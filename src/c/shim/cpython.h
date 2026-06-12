@@ -423,8 +423,11 @@ static inline PyObject *Py_XNewRef(void *obj) {
 #define METH_FASTCALL   0x0080
 #define METH_METHOD     0x0200
 
-/* Module definition slots */
-#define Py_mod_exec                  1
+/* Module definition slots — ids MUST match real CPython's moduleobject.h:
+   extension .so files compiled against real headers emit these numbers,
+   and shimDynLoad walks their slot arrays. */
+#define Py_mod_create                1
+#define Py_mod_exec                  2
 #define Py_mod_multiple_interpreters 3
 #define Py_mod_gil                   4
 #define Py_MOD_PER_INTERPRETER_GIL_SUPPORTED ((void *)1)
@@ -600,6 +603,24 @@ extern PyObject *PyExc_MemoryError;
 extern PyObject *PyExc_StopIteration;
 extern PyObject *PyExc_SystemError;
 extern PyObject *PyExc_RecursionError;
+extern PyObject *PyExc_BaseException;
+extern PyObject *PyExc_Exception;
+extern PyObject *PyExc_LookupError;
+extern PyObject *PyExc_ArithmeticError;
+extern PyObject *PyExc_NotImplementedError;
+extern PyObject *PyExc_OSError;
+extern PyObject *PyExc_IOError;          /* alias of OSError in CPython */
+extern PyObject *PyExc_ImportError;
+extern PyObject *PyExc_NameError;
+extern PyObject *PyExc_StopAsyncIteration;
+extern PyObject *PyExc_BufferError;
+extern PyObject *PyExc_EOFError;
+extern PyObject *PyExc_KeyboardInterrupt;
+extern PyObject *PyExc_UnicodeError;
+extern PyObject *PyExc_UnicodeDecodeError;
+extern PyObject *PyExc_UnicodeEncodeError;
+extern PyObject *PyExc_RuntimeWarning;
+extern PyObject *PyExc_UserWarning;
 
 /* ========== Float API ========== */
 
@@ -890,9 +911,12 @@ typedef PyObject *(*PyCMethod)(PyObject *self, PyTypeObject *defining_class,
 /* PyDoc_STR */
 #define PyDoc_STR(str) str
 
-/* PY_SSIZE_T_MAX */
+/* PY_SSIZE_T_MAX / PY_SSIZE_T_MIN */
 #ifndef PY_SSIZE_T_MAX
 #define PY_SSIZE_T_MAX  ((Py_ssize_t)(((size_t)-1) >> 1))
+#endif
+#ifndef PY_SSIZE_T_MIN
+#define PY_SSIZE_T_MIN  (-PY_SSIZE_T_MAX - 1)
 #endif
 
 /* Py_GenericAlias (used for __class_getitem__ support) */
@@ -1067,5 +1091,175 @@ PyObject *PyCallIter_New(PyObject *callable, PyObject *sentinel);
 /* Singletons */
 #define _Py_SINGLETON(name) /* unused */
 #define _Py_STR(name) /* unused */
+
+/* ========== Version constants ========== */
+
+#define PY_MAJOR_VERSION 3
+#define PY_MINOR_VERSION 14
+#define PY_MICRO_VERSION 0
+#define PY_VERSION_HEX 0x030E00A4  /* 3.14.0a4 — matches the forked _sre */
+
+/* ========== Utility macros (additional) ========== */
+
+#define Py_ABS(x) ((x) < 0 ? -(x) : (x))
+#define _Py_STRINGIFY2(x) #x
+#define Py_STRINGIFY(x) _Py_STRINGIFY2(x)
+#define Py_CHARMASK(c) ((unsigned char)((c) & 0xff))
+
+#define Py_RETURN_RICHCOMPARE(val1, val2, op)                               \
+    do {                                                                    \
+        switch (op) {                                                       \
+        case Py_EQ: if ((val1) == (val2)) Py_RETURN_TRUE; Py_RETURN_FALSE;  \
+        case Py_NE: if ((val1) != (val2)) Py_RETURN_TRUE; Py_RETURN_FALSE;  \
+        case Py_LT: if ((val1) < (val2)) Py_RETURN_TRUE; Py_RETURN_FALSE;   \
+        case Py_GT: if ((val1) > (val2)) Py_RETURN_TRUE; Py_RETURN_FALSE;   \
+        case Py_LE: if ((val1) <= (val2)) Py_RETURN_TRUE; Py_RETURN_FALSE;  \
+        case Py_GE: if ((val1) >= (val2)) Py_RETURN_TRUE; Py_RETURN_FALSE;  \
+        default: Py_UNREACHABLE();                                          \
+        }                                                                   \
+    } while (0)
+
+/* GIL macros — Grail gems are single-threaded; pure no-ops. */
+#define Py_BEGIN_ALLOW_THREADS {
+#define Py_END_ALLOW_THREADS }
+#define Py_BLOCK_THREADS
+#define Py_UNBLOCK_THREADS
+
+/* ========== Subclass-aware type checks ========== */
+
+#define PyLong_CheckExact(op)   ((op) != NULL && Py_TYPE(op) == &PyLong_Type)
+#define PyFloat_CheckExact(op)  ((op) != NULL && Py_TYPE(op) == &PyFloat_Type)
+#define PyList_CheckExact(op)   ((op) != NULL && Py_TYPE(op) == &PyList_Type)
+#define PyDict_CheckExact(op)   ((op) != NULL && Py_TYPE(op) == &PyDict_Type)
+#define PyTuple_CheckExact(op)  ((op) != NULL && Py_TYPE(op) == &PyTuple_Type)
+int PyBool_Check(PyObject *obj);
+
+/* ========== Object protocol — PyObject* attribute names ========== */
+
+PyObject *PyObject_GetAttr(PyObject *obj, PyObject *name);
+int       PyObject_SetAttr(PyObject *obj, PyObject *name, PyObject *value);
+int       PyObject_HasAttr(PyObject *obj, PyObject *name);
+
+/* ========== Call helpers ========== */
+
+PyObject *PyObject_CallNoArgs(PyObject *callable);
+PyObject *PyObject_CallObject(PyObject *callable, PyObject *args);
+PyObject *PyObject_CallFunctionObjArgs(PyObject *callable, ...);
+PyObject *PyObject_CallMethodObjArgs(PyObject *obj, PyObject *name, ...);
+
+static inline PyObject *PyObject_CallMethodNoArgs(PyObject *self, PyObject *name) {
+    PyObject *meth = PyObject_GetAttr(self, name);
+    if (!meth) return NULL;
+    return PyObject_CallNoArgs(meth);
+}
+static inline PyObject *PyObject_CallMethodOneArg(PyObject *self, PyObject *name,
+                                                  PyObject *arg) {
+    PyObject *meth = PyObject_GetAttr(self, name);
+    if (!meth) return NULL;
+    return PyObject_CallOneArg(meth, arg);
+}
+
+/* ========== Iteration protocol ========== */
+
+PyObject *PyObject_GetIter(PyObject *obj);
+PyObject *PyIter_Next(PyObject *iterator);
+int       PyIter_Check(PyObject *obj);
+
+/* ========== Module helpers (additional) ========== */
+
+int PyModule_AddObject(PyObject *module, const char *name, PyObject *value);
+int PyModule_AddType(PyObject *module, PyTypeObject *type);
+
+/* ========== Error handling (additional) ========== */
+
+PyObject *PyErr_NewException(const char *name, PyObject *base, PyObject *dict);
+PyObject *PyErr_NewExceptionWithDoc(const char *name, const char *doc,
+                                    PyObject *base, PyObject *dict);
+void      PyErr_SetObject(PyObject *type, PyObject *value);
+int       PyErr_GivenExceptionMatches(PyObject *given, PyObject *exc);
+int       PyErr_BadArgument(void);
+void      PyErr_BadInternalCall(void);
+#define _PyErr_BadInternalCall(filename, lineno) PyErr_BadInternalCall()
+
+/* ========== Integer API (64-bit + double) ========== */
+
+PyObject          *PyLong_FromLongLong(long long v);
+long long          PyLong_AsLongLong(PyObject *obj);
+PyObject          *PyLong_FromUnsignedLongLong(unsigned long long v);
+unsigned long long PyLong_AsUnsignedLongLong(PyObject *obj);
+unsigned long      PyLong_AsUnsignedLongMask(PyObject *obj);
+PyObject          *PyLong_FromDouble(double v);
+double             PyLong_AsDouble(PyObject *obj);
+
+/* ========== Unicode (additional) ========== */
+
+const char *PyUnicode_AsUTF8AndSize(PyObject *unicode, Py_ssize_t *size);
+PyObject   *PyUnicode_DecodeUTF8(const char *s, Py_ssize_t size,
+                                 const char *errors);
+PyObject   *PyUnicode_InternFromString(const char *s);
+PyObject   *PyUnicode_Concat(PyObject *left, PyObject *right);
+
+/* ========== Sequence protocol (additional) ========== */
+
+Py_ssize_t PySequence_Size(PyObject *seq);
+int        PySequence_Check(PyObject *obj);
+int        PySequence_Contains(PyObject *seq, PyObject *item);
+int        PySequence_SetItem(PyObject *seq, Py_ssize_t i, PyObject *value);
+
+/* ========== Dict API (additional) ========== */
+
+void      PyDict_Clear(PyObject *dict);
+PyObject *PyDict_Keys(PyObject *dict);
+PyObject *PyDict_Values(PyObject *dict);
+PyObject *PyDict_Items(PyObject *dict);
+PyObject *PyDict_Copy(PyObject *dict);
+int       PyDict_Update(PyObject *dict, PyObject *other);
+int       PyDict_Merge(PyObject *dict, PyObject *other, int override);
+PyObject *PyDict_SetDefault(PyObject *dict, PyObject *key,
+                            PyObject *defaultobj);
+
+/* ========== List / Tuple (additional) ========== */
+
+PyObject *PyList_GetSlice(PyObject *list, Py_ssize_t low, Py_ssize_t high);
+PyObject *PyList_AsTuple(PyObject *list);
+int       PyList_Sort(PyObject *list);
+int       PyList_Reverse(PyObject *list);
+PyObject *PyTuple_GetSlice(PyObject *tuple, Py_ssize_t low, Py_ssize_t high);
+
+/* ========== Sets ========== */
+
+PyObject  *PySet_New(PyObject *iterable);
+PyObject  *PyFrozenSet_New(PyObject *iterable);
+int        PySet_Add(PyObject *set, PyObject *key);
+int        PySet_Contains(PyObject *set, PyObject *key);
+int        PySet_Discard(PyObject *set, PyObject *key);
+int        PySet_Clear(PyObject *set);
+Py_ssize_t PySet_Size(PyObject *set);
+int        PySet_Check(PyObject *obj);
+int        PyFrozenSet_Check(PyObject *obj);
+int        PyAnySet_Check(PyObject *obj);
+#define PySet_GET_SIZE(op) PySet_Size(op)
+
+/* ========== Bytearray ========== */
+
+PyObject  *PyByteArray_FromStringAndSize(const char *data, Py_ssize_t len);
+char      *PyByteArray_AsString(PyObject *obj);
+Py_ssize_t PyByteArray_Size(PyObject *obj);
+int        PyByteArray_Check(PyObject *obj);
+#define PyByteArray_AS_STRING(op) PyByteArray_AsString(op)
+#define PyByteArray_GET_SIZE(op)  PyByteArray_Size(op)
+
+/* ========== Capsules ========== */
+
+typedef void (*PyCapsule_Destructor)(PyObject *);
+
+PyObject   *PyCapsule_New(void *pointer, const char *name,
+                          PyCapsule_Destructor destructor);
+void       *PyCapsule_GetPointer(PyObject *capsule, const char *name);
+const char *PyCapsule_GetName(PyObject *capsule);
+int         PyCapsule_IsValid(PyObject *capsule, const char *name);
+int         PyCapsule_SetPointer(PyObject *capsule, void *pointer);
+void       *PyCapsule_Import(const char *name, int no_block);
+int         PyCapsule_CheckExact(PyObject *op);
 
 #endif /* CPYTHON_H */

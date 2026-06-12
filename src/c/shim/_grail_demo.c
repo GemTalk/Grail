@@ -125,12 +125,31 @@ static PyMethodDef grail_demo_methods[] = {
     {NULL, NULL, 0, NULL}
 };
 
+/* Multi-phase init: module-level constants. Works on both real CPython
+   and Grail (where shimDynLoad runs Py_mod_exec and shimModuleAttrs
+   exports the constants as Python attributes). */
+static int
+grail_demo_exec(PyObject *mod) {
+    PyModule_AddIntConstant(mod, "DEMO_VERSION", 7);
+    PyModule_AddStringConstant(mod, "DEMO_NAME", "grail-demo");
+    return 0;
+}
+
+static PyModuleDef_Slot grail_demo_slots[] = {
+    {Py_mod_exec, (void *)grail_demo_exec},
+#ifndef GRAIL_SHIM
+    {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+#endif
+    {0, NULL}
+};
+
 static struct PyModuleDef _grail_demo_module = {
     PyModuleDef_HEAD_INIT,
     .m_name    = "_grail_demo",
     .m_doc     = "Demo module that runs on both CPython and Grail.",
     .m_size    = 0,
     .m_methods = grail_demo_methods,
+    .m_slots   = grail_demo_slots,
 };
 
 PyMODINIT_FUNC

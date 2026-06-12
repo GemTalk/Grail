@@ -1893,3 +1893,640 @@ testShimSingletonLivesInSessionTempsNotCommitted
 	CPythonShim current.
 %
 
+
+! ===============================================================================
+! Tests - Server selectors that were missing (P1 in docs/Shim_API_Gaps.md)
+! ===============================================================================
+
+category: 'Grail-Tests - Generic Calling'
+method: CPythonShimTestCase
+testObjectCallOneArg
+	"PyObject_CallOneArg routes through the server's PyObject_Call:args:."
+
+	| callable result |
+	callable := BoundMethod @env1:receiver: 10 selector: #'__add__'.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_call_one'
+		with: callable with: 5.
+	self assert: result equals: 15.
+%
+
+category: 'Grail-Tests - Generic Calling'
+method: CPythonShimTestCase
+testObjectCallNoArgs
+	"PyObject_CallNoArgs calls a zero-arg callable."
+
+	| callable result |
+	callable := BoundMethod @env1:receiver: 'hello' selector: #'__len__'.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_call_noargs'
+		with: callable.
+	self assert: result equals: 5.
+%
+
+category: 'Grail-Tests - Object Protocol'
+method: CPythonShimTestCase
+testObjectGetItem
+	"PyObject_GetItem reads dict[key] via __getitem__."
+
+	| dict result |
+	dict := KeyValueDictionary new.
+	dict at: 'a' put: 41.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_obj_getitem'
+		with: dict with: 'a'.
+	self assert: result equals: 41.
+%
+
+category: 'Grail-Tests - Object Protocol'
+method: CPythonShimTestCase
+testObjectSetItem
+	"PyObject_SetItem stores dict[key] = value via __setitem__."
+
+	| dict |
+	dict := KeyValueDictionary new.
+	CPythonShim current
+		callModule: '_shimtest' method: 'test_obj_setitem'
+		with: dict with: 'k' with: 99.
+	self assert: (dict at: 'k') equals: 99.
+%
+
+category: 'Grail-Tests - Object Protocol'
+method: CPythonShimTestCase
+testRichCompareObject
+	"PyObject_RichCompare returns the comparison result as an object."
+
+	| shim |
+	shim := CPythonShim current.
+	self assert: (shim callModule: '_shimtest' method: 'test_richcompare_obj'
+		with: 1 with: 2 with: 0) equals: true.   "1 < 2"
+	self assert: (shim callModule: '_shimtest' method: 'test_richcompare_obj'
+		with: 1 with: 2 with: 4) equals: false.  "1 > 2"
+%
+
+category: 'Grail-Tests - Object Protocol'
+method: CPythonShimTestCase
+testSequenceGetItemString
+	"PySequence_GetItem on a str exercises the server fallback path
+	(strings are neither PyList nor PyTuple on the C side)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_seq_getitem'
+		with: 'hello' with: 1.
+	self assert: result equals: 'e'.
+%
+
+category: 'Grail-Tests - Object Protocol'
+method: CPythonShimTestCase
+testImportGetAttr
+	"_PyImport_GetModuleAttrString imports a module and reads an attribute."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_import_attr'
+		with: 'math' with: 'pi'.
+	self assert: (result - Float pi) abs < 1e-12.
+%
+
+category: 'Grail-Tests - Iteration'
+method: CPythonShimTestCase
+testIterSum
+	"PyObject_GetIter + PyIter_Next traverse a Python list."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_iter_sum'
+		with: (OrderedCollection withAll: { 1 . 2 . 3 }).
+	self assert: result equals: 6.
+%
+
+! ===============================================================================
+! Tests - C-side correctness fixes (P2 in docs/Shim_API_Gaps.md)
+! ===============================================================================
+
+category: 'Grail-Tests - Truthiness'
+method: CPythonShimTestCase
+testIsTrueEmptyContainersAreFalsy
+	"PyObject_IsTrue: empty str/list/dict and 0.0 are falsy; non-empty truthy."
+
+	| shim |
+	shim := CPythonShim current.
+	self assert: (shim callModule: '_shimtest' method: 'test_is_true' with: '') equals: 0.
+	self assert: (shim callModule: '_shimtest' method: 'test_is_true' with: 'x') equals: 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_is_true' with: OrderedCollection new) equals: 0.
+	self assert: (shim callModule: '_shimtest' method: 'test_is_true' with: (OrderedCollection withAll: { 1 })) equals: 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_is_true' with: KeyValueDictionary new) equals: 0.
+	self assert: (shim callModule: '_shimtest' method: 'test_is_true' with: 0.0) equals: 0.
+	self assert: (shim callModule: '_shimtest' method: 'test_is_true' with: 0.5) equals: 1.
+%
+
+category: 'Grail-Tests - Type Checks'
+method: CPythonShimTestCase
+testLongCheckAcceptsBool
+	"bool is an int subclass in CPython: PyLong_Check(True) is 1."
+
+	| shim |
+	shim := CPythonShim current.
+	self assert: (shim callModule: '_shimtest' method: 'test_long_check' with: true) equals: 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_long_check' with: 3) equals: 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_long_check' with: 'x') equals: 0.
+%
+
+category: 'Grail-Tests - Slices'
+method: CPythonShimTestCase
+testSliceAdjustIndices
+	"PySlice_AdjustIndices clamps like CPython: len 5, [-3:10:1] -> 3 items from 2 to 5."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_slice_adjust'
+		with: 5 with: -3 with: 10 with: 1.
+	self assert: result asArray equals: #(3 2 5).
+%
+
+category: 'Grail-Tests - Type Creation'
+method: CPythonShimTestCase
+testTypeGenericNew
+	"PyType_GenericNew allocates a zeroed instance with refcnt 1 and the type set."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_generic_new'.
+	self assert: result equals: 1.
+%
+
+! ===============================================================================
+! Tests - Format strings (P3 in docs/Shim_API_Gaps.md)
+! ===============================================================================
+
+category: 'Grail-Tests - Argument Parsing'
+method: CPythonShimTestCase
+testParseTupleFormats
+	"PyArg_ParseTuple 'snd' parses str, ssize_t, double."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_parse_tuple'
+		with: 'abc' with: 4 with: 0.5.
+	self assert: result equals: 7.5.
+%
+
+category: 'Grail-Tests - Argument Parsing'
+method: CPythonShimTestCase
+testBuildValueNested
+	"Py_BuildValue '(ns[nn])' builds a tuple of int, str, and nested list."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_build_value'
+		with: 2 with: 'hi'.
+	self assert: result size equals: 3.
+	self assert: (result at: 1) equals: 3.
+	self assert: (result at: 2) equals: 'hi'.
+	self assert: (result at: 3) asArray equals: #(2 2).
+%
+
+! ===============================================================================
+! Tests - Additional APIs (P4 in docs/Shim_API_Gaps.md)
+! ===============================================================================
+
+category: 'Grail-Tests - Object Protocol'
+method: CPythonShimTestCase
+testGetAttrObjectName
+	"PyObject_GetAttr (PyObject* name variant)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_getattr_obj'
+		with: 42 with: '__class__'.
+	self assert: (result isKindOf: Behavior).
+%
+
+category: 'Grail-Tests - Integer API'
+method: CPythonShimTestCase
+testLongLongRoundtrip
+	"PyLong_AsLongLong / PyLong_FromLongLong handle values beyond 32 bits."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_long64'
+		with: 10000000000.
+	self assert: result equals: 20000000000.
+%
+
+category: 'Grail-Tests - String API'
+method: CPythonShimTestCase
+testUtf8AndSize
+	"PyUnicode_AsUTF8AndSize reports the BYTE length (é is 2 bytes)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_utf8_size'
+		with: 'hello'.
+	self assert: result equals: 5.
+%
+
+category: 'Grail-Tests - String API'
+method: CPythonShimTestCase
+testUnicodeConcat
+	"PyUnicode_Concat joins two strings via the server."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_unicode_concat'
+		with: 'foo' with: 'bar'.
+	self assert: result equals: 'foobar'.
+%
+
+category: 'Grail-Tests - Dict API'
+method: CPythonShimTestCase
+testDictKeys
+	"PyDict_Keys returns a list of the keys."
+
+	| dict result |
+	dict := KeyValueDictionary new.
+	dict at: 'a' put: 1; at: 'b' put: 2.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_dict_keys'
+		with: dict.
+	self assert: result size equals: 2.
+	self assert: (result includes: 'a').
+	self assert: (result includes: 'b').
+%
+
+category: 'Grail-Tests - Dict API'
+method: CPythonShimTestCase
+testDictItemsCount
+	"PyDict_Items returns a list of (key, value) tuples."
+
+	| dict result |
+	dict := KeyValueDictionary new.
+	dict at: 'a' put: 1; at: 'b' put: 2; at: 'c' put: 3.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_dict_items_count'
+		with: dict.
+	self assert: result equals: 3.
+%
+
+category: 'Grail-Tests - Dict API'
+method: CPythonShimTestCase
+testDictSetDefault
+	"PyDict_SetDefault returns existing values and stores defaults."
+
+	| dict shim |
+	shim := CPythonShim current.
+	dict := KeyValueDictionary new.
+	dict at: 'a' put: 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_dict_setdefault'
+		with: dict with: 'a' with: 99) equals: 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_dict_setdefault'
+		with: dict with: 'b' with: 99) equals: 99.
+	self assert: (dict at: 'b') equals: 99.
+%
+
+category: 'Grail-Tests - Dict API'
+method: CPythonShimTestCase
+testDictMerge
+	"PyDict_Merge with override=false keeps existing entries."
+
+	| a b |
+	a := KeyValueDictionary new. a at: 'k' put: 1.
+	b := KeyValueDictionary new. b at: 'k' put: 2. b at: 'n' put: 3.
+	CPythonShim current
+		callModule: '_shimtest' method: 'test_dict_merge'
+		with: a with: b with: false.
+	self assert: (a at: 'k') equals: 1.
+	self assert: (a at: 'n') equals: 3.
+%
+
+category: 'Grail-Tests - Dict API'
+method: CPythonShimTestCase
+testDictClear
+	"PyDict_Clear empties the dictionary."
+
+	| dict result |
+	dict := KeyValueDictionary new.
+	dict at: 'a' put: 1; at: 'b' put: 2.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_dict_clear'
+		with: dict.
+	self assert: result equals: 0.
+	self assert: dict size equals: 0.
+%
+
+category: 'Grail-Tests - List API'
+method: CPythonShimTestCase
+testListGetSlice
+	"PyList_GetSlice returns a clamped sub-list."
+
+	| oc result |
+	oc := OrderedCollection withAll: { 10 . 20 . 30 . 40 }.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_list_slice'
+		with: oc with: 1 with: 3.
+	self assert: result asArray equals: #(20 30).
+%
+
+category: 'Grail-Tests - List API'
+method: CPythonShimTestCase
+testListSortInPlace
+	"PyList_Sort sorts in place via Python __lt__."
+
+	| oc |
+	oc := OrderedCollection withAll: { 3 . 1 . 2 }.
+	CPythonShim current
+		callModule: '_shimtest' method: 'test_list_sort'
+		with: oc.
+	self assert: oc asArray equals: #(1 2 3).
+%
+
+category: 'Grail-Tests - List API'
+method: CPythonShimTestCase
+testListReverseInPlace
+	"PyList_Reverse reverses in place."
+
+	| oc |
+	oc := OrderedCollection withAll: { 1 . 2 . 3 }.
+	CPythonShim current
+		callModule: '_shimtest' method: 'test_list_reverse'
+		with: oc.
+	self assert: oc asArray equals: #(3 2 1).
+%
+
+category: 'Grail-Tests - List API'
+method: CPythonShimTestCase
+testListAsTuple
+	"PyList_AsTuple converts list to tuple (Array)."
+
+	| oc result |
+	oc := OrderedCollection withAll: { 1 . 2 }.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_list_astuple'
+		with: oc.
+	self assert: (result isKindOf: Array).
+	self assert: result asArray equals: #(1 2).
+%
+
+category: 'Grail-Tests - Tuple API'
+method: CPythonShimTestCase
+testTupleGetSlice
+	"PyTuple_GetSlice returns a clamped sub-tuple."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_tuple_slice'
+		with: { 10 . 20 . 30 } with: 0 with: 2.
+	self assert: result asArray equals: #(10 20).
+%
+
+category: 'Grail-Tests - Sequence API'
+method: CPythonShimTestCase
+testSequenceContains
+	"PySequence_Contains uses __contains__."
+
+	| shim oc |
+	shim := CPythonShim current.
+	oc := OrderedCollection withAll: { 1 . 2 . 3 }.
+	self assert: (shim callModule: '_shimtest' method: 'test_seq_contains'
+		with: oc with: 2) equals: 1.
+	self assert: (shim callModule: '_shimtest' method: 'test_seq_contains'
+		with: oc with: 9) equals: 0.
+%
+
+category: 'Grail-Tests - Capsules'
+method: CPythonShimTestCase
+testCapsuleRoundtrip
+	"PyCapsule_New / GetPointer / GetName / IsValid round-trip in C."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_capsule_roundtrip'.
+	self assert: result equals: 1.
+%
+
+category: 'Grail-Tests - Error Handling'
+method: CPythonShimTestCase
+testNewExceptionRaisesByName
+	"PyErr_NewException creates a type whose raises carry its short name."
+
+	| raised |
+	raised := false.
+	[ CPythonShim current callModule: '_shimtest' method: 'test_new_exception' ]
+		on: Error
+		do: [:e |
+			raised := true.
+			self assert: (e messageText includesString: 'CustomError').
+			self assert: (e messageText includesString: 'custom failure') ].
+	self assert: raised.
+%
+
+category: 'Grail-Tests - Error Handling'
+method: CPythonShimTestCase
+testExceptionMatchesHierarchy
+	"PyErr_ExceptionMatches: KeyError matches LookupError and Exception."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_exc_matches'.
+	self assert: result equals: 1.
+%
+
+! ===============================================================================
+! Tests - P5: module attribute export (docs/Shim_API_Gaps.md)
+! ===============================================================================
+
+category: 'Grail-Tests - Module Attrs'
+method: CPythonShimTestCase
+testModuleAttrsExport
+	"shimModuleAttrs exports PyModule_AddIntConstant / AddStringConstant /
+	AddObjectRef values; C-only objects (capsules) are skipped."
+
+	| attrs |
+	attrs := CPythonShim current moduleAttrs: '_shimtest'.
+	self assert: (attrs at: #MAGIC_INT) equals: 42.
+	self assert: (attrs at: #MAGIC_STR) equals: 'grail'.
+	self assert: (attrs at: #MAGIC_FLOAT) equals: 2.5.
+	self deny: (attrs includesKey: #SKIPPED_CAPSULE).
+%
+
+category: 'Grail-Tests - Module Attrs'
+method: CPythonShimTestCase
+testDynLoadModuleConstants
+	"Dynamically loaded modules run Py_mod_exec (previously skipped) and
+	expose their PyModule_Add*Constant values as Python attributes."
+
+	| soPath mod |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	mod := CPythonShim loadDynamicModule: '_grail_demo' fromPath: soPath.
+	self assert: (mod @env1:DEMO_VERSION) equals: 7.
+	self assert: (mod @env1:DEMO_NAME) equals: 'grail-demo'.
+%
+
+! ===============================================================================
+! Tests - P5: keyword arguments across the C boundary
+! ===============================================================================
+
+category: 'Grail-Tests - Kwargs'
+method: CPythonShimTestCase
+testKwargsFastcall
+	"METH_FASTCALL|METH_KEYWORDS receives kwnames + trailing values."
+
+	| shim kw result |
+	shim := CPythonShim current.
+	kw := KeyValueDictionary new.
+	kw at: 'x' put: 3.
+	result := shim callModule: '_shimtest' method: 'test_kwargs'
+		args: { 1 . 2 } kwargs: kw.
+	self assert: result equals: 303.  "1 + 2 + 100*3"
+	kw at: 'y' put: 1.
+	result := shim callModule: '_shimtest' method: 'test_kwargs'
+		args: { } kwargs: kw.
+	self assert: result equals: 10300.  "100*3 + 10000*1"
+	result := shim callModule: '_shimtest' method: 'test_kwargs'
+		args: { 5 } kwargs: nil.
+	self assert: result equals: 5.
+%
+
+category: 'Grail-Tests - Kwargs'
+method: CPythonShimTestCase
+testKwargsVarargsDict
+	"METH_VARARGS|METH_KEYWORDS receives a kwargs dict."
+
+	| kw result |
+	kw := KeyValueDictionary new.
+	kw at: 'key' put: 'val'.
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_kwargs_dict'
+		args: { } kwargs: kw.
+	self assert: result equals: 'val'.
+%
+
+category: 'Grail-Tests - Kwargs'
+method: CPythonShimTestCase
+testKwargsRejectedByPositionalOnly
+	"A method without METH_KEYWORDS raises TypeError when kwargs given."
+
+	| kw |
+	kw := KeyValueDictionary new.
+	kw at: 'x' put: 1.
+	self should: [
+		CPythonShim current
+			callModule: '_shimtest' method: 'test_int'
+			args: { 1 } kwargs: kw.
+	] raise: Error.
+%
+
+! ===============================================================================
+! Tests - P5: heap types (bases, getset setters, buffer protocol)
+! ===============================================================================
+
+category: 'Grail-Tests - Heap Types'
+method: CPythonShimTestCase
+testHeapTypeBase
+	"PyType_FromSpecWithBases with a single type base sets tp_base and
+	inherits the subclass-identity flag (PyLong_Check passes)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_heap_type_base'.
+	self assert: result equals: 1.
+%
+
+category: 'Grail-Tests - Heap Types'
+method: CPythonShimTestCase
+testCounterMethodsAndGetSet
+	"shimCallTyped on a heap type: METH_NOARGS method, tp_getset getter,
+	and (new) tp_getset SETTER via the flags bit-4 path."
+
+	| shim ptr |
+	shim := CPythonShim current.
+	ptr := shim callModuleReturnCPtr: '_shimtest' method: 'test_make_counter'.
+	self assert: (shim callTyped: '_shimtest' type: 'Counter' method: 'incr' selfPtr: ptr) equals: 1.
+	self assert: (shim callTyped: '_shimtest' type: 'Counter' method: 'incr' selfPtr: ptr) equals: 2.
+	self assert: (shim callTyped: '_shimtest' type: 'Counter' method: 'value' selfPtr: ptr) equals: 2.
+	shim callTyped: '_shimtest' type: 'Counter' setattr: 'value' selfPtr: ptr value: 41.
+	self assert: (shim callTyped: '_shimtest' type: 'Counter' method: 'value' selfPtr: ptr) equals: 41.
+	self assert: (shim callTyped: '_shimtest' type: 'Counter' method: 'incr' selfPtr: ptr) equals: 42.
+%
+
+category: 'Grail-Tests - Heap Types'
+method: CPythonShimTestCase
+testCounterBufferProtocol
+	"PyObject_GetBuffer consults a heap type's bf_getbuffer slot."
+
+	| shim ptr text |
+	shim := CPythonShim current.
+	ptr := shim callModuleReturnCPtr: '_shimtest' method: 'test_make_counter'.
+	text := shim callModule: '_shimtest' method: 'test_counter_text' with: ptr.
+	self assert: text equals: 'counter!'.
+%
+
+! ===============================================================================
+! Tests - P5: slices, sets, bytearray, FromFormat
+! ===============================================================================
+
+category: 'Grail-Tests - Slices'
+method: CPythonShimTestCase
+testSliceRoundtrip
+	"PySlice_New + PySlice_Unpack round-trip explicit values."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_slice_roundtrip'
+		with: 1 with: 10 with: 2.
+	self assert: result asArray equals: #(1 10 2).
+%
+
+category: 'Grail-Tests - Slices'
+method: CPythonShimTestCase
+testSliceUnpackDefaults
+	"slice(None, None, None) unpacks to CPython defaults (0, MAX, 1)."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_slice_defaults'.
+	self assert: result equals: 1.
+%
+
+category: 'Grail-Tests - Sets'
+method: CPythonShimTestCase
+testSetRoundtrip
+	"PySet_New/Add/Contains/Size/Check against the Grail set class."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_set_roundtrip'
+		with: 'a'.
+	self assert: (result isKindOf: Set).
+	self assert: result size equals: 1.
+	self assert: (result includes: 'a').
+%
+
+category: 'Grail-Tests - Bytearray'
+method: CPythonShimTestCase
+testByteArrayRoundtrip
+	"PyByteArray_FromStringAndSize creates a Grail bytearray instance."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_bytearray'
+		with: 'abc' asByteArray.
+	self assert: result class name equals: #bytearray.
+	self assert: result size equals: 3.
+	self assert: (result at: 1) equals: 97.
+	self assert: (result at: 3) equals: 99.
+%
+
+category: 'Grail-Tests - String API'
+method: CPythonShimTestCase
+testFromFormatObjectConversions
+	"PyUnicode_FromFormat handles %R (repr), %S (str), and %d."
+
+	| result |
+	result := CPythonShim current
+		callModule: '_shimtest' method: 'test_from_format'
+		with: 'hi'.
+	self assert: result equals: 'repr=<''hi''> str=<hi> n=42'.
+%

@@ -63,6 +63,8 @@ static inline PyObject *addr_to_pyobj(OopType addrOop) {
     return (PyObject *)(intptr_t)GciOopToI64(addrOop);
 }
 
+static int64 oopToLongWithIndex(OopType oop);  /* forward decl */
+
 /* ====================================================================
  * Server — the CPythonShim instance, set by shimInit
  * ==================================================================== */
@@ -162,6 +164,23 @@ static struct _object _exc_MemoryError       = { 1, NULL };
 static struct _object _exc_StopIteration     = { 1, NULL };
 static struct _object _exc_SystemError       = { 1, NULL };
 static struct _object _exc_RecursionError    = { 1, NULL };
+static struct _object _exc_BaseException     = { 1, NULL };
+static struct _object _exc_Exception         = { 1, NULL };
+static struct _object _exc_LookupError       = { 1, NULL };
+static struct _object _exc_ArithmeticError   = { 1, NULL };
+static struct _object _exc_NotImplementedError = { 1, NULL };
+static struct _object _exc_OSError           = { 1, NULL };
+static struct _object _exc_ImportError       = { 1, NULL };
+static struct _object _exc_NameError         = { 1, NULL };
+static struct _object _exc_StopAsyncIteration = { 1, NULL };
+static struct _object _exc_BufferError       = { 1, NULL };
+static struct _object _exc_EOFError          = { 1, NULL };
+static struct _object _exc_KeyboardInterrupt = { 1, NULL };
+static struct _object _exc_UnicodeError      = { 1, NULL };
+static struct _object _exc_UnicodeDecodeError = { 1, NULL };
+static struct _object _exc_UnicodeEncodeError = { 1, NULL };
+static struct _object _exc_RuntimeWarning    = { 1, NULL };
+static struct _object _exc_UserWarning       = { 1, NULL };
 
 PyObject *PyExc_ValueError        = &_exc_ValueError;
 PyObject *PyExc_TypeError         = &_exc_TypeError;
@@ -177,6 +196,76 @@ PyObject *PyExc_MemoryError       = &_exc_MemoryError;
 PyObject *PyExc_StopIteration     = &_exc_StopIteration;
 PyObject *PyExc_SystemError       = &_exc_SystemError;
 PyObject *PyExc_RecursionError    = &_exc_RecursionError;
+PyObject *PyExc_BaseException     = &_exc_BaseException;
+PyObject *PyExc_Exception         = &_exc_Exception;
+PyObject *PyExc_LookupError       = &_exc_LookupError;
+PyObject *PyExc_ArithmeticError   = &_exc_ArithmeticError;
+PyObject *PyExc_NotImplementedError = &_exc_NotImplementedError;
+PyObject *PyExc_OSError           = &_exc_OSError;
+PyObject *PyExc_IOError           = &_exc_OSError;  /* alias, as in CPython */
+PyObject *PyExc_ImportError       = &_exc_ImportError;
+PyObject *PyExc_NameError         = &_exc_NameError;
+PyObject *PyExc_StopAsyncIteration = &_exc_StopAsyncIteration;
+PyObject *PyExc_BufferError       = &_exc_BufferError;
+PyObject *PyExc_EOFError          = &_exc_EOFError;
+PyObject *PyExc_KeyboardInterrupt = &_exc_KeyboardInterrupt;
+PyObject *PyExc_UnicodeError      = &_exc_UnicodeError;
+PyObject *PyExc_UnicodeDecodeError = &_exc_UnicodeDecodeError;
+PyObject *PyExc_UnicodeEncodeError = &_exc_UnicodeEncodeError;
+PyObject *PyExc_RuntimeWarning    = &_exc_RuntimeWarning;
+PyObject *PyExc_UserWarning       = &_exc_UserWarning;
+
+/* Exception hierarchy for PyErr_(Given)ExceptionMatches. Each row is
+   { child, parent }; matching walks child→parent until NULL. Only the
+   relationships extensions actually test for are modeled. */
+static PyObject *const exc_parent_table[][2] = {
+    { &_exc_KeyError,           &_exc_LookupError },
+    { &_exc_IndexError,         &_exc_LookupError },
+    { &_exc_OverflowError,      &_exc_ArithmeticError },
+    { &_exc_ZeroDivisionError,  &_exc_ArithmeticError },
+    { &_exc_RecursionError,     &_exc_RuntimeError },
+    { &_exc_NotImplementedError, &_exc_RuntimeError },
+    { &_exc_UnicodeDecodeError, &_exc_UnicodeError },
+    { &_exc_UnicodeEncodeError, &_exc_UnicodeError },
+    { &_exc_UnicodeError,       &_exc_ValueError },
+    { &_exc_EOFError,           &_exc_Exception },
+    { &_exc_LookupError,        &_exc_Exception },
+    { &_exc_ArithmeticError,    &_exc_Exception },
+    { &_exc_ValueError,         &_exc_Exception },
+    { &_exc_TypeError,          &_exc_Exception },
+    { &_exc_AttributeError,     &_exc_Exception },
+    { &_exc_RuntimeError,       &_exc_Exception },
+    { &_exc_MemoryError,        &_exc_Exception },
+    { &_exc_StopIteration,      &_exc_Exception },
+    { &_exc_StopAsyncIteration, &_exc_Exception },
+    { &_exc_SystemError,        &_exc_Exception },
+    { &_exc_OSError,            &_exc_Exception },
+    { &_exc_ImportError,        &_exc_Exception },
+    { &_exc_NameError,          &_exc_Exception },
+    { &_exc_BufferError,        &_exc_Exception },
+    { &_exc_Exception,          &_exc_BaseException },
+    { &_exc_KeyboardInterrupt,  &_exc_BaseException },
+    { NULL, NULL }
+};
+
+static PyObject *exc_parent_of(PyObject *exc) {
+    for (int i = 0; exc_parent_table[i][0]; i++) {
+        if (exc_parent_table[i][0] == exc) return exc_parent_table[i][1];
+    }
+    return NULL;
+}
+
+/* Dynamically created exception types (PyErr_NewException). Each is a
+   bare sentinel object plus its dotted name; get_error_type reports the
+   part after the last dot so the server raises a sensibly named error. */
+#define MAX_DYN_EXCEPTIONS 32
+
+static struct {
+    struct _object obj;
+    char           name[128];
+    PyObject      *base;
+} dyn_exceptions[MAX_DYN_EXCEPTIONS];
+static int dyn_exception_count = 0;
 
 /* NotImplemented singleton */
 PyObject _Py_NotImplementedStruct = { 1, NULL };
@@ -276,6 +365,29 @@ static const char *get_error_type(void) {
     if (current_error_type == PyExc_StopIteration)     return "StopIteration";
     if (current_error_type == PyExc_SystemError)       return "SystemError";
     if (current_error_type == PyExc_RecursionError)    return "RecursionError";
+    if (current_error_type == PyExc_BaseException)     return "BaseException";
+    if (current_error_type == PyExc_Exception)         return "Exception";
+    if (current_error_type == PyExc_LookupError)       return "LookupError";
+    if (current_error_type == PyExc_ArithmeticError)   return "ArithmeticError";
+    if (current_error_type == PyExc_NotImplementedError) return "NotImplementedError";
+    if (current_error_type == PyExc_OSError)           return "OSError";
+    if (current_error_type == PyExc_ImportError)       return "ImportError";
+    if (current_error_type == PyExc_NameError)         return "NameError";
+    if (current_error_type == PyExc_StopAsyncIteration) return "StopAsyncIteration";
+    if (current_error_type == PyExc_BufferError)       return "BufferError";
+    if (current_error_type == PyExc_EOFError)          return "EOFError";
+    if (current_error_type == PyExc_KeyboardInterrupt) return "KeyboardInterrupt";
+    if (current_error_type == PyExc_UnicodeError)      return "UnicodeError";
+    if (current_error_type == PyExc_UnicodeDecodeError) return "UnicodeDecodeError";
+    if (current_error_type == PyExc_UnicodeEncodeError) return "UnicodeEncodeError";
+    /* Dynamically created exception types: report the name after the
+       last dot ("spam.error" → "error"). */
+    for (int i = 0; i < dyn_exception_count; i++) {
+        if (current_error_type == (PyObject *)&dyn_exceptions[i].obj) {
+            const char *dot = strrchr(dyn_exceptions[i].name, '.');
+            return dot ? dot + 1 : dyn_exceptions[i].name;
+        }
+    }
     if (current_error_type != NULL)                    return "UnknownError";
     return NULL;
 }
@@ -379,6 +491,58 @@ static PyObject *call_method(PyObject *module_ptr, int method_index,
     return call_method_on(module_ptr, method, NULL, args, nargs);
 }
 
+/* Keyword-aware variant. `args` holds npos positionals followed by nkw
+   keyword values; `kwnames` is a PyObject tuple of the keyword names
+   (the METH_FASTCALL|METH_KEYWORDS vector convention). */
+static PyObject *call_method_on_kw(PyObject *self, PyMethodDef *method,
+                                   PyTypeObject *defining_class,
+                                   PyObject **args, Py_ssize_t npos,
+                                   PyObject *kwnames, Py_ssize_t nkw) {
+    if (!method->ml_meth) return NULL;
+
+    if (nkw == 0)
+        return call_method_on(self, method, defining_class, args, npos);
+
+    int flags = method->ml_flags;
+    if (!(flags & METH_KEYWORDS)) {
+        PyErr_Format(PyExc_TypeError, "%s() takes no keyword arguments",
+                     method->ml_name);
+        return NULL;
+    }
+    PyErr_Clear();
+
+    if (flags & METH_FASTCALL) {
+        if (flags & METH_METHOD) {
+            PyCMethod func = (PyCMethod)(void *)method->ml_meth;
+            return func(self, defining_class,
+                        (PyObject *const *)args, npos, kwnames);
+        }
+        typedef PyObject *(*FastCallKwFunc)(PyObject *, PyObject *const *,
+                                            Py_ssize_t, PyObject *);
+        FastCallKwFunc func = (FastCallKwFunc)(void *)method->ml_meth;
+        return func(self, (PyObject *const *)args, npos, kwnames);
+    }
+    if (flags & METH_VARARGS) {
+        PyObject *tuple = pack_args_as_tuple(args, npos);
+        if (!tuple) return NULL;
+        PyObject *kwdict = PyDict_New();
+        if (!kwdict) return NULL;
+        for (Py_ssize_t i = 0; i < nkw; i++) {
+            PyObject *name = PyTuple_GetItem(kwnames, i);
+            if (PyDict_SetItem(kwdict, name, args[npos + i]) < 0)
+                return NULL;
+        }
+        typedef PyObject *(*VarArgsKwFunc)(PyObject *, PyObject *, PyObject *);
+        VarArgsKwFunc func = (VarArgsKwFunc)(void *)method->ml_meth;
+        return func(self, tuple, kwdict);
+    }
+
+    PyErr_Format(PyExc_TypeError,
+                 "%s() has METH_KEYWORDS but no recognized calling convention",
+                 method->ml_name);
+    return NULL;
+}
+
 /* ====================================================================
  * Buffer cache — materialized C buffers for bytes/strings
  *
@@ -452,7 +616,18 @@ extern "C" PyObject *PyFloat_FromDouble(double v) {
 }
 
 extern "C" double PyFloat_AsDouble(PyObject *obj) {
-    return GciOopToFlt(pyobj_oop(obj));
+    if (obj == NULL) {
+        PyErr_BadArgument();
+        return -1.0;
+    }
+    OopType oop = pyobj_oop(obj);
+    /* CPython accepts ints (and __index__-able wrappers) here too. */
+    if (GCI_OOP_IS_SMALL_INT(oop))
+        return (double)GciOopToI64(oop);
+    if (Py_TYPE(obj) != NULL &&
+        (Py_TYPE(obj)->tp_flags & Py_TPFLAGS_LONG_SUBCLASS))
+        return (double)oopToLongWithIndex(oop);
+    return GciOopToFlt(oop);
 }
 
 extern "C" int PyFloat_Check(PyObject *obj) {
@@ -506,8 +681,20 @@ extern "C" long PyLong_AsLong(PyObject *obj) {
     return (long)oopToLongWithIndex(pyobj_oop(obj));
 }
 
+/* Subclass-aware check: CPython's PyXxx_Check tests tp_flags subclass
+   bits so bool passes PyLong_Check and heap-type subclasses pass too. */
+static inline int type_flag_check(PyObject *obj, unsigned long flag) {
+    return obj != NULL && Py_TYPE(obj) != NULL &&
+           (Py_TYPE(obj)->tp_flags & flag) != 0;
+}
+
 extern "C" int PyLong_Check(PyObject *obj) {
-    return obj != NULL && Py_TYPE(obj) == &PyLong_Type;
+    return type_flag_check(obj, Py_TPFLAGS_LONG_SUBCLASS);
+}
+
+extern "C" int PyBool_Check(PyObject *obj) {
+    return obj != NULL &&
+           (obj == Py_True || obj == Py_False || Py_TYPE(obj) == &PyBool_Type);
 }
 
 /* ====================================================================
@@ -516,12 +703,25 @@ extern "C" int PyLong_Check(PyObject *obj) {
 
 extern "C" int PyObject_IsTrue(PyObject *obj) {
     if (obj == NULL) return 0;
+    if (obj == Py_None || obj == Py_False) return 0;
     OopType oop = pyobj_oop(obj);
     if (oop == OOP_NIL || oop == OOP_FALSE)
         return 0;
     /* SmallInteger 0 is false */
     if ((oop & OOP_RAM_TAG_MASK) == OOP_TAG_SMALLINT && GciOopToI64(oop) == 0)
         return 0;
+    /* Empty containers and empty strings are falsy. Byte-format objects
+       (str/bytes) answer their size directly; list/dict sizes come from
+       the server. SmallDouble 0.0 is also falsy. */
+    PyTypeObject *t = Py_TYPE(obj);
+    if (t == &PyUnicode_Type || t == &PyBytes_Type || t == &PyTuple_Type)
+        return GciFetchSize_(oop) != 0;
+    if (t == &PyList_Type)
+        return PyList_Size(obj) != 0;
+    if (t == &PyDict_Type)
+        return PyDict_Size(obj) != 0;
+    if (t == &PyFloat_Type)
+        return GciOopToFlt(oop) != 0.0;
     return 1;
 }
 
@@ -548,7 +748,7 @@ extern "C" const char *PyUnicode_AsUTF8(PyObject *obj) {
 }
 
 extern "C" int PyUnicode_Check(PyObject *obj) {
-    return obj != NULL && Py_TYPE(obj) == &PyUnicode_Type;
+    return type_flag_check(obj, Py_TPFLAGS_UNICODE_SUBCLASS);
 }
 
 /* ====================================================================
@@ -582,7 +782,7 @@ extern "C" Py_ssize_t PyBytes_Size(PyObject *obj) {
 }
 
 extern "C" int PyBytes_Check(PyObject *obj) {
-    return obj != NULL && Py_TYPE(obj) == &PyBytes_Type;
+    return type_flag_check(obj, Py_TPFLAGS_BYTES_SUBCLASS);
 }
 
 /* ====================================================================
@@ -653,7 +853,7 @@ extern "C" Py_ssize_t PyList_Size(PyObject *list) {
 }
 
 extern "C" int PyList_Check(PyObject *obj) {
-    return obj != NULL && Py_TYPE(obj) == &PyList_Type;
+    return type_flag_check(obj, Py_TPFLAGS_LIST_SUBCLASS);
 }
 
 /* ====================================================================
@@ -722,7 +922,7 @@ extern "C" Py_ssize_t PyDict_Size(PyObject *dict) {
 }
 
 extern "C" int PyDict_Check(PyObject *obj) {
-    return obj != NULL && Py_TYPE(obj) == &PyDict_Type;
+    return type_flag_check(obj, Py_TPFLAGS_DICT_SUBCLASS);
 }
 
 /* ====================================================================
@@ -757,7 +957,7 @@ extern "C" Py_ssize_t PyTuple_Size(PyObject *tuple) {
 }
 
 extern "C" int PyTuple_Check(PyObject *obj) {
-    return obj != NULL && Py_TYPE(obj) == &PyTuple_Type;
+    return type_flag_check(obj, Py_TPFLAGS_TUPLE_SUBCLASS);
 }
 
 /* ====================================================================
@@ -1321,22 +1521,78 @@ extern "C" PyObject *PyObject_Type(PyObject *obj) {
  * ==================================================================== */
 
 extern "C" PyObject *PySlice_New(PyObject *start, PyObject *stop, PyObject *step) {
-    (void)start; (void)stop; (void)step;
-    /* Stub — _sre doesn't actually call this */
-    PyErr_SetString(PyExc_RuntimeError, "PySlice_New not implemented");
-    return NULL;
+    /* pyobj_oop(NULL) is the None OOP, so C NULL maps to Python None. */
+    OopType args[3] = { pyobj_oop(start), pyobj_oop(stop), pyobj_oop(step) };
+    OopType result = GciPerform(server, "PySlice_New:stop:step:", args, 3);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(result);
 }
 
 extern "C" int PySlice_Unpack(PyObject *slice, Py_ssize_t *start,
                                Py_ssize_t *stop, Py_ssize_t *step) {
-    (void)slice; (void)start; (void)stop; (void)step;
-    PyErr_SetString(PyExc_RuntimeError, "PySlice_Unpack not implemented");
-    return -1;
+    OopType arg = pyobj_oop(slice);
+    OopType result = GciPerform(server, "PySlice_Unpack:", &arg, 1);
+    if (check_gci_error()) return -1;
+    if (result == OOP_NIL) {
+        PyErr_SetString(PyExc_TypeError, "PySlice_Unpack: not a slice object");
+        return -1;
+    }
+
+    /* result is { startOrNil. stopOrNil. stepOrNil }; CPython defaults
+       are applied here so the huge sentinel values never round-trip
+       through Smalltalk SmallIntegers. */
+    OopType idx1[1] = { OOP_One };
+    OopType idx2[1] = { OOP_Two };
+    OopType idx3[1] = { OOP_Three };
+    OopType stepOop = GciPerform(result, "at:", idx3, 1);
+    *step = (stepOop == OOP_NIL) ? 1 : (Py_ssize_t)GciOopToI64(stepOop);
+    if (*step == 0) {
+        PyErr_SetString(PyExc_ValueError, "slice step cannot be zero");
+        return -1;
+    }
+    OopType startOop = GciPerform(result, "at:", idx1, 1);
+    *start = (startOop == OOP_NIL)
+        ? (*step < 0 ? PY_SSIZE_T_MAX : 0)
+        : (Py_ssize_t)GciOopToI64(startOop);
+    OopType stopOop = GciPerform(result, "at:", idx2, 1);
+    *stop = (stopOop == OOP_NIL)
+        ? (*step < 0 ? PY_SSIZE_T_MIN : PY_SSIZE_T_MAX)
+        : (Py_ssize_t)GciOopToI64(stopOop);
+    return 0;
 }
 
 extern "C" Py_ssize_t PySlice_AdjustIndices(Py_ssize_t length, Py_ssize_t *start,
                                              Py_ssize_t *stop, Py_ssize_t step) {
-    (void)length; (void)start; (void)stop; (void)step;
+    /* CPython's clamping algorithm (Objects/sliceobject.c). Returns the
+       number of elements the adjusted slice selects. */
+    assert(step != 0);
+
+    if (*start < 0) {
+        *start += length;
+        if (*start < 0)
+            *start = (step < 0) ? -1 : 0;
+    }
+    else if (*start >= length) {
+        *start = (step < 0) ? length - 1 : length;
+    }
+
+    if (*stop < 0) {
+        *stop += length;
+        if (*stop < 0)
+            *stop = (step < 0) ? -1 : 0;
+    }
+    else if (*stop >= length) {
+        *stop = (step < 0) ? length - 1 : length;
+    }
+
+    if (step < 0) {
+        if (*stop < *start)
+            return (*start - *stop - 1) / (-step) + 1;
+    }
+    else {
+        if (*start < *stop)
+            return (*stop - *start - 1) / step + 1;
+    }
     return 0;
 }
 
@@ -1345,7 +1601,10 @@ extern "C" Py_ssize_t PySlice_AdjustIndices(Py_ssize_t length, Py_ssize_t *start
  * ==================================================================== */
 
 extern "C" int PyObject_CheckBuffer(PyObject *obj) {
-    return PyBytes_Check(obj) || PyUnicode_Check(obj);
+    if (PyBytes_Check(obj) || PyUnicode_Check(obj)) return 1;
+    return obj != NULL && Py_TYPE(obj) != NULL &&
+           Py_TYPE(obj)->tp_as_buffer != NULL &&
+           Py_TYPE(obj)->tp_as_buffer->bf_getbuffer != NULL;
 }
 
 extern "C" int PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags) {
@@ -1361,12 +1620,19 @@ extern "C" int PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags) {
         return 0;
     }
     if (PyUnicode_Check(obj)) {
-        /* Return the raw UTF-8 bytes */
+        /* Return the raw UTF-8 bytes; len is the BYTE length (the
+           code-point count can be shorter for non-ASCII strings). */
         view->buf = (void *)PyUnicode_AsUTF8(obj);
-        view->len = PyUnicode_GetLength(obj);
+        view->len = (Py_ssize_t)GciFetchSize_(pyobj_oop(obj));
         view->itemsize = 1;
         view->readonly = 1;
         return 0;
+    }
+    /* Heap types implementing the buffer protocol (Py_bf_getbuffer slot) */
+    if (obj != NULL && Py_TYPE(obj) != NULL &&
+        Py_TYPE(obj)->tp_as_buffer != NULL &&
+        Py_TYPE(obj)->tp_as_buffer->bf_getbuffer != NULL) {
+        return Py_TYPE(obj)->tp_as_buffer->bf_getbuffer(obj, view, flags);
     }
     PyErr_Format(PyExc_TypeError, "a bytes-like object is required, not '%.200s'",
                  obj ? Py_TYPE(obj)->tp_name : "NULL");
@@ -1374,7 +1640,13 @@ extern "C" int PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags) {
 }
 
 extern "C" void PyBuffer_Release(Py_buffer *view) {
-    /* Buffer memory is managed by the buffer cache — don't free here */
+    /* Heap types with a release hook get it; str/bytes buffers are owned
+       by the buffer cache and must not be freed here. */
+    if (view->obj != NULL && Py_TYPE(view->obj) != NULL &&
+        Py_TYPE(view->obj)->tp_as_buffer != NULL &&
+        Py_TYPE(view->obj)->tp_as_buffer->bf_releasebuffer != NULL) {
+        Py_TYPE(view->obj)->tp_as_buffer->bf_releasebuffer(view->obj, view);
+    }
     memset(view, 0, sizeof(Py_buffer));
 }
 
@@ -1415,25 +1687,33 @@ extern "C" PyObject *PyDict_GetItemWithError(PyObject *dict, PyObject *key) {
  * ==================================================================== */
 
 extern "C" int PyArg_ParseTuple(PyObject *args, const char *format, ...) {
-    /* Minimal implementation for _sre's match_group (METH_VARARGS).
-       Supports: "O", "n", "On", "OO", "|" for optional args.
-       args is a tuple. */
+    /* Covers the format units used by typical extension modules:
+       O, O!, O&, n, i, b, h, l, k, K, L, I, d, f, p, c, s, s#, z, y, y#,
+       plus '|' (optional), '$' (keyword-only — treated like '|'),
+       and ':'/';' function-name suffixes. */
     Py_ssize_t nargs = PyTuple_Size(args);
     va_list vargs;
     va_start(vargs, format);
 
     const char *f = format;
+    const char *fname = strchr(format, ':');
+    if (!fname) fname = strchr(format, ';');
+    fname = fname ? fname + 1 : "function";
+
     Py_ssize_t i = 0;
     int required = 1;
 
     while (*f) {
-        if (*f == '|') { required = 0; f++; continue; }
+        if (*f == '|' || *f == '$') { required = 0; f++; continue; }
         if (*f == ':' || *f == ';') break;  /* end of format */
+        if (*f == ' ') { f++; continue; }
 
         if (i >= nargs) {
             if (required) {
                 va_end(vargs);
-                PyErr_SetString(PyExc_TypeError, "not enough arguments");
+                PyErr_Format(PyExc_TypeError,
+                    "%s expected at least %zd arguments, got %zd",
+                    fname, i + 1, nargs);
                 return 0;
             }
             break;
@@ -1441,11 +1721,43 @@ extern "C" int PyArg_ParseTuple(PyObject *args, const char *format, ...) {
 
         PyObject *item = PyTuple_GetItem(args, i);
         if (item == NULL) {
+          va_end(vargs);
           PyErr_Format(PyExc_RuntimeError, "PyArg_ParseTuple: item == NULL");
           return 0;
         }
         switch (*f) {
             case 'O': {
+                if (f[1] == '!') {
+                    PyTypeObject *expected = va_arg(vargs, PyTypeObject *);
+                    PyObject **out = va_arg(vargs, PyObject **);
+                    if (Py_TYPE(item) != expected &&
+                        !(Py_TYPE(item) && expected &&
+                          Py_TYPE(item)->tp_base == expected)) {
+                        va_end(vargs);
+                        PyErr_Format(PyExc_TypeError,
+                            "%s argument %zd must be %s, not %s",
+                            fname, i + 1, expected->tp_name,
+                            Py_TYPE(item) ? Py_TYPE(item)->tp_name : "?");
+                        return 0;
+                    }
+                    *out = item;
+                    f++;  /* consume '!' */
+                    break;
+                }
+                if (f[1] == '&') {
+                    typedef int (*converter_t)(PyObject *, void *);
+                    converter_t conv = va_arg(vargs, converter_t);
+                    void *out = va_arg(vargs, void *);
+                    if (!conv(item, out)) {
+                        va_end(vargs);
+                        if (!PyErr_Occurred())
+                            PyErr_Format(PyExc_TypeError,
+                                "%s argument %zd conversion failed", fname, i + 1);
+                        return 0;
+                    }
+                    f++;  /* consume '&' */
+                    break;
+                }
                 PyObject **out = va_arg(vargs, PyObject **);
                 *out = item;
                 break;
@@ -1460,6 +1772,132 @@ extern "C" int PyArg_ParseTuple(PyObject *args, const char *format, ...) {
                 *out = (int)PyLong_AsLong(item);
                 break;
             }
+            case 'b': {
+                unsigned char *out = va_arg(vargs, unsigned char *);
+                *out = (unsigned char)PyLong_AsLong(item);
+                break;
+            }
+            case 'h': {
+                short *out = va_arg(vargs, short *);
+                *out = (short)PyLong_AsLong(item);
+                break;
+            }
+            case 'l': {
+                long *out = va_arg(vargs, long *);
+                *out = PyLong_AsLong(item);
+                break;
+            }
+            case 'k': {
+                unsigned long *out = va_arg(vargs, unsigned long *);
+                *out = PyLong_AsUnsignedLong(item);
+                break;
+            }
+            case 'L': {
+                long long *out = va_arg(vargs, long long *);
+                *out = PyLong_AsLongLong(item);
+                break;
+            }
+            case 'K': {
+                unsigned long long *out = va_arg(vargs, unsigned long long *);
+                *out = PyLong_AsUnsignedLongLong(item);
+                break;
+            }
+            case 'I': {
+                unsigned int *out = va_arg(vargs, unsigned int *);
+                *out = (unsigned int)PyLong_AsUnsignedLong(item);
+                break;
+            }
+            case 'd': {
+                double *out = va_arg(vargs, double *);
+                *out = PyFloat_AsDouble(item);
+                break;
+            }
+            case 'f': {
+                float *out = va_arg(vargs, float *);
+                *out = (float)PyFloat_AsDouble(item);
+                break;
+            }
+            case 'p': {
+                int *out = va_arg(vargs, int *);
+                *out = PyObject_IsTrue(item);
+                break;
+            }
+            case 'c': {
+                char *out = va_arg(vargs, char *);
+                const char *s = PyUnicode_AsUTF8(item);
+                if (!s || strlen(s) != 1) {
+                    va_end(vargs);
+                    PyErr_Format(PyExc_TypeError,
+                        "%s argument %zd must be a 1-character string",
+                        fname, i + 1);
+                    return 0;
+                }
+                *out = s[0];
+                break;
+            }
+            case 'z':   /* string or None */
+            case 's': {
+                if (*f == 'z' && item == Py_None) {
+                    if (f[1] == '#') {
+                        const char **out = va_arg(vargs, const char **);
+                        Py_ssize_t *len = va_arg(vargs, Py_ssize_t *);
+                        *out = NULL; *len = 0;
+                        f++;
+                    } else {
+                        const char **out = va_arg(vargs, const char **);
+                        *out = NULL;
+                    }
+                    break;
+                }
+                if (!PyUnicode_Check(item)) {
+                    va_end(vargs);
+                    PyErr_Format(PyExc_TypeError,
+                        "%s argument %zd must be str, not %s",
+                        fname, i + 1,
+                        Py_TYPE(item) ? Py_TYPE(item)->tp_name : "?");
+                    return 0;
+                }
+                if (f[1] == '#') {
+                    const char **out = va_arg(vargs, const char **);
+                    Py_ssize_t *len = va_arg(vargs, Py_ssize_t *);
+                    *out = PyUnicode_AsUTF8AndSize(item, len);
+                    f++;  /* consume '#' */
+                } else {
+                    const char **out = va_arg(vargs, const char **);
+                    *out = PyUnicode_AsUTF8(item);
+                }
+                break;
+            }
+            case 'y': {
+                if (!PyBytes_Check(item)) {
+                    va_end(vargs);
+                    PyErr_Format(PyExc_TypeError,
+                        "%s argument %zd must be bytes, not %s",
+                        fname, i + 1,
+                        Py_TYPE(item) ? Py_TYPE(item)->tp_name : "?");
+                    return 0;
+                }
+                if (f[1] == '#' || f[1] == '*') {
+                    /* 'y#' fills ptr+len; 'y*' fills a Py_buffer. */
+                    if (f[1] == '*') {
+                        Py_buffer *view = va_arg(vargs, Py_buffer *);
+                        if (PyObject_GetBuffer(item, view, PyBUF_SIMPLE) < 0) {
+                            va_end(vargs);
+                            return 0;
+                        }
+                    } else {
+                        const char **out = va_arg(vargs, const char **);
+                        Py_ssize_t *len = va_arg(vargs, Py_ssize_t *);
+                        *out = PyBytes_AsString(item);
+                        *len = PyBytes_Size(item);
+                    }
+                    f++;  /* consume '#' or '*' */
+                } else {
+                    const char **out = va_arg(vargs, const char **);
+                    *out = PyBytes_AsString(item);
+                }
+                break;
+            }
             default:
                 va_end(vargs);
                 PyErr_Format(PyExc_RuntimeError,
@@ -1471,6 +1909,16 @@ extern "C" int PyArg_ParseTuple(PyObject *args, const char *format, ...) {
     }
 
     va_end(vargs);
+
+    /* Too many args? Count remaining required format units. */
+    if (i < nargs && *f != ':' && *f != ';' && *f != '\0') {
+        /* leftover format units exist but we ran out — already handled */
+    }
+    if (i < nargs && (*f == '\0' || *f == ':' || *f == ';')) {
+        PyErr_Format(PyExc_TypeError,
+            "%s expected at most %zd arguments, got %zd", fname, i, nargs);
+        return 0;
+    }
     return 1;
 }
 
@@ -1579,6 +2027,24 @@ static PyObject *module_cache[MAX_MODULES];
 static char      module_names[MAX_MODULES][64];
 static int       num_modules = 0;
 
+/* Multi-phase init: allocate state and run Py_mod_exec slots.
+   Returns 0 on success, -1 if an exec slot failed. */
+static int run_module_exec_slots(PyObject *mod) {
+    PyModuleDef *def = (PyModuleDef *)mod;
+    if (!def->m_slots) return 0;
+    if (def->m_size > 0) {
+        allocate_module_state(def);
+    }
+    for (PyModuleDef_Slot *slot = def->m_slots; slot->slot; slot++) {
+        if (slot->slot == Py_mod_exec) {
+            typedef int (*ExecFunc)(PyObject *);
+            ExecFunc exec = (ExecFunc)slot->value;
+            if (exec(mod) != 0) return -1;
+        }
+    }
+    return 0;
+}
+
 static PyObject *get_or_load_module(const char *name) {
     /* Check cache */
     for (int i = 0; i < num_modules; i++) {
@@ -1595,26 +2061,10 @@ static PyObject *get_or_load_module(const char *name) {
                 module_cache[num_modules] = mod;
                 num_modules++;
 
-                /* Multi-phase init: check for Py_mod_exec slot */
-                PyModuleDef *def = (PyModuleDef *)mod;
-                if (def->m_slots) {
-                    /* Allocate module state if m_size > 0 */
-                    if (def->m_size > 0) {
-                        allocate_module_state(def);
-                    }
-                    /* Run Py_mod_exec slots */
-                    for (PyModuleDef_Slot *slot = def->m_slots; slot->slot; slot++) {
-                        if (slot->slot == Py_mod_exec) {
-                            typedef int (*ExecFunc)(PyObject *);
-                            ExecFunc exec = (ExecFunc)slot->value;
-                            int rc = exec(mod);
-                            if (rc != 0) {
-                                /* exec failed — remove from cache */
-                                num_modules--;
-                                return NULL;
-                            }
-                        }
-                    }
+                if (run_module_exec_slots(mod) != 0) {
+                    /* exec failed — remove from cache */
+                    num_modules--;
+                    return NULL;
                 }
             }
             return mod;
@@ -1760,6 +2210,89 @@ static OopType shimCall(OopType modOop, OopType methOop,
 }
 
 /* ====================================================================
+ * shimCallKw — call a module method with positional AND keyword args
+ *
+ * Arguments (5 OopType):
+ *   mod      — String: module name
+ *   meth     — String: method name
+ *   posArr   — Array of SmallInteger: PyObject addresses (positionals)
+ *   kwNames  — Array of String: keyword names
+ *   kwVals   — Array of SmallInteger: PyObject addresses (keyword values)
+ *
+ * Follows the METH_FASTCALL|METH_KEYWORDS vector convention internally;
+ * METH_VARARGS|METH_KEYWORDS methods get a dict instead.
+ * ==================================================================== */
+
+#define SHIM_KW_MAX_ARGS 16
+
+static OopType shimCallKw(OopType modOop, OopType methOop,
+                          OopType posArrOop, OopType kwNamesOop,
+                          OopType kwValsOop)
+{
+    char modName[64], methName[64];
+    fetch_string(modOop, modName, sizeof(modName));
+    fetch_string(methOop, methName, sizeof(methName));
+
+    PyObject *module = get_or_load_module(modName);
+    if (!module) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Module not found: %s", modName);
+        raise_error(msg);
+        return OOP_NIL;
+    }
+    int methIdx = find_method(module, methName);
+    if (methIdx < 0) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Method not found: %s.%s", modName, methName);
+        raise_error(msg);
+        return OOP_NIL;
+    }
+
+    Py_ssize_t npos = (Py_ssize_t)GciFetchSize_(posArrOop);
+    Py_ssize_t nkw = (Py_ssize_t)GciFetchSize_(kwNamesOop);
+    if (npos + nkw > SHIM_KW_MAX_ARGS) {
+        raise_error("shimCallKw: too many arguments");
+        return OOP_NIL;
+    }
+
+    /* args = positionals followed by keyword values */
+    PyObject *args[SHIM_KW_MAX_ARGS];
+    for (Py_ssize_t i = 0; i < npos; i++) {
+        OopType idxOop = GciI64ToOop(i + 1);
+        OopType addrOop = GciPerform(posArrOop, "at:", &idxOop, 1);
+        args[i] = (PyObject *)(intptr_t)GciOopToI64(addrOop);
+    }
+    PyObject *kwnames = PyTuple_New(nkw);
+    if (!kwnames) {
+        raise_error("shimCallKw: could not allocate kwnames");
+        return OOP_NIL;
+    }
+    for (Py_ssize_t i = 0; i < nkw; i++) {
+        OopType idxOop = GciI64ToOop(i + 1);
+        OopType nameOop = GciPerform(kwNamesOop, "at:", &idxOop, 1);
+        OopType valAddrOop = GciPerform(kwValsOop, "at:", &idxOop, 1);
+        /* The name is already a Smalltalk String — wrap it as a PyObject */
+        OopType nameAddr = GciPerform(server, "PyUnicode_FromString:", &nameOop, 1);
+        PyTuple_SetItem(kwnames, i, addr_to_pyobj(nameAddr));
+        args[npos + i] = (PyObject *)(intptr_t)GciOopToI64(valAddrOop);
+    }
+
+    PyModuleDef *def = (PyModuleDef *)module;
+    PyMethodDef *method = &def->m_methods[methIdx];
+    PyErr_Clear();
+    PyObject *result = call_method_on_kw(module, method, NULL,
+                                         args, npos, kwnames, nkw);
+
+    buffer_cache_clear();
+    if (has_error()) {
+        check_and_raise_error();
+        return OOP_NIL;
+    }
+    if (!result) return OOP_NIL;
+    return pyobj_oop(result);
+}
+
+/* ====================================================================
  * shimLoadModule — verify a module can be loaded
  * ==================================================================== */
 
@@ -1851,17 +2384,27 @@ extern "C" int PyType_Ready(PyTypeObject *type) {
     return 0;
 }
 
-extern "C" PyObject *PyType_GenericNew(PyTypeObject *type, PyObject *args,
-                                       PyObject *kwds) {
-    (void)type; (void)args; (void)kwds;
-    /* Stub — real implementation would allocate an instance. */
-    return NULL;
-}
-
 extern "C" PyObject *PyType_GenericAlloc(PyTypeObject *type,
                                          Py_ssize_t nitems) {
-    (void)type; (void)nitems;
-    return NULL;
+    size_t size = (size_t)type->tp_basicsize +
+                  (size_t)nitems * (size_t)type->tp_itemsize;
+    PyObject *obj = (PyObject *)calloc(1, size);
+    if (!obj) {
+        PyErr_NoMemory();
+        return NULL;
+    }
+    obj->ob_refcnt = 1;
+    obj->ob_type = type;
+    if (type->tp_itemsize != 0)
+        Py_SET_SIZE(obj, nitems);
+    return obj;
+}
+
+extern "C" PyObject *PyType_GenericNew(PyTypeObject *type, PyObject *args,
+                                       PyObject *kwds) {
+    (void)args; (void)kwds;
+    allocfunc alloc = type->tp_alloc ? type->tp_alloc : PyType_GenericAlloc;
+    return alloc(type, 0);
 }
 
 /* ====================================================================
@@ -1884,10 +2427,16 @@ static struct {
 } heap_types[MAX_HEAP_TYPES];
 static int heap_type_count = 0;
 
+/* Subclass-identity bits a heap type inherits from its base so the
+   flag-based PyXxx_Check functions see through the subclassing. */
+#define Py_TPFLAGS_SUBCLASS_MASK                                         \
+    (Py_TPFLAGS_LONG_SUBCLASS | Py_TPFLAGS_LIST_SUBCLASS |               \
+     Py_TPFLAGS_TUPLE_SUBCLASS | Py_TPFLAGS_BYTES_SUBCLASS |             \
+     Py_TPFLAGS_UNICODE_SUBCLASS | Py_TPFLAGS_DICT_SUBCLASS |            \
+     Py_TPFLAGS_BASE_EXC_SUBCLASS | Py_TPFLAGS_TYPE_SUBCLASS)
+
 static PyObject *type_from_spec_impl(PyObject *module, PyType_Spec *spec,
                                      PyObject *bases) {
-    (void)bases;
-
     if (heap_type_count >= MAX_HEAP_TYPES) {
         PyErr_SetString(PyExc_RuntimeError, "Too many heap types");
         return NULL;
@@ -1904,6 +2453,22 @@ static PyObject *type_from_spec_impl(PyObject *module, PyType_Spec *spec,
     type->tp_itemsize = spec->itemsize;
     type->tp_flags = spec->flags | Py_TPFLAGS_HEAPTYPE | Py_TPFLAGS_READY;
     type->tp_base = &PyBaseObject_Type;
+
+    /* A single type object passed as `bases` becomes tp_base. A TUPLE of
+       bases cannot be supported: the tuple lives in Smalltalk and type
+       objects have no OOP at offset 16, so its elements are unreadable —
+       reject loudly rather than mis-derive. */
+    if (bases != NULL) {
+        if (Py_TYPE(bases) == &PyType_Type) {
+            type->tp_base = (PyTypeObject *)bases;
+        } else {
+            free(type);
+            PyErr_SetString(PyExc_TypeError,
+                "PyType_FromSpecWithBases: only a single type object is "
+                "supported as bases in the Grail shim (not a tuple)");
+            return NULL;
+        }
+    }
 
     int idx = heap_type_count++;
     heap_types[idx].type = type;
@@ -1991,6 +2556,15 @@ static PyObject *type_from_spec_impl(PyObject *module, PyType_Spec *spec,
                 /* Ignore unhandled slots */
                 break;
         }
+    }
+
+    /* Inherit subclass-identity flag bits (and buffer procs) from the
+       base so PyXxx_Check and PyObject_GetBuffer see through heap-type
+       subclassing. */
+    if (type->tp_base) {
+        type->tp_flags |= type->tp_base->tp_flags & Py_TPFLAGS_SUBCLASS_MASK;
+        if (!type->tp_as_buffer && type->tp_base->tp_as_buffer)
+            type->tp_as_buffer = type->tp_base->tp_as_buffer;
     }
 
     return (PyObject *)type;
@@ -2122,6 +2696,17 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
     module_cache[num_modules] = mod;
     num_modules++;
 
+    /* Multi-phase modules: run Py_mod_exec slots (registers constants,
+       creates heap types). Previously only the static-registry path did
+       this, so dynamically loaded modules silently skipped their init. */
+    if (run_module_exec_slots(mod) != 0) {
+        num_modules--;
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Module exec failed: %s", name);
+        raise_error(msg);
+        return OOP_NIL;
+    }
+
     /* Walk the method table and return an Array of method name strings */
     PyModuleDef *def = (PyModuleDef *)mod;
     PyMethodDef *methods = def->m_methods;
@@ -2133,6 +2718,82 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
     for (int i = 0; i < count; i++) {
         OopType nameStr = GciNewString(methods[i].ml_name);
         GciStoreOop(arr, i + 1, nameStr);
+    }
+    return arr;
+}
+
+/* ====================================================================
+ * shimModuleAttrs — export module-level constants to Smalltalk
+ *
+ * PyModule_AddIntConstant / AddStringConstant / AddObjectRef record
+ * attributes in the C-side module_attrs table. This user action returns
+ * them as a flat Array { name1. value1. name2. value2. ... } so the
+ * Smalltalk module wrapper can expose them as Python attributes.
+ *
+ * Object attrs are exported only when they wrap a Smalltalk value
+ * (int/float/str/bytes/list/dict/tuple/bool/None) — C-only objects
+ * (heap types, capsules) have no OOP at offset 16 and are skipped.
+ * ==================================================================== */
+
+static int is_value_pyobj(PyObject *obj) {
+    if (obj == NULL) return 0;
+    if (obj == Py_None || obj == Py_True || obj == Py_False) return 1;
+    PyTypeObject *t = Py_TYPE(obj);
+    return t == &PyLong_Type || t == &PyFloat_Type || t == &PyBool_Type ||
+           t == &PyUnicode_Type || t == &PyBytes_Type || t == &PyList_Type ||
+           t == &PyDict_Type || t == &PyTuple_Type;
+}
+
+static OopType shimModuleAttrs(OopType modOop)
+{
+    char modName[64];
+    fetch_string(modOop, modName, sizeof(modName));
+
+    PyObject *module = get_or_load_module(modName);
+    if (!module) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Module not found: %s", modName);
+        raise_error(msg);
+        return OOP_NIL;
+    }
+
+    int idx = -1;
+    for (int i = 0; i < module_attrs_count; i++) {
+        if (module_attrs[i].module == module) { idx = i; break; }
+    }
+
+    /* First pass: count exportable attrs */
+    int exportable = 0;
+    int total = (idx < 0) ? 0 : module_attrs[idx].attr_count;
+    for (int i = 0; i < total; i++) {
+        ModuleAttr *a = &module_attrs[idx].attrs[i];
+        if (a->type == ModuleAttr::ATTR_OBJECT && !is_value_pyobj(a->obj_val))
+            continue;
+        exportable++;
+    }
+
+    OopType sizeOop = GciI64ToOop(exportable * 2);
+    OopType arr = GciPerform(OOP_CLASS_ARRAY, "new:", &sizeOop, 1);
+    int slot = 1;
+    for (int i = 0; i < total; i++) {
+        ModuleAttr *a = &module_attrs[idx].attrs[i];
+        OopType valOop;
+        switch (a->type) {
+            case ModuleAttr::ATTR_INT:
+                valOop = GciI64ToOop(a->int_val);
+                break;
+            case ModuleAttr::ATTR_STRING:
+                valOop = GciNewString(a->str_val);
+                break;
+            case ModuleAttr::ATTR_OBJECT:
+                if (!is_value_pyobj(a->obj_val)) continue;
+                valOop = pyobj_oop(a->obj_val);
+                break;
+            default:
+                continue;
+        }
+        GciStoreOop(arr, slot++, GciNewString(a->name));
+        GciStoreOop(arr, slot++, valOop);
     }
     return arr;
 }
@@ -2161,6 +2822,7 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
     int flags = GciOopToI32(flagsOop);
     int nargs = flags & 0x7;
     int returnCPtr = (flags >> 3) & 1;
+    int setAttr = (flags >> 4) & 1;
 
     /* Find the module */
     PyObject *module = get_or_load_module(modName);
@@ -2171,29 +2833,20 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
         return OOP_NIL;
     }
 
-    /* Find the type — look in module state for the type pointer */
-    PyModuleDef *def = (PyModuleDef *)module;
-    void *state = NULL;
-    if (def->m_size > 0) {
-        state = PyModule_GetState(module);
-    }
-
-    /* The module state contains PyTypeObject* entries. We search by name. */
+    /* Find the type in the heap-type registry by short name (after the
+       last '.'). Registered at PyType_FromModuleAndSpec / PyModule_AddType
+       time; no module state is needed for the lookup. */
     PyTypeObject *targetType = NULL;
-    if (state) {
-        /* Walk through heap_types to find matching name */
-        for (int i = 0; i < heap_type_count; i++) {
-            if (heap_types[i].module == module &&
-                heap_types[i].type &&
-                heap_types[i].type->tp_name) {
-                /* Match by short name (after last '.') */
-                const char *name = heap_types[i].type->tp_name;
-                const char *dot = strrchr(name, '.');
-                const char *shortName = dot ? dot + 1 : name;
-                if (strcmp(shortName, typeName) == 0) {
-                    targetType = heap_types[i].type;
-                    break;
-                }
+    for (int i = 0; i < heap_type_count; i++) {
+        if (heap_types[i].module == module &&
+            heap_types[i].type &&
+            heap_types[i].type->tp_name) {
+            const char *name = heap_types[i].type->tp_name;
+            const char *dot = strrchr(name, '.');
+            const char *shortName = dot ? dot + 1 : name;
+            if (strcmp(shortName, typeName) == 0) {
+                targetType = heap_types[i].type;
+                break;
             }
         }
     }
@@ -2201,6 +2854,33 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
     if (!targetType) {
         char msg[256];
         snprintf(msg, sizeof(msg), "Type not found: %s.%s", modName, typeName);
+        raise_error(msg);
+        return OOP_NIL;
+    }
+
+    /* Setter path (flags bit 4): methName names a tp_getset entry; a1 is
+       the value PyObject. */
+    if (setAttr) {
+        PyGetSetDef *getset = targetType->tp_getset;
+        if (getset) {
+            for (int i = 0; getset[i].name; i++) {
+                if (strcmp(getset[i].name, methName) == 0 && getset[i].set) {
+                    PyObject *self = (PyObject *)(intptr_t)GciOopToI64(selfOop);
+                    PyObject *value = (PyObject *)(intptr_t)GciOopToI64(a1);
+                    PyErr_Clear();
+                    int rc = getset[i].set(self, value, getset[i].closure);
+                    buffer_cache_clear();
+                    if (rc < 0 || has_error()) {
+                        check_and_raise_error();
+                        return OOP_NIL;
+                    }
+                    return OOP_TRUE;
+                }
+            }
+        }
+        char msg[256];
+        snprintf(msg, sizeof(msg), "No settable attribute: %s.%s",
+                 typeName, methName);
         raise_error(msg);
         return OOP_NIL;
     }
@@ -2336,9 +3016,74 @@ PyObject *PyErr_NoMemory(void) {
     return NULL;
 }
 
+int PyErr_GivenExceptionMatches(PyObject *given, PyObject *exc) {
+    if (given == NULL || exc == NULL) return 0;
+    /* Walk the sentinel hierarchy: a KeyError matches LookupError etc. */
+    for (PyObject *e = given; e != NULL; e = exc_parent_of(e)) {
+        if (e == exc) return 1;
+    }
+    /* Dynamic exceptions match their declared base (and its ancestry). */
+    for (int i = 0; i < dyn_exception_count; i++) {
+        if (given == (PyObject *)&dyn_exceptions[i].obj) {
+            PyObject *base = dyn_exceptions[i].base;
+            if (base == NULL) base = PyExc_Exception;
+            return PyErr_GivenExceptionMatches(base, exc);
+        }
+    }
+    return 0;
+}
+
 int PyErr_ExceptionMatches(PyObject *exc) {
-    PyObject *current = PyErr_Occurred();
-    return current == exc;
+    return PyErr_GivenExceptionMatches(PyErr_Occurred(), exc);
+}
+
+PyObject *PyErr_NewException(const char *name, PyObject *base, PyObject *dict) {
+    (void)dict;
+    /* Reuse an existing slot if the same dotted name was created before
+       (modules may be re-initialized within a session). */
+    for (int i = 0; i < dyn_exception_count; i++) {
+        if (strcmp(dyn_exceptions[i].name, name) == 0)
+            return (PyObject *)&dyn_exceptions[i].obj;
+    }
+    if (dyn_exception_count >= MAX_DYN_EXCEPTIONS) {
+        /* Degrade gracefully: errors raise as RuntimeError. */
+        return PyExc_RuntimeError;
+    }
+    int idx = dyn_exception_count++;
+    dyn_exceptions[idx].obj.ob_refcnt = 1;
+    dyn_exceptions[idx].obj.ob_type = NULL;
+    snprintf(dyn_exceptions[idx].name, sizeof(dyn_exceptions[idx].name),
+             "%s", name);
+    dyn_exceptions[idx].base = base;
+    return (PyObject *)&dyn_exceptions[idx].obj;
+}
+
+PyObject *PyErr_NewExceptionWithDoc(const char *name, const char *doc,
+                                    PyObject *base, PyObject *dict) {
+    (void)doc;
+    return PyErr_NewException(name, base, dict);
+}
+
+void PyErr_SetObject(PyObject *type, PyObject *value) {
+    if (value != NULL && PyUnicode_Check(value)) {
+        PyErr_SetString(type, PyUnicode_AsUTF8(value));
+        return;
+    }
+    if (value == NULL || value == Py_None) {
+        PyErr_SetString(type, "");
+        return;
+    }
+    PyObject *str = PyObject_Str(value);
+    PyErr_SetString(type, str ? PyUnicode_AsUTF8(str) : "");
+}
+
+int PyErr_BadArgument(void) {
+    PyErr_SetString(PyExc_TypeError, "bad argument type for built-in operation");
+    return 0;
+}
+
+void PyErr_BadInternalCall(void) {
+    PyErr_SetString(PyExc_SystemError, "bad argument to internal function");
 }
 
 /* --- Vectorcall protocol --- */
@@ -2361,11 +3106,103 @@ PyObject *PyObject_Vectorcall(PyObject *callable, PyObject *const *args,
 /* --- Unicode additional --- */
 
 PyObject *PyUnicode_FromFormat(const char *format, ...) {
+    /* Supports the printf subset plus CPython's object conversions:
+       %R (repr), %S (str), %A (repr, ascii not enforced), %U (str object),
+       with optional width/precision digits which are honored for %s. */
     char buf[4096];
+    size_t pos = 0;
+    const size_t cap = sizeof(buf) - 1;
     va_list ap;
     va_start(ap, format);
-    vsnprintf(buf, sizeof(buf), format, ap);
+
+    for (const char *f = format; *f && pos < cap; f++) {
+        if (*f != '%') { buf[pos++] = *f; continue; }
+        f++;
+        /* Collect width/precision digits (e.g. %.200s) */
+        char spec[16];
+        int si = 0;
+        while (*f && (strchr("0123456789.", *f) != NULL) && si < 12)
+            spec[si++] = *f++;
+        spec[si] = '\0';
+        size_t rem = cap - pos;
+
+        switch (*f) {
+            case '%': buf[pos++] = '%'; break;
+            case 'c': {
+                int c = va_arg(ap, int);
+                buf[pos++] = (char)c;
+                break;
+            }
+            case 'd': case 'i': {
+                pos += (size_t)snprintf(buf + pos, rem, "%d", va_arg(ap, int));
+                break;
+            }
+            case 'u': {
+                pos += (size_t)snprintf(buf + pos, rem, "%u", va_arg(ap, unsigned int));
+                break;
+            }
+            case 'x': {
+                pos += (size_t)snprintf(buf + pos, rem, "%x", va_arg(ap, unsigned int));
+                break;
+            }
+            case 'z': {
+                f++;  /* zd / zu / zi */
+                if (*f == 'u')
+                    pos += (size_t)snprintf(buf + pos, rem, "%zu", va_arg(ap, size_t));
+                else
+                    pos += (size_t)snprintf(buf + pos, rem, "%zd", va_arg(ap, Py_ssize_t));
+                break;
+            }
+            case 'l': {
+                f++;  /* ld / lu / lld / llu */
+                if (*f == 'l') {
+                    f++;
+                    if (*f == 'u')
+                        pos += (size_t)snprintf(buf + pos, rem, "%llu", va_arg(ap, unsigned long long));
+                    else
+                        pos += (size_t)snprintf(buf + pos, rem, "%lld", va_arg(ap, long long));
+                } else if (*f == 'u') {
+                    pos += (size_t)snprintf(buf + pos, rem, "%lu", va_arg(ap, unsigned long));
+                } else {
+                    pos += (size_t)snprintf(buf + pos, rem, "%ld", va_arg(ap, long));
+                }
+                break;
+            }
+            case 'p': {
+                pos += (size_t)snprintf(buf + pos, rem, "%p", va_arg(ap, void *));
+                break;
+            }
+            case 's': {
+                const char *s = va_arg(ap, const char *);
+                if (!s) s = "(null)";
+                if (spec[0] == '.') {
+                    int prec = atoi(spec + 1);
+                    pos += (size_t)snprintf(buf + pos, rem, "%.*s", prec, s);
+                } else {
+                    pos += (size_t)snprintf(buf + pos, rem, "%s", s);
+                }
+                break;
+            }
+            case 'R': case 'S': case 'A': case 'U': {
+                PyObject *obj = va_arg(ap, PyObject *);
+                PyObject *strObj;
+                if (*f == 'U')      strObj = obj;
+                else if (*f == 'S') strObj = PyObject_Str(obj);
+                else                strObj = PyObject_Repr(obj);
+                const char *s = strObj ? PyUnicode_AsUTF8(strObj) : NULL;
+                if (!s) s = "<unprintable>";
+                pos += (size_t)snprintf(buf + pos, rem, "%s", s);
+                break;
+            }
+            default:
+                buf[pos++] = '%';
+                if (*f && pos < cap) buf[pos++] = *f;
+                break;
+        }
+        if (pos > cap) pos = cap;
+    }
     va_end(ap);
+    buf[pos] = '\0';
     return PyUnicode_FromString(buf);
 }
 
@@ -2541,29 +3378,144 @@ PyObject *_PyImport_GetModuleAttrString(const char *modname,
 
 /* --- Py_BuildValue --- */
 
+/* Build a single value from one format unit, advancing *pf past it.
+   Returns NULL with an error set for unsupported units. */
+static PyObject *build_value_item(const char **pf, va_list *ap) {
+    const char *f = *pf;
+    PyObject *result = NULL;
+    switch (*f) {
+        case 'i': case 'b': case 'h':
+            result = PyLong_FromLong((long)va_arg(*ap, int)); f++; break;
+        case 'l':
+            result = PyLong_FromLong(va_arg(*ap, long)); f++; break;
+        case 'n':
+            result = PyLong_FromSsize_t(va_arg(*ap, Py_ssize_t)); f++; break;
+        case 'L':
+            result = PyLong_FromLongLong(va_arg(*ap, long long)); f++; break;
+        case 'k':
+            result = PyLong_FromUnsignedLong(va_arg(*ap, unsigned long)); f++; break;
+        case 'K':
+            result = PyLong_FromUnsignedLongLong(va_arg(*ap, unsigned long long)); f++; break;
+        case 'I':
+            result = PyLong_FromUnsignedLong((unsigned long)va_arg(*ap, unsigned int)); f++; break;
+        case 'd': case 'f':
+            result = PyFloat_FromDouble(va_arg(*ap, double)); f++; break;
+        case 'c': {
+            char buf[2] = { (char)va_arg(*ap, int), '\0' };
+            result = PyUnicode_FromString(buf); f++; break;
+        }
+        case 's': case 'z': {
+            const char *s = va_arg(*ap, const char *);
+            if (f[1] == '#') {
+                Py_ssize_t len = va_arg(*ap, Py_ssize_t);
+                result = s ? PyUnicode_FromStringAndSize(s, len) : Py_None;
+                f += 2;
+            } else {
+                result = s ? PyUnicode_FromString(s) : Py_None;
+                f++;
+            }
+            break;
+        }
+        case 'y': {
+            const char *s = va_arg(*ap, const char *);
+            if (f[1] == '#') {
+                Py_ssize_t len = va_arg(*ap, Py_ssize_t);
+                result = s ? PyBytes_FromStringAndSize(s, len) : Py_None;
+                f += 2;
+            } else {
+                result = s ? PyBytes_FromStringAndSize(s, (Py_ssize_t)strlen(s))
+                           : Py_None;
+                f++;
+            }
+            break;
+        }
+        case 'O': case 'N': case 'S': {
+            PyObject *obj = va_arg(*ap, PyObject *);
+            result = obj ? obj : Py_None;
+            f++;
+            break;
+        }
+        case '(': case '[': {
+            char open = *f, close = (open == '(') ? ')' : ']';
+            f++;
+            PyObject *items[32];
+            int count = 0;
+            while (*f && *f != close) {
+                if (*f == ',' || *f == ' ') { f++; continue; }
+                if (count >= 32) {
+                    PyErr_SetString(PyExc_SystemError,
+                                    "Py_BuildValue: too many items");
+                    return NULL;
+                }
+                items[count] = build_value_item(&f, ap);
+                if (!items[count]) return NULL;
+                count++;
+            }
+            if (*f == close) f++;
+            if (open == '(') {
+                result = PyTuple_New(count);
+                for (int j = 0; j < count; j++)
+                    PyTuple_SetItem(result, j, items[j]);
+            } else {
+                result = PyList_New(0);
+                for (int j = 0; j < count; j++)
+                    PyList_Append(result, items[j]);
+            }
+            break;
+        }
+        case '{': {
+            f++;
+            PyObject *dict = PyDict_New();
+            while (*f && *f != '}') {
+                if (*f == ',' || *f == ' ') { f++; continue; }
+                PyObject *key = build_value_item(&f, ap);
+                if (!key) return NULL;
+                if (*f == ':') f++;
+                PyObject *val = build_value_item(&f, ap);
+                if (!val) return NULL;
+                PyDict_SetItem(dict, key, val);
+            }
+            if (*f == '}') f++;
+            result = dict;
+            break;
+        }
+        default:
+            PyErr_Format(PyExc_SystemError,
+                         "Py_BuildValue: unsupported format char '%c'", *f);
+            return NULL;
+    }
+    *pf = f;
+    return result;
+}
+
 PyObject *Py_BuildValue(const char *format, ...) {
     va_list ap;
     va_start(ap, format);
 
-    if (strcmp(format, "Nn") == 0) {
-        PyObject *obj = va_arg(ap, PyObject *);
-        Py_ssize_t n = va_arg(ap, Py_ssize_t);
-        va_end(ap);
-        PyObject *tuple = PyTuple_New(2);
-        if (!tuple) return NULL;
-        PyTuple_SetItem(tuple, 0, obj);  /* steals reference */
-        PyTuple_SetItem(tuple, 1, PyLong_FromSsize_t(n));
-        return tuple;
-    }
-    if (strcmp(format, "") == 0) {
-        va_end(ap);
-        return Py_None;
-    }
+    const char *f = format;
+    PyObject *items[32];
+    int count = 0;
 
+    while (*f && *f != ':' && *f != ';') {
+        if (*f == ',' || *f == ' ') { f++; continue; }
+        if (count >= 32) {
+            va_end(ap);
+            PyErr_SetString(PyExc_SystemError, "Py_BuildValue: too many items");
+            return NULL;
+        }
+        items[count] = build_value_item(&f, &ap);
+        if (!items[count]) { va_end(ap); return NULL; }
+        count++;
+    }
     va_end(ap);
-    PyErr_Format(PyExc_SystemError,
-                 "Py_BuildValue format '%s' not implemented", format);
-    return NULL;
+
+    if (count == 0) return Py_None;
+    if (count == 1) return items[0];
+    PyObject *tuple = PyTuple_New(count);
+    if (!tuple) return NULL;
+    for (int j = 0; j < count; j++)
+        PyTuple_SetItem(tuple, j, items[j]);
+    return tuple;
 }
 
 /* --- Number protocol --- */
@@ -2613,6 +3565,514 @@ PyObject *PyCallIter_New(PyObject *callable, PyObject *sentinel) {
     return NULL;
 }
 
+/* --- Iteration protocol --- */
+
+extern "C" PyObject *PyObject_GetIter(PyObject *obj) {
+    if (obj == NULL) return NULL;
+    OopType arg = pyobj_oop(obj);
+    OopType result = GciPerform(server, "PyObject_GetIter:", &arg, 1);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(result);
+}
+
+extern "C" PyObject *PyIter_Next(PyObject *iterator) {
+    if (iterator == NULL) return NULL;
+    OopType arg = pyobj_oop(iterator);
+    OopType result = GciPerform(server, "PyIter_Next:", &arg, 1);
+    if (check_gci_error()) return NULL;
+    int64 addr = GciOopToI64(result);
+    if (addr == 0) return NULL;  /* exhausted — NULL without error */
+    return (PyObject *)(intptr_t)addr;
+}
+
+extern "C" int PyIter_Check(PyObject *obj) {
+    /* Best effort: anything with __next__ would pass; cheap heuristic is
+       to say yes and let PyIter_Next raise if not. Type-level info isn't
+       tracked for Smalltalk-backed objects. */
+    return obj != NULL;
+}
+
+/* --- Integer 64-bit family --- */
+
+extern "C" PyObject *PyLong_FromLongLong(long long v) {
+    return PyLong_FromSsize_t((Py_ssize_t)v);
+}
+
+extern "C" long long PyLong_AsLongLong(PyObject *obj) {
+    if (obj == NULL) return -1;
+    return (long long)oopToLongWithIndex(pyobj_oop(obj));
+}
+
+extern "C" PyObject *PyLong_FromUnsignedLongLong(unsigned long long v) {
+    /* Values above 2^63-1 cannot ride the tagged SmallInteger path;
+       extensions in practice pass sizes/flags that fit. Saturate with an
+       OverflowError rather than corrupting silently. */
+    if (v > (unsigned long long)PY_SSIZE_T_MAX) {
+        PyErr_SetString(PyExc_OverflowError,
+                        "value too large for the shim's integer path");
+        return NULL;
+    }
+    return PyLong_FromSsize_t((Py_ssize_t)v);
+}
+
+extern "C" unsigned long long PyLong_AsUnsignedLongLong(PyObject *obj) {
+    if (obj == NULL) return (unsigned long long)-1;
+    return (unsigned long long)oopToLongWithIndex(pyobj_oop(obj));
+}
+
+extern "C" unsigned long PyLong_AsUnsignedLongMask(PyObject *obj) {
+    if (obj == NULL) return (unsigned long)-1;
+    return (unsigned long)oopToLongWithIndex(pyobj_oop(obj));
+}
+
+extern "C" PyObject *PyLong_FromDouble(double v) {
+    return PyLong_FromSsize_t((Py_ssize_t)v);  /* truncates toward zero */
+}
+
+extern "C" double PyLong_AsDouble(PyObject *obj) {
+    if (obj == NULL) return -1.0;
+    return (double)oopToLongWithIndex(pyobj_oop(obj));
+}
+
+/* --- Object protocol: PyObject* attribute names --- */
+
+extern "C" PyObject *PyObject_GetAttr(PyObject *obj, PyObject *name) {
+    const char *s = PyUnicode_AsUTF8(name);
+    if (!s) return NULL;
+    return PyObject_GetAttrString(obj, s);
+}
+
+extern "C" int PyObject_SetAttr(PyObject *obj, PyObject *name, PyObject *value) {
+    const char *s = PyUnicode_AsUTF8(name);
+    if (!s) return -1;
+    return PyObject_SetAttrString(obj, s, value);
+}
+
+extern "C" int PyObject_HasAttr(PyObject *obj, PyObject *name) {
+    const char *s = PyUnicode_AsUTF8(name);
+    if (!s) return 0;
+    return PyObject_HasAttrString(obj, s);
+}
+
+/* --- Call helpers --- */
+
+extern "C" PyObject *PyObject_CallNoArgs(PyObject *callable) {
+    PyObject *args = PyTuple_New(0);
+    if (!args) return NULL;
+    return PyObject_Call(callable, args, NULL);
+}
+
+extern "C" PyObject *PyObject_CallObject(PyObject *callable, PyObject *args) {
+    if (args == NULL) return PyObject_CallNoArgs(callable);
+    return PyObject_Call(callable, args, NULL);
+}
+
+extern "C" PyObject *PyObject_CallFunctionObjArgs(PyObject *callable, ...) {
+    PyObject *items[16];
+    int count = 0;
+    va_list ap;
+    va_start(ap, callable);
+    PyObject *arg;
+    while ((arg = va_arg(ap, PyObject *)) != NULL && count < 16) {
+        items[count++] = arg;
+    }
+    va_end(ap);
+    PyObject *args = PyTuple_New(count);
+    if (!args) return NULL;
+    for (int i = 0; i < count; i++)
+        PyTuple_SetItem(args, i, items[i]);
+    return PyObject_Call(callable, args, NULL);
+}
+
+extern "C" PyObject *PyObject_CallMethodObjArgs(PyObject *obj, PyObject *name, ...) {
+    PyObject *meth = PyObject_GetAttr(obj, name);
+    if (!meth) return NULL;
+    PyObject *items[16];
+    int count = 0;
+    va_list ap;
+    va_start(ap, name);
+    PyObject *arg;
+    while ((arg = va_arg(ap, PyObject *)) != NULL && count < 16) {
+        items[count++] = arg;
+    }
+    va_end(ap);
+    PyObject *args = PyTuple_New(count);
+    if (!args) return NULL;
+    for (int i = 0; i < count; i++)
+        PyTuple_SetItem(args, i, items[i]);
+    return PyObject_Call(meth, args, NULL);
+}
+
+/* --- Module helpers --- */
+
+extern "C" int PyModule_AddObject(PyObject *module, const char *name,
+                                  PyObject *value) {
+    return PyModule_AddObjectRef(module, name, value);
+}
+
+extern "C" int PyModule_AddType(PyObject *module, PyTypeObject *type) {
+    /* Register so shimCallTyped can find the type by short name. Heap
+       types created via PyType_FromModuleAndSpec are already recorded;
+       static types arrive here after PyType_Ready. */
+    for (int i = 0; i < heap_type_count; i++) {
+        if (heap_types[i].type == type) {
+            if (heap_types[i].module == NULL)
+                heap_types[i].module = module;
+            return 0;
+        }
+    }
+    if (heap_type_count < MAX_HEAP_TYPES) {
+        int idx = heap_type_count++;
+        heap_types[idx].type = type;
+        heap_types[idx].module = module;
+        heap_types[idx].as_mapping = NULL;
+        heap_types[idx].as_sequence = NULL;
+        heap_types[idx].as_number = NULL;
+        heap_types[idx].as_buffer = NULL;
+    }
+    return 0;
+}
+
+/* --- Unicode additional --- */
+
+extern "C" const char *PyUnicode_AsUTF8AndSize(PyObject *unicode,
+                                               Py_ssize_t *size) {
+    const char *s = PyUnicode_AsUTF8(unicode);
+    if (!s) {
+        if (size) *size = 0;
+        return NULL;
+    }
+    if (size) *size = (Py_ssize_t)GciFetchSize_(pyobj_oop(unicode));
+    return s;
+}
+
+extern "C" PyObject *PyUnicode_DecodeUTF8(const char *s, Py_ssize_t size,
+                                          const char *errors) {
+    (void)errors;
+    return PyUnicode_FromStringAndSize(s, size);
+}
+
+extern "C" PyObject *PyUnicode_InternFromString(const char *s) {
+    return PyUnicode_FromString(s);
+}
+
+extern "C" PyObject *PyUnicode_Concat(PyObject *left, PyObject *right) {
+    if (left == NULL || right == NULL) return NULL;
+    OopType args[2] = { pyobj_oop(left), pyobj_oop(right) };
+    OopType result = GciPerform(server, "PyUnicode_Concat:with:", args, 2);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(result);
+}
+
+/* --- Sequence protocol additional --- */
+
+extern "C" Py_ssize_t PySequence_Size(PyObject *seq) {
+    return PyObject_Length(seq);
+}
+
+extern "C" int PySequence_Check(PyObject *obj) {
+    if (obj == NULL) return 0;
+    PyTypeObject *t = Py_TYPE(obj);
+    if (t == NULL) return 0;
+    if (t->tp_flags & (Py_TPFLAGS_LIST_SUBCLASS | Py_TPFLAGS_TUPLE_SUBCLASS |
+                       Py_TPFLAGS_UNICODE_SUBCLASS | Py_TPFLAGS_BYTES_SUBCLASS |
+                       Py_TPFLAGS_SEQUENCE))
+        return 1;
+    if (t->tp_as_sequence && t->tp_as_sequence->sq_item)
+        return 1;
+    return 0;
+}
+
+extern "C" int PySequence_Contains(PyObject *seq, PyObject *item) {
+    if (seq == NULL || item == NULL) return -1;
+    OopType args[2] = { pyobj_oop(seq), pyobj_oop(item) };
+    OopType result = GciPerform(server, "PySequence_Contains:item:", args, 2);
+    if (check_gci_error()) return -1;
+    return result == OOP_TRUE ? 1 : 0;
+}
+
+extern "C" int PySequence_SetItem(PyObject *seq, Py_ssize_t i, PyObject *value) {
+    if (PyList_Check(seq)) return PyList_SetItem(seq, i, value);
+    PyObject *key = PyLong_FromSsize_t(i);
+    if (!key) return -1;
+    return PyObject_SetItem(seq, key, value);
+}
+
+/* --- Dict additional --- */
+
+extern "C" void PyDict_Clear(PyObject *dict) {
+    if (dict == NULL) return;
+    OopType arg = pyobj_oop(dict);
+    GciPerform(server, "PyDict_Clear:", &arg, 1);
+    check_gci_error();
+}
+
+static PyObject *dict_view_call(PyObject *dict, const char *selector) {
+    if (dict == NULL) return NULL;
+    OopType arg = pyobj_oop(dict);
+    OopType result = GciPerform(server, selector, &arg, 1);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(result);
+}
+
+extern "C" PyObject *PyDict_Keys(PyObject *dict) {
+    return dict_view_call(dict, "PyDict_Keys:");
+}
+
+extern "C" PyObject *PyDict_Values(PyObject *dict) {
+    return dict_view_call(dict, "PyDict_Values:");
+}
+
+extern "C" PyObject *PyDict_Items(PyObject *dict) {
+    return dict_view_call(dict, "PyDict_Items:");
+}
+
+extern "C" PyObject *PyDict_Copy(PyObject *dict) {
+    return dict_view_call(dict, "PyDict_Copy:");
+}
+
+extern "C" int PyDict_Merge(PyObject *dict, PyObject *other, int override) {
+    if (dict == NULL || other == NULL) return -1;
+    OopType args[3] = { pyobj_oop(dict), pyobj_oop(other),
+                        override ? OOP_TRUE : OOP_FALSE };
+    GciPerform(server, "PyDict_Merge:with:override:", args, 3);
+    if (check_gci_error()) return -1;
+    return 0;
+}
+
+extern "C" int PyDict_Update(PyObject *dict, PyObject *other) {
+    return PyDict_Merge(dict, other, 1);
+}
+
+extern "C" PyObject *PyDict_SetDefault(PyObject *dict, PyObject *key,
+                                       PyObject *defaultobj) {
+    if (dict == NULL || key == NULL) return NULL;
+    OopType args[3] = { pyobj_oop(dict), pyobj_oop(key),
+                        defaultobj ? pyobj_oop(defaultobj) : OOP_NIL };
+    OopType result = GciPerform(server, "PyDict_SetDefault:key:default:", args, 3);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(result);
+}
+
+/* --- List / Tuple additional --- */
+
+extern "C" PyObject *PyList_GetSlice(PyObject *list, Py_ssize_t low,
+                                     Py_ssize_t high) {
+    if (list == NULL) return NULL;
+    OopType args[3] = { pyobj_oop(list), GciI64ToOop(low), GciI64ToOop(high) };
+    OopType result = GciPerform(server, "PyList_GetSlice:from:to:", args, 3);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(result);
+}
+
+extern "C" PyObject *PyList_AsTuple(PyObject *list) {
+    return dict_view_call(list, "PyList_AsTuple:");
+}
+
+extern "C" int PyList_Sort(PyObject *list) {
+    if (list == NULL) return -1;
+    OopType arg = pyobj_oop(list);
+    GciPerform(server, "PyList_Sort:", &arg, 1);
+    if (check_gci_error()) return -1;
+    return 0;
+}
+
+extern "C" int PyList_Reverse(PyObject *list) {
+    if (list == NULL) return -1;
+    OopType arg = pyobj_oop(list);
+    GciPerform(server, "PyList_Reverse:", &arg, 1);
+    if (check_gci_error()) return -1;
+    return 0;
+}
+
+extern "C" PyObject *PyTuple_GetSlice(PyObject *tuple, Py_ssize_t low,
+                                      Py_ssize_t high) {
+    if (tuple == NULL) return NULL;
+    OopType args[3] = { pyobj_oop(tuple), GciI64ToOop(low), GciI64ToOop(high) };
+    OopType result = GciPerform(server, "PyTuple_GetSlice:from:to:", args, 3);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(result);
+}
+
+/* --- Sets (backed by the Grail `set` class) --- */
+
+extern "C" PyObject *PySet_New(PyObject *iterable) {
+    OopType arg = iterable ? pyobj_oop(iterable) : OOP_NIL;
+    OopType result = GciPerform(server, "PySet_New:", &arg, 1);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(result);
+}
+
+extern "C" PyObject *PyFrozenSet_New(PyObject *iterable) {
+    /* Mutability distinction is not enforced by the shim. */
+    return PySet_New(iterable);
+}
+
+extern "C" int PySet_Add(PyObject *set, PyObject *key) {
+    if (set == NULL || key == NULL) return -1;
+    OopType args[2] = { pyobj_oop(set), pyobj_oop(key) };
+    GciPerform(server, "PySet_Add:item:", args, 2);
+    if (check_gci_error()) return -1;
+    return 0;
+}
+
+extern "C" int PySet_Contains(PyObject *set, PyObject *key) {
+    if (set == NULL || key == NULL) return -1;
+    OopType args[2] = { pyobj_oop(set), pyobj_oop(key) };
+    OopType result = GciPerform(server, "PySet_Contains:item:", args, 2);
+    if (check_gci_error()) return -1;
+    return result == OOP_TRUE ? 1 : 0;
+}
+
+extern "C" int PySet_Discard(PyObject *set, PyObject *key) {
+    if (set == NULL || key == NULL) return -1;
+    OopType args[2] = { pyobj_oop(set), pyobj_oop(key) };
+    OopType result = GciPerform(server, "PySet_Discard:item:", args, 2);
+    if (check_gci_error()) return -1;
+    return result == OOP_TRUE ? 1 : 0;
+}
+
+extern "C" int PySet_Clear(PyObject *set) {
+    if (set == NULL) return -1;
+    OopType arg = pyobj_oop(set);
+    GciPerform(server, "PySet_Clear:", &arg, 1);
+    if (check_gci_error()) return -1;
+    return 0;
+}
+
+extern "C" Py_ssize_t PySet_Size(PyObject *set) {
+    return PyObject_Length(set);
+}
+
+extern "C" int PySet_Check(PyObject *obj) {
+    if (obj == NULL) return 0;
+    OopType arg = pyobj_oop(obj);
+    OopType result = GciPerform(server, "PySet_Check:", &arg, 1);
+    if (check_gci_error()) return 0;
+    return result == OOP_TRUE ? 1 : 0;
+}
+
+extern "C" int PyFrozenSet_Check(PyObject *obj) {
+    return PySet_Check(obj);
+}
+
+extern "C" int PyAnySet_Check(PyObject *obj) {
+    return PySet_Check(obj);
+}
+
+/* --- Bytearray (backed by the Grail `bytearray` class) --- */
+
+extern "C" PyObject *PyByteArray_FromStringAndSize(const char *data,
+                                                   Py_ssize_t len) {
+    OopType sizeOop = GciI64ToOop(len);
+    OopType oop = GciPerform(OOP_CLASS_BYTE_ARRAY, "new:", &sizeOop, 1);
+    if (len > 0) {
+        GciStoreBytes(oop, 1, (const ByteType *)data, (int64)len);
+    }
+    OopType result = GciPerform(server, "PyByteArray_FromStringAndSize:", &oop, 1);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(result);
+}
+
+extern "C" char *PyByteArray_AsString(PyObject *obj) {
+    return PyBytes_AsString(obj);
+}
+
+extern "C" Py_ssize_t PyByteArray_Size(PyObject *obj) {
+    return PyBytes_Size(obj);
+}
+
+extern "C" int PyByteArray_Check(PyObject *obj) {
+    if (obj == NULL) return 0;
+    OopType arg = pyobj_oop(obj);
+    OopType result = GciPerform(server, "PyByteArray_Check:", &arg, 1);
+    if (check_gci_error()) return 0;
+    return result == OOP_TRUE ? 1 : 0;
+}
+
+/* --- Capsules (pure C; never cross into Smalltalk) --- */
+
+typedef struct {
+    PyObject_HEAD
+    void                *pointer;
+    const char          *name;
+    PyCapsule_Destructor destructor;
+} GrailCapsule;
+
+static PyTypeObject GrailCapsule_Type;  /* zero-initialized; identity only */
+
+extern "C" PyObject *PyCapsule_New(void *pointer, const char *name,
+                                   PyCapsule_Destructor destructor) {
+    if (pointer == NULL) {
+        PyErr_SetString(PyExc_ValueError, "PyCapsule_New called with null pointer");
+        return NULL;
+    }
+    if (GrailCapsule_Type.tp_name == NULL)
+        GrailCapsule_Type.tp_name = "PyCapsule";
+    GrailCapsule *cap = (GrailCapsule *)calloc(1, sizeof(GrailCapsule));
+    if (!cap) return PyErr_NoMemory();
+    cap->ob_base.ob_refcnt = 1;
+    cap->ob_base.ob_type = &GrailCapsule_Type;
+    cap->pointer = pointer;
+    cap->name = name;
+    cap->destructor = destructor;
+    return (PyObject *)cap;
+}
+
+extern "C" int PyCapsule_CheckExact(PyObject *op) {
+    return op != NULL && Py_TYPE(op) == &GrailCapsule_Type;
+}
+
+static int capsule_name_matches(GrailCapsule *cap, const char *name) {
+    if (cap->name == NULL && name == NULL) return 1;
+    if (cap->name == NULL || name == NULL) return 0;
+    return strcmp(cap->name, name) == 0;
+}
+
+extern "C" void *PyCapsule_GetPointer(PyObject *capsule, const char *name) {
+    if (!PyCapsule_CheckExact(capsule)) {
+        PyErr_SetString(PyExc_ValueError, "PyCapsule_GetPointer called with invalid PyCapsule object");
+        return NULL;
+    }
+    GrailCapsule *cap = (GrailCapsule *)capsule;
+    if (!capsule_name_matches(cap, name)) {
+        PyErr_SetString(PyExc_ValueError, "PyCapsule_GetPointer called with incorrect name");
+        return NULL;
+    }
+    return cap->pointer;
+}
+
+extern "C" const char *PyCapsule_GetName(PyObject *capsule) {
+    if (!PyCapsule_CheckExact(capsule)) {
+        PyErr_SetString(PyExc_ValueError, "PyCapsule_GetName called with invalid PyCapsule object");
+        return NULL;
+    }
+    return ((GrailCapsule *)capsule)->name;
+}
+
+extern "C" int PyCapsule_IsValid(PyObject *capsule, const char *name) {
+    return PyCapsule_CheckExact(capsule) &&
+           ((GrailCapsule *)capsule)->pointer != NULL &&
+           capsule_name_matches((GrailCapsule *)capsule, name);
+}
+
+extern "C" int PyCapsule_SetPointer(PyObject *capsule, void *pointer) {
+    if (!PyCapsule_CheckExact(capsule) || pointer == NULL) {
+        PyErr_SetString(PyExc_ValueError, "PyCapsule_SetPointer called with invalid arguments");
+        return -1;
+    }
+    ((GrailCapsule *)capsule)->pointer = pointer;
+    return 0;
+}
+
+extern "C" void *PyCapsule_Import(const char *name, int no_block) {
+    (void)no_block;
+    /* Cross-module capsule sharing needs module attribute storage that
+       Smalltalk can read back (see docs/Shim_API_Gaps.md, Priority 5). */
+    PyErr_Format(PyExc_ImportError, "PyCapsule_Import('%s') not supported", name);
+    return NULL;
+}
+
 /* ====================================================================
  * GCI User Action registration (keep at end of file)
  * ==================================================================== */
@@ -2631,6 +4091,8 @@ extern "C" void GciUserActionInit(void) {
     GCI_DECLARE_ACTION("shimInit", shimInit, 4);
     GCI_DECLARE_ACTION("shimTypeAddr", shimTypeAddr, 1);
     GCI_DECLARE_ACTION("shimDynLoad", shimDynLoad, 2);
+    GCI_DECLARE_ACTION("shimModuleAttrs", shimModuleAttrs, 1);
+    GCI_DECLARE_ACTION("shimCallKw", shimCallKw, 5);
 }
 
 extern "C" void GciUserActionShutdown(void) {

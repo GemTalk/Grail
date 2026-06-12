@@ -664,10 +664,861 @@ test_sizeof_type(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
 }
 
 /* ------------------------------------------------------------------ */
+/* test_call_one(callable, arg) -> callable(arg)                       */
+/* Exercises: PyObject_CallOneArg -> PyObject_Call -> server           */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_call_one(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 2) {
+        PyErr_Format(PyExc_TypeError, "test_call_one expected 2 args, got %zd", nargs);
+        return NULL;
+    }
+    return PyObject_CallOneArg(args[0], args[1]);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_call_noargs(callable) -> callable()                            */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_call_noargs(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_call_noargs expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    return PyObject_CallNoArgs(args[0]);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_obj_getitem(obj, key) -> obj[key]                              */
+/* test_obj_setitem(obj, key, value) -> None                           */
+/* Exercises: PyObject_GetItem / PyObject_SetItem                      */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_obj_getitem(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 2) {
+        PyErr_Format(PyExc_TypeError, "test_obj_getitem expected 2 args, got %zd", nargs);
+        return NULL;
+    }
+    return PyObject_GetItem(args[0], args[1]);
+}
+
+static PyObject *
+test_obj_setitem(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 3) {
+        PyErr_Format(PyExc_TypeError, "test_obj_setitem expected 3 args, got %zd", nargs);
+        return NULL;
+    }
+    if (PyObject_SetItem(args[0], args[1], args[2]) < 0)
+        return NULL;
+    Py_RETURN_NONE;
+}
+
+/* ------------------------------------------------------------------ */
+/* test_setattr(obj, name, value) -> None                              */
+/* Exercises: PyObject_SetAttrString                                   */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_setattr(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 3) {
+        PyErr_Format(PyExc_TypeError, "test_setattr expected 3 args, got %zd", nargs);
+        return NULL;
+    }
+    const char *name = PyUnicode_AsUTF8(args[1]);
+    if (!name) return NULL;
+    if (PyObject_SetAttrString(args[0], name, args[2]) < 0)
+        return NULL;
+    Py_RETURN_NONE;
+}
+
+/* ------------------------------------------------------------------ */
+/* test_richcompare_obj(a, b, op) -> a <op> b as object                */
+/* Exercises: PyObject_RichCompare (object-returning variant)          */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_richcompare_obj(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 3) {
+        PyErr_Format(PyExc_TypeError, "test_richcompare_obj expected 3 args, got %zd", nargs);
+        return NULL;
+    }
+    int op = (int)PyLong_AsLong(args[2]);
+    return PyObject_RichCompare(args[0], args[1], op);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_seq_getitem(seq, i) -> seq[i] via PySequence_GetItem           */
+/* (pass a str to exercise the server fallback path)                   */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_seq_getitem(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 2) {
+        PyErr_Format(PyExc_TypeError, "test_seq_getitem expected 2 args, got %zd", nargs);
+        return NULL;
+    }
+    return PySequence_GetItem(args[0], PyLong_AsSsize_t(args[1]));
+}
+
+/* ------------------------------------------------------------------ */
+/* test_import_attr(modname, attrname) -> module.attr                  */
+/* Exercises: _PyImport_GetModuleAttrString -> server importGetAttr    */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_import_attr(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 2) {
+        PyErr_Format(PyExc_TypeError, "test_import_attr expected 2 args, got %zd", nargs);
+        return NULL;
+    }
+    const char *mod = PyUnicode_AsUTF8(args[0]);
+    const char *attr = PyUnicode_AsUTF8(args[1]);
+    if (!mod || !attr) return NULL;
+    return _PyImport_GetModuleAttrString(mod, attr);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_iter_sum(iterable) -> sum of int items                         */
+/* Exercises: PyObject_GetIter, PyIter_Next                            */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_iter_sum(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_iter_sum expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    PyObject *iter = PyObject_GetIter(args[0]);
+    if (!iter) return NULL;
+    Py_ssize_t sum = 0;
+    PyObject *item;
+    while ((item = PyIter_Next(iter)) != NULL) {
+        sum += PyLong_AsSsize_t(item);
+    }
+    if (PyErr_Occurred()) return NULL;
+    return PyLong_FromSsize_t(sum);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_is_true(obj) -> int truthiness                                 */
+/* test_long_check(obj) -> PyLong_Check (1 for bool too)               */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_is_true(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_is_true expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    return PyLong_FromSsize_t(PyObject_IsTrue(args[0]));
+}
+
+static PyObject *
+test_long_check(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_long_check expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    return PyLong_FromSsize_t(PyLong_Check(args[0]));
+}
+
+/* ------------------------------------------------------------------ */
+/* test_slice_adjust(length, start, stop, step) -> [count,start,stop]  */
+/* Exercises: PySlice_AdjustIndices                                    */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_slice_adjust(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 4) {
+        PyErr_Format(PyExc_TypeError, "test_slice_adjust expected 4 args, got %zd", nargs);
+        return NULL;
+    }
+    Py_ssize_t length = PyLong_AsSsize_t(args[0]);
+    Py_ssize_t start = PyLong_AsSsize_t(args[1]);
+    Py_ssize_t stop = PyLong_AsSsize_t(args[2]);
+    Py_ssize_t step = PyLong_AsSsize_t(args[3]);
+    Py_ssize_t count = PySlice_AdjustIndices(length, &start, &stop, step);
+    PyObject *list = PyList_New(0);
+    PyList_Append(list, PyLong_FromSsize_t(count));
+    PyList_Append(list, PyLong_FromSsize_t(start));
+    PyList_Append(list, PyLong_FromSsize_t(stop));
+    return list;
+}
+
+/* ------------------------------------------------------------------ */
+/* test_generic_new() -> 1 if PyType_GenericNew allocates correctly    */
+/* ------------------------------------------------------------------ */
+
+static PyTypeObject GenericNewDummy;
+
+static PyObject *
+test_generic_new(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module; (void)args; (void)nargs;
+    memset(&GenericNewDummy, 0, sizeof(PyTypeObject));
+    GenericNewDummy.tp_name = "GenericNewDummy";
+    GenericNewDummy.tp_basicsize = sizeof(PyObject) + 64;
+    PyType_Ready(&GenericNewDummy);
+    PyObject *obj = PyType_GenericNew(&GenericNewDummy, NULL, NULL);
+    if (!obj) return PyLong_FromSsize_t(0);
+    int ok = (Py_TYPE(obj) == &GenericNewDummy) && (obj->ob_refcnt == 1);
+    PyObject_GC_Del(obj);
+    return PyLong_FromSsize_t(ok);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_parse_tuple(s, n, d) -> strlen(s) + n + d as float             */
+/* Exercises: PyArg_ParseTuple "snd"                                   */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_parse_tuple(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    PyObject *tuple = PyTuple_New(nargs);
+    if (!tuple) return NULL;
+    for (Py_ssize_t i = 0; i < nargs; i++)
+        PyTuple_SetItem(tuple, i, args[i]);
+    const char *s = NULL;
+    Py_ssize_t n = 0;
+    double d = 0.0;
+    if (!PyArg_ParseTuple(tuple, "snd:test_parse_tuple", &s, &n, &d))
+        return NULL;
+    return PyFloat_FromDouble((double)strlen(s) + (double)n + d);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_build_value(n, s) -> (n+1, s, [n, n]) via Py_BuildValue        */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_build_value(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 2) {
+        PyErr_Format(PyExc_TypeError, "test_build_value expected 2 args, got %zd", nargs);
+        return NULL;
+    }
+    Py_ssize_t n = PyLong_AsSsize_t(args[0]);
+    const char *s = PyUnicode_AsUTF8(args[1]);
+    if (!s) return NULL;
+    return Py_BuildValue("(ns[nn])", n + 1, s, n, n);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_getattr_obj(obj, name) -> getattr via PyObject_GetAttr         */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_getattr_obj(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 2) {
+        PyErr_Format(PyExc_TypeError, "test_getattr_obj expected 2 args, got %zd", nargs);
+        return NULL;
+    }
+    return PyObject_GetAttr(args[0], args[1]);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_long64(n) -> PyLong_AsLongLong(n) * 2 via FromLongLong         */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_long64(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_long64 expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    long long v = PyLong_AsLongLong(args[0]);
+    return PyLong_FromLongLong(v * 2);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_utf8_size(s) -> byte length via PyUnicode_AsUTF8AndSize        */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_utf8_size(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_utf8_size expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    Py_ssize_t size = -1;
+    const char *s = PyUnicode_AsUTF8AndSize(args[0], &size);
+    if (!s) return NULL;
+    return PyLong_FromSsize_t(size);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_unicode_concat(a, b) -> a + b                                  */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_unicode_concat(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 2) {
+        PyErr_Format(PyExc_TypeError, "test_unicode_concat expected 2 args, got %zd", nargs);
+        return NULL;
+    }
+    return PyUnicode_Concat(args[0], args[1]);
+}
+
+/* ------------------------------------------------------------------ */
+/* Dict API additions                                                  */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_dict_keys(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_dict_keys expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    return PyDict_Keys(args[0]);
+}
+
+static PyObject *
+test_dict_items_count(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_dict_items_count expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    PyObject *items = PyDict_Items(args[0]);
+    if (!items) return NULL;
+    return PyLong_FromSsize_t(PyList_Size(items));
+}
+
+static PyObject *
+test_dict_setdefault(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 3) {
+        PyErr_Format(PyExc_TypeError, "test_dict_setdefault expected 3 args, got %zd", nargs);
+        return NULL;
+    }
+    return PyDict_SetDefault(args[0], args[1], args[2]);
+}
+
+static PyObject *
+test_dict_merge(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 3) {
+        PyErr_Format(PyExc_TypeError, "test_dict_merge expected 3 args, got %zd", nargs);
+        return NULL;
+    }
+    int override = PyObject_IsTrue(args[2]);
+    if (PyDict_Merge(args[0], args[1], override) < 0)
+        return NULL;
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+test_dict_clear(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_dict_clear expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    PyDict_Clear(args[0]);
+    return PyLong_FromSsize_t(PyDict_Size(args[0]));
+}
+
+/* ------------------------------------------------------------------ */
+/* List / tuple API additions                                          */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_list_slice(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 3) {
+        PyErr_Format(PyExc_TypeError, "test_list_slice expected 3 args, got %zd", nargs);
+        return NULL;
+    }
+    return PyList_GetSlice(args[0], PyLong_AsSsize_t(args[1]),
+                           PyLong_AsSsize_t(args[2]));
+}
+
+static PyObject *
+test_list_sort(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_list_sort expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    if (PyList_Sort(args[0]) < 0) return NULL;
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+test_list_reverse(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_list_reverse expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    if (PyList_Reverse(args[0]) < 0) return NULL;
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+test_list_astuple(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_list_astuple expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    return PyList_AsTuple(args[0]);
+}
+
+static PyObject *
+test_tuple_slice(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 3) {
+        PyErr_Format(PyExc_TypeError, "test_tuple_slice expected 3 args, got %zd", nargs);
+        return NULL;
+    }
+    return PyTuple_GetSlice(args[0], PyLong_AsSsize_t(args[1]),
+                            PyLong_AsSsize_t(args[2]));
+}
+
+static PyObject *
+test_seq_contains(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 2) {
+        PyErr_Format(PyExc_TypeError, "test_seq_contains expected 2 args, got %zd", nargs);
+        return NULL;
+    }
+    int r = PySequence_Contains(args[0], args[1]);
+    if (r < 0) return NULL;
+    return PyLong_FromSsize_t(r);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_capsule_roundtrip() -> 1 when capsule semantics hold           */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_capsule_roundtrip(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module; (void)args; (void)nargs;
+    static int payload = 42;
+    PyObject *cap = PyCapsule_New(&payload, "shimtest.payload", NULL);
+    if (!cap) return NULL;
+    int ok = PyCapsule_IsValid(cap, "shimtest.payload");
+    ok = ok && (PyCapsule_GetPointer(cap, "shimtest.payload") == &payload);
+    ok = ok && (PyCapsule_GetPointer(cap, "wrong.name") == NULL);
+    PyErr_Clear();  /* the wrong-name probe sets ValueError */
+    ok = ok && (strcmp(PyCapsule_GetName(cap), "shimtest.payload") == 0);
+    return PyLong_FromSsize_t(ok);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_new_exception() -> raises a dynamically created exception      */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_new_exception(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module; (void)args; (void)nargs;
+    PyObject *exc = PyErr_NewException("_shimtest.CustomError", PyExc_ValueError, NULL);
+    PyErr_SetString(exc, "custom failure");
+    return NULL;
+}
+
+/* ------------------------------------------------------------------ */
+/* test_exc_matches() -> 1 if KeyError matches LookupError             */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_exc_matches(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module; (void)args; (void)nargs;
+    PyErr_SetString(PyExc_KeyError, "probe");
+    int direct = PyErr_ExceptionMatches(PyExc_KeyError);
+    int parent = PyErr_ExceptionMatches(PyExc_LookupError);
+    int base = PyErr_ExceptionMatches(PyExc_Exception);
+    int wrong = PyErr_ExceptionMatches(PyExc_TypeError);
+    PyErr_Clear();
+    return PyLong_FromSsize_t(direct && parent && base && !wrong);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_kwargs(*args, x=?, y=?) — METH_FASTCALL|METH_KEYWORDS          */
+/* returns sum(args) + 100*x + 10000*y                                 */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_kwargs(PyObject *module, PyObject *const *args, Py_ssize_t nargs,
+            PyObject *kwnames) {
+    (void)module;
+    Py_ssize_t sum = 0;
+    for (Py_ssize_t i = 0; i < nargs; i++)
+        sum += PyLong_AsSsize_t(args[i]);
+    if (kwnames) {
+        Py_ssize_t nkw = PyTuple_Size(kwnames);
+        for (Py_ssize_t i = 0; i < nkw; i++) {
+            const char *name = PyUnicode_AsUTF8(PyTuple_GetItem(kwnames, i));
+            PyObject *val = args[nargs + i];
+            if (name && strcmp(name, "x") == 0)
+                sum += 100 * PyLong_AsSsize_t(val);
+            else if (name && strcmp(name, "y") == 0)
+                sum += 10000 * PyLong_AsSsize_t(val);
+        }
+    }
+    return PyLong_FromSsize_t(sum);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_kwargs_dict(**kw) — METH_VARARGS|METH_KEYWORDS                 */
+/* returns kw["key"] or None                                           */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_kwargs_dict(PyObject *module, PyObject *args, PyObject *kwargs) {
+    (void)module; (void)args;
+    if (!kwargs) Py_RETURN_NONE;
+    PyObject *v = PyDict_GetItemString(kwargs, "key");
+    if (!v) Py_RETURN_NONE;
+    return Py_NewRef(v);
+}
+
+/* ------------------------------------------------------------------ */
+/* Counter — heap type exercising tp_getset (get AND set), tp_methods, */
+/* and the buffer protocol via PyType_FromModuleAndSpec.               */
+/* ------------------------------------------------------------------ */
+
+typedef struct {
+    PyObject_HEAD
+    Py_ssize_t value;
+    char text[16];
+} CounterObject;
+
+static PyObject *
+Counter_incr(PyObject *self, PyObject *ignored) {
+    (void)ignored;
+    CounterObject *c = (CounterObject *)self;
+    c->value++;
+    return PyLong_FromSsize_t(c->value);
+}
+
+static PyObject *
+Counter_get_value(PyObject *self, void *closure) {
+    (void)closure;
+    return PyLong_FromSsize_t(((CounterObject *)self)->value);
+}
+
+static int
+Counter_set_value(PyObject *self, PyObject *v, void *closure) {
+    (void)closure;
+    Py_ssize_t n = PyLong_AsSsize_t(v);
+    if (n == -1 && PyErr_Occurred()) return -1;
+    ((CounterObject *)self)->value = n;
+    return 0;
+}
+
+static int
+Counter_getbuffer(PyObject *self, Py_buffer *view, int flags) {
+    (void)flags;
+    CounterObject *c = (CounterObject *)self;
+    memset(view, 0, sizeof(Py_buffer));
+    view->obj = self;
+    view->buf = c->text;
+    view->len = (Py_ssize_t)strlen(c->text);
+    view->itemsize = 1;
+    view->readonly = 1;
+    return 0;
+}
+
+static PyMethodDef Counter_methods[] = {
+    {"incr", (PyCFunction)Counter_incr, METH_NOARGS, "increment, return value"},
+    {NULL, NULL, 0, NULL}
+};
+
+static PyGetSetDef Counter_getset[] = {
+    {"value", Counter_get_value, Counter_set_value, "counter value", NULL},
+    {NULL, NULL, NULL, NULL, NULL}
+};
+
+static PyType_Slot Counter_slots[] = {
+    {Py_tp_methods, Counter_methods},
+    {Py_tp_getset, Counter_getset},
+    {Py_bf_getbuffer, (void *)Counter_getbuffer},
+    {0, NULL}
+};
+
+static PyType_Spec Counter_spec = {
+    "_shimtest.Counter",
+    sizeof(CounterObject),
+    0,
+    Py_TPFLAGS_DEFAULT,
+    Counter_slots
+};
+
+static PyObject *CounterType;  /* created in shimtest_exec */
+
+static PyObject *
+test_make_counter(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module; (void)args; (void)nargs;
+    if (!CounterType) {
+        PyErr_SetString(PyExc_RuntimeError, "Counter type not initialized");
+        return NULL;
+    }
+    PyObject *obj = PyType_GenericNew((PyTypeObject *)CounterType, NULL, NULL);
+    if (!obj) return NULL;
+    strcpy(((CounterObject *)obj)->text, "counter!");
+    return obj;
+}
+
+static PyObject *
+test_counter_text(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_counter_text expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    /* arg is the counter's C address as an int */
+    PyObject *obj = (PyObject *)(intptr_t)PyLong_AsSsize_t(args[0]);
+    Py_buffer view;
+    if (PyObject_GetBuffer(obj, &view, PyBUF_SIMPLE) < 0)
+        return NULL;
+    PyObject *result = PyUnicode_FromStringAndSize((const char *)view.buf, view.len);
+    PyBuffer_Release(&view);
+    return result;
+}
+
+/* ------------------------------------------------------------------ */
+/* test_heap_type_base() — FromSpecWithBases(spec, PyLong_Type):       */
+/* instance must pass PyLong_Check via inherited subclass flag.        */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_heap_type_base(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module; (void)args; (void)nargs;
+    static PyType_Slot IntLike_slots[] = { {0, NULL} };
+    static PyType_Spec IntLike_spec = {
+        "_shimtest.IntLike", sizeof(PyObject), 0, Py_TPFLAGS_DEFAULT,
+        IntLike_slots
+    };
+    PyObject *type = PyType_FromSpecWithBases(&IntLike_spec,
+                                              (PyObject *)&PyLong_Type);
+    if (!type) return NULL;
+    PyObject *inst = PyType_GenericNew((PyTypeObject *)type, NULL, NULL);
+    if (!inst) return NULL;
+    int ok = PyLong_Check(inst) &&
+             (((PyTypeObject *)type)->tp_base == &PyLong_Type);
+    PyObject_GC_Del(inst);
+    return PyLong_FromSsize_t(ok);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_slice_roundtrip(start, stop, step) -> [start, stop, step]      */
+/* via PySlice_New + PySlice_Unpack                                    */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_slice_roundtrip(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 3) {
+        PyErr_Format(PyExc_TypeError, "test_slice_roundtrip expected 3 args, got %zd", nargs);
+        return NULL;
+    }
+    PyObject *sl = PySlice_New(args[0], args[1], args[2]);
+    if (!sl) return NULL;
+    Py_ssize_t start, stop, step;
+    if (PySlice_Unpack(sl, &start, &stop, &step) < 0)
+        return NULL;
+    PyObject *list = PyList_New(0);
+    PyList_Append(list, PyLong_FromSsize_t(start));
+    PyList_Append(list, PyLong_FromSsize_t(stop));
+    PyList_Append(list, PyLong_FromSsize_t(step));
+    return list;
+}
+
+/* ------------------------------------------------------------------ */
+/* test_slice_defaults() -> 1 when slice(None,None,None) unpacks to    */
+/* CPython defaults (0, PY_SSIZE_T_MAX, 1)                             */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_slice_defaults(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module; (void)args; (void)nargs;
+    PyObject *sl = PySlice_New(NULL, NULL, NULL);
+    if (!sl) return NULL;
+    Py_ssize_t start, stop, step;
+    if (PySlice_Unpack(sl, &start, &stop, &step) < 0)
+        return NULL;
+    int ok = (start == 0) && (stop == PY_SSIZE_T_MAX) && (step == 1);
+    return PyLong_FromSsize_t(ok);
+}
+
+/* ------------------------------------------------------------------ */
+/* test_set_roundtrip(item) -> the set, after New/Add/Contains checks  */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_set_roundtrip(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_set_roundtrip expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    PyObject *set = PySet_New(NULL);
+    if (!set) return NULL;
+    if (PySet_Add(set, args[0]) < 0) return NULL;
+    if (PySet_Add(set, args[0]) < 0) return NULL;  /* dup is a no-op */
+    if (PySet_Contains(set, args[0]) != 1) {
+        PyErr_SetString(PyExc_RuntimeError, "PySet_Contains failed");
+        return NULL;
+    }
+    if (PySet_Size(set) != 1) {
+        PyErr_SetString(PyExc_RuntimeError, "PySet_Size != 1");
+        return NULL;
+    }
+    if (!PySet_Check(set)) {
+        PyErr_SetString(PyExc_RuntimeError, "PySet_Check failed");
+        return NULL;
+    }
+    return set;
+}
+
+/* ------------------------------------------------------------------ */
+/* test_bytearray(b) -> bytearray copy of the bytes argument           */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_bytearray(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_bytearray expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    char *data = PyBytes_AsString(args[0]);
+    Py_ssize_t len = PyBytes_Size(args[0]);
+    PyObject *ba = PyByteArray_FromStringAndSize(data, len);
+    if (!ba) return NULL;
+    if (!PyByteArray_Check(ba)) {
+        PyErr_SetString(PyExc_RuntimeError, "PyByteArray_Check failed");
+        return NULL;
+    }
+    return ba;
+}
+
+/* ------------------------------------------------------------------ */
+/* test_from_format(obj) -> "repr=<%R> str=<%S> n=42"                  */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_from_format(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_from_format expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    return PyUnicode_FromFormat("repr=<%R> str=<%S> n=%d", args[0], args[0], 42);
+}
+
+/* ------------------------------------------------------------------ */
 /* Module definition                                                   */
 /* ------------------------------------------------------------------ */
 
 static PyMethodDef shimtest_methods[] = {
+    {"test_kwargs", (PyCFunction)(void *)test_kwargs,
+     METH_FASTCALL | METH_KEYWORDS, "test_kwargs(*a, x=0, y=0) -> sum"},
+    {"test_kwargs_dict", (PyCFunction)(void *)test_kwargs_dict,
+     METH_VARARGS | METH_KEYWORDS, "test_kwargs_dict(**kw) -> kw['key']"},
+    {"test_make_counter", (PyCFunction)(void *)test_make_counter,
+     METH_FASTCALL, "test_make_counter() -> new Counter (C ptr)"},
+    {"test_counter_text", (PyCFunction)(void *)test_counter_text,
+     METH_FASTCALL, "test_counter_text(addr) -> buffer contents"},
+    {"test_heap_type_base", (PyCFunction)(void *)test_heap_type_base,
+     METH_FASTCALL, "test_heap_type_base() -> 1 if ok"},
+    {"test_slice_roundtrip", (PyCFunction)(void *)test_slice_roundtrip,
+     METH_FASTCALL, "test_slice_roundtrip(a, b, c) -> [start, stop, step]"},
+    {"test_slice_defaults", (PyCFunction)(void *)test_slice_defaults,
+     METH_FASTCALL, "test_slice_defaults() -> 1 if ok"},
+    {"test_set_roundtrip", (PyCFunction)(void *)test_set_roundtrip,
+     METH_FASTCALL, "test_set_roundtrip(item) -> set"},
+    {"test_bytearray", (PyCFunction)(void *)test_bytearray,
+     METH_FASTCALL, "test_bytearray(b) -> bytearray"},
+    {"test_from_format", (PyCFunction)(void *)test_from_format,
+     METH_FASTCALL, "test_from_format(obj) -> formatted string"},
+    {"test_call_one", (PyCFunction)(void *)test_call_one,
+     METH_FASTCALL, "test_call_one(f, x) -> f(x)"},
+    {"test_call_noargs", (PyCFunction)(void *)test_call_noargs,
+     METH_FASTCALL, "test_call_noargs(f) -> f()"},
+    {"test_obj_getitem", (PyCFunction)(void *)test_obj_getitem,
+     METH_FASTCALL, "test_obj_getitem(obj, key) -> obj[key]"},
+    {"test_obj_setitem", (PyCFunction)(void *)test_obj_setitem,
+     METH_FASTCALL, "test_obj_setitem(obj, key, value) -> None"},
+    {"test_setattr", (PyCFunction)(void *)test_setattr,
+     METH_FASTCALL, "test_setattr(obj, name, value) -> None"},
+    {"test_richcompare_obj", (PyCFunction)(void *)test_richcompare_obj,
+     METH_FASTCALL, "test_richcompare_obj(a, b, op) -> object"},
+    {"test_seq_getitem", (PyCFunction)(void *)test_seq_getitem,
+     METH_FASTCALL, "test_seq_getitem(seq, i) -> seq[i]"},
+    {"test_import_attr", (PyCFunction)(void *)test_import_attr,
+     METH_FASTCALL, "test_import_attr(mod, attr) -> value"},
+    {"test_iter_sum", (PyCFunction)(void *)test_iter_sum,
+     METH_FASTCALL, "test_iter_sum(iterable) -> sum"},
+    {"test_is_true", (PyCFunction)(void *)test_is_true,
+     METH_FASTCALL, "test_is_true(obj) -> 0/1"},
+    {"test_long_check", (PyCFunction)(void *)test_long_check,
+     METH_FASTCALL, "test_long_check(obj) -> 0/1"},
+    {"test_slice_adjust", (PyCFunction)(void *)test_slice_adjust,
+     METH_FASTCALL, "test_slice_adjust(len, start, stop, step) -> [count, start, stop]"},
+    {"test_generic_new", (PyCFunction)(void *)test_generic_new,
+     METH_FASTCALL, "test_generic_new() -> 1 if ok"},
+    {"test_parse_tuple", (PyCFunction)(void *)test_parse_tuple,
+     METH_FASTCALL, "test_parse_tuple(s, n, d) -> len(s)+n+d"},
+    {"test_build_value", (PyCFunction)(void *)test_build_value,
+     METH_FASTCALL, "test_build_value(n, s) -> (n+1, s, [n, n])"},
+    {"test_getattr_obj", (PyCFunction)(void *)test_getattr_obj,
+     METH_FASTCALL, "test_getattr_obj(obj, name) -> attr"},
+    {"test_long64", (PyCFunction)(void *)test_long64,
+     METH_FASTCALL, "test_long64(n) -> n*2 via long long"},
+    {"test_utf8_size", (PyCFunction)(void *)test_utf8_size,
+     METH_FASTCALL, "test_utf8_size(s) -> UTF-8 byte length"},
+    {"test_unicode_concat", (PyCFunction)(void *)test_unicode_concat,
+     METH_FASTCALL, "test_unicode_concat(a, b) -> a + b"},
+    {"test_dict_keys", (PyCFunction)(void *)test_dict_keys,
+     METH_FASTCALL, "test_dict_keys(d) -> list of keys"},
+    {"test_dict_items_count", (PyCFunction)(void *)test_dict_items_count,
+     METH_FASTCALL, "test_dict_items_count(d) -> len(d.items())"},
+    {"test_dict_setdefault", (PyCFunction)(void *)test_dict_setdefault,
+     METH_FASTCALL, "test_dict_setdefault(d, k, v) -> value"},
+    {"test_dict_merge", (PyCFunction)(void *)test_dict_merge,
+     METH_FASTCALL, "test_dict_merge(a, b, override) -> None"},
+    {"test_dict_clear", (PyCFunction)(void *)test_dict_clear,
+     METH_FASTCALL, "test_dict_clear(d) -> 0"},
+    {"test_list_slice", (PyCFunction)(void *)test_list_slice,
+     METH_FASTCALL, "test_list_slice(list, lo, hi) -> list[lo:hi]"},
+    {"test_list_sort", (PyCFunction)(void *)test_list_sort,
+     METH_FASTCALL, "test_list_sort(list) -> None (in place)"},
+    {"test_list_reverse", (PyCFunction)(void *)test_list_reverse,
+     METH_FASTCALL, "test_list_reverse(list) -> None (in place)"},
+    {"test_list_astuple", (PyCFunction)(void *)test_list_astuple,
+     METH_FASTCALL, "test_list_astuple(list) -> tuple"},
+    {"test_tuple_slice", (PyCFunction)(void *)test_tuple_slice,
+     METH_FASTCALL, "test_tuple_slice(t, lo, hi) -> t[lo:hi]"},
+    {"test_seq_contains", (PyCFunction)(void *)test_seq_contains,
+     METH_FASTCALL, "test_seq_contains(seq, item) -> 0/1"},
+    {"test_capsule_roundtrip", (PyCFunction)(void *)test_capsule_roundtrip,
+     METH_FASTCALL, "test_capsule_roundtrip() -> 1 if ok"},
+    {"test_new_exception", (PyCFunction)(void *)test_new_exception,
+     METH_FASTCALL, "test_new_exception() -> raises CustomError"},
+    {"test_exc_matches", (PyCFunction)(void *)test_exc_matches,
+     METH_FASTCALL, "test_exc_matches() -> 1 if hierarchy matching works"},
     {"test_float", (PyCFunction)(void *)test_float,
      METH_FASTCALL, "test_float(x) -> x * 2.0"},
     {"test_int", (PyCFunction)(void *)test_int,
@@ -740,13 +1591,36 @@ static PyMethodDef shimtest_methods[] = {
 PyDoc_STRVAR(module_doc,
     "Test module for the CPython C API stand-in.");
 
+/* Multi-phase init: register module-level constants so shimModuleAttrs
+   export can be tested. The capsule is deliberately non-exportable (a
+   C-only object) and must be skipped by the export. */
+static int
+shimtest_exec(PyObject *mod) {
+    static int capsule_payload = 7;
+    PyModule_AddIntConstant(mod, "MAGIC_INT", 42);
+    PyModule_AddStringConstant(mod, "MAGIC_STR", "grail");
+    PyModule_AddObjectRef(mod, "MAGIC_FLOAT", PyFloat_FromDouble(2.5));
+    PyModule_AddObjectRef(mod, "SKIPPED_CAPSULE",
+        PyCapsule_New(&capsule_payload, "shimtest.skipped", NULL));
+    /* Heap type for the typed-object tests (registered against this
+       module so shimCallTyped finds it by short name "Counter"). */
+    CounterType = PyType_FromModuleAndSpec(mod, &Counter_spec, NULL);
+    if (!CounterType) return -1;
+    return 0;
+}
+
+static PyModuleDef_Slot shimtest_slots[] = {
+    {Py_mod_exec, (void *)shimtest_exec},
+    {0, NULL}
+};
+
 static struct PyModuleDef _shimtestmodule = {
     PyModuleDef_HEAD_INIT,
     .m_name    = "_shimtest",
     .m_doc     = module_doc,
     .m_size    = -1,
     .m_methods = shimtest_methods,
-    .m_slots   = NULL,
+    .m_slots   = shimtest_slots,
     .m_traverse = NULL,
     .m_clear    = NULL,
     .m_free     = NULL,

@@ -420,6 +420,56 @@ callModule: moduleName method: methodName with: arg1 with: arg2 with: arg3 with:
 	}
 %
 
+category: 'Grail-Calling'
+method: CPythonShim
+callModule: moduleName method: methodName args: posArray kwargs: kwDictOrNil
+	"Call a module method with positional args and keyword args (a
+	Dictionary of String name -> value, or nil). Routes through the
+	shimCallKw user action, which follows the METH_FASTCALL|METH_KEYWORDS
+	vector convention (and builds a dict for METH_VARARGS|METH_KEYWORDS)."
+
+	| posAddrs names vals |
+	posAddrs := Array new: posArray size.
+	1 to: posArray size do: [:i |
+		posAddrs at: i put: (self wrap: (posArray at: i)) memoryAddress.
+	].
+	names := OrderedCollection new.
+	vals := OrderedCollection new.
+	kwDictOrNil ifNotNil: [
+		kwDictOrNil keysAndValuesDo: [:k :v |
+			names addLast: k asString.
+			vals addLast: (self wrap: v) memoryAddress.
+		].
+	].
+	^ System userAction: #shimCallKw withArgs: {
+		moduleName . methodName . posAddrs . names asArray . vals asArray }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
+callModuleReturnCPtr: moduleName method: methodName
+	"Call a no-arg module method that returns a raw C pointer
+	(SmallInteger address) instead of a Smalltalk value."
+
+	^ System userAction: #shimCall withArgs: {
+		moduleName . methodName .
+		0 . 0 . 0 .
+		0 . 0 . 8
+	}
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
+callTyped: moduleName type: typeName setattr: attrName selfPtr: ptr value: aValue
+	"Invoke a tp_getset SETTER on a C-allocated typed object.
+	Flags bit 4 selects the setter path in shimCallTyped."
+
+	^ System userAction: #shimCallTyped withArgs: {
+		moduleName . typeName . attrName . ptr .
+		(self wrap: aValue) memoryAddress . 0 . 0 . (1 bitOr: 16)
+	}
+%
+
 ! ===============================================================================
 ! Instance methods - Backwards-compatible specialized calling
 ! ===============================================================================
@@ -650,6 +700,23 @@ loadModule: moduleName
 	Returns true if the module loaded successfully, or signals an error."
 
 	^ System userAction: #shimLoadModule with: moduleName
+%
+
+category: 'Grail-Module Loading'
+method: CPythonShim
+moduleAttrs: moduleName
+	"Return a Dictionary of the module-level constants the C module
+	registered via PyModule_AddIntConstant / AddStringConstant /
+	AddObjectRef. C-only objects (heap types, capsules) are skipped
+	by the export — they have no Smalltalk value to hand back."
+
+	| flat dict |
+	flat := System userAction: #shimModuleAttrs with: moduleName.
+	dict := SymbolDictionary new.
+	1 to: flat size by: 2 do: [:i |
+		dict at: (flat at: i) asSymbol put: (flat at: i + 1).
+	].
+	^ dict
 %
 
 ! ===============================================================================
@@ -916,6 +983,19 @@ PyObject_Length: obj
 
 category: 'Grail-Dynamic Loading'
 method: CPythonShim
+callModuleDynamic: moduleName method: methodName args: anArray kwargs: kwDictOrNil
+	"Keyword-aware entry point for dynamically loaded module methods.
+	Falls back to the legacy positional-only path when there are no
+	keyword arguments."
+
+	(kwDictOrNil == nil or: [kwDictOrNil isEmpty]) ifTrue: [
+		^ self callModuleDynamic: moduleName method: methodName args: anArray
+	].
+	^ self callModule: moduleName method: methodName args: anArray kwargs: kwDictOrNil
+%
+
+category: 'Grail-Dynamic Loading'
+method: CPythonShim
 callModuleDynamic: moduleName method: methodName args: anArray
 	"Call a dynamically loaded module method with a variable number of arguments.
 	anArray is an Array of Smalltalk values (0 to 5 elements)."
@@ -967,9 +1047,10 @@ loadDynamicModule: moduleName fromPath: pathString
 	symbolList := System myUserProfile symbolList.
 	methodNames do: [:methName |
 		| varargsSrc arity0Src arity1Src arity2Src arity3Src |
-		"Varargs form — actually invokes the C function."
+		"Varargs form — actually invokes the C function. Keyword args
+		flow through the shimCallKw user action when present."
 		varargsSrc := '_' , methName , ': positional kw: keywords
-	^ (CPythonShim @env0:current) @env0:callModuleDynamic: ''' , moduleName , ''' method: ''' , methName , ''' args: positional'.
+	^ (CPythonShim @env0:current) @env0:callModuleDynamic: ''' , moduleName , ''' method: ''' , methName , ''' args: positional kwargs: keywords'.
 		moduleClass
 			compileMethod: varargsSrc
 			dictionaries: symbolList
@@ -997,6 +1078,13 @@ loadDynamicModule: moduleName fromPath: pathString
 	moduleInstance := moduleClass @env0:new.
 	moduleInstance @env1:__name__: moduleName;
 		 @env1:__package__: nil.
+	"Expose module-level constants (PyModule_AddIntConstant /
+	AddStringConstant / AddObjectRef) as dynamic instVars so Python
+	attribute reads (mymod.CONST) resolve through the
+	___pyAttrLoad___ dynamic-instVar probe."
+	(self current moduleAttrs: moduleName) keysAndValuesDo: [:k :v |
+		moduleInstance dynamicInstVarAt: k put: v.
+	].
 	^ moduleInstance
 %
 
@@ -1012,4 +1100,337 @@ PyObject_RichCompareBool: v with: w op: opInt
 	selectors := #(#'__lt__:' #'__le__:' #'__eq__:' #'__ne__:' #'__gt__:' #'__ge__:').
 	selector := selectors at: opInt + 1.
 	^ v perform: selector env: 1 withArguments: { w }
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyObject_RichCompare: v with: w op: opInt
+	"Like PyObject_RichCompareBool but returns the wrapped result object
+	(normally a Boolean, but a dunder may return any object)."
+
+	| selectors selector |
+	selectors := #(#'__lt__:' #'__le__:' #'__eq__:' #'__ne__:' #'__gt__:' #'__ge__:').
+	selector := selectors at: opInt + 1.
+	^ (self wrap: (v perform: selector env: 1 withArguments: { w })) memoryAddress
+%
+
+! --------------- Generic calling / subscript / attribute store ---------------
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyObject_Call: callable args: argsArray
+	"Invoke a Python callable with positional args. argsArray is the
+	Smalltalk value behind the C-side args tuple (an Array or tuple
+	subclass); nil means no arguments. Dispatches through the canonical
+	___pyCallValue___:kw: entry point so BoundMethods, classes, and
+	user-defined __call__ objects all work."
+
+	| args result |
+	args := argsArray ifNil: [ Array new ].
+	(args class == Array) ifFalse: [ args := Array withAll: args ].
+	result := callable perform: #'___pyCallValue___:kw:' env: 1 withArguments: { args . nil }.
+	^ (self wrap: result) memoryAddress
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyObject_GetItem: obj key: aKey
+	"obj[key] via __getitem__. A missing key raises (KeyError/IndexError)
+	in env 1, which surfaces as a GCI error the C side converts."
+
+	^ (self wrap: (obj perform: #'__getitem__:' env: 1 withArguments: { aKey })) memoryAddress
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyObject_SetItem: obj key: aKey value: aValue
+	"obj[key] = value via __setitem__."
+
+	obj perform: #'__setitem__:_:' env: 1 withArguments: { aKey . aValue }.
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyObject_SetAttrString: obj name: nameString value: aValue
+	"setattr(obj, name, value) — Grail compiles attribute stores as a
+	`name:` setter in env 1."
+
+	obj perform: (nameString , ':') asSymbol env: 1 withArguments: { aValue }.
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PySequence_GetItem: seq at: zeroBasedIndex
+	"Fallback for sequences that are neither list nor tuple on the C side.
+	Python __getitem__ handles negative indices and raises IndexError."
+
+	^ (self wrap: (seq perform: #'__getitem__:' env: 1 withArguments: { zeroBasedIndex })) memoryAddress
+%
+
+! --------------- Iteration protocol ---------------
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyObject_GetIter: obj
+	"iter(obj) via __iter__."
+
+	^ (self wrap: (obj @env1:__iter__)) memoryAddress
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyIter_Next: anIterator
+	"next(iterator). Returns 0 (C NULL, no error) when the iterator is
+	exhausted — the C side translates StopIteration-as-end-of-iteration
+	into the NULL-without-error protocol."
+
+	| result |
+	"Runtime lookup: StopIteration.gs compiles after CPythonShim.gs in
+	install.gs, so a direct reference would not resolve here."
+	result := [ anIterator @env1:__next__ ]
+		on: (Python at: #StopIteration)
+		do: [:e | ^ 0 ].
+	^ (self wrap: result) memoryAddress
+%
+
+! --------------- Sequence / string helpers ---------------
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PySequence_Contains: seq item: anItem
+	"item in seq via __contains__."
+
+	^ seq perform: #'__contains__:' env: 1 withArguments: { anItem }
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyUnicode_Concat: left with: right
+	^ (self wrap: (left , right)) memoryAddress
+%
+
+! --------------- Dict API (additional) ---------------
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyDict_Clear: aDictionary
+	aDictionary removeAllKeys: aDictionary keys.
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyDict_Keys: aDictionary
+	"Returns a Python list (OrderedCollection) of the keys."
+
+	^ (self wrap: (OrderedCollection withAll: aDictionary keys asArray)) memoryAddress
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyDict_Values: aDictionary
+	| values |
+	values := OrderedCollection new.
+	aDictionary keysAndValuesDo: [:k :v | values addLast: v].
+	^ (self wrap: values) memoryAddress
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyDict_Items: aDictionary
+	"Returns a Python list of (key, value) tuples."
+
+	| items |
+	items := OrderedCollection new.
+	aDictionary keysAndValuesDo: [:k :v | items addLast: { k . v }].
+	^ (self wrap: items) memoryAddress
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyDict_Copy: aDictionary
+	^ (self wrap: aDictionary copy) memoryAddress
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyDict_Merge: aDictionary with: otherDictionary override: aBoolean
+	otherDictionary keysAndValuesDo: [:k :v |
+		(aBoolean or: [(aDictionary includesKey: k) not]) ifTrue: [
+			aDictionary at: k put: v.
+		].
+	].
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyDict_SetDefault: aDictionary key: aKey default: aDefault
+	"dict.setdefault — return the existing value, or store and return
+	the default. A nil default (C NULL) means Python None; never store
+	Smalltalk nil in a Python dict."
+
+	| value |
+	(aDictionary includesKey: aKey) ifTrue: [
+		^ (self wrap: (aDictionary at: aKey)) memoryAddress
+	].
+	value := aDefault ifNil: [ None ].
+	aDictionary at: aKey put: value.
+	^ (self wrap: value) memoryAddress
+%
+
+! --------------- List / Tuple API (additional) ---------------
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyList_GetSlice: aList from: lo to: hi
+	"Python slice semantics: 0-based, end exclusive, clamped to length.
+	Returns a new list."
+
+	| len oneLo oneHi |
+	len := aList size.
+	oneLo := (lo max: 0) + 1.
+	oneHi := hi min: len.
+	oneHi < oneLo ifTrue: [^ (self wrap: OrderedCollection new) memoryAddress].
+	^ (self wrap: (OrderedCollection withAll: (aList copyFrom: oneLo to: oneHi))) memoryAddress
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyList_AsTuple: aList
+	^ (self wrap: (Array withAll: aList)) memoryAddress
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyList_Sort: aList
+	"In-place sort using Python __lt__ — delegate to the Python-level
+	list>>sort method."
+
+	aList @env1:sort.
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyList_Reverse: aList
+	aList @env1:reverse.
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyTuple_GetSlice: anArray from: lo to: hi
+	"Returns a new tuple (Array) with Python slice clamping."
+
+	| len oneLo oneHi |
+	len := anArray size.
+	oneLo := (lo max: 0) + 1.
+	oneHi := hi min: len.
+	oneHi < oneLo ifTrue: [^ (self wrap: (Array new: 0)) memoryAddress].
+	^ (self wrap: (anArray copyFrom: oneLo to: oneHi)) memoryAddress
+%
+
+! --------------- Slice API ---------------
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PySlice_New: start stop: stop step: step
+	"slice() construction. The C side maps NULL args to None before
+	delegating, so the three values are always present."
+
+	^ (self wrap: (slice ___newStart: start stop: stop step: step)) memoryAddress
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PySlice_Unpack: aSlice
+	"Return { startOrNil. stopOrNil. stepOrNil } with nil where the
+	slice holds None. CPython's defaults (and the step ~= 0 check)
+	are applied on the C side so the PY_SSIZE_T sentinel values never
+	round-trip through Smalltalk. Returns nil for a non-slice."
+
+	| s |
+	(aSlice isKindOf: slice) ifFalse: [^ nil].
+	s := Array new: 3.
+	s at: 1 put: ((aSlice @env1:start) == None ifTrue: [nil] ifFalse: [aSlice @env1:start]).
+	s at: 2 put: ((aSlice @env1:stop) == None ifTrue: [nil] ifFalse: [aSlice @env1:stop]).
+	s at: 3 put: ((aSlice @env1:step) == None ifTrue: [nil] ifFalse: [aSlice @env1:step]).
+	^ s
+%
+
+! --------------- Set API ---------------
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PySet_New: iterableOrNil
+	"PySet_New(NULL) -> empty set; with an iterable, add its elements.
+	Smalltalk collections (list/tuple/set) enumerate via do:; Python
+	iterator objects are not supported here. Runtime class lookup:
+	set.gs compiles after CPythonShim.gs in install.gs."
+
+	| s |
+	s := (Python at: #set) new.
+	iterableOrNil ifNotNil: [ iterableOrNil do: [:each | s add: each] ].
+	^ (self wrap: s) memoryAddress
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PySet_Add: aSet item: anItem
+	aSet add: anItem.
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PySet_Contains: aSet item: anItem
+	^ aSet includes: anItem
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PySet_Discard: aSet item: anItem
+	"Returns true if the item was present and removed."
+
+	(aSet includes: anItem) ifFalse: [^ false].
+	aSet remove: anItem ifAbsent: [].
+	^ true
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PySet_Clear: aSet
+	aSet asArray do: [:each | aSet remove: each ifAbsent: []].
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PySet_Check: obj
+	^ obj isKindOf: Set
+%
+
+! --------------- Bytearray API ---------------
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyByteArray_FromStringAndSize: aByteArray
+	^ (self wrap: (bytearray withAll: aByteArray)) memoryAddress
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyByteArray_Check: obj
+	^ obj isKindOf: bytearray
+%
+
+! --------------- Import helper ---------------
+
+category: 'Grail-CPython API'
+method: CPythonShim
+importGetAttr: modName name: attrName
+	"Backs _PyImport_GetModuleAttrString: import a module by name and
+	return one attribute of it."
+
+	| mod value |
+	"Runtime lookup: importlib.gs compiles after CPythonShim.gs in
+	install.gs, so a direct reference would not resolve here."
+	mod := ((Python at: #importlib) ___instance___) @env1:import_module: modName.
+	value := mod perform: attrName asSymbol env: 1.
+	^ (self wrap: value) memoryAddress
 %
