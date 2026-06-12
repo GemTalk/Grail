@@ -577,8 +577,11 @@ run
 	at: #'ConfigparserTestCase' put: nil;
 	at: #'CsvTestCase' put: nil;
 	at: #'FnmatchTestCase' put: nil;
+	at: #'GetoptTestCase' put: nil;
+	at: #'GetpassTestCase' put: nil;
 	at: #'HeapqTestCase' put: nil;
 	at: #'QueueTestCase' put: nil;
+	at: #'ReprlibTestCase' put: nil;
 	at: #'ShlexTestCase' put: nil;
 	at: #'ShutilTestCase' put: nil;
 	at: #'TextwrapTestCase' put: nil;
@@ -1218,8 +1221,11 @@ input src/smalltalk/PythonTests/CalendarTestCase.gs
 input src/smalltalk/PythonTests/ConfigparserTestCase.gs
 input src/smalltalk/PythonTests/CsvTestCase.gs
 input src/smalltalk/PythonTests/FnmatchTestCase.gs
+input src/smalltalk/PythonTests/GetoptTestCase.gs
+input src/smalltalk/PythonTests/GetpassTestCase.gs
 input src/smalltalk/PythonTests/HeapqTestCase.gs
 input src/smalltalk/PythonTests/QueueTestCase.gs
+input src/smalltalk/PythonTests/ReprlibTestCase.gs
 input src/smalltalk/PythonTests/ShlexTestCase.gs
 input src/smalltalk/PythonTests/TextwrapTestCase.gs
 input src/smalltalk/PythonTests/GlobTestCase.gs
