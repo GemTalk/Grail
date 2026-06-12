@@ -87,6 +87,7 @@ initializeBuiltinModules
 		@env0:at: #os 			put: os 		instance;
 		@env0:at: #string 		put: string 	instance;
 		@env0:at: #sys 			put: sys 		instance;
+		@env0:at: #zlib 		put: zlib 		instance;
 		@env0:yourself.
 %
 

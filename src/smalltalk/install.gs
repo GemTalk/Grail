@@ -318,6 +318,8 @@ run
 	at: #'BytesIO' put: nil;
 	at: #'FileIO' put: nil;
 	at: #'TextIOWrapper' put: nil;
+	at: #'zlib' put: nil;
+	at: #'ZlibError' put: nil;
 	at: #'math' put: nil;
 	at: #'module' put: nil;
 	at: #'PythonClass' put: nil;
@@ -587,6 +589,7 @@ run
 	at: #'ShutilTestCase' put: nil;
 	at: #'TomllibTestCase' put: nil;
 	at: #'UnittestTestCase' put: nil;
+	at: #'ZlibTestCase' put: nil;
 	at: #'TextwrapTestCase' put: nil;
 	at: #'GlobTestCase' put: nil;
 	at: #'GemStoneTestCase' put: nil;
@@ -861,6 +864,7 @@ input src/smalltalk/Python/ipaddress.gs
 input src/smalltalk/Python/datetime_module.gs
 input src/smalltalk/Python/json_module.gs
 input src/smalltalk/Python/io_module.gs
+input src/smalltalk/Python/zlib_module.gs
 input src/smalltalk/Python/math.gs
 input src/smalltalk/Python/numbers.gs
 input src/smalltalk/Python/os.gs
@@ -1236,6 +1240,7 @@ input src/smalltalk/PythonTests/GlobTestCase.gs
 input src/smalltalk/PythonTests/ShutilTestCase.gs
 input src/smalltalk/PythonTests/TomllibTestCase.gs
 input src/smalltalk/PythonTests/UnittestTestCase.gs
+input src/smalltalk/PythonTests/ZlibTestCase.gs
 input src/smalltalk/PythonTests/GemStoneTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementTestCase.gs
 input src/smalltalk/PythonTests/HtmlTestCase.gs
