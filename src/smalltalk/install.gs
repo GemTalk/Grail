@@ -572,6 +572,7 @@ run
 	at: #'FunctoolsWrapsVarargsTestCase' put: nil;
 	at: #'FrozensetTestCase' put: nil;
 	at: #'FutureWarningTestCase' put: nil;
+	at: #'ArgparseTestCase' put: nil;
 	at: #'BisectTestCase' put: nil;
 	at: #'CalendarTestCase' put: nil;
 	at: #'ConfigparserTestCase' put: nil;
@@ -1218,6 +1219,7 @@ input src/smalltalk/PythonTests/FractionTestCase.gs
 input src/smalltalk/PythonTests/FrozensetTestCase.gs
 input src/smalltalk/PythonTests/FunctoolsTestCase.gs
 input src/smalltalk/PythonTests/FunctoolsWrapsVarargsTestCase.gs
+input src/smalltalk/PythonTests/ArgparseTestCase.gs
 input src/smalltalk/PythonTests/BisectTestCase.gs
 input src/smalltalk/PythonTests/CalendarTestCase.gs
 input src/smalltalk/PythonTests/ConfigparserTestCase.gs
