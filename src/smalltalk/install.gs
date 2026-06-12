@@ -316,6 +316,8 @@ run
 	at: #'io' put: nil;
 	at: #'StringIO' put: nil;
 	at: #'BytesIO' put: nil;
+	at: #'FileIO' put: nil;
+	at: #'TextIOWrapper' put: nil;
 	at: #'math' put: nil;
 	at: #'module' put: nil;
 	at: #'PythonClass' put: nil;
@@ -560,6 +562,7 @@ run
 	at: #'ExceptionGroupTestCase' put: nil;
 	at: #'ExceptionTestCase' put: nil;
 	at: #'FileExistsErrorTestCase' put: nil;
+	at: #'FileIoTestCase' put: nil;
 	at: #'FileNotFoundErrorTestCase' put: nil;
 	at: #'FloatTestCase' put: nil;
 	at: #'FourArgAttrCallTestCase' put: nil;
@@ -1282,6 +1285,7 @@ input src/smalltalk/PythonTests/EncodingWarningTestCase.gs
 input src/smalltalk/PythonTests/ExceptionGroupTestCase.gs
 input src/smalltalk/PythonTests/ExceptionTestCase.gs
 input src/smalltalk/PythonTests/FileExistsErrorTestCase.gs
+input src/smalltalk/PythonTests/FileIoTestCase.gs
 input src/smalltalk/PythonTests/FileNotFoundErrorTestCase.gs
 input src/smalltalk/PythonTests/FloatingPointErrorTestCase.gs
 input src/smalltalk/PythonTests/FutureWarningTestCase.gs

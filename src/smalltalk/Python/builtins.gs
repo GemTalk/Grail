@@ -535,6 +535,74 @@ oct: aNumber
 
 category: 'Grail-Built-in Functions'
 method: builtins
+open: file
+	"Python builtin open(file) — fixed-arity fast path; text read mode.
+	Implementation lives in FileIO class >> ___open___:mode:encoding:."
+
+	^ FileIO @env1:___open___: file mode: nil encoding: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+open: file _: mode
+	"Python builtin open(file, mode) — fixed-arity fast path."
+
+	^ FileIO @env1:___open___: file mode: mode encoding: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+open: file _: mode _: buffering
+	"Python builtin open(file, mode, buffering) — fixed-arity fast path.
+	buffering is accepted and ignored (GsFile buffers internally)."
+
+	^ FileIO @env1:___open___: file mode: mode encoding: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+open: file _: mode _: buffering _: encoding
+	"Python builtin open(file, mode, buffering, encoding) — fixed-arity
+	fast path.  buffering is accepted and ignored."
+
+	^ FileIO @env1:___open___: file mode: mode encoding: encoding
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+_open: positional kw: kwargs
+	"Python builtin open(file, mode='r', buffering=-1, encoding=None,
+	errors=None, newline=None, closefd=True, opener=None) — varargs fast
+	path for kwarg call shapes like open(p, encoding='utf-8').
+	buffering / errors / newline / closefd / opener are accepted and
+	ignored (no newline translation; GsFile buffers internally)."
+
+	| nargs file mode encoding |
+	nargs := positional @env0:size.
+	file := (nargs @env0:>= 1)
+		ifTrue: [positional @env0:at: 1]
+		ifFalse: [
+			(kwargs @env0:== nil) ifTrue: [
+				TypeError ___signal___: 'open() missing required argument: ''file'''].
+			kwargs @env0:at: 'file' ifAbsent: [
+				TypeError ___signal___: 'open() missing required argument: ''file''']].
+	mode := (nargs @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [
+			(kwargs @env0:== nil)
+				ifTrue: [nil]
+				ifFalse: [kwargs @env0:at: 'mode' ifAbsent: [nil]]].
+	encoding := (nargs @env0:>= 4)
+		ifTrue: [positional @env0:at: 4]
+		ifFalse: [
+			(kwargs @env0:== nil)
+				ifTrue: [nil]
+				ifFalse: [kwargs @env0:at: 'encoding' ifAbsent: [nil]]].
+	^ FileIO @env1:___open___: file mode: mode encoding: encoding
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ord: aString
 	"Python builtin ord(c) — fixed-arity fast path."
 
