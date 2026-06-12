@@ -50,18 +50,29 @@ GemStone-resident business logic), (c) feasibility on the GemStone VM.
    FileNotFoundError/FileExistsError/IsADirectoryError mapping.
    Not supported (raise OSError): truncate(), fileno(); no
    universal-newline translation. Tests: `FileIoTestCase` (27).
-2. **`locals()`** — known gap (see TODO.md); needs codegen support.
+2. **`locals()`** — DONE 2026-06-12. Compile-time rewrite in CallAst
+   (`printLocalsCallOn:`): emits the enclosing function's variable set
+   as name/value pairs; `builtins ___buildLocals___:` filters unbound
+   (nil) entries into a fresh dict. Module-level locals() emits `self`
+   (== globals()). V1 gaps: class-body locals() answers the module
+   namespace; closure free variables omitted; aliased `f = locals` not
+   rewritten. Tests: `LocalsTestCase` (8).
 
 ### P1 — small, pure-Python, high-frequency (each ≤ a day)
 
-3. **heapq** — pure Python port; used by many libraries internally.
-4. **glob** — composes existing fnmatch + os.listdir/isdir.
-5. **textwrap** — pure; needed by argparse/click help and inspect.cleandoc.
-6. **shutil (subset)** — copyfile/copy/copytree/move/rmtree; needs open().
+3. **heapq** — DONE 2026-06-12 (`HeapqTestCase`; merge() non-lazy).
+4. **glob** — DONE 2026-06-12 (`GlobTestCase`; no `**`, raises
+   ValueError). Required extending fnmatch with `[seq]`/`[!seq]`
+   character classes (`FnmatchTestCase`).
+5. **textwrap** — DONE 2026-06-12 (`TextwrapTestCase`; dedent/indent
+   per CPython, wrap/fill/shorten greedy, no long-word breaking).
+6. **shutil (subset)** — DONE 2026-06-12 (`ShutilTestCase`;
+   copyfile/copy/copytree/move/rmtree, no metadata/symlinks). Exposed
+   and fixed an os bug: listdir reported '.'/'..'.
 7. **csv** — pure Python; reader/writer/DictReader/DictWriter over any
-   iterable of lines (file objects once open() lands).
-8. **bisect** — `_bisect` C shim is already registered; add the thin
-   `bisect.py` wrapper module.
+   iterable of lines (file objects now exist).
+8. **bisect** — DONE 2026-06-12 (`BisectTestCase`; pure Python, no
+   key= param yet).
 9. **queue** — pure Python over existing threading.Lock/Condition.
 10. **reprlib** — tiny; referenced by collections/functools idioms.
 11. **shlex** — pure; used by config/CLI-ish code.
