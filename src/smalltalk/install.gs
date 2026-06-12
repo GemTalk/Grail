@@ -573,8 +573,13 @@ run
 	at: #'FrozensetTestCase' put: nil;
 	at: #'FutureWarningTestCase' put: nil;
 	at: #'BisectTestCase' put: nil;
+	at: #'CalendarTestCase' put: nil;
+	at: #'ConfigparserTestCase' put: nil;
+	at: #'CsvTestCase' put: nil;
 	at: #'FnmatchTestCase' put: nil;
 	at: #'HeapqTestCase' put: nil;
+	at: #'QueueTestCase' put: nil;
+	at: #'ShlexTestCase' put: nil;
 	at: #'ShutilTestCase' put: nil;
 	at: #'TextwrapTestCase' put: nil;
 	at: #'GlobTestCase' put: nil;
@@ -1209,8 +1214,13 @@ input src/smalltalk/PythonTests/FrozensetTestCase.gs
 input src/smalltalk/PythonTests/FunctoolsTestCase.gs
 input src/smalltalk/PythonTests/FunctoolsWrapsVarargsTestCase.gs
 input src/smalltalk/PythonTests/BisectTestCase.gs
+input src/smalltalk/PythonTests/CalendarTestCase.gs
+input src/smalltalk/PythonTests/ConfigparserTestCase.gs
+input src/smalltalk/PythonTests/CsvTestCase.gs
 input src/smalltalk/PythonTests/FnmatchTestCase.gs
 input src/smalltalk/PythonTests/HeapqTestCase.gs
+input src/smalltalk/PythonTests/QueueTestCase.gs
+input src/smalltalk/PythonTests/ShlexTestCase.gs
 input src/smalltalk/PythonTests/TextwrapTestCase.gs
 input src/smalltalk/PythonTests/GlobTestCase.gs
 input src/smalltalk/PythonTests/ShutilTestCase.gs
