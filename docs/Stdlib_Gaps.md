@@ -108,9 +108,18 @@ GemStone-resident business logic), (c) feasibility on the GemStone VM.
     over /usr/lib/libz.dylib via CCallout: compress/decompress (zlib
     format, wbits 9..15), crc32/adler32, zlib.error; no streaming
     objects / raw deflate / gzip framing yet — those need z_stream,
-    which is also the path to gzip → zipfile).
+    which is also the path to zipfile).
+18b. **gzip** — DONE 2026-06-12 (`GzipTestCase`; files over GsFile's
+    transparent zlib compression via io._gzip_open; in-memory
+    compress/decompress via temp file; stream-only, no seek/tell).
+18c. **unittest.mock** — DONE 2026-06-12 (`MockTestCase`; Mock/patch/
+    sentinel/call/ANY as top-level `mock`, aliased to unittest.mock;
+    no spec/autospec; direct-send call sites bypass patched module
+    attrs — documented).
 19. **email (full message model)** — only utils today; smtplib later.
-20. **wsgiref** — lower urgency since werkzeug serves WSGI already.
+    THE remaining P2 item.
+20. **wsgiref** — DONE 2026-06-12 (`WsgirefTestCase`; headers.Headers
+    + util; simple_server intentionally absent — werkzeug serves).
 21. **sqlite3** — CCallout to libsqlite3; big, but the killer demo is
     GemStone-as-the-database, so consider a DB-API shim over GemStone
     objects instead.
