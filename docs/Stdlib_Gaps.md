@@ -104,9 +104,11 @@ GemStone-resident business logic), (c) feasibility on the GemStone VM.
 17. **argparse** — DONE 2026-06-12 (`ArgparseTestCase`; actions,
     nargs, type/choices/required, option-value forms, clusters, '--',
     set_defaults, minimal help; no subparsers/groups/abbreviation).
-18. **zlib (real)** — current module raises on use. CCallout to system
-    libz is the plausible path (same pattern as CPython shim). Unlocks
-    gzip → zipfile → wheel handling.
+18. **zlib (real)** — DONE 2026-06-12 (`ZlibTestCase`; native module
+    over /usr/lib/libz.dylib via CCallout: compress/decompress (zlib
+    format, wbits 9..15), crc32/adler32, zlib.error; no streaming
+    objects / raw deflate / gzip framing yet — those need z_stream,
+    which is also the path to gzip → zipfile).
 19. **email (full message model)** — only utils today; smtplib later.
 20. **wsgiref** — lower urgency since werkzeug serves WSGI already.
 21. **sqlite3** — CCallout to libsqlite3; big, but the killer demo is
