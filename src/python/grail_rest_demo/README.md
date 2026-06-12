@@ -58,7 +58,7 @@ On the Grail side (Topaz session or `flask run`):
 
 ```python
 from src.python.grail_rest_demo.app import main
-main(port=5000)
+main(port=8384)
 ```
 
 Use `main()` — it configures the dev server for the way Grail runs:
