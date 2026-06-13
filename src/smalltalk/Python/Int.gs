@@ -362,16 +362,11 @@ __floordiv__: other
 category: 'Grail-String Representation'
 method: int
 __format__: formatSpec
-	"Format the integer according to format specification.  Supports
-	a subset of Python's format-spec mini-language: optional
-	[fill][<|>|^][width].  Empty spec → ``__str__''.  Anything fancier
-	(sign, padding zero, base, thousands-separator) falls back to the
-	plain string."
+	"Format the integer per the full format-spec mini-language
+	(fill/align/sign/#/0/width/grouping/.precision/type) — see the
+	shared engine in builtins ___formatValue___:spec:."
 
-	| s |
-	s := self @env1:__str__.
-	formatSpec @env0:isEmpty ifTrue: [^ s].
-	^ s @env1:___applyAlignWidthFormat___: formatSpec
+	^ (builtins @env1:instance) @env1:___formatValue___: self spec: formatSpec
 %
 
 category: 'Grail-Comparison'

@@ -159,14 +159,12 @@ __eq__: other
 category: 'Grail-String Representation'
 method: CharacterCollection
 __format__: formatSpec
-	"Python str.__format__: empty spec returns self; a non-empty spec
-	delegates to ___applyAlignWidthFormat___: for the
-	[fill][<|>|^][width] subset that jinja2 / common Python code
-	hits.  Other spec syntax (precision, type, etc.) falls back
-	to plain self."
+	"Python str.__format__: full fill/align/width plus .precision
+	truncation and the 's' type — see the shared engine in builtins
+	___formatValue___:spec:."
 
 	(formatSpec @env0:isNil or: [formatSpec @env0:= '']) ifTrue: [^ self].
-	^ self @env1:___applyAlignWidthFormat___: formatSpec
+	^ (builtins @env1:instance) @env1:___formatValue___: self spec: formatSpec
 %
 
 category: 'Grail-Comparison'

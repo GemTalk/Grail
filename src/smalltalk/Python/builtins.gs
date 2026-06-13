@@ -645,6 +645,325 @@ repr: anObject
 	^ anObject __repr__
 %
 
+category: 'Grail-Format Spec Engine'
+method: builtins
+___parseFormatSpec___: spec
+	"Parse Python's format-spec mini-language
+	    [[fill]align][sign][#][0][width][,|_][.precision][type]
+	into an 8-slot Array: {fill. align. sign. alt. width. grouping.
+	precision. type}.  align/grouping/precision/type are nil when
+	absent; raises ValueError on trailing junk or empty precision."
+
+	| fill align sign alt width grouping precision type i n c |
+	fill := $ . align := nil. sign := $-. alt := false.
+	width := 0. grouping := nil. precision := nil. type := nil.
+	i := 1. n := spec @env0:size.
+	(n @env0:>= 2 and: [#($< $> $^ $=) @env0:includes: (spec @env0:at: 2)])
+		ifTrue: [
+			fill := spec @env0:at: 1.
+			align := spec @env0:at: 2.
+			i := 3]
+		ifFalse: [
+			(n @env0:>= 1 and: [#($< $> $^ $=) @env0:includes: (spec @env0:at: 1)])
+				ifTrue: [
+					align := spec @env0:at: 1.
+					i := 2]].
+	(i @env0:<= n and: [#($+ $- $ ) @env0:includes: (spec @env0:at: i)]) ifTrue: [
+		sign := spec @env0:at: i. i := i @env0:+ 1].
+	(i @env0:<= n and: [(spec @env0:at: i) @env0:= $#]) ifTrue: [
+		alt := true. i := i @env0:+ 1].
+	(i @env0:<= n and: [(spec @env0:at: i) @env0:= $0]) ifTrue: [
+		align @env0:== nil ifTrue: [align := $=. fill := $0].
+		i := i @env0:+ 1].
+	[i @env0:<= n and: [(spec @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
+		width := (width @env0:* 10) @env0:+ (spec @env0:at: i) @env0:digitValue.
+		i := i @env0:+ 1].
+	(i @env0:<= n and: [#($, $_) @env0:includes: (spec @env0:at: i)]) ifTrue: [
+		grouping := spec @env0:at: i. i := i @env0:+ 1].
+	(i @env0:<= n and: [(spec @env0:at: i) @env0:= $.]) ifTrue: [
+		i := i @env0:+ 1.
+		(i @env0:> n or: [(spec @env0:at: i) @env0:isDigit @env0:not]) ifTrue: [
+			ValueError ___signal___: 'Format specifier missing precision'].
+		precision := 0.
+		[i @env0:<= n and: [(spec @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
+			precision := (precision @env0:* 10) @env0:+ (spec @env0:at: i) @env0:digitValue.
+			i := i @env0:+ 1]].
+	i @env0:<= n ifTrue: [
+		c := spec @env0:at: i.
+		(#($b $c $d $e $E $f $F $g $G $n $o $s $x $X $%) @env0:includes: c) ifFalse: [
+			ValueError ___signal___: ('Invalid format specifier ''' @env0:, spec @env0:asString @env0:, '''')].
+		type := c.
+		i := i @env0:+ 1].
+	i @env0:<= n ifTrue: [
+		ValueError ___signal___: ('Invalid format specifier ''' @env0:, spec @env0:asString @env0:, '''')].
+	^ { fill. align. sign. alt. width. grouping. precision. type }
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___formatPadBody___: body fill: fill align: align width: width signLength: signLength
+	"Pad body to width.  align $= keeps the first signLength chars
+	(sign and/or 0x prefix) on the left and pads between them and the
+	digits."
+
+	| padCount pad left lp rp leftPad |
+	width @env0:<= body @env0:size ifTrue: [^ body @env0:asString].
+	padCount := width @env0:- body @env0:size.
+	"atAllPut: answers its ARGUMENT, not the receiver — assign first."
+	pad := String @env0:new: padCount.
+	pad @env0:atAllPut: fill.
+	align @env0:= $< ifTrue: [^ (body @env0:, pad) @env0:asString].
+	align @env0:= $^ ifTrue: [
+		leftPad := padCount @env0:// 2.
+		lp := String @env0:new: leftPad.
+		lp @env0:atAllPut: fill.
+		rp := String @env0:new: padCount @env0:- leftPad.
+		rp @env0:atAllPut: fill.
+		^ (lp @env0:, body @env0:, rp) @env0:asString].
+	align @env0:= $= ifTrue: [
+		left := body @env0:copyFrom: 1 to: signLength.
+		^ (left @env0:, pad @env0:, (body @env0:copyFrom: signLength @env0:+ 1 to: body @env0:size)) @env0:asString].
+	^ (pad @env0:, body) @env0:asString
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___groupDigits___: digits separator: sep every: groupSize
+	"Insert sep into a digit string every groupSize digits from the
+	right: '1234567' -> '1,234,567'."
+
+	| out count i |
+	digits @env0:size @env0:<= groupSize ifTrue: [^ digits].
+	out := ''.
+	count := 0.
+	i := digits @env0:size.
+	[i @env0:>= 1] @env0:whileTrue: [
+		out := (String @env0:with: (digits @env0:at: i)) @env0:, out.
+		count := count @env0:+ 1.
+		(count @env0:\\ groupSize @env0:= 0 and: [i @env0:> 1]) ifTrue: [
+			out := (String @env0:with: sep) @env0:, out].
+		i := i @env0:- 1].
+	^ out
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___signString___: negative sign: sign
+	negative ifTrue: [^ '-'].
+	sign @env0:= $+ ifTrue: [^ '+'].
+	sign @env0:= $  ifTrue: [^ ' '].
+	^ ''
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___formatIntValue___: value parsed: p
+	"Format an Integer per a parsed spec.  Float-ish types delegate
+	to the float formatter (CPython allows format(3, '.2f'))."
+
+	| fill align sign alt width grouping type digits prefix signStr body groupSize |
+	fill := p @env0:at: 1. align := p @env0:at: 2. sign := p @env0:at: 3.
+	alt := p @env0:at: 4. width := p @env0:at: 5. grouping := p @env0:at: 6.
+	type := p @env0:at: 8.
+	(#($e $E $f $F $g $G $%) @env0:includes: type) ifTrue: [
+		^ self @env1:___formatFloatValue___: value @env0:asFloat parsed: p].
+	type @env0:= $c ifTrue: [
+		body := String @env0:with: (Character @env0:codePoint: value).
+		align @env0:== nil ifTrue: [align := $<].
+		^ self @env1:___formatPadBody___: body fill: fill align: align width: width signLength: 0].
+	type @env0:= $s ifTrue: [
+		ValueError ___signal___: 'Unknown format code ''s'' for object of type ''int'''].
+	prefix := ''.
+	(type @env0:== nil or: [type @env0:= $d or: [type @env0:= $n]]) ifTrue: [
+		digits := value @env0:abs @env0:printString]
+	ifFalse: [
+		type @env0:= $b ifTrue: [
+			digits := value @env0:abs @env0:printStringRadix: 2.
+			alt ifTrue: [prefix := '0b']].
+		type @env0:= $o ifTrue: [
+			digits := value @env0:abs @env0:printStringRadix: 8.
+			alt ifTrue: [prefix := '0o']].
+		type @env0:= $x ifTrue: [
+			digits := (value @env0:abs @env0:printStringRadix: 16) @env0:asLowercase.
+			alt ifTrue: [prefix := '0x']].
+		type @env0:= $X ifTrue: [
+			digits := value @env0:abs @env0:printStringRadix: 16.
+			alt ifTrue: [prefix := '0X']]].
+	grouping @env0:== nil ifFalse: [
+		groupSize := (type @env0:== nil or: [type @env0:= $d or: [type @env0:= $n]])
+			ifTrue: [3] ifFalse: [4].
+		digits := self @env1:___groupDigits___: digits separator: grouping every: groupSize].
+	signStr := self @env1:___signString___: value @env0:< 0 sign: sign.
+	body := signStr @env0:, prefix @env0:, digits.
+	align @env0:== nil ifTrue: [align := $>].
+	^ self @env1:___formatPadBody___: body fill: fill align: align
+		width: width signLength: signStr @env0:size @env0:+ prefix @env0:size
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___fixedDigits___: absValue precision: precision
+	"Fixed-point digit string for a non-negative Float: 'II.FFF' with
+	exactly `precision` fraction digits ('II' when precision = 0)."
+
+	| factor scaled ip fp frac |
+	factor := 10 @env0:raisedTo: precision.
+	scaled := (absValue @env0:* factor) @env0:rounded.
+	ip := scaled @env0:// factor.
+	fp := scaled @env0:\\ factor.
+	precision @env0:= 0 ifTrue: [^ ip @env0:printString].
+	frac := fp @env0:printString.
+	[frac @env0:size @env0:< precision] @env0:whileTrue: [frac := '0' @env0:, frac].
+	^ (ip @env0:printString) @env0:, '.' @env0:, frac
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___sciDigits___: absValue precision: precision upper: upper
+	"Scientific-notation digit string for a non-negative Float:
+	'M.MMMe+EE'."
+
+	| m exp mstr estr marker |
+	m := absValue.
+	exp := 0.
+	m @env0:= 0 ifFalse: [
+		[m @env0:>= 10] @env0:whileTrue: [m := m @env0:/ 10. exp := exp @env0:+ 1].
+		[m @env0:< 1] @env0:whileTrue: [m := m @env0:* 10. exp := exp @env0:- 1]].
+	mstr := self @env1:___fixedDigits___: m precision: precision.
+	"Rounding can push the mantissa to 10.000...; renormalize."
+	(mstr @env0:size @env0:>= 2 and: [(mstr @env0:at: 1) @env0:= $1 and: [(mstr @env0:at: 2) @env0:= $0]]) ifTrue: [
+		(mstr @env0:copyFrom: 1 to: 2) @env0:= '10' ifTrue: [
+			m := m @env0:/ 10. exp := exp @env0:+ 1.
+			mstr := self @env1:___fixedDigits___: m precision: precision]].
+	estr := exp @env0:abs @env0:printString.
+	estr @env0:size @env0:< 2 ifTrue: [estr := '0' @env0:, estr].
+	estr := (exp @env0:< 0 ifTrue: ['-'] ifFalse: ['+']) @env0:, estr.
+	marker := upper ifTrue: ['E'] ifFalse: ['e'].
+	^ mstr @env0:, marker @env0:, estr
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___stripTrailingZeros___: digitString
+	"For %g: drop trailing fraction zeros and a bare trailing dot."
+
+	| s |
+	s := digitString.
+	(s @env0:includes: $.) ifFalse: [^ s].
+	[s @env0:size @env0:> 0 and: [(s @env0:at: s @env0:size) @env0:= $0]]
+		@env0:whileTrue: [s := s @env0:copyFrom: 1 to: s @env0:size @env0:- 1].
+	(s @env0:size @env0:> 0 and: [(s @env0:at: s @env0:size) @env0:= $.]) ifTrue: [
+		s := s @env0:copyFrom: 1 to: s @env0:size @env0:- 1].
+	^ s
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___formatFloatValue___: value parsed: p
+	"Format a Float per a parsed spec (types f F e E g G % and the
+	bare-precision form)."
+
+	| fill align sign width grouping precision type neg a digits signStr body suffix exp10 probe |
+	fill := p @env0:at: 1. align := p @env0:at: 2. sign := p @env0:at: 3.
+	width := p @env0:at: 5. grouping := p @env0:at: 6.
+	precision := p @env0:at: 7. type := p @env0:at: 8.
+	(#($b $o $x $X $c $d $n $s) @env0:includes: type) ifTrue: [
+		ValueError ___signal___: ('Unknown format code for object of type ''float''')].
+	"Non-finite values format as their str with sign/width only."
+	(value @env0:= value) ifFalse: [
+		digits := 'nan'. neg := false]
+	ifTrue: [
+		neg := value @env0:< 0.
+		a := value @env0:abs.
+		a @env0:> 1e300 ifTrue: [
+			a @env0:* 0 @env0:= 0 ifFalse: [digits := 'inf']]].
+	digits @env0:== nil ifTrue: [
+		suffix := ''.
+		type @env0:= $% ifTrue: [
+			a := a @env0:* 100.
+			suffix := '%'.
+			type := $f].
+		(type @env0:= $f or: [type @env0:= $F]) ifTrue: [
+			digits := self @env1:___fixedDigits___: a
+				precision: (precision @env0:== nil ifTrue: [6] ifFalse: [precision])]
+		ifFalse: [
+		(type @env0:= $e or: [type @env0:= $E]) ifTrue: [
+			digits := self @env1:___sciDigits___: a
+				precision: (precision @env0:== nil ifTrue: [6] ifFalse: [precision])
+				upper: type @env0:= $E]
+		ifFalse: [
+			"g / G / bare precision / bare float."
+			(type @env0:== nil and: [precision @env0:== nil]) ifTrue: [
+				digits := a @env0:printString]
+			ifFalse: [
+				precision @env0:== nil ifTrue: [precision := 6].
+				precision @env0:= 0 ifTrue: [precision := 1].
+				exp10 := 0.
+				probe := a.
+				probe @env0:= 0 ifFalse: [
+					[probe @env0:>= 10] @env0:whileTrue: [probe := probe @env0:/ 10. exp10 := exp10 @env0:+ 1].
+					[probe @env0:< 1] @env0:whileTrue: [probe := probe @env0:* 10. exp10 := exp10 @env0:- 1]].
+				((exp10 @env0:>= -4) @env0:and: [exp10 @env0:< precision])
+					ifTrue: [
+						digits := self @env1:___stripTrailingZeros___:
+							(self @env1:___fixedDigits___: a precision: (precision @env0:- 1 @env0:- exp10 @env0:max: 0))]
+					ifFalse: [
+						digits := self @env1:___stripTrailingZeros___:
+							(self @env1:___sciDigits___: a precision: precision @env0:- 1 upper: type @env0:= $G)]]]].
+		digits := digits @env0:, suffix].
+	grouping @env0:== nil ifFalse: [
+		| dot ip rest |
+		dot := digits @env0:indexOf: $..
+		dot @env0:= 0
+			ifTrue: [ip := digits. rest := '']
+			ifFalse: [ip := digits @env0:copyFrom: 1 to: dot @env0:- 1.
+				rest := digits @env0:copyFrom: dot to: digits @env0:size].
+		digits := (self @env1:___groupDigits___: ip separator: grouping every: 3) @env0:, rest].
+	signStr := self @env1:___signString___: neg sign: sign.
+	body := signStr @env0:, digits.
+	align @env0:== nil ifTrue: [align := $>].
+	^ self @env1:___formatPadBody___: body fill: fill align: align
+		width: width signLength: signStr @env0:size
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___formatStrValue___: value parsed: p
+	"Format a string per a parsed spec: optional .precision truncation,
+	then fill/align/width.  Default alignment is left."
+
+	| fill align width precision type body |
+	fill := p @env0:at: 1. align := p @env0:at: 2. width := p @env0:at: 5.
+	precision := p @env0:at: 7. type := p @env0:at: 8.
+	(type @env0:== nil or: [type @env0:= $s]) ifFalse: [
+		ValueError ___signal___: ('Unknown format code for object of type ''str''')].
+	body := value.
+	((precision @env0:== nil) @env0:not and: [body @env0:size @env0:> precision]) ifTrue: [
+		body := body @env0:copyFrom: 1 to: precision].
+	align @env0:== nil ifTrue: [align := $<].
+	align @env0:= $= ifTrue: [
+		ValueError ___signal___: '''='' alignment not allowed in string format specifier'].
+	^ self @env1:___formatPadBody___: body fill: fill align: align width: width signLength: 0
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___formatValue___: value spec: spec
+	"Shared entry point behind int/float/str __format__.  Empty spec
+	is str(value); otherwise parse once and dispatch by type."
+
+	| p |
+	(spec @env0:== nil or: [spec @env0:isEmpty]) ifTrue: [^ value @env1:__str__].
+	p := self @env1:___parseFormatSpec___: spec.
+	(value @env0:isKindOf: Float) ifTrue: [
+		^ self @env1:___formatFloatValue___: value parsed: p].
+	(value @env0:isKindOf: Integer) ifTrue: [
+		^ self @env1:___formatIntValue___: value parsed: p].
+	(value @env0:isKindOf: CharacterCollection) ifTrue: [
+		^ self @env1:___formatStrValue___: value @env0:asString parsed: p].
+	^ self @env1:___formatStrValue___: (value @env1:__str__) parsed: p
+%
+
 category: 'Grail-Built-in Functions'
 method: builtins
 format: aValue
@@ -724,6 +1043,139 @@ map: aFunction _: anIterable
 		] @env0:on: StopIteration do: [:ex | done := true]
 	].
 	^ lst
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+filter: aFunction _: anIterable
+	"Python builtin filter(func, iter) — keep items where func(item)
+	is truthy; filter(None, iter) keeps truthy items.  Materialized
+	eagerly like map() (no lazy iterator type yet); answers an
+	iterator over the result."
+
+	| lst iter done keep |
+	lst := list ___new___.
+	iter := anIterable __iter__.
+	done := false.
+	[done] @env0:whileFalse: [
+		[
+			| item |
+			item := iter __next__.
+			(aFunction @env0:== None)
+				ifTrue: [keep := item ___isTruthy___]
+				ifFalse: [keep := (aFunction value: { item } value: nil) ___isTruthy___].
+			keep ifTrue: [lst append: item]
+		] @env0:on: StopIteration do: [:ex | done := true]
+	].
+	^ lst __iter__
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+_filter: positional kw: kwargs
+	"Varargs form of filter() for BoundMethod indirect calls."
+
+	^ self @env1:filter: (positional @env0:at: 1) _: (positional @env0:at: 2)
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+vars: anObject
+	"Python builtin vars(obj) — the instance namespace as a fresh
+	dict: dynamic instVars plus non-nil named instVars (nil means
+	unbound in Grail); module/dict-backed receivers also contribute
+	their dict entries.  The zero-arg vars() is rewritten to locals()
+	at compile time (CallAst), matching CPython's equivalence."
+
+	| d |
+	"Reject receivers that cannot carry attributes BEFORE touching the
+	dynamic-instVar API — signaling from inside an on:Error handler
+	around dynamicInstVarPairs on a special (immediate) object loops
+	the signal machinery into AlmostOutOfStack."
+	((anObject @env0:== nil)
+		or: [(anObject @env0:== None)
+		or: [(anObject @env0:isKindOf: Number)
+		or: [(anObject @env0:isKindOf: Boolean)
+		or: [(anObject @env0:isKindOf: CharacterCollection)
+		or: [(anObject @env0:class @env0:isPointers) @env0:not]]]]]) ifTrue: [
+		TypeError ___signal___: 'vars() argument must have __dict__ attribute'].
+	d := dict @env1:___new___.
+	(anObject @env0:isKindOf: SymbolDictionary) ifTrue: [
+		anObject @env0:keysDo: [:k |
+			d @env1:__setitem__: k @env0:asString @env0:asUnicodeString _: (anObject @env0:at: k)]].
+	(anObject @env0:dynamicInstanceVariables) @env0:do: [:nm |
+		d @env1:__setitem__: (nm @env0:asString @env0:asUnicodeString)
+			_: (anObject @env0:dynamicInstVarAt: nm)].
+	(anObject @env0:class @env0:allInstVarNames) @env0:doWithIndex: [:nm :i |
+		| v |
+		v := anObject @env0:instVarAt: i.
+		v @env0:== nil ifFalse: [
+			d @env1:__setitem__: (nm @env0:asString @env0:asUnicodeString) _: v]].
+	^ d
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+ascii: anObject
+	"Python builtin ascii(x) — repr() with non-ASCII characters
+	escaped as \\xHH / \\uHHHH / \\UHHHHHHHH."
+
+	| r ws cp hex |
+	r := anObject __repr__.
+	ws := WriteStream @env0:on: String @env0:new.
+	r @env0:do: [:ch |
+		cp := ch @env0:codePoint.
+		cp @env0:<= 126
+			ifTrue: [ws @env0:nextPut: ch]
+			ifFalse: [
+				hex := (cp @env0:printStringRadix: 16) @env0:asLowercase.
+				cp @env0:<= 255
+					ifTrue: [
+						[hex @env0:size @env0:< 2] @env0:whileTrue: [hex := '0' @env0:, hex].
+						ws @env0:nextPutAll: '\x'.
+						ws @env0:nextPutAll: hex]
+					ifFalse: [
+						cp @env0:<= 16rFFFF
+							ifTrue: [
+								[hex @env0:size @env0:< 4] @env0:whileTrue: [hex := '0' @env0:, hex].
+								ws @env0:nextPutAll: '\u'.
+								ws @env0:nextPutAll: hex]
+							ifFalse: [
+								[hex @env0:size @env0:< 8] @env0:whileTrue: [hex := '0' @env0:, hex].
+								ws @env0:nextPutAll: '\U'.
+								ws @env0:nextPutAll: hex]]]].
+	^ ws @env0:contents
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+help
+	"Python builtin help() — Grail has no interactive help system."
+
+	Transcript @env0:nextPutAll: 'Grail: call help(obj) to print obj.__doc__.'.
+	Transcript @env0:cr.
+	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+help: anObject
+	"Python builtin help(obj) — minimal: print the docstring."
+
+	| doc |
+	doc := [anObject @env1:__doc__] @env0:on: Error do: [:ex | nil].
+	(doc @env0:== nil or: [doc @env0:== None]) ifTrue: [
+		doc := 'No documentation available.'].
+	Transcript @env0:nextPutAll: doc @env0:asString.
+	Transcript @env0:cr.
+	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+_help: positional kw: kwargs
+	positional @env0:isEmpty ifTrue: [^ self @env1:help].
+	^ self @env1:help: (positional @env0:at: 1)
 %
 
 category: 'Python-Built-in Functions'

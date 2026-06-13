@@ -135,6 +135,19 @@ __abs__
 	^ self @env0:abs
 %
 
+category: 'Grail-String Representation'
+method: float
+__format__: formatSpec
+	"Format the float per the full format-spec mini-language
+	(f/F/e/E/g/G/% types, precision, sign, width, grouping) — see the
+	shared engine in builtins ___formatValue___:spec:.  Previously
+	float had NO __format__, so ``'{:.2f}'.format(x)`` died in the
+	DNU path with an uncatchable MessageNotUnderstood."
+
+	(formatSpec @env0:isNil or: [formatSpec @env0:isEmpty]) ifTrue: [^ self @env1:__str__].
+	^ (builtins @env1:instance) @env1:___formatValue___: self spec: formatSpec
+%
+
 category: 'Grail-Arithmetic'
 method: float
 __add__: other

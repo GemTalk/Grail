@@ -494,7 +494,9 @@ run
 	at: #'BoundMethodNameTestCase' put: nil;
 	at: #'BrokenPipeErrorTestCase' put: nil;
 	at: #'BufferErrorTestCase' put: nil;
+	at: #'BuiltinExtrasTestCase' put: nil;
 	at: #'BuiltinSubclassOverrideTestCase' put: nil;
+	at: #'FormatSpecTestCase' put: nil;
 	at: #'BuiltinsTestCase' put: nil;
 	at: #'BytearrayTestCase' put: nil;
 	at: #'BytesTestCase' put: nil;
@@ -1228,6 +1230,8 @@ input src/smalltalk/PythonTests/FrozensetTestCase.gs
 input src/smalltalk/PythonTests/FunctoolsTestCase.gs
 input src/smalltalk/PythonTests/FunctoolsWrapsVarargsTestCase.gs
 input src/smalltalk/PythonTests/ArgparseTestCase.gs
+input src/smalltalk/PythonTests/BuiltinExtrasTestCase.gs
+input src/smalltalk/PythonTests/FormatSpecTestCase.gs
 input src/smalltalk/PythonTests/BisectTestCase.gs
 input src/smalltalk/PythonTests/CalendarTestCase.gs
 input src/smalltalk/PythonTests/ConfigparserTestCase.gs

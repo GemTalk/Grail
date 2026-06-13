@@ -153,16 +153,18 @@ printSmalltalkOn: aStream
 			and: [arguments isEmpty and: [keywords isEmpty]]])
 				ifTrue: [aStream nextPutAll: 'self'. ^self].
 
-	"0b. `locals()` — compile-time rewrite.  Inside a function body
-	(CallAst functionBeingCompiled is set by FunctionDefAst >>
-	printBodyOn:), emit a pair-array of every name in the function
-	scope; builtins ___buildLocals___: filters the still-unbound ones
-	(Smalltalk nil ≡ unbound — Python None is the None singleton) and
-	answers a dict.  At module body scope locals() IS globals(), so
-	emit `self` like the globals() case above.  Same caveat as
-	globals(): only the bare-name 0-arg call shape is rewritten."
+	"0b. `locals()` / zero-arg `vars()` — compile-time rewrite.  Inside
+	a function body (CallAst functionBeingCompiled is set by
+	FunctionDefAst >> printBodyOn:), emit a pair-array of every name in
+	the function scope; builtins ___buildLocals___: filters the
+	still-unbound ones (Smalltalk nil ≡ unbound — Python None is the
+	None singleton) and answers a dict.  At module body scope locals()
+	IS globals(), so emit `self` like the globals() case above.
+	vars() with no argument is locals() by definition (the 1-arg form
+	dispatches to builtins vars: normally).  Same caveat as globals():
+	only the bare-name 0-arg call shape is rewritten."
 	((function isKindOf: NameAst)
-		and: [function id = #'locals'
+		and: [(function id = #'locals' or: [function id = #'vars'])
 			and: [arguments isEmpty and: [keywords isEmpty]]])
 				ifTrue: [^ self printLocalsCallOn: aStream].
 
