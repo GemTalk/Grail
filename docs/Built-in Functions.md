@@ -12,7 +12,7 @@ table.
 |  ✅  | `all()`          | Return True if all elements of the iterable are true (or if the iterable is empty).                                         |
 |      | `anext()`        | When awaited, return the next item from the given asynchronous iterator, or default if given and the iterator is exhausted. |
 |  ✅  | `any()`          | Return True if any element of the iterable is true.                                                                         |
-|      | `ascii()`        | As repr(), return a string containing a printable representation of an object, but escape the non-ASCII characters.         |
+|  ✅  | `ascii()`        | As repr(), return a string containing a printable representation of an object, but escape the non-ASCII characters.         |
 |  ✅  | `bin()`          | Convert an integer number to a binary string prefixed with "0b".                                                            |
 |  ✅  | `bool()`         | Return a boolean value.                                                                                                     |
 |      | `breakpoint()`   | Drop into the debugger at the call site.                                                                                    |
@@ -30,15 +30,15 @@ table.
 |  ✅  | `enumerate()`    | Return an enumerate object.                                                                                                 |
 |  ✅  | `eval()`         | Evaluate the given source in the context of globals and locals.                                                             |
 |  ✅  | `exec()`         | Execute the given source in the context of globals and locals.                                                              |
-|      | `filter()`       | Construct an iterator from elements of iterable for which function returns true.                                            |
+|  ✅  | `filter()`       | Construct an iterator from elements of iterable for which function returns true.                                            |
 |  ✅  | `float()`        | Return a floating point number constructed from a number or string.                                                         |
-|  ⚠️  | `format()`       | Convert a value to a formatted representation.                                                                              |
+|  ✅  | `format()`       | Convert a value to a formatted representation.                                                                              |
 |  ✅  | `frozenset()`    | Return a new frozenset object.                                                                                              |
 |  ✅  | `getattr()`      | Return the value of the named attribute of object.                                                                          |
 |  ✅  | `globals()`      | Return the dictionary implementing the current module namespace.                                                            |
 |  ✅  | `hasattr()`      | Return True if the string is the name of one of the object's attributes.                                                    |
 |  ✅  | `hash()`         | Return the hash value of the object (if it has one).                                                                        |
-|      | `help()`         | Invoke the built-in help system.                                                                                            |
+|  ⚠️  | `help()`         | Invoke the built-in help system.                                                                                            |
 |  ✅  | `hex()`          | Convert an integer number to a lowercase hexadecimal string prefixed with "0x".                                             |
 |  ✅  | `id()`           | Return the "identity" of an object.                                                                                         |
 |  ✅  | `input()`        | Read a string from standard input.                                                                                          |
@@ -75,18 +75,22 @@ table.
 |  ✅  | `super()`        | Return a proxy object that delegates method calls to a parent or sibling class.                                             |
 |  ✅  | `tuple()`        | Return a tuple.                                                                                                             |
 |  ✅  | `type()`         | Return the type of an object.                                                                                               |
-|      | `vars()`         | Return the `__dict__` attribute for a module, class, instance, or any other object.                                         |
+|  ✅  | `vars()`         | Return the `__dict__` attribute for a module, class, instance, or any other object.                                         |
 |  ✅  | `zip()`          | Iterate over several iterables in parallel.                                                                                 |
 |  ✅  | `__import__()`   | This function is invoked by the import statement.                                                                           |
 
 ## Notes on the qualified rows
 
-- **`format()` / `str.format()` (⚠️)** — placeholders (`{}`, `{0}`,
-  `{name}`) and alignment/width specs (`{:<6}`) work.  Type codes are
-  silently IGNORED (`format(255, "x")` → `'255'`, not `'ff'`), and a
-  precision spec (`"{:.2f}".format(x)`) crashes with an UNCATCHABLE
-  Smalltalk-level MessageNotUnderstood (env-1 `#','` sent to
-  Unicode7) — a Python `except` cannot recover.
+- **`format()` / `str.format()`** — DONE 2026-06-12 (`FormatSpecTestCase`).
+  Full `[[fill]align][sign][#][0][width][,|_][.precision][type]` spec
+  across the `b c d o x X e E f F g G n % s` types, grouping
+  separators, sign-aware zero-padding, and CATCHABLE `ValueError` on
+  bad specs.  `int` with a float-type spec (`format(3, ".2f")`)
+  delegates to the float path, matching CPython.  Shared engine lives
+  on `builtins` (`___formatValue___:spec:`).
+- **`help()` (⚠️)** — minimal stub: `help(obj)` prints `obj.__doc__`,
+  `help()` prints a one-liner; both return None.  No interactive help
+  system.
 - **`super()`** — zero-arg and explicit `super(Cls, self)` forms work
   via the CallAst rewrite; other shapes (e.g. `super` aliased through
   a local) fall through to NameError (see TODO.md).
@@ -94,23 +98,13 @@ table.
   `mock.Mock`: Mock's `__getattr__` auto-creates attributes, so
   `hasattr` is always True there.)
 
-## Prioritized implementation list
+## Remaining
 
-1. **format-spec mini-language** (`format()` + `str.format` + the
-   shared formatter in `string_Formatter.gs`) — HIGH.  Two defects:
-   type codes ignored (silent wrong answers) and precision specs
-   crash uncatchably.  Numeric specs (`.2f`, `x`, `05d`, `,`) are
-   pervasive in real code (logging, reprs, templates).  Largest and
-   most impactful remaining builtins item.
-2. **`filter()`** — common builtin, absent entirely (bare-name use is
-   a compile error).  Straightforward: mirror `map()`'s iterator
-   shape; support `filter(None, it)`.
-3. **`vars()`** — `vars(obj)` from the instance attribute set (same
-   machinery as `dir`+`getattr`); zero-arg `vars()` can reuse the
-   `locals()` compile-time rewrite.
-4. **`ascii()`** — `repr()` plus non-ASCII escaping; small.
-5. **`help()`** — minimal: print the `__doc__` of the argument; only
-   worth a stub.
-6. **Out of scope for now:** `aiter()`/`anext()` (no async runtime in
-   Grail), `breakpoint()` (no debugger bridge; could stub to a no-op
-   or topaz pause later).
+Genuinely missing builtins, in rough priority:
+
+1. **`breakpoint()`** — no debugger bridge.  Could stub to a no-op or
+   a topaz pause if a workflow ever needs it.
+2. **`aiter()` / `anext()`** — out of scope until Grail has an async
+   runtime (no event loop; cooperative green threads only).
+
+Everything else in the table is ✅ or a documented partial above.
