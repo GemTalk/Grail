@@ -1,136 +1,127 @@
-# Python Standard Library Gaps in Grail
+# Python Standard Library Coverage in Grail
 
 Survey date: 2026-06-12, against the Python 3.14 library index
-(https://docs.python.org/3/library/index.html).
+(https://docs.python.org/3/library/index.html). All P0/P1/P2 items
+from the original gap list shipped on 2026-06-12 — per-module details
+are in `git log` and the per-module TestCases named below.
 
 Inventory sources: native module classes in `src/smalltalk/Python/*.gs`
 (`module subclass:` definitions) and pure-Python modules in
 `src/python/stdlib/`.
 
-## What Grail already has
+## Coverage by official index section
 
-| Section | Covered |
-|---|---|
-| Text processing | string, re (full SRE engine), difflib, unicodedata |
-| Binary data | struct, codecs |
-| Data types | datetime, collections(+abc), weakref, types, copy, pprint, enum (partial) |
-| Numeric | numbers, math, cmath, decimal, fractions, random, statistics |
-| Functional | itertools, functools, operator |
-| File/dir | pathlib, os.path, stat, tempfile, fnmatch |
-| Persistence | pickle, copyreg, marshal |
-| File formats | — |
-| Crypto | hashlib, hmac, secrets |
-| OS services | os (metadata ops), io (StringIO/BytesIO only), time, logging, platform, errno |
-| Concurrency | threading (cooperative), _thread, contextvars |
-| Networking | socket, ssl, select, selectors |
-| Internet data | email (utils), json, mimetypes, base64, binascii |
-| Markup | html, html.entities, xml.etree (partial) |
-| Internet protocols | urllib.parse/request/error, http(+client/server/cookies), uuid, socketserver, ipaddress |
-| Dev/runtime | typing, sys, builtins, warnings, dataclasses, contextlib, abc, traceback, __future__, inspect (partial) |
-| Importing | importlib (+reload), pkgutil, zipimport (stub) |
-| Language | ast, keyword |
+Sections mirror the docs.python.org index so the two lists can be
+compared side by side. "In Grail" includes partial implementations —
+see the deviation notes in the next section for what "partial" means.
 
-Third-party already vendored and working: flask, werkzeug, jinja2, click,
-itsdangerous, markupsafe, blinker, requests (partial), twilio.
+| Official section | In Grail | Not in Grail |
+|---|---|---|
+| Text Processing | string, re (full SRE engine), difflib, textwrap, unicodedata | string.templatelib, stringprep, readline, rlcompleter |
+| Binary Data | struct, codecs | — |
+| Data Types | datetime, calendar, collections(+abc), heapq, bisect, weakref, types, copy, pprint, reprlib, enum (partial) | zoneinfo, array, graphlib |
+| Numeric & Mathematical | numbers, math, cmath, decimal, fractions, random, statistics | — |
+| Functional Programming | itertools, functools, operator | — |
+| File & Directory Access | pathlib (partial), os.path, stat, tempfile, glob, fnmatch, shutil | filecmp, linecache |
+| Data Persistence | pickle (partial), copyreg, marshal (partial) | shelve, dbm, sqlite3 |
+| Compression & Archiving | zlib (one-shot), gzip (stream-only) | compression.zstd, bz2, lzma, zipfile, tarfile |
+| File Formats | csv, configparser, tomllib | netrc, plistlib |
+| Cryptographic Services | hashlib, hmac, secrets | — |
+| Generic OS Services | os, io (full file objects), time, logging, platform, errno | logging.config/handlers, ctypes |
+| Command-line Interface | argparse, getpass | optparse, fileinput, curses, cmd |
+| Concurrent Execution | threading (cooperative), queue, contextvars, _thread | multiprocessing, concurrent.futures, subprocess, sched |
+| Networking & IPC | socket, ssl, select, selectors | asyncio, signal, mmap |
+| Internet Data Handling | email (message model + utils), json, mimetypes, base64, binascii | mailbox, quopri |
+| Structured Markup | html, html.entities, xml.etree (partial) | html.parser, xml.dom, xml.sax, xml.parsers.expat |
+| Internet Protocols | urllib.parse/request/error, http(+client/server/cookies), wsgiref (util+headers), uuid, socketserver, ipaddress | webbrowser, urllib.robotparser, http.cookiejar, ftplib, poplib, imaplib, smtplib, xmlrpc |
+| Multimedia | — | wave, colorsys |
+| Internationalization | — | gettext, locale |
+| GUIs with Tk | — | tkinter, turtle, IDLE (out of scope) |
+| Development Tools | typing, unittest, unittest.mock | pydoc, doctest, test.support |
+| Debugging & Profiling | — | bdb, pdb, timeit, trace, tracemalloc, faulthandler |
+| Packaging & Distribution | — | ensurepip, venv, zipapp (out of scope) |
+| Python Runtime Services | sys, builtins, warnings, dataclasses, contextlib, abc, traceback, \_\_future\_\_, inspect (partial) | sys.monitoring, sysconfig, \_\_main\_\_, atexit, gc, annotationlib, site |
+| Custom Interpreters | — | code, codeop |
+| Importing Modules | importlib (+reload/metadata/util), pkgutil, zipimport (stub) | modulefinder, runpy, importlib.resources |
+| Language Services | ast, keyword | symtable, token, tokenize, py_compile, compileall, dis, pickletools |
+| MS Windows | — | msvcrt, winreg, winsound (out of scope) |
+| Unix-specific | shlex | posix, pwd, grp, termios, tty, pty, fcntl, resource, syslog |
+| Superseded | getopt | — |
 
-## Prioritized gaps
+Builtins highlights beyond the module list: real `open()` with
+FileIO/TextIOWrapper file objects (`FileIoTestCase`) and a
+compile-time `locals()` (`LocalsTestCase`).
 
-Priority weighs: (a) how often real-world Python hits the module,
-(b) whether it blocks Grail's trajectories (Flask apps, REST/twilio,
-GemStone-resident business logic), (c) feasibility on the GemStone VM.
+Third-party already vendored and working: flask, werkzeug, jinja2,
+click, itsdangerous, markupsafe, blinker, requests (partial), twilio.
 
-### P0 — blocks ordinary programs
+## Deviation notes for the 2026-06-12 modules
 
-1. **`open()` builtin + real file objects in `io`** — DONE 2026-06-12.
-   `FileIO` (binary) / `TextIOWrapper` (text) over server-side `GsFile`
-   in `io_module.gs`; `open()` builtin (fixed-arity 1–4 args plus
-   `_open:kw:` for kwargs) and `io.open` alias. Modes r/w/a/x with
-   +/b/t, utf-8 (default) and latin-1 encodings, read/readline(s)/
-   write(lines)/seek/tell/flush/close, iteration, context manager,
-   FileNotFoundError/FileExistsError/IsADirectoryError mapping.
-   Not supported (raise OSError): truncate(), fileno(); no
-   universal-newline translation. Tests: `FileIoTestCase` (27).
-2. **`locals()`** — DONE 2026-06-12. Compile-time rewrite in CallAst
-   (`printLocalsCallOn:`): emits the enclosing function's variable set
-   as name/value pairs; `builtins ___buildLocals___:` filters unbound
-   (nil) entries into a fresh dict. Module-level locals() emits `self`
-   (== globals()). V1 gaps: class-body locals() answers the module
-   namespace; closure free variables omitted; aliased `f = locals` not
-   rewritten. Tests: `LocalsTestCase` (8).
+What "in Grail" does NOT include, per module (each has a TestCase of
+the same name):
 
-### P1 — small, pure-Python, high-frequency (each ≤ a day)
+- **open()/io** (`FileIoTestCase`) — no truncate()/fileno(), no
+  universal-newline translation; utf-8 + latin-1 encodings only.
+- **locals()** (`LocalsTestCase`) — class-body locals() answers the
+  module namespace; closure free variables omitted; `f = locals`
+  aliasing not rewritten.
+- **heapq** — merge() is non-lazy.
+- **bisect** — no key= parameter.
+- **textwrap** — wrap/fill/shorten are greedy; no long-word breaking.
+- **glob** — no recursive `**` (raises ValueError).
+- **fnmatch** — full `[seq]`/`[!seq]` support; translate() is
+  approximate.
+- **shutil** — no metadata copying (copymode/copystat no-ops), no
+  symlinks; copy2 == copy.
+- **csv** — dialects via kwargs only; no Sniffer; escapechar on the
+  write path only.
+- **queue** — poll-based blocking (no Condition in cooperative
+  threading); SimpleQueue is an unbounded Queue.
+- **configparser** — no ExtendedInterpolation; fixed delimiters and
+  comment prefixes.
+- **tomllib** — inline tables not frozen; dotted keys don't close
+  tables; surrogate \u escapes not rejected.
+- **calendar** — computational core + timegm only; no
+  TextCalendar/HTMLCalendar.
+- **shlex** — split/quote/join only; no streaming lexer class.
+- **reprlib** — apply recursive_repr explicitly (method @-decorators
+  are dropped by Grail).
+- **getpass** — getpass() echoes (no termios layer).
+- **unittest** (`UnittestTestCase`) — no subTest; skip decorators only
+  work applied explicitly; tracebacks are "Name: message" strings;
+  main() requires a module argument.
+- **argparse** — no subparsers, argument groups, mutually exclusive
+  groups, prefix abbreviation, or fromfile args.
+- **zlib** — one-shot only (zlib format, wbits 9..15); no
+  compressobj/decompressobj, raw deflate, or gzip framing (needs
+  z_stream — also the prerequisite for zipfile).
+- **gzip** — file objects are stream-only (no seek/tell); GzipFile is
+  a factory function; fileobj= unsupported; compresslevel ignored.
+- **mock** (`MockTestCase`) — no spec/autospec/wraps; MagicMock is
+  Mock (no dunder magic); patch is context-manager-only; call sites
+  Grail compiled as direct module sends bypass patched module
+  attributes (read via getattr, or patch object attributes).
+- **wsgiref** — headers + util only; simple_server intentionally
+  absent (werkzeug is the serving path).
+- **email** (`EmailMessageTestCase`) — no RFC 2047 encoded words,
+  quoted-printable decode, output line folding, or policies.
 
-3. **heapq** — DONE 2026-06-12 (`HeapqTestCase`; merge() non-lazy).
-4. **glob** — DONE 2026-06-12 (`GlobTestCase`; no `**`, raises
-   ValueError). Required extending fnmatch with `[seq]`/`[!seq]`
-   character classes (`FnmatchTestCase`).
-5. **textwrap** — DONE 2026-06-12 (`TextwrapTestCase`; dedent/indent
-   per CPython, wrap/fill/shorten greedy, no long-word breaking).
-6. **shutil (subset)** — DONE 2026-06-12 (`ShutilTestCase`;
-   copyfile/copy/copytree/move/rmtree, no metadata/symlinks). Exposed
-   and fixed an os bug: listdir reported '.'/'..'.
-7. **csv** — DONE 2026-06-12 (`CsvTestCase`; reader/writer/Dict*,
-   multi-line quoted fields, QUOTE_* policies; kwargs-only dialects,
-   no Sniffer).
-8. **bisect** — DONE 2026-06-12 (`BisectTestCase`; pure Python, no
-   key= param yet).
-9. **queue** — DONE 2026-06-12 (`QueueTestCase`; poll-based blocking
-   under the cooperative scheduler — no Condition; PriorityQueue over
-   heapq; SimpleQueue = unbounded Queue).
-10. **reprlib** — DONE 2026-06-12 (`ReprlibTestCase`; Repr/aRepr/
-    repr/recursive_repr; note: apply recursive_repr explicitly —
-    method @-decorators are dropped).
-11. **shlex** — DONE 2026-06-12 (`ShlexTestCase`; split/quote/join,
-    no lexer class).
-12. **configparser** — DONE 2026-06-12 (`ConfigparserTestCase`;
-    sections/DEFAULT/interpolation/getters/mapping access/write; no
-    ExtendedInterpolation).
-13. **tomllib** — DONE 2026-06-12 (`TomllibTestCase`; hand-rolled
-    recursive descent, full TOML 1.0 value surface incl. RFC 3339
-    datetimes; inline tables not frozen, dotted keys don't close
-    tables). **P1 is complete.**
-14. **calendar** — DONE 2026-06-12 (`CalendarTestCase`; computational
-    core + timegm; no TextCalendar formatting classes).
-15. **getpass / getopt** — DONE 2026-06-12 (`GetpassTestCase` /
-    `GetoptTestCase`; getpass() echoes — no termios layer).
+## Remaining gaps, prioritized
 
-### P2 — bigger efforts, high leverage
+1. **zipfile** — needs raw deflate (z_stream / deflateInit2_ in the
+   native zlib) first; then zipfile itself is mostly pure Python.
+2. **sqlite3** — open design question: CCallout to libsqlite3 is
+   feasible, but the killer demo is GemStone-as-the-database, so a
+   DB-API shim over GemStone objects may be the better investment.
+3. **Stub tier** (cheap import-compatibility wins): signal, atexit,
+   gc, zoneinfo, locale, gettext, html.parser, quopri, linecache,
+   filecmp, netrc, plistlib, array.
+4. **logging.config / logging.handlers** — extend the existing
+   logging port.
+5. **smtplib / ftplib / http.cookiejar / xmlrpc** — only if a target
+   library demands them; socket + ssl exist to build on.
 
-16. **unittest** — DONE 2026-06-12 (`UnittestTestCase`; TestCase with
-    the standard assertion set, loader/suite/result/runner,
-    main(module=...)). No mock or subTest; skip decorators only work
-    applied explicitly. Side fix: `module` now has a safe `__dir__`
-    (the inherited one let dir+getattr execute popitem/clear).
-17. **argparse** — DONE 2026-06-12 (`ArgparseTestCase`; actions,
-    nargs, type/choices/required, option-value forms, clusters, '--',
-    set_defaults, minimal help; no subparsers/groups/abbreviation).
-18. **zlib (real)** — DONE 2026-06-12 (`ZlibTestCase`; native module
-    over /usr/lib/libz.dylib via CCallout: compress/decompress (zlib
-    format, wbits 9..15), crc32/adler32, zlib.error; no streaming
-    objects / raw deflate / gzip framing yet — those need z_stream,
-    which is also the path to zipfile).
-18b. **gzip** — DONE 2026-06-12 (`GzipTestCase`; files over GsFile's
-    transparent zlib compression via io._gzip_open; in-memory
-    compress/decompress via temp file; stream-only, no seek/tell).
-18c. **unittest.mock** — DONE 2026-06-12 (`MockTestCase`; Mock/patch/
-    sentinel/call/ANY as top-level `mock`, aliased to unittest.mock;
-    no spec/autospec; direct-send call sites bypass patched module
-    attrs — documented).
-19. **email (full message model)** — DONE 2026-06-12
-    (`EmailMessageTestCase`; Message/EmailMessage + Parser with
-    multipart, base64 decode, round-trip serialization; no RFC 2047 /
-    quoted-printable / policies). **P2 is complete** except the
-    sqlite3-vs-GemStone-DB-API question (21) and stub tiers (22-23).
-20. **wsgiref** — DONE 2026-06-12 (`WsgirefTestCase`; headers.Headers
-    + util; simple_server intentionally absent — werkzeug serves).
-21. **sqlite3** — CCallout to libsqlite3; big, but the killer demo is
-    GemStone-as-the-database, so consider a DB-API shim over GemStone
-    objects instead.
-22. **signal / atexit / gc** — thin façades over GemStone facilities
-    (mostly no-op stubs to make imports succeed).
-23. **zoneinfo / locale / gettext** — stubs first; real data later.
-
-### P3 — out of scope / not feasible on the GemStone VM
+## Out of scope on the GemStone VM (P3)
 
 - subprocess, multiprocessing, concurrent.futures (process pools) — no
   fork/exec model inside a gem worth exposing yet.
@@ -142,7 +133,11 @@ GemStone-resident business logic), (c) feasibility on the GemStone VM.
 ## Known cross-cutting language gaps (tracked in TODO.md / memory)
 
 Not stdlib modules, but they bite when porting stdlib code: no multiple
-inheritance (C3 MRO), no name mangling (`self.__x`), module-level
-decorators dropped, `kwargs` catch-all param name, descriptor protocol
-(`__get__`) on class attributes, user `__new__` never invoked,
-del-sys.modules str-vs-Symbol bug.
+inheritance (C3 MRO), no name mangling (`self.__x`), module-level AND
+class-body method decorators dropped, `kwargs` catch-all param name,
+descriptor protocol (`__get__`) on class attributes, user `__new__`
+never invoked, del-sys.modules str-vs-Symbol bug, eval-path `class`
+statements broken (use importlib fixtures), `import x as y` aliases
+defeat the native-module call fast path, isinstance(x, type) /
+issubclass-on-non-class raise uncatchable Smalltalk errors (probe
+`getattr(obj, "__mro__", None)` instead).
