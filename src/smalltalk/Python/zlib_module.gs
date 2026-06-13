@@ -107,10 +107,16 @@ _callouts
 	"CCallout handles wrap per-process C state - cache them in
 	SessionTemps so each fresh gem rebuilds them on first use."
 
-	| d lib |
+	| d lib libName |
 	d := SessionTemps @env0:current @env0:at: #Grail_zlib_callouts otherwise: nil.
 	d @env0:== nil ifTrue: [
-		lib := CLibrary @env0:named: '/usr/lib/libz.dylib'.
+		"libz lives at a different path/extension per OS; pass a bare soname
+		and let the loader resolve it (avoids Linux multiarch dir differences).
+		libz.so.1 is the runtime soname from zlib1g - present without -dev."
+		libName := (System @env0:gemVersionAt: #osName) @env0:= 'Darwin'
+			ifTrue: ['libz.dylib']
+			ifFalse: ['libz.so.1'].
+		lib := CLibrary @env0:named: libName.
 		d := KeyValueDictionary @env0:new.
 		d @env0:at: #compressBound put: (CCallout @env0:library: lib name: 'compressBound' result: #uint64 args: #(#'uint64')).
 		d @env0:at: #compress2 put: (CCallout @env0:library: lib name: 'compress2' result: #int32 args: #(#'ptr' #'ptr' #'ptr' #'uint64' #'int32')).
