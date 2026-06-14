@@ -521,6 +521,8 @@ run
 	at: #'ComprehensionTestCase' put: nil;
 	at: #'DefaultsAndAttrsTestCase' put: nil;
 	at: #'DynamicGlobalsTestCase' put: nil;
+	at: #'ModuleScopeBindingsTestCase' put: nil;
+	at: #'ModuleFunctionDecoratorsTestCase' put: nil;
 	at: #'DynamicInstanceAttrsTestCase' put: nil;
 	at: #'AttributeAccessTestCase' put: nil;
 	at: #'AttributeInheritanceTestCase' put: nil;
@@ -1184,6 +1186,8 @@ input src/smalltalk/PythonTests/ComplexTestCase.gs
 input src/smalltalk/PythonTests/ComprehensionTestCase.gs
 input src/smalltalk/PythonTests/DefaultsAndAttrsTestCase.gs
 input src/smalltalk/PythonTests/DynamicGlobalsTestCase.gs
+input src/smalltalk/PythonTests/ModuleScopeBindingsTestCase.gs
+input src/smalltalk/PythonTests/ModuleFunctionDecoratorsTestCase.gs
 input src/smalltalk/PythonTests/DynamicInstanceAttrsTestCase.gs
 input src/smalltalk/PythonTests/AttributeAccessTestCase.gs
 input src/smalltalk/PythonTests/AttributeInheritanceTestCase.gs

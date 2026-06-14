@@ -967,6 +967,52 @@ extern "C" int PyTuple_Check(PyObject *obj) {
  * Smalltalk.
  * ==================================================================== */
 
+/* C-side import cache: PyImport_ImportModule caches the wrapped module by
+   name so repeated imports during an extension's init don't re-cross into
+   Smalltalk.  Populated lazily on the first successful import. */
+#define IMPORT_CACHE_MAX 64
+static struct { char name[64]; PyObject *mod; } import_cache[IMPORT_CACHE_MAX];
+static int import_cache_count = 0;
+
+static PyObject *import_cache_get(const char *name) {
+    for (int i = 0; i < import_cache_count; i++)
+        if (strcmp(import_cache[i].name, name) == 0) return import_cache[i].mod;
+    return NULL;
+}
+static void import_cache_put(const char *name, PyObject *mod) {
+    if (import_cache_count >= IMPORT_CACHE_MAX) return;
+    snprintf(import_cache[import_cache_count].name, 64, "%s", name);
+    import_cache[import_cache_count].mod = mod;
+    import_cache_count++;
+}
+
+static PyObject *do_import_via_server(const char *name) {
+    GciErrSType e; GciErr(&e);              /* drop any stale error first */
+    OopType arg = GciNewString(name);
+    OopType r = GciPerform(server, "PyImport_ImportModule:", &arg, 1);
+    if (GciErr(&e)) {                       /* a real error from THIS perform */
+        fprintf(stderr,
+            "SHIM-DIAG: import '%s' raised in server: [%d] %s\n",
+            name, e.number, e.message);
+        fflush(stderr);
+        return NULL;
+    }
+    return addr_to_pyobj(r);               /* 0 if server returned 0 (not found) */
+}
+
+extern "C" PyObject *PyImport_ImportModule(const char *name) {
+    PyObject *cached = import_cache_get(name);
+    if (cached) return cached;
+    PyObject *m = do_import_via_server(name);
+    if (m == NULL) {
+        PyErr_Format(PyExc_ImportError, "No module named '%s'", name);
+        return NULL;
+    }
+    import_cache_put(name, m);
+    return m;
+}
+
+
 extern "C" PyObject *PyObject_GetAttrString(PyObject *obj, const char *name) {
     CHECK_pyObj(obj, "PyObject_GetAttrString obj");
     OopType args[2] = { pyobj_oop(obj), GciNewString(name) };
@@ -1072,6 +1118,7 @@ static struct {
     PyObject      *module;  /* PyModuleDef pointer */
     ModuleAttr     attrs[MAX_MODULE_ATTRS];
     int            attr_count;
+    PyObject      *dict;    /* lazily-created Grail dict for PyModule_GetDict */
 } module_attrs[MAX_MODULES];
 static int module_attrs_count = 0;
 
@@ -1083,7 +1130,19 @@ static int find_or_create_module_attrs(PyObject *module) {
     int idx = module_attrs_count++;
     module_attrs[idx].module = module;
     module_attrs[idx].attr_count = 0;
+    module_attrs[idx].dict = NULL;
     return idx;
+}
+
+extern "C" PyObject *PyModule_GetDict(PyObject *module) {
+    /* NumPy's init calls this early to get the namespace to populate.
+       Return a lazily-created real (Grail-backed) dict associated with the
+       module; PyDict_SetItemString into it delegates to Grail. */
+    int idx = find_or_create_module_attrs(module);
+    if (idx < 0) return NULL;
+    if (module_attrs[idx].dict == NULL)
+        module_attrs[idx].dict = PyDict_New();
+    return module_attrs[idx].dict;
 }
 
 extern "C" int PyModule_AddObjectRef(PyObject *module, const char *name,
@@ -2039,7 +2098,15 @@ static int run_module_exec_slots(PyObject *mod) {
         if (slot->slot == Py_mod_exec) {
             typedef int (*ExecFunc)(PyObject *);
             ExecFunc exec = (ExecFunc)slot->value;
-            if (exec(mod) != 0) return -1;
+            if (exec(mod) != 0) {
+                const char *et = get_error_type();
+                const char *em = get_error_message();
+                fprintf(stderr,
+                    "SHIM-DIAG: Py_mod_exec slot failed; pending error: %s: %s\n",
+                    et ? et : "(none)", em ? em : "(none)");
+                fflush(stderr);
+                return -1;
+            }
         }
     }
     return 0;
@@ -2666,6 +2733,7 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
         raise_error(msg);
         return OOP_NIL;
     }
+
 
     /* Look for PyInit_{name} */
     char initName[128];
@@ -4065,10 +4133,55 @@ extern "C" int PyCapsule_SetPointer(PyObject *capsule, void *pointer) {
     return 0;
 }
 
+/* Minimal datetime C-API table for PyDateTime_IMPORT (NumPy datetime64).
+   Layout matches CPython 3.14 datetime.h.  Constructors are stubs for now:
+   NumPy stores this pointer at import and only calls through it during
+   actual datetime64<->datetime.datetime conversion, which we wire to Grail
+   later.  Returning a non-NULL table lets module init proceed. */
+typedef struct {
+    PyTypeObject *DateType, *DateTimeType, *TimeType, *DeltaType, *TZInfoType;
+    PyObject *TimeZone_UTC;
+    PyObject *(*Date_FromDate)(int,int,int,PyTypeObject*);
+    PyObject *(*DateTime_FromDateAndTime)(int,int,int,int,int,int,int,PyObject*,PyTypeObject*);
+    PyObject *(*Time_FromTime)(int,int,int,int,PyObject*,PyTypeObject*);
+    PyObject *(*Delta_FromDelta)(int,int,int,int,PyTypeObject*);
+    PyObject *(*TimeZone_FromTimeZone)(PyObject*,PyObject*);
+    PyObject *(*DateTime_FromTimestamp)(PyObject*,PyObject*,PyObject*);
+    PyObject *(*Date_FromTimestamp)(PyObject*,PyObject*);
+    PyObject *(*DateTime_FromDateAndTimeAndFold)(int,int,int,int,int,int,int,PyObject*,int,PyTypeObject*);
+    PyObject *(*Time_FromTimeAndFold)(int,int,int,int,PyObject*,int,PyTypeObject*);
+} ShimDateTimeCAPI;
+
+static PyObject *shim_dt_unsupported(void) {
+    PyErr_SetString(PyExc_NotImplementedError,
+        "datetime C-API constructor not yet wired to Grail");
+    return NULL;
+}
+/* trampolines with the right signatures, all routing to the stub */
+static PyObject *dt_DateFromDate(int a,int b,int c,PyTypeObject*t){(void)a;(void)b;(void)c;(void)t;return shim_dt_unsupported();}
+static PyObject *dt_DateTimeFromDateAndTime(int a,int b,int c,int d,int e,int f,int g,PyObject*h,PyTypeObject*i){(void)a;(void)b;(void)c;(void)d;(void)e;(void)f;(void)g;(void)h;(void)i;return shim_dt_unsupported();}
+static PyObject *dt_TimeFromTime(int a,int b,int c,int d,PyObject*e,PyTypeObject*f){(void)a;(void)b;(void)c;(void)d;(void)e;(void)f;return shim_dt_unsupported();}
+static PyObject *dt_DeltaFromDelta(int a,int b,int c,int d,PyTypeObject*e){(void)a;(void)b;(void)c;(void)d;(void)e;return shim_dt_unsupported();}
+static PyObject *dt_TimeZoneFromTimeZone(PyObject*a,PyObject*b){(void)a;(void)b;return shim_dt_unsupported();}
+static PyObject *dt_DateTimeFromTimestamp(PyObject*a,PyObject*b,PyObject*c){(void)a;(void)b;(void)c;return shim_dt_unsupported();}
+static PyObject *dt_DateFromTimestamp(PyObject*a,PyObject*b){(void)a;(void)b;return shim_dt_unsupported();}
+static PyObject *dt_DateTimeFromDateAndTimeAndFold(int a,int b,int c,int d,int e,int f,int g,PyObject*h,int i,PyTypeObject*j){(void)a;(void)b;(void)c;(void)d;(void)e;(void)f;(void)g;(void)h;(void)i;(void)j;return shim_dt_unsupported();}
+static PyObject *dt_TimeFromTimeAndFold(int a,int b,int c,int d,PyObject*e,int f,PyTypeObject*g){(void)a;(void)b;(void)c;(void)d;(void)e;(void)f;(void)g;return shim_dt_unsupported();}
+
+extern PyTypeObject PyComplex_Type;  /* any non-null type ptr placeholder */
+static ShimDateTimeCAPI shim_datetime_capi = {
+    &PyType_Type, &PyType_Type, &PyType_Type, &PyType_Type, &PyType_Type,
+    NULL,
+    dt_DateFromDate, dt_DateTimeFromDateAndTime, dt_TimeFromTime, dt_DeltaFromDelta,
+    dt_TimeZoneFromTimeZone, dt_DateTimeFromTimestamp, dt_DateFromTimestamp,
+    dt_DateTimeFromDateAndTimeAndFold, dt_TimeFromTimeAndFold
+};
+
 extern "C" void *PyCapsule_Import(const char *name, int no_block) {
     (void)no_block;
-    /* Cross-module capsule sharing needs module attribute storage that
-       Smalltalk can read back (see docs/Shim_API_Gaps.md, Priority 5). */
+    if (name && strcmp(name, "datetime.datetime_CAPI") == 0) {
+        return &shim_datetime_capi;
+    }
     PyErr_Format(PyExc_ImportError, "PyCapsule_Import('%s') not supported", name);
     return NULL;
 }
@@ -4077,6 +4190,35 @@ extern "C" void *PyCapsule_Import(const char *name, int no_block) {
  * GCI User Action registration (keep at end of file)
  * ==================================================================== */
 
+/* Diagnostic user action: minimal ST -> userAction(C) -> callback(ST)
+   reentrancy probe, isolated from dlopen/PyInit.  Calls the server's
+   ___wrapProbe___: on the given object and returns the GCI error number
+   (0 = clean).  Lets us test which object kinds trip 2079 at a SINGLE
+   level of user-action reentrancy. */
+static OopType shim_wrap_at_depth(OopType valOop, long depth)
+{
+    /* Recurse `depth` C frames, then do the wrap callback — tests whether
+       raw C-stack depth (independent of dlopen/PyInit) is what trips 2079. */
+    char pad[256];                 /* keep a real frame, defeat tail-call */
+    pad[0] = (char)depth;
+    if (depth > 0) {
+        OopType r = shim_wrap_at_depth(valOop, depth - 1);
+        return (OopType)(r + (OopType)pad[0] - (OopType)pad[0]);
+    }
+    GciErrSType eClear; GciErr(&eClear);
+    OopType r = GciPerform(server, "___wrapProbe___:", &valOop, 1);
+    (void)r;
+    GciErrSType e;
+    long num = GciErr(&e) ? (long)e.number : 0;
+    return GciI64ToOop(num);
+}
+
+static OopType shimWrapProbe(OopType valOop, OopType depthOop)
+{
+    long depth = (long)GciOopToI64(depthOop);
+    return shim_wrap_at_depth(valOop, depth);
+}
+
 extern "C" void GciUserActionInit(void) {
     server   = OOP_NIL;
     none_oop = 0;
@@ -4084,6 +4226,7 @@ extern "C" void GciUserActionInit(void) {
     false_oop = 0;
 
     init_types();
+    GCI_DECLARE_ACTION("shimWrapProbe", shimWrapProbe, 2);
 
     GCI_DECLARE_ACTION("shimCall", shimCall, 8);
     GCI_DECLARE_ACTION("shimCallTyped", shimCallTyped, 8);

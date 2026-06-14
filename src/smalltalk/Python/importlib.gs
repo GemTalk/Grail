@@ -970,23 +970,57 @@ category: 'Grail-Module Loading'
 classmethod: importlib
 ___moduleNameToPath___: aName
 	"Convert a module name (e.g., 'python.hello' or 're') to a file path.
-	Search order: grailDir/<name> first, then grailDir/src/python/stdlib/<name>
-	(the bundled Python standard library ports). For each search root,
-	check name.py before name/__init__.py."
-	| pathParts joined searchRoots |
+	Search order: grailDir, grailDir/src/python/stdlib (the bundled stdlib
+	ports), then the extra search roots (a sys.path-like list — see
+	extraSearchRoots / addSearchRoot:, used to point Grail at third-party
+	package trees such as NumPy's site-packages).  For each root, check
+	name.py before name/__init__.py."
+	| pathParts joined searchRoots result |
 	grailDir == nil ifTrue: [^ nil].
 	pathParts := $. @env0:split: aName.
 	joined := '/' @env0:join: pathParts.
-	searchRoots := Array @env0:with: grailDir
-		with: (grailDir @env0:, '/src/python/stdlib').
+	searchRoots := (OrderedCollection @env0:new)
+		@env0:add: grailDir;
+		@env0:add: (grailDir @env0:, '/src/python/stdlib');
+		@env0:addAll: self extraSearchRoots;
+		@env0:yourself.
+	"Return via a local rather than ``^'' out of the do: block.  This
+	method is reachable from the CPython shim's PyInit user-action
+	callback (PyImport_ImportModule of a NumPy submodule); a non-local
+	return out of a real block in that context raises
+	RT_ERR_CANT_RETURN (2079).  See docs/Shim_NumPy.md."
+	result := nil.
 	searchRoots @env0:do: [:root | | base pyPath initPath |
-		base := (root @env0:, '/') @env0:, joined.
-		pyPath := base @env0:, '.py'.
-		(GsFile @env0:existsOnServer: pyPath) ifTrue: [^ pyPath].
-		initPath := base @env0:, '/__init__.py'.
-		(GsFile @env0:existsOnServer: initPath) ifTrue: [^ initPath].
-	].
-	^ nil
+		result @env0:isNil ifTrue: [
+			base := (root @env0:, '/') @env0:, joined.
+			pyPath := base @env0:, '.py'.
+			(GsFile @env0:existsOnServer: pyPath)
+				ifTrue: [result := pyPath]
+				ifFalse: [
+					initPath := base @env0:, '/__init__.py'.
+					(GsFile @env0:existsOnServer: initPath)
+						ifTrue: [result := initPath]]]].
+	^ result
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+extraSearchRoots
+	"Extra module search roots (a sys.path-like list), held in a SessionTemp
+	so they can be configured per session without recompiling the class.
+	Used to point Grail at third-party package trees (e.g. NumPy)."
+	^ SessionTemps @env0:current @env0:at: #Grail_importlib_extraRoots otherwise: #()
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+addSearchRoot: aDir
+	"Append aDir to the sys.path-like extra search roots (idempotent)."
+	| roots |
+	roots := OrderedCollection @env0:withAll: self extraSearchRoots.
+	(roots @env0:includes: aDir) ifFalse: [roots @env0:add: aDir].
+	SessionTemps @env0:current @env0:at: #Grail_importlib_extraRoots put: roots @env0:asArray.
+	^ aDir
 %
 
 category: 'Grail-Module Loading'

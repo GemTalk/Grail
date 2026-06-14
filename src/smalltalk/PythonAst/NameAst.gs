@@ -625,48 +625,6 @@ ___compNodeBindsTarget___: compNode named: aSymbol
 
 category: 'other'
 method: NameAst
-___functionDeclaresLocal___: funcAst named: aSymbol
-	"True iff the given FunctionDefAst or LambdaAst declares
-	aSymbol as a parameter or in its body's BlockAst variables.
-	Uses instVar access (no public getters on AST nodes)."
-
-	| ivars argsIdx bodyIdx argsNode bodyNode argsIvars |
-	ivars := funcAst class allInstVarNames.
-	argsIdx := ivars indexOf: #args.
-	bodyIdx := ivars indexOf: #body.
-	argsNode := argsIdx > 0 ifTrue: [funcAst instVarAt: argsIdx] ifFalse: [nil].
-	bodyNode := bodyIdx > 0 ifTrue: [funcAst instVarAt: bodyIdx] ifFalse: [nil].
-	argsNode ifNotNil: [
-		argsIvars := argsNode class allInstVarNames.
-		#(#args #posonlyargs #kwonlyargs) do: [:fld |
-			| idx list |
-			idx := argsIvars indexOf: fld.
-			idx > 0 ifTrue: [
-				list := argsNode instVarAt: idx.
-				list ifNotNil: [
-					(list anySatisfy: [:a | a name asSymbol == aSymbol asSymbol])
-						ifTrue: [^ true]
-				].
-			].
-		].
-		#(#vararg #kwarg) do: [:fld |
-			| idx v |
-			idx := argsIvars indexOf: fld.
-			idx > 0 ifTrue: [
-				v := argsNode instVarAt: idx.
-				(v notNil and: [v name asSymbol == aSymbol asSymbol])
-					ifTrue: [^ true].
-			].
-		].
-	].
-	((bodyNode isKindOf: BlockAst)
-		and: [bodyNode variables includes: aSymbol asSymbol])
-			ifTrue: [^ true].
-	^ false
-%
-
-category: 'other'
-method: NameAst
 isModuleScopeName: aSymbol
 	"True if aSymbol was declared in the enclosing module body's
 	scope (recorded by the parser into ``CallAst moduleVariableNames'').

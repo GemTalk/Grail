@@ -78,8 +78,17 @@ printItem: anIndex onStream: aStream
 	aStream nextPut: $[.
 	aStream increaseIndent; lf.
 	item optional_vars ifNotNil: [
-		item optional_vars printSmalltalkOn: aStream.
-		aStream nextPutAll: ' := ___val___.'; lf.
+		(item optional_vars isKindOf: NameAst)
+			ifTrue: [
+				"Route ``with X as y'' through the module-scope-aware store
+				so a module-level y binds the module variable rather than
+				an undeclared temp."
+				self ___emitModuleScopeStoreOf___: item optional_vars id
+					from: '___val___' on: aStream.
+				aStream lf]
+			ifFalse: [
+				item optional_vars printSmalltalkOn: aStream.
+				aStream nextPutAll: ' := ___val___.'; lf].
 	].
 	anIndex = items size
 		ifTrue: [body printSmalltalkOn: aStream]

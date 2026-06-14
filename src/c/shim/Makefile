@@ -18,7 +18,7 @@ else
   CFLAGS += -I/usr/include/python3.14 -I/usr/include/python3.13
 endif
 
-EXT_OBJECTS = _statisticsmodule.o _bisectmodule.o _crc32cmodule.o _shimtestmodule.o _heapqmodule.o _grail_demo.o _sre.o
+EXT_OBJECTS = _statisticsmodule.o _bisectmodule.o _crc32cmodule.o _shimtestmodule.o _heapqmodule.o _grail_demo.o _sre.o shim_numpy.o shim_numpy_compat.o
 
 LIB = libcpython_ua.$(SHARED_EXT)
 OBJECTS = cpython.o $(EXT_OBJECTS)
@@ -51,6 +51,12 @@ _grail_demo.o: _grail_demo.c cpython.h
 
 _sre.o: _sre/sre.c _sre/sre.h _sre/sre_lib.h _sre/sre_constants.h _sre/sre_targets.h cpython.h
 	$(CC) $(CFLAGS) -DGRAIL_SHIM -Wno-unused-parameter -Wno-unused-function -Wno-unused-variable -Wno-missing-field-initializers -I. -c _sre/sre.c -o _sre.o
+
+shim_numpy_compat.o: shim_numpy_compat.c
+	$(CC) -fPIC -O2 -c shim_numpy_compat.c -o shim_numpy_compat.o
+
+shim_numpy.o: shim_numpy.cc cpython.h
+	$(CXX) -Wall -Wextra -Wno-unused-parameter -Wno-strict-aliasing -Wno-unused-function -fPIC -O2 -I$(GEMSTONE)/include -c shim_numpy.cc -o shim_numpy.o
 
 $(LIB): $(OBJECTS)
 	$(CXX) $(SHARED_FLAGS) -o $@ $(OBJECTS) $(GEMSTONE)/lib/gciualib.o -lm -lpthread $(UNDEF_ARGS)

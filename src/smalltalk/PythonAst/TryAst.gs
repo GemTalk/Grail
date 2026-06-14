@@ -126,7 +126,11 @@ printSmalltalkOn: aStream
 			nextPutAll: '((___ex @env0:isKindOf: PythonReturn) or: [(___ex @env0:isKindOf: PythonBreak) or: [___ex @env0:isKindOf: PythonContinue]]) ifTrue: [___ex @env0:pass].';
 			lf.
 		handler name ifNotNil: [
-			aStream nextPutAll: handler name; nextPutAll: ' := ___ex.'; lf.
+			"Route ``except X as e'' through the module-scope-aware store so
+			a module-level e binds the module variable rather than an
+			undeclared temp."
+			self ___emitModuleScopeStoreOf___: handler name from: '___ex' on: aStream.
+			aStream lf.
 		].
 		handler body printSmalltalkOn: aStream.
 	].

@@ -145,7 +145,7 @@ printSmalltalkOn: aStream
 	assignment so the instVar holds a callable reference for first-class use
 	(e.g. `f = add; f(1, 2)`). Nested defs still use the block form."
 
-	| fixedCount paramNames savedReturnMode savedFunction passXDecorators |
+	| fixedCount paramNames savedReturnMode savedFunction moduleDecorators |
 	(CallAst moduleClassBeingCompiled notNil and: [self isModuleLevelDef]) ifTrue: [
 		"Top-level def: the real env-1 method has already been
 		compiled on the module class (by importlib's topLevelDefs
@@ -153,24 +153,22 @@ printSmalltalkOn: aStream
 		call dispatcher probes the dynamic instVar at call time, and
 		an absent slot routes to the fast self-send path.
 
-		For the narrow whitelist of attribute-only decorators (jinja2's
-		``@pass_environment'' / ``@pass_eval_context'' / ``@pass_context'',
-		which just set ``f.jinja_pass_arg = <enum>'' and return ``f''),
-		apply them at module body time: read the function as a
-		BoundMethod via ``___moduleAttrLoad___:'', call the decorator,
-		and store the (same, now-tagged) BoundMethod in the dynamic
-		instVar so subsequent bare-call probes still pick up the
-		original method while attribute reads see ``jinja_pass_arg''.
-		BoundMethod inherits Object's __setattr__ → dynamicInstVar
-		storage, so the tag survives the round-trip.
-
-		Other module-level decorators are left dropped on the floor —
-		general support would cascade into ExecBlock callability,
-		functools.wraps kwarg forms, and several re-module decorators
-		that downstream code never expected to fire."
-		passXDecorators := self passXDecorators.
-		passXDecorators isEmpty ifTrue: [^self].
-		self printPassXDecoratorsOn: aStream decorators: passXDecorators.
+		Decorators ARE applied at module-body time: ``@A @B def f''
+		rebinds f to A(B(f)).  The original function is read as a
+		BoundMethod via ``___moduleAttrLoad___:'', each decorator is
+		called on the previous result via ``___pyCallValue___:kw:'', and
+		the final value is stored in f's dynamic-instVar slot.  Bare
+		calls ``f(...)'' probe that slot first (an absent slot routes to
+		the fast self-send of the real method), so a decorator that
+		returns a wrapper takes effect, while one that merely mutates and
+		returns the original (jinja2's ``@pass_environment'' family) still
+		resolves to the same BoundMethod with its tag attached.  The
+		parse-time class-declarative decorators (staticmethod /
+		classmethod / property) are excluded — the parser already handled
+		them by re-classing this node."
+		moduleDecorators := self applicableModuleDecorators.
+		moduleDecorators isEmpty ifTrue: [^self].
+		self printModuleDecoratorsOn: aStream decorators: moduleDecorators.
 		^self
 	].
 
@@ -509,65 +507,74 @@ ___enclosingDefDeclares___: funcAst named: aSymbol
 
 category: 'Grail-code generation'
 method: FunctionDefAst
-passXDecorators
-	"Return the subset of decorator_list that match the narrow
-	whitelist Grail applies at module body time: jinja2's
-	``@pass_environment'' / ``@pass_eval_context'' / ``@pass_context''.
-	Order preserved.  Each entry is either the bare Symbol decorator
-	name or an AttributeAst whose attr is the whitelisted name
-	(e.g. ``@jinja2.utils.pass_environment'').  Empty when the def
-	carries no such decorators."
+applicableModuleDecorators
+	"Decorators to apply at module-body time for a top-level def:
+	everything in decorator_list EXCEPT the class-declarative ones
+	(staticmethod / classmethod / property), which the parser already
+	handled by re-classing this node into a Static/Class/PropertyFunction
+	def.  Source order preserved (outermost first), so ``@A @B def f''
+	yields { A. B } and is applied as A(B(f))."
 
-	| names result |
 	decorator_list isNil ifTrue: [^ #()].
-	names := IdentitySet new
-		add: #'pass_environment';
-		add: #'pass_eval_context';
-		add: #'pass_context';
-		yourself.
-	result := OrderedCollection new.
-	decorator_list do: [:deco |
-		((deco isKindOf: Symbol) and: [names includes: deco asSymbol]) ifTrue: [
-			result add: deco
-		] ifFalse: [
-			((deco isKindOf: AttributeAst)
-				and: [names includes: deco attr asSymbol])
-				ifTrue: [result add: deco]
-		].
-	].
-	^ result
+	^ decorator_list reject: [:deco | self isClassDeclarativeDecorator: deco]
 %
 
 category: 'Grail-code generation'
 method: FunctionDefAst
-printPassXDecoratorsOn: aStream decorators: decoList
-	"Emit ``deco(self.name)'' for each @pass_X decorator at module
-	body time, storing the result in the dynamic instVar slot for
-	``name''.  Each pass_X decorator mutates its argument in place
-	(sets ``f.jinja_pass_arg = <enum>'') and returns it, so the
-	stored value is the same BoundMethod that ___moduleAttrLoad___:
-	would have returned on the fast path — just with the attribute
-	tag attached.
+printModuleDecoratorsOn: aStream decorators: decoList
+	"Apply module-level function decorators.  ``@A @B def f'' rebinds f
+	to A(B(f)); the result is stored into f's dynamic-instVar slot so
+	both attribute reads and bare calls pick it up (an absent slot would
+	route a bare call to the fast self-send of the undecorated method).
+	The original function is read ONCE as a BoundMethod (the innermost
+	base of the chain) via ___moduleAttrLoad___:, and the decorators
+	nest around it — so a chain threads correctly even when an inner
+	decorator returns a fresh wrapper rather than the original.
 
-	Stack order: ``@A @B def f'' applies B first then A, so iterate
-	decoList in reverse (B at end of list = nearest to def)."
+	The application is wrapped in a handler: if applying any decorator
+	raises (e.g. werkzeug's ``@LocalProxy'', a class that isn't callable
+	through the Grail call path), the store never runs and the slot is
+	left ABSENT — exactly the pre-fix behaviour (decorator dropped, bare
+	call uses the fast self-send of the real method).  This makes the
+	generalisation strictly additive: decorators that apply cleanly take
+	effect, decorators that can't are no worse than before.  Control-flow
+	signals (Python return / break / continue) are re-raised."
+
+	aStream
+		lf;
+		nextPutAll: '[self @env0:dynamicInstVarAt: #''';
+		nextPutAll: name;
+		nextPutAll: ''' put: '.
+	self printDecoratorChainOn: aStream decorators: decoList index: 1.
+	aStream
+		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
+		nextPutAll: '	((___de @env0:isKindOf: PythonReturn) @env0:or: [(___de @env0:isKindOf: PythonBreak) @env0:or: [___de @env0:isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass]].'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+printDecoratorChainOn: aStream decorators: decoList index: i
+	"Recursively emit the nested decorator-application expression
+	A(B(...(f)...)) as ``(decoRecv ___pyCallValue___: { <inner> } kw: nil)''.
+	index i is the 1-based position in decoList (1 = outermost decorator);
+	at the base case (i past the end) emit the original function read as
+	a BoundMethod from the module instance."
 
 	| modName |
-	modName := CallAst moduleClassBeingCompiled name.
-	decoList reverseDo: [:deco |
+	i > decoList size ifTrue: [
+		modName := CallAst moduleClassBeingCompiled name.
 		aStream
-			lf;
-			nextPutAll: 'self @env0:dynamicInstVarAt: #''';
-			nextPutAll: name;
-			nextPutAll: ''' put: (('.
-		self printDecoratorReceiverOn: aStream deco: deco.
-		aStream
-			nextPutAll: ') @env1:___pyCallValue___: { ((';
+			nextPutAll: '((';
 			nextPutAll: modName;
 			nextPutAll: ' @env0:___instance___) @env1:___moduleAttrLoad___: #''';
 			nextPutAll: name;
-			nextPutAll: ''') } kw: nil).'
-	]
+			nextPutAll: ''')'.
+		^ self].
+	aStream nextPutAll: '(('.
+	self printDecoratorReceiverOn: aStream deco: (decoList at: i).
+	aStream nextPutAll: ') @env1:___pyCallValue___: { '.
+	self printDecoratorChainOn: aStream decorators: decoList index: i + 1.
+	aStream nextPutAll: ' } kw: nil)'
 %
 
 category: 'Grail-code generation'

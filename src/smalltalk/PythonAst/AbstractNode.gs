@@ -224,4 +224,92 @@ method: AbstractNode
 setBlock: aBlock
 %
 
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___functionDeclaresLocal___: funcAst named: aSymbol
+	"True iff the given FunctionDefAst or LambdaAst declares
+	aSymbol as a parameter or in its body's BlockAst variables.
+	Uses instVar access (no public getters on AST nodes).
+	Lives on AbstractNode so any node (NameAst load codegen, but also
+	with-as / except-as store codegen) can walk an enclosing function."
+
+	| ivars argsIdx bodyIdx argsNode bodyNode argsIvars |
+	ivars := funcAst class allInstVarNames.
+	argsIdx := ivars indexOf: #args.
+	bodyIdx := ivars indexOf: #body.
+	argsNode := argsIdx > 0 ifTrue: [funcAst instVarAt: argsIdx] ifFalse: [nil].
+	bodyNode := bodyIdx > 0 ifTrue: [funcAst instVarAt: bodyIdx] ifFalse: [nil].
+	argsNode ifNotNil: [
+		argsIvars := argsNode class allInstVarNames.
+		#(#args #posonlyargs #kwonlyargs) do: [:fld |
+			| idx list |
+			idx := argsIvars indexOf: fld.
+			idx > 0 ifTrue: [
+				list := argsNode instVarAt: idx.
+				list ifNotNil: [
+					(list anySatisfy: [:a | a name asSymbol == aSymbol asSymbol])
+						ifTrue: [^ true]
+				].
+			].
+		].
+		#(#vararg #kwarg) do: [:fld |
+			| idx v |
+			idx := argsIvars indexOf: fld.
+			idx > 0 ifTrue: [
+				v := argsNode instVarAt: idx.
+				(v notNil and: [v name asSymbol == aSymbol asSymbol])
+					ifTrue: [^ true].
+			].
+		].
+	].
+	((bodyNode isKindOf: BlockAst)
+		and: [bodyNode variables includes: aSymbol asSymbol])
+			ifTrue: [^ true].
+	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___emitModuleScopeStoreOf___: aNameSymbol from: sourceExpr on: aStream
+	"Emit a Smalltalk store of the raw expression fragment sourceExpr
+	into the Python name aNameSymbol.  When compiling a module body
+	(not a user class) and aNameSymbol is a module-scope variable that
+	no enclosing function shadows, route the store through
+	``self @env0:dynamicInstVarAt: #name put: (...)'' — module-body
+	methods carry module variables as dynamic instVars, not temps, so a
+	bare ``name := ...'' would reference an undeclared temp and fail to
+	compile.  Otherwise emit a bare assignment to the enclosing-scope
+	temp.  Shared by with-as and except-as target bindings, mirroring
+	ForAst>>emitForTargetStore:source:on:."
+
+	| sym names enclosingFn node |
+	sym := aNameSymbol asSymbol.
+	names := CallAst moduleVariableNames.
+	enclosingFn := false.
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [
+				(self ___functionDeclaresLocal___: node named: sym)
+					ifTrue: [enclosingFn := true]].
+		node := node parent].
+	((CallAst moduleClassBeingCompiled notNil)
+		and: [(CallAst classBeingCompiled isNil)
+		and: [(names notNil and: [names includes: sym])
+		and: [enclosingFn not]]])
+		ifTrue: [
+			aStream
+				nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+				nextPutAll: sym asString;
+				nextPutAll: ''' put: (';
+				nextPutAll: sourceExpr;
+				nextPutAll: ').'.
+			^ self].
+	aStream
+		nextPutAll: sym asString;
+		nextPutAll: ' := ';
+		nextPutAll: sourceExpr;
+		nextPut: $.
+%
+
 

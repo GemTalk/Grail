@@ -2588,6 +2588,10 @@ parseTry
 			excType := self parseExpression.
 			(self matchKeyword: 'as') ifTrue: [
 				excName := self advance value asSymbol.
+				"Bind the except name into the enclosing scope (module body
+				or function), so a module-level ``except X as e'' records e
+				as a module variable rather than an undeclared name."
+				self declareWrite: excName.
 			].
 		].
 		self expect: #OP value: ':'.

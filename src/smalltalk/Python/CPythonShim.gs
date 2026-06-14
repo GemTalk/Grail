@@ -249,18 +249,22 @@ wrap: aValue
 category: 'Grail-Wrapping'
 method: CPythonShim
 typeAddrFor: aValue
-	"Return the C type address for a Smalltalk value.
-	Returns 0 if type addresses not yet initialized.
-	Falls back to isKindOf: checks for unregistered subclasses."
+	"Return the C type address for a Smalltalk value.  Returns 0 if type
+	addresses are not yet initialized or the type is unregistered.
+	No non-local returns (^) inside the ifAbsent: block: when this runs
+	nested in an extension''s PyInit user action (dynamic module load), a
+	^ out of a block raises RT_ERR_CANT_RETURN (2079).  Use a local +
+	normal returns instead."
 
+	| t |
 	typeAddresses ifNil: [^ 0].
 	^ typeAddresses at: aValue class ifAbsent: [
-		(aValue isKindOf: String) ifTrue: [^ typeAddresses at: #str].
-		(aValue isKindOf: Integer) ifTrue: [^ typeAddresses at: #int].
-		(aValue isKindOf: Float) ifTrue: [^ typeAddresses at: #float].
-		(aValue isKindOf: ByteArray) ifTrue: [^ typeAddresses at: #bytes].
-		typeAddresses at: Object
-	]
+		(aValue isKindOf: String) ifTrue: [t := typeAddresses at: #str ifAbsent: [0]]
+		ifFalse: [(aValue isKindOf: Integer) ifTrue: [t := typeAddresses at: #int ifAbsent: [0]]
+		ifFalse: [(aValue isKindOf: Float) ifTrue: [t := typeAddresses at: #float ifAbsent: [0]]
+		ifFalse: [(aValue isKindOf: ByteArray) ifTrue: [t := typeAddresses at: #bytes ifAbsent: [0]]
+		ifFalse: [t := typeAddresses at: Object ifAbsent: [0]]]]].
+		t]
 %
 
 ! ===============================================================================
@@ -734,6 +738,48 @@ PyFloat_FromDouble: aFloat
 	^ (self wrap: aFloat) memoryAddress
 %
 
+category: 'Grail-C API - Import'
+method: CPythonShim
+PyImport_ImportModule: aName
+	"Resolve a module for a C extension's PyImport_ImportModule:
+	 1. builtin module (Python dict) via ___instance___;
+	 2. else load a .py submodule from the importlib search path
+	    (importlib addSearchRoot: must have been told where the package is).
+	The C-side import_cache dedups by name, so each module loads at most
+	once.  No sys.modules check here — its env-1 lazy init would risk
+	ERR_EXC_RETURN_DISALLOWED (2758) inside the PyInit user action.  NOTE:
+	submodules with RELATIVE imports (numpy's do) pull in their parent
+	package, whose __init__.py must itself compile/run in Grail — that is
+	the current frontier (see docs/Shim_NumPy.md)."
+	| nameStr sym path mod |
+	nameStr := aName asString.
+	sym := nameStr asSymbol.
+	(Python includesKey: sym)
+		ifTrue: [^ (self wrap: (Python at: sym) ___instance___) memoryAddress].
+	"This server method runs in env-0 (it is invoked by C via GciPerform).
+	``___moduleNameToPath___:'' is an env-1 classmethod, so it MUST be
+	sent @env1: — a bare env-0 send DNUs, and inside the PyInit
+	user-action callback that DNU surfaces to C as a NULL return
+	(``No module named '<name>'''').  ``loadModuleFromPath:name:'' is an
+	env-0 classmethod, so it is sent plainly (an @env1: send to it DNUs)."
+	path := (Python at: #importlib) @env1:___moduleNameToPath___: nameStr.
+	path isNil ifTrue: [^ 0].
+	mod := (Python at: #importlib) loadModuleFromPath: path name: nameStr.
+	mod isNil ifTrue: [^ 0].
+	^ (self wrap: mod) memoryAddress
+%
+
+category: 'Grail-Diagnostics'
+method: CPythonShim
+___wrapProbe___: aValue
+	"Diagnostic backing for the shimWrapProbe user action: wrap aValue and
+	return its memoryAddress, the same path the real PyXxx server methods
+	use.  Lets us test which operations trip RT_ERR_CANT_RETURN (2079) /
+	ERR_EXC_RETURN_DISALLOWED (2758) at a single level of user-action
+	reentrancy, isolated from the dlopen/PyInit path."
+	^ (self wrap: aValue) memoryAddress
+%
+
 ! --------------- Integer API ---------------
 
 category: 'Grail-CPython API'
@@ -950,7 +996,14 @@ PyCallable_Check: obj
 category: 'Grail-CPython API'
 method: CPythonShim
 PyObject_GetAttrString: obj name: nameString
-	^ (self wrap: (obj perform: nameString asSymbol env: 1)) memoryAddress
+	"Use Grail's Python attribute protocol (___pyAttrLoad___:), not a direct
+	env-1 send.  A direct ``obj perform: #name'' DNUs for module-style
+	attributes (e.g. math.floor) — and inside an extension's PyInit user
+	action that DNU surfaces as ERR_EXC_RETURN_DISALLOWED (2758) rather than
+	a recoverable AttributeError.  ___pyAttrLoad___: returns the bound
+	method / value the way Python attribute access should."
+	^ (self wrap: (obj perform: #'___pyAttrLoad___:' env: 1 withArguments: { nameString asSymbol }))
+		memoryAddress
 %
 
 category: 'Grail-CPython API'
