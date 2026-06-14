@@ -222,6 +222,83 @@ a fresh error from inside the callback to carry the message out: signaling
 a new exception in that reentrant context itself raises `2079` and loses
 the text.
 
+## 2026-06-13 (cont. 2): drive `import numpy`; the .so now loads in-package
+
+The decisive change: **stop driving `_multiarray_umath` directly and
+drive `import numpy` (numpy/__init__.py) instead.**  CPython's order is
+that numpy/__init__.py runs first, registers `numpy` (partial) in
+sys.modules at line 95's `from ._globals import _CopyMode`, and only
+imports `_core` / `_multiarray_umath` later (line 122).  Driving the .so
+first inverted that, so `_globals`'s relative `from ._utils import …`
+pulled in numpy/__init__.py which read `_CopyMode` from the still-partial
+`_globals` → the circular-import wall.  With `import numpy` as the entry
+the order is correct and `_globals` completes before the .so loads.
+
+A chain of language/import gaps then surfaced, each fixed and each
+advancing numpy's init.  **The C extension's `PyInit__multiarray_umath`
+now runs (~34 KB of core-init trace) under the package import.**  Fixes
+(commit ca3fcc3):
+
+1. **`isinstance(x, type)` / `issubclass(c, type)`.**  `type` referenced
+   as a value is the builtins `type` callable (a BoundMethod), not a
+   class; `___resolveClassRef___:` maps it to `Behavior` so both tests run
+   as `isKindOf:` / `inheritsFrom:` (≈ "is x a class") instead of raising
+   an uncatchable ArgumentTypeError.  numpy._utils.set_module needs this.
+2. **`from PKG import missing` → `ModuleNotFoundError` (an ImportError).**
+   A fromlist name that is neither an attribute nor a loadable submodule
+   now raises in `___import__:kw:` instead of letting a downstream
+   AttributeError escape — so numpy's `try: from . import
+   _distributor_init_local except ImportError` hook is caught.  Guards
+   exclude the `*` star marker and the `import X` self-binding
+   (fromName == absoluteName); a final `__getattr__` probe avoids false
+   misses.
+3. **In-package `.so` loading.**  `___moduleNameToSoPath___` now also
+   searches the package tree under each search root, globbing
+   `<leaf>.*.so` (the `cpython-<ver>-<plat>.so` suffix), so
+   `numpy._core._multiarray_umath` resolves to its in-package `.so`.  And
+   `shimDynLoad` (cpython.cc) builds the init symbol from the module's
+   **simple (leaf)** name — `PyInit__multiarray_umath`, not the dotted
+   path.
+4. **Single-element tuple unpack `arr, = f()`.**  The parser
+   (`parseStarExpressions`) stopped at the `=` after a trailing comma and
+   collapsed `x,` to a bare name; now it builds a 1-tuple target so the
+   unpack binds `f()[0]`.  numpy.fromnumeric uses `arr, = conv.as_arrays`.
+5. **`cls.__base__` / `cls.__bases__`** (Behavior + the
+   `___pyAttrLoad___` class-dunder allowlist), used by
+   numpy._core._exceptions' `cls.__name__ = cls.__base__.__name__`.
+
+Module-level CLASS decorators and `enum.Enum` subclassing — the previous
+frontier — turned out to **already work**; the real `_globals` blocker
+was the entry order, not decorators.
+
+Regression coverage for the language/import fixes:
+`ImportTypeIntrospectionTestCase`.  Suite 2842/2842 + 127/127.
+
+### Walls walked since (each a small fix, .so init runs further)
+
+- **`os.PathLike`** (commit bff967b): numpy does
+  `isinstance(filename, os.PathLike)`.  Added `os.PathLike` as a class
+  whose class-side `__instancecheck__:` reports objects whose type defines
+  `__fspath__` (str/bytes/int are not PathLike).
+- **`sys.flags`** (commit 9714ad0): numpy's core reads
+  `PySys_GetObject("flags")`, which was a C stub returning NULL, and
+  `sys.flags` was `None`.  Implemented `PySys_GetObject` in cpython.cc to
+  delegate to the Grail `sys` module via the server, and made `sys.flags`
+  a real `sys_flags` object (mirrors `os.path`) whose attributes
+  (`optimize`, `debug`, …) default to 0.
+
+**Current frontier — `PyContextVar_New`.**  numpy 2.x uses `contextvars`
+(printoptions / errstate); its C init calls `PyContextVar_New(name,
+default)`, which the shim stubs (returns NULL), so the `Py_mod_exec` slot
+fails with *no* pending error (`SHIM-DIAG: pending error: (none)`).  Grail
+has **no contextvars infrastructure** at all.  Next sub-project: a minimal
+`ContextVar` (a Grail object holding name/default/current — a single value
+is enough for single-threaded load) plus C delegations for
+`PyContextVar_New` / `_Get` / `_Set` (and likely `_Reset`) and a
+`contextvars` Python module.  Beyond that the `.so`'s core init continues
+its long tail (dtype/ufunc registration, …), each observable one wall at a
+time via the probe + the `SHIM-STUB-HIT` / `SHIM-DIAG` logging.
+
 ## Repro
 
 ```

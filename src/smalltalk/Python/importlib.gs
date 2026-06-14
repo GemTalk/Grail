@@ -1026,13 +1026,55 @@ addSearchRoot: aDir
 category: 'Grail-Module Loading'
 classmethod: importlib
 ___moduleNameToSoPath___: aName
-	"Search for a .so extension module in the lib/ directory.
-	Returns the full path if found, or nil if not found."
-	| filePath |
+	"Search for a compiled extension (.so) for module aName.
+
+	First the bundled ``grailDir/lib/<name>.so'' (Grail's own statically
+	known C modules).  Then, for a dotted name, the package tree under
+	each search root: ``numpy._core._multiarray_umath'' maps to
+	``<root>/numpy/_core/'' and we glob for a basename matching
+	``_multiarray_umath.*.so'' (the CPython ``.cpython-<ver>-<plat>.so'' /
+	``.abi3.so'' / bare ``.so'' suffixes).  Returns the full path or nil.
+
+	Returns via a local rather than ``^'' out of the do: block — this is
+	reachable from the CPython shim's PyInit user-action callback, where a
+	non-local return out of a real block raises RT_ERR_CANT_RETURN (2079)."
+	| filePath parts joined searchRoots result dirPart leaf |
 	grailDir == nil ifTrue: [^ nil].
 	filePath := ((grailDir @env0:, '/lib/') @env0:, aName) @env0:, '.so'.
 	(GsFile @env0:existsOnServer: filePath) ifTrue: [^ filePath].
-	^ nil
+
+	parts := $. @env0:split: aName.
+	joined := '/' @env0:join: parts.
+	leaf := parts @env0:last.
+	dirPart := (parts @env0:size @env0:> 1)
+		ifTrue: ['/' @env0:join: (parts @env0:copyFrom: 1 to: parts @env0:size - 1)]
+		ifFalse: [nil].
+	searchRoots := (OrderedCollection @env0:new)
+		@env0:add: grailDir;
+		@env0:add: (grailDir @env0:, '/src/python/stdlib');
+		@env0:addAll: self extraSearchRoots;
+		@env0:yourself.
+	result := nil.
+	searchRoots @env0:do: [:root | | base dir entries |
+		result @env0:isNil ifTrue: [
+			base := ((root @env0:, '/') @env0:, joined) @env0:, '.so'.
+			(GsFile @env0:existsOnServer: base) ifTrue: [result := base].
+			result @env0:isNil ifTrue: [
+				dir := dirPart @env0:isNil
+					ifTrue: [root]
+					ifFalse: [(root @env0:, '/') @env0:, dirPart].
+				((GsFile @env0:isServerDirectory: dir) @env0:== true) ifTrue: [
+					entries := GsFile @env0:contentsOfDirectory: dir onClient: false.
+					(entries @env0:isKindOf: Array) ifTrue: [
+						entries @env0:do: [:each | | nm idx |
+							result @env0:isNil ifTrue: [
+								nm := each @env0:asString.
+								idx := (nm @env0:reverse) @env0:findString: '/' startingAt: 1.
+								(idx @env0:> 0) ifTrue: [
+									nm := nm @env0:copyFrom: (nm @env0:size - idx + 2) to: nm @env0:size].
+								((nm @env0:beginsWith: (leaf @env0:, '.')) @env0:and: [nm @env0:endsWith: '.so'])
+									ifTrue: [result := (dir @env0:, '/') @env0:, nm]]]]]]]].
+	^ result
 %
 
 category: 'Grail-Module Registry'
@@ -1205,8 +1247,17 @@ ___import__: positional kw: kwargs
 	class with the submodule object."
 	fromlist __len__ @env0:> 0 ifTrue: [
 		fromlist @env0:do: [:fromName |
-			| subName subPath alreadyBound |
-			alreadyBound := (result @env0:isKindOf: module)
+			| subName subPath alreadyBound soPath provided |
+			"``*'' is the star-import marker, not a submodule name — the
+			caller does the public-attr merge separately.  And ``import X''
+			passes X's own name in the fromlist as the binding target (so
+			absoluteName = fromName); that is the already-loaded module
+			itself, not a ``X.X'' submodule.  Treat both as already-bound so
+			the submodule-load / missing-name raise below never fires for
+			``from PKG import *'' or plain ``import X''."
+			alreadyBound := (fromName @env0:= '*')
+				or: [(fromName @env0:= absoluteName)
+				or: [(result @env0:isKindOf: module)
 				ifTrue: [
 					"Check dynamic instVars first (fast path), then env-1
 					methods (varargs _name:kw:, unary name, fixed-arity
@@ -1244,7 +1295,7 @@ ___import__: positional kw: kwargs
 								ifAbsent: [nil]) notNil]
 					]
 				]
-				ifFalse: [false].
+				ifFalse: [false]]].
 			alreadyBound ifFalse: [
 				subName := (absoluteName @env0:, '.') @env0:, fromName @env0:asString.
 				(self @env0:class lookupModule: subName) ifNil: [
@@ -1252,7 +1303,27 @@ ___import__: positional kw: kwargs
 					subPath notNil ifTrue: [
 						self @env0:class
 							@env0:loadModuleFromPath: subPath name: subName.
-					]
+					] ifFalse: [
+						"No attribute and no .py submodule.  Try a .so / builtin
+						submodule; if none, and the package can't provide the
+						name (even via a module-level __getattr__), it is a
+						genuine ``from PKG import name'' miss — raise
+						ModuleNotFoundError (an ImportError), NOT the
+						AttributeError a downstream ___pyAttrLoad___ would
+						produce.  This is what lets numpy's optional
+						``try: from . import _distributor_init_local
+						except ImportError: pass'' hook be caught."
+						soPath := self @env0:class ___moduleNameToSoPath___: subName.
+						soPath notNil
+							ifTrue: [
+								self @env0:class
+									@env0:loadDynamicModuleNamed: subName fromPath: soPath]
+							ifFalse: [
+								provided := [(result @env1:___pyAttrLoad___: fromName @env0:asSymbol). true]
+									@env0:on: AbstractException do: [:ignored | false].
+								provided ifFalse: [
+									ModuleNotFoundError ___signal___:
+										(('No module named ''' @env0:, subName) @env0:, '''')]]]
 				]
 			]
 		]

@@ -117,6 +117,41 @@ __mro__
 	^ Array @env0:withAll: result
 %
 
+category: 'Grail-Reflection'
+method: Behavior
+__base__
+	"Python ``cls.__base__'': the primary (first) base class.  Grail
+	classes are single-inheritance Smalltalk classes, so this is the
+	Smalltalk superclass; a class with no superclass (Object) reports
+	Python None.  Read as a value — listed among the class-level dunders
+	in Object>>___pyAttrLoad___:.  numpy._core._exceptions does
+	``cls.__name__ = cls.__base__.__name__'' in a class decorator.
+
+	Class.gs loads before the ``None'' global is declared, so the
+	no-superclass case resolves None from the symbol list at run time
+	(when it exists) rather than referencing the bare ``None'' symbol
+	(which would be an undefined-symbol compile error here)."
+
+	| s |
+	s := self @env0:superclass.
+	^ s @env0:== nil
+		ifTrue: [System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'None']
+		ifFalse: [s]
+%
+
+category: 'Grail-Reflection'
+method: Behavior
+__bases__
+	"Python ``cls.__bases__'': the direct base classes as a tuple.
+	Single-inheritance approximation — the Smalltalk superclass as a
+	1-element Array (empty when there is no superclass), mirroring how
+	__mro__ answers a plain Array."
+
+	| s |
+	s := self @env0:superclass.
+	^ s @env0:== nil ifTrue: [Array @env0:new] ifFalse: [Array @env0:with: s]
+%
+
 category: 'Grail-Class Compilation'
 method: Behavior
 ___compileMethod: aSource category: aCategory

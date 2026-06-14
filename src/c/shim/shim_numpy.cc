@@ -463,10 +463,8 @@ extern "C" PyObject * PySequence_Tuple(PyObject *o) {
     STUBLOG("PySequence_Tuple");
     return 0;
 }
-extern "C" PyObject * PySys_GetObject(const char *) {
-    STUBLOG("PySys_GetObject");
-    return 0;
-}
+/* PySys_GetObject is implemented for real in cpython.cc (delegates to the
+   Grail sys module via the server) — not stubbed here. */
 extern "C" PyThreadState * PyThreadState_Get(void) {
     STUBLOG("PyThreadState_Get");
     return 0;

@@ -1012,6 +1012,17 @@ extern "C" PyObject *PyImport_ImportModule(const char *name) {
     return m;
 }
 
+/* PySys_GetObject(name): borrowed ref to the named sys-module attribute,
+   or NULL if absent.  Delegates to the Grail sys module via the server
+   (CPythonShim>>PySys_GetObject:).  NumPy's core reads sys.flags here. */
+extern "C" PyObject *PySys_GetObject(const char *name) {
+    GciErrSType e; GciErr(&e);              /* drop any stale error first */
+    OopType arg = GciNewString(name);
+    OopType r = GciPerform(server, "PySys_GetObject:", &arg, 1);
+    if (GciErr(&e)) return NULL;
+    return addr_to_pyobj(r);               /* 0 -> NULL (no such sys attr) */
+}
+
 
 extern "C" PyObject *PyObject_GetAttrString(PyObject *obj, const char *name) {
     CHECK_pyObj(obj, "PyObject_GetAttrString obj");
@@ -2735,9 +2746,14 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
     }
 
 
-    /* Look for PyInit_{name} */
+    /* Look for PyInit_{leaf}.  CPython names the init function by the
+       module's SIMPLE name (the last dotted component), not its
+       fully-qualified package path: numpy._core._multiarray_umath is
+       initialised by PyInit__multiarray_umath. */
+    const char *leaf = strrchr(name, '.');
+    leaf = leaf ? leaf + 1 : name;
     char initName[128];
-    snprintf(initName, sizeof(initName), "PyInit_%s", name);
+    snprintf(initName, sizeof(initName), "PyInit_%s", leaf);
     ModuleInitFunc initFunc = (ModuleInitFunc)dlsym(handle, initName);
     if (!initFunc) {
         char msg[1024];

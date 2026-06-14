@@ -1357,9 +1357,21 @@ method: builtins
 ___resolveClassRef___: aRef
 	"Helper for isinstance/issubclass: unwrap a BoundMethod wrapping a
 	builtin class name (e.g. BoundMethod(builtins, #str)) to the
-	underlying Smalltalk class.  Other inputs pass through unchanged."
+	underlying Smalltalk class.  Other inputs pass through unchanged.
+
+	``type'' is special: referenced as a value it is the builtins ``type''
+	callable (a BoundMethod selector #type), not a Smalltalk class, and
+	there is no ``type'' class in the Python dict.  Per Python,
+	``isinstance(x, type)'' / ``issubclass(c, type)'' ask whether x / c is
+	a class — which in GemStone is ``isKindOf: Behavior'' /
+	``inheritsFrom: Behavior''.  Mapping the type callable to Behavior lets
+	both checks run through the normal isKindOf:/inheritsFrom: path instead
+	of raising an uncatchable ArgumentTypeError from isKindOf: on a
+	non-class second argument.  (numpy._utils.set_module does
+	``isinstance(func, type)'' to tell a decorated class from a function.)"
 
 	(aRef @env0:isKindOf: BoundMethod) ifTrue: [
+		(aRef @env0:selector == #'type') ifTrue: [^ Behavior].
 		^ Python @env0:at: aRef @env0:selector ifAbsent: [aRef]
 	].
 	^ aRef

@@ -769,6 +769,22 @@ PyImport_ImportModule: aName
 	^ (self wrap: mod) memoryAddress
 %
 
+category: 'Grail-C API - Sys'
+method: CPythonShim
+PySys_GetObject: aName
+	"Back PySys_GetObject(name): return the named attribute of the sys
+	module wrapped as a PyObject, or 0 (C NULL) when sys has no such
+	attribute (CPython returns NULL without setting an error).  Invoked
+	from C via GciPerform (env-0); reads through the env-1 Python
+	attribute protocol.  numpy's core init reads sys.flags."
+
+	^ [ | sysInst |
+	    sysInst := (Python at: #sys) ___instance___.
+	    (self wrap: (sysInst @env1:___pyAttrLoad___: aName @env0:asString @env0:asSymbol))
+	        memoryAddress
+	  ] @env0:on: AbstractException do: [:ex | 0]
+%
+
 category: 'Grail-Diagnostics'
 method: CPythonShim
 ___wrapProbe___: aValue

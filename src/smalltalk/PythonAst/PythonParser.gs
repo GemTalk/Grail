@@ -2099,11 +2099,17 @@ parseStarExpressions
 	exprs := Array new.
 	exprs add: first.
 	[self matchOp: ','] whileTrue: [
-		(self peek notNil and: [self peek isNewline not and: [self peek isEndMarker not and: [(self peek isOp: ')') not and: [(self peek isOp: ']') not and: [(self peek isOp: '}') not and: [(self peek isOp: ':') not and: [(self peek isOp: ';') not]]]]]]]) ifTrue: [
+		(self peek notNil and: [self peek isNewline not and: [self peek isEndMarker not and: [(self peek isOp: ')') not and: [(self peek isOp: ']') not and: [(self peek isOp: '}') not and: [(self peek isOp: ':') not and: [(self peek isOp: ';') not and: [(self peek isOp: '=') not]]]]]]]]) ifTrue: [
 			exprs add: self parseStarExpression.
 		].
 	].
-	exprs size == 1 ifTrue: [^first].
+	"A trailing comma after a single element is a 1-tuple, NOT the bare
+	expression: ``x,'' is ``(x,)'' and ``arr, = f()'' unpacks a 1-tuple
+	(arr := f()[0]).  We only reach here when a comma was consumed, so
+	always build a TupleAst — collapsing size==1 to ``first'' would turn
+	``arr, = f()'' into ``arr = f()'' (binding the whole result).  The
+	``=''-stop in the guard above keeps ``x, = ...'' from trying to parse
+	the ``='' as another tuple element."
 	^self buildNode: TupleAst fields: (IdentityKeyValueDictionary new
 		at: #elts put: exprs;
 		at: #ctx put: self loadCtx;

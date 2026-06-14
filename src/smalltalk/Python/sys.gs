@@ -42,6 +42,32 @@ doit
 sys category: 'Grail-Modules'
 %
 
+! ------- sys_flags class (Python 'sys.flags' structseq)
+expectvalue /Class
+doit
+module subclass: 'sys_flags'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+sys_flags comment:
+'Python sys.flags — the command-line / environment interpreter flags
+(PEP structseq).  Grail exposes attribute access (sys.flags.optimize,
+etc.); numpy''s core init reads sys.flags.  All flags default to 0
+(a normal, non-optimized, non-isolated interpreter).'
+%
+
+expectvalue /Class
+doit
+sys_flags category: 'Grail-Modules'
+%
+
 ! ===============================================================================
 ! sys Module (Python 'sys' module)
 ! ===============================================================================
@@ -55,9 +81,27 @@ expectvalue /Metaclass3
 doit
 sys removeAllMethods: 1.
 sys class removeAllMethods: 1.
+sys_flags removeAllMethods: 1.
+sys_flags class removeAllMethods: 1.
 %
 
 set compile_env: 1
+
+category: 'Grail-Initialization'
+method: sys_flags
+initialize
+	"Populate the standard CPython interpreter flags, all 0 (a normal,
+	non-optimized interpreter).  Attribute reads (sys.flags.optimize,
+	sys.flags.debug, ...) resolve these via the dynamic-instVar store."
+
+	#( #debug #inspect #interactive #optimize #dont_write_bytecode
+	   #no_user_site #no_site #ignore_environment #verbose #bytes_warning
+	   #quiet #hash_randomization #isolated #dev_mode #utf8_mode
+	   #warn_default_encoding #safe_path ) @env0:do: [:f |
+		self @env0:dynamicInstVarAt: f put: 0 ].
+	"int_max_str_digits: CPython's default cap (0 means ``no limit'')."
+	self @env0:dynamicInstVarAt: #int_max_str_digits put: 4300
+%
 
 category: 'Grail-Module Registry'
 classmethod: sys
@@ -759,7 +803,7 @@ initialize_runtime_info
 	self @env0:at: #builtin_module_names put: (tuple @env0:withAll: {'builtins'. 'cmath'. 'fractions'. 'gemstone'. 'importlib'. 'math'. 'os'. 'string'. 'sys'}).
 	self @env0:at: #stdlib_module_names put: (frozenset ___new___).
 	self @env0:at: #copyright put: 'Copyright (c) GemTalk Systems LLC. All rights reserved.'.
-	self @env0:at: #flags put: None.
+	self @env0:at: #flags put: (sys_flags instance).
 	self @env0:at: #float_info put: None.
 	self @env0:at: #int_info put: None.
 	self @env0:at: #hash_info put: None.

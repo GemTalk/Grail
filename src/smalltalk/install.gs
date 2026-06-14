@@ -338,6 +338,7 @@ run
 	at: #'numbers_Real' put: nil;
 	at: #'os' put: nil;
 	at: #'os_path' put: nil;
+	at: #'os_PathLike' put: nil;
 	at: #'random' put: nil;
 	at: #'range_iterator' put: nil;
 	at: #'set' put: nil;
@@ -348,6 +349,7 @@ run
 	at: #'string' put: nil;
 	at: #'string_formatter' put: nil;
 	at: #'sys' put: nil;
+	at: #'sys_flags' put: nil;
 	at: #'tuple' put: nil;
 	at: #'tuple_iterator' put: nil;
 	at: #'_weakref' put: nil;
@@ -523,6 +525,7 @@ run
 	at: #'DynamicGlobalsTestCase' put: nil;
 	at: #'ModuleScopeBindingsTestCase' put: nil;
 	at: #'ModuleFunctionDecoratorsTestCase' put: nil;
+	at: #'ImportTypeIntrospectionTestCase' put: nil;
 	at: #'DynamicInstanceAttrsTestCase' put: nil;
 	at: #'AttributeAccessTestCase' put: nil;
 	at: #'AttributeInheritanceTestCase' put: nil;
@@ -1188,6 +1191,7 @@ input src/smalltalk/PythonTests/DefaultsAndAttrsTestCase.gs
 input src/smalltalk/PythonTests/DynamicGlobalsTestCase.gs
 input src/smalltalk/PythonTests/ModuleScopeBindingsTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionDecoratorsTestCase.gs
+input src/smalltalk/PythonTests/ImportTypeIntrospectionTestCase.gs
 input src/smalltalk/PythonTests/DynamicInstanceAttrsTestCase.gs
 input src/smalltalk/PythonTests/AttributeAccessTestCase.gs
 input src/smalltalk/PythonTests/AttributeInheritanceTestCase.gs

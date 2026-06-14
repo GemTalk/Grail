@@ -31,6 +31,31 @@ doit
 os category: 'Grail-Modules'
 %
 
+! ------- os_PathLike class (Python 'os.PathLike' ABC)
+expectvalue /Class
+doit
+object subclass: 'os_PathLike'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+os_PathLike comment:
+'Python os.PathLike - the abstract base class for path-like objects
+(PEP 519).  isinstance(x, os.PathLike) is true for any object whose type
+defines __fspath__ (duck-typed); str/bytes are NOT PathLike.'
+%
+
+expectvalue /Class
+doit
+os_PathLike category: 'Grail-Modules'
+%
+
 set compile_env: 0
 
 ! ------------------- Remove existing Python methods from os
@@ -38,6 +63,8 @@ expectvalue /Metaclass3
 doit
 os removeAllMethods: 1.
 os class removeAllMethods: 1.
+os_PathLike removeAllMethods: 1.
+os_PathLike class removeAllMethods: 1.
 %
 
 set compile_env: 1
@@ -53,6 +80,7 @@ initialize
 	self @env0:at: #pathsep put: ':'.
 	self @env0:at: #linesep put: ((Character @env0:lf) @env0:asString).
 	self @env0:at: #path put: (os_path instance).
+	self @env0:at: #PathLike put: os_PathLike.
 	"Pre-store fsdecode as a BoundMethod so ``from os import
 	fsdecode'' (werkzeug's file_storage) reads the callable
 	directly via the ImportFromAst __pyAttrLoad path."
@@ -64,6 +92,20 @@ initialize
 	first read).  Stored as a KeyValueDictionary so dict-protocol
 	calls (``.get'', ``__getitem__'', ``__contains__'') work."
 	self @env0:dynamicInstVarAt: #environ put: (KeyValueDictionary @env0:new)
+%
+
+category: 'Grail-Filesystem'
+classmethod: os_PathLike
+__instancecheck__: instance
+	"Python os.PathLike.__subclasshook__: any object whose type defines
+	``__fspath__'' is path-like (duck-typed, PEP 519).  str / bytes do
+	NOT define __fspath__, so they are not PathLike — matching CPython.
+	Consulted by builtins>>___isInstanceSingle___:of: when the second
+	isinstance/issubclass argument is os.PathLike.  Walks the class chain
+	(not just the own method dict) so a subclass that inherits __fspath__
+	is still recognised."
+
+	^ (instance @env0:class @env0:whichClassIncludesSelector: #'__fspath__' environmentId: 1) notNil
 %
 
 category: 'Grail-Filesystem'
