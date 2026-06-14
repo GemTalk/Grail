@@ -79,7 +79,7 @@ category: 'other'
 method: SliceAst
 printSmalltalkOn: aStream
 	"Materialize a Python `slice` instance.  SubscriptAst's load path
-	special-cases SliceAst and emits `__getslice__:_:_:` directly for
+	special-cases SliceAst and emits `___getslice___:_:_:` directly for
 	the SequenceableCollection fast path; other contexts (store/del
 	subscripts, slices passed as values, `xs[a:b, c:d]` tuples) need
 	a real slice object so receivers' `__setitem__` / `__delitem__` /

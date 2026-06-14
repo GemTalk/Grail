@@ -1318,47 +1318,6 @@ selfParameterName
 
 category: 'Grail-other'
 method: ClassDefAst
-__eq__
-
-	^[:lhs :rhs | (lhs name = rhs name) ifTrue: [True] ifFalse: [False]]
-%
-
-category: 'Grail-other'
-method: ClassDefAst
-__mro__
-
-	self error: 'What should thgis do?'.
-"
-	^[:scope |
-		| linearization parentLinearizations parentList mergeLinearizations |
-		linearization := Array with: (scope get: self name).
-		parentLinearizations := self bases collect: [:base | (scope get: base id) __mro__ value].
-		parentList := self bases collect: [:base | (scope get: base id)].
-		mergeLinearizations := Array withAll: parentLinearizations.
-		mergeLinearizations add: parentList.
-		linearization addAll: (Linearization merge: mergeLinearizations).
-		linearization.
-	]
-	"
-%
-
-category: 'Grail-other'
-method: ClassDefAst
-__str__
-	"<class '__main__.MyClass'>"
-
-	^[:inst |
-		str withAll: ((WriteStream on: Unicode7 new)
-			nextPutAll: '<class ''';
-			nextPutAll: self module name;
-			nextPut: $.;
-			nextPutAll: name;
-			nextPutAll: '''>';
-			contents)]
-%
-
-category: 'Grail-other'
-method: ClassDefAst
 astNode
 
 	^self

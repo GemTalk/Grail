@@ -229,7 +229,7 @@ printSmalltalkTupleStoreOn: aStream target: tgt
 					"Star itself: slice from current index to (size-after-star) before end."
 					| afterCount sliceExpr |
 					afterCount := elts size - i.
-					sliceExpr := holder , ' __getslice__: ' , (i - 1) printString , ' _: '
+					sliceExpr := holder , ' ___getslice___: ' , (i - 1) printString , ' _: '
 						, (afterCount = 0 ifTrue: ['nil'] ifFalse: ['-' , afterCount printString])
 						, ' _: nil'.
 					self

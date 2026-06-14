@@ -122,7 +122,7 @@ __getitem__: index
 
 	| idx size |
 	(index @env0:isKindOf: slice) ifTrue: [
-		^ self @env1:__getslice__: index @env1:start
+		^ self @env1:___getslice___: index @env1:start
 			_: index @env1:stop
 			_: index @env1:step
 	].

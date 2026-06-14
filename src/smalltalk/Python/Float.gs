@@ -54,7 +54,7 @@ __new__: obj
 
 	"Try to convert from string"
 	(obj @env0:isKindOf: Unicode7) ifTrue: [
-		^ self __new__fromString: obj
+		^ self ___newFromString___: obj
 	].
 
 	"Otherwise, error"
@@ -63,7 +63,7 @@ __new__: obj
 
 category: 'Grail-Initialization'
 classmethod: float
-__new__fromString: str
+___newFromString___: str
 	"Helper method to convert string to float, handling special values"
 
 	| trimmed |

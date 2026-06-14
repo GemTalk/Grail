@@ -208,7 +208,7 @@ __add__: other
 
 category: 'Grail-Sequence Protocol'
 method: tuple
-__getslice__: lower _: upper _: step
+___getslice___: lower _: upper _: step
 	"Slice a tuple — returns a new (frozen) tuple.  Overrides the
 	SequenceableCollection implementation, which builds via
 	``species new + add:``; that path fails on tuple because empty

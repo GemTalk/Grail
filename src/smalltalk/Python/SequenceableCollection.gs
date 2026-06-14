@@ -146,7 +146,7 @@ __getitem__: index
 
 	| size idx |
 	(index @env0:isKindOf: slice) ifTrue: [
-		^ self @env1:__getslice__: index @env1:start
+		^ self @env1:___getslice___: index @env1:start
 			_: index @env1:stop
 			_: index @env1:step
 	].
@@ -171,7 +171,7 @@ __getitem__: index
 
 category: 'Grail-Sequence Protocol'
 method: SequenceableCollection
-__getslice__: lower _: upper _: step
+___getslice___: lower _: upper _: step
 	"Return a slice of self. lower/upper/step are integers or None for
 	defaults. Negative indices count from the end and are clamped to the
 	collection. Step must be non-zero; negative step yields a reverse
@@ -224,7 +224,7 @@ __iter__
 	"Return an iterator over the sequence.  Subclasses such as
 	OrderedCollection and tuple override this with a class-specific
 	iterator; concrete subclasses without an override (e.g. plain
-	Array, which is what Interval>>__getslice__ returns) fall through
+	Array, which is what Interval>>___getslice___ returns) fall through
 	to a generic tuple_iterator wrapping the receiver."
 
 	^ tuple_iterator @env1:___on: self

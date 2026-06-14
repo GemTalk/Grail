@@ -357,7 +357,7 @@ __getitem__: index
 	"Get byte at index (0-based, supports negative indices) or a slice."
 	| idx size |
 	(index @env0:isKindOf: slice) ifTrue: [
-		^ self @env1:__getslice__: index @env1:start
+		^ self @env1:___getslice___: index @env1:start
 			_: index @env1:stop
 			_: index @env1:step
 	].

@@ -96,7 +96,7 @@ printSmalltalkOn: aStream
 	Slice    (`xs[i:j:k]`) →  `(xs) __getitem__: (slice ___newStart: lo
 	stop: hi step: st)`, building a real Python ``slice`` instance.
 	Receivers that want sequence-style slicing handle it inside their
-	own __getitem__ (SequenceableCollection delegates to __getslice__);
+	own __getitem__ (SequenceableCollection delegates to ___getslice___);
 	user classes such as re._parser.SubPattern dispatch on
 	``isinstance(index, slice)`` themselves.  Emitting a slice object
 	(rather than splaying lo/hi/st across separate selector keywords)
