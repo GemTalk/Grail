@@ -50,14 +50,8 @@ typedef Py_ssize_t Py_hash_t;
 #endif
 static void shim_stub_log(const char*n){fprintf(stderr,"SHIM-STUB-HIT: %s\n",n);}
 #define STUBLOG(n) do{static int _w=0;if(!_w){_w=1;shim_stub_log(n);}}while(0)
-extern "C" int PyArg_ParseTupleAndKeywords(PyObject *, PyObject *, const char *, PY_CXX_CONST char * const *, ...) {
-    STUBLOG("PyArg_ParseTupleAndKeywords");
-    return 0;
-}
-extern "C" int PyArg_VaParseTupleAndKeywords(PyObject *, PyObject *, const char *, PY_CXX_CONST char * const *, va_list) {
-    STUBLOG("PyArg_VaParseTupleAndKeywords");
-    return 0;
-}
+/* PyArg_ParseTupleAndKeywords / PyArg_VaParseTupleAndKeywords implemented in
+   cpython.cc (shared vparse_kw core with PyArg_ParseTuple). */
 extern "C" int PyBytes_AsStringAndSize(PyObject *obj, char **s, Py_ssize_t *len) {
     STUBLOG("PyBytes_AsStringAndSize");
     return 0;
@@ -98,18 +92,8 @@ extern "C" double PyComplex_RealAsDouble(PyObject *op) {
     STUBLOG("PyComplex_RealAsDouble");
     return 0.0;
 }
-extern "C" int PyContextVar_Get(PyObject *var, PyObject *default_value, PyObject **value) {
-    STUBLOG("PyContextVar_Get");
-    return 0;
-}
-extern "C" PyObject * PyContextVar_New(const char *name, PyObject *default_value) {
-    STUBLOG("PyContextVar_New");
-    return 0;
-}
-extern "C" PyObject * PyContextVar_Set(PyObject *var, PyObject *value) {
-    STUBLOG("PyContextVar_Set");
-    return 0;
-}
+/* PyContextVar_New / _Get / _Set are implemented for real in cpython.cc
+   (they delegate to the Grail contextvars.ContextVar class) — not stubbed. */
 extern "C" int PyDict_ContainsString(PyObject *mp, const char *key) {
     STUBLOG("PyDict_ContainsString");
     return 0;
@@ -118,13 +102,19 @@ extern "C" int PyDict_DelItemString(PyObject *dp, const char *key) {
     STUBLOG("PyDict_DelItemString");
     return 0;
 }
+/* CPython 3.13+ strong-ref dict lookups: return 1 (found, *result=new ref),
+   0 (absent, *result=NULL), or -1 (error). */
 extern "C" int PyDict_GetItemRef(PyObject *mp, PyObject *key, PyObject **result) {
-    STUBLOG("PyDict_GetItemRef");
-    return 0;
+    PyObject *v = PyDict_GetItem(mp, key);
+    if (v) { Py_INCREF(v); *result = v; return 1; }
+    *result = NULL;
+    return PyErr_Occurred() ? -1 : 0;
 }
 extern "C" int PyDict_GetItemStringRef(PyObject *mp, const char *key, PyObject **result) {
-    STUBLOG("PyDict_GetItemStringRef");
-    return 0;
+    PyObject *v = PyDict_GetItemString(mp, key);
+    if (v) { Py_INCREF(v); *result = v; return 1; }
+    *result = NULL;
+    return PyErr_Occurred() ? -1 : 0;
 }
 extern "C" int PyErr_CheckSignals(void) {
     return 0;
@@ -188,10 +178,7 @@ extern "C" PyInterpreterState * PyInterpreterState_Main(void) {
     STUBLOG("PyInterpreterState_Main");
     return 0;
 }
-extern "C" PyObject * PyList_GetItemRef(PyObject *, Py_ssize_t) {
-    STUBLOG("PyList_GetItemRef");
-    return 0;
-}
+/* PyList_GetItemRef implemented in cpython.cc (strong-ref PyList_GetItem). */
 extern "C" long PyLong_AsLongAndOverflow(PyObject *, int *) {
     STUBLOG("PyLong_AsLongAndOverflow");
     return 0;
@@ -278,9 +265,12 @@ extern "C" PyObject * PyNumber_Divmod(PyObject *o1, PyObject *o2) {
     STUBLOG("PyNumber_Divmod");
     return 0;
 }
+/* float(o): pass through floats; otherwise coerce via the server's
+   double conversion (applies __float__/__index__ on the Grail side). */
 extern "C" PyObject * PyNumber_Float(PyObject *o) {
-    STUBLOG("PyNumber_Float");
-    return 0;
+    if (o == NULL) return NULL;
+    if (PyFloat_Check(o)) { Py_INCREF(o); return o; }
+    return PyFloat_FromDouble(PyFloat_AsDouble(o));
 }
 extern "C" PyObject * PyNumber_FloorDivide(PyObject *o1, PyObject *o2) {
     STUBLOG("PyNumber_FloorDivide");
@@ -290,9 +280,12 @@ extern "C" PyObject * PyNumber_Invert(PyObject *o) {
     STUBLOG("PyNumber_Invert");
     return 0;
 }
+/* int(o): already-int passes through; otherwise coerce via the server's
+   Py_ssize_t conversion (which applies __index__/__int__ on the Grail side). */
 extern "C" PyObject * PyNumber_Long(PyObject *o) {
-    STUBLOG("PyNumber_Long");
-    return 0;
+    if (o == NULL) return NULL;
+    if (PyLong_Check(o)) { Py_INCREF(o); return o; }
+    return PyLong_FromSsize_t(PyLong_AsSsize_t(o));
 }
 extern "C" PyObject * PyNumber_Lshift(PyObject *o1, PyObject *o2) {
     STUBLOG("PyNumber_Lshift");
@@ -358,14 +351,8 @@ extern "C" PyObject * PyObject_Bytes(PyObject *) {
     STUBLOG("PyObject_Bytes");
     return 0;
 }
-extern "C" PyObject * PyObject_CallFunction(PyObject *callable, const char *format, ...) {
-    STUBLOG("PyObject_CallFunction");
-    return 0;
-}
-extern "C" PyObject * PyObject_CallMethod(PyObject *obj, const char *name, const char *format, ...) {
-    STUBLOG("PyObject_CallMethod");
-    return 0;
-}
+/* PyObject_CallFunction / PyObject_CallMethod are implemented for real in
+   cpython.cc (Py_BuildValue-format args + PyObject_Call) — not stubbed. */
 extern "C" PyObject * PyObject_Format(PyObject *obj, PyObject *format_spec) {
     STUBLOG("PyObject_Format");
     return 0;
@@ -389,9 +376,12 @@ extern "C" int PyObject_GetOptionalAttr(PyObject *, PyObject *, PyObject **) {
     STUBLOG("PyObject_GetOptionalAttr");
     return 0;
 }
-extern "C" PyObject * PyObject_Init(PyObject *, PyTypeObject *) {
-    STUBLOG("PyObject_Init");
-    return 0;
+/* Initialize a freshly-allocated object: set its type and refcount. */
+extern "C" PyObject * PyObject_Init(PyObject *op, PyTypeObject *type) {
+    if (op == NULL) return NULL;
+    op->ob_refcnt = 1;
+    op->ob_type = type;
+    return op;
 }
 extern "C" PyVarObject * PyObject_InitVar(PyVarObject *, PyTypeObject *, Py_ssize_t) {
     STUBLOG("PyObject_InitVar");
@@ -475,10 +465,7 @@ extern "C" int PyTraceMalloc_Track(unsigned int domain, uintptr_t ptr, size_t si
 extern "C" int PyTraceMalloc_Untrack(unsigned int domain, uintptr_t ptr) {
     return 0;
 }
-extern "C" int PyType_IsSubtype(PyTypeObject *, PyTypeObject *) {
-    STUBLOG("PyType_IsSubtype");
-    return 0;
-}
+/* PyType_IsSubtype implemented in cpython.cc (walks tp_base). */
 extern "C" PyObject* PyUnicode_AsASCIIString(PyObject *unicode) {
     STUBLOG("PyUnicode_AsASCIIString");
     return 0;

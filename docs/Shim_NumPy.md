@@ -287,17 +287,190 @@ Regression coverage for the language/import fixes:
   a real `sys_flags` object (mirrors `os.path`) whose attributes
   (`optimize`, `debug`, …) default to 0.
 
-**Current frontier — `PyContextVar_New`.**  numpy 2.x uses `contextvars`
-(printoptions / errstate); its C init calls `PyContextVar_New(name,
-default)`, which the shim stubs (returns NULL), so the `Py_mod_exec` slot
-fails with *no* pending error (`SHIM-DIAG: pending error: (none)`).  Grail
-has **no contextvars infrastructure** at all.  Next sub-project: a minimal
-`ContextVar` (a Grail object holding name/default/current — a single value
-is enough for single-threaded load) plus C delegations for
-`PyContextVar_New` / `_Get` / `_Set` (and likely `_Reset`) and a
-`contextvars` Python module.  Beyond that the `.so`'s core init continues
-its long tail (dtype/ufunc registration, …), each observable one wall at a
-time via the probe + the `SHIM-STUB-HIT` / `SHIM-DIAG` logging.
+**contextvars — done (commit b74fd7c).**  numpy 2.x creates ContextVars
+from C during `_multiarray_umath` init (ufunc extobj, printoptions).  The
+shim stubbed `PyContextVar_New/_Get/_Set`; they now delegate to the
+existing Grail `contextvars.ContextVar` (a Python stdlib port) so a
+C-created var and any Python-created one are the same object.  Two gotchas:
+a Grail Python class is **not** callable via `___pyCallValue___:kw:` — the
+server instantiates through the class-call entry `value:value:`; and
+numpy's extobj **default** is a C-built object whose offset-16 OOP isn't a
+live Grail object (`OBJ_ERR_OOP_NOT_ALLOCATED` 2106, raised at the
+GciPerform-arg level so the server method never runs), so `PyContextVar_New`
+retries without the default — the var still loads, and `.get()` before a
+`.set()` would `LookupError` (numpy sets extobj during use).  Test:
+`ContextVarsTestCase`.
+
+## The object-model track — prebuilt wheels inline CPython struct macros
+
+The SIGSEGV after contextvars (`Signal 11`, fault `0x7654321f`) was lldb'd
+to `_multiarray_umath`'s `npy_cpu_baseline_list + 48`:
+
+```
+PyList_New(4) -> x19 ; PyUnicode_FromString("NEON") -> x0
+ldr x8, [x19, #0x18] ; x8 = list->ob_item   (PyListObject offset 0x18)
+str x0, [x8]         ; ob_item[0] = x0       <- CRASH, x8 = 0x7654321f
+```
+
+**Root cause (architectural).**  numpy's `.so` was compiled against real
+CPython headers, so it inlines `PyList_SET_ITEM` as
+`((PyListObject*)op)->ob_item[i] = v` — direct struct access.  The shim
+intercepts *function calls*, but cannot intercept struct-access macros
+baked into a prebuilt wheel, and a Grail-backed 24-byte `CByteArray` has no
+`ob_item` at offset 0x18.  numpy uses these macros pervasively
+(`PyTuple_SET_ITEM`, `PyList_GET_ITEM`) and accesses its own structs
+(`PyArrayObject->data/dimensions`).  Decision (with the user): build real
+CPython memory layouts in the shim — the **object-model track**.  It has
+two directions:
+
+1. **Grail → numpy (build objects numpy struct-accesses).**  *Step 1 done
+   (ad3c770):* `PyList_New` returns a real-layout `ShimListObject`
+   (ABI-identical to `PyListObject`, real `ob_item` array), recorded in a
+   registry; `is_real_layout()` detects them; `pyobj_oop()` bridges one to
+   a Grail list at the C↔Grail boundary; the `PyList_*` functions handle
+   both representations.  numpy now builds `__cpu_baseline__` without
+   crashing.  *Still to do:* tuples (`PyTuple_SET_ITEM`), real-layout
+   `tp_dealloc`, identity-stable bridging.
+   Also implemented `PyObject_CallFunction` / `PyObject_CallMethod`
+   (cf471e7) on Py_BuildValue + PyObject_Call — numpy's init uses them
+   heavily.
+
+2. **numpy → Grail (the reverse proxy) — DONE for `__name__` + round-trip
+   (commits 9342da3, 5758851).**  After CPU/feature init, `_multiarray_umath`'s
+   exec registers the legacy dtypes.  The original failure (pinned with a
+   `GRAIL_SHIM_DIAG` C backtrace in `check_gci_error`):
+
+   ```
+   _multiarray_umath_exec -> set_typeinfo
+     -> dtypemeta_wrap_legacy_descriptor
+       -> PyObject_CallFunction(numpy.dtypes._add_dtype_helper, "OO", DType, alias)
+         -> GS err #2702 (a Smalltalk Exception, empty message)
+   ```
+
+   `_add_dtype_helper(DType, alias)` does
+   `setattr(dtypes, DType.__name__, DType)` + `__all__.append(...)`.
+   `DType` is numpy's own real C type object — *not* Grail-backed — so
+   `pyobj_oop(DType)` reads offset 16 of a numpy C struct (garbage), the
+   parameter binds to a junk OOP, and accessing `DType.__name__` raises.
+   The function's codegen is fine (an isolated `helper(GrailClass, alias)`
+   with the same shape — param + function-local `from`-import + `__all__`
+   — works); the wall is purely that a foreign C `PyObject*` can't cross
+   into Grail.
+
+   **Diagnosis note (2026-06-14):** this root cause was masked by two
+   secondary symptoms, now resolved, so a fresh probe shows it cleanly:
+   (a) numpy's `finally: os.unsetenv(...)` raised AttributeError (Grail
+   lacked `os.unsetenv`) *while* err #2702 unwound across the C frame →
+   `UncontinuableError` cascade; with a raised stack limit this drove an
+   unbounded exception-handler recursion → temp-cache OOM (err #4067, 0
+   successful scavenges).  Fixed by adding `os.unsetenv`.  (b) numpy init
+   needs `GEM_MAX_SMALLTALK_STACK_DEPTH` well above the 1000 default (the
+   import chain alone is ~55 frames); run probes with e.g.
+   `-C GEM_MAX_SMALLTALK_STACK_DEPTH=80000`.
+
+   **Implemented (`ShimForeignObject`).**  Foreign objects are detected by
+   a self-identifying mark on Grail wrappers: `wrap:` now makes 32-byte
+   wrappers and stamps a `GRAILWP1` sentinel at offset 24 (ob_type can't
+   distinguish them — numpy readies its DType *type objects* under the
+   shim's `PyType_Type`, same as a Grail-wrapped class).  `is_foreign(obj)`
+   = no sentinel at offset 24.  `pyobj_oop()` bridges a foreign object to a
+   session-scoped `ShimForeignObject` (via
+   `CPythonShim>>foreignProxyForPointer:typeName:`, a SessionTemps
+   pointer→proxy map) that holds the raw pointer + the C `tp_name`.  The
+   proxy forwards `__name__`/`__qualname__`/`__module__` (the unqualified
+   tail / module prefix of `tp_name`); other attributes raise
+   `AttributeError` (richer forwarding back to C via `tp_getattro` is future
+   work — it needs a real-layout `str` for the name argument).  `wrap:`
+   round-trips a proxy straight back to its original `PyObject*` through a
+   non-owning `CByteArray fromCPointer: (CPointer forAddress: cPtr)
+   numBytes: 32`, so numpy gets its own DType pointer again.  Tests:
+   `ShimForeignObjectTestCase` (5, no `.so` needed).
+
+3. **numpy cast-table init — FIXED (commit b875b66).**  With the proxy in
+   place, `_add_dtype_helper` succeeded and init reached
+   `PyArray_InitializeCasts -> PyArrayMethod_FromSpec_int`, which rejected a
+   DType: `"ArrayMethod provided object %R is not a DType."`.  A
+   `GRAIL_SHIM_DIAG` trap identified the object as `numpy.dtypes.BoolDType`
+   whose `ob_type` was the shim's `PyType_Type` instead of numpy's
+   `PyArrayDTypeMeta_Type`.  Cause: the shim's `PyType_Ready` set
+   `ob_type = &PyType_Type` *unconditionally*; numpy allocates a DType class
+   as an instance of its own metaclass and then readies it, so the metatype
+   was clobbered.  Fix: default the metatype only when NULL (CPython
+   semantics).  Also made `PyErr_Format` honor `%R`/`%S` (shared
+   `shim_format_into`), so numpy errors are now legible.
+
+4. **StringDType init — FIXED (commits 4e784e4, 1b12cd8, a590d21, 881d931).**
+   Building a default StringDType descriptor exercised the whole "forward
+   calls back to C" half of the object model.  In order, each wall and fix:
+   - `use_new_as_default -> PyObject_Call(StringDType, ())` raised GS #2702:
+     the shim delegated *every* callable to the Grail server (proxy not
+     callable).  Fix: `PyObject_Call` routes a foreign callable to
+     `call_foreign()`, which invokes `ob_type->tp_call` or, for a type,
+     emulates `type_call` (tp_new/tp_init) **in C**; args are converted to a
+     real-layout tuple (`to_real_tuple`).  Implemented `PyType_IsSubtype`
+     (was a stub returning 0).
+   - `StringDType.tp_new` then hit a stubbed `PyArg_ParseTupleAndKeywords`.
+     Fix: real parser — `parse_one_unit`/`skip_one_unit`/`vparse_kw` shared
+     with `PyArg_ParseTuple`.
+   - `arraydescr_new -> subtype->tp_alloc(...)` jumped to 0x0: `PyType_Ready`
+     did no slot inheritance.  Fix: inherit tp_alloc/tp_new/tp_free/... from
+     tp_base and default tp_alloc to `PyType_GenericAlloc`.
+   - `PyUFunc_FromFuncAndData... -> _PyObject_GC_New -> PyType_GenericAlloc`
+     jumped to 0x0: **cpython.h had no `extern "C"` wrapper**, so a C++ TU
+     (shim_numpy.cc) mangled its call to the extern "C" definition; under
+     `-undefined dynamic_lookup` the mangled ref bound to 0x0.  Fix: wrap the
+     header in `extern "C"` — a broad latent-bug fix.
+
+5. **ufunc info-tuple validation — FIXED (commit 77830a5).**  numpy validates
+   its loop "info" with inlined `PyTuple_CheckExact` + `PyTuple_GET_SIZE`; a
+   Grail-backed tuple's offset-16 OOP read as ob_size gave TypeError
+   "Info must be a tuple…".  Fix: **real-layout tuples** (`ShimTupleObject`,
+   inline ob_item) mirroring lists, bridged to/from Grail at the boundary.
+
+6. **PyUFunc_AddLoop tuple layout — FIXED (commit c6c49bf).**  The crash
+   (`PyUFunc_AddLoop+288: ldr x0,[x23,#8]`, `x23≈NULL`) was *not* a
+   round-trip-identity problem (an early wrong guess).  Reading the crashing
+   object's memory showed a clean real-layout tuple — but numpy's inlined
+   `PyTuple_GET_ITEM` accessed `ob_item` at **offset 32**, while
+   `ShimTupleObject` had it at 24.  CPython 3.14 added `Py_hash_t ob_hash`
+   to `PyTupleObject` (tuple hash cache) between `ob_size` and `ob_item`.
+   Added the field (init -1); ob_item now sits at offset 32.  numpy got
+   `info[0]` right via the `PyTuple_GetItem` *function* (shim layout) but
+   read elements via the inlined macro (real layout) — the two disagreed by
+   one slot.  [Lists were unaffected: `PyListObject` has no `ob_hash`.]
+
+7. **Stub run during ufunc-loop registration — FIXED (commit 198b88e).**
+   Implemented `PyList_GetItemRef`, `PyDict_GetItemRef`/`StringRef` (3.13+
+   strong-ref getters), `PyNumber_Long`, and `PyObject_Init` (each was a
+   stub returning NULL/0).
+
+8. **ufunc-loop dedup + `PyNumber_Float` — FIXED (commit, see git log).**
+   `PyUFunc_AddLoop` dedups loops with `PyObject_RichCompareBool(infoA,
+   infoB, Py_EQ)` over real-layout tuples of foreign DType/method singletons.
+   The server path bridged each tuple to Grail (836 bridges; #2163 comparing
+   foreign-proxy elements).  Fix: `PyObject_RichCompareBool` identity-
+   shortcuts ==/!= and compares two real-layout tuples **structurally in C**
+   (`real_tuple_eq`): recurse nested tuples, treat non-identical
+   foreign/real-layout leaves as not-equal (DTypes/methods are singletons →
+   identity == equality), defer only genuine Grail leaves to the server.
+   Bridges dropped 836→26.  Also implemented `PyNumber_Float`.
+
+9. **CURRENT FRONTIER — `PyLong_As*` on a foreign numpy scalar.**  numpy now
+   sets ufunc identities: `get_initial_from_ufunc → LONGDOUBLE_setitem →
+   npy_longdouble_from_PyLong`.  It calls a `PyLong_As*` conversion on a
+   **foreign `numpy.int64` scalar**, which the shim proxies as a
+   `ShimForeignObject`.  `oopToLongWithIndex` does
+   `GciPerform_(proxyOop, "__index__")`, the proxy doesn't implement
+   `__index__` → returns nil → `GciOopToI64(nil)` raises GCI #2163 (which
+   then leaks to the next `check_gci_error`, surfacing at `PyObject_Str`).
+   Confirmed by diag: `indexed=20` (OOP_NIL).  **Fix:** the reverse proxy
+   must forward the *numeric* protocol — `PyLong_AsLong`/`AsSsize_t`/
+   `AsLongLong`/`AsDouble`/`PyNumber_Index` on a foreign object should invoke
+   that object's C number slots (`tp_as_number->nb_index`/`nb_int`/`nb_float`)
+   directly, rather than routing through the proxy's (absent) Python dunders.
+   (Tangential: `oopToLongWithIndex` also *leaks* the GCI error on failure —
+   it should consume it and set a Python error — but the primary fix is the
+   foreign numeric-slot forwarding.)
 
 ## Repro
 

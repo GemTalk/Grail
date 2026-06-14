@@ -224,12 +224,22 @@ wrap: aValue
 	through C yields ``None``, not nil."
 
 	| pyObj |
+	"Wrappers are 32 bytes: [refcnt:0][ob_type:8][oop:16][magic:24].  The
+	magic sentinel at offset 24 lets the C shim positively identify a
+	Grail-backed wrapper — a prebuilt wheel's own objects (e.g. numpy's
+	DType type objects) carry the same ob_type (PyType_Type) the shim
+	readied them under, so ob_type alone can't distinguish them; the
+	sentinel can.  See is_foreign()/GRAIL_WRAP_MAGIC in cpython.cc."
+	"A reverse proxy round-trips straight back to its original foreign
+	PyObject* — numpy must get its own DType pointer again, not a wrapper."
+	(aValue isKindOf: ShimForeignObject) ifTrue: [ ^ aValue @env0:pyObjectView ].
 	(aValue == nil or: [aValue == None]) ifTrue: [
 		noneWrapper ifNil: [
-			noneWrapper := CByteArray gcMalloc: 24.
+			noneWrapper := CByteArray gcMalloc: 32.
 			noneWrapper int64At: 0 put: 1.
 			noneWrapper int64At: 8 put: (self typeAddrFor: None).
 			self storeOop: None asOop in: noneWrapper at: 16.
+			noneWrapper int64At: 24 put: 16r475241494C575031.
 		].
 		^ noneWrapper
 	].
@@ -237,13 +247,35 @@ wrap: aValue
 	wrapsSinceSweep := (wrapsSinceSweep ifNil: [0]) + 1.
 	(wrapsSinceSweep \\ 1000) = 0 ifTrue: [ self sweep ].
 	^ valueToPyObject at: aValue ifAbsent: [
-		pyObj := CByteArray gcMalloc: 24.
+		pyObj := CByteArray gcMalloc: 32.
 		pyObj int64At: 0 put: 1.
 		pyObj int64At: 8 put: (self typeAddrFor: aValue).
 		self storeOop: aValue asOop in: pyObj at: 16.
+		pyObj int64At: 24 put: 16r475241494C575031.
 		valueToPyObject at: aValue put: pyObj.
 		pyObj
 	]
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
+foreignProxyForPointer: ptrInt typeName: nameStr
+	"Reverse proxy: return a Grail ShimForeignObject standing in for a
+	foreign C PyObject* (a prebuilt wheel's own object, e.g. a numpy
+	DType) so Grail code that receives it can use it.  Called from the C
+	shim's pyobj_oop when a foreign object crosses into Grail.  The map is
+	session-scoped (foreign pointers die with the process) and lives in
+	SessionTemps, so the committed singleton's shape is untouched."
+
+	| map |
+	map := SessionTemps @env0:current
+		@env0:at: #'GrailForeignProxies'
+		ifAbsentPut: [ IdentityKeyValueDictionary @env0:new ].
+	^ map @env0:at: ptrInt ifAbsent: [ | p |
+		p := ShimForeignObject @env0:new.
+		p @env0:setCPtr: ptrInt typeName: nameStr.
+		map @env0:at: ptrInt put: p.
+		p ]
 %
 
 category: 'Grail-Wrapping'
@@ -783,6 +815,52 @@ PySys_GetObject: aName
 	    (self wrap: (sysInst @env1:___pyAttrLoad___: aName @env0:asString @env0:asSymbol))
 	        memoryAddress
 	  ] @env0:on: AbstractException do: [:ex | 0]
+%
+
+category: 'Grail-C API - ContextVar'
+method: CPythonShim
+PyContextVar_New: aName default: aDefault
+	"Back PyContextVar_New(name, default): create a Grail
+	contextvars.ContextVar so the C-created var and any Python-created one
+	(numpy._core.printoptions) are the same kind of object.  ContextVar's
+	__init__ is (name, default=_MISSING), so a supplied default is passed
+	positionally; aDefault is nil when C passed no default (NULL)."
+
+	| cvModule cvClass posArgs |
+	cvModule := ((Python at: #importlib) ___instance___) @env1:import_module: 'contextvars'.
+	cvClass := cvModule @env1:___pyAttrLoad___: #'ContextVar'.
+	posArgs := aDefault == nil ifTrue: [{ aName }] ifFalse: [{ aName . aDefault }].
+	"Instantiate via the class-call entry ``value:value:'' (positional
+	array + kwargs); a Grail Python class is not callable through
+	___pyCallValue___:kw:."
+	^ (self wrap: (cvClass perform: #'value:value:' env: 1
+		withArguments: { posArgs . nil })) memoryAddress
+%
+
+category: 'Grail-C API - ContextVar'
+method: CPythonShim
+PyContextVar_Get: aVar default: aDefault
+	"Back PyContextVar_Get(var, default, &value): return var.get() — or
+	var.get(default) when C supplied a default (aDefault not nil).  The C
+	side writes the result through *value and returns 0."
+
+	| getter posArgs |
+	getter := aVar @env1:___pyAttrLoad___: #'get'.
+	posArgs := aDefault == nil ifTrue: [{}] ifFalse: [{ aDefault }].
+	^ (self wrap: (getter perform: #'value:value:' env: 1
+		withArguments: { posArgs . nil })) memoryAddress
+%
+
+category: 'Grail-C API - ContextVar'
+method: CPythonShim
+PyContextVar_Set: aVar value: aValue
+	"Back PyContextVar_Set(var, value): var.set(value) answers a Token
+	(passed back to var.reset())."
+
+	| setter |
+	setter := aVar @env1:___pyAttrLoad___: #'set'.
+	^ (self wrap: (setter perform: #'value:value:' env: 1
+		withArguments: { { aValue } . nil })) memoryAddress
 %
 
 category: 'Grail-Diagnostics'

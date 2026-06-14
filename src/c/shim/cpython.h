@@ -22,6 +22,17 @@
 #include <assert.h>
 #include <math.h>
 
+/* Give every declared function/variable C linkage when this header is
+   included from a C++ translation unit (cpython.cc, shim_numpy.cc, the
+   bundled C++ modules).  Without this, a C++ TU mangles its calls to the
+   shim's API (e.g. PyType_GenericAlloc), which the extern "C" definitions
+   don't satisfy; under -undefined dynamic_lookup the mangled reference
+   silently binds to 0x0 and crashes when first called (numpy's first
+   _PyObject_GC_New -> PyType_GenericAlloc did exactly this). */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ========== Core types ========== */
 
 typedef intptr_t Py_ssize_t;
@@ -1261,5 +1272,9 @@ int         PyCapsule_IsValid(PyObject *capsule, const char *name);
 int         PyCapsule_SetPointer(PyObject *capsule, void *pointer);
 void       *PyCapsule_Import(const char *name, int no_block);
 int         PyCapsule_CheckExact(PyObject *op);
+
+#ifdef __cplusplus
+}  /* extern "C" */
+#endif
 
 #endif /* CPYTHON_H */

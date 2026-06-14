@@ -255,6 +255,7 @@ run
 	at: #'Warning' put: nil;
 	at: #'ZeroDivisionError' put: nil;
 	at: #'CPythonShim' put: nil;
+	at: #'ShimForeignObject' put: nil;
 	at: #'PyObject' put: nil;
 	at: #'_statistics' put: nil;
 	at: #'_bisect' put: nil;
@@ -526,6 +527,8 @@ run
 	at: #'ModuleScopeBindingsTestCase' put: nil;
 	at: #'ModuleFunctionDecoratorsTestCase' put: nil;
 	at: #'ImportTypeIntrospectionTestCase' put: nil;
+	at: #'ContextVarsTestCase' put: nil;
+	at: #'ShimForeignObjectTestCase' put: nil;
 	at: #'DynamicInstanceAttrsTestCase' put: nil;
 	at: #'AttributeAccessTestCase' put: nil;
 	at: #'AttributeInheritanceTestCase' put: nil;
@@ -848,6 +851,7 @@ input src/smalltalk/Python/gemstone.gs
 input src/smalltalk/Python/grail.gs
 input src/smalltalk/Python/PyObject.gs
 input src/smalltalk/Python/CPythonShim.gs
+input src/smalltalk/Python/ShimForeignObject.gs
 input src/smalltalk/EmbeddedPython/CPythonException.gs
 input src/smalltalk/EmbeddedPython/CPythonLibrary.gs
 input src/smalltalk/EmbeddedPython/CPythonObject.gs
@@ -1192,6 +1196,8 @@ input src/smalltalk/PythonTests/DynamicGlobalsTestCase.gs
 input src/smalltalk/PythonTests/ModuleScopeBindingsTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionDecoratorsTestCase.gs
 input src/smalltalk/PythonTests/ImportTypeIntrospectionTestCase.gs
+input src/smalltalk/PythonTests/ContextVarsTestCase.gs
+input src/smalltalk/PythonTests/ShimForeignObjectTestCase.gs
 input src/smalltalk/PythonTests/DynamicInstanceAttrsTestCase.gs
 input src/smalltalk/PythonTests/AttributeAccessTestCase.gs
 input src/smalltalk/PythonTests/AttributeInheritanceTestCase.gs

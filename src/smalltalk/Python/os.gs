@@ -469,6 +469,20 @@ putenv: name _: value
 	^ None
 %
 
+category: 'Grail-Environment Variables'
+method: os
+unsetenv: name
+	"os.unsetenv(name) — remove an environment variable.  GemStone has no
+	true ``remove'' for a gem environment variable, so clear it to nil
+	(falling back to an empty string if the platform rejects nil).  numpy's
+	_core init relies on this to undo a transient OPENBLAS_MAIN_FREE putenv."
+
+	[ System @env0:gemEnvironmentVariable: name put: nil ]
+		@env0:on: AbstractException
+		do: [:ex | System @env0:gemEnvironmentVariable: name put: '' ].
+	^ None
+%
+
 ! ===============================================================================
 ! Fast-path callables — process management
 ! ===============================================================================

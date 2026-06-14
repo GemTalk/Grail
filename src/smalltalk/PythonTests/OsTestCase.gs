@@ -771,6 +771,26 @@ testPutenv
 	self assert: result equals: testValue
 %
 
+category: 'Grail-Tests - Environment Variables'
+method: OsTestCase
+testUnsetenv
+	"Test os.unsetenv() - remove an environment variable.  numpy's _core
+	init relies on this to undo a transient putenv inside a finally block;
+	a missing os.unsetenv there raised an AttributeError that masked the
+	real import failure."
+
+	| o testVar |
+	o := os @env1:instance.
+	testVar := 'GRAIL_TEST_UNSETENV_VAR'.
+
+	"Set then clear it; getenv should no longer return the set value."
+	o @env1:putenv: testVar _: 'transient_value'.
+	o @env1:unsetenv: testVar.
+
+	"After unsetenv the value must not be the one we set (nil/None or empty)."
+	self deny: ((o @env1:getenv: testVar) = 'transient_value')
+%
+
 category: 'Grail-Tests - File and Directory Operations'
 method: OsTestCase
 testRemove
