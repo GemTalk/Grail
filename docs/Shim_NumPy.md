@@ -455,22 +455,48 @@ two directions:
    identity == equality), defer only genuine Grail leaves to the server.
    Bridges dropped 836→26.  Also implemented `PyNumber_Float`.
 
-9. **CURRENT FRONTIER — `PyLong_As*` on a foreign numpy scalar.**  numpy now
-   sets ufunc identities: `get_initial_from_ufunc → LONGDOUBLE_setitem →
-   npy_longdouble_from_PyLong`.  It calls a `PyLong_As*` conversion on a
-   **foreign `numpy.int64` scalar**, which the shim proxies as a
-   `ShimForeignObject`.  `oopToLongWithIndex` does
-   `GciPerform_(proxyOop, "__index__")`, the proxy doesn't implement
-   `__index__` → returns nil → `GciOopToI64(nil)` raises GCI #2163 (which
-   then leaks to the next `check_gci_error`, surfacing at `PyObject_Str`).
-   Confirmed by diag: `indexed=20` (OOP_NIL).  **Fix:** the reverse proxy
-   must forward the *numeric* protocol — `PyLong_AsLong`/`AsSsize_t`/
-   `AsLongLong`/`AsDouble`/`PyNumber_Index` on a foreign object should invoke
-   that object's C number slots (`tp_as_number->nb_index`/`nb_int`/`nb_float`)
-   directly, rather than routing through the proxy's (absent) Python dunders.
-   (Tangential: `oopToLongWithIndex` also *leaks* the GCI error on failure —
-   it should consume it and set a Python error — but the primary fix is the
-   foreign numeric-slot forwarding.)
+9. **Foreign-scalar protocol forwarding — FIXED (commit d0cced9).**  numpy
+   passed its own scalars (`numpy.int64`/`numpy.float64`) to the C-API
+   conversions during ufunc-identity setup; the proxy had no `__index__`, so
+   `PyLong_As*` raised GCI #2163.  Fix: route a foreign object through its own
+   C slots — `foreign_number_oop` invokes `nb_index`/`nb_int`/`nb_float`
+   (numpy's C builds the result via our `PyLong_From*`/`PyFloat_FromDouble`, a
+   Grail value we then convert); `foreign_str` routes `PyObject_Str`/`Repr`
+   through `tp_str`/`tp_repr`.  This is the reverse-proxy *protocol
+   forwarding* the design doc called for.
+
+10. **Float non-finite repr/str — FIXED (commit f0a5f27).**  Found while
+    tracing the longdouble wall: `float.__repr__`/`__str__` rendered non-finite
+    values via GemStone's `printString` → `"PlusInfinity"`/`"MinusInfinity"`/
+    `"PlusQuietNaN"` instead of CPython's `"inf"`/`"-inf"`/`"nan"`.  Mapped them
+    (NaN variants end in `"NaN"`; `Plus/MinusInfinity`).  A real CPython-compat
+    bug, *independent* of the longdouble wall (verified: it does not clear it).
+
+11. **CURRENT FRONTIER — `LONGDOUBLE_setitem` empty-string parse (logaddexp
+    identity).**  Init reaches numpy setting the longdouble identity of the
+    **`logaddexp`** ufunc (`-inf`):
+
+    ```
+    InitOperators → … → get_initial_from_ufunc
+      → LONGDOUBLE_setitem + 724:  PyErr_Format(ValueError,
+            "invalid literal for long double: %s")   ← the %s string is EMPTY
+    ```
+
+    Pinned via lldb: the failing frame's `x25 = logaddexp_signatures`; the
+    format is `"invalid literal for long double: %s"`; `op` reaches the
+    `PyUnicode_Check` branch (so it's a **string**) and `PyUnicode_AsUTF8(op)`
+    is empty.  `op` is **Grail-backed (not foreign)** — `PyUnicode_AsUTF8`/
+    `PyObject_Str` on a *foreign* object never fire here.  Ruled out:
+    `PyUnicode_FromStringAndSize` (correct), `PyOS_snprintf`/`PyOS_string_to_double`
+    (real), and our float `__str__` (gives `"MinusInfinity"`, non-empty — and
+    now `"-inf"`).  So numpy builds the identity string itself (its own
+    longdouble formatting / a stored identity string) and it comes out `""`.
+    The exact producer of the empty Grail string is still open.  Next:
+    instrument `PyUnicode_FromStringAndSize` (the only string-builder numpy
+    imports) to log `len==0` creations + C backtrace, OR break at the
+    `logaddexp` `get_initial_from_ufunc` and watch how it materializes the
+    identity string — likely a numpy longdouble→text path that yields nothing
+    on our platform/longdouble handling.
 
 ## Repro
 

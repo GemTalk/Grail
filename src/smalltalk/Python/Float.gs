@@ -323,10 +323,17 @@ __pow__: other _: modulo
 category: 'Grail-String Representation'
 method: float
 __repr__
-	"Return the official string representation of the float."
+	"Return the official string representation of the float.  Non-finite
+	values use CPython's spellings (inf / -inf / nan), not GemStone's
+	PlusInfinity / MinusInfinity / *QuietNaN; -0.0 keeps its sign."
 
 	| str |
 	str := self @env0:printString.
+	(str @env0:endsWith: 'NaN') ifTrue: [ ^ 'nan' @env0:asUnicodeString ].
+	(str @env0:= 'PlusInfinity') ifTrue: [ ^ 'inf' @env0:asUnicodeString ].
+	(str @env0:= 'MinusInfinity') ifTrue: [ ^ '-inf' @env0:asUnicodeString ].
+	((self @env0:= 0.0) @env0:and: [ (self @env0:signBit) == 1 ])
+		ifTrue: [ ^ '-0.0' @env0:asUnicodeString ].
 	^ str @env0:asUnicodeString
 %
 
@@ -360,10 +367,14 @@ __round__: ndigits
 category: 'Grail-String Representation'
 method: float
 __str__
-	"Return the informal string representation of the float."
+	"Return the informal string representation of the float.  CPython
+	spellings for non-finite (inf / -inf / nan) and signed zero."
 
 	| str x y |
 	str := self @env0:printString.
+	(str @env0:endsWith: 'NaN') ifTrue: [ ^ 'nan' @env0:asUnicodeString ].
+	(str @env0:= 'PlusInfinity') ifTrue: [ ^ 'inf' @env0:asUnicodeString ].
+	(str @env0:= 'MinusInfinity') ifTrue: [ ^ '-inf' @env0:asUnicodeString ].
 	"Handle -0.0 specially"
 	x := self @env0:= 0.0.
 	y := (self @env0:signBit) == 1.

@@ -60,6 +60,7 @@ static OopType real_obj_to_oop(PyObject *obj);
 static void register_shim_type(PyTypeObject *t);   /* shim type registry */
 static int is_shim_type(PyTypeObject *t);          /* type the shim created */
 static int is_foreign(PyObject *obj);              /* not a Grail wrapper */
+static OopType foreign_number_oop(PyObject *obj, int want_float); /* nb_* slot */
 static OopType foreign_proxy_oop(PyObject *obj);   /* reverse proxy bridge */
 extern "C" int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b);
 
@@ -701,6 +702,13 @@ extern "C" double PyFloat_AsDouble(PyObject *obj) {
         PyErr_BadArgument();
         return -1.0;
     }
+    /* Foreign numpy scalar: take its own nb_float (or nb_index for ints). */
+    if (is_foreign(obj)) {
+        OopType fo = foreign_number_oop(obj, 1);
+        if (fo == OOP_NIL) fo = foreign_number_oop(obj, 0);
+        if (fo == OOP_NIL) { PyErr_BadArgument(); return -1.0; }
+        return GCI_OOP_IS_SMALL_INT(fo) ? (double)GciOopToI64(fo) : GciOopToFlt(fo);
+    }
     OopType oop = pyobj_oop(obj);
     /* CPython accepts ints (and __index__-able wrappers) here too. */
     if (GCI_OOP_IS_SMALL_INT(oop))
@@ -754,14 +762,44 @@ static int64 oopToLongWithIndex(OopType oop) {
     return GciOopToI64(indexed);
 }
 
+/* Convert a foreign object (a wheel's own C object, e.g. a numpy.int64 /
+   numpy.float64 scalar) to a Grail-backed number's OOP by invoking its OWN C
+   number slot — NOT routing through the reverse proxy's (absent) Python
+   dunders.  The slot is numpy's C, which builds its result via our
+   PyLong_From* / PyFloat_FromDouble, so the returned object is Grail-backed
+   and converts normally.  want_float picks nb_float; otherwise nb_index then
+   nb_int.  Returns OOP_NIL if the object exposes no suitable slot. */
+static OopType foreign_number_oop(PyObject *obj, int want_float) {
+    PyTypeObject *t = obj ? obj->ob_type : NULL;
+    PyNumberMethods *nb = t ? t->tp_as_number : NULL;
+    if (nb == NULL) return OOP_NIL;
+    PyObject *r = NULL;
+    if (want_float) {
+        if (nb->nb_float) r = nb->nb_float(obj);
+    } else {
+        if (nb->nb_index)     r = nb->nb_index(obj);
+        else if (nb->nb_int)  r = nb->nb_int(obj);
+    }
+    /* r must be Grail-backed (the slot built it via our PyLong_/PyFloat_ ctors);
+       guard against NULL or a still-foreign result to avoid bad reads. */
+    if (r == NULL || is_foreign(r)) return OOP_NIL;
+    return pyobj_oop(r);
+}
+
+/* OOP to feed an integer conversion: a foreign object goes through its nb_*
+   slot, everything else through the normal wrapper. */
+static inline OopType int_conv_oop(PyObject *obj) {
+    return is_foreign(obj) ? foreign_number_oop(obj, 0) : pyobj_oop(obj);
+}
+
 extern "C" Py_ssize_t PyLong_AsSsize_t(PyObject *obj) {
     if (obj == NULL) return 0;
-    return (Py_ssize_t)oopToLongWithIndex(pyobj_oop(obj));
+    return (Py_ssize_t)oopToLongWithIndex(int_conv_oop(obj));
 }
 
 extern "C" long PyLong_AsLong(PyObject *obj) {
     if (obj == NULL) return -1;
-    return (long)oopToLongWithIndex(pyobj_oop(obj));
+    return (long)oopToLongWithIndex(int_conv_oop(obj));
 }
 
 /* Subclass-aware check: CPython's PyXxx_Check tests tp_flags subclass
@@ -1474,8 +1512,22 @@ extern "C" int PyObject_HasAttrString(PyObject *obj, const char *name) {
     return result == OOP_TRUE ? 1 : 0;
 }
 
+/* A foreign object (numpy scalar/dtype) stringifies through its own C
+   tp_str/tp_repr slot (which builds a Grail-backed str via our PyUnicode
+   ctors), not through the reverse proxy's absent Python dunders. */
+static PyObject *foreign_str(PyObject *obj, int want_repr) {
+    PyTypeObject *t = obj->ob_type;
+    if (t == NULL) return NULL;
+    if (want_repr) { if (t->tp_repr) return t->tp_repr(obj);
+                     if (t->tp_str)  return t->tp_str(obj); }
+    else          { if (t->tp_str)  return t->tp_str(obj);
+                     if (t->tp_repr) return t->tp_repr(obj); }
+    return NULL;
+}
+
 extern "C" PyObject *PyObject_Repr(PyObject *obj) {
     CHECK_pyObj(obj, "PyObject_Repr obj");
+    if (is_foreign(obj)) { PyObject *r = foreign_str(obj, 1); if (r) return r; }
     OopType arg = pyobj_oop(obj);
     OopType addrOop = GciPerform(server, "PyObject_Repr:", &arg, 1);
     if (check_gci_error()) return NULL;
@@ -1484,6 +1536,7 @@ extern "C" PyObject *PyObject_Repr(PyObject *obj) {
 
 extern "C" PyObject *PyObject_Str(PyObject *obj) {
     CHECK_pyObj(obj, "PyObject_Str obj");
+    if (is_foreign(obj)) { PyObject *r = foreign_str(obj, 0); if (r) return r; }
     OopType arg = pyobj_oop(obj);
     OopType addrOop = GciPerform(server, "PyObject_Str:", &arg, 1);
     if (check_gci_error()) return NULL;
@@ -1742,7 +1795,7 @@ extern "C" PyObject *PyLong_FromUnsignedLong(unsigned long v) {
 
 extern "C" unsigned long PyLong_AsUnsignedLong(PyObject *obj) {
     if (obj == NULL) return 0;
-    return (unsigned long)oopToLongWithIndex(pyobj_oop(obj));
+    return (unsigned long)oopToLongWithIndex(int_conv_oop(obj));
 }
 
 extern "C" int PyIndex_Check(PyObject *obj) {
@@ -1753,6 +1806,12 @@ extern "C" PyObject *PyNumber_Index(PyObject *obj) {
     if (PyLong_Check(obj)) {
         Py_INCREF(obj);
         return obj;
+    }
+    /* A foreign object (numpy scalar) supplies an exact int via its own
+       nb_index slot. */
+    if (is_foreign(obj) && Py_TYPE(obj) && Py_TYPE(obj)->tp_as_number &&
+        Py_TYPE(obj)->tp_as_number->nb_index) {
+        return Py_TYPE(obj)->tp_as_number->nb_index(obj);
     }
     PyErr_Format(PyExc_TypeError, "'%.200s' object cannot be interpreted as an integer",
                  obj ? Py_TYPE(obj)->tp_name : "NULL");
@@ -4501,7 +4560,7 @@ extern "C" PyObject *PyLong_FromLongLong(long long v) {
 
 extern "C" long long PyLong_AsLongLong(PyObject *obj) {
     if (obj == NULL) return -1;
-    return (long long)oopToLongWithIndex(pyobj_oop(obj));
+    return (long long)oopToLongWithIndex(int_conv_oop(obj));
 }
 
 extern "C" PyObject *PyLong_FromUnsignedLongLong(unsigned long long v) {
@@ -4518,12 +4577,12 @@ extern "C" PyObject *PyLong_FromUnsignedLongLong(unsigned long long v) {
 
 extern "C" unsigned long long PyLong_AsUnsignedLongLong(PyObject *obj) {
     if (obj == NULL) return (unsigned long long)-1;
-    return (unsigned long long)oopToLongWithIndex(pyobj_oop(obj));
+    return (unsigned long long)oopToLongWithIndex(int_conv_oop(obj));
 }
 
 extern "C" unsigned long PyLong_AsUnsignedLongMask(PyObject *obj) {
     if (obj == NULL) return (unsigned long)-1;
-    return (unsigned long)oopToLongWithIndex(pyobj_oop(obj));
+    return (unsigned long)oopToLongWithIndex(int_conv_oop(obj));
 }
 
 extern "C" PyObject *PyLong_FromDouble(double v) {
@@ -4532,7 +4591,7 @@ extern "C" PyObject *PyLong_FromDouble(double v) {
 
 extern "C" double PyLong_AsDouble(PyObject *obj) {
     if (obj == NULL) return -1.0;
-    return (double)oopToLongWithIndex(pyobj_oop(obj));
+    return (double)oopToLongWithIndex(int_conv_oop(obj));
 }
 
 /* --- Object protocol: PyObject* attribute names --- */

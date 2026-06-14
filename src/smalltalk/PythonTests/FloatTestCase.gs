@@ -394,6 +394,24 @@ test__str__
 	self assert: result equals: '-0.0'.
 %
 
+category: 'Grail-Tests - String Representation'
+method: FloatTestCase
+test__repr__nonFinite
+	"Non-finite floats repr/str with CPython's spellings (inf / -inf / nan),
+	not GemStone's PlusInfinity / MinusInfinity / *QuietNaN."
+
+	| posInf negInf nan |
+	posInf := 1.0e308 * 10.0.
+	negInf := posInf negated.
+	nan := posInf - posInf.
+	self assert: (posInf @env1:__repr__) equals: 'inf'.
+	self assert: (negInf @env1:__repr__) equals: '-inf'.
+	self assert: (nan @env1:__repr__) equals: 'nan'.
+	self assert: (posInf @env1:__str__) equals: 'inf'.
+	self assert: (negInf @env1:__str__) equals: '-inf'.
+	self assert: (nan @env1:__str__) equals: 'nan'.
+%
+
 category: 'Grail-Tests - Arithmetic'
 method: FloatTestCase
 test__sub__
