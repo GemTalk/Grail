@@ -9,14 +9,14 @@ from twilio_env import account_sid,auth_token
 to          = "+15098766685"
 from_number = "+14155238886"
 
-sent_sms_invoices = gemstone["sent_sms_invoices"]
+sent_messages_invoices = gemstone["sent_sms_invoices"]
 acmeSystem = gemstone["InstalledAcmeSystem"]
 
 while True:
     invoices = acmeSystem.invoices()
 
-    not_send_sms_invoices = set(invoices) - set(sent_sms_invoices)
-    for invoice in not_send_sms_invoices:
+    not_send_messages_invoices = set(invoices) - set(sent_messages_invoices)
+    for invoice in not_send_messages_invoices:
         invoice_number = invoice.number()
         body = f"Invoice {invoice_number} created"
         cmd = (
@@ -30,6 +30,6 @@ while True:
         sent_result = os.system(cmd)
         print(f"Sent: {body} - Sent result: {sent_result}")
 
-    sent_sms_invoices.extend(not_send_sms_invoices)
+    sent_messages_invoices.extend(not_send_messages_invoices)
     gemstone.system().commit()
     time.sleep(1)
