@@ -40,7 +40,7 @@ Run it::
     from grail_rest_demo.app import main
     main(port=5000)            # serves single-threaded -- see below
 
-then open http://127.0.0.1:5000/ in a browser, or drive ``/api`` with
+then open http://127.0.0.1:5001/ in a browser, or drive ``/api`` with
 ``client.py`` / curl.
 
 ``main()`` configures the dev server for the way Grail runs: SINGLE-THREADED

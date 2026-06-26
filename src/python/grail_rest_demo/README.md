@@ -27,7 +27,7 @@ The point of the demo is twofold:
 
 ## HTML UI
 
-Open <http://127.0.0.1:5000/> in a browser: a task list with a "new
+Open <http://127.0.0.1:5001/> in a browser: a task list with a "new
 task" form, plus per-task toggle / edit / delete controls. Every write is
 a `POST` (HTML forms can't issue `PUT`/`DELETE`) that mutates the store
 and redirects back — the classic POST/redirect/GET pattern. It reads and
@@ -81,10 +81,10 @@ Use `main()` — it configures the dev server for the way Grail runs:
 Then drive it however you like:
 
 ```console
-$ curl -s http://127.0.0.1:5000/api/tasks
+$ curl -s http://127.0.0.1:5001/api/tasks
 {"tasks": [...]}
 
-$ curl -s -X POST http://127.0.0.1:5000/api/tasks \
+$ curl -s -X POST http://127.0.0.1:5001/api/tasks \
        -H 'Content-Type: application/json' \
        -d '{"title": "write docs"}'
 {"id": 3, "title": "write docs", "done": false}
@@ -98,8 +98,8 @@ cross-runtime interop (CPython client ↔ GemStone/Smalltalk server, plain
 HTTP between them):
 
 ```console
-$ python3 client.py http://127.0.0.1:5000
-Talking to http://127.0.0.1:5000
+$ python3 client.py http://127.0.0.1:5001
+Talking to http://127.0.0.1:5001
 POST   /api/tasks            -> 201  id=3  Location=/api/tasks/3
 GET    /api/tasks            -> 200  count=3
 GET    /api/tasks/3          -> 200  {'id': 3, 'title': 'Try the Grail REST demo', 'done': False}
