@@ -10,11 +10,11 @@ Start the server on the Grail side, e.g.::
 
     # in a Grail/Topaz session, or via `flask run`:
     from grail_rest_demo.app import create_app
-    create_app().run(host="127.0.0.1", port=5000)
+    create_app().run(host="127.0.0.1", port=5001)
 
 then point this client at it::
 
-    python3 client.py                 # defaults to http://127.0.0.1:5000
+    python3 client.py                 # defaults to http://127.0.0.1:5001
     python3 client.py http://host:8000
 
 It walks the same CRUD lifecycle the test suite exercises in-process and
@@ -99,5 +99,5 @@ def main(base_url):
 
 
 if __name__ == "__main__":
-    base = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:5000"
+    base = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:5001"
     main(base)
