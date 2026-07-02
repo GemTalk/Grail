@@ -106,6 +106,50 @@ _smalltalk_class: args kw: kw
 	]
 %
 
+! ===============================================================================
+! @smalltalk decorator
+! ===============================================================================
+
+category: 'Grail-smalltalk'
+method: grail
+_smalltalk: args kw: kw
+	"grail.smalltalk — marks a class method as a forwarder to a native
+	(env-0) Smalltalk method.  RECOGNISED AT COMPILE TIME by FunctionDefAst
+	(see isSmalltalkForwarder): a @smalltalk-decorated method inside a class
+	body is rewritten so that calling it dispatches ``self @env0:<selector>''
+	with the method''s arguments, mapping a nil result to None.  Usage:
+
+	    from grail import smalltalk
+
+	    class Widget:
+	        @smalltalk
+	        def size(self): ...              # -> self size          (env 0)
+
+	        @smalltalk('at:put:')
+	        def set(self, key, value): ...   # -> self at: key put: value (env 0)
+
+	Bare ``@smalltalk'' derives the target selector from the method name and
+	arity (name / name: / name:_: ...); ``@smalltalk('selector')'' names it
+	explicitly (any unary / binary / keyword Smalltalk selector).
+
+	This runtime method is only an IDENTITY decorator — it exists so the
+	name imports (``from grail import smalltalk'') and so any module-level /
+	CPython-compat use stays harmless.  Class-body methods never reach it:
+	the rewrite happens at compile time.  Called bare (args = (func,)) it
+	returns the function unchanged; called as a factory (args = ('sel',)) it
+	returns an identity decorator."
+
+	| first |
+	first := (args @env0:isNil or: [args @env0:isEmpty])
+		ifTrue: [nil]
+		ifFalse: [args @env0:at: 1].
+	(first @env0:isKindOf: CharacterCollection) ifTrue: [
+		"Factory form @smalltalk('sel'): return an identity decorator."
+		^ [:a2 :k2 | a2 @env0:at: 1]].
+	"Bare form @smalltalk applied to the function: return it unchanged."
+	^ first
+%
+
 set compile_env: 0
 
 ! ===============================================================================

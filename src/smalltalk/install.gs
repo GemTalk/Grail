@@ -511,6 +511,7 @@ run
 	at: #'ClassCallFastPathTestCase' put: nil;
 	at: #'ClassAttrsTestCase' put: nil;
 	at: #'ClassDecoratorTestCase' put: nil;
+	at: #'SmalltalkForwarderTestCase' put: nil;
 	at: #'ClassScopeTestCase' put: nil;
 	at: #'GrailModuleTestCase' put: nil;
 	at: #'HttpClientTestCase' put: nil;
@@ -1183,6 +1184,7 @@ input src/smalltalk/PythonTests/CachedPropertyTestCase.gs
 input src/smalltalk/PythonTests/BytesTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrsTestCase.gs
 input src/smalltalk/PythonTests/ClassDecoratorTestCase.gs
+input src/smalltalk/PythonTests/SmalltalkForwarderTestCase.gs
 input src/smalltalk/PythonTests/GrailModuleTestCase.gs
 input src/smalltalk/PythonTests/ClassCallFastPathTestCase.gs
 input src/smalltalk/PythonTests/ClassScopeTestCase.gs

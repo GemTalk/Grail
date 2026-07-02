@@ -930,6 +930,17 @@ generateModuleMethodSourceOn: aStream
 
 	| paramNames bodyVars allLocals assignedNames needsTemp instVarNames canOptimise
 	  savedReturnMode useDirectReturn useMethodTemps |
+	"A ``@smalltalk'' forwarder on a @staticmethod (this generator also
+	serves @staticmethod bodies, signalled by classBeingCompiled being
+	non-nil).  A static method has no self/cls parameter, but its compiled
+	method is class-side — so the Smalltalk receiver ``self'' IS the class,
+	ALL parameters are forwarded, and the send dispatches to a class-side
+	env-0 selector.  Module-level @smalltalk defs (classBeingCompiled nil)
+	fall through — the receiver there would be the module instance, which
+	isn't a supported forward target."
+	(self isSmalltalkForwarder and: [CallAst classBeingCompiled notNil]) ifTrue: [
+		^ self generateSmalltalkForwarderSourceOn: aStream
+			argCount: self allParameterNames size].
 	paramNames := self allParameterNames.
 	bodyVars := body variables.
 	"Whether to apply the method-arg optimisation (use the real Python
@@ -1488,6 +1499,131 @@ generateMethodStubSource
 
 category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
+isSmalltalkForwarder
+	"True when this def is decorated with grail's ``@smalltalk'' — bare
+	``@smalltalk'', ``@smalltalk('selector')'', or either of the
+	``@grail.smalltalk'' attribute forms.  Such a method has no Python
+	body (``...''); Grail rewrites it at compile time into a forwarder
+	that dispatches to a native env-0 Smalltalk method on the receiver.
+	See generateSmalltalkForwarderSourceOn:."
+
+	decorator_list isNil ifTrue: [^ false].
+	^ decorator_list anySatisfy: [:deco | self decoratorRefersToSmalltalk: deco]
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
+decoratorRefersToSmalltalk: deco
+	"Recognise grail's ``@smalltalk'' decorator in every shape the parser
+	may store: a bare name (the parser collapses ``@smalltalk'' to the
+	Symbol/String ``smalltalk''; a NameAst is handled too for safety), the
+	``@grail.smalltalk'' attribute form (AttributeAst attr 'smalltalk'), or
+	either wrapped in a call ``@smalltalk('sel')'' / ``@grail.smalltalk('sel')''
+	(CallAst — recurse into the called function)."
+
+	(deco isKindOf: Symbol) ifTrue: [^ deco asString = 'smalltalk'].
+	(deco isKindOf: String) ifTrue: [^ deco asString = 'smalltalk'].
+	(deco isKindOf: NameAst) ifTrue: [^ deco id asString = 'smalltalk'].
+	(deco isKindOf: AttributeAst) ifTrue: [^ deco attr asString = 'smalltalk'].
+	(deco isKindOf: CallAst) ifTrue: [^ self decoratorRefersToSmalltalk: deco function].
+	^ false
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
+smalltalkForwarderExplicitSelector
+	"The explicit env-0 selector string supplied as ``@smalltalk('sel')''
+	(or ``@grail.smalltalk('sel')''), or nil for the bare ``@smalltalk''
+	form (whose target selector is derived from the method name + arity).
+	The decorator argument, when present, must be a string literal."
+
+	decorator_list isNil ifTrue: [^ nil].
+	decorator_list do: [:deco |
+		(self decoratorRefersToSmalltalk: deco) ifTrue: [
+			(deco isKindOf: CallAst) ifTrue: [
+				| posArgs first |
+				posArgs := deco arguments.
+				(posArgs isNil or: [posArgs isEmpty]) ifTrue: [^ nil].
+				first := posArgs first.
+				((first isKindOf: ConstantAst) and: [first value isKindOf: String])
+					ifTrue: [^ first value asString].
+				self error: 'grail @smalltalk(...) selector must be a string literal'.
+			].
+			^ nil.
+		].
+	].
+	^ nil
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
+smalltalkForwarderTargetSelector: argCount
+	"The env-0 selector this forwarder dispatches to: the explicit string
+	from ``@smalltalk('sel')'', else derived from the method name and
+	arity (name / name: / name:_: ...) — the same convention Grail uses
+	for a normal fixed-arity method."
+
+	| explicit |
+	explicit := self smalltalkForwarderExplicitSelector.
+	explicit ifNotNil: [^ explicit asString].
+	^ (CallAst fastPathSelectorForAttr: name arity: argCount) asString
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
+generateSmalltalkForwarderSourceOn: aStream argCount: argCount
+	"Emit the complete env-1 method source for a ``@smalltalk''-decorated
+	forwarder.  The header is the ordinary fixed-arity selector (name /
+	name: / name:_: ...); the body performs the target env-0 selector on
+	the receiver ``self'' with the method's arguments, and maps a nil
+	result to Python None.
+
+	``argCount'' is the number of forwarded arguments, which also picks the
+	receiver:
+	  - instance method   -> self is the instance   (self stripped: argCount
+	    = instanceMethodParameterNames size)
+	  - @classmethod       -> self is the class      (cls stripped, same count)
+	  - @staticmethod      -> self is the class too, but NO first parameter is
+	    stripped (argCount = allParameterNames size), compiled class-side.
+
+	Only fixed positional signatures are supported (no defaults, *args,
+	**kwargs, keyword-only args, and not __init__ — which Grail forces to
+	the varargs form)."
+
+	| targetSel numExpected |
+	self compilesAsVarargs ifTrue: [
+		self error: 'grail @smalltalk forwarder ''' , name asString ,
+			''' must have a fixed positional signature (no defaults, *args, **kwargs or keyword-only args; and not __init__)'].
+	targetSel := self smalltalkForwarderTargetSelector: argCount.
+	"Validate that the target selector's arity matches the forwarded args."
+	numExpected := (targetSel includes: $:)
+		ifTrue: [targetSel occurrencesOf: $:]
+		ifFalse: [
+			(targetSel size > 0 and: [(targetSel at: 1) isLetter or: [(targetSel at: 1) = $_]])
+				ifTrue: [0] ifFalse: [1]].
+	numExpected = argCount ifFalse: [
+		self error: 'grail @smalltalk selector ''' , targetSel asString ,
+			''' expects ' , numExpected printString ,
+			' argument(s) but method ''' , name asString ,
+			''' forwards ' , argCount printString].
+	"Header — the same selector a normal instance method would expose."
+	aStream nextPutAll: name asString.
+	argCount > 0 ifTrue: [
+		aStream nextPutAll: ': ___1'.
+		2 to: argCount do: [:i | aStream nextPutAll: ' _: ___' , i printString]].
+	aStream lf.
+	"Body — forward to the env-0 target via perform:, coercing nil to None."
+	aStream nextPutAll: '| ___stResult___ |'; lf.
+	aStream nextPutAll: '___stResult___ := self perform: #'''.
+	aStream nextPutAll: targetSel asString.
+	aStream nextPutAll: ''' env: 0 withArguments: { '.
+	1 to: argCount do: [:i | aStream nextPutAll: '___' , i printString , '. '].
+	aStream nextPutAll: '}.'; lf.
+	aStream nextPutAll: '^ ___stResult___ == nil ifTrue: [None] ifFalse: [___stResult___]'
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
 generateMethodSourceOn: aStream
 	"Generate method source for a class instance method. Strips the self
 	parameter (first arg of the Python function). The Smalltalk `self`
@@ -1512,6 +1648,13 @@ generateMethodSourceOn: aStream
 
 	| paramNames bodyVars allLocals savedReturnMode
 	  useDirectReturn useMethodTemps |
+	"``@smalltalk''-decorated methods forward to a native (env-0) Smalltalk
+	method rather than compiling a Python body — see isSmalltalkForwarder.
+	Instance methods and @classmethods strip the first parameter (self /
+	cls), so the forwarded arg count is instanceMethodParameterNames size."
+	self isSmalltalkForwarder ifTrue: [
+		^ self generateSmalltalkForwarderSourceOn: aStream
+			argCount: self instanceMethodParameterNames size].
 	paramNames := self instanceMethodParameterNames.
 	bodyVars := body variables.
 
