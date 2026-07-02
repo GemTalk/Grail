@@ -80,8 +80,13 @@ ___newFromString___: str
 	(trimmed @env0:= '+nan') ifTrue: [ ^ PlusQuietNaN ].
 	(trimmed @env0:= '-nan') ifTrue: [ ^ MinusQuietNaN ].
 
-	"Try to parse as number"
-	^ [ (trimmed @env0:asNumber) @env0:asFloat ]
+	"Parse via the vendor number reader ``Number>>fromStream:'' rather than
+	``CharacterCollection>>asNumber'': some images load a Squeak-compatibility
+	package that overrides asNumber (``^Number readFrom: self readStream'')
+	which rejects a leading unary ``+'' (float('+5') must work).  fromStream:
+	is what the vendor asNumber itself uses, is not overridden, and accepts
+	both ``+'' and ``-''.  ``+inf''/``+nan'' were already handled above."
+	^ [ (Number @env0:fromStream: (ReadStreamPortable @env0:on: trimmed)) @env0:asFloat ]
 		@env0:on: Error
 		do: [:ex | ValueError @env0:signal: ('could not convert string to float: ''' @env0:, str)]
 %

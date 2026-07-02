@@ -2935,12 +2935,27 @@ static int64 fetch_string(OopType oop, char *buf, int bufSize) {
  * ==================================================================== */
 
 static void raise_error(const char *message) {
-    GciErrSType err;
+    GciErrSType err;                 /* ctor calls init(): fields cleared */
+    OopType msgOop = GciNewString(message);
     err.number = ERR_Error;
     err.argCount = 1;
-    err.args[0] = GciNewString(message);
+    err.args[0] = msgOop;
     strncpy(err.message, message, GCI_ERR_STR_SIZE);
     err.message[GCI_ERR_STR_SIZE] = '\0';
+    /* Attach a real Error instance carrying `message` as its messageText.
+       On some images (e.g. ones whose error handling is patched by a
+       Squeak/GLASS/Seaside layer) GciRaiseException does not surface
+       err.message as the raised exception's messageText for a bare
+       ERR_Error, leaving shim-signaled errors with a nil messageText.
+       Raising an explicit instance (err.exceptionObj) keeps the message
+       intact regardless of image.  If the server perform can't build one,
+       fall back to number+message as before. */
+    if (server != OOP_NIL) {
+        OopType exc = GciPerform(server, "___makeErrorWithText:", &msgOop, 1);
+        GciErrSType tmp; GciErr(&tmp);   /* drop any error from the perform */
+        if (exc != OOP_NIL && exc != OOP_ILLEGAL)
+            err.exceptionObj = exc;
+    }
     // printf("cpython.cc: raise_error %s\n", message); // uncomment for debugging
     GciRaiseException(&err);
 }

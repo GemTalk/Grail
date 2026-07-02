@@ -770,6 +770,19 @@ PyFloat_FromDouble: aFloat
 	^ (self wrap: aFloat) memoryAddress
 %
 
+category: 'Grail-CPython API'
+method: CPythonShim
+___makeErrorWithText: aString
+	"Build (do NOT signal) an Error instance whose messageText is aString,
+	for the C shim's raise_error to attach as GciErrSType>>exceptionObj.
+	On some images GciRaiseException does not surface err.message as the
+	raised exception's messageText for a bare ERR_Error (2710) — observed on
+	an image whose error handling is patched by a Squeak/GLASS/Seaside layer,
+	where it comes back nil.  Raising an explicit Error instance (whose
+	messageText we set) keeps shim error messages intact regardless of image."
+	^ Error new messageText: aString; yourself
+%
+
 category: 'Grail-C API - Import'
 method: CPythonShim
 PyImport_ImportModule: aName

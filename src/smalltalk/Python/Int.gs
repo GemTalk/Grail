@@ -57,12 +57,17 @@ __new__: obj
 		^ obj @env0:truncated
 	].
 
-	"Try to convert from string.  trimBoth first: the kernel asNumber
-	tolerates surrounding whitespace, but a host extent may override
-	CharacterCollection>>asNumber with Squeak semantics that raise on
-	leading spaces — int('  100  ') must work either way."
+	"Try to convert from string.  Parse via the vendor number reader
+	``Number>>fromStream:'' rather than ``CharacterCollection>>asNumber'':
+	some images load a Squeak-compatibility package that OVERRIDES asNumber
+	(category ``*squeak-converting'', body ``^Number readFrom: self readStream''),
+	and that Squeak reader rejects a leading unary ``+'' (int('+5') must work)
+	and can diverge in other ways.  ``fromStream:'' is the primitive the
+	vendor asNumber itself uses and is not overridden, so it behaves the same
+	on base and Squeak/GLASS/Seaside images and accepts both ``+'' and ``-''.
+	trimBoth first so surrounding whitespace is tolerated (int('  100  '))."
 	(obj @env0:isKindOf: Unicode7) ifTrue: [
-		^ [ (obj @env0:trimBoth @env0:asNumber) @env0:truncated ]
+		^ [ (Number @env0:fromStream: (ReadStreamPortable @env0:on: obj @env0:trimBoth)) @env0:truncated ]
 			@env0:on: Error
 			do: [:ex | ValueError @env0:signal: 'invalid literal for int()']
 	].
