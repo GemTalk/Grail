@@ -81,6 +81,14 @@ lru_cache: maxsize
 	call re-invokes the wrapped function.  Adequate for Flask
 	hello-world; revisit when render perf matters."
 
+	"``@lru_cache`` (bare, no parens) passes the function directly as
+	the sole argument — CPython supports both that and
+	``@lru_cache(maxsize=N)''.  ``maxsize'' is normally an Integer or
+	None; anything else is the bare-decorator function, so wrap it
+	immediately.  django.views.debug uses the bare form."
+	((maxsize @env0:isKindOf: Integer)
+		or: [maxsize @env0:== nil or: [maxsize @env0:== None]]) ifFalse: [
+		^ LruCacheWrapper @env1:___wrap___: maxsize].
 	^ [:positional2 :keywords2 |
 		LruCacheWrapper @env1:___wrap___: (positional2 @env0:at: 1)]
 %
@@ -212,6 +220,72 @@ _partial: positional kw: kwargs
 						moreKwargs @env0:keysAndValuesDo: [:k :v | merged @env0:at: k put: v].
 						merged]].
 		fn @env1:___pyCallValue___: allArgs kw: allKw]
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+partialmethod: aFunction
+	"partialmethod(fn) with nothing bound — the descriptor behaves
+	like the function itself."
+
+	^ aFunction
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+_partialmethod: positional kw: kwargs
+	"functools.partialmethod(fn, *bound, **boundKw).  CPython returns
+	a descriptor that, accessed through an instance, prepends self
+	before the bound args.  Grail class attrs holding closures are
+	invoked unbound, so the closure takes the receiver explicitly as
+	its first call argument: ``inst.m(*more)`` arrives here as
+	``(inst, *more)`` and is forwarded as ``fn(inst, *bound, *more)''.
+	Django's ORM (_get_FIELD_display, model deferred loading) only
+	CONSTRUCTS these at class-definition time on the hello-world
+	path."
+
+	| fn boundArgs boundKw |
+	(positional @env0:isNil or: [positional @env0:isEmpty]) ifTrue: [
+		TypeError @env1:___signal___: 'partialmethod expected at least 1 argument, got 0'
+	].
+	fn := positional @env0:at: 1.
+	boundArgs := positional @env0:size @env0:> 1
+		ifTrue: [positional @env0:copyFrom: 2 to: positional @env0:size]
+		ifFalse: [#()].
+	boundKw := kwargs.
+	^ [:morePositional :moreKwargs |
+		| callArgs rest allKw |
+		callArgs := morePositional @env0:ifNil: [#()].
+		callArgs @env0:isEmpty
+			ifTrue: [rest := boundArgs]
+			ifFalse: [
+				"receiver first, then the partialmethod-bound args, then
+				the remaining call args."
+				rest := (Array @env0:with: (callArgs @env0:at: 1)) @env0:, boundArgs.
+				callArgs @env0:size @env0:> 1 ifTrue: [
+					rest := rest @env0:, (callArgs @env0:copyFrom: 2 to: callArgs @env0:size)]].
+		allKw := (boundKw @env0:isNil or: [boundKw @env0:isEmpty])
+			ifTrue: [moreKwargs]
+			ifFalse: [
+				(moreKwargs @env0:isNil or: [moreKwargs @env0:isEmpty])
+					ifTrue: [boundKw]
+					ifFalse: [
+						| merged |
+						merged := boundKw @env0:copy.
+						moreKwargs @env0:keysAndValuesDo: [:k :v | merged @env0:at: k put: v].
+						merged]].
+		fn @env1:___pyCallValue___: rest kw: allKw]
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+total_ordering: cls
+	"functools.total_ordering(cls) — upstream synthesises the missing
+	rich comparisons from __eq__ + one ordering method.  Grail's
+	comparison dispatch already falls back pairwise (__lt__/__gt__
+	swap), so pass the class through unchanged."
+
+	^ cls
 %
 
 category: 'Grail-Built-in Functions'

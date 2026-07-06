@@ -136,3 +136,29 @@ def prepare_class(name, bases=(), kwds=None):
 
 def resolve_bases(bases):
     return bases
+
+
+# type(None) — Grail's None is a real singleton whose class the type()
+# builtin reports; downstream isinstance(x, NoneType) then behaves
+# exactly like ``x is None``.
+NoneType = type(None)
+
+
+class GenericAlias:
+    """Stub — Grail evaluates ``list[int]`` via class-side
+    __getitem__ returning the origin class, so no real GenericAlias
+    instances exist; isinstance against this is always False."""
+    pass
+
+
+class UnionType:
+    """Stub — ``int | str`` unions aren't materialised in Grail."""
+    pass
+
+
+class EllipsisType:
+    pass
+
+
+class NotImplementedType:
+    pass

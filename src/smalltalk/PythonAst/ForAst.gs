@@ -211,14 +211,43 @@ emitUnpackOn: aStream target: aTarget source: sourceExpr depth: aDepth
 		^ self
 	].
 	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		| n |
+		n := aTarget elts size.
 		aTarget elts doWithIndex: [:elt :i |
-			| childExpr |
-			childExpr := '(' , sourceExpr , ' __getitem__: ' , (i - 1) printString , ')'.
-			self
-				emitUnpackOn: aStream
-				target: elt
-				source: childExpr
-				depth: aDepth
+			| childExpr starIdx |
+			(elt isKindOf: StarredAst) ifTrue: [
+				"PEP 3132 star target — ``for head, *tail in ...''.
+				The starred name takes the middle slice: everything
+				from its position up to len - (elements after it).
+				Emitted as a Python-level slice through __getitem__:
+				with a slice object, so any sequence works."
+				starIdx := i - 1.
+				childExpr := '(list @env1:__new__: (' , sourceExpr ,
+					' __getitem__: (slice @env1:__new__: ' , starIdx printString ,
+					' _: ((' , sourceExpr , ' __len__) @env0:- ' ,
+					(n - i) printString , '))))'.
+				self
+					emitUnpackOn: aStream
+					target: elt value
+					source: childExpr
+					depth: aDepth
+			] ifFalse: [
+				| after |
+				"Elements AFTER a star index from the sequence end."
+				after := (aTarget elts copyFrom: 1 to: i - 1)
+					anySatisfy: [:e | e isKindOf: StarredAst].
+				childExpr := after
+					ifTrue: ['(' , sourceExpr , ' __getitem__: ((' ,
+						sourceExpr , ' __len__) @env0:- ' ,
+						(n - i + 1) printString , '))']
+					ifFalse: ['(' , sourceExpr , ' __getitem__: ' ,
+						(i - 1) printString , ')'].
+				self
+					emitUnpackOn: aStream
+					target: elt
+					source: childExpr
+					depth: aDepth
+			]
 		].
 		^ self
 	].

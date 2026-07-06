@@ -99,6 +99,55 @@ def TypeVar(name, *constraints, bound=None, covariant=False,
     return _TypeVarInstance(name)
 
 
+class _ParamSpecInstance(_TypeVarInstance):
+    """ParamSpec value.  `P.args` / `P.kwargs` appear in annotations
+    (asgiref types every wrapper with them); they just need to be
+    subscript-tolerant placeholders."""
+
+    def __init__(self, name):
+        _TypeVarInstance.__init__(self, name)
+        self.args = _StubGeneric(name + '.args')
+        self.kwargs = _StubGeneric(name + '.kwargs')
+
+
+def ParamSpec(name, *, bound=None, covariant=False, contravariant=False,
+              default=None):
+    return _ParamSpecInstance(name)
+
+
+def TypeVarTuple(name, *, default=None):
+    return _TypeVarInstance(name)
+
+
+Concatenate = _StubGeneric('Concatenate')
+TypeAlias = _StubGeneric('TypeAlias')
+Annotated = _StubGeneric('Annotated')
+Never = _StubGeneric('Never')
+LiteralString = _StubGeneric('LiteralString')
+Unpack = _StubGeneric('Unpack')
+Required = _StubGeneric('Required')
+NotRequired = _StubGeneric('NotRequired')
+
+
+def final(obj):
+    return obj
+
+
+def NewType(name, tp):
+    def _identity(x):
+        return x
+    _identity.__name__ = name
+    return _identity
+
+
+def get_origin(tp):
+    return None
+
+
+def get_args(tp):
+    return ()
+
+
 class Generic(_StubGeneric):
     pass
 

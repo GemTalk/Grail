@@ -532,3 +532,221 @@ __all__ = [
     'defaultdict', 'OrderedDict', 'deque', 'namedtuple',
     'Counter', 'ChainMap',
 ]
+
+
+class UserList:
+    """List wrapper with .data — subclassed by django.utils.datastructures
+    and forms.utils.ErrorList."""
+
+    def __init__(self, initlist=None):
+        self.data = []
+        if initlist is not None:
+            if isinstance(initlist, UserList):
+                self.data[:] = initlist.data[:]
+            else:
+                self.data[:] = list(initlist)
+
+    def __repr__(self):
+        return repr(self.data)
+
+    def __contains__(self, item):
+        return item in self.data
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, i):
+        if isinstance(i, slice):
+            result = self.__class__()
+            result.data = self.data[i]
+            return result
+        return self.data[i]
+
+    def __setitem__(self, i, item):
+        self.data[i] = item
+
+    def __delitem__(self, i):
+        del self.data[i]
+
+    def __iter__(self):
+        return iter(self.data)
+
+    def __eq__(self, other):
+        return self.data == self.__cast(other)
+
+    def __lt__(self, other):
+        return self.data < self.__cast(other)
+
+    def __cast(self, other):
+        return other.data if isinstance(other, UserList) else other
+
+    def __add__(self, other):
+        result = self.__class__()
+        if isinstance(other, UserList):
+            result.data = self.data + other.data
+        else:
+            result.data = self.data + list(other)
+        return result
+
+    def __mul__(self, n):
+        result = self.__class__()
+        result.data = self.data * n
+        return result
+
+    def append(self, item):
+        self.data.append(item)
+
+    def insert(self, i, item):
+        self.data.insert(i, item)
+
+    def pop(self, i=-1):
+        return self.data.pop(i)
+
+    def remove(self, item):
+        self.data.remove(item)
+
+    def clear(self):
+        self.data.clear()
+
+    def copy(self):
+        result = self.__class__()
+        result.data = list(self.data)
+        return result
+
+    def count(self, item):
+        return self.data.count(item)
+
+    def index(self, item, *args):
+        return self.data.index(item, *args)
+
+    def reverse(self):
+        self.data.reverse()
+
+    def sort(self, *args, **kwds):
+        self.data.sort(*args, **kwds)
+
+    def extend(self, other):
+        if isinstance(other, UserList):
+            self.data.extend(other.data)
+        else:
+            self.data.extend(other)
+
+
+class UserDict:
+    """Dict wrapper with .data."""
+
+    def __init__(self, dict=None, **kwargs):
+        self.data = {}
+        if dict is not None:
+            self.update(dict)
+        if kwargs:
+            self.update(kwargs)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, key):
+        if key in self.data:
+            return self.data[key]
+        if hasattr(self.__class__, "__missing__"):
+            return self.__class__.__missing__(self, key)
+        raise KeyError(key)
+
+    def __setitem__(self, key, item):
+        self.data[key] = item
+
+    def __delitem__(self, key):
+        del self.data[key]
+
+    def __iter__(self):
+        return iter(self.data)
+
+    def __contains__(self, key):
+        return key in self.data
+
+    def __repr__(self):
+        return repr(self.data)
+
+    def get(self, key, default=None):
+        if key in self.data:
+            return self.data[key]
+        return default
+
+    def keys(self):
+        return self.data.keys()
+
+    def values(self):
+        return self.data.values()
+
+    def items(self):
+        return self.data.items()
+
+    def update(self, other=None, **kwargs):
+        if other is not None:
+            if hasattr(other, "keys"):
+                for k in other.keys():
+                    self.data[k] = other[k]
+            else:
+                for k, v in other:
+                    self.data[k] = v
+        for k, v in kwargs.items():
+            self.data[k] = v
+
+    def setdefault(self, key, default=None):
+        if key in self.data:
+            return self.data[key]
+        self.data[key] = default
+        return default
+
+    def pop(self, key, *args):
+        return self.data.pop(key, *args)
+
+    def popitem(self):
+        return self.data.popitem()
+
+    def clear(self):
+        self.data.clear()
+
+    def copy(self):
+        result = self.__class__()
+        result.data = dict(self.data)
+        return result
+
+
+class UserString:
+    """String wrapper with .data — rarely subclassed; minimal."""
+
+    def __init__(self, seq):
+        if isinstance(seq, str):
+            self.data = seq
+        elif isinstance(seq, UserString):
+            self.data = seq.data[:]
+        else:
+            self.data = str(seq)
+
+    def __str__(self):
+        return str(self.data)
+
+    def __repr__(self):
+        return repr(self.data)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        return self.__class__(self.data[index])
+
+    def __eq__(self, string):
+        if isinstance(string, UserString):
+            return self.data == string.data
+        return self.data == string
+
+    def __add__(self, other):
+        if isinstance(other, UserString):
+            return self.__class__(self.data + other.data)
+        return self.__class__(self.data + str(other))
+
+    def __contains__(self, char):
+        if isinstance(char, UserString):
+            char = char.data
+        return char in self.data

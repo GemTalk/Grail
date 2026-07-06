@@ -399,3 +399,69 @@ class ArgumentParser:
             index = index + 1
         if qi < total:
             self.error("unrecognized arguments: " + " ".join(queue[qi:]))
+
+
+class HelpFormatter:
+    """Help layout engine.  Grail's stub keeps construction working
+    (management commands subclass it for kwargs reordering); rendering
+    help text is not supported."""
+
+    def __init__(self, prog, indent_increment=2, max_help_position=24,
+                 width=None):
+        self._prog = prog
+
+    def add_usage(self, usage, actions, groups, prefix=None):
+        pass
+
+    def add_text(self, text):
+        pass
+
+    def add_arguments(self, actions):
+        pass
+
+    def format_help(self):
+        return ""
+
+
+class _StoreConstAction(_Action):
+    pass
+
+
+class _AppendConstAction(_Action):
+    pass
+
+
+class _CountAction(_Action):
+    pass
+
+
+class _SubParsersAction(_Action):
+    pass
+
+
+class _StoreTrueAction(_StoreConstAction):
+    pass
+
+
+class _StoreFalseAction(_StoreConstAction):
+    pass
+
+
+class BooleanOptionalAction(_Action):
+    pass
+
+
+class RawDescriptionHelpFormatter(HelpFormatter):
+    pass
+
+
+class RawTextHelpFormatter(RawDescriptionHelpFormatter):
+    pass
+
+
+class ArgumentDefaultsHelpFormatter(HelpFormatter):
+    pass
+
+
+class ArgumentTypeError(Exception):
+    pass

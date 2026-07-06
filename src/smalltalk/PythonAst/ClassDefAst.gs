@@ -154,6 +154,13 @@ printSmalltalkRuntimeOn: aStream
 			s := PrettyWriteStream on: Unicode7 new.
 			def generateMethodSourceOn: s.
 			methodSources add: def name asString -> s contents.
+			"Keyword-call companion for a simple-positional instance
+			method: a varargs ``_name:kw:'' forwarder so ``obj.m(a,
+			kw=v)'' binds by name rather than DNU-ing (django calls
+			view/handler methods with keyword arguments)."
+			def needsVarargsForwarder ifTrue: [
+				methodSources add: ('_' , def name asString)
+					-> def generateInstanceVarargsForwarderSource].
 		].
 		"@classmethod bodies use the same per-method source generator
 		(both strip the first positional — ``self`` or ``cls`` — and
@@ -452,11 +459,46 @@ printSmalltalkRuntimeOn: aStream
 	CallAst classSlotNames: slotNameSet.
 	CallAst inClassBodyValueEmit: true.
 	[
+		"Python executes a class body top-to-bottom: a name is class-
+		local only once its binding statement has run.  Build each
+		body name's first binding position, then emit every attr value
+		with classBodyBoundNames = the names bound strictly before it,
+		so NameAst falls back to module scope for later siblings
+		(``empty_values = list(validators.EMPTY_VALUES)'' before
+		``def validators'' — django's Field)."
+		| firstBinding attrAssignPos |
+		firstBinding := IdentityKeyValueDictionary new.
+		attrAssignPos := IdentityKeyValueDictionary new.
+		body body doWithIndex: [:stmt :pos |
+			(stmt isKindOf: FunctionDefAst) ifTrue: [
+				(firstBinding includesKey: stmt name asSymbol) ifFalse: [
+					firstBinding at: stmt name asSymbol put: pos]].
+			(stmt isKindOf: ClassDefAst) ifTrue: [
+				(firstBinding includesKey: stmt name asSymbol) ifFalse: [
+					firstBinding at: stmt name asSymbol put: pos]].
+			((stmt isKindOf: AssignAst) or: [stmt isKindOf: AnnAssignAst]) ifTrue: [
+				(stmt ___boundTargetNames___) do: [:nm |
+					(firstBinding includesKey: nm) ifFalse: [
+						firstBinding at: nm put: pos].
+					"Last assignment wins — that's the statement the
+					classAttrs pair came from (``args_check =
+					staticmethod(args_check)'' rebinding a sibling def
+					must see the def as already bound)."
+					attrAssignPos at: nm put: pos]].
+		].
 		classAttrs do: [:pair |
 			"pair value is nil for bare annotations (``x: int'' with no
 			assignment) — skip the init emit; the slot stays nil until
 			some later assignment fills it."
 			pair value ifNotNil: [
+				| myPos bound |
+				myPos := attrAssignPos at: pair key asSymbol
+					ifAbsent: [firstBinding at: pair key asSymbol ifAbsent: [nil]].
+				bound := IdentitySet new.
+				myPos ifNotNil: [
+					firstBinding keysAndValuesDo: [:nm :pos |
+						pos < myPos ifTrue: [bound add: nm]]].
+				CallAst classBodyBoundNames: (myPos isNil ifTrue: [nil] ifFalse: [bound]).
 				aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key; nextPutAll: ': '.
 				pair value printSmalltalkWithParenthesisOn: aStream.
 				aStream nextPutAll: '.'; lf
@@ -470,6 +512,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst selfParameterName: savedSelfParam.
 		CallAst classSlotNames: savedSlotNames.
 		CallAst inClassBodyValueEmit: false.
+		CallAst classBodyBoundNames: nil.
 	].
 	"NamedTuple-style classes get a ``_fields'' accessor/setter pair
 	on the metaclass, initialised to a tuple of declaration-order
@@ -1307,7 +1350,22 @@ selfParameterName
 	`cls` by convention)."
 	fallback := body body detect: [:stmt |
 		(stmt isKindOf: InstanceFunctionDefAst)
-			and: [stmt name asString ~= '__new__']
+			and: [stmt name asString ~= '__new__'
+			and: [stmt allParameterNames notEmpty
+			and: [stmt allParameterNames first asSymbol == #self]]]
+	] ifNone: [nil].
+	fallback ifNotNil: [^ #self].
+	"No method literally takes ``self''.  Fall back to the first
+	non-__new__ instance method's first parameter — but never to
+	``cls'': that's a decorated classmethod-alike the parser didn't
+	re-class (django's @classproperty), and adopting it would make
+	every plain ``self'' method in the class miscompile (Expression
+	in django.db.models.expressions)."
+	fallback := body body detect: [:stmt |
+		(stmt isKindOf: InstanceFunctionDefAst)
+			and: [stmt name asString ~= '__new__'
+			and: [stmt allParameterNames notEmpty
+			and: [stmt allParameterNames first asSymbol ~~ #cls]]]
 	] ifNone: [nil].
 	fallback ifNotNil: [
 		paramNames := fallback allParameterNames.

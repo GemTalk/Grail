@@ -186,6 +186,7 @@ run
 	at: #'BaseException' put: nil;
 	at: #'BaseExceptionGroup' put: nil;
 	at: #'BlockingIOError' put: nil;
+	at: #'UnsupportedOperation' put: nil;
 	at: #'BrokenPipeError' put: nil;
 	at: #'BufferError' put: nil;
 	at: #'BytesWarning' put: nil;
@@ -217,6 +218,7 @@ run
 	at: #'ModuleNotFoundError' put: nil;
 	at: #'NameError' put: nil;
 	at: #'None' put: nil;
+	at: #'NotImplemented' put: nil;
 	at: #'Ellipsis' put: nil;
 	at: #'NoneType' put: nil;
 	at: #'NotADirectoryError' put: nil;
@@ -273,6 +275,7 @@ run
 	at: #'PythonGenerator' put: nil;
 	at: #'builtins' put: nil;
 	at: #'bytearray' put: nil;
+	at: #'PyMemoryView' put: nil;
 	at: #'cmath' put: nil;
 	at: #'complex' put: nil;
 	at: #'copyreg' put: nil;
@@ -313,10 +316,15 @@ run
 	at: #'PyTime' put: nil;
 	at: #'PyTimedelta' put: nil;
 	at: #'PyTimezone' put: nil;
+	at: #'PyTzinfo' put: nil;
 	at: #'json' put: nil;
 	at: #'io' put: nil;
 	at: #'StringIO' put: nil;
 	at: #'BytesIO' put: nil;
+	at: #'PyIOBase' put: nil;
+	at: #'PyRawIOBase' put: nil;
+	at: #'PyBufferedIOBase' put: nil;
+	at: #'PyTextIOBase' put: nil;
 	at: #'FileIO' put: nil;
 	at: #'TextIOWrapper' put: nil;
 	at: #'zlib' put: nil;
@@ -351,6 +359,7 @@ run
 	at: #'string_formatter' put: nil;
 	at: #'sys' put: nil;
 	at: #'sys_flags' put: nil;
+	at: #'sys_implementation' put: nil;
 	at: #'tuple' put: nil;
 	at: #'tuple_iterator' put: nil;
 	at: #'_weakref' put: nil;
@@ -684,6 +693,7 @@ run
 	at: #'StrTestCase' put: nil;
 	at: #'ClassMethodGlobalFallbackTestCase' put: nil;
 	at: #'FlaskScaffoldingTestCase' put: nil;
+	at: #'DjangoTestCase' put: nil;
 	at: #'ReModuleTestCase' put: nil;
 	at: #'StarImportDynamicNamesTestCase' put: nil;
 	at: #'StringModuleTestCase' put: nil;
@@ -761,13 +771,32 @@ Transcript show: 'Step 2 complete: All forward references created'.
 
 set compile_env: 0
 
+! ``memoryview'' has no Grail implementation, but Django (and other
+! libraries) reference it inside isinstance type-tuples like
+! ``isinstance(v, (bytes, memoryview, str))''.  Without a real class
+! there, ``memoryview'' resolves to a BoundMethod and isinstance
+! raises ArgumentTypeError.  Define an empty marker class so those
+! guards evaluate to False (nothing is ever a memoryview in Grail).
+expectvalue /Class
+doit
+Object subclass: 'PyMemoryView'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
 run
 (System myUserProfile symbolList objectNamed: #'Python')
   "Python names that map to existing GemStone globals"
 	at: #'True'                       put: true;
+	at: #'memoryview'                 put: PyMemoryView;
 	at: #'False'                      put: false;
 	at: #'__debug__'                  put: true;
 	at: #'Ellipsis'                   put: #'...' asSymbol;
+	at: #'NotImplemented'             put: #'___NotImplemented___' asSymbol;
   "Python names that map to existing GemStone classes"
 	at: #'bool'                       put: Boolean;
 	at: #'builtin_function_or_method' put: GsNMethod;
@@ -922,6 +951,7 @@ input src/smalltalk/Python/IndexError.gs
 input src/smalltalk/Python/KeyError.gs
 input src/smalltalk/Python/UnboundLocalError.gs
 input src/smalltalk/Python/BlockingIOError.gs
+input src/smalltalk/Python/UnsupportedOperation.gs
 input src/smalltalk/Python/ChildProcessError.gs
 input src/smalltalk/Python/ConnectionError.gs
 input src/smalltalk/Python/FileExistsError.gs
@@ -1313,6 +1343,7 @@ input src/smalltalk/PythonTests/StatisticsTestCase.gs
 input src/smalltalk/PythonTests/StrTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodGlobalFallbackTestCase.gs
 input src/smalltalk/PythonTests/FlaskScaffoldingTestCase.gs
+input src/smalltalk/PythonTests/DjangoTestCase.gs
 input src/smalltalk/PythonTests/ReModuleTestCase.gs
 input src/smalltalk/PythonTests/ReSubCallableTestCase.gs
 input src/smalltalk/PythonTests/ImportlibUnloadTestCase.gs
@@ -1520,6 +1551,9 @@ importlib grailDir: (System gemEnvironmentVariable: 'GRAIL_DIR').
 "Pure-Smalltalk modules — registered unconditionally."
 importlib registerModule: 'grail' with: grail ___instance___.
 importlib registerModule: '_weakref' with: _weakref ___instance___.
+"CPython's os.path is a real importable module (an alias of posixpath);
+django.utils._os does ``from os.path import abspath, ...''."
+importlib registerModule: 'os.path' with: os_path ___instance___.
 libPath := System gemEnvironmentVariable:'SHIM_LIB_PATH'.
 (libPath notNil and: [libPath notEmpty]) ifTrue: [
 	"Only record the path (CPythonShim isConfigured then holds).  The shim

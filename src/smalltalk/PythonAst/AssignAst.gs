@@ -461,3 +461,20 @@ value
 
 	^value
 %
+
+category: 'Grail-Class Body'
+method: AssignAst
+___boundTargetNames___
+	"Symbols bound by this assignment's simple Name targets (tuple
+	targets contribute each element).  Used by ClassDefAst's source-
+	order class-body name resolution."
+
+	| names |
+	names := OrderedCollection new.
+	targets do: [:tgt |
+		(tgt isKindOf: NameAst) ifTrue: [names add: tgt id asSymbol].
+		((tgt isKindOf: TupleAst) or: [tgt isKindOf: ListAst]) ifTrue: [
+			tgt elts do: [:e |
+				(e isKindOf: NameAst) ifTrue: [names add: e id asSymbol]]]].
+	^ names
+%

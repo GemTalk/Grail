@@ -102,3 +102,132 @@ def formatdate(timeval=None, localtime=False, usegmt=False):
     else:
         dt = datetime.fromtimestamp(timeval, tz=timezone.utc)
     return format_datetime(dt, usegmt=usegmt)
+
+
+# --- Additions for Django (django.core.mail) and the vendored real
+# --- email.charset/_policybase modules. --------------------------------
+
+import re as _re
+
+# GRAIL: upstream compiles a regex containing literal surrogate code
+# points; GemStone strings cannot hold lone surrogates, so scan by
+# ordinal instead.  (Grail strings never contain surrogates anyway —
+# this always answers False/None.)
+def _has_surrogates(string):
+    for ch in string:
+        o = ord(ch)
+        if 0xD800 <= o <= 0xDFFF:
+            return True
+    return False
+
+
+def _sanitize(string):
+    original_bytes = string.encode("utf-8", "surrogateescape")
+    return original_bytes.decode("utf-8", "replace")
+
+
+def quote(str):
+    return str.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def unquote(str):
+    if len(str) > 1:
+        if str.startswith('"') and str.endswith('"'):
+            return str[1:-1].replace("\\\\", "\\").replace('\\"', '"')
+        if str.startswith("<") and str.endswith(">"):
+            return str[1:-1]
+    return str
+
+
+def formataddr(pair, charset="utf-8"):
+    """(display_name, addr) -> RFC 5322 To/From value.  ASCII-only
+    fast path; non-ASCII names go through email.header.Header the same
+    way upstream does."""
+    name, address = pair
+    if name:
+        try:
+            name.encode("ascii")
+        except UnicodeEncodeError:
+            from email.header import Header
+            encoded_name = Header(name, charset).encode()
+            return "%s <%s>" % (encoded_name, address)
+        else:
+            quotes = ""
+            if specialsre.search(name):
+                quotes = '"'
+            name = escapesre.sub(r"\\\g<0>", name)
+            return "%s%s%s <%s>" % (quotes, name, quotes, address)
+    return address
+
+
+specialsre = _re.compile(r'[][\\()<>@,:;".]')
+escapesre = _re.compile(r'[\\"]')
+
+
+def parseaddr(addr, *, strict=True):
+    """Parse a single RFC 5322 address into (realname, email_address).
+    Grail: simple pattern-based parse (no _parseaddr state machine on
+    the hot path); handles the ``Name <addr>'' and bare-addr shapes."""
+    if not isinstance(addr, str):
+        return ("", "")
+    addr = addr.strip()
+    m = _re.match(r'^(?:"?([^"<]*)"?\s*)?<([^>]*)>$', addr)
+    if m:
+        name = (m.group(1) or "").strip()
+        return (name, m.group(2).strip())
+    return ("", addr)
+
+
+def getaddresses(fieldvalues, *, strict=True):
+    """Return a list of (realname, email_address) from a list of
+    header values.  Splits on commas that are outside angle brackets
+    and quoted strings."""
+    all_addrs = []
+    for fieldvalue in fieldvalues:
+        if not isinstance(fieldvalue, str):
+            continue
+        depth = 0
+        in_quote = False
+        current = []
+        parts = []
+        for ch in fieldvalue:
+            if ch == '"':
+                in_quote = not in_quote
+                current.append(ch)
+            elif ch == "<" and not in_quote:
+                depth += 1
+                current.append(ch)
+            elif ch == ">" and not in_quote:
+                depth -= 1
+                current.append(ch)
+            elif ch == "," and depth == 0 and not in_quote:
+                parts.append("".join(current))
+                current = []
+            else:
+                current.append(ch)
+        parts.append("".join(current))
+        for part in parts:
+            part = part.strip()
+            if part:
+                all_addrs.append(parseaddr(part))
+    return all_addrs
+
+
+def make_msgid(idstring=None, domain=None):
+    """Return a unique RFC 2822 message id, e.g.
+    <175....12345@example.com>."""
+    import time
+    import random
+    timeval = int(time.time() * 100)
+    pid = 1
+    randint = random.getrandbits(64)
+    if idstring is None:
+        idstring = ""
+    else:
+        idstring = "." + idstring
+    if domain is None:
+        import socket
+        domain = getattr(socket, "getfqdn", lambda: "localhost")()
+        if not domain:
+            domain = "localhost"
+    return "<%d.%d.%d%s@%s>" % (timeval, pid, randint, idstring, domain)

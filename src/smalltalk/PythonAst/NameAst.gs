@@ -182,8 +182,13 @@ printSmalltalkOn: aStream
 	Direct call sites like `abs(5)` are special-cased in
 	`CallAst>>printSmalltalkOn:` and bypass this method entirely."
 
-	"self parameter in class method → Smalltalk self"
-	(CallAst isSelfReference: id) ifTrue: [
+	"self parameter in class method → Smalltalk self.  NOT when a
+	nested function between here and the method binds the name itself
+	(``def view(request): self = cls(**kw)'' inside View.as_view) —
+	that ``self'' is the nested def's own local and takes the
+	reserved-name transport rename below."
+	((CallAst isSelfReference: id)
+		and: [(self ___boundInNestedFunction___: id) not]) ifTrue: [
 		aStream nextPutAll: 'self'.
 		^ self
 	].
@@ -250,12 +255,45 @@ printSmalltalkOn: aStream
 			the existing module-scope / declared-local branches below."
 			(CallAst inClassBodyValueEmit
 				and: [CallAst classFunctionNames notNil
-				and: [CallAst classFunctionNames includes: id asSymbol]])
+				and: [(CallAst classFunctionNames includes: id asSymbol)
+				and: [CallAst classBodyBoundNames isNil
+					or: [CallAst classBodyBoundNames includes: id asSymbol]]]])
 				ifTrue: [
 					aStream
 						nextPutAll: '(BoundMethod receiver: nil selector: #';
 						nextPutAll: id;
 						nextPutAll: ')'.
+					^self
+				].
+			"Class-body reference to a PRIOR class attribute (``ul = ...''
+			then ``regex = '[a-z' + ul + ...'`` — django's URLValidator).
+			The class under construction is in scope as ``___cls___''
+			while attribute values emit; probe its dict first and fall
+			back to the module global of the same name (Python reads the
+			class-local if already bound, else the global)."
+			(CallAst inClassBodyValueEmit
+				and: [CallAst classAttrNames notNil
+				and: [(CallAst classAttrNames includes: id asSymbol)
+				and: [CallAst classBodyBoundNames isNil
+					or: [CallAst classBodyBoundNames includes: id asSymbol]]]])
+				ifTrue: [
+					"The attr accessor pair is compiled just before each
+					``<Class> <attr>: value'' store, so a later value
+					expression can read the earlier attr with a plain
+					getter send.  nil (never a stored value — Grail's
+					nil-as-absent rule) means ``not bound yet''; fall
+					back to the module global of the same name, matching
+					Python's class-body read semantics."
+					aStream
+						nextPutAll: '((';
+						nextPutAll: CallAst classBeingCompiled asString;
+						nextPutAll: ' ';
+						nextPutAll: id;
+						nextPutAll: ') @env0:ifNil: ['.
+					self emitModuleAttrLoad: id
+						receiverExpr: CallAst moduleClassBeingCompiled name , ' @env0:___instance___'
+						on: aStream.
+					aStream nextPutAll: '])'.
 					^self
 				].
 			(CallAst moduleFunctionNames notNil
@@ -473,24 +511,82 @@ isReservedSmalltalkIdentifier: aSymbol
 
 category: 'other'
 method: NameAst
+___boundInNestedFunction___: aSymbol
+	"True when the nearest enclosing binder of aSymbol is a NESTED
+	plain function or lambda (not the class method itself).  Walk
+	outward: the first plain FunctionDefAst/LambdaAst that declares
+	aSymbol as a parameter or writes it in its body claims the name;
+	hitting the method (Instance/Class/StaticFunctionDefAst) first
+	means the name is the receiver parameter."
+
+	| node ivars idx argsNode blockNode writesSet |
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: InstanceFunctionDefAst)
+			or: [(node isKindOf: ClassFunctionDefAst)
+			or: [node isKindOf: StaticFunctionDefAst]]) ifTrue: [^ false].
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [
+			ivars := node class allInstVarNames.
+			idx := ivars indexOf: #args.
+			argsNode := idx > 0 ifTrue: [node instVarAt: idx] ifFalse: [nil].
+			argsNode notNil ifTrue: [
+				| argsIvars found |
+				argsIvars := argsNode class allInstVarNames.
+				found := false.
+				#(#args #posonlyargs #kwonlyargs) do: [:fld |
+					| fldIdx lst |
+					fldIdx := argsIvars indexOf: fld.
+					fldIdx > 0 ifTrue: [
+						lst := argsNode instVarAt: fldIdx.
+						lst ifNotNil: [
+							(lst anySatisfy: [:a | a name asSymbol == aSymbol asSymbol])
+								ifTrue: [found := true]]]].
+				#(#vararg #kwarg) do: [:fld |
+					| fldIdx v |
+					fldIdx := argsIvars indexOf: fld.
+					fldIdx > 0 ifTrue: [
+						v := argsNode instVarAt: fldIdx.
+						(v notNil and: [v name asSymbol == aSymbol asSymbol])
+							ifTrue: [found := true]]].
+				found ifTrue: [^ true]
+			].
+			(node isKindOf: FunctionDefAst) ifTrue: [
+				idx := ivars indexOf: #body.
+				blockNode := idx > 0 ifTrue: [node instVarAt: idx] ifFalse: [nil].
+				(blockNode notNil and: [blockNode isKindOf: BlockAst]) ifTrue: [
+					writesSet := blockNode writes.
+					(writesSet notNil and: [writesSet includes: aSymbol asSymbol])
+						ifTrue: [^ true]
+				]
+			]
+		].
+		node := node parent.
+	].
+	^ false
+%
+
+category: 'other'
+method: NameAst
 ___enclosingFuncDeclaresReservedParam___: aSymbol
 	"True iff aSymbol is a Smalltalk pseudo-variable (``self'', etc.)
-	AND some enclosing FunctionDef/Lambda declares it as a PARAMETER
-	AND we are in module-method codegen context (not in-class method
-	context).  Drives the body rename: references to the original
-	Python name emit the transport identifier ``_<name>'' rather than
-	Smalltalk's pseudo-variable, matching what
-	FunctionDefAst>>generateModuleMethodSourceOn: places in the
-	selector.
+	AND some enclosing FunctionDef/Lambda binds it as a PARAMETER or
+	assigns it as a BODY LOCAL.  Drives the body rename: references to
+	the original Python name emit the transport identifier ``_<name>''
+	rather than Smalltalk's pseudo-variable, matching the temp the
+	source generators declare (module defs, closures, @staticmethod
+	bodies, and in-class methods that REBIND their self/cls parameter
+	— ``self = None'' / ``self = tuple.__new__(cls, ...)'').
 
-	Class method context is excluded because the in-class def emitter
-	strips the first Python parameter (``self'') and relies on
-	Smalltalk's implicit ``self'' for the receiver — CallAst's
-	isSelfReference: check above handles that path."
+	The live receiver reference is NOT renamed: CallAst's
+	isSelfReference: check fires before this method and emits
+	Smalltalk ``self'' — except when the enclosing method rebinds it
+	(CallAst selfParameterRebound), in which case isSelfReference:
+	answers false and the walk below finds the parameter, landing on
+	the ``_self'' temp the method generator initialised from the
+	receiver."
 
-	| node ivars idx argsNode argsIvars |
+	| node ivars idx argsNode argsIvars bodyIdx blockNode writesSet |
 	(NameAst isReservedSmalltalkIdentifier: aSymbol) ifFalse: [^ false].
-	CallAst classBeingCompiled ifNotNil: [^ false].
 	CallAst moduleClassBeingCompiled ifNil: [^ false].
 	node := parent.
 	[node notNil] whileTrue: [
@@ -521,6 +617,18 @@ ___enclosingFuncDeclaresReservedParam___: aSymbol
 							(v notNil and: [v name asSymbol == aSymbol asSymbol])
 								ifTrue: [^ true]
 						]
+					]
+				].
+				"Assigned-in-body check (FunctionDefAst only — lambdas
+				can't assign).  body writes is the parser's record of
+				assignment/for/with-as/walrus targets."
+				(node isKindOf: FunctionDefAst) ifTrue: [
+					bodyIdx := ivars indexOf: #body.
+					blockNode := bodyIdx > 0 ifTrue: [node instVarAt: bodyIdx] ifFalse: [nil].
+					(blockNode notNil and: [blockNode isKindOf: BlockAst]) ifTrue: [
+						writesSet := blockNode writes.
+						(writesSet notNil and: [writesSet includes: aSymbol asSymbol])
+							ifTrue: [^ true]
 					]
 				]
 			].
@@ -663,6 +771,12 @@ isFastPathBuiltinName
 	(self isFunctionPositionOfCall) ifTrue: [^false].
 	(self isBaseOfClassDef) ifTrue: [^false].
 	(self isVariableIsDeclared: id) ifTrue: [^false].
+	"A comprehension loop variable shadows the builtin for both the
+	store that binds it and every read in the comprehension body —
+	``(cwd / to_path(dir) for dir in dirs)'' in django.template.
+	autoreload names its target ``dir''.  Without this, the store
+	emits ``(BoundMethod ...) := ...'', which doesn't parse."
+	(self ___isEnclosingComprehensionTarget___: id) ifTrue: [^false].
 	^ self class isFastPathBuiltinName: id
 %
 

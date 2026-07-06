@@ -117,7 +117,15 @@ initialize_punctuation
 category: 'Grail-Initialization'
 method: string
 initialize_whitespace
-	self @env0:at: #whitespace put: ' \t\n\r\x0b\x0c'
+	"Python's ``string.whitespace'' = space, tab, newline, carriage
+	return, vertical tab, form feed.  A Smalltalk string literal does
+	NOT interpret ``\t''/``\n'' escapes (they'd be the literal
+	characters ``\'', ``t'', ...), so build the string from code
+	points."
+	| ws |
+	ws := Unicode7 @env0:new.
+	#(32 9 10 13 11 12) @env0:do: [:cp | ws @env0:add: (Character @env0:codePoint: cp)].
+	self @env0:at: #whitespace put: ws
 %
 
 category: 'Grail-Initialization'

@@ -184,7 +184,12 @@ setParent: aNode
 		(val isKindOf: AbstractNode) ifTrue: [
 			val setParent: self.
 		].
-		(val isKindOf: Array) ifTrue: [
+		"Array AND OrderedCollection — comprehension nodes hold their
+		generators in an OrderedCollection; skipping it left every
+		node under a genexp with a nil parent, silently disabling all
+		parent-walk checks (comprehension-target shadowing, reserved-
+		name rename, ...) inside comprehensions."
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
 			val do: [:each |
 				(each isKindOf: AbstractNode) ifTrue: [
 					each setParent: self.

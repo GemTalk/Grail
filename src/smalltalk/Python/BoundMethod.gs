@@ -156,6 +156,8 @@ ___pythonValueAttrs___
 		add: #'__name__';
 		add: #'__qualname__';
 		add: #'__module__';
+		add: #'__func__';
+		add: #'__self__';
 		yourself
 %
 
@@ -271,6 +273,47 @@ __name__
 
 	selector @env0:== nil ifTrue: [^ receiver @env0:class @env0:name @env0:asString].
 	^ selector @env0:asString
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+cache_clear
+	"``@functools.cache`` / ``@lru_cache`` on a METHOD is dropped by
+	Grail's class-body codegen (method decorators aren't applied), so
+	``self.cached_method`` is a plain BoundMethod.  Callers that invoke
+	``self.cached_method.cache_clear()'' (django.apps.registry.
+	clear_cache) must still find the selector — Grail never caches, so
+	this is a no-op.  Returns None (CPython's cache_clear return)."
+
+	^ None
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+cache_info
+	"Companion to cache_clear — a zeroed CacheInfo-shaped tuple."
+
+	^ tuple @env0:withAll: #(0 0 nil 0)
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__func__
+	"Python's bound-method ``m.__func__'' — the underlying function.
+	Grail has no separate function object, so return self (the handle
+	is both); callers (django.utils.inspect._get_callable_parameters)
+	only re-inspect it, and inspect.signature is arity-agnostic here."
+
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__self__
+	"Python's bound-method ``m.__self__'' — the receiver the method is
+	bound to."
+
+	^ receiver
 %
 
 category: 'Grail-Attribute Access'

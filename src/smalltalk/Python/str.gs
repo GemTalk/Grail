@@ -428,6 +428,12 @@ ___convert___: value with: conv
 		^ s
 	].
 	conv @env0:= $X ifTrue: [^ (self @env1:___convert___: value with: $x) @env0:asUppercase].
+	conv @env0:= $c ifTrue: [
+		"%c — an int is a code point; a 1-char string passes through."
+		(value @env0:isKindOf: Integer) ifTrue: [
+			^ Unicode7 @env0:with: (Character @env0:codePoint: value)].
+		^ value @env0:asString
+	].
 	conv @env0:= $o ifTrue: [
 		| n s |
 		n := value @env0:asInteger.
@@ -596,6 +602,52 @@ count: sub
 		start := (index @env0:+ sub @env0:size).
 	].
 	^ count
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+count: sub _: start
+	"count(sub, start) — occurrences at or after 0-based ``start''."
+
+	^ self @env1:count: sub _: start _: (self @env0:size)
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+count: sub _: start _: stop
+	"count(sub, start, stop) — occurrences within the [start, stop)
+	slice, Python 0-based half-open indices (negatives wrap)."
+
+	| n s e |
+	n := self @env0:size.
+	s := start.
+	e := stop.
+	(s @env0:== nil or: [s @env0:== None]) ifTrue: [s := 0].
+	(e @env0:== nil or: [e @env0:== None]) ifTrue: [e := n].
+	s @env0:< 0 ifTrue: [s := (s @env0:+ n) @env0:max: 0].
+	e @env0:< 0 ifTrue: [e := (e @env0:+ n) @env0:max: 0].
+	e := e @env0:min: n.
+	s @env0:>= e ifTrue: [^ 0].
+	^ (self @env0:copyFrom: s @env0:+ 1 to: e) @env1:count: sub
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+_count: positional kw: kwargs
+	"Varargs entry for ``count(sub[, start[, stop]])''."
+
+	| sub start stop |
+	positional @env0:isEmpty ifTrue: [
+		TypeError @env1:___signal___: 'count() takes at least 1 argument'
+	].
+	sub := positional @env0:at: 1.
+	positional @env0:size @env0:>= 2
+		ifTrue: [start := positional @env0:at: 2]
+		ifFalse: [^ self @env1:count: sub].
+	positional @env0:size @env0:>= 3
+		ifTrue: [stop := positional @env0:at: 3]
+		ifFalse: [^ self @env1:count: sub _: start].
+	^ self @env1:count: sub _: start _: stop
 %
 
 category: 'Grail-String Methods'
@@ -1342,6 +1394,61 @@ replace: old _: new
 
 category: 'Grail-String Methods'
 method: CharacterCollection
+replace: old _: new _: count
+	"replace(old, new, count) — replace at most ``count'' leftmost
+	occurrences (negative count means all).  django's WSGIRequest
+	path handling uses ``path_info.replace('/', '', 1)''."
+
+	| n | n := count.
+	(n @env0:== nil or: [n @env0:== None or: [n @env0:< 0]]) ifTrue: [
+		^ self @env0:copyReplaceAll: old with: new].
+	^ self @env1:_replaceFirst: old _: new _: n
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+_replaceFirst: old _: new _: count
+	"Replace the first ``count'' non-overlapping occurrences of old."
+
+	| stream oldSize src pos n done |
+	oldSize := old @env0:size.
+	oldSize @env0:= 0 ifTrue: [^ self].
+	src := self.
+	stream := WriteStream @env0:on: (Unicode7 @env0:new).
+	pos := 1.
+	n := src @env0:size.
+	done := 0.
+	[pos @env0:<= n] @env0:whileTrue: [
+		(done @env0:< count
+			and: [(pos @env0:+ oldSize @env0:- 1 @env0:<= n)
+			and: [(src @env0:copyFrom: pos to: pos @env0:+ oldSize @env0:- 1) @env0:= old]]) ifTrue: [
+			stream @env0:nextPutAll: new.
+			pos := pos @env0:+ oldSize.
+			done := done @env0:+ 1
+		] ifFalse: [
+			stream @env0:nextPut: (src @env0:at: pos).
+			pos := pos @env0:+ 1
+		]
+	].
+	^ stream @env0:contents
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+_replace: positional kw: kwargs
+	"Varargs entry for ``replace(old, new[, count])''."
+
+	| old new count |
+	old := positional @env0:at: 1.
+	new := positional @env0:at: 2.
+	positional @env0:size @env0:>= 3
+		ifTrue: [count := positional @env0:at: 3]
+		ifFalse: [^ self @env1:replace: old _: new].
+	^ self @env1:replace: old _: new _: count
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
 rfind: sub
 	"Return the highest index where substring sub is found, or -1 if not found."
 
@@ -1355,6 +1462,49 @@ rfind: sub
 	].
 	(lastIndex == 0) ifTrue: [ ^ -1 ].
 	^ (lastIndex @env0:- (1))  "Convert to 0-based indexing"
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+rfind: sub _: start
+	^ self @env1:rfind: sub _: start _: (self @env0:size)
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+rfind: sub _: start _: stop
+	"rfind(sub, start, stop) — highest 0-based index of ``sub'' within
+	the [start, stop) slice, or -1.  Negative indices wrap."
+
+	| n s e found |
+	n := self @env0:size.
+	s := start.
+	e := stop.
+	(s @env0:== nil or: [s @env0:== None]) ifTrue: [s := 0].
+	(e @env0:== nil or: [e @env0:== None]) ifTrue: [e := n].
+	s @env0:< 0 ifTrue: [s := (s @env0:+ n) @env0:max: 0].
+	e @env0:< 0 ifTrue: [e := (e @env0:+ n) @env0:max: 0].
+	e := e @env0:min: n.
+	s @env0:>= e ifTrue: [^ -1].
+	found := (self @env0:copyFrom: s @env0:+ 1 to: e) @env1:rfind: sub.
+	found @env0:< 0 ifTrue: [^ -1].
+	^ found @env0:+ s
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+_rfind: positional kw: kwargs
+	"Varargs entry for ``rfind(sub[, start[, stop]])''."
+
+	| sub |
+	positional @env0:isEmpty ifTrue: [
+		TypeError @env1:___signal___: 'rfind() takes at least 1 argument'
+	].
+	sub := positional @env0:at: 1.
+	positional @env0:size @env0:= 1 ifTrue: [^ self @env1:rfind: sub].
+	positional @env0:size @env0:= 2 ifTrue: [
+		^ self @env1:rfind: sub _: (positional @env0:at: 2)].
+	^ self @env1:rfind: sub _: (positional @env0:at: 2) _: (positional @env0:at: 3)
 %
 
 category: 'Grail-String Methods'
@@ -1418,6 +1568,66 @@ rsplit
 
 	"For now, same as split since we don't have maxsplit parameter"
 	^ self split
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+rsplit: sep
+	"rsplit(sep) with no maxsplit — identical to split(sep)."
+
+	^ self @env1:split: sep
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+rsplit: sep _: maxsplit
+	^ self @env1:_rsplit: { sep. maxsplit } kw: nil
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+_rsplit: positional kw: kwargs
+	"Python ``str.rsplit(sep=None, maxsplit=-1)`` varargs entry.
+	Splits are counted from the RIGHT: the leading pieces coalesce
+	back into the head entry so the result has at most
+	``maxsplit + 1`` elements (email._policybase's
+	``doc.rsplit('\n', 1)`` docstring surgery)."
+
+	| sep maxsplit base keep head |
+	sep := nil.
+	maxsplit := -1.
+	positional @env0:isEmpty ifFalse: [
+		sep := positional @env0:at: 1.
+		positional @env0:size @env0:>= 2 ifTrue: [
+			maxsplit := positional @env0:at: 2
+		].
+	].
+	kwargs @env0:isNil ifFalse: [
+		sep := kwargs @env0:at: 'sep' ifAbsent: [sep].
+		maxsplit := kwargs @env0:at: 'maxsplit' ifAbsent: [maxsplit].
+	].
+	(sep @env0:== nil or: [sep @env0:== None])
+		ifTrue: [base := self split]
+		ifFalse: [base := self split: sep].
+	(maxsplit @env0:< 0 or: [base @env0:size @env0:<= (maxsplit @env0:+ 1)])
+		ifTrue: [^ base].
+	keep := base @env0:copyFrom: (base @env0:size @env0:- maxsplit @env0:+ 1) to: base @env0:size.
+	head := (base @env0:copyFrom: 1 to: base @env0:size @env0:- maxsplit).
+	(sep @env0:== nil or: [sep @env0:== None])
+		ifTrue: [
+			head := (head @env0:inject: '' into: [:acc :each |
+				acc @env0:isEmpty ifTrue: [each] ifFalse: [acc @env0:, ' ' @env0:, each]])
+		] ifFalse: [
+			head := (head @env0:inject: '' into: [:acc :each |
+				acc @env0:isEmpty ifTrue: [each] ifFalse: [acc @env0:, sep @env0:, each]])
+		].
+	^ (OrderedCollection @env0:with: head) @env0:, keep
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+split: sep _: maxsplit
+	^ self @env1:_split: { sep. maxsplit } kw: nil
 %
 
 category: 'Grail-String Methods'

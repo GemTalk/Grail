@@ -156,6 +156,36 @@ hello
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___starExportNamesFor___: aModuleAst
+	"Answer the Array of names from a top-level ``__all__ = [ 'a',
+	'b' ]'' literal (list or tuple of plain string constants), or nil
+	when the module doesn't declare one statically."
+
+	aModuleAst body body do: [:stmt |
+		((stmt isKindOf: AssignAst)
+			and: [(stmt ___boundTargetNames___) includes: #'__all__']) ifTrue: [
+			| valNode elts names ivars idx ok |
+			ivars := stmt class allInstVarNames.
+			idx := ivars indexOf: #value.
+			valNode := stmt instVarAt: idx.
+			((valNode isKindOf: ListAst) or: [valNode isKindOf: TupleAst]) ifTrue: [
+				elts := valNode elts.
+				names := OrderedCollection new.
+				ok := true.
+				elts do: [:e |
+					((e isKindOf: ConstantAst)
+						and: [(e value isKindOf: CharacterCollection)])
+						ifTrue: [names add: e value asString]
+						ifFalse: [ok := false]].
+				ok ifTrue: [^ names asArray]
+			]
+		]
+	].
+	^ nil
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 expandStarImports: aModuleAst
 	"Rewrite every `from X import *` in aModuleAst's body into
 	`from X import a, b, c, ...` where the names are X's top-level
@@ -186,12 +216,15 @@ expandStarImports: aModuleAst
 			path := self @env1:___moduleNameToPath___: absName.
 			path notNil ifTrue: [
 				subAst := self astForPath: path.
-				"Names exported by a star-import: every top-level variable
-				that isn't underscore-prefixed (matches CPython's default
-				when __all__ isn't set).  __all__ handling is a future
-				refinement."
-				expandedNames := subAst body variables asArray
-					select: [:n | (n size > 0) and: [(n at: 1) ~= $_]].
+				"Names exported by a star-import: the module's top-level
+				``__all__ = [...]'' literal when present (CPython
+				semantics — django.db.models.enums exports only three
+				names while conditionally defining more), else every
+				top-level variable that isn't underscore-prefixed."
+				expandedNames := self ___starExportNamesFor___: subAst.
+				expandedNames isNil ifTrue: [
+					expandedNames := subAst body variables asArray
+						select: [:n | (n size > 0) and: [(n at: 1) ~= $_]]].
 				newAliases := expandedNames collect: [:n |
 					AliasAst buildWithFields: (IdentityKeyValueDictionary new
 						at: #name put: n asSymbol;
@@ -356,6 +389,27 @@ ___buildModuleClass: moduleAst name: moduleName
 				category: 'Grail-Methods'
 				environmentId: 1.
 			] on: CompileWarning do: [:ex | ex resume].
+			"Keyword-call companion: a simple-positional module function
+			also gets a varargs ``_name:kw:'' forwarder so a keyword
+			call site (django's URL dispatcher passes captured groups as
+			kwargs: ``view(request, name='x')'') binds by name instead of
+			DNU-ing on the missing varargs selector."
+			stmt needsVarargsForwarder ifTrue: [
+				| fwdSource |
+				fwdSource := stmt generateModuleMethodVarargsForwarderSource.
+				traceDir ifNotNil: [
+					debugStream
+						nextPutAll: 'category: ''Grail-Methods'''; lf;
+						nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
+					self ___writeMethodSource: fwdSource on: debugStream.
+					debugStream nextPutAll: '%'; lf; lf.
+				].
+				[moduleClass compileMethod: fwdSource
+					dictionaries: sl
+					category: 'Grail-Methods'
+					environmentId: 1.
+				] on: CompileWarning do: [:ex | ex resume].
+			].
 		].
 
 		"Generate the module body as Smalltalk source for the initialize method.
@@ -563,6 +617,26 @@ ___bind: aChildModule onParent: aParent as: anAttrName
 
 	| sym |
 	sym := anAttrName @env0:asSymbol.
+	"Don't let a like-named submodule clobber a NATIVE parent module's
+	own attribute accessor.  ``html'' (Smalltalk html.gs) compiles an
+	``entities'' method returning Grail's curated HTML-entities table
+	(which Grail's ``unescape'' and HtmlTestCase validate — its keys
+	are semicolon-less, e.g. ``acE'' not CPython's ``acE;'').  Django's
+	``from html.parser import HTMLParser'' pulls in the vendored
+	``html.entities'' submodule; that submodule stays reachable through
+	sys.modules (``from html.entities import html5'' still resolves by
+	name, so the parser gets the full CPython table) but must NOT
+	overwrite html's native ``entities'' attribute.
+
+	Scoped to NATIVE modules (hand-written Smalltalk module subclasses
+	in the ``Python'' dictionary): a LOADED Python module's class lives
+	in ``PythonModules'' and its top-level ``def''s are genuine
+	attributes that a like-named submodule legitimately shadows — e.g.
+	twilio's ``from twilio.base import values'' must see the ``values''
+	SUBMODULE, so binding there must proceed normally."
+	(((aParent @env0:class whichClassIncludesSelector: sym environmentId: 1) notNil)
+		and: [(PythonModules @env0:includesKey: aParent @env0:class name @env0:asSymbol) @env0:not])
+		ifTrue: [^ self].
 	aParent @env0:at: sym put: aChildModule.
 	aParent @env0:dynamicInstVarAt: sym put: aChildModule.
 %
@@ -881,7 +955,28 @@ ___selectStorageBase___: bases
 		((b @env0:isKindOf: Behavior) and: [b @env0:inheritsFrom: Collection])
 			ifTrue: [^ b]
 	].
-	^ bases @env0:first
+	"No built-in storage base.  Prefer the base with the DEEPEST
+	superclass chain: the ``class DateField(DateTimeCheckMixin, Field)''
+	idiom (and Django's exception / descriptor hierarchies) puts a
+	shallow mixin first, but ``super().__init__'' from the subclass
+	must reach the substantial base — so that base has to be the
+	Smalltalk superclass, or the primary chain dead-ends before it.
+	Ties keep left-to-right preference.  Method-precedence is then
+	restored to C3 by ___mergeSecondaryBases___, which lets a leftmost
+	mixin OVERRIDE this deeper base (see there)."
+	^ [ | best bestDepth |
+	best := bases @env0:first.
+	bestDepth := -1.
+	bases do: [:b |
+		| d w |
+		(b @env0:isKindOf: Behavior) ifTrue: [
+			d := 0.
+			w := b.
+			[w @env0:~~ nil] @env0:whileTrue: [d := d @env0:+ 1. w := w @env0:superclass].
+			d @env0:> bestDepth ifTrue: [bestDepth := d. best := b]
+		]
+	].
+	best ] @env0:value
 %
 
 category: 'Grail-Module Loading'
@@ -914,19 +1009,56 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 	resolves against ``aClass``'s primary superclass (cooperative
 	mixins that chain via ``super`` may misbehave)."
 
-	secondaryBases do: [:base |
-		| walker |
+	"C3 method precedence for the deepest-chain storage case.  When the
+	storage base was chosen by DEPTH (not built-in storage), a leftmost
+	mixin — declared before it — must OVERRIDE the methods the deep
+	primary chain provides, not merely fill gaps: Python's C3 MRO puts
+	that mixin first.  The motivating regression:
+	``ThreadedWSGIServer(ThreadingMixIn, BaseWSGIServer)'' resolved
+	``process_request'' to BaseServer's inline version instead of
+	ThreadingMixIn's spawn-a-worker version, silently running requests
+	on the main thread.
+
+	This override is DELIBERATELY SCOPED OUT of the built-in-storage
+	case (``storageBase inheritsFrom: Collection'' — e.g.
+	``ImmutableMultiDict(ImmutableMultiDictMixin, MultiDict)'').  Those
+	classes collapse onto Grail's primitive dict/list/set storage, and
+	overriding the storage base's own methods (``__setitem__'', the
+	construction-time populators, ``get'') breaks reads and construction;
+	gap-fill (the immutable mixin's mutators are skipped, leaving the
+	structure effectively mutable) is the tolerated pre-existing
+	behaviour there.  A method defined directly on aClass always wins;
+	an earlier secondary base still beats a later one (copies land on
+	aClass's own dict)."
+	| storageBase storageIdx overrideEligible |
+	storageBase := self ___selectStorageBase___: secondaryBases.
+	storageIdx := secondaryBases @env0:indexOf: storageBase.
+	overrideEligible := (storageBase @env0:isKindOf: Behavior)
+		and: [(storageBase @env0:inheritsFrom: Collection) @env0:not].
+	secondaryBases doWithIndex: [:base :baseIdx |
+		| walker overrideMode |
+		overrideMode := overrideEligible
+			and: [storageIdx > 0 and: [baseIdx < storageIdx]].
 		walker := base.
 		[(walker ~~ nil)
 			and: [(walker ~~ PythonInstance)
 			and: [(walker ~~ Object)
 			and: [(walker class whichClassIncludesSelector: #'dynInstVars' environmentId: 1) ~~ nil]]]]
 			whileTrue: [
-			| md |
+			| md mdc kernelSlots ownMd |
+			ownMd := aClass methodDictForEnv: 1.
 			md := walker methodDictForEnv: 1.
 			md ~~ nil ifTrue: [
 				md keys do: [:sel |
-					(self ___primaryChainProvides___: sel forClass: aClass) ifFalse: [
+					| shouldCopy |
+					"Override mode guards only against aClass's OWN methods
+					(class-body definitions + copies from an earlier
+					leftmost base); gap-fill guards against the whole
+					primary chain."
+					shouldCopy := overrideMode
+						ifTrue: [ownMd isNil or: [(ownMd includesKey: sel) not]]
+						ifFalse: [(self ___primaryChainProvides___: sel forClass: aClass) not].
+					shouldCopy ifTrue: [
 						| src |
 						src := [walker sourceCodeAt: sel environmentId: 1]
 							on: Error do: [:e | nil].
@@ -935,6 +1067,62 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 								env: 1
 								withArguments: { src. 'Grail-MI-Inherited' }]
 							on: Error do: [:e | nil]
+						]
+					]
+				]
+			].
+			"Class-side merge: a secondary base's class attributes live in
+			class-side accessor pairs plus per-metaclass instVar VALUES
+			(classInstVars are per-class storage).  aClass's metaclass
+			has no classInstVar slots for the base's attrs, so accessor
+			sources can't be recompiled here — copy the VALUES into
+			aClass's per-class dynInstVars holder (where
+			___pyAttrStore___ also lands and ___pyAttrLoad___ probes),
+			so ``IntegerFieldExact(IntegerFieldOverflow, Exact)'' sees
+			Exact's ``lookup_name = 'exact'''.  Real class-side METHODS
+			(@classmethod / @staticmethod, keyword selectors) are copied
+			as source like the instance pass."
+			kernelSlots := Object class allInstVarNames asIdentitySet.
+			mdc := walker class methodDictForEnv: 1.
+			mdc ~~ nil ifTrue: [
+				mdc keys do: [:sel |
+					| cat |
+					cat := [walker class categoryOfSelector: sel environmentId: 1]
+						on: Error do: [:e | nil].
+					((aClass class whichClassIncludesSelector: sel environmentId: 1) isNil
+						and: [(kernelSlots includes: sel) not
+						and: [cat ~~ #'Grail-Class Attrs']]) ifTrue: [
+						| src |
+						src := [walker class sourceCodeAt: sel environmentId: 1]
+							on: Error do: [:e | nil].
+						src ~~ nil ifTrue: [
+							[aClass class perform: #'___compileMethod:category:'
+								env: 1
+								withArguments: { src. 'Grail-MI-Inherited' }]
+							on: Error do: [:e | nil]
+						]
+					].
+					"Value pass for class attributes (unary getter in the
+					Grail-Class Attrs category): copy into aClass's
+					dynInstVars holder when nothing shadows it."
+					(cat == #'Grail-Class Attrs'
+						and: [(sel asString includes: $:) not
+						and: [(kernelSlots includes: sel) not
+						and: [sel ~~ #'__module__'
+						and: [sel ~~ #'dynInstVars'
+						and: [(aClass class whichClassIncludesSelector: sel environmentId: 1) isNil]]]]]) ifTrue: [
+						| v holder |
+						v := [walker perform: sel env: 1] on: Error do: [:e | nil].
+						v isNil ifFalse: [
+							holder := [aClass perform: #dynInstVars env: 1] on: Error do: [:e | nil].
+							holder isNil ifTrue: [
+								holder := Object new.
+								[aClass perform: #dynInstVars: env: 1 withArguments: { holder }]
+									on: Error do: [:e | nil]
+							].
+							(holder dynamicInstVarAt: sel) isNil ifTrue: [
+								holder dynamicInstVarAt: sel put: v
+							]
 						]
 					]
 				]
@@ -1257,6 +1445,7 @@ ___import__: positional kw: kwargs
 			``from PKG import *'' or plain ``import X''."
 			alreadyBound := (fromName @env0:= '*')
 				or: [(fromName @env0:= absoluteName)
+				or: [(fromName @env0:= (nameParts @env0:last))
 				or: [(result @env0:isKindOf: module)
 				ifTrue: [
 					"Check dynamic instVars first (fast path), then env-1
@@ -1295,7 +1484,7 @@ ___import__: positional kw: kwargs
 								ifAbsent: [nil]) notNil]
 					]
 				]
-				ifFalse: [false]]].
+				ifFalse: [false]]]].
 			alreadyBound ifFalse: [
 				subName := (absoluteName @env0:, '.') @env0:, fromName @env0:asString.
 				(self @env0:class lookupModule: subName) ifNil: [

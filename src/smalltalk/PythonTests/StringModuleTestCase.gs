@@ -300,8 +300,13 @@ testWhitespace
 	s := string @env1:instance.
 	result := s @env1:whitespace.
 
-	"Check that it contains common whitespace characters"
+	"Check that it contains the ACTUAL whitespace characters — space,
+	tab (code 9), newline (code 10) — not the two-character literals
+	``\t'' / ``\n''.  A Smalltalk string literal does not interpret
+	backslash escapes, so asserting containment of ``\t'' would lock
+	in a bug in the constant."
 	self assert: (result @env1:__contains__: ' ').
-	self assert: (result @env1:__contains__: '\t').
-	self assert: (result @env1:__contains__: '\n')
+	self assert: (result @env1:__contains__: (Unicode7 @env0:with: (Character @env0:codePoint: 9))).
+	self assert: (result @env1:__contains__: (Unicode7 @env0:with: (Character @env0:codePoint: 10))).
+	self assert: (result @env0:size) equals: 6
 %

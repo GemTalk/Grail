@@ -340,6 +340,36 @@ ___pyAnd___: alternativeBlock
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___descriptorGet___: aValue
+	"Python descriptor protocol on attribute read.  When a class
+	attribute resolves to an object whose class defines ``__get__''
+	(env-1 ``__get__:_:''), Python calls
+	``descriptor.__get__(instance, owner)'' and returns that instead
+	of the descriptor itself.  Grail has no built-in descriptor
+	machinery, so honour it here for the class-attribute return paths.
+
+	Load-bearing for django.urls.resolvers (``regex =
+	LocaleRegexDescriptor()'' — ``self.regex'' must compile the
+	pattern), and for django.utils.functional.classproperty and
+	db.models.query_utils.class_or_instance_method.
+
+	Only user descriptor CLASSES define ``__get__''; Grail's own
+	BoundMethod / functions do not, so a plain method value passes
+	through unchanged."
+
+	(aValue @env0:== nil or: [aValue @env0:== None]) ifTrue: [^ aValue].
+	"``__get__(self, instance, cls=None)'' — the ``cls'' default makes
+	it compile to the varargs selector ``___get__:kw:''; a defaultless
+	one would be the fixed ``__get__:_:''.  Try both."
+	((aValue @env0:class @env0:whichClassIncludesSelector: #'___get__:kw:' environmentId: 1) notNil)
+		ifTrue: [^ aValue @env1:___get__: { self. self @env0:class } kw: nil].
+	((aValue @env0:class @env0:whichClassIncludesSelector: #'__get__:_:' environmentId: 1) notNil)
+		ifTrue: [^ aValue @env1:__get__: self _: self @env0:class].
+	^ aValue
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___dynamicClassAttr___: aSym
 	"Walk self's class chain looking for aSym in the per-class
 	``dynInstVars'' store.  Returns the raw value if found, nil
@@ -600,7 +630,10 @@ ___pyAttrLoad___: aSym
 		].
 		(((self @env0:class @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil)
 			or: [(self @env0:class @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
-			or: [(self @env0:class @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil]]) ifTrue: [
+			or: [(self @env0:class @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
+			or: [(self @env0:class @env0:whichClassIncludesSelector: sym4 environmentId: 1) notNil
+			or: [(self @env0:class @env0:whichClassIncludesSelector: sym5 environmentId: 1) notNil
+			or: [(self @env0:class @env0:whichClassIncludesSelector: sym6 environmentId: 1) notNil]]]]]) ifTrue: [
 			^ BoundMethod @env1:receiver: self selector: aSym
 		].
 		^ self @env0:at: aSym ifAbsent: [
@@ -661,6 +694,24 @@ ___pyAttrLoad___: aSym
 		owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
 		(owner notNil and: [(owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs'])
 			ifTrue: [^ self @env0:perform: aSym env: 1].
+		"Per-class dynamic attr store — the home of setattr(cls, ...)
+		fallbacks AND of class-attr values merged from SECONDARY bases
+		(multiple inheritance; see importlib
+		___mergeSecondaryBases___).  Walk the primary chain so
+		subclasses see values stored on an ancestor."
+		[ | walker holder v |
+		walker := self.
+		[walker @env0:~~ nil and: [walker @env0:~~ Object]] @env0:whileTrue: [
+			((walker @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) @env0:~~ nil) ifTrue: [
+				holder := walker @env0:perform: #dynInstVars env: 1.
+				holder @env0:== nil ifFalse: [
+					v := holder @env0:dynamicInstVarAt: aSym.
+					v @env0:== nil ifFalse: [^ v]
+				]
+			].
+			walker := walker @env0:superclass
+		].
+		nil ] value.
 		"Instance method accessed via the class object — an *unbound* method
 		(a plain function in Python 3).  ``ParentClass.__init__(self, **opts)''
 		(explicit super-init, e.g. flask's ``Environment'' subclass calling
@@ -718,9 +769,9 @@ ___pyAttrLoad___: aSym
 				metaclass := self @env0:class @env0:class.
 				((metaclass @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
 					and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil])
-					ifTrue: [^ self @env0:class @env0:perform: aSym env: 1].
+					ifTrue: [^ self @env1:___descriptorGet___: (self @env0:class @env0:perform: aSym env: 1)].
 			].
-			^ instVal
+			^ self @env1:___descriptorGet___: instVal
 	].
 	"Instance falling through to a class-side attribute.  When the
 	receiver is an instance of a Python user class and the attribute
@@ -744,7 +795,7 @@ ___pyAttrLoad___: aSym
 		metaclass := self @env0:class @env0:class.
 		((metaclass @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
 			and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil]) ifTrue: [
-			^ self @env0:class @env0:perform: aSym env: 1
+			^ self @env1:___descriptorGet___: (self @env0:class @env0:perform: aSym env: 1)
 		].
 		"@classmethod / @staticmethod live on the metaclass with
 		``name:`` or ``_name:kw:`` selectors but NO paired unary
@@ -884,6 +935,31 @@ ___pyAttrLoad___: aSym
 		and: [(self @env0:class @env0:whichClassIncludesSelector: #'__getattr__:' environmentId: 1)
 			@env0:~~ object])
 		ifTrue: [^ self @env1:__getattr__: s].
+	"A ``__getattr__'' bound as a class ATTRIBUTE (a function value,
+	not a ``def'') — django's LazyObject does ``__getattr__ =
+	new_method_proxy(getattr)''.  Grail stores it in the per-class
+	dynInstVars holder rather than as an env-1 method, so probe the
+	class chain and invoke it with (self, name); CPython passes the
+	instance as the descriptor's first arg."
+	(self @env0:isKindOf: Behavior) ifFalse: [
+		| getattrFn metaCls |
+		"``__getattr__'' bound as a class attribute lands in EITHER the
+		per-class dynInstVars holder (setattr / MI merge) OR a
+		Grail-Class Attrs accessor pair on the metaclass (a plain
+		``__getattr__ = fn'' class-body assignment — django's
+		LazyObject).  Probe both."
+		getattrFn := self @env1:___dynamicClassAttr___: #'__getattr__'.
+		getattrFn @env0:== nil ifTrue: [
+			metaCls := self @env0:class @env0:class.
+			(metaCls @env0:whichClassIncludesSelector: #'__getattr__' environmentId: 1) notNil ifTrue: [
+				getattrFn := [self @env0:class @env0:perform: #'__getattr__' env: 1]
+					@env0:on: Error do: [:e | nil]
+			]
+		].
+		(getattrFn @env0:== nil or: [getattrFn @env0:== None]) ifFalse: [
+			^ getattrFn @env1:value: { self. s } value: nil
+		]
+	].
 	^ AttributeError @env1:___signal___:
 		(self @env0:class @env0:name @env0:asString @env0:,
 			' object has no attribute ''' @env0:, s @env0:, '''')

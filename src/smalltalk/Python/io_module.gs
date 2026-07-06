@@ -4,6 +4,82 @@ module ifNil: [self error: 'module is not defined. Check file ordering.'].
 %
 
 ! ===============================================================================
+! io ABCs — IOBase / RawIOBase / BufferedIOBase / TextIOBase
+!
+! CPython exposes these as abstract bases for isinstance dispatch and
+! user subclassing (django's OutputWrapper subclasses TextIOBase).
+! Grail's concrete streams (StringIO/BytesIO/FileIO) predate them and
+! do NOT inherit from them; these exist as subclassable markers with
+! no behaviour of their own.
+! ===============================================================================
+
+expectvalue /Class
+doit
+Object subclass: 'PyIOBase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+PyIOBase subclass: 'PyRawIOBase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+PyIOBase subclass: 'PyBufferedIOBase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+PyIOBase subclass: 'PyTextIOBase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+PyIOBase category: 'Grail-Modules'.
+PyRawIOBase category: 'Grail-Modules'.
+PyBufferedIOBase category: 'Grail-Modules'.
+PyTextIOBase category: 'Grail-Modules'
+%
+
+set compile_env: 1
+
+category: 'Grail-ABC'
+classmethod: PyIOBase
+register: aClass
+	"ABC virtual-subclass registration (``TextIOBase.register(X)'' in
+	django.core.management.base).  Grail's isinstance doesn't consult
+	virtual registrations; accept and return the class per CPython."
+
+	^ aClass
+%
+
+set compile_env: 0
+
+! ===============================================================================
 ! StringIO - text-mode in-memory file
 ! ===============================================================================
 
@@ -1214,6 +1290,12 @@ initialize
 	self @env0:at: #BytesIO put: BytesIO.
 	self @env0:at: #FileIO put: FileIO.
 	self @env0:at: #TextIOWrapper put: TextIOWrapper.
+	self @env0:at: #IOBase put: PyIOBase.
+	self @env0:at: #RawIOBase put: PyRawIOBase.
+	self @env0:at: #BufferedIOBase put: PyBufferedIOBase.
+	self @env0:at: #TextIOBase put: PyTextIOBase.
+	self @env0:at: #UnsupportedOperation put: UnsupportedOperation.
+	self @env0:at: #DEFAULT_BUFFER_SIZE put: 8192.
 	self @env0:at: #SEEK_SET put: 0.
 	self @env0:at: #SEEK_CUR put: 1.
 	self @env0:at: #SEEK_END put: 2

@@ -5,12 +5,31 @@
 # but expand on demand when call sites need more.
 
 
-def chain(*iterables):
-    """Make an iterator that returns elements from the first iterable
-    until exhausted, then proceeds to the next."""
+def _chain_gen(iterables):
     for it in iterables:
         for x in it:
             yield x
+
+
+class chain:
+    """Iterator chaining.  A class (as in CPython) so the
+    ``chain.from_iterable`` classmethod exists — django's Media and
+    query machinery use it."""
+
+    def __init__(self, *iterables):
+        self._gen = _chain_gen(iterables)
+
+    def __iter__(self):
+        return self._gen
+
+    def __next__(self):
+        return next(self._gen)
+
+    @classmethod
+    def from_iterable(cls, iterables):
+        obj = cls()
+        obj._gen = _chain_gen(iterables)
+        return obj
 
 
 def islice(iterable, *args):

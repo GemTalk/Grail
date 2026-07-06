@@ -76,8 +76,24 @@ set compile_env: 1
 category: 'Grail-Initialization'
 method: os
 initialize
+	self @env0:at: #name put: 'posix'.
 	self @env0:at: #sep put: '/'.
 	self @env0:at: #pathsep put: ':'.
+	self @env0:at: #curdir put: '.'.
+	self @env0:at: #pardir put: '..'.
+	self @env0:at: #extsep put: '.'.
+	self @env0:at: #altsep put: None.
+	self @env0:at: #devnull put: '/dev/null'.
+	"open(2) flag constants (POSIX values, macOS/Linux common set)."
+	self @env0:at: #O_RDONLY put: 0.
+	self @env0:at: #O_WRONLY put: 1.
+	self @env0:at: #O_RDWR put: 2.
+	self @env0:at: #O_APPEND put: 8.
+	self @env0:at: #O_CREAT put: 512.
+	self @env0:at: #O_TRUNC put: 1024.
+	self @env0:at: #O_EXCL put: 2048.
+	self @env0:at: #O_NOFOLLOW put: 256.
+	self @env0:at: #O_CLOEXEC put: 16777216.
 	self @env0:at: #linesep put: ((Character @env0:lf) @env0:asString).
 	self @env0:at: #path put: (os_path instance).
 	self @env0:at: #PathLike put: os_PathLike.

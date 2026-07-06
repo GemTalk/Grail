@@ -86,6 +86,19 @@ ___call___: positional kw: kwargs
 	^ wrapped @env1:value: positional value: kwargs
 %
 
+category: 'Grail-Calling'
+method: LruCacheWrapper
+___pyCallValue___: positional kw: kwargs
+	"Indirect call protocol — ``f = lru_cached_fn; f(x)`` and any
+	call site that reaches the object through a variable dispatches
+	here (object>>___pyCallValue___ otherwise raises ``not
+	callable'').  django.utils.inspect._get_func_parameters is
+	@lru_cache-decorated and invoked indirectly through
+	_get_callable_parameters."
+
+	^ wrapped @env1:value: positional value: kwargs
+%
+
 category: 'Grail-Attributes'
 method: LruCacheWrapper
 cache_clear

@@ -80,6 +80,60 @@ ifs
 
 ! ------------------- Code generation shared by ListComp / DictComp / SetComp / GeneratorExp
 
+category: 'Grail-code generation'
+classmethod: ComprehensionAst
+___collectTargetNames___: aTarget into: seenSet on: aStream
+	"Emit each leaf NameAst id of a (possibly nested) tuple target as
+	a block temp, once."
+
+	(aTarget isKindOf: NameAst) ifTrue: [
+		(seenSet includes: aTarget id asSymbol) ifFalse: [
+			seenSet add: aTarget id asSymbol.
+			aStream nextPutAll: ' '; nextPutAll: aTarget id].
+		^ self].
+	(aTarget isKindOf: StarredAst) ifTrue: [
+		^ self ___collectTargetNames___: aTarget value into: seenSet on: aStream].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		aTarget elts do: [:e |
+			self ___collectTargetNames___: e into: seenSet on: aStream]].
+%
+
+category: 'Grail-code generation'
+classmethod: ComprehensionAst
+___emitUnpack___: aTarget from: sourceExpr on: aStream
+	"Bind aTarget from the Smalltalk expression sourceExpr — plain
+	name, nested tuple (recursing with a wrapped __getitem__: source),
+	or PEP 3132 star slice."
+
+	| n |
+	(aTarget isKindOf: NameAst) ifTrue: [
+		aStream nextPutAll: aTarget id; nextPutAll: ' := '; nextPutAll: sourceExpr; nextPut: $.; lf.
+		^ self].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifFalse: [^ self].
+	n := aTarget elts size.
+	aTarget elts doWithIndex: [:elt :i |
+		| childExpr starIdx after |
+		(elt isKindOf: StarredAst) ifTrue: [
+			starIdx := i - 1.
+			childExpr := '(list @env1:__new__: ((' , sourceExpr ,
+				') __getitem__: (slice @env1:__new__: ' , starIdx printString ,
+				' _: (((' , sourceExpr , ') __len__) @env0:- ' ,
+				(n - i) printString , '))))'.
+			self ___emitUnpack___: elt value from: childExpr on: aStream
+		] ifFalse: [
+			after := (aTarget elts copyFrom: 1 to: i - 1)
+				anySatisfy: [:e | e isKindOf: StarredAst].
+			childExpr := after
+				ifTrue: ['((' , sourceExpr , ') __getitem__: (((' ,
+					sourceExpr , ') __len__) @env0:- ' ,
+					(n - i + 1) printString , '))']
+				ifFalse: ['((' , sourceExpr , ') __getitem__: ' ,
+					(i - 1) printString , ')'].
+			self ___emitUnpack___: elt from: childExpr on: aStream
+		]
+	].
+%
+
 category: 'code generation'
 classmethod: ComprehensionAst
 emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
@@ -104,9 +158,14 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 	aStream nextPutAll: '[| ', iterTemp.
 	isTupleTarget ifTrue: [aStream nextPutAll: ' ', itemTemp].
 	isTupleTarget ifTrue: [
-		gen target elts do: [:each |
-			aStream nextPutAll: ' '; nextPutAll: each id
-		]
+		| seen |
+		"Recursive name collection: nested tuple targets (``for (a, b),
+		c in ...'') and star targets contribute their leaf names.
+		Dedupe: multiple ``_'' wildcards all parse to ___unused___;
+		declaring the temp twice is a CompileError (assigning twice is
+		fine)."
+		seen := IdentitySet new.
+		self ___collectTargetNames___: gen target into: seen on: aStream
 	] ifFalse: [
 		aStream nextPutAll: ' '; nextPutAll: gen target id
 	].
@@ -123,10 +182,7 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 	"Bind target (tuple unpack or simple)"
 	isTupleTarget ifTrue: [
 		aStream nextPutAll: itemTemp; nextPutAll: ' := '; nextPutAll: iterTemp; nextPutAll: ' __next__.'; lf.
-		gen target elts doWithIndex: [:each :i |
-			aStream nextPutAll: each id; nextPutAll: ' := '; nextPutAll: itemTemp.
-			aStream nextPutAll: ' __getitem__: '; print: i - 1; nextPut: $.; lf
-		]
+		self ___emitUnpack___: gen target from: itemTemp on: aStream
 	] ifFalse: [
 		gen target printSmalltalkOn: aStream.
 		aStream nextPutAll: ' := '; nextPutAll: iterTemp; nextPutAll: ' __next__.'; lf

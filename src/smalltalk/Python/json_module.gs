@@ -63,6 +63,13 @@ set compile_env: 1
 category: 'Grail-Initialization'
 method: json
 initialize
+	"JSONEncoder — subclassable hook class (django's DjangoJSONEncoder
+	extends it and overrides ``default'').  Grail's _dumps: doesn't
+	route through encoder instances yet; the class exists so the
+	subclass statement and isinstance checks work.  JSONDecodeError
+	aliases ValueError (its CPython superclass)."
+	self @env0:at: #JSONEncoder put: (PythonInstance @env1:___subclass___: #JSONEncoder instVarNames: #() classInstVarNames: #()).
+	self @env0:at: #JSONDecodeError put: ValueError
 %
 
 ! ===============================================================================

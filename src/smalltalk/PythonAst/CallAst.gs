@@ -14,7 +14,9 @@ ExpressionAst subclass: 'CallAst'
                     'classBeingCompiled'
                     'classFunctionNames' 'classVarargsFunctionNames'
                     'classAttrNames' 'classSlotNames' 'selfParameterName'
+                    'selfParameterRebound'
                     'returnEmitMode' 'inClassBodyValueEmit'
+                    'classBodyBoundNames'
                     'functionBeingCompiled')
   poolDictionaries: #()
   inDictionary: PythonAst
@@ -1176,6 +1178,25 @@ classFunctionNames: aSetOrNil
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classBodyBoundNames
+	"While ClassDefAst emits class-attribute value expressions, the
+	set of class-body names bound BEFORE the attr being emitted (in
+	source order).  Python executes a class body sequentially, so
+	``empty_values = list(validators.EMPTY_VALUES)'' must read the
+	``validators'' MODULE when the class's ``def validators'' appears
+	later (django's db.models Field).  nil outside the value emit."
+
+	^ classBodyBoundNames
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classBodyBoundNames: aSetOrNil
+	classBodyBoundNames := aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 inClassBodyValueEmit
 	"Boolean — true while ClassDefAst is emitting the class
 	attribute value expressions, false otherwise (including while
@@ -1280,8 +1301,31 @@ isInClassMethodContext
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+selfParameterRebound
+	^ selfParameterRebound == true
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+selfParameterRebound: aBooleanOrNil
+	"True while emitting the body of a method that ASSIGNS its
+	self/cls parameter (CPython treats the receiver as an ordinary
+	rebindable local — ``self = None'' to break reference cycles,
+	``self = tuple.__new__(cls, ...)'' in __new__).  The method-source
+	generator then carries the receiver in a ``_self'' block temp and
+	isSelfReference: answers false, so every receiver fast path
+	(instVar read/store, self-send) degrades to the generic object
+	paths, which is exactly the semantics of a rebound local."
+
+	selfParameterRebound := aBooleanOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 isSelfReference: aSymbol
-	^ classBeingCompiled notNil and: [aSymbol == selfParameterName]
+	^ classBeingCompiled notNil
+		and: [aSymbol == selfParameterName
+		and: [selfParameterRebound ~~ true]]
 %
 
 category: 'Grail-Class Self-Send'

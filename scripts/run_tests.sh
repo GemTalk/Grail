@@ -40,10 +40,15 @@ fi
 # Flask once each) to overflow the default 20%-of-cache code space.  Topaz
 # `-C` overrides take precedence over gem.conf.
 #
-# CACHE_SIZE bumped to 100MB (default 50MB) so the suite finishes without
-# spurious markSweep-exhaustion errors in late ReModule / VarargsAndImports
-# tests once the cumulative ~1988-test working set crosses ~37MB old gen.
-TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=200000;"
+# CACHE_SIZE governs the whole temp-object cache (new + old gen + code).
+# It has been raised in step with the growing in-suite import surface to
+# avoid spurious markSweep-exhaustion ("VM temporary object memory is
+# full") in the late suite once the cumulative working set crosses the
+# old-gen ceiling.  Vendoring Django (DjangoTestCase imports the whole
+# framework once — asgiref + the ORM + template engine all load on the
+# django.setup() path) pushed old gen past ~150MB, so CACHE_SIZE is now
+# ~490MB (was ~195MB).  Comfortably within a 16GB host.
+TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=500000;"
 
 EXIT=0
 

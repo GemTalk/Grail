@@ -175,3 +175,12 @@ isModuleScopeAnnTarget: aNameAst
 	(aNameAst ___declaredInEnclosingFunction___: aNameAst id) ifTrue: [^ false].
 	^ true
 %
+
+category: 'Grail-Class Body'
+method: AnnAssignAst
+___boundTargetNames___
+	"Symbol bound by this annotated assignment (Name target only)."
+
+	(target isKindOf: NameAst) ifTrue: [^ OrderedCollection with: target id asSymbol].
+	^ OrderedCollection new
+%

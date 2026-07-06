@@ -129,3 +129,19 @@ def standard_b64encode(data):
 
 def standard_b64decode(data):
     return b64decode(data)
+
+
+def encodebytes(s):
+    """Encode with the legacy MIME line discipline: 76-char lines,
+    trailing newline (what email.base64mime feeds body_encode)."""
+    encoded = b64encode(s)
+    pieces = []
+    i = 0
+    while i < len(encoded):
+        pieces.append(encoded[i:i + 76])
+        i += 76
+    return b"\n".join(pieces) + b"\n" if pieces else b"\n"
+
+
+def decodebytes(s):
+    return b64decode(s)

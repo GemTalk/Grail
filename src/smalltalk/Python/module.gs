@@ -178,6 +178,19 @@ __doc__: aValue
 	self @env0:at: #__doc__ put: aValue
 %
 
+category: 'Grail-Collection Protocol'
+method: module
+__bool__
+	"A module object is ALWAYS truthy in Python, regardless of how
+	many globals it holds.  Without this, ``bool(module)'' falls
+	through to the dict-length path (module is a SymbolDictionary) and
+	an empty-dict module reads as falsy — django.utils.module_loading's
+	``cached_import'' does ``if not (module := sys.modules.get(...))
+	and ...'', so a freshly-imported module wrongly looked unloaded."
+
+	^ true
+%
+
 category: 'Grail-Accessors'
 method: module
 __loader__

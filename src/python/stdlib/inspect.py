@@ -24,7 +24,29 @@ def isclass(obj):
 
 
 def iscoroutinefunction(obj):
-    return False
+    # Grail compiles ``async def`` to a plain function, so there is no
+    # intrinsic coroutine flag.  The only way an object tests true is
+    # the explicit markcoroutinefunction() marker (asgiref's SyncToAsync
+    # marks itself; Django's async adaptation machinery keys off this).
+    try:
+        return getattr(obj, '_is_coroutine_marker', False) is True
+    except Exception:
+        return False
+
+
+def markcoroutinefunction(func):
+    """Mark func as a coroutine function for iscoroutinefunction().
+
+    CPython 3.12+ rewrites func.__code__.co_flags; Grail has no code
+    objects, so set a plain attribute.  Callables that reject attribute
+    stores (BoundMethod et al.) are left unmarked — they then test
+    False, which keeps callers on their sync paths.
+    """
+    try:
+        func._is_coroutine_marker = True
+    except Exception:
+        pass
+    return func
 
 
 def iscoroutine(obj):
@@ -74,8 +96,49 @@ class _FullArgSpec:
         self.annotations = annotations
 
 
-def signature(obj):
-    """Stub Signature with no parameters."""
+class _ParameterKind:
+    """Stands in for inspect._ParameterKind enum members — distinct
+    objects that compare by identity, which is all `param.kind ==
+    inspect.Parameter.VAR_POSITIONAL`-style checks need."""
+
+    def __init__(self, name):
+        self._name = name
+
+    def __repr__(self):
+        return '<_ParameterKind: %s>' % self._name
+
+
+class Parameter:
+    POSITIONAL_ONLY = _ParameterKind('POSITIONAL_ONLY')
+    POSITIONAL_OR_KEYWORD = _ParameterKind('POSITIONAL_OR_KEYWORD')
+    VAR_POSITIONAL = _ParameterKind('VAR_POSITIONAL')
+    KEYWORD_ONLY = _ParameterKind('KEYWORD_ONLY')
+    VAR_KEYWORD = _ParameterKind('VAR_KEYWORD')
+
+    class empty:
+        pass
+
+    def __init__(self, name, kind, default=None, annotation=None):
+        self.name = name
+        self.kind = kind
+        self.default = default if default is not None else Parameter.empty
+        self.annotation = annotation if annotation is not None else Parameter.empty
+
+
+def _signature_from_callable(obj, *, follow_wrapped=True, globals=None,
+                             locals=None, eval_str=False,
+                             annotation_format=None, sigcls=None):
+    """CPython-private constructor behind signature(); django.utils.
+    inspect partials it with an annotation format.  Grail ignores
+    every knob and returns the same stub signature() does."""
+    return _Signature()
+
+
+def signature(obj, *args, **kwargs):
+    """Stub Signature with no parameters.  Accepts (and ignores) the
+    extra positional/keyword args CPython 3.14 grew (globals=,
+    locals=, eval_str=, annotation_format=) so keyword call sites in
+    django.utils.inspect bind."""
     return _Signature()
 
 
@@ -160,3 +223,58 @@ def cleandoc(doc):
     while lines and not lines[-1].strip():
         lines = lines[:-1]
     return '\n'.join(lines)
+
+
+def unwrap(func, *, stop=None):
+    """Follow the __wrapped__ chain (functools.wraps leaves it);
+    Grail's wraps stub doesn't set __wrapped__, so this is usually
+    the identity."""
+    seen = set()
+    while True:
+        wrapped = getattr(func, "__wrapped__", None)
+        if wrapped is None:
+            return func
+        if stop is not None and stop(func):
+            return func
+        marker = id(wrapped)
+        if marker in seen:
+            raise ValueError("wrapper loop when unwrapping {!r}".format(func))
+        seen.add(marker)
+        func = wrapped
+
+
+def getmodule(obj, _filename=None):
+    return None
+
+
+def getdoc(obj):
+    doc = getattr(obj, "__doc__", None)
+    if isinstance(doc, str):
+        return cleandoc(doc)
+    return None
+
+
+def getmembers(obj, predicate=None):
+    """Return (name, value) pairs from dir(obj), optionally filtered."""
+    results = []
+    for name in dir(obj):
+        try:
+            value = getattr(obj, name)
+        except AttributeError:
+            continue
+        if predicate is None or predicate(value):
+            results.append((name, value))
+    results.sort(key=lambda pair: pair[0])
+    return results
+
+
+def isdatadescriptor(obj):
+    return False
+
+
+def ismethoddescriptor(obj):
+    return False
+
+
+def isabstract(obj):
+    return False

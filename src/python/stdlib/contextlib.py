@@ -181,3 +181,45 @@ class _ExitStackCmCloser:
 
 
 AsyncExitStack = ExitStack
+
+
+class ContextDecorator:
+    """Base adding ``@cm``-style decorator behaviour to a context
+    manager class (django.db.transaction.Atomic subclasses it)."""
+
+    def _recreate_cm(self):
+        return self
+
+    def __call__(self, func):
+        def inner(*args, **kwds):
+            with self._recreate_cm():
+                return func(*args, **kwds)
+        try:
+            inner.__name__ = func.__name__
+        except (AttributeError, TypeError):
+            pass
+        return inner
+
+
+class AsyncContextDecorator(ContextDecorator):
+    pass
+
+
+class AbstractContextManager:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return None
+
+
+class AbstractAsyncContextManager:
+    pass
+
+
+def aclosing(thing):
+    return closing(thing)
+
+
+def chdir(path):
+    raise NotImplementedError("contextlib.chdir is not supported in Grail")

@@ -269,6 +269,68 @@ update: other
 
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
+clear
+	"Python ``dict.clear()'' — remove every dynamic instVar from the
+	source instance (django's LazyObject.__setattr__ resets state with
+	``self.__dict__.clear()'')."
+
+	| pairs |
+	pairs := source @env0:dynamicInstVarPairs.
+	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
+		source @env0:removeDynamicInstVar: (pairs @env0:at: i)
+	].
+	^ None
+%
+
+category: 'Grail-Python-Protocol'
+method: PyInstanceDict
+pop: key
+	"Python ``dict.pop(k)'' — remove and return; KeyError when absent."
+
+	| sym val |
+	sym := key @env0:asSymbol.
+	val := source @env0:dynamicInstVarAt: sym.
+	val @env0:== nil ifTrue: [
+		KeyError @env1:___signal___: key @env0:printString
+	].
+	source @env0:removeDynamicInstVar: sym.
+	^ val
+%
+
+category: 'Grail-Python-Protocol'
+method: PyInstanceDict
+pop: key _: default
+	"Python ``dict.pop(k, default)'' — remove and return, or default."
+
+	| sym val |
+	sym := key @env0:asSymbol.
+	val := source @env0:dynamicInstVarAt: sym.
+	val @env0:== nil ifTrue: [^ default].
+	source @env0:removeDynamicInstVar: sym.
+	^ val
+%
+
+category: 'Grail-Python-Protocol'
+method: PyInstanceDict
+setdefault: key
+	^ self @env1:setdefault: key _: None
+%
+
+category: 'Grail-Python-Protocol'
+method: PyInstanceDict
+setdefault: key _: default
+	| sym val |
+	sym := key @env0:asSymbol.
+	val := source @env0:dynamicInstVarAt: sym.
+	val @env0:== nil ifTrue: [
+		source @env0:dynamicInstVarAt: sym put: default.
+		^ default
+	].
+	^ val
+%
+
+category: 'Grail-Python-Protocol'
+method: PyInstanceDict
 __iter__
 	"Iterating a dict yields its KEYS in Python (the values come from
 	indexing).  Match by yielding the dict-keys list's iterator."

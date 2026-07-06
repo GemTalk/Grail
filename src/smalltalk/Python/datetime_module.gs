@@ -274,9 +274,28 @@ __str__
 
 set compile_env: 0
 
+! PyTzinfo — Python's abstract ``datetime.tzinfo'' base.  Exists so
+! user code can subclass it (django.utils.timezone imports tzinfo) and
+! so ``isinstance(x, tzinfo)'' holds for timezone instances.
 expectvalue /Class
 doit
-Object subclass: 'PyTimezone'
+Object subclass: 'PyTzinfo'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+PyTzinfo category: 'Grail-Modules'
+%
+
+expectvalue /Class
+doit
+PyTzinfo subclass: 'PyTimezone'
   instVarNames: #()
   classVars: #( '_utc' )
   classInstVars: #()
@@ -1610,6 +1629,12 @@ category: 'Grail-Accessors'
 method: datetime
 timedelta
 	^ PyTimedelta
+%
+
+category: 'Grail-Accessors'
+method: datetime
+tzinfo
+	^ PyTzinfo
 %
 
 category: 'Grail-Accessors'

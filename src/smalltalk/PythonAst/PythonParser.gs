@@ -1224,6 +1224,11 @@ parseFromImportName
 	asName := nil.
 	(self matchKeyword: 'as') ifTrue: [
 		asName := self advance value asSymbol.
+		"``as _'' must track NameAst's parse-time rename of ``_'' —
+		reads of the alias emit ___unused___, so the binding has to
+		land there too (``from django.utils.translation import
+		gettext_lazy as _'')."
+		asName == #'_' ifTrue: [asName := #'___unused___'].
 	].
 	^self buildNode: AliasAst fields: (IdentityKeyValueDictionary new
 		at: #name put: nameTok value asSymbol;
@@ -1553,6 +1558,7 @@ parseImportName
 	asName := nil.
 	(self matchKeyword: 'as') ifTrue: [
 		asName := self advance value asSymbol.
+		asName == #'_' ifTrue: [asName := #'___unused___'].
 	].
 	^self buildNode: AliasAst fields: (IdentityKeyValueDictionary new
 		at: #name put: nameStr asSymbol;

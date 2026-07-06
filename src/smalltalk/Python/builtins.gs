@@ -362,9 +362,29 @@ method: builtins
 next: anIterator
 	"Python builtin next(it) — call it.__next__().  Propagates
 	StopIteration when the iterator is exhausted; caller can wrap
-	in try/except or use the two-arg form below."
+	in try/except or use the two-arg form below.
 
-	^ anIterator @env1:__next__
+	Grail compiles a generator EXPRESSION ``(x for x in ...)'' to an
+	eager OrderedCollection rather than a lazy iterator, so a receiver
+	that answers ``__iter__'' but not ``__next__'' is materialised to
+	its iterator first — ``next(genexp)'' then yields its first
+	element (the ``first match'' idiom in django's accepted_type)."
+
+	^ (self @env1:___asIterator___: anIterator) @env1:__next__
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___asIterator___: anIterator
+	"Return anIterator itself when it is already an iterator (answers
+	``__next__''), else its ``__iter__''.  Bridges Grail's eager
+	generator-expression collections into the next()/StopIteration
+	protocol."
+
+	((anIterator @env0:class @env0:whichClassIncludesSelector: #'__next__' environmentId: 1) isNil
+		and: [(anIterator @env0:class @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) notNil])
+		ifTrue: [^ anIterator @env1:__iter__].
+	^ anIterator
 %
 
 category: 'Grail-Built-in Functions'
@@ -376,7 +396,7 @@ next: anIterator _: aDefault
 	(though that one always pops a real key, so the default path
 	is the safety net)."
 
-	^ [anIterator @env1:__next__]
+	^ [(self @env1:___asIterator___: anIterator) @env1:__next__]
 		@env0:on: StopIteration
 		do: [:ex | aDefault]
 %
@@ -1569,13 +1589,22 @@ type: className _: bases _: namespace
 	il := Python @env0:at: #importlib.
 	baseArray := Array @env0:withAll: bases.
 	baseArray @env0:isEmpty ifTrue: [ baseArray := { PythonInstance } ].
-	(namespace @env0:isNil @env0:not and: [namespace @env0:isEmpty @env0:not])
-		ifTrue: [ ^ NotImplementedError ___signal___:
-			'type(name, bases, namespace) with a non-empty namespace is not yet supported' ].
 	storageBase := il @env0:___selectStorageBase___: baseArray.
 	nameSym := (il @env0:___asSmalltalkClassName___: className @env0:asString) @env0:asSymbol.
 	newClass := storageBase @env1:___subclass___: nameSym instVarNames: #() classInstVarNames: #().
 	il @env0:___mergeSecondaryBases___: newClass bases: baseArray.
+	"Non-empty namespace: store each binding as a class attribute via
+	the polymorphic attribute store (values land in the per-class
+	dynInstVars holder, where ___pyAttrLoad___'s class branch finds
+	them).  Callables become class attrs too — enough for django's
+	``BaseManager.from_queryset(QuerySet)'' (its copied queryset
+	methods are invoked through instance attribute dispatch)."
+	(namespace @env0:isNil @env0:not and: [namespace @env0:isEmpty @env0:not])
+		ifTrue: [
+			namespace @env0:keysAndValuesDo: [:k :v |
+				newClass @env1:___pyAttrStore___: k @env0:asSymbol put: v
+			]
+		].
 	"Copy inherited class-body data attributes (``X = v'') from the storage
 	base into newClass's per-class slots — the same step ClassDefAst runs at
 	compile time.  Smalltalk class-side instVars are per-class storage, so

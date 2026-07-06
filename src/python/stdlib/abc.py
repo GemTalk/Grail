@@ -22,7 +22,12 @@ class ABC:
     pass
 
 
-class ABCMeta(type):
+# GRAIL: upstream ABCMeta subclasses ``type``; Grail doesn't expose
+# ``type`` as a base class and honors no metaclasses, so a plain
+# marker class keeps ``from abc import ABCMeta'' importable
+# (email._policybase uses it as a metaclass= kwarg, which Grail's
+# ClassDefAst ignores).
+class ABCMeta:
     pass
 
 

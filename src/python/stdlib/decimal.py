@@ -61,3 +61,46 @@ def getcontext():
 def setcontext(ctx):
     global _default_context
     _default_context = ctx
+
+
+# Rounding modes (string constants, as in CPython).
+ROUND_DOWN = "ROUND_DOWN"
+ROUND_HALF_UP = "ROUND_HALF_UP"
+ROUND_HALF_EVEN = "ROUND_HALF_EVEN"
+ROUND_CEILING = "ROUND_CEILING"
+ROUND_FLOOR = "ROUND_FLOOR"
+ROUND_UP = "ROUND_UP"
+ROUND_HALF_DOWN = "ROUND_HALF_DOWN"
+ROUND_05UP = "ROUND_05UP"
+
+
+class Rounded(DecimalException):
+    pass
+
+
+class Inexact(DecimalException):
+    pass
+
+
+class Overflow(DecimalException):
+    pass
+
+
+class Underflow(Inexact, Rounded):
+    pass
+
+
+class Subnormal(DecimalException):
+    pass
+
+
+class DivisionByZero(DecimalException, ZeroDivisionError):
+    pass
+
+
+class Clamped(DecimalException):
+    pass
+
+
+class FloatOperation(DecimalException, TypeError):
+    pass

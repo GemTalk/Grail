@@ -182,13 +182,18 @@ printSmalltalkAttributeAugAssignOn: aStream
 		aStream nextPutAll: ').'.
 		^self
 	].
+	"General receiver: route through the polymorphic attribute
+	protocol.  ``at: #attr put:'' would hit Behavior>>at:put: (indexed
+	subscript) when the receiver is a CLASS — ``Field.creation_counter
+	+= 1'' in django's Field.__init__ crashed exactly there."
 	target value printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' @env0:at: #'''.
+	aStream nextPutAll: ' @env1:___pyAttrStore___: #'''.
 	aStream nextPutAll: target attr.
 	aStream nextPutAll: ''' put: (('.
 	target value printSmalltalkWithParenthesisOn: aStream.
-	aStream space; nextPutAll: target attr.
-	aStream nextPut: $).
+	aStream nextPutAll: ' @env1:___pyAttrLoad___: #''';
+		nextPutAll: target attr;
+		nextPutAll: ''')'.
 	op printSmalltalkOn: aStream.
 	value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ').'.

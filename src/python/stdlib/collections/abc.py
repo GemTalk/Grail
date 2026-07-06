@@ -94,8 +94,75 @@ class Coroutine(_ABCStub): pass
 class Awaitable(_ABCStub): pass
 class Sequence(_ABCStub): pass
 class MutableSequence(_ABCStub): pass
-class Mapping(_ABCStub): pass
-class MutableMapping(_ABCStub): pass
+class Mapping(_ABCStub):
+    # GRAIL: real mixin methods (as in CPython's collections.abc.Mapping)
+    # built on the subclass's __getitem__/__iter__/__len__, so
+    # ``CaseInsensitiveMapping`` (django's HttpHeaders base) inherits
+    # a working .get/.keys/.items/.values/__contains__/__eq__.
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def __contains__(self, key):
+        try:
+            self[key]
+        except KeyError:
+            return False
+        return True
+
+    def keys(self):
+        return list(self.__iter__())
+
+    def items(self):
+        return [(k, self[k]) for k in self.__iter__()]
+
+    def values(self):
+        return [self[k] for k in self.__iter__()]
+
+    def __eq__(self, other):
+        if not isinstance(other, Mapping):
+            return NotImplemented
+        return dict(self.items()) == dict(other.items())
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
+
+
+class MutableMapping(Mapping):
+    __marker = object()
+
+    def pop(self, key, default=__marker):
+        try:
+            value = self[key]
+        except KeyError:
+            if default is self.__marker:
+                raise
+            return default
+        else:
+            del self[key]
+            return value
+
+    def setdefault(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            self[key] = default
+        return default
+
+    def update(self, other=(), **kwds):
+        if hasattr(other, "keys"):
+            for key in other.keys():
+                self[key] = other[key]
+        else:
+            for key, value in other:
+                self[key] = value
+        for key, value in kwds.items():
+            self[key] = value
 class Set(_ABCStub): pass
 class MutableSet(_ABCStub): pass
 class Container(_ABCStub): pass

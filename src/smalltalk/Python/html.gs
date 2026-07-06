@@ -113,7 +113,13 @@ unescape: s
 	Quick exit if no `&` in the input string."
 
 	| n2c out i len |
-	n2c := (self @env0:at: #entities) @env0:at: #name2codepoint.
+	"Read the table from the native html_entities class directly, NOT
+	via ``self at: #entities'': importing the vendored ``html.entities''
+	submodule (django's html.parser does) rebinds this module's
+	``entities'' attribute to that module, whose name2codepoint lives in
+	dynamic-instVar storage and is not reachable through ``at:''.  The
+	native html_entities is stable and complete (252 HTML4 names)."
+	n2c := (html_entities @env1:instance) @env0:at: #name2codepoint.
 
 	(s @env0:includesString: '&') ifFalse: [^ s].
 

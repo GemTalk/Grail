@@ -50,6 +50,13 @@ initialize
 	hook ``___pyClassDefined___:``.  StrEnum / Flag remain simple
 	aliases (out of scope): StrEnum -> str, Flag -> PythonInstance."
 	self @env0:at: #Enum put: Enum.
+	self @env0:at: #EnumType put: Enum @env0:class.
+	self @env0:at: #property put: PropertyDescriptor.
+	self @env0:at: #member put: PropertyDescriptor.
+	self @env0:at: #nonmember put: PropertyDescriptor.
+	self @env0:at: #unique put: PropertyDescriptor.
+	self @env0:at: #auto put: PropertyDescriptor.
+	self @env0:at: #EnumMeta put: Enum @env0:class.
 	self @env0:at: #IntEnum put: IntEnum.
 	self @env0:at: #IntFlag put: IntFlag.
 	self @env0:at: #StrEnum put: Unicode7.

@@ -253,18 +253,15 @@ printSmalltalkOn: aStream
 	args args do: [:arg | paramNames add: (self transportParamName: arg name)].
 	args vararg ifNotNil: [paramNames add: (self transportParamName: args vararg name)].
 	args kwarg ifNotNil: [paramNames add: (self transportParamName: args kwarg name)].
-	"Merge bodyVars while preserving uniqueness.  Skip reserved-name
-	body locals — they ALWAYS resolve via NameAst's reserved-param
-	rename (parameters of the surrounding def) or its
-	isReservedSmalltalkIdentifier-tripped rename in any nested
-	function; declaring them as temps would be a parse error."
+	"Merge bodyVars while preserving uniqueness.  Reserved-name body
+	locals (``self = cls(**initkwargs)'' in django's View.as_view
+	inner function) are declared via their ``_<name>'' transport —
+	NameAst's reserved-name rename points every read and write at
+	that temp; the pseudo-variable itself can't be declared."
 	body variables do: [:n |
 		((paramNames includes: n)
 			or: [paramNames includes: (self transportParamName: n)])
-			ifFalse: [
-				(NameAst isReservedSmalltalkIdentifier: n)
-					ifFalse: [paramNames add: n]
-			].
+			ifFalse: [paramNames add: (self transportParamName: n)].
 	].
 	paramNames isEmpty ifFalse: [
 		aStream nextPutAll: '| '.
@@ -710,6 +707,117 @@ moduleMethodSelector
 
 category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
+needsVarargsForwarder
+	"True for a simple-positional def that should ALSO get a varargs
+	``_name:kw:'' companion so keyword call sites bind.  A fixed-arity
+	selector (``greet:_:'') encodes only arity, so a keyword call
+	``greet(request, name='x')'' — which Django's URL dispatcher makes
+	for every captured kwarg — routes to ``_greet:kw:'' and would DNU.
+	Skip zero-parameter defs (nothing to bind by keyword) and defs
+	that already compile as varargs."
+
+	^ self isSimplePositionalArgs
+		and: [self compilesAsVarargs not
+		and: [self allParameterNames notEmpty]]
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+generateModuleMethodVarargsForwarderSource
+	"Emit a varargs ``_name:kw:'' method that binds positional-then-
+	keyword by declared parameter name and forwards to the fixed-arity
+	module method.  Lets keyword call sites reach a simple-positional
+	module function."
+
+	^ self ___varargsForwarderSourceStripSelf___: false
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+generateInstanceVarargsForwarderSource
+	"As generateModuleMethodVarargsForwarderSource but for an instance
+	method: the first Python parameter (self) is stripped — the
+	Smalltalk receiver IS self."
+
+	^ self ___varargsForwarderSourceStripSelf___: true
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+___varargsForwarderSourceStripSelf___: stripSelf
+	"Shared body for the varargs forwarders.  paramNames is the list of
+	Python parameters that become call arguments (self stripped for
+	instance methods).  Emit:
+	  _name: positional kw: kwargs
+	  | p1 p2 ... |
+	  p1 := (positional size >= 1) ifTrue: [positional at: 1]
+	        ifFalse: [kwargs...'p1'... ifAbsent default/TypeError].
+	  ...
+	  ^ self name: p1 _: p2 ...       (module: bare selector)
+	  ^ self <sel>                    (instance: env-1 fixed selector)"
+
+	| stream callParams allParams defaults firstDefault |
+	stream := WriteStream on: Unicode7 new.
+	allParams := self allParameterNames.
+	callParams := stripSelf
+		ifTrue: [allParams copyFrom: 2 to: allParams size]
+		ifFalse: [allParams].
+	"Defaults align to the TAIL of args (posonly+args)."
+	defaults := args defaults.
+	firstDefault := (args posonlyargs size + args args size)
+		- (defaults isNil ifTrue: [0] ifFalse: [defaults size]).
+
+	stream nextPut: $_; nextPutAll: name; nextPutAll: ': ___pos___ kw: ___kw___'; lf.
+	callParams isEmpty ifFalse: [
+		stream nextPutAll: '| '.
+		callParams do: [:p | stream nextPutAll: (self transportParamName: p); space].
+		stream nextPut: $|; lf.
+	].
+	callParams doWithIndex: [:p :i |
+		| absoluteIdx def |
+		"absolute parameter index in the full (self-included) list, to
+		align with the fixed selector's positional order."
+		absoluteIdx := stripSelf ifTrue: [i + 1] ifFalse: [i].
+		stream nextPutAll: (self transportParamName: p);
+			nextPutAll: ' := (___pos___ @env0:size @env0:>= '; print: i;
+			nextPutAll: ') ifTrue: [___pos___ @env0:at: '; print: i;
+			nextPutAll: '] ifFalse: [(___kw___ @env0:isNil @env0:not and: [___kw___ @env0:includesKey: ''';
+			nextPutAll: p asString;
+			nextPutAll: ''']) ifTrue: [___kw___ @env0:at: '''; nextPutAll: p asString; nextPutAll: '''] ifFalse: ['.
+		"Default expression when this param has one; else TypeError."
+		(defaults notNil and: [absoluteIdx >= (firstDefault + 1)
+			and: [absoluteIdx <= (args posonlyargs size + args args size)]])
+			ifTrue: [
+				| d |
+				d := defaults at: absoluteIdx - firstDefault.
+				d printSmalltalkOn: stream ]
+			ifFalse: [
+				stream nextPutAll: 'TypeError ___signal___: ''missing required argument: ';
+					nextPutAll: p asString; nextPutAll: '''' ].
+		stream nextPutAll: ']].'; lf.
+	].
+	"Forward to the fixed-arity selector."
+	stream nextPutAll: '^ self '.
+	stripSelf
+		ifTrue: [
+			callParams isEmpty
+				ifTrue: [stream nextPutAll: name]
+				ifFalse: [
+					stream nextPutAll: name; nextPutAll: ': '; nextPutAll: (self transportParamName: (callParams at: 1)).
+					2 to: callParams size do: [:i |
+						stream nextPutAll: ' _: '; nextPutAll: (self transportParamName: (callParams at: i))]] ]
+		ifFalse: [
+			callParams isEmpty
+				ifTrue: [stream nextPutAll: name]
+				ifFalse: [
+					stream nextPutAll: name; nextPutAll: ': '; nextPutAll: (self transportParamName: (callParams at: 1)).
+					2 to: callParams size do: [:i |
+						stream nextPutAll: ' _: '; nextPutAll: (self transportParamName: (callParams at: i))]] ].
+	^ stream contents
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
 generateModuleMethodStubSource
 	"Generate a minimal stub method source for pre-registration on the module
 	class. The stub has the correct selector header with parameter names but
@@ -1044,9 +1152,26 @@ generateModuleMethodSourceOn: aStream
 			(allLocals includes: each) ifFalse: [
 				((paramNames includes: each) and: [
 					(needsTemp at: (paramNames indexOf: each)) not]) ifFalse: [
-					(self isSmalltalkReservedIdentifier: each) ifFalse: [
-						allLocals add: each
-					]
+					(self isSmalltalkReservedIdentifier: each)
+						ifFalse: [allLocals add: each]
+						ifTrue: [
+							"Reserved-named BODY LOCAL (``self = cls(**kw)''
+							in a nested function or @staticmethod __new__):
+							declare the ``_<name>'' transport temp; NameAst's
+							reserved-name rename points reads and writes at
+							it.  A reserved-named PARAM also appears in
+							body.variables (the parser registers params
+							there) but its ``_<name>'' is already the METHOD
+							ARG — declaring it as a temp too would shadow-
+							collide, so skip anything the transportNames
+							slot already carries."
+							| transport |
+							transport := '_' , each asString.
+							((allLocals includes: transport)
+								or: [(paramNames includes: transport)
+								or: [(transportNames detect: [:t | t @env0:asString @env0:= transport] ifNone: [nil]) notNil
+								or: [paramNames includes: each]]])
+								ifFalse: [allLocals add: transport]]
 				].
 			].
 		].
@@ -1152,14 +1277,30 @@ generateModuleMethodSourceOn: aStream
 
 		"Declare param locals (positional + *vararg + kwonly + **kwarg)
 		+ body locals as block temps."
-		allLocals := OrderedCollection withAll: paramNames.
-		args vararg ifNotNil: [allLocals add: args vararg name].
+		"Every entry goes through transportParamName: (a String; reserved
+		names become ``_<name>'') so the includes: dedupe below compares
+		String-to-String — Symbol entries would dodge it (Symbol
+		equality is identity) and re-declare the same temp."
+		allLocals := OrderedCollection new.
+		paramNames do: [:each | allLocals add: (self transportParamName: each)].
+		args vararg ifNotNil: [allLocals add: (self transportParamName: args vararg name)].
 		args kwonlyargs do: [:each |
-			(allLocals includes: each name) ifFalse: [allLocals add: each name].
+			| transport |
+			transport := self transportParamName: each name.
+			(allLocals includes: transport) ifFalse: [allLocals add: transport].
 		].
-		args kwarg ifNotNil: [allLocals add: args kwarg name].
+		args kwarg ifNotNil: [
+			| transport |
+			transport := self transportParamName: args kwarg name.
+			(allLocals includes: transport) ifFalse: [allLocals add: transport].
+		].
 		bodyVars do: [:each |
-			(allLocals includes: each) ifFalse: [allLocals add: each].
+			| transport |
+			"Reserved-named body locals (``self = cls(**kw)'' in a nested
+			function) are carried in the ``_<name>'' transport temp;
+			NameAst's reserved-name rename points reads and writes at it."
+			transport := self transportParamName: each.
+			(allLocals includes: transport) ifFalse: [allLocals add: transport].
 		].
 		allLocals isEmpty ifFalse: [
 			aStream nextPutAll: '| '.
@@ -1167,15 +1308,16 @@ generateModuleMethodSourceOn: aStream
 			aStream nextPut: $|; lf.
 		].
 
-		"Unpack positional args into locals (with default-arg fallback)."
+		"Unpack positional args into locals (with default-arg fallback).
+		Reserved-named params bind through their ``_<name>'' transport."
 		self printPositionalUnpackingOn: aStream
-			paramNames: paramNames
+			paramNames: (paramNames collect: [:p | self transportParamName: p])
 			positionalName: posMethodParam
 			kwargsName: kwMethodParam.
 		"Bind *vararg to the tail of positional, wrapped as a tuple."
 		args vararg ifNotNil: [
 			aStream
-				nextPutAll: args vararg name;
+				nextPutAll: (self transportParamName: args vararg name);
 				nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { ';
 				nextPutAll: posMethodParam;
 				nextPutAll: ' @env0:copyFrom: ';
@@ -1357,6 +1499,39 @@ nodeContainsYieldExceptNestedDefs: node
 
 category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
+___stmtEndsWithInlineReturn___: stmt
+	"True when emitting stmt in a ``^''-return mode leaves a caret
+	return as the LAST statement at the enclosing block level.  A bare
+	ReturnAst obviously does; so does a while/for whose ``else''
+	clause ends with a return, because the orelse statements print
+	inline after the loop at the same level (django.utils.autoreload's
+	wait_for_apps_ready ends with while/else/return).  ``if'' branches
+	don't count — their returns sit inside ifTrue:/ifFalse: blocks, so
+	a trailing fall-through after the send is still parseable."
+
+	| ivars idx orelse lastStmt |
+	(stmt isKindOf: ReturnAst) ifTrue: [^ true].
+	((stmt isKindOf: WhileAst) or: [stmt isKindOf: ForAst]) ifFalse: [^ false].
+	ivars := stmt class allInstVarNames.
+	idx := ivars indexOf: #orelse.
+	idx = 0 ifTrue: [^ false].
+	orelse := stmt instVarAt: idx.
+	orelse isNil ifTrue: [^ false].
+	(orelse isKindOf: AbstractNode) ifTrue: [
+		"SuiteAst wrapper — take its statement list."
+		| sIvars sIdx |
+		sIvars := orelse class allInstVarNames.
+		sIdx := sIvars indexOf: #body.
+		sIdx = 0 ifTrue: [^ false].
+		orelse := orelse instVarAt: sIdx].
+	(orelse isKindOf: SequenceableCollection) ifFalse: [^ false].
+	orelse isEmpty ifTrue: [^ false].
+	lastStmt := orelse last.
+	^ self ___stmtEndsWithInlineReturn___: lastStmt
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
 printBodyOn: aStream
 	"Emit the function body.
 
@@ -1397,7 +1572,7 @@ printBodyOn: aStream
 	so the implicit return matches Python's ``return None''."
 	lastIsReturn := (useDirect or: [useMethod])
 		and: [body body notEmpty
-		and: [body body last isKindOf: ReturnAst]].
+		and: [self ___stmtEndsWithInlineReturn___: body body last]].
 
 	self isGenerator ifTrue: [
 		aStream nextPutAll: 'PythonGenerator @env1:withBlock: [:___gen___ |'; lf.
@@ -1647,7 +1822,8 @@ generateMethodSourceOn: aStream
 			] value"
 
 	| paramNames bodyVars allLocals savedReturnMode
-	  useDirectReturn useMethodTemps |
+	  useDirectReturn useMethodTemps
+	  selfName selfRebound selfTransport savedSelfRebound |
 	"``@smalltalk''-decorated methods forward to a native (env-0) Smalltalk
 	method rather than compiling a Python body — see isSmalltalkForwarder.
 	Instance methods and @classmethods strip the first parameter (self /
@@ -1657,6 +1833,21 @@ generateMethodSourceOn: aStream
 			argCount: self instanceMethodParameterNames size].
 	paramNames := self instanceMethodParameterNames.
 	bodyVars := body variables.
+
+	"CPython treats the self/cls parameter as an ordinary rebindable
+	local (``self = None'' to break reference cycles in asgiref;
+	``self = tuple.__new__(cls, ...)'' in __new__).  Smalltalk's
+	``self'' pseudo-variable is not assignable, so when the body
+	rebinds it, carry the receiver in a ``_self'' block temp instead:
+	declare the temp, initialise it from the receiver, and print the
+	body with CallAst selfParameterRebound set so NameAst emits the
+	transport identifier and every receiver fast path (instVar
+	read/store, self-send) degrades to the generic object paths."
+	selfName := CallAst selfParameterName.
+	selfRebound := selfName notNil
+		and: [self assignedNamesInBody includes: selfName asSymbol].
+	selfTransport := selfRebound
+		ifTrue: ['_' , selfName asString] ifFalse: [nil].
 
 	self compilesAsVarargs ifFalse: [
 		| transportNames |
@@ -1706,6 +1897,9 @@ generateMethodSourceOn: aStream
 				]
 			]
 		].
+		selfRebound ifTrue: [
+			(allLocals includes: selfTransport) ifFalse: [
+				allLocals add: selfTransport]].
 
 		"Drop the outer ``^ [ ... ] value'' wrapper when there's
 		nothing to put inside it — no params, no body locals, and
@@ -1735,6 +1929,9 @@ generateMethodSourceOn: aStream
 					nextPut: $.;
 					lf.
 			].
+			selfRebound ifTrue: [
+				aStream nextPutAll: selfTransport;
+					nextPutAll: ' := self.'; lf].
 		].
 	] ifTrue: [
 		"Varargs selector.  Rename method params to internal sentinels
@@ -1787,6 +1984,9 @@ generateMethodSourceOn: aStream
 				]
 			]
 		].
+		selfRebound ifTrue: [
+			(allLocals includes: selfTransport) ifFalse: [
+				allLocals add: selfTransport]].
 		allLocals isEmpty ifFalse: [
 			aStream nextPutAll: '| '.
 			allLocals do: [:each | aStream nextPutAll: each; space].
@@ -1877,6 +2077,9 @@ generateMethodSourceOn: aStream
 					nextPutAll: ''' ifAbsent: []. '; lf.
 			].
 		].
+		selfRebound ifTrue: [
+			aStream nextPutAll: selfTransport;
+				nextPutAll: ' := self.'; lf].
 	].
 
 	"Push the return-emit mode.  #directMethod when useMethodTemps is
@@ -1885,6 +2088,7 @@ generateMethodSourceOn: aStream
 	``^'' can't safely escape the body (generator or
 	with/try-finally — those still need the PythonReturn handler)."
 	savedReturnMode := CallAst returnEmitMode.
+	savedSelfRebound := CallAst selfParameterRebound.
 	[
 		CallAst returnEmitMode:
 			(useMethodTemps == true
@@ -1893,8 +2097,11 @@ generateMethodSourceOn: aStream
 					(self isGenerator or: [body hasReturnBlocking == true])
 						ifTrue: [#exception]
 						ifFalse: [#direct]]).
+		CallAst selfParameterRebound: selfRebound.
 		self printBodyOn: aStream.
-	] ensure: [CallAst returnEmitMode: savedReturnMode].
+	] ensure: [
+		CallAst returnEmitMode: savedReturnMode.
+		CallAst selfParameterRebound: savedSelfRebound].
 	"Close the outer block only when one was opened."
 	useMethodTemps == true ifFalse: [aStream nextPutAll: '] value'].
 %

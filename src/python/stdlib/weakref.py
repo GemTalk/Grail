@@ -27,6 +27,13 @@ def ref(obj, callback=None):
     return _weakref.ref(obj, callback)
 
 
+# ``ReferenceType'' — CPython exposes the weak-reference class for
+# isinstance checks (django.dispatch tests receivers with it).  The
+# concrete Grail object is a Smalltalk WeakReference; expose that
+# class so isinstance(ref(x), ReferenceType) holds.
+ReferenceType = type(_weakref.ref(ref))
+
+
 def proxy(obj, callback=None):
     """weakref.proxy(obj[, callback]) — return a transparent weak proxy."""
     if callable(obj):

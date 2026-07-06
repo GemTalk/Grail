@@ -17,7 +17,7 @@ fi
     printf 'login\nlevel 0\niferr 1 stk\niferr 2 exit 1\nrun\n'
     printf '%s\n' "$SNIPPET"
     printf '%%\nlogout\nexit 0\n'
-} | topaz -lq 2>&1 | awk '
+} | topaz -lq -T 400000 -C "GEM_TEMPOBJ_CODE_SIZE=300000;" 2>&1 | awk '
     /^%$/                                              { p = 1; next }
     p && /^topaz [0-9>] exec iferr/                    { next }
     p && /^Logging out/                                { exit err }

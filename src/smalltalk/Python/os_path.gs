@@ -55,6 +55,8 @@ initialize
 
 	self @env0:dynamicInstVarAt: #altsep put: None.
 	self @env0:dynamicInstVarAt: #sep put: '/'.
+	self @env0:dynamicInstVarAt: #curdir put: '.'.
+	self @env0:dynamicInstVarAt: #pardir put: '..'.
 	self @env0:dynamicInstVarAt: #pathsep put: ':'.
 	self @env0:dynamicInstVarAt: #extsep put: '.'.
 	self @env0:dynamicInstVarAt: #defpath put: '/bin:/usr/bin'.
@@ -126,6 +128,35 @@ ___joinComponents___: paths
 		]
 	].
 	^ result
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+normcase: path
+	"POSIX normcase is the identity (case is significant)."
+
+	^ path
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+realpath: path
+	"No symlink resolution in Grail — same as abspath."
+
+	^ self @env1:abspath: path
+%
+
+category: 'Grail-Path Manipulation'
+method: os_path
+expanduser: path
+	"~ expansion via the HOME environment variable."
+
+	| home |
+	(path @env0:size @env0:> 0 and: [(path @env0:at: 1) @env0:= $~]) ifFalse: [^ path].
+	home := System @env0:gemEnvironmentVariable: 'HOME'.
+	home @env0:isNil ifTrue: [^ path].
+	path @env0:size @env0:= 1 ifTrue: [^ home].
+	^ home @env0:, (path @env0:copyFrom: 2 to: path @env0:size)
 %
 
 category: 'Grail-Path Manipulation'

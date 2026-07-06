@@ -179,3 +179,78 @@ def current_thread():
 
 def main_thread():
     return _MainThread
+
+
+class local:
+    """Thread-local storage.  Grail threads are cooperative GsProcess
+    green threads sharing one OS thread, so plain per-instance storage
+    (each Thread runs to completion or yields explicitly) is the
+    honest equivalent — the same choice CPython makes for a
+    single-threaded program."""
+
+    pass
+
+
+class Semaphore:
+    def __init__(self, value=1):
+        self._value = value
+
+    def acquire(self, blocking=True, timeout=None):
+        if self._value > 0:
+            self._value -= 1
+            return True
+        if not blocking:
+            return False
+        raise RuntimeError(
+            "Semaphore.acquire would block forever (Grail threads are cooperative)")
+
+    def release(self, n=1):
+        self._value += n
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.release()
+        return False
+
+
+class BoundedSemaphore(Semaphore):
+    def __init__(self, value=1):
+        Semaphore.__init__(self, value)
+        self._initial_value = value
+
+    def release(self, n=1):
+        if self._value + n > self._initial_value:
+            raise ValueError("Semaphore released too many times")
+        Semaphore.release(self, n)
+
+
+class Condition:
+    def __init__(self, lock=None):
+        self._lock = lock if lock is not None else RLock()
+
+    def acquire(self, *args):
+        return self._lock.acquire(*args)
+
+    def release(self):
+        self._lock.release()
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.release()
+        return False
+
+    def wait(self, timeout=None):
+        raise RuntimeError(
+            "Condition.wait would block forever (Grail threads are cooperative)")
+
+    def notify(self, n=1):
+        pass
+
+    def notify_all(self):
+        pass

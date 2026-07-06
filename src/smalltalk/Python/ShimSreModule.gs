@@ -780,6 +780,16 @@ group: groupArg
 
 category: 'Grail-Methods'
 method: SreMatch
+__getitem__: groupArg
+	"``m[g]'' — subscripting a match is ``m.group(g)'' in CPython.
+	django.urls.resolvers._route_to_regex reads named groups as
+	``match['parameter']''."
+
+	^ self @env1:group: groupArg
+%
+
+category: 'Grail-Methods'
+method: SreMatch
 group: g1 _: g2
 	"group(g1, g2) -> tuple"
 	^ (CPythonShim @env0:current)
@@ -822,21 +832,36 @@ groups
 category: 'Grail-Methods'
 method: SreMatch
 groups: defaultValue
-	"groups(default) -> tuple"
-	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'groups' selfPtr: (self @env0:cPtrAddress)
-		with: defaultValue
+	"groups(default) -> tuple.  The C ``groups'' entry ignores the
+	default argument, so substitute it here: every unmatched group
+	(None) becomes defaultValue.  django.urls.resolvers relies on
+	``match.groups(default='str')'' to default the optional converter
+	group."
+	| raw result |
+	raw := (CPythonShim @env0:current)
+		@env0:callTyped: '_sre' type: 'Match' method: 'groups' selfPtr: (self @env0:cPtrAddress).
+	(defaultValue @env0:== nil or: [defaultValue @env0:== None]) ifTrue: [^ raw].
+	result := list ___new___.
+	raw @env0:do: [:each |
+		result @env1:append: ((each @env0:== None or: [each @env0:== nil])
+			ifTrue: [defaultValue] ifFalse: [each])].
+	^ tuple @env0:withAll: result
 %
 
 category: 'Grail-Methods'
 method: SreMatch
 _groups: positional kw: keywords
-	"Varargs dispatcher for groups()."
-	| nargs |
+	"Varargs dispatcher for groups().  ``default'' may arrive
+	positionally OR as a keyword (django calls
+	``match.groups(default='str')'')."
+	| nargs default |
 	nargs := positional @env0:size.
-	(nargs == 0) ifTrue: [^ self groups].
-	(nargs == 1) ifTrue: [^ self groups: (positional @env0:at: 1)].
-	TypeError ___signal___: 'groups() takes 0 or 1 arguments'
+	default := nil.
+	nargs @env0:>= 1 ifTrue: [default := positional @env0:at: 1].
+	(keywords @env0:isNil @env0:not and: [keywords @env0:includesKey: 'default'])
+		ifTrue: [default := keywords @env0:at: 'default'].
+	default @env0:isNil ifTrue: [^ self @env1:groups].
+	^ self @env1:groups: default
 %
 
 ! --------- groupdict -------------------------------------------------------

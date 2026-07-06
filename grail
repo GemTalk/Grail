@@ -17,4 +17,4 @@ fi
 #  For gem configuration, create a gem.conf in current directory 
 #  or edit this script to add a -T or -C  argument before the -S .
 
-topaz -lq -S scripts/grail.tpz -T 250000 -- $*
+topaz -lq -S scripts/grail.tpz -T 400000 -C "GEM_TEMPOBJ_CODE_SIZE=300000;" -- $*

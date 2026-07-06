@@ -58,7 +58,12 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: '([:___s | '.
 	elts do: [:each |
 		aStream nextPutAll: '___s add: '.
-		each printSmalltalkOn: aStream.
+		"Parenthesize: an element that prints as a keyword send
+		(``x @env1:___pyAttrLoad___: #'attr''') would otherwise fuse
+		with ``add:'' into one selector (#add:___pyAttrLoad___:) —
+		{inspect.Parameter.POSITIONAL_ONLY, ...} in django.utils.
+		inspect hit exactly that."
+		each printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: '. '.
 	].
 	aStream nextPutAll: '___s] value: (set perform: #new env: 0))'.

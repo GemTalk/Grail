@@ -68,6 +68,32 @@ doit
 sys_flags category: 'Grail-Modules'
 %
 
+! ------- sys_implementation class (Python 'sys.implementation' namespace)
+expectvalue /Class
+doit
+module subclass: 'sys_implementation'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+sys_implementation comment:
+'Python sys.implementation — PEP 421 implementation metadata namespace.
+Grail reports name=''grail'' with the CPython language level it tracks
+in version/hexversion.  Django (django.utils.version) and other
+packages read sys.implementation.name at import time.'
+%
+
+expectvalue /Class
+doit
+sys_implementation category: 'Grail-Modules'
+%
+
 ! ===============================================================================
 ! sys Module (Python 'sys' module)
 ! ===============================================================================
@@ -83,9 +109,25 @@ sys removeAllMethods: 1.
 sys class removeAllMethods: 1.
 sys_flags removeAllMethods: 1.
 sys_flags class removeAllMethods: 1.
+sys_implementation removeAllMethods: 1.
+sys_implementation class removeAllMethods: 1.
 %
 
 set compile_env: 1
+
+category: 'Grail-Initialization'
+method: sys_implementation
+initialize
+	"PEP 421 required attributes.  The version here is the CPython
+	language level Grail emulates (the vendored stdlib and _sre are
+	3.14), which is what packages gate features on."
+
+	self @env0:dynamicInstVarAt: #name put: 'grail'.
+	self @env0:dynamicInstVarAt: #cache_tag put: None.
+	self @env0:dynamicInstVarAt: #version put: (tuple @env0:withAll: {3. 14. 0. 'final'. 0}).
+	self @env0:dynamicInstVarAt: #hexversion put: 16r030E00F0.
+	self @env0:dynamicInstVarAt: #_multiarch put: 'gemstone'
+%
 
 category: 'Grail-Initialization'
 method: sys_flags
@@ -736,10 +778,14 @@ initialize_version_info
 	gsVersion := gsVersionReport @env0:at: #gsVersion ifAbsent: ['unknown'].
 	grailVersion := '0.1.0'.
 	self @env0:at: #version put: (((('Grail ' @env0:, grailVersion) @env0:, ' (GemStone/S ') @env0:, gsVersion) @env0:, ')').
-	self @env0:at: #version_info put: (tuple @env0:withAll: {0. 1. 0. 'alpha'. 0}).
+	"version_info reports the CPython language level Grail emulates —
+	packages (Django's PY310..PY314 gates, typing backports) branch on
+	it, and the pre-3.10 branches assume interpreter features Grail
+	never had.  The Grail release number stays in the version string."
+	self @env0:at: #version_info put: (tuple @env0:withAll: {3. 14. 0. 'final'. 0}).
 	self @env0:at: #api_version put: 0.
-	self @env0:at: #hexversion put: 16r00010000.
-	self @env0:at: #implementation put: None.
+	self @env0:at: #hexversion put: 16r030E00F0.
+	self @env0:at: #implementation put: (sys_implementation instance).
 %
 
 category: 'Grail-Initialization'
