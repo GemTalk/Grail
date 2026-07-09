@@ -25,6 +25,29 @@ public API equivalents, replacing Argument Clinic generated wrappers
 with hand-written argument parsing, and adapting string handling for
 GemStone's UTF-8 representation.
 
+## Vendored Regression-Test Suite
+
+The tree under `src/python/stdlib/test/` is vendored from CPython 3.14.4
+(`Lib/test/`) so Grail can run CPython's own regression-test modules and
+score its conformance (see `docs/CPython_Suite_Scoreboard.md`). It is
+redistributed under the same Python Software Foundation License Version 2.
+
+| Path | CPython Source | Notes |
+|------|---------------|-------|
+| `src/python/stdlib/test/test_*.py` | `Lib/test/test_*.py` | Curated starter modules, vendored verbatim |
+| `src/python/stdlib/test/support/numbers.py` | `Lib/test/support/numbers.py` | Verbatim (pure data) |
+| `src/python/stdlib/test/support/testcase.py` | `Lib/test/support/testcase.py` | Verbatim |
+| `src/python/stdlib/test/support/__init__.py` | `Lib/test/support/__init__.py` | **Trimmed**: only the names the starter set imports; CPython's ~3200-line original pulls in subprocess/socket/faulthandler which Grail lacks |
+| `src/python/stdlib/test/support/import_helper.py` | `Lib/test/support/import_helper.py` | **Trimmed** to the helpers used by the starter set (no fresh-import isolation in Grail) |
+| `src/python/stdlib/test/support/threading_helper.py` | `Lib/test/support/threading_helper.py` | **Trimmed** (Grail threading is cooperative) |
+| `src/python/stdlib/test/support/warnings_helper.py` | `Lib/test/support/warnings_helper.py` | **Trimmed** to class-based context managers over the `warnings` shim |
+
+Per PSF License clause 3, these are modified copies: the `support`
+package was reduced to the subset Grail can satisfy, and every context
+manager was rewritten as a plain `__enter__`/`__exit__` class because
+Grail's `contextlib.contextmanager` is a no-op. `test/__init__.py` and
+`test/_grail_harness.py` are Grail-authored.
+
 ## Python Software Foundation License Version 2
 
 ```

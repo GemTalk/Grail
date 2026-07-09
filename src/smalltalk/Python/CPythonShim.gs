@@ -381,7 +381,7 @@ method: CPythonShim
 callModule: moduleName method: methodName
 	"Call a module method with no arguments."
 
-	^ System userAction: #shimCall withArgs: {
+	^ self ___shimUserAction: #shimCall withArgs: {
 		moduleName . methodName .
 		0 . 0 . 0 .
 		0 . 0 . 0
@@ -393,7 +393,7 @@ method: CPythonShim
 callModule: moduleName method: methodName with: arg1
 	"Call a module method with 1 argument."
 
-	^ System userAction: #shimCall withArgs: {
+	^ self ___shimUserAction: #shimCall withArgs: {
 		moduleName . methodName .
 		(self wrap: arg1) memoryAddress . 0 . 0 .
 		0 . 0 . 1
@@ -405,7 +405,7 @@ method: CPythonShim
 callModule: moduleName method: methodName with: arg1 with: arg2
 	"Call a module method with 2 arguments."
 
-	^ System userAction: #shimCall withArgs: {
+	^ self ___shimUserAction: #shimCall withArgs: {
 		moduleName . methodName .
 		(self wrap: arg1) memoryAddress .
 		(self wrap: arg2) memoryAddress . 0 .
@@ -418,7 +418,7 @@ method: CPythonShim
 callModule: moduleName method: methodName with: arg1 with: arg2 with: arg3
 	"Call a module method with 3 arguments."
 
-	^ System userAction: #shimCall withArgs: {
+	^ self ___shimUserAction: #shimCall withArgs: {
 		moduleName . methodName .
 		(self wrap: arg1) memoryAddress .
 		(self wrap: arg2) memoryAddress .
@@ -432,7 +432,7 @@ method: CPythonShim
 callModule: moduleName method: methodName with: arg1 with: arg2 with: arg3 with: arg4
 	"Call a module method with 4 arguments."
 
-	^ System userAction: #shimCall withArgs: {
+	^ self ___shimUserAction: #shimCall withArgs: {
 		moduleName . methodName .
 		(self wrap: arg1) memoryAddress .
 		(self wrap: arg2) memoryAddress .
@@ -446,7 +446,7 @@ method: CPythonShim
 callModule: moduleName method: methodName with: arg1 with: arg2 with: arg3 with: arg4 with: arg5
 	"Call a module method with 5 arguments."
 
-	^ System userAction: #shimCall withArgs: {
+	^ self ___shimUserAction: #shimCall withArgs: {
 		moduleName . methodName .
 		(self wrap: arg1) memoryAddress .
 		(self wrap: arg2) memoryAddress .
@@ -477,7 +477,7 @@ callModule: moduleName method: methodName args: posArray kwargs: kwDictOrNil
 			vals addLast: (self wrap: v) memoryAddress.
 		].
 	].
-	^ System userAction: #shimCallKw withArgs: {
+	^ self ___shimUserAction: #shimCallKw withArgs: {
 		moduleName . methodName . posAddrs . names asArray . vals asArray }
 %
 
@@ -487,7 +487,7 @@ callModuleReturnCPtr: moduleName method: methodName
 	"Call a no-arg module method that returns a raw C pointer
 	(SmallInteger address) instead of a Smalltalk value."
 
-	^ System userAction: #shimCall withArgs: {
+	^ self ___shimUserAction: #shimCall withArgs: {
 		moduleName . methodName .
 		0 . 0 . 0 .
 		0 . 0 . 8
@@ -500,7 +500,7 @@ callTyped: moduleName type: typeName setattr: attrName selfPtr: ptr value: aValu
 	"Invoke a tp_getset SETTER on a C-allocated typed object.
 	Flags bit 4 selects the setter path in shimCallTyped."
 
-	^ System userAction: #shimCallTyped withArgs: {
+	^ self ___shimUserAction: #shimCallTyped withArgs: {
 		moduleName . typeName . attrName . ptr .
 		(self wrap: aValue) memoryAddress . 0 . 0 . (1 bitOr: 16)
 	}
@@ -515,7 +515,7 @@ method: CPythonShim
 callModule: moduleName method: methodName doubles: anArrayOfDoubles
 	"Call a METH_FASTCALL method that takes 3 doubles and returns a double."
 
-	^ System userAction: #shimCall withArgs: {
+	^ self ___shimUserAction: #shimCall withArgs: {
 		moduleName . methodName .
 		(self wrap: (anArrayOfDoubles at: 1)) memoryAddress .
 		(self wrap: (anArrayOfDoubles at: 2)) memoryAddress .
@@ -535,7 +535,7 @@ callModule: moduleName method: methodName withList: anArray andDouble: aFloat
 	list := (anArray isKindOf: OrderedCollection)
 		ifTrue: [ anArray ]
 		ifFalse: [ OrderedCollection withAll: anArray ].
-	^ System userAction: #shimCall withArgs: {
+	^ self ___shimUserAction: #shimCall withArgs: {
 		moduleName . methodName .
 		(self wrap: list) memoryAddress .
 		(self wrap: aFloat) memoryAddress . 0 .
@@ -552,7 +552,7 @@ callModule: moduleName method: methodName insortList: anArray value: aFloat
 
 	| oc |
 	oc := OrderedCollection withAll: anArray.
-	System userAction: #shimCall withArgs: {
+	self ___shimUserAction: #shimCall withArgs: {
 		moduleName . methodName .
 		(self wrap: oc) memoryAddress .
 		(self wrap: aFloat) memoryAddress . 0 .
@@ -566,7 +566,7 @@ method: CPythonShim
 callModule: moduleName method: methodName withBytes: aByteArray
 	"Call a method that takes (bytes) and returns an integer."
 
-	^ System userAction: #shimCall withArgs: {
+	^ self ___shimUserAction: #shimCall withArgs: {
 		moduleName . methodName .
 		(self wrap: aByteArray) memoryAddress . 0 . 0 .
 		0 . 0 . 1
@@ -578,7 +578,7 @@ method: CPythonShim
 callModule: moduleName method: methodName extendCrc: anInteger withBytes: aByteArray
 	"Call a method that takes (int, bytes) and returns an integer."
 
-	^ System userAction: #shimCall withArgs: {
+	^ self ___shimUserAction: #shimCall withArgs: {
 		moduleName . methodName .
 		(self wrap: anInteger) memoryAddress .
 		(self wrap: aByteArray) memoryAddress . 0 .
@@ -597,7 +597,7 @@ callModule6: modDotMethod with: a1 with: a2 with: a3 with: a4 with: a5 with: a6
 	"Call a module method with 6 arguments. modDotMethod is 'module.method'.
 	Returns a Smalltalk OOP (extracted from result PyObject offset 16)."
 
-	^ System userAction: #shimCall withArgs: {
+	^ self ___shimUserAction: #shimCall withArgs: {
 		modDotMethod .
 		(self wrap: a1) memoryAddress .
 		(self wrap: a2) memoryAddress .
@@ -614,7 +614,7 @@ callModule6ReturnCPtr: modDotMethod with: a1 with: a2 with: a3 with: a4 with: a5
 	"Call a module method with 6 arguments. Returns a raw C pointer (SmallInteger).
 	modDotMethod is 'module.method'."
 
-	^ System userAction: #shimCall withArgs: {
+	^ self ___shimUserAction: #shimCall withArgs: {
 		modDotMethod .
 		(self wrap: a1) memoryAddress .
 		(self wrap: a2) memoryAddress .
@@ -631,10 +631,56 @@ callModule6ReturnCPtr: modDotMethod with: a1 with: a2 with: a3 with: a4 with: a5
 
 category: 'Grail-Calling'
 method: CPythonShim
+___shimUserAction: selector withArgs: argsArray
+	"Invoke a Python-invoking shim user action (#shimCall, #shimCallKw,
+	#shimCallTyped), translating a raw shim error into a catchable Grail
+	exception.
+
+	When a C extension (e.g. _sre) fails, the shim reports the Python
+	exception as a bare GemStone Error (ERR_Error 2710) whose messageText
+	is the exception's str, e.g. 'TypeError: expected string or
+	bytes-like object, got dict' or 'RuntimeError: invalid SRE code'.  A
+	GemStone Error is NOT a Grail BaseException (both descend from
+	Exception as siblings), so Python try/except and
+	unittest.assertRaises cannot catch it and it escapes as an
+	uncatchable Smalltalk error.  Re-signal it as the matching Grail
+	Python exception; a non-Python error is re-raised unchanged."
+
+	^ [ System userAction: selector withArgs: argsArray ]
+		on: Error
+		do: [:ex | self ___translateShimError: ex]
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
+___translateShimError: ex
+	"Parse ``<ExcName>: <message>'' out of a raw shim Error's messageText
+	and re-signal the matching Grail Python exception (looked up in the
+	Python namespace and verified to be a BaseException subclass).  If the
+	text has no recognizable exception-name prefix, re-raise unchanged."
+
+	| text idx name cls baseExc msg |
+	text := ex messageText.
+	text isNil ifTrue: [^ ex pass].
+	idx := text indexOf: $:.
+	idx = 0 ifTrue: [^ ex pass].
+	name := text copyFrom: 1 to: idx - 1.
+	cls := Python at: name asSymbol otherwise: nil.
+	baseExc := Python at: #BaseException otherwise: nil.
+	((cls ~~ nil) and: [(baseExc ~~ nil) and: [cls isBehavior
+		and: [(cls == baseExc) or: [cls inheritsFrom: baseExc]]]]) ifFalse: [
+			^ ex pass].
+	msg := text copyFrom: idx + 1 to: text size.
+	(msg size > 0 and: [msg first == $ ]) ifTrue: [msg := msg copyFrom: 2 to: msg size].
+	^ cls @env1:___signal___: msg
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
 callTyped: moduleName type: typeName method: methName selfPtr: ptr
 	"Call a no-arg method on a C-allocated typed object. Returns a Smalltalk OOP."
 
-	^ System userAction: #shimCallTyped withArgs: {
+	^ self ___shimUserAction: #shimCallTyped withArgs: {
 		moduleName . typeName . methName . ptr .
 		0 . 0 . 0 . 0
 	}
@@ -645,7 +691,7 @@ method: CPythonShim
 callTyped: moduleName type: typeName method: methName selfPtr: ptr with: a1
 	"Call a 1-arg method on a C-allocated typed object. Returns a Smalltalk OOP."
 
-	^ System userAction: #shimCallTyped withArgs: {
+	^ self ___shimUserAction: #shimCallTyped withArgs: {
 		moduleName . typeName . methName . ptr .
 		(self wrap: a1) memoryAddress . 0 . 0 . 1
 	}
@@ -656,7 +702,7 @@ method: CPythonShim
 callTyped: moduleName type: typeName method: methName selfPtr: ptr with: a1 with: a2
 	"Call a 2-arg method on a C-allocated typed object. Returns a Smalltalk OOP."
 
-	^ System userAction: #shimCallTyped withArgs: {
+	^ self ___shimUserAction: #shimCallTyped withArgs: {
 		moduleName . typeName . methName . ptr .
 		(self wrap: a1) memoryAddress .
 		(self wrap: a2) memoryAddress . 0 . 2
@@ -668,7 +714,7 @@ method: CPythonShim
 callTyped: moduleName type: typeName method: methName selfPtr: ptr with: a1 with: a2 with: a3
 	"Call a 3-arg method on a C-allocated typed object. Returns a Smalltalk OOP."
 
-	^ System userAction: #shimCallTyped withArgs: {
+	^ self ___shimUserAction: #shimCallTyped withArgs: {
 		moduleName . typeName . methName . ptr .
 		(self wrap: a1) memoryAddress .
 		(self wrap: a2) memoryAddress .
@@ -681,7 +727,7 @@ method: CPythonShim
 callTypedReturnCPtr: moduleName type: typeName method: methName selfPtr: ptr
 	"Call a no-arg method on a C-allocated typed object. Returns a raw C pointer."
 
-	^ System userAction: #shimCallTyped withArgs: {
+	^ self ___shimUserAction: #shimCallTyped withArgs: {
 		moduleName . typeName . methName . ptr .
 		0 . 0 . 0 . 8
 	}
@@ -692,7 +738,7 @@ method: CPythonShim
 callTypedReturnCPtr: moduleName type: typeName method: methName selfPtr: ptr with: a1
 	"Call a 1-arg method on a C-allocated typed object. Returns a raw C pointer."
 
-	^ System userAction: #shimCallTyped withArgs: {
+	^ self ___shimUserAction: #shimCallTyped withArgs: {
 		moduleName . typeName . methName . ptr .
 		(self wrap: a1) memoryAddress . 0 . 0 . (1 bitOr: 8)
 	}
@@ -703,7 +749,7 @@ method: CPythonShim
 callTypedReturnCPtr: moduleName type: typeName method: methName selfPtr: ptr with: a1 with: a2
 	"Call a 2-arg method on a C-allocated typed object. Returns a raw C pointer."
 
-	^ System userAction: #shimCallTyped withArgs: {
+	^ self ___shimUserAction: #shimCallTyped withArgs: {
 		moduleName . typeName . methName . ptr .
 		(self wrap: a1) memoryAddress .
 		(self wrap: a2) memoryAddress . 0 . (2 bitOr: 8)
@@ -715,7 +761,7 @@ method: CPythonShim
 callTypedReturnCPtr: moduleName type: typeName method: methName selfPtr: ptr with: a1 with: a2 with: a3
 	"Call a 3-arg method on a C-allocated typed object. Returns a raw C pointer."
 
-	^ System userAction: #shimCallTyped withArgs: {
+	^ self ___shimUserAction: #shimCallTyped withArgs: {
 		moduleName . typeName . methName . ptr .
 		(self wrap: a1) memoryAddress .
 		(self wrap: a2) memoryAddress .
@@ -1167,7 +1213,7 @@ callModuleDynamic: moduleName method: methodName args: anArray
 	a3 := nargs >= 3 ifTrue: [(self wrap: (anArray at: 3)) memoryAddress] ifFalse: [0].
 	a4 := nargs >= 4 ifTrue: [(self wrap: (anArray at: 4)) memoryAddress] ifFalse: [0].
 	a5 := nargs >= 5 ifTrue: [(self wrap: (anArray at: 5)) memoryAddress] ifFalse: [0].
-	^ System userAction: #shimCall withArgs: {
+	^ self ___shimUserAction: #shimCall withArgs: {
 		moduleName . methodName .
 		a1 . a2 . a3 .
 		a4 . a5 . nargs

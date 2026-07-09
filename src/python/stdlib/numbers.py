@@ -5,23 +5,41 @@
 # classes — isinstance() against them returns False; Jinja2 (and
 # Werkzeug) fall through to the duck-typed branch, which is what
 # they want anyway.
+#
+# `register(subclass)` is a no-op returning the subclass (so it also
+# works in decorator position and so a module-level
+# `numbers.Real.register(X)` does not raise).  Grail does not track
+# virtual subclasses -- isinstance() against the tower stays False -- but
+# real code (and CPython's own tests) call register() at import time.
+# It is repeated per class rather than relying on classmethod
+# inheritance, which Grail supports only partially.
 
 
 class Number:
-    pass
+    @classmethod
+    def register(cls, subclass):
+        return subclass
 
 
 class Complex(Number):
-    pass
+    @classmethod
+    def register(cls, subclass):
+        return subclass
 
 
 class Real(Complex):
-    pass
+    @classmethod
+    def register(cls, subclass):
+        return subclass
 
 
 class Rational(Real):
-    pass
+    @classmethod
+    def register(cls, subclass):
+        return subclass
 
 
 class Integral(Rational):
-    pass
+    @classmethod
+    def register(cls, subclass):
+        return subclass

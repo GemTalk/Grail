@@ -344,9 +344,15 @@ __imul__: count
 category: 'Grail-Sequence Protocol'
 method: bytearray
 __setitem__: index _: value
-	"Set byte at index (mutable)"
+	"Set byte at index, or assign to a slice (mutable)."
 	| idx size val |
 	size := self @env0:size.
+
+	"Slice assignment: bytearray[i:j[:k]] = bytes-like."
+	(index @env0:isKindOf: slice) ifTrue: [
+		^ self ___setSliceItem: index value: value size: size
+	].
+
 	idx := index.
 	val := value.
 
@@ -372,6 +378,72 @@ __setitem__: index _: value
 	"Set value (convert to 1-based index)"
 	self @env0:at: (idx @env0:+ 1) put: val.
 	^ None
+%
+
+category: 'Grail-Sequence Protocol'
+method: bytearray
+___setSliceItem: aSlice value: value size: size
+	"bytearray[i:j[:k]] = value.  For step 1 the length may change; the
+	receiver is resized IN PLACE (identity preserved) via ``size:''.  For
+	an extended slice (step != 1) the value length must equal the number
+	of selected indices (CPython semantics)."
+
+	| idxTuple lo hi st vals newVals indices i |
+	idxTuple := aSlice @env1:indices: size.
+	lo := idxTuple @env0:at: 1.
+	hi := idxTuple @env0:at: 2.
+	st := idxTuple @env0:at: 3.
+	vals := self ___bytesFrom: value.
+
+	(st @env0:= 1) ifTrue: [
+		newVals := OrderedCollection @env0:new.
+		1 @env0:to: lo do: [:j | newVals @env0:add: (self @env0:at: j)].
+		newVals @env0:addAll: vals.
+		(hi @env0:+ 1) @env0:to: size do: [:j | newVals @env0:add: (self @env0:at: j)].
+		self @env0:size: newVals @env0:size.
+		1 @env0:to: newVals @env0:size do: [:j | self @env0:at: j put: (newVals @env0:at: j)].
+		^ None
+	].
+
+	"Extended slice: collect the selected 0-based indices."
+	indices := OrderedCollection @env0:new.
+	i := lo.
+	st @env0:> 0
+		ifTrue: [[i @env0:< hi] @env0:whileTrue: [indices @env0:add: i. i := i @env0:+ st]]
+		ifFalse: [[i @env0:> hi] @env0:whileTrue: [indices @env0:add: i. i := i @env0:+ st]].
+	(vals @env0:size @env0:= indices @env0:size) ifFalse: [
+		ValueError ___signal___: ('attempt to assign bytes of size '
+			@env0:, vals @env0:size @env0:printString
+			@env0:, ' to extended slice of size '
+			@env0:, indices @env0:size @env0:printString)
+	].
+	1 @env0:to: indices @env0:size do: [:k |
+		self @env0:at: ((indices @env0:at: k) @env0:+ 1) put: (vals @env0:at: k)].
+	^ None
+%
+
+category: 'Grail-Sequence Protocol'
+method: bytearray
+___bytesFrom: value
+	"Materialize a bytes-like value (bytes / bytearray / list / tuple of
+	ints) into an OrderedCollection of validated byte ints (0..255)."
+
+	| cls out |
+	cls := value @env0:class.
+	((cls @env0:== bytes) or: [(cls @env0:== bytearray)
+		or: [(cls @env0:== list) or: [cls @env0:== tuple]]]) ifFalse: [
+			TypeError ___signal___:
+				'can assign only a bytes-like object to a bytearray slice'
+	].
+	out := OrderedCollection @env0:new.
+	1 @env0:to: value @env0:size do: [:i | | b |
+		b := value @env0:at: i.
+		((b @env0:< 0) or: [b @env0:> 255]) ifTrue: [
+			ValueError ___signal___: 'byte must be in range(0, 256)'
+		].
+		out @env0:add: b
+	].
+	^ out
 %
 
 category: 'Grail-Mutation Methods'

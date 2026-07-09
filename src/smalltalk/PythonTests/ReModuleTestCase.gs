@@ -118,6 +118,21 @@ testMatchNoMatchReturnsNone
 	self assert: m equals: None.
 %
 
+category: 'Grail-Tests - Errors'
+method: ReModuleTestCase
+testBadArgTypeRaisesCatchableTypeError
+	"A non-string argument to Pattern.search makes the _sre C shim raise a
+	Python TypeError.  Regression (CPythonShim>>___translateShimError:):
+	it must surface as a CATCHABLE Grail TypeError, not a raw GemStone
+	Error that escapes Python try/except and unittest.assertRaises.  This
+	is what tanked CPython's test_re as an uncatchable-error STERROR."
+
+	| pat |
+	CPythonShim isConfigured ifFalse: [^ self].
+	pat := re @env1:compile: 'abc'.
+	self should: [pat @env1:search: 123] raise: TypeError
+%
+
 category: 'Grail-Tests - Capture groups'
 method: ReModuleTestCase
 testSingleCaptureGroup

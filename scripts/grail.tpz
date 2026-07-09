@@ -24,21 +24,35 @@ priorTranscript := Transcript.
     Transcript := GsFile stdout.
     haveDashD := false .
     dashDashOfs ifNil:[ ExitClientError signal: ' "--"   not found on topaz command line ' ].
-    dashDashOfs < args size ifTrue:[  
-        " after '--'  we expect optional -D  and a filename " 
-        | anArg path |
-        anArg := args at: dashDashOfs + 1 .
+    dashDashOfs < args size ifTrue:[
+        " after '--'  we expect optional -D, then either -m <module> or a filename "
+        | anArg path haveDashM moduleName argIdx |
+        haveDashM := false .
+        argIdx := dashDashOfs + 1 .
+        anArg := args at: argIdx .
         anArg = '-D' ifTrue:[
         haveDashD := true .
-        anArg := args at: dashDashOfs + 2 .
+        argIdx := argIdx + 1 .
+        anArg := args at: argIdx .
         ].
-        path := anArg .
-        (GsFile exists: path) ifFalse: [
-            GsFile stderr nextPutAll: path printString , ' not found!'; lf; flush.
-            Error signal: 'Path not found!'.
+        anArg = '-m' ifTrue:[
+            " -m <module>: run a module by dotted name as __main__ (python3 -m) "
+            (argIdx + 1 > args size) ifTrue:[
+                Error signal: '-m requires a module name'.
+            ].
+            haveDashM := true .
+            moduleName := args at: argIdx + 1 .
+        ] ifFalse:[
+            path := anArg .
+            (GsFile exists: path) ifFalse: [
+                GsFile stderr nextPutAll: path printString , ' not found!'; lf; flush.
+                Error signal: 'Path not found!'.
+            ].
         ].
         [
-            importlib runPath: path.
+            haveDashM
+                ifTrue: [ importlib runModule: moduleName ]
+                ifFalse: [ importlib runPath: path ].
         ] on: Error do: [:ex |
             | msg |
             "messageText can be nil (e.g. MessageNotUnderstood) and GsFile

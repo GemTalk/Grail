@@ -1,0 +1,36 @@
+# Manifest of CPython 3.14.4 regression-test modules run by
+# scripts/run_cpython_suite.sh.  One dotted module name per line.
+# Blank lines and lines starting with '#' are ignored.
+#
+# These are vendored under src/python/stdlib/test/ (see licenses/CPYTHON.md)
+# and scored one topaz session per module.  This is a CURATED STARTER SET
+# chosen from areas Grail already covers -- NOT the full ~480-module
+# suite.  Grow it as test.support and the stdlib shims fill in; the
+# scoreboard's `detail` column names whatever symbol is still missing.
+
+# --- Phase 1: most likely to at least import with the trimmed support ---
+test.test_textwrap
+test.test_math
+test.test_int
+test.test_float
+test.test_heapq
+test.test_bisect
+test.test_operator
+test.test_fractions
+test.test_datetime
+test.test_re
+test.test_functools
+
+# --- Phase 2 (uncomment as support grows): need sibling mixins / array /
+#     doctest / subprocess, or heavy multiple-inheritance ---
+# test.test_list
+# test.test_tuple
+# test.test_dict
+# test.test_set
+# test.test_bytes
+# test.test_collections
+# test.test_itertools
+# test.test_enum
+#
+# NOTE: test_json and test_string are PACKAGES (directories) in 3.14, not
+# single modules -- out of scope for the V1 single-module harness.

@@ -94,6 +94,32 @@ doit
 sys_implementation category: 'Grail-Modules'
 %
 
+! ------- sys_float_info class (Python 'sys.float_info' structseq)
+expectvalue /Class
+doit
+module subclass: 'sys_float_info'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+sys_float_info comment:
+'Python sys.float_info — IEEE 754 double-precision characteristics
+(PEP structseq).  Grail exposes attribute access (sys.float_info.max,
+.min, .epsilon, .dig, .mant_dig, ...); CPython''s test suite and math
+code read these at import time.'
+%
+
+expectvalue /Class
+doit
+sys_float_info category: 'Grail-Modules'
+%
+
 ! ===============================================================================
 ! sys Module (Python 'sys' module)
 ! ===============================================================================
@@ -111,6 +137,8 @@ sys_flags removeAllMethods: 1.
 sys_flags class removeAllMethods: 1.
 sys_implementation removeAllMethods: 1.
 sys_implementation class removeAllMethods: 1.
+sys_float_info removeAllMethods: 1.
+sys_float_info class removeAllMethods: 1.
 %
 
 set compile_env: 1
@@ -127,6 +155,27 @@ initialize
 	self @env0:dynamicInstVarAt: #version put: (tuple @env0:withAll: {3. 14. 0. 'final'. 0}).
 	self @env0:dynamicInstVarAt: #hexversion put: 16r030E00F0.
 	self @env0:dynamicInstVarAt: #_multiarch put: 'gemstone'
+%
+
+category: 'Grail-Initialization'
+method: sys_float_info
+initialize
+	"IEEE 754 double-precision characteristics, matching CPython's
+	sys.float_info on every platform Grail targets.  Reads
+	(sys.float_info.max, .min, .epsilon, ...) resolve via the
+	dynamic-instVar store, exactly like sys.flags."
+
+	self @env0:dynamicInstVarAt: #max put: 1.7976931348623157e308.
+	self @env0:dynamicInstVarAt: #max_exp put: 1024.
+	self @env0:dynamicInstVarAt: #max_10_exp put: 308.
+	self @env0:dynamicInstVarAt: #min put: 2.2250738585072014e-308.
+	self @env0:dynamicInstVarAt: #min_exp put: -1021.
+	self @env0:dynamicInstVarAt: #min_10_exp put: -307.
+	self @env0:dynamicInstVarAt: #dig put: 15.
+	self @env0:dynamicInstVarAt: #mant_dig put: 53.
+	self @env0:dynamicInstVarAt: #epsilon put: 2.220446049250313e-16.
+	self @env0:dynamicInstVarAt: #radix put: 2.
+	self @env0:dynamicInstVarAt: #rounds put: 1
 %
 
 category: 'Grail-Initialization'
@@ -850,7 +899,7 @@ initialize_runtime_info
 	self @env0:at: #stdlib_module_names put: (frozenset ___new___).
 	self @env0:at: #copyright put: 'Copyright (c) GemTalk Systems LLC. All rights reserved.'.
 	self @env0:at: #flags put: (sys_flags instance).
-	self @env0:at: #float_info put: None.
+	self @env0:at: #float_info put: (sys_float_info instance).
 	self @env0:at: #int_info put: None.
 	self @env0:at: #hash_info put: None.
 	self @env0:at: #thread_info put: None.

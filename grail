@@ -11,6 +11,9 @@ fi
 # Usage
 #   grail  <path to python file to run>
 #
+#   grail  -m  <dotted.module.name>
+#      run a module by name as __main__ (like: python3 -m dotted.module.name)
+#
 #   grail  -D  <path to python file to run>
 #      run specified file and if interactive, pass errors to topaz for interactive debug
 #

@@ -1,5 +1,6 @@
 .topazini
 *.out
+out/
 __pycache__
 stdout.txt
 .tmp/*

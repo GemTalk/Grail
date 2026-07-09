@@ -628,3 +628,77 @@ testReverse
 	self assert: (ba at: 2) equals: 66.
 	self assert: (ba at: 3) equals: 65.
 %
+
+category: 'Grail-Helpers'
+method: BytearrayTestCase
+baFrom: anArray
+	"Build a Grail bytearray from a Smalltalk Array of byte ints."
+
+	| ba |
+	ba := bytearray ___new___: bytearray.
+	anArray do: [:b | ba @env1:append: b].
+	^ ba
+%
+
+category: 'Grail-Tests - Slice assignment'
+method: BytearrayTestCase
+testSetSliceFullReplaceShrinks
+	"bytearray[:] = shorter bytes replaces all contents in place; the
+	length shrinks and identity is preserved.  Regresses CPython's
+	test_re test_bug_29444 (`s[:] = b'xyz'`)."
+
+	| ba |
+	ba := self baFrom: #(97 98 99 100 101 102 103 104).   "b'abcdefgh'"
+	ba @env1:__setitem__: (slice @env1:__new__: None) _: (self baFrom: #(120 121 122)).  "= b'xyz'"
+	self assert: ba size equals: 3.
+	self assert: (ba at: 1) equals: 120.
+	self assert: (ba at: 2) equals: 121.
+	self assert: (ba at: 3) equals: 122.
+%
+
+category: 'Grail-Tests - Slice assignment'
+method: BytearrayTestCase
+testSetSlicePartialGrows
+	"bytearray[1:2] = b'XYZ' replaces one byte with three (length grows,
+	middle splice)."
+
+	| ba |
+	ba := self baFrom: #(97 98 99).   "b'abc'"
+	ba @env1:__setitem__: (slice @env1:__new__: 1 _: 2 _: None) _: (self baFrom: #(88 89 90)).
+	"a + XYZ + c => aXYZc"
+	self assert: ba size equals: 5.
+	self assert: (ba at: 1) equals: 97.
+	self assert: (ba at: 2) equals: 88.
+	self assert: (ba at: 4) equals: 90.
+	self assert: (ba at: 5) equals: 99.
+%
+
+category: 'Grail-Tests - Slice assignment'
+method: BytearrayTestCase
+testSetSliceExtendedStep
+	"bytearray[::2] = b'XYZ' assigns element-wise to the stepped
+	positions."
+
+	| ba |
+	ba := self baFrom: #(97 98 99 100 101 102).   "b'abcdef'"
+	ba @env1:__setitem__: (slice @env1:__new__: None _: None _: 2) _: (self baFrom: #(88 89 90)).
+	"X b Y d Z f"
+	self assert: ba size equals: 6.
+	self assert: (ba at: 1) equals: 88.
+	self assert: (ba at: 2) equals: 98.
+	self assert: (ba at: 3) equals: 89.
+	self assert: (ba at: 5) equals: 90.
+%
+
+category: 'Grail-Tests - Slice assignment'
+method: BytearrayTestCase
+testSetSliceExtendedWrongLengthRaises
+	"An extended-slice assignment whose value length differs from the
+	number of selected indices raises ValueError (CPython semantics)."
+
+	| ba |
+	ba := self baFrom: #(97 98 99 100 101 102).   "[::2] selects 3 positions"
+	self should: [
+		ba @env1:__setitem__: (slice @env1:__new__: None _: None _: 2) _: (self baFrom: #(88 89))
+	] raise: ValueError.
+%

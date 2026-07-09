@@ -115,27 +115,29 @@ testInvCdfSymmetry
 category: 'Grail-Tests - Statistics'
 method: CPythonShimTestCase
 testInvCdfErrorAtZero
-	"inv_cdf(0.0, 0, 1) should raise a ValueError."
+	"inv_cdf(0.0, 0, 1) raises a catchable Python ValueError (the shim
+	translates the raw error via ___translateShimError:)."
 
 	self should: [
 		CPythonShim current
 			callModule: '_statistics'
 			method: '_normal_dist_inv_cdf'
 			doubles: { 0.0 . 0.0 . 1.0 }.
-	] raise: Error.
+	] raise: ValueError.
 %
 
 category: 'Grail-Tests - Statistics'
 method: CPythonShimTestCase
 testInvCdfErrorAtOne
-	"inv_cdf(1.0, 0, 1) should raise a ValueError."
+	"inv_cdf(1.0, 0, 1) raises a catchable Python ValueError (the shim
+	translates the raw error via ___translateShimError:)."
 
 	self should: [
 		CPythonShim current
 			callModule: '_statistics'
 			method: '_normal_dist_inv_cdf'
 			doubles: { 1.0 . 0.0 . 1.0 }.
-	] raise: Error.
+	] raise: ValueError.
 %
 
 category: 'Grail-Tests - Statistics'
@@ -623,12 +625,13 @@ testShimtestNone
 category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestError
-	"test_error() raises a ValueError."
+	"test_error() raises a catchable Python ValueError (the shim
+	translates the raw error via ___translateShimError:)."
 
 	self should: [
 		CPythonShim current
 			callModule: '_shimtest' method: 'test_error'.
-	] raise: Error.
+	] raise: ValueError.
 %
 
 category: 'Grail-Tests - ShimTest API'
@@ -1018,13 +1021,14 @@ testShimtestBytesRoundtrip
 category: 'Grail-Tests - ShimTest API'
 method: CPythonShimTestCase
 testShimtestErrorFormat
-	"test_error_format raises a formatted TypeError."
+	"test_error_format raises a catchable, formatted Python TypeError
+	(the shim translates the raw error via ___translateShimError:)."
 
 	self should: [
 		CPythonShim current
 			callModule: '_shimtest' method: 'test_error_format'
 			with: 42.
-	] raise: Error.
+	] raise: TypeError.
 %
 
 ! ===============================================================================
@@ -1268,13 +1272,14 @@ testHeapqSortStrings
 category: 'Grail-Tests - Heapq'
 method: CPythonShimTestCase
 testHeapqPopEmpty
-	"heappop on an empty heap raises IndexError."
+	"heappop on an empty heap raises a catchable Python IndexError (the
+	shim translates the raw error via ___translateShimError:)."
 
 	self should: [
 		CPythonShim current
 			callModule: '_heapq' method: 'heappop'
 			with: OrderedCollection new.
-	] raise: Error.
+	] raise: IndexError.
 %
 
 category: 'Grail-Tests - Heapq'
@@ -2406,7 +2411,9 @@ testKwargsVarargsDict
 category: 'Grail-Tests - Kwargs'
 method: CPythonShimTestCase
 testKwargsRejectedByPositionalOnly
-	"A method without METH_KEYWORDS raises TypeError when kwargs given."
+	"A method without METH_KEYWORDS raises a catchable Python TypeError
+	when kwargs are given (the shim translates the raw error via
+	___translateShimError:)."
 
 	| kw |
 	kw := KeyValueDictionary new.
@@ -2415,7 +2422,7 @@ testKwargsRejectedByPositionalOnly
 		CPythonShim current
 			callModule: '_shimtest' method: 'test_int'
 			args: { 1 } kwargs: kw.
-	] raise: Error.
+	] raise: TypeError.
 %
 
 ! ===============================================================================

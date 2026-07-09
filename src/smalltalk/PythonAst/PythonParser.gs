@@ -1732,6 +1732,16 @@ parseNumberValue: aString
 	| str |
 	str := aString.
 
+	"Python permits underscore digit separators in every numeric literal
+	(1_000_000, 0xdead_beef, 1_0.5e1_0); GemStone's asNumber stops at the
+	first underscore and returns a truncated value, so strip them first."
+	(str includes: $_) ifTrue: [str := str copyWithout: $_].
+
+	"Python allows a leading-dot float with no integer part (.5, .3e2,
+	.5j); GemStone's asNumber rejects it with rtErrBadFormat, so supply
+	the implicit leading zero."
+	(str notEmpty and: [str first == $.]) ifTrue: [str := '0' , str].
+
 	"Complex number"
 	(str notEmpty and: [(str last == $j) or: [str last == $J]]) ifTrue: [
 		| realPart |

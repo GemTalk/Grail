@@ -33,6 +33,7 @@ Class methods for loading modules from files:
 - astForPath: - Create a ModuleAst from a Python file
 - astForSource: - Create a ModuleAst from Python source
 - runPath: - Execute a Python file as __main__
+- runModule: - Execute a module by dotted name as __main__ (like python3 -m)
 
 The module registry is maintained in sys.modules (accessed via sys class>>modules).
 
@@ -733,6 +734,40 @@ runPath: pathString
 	importlib runPath: '/path/to/script.py'.
 	"
 	^ self loadModuleFromPath: pathString name: '__main__'
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+runModule: aName
+	"Resolve a dotted module name to a file and execute it as __main__
+	(like running ``python3 -m aName'').  Reuses ___moduleNameToPath___:
+	for resolution and loadModuleFromPath:name: for execution, so class
+	defs / top-level defs / body share the one codegen path that runPath:
+	and the import machinery already use.  Signals a Python
+	ModuleNotFoundError when the name does not resolve to a file on the
+	loader search path.
+
+	NOTE: for a stock CPython test module this runs the whole module
+	body, including any trailing ``if __name__ == '__main__':
+	unittest.main()'' tail — which raises TypeError because Grail's
+	unittest.main() requires an explicit ``module='' argument (it has no
+	__main__ introspection).  That is faithful ``-m'' behavior.  The
+	regression-test SCORING path (scripts/run_one_cpython_module.gs)
+	deliberately imports the module under its real dotted name instead,
+	so the ``__main__'' tail does not fire and unittest discovery runs.
+
+	``___moduleNameToPath___:'' is an env-1 classmethod, so it is reached
+	via @env1: from this env-0 method (see the star-import expander for
+	the same idiom); ``___signal___:'' on the exception class is likewise
+	env-1.
+
+	importlib runModule: 'test.test_math'.
+	"
+	| path |
+	path := self @env1:___moduleNameToPath___: aName.
+	path isNil ifTrue: [
+		ModuleNotFoundError @env1:___signal___: 'No module named ''', aName, ''''].
+	^ self loadModuleFromPath: path name: '__main__'
 %
 
 category: 'Grail-Module Loading'

@@ -515,6 +515,7 @@ run
 	at: #'CachedPropertyTestCase' put: nil;
 	at: #'BytesWarningTestCase' put: nil;
 	at: #'CPythonShimTestCase' put: nil;
+	at: #'CPythonHarnessTestCase' put: nil;
 	at: #'CMathTestCase' put: nil;
 	at: #'ChildProcessErrorTestCase' put: nil;
 	at: #'ClassCallFastPathTestCase' put: nil;
@@ -1307,6 +1308,7 @@ input src/smalltalk/PythonTests/HttpStatusTestCase.gs
 input src/smalltalk/PythonTests/HttpCookiesTestCase.gs
 input src/smalltalk/PythonTests/EnumTestCase.gs
 input src/smalltalk/PythonTests/CPythonShimTestCase.gs
+input src/smalltalk/PythonTests/CPythonHarnessTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonLibraryTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonObjectForwarderTestCase.gs
