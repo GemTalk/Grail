@@ -74,4 +74,18 @@ RESULTS = {
     "int_pow_int": 2 ** 5,
     # reflected arithmetic dunder on a user class
     "reflected_radd": 1 + Radd(),
+    # --- index/unary protocol ---
+    "list_index_none": _t(lambda: [1, 2][None]),
+    "list_setitem_none": _t(lambda: [1, 2].__setitem__(None, 5)),
+    "list_delitem_none": _t(lambda: [1, 2].__delitem__(None)),
+    "str_index_none": _t(lambda: "ab"[None]),
+    "range_index_none": _t(lambda: range(5)[None]),
+    "bytes_index_none": _t(lambda: b"ab"[None]),
+    "in_none": _t(lambda: 1 in None),
+    "invert_none": _t(lambda: ~None),
+    "neg_none": _t(lambda: -None),
+    # valid indexing keeps working
+    "list_index_ok": [1, 2][1],
+    "str_index_neg": "abc"[-1],
+    "range_index_ok": range(5)[2],
 }

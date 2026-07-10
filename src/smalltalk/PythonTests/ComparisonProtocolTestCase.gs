@@ -121,3 +121,26 @@ testReflectedArithmeticDunder
 
 	self assert: (self resultAt: 'reflected_radd') equals: 'RADD:1'
 %
+
+category: 'Grail-Tests - Index/unary protocol'
+method: ComparisonProtocolTestCase
+testBadIndexAndUnaryRaiseCatchableTypeError
+	"Non-integer indices ([1,2][None], 'ab'[None], range(5)[None]) and
+	unary ops on unsupported types (~None, -None) raise catchable
+	TypeError instead of uncatchable env-0 comparison DNUs on the index
+	(the shapes that kept CPython's test_operator at STERROR)."
+
+	#('list_index_none' 'list_setitem_none' 'list_delitem_none'
+	  'str_index_none' 'range_index_none' 'bytes_index_none'
+	  'in_none' 'invert_none' 'neg_none') do: [:key |
+		self assert: ((self resultAt: key) = 'type-error')
+			description: key]
+%
+
+category: 'Grail-Tests - Index/unary protocol'
+method: ComparisonProtocolTestCase
+testValidIndexingStillWorks
+	self assert: (self resultAt: 'list_index_ok') equals: 2.
+	self assert: (self resultAt: 'str_index_neg') equals: 'c'.
+	self assert: (self resultAt: 'range_index_ok') equals: 2
+%

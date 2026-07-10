@@ -1695,6 +1695,18 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 		TypeError @env1:___signal___: ('argument of type ''',
 			self @env0:class @env0:name @env0:asString,
 			''' is not iterable')].
+	"Missing UNARY operator dunders (``~None'', ``-None'', ``+None'')
+	raise CPython's catchable TypeError.  Same non-PythonInstance
+	restriction as __contains__ -- user-instance unary sends stay on the
+	attribute-semantics path."
+	(self @env0:isKindOf: PythonInstance) ifFalse: [ | unaryOp |
+		unaryOp := nil.
+		aSelector == #'__invert__' ifTrue: [unaryOp := '~'].
+		aSelector == #'__neg__' ifTrue: [unaryOp := '-'].
+		aSelector == #'__pos__' ifTrue: [unaryOp := '+'].
+		unaryOp @env0:== nil ifFalse: [
+			TypeError @env1:___signal___: ('bad operand type for unary ',
+				unaryOp, ': ''', self @env0:class @env0:name @env0:asString, '''')]].
 	(s @env0:size @env0:> 0 @env0:and: [s @env0:last @env0:= $:]) ifTrue: [
 		"Keyword selector like `name:_:_:` — the corresponding Python
 		function may have been compiled as varargs (`_name:kw:`) because
