@@ -1,6 +1,6 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-07-10T13:09:19Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
+Generated: 2026-07-10T14:56:07Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
 
 **Modules: 11** — OK 1 · FAIL 0 · ERROR 2 · SKIP 1 · IMPORTERROR 5 · STERROR 2 · CRASH 0 · TIMEOUT 0
 
@@ -23,5 +23,5 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_operator | ERROR | 110 | 30 | 28 | 0 |  |
 | test.test_fractions | IMPORTERROR | 0 | 0 | 0 | 0 | a CompileError occurred (error 1001), unexpected token ; expected a right bracket (]) ; unexpected token ; unexpected token ; unexpected token  |
 | test.test_datetime | SKIP | 0 | 0 | 0 | 0 |  |
-| test.test_re | STERROR | 0 | 0 | 0 | 0 | a MessageNotUnderstood occurred (error 2010), a Re does not understand  #'_compile_template' (env 1) |
+| test.test_re | STERROR | 0 | 0 | 0 | 0 | object does not have varying instVars |
 | test.test_functools | IMPORTERROR | 0 | 0 | 0 | 0 | Expected OP '(' but got OP '[' at line 840 |

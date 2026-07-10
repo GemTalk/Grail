@@ -553,6 +553,73 @@ center: width
 
 category: 'Grail-Search Methods'
 method: bytes
+count: sub _: start
+	"bytes.count(sub, start) -- bounded from start (0-based)."
+
+	^ self count: sub _: start _: self @env0:size
+%
+
+category: 'Grail-Search Methods'
+method: bytes
+count: sub _: start _: end
+	"bytes.count(sub, start, end) -- count within the [start, end)
+	slice, CPython clamping rules.  re._constants.PatternError builds
+	error line numbers with the 3-arg form on byte patterns."
+
+	| size s e |
+	size := self @env0:size.
+	s := start. e := end.
+	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
+	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
+	e := e @env0:min: size.
+	s @env0:>= e ifTrue: [^ 0].
+	^ (self @env0:copyFrom: s @env0:+ 1 to: e) count: sub
+%
+
+category: 'Grail-Search Methods'
+method: bytes
+rfind: sub _: start _: end
+	"bytes.rfind(sub, start, end) -- highest 0-based index of sub within
+	[start, end), or -1.  re._constants.PatternError computes error
+	column positions with it on byte patterns."
+
+	| size s e subSize i |
+	size := self @env0:size.
+	s := start. e := end.
+	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
+	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
+	e := e @env0:min: size.
+	subSize := (sub @env0:isKindOf: SmallInteger)
+		@env0:ifTrue: [1] @env0:ifFalse: [sub @env0:size].
+	i := e @env0:- subSize.
+	[i @env0:>= s] @env0:whileTrue: [
+		| match |
+		match := true.
+		(sub @env0:isKindOf: SmallInteger)
+			ifTrue: [match := (self @env0:at: i @env0:+ 1) @env0:= sub]
+			ifFalse: [
+				1 @env0:to: subSize do: [:j |
+					(self @env0:at: i @env0:+ j) @env0:= (sub @env0:at: j)
+						ifFalse: [match := false]]].
+		match ifTrue: [^ i].
+		i := i @env0:- 1].
+	^ -1
+%
+
+category: 'Grail-Search Methods'
+method: bytes
+rfind: sub _: start
+	^ self rfind: sub _: start _: self @env0:size
+%
+
+category: 'Grail-Search Methods'
+method: bytes
+rfind: sub
+	^ self rfind: sub _: 0 _: self @env0:size
+%
+
+category: 'Grail-Search Methods'
+method: bytes
 count: sub
 	"Count non-overlapping occurrences of sub"
 	| subClass subSize mySize count i |
@@ -658,11 +725,18 @@ decode: encoding
 	| encodingStr |
 	encodingStr := encoding.
 
-	"Support UTF-8"
+	"Support UTF-8.  Ill-formed input raises Python's catchable
+	UnicodeDecodeError, not GemStone's raw ArgumentError (which escapes
+	try/except -- CPython test_re's locale tests decode latin-1-laden
+	byte patterns and expect a Python exception)."
 	((encodingStr @env0:= 'utf-8') or: [
 		encodingStr @env0:= 'utf8'
 	]) ifTrue: [
-		^ self @env0:decodeFromUTF8
+		^ [self @env0:decodeFromUTF8]
+			@env0:on: ArgumentError
+			do: [:ex |
+				UnicodeDecodeError ___signal___:
+					('''utf-8'' codec can''t decode bytes: invalid continuation byte')]
 	].
 
 	"Support ASCII"

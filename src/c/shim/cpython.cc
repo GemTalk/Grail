@@ -3879,8 +3879,17 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
                             return GciI64ToOop((int64)v);
                         }
                         case _Py_T_OBJECT: {
+                            /* Honor returnCPtr here too: Match.re is a
+                               _Py_T_OBJECT member holding a heap
+                               PatternObject, which has no OOP slot —
+                               pyobj_oop would manufacture a foreign-object
+                               wrapper instead of the raw pointer the
+                               SrePattern wrapper expects. */
                             PyObject *v = *(PyObject **)base;
                             if (!v) return OOP_NIL;
+                            if (returnCPtr)
+                                return GciI64ToOop(v == Py_None ? 0
+                                                   : (intptr_t)v);
                             return pyobj_oop(v);
                         }
                         default:

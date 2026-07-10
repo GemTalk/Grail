@@ -1207,3 +1207,35 @@ test__mod__formatting
 	r := b @env1:__mod__: (tuple @env1:__new__: { 1. 2 }).
 	self assert: r equals: (bytes @env1:__new__: '1-2' _: 'latin1')
 %
+
+category: 'Grail-Tests - Decode errors'
+method: BytesTestCase
+testDecodeIllFormedUtf8RaisesUnicodeDecodeError
+	"Ill-formed UTF-8 input raises Python's catchable UnicodeDecodeError,
+	not GemStone's raw ArgumentError (which escaped try/except and
+	killed CPython test_re's locale tests)."
+
+	| ba |
+	ba := bytearray ___new___: bytearray.
+	ba @env1:append: 16rB5.
+	self should: [ba @env1:decode: 'utf-8'] raise: UnicodeDecodeError.
+	"latin-1 decodes the same byte fine."
+	self assert: ((ba @env1:decode: 'latin-1') @env1:__len__) equals: 1
+%
+
+category: 'Grail-Tests - Bounded search'
+method: BytesTestCase
+testCountAndRfindWithBounds
+	"bytes.count(sub, start, end) and bytes.rfind(sub, start, end) --
+	re._constants.PatternError builds error line/column numbers with
+	the 3-arg forms on byte patterns."
+
+	| ba |
+	ba := bytearray ___new___: bytearray.
+	#(97 98 97 98 97) do: [:b | ba @env1:append: b].   "b'ababa'"
+	self assert: (ba @env1:count: 97 _: 0 _: 5) equals: 3.
+	self assert: (ba @env1:count: 97 _: 1 _: 4) equals: 1.
+	self assert: (ba @env1:rfind: 97 _: 0 _: 5) equals: 4.
+	self assert: (ba @env1:rfind: 97 _: 0 _: 4) equals: 2.
+	self assert: (ba @env1:rfind: 122 _: 0 _: 5) equals: -1
+%

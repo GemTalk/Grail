@@ -1695,6 +1695,16 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 		TypeError @env1:___signal___: ('argument of type ''',
 			self @env0:class @env0:name @env0:asString,
 			''' is not iterable')].
+	((self @env0:isKindOf: PythonInstance) @env0:not
+		and: [aSelector == #'__setitem__:_:']) ifTrue: [
+		TypeError @env1:___signal___: ('''',
+			self @env0:class @env0:name @env0:asString,
+			''' object does not support item assignment')].
+	((self @env0:isKindOf: PythonInstance) @env0:not
+		and: [aSelector == #'__delitem__:']) ifTrue: [
+		TypeError @env1:___signal___: ('''',
+			self @env0:class @env0:name @env0:asString,
+			''' object does not support item deletion')].
 	"Missing UNARY operator dunders (``~None'', ``-None'', ``+None'')
 	raise CPython's catchable TypeError.  Same non-PythonInstance
 	restriction as __contains__ -- user-instance unary sends stay on the

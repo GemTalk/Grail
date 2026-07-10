@@ -514,7 +514,7 @@ __repr__
 			multi-line template compiles to ``yield 'line1<NL>line2''' --
 			an unterminated string literal that the tokenizer rejects."
 			| hex |
-			hex := (cp @env0:printString: 16) @env0:asLowercase.
+			hex := (cp @env0:printStringRadix: 16 showRadix: false) @env0:asLowercase.
 			stream @env0:nextPutAll: '\x'.
 			((hex @env0:size) @env0:< 2) ifTrue: [ stream @env0:nextPut: $0 ].
 			stream @env0:nextPutAll: hex.
@@ -720,7 +720,7 @@ encode: encoding
 	(enc @env0:= 'unicode_escape') ifTrue: [
 		| ws hexFor |
 		hexFor := [:cp :width | | h |
-			h := (cp @env0:printString: 16) @env0:asLowercase.
+			h := (cp @env0:printStringRadix: 16 showRadix: false) @env0:asLowercase.
 			[h @env0:size @env0:< width] @env0:whileTrue: [h := '0' @env0:, h].
 			h].
 		ws := WriteStream @env0:on: String @env0:new.
@@ -1105,19 +1105,25 @@ ___resolveFormatField___: field positional: positional kwargs: kwargs autoIdx: a
 			IndexError ___signal___: 'Replacement index ' @env0:,
 				idx printString @env0:, ' out of range for positional args tuple'].
 		^ positional @env0:at: idx @env0:+ 1].
-	"Keyword field."
+	"Keyword field: look up through the mapping's own __getitem__ so
+	format_map works with ANY mapping (a regex Match resolves group
+	names and raises ITS OWN IndexError for unknown groups, which
+	CPython's test_re asserts on); a plain dict raises its native
+	KeyError, matching the old at:ifAbsent: behavior."
 	kwargs @env0:isNil ifTrue: [
 		KeyError ___signal___: '''' @env0:, field @env0:asString @env0:, ''''].
-	^ kwargs @env0:at: field @env0:asString ifAbsent: [
-		KeyError ___signal___: '''' @env0:, field @env0:asString @env0:, '''']
+	^ kwargs @env1:__getitem__: field @env0:asString
 %
 
 category: 'Grail-String Methods'
 method: CharacterCollection
 format_map: mapping
-	"String formatting using a mapping. Not yet implemented."
+	"str.format_map(mapping) -- like format(**mapping) but keyword
+	fields resolve through the mapping's __getitem__ directly (no dict
+	copy), so mappings with custom item access (regex Match objects,
+	defaultdict-alikes) work."
 
-	self @env0:error: 'Not yet implemented: format_map'
+	^ self @env1:_format: #() kw: mapping
 %
 
 category: 'Grail-String Methods'

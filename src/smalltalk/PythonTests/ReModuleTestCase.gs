@@ -402,3 +402,42 @@ parts = re.split(" ", text)
 	self assert: (result @env1:__getitem__: 3) equals: 'Die'.
 	self assert: (result @env1:__getitem__: 4) equals: 17
 %
+
+category: 'Grail-Tests - Substitution'
+method: ReModuleTestCase
+testSubUnmatchedGroupExpandsEmpty
+	"An unmatched group in a sub template expands to the empty string
+	(CPython 3.5+); Match.group answers the None SINGLETON for it, and
+	comparing only against Smalltalk nil let None leak into the join."
+
+	self assert: (self eval: 'import re
+re.sub(r"(x)?y", r"[\1]", "y")') equals: '[]'
+%
+
+category: 'Grail-Tests - Match protocol'
+method: ReModuleTestCase
+testMatchItemAssignmentRaisesTypeError
+	"m[0] = 1 on a Match raises catchable TypeError (missing __setitem__
+	on a non-PythonInstance routes through the DNU protocol fallback)."
+
+	self assert: (self eval: 'import re
+m = re.match("a", "a")
+try:
+    m[0] = 1
+    r = "no-error"
+except TypeError:
+    r = "type-error"
+r') equals: 'type-error'
+%
+
+category: 'Grail-Tests - Templates'
+method: ReModuleTestCase
+testExpandViaCompileTemplate
+	"Match.expand routes through the C shim's re._compile_template
+	fetch (importGetAttr must lazy-wrap multi-arg defs as BoundMethods
+	while leaving native value attrs like math.pi as plain values)."
+
+	self assert: (self eval: 'import re
+m = re.match(r"(\w+) (\w+)", "hello world")
+m.expand(r"\2 \1")') equals: 'world hello'
+%

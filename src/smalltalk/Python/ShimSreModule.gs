@@ -618,7 +618,11 @@ ___expandTemplate___: aTemplate withMatch: m
 			ifTrue: [
 				| g |
 				g := m @env1:group: item.
-				g @env0:== nil ifFalse: [parts @env0:add: g]
+				"Unmatched group -> empty string (CPython 3.5+ sub
+				semantics).  group: answers the Python None SINGLETON,
+				not Smalltalk nil -- comparing only against nil let None
+				leak into the join and DNU on do: (test_symbolic_refs)."
+				(g @env0:== nil or: [g @env0:== None]) ifFalse: [parts @env0:add: g]
 			]
 			ifFalse: [parts @env0:add: item]
 	].
@@ -989,10 +993,22 @@ _span: positional kw: keywords
 category: 'Grail-Methods'
 method: SreMatch
 expand: template
-	"expand(template) -> str"
-	^ (CPythonShim @env0:current)
-		@env0:callTyped: '_sre' type: 'Match' method: 'expand' selfPtr: (self @env0:cPtrAddress)
-		with: template
+	"expand(template) -> str.
+
+	Expanded on the Grail side (re._parser.parse_template plus the same
+	___expandTemplate___ that sub uses) rather than via the C
+	match_expand: that path fetches AND CALLS re._compile_template,
+	whose Python body needs `_sre.template` -- a heap TemplateObject
+	the shim's OOP-marshalling can't carry (see SrePattern>>sub:_:_:).
+	Worse, the AttributeError it raised inside the GciPerform callback
+	could not unwind across the user-action frame, degenerating into an
+	UncontinuableError storm."
+
+	| pat parser parsed |
+	pat := self @env1:re.
+	parser := importlib @env1:modules @env0:at: #'re._parser'.
+	parsed := parser @env1:parse_template: template _: pat.
+	^ pat @env1:___expandTemplate___: parsed withMatch: self
 %
 
 category: 'Grail-Methods'

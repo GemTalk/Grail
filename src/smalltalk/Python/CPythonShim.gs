@@ -1671,6 +1671,14 @@ importGetAttr: modName name: attrName
 	"Runtime lookup: importlib.gs compiles after CPythonShim.gs in
 	install.gs, so a direct reference would not resolve here."
 	mod := ((Python at: #importlib) ___instance___) @env1:import_module: modName.
-	value := mod perform: attrName asSymbol env: 1.
+	"Unary perform first (native-module VALUE attrs like math.pi are
+	env-1 unary getters); fall back to the module attribute protocol
+	when there is no unary form -- a multi-arg top-level def
+	(re._compile_template(pattern, repl)) has none, and
+	___moduleAttrLoad___: lazy-wraps it as a BoundMethod (sre.c fetches
+	_compile_template this way for Match.expand / Pattern.sub)."
+	value := [mod perform: attrName asSymbol env: 1]
+		on: MessageNotUnderstood
+		do: [:ex | mod @env1:___moduleAttrLoad___: attrName asSymbol].
 	^ (self wrap: value) memoryAddress
 %

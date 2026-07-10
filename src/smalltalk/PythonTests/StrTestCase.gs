@@ -1248,3 +1248,35 @@ testCapitalUEscape
 	self assert: (self eval: 'ord("\U0001F600")') equals: 128512.
 	self assert: (self eval: 'ord("\U000000E4")') equals: 228
 %
+
+category: 'Grail-Tests - format'
+method: StrTestCase
+testFormatMap
+	"str.format_map(mapping) resolves keyword fields through the
+	mapping's __getitem__ (previously a 'Not yet implemented' stub;
+	CPython test_re formats through a regex Match this way)."
+
+	| d |
+	d := self eval: '{"a": 1, "b": "x"}'.
+	self assert: ('{a}-{b}' @env1:format_map: d) equals: '1-x'.
+	self should: [('{missing}' @env1:format_map: d)] raise: KeyError
+%
+
+category: 'Grail-Tests - escapes'
+method: StrTestCase
+testUnicodeEscapeEncode
+	"str.encode('unicode_escape') backslash-escapes non-ASCII with
+	correctly padded hex (printStringRadix:showRadix:, not the absent
+	printString: -- a 0xB5 char must become the four bytes of
+	backslash-x-b-5)."
+
+	| s enc |
+	s := String new.
+	s add: (Character codePoint: 181).   "MICRO SIGN"
+	enc := s @env1:encode: 'unicode_escape'.
+	self assert: (enc @env1:__len__) equals: 4.
+	self assert: (enc @env0:at: 1) equals: 92.
+	self assert: (enc @env0:at: 2) equals: 120.
+	self assert: (enc @env0:at: 3) equals: 98.
+	self assert: (enc @env0:at: 4) equals: 53
+%
