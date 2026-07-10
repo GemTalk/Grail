@@ -7,7 +7,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'CPythonShim'
-  instVarNames: #(valueToPyObject noneWrapper typeAddresses wrapsSinceSweep)
+  instVarNames: #(valueToPyObject noneWrapper typeAddresses wrapsSinceSweep callDepth)
   classVars: #()
   classInstVars: #( libraryPath)
   poolDictionaries: #()
@@ -245,16 +245,32 @@ wrap: aValue
 	].
 	valueToPyObject ifNil: [ valueToPyObject := IdentityKeyValueDictionary new ].
 	wrapsSinceSweep := (wrapsSinceSweep ifNil: [0]) + 1.
-	(wrapsSinceSweep \\ 1000) = 0 ifTrue: [ self sweep ].
-	^ valueToPyObject at: aValue ifAbsent: [
-		pyObj := CByteArray gcMalloc: 32.
-		pyObj int64At: 0 put: 1.
-		pyObj int64At: 8 put: (self typeAddrFor: aValue).
-		self storeOop: aValue asOop in: pyObj at: 16.
-		pyObj int64At: 24 put: 16r475241494C575031.
-		valueToPyObject at: aValue put: pyObj.
-		pyObj
-	]
+	"Sweep only between shim calls (callDepth = 0).  Server callbacks
+	(PyList_New, PyUnicode_* creation, ...) re-enter wrap: THOUSANDS of
+	times during one C call (e.g. one sre split); a sweep fired mid-call
+	could reap a refcnt<=0 wrapper the in-flight C code still holds a raw
+	pointer to -- dict removal makes the CByteArray garbage, the next
+	scavenge frees its gcMalloc block, and pyobj_oop SEGVs on the stale
+	address.  This was the GC-geometry-sensitive HostCoreDump in CPython
+	test_textwrap's test_em_dash (crash/no-crash flipped with
+	GEM_TEMPOBJ_CACHE_SIZE)."
+	((wrapsSinceSweep \\ 1000) = 0 and: [(callDepth ifNil: [0]) = 0])
+		ifTrue: [ self sweep ].
+	pyObj := valueToPyObject at: aValue otherwise: nil.
+	pyObj notNil ifTrue: [
+		"Resurrect: C may have decref'd this cached wrapper to zero after
+		a previous call.  Handing it out at refcnt <= 0 would make it
+		sweep-bait while in flight; reset to 1 so it survives until the
+		C side is done with it again."
+		(pyObj int64At: 0) <= 0 ifTrue: [pyObj int64At: 0 put: 1].
+		^ pyObj].
+	pyObj := CByteArray gcMalloc: 32.
+	pyObj int64At: 0 put: 1.
+	pyObj int64At: 8 put: (self typeAddrFor: aValue).
+	self storeOop: aValue asOop in: pyObj at: 16.
+	pyObj int64At: 24 put: 16r475241494C575031.
+	valueToPyObject at: aValue put: pyObj.
+	^ pyObj
 %
 
 category: 'Grail-Wrapping'
@@ -355,6 +371,16 @@ initTypeAddresses
 ! ===============================================================================
 ! Instance methods - Reference counting sweep
 ! ===============================================================================
+
+category: 'Grail-Management'
+method: CPythonShim
+___duringCallDo: aBlock
+	"Evaluate aBlock with callDepth raised, so wrap: defers sweeps for
+	its duration (see wrap: for why sweeping mid-call is unsafe)."
+
+	callDepth := (callDepth ifNil: [0]) + 1.
+	^ aBlock ensure: [callDepth := callDepth - 1]
+%
 
 category: 'Grail-Management'
 method: CPythonShim
@@ -646,9 +672,11 @@ ___shimUserAction: selector withArgs: argsArray
 	uncatchable Smalltalk error.  Re-signal it as the matching Grail
 	Python exception; a non-Python error is re-raised unchanged."
 
-	^ [ System userAction: selector withArgs: argsArray ]
+	callDepth := (callDepth ifNil: [0]) + 1.
+	^ [[ System userAction: selector withArgs: argsArray ]
 		on: Error
-		do: [:ex | self ___translateShimError: ex]
+		do: [:ex | self ___translateShimError: ex]]
+			ensure: [callDepth := callDepth - 1]
 %
 
 category: 'Grail-Calling'
@@ -781,7 +809,9 @@ loadModule: moduleName
 
 	Returns true if the module loaded successfully, or signals an error."
 
-	^ System userAction: #shimLoadModule with: moduleName
+	callDepth := (callDepth ifNil: [0]) + 1.
+	^ [ System userAction: #shimLoadModule with: moduleName ]
+		ensure: [callDepth := callDepth - 1]
 %
 
 category: 'Grail-Module Loading'
@@ -1234,7 +1264,11 @@ loadDynamicModule: moduleName fromPath: pathString
 
 	| methodNames moduleClass moduleInstance symbolList |
 	self current.
-	methodNames := System userAction: #shimDynLoad withArgs: { pathString . moduleName }.
+	"Depth-track like ___shimUserAction:withArgs: -- a dynamic module's
+	init exec re-enters wrap: via server callbacks; a sweep mid-load
+	could reap in-flight wrappers (see wrap:)."
+	methodNames := self current ___duringCallDo: [
+		System userAction: #shimDynLoad withArgs: { pathString . moduleName }].
 	"Create a module subclass for this C extension"
 	moduleClass := module
 		subclass: moduleName

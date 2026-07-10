@@ -2537,3 +2537,75 @@ testFromFormatObjectConversions
 		with: 'hi'.
 	self assert: result equals: 'repr=<''hi''> str=<hi> n=42'.
 %
+
+category: 'Grail-Tests - Wrapper lifetime'
+method: CPythonShimTestCase
+testWrapResurrectsZeroRefcountOnCacheHit
+	"A cached wrapper whose refcount the C side dropped to zero must be
+	resurrected (refcnt := 1) when handed out again -- otherwise it is
+	sweep-bait while in flight and pyobj_oop reads freed memory (the
+	GC-geometry-sensitive test_em_dash HostCoreDump)."
+
+	| shim v w w2 |
+	shim := CPythonShim current.
+	v := 'resurrect-probe' copy.
+	w := shim wrap: v.
+	self assert: (w int64At: 0) equals: 1.
+	w int64At: 0 put: 0.
+	w2 := shim wrap: v.
+	self assert: w == w2.
+	self assert: (w int64At: 0) equals: 1
+%
+
+category: 'Grail-Tests - Wrapper lifetime'
+method: CPythonShimTestCase
+testSweepReapsIdleZeroRefcountWrappers
+	"sweep still reclaims wrappers whose refcount is <= 0 when no call is
+	in flight: a re-wrap after the sweep builds a FRESH wrapper."
+
+	| shim v w w2 |
+	shim := CPythonShim current.
+	v := 'reap-probe' copy.
+	w := shim wrap: v.
+	w int64At: 0 put: 0.
+	shim sweep.
+	w2 := shim wrap: v.
+	self deny: w == w2.
+	self assert: (w2 int64At: 0) equals: 1
+%
+
+category: 'Grail-Tests - Wrapper lifetime'
+method: CPythonShimTestCase
+testSweepDeferredWhileCallInFlight
+	"While a shim call is in flight (___duringCallDo:), crossing the
+	1000-wrap sweep boundary must NOT reap a zero-refcount wrapper --
+	server callbacks re-enter wrap: thousands of times during one C
+	call, and the in-flight C code still holds raw pointers to such
+	wrappers.  The same wrapper (identity) must come back."
+
+	| shim v w result |
+	shim := CPythonShim current.
+	v := 'defer-probe' copy.
+	w := shim wrap: v.
+	w int64At: 0 put: 0.
+	result := shim ___duringCallDo: [ | probe |
+		probe := 'boundary-filler' copy.
+		"Cross at least one 1000-wrap sweep boundary while 'in flight'."
+		1001 timesRepeat: [shim wrap: probe].
+		shim wrap: v].
+	self assert: result == w.
+	self assert: (w int64At: 0) equals: 1
+%
+
+category: 'Grail-Tests - Wrapper lifetime'
+method: CPythonShimTestCase
+testDuringCallDoRestoresDepthAndReturnsValue
+	"___duringCallDo: passes the block value through and restores the
+	depth even on non-local exit, so sweeping resumes between calls."
+
+	| shim |
+	shim := CPythonShim current.
+	self assert: (shim ___duringCallDo: [42]) equals: 42.
+	"Nested use unwinds cleanly."
+	self assert: (shim ___duringCallDo: [shim ___duringCallDo: [7]]) equals: 7
+%
