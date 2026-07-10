@@ -1405,6 +1405,14 @@ ___isInstanceSingle___: anObject of: aClass
 	| result theMetaclass |
 	result := anObject @env0:isKindOf: aClass.
 	result ifFalse: [
+		"Secondary (multiple-inheritance) bases are not on the Smalltalk
+		chain isKindOf: walks -- consult the instance class's registered
+		C3 MRO."
+		| il |
+		il := Python @env0:at: #importlib otherwise: nil.
+		il @env0:== nil ifFalse: [
+			result := (il @env0:___mroOf___: anObject @env0:class) @env0:includes: aClass]].
+	result ifFalse: [
 		theMetaclass := aClass @env0:class.
 		"Walk the metaclass chain (not just the own method dict) for
 		``__instancecheck__:'' — ABCs define it once on a base
@@ -1545,13 +1553,27 @@ issubclass: aClass _: aClassOrTuple
 	target := self @env1:___resolveClassRef___: aClassOrTuple.
 	(target @env0:isKindOf: tuple) ifTrue: [
 		target @env0:do: [:eachCls |
-			(sub @env0:== eachCls) ifTrue: [^ true].
-			(sub @env0:inheritsFrom: eachCls) ifTrue: [^ true]
+			(self @env1:___isSubclassSingle___: sub of: eachCls) ifTrue: [^ true]
 		].
 		^ false
 	].
+	^ self @env1:___isSubclassSingle___: sub of: target
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___isSubclassSingle___: sub of: target
+	"issubclass with a single class argument.  The Smalltalk chain
+	covers single inheritance; a multiple-inheritance class's secondary
+	bases are visible only through its registered C3 MRO."
+
+	| il |
 	(sub @env0:== target) ifTrue: [^ true].
-	^ sub @env0:inheritsFrom: target
+	(sub @env0:inheritsFrom: target) ifTrue: [^ true].
+	il := Python @env0:at: #importlib otherwise: nil.
+	il @env0:== nil ifFalse: [
+		((il @env0:___mroOf___: sub) @env0:includes: target) ifTrue: [^ true]].
+	^ false
 %
 
 category: 'Grail-Built-in Functions'

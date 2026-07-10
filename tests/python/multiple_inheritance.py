@@ -87,3 +87,72 @@ class MyDict(dict):
 
 class MixedDict(TagMixin, MyDict):
     pass
+
+
+# --- C3 linearization + cooperative super (Phase 0/1 of real MI) ---
+
+class C3A:
+    pass
+
+class C3B(C3A):
+    pass
+
+class C3C(C3A):
+    pass
+
+class C3D(C3B, C3C):
+    pass
+
+
+def c3_diamond_order():
+    # D's MRO must be [D, B, C, A, ...] -- C3 puts BOTH branches of the
+    # diamond before the shared ancestor (a plain superclass-chain walk
+    # would report [D, B, A, ...] and lose C entirely).
+    names = [c.__name__ for c in C3D.__mro__]
+    return names[:4]
+
+
+def c3_bases_are_true_bases():
+    return [c.__name__ for c in C3D.__bases__]
+
+
+def c3_secondary_isinstance():
+    # C3C is a secondary base: not on the Smalltalk chain.
+    d = C3D()
+    return (isinstance(d, C3C), issubclass(C3D, C3C), isinstance(d, C3A))
+
+
+class CoopBase:
+    def __init__(self):
+        self.log = getattr(self, "log", [])
+        self.log.append("base")
+
+class CoopMixin:
+    def __init__(self):
+        self.log = getattr(self, "log", [])
+        self.log.append("mixin")
+        super().__init__()          # must reach CoopBase THROUGH D's MRO
+
+class CoopD(CoopMixin, CoopBase):
+    def __init__(self):
+        self.log = []
+        self.log.append("d")
+        super().__init__()          # -> CoopMixin.__init__ -> CoopBase.__init__
+
+
+def cooperative_super_chain():
+    return CoopD().log
+
+
+def inconsistent_mro_raises():
+    # CPython: TypeError at class creation (X before Y in one base's MRO,
+    # Y before X in the other's -- no consistent linearization exists).
+    class X: pass
+    class Y: pass
+    class XY(X, Y): pass
+    class YX(Y, X): pass
+    try:
+        bad = type("Bad", (XY, YX), {})
+        return "no-error"
+    except TypeError:
+        return "type-error"

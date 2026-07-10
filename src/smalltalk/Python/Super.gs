@@ -114,7 +114,31 @@ _lookupMethodFirstOf: selectors
 	(twilio.twiml: MessagingResponse() left TwiML.__init__ unrun,
 	so ``verbs`` / ``attrs`` never materialized)."
 
-	| walker |
+	| il receiverCls mro idx walker |
+	"MRO-POSITIONAL lookup (Python semantics): search the classes AFTER
+	``cls'' in the RECEIVER's C3 linearization, not cls's Smalltalk
+	superclass chain.  This is what makes cooperative mixins work:
+	in ``class D(Mixin, Base)'', Mixin.__init__'s super().__init__ must
+	reach Base THROUGH D's MRO even though Mixin does not inherit from
+	Base -- and a Mixin method copied onto D by the merge still carries
+	``cls = Mixin'', so the walk lands on exactly the right successor.
+	When the receiver's class has no registered MRO, or cls is not on
+	it, fall back to the superclass-chain walk (identical to the old
+	behavior for single inheritance)."
+
+	il := Python @env0:at: #importlib otherwise: nil.
+	receiverCls := (obj @env0:isKindOf: Behavior) ifTrue: [obj] ifFalse: [obj @env0:class].
+	il @env0:== nil ifFalse: [
+		mro := il @env0:___mroOf___: receiverCls.
+		idx := mro @env0:indexOf: cls.
+		idx @env0:> 0 ifTrue: [
+			idx @env0:+ 1 @env0:to: mro @env0:size do: [:i |
+				| md |
+				md := (mro @env0:at: i) @env0:methodDictForEnv: 1.
+				selectors @env0:do: [:sel |
+					sel ifNotNil: [
+						(md @env0:includesKey: sel) ifTrue: [^ md @env0:at: sel]]]].
+			^ nil]].
 	walker := cls @env0:superClass.
 	[walker notNil] whileTrue: [
 		| md |

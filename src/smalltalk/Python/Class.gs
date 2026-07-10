@@ -107,7 +107,15 @@ __mro__
 	``___pyAttrLoad___:'' lists ``__mro__'' among the class-level
 	dunders that always resolve to their value."
 
-	| result c |
+	| il result c |
+	"Multiple-inheritance classes registered their exact C3
+	linearization at creation (importlib ___registerBases___:bases:) --
+	answer it.  Everything else keeps the superclass-chain derivation."
+	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
+	il @env0:== nil ifFalse: [
+		| entry |
+		entry := il @env0:___miRegistry___ @env0:at: self otherwise: nil.
+		entry @env0:== nil ifFalse: [^ entry @env0:at: 2]].
 	result := OrderedCollection @env0:new.
 	c := self.
 	[c @env0:== nil] whileFalse: [
@@ -147,7 +155,13 @@ __bases__
 	1-element Array (empty when there is no superclass), mirroring how
 	__mro__ answers a plain Array."
 
-	| s |
+	| il s |
+	"Multiple-inheritance classes report their TRUE declared bases."
+	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
+	il @env0:== nil ifFalse: [
+		| entry |
+		entry := il @env0:___miRegistry___ @env0:at: self otherwise: nil.
+		entry @env0:== nil ifFalse: [^ entry @env0:at: 1]].
 	s := self @env0:superclass.
 	^ s @env0:== nil ifTrue: [Array @env0:new] ifFalse: [Array @env0:with: s]
 %

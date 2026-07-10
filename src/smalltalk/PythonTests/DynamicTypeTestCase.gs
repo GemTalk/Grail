@@ -54,10 +54,11 @@ testDynamicMultiBase
 	"``type('LoudAnimal', (Animal, Loud), {})`` yields a class whose
 	instances answer the primary/storage base's methods (speak/legs)
 	AND the merged secondary base's method (shout).  ``isinstance``
-	passes for the primary base (Smalltalk inheritance) but NOT for the
-	merged secondary base (its methods are copied, but the class does
-	not inherit from it — the same limitation as compile-time multiple
-	inheritance; see MultipleInheritanceTestCase)."
+	passes for the primary base (Smalltalk inheritance) AND -- since
+	classes register their true bases and C3 MRO at creation
+	(importlib ___registerBases___:bases:) -- for the secondary base
+	too, matching CPython.  (This used to assert false as a documented
+	limitation of the copy-down merge.)"
 
 	| r |
 	r := self loadFixture @env1:dynamic_multi_base.
@@ -66,8 +67,7 @@ testDynamicMultiBase
 	self assert: (r @env1:__getitem__: 2) equals: 'LOUD'.
 	self assert: (r @env1:__getitem__: 3) equals: 4.
 	self assert: (r @env1:__getitem__: 4) equals: true.
-	"Merged secondary base is not in the isinstance chain (known limit)."
-	self assert: (r @env1:__getitem__: 5) equals: false
+	self assert: (r @env1:__getitem__: 5) equals: true
 %
 
 category: 'Grail-Tests-DynamicType'

@@ -9,7 +9,7 @@ doit
 module subclass: 'importlib'
   instVarNames: #()
   classVars: #()
-  classInstVars: #('grailDir')
+  classInstVars: #('grailDir' 'miRegistry')
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -1016,6 +1016,99 @@ ___selectStorageBase___: bases
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___miRegistry___
+	"Identity registry: Python class -> Array {basesArray. mroArray}.
+	Populated at class creation by ___registerBases___:bases: (reached
+	from both ClassDefAst's emitted merge call and the 3-arg type()
+	builtin).  Lives in a classInstVar so committed classes keep their
+	MRO metadata alongside the class graph."
+
+	miRegistry ifNil: [miRegistry := IdentityKeyValueDictionary new].
+	^ miRegistry
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___registerBases___: aClass bases: basesArray
+	"Record aClass's TRUE Python bases and its C3 linearization.
+	Python computes the MRO once at class creation and it is fixed
+	thereafter -- same here.  An inconsistent hierarchy raises
+	TypeError, matching CPython's class-creation behavior."
+
+	| mro |
+	mro := self ___c3Linearize___: aClass bases: basesArray.
+	self ___miRegistry___ at: aClass put: { Array withAll: basesArray. mro }.
+	^ mro
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___pythonBasesOf___: aClass
+	"The registered TRUE bases of a multiple-inheritance class, or nil
+	for unregistered (single-inheritance) classes."
+
+	| entry |
+	entry := self ___miRegistry___ at: aClass otherwise: nil.
+	^ entry ifNil: [nil] ifNotNil: [entry at: 1]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___mroOf___: aClass
+	"aClass's method resolution order as an Array.  Registered
+	(multiple-inheritance) classes answer their stored C3
+	linearization; everything else derives the Smalltalk superclass
+	chain -- for single inheritance the two coincide, and the chain's
+	GemStone-internal ancestors (PythonInstance, Object, ...) appear at
+	the tail exactly as Behavior>>__mro__ has always reported them."
+
+	| entry result c |
+	entry := self ___miRegistry___ at: aClass otherwise: nil.
+	entry ifNotNil: [^ entry at: 2].
+	result := OrderedCollection new.
+	c := aClass.
+	[c == nil] whileFalse: [
+		result add: c.
+		c := c superclass].
+	^ Array withAll: result
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___c3Linearize___: aClass bases: basesArray
+	"C3 linearization: L(C) = C + merge(L(B1), ..., L(Bn), [B1..Bn]).
+	At each step take the head of the first sequence that appears in no
+	other sequence's TAIL; failure to find one means the hierarchy has
+	no consistent linearization (CPython raises TypeError at class
+	creation)."
+
+	| seqs result head |
+	seqs := OrderedCollection new.
+	basesArray do: [:b |
+		(b isKindOf: Behavior) ifTrue: [
+			seqs add: (OrderedCollection withAll: (self ___mroOf___: b))]].
+	seqs add: (OrderedCollection withAll:
+		(basesArray select: [:b | b isKindOf: Behavior])).
+	result := OrderedCollection with: aClass.
+	[seqs anySatisfy: [:s | s isEmpty not]] whileTrue: [
+		head := nil.
+		seqs do: [:s |
+			(head == nil and: [s isEmpty not]) ifTrue: [
+				| cand inTail |
+				cand := s first.
+				inTail := seqs anySatisfy: [:t | (t indexOf: cand) > 1].
+				inTail ifFalse: [head := cand]]].
+		head == nil ifTrue: [
+			TypeError @env1:___signal___:
+				'Cannot create a consistent method resolution order (MRO) for bases'].
+		result add: head.
+		seqs do: [:s |
+			(s isEmpty not and: [s first == head]) ifTrue: [s removeFirst]]].
+	^ Array withAll: result
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___mergeSecondaryBases___: aClass bases: secondaryBases
 	"Multiple-inheritance method resolution.  ``aClass`` already
 	inherits its PRIMARY base (the storage base selected by
@@ -1044,6 +1137,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 	resolves against ``aClass``'s primary superclass (cooperative
 	mixins that chain via ``super`` may misbehave)."
 
+
 	"C3 method precedence for the deepest-chain storage case.  When the
 	storage base was chosen by DEPTH (not built-in storage), a leftmost
 	mixin — declared before it — must OVERRIDE the methods the deep
@@ -1066,6 +1160,12 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 	an earlier secondary base still beats a later one (copies land on
 	aClass's own dict)."
 	| storageBase storageIdx overrideEligible |
+	"Phase 0 of real multiple inheritance: record the TRUE bases and the
+	exact C3 linearization before any method merging.  __mro__ /
+	__bases__ / isinstance / issubclass / super() all consult this
+	registry; the copy-down merge below remains the dispatch mechanism
+	for now (its approximate precedence is unchanged this phase)."
+	self ___registerBases___: aClass bases: secondaryBases.
 	storageBase := self ___selectStorageBase___: secondaryBases.
 	storageIdx := secondaryBases @env0:indexOf: storageBase.
 	overrideEligible := (storageBase @env0:isKindOf: Behavior)
