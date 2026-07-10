@@ -7,7 +7,7 @@ SuiteAst ifNil: [self error: 'SuiteAst is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 SuiteAst subclass: 'BlockAst'
-  instVarNames: #( variables tempCount writes hasReturnBlocking)
+  instVarNames: #( variables tempCount writes hasReturnBlocking globalNames)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -131,6 +131,20 @@ hasReturnBlocking
 	flag; callers should treat nil as false."
 
 	^ hasReturnBlocking
+%
+
+category: 'Grail-other'
+method: BlockAst
+globalNames
+	"Names declared ``global'' in this scope (parser-recorded from the
+	globalStack at popScope time).  Python's rule: a global declaration
+	makes the name refer to the module binding for the WHOLE declaring
+	scope -- reads, stores, and del must all route to the module even
+	when an intermediate enclosing function has a same-named local.
+	May be nil for blocks built before this field existed; callers
+	treat nil as empty."
+
+	^ globalNames
 %
 
 category: 'Grail-other'

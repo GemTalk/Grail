@@ -163,7 +163,8 @@ emitForTargetStore: aNameAst source: sourceExpr on: aStream
 
 	(self isModuleScopeForTarget: aNameAst) ifTrue: [
 		aStream
-			nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+			nextPutAll: self ___moduleStoreReceiverExpr___;
+			nextPutAll: ' @env0:dynamicInstVarAt: #''';
 			nextPutAll: aNameAst id;
 			nextPutAll: ''' put: (';
 			nextPutAll: sourceExpr;
@@ -186,9 +187,19 @@ isModuleScopeForTarget: aNameAst
 	enclosing function shadows it."
 
 	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	"``global x'' in the nearest enclosing function forces the module
+	route -- even inside a class method (the emitters pick the module-
+	instance receiver via ___moduleStoreReceiverExpr___) and past any
+	enclosing-function shadow (Python: the declaration binds the name
+	to the module for the whole declaring scope)."
+	(aNameAst ___nearestEnclosingFunctionDeclaresGlobal___: aNameAst id)
+		ifTrue: [^ true].
 	CallAst classBeingCompiled ifNotNil: [^ false].
 	(aNameAst isModuleVariableName: aNameAst id) ifFalse: [^ false].
-	(aNameAst ___declaredInEnclosingFunction___: aNameAst id) ifTrue: [^ false].
+	"PRECISE local-shadow check (writes + params; comprehension targets
+	and global-declared names excluded) -- not the over-approximating
+	___declaredInEnclosingFunction___: variables walk."
+	(aNameAst ___pythonLocalInEnclosingFunctions___: aNameAst id) ifTrue: [^ false].
 	^ true
 %
 

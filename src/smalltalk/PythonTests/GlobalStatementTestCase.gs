@@ -84,3 +84,34 @@ testGlobalCreatesModuleBinding
 	mod @env1:make_fresh.
 	self assert: mod @env1:read_fresh equals: 99
 %
+
+category: 'Grail-Tests - global'
+method: GlobalStatementTestCase
+testGlobalInNestedDefBypassesOuterLocal
+	"``global x'' in a nested def stores the MODULE binding even when
+	the enclosing function has a same-named local; the outer local is
+	untouched (Python: the declaration binds the name to the module for
+	the whole declaring scope)."
+
+	| mod pair |
+	mod := self loadFixture.
+	pair := mod @env1:shadowed_nested.
+	self assert: (pair @env1:__getitem__: 0) equals: 1.
+	self assert: (pair @env1:__getitem__: 1) equals: 100.
+	self assert: (mod @env1:___pyAttrLoad___: #_counter) equals: 1
+%
+
+category: 'Grail-Tests - global'
+method: GlobalStatementTestCase
+testGlobalStoreInClassMethod
+	"``global x; x = ...'' inside a class METHOD routes the store to the
+	module singleton (previously a CompileError: the store guard bailed
+	on class context and the temp had been stripped by the parser)."
+
+	| mod r |
+	mod := self loadFixture.
+	mod @env1:shadowed_nested.  "reset _counter to 1"
+	r := mod @env1:method_bump.
+	self assert: r equals: 51.
+	self assert: (mod @env1:___pyAttrLoad___: #_counter) equals: 51
+%

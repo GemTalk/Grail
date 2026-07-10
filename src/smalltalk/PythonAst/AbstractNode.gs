@@ -275,6 +275,137 @@ ___functionDeclaresLocal___: funcAst named: aSymbol
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___nearestEnclosingFunctionDeclaresGlobal___: aSymbol
+	"True iff the NEAREST enclosing function's scope declares
+	``global aSymbol''.  Python's rule: the declaration binds the name
+	to the module for the WHOLE declaring scope -- reads, stores, and
+	del of the name must route to the module even when an intermediate
+	enclosing function has a same-named local (which would otherwise
+	win the LEGB walk).  Reads the parser-recorded per-scope set
+	(BlockAst>>globalNames); lambdas cannot contain statements, so a
+	LambdaAst never declares one."
+
+	| node ivars bodyIdx bodyNode gset |
+	node := parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: LambdaAst) ifTrue: [^ false].
+		(node isKindOf: FunctionDefAst) ifTrue: [
+			ivars := node class allInstVarNames.
+			bodyIdx := ivars indexOf: #body.
+			bodyNode := bodyIdx > 0 ifTrue: [node instVarAt: bodyIdx] ifFalse: [nil].
+			(bodyNode isKindOf: BlockAst) ifFalse: [^ false].
+			gset := bodyNode globalNames.
+			^ gset notNil and: [gset includes: aSymbol asSymbol]
+		].
+		node := node parent.
+	].
+	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___pythonLocalInEnclosingFunctions___: aSymbol
+	"True iff aSymbol is a TRUE PYTHON LOCAL (parameter or genuine body
+	binding — the precise ``writes'' set, not the over-approximating
+	``variables'' set) of ANY function/lambda enclosing this NameAst.
+	Per LEGB, such a name shadows a same-named module-level function or
+	module global; per the closure rule a binding in ANY enclosing
+	function claims the name (Smalltalk block capture reaches outer
+	temps), so keep walking past the innermost function.
+
+	Comprehension targets are NOT python-locals of the function (they
+	are comprehension-scoped; see ___isEnclosingComprehensionTarget___: for
+	reads inside the comprehension itself), and global- / nonlocal-
+	declared names were stripped from ``writes'' by the parser."
+
+	| node |
+	"``global aSymbol'' in the nearest enclosing function makes the name
+	a MODULE binding for that whole scope -- never a local, and never
+	resolved to an outer function's same-named local."
+	(self ___nearestEnclosingFunctionDeclaresGlobal___: aSymbol) ifTrue: [^ false].
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [
+				(self ___functionBindsPythonLocal___: node named: aSymbol)
+					ifTrue: [^ true]].
+		node := node parent.
+	].
+	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___moduleStoreReceiverExpr___
+	"Smalltalk receiver expression for a module dynamic-instVar store /
+	delete.  Inside the module body's initialize and top-level defs,
+	``self'' IS the module instance; inside a user class METHOD it is
+	the Python instance, so the store must reach the module singleton
+	explicitly -- the case that arises when a method declares
+	``global x'' (previously a CompileError: the guard bailed on
+	classBeingCompiled and the bare temp had been stripped)."
+
+	^ CallAst classBeingCompiled notNil
+		ifTrue: [CallAst moduleClassBeingCompiled name , ' @env0:___instance___']
+		ifFalse: ['self']
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___functionBindsPythonLocal___: funcAst named: aSymbol
+	"True iff aSymbol is a TRUE PYTHON LOCAL of the given FunctionDefAst
+	or LambdaAst: a parameter, or a genuine body binding (the block's
+	``writes'' set — assignment / for / with-as / except-as / walrus
+	targets, def / class / import names).
+
+	Distinct from ___functionDeclaresLocal___:, which consults the
+	block's ``variables'' set — that set over-approximates Python's
+	locals (it also holds comprehension targets, f-string resolution
+	hints, and every name needing a Smalltalk temp declaration), so it
+	must not drive LEGB decisions.  ``writes'' excludes comprehension
+	targets (comprehension-scoped in Python 3; see the parser's
+	declareWrite:) and global- / nonlocal-declared names (stripped by
+	popScope)."
+
+	| ivars argsIdx bodyIdx argsNode bodyNode argsIvars writesSet |
+	ivars := funcAst class allInstVarNames.
+	argsIdx := ivars indexOf: #args.
+	bodyIdx := ivars indexOf: #body.
+	argsNode := argsIdx > 0 ifTrue: [funcAst instVarAt: argsIdx] ifFalse: [nil].
+	bodyNode := bodyIdx > 0 ifTrue: [funcAst instVarAt: bodyIdx] ifFalse: [nil].
+	argsNode ifNotNil: [
+		argsIvars := argsNode class allInstVarNames.
+		#(#args #posonlyargs #kwonlyargs) do: [:fld |
+			| idx list |
+			idx := argsIvars indexOf: fld.
+			idx > 0 ifTrue: [
+				list := argsNode instVarAt: idx.
+				list ifNotNil: [
+					(list anySatisfy: [:a | a name asSymbol == aSymbol asSymbol])
+						ifTrue: [^ true]
+				].
+			].
+		].
+		#(#vararg #kwarg) do: [:fld |
+			| idx v |
+			idx := argsIvars indexOf: fld.
+			idx > 0 ifTrue: [
+				v := argsNode instVarAt: idx.
+				(v notNil and: [v name asSymbol == aSymbol asSymbol])
+					ifTrue: [^ true].
+			].
+		].
+	].
+	(bodyNode isKindOf: BlockAst) ifTrue: [
+		writesSet := bodyNode writes.
+		(writesSet notNil and: [writesSet includes: aSymbol asSymbol])
+			ifTrue: [^ true]
+	].
+	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___emitModuleScopeStoreOf___: aNameSymbol from: sourceExpr on: aStream
 	"Emit a Smalltalk store of the raw expression fragment sourceExpr
 	into the Python name aNameSymbol.  When compiling a module body
@@ -287,24 +418,30 @@ ___emitModuleScopeStoreOf___: aNameSymbol from: sourceExpr on: aStream
 	temp.  Shared by with-as and except-as target bindings, mirroring
 	ForAst>>emitForTargetStore:source:on:."
 
-	| sym names enclosingFn node |
+	| sym names moduleRoute |
 	sym := aNameSymbol asSymbol.
 	names := CallAst moduleVariableNames.
-	enclosingFn := false.
-	node := parent.
-	[node notNil] whileTrue: [
-		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
-			ifTrue: [
-				(self ___functionDeclaresLocal___: node named: sym)
-					ifTrue: [enclosingFn := true]].
-		node := node parent].
-	((CallAst moduleClassBeingCompiled notNil)
+	"Module-route the store when (a) ``global sym'' is declared in the
+	nearest enclosing function -- even inside a class method, and past
+	any enclosing-function shadow -- or (b) we're in module context and
+	sym is a module variable not shadowed by a TRUE python-local of an
+	enclosing function (precise writes-based check, not the
+	over-approximating ___functionDeclaresLocal___: variables walk)."
+	moduleRoute := false.
+	(CallAst moduleClassBeingCompiled notNil
+		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: sym])
+		ifTrue: [moduleRoute := true].
+	(moduleRoute not
+		and: [(CallAst moduleClassBeingCompiled notNil)
 		and: [(CallAst classBeingCompiled isNil)
 		and: [(names notNil and: [names includes: sym])
-		and: [enclosingFn not]]])
+		and: [(self ___pythonLocalInEnclosingFunctions___: sym) not]]]])
+		ifTrue: [moduleRoute := true].
+	moduleRoute
 		ifTrue: [
 			aStream
-				nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+				nextPutAll: self ___moduleStoreReceiverExpr___;
+				nextPutAll: ' @env0:dynamicInstVarAt: #''';
 				nextPutAll: sym asString;
 				nextPutAll: ''' put: (';
 				nextPutAll: sourceExpr;

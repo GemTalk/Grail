@@ -353,11 +353,16 @@ ___descriptorGet___: aValue
 	pattern), and for django.utils.functional.classproperty and
 	db.models.query_utils.class_or_instance_method.
 
-	Only user descriptor CLASSES define ``__get__''; Grail's own
-	BoundMethod / functions do not, so a plain method value passes
-	through unchanged."
+	BoundMethod is explicitly EXCLUDED even though it now defines
+	``__get__:_:'' (the function descriptor protocol, added for explicit
+	callers like weakref.WeakMethod's ``self._func.__get__(obj, cls)'').
+	Grail's dispatch model performs method binding elsewhere; letting
+	the implicit attr-read path rebind every class-attribute function
+	(e.g. itsdangerous' ``digest_method = staticmethod(hashlib.sha1)'')
+	would redirect such calls at the holder instance and DNU."
 
 	(aValue @env0:== nil or: [aValue @env0:== None]) ifTrue: [^ aValue].
+	(aValue @env0:isKindOf: BoundMethod) ifTrue: [^ aValue].
 	"``__get__(self, instance, cls=None)'' — the ``cls'' default makes
 	it compile to the varargs selector ``___get__:kw:''; a defaultless
 	one would be the fixed ``__get__:_:''.  Try both."

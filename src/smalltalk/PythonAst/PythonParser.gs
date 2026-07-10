@@ -8,7 +8,7 @@ expectvalue /Class
 doit
 Object subclass: 'PythonParser'
   instVarNames: #( source tokens position variableStack classNesting writeStack
-                    blockingStack nonlocalStack globalStack)
+                    blockingStack nonlocalStack globalStack inCompTarget)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -187,9 +187,22 @@ declareWrite: aSymbol
 	resolution callers (isVariableIsDeclared:, NameAst codegen)
 	working unchanged; the writeStack entry feeds
 	FunctionDefAst >> assignedNamesInBody and is what the method-arg
-	optimisation consults to decide whether a param needs a temp."
+	optimisation consults to decide whether a param needs a temp.
+
+	COMPREHENSION TARGETS are the exception (inCompTarget, set by
+	parseComprehensions around its target registration): Python 3
+	scopes them to the comprehension itself, not the enclosing
+	function, so they must NOT land in the enclosing scope's write
+	set — ``writes'' is the set of true Python locals bound in the
+	scope (params live on the args node) and NameAst's LEGB
+	resolution depends on its precision.  They still register in
+	variableStack so name-resolution (isVariableIsDeclared:) and the
+	enclosing scope's Smalltalk temp declarations keep working; the
+	comprehension codegen additionally declares each target as a
+	block-local temp of its own emitted block."
 
 	variableStack last add: aSymbol.
+	inCompTarget == true ifTrue: [^ self].
 	writeStack last add: aSymbol.
 %
 
@@ -684,6 +697,7 @@ parseClassDefWithDecorators: decorators
 		at: #variables put: variables;
 		at: #writes put: writes;
 		at: #hasReturnBlocking put: blocking;
+		at: #globalNames put: (scope at: 4);
 		yourself).
 	^self buildNode: ClassDefAst fields: (IdentityKeyValueDictionary new
 		at: #name put: nameTok value asSymbol;
@@ -764,7 +778,16 @@ parseComprehensions
 		].
 		forTok := self advance. "consume 'for'"
 		target := self parseStarTargets.
-		self setStoreCtx: target.
+		"Comprehension targets are comprehension-local in Python 3 —
+		flag the registration so declareWrite: keeps them out of the
+		enclosing scope's write set (see declareWrite:).  Save/restore
+		rather than set/clear: nothing nests inside a target pattern,
+		but restoring the prior value is future-proof and free."
+		[ | saved |
+			saved := inCompTarget.
+			inCompTarget := true.
+			[self setStoreCtx: target] ensure: [inCompTarget := saved]
+		] value.
 		self expect: #KEYWORD value: 'in'.
 		iter := self parseDisjunction.
 		ifs := Array new.
@@ -1294,6 +1317,7 @@ parseFunctionDefWithDecorators: decorators
 		at: #variables put: variables;
 		at: #writes put: writes;
 		at: #hasReturnBlocking put: blocking;
+		at: #globalNames put: (scope at: 4);
 		yourself).
 	decoratorNames := decorators collect: [:each |
 		(each isKindOf: NameAst) ifTrue: [each id] ifFalse: [each]
@@ -1687,6 +1711,7 @@ parseModule
 		at: #variables put: variables;
 		at: #writes put: writes;
 		at: #hasReturnBlocking put: blocking;
+		at: #globalNames put: (scope at: 4);
 		yourself).
 	module := ModuleAst basicNew.
 	module
@@ -2851,7 +2876,11 @@ popScope
 		vars remove: n ifAbsent: [].
 		writes remove: n ifAbsent: [].
 	].
-	^ Array with: vars with: writes with: blocking
+	"The globals set itself is returned so scope builders can record it
+	on the BlockAst (globalNames) -- codegen needs per-scope global
+	declarations to route reads/stores of those names to the module
+	even past enclosing-function shadows."
+	^ Array with: vars with: writes with: blocking with: globals
 %
 
 category: 'Grail-node construction'
@@ -2954,6 +2983,7 @@ source: aString
 	globalStack := Array new.
 	globalStack add: IdentitySet new.
 	classNesting := 0.
+	inCompTarget := false.
 %
 
 category: 'Grail-node construction'

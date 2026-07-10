@@ -563,6 +563,7 @@ run
 	at: #'MultipleInheritanceTestCase' put: nil;
 	at: #'FunctionRebindingTestCase' put: nil;
 	at: #'LiveDictTestCase' put: nil;
+	at: #'LegbScopeTestCase' put: nil;
 	at: #'KwargsSplatTestCase' put: nil;
 	at: #'SubclassNameAttrTestCase' put: nil;
 	at: #'TernaryTruthinessTestCase' put: nil;
@@ -1255,6 +1256,7 @@ input src/smalltalk/PythonTests/FunctionRebindingTestCase.gs
 input src/smalltalk/PythonTests/KwargsSplatTestCase.gs
 input src/smalltalk/PythonTests/SubclassNameAttrTestCase.gs
 input src/smalltalk/PythonTests/LiveDictTestCase.gs
+input src/smalltalk/PythonTests/LegbScopeTestCase.gs
 input src/smalltalk/PythonTests/TernaryTruthinessTestCase.gs
 input src/smalltalk/PythonTests/VarargsNamingTestCase.gs
 input src/smalltalk/PythonTests/YieldFromTestCase.gs

@@ -92,7 +92,7 @@ method: TextwrapTestCase
 testWrapIndents
 	| result |
 	result := self eval: 'import textwrap
-lines = textwrap.wrap("aa bb cc", 6, "* ", "  ")
+lines = textwrap.wrap("aa bb cc", 6, initial_indent="* ", subsequent_indent="  ")
 lines == ["* aa", "  bb", "  cc"]'.
 	self assert: result
 %

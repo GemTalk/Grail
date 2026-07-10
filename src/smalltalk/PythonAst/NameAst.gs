@@ -296,8 +296,20 @@ printSmalltalkOn: aStream
 					aStream nextPutAll: '])'.
 					^self
 				].
+			"LEGB guard: a name that is a true Python local (parameter or
+			genuine body binding) of an enclosing function, or the target of
+			an enclosing comprehension, SHADOWS a same-named module-level
+			function.  Divert those reads past this shortcut so they fall
+			through to the regular declared-local emit at the bottom (the
+			path every non-colliding local/param already takes).  Uses the
+			precise ``writes''-based checks — NOT ``variables'', whose
+			over-approximation (comprehension targets, f-string hints)
+			would wrongly divert genuine module-function reads (e.g.
+			django's receiver/match/url collisions with comprehension
+			targets elsewhere in the same method)."
 			(CallAst moduleFunctionNames notNil
-				and: [CallAst moduleFunctionNames includes: id asSymbol])
+				and: [(CallAst moduleFunctionNames includes: id asSymbol)
+				and: [(self ___localBindingShadows___: id) not]])
 				ifTrue: [
 					aStream
 						nextPutAll: '(BoundMethod receiver: (';
@@ -318,7 +330,8 @@ printSmalltalkOn: aStream
 				level loop variable (e.g. from a generator expression
 				elsewhere in the file) would read the module instVar
 				instead of the parameter."
-				(self ___declaredInEnclosingFunction___: id) ifFalse: [
+				((self ___pythonLocalInEnclosingFunctions___: id)
+					or: [self ___isEnclosingComprehensionTarget___: id]) ifFalse: [
 					"Phase A: module globals live in dynamic instVar
 					storage on the module instance.  Read through
 					dynamicInstVarAt:ifAbsent: so `del` truly unbinds
@@ -365,7 +378,7 @@ printSmalltalkOn: aStream
 	branches below so `del` truly unbinds the name (a probe of an
 	absent dynamic instVar raises NameError, the Python-correct
 	exception for module-scope ``del x; x'')."
-	((ctx isKindOf: LoadAst) and: [self ___declaredInEnclosingFunction___: id]) ifTrue: [
+	((ctx isKindOf: LoadAst) and: [self ___pythonLocalInEnclosingFunctions___: id]) ifTrue: [
 		aStream
 			nextPutAll: '(UnboundLocalError ___checkLocal: ';
 			nextPutAll: id;
@@ -450,7 +463,8 @@ printSmalltalkOn: aStream
 		and: [CallAst moduleClassBeingCompiled notNil
 		and: [CallAst classBeingCompiled isNil
 		and: [(self isModuleVariableName: id)
-		and: [(self ___declaredInEnclosingFunction___: id) not]]]]) ifTrue: [
+		and: [((self ___pythonLocalInEnclosingFunctions___: id)
+			or: [self ___isEnclosingComprehensionTarget___: id]) not]]]]) ifTrue: [
 			self emitModuleAttrLoad: id receiverExpr: 'self' on: aStream.
 			^ self
 		].
@@ -639,6 +653,100 @@ ___enclosingFuncDeclaresReservedParam___: aSymbol
 
 category: 'other'
 method: NameAst
+___localBindingShadows___: aSymbol
+	"True when a LOCAL Python binding visible from this node shadows
+	module-level resolution of aSymbol: a true python-local (parameter
+	or body binding) of an enclosing function, or the target of an
+	enclosing comprehension.  This is the guard tier for module-level
+	shortcuts (module-function BoundMethods, module self-sends) --
+	module-scope bindings themselves do NOT count, since they are what
+	those shortcuts resolve to."
+
+	(self ___pythonLocalInEnclosingFunctions___: aSymbol) ifTrue: [^ true].
+	^ self ___isEnclosingComprehensionTarget___: aSymbol
+%
+
+category: 'other'
+method: NameAst
+___pythonBindingShadows___: aSymbol
+	"True when ANY Python binding visible from this node shadows
+	builtin-level resolution of aSymbol: a local binding (see
+	___localBindingShadows___:), a module-body binding -- variable OR
+	top-level def (re.py's own ``def compile'' must shadow the
+	``compile'' builtin for the whole module) -- or, during class-body
+	value emit, a class attribute of the same name (Python reads the
+	class-local).  This is the guard tier for builtin fast paths and
+	class-instantiation shortcuts.
+
+	PRECISE by construction: built from params + the writes set + the
+	parser-recorded module name sets, never from the over-approximating
+	``variables'' walk (comprehension targets, f-string hints)."
+
+	(self ___localBindingShadows___: aSymbol) ifTrue: [^ true].
+	(self isModuleVariableName: aSymbol) ifTrue: [^ true].
+	(CallAst moduleFunctionNames notNil
+		and: [CallAst moduleFunctionNames includes: aSymbol asSymbol]) ifTrue: [^ true].
+	(CallAst inClassBodyValueEmit
+		and: [CallAst classAttrNames notNil
+		and: [CallAst classAttrNames includes: aSymbol asSymbol]]) ifTrue: [^ true].
+	"Top-level (root) body binding.  Covers the EVAL path, where the
+	module compile context (moduleVariableNames / moduleFunctionNames)
+	is not set: ``abs = 42; abs'' evaluated via ModuleAst
+	evaluateSource: binds abs in the root block's writes."
+	^ self ___boundAtTopLevel___: aSymbol
+%
+
+category: 'other'
+method: NameAst
+___boundAtTopLevel___: aSymbol
+	"True iff the OUTERMOST BlockAst on the parent chain (the module /
+	eval body) genuinely binds aSymbol -- its precise ``writes'' set
+	(assignments, def / class names, imports; comprehension targets and
+	global-declared names excluded by the parser)."
+
+	| node rootBlock writesSet |
+	node := parent.
+	rootBlock := nil.
+	[node notNil] whileTrue: [
+		(node isKindOf: BlockAst) ifTrue: [rootBlock := node].
+		node := node parent.
+	].
+	rootBlock isNil ifTrue: [^ false].
+	writesSet := rootBlock writes.
+	^ writesSet notNil and: [writesSet includes: aSymbol asSymbol]
+%
+
+
+
+category: 'other'
+method: NameAst
+___targetPattern___: targetNode bindsName: aSymbol
+	"True iff the given assignment-target pattern (a NameAst, or a
+	Tuple/List/Starred nesting of them) binds aSymbol."
+
+	| cls ivars idx elts inner |
+	(targetNode isKindOf: NameAst) ifTrue: [
+		^ targetNode id asSymbol == aSymbol asSymbol].
+	cls := targetNode class name.
+	((cls == #TupleAst) or: [cls == #ListAst]) ifTrue: [
+		ivars := targetNode class allInstVarNames.
+		idx := ivars indexOf: #elts.
+		elts := idx > 0 ifTrue: [targetNode instVarAt: idx] ifFalse: [nil].
+		elts ifNotNil: [
+			elts do: [:e |
+				(self ___targetPattern___: e bindsName: aSymbol) ifTrue: [^ true]]].
+		^ false].
+	cls == #StarredAst ifTrue: [
+		ivars := targetNode class allInstVarNames.
+		idx := ivars indexOf: #value.
+		inner := idx > 0 ifTrue: [targetNode instVarAt: idx] ifFalse: [nil].
+		inner ifNotNil: [^ self ___targetPattern___: inner bindsName: aSymbol].
+		^ false].
+	^ false
+%
+
+category: 'other'
+method: NameAst
 ___declaredInEnclosingFunction___: aSymbol
 	"True if aSymbol is declared as a local in some FunctionDefAst
 	or LambdaAst between this NameAst and the surrounding module
@@ -717,16 +825,10 @@ ___compNodeBindsTarget___: compNode named: aSymbol
 	gens := compNode instVarAt: idx.
 	gens ifNil: [^ false].
 	gens do: [:gen |
-		| tgt |
-		tgt := gen target.
-		((tgt isKindOf: NameAst) and: [tgt id asSymbol == aSymbol asSymbol])
-			ifTrue: [^ true].
-		(tgt isKindOf: TupleAst) ifTrue: [
-			tgt elts do: [:elt |
-				((elt isKindOf: NameAst) and: [elt id asSymbol == aSymbol asSymbol])
-					ifTrue: [^ true]
-			]
-		]
+		"Recursive pattern match: covers plain names, nested tuple /
+		list patterns, and starred targets (``for a, (b, *c) in ...'')."
+		(self ___targetPattern___: gen target bindsName: aSymbol)
+			ifTrue: [^ true]
 	].
 	^ false
 %
@@ -770,7 +872,12 @@ isFastPathBuiltinName
 
 	(self isFunctionPositionOfCall) ifTrue: [^false].
 	(self isBaseOfClassDef) ifTrue: [^false].
-	(self isVariableIsDeclared: id) ifTrue: [^false].
+	"Shadow check, PRECISE (see ___pythonBindingShadows___:).  Previously
+	isVariableIsDeclared:, whose over-approximating `variables' walk made
+	a mere comprehension target suppress the builtin for the whole
+	function -- `vals = [len for len in xs]; len(s)' then raised
+	UnboundLocalError on the second len."
+	(self ___pythonBindingShadows___: id) ifTrue: [^false].
 	"A comprehension loop variable shadows the builtin for both the
 	store that binds it and every read in the comprehension body —
 	``(cwd / to_path(dir) for dir in dirs)'' in django.template.

@@ -39,3 +39,35 @@ def make_fresh():
 
 def read_fresh():
     return _fresh_global
+
+
+def shadowed_nested():
+    # ``global`` in a NESTED def must bypass the enclosing function's
+    # same-named local: inner's store hits the module, outer's local is
+    # untouched.  (Previously the store landed in outer's temp and the
+    # module global never moved.)
+    global _counter
+    _counter = 0
+    def run():
+        _counter = 100      # outer's local (no global here)
+        def inner():
+            global _counter
+            _counter = _counter + 1
+            return _counter
+        r = inner()
+        return (r, _counter)
+    return run()
+
+
+class MethodBumper:
+    # ``global`` store inside a class METHOD (previously a hard
+    # CompileError: module-store routing was disabled in method context
+    # and the bare temp had been stripped).
+    def bump(self):
+        global _counter
+        _counter = _counter + 50
+        return _counter
+
+
+def method_bump():
+    return MethodBumper().bump()

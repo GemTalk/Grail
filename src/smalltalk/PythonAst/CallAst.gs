@@ -406,7 +406,12 @@ bareCallFastPathSelector
 	(function isKindOf: NameAst) ifFalse: [^nil].
 	keywords isEmpty ifFalse: [^nil].
 	funcName := function id.
-	(self isVariableIsDeclared: funcName) ifTrue: [^nil].
+	"Precise LEGB shadow check (see NameAst>>___pythonBindingShadows___:)
+	 rather than the over-approximating isVariableIsDeclared: variables
+	 walk -- a mere comprehension target elsewhere in the function must
+	 not suppress this dispatch (the fallback emits a bare temp that is
+	 nil outside the comprehension)."
+	(function ___pythonBindingShadows___: funcName) ifTrue: [^nil].
 
 	nargs := arguments size.
 	nargs = 0 ifTrue: [^nil].
@@ -435,7 +440,12 @@ bareCallVarargsSelector
 	| funcName candidate |
 	(function isKindOf: NameAst) ifFalse: [^nil].
 	funcName := function id.
-	(self isVariableIsDeclared: funcName) ifTrue: [^nil].
+	"Precise LEGB shadow check (see NameAst>>___pythonBindingShadows___:)
+	 rather than the over-approximating isVariableIsDeclared: variables
+	 walk -- a mere comprehension target elsewhere in the function must
+	 not suppress this dispatch (the fallback emits a bare temp that is
+	 nil outside the comprehension)."
+	(function ___pythonBindingShadows___: funcName) ifTrue: [^nil].
 	candidate := self class varargsSelectorForName: funcName.
 	(self class builtinsHasFastPathSelector: candidate) ifFalse: [^nil].
 	^ candidate
@@ -458,7 +468,12 @@ knownBuiltinName
 	| funcName |
 	(function isKindOf: NameAst) ifFalse: [^nil].
 	funcName := function id.
-	(self isVariableIsDeclared: funcName) ifTrue: [^nil].
+	"Precise LEGB shadow check (see NameAst>>___pythonBindingShadows___:)
+	 rather than the over-approximating isVariableIsDeclared: variables
+	 walk -- a mere comprehension target elsewhere in the function must
+	 not suppress this dispatch (the fallback emits a bare temp that is
+	 nil outside the comprehension)."
+	(function ___pythonBindingShadows___: funcName) ifTrue: [^nil].
 	(NameAst isFastPathBuiltinName: funcName) ifFalse: [^nil].
 	^ funcName
 %
@@ -903,7 +918,12 @@ bareCallClassNewSelector
 	(function isKindOf: NameAst) ifFalse: [^nil].
 	keywords isEmpty ifFalse: [^nil].
 	funcName := function id.
-	(self isVariableIsDeclared: funcName) ifTrue: [^nil].
+	"Precise LEGB shadow check (see NameAst>>___pythonBindingShadows___:)
+	 rather than the over-approximating isVariableIsDeclared: variables
+	 walk -- a mere comprehension target elsewhere in the function must
+	 not suppress this dispatch (the fallback emits a bare temp that is
+	 nil outside the comprehension)."
+	(function ___pythonBindingShadows___: funcName) ifTrue: [^nil].
 	cls := self class resolveClassForName: funcName.
 	cls ifNil: [^nil].
 	candidate := self class classNewSelectorForArity: arguments size.
@@ -937,7 +957,12 @@ knownClassName
 	| funcName cls metacls |
 	(function isKindOf: NameAst) ifFalse: [^nil].
 	funcName := function id.
-	(self isVariableIsDeclared: funcName) ifTrue: [^nil].
+	"Precise LEGB shadow check (see NameAst>>___pythonBindingShadows___:)
+	 rather than the over-approximating isVariableIsDeclared: variables
+	 walk -- a mere comprehension target elsewhere in the function must
+	 not suppress this dispatch (the fallback emits a bare temp that is
+	 nil outside the comprehension)."
+	(function ___pythonBindingShadows___: funcName) ifTrue: [^nil].
 	cls := self class resolveClassForName: funcName.
 	cls ifNil: [^nil].
 	metacls := cls class.
@@ -1458,6 +1483,10 @@ moduleSelfSendSelector
 	(function isKindOf: NameAst) ifFalse: [^nil].
 	funcName := function id.
 	(self class moduleFunctionNames includes: funcName) ifFalse: [^nil].
+	"LEGB: a true local (or enclosing comprehension target) of the same
+	 name shadows the top-level def -- the call must dispatch the local's
+	 value, not self-send to the module method."
+	(function ___localBindingShadows___: funcName) ifTrue: [^nil].
 	keywords isEmpty ifFalse: [^nil].
 	"Build the fixed-arity selector and verify it exists in the class's
 	env-1 method dict. Functions defined with *args / **kwargs / defaults
@@ -1486,6 +1515,9 @@ moduleSelfSendVarargsSelector
 	(function isKindOf: NameAst) ifFalse: [^nil].
 	funcName := function id.
 	(self class moduleFunctionNames includes: funcName) ifFalse: [^nil].
+	"LEGB: a true local (or enclosing comprehension target) of the same
+	 name shadows the top-level def (see moduleSelfSendSelector)."
+	(function ___localBindingShadows___: funcName) ifTrue: [^nil].
 	candidate := self class varargsSelectorForName: funcName.
 	((self class moduleClassBeingCompiled methodDictForEnv: 1) includesKey: candidate)
 		ifFalse: [^nil].

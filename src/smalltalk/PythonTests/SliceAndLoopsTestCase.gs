@@ -224,3 +224,65 @@ testUnderscoreParameter
 	"`def f(_, x):` parameter rename — discard_first ignores its first arg."
 	self assert: (testModule @env1:discard_first_result) equals: 42.
 %
+
+category: 'Tests - Loop else'
+method: SliceAndLoopsTestCase
+testWhileElseRunsOnNaturalExit
+	"Python while-else: the else body runs when the loop drains
+	without break."
+
+	| result |
+	result := self eval: 'log = []
+i = 0
+while i < 2:
+    log.append(i)
+    i = i + 1
+else:
+    log.append("else")
+log'.
+	self assert: (result @env1:__len__) equals: 3.
+	self assert: (result @env1:__getitem__: 2) equals: 'else'
+%
+
+category: 'Tests - Loop else'
+method: SliceAndLoopsTestCase
+testWhileElseSkippedOnBreak
+	"Python while-else: a break from the body skips the else clause
+	(regresses WhileAst emitting the else inside the PythonBreak-
+	protected block, matching ForAst)."
+
+	| result |
+	result := self eval: 'log = []
+i = 0
+while i < 5:
+    if i == 1:
+        break
+    log.append(i)
+    i = i + 1
+else:
+    log.append("else")
+log'.
+	self assert: (result @env1:__len__) equals: 1.
+	self assert: (result @env1:__getitem__: 0) equals: 0
+%
+
+category: 'Tests - Loop else'
+method: SliceAndLoopsTestCase
+testForElseSkippedOnBreak
+	"Python for-else: break skips the else; natural drain runs it."
+
+	| result |
+	result := self eval: 'log = []
+for i in [1, 2, 3]:
+    if i == 2:
+        break
+else:
+    log.append("else-a")
+for j in [1]:
+    pass
+else:
+    log.append("else-b")
+log'.
+	self assert: (result @env1:__len__) equals: 1.
+	self assert: (result @env1:__getitem__: 0) equals: 'else-b'
+%

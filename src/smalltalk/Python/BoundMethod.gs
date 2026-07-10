@@ -318,6 +318,32 @@ __self__
 
 category: 'Grail-Attribute Access'
 method: BoundMethod
+__get__: obj _: objtype
+	"Python's function descriptor protocol ``f.__get__(obj, objtype)'' —
+	bind the function to obj, returning a method handle whose calls
+	dispatch to obj.  Accessed through the class (obj is None), a
+	function returns itself.
+
+	weakref.WeakMethod.__call__ depends on this
+	(``self._func.__get__(obj, self._cls)'') to re-bind the saved
+	function to the still-alive instance — exercised by Django's signal
+	dispatch once Signal.connect receives its true receiver argument
+	(see the NameAst LEGB guard)."
+
+	obj == None ifTrue: [^ self].
+	^ BoundMethod receiver: obj selector: selector
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__get__: obj
+	"One-argument form of the descriptor protocol."
+
+	^ self __get__: obj _: None
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
 __qualname__
 	"Python's ``func.__qualname__'' — return the same string as
 	__name__ for now.  Real qualname encodes lexical nesting

@@ -72,21 +72,26 @@ printSmalltalkOn: aStream
 	body printSmalltalkOn: aStream.
 	aStream decreaseIndent; nextPutAll: '] @env0:on: PythonContinue do: [:___ex___ | nil].'; lf.
 	aStream decreaseIndent; nextPutAll: '].'; lf.
-	aStream decreaseIndent; nextPutAll: '] @env0:on: PythonBreak do: [:___ex___ | nil].'.
 	(orelse notNil and: [orelse size > 0]) ifTrue: [
-		aStream lf.
-		"orelse may be either an Array of statements or a SuiteAst —
+		"Python while-else: the else body runs only when the loop
+		terminates WITHOUT break.  Emit it INSIDE the outer block, after
+		the whileTrue: drain, so a PythonBreak signalled from the body
+		propagates past it to the handler below and skips it — the same
+		structure ForAst uses for for-else.  (This used to be emitted
+		after the handler, i.e. unconditionally; textwrap's max_lines
+		placeholder backtracking depends on the correct semantics.)
+
+		orelse may be either an Array of statements or a SuiteAst —
 		the parser produces both shapes depending on context.  Both
 		respond to printSmalltalkOn:, so route through that rather
-		than iterating directly.  KNOWN SEMANTIC GAP: this emits the
-		else body unconditionally, but Python's while-else should only
-		fire when the loop terminated WITHOUT break.  Tracked in
-		TODO.md (`while-else` / `for-else`)."
+		than iterating directly."
 		(orelse isKindOf: SuiteAst)
 			ifTrue: [orelse printSmalltalkOn: aStream]
 			ifFalse: [orelse do: [:stmt |
 				stmt printSmalltalkOn: aStream.
 				aStream lf.
 			]].
+		aStream lf.
 	].
+	aStream decreaseIndent; nextPutAll: '] @env0:on: PythonBreak do: [:___ex___ | nil].'.
 %

@@ -100,7 +100,8 @@ printSmalltalkOn: aStream
 						``self dynamicInstVarAt: ifAbsent: [NameError]''
 						and raises Python's NameError on miss — matching
 						CPython's module-scope semantics for ``del x''."
-						aStream nextPutAll: 'self @env0:removeDynamicInstVar: #''';
+						aStream nextPutAll: self ___moduleStoreReceiverExpr___;
+							nextPutAll: ' @env0:removeDynamicInstVar: #''';
 							nextPutAll: target id;
 							nextPutAll: '''.'.
 					] ifFalse: [
@@ -129,8 +130,18 @@ isModuleScopeTarget: aNameAst
 	scope, and no enclosing function shadows it as a local."
 
 	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	"``global x'' in the nearest enclosing function forces the module
+	route -- even inside a class method (the emitters pick the module-
+	instance receiver via ___moduleStoreReceiverExpr___) and past any
+	enclosing-function shadow (Python: the declaration binds the name
+	to the module for the whole declaring scope)."
+	(aNameAst ___nearestEnclosingFunctionDeclaresGlobal___: aNameAst id)
+		ifTrue: [^ true].
 	CallAst classBeingCompiled ifNotNil: [^ false].
 	(aNameAst isModuleVariableName: aNameAst id) ifFalse: [^ false].
-	(aNameAst ___declaredInEnclosingFunction___: aNameAst id) ifTrue: [^ false].
+	"PRECISE local-shadow check (writes + params; comprehension targets
+	and global-declared names excluded) -- not the over-approximating
+	___declaredInEnclosingFunction___: variables walk."
+	(aNameAst ___pythonLocalInEnclosingFunctions___: aNameAst id) ifTrue: [^ false].
 	^ true
 %
