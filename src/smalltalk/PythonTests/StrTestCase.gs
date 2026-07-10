@@ -1200,3 +1200,51 @@ testExpandtabsColumnAware
 	self assert: (('ab', tab, 'c') @env1:expandtabs: 4) equals: 'ab  c'.
 	self assert: (tab @env1:expandtabs: 8) equals: '        '.
 %
+
+category: 'Grail-Tests - split'
+method: StrTestCase
+testSplitReturnsPythonList
+	"str.split() must answer the canonical Python list surrogate
+	(OrderedCollection), not the Array subStrings produces: an Array
+	broke `text.split() == wrap(...)` comparisons and would reject
+	append.  Also regresses cross-kind sequence __eq__ (Array vs
+	OrderedCollection compare by content; tuple stays distinct)."
+
+	| r |
+	r := 'a b c' @env1:split.
+	self assert: (r isKindOf: OrderedCollection).
+	self assert: (self eval: '"a b".split() == ["a", "b"]').
+	self assert: (self eval: '(1,) == [1]') equals: false.
+	self assert: (self eval: '[1] == (1,)') equals: false
+%
+
+category: 'Grail-Tests - escapes'
+method: StrTestCase
+testNamedUnicodeEscape
+	"\N{NAME} escapes resolve through the curated name table; the
+	character lands in the literal (regresses the tokenizer keeping
+	the raw backslash-N text, which silently corrupted literals)."
+
+	self assert: (self eval: 'len("a\N{NO-BREAK SPACE}b")') equals: 3.
+	self assert: (self eval: 'ord("\N{NARROW NO-BREAK SPACE}")') equals: 8239.
+	self assert: (self eval: 'ord("\N{EM DASH}")') equals: 8212
+%
+
+category: 'Grail-Tests - escapes'
+method: StrTestCase
+testUnknownUnicodeNameRaises
+	"An unknown \N name is a SyntaxError (CPython semantics), not a
+	silently-kept raw escape."
+
+	self should: [self eval: '"\N{NOT A REAL NAME XYZZY}"']
+		raise: SyntaxError
+%
+
+category: 'Grail-Tests - escapes'
+method: StrTestCase
+testCapitalUEscape
+	"\UXXXXXXXX eight-hex-digit escapes decode (supplementary planes)."
+
+	self assert: (self eval: 'ord("\U0001F600")') equals: 128512.
+	self assert: (self eval: 'ord("\U000000E4")') equals: 228
+%

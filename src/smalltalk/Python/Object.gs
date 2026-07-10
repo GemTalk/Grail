@@ -271,6 +271,18 @@ __name__
 	^ self @env0:name @env0:asString
 %
 
+category: 'Grail-Introspection'
+classmethod: object
+__qualname__
+	"Python ``cls.__qualname__`` — the qualified name.  Grail does not
+	track lexical nesting of classes, so answer the same string as
+	__name__ (correct for top-level classes, which is the common case).
+	CPython error messages interpolate it (e.g. textwrap.dedent's
+	``expected str object, not {type(text).__qualname__!r}'')."
+
+	^ self @env0:name @env0:asString
+%
+
 category: 'Grail-Callable'
 classmethod: object
 value: positional value: kwargs

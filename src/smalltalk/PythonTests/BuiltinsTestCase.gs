@@ -1035,3 +1035,14 @@ testModuleAstEvaluateExpressionSource
 	self assert: (ModuleAst evaluateExpressionSource: '"hello"') equals: 'hello'.
 	self should: [ModuleAst evaluateExpressionSource: 'x = 1'] raise: SyntaxError
 %
+
+category: 'Grail-Tests - Introspection'
+method: BuiltinsTestCase
+testClassQualname
+	"cls.__qualname__ answers the class name (Grail tracks no lexical
+	nesting).  CPython error messages interpolate it -- textwrap.dedent's
+	type check reads type(x).__qualname__."
+
+	self assert: (self eval: 'type(0).__qualname__') equals: 'SmallInteger'.
+	self assert: (self eval: 'type("s").__qualname__ == type("s").__name__')
+%

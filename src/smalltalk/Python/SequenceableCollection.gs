@@ -52,12 +52,26 @@ __eq__: other
 	| myClass otherClass |
 	myClass := self @env0:class.
 	otherClass := other @env0:class.
-	
-	"Must be same class"
-	myClass == otherClass ifFalse: [^ false].
-	
-	"Use Smalltalk's = for comparison"
-	^ self @env0:= other
+
+	"Same class: Smalltalk's structural = suffices."
+	myClass == otherClass ifTrue: [^ self @env0:= other].
+
+	"Cross-class LIST comparison: plain Array and OrderedCollection both
+	surrogate Python ``list'' (historically str.split returned Arrays;
+	splat/varargs still produce them), and Python compares lists by
+	content.  tuple is an Array SUBCLASS and a distinct Python type, so
+	the Array side uses an exact-class check -- [1] == (1,) stays False.
+	Elements compare through env-1 __eq__ so Python semantics (nested
+	lists, None, cross-class strings) hold."
+	((myClass == Array or: [self @env0:isKindOf: OrderedCollection])
+		and: [otherClass == Array or: [other @env0:isKindOf: OrderedCollection]])
+		ifTrue: [
+			(self @env0:size) @env0:= (other @env0:size) ifFalse: [^ false].
+			1 @env0:to: self @env0:size do: [:i |
+				(((self @env0:at: i) @env1:__eq__: (other @env0:at: i)) == true)
+					ifFalse: [^ false]].
+			^ true].
+	^ false
 %
 
 category: 'Grail-Comparison'

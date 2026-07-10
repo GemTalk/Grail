@@ -1,10 +1,10 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-07-10T06:07:10Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
+Generated: 2026-07-10T06:37:38Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
 
-**Modules: 11** — OK 0 · FAIL 1 · ERROR 1 · SKIP 3 · IMPORTERROR 5 · STERROR 1 · CRASH 0 · TIMEOUT 0
+**Modules: 11** — OK 1 · FAIL 1 · ERROR 0 · SKIP 3 · IMPORTERROR 5 · STERROR 1 · CRASH 0 · TIMEOUT 0
 
-**Totals:** tests=70 failures=6 errors=2 skipped=0
+**Totals:** tests=70 failures=2 errors=0 skipped=0
 
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
@@ -14,7 +14,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 
 | Module | Status | tests | fail | err | skip | detail |
 |--------|--------|------:|-----:|----:|-----:|--------|
-| test.test_textwrap | ERROR | 68 | 4 | 2 | 0 |  |
+| test.test_textwrap | OK | 68 | 0 | 0 | 0 |  |
 | test.test_math | IMPORTERROR | 0 | 0 | 0 | 0 | a ImproperOperation occurred (error 2014), reason:classErrSubclassDisallowed, Cannot create a subclass of the class Integer. |
 | test.test_int | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd800 is illegal for Unicode |
 | test.test_float | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd8f0 is illegal for Unicode |

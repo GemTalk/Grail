@@ -1921,11 +1921,23 @@ static int get_ucs4_for_string(PyObject *op, Py_UCS4 **data_out,
         }
     }
 
-    /* Fetch UTF-8 bytes */
-    int64 byte_len = GciFetchSize_(oop);
+    /* Fetch the content as UTF-8 via GemStone's own encoder
+       (CharacterCollection>>encodeAsUTF8 -> a Utf8 byte object).  Raw
+       GciFetchBytes_ bytes are only UTF-8-compatible for 7-bit content:
+       String / ISOLatin store latin-1 code points ('\xe4' is the single
+       byte 0xE4, an invalid UTF-8 lead that mis-decoded by swallowing
+       its neighbors), and DoubleByteString stores UTF-16 units (whose
+       0x00 high bytes masquerade as NULs).  This mis-decode scrambled
+       every SRE span on non-ASCII subjects -- CPython test_textwrap's
+       umlaut / no-break-space wraps split mid-word. */
+    GciErrSType encErr; GciErr(&encErr);    /* drop any stale error first */
+    OopType fetchOop = GciPerform(oop, "encodeAsUTF8", NULL, 0);
+    if (GciErr(&encErr) || fetchOop == OOP_NIL || fetchOop == OOP_ILLEGAL)
+        fetchOop = oop;                     /* fall back to raw bytes */
+    int64 byte_len = GciFetchSize_(fetchOop);
     char *utf8 = (char *)malloc((size_t)(byte_len + 1));
     if (!utf8) return -1;
-    GciFetchBytes_(oop, 1, (ByteType *)utf8, byte_len);
+    GciFetchBytes_(fetchOop, 1, (ByteType *)utf8, byte_len);
     utf8[byte_len] = '\0';
 
     /* Convert to UCS-4 */

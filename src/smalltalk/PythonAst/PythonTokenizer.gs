@@ -76,6 +76,49 @@ on: aString
 
 category: 'Grail-tokenizing'
 classmethod: PythonTokenizer
+___unicodeNameToCodePoint___: aName
+	"Code point for a \N{NAME} escape, or nil when unknown.  A curated
+	table of the names that appear in real code and in CPython's test
+	suite -- Grail has no unicodedata name database.  Callers raise
+	SyntaxError on nil, so an unsupported name fails loudly instead of
+	silently corrupting the literal; extend the table as needed."
+
+	| t |
+	t := KeyValueDictionary new.
+	t at: 'NULL' put: 16r0.
+	t at: 'NO-BREAK SPACE' put: 16rA0.
+	t at: 'NARROW NO-BREAK SPACE' put: 16r202F.
+	t at: 'ZERO WIDTH SPACE' put: 16r200B.
+	t at: 'ZERO WIDTH NO-BREAK SPACE' put: 16rFEFF.
+	t at: 'EN SPACE' put: 16r2002.
+	t at: 'EM SPACE' put: 16r2003.
+	t at: 'THIN SPACE' put: 16r2009.
+	t at: 'HAIR SPACE' put: 16r200A.
+	t at: 'EN DASH' put: 16r2013.
+	t at: 'EM DASH' put: 16r2014.
+	t at: 'HORIZONTAL ELLIPSIS' put: 16r2026.
+	t at: 'BULLET' put: 16r2022.
+	t at: 'LINE SEPARATOR' put: 16r2028.
+	t at: 'PARAGRAPH SEPARATOR' put: 16r2029.
+	t at: 'LEFT SINGLE QUOTATION MARK' put: 16r2018.
+	t at: 'RIGHT SINGLE QUOTATION MARK' put: 16r2019.
+	t at: 'LEFT DOUBLE QUOTATION MARK' put: 16r201C.
+	t at: 'RIGHT DOUBLE QUOTATION MARK' put: 16r201D.
+	t at: 'DEGREE SIGN' put: 16rB0.
+	t at: 'MICRO SIGN' put: 16rB5.
+	t at: 'MULTIPLICATION SIGN' put: 16rD7.
+	t at: 'LATIN SMALL LETTER A WITH DIAERESIS' put: 16rE4.
+	t at: 'LATIN SMALL LETTER O WITH DIAERESIS' put: 16rF6.
+	t at: 'LATIN SMALL LETTER U WITH DIAERESIS' put: 16rFC.
+	t at: 'LATIN SMALL LETTER SHARP S' put: 16rDF.
+	t at: 'GREEK SMALL LETTER ALPHA' put: 16r3B1.
+	t at: 'GREEK SMALL LETTER PI' put: 16r3C0.
+	t at: 'REPLACEMENT CHARACTER' put: 16rFFFD.
+	t at: 'SNOWMAN' put: 16r2603.
+	^ t at: aName otherwise: nil
+%
+
+classmethod: PythonTokenizer
 tokenize: aString
 
 	^(self on: aString) tokenize
@@ -684,11 +727,40 @@ tokenizeString
 				hex := (self advance asString , self advance asString , self advance asString , self advance asString).
 				writeStream nextPut: (Character codePoint: (PythonParser integerFrom: hex radix: 16)).
 			]
+			ifFalse: [escaped == $U ifTrue: [
+				| hex |
+				hex := String new.
+				8 timesRepeat: [hex := hex , self advance asString].
+				writeStream nextPut: (Character codePoint: (PythonParser integerFrom: hex radix: 16)).
+			]
+			ifFalse: [escaped == $N ifTrue: [
+				"\N{NAME} named-character escape.  Resolved against a
+				curated table of common names (see
+				___unicodeNameToCodePoint___:); an unknown name raises
+				SyntaxError, matching CPython -- silently keeping the raw
+				text (the old behavior for every \N) corrupted string
+				literals invisibly."
+				| nameStream cp |
+				(self atEnd not and: [self peek == ${]) ifFalse: [
+					SyntaxError signal: '(unicode error) malformed \N character escape'].
+				self advance.
+				nameStream := WriteStream on: String new.
+				[self atEnd not and: [self peek ~~ $}]] whileTrue: [
+					nameStream nextPut: self advance].
+				self atEnd ifTrue: [
+					SyntaxError signal: '(unicode error) malformed \N character escape'].
+				self advance.
+				cp := PythonTokenizer ___unicodeNameToCodePoint___: nameStream contents.
+				cp isNil ifTrue: [
+					SyntaxError signal: '(unicode error) unknown Unicode character name: '
+						, nameStream contents].
+				writeStream nextPut: (Character codePoint: cp).
+			]
 			ifFalse: [escaped == Character lf ifTrue: ["line continuation in string - skip"]
 			ifFalse: [
 				"Unknown escape - keep as-is"
 				writeStream nextPut: $\; nextPut: escaped.
-			]]]]]]]]]]]]].
+			]]]]]]]]]]]]]]].
 		] ifFalse: [
 			writeStream nextPut: self advance.
 		]].

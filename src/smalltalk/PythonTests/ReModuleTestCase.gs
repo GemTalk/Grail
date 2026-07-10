@@ -380,3 +380,25 @@ testGroupSpan
 	self assert: (s1 @env0:at: 1) equals: 1.
 	self assert: (s1 @env0:at: 2) equals: 2.
 %
+
+category: 'Grail-Tests - Non-ASCII subjects'
+method: ReModuleTestCase
+testNonAsciiSubjectSpansAreCodepoints
+	"Regex spans on a non-ASCII subject are CODEPOINT indices.
+	Regresses get_ucs4_for_string fetching raw GemStone bytes and
+	decoding them as UTF-8: latin-1 '\xe4' (0xE4) is an invalid UTF-8
+	lead that swallowed its neighbors, scrambling every span --
+	textwrap's umlaut wraps split mid-word."
+
+	| result |
+	result := self eval: 'import re
+text = "Die Empf\xe4nger-Auswahl"
+m = re.search("Empf.nger", text)
+parts = re.split(" ", text)
+(m.start(), m.end(), len(parts), parts[0], len(parts[1]))'.
+	self assert: (result @env1:__getitem__: 0) equals: 4.
+	self assert: (result @env1:__getitem__: 1) equals: 13.
+	self assert: (result @env1:__getitem__: 2) equals: 2.
+	self assert: (result @env1:__getitem__: 3) equals: 'Die'.
+	self assert: (result @env1:__getitem__: 4) equals: 17
+%

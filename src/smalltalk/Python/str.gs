@@ -1695,9 +1695,15 @@ split
 	"Return a list of words in the string, using whitespace as the
 	delimiter.  ``subStrings'' yields plain GemStone String substrings;
 	rebuild each as the receiver's str class (Unicode7) so they satisfy
-	``isinstance(x, str)'' downstream (see split: sep)."
+	``isinstance(x, str)'' downstream (see split: sep).
 
-	^ (self @env0:subStrings) @env0:collect: [:p | (self @env0:copyEmpty) @env0:, p]
+	Answer an OrderedCollection -- the canonical Python ``list''
+	surrogate -- not the Array subStrings produces: a returned Array
+	broke ``text.split() == wrap(...)'' comparisons (class-strict
+	sequence __eq__) and would reject list mutations like append."
+
+	^ OrderedCollection @env0:withAll:
+		((self @env0:subStrings) @env0:collect: [:p | (self @env0:copyEmpty) @env0:, p])
 %
 
 category: 'Grail-String Methods'
