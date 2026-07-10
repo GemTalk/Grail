@@ -1171,6 +1171,51 @@ __le__: other
 	^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'
 %
 
+category: 'Grail-Arithmetic'
+method: object
+___binOpFallback___: other op: opString reflected: refSelector
+	"Python binary-operator fallback for an unsupported operand pair --
+	the arithmetic sibling of ___cmpFallback___:op:reflected:.  Try the
+	REFLECTED dunder (__radd__ & co.) on ``other'' when a user class
+	defines it, else raise the catchable Python TypeError.  (Previously
+	``None + 1'' was an env-1 DNU and ``1 + None'' escaped as a
+	Smalltalk _generality error -- the STERROR class that blocked
+	CPython's test_operator.)"
+
+	| refOwner |
+	"Unlike ___cmpFallback___ (whose lt<->gt selector symmetry could
+	recurse between two built-ins), the __r*__ family is distinct and
+	every guarded reverse op terminates in a direct TypeError -- so the
+	reflected try is safe for ANY class that defines it (complex, an
+	object subclass outside Number, relies on this for int + complex)."
+	"CPython skips the reflected slot when the operands share a type --
+	and our approximation must skip it for same-FAMILY operands, or two
+	strings' delegating __rmul__/__mul__ pair would ping-pong forever
+	(``'a' * 'b''' recursed to stack exhaustion)."
+	((other @env0:isKindOf: self @env0:class)
+		or: [self @env0:isKindOf: other @env0:class]) ifFalse: [
+		refOwner := other @env0:class
+			@env0:whichClassIncludesSelector: refSelector environmentId: 1.
+		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
+			^ other @env0:perform: refSelector env: 1 withArguments: { self }]].
+	TypeError ___signal___: ('unsupported operand type(s) for ' @env0:, opString
+		@env0:, ': ''' @env0:, self @env0:class @env0:name @env0:asString
+		@env0:, ''' and ''' @env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___rbinOpFallback___: other op: opString
+	"TypeError for a failed REVERSE binary op (__radd__ & co.): the
+	forward direction already had its chance, so no further reflection
+	-- and the message names the operands in evaluation order
+	(other OP self)."
+
+	TypeError ___signal___: ('unsupported operand type(s) for ' @env0:, opString
+		@env0:, ': ''' @env0:, other @env0:class @env0:name @env0:asString
+		@env0:, ''' and ''' @env0:, self @env0:class @env0:name @env0:asString @env0:, '''')
+%
+
 category: 'Grail-Comparison'
 method: object
 ___cmpFallback___: other op: opString reflected: refSelector
@@ -1577,6 +1622,39 @@ ___pyStarToArray___
 
 category: 'Grail-Attribute Access'
 method: object
+___tryBinaryDunderDNU___: aSelector args: anArray
+	"When aSelector is a missing BINARY-OPERATOR dunder, run the Python
+	protocol tail (reflected dunder on the operand, else catchable
+	TypeError) and return its result; otherwise return the
+	#___noBinOp___ sentinel.  Called from BOTH doesNotUnderstand:
+	overrides -- Object's (env-1 miss on any receiver) and
+	PythonInstance's (which would otherwise misread ``__sub__: other''
+	as an attribute-setter and silently store the operand).  Handled at
+	dispatch-failure time rather than as object-level default methods,
+	which would shadow DNU-based magic like IntEnum member arithmetic."
+
+	| binOp |
+	binOp := nil.
+	aSelector == #'__add__:' ifTrue: [binOp := { '+'. #'__radd__:' }].
+	aSelector == #'__sub__:' ifTrue: [binOp := { '-'. #'__rsub__:' }].
+	aSelector == #'__mul__:' ifTrue: [binOp := { '*'. #'__rmul__:' }].
+	aSelector == #'__truediv__:' ifTrue: [binOp := { '/'. #'__rtruediv__:' }].
+	aSelector == #'__floordiv__:' ifTrue: [binOp := { '//'. #'__rfloordiv__:' }].
+	aSelector == #'__mod__:' ifTrue: [binOp := { '%'. #'__rmod__:' }].
+	aSelector == #'__pow__:' ifTrue: [binOp := { '**'. #'__rpow__:' }].
+	aSelector == #'__lshift__:' ifTrue: [binOp := { '<<'. #'__rlshift__:' }].
+	aSelector == #'__rshift__:' ifTrue: [binOp := { '>>'. #'__rrshift__:' }].
+	aSelector == #'__and__:' ifTrue: [binOp := { '&'. #'__rand__:' }].
+	aSelector == #'__or__:' ifTrue: [binOp := { '|'. #'__ror__:' }].
+	aSelector == #'__xor__:' ifTrue: [binOp := { '^'. #'__rxor__:' }].
+	aSelector == #'__matmul__:' ifTrue: [binOp := { '@'. #'__rmatmul__:' }].
+	binOp @env0:== nil ifTrue: [^ #'___noBinOp___'].
+	^ self @env1:___binOpFallback___: (anArray @env0:at: 1)
+		op: (binOp @env0:at: 1) reflected: (binOp @env0:at: 2)
+%
+
+category: 'Grail-Attribute Access'
+method: object
 doesNotUnderstand: aSelector args: anArray envId: envId
 	"Bound-method-via-attribute-load fallback.
 
@@ -1592,12 +1670,31 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	``attr:_:`` etc., or the varargs form ``_attr:kw:``).
 	All other unknown sends fall through to super."
 
-	| s md cls |
+	| s md cls binOp |
 	envId @env0:= 1 ifFalse: [^ MessageNotUnderstood @env0:signal:
 	'env-1 ', aSelector @env0:printString, ' not understood by ', self @env0:class @env0:name @env0:asString].
 	s := aSelector @env0:asString.
 	cls := self @env0:class.
 	md := cls @env0:methodDictForEnv: 1.
+	"A missing BINARY-OPERATOR dunder takes the Python protocol tail:
+	reflected dunder on the operand, else catchable TypeError.  Handled
+	HERE at dispatch-failure time (not as object-level default methods,
+	which would shadow DNU-based magic like IntEnum member arithmetic --
+	``Color.RED + 1'' resolves through this very handler's
+	BoundMethod/varargs machinery)."
+	binOp := self ___tryBinaryDunderDNU___: aSelector args: anArray.
+	binOp @env0:== #'___noBinOp___' ifFalse: [^ binOp].
+	"A missing ``__contains__:'' (``x in None'') raises CPython's
+	catchable TypeError.  Only this ONE container dunder is intercepted:
+	__len__ / __iter__ / __getitem__ double as soft-miss PROBES all over
+	Grail's own machinery (truthiness checks on user instances,
+	PyDateTime formatting, ...) and intercepting them broke Twilio --
+	len(None)-style calls remain a documented residual."
+	((self @env0:isKindOf: PythonInstance) @env0:not
+		and: [aSelector == #'__contains__:']) ifTrue: [
+		TypeError @env1:___signal___: ('argument of type ''',
+			self @env0:class @env0:name @env0:asString,
+			''' is not iterable')].
 	(s @env0:size @env0:> 0 @env0:and: [s @env0:last @env0:= $:]) ifTrue: [
 		"Keyword selector like `name:_:_:` — the corresponding Python
 		function may have been compiled as varargs (`_name:kw:`) because

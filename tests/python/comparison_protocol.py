@@ -28,6 +28,11 @@ class Plain:
     pass
 
 
+class Radd:
+    def __radd__(self, other):
+        return "RADD:" + str(other)
+
+
 RESULTS = {
     "int_lt_str": _t(lambda: 1 < "a"),
     "str_lt_int": _t(lambda: "a" < 1),
@@ -50,4 +55,23 @@ RESULTS = {
     "reflected_gt": 1 < Meters(5),
     # sorting with mixed types inside raises catchably
     "sort_mixed": _t(lambda: sorted([3, "a", 1])),
+    # --- arithmetic protocol (the sibling) ---
+    "none_add_int": _t(lambda: None + 1),
+    "int_add_none": _t(lambda: 1 + None),
+    "int_add_str": _t(lambda: 1 + "a"),
+    "str_add_int": _t(lambda: "a" + 1),
+    "list_add_tuple": _t(lambda: [1] + (1,)),
+    "str_mul_str": _t(lambda: "a" * "b"),
+    "plain_sub_plain": _t(lambda: Plain() - Plain()),
+    "none_mod_int": _t(lambda: None % 3),
+    # valid arithmetic that must keep working
+    "int_mul_str": 2 * "ab",
+    "str_mul_int": "ab" * 2,
+    "int_mul_list": 2 * [7],
+    "tuple_mul_int": (1,) * 2,
+    "bytes_add_bytes": b"a" + b"b",
+    "bool_add_int": True + 2,
+    "int_pow_int": 2 ** 5,
+    # reflected arithmetic dunder on a user class
+    "reflected_radd": 1 + Radd(),
 }

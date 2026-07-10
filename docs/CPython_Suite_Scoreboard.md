@@ -1,6 +1,6 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-07-10T08:32:01Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
+Generated: 2026-07-10T09:30:29Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
 
 **Modules: 11** — OK 1 · FAIL 0 · ERROR 1 · SKIP 1 · IMPORTERROR 5 · STERROR 3 · CRASH 0 · TIMEOUT 0
 
@@ -20,8 +20,8 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_float | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd8f0 is illegal for Unicode |
 | test.test_heapq | STERROR | 0 | 0 | 0 | 0 | a ImproperOperation occurred (error 2014), reason:classErrSubclassDisallowed, Cannot create a subclass of the class Integer. |
 | test.test_bisect | ERROR | 42 | 14 | 6 | 0 |  |
-| test.test_operator | STERROR | 0 | 0 | 0 | 0 | env-1 #'__add__:' not understood by NoneType |
+| test.test_operator | STERROR | 0 | 0 | 0 | 0 | env-1 #'__contains__:' not understood by NoneType |
 | test.test_fractions | IMPORTERROR | 0 | 0 | 0 | 0 | a CompileError occurred (error 1001), unexpected token ; expected a right bracket (]) ; unexpected token ; unexpected token ; unexpected token  |
 | test.test_datetime | SKIP | 0 | 0 | 0 | 0 |  |
-| test.test_re | STERROR | 0 | 0 | 0 | 0 | a MessageNotUnderstood occurred (error 2010), a Unicode7 does not understand  #'_generality' |
+| test.test_re | STERROR | 0 | 0 | 0 | 0 | a MessageNotUnderstood occurred (error 2010), a Re does not understand  #'_compile_template' (env 1) |
 | test.test_functools | IMPORTERROR | 0 | 0 | 0 | 0 | Expected OP '(' but got OP '[' at line 840 |

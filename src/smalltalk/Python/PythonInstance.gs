@@ -62,10 +62,16 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	signature compiles to `_foo:kw:``).  Without this redirect, every
 	such call would be misinterpreted as a setter."
 
-	| s metaOwner |
+	| s metaOwner binOp |
 	envId = 1 ifFalse: [
 		^ super doesNotUnderstand: aSelector args: anArray envId: envId
 	].
+	"Missing binary-operator dunders take the Python protocol fallback
+	BEFORE the attribute-setter interpretation below -- otherwise
+	``Plain() - Plain()'' silently stores the operand as an attribute
+	named __sub__ instead of raising TypeError."
+	binOp := self ___tryBinaryDunderDNU___: aSelector args: anArray.
+	binOp == #'___noBinOp___' ifFalse: [^ binOp].
 	s := aSelector asString.
 	s size > 0 ifTrue: [
 		(s last = $:) ifTrue: [

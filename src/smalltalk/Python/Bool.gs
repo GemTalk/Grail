@@ -446,6 +446,8 @@ method: bool
 __add__: other
 	"Add bool (as int) to other."
 
+	((other @env0:isKindOf: Number) or: [other @env0:isKindOf: Boolean]) ifFalse: [
+		^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:+ other
 %
 
@@ -519,6 +521,8 @@ method: bool
 __floordiv__: other
 	"Floor division of bool (as int) by other."
 
+	((other @env0:isKindOf: Number) or: [other @env0:isKindOf: Boolean]) ifFalse: [
+		^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:// other
 %
 
@@ -532,7 +536,7 @@ __ge__: other
 	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	(otherInt @env0:isKindOf: Number)
+	((otherInt @env0:isKindOf: Number) or: [otherInt @env0:isKindOf: Boolean])
 		ifFalse: [^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'].
 	^ selfInt @env0:>= otherInt
 %
@@ -547,7 +551,7 @@ __gt__: other
 	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	(otherInt @env0:isKindOf: Number)
+	((otherInt @env0:isKindOf: Number) or: [otherInt @env0:isKindOf: Boolean])
 		ifFalse: [^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'].
 	^ selfInt @env0:> otherInt
 %
@@ -586,7 +590,7 @@ __le__: other
 	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	(otherInt @env0:isKindOf: Number)
+	((otherInt @env0:isKindOf: Number) or: [otherInt @env0:isKindOf: Boolean])
 		ifFalse: [^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'].
 	^ selfInt @env0:<= otherInt
 %
@@ -601,7 +605,7 @@ __lt__: other
 	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	(otherInt @env0:isKindOf: Number)
+	((otherInt @env0:isKindOf: Number) or: [otherInt @env0:isKindOf: Boolean])
 		ifFalse: [^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'].
 	^ selfInt @env0:< otherInt
 %
@@ -611,6 +615,8 @@ method: bool
 __mod__: other
 	"Modulo of bool (as int) by other."
 
+	((other @env0:isKindOf: Number) or: [other @env0:isKindOf: Boolean]) ifFalse: [
+		^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:\\ other
 %
 
@@ -619,6 +625,8 @@ method: bool
 __mul__: other
 	"Multiply bool (as int) by other."
 
+	((other @env0:isKindOf: Number) or: [other @env0:isKindOf: Boolean]) ifFalse: [
+		^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:* other
 %
 
@@ -668,6 +676,8 @@ method: bool
 __pow__: other
 	"Raise bool (as int) to power of other."
 
+	((other @env0:isKindOf: Number) or: [other @env0:isKindOf: Boolean]) ifFalse: [
+		^ self ___binOpFallback___: other op: '**' reflected: #'__rpow__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:raisedTo: other
 %
 
@@ -692,6 +702,8 @@ method: bool
 __sub__: other
 	"Subtract other from bool (as int)."
 
+	((other @env0:isKindOf: Number) or: [other @env0:isKindOf: Boolean]) ifFalse: [
+		^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:- (other)
 %
 
@@ -700,6 +712,8 @@ method: bool
 __truediv__: other
 	"True division of bool (as int) by other."
 
+	((other @env0:isKindOf: Number) or: [other @env0:isKindOf: Boolean]) ifFalse: [
+		^ self ___binOpFallback___: other op: '/' reflected: #'__rtruediv__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:/ other
 %
 

@@ -158,7 +158,10 @@ method: float
 __add__: other
 	"Add two floats or float and other number."
 
-	^ self @env0:+ other
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:+ other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:+ (other @env1:__index__)].
+	^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'
 %
 
 category: 'Grail-Conversion'
@@ -225,7 +228,10 @@ method: float
 __floordiv__: other
 	"Floor division."
 
-	^ self @env0:// other
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:// other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:// (other @env1:__index__)].
+	^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'
 %
 
 category: 'Grail-Comparison'
@@ -293,7 +299,10 @@ method: float
 __mod__: other
 	"Modulo operation."
 
-	^ self @env0:\\ other
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:\\ other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:\\ (other @env1:__index__)].
+	^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'
 %
 
 category: 'Grail-Arithmetic'
@@ -301,7 +310,10 @@ method: float
 __mul__: other
 	"Multiply two floats or float and other number."
 
-	^ self @env0:* other
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:* other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:* (other @env1:__index__)].
+	^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'
 %
 
 category: 'Grail-Comparison'
@@ -333,7 +345,10 @@ method: float
 __pow__: other
 	"Raise self to the power of other."
 
-	^ self @env0:raisedTo: other
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:raisedTo: other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:raisedTo: (other @env1:__index__)].
+	^ self ___binOpFallback___: other op: '**' reflected: #'__rpow__:'
 %
 
 category: 'Grail-Arithmetic'
@@ -414,7 +429,10 @@ method: float
 __sub__: other
 	"Subtract other from self."
 
-	^ self @env0:- (other)
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:- (other)].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:- ((other @env1:__index__))].
+	^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'
 %
 
 category: 'Grail-Arithmetic'
@@ -422,7 +440,10 @@ method: float
 __truediv__: other
 	"True division (always returns float)."
 
-	^ self @env0:/ other
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:/ other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:/ (other @env1:__index__)].
+	^ self ___binOpFallback___: other op: '/' reflected: #'__rtruediv__:'
 %
 
 category: 'Grail-Rounding'

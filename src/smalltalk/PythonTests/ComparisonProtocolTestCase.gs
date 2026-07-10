@@ -87,3 +87,37 @@ testReflectedDunderGetsFirstChance
 
 	self assert: (self resultAt: 'reflected_gt') equals: true
 %
+
+category: 'Grail-Tests - Arithmetic TypeError'
+method: ComparisonProtocolTestCase
+testMixedArithmeticRaisesCatchableTypeError
+	"Unsupported binary-operator pairs raise catchable TypeError
+	(previously ``None + 1'' was an env-1 DNU, ``1 + None'' a
+	Smalltalk _generality error, and ``[1] + (1,)'' silently
+	concatenated)."
+
+	#('none_add_int' 'int_add_none' 'int_add_str' 'str_add_int'
+	  'list_add_tuple' 'str_mul_str' 'plain_sub_plain' 'none_mod_int') do: [:key |
+		self assert: ((self resultAt: key) = 'type-error')
+			description: key]
+%
+
+category: 'Grail-Tests - Arithmetic'
+method: ComparisonProtocolTestCase
+testValidArithmeticStillWorks
+	self assert: (self resultAt: 'int_mul_str') equals: 'abab'.
+	self assert: (self resultAt: 'str_mul_int') equals: 'abab'.
+	self assert: ((self resultAt: 'int_mul_list') @env1:__len__) equals: 2.
+	self assert: ((self resultAt: 'tuple_mul_int') @env1:__len__) equals: 2.
+	self assert: ((self resultAt: 'bytes_add_bytes') @env1:__len__) equals: 2.
+	self assert: (self resultAt: 'bool_add_int') equals: 3.
+	self assert: (self resultAt: 'int_pow_int') equals: 32
+%
+
+category: 'Grail-Tests - Arithmetic'
+method: ComparisonProtocolTestCase
+testReflectedArithmeticDunder
+	"``1 + Radd()'' dispatches Radd.__radd__(radd, 1)."
+
+	self assert: (self resultAt: 'reflected_radd') equals: 'RADD:1'
+%

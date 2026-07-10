@@ -197,9 +197,15 @@ __new__: iterable
 category: 'Grail-Sequence Operations'
 method: tuple
 __add__: other
-	"Concatenate two sequences. Returns a new (frozen) tuple."
+	"Concatenate two sequences. Returns a new (frozen) tuple.
+	Python only concatenates tuple + tuple."
 
 	| accumulator |
+	"Accept tuple + plain Array too -- the Array is Grail's ambiguous
+	*args/splat carrier (see ___sameSequenceKindAs___)."
+	((other @env0:isKindOf: tuple) or: [other @env0:class == Array]) ifFalse: [
+		^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'].
+
 	accumulator := OrderedCollection @env0:new.
 	accumulator @env0:addAll: self.
 	accumulator @env0:addAll: other.
@@ -258,6 +264,10 @@ __mul__: n
 	tuples because the empty instance is already frozen."
 
 	| accumulator |
+	((n @env0:isKindOf: Integer)
+		or: [(n @env0:class @env0:methodDictForEnv: 1)
+			@env0:includesKey: #'__index__']) ifFalse: [
+		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
 	(n @env0:<= 0) ifTrue: [^ tuple @env0:new].
 	accumulator := OrderedCollection @env0:new.
 	n @env0:timesRepeat: [accumulator @env0:addAll: self].

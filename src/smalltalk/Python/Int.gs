@@ -263,7 +263,10 @@ method: int
 __add__: other
 	"Add two integers or integer and other number."
 
-	^ self @env0:+ other
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:+ other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:+ (other @env1:__index__)].
+	^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'
 %
 
 category: 'Grail-Bitwise Operations'
@@ -271,7 +274,10 @@ method: int
 __and__: other
 	"Bitwise AND."
 
-	^ self @env0:bitAnd: other
+	(other @env0:isKindOf: Integer) ifTrue: [^ self @env0:bitAnd: other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitAnd: (other @env1:__index__)].
+	^ self ___binOpFallback___: other op: '&' reflected: #'__rand__:'
 %
 
 category: 'Grail-Conversion'
@@ -361,7 +367,10 @@ method: int
 __floordiv__: other
 	"Floor division."
 
-	^ self @env0:// other
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:// other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:// (other @env1:__index__)].
+	^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'
 %
 
 category: 'Grail-String Representation'
@@ -470,7 +479,10 @@ method: int
 __lshift__: other
 	"Left shift."
 
-	^ self @env0:bitShift: other
+	(other @env0:isKindOf: Integer) ifTrue: [^ self @env0:bitShift: other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitShift: (other @env1:__index__)].
+	^ self ___binOpFallback___: other op: '<<' reflected: #'__rlshift__:'
 %
 
 category: 'Grail-Comparison'
@@ -491,7 +503,10 @@ method: int
 __mod__: other
 	"Modulo operation."
 
-	^ self @env0:\\ other
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:\\ other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:\\ (other @env1:__index__)].
+	^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'
 %
 
 category: 'Grail-Arithmetic'
@@ -499,7 +514,17 @@ method: int
 __mul__: other
 	"Multiply two integers or integer and other number."
 
-	^ self @env0:* other
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:* other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:* (other @env1:__index__)].
+	"Sequence repetition is commutative: ``2 * 'ab''' / ``2 * [1]''
+	delegate to the sequence's own __mul__ (CPython reaches the
+	same result via NotImplemented -> str.__rmul__)."
+	((other @env0:isKindOf: CharacterCollection)
+		or: [(other @env0:isKindOf: SequenceableCollection)
+		or: [other @env0:isKindOf: ByteArray]]) ifTrue: [
+		^ other @env1:__mul__: self].
+	^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'
 %
 
 category: 'Grail-Comparison'
@@ -523,7 +548,10 @@ method: int
 __or__: other
 	"Bitwise OR."
 
-	^ self @env0:bitOr: other
+	(other @env0:isKindOf: Integer) ifTrue: [^ self @env0:bitOr: other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitOr: (other @env1:__index__)].
+	^ self ___binOpFallback___: other op: '|' reflected: #'__ror__:'
 %
 
 category: 'Grail-Arithmetic'
@@ -539,7 +567,10 @@ method: int
 __pow__: other
 	"Raise to power."
 
-	^ self @env0:raisedTo: other
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:raisedTo: other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:raisedTo: (other @env1:__index__)].
+	^ self ___binOpFallback___: other op: '**' reflected: #'__rpow__:'
 %
 
 category: 'Grail-Arithmetic'
@@ -560,7 +591,10 @@ method: int
 __radd__: other
 	"Reverse add (other + self)."
 
-	^ other @env0:+ self
+	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:+ self].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:+ self].
+	^ self ___rbinOpFallback___: other op: '+'
 %
 
 category: 'Grail-Bitwise Operations - Reverse'
@@ -568,7 +602,10 @@ method: int
 __rand__: other
 	"Reverse bitwise AND (other & self)."
 
-	^ other @env0:bitAnd: self
+	(other @env0:isKindOf: Integer) ifTrue: [^ other @env0:bitAnd: self].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:bitAnd: self].
+	^ self ___rbinOpFallback___: other op: '&'
 %
 
 category: 'Grail-Arithmetic - Reverse'
@@ -595,7 +632,10 @@ method: int
 __rfloordiv__: other
 	"Reverse floor division (other // self)."
 
-	^ other @env0:// self
+	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:// self].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:// self].
+	^ self ___rbinOpFallback___: other op: '//'
 %
 
 category: 'Grail-Bitwise Operations - Reverse'
@@ -603,7 +643,10 @@ method: int
 __rlshift__: other
 	"Reverse left shift (other << self)."
 
-	^ other @env0:bitShift: self
+	(other @env0:isKindOf: Integer) ifTrue: [^ other @env0:bitShift: self].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:bitShift: self].
+	^ self ___rbinOpFallback___: other op: '<<'
 %
 
 category: 'Grail-Arithmetic - Reverse'
@@ -611,7 +654,10 @@ method: int
 __rmod__: other
 	"Reverse modulo (other % self)."
 
-	^ other @env0:\\ self
+	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:\\ self].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:\\ self].
+	^ self ___rbinOpFallback___: other op: '%'
 %
 
 category: 'Grail-Arithmetic - Reverse'
@@ -619,7 +665,10 @@ method: int
 __rmul__: other
 	"Reverse multiply (other * self)."
 
-	^ other @env0:* self
+	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:* self].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:* self].
+	^ self ___rbinOpFallback___: other op: '*'
 %
 
 category: 'Grail-Bitwise Operations - Reverse'
@@ -627,7 +676,10 @@ method: int
 __ror__: other
 	"Reverse bitwise OR (other | self)."
 
-	^ other @env0:bitOr: self
+	(other @env0:isKindOf: Integer) ifTrue: [^ other @env0:bitOr: self].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:bitOr: self].
+	^ self ___rbinOpFallback___: other op: '|'
 %
 
 category: 'Grail-Rounding'
@@ -662,7 +714,10 @@ method: int
 __rpow__: other
 	"Reverse power (other ** self)."
 
-	^ other @env0:raisedTo: self
+	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:raisedTo: self].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:raisedTo: self].
+	^ self ___rbinOpFallback___: other op: '**'
 %
 
 category: 'Grail-Bitwise Operations - Reverse'
@@ -670,7 +725,10 @@ method: int
 __rrshift__: other
 	"Reverse right shift (other >> self)."
 
-	^ other @env0:bitShift: (self @env0:negated)
+	(other @env0:isKindOf: Integer) ifTrue: [^ other @env0:bitShift: (self @env0:negated)].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:bitShift: (self @env0:negated)].
+	^ self ___rbinOpFallback___: other op: '>>'
 %
 
 category: 'Grail-Bitwise Operations'
@@ -678,7 +736,10 @@ method: int
 __rshift__: other
 	"Right shift."
 
-	^ self @env0:bitShift: (other @env0:negated)
+	(other @env0:isKindOf: Integer) ifTrue: [^ self @env0:bitShift: (other @env0:negated)].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitShift: ((other @env1:__index__) @env0:negated)].
+	^ self ___binOpFallback___: other op: '>>' reflected: #'__rrshift__:'
 %
 
 category: 'Grail-Arithmetic - Reverse'
@@ -686,7 +747,10 @@ method: int
 __rsub__: other
 	"Reverse subtract (other - self)."
 
-	^ other @env0:- (self)
+	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:- (self)].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:- (self)].
+	^ self ___rbinOpFallback___: other op: '-'
 %
 
 category: 'Grail-Arithmetic - Reverse'
@@ -694,7 +758,10 @@ method: int
 __rtruediv__: other
 	"Reverse true division (other / self)."
 
-	^ other @env0:/ self
+	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:/ self].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:/ self].
+	^ self ___rbinOpFallback___: other op: '/'
 %
 
 category: 'Grail-Bitwise Operations - Reverse'
@@ -702,7 +769,10 @@ method: int
 __rxor__: other
 	"Reverse bitwise XOR (other ^ self)."
 
-	^ other @env0:bitXor: self
+	(other @env0:isKindOf: Integer) ifTrue: [^ other @env0:bitXor: self].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:bitXor: self].
+	^ self ___rbinOpFallback___: other op: '^'
 %
 
 category: 'Grail-String Representation'
@@ -718,7 +788,10 @@ method: int
 __sub__: other
 	"Subtract other from self."
 
-	^ self @env0:- (other)
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:- (other)].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:- ((other @env1:__index__))].
+	^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'
 %
 
 category: 'Grail-Arithmetic'
@@ -726,7 +799,10 @@ method: int
 __truediv__: other
 	"True division (returns float)."
 
-	^ self @env0:/ other
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:/ other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:/ (other @env1:__index__)].
+	^ self ___binOpFallback___: other op: '/' reflected: #'__rtruediv__:'
 %
 
 category: 'Grail-Rounding'
@@ -742,7 +818,10 @@ method: int
 __xor__: other
 	"Bitwise XOR."
 
-	^ self @env0:bitXor: other
+	(other @env0:isKindOf: Integer) ifTrue: [^ self @env0:bitXor: other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitXor: (other @env1:__index__)].
+	^ self ___binOpFallback___: other op: '^' reflected: #'__rxor__:'
 %
 
 category: 'Grail-Integer Methods'

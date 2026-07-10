@@ -135,7 +135,8 @@ method: CharacterCollection
 __add__: other
 	"Concatenate two strings. In Python: str1 + str2"
 
-	^ self @env0:, other
+	(other @env0:isKindOf: CharacterCollection) ifTrue: [^ self @env0:, other].
+	^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'
 %
 
 category: 'Grail-Sequence Operations'
@@ -454,6 +455,10 @@ __mul__: n
 	"Repeat string n times. In Python: str * n"
 
 	| count result stream |
+	((n @env0:isKindOf: Integer)
+		or: [(n @env0:class @env0:methodDictForEnv: 1)
+			@env0:includesKey: #'__index__']) ifFalse: [
+		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
 	count := n @env0:asInteger.
 	(count @env0:<= 0) ifTrue: [ ^ '' @env0:copy ].
 
@@ -701,6 +706,34 @@ encode: encoding
 	request URL build; for the M7 Flask demo path (defaults to
 	``localhost'') ASCII passthrough is sufficient.  Real punycode
 	can land on top of this when a downstream test depends on it."
+	"unicode_escape: backslash-escape control and non-ASCII characters
+	(backslash, LF, CR, TAB named; ''BSxXX'' below U+0100, ''BSuXXXX''
+	beyond -- BS denoting a single backslash), yielding ASCII bytes.
+	django.utils.log escapes response-log arguments with it."
+	(enc @env0:= 'unicode_escape') ifTrue: [
+		| ws hexFor |
+		hexFor := [:cp :width | | h |
+			h := (cp @env0:printString: 16) @env0:asLowercase.
+			[h @env0:size @env0:< width] @env0:whileTrue: [h := '0' @env0:, h].
+			h].
+		ws := WriteStream @env0:on: String @env0:new.
+		1 @env0:to: size do: [:i | | ch cp |
+			ch := self @env0:at: i.
+			cp := ch @env0:codePoint.
+			cp @env0:= 92 ifTrue: [ws @env0:nextPutAll: '\\'] ifFalse: [
+			cp @env0:= 10 ifTrue: [ws @env0:nextPutAll: '\n'] ifFalse: [
+			cp @env0:= 13 ifTrue: [ws @env0:nextPutAll: '\r'] ifFalse: [
+			cp @env0:= 9 ifTrue: [ws @env0:nextPutAll: '\t'] ifFalse: [
+			((cp @env0:>= 32) and: [cp @env0:<= 126]) ifTrue: [ws @env0:nextPut: ch] ifFalse: [
+			cp @env0:< 256
+				ifTrue: [
+					ws @env0:nextPutAll: '\x'.
+					ws @env0:nextPutAll: (hexFor value: cp value: 2)]
+				ifFalse: [
+					ws @env0:nextPutAll: '\u'.
+					ws @env0:nextPutAll: (hexFor value: cp value: 4)]]]]]]].
+		^ bytes @env0:withAll: (ws @env0:contents @env0:asByteArray)
+	].
 	((enc @env0:= 'ascii')
 		or: [enc @env0:= 'utf-8'
 		or: [enc @env0:= 'utf8'

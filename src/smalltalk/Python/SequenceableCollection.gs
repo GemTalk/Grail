@@ -20,9 +20,14 @@ set compile_env: 1
 category: 'Grail-Sequence Operations'
 method: SequenceableCollection
 __add__: other
-	"Concatenate two sequences. Returns a new sequence of the same type."
+	"Concatenate two sequences. Returns a new sequence of the same type.
+	Python only concatenates like kinds: list+tuple / list+int raise the
+	catchable TypeError (previously [1] + (1,) silently concatenated)."
 
 	| result x |
+	(self ___sameSequenceKindAs___: other) ifFalse: [
+		^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'].
+
 	result := self @env0:copy.
 	result @env0:addAll: other.
 	^ result
@@ -86,10 +91,17 @@ ___sameSequenceKindAs___: other
 		ifTrue: [^ true].
 	((self @env0:isKindOf: ByteArray) and: [other @env0:isKindOf: ByteArray])
 		ifTrue: [^ true].
-	selfList := (self @env0:isKindOf: OrderedCollection)
-		or: [self @env0:class == Array].
-	otherList := (other @env0:isKindOf: OrderedCollection)
-		or: [other @env0:class == Array].
+	"Plain Array (EXACT class) is Grail's ambiguous sequence carrier:
+	*args captures, splat results, and legacy subStrings products all
+	materialize as Arrays whether CPython would have a tuple or a list.
+	Until varargs capture produces real tuples, a plain Array
+	interoperates with BOTH kinds -- django's URL resolver concatenates
+	an *args Array with a converters tuple on every resolve.  The
+	strict pairs (OrderedCollection vs tuple) still raise."
+	(self @env0:class == Array or: [other @env0:class == Array])
+		ifTrue: [^ true].
+	selfList := self @env0:isKindOf: OrderedCollection.
+	otherList := other @env0:isKindOf: OrderedCollection.
 	^ selfList and: [otherList]
 %
 
@@ -309,6 +321,10 @@ __mul__: n
 	"Repeat the sequence n times. Returns a new sequence."
 
 	| result |
+	((n @env0:isKindOf: Integer)
+		or: [(n @env0:class @env0:methodDictForEnv: 1)
+			@env0:includesKey: #'__index__']) ifFalse: [
+		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
 	result := (self @env0:species) ___new___.
 	(n @env0:<= 0) ifTrue: [
 		^ result
