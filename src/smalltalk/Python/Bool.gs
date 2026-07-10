@@ -532,6 +532,8 @@ __ge__: other
 	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
+	(otherInt @env0:isKindOf: Number)
+		ifFalse: [^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'].
 	^ selfInt @env0:>= otherInt
 %
 
@@ -545,6 +547,8 @@ __gt__: other
 	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
+	(otherInt @env0:isKindOf: Number)
+		ifFalse: [^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'].
 	^ selfInt @env0:> otherInt
 %
 
@@ -582,6 +586,8 @@ __le__: other
 	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
+	(otherInt @env0:isKindOf: Number)
+		ifFalse: [^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'].
 	^ selfInt @env0:<= otherInt
 %
 
@@ -595,6 +601,8 @@ __lt__: other
 	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
+	(otherInt @env0:isKindOf: Number)
+		ifFalse: [^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'].
 	^ selfInt @env0:< otherInt
 %
 

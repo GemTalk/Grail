@@ -233,7 +233,12 @@ method: float
 __ge__: other
 	"Greater than or equal comparison."
 
-	^ self @env0:>= other
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:>= other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [
+		^ self @env0:>= (other @env1:__index__)
+	].
+	^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'
 %
 
 category: 'Grail-Comparison'
@@ -241,7 +246,12 @@ method: float
 __gt__: other
 	"Greater than comparison."
 
-	^ self @env0:> other
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:> other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [
+		^ self @env0:> (other @env1:__index__)
+	].
+	^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'
 %
 
 category: 'Grail-Conversion'
@@ -257,7 +267,12 @@ method: float
 __le__: other
 	"Less than or equal comparison."
 
-	^ self @env0:<= other
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:<= other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [
+		^ self @env0:<= (other @env1:__index__)
+	].
+	^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'
 %
 
 category: 'Grail-Comparison'
@@ -265,7 +280,12 @@ method: float
 __lt__: other
 	"Less than comparison."
 
-	^ self @env0:< other
+	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:< other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [
+		^ self @env0:< (other @env1:__index__)
+	].
+	^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'
 %
 
 category: 'Grail-Arithmetic'

@@ -199,7 +199,7 @@ __ge__: other
 	(other @env0:isKindOf: CharacterCollection) ifTrue: [
 		^ (self ___codePointCompare___: other) @env0:>= 0
 	].
-	^ self @env0:>= other
+	^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'
 %
 
 category: 'Grail-Sequence Operations'
@@ -248,7 +248,7 @@ __gt__: other
 	(other @env0:isKindOf: CharacterCollection) ifTrue: [
 		^ (self ___codePointCompare___: other) @env0:> 0
 	].
-	^ self @env0:> other
+	^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'
 %
 
 category: 'Grail-Hashing & Identity'
@@ -284,7 +284,7 @@ __le__: other
 	(other @env0:isKindOf: CharacterCollection) ifTrue: [
 		^ (self ___codePointCompare___: other) @env0:<= 0
 	].
-	^ self @env0:<= other
+	^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'
 %
 
 category: 'Grail-Sequence Operations'
@@ -303,7 +303,7 @@ __lt__: other
 	(other @env0:isKindOf: CharacterCollection) ifTrue: [
 		^ (self ___codePointCompare___: other) @env0:< 0
 	].
-	^ self @env0:< other
+	^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'
 %
 
 category: 'Grail-String Operations'

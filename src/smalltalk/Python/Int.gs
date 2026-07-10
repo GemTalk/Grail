@@ -386,7 +386,7 @@ __ge__: other
 		@env0:includesKey: #'__index__') ifTrue: [
 		^ self @env0:>= (other @env1:__index__)
 	].
-	^ self @env0:>= other
+	^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'
 %
 
 category: 'Grail-Comparison'
@@ -399,7 +399,7 @@ __gt__: other
 		@env0:includesKey: #'__index__') ifTrue: [
 		^ self @env0:> (other @env1:__index__)
 	].
-	^ self @env0:> other
+	^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'
 %
 
 category: 'Grail-Hashing'
@@ -462,7 +462,7 @@ __le__: other
 		@env0:includesKey: #'__index__') ifTrue: [
 		^ self @env0:<= (other @env1:__index__)
 	].
-	^ self @env0:<= other
+	^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'
 %
 
 category: 'Grail-Bitwise Operations'
@@ -483,7 +483,7 @@ __lt__: other
 		@env0:includesKey: #'__index__') ifTrue: [
 		^ self @env0:< (other @env1:__index__)
 	].
-	^ self @env0:< other
+	^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'
 %
 
 category: 'Grail-Arithmetic'

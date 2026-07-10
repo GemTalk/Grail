@@ -1111,7 +1111,9 @@ method: object
 __ge__: other
 	"Return self >= other"
 
-	self @env0:error: 'Not yet implemented: __ge__'
+	"Python protocol: no default ordering -- try the reflected
+	operation, else raise the catchable TypeError."
+	^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'
 %
 
 category: 'Grail-Attribute Access'
@@ -1135,7 +1137,9 @@ method: object
 __gt__: other
 	"Return self > other"
 
-	self @env0:error: 'Not yet implemented: __gt__'
+	"Python protocol: no default ordering -- try the reflected
+	operation, else raise the catchable TypeError."
+	^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'
 %
 
 category: 'Grail-Hashing & Identity'
@@ -1162,7 +1166,35 @@ method: object
 __le__: other
 	"Return self <= other"
 
-	self @env0:error: 'Not yet implemented: __le__'
+	"Python protocol: no default ordering -- try the reflected
+	operation, else raise the catchable TypeError."
+	^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'
+%
+
+category: 'Grail-Comparison'
+method: object
+___cmpFallback___: other op: opString reflected: refSelector
+	"Python rich-comparison fallback for an unsupported operand pair.
+	First try the REFLECTED dunder on ``other'' when a user class
+	defines it (``1 < Meters(2)'' runs Meters.__gt__) -- restricted to
+	PythonInstance descendants because a built-in's reflected
+	implementation would just re-guard and recurse.  Otherwise raise
+	the catchable Python TypeError CPython raises for unorderable
+	types.  (Previously these paths fell through to env-0 comparison
+	primitives, whose ArgumentTypeError / 'Expected a Number' /
+	_generality errors escape Python try/except entirely -- the STERROR
+	class that blocked CPython's test_bisect / test_operator /
+	test_heapq / test_re.)"
+
+	| refOwner |
+	(other @env0:isKindOf: PythonInstance) ifTrue: [
+		refOwner := other @env0:class
+			@env0:whichClassIncludesSelector: refSelector environmentId: 1.
+		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
+			^ other @env0:perform: refSelector env: 1 withArguments: { self }]].
+	TypeError ___signal___: ('''' @env0:, opString @env0:, ''' not supported between instances of '''
+		@env0:, self @env0:class @env0:name @env0:asString
+		@env0:, ''' and ''' @env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
 %
 
 category: 'Grail-Comparison'
@@ -1170,7 +1202,9 @@ method: object
 __lt__: other
 	"Return self < other"
 
-	self @env0:error: 'Not yet implemented: __lt__'
+	"Python protocol: no default ordering -- try the reflected
+	operation, else raise the catchable TypeError."
+	^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'
 %
 
 category: 'Grail-Comparison'

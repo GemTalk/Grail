@@ -76,6 +76,25 @@ __eq__: other
 
 category: 'Grail-Comparison'
 method: SequenceableCollection
+___sameSequenceKindAs___: other
+	"True when self and other are the same ordered Python sequence kind
+	(so lexicographic comparison applies): both tuples, both lists
+	(OrderedCollection or exact plain Array), or both bytes-like."
+
+	| selfList otherList |
+	((self @env0:isKindOf: tuple) and: [other @env0:isKindOf: tuple])
+		ifTrue: [^ true].
+	((self @env0:isKindOf: ByteArray) and: [other @env0:isKindOf: ByteArray])
+		ifTrue: [^ true].
+	selfList := (self @env0:isKindOf: OrderedCollection)
+		or: [self @env0:class == Array].
+	otherList := (other @env0:isKindOf: OrderedCollection)
+		or: [other @env0:class == Array].
+	^ selfList and: [otherList]
+%
+
+category: 'Grail-Comparison'
+method: SequenceableCollection
 __ge__: other
 	"Lexicographic comparison: self >= other.  GemStone
 	SequenceableCollection doesn't expose ``>=`` directly, so
@@ -85,6 +104,14 @@ __ge__: other
 	longer (or equal-length) sequence wins."
 
 	| size otherSize minSize i a b |
+	"Ordering is defined only within the same Python sequence kind:
+	tuple-vs-tuple, list-vs-list (OrderedCollection / plain Array both
+	surrogate list), bytes-vs-bytes.  Anything else -- including
+	tuple-vs-list and range (Interval), which CPython leaves
+	unorderable -- takes the reflected-op / TypeError fallback instead
+	of silently comparing sizes."
+	(self ___sameSequenceKindAs___: other)
+		ifFalse: [^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'].
 	size := self @env0:size.
 	otherSize := other @env0:size.
 	minSize := size @env0:min: otherSize.
@@ -102,6 +129,14 @@ category: 'Grail-Comparison'
 method: SequenceableCollection
 __gt__: other
 	| size otherSize minSize i a b |
+	"Ordering is defined only within the same Python sequence kind:
+	tuple-vs-tuple, list-vs-list (OrderedCollection / plain Array both
+	surrogate list), bytes-vs-bytes.  Anything else -- including
+	tuple-vs-list and range (Interval), which CPython leaves
+	unorderable -- takes the reflected-op / TypeError fallback instead
+	of silently comparing sizes."
+	(self ___sameSequenceKindAs___: other)
+		ifFalse: [^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'].
 	size := self @env0:size.
 	otherSize := other @env0:size.
 	minSize := size @env0:min: otherSize.
@@ -119,6 +154,14 @@ category: 'Grail-Comparison'
 method: SequenceableCollection
 __le__: other
 	| size otherSize minSize i a b |
+	"Ordering is defined only within the same Python sequence kind:
+	tuple-vs-tuple, list-vs-list (OrderedCollection / plain Array both
+	surrogate list), bytes-vs-bytes.  Anything else -- including
+	tuple-vs-list and range (Interval), which CPython leaves
+	unorderable -- takes the reflected-op / TypeError fallback instead
+	of silently comparing sizes."
+	(self ___sameSequenceKindAs___: other)
+		ifFalse: [^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'].
 	size := self @env0:size.
 	otherSize := other @env0:size.
 	minSize := size @env0:min: otherSize.
@@ -136,6 +179,14 @@ category: 'Grail-Comparison'
 method: SequenceableCollection
 __lt__: other
 	| size otherSize minSize i a b |
+	"Ordering is defined only within the same Python sequence kind:
+	tuple-vs-tuple, list-vs-list (OrderedCollection / plain Array both
+	surrogate list), bytes-vs-bytes.  Anything else -- including
+	tuple-vs-list and range (Interval), which CPython leaves
+	unorderable -- takes the reflected-op / TypeError fallback instead
+	of silently comparing sizes."
+	(self ___sameSequenceKindAs___: other)
+		ifFalse: [^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'].
 	size := self @env0:size.
 	otherSize := other @env0:size.
 	minSize := size @env0:min: otherSize.

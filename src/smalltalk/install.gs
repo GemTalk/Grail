@@ -532,6 +532,7 @@ run
 	at: #'ClassTestCase' put: nil;
 	at: #'ClosureAttributeTestCase' put: nil;
 	at: #'ComplexTestCase' put: nil;
+	at: #'ComparisonProtocolTestCase' put: nil;
 	at: #'ComprehensionTestCase' put: nil;
 	at: #'DefaultsAndAttrsTestCase' put: nil;
 	at: #'DynamicGlobalsTestCase' put: nil;
@@ -1224,6 +1225,7 @@ input src/smalltalk/PythonTests/ClassTestCase.gs
 input src/smalltalk/PythonTests/ClosureAttributeTestCase.gs
 input src/smalltalk/PythonTests/CMathTestCase.gs
 input src/smalltalk/PythonTests/ComplexTestCase.gs
+input src/smalltalk/PythonTests/ComparisonProtocolTestCase.gs
 input src/smalltalk/PythonTests/ComprehensionTestCase.gs
 input src/smalltalk/PythonTests/DefaultsAndAttrsTestCase.gs
 input src/smalltalk/PythonTests/DynamicGlobalsTestCase.gs
