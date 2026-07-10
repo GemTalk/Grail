@@ -123,6 +123,42 @@ __hash__
 
 category: 'Grail-Special Methods'
 method: NoneType
+__iter__
+	"Iterating None raises catchable TypeError (CPython).  Without a
+	real method the send died as an UNCATCHABLE env-1 MNU -- Object's
+	DNU deliberately does not intercept the probe selectors
+	__iter__/__len__/__getitem__, but a real method on NoneType alone
+	is safe (operator.countOf(None, None) in test_operator)."
+
+	TypeError ___signal___: '''NoneType'' object is not iterable'
+%
+
+category: 'Grail-Python protocol'
+method: NoneType
+__len__
+	"len(None) raises catchable TypeError (CPython)."
+
+	TypeError ___signal___: 'object of type ''NoneType'' has no len()'
+%
+
+category: 'Grail-Python protocol'
+method: NoneType
+__getitem__: idx
+	"None[i] raises catchable TypeError (CPython)."
+
+	TypeError ___signal___: '''NoneType'' object is not subscriptable'
+%
+
+category: 'Grail-Python protocol'
+method: NoneType
+__contains__: item
+	"``x in None`` raises catchable TypeError (CPython)."
+
+	TypeError ___signal___: 'argument of type ''NoneType'' is not iterable'
+%
+
+category: 'Grail-String Representation'
+method: NoneType
 __repr__
 	^ 'None'
 %

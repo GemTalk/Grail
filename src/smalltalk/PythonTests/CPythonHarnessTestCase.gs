@@ -156,3 +156,25 @@ repr(re.compile("random pattern"))') equals: 're.compile(''random pattern'')'.
 repr(re.compile("p", re.I|re.S|re.X))')
 		equals: 're.compile(''p'', re.IGNORECASE|re.DOTALL|re.VERBOSE)'
 %
+
+category: 'Grail-Tests - operator module'
+method: CPythonHarnessTestCase
+testOperatorParityAdditions
+	"operator.inv/call/is_none/is_not_none/countOf/indexOf/__all__ --
+	the CPython names test_operator exercises beyond the original
+	jinja2-driven surface."
+
+	self assert: (self eval: 'import operator
+[operator.inv(5), operator.call(len, [1, 2, 3]),
+ operator.is_none(None), operator.is_not_none(None),
+ operator.countOf([1, 2, 1, 3], 1), operator.indexOf([9, 8, 7], 8),
+ "call" in operator.__all__]
+') @env1:__repr__ equals: '[-6, 3, True, False, 2, 1, True]'.
+	self assert: (self eval: 'import operator
+try:
+    operator.indexOf([1, 2], 5)
+    r = "no-error"
+except ValueError:
+    r = "value-error"
+r') equals: 'value-error'
+%

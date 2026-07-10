@@ -260,3 +260,51 @@ def ior(a, b):
 def ixor(a, b):
     a ^= b
     return a
+
+
+# ---- CPython parity additions (test_operator coverage) --------------------
+
+__all__ = ['abs', 'add', 'and_', 'attrgetter', 'call', 'concat', 'contains',
+           'countOf', 'delitem', 'eq', 'floordiv', 'ge', 'getitem', 'gt',
+           'iadd', 'iand', 'iconcat', 'ifloordiv', 'ilshift', 'imatmul',
+           'imod', 'imul', 'index', 'indexOf', 'inv', 'invert', 'ior',
+           'ipow', 'irshift', 'is_', 'is_none', 'is_not', 'is_not_none',
+           'isub', 'itemgetter', 'itruediv', 'ixor', 'le', 'length_hint',
+           'lshift', 'lt', 'matmul', 'methodcaller', 'mod', 'mul', 'ne',
+           'neg', 'not_', 'or_', 'pos', 'pow', 'rshift', 'setitem', 'sub',
+           'truediv', 'truth', 'xor']
+
+
+def inv(a):
+    return ~a
+
+
+def call(obj, *args, **kwargs):
+    return obj(*args, **kwargs)
+
+
+def is_none(a):
+    return a is None
+
+
+def is_not_none(a):
+    return a is not None
+
+
+def countOf(a, b):
+    "Return the number of items in a which are, or which equal, b."
+    count = 0
+    for i in a:
+        if i is b or i == b:
+            count = count + 1
+    return count
+
+
+def indexOf(a, b):
+    "Return the first index of b in a."
+    i = 0
+    for j in a:
+        if j is b or j == b:
+            return i
+        i = i + 1
+    raise ValueError('sequence.index(x): x not in sequence')

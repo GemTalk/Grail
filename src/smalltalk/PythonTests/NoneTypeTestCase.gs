@@ -299,3 +299,25 @@ testPrintOnEmitsNone
 
 	self assert: None printString equals: 'None'.
 %
+
+category: 'Grail-Tests - Python protocol'
+method: NoneTypeTestCase
+testIterationProtocolRaisesTypeError
+	"Iterating/len/subscript/membership on None raise CATCHABLE
+	TypeErrors (CPython).  These were uncatchable env-1 MNUs -- real
+	methods on NoneType alone are safe where a blanket DNU intercept
+	of the probe selectors __iter__/__len__/__getitem__ is not
+	(operator.countOf(None, None) killed the test_operator run)."
+
+	self should: [None @env1:__iter__] raise: TypeError.
+	self should: [None @env1:__len__] raise: TypeError.
+	self should: [None @env1:__getitem__: 0] raise: TypeError.
+	self should: [None @env1:__contains__: 1] raise: TypeError.
+	self assert: (self eval: 'try:
+    for x in None:
+        pass
+    r = "no-error"
+except TypeError:
+    r = "type-error"
+r') equals: 'type-error'
+%
