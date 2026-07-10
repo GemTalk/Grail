@@ -1140,7 +1140,13 @@ PyDict_Size: aDictionary
 category: 'Grail-CPython API'
 method: CPythonShim
 PyTuple_New: size
-	^ (self wrap: (Array new: size)) memoryAddress
+	"A real Grail tuple, not a plain Array: since list/tuple __eq__
+	became cross-kind-distinct, a C-API tuple surfacing as an Array
+	compared equal to lists and unequal to tuples -- every
+	assertEqual(m.span(), (x, y)) in CPython test_re failed on it.
+	tuple is an Array subclass, so PyTuple_SetItem's at:put: still
+	works during construction."
+	^ (self wrap: (tuple new: size)) memoryAddress
 %
 
 category: 'Grail-CPython API'

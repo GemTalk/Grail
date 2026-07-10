@@ -466,3 +466,17 @@ testFinditerZeroWidthKeepsSameStartMatch
 [[m.start(), m.end()] for m in re.finditer(r"\b|\w+", "a::bc")]
 ') @env1:__repr__ equals: '[[0, 0], [0, 1], [1, 1], [3, 3], [3, 5], [5, 5]]'
 %
+
+category: 'Grail-Tests - Match protocol'
+method: ReModuleTestCase
+testSpanAndGroupsAreRealTuples
+	"C-API tuples (PyTuple_New) must surface as Grail tuples, not plain
+	Arrays: list/tuple __eq__ is cross-kind-distinct, so an Array-kind
+	span compared unequal to the (x, y) tuples CPython tests assert
+	against."
+
+	self assert: (self eval: 'import re
+m = re.match(r"(\w+) (\w+)", "hello world")
+[type(m.span()) is tuple, m.span() == (0, 11), m.groups() == ("hello", "world")]
+') @env1:__repr__ equals: '[True, True, True]'
+%

@@ -1,10 +1,10 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-07-10T15:21:56Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
+Generated: 2026-07-10T15:33:30Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
 
 **Modules: 11** — OK 1 · FAIL 0 · ERROR 3 · SKIP 1 · IMPORTERROR 5 · STERROR 1 · CRASH 0 · TIMEOUT 0
 
-**Totals:** tests=381 failures=103 errors=90 skipped=0
+**Totals:** tests=381 failures=76 errors=94 skipped=0
 
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
@@ -23,5 +23,5 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_operator | ERROR | 110 | 30 | 28 | 0 |  |
 | test.test_fractions | IMPORTERROR | 0 | 0 | 0 | 0 | a CompileError occurred (error 1001), unexpected token ; expected a right bracket (]) ; unexpected token ; unexpected token ; unexpected token  |
 | test.test_datetime | SKIP | 0 | 0 | 0 | 0 |  |
-| test.test_re | ERROR | 161 | 59 | 56 | 0 |  |
+| test.test_re | ERROR | 161 | 32 | 60 | 0 |  |
 | test.test_functools | IMPORTERROR | 0 | 0 | 0 | 0 | Expected OP '(' but got OP '[' at line 840 |
