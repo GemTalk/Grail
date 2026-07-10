@@ -1046,3 +1046,33 @@ testClassQualname
 	self assert: (self eval: 'type(0).__qualname__') equals: 'SmallInteger'.
 	self assert: (self eval: 'type("s").__qualname__ == type("s").__name__')
 %
+
+category: 'Grail-Tests - Type Checks'
+method: BuiltinsTestCase
+testIsinstanceStrAcceptsWideStrings
+	"Every text string class counts as str (CPython: all text IS str).
+	str maps to Unicode7 for construction, but wide literals come back
+	Unicode16/DoubleByteString and GemStone APIs hand back String --
+	without the CharacterCollection widening, re.compile rejected
+	Cyrillic patterns (test_re test_word_boundaries)."
+
+	self assert: (self eval: 'isinstance("ьюя", str)') equals: true.
+	self assert: (builtins ___instance___ @env1:isinstance: 'plain' _: (Python @env0:at: #str)) equals: true.
+	self assert: (self eval: 'isinstance(b"x", str)') equals: false.
+	self assert: (self eval: 'issubclass(type("ь"), str)') equals: true
+%
+
+category: 'Grail-Tests - Conversions'
+method: BuiltinsTestCase
+testChrLoneSurrogateRaisesValueError
+	"DELIBERATE DEVIATION: CPython chr() accepts lone surrogates, but a
+	GemStone string cannot hold one -- downstream construction died
+	UNCATCHABLY ('codePoint not valid for Unicode', killing the whole
+	test_re run in test_bigcharset).  chr() raises catchable ValueError
+	at the source instead."
+
+	self should: [self eval: 'chr(0xD800)'] raise: ValueError.
+	self should: [self eval: 'chr(0xDFFF)'] raise: ValueError.
+	self assert: (self eval: 'ord(chr(0xD7FF))') equals: 16rD7FF.
+	self assert: (self eval: 'ord(chr(0xE000))') equals: 16rE000
+%

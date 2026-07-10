@@ -271,8 +271,17 @@ callable: anObject
 category: 'Grail-Built-in Functions'
 method: builtins
 chr: anInteger
-	"Python builtin chr(i) — fixed-arity fast path."
+	"Python builtin chr(i) — fixed-arity fast path.
 
+	DELIBERATE DEVIATION: CPython's chr() accepts lone surrogates
+	(0xD800-0xDFFF), but a GemStone Unicode string cannot hold one —
+	downstream string construction dies with the UNCATCHABLE 'receiver
+	contains a codePoint not valid for Unicode' error (it killed the
+	whole test_re module run via test_bigcharset).  Raise a catchable
+	ValueError at the source instead."
+
+	(anInteger @env0:>= 16rD800 and: [anInteger @env0:<= 16rDFFF]) ifTrue: [
+		ValueError ___signal___: 'chr() arg is a lone surrogate, which Grail strings cannot represent'].
 	^ (Character @env0:codePoint: anInteger) @env0:asString
 %
 
@@ -1404,6 +1413,15 @@ ___isInstanceSingle___: anObject of: aClass
 
 	| result theMetaclass |
 	result := anObject @env0:isKindOf: aClass.
+	(result not and: [aClass @env0:== Unicode7]) ifTrue: [
+		"str maps to Unicode7 for construction, but CPython counts EVERY
+		text string as str: Grail literals may come back Unicode16 /
+		QuadByteString (wide content) and GemStone APIs hand back String /
+		DoubleByteString.  Without this, isinstance(cyrillic, str) was
+		False and re.compile rejected wide-string patterns
+		(test_word_boundaries).  bytes stays distinct: ByteArray is not a
+		CharacterCollection."
+		result := anObject @env0:isKindOf: CharacterCollection].
 	result ifFalse: [
 		"Secondary (multiple-inheritance) bases are not on the Smalltalk
 		chain isKindOf: walks -- consult the instance class's registered
@@ -1570,6 +1588,10 @@ ___isSubclassSingle___: sub of: target
 	| il |
 	(sub @env0:== target) ifTrue: [^ true].
 	(sub @env0:inheritsFrom: target) ifTrue: [^ true].
+	"Mirror isinstance's str widening: every text string class is a
+	subclass of str (see ___isInstanceSingle___:of:)."
+	(target @env0:== Unicode7 and: [(sub @env0:== CharacterCollection)
+		or: [sub @env0:inheritsFrom: CharacterCollection]]) ifTrue: [^ true].
 	il := Python @env0:at: #importlib otherwise: nil.
 	il @env0:== nil ifFalse: [
 		((il @env0:___mroOf___: sub) @env0:includes: target) ifTrue: [^ true]].

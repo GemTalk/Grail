@@ -124,6 +124,33 @@ warn: message
 
 category: 'Grail-Public'
 method: warnings
+warn: message _: category _: stacklevel
+	"warn(message, category, stacklevel) - stacklevel only shapes the
+	reported source location, which Grail does not track; ignore it."
+
+	^ self @env1:warn: message _: category
+%
+
+category: 'Grail-Public'
+method: warnings
+_warn: positional kw: keywords
+	"Varargs dispatcher for warn() - first-class calls and keyword
+	args (warnings.warn(msg, DeprecationWarning, stacklevel=2))."
+
+	| nargs msg cat |
+	nargs := positional @env0:size.
+	nargs @env0:< 1 ifTrue: [
+		TypeError ___signal___: 'warn() missing required argument: message'].
+	msg := positional @env0:at: 1.
+	cat := nargs @env0:>= 2 ifTrue: [positional @env0:at: 2] ifFalse: [nil].
+	(cat @env0:== nil and: [keywords @env0:~~ nil]) ifTrue: [
+		(keywords @env0:includesKey: 'category') ifTrue: [
+			cat := keywords @env0:at: 'category']].
+	^ self @env1:warn: msg _: cat
+%
+
+category: 'Grail-Public'
+method: warnings
 warn: message _: category
 	"warn(message, category) - emit a warning of `category` (defaults
 	to UserWarning when nil/None)."

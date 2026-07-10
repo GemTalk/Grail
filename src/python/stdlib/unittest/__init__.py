@@ -7,7 +7,10 @@
 #     Grail drops method @-decorators, so use self.skipTest() instead;
 #   * main() requires an explicit module argument (no __main__
 #     introspection) and does not parse argv;
-#   * subTest() is not provided;
+#   * subTest() runs its body inline; the first failing subTest fails
+#     the whole test immediately (CPython records it and continues);
+#   * assertWarns works by installing an 'error' warnings filter for
+#     the expected category and resets ALL filters on exit;
 #   * tracebacks are reported as "ExceptionName: message" strings.
 
 __all__ = ["TestCase", "TestSuite", "TestLoader", "TestResult",
@@ -138,6 +141,65 @@ class _AssertRaisesContext:
         return True
 
 
+# ---- subTest context manager ---------------------------------------------
+
+class _SubTest:
+    # Minimal subTest: the body runs inline and nothing is swallowed, so
+    # the first failing subTest fails the enclosing test right away
+    # (CPython would record it, continue, and report each params set).
+    def __init__(self, msg, params):
+        self._msg = msg
+        self.params = params
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, tb):
+        return False
+
+
+# ---- assertWarns context manager ------------------------------------------
+
+class _AssertWarnsContext:
+    # Grail's warnings module routes action 'error' to a real raise of
+    # the warning category, so triggering is detected by installing an
+    # 'error' filter for the expected category and catching it here.
+    # On exit ALL filters are reset (the module keeps no filter stack).
+    def __init__(self, expected, expected_regex=None):
+        self.expected = expected
+        self.expected_regex = expected_regex
+        self.warning = None
+        # CPython fills these from the warning's source; Grail does not
+        # track warning origins, so they carry placeholders.
+        self.filename = "<unknown>"
+        self.lineno = 0
+
+    def __enter__(self):
+        import warnings
+        warnings.simplefilter("error", self.expected)
+        return self
+
+    def __exit__(self, exc_type, exc_value, tb):
+        # The receiver must be an import-bound NAME: a zero-arg module
+        # method reached through an attribute expression (stored module
+        # ref) trips Grail's unary-getter protocol -- the attribute load
+        # already executes the method and the call then invokes None.
+        import warnings
+        warnings.resetwarnings()
+        if exc_type is None:
+            raise AssertionError(self.expected.__name__ + " not triggered")
+        if not issubclass(exc_type, self.expected):
+            return False
+        self.warning = exc_value
+        if self.expected_regex is not None:
+            import re
+            if re.search(self.expected_regex, str(exc_value)) is None:
+                raise AssertionError(
+                    "'" + self.expected_regex + "' does not match '"
+                    + str(exc_value) + "'")
+        return True
+
+
 # ---- TestCase -------------------------------------------------------------
 
 class TestCase:
@@ -145,6 +207,7 @@ class TestCase:
 
     def __init__(self, methodName="runTest"):
         self._testMethodName = methodName
+        self._cleanups = []
 
     @classmethod
     def setUpClass(cls):
@@ -177,6 +240,17 @@ class TestCase:
 
     def skipTest(self, reason):
         raise SkipTest(reason)
+
+    def subTest(self, msg=None, **params):
+        return _SubTest(msg, params)
+
+    def addCleanup(self, function, *args, **kwargs):
+        self._cleanups.append((function, args, kwargs))
+
+    def doCleanups(self):
+        while len(self._cleanups) > 0:
+            entry = self._cleanups.pop()
+            entry[0](*entry[1], **entry[2])
 
     def fail(self, msg=None):
         if msg is None:
@@ -306,6 +380,27 @@ class TestCase:
             fn(*rest, **call_kw)
         return None
 
+    def assertWarns(self, expected_warning, *call_args, **call_kw):
+        if len(call_args) == 0:
+            return _AssertWarnsContext(expected_warning)
+        fn = call_args[0]
+        rest = call_args[1:]
+        ctx = _AssertWarnsContext(expected_warning)
+        with ctx:
+            fn(*rest, **call_kw)
+        return None
+
+    def assertWarnsRegex(self, expected_warning, expected_regex,
+                         *call_args, **call_kw):
+        if len(call_args) == 0:
+            return _AssertWarnsContext(expected_warning, expected_regex)
+        fn = call_args[0]
+        rest = call_args[1:]
+        ctx = _AssertWarnsContext(expected_warning, expected_regex)
+        with ctx:
+            fn(*rest, **call_kw)
+        return None
+
     # -- running --
 
     def run(self, result=None):
@@ -346,6 +441,12 @@ class TestCase:
             if status == "success":
                 status = "error"
                 message = _describe_exception(e)
+        try:
+            self.doCleanups()
+        except Exception as e:
+            if status == "success":
+                status = "error"
+                message = _describe_exception(e)
         if status == "success":
             result.addSuccess(self)
         elif status == "skip":
@@ -363,6 +464,7 @@ class TestCase:
         method = getattr(self, self._testMethodName)
         method()
         self.tearDown()
+        self.doCleanups()
         return None
 
     def __call__(self, *call_args, **call_kw):

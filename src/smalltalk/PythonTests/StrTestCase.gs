@@ -1280,3 +1280,16 @@ testUnicodeEscapeEncode
 	self assert: (enc @env0:at: 3) equals: 98.
 	self assert: (enc @env0:at: 4) equals: 53
 %
+
+category: 'Grail-Tests - escapes'
+method: StrTestCase
+testNamedEscapeCapitalDiaeresis
+	"\N{LATIN CAPITAL LETTER A WITH DIAERESIS} resolves through the
+	tokenizer's curated name table (vendored test/re_tests.py has it in
+	an ordinary literal, so import died with SyntaxError before)."
+
+	| s |
+	s := self eval: '"\N{LATIN CAPITAL LETTER A WITH DIAERESIS}"'.
+	self assert: (s @env1:__len__) equals: 1.
+	self assert: (s @env0:at: 1) @env0:codePoint equals: 16rC4
+%

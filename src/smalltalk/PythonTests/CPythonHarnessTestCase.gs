@@ -48,7 +48,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	#('__main__' 'test.grail_selfcheck' 'test._grail_harness') do: [:name |
+	#('__main__' 'test.grail_selfcheck' 'test.grail_feature_check' 'test._grail_harness') do: [:name |
 		mods @env0:removeKey: name @env0:asSymbol ifAbsent: []].
 %
 
@@ -104,4 +104,55 @@ testScorePathDiscoversTestCases
 	self assert: (res @env1:__getitem__: 1) equals: 1.
 	self assert: (res @env1:__getitem__: 2) equals: 0.
 	self assert: (res @env1:__getitem__: 3) equals: 1.
+%
+
+category: 'Grail-Tests - unittest features'
+method: CPythonHarnessTestCase
+testUnittestFeatureFixture
+	"subTest runs its body inline, addCleanup runs LIFO after tearDown,
+	assertWarns passes on a triggered warning (incl. the
+	warnings.warn(msg, cat, stacklevel=n) kwargs form) and FAILS when
+	nothing warns.  17 test_re tests errored on missing subTest alone.
+	Fixture-based: a TestCase subclass with a module base cannot be
+	defined inside PythonTestCase>>eval: (module-scope classdef path)."
+
+	| mod result |
+	mod := self loadByName: 'test.grail_feature_check'.
+	result := mod @env1:RESULT.
+	self assert: (result @env1:__getitem__: 0) equals: 3.
+	self assert: (result @env1:__getitem__: 1) equals: 1.
+	self assert: (result @env1:__getitem__: 2) equals: 0.
+	self assert: (result @env1:__getitem__: 3) equals: true
+%
+
+category: 'Grail-Tests - unittest features'
+method: CPythonHarnessTestCase
+testUnicodedataLookup
+	"unicodedata.lookup resolves curated names case-insensitively and
+	raises KeyError on unknown names (re._parser routes \N{...} pattern
+	escapes through it)."
+
+	self assert: (self eval: 'import unicodedata
+[ord(unicodedata.lookup("LESS-THAN SIGN")), ord(unicodedata.lookup("less-than sign"))]
+') @env1:__repr__ equals: '[60, 60]'.
+	self assert: (self eval: 'import unicodedata
+try:
+    unicodedata.lookup("SPAM")
+    r = "no-error"
+except KeyError:
+    r = "key-error"
+r') equals: 'key-error'
+%
+
+category: 'Grail-Tests - re conformance'
+method: CPythonHarnessTestCase
+testPatternReprLikeCPython
+	"repr(compiled_pattern) mirrors CPython pattern_repr: source repr
+	plus flag names, implicit re.UNICODE dropped for str patterns."
+
+	self assert: (self eval: 'import re
+repr(re.compile("random pattern"))') equals: 're.compile(''random pattern'')'.
+	self assert: (self eval: 'import re
+repr(re.compile("p", re.I|re.S|re.X))')
+		equals: 're.compile(''p'', re.IGNORECASE|re.DOTALL|re.VERBOSE)'
 %

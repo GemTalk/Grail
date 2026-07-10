@@ -720,6 +720,41 @@ groupindex
 	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Pattern' method: 'groupindex' selfPtr: (self @env0:cPtrAddress)
 %
 
+category: 'Grail-Printing'
+method: SrePattern
+__repr__
+	"repr(pattern) -> re.compile('source', re.FLAG|...) mirroring
+	CPython's pattern_repr: the source repr truncated to 200 chars,
+	flag names in sre.c's table order, and the implicit re.UNICODE
+	dropped for str patterns (test_pattern_compile repr checks)."
+
+	| src flagsVal srcRepr names stream |
+	src := self @env1:pattern.
+	flagsVal := self @env1:flags.
+	(src @env0:isKindOf: ByteArray) ifFalse: [
+		flagsVal := flagsVal @env0:- (flagsVal @env0:bitAnd: 32)
+	].
+	names := OrderedCollection @env0:new.
+	{ { 're.TEMPLATE'. 1 }. { 're.IGNORECASE'. 2 }. { 're.LOCALE'. 4 }.
+	  { 're.MULTILINE'. 8 }. { 're.DOTALL'. 16 }. { 're.UNICODE'. 32 }.
+	  { 're.VERBOSE'. 64 }. { 're.DEBUG'. 128 }. { 're.ASCII'. 256 } }
+		@env0:do: [:pair |
+			((flagsVal @env0:bitAnd: (pair @env0:at: 2)) @env0:= 0) ifFalse: [
+				names @env0:add: (pair @env0:at: 1)]].
+	srcRepr := src @env1:__repr__.
+	srcRepr @env0:size @env0:> 200 ifTrue: [
+		srcRepr := srcRepr @env0:copyFrom: 1 to: 200].
+	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream @env0:nextPutAll: 're.compile('.
+	stream @env0:nextPutAll: srcRepr.
+	names @env0:notEmpty ifTrue: [
+		stream @env0:nextPutAll: ', '.
+		names @env0:do: [:n | stream @env0:nextPutAll: n]
+			separatedBy: [stream @env0:nextPut: $|]].
+	stream @env0:nextPut: $).
+	^ stream @env0:contents
+%
+
 ! ===============================================================================
 ! SreMatch - env 0 class methods
 ! ===============================================================================
