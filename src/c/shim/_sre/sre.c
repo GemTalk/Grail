@@ -3385,6 +3385,49 @@ _sre_SRE_Pattern_search(PyObject *self, PyTypeObject *cls,
     {"search", (PyCFunction)(void*)_sre_SRE_Pattern_search, \
      METH_METHOD|METH_FASTCALL|METH_KEYWORDS, NULL},
 
+/* GRAIL: Pattern.grail_search_advance(string, pos, endpos) — a one-shot
+   search with the scanner's must_advance flag set: never returns a
+   zero-width match AT pos, but still allows a longer match starting
+   there.  The Grail-side sub/finditer loops need this to iterate with
+   CPython scanner semantics, because a C Scanner cannot live across
+   shim calls — its SRE_STATE points into the per-call UCS4 buffer
+   cache, which buffer_cache_clear frees at the end of every call. */
+static PyObject *
+_sre_SRE_Pattern_grail_search_advance(PyObject *self, PyTypeObject *cls,
+                                      PyObject *const *args,
+                                      Py_ssize_t nargs, PyObject *kwnames)
+{
+    (void)kwnames;
+    PyObject *string;
+    Py_ssize_t pos, endpos;
+    if (_sre_parse_string_pos_endpos(args, nargs, &string, &pos, &endpos) < 0)
+        return NULL;
+
+    PatternObject *pattern = _PatternObject_CAST(self);
+    _sremodulestate *module_state = get_sre_module_state_by_class(cls);
+    SRE_STATE state;
+    Py_ssize_t status;
+    PyObject *match;
+
+    if (!state_init(&state, pattern, string, pos, endpos))
+        return NULL;
+    state.must_advance = 1;
+
+    status = sre_search(&state, PatternObject_GetCode(pattern));
+    if (PyErr_Occurred()) {
+        state_fini(&state);
+        return NULL;
+    }
+    match = pattern_new_match(module_state, pattern, &state, status);
+    state_fini(&state);
+    return match;
+}
+
+#define _SRE_SRE_PATTERN_GRAIL_SEARCH_ADVANCE_METHODDEF \
+    {"grail_search_advance", \
+     (PyCFunction)(void*)_sre_SRE_Pattern_grail_search_advance, \
+     METH_METHOD|METH_FASTCALL|METH_KEYWORDS, NULL},
+
 /* Pattern.findall(string, pos=0, endpos=MAX) — plain METH_FASTCALL */
 static PyObject *
 _sre_SRE_Pattern_findall(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
@@ -3654,6 +3697,9 @@ static PyMethodDef pattern_methods[] = {
     _SRE_SRE_PATTERN_MATCH_METHODDEF
     _SRE_SRE_PATTERN_FULLMATCH_METHODDEF
     _SRE_SRE_PATTERN_SEARCH_METHODDEF
+#ifdef GRAIL_SHIM
+    _SRE_SRE_PATTERN_GRAIL_SEARCH_ADVANCE_METHODDEF
+#endif
     _SRE_SRE_PATTERN_SUB_METHODDEF
     _SRE_SRE_PATTERN_SUBN_METHODDEF
     _SRE_SRE_PATTERN_FINDALL_METHODDEF

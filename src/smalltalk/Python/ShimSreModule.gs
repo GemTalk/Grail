@@ -361,6 +361,32 @@ _findall: positional kw: keywords
 	TypeError ___signal___: 'findall() takes 1 to 3 arguments'
 %
 
+! --------- scanner-semantics search ----------------------------------------
+
+category: 'Grail-Methods - Private'
+method: SrePattern
+___searchFrom___: pos in: aString to: endpos mustAdvance: mustAdvance
+	"One scanner step: search aString from pos, with CPython's
+	must_advance semantics when mustAdvance is true (never return a
+	zero-width match AT pos, but still allow a longer match starting
+	there).  This is how CPython's sub/finditer/split iterate; skipping
+	a whole character after a zero-width match instead (the old
+	workaround) LOSES any non-empty match starting at that position
+	(test_zerowidth: finditer(r'\b|\w+', 'a::bc') must yield (0,0) THEN
+	(0,1)).  A real C Scanner cannot be kept across shim calls -- its
+	SRE_STATE points into the per-call UCS4 buffer cache -- so the flag
+	is exposed via the one-shot grail_search_advance method instead."
+
+	| result |
+	result := (CPythonShim @env0:current)
+		@env0:callTypedReturnCPtr: '_sre'
+		type: 'Pattern'
+		method: (mustAdvance ifTrue: ['grail_search_advance'] ifFalse: ['search'])
+		selfPtr: (self @env0:cPtrAddress)
+		with: aString with: pos with: endpos.
+	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
+%
+
 ! --------- finditer --------------------------------------------------------
 
 category: 'Grail-Methods'
@@ -368,9 +394,8 @@ method: SrePattern
 finditer: aString
 	"finditer(string) -> iterator of SreMatch.  Returns a list (list is
 	iterable in Python; werkzeug.routing uses ``for m in p.finditer(s)'').
-	Walks the string by repeated ``search'' from the end of the previous
-	match.  A zero-width match advances the cursor by 1 to avoid
-	infinite loops, matching CPython's Scanner_search semantics."
+	Walks the string with scanner semantics (see
+	___searchFrom___:in:to:mustAdvance:)."
 	^ self @env1:finditer: aString _: 0 _: aString @env0:size
 %
 
@@ -384,20 +409,22 @@ finditer: aString _: pos
 category: 'Grail-Methods'
 method: SrePattern
 finditer: aString _: pos _: endpos
-	"finditer(string, pos, endpos) -> iterator of SreMatch."
-	| matches cursor m matchEnd |
+	"finditer(string, pos, endpos) -> iterator of SreMatch.  Scanner
+	semantics: after a zero-width match the next search runs from the
+	SAME position with must_advance set, so a longer match starting
+	there is still found (test_zerowidth)."
+	| matches cursor m mStart mEnd mustAdvance |
 	matches := OrderedCollection @env0:new.
 	cursor := pos.
+	mustAdvance := false.
 	[cursor @env0:<= endpos] @env0:whileTrue: [
-		m := self @env1:search: aString _: cursor _: endpos.
+		m := self @env1:___searchFrom___: cursor in: aString to: endpos mustAdvance: mustAdvance.
 		(m @env0:== None) ifTrue: [^ matches].
 		matches @env0:add: m.
-		matchEnd := m @env1:end.
-		"Zero-width match: advance past the current cursor to avoid
-		an infinite loop on patterns like ``a*''."
-		cursor := (matchEnd @env0:= cursor)
-			ifTrue: [cursor @env0:+ 1]
-			ifFalse: [matchEnd]
+		mStart := m @env1:start.
+		mEnd := m @env1:end.
+		mustAdvance := mEnd @env0:= mStart.
+		cursor := mEnd
 	].
 	^ matches
 %
@@ -527,7 +554,7 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 	support.  Returns a String when ``returnTuple`` is false, or a
 	(String, count) tuple when true (the subn return shape)."
 
-	| parser template parts pos m mEnd mStart expanded numSubs result tail emptySep |
+	| parser template parts pos m mEnd mStart expanded numSubs result tail emptySep mustAdvance |
 	parser := importlib @env1:modules @env0:at: #'re._parser'.
 	"A bytes pattern substituting over a bytes subject must return
 	bytes (CPython semantics) — join with an empty ByteArray so the
@@ -548,6 +575,7 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 	parts := OrderedCollection @env0:new.
 	pos := 0.
 	numSubs := 0.
+	mustAdvance := false.
 	[
 		(count @env0:> 0 and: [numSubs @env0:>= count]) ifTrue: [
 			"Reached count limit; break with tail kept."
@@ -556,7 +584,14 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 				ifTrue: [(tuple @env0:withAll: { (emptySep @env1:join: parts). numSubs })]
 				ifFalse: [emptySep @env1:join: parts]
 		].
-		m := self @env1:search: aString _: pos.
+		"Scanner semantics (CPython pattern_subx): after a zero-width
+		match the next search runs from the SAME position with
+		must_advance set.  The old skip-one-character workaround both
+		lost non-empty matches starting at that position AND, for a
+		zero-width match at end-of-string, never terminated -- the C
+		engine clamps a pos beyond len back to len, so plain search
+		re-returned the same (len,len) match forever (test_zerowidth)."
+		m := self @env1:___searchFrom___: pos in: aString to: aString @env0:size mustAdvance: mustAdvance.
 		(m @env0:== nil or: [m @env0:== None]) ifTrue: [
 			parts @env0:add: (aString @env0:copyFrom: pos @env0:+ 1 to: aString @env0:size).
 			^ returnTuple
@@ -592,15 +627,8 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 			].
 		parts @env0:add: expanded.
 		numSubs := numSubs @env0:+ 1.
-		"Advance past the match — handle zero-width matches by stepping 1."
-		pos := mEnd @env0:= mStart
-			ifTrue: [
-				mStart @env0:< aString @env0:size ifTrue: [
-					parts @env0:add: (aString @env0:copyFrom: mStart @env0:+ 1 to: mStart @env0:+ 1)
-				].
-				mEnd @env0:+ 1
-			]
-			ifFalse: [mEnd]
+		mustAdvance := mEnd @env0:= mStart.
+		pos := mEnd
 	] @env0:repeat
 %
 

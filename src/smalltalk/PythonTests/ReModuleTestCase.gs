@@ -441,3 +441,28 @@ testExpandViaCompileTemplate
 m = re.match(r"(\w+) (\w+)", "hello world")
 m.expand(r"\2 \1")') equals: 'world hello'
 %
+
+category: 'Grail-Tests - Zero-width'
+method: ReModuleTestCase
+testSubZeroWidthGroupTerminatesAndExpands
+	"sub over a zero-width-capable group pattern must use scanner
+	(must_advance) semantics: a plain re-search after the (len,len)
+	zero-width match re-returns it forever (the C engine clamps
+	pos>len back to len), which used to spin until the shim wrapper
+	machinery died with an OffsetError (test_zerowidth)."
+
+	self assert: (self eval: 'import re
+re.sub(r"(\b|:+)", r"[\1]", "a::bc")') equals: '[]a[][::][]bc[]'
+%
+
+category: 'Grail-Tests - Zero-width'
+method: ReModuleTestCase
+testFinditerZeroWidthKeepsSameStartMatch
+	"After a zero-width match at p, the next search runs from p WITH
+	must_advance -- skipping a character instead loses the non-empty
+	match that starts at p ((0,0) must be followed by (0,1))."
+
+	self assert: (self eval: 'import re
+[[m.start(), m.end()] for m in re.finditer(r"\b|\w+", "a::bc")]
+') @env1:__repr__ equals: '[[0, 0], [0, 1], [1, 1], [3, 3], [3, 5], [5, 5]]'
+%
