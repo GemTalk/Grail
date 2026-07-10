@@ -60,3 +60,12 @@ SLOT_RESULT = Slotted(5)._x
 OP_RESULT = OpAttrs(3) + OpAttrs(4)
 REBIND_RESULT = Rebinder().m(1)
 SEALED_RESULT = sealed_subclass_result()
+
+
+class GenericBox[T]:
+    # PEP 695 type params on a CLASS (parsed and erased).
+    def __init__(self, v):
+        self.v = v
+
+
+PEP695_CLASS_RESULT = GenericBox(7).v

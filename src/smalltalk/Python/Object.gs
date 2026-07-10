@@ -1248,7 +1248,7 @@ ___binOpFallback___: other op: opString reflected: refSelector
 	Smalltalk _generality error -- the STERROR class that blocked
 	CPython's test_operator.)"
 
-	| refOwner fwdBase refBase fn result |
+	| refOwner fwdBase refBase fn result refVa |
 	"Class-ATTRIBUTE dunders first: a callable stored as a class attr
 	(fractions' ``__add__, __radd__ = _operator_fallbacks(...)``) is a
 	method in Python but is invisible to the compiled-selector probes
@@ -1282,7 +1282,16 @@ ___binOpFallback___: other op: opString reflected: refSelector
 		refOwner := other @env0:class
 			@env0:whichClassIncludesSelector: refSelector environmentId: 1.
 		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
-			^ other @env0:perform: refSelector env: 1 withArguments: { self }]].
+			^ other @env0:perform: refSelector env: 1 withArguments: { self }].
+		"Reflected dunder compiled VARARGS-ONLY (``def __rpow__(b, a,
+		modulo=None)`` in vendored fractions.py) -- probe the
+		``_<name>:kw:`` form too."
+		refVa := ('_' @env0:, (refSelector @env0:asString @env0:copyFrom: 1
+			to: refSelector @env0:asString @env0:size - 1) @env0:, ':kw:') @env0:asSymbol.
+		refOwner := other @env0:class
+			@env0:whichClassIncludesSelector: refVa environmentId: 1.
+		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
+			^ other @env0:perform: refVa env: 1 withArguments: { { self }. nil }]].
 	TypeError ___signal___: ('unsupported operand type(s) for ' @env0:, opString
 		@env0:, ': ''' @env0:, self @env0:class @env0:name @env0:asString
 		@env0:, ''' and ''' @env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
@@ -1718,7 +1727,7 @@ ___tryBinaryDunderDNU___: aSelector args: anArray
 	dispatch-failure time rather than as object-level default methods,
 	which would shadow DNU-based magic like IntEnum member arithmetic."
 
-	| binOp |
+	| binOp vaSel |
 	binOp := nil.
 	aSelector == #'__add__:' ifTrue: [binOp := { '+'. #'__radd__:' }].
 	aSelector == #'__sub__:' ifTrue: [binOp := { '-'. #'__rsub__:' }].
@@ -1734,6 +1743,15 @@ ___tryBinaryDunderDNU___: aSelector args: anArray
 	aSelector == #'__xor__:' ifTrue: [binOp := { '^'. #'__rxor__:' }].
 	aSelector == #'__matmul__:' ifTrue: [binOp := { '@'. #'__rmatmul__:' }].
 	binOp @env0:== nil ifTrue: [^ #'___noBinOp___'].
+	"A dunder compiled VARARGS-ONLY (``def __pow__(a, b, modulo=None)``
+	in vendored fractions.py) has no fixed ``__pow__:`` selector, so the
+	send landed here -- dispatch the ``___pow__:kw:`` form before
+	running the fallback protocol."
+	vaSel := ('_' @env0:, (aSelector @env0:asString @env0:copyFrom: 1
+		to: aSelector @env0:asString @env0:size - 1) @env0:, ':kw:') @env0:asSymbol.
+	((self @env0:class @env0:whichClassIncludesSelector: vaSel environmentId: 1) @env0:~~ nil)
+		ifTrue: [^ self @env0:perform: vaSel env: 1
+			withArguments: { anArray. nil }].
 	^ self @env1:___binOpFallback___: (anArray @env0:at: 1)
 		op: (binOp @env0:at: 1) reflected: (binOp @env0:at: 2)
 %

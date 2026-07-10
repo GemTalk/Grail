@@ -1,10 +1,10 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-07-10T20:31:05Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
+Generated: 2026-07-10T20:54:37Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
 
 **Modules: 11** — OK 1 · FAIL 0 · ERROR 4 · SKIP 1 · IMPORTERROR 4 · STERROR 1 · CRASH 0 · TIMEOUT 0
 
-**Totals:** tests=430 failures=91 errors=73 skipped=2
+**Totals:** tests=430 failures=94 errors=67 skipped=2
 
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
@@ -21,7 +21,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_heapq | STERROR | 0 | 0 | 0 | 0 | env-1 #'__iter__' not understood by G |
 | test.test_bisect | ERROR | 42 | 14 | 6 | 0 |  |
 | test.test_operator | ERROR | 110 | 30 | 16 | 0 |  |
-| test.test_fractions | ERROR | 49 | 14 | 22 | 0 |  |
+| test.test_fractions | ERROR | 49 | 17 | 16 | 0 |  |
 | test.test_datetime | SKIP | 0 | 0 | 0 | 0 |  |
 | test.test_re | ERROR | 161 | 33 | 29 | 2 |  |
-| test.test_functools | IMPORTERROR | 0 | 0 | 0 | 0 | Expected OP '(' but got OP '[' at line 840 |
+| test.test_functools | IMPORTERROR | 0 | 0 | 0 | 0 | env-1 #'___subclass___:instVarNames:classInstVarNames:' not understood by BoundMethod |

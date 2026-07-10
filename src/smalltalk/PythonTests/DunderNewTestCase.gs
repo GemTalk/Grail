@@ -113,3 +113,46 @@ testVendoredFractionEndToEnd
  isinstance(F(1, 2), __import__("numbers").Rational), F(7, 3).numerator]
 ') @env1:__repr__ equals: '[''Fraction(7, 3)'', ''5/6'', ''2'', 0.25, ''3/7'', True, ''5'', 4, True, 7]'
 %
+
+category: 'Grail-Tests - PEP 695'
+method: DunderNewTestCase
+testTypeParamsParsedAndErased
+	"PEP 695 generics: ``def f[T](...)`` / ``class C[T]:`` parse (the
+	bracket group is discarded -- Grail erases generics).  test_functools
+	could not even IMPORT before (SyntaxError at def f[T])."
+
+	self assert: (self eval: 'def f[T](a):
+    return a * 2
+def g[T: (int, str), *Ts, **P](x):
+    return x + 1
+[f(21), g(1)]') @env1:__repr__ equals: '[42, 2]'.
+	self assert: (self fixture @env1:PEP695_CLASS_RESULT) equals: 7
+%
+
+category: 'Grail-Tests - call sites'
+method: DunderNewTestCase
+testStarUnpackInCalls
+	"``f(*args)`` splices at ANY call shape: bare-name calls,
+	classmethod calls, attribute calls (the fixed-arity fast paths
+	decline splatted calls and fall through to the value:value: form,
+	whose argument emitter concatenates).  Fraction(0.5) constructs
+	through cls._from_coprime_ints(*x.as_integer_ratio())."
+
+	self assert: (self eval: 'def f(a, b, c):
+    return a + b * c
+args = (2, 3, 4)
+f(*args)') equals: 14.
+	self assert: (self eval: 'from fractions import Fraction as F
+str(F(0.5))') equals: '1/2'
+%
+
+category: 'Grail-Tests - varargs dunders'
+method: DunderNewTestCase
+testVarargsOnlyDunderDispatch
+	"A dunder compiled VARARGS-ONLY (``def __pow__(a, b, modulo=None)``)
+	has no fixed ``__pow__:`` selector; both the DNU binOp probe and the
+	reflected-operand probe must try the ``_<name>:kw:`` form."
+
+	self assert: (self eval: 'from fractions import Fraction as F
+[str(F(1, 2) ** 2), str(2 ** F(2, 1))]') @env1:__repr__ equals: '[''1/4'', ''4'']'
+%

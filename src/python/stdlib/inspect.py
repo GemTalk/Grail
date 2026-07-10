@@ -278,3 +278,8 @@ def ismethoddescriptor(obj):
 
 def isabstract(obj):
     return False
+
+
+# Public name: `from inspect import Signature` (test_functools) -- the
+# stub class doubles as the public type.
+Signature = _Signature

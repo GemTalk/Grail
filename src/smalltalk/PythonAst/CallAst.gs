@@ -413,6 +413,18 @@ printSmalltalkOn: aStream
 
 category: 'Grail-other'
 method: CallAst
+hasStarredArgument
+	"True when any positional argument is a ``*x`` splat.  Every
+	fixed-arity fast path must decline such calls -- they print
+	arguments individually, and StarredAst's stub raises at runtime.
+	The legacy ``(load) value: {args} value: kw`` form handles splats
+	via printArgumentsArrayOn:'s concatenation."
+
+	^ arguments anySatisfy: [:each | each isKindOf: StarredAst]
+%
+
+category: 'Grail-other'
+method: CallAst
 bareCallFastPathSelector
 	"Return the Smalltalk selector to use for fixed-arity fast-path
 	dispatch of this call, or nil if no fixed-arity match exists.
@@ -432,6 +444,8 @@ bareCallFastPathSelector
 	      N args  → `name:` followed by `(N-1)` `_:` keywords."
 
 	| funcName nargs candidate |
+
+	self hasStarredArgument ifTrue: [^nil].
 	(function isKindOf: NameAst) ifFalse: [^nil].
 	keywords isEmpty ifFalse: [^nil].
 	funcName := function id.
@@ -533,6 +547,8 @@ attributeCallFastPathSelector
 	`AttributeError`-equivalent behavior."
 
 	| receiverName receiverClass candidate |
+
+	self hasStarredArgument ifTrue: [^nil].
 	(function isKindOf: AttributeAst) ifFalse: [^nil].
 	(function value isKindOf: NameAst) ifFalse: [^nil].
 	keywords isEmpty ifFalse: [^nil].
@@ -1399,6 +1415,8 @@ classSelfSendSelector
 	    similar)."
 
 	| attrName attrSym |
+
+	self hasStarredArgument ifTrue: [^nil].
 	(self class isInClassMethodContext) ifFalse: [^nil].
 	(function isKindOf: AttributeAst) ifFalse: [^nil].
 	(function value isKindOf: NameAst) ifFalse: [^nil].
@@ -1418,6 +1436,8 @@ classSelfSendVarargsSelector
 	"Return the varargs selector for a self.method(args, kw=val) call, or nil."
 
 	| attrName candidate |
+
+	self hasStarredArgument ifTrue: [^nil].
 	(self class isInClassMethodContext) ifFalse: [^nil].
 	(function isKindOf: AttributeAst) ifFalse: [^nil].
 	(function value isKindOf: NameAst) ifFalse: [^nil].
@@ -1504,6 +1524,8 @@ moduleSelfSendSelector
 	yet when we generate source for inter-function calls."
 
 	| funcName candidate |
+
+	self hasStarredArgument ifTrue: [^nil].
 	self class moduleClassBeingCompiled ifNil: [^nil].
 	"Don't self-send while compiling a class body — bare names there
 	follow Python's LEGB and resolve through the module singleton,
@@ -1536,6 +1558,8 @@ moduleSelfSendVarargsSelector
 	ARE allowed and we check for the varargs form."
 
 	| funcName candidate |
+
+	self hasStarredArgument ifTrue: [^nil].
 	self class moduleClassBeingCompiled ifNil: [^nil].
 	"Don't self-send while compiling a class body — bare names there
 	follow Python's LEGB and resolve through the module singleton,

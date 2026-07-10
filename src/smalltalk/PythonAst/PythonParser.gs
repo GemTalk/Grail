@@ -270,6 +270,28 @@ matchKeyword: aString
 
 category: 'Grail-token access'
 method: PythonParser
+skipTypeParams
+	"PEP 695 type-parameter list after a def/class name --
+	``def f[T](...)`` / ``class C[T: bound]:`` / ``def g[*Ts, **P]()``.
+	Parse and DISCARD the balanced bracket group: Grail erases generics
+	(as it does Generic[...]), and the parameter names only appear in
+	annotations, which Grail never evaluates.  test_functools could not
+	even import before this."
+
+	| depth tok |
+	tok := self peek.
+	(tok notNil and: [tok isOp: '[']) ifFalse: [^ self].
+	depth := 0.
+	[
+		tok := self advance.
+		(tok isOp: '[') ifTrue: [depth := depth + 1].
+		(tok isOp: ']') ifTrue: [depth := depth - 1].
+		depth = 0
+	] whileFalse
+%
+
+category: 'Grail-parsing - helpers'
+method: PythonParser
 matchOp: aString
 	"If the current token is the given operator, consume it and return true."
 
@@ -674,6 +696,7 @@ parseClassDefWithDecorators: decorators
 	tok := self advance. "consume 'class'"
 	nameTok := self expectType: #NAME.
 	self declareWrite: nameTok value asSymbol.
+	self skipTypeParams.
 	bases := Array new.
 	keywords := Array new.
 	(self matchOp: '(') ifTrue: [
@@ -1277,6 +1300,7 @@ parseFunctionDefWithDecorators: decorators
 	tok := self advance. "consume 'def'"
 	nameTok := self expectType: #NAME.
 	self declareWrite: nameTok value asSymbol.
+	self skipTypeParams.
 	self expect: #OP value: '('.
 	args := self parseFunctionParametersUntil: ')'.
 	self expect: #OP value: ')'.
