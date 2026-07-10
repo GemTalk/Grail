@@ -1144,3 +1144,59 @@ testFindKwargsDispatch
 		'abc' @env1:_find: #('a' 0 1 9) kw: nil
 	] raise: TypeError
 %
+
+category: 'Grail-Tests - splitlines'
+method: StrTestCase
+testSplitlinesPreservesEmptyLines
+	"splitlines() preserves empty lines (unlike the old subStrings: form)
+	and drops the terminators."
+
+	| lf r |
+	lf := String with: Character lf.
+	r := ('a', lf, lf, 'b') @env1:splitlines.
+	self assert: r size equals: 3.
+	self assert: (r at: 1) equals: 'a'.
+	self assert: (r at: 2) equals: ''.
+	self assert: (r at: 3) equals: 'b'.
+%
+
+category: 'Grail-Tests - splitlines'
+method: StrTestCase
+testSplitlinesCRLFAndTrailing
+	"splitlines() treats CR+LF as a single boundary and yields no extra
+	empty line after a trailing terminator."
+
+	| cr lf r |
+	cr := String with: Character cr.
+	lf := String with: Character lf.
+	r := ('a', cr, lf, 'b', lf) @env1:splitlines.
+	self assert: r size equals: 2.
+	self assert: (r at: 1) equals: 'a'.
+	self assert: (r at: 2) equals: 'b'.
+%
+
+category: 'Grail-Tests - splitlines'
+method: StrTestCase
+testSplitlinesKeepends
+	"splitlines(True) retains each line's terminator."
+
+	| lf r |
+	lf := String with: Character lf.
+	r := ('a', lf, 'b') @env1:splitlines: true.
+	self assert: r size equals: 2.
+	self assert: (r at: 1) equals: ('a', lf).
+	self assert: (r at: 2) equals: 'b'.
+%
+
+category: 'Grail-Tests - expandtabs'
+method: StrTestCase
+testExpandtabsColumnAware
+	"expandtabs(n) expands each tab to the next multiple of n columns
+	(column-aware), not a blind replace."
+
+	| tab |
+	tab := String with: Character tab.
+	self assert: (('a', tab, 'b') @env1:expandtabs: 4) equals: 'a   b'.
+	self assert: (('ab', tab, 'c') @env1:expandtabs: 4) equals: 'ab  c'.
+	self assert: (tab @env1:expandtabs: 8) equals: '        '.
+%

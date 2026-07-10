@@ -736,9 +736,48 @@ endswith: suffix
 category: 'Grail-String Methods'
 method: CharacterCollection
 expandtabs
-	"Return a copy where all tab characters are replaced by spaces."
+	"str.expandtabs() -> copy with tabs expanded to the next multiple of
+	8 columns (column-aware, matching CPython -- not a blind replace)."
 
-	^ self @env0:copyReplaceAll: (Character @env0:tab) @env0:asString with: '        '
+	^ self ___expandtabs: 8
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+expandtabs: tabsize
+	"str.expandtabs(tabsize) -> copy with tabs expanded to the next
+	multiple of tabsize columns; tabsize <= 0 deletes tabs."
+
+	^ self ___expandtabs: tabsize
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___expandtabs: tabsize
+	"Column-aware tab expansion shared by expandtabs / expandtabs:.  The
+	column counter resets on newline / carriage-return.  Builds the result
+	on ``copyEmpty'' so it keeps the receiver's str class."
+
+	| ws col n cp nSpaces |
+	ws := WriteStream @env0:on: (self @env0:copyEmpty).
+	col := 0.
+	n := self @env0:size.
+	1 @env0:to: n do: [:i | | ch |
+		ch := self @env0:at: i.
+		cp := ch @env0:codePoint.
+		(cp @env0:= 9) ifTrue: [
+			(tabsize @env0:> 0) ifTrue: [
+				nSpaces := tabsize @env0:- (col @env0:\\ tabsize).
+				nSpaces @env0:timesRepeat: [ws @env0:nextPut: (Character @env0:space)].
+				col := col @env0:+ nSpaces
+			]
+		] ifFalse: [
+			((cp @env0:= 10) or: [cp @env0:= 13])
+				ifTrue: [ws @env0:nextPut: ch. col := 0]
+				ifFalse: [ws @env0:nextPut: ch. col := col @env0:+ 1]
+		]
+	].
+	^ ws @env0:contents
 %
 
 category: 'Grail-String Methods'
@@ -1746,12 +1785,69 @@ _split: positional kw: kwargs
 category: 'Grail-String Methods'
 method: CharacterCollection
 splitlines
-	"Return a list of lines in the string, breaking at line boundaries."
+	"str.splitlines() -> list of lines, breaking at universal line
+	boundaries, terminators dropped."
 
-	| lines lf |
-	lf := Character @env0:lf.
-	lines := self @env0:subStrings: lf.
-	^ lines
+	^ self ___splitlinesKeepends: false
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+splitlines: keepends
+	"str.splitlines(keepends) -> list of lines; when keepends is truthy
+	each line retains its terminator."
+
+	| ke |
+	ke := (keepends @env0:== true)
+		or: [(keepends @env0:~~ false) and: [(keepends @env0:~~ nil)
+			and: [(keepends @env0:~~ None) and: [keepends @env0:~~ 0]]]].
+	^ self ___splitlinesKeepends: ke
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___isLineBoundaryCode: cp
+	"True for a Unicode code point that str.splitlines() treats as a line
+	boundary: LF CR VT FF FS GS RS NEL LINE-SEP PARA-SEP."
+
+	^ (cp @env0:= 10) or: [(cp @env0:= 13) or: [(cp @env0:= 11)
+		or: [(cp @env0:= 12) or: [(cp @env0:= 28) or: [(cp @env0:= 29)
+		or: [(cp @env0:= 30) or: [(cp @env0:= 133) or: [(cp @env0:= 8232)
+		or: [cp @env0:= 8233]]]]]]]]]
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___splitlinesKeepends: keepends
+	"Shared splitlines engine.  Slices the receiver with copyFrom:to: so
+	each line keeps the receiver's str class (Unicode7), preserves empty
+	lines (unlike subStrings:), and treats CR+LF as one boundary."
+
+	| n result start i cp termLen |
+	n := self @env0:size.
+	result := OrderedCollection @env0:new.
+	start := 1.
+	i := 1.
+	[i @env0:<= n] @env0:whileTrue: [
+		cp := (self @env0:at: i) @env0:asInteger.
+		(self ___isLineBoundaryCode: cp) ifTrue: [
+			termLen := 1.
+			((cp @env0:= 13) and: [(i @env0:< n)
+				and: [((self @env0:at: i @env0:+ 1) @env0:asInteger) @env0:= 10]])
+				ifTrue: [termLen := 2].
+			keepends
+				ifTrue: [result @env0:add: (self @env0:copyFrom: start to: i @env0:+ termLen @env0:- 1)]
+				ifFalse: [result @env0:add: (self @env0:copyFrom: start to: i @env0:- 1)].
+			i := i @env0:+ termLen.
+			start := i
+		] ifFalse: [
+			i := i @env0:+ 1
+		]
+	].
+	start @env0:<= n ifTrue: [
+		result @env0:add: (self @env0:copyFrom: start to: n)
+	].
+	^ result
 %
 
 category: 'Grail-String Methods'
