@@ -337,6 +337,10 @@ __eq__: other
 	unwrap and re-compare.  This makes the reverse direction
 	``16 == LITERAL`` agree with ``LITERAL == 16``."
 
+	"complex first: kernel env-0 = would try GemStone Number coercion
+	and send the internal #_getKind to complex (DNU).  complex knows
+	how to compare against reals."
+	(other @env0:isKindOf: complex) ifTrue: [^ other @env1:__eq__: self].
 	(self @env0:= other) ifTrue: [^ true].
 	(other @env0:isKindOf: SmallInteger) ifTrue: [^ false].
 	((other @env0:class @env0:methodDictForEnv: 1)

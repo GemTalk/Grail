@@ -1,8 +1,8 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-07-10T16:24:13Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
+Generated: 2026-07-10T16:50:33Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
 
-**Modules: 11** — OK 1 · FAIL 0 · ERROR 3 · SKIP 1 · IMPORTERROR 5 · STERROR 1 · CRASH 0 · TIMEOUT 0
+**Modules: 11** — OK 1 · FAIL 0 · ERROR 3 · SKIP 1 · IMPORTERROR 4 · STERROR 2 · CRASH 0 · TIMEOUT 0
 
 **Totals:** tests=381 failures=77 errors=63 skipped=2
 
@@ -21,7 +21,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_heapq | STERROR | 0 | 0 | 0 | 0 | a ImproperOperation occurred (error 2014), reason:classErrSubclassDisallowed, Cannot create a subclass of the class Integer. |
 | test.test_bisect | ERROR | 42 | 14 | 6 | 0 |  |
 | test.test_operator | ERROR | 110 | 30 | 28 | 0 |  |
-| test.test_fractions | IMPORTERROR | 0 | 0 | 0 | 0 | a CompileError occurred (error 1001), unexpected token ; expected a right bracket (]) ; unexpected token ; unexpected token ; unexpected token  |
+| test.test_fractions | STERROR | 0 | 0 | 0 | 0 | a Error occurred (error 2007), reason:rtErrShouldNotImplement, A method was invoked that has been specifically disallowed in a subclass. Receiver:  Fraction.  Selector:  #'new'. |
 | test.test_datetime | SKIP | 0 | 0 | 0 | 0 |  |
 | test.test_re | ERROR | 161 | 33 | 29 | 2 |  |
 | test.test_functools | IMPORTERROR | 0 | 0 | 0 | 0 | Expected OP '(' but got OP '[' at line 840 |

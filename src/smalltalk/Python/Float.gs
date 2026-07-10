@@ -202,8 +202,10 @@ __doc__
 category: 'Grail-Comparison'
 method: float
 __eq__: other
-	"Equality comparison."
+	"Equality comparison.  complex first: kernel env-0 = would try
+	GemStone Number coercion and send #_getKind to complex (DNU)."
 
+	(other @env0:isKindOf: complex) ifTrue: [^ other @env1:__eq__: self].
 	^ self @env0:= other
 %
 

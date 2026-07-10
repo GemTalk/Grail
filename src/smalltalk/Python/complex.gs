@@ -137,6 +137,21 @@ set compile_env: 1
 
 category: 'Grail-Initialization'
 classmethod: complex
+__new__: r
+	"complex(x) -- the one-arg form.  Without this, the call fell
+	through to the inherited object.__new__: (whose argument is a
+	CLASS) and sent #new to the number: complex(10**23) died with
+	'LargeInteger does not understand #new' (test_fractions
+	testBigComplexComparisons).  The isBehavior branch keeps the
+	object.__new__(cls) protocol (copy/pickle) working."
+
+	(r @env0:isBehavior) ifTrue: [^ r @env0:new].
+	(r @env0:isKindOf: complex) ifTrue: [^ r].
+	^ complex @env1:__new__: r _: 0.0
+%
+
+category: 'Grail-Initialization'
+classmethod: complex
 __new__: r _: i
 	"Create a new complex number with given real and imaginary parts.
 	In Python: complex(real, imag) or complex.__new__(complex, real, imag)"
@@ -216,7 +231,19 @@ __eq__: other
 	"Test equality with another complex number."
 	
 	| otherReal otherImag |
-	(other @env0:class) == complex ifFalse: [^ false].
+	(other @env0:isKindOf: complex) ifFalse: [
+		"CPython: complex(5) == 5 is True -- a real number compares
+		equal when the imaginary part is zero."
+		((other @env0:isKindOf: Number) or: [other @env0:isKindOf: Boolean]) ifTrue: [
+			"Compare EXACTLY (no asFloat): CPython's int-vs-float real
+			comparison is exact, so 10**23 != complex(10**23) -- the
+			float real is 1e23, a different integer."
+			| o |
+			o := (other @env0:isKindOf: Boolean)
+				ifTrue: [other ifTrue: [1] ifFalse: [0]]
+				ifFalse: [other].
+			^ ((self imag) @env0:= 0) and: [(self real) @env0:= o]].
+		^ false].
 	otherReal := other real.
 	otherImag := other imag.
 	^ ((self real) @env0:= otherReal) 

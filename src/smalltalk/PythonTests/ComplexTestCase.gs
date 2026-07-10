@@ -580,3 +580,34 @@ testEvalComplexNegation
 	self assert: (result @env1:real) equals: -3.0.
 	self assert: (result @env1:imag) equals: -4.0.
 %
+
+category: 'Grail-Tests - Construction'
+method: ComplexTestCase
+testComplexOneArgConstructor
+	"complex(x) -- the one-arg form fell through to the inherited
+	object.__new__: (whose argument is a CLASS) and sent #new to the
+	number: complex(10**23) died with 'LargeInteger does not understand
+	#new' (test_fractions testBigComplexComparisons)."
+
+	| c |
+	c := self eval: 'complex(10**23)'.
+	self assert: (c @env1:imag) equals: 0.0.
+	c := self eval: 'complex(5)'.
+	self assert: (c @env1:real) equals: 5.0.
+	self assert: (self eval: 'complex(complex(1, 2)).imag') equals: 2.0
+%
+
+category: 'Grail-Tests - Comparison'
+method: ComplexTestCase
+testNumericEqualityWithComplex
+	"int/float == complex must route through complex.__eq__ -- the
+	kernel env-0 = tried GemStone Number coercion and sent the internal
+	#_getKind to complex (DNU).  CPython: complex(5) == 5 is True; a
+	nonzero imaginary part compares unequal."
+
+	self assert: (self eval: '5 == complex(5)') equals: true.
+	self assert: (self eval: 'complex(5) == 5') equals: true.
+	self assert: (self eval: '5.0 == complex(5)') equals: true.
+	self assert: (self eval: '5 == complex(5, 1)') equals: false.
+	self assert: (self eval: '10**23 == complex(10**23)') equals: false
+%

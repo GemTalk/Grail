@@ -216,3 +216,16 @@ test__str__
 	"Result should be a Unicode7"
 	self assert: result class equals: Unicode7
 %
+
+category: 'Grail-Tests - Initialization'
+method: ObjectTestCase
+testVarargsInitIsNoOp
+	"object.__init__(*args, **kwargs) is a no-op (CPython semantics
+	when __new__ is overridden).  Without the varargs form, calling
+	__init__ with arguments on a non-PythonInstance receiver died with
+	an UNCATCHABLE MessageNotUnderstood (test_fractions.testImmutable)."
+
+	self assert: (self eval: 'x = 7
+r = x.__init__(2, 15)
+[r is None, x]') @env1:__repr__ equals: '[True, 7]'
+%

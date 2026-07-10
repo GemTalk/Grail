@@ -100,6 +100,10 @@ printSmalltalkOn: aStream useTemps: aBoolean
 	body do: [:each |
 		each printSmalltalkOn: aStream.
 		aStream lf.
+		"Unreachable Python code after a top-level `return` must be
+		dropped: Smalltalk rejects statements after ^ inside a block
+		(test_fractions.Rat.__rmod__ has dead code after return)."
+		each isUnconditionalReturn ifTrue: [^ self].
 	].
 %
 

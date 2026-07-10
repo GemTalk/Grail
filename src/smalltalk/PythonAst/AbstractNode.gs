@@ -455,3 +455,14 @@ ___emitModuleScopeStoreOf___: aNameSymbol from: sourceExpr on: aStream
 %
 
 
+
+category: 'Grail-testing'
+method: AbstractNode
+isUnconditionalReturn
+	"True only for a top-level ReturnAst statement.  Statement emitters
+	stop after one: Smalltalk rejects statements after ^ inside a
+	block, so Python's (legal) unreachable code after `return` must be
+	dropped at codegen."
+
+	^ false
+%

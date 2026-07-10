@@ -85,3 +85,9 @@ printSmalltalkOn: aStream
 	].
 	aStream nextPut: $.
 %
+
+category: 'Grail-testing'
+method: ReturnAst
+isUnconditionalReturn
+	^ true
+%

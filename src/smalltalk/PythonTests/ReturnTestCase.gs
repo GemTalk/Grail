@@ -80,3 +80,33 @@ testReturnExpression
     return a + b
 add(3, 4)') equals: 7.
 %
+
+category: 'Grail-Tests'
+method: ReturnTestCase
+testUnreachableCodeAfterReturn
+	"Statements after a top-level `return` are legal (dead) Python, but
+	Smalltalk rejects statements after ^ inside a block -- codegen must
+	drop the unreachable tail (test_fractions.Rat failed to COMPILE).
+	Both flavors: dead return and dead assignment (the assignment also
+	exercised the lastIsReturn fall-through suppression)."
+
+	self assert: (self eval: 'def f():
+    return 1
+    return 2
+f()') equals: 1.
+	self assert: (self eval: 'def g():
+    return 1
+    x = 5
+g()') equals: 1.
+	self assert: (self eval: 'def m():
+    return "m"
+    y = 2
+    return "n"
+m()') equals: 'm'.
+	"Reachable code after a CONDITIONAL return still runs."
+	self assert: (self eval: 'def h(flag):
+    if flag:
+        return "early"
+    return "late"
+h(False)') equals: 'late'
+%

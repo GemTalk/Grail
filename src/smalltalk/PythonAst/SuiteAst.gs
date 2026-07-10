@@ -54,6 +54,9 @@ printSmalltalkOn: aStream
 	body do: [:stmt |
 		stmt printSmalltalkOn: aStream.
 		aStream lf.
+		"See BlockAst>>printSmalltalkOn:useTemps: -- dead code after a
+		top-level `return` is a Smalltalk syntax error after ^."
+		stmt isUnconditionalReturn ifTrue: [^ self].
 	].
 %
 

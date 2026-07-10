@@ -1161,6 +1161,18 @@ __init__
 	^ None
 %
 
+category: 'Grail-Initialization'
+method: object
+___init__: positional kw: kwargs
+	"Varargs object.__init__(*args, **kwargs) -- a no-op, as in
+	CPython when __new__ is overridden.  Without it,
+	``F(7,3).__init__(2, 15)`` (test_fractions.testImmutable, where
+	Fraction maps to a kernel number) died with an UNCATCHABLE
+	MessageNotUnderstood instead of being ignored."
+
+	^ None
+%
+
 category: 'Grail-Comparison'
 method: object
 __le__: other

@@ -334,10 +334,9 @@ printSmalltalkOn: aStream
 		emit — the locals() rewrite reads it (same save/restore as
 		printBodyOn:, which this closure path bypasses)."
 		CallAst functionBeingCompiled: self.
-		body body do: [:stmt |
+		(self ___reachableStatements___: body body) do: [:stmt |
 			stmt printSmalltalkOn: aStream.
-			aStream lf.
-		].
+			aStream lf].
 	] ensure: [
 		CallAst returnEmitMode: savedReturnMode.
 		CallAst functionBeingCompiled: savedFunction].
@@ -1570,9 +1569,14 @@ printBodyOn: aStream
 	routines — still get a fall-through (``None.'' inside the block in
 	#direct mode, ``^ None.'' at method scope in #directMethod mode)
 	so the implicit return matches Python's ``return None''."
+	"Judge the REACHABLE statement list: unreachable code after a
+	top-level `return` is dropped at emit (___reachableStatements___:),
+	so `return 1` followed by dead statements still ends the emitted
+	body with ^ and must suppress the fall-through."
 	lastIsReturn := (useDirect or: [useMethod])
 		and: [body body notEmpty
-		and: [self ___stmtEndsWithInlineReturn___: body body last]].
+		and: [self ___stmtEndsWithInlineReturn___:
+			(self ___reachableStatements___: body body) last]].
 
 	self isGenerator ifTrue: [
 		aStream nextPutAll: 'PythonGenerator @env1:withBlock: [:___gen___ |'; lf.
@@ -1587,10 +1591,9 @@ printBodyOn: aStream
 	savedFunction := CallAst functionBeingCompiled.
 	CallAst functionBeingCompiled: self.
 	[
-		body body do: [:each |
+		(self ___reachableStatements___: body body) do: [:each |
 			each printSmalltalkOn: aStream.
-			aStream lf.
-		].
+			aStream lf].
 	] ensure: [CallAst functionBeingCompiled: savedFunction].
 	lastIsReturn ifFalse: [
 		useMethod
@@ -2104,4 +2107,21 @@ generateMethodSourceOn: aStream
 		CallAst selfParameterRebound: savedSelfRebound].
 	"Close the outer block only when one was opened."
 	useMethodTemps == true ifFalse: [aStream nextPutAll: '] value'].
+%
+
+category: 'Grail-printing'
+method: FunctionDefAst
+___reachableStatements___: stmts
+	"Statements up to and including the first top-level `return`.
+	Smalltalk rejects statements after ^ inside a block, so Python's
+	(legal) unreachable tail after `return` must be dropped at codegen
+	-- test_fractions.Rat.__rmod__ has dead code after its return and
+	the whole module failed to compile."
+
+	| out |
+	out := OrderedCollection new.
+	stmts do: [:each |
+		out add: each.
+		each isUnconditionalReturn ifTrue: [^ out]].
+	^ out
 %
