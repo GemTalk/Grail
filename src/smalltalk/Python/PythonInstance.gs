@@ -64,6 +64,26 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 
 	| s metaOwner binOp |
 	envId = 1 ifFalse: [
+		"env-0 arithmetic/comparison bridge: GemStone's mixed-mode
+		numeric retry can send kernel selectors (*, +, <, ...) to a
+		PythonInstance operand (an int meeting a vendored Fraction).
+		Route them to the Python dunder protocol instead of an
+		uncatchable MNU.  Everything else keeps default env-0 DNU."
+		(envId = 0 and: [anArray size = 1]) ifTrue: [
+			| dunder |
+			dunder := nil.
+			aSelector == #'+' ifTrue: [dunder := #'__add__:'].
+			aSelector == #'-' ifTrue: [dunder := #'__sub__:'].
+			aSelector == #'*' ifTrue: [dunder := #'__mul__:'].
+			aSelector == #'/' ifTrue: [dunder := #'__truediv__:'].
+			aSelector == #'//' ifTrue: [dunder := #'__floordiv__:'].
+			aSelector == #'<' ifTrue: [dunder := #'__lt__:'].
+			aSelector == #'<=' ifTrue: [dunder := #'__le__:'].
+			aSelector == #'>' ifTrue: [dunder := #'__gt__:'].
+			aSelector == #'>=' ifTrue: [dunder := #'__ge__:'].
+			aSelector == #'=' ifTrue: [dunder := #'__eq__:'].
+			dunder == nil ifFalse: [
+				^ self @env0:perform: dunder env: 1 withArguments: anArray]].
 		^ super doesNotUnderstand: aSelector args: anArray envId: envId
 	].
 	"Missing binary-operator dunders take the Python protocol fallback

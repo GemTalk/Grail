@@ -960,9 +960,14 @@ ___inheritClassAttrs___: aClass exclude: ownAttrs
 	kernelSlots := Object class allInstVarNames asIdentitySet.
 	aClass superclass class allInstVarNames do: [:n |
 		(((aClass superclass class whichClassIncludesSelector: n environmentId: 1) notNil)
+			and: [(aClass class whichClassIncludesSelector: (n asString , ':') asSymbol environmentId: 1) notNil
 			and: [n ~= #'__module__'
 			and: [(ownAttrs includes: n) not
-			and: [(kernelSlots includes: n) not]]]) ifTrue: [
+			and: [(kernelSlots includes: n) not]]]]) ifTrue: [
+			"Setter probed too: a parent metaclass slot may expose only a
+			READER (numbers_Rational's ``registeredTypes'' backing its ABC
+			register()) -- blindly firing ``n:'' DNU'd when vendored
+			fractions.py subclassed numbers.Rational."
 			| v |
 			v := aClass superclass perform: n env: 1.
 			aClass perform: (n asString , ':') asSymbol env: 1 withArguments: { v }

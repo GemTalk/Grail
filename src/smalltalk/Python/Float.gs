@@ -41,9 +41,11 @@ __new__: obj
 		^ obj
 	].
 
-	"Try to call __float__ on the object if it has one"
-	(obj @env0:respondsTo: #__float__) ifTrue: [
-		result := obj __float__.
+	"Try to call __float__ on the object if it has one.  Probe the
+	ENV-1 dict (a Python user class's __float__ is an env-1 method;
+	env-0 respondsTo: missed vendored Fraction's)."
+	((obj @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) @env0:~~ nil) ifTrue: [
+		result := obj @env0:perform: #'__float__' env: 1.
 		^ result
 	].
 
@@ -536,3 +538,15 @@ real
 %
 
 set compile_env: 0
+
+category: 'Grail-Python Attribute Hook'
+classmethod: float
+___pythonValueAttrs___
+	"real/imag are CPython float properties (value attributes), not
+	methods -- see int's hook."
+
+	^ IdentitySet new
+		add: #real;
+		add: #imag;
+		yourself
+%

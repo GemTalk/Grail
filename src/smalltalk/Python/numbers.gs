@@ -10,7 +10,12 @@ object ifNil: [self error: 'object is not defined. Check file ordering.'].
 ! ------- numbers_Number class (root of numeric hierarchy)
 expectvalue /Class
 doit
-object subclass: 'numbers_Number'
+"PythonInstance, not bare object: user classes deriving from the
+tower (class Fraction(numbers.Rational)) must land on the
+PythonInstance chain -- every instance-attr / property-pair /
+class-attr branch in ___pyAttrLoad___ gates on it (the twilio
+ClientBase(object) lesson)."
+PythonInstance subclass: 'numbers_Number'
   instVarNames: #()
   classVars: #()
   classInstVars: #('registeredTypes')
@@ -238,7 +243,40 @@ numbers removeAllMethods: 1.
 numbers class removeAllMethods: 1.
 %
 
+set compile_env: 0
+
+category: 'Grail-Smalltalk Bridge'
+method: numbers_Rational
+truncated
+	"Kernel bridge: #truncated -> __trunc__ (see asFloat)."
+
+	^ self perform: #'__trunc__' env: 1
+%
+
+category: 'Grail-Smalltalk Bridge'
+method: numbers_Rational
+asFloat
+	"Kernel-numeric bridge: GemStone numeric code (round:, coercions,
+	mixed comparisons) sends env-0 #asFloat.  Forward to the Python
+	__float__ protocol so a vendored Fraction participates instead of
+	dying with an uncatchable MNU (test_fractions testConversions)."
+
+	^ self perform: #'__float__' env: 1
+%
+
 set compile_env: 1
+
+category: 'Grail-Mixins'
+method: numbers_Rational
+__float__
+	"PEP 3141 concrete mixin: float(rational) == numerator/denominator
+	under true division.  CPython's numbers.Rational provides this;
+	vendored fractions.Fraction defines no __float__ of its own and
+	inherits it from here."
+
+	^ ((self @env1:___pyAttrLoad___: #numerator) @env0:asFloat)
+		@env0:/ ((self @env1:___pyAttrLoad___: #denominator) @env0:asFloat)
+%
 
 category: 'Grail-ABC'
 classmethod: numbers_Number

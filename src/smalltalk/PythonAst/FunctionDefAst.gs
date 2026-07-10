@@ -1849,8 +1849,18 @@ generateMethodSourceOn: aStream
 	selfName := CallAst selfParameterName.
 	selfRebound := selfName notNil
 		and: [self assignedNamesInBody includes: selfName asSymbol].
+	"The transport temp needs the ``_'' prefix only when the param is a
+	Smalltalk pseudo-variable (``self'') that can't be declared as a
+	temp.  An ordinary self-param name (jinja2's ``Context.call(__self,
+	...)`` rebinds ``__self``) is declared under its OWN name -- NameAst
+	emits the plain identifier for it (isSelfReference answers false on
+	the rebound path and no reserved rename fires), so a prefixed temp
+	would leave every body reference undeclared."
 	selfTransport := selfRebound
-		ifTrue: ['_' , selfName asString] ifFalse: [nil].
+		ifTrue: [(self isSmalltalkReservedIdentifier: selfName asString)
+			ifTrue: ['_' , selfName asString]
+			ifFalse: [selfName asString]]
+		ifFalse: [nil].
 
 	self compilesAsVarargs ifFalse: [
 		| transportNames |
@@ -1894,9 +1904,18 @@ generateMethodSourceOn: aStream
 		allLocals := OrderedCollection new.
 		paramNames do: [:each | allLocals add: each].
 		bodyVars do: [:each |
-			(allLocals includes: each) ifFalse: [
+			| declared |
+			"Reserved-named body locals (``self = super(...).__new__(cls)``
+			in a def whose receiver param is ``cls``) must be DECLARED
+			under their ``_<name>'' transport -- NameAst's reserved-name
+			rename points every read/write at that temp, and the
+			pseudo-variable itself can't be a Smalltalk temp."
+			declared := (self isSmalltalkReservedIdentifier: each)
+				ifTrue: ['_' , each asString]
+				ifFalse: [each].
+			(allLocals includes: declared) ifFalse: [
 				(CallAst isSelfReference: each) ifFalse: [
-					allLocals add: each
+					allLocals add: declared
 				]
 			]
 		].
@@ -1978,12 +1997,17 @@ generateMethodSourceOn: aStream
 		].
 		args kwarg ifNotNil: [allLocals add: args kwarg name].
 		bodyVars do: [:each |
-			(allLocals includes: each) ifFalse: [
+			| declared |
+			"Phase B: body locals are always temps — no classIvars
+			filter; instance state lives in dynamic instVar storage now.
+			Reserved-named locals declare their ``_<name>'' transport
+			(see the fixed-arity branch above)."
+			declared := (self isSmalltalkReservedIdentifier: each)
+				ifTrue: ['_' , each asString]
+				ifFalse: [each].
+			(allLocals includes: declared) ifFalse: [
 				(CallAst isSelfReference: each) ifFalse: [
-					"Phase B: body locals are always temps — no
-					classIvars filter; instance state lives in dynamic
-					instVar storage now."
-					allLocals add: each
+					allLocals add: declared
 				]
 			]
 		].

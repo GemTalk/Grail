@@ -150,17 +150,31 @@ printSmalltalkRuntimeOn: aStream
 	staticMethodSources := OrderedCollection new.
 	[
 		methodDefs do: [:def |
-			| s |
-			s := PrettyWriteStream on: Unicode7 new.
-			def generateMethodSourceOn: s.
-			methodSources add: def name asString -> s contents.
-			"Keyword-call companion for a simple-positional instance
-			method: a varargs ``_name:kw:'' forwarder so ``obj.m(a,
-			kw=v)'' binds by name rather than DNU-ing (django calls
-			view/handler methods with keyword arguments)."
-			def needsVarargsForwarder ifTrue: [
-				methodSources add: ('_' , def name asString)
-					-> def generateInstanceVarargsForwarderSource].
+			| s savedSelfForIM |
+			"Per-def receiver name: each method's FIRST parameter is its
+			receiver (Python binds it to the instance regardless of what
+			it is called), so switch selfParameterName per def -- the
+			class-wide value (from __init__/`self` methods) mis-binds a
+			``def __new__(cls, ...)`` body, leaving ``cls`` an
+			UnboundLocal.  Mirrors the @classmethod loop below.  A def
+			with no plain params (only *args/**kwargs) keeps the
+			class-wide name."
+			savedSelfForIM := CallAst selfParameterName.
+			CallAst selfParameterName: (def allParameterNames isEmpty
+				ifTrue: [savedSelfForIM]
+				ifFalse: [def allParameterNames first asSymbol]).
+			[
+				s := PrettyWriteStream on: Unicode7 new.
+				def generateMethodSourceOn: s.
+				methodSources add: def name asString -> s contents.
+				"Keyword-call companion for a simple-positional instance
+				method: a varargs ``_name:kw:'' forwarder so ``obj.m(a,
+				kw=v)'' binds by name rather than DNU-ing (django calls
+				view/handler methods with keyword arguments)."
+				def needsVarargsForwarder ifTrue: [
+					methodSources add: ('_' , def name asString)
+						-> def generateInstanceVarargsForwarderSource].
+			] ensure: [CallAst selfParameterName: savedSelfForIM].
 		].
 		"@classmethod bodies use the same per-method source generator
 		(both strip the first positional — ``self`` or ``cls`` — and
@@ -937,7 +951,13 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 					nextPutAll: 'instance := positional @env0:size @env0:= 0 ifTrue: [self @env0:new] ifFalse: [self @env1:__new__: (positional @env0:at: 1)].';
 					nextPutAll: lf
 			]
-			ifFalse: [src nextPutAll: 'instance := self @env0:new.'; nextPutAll: lf]].
+			ifFalse: [
+				"Route through the runtime allocator so a class-body (or
+				inherited) ``def __new__(cls, ...)`` runs with the class
+				as receiver before __init__ -- see object class >>
+				___allocateInstance___:kw: (vendored fractions.py's
+				Fraction.__new__ carries ALL of its construction)."
+				src nextPutAll: 'instance := self @env1:___allocateInstance___: positional kw: keywords.'; nextPutAll: lf]].
 	"Descriptor-bound __init__ override: a setattr-installed
 	``cls.__init__ = synth_fn'' lands in the class''s dynInstVars
 	store.  Probe for it BEFORE the static dispatch so dataclass-
@@ -1031,6 +1051,35 @@ classBodyAttributes
 				stmt targets do: [:t |
 					pairs add: t id asSymbol -> stmt value.
 				].
+			].
+			"Tuple-target class-body assignment: ``__add__, __radd__ =
+			_operator_fallbacks(_add, operator.add)'' (vendored
+			fractions.py builds every binary operator this way).  Each
+			element becomes a class attribute whose value is a synthetic
+			``<value>[i]`` subscript.  The RHS re-evaluates once per
+			element -- acceptable for the factory-call idiom (each call
+			returns an equivalent fresh tuple)."
+			((stmt targets size = 1)
+				and: [(stmt targets first isKindOf: TupleAst)
+				and: [(stmt targets first instVarAt:
+						((stmt targets first class allInstVarNames indexOf: #elts)))
+					allSatisfy: [:e | e isKindOf: NameAst]]]) ifTrue: [
+				| elts |
+				elts := stmt targets first instVarAt:
+					(stmt targets first class allInstVarNames indexOf: #elts).
+				1 to: elts size do: [:i |
+					| sub |
+					sub := SubscriptAst buildWithFields:
+						(IdentityKeyValueDictionary new
+							at: #value put: stmt value;
+							at: #slice put: (ConstantAst buildWithFields:
+								(IdentityKeyValueDictionary new
+									at: #value put: i - 1;
+									at: #kind put: nil;
+									yourself));
+							at: #ctx put: LoadAst basicNew;
+							yourself).
+					pairs add: (elts at: i) id asSymbol -> sub]
 			].
 		].
 		"Class-level annotated assignment (`x: int = 5`) — strip

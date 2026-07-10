@@ -516,6 +516,7 @@ run
 	at: #'BytesWarningTestCase' put: nil;
 	at: #'CPythonShimTestCase' put: nil;
 	at: #'CPythonHarnessTestCase' put: nil;
+	at: #'DunderNewTestCase' put: nil;
 	at: #'CMathTestCase' put: nil;
 	at: #'ChildProcessErrorTestCase' put: nil;
 	at: #'ClassCallFastPathTestCase' put: nil;
@@ -1313,6 +1314,7 @@ input src/smalltalk/PythonTests/HttpCookiesTestCase.gs
 input src/smalltalk/PythonTests/EnumTestCase.gs
 input src/smalltalk/PythonTests/CPythonShimTestCase.gs
 input src/smalltalk/PythonTests/CPythonHarnessTestCase.gs
+input src/smalltalk/PythonTests/DunderNewTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonLibraryTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonObjectForwarderTestCase.gs
@@ -1529,6 +1531,10 @@ run
 (sys @env1:modules) @env0:at: #'datetime' put: datetime @env1:instance.
 (sys @env1:modules) @env0:at: #'json' put: json @env1:instance.
 (sys @env1:modules) @env0:at: #'io' put: io @env1:instance.
+"numbers must resolve to the Smalltalk ABC module (real
+__instancecheck__ + Integer/Float/Fraction registrations); an
+unregistered name would fall through to a filesystem probe."
+(sys @env1:modules) @env0:at: #'numbers' put: numbers @env1:instance.
 %
 
 run

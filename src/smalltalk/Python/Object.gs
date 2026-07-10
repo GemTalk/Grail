@@ -201,6 +201,38 @@ ___new__: positional kw: kwargs
 	^ (positional @env0:at: 1) @env0:new
 %
 
+category: 'Grail-Instantiation'
+classmethod: object
+___allocateInstance___: positional kw: keywords
+	"Allocate an instance of self (a class) for ``Cls(*args, **kw)``.
+	A class-body ``def __new__(cls, ...)`` compiles as an INSTANCE-side
+	method whose self-param is ``cls`` -- run it non-virtually with the
+	CLASS as receiver (so ``cls`` binds to the class), walking the
+	chain so subclasses inherit a parent's Python __new__.  Falls back
+	to plain allocation when no user __new__ exists.  The instantiation
+	method (ClassDefAst>>emitInstantiationMethodFor:) calls __init__ on
+	the result afterwards, matching CPython's __new__-then-__init__.
+
+	vendored fractions.py is the driving case: Fraction.__new__ does
+	all construction (slots + normalization) and there is no __init__.
+	Invocation reuses UnboundMethod (arity resolution + the
+	performMethod: family); its convention takes the receiver as the
+	first positional, which here is the class itself."
+
+	| n sel stream found |
+	found := (self @env0:whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) @env0:~~ nil.
+	found ifFalse: [
+		n := positional @env0:size.
+		stream := WriteStream @env0:on: String @env0:new.
+		stream @env0:nextPutAll: '__new__:'.
+		2 @env0:to: n do: [:i | stream @env0:nextPutAll: '_:'].
+		sel := stream @env0:contents @env0:asSymbol.
+		found := n @env0:> 0 and: [(self @env0:whichClassIncludesSelector: sel environmentId: 1) @env0:~~ nil]].
+	found ifFalse: [^ self @env0:new].
+	^ (UnboundMethod @env1:definingClass: self selector: #'__new__')
+		@env1:value: ({ self } @env0:, positional) value: keywords
+%
+
 category: 'Grail-Convenience Methods'
 classmethod: object
 ___new___: arg1 _: arg2
@@ -416,6 +448,28 @@ ___dynamicClassAttr___: aSym
 		walker := walker @env0:superClass
 	].
 	^ nil
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___classAttrDunder___: baseSym
+	"A callable stored as a CLASS ATTRIBUTE under a dunder name --
+	fractions' ``__add__, __radd__ = _operator_fallbacks(_add,
+	operator.add)'' materializes the operators as class-body attrs,
+	not compiled methods.  Probe the class-body accessor pair on the
+	metaclass first (ClassDefAst class attrs), then per-class dynamic
+	attrs (setattr'd overrides).  Returns nil when absent."
+
+	| cls metaclass sym1 v |
+	cls := self @env0:class.
+	metaclass := cls @env0:class.
+	sym1 := (baseSym @env0:asString @env0:, ':') @env0:asSymbol.
+	((metaclass @env0:whichClassIncludesSelector: baseSym environmentId: 1) @env0:~~ nil
+		and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) @env0:~~ nil])
+		ifTrue: [
+			v := cls @env0:perform: baseSym env: 1.
+			v @env0:== nil ifFalse: [^ v]].
+	^ self @env1:___dynamicClassAttr___: baseSym
 %
 
 category: 'Grail-Convenience Methods - Attribute'
@@ -1194,7 +1248,26 @@ ___binOpFallback___: other op: opString reflected: refSelector
 	Smalltalk _generality error -- the STERROR class that blocked
 	CPython's test_operator.)"
 
-	| refOwner |
+	| refOwner fwdBase refBase fn result |
+	"Class-ATTRIBUTE dunders first: a callable stored as a class attr
+	(fractions' ``__add__, __radd__ = _operator_fallbacks(...)``) is a
+	method in Python but is invisible to the compiled-selector probes
+	that got us here.  Forward on self, then reflected on other; a
+	NotImplemented return falls through, matching CPython."
+	refBase := (refSelector @env0:asString @env0:copyFrom: 1
+		to: refSelector @env0:asString @env0:size - 1) @env0:asSymbol.
+	fwdBase := ('__' @env0:, (refBase @env0:asString @env0:copyFrom: 4
+		to: refBase @env0:asString @env0:size)) @env0:asSymbol.
+	fn := self @env1:___classAttrDunder___: fwdBase.
+	fn @env0:== nil ifFalse: [
+		result := fn @env1:___pyCallValue___: { self. other } kw: nil.
+		result @env0:== (Python @env0:at: #NotImplemented otherwise: nil)
+			ifFalse: [^ result]].
+	fn := other @env1:___classAttrDunder___: refBase.
+	fn @env0:== nil ifFalse: [
+		result := fn @env1:___pyCallValue___: { other. self } kw: nil.
+		result @env0:== (Python @env0:at: #NotImplemented otherwise: nil)
+			ifFalse: [^ result]].
 	"Unlike ___cmpFallback___ (whose lt<->gt selector symmetry could
 	recurse between two built-ins), the __r*__ family is distinct and
 	every guarded reverse op terminates in a direct TypeError -- so the

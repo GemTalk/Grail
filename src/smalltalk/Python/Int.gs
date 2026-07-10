@@ -909,6 +909,18 @@ numerator
 	^ self
 %
 
+category: 'Grail-Python protocol'
+method: int
+__getitem__: idx
+	"x[i] on an int raises catchable TypeError (CPython).  Without a
+	real method the send died as an UNCATCHABLE env-1 MNU and killed
+	the test_fractions module run.  Safe as a real method on int alone
+	(the probe-selector concern applies to blanket DNU intercepts)."
+
+	TypeError ___signal___: '''int'' object is not subscriptable'
+%
+
+
 category: 'Grail-Properties'
 method: int
 real
@@ -973,3 +985,20 @@ to_bytes: length _: byteorder _: signed
 %
 
 set compile_env: 0
+
+category: 'Grail-Python Attribute Hook'
+classmethod: int
+___pythonValueAttrs___
+	"Unary methods exposed to Python as VALUE attributes rather than
+	bound methods: CPython's int carries numerator/denominator/
+	real/imag as properties (vendored fractions.py multiplies
+	``numerator.numerator * denominator.denominator'' -- a BoundMethod
+	there poisons the arithmetic)."
+
+	^ IdentitySet new
+		add: #numerator;
+		add: #denominator;
+		add: #real;
+		add: #imag;
+		yourself
+%

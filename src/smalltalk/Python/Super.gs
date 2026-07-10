@@ -114,7 +114,7 @@ _lookupMethodFirstOf: selectors
 	(twilio.twiml: MessagingResponse() left TwiML.__init__ unrun,
 	so ``verbs`` / ``attrs`` never materialized)."
 
-	| il receiverCls mro idx walker |
+	| il receiverCls mro idx walker alsoMeta |
 	"MRO-POSITIONAL lookup (Python semantics): search the classes AFTER
 	``cls'' in the RECEIVER's C3 linearization, not cls's Smalltalk
 	superclass chain.  This is what makes cooperative mixins work:
@@ -126,26 +126,41 @@ _lookupMethodFirstOf: selectors
 	it, fall back to the superclass-chain walk (identical to the old
 	behavior for single inheritance)."
 
+	"When the bound receiver is itself a CLASS (``super(D, cls)`` inside
+	``__new__``), Python looks the attribute up on the MRO classes AS
+	OBJECTS -- which for Grail means the parents' class-side (metaclass)
+	dicts too: object's ``__new__:`` family is compiled class-side."
+	alsoMeta := obj @env0:isKindOf: Behavior.
 	il := Python @env0:at: #importlib otherwise: nil.
-	receiverCls := (obj @env0:isKindOf: Behavior) ifTrue: [obj] ifFalse: [obj @env0:class].
+	receiverCls := alsoMeta ifTrue: [obj] ifFalse: [obj @env0:class].
 	il @env0:== nil ifFalse: [
 		mro := il @env0:___mroOf___: receiverCls.
 		idx := mro @env0:indexOf: cls.
 		idx @env0:> 0 ifTrue: [
 			idx @env0:+ 1 @env0:to: mro @env0:size do: [:i |
-				| md |
+				| md mdMeta |
 				md := (mro @env0:at: i) @env0:methodDictForEnv: 1.
+				mdMeta := alsoMeta
+					ifTrue: [(mro @env0:at: i) @env0:class @env0:methodDictForEnv: 1]
+					ifFalse: [nil].
 				selectors @env0:do: [:sel |
 					sel ifNotNil: [
-						(md @env0:includesKey: sel) ifTrue: [^ md @env0:at: sel]]]].
+						(md @env0:includesKey: sel) ifTrue: [^ md @env0:at: sel].
+						(mdMeta @env0:~~ nil and: [mdMeta @env0:includesKey: sel])
+							ifTrue: [^ mdMeta @env0:at: sel]]]].
 			^ nil]].
 	walker := cls @env0:superClass.
 	[walker notNil] whileTrue: [
-		| md |
+		| md mdMeta |
 		md := walker @env0:methodDictForEnv: 1.
+		mdMeta := alsoMeta
+			ifTrue: [walker @env0:class @env0:methodDictForEnv: 1]
+			ifFalse: [nil].
 		selectors @env0:do: [:sel |
 			sel ifNotNil: [
-				(md @env0:includesKey: sel) ifTrue: [^ md @env0:at: sel]]].
+				(md @env0:includesKey: sel) ifTrue: [^ md @env0:at: sel].
+				(mdMeta @env0:~~ nil and: [mdMeta @env0:includesKey: sel])
+					ifTrue: [^ mdMeta @env0:at: sel]]].
 		walker := walker @env0:superClass].
 	^ nil
 %

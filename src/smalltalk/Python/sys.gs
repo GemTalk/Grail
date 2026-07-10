@@ -120,6 +120,54 @@ doit
 sys_float_info category: 'Grail-Modules'
 %
 
+! ------- sys_hash_info class (Python 'sys.hash_info' structseq)
+expectvalue /Class
+doit
+module subclass: 'sys_hash_info'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+sys_hash_info comment:
+'Python sys.hash_info — numeric-hash parameters (PEP structseq).
+fractions.py computes _PyHASH_MODULUS / _PyHASH_INF from it at
+import time.'
+%
+
+expectvalue /Class
+doit
+sys_hash_info category: 'Grail-Modules'
+%
+
+! ------- sys_int_info class (Python 'sys.int_info' structseq)
+expectvalue /Class
+doit
+module subclass: 'sys_int_info'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+sys_int_info comment:
+'Python sys.int_info — int-implementation parameters (PEP structseq).'
+%
+
+expectvalue /Class
+doit
+sys_int_info category: 'Grail-Modules'
+%
+
 ! ===============================================================================
 ! sys Module (Python 'sys' module)
 ! ===============================================================================
@@ -139,6 +187,10 @@ sys_implementation removeAllMethods: 1.
 sys_implementation class removeAllMethods: 1.
 sys_float_info removeAllMethods: 1.
 sys_float_info class removeAllMethods: 1.
+sys_hash_info removeAllMethods: 1.
+sys_hash_info class removeAllMethods: 1.
+sys_int_info removeAllMethods: 1.
+sys_int_info class removeAllMethods: 1.
 %
 
 set compile_env: 1
@@ -179,6 +231,36 @@ initialize
 %
 
 category: 'Grail-Initialization'
+method: sys_hash_info
+initialize
+	"CPython's 64-bit numeric-hash parameters.  fractions.py reads
+	.modulus/.inf at import; Grail's own hash need not match these,
+	but the published constants do (they are interface, not
+	implementation, for consumers like Fraction.__hash__)."
+
+	self @env0:dynamicInstVarAt: #width put: 64.
+	self @env0:dynamicInstVarAt: #modulus put: 2305843009213693951.
+	self @env0:dynamicInstVarAt: #inf put: 314159.
+	self @env0:dynamicInstVarAt: #nan put: 0.
+	self @env0:dynamicInstVarAt: #imag put: 1000003.
+	self @env0:dynamicInstVarAt: #algorithm put: 'siphash13'.
+	self @env0:dynamicInstVarAt: #hash_bits put: 64.
+	self @env0:dynamicInstVarAt: #seed_bits put: 128.
+	self @env0:dynamicInstVarAt: #cutoff put: 0
+%
+
+category: 'Grail-Initialization'
+method: sys_int_info
+initialize
+	"CPython 64-bit int-implementation parameters."
+
+	self @env0:dynamicInstVarAt: #bits_per_digit put: 30.
+	self @env0:dynamicInstVarAt: #sizeof_digit put: 4.
+	self @env0:dynamicInstVarAt: #default_max_str_digits put: 4300.
+	self @env0:dynamicInstVarAt: #str_digits_check_threshold put: 640
+%
+
+category: 'Grail-Initialization'
 method: sys_flags
 initialize
 	"Populate the standard CPython interpreter flags, all 0 (a normal,
@@ -213,7 +295,11 @@ initializeBuiltinModules
 		@env0:at: #json 		put: json 		instance;
 		@env0:at: #io 			put: io 		instance;
 		@env0:at: #enum 		put: enum 		instance;
-		@env0:at: #fractions	put: fractions 	instance;
+		"fractions deliberately NOT seeded: ``import fractions`` resolves
+		to the vendored CPython fractions.py (real Fraction semantics --
+		user __new__, slots, Rational ABC).  The Smalltalk ``fractions``
+		module (kernel-Fraction binding) remains for direct Smalltalk
+		references (FractionTestCase) and the kernel Fraction dunders."
 		@env0:at: #functools	put: functools 	instance;
 		@env0:at: #gemstone 	put: gemstone 	instance;
 		@env0:at: #html 		put: html 		instance;
@@ -458,6 +544,18 @@ category: 'Grail-Accessors'
 method: sys
 float_info
 	^ self @env0:at: #float_info
+%
+
+category: 'Grail-Accessors'
+method: sys
+hash_info
+	^ self @env0:at: #hash_info
+%
+
+category: 'Grail-Accessors'
+method: sys
+int_info
+	^ self @env0:at: #int_info
 %
 
 
@@ -900,8 +998,8 @@ initialize_runtime_info
 	self @env0:at: #copyright put: 'Copyright (c) GemTalk Systems LLC. All rights reserved.'.
 	self @env0:at: #flags put: (sys_flags instance).
 	self @env0:at: #float_info put: (sys_float_info instance).
-	self @env0:at: #int_info put: None.
-	self @env0:at: #hash_info put: None.
+	self @env0:at: #int_info put: (sys_int_info instance).
+	self @env0:at: #hash_info put: (sys_hash_info instance).
 	self @env0:at: #thread_info put: None.
 	self @env0:at: #warnoptions put: (list ___new___).
 	self @env0:at: #tracebacklimit put: 1000.

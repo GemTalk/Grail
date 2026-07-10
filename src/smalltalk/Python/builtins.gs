@@ -1034,8 +1034,15 @@ category: 'Grail-Built-in Functions'
 method: builtins
 round: aNumber
 	"Python builtin round(x) — fixed-arity fast path (1-arg form).
-	The 2-arg form `round(x, ndigits)` lives at `_round:kw:`."
+	The 2-arg form `round(x, ndigits)` lives at `_round:kw:`.
+	__round__ first (CPython protocol): vendored fractions.Fraction
+	implements banker's rounding there; the kernel #rounded was an
+	uncatchable MNU on PythonInstances."
 
+	((aNumber @env0:class @env0:whichClassIncludesSelector: #'___round__:kw:' environmentId: 1) @env0:~~ nil)
+		ifTrue: [^ aNumber @env1:___round__: { } kw: nil].
+	((aNumber @env0:class @env0:whichClassIncludesSelector: #'__round__' environmentId: 1) @env0:~~ nil)
+		ifTrue: [^ aNumber @env0:perform: #'__round__' env: 1].
 	^ aNumber @env0:rounded
 %
 
@@ -1793,6 +1800,11 @@ _round: positional kw: kwargs
 				ifTrue: [nil]
 				ifFalse: [kwargs @env0:at: 'ndigits' ifAbsent: [nil]]
 		].
+	"__round__ first (CPython protocol) -- see round: for the 1-arg
+	rationale; the kernel arithmetic below MNUs on PythonInstances."
+	((number @env0:class @env0:whichClassIncludesSelector: #'___round__:kw:' environmentId: 1) @env0:~~ nil)
+		ifTrue: [^ number @env1:___round__:
+			(ndigits @env0:== nil ifTrue: [{ }] ifFalse: [{ ndigits }]) kw: nil].
 	ndigits ifNil: [^ number @env0:rounded].
 	multiplier := 10 @env0:raisedTo: ndigits.
 	"Match CPython: ``round(1.234, 2)'' returns the Float 1.23.

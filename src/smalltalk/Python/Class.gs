@@ -76,14 +76,27 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 		self @env0:allInstVarNames @env0:includes: n].
 	filteredClassIvars := classIvarNames @env0:reject: [:n |
 		self @env0:class @env0:allInstVarNames @env0:includes: n].
-	^ self
+	"A sealed kernel class (Integer, Boolean, ...) refuses subclassing
+	with an UNCATCHABLE ImproperOperation that killed whole CPython
+	test-module runs (class myint(int) in test_fractions/test_math).
+	Re-signal as a catchable Python TypeError -- a DELIBERATE Grail
+	deviation until int subclassing lands."
+	^ [self
 		@env0:subclass: aSymbol
 		instVarNames: filteredIvars
 		classVars: #()
 		classInstVars: filteredClassIvars
 		poolDictionaries: #()
 		inDictionary: nil
-		options: #()
+		options: #()]
+			@env0:on: ImproperOperation
+			do: [:ex |
+				"TypeError resolved at runtime: this method compiles on the
+				kernel Class class, whose symbol list lacks the Python dict."
+				(System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #TypeError)
+					@env1:___signal___:
+						('Grail cannot subclass sealed kernel class '''
+							@env0:, self @env0:name @env0:asString @env0:, '''')]
 %
 
 category: 'Grail-Reflection'

@@ -366,6 +366,35 @@ printSmalltalkOn: aStream
 	is a complete unit before value:value: is sent to its result.
 	NameAst (a plain identifier) needs no parens — bare name reads
 	don't emit a keyword message."
+	"Class-body call to a class-body function (``__add__, __radd__ =
+	_operator_fallbacks(_add, operator.add)`` in vendored fractions.py):
+	the bare-name reference would emit a receiver-nil BoundMethod whose
+	value:value: dispatches on the FIRST ARGUMENT's class -- wrong for a
+	direct call.  Emit an UnboundMethod on ``___cls___`` (the class
+	under construction, in scope during attr-value emit): its
+	value:value: resolves the compiled selector on the class and runs
+	it non-virtually with the first argument as the receiver, which is
+	exactly Python's plain-function-in-class-namespace semantics under
+	Grail's first-param-is-receiver compilation."
+	((self class inClassBodyValueEmit)
+		and: [(function isKindOf: NameAst)
+		and: [self class classFunctionNames notNil
+		and: [(self class classFunctionNames includes: function id asSymbol)
+		and: [self class classBodyBoundNames isNil
+			or: [self class classBodyBoundNames includes: function id asSymbol]]]]])
+		ifTrue: [
+			aStream
+				nextPutAll: '((UnboundMethod @env1:definingClass: ';
+				nextPutAll: self class classBeingCompiled asString;
+				nextPutAll: ' selector: #''';
+				nextPutAll: function id asString;
+				nextPutAll: ''') @env1:value: '.
+			self printArgumentsArrayOn: aStream.
+			aStream nextPutAll: ' value: '.
+			self printKeywordsDictOn: aStream.
+			aStream nextPut: $).
+			^ self
+		].
 	(function isKindOf: NameAst)
 		ifTrue: [function printSmalltalkOn: aStream]
 		ifFalse: [
