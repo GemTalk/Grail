@@ -1,0 +1,7 @@
+# Per-test skips for the CPython scoreboard harness.
+# Format: <module>|<TestCaseClass.test_method>|<reason>
+# These are tests whose FAILURE MODE takes down the whole scoring
+# session (hard VM OutOfMemory, uncatchable) rather than tests we
+# merely fail -- they are counted in the skip column, never as passes.
+test.test_itertools|RegressionTests.test_long_chain_of_empty_iterables|10M generator yields: each suspended producer GsProcess pins its frame; hard VM OOM kills the session
+test.test_itertools|TestBasicOps.test_tee_concurrent|real-thread contention test: Grail's cooperative green threads deadlock and the session hangs

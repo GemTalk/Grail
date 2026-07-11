@@ -747,3 +747,32 @@ testUncompilableMethodStubbed
 	self assert: (self phase2b @env1:__getitem__: 'good_still_works') equals: 42.
 	self assert: (self phase2b @env1:__getitem__: 'bad_raises') equals: 'NameError'
 %
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testLazyMapFilterZip
+	"map/filter/zip are LAZY iterators (CPython semantics): they must
+	work over infinite sources -- the eager versions looped to OOM and
+	killed whole scoring sessions (test_itertools) -- while finite
+	behavior is unchanged."
+
+	self assert: (self eval: 'from itertools import count
+
+def take(n, it):
+    out = []
+    for x in it:
+        out.append(x)
+        if len(out) == n:
+            break
+    return out
+
+a = take(3, map(lambda x: x * 2, count()))
+b = take(3, filter(lambda x: x % 2 == 0, count()))
+c = take(2, zip(count(), count(1)))
+d = list(map(str, [1, 2]))
+e = list(filter(None, [0, 1, 0, 2]))
+f = list(zip("ab", [10, 20]))
+g = list(zip())
+(a, b, c, d, e, f, g)
+') @env1:__repr__ equals: '([0, 2, 4], [0, 2, 4], [(0, 1), (1, 2)], [''1'', ''2''], [1, 2], [(''a'', 10), (''b'', 20)], [])'
+%

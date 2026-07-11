@@ -833,19 +833,22 @@ category: 'Grail-Tests - Sequence Functions'
 method: BuiltinsTestCase
 testMap
 	"map(func, iter) — applies func to each element of iter and
-	returns a list (Grail materializes eagerly; CPython returns a
-	lazy iterator).  The callable is invoked Python-style:
-	`value: positionalArray value: kwargs`, so the block destructures
-	the positional array."
+	returns a LAZY iterator (CPython semantics; the former eager list
+	looped to OOM on infinite sources).  Materialize through the
+	iterator protocol to check the values.  The callable is invoked
+	Python-style: `value: positionalArray value: kwargs`, so the block
+	destructures the positional array."
 
-	| b result doubler |
+	| b result doubler materialized done |
 	b := builtins ___instance___.
 	doubler := [:positional :_kw | (positional @env0:at: 1) @env1:__mul__: 2].
 	result := b @env1:map: doubler _: (list @env0:withAll: #(1 2 3)).
-	self assert: (result @env1:__getitem__: 0) equals: 2.
-	self assert: (result @env1:__getitem__: 1) equals: 4.
-	self assert: (result @env1:__getitem__: 2) equals: 6.
-	self assert: result size equals: 3
+	materialized := OrderedCollection new.
+	done := false.
+	[done] whileFalse: [
+		[materialized add: (result @env1:__next__)]
+			on: StopIteration do: [:ex | done := true]].
+	self assert: materialized asArray equals: #(2 4 6)
 %
 
 category: 'Tests - Sequence Functions'

@@ -294,6 +294,9 @@ run
 	at: #'importlib' put: nil;
 	at: #'iterator' put: nil;
 	at: #'list_iterator' put: nil;
+	at: #'filter_iterator' put: nil;
+	at: #'map_iterator' put: nil;
+	at: #'zip_iterator' put: nil;
 	at: #'hashlib' put: nil;
 	at: #'socket' put: nil;
 	at: #'PySocket' put: nil;
@@ -872,6 +875,9 @@ input src/smalltalk/Python/set_iterator.gs
 input src/smalltalk/Python/str_iterator.gs
 input src/smalltalk/Python/Tuple.gs
 input src/smalltalk/Python/tuple_iterator.gs
+input src/smalltalk/Python/filter_iterator.gs
+input src/smalltalk/Python/map_iterator.gs
+input src/smalltalk/Python/zip_iterator.gs
 input src/smalltalk/Python/builtins.gs
 input src/smalltalk/Python/copyreg.gs
 input src/smalltalk/Python/cmath.gs

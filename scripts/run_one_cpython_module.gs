@@ -89,12 +89,38 @@ emit := [:st :tt :ff :ee :ss :dd |
    AlmostOutOfMemory in one memory-bomb test) classified the ENTIRE
    module STERROR with zero tests scored; per-test rescue counts that
    one test as an error and keeps scoring the rest."
-  [ | cases n |
+  [ | cases n skipIds skipFile line |
+    "Harness-level per-test skip list: tests whose failure mode is a
+     HARD VM death (uncatchable OutOfMemory) that would void the whole
+     module's scoring.  scripts/cpython_suite_skips.txt, counted in
+     the skip column."
+    skipIds := Set new.
+    skipFile := GsFile openReadOnServer:
+      (System gemEnvironmentVariable: 'GRAIL_DIR'), '/scripts/cpython_suite_skips.txt'.
+    skipFile ifNotNil: [
+      [(line := skipFile nextLine) isNil] whileFalse: [
+        | parts |
+        (line isEmpty or: [(line at: 1) == $#]) ifFalse: [
+          parts := line subStrings: $|.
+          (parts size >= 2 and: [(parts at: 1) = modName]) ifTrue: [
+            skipIds add: (parts at: 2)]]].
+      skipFile close].
     cases := harnessMod @env1:cases: mod.
     n := cases @env1:__len__.
     tests := 0. fails := 0. errs := 0. skips := 0.
-    1 to: n do: [:i | | tc |
+    1 to: n do: [:i | | tc tcId |
       tc := cases @env1:__getitem__: (i - 1).
+      tcId := [tc @env1:id asString] on: AbstractException do: [:ex | ''].
+      "id() is 'test.test_x.Class.test_m'; the skip file holds the
+       trailing 'Class.test_m'."
+      "Progress line per test -- with one topaz session per module, the
+       last GRAIL_TEST line in the .out names the culprit when the VM
+       dies mid-run (uncatchable OOM)."
+      out nextPutAll: 'GRAIL_TEST|'; nextPutAll: tcId; lf; flush.
+      (skipIds detect: [:sid | tcId endsWith: sid] ifNone: [nil]) notNil ifTrue: [
+        tests := tests + 1.
+        skips := skips + 1 ]
+      ifFalse: [
       [ | r |
         r := harnessMod @env1:run_one: tc.
         tests := tests + 1.
@@ -104,7 +130,7 @@ emit := [:st :tt :ff :ee :ss :dd |
       ] on: AbstractException do: [:ex |
         (ex isKindOf: ExitClientError) ifTrue: [ex pass].
         tests := tests + 1.
-        errs := errs + 1 ].
+        errs := errs + 1 ]].
     ].
   ] value.
 

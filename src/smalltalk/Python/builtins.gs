@@ -1064,48 +1064,21 @@ memoryview: aBytesObject
 category: 'Python-Built-in Functions'
 method: builtins
 map: aFunction _: anIterable
-	"Python builtin map(func, iter) — fixed-arity fast path.
-	Materialize eagerly into a list; CPython returns a lazy iterator,
-	but Grail has no first-class generator type yet (see GeneratorExpAst
-	for the same trade-off)."
+	"Python builtin map(func, iter) — LAZY, as in CPython.  Eager
+	materialization looped forever (then OOM-killed the session) on
+	infinite sources: take(4, map(f, itertools.count()))."
 
-	| lst iter done |
-	lst := list ___new___.
-	iter := anIterable __iter__.
-	done := false.
-	[done] @env0:whileFalse: [
-		[
-			| item |
-			item := iter __next__.
-			lst append: (aFunction value: { item } value: nil)
-		] @env0:on: StopIteration do: [:ex | done := true]
-	].
-	^ lst
+	^ map_iterator @env1:___on: aFunction source: anIterable __iter__
 %
 
 category: 'Grail-Built-in Functions'
 method: builtins
 filter: aFunction _: anIterable
 	"Python builtin filter(func, iter) — keep items where func(item)
-	is truthy; filter(None, iter) keeps truthy items.  Materialized
-	eagerly like map() (no lazy iterator type yet); answers an
-	iterator over the result."
+	is truthy; filter(None, iter) keeps truthy items.  LAZY, as in
+	CPython (see map:_:)."
 
-	| lst iter done keep |
-	lst := list ___new___.
-	iter := anIterable __iter__.
-	done := false.
-	[done] @env0:whileFalse: [
-		[
-			| item |
-			item := iter __next__.
-			(aFunction @env0:== None)
-				ifTrue: [keep := item ___isTruthy___]
-				ifFalse: [keep := (aFunction value: { item } value: nil) ___isTruthy___].
-			keep ifTrue: [lst append: item]
-		] @env0:on: StopIteration do: [:ex | done := true]
-	].
-	^ lst __iter__
+	^ filter_iterator @env1:___on: aFunction source: anIterable __iter__
 %
 
 category: 'Grail-Built-in Functions'
@@ -1844,29 +1817,14 @@ _zip: positional kw: kwargs
 	element is an iterable; the result is an iterator yielding tuples
 	drawn from each one in lockstep, stopping at the shortest."
 
-	| iterators result allDone |
-	iterators := list ___new___.
-	positional @env0:do: [:iterable | iterators append: iterable __iter__].
-	result := list ___new___.
-	allDone := false.
-	[allDone] @env0:whileFalse: [
-		| items |
-		items := list ___new___.
-		iterators @env0:do: [:iter |
-			[
-				| item |
-				item := iter __next__.
-				items append: item
-			] @env0:on: StopIteration do: [:ex | allDone := true]
-		].
-		allDone ifFalse: [
-			| itemsArray tup |
-			itemsArray := items @env0:asArray.
-			tup := tuple @env0:withAll: itemsArray.
-			result append: tup
-		]
-	].
-	^ result __iter__
+	| iterators |
+	iterators := Array @env0:new: positional @env0:size.
+	1 @env0:to: positional @env0:size do: [:i |
+		iterators @env0:at: i put: (positional @env0:at: i) __iter__].
+	"LAZY, as in CPython -- an eager zip looped forever (then
+	OOM-killed the session) on infinite sources like
+	zip(count(), count(1))."
+	^ zip_iterator @env1:___on: iterators
 %
 
 set compile_env: 0
