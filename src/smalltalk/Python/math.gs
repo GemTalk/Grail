@@ -309,6 +309,127 @@ isnan: x
 
 category: 'Grail-Math Functions'
 method: math
+___materialize___: iterable
+	"Collect any Python iterable (list, tuple, iterator, generator)
+	into an OrderedCollection via the __iter__/__next__ protocol --
+	env-0 do: is not part of the Python surface (list_iterator has
+	none)."
+
+	| out it done |
+	out := OrderedCollection @env0:new.
+	it := iterable @env1:__iter__.
+	done := false.
+	[done] @env0:whileFalse: [
+		[out @env0:add: (it @env1:__next__)]
+			@env0:on: StopIteration
+			do: [:ex | done := true. ex @env0:return: nil]].
+	^ out
+%
+
+category: 'Grail-Math Functions'
+method: math
+copysign: x _: y
+	"copysign(x, y) -> magnitude of x with the sign of y.  The 1/y
+	probe distinguishes -0.0 from 0.0 (its reciprocal's sign
+	survives)."
+
+	| mag neg fy |
+	mag := (self @env1:___real___: x) @env0:abs.
+	fy := self @env1:___real___: y.
+	neg := fy @env0:< 0
+		or: [fy @env0:= 0 and: [(1.0 @env0:/ fy) @env0:< 0]].
+	^ neg ifTrue: [mag @env0:negated] ifFalse: [mag]
+%
+
+category: 'Grail-Math Functions'
+method: math
+ldexp: x _: i
+	"ldexp(x, i) -> x * 2**i."
+
+	^ (self @env1:___real___: x) @env0:* (2.0 @env0:raisedTo: i @env0:asInteger)
+%
+
+category: 'Grail-Math Functions'
+method: math
+fma: x _: y _: z
+	"fma(x, y, z) -> x*y + z.  DEVIATION: not a fused multiply-add --
+	the intermediate rounds (GemStone has no FMA primitive)."
+
+	^ ((self @env1:___real___: x) @env0:* (self @env1:___real___: y))
+		@env0:+ (self @env1:___real___: z)
+%
+
+category: 'Grail-Math Functions'
+method: math
+ulp: x
+	"ulp(x) -> spacing between x and the next float.  0 -> the
+	smallest subnormal; otherwise 2**(exponent - 52)."
+
+	| fx |
+	fx := (self @env1:___real___: x) @env0:abs.
+	fx @env0:= 0 ifTrue: [^ 5e-324].
+	^ 2.0 @env0:raisedTo: (fx @env0:exponent @env0:- 52)
+%
+
+category: 'Grail-Math Functions'
+method: math
+_hypot: positional kw: kwargs
+	"hypot(*coordinates) -> Euclidean norm."
+
+	| sum coords |
+	coords := (positional @env0:size @env0:= 1
+		and: [((positional @env0:at: 1) @env0:isKindOf: Number) @env0:not])
+		ifTrue: [self @env1:___materialize___: (positional @env0:at: 1)]
+		ifFalse: [positional].
+	sum := 0.0.
+	coords @env0:do: [:c |
+		| f |
+		f := self @env1:___real___: c.
+		sum := sum @env0:+ (f @env0:* f)].
+	^ sum @env0:sqrt
+%
+
+category: 'Grail-Math Functions'
+method: math
+dist: pIter _: qIter
+	"dist(p, q) -> Euclidean distance between two points."
+
+	| ps qs sum d |
+	ps := (self @env1:___materialize___: pIter)
+		@env0:collect: [:v | self @env1:___real___: v].
+	qs := (self @env1:___materialize___: qIter)
+		@env0:collect: [:v | self @env1:___real___: v].
+	ps @env0:size @env0:= qs @env0:size ifFalse: [
+		ValueError ___signal___: 'both points must have the same number of dimensions'].
+	sum := 0.0.
+	1 @env0:to: ps @env0:size do: [:i |
+		d := (ps @env0:at: i) @env0:- (qs @env0:at: i).
+		sum := sum @env0:+ (d @env0:* d)].
+	^ sum @env0:sqrt
+%
+
+category: 'Grail-Math Functions'
+method: math
+sumprod: pIter _: qIter
+	"sumprod(p, q) -> sum of products of parallel elements (3.12+)."
+
+	| ps qs sum |
+	ps := self @env1:___materialize___: pIter.
+	qs := self @env1:___materialize___: qIter.
+	ps @env0:size @env0:= qs @env0:size ifFalse: [
+		ValueError ___signal___: 'Inputs are not the same length'].
+	sum := 0.
+	1 @env0:to: ps @env0:size do: [:i |
+		"env-1 dunders, not env-0 arithmetic: a Python Fraction operand
+		dispatches __mul__/__add__ through the class-attr operator
+		protocol; env-0 sends land in the CLASSIC 1-arg DNU and die."
+		sum := sum @env1:__add__:
+			((ps @env0:at: i) @env1:__mul__: (qs @env0:at: i))].
+	^ sum
+%
+
+category: 'Grail-Math Functions'
+method: math
 ___real___: x
 	"Convert a math-function argument to a Float with CPython's error:
 	TypeError 'must be real number, not X' for non-numerics.  Booleans

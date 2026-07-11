@@ -447,3 +447,29 @@ from decimal import Decimal
 [math.isclose(Decimal("1.0"), Decimal("1.00000001"), rel_tol=1e-4),
  float(Decimal("2.5"))]') @env1:__repr__ equals: '[True, 2.5]'
 %
+
+category: 'Grail-Tests - math'
+method: DunderNewTestCase
+testMathFunctionBatch
+	"copysign (incl. -0.0), ldexp, fma, hypot, dist, sumprod (incl.
+	Python-Fraction operands through the env-1 dunder protocol), ulp
+	-- test_math errored on every missing name (copysign alone 22x)."
+
+	self assert: (self eval: 'import math
+from fractions import Fraction as F
+[math.copysign(3, -1), math.copysign(3.0, -0.0), math.ldexp(1.5, 3),
+ math.fma(2, 3, 4), math.hypot(3, 4), math.dist((0, 0), (3, 4)),
+ math.sumprod([1, 2, 3], [4, 5, 6]), str(math.sumprod([F(1, 2)], [F(2, 3)])),
+ math.ulp(1.0) == 2.220446049250313e-16]
+') @env1:__repr__ equals: '[-3.0, -3.0, 12.0, 10.0, 5.0, 5.0, 32, ''1/3'', True]'
+%
+
+category: 'Grail-Tests - builtins'
+method: DunderNewTestCase
+testSortedMinMaxExplicitKeyNone
+	"An explicit key=None means no key (CPython) -- test_heapq passes
+	key in [None, itemgetter(0), ...]."
+
+	self assert: (self eval: '[sorted([3, 1, 2], key=None), min([3, 1, 2], key=None), max([3, 1, 2], key=None)]
+') @env1:__repr__ equals: '[[1, 2, 3], 1, 3]'
+%
