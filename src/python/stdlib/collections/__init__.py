@@ -750,3 +750,9 @@ class UserString:
         if isinstance(char, UserString):
             char = char.data
         return char in self.data
+
+
+def _count_elements(mapping, iterable):
+    # CPython's C-accelerated Counter helper; pure-Python equivalent.
+    for elem in iterable:
+        mapping[elem] = mapping.get(elem, 0) + 1

@@ -340,6 +340,18 @@ __iter__
 
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
+__reversed__
+	"reversed(d) -- see dict>>__reversed__ (working iterator instead of
+	an uncatchable reverseDo: MNU; order caveat identical)."
+
+	| ks |
+	ks := OrderedCollection @env0:new.
+	self @env0:keysAndValuesDo: [:k :v | ks @env0:add: k].
+	^ (ks @env0:reverse) @env1:__iter__
+%
+
+category: 'Grail-Python-Protocol'
+method: PyInstanceDict
 __repr__
 	"Match Python's dict.__repr__ shape — sufficient for debugging."
 
@@ -350,10 +362,12 @@ __repr__
 	self @env0:keysAndValuesDo: [:k :v |
 		first ifFalse: [stream @env0:nextPutAll: ', '].
 		first := false.
-		stream @env0:nextPutAll: '''';
-			nextPutAll: k @env0:asString;
-			nextPutAll: ''': '.
-		stream @env0:nextPutAll: v @env0:printString
+		"NO cascade here: a cascade continuation after an @env0: send is
+		compiled in the METHOD's environment (env-1) and MNUs on the
+		kernel WriteStream."
+		stream @env0:nextPutAll: (k @env1:__repr__) @env0:asString.
+		stream @env0:nextPutAll: ': '.
+		stream @env0:nextPutAll: (v @env1:__repr__) @env0:asString
 	].
 	stream @env0:nextPutAll: '}'.
 	^ stream @env0:contents

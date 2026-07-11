@@ -139,7 +139,16 @@ printSmalltalkOn: aStream
 				eachTgt slice printSmalltalkWithParenthesisOn: aStream.
 				aStream nextPutAll: ' _: ___chain___. '
 			] ifFalse: [
-				"Plain NameAst (or TupleAst/ListAst — rare chained with tuples)."
+				((eachTgt isKindOf: TupleAst) or: [eachTgt isKindOf: ListAst]) ifTrue: [
+					"Chained tuple-unpack target (``ka, va = ta = expr'',
+					test_dict's test_popitem): unpack from the chain temp via
+					the nested-target branch of the shared per-element
+					emitter.  (A starred element inside a CHAINED tuple
+					target is not supported -- plain doWithIndex there.)"
+					self emitTupleElementStoreOn: aStream target: eachTgt
+						holder: '___chain___' indexExpr: nil directRhs: '___chain___'
+				] ifFalse: [
+				"Plain NameAst."
 				((eachTgt isKindOf: NameAst)
 					and: [self isModuleScopeStoreTarget: eachTgt])
 					ifTrue: [
@@ -151,6 +160,7 @@ printSmalltalkOn: aStream
 						eachTgt printSmalltalkOn: aStream.
 						aStream nextPutAll: ' := ___chain___. '
 					]
+				]
 			]
 		]
 	].

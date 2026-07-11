@@ -134,12 +134,25 @@ ___delSlice___: aSlice
 		].
 		^ None
 	].
+	"Clamp |st| to size+1: visits the same index set while keeping the
+	inlined to:by:do: comparisons in SmallInteger range -- a LargeInteger
+	step (del a[9::1<<333]) MNUs on the env-1 _nonZeroGte: bridge."
+	st := (st @env0:> 0)
+		ifTrue: [st @env0:min: size @env0:+ 1]
+		ifFalse: [st @env0:max: (size @env0:+ 1) @env0:negated].
 	indicesArray := OrderedCollection @env0:new.
-	lo @env0:to: hi @env0:- 1 by: st do: [:i | indicesArray @env0:add: i].
-	"Delete in descending index order to avoid renumbering."
-	indicesArray @env0:size @env0:to: 1 by: -1 do: [:k |
-		self @env0:removeAtIndex: (indicesArray @env0:at: k) @env0:+ 1
-	].
+	"hi is Python-style EXCLUSIVE: last included index is hi-1 for a
+	positive step but hi+1 for a negative one."
+	(st @env0:> 0)
+		ifTrue: [lo @env0:to: hi @env0:- 1 by: st do: [:i | indicesArray @env0:add: i]]
+		ifFalse: [lo @env0:to: hi @env0:+ 1 by: st do: [:i | indicesArray @env0:add: i]].
+	"Delete in descending INDEX-VALUE order to avoid renumbering (for a
+	negative step the array itself is already descending)."
+	(st @env0:> 0)
+		ifTrue: [indicesArray @env0:size @env0:to: 1 by: -1 do: [:k |
+			self @env0:removeAtIndex: (indicesArray @env0:at: k) @env0:+ 1]]
+		ifFalse: [1 @env0:to: indicesArray @env0:size do: [:k |
+			self @env0:removeAtIndex: (indicesArray @env0:at: k) @env0:+ 1]].
 	^ None
 %
 
@@ -159,7 +172,7 @@ method: list
 __iadd__: other
 	"In-place concatenation: self += other. Returns self."
 
-	self @env0:addAll: other.
+	self extend: other.
 	^ self
 %
 
@@ -173,12 +186,33 @@ __imul__: n
 		self @env0:size: 0.
 		^ self
 	].
+	"lst *= sys.maxsize must raise, not exhaust the gem's temporary
+	object memory (test_list_resize_overflow kills the whole session
+	otherwise)."
+	(self @env0:size @env0:* n) @env0:> 50000000 ifTrue: [
+		MemoryError ___signal___: 'repeated list would exhaust memory'].
 
 	original := self @env0:copy.
 	(n @env0:- 1) @env0:timesRepeat: [
 		self @env0:addAll: original.
 	].
 	^ self
+%
+
+category: 'Grail-Initialization'
+classmethod: list
+_new: positional kw: kwargs
+	"list(**kw) / list(a, b) -- CPython rejects keyword arguments and
+	more than one positional; raise the catchable TypeError instead of
+	an uncatchable MNU (list_tests' test_keyword_args)."
+
+	(kwargs @env0:~~ nil and: [kwargs @env0:size @env0:> 0]) ifTrue: [
+		TypeError ___signal___: 'list() takes no keyword arguments'].
+	positional @env0:size @env0:> 1 ifTrue: [
+		TypeError ___signal___: 'list expected at most 1 argument, got '
+			@env0:, positional @env0:size @env0:printString].
+	positional @env0:size @env0:= 0 ifTrue: [^ self __new__].
+	^ self __new__: (positional @env0:at: 1)
 %
 
 category: 'Grail-Sequence Protocol'
@@ -192,20 +226,40 @@ __iter__
 category: 'Grail-String Representation'
 method: list
 __repr__
-	"Return a string representation of the list: [item1, item2, ...]"
+	"Return a string representation of the list: [item1, item2, ...].
+	A self-referential list (l.append(l)) prints '[...]' at the cycle
+	like CPython, instead of recursing to AlmostOutOfStack; the
+	in-progress set is session-local (repr is not reentrant across
+	green threads in a way that matters here)."
 
-	| stream |
-	stream := WriteStream @env0:on: (String ___new___).
+	| stream seen |
+	seen := SessionTemps @env0:current @env0:at: #GrailReprSeen otherwise: nil.
+	seen @env0:isNil ifTrue: [
+		seen := IdentitySet @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailReprSeen put: seen].
+	(seen @env0:includes: self) ifTrue: [^ '[...]'].
+	"seen's size is the current repr nesting depth: deep nesting must raise the catchable
+	RecursionError before the gem's real stack overflows -- threshold 200
+	because a default gem has GEM_MAX_SMALLTALK_STACK_DEPTH 1000 and each
+	repr level costs several frames (list_tests test_repr_deep nests 200k)."
+	seen @env0:size @env0:> 200 ifTrue: [
+		RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object'].
+	seen @env0:add: self.
+	^ [[stream := WriteStream @env0:on: (String ___new___).
 	stream @env0:nextPut: $[.
-
 	self @env0:do: [:each |
 			| reprStr |
 			reprStr := each __repr__.
 			stream @env0:nextPutAll: reprStr
 		] separatedBy: [stream @env0:nextPutAll: ', '].
-
 	stream @env0:nextPut: $].
-	^ stream @env0:contents
+	stream @env0:contents]
+		@env0:on: AlmostOutOfStack do: [:ex |
+			"A default gem's stack (GEM_MAX_SMALLTALK_STACK_DEPTH 1000)
+			overflows before the seen-size guard fires -- convert the
+			resumable notification into CPython's RecursionError."
+			RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object']]
+		@env0:ensure: [seen @env0:remove: self otherwise: nil]
 %
 
 category: 'Grail-Sequence Protocol'
@@ -258,20 +312,27 @@ ___setSlice___: aSlice _: anIterable
 	length and replaces one-for-one."
 
 	| size indices lo hi st values len indicesArray |
+	"Coerce anIterable to an array FIRST.  Python iterables that aren't
+	SequenceableCollections (e.g. re._parser SubPattern, which exposes
+	its data through an env-1 __iter__/__next__ pair) need to go
+	through the list constructor's iteration loop, not Smalltalk
+	asArray -- and that loop runs USER __iter__ code which may mutate
+	self (gh-120384: an evil iterable clearing the target list), so
+	the slice indices must be computed from the post-iteration size."
+	values := (anIterable @env0:isKindOf: SequenceableCollection)
+		ifTrue: [anIterable @env0:asArray]
+		ifFalse: [(list @env1:__new__: anIterable) @env0:asArray].
+	len := values @env0:size.
 	size := self @env0:size.
 	indices := aSlice @env1:indices: size.
 	lo := indices @env0:at: 1.
 	hi := indices @env0:at: 2.
 	st := indices @env0:at: 3.
-	"Coerce anIterable to an array.  Python iterables that aren't
-	SequenceableCollections (e.g. re._parser SubPattern, which exposes
-	its data through an env-1 __iter__/__next__ pair) need to go
-	through the list constructor's iteration loop, not Smalltalk
-	asArray.  list __new__: already handles both shapes."
-	values := (anIterable @env0:isKindOf: SequenceableCollection)
-		ifTrue: [anIterable @env0:asArray]
-		ifFalse: [(list @env1:__new__: anIterable) @env0:asArray].
-	len := values @env0:size.
+	"Clamp |st| to size+1 -- see ___delSlice___ (LargeInteger steps MNU
+	on the env-1 _nonZeroGte: bridge inside inlined to:by:do:)."
+	st := (st @env0:> 0)
+		ifTrue: [st @env0:min: size @env0:+ 1]
+		ifFalse: [st @env0:max: (size @env0:+ 1) @env0:negated].
 	(st @env0:= 1) ifTrue: [
 		"Contiguous: remove [lo..hi) then insert new items at lo."
 		hi @env0:> lo ifTrue: [
@@ -283,10 +344,14 @@ ___setSlice___: aSlice _: anIterable
 		].
 		^ None
 	].
-	"Extended slice: must match length."
+	"Extended slice: must match length.  hi is Python-style EXCLUSIVE:
+	the last included index is hi-1 for a positive step but hi+1 for a
+	negative one (a[::-1] on size 4 -> lo 3, hi -1, st -1 -> 3..0)."
 	indicesArray := OrderedCollection @env0:new.
-	lo @env0:to: hi @env0:- 1 by: st do: [:i | indicesArray @env0:add: i].
-	indicesArray @env0:size = len ifFalse: [
+	(st @env0:> 0)
+		ifTrue: [lo @env0:to: hi @env0:- 1 by: st do: [:i | indicesArray @env0:add: i]]
+		ifFalse: [lo @env0:to: hi @env0:+ 1 by: st do: [:i | indicesArray @env0:add: i]].
+	(indicesArray @env0:size @env0:= len) ifFalse: [
 		ValueError ___signal___:
 			('attempt to assign sequence of size ' @env0:,
 				len @env0:printString @env0:,
@@ -329,10 +394,25 @@ copy
 category: 'Grail-List Methods'
 method: list
 extend: iterable
-	"Extend the list by appending all items from iterable."
+	"Extend the list by appending all items from iterable.  A plain
+	addAll: sends #do: to the argument, which is an uncatchable MNU for
+	non-collections (a.extend(None)) -- probe for iterability and route
+	Python-protocol iterables through __iter__/__next__ instead."
 
-	self @env0:addAll: iterable.
-	^ None
+	(iterable @env0:isKindOf: Collection) ifTrue: [
+		self @env0:addAll: iterable.
+		^ None].
+	((iterable @env0:class
+		@env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) @env0:~~ nil) ifTrue: [
+		| iter done |
+		iter := iterable __iter__.
+		done := false.
+		[done] @env0:whileFalse: [
+			[self @env0:add: iter __next__]
+				@env0:on: StopIteration do: [:ex | done := true]].
+		^ None].
+	TypeError ___signal___: '''' @env0:, iterable @env0:class @env0:name @env0:asString
+		@env0:, ''' object is not iterable'
 %
 
 category: 'Grail-List Methods'

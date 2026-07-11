@@ -336,6 +336,11 @@ __mul__: n
 	(n @env0:<= 0) ifTrue: [
 		^ result
 	].
+	"seq * sys.maxsize must raise, not exhaust the gem's temporary
+	object memory (test_list_resize_overflow kills the session
+	otherwise)."
+	(self @env0:size @env0:* n) @env0:> 50000000 ifTrue: [
+		MemoryError ___signal___: 'repeated sequence would exhaust memory'].
 
 	n @env0:timesRepeat: [result @env0:addAll: self].
 	^ result

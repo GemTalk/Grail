@@ -304,13 +304,24 @@ method: dict
 __repr__
 	"Return a string representation of the dictionary"
 
-	| stream isEmpty |
+	| stream isEmpty seen |
 	isEmpty := self @env0:isEmpty.
 	isEmpty ifTrue: [
 		^ '{}'
 	].
+	"Cycle + depth guard -- shared #GrailReprSeen set with list/tuple
+	(a self-referential dict prints '{...}'; 200k-deep nesting raises
+	the catchable RecursionError before the real stack overflows)."
+	seen := SessionTemps @env0:current @env0:at: #GrailReprSeen otherwise: nil.
+	seen @env0:isNil ifTrue: [
+		seen := IdentitySet @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailReprSeen put: seen].
+	(seen @env0:includes: self) ifTrue: [^ '{...}'].
+	seen @env0:size @env0:> 200 ifTrue: [
+		RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object'].
+	seen @env0:add: self.
 
-	stream := WriteStream @env0:on: (String ___new___).
+	^ [[stream := WriteStream @env0:on: (String ___new___).
 	stream @env0:nextPutAll: '{'.
 
 	self @env0:keysAndValuesDo: [:key :value |
@@ -327,7 +338,13 @@ __repr__
 	stream @env0:skip: -2.
 	stream @env0:nextPutAll: '}'.
 
-	^ stream @env0:contents
+	stream @env0:contents]
+		@env0:on: AlmostOutOfStack do: [:ex |
+			"A default gem's stack (GEM_MAX_SMALLTALK_STACK_DEPTH 1000)
+			overflows before the seen-size guard fires -- convert the
+			resumable notification into CPython's RecursionError."
+			RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object']]
+		@env0:ensure: [seen @env0:remove: self otherwise: nil]
 %
 
 category: 'Grail-Subscript Protocol'
@@ -501,21 +518,48 @@ method: dict
 update: other
 	"Update the dictionary with key/value pairs from other, overwriting existing keys"
 
-	| isDict |
-	isDict := other @env0:isKindOf: dict.
-	isDict ifTrue: [
+	| keysMethod keysIter iter done k idx |
+	(other @env0:isKindOf: KeyValueDictionary) ifTrue: [
 		other @env0:keysAndValuesDo: [:key :value |
-			self @env0:at: key put: value
-		]
-	] ifFalse: [
-		"Assume other is an iterable of (key, value) pairs"
-		other @env0:do: [:pair |
-			| key value |
-			key := pair @env0:at: 1.
-			value := pair @env0:at: 2.
-			self @env0:at: key put: value
-		]
-	]
+			self @env0:at: key put: value].
+		^ None].
+	"Python mapping protocol: other exposes keys + __getitem__
+	(PyInstanceDict, user mappings) -- mirrors ___fromMapping___."
+	keysMethod := [other @env1:keys]
+		@env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: #__noKeys__].
+	(keysMethod @env0:== #__noKeys__) ifFalse: [
+		keysIter := keysMethod __iter__.
+		done := false.
+		[done] @env0:whileFalse: [
+			[k := keysIter __next__.
+			self @env0:at: k put: (other @env1:__getitem__: k)]
+				@env0:on: StopIteration do: [:ex | done := true]].
+		^ None].
+	"Iterable of 2-element pairs, via the __iter__ protocol.  A plain
+	do: here was an uncatchable MNU for d.update(None) / d.update(42)
+	(test_dict, mapping_tests)."
+	((other @env0:class
+		@env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) @env0:~~ nil) ifFalse: [
+		TypeError ___signal___: '''' @env0:, other @env0:class @env0:name @env0:asString
+			@env0:, ''' object is not iterable'].
+	iter := other __iter__.
+	idx := 0.
+	done := false.
+	[done] @env0:whileFalse: [
+		[| pair |
+		pair := iter __next__.
+		((pair @env0:isKindOf: SequenceableCollection)
+			or: [(pair @env0:class
+				@env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) @env0:~~ nil]) ifFalse: [
+			TypeError ___signal___: 'cannot convert dictionary update sequence element #'
+				@env0:, idx @env0:printString @env0:, ' to a sequence'].
+		(pair @env1:__len__ @env0:= 2) ifFalse: [
+			ValueError ___signal___: 'dictionary update sequence element #'
+				@env0:, idx @env0:printString @env0:, ' has length '
+				@env0:, pair @env1:__len__ @env0:printString @env0:, '; 2 is required'].
+		self @env0:at: (pair @env1:__getitem__: 0) put: (pair @env1:__getitem__: 1).
+		idx := idx @env0:+ 1]
+			@env0:on: StopIteration do: [:ex | done := true]]
 %
 
 category: 'Grail-Mutation Methods'
@@ -535,6 +579,20 @@ _update: positional kw: kwargs
 		]
 	].
 	^ None
+%
+
+category: 'Grail-Python-Protocol'
+method: dict
+__reversed__
+	"reversed(d) -- iterate keys in reverse insertion order.  GemStone's
+	KeyValueDictionary is hash-ordered, so 'reverse' here is relative to
+	whatever order keysDo: yields (same caveat as __iter__); the point
+	is a working iterator instead of an uncatchable reverseDo: MNU."
+
+	| ks |
+	ks := OrderedCollection @env0:new.
+	self @env0:keysDo: [:k | ks @env0:add: k].
+	^ (ks @env0:reverse) @env1:__iter__
 %
 
 category: 'Grail-View Methods'

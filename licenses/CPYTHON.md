@@ -34,7 +34,9 @@ redistributed under the same Python Software Foundation License Version 2.
 
 | Path | CPython Source | Notes |
 |------|---------------|-------|
-| `src/python/stdlib/test/test_*.py` | `Lib/test/test_*.py` | Curated starter modules, vendored verbatim |
+| `src/python/stdlib/test/test_*.py` | `Lib/test/test_*.py` | Curated starter + phase-2 modules, vendored verbatim |
+| `src/python/stdlib/test/list_tests.py`, `seq_tests.py`, `mapping_tests.py`, `string_tests.py` | `Lib/test/*.py` | Sibling test mixins, vendored verbatim |
+| `src/python/stdlib/test/support/script_helper.py` | `Lib/test/support/script_helper.py` | **Rewritten**: every helper spawns a subprocess in CPython; Grail's raise `unittest.SkipTest` instead |
 | `src/python/stdlib/test/support/numbers.py` | `Lib/test/support/numbers.py` | Verbatim (pure data) |
 | `src/python/stdlib/test/support/testcase.py` | `Lib/test/support/testcase.py` | Verbatim |
 | `src/python/stdlib/test/support/__init__.py` | `Lib/test/support/__init__.py` | **Trimmed**: only the names the starter set imports; CPython's ~3200-line original pulls in subprocess/socket/faulthandler which Grail lacks |

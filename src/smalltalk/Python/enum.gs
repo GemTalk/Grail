@@ -45,10 +45,20 @@ method: enum
 initialize
 	"Initialize stored attributes."
 	self @env0:at: #KEEP put: #KEEP.
+	"FlagBoundary + verify() constants: opaque symbols are enough for
+	``from enum import STRICT, CONFORM, ...`` to resolve (test_enum)."
+	self @env0:at: #STRICT put: #STRICT.
+	self @env0:at: #CONFORM put: #CONFORM.
+	self @env0:at: #EJECT put: #EJECT.
+	self @env0:at: #UNIQUE put: #UNIQUE.
+	self @env0:at: #CONTINUOUS put: #CONTINUOUS.
+	self @env0:at: #NAMED_FLAGS put: #NAMED_FLAGS.
+	self @env0:at: #ReprEnum put: Enum.
+	self @env0:at: #EnumDict put: dict.
 	"Enum / IntEnum / IntFlag are real classes now (see PyEnumTypes.gs):
 	``class X(IntEnum): A = 1`` builds real members via the metaclass
 	hook ``___pyClassDefined___:``.  StrEnum / Flag remain simple
-	aliases (out of scope): StrEnum -> str, Flag -> PythonInstance."
+	alias (out of scope): StrEnum -> str.  Flag is real (PyEnumTypes.gs)."
 	self @env0:at: #Enum put: Enum.
 	self @env0:at: #EnumType put: Enum @env0:class.
 	self @env0:at: #property put: PropertyDescriptor.
@@ -60,7 +70,7 @@ initialize
 	self @env0:at: #IntEnum put: IntEnum.
 	self @env0:at: #IntFlag put: IntFlag.
 	self @env0:at: #StrEnum put: Unicode7.
-	self @env0:at: #Flag put: PythonInstance.
+	self @env0:at: #Flag put: Flag.
 	"Pre-store ``auto'' as a BoundMethod so ``from enum import auto''
 	binds to the callable rather than invoking the unary method
 	immediately and binding its result (an integer).  Werkzeug's
@@ -179,6 +189,43 @@ __simple_enum: positional kw: kwargs
 	Smalltalk selector ``__simple_enum:kw:``."
 
 	^ [:positional2 :keywords2 | positional2 @env0:at: 1]
+%
+
+category: 'Grail-Built-in Functions'
+method: enum
+_verify: positional kw: kwargs
+	"@verify(UNIQUE, ...) -> decorator returning the class unchanged.
+	The checks it performs in CPython are advisory; skipping them only
+	means we never raise on a malformed enum definition."
+
+	^ [:positional2 :keywords2 | positional2 @env0:at: 1]
+%
+
+category: 'Grail-Built-in Functions'
+method: enum
+__test_simple_enum: positional kw: kwargs
+	"_test_simple_enum(checked, simple) — CPython-internal consistency
+	check between a @_simple_enum class and its handwritten twin.
+	Nothing to verify here; return None."
+
+	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: enum
+_iter_bits_lsb: num
+	"_iter_bits_lsb(n) — yield each set bit, least-significant first.
+	Return the materialized list; callers only iterate it."
+
+	| result n |
+	result := OrderedCollection @env0:new.
+	n := num.
+	[n @env0:> 0] @env0:whileTrue: [
+		| bit |
+		bit := n @env0:bitAnd: (n @env0:negated).
+		result @env0:add: bit.
+		n := n @env0:- bit].
+	^ result
 %
 
 set compile_env: 0

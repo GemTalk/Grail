@@ -115,7 +115,7 @@ ___asSmalltalkClassName___: aPythonName
 	  ``MyClass``       → ``MyClass``  (already valid)
 	  ``_constants``    → ``_constants``"
 
-	| s first |
+	| s first sym |
 	s := aPythonName @env0:asString @env0:copyReplaceAll: '.' with: '_'.
 	s @env0:isEmpty ifTrue: [^ s @env0:asSymbol].
 	first := s @env0:at: 1.
@@ -258,8 +258,18 @@ ___buildModuleClass: moduleAst name: moduleName
 	variables := moduleAst body variables.
 	variableNames := variables asArray.
 
-	"Build the Smalltalk class name from the Python module name."
+	"Build the Smalltalk class name from the Python module name.
+	Guard against kernel-class collisions HERE (module classes only):
+	module 'array' -> 'Array' would land in PythonModules, which
+	PRECEDES Globals in the compilation symbol list, so every method
+	compiled afterwards that references Array would silently bind the
+	module class (the generated value:value: instantiators all do).
+	User classes (ClassDefAst) go in no dictionary and never shadow --
+	and MUST keep their Python-visible name (kernel Fraction exists,
+	but Python Fraction's repr must still say 'Fraction')."
 	moduleClassName := self ___asSmalltalkClassName___: moduleName.
+	(Globals includesKey: moduleClassName) ifTrue: [
+		moduleClassName := ('Py' , moduleClassName asString) asSymbol].
 
 	"Create or recreate the Smalltalk class for this module.  Always go
 	through ``module subclass:`` rather than reusing a previously-

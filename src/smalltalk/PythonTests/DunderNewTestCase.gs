@@ -515,3 +515,235 @@ for thunk in [lambda: math.sqrt(-1), lambda: math.acos(2), lambda: math.asin(-2)
 r + [math.sqrt(4), math.log(math.e)]
 ') @env1:__repr__ equals: '[''ve'', ''ve'', ''ve'', ''ve'', ''ve'', ''ve'', ''ve'', 2.0, 1.0]'
 %
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+phase2
+	"PHASE2_RESULT dict from the fixture (fresh-loaded)."
+
+	^ self fixture @env1:PHASE2_RESULT
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testChainedTupleUnpackAssign
+	"``ka, va = ta = d.popitem()'' -- a chained assignment whose first
+	target is a tuple pattern compiled to invalid Smalltalk before
+	(AssignAst emitted ``(tuple...) := ___chain___''; test_dict's
+	test_popitem could not even compile)."
+
+	self assert: (self phase2 @env1:__getitem__: 'chained') equals: true
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testNoneOrderingRaisesTypeError
+	"Sorting a list containing None raises catchable TypeError (both
+	the env-0 #< sort-block send and the __lt__ dunder route)."
+
+	self assert: (self phase2 @env1:__getitem__: 'none_lt') equals: 'TypeError'
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testSequenceKwargsConstructorsRaise
+	"tuple(sequence=()) / list(sequence=[]) reject keyword arguments
+	with TypeError instead of an uncatchable _new:kw: MNU."
+
+	self assert: (self phase2 @env1:__getitem__: 'tuple_kw') equals: 'TypeError'.
+	self assert: (self phase2 @env1:__getitem__: 'list_kw') equals: 'TypeError'
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testListExtendProtocol
+	"extend(None) raises TypeError (was #do: MNU); extend(obj) with an
+	__iter__/__next__ pair appends its items."
+
+	self assert: (self phase2 @env1:__getitem__: 'extend_none') equals: 'TypeError'.
+	self assert: (self phase2 @env1:__getitem__: 'extend_iter') equals: '[1, 1, 2]'
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testNegativeStepSliceStores
+	"Negative-step extended-slice assignment and deletion use the
+	correct inclusive bound (hi is exclusive: hi+1 for st<0, previously
+	hi-1 walked one past and raised uncatchable OffsetError)."
+
+	self assert: (self phase2 @env1:__getitem__: 'neg_assign') equals: '[3, 2, 1, 0]'.
+	self assert: (self phase2 @env1:__getitem__: 'neg_del') equals: '[0, 2, 3, 4]'
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testHugeStepSliceClamped
+	"sys.maxsize / 1<<333 slice steps are clamped to the collection
+	size: same visited indices, and no LargeInteger reaches the inlined
+	to:by:do: comparison (env-1 _nonZeroGte: MNU on LargeInteger)."
+
+	self assert: (self phase2 @env1:__getitem__: 'big_step_set') equals: '[0, 0, 2, 3, 4]'.
+	self assert: (self phase2 @env1:__getitem__: 'big_step_del') equals: '[0, 1, 2, 3, 4, 5, 6, 7, 8]'
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testEvilIterableSliceAssignRaises
+	"gh-120384: an iterable that mutates the target list during
+	iteration makes extended-slice assignment raise ValueError (indices
+	are computed AFTER materializing the values)."
+
+	self assert: (self phase2 @env1:__getitem__: 'evil') equals: 'ValueError'
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testReprCycleGuards
+	"Self-referential containers repr with CPython's cycle markers
+	instead of recursing to AlmostOutOfStack."
+
+	self assert: (self phase2 @env1:__getitem__: 'list_cycle') equals: '[0, 1, [...]]'.
+	self assert: (self phase2 @env1:__getitem__: 'dict_cycle') equals: '{''k'': {...}}'
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testReprDepthRaisesRecursionError
+	"2000-deep nesting raises catchable RecursionError before the gem
+	stack overflows (list_tests test_repr_deep uses 200k)."
+
+	self assert: (self phase2 @env1:__getitem__: 'deep') equals: 'RecursionError'
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testSequenceRepeatMemoryGuard
+	"[0] * 2**62 and *= raise MemoryError instead of exhausting the
+	session's temporary object memory."
+
+	self assert: (self phase2 @env1:__getitem__: 'mul_mem') equals: 'MemoryError'.
+	self assert: (self phase2 @env1:__getitem__: 'imul_mem') equals: 'MemoryError'
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testIteratorReprPrintable
+	"repr(iter(t)) works -- iterator __repr__ fed a raw SmallInteger
+	identityHash to nextPutAll: before (uncatchable #do: MNU inside
+	pickle.dumps of an iterator)."
+
+	self assert: (self phase2 @env1:__getitem__: 'iter_repr') equals: true
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testDictUpdateProtocol
+	"dict.update: None/int/[object()] raise TypeError (was #do: MNU);
+	pair-lists and keys/__getitem__ mappings merge."
+
+	self assert: (self phase2 @env1:__getitem__: 'upd_none') equals: 'TypeError'.
+	self assert: (self phase2 @env1:__getitem__: 'upd_int') equals: 'TypeError'.
+	self assert: (self phase2 @env1:__getitem__: 'upd_obj') equals: 'TypeError'.
+	self assert: (self phase2 @env1:__getitem__: 'upd') equals: true
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testReversedDict
+	"reversed(d) yields keys via dict>>__reversed__ instead of an
+	uncatchable reverseDo: MNU."
+
+	self assert: (self phase2 @env1:__getitem__: 'rev_dict') equals: '[''p'', ''q'']'
+%
+
+category: 'Grail-Tests - enum functional API'
+method: DunderNewTestCase
+testEnumFunctionalAPI
+	"Enum('Name', names, **kw) builds a runtime enum class: string
+	names (auto 1..n values), start=, (name, value) pairs, value/name
+	lookup, iteration/len, empty base shape, and a real Flag class."
+
+	| r |
+	r := self fixture @env1:ENUM_FUNC_RESULT.
+	self assert: (r @env1:__getitem__: 'names') equals: '[''who'', ''what'', ''when'']'.
+	self assert: (r @env1:__getitem__: 'values') equals: '[1, 2, 3]'.
+	self assert: (r @env1:__getitem__: 'lookup') equals: true.
+	self assert: (r @env1:__getitem__: 'getitem') equals: true.
+	self assert: (r @env1:__getitem__: 'len') equals: 3.
+	self assert: (r @env1:__getitem__: 'start') equals: '[8, 9, 10]'.
+	self assert: (r @env1:__getitem__: 'pairs') equals: '[10, 20]'.
+	self assert: (r @env1:__getitem__: 'empty') equals: 0.
+	self assert: (r @env1:__getitem__: 'flag') equals: 'R'
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testSingleLineTrySuites
+	"``try: stmt'' with except/else/finally continuations on their own
+	single-line suites parses (the trailing NEWLINE of a single-line
+	suite hid the continuation keyword; test_bytes line 2409)."
+
+	self assert: (self eval: 'def f(a):
+    try: a.append(1)
+    except ValueError: pass
+    return a
+
+def g():
+    try: (0)[1]
+    except TypeError: return "caught"
+    else: return "no"
+
+def h():
+    out = []
+    try: out.append("t")
+    finally: out.append("f")
+    return out
+
+(len(f([])), g(), h()[1])
+') @env1:__repr__ equals: '(1, ''caught'', ''f'')'
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+phase2b
+	^ self fixture @env1:PHASE2B_RESULT
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testArrayModuleNoKernelCollision
+	"import array must not shadow kernel Array: the module class is
+	mangled to PyArray (importlib ___asSmalltalkClassName___ probes
+	Globals), and array.array works via the _array alias."
+
+	self assert: (self phase2b @env1:__getitem__: 'array') equals: true.
+	self assert: (self phase2b @env1:__getitem__: 'kernel_intact') equals: true
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testCollectionsCountElements
+	self assert: (self phase2b @env1:__getitem__: 'count_elements') equals: true.
+	self assert: (self phase2b @env1:__getitem__: 'counter') equals: true
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testWithOnNonContextManagerRaises
+	"``with <generator>:'' raises catchable TypeError via
+	object>>__enter__ (was an uncatchable env-1 MNU that walled
+	test_functools)."
+
+	self assert: (self phase2b @env1:__getitem__: 'with_gen') equals: 'TypeError'
+%
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testUncompilableMethodStubbed
+	"A classdef method hitting a codegen gap (generator lambda) no
+	longer aborts the classdef: the class defines, sibling methods
+	work, and CALLING the bad method raises catchable NameError."
+
+	self assert: (self phase2b @env1:__getitem__: 'good_still_works') equals: 42.
+	self assert: (self phase2b @env1:__getitem__: 'bad_raises') equals: 'NameError'
+%

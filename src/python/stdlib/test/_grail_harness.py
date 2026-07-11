@@ -26,3 +26,27 @@ def score(mod):
             len(result.failures),
             len(result.errors),
             len(result.skipped))
+
+
+def cases(mod):
+    # Flattened list of the module's individual TestCase instances, for
+    # per-test bisection from the Smalltalk side (an uncatchable
+    # Smalltalk error escaping one test must not hide the tests after
+    # it, so the loop-with-rescue lives in topaz, not here).
+    suite = unittest.defaultTestLoader.loadTestsFromModule(mod)
+    found = []
+    def _flat(s):
+        for t in s:
+            if isinstance(t, unittest.TestCase):
+                found.append(t)
+            else:
+                _flat(t)
+    _flat(suite)
+    return found
+
+
+def run_one(tc):
+    # Run a single TestCase; returns (failures, errors, skipped) counts.
+    result = unittest.TestResult()
+    tc.run(result)
+    return (len(result.failures), len(result.errors), len(result.skipped))

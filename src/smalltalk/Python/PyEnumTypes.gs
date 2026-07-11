@@ -39,6 +39,17 @@ PythonInstance subclass: 'Enum'
 
 expectvalue /Class
 doit
+Enum subclass: 'Flag'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
 AbstractPyInt subclass: 'IntEnum'
   instVarNames: #()
   classVars: #()
@@ -61,12 +72,12 @@ IntEnum subclass: 'IntFlag'
 
 run
 Enum comment: 'Python enum base — see category comment in PyEnumTypes.gs.'.
-#( #Enum #IntEnum #IntFlag ) do: [:nm | (Python at: nm) category: 'Grail-Modules'].
+#( #Enum #Flag #IntEnum #IntFlag ) do: [:nm | (Python at: nm) category: 'Grail-Modules'].
 %
 
 ! ------------------- Remove existing behavior (env 0 + env 1)
 run
-#( #Enum #IntEnum #IntFlag ) do: [:nm | | c |
+#( #Enum #Flag #IntEnum #IntFlag ) do: [:nm | | c |
   c := Python at: nm.
   c removeAllMethods. c class removeAllMethods.
   c removeAllMethods: 1. c class removeAllMethods: 1].
@@ -143,7 +154,7 @@ ___grailLookupValue: cls value: aValue
 	(rec @env0:notNil and: [(rec @env0:at: 1) @env0:includesKey: aValue])
 		ifTrue: [^ (rec @env0:at: 1) @env0:at: aValue].
 	(aValue @env0:isKindOf: cls) ifTrue: [^ aValue].
-	^ ValueError ___signal___: aValue printString @env0:, ' is not a valid ' @env0:, cls name @env0:asString
+	^ ValueError ___signal___: aValue @env0:printString @env0:, ' is not a valid ' @env0:, cls @env0:name @env0:asString
 %
 
 category: 'Grail-Enum Metaclass'
@@ -155,7 +166,7 @@ ___grailLookupName: cls name: aName
 	rec := self ___grailRecordFor: cls.
 	(rec @env0:notNil and: [(rec @env0:at: 2) @env0:includesKey: aName])
 		ifTrue: [^ (rec @env0:at: 2) @env0:at: aName].
-	^ KeyError ___signal___: aName printString
+	^ KeyError ___signal___: aName @env0:printString
 %
 
 category: 'Grail-Enum Metaclass'
@@ -167,6 +178,83 @@ ___grailMembers: cls
 	rec := self ___grailRecordFor: cls.
 	rec @env0:isNil ifTrue: [^ OrderedCollection @env0:new].
 	^ rec @env0:at: 3
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailFunctional: cls positional: positional keywords: keywords
+	"Enum('Name', names, *, module=, qualname=, type=, start=1) -- the
+	FUNCTIONAL API: build a new enum class at runtime.  ``names'' may be
+	a whitespace/comma-separated string, a sequence of names, a sequence
+	of (name, value) pairs, or a mapping.  module / qualname / type /
+	boundary are accepted and ignored (Grail classes don't carry them);
+	omitting names yields an empty enum used as a base class
+	(test_enum's ``Enum('enum_type', type=int)'' shape).  Member reads
+	(Question.who) resolve through a compiled class-side accessor that
+	delegates to the metaclass __getitem__, which both the Enum and
+	IntEnum metaclass chains implement."
+
+	| className names start pairs newCls byValue byName members |
+	className := (positional @env0:at: 1) @env0:asSymbol.
+	names := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2] ifFalse: [nil].
+	start := (keywords @env0:~~ nil and: [keywords @env0:includesKey: 'start'])
+		ifTrue: [keywords @env0:at: 'start'] ifFalse: [1].
+	pairs := OrderedCollection @env0:new.
+	names @env0:isNil ifFalse: [
+		(names @env0:isKindOf: CharacterCollection)
+			ifTrue: [
+				| cleaned tokens idx |
+				cleaned := names @env0:copyReplaceAll: ',' with: ' '.
+				tokens := cleaned @env0:asString @env0:subStrings.
+				idx := 0.
+				tokens @env0:do: [:tok |
+					idx := idx @env0:+ 1.
+					pairs @env0:add: (Array @env0:with: tok @env0:asString
+						with: start @env0:+ idx @env0:- 1)]]
+			ifFalse: [(names @env0:isKindOf: KeyValueDictionary)
+				ifTrue: [
+					names @env0:keysAndValuesDo: [:k :v |
+						pairs @env0:add: (Array @env0:with: k @env0:asString with: v)]]
+				ifFalse: [
+					| idx |
+					idx := 0.
+					names @env0:do: [:item |
+						idx := idx @env0:+ 1.
+						(item @env0:isKindOf: CharacterCollection)
+							ifTrue: [pairs @env0:add: (Array @env0:with: item @env0:asString
+								with: start @env0:+ idx @env0:- 1)]
+							ifFalse: [pairs @env0:add: (Array @env0:with: (item @env0:at: 1) @env0:asString
+								with: (item @env0:at: 2))]]]]].
+	newCls := cls ___subclass___: className instVarNames: #() classInstVarNames: #().
+	EnumRegistry @env0:isNil ifTrue: [EnumRegistry := IdentityKeyValueDictionary @env0:new].
+	byValue := KeyValueDictionary @env0:new.
+	byName := KeyValueDictionary @env0:new.
+	members := OrderedCollection @env0:new.
+	pairs @env0:do: [:pair |
+		| nameStr rawValue member |
+		nameStr := pair @env0:at: 1.
+		rawValue := pair @env0:at: 2.
+		((nameStr @env0:size @env0:> 0) and: [(nameStr @env0:at: 1) @env0:= $_]) ifFalse: [
+			(byValue @env0:includesKey: rawValue)
+				ifTrue: [member := byValue @env0:at: rawValue]
+				ifFalse: [
+					member := newCls @env0:basicNew.
+					member @env0:dynamicInstVarAt: #value put: rawValue.
+					member @env0:dynamicInstVarAt: #name put: nameStr.
+					byValue @env0:at: rawValue put: member.
+					members @env0:add: member].
+			byName @env0:at: nameStr put: member.
+			"Category MUST be Grail-Class Attrs: the class-receiver branch of
+		Object's attribute load performs only setter-paired accessors or
+		that category, and wraps everything else as a BoundMethod -- any
+		other category makes Question.who a callable, not the member."
+		(newCls @env0:class) ___compileMethod:
+				(nameStr @env0:, '
+	^ self __getitem__: ''' @env0:, nameStr @env0:, '''')
+				category: 'Grail-Class Attrs']].
+	EnumRegistry @env0:at: newCls put: (Array @env0:with: byValue with: byName with: members).
+	^ newCls
 %
 
 ! ------------------- Enum class: metaclass entry points
@@ -186,7 +274,11 @@ __new__: aValue
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
 value: positional value: keywords
-	"Generic class-call path: Color(v) value-lookup."
+	"Generic class-call path: Color(v) value-lookup, or the functional
+	API -- Enum('Name', names, **kw) -- when extra arguments arrive."
+	((positional @env0:size @env0:>= 2)
+		or: [keywords @env0:~~ nil and: [keywords @env0:size @env0:> 0]])
+		ifTrue: [^ Enum ___grailFunctional: self positional: positional keywords: keywords].
 	^ Enum ___grailLookupValue: self value: (positional @env0:at: 1)
 %
 
@@ -225,6 +317,9 @@ __new__: aValue
 category: 'Grail-Enum Metaclass'
 classmethod: IntEnum
 value: positional value: keywords
+	((positional @env0:size @env0:>= 2)
+		or: [keywords @env0:~~ nil and: [keywords @env0:size @env0:> 0]])
+		ifTrue: [^ Enum ___grailFunctional: self positional: positional keywords: keywords].
 	^ Enum ___grailLookupValue: self value: (positional @env0:at: 1)
 %
 

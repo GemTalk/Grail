@@ -239,14 +239,34 @@ ___compileMethod: aSource category: aCategory
 	] @env0:on: CompileWarning do: [:ex | ex @env0:resume]]
 		@env0:on: CompileError
 		do: [:ex |
-			"A RUNTIME classdef whose method can't compile (e.g. it
-			references a method-local sibling temp that string-compiled
-			methods can't close over -- test_fractions' CustomInt) must
-			raise a CATCHABLE Python error, not abort the module/test
-			run.  NameError approximates CPython's runtime lookup
-			failure for the common undefined-symbol case."
-			(System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #NameError)
-				@env1:___signal___: ('method compile failed: '
-					@env0:, (ex @env0:messageText @env0:ifNil: ['(no details)']))].
+			"A RUNTIME classdef whose method can't compile (a Grail
+			codegen gap, e.g. yield-in-lambda) must not abort the whole
+			classdef -- that turned ONE bad method into a module-wide
+			IMPORTERROR (test_collections' test_Generator).  Install a
+			same-selector STUB that raises a catchable NameError when
+			the method is actually CALLED; if even the stub won't
+			compile, fall back to raising the NameError here (still
+			catchable -- the pre-stub behavior)."
+			| lfIdx endIdx pattern stubSrc |
+			lfIdx := aSource @env0:indexOf: Character @env0:lf.
+			endIdx := lfIdx @env0:= 0
+				ifTrue: [aSource @env0:size]
+				ifFalse: [lfIdx @env0:- 1].
+			pattern := aSource @env0:copyFrom: 1 to: endIdx.
+			stubSrc := pattern @env0:, (Character @env0:lf @env0:asString) @env0:,
+				'	(System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #NameError)
+		@env1:___signal___: ''Grail could not compile this method (codegen gap); see install/import log'''.
+			[[self @env0:compileMethod: stubSrc
+				dictionaries: System @env0:myUserProfile @env0:symbolList @env0:copy
+				category: aCategory
+				environmentId: 1.
+			] @env0:on: CompileWarning do: [:wx | wx @env0:resume]]
+				@env0:on: CompileError
+				do: [:ex2 |
+					(System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #NameError)
+						@env1:___signal___: ('method compile failed ['
+							@env0:, (pattern @env0:copyFrom: 1 to: (pattern @env0:size @env0:min: 80)) @env0:asString
+							@env0:, ']: '
+							@env0:, (ex @env0:messageText @env0:ifNil: ['(no details)']))]].
 	^ self
 %

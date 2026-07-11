@@ -173,6 +173,7 @@ class AsyncIterator(_ABCStub): pass
 class AsyncGenerator(_ABCStub): pass
 class Reversible(_ABCStub): pass
 class ByteString(_ABCStub): pass
+class Buffer(_ABCStub): pass
 class ItemsView(_ABCStub): pass
 class KeysView(_ABCStub): pass
 class ValuesView(_ABCStub): pass
@@ -185,6 +186,6 @@ __all__ = [
     'Mapping', 'MutableMapping', 'Set', 'MutableSet', 'Container',
     'Sized', 'Collection',
     'AsyncIterable', 'AsyncIterator', 'AsyncGenerator',
-    'Reversible', 'ByteString',
+    'Reversible', 'ByteString', 'Buffer',
     'ItemsView', 'KeysView', 'ValuesView', 'MappingView',
 ]

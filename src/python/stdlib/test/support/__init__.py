@@ -79,6 +79,13 @@ skip_if_sanitizer = _PassthroughDecorator()
 skip_if_unlimited_stack_size = _PassthroughDecorator()
 skip_on_s390x = _PassthroughDecorator()
 skip_emscripten_stack_overflow = _PassthroughDecorator()
+skip_wasi_stack_overflow = _PassthroughDecorator()
+
+
+def check_sizeof(test, o, size):
+    # sys.getsizeof has no meaning on GemStone objects
+    raise unittest.SkipTest("sys.getsizeof unavailable under Grail")
+
 skip_if_buildbot = _PassthroughDecorator()
 skip_if_pgo_task = _PassthroughDecorator()
 requires_working_socket = _PassthroughDecorator()

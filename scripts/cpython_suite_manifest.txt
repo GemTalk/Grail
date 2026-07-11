@@ -21,16 +21,17 @@ test.test_datetime
 test.test_re
 test.test_functools
 
-# --- Phase 2 (uncomment as support grows): need sibling mixins / array /
-#     doctest / subprocess, or heavy multiple-inheritance ---
-# test.test_list
-# test.test_tuple
-# test.test_dict
-# test.test_set
-# test.test_bytes
-# test.test_collections
-# test.test_itertools
-# test.test_enum
+# --- Phase 2 (enabled 2026-07-11: MI/C3, closure cells, int subclassing,
+#     unittest subTest/assertWarns, and the catchable-error batches have
+#     landed; sibling mixins vendored) ---
+test.test_list
+test.test_tuple
+test.test_dict
+test.test_set
+test.test_bytes
+test.test_collections
+test.test_itertools
+test.test_enum
 #
 # NOTE: test_json and test_string are PACKAGES (directories) in 3.14, not
 # single modules -- out of scope for the V1 single-module harness.

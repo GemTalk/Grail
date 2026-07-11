@@ -66,6 +66,32 @@ new
 	^ self @env1:new
 %
 
+category: 'Grail-Python protocol'
+method: NoneType
+< other
+	"Smalltalk sort blocks send env-0 #< directly; route to the
+	catchable TypeError instead of an uncatchable MNU."
+	^ self @env1:__lt__: other
+%
+
+category: 'Grail-Python protocol'
+method: NoneType
+<= other
+	^ self @env1:__le__: other
+%
+
+category: 'Grail-Python protocol'
+method: NoneType
+> other
+	^ self @env1:__gt__: other
+%
+
+category: 'Grail-Python protocol'
+method: NoneType
+>= other
+	^ self @env1:__ge__: other
+%
+
 set compile_env: 1
 
 category: 'Grail-Singleton'
@@ -122,6 +148,63 @@ __hash__
 %
 
 category: 'Grail-Special Methods'
+method: NoneType
+< other
+	"Sort blocks send env-1 #< directly (not the dunder)."
+
+	^ self @env1:__lt__: other
+%
+
+category: 'Grail-Python protocol'
+method: NoneType
+<= other
+	^ self @env1:__le__: other
+%
+
+category: 'Grail-Python protocol'
+method: NoneType
+> other
+	^ self @env1:__gt__: other
+%
+
+category: 'Grail-Python protocol'
+method: NoneType
+>= other
+	^ self @env1:__ge__: other
+%
+
+category: 'Grail-Python protocol'
+method: NoneType
+__lt__: other
+	"Ordering None raises catchable TypeError (CPython) -- an env-1
+	MNU killed test_tuple's whole run."
+
+	TypeError ___signal___: ('''<'' not supported between instances of ''NoneType'' and '''
+		@env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
+%
+
+category: 'Grail-Python protocol'
+method: NoneType
+__le__: other
+	TypeError ___signal___: ('''<='' not supported between instances of ''NoneType'' and '''
+		@env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
+%
+
+category: 'Grail-Python protocol'
+method: NoneType
+__gt__: other
+	TypeError ___signal___: ('''>'' not supported between instances of ''NoneType'' and '''
+		@env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
+%
+
+category: 'Grail-Python protocol'
+method: NoneType
+__ge__: other
+	TypeError ___signal___: ('''>='' not supported between instances of ''NoneType'' and '''
+		@env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
+%
+
+category: 'Grail-Python protocol'
 method: NoneType
 __iter__
 	"Iterating None raises catchable TypeError (CPython).  Without a

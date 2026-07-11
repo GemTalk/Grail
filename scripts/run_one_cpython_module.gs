@@ -72,16 +72,41 @@ emit := [:st :tt :ff :ee :ss :dd |
         ifTrue: [ Error signal: 'no file on search path for module ', modName ]
         ifFalse: [ importlib loadModuleFromPath: path name: modName ] ]
     on: AbstractException do: [:ex |
+      "unittest.SkipTest raised at module scope (the CPython idiom for
+       'this whole module needs an unavailable dependency', e.g.
+       import_helper.import_module('_testcapi')) is a SKIP, not an
+       import failure."
+      (ex class name asString = 'SkipTest')
+        ifTrue: [
+          emit valueWithArguments: { 'SKIP'. 0. 0. 0. 0. (ex messageText ifNil: ['']) }.
+          ExitClientError signal: 'module-skipped' status: 0 ].
       emit valueWithArguments: { 'IMPORTERROR'. 0. 0. 0. 0. (ex messageText ifNil: [ex class name]) }.
       ExitClientError signal: 'import-failed' status: 0 ].
 
-  "Layer 1b: discover + run.  Python test failures/errors are counted by
-   the native unittest TestResult inside score()."
-  res := harnessMod @env1:score: mod.
-  tests := res @env1:__getitem__: 0.
-  fails := res @env1:__getitem__: 1.
-  errs  := res @env1:__getitem__: 2.
-  skips := res @env1:__getitem__: 3.
+  "Layer 1b: discover + run PER TEST, each under its own
+   AbstractException rescue.  Running the whole suite in one Python
+   call meant a single uncatchable Smalltalk escape (an MNU, an
+   AlmostOutOfMemory in one memory-bomb test) classified the ENTIRE
+   module STERROR with zero tests scored; per-test rescue counts that
+   one test as an error and keeps scoring the rest."
+  [ | cases n |
+    cases := harnessMod @env1:cases: mod.
+    n := cases @env1:__len__.
+    tests := 0. fails := 0. errs := 0. skips := 0.
+    1 to: n do: [:i | | tc |
+      tc := cases @env1:__getitem__: (i - 1).
+      [ | r |
+        r := harnessMod @env1:run_one: tc.
+        tests := tests + 1.
+        fails := fails + (r @env1:__getitem__: 0).
+        errs := errs + (r @env1:__getitem__: 1).
+        skips := skips + (r @env1:__getitem__: 2).
+      ] on: AbstractException do: [:ex |
+        (ex isKindOf: ExitClientError) ifTrue: [ex pass].
+        tests := tests + 1.
+        errs := errs + 1 ].
+    ].
+  ] value.
 
   status := (errs > 0)
     ifTrue: ['ERROR']

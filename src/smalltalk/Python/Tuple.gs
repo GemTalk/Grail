@@ -194,6 +194,22 @@ __new__: iterable
 	^ self @env0:withAll: items
 %
 
+category: 'Grail-Initialization'
+classmethod: tuple
+_new: positional kw: kwargs
+	"tuple(**kw) / tuple(iterable, extra) -- CPython rejects keyword
+	arguments and >1 positional; raise the catchable TypeError instead
+	of an uncatchable MNU (test_tuple's test_keyword_args)."
+
+	(kwargs @env0:~~ nil and: [kwargs @env0:size @env0:> 0]) ifTrue: [
+		TypeError ___signal___: 'tuple() takes no keyword arguments'].
+	positional @env0:size @env0:> 1 ifTrue: [
+		TypeError ___signal___: 'tuple expected at most 1 argument, got '
+			@env0:, positional @env0:size @env0:printString].
+	positional @env0:size @env0:= 0 ifTrue: [^ self __new__].
+	^ self __new__: (positional @env0:at: 1)
+%
+
 category: 'Grail-Sequence Operations'
 method: tuple
 __add__: other
@@ -329,8 +345,20 @@ __repr__
 	"Return a string representation of the tuple: (item1, item2, ...)
 	Special case: single-element tuples need a trailing comma."
 
-	| stream size |
-	size := self @env0:size.
+	| stream size seen |
+	seen := SessionTemps @env0:current @env0:at: #GrailReprSeen otherwise: nil.
+	seen @env0:isNil ifTrue: [
+		seen := IdentitySet @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailReprSeen put: seen].
+	(seen @env0:includes: self) ifTrue: [^ '(...)'].
+	"seen's size is the current repr nesting depth: deep nesting must raise the catchable
+	RecursionError before the gem's real stack overflows -- threshold 200
+	because a default gem has GEM_MAX_SMALLTALK_STACK_DEPTH 1000 and each
+	repr level costs several frames (list_tests test_repr_deep nests 200k)."
+	seen @env0:size @env0:> 200 ifTrue: [
+		RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object'].
+	seen @env0:add: self.
+	^ [[size := self @env0:size.
 	stream := WriteStream @env0:on: (String ___new___).
 	stream @env0:nextPut: $(.
 
@@ -349,7 +377,13 @@ __repr__
 	].
 
 	stream @env0:nextPut: $).
-	^ stream @env0:contents
+	stream @env0:contents]
+		@env0:on: AlmostOutOfStack do: [:ex |
+			"A default gem's stack (GEM_MAX_SMALLTALK_STACK_DEPTH 1000)
+			overflows before the seen-size guard fires -- convert the
+			resumable notification into CPython's RecursionError."
+			RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object']]
+		@env0:ensure: [seen @env0:remove: self otherwise: nil]
 %
 
 category: 'Grail-Sequence Protocol'

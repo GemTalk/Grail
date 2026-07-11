@@ -2714,7 +2714,7 @@ parseTry
 	finalbody := Array new.
 
 	"Parse except clauses"
-	[self atKeyword: 'except'] whileTrue: [
+	[self atKeywordSkippingNewlines: 'except'] whileTrue: [
 		| exceptTok excType excName exceptBody |
 		exceptTok := self advance. "consume 'except'"
 		excType := nil.
@@ -2739,13 +2739,13 @@ parseTry
 	].
 
 	"Parse else clause"
-	(self matchKeyword: 'else') ifTrue: [
+	((self atKeywordSkippingNewlines: 'else') and: [self matchKeyword: 'else']) ifTrue: [
 		self expect: #OP value: ':'.
 		orelse := self parseBlock.
 	].
 
 	"Parse finally clause"
-	(self matchKeyword: 'finally') ifTrue: [
+	((self atKeywordSkippingNewlines: 'finally') and: [self matchKeyword: 'finally']) ifTrue: [
 		self expect: #OP value: ':'.
 		finalbody := self parseBlock.
 		"Flag the enclosing scope as return-blocking — the finally
@@ -3051,6 +3051,25 @@ skipNewlines
 	[self peek notNil and: [self peek isNewline]] whileTrue: [
 		self advance.
 	].
+%
+
+category: 'Grail-parsing - helpers'
+method: PythonParser
+atKeywordSkippingNewlines: aString
+	"True when the next non-newline token is the given keyword -- AND
+	consume the intervening newlines in that case; otherwise leave the
+	stream position untouched.  Needed for compound-statement
+	continuations after a SINGLE-LINE suite: ``try: a.clear()'' leaves
+	the trailing NEWLINE unconsumed, so a bare atKeyword: 'except'
+	never matched and the clause fell out to statement level
+	(test_bytes line 2409)."
+
+	| saved |
+	saved := position.
+	self skipNewlines.
+	(self atKeyword: aString) ifTrue: [^ true].
+	position := saved.
+	^ false
 %
 
 category: 'Grail-initialization'

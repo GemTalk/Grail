@@ -1252,6 +1252,26 @@ __format__: formatSpec
 		'unsupported format string passed to ', self __class__ __name__, '.__format__'
 %
 
+category: 'Grail-Context Manager'
+method: object
+__enter__
+	"Default: not a context manager.  ``with obj:`` on an object with
+	no __enter__ must raise the catchable TypeError (CPython message
+	shape), not an uncatchable env-1 MNU -- test_functools hits this
+	with a raw generator in a with-statement (a dropped @contextmanager
+	class-body decorator)."
+
+	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
+		@env0:, ''' object does not support the context manager protocol')
+%
+
+category: 'Grail-Context Manager'
+method: object
+__exit__: excType _: excValue _: excTb
+	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
+		@env0:, ''' object does not support the context manager protocol')
+%
+
 category: 'Grail-Comparison'
 method: object
 __ge__: other
