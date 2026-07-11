@@ -379,13 +379,17 @@ r') @env1:__repr__ equals: '[''zde'', ''zde'', ''zde'', ''type-error'']'
 category: 'Grail-Tests - codegen'
 method: DunderNewTestCase
 testRuntimeClassCompileFailureIsCatchable
-	"A RUNTIME classdef whose method cannot compile (references a
-	method-local sibling temp that string-compiled methods cannot
-	close over) raises catchable NameError instead of aborting the
-	module -- keeps whole CPython modules scoreable while the
-	closure-cell gap remains open."
+	"A RUNTIME method-compile failure raises catchable NameError
+	instead of aborting the module (___compileMethod:'s CompileError
+	resignal).  The old fixture -- a class method referencing a
+	method-local sibling -- now COMPILES thanks to closure cells, so
+	the guard is probed directly with unparseable source."
 
-	self assert: (self fixture @env1:COMPILE_FAIL_RESULT) equals: 'name-error'
+	| cls |
+	cls := PythonInstance @env1:___subclass___: #'___CompileFailProbe___'
+		instVarNames: #() classInstVarNames: #(#'__module__' #'dynInstVars').
+	self should: [cls @env1:___compileMethod: '][ bogus' category: 'Grail-Test']
+		raise: NameError
 %
 
 category: 'Grail-Tests - heapq'
@@ -472,4 +476,21 @@ testSortedMinMaxExplicitKeyNone
 
 	self assert: (self eval: '[sorted([3, 1, 2], key=None), min([3, 1, 2], key=None), max([3, 1, 2], key=None)]
 ') @env1:__repr__ equals: '[[1, 2, 3], 1, 3]'
+%
+
+category: 'Grail-Tests - closure cells'
+method: DunderNewTestCase
+testClassMethodClosureCells
+	"Method-local classes whose METHOD bodies reference enclosing-
+	function locals (their own name, sibling locals): string-compiled
+	methods have no home context, so the classdef emission stores each
+	captured VALUE on the class's per-class dynamic attrs and the
+	method reads it back (object>>___classCell___:).  Capture is
+	by-value at definition (documented deviation from CPython's
+	by-reference cells).  Also pins: int subclasses register with the
+	numbers tower, and the @property pair-read applies to
+	AbstractPyInt-rooted classes (test_fractions' CustomInt)."
+
+	self assert: (self fixture @env1:CLOSURE_CELL_RESULT) @env1:__repr__
+		equals: '[''Local'', [1, 2, 3], ''13/5'', True]'
 %

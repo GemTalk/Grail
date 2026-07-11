@@ -396,6 +396,27 @@ printSmalltalkOn: aStream
 	branches below so `del` truly unbinds the name (a probe of an
 	absent dynamic instVar raises NameError, the Python-correct
 	exception for module-scope ``del x; x'')."
+	"CLASS-METHOD CLOSURE CELL: a load of an enclosing-function local
+	from inside a class METHOD body.  The method string-compiles onto
+	the class with no home context, so the enclosing temp is
+	unreachable (``class CustomInt(int)`` referencing its own name in
+	a method, test_functools' sibling fixtures).  The classdef
+	emission stores each captured VALUE on the class's per-class
+	dynamic attrs at DEFINITION time; read it back through the
+	receiver's class chain.  Attr-VALUE expressions
+	(inClassBodyValueEmit) emit inline in the enclosing method where
+	the temps ARE reachable -- excluded."
+	((ctx isKindOf: LoadAst)
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst inClassBodyValueEmit ~~ true
+		and: [self ___enclosingFunctionLocalBeyondClass___: id]]]) ifTrue: [
+		CallAst addCapturedClassName: id.
+		aStream
+			nextPutAll: '(self @env1:___classCell___: #''___cell_';
+			nextPutAll: id;
+			nextPutAll: '___'')'.
+		^self
+	].
 	((ctx isKindOf: LoadAst) and: [self ___pythonLocalInEnclosingFunctions___: id]) ifTrue: [
 		aStream
 			nextPutAll: '(UnboundLocalError ___checkLocal: ';
@@ -594,6 +615,29 @@ ___boundInNestedFunction___: aSymbol
 		].
 		node := node parent.
 	].
+	^ false
+%
+
+category: 'other'
+method: NameAst
+___enclosingFunctionLocalBeyondClass___: aSymbol
+	"True iff aSymbol is a python-local of an enclosing function BEYOND
+	the nearest enclosing ClassDefAst -- i.e. this NameAst sits in a
+	class-method body and the name belongs to the method's ENCLOSING
+	def, not to the method itself (or a def nested in it).  The first
+	binding function wins: bound before crossing a classdef -> a real
+	temp of the compiled method -> false."
+
+	| node passedClass |
+	node := parent.
+	passedClass := false.
+	[node notNil] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [passedClass := true].
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [
+				(self ___functionBindsPythonLocal___: node named: aSymbol)
+					ifTrue: [^ passedClass]].
+		node := node parent].
 	^ false
 %
 

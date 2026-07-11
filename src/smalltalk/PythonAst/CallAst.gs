@@ -17,6 +17,7 @@ ExpressionAst subclass: 'CallAst'
                     'selfParameterRebound'
                     'returnEmitMode' 'inClassBodyValueEmit'
                     'classBodyBoundNames' 'classNestedClassNames'
+                    'classCapturedNames'
                     'functionBeingCompiled')
   poolDictionaries: #()
   inDictionary: PythonAst
@@ -1263,6 +1264,30 @@ category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classBodyBoundNames: aSetOrNil
 	classBodyBoundNames := aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classCapturedNames
+	"Enclosing-function locals referenced from the CLASS-METHOD bodies
+	being generated (closure cells).  NameAst adds names as it emits
+	___classCell___ reads; ClassDefAst emits the definition-time
+	stores.  nil outside a class compile."
+
+	^ classCapturedNames
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classCapturedNames: aSetOrNil
+	classCapturedNames := aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+addCapturedClassName: aSymbol
+	classCapturedNames == nil ifTrue: [classCapturedNames := IdentitySet new].
+	classCapturedNames add: aSymbol asSymbol
 %
 
 category: 'Grail-Class Compile Context'

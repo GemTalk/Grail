@@ -80,7 +80,8 @@ printSmalltalkRuntimeOn: aStream
 	  savedClass savedFuncNames savedVarargsFuncNames
 	  savedSelfParam savedClassAttrNames settersByName
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames
-	  savedInBodyEmit savedBoundNames savedNestedNames |
+	  savedInBodyEmit savedBoundNames savedNestedNames
+	  savedCapturedNames |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -146,6 +147,8 @@ printSmalltalkRuntimeOn: aStream
 	CallAst selfParameterName: selfParam.
 	CallAst classSlotNames: slotNameSet.
 
+	savedCapturedNames := CallAst classCapturedNames.
+	CallAst classCapturedNames: IdentitySet new.
 	methodSources := OrderedCollection new.
 	classMethodSources := OrderedCollection new.
 	staticMethodSources := OrderedCollection new.
@@ -864,6 +867,24 @@ printSmalltalkRuntimeOn: aStream
 		deco printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: ' value: { '; nextPutAll: name; nextPutAll: ' } value: nil.'; lf.
 	].
+	"CLOSURE CELLS: store every enclosing-function local the class's
+	method bodies referenced (NameAst emitted ___classCell___ reads for
+	them) onto the class's per-class dynamic attrs.  Emitted AFTER the
+	decorator loop so the self-name cell holds the FINAL class object.
+	Capture is by VALUE at definition time (see object>>___classCell___:)."
+	(CallAst classCapturedNames notNil and: [CallAst classCapturedNames notEmpty])
+		ifTrue: [
+			CallAst classCapturedNames do: [:cap |
+				aStream
+					nextPutAll: name;
+					nextPutAll: ' @env1:___pyAttrStore___: #''___cell_';
+					nextPutAll: cap asString;
+					nextPutAll: '___'' put: ';
+					nextPutAll: cap asString;
+					nextPut: $.;
+					lf]].
+	CallAst classCapturedNames: savedCapturedNames.
+
 	"Phase A: close the wrapping block (opened at the top of this
 	method) and store the final class object into the module
 	instance's dynamic-instVar storage."

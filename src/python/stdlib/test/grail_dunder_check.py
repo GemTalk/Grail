@@ -153,22 +153,10 @@ def _legacy_iter_results():
 LEGACY_ITER_RESULT = _legacy_iter_results()
 
 
-def _compile_fail_result():
-    try:
-        def trapped():
-            class Local:
-                def m(self):
-                    return Local
-            return Local
-        trapped()().m() if False else None
-        cls = trapped()
-        cls().m()
-        return "no-error"
-    except NameError:
-        return "name-error"
-
-
-COMPILE_FAIL_RESULT = _compile_fail_result()
+# (The old _compile_fail_result fixture -- a class method referencing a
+# method-local sibling -- now COMPILES thanks to closure cells; the
+# catchable-compile-failure guard is probed directly from the SUnit
+# test instead.)
 
 
 def _protocol_fallback_results():
@@ -191,3 +179,35 @@ def _protocol_fallback_results():
 
 
 PROTOCOL_FALLBACK_RESULT = _protocol_fallback_results()
+
+
+def _closure_cell_results():
+    class Local:
+        def m(self):
+            return Local
+
+    data = [3, 1, 2]
+
+    class Sorter:
+        def go(self):
+            return sorted(data)
+
+    class CustomInt(int):
+        @property
+        def numerator(self):
+            return self
+
+        @property
+        def denominator(self):
+            return CustomInt(1)
+
+        def __mul__(self, other):
+            return CustomInt(int(self) * int(other))
+
+    from fractions import Fraction as F
+    f = F(CustomInt(13), CustomInt(5))
+    return [Local().m().__name__, Sorter().go(), str(f),
+            isinstance(CustomInt(2), __import__("numbers").Rational)]
+
+
+CLOSURE_CELL_RESULT = _closure_cell_results()

@@ -517,6 +517,28 @@ ___dynamicClassAttr___: aSym
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___classCell___: aSym
+	"Closure-cell read for class-method bodies: the value of an
+	enclosing-function local captured at class-DEFINITION time into
+	the class's per-class dynamic attrs (see NameAst's class-method
+	closure-cell branch).  Works for instance methods (receiver is the
+	instance) and class-side receivers alike; the chain walk lets
+	subclasses inherit the cells.  An absent cell is a NameError --
+	capture is by VALUE at definition, so a sibling bound after the
+	classdef is not visible (documented deviation from CPython's
+	by-reference cells)."
+
+	| v |
+	v := self @env1:___dynamicClassAttr___: aSym.
+	v @env0:== nil ifTrue: [
+		NameError ___signal___: ('free variable '''
+			@env0:, (aSym @env0:asString @env0:copyFrom: 9 to: aSym @env0:asString @env0:size - 3)
+			@env0:, ''' referenced before assignment in enclosing scope')].
+	^ v
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___classAttrDunder___: baseSym
 	"A callable stored as a CLASS ATTRIBUTE under a dunder name --
 	fractions' ``__add__, __radd__ = _operator_fallbacks(_add,
@@ -881,7 +903,12 @@ ___pyAttrLoad___: aSym
 	chain.  If yes, the pair is a value-accessor (synthesized getter
 	+ setter).  If no, ``attr:`` is just a method that happens to take
 	one arg — fall through to the ``BoundMethod`` wrap below."
-	isGenerated := self @env0:isKindOf: PythonInstance.
+	"AbstractPyInt-rooted classes (int subclasses routed by
+	___subclass___) get the same ClassDefAst-synthesized getter/setter
+	pairs as PythonInstance ones -- the @property pair-read applies
+	equally (CustomInt's ``numerator`` property in test_fractions)."
+	isGenerated := (self @env0:isKindOf: PythonInstance)
+		or: [self @env0:isKindOf: AbstractPyInt].
 	"Walk the full class chain for both the unary getter and the
 	1-arg setter — TestResponse(Response) inherits ``status'' /
 	``status:'' through two parent classes; checking only the

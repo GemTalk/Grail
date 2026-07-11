@@ -454,6 +454,11 @@ registerBuiltinTypes
 	numbers_Integral register: Integer.
 	numbers_Integral register: SmallInteger.
 	numbers_Integral register: LargeInteger.
+	"int SUBCLASSES route their storage base to AbstractPyInt
+	(Class>>___subclass___) -- they are ints for the tower too
+	(fractions.Fraction(CustomInt(13), CustomInt(5)) checks
+	isinstance(_, numbers.Rational))."
+	numbers_Integral register: AbstractPyInt.
 
 	"Register bool (Boolean) with Integral (bool is subclass of int in Python)"
 	numbers_Integral register: Boolean.
