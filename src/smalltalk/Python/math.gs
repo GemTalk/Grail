@@ -112,13 +112,21 @@ tan: x
 category: 'Grail-Trigonometric Functions'
 method: math
 asin: x
-	^ (self @env1:___real___: x) @env0:arcSin
+	| f |
+	f := self @env1:___real___: x.
+	(f @env0:< -1.0 or: [f @env0:> 1.0]) ifTrue: [
+		ValueError ___signal___: 'math domain error'].
+	^ f @env0:arcSin
 %
 
 category: 'Grail-Trigonometric Functions'
 method: math
 acos: x
-	^ (self @env1:___real___: x) @env0:arcCos
+	| f |
+	f := self @env1:___real___: x.
+	(f @env0:< -1.0 or: [f @env0:> 1.0]) ifTrue: [
+		ValueError ___signal___: 'math domain error'].
+	^ f @env0:arcCos
 %
 
 category: 'Grail-Trigonometric Functions'
@@ -164,13 +172,21 @@ asinh: x
 category: 'Grail-Hyperbolic Functions'
 method: math
 acosh: x
-	^ (self @env1:___real___: x) @env0:arcCosh
+	| f |
+	f := self @env1:___real___: x.
+	f @env0:< 1.0 ifTrue: [
+		ValueError ___signal___: 'math domain error'].
+	^ f @env0:arcCosh
 %
 
 category: 'Grail-Hyperbolic Functions'
 method: math
 atanh: x
-	^ (self @env1:___real___: x) @env0:arcTanh
+	| f |
+	f := self @env1:___real___: x.
+	(f @env0:<= -1.0 or: [f @env0:>= 1.0]) ifTrue: [
+		ValueError ___signal___: 'math domain error'].
+	^ f @env0:arcTanh
 %
 
 ! ===============================================================================
@@ -193,14 +209,24 @@ log: x
 category: 'Grail-Exponential and Logarithmic'
 method: math
 log: x _: base
-	"math.log(x, base) — logarithm of x to the given base."
-	^ (x @env0:ln) @env0:/ (base @env0:ln)
+	"math.log(x, base) — logarithm of x to the given base.  Domain:
+	x <= 0 raises CPython's ValueError."
+
+	| f |
+	f := self @env1:___real___: x.
+	f @env0:<= 0.0 ifTrue: [
+		ValueError ___signal___: 'math domain error'].
+	^ (f @env0:ln) @env0:/ ((self @env1:___real___: base) @env0:ln)
 %
 
 category: 'Grail-Exponential and Logarithmic'
 method: math
 log10: x
-	^ (self @env1:___real___: x) @env0:log10
+	| f |
+	f := self @env1:___real___: x.
+	f @env0:<= 0.0 ifTrue: [
+		ValueError ___signal___: 'math domain error'].
+	^ f @env0:log10
 %
 
 category: 'Grail-Exponential and Logarithmic'
@@ -214,7 +240,11 @@ log2: x
 category: 'Grail-Exponential and Logarithmic'
 method: math
 sqrt: x
-	^ (self @env1:___real___: x) @env0:sqrt
+	| f |
+	f := self @env1:___real___: x.
+	f @env0:< 0.0 ifTrue: [
+		ValueError ___signal___: 'math domain error'].
+	^ f @env0:sqrt
 %
 
 category: 'Grail-Exponential and Logarithmic'

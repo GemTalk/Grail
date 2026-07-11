@@ -494,3 +494,24 @@ testClassMethodClosureCells
 	self assert: (self fixture @env1:CLOSURE_CELL_RESULT) @env1:__repr__
 		equals: '[''Local'', [1, 2, 3], ''13/5'', True]'
 %
+
+category: 'Grail-Tests - math'
+method: DunderNewTestCase
+testMathDomainErrors
+	"sqrt/acos/asin/acosh/atanh/log/log10 raise CPython's
+	ValueError('math domain error') outside their domains instead of
+	kernel numeric errors or NaNs."
+
+	self assert: (self eval: 'import math
+r = []
+for thunk in [lambda: math.sqrt(-1), lambda: math.acos(2), lambda: math.asin(-2),
+              lambda: math.acosh(0.5), lambda: math.atanh(1), lambda: math.log(0),
+              lambda: math.log10(-3)]:
+    try:
+        thunk()
+        r.append("no-error")
+    except ValueError:
+        r.append("ve")
+r + [math.sqrt(4), math.log(math.e)]
+') @env1:__repr__ equals: '[''ve'', ''ve'', ''ve'', ''ve'', ''ve'', ''ve'', ''ve'', 2.0, 1.0]'
+%
