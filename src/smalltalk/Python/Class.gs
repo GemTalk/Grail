@@ -72,6 +72,19 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	so the generated code reduces to a single send."
 
 	| filteredIvars filteredClassIvars |
+	"``class MyInt(int)``: Integer is sealed AND its instances are
+	immediate/byte-format, so no subclass can share its storage.
+	Substitute AbstractPyInt -- the Number-sibling whose _generality
+	coercion strips the wrapper in mixed arithmetic (exactly CPython's
+	int-subclass operator semantics) and whose value slot carries the
+	real Integer.  isinstance/issubclass against int recognize the
+	substitute (Int.gs __instancecheck__, builtins issubclass)."
+	((self @env0:== Integer)
+		or: [self @env0:== SmallInteger or: [self @env0:== LargeInteger]]) ifTrue: [
+		^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #AbstractPyInt)
+			@env1:___subclass___: aSymbol
+			instVarNames: ivarNames
+			classInstVarNames: classIvarNames].
 	filteredIvars := ivarNames @env0:reject: [:n |
 		self @env0:allInstVarNames @env0:includes: n].
 	filteredClassIvars := classIvarNames @env0:reject: [:n |
@@ -219,10 +232,21 @@ ___compileMethod: aSource category: aCategory
 	importlib globals exist), so the bare ``Python at: #importlib''
 	would fail to compile here.  The user-profile symbol list is the
 	same value importlib's helper would return."
-	[self @env0:compileMethod: aSource
+	[[self @env0:compileMethod: aSource
 		dictionaries: System @env0:myUserProfile @env0:symbolList @env0:copy
 		category: aCategory
 		environmentId: 1.
-	] @env0:on: CompileWarning do: [:ex | ex @env0:resume].
+	] @env0:on: CompileWarning do: [:ex | ex @env0:resume]]
+		@env0:on: CompileError
+		do: [:ex |
+			"A RUNTIME classdef whose method can't compile (e.g. it
+			references a method-local sibling temp that string-compiled
+			methods can't close over -- test_fractions' CustomInt) must
+			raise a CATCHABLE Python error, not abort the module/test
+			run.  NameError approximates CPython's runtime lookup
+			failure for the common undefined-symbol case."
+			(System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #NameError)
+				@env1:___signal___: ('method compile failed: '
+					@env0:, (ex @env0:messageText @env0:ifNil: ['(no details)']))].
 	^ self
 %

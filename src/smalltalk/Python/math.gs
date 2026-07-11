@@ -299,6 +299,35 @@ isnan: x
 	^ (x @env0:asFloat) @env0:_isNaN
 %
 
+category: 'Grail-Math Functions'
+method: math
+_isclose: positional kw: kwargs
+	"math.isclose(a, b, rel_tol=1e-09, abs_tol=0.0) -- PEP 485.
+	test_math imports it at module scope."
+
+	| a b relTol absTol diff |
+	a := (positional @env0:at: 1) @env0:asFloat.
+	b := (positional @env0:at: 2) @env0:asFloat.
+	relTol := (positional @env0:size @env0:>= 3)
+		ifTrue: [positional @env0:at: 3]
+		ifFalse: [(kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'rel_tol'])
+			ifTrue: [kwargs @env0:at: 'rel_tol'] ifFalse: [1e-09]].
+	absTol := (positional @env0:size @env0:>= 4)
+		ifTrue: [positional @env0:at: 4]
+		ifFalse: [(kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'abs_tol'])
+			ifTrue: [kwargs @env0:at: 'abs_tol'] ifFalse: [0.0]].
+	(relTol @env0:< 0 or: [absTol @env0:< 0]) ifTrue: [
+		ValueError ___signal___: 'tolerances must be non-negative'].
+	(a @env0:= b) ifTrue: [^ true].
+	((a @env0:= PlusInfinity or: [a @env0:= MinusInfinity])
+		or: [b @env0:= PlusInfinity or: [b @env0:= MinusInfinity]])
+		ifTrue: [^ false].
+	diff := (b @env0:- a) @env0:abs.
+	^ (diff @env0:<= (relTol @env0:* b @env0:abs) @env0:abs)
+		or: [(diff @env0:<= (relTol @env0:* a @env0:abs) @env0:abs)
+		or: [diff @env0:<= absTol]]
+%
+
 ! ===============================================================================
 ! Fast-path callables — angle conversion
 ! ===============================================================================

@@ -47,6 +47,76 @@ removeallclassmethods PythonInstance
 
 set compile_env: 0
 
+category: 'Grail-Smalltalk Bridge'
+method: PythonInstance
+asFloat
+	"Kernel-numeric bridge: GemStone code (math shims, coercion
+	fallbacks) sends #asFloat in BOTH environments.  Forward to the
+	Python __float__ protocol when the class provides it (vendored
+	decimal.Decimal, fractions.Fraction) instead of an uncatchable
+	MNU.  Compiled twice -- once per environment (see the env-1 copy
+	after the marker below)."
+
+	((self @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) @env0:~~ nil)
+		ifTrue: [^ self perform: #'__float__' env: 1].
+	^ super doesNotUnderstand: #asFloat args: #() envId: 0
+%
+
+set compile_env: 1
+
+category: 'Grail-Python Protocol'
+method: PythonInstance
+__iter__
+	"CPython's LEGACY sequence-iteration protocol: an object with
+	__getitem__ but no __iter__ iterates by successive integer indices
+	until IndexError (test_heapq's __getitem__-only fixtures).
+	Materialized eagerly (v1: fine for finite fixtures; a lazy
+	iterator is a refinement).  Without __getitem__ raise CPython's
+	catchable TypeError -- the bare env-1 MNU was uncatchable.
+	A user class defining its own __iter__ overrides this (nearer in
+	the chain)."
+
+	| items idx v |
+	((self @env0:class @env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) @env0:== nil)
+		ifTrue: [
+			TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
+				@env0:, ''' object is not iterable')].
+	items := OrderedCollection @env0:new.
+	idx := 0.
+	[true] @env0:whileTrue: [
+		v := [self @env1:__getitem__: idx]
+			@env0:on: IndexError
+			do: [:ex | ex @env0:return: #'___stopIteration___'].
+		v @env0:== #'___stopIteration___' ifTrue: [
+			^ items @env1:__iter__].
+		items @env0:add: v.
+		idx := idx @env0:+ 1]
+%
+
+category: 'Grail-Python Protocol'
+method: PythonInstance
+__next__
+	"An object whose __iter__ returned self but which defines no
+	__next__ (test_heapq's broken-iterator fixtures): CPython raises
+	TypeError; the bare env-1 MNU was uncatchable.  A real __next__
+	on the user class overrides this."
+
+	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
+		@env0:, ''' object is not an iterator')
+%
+
+category: 'Grail-Smalltalk Bridge'
+method: PythonInstance
+asFloat
+	"env-1 twin of the env-0 bridge above."
+
+	((self @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) @env0:~~ nil)
+		ifTrue: [^ self @env0:perform: #'__float__' env: 1].
+	^ self @env0:doesNotUnderstand: #asFloat args: #() envId: 1
+%
+
+set compile_env: 0
+
 category: 'Python-Attribute Access'
 method: PythonInstance
 doesNotUnderstand: aSelector args: anArray envId: envId

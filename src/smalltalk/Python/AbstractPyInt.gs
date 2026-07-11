@@ -133,6 +133,122 @@ _coerce: aNumber
 	^ aNumber truncated
 %
 
+! ------------------- Receiver-side arithmetic (env 0)
+!
+! Number's binary selectors are ABSTRACT (subclassResponsibility) --
+! the coercion retry only fires when a CONCRETE kernel number
+! receives the wrapper as its ARGUMENT.  Receiver-side ops forward
+! to the plain value, unwrapping a wrapper argument; results are
+! plain integers (CPython int-subclass operator semantics).
+
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
++ other
+	^ self @env0:value + ((other @env0:isKindOf: AbstractPyInt)
+		ifTrue: [other @env0:value] ifFalse: [other])
+%
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+- other
+	^ self @env0:value - ((other @env0:isKindOf: AbstractPyInt)
+		ifTrue: [other @env0:value] ifFalse: [other])
+%
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+* other
+	^ self @env0:value * ((other @env0:isKindOf: AbstractPyInt)
+		ifTrue: [other @env0:value] ifFalse: [other])
+%
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+/ other
+	^ self @env0:value / ((other @env0:isKindOf: AbstractPyInt)
+		ifTrue: [other @env0:value] ifFalse: [other])
+%
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+// other
+	^ self @env0:value // ((other @env0:isKindOf: AbstractPyInt)
+		ifTrue: [other @env0:value] ifFalse: [other])
+%
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+\\ other
+	^ self @env0:value \\ ((other @env0:isKindOf: AbstractPyInt)
+		ifTrue: [other @env0:value] ifFalse: [other])
+%
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+rem: other
+	^ self @env0:value rem: ((other @env0:isKindOf: AbstractPyInt)
+		ifTrue: [other @env0:value] ifFalse: [other])
+%
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+quo: other
+	^ self @env0:value quo: ((other @env0:isKindOf: AbstractPyInt)
+		ifTrue: [other @env0:value] ifFalse: [other])
+%
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+bitAnd: other
+	^ self @env0:value bitAnd: ((other @env0:isKindOf: AbstractPyInt)
+		ifTrue: [other @env0:value] ifFalse: [other])
+%
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+bitOr: other
+	^ self @env0:value bitOr: ((other @env0:isKindOf: AbstractPyInt)
+		ifTrue: [other @env0:value] ifFalse: [other])
+%
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+bitXor: other
+	^ self @env0:value bitXor: ((other @env0:isKindOf: AbstractPyInt)
+		ifTrue: [other @env0:value] ifFalse: [other])
+%
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+bitShift: other
+	^ self @env0:value bitShift: ((other @env0:isKindOf: AbstractPyInt)
+		ifTrue: [other @env0:value] ifFalse: [other])
+%
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+raisedTo: other
+	^ self @env0:value raisedTo: ((other @env0:isKindOf: AbstractPyInt)
+		ifTrue: [other @env0:value] ifFalse: [other])
+%
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+min: other
+	^ self @env0:value min: ((other @env0:isKindOf: AbstractPyInt)
+		ifTrue: [other @env0:value] ifFalse: [other])
+%
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+max: other
+	^ self @env0:value max: ((other @env0:isKindOf: AbstractPyInt)
+		ifTrue: [other @env0:value] ifFalse: [other])
+%
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+negated
+	^ self @env0:value negated
+%
+
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+abs
+	^ self @env0:value abs
+%
+
+category: 'Grail-Arithmetic Forward'
+method: AbstractPyInt
+printOn: aStream
+	aStream @env0:nextPutAll: self @env0:value printString
+%
+
 ! ------------------- Relational + identity (env 0, receiver side)
 
 category: 'Grail-Comparison'
@@ -207,6 +323,33 @@ cantPerform: aSymbol withArguments: anArray env: envId
 %
 
 set compile_env: 1
+
+! ------------------- Constructor (allocator protocol)
+
+category: 'Grail-Instantiation'
+method: AbstractPyInt
+___new__: positional kw: keywords
+	"int-subclass constructor: ``self`` is the CLASS (object class>>
+	___allocateInstance___ runs a class-body/inherited __new__
+	non-virtually with the class as receiver), so ``class MyInt(int):
+	pass`` constructs through int's conversion: MyInt(3), MyInt('7'),
+	MyInt('101', 2).  A conversion failure leaves the value slot for
+	__init__ to fill -- enum-style AbstractPyInt subclasses construct
+	with non-numeric args and set #value themselves."
+
+	| inst v |
+	inst := self @env0:new.
+	v := [positional @env0:size @env0:= 0
+			ifTrue: [0]
+			ifFalse: [positional @env0:size @env0:= 1
+				ifTrue: [int @env1:__new__: (positional @env0:at: 1)]
+				ifFalse: [int @env1:__new__: (positional @env0:at: 1) _: (positional @env0:at: 2)]]]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil].
+	v @env0:== nil ifFalse: [
+		inst @env0:dynamicInstVarAt: #value put: v].
+	^ inst
+%
 
 ! ------------------- Python protocol (env 1)
 !

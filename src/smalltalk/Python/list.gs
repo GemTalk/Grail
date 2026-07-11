@@ -89,8 +89,8 @@ __delitem__: index
 		^ self @env1:___delSlice___: index
 	].
 	((index @env0:isKindOf: Integer)
-		or: [(index @env0:class @env0:methodDictForEnv: 1)
-			@env0:includesKey: #'__index__']) ifFalse: [
+		or: [(index @env0:class
+			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:~~ nil]) ifFalse: [
 		TypeError @env1:___signal___: ('list indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	size := self @env0:size.
@@ -222,8 +222,8 @@ __setitem__: index _: value
 		^ self @env1:___setSlice___: index _: value
 	].
 	((index @env0:isKindOf: Integer)
-		or: [(index @env0:class @env0:methodDictForEnv: 1)
-			@env0:includesKey: #'__index__']) ifFalse: [
+		or: [(index @env0:class
+			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:~~ nil]) ifFalse: [
 		TypeError @env1:___signal___: ('list indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 

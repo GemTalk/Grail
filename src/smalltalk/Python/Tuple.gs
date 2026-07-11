@@ -265,8 +265,8 @@ __mul__: n
 
 	| accumulator |
 	((n @env0:isKindOf: Integer)
-		or: [(n @env0:class @env0:methodDictForEnv: 1)
-			@env0:includesKey: #'__index__']) ifFalse: [
+		or: [(n @env0:class
+			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:~~ nil]) ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
 	(n @env0:<= 0) ifTrue: [^ tuple @env0:new].
 	accumulator := OrderedCollection @env0:new.

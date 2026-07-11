@@ -129,8 +129,8 @@ __getitem__: index
 	"Non-integer, non-slice index: catchable TypeError instead of an
 	uncatchable env-0 comparison DNU on the index."
 	((index @env0:isKindOf: Integer)
-		or: [(index @env0:class @env0:methodDictForEnv: 1)
-			@env0:includesKey: #'__index__']) ifFalse: [
+		or: [(index @env0:class
+			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:~~ nil]) ifFalse: [
 		TypeError @env1:___signal___: ('range indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	size := self @env0:size.

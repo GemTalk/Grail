@@ -219,8 +219,8 @@ __getitem__: index
 	"Non-integer, non-slice index: catchable TypeError instead of an
 	uncatchable env-0 comparison DNU on the index."
 	((index @env0:isKindOf: Integer)
-		or: [(index @env0:class @env0:methodDictForEnv: 1)
-			@env0:includesKey: #'__index__']) ifFalse: [
+		or: [(index @env0:class
+			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:~~ nil]) ifFalse: [
 		TypeError @env1:___signal___: ('string indices must be integers, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	size := self @env0:size.
@@ -463,8 +463,8 @@ __mul__: n
 
 	| count result stream |
 	((n @env0:isKindOf: Integer)
-		or: [(n @env0:class @env0:methodDictForEnv: 1)
-			@env0:includesKey: #'__index__']) ifFalse: [
+		or: [(n @env0:class
+			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:~~ nil]) ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
 	count := n @env0:asInteger.
 	(count @env0:<= 0) ifTrue: [ ^ '' @env0:copy ].

@@ -7,7 +7,7 @@ PythonInstance ifNil: [self error: 'PythonInstance is not defined. Check file or
 expectvalue /Class
 doit
 PythonInstance subclass: 'PythonGenerator'
-  instVarNames: #( block proc consumerSem producerSem value done returnValue started sentValue injectedException )
+  instVarNames: #( block proc consumerSem producerSem value done returnValue started sentValue injectedException escapedException )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -105,9 +105,21 @@ _forkBody
 	started := true.
 	proc := [
 		[
-			[returnValue := block @env0:value: self]
+			[[returnValue := block @env0:value: self]
 				on: GeneratorExit
-				do: [:ex | nil]
+				do: [:ex | nil]]
+				on: AbstractException
+				do: [:ex |
+					"An exception raised INSIDE the generator body runs
+					on the FORKED process -- letting it escape here kills
+					the whole session instead of reaching the consumer.
+					Stow it; send:/throw: re-signal it on the CONSUMER
+					process (CPython: the exception propagates out of
+					next()).  test_heapq's
+					test_merge_does_not_suppress_index_error is exactly
+					this contract."
+					escapedException := ex.
+					ex @env0:return: nil]
 		] @env0:ensure: [
 			done := true.
 			consumerSem @env0:signal]
@@ -167,7 +179,13 @@ send: aValue
 		producerSem @env0:signal.
 	].
 	consumerSem @env0:wait.
-	done ifTrue: [StopIteration @env1:___signal___: returnValue].
+	done ifTrue: [
+		escapedException @env0:== nil ifFalse: [
+			| ex |
+			ex := escapedException.
+			escapedException := nil.
+			^ ex @env0:signal].
+		StopIteration @env1:___signal___: returnValue].
 	^ value
 %
 
@@ -191,10 +209,14 @@ throw: anException
 	producerSem @env0:signal.
 	consumerSem @env0:wait.
 	done ifTrue: [
-		"Body finished — either normal completion or because the
-		injected exception bubbled out.  Treat as StopIteration; if
-		the original exception escaped, GemStone''s process-level
-		handler will have already done what it does with it."
+		"Body finished — normal completion raises StopIteration; an
+		exception that bubbled out of the body (stowed by _forkBody)
+		re-signals on THIS (consumer) process."
+		escapedException @env0:== nil ifFalse: [
+			| ex |
+			ex := escapedException.
+			escapedException := nil.
+			^ ex @env0:signal].
 		StopIteration @env1:___signal___: returnValue
 	].
 	^ value

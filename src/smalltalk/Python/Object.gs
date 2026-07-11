@@ -405,6 +405,19 @@ value: positional value: kwargs
 	^ self @env0:perform: sel @env0:contents @env0:asSymbol env: 1 withArguments: positional
 %
 
+category: 'Grail-Callable'
+method: object
+value: positional value: kwargs
+	"Calling a NON-callable (a list passed where a key function was
+	expected -- test_heapq's error-path fixtures): CPython raises
+	TypeError; the bare env-1 MNU was uncatchable.  Real callables
+	(blocks, BoundMethod, UnboundMethod, partial, classes via the
+	metaclass) define their own value:value: and never reach this."
+
+	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
+		@env0:, ''' object is not callable')
+%
+
 category: 'Grail-Convenience Methods - Unary'
 method: object
 ___isTruthy___

@@ -318,8 +318,11 @@ category: 'Grail-Arithmetic'
 method: int
 __divmod__: other
 	"Return (quotient, remainder) tuple."
-
 	| quot rem |
+	"CPython: division/modulo by zero raises catchable
+	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
+	((other @env0:isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
+		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 	quot := self @env0:// other.
 	rem := self @env0:\\ other.
 	^ tuple @env0:with: quot with: rem
@@ -388,6 +391,10 @@ category: 'Grail-Arithmetic'
 method: int
 __floordiv__: other
 	"Floor division."
+	"CPython: division/modulo by zero raises catchable
+	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
+	((other @env0:isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
+		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 
 	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:// other].
 	((other @env0:class @env0:methodDictForEnv: 1)
@@ -524,6 +531,10 @@ category: 'Grail-Arithmetic'
 method: int
 __mod__: other
 	"Modulo operation."
+	"CPython: division/modulo by zero raises catchable
+	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
+	((other @env0:isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
+		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 
 	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:\\ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
@@ -634,8 +645,10 @@ category: 'Grail-Arithmetic - Reverse'
 method: int
 __rdivmod__: other
 	"Reverse divmod (divmod(other, self))."
-
 	| quot rem |
+	"Reverse form: other OP self -- self is the divisor."
+	(self @env0:= 0) ifTrue: [
+		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 	quot := other @env0:// self.
 	rem := other @env0:\\ self.
 	^ tuple @env0:with: quot with: rem
@@ -653,6 +666,9 @@ category: 'Grail-Arithmetic - Reverse'
 method: int
 __rfloordiv__: other
 	"Reverse floor division (other // self)."
+	"Reverse form: other OP self -- self is the divisor."
+	(self @env0:= 0) ifTrue: [
+		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 
 	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:// self].
 	((other @env0:class @env0:methodDictForEnv: 1)
@@ -675,6 +691,9 @@ category: 'Grail-Arithmetic - Reverse'
 method: int
 __rmod__: other
 	"Reverse modulo (other % self)."
+	"Reverse form: other OP self -- self is the divisor."
+	(self @env0:= 0) ifTrue: [
+		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 
 	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:\\ self].
 	((other @env0:class @env0:methodDictForEnv: 1)
@@ -779,6 +798,9 @@ category: 'Grail-Arithmetic - Reverse'
 method: int
 __rtruediv__: other
 	"Reverse true division (other / self)."
+	"Reverse form: other OP self -- self is the divisor."
+	(self @env0:= 0) ifTrue: [
+		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 
 	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:/ self].
 	((other @env0:class @env0:methodDictForEnv: 1)
@@ -820,6 +842,10 @@ category: 'Grail-Arithmetic'
 method: int
 __truediv__: other
 	"True division (returns float)."
+	"CPython: division/modulo by zero raises catchable
+	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
+	((other @env0:isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
+		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 
 	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:/ other].
 	((other @env0:class @env0:methodDictForEnv: 1)

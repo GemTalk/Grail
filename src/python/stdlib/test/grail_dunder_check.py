@@ -47,8 +47,10 @@ class Rebinder:
 
 
 def sealed_subclass_result():
+    # int subclassing WORKS now (AbstractPyInt routing); bool stays
+    # sealed -- CPython itself forbids subclassing bool.
     try:
-        class MyInt(int):
+        class MyBool(bool):
             pass
         return "no-error"
     except TypeError:
@@ -95,3 +97,75 @@ class ClosureHost:
 
 
 CLOSURE_RESULT = ClosureHost().m()
+
+
+class MyInt(int):
+    def label(self):
+        return "v=" + str(int(self))
+
+
+INT_SUB_RESULTS = [
+    MyInt(7) + 1,
+    1 + MyInt(7),
+    type(MyInt(3) + MyInt(4)).__name__,
+    isinstance(MyInt(7), int),
+    issubclass(MyInt, int),
+    MyInt("101", 2),
+    [10, 20, 30][MyInt(1)],
+    {MyInt(7): "x"}[7],
+    MyInt(9).label(),
+    hash(MyInt(5)) == hash(5),
+]
+
+
+class GetitemOnly:
+    def __init__(self, seq):
+        self.seq = list(seq)
+
+    def __getitem__(self, i):
+        return self.seq[i]
+
+
+class IterNoNext:
+    def __iter__(self):
+        return self
+
+
+class NotIterable:
+    pass
+
+
+def _legacy_iter_results():
+    r = [list(GetitemOnly([3, 1, 2])), sorted(GetitemOnly([3, 1, 2]))]
+    try:
+        next(iter(IterNoNext()))
+        r.append("no-error")
+    except TypeError:
+        r.append("type-error")
+    try:
+        iter(NotIterable())
+        r.append("no-error")
+    except TypeError:
+        r.append("type-error")
+    return r
+
+
+LEGACY_ITER_RESULT = _legacy_iter_results()
+
+
+def _compile_fail_result():
+    try:
+        def trapped():
+            class Local:
+                def m(self):
+                    return Local
+            return Local
+        trapped()().m() if False else None
+        cls = trapped()
+        cls().m()
+        return "no-error"
+    except NameError:
+        return "name-error"
+
+
+COMPILE_FAIL_RESULT = _compile_fail_result()

@@ -272,12 +272,13 @@ testShadowedNameSkipsFastPath
 	the integer 5, which fails with a runtime error (not a TypeError
 	from the arity-mismatch branch and not the @env1:__new__ form)."
 
-	"The local rebinding produces a non-class call. We just verify it
-	does NOT raise a TypeError citing the bool() class-call shape — any
-	other error is acceptable."
+	"The local rebinding produces a non-class call.  Calling the
+	integer now raises the CPython TypeError ('SmallInteger object is
+	not callable' via object>>value:value:) -- previously it escaped
+	as a raw Smalltalk error, which is what this test used to assert."
 	self should: [self eval: 'bool = 5
 result = bool(1)']
-		raise: Error
+		raise: TypeError
 %
 
 ! ===============================================================================

@@ -92,9 +92,11 @@ testNonSelfReceiverNameRebound
 category: 'Grail-Tests - sealed classes'
 method: DunderNewTestCase
 testSealedKernelSubclassRaisesTypeError
-	"DELIBERATE DEVIATION: subclassing a sealed kernel class (int ->
-	Integer) raises catchable TypeError instead of the uncatchable
-	ImproperOperation that killed whole CPython module runs."
+	"Subclassing a sealed kernel class raises catchable TypeError
+	instead of the uncatchable ImproperOperation.  bool is the probe:
+	CPython itself forbids subclassing bool, while int subclassing now
+	WORKS via the AbstractPyInt routing (see
+	testIntSubclassViaAbstractPyInt)."
 
 	self assert: (self fixture @env1:SEALED_RESULT) equals: 'type-error'
 %
@@ -290,4 +292,98 @@ testStaticmethodClosureOverMethodSelf
 	limitation; this pins the compile.)"
 
 	self assert: (self fixture @env1:CLOSURE_RESULT) equals: 4
+%
+
+category: 'Grail-Tests - int subclass'
+method: DunderNewTestCase
+testIntSubclassViaAbstractPyInt
+	"``class MyInt(int)`` routes its storage base to AbstractPyInt
+	(Class>>___subclass___ substitutes the sealed Integer): instances
+	construct through int's conversion (incl. the string+base form),
+	degrade to plain int under arithmetic (CPython operator
+	semantics), index sequences via __index__ (guards chain-walk now),
+	interoperate as dict keys, keep their own methods, and satisfy
+	isinstance/issubclass against int."
+
+	self assert: (self fixture @env1:INT_SUB_RESULTS) @env1:__repr__
+		equals: '[8, 8, ''SmallInteger'', True, True, 5, 20, ''x'', ''v=9'', True]'
+%
+
+category: 'Grail-Tests - math'
+method: DunderNewTestCase
+testMathIsclose
+	"math.isclose (PEP 485) -- test_math imports it at module scope."
+
+	self assert: (self eval: 'import math
+[math.isclose(1.0, 1.0 + 1e-10), math.isclose(1.0, 1.1),
+ math.isclose(100, 100.00001, rel_tol=1e-3)]
+') @env1:__repr__ equals: '[True, False, True]'
+%
+
+category: 'Grail-Tests - generators'
+method: DunderNewTestCase
+testGeneratorBodyExceptionPropagates
+	"An exception raised INSIDE a generator body runs on the forked
+	producer process; it must re-signal at the consumer's next()
+	(CPython contract -- heapq.merge must not suppress an IndexError
+	from its inputs).  Previously it escaped on the forked process and
+	killed the whole session."
+
+	self assert: (self eval: 'def gen():
+    yield 1
+    raise ValueError("boom")
+g = gen()
+first = next(g)
+try:
+    next(g)
+    r = "no-error"
+except ValueError as e:
+    r = str(e)
+[first, r]') @env1:__repr__ equals: '[1, ''boom'']'
+%
+
+category: 'Grail-Tests - iteration'
+method: DunderNewTestCase
+testLegacyGetitemIterationAndIteratorErrors
+	"CPython's legacy sequence protocol: __getitem__-only classes
+	iterate by successive indices until IndexError; __iter__-without-
+	__next__ and iter(non-iterable) raise catchable TypeErrors (each
+	was an uncatchable MNU that killed test_heapq)."
+
+	self assert: (self fixture @env1:LEGACY_ITER_RESULT) @env1:__repr__
+		equals: '[[3, 1, 2], [1, 2, 3], ''type-error'', ''type-error'']'
+%
+
+category: 'Grail-Tests - arithmetic'
+method: DunderNewTestCase
+testZeroDivisionAndNotCallable
+	"Division/modulo by zero raise catchable ZeroDivisionError (the
+	kernel ZeroDivide was uncatchable); calling a non-callable raises
+	catchable TypeError."
+
+	self assert: (self eval: 'r = []
+for expr in ["3 // 0", "3 % 0", "divmod(3, 0)"]:
+    try:
+        eval(expr)
+        r.append("no-error")
+    except ZeroDivisionError:
+        r.append("zde")
+try:
+    [1, 2, 3](4)
+    r.append("no-error")
+except TypeError:
+    r.append("type-error")
+r') @env1:__repr__ equals: '[''zde'', ''zde'', ''zde'', ''type-error'']'
+%
+
+category: 'Grail-Tests - codegen'
+method: DunderNewTestCase
+testRuntimeClassCompileFailureIsCatchable
+	"A RUNTIME classdef whose method cannot compile (references a
+	method-local sibling temp that string-compiled methods cannot
+	close over) raises catchable NameError instead of aborting the
+	module -- keeps whole CPython modules scoreable while the
+	closure-cell gap remains open."
+
+	self assert: (self fixture @env1:COMPILE_FAIL_RESULT) equals: 'name-error'
 %
