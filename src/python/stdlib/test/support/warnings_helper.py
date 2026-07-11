@@ -31,14 +31,19 @@ class check_warnings:
         self.warnings = []
 
     def __enter__(self):
+        # Dunder lookups go through the TYPE: a Grail instance
+        # attribute read of a zero-arg dunder auto-invokes it, so
+        # self._cm.__enter__() would call the RESULT of __enter__.
         self._cm = warnings.catch_warnings(record=True)
-        self.warnings = self._cm.__enter__()
+        cls = type(self._cm)
+        self.warnings = getattr(cls, '__enter__')(self._cm)
         warnings.simplefilter("always")
         return self
 
     def __exit__(self, *exc):
         if self._cm is not None:
-            self._cm.__exit__(*exc)
+            cls = type(self._cm)
+            getattr(cls, '__exit__')(self._cm, None, None, None)
         return False
 
     def reset(self):

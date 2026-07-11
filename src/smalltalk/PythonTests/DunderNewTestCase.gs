@@ -789,3 +789,15 @@ testClassBodyIfAssignments
 	self assert: (self fixture @env1:CLASS_BODY_IF_RESULT) @env1:__repr__
 		equals: '(True, 7, ''py'', False)'
 %
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testUnittestContextAndSubclassAsserts
+	"TestCase.assertIsSubclass/assertNotIsSubclass/enterContext (3.11+)
+	and warnings.catch_warnings(record=True) -- the kwargs form needs
+	the _catch_warnings:kw: selector or the unary method auto-invokes
+	on the attribute load and the CM instance itself gets called."
+
+	self assert: (self fixture @env1:UNITTEST_SURFACE_RESULT) @env1:__repr__
+		equals: '(1, 0, 0)'
+%

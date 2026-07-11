@@ -317,6 +317,27 @@ class TestCase:
         if isinstance(obj, cls):
             self._failWith(msg, repr(obj) + " is an instance of " + repr(cls))
 
+    def assertIsSubclass(self, cls, superclass, msg=None):
+        if not issubclass(cls, superclass):
+            self._failWith(msg, repr(cls) + " is not a subclass of " + repr(superclass))
+
+    def assertNotIsSubclass(self, cls, superclass, msg=None):
+        if issubclass(cls, superclass):
+            self._failWith(msg, repr(cls) + " is a subclass of " + repr(superclass))
+
+    def enterContext(self, cm):
+        # Enter a context manager for the duration of the test; its
+        # __exit__ runs during doCleanups (CPython 3.11+).  Look the
+        # dunders up on the TYPE (CPython semantics) -- under Grail an
+        # instance attribute read of a zero-arg dunder auto-invokes it,
+        # so cm.__enter__() would call the RESULT of __enter__.
+        cls = type(cm)
+        enter = getattr(cls, '__enter__')
+        exit_ = getattr(cls, '__exit__')
+        result = enter(cm)
+        self.addCleanup(exit_, cm, None, None, None)
+        return result
+
     def assertGreater(self, a, b, msg=None):
         if not (a > b):
             self._failWith(msg, repr(a) + " not greater than " + repr(b))

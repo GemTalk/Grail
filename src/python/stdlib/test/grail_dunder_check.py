@@ -443,3 +443,23 @@ def _class_body_if_results():
 
 
 CLASS_BODY_IF_RESULT = _class_body_if_results()
+
+
+def _unittest_surface_results():
+    import unittest
+    import warnings
+
+    class T(unittest.TestCase):
+        def test_it(self):
+            self.assertIsSubclass(ValueError, Exception)
+            self.assertNotIsSubclass(ValueError, TypeError)
+            cm = warnings.catch_warnings(record=True)
+            self.enterContext(cm)
+
+    t = T('test_it')
+    r = unittest.TestResult()
+    t.run(r)
+    return (r.testsRun, len(r.errors), len(r.failures))
+
+
+UNITTEST_SURFACE_RESULT = _unittest_surface_results()

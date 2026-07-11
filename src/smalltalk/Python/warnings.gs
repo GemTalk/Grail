@@ -278,6 +278,20 @@ catch_warnings
 	^ (CatchWarnings @env0:new) @env0:_owner: self
 %
 
+category: 'Grail-Catch warnings'
+method: warnings
+_catch_warnings: positional kw: kwargs
+	"catch_warnings(record=True) -- the kwargs form.  record is
+	accepted and ignored (the wrapper's __enter__ returns itself, not
+	a recording list; enough for the enter/exit protocol to work).
+	Without this selector the call fell back to attr-load + call:
+	the unary method auto-invoked on the load and the CatchWarnings
+	INSTANCE got called -- TypeError 'not callable' (22 test_set
+	tests)."
+
+	^ self @env1:catch_warnings
+%
+
 set compile_env: 0
 
 ! ------- CatchWarnings: the object returned by catch_warnings()
