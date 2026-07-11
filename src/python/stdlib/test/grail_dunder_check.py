@@ -414,3 +414,32 @@ def _phase2b_results():
 
 
 PHASE2B_RESULT = _phase2b_results()
+
+
+def _class_body_if_results():
+    # Class-body ``if`` statements execute at class-definition time
+    # (CPython's C-vs-Python dual-module test pattern:
+    # ``if c_functools: partial = c_functools.partial``).
+    import functools
+    c_mod = functools
+    missing = None
+
+    class Cond:
+        if c_mod:
+            module = c_mod
+            partial = c_mod.partial
+        if missing:
+            ghost = 1
+        else:
+            fallback = 'py'
+
+        def read(self):
+            return (self.module is c_mod,
+                    self.partial(int, "7")(),
+                    self.fallback,
+                    hasattr(self, 'ghost'))
+
+    return Cond().read()
+
+
+CLASS_BODY_IF_RESULT = _class_body_if_results()

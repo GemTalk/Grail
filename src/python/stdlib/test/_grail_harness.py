@@ -45,8 +45,25 @@ def cases(mod):
     return found
 
 
+def _first_line(err):
+    try:
+        text = str(err)
+    except Exception:
+        return ''
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    return lines[-1][:200] if lines else ''
+
+
 def run_one(tc):
-    # Run a single TestCase; returns (failures, errors, skipped) counts.
+    # Run a single TestCase; returns (failures, errors, skipped, detail)
+    # where detail is a one-line summary of the first failure/error --
+    # the shell-side scoreboard buckets these to find shared root
+    # causes across a module's tail.
     result = unittest.TestResult()
     tc.run(result)
-    return (len(result.failures), len(result.errors), len(result.skipped))
+    detail = ''
+    if result.errors:
+        detail = 'E: ' + _first_line(result.errors[0][1])
+    elif result.failures:
+        detail = 'F: ' + _first_line(result.failures[0][1])
+    return (len(result.failures), len(result.errors), len(result.skipped), detail)

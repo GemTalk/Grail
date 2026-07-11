@@ -58,6 +58,24 @@ set compile_env: 0
 
 category: 'Grail-other'
 method: IfAst
+test
+	^ test
+%
+
+category: 'Grail-accessing'
+method: IfAst
+body
+	^ body
+%
+
+category: 'Grail-accessing'
+method: IfAst
+orelse
+	^ orelse
+%
+
+category: 'Grail-printing'
+method: IfAst
 printSmalltalkOn: aStream
 
 	test printSmalltalkWithParenthesisOn: aStream.

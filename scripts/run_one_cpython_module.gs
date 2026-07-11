@@ -121,14 +121,19 @@ emit := [:st :tt :ff :ee :ss :dd |
         tests := tests + 1.
         skips := skips + 1 ]
       ifFalse: [
-      [ | r |
+      [ | r detail |
         r := harnessMod @env1:run_one: tc.
         tests := tests + 1.
         fails := fails + (r @env1:__getitem__: 0).
         errs := errs + (r @env1:__getitem__: 1).
         skips := skips + (r @env1:__getitem__: 2).
+        detail := [(r @env1:__getitem__: 3) asString] on: AbstractException do: [:dx | ''].
+        detail isEmpty ifFalse: [
+          out nextPutAll: 'GRAIL_DETAIL|'; nextPutAll: (clean value: detail); lf; flush].
       ] on: AbstractException do: [:ex |
         (ex isKindOf: ExitClientError) ifTrue: [ex pass].
+        out nextPutAll: 'GRAIL_DETAIL|ST: ';
+          nextPutAll: (clean value: (ex messageText ifNil: [ex class name asString])); lf; flush.
         tests := tests + 1.
         errs := errs + 1 ]].
     ].

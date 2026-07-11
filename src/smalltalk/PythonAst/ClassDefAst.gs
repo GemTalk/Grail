@@ -493,8 +493,11 @@ printSmalltalkRuntimeOn: aStream
 	``a = A()'' in the outer body can read it (test_functools'
 	TestPartialMethod.A).  The nested emit saves/restores the CallAst
 	compile context itself."
-	(body body anySatisfy: [:stmt | stmt isKindOf: ClassDefAst]) ifTrue: [
-		"The per-class dynamic store backs the nested-class attribute;
+	((body body anySatisfy: [:stmt | stmt isKindOf: ClassDefAst])
+		or: [body body anySatisfy: [:stmt | stmt isKindOf: IfAst]]) ifTrue: [
+		"The per-class dynamic store backs the nested-class attribute
+		AND the class-body ``if'' branch stores (emitted in the attr
+		section below);
 		its accessors normally compile at the END of the class emit,
 		AFTER this section runs -- pull them (and the holder init)
 		forward.  The later init is conditional, so the holder set
@@ -575,6 +578,24 @@ printSmalltalkRuntimeOn: aStream
 				aStream nextPutAll: '.'; lf
 			].
 		].
+		"Top-level ``if'' statements in the class body: CPython runs
+		them at class-DEFINITION time — the C-vs-Python dual-module
+		pattern (``if c_functools: partial = c_functools.partial''
+		guards 30+ attributes in test_functools).  Emit each as a
+		runtime conditional whose branch assignments store per-class
+		DYNAMIC attrs — the tier setattr(cls, ...) writes and both
+		class-receiver and instance attribute loads consult — so the
+		attribute exists exactly when its branch ran.  Only simple
+		NAME = value assignments (and nested ifs) are honored; other
+		statement kinds inside a class-body if are still dropped."
+		body body doWithIndex: [:stmt :pos |
+			(stmt isKindOf: IfAst) ifTrue: [
+				| bound |
+				bound := IdentitySet new.
+				firstBinding keysAndValuesDo: [:nm :p |
+					p < pos ifTrue: [bound add: nm]].
+				CallAst classBodyBoundNames: bound.
+				self emitClassBodyIf: stmt on: aStream]].
 	] ensure: [
 		"RESTORE (not hardcode-off) the body-emit flags: a NESTED class
 		emits inside the OUTER class's attr-value section, and clearing
@@ -1335,6 +1356,51 @@ printSmalltalkLegacyOn: aStream
 	aStream nextPutAll: '___cls___'; lf.
 
 	aStream decreaseIndent; nextPutAll: '] value: (PythonClass perform: #new env: 0).'.
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+emitClassBodyIf: ifStmt on: aStream
+	"Emit a class-body ``if'' as a runtime conditional over per-class
+	dynamic-attr stores (see the call site in the attr-init section)."
+
+	aStream nextPutAll: '('.
+	ifStmt test printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' ___isTruthy___) ifTrue: ['; lf.
+	self emitClassBodyIfBranch: ifStmt body on: aStream.
+	aStream nextPutAll: '] ifFalse: ['; lf.
+	self emitClassBodyIfBranch: ifStmt orelse on: aStream.
+	aStream nextPutAll: '].'; lf
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+emitClassBodyIfBranch: aSuite on: aStream
+	"One branch of a class-body ``if'': simple NAME = value assignments
+	become per-class dynamic-attr stores on the class temp; nested ifs
+	recurse.  Anything else is dropped (same as before this feature)."
+
+	(aSuite isNil or: [aSuite body isNil]) ifTrue: [^ self].
+	aSuite body do: [:stmt |
+		(stmt isKindOf: IfAst) ifTrue: [
+			self emitClassBodyIf: stmt on: aStream].
+		((stmt isKindOf: AssignAst)
+			and: [stmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
+			stmt targets do: [:t |
+				aStream nextPutAll: name;
+					nextPutAll: ' @env1:___pyAttrStore___: #''';
+					nextPutAll: t id asString;
+					nextPutAll: ''' put: '.
+				stmt value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: '.'; lf]].
+		((stmt isKindOf: AnnAssignAst)
+			and: [(stmt target isKindOf: NameAst) and: [stmt value notNil]]) ifTrue: [
+			aStream nextPutAll: name;
+				nextPutAll: ' @env1:___pyAttrStore___: #''';
+				nextPutAll: stmt target id asString;
+				nextPutAll: ''' put: '.
+			stmt value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPutAll: '.'; lf]]
 %
 
 category: 'Grail-accessing'

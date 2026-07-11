@@ -776,3 +776,16 @@ g = list(zip())
 (a, b, c, d, e, f, g)
 ') @env1:__repr__ equals: '([0, 2, 4], [0, 2, 4], [(0, 1), (1, 2)], [''1'', ''2''], [1, 2], [(''a'', 10), (''b'', 20)], [])'
 %
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testClassBodyIfAssignments
+	"Top-level ``if'' statements in a class body run at class-definition
+	time: taken-branch NAME = value assignments become class attributes
+	(per-class dynamic store), untaken branches leave the name absent.
+	The CPython dual-module pattern (``if c_functools: partial = ...'')
+	guards 30+ attributes in test_functools alone."
+
+	self assert: (self fixture @env1:CLASS_BODY_IF_RESULT) @env1:__repr__
+		equals: '(True, 7, ''py'', False)'
+%
