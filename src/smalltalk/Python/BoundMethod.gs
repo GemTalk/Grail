@@ -224,6 +224,16 @@ value: positional value: kwargs
 			].
 		].
 	].
+	"No fixed-arity form matched and no varargs form exists: raise
+	CPython's catchable TypeError (``assertRaises(TypeError,
+	math.acos)`` calls a 1-arg module function with 0 args -- the
+	blind varargs perform was an uncatchable MNU)."
+	((actualReceiver @env0:class @env0:whichClassIncludesSelector: selVarargs environmentId: 1) @env0:== nil)
+		ifTrue: [
+			TypeError @env1:___signal___: (selector @env0:asString
+				@env0:, '() takes a different number of arguments ('
+				@env0:, actualArgs @env0:size @env0:printString
+				@env0:, ' given)')].
 	^ actualReceiver perform: selVarargs env: 1 withArguments: { actualArgs. kwargs }
 %
 

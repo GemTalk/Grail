@@ -30,6 +30,24 @@ class Decimal:
     def __str__(self):
         return str(self._value)
 
+    def __float__(self):
+        # test_math's IsCloseTests.test_decimals feeds Decimals to
+        # math.isclose, which converts through __float__.
+        return float(self._value)
+
+    def __eq__(self, other):
+        if isinstance(other, Decimal):
+            return float(self._value) == float(other._value)
+        return float(self._value) == other
+
+    def __lt__(self, other):
+        o = float(other._value) if isinstance(other, Decimal) else other
+        return float(self._value) < o
+
+    def __le__(self, other):
+        o = float(other._value) if isinstance(other, Decimal) else other
+        return float(self._value) <= o
+
 
 class DecimalException(Exception):
     pass

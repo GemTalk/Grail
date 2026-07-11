@@ -598,9 +598,15 @@ __pos__
 category: 'Grail-Arithmetic'
 method: int
 __pow__: other
-	"Raise to power."
+	"Raise to power.  The kernel caps LargeInteger at ~130k bits;
+	resignal its NumericError as catchable OverflowError (DELIBERATE
+	deviation -- CPython ints are unbounded)."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:raisedTo: other].
+	(other @env0:isKindOf: Number) ifTrue: [
+		^ [self @env0:raisedTo: other]
+			@env0:on: NumericError
+			do: [:ex |
+				OverflowError ___signal___: 'result exceeds Grail integer capacity']].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:raisedTo: (other @env1:__index__)].
 	^ self ___binOpFallback___: other op: '**' reflected: #'__rpow__:'
@@ -951,6 +957,15 @@ numerator
 	"Return the numerator (self)."
 
 	^ self
+%
+
+category: 'Grail-Python protocol'
+method: int
+__iter__
+	"iter(int) raises catchable TypeError (CPython) -- heapify(non-
+	sequence) sent an uncatchable env-1 MNU."
+
+	TypeError ___signal___: '''int'' object is not iterable'
 %
 
 category: 'Grail-Python protocol'

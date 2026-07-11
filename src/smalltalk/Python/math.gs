@@ -94,43 +94,43 @@ nan
 category: 'Grail-Trigonometric Functions'
 method: math
 sin: x
-	^ x @env0:sin
+	^ (self @env1:___real___: x) @env0:sin
 %
 
 category: 'Grail-Trigonometric Functions'
 method: math
 cos: x
-	^ x @env0:cos
+	^ (self @env1:___real___: x) @env0:cos
 %
 
 category: 'Grail-Trigonometric Functions'
 method: math
 tan: x
-	^ x @env0:tan
+	^ (self @env1:___real___: x) @env0:tan
 %
 
 category: 'Grail-Trigonometric Functions'
 method: math
 asin: x
-	^ x @env0:arcSin
+	^ (self @env1:___real___: x) @env0:arcSin
 %
 
 category: 'Grail-Trigonometric Functions'
 method: math
 acos: x
-	^ x @env0:arcCos
+	^ (self @env1:___real___: x) @env0:arcCos
 %
 
 category: 'Grail-Trigonometric Functions'
 method: math
 atan: x
-	^ x @env0:arcTan
+	^ (self @env1:___real___: x) @env0:arcTan
 %
 
 category: 'Grail-Trigonometric Functions'
 method: math
 atan2: y _: x
-	^ (y @env0:asFloat) @env0:arcTan2: (x @env0:asFloat)
+	^ (self @env1:___real___: y) @env0:arcTan2: (self @env1:___real___: x)
 %
 
 ! ===============================================================================
@@ -140,37 +140,37 @@ atan2: y _: x
 category: 'Grail-Hyperbolic Functions'
 method: math
 sinh: x
-	^ (x @env0:asFloat) @env0:sinh
+	^ (self @env1:___real___: x) @env0:sinh
 %
 
 category: 'Grail-Hyperbolic Functions'
 method: math
 cosh: x
-	^ (x @env0:asFloat) @env0:cosh
+	^ (self @env1:___real___: x) @env0:cosh
 %
 
 category: 'Grail-Hyperbolic Functions'
 method: math
 tanh: x
-	^ (x @env0:asFloat) @env0:tanh
+	^ (self @env1:___real___: x) @env0:tanh
 %
 
 category: 'Grail-Hyperbolic Functions'
 method: math
 asinh: x
-	^ (x @env0:asFloat) @env0:arcSinh
+	^ (self @env1:___real___: x) @env0:arcSinh
 %
 
 category: 'Grail-Hyperbolic Functions'
 method: math
 acosh: x
-	^ (x @env0:asFloat) @env0:arcCosh
+	^ (self @env1:___real___: x) @env0:arcCosh
 %
 
 category: 'Grail-Hyperbolic Functions'
 method: math
 atanh: x
-	^ (x @env0:asFloat) @env0:arcTanh
+	^ (self @env1:___real___: x) @env0:arcTanh
 %
 
 ! ===============================================================================
@@ -180,7 +180,7 @@ atanh: x
 category: 'Grail-Exponential and Logarithmic'
 method: math
 exp: x
-	^ x @env0:exp
+	^ (self @env1:___real___: x) @env0:exp
 %
 
 category: 'Grail-Exponential and Logarithmic'
@@ -200,7 +200,7 @@ log: x _: base
 category: 'Grail-Exponential and Logarithmic'
 method: math
 log10: x
-	^ (x @env0:asFloat) @env0:log10
+	^ (self @env1:___real___: x) @env0:log10
 %
 
 category: 'Grail-Exponential and Logarithmic'
@@ -214,14 +214,14 @@ log2: x
 category: 'Grail-Exponential and Logarithmic'
 method: math
 sqrt: x
-	^ x @env0:sqrt
+	^ (self @env1:___real___: x) @env0:sqrt
 %
 
 category: 'Grail-Exponential and Logarithmic'
 method: math
 pow: x _: y
 	"math.pow(x, y) — x raised to the power y (as float)."
-	^ (x @env0:asFloat) @env0:raisedTo: (y @env0:asFloat)
+	^ (self @env1:___real___: x) @env0:raisedTo: (self @env1:___real___: y)
 %
 
 ! ===============================================================================
@@ -231,30 +231,38 @@ pow: x _: y
 category: 'Grail-Rounding'
 method: math
 ceil: x
-	^ (x @env0:asFloat) @env0:ceiling
+	^ (self @env1:___real___: x) @env0:ceiling
 %
 
 category: 'Grail-Rounding'
 method: math
 floor: x
-	^ (x @env0:asFloat) @env0:floor
+	^ (self @env1:___real___: x) @env0:floor
 %
 
 category: 'Grail-Rounding'
 method: math
 trunc: x
-	^ (x @env0:asFloat) @env0:truncated
+	^ (self @env1:___real___: x) @env0:truncated
 %
 
 category: 'Grail-Rounding'
 method: math
 factorial: n
+	"GemStone caps LargeInteger at ~130k bits (engine limit; CPython's
+	ints are unbounded).  Resignal the kernel NumericError as the
+	catchable Python OverflowError -- a DELIBERATE deviation
+	(test_math's factorial(10**10) huge-input probes)."
+
 	| nInt |
 	nInt := n @env0:asInteger.
 	(nInt @env0:< 0) ifTrue: [
 		ValueError ___signal___: 'factorial() not defined for negative values'
 	].
-	^ nInt @env0:factorial
+	^ [nInt @env0:factorial]
+		@env0:on: NumericError
+		do: [:ex |
+			OverflowError ___signal___: 'factorial result exceeds Grail integer capacity']
 %
 
 category: 'Grail-Number Theory'
@@ -272,7 +280,7 @@ lcm: a _: b
 category: 'Grail-Floating Point Functions'
 method: math
 fabs: x
-	^ (x @env0:asFloat) @env0:abs
+	^ (self @env1:___real___: x) @env0:abs
 %
 
 ! ===============================================================================
@@ -283,20 +291,37 @@ category: 'Grail-Classification'
 method: math
 isfinite: x
 	| kind |
-	kind := (x @env0:asFloat) @env0:_getKind.
+	kind := (self @env1:___real___: x) @env0:_getKind.
 	^ (kind @env0:<= 2) or: [kind == 4]
 %
 
 category: 'Grail-Classification'
 method: math
 isinf: x
-	^ ((x @env0:asFloat) @env0:_getKind) == 3
+	^ ((self @env1:___real___: x) @env0:_getKind) == 3
 %
 
 category: 'Grail-Classification'
 method: math
 isnan: x
-	^ (x @env0:asFloat) @env0:_isNaN
+	^ (self @env1:___real___: x) @env0:_isNaN
+%
+
+category: 'Grail-Math Functions'
+method: math
+___real___: x
+	"Convert a math-function argument to a Float with CPython's error:
+	TypeError 'must be real number, not X' for non-numerics.  Booleans
+	count as 0/1; __float__-bearing objects (Decimal stubs, Fraction)
+	convert through the protocol.  Bare @env0:asFloat on a string
+	produced downstream uncatchable MNUs (math.exp('x'))."
+
+	(x @env0:isKindOf: Boolean) ifTrue: [^ x ifTrue: [1.0] ifFalse: [0.0]].
+	(x @env0:isKindOf: Number) ifTrue: [^ x @env0:asFloat].
+	((x @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) @env0:~~ nil)
+		ifTrue: [^ (x @env0:perform: #'__float__' env: 1) @env0:asFloat].
+	TypeError ___signal___: ('must be real number, not '
+		@env0:, x @env0:class @env0:name @env0:asString)
 %
 
 category: 'Grail-Math Functions'
@@ -306,8 +331,8 @@ _isclose: positional kw: kwargs
 	test_math imports it at module scope."
 
 	| a b relTol absTol diff |
-	a := (positional @env0:at: 1) @env0:asFloat.
-	b := (positional @env0:at: 2) @env0:asFloat.
+	a := self @env1:___real___: (positional @env0:at: 1).
+	b := self @env1:___real___: (positional @env0:at: 2).
 	relTol := (positional @env0:size @env0:>= 3)
 		ifTrue: [positional @env0:at: 3]
 		ifFalse: [(kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'rel_tol'])
@@ -335,13 +360,13 @@ _isclose: positional kw: kwargs
 category: 'Grail-Angle Conversion'
 method: math
 degrees: x
-	^ (x @env0:asFloat) @env0:radiansToDegrees
+	^ (self @env1:___real___: x) @env0:radiansToDegrees
 %
 
 category: 'Grail-Angle Conversion'
 method: math
 radians: x
-	^ (x @env0:asFloat) @env0:degreesToRadians
+	^ (self @env1:___real___: x) @env0:degreesToRadians
 %
 
 set compile_env: 0

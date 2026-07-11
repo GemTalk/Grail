@@ -117,3 +117,78 @@ def merge(*iterables, key=None, reverse=False):
     if reverse:
         out = list(reversed(out))
     return iter(out)
+
+
+# ---- Max-heap API (Python 3.13+/3.14) -------------------------------------
+# CPython grew a public *_max family; test_heapq exercises it heavily.
+# Pure-Python mirrors of the min-heap implementations with the
+# comparison direction flipped.
+
+
+def _siftdown_max(heap, startpos, pos):
+    newitem = heap[pos]
+    while pos > startpos:
+        parentpos = (pos - 1) >> 1
+        parent = heap[parentpos]
+        if parent < newitem:
+            heap[pos] = parent
+            pos = parentpos
+            continue
+        break
+    heap[pos] = newitem
+
+
+def _siftup_max(heap, pos):
+    endpos = len(heap)
+    startpos = pos
+    newitem = heap[pos]
+    childpos = 2 * pos + 1
+    while childpos < endpos:
+        rightpos = childpos + 1
+        if rightpos < endpos and not heap[rightpos] < heap[childpos]:
+            childpos = rightpos
+        heap[pos] = heap[childpos]
+        pos = childpos
+        childpos = 2 * pos + 1
+    heap[pos] = newitem
+    _siftdown_max(heap, startpos, pos)
+
+
+def heapify_max(x):
+    """Transform list into a maxheap, in-place, in O(len(x)) time."""
+    n = len(x)
+    for i in reversed(range(n // 2)):
+        _siftup_max(x, i)
+
+
+def heappush_max(heap, item):
+    """Push item onto maxheap, maintaining the heap invariant."""
+    heap.append(item)
+    _siftdown_max(heap, 0, len(heap) - 1)
+
+
+def heappop_max(heap):
+    """Maxheap version of heappop."""
+    lastelt = heap.pop()
+    if heap:
+        returnitem = heap[0]
+        heap[0] = lastelt
+        _siftup_max(heap, 0)
+        return returnitem
+    return lastelt
+
+
+def heapreplace_max(heap, item):
+    """Maxheap version of heapreplace."""
+    returnitem = heap[0]
+    heap[0] = item
+    _siftup_max(heap, 0)
+    return returnitem
+
+
+def heappushpop_max(heap, item):
+    """Maxheap version of heappushpop."""
+    if heap and item < heap[0]:
+        item, heap[0] = heap[0], item
+        _siftup_max(heap, 0)
+    return item

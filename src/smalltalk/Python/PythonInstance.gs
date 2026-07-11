@@ -59,7 +59,8 @@ asFloat
 
 	((self @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) @env0:~~ nil)
 		ifTrue: [^ self perform: #'__float__' env: 1].
-	^ super doesNotUnderstand: #asFloat args: #() envId: 0
+	TypeError @env1:___signal___: ('must be real number, not '
+		@env0:, self @env0:class @env0:name @env0:asString)
 %
 
 set compile_env: 1
@@ -95,6 +96,37 @@ __iter__
 
 category: 'Grail-Python Protocol'
 method: PythonInstance
+__getitem__: key
+	"Subscripting an instance whose class defines no __getitem__:
+	catchable TypeError (CPython).  A real __getitem__ on the user
+	class overrides this; the legacy-iteration probe in __iter__ uses
+	whichClassIncludesSelector (not a send), so it is unaffected."
+
+	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
+		@env0:, ''' object is not subscriptable')
+%
+
+category: 'Grail-Python Protocol'
+method: PythonInstance
+__setitem__: key _: aValue
+	"Item assignment without __setitem__: catchable TypeError
+	(test_heapq's LenOnly fixture -- heappush into a non-sequence)."
+
+	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
+		@env0:, ''' object does not support item assignment')
+%
+
+category: 'Grail-Python Protocol'
+method: PythonInstance
+__delitem__: key
+	"Item deletion without __delitem__: catchable TypeError."
+
+	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
+		@env0:, ''' object does not support item deletion')
+%
+
+category: 'Grail-Python Protocol'
+method: PythonInstance
 __next__
 	"An object whose __iter__ returned self but which defines no
 	__next__ (test_heapq's broken-iterator fixtures): CPython raises
@@ -112,7 +144,8 @@ asFloat
 
 	((self @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) @env0:~~ nil)
 		ifTrue: [^ self @env0:perform: #'__float__' env: 1].
-	^ self @env0:doesNotUnderstand: #asFloat args: #() envId: 1
+	TypeError ___signal___: ('must be real number, not '
+		@env0:, self @env0:class @env0:name @env0:asString)
 %
 
 set compile_env: 0

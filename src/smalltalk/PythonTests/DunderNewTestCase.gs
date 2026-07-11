@@ -387,3 +387,63 @@ testRuntimeClassCompileFailureIsCatchable
 
 	self assert: (self fixture @env1:COMPILE_FAIL_RESULT) equals: 'name-error'
 %
+
+category: 'Grail-Tests - heapq'
+method: DunderNewTestCase
+testHeapqMaxApi
+	"Python 3.14's public max-heap family (heapify_max & co.) --
+	test_heapq exercises it in 26 places."
+
+	self assert: (self eval: 'import heapq
+h = [3, 1, 4, 1, 5, 9, 2, 6]
+heapq.heapify_max(h)
+top = h[0]
+heapq.heappush_max(h, 100)
+a = heapq.heappop_max(h)
+b = heapq.heappop_max(h)
+c = heapq.heappushpop_max(h, 0)
+[top, a, b, c]') @env1:__repr__ equals: '[9, 100, 9, 6]'
+%
+
+category: 'Grail-Tests - protocol errors'
+method: DunderNewTestCase
+testProtocolFallbacksRaiseCatchableTypeErrors
+	"PythonInstance item-protocol fallbacks (__getitem__/__setitem__/
+	__delitem__ without a definition), iter(int), zero-arg call of a
+	fixed-arity module function (BoundMethod no-match), and math-arg
+	conversion (math.exp('x')) all raise CATCHABLE TypeErrors -- each
+	was an uncatchable MNU that killed a CPython module run."
+
+	self assert: (self fixture @env1:PROTOCOL_FALLBACK_RESULT) @env1:__repr__
+		equals: '[''te'', ''te'', ''te'', ''te'', ''te'']'
+%
+
+category: 'Grail-Tests - overflow'
+method: DunderNewTestCase
+testIntegerOverflowIsCatchable
+	"DELIBERATE DEVIATION: GemStone caps LargeInteger (~130k bits;
+	CPython ints are unbounded).  factorial/** resignal the kernel
+	NumericError as catchable OverflowError instead of killing the
+	module run."
+
+	self assert: (self eval: 'import math
+try:
+    math.factorial(100000)
+    r = "no-error"
+except OverflowError:
+    r = "overflow"
+r') equals: 'overflow'
+%
+
+category: 'Grail-Tests - decimal'
+method: DunderNewTestCase
+testDecimalStubFloatProtocol
+	"The stdlib decimal.Decimal stub converts through __float__ (and
+	the PythonInstance asFloat bridge), so math.isclose(Decimal(...),
+	Decimal(...)) works (test_math IsCloseTests.test_decimals)."
+
+	self assert: (self eval: 'import math
+from decimal import Decimal
+[math.isclose(Decimal("1.0"), Decimal("1.00000001"), rel_tol=1e-4),
+ float(Decimal("2.5"))]') @env1:__repr__ equals: '[True, 2.5]'
+%

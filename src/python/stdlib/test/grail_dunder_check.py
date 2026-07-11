@@ -169,3 +169,25 @@ def _compile_fail_result():
 
 
 COMPILE_FAIL_RESULT = _compile_fail_result()
+
+
+def _protocol_fallback_results():
+    import math
+
+    class Bare:
+        pass
+
+    b = Bare()
+    r = []
+    for thunk in [lambda: b[0], lambda: b.__setitem__(0, 1),
+                  lambda: iter(3), lambda: math.acos(),
+                  lambda: math.exp("x")]:
+        try:
+            thunk()
+            r.append("no-error")
+        except TypeError:
+            r.append("te")
+    return r
+
+
+PROTOCOL_FALLBACK_RESULT = _protocol_fallback_results()

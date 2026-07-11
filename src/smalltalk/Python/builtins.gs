@@ -493,6 +493,8 @@ ___minOrMax___: positional kw: kwargs lessThan: pickSmaller
 	keyFn := (kwargs @env0:notNil and: [kwargs @env0:includesKey: 'key'])
 		@env0:ifTrue: [kwargs @env0:at: 'key']
 		@env0:ifFalse: [nil].
+	"Explicit key=None means no key (CPython)."
+	keyFn @env0:== None ifTrue: [keyFn := nil].
 	hasDefault := kwargs @env0:notNil and: [kwargs @env0:includesKey: 'default'].
 	default := hasDefault @env0:ifTrue: [kwargs @env0:at: 'default'] @env0:ifFalse: [nil].
 	iterable := (positional @env0:size) @env0:= 1
@@ -1256,9 +1258,14 @@ _sorted: positional kw: kwargs
 	keyFn := kwargs @env0:isNil
 		ifTrue: [nil]
 		ifFalse: [kwargs @env0:at: 'key' ifAbsent: [nil]].
+	"An EXPLICIT key=None means no key (CPython) -- test_heapq passes
+	key in [None, itemgetter(0), ...]; calling the None killed the
+	test with 'NoneType' object is not callable."
+	keyFn @env0:== None ifTrue: [keyFn := nil].
 	reverse := kwargs @env0:isNil
 		ifTrue: [false]
 		ifFalse: [kwargs @env0:at: 'reverse' ifAbsent: [false]].
+	reverse @env0:== None ifTrue: [reverse := false].
 	lst := list ___new___.
 	iter := iterable __iter__.
 	done := false.
