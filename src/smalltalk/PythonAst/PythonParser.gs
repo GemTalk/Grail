@@ -695,6 +695,8 @@ parseClassDefWithDecorators: decorators
 	| tok nameTok bases keywords body block variables writes blocking scope |
 	tok := self advance. "consume 'class'"
 	nameTok := self expectType: #NAME.
+	"``class _:`` -- same parse-time rename as def _ / NameAst reads."
+	nameTok value = '_' ifTrue: [nameTok value: '___unused___'].
 	self declareWrite: nameTok value asSymbol.
 	self skipTypeParams.
 	bases := Array new.
@@ -1299,6 +1301,10 @@ parseFunctionDefWithDecorators: decorators
 	  savedNesting |
 	tok := self advance. "consume 'def'"
 	nameTok := self expectType: #NAME.
+	"``def _(...)`` -- apply the same parse-time rename NameAst reads
+	get (see the identifier atom): `_` is GemStone's legacy assignment
+	token, not an identifier."
+	nameTok value = '_' ifTrue: [nameTok value: '___unused___'].
 	self declareWrite: nameTok value asSymbol.
 	self skipTypeParams.
 	self expect: #OP value: '('.
@@ -2523,20 +2529,78 @@ ___wrapFStringExpr: exprAst conversion: conversionChar formatSpec: formatSpec at
 		at: #keywords put: Array new;
 		yourself) from: locTok to: locTok.
 	formatSpec ifNil: [^ inner].
-	"format(value, spec) wrap."
+	"format(value, spec) wrap.  A spec containing {expr} placeholders
+	(``f'{x:0{w}d}''' -- PEP 498 one-level nesting) becomes a runtime
+	concatenation instead of a literal (___fstringSpecExprFor:at:);
+	vendored fractions.py's __format__ tests build specs this way."
 	callNode := self buildNode: CallAst fields: (IdentityKeyValueDictionary new
 		at: #function put: (self buildNode: NameAst fields: (IdentityKeyValueDictionary new
 			at: #id put: #format;
 			at: #ctx put: self loadCtx;
 			yourself) from: locTok to: locTok);
 		at: #arguments put: { exprAst.
-			self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
-				at: #value put: formatSpec;
-				at: #kind put: nil;
-				yourself) from: locTok to: locTok };
+			((formatSpec @env0:includes: ${)
+				ifTrue: [self ___fstringSpecExprFor: formatSpec at: locTok]
+				ifFalse: [
+					self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
+						at: #value put: formatSpec;
+						at: #kind put: nil;
+						yourself) from: locTok to: locTok]) };
 		at: #keywords put: Array new;
 		yourself) from: locTok to: locTok.
 	^ callNode
+%
+
+category: 'Grail-parsing - atoms'
+method: PythonParser
+___fstringSpecExprFor: spec at: locTok
+	"Build an AST expression for a format spec containing {expr}
+	placeholders: literal runs stay constants, each placeholder becomes
+	str(expr) (parsed by a child parser, its declared names propagated),
+	all folded with +."
+
+	| parts pos len ch runStart exprStart depth innerParser exprAst result piece |
+	parts := OrderedCollection new.
+	pos := 1.
+	len := spec @env0:size.
+	[pos <= len] whileTrue: [
+		ch := spec @env0:at: pos.
+		ch == ${
+			ifTrue: [
+				exprStart := pos + 1.
+				depth := 1.
+				pos := pos + 1.
+				[pos <= len and: [depth > 0]] whileTrue: [
+					ch := spec @env0:at: pos.
+					ch == ${ ifTrue: [depth := depth + 1].
+					ch == $} ifTrue: [depth := depth - 1].
+					depth > 0 ifTrue: [pos := pos + 1]].
+				innerParser := PythonParser basicNew
+					source: (spec @env0:copyFrom: exprStart to: pos - 1) asString.
+				exprAst := innerParser parseExpression.
+				innerParser ___variableStack___ do: [:innerScope |
+					innerScope do: [:varName | self declareVariable: varName]].
+				parts add: #expr ->
+					(self ___wrapFStringExpr: exprAst conversion: nil formatSpec: nil at: locTok).
+				pos := pos + 1]
+			ifFalse: [
+				runStart := pos.
+				[pos <= len and: [(spec @env0:at: pos) ~= ${]] whileTrue: [pos := pos + 1].
+				parts add: #literal -> (spec @env0:copyFrom: runStart to: pos - 1)]].
+	parts isEmpty ifTrue: [
+		^ self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
+			at: #value put: '';
+			at: #kind put: nil;
+			yourself) from: locTok to: locTok].
+	result := self ___fstringPartToAst: parts first from: locTok.
+	2 to: parts size do: [:i |
+		piece := self ___fstringPartToAst: (parts at: i) from: locTok.
+		result := self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
+			at: #left put: result;
+			at: #op put: (self buildNode: AddAst fields: IdentityKeyValueDictionary new from: locTok to: locTok);
+			at: #right put: piece;
+			yourself) from: locTok to: locTok].
+	^ result
 %
 
 category: 'Grail-parsing - subscript'

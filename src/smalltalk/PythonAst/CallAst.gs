@@ -16,7 +16,7 @@ ExpressionAst subclass: 'CallAst'
                     'classAttrNames' 'classSlotNames' 'selfParameterName'
                     'selfParameterRebound'
                     'returnEmitMode' 'inClassBodyValueEmit'
-                    'classBodyBoundNames'
+                    'classBodyBoundNames' 'classNestedClassNames'
                     'functionBeingCompiled')
   poolDictionaries: #()
   inDictionary: PythonAst
@@ -1263,6 +1263,23 @@ category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classBodyBoundNames: aSetOrNil
 	classBodyBoundNames := aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classNestedClassNames
+	"Names bound by NESTED classdefs in the class body being compiled.
+	They live in the outer class's per-class DYNAMIC attr store (no
+	accessor pair), so NameAst's prior-class-attr branch must read
+	them via ___dynamicClassAttr___ rather than the accessor send."
+
+	^ classNestedClassNames
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classNestedClassNames: aSetOrNil
+	classNestedClassNames := aSetOrNil
 %
 
 category: 'Grail-Class Compile Context'

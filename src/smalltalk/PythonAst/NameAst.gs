@@ -271,6 +271,24 @@ printSmalltalkOn: aStream
 			while attribute values emit; probe its dict first and fall
 			back to the module global of the same name (Python reads the
 			class-local if already bound, else the global)."
+			"NESTED-class sibling reference (``class A: ...`` then
+			``a = A()``): the nested class lives in the outer class's
+			per-class DYNAMIC store -- read it there (the accessor
+			send below would DNU)."
+			(CallAst inClassBodyValueEmit
+				and: [CallAst classNestedClassNames notNil
+				and: [(CallAst classNestedClassNames includes: id asSymbol)
+				and: [CallAst classBodyBoundNames isNil
+					or: [CallAst classBodyBoundNames includes: id asSymbol]]]])
+				ifTrue: [
+					aStream
+						nextPutAll: '(';
+						nextPutAll: CallAst classBeingCompiled asString;
+						nextPutAll: ' @env1:___dynamicClassAttr___: #''';
+						nextPutAll: id;
+						nextPutAll: ''')'.
+					^self
+				].
 			(CallAst inClassBodyValueEmit
 				and: [CallAst classAttrNames notNil
 				and: [(CallAst classAttrNames includes: id asSymbol)

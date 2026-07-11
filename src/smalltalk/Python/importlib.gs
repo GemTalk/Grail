@@ -962,8 +962,14 @@ ___inheritClassAttrs___: aClass exclude: ownAttrs
 		(((aClass superclass class whichClassIncludesSelector: n environmentId: 1) notNil)
 			and: [(aClass class whichClassIncludesSelector: (n asString , ':') asSymbol environmentId: 1) notNil
 			and: [n ~= #'__module__'
+			and: [n ~= #'dynInstVars'
 			and: [(ownAttrs includes: n) not
-			and: [(kernelSlots includes: n) not]]]]) ifTrue: [
+			and: [(kernelSlots includes: n) not]]]]]) ifTrue: [
+			"dynInstVars excluded: copying the PARENT's holder makes the
+			subclass SHARE the parent's per-class dynamic attrs -- the
+			conditional holder-init (nested-class fix) then keeps the
+			shared object, and a sibling dataclass's setattr'd __init__
+			leaked to every subclass (werkzeug multipart NeedData())."
 			"Setter probed too: a parent metaclass slot may expose only a
 			READER (numbers_Rational's ``registeredTypes'' backing its ABC
 			register()) -- blindly firing ``n:'' DNU'd when vendored

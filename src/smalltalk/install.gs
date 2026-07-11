@@ -283,6 +283,7 @@ run
 	at: #'fractions' put: nil;
 	at: #'frozenset' put: nil;
 	at: #'functools' put: nil;
+	at: #'functools_partial' put: nil;
 	at: #'dict_itemiterator' put: nil;
 	at: #'dict_keyiterator' put: nil;
 	at: #'dict_valueiterator' put: nil;

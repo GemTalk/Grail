@@ -156,3 +156,102 @@ testVarargsOnlyDunderDispatch
 	self assert: (self eval: 'from fractions import Fraction as F
 [str(F(1, 2) ** 2), str(2 ** F(2, 1))]') @env1:__repr__ equals: '[''1/4'', ''4'']'
 %
+
+category: 'Grail-Tests - functools'
+method: DunderNewTestCase
+testPartialIsARealClass
+	"functools.partial is a CLASS (CPython subclasses it at import in
+	test_functools; the old closure-returning module function could
+	not be).  Covers construction, invocation with merged kwargs,
+	func/args/keywords attrs, nested-partial flattening, and
+	isinstance."
+
+	self assert: (self eval: 'import functools
+from functools import partial
+p = partial(int, base=2)
+p2 = partial(p, "101")
+[p("101"), p2(), p.args == (), sorted(p.keywords.items()),
+ isinstance(p, functools.partial)]
+') @env1:__repr__ equals: '[5, 5, True, [(''base'', 2)], True]'
+%
+
+category: 'Grail-Tests - functools'
+method: DunderNewTestCase
+testCmpToKey
+	"functools.cmp_to_key wraps values so comparisons route through
+	the comparator; keyword form and non-K operand TypeErrors match
+	CPython."
+
+	self assert: (self eval: 'import functools
+def revcmp(a, b):
+    return (b > a) - (b < a)
+r1 = sorted([3, 1, 2], key=functools.cmp_to_key(revcmp))
+k = functools.cmp_to_key(mycmp=revcmp)
+try:
+    k(3) > 1
+    r2 = "no-error"
+except TypeError:
+    r2 = "type-error"
+[r1, r2]') @env1:__repr__ equals: '[[3, 2, 1], ''type-error'']'
+%
+
+category: 'Grail-Tests - codegen'
+method: DunderNewTestCase
+testUnderscoreAsDefAndClassName
+	"``def _(...)`` / ``class _:`` -- `_` is GemStone's legacy
+	assignment token; the parser renames the binding to ___unused___
+	(same rename NameAst reads always had).  singledispatch
+	registration bodies in test_functools use both forms."
+
+	self assert: (self eval: 'def outer():
+    def _(obj):
+        return obj + 1
+    return _(5)
+outer()') equals: 6
+%
+
+category: 'Grail-Tests - f-strings'
+method: DunderNewTestCase
+testFStringNestedSpecInterpolation
+	"PEP 498 one-level spec nesting: f''{x:0{w}d}'' evaluates {w}
+	inside the format spec at runtime (previously the literal brace
+	text reached the format engine and raised ValueError)."
+
+	self assert: (self eval: 'w = 5
+x = 42
+[f"{x:0{w}d}", f"{x:{w}}", f"{3.14159:.{3}f}"]
+') @env1:__repr__ equals: '[''00042'', ''   42'', ''3.142'']'
+%
+
+category: 'Grail-Tests - type checks'
+method: DunderNewTestCase
+testNonClassTypeChecksRaiseTypeError
+	"isinstance/issubclass with a non-class classinfo, class statements
+	with a non-class base, and instantiating a sealed kernel class all
+	raise CATCHABLE TypeErrors (each was an uncatchable Smalltalk error
+	that killed the test_functools module run)."
+
+	self assert: (self eval: 'import functools
+try:
+    isinstance(3, functools.reduce)
+    r1 = "no-error"
+except TypeError:
+    r1 = "type-error"
+try:
+    type(lambda: 1)()
+    r2 = "no-error"
+except TypeError:
+    r2 = "type-error"
+[r1, r2]') @env1:__repr__ equals: '[''type-error'', ''type-error'']'
+%
+
+category: 'Grail-Tests - nested classes'
+method: DunderNewTestCase
+testNestedClassInClassBody
+	"``class Outer: class A: ...`` -- nested classes now emit (stored
+	in the outer class's per-class dynamic attrs) and a LATER class-body
+	statement can instantiate them (``a = A()``), the
+	test_functools TestPartialMethod shape."
+
+	self assert: (self fixture @env1:NESTED_RESULT) equals: 11
+%

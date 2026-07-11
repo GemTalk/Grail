@@ -1419,6 +1419,12 @@ ___isInstanceSingle___: anObject of: aClass
 	"isinstance with a single class argument (post-tuple-expansion)."
 
 	| result theMetaclass |
+	"Non-class classinfo (isinstance(x, functools.cached_property)
+	where the attr resolved to a BoundMethod): raise CPython's
+	catchable TypeError -- isKindOf: on a non-Behavior dies with an
+	UNCATCHABLE ArgumentTypeError (killed test_functools)."
+	(aClass @env0:isKindOf: Behavior) ifFalse: [
+		TypeError ___signal___: 'isinstance() arg 2 must be a type, a tuple of types, or a union'].
 	result := anObject @env0:isKindOf: aClass.
 	(result not and: [aClass @env0:== Unicode7]) ifTrue: [
 		"str maps to Unicode7 for construction, but CPython counts EVERY
@@ -1593,6 +1599,8 @@ ___isSubclassSingle___: sub of: target
 	bases are visible only through its registered C3 MRO."
 
 	| il |
+	((sub @env0:isKindOf: Behavior) and: [target @env0:isKindOf: Behavior]) ifFalse: [
+		TypeError ___signal___: 'issubclass() arg must be a type'].
 	(sub @env0:== target) ifTrue: [^ true].
 	(sub @env0:inheritsFrom: target) ifTrue: [^ true].
 	"Mirror isinstance's str widening: every text string class is a

@@ -185,9 +185,19 @@ __new__: cls
 	"Python ``object.__new__(cls)`` — create a fresh instance of
 	``cls`` without running ``__init__``.  jinja2's Template
 	._from_namespace uses this to materialize a Template object
-	whose attributes get filled by the exec'd namespace."
+	whose attributes get filled by the exec'd namespace.
+	Sealed kernel classes refuse #new UNCATCHABLY -- resignal as
+	CPython's TypeError (see ___allocateInstance___:kw:)."
 
-	^ cls @env0:new
+	^ [cls @env0:new]
+		@env0:on: Error
+		do: [:ex |
+			(ex @env0:number == 2007 or: [ex @env0:number == 2014])
+				ifTrue: [
+					TypeError ___signal___: ('cannot create '''
+						@env0:, cls @env0:name @env0:asString
+						@env0:, ''' instances')]
+				ifFalse: [ex @env0:pass]]
 %
 
 category: 'Grail-Convenience Methods'
@@ -198,7 +208,27 @@ ___new__: positional kw: kwargs
 	Ignores extra positional / keyword args (object.__new__ accepts
 	them silently when __init__ is overridden)."
 
-	^ (positional @env0:at: 1) @env0:new
+	^ [(positional @env0:at: 1) @env0:new]
+		@env0:on: Error
+		do: [:ex |
+			(ex @env0:number == 2007 or: [ex @env0:number == 2014])
+				ifTrue: [
+					TypeError ___signal___: ('cannot create '''
+						@env0:, (positional @env0:at: 1) @env0:name @env0:asString
+						@env0:, ''' instances')]
+				ifFalse: [ex @env0:pass]]
+%
+
+category: 'Grail-Instantiation'
+method: object
+___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarNames
+	"``class X(base)`` where base is NOT a class (a BoundMethod --
+	test_functools subclasses functools.cached_property, which Grail
+	models as a module method): CPython raises TypeError; the bare
+	env-1 MNU was uncatchable and killed the module run."
+
+	TypeError ___signal___: ('cannot subclass a non-class base ('
+		@env0:, self @env0:class @env0:name @env0:asString @env0:, ')')
 %
 
 category: 'Grail-Instantiation'
@@ -228,7 +258,19 @@ ___allocateInstance___: positional kw: keywords
 		2 @env0:to: n do: [:i | stream @env0:nextPutAll: '_:'].
 		sel := stream @env0:contents @env0:asSymbol.
 		found := n @env0:> 0 and: [(self @env0:whichClassIncludesSelector: sel environmentId: 1) @env0:~~ nil]].
-	found ifFalse: [^ self @env0:new].
+	found ifFalse: [
+		"A sealed kernel class (ExecBlock via type(lambda)(), ...) refuses
+		#new with an UNCATCHABLE ShouldNotImplement/ImproperOperation --
+		resignal as CPython's catchable TypeError."
+		^ [self @env0:new]
+			@env0:on: Error
+			do: [:ex |
+				(ex @env0:number == 2007 or: [ex @env0:number == 2014])
+					ifTrue: [
+						TypeError ___signal___: ('cannot create '''
+							@env0:, self @env0:name @env0:asString
+							@env0:, ''' instances')]
+					ifFalse: [ex @env0:pass]]].
 	^ (UnboundMethod @env1:definingClass: self selector: #'__new__')
 		@env1:value: ({ self } @env0:, positional) value: keywords
 %
@@ -278,9 +320,19 @@ classmethod: object
 __new__
 	"Create a new instance of this class.
 	This is a class method that takes the class as the receiver.
-	In Python: object.__new__(cls) creates a new instance of cls."
+	In Python: object.__new__(cls) creates a new instance of cls.
+	Sealed kernel classes refuse #new UNCATCHABLY -- resignal as
+	CPython's TypeError."
 
-	^ self @env0:new
+	^ [self @env0:new]
+		@env0:on: Error
+		do: [:ex |
+			(ex @env0:number == 2007 or: [ex @env0:number == 2014])
+				ifTrue: [
+					TypeError ___signal___: ('cannot create '''
+						@env0:, self @env0:name @env0:asString
+						@env0:, ''' instances')]
+				ifFalse: [ex @env0:pass]]
 %
 
 category: 'Grail-Introspection'

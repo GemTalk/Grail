@@ -69,3 +69,17 @@ class GenericBox[T]:
 
 
 PEP695_CLASS_RESULT = GenericBox(7).v
+
+
+class NestedOuter:
+    class A:
+        x = 5
+
+    class B:
+        y = 6
+
+    a = A()
+    b = B()
+
+
+NESTED_RESULT = NestedOuter.a.x + NestedOuter.b.y

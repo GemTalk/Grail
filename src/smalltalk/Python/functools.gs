@@ -31,10 +31,60 @@ doit
 functools category: 'Grail-Modules'
 %
 
+! ------- functools_cmpkey class (functools.cmp_to_key wrapper)
+expectvalue /Class
+doit
+PythonInstance subclass: 'functools_cmpkey'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+functools_cmpkey category: 'Grail-Modules'
+%
+
+! ------- functools_partial class (Python functools.partial)
+expectvalue /Class
+doit
+PythonInstance subclass: 'functools_partial'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+functools_partial comment:
+'Python functools.partial as a REAL class (CPython test_functools
+subclasses it at import time; the previous closure-returning module
+function could not be subclassed).  State lives in dynamic instVars
+func / args / keywords, so attribute reads resolve through the
+standard PythonInstance probe.  Construction is implemented as the
+instance-side __new__ protocol (___new__:kw:) so ClassDefAst-emitted
+subclass instantiation and direct partial(...) calls share it.'
+%
+
+expectvalue /Class
+doit
+functools_partial category: 'Grail-Modules'
+%
+
 expectvalue /Metaclass3
 doit
 functools removeAllMethods: 1.
 functools class removeAllMethods: 1.
+functools_partial removeAllMethods: 1.
+functools_partial class removeAllMethods: 1.
+functools_cmpkey removeAllMethods: 1.
+functools_cmpkey class removeAllMethods: 1.
 %
 
 set compile_env: 1
@@ -42,7 +92,192 @@ set compile_env: 1
 category: 'Grail-Initialization'
 method: functools
 initialize
-	"No-op — all methods are real fast-path methods."
+	"Bind the partial class.  The module attribute load falls through
+	to SymbolDictionary storage once no partial:/-varargs methods
+	shadow it, so ``functools.partial`` / ``from functools import
+	partial`` yield the CLASS."
+
+	self @env0:at: #partial put: functools_partial
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+cmp_to_key: mycmp
+	"cmp_to_key(cmp) -> a key factory: key(x) wraps x so comparisons
+	route through cmp (sorted/min/max with old-style comparators --
+	test_functools exercises it directly)."
+
+	^ [:___p___ :___k___ |
+		| w o |
+		o := (___p___ @env0:~~ nil and: [___p___ @env0:size @env0:>= 1])
+			ifTrue: [___p___ @env0:at: 1]
+			ifFalse: [
+				(___k___ @env0:~~ nil and: [___k___ @env0:includesKey: 'obj'])
+					ifTrue: [___k___ @env0:at: 'obj']
+					ifFalse: [TypeError ___signal___: 'K() missing required argument: obj']].
+		w := functools_cmpkey @env0:new.
+		w @env0:dynamicInstVarAt: #obj put: o.
+		w @env0:dynamicInstVarAt: #cmp put: mycmp.
+		w]
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+_cmp_to_key: positional kw: kwargs
+	"Varargs companion: cmp_to_key(mycmp=f) keyword form and
+	argument-count errors (test_cmp_to_key)."
+
+	| f |
+	f := (positional @env0:size @env0:>= 1)
+		ifTrue: [positional @env0:at: 1]
+		ifFalse: [
+			(kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'mycmp'])
+				ifTrue: [kwargs @env0:at: 'mycmp']
+				ifFalse: [TypeError ___signal___: 'cmp_to_key() missing required argument: mycmp']].
+	^ self @env1:cmp_to_key: f
+%
+
+category: 'Grail-Comparison'
+method: functools_cmpkey
+__lt__: other
+	(other @env0:isKindOf: functools_cmpkey) ifFalse: [
+		TypeError ___signal___: 'other argument must be K instance'].
+	^ ((self @env0:dynamicInstVarAt: #cmp) @env1:value:
+		{ self @env0:dynamicInstVarAt: #obj. other @env0:dynamicInstVarAt: #obj } value: nil)
+		@env0:< 0
+%
+
+category: 'Grail-Comparison'
+method: functools_cmpkey
+__gt__: other
+	(other @env0:isKindOf: functools_cmpkey) ifFalse: [
+		TypeError ___signal___: 'other argument must be K instance'].
+	^ ((self @env0:dynamicInstVarAt: #cmp) @env1:value:
+		{ self @env0:dynamicInstVarAt: #obj. other @env0:dynamicInstVarAt: #obj } value: nil)
+		@env0:> 0
+%
+
+category: 'Grail-Comparison'
+method: functools_cmpkey
+__le__: other
+	(other @env0:isKindOf: functools_cmpkey) ifFalse: [
+		TypeError ___signal___: 'other argument must be K instance'].
+	^ ((self @env0:dynamicInstVarAt: #cmp) @env1:value:
+		{ self @env0:dynamicInstVarAt: #obj. other @env0:dynamicInstVarAt: #obj } value: nil)
+		@env0:<= 0
+%
+
+category: 'Grail-Comparison'
+method: functools_cmpkey
+__ge__: other
+	(other @env0:isKindOf: functools_cmpkey) ifFalse: [
+		TypeError ___signal___: 'other argument must be K instance'].
+	^ ((self @env0:dynamicInstVarAt: #cmp) @env1:value:
+		{ self @env0:dynamicInstVarAt: #obj. other @env0:dynamicInstVarAt: #obj } value: nil)
+		@env0:>= 0
+%
+
+category: 'Grail-Comparison'
+method: functools_cmpkey
+__eq__: other
+	(other @env0:isKindOf: functools_cmpkey) ifFalse: [
+		TypeError ___signal___: 'other argument must be K instance'].
+	^ ((self @env0:dynamicInstVarAt: #cmp) @env1:value:
+		{ self @env0:dynamicInstVarAt: #obj. other @env0:dynamicInstVarAt: #obj } value: nil)
+		@env0:= 0
+%
+
+category: 'Grail-Instantiation'
+classmethod: functools_partial
+value: positional value: keywords
+	"partial(fn, *args, **kw) -- class-call entry.  Route through the
+	__new__ protocol so subclass instantiation (ClassDefAst-emitted
+	value:value: uses ___allocateInstance___) and direct calls share
+	one constructor."
+
+	^ self @env1:___allocateInstance___: positional kw: keywords
+%
+
+category: 'Grail-Instantiation'
+method: functools_partial
+___new__: positional kw: keywords
+	"Constructor body.  self is the CLASS: ___allocateInstance___ runs a
+	class-body __new__ non-virtually with the class as receiver, which
+	also makes ``class Sub(partial): pass`` construct Sub instances."
+
+	| inst fn rest kw |
+	(positional @env0:== nil or: [positional @env0:isEmpty]) ifTrue: [
+		TypeError ___signal___: 'partial expected at least 1 argument, got 0'].
+	fn := positional @env0:at: 1.
+	rest := positional @env0:size @env0:> 1
+		ifTrue: [positional @env0:copyFrom: 2 to: positional @env0:size]
+		ifFalse: [#()].
+	kw := keywords @env0:== nil
+		ifTrue: [KeyValueDictionary @env0:new]
+		ifFalse: [keywords @env0:copy].
+	"CPython flattens partial-of-partial: adopt the inner func, prepend
+	its bound args, and let the OUTER keywords override the inner."
+	(fn @env0:isKindOf: functools_partial) ifTrue: [
+		| merged |
+		rest := (fn @env0:dynamicInstVarAt: #args) @env0:asArray @env0:, rest.
+		merged := (fn @env0:dynamicInstVarAt: #keywords) @env0:copy.
+		kw @env0:keysAndValuesDo: [:k :v | merged @env0:at: k put: v].
+		kw := merged.
+		fn := fn @env0:dynamicInstVarAt: #func].
+	inst := self @env0:new.
+	inst @env0:dynamicInstVarAt: #func put: fn.
+	inst @env0:dynamicInstVarAt: #args put: (tuple @env0:withAll: rest).
+	inst @env0:dynamicInstVarAt: #keywords put: kw.
+	^ inst
+%
+
+category: 'Grail-Calling'
+method: functools_partial
+value: morePositional value: moreKw
+	"Invoke: fn(*bound, *more, **{**boundKw, **moreKw}) -- later
+	keywords override the bound ones (CPython semantics)."
+
+	| fn allArgs bk allKw |
+	fn := self @env0:dynamicInstVarAt: #func.
+	allArgs := (self @env0:dynamicInstVarAt: #args) @env0:asArray
+		@env0:, (morePositional @env0:== nil ifTrue: [#()] ifFalse: [morePositional]).
+	bk := self @env0:dynamicInstVarAt: #keywords.
+	allKw := (bk @env0:== nil or: [bk @env0:isEmpty])
+		ifTrue: [moreKw]
+		ifFalse: [
+			(moreKw @env0:== nil or: [moreKw @env0:isEmpty])
+				ifTrue: [bk]
+				ifFalse: [
+					| merged |
+					merged := bk @env0:copy.
+					moreKw @env0:keysAndValuesDo: [:k :v | merged @env0:at: k put: v].
+					merged]].
+	"value:value: is the universal call protocol -- BoundMethod, class
+	objects (partial(int, base=2)), blocks, and nested partials all
+	dispatch through it; ___pyCallValue___ rejects classes."
+	^ fn @env1:value: allArgs value: allKw
+%
+
+category: 'Grail-String Representation'
+method: functools_partial
+__repr__
+	"functools.partial(<func repr>, args..., k=v...)"
+
+	| stream |
+	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream @env0:nextPutAll: 'functools.partial('.
+	stream @env0:nextPutAll:
+		((self @env0:dynamicInstVarAt: #func) @env1:__repr__) @env0:asString.
+	(self @env0:dynamicInstVarAt: #args) @env0:do: [:a |
+		stream @env0:nextPutAll: ', '.
+		stream @env0:nextPutAll: (a @env1:__repr__) @env0:asString].
+	(self @env0:dynamicInstVarAt: #keywords) @env0:keysAndValuesDo: [:k :v |
+		stream @env0:nextPutAll: ', '.
+		stream @env0:nextPutAll: k @env0:asString.
+		stream @env0:nextPutAll: '='.
+		stream @env0:nextPutAll: (v @env1:__repr__) @env0:asString].
+	stream @env0:nextPut: $).
+	^ stream @env0:contents
 %
 
 category: 'Grail-Built-in Functions'
@@ -174,52 +409,6 @@ _update_wrapper: positional kw: kwargs
 	``updated=`` keyword variants — same identity stub."
 
 	^ positional @env0:at: 1
-%
-
-category: 'Grail-Built-in Functions'
-method: functools
-partial: aFunction
-	"partial(fn, *args, **kwargs) — bind some arguments now and
-	return a callable that fills the rest in later.  The 1-arg form
-	(no pre-bound args) returns the function untouched; the
-	``_partial:kw:'' varargs form handles pre-bound positional /
-	keyword arguments."
-
-	^ aFunction
-%
-
-category: 'Grail-Built-in Functions'
-method: functools
-_partial: positional kw: kwargs
-	"functools.partial(fn, *bound, **boundKw) — return a callable that,
-	when later invoked with ``(*more, **moreKw)'', calls
-	``fn(*bound, *more, **boundKw, **moreKw)''.  Pre-bound positional
-	args come first; later kwargs override earlier ones.  Used e.g. by
-	werkzeug.wsgi's ``partial(next, iterator)''."
-
-	| fn boundArgs boundKw |
-	(positional @env0:isNil or: [positional @env0:isEmpty]) ifTrue: [
-		TypeError @env1:___signal___: 'partial expected at least 1 argument, got 0'
-	].
-	fn := positional @env0:at: 1.
-	boundArgs := positional @env0:size @env0:> 1
-		ifTrue: [positional @env0:copyFrom: 2 to: positional @env0:size]
-		ifFalse: [#()].
-	boundKw := kwargs.
-	^ [:morePositional :moreKwargs |
-		| allArgs allKw |
-		allArgs := boundArgs @env0:, (morePositional @env0:ifNil: [#()]).
-		allKw := (boundKw @env0:isNil or: [boundKw @env0:isEmpty])
-			ifTrue: [moreKwargs]
-			ifFalse: [
-				(moreKwargs @env0:isNil or: [moreKwargs @env0:isEmpty])
-					ifTrue: [boundKw]
-					ifFalse: [
-						| merged |
-						merged := boundKw @env0:copy.
-						moreKwargs @env0:keysAndValuesDo: [:k :v | merged @env0:at: k put: v].
-						merged]].
-		fn @env1:___pyCallValue___: allArgs kw: allKw]
 %
 
 category: 'Grail-Built-in Functions'

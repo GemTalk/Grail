@@ -21,6 +21,24 @@ set compile_env: 1
 
 category: 'Grail-Initialization'
 classmethod: int
+_new: positional kw: kwargs
+	"Kwargs constructor entry: int(x, base=n) -- the generic class-call
+	(Object class>>value:value:) forwards keyword calls here.
+	partial(int, base=2)('101') reaches this via the partial invoke."
+
+	| obj base |
+	obj := (positional @env0:size @env0:>= 1)
+		ifTrue: [positional @env0:at: 1]
+		ifFalse: [kwargs @env0:at: 'x' ifAbsent: [^ 0]].
+	base := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [kwargs @env0:at: 'base' ifAbsent: [nil]].
+	base @env0:== nil ifTrue: [^ self @env1:__new__: obj].
+	^ self @env1:__new__: obj _: base
+%
+
+category: 'Grail-Initialization'
+classmethod: int
 __new__
 	"Create a new int instance with default value 0.
 	In Python: int() or int.__new__(int)"

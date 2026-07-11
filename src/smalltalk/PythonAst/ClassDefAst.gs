@@ -79,7 +79,8 @@ printSmalltalkRuntimeOn: aStream
 	  initMethod initSelector classAttrs allClassInstVars
 	  savedClass savedFuncNames savedVarargsFuncNames
 	  savedSelfParam savedClassAttrNames settersByName
-	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames |
+	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames
+	  savedInBodyEmit savedBoundNames savedNestedNames |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -468,10 +469,63 @@ printSmalltalkRuntimeOn: aStream
 	CallAst classBeingCompiled: name asSymbol.
 	CallAst classFunctionNames: funcNames.
 	CallAst classVarargsFunctionNames: varargsFuncNames.
-	CallAst classAttrNames: (IdentitySet withAll: (classAttrs collect: [:p | p key])).
+	CallAst classAttrNames: ((IdentitySet withAll: (classAttrs collect: [:p | p key]))
+		addAll: ((body body select: [:stmt | stmt isKindOf: ClassDefAst])
+			collect: [:c | c name asSymbol]);
+		yourself).
 	CallAst selfParameterName: selfParam.
 	CallAst classSlotNames: slotNameSet.
+	savedInBodyEmit := CallAst inClassBodyValueEmit.
+	savedBoundNames := CallAst classBodyBoundNames.
+	savedNestedNames := CallAst classNestedClassNames.
+	CallAst classNestedClassNames: (IdentitySet withAll:
+		((body body select: [:stmt | stmt isKindOf: ClassDefAst])
+			collect: [:c | c name asSymbol])).
 	CallAst inClassBodyValueEmit: true.
+	"NESTED CLASSES (``class Outer: class A: ...``) -- previously
+	dropped entirely.  Emit each nested classdef inside a bracketed
+	block (its class variable is block-local, not a module temp) and
+	store the built class as a class attribute on the outer class via
+	the per-class dynamic store, BEFORE the attr values emit so a later
+	``a = A()'' in the outer body can read it (test_functools'
+	TestPartialMethod.A).  The nested emit saves/restores the CallAst
+	compile context itself."
+	(body body anySatisfy: [:stmt | stmt isKindOf: ClassDefAst]) ifTrue: [
+		"The per-class dynamic store backs the nested-class attribute;
+		its accessors normally compile at the END of the class emit,
+		AFTER this section runs -- pull them (and the holder init)
+		forward.  The later init is conditional, so the holder set
+		here survives."
+		self
+			emitCompileMethodOn: name
+			source: 'dynInstVars
+	^ dynInstVars'
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream.
+		self
+			emitCompileMethodOn: name
+			source: 'dynInstVars: ___1
+	dynInstVars := ___1.'
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream.
+		aStream nextPutAll: name;
+			nextPutAll: ' dynInstVars: (Object @env0:new).'; lf].
+	(body body select: [:stmt | stmt isKindOf: ClassDefAst]) do: [:nested |
+		aStream nextPutAll: '[ | '; nextPutAll: nested name asString;
+			nextPutAll: ' |'; lf.
+		nested printSmalltalkOn: aStream.
+		aStream lf;
+			nextPutAll: name;
+			nextPutAll: ' @env1:___pyAttrStore___: #''';
+			nextPutAll: nested name asString;
+			nextPutAll: ''' put: ';
+			nextPutAll: nested name asString;
+			nextPutAll: ' ] value.'; lf.
+	].
 	[
 		"Python executes a class body top-to-bottom: a name is class-
 		local only once its binding statement has run.  Build each
@@ -519,14 +573,19 @@ printSmalltalkRuntimeOn: aStream
 			].
 		].
 	] ensure: [
+		"RESTORE (not hardcode-off) the body-emit flags: a NESTED class
+		emits inside the OUTER class's attr-value section, and clearing
+		the flags here killed the outer prior-class-attr resolution
+		(``a = A()`` after ``class A:`` emitted a bare undeclared A)."
 		CallAst classBeingCompiled: savedClass.
 		CallAst classFunctionNames: savedFuncNames.
 		CallAst classVarargsFunctionNames: savedVarargsFuncNames.
 		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.
 		CallAst classSlotNames: savedSlotNames.
-		CallAst inClassBodyValueEmit: false.
-		CallAst classBodyBoundNames: nil.
+		CallAst inClassBodyValueEmit: (savedInBodyEmit == true).
+		CallAst classBodyBoundNames: savedBoundNames.
+		CallAst classNestedClassNames: savedNestedNames.
 	].
 	"NamedTuple-style classes get a ``_fields'' accessor/setter pair
 	on the metaclass, initialised to a tuple of declaration-order
@@ -664,7 +723,13 @@ printSmalltalkRuntimeOn: aStream
 		env: 1
 		classSide: true
 		onStream: aStream.
-	aStream nextPutAll: name; nextPutAll: ' dynInstVars: (Object @env0:new).'; lf.
+	"Conditional: a NESTED class stored via ___pyAttrStore___ during the
+	attr-value section already forced the holder into existence --
+	an unconditional overwrite here wiped it (Outer.A vanished)."
+	aStream nextPutAll: name;
+		nextPutAll: ' dynInstVars @env0:== nil ifTrue: [';
+		nextPutAll: name;
+		nextPutAll: ' dynInstVars: (Object @env0:new)].'; lf.
 
 	"For each @property (and @cached_property) method, compile a 1-arg
 	setter that signals AttributeError.  Pairing the getter with a
@@ -913,7 +978,7 @@ emitCompileMethodOn: classVarName source: sourceString category: categoryString 
 category: 'Grail-code generation'
 method: ClassDefAst
 emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aStream
-	"Emit the class-side `value: positional value: keywords` method
+	"Emit the class-side `value: ___pos___ value: ___kw___` method
 	used as the entry point when Python code instantiates the class.
 
 	str subclasses are special-cased: ``self new`` returns an empty
@@ -931,12 +996,12 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 	| src lf |
 	lf := Character lf asString.
 	src := WriteStream on: Unicode7 new.
-	src nextPutAll: 'value: positional value: keywords'; nextPutAll: lf.
+	src nextPutAll: 'value: ___pos___ value: ___kw___'; nextPutAll: lf.
 	src nextPutAll: '| instance dynInit |'; nextPutAll: lf.
 	self firstBaseIsStr
 		ifTrue: [
 			src
-				nextPutAll: 'instance := self @env1:__new__: ((positional @env0:size @env0:>= 1) ifTrue: [positional @env0:at: 1] ifFalse: ['''']).';
+				nextPutAll: 'instance := self @env1:__new__: ((___pos___ @env0:size @env0:>= 1) ifTrue: [___pos___ @env0:at: 1] ifFalse: ['''']).';
 				nextPutAll: lf
 		]
 		ifFalse: [self firstBaseIsTuple
@@ -948,7 +1013,7 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 				marker tuple from an iterable.  Empty positional yields
 				the empty-tuple fast path."
 				src
-					nextPutAll: 'instance := positional @env0:size @env0:= 0 ifTrue: [self @env0:new] ifFalse: [self @env1:__new__: (positional @env0:at: 1)].';
+					nextPutAll: 'instance := ___pos___ @env0:size @env0:= 0 ifTrue: [self @env0:new] ifFalse: [self @env1:__new__: (___pos___ @env0:at: 1)].';
 					nextPutAll: lf
 			]
 			ifFalse: [
@@ -957,12 +1022,12 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 				as receiver before __init__ -- see object class >>
 				___allocateInstance___:kw: (vendored fractions.py's
 				Fraction.__new__ carries ALL of its construction)."
-				src nextPutAll: 'instance := self @env1:___allocateInstance___: positional kw: keywords.'; nextPutAll: lf]].
+				src nextPutAll: 'instance := self @env1:___allocateInstance___: ___pos___ kw: ___kw___.'; nextPutAll: lf]].
 	"Descriptor-bound __init__ override: a setattr-installed
 	``cls.__init__ = synth_fn'' lands in the class''s dynInstVars
 	store.  Probe for it BEFORE the static dispatch so dataclass-
 	style synthesis (or any runtime mutation of __init__) takes
-	effect.  When found, prepend the instance to positional args and
+	effect.  When found, prepend the instance to ___pos___ args and
 	forward via ___pyCallValue___ — matches CPython''s descriptor
 	read.  When absent (the common case), fall through to the
 	statically-compiled dispatch below."
@@ -970,26 +1035,26 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 		nextPutAll: 'dynInit := self @env1:___dynamicClassAttr___: #''__init__''.';
 		nextPutAll: lf;
 		nextPutAll: 'dynInit @env0:== nil ifFalse: [';
-		nextPutAll: 'dynInit @env1:___pyCallValue___: ({ instance } @env0:, positional) kw: keywords.';
+		nextPutAll: 'dynInit @env1:___pyCallValue___: ({ instance } @env0:, ___pos___) kw: ___kw___.';
 		nextPutAll: '^ instance].';
 		nextPutAll: lf.
 	initSelector ifNotNil: [
 		"Varargs __init__ (defaults, *args, or **kwargs) compiles to a
-		`___init__:kw:` selector that takes both positional and keyword
-		arrays; the fixed-arity form takes the positional values
+		`___init__:kw:` selector that takes both ___pos___ and keyword
+		arrays; the fixed-arity form takes the ___pos___ values
 		spread."
 		(initSelector asString endsWith: ':kw:')
 			ifTrue: [
 				src
 					nextPutAll: 'instance perform: #''';
 					nextPutAll: initSelector asString;
-					nextPutAll: ''' env: 1 withArguments: (Array @env0:with: positional @env0:with: keywords).';
+					nextPutAll: ''' env: 1 withArguments: (Array @env0:with: ___pos___ @env0:with: ___kw___).';
 					nextPutAll: lf.
 			] ifFalse: [
 				src
 					nextPutAll: 'instance perform: #''';
 					nextPutAll: initSelector asString;
-					nextPutAll: ''' env: 1 withArguments: positional.';
+					nextPutAll: ''' env: 1 withArguments: ___pos___.';
 					nextPutAll: lf.
 			].
 	] ifNil: [
@@ -1001,7 +1066,7 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 		zero-arg ``new`` semantics."
 		src
 			nextPutAll: '[instance perform: #''___init__:kw:'' env: 1 withArguments:';
-			nextPutAll: ' (Array @env0:with: positional @env0:with: keywords)] @env0:on: MessageNotUnderstood do: [:___ex | nil].';
+			nextPutAll: ' (Array @env0:with: ___pos___ @env0:with: ___kw___)] @env0:on: MessageNotUnderstood do: [:___ex | nil].';
 			nextPutAll: lf.
 	].
 	src nextPutAll: '^ instance'.
