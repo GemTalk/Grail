@@ -801,3 +801,16 @@ testUnittestContextAndSubclassAsserts
 	self assert: (self fixture @env1:UNITTEST_SURFACE_RESULT) @env1:__repr__
 		equals: '(1, 0, 0)'
 %
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testStaticSiblingRefInClassBody
+	"A class-body value expression can reference an earlier sibling
+	@staticmethod as a first-class function (NameAst emits a
+	class-receiver BoundMethod; plain sibling defs already worked via
+	the receiver-less form).  test_enum's functional-API classes pass
+	_generate_next_value_ this way."
+
+	self assert: (self fixture @env1:STATIC_SIBLING_RESULT) @env1:__repr__
+		equals: '(''x'', 5)'
+%

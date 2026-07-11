@@ -76,7 +76,7 @@ printSmalltalkRuntimeOn: aStream
 	| methodDefs classMethodDefs staticMethodDefs selfParam
 	  funcNames varargsFuncNames
 	  methodSources classMethodSources staticMethodSources
-	  initMethod initSelector classAttrs allClassInstVars
+	  initMethod initSelector classAttrs allClassInstVars staticFuncNames savedStaticFuncNames
 	  savedClass savedFuncNames savedVarargsFuncNames
 	  savedSelfParam savedClassAttrNames settersByName
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames
@@ -87,6 +87,8 @@ printSmalltalkRuntimeOn: aStream
 	staticMethodDefs := self staticMethodDefs.
 	selfParam := self selfParameterName.
 	funcNames := IdentitySet new.
+	staticFuncNames := IdentitySet new.
+	staticMethodDefs do: [:def | staticFuncNames add: def name asSymbol].
 	varargsFuncNames := IdentitySet new.
 	methodDefs do: [:def |
 		funcNames add: def name asSymbol.
@@ -142,6 +144,8 @@ printSmalltalkRuntimeOn: aStream
 	actual class doesn't exist until the emitted code runs."
 	CallAst classBeingCompiled: name asSymbol.
 	CallAst classFunctionNames: funcNames.
+	savedStaticFuncNames := CallAst classStaticFunctionNames.
+	CallAst classStaticFunctionNames: staticFuncNames.
 	CallAst classVarargsFunctionNames: varargsFuncNames.
 	CallAst classAttrNames: (IdentitySet withAll: (classAttrs collect: [:p | p key])).
 	CallAst selfParameterName: selfParam.
@@ -230,6 +234,7 @@ printSmalltalkRuntimeOn: aStream
 	] ensure: [
 		CallAst classBeingCompiled: savedClass.
 		CallAst classFunctionNames: savedFuncNames.
+		CallAst classStaticFunctionNames: savedStaticFuncNames.
 		CallAst classVarargsFunctionNames: savedVarargsFuncNames.
 		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.
@@ -471,6 +476,8 @@ printSmalltalkRuntimeOn: aStream
 	NameError at class-init time."
 	CallAst classBeingCompiled: name asSymbol.
 	CallAst classFunctionNames: funcNames.
+	savedStaticFuncNames := CallAst classStaticFunctionNames.
+	CallAst classStaticFunctionNames: staticFuncNames.
 	CallAst classVarargsFunctionNames: varargsFuncNames.
 	CallAst classAttrNames: ((IdentitySet withAll: (classAttrs collect: [:p | p key]))
 		addAll: ((body body select: [:stmt | stmt isKindOf: ClassDefAst])
@@ -603,6 +610,7 @@ printSmalltalkRuntimeOn: aStream
 		(``a = A()`` after ``class A:`` emitted a bare undeclared A)."
 		CallAst classBeingCompiled: savedClass.
 		CallAst classFunctionNames: savedFuncNames.
+		CallAst classStaticFunctionNames: savedStaticFuncNames.
 		CallAst classVarargsFunctionNames: savedVarargsFuncNames.
 		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.

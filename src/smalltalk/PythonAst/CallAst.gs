@@ -13,6 +13,7 @@ ExpressionAst subclass: 'CallAst'
                     'moduleVariableNames'
                     'classBeingCompiled'
                     'classFunctionNames' 'classVarargsFunctionNames'
+                    'classStaticFunctionNames'
                     'classAttrNames' 'classSlotNames' 'selfParameterName'
                     'selfParameterRebound'
                     'returnEmitMode' 'inClassBodyValueEmit'
@@ -1239,6 +1240,18 @@ category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classFunctionNames
 	^ classFunctionNames
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classStaticFunctionNames
+	^ classStaticFunctionNames
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classStaticFunctionNames: aSetOrNil
+	classStaticFunctionNames := aSetOrNil
 %
 
 category: 'Grail-Class Compile Context'

@@ -463,3 +463,22 @@ def _unittest_surface_results():
 
 
 UNITTEST_SURFACE_RESULT = _unittest_surface_results()
+
+
+def _static_sibling_ref_results():
+    # A class-body value expression referencing an earlier sibling
+    # @staticmethod (test_enum's _generate_next_value_ shape).  Static
+    # defs compile class-side, so the reference must dispatch on the
+    # class itself with the caller's full argument list.
+    class HasStatic:
+        @staticmethod
+        def _gen(name, start, count, last_values):
+            return (name, count)
+
+        table = {'_gen': _gen}
+
+    f = HasStatic.table['_gen']
+    return f('x', 1, 5, [])
+
+
+STATIC_SIBLING_RESULT = _static_sibling_ref_results()

@@ -265,6 +265,27 @@ printSmalltalkOn: aStream
 						nextPutAll: ')'.
 					^self
 				].
+			"Class-body reference to a sibling @staticmethod (test_enum's
+			``@staticmethod def _generate_next_value_(...)'' then
+			``enum_type = Enum(..., {'_generate_next_value_':
+			_generate_next_value_})'').  Static defs compile CLASS-side,
+			so the reference is a BoundMethod on the class temp itself --
+			calling it dispatches the metaclass method with the caller's
+			full argument list (no receiver popping)."
+			(CallAst inClassBodyValueEmit
+				and: [CallAst classStaticFunctionNames notNil
+				and: [(CallAst classStaticFunctionNames includes: id asSymbol)
+				and: [CallAst classBodyBoundNames isNil
+					or: [CallAst classBodyBoundNames includes: id asSymbol]]]])
+				ifTrue: [
+					aStream
+						nextPutAll: '(BoundMethod receiver: ';
+						nextPutAll: CallAst classBeingCompiled asString;
+						nextPutAll: ' selector: #';
+						nextPutAll: id;
+						nextPutAll: ')'.
+					^self
+				].
 			"Class-body reference to a PRIOR class attribute (``ul = ...''
 			then ``regex = '[a-z' + ul + ...'`` — django's URLValidator).
 			The class under construction is in scope as ``___cls___''
