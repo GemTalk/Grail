@@ -7,7 +7,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'LruCacheWrapper'
-  instVarNames: #( wrapped )
+  instVarNames: #( wrapped cache hits misses )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -18,16 +18,12 @@ Object subclass: 'LruCacheWrapper'
 expectvalue /Class
 doit
 LruCacheWrapper comment:
-'Wrapper returned by ``functools.lru_cache`` so the decorated
-function exposes the ``cache_clear`` / ``cache_info`` attributes
-CPython callers rely on.  Caching itself is a no-op in this
-build — every invocation re-delegates to the wrapped function.
-
-A real lru_cache implementation would intern call results in a
-dictionary keyed by a freeze of the positional + keyword args;
-the surface here is intentionally minimal — enough to let
-``@lru_cache(maxsize=10)``-decorated functions import and run
-without ``MessageNotUnderstood: cache_clear``.'
+'Wrapper returned by ``functools.lru_cache``.  REAL memoization:
+results intern in a dictionary keyed by the positional args plus
+sorted keyword pairs.  The cache is UNBOUNDED (maxsize / typed are
+accepted and ignored) -- eviction is a perf refinement, but the
+memoization itself is semantic: CPython test_functools''s
+test_lru_recursion is exponential without it.'
 %
 
 expectvalue /Class
@@ -68,12 +64,30 @@ ___wrap___: aFunction
 category: 'Grail-Calling'
 method: LruCacheWrapper
 value: positional value: kwargs
-	"Plain call site: ``wrapped_fn(*args, **kwargs)``.  Delegates
-	to the wrapped function; the wrapped function is itself a
-	closure / BoundMethod that already accepts the
-	``value:value:`` 2-arg call convention."
+	"Memoizing call: intern the result keyed by positional args +
+	sorted keyword pairs.  Python values never surface as Smalltalk
+	nil (None is a singleton), so nil-as-absent is a safe cache miss
+	marker."
 
-	^ wrapped @env1:value: positional value: kwargs
+	| key result |
+	key := (positional @env0:== nil ifTrue: [#()] ifFalse: [positional]) @env0:asArray.
+	(kwargs @env0:~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
+		| pairs sortedKeys |
+		pairs := OrderedCollection @env0:new.
+		sortedKeys := kwargs @env0:keys @env0:asSortedCollection.
+		sortedKeys @env0:do: [:k |
+			pairs @env0:add: k.
+			pairs @env0:add: (kwargs @env0:at: k)].
+		key := key @env0:, pairs @env0:asArray].
+	cache @env0:== nil ifTrue: [cache := KeyValueDictionary @env0:new].
+	result := cache @env0:at: key ifAbsent: [nil].
+	result @env0:== nil ifFalse: [
+		hits := (hits @env0:== nil ifTrue: [0] ifFalse: [hits]) @env0:+ 1.
+		^ result].
+	result := wrapped @env1:value: positional value: kwargs.
+	misses := (misses @env0:== nil ifTrue: [0] ifFalse: [misses]) @env0:+ 1.
+	cache @env0:at: key put: result.
+	^ result
 %
 
 category: 'Grail-Calling'
@@ -83,7 +97,7 @@ ___call___: positional kw: kwargs
 	CallAst fast path tries ``___call___:kw:`` when the receiver
 	doesn't match a simpler shape."
 
-	^ wrapped @env1:value: positional value: kwargs
+	^ self @env1:value: positional value: kwargs
 %
 
 category: 'Grail-Calling'
@@ -96,15 +110,17 @@ ___pyCallValue___: positional kw: kwargs
 	@lru_cache-decorated and invoked indirectly through
 	_get_callable_parameters."
 
-	^ wrapped @env1:value: positional value: kwargs
+	^ self @env1:value: positional value: kwargs
 %
 
 category: 'Grail-Attributes'
 method: LruCacheWrapper
 cache_clear
-	"``functools.lru_cache``: clear the (no-op) cache.  Real
-	implementation would reset the cache dict."
+	"``functools.lru_cache``: drop every interned result."
 
+	cache := nil.
+	hits := nil.
+	misses := nil.
 	^ None
 %
 
@@ -114,7 +130,11 @@ cache_info
 	"``functools.lru_cache``: return a ``CacheInfo`` named-tuple
 	(hits, misses, maxsize, currsize).  Stub: a tuple of zeros."
 
-	^ tuple @env0:withAll: #(0 0 nil 0)
+	^ tuple @env0:withAll: {
+		(hits @env0:== nil ifTrue: [0] ifFalse: [hits]).
+		(misses @env0:== nil ifTrue: [0] ifFalse: [misses]).
+		None.
+		(cache @env0:== nil ifTrue: [0] ifFalse: [cache @env0:size]) }
 %
 
 category: 'Grail-Attributes'

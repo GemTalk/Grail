@@ -255,3 +255,39 @@ testNestedClassInClassBody
 
 	self assert: (self fixture @env1:NESTED_RESULT) equals: 11
 %
+
+category: 'Grail-Tests - functools'
+method: DunderNewTestCase
+testLruCacheMemoizes
+	"lru_cache REALLY memoizes now (results interned by positional +
+	sorted-kw key; unbounded).  Without it, recursive memoized
+	functions are exponential -- test_functools' fib test never
+	finished.  cache_info counts and cache_clear resets."
+
+	self assert: (self eval: 'import functools
+calls = []
+@functools.lru_cache(maxsize=None)
+def fib(n):
+    calls.append(n)
+    if n < 2:
+        return n
+    return fib(n - 1) + fib(n - 2)
+r = fib(40)
+info = fib.cache_info()
+fib.cache_clear()
+[r, len(calls), info[3], fib.cache_info()[3]]
+') @env1:__repr__ equals: '[102334155, 41, 41, 0]'
+%
+
+category: 'Grail-Tests - closures'
+method: DunderNewTestCase
+testStaticmethodClosureOverMethodSelf
+	"A @staticmethod inside a METHOD-LOCAL class referencing the outer
+	method's ``self``: the receiver-bound self must emit Smalltalk
+	self (not the undeclared ``_self`` transport) -- the shape killed
+	test_functools' lru_cache_weakrefable at compile time.  (True
+	closure capture across compiled methods is a separate known
+	limitation; this pins the compile.)"
+
+	self assert: (self fixture @env1:CLOSURE_RESULT) equals: 4
+%

@@ -622,6 +622,18 @@ ___enclosingFuncDeclaresReservedParam___: aSymbol
 	CallAst moduleClassBeingCompiled ifNil: [^ false].
 	node := parent.
 	[node notNil] whileTrue: [
+		"An enclosing INSTANCE METHOD whose self-param is aSymbol and is
+		NOT rebound binds it to the Smalltalk RECEIVER -- no transport
+		temp exists, and blocks capture ``self'' at any nesting depth,
+		so the caller must emit plain ``self''.  (A @staticmethod inside
+		a method-local class closing over the outer method's ``self'' --
+		test_functools' lru_cache_weakrefable -- emitted an undeclared
+		``_self'' before this check.)"
+		((node isKindOf: InstanceFunctionDefAst)
+			and: [node allParameterNames notEmpty
+			and: [node allParameterNames first asSymbol == aSymbol
+			and: [(node assignedNamesInBody includes: aSymbol) not]]])
+			ifTrue: [^ false].
 		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
 			ifTrue: [
 				ivars := node class allInstVarNames.

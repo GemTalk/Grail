@@ -83,3 +83,15 @@ class NestedOuter:
 
 
 NESTED_RESULT = NestedOuter.a.x + NestedOuter.b.y
+
+
+class ClosureHost:
+    def m(self):
+        class A:
+            @staticmethod
+            def s(x):
+                return (self, x)
+        return A.s(4)[1]
+
+
+CLOSURE_RESULT = ClosureHost().m()

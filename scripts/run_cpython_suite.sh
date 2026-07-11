@@ -33,7 +33,11 @@ export GRAIL_DIR="$PROJECT_ROOT"
 # large, and GC starvation in a too-small temp-object cache looks like
 # spurious failures.  Per-module isolation means only intra-module working
 # set matters, so this is comfortable.
-TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=500000;"
+# GEM_MAX_SMALLTALK_STACK_DEPTH: CPython's default recursion limit is
+# 1000 PYTHON frames; each Grail Python call spans many Smalltalk frames
+# (wrapper + closure + dispatch), so the default gem depth overflows on
+# tests that are fine under CPython (test_functools' fib(100)).
+TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=500000;GEM_MAX_SMALLTALK_STACK_DEPTH=100000;"
 
 # Per-module wall-clock cap, enforced by a portable poll-and-kill watchdog
 # (no coreutils `timeout` dependency -- `topaz -l` is a linked gem, so
