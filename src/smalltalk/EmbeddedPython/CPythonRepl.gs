@@ -141,10 +141,15 @@ handleStepRequestFrom: stepResult
 	| stRequest |
 	stRequest := [ stepResult asSmalltalk ] ensure: [ stepResult release ].
 	[ self resolveWith: (self processRequest: stRequest) ]
-		on: Error do: [ :e |
-			"messageText is nil for many kernel-raised errors (e.g. the
-			ZeroDivide from python_eval('1/0')); rejecting with nil used
-			to reach PyUnicode_FromString(NULL) and SEGV the gem."
+		on: Error, BaseException do: [ :e |
+			"Error alone is not enough: Grail's Python exceptions
+			(BaseException tree) are Exception SIBLINGS of Error, so a
+			python_eval('1/0') that now raises the catchable Grail
+			ZeroDivisionError (Int.gs division guards) escaped this
+			handler and aborted the whole embedded suite.
+			messageText is nil for many kernel-raised errors (e.g. the
+			old kernel ZeroDivide); rejecting with nil used to reach
+			PyUnicode_FromString(NULL) and SEGV the gem."
 			self rejectWith: (e messageText ifNil: [ e description ]) ]
 %
 category: 'Initialization'
