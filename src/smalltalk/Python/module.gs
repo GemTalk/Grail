@@ -83,6 +83,30 @@ ___instance___
 
 category: 'Grail-Singleton'
 classmethod: module
+___sessionInstances___
+	"The per-SESSION module-singleton registry (module class -> module
+	instance), stored in SessionTemps.  Module classes are committed
+	(PythonModules), so the old ``instance'' classInstVar made every
+	module singleton -- and with it every module-level Python global --
+	part of the committed graph: multi-user commit conflicts, stale
+	state across sessions, and (before the dbTransient weakref split)
+	attempts to commit ephemerons held in module globals.  Module state
+	is session state; a value that should genuinely be shared belongs
+	in an RC* collection committed explicitly by the application.
+	The ``instance'' classInstVar declaration REMAINS (removing it
+	would restructure every committed module class) but is no longer
+	read or written."
+
+	| reg |
+	reg := SessionTemps @env0:current @env0:at: #GrailModuleInstances otherwise: nil.
+	reg @env0:isNil ifTrue: [
+		reg := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailModuleInstances put: reg].
+	^ reg
+%
+
+category: 'Grail-Singleton'
+classmethod: module
 ___adoptInstance___: anInstance
 	"Register an already-created instance as the singleton.  Called by
 	importlib's ``loadModuleFromPath:'' BEFORE running the module body's
@@ -96,7 +120,7 @@ ___adoptInstance___: anInstance
 	``FlaskScaffoldingTestCase >> testModuleSingletonReturnsSameClass''
 	flips to green when this hook is wired."
 
-	instance := anInstance
+	self ___sessionInstances___ at: self put: anInstance
 %
 
 set compile_env: 1
@@ -105,21 +129,26 @@ category: 'Grail-Singleton'
 classmethod: module
 clearInstance
 	"Clear the singleton instance (useful for testing)."
-	instance := nil
+	self @env0:___sessionInstances___ @env0:removeKey: self ifAbsent: []
 %
 
 category: 'Grail-Singleton'
 classmethod: module
 instance
-	"Return the singleton instance of this module subclass, creating it on
-	first access. Initialization runs in env 1 so subclasses can install
-	Python-side state."
+	"Return the singleton instance of this module subclass, creating it
+	on first access.  SESSION-LOCAL (SessionTemps) -- see
+	___sessionInstances___.  Initialization runs in env 1 so subclasses
+	can install Python-side state."
 
-	instance == nil ifTrue: [
-		instance := self @env0:new.
-		instance @env1:initialize
+	| reg inst |
+	reg := self @env0:___sessionInstances___.
+	inst := reg @env0:at: self otherwise: nil.
+	inst == nil ifTrue: [
+		inst := self @env0:new.
+		reg @env0:at: self put: inst.
+		inst @env1:initialize
 	].
-	^ instance
+	^ inst
 %
 
 category: 'Grail-Singleton'

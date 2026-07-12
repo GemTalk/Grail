@@ -107,11 +107,29 @@ set compile_env: 1
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailRegistry___
+	"The per-SESSION enum-member registry (enum class -> {byValue.
+	byName. members}), stored in SessionTemps.  The old ``EnumRegistry''
+	classVar sat on the committed Enum class, so every enum definition
+	dirtied committed state (multi-user commit conflicts) and dragged
+	session-defined classes into any commit.  The classVar declaration
+	remains but is unused (removing it would restructure the committed
+	class)."
+
+	| reg |
+	reg := SessionTemps @env0:current @env0:at: #GrailEnumRegistry otherwise: nil.
+	reg @env0:isNil ifTrue: [
+		reg := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailEnumRegistry put: reg].
+	^ reg
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailRecordFor: cls
 	"The {byValue. byName. members} record for an enum class, or nil."
 
-	EnumRegistry @env0:isNil ifTrue: [^ nil].
-	^ EnumRegistry @env0:at: cls otherwise: nil
+	^ self ___grailRegistry___ @env0:at: cls otherwise: nil
 %
 
 category: 'Grail-Enum Metaclass'
@@ -123,7 +141,6 @@ ___grailBuildMembers: cls names: attrNames
 	recorded in EnumRegistry."
 
 	| byValue byName members lastInt |
-	EnumRegistry @env0:isNil ifTrue: [EnumRegistry := IdentityKeyValueDictionary @env0:new].
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
@@ -155,7 +172,7 @@ ___grailBuildMembers: cls names: attrNames
 			byName @env0:at: nameStr put: member.
 			cls @env0:perform: (nameStr @env0:, ':') @env0:asSymbol env: 1
 				withArguments: (Array @env0:with: member)]].
-	EnumRegistry @env0:at: cls put: (Array @env0:with: byValue with: byName with: members).
+	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members).
 	"Drop the ClassDefAst-emitted generic instantiation (env-1
 	``value:value:``) so calling the class — Color(value) — reaches the
 	inherited enum value-lookup instead of trying to build an instance.
@@ -356,7 +373,6 @@ ___grailFunctional: cls positional: positional keywords: keywords
 							ifFalse: [pairs @env0:add: (Array @env0:with: (item @env0:at: 1) @env0:asString
 								with: (item @env0:at: 2))]]]]].
 	newCls := cls ___subclass___: className instVarNames: #() classInstVarNames: #().
-	EnumRegistry @env0:isNil ifTrue: [EnumRegistry := IdentityKeyValueDictionary @env0:new].
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
@@ -395,7 +411,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 				(nameStr @env0:, '
 	^ self __getitem__: ''' @env0:, nameStr @env0:, '''')
 				category: 'Grail-Class Attrs']]] value.
-	EnumRegistry @env0:at: newCls put: (Array @env0:with: byValue with: byName with: members).
+	self ___grailRegistry___ @env0:at: newCls put: (Array @env0:with: byValue with: byName with: members).
 	^ newCls
 %
 

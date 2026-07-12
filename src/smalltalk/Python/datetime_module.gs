@@ -340,13 +340,22 @@ set compile_env: 1
 category: 'Grail-Singletons'
 classmethod: PyTimezone
 utc
-	"timezone.utc - canonical singleton for UTC."
+	"timezone.utc - canonical singleton for UTC.  SESSION-LOCAL
+	(SessionTemps): the old lazy write to the ``_utc'' classVar dirtied
+	the committed PyTimezone class in every fresh session (multi-user
+	commit conflicts).  Identity is only compared within a session
+	(tz is timezone.utc); datetimes deliberately committed by an
+	application carry their own offset data.  The classVar declaration
+	remains but is unused."
 
-	_utc @env0:isNil ifTrue: [
-		_utc := self @env0:new
-			@env0:_offset: (PyTimedelta @env0:___fromTotalMicros___: 0) _name: 'UTC'
+	| tz |
+	tz := SessionTemps @env0:current @env0:at: #GrailTimezoneUtc otherwise: nil.
+	tz @env0:isNil ifTrue: [
+		tz := self @env0:new
+			@env0:_offset: (PyTimedelta @env0:___fromTotalMicros___: 0) _name: 'UTC'.
+		SessionTemps @env0:current @env0:at: #GrailTimezoneUtc put: tz
 	].
-	^ _utc
+	^ tz
 %
 
 category: 'Grail-Initialization'

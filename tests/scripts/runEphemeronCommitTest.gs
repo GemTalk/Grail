@@ -65,13 +65,24 @@ ref isEphemeron ifTrue: [^ self error: 'setup: outer WeakReference must not be a
 ((ref instVarAt: 1) instVarAt: 1) isEphemeron
   ifFalse: [^ self error: 'setup: inner ephemeron must have beEphemeron: armed pre-commit'].
 
+"THE REPORTED SCENARIO (ERROR 2407, 'attempt to commit an ephemeron'):
+load the full weakref fixture module -- its MODULE GLOBALS hold
+WeakReferences, a WeakValueDictionary, a WeakSet and finalizers -- and
+then commit.  Module singletons are SESSION-LOCAL (SessionTemps), so
+none of that state is reachable from committed roots; before that
+change the module instance hung off the committed module class and the
+commit tripped over the ephemerons."
+importlib
+  loadModuleFromPath: (importlib grailDir , '/tests/python/weakref_basic.py')
+  name: 'weakref_basic'.
+
 "Commit (ref, target, expectedHash). expectedHash is the in-session hashCache;
 session 2 compares it to the post-commit hash to prove the hash survived even
 though the holder's instVars get wiped."
 UserGlobals at: #'Grail_commit_test_weakref' put:
   (Array with: ref with: target with: ref hash).
 System commit.
-out cr; nextPutAll: 'session1: committed live WeakReference under #Grail_commit_test_weakref'; cr.
+out cr; nextPutAll: 'session1: committed live WeakReference (with weakref_basic loaded) under #Grail_commit_test_weakref'; cr.
 %
 logout
 
@@ -125,8 +136,23 @@ unwinds — leaving the repository pristine in every case."
   "hashCache survived: the ref is still usable as a dict key (Python contract
   is that hash stays valid after the referent dies)."
   check value: 'hashCache survived commit' value: ref hash = expectedHash.
+
+  "Module state stayed SESSION-LOCAL: session 1 loaded weakref_basic and
+  committed.  Its CLASS persists (module code, like an install), but the
+  singleton slot -- the old home of every module-level global -- must not
+  have been written."
+  [ | wbCls idx slotVal |
+  wbCls := PythonModules at: #Weakref_basic ifAbsent: [nil].
+  check value: 'weakref_basic class was committed (module code persists)'
+    value: wbCls notNil.
+  slotVal := wbCls isNil ifTrue: [nil] ifFalse: [
+    idx := wbCls class allInstVarNames indexOf: #instance.
+    idx = 0 ifTrue: [nil] ifFalse: [wbCls instVarAt: idx]].
+  check value: 'module singleton slot NOT committed (instance classInstVar nil)'
+    value: slotVal isNil ] value.
 ] ensure: [
   UserGlobals removeKey: #'Grail_commit_test_weakref' ifAbsent: [].
+  PythonModules removeKey: #Weakref_basic ifAbsent: [].
   System commit
 ].
 

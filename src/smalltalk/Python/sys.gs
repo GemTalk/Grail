@@ -280,7 +280,7 @@ category: 'Grail-Module Registry'
 classmethod: sys
 initializeBuiltinModules
 	"Initialize the registry with built-in modules"
-	modules
+	self modules
 		@env0:at: #builtins 	put: builtins 	instance;
 		@env0:at: #copyreg 		put: copyreg 	instance;
 		@env0:at: #math 		put: math 		instance;
@@ -315,14 +315,24 @@ initializeBuiltinModules
 category: 'Grail-Module Registry'
 classmethod: sys
 modules
-	"Return the module registry (sys.modules).
-	This is a SymbolDictionary mapping module names to module instances."
-	modules == nil ifTrue: [
-		modules := SymbolDictionary ___new___.
-		"Register built-in modules"
+	"Return the module registry (sys.modules) -- a SymbolDictionary
+	mapping module names to module instances.  SESSION-LOCAL
+	(SessionTemps): the old ``modules'' classInstVar sat on the
+	committed sys class, so every import dirtied committed state
+	(multi-user commit conflicts) and the whole loaded-module graph
+	persisted on any commit.  The classInstVar declaration remains but
+	is unused (removing it would restructure the committed class)."
+
+	| reg |
+	reg := SessionTemps @env0:current @env0:at: #GrailSysModules otherwise: nil.
+	reg == nil ifTrue: [
+		reg := SymbolDictionary ___new___.
+		SessionTemps @env0:current @env0:at: #GrailSysModules put: reg.
+		"Register built-in modules (AFTER the SessionTemps store --
+		initializeBuiltinModules re-enters ``self modules'')."
 		self initializeBuiltinModules.
 	].
-	^ modules
+	^ reg
 %
 
 category: 'Grail-Accessors'

@@ -342,17 +342,29 @@ register: aClass
 	"Register a class as a virtual subclass of this ABC.
 	After registration, isinstance(instance, ABC) returns True."
 
-	registeredTypes == nil ifTrue: [registeredTypes := IdentitySet ___new___].
-	registeredTypes @env0:add: aClass
+	self registeredTypes @env0:add: aClass
 %
 
 category: 'Grail-ABC'
 classmethod: numbers_Number
 registeredTypes
-	"Return the set of registered types for this ABC."
+	"The set of registered types for this ABC.  SESSION-LOCAL
+	(SessionTemps, keyed per ABC class): registrations run from the
+	numbers module's initialize (session time) and from user code
+	(ABC.register(cls)); the old classInstVar write dirtied the
+	committed ABC classes (multi-user commit conflicts).  The
+	classInstVar declaration remains but is unused."
 
-	registeredTypes == nil ifTrue: [registeredTypes := IdentitySet ___new___].
-	^ registeredTypes
+	| all mine |
+	all := SessionTemps @env0:current @env0:at: #GrailNumbersRegistry otherwise: nil.
+	all == nil ifTrue: [
+		all := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailNumbersRegistry put: all].
+	mine := all @env0:at: self otherwise: nil.
+	mine == nil ifTrue: [
+		mine := IdentitySet ___new___.
+		all @env0:at: self put: mine].
+	^ mine
 %
 
 category: 'Grail-Attributes'

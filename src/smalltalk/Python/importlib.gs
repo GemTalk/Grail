@@ -129,15 +129,19 @@ ___asSmalltalkClassName___: aPythonName
 category: 'Grail-For Tests'
 classmethod: importlib
 grailDir
-	"Return the absolute path to the Grail project directory."
-	^ grailDir
+	"Return the absolute path to the Grail project directory.
+	SESSION-LOCAL (SessionTemps): the path differs per host/checkout,
+	and the old classInstVar write dirtied the committed importlib
+	class on every session's setup (multi-user commit conflicts).
+	The classInstVar declaration remains but is unused."
+	^ SessionTemps @env0:current @env0:at: #GrailDir otherwise: nil
 %
 
 category: 'Grail-Configuration'
 classmethod: importlib
 grailDir: aString
-	"Set the absolute path to the Grail project directory."
-	grailDir := aString
+	"Set the absolute path to the Grail project directory (session-local)."
+	SessionTemps @env0:current @env0:at: #GrailDir put: aString
 %
 
 category: 'Grail-Demo'
@@ -1041,11 +1045,19 @@ ___miRegistry___
 	"Identity registry: Python class -> Array {basesArray. mroArray}.
 	Populated at class creation by ___registerBases___:bases: (reached
 	from both ClassDefAst's emitted merge call and the 3-arg type()
-	builtin).  Lives in a classInstVar so committed classes keep their
-	MRO metadata alongside the class graph."
+	builtin).  SESSION-LOCAL (SessionTemps): the old classInstVar
+	dirtied the committed importlib class at every MI class definition
+	(multi-user commit conflicts).  A class DELIBERATELY committed by
+	an application loses its MRO metadata in later sessions -- such
+	sharing belongs in an application-managed RC* collection.  The
+	classInstVar declaration remains but is unused."
 
-	miRegistry ifNil: [miRegistry := IdentityKeyValueDictionary new].
-	^ miRegistry
+	| reg |
+	reg := SessionTemps @env0:current @env0:at: #GrailMiRegistry otherwise: nil.
+	reg ifNil: [
+		reg := IdentityKeyValueDictionary new.
+		SessionTemps @env0:current @env0:at: #GrailMiRegistry put: reg].
+	^ reg
 %
 
 category: 'Grail-Module Loading'
@@ -1396,13 +1408,14 @@ ___moduleNameToPath___: aName
 	extraSearchRoots / addSearchRoot:, used to point Grail at third-party
 	package trees such as NumPy's site-packages).  For each root, check
 	name.py before name/__init__.py."
-	| pathParts joined searchRoots result |
-	grailDir == nil ifTrue: [^ nil].
+	| pathParts joined searchRoots result gd |
+	gd := self @env0:grailDir.
+	gd == nil ifTrue: [^ nil].
 	pathParts := $. @env0:split: aName.
 	joined := '/' @env0:join: pathParts.
 	searchRoots := (OrderedCollection @env0:new)
-		@env0:add: grailDir;
-		@env0:add: (grailDir @env0:, '/src/python/stdlib');
+		@env0:add: gd;
+		@env0:add: (gd @env0:, '/src/python/stdlib');
 		@env0:addAll: self extraSearchRoots;
 		@env0:yourself.
 	"Return via a local rather than ``^'' out of the do: block.  This
@@ -1415,11 +1428,15 @@ ___moduleNameToPath___: aName
 		result @env0:isNil ifTrue: [
 			base := (root @env0:, '/') @env0:, joined.
 			pyPath := base @env0:, '.py'.
-			(GsFile @env0:existsOnServer: pyPath)
+			"existsOnServer: answers NIL (not false) when the probe
+			errors -- e.g. <name>/__init__.py where <name> is a plain
+			FILE (the ./grail CLI script when probing 'import grail');
+			compare == true so nil routes to not-found."
+			((GsFile @env0:existsOnServer: pyPath) @env0:== true)
 				ifTrue: [result := pyPath]
 				ifFalse: [
 					initPath := base @env0:, '/__init__.py'.
-					(GsFile @env0:existsOnServer: initPath)
+					((GsFile @env0:existsOnServer: initPath) @env0:== true)
 						ifTrue: [result := initPath]]]].
 	^ result
 %
@@ -1459,9 +1476,10 @@ ___moduleNameToSoPath___: aName
 	Returns via a local rather than ``^'' out of the do: block — this is
 	reachable from the CPython shim's PyInit user-action callback, where a
 	non-local return out of a real block raises RT_ERR_CANT_RETURN (2079)."
-	| filePath parts joined searchRoots result dirPart leaf |
-	grailDir == nil ifTrue: [^ nil].
-	filePath := ((grailDir @env0:, '/lib/') @env0:, aName) @env0:, '.so'.
+	| filePath parts joined searchRoots result dirPart leaf gd |
+	gd := self @env0:grailDir.
+	gd == nil ifTrue: [^ nil].
+	filePath := ((gd @env0:, '/lib/') @env0:, aName) @env0:, '.so'.
 	(GsFile @env0:existsOnServer: filePath) ifTrue: [^ filePath].
 
 	parts := $. @env0:split: aName.
@@ -1471,8 +1489,8 @@ ___moduleNameToSoPath___: aName
 		ifTrue: ['/' @env0:join: (parts @env0:copyFrom: 1 to: parts @env0:size - 1)]
 		ifFalse: [nil].
 	searchRoots := (OrderedCollection @env0:new)
-		@env0:add: grailDir;
-		@env0:add: (grailDir @env0:, '/src/python/stdlib');
+		@env0:add: gd;
+		@env0:add: (gd @env0:, '/src/python/stdlib');
 		@env0:addAll: self extraSearchRoots;
 		@env0:yourself.
 	result := nil.
@@ -1501,9 +1519,43 @@ ___moduleNameToSoPath___: aName
 category: 'Grail-Module Registry'
 classmethod: importlib
 lookupModule: aName
-	"Look up a module by name in the registry.
-	Returns the module class or nil if not found."
-	^ self modules @env0:at: aName @env0:asSymbol ifAbsent: [nil]
+	"Look up a module by name: the session registry first, then a lazy
+	fallback for pure-Smalltalk builtin modules (socket, grail,
+	_weakref, os.path, ...) resolved from the symbol list.  The
+	registry is SESSION-LOCAL (SessionTemps); the old committed
+	classInstVar accumulated builtin registrations at install time, so
+	fresh sessions found them without this fallback.  Dotted aliases
+	(os.path) retry with dots mapped to underscores (the os_path
+	class).  Returns the module instance or nil."
+
+	| sym found cls inst |
+	sym := aName @env0:asSymbol.
+	found := self modules @env0:at: sym ifAbsent: [nil].
+	found @env0:notNil ifTrue: [^ found].
+	"A vendored .py SHADOWS the Smalltalk builtin of the same name --
+	the old committed registry expressed this by never containing
+	fractions/heapq/etc.; here the filesystem probe expresses it
+	directly.  (Seeded registry entries above still win: math, json,
+	... are seeded by initializeBuiltinModules.)"
+	(self ___moduleNameToPath___: aName) @env0:notNil ifTrue: [^ nil].
+	"Backend-managed C-extension stand-ins (_sre, _statistics, ...)
+	resolve through the session's configured backend (CPythonShim /
+	EmbeddedExtensionModule) in ___import__:kw:, never through this
+	builtin fallback -- the old committed registry expressed this by
+	deliberately not containing them (see install.gs's SHIM_LIB_PATH
+	comment)."
+	(CPythonShim @env0:builtinModuleNames @env0:includes: sym) ifTrue: [^ nil].
+	cls := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: sym.
+	((cls @env0:isNil) and: [aName @env0:includes: $.]) ifTrue: [
+		cls := System @env0:myUserProfile @env0:symbolList
+			@env0:objectNamed: (aName @env0:copyReplaceAll: '.' with: '_') @env0:asSymbol].
+	((cls @env0:notNil)
+		and: [(cls @env0:isKindOf: Behavior)
+		and: [cls @env0:inheritsFrom: module]]) ifTrue: [
+		inst := cls @env0:___instance___.
+		self modules @env0:at: sym put: inst.
+		^ inst].
+	^ nil
 %
 
 category: 'Grail-Module Registry'
