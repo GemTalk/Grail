@@ -758,15 +758,24 @@ ___pyAttrLoad___: aSym
 		  (6) AttributeError."
 
 		| dynValue |
-		((self @env0:class @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil) ifTrue: [
-			^ BoundMethod @env1:receiver: self selector: aSym
-		].
 		"Phase A: dynamic-instVar storage is the canonical home for
-		module globals.  Per the project nil-as-absent convention, a
-		nil read can only mean the slot is unset — no sentinel dance
-		needed."
+		module globals -- checked BEFORE the varargs-selector probe so a
+		module-level decorator's rebinding wins over the original
+		compiled def (``@functools.singledispatch def g'' stores the
+		wrapper in g's slot while ``_g:kw:'' still exists; the bare-call
+		dispatcher and module.gs's resolution already use this order).
+		Per the nil-as-absent convention, a nil read means unset."
 		dynValue := self @env0:dynamicInstVarAt: aSym.
 		dynValue == nil ifFalse: [^ dynValue].
+		"Cache the wrapper in the slot so repeated reads of the same
+		module function return the SAME object -- CPython functions are
+		first-class module attributes with stable identity
+		(g.dispatch(int) is g_int)."
+		((self @env0:class @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil) ifTrue: [
+			dynValue := BoundMethod @env1:receiver: self selector: aSym.
+			self @env0:dynamicInstVarAt: aSym put: dynValue.
+			^ dynValue
+		].
 		"Unary selector resolution.  Sub-cases:
 		  * Defined on ``module'' itself, or a hand-written getter/
 		    accessor on a module subclass (categories like
@@ -783,7 +792,10 @@ ___pyAttrLoad___: aSym
 		owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
 		owner notNil ifTrue: [
 			(owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Methods'
-				ifTrue: [^ BoundMethod @env1:receiver: self selector: aSym]
+				ifTrue: [
+					dynValue := BoundMethod @env1:receiver: self selector: aSym.
+					self @env0:dynamicInstVarAt: aSym put: dynValue.
+					^ dynValue]
 				ifFalse: [^ self @env0:perform: aSym env: 1]
 		].
 		(((self @env0:class @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil)
@@ -792,7 +804,9 @@ ___pyAttrLoad___: aSym
 			or: [(self @env0:class @env0:whichClassIncludesSelector: sym4 environmentId: 1) notNil
 			or: [(self @env0:class @env0:whichClassIncludesSelector: sym5 environmentId: 1) notNil
 			or: [(self @env0:class @env0:whichClassIncludesSelector: sym6 environmentId: 1) notNil]]]]]) ifTrue: [
-			^ BoundMethod @env1:receiver: self selector: aSym
+			dynValue := BoundMethod @env1:receiver: self selector: aSym.
+			self @env0:dynamicInstVarAt: aSym put: dynValue.
+			^ dynValue
 		].
 		^ self @env0:at: aSym ifAbsent: [
 			AttributeError ___signal___: 'module has no attribute ''' @env0:, s @env0:, ''''

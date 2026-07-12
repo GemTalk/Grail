@@ -381,8 +381,16 @@ ___moduleAttrLoad___: aSym
 	compiled as a real env-1 method on the module class; this is
 	the first read that turns it into a first-class function value."
 	symVA := ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol.
+	"Wrap sites below CACHE the BoundMethod in the dynamic slot: module
+	functions are first-class attributes with STABLE identity in
+	CPython (g.dispatch(int) is g_int), and callers may compare with
+	``is''.  The slot was already checked above, so this only runs on
+	the first read."
 	((cls @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil) ifTrue: [
-		^ BoundMethod @env1:receiver: self selector: aSym
+		| fn |
+		fn := BoundMethod @env1:receiver: self selector: aSym.
+		self @env0:dynamicInstVarAt: aSym put: fn.
+		^ fn
 	].
 	"Try the fast-path fixed-arity selectors first (1..3 args), then
 	walk to higher arities until we either find one or exhaust the
@@ -398,7 +406,10 @@ ___moduleAttrLoad___: aSym
 	(((cls @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil)
 		or: [(cls @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
 		or: [(cls @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil]]) ifTrue: [
-		^ BoundMethod @env1:receiver: self selector: aSym
+		| fn |
+		fn := BoundMethod @env1:receiver: self selector: aSym.
+		self @env0:dynamicInstVarAt: aSym put: fn.
+		^ fn
 	].
 	"Higher-arity fixed selectors (4..16 args).  Selector shape is
 	``name:'' followed by ``_:'' repeated (arity - 1) times."
@@ -407,7 +418,10 @@ ___moduleAttrLoad___: aSym
 		candidate := s @env0:asString @env0:, ':'.
 		2 to: arity do: [:_ | candidate := candidate @env0:, '_:'].
 		(cls @env0:whichClassIncludesSelector: candidate @env0:asSymbol environmentId: 1) notNil ifTrue: [
-			^ BoundMethod @env1:receiver: self selector: aSym
+			| fn |
+			fn := BoundMethod @env1:receiver: self selector: aSym.
+			self @env0:dynamicInstVarAt: aSym put: fn.
+			^ fn
 		].
 	].
 	"Unary class method.  Two sub-cases:

@@ -482,3 +482,52 @@ def _static_sibling_ref_results():
 
 
 STATIC_SIBLING_RESULT = _static_sibling_ref_results()
+
+
+def _singledispatch_results():
+    # functools.singledispatch: MRO-aware dispatch (C3 for MI), the
+    # register(cls, impl) and @register(cls) decorator forms, builtin
+    # type keys (str/int arrive as first-class builtin wrappers and
+    # must normalize to classes), and CPython's stable module-function
+    # identity (g.dispatch(int) is g_int).
+    import functools
+
+    @functools.singledispatch
+    def g(obj):
+        return "base"
+
+    def g_int(i):
+        return "integer"
+
+    g.register(int, g_int)
+
+    @g.register(str)
+    def g_str(s):
+        return "string " + s
+
+    class A:
+        pass
+
+    class C(A):
+        pass
+
+    class B(A):
+        pass
+
+    class D(C, B):
+        pass
+
+    def g_A(a):
+        return "A"
+
+    def g_B(b):
+        return "B"
+
+    g.register(A, g_A)
+    g.register(B, g_B)
+    return (g(1.5), g(1), g("hi"), g([1]),
+            g(A()), g(B()), g(C()), g(D()),
+            g.dispatch(int) is g_int)
+
+
+SINGLEDISPATCH_RESULT = _singledispatch_results()

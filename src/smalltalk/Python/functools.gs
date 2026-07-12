@@ -48,6 +48,29 @@ doit
 functools_cmpkey category: 'Grail-Modules'
 %
 
+! ------- functools_singledispatch: the wrapper returned by singledispatch()
+expectvalue /Class
+doit
+PythonInstance subclass: 'functools_singledispatch'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+functools_singledispatch category: 'Grail-Modules'
+%
+
+expectvalue /Metaclass3
+doit
+functools_singledispatch removeAllMethods: 1.
+functools_singledispatch class removeAllMethods: 1.
+%
+
 ! ------- functools_partial class (Python functools.partial)
 expectvalue /Class
 doit
@@ -512,6 +535,131 @@ reduce: function _: iterable _: initial
 		] repeat.
 	] @env0:on: StopIteration do: [:ex | "done" ].
 	^ result
+%
+
+category: 'Grail-Single Dispatch'
+method: functools
+singledispatch: aFunc
+	"functools.singledispatch(func) -- generic-function decorator.
+	Returns a wrapper that dispatches on the TYPE of its first
+	positional argument, walking that type's __mro__ (C3-aware for MI
+	classes) for the most specific registered implementation and
+	falling back to func."
+
+	^ functools_singledispatch ___on: aFunc
+%
+
+category: 'Grail-Instance Creation'
+classmethod: functools_singledispatch
+___on: aFunc
+	| inst |
+	inst := self ___new___.
+	inst @env0:dynamicInstVarAt: #default put: aFunc.
+	inst @env0:dynamicInstVarAt: #registry put: IdentityKeyValueDictionary @env0:new.
+	^ inst
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+value: positional value: keywords
+	"Calling the generic function: dispatch on type(args[0])."
+
+	| impl |
+	positional @env0:isEmpty ifTrue: [
+		TypeError ___signal___: 'singledispatch function requires at least 1 positional argument'].
+	impl := self dispatch: (positional @env0:at: 1) @env0:class.
+	^ impl value: positional value: keywords
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+dispatch: cls
+	"First registered implementation along cls's __mro__, else the
+	default.  Behavior>>__mro__ covers kernel classes (superclass
+	chain) and MI user classes (C3 linearization) alike."
+
+	| reg mro key |
+	reg := self @env0:dynamicInstVarAt: #registry.
+	"g.dispatch(int): bare builtin-type names arrive as BoundMethod
+	wrappers here too -- normalize, tolerating non-classes."
+	key := (self ___registryKey___: cls) @env0:ifNil: [cls].
+	mro := key @env1:__mro__.
+	mro @env0:do: [:c |
+		(reg @env0:includesKey: c) ifTrue: [^ reg @env0:at: c]].
+	"Python-semantics widenings the Smalltalk chain can't see:
+	isinstance(x, str) is true for EVERY CharacterCollection (str maps
+	to Unicode7 but a plain String's chain never passes it), and int
+	subclasses are AbstractPyInt siblings of Integer."
+	((key @env0:== CharacterCollection)
+		or: [key @env0:inheritsFrom: CharacterCollection]) ifTrue: [
+		(reg @env0:includesKey: Unicode7) ifTrue: [^ reg @env0:at: Unicode7]].
+	((key @env0:== AbstractPyInt)
+		or: [key @env0:inheritsFrom: AbstractPyInt]) ifTrue: [
+		(reg @env0:includesKey: Integer) ifTrue: [^ reg @env0:at: Integer]].
+	^ self @env0:dynamicInstVarAt: #default
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___registryKey___: aKey
+	"Normalize a registration key to a CLASS.  Bare builtin-type names
+	(str, int, ...) reach here as first-class BoundMethods wrapping the
+	builtins constructor; map the selector back through the Python
+	symbol dictionary to the class it names."
+
+	| sel resolved |
+	(aKey @env0:isKindOf: Behavior) ifTrue: [^ aKey].
+	(aKey @env0:isKindOf: BoundMethod) ifTrue: [
+		sel := aKey @env0:selector.
+		resolved := (System @env0:myUserProfile @env0:symbolList
+			@env0:objectNamed: #Python) @env0:at: sel @env0:asSymbol otherwise: nil.
+		(resolved @env0:notNil and: [resolved @env0:isKindOf: Behavior]) ifTrue: [
+			^ resolved]].
+	^ nil
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+register: clsOrFunc
+	"@g.register(cls) decorator form: returns a decorator that
+	registers the decorated function for cls and hands it back."
+
+	| key |
+	key := self ___registryKey___: clsOrFunc.
+	key @env0:isNil ifTrue: [
+		TypeError ___signal___: 'Invalid first argument to `register()`: not a class'].
+	^ [:positional2 :keywords2 |
+		| fn |
+		fn := positional2 @env0:at: 1.
+		(self @env0:dynamicInstVarAt: #registry) @env0:at: key put: fn.
+		fn]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+register: cls _: aFunc
+	"g.register(cls, impl) direct form."
+
+	| key |
+	key := self ___registryKey___: cls.
+	key @env0:isNil ifTrue: [
+		TypeError ___signal___: 'Invalid first argument to `register()`: not a class'].
+	(self @env0:dynamicInstVarAt: #registry) @env0:at: key put: aFunc.
+	^ aFunc
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+_register: positional kw: kwargs
+	positional @env0:size @env0:>= 2 ifTrue: [
+		^ self register: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	^ self register: (positional @env0:at: 1)
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+registry
+	^ self @env0:dynamicInstVarAt: #registry
 %
 
 set compile_env: 0

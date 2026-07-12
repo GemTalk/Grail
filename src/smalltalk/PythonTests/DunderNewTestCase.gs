@@ -814,3 +814,16 @@ testStaticSiblingRefInClassBody
 	self assert: (self fixture @env1:STATIC_SIBLING_RESULT) @env1:__repr__
 		equals: '(''x'', 5)'
 %
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testSingledispatch
+	"functools.singledispatch: MRO-aware dispatch, both register forms,
+	builtin-type key normalization, and stable module-function identity
+	(every module-attr wrap site now CACHES its BoundMethod in the
+	dynamic slot, so two reads of the same function are ``is''-equal,
+	and a decorator's rebinding wins over the original compiled def)."
+
+	self assert: (self fixture @env1:SINGLEDISPATCH_RESULT) @env1:__repr__
+		equals: '(''base'', ''integer'', ''string hi'', ''base'', ''A'', ''B'', ''A'', ''B'', True)'
+%

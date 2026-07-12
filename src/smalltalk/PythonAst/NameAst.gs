@@ -350,12 +350,26 @@ printSmalltalkOn: aStream
 				and: [(CallAst moduleFunctionNames includes: id asSymbol)
 				and: [(self ___localBindingShadows___: id) not]])
 				ifTrue: [
+					"Probe the dynamic slot FIRST: a module-level decorator
+					(``@functools.singledispatch def g'') rebinds g to a
+					wrapper stored there, and this shortcut previously
+					handed back the ORIGINAL compiled def as a BoundMethod
+					regardless (g.dispatch(...) inside a same-module method
+					read the stale function)."
 					aStream
-						nextPutAll: '(BoundMethod receiver: (';
+						nextPutAll: '(((';
+						nextPutAll: CallAst moduleClassBeingCompiled name;
+						nextPutAll: ' @env0:___instance___) @env0:dynamicInstVarAt: #''';
+						nextPutAll: id;
+						nextPutAll: ''') @env0:ifNil: [ | ___fn___ | ___fn___ := BoundMethod receiver: (';
 						nextPutAll: CallAst moduleClassBeingCompiled name;
 						nextPutAll: ' @env0:___instance___) selector: #';
 						nextPutAll: id;
-						nextPutAll: ')'.
+						nextPutAll: '. (';
+						nextPutAll: CallAst moduleClassBeingCompiled name;
+						nextPutAll: ' @env0:___instance___) @env0:dynamicInstVarAt: #''';
+						nextPutAll: id;
+						nextPutAll: ''' put: ___fn___. ___fn___])'.
 					^self
 				].
 			(self isModuleScopeName: id) ifTrue: [
