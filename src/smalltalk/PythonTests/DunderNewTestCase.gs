@@ -969,5 +969,12 @@ testDictSubclassConstruction
 	self assert: (r @env1:__getitem__: 'mapping') @env1:__repr__ equals: '[(''m'', 9)]'.
 	self assert: (r @env1:__getitem__: 'empty') equals: 0.
 	self assert: (r @env1:__getitem__: 'is_dict') equals: true.
-	self assert: (r @env1:__getitem__: 'nosuper_empty') equals: true
+	self assert: (r @env1:__getitem__: 'nosuper_empty') equals: true.
+	"super().__init__ from a dict subclass's own __init__ populates:
+	kwargs reach dict's varargs ___init__:kw: (the Super resolver
+	prefers it when kwargs are present), positional pairs and a mapping
+	source go through the same in-place populate."
+	self assert: (r @env1:__getitem__: 'super_kwargs') equals: true.
+	self assert: (r @env1:__getitem__: 'super_pairs') equals: true.
+	self assert: (r @env1:__getitem__: 'super_source') equals: true
 %

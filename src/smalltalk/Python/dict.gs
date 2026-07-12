@@ -208,6 +208,27 @@ __init__: source
 
 category: 'Grail-Initialization'
 method: dict
+___init__: positional kw: keywords
+	"Varargs dict.__init__ -- the form the Super resolver picks for
+	``super().__init__(*args, **kwargs)'' from a dict subclass when the
+	call carries keyword args (Super>>pickMethod prefers the
+	``___init__:kw:'' varargs selector over the fixed ``__init__''/
+	``__init__:'' forms precisely when kwOk is false).  A dict subclass
+	whose own __init__ chains up with kwargs
+	(``super().__init__(**kw)'') reached the 0-arg ``__init__'' before
+	and silently dropped them.  Populates self in place.
+
+	The no-kwargs paths are unaffected: super().__init__() resolves to
+	the 0-arg ``__init__'' and super().__init__(source) to the 1-arg
+	``__init__:'' (both preferred over this varargs form when kwOk is
+	true), so flask.config.Config's ``super().__init__(defaults)''
+	keeps its existing dispatch."
+
+	^ self @env1:___initFrom___: positional kw: keywords
+%
+
+category: 'Grail-Initialization'
+method: dict
 ___initFrom___: positional kw: keywords
 	"Populate self IN PLACE from an optional positional mapping/iterable
 	plus keyword args -- the in-place equivalent of dict's constructor.

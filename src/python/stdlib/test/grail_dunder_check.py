@@ -698,7 +698,28 @@ def _dict_subclass_ctor_results():
     out['is_dict'] = isinstance(MyDict(a=1), dict)
     ns = NoSuperDict(a=1)
     out['nosuper_empty'] = (len(ns) == 0 and ns.marked)
+
+    # super().__init__ from a dict subclass's own __init__ (the
+    # subclasses are MODULE-level -- _SuperCountingDict / _SuperSourceDict
+    # below -- because no-arg super() in a METHOD-LOCAL class is a
+    # separate, unrelated limitation).
+    cd = _SuperCountingDict(a=1, b=2)
+    out['super_kwargs'] = (sorted(cd.items()) == [("a", 1), ("b", 2)]
+                           and cd.init_called)
+    out['super_pairs'] = sorted(_SuperCountingDict([("x", 9)]).items()) == [("x", 9)]
+    out['super_source'] = sorted(_SuperSourceDict({"m": 5}).items()) == [("m", 5)]
     return out
+
+
+class _SuperCountingDict(dict):
+    def __init__(self, *a, **k):
+        self.init_called = True
+        super().__init__(*a, **k)
+
+
+class _SuperSourceDict(dict):
+    def __init__(self, src):
+        super().__init__(src)
 
 
 DICT_SUBCLASS_CTOR_RESULT = _dict_subclass_ctor_results()
