@@ -139,17 +139,15 @@ unwinds — leaving the repository pristine in every case."
 
   "Module state stayed SESSION-LOCAL: session 1 loaded weakref_basic and
   committed.  Its CLASS persists (module code, like an install), but the
-  singleton slot -- the old home of every module-level global -- must not
-  have been written."
-  [ | wbCls idx slotVal |
+  module carries NO committed singleton slot at all -- the ``instance''
+  classInstVar was removed from the module class, so a module-level
+  global has nowhere to persist to."
+  [ | wbCls |
   wbCls := PythonModules at: #Weakref_basic ifAbsent: [nil].
   check value: 'weakref_basic class was committed (module code persists)'
     value: wbCls notNil.
-  slotVal := wbCls isNil ifTrue: [nil] ifFalse: [
-    idx := wbCls class allInstVarNames indexOf: #instance.
-    idx = 0 ifTrue: [nil] ifFalse: [wbCls instVarAt: idx]].
-  check value: 'module singleton slot NOT committed (instance classInstVar nil)'
-    value: slotVal isNil ] value.
+  check value: 'module class has no committed singleton slot (instance classInstVar removed)'
+    value: (wbCls isNil or: [(wbCls class allInstVarNames includes: #instance) not]) ] value.
 ] ensure: [
   UserGlobals removeKey: #'Grail_commit_test_weakref' ifAbsent: [].
   PythonModules removeKey: #Weakref_basic ifAbsent: [].

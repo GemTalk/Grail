@@ -15,7 +15,7 @@ expectvalue /Class
 doit
 Object subclass: 'AbstractNode'
   instVarNames: #( parent)
-  classVars: #( escapeCharacters)
+  classVars: #()
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: PythonAst

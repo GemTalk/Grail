@@ -19,7 +19,7 @@ doit
 SymbolDictionary subclass: 'module'
   instVarNames: #()
   classVars: #()
-  classInstVars: #( instance )
+  classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -93,9 +93,8 @@ ___sessionInstances___
 	attempts to commit ephemerons held in module globals.  Module state
 	is session state; a value that should genuinely be shared belongs
 	in an RC* collection committed explicitly by the application.
-	The ``instance'' classInstVar declaration REMAINS (removing it
-	would restructure every committed module class) but is no longer
-	read or written."
+	The old ``instance'' classInstVar has been removed entirely (the
+	extent is rebuilt, so no migration is needed)."
 
 	| reg |
 	reg := SessionTemps @env0:current @env0:at: #GrailModuleInstances otherwise: nil.
