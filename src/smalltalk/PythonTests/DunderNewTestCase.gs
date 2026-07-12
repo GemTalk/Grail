@@ -891,3 +891,46 @@ testMiFlagEnums
 	self assert: (self fixture @env1:MI_FLAG_RESULT) @env1:__repr__
 		equals: '(1, 2, 4, 3, 5, True, True, 1, ''R'', 1, 2, True, ''a'', True, 1)'
 %
+
+category: 'Grail-Tests - functools'
+method: DunderNewTestCase
+testPartialPlaceholderAndCacheInfo
+	"functools.Placeholder (singleton sentinel reserving positional
+	slots in partial) and functools._CacheInfo (the named 4-tuple
+	cache_info returns).  Covers: type(PH)() singleton identity,
+	placeholder fill at call time, trailing-Placeholder TypeError,
+	partial-of-partial flatten filling inner placeholders, cache_info
+	field access + equality with _CacheInfo(**kw), maxsize=128 default,
+	maxsize=0 disabling caching, and partial.__module__/__qualname__."
+
+	self assert: (self eval: 'import functools
+PH = functools.Placeholder
+out = []
+out.append(type(PH)() is PH)
+p = functools.partial(lambda *a, **k: (list(a), k), PH, 0)
+out.append(p("x") == (["x", 0], {}))
+try:
+    functools.partial(lambda *a: a, 0, PH); out.append(False)
+except TypeError:
+    out.append(True)
+p2 = functools.partial(functools.partial(lambda *a: a, PH, 0), PH, 1, 2, 3)
+out.append(p2.args == (PH, 0, 1, 2, 3))
+try:
+    p("only-one-of-two", )  # single arg for one PH is fine
+    q = functools.partial(lambda *a: a, PH, PH)
+    q(1); out.append(False)
+except TypeError:
+    out.append(True)
+@functools.lru_cache
+def f(n): return n
+[f(i) for i in range(3)]; f(0); f(1)
+out.append(f.cache_info() == functools._CacheInfo(hits=2, misses=3, maxsize=128, currsize=3))
+@functools.lru_cache(maxsize=0)
+def g(n): return n
+[g(i) for i in range(5)]; [g(i) for i in range(5)]
+out.append(g.cache_info() == functools._CacheInfo(hits=0, misses=10, maxsize=0, currsize=0))
+out.append(functools.partial.__module__ == "functools")
+out.append(functools.partial.__qualname__ == "partial")
+all(out)
+') equals: true
+%

@@ -100,6 +100,40 @@ doit
 functools_partial category: 'Grail-Modules'
 %
 
+! ------- functools_CacheInfo: the named 4-tuple lru_cache.cache_info() returns
+expectvalue /Class
+doit
+PythonInstance subclass: 'functools_CacheInfo'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+functools_CacheInfo category: 'Grail-Modules'
+%
+
+! ------- functools_Placeholder: the type of functools.Placeholder (a singleton)
+expectvalue /Class
+doit
+PythonInstance subclass: 'functools_Placeholder'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+functools_Placeholder category: 'Grail-Modules'
+%
+
 expectvalue /Metaclass3
 doit
 functools removeAllMethods: 1.
@@ -108,6 +142,10 @@ functools_partial removeAllMethods: 1.
 functools_partial class removeAllMethods: 1.
 functools_cmpkey removeAllMethods: 1.
 functools_cmpkey class removeAllMethods: 1.
+functools_CacheInfo removeAllMethods: 1.
+functools_CacheInfo class removeAllMethods: 1.
+functools_Placeholder removeAllMethods: 1.
+functools_Placeholder class removeAllMethods: 1.
 %
 
 set compile_env: 1
@@ -120,7 +158,14 @@ initialize
 	shadow it, so ``functools.partial`` / ``from functools import
 	partial`` yield the CLASS."
 
-	self @env0:at: #partial put: functools_partial
+	self @env0:at: #partial put: functools_partial.
+	"_CacheInfo: the named 4-tuple class lru_cache.cache_info() returns
+	and test code constructs directly."
+	self @env0:at: #'_CacheInfo' put: functools_CacheInfo.
+	"Placeholder: the singleton sentinel for reserved positional slots
+	in partial (Python 3.14).  Its type is functools_Placeholder;
+	``Placeholder'' is that type's sole instance."
+	self @env0:at: #Placeholder put: functools_Placeholder @env1:___singleton___
 %
 
 category: 'Grail-Built-in Functions'
@@ -221,6 +266,21 @@ value: positional value: keywords
 	^ self @env1:___allocateInstance___: positional kw: keywords
 %
 
+category: 'Grail-Reflection'
+classmethod: functools_partial
+__module__
+	"partial.__module__ -- test_repr builds the repr's name prefix from
+	``{partial.__module__}.{partial.__qualname__}''."
+
+	^ 'functools'
+%
+
+category: 'Grail-Reflection'
+classmethod: functools_partial
+__qualname__
+	^ 'partial'
+%
+
 category: 'Grail-Instantiation'
 method: functools_partial
 ___new__: positional kw: keywords
@@ -228,7 +288,7 @@ ___new__: positional kw: keywords
 	class-body __new__ non-virtually with the class as receiver, which
 	also makes ``class Sub(partial): pass`` construct Sub instances."
 
-	| inst fn rest kw |
+	| inst fn rest kw ph |
 	(positional @env0:== nil or: [positional @env0:isEmpty]) ifTrue: [
 		TypeError ___signal___: 'partial expected at least 1 argument, got 0'].
 	fn := positional @env0:at: 1.
@@ -238,20 +298,69 @@ ___new__: positional kw: keywords
 	kw := keywords @env0:== nil
 		ifTrue: [KeyValueDictionary @env0:new]
 		ifFalse: [keywords @env0:copy].
-	"CPython flattens partial-of-partial: adopt the inner func, prepend
-	its bound args, and let the OUTER keywords override the inner."
+	ph := functools_Placeholder @env1:___singleton___.
+	"Placeholder is not allowed as a keyword-argument value (checked by
+	identity, so ALWAYS_EQ -- which == everything -- is not treated as
+	a Placeholder)."
+	kw @env0:valuesDo: [:v | v @env0:== ph ifTrue: [
+		TypeError ___signal___: 'Placeholder cannot be passed as a keyword argument']].
+	"CPython flattens partial-of-partial: adopt the inner func, and the
+	outer positional args FILL the inner's Placeholder slots (leftover
+	outer args append); the OUTER keywords override the inner."
 	(fn @env0:isKindOf: functools_partial) ifTrue: [
 		| merged |
-		rest := (fn @env0:dynamicInstVarAt: #args) @env0:asArray @env0:, rest.
+		rest := functools_partial
+			___applyPlaceholders___: (fn @env0:dynamicInstVarAt: #args) @env0:asArray
+			with: rest.
 		merged := (fn @env0:dynamicInstVarAt: #keywords) @env0:copy.
 		kw @env0:keysAndValuesDo: [:k :v | merged @env0:at: k put: v].
 		kw := merged.
 		fn := fn @env0:dynamicInstVarAt: #func].
+	"Trailing Placeholders are not allowed (they could never be filled
+	at call time)."
+	(rest @env0:isEmpty @env0:not and: [(rest @env0:last) @env0:== ph]) ifTrue: [
+		TypeError ___signal___: 'trailing Placeholders are not allowed'].
 	inst := self @env0:new.
 	inst @env0:dynamicInstVarAt: #func put: fn.
 	inst @env0:dynamicInstVarAt: #args put: (tuple @env0:withAll: rest).
 	inst @env0:dynamicInstVarAt: #keywords put: kw.
 	^ inst
+%
+
+category: 'Grail-Placeholder'
+classmethod: functools_partial
+___applyPlaceholders___: boundArgs with: newArgs
+	"Fill each Placeholder in boundArgs with the next positional from
+	newArgs (in order), passing non-Placeholder bound args through and
+	appending any leftover newArgs.  A Placeholder with no newArg left
+	to consume stays a Placeholder -- construction tolerates that
+	(a mid-sequence reserved slot); the call path treats a surviving
+	Placeholder as a missing argument."
+
+	| ph result newList |
+	ph := functools_Placeholder @env1:___singleton___.
+	result := OrderedCollection @env0:new.
+	newList := OrderedCollection @env0:withAll:
+		(newArgs @env0:== nil ifTrue: [#()] ifFalse: [newArgs]).
+	boundArgs @env0:do: [:a |
+		(a @env0:== ph)
+			ifTrue: [
+				newList @env0:isEmpty
+					ifTrue: [result @env0:add: a]
+					ifFalse: [result @env0:add: newList @env0:removeFirst]]
+			ifFalse: [result @env0:add: a]].
+	result @env0:addAll: newList.
+	^ result @env0:asArray
+%
+
+category: 'Grail-Placeholder'
+classmethod: functools_partial
+___countPlaceholders___: anArray
+	| ph n |
+	ph := functools_Placeholder @env1:___singleton___.
+	n := 0.
+	anArray @env0:do: [:a | a @env0:== ph ifTrue: [n := n @env0:+ 1]].
+	^ n
 %
 
 category: 'Grail-Calling'
@@ -260,10 +369,21 @@ value: morePositional value: moreKw
 	"Invoke: fn(*bound, *more, **{**boundKw, **moreKw}) -- later
 	keywords override the bound ones (CPython semantics)."
 
-	| fn allArgs bk allKw |
+	| fn allArgs bk allKw remaining |
 	fn := self @env0:dynamicInstVarAt: #func.
-	allArgs := (self @env0:dynamicInstVarAt: #args) @env0:asArray
-		@env0:, (morePositional @env0:== nil ifTrue: [#()] ifFalse: [morePositional]).
+	"Fill reserved Placeholder slots with the call's positional args
+	(leftover call args append).  A Placeholder that survives means the
+	caller supplied too few positionals -- CPython's exact message."
+	allArgs := functools_partial
+		___applyPlaceholders___: (self @env0:dynamicInstVarAt: #args) @env0:asArray
+		with: (morePositional @env0:== nil ifTrue: [#()] ifFalse: [morePositional]).
+	remaining := functools_partial ___countPlaceholders___: allArgs.
+	remaining @env0:> 0 ifTrue: [
+		TypeError ___signal___: ('missing positional arguments in ''partial'' call; expected at least '
+			@env0:, (functools_partial ___countPlaceholders___:
+				(self @env0:dynamicInstVarAt: #args) @env0:asArray) @env0:printString
+			@env0:, ', got '
+			@env0:, (morePositional @env0:== nil ifTrue: [0] ifFalse: [morePositional @env0:size]) @env0:printString)].
 	bk := self @env0:dynamicInstVarAt: #keywords.
 	allKw := (bk @env0:== nil or: [bk @env0:isEmpty])
 		ifTrue: [moreKw]
@@ -303,6 +423,165 @@ __repr__
 	^ stream @env0:contents
 %
 
+! ===============================================================================
+! functools_CacheInfo -- the named 4-tuple returned by cache_info()
+! ===============================================================================
+
+category: 'Grail-Instantiation'
+classmethod: functools_CacheInfo
+hits: h misses: m maxsize: x currsize: c
+	| inst |
+	inst := self @env0:new.
+	inst @env0:dynamicInstVarAt: #hits put: h.
+	inst @env0:dynamicInstVarAt: #misses put: m.
+	inst @env0:dynamicInstVarAt: #maxsize put: x.
+	inst @env0:dynamicInstVarAt: #currsize put: c.
+	^ inst
+%
+
+category: 'Grail-Instantiation'
+classmethod: functools_CacheInfo
+value: positional value: keywords
+	"_CacheInfo(hits, misses, maxsize, currsize) -- accepts positional
+	OR keyword arguments (test code builds it with keywords)."
+
+	| pick |
+	pick := [:idx :key |
+		(positional @env0:~~ nil and: [positional @env0:size @env0:>= idx])
+			ifTrue: [positional @env0:at: idx]
+			ifFalse: [(keywords @env0:~~ nil and: [keywords @env0:includesKey: key])
+				ifTrue: [keywords @env0:at: key]
+				ifFalse: [None]]].
+	^ self
+		hits: (pick @env0:value: 1 value: 'hits')
+		misses: (pick @env0:value: 2 value: 'misses')
+		maxsize: (pick @env0:value: 3 value: 'maxsize')
+		currsize: (pick @env0:value: 4 value: 'currsize')
+%
+
+category: 'Grail-Accessors'
+method: functools_CacheInfo
+hits
+	^ self @env0:dynamicInstVarAt: #hits
+%
+
+category: 'Grail-Accessors'
+method: functools_CacheInfo
+misses
+	^ self @env0:dynamicInstVarAt: #misses
+%
+
+category: 'Grail-Accessors'
+method: functools_CacheInfo
+maxsize
+	^ self @env0:dynamicInstVarAt: #maxsize
+%
+
+category: 'Grail-Accessors'
+method: functools_CacheInfo
+currsize
+	^ self @env0:dynamicInstVarAt: #currsize
+%
+
+category: 'Grail-Sequence'
+method: functools_CacheInfo
+___asArray___
+	^ { self @env0:dynamicInstVarAt: #hits.
+		self @env0:dynamicInstVarAt: #misses.
+		self @env0:dynamicInstVarAt: #maxsize.
+		self @env0:dynamicInstVarAt: #currsize }
+%
+
+category: 'Grail-Sequence'
+method: functools_CacheInfo
+__getitem__: idx
+	"Namedtuples index like tuples (0-based)."
+
+	^ self ___asArray___ @env0:at: idx @env0:+ 1
+%
+
+category: 'Grail-Sequence'
+method: functools_CacheInfo
+__len__
+	^ 4
+%
+
+category: 'Grail-Comparison'
+method: functools_CacheInfo
+__eq__: other
+	"Field-wise equality.  A namedtuple compares equal to another
+	namedtuple (or plain tuple) with the same element values; compare
+	element-by-element via the Python __eq__ so None/int match."
+
+	| mine theirs |
+	mine := self ___asArray___.
+	theirs := (other @env0:isKindOf: functools_CacheInfo)
+		ifTrue: [other @env1:___asArray___]
+		ifFalse: [(other @env0:isKindOf: SequenceableCollection)
+			ifTrue: [other @env0:asArray]
+			ifFalse: [^ false]].
+	mine @env0:size @env0:= theirs @env0:size ifFalse: [^ false].
+	1 @env0:to: mine @env0:size do: [:i |
+		((mine @env0:at: i) @env1:__eq__: (theirs @env0:at: i)) @env0:== true
+			ifFalse: [^ false]].
+	^ true
+%
+
+category: 'Grail-Comparison'
+method: functools_CacheInfo
+__ne__: other
+	^ (self @env1:__eq__: other) @env0:not
+%
+
+category: 'Grail-String Representation'
+method: functools_CacheInfo
+__repr__
+	^ 'CacheInfo(hits=' @env0:, (self @env0:dynamicInstVarAt: #hits) @env1:__repr__ @env0:asString
+		@env0:, ', misses=' @env0:, (self @env0:dynamicInstVarAt: #misses) @env1:__repr__ @env0:asString
+		@env0:, ', maxsize=' @env0:, (self @env0:dynamicInstVarAt: #maxsize) @env1:__repr__ @env0:asString
+		@env0:, ', currsize=' @env0:, (self @env0:dynamicInstVarAt: #currsize) @env1:__repr__ @env0:asString
+		@env0:, ')'
+%
+
+! ===============================================================================
+! functools_Placeholder -- singleton sentinel for reserved partial arg slots
+! ===============================================================================
+
+category: 'Grail-Singleton'
+classmethod: functools_Placeholder
+___singleton___
+	"The sole Placeholder instance.  SESSION-LOCAL (SessionTemps):
+	Placeholders are transient partial-construction sentinels compared
+	by identity WITHIN a session and never committed (a value that
+	needs to persist would not be a Placeholder).  Keeps the sentinel
+	off any committed class -- see the session-state policy."
+
+	| p |
+	p := SessionTemps @env0:current @env0:at: #GrailFunctoolsPlaceholder otherwise: nil.
+	p @env0:isNil ifTrue: [
+		p := self @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailFunctoolsPlaceholder put: p].
+	^ p
+%
+
+category: 'Grail-Singleton'
+classmethod: functools_Placeholder
+value: positional value: keywords
+	"type(Placeholder)() returns the singleton; any argument raises
+	TypeError (CPython: the Placeholder type takes no arguments)."
+
+	((positional @env0:~~ nil and: [positional @env0:isEmpty @env0:not])
+		or: [keywords @env0:~~ nil and: [keywords @env0:isEmpty @env0:not]]) ifTrue: [
+		TypeError ___signal___: 'Placeholder() takes no arguments'].
+	^ self ___singleton___
+%
+
+category: 'Grail-String Representation'
+method: functools_Placeholder
+__repr__
+	^ 'Placeholder'
+%
+
 category: 'Grail-Built-in Functions'
 method: functools
 WRAPPER_ASSIGNMENTS
@@ -331,47 +610,49 @@ WRAPPER_UPDATES
 category: 'Grail-Built-in Functions'
 method: functools
 lru_cache: maxsize
-	"lru_cache(maxsize) -> decorator.
-	The decorator wraps the user function in a LruCacheWrapper that
-	is callable (delegates to the wrapped function) and exposes the
-	``cache_clear`` / ``cache_info`` attributes Jinja2 + downstream
-	consumers expect.  Caching itself is a no-op for now — every
-	call re-invokes the wrapped function.  Adequate for Flask
-	hello-world; revisit when render perf matters."
+	"lru_cache(maxsize) -> decorator.  The decorator wraps the user
+	function in a LruCacheWrapper that memoizes results and exposes
+	``cache_clear`` / ``cache_info``.
 
-	"``@lru_cache`` (bare, no parens) passes the function directly as
-	the sole argument — CPython supports both that and
-	``@lru_cache(maxsize=N)''.  ``maxsize'' is normally an Integer or
-	None; anything else is the bare-decorator function, so wrap it
-	immediately.  django.views.debug uses the bare form."
+	``@lru_cache`` (bare, no parens) passes the FUNCTION directly as
+	the sole argument -- CPython supports both that and
+	``@lru_cache(maxsize=N)''.  The bare form uses CPython's default
+	bound of 128; the ``(maxsize=N)'' form uses N.  ``maxsize'' is
+	normally an Integer or None; anything else is the bare-decorator
+	function, so wrap it immediately (default 128).  django.views.debug
+	uses the bare form."
+
 	((maxsize @env0:isKindOf: Integer)
 		or: [maxsize @env0:== nil or: [maxsize @env0:== None]]) ifFalse: [
-		^ LruCacheWrapper @env1:___wrap___: maxsize].
+		^ LruCacheWrapper @env1:___wrap___: maxsize maxsize: 128].
 	^ [:positional2 :keywords2 |
-		LruCacheWrapper @env1:___wrap___: (positional2 @env0:at: 1)]
+		LruCacheWrapper @env1:___wrap___: (positional2 @env0:at: 1) maxsize: maxsize]
 %
 
 category: 'Grail-Built-in Functions'
 method: functools
 _lru_cache: positional kw: kwargs
-	"Varargs entry — ``lru_cache(maxsize=128, typed=False)`` from
-	user code.  Ignores the keyword args; returns the same wrapper-
-	emitting decorator the fixed-arity form does."
+	"Varargs entry — ``lru_cache(maxsize=128, typed=False)'' from user
+	code.  Honors the ``maxsize'' keyword (default 128, matching
+	CPython); ``typed'' is accepted and ignored."
 
+	| ms |
+	ms := (kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'maxsize'])
+		ifTrue: [kwargs @env0:at: 'maxsize']
+		ifFalse: [(positional @env0:~~ nil and: [positional @env0:isEmpty @env0:not])
+			ifTrue: [positional @env0:at: 1]
+			ifFalse: [128]].
 	^ [:positional2 :keywords2 |
-		LruCacheWrapper @env1:___wrap___: (positional2 @env0:at: 1)]
+		LruCacheWrapper @env1:___wrap___: (positional2 @env0:at: 1) maxsize: ms]
 %
 
 category: 'Grail-Built-in Functions'
 method: functools
 cache: aFunction
 	"``@cache'' (Python 3.9+) — shorthand for ``@lru_cache(maxsize=None)''
-	with unbounded cache.  Grail wraps the function in a LruCacheWrapper
-	the same way ``lru_cache(...)'' does — no caching today (every call
-	re-invokes), but the wrapper is callable and exposes
-	``cache_clear'' / ``cache_info''."
+	with an unbounded cache."
 
-	^ LruCacheWrapper @env1:___wrap___: aFunction
+	^ LruCacheWrapper @env1:___wrap___: aFunction maxsize: None
 %
 
 category: 'Grail-Built-in Functions'

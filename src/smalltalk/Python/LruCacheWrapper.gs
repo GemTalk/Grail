@@ -7,7 +7,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'LruCacheWrapper'
-  instVarNames: #( wrapped cache hits misses )
+  instVarNames: #( wrapped cache hits misses maxsize )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -38,9 +38,19 @@ set compile_env: 0
 
 category: 'Grail-Private'
 method: LruCacheWrapper
-_setWrapped: aFunction
+_setWrapped: aFunction maxsize: aMaxsize
 
-	wrapped := aFunction
+	wrapped := aFunction.
+	"Normalize maxsize like CPython: None -> unbounded; a non-negative
+	integer -> that bound (not enforced -- the cache is effectively
+	unbounded, an acceptable perf-only deviation); a NEGATIVE integer
+	-> 0, which DOES change behavior (0 disables caching entirely, so
+	every call is a miss).  cache_info reports the normalized value."
+	maxsize := (aMaxsize @env0:== nil or: [aMaxsize @env0:== None])
+		ifTrue: [None]
+		ifFalse: [(aMaxsize @env0:isKindOf: Integer)
+			ifTrue: [aMaxsize @env0:< 0 ifTrue: [0] ifFalse: [aMaxsize]]
+			ifFalse: [None]]
 %
 
 set compile_env: 1
@@ -50,12 +60,20 @@ set compile_env: 1
 category: 'Grail-Instance Creation'
 classmethod: LruCacheWrapper
 ___wrap___: aFunction
-	"Build a wrapper around aFunction.  ``functools.lru_cache``
-	uses this as the decoration step."
+	"Back-compat entry: wrap with an unbounded cache (maxsize None)."
+
+	^ self ___wrap___: aFunction maxsize: None
+%
+
+category: 'Grail-Instance Creation'
+classmethod: LruCacheWrapper
+___wrap___: aFunction maxsize: aMaxsize
+	"Build a wrapper around aFunction with the requested maxsize.
+	``functools.lru_cache`` uses this as the decoration step."
 
 	| inst |
 	inst := self @env0:new.
-	inst @env0:_setWrapped: aFunction.
+	inst @env0:_setWrapped: aFunction maxsize: aMaxsize.
 	^ inst
 %
 
@@ -70,6 +88,11 @@ value: positional value: kwargs
 	marker."
 
 	| key result |
+	"maxsize 0 disables caching entirely -- every call misses and
+	nothing is retained (test_lru_cache_size_zero / negative maxsize)."
+	maxsize @env0:== 0 ifTrue: [
+		misses := (misses @env0:== nil ifTrue: [0] ifFalse: [misses]) @env0:+ 1.
+		^ wrapped @env1:value: positional value: kwargs].
 	key := (positional @env0:== nil ifTrue: [#()] ifFalse: [positional]) @env0:asArray.
 	(kwargs @env0:~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
 		| pairs sortedKeys |
@@ -127,14 +150,16 @@ cache_clear
 category: 'Grail-Attributes'
 method: LruCacheWrapper
 cache_info
-	"``functools.lru_cache``: return a ``CacheInfo`` named-tuple
-	(hits, misses, maxsize, currsize).  Stub: a tuple of zeros."
+	"``functools.lru_cache``: return the ``_CacheInfo`` named 4-tuple
+	(hits, misses, maxsize, currsize).  maxsize is the normalized
+	requested bound (None = unbounded); currsize is the live entry
+	count."
 
-	^ tuple @env0:withAll: {
-		(hits @env0:== nil ifTrue: [0] ifFalse: [hits]).
-		(misses @env0:== nil ifTrue: [0] ifFalse: [misses]).
-		None.
-		(cache @env0:== nil ifTrue: [0] ifFalse: [cache @env0:size]) }
+	^ functools_CacheInfo
+		hits: (hits @env0:== nil ifTrue: [0] ifFalse: [hits])
+		misses: (misses @env0:== nil ifTrue: [0] ifFalse: [misses])
+		maxsize: (maxsize @env0:== nil ifTrue: [None] ifFalse: [maxsize])
+		currsize: (cache @env0:== nil ifTrue: [0] ifFalse: [cache @env0:size])
 %
 
 category: 'Grail-Attributes'

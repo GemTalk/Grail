@@ -1,10 +1,10 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-07-12T11:50:25Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
+Generated: 2026-07-12T18:10:19Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
 
 **Modules: 19** — OK 1 · FAIL 0 · ERROR 14 · SKIP 2 · IMPORTERROR 2 · STERROR 0 · CRASH 0 · TIMEOUT 0
 
-**Totals:** tests=2911 failures=814 errors=779 skipped=8
+**Totals:** tests=2911 failures=816 errors=750 skipped=8
 
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
@@ -24,7 +24,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_fractions | ERROR | 49 | 18 | 13 | 0 |  |
 | test.test_datetime | SKIP | 0 | 0 | 0 | 0 |  |
 | test.test_re | ERROR | 161 | 32 | 30 | 2 |  |
-| test.test_functools | ERROR | 253 | 77 | 126 | 0 |  |
+| test.test_functools | ERROR | 253 | 79 | 97 | 0 |  |
 | test.test_list | ERROR | 68 | 17 | 9 | 2 |  |
 | test.test_tuple | ERROR | 38 | 11 | 9 | 0 |  |
 | test.test_dict | ERROR | 120 | 35 | 23 | 1 |  |

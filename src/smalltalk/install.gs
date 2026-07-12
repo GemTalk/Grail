@@ -269,6 +269,8 @@ run
 	at: #'MethodBinding' put: nil;
 	at: #'PropertyDescriptor' put: nil;
 	at: #'LruCacheWrapper' put: nil;
+	at: #'functools_CacheInfo' put: nil;
+	at: #'functools_Placeholder' put: nil;
 	at: #'Super' put: nil;
 	at: #'SuperBoundMethod' put: nil;
 	at: #'UnboundMethod' put: nil;
