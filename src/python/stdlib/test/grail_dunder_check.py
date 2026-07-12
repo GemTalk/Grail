@@ -602,3 +602,33 @@ def _enum_internals_results():
 
 
 ENUM_INTERNALS_RESULT = _enum_internals_results()
+
+
+def _mi_flag_results():
+    # MI flag enums (class E(int, Flag)) are AbstractPyInt-rooted, so
+    # both the Enum METACLASS protocol (member building -- object's
+    # no-op ___pyClassDefined___ default must not block the copy) and
+    # Flag's INSTANCE algebra reach them via the enum secondary-base
+    # merge; auto() markers resolve through the functional dict/pairs
+    # forms too.
+    from enum import Enum, Flag, auto
+
+    class IFlag(int, Flag):
+        R = auto()
+        W = auto()
+        X = auto()
+
+    rw = IFlag.R | IFlag.W
+    Base = Enum('Base', {})
+    # ordered pairs form: Grail dicts are hash-ordered (documented
+    # deviation), so marker resolution order is only guaranteed for
+    # string/sequence/pairs names
+    Main = Base('Main', [('first', auto()), ('second', auto()),
+                         ('third', auto()), ('dupe', 3)])
+    return (IFlag.R.value, IFlag.W.value, IFlag.X.value,
+            rw.value, IFlag(5).value, IFlag.R in rw,
+            (rw & IFlag.R) is IFlag.R, IFlag.R + 0, IFlag.R.name,
+            Main.first.value, Main.second.value, Main.dupe is Main.third)
+
+
+MI_FLAG_RESULT = _mi_flag_results()

@@ -337,10 +337,23 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
+	[ | lastInt isFlag |
+	lastInt := 0.
+	isFlag := self ___grailIsFlagClass: newCls.
 	pairs @env0:do: [:pair |
 		| nameStr rawValue member |
 		nameStr := pair @env0:at: 1.
 		rawValue := pair @env0:at: 2.
+		"auto() markers can arrive through the mapping/pairs forms
+		(BaseEnum('MainEnum', dict(first=auto(), ...))) -- resolve with
+		the same per-class rule as class-body members."
+		(rawValue @env0:isKindOf: GrailEnumAuto) ifTrue: [
+			rawValue := isFlag
+				ifTrue: [lastInt @env0:<= 0
+					ifTrue: [1]
+					ifFalse: [1 @env0:bitShift: lastInt @env0:highBit]]
+				ifFalse: [lastInt @env0:+ 1]].
+		(rawValue @env0:isKindOf: Integer) ifTrue: [lastInt := rawValue].
 		((nameStr @env0:size @env0:> 0) and: [(nameStr @env0:at: 1) @env0:= $_]) ifFalse: [
 			(byValue @env0:includesKey: rawValue)
 				ifTrue: [member := byValue @env0:at: rawValue]
@@ -358,7 +371,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 		(newCls @env0:class) ___compileMethod:
 				(nameStr @env0:, '
 	^ self __getitem__: ''' @env0:, nameStr @env0:, '''')
-				category: 'Grail-Class Attrs']].
+				category: 'Grail-Class Attrs']]] value.
 	EnumRegistry @env0:at: newCls put: (Array @env0:with: byValue with: byName with: members).
 	^ newCls
 %
@@ -567,7 +580,17 @@ __hash__
 category: 'Grail-Flag Member'
 method: Flag
 ___flagOperand___: other
-	(other @env0:isKindOf: Flag) ifTrue: [^ other @env0:dynamicInstVarAt: #value].
+	"Tolerant across storage roots: this source is COPIED onto MI flag
+	classes (class E(int, Flag) is AbstractPyInt-rooted), whose members
+	are NOT Flag-kind."
+
+	((other @env0:isKindOf: Flag)
+		or: [other @env0:class @env0:== self @env0:class]) ifTrue: [
+		^ other @env0:dynamicInstVarAt: #value].
+	(other @env0:isKindOf: AbstractPyInt) ifTrue: [
+		| v |
+		v := other @env0:dynamicInstVarAt: #value.
+		v @env0:isNil ifFalse: [^ v]].
 	(other @env0:isKindOf: Integer) ifTrue: [^ other].
 	^ TypeError ___signal___: 'unsupported operand type(s) for flag operation'
 %
@@ -612,9 +635,7 @@ __contains__: other
 	"``B in (A|B)``: membership by bit coverage."
 
 	| ov v |
-	(other @env0:isKindOf: Flag) ifFalse: [
-		^ TypeError ___signal___: 'unsupported operand type(s) for ''in''' ].
-	ov := other @env0:dynamicInstVarAt: #value.
+	ov := self ___flagOperand___: other.
 	v := self @env0:dynamicInstVarAt: #value.
 	^ (v @env0:bitAnd: ov) @env0:= ov
 %

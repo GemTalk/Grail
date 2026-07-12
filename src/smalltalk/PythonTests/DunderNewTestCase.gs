@@ -871,3 +871,17 @@ testEnumInternals
 	self assert: (r @env1:__getitem__: 'flag_bool') @env1:__repr__ equals: '(True, False)'.
 	self assert: (r @env1:__getitem__: 'flag_auto') @env1:__repr__ equals: '(1, 2, 4)'
 %
+
+category: 'Grail-Tests - enum internals'
+method: DunderNewTestCase
+testMiFlagEnums
+	"class E(int, Flag): the enum secondary-base merge copies BOTH the
+	metaclass protocol (universal-root no-op defaults like object's
+	___pyClassDefined___: must not block the copy -- members were never
+	built) AND Flag's instance algebra (operand-tolerant across storage
+	roots).  auto() markers also resolve through the functional API's
+	dict/pairs forms with per-class numbering."
+
+	self assert: (self fixture @env1:MI_FLAG_RESULT) @env1:__repr__
+		equals: '(1, 2, 4, 3, 5, True, True, 1, ''R'', 1, 2, True)'
+%

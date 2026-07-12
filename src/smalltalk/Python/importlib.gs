@@ -1298,9 +1298,19 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 	builds the members."
 	(secondaryBases anySatisfy: [:b |
 		(b isKindOf: Behavior) and: [(b == Enum) or: [b inheritsFrom: Enum]]]) ifTrue: [
+		| pyObjectClass |
+		pyObjectClass := [(System myUserProfile symbolList objectNamed: #object) class]
+			on: Error do: [:e | nil].
 		#( #'___pyClassDefined___:' #'_member_type_' #'__contains__:'
 		   #'__getitem__:' #'__iter__' #'__len__' #'__new__:' ) do: [:sel |
-			((aClass class whichClassIncludesSelector: sel environmentId: 1) isNil) ifTrue: [
+			| provider |
+			provider := aClass class whichClassIncludesSelector: sel environmentId: 1.
+			"A universal-root DEFAULT (object's no-op ___pyClassDefined___:)
+			must not block the copy -- it shadowed the member-building
+			hook for class E(int, Flag) and no members were ever built."
+			(provider isNil
+				or: [provider == Object class
+				or: [provider == pyObjectClass]]) ifTrue: [
 				| src cat |
 				src := [Enum class sourceCodeAt: sel environmentId: 1]
 					on: Error do: [:e | nil].
@@ -1319,7 +1329,35 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 		src := Enum class sourceCodeAt: #'value:value:' environmentId: 1.
 		aClass class perform: #'___compileMethod:category:' env: 1
 			withArguments: { src. 'Grail-Enum Metaclass' }]
-			on: Error do: [:e | nil]]
+			on: Error do: [:e | nil].
+		"INSTANCE-side member protocol: the same dynInstVars gate that
+		skipped the Enum metaclass also skips Flag/Enum in the general
+		instance walk above, so an MI flag's members (class E(int, Flag)
+		is AbstractPyInt-rooted) had no |/&/^/~ algebra, name/value
+		accessors, or composed repr.  Gap-fill from each Enum-rooted
+		secondary base's chain up through Enum (the method sources are
+		storage-agnostic -- see Flag>>___flagOperand___:)."
+		secondaryBases do: [:base |
+			| eWalker |
+			((base isKindOf: Behavior)
+				and: [(base == Enum) or: [base inheritsFrom: Enum]]) ifTrue: [
+				eWalker := base.
+				[(eWalker ~~ nil) and: [(eWalker ~~ PythonInstance) and: [eWalker ~~ Object]]] whileTrue: [
+					| emd |
+					emd := eWalker methodDictForEnv: 1.
+					emd ~~ nil ifTrue: [
+						emd keys do: [:sel |
+							((self ___primaryChainProvides___: sel forClass: aClass) not) ifTrue: [
+								| src cat |
+								src := [eWalker sourceCodeAt: sel environmentId: 1]
+									on: Error do: [:e | nil].
+								cat := [(eWalker categoryOfSelector: sel environmentId: 1) asString]
+									on: Error do: [:e | 'Grail-MI-Inherited'].
+								src ~~ nil ifTrue: [
+									[aClass perform: #'___compileMethod:category:' env: 1
+										withArguments: { src. cat }]
+										on: Error do: [:e | nil]]]]].
+					eWalker := eWalker superClass]]]]
 %
 
 category: 'Grail-Module Loading'
