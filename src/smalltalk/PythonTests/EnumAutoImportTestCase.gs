@@ -61,19 +61,23 @@ setUp
 category: 'Grail-Tests'
 method: EnumAutoImportTestCase
 testAutoCallableAfterImport
-	"x = auto(); y = auto(); z = auto() should produce three
-	distinct integers."
+	"auto() is callable after ``from enum import auto'' and returns a
+	fresh marker each call.  Markers resolve to per-CLASS sequential
+	values at member-build time (CPython semantics; the old behavior
+	returned process-global integers directly, giving arbitrary values
+	inside class bodies -- see DunderNewTestCase>>testEnumInternals for
+	the value-resolution pins)."
 
 	| result a b c |
 	result := testModule @env1:imported_auto_is_callable.
 	a := result @env0:at: 1.
 	b := result @env0:at: 2.
 	c := result @env0:at: 3.
-	self assert: (a @env0:isKindOf: Integer).
-	self assert: (b @env0:isKindOf: Integer).
-	self assert: (c @env0:isKindOf: Integer).
-	"Each call returns a different value."
-	self deny: a equals: b.
-	self deny: b equals: c.
-	self deny: a equals: c
+	self assert: (a @env0:isKindOf: GrailEnumAuto).
+	self assert: (b @env0:isKindOf: GrailEnumAuto).
+	self assert: (c @env0:isKindOf: GrailEnumAuto).
+	"Each call returns a distinct marker object."
+	self deny: a == b.
+	self deny: b == c.
+	self deny: a == c
 %

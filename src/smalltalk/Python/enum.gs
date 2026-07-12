@@ -121,15 +121,12 @@ Flag
 category: 'Grail-Built-in Functions'
 method: enum
 auto
-	"``enum.auto()`` — return a fresh unique integer.  CPython
-	tracks per-class counters; here we use a process-global counter
-	stored on the module instance.  Adequate for Jinja2's
-	``_PassArg`` membership-test usage."
+	"``enum.auto()`` — return a marker that ___grailBuildMembers:
+	resolves to last-integer-value + 1 in declaration order (CPython
+	per-class semantics; a process-global counter gave arbitrary
+	values -- 112 test_enum errors expected first/second/third = 1/2/3)."
 
-	| counter |
-	counter := (self @env0:at: #'__auto_counter' otherwise: 0) @env0:+ 1.
-	self @env0:at: #'__auto_counter' put: counter.
-	^ counter
+	^ GrailEnumAuto @env0:new
 %
 
 ! ===============================================================================

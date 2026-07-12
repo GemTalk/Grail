@@ -549,3 +549,56 @@ def _float_subclass_results():
 
 
 FLOAT_SUBCLASS_RESULT = _float_subclass_results()
+
+
+def _enum_internals_results():
+    # The enum-internals round: local-class bases, _member_type_,
+    # per-class auto() numbering, and Flag bitwise algebra.
+    from enum import Enum, IntEnum, Flag, auto
+    out = {}
+
+    # method-local class inheriting a sibling method-local class
+    # (the bases expression must evaluate inline, not via closure cell)
+    class BaseL:
+        def hello(self):
+            return 'hi'
+
+    class MainL(BaseL):
+        second = 2
+
+    out['local_bases'] = (MainL().hello(), MainL.second)
+
+    class Color(Enum):
+        RED = auto()
+        GREEN = auto()
+        BLUE = auto()
+
+    out['auto_values'] = (Color.RED.value, Color.GREEN.value, Color.BLUE.value)
+    out['member_type_plain'] = Color._member_type_ is object
+
+    class Nums(IntEnum):
+        ONE = 1
+
+    out['member_type_int'] = Nums._member_type_ is int
+    out['contains'] = (Color.RED in Color, 'x' in Color)
+
+    Perm = Flag('Perm', 'R W X')
+    rw = Perm.R | Perm.W
+    out['flag_values'] = (Perm.R.value, Perm.W.value, Perm.X.value)
+    out['flag_or'] = (rw.value, repr(rw))
+    out['flag_lookup'] = repr(Perm(5))
+    out['flag_in'] = (Perm.R in rw, Perm.X in rw)
+    out['flag_and_xor'] = ((rw & Perm.R) is Perm.R, (rw ^ Perm.R) is Perm.W)
+    out['flag_invert'] = repr(~Perm.R)
+    out['flag_bool'] = (bool(Perm.R), bool(Perm.R & Perm.X))
+
+    class FPerm(Flag):
+        R = auto()
+        W = auto()
+        X = auto()
+
+    out['flag_auto'] = (FPerm.R.value, FPerm.W.value, FPerm.X.value)
+    return out
+
+
+ENUM_INTERNALS_RESULT = _enum_internals_results()

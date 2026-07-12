@@ -1285,7 +1285,41 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 			].
 			walker := walker superClass
 		]
-	]
+	].
+	"ENUM SECONDARY BASE: the hand-written Enum metaclass carries the
+	whole member-building/lookup protocol but declares no dynInstVars,
+	so the general class-side walk above skips it entirely -- an MI
+	enum (``class E(date, ReprEnum)``) built NO members and had no
+	_member_type_ (751 test_enum errors).  Recompile the fixed
+	delegator set from Enum class, preserving each method's own
+	category (_member_type_ must stay in Grail-Class Attrs for the
+	class-attr read gate).  Emitted-merge order guarantees this runs
+	BEFORE the ___pyClassDefined___: hook fires, so the copied hook
+	builds the members."
+	(secondaryBases anySatisfy: [:b |
+		(b isKindOf: Behavior) and: [(b == Enum) or: [b inheritsFrom: Enum]]]) ifTrue: [
+		#( #'___pyClassDefined___:' #'_member_type_' #'__contains__:'
+		   #'__getitem__:' #'__iter__' #'__len__' #'__new__:' ) do: [:sel |
+			((aClass class whichClassIncludesSelector: sel environmentId: 1) isNil) ifTrue: [
+				| src cat |
+				src := [Enum class sourceCodeAt: sel environmentId: 1]
+					on: Error do: [:e | nil].
+				cat := [(Enum class categoryOfSelector: sel environmentId: 1) asString]
+					on: Error do: [:e | 'Grail-MI-Inherited'].
+				src ~~ nil ifTrue: [
+					[aClass class perform: #'___compileMethod:category:' env: 1
+						withArguments: { src. cat }]
+						on: Error do: [:e | nil]]]].
+		"The generic ClassDefAst instantiation (value:value:) blocks the
+		enum value-lookup path; replace it with Enum's version so
+		``E(3)`` resolves members (buildMembers would only REMOVE it,
+		leaving dispatch to fall through to the data base's
+		constructor)."
+		[ | src |
+		src := Enum class sourceCodeAt: #'value:value:' environmentId: 1.
+		aClass class perform: #'___compileMethod:category:' env: 1
+			withArguments: { src. 'Grail-Enum Metaclass' }]
+			on: Error do: [:e | nil]]
 %
 
 category: 'Grail-Module Loading'

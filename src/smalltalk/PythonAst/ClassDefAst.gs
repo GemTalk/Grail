@@ -336,7 +336,21 @@ printSmalltalkRuntimeOn: aStream
 	Behavior / Class receivers (error 2484); accessor/setter pairs
 	keep the read/write path working for class-side attrs."
 	aStream nextPutAll: name; nextPutAll: ' := ('.
-	self printSuperclassOn: aStream.
+	"The BASES expression evaluates INLINE in the enclosing scope at
+	classdef time -- a sibling method-local class (``class BaseEnum:
+	... class MainEnum(BaseEnum):`` in a setUp) is a plain Smalltalk
+	temp there.  classBeingCompiled is already pushed, so NameAst's
+	closure-cell branch would otherwise hijack the base name into a
+	___classCell___ read that was never stored (539 test_enum setUp
+	errors, incl. ``class enum_type(date, Enum)`` on ``date``).  The
+	DEDICATED inBasesEmit flag suppresses ONLY that branch -- flipping
+	inClassBodyValueEmit here instead broke twilio (module-level base
+	names took the class-body value branches)."
+	[ | savedBasesFlag |
+	savedBasesFlag := CallAst inBasesEmit.
+	CallAst inBasesEmit: true.
+	[self printSuperclassOn: aStream]
+		ensure: [CallAst inBasesEmit: (savedBasesFlag == true)]] value.
 	"``___subclass___:'' is an env-1 method on Class (see Class.gs).
 	The bare send used to work for built-in classes whose metaclass
 	chain reached Class via env-0 dispatch, but Grail-built parents
@@ -846,14 +860,20 @@ printSmalltalkRuntimeOn: aStream
 	them).  Emitted after the class's own methods are compiled so they
 	take precedence.  See importlib >> ___mergeSecondaryBases___:bases:."
 	bases size > 1 ifTrue: [
-		aStream
+		"Same inline-scope rule as printSuperclassOn: above -- these are
+		the SAME base expressions, re-emitted for the MI merge."
+		| savedBasesFlag |
+		savedBasesFlag := CallAst inBasesEmit.
+		CallAst inBasesEmit: true.
+		[aStream
 			nextPutAll: '(Python @env0:at: #importlib) @env0:___mergeSecondaryBases___: ';
 			nextPutAll: name;
 			nextPutAll: ' bases: { '.
 		1 to: bases size do: [:i |
 			i > 1 ifTrue: [aStream nextPutAll: '. '].
 			(bases at: i) printSmalltalkWithParenthesisOn: aStream].
-		aStream nextPutAll: ' }.'; lf
+		aStream nextPutAll: ' }.'; lf]
+			ensure: [CallAst inBasesEmit: (savedBasesFlag == true)]
 	].
 
 	"Compile the class-side value:value: method used for Python

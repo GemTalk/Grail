@@ -444,7 +444,8 @@ printSmalltalkOn: aStream
 	((ctx isKindOf: LoadAst)
 		and: [CallAst classBeingCompiled notNil
 		and: [CallAst inClassBodyValueEmit ~~ true
-		and: [self ___enclosingFunctionLocalBeyondClass___: id]]]) ifTrue: [
+		and: [CallAst inBasesEmit ~~ true
+		and: [self ___enclosingFunctionLocalBeyondClass___: id]]]]) ifTrue: [
 		CallAst addCapturedClassName: id.
 		aStream
 			nextPutAll: '(self @env1:___classCell___: #''___cell_';

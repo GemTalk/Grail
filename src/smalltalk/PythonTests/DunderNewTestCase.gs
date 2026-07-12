@@ -842,3 +842,32 @@ testFloatSubclassViaAbstractPyFloat
 	self assert: (self fixture @env1:FLOAT_SUBCLASS_RESULT) @env1:__repr__
 		equals: '(2.5, 3.5, 3.5, 3.0, 5.0, True, True, True, 2, ''2.5'', ''MyFloat'', 2.0)'
 %
+
+category: 'Grail-Tests - enum internals'
+method: DunderNewTestCase
+testEnumInternals
+	"The enum-internals round: (1) a method-local classdef whose BASE
+	is a sibling method-local class evaluates the bases expression
+	inline (it was hijacked into an unstored ___classCell___ read --
+	539 test_enum errors); (2) _member_type_ (category Grail-Class
+	Attrs so class-attr reads perform it); (3) auto() resolves to
+	per-CLASS values, sequential for Enum and power-of-two for Flag;
+	(4) metaclass __contains__; (5) Flag bitwise algebra with cached
+	composite pseudo-members."
+
+	| r |
+	r := self fixture @env1:ENUM_INTERNALS_RESULT.
+	self assert: (r @env1:__getitem__: 'local_bases') @env1:__repr__ equals: '(''hi'', 2)'.
+	self assert: (r @env1:__getitem__: 'auto_values') @env1:__repr__ equals: '(1, 2, 3)'.
+	self assert: (r @env1:__getitem__: 'member_type_plain') equals: true.
+	self assert: (r @env1:__getitem__: 'member_type_int') equals: true.
+	self assert: (r @env1:__getitem__: 'contains') @env1:__repr__ equals: '(True, False)'.
+	self assert: (r @env1:__getitem__: 'flag_values') @env1:__repr__ equals: '(1, 2, 4)'.
+	self assert: (r @env1:__getitem__: 'flag_or') @env1:__repr__ equals: '(3, ''<Perm.R|W: 3>'')'.
+	self assert: (r @env1:__getitem__: 'flag_lookup') equals: '<Perm.R|X: 5>'.
+	self assert: (r @env1:__getitem__: 'flag_in') @env1:__repr__ equals: '(True, False)'.
+	self assert: (r @env1:__getitem__: 'flag_and_xor') @env1:__repr__ equals: '(True, True)'.
+	self assert: (r @env1:__getitem__: 'flag_invert') equals: '<Perm.W|X: 6>'.
+	self assert: (r @env1:__getitem__: 'flag_bool') @env1:__repr__ equals: '(True, False)'.
+	self assert: (r @env1:__getitem__: 'flag_auto') @env1:__repr__ equals: '(1, 2, 4)'
+%
