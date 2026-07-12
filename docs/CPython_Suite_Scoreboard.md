@@ -1,10 +1,10 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-07-12T00:50:24Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
+Generated: 2026-07-12T04:20:46Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
 
-**Modules: 19** — OK 1 · FAIL 0 · ERROR 13 · SKIP 2 · IMPORTERROR 3 · STERROR 0 · CRASH 0 · TIMEOUT 0
+**Modules: 19** — OK 1 · FAIL 0 · ERROR 14 · SKIP 2 · IMPORTERROR 2 · STERROR 0 · CRASH 0 · TIMEOUT 0
 
-**Totals:** tests=1834 failures=422 errors=433 skipped=8
+**Totals:** tests=2911 failures=468 errors=1449 skipped=8
 
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
@@ -32,4 +32,4 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_bytes | SKIP | 0 | 0 | 0 | 0 | a SkipTest occurred (error 2702) |
 | test.test_collections | ERROR | 101 | 46 | 45 | 0 |  |
 | test.test_itertools | ERROR | 131 | 49 | 38 | 3 |  |
-| test.test_enum | IMPORTERROR | 0 | 0 | 0 | 0 | Grail cannot subclass sealed kernel class 'Float' |
+| test.test_enum | ERROR | 1077 | 46 | 1016 | 0 |  |

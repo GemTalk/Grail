@@ -1591,6 +1591,9 @@ ___isSubclassSingle___: sub of: target
 	___subclass___'s sealed-Integer substitution IS a subclass of int."
 	(target @env0:== Integer and: [(sub @env0:== AbstractPyInt)
 		or: [sub @env0:inheritsFrom: AbstractPyInt]]) ifTrue: [^ true].
+	"float-subclass widening -- same substitution story."
+	(target @env0:== Float and: [(sub @env0:== AbstractPyFloat)
+		or: [sub @env0:inheritsFrom: AbstractPyFloat]]) ifTrue: [^ true].
 	il := Python @env0:at: #importlib otherwise: nil.
 	il @env0:== nil ifFalse: [
 		((il @env0:___mroOf___: sub) @env0:includes: target) ifTrue: [^ true]].

@@ -85,6 +85,15 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 			@env1:___subclass___: aSymbol
 			instVarNames: ivarNames
 			classInstVarNames: classIvarNames].
+	"``class MyFloat(float)``: same story for the sealed float kernel --
+	substitute the AbstractPyFloat Number-sibling (generality 80 strips
+	the wrapper in mixed arithmetic; see AbstractPyFloat.gs)."
+	((self @env0:== Float)
+		or: [self @env0:== SmallDouble or: [self @env0:== BinaryFloat]]) ifTrue: [
+		^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #AbstractPyFloat)
+			@env1:___subclass___: aSymbol
+			instVarNames: ivarNames
+			classInstVarNames: classIvarNames].
 	filteredIvars := ivarNames @env0:reject: [:n |
 		self @env0:allInstVarNames @env0:includes: n].
 	filteredClassIvars := classIvarNames @env0:reject: [:n |

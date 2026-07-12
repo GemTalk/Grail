@@ -827,3 +827,18 @@ testSingledispatch
 	self assert: (self fixture @env1:SINGLEDISPATCH_RESULT) @env1:__repr__
 		equals: '(''base'', ''integer'', ''string hi'', ''base'', ''A'', ''B'', ''A'', ''B'', True)'
 %
+
+category: 'Grail-Tests - phase2 conformance'
+method: DunderNewTestCase
+testFloatSubclassViaAbstractPyFloat
+	"class MyFloat(float) substitutes the AbstractPyFloat Number-sibling
+	(kernel Float is sealed).  Generality 80 -- above ints/fractions,
+	below SmallDouble -- makes mixed arithmetic strip the wrapper in
+	BOTH operand orders (1 + m retries as 1.0 + m; m + 1 forwards
+	receiver-side), matching CPython float-subclass semantics.  This
+	unblocked test_enum's import (class enum_type(float, Enum)):
+	1077 tests now score."
+
+	self assert: (self fixture @env1:FLOAT_SUBCLASS_RESULT) @env1:__repr__
+		equals: '(2.5, 3.5, 3.5, 3.0, 5.0, True, True, True, 2, ''2.5'', ''MyFloat'', 2.0)'
+%

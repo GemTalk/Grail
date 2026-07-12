@@ -20,6 +20,16 @@ set compile_env: 1
 
 category: 'Grail-Initialization'
 classmethod: float
+__instancecheck__: anObject
+	"isinstance(x, float) -- consulted when ``isKindOf: Float`` fails;
+	recognize AbstractPyFloat wrappers (float subclasses), matching
+	CPython (see int's twin hook)."
+
+	^ anObject @env0:isKindOf: AbstractPyFloat
+%
+
+category: 'Grail-Instance Creation'
+classmethod: float
 __new__
 	"Create a new float instance with default value 0.0.
 	In Python: float() or float.__new__(float)"

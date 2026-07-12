@@ -531,3 +531,21 @@ def _singledispatch_results():
 
 
 SINGLEDISPATCH_RESULT = _singledispatch_results()
+
+
+def _float_subclass_results():
+    # class MyFloat(float): the sealed-kernel substitution
+    # (AbstractPyFloat, generality 80) -- mixed arithmetic strips the
+    # wrapper in BOTH operand orders, comparisons/isinstance/int()/str()
+    # all behave as CPython float subclasses.
+    class MyFloat(float):
+        def describe(self):
+            return "MyFloat"
+
+    m = MyFloat(2.5)
+    return (float(m), m + 1, 1 + m, m + 0.5, 2.0 * m,
+            m == 2.5, m < 3, isinstance(m, float),
+            int(m), str(m), m.describe(), m - MyFloat(0.5))
+
+
+FLOAT_SUBCLASS_RESULT = _float_subclass_results()
