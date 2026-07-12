@@ -723,3 +723,29 @@ class _SuperSourceDict(dict):
 
 
 DICT_SUBCLASS_CTOR_RESULT = _dict_subclass_ctor_results()
+
+
+def _method_local_super_results():
+    # No-arg super() inside a class defined in a function body: the
+    # defining class isn't a module attribute, so the class must be
+    # resolved through the closure cell that holds it (name-specific
+    # ___cell_<Class>___, chain-walk-correct for subclass instances).
+    class Base:
+        def greet(self):
+            return "base"
+
+    class Derived(Base):
+        def greet(self):
+            return "derived+" + super().greet()
+
+    class LocalDict(dict):
+        def __init__(self, *a, **k):
+            self.tag = "local"
+            super().__init__(*a, **k)
+
+    d = LocalDict(a=1, b=2)
+    return (Base().greet(), Derived().greet(),
+            sorted(d.items()), d.tag, isinstance(d, dict))
+
+
+METHOD_LOCAL_SUPER_RESULT = _method_local_super_results()

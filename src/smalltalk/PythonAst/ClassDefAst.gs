@@ -76,7 +76,7 @@ printSmalltalkRuntimeOn: aStream
 	| methodDefs classMethodDefs staticMethodDefs selfParam
 	  funcNames varargsFuncNames
 	  methodSources classMethodSources staticMethodSources
-	  initMethod initSelector classAttrs allClassInstVars staticFuncNames savedStaticFuncNames
+	  initMethod initSelector classAttrs allClassInstVars staticFuncNames savedStaticFuncNames savedIsModuleScope
 	  savedClass savedFuncNames savedVarargsFuncNames
 	  savedSelfParam savedClassAttrNames settersByName
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames
@@ -139,6 +139,15 @@ printSmalltalkRuntimeOn: aStream
 	savedClassAttrNames := CallAst classAttrNames.
 	savedSelfParam := CallAst selfParameterName.
 	savedSlotNames := CallAst classSlotNames.
+
+	"Capture module-scope-ness NOW, BEFORE classBeingCompiled is set to
+	this class below: isModuleScopeClassDef returns false when
+	classBeingCompiled is non-nil (its ``nested inside another class''
+	test), so reading it after the set would report EVERY class as
+	non-module-scope and route every super() through the method-local
+	closure-cell path."
+	savedIsModuleScope := CallAst classDefIsModuleScope.
+	CallAst classDefIsModuleScope: self isModuleScopeClassDef.
 
 	"classBeingCompiled is only used as a non-nil marker here; the
 	actual class doesn't exist until the emitted code runs."
@@ -235,6 +244,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classBeingCompiled: savedClass.
 		CallAst classFunctionNames: savedFuncNames.
 		CallAst classStaticFunctionNames: savedStaticFuncNames.
+		CallAst classDefIsModuleScope: savedIsModuleScope.
 		CallAst classVarargsFunctionNames: savedVarargsFuncNames.
 		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.

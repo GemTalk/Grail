@@ -14,6 +14,7 @@ ExpressionAst subclass: 'CallAst'
                     'classBeingCompiled'
                     'classFunctionNames' 'classVarargsFunctionNames'
                     'classStaticFunctionNames' 'inBasesEmit'
+                    'classDefIsModuleScope'
                     'classAttrNames' 'classSlotNames' 'selfParameterName'
                     'selfParameterRebound'
                     'returnEmitMode' 'inClassBodyValueEmit'
@@ -187,6 +188,23 @@ printSmalltalkOn: aStream
 					and: [CallAst classBeingCompiled notNil
 						and: [CallAst moduleClassBeingCompiled notNil]]]]])
 		ifTrue: [
+			"A METHOD-LOCAL class (defined in a function body) is not a
+			module attribute, so the module-instance-by-name lookup below
+			returns nil and Super walks nil's superClass.  Resolve the
+			defining class through the closure cell that holds the class
+			object instead: ___classCell___ chain-walks by the NAME-
+			SPECIFIC key ``___cell_<ClassName>___'', which only the
+			defining class carries, so it resolves correctly even when
+			the method runs on a subclass instance.  Register the class's
+			own name as captured so ClassDefAst emits the cell store."
+			(CallAst classDefIsModuleScope == false)
+				ifTrue: [
+					CallAst addCapturedClassName: CallAst classBeingCompiled.
+					aStream
+						nextPutAll: '(Super @env1:cls: (self @env1:___classCell___: #''___cell_';
+						nextPutAll: CallAst classBeingCompiled asString;
+						nextPutAll: '___'') obj: self)'.
+					^self].
 			aStream
 				nextPutAll: '(Super @env1:cls: ((';
 				nextPutAll: CallAst moduleClassBeingCompiled name;
@@ -1246,6 +1264,26 @@ category: 'Grail-Class Compile Context'
 classmethod: CallAst
 inBasesEmit
 	^ inBasesEmit
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classDefIsModuleScope
+	"True/false while a class's methods are being compiled: whether the
+	class is defined at module scope.  Governs how a bare zero-arg
+	super() resolves its defining class -- a module-scope class is
+	reachable by name through the module instance, a method-local one
+	is not, so the latter routes through the closure-cell that holds
+	the class object (see CallAst>>printSmalltalkOn:).  nil (the
+	default) means ``not compiling a class'' and reads as module-scope
+	for the existing path."
+	^ classDefIsModuleScope
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classDefIsModuleScope: aBooleanOrNil
+	classDefIsModuleScope := aBooleanOrNil
 %
 
 category: 'Grail-Class Compile Context'

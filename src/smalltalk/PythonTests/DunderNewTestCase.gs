@@ -978,3 +978,19 @@ testDictSubclassConstruction
 	self assert: (r @env1:__getitem__: 'super_pairs') equals: true.
 	self assert: (r @env1:__getitem__: 'super_source') equals: true
 %
+
+category: 'Grail-Tests - codegen'
+method: DunderNewTestCase
+testMethodLocalSuper
+	"No-arg super() inside a class defined in a FUNCTION body: the
+	defining class is not a module attribute, so the module-instance-
+	by-name lookup returned nil and Super walked nil (``UndefinedObject
+	does not understand #superClass'').  Now resolved through the
+	closure cell holding the class -- chain-walk-correct, so a subclass
+	instance still finds the defining class -- covering both a plain
+	method override chain and a method-local dict subclass chaining
+	super().__init__(**kwargs)."
+
+	self assert: (self fixture @env1:METHOD_LOCAL_SUPER_RESULT) @env1:__repr__
+		equals: '(''base'', ''derived+base'', [(''a'', 1), (''b'', 2)], ''local'', True)'
+%
