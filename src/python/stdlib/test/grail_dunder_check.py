@@ -666,14 +666,8 @@ def _partial_setstate_results():
     class MyDict(dict):
         pass
 
-    # Build the dict subclass via item assignment -- dict-SUBCLASS
-    # kwargs/iterable construction (MyDict(a=10)) is a separate,
-    # pre-existing gap; here we only exercise __setstate__'s coercion
-    # of a populated tuple/dict subclass to the exact plain types.
-    md = MyDict()
-    md["a"] = 10
     g = functools.partial(signature)
-    g.__setstate__((capture, MyTuple((1,)), md, None))
+    g.__setstate__((capture, MyTuple((1,)), MyDict(a=10), None))
     s = signature(g)
     out['coerce'] = (type(s[1]) is tuple and type(s[2]) is dict
                      and s == (capture, (1,), dict(a=10), {}))
@@ -681,3 +675,30 @@ def _partial_setstate_results():
 
 
 PARTIAL_SETSTATE_RESULT = _partial_setstate_results()
+
+
+def _dict_subclass_ctor_results():
+    # dict SUBCLASS construction populates like the inherited
+    # dict.__init__: kwargs, an iterable of pairs, and a mapping all
+    # fill the instance (a plain-`pass` subclass has no own __init__).
+    # A subclass whose __init__ does NOT call super stays empty
+    # (population lives in __init__, not __new__).
+    class MyDict(dict):
+        pass
+
+    class NoSuperDict(dict):
+        def __init__(self, *a, **k):
+            self.marked = True  # no super().__init__ -> not populated
+
+    out = {}
+    out['kwargs'] = sorted(MyDict(a=10, b=20).items())
+    out['pairs'] = sorted(MyDict([("x", 1), ("y", 2)]).items())
+    out['mapping'] = sorted(MyDict({"m": 9}).items())
+    out['empty'] = len(MyDict())
+    out['is_dict'] = isinstance(MyDict(a=1), dict)
+    ns = NoSuperDict(a=1)
+    out['nosuper_empty'] = (len(ns) == 0 and ns.marked)
+    return out
+
+
+DICT_SUBCLASS_CTOR_RESULT = _dict_subclass_ctor_results()

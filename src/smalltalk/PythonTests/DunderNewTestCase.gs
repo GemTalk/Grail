@@ -951,3 +951,23 @@ testPartialSetstateAndDict
 	self assert: (r @env1:__getitem__: 'ns_none_clears') equals: true.
 	self assert: (r @env1:__getitem__: 'coerce') equals: true
 %
+
+category: 'Grail-Tests - collections'
+method: DunderNewTestCase
+testDictSubclassConstruction
+	"class MyDict(dict) with no own __init__ populates from the
+	constructor like the inherited dict.__init__ -- kwargs, an iterable
+	of (k,v) pairs, and a mapping all fill the instance (it allocated
+	empty before, breaking test_setstate_subclasses).  A subclass whose
+	__init__ omits super().__init__ stays empty (population belongs to
+	__init__, not __new__)."
+
+	| r |
+	r := self fixture @env1:DICT_SUBCLASS_CTOR_RESULT.
+	self assert: (r @env1:__getitem__: 'kwargs') @env1:__repr__ equals: '[(''a'', 10), (''b'', 20)]'.
+	self assert: (r @env1:__getitem__: 'pairs') @env1:__repr__ equals: '[(''x'', 1), (''y'', 2)]'.
+	self assert: (r @env1:__getitem__: 'mapping') @env1:__repr__ equals: '[(''m'', 9)]'.
+	self assert: (r @env1:__getitem__: 'empty') equals: 0.
+	self assert: (r @env1:__getitem__: 'is_dict') equals: true.
+	self assert: (r @env1:__getitem__: 'nosuper_empty') equals: true
+%

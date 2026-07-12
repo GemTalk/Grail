@@ -1086,13 +1086,29 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 					nextPutAll: 'instance := ___pos___ @env0:size @env0:= 0 ifTrue: [self @env0:new] ifFalse: [self @env1:__new__: (___pos___ @env0:at: 1)].';
 					nextPutAll: lf
 			]
-			ifFalse: [
-				"Route through the runtime allocator so a class-body (or
-				inherited) ``def __new__(cls, ...)`` runs with the class
-				as receiver before __init__ -- see object class >>
-				___allocateInstance___:kw: (vendored fractions.py's
-				Fraction.__new__ carries ALL of its construction)."
-				src nextPutAll: 'instance := self @env1:___allocateInstance___: ___pos___ kw: ___kw___.'; nextPutAll: lf]].
+			ifFalse: [self firstBaseIsDict
+				ifTrue: [
+					"dict subclasses — allocate an empty instance (of the
+					subclass), then, ONLY when the subclass does not
+					override __init__, populate it from the positional
+					mapping/iterable + kwargs.  CPython puts population in
+					the inherited dict.__init__, so a subclass WITH its own
+					__init__ must NOT be auto-populated (its __init__ owns
+					that, and may or may not call super().__init__); that
+					case falls through to the static __init__ dispatch
+					below.  ``self new'' keeps the subclass storage; a user
+					__new__ on a dict subclass is bypassed (same documented
+					limitation as the str/tuple paths)."
+					src nextPutAll: 'instance := self @env0:new.'; nextPutAll: lf.
+					initSelector isNil ifTrue: [
+						src nextPutAll: 'instance @env1:___initFrom___: ___pos___ kw: ___kw___.'; nextPutAll: lf]]
+				ifFalse: [
+					"Route through the runtime allocator so a class-body (or
+					inherited) ``def __new__(cls, ...)`` runs with the class
+					as receiver before __init__ -- see object class >>
+					___allocateInstance___:kw: (vendored fractions.py's
+					Fraction.__new__ carries ALL of its construction)."
+					src nextPutAll: 'instance := self @env1:___allocateInstance___: ___pos___ kw: ___kw___.'; nextPutAll: lf]]].
 	"Descriptor-bound __init__ override: a setattr-installed
 	``cls.__init__ = synth_fn'' lands in the class''s dynInstVars
 	store.  Probe for it BEFORE the static dispatch so dataclass-
@@ -1539,6 +1555,21 @@ firstBaseIsStr
 	bases isEmpty ifTrue: [^ false].
 	^ (bases first isKindOf: NameAst)
 		and: [bases first id asSymbol = #'str']
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+firstBaseIsDict
+	"True when this class is a direct ``dict`` subclass.  Gates the
+	dict-specific value:value: path that populates the allocated
+	instance from the positional mapping/iterable + kwargs (the
+	inherited dict.__init__ behavior), since the Smalltalk allocator
+	returns an empty KeyValueDictionary otherwise.  Static check on the
+	bases list; Grail can't resolve transitive ancestry at codegen."
+
+	bases isEmpty ifTrue: [^ false].
+	^ (bases first isKindOf: NameAst)
+		and: [bases first id asSymbol = #'dict']
 %
 
 category: 'Grail-Class Compilation'

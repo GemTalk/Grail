@@ -206,6 +206,29 @@ __init__: source
 	^ None
 %
 
+category: 'Grail-Initialization'
+method: dict
+___initFrom___: positional kw: keywords
+	"Populate self IN PLACE from an optional positional mapping/iterable
+	plus keyword args -- the in-place equivalent of dict's constructor.
+	A dict SUBCLASS that does not override __init__ is instantiated by
+	ClassDefAst-emitted code that allocates an empty instance and calls
+	this, matching CPython where the inherited dict.__init__ populates
+	(dict.__new__ allocates empty, __init__ fills).  Reuses dict class
+	>> __new__: for the mapping/iterable-of-pairs handling, then applies
+	the keyword overrides with str keys (the dict() boundary rule)."
+
+	(positional @env0:size @env0:> 1) ifTrue: [
+		TypeError ___signal___: 'dict expected at most 1 positional argument'].
+	positional @env0:isEmpty ifFalse: [
+		(dict @env1:__new__: (positional @env0:at: 1)) @env0:keysAndValuesDo: [:k :v |
+			self @env0:at: k put: v]].
+	keywords ifNotNil: [
+		keywords @env0:keysAndValuesDo: [:k :v |
+			self @env0:at: k @env0:asString put: v]].
+	^ self
+%
+
 category: 'Grail-Collection Protocol'
 method: dict
 __contains__: key
