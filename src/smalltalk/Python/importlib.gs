@@ -1305,12 +1305,17 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 		   #'__getitem__:' #'__iter__' #'__len__' #'__new__:' ) do: [:sel |
 			| provider |
 			provider := aClass class whichClassIncludesSelector: sel environmentId: 1.
-			"A universal-root DEFAULT (object's no-op ___pyClassDefined___:)
-			must not block the copy -- it shadowed the member-building
-			hook for class E(int, Flag) and no members were ever built."
-			(provider isNil
-				or: [provider == Object class
-				or: [provider == pyObjectClass]]) ifTrue: [
+			"The enum METACLASS protocol always wins over whatever the
+			data base's chain provides: a universal-root no-op (object's
+			___pyClassDefined___: blocked member building for
+			class E(int, Flag)) or a kernel raiser (str's class-side
+			__getitem__: 'type str is not subscriptable' blocked member
+			accessors for str-mixin enums).  Skip the copy only when the
+			provider IS enum machinery already."
+			((provider == Enum class)
+				or: [(provider == IntEnum class)
+				or: [(provider == Flag class)
+				or: [provider == aClass class]]]) ifFalse: [
 				| src cat |
 				src := [Enum class sourceCodeAt: sel environmentId: 1]
 					on: Error do: [:e | nil].

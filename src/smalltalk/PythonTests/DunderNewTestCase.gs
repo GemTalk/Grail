@@ -880,8 +880,14 @@ testMiFlagEnums
 	___pyClassDefined___: must not block the copy -- members were never
 	built) AND Flag's instance algebra (operand-tolerant across storage
 	roots).  auto() markers also resolve through the functional API's
-	dict/pairs forms with per-class numbering."
+	dict/pairs forms with per-class numbering.  str-mixin enums
+	(class SE(str, Enum)) additionally pin the hook-time value:value:
+	install (the generic instantiation used to overwrite the merged
+	enum class-call and buildMembers then removed it -- the class-call
+	fell into str's constructor, 'decoding str is not supported') and
+	the kernel-provider override for metaclass delegators (str's
+	class-side __getitem__: raiser blocked member accessors)."
 
 	self assert: (self fixture @env1:MI_FLAG_RESULT) @env1:__repr__
-		equals: '(1, 2, 4, 3, 5, True, True, 1, ''R'', 1, 2, True)'
+		equals: '(1, 2, 4, 3, 5, True, True, 1, ''R'', 1, 2, True, ''a'', True, 1)'
 %

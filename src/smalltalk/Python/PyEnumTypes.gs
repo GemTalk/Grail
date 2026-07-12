@@ -158,8 +158,15 @@ ___grailBuildMembers: cls names: attrNames
 	EnumRegistry @env0:at: cls put: (Array @env0:with: byValue with: byName with: members).
 	"Drop the ClassDefAst-emitted generic instantiation (env-1
 	``value:value:``) so calling the class — Color(value) — reaches the
-	inherited enum value-lookup instead of trying to build an instance."
-	((cls @env0:class @env0:methodDictForEnv: 1) @env0:includesKey: #'value:value:')
+	inherited enum value-lookup instead of trying to build an instance.
+	ONLY the generic one: ___mergeSecondaryBases___ pre-installs Enum's
+	own value:value: (category Grail-Enum Metaclass) on MI enums whose
+	kernel-rooted chain would otherwise dispatch the class-call to the
+	data base's constructor (str-mixin enums hit ``decoding str is not
+	supported'')."
+	(((cls @env0:class @env0:methodDictForEnv: 1) @env0:includesKey: #'value:value:')
+		and: [((cls @env0:class @env0:categoryOfSelector: #'value:value:' environmentId: 1)
+			@env0:== #'Grail-Enum Metaclass') not])
 		ifTrue: [
 			[cls @env0:class @env0:removeSelector: #'value:value:' environmentId: 1]
 				@env0:on: Error do: [:ex |
@@ -169,6 +176,22 @@ ___grailBuildMembers: cls names: attrNames
 					failure when the removal took; anything else passes."
 					((cls @env0:class @env0:methodDictForEnv: 1) @env0:includesKey: #'value:value:')
 						ifTrue: [ex @env0:pass]]].
+	"With the generic gone, make sure the class-call actually reaches
+	the ENUM lookup: for MI enums whose kernel-rooted metaclass chain
+	provides some other value:value: (str-mixin classes dispatched the
+	class-call into CharacterCollection's constructor -- ``decoding str
+	is not supported''), compile Enum's version onto the metaclass.
+	This runs at HOOK time, i.e. after the ClassDefAst-emitted generic
+	instantiation compile, so nothing overwrites it afterwards."
+	[ | prov |
+	prov := cls @env0:class @env0:whichClassIncludesSelector: #'value:value:' environmentId: 1.
+	((prov @env0:== Enum @env0:class)
+		or: [(prov @env0:== IntEnum @env0:class)
+		or: [(prov @env0:notNil and: [(cls @env0:class @env0:categoryOfSelector: #'value:value:' environmentId: 1) @env0:== #'Grail-Enum Metaclass'])]]) ifFalse: [
+		(cls @env0:class) ___compileMethod:
+			(Enum @env0:class @env0:sourceCodeAt: #'value:value:' environmentId: 1)
+			category: 'Grail-Enum Metaclass']]
+		@env0:on: Error do: [:ex | "best effort" ].
 	^ cls
 %
 

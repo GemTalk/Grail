@@ -625,10 +625,16 @@ def _mi_flag_results():
     # string/sequence/pairs names
     Main = Base('Main', [('first', auto()), ('second', auto()),
                          ('third', auto()), ('dupe', 3)])
+    class SE(str, Enum):
+        A = 'a'
+        B = 'b'
+
+    NewSE = SE('NewSE', [('first', auto())])
     return (IFlag.R.value, IFlag.W.value, IFlag.X.value,
             rw.value, IFlag(5).value, IFlag.R in rw,
             (rw & IFlag.R) is IFlag.R, IFlag.R + 0, IFlag.R.name,
-            Main.first.value, Main.second.value, Main.dupe is Main.third)
+            Main.first.value, Main.second.value, Main.dupe is Main.third,
+            SE.A.value, SE('a') is SE.A, NewSE.first.value)
 
 
 MI_FLAG_RESULT = _mi_flag_results()
