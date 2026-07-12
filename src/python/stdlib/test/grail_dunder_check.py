@@ -638,3 +638,46 @@ def _mi_flag_results():
 
 
 MI_FLAG_RESULT = _mi_flag_results()
+
+
+def _partial_setstate_results():
+    # functools.partial.__setstate__ + __dict__ namespace, including the
+    # tuple/dict-SUBCLASS coercion path (needs real classdefs, so it
+    # lives here rather than in an eval:).
+    import functools
+
+    def capture(*args, **kw):
+        return (args, kw)
+
+    def signature(p):
+        return (p.func, p.args, p.keywords, p.__dict__)
+
+    out = {}
+    f = functools.partial(signature)
+    f.__setstate__((capture, (1,), dict(a=10), dict(attr=[])))
+    out['set'] = signature(f) == (capture, (1,), dict(a=10), dict(attr=[]))
+    out['call'] = f(2, b=20) == ((1, 2), {"a": 10, "b": 20})
+    f.__setstate__((capture, (1,), dict(a=10), None))
+    out['ns_none_clears'] = signature(f) == (capture, (1,), dict(a=10), {})
+
+    class MyTuple(tuple):
+        pass
+
+    class MyDict(dict):
+        pass
+
+    # Build the dict subclass via item assignment -- dict-SUBCLASS
+    # kwargs/iterable construction (MyDict(a=10)) is a separate,
+    # pre-existing gap; here we only exercise __setstate__'s coercion
+    # of a populated tuple/dict subclass to the exact plain types.
+    md = MyDict()
+    md["a"] = 10
+    g = functools.partial(signature)
+    g.__setstate__((capture, MyTuple((1,)), md, None))
+    s = signature(g)
+    out['coerce'] = (type(s[1]) is tuple and type(s[2]) is dict
+                     and s == (capture, (1,), dict(a=10), {}))
+    return out
+
+
+PARTIAL_SETSTATE_RESULT = _partial_setstate_results()

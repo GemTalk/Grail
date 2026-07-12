@@ -423,6 +423,114 @@ __repr__
 	^ stream @env0:contents
 %
 
+category: 'Grail-Pickle Protocol'
+method: functools_partial
+___reservedName___: aName
+	"True for the three internal-state names (func / args / keywords),
+	which are stored as dynamic instVars but must NOT appear in
+	__dict__ and are read-only via attribute assignment."
+
+	| s |
+	s := aName @env0:asString.
+	^ (s @env0:= 'func') or: [s @env0:= 'args' or: [s @env0:= 'keywords']]
+%
+
+category: 'Grail-Introspection'
+method: functools_partial
+__dict__
+	"The instance namespace -- user attributes only (``p.attr = ...''),
+	NOT the func/args/keywords internal state (those are C-level slots
+	in CPython, absent from __dict__).  A fresh dict snapshot: partial's
+	tests read it via signature() and compare by value; no test writes
+	back through it."
+
+	| d pairs |
+	d := dict @env1:___new___.
+	pairs := self @env0:dynamicInstVarPairs.
+	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
+		| nm |
+		nm := pairs @env0:at: i.
+		(self @env1:___reservedName___: nm) ifFalse: [
+			d @env0:at: nm @env0:asString put: (pairs @env0:at: i @env0:+ 1)]].
+	^ d
+%
+
+category: 'Grail-Attribute Access'
+method: functools_partial
+__setattr__: name _: value
+	"func / args / keywords are read-only (CPython: AttributeError).
+	Everything else is a normal user attribute."
+
+	(self @env1:___reservedName___: name) ifTrue: [
+		AttributeError ___signal___: 'attribute ''' @env0:, name @env0:asString
+			@env0:, ''' of ''functools.partial'' objects is not writable'].
+	^ super @env1:__setattr__: name _: value
+%
+
+category: 'Grail-Attribute Access'
+method: functools_partial
+__delattr__: name
+	"``del p.__dict__'' is forbidden (CPython: TypeError).  Other
+	deletions fall through to the default."
+
+	(name @env0:asString @env0:= '__dict__') ifTrue: [
+		TypeError ___signal___: 'a partial object''s dictionary may not be deleted'].
+	^ super @env1:__delattr__: name
+%
+
+category: 'Grail-Pickle Protocol'
+method: functools_partial
+__setstate__: state
+	"Restore partial state from a 4-tuple (func, args, kwds, namespace)
+	-- the pickle/copy protocol counterpart of __reduce__.  Validates
+	shape and element types (CPython raises TypeError otherwise),
+	coerces args to a plain tuple and kwds to a plain dict (tuple/dict
+	SUBCLASSES are normalized), rejects a trailing Placeholder, and
+	installs namespace as the instance __dict__ (None clears it)."
+
+	| ph fn args kwds namespace kd pairs |
+	(state @env0:isKindOf: tuple) ifFalse: [
+		TypeError ___signal___: 'argument to __setstate__ must be a tuple'].
+	(state @env0:size @env0:= 4) ifFalse: [
+		TypeError ___signal___: 'expected 4 items in state, got '
+			@env0:, state @env0:size @env0:printString].
+	fn := state @env0:at: 1.
+	args := state @env0:at: 2.
+	kwds := state @env0:at: 3.
+	namespace := state @env0:at: 4.
+	(fn @env0:== None or: [fn @env0:== nil]) ifTrue: [
+		TypeError ___signal___: 'the first argument must be callable'].
+	(args @env0:isKindOf: tuple) ifFalse: [
+		TypeError ___signal___: 'invalid partial state (args must be a tuple)'].
+	((kwds @env0:== None) or: [kwds @env0:isKindOf: KeyValueDictionary]) ifFalse: [
+		TypeError ___signal___: 'invalid partial state (kwds must be a dict)'].
+	((namespace @env0:== None) or: [namespace @env0:isKindOf: KeyValueDictionary]) ifFalse: [
+		TypeError ___signal___: 'invalid partial state (namespace must be a dict)'].
+	ph := functools_Placeholder @env1:___singleton___.
+	(args @env0:isEmpty @env0:not and: [(args @env0:at: args @env0:size) @env0:== ph]) ifTrue: [
+		TypeError ___signal___: 'trailing Placeholders are not allowed'].
+	"Install internal state -- args to a PLAIN tuple, kwds to a PLAIN
+	dict (test_setstate_subclasses requires exact tuple/dict types)."
+	self @env0:dynamicInstVarAt: #func put: fn.
+	self @env0:dynamicInstVarAt: #args put: (tuple @env0:withAll: args).
+	kd := KeyValueDictionary @env0:new.
+	(kwds @env0:~~ None) ifTrue: [
+		kwds @env0:keysAndValuesDo: [:k :v | kd @env0:at: k put: v]].
+	self @env0:dynamicInstVarAt: #keywords put: kd.
+	"Reset the instance __dict__: drop every user attribute (all
+	dynamic instVars except the reserved three), then apply namespace."
+	pairs := self @env0:dynamicInstVarPairs.
+	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
+		| nm |
+		nm := pairs @env0:at: i.
+		(self @env1:___reservedName___: nm) ifFalse: [
+			self @env0:removeDynamicInstVar: nm]].
+	(namespace @env0:~~ None) ifTrue: [
+		namespace @env0:keysAndValuesDo: [:k :v |
+			self @env0:dynamicInstVarAt: k @env0:asSymbol put: v]].
+	^ None
+%
+
 ! ===============================================================================
 ! functools_CacheInfo -- the named 4-tuple returned by cache_info()
 ! ===============================================================================

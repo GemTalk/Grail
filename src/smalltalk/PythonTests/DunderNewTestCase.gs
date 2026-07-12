@@ -934,3 +934,20 @@ out.append(functools.partial.__qualname__ == "partial")
 all(out)
 ') equals: true
 %
+
+category: 'Grail-Tests - functools'
+method: DunderNewTestCase
+testPartialSetstateAndDict
+	"functools.partial.__setstate__ restores (func, args, kwds,
+	namespace) from a 4-tuple, with __dict__ exposing ONLY the user
+	namespace (not the func/args/keywords internal state).  The
+	tuple/dict-SUBCLASS coercion path (args -> plain tuple, kwds ->
+	plain dict) needs real classdefs, hence the fixture."
+
+	| r |
+	r := self fixture @env1:PARTIAL_SETSTATE_RESULT.
+	self assert: (r @env1:__getitem__: 'set') equals: true.
+	self assert: (r @env1:__getitem__: 'call') equals: true.
+	self assert: (r @env1:__getitem__: 'ns_none_clears') equals: true.
+	self assert: (r @env1:__getitem__: 'coerce') equals: true
+%
