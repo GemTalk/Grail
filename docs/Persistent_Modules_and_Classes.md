@@ -373,7 +373,9 @@ class-scope `__persistent__` follow-up above.
 4. **Redefinition / migration** — only needed once someone edits a committed
    module; the source hash defers it until then. (The identity-preserving
    method refresh in §9.1 covers behavior-only edits; *shape* changes still
-   need this phase.)
+   need this phase.) **Decision (2026-07-13): instance migration is a larger
+   task and must NOT happen automatically** — it is a deliberate
+   developer/deploy action, never an import side effect.
 
 ### 9.1 Phase-1 implementation notes (as landed)
 
