@@ -89,4 +89,13 @@ LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runEphemeronCommitTest.gs < 
 # the flag defaults OFF in a fresh session.
 LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCanonicalClassTest.gs < /dev/null || EXIT=$?
 
+# Phase-2 persistent-module-state regression (__persistent__ marker; see
+# docs/Persistent_Modules_and_Classes.md). Session 1 imports a module that
+# declares persistent globals, rebinds one + mutates another in place, and
+# commits via the Python-visible gemstone.system.commit() (the write-through
+# point); session 2 re-imports and asserts the committed values win over the
+# re-run initializers while unlisted globals stay session-local. Cleans up
+# the store key and temp module file.
+LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runPersistentStateTest.gs < /dev/null || EXIT=$?
+
 exit $EXIT

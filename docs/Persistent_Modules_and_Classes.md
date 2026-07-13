@@ -249,29 +249,50 @@ locally and reuses the annotation-capture machinery, but it (a) collides with a
 user class named `Persistent`, and (b) overloads type annotations with a
 storage directive. Documented here only to record why it was rejected.
 
-### 6.2 Semantics of a persistent variable
+### 6.2 Semantics of a persistent variable — **IMPLEMENTED**
 
-- It becomes a **committed named instVar** on the (now-persistent) module
-  instance. The name is known at parse time from the marker, so the module
-  class can declare the slot.
-- Its initializer runs **once** (first compile), and the committed value is
-  reused by later sessions — unlike a transient variable, whose initializer
-  re-runs each session. (The body codegen must therefore **guard** persistent
-  initializers so a re-run does not overwrite/commit them again — see §8.)
+As landed (a committed side store rather than instVar surgery on the module
+instance — the module instance stays session-local, unchanged):
+
+- Storage: `UserGlobals at: #GrailPersistentModuleState` — a committed
+  `(module dotted-name → (global-name → value))` map. Created lazily in the
+  current transaction; **import never commits it** (§4.1).
+- **Bind-or-capture on import** (`___syncPersistentState___:`, after the
+  body runs): a listed name already in the store → the module global is
+  **rebound to the committed value** (the body's initializer ran, but the
+  committed value wins — CPython's "initializer runs once per process"
+  lifted to once per repository). Absent → the initializer's value is
+  **captured** into the store, in-transaction.
+- **Two mutation flavors:**
+  - *In-place mutation* of a persistent object (the intended pattern — an
+    `RC*` collection, a dict): the binding is restored at import and
+    mutations are ordinary GemStone object writes the developer commits.
+    No flush needed.
+  - *Rebinding* the name (`count = count + 1`): reaches the session binding;
+    it persists at the developer's own **`gemstone.system.commit()`**, which
+    flushes every loaded module's listed globals into the store first
+    (`___flushPersistentState___`) — the developer's commit boundary is the
+    write-through point. A raw Smalltalk `System commit` bypasses the flush;
+    the Python-visible commit is the supported API.
 - **Concurrency is the developer's problem.** Grail imposes nothing: a bare
   `__persistent__` `count` shared across concurrent writers *will* produce
   write-write conflicts, and that is the developer's signal to choose a
   conflict-tolerant value (an `RC*` reduced-conflict collection, a per-session
   key, etc.). Grail neither forces nor forbids `RC*`.
+- Regression: `tests/scripts/runPersistentStateTest.gs` (rebound scalar via
+  python-commit, in-place-mutated dict, unlisted global stays session-local,
+  no store entry for non-declaring modules).
 
 ### 6.3 Storage split
 
-- **Persistent vars** → named instVars on the committed module instance.
-- **Transient vars** → session-local overlay (SessionTemps), as today.
+- **Persistent vars** → entries in the committed per-module store, rebound
+  onto the (session-local) module instance at import.
+- **Transient vars** → the module instance's dynamic instVars (SessionTemps),
+  as today.
 
-This is a cleaner split than today's "whole instance is session-local": the
-module instance can be persistent (holding only the marked slots), while the
-transient namespace lives in the session-local overlay.
+The module instance itself stays session-local — only the values of marked
+names outlive it, via the store. Needs no module-class shape changes and
+keeps every existing read/write path untouched.
 
 ## 7. Class-level mutable state
 
@@ -313,8 +334,19 @@ committed state. The same rule applies one level down:
    recompilation. Everything else stays as-is. — **IMPLEMENTED** (flag-guarded,
    off by default; see §9.1).
 2. **Persistent-variable marker** (`__persistent__ = [...]`) + the module
-   storage split.
-3. **Class-level mutable-attribute** session-local overlay under shared classes.
+   storage split. — **IMPLEMENTED** (see §6.2; always available — the dunder
+   itself is the opt-in, no feature flag needed).
+3. **Class-level mutable-attribute** session-local overlay under shared
+   classes. — *Not started; scouting notes:* the WRITE side is one clean
+   branch (`Object >> ___pyAttrStore___`'s Behavior case — both the
+   paired-setter and dynInstVars flavors funnel through it), but the READ
+   side scatters (`___dynamicClassAttr___`, the Behavior-receiver branches in
+   `___pyAttrLoad___`, the PythonInstance metaclass fallback, generated
+   `value:value:` instantiation, enum/dataclass metaclass iteration). An
+   overlay is only safe once every read site consults it first — needs a
+   read-path inventory pass of its own. Until then, class-attr mutation on a
+   canonical class writes committed state (GemStone-native semantics; the
+   developer owns the conflicts, as with any committed object).
 4. **Redefinition / migration** — only needed once someone edits a committed
    module; the source hash defers it until then. (The identity-preserving
    method refresh in §9.1 covers behavior-only edits; *shape* changes still

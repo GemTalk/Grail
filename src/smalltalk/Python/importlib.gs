@@ -573,6 +573,97 @@ ___canonicalModuleHashes___
 	^ reg
 %
 
+category: 'Grail-Persistent State'
+classmethod: importlib
+___persistentModuleState___
+	"Committed (module dotted-name -> (global-name -> value)) store backing
+	the ``__persistent__ = [...]'' module marker
+	(docs/Persistent_Modules_and_Classes.md par.6).  Module globals are
+	session-local by default; a name listed in a module's ``__persistent__''
+	list is bound from here on import and flushed back here by
+	gemstone.system.commit().  Lazily created in the current transaction;
+	persists only when the developer / deploy action commits.  Concurrency
+	is the developer's concern: Grail imposes no RC* policy -- a plain
+	shared value that conflicts is the signal to choose a conflict-safe one."
+
+	| store |
+	store := UserGlobals @env0:at: #'GrailPersistentModuleState' otherwise: nil.
+	store @env0:isNil ifTrue: [
+		store := KeyValueDictionary @env0:new.
+		UserGlobals @env0:at: #'GrailPersistentModuleState' put: store].
+	^ store
+%
+
+category: 'Grail-Persistent State'
+classmethod: importlib
+___syncPersistentState___: aModule
+	"Bind-or-capture pass run after a module's body executes.  For each
+	name in the module's ``__persistent__'' list: when the committed store
+	already holds the name, REBIND the module global to the committed value
+	(the body's initializer ran, but the committed value wins -- CPython's
+	``initializer runs once per process'' lifted to once per repository);
+	when absent, CAPTURE the initializer's value into the store
+	(first-import, in-transaction only -- import never commits).  A module
+	with no ``__persistent__'' global is untouched.
+
+	The intended usage is a persistent MUTABLE object (an RC* collection,
+	a dict): the binding is restored here, and in-place mutations are
+	ordinary GemStone object writes the developer commits.  REBINDING a
+	persistent name mid-session persists at the developer's own
+	gemstone.system.commit(), which flushes via
+	___flushPersistentState___."
+
+	| names store inner modName |
+	names := aModule @env0:dynamicInstVarAt: #'__persistent__'.
+	names @env0:== nil ifTrue: [^ aModule].
+	(names @env0:isKindOf: Collection) ifFalse: [^ aModule].
+	modName := (aModule @env1:__name__) @env0:asString.
+	store := self ___persistentModuleState___.
+	inner := store @env0:at: modName otherwise: nil.
+	inner @env0:isNil ifTrue: [
+		inner := KeyValueDictionary @env0:new.
+		store @env0:at: modName put: inner].
+	names @env0:do: [:each |
+		| nameStr sym current |
+		nameStr := each @env0:asString.
+		sym := nameStr @env0:asSymbol.
+		(inner @env0:includesKey: nameStr)
+			ifTrue: [aModule @env0:dynamicInstVarAt: sym put: (inner @env0:at: nameStr)]
+			ifFalse: [
+				current := aModule @env0:dynamicInstVarAt: sym.
+				current @env0:== nil ifFalse: [inner @env0:at: nameStr put: current]]].
+	^ aModule
+%
+
+category: 'Grail-Persistent State'
+classmethod: importlib
+___flushPersistentState___
+	"Write every loaded module's ``__persistent__''-listed globals into the
+	committed store.  Called by gemstone.system.commit() just before the
+	GemStone commit -- the developer's OWN commit boundary is the
+	write-through point for persistent-name REBINDS (in-place mutations of
+	persistent objects need no flush).  Direct Smalltalk ``System commit''
+	bypasses this; the Python-visible commit is the supported API."
+
+	| store |
+	store := self ___persistentModuleState___.
+	(self @env1:modules) @env0:keysAndValuesDo: [:modKey :mod |
+		| names inner |
+		names := [mod @env0:dynamicInstVarAt: #'__persistent__']
+			@env0:on: Error do: [:ex | ex @env0:return: nil].
+		(names @env0:~~ nil and: [names @env0:isKindOf: Collection]) ifTrue: [
+			inner := store @env0:at: modKey @env0:asString otherwise: nil.
+			inner @env0:isNil ifTrue: [
+				inner := KeyValueDictionary @env0:new.
+				store @env0:at: modKey @env0:asString put: inner].
+			names @env0:do: [:each |
+				| current |
+				current := mod @env0:dynamicInstVarAt: each @env0:asString @env0:asSymbol.
+				current @env0:== nil ifFalse: [
+					inner @env0:at: each @env0:asString put: current]]]].
+	^ self
+%
+
 category: 'Grail-Canonical Classes'
 classmethod: importlib
 ___sourceStringForPath___: pathString
@@ -740,6 +831,9 @@ loadModuleFromPath: pathString name: moduleName
 	[moduleInstance @env1:initialize] @env0:on: AbstractException do: [:ex |
 		self removeModule: moduleName.
 		ex @env0:outer].
+	"Persistent-state bind/capture for modules declaring ``__persistent__''
+	(docs/Persistent_Modules_and_Classes.md par.6) -- a no-op for the rest."
+	self ___syncPersistentState___: moduleInstance.
 	^ moduleInstance
 %
 

@@ -41,8 +41,17 @@ classmethod: System
 commit
 	"Python gemstone.system.commit() — commit the current GemStone
 	transaction.  Returns True on success, False if the commit failed
-	(e.g. due to a conflict)."
+	(e.g. due to a conflict).
 
+	Flushes every loaded module's ``__persistent__''-listed globals into
+	the committed store first (docs/Persistent_Modules_and_Classes.md
+	par.6) — the developer's own commit boundary is the write-through
+	point for persistent-name rebinds.  Resolved through the symbol list
+	because this class files in before the Python globals exist."
+
+	| imp |
+	imp := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'importlib'.
+	imp @env0:== nil ifFalse: [imp @env0:___flushPersistentState___].
 	^ System @env0:commit
 %
 
