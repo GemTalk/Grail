@@ -1061,3 +1061,9 @@ setTo: aValue scope: aScope
 	self assertContextIsStore.
 	aScope set: id to: aValue.
 %
+
+category: 'Grail-annotations'
+method: NameAst
+___annotationSourceString___
+	^ id asString
+%

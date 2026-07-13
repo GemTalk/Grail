@@ -150,3 +150,12 @@ setTo: aValue scope: aScope
 		(elts at: i) setTo: (aValue ___at: i) scope: aScope.
 	].
 %
+
+category: 'Grail-annotations'
+method: TupleAst
+___annotationSourceString___
+	| parts |
+	parts := elts collect: [:e | e ___annotationSourceString___].
+	^ parts inject: '' into: [:acc :p |
+		acc isEmpty ifTrue: [p] ifFalse: [acc , ', ' , p]]
+%

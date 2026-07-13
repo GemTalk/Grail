@@ -370,7 +370,20 @@ printSmalltalkOn: aStream
 	the assignment / decorator pipeline.  flask's ``@app.route'' reads
 	``view_func.__name__'' to key ``view_functions'' and the rule
 	endpoint; without a real name the lookup KeyErrors."
-	aStream nextPutAll: ' @env0:___pyNamed___: '''; nextPutAll: name; nextPutAll: ''''.
+	"Stamp __name__ (always) and, when the def carries annotations,
+	__annotations__ too -- via a single combined keyword send so the
+	two don't parse as one ``___pyNamed___:___pyAnnotated___:'' message.
+	Both stamps return self, so this composes transparently in the
+	``name := <block>'' assignment / decorator pipeline.  The
+	annotation dict is built HERE, in the enclosing scope, so its
+	expressions resolve at def-time."
+	self hasAnnotations
+		ifTrue: [
+			aStream nextPutAll: ' @env0:___pyNamed___: '''; nextPutAll: name;
+				nextPutAll: ''' annotations: '.
+			self emitAnnotationsDictOn: aStream]
+		ifFalse: [
+			aStream nextPutAll: ' @env0:___pyNamed___: '''; nextPutAll: name; nextPutAll: ''''].
 	"Phase A: close the dynamicInstVarAt:put: paren opened above when
 	this is a module-scope nested def; otherwise just emit the
 	statement-terminating period."
@@ -643,6 +656,72 @@ isModuleLevelDef
 	(parent isKindOf: BlockAst) ifFalse: [^false].
 	parent parent ifNil: [^false].
 	^ parent parent isKindOf: ModuleAst
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___annotatedArgs___
+	"Every ArgAst across posonly/regular/kwonly params plus *vararg and
+	**kwarg, in declaration order, that carries an annotation.  Used to
+	build __annotations__ (CPython includes only annotated params)."
+
+	| result |
+	result := OrderedCollection new.
+	args ifNil: [^ result].
+	(args posonlyargs, args args, args kwonlyargs) do: [:a |
+		a annotation ifNotNil: [result add: a]].
+	(args vararg notNil and: [args vararg annotation notNil])
+		ifTrue: [result add: args vararg].
+	(args kwarg notNil and: [args kwarg annotation notNil])
+		ifTrue: [result add: args kwarg].
+	^ result
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+hasAnnotations
+	"True when any parameter or the return carries an annotation --
+	gates emission of the __annotations__ stamp."
+
+	^ returns notNil or: [self ___annotatedArgs___ notEmpty]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitAnnotationsDictOn: aStream
+	"Emit a Python dict expression { param-name -> annotation-SOURCE-
+	STRING, ..., 'return' -> ... }.  Annotations are stored as their
+	source strings (PEP 563 semantics) and NEVER evaluated: 55+
+	werkzeug/flask modules use ``from __future__ import annotations''
+	and annotate parameters with forward references to names not yet
+	bound at def-time, so evaluating would raise NameError and abort
+	the module load.  The strings are computed at codegen via
+	___annotationSourceString___; a consumer that needs the type
+	(functools.singledispatch.register) resolves the string itself."
+
+	aStream nextPutAll: '((KeyValueDictionary @env0:new)'.
+	self ___annotatedArgs___ do: [:a |
+		aStream nextPutAll: ' @env0:at: '''; nextPutAll: a name asString; nextPutAll: ''' put: '.
+		self emitStringLiteral: a annotation ___annotationSourceString___ on: aStream.
+		aStream nextPut: $;].
+	returns ifNotNil: [
+		aStream nextPutAll: ' @env0:at: ''return'' put: '.
+		self emitStringLiteral: returns ___annotationSourceString___ on: aStream.
+		aStream nextPut: $;].
+	aStream nextPutAll: ' @env0:yourself)'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitStringLiteral: aString on: aStream
+	"Emit aString as a Smalltalk string literal, doubling embedded
+	single quotes."
+
+	aStream nextPut: $'.
+	aString do: [:ch |
+		ch = $' ifTrue: [aStream nextPut: $'].
+		aStream nextPut: ch].
+	aStream nextPut: $'
 %
 
 category: 'Grail-Module Method Compilation'

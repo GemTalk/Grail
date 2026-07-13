@@ -994,3 +994,27 @@ testMethodLocalSuper
 	self assert: (self fixture @env1:METHOD_LOCAL_SUPER_RESULT) @env1:__repr__
 		equals: '(''base'', ''derived+base'', [(''a'', 1), (''b'', 2)], ''local'', True)'
 %
+
+category: 'Grail-Tests - annotations'
+method: DunderNewTestCase
+testFunctionAnnotations
+	"Local-def __annotations__ (stamped on the closure via ExecBlockAttrs
+	at def-time): parameter + *args/**kw + return annotations as PEP-563
+	SOURCE STRINGS (never evaluated -- forward refs mustn't break module
+	load; 55+ werkzeug/flask modules use ``from __future__ import
+	annotations''), an empty dict for an unannotated def, and forward-
+	reference strings kept verbatim.  Plus
+	functools.singledispatch's annotation-based register (@s.register on
+	an annotated def infers the dispatch type from the first parameter's
+	annotation; forward-ref strings resolve to the class).  ABC-typed
+	annotations (Mapping/Sequence) are NOT covered -- Grail's
+	collections.abc are non-recognizing stubs, a separate gap."
+
+	| r |
+	r := self fixture @env1:ANNOTATIONS_RESULT.
+	self assert: (r @env1:__getitem__: 'params') equals: true.
+	self assert: (r @env1:__getitem__: 'empty') equals: true.
+	self assert: (r @env1:__getitem__: 'forwardref') equals: true.
+	self assert: (r @env1:__getitem__: 'register') @env1:__repr__
+		equals: '(''base'', ''int'', ''str'', ''base'')'
+%

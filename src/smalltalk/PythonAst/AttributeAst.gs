@@ -182,3 +182,9 @@ setSuperInfo: aScope
 
 	aScope superInfo at: #'type' put: aScope outer astNode
 %
+
+category: 'Grail-annotations'
+method: AttributeAst
+___annotationSourceString___
+	^ (value ___annotationSourceString___) , '.' , attr asString
+%

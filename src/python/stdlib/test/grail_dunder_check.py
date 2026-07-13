@@ -749,3 +749,48 @@ def _method_local_super_results():
 
 
 METHOD_LOCAL_SUPER_RESULT = _method_local_super_results()
+
+
+def _annotations_results():
+    # Function __annotations__ for LOCAL defs (stamped on the block via
+    # ExecBlockAttrs at def-time) + singledispatch's annotation-based
+    # register (infers the dispatch type from the decorated function's
+    # first-parameter annotation; forward-ref strings resolve).
+    import functools
+
+    def f(x: int, y: str = "z", *args: float, **kw: bool) -> bool:
+        return True
+
+    def g(a):
+        return a
+
+    def h(arg: "int"):
+        return arg
+
+    fa = f.__annotations__
+    out = {}
+    # PEP 563: annotations are stored as source strings (never
+    # evaluated -- forward refs to not-yet-defined names must not
+    # break module load).
+    out['params'] = (fa["x"] == "int" and fa["args"] == "float"
+                     and fa["kw"] == "bool" and fa["return"] == "bool")
+    out['empty'] = (len(g.__annotations__) == 0)
+    out['forwardref'] = (h.__annotations__["arg"] == "int")
+
+    @functools.singledispatch
+    def s(arg):
+        return "base"
+
+    @s.register
+    def _(arg: int):
+        return "int"
+
+    @s.register
+    def _(arg: "str"):
+        return "str"
+
+    out['register'] = (s(1.5), s(42), s("hi"), s([1]))
+    return out
+
+
+ANNOTATIONS_RESULT = _annotations_results()

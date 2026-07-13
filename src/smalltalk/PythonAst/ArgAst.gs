@@ -55,6 +55,15 @@ name
 
 category: 'Grail-other'
 method: ArgAst
+annotation
+	"The parameter's annotation expression AST (or nil).  Read by
+	FunctionDefAst when building a function's __annotations__ dict."
+
+	^annotation
+%
+
+category: 'Grail-other'
+method: ArgAst
 printOn: aStream
 
 	super printOn: aStream.

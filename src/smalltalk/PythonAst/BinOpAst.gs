@@ -81,3 +81,14 @@ printSmalltalkOn: aStream
 	op printSmalltalkOn: aStream.
 	right printSmalltalkWithParenthesisOn: aStream.
 %
+
+category: 'Grail-annotations'
+method: BinOpAst
+___annotationSourceString___
+	"Annotation binops are almost always PEP 604 unions (``int | None'').
+	Render with the union bar; the exact operator glyph is not load-
+	bearing (the string is used for display and best-effort register
+	resolution, never re-parsed)."
+
+	^ (left ___annotationSourceString___) , ' | ' , (right ___annotationSourceString___)
+%

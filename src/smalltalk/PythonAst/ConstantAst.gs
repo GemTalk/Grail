@@ -95,3 +95,16 @@ value
 
 	^value
 %
+
+category: 'Grail-annotations'
+method: ConstantAst
+___annotationSourceString___
+	"A string-literal annotation (a forward reference like def
+	f(x: Foo) written with Foo quoted) carries its content verbatim --
+	CPython stores the forward-reference string.  None/other literals
+	stringify."
+
+	(value isKindOf: CharacterCollection) ifTrue: [^ value asString].
+	value isNil ifTrue: [^ 'None'].
+	^ value printString
+%

@@ -1010,18 +1010,58 @@ ___registryKey___: aKey
 category: 'Grail-Single Dispatch'
 method: functools_singledispatch
 register: clsOrFunc
-	"@g.register(cls) decorator form: returns a decorator that
-	registers the decorated function for cls and hands it back."
+	"Two forms:
+	  * @g.register(cls) -- clsOrFunc is a CLASS: return a decorator
+	    that registers the decorated function for cls and hands it back.
+	  * @g.register -- clsOrFunc is the decorated FUNCTION itself
+	    (Python 3.7+ annotation form): infer the dispatch class from
+	    its first parameter's annotation, register, and return it."
 
 	| key |
 	key := self ___registryKey___: clsOrFunc.
 	key @env0:isNil ifTrue: [
-		TypeError ___signal___: 'Invalid first argument to `register()`: not a class'].
+		"Not a class -> the annotation form: clsOrFunc is the function."
+		| inferred |
+		inferred := self ___inferRegisterType___: clsOrFunc.
+		(self @env0:dynamicInstVarAt: #registry) @env0:at: inferred put: clsOrFunc.
+		^ clsOrFunc].
 	^ [:positional2 :keywords2 |
 		| fn |
 		fn := positional2 @env0:at: 1.
 		(self @env0:dynamicInstVarAt: #registry) @env0:at: key put: fn.
 		fn]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___inferRegisterType___: aFunc
+	"Infer the dispatch type for the annotation form of register from
+	aFunc's first-parameter annotation (__annotations__ minus the
+	``return'' entry).  A forward-reference annotation (a string) is
+	resolved against the Python globals.  Raises TypeError when no
+	usable annotation is present -- CPython requires the first
+	parameter be annotated with a class in this form.
+
+	Note: Grail dicts are hash-ordered, so ``first parameter'' is only
+	unambiguous when exactly one parameter is annotated -- the shape
+	the annotation form is used in (``def _(arg: T)'')."
+
+	| ann candidate |
+	ann := [aFunc @env1:__annotations__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(ann @env0:isNil or: [ann @env0:isEmpty]) ifTrue: [
+		TypeError ___signal___:
+			'Invalid first argument to `register()`: no type annotation found'].
+	candidate := nil.
+	ann @env0:keysAndValuesDo: [:k :v |
+		(k @env0:asString @env0:= 'return') ifFalse: [candidate := v]].
+	candidate @env0:isNil ifTrue: [
+		TypeError ___signal___:
+			'Invalid first argument to `register()`: no parameter annotation found'].
+	"Resolve a forward-reference string against the Python globals."
+	(candidate @env0:isKindOf: CharacterCollection) ifTrue: [
+		candidate := (System @env0:myUserProfile @env0:symbolList
+			@env0:objectNamed: candidate @env0:asSymbol) @env0:ifNil: [candidate]].
+	^ (self ___registryKey___: candidate) @env0:ifNil: [candidate]
 %
 
 category: 'Grail-Single Dispatch'

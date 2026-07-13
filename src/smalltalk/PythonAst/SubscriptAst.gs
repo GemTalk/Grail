@@ -125,3 +125,9 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: ' __getitem__: '.
 	slice printSmalltalkWithParenthesisOn: aStream.
 %
+
+category: 'Grail-annotations'
+method: SubscriptAst
+___annotationSourceString___
+	^ (value ___annotationSourceString___) , '[' , (slice ___annotationSourceString___) , ']'
+%

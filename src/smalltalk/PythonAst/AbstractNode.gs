@@ -466,3 +466,16 @@ isUnconditionalReturn
 
 	^ false
 %
+
+category: 'Grail-annotations'
+method: AbstractNode
+___annotationSourceString___
+	"PEP 563-style source string for an annotation expression.  The
+	annotation subset the unparser covers (Name / Attribute / Subscript /
+	Tuple / BinOp union / string+None constants) is handled by per-node
+	overrides; anything else falls back to this placeholder rather than
+	evaluating (annotations are NEVER evaluated -- forward references to
+	not-yet-defined names must not break module load)."
+
+	^ '<annotation>'
+%

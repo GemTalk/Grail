@@ -98,6 +98,21 @@ __module__
 		ifNil: ['<closure>']
 %
 
+category: 'Grail-Attribute Access'
+method: ExecBlock
+__annotations__
+	"``func.__annotations__'' — the parameter/return annotation dict.
+	Stamped at def-time by ___pyAnnotated___: (chained onto the block
+	expression when the def carries any annotation); an un-annotated
+	closure answers a fresh empty dict, matching CPython where every
+	function has an ``__annotations__'' mapping.  A value attribute
+	(see ___pythonValueAttrs___) so the read returns the dict rather
+	than a BoundMethod wrap."
+
+	^ (ExecBlockAttrs @env0:at: self attr: '__annotations__')
+		ifNil: [KeyValueDictionary @env0:new]
+%
+
 category: 'Grail-Callable'
 method: ExecBlock
 ___pyCallValue___: positional kw: kwargs
@@ -197,6 +212,7 @@ ___pythonValueAttrs___
 		add: #'__name__';
 		add: #'__qualname__';
 		add: #'__module__';
+		add: #'__annotations__';
 		yourself
 %
 
@@ -211,5 +227,23 @@ ___pyNamed___: aString
 	the ``name := <block>'' assignment / decorator pipeline."
 
 	ExecBlockAttrs @env0:at: self attr: '__name__' put: aString.
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
+___pyNamed___: aString annotations: aDict
+	"Stamp both ``__name__'' and ``__annotations__'' in one send.
+	FunctionDefAst emits this (rather than two chained keyword sends,
+	which Smalltalk would parse as a single ``___pyNamed___:annotations:''
+	... which is in fact exactly this selector) for an annotated
+	nested def.  The annotations dict is built at def-time in the
+	enclosing scope.  Returns self so it composes transparently in the
+	``name := <block>'' assignment / decorator pipeline
+	(``functools.singledispatch.register'' reads the first parameter's
+	annotation off a decorated local def this way)."
+
+	ExecBlockAttrs @env0:at: self attr: '__name__' put: aString.
+	ExecBlockAttrs @env0:at: self attr: '__annotations__' put: aDict.
 	^ self
 %
