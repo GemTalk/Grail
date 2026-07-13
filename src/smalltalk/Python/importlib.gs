@@ -553,6 +553,19 @@ ___canonicalClassRegister___: aModuleName name: aClassName value: anObject
 	self ___canonicalClassRegistry___
 		@env0:at: (aModuleName @env0:asString @env0:, '.' @env0:, aClassName @env0:asString)
 		put: anObject.
+	"Membership in the canonical-class set is what routes RUNTIME
+	class-attribute stores into the session-local overlay
+	(object >> ___classAttrOverlayStore___).  Added HERE -- at the end of
+	the build, after the class body / metaclass hook / decorators ran --
+	so definitional class-body stores land on (and commit with) the class,
+	while post-definition mutation stays session-local."
+	(anObject @env0:isKindOf: Behavior) ifTrue: [
+		| set |
+		set := UserGlobals @env0:at: #'GrailCanonicalClassSet' otherwise: nil.
+		set @env0:isNil ifTrue: [
+			set := IdentitySet @env0:new.
+			UserGlobals @env0:at: #'GrailCanonicalClassSet' put: set].
+		set @env0:add: anObject].
 	^ anObject
 %
 

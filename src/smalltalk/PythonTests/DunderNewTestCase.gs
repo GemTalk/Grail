@@ -1044,3 +1044,45 @@ testPhase2Annotations
 	self assert: (r @env1:__getitem__: 'inherited_method') equals: true.
 	self assert: (r @env1:__getitem__: 'child_method') equals: true
 %
+
+category: 'Grail-Tests - canonical classes'
+method: DunderNewTestCase
+testCanonicalClassAttrOverlay
+	"Phase-3 class-attr overlay (docs/Persistent_Modules_and_Classes.md
+	par.7): with canonical classes enabled, a RUNTIME class-attribute store
+	on a canonical class lands in a session-local overlay -- visible through
+	Cls.x, self.x, and shadowing the committed value -- while the committed
+	classInstVar slot stays untouched (no dirtying of the shared class).
+	``del Cls.x`` removes the overlay entry and the committed value shows
+	through again.  A store under a NEVER-DECLARED name must not reach the
+	committed per-class dynInstVars either.  Everything is flag-gated and
+	the ensure: resets the session + in-transaction registry keys, so the
+	rest of the suite (flag off) is unaffected."
+
+	| mod holder inst |
+	[
+	SessionTemps current at: #'GrailCanonicalClassesEnabled' put: true.
+	mod := self fixture.
+	holder := mod @env1:_AnnHolder.
+	self assert: (holder @env1:___pyAttrLoad___: #'z') equals: 10.
+	holder @env1:___pyAttrStore___: 'z' put: 99.
+	self assert: (holder @env1:___pyAttrLoad___: #'z') equals: 99.
+	self assert: (holder perform: #'z' env: 1) equals: 10.
+	inst := holder @env1:value: (Array new) value: nil.
+	self assert: (inst @env1:___pyAttrLoad___: #'z') equals: 99.
+	holder @env1:___pyAttrStore___: 'fresh' put: 'x'.
+	self assert: (holder @env1:___pyAttrLoad___: #'fresh') equals: 'x'.
+	self assert: ((holder perform: #'dynInstVars' env: 1)
+		dynamicInstVarAt: #'fresh') equals: nil.
+	holder @env1:__delattr__: 'z'.
+	self assert: (holder @env1:___pyAttrLoad___: #'z') equals: 10.
+	] ensure: [
+		SessionTemps current at: #'GrailCanonicalClassesEnabled' put: false.
+		SessionTemps current removeKey: #'GrailClassAttrOverlay' ifAbsent: [].
+		SessionTemps current removeKey: #'GrailModuleHashState' ifAbsent: [].
+		UserGlobals removeKey: #'GrailCanonicalClasses' ifAbsent: [].
+		UserGlobals removeKey: #'GrailCanonicalClassSet' ifAbsent: [].
+		UserGlobals removeKey: #'GrailCanonicalModuleHashes' ifAbsent: [].
+		(importlib @env1:modules) removeKey: #'test.grail_dunder_check' ifAbsent: []]
+%
+

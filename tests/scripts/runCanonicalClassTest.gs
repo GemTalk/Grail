@@ -99,6 +99,16 @@ the repository is left clean even when a check fails."
   check value: 'CANONICAL REUSE: re-imported class == committed instance class'
     value: (freshWidget == (w class)).
 
+  "Phase-3 class-attr overlay: a RUNTIME class-attr store on the shared
+  canonical class must land session-locally -- visible to reads, but the
+  COMMITTED classInstVar slot untouched (this session's ensure-commit
+  below therefore cannot leak it)."
+  freshWidget @env1:___pyAttrStore___: 'size' put: 99.
+  check value: 'overlay: runtime store visible (Cls.size = 99)'
+    value: ((freshWidget @env1:___pyAttrLoad___: #'size') = 99).
+  check value: 'overlay: committed slot untouched (getter still 3)'
+    value: ((freshWidget perform: #'size' env: 1) = 3).
+
   "EDIT WORKFLOW: write a throwaway module, import it (cold -- hash
   recorded), commit an instance; then REWRITE the source with changed
   method behaviour and re-import.  The stale hash must force a rebuild
@@ -136,6 +146,7 @@ gadget = Gadget()
 ] ensure: [
   UserGlobals removeKey: #'Grail_canonical_test' ifAbsent: [].
   UserGlobals removeKey: #'GrailCanonicalClasses' ifAbsent: [].
+  UserGlobals removeKey: #'GrailCanonicalClassSet' ifAbsent: [].
   UserGlobals removeKey: #'GrailCanonicalModuleHashes' ifAbsent: [].
   System commit
 ].

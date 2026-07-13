@@ -301,11 +301,35 @@ scope**: a class-side mutable attribute (`_cache = {}`, an `@lru_cache`
 classmethod, a class-level counter) on a now-shared class becomes shared
 committed state. The same rule applies one level down:
 
-- Definitional class state (methods, `__annotations__`, `_fields`) → persistent
-  (committed with the class). Already the case.
-- Mutable class attributes → session-local per-class overlay (SessionTemps,
-  keyed by the canonical class) unless named in the class body's
-  `__persistent__`.
+- Definitional class state (methods, `__annotations__`, `_fields`, class-body
+  attribute *defaults*) → persistent (committed with the class). Already the
+  case.
+- **Runtime** class-attribute mutation (`Cls.x = v`, `setattr`, `del Cls.x`)
+  → session-local per-class overlay (SessionTemps, keyed by the canonical
+  class). — **IMPLEMENTED**, see below.
+- A future `__persistent__` list in a *class body* could opt specific class
+  attributes back into committed mutation (not yet implemented; the module
+  form landed in §6).
+
+**As landed:** the split is temporal — everything the class *definition* does
+(class body, metaclass hook, decorators) runs before
+`___canonicalClassRegister___` adds the class to the canonical set
+(`#GrailCanonicalClassSet`, committed beside the registry), so definitional
+stores land on and commit with the class; anything after registration is
+runtime mutation and routes to the session overlay
+(`#GrailClassAttrOverlay` in SessionTemps). One write choke point
+(`object >> ___pyAttrStore___`, Behavior branch) and four read sites consult
+the overlay first, matching CPython's last-setattr-wins: the Behavior branch
+of `___pyAttrLoad___` (`Cls.x`), the PythonInstance fallback (`self.x`
+through the class, with descriptor binding), `___dynamicClassAttr___` (walks
+the superclass chain, so a store on a base is visible through a subclass —
+type-MRO semantics), and `___classAttrDunder___` (operator dunders stored as
+class attrs). `del Cls.x` removes the class's own overlay entry, letting the
+committed value show through again. Flag off (the default) costs one
+SessionTemps probe on the store path and nothing on reads (the overlay dict
+doesn't exist). Known approximation: with the flag on, a runtime store is
+session-local even if the developer *wanted* it committed — that's the
+class-scope `__persistent__` follow-up above.
 
 ## 8. Open questions / decisions to make
 
@@ -337,16 +361,15 @@ committed state. The same rule applies one level down:
    storage split. — **IMPLEMENTED** (see §6.2; always available — the dunder
    itself is the opt-in, no feature flag needed).
 3. **Class-level mutable-attribute** session-local overlay under shared
-   classes. — *Not started; scouting notes:* the WRITE side is one clean
-   branch (`Object >> ___pyAttrStore___`'s Behavior case — both the
-   paired-setter and dynInstVars flavors funnel through it), but the READ
-   side scatters (`___dynamicClassAttr___`, the Behavior-receiver branches in
-   `___pyAttrLoad___`, the PythonInstance metaclass fallback, generated
-   `value:value:` instantiation, enum/dataclass metaclass iteration). An
-   overlay is only safe once every read site consults it first — needs a
-   read-path inventory pass of its own. Until then, class-attr mutation on a
-   canonical class writes committed state (GemStone-native semantics; the
-   developer owns the conflicts, as with any committed object).
+   classes. — **IMPLEMENTED** (see §7): one write choke point + four read
+   sites (`___pyAttrLoad___` Behavior + PythonInstance branches,
+   `___dynamicClassAttr___`, `___classAttrDunder___`) + delete; the
+   canonical set is populated at register time so definitional class-body
+   stores stay committed while post-definition mutation is session-local.
+   Class-body reads during the build (`inClassBodyValueEmit` direct getter
+   sends) intentionally bypass the overlay — it is empty until the class is
+   registered. Not covered: a class-scope `__persistent__` opt-back-in for
+   deliberately-shared mutable class attrs.
 4. **Redefinition / migration** — only needed once someone edits a committed
    module; the source hash defers it until then. (The identity-preserving
    method refresh in §9.1 covers behavior-only edits; *shape* changes still

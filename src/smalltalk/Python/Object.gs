@@ -500,6 +500,12 @@ ___dynamicClassAttr___: aSym
 	walker := (self @env0:isKindOf: Behavior)
 		ifTrue: [self]
 		ifFalse: [self @env0:class].
+	"Canonical-class overlay first: a runtime setattr on a canonical class
+	(e.g. ``Cls.__init__ = fn'') lands in the session overlay, which must
+	shadow the committed dynInstVars store.  The lookup walks the same
+	superclass chain this method does."
+	(self @env1:___classAttrOverlayLookup___: walker name: aSym)
+		@env0:ifNotNil: [:___ovv | ^ ___ovv].
 	[walker @env0:== nil] whileFalse: [
 		((walker @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) notNil)
 			ifTrue: [
@@ -513,6 +519,91 @@ ___dynamicClassAttr___: aSym
 		walker := walker @env0:superClass
 	].
 	^ nil
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___classAttrOverlayLookup___: aClass name: aSym
+	"Session-local overlay read for runtime class-attribute writes on
+	CANONICAL classes (docs/Persistent_Modules_and_Classes.md par.7).
+	Walks aClass's superclass chain (runtime setattr on a base is visible
+	through a subclass, matching Python's type-MRO lookup) and returns the
+	overlaid value, or nil when none applies.  The overlay only ever holds
+	values when the canonical-classes flag is on AND the class was
+	registered canonically, so the common case is a single SessionTemps
+	probe that answers nil.  Values are Python objects (None is the None
+	singleton, never Smalltalk nil), so nil unambiguously means absent."
+
+	| st ov walker inner v |
+	st := SessionTemps @env0:current.
+	ov := st @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+	ov @env0:== nil ifTrue: [^ nil].
+	walker := aClass.
+	[walker @env0:== nil] whileFalse: [
+		inner := ov @env0:at: walker otherwise: nil.
+		inner @env0:== nil ifFalse: [
+			v := inner @env0:at: aSym otherwise: nil.
+			v @env0:== nil ifFalse: [^ v]].
+		walker := walker @env0:superClass].
+	^ nil
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___classAttrOverlayStore___: aClass name: aSym value: aValue
+	"Route a runtime class-attribute STORE on a canonical class into the
+	session-local overlay instead of the committed class.  Returns true
+	when routed (flag on + aClass registered canonically), false when the
+	caller should use the ordinary (committed) path.  Keeping runtime
+	mutation session-local means a shared canonical class is never dirtied
+	by ``Cls.x = v`` -- no write-write conflicts between sessions, and no
+	session objects swept into the developer's next commit through a
+	class-attr value.  Class-BODY initialisation is unaffected: it runs
+	inside the class-build guard BEFORE ___canonicalClassRegister___ adds
+	the class to the canonical set, so definitional defaults still land on
+	(and commit with) the class."
+
+	| st set ov inner ug |
+	st := SessionTemps @env0:current.
+	((st @env0:at: #'GrailCanonicalClassesEnabled' otherwise: false) @env0:== true)
+		ifFalse: [^ false].
+	"UserGlobals is PER-USER and this file compiles as SystemUser (shared
+	classes), while the canonical set is registered under the session
+	user's UserGlobals (importlib compiles as DataCurator) -- a static
+	reference here would silently probe the wrong dictionary.  Resolve the
+	SESSION user's binding at runtime."
+	ug := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'UserGlobals'.
+	ug @env0:== nil ifTrue: [^ false].
+	set := ug @env0:at: #'GrailCanonicalClassSet' otherwise: nil.
+	set @env0:== nil ifTrue: [^ false].
+	(set @env0:includes: aClass) ifFalse: [^ false].
+	ov := st @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+	ov @env0:== nil ifTrue: [
+		ov := IdentityKeyValueDictionary @env0:new.
+		st @env0:at: #'GrailClassAttrOverlay' put: ov].
+	inner := ov @env0:at: aClass otherwise: nil.
+	inner @env0:== nil ifTrue: [
+		inner := KeyValueDictionary @env0:new.
+		ov @env0:at: aClass put: inner].
+	inner @env0:at: aSym put: aValue.
+	^ true
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___classAttrOverlayRemove___: aClass name: aSym
+	"Remove aClass's OWN overlay entry for aSym (``del Cls.x'' deletes from
+	the class's own dict in CPython -- no chain walk).  Returns true when an
+	entry was removed; false sends the caller down the ordinary path."
+
+	| ov inner |
+	ov := SessionTemps @env0:current @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+	ov @env0:== nil ifTrue: [^ false].
+	inner := ov @env0:at: aClass otherwise: nil.
+	inner @env0:== nil ifTrue: [^ false].
+	(inner @env0:at: aSym otherwise: nil) @env0:== nil ifTrue: [^ false].
+	inner @env0:removeKey: aSym.
+	^ true
 %
 
 category: 'Grail-Convenience Methods - Attribute'
@@ -549,6 +640,10 @@ ___classAttrDunder___: baseSym
 
 	| cls metaclass sym1 v |
 	cls := self @env0:class.
+	"Canonical-class overlay first: setattr(Cls, '__add__', fn) at runtime
+	lands session-locally and must shadow the committed accessor pair."
+	(self @env1:___classAttrOverlayLookup___: cls name: baseSym)
+		@env0:ifNotNil: [:___ovv | ^ ___ovv].
 	metaclass := cls @env0:class.
 	sym1 := (baseSym @env0:asString @env0:, ':') @env0:asSymbol.
 	((metaclass @env0:whichClassIncludesSelector: baseSym environmentId: 1) @env0:~~ nil
@@ -847,6 +942,12 @@ ___pyAttrLoad___: aSym
 		((s @env0:= '__name__' or: [s @env0:= '__module__' or: [s @env0:= '__qualname__' or: [s @env0:= '__mro__' or: [s @env0:= '__base__' or: [s @env0:= '__bases__']]]]])
 			and: [(self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil])
 				ifTrue: [^ self @env0:perform: aSym env: 1].
+		"Canonical-class overlay: a runtime ``Cls.x = v'' store landed
+		session-locally (see ___pyAttrStore___) and must SHADOW the
+		committed class-body value / compiled method on read -- CPython's
+		last-setattr-wins.  nil means no overlay applies (the default)."
+		(self @env1:___classAttrOverlayLookup___: self name: aSym)
+			@env0:ifNotNil: [:___ovv | ^ ___ovv].
 		"Setter-paired class-level accessor on a Python user class —
 		value attribute (``class C: X = 1``)."
 		((self @env0:inheritsFrom: PythonInstance)
@@ -969,6 +1070,11 @@ ___pyAttrLoad___: aSym
 	lookup directly."
 	(self @env0:isKindOf: PythonInstance) ifTrue: [
 		| metaclass |
+		"Canonical-class overlay first: an ``self.x'' read falling back to
+		the class must see a runtime ``Cls.x = v'' overlay store before the
+		committed class-body accessor, with the same descriptor binding."
+		(self @env1:___classAttrOverlayLookup___: self @env0:class name: aSym)
+			@env0:ifNotNil: [:___ovv | ^ self @env1:___descriptorGet___: ___ovv].
 		metaclass := self @env0:class @env0:class.
 		((metaclass @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
 			and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil]) ifTrue: [
@@ -1607,6 +1713,11 @@ ___pyAttrDelete___: aName
 	| sym |
 	sym := aName @env0:asSymbol.
 	(self @env0:isKindOf: Behavior) ifTrue: [
+		"Canonical-class overlay: ``del Cls.x'' removes the class's OWN
+		session-local overlay entry when one exists (a runtime setattr
+		being undone) before consulting the committed store."
+		(self @env1:___classAttrOverlayRemove___: self name: sym)
+			ifTrue: [^ self].
 		"Class receiver — remove from dynInstVars dict (Python user
 		class).  Built-in / non-Python classes have no dynInstVars
 		slot and immediately AttributeError."
@@ -1675,6 +1786,13 @@ ___pyAttrStore___: aName put: aValue
 
 	(self @env0:isKindOf: Behavior) ifTrue: [
 		| setterSym getterSym metaclass |
+		"Canonical-class overlay: runtime stores on a shared canonical
+		class stay session-local (docs/Persistent_Modules_and_Classes.md
+		par.7).  False (the default -- flag off or not canonical) falls
+		through to the committed paths below."
+		(self @env1:___classAttrOverlayStore___: self
+				name: aName @env0:asString @env0:asSymbol value: aValue)
+			ifTrue: [^ aValue].
 		setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
 		getterSym := aName @env0:asString @env0:asSymbol.
 		metaclass := self @env0:class.
