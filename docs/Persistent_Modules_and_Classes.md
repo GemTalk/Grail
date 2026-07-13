@@ -310,12 +310,53 @@ committed state. The same rule applies one level down:
 
 1. **Canonical user-class registry + reuse-on-import**, gated by a source hash.
    This alone removes the cross-session divergence and makes warm imports skip
-   recompilation. Everything else stays as-is.
+   recompilation. Everything else stays as-is. — **IMPLEMENTED** (flag-guarded,
+   off by default; see §9.1).
 2. **Persistent-variable marker** (`__persistent__ = [...]`) + the module
    storage split.
 3. **Class-level mutable-attribute** session-local overlay under shared classes.
 4. **Redefinition / migration** — only needed once someone edits a committed
-   module; the source hash defers it until then.
+   module; the source hash defers it until then. (The identity-preserving
+   method refresh in §9.1 covers behavior-only edits; *shape* changes still
+   need this phase.)
+
+### 9.1 Phase-1 implementation notes (as landed)
+
+Flag: `importlib ___canonicalClassesEnabled___: true` (session-local,
+default **off**; when off every path below is byte-for-byte the old
+behavior). Registry: `UserGlobals at: #GrailCanonicalClasses`
+(`module.qualname` → final class object); hashes:
+`#GrailCanonicalModuleHashes` (`module` → source `sha1Sum`). Neither is
+committed by import — they persist when the developer/deploy commits (§4.1).
+
+- **Emit shape** (module-scope classdefs only; method-local classes still mint
+  per execution, matching CPython):
+  `probe → miss? [mint-or-identity-reuse → compiles → metaclass hook →
+  decorators → register FINAL object] → bind into module instance`.
+  The probe hits only when this session verified the module's source hash, so
+  a **warm import binds classes with zero `___compileMethod:` sends** — it
+  never dirties the committed class (no write-write conflicts between
+  concurrent importers, nothing swept into the developer's next commit).
+  Registering the *final* object keeps decorator wrappers intact. The guard
+  sits inside the statement position, so `if cond: class C` only probes when
+  the branch actually runs.
+- **Warm module load**: on a hash match `loadModuleFromPath:` skips the parse
+  and `___buildModuleClass:` entirely and reuses the committed module class;
+  the body still runs for transient state (globals, sys.modules entry).
+- **Edit workflow**: a stale hash forces a rebuild in which
+  `___canonicalSubclassOf:` **reuses the registered class's identity** (same
+  parent) and the emitted compiles refresh its methods in place — so edits
+  reach already-persisted instances instead of stranding them on an old class.
+  A changed base (or a non-class registry value) re-mints.
+- **`Cls.__module__` is now the dotted-name STRING** (CPython semantics),
+  emitted as a compile-time literal. The old emit stored the module
+  *instance*, which made any committed class drag its defining session's
+  entire globals graph into a commit via reachability — the ephemeron/
+  commit-conflict shape all over again, resurfacing through the class. The
+  one instance-consumer (`enum.global_enum`) now resolves through
+  `sys.modules` and tolerates legacy instances.
+- Regression: `tests/scripts/runCanonicalClassTest.gs` (cross-session reuse,
+  flag-off default, edit-workflow identity+behavior refresh).
 
 ## 10. Relationship to the annotations work
 

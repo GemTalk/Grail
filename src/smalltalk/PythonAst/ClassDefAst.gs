@@ -345,6 +345,24 @@ printSmalltalkRuntimeOn: aStream
 	enclosing scope's variable."
 	(self isModuleScopeClassDef) ifTrue: [
 		aStream nextPutAll: '[| '; nextPutAll: name; nextPutAll: ' | '.
+		"Canonical-class fast path (docs/Persistent_Modules_and_Classes.md):
+		probe the committed registry first -- a hit binds the final
+		(post-decorator) object with ZERO compiles, so a warm import never
+		touches the committed class.  The probe returns nil unless the
+		feature flag is on AND this session verified the module's source
+		hash, so with the flag off the guard body always runs and the emit
+		is behaviour-neutral.  Living INSIDE the (possibly conditional)
+		statement position keeps ``if cond: class C`` semantics: the probe
+		only fires when the definition would have executed."
+		aStream
+			lf;
+			nextPutAll: name;
+			nextPutAll: ' := importlib @env0:___canonicalClassProbe___: '.
+		self printQuotedString: self ___enclosingModuleName___ on: aStream.
+		aStream nextPutAll: ' name: '.
+		self printQuotedString: name asString on: aStream.
+		aStream nextPutAll: '.'; lf;
+			nextPutAll: name; nextPutAll: ' @env0:== nil ifTrue: ['; lf.
 	].
 	"Phase B: instance attributes live in dynamic-instVar storage on
 	each instance (created on first write via ``dynamicInstVarAt:put:'').
@@ -354,14 +372,14 @@ printSmalltalkRuntimeOn: aStream
 	Behavior / Class receivers (error 2484); accessor/setter pairs
 	keep the read/write path working for class-side attrs."
 	aStream nextPutAll: name; nextPutAll: ' := ('.
-	"Phase-1 canonical classes: a module-level class definition is routed
-	through importlib ___canonicalSubclassOf: so a re-import in a later
-	session can reuse the committed class (see
-	docs/Persistent_Modules_and_Classes.md).  The helper falls back to
+	"Phase-1 canonical classes: a module-scope class definition mints
+	through importlib ___canonicalSubclassOf: so a stale-source rebuild can
+	reuse the committed class's IDENTITY (recompiling its methods in place;
+	see docs/Persistent_Modules_and_Classes.md).  The helper falls back to
 	___subclass___ when its feature flag is off, so this is behaviour-neutral
 	by default.  Nested / method-local classes keep the direct ___subclass___
-	path (minted fresh per execution)."
-	self isModuleLevelClassDef ifTrue: [
+	path (minted fresh per execution, matching CPython)."
+	self isModuleScopeClassDef ifTrue: [
 		aStream nextPutAll: 'importlib @env0:___canonicalSubclassOf: ('].
 	"The BASES expression evaluates INLINE in the enclosing scope at
 	classdef time -- a sibling method-local class (``class BaseEnum:
@@ -383,16 +401,17 @@ printSmalltalkRuntimeOn: aStream
 	chain reached Class via env-0 dispatch, but Grail-built parents
 	(e.g. ``click.UsageError'') have a metaclass chain that requires
 	env-1 dispatch to find the inherited method."
-	self isModuleLevelClassDef
+	self isModuleScopeClassDef
 		ifTrue: [
 			"The parent expression just emitted becomes the first argument to
-			___canonicalSubclassOf:; the module class name keys the registry."
+			___canonicalSubclassOf:; the Python dotted module name keys the
+			registry (same key the probe and register epilogue use)."
 			aStream
 				nextPutAll: ') name: #''';
 				nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
-				nextPutAll: ''' module: #''';
-				nextPutAll: CallAst moduleClassBeingCompiled name asString;
-				nextPutAll: ''' instVarNames: ']
+				nextPutAll: ''' module: '.
+			self printQuotedString: self ___enclosingModuleName___ on: aStream.
+			aStream nextPutAll: ' instVarNames: ']
 		ifFalse: [
 			aStream
 				nextPutAll: ') @env1:___subclass___: #''';
@@ -405,7 +424,7 @@ printSmalltalkRuntimeOn: aStream
 	self printSymbolArray: mangledSlotNames on: aStream.
 	aStream nextPutAll: ' classInstVarNames: '.
 	self printSymbolArray: allClassInstVars on: aStream.
-	self isModuleLevelClassDef ifTrue: [aStream nextPutAll: ')'].
+	self isModuleScopeClassDef ifTrue: [aStream nextPutAll: ')'].
 	aStream nextPutAll: '.'; lf.
 
 	"Every class that declares __slots__ (in any form, even ``()'') gets an
@@ -820,7 +839,13 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream.
-		aStream nextPutAll: name; nextPutAll: ' __module__: self.'; lf.
+		"__module__ is the defining module's dotted NAME STRING (CPython
+		semantics), emitted as a compile-time literal via the enclosing
+		ModuleAst.  Never the module instance — see
+		___enclosingModuleName___ for the reachability rationale."
+		aStream nextPutAll: name; nextPutAll: ' __module__: '.
+		self printQuotedString: self ___enclosingModuleName___ on: aStream.
+		aStream nextPutAll: '.'; lf.
 	].
 
 	"Compile the ``dynInstVars'' accessor + setter pair on every class.
@@ -1012,9 +1037,21 @@ printSmalltalkRuntimeOn: aStream
 
 	"Phase A: close the wrapping block (opened at the top of this
 	method) and store the final class object into the module
-	instance's dynamic-instVar storage."
+	instance's dynamic-instVar storage.  The canonical-class guard
+	(opened beside the block) closes FIRST, after registering the final
+	post-decorator object under the module.class key -- the store into
+	the module instance stays OUTSIDE the guard because a fresh session's
+	module instance needs the binding whether the class was probed or
+	built."
 	(self isModuleScopeClassDef) ifTrue: [
 		aStream
+			nextPutAll: 'importlib @env0:___canonicalClassRegister___: '.
+		self printQuotedString: self ___enclosingModuleName___ on: aStream.
+		aStream nextPutAll: ' name: '.
+		self printQuotedString: name asString on: aStream.
+		aStream
+			nextPutAll: ' value: '; nextPutAll: name; nextPutAll: '.'; lf;
+			nextPutAll: '].'; lf;
 			nextPutAll: 'self @env0:dynamicInstVarAt: #''';
 			nextPutAll: name;
 			nextPutAll: ''' put: '; nextPutAll: name;
@@ -1528,6 +1565,29 @@ method: ClassDefAst
 body
 
 	^ body
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___enclosingModuleName___
+	"The dotted Python name of the module this class definition textually
+	lives in, read from the enclosing ModuleAst (loadModuleFromPath: stamps
+	``moduleAst name:'' before codegen).  '__main__' when there is no named
+	module (plain eval) — CPython's default for exec'd code.  Used to emit
+	``Cls.__module__'' as a compile-time NAME STRING (CPython semantics:
+	__module__ IS a string).  Storing the module INSTANCE (the old emit)
+	made every committed class drag its defining session's module instance
+	— and that instance's entire globals graph — into any commit that
+	reached the class: exactly the ephemeron/commit-conflict shape the
+	session-state refactor removed, resurfacing through class reachability."
+
+	| node |
+	node := self.
+	[node notNil] whileTrue: [
+		(node isKindOf: ModuleAst) ifTrue: [
+			^ node name ifNil: ['__main__'] ifNotNil: [:n | n asString]].
+		node := node parent].
+	^ '__main__'
 %
 
 category: 'Grail-Class Compilation'

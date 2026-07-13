@@ -478,10 +478,10 @@ category: 'Grail-Canonical Classes'
 classmethod: importlib
 ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: ivNames classInstVarNames: civNames
 	"Phase 1 of persistent modules (docs/Persistent_Modules_and_Classes.md).
-	Route a MODULE-LEVEL class definition through a canonical
-	(module.qualname -> class) registry so a re-import in a LATER session
-	REUSES the committed class object instead of minting a divergent one
-	(the cross-session class-identity divergence).
+	MINT (or identity-reuse) the backing class for a module-scope class
+	definition.  Runs only on the BUILD path -- when the class-build guard's
+	___canonicalClassProbe___:name: missed (flag off, no registry entry, or
+	stale source hash).
 
 	FLAG-GUARDED and OFF by default: when disabled this is byte-for-byte the
 	old ``aParent ___subclass___: aName ...'', so system-wide behaviour is
@@ -489,9 +489,14 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	the doc); the registry entry (and the class) persist only when the
 	developer, or an explicit deploy action, next commits.
 
-	Reuse requires the recorded class to still descend from the SAME parent;
-	a changed base means a changed definition, so we re-mint and re-register
-	(identity intentionally changes -- migration is a later phase)."
+	When the registry already holds a CLASS for this key (a stale-source
+	rebuild, or an eval redefinition), reuse its IDENTITY when it still
+	descends from the same parent -- the emitted compiles then refresh its
+	methods in place, so already-persisted instances see the updated
+	behaviour rather than being stranded on a divergent old class.  A
+	changed base (or a non-class registry value, e.g. a decorator wrapper)
+	means a changed definition: re-mint.  The final post-decorator object is
+	(re)registered by the guard's ___canonicalClassRegister___ epilogue."
 
 	| key reg existing |
 	self ___canonicalClassesEnabled___ ifFalse: [
@@ -499,11 +504,87 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	key := aModuleName @env0:asString @env0:, '.' @env0:, aName @env0:asString.
 	reg := self ___canonicalClassRegistry___.
 	existing := reg @env0:at: key otherwise: nil.
-	(existing @env0:notNil and: [existing @env0:superclass @env0:== aParent])
-		ifTrue: [^ existing].
+	((existing @env0:isKindOf: Behavior)
+		and: [existing @env0:superclass @env0:== aParent])
+			ifTrue: [^ existing].
 	existing := aParent @env1:___subclass___: aName instVarNames: ivNames classInstVarNames: civNames.
 	reg @env0:at: key put: existing.
 	^ existing
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___canonicalClassProbe___: aModuleName name: aClassName
+	"Fast-path probe for the emitted class-build guard: return the canonical
+	(final, post-decorator) object for module.class when it can be reused
+	WITHOUT re-running any of the build -- else nil, which sends the emitted
+	code down the full build path.
+
+	Reusable means: the feature flag is on, THIS session's load of the
+	module found its source hash equal to the committed hash (recorded by
+	loadModuleFromPath: in the session-local hash-state map -- an edited
+	source, or a module that never recorded a hash, probes nil and
+	rebuilds), and the registry has the key.  On a hit the class binds with
+	ZERO ___compileMethod: sends, so a warm import never modifies the
+	committed class -- no write-write conflicts between concurrent
+	importers, and nothing new for the developer's next commit to sweep up."
+
+	| state |
+	self ___canonicalClassesEnabled___ ifFalse: [^ nil].
+	state := SessionTemps @env0:current @env0:at: #'GrailModuleHashState' otherwise: nil.
+	state @env0:isNil ifTrue: [^ nil].
+	((state @env0:at: aModuleName @env0:asString @env0:asSymbol otherwise: nil) @env0:== #'match')
+		ifFalse: [^ nil].
+	^ self ___canonicalClassRegistry___
+		@env0:at: (aModuleName @env0:asString @env0:, '.' @env0:, aClassName @env0:asString)
+		otherwise: nil
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___canonicalClassRegister___: aModuleName name: aClassName value: anObject
+	"Record the FINAL object a module-scope class statement bound -- after
+	the ___pyClassDefined___: metaclass hook and any class decorators (which
+	may return a wrapper rather than the class).  Emitted at the end of the
+	class-build guard, so the probe hands back exactly what the original
+	build produced.  No-op when the flag is off; never commits."
+
+	self ___canonicalClassesEnabled___ ifFalse: [^ anObject].
+	self ___canonicalClassRegistry___
+		@env0:at: (aModuleName @env0:asString @env0:, '.' @env0:, aClassName @env0:asString)
+		put: anObject.
+	^ anObject
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___canonicalModuleHashes___
+	"Committed (module dotted-name -> source sha1Sum) map.  A later
+	session's import compares the current source hash against this to
+	decide warm (reuse committed classes, skip parse) vs cold (rebuild,
+	re-register, update hash).  Lives beside the class registry in
+	UserGlobals; persists only when the developer / deploy action commits."
+
+	| reg |
+	reg := UserGlobals @env0:at: #'GrailCanonicalModuleHashes' otherwise: nil.
+	reg @env0:isNil ifTrue: [
+		reg := KeyValueDictionary @env0:new.
+		UserGlobals @env0:at: #'GrailCanonicalModuleHashes' put: reg].
+	^ reg
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___sourceStringForPath___: pathString
+	"The decoded source text of a .py file -- the read half of astForPath:,
+	split out so loadModuleFromPath: can hash the source before deciding
+	whether to parse it at all."
+
+	| file sourceString |
+	file := GsFile @env0:open: pathString mode: 'rb' onClient: false.
+	sourceString := file @env0:contentsAsUtf8 @env0:decodeToUnicode.
+	file @env0:close.
+	^ sourceString
 %
 
 category: 'Grail-Canonical Classes'
@@ -559,24 +640,59 @@ loadModuleFromPath: pathString name: moduleName
 	sys.modules; the Smalltalk class is only consulted to allocate
 	new instances when the cache is missed."
 
-	| moduleAst moduleClass moduleInstance nameParts packageName |
-	moduleAst := self astForPath: pathString.
-	moduleAst name: moduleName.
-	moduleAst useTempsForBlock: false.
+	| moduleAst moduleClass moduleInstance nameParts packageName
+	  canonical srcString srcHash hashes hashState stateMap clsName |
+	"Canonical-classes source hash (docs/Persistent_Modules_and_Classes.md).
+	When the feature flag is on, hash the source FIRST and compare against
+	the committed per-module hash: a match means the committed module class
+	(and, via the emitted class-build guards, every canonical user class)
+	can be reused verbatim -- skip the parse and every compile.  A miss
+	(first-ever import, or the source changed) takes the cold path below and
+	records the new hash -- in the current transaction only; import never
+	commits.  The match/stale verdict is stashed session-locally so the
+	___canonicalClassProbe___ calls inside the module body (which runs in
+	both cases) know whether registry entries for THIS module are current.
+	Flag off -> zero overhead, exactly the old path."
+	canonical := self ___canonicalClassesEnabled___.
+	canonical ifTrue: [
+		srcString := self ___sourceStringForPath___: pathString.
+		srcHash := srcString sha1Sum.
+		hashes := self ___canonicalModuleHashes___.
+		hashState := ((hashes at: moduleName otherwise: nil) = srcHash)
+			ifTrue: [#'match'] ifFalse: [#'stale'].
+		stateMap := SessionTemps current at: #'GrailModuleHashState' otherwise: nil.
+		stateMap isNil ifTrue: [
+			stateMap := KeyValueDictionary new.
+			SessionTemps current at: #'GrailModuleHashState' put: stateMap].
+		stateMap at: moduleName asSymbol put: hashState.
+		hashState == #'match' ifTrue: [
+			"Same collision-guarded name computation as ___buildModuleClass:."
+			clsName := self ___asSmalltalkClassName___: moduleName.
+			(Globals includesKey: clsName) ifTrue: [
+				clsName := ('Py' , clsName asString) asSymbol].
+			moduleClass := PythonModules at: clsName otherwise: nil]].
 
-	"Parent linkage must happen before star-import expansion so the
-	ImportFromAst nodes can find their enclosing ModuleAst (for relative
-	import resolution)."
-	moduleAst setParent: nil.
+	moduleClass isNil ifTrue: [
+		moduleAst := canonical
+			ifTrue: [(ModuleAst parseSource: srcString) path: pathString; yourself]
+			ifFalse: [self astForPath: pathString].
+		moduleAst name: moduleName.
+		moduleAst useTempsForBlock: false.
 
-	"Expand `from X import *` into explicit `from X import a, b, c`.
-	Done by parsing the target module's source, collecting its top-level
-	names, and rewriting the star AliasAst into one AliasAst per name.
-	Each name is also declared on the body so it shows up in body.variables
-	below (and therefore in the generated class's inst vars)."
-	self expandStarImports: moduleAst.
+		"Parent linkage must happen before star-import expansion so the
+		ImportFromAst nodes can find their enclosing ModuleAst (for relative
+		import resolution)."
+		moduleAst setParent: nil.
 
-	moduleClass := self ___buildModuleClass: moduleAst name: moduleName.
+		"Expand `from X import *` into explicit `from X import a, b, c`.
+		Done by parsing the target module's source, collecting its top-level
+		names, and rewriting the star AliasAst into one AliasAst per name.
+		Each name is also declared on the body so it shows up in body.variables
+		below (and therefore in the generated class's inst vars)."
+		self expandStarImports: moduleAst.
+
+		moduleClass := self ___buildModuleClass: moduleAst name: moduleName.
+		canonical ifTrue: [hashes at: moduleName put: srcHash]].
 
 	"Phase A: no per-variable accessor methods are generated.  Module
 	globals live in dynamicInstVarAt: storage and are read/written

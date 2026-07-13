@@ -155,6 +155,14 @@ global_enum: cls
 
 	| module classMd processed |
 	module := cls @env0:perform: #'__module__' env: 1.
+	"__module__ is the dotted NAME STRING (CPython semantics) -- resolve
+	the instance through sys.modules; tolerate a module INSTANCE stored
+	by older codegen.  Unresolvable name -> decorator is a no-op."
+	(module @env0:isKindOf: CharacterCollection) ifTrue: [
+		module := importlib modules
+			@env0:at: (module @env0:asString @env0:asSymbol)
+			otherwise: nil.
+		module @env0:isNil ifTrue: [^ cls]].
 	classMd := cls @env0:class @env0:methodDictForEnv: 1.
 	processed := IdentitySet @env0:new.
 	classMd @env0:keysDo: [:sel |

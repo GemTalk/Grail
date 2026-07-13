@@ -98,9 +98,45 @@ the repository is left clean even when a check fails."
   freshWidget := mod2 @env1:Widget.
   check value: 'CANONICAL REUSE: re-imported class == committed instance class'
     value: (freshWidget == (w class)).
+
+  "EDIT WORKFLOW: write a throwaway module, import it (cold -- hash
+  recorded), commit an instance; then REWRITE the source with changed
+  method behaviour and re-import.  The stale hash must force a rebuild
+  that keeps the class IDENTITY (canonical reuse) while refreshing the
+  methods -- so the change reaches the ALREADY-PERSISTED instance."
+  [ | tmpPath f modA gadget modB |
+  tmpPath := '/tmp/grail_canon_edit_test.py'.
+  f := GsFile openWriteOnServer: tmpPath.
+  f nextPutAll: 'class Gadget:
+    def spin(self):
+        return 1
+gadget = Gadget()
+'.
+  f close.
+  (importlib @env1:modules) removeKey: #'grail_canon_edit_test' ifAbsent: [].
+  modA := importlib loadModuleFromPath: tmpPath name: 'grail_canon_edit_test'.
+  gadget := modA @env1:gadget.
+  check value: 'edit-flow setup: v1 spin() = 1' value: ((gadget @env1:spin) = 1).
+
+  f := GsFile openWriteOnServer: tmpPath.
+  f nextPutAll: 'class Gadget:
+    def spin(self):
+        return 2
+gadget = Gadget()
+'.
+  f close.
+  (importlib @env1:modules) removeKey: #'grail_canon_edit_test' ifAbsent: [].
+  modB := importlib loadModuleFromPath: tmpPath name: 'grail_canon_edit_test'.
+  check value: 'edit flow: stale hash rebuilds onto the SAME class identity'
+    value: ((modB @env1:Gadget) == (gadget class)).
+  check value: 'edit flow: updated method reaches the pre-edit instance (spin = 2)'
+    value: ((gadget @env1:spin) = 2).
+  GsFile removeServerFile: tmpPath.
+  ] value.
 ] ensure: [
   UserGlobals removeKey: #'Grail_canonical_test' ifAbsent: [].
   UserGlobals removeKey: #'GrailCanonicalClasses' ifAbsent: [].
+  UserGlobals removeKey: #'GrailCanonicalModuleHashes' ifAbsent: [].
   System commit
 ].
 
