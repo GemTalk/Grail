@@ -261,9 +261,15 @@ bin: aNumber
 category: 'Grail-Built-in Functions'
 method: builtins
 callable: anObject
-	"Python builtin callable(x) — fixed-arity fast path."
+	"Python builtin callable(x) — fixed-arity fast path.  Classes are
+	always callable (instantiation); everything else by the presence of
+	``__call__`` (or the Grail call protocol on BoundMethod/closures,
+	which both compile ``__call__:``-shaped entries or value:value:)."
 
 	| objClass |
+	(anObject @env0:isKindOf: Behavior) ifTrue: [^ true].
+	(anObject @env0:isKindOf: BoundMethod) ifTrue: [^ true].
+	(anObject @env0:isKindOf: ExecBlock) ifTrue: [^ true].
 	objClass := anObject @env0:class.
 	^ (objClass @env0:whichClassIncludesSelector: (#__call__:) environmentId: 1) notNil
 %
@@ -1573,6 +1579,19 @@ issubclass: aClass _: aClassOrTuple
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___hasProtocol___: anObject _: aName
+	"Grail-internal builtin bridging collections.abc's structural checks to
+	object >> ___hasProtocol___: (method OWNERSHIP below the
+	PythonInstance/Object fallback level).  A separate builtin because the
+	Python attribute-call path on a CLASS receiver doesn't reach Object's
+	env-1 instance methods -- a direct Smalltalk env-1 send does, for
+	instance and class receivers alike."
+
+	^ anObject @env1:___hasProtocol___: aName
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___isSubclassSingle___: sub of: target
 	"issubclass with a single class argument.  The Smalltalk chain
 	covers single inheritance; a multiple-inheritance class's secondary
@@ -1597,6 +1616,14 @@ ___isSubclassSingle___: sub of: target
 	il := Python @env0:at: #importlib otherwise: nil.
 	il @env0:== nil ifFalse: [
 		((il @env0:___mroOf___: sub) @env0:includes: target) ifTrue: [^ true]].
+	"``__subclasscheck__:'' hook -- the issubclass analog of isinstance's
+	``__instancecheck__:'' probe above.  ABCs (collections.abc, numbers)
+	define it once on a shared base and every concrete ABC inherits it, so
+	walk the METACLASS chain, mirroring CPython's
+	``type(cls).__subclasscheck__''.  Reached only after the real chain,
+	the widenings, and the C3 MRO all missed."
+	((target @env0:class @env0:whichClassIncludesSelector: #'__subclasscheck__:' environmentId: 1) notNil) ifTrue: [
+		^ (target __subclasscheck__: sub) @env0:== true].
 	^ false
 %
 

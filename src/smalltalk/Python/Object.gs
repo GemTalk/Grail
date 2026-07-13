@@ -521,6 +521,43 @@ ___dynamicClassAttr___: aSym
 	^ nil
 %
 
+category: 'Grail-Python Protocol'
+method: object
+___hasProtocol___: aName
+	"True when the receiver's class chain REALLY defines the Python method
+	aName -- i.e. below the PythonInstance / Object fallback level.
+	collections.abc's structural checks (isinstance(x, Iterable) etc.) need
+	method OWNERSHIP, and a plain getattr probe cannot provide it:
+	PythonInstance compiles catchable-TypeError fallbacks for __iter__ /
+	__next__ / __getitem__ / ... onto EVERY instance (so the legacy
+	protocols raise catchably instead of MNUing), which makes
+	``getattr(x, '__iter__')'' non-None for any object whatsoever.
+	Works for instance receivers (probe the class) and class receivers
+	(probe the class itself -- the issubclass side)."
+
+	| walker s found |
+	s := aName @env0:asString.
+	walker := (self @env0:isKindOf: Behavior)
+		ifTrue: [self]
+		ifFalse: [self @env0:class].
+	{ s @env0:asSymbol.
+	  (s @env0:, ':') @env0:asSymbol.
+	  (s @env0:, ':_:') @env0:asSymbol.
+	  ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol } @env0:do: [:sel |
+		found := walker @env0:whichClassIncludesSelector: sel environmentId: 1.
+		"Excluded owners: PythonInstance/Object carry the generic legacy
+		fallbacks; NoneType and Integer compile raising-TypeError stubs for
+		__iter__/__getitem__ (catchable errors instead of env-1 MNUs) --
+		none of those are real protocol implementations."
+		(found @env0:~~ nil
+			and: [found @env0:~~ PythonInstance
+			and: [found @env0:~~ Object
+			and: [found @env0:~~ Integer
+			and: [found @env0:name @env0:~~ #'NoneType']]]])
+				ifTrue: [^ true]].
+	^ false
+%
+
 category: 'Grail-Class Attr Overlay'
 method: object
 ___classAttrOverlayLookup___: aClass name: aSym

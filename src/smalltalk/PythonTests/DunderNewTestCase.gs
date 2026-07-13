@@ -1045,6 +1045,40 @@ testPhase2Annotations
 	self assert: (r @env1:__getitem__: 'child_method') equals: true
 %
 
+category: 'Grail-Tests - abc'
+method: DunderNewTestCase
+testRecognizingAbcs
+	"Recognizing collections.abc ABCs (was: non-recognizing stubs).
+	Covers: STRUCTURAL one-trick-pony checks (a class with __iter__ IS
+	Iterable, without is not, ``__iter__ = None'' blocks); builtin
+	whitelists for instance AND subclass checks (issubclass via the new
+	``__subclasscheck__:'' hook in builtins.gs); the ABC inheritance DAG
+	through the C3 MI registry (Sequence < Reversible but NOT
+	Mapping < Reversible); ABC.register() virtual subclasses; Sequence/Set
+	mixin methods on tiny concrete subclasses; and singledispatch
+	dispatching a dict through a Mapping-keyed registration while list/int
+	fall to the default."
+
+	| r |
+	r := self fixture @env1:ABC_RESULT.
+	self assert: (r @env1:__getitem__: 'structural') @env1:__repr__
+		equals: '(True, True, True, True)'.
+	self assert: (r @env1:__getitem__: 'builtin_inst') @env1:__repr__
+		equals: '(True, True, True, True, True, True, True)'.
+	self assert: (r @env1:__getitem__: 'builtin_sub') @env1:__repr__
+		equals: '(True, True, True, True)'.
+	self assert: (r @env1:__getitem__: 'abc_dag') @env1:__repr__
+		equals: '(True, True, True)'.
+	self assert: (r @env1:__getitem__: 'register') @env1:__repr__
+		equals: '(True, True, True)'.
+	self assert: (r @env1:__getitem__: 'mixin_seq') @env1:__repr__
+		equals: '([10, 20, 30, 20], True, 1, 2, True)'.
+	self assert: (r @env1:__getitem__: 'mixin_set') @env1:__repr__
+		equals: '(True, True, 2, True)'.
+	self assert: (r @env1:__getitem__: 'sd_abc') @env1:__repr__
+		equals: '(''mapping'', ''obj'', ''obj'')'
+%
+
 category: 'Grail-Tests - canonical classes'
 method: DunderNewTestCase
 testCanonicalClassAttrOverlay

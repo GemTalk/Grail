@@ -858,3 +858,96 @@ def _phase2_annotations_results():
 
 
 PHASE2_ANNOTATIONS_RESULT = _phase2_annotations_results()
+
+
+def _abc_results():
+    # Recognizing collections.abc ABCs: structural one-trick ponies,
+    # builtin whitelists, the ABC inheritance DAG, virtual registration,
+    # mixin methods on tiny concrete subclasses, and singledispatch
+    # dispatching through an ABC key.
+    import collections.abc as cabc
+    import functools
+    out = {}
+
+    class HasIter:
+        def __iter__(self):
+            return iter([])
+
+    class NoIter:
+        pass
+
+    class Blocked(HasIter):
+        __iter__ = None
+
+    out['structural'] = (isinstance(HasIter(), cabc.Iterable),
+                         not isinstance(NoIter(), cabc.Iterable),
+                         issubclass(HasIter, cabc.Iterable),
+                         not isinstance(Blocked(), cabc.Iterable))
+    out['builtin_inst'] = (isinstance([], cabc.Sequence),
+                           isinstance({}, cabc.Mapping),
+                           isinstance(set(), cabc.Set),
+                           isinstance((), cabc.Iterable),
+                           isinstance(42, cabc.Hashable),
+                           not isinstance([], cabc.Hashable),
+                           isinstance(None, cabc.Hashable))
+    out['builtin_sub'] = (issubclass(list, cabc.Sequence),
+                          issubclass(dict, cabc.Mapping),
+                          issubclass(bytearray, cabc.Iterable),
+                          issubclass(tuple, cabc.Hashable))
+    out['abc_dag'] = (issubclass(cabc.Sequence, cabc.Reversible),
+                      not issubclass(cabc.Mapping, cabc.Reversible),
+                      issubclass(cabc.MutableSequence, cabc.Sequence))
+
+    class V:
+        pass
+
+    cabc.Sequence.register(V)
+    out['register'] = (isinstance(V(), cabc.Sequence),
+                       issubclass(V, cabc.Sequence),
+                       not isinstance(V(), cabc.Mapping))
+
+    class MySeq(cabc.Sequence):
+        def __init__(self):
+            self._d = [10, 20, 30, 20]
+
+        def __len__(self):
+            return len(self._d)
+
+        def __getitem__(self, i):
+            return self._d[i]
+
+    s = MySeq()
+    out['mixin_seq'] = (list(iter(s)), 20 in s, s.index(20), s.count(20),
+                        isinstance(s, cabc.Sequence))
+
+    class MySet(cabc.Set):
+        def __init__(self, items):
+            self._d = list(items)
+
+        def __len__(self):
+            return len(self._d)
+
+        def __iter__(self):
+            return iter(self._d)
+
+        def __contains__(self, x):
+            return x in self._d
+
+    a = MySet([1, 2])
+    b = MySet([1, 2, 3])
+    out['mixin_set'] = (a <= b, not (b <= a), len(a & b),
+                        a.isdisjoint(MySet([9])))
+
+    @functools.singledispatch
+    def f(x):
+        return 'obj'
+
+    @f.register(cabc.Mapping)
+    def _(x):
+        return 'mapping'
+
+    out['sd_abc'] = (f({}), f([]), f(42))
+    return out
+
+
+ABC_RESULT = _abc_results()

@@ -985,6 +985,18 @@ dispatch: cls
 	((key @env0:== AbstractPyInt)
 		or: [key @env0:inheritsFrom: AbstractPyInt]) ifTrue: [
 		(reg @env0:includesKey: Integer) ifTrue: [^ reg @env0:at: Integer]].
+	"ABC fallback: a registered key that is neither on the chain nor a
+	widening may still match VIRTUALLY -- a collections.abc / numbers ABC
+	recognizes cls through its ``__subclasscheck__'' hook (registration,
+	whitelist, or structural protocol).  Scoped to hook-bearing keys so
+	ordinary class keys cost nothing extra.  Note: no CPython-style
+	ambiguity resolution between multiple matching ABCs -- Grail dicts are
+	hash-ordered, so the first matching ABC wins."
+	reg @env0:keysAndValuesDo: [:k :impl |
+		((k @env0:isKindOf: Behavior)
+			and: [(k @env0:class @env0:whichClassIncludesSelector: #'__subclasscheck__:' environmentId: 1) notNil
+			and: [(k __subclasscheck__: key) @env0:== true]])
+				ifTrue: [^ impl]].
 	^ self @env0:dynamicInstVarAt: #default
 %
 
@@ -1061,6 +1073,18 @@ ___inferRegisterType___: aFunc
 	(candidate @env0:isKindOf: CharacterCollection) ifTrue: [
 		candidate := (System @env0:myUserProfile @env0:symbolList
 			@env0:objectNamed: candidate @env0:asSymbol) @env0:ifNil: [candidate]].
+	"Still a string?  ABC names ('Mapping', 'Sequence', ...) live as
+	classes on the collections.abc module, not in the symbol list --
+	resolve through sys.modules when that module has been imported."
+	(candidate @env0:isKindOf: CharacterCollection) ifTrue: [
+		| cabc resolved |
+		cabc := (System @env0:myUserProfile @env0:symbolList
+			@env0:objectNamed: #importlib) @env1:modules
+			@env0:at: #'collections.abc' otherwise: nil.
+		cabc @env0:== nil ifFalse: [
+			resolved := cabc @env0:dynamicInstVarAt: candidate @env0:asString @env0:asSymbol.
+			(resolved @env0:~~ nil and: [resolved @env0:isKindOf: Behavior])
+				ifTrue: [candidate := resolved]]].
 	^ (self ___registryKey___: candidate) @env0:ifNil: [candidate]
 %
 
