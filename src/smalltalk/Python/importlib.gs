@@ -474,6 +474,73 @@ ___buildModuleClass: moduleAst name: moduleName
 	^ moduleClass
 %
 
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: ivNames classInstVarNames: civNames
+	"Phase 1 of persistent modules (docs/Persistent_Modules_and_Classes.md).
+	Route a MODULE-LEVEL class definition through a canonical
+	(module.qualname -> class) registry so a re-import in a LATER session
+	REUSES the committed class object instead of minting a divergent one
+	(the cross-session class-identity divergence).
+
+	FLAG-GUARDED and OFF by default: when disabled this is byte-for-byte the
+	old ``aParent ___subclass___: aName ...'', so system-wide behaviour is
+	unchanged.  NEVER commits -- import must not own the commit boundary (see
+	the doc); the registry entry (and the class) persist only when the
+	developer, or an explicit deploy action, next commits.
+
+	Reuse requires the recorded class to still descend from the SAME parent;
+	a changed base means a changed definition, so we re-mint and re-register
+	(identity intentionally changes -- migration is a later phase)."
+
+	| key reg existing |
+	self ___canonicalClassesEnabled___ ifFalse: [
+		^ aParent @env1:___subclass___: aName instVarNames: ivNames classInstVarNames: civNames].
+	key := aModuleName @env0:asString @env0:, '.' @env0:, aName @env0:asString.
+	reg := self ___canonicalClassRegistry___.
+	existing := reg @env0:at: key otherwise: nil.
+	(existing @env0:notNil and: [existing @env0:superclass @env0:== aParent])
+		ifTrue: [^ existing].
+	existing := aParent @env1:___subclass___: aName instVarNames: ivNames classInstVarNames: civNames.
+	reg @env0:at: key put: existing.
+	^ existing
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___canonicalClassRegistry___
+	"Committed (module.qualname -> class) map backing canonical-class reuse.
+	Lives in UserGlobals so it survives sessions; a production deployment
+	would use a reduced-conflict collection (see the doc).  Created lazily
+	in the current transaction; persists only when that transaction commits."
+
+	| reg |
+	reg := UserGlobals @env0:at: #'GrailCanonicalClasses' otherwise: nil.
+	reg @env0:isNil ifTrue: [
+		reg := KeyValueDictionary @env0:new.
+		UserGlobals @env0:at: #'GrailCanonicalClasses' put: reg].
+	^ reg
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___canonicalClassesEnabled___
+	"Session-local feature flag (default OFF) for phase-1 canonical classes.
+	OFF -> ___canonicalSubclassOf: behaves exactly like ___subclass___, so the
+	whole system is unchanged; flip ON per session to exercise reuse."
+
+	^ (SessionTemps @env0:current @env0:at: #'GrailCanonicalClassesEnabled' otherwise: false) @env0:== true
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___canonicalClassesEnabled___: aBool
+	"Enable/disable phase-1 canonical-class reuse for THIS session only."
+
+	SessionTemps @env0:current @env0:at: #'GrailCanonicalClassesEnabled' put: aBool @env0:== true.
+	^ aBool
+%
+
 category: 'Grail-Module Loading'
 classmethod: importlib
 loadModuleFromPath: pathString name: moduleName

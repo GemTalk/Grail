@@ -354,6 +354,15 @@ printSmalltalkRuntimeOn: aStream
 	Behavior / Class receivers (error 2484); accessor/setter pairs
 	keep the read/write path working for class-side attrs."
 	aStream nextPutAll: name; nextPutAll: ' := ('.
+	"Phase-1 canonical classes: a module-level class definition is routed
+	through importlib ___canonicalSubclassOf: so a re-import in a later
+	session can reuse the committed class (see
+	docs/Persistent_Modules_and_Classes.md).  The helper falls back to
+	___subclass___ when its feature flag is off, so this is behaviour-neutral
+	by default.  Nested / method-local classes keep the direct ___subclass___
+	path (minted fresh per execution)."
+	self isModuleLevelClassDef ifTrue: [
+		aStream nextPutAll: 'importlib @env0:___canonicalSubclassOf: ('].
 	"The BASES expression evaluates INLINE in the enclosing scope at
 	classdef time -- a sibling method-local class (``class BaseEnum:
 	... class MainEnum(BaseEnum):`` in a setUp) is a plain Smalltalk
@@ -374,10 +383,21 @@ printSmalltalkRuntimeOn: aStream
 	chain reached Class via env-0 dispatch, but Grail-built parents
 	(e.g. ``click.UsageError'') have a metaclass chain that requires
 	env-1 dispatch to find the inherited method."
-	aStream
-		nextPutAll: ') @env1:___subclass___: #''';
-		nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
-		nextPutAll: ''' instVarNames: '.
+	self isModuleLevelClassDef
+		ifTrue: [
+			"The parent expression just emitted becomes the first argument to
+			___canonicalSubclassOf:; the module class name keys the registry."
+			aStream
+				nextPutAll: ') name: #''';
+				nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
+				nextPutAll: ''' module: #''';
+				nextPutAll: CallAst moduleClassBeingCompiled name asString;
+				nextPutAll: ''' instVarNames: ']
+		ifFalse: [
+			aStream
+				nextPutAll: ') @env1:___subclass___: #''';
+				nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
+				nextPutAll: ''' instVarNames: '].
 	"Python ``__slots__'' names become real GemStone named instance
 	variables (name-mangled — see above).  ___subclass___: filters any the
 	parent already declares, so an inherited / re-declared slot reuses the
@@ -385,6 +405,7 @@ printSmalltalkRuntimeOn: aStream
 	self printSymbolArray: mangledSlotNames on: aStream.
 	aStream nextPutAll: ' classInstVarNames: '.
 	self printSymbolArray: allClassInstVars on: aStream.
+	self isModuleLevelClassDef ifTrue: [aStream nextPutAll: ')'].
 	aStream nextPutAll: '.'; lf.
 
 	"Every class that declares __slots__ (in any form, even ``()'') gets an
@@ -1507,6 +1528,22 @@ method: ClassDefAst
 body
 
 	^ body
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+isModuleLevelClassDef
+	"True if this class def is a direct child of a module body (not nested in
+	a function or another class).  Parent chain: self -> BlockAst -> ModuleAst.
+	Only module-level classes are routed through the phase-1 canonical-class
+	registry (docs/Persistent_Modules_and_Classes.md); method-local classes
+	are minted fresh per execution, matching CPython (a class statement in a
+	function body produces a new class object on each call)."
+
+	parent ifNil: [^ false].
+	(parent isKindOf: BlockAst) ifFalse: [^ false].
+	parent parent ifNil: [^ false].
+	^ parent parent isKindOf: ModuleAst
 %
 
 category: 'Grail-Class Compilation'

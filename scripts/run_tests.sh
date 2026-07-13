@@ -80,4 +80,13 @@ LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runGemstoneSystemTest.gs < /
 # the frozen hashCache survives so the ref stays usable as a dict key.
 LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runEphemeronCommitTest.gs < /dev/null || EXIT=$?
 
+# Phase-1 canonical-class regression (docs/Persistent_Modules_and_Classes.md).
+# Reuse can only be observed across a commit + logout + login boundary, so it
+# can't live in the in-session SUnit suite. Session 1 (flag on) imports the
+# fixture and commits an instance; session 2 re-imports and asserts the
+# re-imported class IS the committed instance's class, then removes the
+# UserGlobals keys and commits to leave the repository clean. Also asserts
+# the flag defaults OFF in a fresh session.
+LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCanonicalClassTest.gs < /dev/null || EXIT=$?
+
 exit $EXIT
