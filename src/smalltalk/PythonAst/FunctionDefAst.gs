@@ -166,6 +166,20 @@ printSmalltalkOn: aStream
 		parse-time class-declarative decorators (staticmethod /
 		classmethod / property) are excluded — the parser already handled
 		them by re-classing this node."
+		"Record this top-level function's __annotations__ (PEP 563 source
+		strings) on the module instance, keyed by the plain Python name.
+		``self'' here is the module instance (the module body compiles to a
+		method on the module class); BoundMethod >> __annotations__ reads it
+		back.  Emitted before any decorator application so the annotations
+		are available regardless of decoration."
+		self hasAnnotations ifTrue: [
+			aStream
+				lf;
+				nextPutAll: 'self @env0:___setFunctionAnnotations___: ''';
+				nextPutAll: name;
+				nextPutAll: ''' dict: '.
+			self emitAnnotationsDictOn: aStream.
+			aStream nextPutAll: '.'].
 		moduleDecorators := self applicableModuleDecorators.
 		moduleDecorators isEmpty ifTrue: [^self].
 		self printModuleDecoratorsOn: aStream decorators: moduleDecorators.

@@ -158,6 +158,7 @@ ___pythonValueAttrs___
 		add: #'__module__';
 		add: #'__func__';
 		add: #'__self__';
+		add: #'__annotations__';
 		yourself
 %
 
@@ -350,6 +351,48 @@ __get__: obj
 	"One-argument form of the descriptor protocol."
 
 	^ self __get__: obj _: None
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__annotations__
+	"Python's ``func.__annotations__'' — the parameter/return annotation
+	dict (PEP 563 source strings; see FunctionDefAst).  Module-level
+	functions store theirs on the module instance keyed by name; methods
+	store theirs on the defining class, so walk the superclass chain to
+	report the annotations from where an inherited method was defined.
+	An unbound handle (receiver nil) or an unannotated / unknown callable
+	reports an empty dict, matching CPython's ``always has one''."
+
+	| cls |
+	receiver @env0:== nil ifTrue: [^ KeyValueDictionary @env0:new].
+	(receiver @env0:isKindOf: module)
+		ifTrue: [^ receiver @env0:___functionAnnotationsFor___: selector @env0:asString].
+	cls := (receiver @env0:isKindOf: Class)
+		ifTrue: [receiver]
+		ifFalse: [receiver @env0:class].
+	^ self @env1:___methodAnnotationsForClass___: cls name: selector @env0:asString
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___methodAnnotationsForClass___: aClass name: aName
+	"Walk aClass and its superclasses for the first ``__annotations__''
+	entry named aName in a ``___methodAnnotationsTable___'' (compiled
+	class-side by ClassDefAst for classes that declare annotated
+	methods).  Empty dict when none is found.  The table is compiled in
+	ENVIRONMENT 1 (like every Grail method), so probe for it with
+	``whichClassIncludesSelector:environmentId: 1'' on the metaclass and
+	invoke it with an env-1 send — an env-0 ``canUnderstand:'' would never
+	see it."
+
+	| tbl v |
+	aClass @env0:== nil ifTrue: [^ KeyValueDictionary @env0:new].
+	((aClass @env0:class @env0:whichClassIncludesSelector: #'___methodAnnotationsTable___' environmentId: 1) @env0:~~ nil) ifTrue: [
+		tbl := aClass @env1:___methodAnnotationsTable___.
+		v := tbl @env0:at: aName otherwise: nil.
+		v @env0:== nil ifFalse: [^ v]].
+	^ self @env1:___methodAnnotationsForClass___: (aClass @env0:superclass) name: aName
 %
 
 category: 'Grail-Attribute Access'

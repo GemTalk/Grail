@@ -794,3 +794,67 @@ def _annotations_results():
 
 
 ANNOTATIONS_RESULT = _annotations_results()
+
+
+# --- Phase 2: module-level function, method, and class __annotations__ ---
+# All annotations are PEP 563 SOURCE STRINGS (never evaluated); "Later" is
+# an intentional forward reference to a name that never exists.
+
+def mod_annotated(a: int, b: "Later", *rest: float) -> str:
+    return "ok"
+
+
+def mod_plain(a, b):
+    return a
+
+
+class _AnnHolder:
+    x: int
+    y: "Later" = 5
+    z = 10                       # not annotated -> excluded from __annotations__
+
+    def m(self, p: int, q: str = "d") -> bool:
+        return True
+
+    def plain(self, p):
+        return p
+
+
+class _AnnChild(_AnnHolder):
+    w: bool
+
+    def child_m(self, r: "int") -> None:
+        return None
+
+
+def _phase2_annotations_results():
+    out = {}
+    # Module-level function annotations (BoundMethod resolves via the module).
+    ma = mod_annotated.__annotations__
+    out['mod_params'] = (ma["a"] == "int" and ma["b"] == "Later"
+                         and ma["rest"] == "float" and ma["return"] == "str")
+    out['mod_empty'] = (len(mod_plain.__annotations__) == 0)
+
+    # Class annotations (own-only; PEP 563 strings; unannotated names excluded).
+    ca = _AnnHolder.__annotations__
+    out['class_ann'] = (ca["x"] == "int" and ca["y"] == "Later"
+                        and "z" not in ca)
+    # A subclass reports only its OWN class-body annotations, not the parent's.
+    cc = _AnnChild.__annotations__
+    out['subclass_own'] = ("w" in cc and "x" not in cc)
+
+    # Method annotations via an instance's bound method (self excluded).
+    inst = _AnnHolder()
+    mm = inst.m.__annotations__
+    out['method_ann'] = (mm["p"] == "int" and mm["q"] == "str"
+                         and mm["return"] == "bool" and "self" not in mm)
+    out['method_empty'] = (len(inst.plain.__annotations__) == 0)
+    # Inherited method resolves to where it was defined; child's own too.
+    child = _AnnChild()
+    out['inherited_method'] = (child.m.__annotations__["p"] == "int")
+    out['child_method'] = (child.child_m.__annotations__["r"] == "int"
+                           and child.child_m.__annotations__["return"] == "None")
+    return out
+
+
+PHASE2_ANNOTATIONS_RESULT = _phase2_annotations_results()

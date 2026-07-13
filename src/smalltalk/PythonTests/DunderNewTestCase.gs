@@ -1018,3 +1018,29 @@ testFunctionAnnotations
 	self assert: (r @env1:__getitem__: 'register') @env1:__repr__
 		equals: '(''base'', ''int'', ''str'', ''base'')'
 %
+
+category: 'Grail-Tests - annotations'
+method: DunderNewTestCase
+testPhase2Annotations
+	"Module-level function, instance-method, and class __annotations__
+	(PEP-563 SOURCE STRINGS).  Module functions store theirs on the module
+	instance keyed by name; methods on a class-side ___methodAnnotationsTable___
+	that BoundMethod >> __annotations__ walks up the superclass chain; classes
+	expose their own class-body annotations via a class-side accessor.
+	Verifies: module params/return + empty; class own-only annotations (a
+	subclass reports only ITS annotations, not the parent's; unannotated names
+	excluded); method params/return with ``self'' excluded + empty; an
+	inherited method resolves to where it was defined; a forward-ref string
+	(``Later'') is kept verbatim, never evaluated."
+
+	| r |
+	r := self fixture @env1:PHASE2_ANNOTATIONS_RESULT.
+	self assert: (r @env1:__getitem__: 'mod_params') equals: true.
+	self assert: (r @env1:__getitem__: 'mod_empty') equals: true.
+	self assert: (r @env1:__getitem__: 'class_ann') equals: true.
+	self assert: (r @env1:__getitem__: 'subclass_own') equals: true.
+	self assert: (r @env1:__getitem__: 'method_ann') equals: true.
+	self assert: (r @env1:__getitem__: 'method_empty') equals: true.
+	self assert: (r @env1:__getitem__: 'inherited_method') equals: true.
+	self assert: (r @env1:__getitem__: 'child_method') equals: true
+%

@@ -314,6 +314,14 @@ printSmalltalkRuntimeOn: aStream
 		and: [self dataclassAnnotatedNames notEmpty
 		and: [(classAttrs anySatisfy: [:p | p key == #'___annotatedFields___']) not]])
 			ifTrue: [allClassInstVars add: #'___annotatedFields___'].
+	"Add an ``__annotations__`` slot for ANY class carrying class-body
+	annotations (``x: int'' / ``x: int = default''), not just dataclasses
+	— CPython gives every such class a ``Cls.__annotations__''.  Holds a
+	PEP 563 source-string dict (never evaluated; see FunctionDefAst).
+	Skipped when the user declared ``__annotations__'' explicitly."
+	((self classAnnotationPairs notEmpty)
+		and: [(classAttrs anySatisfy: [:p | p key == #'__annotations__']) not])
+			ifTrue: [allClassInstVars add: #'__annotations__'].
 	"Emit a single send to the ``___subclass___:...'' helper on Class.
 	The helper filters the instVar and classInstVar name arrays
 	against the parent's hierarchy before calling subclass:..., so the
@@ -711,6 +719,39 @@ printSmalltalkRuntimeOn: aStream
 			aStream space; nextPutAll: ''''; nextPutAll: n asString; nextPutAll: '''' ].
 		aStream nextPutAll: ' )).'; lf.
 	].
+	"``__annotations__`` accessor/setter + init for a class with class-body
+	annotations.  The getter guards nil so a subclass — which inherits the
+	class-side slot but leaves it nil (excluded from the parent-value copy
+	below) — reports {} rather than nil, matching CPython's own-annotations-
+	only ``Cls.__annotations__''."
+	((self classAnnotationPairs notEmpty)
+		and: [(classAttrs anySatisfy: [:p | p key == #'__annotations__']) not])
+			ifTrue: [
+		| lf accessorSrc setterSrc |
+		lf := Character lf asString.
+		accessorSrc := '__annotations__' , lf , '	^ __annotations__ @env0:ifNil: [KeyValueDictionary @env0:new]'.
+		self
+			emitCompileMethodOn: name
+			source: accessorSrc
+			category: 'Grail-Annotations'
+			env: 1
+			classSide: true
+			onStream: aStream.
+		setterSrc := '__annotations__: ___1' , lf , '	__annotations__ := ___1.'.
+		self
+			emitCompileMethodOn: name
+			source: setterSrc
+			category: 'Grail-Annotations'
+			env: 1
+			classSide: true
+			onStream: aStream.
+		aStream nextPutAll: name; nextPutAll: ' __annotations__: '.
+		self emitClassAnnotationsDictOn: aStream.
+		aStream nextPutAll: '.'; lf].
+	"Compile a class-side ``___methodAnnotationsTable___`` (method-name ->
+	annotations dict) for every annotated instance method; BoundMethod >>
+	__annotations__ walks the superclass chain consulting it."
+	self emitMethodAnnotationsTableOn: aStream className: name.
 	"Inherit parent class-attr values into our slot.  Smalltalk
 	class-side instVars are per-class storage; without this the
 	subclass's inherited slot stays nil."
@@ -724,6 +765,10 @@ printSmalltalkRuntimeOn: aStream
 		concern."
 		excludeNames := (classAttrs collect: [:p | p key]) asOrderedCollection.
 		self isDataclassDecorated ifTrue: [excludeNames add: #'___annotatedFields___'].
+		"Never copy the parent's ``__annotations__'' — CPython's
+		``Cls.__annotations__'' reports the class's OWN annotations only; the
+		guarded getter turns an uninitialised (inherited) slot into {}."
+		self classAnnotationPairs notEmpty ifTrue: [excludeNames add: #'__annotations__'].
 		aStream
 			nextPutAll: '(Python @env0:at: #importlib) @env0:___inheritClassAttrs___: ';
 			nextPutAll: name;
@@ -1481,6 +1526,69 @@ dataclassAnnotatedNames
 		((stmt isKindOf: AnnAssignAst) and: [stmt target isKindOf: NameAst])
 			ifTrue: [names add: stmt target id asString]].
 	^ names
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+classAnnotationPairs
+	"Ordered ``name -> annotation-SOURCE-STRING'' associations for every
+	annotated class-body assignment (bare ``x: int'' AND ``x: int =
+	default''), in declaration order.  Drives ``Cls.__annotations__''.
+	Annotations are stored as PEP 563 source strings and NEVER evaluated
+	(see FunctionDefAst >> emitAnnotationsDictOn:) — the recursive
+	``___annotationSourceString___'' unparser builds them at codegen."
+
+	| pairs |
+	pairs := OrderedCollection new.
+	body body do: [:stmt |
+		((stmt isKindOf: AnnAssignAst) and: [stmt target isKindOf: NameAst])
+			ifTrue: [pairs add:
+				stmt target id asString -> stmt annotation ___annotationSourceString___]].
+	^ pairs
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitClassAnnotationsDictOn: aStream
+	"Emit the ``{ name -> annotation-source-string, ... }'' dict expression
+	for this class's class-body annotations — same shape as
+	FunctionDefAst >> emitAnnotationsDictOn:."
+
+	aStream nextPutAll: '((KeyValueDictionary @env0:new)'.
+	self classAnnotationPairs do: [:assoc |
+		aStream nextPutAll: ' @env0:at: '''; nextPutAll: assoc key; nextPutAll: ''' put: '.
+		self printQuotedString: assoc value on: aStream.
+		aStream nextPut: $;].
+	aStream nextPutAll: ' @env0:yourself)'
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitMethodAnnotationsTableOn: aStream className: aClassName
+	"Compile a class-side ``___methodAnnotationsTable___'' returning a dict
+	``method-name -> annotations dict'' for every annotated instance method.
+	The method dict expressions are FunctionDefAst >> emitAnnotationsDictOn:
+	output (PEP 563 source strings).  No-op when no method is annotated, so
+	only classes that need it pay for the extra class-side method."
+
+	| annotated src |
+	annotated := self instanceMethodDefs select: [:def | def hasAnnotations].
+	annotated isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___methodAnnotationsTable___'; lf.
+	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+	annotated do: [:def |
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
+		def emitAnnotationsDictOn: src.
+		src nextPut: $;].
+	src nextPutAll: ' @env0:yourself)'.
+	self
+		emitCompileMethodOn: aClassName
+		source: src contents
+		category: 'Grail-Annotations'
+		env: 1
+		classSide: true
+		onStream: aStream
 %
 
 category: 'Grail-Class Compilation'

@@ -534,4 +534,55 @@ cantPerform: aSymbol withArguments: anArray env: envId
 	^ super cantPerform: aSymbol withArguments: anArray env: envId
 %
 
+category: 'Grail-Annotations'
+classmethod: module
+___functionAnnotationsTable___
+	"Session-local map  module-instance -> (function-name-string ->
+	annotations dict).  Held in SessionTemps so it is never committed
+	(module instances are already session-local) and keyed by identity,
+	so it holds no persistent references and -- unlike a dynamic instVar
+	on the module -- contributes nothing to the module's globals() /
+	__dict__ enumeration."
+
+	| st tbl |
+	st := SessionTemps current.
+	tbl := st at: #GrailModuleFunctionAnnotations otherwise: nil.
+	tbl isNil ifTrue: [
+		tbl := IdentityKeyValueDictionary new.
+		st at: #GrailModuleFunctionAnnotations put: tbl].
+	^ tbl
+%
+
+category: 'Grail-Annotations'
+method: module
+___setFunctionAnnotations___: aName dict: aDict
+	"Record a module-level function's __annotations__ (PEP 563 source
+	strings).  FunctionDefAst emits a call to this at module-body eval
+	time for every annotated top-level def.  Keyed by the plain Python
+	name -- exactly the selector a lazily-wrapped module-function
+	BoundMethod carries -- so BoundMethod >> __annotations__ can find it."
+
+	| tbl inner |
+	tbl := module ___functionAnnotationsTable___.
+	inner := tbl at: self otherwise: nil.
+	inner isNil ifTrue: [
+		inner := KeyValueDictionary new.
+		tbl at: self put: inner].
+	inner at: aName asString put: aDict.
+	^ self
+%
+
+category: 'Grail-Annotations'
+method: module
+___functionAnnotationsFor___: aName
+	"The stored __annotations__ dict for a module-level function, or an
+	empty dict when the function carried no annotations."
+
+	| tbl inner |
+	tbl := module ___functionAnnotationsTable___.
+	inner := tbl at: self otherwise: nil.
+	inner isNil ifTrue: [^ KeyValueDictionary new].
+	^ inner at: aName asString otherwise: KeyValueDictionary new
+%
+
 set compile_env: 0
