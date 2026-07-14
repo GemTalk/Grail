@@ -148,6 +148,9 @@ gadget = Gadget()
   UserGlobals removeKey: #'GrailCanonicalClasses' ifAbsent: [].
   UserGlobals removeKey: #'GrailCanonicalClassSet' ifAbsent: [].
   UserGlobals removeKey: #'GrailCanonicalModuleHashes' ifAbsent: [].
+  "Phase-5: session 1's commit also swept the canonical MODULE instances
+  (doc par.10) -- drop the registry so their graphs are collectible."
+  UserGlobals removeKey: #'GrailCanonicalModules' ifAbsent: [].
   System commit
 ].
 

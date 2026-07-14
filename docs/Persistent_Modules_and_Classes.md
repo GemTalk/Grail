@@ -625,11 +625,28 @@ before it can ever default on (shape mirrors `runCanonicalClassTest.gs`):
    re-run): commit the module instance at deploy/developer commit; on warm
    import, bind + `sys.modules` register, skip `initialize`; raise the
    §10.5 `ImportError` on a within-session delete-and-reimport. Gate: §10.6
-   session-A/B test plus the full suite flag-off unchanged.
+   session-A/B test plus the full suite flag-off unchanged. —
+   **IMPLEMENTED** (flag-guarded, off by default). Registry:
+   `UserGlobals at: #GrailCanonicalModules` (dotted-name → module
+   instance), recorded by every flag-on cold import in-transaction (import
+   never commits) and consulted by the warm path. "Deployed" is made
+   precise by `isCommitted`: only an instance actually in the committed
+   repository binds or guards, so a non-committing flag-on session keeps
+   the previous semantics throughout (its forced re-imports keep working —
+   e.g. the overlay regression's per-test fixture reloads). `reload()`
+   already re-executes (phase 7 folded in): it forces the class-def probes
+   `#stale` for the body re-run (identity-reused classes refresh in
+   place), then updates the hash, session verdict, and registry entry.
+   The imported closure composes: session B's reload of the fixture
+   re-runs `from dataclasses import ...`, which warm-binds the committed
+   dataclasses module — same `MISSING` sentinel, so re-decoration is
+   coherent. Acceptance: `tests/scripts/runModuleBindTest.gs` (§10.6 as
+   specified, plus reload and guard checks), wired into run_tests.sh.
 6. **Session tier:** `__session_init__` hook + SessionTemps-backed storage
    for its names; audit vendored stdlib for process-state snapshots.
 7. **`reload()` as the explicit cold path** (today's cold machinery,
-   repointed), including re-register + hash update.
+   repointed), including re-register + hash update. — **IMPLEMENTED**
+   (folded into phase 5; see above).
 8. **Concurrency polish:** two sessions cold-importing the same new module
    and both committing → registry write-write conflict; resolve by
    retry-with-probe (first commit wins, loser rebinds). Document extent

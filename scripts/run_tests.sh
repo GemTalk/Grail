@@ -146,4 +146,13 @@ LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runPersistentStateTest.gs < 
 # (a class-stored function binds self). No commit.
 LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runOverlayReuseTest.gs < /dev/null || EXIT=$?
 
+# Phase-5 module-bind acceptance (docs/Persistent_Modules_and_Classes.md
+# par.10.6). Session A (flag on) imports a fixture exercising @dataclass,
+# @enum.global_enum, and a decorator registry, then commits; session B must
+# warm-BIND the committed module instance (identity, body not re-run, new
+# instances get their defaults), importlib.reload() must be the explicit
+# cold path, and delete-and-reimport of the deployed module must raise the
+# par.10.5 ImportError. Session C cleans the repository.
+LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runModuleBindTest.gs < /dev/null || EXIT=$?
+
 exit $EXIT

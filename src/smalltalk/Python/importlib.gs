@@ -734,6 +734,30 @@ ___canonicalClassRegistry___
 
 category: 'Grail-Canonical Classes'
 classmethod: importlib
+___canonicalModules___
+	"Committed (module dotted-name -> module INSTANCE) registry -- the unit
+	of warm-bind import semantics (doc par.10).  A cold flag-on import
+	records its instance here IN-TRANSACTION (import never commits, par.4.1);
+	the instance -- and, via reachability, its whole globals graph: the
+	classes AND the module-level state they captured at definition time --
+	persists when the developer/deploy next commits.  A later session's
+	import that finds an entry (source hash matching) BINDS it instead of
+	re-running the module body, so definition-time wiring (@dataclass
+	against its MISSING sentinel, @enum.global_enum name injection,
+	decorator registrations) is never torn from the state it captured.
+	Lives beside the class registry; same lazy-create-in-transaction
+	pattern."
+
+	| reg |
+	reg := UserGlobals @env0:at: #'GrailCanonicalModules' otherwise: nil.
+	reg @env0:isNil ifTrue: [
+		reg := KeyValueDictionary @env0:new.
+		UserGlobals @env0:at: #'GrailCanonicalModules' put: reg].
+	^ reg
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
 ___canonicalClassesEnabled___
 	"Session-local feature flag (default OFF) for phase-1 canonical classes.
 	OFF -> ___canonicalSubclassOf: behaves exactly like ___subclass___, so the
@@ -793,6 +817,37 @@ loadModuleFromPath: pathString name: moduleName
 		stateMap isNil ifTrue: [
 			stateMap := KeyValueDictionary new.
 			SessionTemps current at: #'GrailModuleHashState' put: stateMap].
+		"Phase-5 warm BIND (doc par.10.2): a committed module INSTANCE with
+		matching source binds -- register in sys.modules, adopt as the class's
+		session singleton, return.  The module body does NOT re-run: the
+		instance already carries everything the one deploy-time execution
+		produced, so the classes and the state they captured stay one
+		consistent graph.  Checked BEFORE recording this attempt's verdict:
+		an existing hash-state entry means THIS session already imported the
+		module, so reaching here (a sys.modules miss) means it was deleted --
+		a deliberate fresh-execution request that binding would silently
+		betray.  Raise with instructions instead (doc par.10.5; within a
+		session, flag-on either matches CPython or raises).  A failed cold
+		import never recorded a hash-state entry or a registry instance, so
+		CPython's delete-then-retry recovery path stays cold and guard-free."
+		hashState == #'match' ifTrue: [
+			| committedInstance |
+			committedInstance := self ___canonicalModules___ at: moduleName otherwise: nil.
+			"isCommitted is what makes ''deployed'' precise: a registry entry
+			this session recorded in-transaction (and never committed) is NOT
+			deployed -- a non-committing session keeps today's cold-ish
+			semantics throughout (and its forced re-imports keep working,
+			e.g. the flag-on overlay regression's per-test fixture reloads).
+			Only an instance actually IN the committed repository binds or
+			guards."
+			(committedInstance isNil or: [committedInstance isCommitted not]) ifFalse: [
+				(stateMap at: moduleName asSymbol otherwise: nil) isNil ifFalse: [
+					ImportError @env1:___signal___: 'module ''' , moduleName ,
+						''' is canonical (deployed); it was removed from sys.modules in this session. Use importlib.reload() to re-execute it, or assign a replacement into sys.modules to substitute it.'].
+				stateMap at: moduleName asSymbol put: #'match'.
+				committedInstance @env0:class @env0:___adoptInstance___: committedInstance.
+				self registerModule: moduleName with: committedInstance.
+				^ committedInstance]].
 		stateMap at: moduleName asSymbol put: hashState.
 		hashState == #'match' ifTrue: [
 			"Same collision-guarded name computation as ___buildModuleClass:."
@@ -872,6 +927,15 @@ loadModuleFromPath: pathString name: moduleName
 	"Persistent-state bind/capture for modules declaring ``__persistent__''
 	(docs/Persistent_Modules_and_Classes.md par.6) -- a no-op for the rest."
 	self ___syncPersistentState___: moduleInstance.
+	"Phase-5 (doc par.10): record this cold import's instance in the
+	canonical-module registry, IN-TRANSACTION (import never commits).  It
+	persists -- with its whole globals graph, via reachability -- when the
+	developer/deploy next commits; a later session's matching import then
+	warm-BINDS it instead of re-running the body.  Recorded only after the
+	body ran to completion (a raise above unloaded the module and
+	re-signalled), so the registry never holds a half-built instance."
+	canonical ifTrue: [
+		self ___canonicalModules___ at: moduleName put: moduleInstance].
 	^ moduleInstance
 %
 
@@ -2178,10 +2242,25 @@ reload: aModule
 	with no source path (a native/C-extension or built-in module) is returned
 	unchanged."
 
-	| path name moduleAst |
+	| path name moduleAst canonical srcHash stateMap |
 	path := aModule @env0:dynamicInstVarAt: #'__file__'.
 	path @env0:isNil ifTrue: [^ aModule].
 	name := (aModule @env1:__name__) @env0:asString.
+	"Canonical modules (doc par.10.5): reload IS the explicit re-execution
+	path.  Force the emitted class-def probes COLD for the duration of the
+	body re-run (a #match verdict left over from import would bind the
+	registered classes and skip the recompiles, making reload a no-op);
+	___canonicalSubclassOf: still reuses each class's IDENTITY, so the
+	re-run refreshes methods in place and persisted instances follow the
+	edit rather than stranding on an old class."
+	canonical := importlib @env0:___canonicalClassesEnabled___.
+	canonical ifTrue: [
+		srcHash := (importlib @env0:___sourceStringForPath___: path @env0:asString) @env0:sha1Sum.
+		stateMap := SessionTemps @env0:current @env0:at: #'GrailModuleHashState' otherwise: nil.
+		stateMap @env0:isNil ifTrue: [
+			stateMap := KeyValueDictionary @env0:new.
+			SessionTemps @env0:current @env0:at: #'GrailModuleHashState' put: stateMap].
+		stateMap @env0:at: name @env0:asSymbol put: #'stale'].
 	moduleAst := importlib @env0:astForPath: path @env0:asString.
 	moduleAst @env0:name: name.
 	moduleAst @env0:useTempsForBlock: false.
@@ -2192,6 +2271,16 @@ reload: aModule
 	instance so it stays the module's canonical object before re-running body."
 	(aModule @env0:class) @env0:___adoptInstance___: aModule.
 	aModule @env1:initialize.
+	"After a successful re-run: the current source is what the (same,
+	identity-preserved) instance now reflects -- update the committed hash
+	and registry entry in-transaction and mark the session verdict #match,
+	so subsequent class probes reuse the refreshed classes.  A body that
+	raised skipped this, leaving the verdict #stale (conservative: the next
+	load rebuilds)."
+	canonical ifTrue: [
+		importlib @env0:___canonicalModuleHashes___ @env0:at: name put: srcHash.
+		stateMap @env0:at: name @env0:asSymbol put: #'match'.
+		importlib @env0:___canonicalModules___ @env0:at: name put: aModule].
 	^ aModule
 %
 
