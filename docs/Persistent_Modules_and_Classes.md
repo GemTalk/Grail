@@ -111,6 +111,9 @@ import foo (runtime — NEVER commits):
   in-session sys.modules hit?            -> return it            (no work, no commit)
   committed artifact for foo present?
     and (source absent OR hash matches)? -> LOAD committed       (no parse/compile/commit)
+                                            (what LOAD means was revised by
+                                             §10: bind the committed module
+                                             instance; the body does NOT re-run)
     else (absent or hash mismatch)       -> BUILD in the CURRENT
                                             transaction (compile,
                                             register canonically);
@@ -333,15 +336,16 @@ class-scope `__persistent__` follow-up above.
 
 ## 8. Open questions / decisions to make
 
-- **Persistent-initializer semantics.** Run-once vs. re-run-with-guard; how to
-  guard so a body re-run (for transient state) does not re-commit persistent
-  slots. Candidate: emit persistent initializers only on the compile path, not
-  the warm-load path.
-- **Does the body re-run on a warm load at all?** If transient globals must be
-  rebuilt, the body (or a designated transient-init section) must run even on a
-  hash-match load. Simplest: always run the body for its transient effects, but
-  resolve `class`/`def` to canonical classes and skip persistent re-init.
-  (Matches CPython "body runs once per process" ≈ "once per session".)
+- **Persistent-initializer semantics.** ~~Run-once vs. re-run-with-guard~~ —
+  **ANSWERED by §10**: the body runs once per deployed source version, so
+  initializers cannot double-run; the §6.2 bind-or-capture store remains
+  valid for the cold path.
+- **Does the body re-run on a warm load at all?** — **ANSWERED by §10: NO.**
+  The "simplest" candidate here (run the body, resolve classes canonically)
+  was implemented (§9.1) and experimentally falsified (§10.1): reused code +
+  re-executed state is a hybrid with no consistent semantics. Transient
+  globals are the session tier, rebuilt by §10.4's mechanisms, not by a body
+  re-run.
 - **Source-hash granularity:** per-module vs. per-class.
 - **Redefinition / migration policy:** instVar shape changes, method removal,
   base-class changes; `migrateInstances:` vs. leaving old instances on the old
@@ -400,6 +404,8 @@ committed by import — they persist when the developer/deploy commits (§4.1).
 - **Warm module load**: on a hash match `loadModuleFromPath:` skips the parse
   and `___buildModuleClass:` entirely and reuses the committed module class;
   the body still runs for transient state (globals, sys.modules entry).
+  **Superseded by §10** — the body re-run is the incoherent hybrid; phase 5
+  replaces it with binding the committed module instance.
 - **Edit workflow**: a stale hash forces a rebuild in which
   `___canonicalSubclassOf:` **reuses the registered class's identity** (same
   parent) and the emitted compiles refresh its methods in place — so edits
@@ -415,7 +421,198 @@ committed by import — they persist when the developer/deploy commits (§4.1).
 - Regression: `tests/scripts/runCanonicalClassTest.gs` (cross-session reuse,
   flag-off default, edit-workflow identity+behavior refresh).
 
-## 10. Relationship to the annotations work
+## 10. Import semantics, revised: bind the committed module — do not re-run the body
+
+*(Added 2026-07-14, after the first real flag-on exercise. This section
+answers §8's open question — "does the body re-run on a warm load at all?" —
+with experimental evidence, and revises §2/§4/§9.1 accordingly. Nothing
+already landed is wasted; this changes what the warm path does with the
+module BODY, not the registry/hash/overlay machinery underneath.)*
+
+### 10.1 What the experiment showed
+
+The first consumer of the flag-on path was an attempt to reuse compiled
+classes across the test suite's forced re-imports (tests `removeKey:` a
+module from `sys.modules` to get fresh state). Result: the suite cannot
+reach green under the semantics §9.1 implemented — **reuse the code, re-run
+the body** — and the failures are structural, not bugs:
+
+- **Re-running definition-time wiring on a reused class corrupts it.**
+  `@dataclass` re-processed the canonical class against the *second* body
+  run's `MISSING` sentinel — a different object than the one the class was
+  built against — and died with `_MissingType has no attribute 'append'`.
+- **Not re-running it loses effects the body depends on.**
+  `enum.global_enum` injects member names into the module's globals *as a
+  side effect of the class statement*; with the statement skipped, the
+  body's later references die (`NameError: ALPHA`). Class-decorator side
+  effects (registrations, logging) likewise never fire again.
+
+Both placements were implemented and measured; each fixes one family and
+breaks the other. The contradiction is inherent: **reused code + re-executed
+state is a hybrid with no consistent semantics.** CPython is consistent
+because a re-import rebuilds *everything together*; a GemStone image is
+consistent because *nothing* re-runs. The middle is where all the breakage
+lives.
+
+**This is not a test-suite artifact.** The primary user scenario hits the
+same hybrid: session A imports a module and commits instances; session B's
+first `import` is a session-cache miss, so under §9.1 it re-runs the body
+while binding committed classes. Session B then sees exactly the failures
+above — a committed dataclass whose `MISSING` no longer matches, committed
+enum classes whose injected globals belong to a dead session, duplicated or
+missing registry registrations. **Users would hit the wall the first time
+persistence matters at all — their second session.**
+
+### 10.2 The revision: three tiers, and imports that bind
+
+§2's two-layer model was one tier short. A module body interleaves:
+
+| Tier | Examples | Treatment |
+|---|---|---|
+| **Code** | classes, functions, compiled methods | Canonical + committed (as landed, §5/§9.1) |
+| **Persistent state** | singletons (`MISSING`), registries, constants, `__persistent__` globals | Committed **with the module instance** — created once, per deployed source version |
+| **Session state** | sockets, `GsFile`/`Transcript` handles, C pointers, `os.environ` snapshots | Re-initialized per session, never committed |
+
+The consequence for import — replacing §4's "LOAD committed (reconstruct
+session-local state)" and §9.1's "the body still runs for transient state":
+
+```
+import foo (runtime — NEVER commits):
+  in-session sys.modules hit?             -> return it (unchanged)
+  COMMITTED module INSTANCE for foo,
+    and (source absent OR hash matches)?  -> BIND it: register in sys.modules,
+                                             run session re-init (§10.4).
+                                             The body does NOT re-run.
+    else (absent or hash mismatch)        -> COLD: parse, compile, run the
+                                             body once, register classes AND
+                                             the module instance canonically —
+                                             all in the current transaction,
+                                             no auto-commit (§4.1 unchanged)
+
+importlib.reload(foo)                     -> always COLD (explicit re-execution;
+                                             this is where "run the body again"
+                                             semantics live, exactly as in
+                                             CPython, where a plain re-import
+                                             of a cached module doesn't re-run
+                                             either)
+```
+
+The module body runs **once per deployed source version**, not once per
+session. Everything the body created — the `MISSING` singleton, injected
+enum globals, decorator side effects on module state — is *in* the committed
+module instance, so binding it is consistent by construction: the classes
+and the state they captured are the same objects.
+
+This is honest to Python, not a departure from it: `import` of an
+already-loaded module never re-executes in CPython either. We widen
+"already loaded" from *this process* to *this repository*, which is
+precisely the image model — and the pitch of the whole feature.
+
+### 10.3 What §9.1's landed mechanism keeps / changes
+
+- **Keeps:** the canonical registry, source hashing, identity-reuse on
+  stale-source rebuild, the class-attr overlay (§7), `import` never commits
+  (§4.1 — a repository with no committed module instance simply always takes
+  the COLD path; sessions that never commit get consistent CPython-style
+  semantics throughout).
+- **Changes:** the warm path binds the committed module *instance* instead
+  of minting a fresh instance and re-running `initialize`. The per-classdef
+  probe/guard emit becomes a cold-path-only concern (on the warm path the
+  class bindings are already in the committed instance's globals; the guard
+  remains for mixed cases such as a cold body probing classes an earlier
+  deploy committed).
+- **Changes:** `Cls.__module__` reachability. §9.1 deliberately made
+  `__module__` a string so a committed class would not drag its session's
+  module-globals graph into a commit. Under §10.2 the module instance is
+  *meant* to commit — but only at the developer's/deploy's boundary, and the
+  session-state tier (§10.4) must be excluded from what that commit sweeps.
+
+### 10.4 The open design problem: the session tier
+
+Some module globals are wrong or dead in any later session: open sockets and
+files, `Transcript`/`GsFile` handles (see the committed-Transcript gotcha),
+boxed C pointers (the committed-`SrePattern` NULL-`CPointer` regression is
+this bug class), `os.environ` snapshots, clocks/seeds. Python bodies
+interleave these with persistent state, and arbitrary code cannot be sliced
+automatically. Candidate mechanisms (not mutually exclusive):
+
+1. **Explicit session hook** — a module-level `def __session_init__():`
+   convention, run on first touch of the module per session (the analog of a
+   GemStone session-init hook; developers already know this pattern from
+   SessionTemps). Explicit, auditable, matches `__persistent__` in spirit:
+   the developer declares, Grail obeys.
+2. **Lazy fault-in re-init** — names listed in a `__transient__ = [...]`
+   marker read through a per-session shim: first read per session runs a
+   registered initializer (or re-raises a clean error if none). Classic
+   GemStone idiom (deoptimized `isNil` re-init), more machinery.
+3. **Vendored-stdlib audit** — the bounded, practical part: the stdlib
+   modules Grail ships are patched once (by us) with hooks from (1)/(2)
+   where they snapshot process state. User code gets documentation plus the
+   same tools.
+
+Recommendation: (1) + (3) first — explicit and cheap — with (2) as a
+follow-up if real code shows fault-prone patterns that a hook can't reach.
+
+A related exclusion problem: the deploy commit must not sweep session-tier
+values reachable from the module instance at commit time (a socket sitting
+in a global at deploy time). Candidate: `__session_init__`-owned names are
+stored in SessionTemps-backed storage, not on the module instance proper —
+i.e., the §6.3 storage split, inverted (persistent is the default, marked
+names are transient).
+
+### 10.5 Divergences to document (and their CPython mapping)
+
+- **"Fresh state per forced re-import" is spelled `reload()`.** `del
+  sys.modules[m]; import m` binds the committed instance rather than
+  re-executing. Code (and tests) that want re-execution ask for it
+  explicitly. This is the one place existing Python instincts must adjust,
+  and it is the *same* adjustment CPython demands between "import again"
+  and "actually re-run".
+- **Module-body side effects happen at deploy time, not per process.** Print
+  statements, network calls, registrations against *other* modules — once
+  per deployed version.
+- **Class identity across redefinition** (already landed, §9.1): a stale
+  rebuild refreshes methods in place rather than minting a divergent class,
+  so persisted instances follow edits; `RuntimeClassCreation`-style
+  same-body redefinition keeps CPython behavior because it happens within
+  one cold execution.
+
+### 10.6 Acceptance test (the missing one)
+
+The suite never encoded the user story; this is the gate the flag must pass
+before it can ever default on (shape mirrors `runCanonicalClassTest.gs`):
+
+- **Session A** (flag on): import a fixture using `@dataclass` (with
+  `field(default_factory=...)`), an enum under `@enum.global_enum`, and a
+  module-level registry populated by a class decorator; create instances;
+  commit via `gemstone.system.commit()`.
+- **Session B** (fresh login, flag on): `import` the same module. Assert:
+  the committed dataclass instance still round-trips (`asdict`, default
+  detection — the `MISSING` identity check); `isinstance` holds against the
+  imported classes; the injected enum globals resolve; the registry has
+  exactly one registration; a *new* dataclass instance created in B behaves
+  identically to A's.
+- **Session B, edit case:** change the fixture source; import → cold rebuild
+  in-transaction, committed instances still answer refreshed behavior
+  (§9.1's identity reuse), nothing auto-commits.
+
+### 10.7 Rollout (continues §9)
+
+5. **Warm-bind the committed module instance** (replaces the §9.1 warm body
+   re-run): commit the module instance at deploy/developer commit; on warm
+   import, bind + `sys.modules` register, skip `initialize`. Gate: §10.6
+   session-A/B test plus the full suite flag-off unchanged.
+6. **Session tier:** `__session_init__` hook + SessionTemps-backed storage
+   for its names; audit vendored stdlib for process-state snapshots.
+7. **`reload()` as the explicit cold path** (today's cold machinery,
+   repointed), including re-register + hash update.
+8. **Concurrency polish:** two sessions cold-importing the same new module
+   and both committing → registry write-write conflict; resolve by
+   retry-with-probe (first commit wins, loser rebinds). Document extent
+   growth: deploying an app commits its imported closure (the image model's
+   cost, and its point).
+
+## 11. Relationship to the annotations work
 
 Function/method/class `__annotations__` already sit on the **code layer**
 (class-side instVars and compiled class-side methods; module-function
