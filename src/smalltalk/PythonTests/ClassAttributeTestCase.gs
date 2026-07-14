@@ -176,3 +176,37 @@ testTwoClassesGetSeparateStorage
 	self assert: (testModule @env1:___pyAttrLoad___: #box_tag) equals: 'box-tag'.
 	self assert: (testModule @env1:___pyAttrLoad___: #other_tag) equals: 'other-tag'.
 %
+
+! --- cls.__dict__ ---
+
+category: 'Grail-Tests - Class __dict__'
+method: ClassAttributeTestCase
+testClassDictReadsOwnAttrs
+	"cls.__dict__ is a dict of the class's OWN attributes: class-body
+	data attrs read as values, methods appear under their Python names,
+	and Grail machinery (dynInstVars, ___...___ selectors) does not
+	leak in.  Regresses the PythonInstance instance-__dict__ shadowing
+	bug: a CLASS access used to answer an UnboundMethod wrapping the
+	per-instance view (test_enum's member_dir then died on .items())."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #dict_x) equals: 7.
+	self assert: (testModule @env1:___pyAttrLoad___: #dict_names) equals: 'X|method_a'.
+%
+
+category: 'Grail-Tests - Class __dict__'
+method: ClassAttributeTestCase
+testClassDictSeesSetattr
+	"A post-definition setattr(cls, ...) store (dynInstVars-backed)
+	shows up in a subsequent cls.__dict__ snapshot."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #dict_after_setattr) equals: 9.
+%
+
+category: 'Grail-Tests - Class __dict__'
+method: ClassAttributeTestCase
+testInstanceDictUnaffectedByClassDict
+	"instance.__dict__ keeps its live per-instance view -- the class
+	__dict__ special-case triggers only for Behavior receivers."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #inst_dict_y) equals: 5.
+%

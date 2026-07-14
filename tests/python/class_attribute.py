@@ -82,3 +82,24 @@ Box.tag = 'box-tag'
 Other.tag = 'other-tag'
 box_tag = Box.tag
 other_tag = Other.tag
+
+
+# --- cls.__dict__: snapshot of the class's OWN attributes ---
+# CPython hands back a mappingproxy of the class dict; Grail answers a
+# snapshot dict unioning class-body data attrs, methods (as unbound
+# functions), and setattr(cls, ...) stores.  Grail machinery
+# (___...___ selectors, dynInstVars) must NOT leak in.
+class DictHolder:
+    X = 7
+
+    def method_a(self):
+        return 1
+
+
+dict_x = DictHolder.__dict__['X']                                     # 7
+dict_names = '|'.join(sorted(k for k in DictHolder.__dict__ if k[0] != '_'))  # 'X|method_a'
+DictHolder.later = 9
+dict_after_setattr = DictHolder.__dict__['later']                     # 9
+_inst = DictHolder()
+_inst.y = 5
+inst_dict_y = _inst.__dict__['y']                                     # 5 (instance view still live)

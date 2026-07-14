@@ -645,6 +645,86 @@ ___classAttrOverlayRemove___: aClass name: aSym
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___classDict___
+	"Python ``cls.__dict__`` (receiver is a CLASS -- dispatched from the
+	Behavior branch of ___pyAttrLoad___).  A SNAPSHOT KeyValueDictionary of
+	the class's OWN attributes; callers that want inherited names walk
+	``mro()`` and union, exactly as CPython code does over the real
+	per-class mappingproxy.  Union of:
+	  (a) the per-class dynamic-attr holder (enum members, class-body-if
+	      stores, setattr(cls, ...) fallbacks),
+	  (b) metaclass OWN accessor-pair class attributes (class-body
+	      ``X = 1'' data) plus other metaclass OWN methods (@classmethod
+	      defs) as UnboundMethod wrappers,
+	  (c) the class's OWN env-1 instance methods (Python functions live in
+	      the class dict) as UnboundMethod wrappers -- arity variants
+	      collapse to the base Python name,
+	  (d) session-local canonical-class overlay entries (runtime
+	      ``Cls.x = v'' stores; flag-on only), which shadow (a)-(c).
+	Grail-internal ``___...___'' selectors are excluded.  Data values that
+	read as Smalltalk nil are ABSENT (project convention) and skipped."
+
+	| d holder pairs imd cmd addSel |
+	d := KeyValueDictionary @env0:new.
+	"(c)/(b) shared: collapse a selector to its Python name and store an
+	UnboundMethod wrapper unless a data value already claimed the name."
+	addSel := [:sel :defCls |
+		| nm |
+		nm := sel @env0:asString.
+		(nm @env0:includes: $:) ifTrue: [
+			nm := nm @env0:copyFrom: 1 to: (nm @env0:indexOf: $:) @env0:- 1].
+		(((nm @env0:size) @env0:> 0)
+			and: [(nm @env0:copyFrom: 1 to: (3 @env0:min: nm @env0:size)) @env0:~= '___'
+			and: [nm @env0:~= 'dynInstVars'
+			and: [(d @env0:includesKey: nm) @env0:not]]]) ifTrue: [
+			d @env0:at: nm put:
+				(UnboundMethod @env1:definingClass: defCls selector: nm @env0:asSymbol)]].
+	"(c) own instance-side methods."
+	imd := [self @env0:methodDictForEnv: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
+	imd @env0:== nil ifFalse: [
+		imd @env0:keys @env0:do: [:sel | addSel @env0:value: sel value: self]].
+	"(b) metaclass own: accessor PAIRS read as data; the rest wrap."
+	cmd := [self @env0:class @env0:methodDictForEnv: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
+	cmd @env0:== nil ifFalse: [
+		cmd @env0:keys @env0:do: [:sel |
+			| nm setter v |
+			nm := sel @env0:asString.
+			((nm @env0:includes: $:) @env0:not
+				and: [nm @env0:~= 'dynInstVars']) ifTrue: [
+				setter := (nm @env0:, ':') @env0:asSymbol.
+				(cmd @env0:includesKey: setter)
+					ifTrue: [
+						v := [self @env0:perform: sel env: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
+						v @env0:== nil ifFalse: [d @env0:at: nm put: v]]
+					ifFalse: [addSel @env0:value: sel value: self @env0:class]]]].
+	"(a) per-class dynamic attrs: data ALWAYS wins over a same-named
+	method wrap (enum members shadow their accessor machinery).
+	dynamicInstVarPairs answers a FLAT alternating array and raises on a
+	never-stored holder -- guard and iterate by 2."
+	((self @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) @env0:~~ nil) ifTrue: [
+		holder := [self @env0:perform: #dynInstVars env: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
+		holder @env0:== nil ifFalse: [
+			pairs := [holder @env0:dynamicInstVarPairs] @env0:on: AbstractException do: [:e | e @env0:return: #()].
+			1 @env0:to: pairs @env0:size @env0:- 1 by: 2 do: [:i |
+				| v |
+				v := pairs @env0:at: i @env0:+ 1.
+				v @env0:== nil ifFalse: [
+					d @env0:at: (pairs @env0:at: i) @env0:asString put: v]]]].
+	"(d) session-local overlay entries shadow everything (last setattr
+	wins; flag-on only, so the common case adds nothing)."
+	[ | ov inner |
+	ov := SessionTemps @env0:current @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+	ov @env0:== nil ifFalse: [
+		inner := ov @env0:at: self otherwise: nil.
+		inner @env0:== nil ifFalse: [
+			inner @env0:keysAndValuesDo: [:k :v |
+				v @env0:== nil ifFalse: [d @env0:at: k @env0:asString put: v]]]] ]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	^ d
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___classCell___: aSym
 	"Closure-cell read for class-method bodies: the value of an
 	enclosing-function local captured at class-DEFINITION time into
@@ -979,6 +1059,15 @@ ___pyAttrLoad___: aSym
 		((s @env0:= '__name__' or: [s @env0:= '__module__' or: [s @env0:= '__qualname__' or: [s @env0:= '__mro__' or: [s @env0:= '__base__' or: [s @env0:= '__bases__']]]]])
 			and: [(self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil])
 				ifTrue: [^ self @env0:perform: aSym env: 1].
+		"Python ``cls.__dict__``: the class's OWN attribute dict.  MUST
+		precede the unbound-method wrap below -- PythonInstance defines an
+		instance-side __dict__ (the live per-instance view), so a CLASS
+		access used to wrap THAT as an UnboundMethod instead of answering
+		the class dict (test_enum's member_dir iterates
+		``cls.__dict__.items()`` over the mro; test_gnv_is_static indexes
+		it).  CPython hands back a read-only mappingproxy; a snapshot
+		dict covers the introspection uses."
+		aSym == #'__dict__' ifTrue: [^ self @env1:___classDict___].
 		"Canonical-class overlay: a runtime ``Cls.x = v'' store landed
 		session-locally (see ___pyAttrStore___) and must SHADOW the
 		committed class-body value / compiled method on read -- CPython's
