@@ -1028,6 +1028,18 @@ def _enum_protocol_results():
     out['flag_if_member'] = ([m.name for m in CondF],
                              repr(CondF.both),
                              CondF['both'] is CondF(3))
+
+    # ``dupe = third`` binds both names to the SAME auto() marker -> dupe
+    # is an ALIAS of third (value 3), not a fresh auto-incremented member.
+    class AliasE(Enum):
+        first = auto()
+        second = auto()
+        third = auto()
+        dupe = third
+
+    out['auto_alias'] = ([(m.name, m.value) for m in AliasE],
+                         AliasE.dupe is AliasE.third,
+                         repr(AliasE.dupe))
     return out
 
 

@@ -1125,7 +1125,11 @@ testEnumMetaclassProtocol
 	the member build: ``if True: both = 3`` becomes a NAMED composite
 	alias (excluded from iteration, named repr, lookup identity)."
 	self assert: (r @env1:__getitem__: 'flag_if_member') @env1:__repr__
-		equals: '([''a'', ''b''], ''<CondF.both: 3>'', True)'
+		equals: '([''a'', ''b''], ''<CondF.both: 3>'', True)'.
+	"``dupe = third`` aliases third (same auto() marker resolved once by
+	identity): dupe excluded from iteration, is third, repr shows third."
+	self assert: (r @env1:__getitem__: 'auto_alias') @env1:__repr__
+		equals: '([(''first'', 1), (''second'', 2), (''third'', 3)], True, ''<AliasE.third: 3>'')'
 %
 
 category: 'Grail-Tests - canonical classes'

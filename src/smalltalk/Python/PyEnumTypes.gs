@@ -140,7 +140,7 @@ ___grailBuildMembers: cls names: attrNames
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members lastInt allNames dynHolder |
+	| byValue byName members lastInt allNames dynHolder autoResolved |
 	"Names assigned under a class-body ``if`` (the shared test fixture's
 	``if issubclass(...): dupe = 3'') never reach classBodyAttributes --
 	their stores go through ___pyAttrStore___ into the per-class
@@ -192,6 +192,12 @@ ___grailBuildMembers: cls names: attrNames
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
 	lastInt := 0.
+	"auto() markers resolve ONCE per instance: ``third = auto(); dupe =
+	third`` binds both names to the SAME marker object, so dupe must reuse
+	third's resolved value (-> alias), not advance the counter again
+	(CPython _EnumDict semantics).  Identity-keyed so distinct auto() calls
+	stay distinct."
+	autoResolved := IdentityKeyValueDictionary @env0:new.
 	allNames @env0:do: [:nameSym | | nameStr hasAccessor |
 		nameStr := nameSym @env0:asString.
 		((nameStr @env0:size @env0:> 0) and: [(nameStr @env0:at: 1) @env0:= $_]) ifFalse: [
@@ -209,11 +215,16 @@ ___grailBuildMembers: cls names: attrNames
 			next auto value is the next power of two ABOVE the last
 			(CPython Flag._generate_next_value_)."
 			(rawValue @env0:isKindOf: GrailEnumAuto) ifTrue: [
-				rawValue := (Enum ___grailIsFlagClass: cls)
-					ifTrue: [lastInt @env0:<= 0
-						ifTrue: [1]
-						ifFalse: [1 @env0:bitShift: lastInt @env0:highBit]]
-					ifFalse: [lastInt @env0:+ 1]].
+				(autoResolved @env0:includesKey: rawValue)
+					ifTrue: [rawValue := autoResolved @env0:at: rawValue]
+					ifFalse: [ | resolved |
+						resolved := (Enum ___grailIsFlagClass: cls)
+							ifTrue: [lastInt @env0:<= 0
+								ifTrue: [1]
+								ifFalse: [1 @env0:bitShift: lastInt @env0:highBit]]
+							ifFalse: [lastInt @env0:+ 1].
+						autoResolved @env0:at: rawValue put: resolved.
+						rawValue := resolved]].
 			(rawValue @env0:isKindOf: Integer) ifTrue: [lastInt := rawValue].
 			(byValue @env0:includesKey: rawValue)
 				ifTrue: [member := byValue @env0:at: rawValue]
