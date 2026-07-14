@@ -1132,7 +1132,10 @@ testEnumMetaclassProtocol
 		equals: '([(''first'', 1), (''second'', 2), (''third'', 3)], True, ''<AliasE.third: 3>'')'.
 	"Member format: pure Enum/Flag member formats as its str."
 	self assert: (r @env1:__getitem__: 'member_format') @env1:__repr__
-		equals: '(''Color.RED'', ''Perm.R'', ''Color.RED'')'
+		equals: '(''Color.RED'', ''Perm.R'', ''Color.RED'')'.
+	"IntEnum member str/format as int value (ReprEnum); repr enum-style."
+	self assert: (r @env1:__getitem__: 'intenum_str') @env1:__repr__
+		equals: '(''7'', ''<Sz.BIG: 7>'', ''7'', ''0007'', True)'
 %
 
 category: 'Grail-Tests - canonical classes'

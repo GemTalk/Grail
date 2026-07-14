@@ -1046,6 +1046,15 @@ def _enum_protocol_results():
     # the 3.11 ReprEnum behavior -- is a separate gap, not covered here.)
     out['member_format'] = (format(Color.RED), format(Perm.R),
                             format(Color.RED, ''))
+
+    # IntEnum members str/format as their INT VALUE (CPython 3.11 ReprEnum);
+    # repr stays enum-style.
+    from enum import IntEnum
+    class Sz(IntEnum):
+        BIG = 7
+    out['intenum_str'] = (str(Sz.BIG), repr(Sz.BIG),
+                          format(Sz.BIG), format(Sz.BIG, '04d'),
+                          int(Sz.BIG) == 7)
     return out
 
 

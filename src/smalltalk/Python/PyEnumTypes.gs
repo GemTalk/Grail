@@ -1104,8 +1104,22 @@ __repr__
 category: 'Grail-Enum Member'
 method: IntEnum
 __str__
-	^ self @env0:class @env0:name @env0:asString @env0:, '.' @env0:,
-		(self @env0:dynamicInstVarAt: #name)
+	"CPython 3.11+ (ReprEnum): IntEnum / IntFlag members str as their INT
+	VALUE, not <Class.name> -- str(Size.BIG) is '7'.  repr stays
+	enum-style (<Size.BIG: 7>, above).  IntFlag < IntEnum inherits this,
+	which is correct (str(anIntFlag) is its int too)."
+
+	^ (self @env0:value) @env1:__str__
+%
+
+category: 'Grail-Enum Member'
+method: IntEnum
+__format__: aSpec
+	"IntEnum / IntFlag members format as their int value (ReprEnum), so a
+	numeric spec (format(Size.BIG, 'd')) works and an empty spec yields the
+	int str -- delegate to the int value's __format__."
+
+	^ (self @env0:value) @env1:__format__: aSpec
 %
 
 set compile_env: 0
