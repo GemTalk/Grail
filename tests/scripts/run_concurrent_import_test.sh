@@ -50,6 +50,7 @@ PID_B=$!
 wait "$PID_A" || EXIT=$?
 wait "$PID_B" || EXIT=$?
 grep -h "commit ->" "$SYNC"/worker_*.out 2>/dev/null
+grep -hA6 "conflicts (informational):" "$SYNC"/worker_*.out 2>/dev/null
 
 if [ "$EXIT" -ne 0 ]; then
   echo "concurrent-import: a worker FAILED"

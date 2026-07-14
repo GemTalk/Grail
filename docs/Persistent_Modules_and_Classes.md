@@ -729,14 +729,16 @@ before it can ever default on (shape mirrors `runCanonicalClassTest.gs`):
 
    - The RC registries themselves **merge** (they appear in the loser's
      RcReadSet, resolved by replay — the design working as intended).
-   - The commit still conflicts on two **residual** shared structures:
-     `CallAst class` (codegen keeps compile-state in class instVars of a
-     committed class — dirtied by ANY Python compile, so any two sessions
-     that each compiled Python and both commit collide, flag-off
-     included; migrating that state to SessionTemps is the outstanding
-     item the session-state refactor deferred) and `PythonModules` (a
-     plain SymbolDictionary both sessions add module classes to; it must
-     stay a SymbolDictionary for name resolution).
+   - The commit initially conflicted on two **residual** shared
+     structures. `CallAst class` — codegen kept compile-state in class
+     instVars of a committed class, dirtied by ANY Python compile, so any
+     two sessions that each compiled Python and both commit collided,
+     flag-off included — is **FIXED** (2026-07-15): all 19 compile-context
+     class instVars moved to a SessionTemps-backed store
+     (`CallAst ___compileContext___`, the item the session-state refactor
+     had deferred); the interleaved test's conflict dump now shows only
+     `PythonModules` (a plain SymbolDictionary both sessions add module
+     classes to; it must stay a SymbolDictionary for name resolution).
    - So the protocol is the classic GemStone one, exactly as this phase
      originally sketched: **first commit wins; the loser aborts (its view
      refreshes past the winner), re-imports, re-commits — and succeeds.**

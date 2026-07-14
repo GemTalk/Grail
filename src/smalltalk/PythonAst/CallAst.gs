@@ -9,18 +9,7 @@ doit
 ExpressionAst subclass: 'CallAst'
   instVarNames: #( function arguments keywords)
   classVars: #()
-  classInstVars: #('moduleClassBeingCompiled' 'moduleFunctionNames'
-                    'moduleVariableNames'
-                    'classBeingCompiled'
-                    'classFunctionNames' 'classVarargsFunctionNames'
-                    'classStaticFunctionNames' 'inBasesEmit'
-                    'classDefIsModuleScope'
-                    'classAttrNames' 'classSlotNames' 'selfParameterName'
-                    'selfParameterRebound'
-                    'returnEmitMode' 'inClassBodyValueEmit'
-                    'classBodyBoundNames' 'classNestedClassNames'
-                    'classCapturedNames'
-                    'functionBeingCompiled')
+  classInstVars: #()
   poolDictionaries: #()
   inDictionary: PythonAst
   options: #()
@@ -1148,14 +1137,37 @@ printBareCallClassNewOn: aStream selector: aSelector
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
+___compileContext___
+	"SESSION-LOCAL storage backing every compile-context accessor below.
+	These were class instVars, but CallAst is a COMMITTED class: writing
+	its class instVars during ANY module compile dirtied the class object
+	in the session's transaction, so any two sessions that each compiled
+	some Python and later committed -- unrelated application data, the
+	canonical flag irrelevant -- took a write-write commit conflict on
+	``CallAst class`` (measured by tests/scripts/
+	run_concurrent_import_test.sh; the session-state refactor had
+	deferred exactly this).  Compile context is inherently per-session:
+	it is set and cleared around each compile and never belongs in the
+	committed graph."
+
+	| ctx |
+	ctx := SessionTemps current at: #'GrailCompileContext' otherwise: nil.
+	ctx isNil ifTrue: [
+		ctx := KeyValueDictionary new.
+		SessionTemps current at: #'GrailCompileContext' put: ctx].
+	^ ctx
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
 moduleClassBeingCompiled
-	^ moduleClassBeingCompiled
+	^ self ___compileContext___ at: #'moduleClassBeingCompiled' otherwise: nil
 %
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
 moduleClassBeingCompiled: aClassOrNil
-	moduleClassBeingCompiled := aClassOrNil
+	self ___compileContext___ at: #'moduleClassBeingCompiled' put: aClassOrNil
 %
 
 category: 'Grail-Module Compile Context'
@@ -1165,25 +1177,25 @@ functionBeingCompiled
 	module body scope).  Set/restored by FunctionDefAst >> printBodyOn:
 	so nested defs see their own scope.  Used by the locals() rewrite."
 
-	^ functionBeingCompiled
+	^ self ___compileContext___ at: #'functionBeingCompiled' otherwise: nil
 %
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
 functionBeingCompiled: aFunctionDefAstOrNil
-	functionBeingCompiled := aFunctionDefAstOrNil
+	self ___compileContext___ at: #'functionBeingCompiled' put: aFunctionDefAstOrNil
 %
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
 moduleFunctionNames
-	^ moduleFunctionNames
+	^ self ___compileContext___ at: #'moduleFunctionNames' otherwise: nil
 %
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
 moduleFunctionNames: aSetOrNil
-	moduleFunctionNames := aSetOrNil
+	self ___compileContext___ at: #'moduleFunctionNames' put: aSetOrNil
 %
 
 category: 'Grail-Module Compile Context'
@@ -1195,13 +1207,13 @@ moduleVariableNames
 	module-scope names (route through dynamicInstVarAt:) from
 	function-local names (emit bare identifier as a Smalltalk temp)."
 
-	^ moduleVariableNames
+	^ self ___compileContext___ at: #'moduleVariableNames' otherwise: nil
 %
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
 moduleVariableNames: aSetOrNil
-	moduleVariableNames := aSetOrNil
+	self ___compileContext___ at: #'moduleVariableNames' put: aSetOrNil
 %
 
 category: 'Grail-Module Compile Context'
@@ -1229,13 +1241,13 @@ returnEmitMode
 	behaviour for eval/exec doits and any caller that doesn't push
 	a mode before invoking ReturnAst codegen."
 
-	^ returnEmitMode
+	^ self ___compileContext___ at: #'returnEmitMode' otherwise: nil
 %
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
 returnEmitMode: aSymbolOrNil
-	returnEmitMode := aSymbolOrNil
+	self ___compileContext___ at: #'returnEmitMode' put: aSymbolOrNil
 %
 
 ! ===============================================================================
@@ -1245,25 +1257,25 @@ returnEmitMode: aSymbolOrNil
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classBeingCompiled
-	^ classBeingCompiled
+	^ self ___compileContext___ at: #'classBeingCompiled' otherwise: nil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classBeingCompiled: aClassOrNil
-	classBeingCompiled := aClassOrNil
+	self ___compileContext___ at: #'classBeingCompiled' put: aClassOrNil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classFunctionNames
-	^ classFunctionNames
+	^ self ___compileContext___ at: #'classFunctionNames' otherwise: nil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 inBasesEmit
-	^ inBasesEmit
+	^ self ___compileContext___ at: #'inBasesEmit' otherwise: nil
 %
 
 category: 'Grail-Class Compile Context'
@@ -1277,37 +1289,37 @@ classDefIsModuleScope
 	the class object (see CallAst>>printSmalltalkOn:).  nil (the
 	default) means ``not compiling a class'' and reads as module-scope
 	for the existing path."
-	^ classDefIsModuleScope
+	^ self ___compileContext___ at: #'classDefIsModuleScope' otherwise: nil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classDefIsModuleScope: aBooleanOrNil
-	classDefIsModuleScope := aBooleanOrNil
+	self ___compileContext___ at: #'classDefIsModuleScope' put: aBooleanOrNil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 inBasesEmit: aBooleanOrNil
-	inBasesEmit := aBooleanOrNil
+	self ___compileContext___ at: #'inBasesEmit' put: aBooleanOrNil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classStaticFunctionNames
-	^ classStaticFunctionNames
+	^ self ___compileContext___ at: #'classStaticFunctionNames' otherwise: nil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classStaticFunctionNames: aSetOrNil
-	classStaticFunctionNames := aSetOrNil
+	self ___compileContext___ at: #'classStaticFunctionNames' put: aSetOrNil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classFunctionNames: aSetOrNil
-	classFunctionNames := aSetOrNil
+	self ___compileContext___ at: #'classFunctionNames' put: aSetOrNil
 %
 
 category: 'Grail-Class Compile Context'
@@ -1320,13 +1332,13 @@ classBodyBoundNames
 	``validators'' MODULE when the class's ``def validators'' appears
 	later (django's db.models Field).  nil outside the value emit."
 
-	^ classBodyBoundNames
+	^ self ___compileContext___ at: #'classBodyBoundNames' otherwise: nil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classBodyBoundNames: aSetOrNil
-	classBodyBoundNames := aSetOrNil
+	self ___compileContext___ at: #'classBodyBoundNames' put: aSetOrNil
 %
 
 category: 'Grail-Class Compile Context'
@@ -1337,20 +1349,20 @@ classCapturedNames
 	___classCell___ reads; ClassDefAst emits the definition-time
 	stores.  nil outside a class compile."
 
-	^ classCapturedNames
+	^ self ___compileContext___ at: #'classCapturedNames' otherwise: nil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classCapturedNames: aSetOrNil
-	classCapturedNames := aSetOrNil
+	self ___compileContext___ at: #'classCapturedNames' put: aSetOrNil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 addCapturedClassName: aSymbol
-	classCapturedNames == nil ifTrue: [classCapturedNames := IdentitySet new].
-	classCapturedNames add: aSymbol asSymbol
+	self classCapturedNames == nil ifTrue: [self classCapturedNames: IdentitySet new].
+	self classCapturedNames add: aSymbol asSymbol
 %
 
 category: 'Grail-Class Compile Context'
@@ -1361,13 +1373,13 @@ classNestedClassNames
 	accessor pair), so NameAst's prior-class-attr branch must read
 	them via ___dynamicClassAttr___ rather than the accessor send."
 
-	^ classNestedClassNames
+	^ self ___compileContext___ at: #'classNestedClassNames' otherwise: nil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classNestedClassNames: aSetOrNil
-	classNestedClassNames := aSetOrNil
+	self ___compileContext___ at: #'classNestedClassNames' put: aSetOrNil
 %
 
 category: 'Grail-Class Compile Context'
@@ -1381,13 +1393,13 @@ inClassBodyValueEmit
 	BoundMethod (class body — yes) or fall through to module-scope
 	lookup (method body — no, matching Python's LEGB-skips-class)."
 
-	^ inClassBodyValueEmit == true
+	^ (self ___compileContext___ at: #'inClassBodyValueEmit' otherwise: nil) == true
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 inClassBodyValueEmit: aBoolean
-	inClassBodyValueEmit := aBoolean
+	self ___compileContext___ at: #'inClassBodyValueEmit' put: aBoolean
 %
 
 category: 'Grail-Class Compile Context'
@@ -1397,13 +1409,13 @@ classVarargsFunctionNames
 	`_name:kw:` varargs form (defs with *args / **kwargs / defaults).
 	classSelfSendSelector consults this so it doesn't emit a
 	fixed-arity send for a method that only has the varargs entry."
-	^ classVarargsFunctionNames
+	^ self ___compileContext___ at: #'classVarargsFunctionNames' otherwise: nil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classVarargsFunctionNames: aSetOrNil
-	classVarargsFunctionNames := aSetOrNil
+	self ___compileContext___ at: #'classVarargsFunctionNames' put: aSetOrNil
 %
 
 category: 'Grail-Class Compile Context'
@@ -1428,13 +1440,13 @@ classAttrNames
 	body declaration), and the AttributeAst class-instvar-fast-path
 	would read a nil instance slot instead of the class-side default."
 
-	^ classAttrNames
+	^ self ___compileContext___ at: #'classAttrNames' otherwise: nil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classAttrNames: aSetOrNil
-	classAttrNames := aSetOrNil
+	self ___compileContext___ at: #'classAttrNames' put: aSetOrNil
 %
 
 category: 'Grail-Class Compile Context'
@@ -1447,37 +1459,37 @@ classSlotNames
 	access (Python __slots__ → GemStone instVar), bypassing the generic
 	attribute-resolution chain.  nil outside a class-body compile."
 
-	^ classSlotNames
+	^ self ___compileContext___ at: #'classSlotNames' otherwise: nil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classSlotNames: aSetOrNil
-	classSlotNames := aSetOrNil
+	self ___compileContext___ at: #'classSlotNames' put: aSetOrNil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 selfParameterName
-	^ selfParameterName
+	^ self ___compileContext___ at: #'selfParameterName' otherwise: nil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 selfParameterName: aSymbolOrNil
-	selfParameterName := aSymbolOrNil
+	self ___compileContext___ at: #'selfParameterName' put: aSymbolOrNil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 isInClassMethodContext
-	^ classBeingCompiled notNil
+	^ self classBeingCompiled notNil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 selfParameterRebound
-	^ selfParameterRebound == true
+	^ (self ___compileContext___ at: #'selfParameterRebound' otherwise: nil) == true
 %
 
 category: 'Grail-Class Compile Context'
@@ -1492,15 +1504,15 @@ selfParameterRebound: aBooleanOrNil
 	(instVar read/store, self-send) degrades to the generic object
 	paths, which is exactly the semantics of a rebound local."
 
-	selfParameterRebound := aBooleanOrNil
+	self ___compileContext___ at: #'selfParameterRebound' put: aBooleanOrNil
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 isSelfReference: aSymbol
-	^ classBeingCompiled notNil
-		and: [aSymbol == selfParameterName
-		and: [selfParameterRebound ~~ true]]
+	^ self classBeingCompiled notNil
+		and: [aSymbol == self selfParameterName
+		and: [self selfParameterRebound ~~ true]]
 %
 
 category: 'Grail-Class Self-Send'
