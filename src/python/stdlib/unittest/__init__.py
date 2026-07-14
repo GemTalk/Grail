@@ -309,6 +309,15 @@ class TestCase:
         if member in container:
             self._failWith(msg, repr(member) + " unexpectedly found in " + repr(container))
 
+    def assertHasAttr(self, obj, name, msg=None):
+        # Python 3.14 addition (test_enum et al. use it).
+        if not hasattr(obj, name):
+            self._failWith(msg, repr(obj) + " has no attribute " + repr(name))
+
+    def assertNotHasAttr(self, obj, name, msg=None):
+        if hasattr(obj, name):
+            self._failWith(msg, repr(obj) + " unexpectedly has attribute " + repr(name))
+
     def assertIsInstance(self, obj, cls, msg=None):
         if not isinstance(obj, cls):
             self._failWith(msg, repr(obj) + " is not an instance of " + repr(cls))

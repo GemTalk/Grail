@@ -951,3 +951,59 @@ def _abc_results():
 
 
 ABC_RESULT = _abc_results()
+
+
+def _enum_protocol_results():
+    # Enum metaclass/member protocol round: class-side repr/str/format and
+    # truthiness, internals API, reversed iteration, Flag covered-bits
+    # containment + empty-flag rendering, member-less-class TypeError,
+    # reserved-name validation, canonical sunder attributes.
+    from enum import Enum, Flag, auto
+    out = {}
+
+    class Color(Enum):
+        RED = 1
+        GREEN = 2
+        BLUE = 2   # alias
+
+    class Empty(Enum):
+        pass
+
+    class Perm(Flag):
+        R = auto()
+        W = auto()
+        X = auto()
+
+    out['class_repr'] = (repr(Color), str(Color), format(Color), repr(Perm))
+    out['class_bool'] = (bool(Empty), bool(Color))
+    out['internals'] = (Color._member_names_,
+                        sorted(Color._member_map_.keys()),
+                        Color._value2member_map_[1] is Color.RED,
+                        Color.mro()[0] is Color)
+    out['reversed'] = [m.name for m in reversed(Color)]
+    out['flag_contains'] = (7 in Perm, 9 in Perm, Perm.R in Perm)
+    empty = Perm.R & Perm.W
+    out['empty_flag'] = (repr(empty), str(empty), bool(empty))
+    try:
+        Empty(7)
+        out['no_members'] = 'no-raise'
+    except TypeError as e:
+        out['no_members'] = str(e)
+    try:
+        class Wrong(Enum):
+            _any_name_ = 9
+        out['sunder_reserved'] = 'no-raise'
+    except ValueError:
+        out['sunder_reserved'] = 'ValueError'
+    try:
+        class Wrong2(Enum):
+            mro = 9
+        out['mro_reserved'] = 'no-raise'
+    except ValueError:
+        out['mro_reserved'] = 'ValueError'
+    out['sunders'] = (Color.RED._name_, Color.RED._value_,
+                      Perm(5)._name_ is None, Perm(5)._value_)
+    return out
+
+
+ENUM_PROTOCOL_RESULT = _enum_protocol_results()

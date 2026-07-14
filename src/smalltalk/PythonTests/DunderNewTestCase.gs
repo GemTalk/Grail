@@ -1079,6 +1079,43 @@ testRecognizingAbcs
 		equals: '(''mapping'', ''obj'', ''obj'')'
 %
 
+category: 'Grail-Tests - enum'
+method: DunderNewTestCase
+testEnumMetaclassProtocol
+	"Enum metaclass/member protocol round (test_enum slices): enum-CLASS
+	repr/str/format is <enum 'X'> / <flag 'X'>; an enum class is always
+	truthy, even empty (EnumType.__bool__ -- bool(cls) used to fall to the
+	class-side __len__ and empty enums were falsy); internals API
+	(_member_names_ canonical-only, _member_map_ with aliases,
+	_value2member_map_, mro()); reversed(cls); Flag covered-bits
+	containment (7 in Perm, not 9); empty-flag rendering <Perm: 0> /
+	Perm(0) / falsy; calling a member-less enum class raises TypeError
+	'has no members' (not ValueError); reserved-name validation (mro,
+	_sunder_) raises ValueError at definition; canonical sunder attrs
+	(_name_/_value_, None name on composites)."
+
+	| r |
+	r := self fixture @env1:ENUM_PROTOCOL_RESULT.
+	self assert: (r @env1:__getitem__: 'class_repr') @env1:__repr__
+		equals: '(''<enum \''Color\''>'', ''<enum \''Color\''>'', ''<enum \''Color\''>'', ''<flag \''Perm\''>'')'.
+	self assert: (r @env1:__getitem__: 'class_bool') @env1:__repr__
+		equals: '(True, True)'.
+	self assert: (r @env1:__getitem__: 'internals') @env1:__repr__
+		equals: '([''RED'', ''GREEN''], [''BLUE'', ''GREEN'', ''RED''], True, True)'.
+	self assert: (r @env1:__getitem__: 'reversed') @env1:__repr__
+		equals: '[''GREEN'', ''RED'']'.
+	self assert: (r @env1:__getitem__: 'flag_contains') @env1:__repr__
+		equals: '(True, False, True)'.
+	self assert: (r @env1:__getitem__: 'empty_flag') @env1:__repr__
+		equals: '(''<Perm: 0>'', ''Perm(0)'', False)'.
+	self assert: (r @env1:__getitem__: 'no_members')
+		equals: '<enum ''Empty''> has no members'.
+	self assert: (r @env1:__getitem__: 'sunder_reserved') equals: 'ValueError'.
+	self assert: (r @env1:__getitem__: 'mro_reserved') equals: 'ValueError'.
+	self assert: (r @env1:__getitem__: 'sunders') @env1:__repr__
+		equals: '(''RED'', 1, True, 5)'
+%
+
 category: 'Grail-Tests - canonical classes'
 method: DunderNewTestCase
 testCanonicalClassAttrOverlay
