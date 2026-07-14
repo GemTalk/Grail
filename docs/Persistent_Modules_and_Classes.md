@@ -562,12 +562,35 @@ names are transient).
 
 ### 10.5 Divergences to document (and their CPython mapping)
 
-- **"Fresh state per forced re-import" is spelled `reload()`.** `del
-  sys.modules[m]; import m` binds the committed instance rather than
-  re-executing. Code (and tests) that want re-execution ask for it
-  explicitly. This is the one place existing Python instincts must adjust,
-  and it is the *same* adjustment CPython demands between "import again"
-  and "actually re-run".
+- **"Fresh state per forced re-import" is spelled `reload()` — and the old
+  spelling raises.** `del sys.modules[m]; import m` does not silently bind:
+  deleting the cache entry is a deliberate "give me fresh execution" signal,
+  and handing back the canonical module would run the caller's subsequent
+  code against state they explicitly tried to discard. Instead the import
+  raises
+
+  ```
+  ImportError: module 'm' is canonical (deployed); it was removed from
+  sys.modules in this session. Use importlib.reload() to re-execute it,
+  or assign a replacement into sys.modules to substitute it.
+  ```
+
+  (2026-07-14, user decision.) The guard applies ONLY to the within-session
+  delete-and-reimport pattern — the session-boundary bind (§10.2) stays
+  silent; it is the feature. Detection is nearly free: the session-local
+  hash-state map already records every module this session loaded, so
+  warm path + entry present + `sys.modules` missing ⇒ deleted this session
+  ⇒ raise (checked before recording the current attempt). Edge cases that
+  correctly do NOT trip it: CPython-style failed-import retry (a failed cold
+  import never registered or committed anything — no canonical instance, so
+  the retry is cold, matching CPython) and stub substitution
+  (`sys.modules[m] = fake` performs no import).
+
+  This yields the contract worth stating to customers plainly: **within a
+  session, flag-on Grail never silently diverges from CPython — it either
+  behaves identically or raises with instructions.** The only silent
+  divergence is at the session boundary, which is what the module was
+  deployed for.
 - **Module-body side effects happen at deploy time, not per process.** Print
   statements, network calls, registrations against *other* modules — once
   per deployed version.
@@ -600,7 +623,8 @@ before it can ever default on (shape mirrors `runCanonicalClassTest.gs`):
 
 5. **Warm-bind the committed module instance** (replaces the §9.1 warm body
    re-run): commit the module instance at deploy/developer commit; on warm
-   import, bind + `sys.modules` register, skip `initialize`. Gate: §10.6
+   import, bind + `sys.modules` register, skip `initialize`; raise the
+   §10.5 `ImportError` on a within-session delete-and-reimport. Gate: §10.6
    session-A/B test plus the full suite flag-off unchanged.
 6. **Session tier:** `__session_init__` hook + SessionTemps-backed storage
    for its names; audit vendored stdlib for process-state snapshots.
