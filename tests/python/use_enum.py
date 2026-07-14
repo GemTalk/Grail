@@ -68,3 +68,17 @@ class Perm(IntFlag):
 r['perm_read_value'] = Perm.READ.value
 r['perm_is_int'] = isinstance(Perm.READ, int)
 r['perm_or'] = _try(lambda: int(Perm.READ | Perm.WRITE))
+
+# --- IntFlag bitwise ops return COMPOSITE MEMBERS (CPython 3.11+), not
+# plain ints; results cache (A|B is B|A); KEEP boundary retains bits not
+# covered by named members; ~ is the positive complement within the mask.
+r['perm_or_is_member'] = _try(lambda: isinstance(Perm.READ | Perm.WRITE, Perm))
+r['perm_or_repr'] = _try(lambda: repr(Perm.READ | Perm.WRITE))
+r['perm_or_str'] = _try(lambda: str(Perm.READ | Perm.WRITE))
+r['perm_or_cached'] = _try(lambda: (Perm.READ | Perm.WRITE) is (Perm.WRITE | Perm.READ))
+r['perm_and_named'] = _try(lambda: ((Perm.READ | Perm.WRITE) & Perm.READ) is Perm.READ)
+r['perm_xor_named'] = _try(lambda: ((Perm.READ | Perm.WRITE) ^ Perm.READ) is Perm.WRITE)
+r['perm_invert_value'] = _try(lambda: int(~Perm.READ))
+r['perm_keep_value'] = _try(lambda: int(Perm.READ | 8))
+r['perm_member_in_composite'] = _try(lambda: Perm.READ in (Perm.READ | Perm.WRITE))
+r['perm_composite_name_none'] = _try(lambda: (Perm.READ | Perm.WRITE).name is None)

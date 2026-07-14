@@ -104,10 +104,56 @@ testPlainEnumMarkers
 category: 'Grail-Tests'
 method: EnumTestCase
 testIntFlag
-	"class Perm(IntFlag) members are ints; bitwise | combines (to a
-	plain int, sufficient for re-style flag use)."
+	"class Perm(IntFlag) members are ints; int() of a bitwise result is
+	the combined value (the result itself is a composite member -- see
+	testIntFlagCompositeMembers)."
 
 	self assert: (self resultAt: 'perm_read_value') equals: 1.
 	self assert: (self resultAt: 'perm_is_int').
 	self assert: (self resultAt: 'perm_or') equals: 3.
+%
+
+category: 'Grail-Tests'
+method: EnumTestCase
+testIntFlagCompositeMembers
+	"Bitwise | on IntFlag members returns a COMPOSITE MEMBER of the class
+	(CPython), not a plain int (which AbstractPyInt's DNU int-forward used
+	to produce), with the enum-style repr; results cache, so the same bit
+	combination is the identical object; str stays the int (ReprEnum); a
+	composite's .name is None."
+
+	self assert: (self resultAt: 'perm_or_is_member').
+	self assert: (self resultAt: 'perm_or_repr') equals: '<Perm.READ|WRITE: 3>'.
+	self assert: (self resultAt: 'perm_or_str') equals: '3'.
+	self assert: (self resultAt: 'perm_or_cached').
+	self assert: (self resultAt: 'perm_composite_name_none').
+%
+
+category: 'Grail-Tests'
+method: EnumTestCase
+testIntFlagAndXorResolveNamed
+	"& and ^ whose result matches a NAMED member's value resolve to that
+	member (identity, not just equality)."
+
+	self assert: (self resultAt: 'perm_and_named').
+	self assert: (self resultAt: 'perm_xor_named').
+%
+
+category: 'Grail-Tests'
+method: EnumTestCase
+testIntFlagInvertAndKeep
+	"~READ is the positive complement within the named-bit mask (WRITE|EXEC
+	= 6, CPython 3.11+); IntFlag's KEEP boundary retains bits no named
+	member covers (READ|8 keeps value 9 where a plain Flag would raise)."
+
+	self assert: (self resultAt: 'perm_invert_value') equals: 6.
+	self assert: (self resultAt: 'perm_keep_value') equals: 9.
+%
+
+category: 'Grail-Tests'
+method: EnumTestCase
+testIntFlagMemberInComposite
+	"``READ in (READ|WRITE)``: membership by bit coverage on a composite."
+
+	self assert: (self resultAt: 'perm_member_in_composite').
 %

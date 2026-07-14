@@ -390,6 +390,36 @@ ___grailFlagComposite: cls value: intValue
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailIntFlagValue: cls value: intValue
+	"Resolve an IntFlag bitwise-op RESULT: the named member when intValue
+	matches one, else a cached composite pseudo-member.  Unlike
+	___grailFlagComposite: (Flag's STRICT-ish boundary -- uncovered bits
+	answer nil and the lookup raises), IntFlag's default boundary is KEEP
+	(CPython 3.11+): bits not covered by named members are retained, so
+	``Perm.R | 8`` is <Perm.R|8: 12> where a plain Flag would raise.
+	Composites cache in byValue so repeated ops answer the identical
+	object (A|B is A|B).  A member-less record (shouldn't happen for an
+	op on a member) falls back to the plain int."
+
+	| rec byValue member |
+	rec := self ___grailRecordFor: cls.
+	rec @env0:isNil ifTrue: [^ intValue].
+	byValue := rec @env0:at: 1.
+	(byValue @env0:includesKey: intValue) ifTrue: [^ byValue @env0:at: intValue].
+	member := cls @env0:basicNew.
+	"The wrapped-int storage AND the enum member value are BOTH dynamic
+	instVar #value on an AbstractPyInt-rooted class (see AbstractPyInt's
+	class comment), so one store makes the composite a working int."
+	member @env0:dynamicInstVarAt: #value put: intValue.
+	member @env0:dynamicInstVarAt: #name put: None.
+	member @env0:dynamicInstVarAt: #'_value_' put: intValue.
+	member @env0:dynamicInstVarAt: #'_name_' put: None.
+	byValue @env0:at: intValue put: member.
+	^ member
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailFlagMask: cls
 	"OR of every named member's int value."
 
@@ -1120,6 +1150,121 @@ __format__: aSpec
 	int str -- delegate to the int value's __format__."
 
 	^ (self @env0:value) @env1:__format__: aSpec
+%
+
+! ------------------- IntFlag members: Flag's bitwise algebra over the
+! AbstractPyInt root.  IntFlag < IntEnum < AbstractPyInt in Smalltalk (so
+! members ARE ints), which means Flag's member methods are NOT inherited --
+! without these, ``Perm.R | Perm.W`` fell to AbstractPyInt's env-1 DNU
+! int-forward and answered a PLAIN Integer 3 instead of the composite
+! member <Perm.R|W: 3>.  Same duplicate-onto-the-int-chain idiom as the
+! IntEnum metaclass methods above.  Results resolve through
+! ___grailIntFlagValue: -- KEEP boundary (CPython 3.11+ IntFlag default):
+! uncovered bits are retained, not rejected.
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
+___flagOperand___: other
+	"Tolerant unwrap, mirroring Flag>>___flagOperand___: -- accepts a
+	member of any int-enum flavor or a plain int (IntFlag ops interoperate
+	with ints in CPython)."
+
+	((other @env0:isKindOf: IntFlag)
+		or: [other @env0:class @env0:== self @env0:class]) ifTrue: [
+		^ other @env0:dynamicInstVarAt: #value].
+	(other @env0:isKindOf: AbstractPyInt) ifTrue: [
+		| v |
+		v := other @env0:dynamicInstVarAt: #value.
+		v @env0:isNil ifFalse: [^ v]].
+	(other @env0:isKindOf: Integer) ifTrue: [^ other].
+	^ TypeError ___signal___: 'unsupported operand type(s) for flag operation'
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
+__or__: other
+	^ Enum ___grailIntFlagValue: self @env0:class
+		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitOr: (self ___flagOperand___: other))
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
+__and__: other
+	^ Enum ___grailIntFlagValue: self @env0:class
+		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitAnd: (self ___flagOperand___: other))
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
+__xor__: other
+	^ Enum ___grailIntFlagValue: self @env0:class
+		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitXor: (self ___flagOperand___: other))
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
+__invert__
+	"~A: the mask-complement within the class's named bits (CPython 3.11+
+	gives IntFlag the same positive-complement invert as Flag)."
+
+	| mask v |
+	mask := Enum ___grailFlagMask: self @env0:class.
+	v := self @env0:dynamicInstVarAt: #value.
+	^ Enum ___grailIntFlagValue: self @env0:class
+		value: (mask @env0:bitXor: (mask @env0:bitAnd: v))
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
+__contains__: other
+	"``B in (A|B)``: membership by bit coverage (same as Flag)."
+
+	| ov v |
+	ov := self ___flagOperand___: other.
+	v := self @env0:dynamicInstVarAt: #value.
+	^ (v @env0:bitAnd: ov) @env0:= ov
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
+___compositeName___
+	"'R|W' for a composite; the plain name for named members; the value
+	string when no named bits cover it (KEEP composites of only uncovered
+	bits).  Mirrors Flag>>___compositeName___."
+
+	| nm v parts |
+	nm := self @env0:dynamicInstVarAt: #name.
+	(nm @env0:isNil or: [nm @env0:== None]) ifFalse: [^ nm].
+	v := self @env0:dynamicInstVarAt: #value.
+	parts := OrderedCollection @env0:new.
+	(Enum ___grailMembers: self @env0:class) @env0:do: [:m |
+		| mv |
+		mv := m @env0:dynamicInstVarAt: #value.
+		((mv @env0:isKindOf: Integer)
+			and: [mv @env0:~= 0
+			and: [(v @env0:bitAnd: mv) @env0:= mv]]) ifTrue: [
+			parts @env0:add: (m @env0:dynamicInstVarAt: #name)]].
+	parts @env0:isEmpty ifTrue: [^ v @env0:printString].
+	^ (parts @env0:inject: nil into: [:acc :p |
+		acc @env0:isNil ifTrue: [p] ifFalse: [acc @env0:, '|' @env0:, p]])
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
+__repr__
+	"<Perm.R|W: 3> for composites (IntEnum's __repr__ above would try to
+	concatenate the composite's None name); named members unchanged."
+
+	| v nm0 |
+	v := self @env0:dynamicInstVarAt: #value.
+	nm0 := self @env0:dynamicInstVarAt: #name.
+	((nm0 @env0:isNil or: [nm0 @env0:== None])
+		and: [(v @env0:isKindOf: Integer) and: [v @env0:= 0]]) ifTrue: [
+		^ '<' @env0:, self @env0:class @env0:name @env0:asString
+			@env0:, ': 0>'].
+	^ '<' @env0:, self @env0:class @env0:name @env0:asString @env0:, '.'
+		@env0:, self ___compositeName___ @env0:, ': '
+		@env0:, v @env0:printString @env0:, '>'
 %
 
 set compile_env: 0
