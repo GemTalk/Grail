@@ -136,4 +136,14 @@ LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCanonicalClassTest.gs < /
 # the store key and temp module file.
 LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runPersistentStateTest.gs < /dev/null || EXIT=$?
 
+# Canonical-class session-local attribute-overlay regression
+# (docs/Persistent_Modules_and_Classes.md par.7). The overlay only carries
+# values with the canonical flag ON, so the main (flag-off) suite never
+# exercises it. This runs AttributeInheritanceTestCase +
+# ClassFunctionBindingTestCase with the flag ON to regress two fixes: the
+# per-class ___resetClassAttrOverlay___ (no stale overlay leaks across a
+# re-import) and the instance-read descriptor binding through the overlay
+# (a class-stored function binds self). No commit.
+LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runOverlayReuseTest.gs < /dev/null || EXIT=$?
+
 exit $EXIT

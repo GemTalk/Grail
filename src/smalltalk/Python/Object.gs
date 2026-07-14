@@ -1109,9 +1109,17 @@ ___pyAttrLoad___: aSym
 		| metaclass |
 		"Canonical-class overlay first: an ``self.x'' read falling back to
 		the class must see a runtime ``Cls.x = v'' overlay store before the
-		committed class-body accessor, with the same descriptor binding."
+		committed class-body accessor -- with the SAME descriptor binding the
+		committed per-class dynInstVars path applies below: a callable stored
+		as a class attribute and read through an INSTANCE binds self via a
+		MethodBinding (``Box.greet = fn; b.greet(x)'' -> fn(b, x)).
+		___descriptorGet___ is wrong here -- it excludes BoundMethod and would
+		return the function unbound, dropping self."
 		(self @env1:___classAttrOverlayLookup___: self @env0:class name: aSym)
-			@env0:ifNotNil: [:___ovv | ^ self @env1:___descriptorGet___: ___ovv].
+			@env0:ifNotNil: [:___ovv |
+				(self @env1:___isDescriptorCallable___: ___ovv)
+					ifTrue: [^ MethodBinding @env1:instance: self callable: ___ovv].
+				^ ___ovv].
 		metaclass := self @env0:class @env0:class.
 		((metaclass @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
 			and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil]) ifTrue: [

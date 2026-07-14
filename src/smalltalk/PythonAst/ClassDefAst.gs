@@ -1042,8 +1042,21 @@ printSmalltalkRuntimeOn: aStream
 	post-decorator object under the module.class key -- the store into
 	the module instance stays OUTSIDE the guard because a fresh session's
 	module instance needs the binding whether the class was probed or
-	built."
+	built.
+
+	Decorators, the metaclass hook, and ___canonicalClassRegister___ all
+	live INSIDE the guard (cold path): under canonical reuse the class is a
+	stable object that was fully built + decorated ONCE, and a warm probe
+	hit binds that same decorated object -- re-running a decorator such as
+	``@dataclass'' on the reused class would re-process it against a fresh
+	module load's singletons (e.g. a second ``MISSING'' sentinel) and
+	corrupt it.  The ONE per-import side effect a warm reuse must still run
+	is dropping this class's stale session-local attr overlay, so a re-run
+	of the module body does not inherit the previous run's ``Cls.x = v''
+	state; emitted OUTSIDE the guard (no-op with the flag off)."
 	(self isModuleScopeClassDef) ifTrue: [
+		"Still INSIDE the canonical guard: register the final (post-metaclass,
+		post-decorator) object under (module, qualname), then close the guard."
 		aStream
 			nextPutAll: 'importlib @env0:___canonicalClassRegister___: '.
 		self printQuotedString: self ___enclosingModuleName___ on: aStream.
@@ -1051,7 +1064,14 @@ printSmalltalkRuntimeOn: aStream
 		self printQuotedString: name asString on: aStream.
 		aStream
 			nextPutAll: ' value: '; nextPutAll: name; nextPutAll: '.'; lf;
-			nextPutAll: '].'; lf;
+			nextPutAll: '].'; lf.
+		"OUTSIDE the guard (runs on both cold build and warm probe hit): drop
+		this class's stale session-local attr overlay, then bind the class
+		into the module instance."
+		aStream
+			nextPutAll: 'importlib @env0:___resetClassAttrOverlay___: ';
+			nextPutAll: name; nextPutAll: '.'; lf.
+		aStream
 			nextPutAll: 'self @env0:dynamicInstVarAt: #''';
 			nextPutAll: name;
 			nextPutAll: ''' put: '; nextPutAll: name;

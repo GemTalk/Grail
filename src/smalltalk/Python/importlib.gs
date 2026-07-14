@@ -571,6 +571,31 @@ ___canonicalClassRegister___: aModuleName name: aClassName value: anObject
 
 category: 'Grail-Canonical Classes'
 classmethod: importlib
+___resetClassAttrOverlay___: aClass
+	"Warm-reuse hygiene (docs/Persistent_Modules_and_Classes.md par.7).  Drop
+	any session-local class-attr overlay entries recorded for aClass on a
+	PRIOR import in this session, so re-executing the module body -- e.g. a
+	test that removed the module from sys.modules to force a fresh import, or
+	the in-run re-imports the warm-reuse path is built to make cheap -- starts
+	the class's runtime attribute state clean instead of inheriting the
+	previous run's ``Cls.x = v'' overlay.  Removes only aClass's OWN entry
+	(superclass overlay entries belong to other classes); committed
+	definitional state on the class itself is untouched.  No-op when the
+	canonical-classes flag is off -- the overlay is only ever populated with
+	the flag on -- so the emit is behaviour-neutral by default.  Returns
+	aClass so it can sit inline in the class-build emit."
+
+	| st ov |
+	self ___canonicalClassesEnabled___ @env0:ifFalse: [^ aClass].
+	st := SessionTemps @env0:current.
+	ov := st @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+	ov @env0:== nil ifTrue: [^ aClass].
+	(ov @env0:includesKey: aClass) ifTrue: [ov @env0:removeKey: aClass].
+	^ aClass
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
 ___canonicalModuleHashes___
 	"Committed (module dotted-name -> source sha1Sum) map.  A later
 	session's import compares the current source hash against this to
