@@ -45,3 +45,18 @@ class Color(IntEnum):
 
 # True only if global_enum's injection landed in this module's globals.
 injected_ok = (CRIMSON is Color.CRIMSON) and (TEAL is Color.TEAL)
+
+
+# Session tier (doc par.10.4): __session_init__ runs once per session per
+# module, at every ACQUISITION -- after a cold body run, after a warm bind
+# (where the body does not run), and after reload().  The body resets
+# init_count to 0 and each acquisition increments it, so:
+#   cold import      -> 1   (body 0, hook +1)
+#   warm bind        -> committed_value + 1  (no body, hook +1)
+#   reload           -> 1   (body re-runs to 0, hook +1)
+init_count = 0
+
+
+def __session_init__():
+    global init_count
+    init_count = init_count + 1

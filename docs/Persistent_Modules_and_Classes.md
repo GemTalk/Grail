@@ -560,6 +560,35 @@ stored in SessionTemps-backed storage, not on the module instance proper —
 i.e., the §6.3 storage split, inverted (persistent is the default, marked
 names are transient).
 
+**Status (2026-07-14): (1) and (3) are IMPLEMENTED.**
+
+- `def __session_init__():` runs once per session per module, at every
+  point the session *acquires* the module's code: after a cold body run,
+  after a warm bind (where the body did not run), and after `reload()`.
+  A `sys.modules` cache hit does not re-run it. Zero-arg by contract; a
+  hook declared with parameters fails its dispatch loudly rather than
+  being skipped. (`importlib ___runSessionInit___:`, three call sites.)
+  Values the hook binds land on the module instance like any global —
+  a hook that ran before a developer commit may leave a dead handle
+  committed, but the next session's hook re-binds the name at import
+  before use: correctness first, extent hygiene via `SessionDict` where
+  it matters.
+- The exclusion problem above already has its storage primitive:
+  `_grail_session.SessionDict` (predates this design) is a dict view
+  whose entries live in SessionTemps via `gemstone.sessionDict(name)` —
+  per-session, never committed. `re`'s compiled-pattern cache (C
+  pointers!) and jinja2's lexer cache already use it.
+- **Stdlib audit result:** the vendored `.py` stdlib has no further
+  import-time process state. `os`/`sys`/`socket`/`time` are native `.gs`
+  modules — rebuilt per session by construction and never
+  canonical-bound (they don't go through `loadModuleFromPath:`);
+  `os.environ` is lazily populated per session on the native module.
+  Vendored `logging`'s StreamHandler deliberately defaults to `print()`
+  (no captured stream handle); no vendored module binds
+  `open()`/sockets/`sys.std*`/clock snapshots at module level. The two
+  C-backed module caches are on `SessionDict` (above). User code gets
+  `__session_init__` + `SessionDict` plus this section as documentation.
+
 ### 10.5 Divergences to document (and their CPython mapping)
 
 - **"Fresh state per forced re-import" is spelled `reload()` — and the old
@@ -643,7 +672,12 @@ before it can ever default on (shape mirrors `runCanonicalClassTest.gs`):
    coherent. Acceptance: `tests/scripts/runModuleBindTest.gs` (§10.6 as
    specified, plus reload and guard checks), wired into run_tests.sh.
 6. **Session tier:** `__session_init__` hook + SessionTemps-backed storage
-   for its names; audit vendored stdlib for process-state snapshots.
+   for its names; audit vendored stdlib for process-state snapshots. —
+   **IMPLEMENTED** (see the §10.4 status block: hook at all three
+   acquisition points, `SessionDict` as the existing never-committed
+   storage, audit found the vendored stdlib clean). Acceptance: the
+   `init_count` checks in `runModuleBindTest.gs` (cold = 1, warm bind =
+   committed + 1, reload = 1).
 7. **`reload()` as the explicit cold path** (today's cold machinery,
    repointed), including re-register + hash update. — **IMPLEMENTED**
    (folded into phase 5; see above).

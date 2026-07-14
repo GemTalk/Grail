@@ -66,6 +66,10 @@ d := widgetCls @env1:value: { } value: nil.
 ((d @env1:describe) = 'unnamed:0')
   ifFalse: [^ self error: 'setup: cold default Widget broken: ' , (d @env1:describe) printString].
 
+"Session tier: the hook ran once after the cold body (0 + 1)."
+((mod @env1:init_count) = 1)
+  ifFalse: [^ self error: 'setup: __session_init__ did not run on cold import: ' , (mod @env1:init_count) printString].
+
 "Post-import module-state mutation: the bind-vs-re-run discriminator."
 (mod @env1:events) @env1:append: 'A'.
 
@@ -141,6 +145,12 @@ check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures ad
   check value: 'decorator registry has exactly one entry'
     value: (((mod @env1:REGISTRY) @env1:__len__) = 1).
 
+  "Session tier (par.10.4): the warm BIND ran __session_init__ exactly
+  once -- the committed value was 1 (session A's cold run), so this
+  session sees 2, session-locally (this session does not commit it)."
+  check value: 'SESSION INIT: hook ran on warm bind (init_count = committed 1 + 1 = 2)'
+    value: ((mod @env1:init_count) = 2).
+
   "reload() is the EXPLICIT re-execution path (par.10.5): body re-runs on
   the SAME instance (events rebinds to [boot]); the identity-reused classes
   are refreshed in place, and the closure's warm-bound dataclasses module
@@ -155,6 +165,8 @@ check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures ad
     value: ((w @env1:describe) = 'gizmo:2').
   check value: 'reload: NEW Widget() after reload still gets defaults'
     value: (((widgetCls @env1:value: { } value: nil) @env1:describe) = 'unnamed:0').
+  check value: 'reload: __session_init__ re-ran after the body (init_count = 0 + 1)'
+    value: ((mod @env1:init_count) = 1).
 
   "par.10.5 guard: del sys.modules + re-import of a DEPLOYED module raises
   with instructions instead of silently binding stale-looking state."

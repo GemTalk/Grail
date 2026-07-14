@@ -777,6 +777,35 @@ ___canonicalClassesEnabled___: aBool
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___runSessionInit___: moduleInstance
+	"SESSION TIER (docs/Persistent_Modules_and_Classes.md par.10.4): run the
+	module's ``def __session_init__():`` hook, when it defines one.  The
+	hook is the explicit home for per-session resources a committed module
+	instance cannot carry across sessions -- open files/sockets, GsFile /
+	Transcript handles, environment snapshots -- re-binding them each
+	session the way GemStone code re-initializes SessionTemps state.
+
+	Called once per session per module, at every point the session
+	ACQUIRES the module's code: after a cold body run, after a warm BIND
+	of the committed instance (where the body did not run), and after an
+	explicit reload().  A sys.modules cache hit does not re-run it.  Values
+	the hook binds land on the module instance like any global; a hook that
+	ran before a developer commit may leave a dead handle committed, but
+	the next session's hook re-binds the name at import before use --
+	correctness first, extent hygiene via SessionDict
+	(src/python/stdlib/_grail_session.py) where it matters.
+
+	Zero-arg by contract (it is a module function, not a method); a hook
+	declared with parameters fails its unary dispatch loudly rather than
+	being silently skipped."
+
+	((moduleInstance @env0:class @env0:whichClassIncludesSelector: #'__session_init__' environmentId: 1) @env0:~~ nil)
+		ifTrue: [moduleInstance @env0:perform: #'__session_init__' env: 1].
+	^ moduleInstance
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 loadModuleFromPath: pathString name: moduleName
 	"Load a module from a file path and register it.
 	Returns the module instance.
@@ -847,6 +876,9 @@ loadModuleFromPath: pathString name: moduleName
 				stateMap at: moduleName asSymbol put: #'match'.
 				committedInstance @env0:class @env0:___adoptInstance___: committedInstance.
 				self registerModule: moduleName with: committedInstance.
+				"Session tier (par.10.4): the body did not run, so this is the
+				one chance to re-bind per-session resources."
+				self ___runSessionInit___: committedInstance.
 				^ committedInstance]].
 		stateMap at: moduleName asSymbol put: hashState.
 		hashState == #'match' ifTrue: [
@@ -927,6 +959,10 @@ loadModuleFromPath: pathString name: moduleName
 	"Persistent-state bind/capture for modules declaring ``__persistent__''
 	(docs/Persistent_Modules_and_Classes.md par.6) -- a no-op for the rest."
 	self ___syncPersistentState___: moduleInstance.
+	"Session tier (par.10.4): runs on the cold path too, so a module author
+	gets ONE uniform per-session hook regardless of how the session
+	acquired the module (cold build here, warm bind above)."
+	self ___runSessionInit___: moduleInstance.
 	"Phase-5 (doc par.10): record this cold import's instance in the
 	canonical-module registry, IN-TRANSACTION (import never commits).  It
 	persists -- with its whole globals graph, via reachability -- when the
@@ -2281,6 +2317,10 @@ reload: aModule
 		importlib @env0:___canonicalModuleHashes___ @env0:at: name put: srcHash.
 		stateMap @env0:at: name @env0:asSymbol put: #'match'.
 		importlib @env0:___canonicalModules___ @env0:at: name put: aModule].
+	"Session tier (par.10.4): reload is a full re-acquisition -- the body
+	re-ran, so per-session resources get re-bound the same as any other
+	acquisition path."
+	importlib @env0:___runSessionInit___: aModule.
 	^ aModule
 %
 
