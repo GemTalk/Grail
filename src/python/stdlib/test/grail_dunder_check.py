@@ -1015,6 +1015,19 @@ def _enum_protocol_results():
                          MainF['dupe'] is MainF(3),
                          MainF(5).name is None,
                          MainF.dupe in MainF)
+    # An explicitly-DEFINED composite keeps its class-body name in repr
+    # (CPython: <TE.dupe: 3>), unlike runtime composites (TE(5), nameless).
+    out['flag_alias_name'] = repr(MainF.dupe)
+
+    class CondF(Flag):
+        a = auto()
+        b = auto()
+        if True:
+            both = 3   # class-body-if store: swept from the dynamic store
+
+    out['flag_if_member'] = ([m.name for m in CondF],
+                             repr(CondF.both),
+                             CondF['both'] is CondF(3))
     return out
 
 

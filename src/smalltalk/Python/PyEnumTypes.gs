@@ -140,12 +140,39 @@ ___grailBuildMembers: cls names: attrNames
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members lastInt |
+	| byValue byName members lastInt allNames dynHolder |
+	"Names assigned under a class-body ``if`` (the shared test fixture's
+	``if issubclass(...): dupe = 3'') never reach classBodyAttributes --
+	their stores go through ___pyAttrStore___ into the per-class
+	dynInstVars holder BEFORE this hook runs.  Sweep the holder for
+	additional member candidates (skipping underscore-prefixed machinery
+	such as closure cells) and process them after the declared names."
+	allNames := attrNames @env0:asOrderedCollection.
+	dynHolder := ((cls @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) notNil)
+		ifTrue: [cls @env0:perform: #dynInstVars env: 1]
+		ifFalse: [nil].
+	dynHolder @env0:== nil ifFalse: [
+		| dynPairs i |
+		"A holder that never received a dynamic instVar has no varying part
+		and dynamicInstVarPairs raises OffsetError -- treat as empty.  The
+		result is a FLAT alternating (name, value, name, value, ...) array."
+		dynPairs := [dynHolder @env0:dynamicInstVarPairs]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: #()].
+		i := 1.
+		[i @env0:< dynPairs @env0:size] @env0:whileTrue: [
+			| dynSym ds |
+			dynSym := dynPairs @env0:at: i.
+			ds := dynSym @env0:asString.
+			((ds @env0:size @env0:> 0)
+				and: [((ds @env0:at: 1) @env0:= $_) not
+				and: [(allNames @env0:includes: dynSym) not]])
+					ifTrue: [allNames @env0:add: dynSym].
+			i := i @env0:+ 2]].
 	"Reserved-name validation (CPython EnumType.__new__): a class-body
 	ASSIGNMENT may not rebind ``mro`` (it would shadow type.mro) nor use a
 	_sunder_ name outside the supported set -- ValueError at definition
 	(test_invalid_names across every enum flavor)."
-	attrNames @env0:do: [:nameSym | | ns sz |
+	allNames @env0:do: [:nameSym | | ns sz |
 		ns := nameSym @env0:asString.
 		sz := ns @env0:size.
 		ns @env0:= 'mro' ifTrue: [
@@ -165,11 +192,18 @@ ___grailBuildMembers: cls names: attrNames
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
 	lastInt := 0.
-	attrNames @env0:do: [:nameSym | | nameStr |
+	allNames @env0:do: [:nameSym | | nameStr hasAccessor |
 		nameStr := nameSym @env0:asString.
 		((nameStr @env0:size @env0:> 0) and: [(nameStr @env0:at: 1) @env0:= $_]) ifFalse: [
 			| rawValue member |
-			rawValue := cls @env0:perform: nameSym env: 1.
+			"Declared names read through their compiled accessor pair;
+			dyn-swept names (class-body ``if`` stores) read from the holder."
+			hasAccessor := (cls @env0:class
+				@env0:whichClassIncludesSelector: (nameStr @env0:, ':') @env0:asSymbol
+				environmentId: 1) notNil.
+			rawValue := hasAccessor
+				ifTrue: [cls @env0:perform: nameSym env: 1]
+				ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym].
 			"auto() markers resolve to last-integer-value + 1 in
 			declaration order -- except Flag-natured classes, where the
 			next auto value is the next power of two ABOVE the last
@@ -203,12 +237,15 @@ ___grailBuildMembers: cls names: attrNames
 							"Build the composite pseudo-member inline (the
 							registry record doesn't exist until after this
 							loop, so ___grailFlagComposite can't).  Cached in
-							byValue, so TE(3) later returns the same object."
+							byValue, so TE(3) later returns the same object.
+							An EXPLICITLY-DEFINED composite keeps its class-body
+							name -- CPython repr(TE.dupe) is <TE.dupe: 3> --
+							while runtime composites (TE(5)) stay nameless."
 							member := cls @env0:basicNew.
 							member @env0:dynamicInstVarAt: #value put: rawValue.
-							member @env0:dynamicInstVarAt: #name put: None.
+							member @env0:dynamicInstVarAt: #name put: nameStr.
 							member @env0:dynamicInstVarAt: #'_value_' put: rawValue.
-							member @env0:dynamicInstVarAt: #'_name_' put: None.
+							member @env0:dynamicInstVarAt: #'_name_' put: nameStr.
 							byValue @env0:at: rawValue put: member]].
 					member @env0:isNil ifTrue: [
 						member := cls @env0:basicNew.
@@ -222,8 +259,10 @@ ___grailBuildMembers: cls names: attrNames
 						byValue @env0:at: rawValue put: member.
 						members @env0:add: member]].
 			byName @env0:at: nameStr put: member.
-			cls @env0:perform: (nameStr @env0:, ':') @env0:asSymbol env: 1
-				withArguments: (Array @env0:with: member)]].
+			hasAccessor
+				ifTrue: [cls @env0:perform: (nameStr @env0:, ':') @env0:asSymbol env: 1
+					withArguments: (Array @env0:with: member)]
+				ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym put: member]]].
 	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members).
 	"Drop the ClassDefAst-emitted generic instantiation (env-1
 	``value:value:``) so calling the class — Color(value) — reaches the

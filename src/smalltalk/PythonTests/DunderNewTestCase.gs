@@ -1118,7 +1118,14 @@ testEnumMetaclassProtocol
 	bits is an alias -- named/value lookup works, iteration excludes it,
 	and its .name reads as None."
 	self assert: (r @env1:__getitem__: 'flag_alias') @env1:__repr__
-		equals: '([''first'', ''second'', ''third''], True, True, True, True)'
+		equals: '([''first'', ''second'', ''third''], True, True, True, True)'.
+	self assert: (r @env1:__getitem__: 'flag_alias_name')
+		equals: '<MainF.dupe: 3>'.
+	"Class-body-if stores are swept from the per-class dynamic store into
+	the member build: ``if True: both = 3`` becomes a NAMED composite
+	alias (excluded from iteration, named repr, lookup identity)."
+	self assert: (r @env1:__getitem__: 'flag_if_member') @env1:__repr__
+		equals: '([''a'', ''b''], ''<CondF.both: 3>'', True)'
 %
 
 category: 'Grail-Tests - canonical classes'
