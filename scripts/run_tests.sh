@@ -52,7 +52,45 @@ TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=500000;"
 
 EXIT=0
 
-LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runTests.gs < /dev/null || EXIT=$?
+# Main SUnit suite, sharded across GRAIL_TEST_WORKERS parallel topaz sessions
+# (default 4; set GRAIL_TEST_WORKERS=1 for the classic single-session run).
+# Each worker runs a disjoint, complete slice of the PythonTestCase classes
+# (partitioned by a stable class-name hash in runTestsShard.gs), so the
+# framework-heavy classes (Flask, Django, ...) compile their imports on ONE
+# shard rather than once per shard.  Besides the wall-clock win this is a
+# genuine multi-session concurrency exercise against a single stone.  The
+# suite does not commit, so the shards share the committed image read-only.
+WORKERS="${GRAIL_TEST_WORKERS:-4}"
+mkdir -p "$PROJECT_ROOT/out"
+rm -f "$PROJECT_ROOT"/out/shard_*.out
+SHARD_PIDS=()
+for i in $(seq 0 $((WORKERS-1))); do
+  GRAIL_TEST_WORKERS="$WORKERS" GRAIL_TEST_SHARD="$i" \
+    LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runTestsShard.gs < /dev/null \
+    > "$PROJECT_ROOT/out/shard_$i.out" 2>&1 &
+  SHARD_PIDS+=("$!")
+done
+for i in $(seq 0 $((WORKERS-1))); do
+  wait "${SHARD_PIDS[$i]}" || EXIT=$?
+done
+# Aggregate shard results into one summary line (portable: no gawk-isms) and
+# surface any per-shard failures/errors.
+S_RUN=0; S_PASS=0; S_FAIL=0; S_ERR=0; S_SEEN=0
+for i in $(seq 0 $((WORKERS-1))); do
+  f="$PROJECT_ROOT/out/shard_$i.out"
+  line=$(grep GRAIL_SHARD_RESULT "$f" 2>/dev/null)
+  if [ -z "$line" ]; then
+    echo "  shard $i: NO RESULT (crash) -- see out/shard_$i.out"; EXIT=1; continue
+  fi
+  S_SEEN=$((S_SEEN+1))
+  nums=$(echo "$line" | sed -E 's/.*\|([0-9]+) run, ([0-9]+) passed, ([0-9]+) failed, ([0-9]+) errors.*/\1 \2 \3 \4/')
+  # shellcheck disable=SC2086
+  set -- $nums
+  S_RUN=$((S_RUN+$1)); S_PASS=$((S_PASS+$2)); S_FAIL=$((S_FAIL+$3)); S_ERR=$((S_ERR+$4))
+  grep -E "debug: #" "$f" | sed 's/^/  /'
+done
+echo "main suite (sharded x$S_SEEN): $S_RUN run, $S_PASS passed, $S_FAIL failed, $S_ERR errors"
+if [ "$S_SEEN" -ne "$WORKERS" ] || [ "$S_FAIL" -ne 0 ] || [ "$S_ERR" -ne 0 ]; then EXIT=1; fi
 
 # Run embedded CPython tests in a separate session (can't coexist with shim)
 LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCPythonTests.gs < /dev/null || EXIT=$?
