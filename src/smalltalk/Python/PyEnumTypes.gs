@@ -184,16 +184,43 @@ ___grailBuildMembers: cls names: attrNames
 			(byValue @env0:includesKey: rawValue)
 				ifTrue: [member := byValue @env0:at: rawValue]
 				ifFalse: [
-					member := cls @env0:basicNew.
-					member @env0:dynamicInstVarAt: #value put: rawValue.
-					member @env0:dynamicInstVarAt: #name put: nameStr.
-					"CPython's canonical sunder attributes; stored as dynamic
-					instVars so attribute READS see values (the attr-load
-					path probes the instance store before wrapping methods)."
-					member @env0:dynamicInstVarAt: #'_value_' put: rawValue.
-					member @env0:dynamicInstVarAt: #'_name_' put: nameStr.
-					byValue @env0:at: rawValue put: member.
-					members @env0:add: member].
+					"Flag composite-alias (CPython): a class-body value whose
+					bits are all covered by the ALREADY-DEFINED members
+					(``dupe = 3`` after R=1/W=2) is an ALIAS for the
+					composite -- reachable by name and value, but excluded
+					from iteration and _member_names_."
+					member := nil.
+					((rawValue @env0:isKindOf: Integer)
+						and: [rawValue @env0:> 0
+						and: [Enum ___grailIsFlagClass: cls]]) ifTrue: [
+						| mask |
+						mask := 0.
+						members @env0:do: [:m | | mv |
+							mv := m @env0:dynamicInstVarAt: #value.
+							(mv @env0:isKindOf: Integer) ifTrue: [
+								mask := mask @env0:bitOr: mv]].
+						((rawValue @env0:bitAnd: mask) @env0:= rawValue) ifTrue: [
+							"Build the composite pseudo-member inline (the
+							registry record doesn't exist until after this
+							loop, so ___grailFlagComposite can't).  Cached in
+							byValue, so TE(3) later returns the same object."
+							member := cls @env0:basicNew.
+							member @env0:dynamicInstVarAt: #value put: rawValue.
+							member @env0:dynamicInstVarAt: #name put: None.
+							member @env0:dynamicInstVarAt: #'_value_' put: rawValue.
+							member @env0:dynamicInstVarAt: #'_name_' put: None.
+							byValue @env0:at: rawValue put: member]].
+					member @env0:isNil ifTrue: [
+						member := cls @env0:basicNew.
+						member @env0:dynamicInstVarAt: #value put: rawValue.
+						member @env0:dynamicInstVarAt: #name put: nameStr.
+						"CPython's canonical sunder attributes; stored as dynamic
+						instVars so attribute READS see values (the attr-load
+						path probes the instance store before wrapping methods)."
+						member @env0:dynamicInstVarAt: #'_value_' put: rawValue.
+						member @env0:dynamicInstVarAt: #'_name_' put: nameStr.
+						byValue @env0:at: rawValue put: member.
+						members @env0:add: member]].
 			byName @env0:at: nameStr put: member.
 			cls @env0:perform: (nameStr @env0:, ':') @env0:asSymbol env: 1
 				withArguments: (Array @env0:with: member)]].
@@ -302,7 +329,7 @@ ___grailFlagComposite: cls value: intValue
 		covered @env0:= intValue ifFalse: [^ nil]].
 	member := cls @env0:basicNew.
 	member @env0:dynamicInstVarAt: #value put: intValue.
-	member @env0:dynamicInstVarAt: #name put: nil.
+	member @env0:dynamicInstVarAt: #name put: None.
 	member @env0:dynamicInstVarAt: #'_value_' put: intValue.
 	"Composite pseudo-members have no name; expose Python None (nil is
 	the project's ABSENT marker and would fall through to a method wrap)."
@@ -515,6 +542,10 @@ __contains__: aValue
 	R=1/W=2/X=4)."
 
 	| rec |
+	"Any instance of this enum class -- including Flag composites and
+	aliases, which are not in the canonical members list -- is in
+	(membership by instance, CPython 3.12)."
+	(aValue @env0:isKindOf: self) ifTrue: [^ true].
 	rec := Enum ___grailRecordFor: self.
 	rec @env0:isNil ifTrue: [^ false].
 	((rec @env0:at: 3) @env0:includesIdentical: aValue) ifTrue: [^ true].
@@ -679,6 +710,10 @@ category: 'Grail-Enum Metaclass'
 classmethod: IntEnum
 __contains__: aValue
 	| rec |
+	"Any instance of this enum class -- including Flag composites and
+	aliases, which are not in the canonical members list -- is in
+	(membership by instance, CPython 3.12)."
+	(aValue @env0:isKindOf: self) ifTrue: [^ true].
 	rec := Enum ___grailRecordFor: self.
 	rec @env0:isNil ifTrue: [^ false].
 	((rec @env0:at: 3) @env0:includesIdentical: aValue) ifTrue: [^ true].
@@ -938,7 +973,7 @@ ___compositeName___
 
 	| nm v parts |
 	nm := self @env0:dynamicInstVarAt: #name.
-	nm @env0:isNil ifFalse: [^ nm].
+	(nm @env0:isNil or: [nm @env0:== None]) ifFalse: [^ nm].
 	v := self @env0:dynamicInstVarAt: #value.
 	parts := OrderedCollection @env0:new.
 	(Enum ___grailMembers: self @env0:class) @env0:do: [:m |
@@ -959,9 +994,10 @@ __repr__
 	"<Perm.R|X: 5> for named/composite members; the EMPTY flag (value 0,
 	no covering members) is <Perm: 0> (CPython 3.11+)."
 
-	| v |
+	| v nm0 |
 	v := self @env0:dynamicInstVarAt: #value.
-	((self @env0:dynamicInstVarAt: #name) @env0:isNil
+	nm0 := self @env0:dynamicInstVarAt: #name.
+	((nm0 @env0:isNil or: [nm0 @env0:== None])
 		and: [(v @env0:isKindOf: Integer) and: [v @env0:= 0]]) ifTrue: [
 		^ '<' @env0:, self @env0:class @env0:name @env0:asString
 			@env0:, ': 0>'].
@@ -975,9 +1011,10 @@ method: Flag
 __str__
 	"Perm.R|X; the EMPTY flag is Perm(0) (CPython 3.11+)."
 
-	| v |
+	| v nm0 |
 	v := self @env0:dynamicInstVarAt: #value.
-	((self @env0:dynamicInstVarAt: #name) @env0:isNil
+	nm0 := self @env0:dynamicInstVarAt: #name.
+	((nm0 @env0:isNil or: [nm0 @env0:== None])
 		and: [(v @env0:isKindOf: Integer) and: [v @env0:= 0]]) ifTrue: [
 		^ self @env0:class @env0:name @env0:asString @env0:, '(0)'].
 	^ self @env0:class @env0:name @env0:asString @env0:, '.' @env0:, self ___compositeName___

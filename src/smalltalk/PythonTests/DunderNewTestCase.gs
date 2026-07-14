@@ -1113,7 +1113,12 @@ testEnumMetaclassProtocol
 	self assert: (r @env1:__getitem__: 'sunder_reserved') equals: 'ValueError'.
 	self assert: (r @env1:__getitem__: 'mro_reserved') equals: 'ValueError'.
 	self assert: (r @env1:__getitem__: 'sunders') @env1:__repr__
-		equals: '(''RED'', 1, True, 5)'
+		equals: '(''RED'', 1, True, 5)'.
+	"Flag composite-alias: a class-body value covered by existing member
+	bits is an alias -- named/value lookup works, iteration excludes it,
+	and its .name reads as None."
+	self assert: (r @env1:__getitem__: 'flag_alias') @env1:__repr__
+		equals: '([''first'', ''second'', ''third''], True, True, True, True)'
 %
 
 category: 'Grail-Tests - canonical classes'

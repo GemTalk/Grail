@@ -1003,6 +1003,18 @@ def _enum_protocol_results():
         out['mro_reserved'] = 'ValueError'
     out['sunders'] = (Color.RED._name_, Color.RED._value_,
                       Perm(5)._name_ is None, Perm(5)._value_)
+
+    class MainF(Flag):
+        first = auto()
+        second = auto()
+        third = auto()
+        dupe = 3   # bits covered by first|second -> composite ALIAS
+
+    out['flag_alias'] = ([m.name for m in MainF],
+                         MainF.dupe is MainF(3),
+                         MainF['dupe'] is MainF(3),
+                         MainF(5).name is None,
+                         MainF.dupe in MainF)
     return out
 
 
