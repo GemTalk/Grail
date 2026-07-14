@@ -681,11 +681,21 @@ before it can ever default on (shape mirrors `runCanonicalClassTest.gs`):
 7. **`reload()` as the explicit cold path** (today's cold machinery,
    repointed), including re-register + hash update. — **IMPLEMENTED**
    (folded into phase 5; see above).
-8. **Concurrency polish:** two sessions cold-importing the same new module
-   and both committing → registry write-write conflict; resolve by
-   retry-with-probe (first commit wins, loser rebinds). Document extent
-   growth: deploying an app commits its imported closure (the image model's
-   cost, and its point).
+8. **Concurrency polish.** — **IMPLEMENTED (v1, reduced-conflict
+   registries):** `#GrailCanonicalClasses`, `#GrailCanonicalModules`, and
+   `#GrailCanonicalModuleHashes` are `RcKeyValueDictionary`;
+   `#GrailCanonicalClassSet` is an `RcIdentityBag` (its one consumer is
+   `includes:`; duplicates are harmless). Two sessions concurrently
+   cold-importing and committing **different** modules add disjoint keys,
+   which the RC collections merge instead of conflicting. A **same-module**
+   race resolves last-writer-wins on RC replay: one build becomes
+   canonical; the loser's session-local classes simply never acquire
+   committed reuse, and the next session binds the winner's — a bounded,
+   documented divergence window rather than a commit failure. (Registries
+   created before this change keep their original class until removed —
+   the accessors adopt whatever exists.) The acceptance script asserts the
+   RC classes. Extent growth stands as documented: deploying an app
+   commits its imported closure (the image model's cost, and its point).
 
 ## 11. Relationship to the annotations work
 

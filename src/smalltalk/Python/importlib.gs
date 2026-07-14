@@ -563,9 +563,15 @@ ___canonicalClassRegister___: aModuleName name: aClassName value: anObject
 		| set |
 		set := UserGlobals @env0:at: #'GrailCanonicalClassSet' otherwise: nil.
 		set @env0:isNil ifTrue: [
-			set := IdentitySet @env0:new.
+			"Reduced-conflict (doc par.10.7 phase 8): concurrent sessions
+			cold-importing DIFFERENT modules must not conflict on the shared
+			membership structure.  A bag admits duplicates; the only consumer
+			is includes: (___classAttrOverlayStore___), so duplicates are
+			harmless -- the includes:-guard below merely bounds same-session
+			re-registration growth."
+			set := RcIdentityBag @env0:new.
 			UserGlobals @env0:at: #'GrailCanonicalClassSet' put: set].
-		set @env0:add: anObject].
+		(set @env0:includes: anObject) ifFalse: [set @env0:add: anObject]].
 	^ anObject
 %
 
@@ -606,7 +612,9 @@ ___canonicalModuleHashes___
 	| reg |
 	reg := UserGlobals @env0:at: #'GrailCanonicalModuleHashes' otherwise: nil.
 	reg @env0:isNil ifTrue: [
-		reg := KeyValueDictionary @env0:new.
+		"Reduced-conflict (doc par.10.7 phase 8): non-overlapping module
+		keys from concurrent first importers merge instead of conflicting."
+		reg := RcKeyValueDictionary @env0:new.
 		UserGlobals @env0:at: #'GrailCanonicalModuleHashes' put: reg].
 	^ reg
 %
@@ -720,14 +728,19 @@ category: 'Grail-Canonical Classes'
 classmethod: importlib
 ___canonicalClassRegistry___
 	"Committed (module.qualname -> class) map backing canonical-class reuse.
-	Lives in UserGlobals so it survives sessions; a production deployment
-	would use a reduced-conflict collection (see the doc).  Created lazily
-	in the current transaction; persists only when that transaction commits."
+	Lives in UserGlobals so it survives sessions.  Reduced-conflict (doc
+	par.10.7 phase 8): two sessions concurrently cold-importing and
+	committing DIFFERENT modules add disjoint keys, which an
+	RcKeyValueDictionary merges instead of conflicting; a same-module race
+	resolves last-writer-wins on replay -- one build becomes canonical and
+	the next session binds it (the loser's session-local classes simply
+	never get committed reuse).  Created lazily in the current transaction;
+	persists only when that transaction commits."
 
 	| reg |
 	reg := UserGlobals @env0:at: #'GrailCanonicalClasses' otherwise: nil.
 	reg @env0:isNil ifTrue: [
-		reg := KeyValueDictionary @env0:new.
+		reg := RcKeyValueDictionary @env0:new.
 		UserGlobals @env0:at: #'GrailCanonicalClasses' put: reg].
 	^ reg
 %
@@ -751,7 +764,8 @@ ___canonicalModules___
 	| reg |
 	reg := UserGlobals @env0:at: #'GrailCanonicalModules' otherwise: nil.
 	reg @env0:isNil ifTrue: [
-		reg := KeyValueDictionary @env0:new.
+		"Reduced-conflict, same rationale as ___canonicalClassRegistry___."
+		reg := RcKeyValueDictionary @env0:new.
 		UserGlobals @env0:at: #'GrailCanonicalModules' put: reg].
 	^ reg
 %

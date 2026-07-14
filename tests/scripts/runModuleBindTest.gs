@@ -70,6 +70,18 @@ d := widgetCls @env1:value: { } value: nil.
 ((mod @env1:init_count) = 1)
   ifFalse: [^ self error: 'setup: __session_init__ did not run on cold import: ' , (mod @env1:init_count) printString].
 
+"Phase 8: the shared registries must be reduced-conflict collections so
+concurrent first importers of DIFFERENT modules merge instead of
+conflicting at commit."
+((importlib ___canonicalClassRegistry___) isKindOf: RcKeyValueDictionary)
+  ifFalse: [^ self error: 'setup: class registry is not reduced-conflict'].
+((importlib ___canonicalModules___) isKindOf: RcKeyValueDictionary)
+  ifFalse: [^ self error: 'setup: module registry is not reduced-conflict'].
+((importlib ___canonicalModuleHashes___) isKindOf: RcKeyValueDictionary)
+  ifFalse: [^ self error: 'setup: hash registry is not reduced-conflict'].
+((UserGlobals at: #'GrailCanonicalClassSet' ifAbsent: [nil]) isKindOf: RcIdentityBag)
+  ifFalse: [^ self error: 'setup: canonical class set is not reduced-conflict'].
+
 "Post-import module-state mutation: the bind-vs-re-run discriminator."
 (mod @env1:events) @env1:append: 'A'.
 
