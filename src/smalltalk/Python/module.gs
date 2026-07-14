@@ -143,6 +143,29 @@ instance
 	reg := self @env0:___sessionInstances___.
 	inst := reg @env0:at: self otherwise: nil.
 	inst == nil ifTrue: [
+		"Canonical modules (docs/Persistent_Modules_and_Classes.md
+		par.10.4): committed code resolves dependency module globals
+		through THIS lazy path without any import having run in the
+		session.  Consult the committed canonical registry before
+		minting -- a fresh mint re-runs the module body and re-mints
+		its singletons, breaking identity checks against committed
+		state.  importlib is resolved late (this file compiles before
+		importlib exists, possibly as a different user), and the helper
+		answers nil unless the canonical flag is on and a committed
+		instance applies -- so the default path is untouched."
+		| implib pyDict |
+		pyDict := System @env0:myUserProfile @env0:symbolList
+			@env0:objectNamed: #'Python'.
+		implib := pyDict @env0:== nil
+			ifTrue: [nil]
+			ifFalse: [pyDict @env0:at: #'importlib' otherwise: nil].
+		implib @env0:== nil ifFalse: [
+			inst := implib @env0:___canonicalInstanceForModuleClass___: self.
+			"The helper already adopted inst as this class's session
+			singleton (before running its __session_init__), so just
+			answer it."
+			inst @env0:== nil ifFalse: [^ inst]]].
+	inst == nil ifTrue: [
 		inst := self @env0:new.
 		reg @env0:at: self put: inst.
 		inst @env1:initialize

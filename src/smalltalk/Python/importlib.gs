@@ -791,6 +791,38 @@ ___canonicalClassesEnabled___: aBool
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___canonicalInstanceForModuleClass___: aModuleClass
+	"LAZY FIRST-TOUCH bind (doc par.10.4): committed code can reach a
+	dependency module's globals through the session-singleton path
+	(module class >> instance) without any import having run in this
+	session -- a deployed Flask closure resolves contextvars' _MISSING
+	sentinel that way while serving a request.  Minting a fresh instance
+	there re-runs the module body and re-mints its singletons, breaking
+	identity checks against committed state (the exact par.10.1 failure,
+	resurfacing through the singleton path instead of import).
+
+	When the canonical flag is on and the registry holds a COMMITTED
+	instance of aModuleClass: adopt it as the session singleton FIRST
+	(so a __session_init__ that reads its own module's globals does not
+	recurse back here), register it in sys.modules (a later explicit
+	import is then a cache hit on the same instance), run the session
+	hook, and answer it.  Answers nil when nothing applies -- the caller
+	keeps the old mint-fresh behavior.  No hash check: committed code
+	referencing committed dependencies wants the instance it was
+	deployed with; staleness is the next explicit import's concern."
+
+	self ___canonicalClassesEnabled___ ifFalse: [^ nil].
+	self ___canonicalModules___ keysAndValuesDo: [:name :inst |
+		((inst @env0:class == aModuleClass) and: [inst @env0:isCommitted]) ifTrue: [
+			aModuleClass @env0:___adoptInstance___: inst.
+			self registerModule: name @env0:asString with: inst.
+			self ___runSessionInit___: inst.
+			^ inst]].
+	^ nil
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___runSessionInit___: moduleInstance
 	"SESSION TIER (docs/Persistent_Modules_and_Classes.md par.10.4): run the
 	module's ``def __session_init__():`` hook, when it defines one.  The

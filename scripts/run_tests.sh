@@ -155,4 +155,18 @@ LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runOverlayReuseTest.gs < /de
 # par.10.5 ImportError. Session C cleans the repository.
 LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runModuleBindTest.gs < /dev/null || EXIT=$?
 
+# REAL-APPLICATION acceptance (par.10): session A deploys a module-level
+# Flask app (committing the whole flask/werkzeug closure); session B
+# warm-binds it and the committed app must serve requests (routing, request
+# context, dynamic converters, jsonify, 404s). Exercises the session-tier
+# fixes this surfaced: dbTransient PyThreadLock, SrePattern per-session
+# recompile, lazy first-touch canonical bind, strong-ref flask provider.
+LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runFlaskDeployTest.gs < /dev/null || EXIT=$?
+
+# Interleaved-commit concurrency (par.10.7 phase 8): two concurrent topaz
+# processes cold-import disjoint modules flag-on with overlapping
+# transactions, then commit in sequence; the loser follows the abort-retry
+# protocol and a fresh session must see both registry entries merged.
+./tests/scripts/run_concurrent_import_test.sh || EXIT=$?
+
 exit $EXIT

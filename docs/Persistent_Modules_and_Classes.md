@@ -589,6 +589,42 @@ names are transient).
   C-backed module caches are on `SessionDict` (above). User code gets
   `__session_init__` + `SessionDict` plus this section as documentation.
 
+**Real-application findings (2026-07-15, from deploying a Flask app —
+`runFlaskDeployTest.gs`).** Actually committing the flask/werkzeug closure
+surfaced four session-tier items the audit's static grep could not, all
+fixed at the framework/runtime level so app code needs nothing:
+
+1. **Locks.** `threading.Lock()` wraps a GemStone `Semaphore` — a
+   non-persistable kernel class, so the deploy commit itself failed
+   (TransactionError 2407). `PyThreadLock` is now `#dbTransient` (the
+   lock's identity commits, its slots don't) with a lazy `_sem` accessor:
+   a faulted-in lock re-creates its mutex on first use, unlocked —
+   correct, since mutex state is meaningless across sessions.
+2. **Compiled regexes.** werkzeug's URL rules carry `SrePattern`s whose C
+   pointers are dead in the next session (the old guard raised).
+   `SrePattern` now remembers its six `_sre.compile()` arguments and
+   **recompiles transparently** on first use per session; a wrapper
+   without them (minted by `SreMatch>>re`) still raises the clean guard.
+   `SreMatch` has no recompile story (it captures a moment) and still
+   guards.
+3. **Lazy first-touch bind.** Committed code resolves *dependency* module
+   globals through the module-class session-singleton path without any
+   import having run — serving a request read contextvars' `_MISSING`
+   that way, and the old lazy path minted a fresh instance and re-ran the
+   body (the §10.1 hybrid resurfacing through a side door).
+   `module class >> instance` now consults the canonical registry before
+   minting (`___canonicalInstanceForModuleClass___:`): adopt the
+   committed instance, register in `sys.modules`, run its
+   `__session_init__`. This is §10.4's "first touch per session," now
+   literal.
+4. **Weakrefs in frameworks.** A committed Grail `WeakReference` faults
+   into a later session dead *by contract* — flask's JSON provider held
+   `weakref.proxy(app)` and jsonify raised `ReferenceError` on the
+   deployed app. Vendored flask now holds strong references (CPython
+   used the weakref only to break refcount cycles; GemStone collects
+   cycles). Audit rule: **framework weakrefs to long-lived objects are a
+   session-tier smell** in deployed closures.
+
 ### 10.5 Divergences to document (and their CPython mapping)
 
 - **"Fresh state per forced re-import" is spelled `reload()` — and the old
@@ -681,21 +717,40 @@ before it can ever default on (shape mirrors `runCanonicalClassTest.gs`):
 7. **`reload()` as the explicit cold path** (today's cold machinery,
    repointed), including re-register + hash update. — **IMPLEMENTED**
    (folded into phase 5; see above).
-8. **Concurrency polish.** — **IMPLEMENTED (v1, reduced-conflict
-   registries):** `#GrailCanonicalClasses`, `#GrailCanonicalModules`, and
+8. **Concurrency polish.** — **IMPLEMENTED (reduced-conflict registries +
+   the abort-retry protocol), and measured with a true interleaved test.**
+   `#GrailCanonicalClasses`, `#GrailCanonicalModules`, and
    `#GrailCanonicalModuleHashes` are `RcKeyValueDictionary`;
-   `#GrailCanonicalClassSet` is an `RcIdentityBag` (its one consumer is
-   `includes:`; duplicates are harmless). Two sessions concurrently
-   cold-importing and committing **different** modules add disjoint keys,
-   which the RC collections merge instead of conflicting. A **same-module**
-   race resolves last-writer-wins on RC replay: one build becomes
-   canonical; the loser's session-local classes simply never acquire
-   committed reuse, and the next session binds the winner's — a bounded,
-   documented divergence window rather than a commit failure. (Registries
-   created before this change keep their original class until removed —
-   the accessors adopt whatever exists.) The acceptance script asserts the
-   RC classes. Extent growth stands as documented: deploying an app
-   commits its imported closure (the image model's cost, and its point).
+   `#GrailCanonicalClassSet` is an `RcIdentityBag`. The interleaved test
+   (`tests/scripts/run_concurrent_import_test.sh`: two concurrent topaz
+   processes, marker-file sync, overlapping transactions, sequenced
+   commits) shows what actually happens when two sessions cold-import
+   **disjoint** modules and both commit:
+
+   - The RC registries themselves **merge** (they appear in the loser's
+     RcReadSet, resolved by replay — the design working as intended).
+   - The commit still conflicts on two **residual** shared structures:
+     `CallAst class` (codegen keeps compile-state in class instVars of a
+     committed class — dirtied by ANY Python compile, so any two sessions
+     that each compiled Python and both commit collide, flag-off
+     included; migrating that state to SessionTemps is the outstanding
+     item the session-state refactor deferred) and `PythonModules` (a
+     plain SymbolDictionary both sessions add module classes to; it must
+     stay a SymbolDictionary for name resolution).
+   - So the protocol is the classic GemStone one, exactly as this phase
+     originally sketched: **first commit wins; the loser aborts (its view
+     refreshes past the winner), re-imports, re-commits — and succeeds.**
+     The test demonstrates the retry converging and a fresh session
+     seeing both registry entries merged.
+
+   The important asymmetry: **warm binds — the common concurrent-runtime
+   case — write none of these structures and cannot conflict.** Cold
+   import + commit is a *deploy*; concurrent deploys retry (or simply
+   serialize deploys, the sane operational default). A same-module
+   concurrent first import additionally collides on `PythonModules` —
+   one more reason deploys come from one session. Extent growth stands
+   as documented: deploying an app commits its imported closure (the
+   image model's cost, and its point).
 
 ## 11. Relationship to the annotations work
 

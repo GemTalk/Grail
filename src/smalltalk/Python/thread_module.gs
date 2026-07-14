@@ -26,7 +26,7 @@ Object subclass: 'PyThreadLock'
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
-  options: #()
+  options: #(#dbTransient)
 %
 
 expectvalue /Class
@@ -68,6 +68,24 @@ _initLock
 	^ self
 %
 
+category: 'Grail-Private'
+method: PyThreadLock
+_sem
+	"Lazy, SESSION-SAFE Semaphore access.  The class is #dbTransient:
+	Semaphores are a non-persistent kernel class (committing one raises
+	TransactionError 2407), and module-level ``threading.Lock()`` objects
+	sit in real app closures (flask / werkzeug), so a deployed canonical
+	module (docs/Persistent_Modules_and_Classes.md par.10) must be able
+	to commit a lock.  dbTransient commits the lock's IDENTITY with its
+	slots unwritten; in a later session the slot faults in nil and this
+	accessor re-creates the mutex on first use.  A freshly-faulted lock
+	is therefore UNLOCKED -- correct, since mutex state is meaningless
+	across sessions."
+
+	sem isNil ifTrue: [sem := Semaphore forMutualExclusion].
+	^ sem
+%
+
 set compile_env: 1
 
 category: 'Grail-Lock'
@@ -75,7 +93,7 @@ method: PyThreadLock
 acquire
 	"Block until the lock is available, then take it.  Returns True."
 
-	sem @env0:wait.
+	self @env0:_sem @env0:wait.
 	^ true
 %
 
@@ -85,8 +103,8 @@ acquire: blocking
 	"``acquire(blocking)`` — when blocking is false, return immediately with
 	whether the lock was taken."
 
-	blocking @env0:ifFalse: [^ sem @env0:tryLock].
-	sem @env0:wait.
+	blocking @env0:ifFalse: [^ self @env0:_sem @env0:tryLock].
+	self @env0:_sem @env0:wait.
 	^ true
 %
 
@@ -95,9 +113,9 @@ method: PyThreadLock
 acquire: blocking _: timeout
 	"``acquire(blocking, timeout)`` — timeout is in seconds (negative = forever)."
 
-	blocking @env0:ifFalse: [^ sem @env0:tryLock].
-	(timeout @env0:< 0) @env0:ifTrue: [sem @env0:wait. ^ true].
-	^ sem @env0:waitForMilliseconds: (timeout @env0:* 1000) @env0:truncated
+	blocking @env0:ifFalse: [^ self @env0:_sem @env0:tryLock].
+	(timeout @env0:< 0) @env0:ifTrue: [self @env0:_sem @env0:wait. ^ true].
+	^ self @env0:_sem @env0:waitForMilliseconds: (timeout @env0:* 1000) @env0:truncated
 %
 
 category: 'Grail-Lock'
@@ -109,9 +127,9 @@ _acquire: positional kw: kwargs
 	n := positional @env0:size.
 	blocking := (n @env0:>= 1) @env0:ifTrue: [positional @env0:at: 1] @env0:ifFalse: [true].
 	timeout := (n @env0:>= 2) @env0:ifTrue: [positional @env0:at: 2] @env0:ifFalse: [-1].
-	blocking @env0:ifFalse: [^ sem @env0:tryLock].
-	(timeout @env0:< 0) @env0:ifTrue: [sem @env0:wait. ^ true].
-	^ sem @env0:waitForMilliseconds: (timeout @env0:* 1000) @env0:truncated
+	blocking @env0:ifFalse: [^ self @env0:_sem @env0:tryLock].
+	(timeout @env0:< 0) @env0:ifTrue: [self @env0:_sem @env0:wait. ^ true].
+	^ self @env0:_sem @env0:waitForMilliseconds: (timeout @env0:* 1000) @env0:truncated
 %
 
 category: 'Grail-Lock'
@@ -119,27 +137,27 @@ method: PyThreadLock
 release
 	"Release the lock (signal one waiter)."
 
-	sem @env0:signal.
+	self @env0:_sem @env0:signal.
 	^ None
 %
 
 category: 'Grail-Lock'
 method: PyThreadLock
 locked
-	^ sem @env0:isLocked
+	^ self @env0:_sem @env0:isLocked
 %
 
 category: 'Grail-Lock'
 method: PyThreadLock
 __enter__
-	sem @env0:wait.
+	self @env0:_sem @env0:wait.
 	^ self
 %
 
 category: 'Grail-Lock'
 method: PyThreadLock
 __exit__: excType _: excValue _: tb
-	sem @env0:signal.
+	self @env0:_sem @env0:signal.
 	^ false
 %
 

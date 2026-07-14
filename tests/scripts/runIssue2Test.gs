@@ -110,10 +110,28 @@ the script -- leaving the repository pristine in every case."
   check value: 'pattern cPointer faulted in NULL' value: (pat @env0:cPointer isNull).
   check value: 'match cPointer faulted in NULL'   value: (match @env0:cPointer isNull).
 
-  "Every C-pointer call must signal cleanly rather than SEGV on the dead address."
-  raises value: 'SrePattern>>search: signals on stale pointer'  value: [pat @env1:search: 'xyzabc'].
-  raises value: 'SrePattern>>match: signals on stale pointer'   value: [pat @env1:match: 'abcxyz'].
-  raises value: 'SrePattern>>findall: signals on stale pointer' value: [pat @env1:findall: 'abc'].
+  "A PATTERN compiled via _sre.compile() remembers its compile arguments
+  and RECOMPILES transparently on first use in the new session (the
+  phase-6 session-tier fix for deployed canonical modules -- werkzeug URL
+  rules carry committed patterns).  What used to be a guard signal is now
+  a working pattern; the no-SEGV guarantee is unchanged because the dead
+  address is never dereferenced."
+  [ | m2 |
+  m2 := pat @env1:search: 'xyzabc'.
+  check value: 'SrePattern>>search: RECOMPILES and matches after the fault'
+    value: ((m2 isKindOf: SreMatch) and: [(m2 @env1:group: 0) = 'abc']).
+  check value: 'pattern cPointer re-populated by the recompile'
+    value: (pat @env0:cPointer isNull not).
+  check value: 'SrePattern>>match: works after recompile'
+    value: (((pat @env1:match: 'abcxyz') isKindOf: SreMatch)).
+  check value: 'SrePattern>>findall: works after recompile'
+    value: (((pat @env1:findall: 'abc') @env1:__len__) = 1).
+  ] on: Error do: [:ex |
+    failures add: 'pattern recompile path raised: ' , ex messageText printString].
+
+  "A MATCH has no recompile story (it captures a moment against a
+  subject string) -- its C-pointer calls must still signal cleanly
+  rather than SEGV on the dead address."
   raises value: 'SreMatch>>group: signals on stale pointer'     value: [match @env1:group: 0].
   raises value: 'SreMatch>>span: signals on stale pointer'      value: [match @env1:span: 0].
 ] ensure: [

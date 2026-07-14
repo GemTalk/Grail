@@ -42,7 +42,7 @@ _sre category: 'Grail-Modules'
 expectvalue /Class
 doit
 Object subclass: 'SrePattern'
-  instVarNames: #(cPointer)
+  instVarNames: #(cPointer compileArgs)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -57,10 +57,17 @@ SrePattern comment:
 
 cPointer holds the C PatternObject* as a CPointer.  A CPointer keeps its
 address in non-persistent storage, so an SrePattern that is committed (the
-re / jinja2 regex caches retain compiled patterns) and later faulted into a
-fresh session comes back with a NULL cPointer instead of a stale integer
-address.  cPtrAddress refuses to hand a NULL/stale address to the C shim,
-turning what used to be a SEGV into a clean Smalltalk error.'
+re / jinja2 regex caches retain compiled patterns, and a DEPLOYED canonical
+module closure -- werkzeug URL rules -- carries patterns compiled at
+definition time) and later faulted into a fresh session comes back with a
+NULL cPointer instead of a stale integer address.
+
+compileArgs holds the six _sre.compile() arguments (pattern, flags, code,
+groups, groupindex, indexgroup -- all plain committable values), letting
+cPtrAddress RECOMPILE the pattern transparently in a session that faulted
+the wrapper in with a NULL cPointer.  A wrapper without compileArgs (e.g.
+minted by SreMatch>>re) still signals a clean Smalltalk error rather than
+handing a NULL/stale address to C (the original SEGV fix).'
 %
 
 ! ------- SreMatch class (wraps C MatchObject*)
@@ -121,6 +128,20 @@ newFromCPtr: anAddress
 	^ self basicNew initCPointer: (CPointer forAddress: anAddress)
 %
 
+category: 'Grail-Instance Creation'
+classmethod: SrePattern
+newFromCPtr: anAddress compileArgs: anArray
+	"Like newFromCPtr:, additionally remembering the six _sre.compile()
+	arguments so the pattern can be RECOMPILED transparently after being
+	committed and faulted into a fresh session (see the class comment)."
+
+	| inst |
+	anAddress = 0 ifTrue: [^ nil].
+	inst := self basicNew initCPointer: (CPointer forAddress: anAddress).
+	inst initCompileArgs: anArray.
+	^ inst
+%
+
 category: 'Grail-Python Attribute Hook'
 classmethod: SrePattern
 ___pythonValueAttrs___
@@ -146,6 +167,12 @@ initCPointer: aCPointer
 	cPointer := aCPointer
 %
 
+category: 'Grail-Private'
+method: SrePattern
+initCompileArgs: anArray
+	compileArgs := anArray
+%
+
 category: 'Grail-Accessing'
 method: SrePattern
 cPointer
@@ -156,13 +183,29 @@ cPointer
 category: 'Grail-Private'
 method: SrePattern
 cPtrAddress
-	"The raw C address to hand to the shim. Signal rather than pass a
-	NULL/stale address into C: a pattern that was committed and faulted into
-	a new session has a NULL cPointer because the C PatternObject no longer
-	exists, and dereferencing it would crash the gem."
+	"The raw C address to hand to the shim.  A pattern that was committed
+	and faulted into a new session has a NULL cPointer because the C
+	PatternObject no longer exists.  When the wrapper remembers its
+	_sre.compile() arguments, RECOMPILE transparently -- a deployed
+	canonical-module closure (werkzeug URL rules, module-level
+	re.compile()) must keep serving in later sessions.  Without the args
+	(a wrapper minted by SreMatch>>re), signal rather than hand a
+	NULL/stale address into C -- dereferencing it would crash the gem."
 
 	(cPointer isNil or: [cPointer isNull]) ifTrue: [
-		^ self error: 'SrePattern is not valid in this session: a compiled regular expression does not persist across a commit/session boundary (recompile the pattern).'].
+		compileArgs isNil ifTrue: [
+			^ self error: 'SrePattern is not valid in this session: a compiled regular expression does not persist across a commit/session boundary (recompile the pattern).'].
+		[ | addr sreCls |
+		"_sre's class definition follows SrePattern's in this file --
+		resolve it at runtime rather than compile time."
+		sreCls := System myUserProfile symbolList objectNamed: #'_sre'.
+		addr := sreCls
+			callCompile: (compileArgs at: 1) flags: (compileArgs at: 2)
+			code: (compileArgs at: 3) groups: (compileArgs at: 4)
+			groupindex: (compileArgs at: 5) indexgroup: (compileArgs at: 6).
+		addr = 0 ifTrue: [
+			^ self error: 'SrePattern recompile failed in this session (see compileArgs).'].
+		cPointer := CPointer forAddress: addr ] value].
 	^ cPointer memoryAddress
 %
 
@@ -1267,7 +1310,10 @@ compile: pattern _: flags _: code _: groups _: groupindex _: indexgroup
 
 	| cPtr |
 	cPtr := self @env0:class @env0:callCompile: pattern flags: flags code: code groups: groups groupindex: groupindex indexgroup: indexgroup.
+	"Remember the compile arguments so a committed pattern faulted into a
+	later session can recompile itself transparently (cPtrAddress)."
 	^ SrePattern @env0:newFromCPtr: cPtr
+		compileArgs: { pattern. flags. code. groups. groupindex. indexgroup }
 %
 
 ! ===============================================================================

@@ -36,7 +36,15 @@ class JSONProvider:
     """
 
     def __init__(self, app: App) -> None:
-        self._app: App = weakref.proxy(app)
+        # Grail deviation: a STRONG reference, not weakref.proxy(app).
+        # CPython uses the proxy only to break the app <-> provider ref
+        # cycle for its refcounting GC; GemStone collects cycles fine.
+        # The weakref actively breaks deployed canonical modules
+        # (docs/Persistent_Modules_and_Classes.md par.10): a committed
+        # Grail WeakReference faults into a later session DEAD by
+        # contract, so jsonify on a deployed app raised ReferenceError
+        # even though the app itself is alive in the committed graph.
+        self._app: App = app
 
     def dumps(self, obj: t.Any, **kwargs: t.Any) -> str:
         """Serialize data as JSON.

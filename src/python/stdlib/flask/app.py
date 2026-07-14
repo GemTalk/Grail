@@ -268,14 +268,17 @@ class Flask(App):
             assert bool(static_host) == host_matching, (
                 "Invalid static_host/host_matching combination"
             )
-            # Use a weakref to avoid creating a reference cycle between the app
-            # and the view function (see #3761).
-            self_ref = weakref.ref(self)
+            # Grail deviation: CPython uses a weakref here only to break
+            # the app <-> view-function ref cycle (#3761) for refcounting;
+            # GemStone collects cycles, and a committed Grail WeakReference
+            # faults into a later session DEAD by contract -- a deployed
+            # app's static route would raise ReferenceError. Capture the
+            # app strongly instead.
             self.add_url_rule(
                 f"{self.static_url_path}/<path:filename>",
                 endpoint="static",
                 host=static_host,
-                view_func=lambda **kw: self_ref().send_static_file(**kw),  # type: ignore # noqa: B950
+                view_func=lambda **kw: self.send_static_file(**kw),  # type: ignore # noqa: B950
             )
 
     def get_send_file_max_age(self, filename: str | None) -> int | None:
