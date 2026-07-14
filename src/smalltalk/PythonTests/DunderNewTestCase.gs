@@ -1129,7 +1129,10 @@ testEnumMetaclassProtocol
 	"``dupe = third`` aliases third (same auto() marker resolved once by
 	identity): dupe excluded from iteration, is third, repr shows third."
 	self assert: (r @env1:__getitem__: 'auto_alias') @env1:__repr__
-		equals: '([(''first'', 1), (''second'', 2), (''third'', 3)], True, ''<AliasE.third: 3>'')'
+		equals: '([(''first'', 1), (''second'', 2), (''third'', 3)], True, ''<AliasE.third: 3>'')'.
+	"Member format: pure Enum/Flag member formats as its str."
+	self assert: (r @env1:__getitem__: 'member_format') @env1:__repr__
+		equals: '(''Color.RED'', ''Perm.R'', ''Color.RED'')'
 %
 
 category: 'Grail-Tests - canonical classes'

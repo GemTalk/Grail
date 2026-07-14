@@ -921,6 +921,18 @@ __str__
 
 category: 'Grail-Enum Member'
 method: Enum
+__format__: aSpec
+	"A pure-Enum (or Flag) member formats as its str -- ``ClassName.name''
+	-- with the spec applied to that string (CPython Enum.__format__ for a
+	non-mixed enum: str.__format__(str(self), spec)).  Mixed enums
+	(IntEnum, AbstractPyInt-rooted) do NOT inherit this -- they keep the
+	data type's numeric formatting, which is correct."
+
+	^ (self @env1:__str__) @env1:__format__: aSpec
+%
+
+category: 'Grail-Enum Member'
+method: Enum
 __eq__: other
 	^ self @env0:== other
 %

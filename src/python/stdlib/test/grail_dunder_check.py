@@ -1040,6 +1040,12 @@ def _enum_protocol_results():
     out['auto_alias'] = ([(m.name, m.value) for m in AliasE],
                          AliasE.dupe is AliasE.third,
                          repr(AliasE.dupe))
+
+    # Member format: a pure-Enum/Flag member formats as its str
+    # (ClassName.name).  (IntEnum members formatting as their int value --
+    # the 3.11 ReprEnum behavior -- is a separate gap, not covered here.)
+    out['member_format'] = (format(Color.RED), format(Perm.R),
+                            format(Color.RED, ''))
     return out
 
 
