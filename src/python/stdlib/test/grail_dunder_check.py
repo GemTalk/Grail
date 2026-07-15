@@ -640,6 +640,41 @@ def _mi_flag_results():
 MI_FLAG_RESULT = _mi_flag_results()
 
 
+def _mi_subclass_results():
+    # SUBCLASSING an MI class must preserve the secondary bases in __mro__
+    # (a single-inheritance subclass used to re-walk only the Smalltalk
+    # superclass chain, dropping Flag/Enum).  This is the _EnumTests
+    # MainEnum shape (class enum_type(int, Flag); BaseEnum(enum_type);
+    # MainEnum(BaseEnum)) -- the whole TestMixedIntFlagClass family
+    # errored because Flag was lost, so auto() numbered sequentially
+    # (third=3) instead of by powers of two (third=4) and the composite
+    # MainEnum(5) == first|third was unreachable.
+    from enum import Flag, auto
+
+    class enum_type(int, Flag):
+        pass
+    class BaseEnum(enum_type):
+        pass
+    class MainEnum(BaseEnum):
+        first = auto()
+        second = auto()
+        third = auto()
+        dupe = 3
+
+    return (
+        Flag in MainEnum.__mro__,              # secondary base survived
+        issubclass(MainEnum, Flag),            # via the same __mro__
+        MainEnum.first.value,                  # 1
+        MainEnum.third.value,                  # 4 (power of two, not 3)
+        [m.name for m in MainEnum],            # single-bit members only
+        MainEnum(5).value,                     # 5 == first|third composite
+        MainEnum.dupe is MainEnum(3),          # dupe aliases the 1|2 composite
+    )
+
+
+MI_SUBCLASS_RESULT = _mi_subclass_results()
+
+
 def _partial_setstate_results():
     # functools.partial.__setstate__ + __dict__ namespace, including the
     # tuple/dict-SUBCLASS coercion path (needs real classdefs, so it

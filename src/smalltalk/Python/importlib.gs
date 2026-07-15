@@ -1845,14 +1845,27 @@ ___mroOf___: aClass
 	GemStone-internal ancestors (PythonInstance, Object, ...) appear at
 	the tail exactly as Behavior>>__mro__ has always reported them."
 
-	| entry result c |
-	entry := self ___miRegistry___ at: aClass otherwise: nil.
-	entry ifNotNil: [^ entry at: 2].
+	| result c |
 	result := OrderedCollection new.
 	c := aClass.
 	[c == nil] whileFalse: [
-		result add: c.
-		c := c superclass].
+		| entry |
+		entry := self ___miRegistry___ at: c otherwise: nil.
+		entry
+			ifNil: [
+				(result includesIdentical: c) ifFalse: [result add: c].
+				c := c superclass]
+			ifNotNil: [
+				"c is a multiple-inheritance class: splice its full stored C3
+				MRO (which carries its SECONDARY bases and everything above)
+				and stop.  A single-inheritance subclass of an MI class must
+				NOT re-walk the raw Smalltalk superclass chain past c -- that
+				chain omits the secondary bases, so issubclass(sub, aSecondary)
+				and C3 linearization through sub would both miss them.  Kept in
+				lockstep with Behavior>>__mro__."
+				(entry at: 2) do: [:m |
+					(result includesIdentical: m) ifFalse: [result add: m]].
+				^ Array withAll: result]].
 	^ Array withAll: result
 %
 

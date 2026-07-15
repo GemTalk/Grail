@@ -143,14 +143,16 @@ __mro__
 	dunders that always resolve to their value."
 
 	| il result c |
-	"Multiple-inheritance classes registered their exact C3
-	linearization at creation (importlib ___registerBases___:bases:) --
-	answer it.  Everything else keeps the superclass-chain derivation."
+	"Single source of truth: importlib ___mroOf___: derives the C3 MRO,
+	splicing an MI-registered ancestor's SECONDARY bases when a
+	single-inheritance subclass would otherwise re-walk the raw Smalltalk
+	superclass chain and drop them (``class E(int, Flag)'' is
+	Integer-chained; a subclass of E must keep Flag/Enum -- Enum
+	___grailIsFlagClass: reads __mro__, so auto() numbering and
+	issubclass(sub, Flag) both hinge on it).  Fall back to the bare chain
+	only before importlib exists (Class.gs loads early)."
 	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
-	il @env0:== nil ifFalse: [
-		| entry |
-		entry := il @env0:___miRegistry___ @env0:at: self otherwise: nil.
-		entry @env0:== nil ifFalse: [^ entry @env0:at: 2]].
+	il @env0:== nil ifFalse: [^ il @env0:___mroOf___: self].
 	result := OrderedCollection @env0:new.
 	c := self.
 	[c @env0:== nil] whileFalse: [

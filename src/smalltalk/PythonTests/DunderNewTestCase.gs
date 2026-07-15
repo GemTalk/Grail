@@ -892,6 +892,25 @@ testMiFlagEnums
 		equals: '(1, 2, 4, 3, 5, True, True, 1, ''R'', 1, 2, True, ''a'', True, 1)'
 %
 
+category: 'Grail-Tests - enum internals'
+method: DunderNewTestCase
+testMiSubclassKeepsSecondaryBases
+	"SUBCLASSING an MI class must preserve its SECONDARY bases in __mro__.
+	A single-inheritance subclass used to re-walk only the Smalltalk
+	superclass chain (``class enum_type(int, Flag)'' is Integer-chained),
+	dropping Flag/Enum -- so ___grailIsFlagClass: saw a plain enum,
+	auto() numbered sequentially (third=3 not 4), and the composite
+	MainEnum(5)==first|third was unreachable.  This was the whole
+	test_enum TestMixedIntFlagClass family (37 errors: setUp's
+	MainEnum(BaseEnum(enum_type)) shape).  __mro__ and importlib
+	___mroOf___: (which issubclass consults) both splice an MI-registered
+	ancestor's stored C3 MRO, so Flag survives, auto() is power-of-two,
+	and issubclass(MainEnum, Flag) holds."
+
+	self assert: (self fixture @env1:MI_SUBCLASS_RESULT) @env1:__repr__
+		equals: '(True, True, 1, 4, [''first'', ''second'', ''third''], 5, True)'
+%
+
 category: 'Grail-Tests - functools'
 method: DunderNewTestCase
 testPartialPlaceholderAndCacheInfo
