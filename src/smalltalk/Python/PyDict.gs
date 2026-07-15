@@ -14,10 +14,19 @@ KeyValueDictionary ifNil: [self error: 'KeyValueDictionary is not defined.'].
 ! env-0 iteration primitives; the Python dict protocol (keys/values/items/
 ! __iter__/__repr__), which is compiled onto KeyValueDictionary and builds
 ! on those primitives, therefore inherits correct order for free.
+!
+! REHASH SAFETY: KeyValueDictionary grows/shrinks its hash table through
+! rebuildTable:, which iterates the LIVE table via the very keysAndValuesDo:
+! we override -- and mid-rebuild `self at:` cannot find a moved entry.  So a
+! `rehashing` flag, set only by our rebuildTable: override, routes the
+! iteration overrides back to super (hash order, table-safe) for the
+! duration of the rebuild, and suppresses order bookkeeping on any
+! re-insertion the rebuild performs.  Everywhere else the overrides walk
+! `order`.
 expectvalue /Class
 doit
 KeyValueDictionary subclass: 'PyDict'
-  instVarNames: #( order )
+  instVarNames: #( order rehashing )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -31,7 +40,8 @@ PyDict comment:
 'The Python ``dict'' type: a KeyValueDictionary that preserves insertion
 order (CPython 3.7+). ``order'' is an OrderedCollection of keys in
 insertion order, maintained by the mutator overrides and walked by the
-iteration overrides. See docs/Ordered_Dict.md.'
+iteration overrides. ``rehashing'' guards the table-rebuild reentry. See
+docs/Ordered_Dict.md.'
 %
 
 expectvalue /Class
@@ -68,6 +78,21 @@ ___setOrder___: anOrderedCollection
 	order := anOrderedCollection
 %
 
+! ------------------- table rebuild (rehash) -- the single choke point
+
+category: 'Grail-Order'
+method: PyDict
+rebuildTable: newSize
+	"Every grow/shrink funnels through here.  While the table is being
+	rebuilt it is inconsistent (entries are mid-move), so the iteration
+	overrides must fall back to super's table-order walk and the mutator
+	overrides must not touch `order`.  A flag scoped to this call does both;
+	`ensure:` restores it even on error."
+
+	rehashing := true.
+	^ [super rebuildTable: newSize] ensure: [rehashing := false]
+%
+
 ! ------------------- mutators (maintain order; guard with O(1) includesKey:)
 
 category: 'Grail-Mutation'
@@ -75,9 +100,11 @@ method: PyDict
 at: aKey put: aValue
 	"Append the key to the order list on FIRST insertion; an update leaves
 	its position unchanged (CPython semantics).  includesKey: is the O(1)
-	hash probe, so this adds no scan."
+	hash probe, so this adds no scan.  During a rebuild, re-inserted entries
+	are already in `order` -- skip the bookkeeping."
 
 	| isNew |
+	rehashing == true ifTrue: [^ super at: aKey put: aValue].
 	isNew := (self includesKey: aKey) not.
 	super at: aKey put: aValue.
 	isNew ifTrue: [self ___order___ addLast: aKey].
@@ -88,6 +115,7 @@ category: 'Grail-Mutation'
 method: PyDict
 add: anAssociation
 	| isNew |
+	rehashing == true ifTrue: [^ super add: anAssociation].
 	isNew := (self includesKey: anAssociation key) not.
 	super add: anAssociation.
 	isNew ifTrue: [self ___order___ addLast: anAssociation key].
@@ -115,29 +143,33 @@ removeAllKeys: aCollection
 	^ super removeAllKeys: aCollection
 %
 
-! ------------------- iteration (walk order)
+! ------------------- iteration (walk order; defer to super during rehash)
 
 category: 'Grail-Iteration'
 method: PyDict
 keysDo: aBlock
+	rehashing == true ifTrue: [^ super keysDo: aBlock].
 	self ___order___ do: [:k | aBlock value: k]
 %
 
 category: 'Grail-Iteration'
 method: PyDict
 valuesDo: aBlock
+	rehashing == true ifTrue: [^ super valuesDo: aBlock].
 	self ___order___ do: [:k | aBlock value: (self at: k)]
 %
 
 category: 'Grail-Iteration'
 method: PyDict
 keysAndValuesDo: aBlock
+	rehashing == true ifTrue: [^ super keysAndValuesDo: aBlock].
 	self ___order___ do: [:k | aBlock value: k value: (self at: k)]
 %
 
 category: 'Grail-Iteration'
 method: PyDict
 associationsDo: aBlock
+	rehashing == true ifTrue: [^ super associationsDo: aBlock].
 	self ___order___ do: [:k | aBlock value: (self associationAt: k)]
 %
 
@@ -145,6 +177,7 @@ category: 'Grail-Iteration'
 method: PyDict
 do: aBlock
 	"KeyValueDictionary>>do: iterates VALUES."
+	rehashing == true ifTrue: [^ super do: aBlock].
 	self valuesDo: aBlock
 %
 
@@ -163,3 +196,12 @@ copy
 %
 
 set compile_env: 0
+
+! ------- The Python `dict` type is PyDict.  install.gs's Python-namespace
+! ------- block (which runs before this file) aliased `dict` to the kernel
+! ------- KeyValueDictionary; re-point it now that PyDict exists so literals,
+! ------- dict(), kwargs, isinstance(x, dict) and `type({}) is dict` all use
+! ------- the insertion-ordered subclass.
+run
+Python at: #'dict' put: PyDict.
+%

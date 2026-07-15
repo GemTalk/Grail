@@ -276,7 +276,12 @@ __eq__: other
 	"Return True if dictionaries have the same (key, value) pairs"
 
 	| mySize otherSize |
-	(other @env0:isKindOf: dict) ifFalse: [
+	"Accept EVERY KeyValueDictionary, not just the PyDict subclass: Grail
+	hands plain KVDs to Python from many places (globals(), a module's
+	__dict__, C-shim results, dicts committed before the PyDict flip).  A
+	Python dict must compare equal to any of them by contents -- exactly
+	what this guard meant when ``dict'' was itself KeyValueDictionary."
+	(other @env0:isKindOf: KeyValueDictionary) ifFalse: [
 		^ false
 	].
 	

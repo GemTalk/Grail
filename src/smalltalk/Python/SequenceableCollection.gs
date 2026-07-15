@@ -58,8 +58,20 @@ __eq__: other
 	myClass := self @env0:class.
 	otherClass := other @env0:class.
 
-	"Same class: Smalltalk's structural = suffices."
-	myClass == otherClass ifTrue: [^ self @env0:= other].
+	"Same class: Smalltalk's structural = is the fast path -- but it recurses
+	into elements with Smalltalk =, which demands same-class elements.  A
+	content-equal element pair of differing Smalltalk class (a plain
+	KeyValueDictionary from __dict__ / globals reflection vs a PyDict
+	literal; or 1 vs 1.0) fails that check though Python == holds.  Trust a
+	TRUE result; on FALSE fall back to element-wise env-1 __eq__ (Python
+	semantics), the same rule the cross-class branch below uses."
+	myClass == otherClass ifTrue: [
+		(self @env0:= other) ifTrue: [^ true].
+		(self @env0:size) @env0:= (other @env0:size) ifFalse: [^ false].
+		1 @env0:to: self @env0:size do: [:i |
+			(((self @env0:at: i) @env1:__eq__: (other @env0:at: i)) == true)
+				ifFalse: [^ false]].
+		^ true].
 
 	"Cross-class LIST comparison: plain Array and OrderedCollection both
 	surrogate Python ``list'' (historically str.split returned Arrays;

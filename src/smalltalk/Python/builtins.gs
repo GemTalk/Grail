@@ -1421,6 +1421,14 @@ ___isInstanceSingle___: anObject of: aClass
 		(test_word_boundaries).  bytes stays distinct: ByteArray is not a
 		CharacterCollection."
 		result := anObject @env0:isKindOf: CharacterCollection].
+	(result not and: [aClass @env0:== (Python @env0:at: #'PyDict' otherwise: nil)]) ifTrue: [
+		"dict maps to PyDict (the insertion-ordered subclass) for
+		construction, but CPython counts EVERY dict as a dict: internal
+		plain KeyValueDictionaries surfaced to Python (module namespaces,
+		some builtins) must still read as dict.  PyDict is-a KVD, so this
+		only widens the check to the superclass (docs/Ordered_Dict.md).
+		PyDict resolved late -- builtins.gs compiles before PyDict.gs."
+		result := anObject @env0:isKindOf: KeyValueDictionary].
 	result ifFalse: [
 		"Secondary (multiple-inheritance) bases are not on the Smalltalk
 		chain isKindOf: walks -- consult the instance class's registered

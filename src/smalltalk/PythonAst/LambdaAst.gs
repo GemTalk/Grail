@@ -169,7 +169,7 @@ printSmalltalkOn: aStream
 	kwargName ifNotNil: [
 		aStream
 			nextPutAll: kwargName;
-			nextPutAll: ' := keywords @env0:isNil ifTrue: [KeyValueDictionary @env0:new] ifFalse: [keywords].';
+			nextPutAll: ' := keywords @env0:isNil ifTrue: [PyDict @env0:new] ifFalse: [keywords].';
 			lf.
 	].
 

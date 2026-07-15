@@ -841,8 +841,10 @@ printKeywordsDictOn: aStream
 	(``'foo' == 'foo''' is false even though ``'foo' = 'foo''' is
 	true), so a call-site ``at: 'name''' and a callee
 	``includesKey: 'name''' would miss in an Identity dict.  Use
-	``=''-keyed KeyValueDictionary instead."
-	aStream nextPutAll: '((KeyValueDictionary @env0:new)'.
+	``=''-keyed KeyValueDictionary instead.  PyDict (an ordered
+	KeyValueDictionary subclass) so **kwargs / dict(**kw) preserve
+	keyword order (docs/Ordered_Dict.md)."
+	aStream nextPutAll: '((PyDict @env0:new)'.
 	keywords do: [:kwAst |
 		kwAst name
 			ifNotNil: [

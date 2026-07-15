@@ -306,7 +306,7 @@ printSmalltalkOn: aStream
 	args kwarg ifNotNil: [
 		aStream
 			nextPutAll: (self transportParamName: args kwarg name);
-			nextPutAll: ' := ___kwargs___ ifNil: [(KeyValueDictionary perform: #new env: 0)].';
+			nextPutAll: ' := ___kwargs___ ifNil: [(PyDict perform: #new env: 0)].';
 			lf.
 	].
 	"Generator functions wrap the entire body in ``PythonGenerator
@@ -713,7 +713,7 @@ emitAnnotationsDictOn: aStream
 	___annotationSourceString___; a consumer that needs the type
 	(functools.singledispatch.register) resolves the string itself."
 
-	aStream nextPutAll: '((KeyValueDictionary @env0:new)'.
+	aStream nextPutAll: '((PyDict @env0:new)'.
 	self ___annotatedArgs___ do: [:a |
 		aStream nextPutAll: ' @env0:at: '''; nextPutAll: a name asString; nextPutAll: ''' put: '.
 		self emitStringLiteral: a annotation ___annotationSourceString___ on: aStream.
@@ -1467,7 +1467,7 @@ generateModuleMethodSourceOn: aStream
 			aStream
 				nextPutAll: args kwarg name;
 				nextPutAll: ' := ('; nextPutAll: kwMethodParam;
-				nextPutAll: ' ifNil: [(KeyValueDictionary perform: #new env: 0)]) @env0:copy.';
+				nextPutAll: ' ifNil: [(PyDict perform: #new env: 0)]) @env0:copy.';
 				lf.
 			args kwonlyargs do: [:each |
 				aStream
@@ -2176,7 +2176,7 @@ generateMethodSourceOn: aStream
 			aStream
 				nextPutAll: args kwarg name;
 				nextPutAll: ' := ('; nextPutAll: kwMethodParam;
-				nextPutAll: ' ifNil: [(KeyValueDictionary perform: #new env: 0)]) @env0:copy.';
+				nextPutAll: ' ifNil: [(PyDict perform: #new env: 0)]) @env0:copy.';
 				lf.
 			args kwonlyargs do: [:each |
 				aStream

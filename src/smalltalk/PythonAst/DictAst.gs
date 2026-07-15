@@ -61,7 +61,7 @@ method: DictAst
 printSmalltalkOn: aStream
 
 	keys isEmpty ifTrue: [
-		aStream nextPutAll: '(KeyValueDictionary perform: #new env: 0)'.
+		aStream nextPutAll: '(PyDict perform: #new env: 0)'.
 		^self.
 	].
 	aStream nextPutAll: '([:___d | '.
@@ -89,5 +89,5 @@ printSmalltalkOn: aStream
 				aStream nextPutAll: '. '.
 			].
 	].
-	aStream nextPutAll: '___d] value: (KeyValueDictionary perform: #new env: 0))'.
+	aStream nextPutAll: '___d] value: (PyDict perform: #new env: 0))'.
 %

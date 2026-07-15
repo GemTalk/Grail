@@ -62,7 +62,7 @@ printSmalltalkOn: aStream
 	generators around an inner body that stores k -> v in the accumulator."
 
 	aStream nextPutAll: '([| ___r___ |'; lf; increaseIndent.
-	aStream nextPutAll: '___r___ := (KeyValueDictionary perform: #new env: 0).'; lf.
+	aStream nextPutAll: '___r___ := (PyDict perform: #new env: 0).'; lf.
 	ComprehensionAst
 		emitGenerators: generators
 		from: 1

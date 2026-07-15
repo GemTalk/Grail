@@ -42,7 +42,7 @@ MainEnum-Function family). See [[dict-ordering]].
 
 ```
 KeyValueDictionary subclass: 'PyDict'
-  instVarNames: #('order')   "an OrderedCollection of keys, insertion order"
+  instVarNames: #('order' 'rehashing')   "order: OrderedCollection of keys; rehashing: table-rebuild guard"
 ```
 
 **Why is-a KVD (not a wrapper):** every consumer — internal Smalltalk
@@ -69,6 +69,17 @@ become `PyDict`) and **iteration order** (walk `order`, not the hash).
 
 **`copy`** must produce a `PyDict` preserving `order`.
 
+**Rehash safety (the load-bearing subtlety).** `KeyValueDictionary` grows /
+shrinks its hash table through `rebuildTable:`, which enumerates the LIVE
+table via the very `keysAndValuesDo:` we override — and mid-rebuild an entry
+has moved, so `self at:` inside an order-walk cannot find it (this crashes,
+e.g., `mimetypes` builds a ~40-entry table). `rebuildTable:` is the single
+choke point every grow/shrink funnels through, so we override it to set a
+`rehashing` flag for the duration of the rebuild; while set, the iteration
+overrides fall back to `super` (hash order, table-safe) and the mutator
+overrides skip `order` bookkeeping on any re-insertion the rebuild performs.
+Everywhere else they walk `order`.
+
 ## 4. Creation touchpoints (where Python dicts are minted)
 
 | Site | File | Change |
@@ -76,10 +87,28 @@ become `PyDict`) and **iteration order** (walk `order`, not the hash).
 | dict literal `{...}` | `PythonAst/DictAst.gs` (emits `KeyValueDictionary perform: #new env: 0`) | emit `PyDict` |
 | dict comprehension | `PythonAst/DictCompAst.gs` | emit `PyDict` |
 | `dict()` / `dict(**kw)` | `Python/dict.gs` (`__new__`, `_new:kw:`) | inherits `dict`=`PyDict` |
-| `**kwargs` collector | codegen keyword-dict construction (CallAst / Function/Lambda param binding) | build `PyDict` |
+| `**kwargs` at a CALL (`f(**kw)`) | `PythonAst/CallAst.gs` (kwargs collector) | emit `PyDict` |
+| `**kw` PARAM binding (`def f(**kw)`) | `PythonAst/FunctionDefAst.gs` (empty-default + copy paths), `LambdaAst.gs` | build `PyDict` — **easy to miss; the call side and the param side are separate codegen** |
+| `func.__annotations__` | `PythonAst/FunctionDefAst.gs` (annotation-dict builder) | emit `PyDict` |
 | `type(name, bases, ns)` / functional `Enum(...)` | already receive a dict from the above | free once above land |
-| `dict` alias | `install.gs:817` (`at: #dict put: KeyValueDictionary`) | `put: PyDict` |
-| internal `dict ___new___` sites | grep `Python/*.gs` | those that hand a dict to Python code → `PyDict`; pure-internal KVDs stay KVD |
+| `dict` alias | `install.gs` aliases `dict`→`KeyValueDictionary` before `PyDict` exists; **re-aliased `dict`→`PyDict` at the end of `Python/PyDict.gs`** (which files in after `dict.gs`) | `put: PyDict` |
+| internal `dict ___new___` sites | grep `Python/*.gs` | those that hand a dict to Python code → `PyDict`; pure-internal KVDs stay KVD. **Instance/class `__dict__` reflection and `globals()` still mint plain KVDs (v1 gap — see equality note)** |
+
+**Equality across dict flavours (load-bearing).** With two dict classes in
+play (`PyDict` for freshly-minted Python dicts, plain `KeyValueDictionary`
+for `__dict__` reflection / `globals()` / internal), two content-equal dicts
+of *different* Smalltalk class must still compare equal to Python:
+- `dict.__eq__` (`Python/dict.gs`) guards on `isKindOf: KeyValueDictionary`,
+  **not** `isKindOf: dict` — else a `PyDict == plainKVD` wrongly returns
+  false (this is exactly what `isKindOf: dict` meant when `dict` *was*
+  `KeyValueDictionary`; the flip silently narrowed it).
+- `SequenceableCollection>>__eq__:` (tuple/list) took a fast path
+  `^ self = other` (Smalltalk structural `=`) for same-class sequences —
+  but Smalltalk `AbstractDictionary>>=` requires `self class == other class`,
+  so a tuple/list containing a `PyDict` in one position and a plain KVD in
+  the matching position compared unequal though Python `==` held. Fix: trust
+  a TRUE structural `=`, but on FALSE fall back to element-wise env-1
+  `__eq__` (Python semantics). Applies to `1 == 1.0` element pairs too.
 
 **`isinstance(x, dict)`** — decision: keep it true for **any**
 `KeyValueDictionary` (not just `PyDict`), so internal KVDs still read as
@@ -106,8 +135,29 @@ Documented, deferred.
 4. **Reconcile** `isinstance`, `copy`, internal `dict ___new___` sites,
    shim recognition. Gate: full suite + measure `test_enum` delta.
 
+**Status:** phase 1 (PyDict class + `PyDictTestCase`, 8/8) landed 191920f.
+Phase 2 (rehash-safety, literals/comprehensions/`dict()`/call-kwargs/param-kwargs
+→ PyDict, `__eq__` robustness, `SequenceableCollection` element-wise fallback)
+landed together; **cold gate 3027/3027**.
+
 **Non-goals (v1):** insertion order across the C-shim round-trip; changing
-kernel `KeyValueDictionary`; ordered `set` (separate).
+kernel `KeyValueDictionary`; ordered `set` (separate); flipping `__dict__` /
+`globals()` reflection to `PyDict` (they stay plain KVDs — the equality
+fixes above make that safe, but instance-attribute *order* is not yet
+preserved).
+
+**Testing lesson (cost me a long debug loop).** The warm/canonical sharded
+gate surfaced `LookupError`/codec crashes that DID NOT reproduce cold or in
+warm isolation. Root cause was **not** the dict change: repeated
+`install.sh` runs recreate the Python exception classes (new object
+identity), and a module deployed by an *earlier* run keeps its compiled
+methods' captured references to the *old* exception classes — so a warm-bound
+`contextvars.get()` raises a `LookupError` that `except LookupError` (bound
+to the current class) can't match. Fixed by clearing the committed canonical
+registries and redeploying. **Validate dict-semantics changes with the COLD
+gate; treat warm-only, non-reproducing failures on a repeatedly-installed
+extent as committed-state artifacts, not code bugs** (wipe/redeploy before
+theorizing).
 
 ## 6. Risks
 

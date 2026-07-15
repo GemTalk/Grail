@@ -4466,14 +4466,16 @@ testSubscriptedBuiltinAsBaseClass
 	"`class X(dict[K, V]):` evaluates ``dict[K, V]`` at runtime as
 	part of the base-class list.  Grail's dict class-side
 	__getitem__: stub returns the class itself so the parameterized
-	base resolves to the origin class (KeyValueDictionary).  Without
-	the stub, class-statement execution DNUs on the metaclass."
+	base resolves to the origin class (PyDict, the insertion-ordered
+	Python ``dict''; docs/Ordered_Dict.md).  Without the stub,
+	class-statement execution DNUs on the metaclass."
 
 	| mod cls inst |
 	mod := self loadFixture: 'subscripted_base'.
 	cls := mod @env1:StringKeyedDict.
-	"The class inherits from KeyValueDictionary (Grail's dict)."
-	self assert: cls superclass equals: KeyValueDictionary.
+	"The class inherits from PyDict (Grail's dict) -- CPython dict
+	subclasses are ordered, so subclassing the ordered PyDict is correct."
+	self assert: cls superclass equals: PyDict.
 	inst := mod @env1:make.
 	self assert: (inst @env0:at: 'k') equals: 1.
 	self assert: (inst @env1:label) equals: 'string-keyed'.
