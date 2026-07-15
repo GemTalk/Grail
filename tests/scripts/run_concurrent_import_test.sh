@@ -2,15 +2,17 @@
 # Interleaved-commit concurrency test for the reduced-conflict canonical
 # registries (docs/Persistent_Modules_and_Classes.md par.10.7 phase 8).
 #
-# Linked topaz allows one session per process, so TRUE interleaving uses two
-# concurrent topaz PROCESSES (as the parallel test shards do), synchronised
-# through marker files: both workers cold-import DISJOINT modules flag-on
-# (uncommitted registry writes in overlapping transactions), then commit in
-# sequence. Worker B's commit succeeding -- and a fresh verifier session
-# seeing BOTH entries -- is the merge assertion. A same-module race is out
-# of scope (documented last-writer-wins; concurrent first imports of the
-# SAME new module can also conflict on PythonModules, a plain
-# SymbolDictionary -- deploys should come from one session).
+# RPC edition: one topaz process drives TWO RPC sessions and interleaves them
+# deterministically (runConcurrentImportRpc.gs, `set session:` -- no marker
+# files, no polling). Requires a running NetLDI; the gemnetid names it via
+# GRAIL_NETLDI (default gs64ldi). CI runs `startnetldi` first (.gitlab-ci.yml).
+#
+# The two sessions cold-import DISJOINT modules flag-on with overlapping
+# transactions, then commit in sequence: A wins, B conflicts on PythonModules
+# (the plain SymbolDictionary both add a module class to) and follows the
+# GemStone abort/refresh/retry protocol to succeed, and a fresh session sees
+# both registry entries merged. A same-module race is out of scope (documented
+# last-writer-wins; deploys come from one session).
 #
 # Assumes a running stone and a sourced .setenv (mirrors run_tests.sh).
 set -u
@@ -20,10 +22,14 @@ if [ -z "${GEMSTONE:-}" ] && [ -f "$PROJECT_ROOT/.setenv" ]; then
     # shellcheck disable=SC1091
     source "$PROJECT_ROOT/.setenv"
 fi
-TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=500000;"
 export GRAIL_DIR="$PROJECT_ROOT"
 
-SYNC=$(mktemp -d "${TMPDIR:-/tmp}/grail_cc.XXXXXX")
+NETLDI="${GRAIL_NETLDI:-gs64ldi}"
+STONE="${GEMSTONE_NAME:-gs64stone}"
+HOST="${GRAIL_CC_HOST:-localhost}"
+GEMNETID="!tcp@${HOST}#netldi:${NETLDI}!gemnetobject"
+
+SYNC=$(mktemp -d "${TMPDIR:-/tmp}/grail_ccrpc.XXXXXX")
 export GRAIL_CC_SYNC="$SYNC"
 trap 'rm -rf "$SYNC"' EXIT
 
@@ -37,28 +43,20 @@ value = 41
 EOF
 done
 
-EXIT=0
-LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S "$SCRIPT_DIR/concurrentImportPrep.gs" < /dev/null \
-  > "$SYNC/prep.out" 2>&1 || { echo "concurrent-import: PREP FAILED (see below)"; cat "$SYNC/prep.out"; exit 1; }
-
-GRAIL_CC_ROLE=a LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S "$SCRIPT_DIR/concurrentImportWorker.gs" < /dev/null \
-  > "$SYNC/worker_a.out" 2>&1 &
-PID_A=$!
-GRAIL_CC_ROLE=b LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S "$SCRIPT_DIR/concurrentImportWorker.gs" < /dev/null \
-  > "$SYNC/worker_b.out" 2>&1 &
-PID_B=$!
-wait "$PID_A" || EXIT=$?
-wait "$PID_B" || EXIT=$?
-grep -h "commit ->" "$SYNC"/worker_*.out 2>/dev/null
-grep -hA6 "conflicts (informational):" "$SYNC"/worker_*.out 2>/dev/null
-
-if [ "$EXIT" -ne 0 ]; then
-  echo "concurrent-import: a worker FAILED"
-  tail -20 "$SYNC/worker_a.out"; tail -20 "$SYNC/worker_b.out"
-fi
-
-LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S "$SCRIPT_DIR/concurrentImportVerify.gs" < /dev/null \
-  > "$SYNC/verify.out" 2>&1 || EXIT=$?
-grep -E "passed|FAILED|  " "$SYNC/verify.out" | head -10
-
+# RPC topaz (NO -l): a gemnetid makes `login` spawn a gem via NetLDI, and
+# multiple logins in one process yield distinct sessions switchable with
+# `set session:`. Prepend the (environment-specific) gems/gemnetid settings
+# to the shared script and run it via -S.
+# The RPC gem is spawned by NetLDI as a SEPARATE process and does NOT inherit
+# topaz's environment, so paths are substituted into the script as literals
+# (@@GRAILDIR@@ / @@SYNC@@) rather than read via System gemEnvironmentVariable:.
+RUN="$SYNC/run.gs"
+{
+  printf 'set gems %s\n' "$STONE"
+  printf 'set gemnetid %s\n' "$GEMNETID"
+  sed -e "s#@@GRAILDIR@@#${PROJECT_ROOT}#g" -e "s#@@SYNC@@#${SYNC}#g" \
+    "$SCRIPT_DIR/runConcurrentImportRpc.gs"
+} > "$RUN"
+LC_ALL=C topaz -q -S "$RUN" < /dev/null
+EXIT=$?
 exit $EXIT

@@ -55,6 +55,11 @@ test:
     - cd "$CI_PROJECT_DIR/testing"
     - startstone -e stone.conf gs64stone
     - waitstone gs64stone 60
+    # NetLDI (guest mode) so the RPC concurrency test can drive two remote
+    # sessions from one topaz process (tests/scripts/run_concurrent_import_test.sh).
+    # Guest mode -g: gems are spawned without per-login OS authentication,
+    # which the CI container's OS user is not provisioned for.
+    - startnetldi -g gs64ldi
     - cd "$CI_PROJECT_DIR"
   script:
     - python3 --version # 3.14.x
