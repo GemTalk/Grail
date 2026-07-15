@@ -521,6 +521,7 @@ run
 	at: #'BytesTestCase' put: nil;
 	at: #'CachedPropertyTestCase' put: nil;
 	at: #'DeployCheckTestCase' put: nil;
+	at: #'PyDictTestCase' put: nil;
 	at: #'BytesWarningTestCase' put: nil;
 	at: #'CPythonShimTestCase' put: nil;
 	at: #'CPythonHarnessTestCase' put: nil;
@@ -1036,6 +1037,7 @@ input src/smalltalk/Python/Bytes.gs
 input src/smalltalk/Python/Decimal.gs
 input src/smalltalk/Python/Fraction.gs
 input src/smalltalk/Python/dict.gs
+input src/smalltalk/Python/PyDict.gs
 input src/smalltalk/Python/ExecBlockAttrs.gs
 input src/smalltalk/Python/ExecBlock.gs
 input src/smalltalk/Python/Float.gs
@@ -1228,6 +1230,7 @@ input src/smalltalk/PythonTests/BuiltinSubclassOverrideTestCase.gs
 input src/smalltalk/PythonTests/BytearrayTestCase.gs
 input src/smalltalk/PythonTests/CachedPropertyTestCase.gs
 input src/smalltalk/PythonTests/DeployCheckTestCase.gs
+input src/smalltalk/PythonTests/PyDictTestCase.gs
 input src/smalltalk/PythonTests/BytesTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrsTestCase.gs
 input src/smalltalk/PythonTests/ClassDecoratorTestCase.gs
