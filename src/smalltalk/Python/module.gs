@@ -400,14 +400,30 @@ set compile_env: 1
 category: 'Grail-Attribute Access'
 method: module
 ___moduleAttrLoad___: aSym
-	"Bare-name module-attribute load with NameError on miss.  Probes
-	dynamic-instVar storage first (canonical home for user globals
-	and rebound names); if absent, lazy-wraps a class method as a
-	BoundMethod (handles top-level defs without pre-storing a handle
-	at def time, which would block rebinding detection in
-	CallAst's bare-call dispatch).  Raises Python NameError if
-	neither path resolves — matches ``KeyError → NameError'' in
-	CPython's __globals__[name] lookup."
+	"Bare-name module-attribute load with NameError on miss.  The full
+	resolution chain lives in ___globalAt___:otherwise: (shared with the
+	PyModuleDict live view that backs globals()); this entry point adds
+	the NameError — matching ``KeyError → NameError'' in CPython's
+	__globals__[name] lookup."
+
+	^ self @env1:___globalAt___: aSym otherwise: [
+		NameError @env1:___signal___:
+			'name ''' @env0:, aSym @env0:asString @env0:, ''' is not defined']
+%
+
+category: 'Grail-Attribute Access'
+method: module
+___globalAt___: aSym otherwise: aBlock
+	"Resolve a module-global binding; evaluate aBlock when absent.  The
+	single resolution chain behind bare-name reads (___moduleAttrLoad___:,
+	which raises NameError) and the globals() live view (PyModuleDict,
+	which raises KeyError / returns a default).  Probes dynamic-instVar
+	storage first (canonical home for user globals and rebound names); if
+	absent, lazy-wraps a class method as a BoundMethod (handles top-level
+	defs without pre-storing a handle at def time, which would block
+	rebinding detection in CallAst's bare-call dispatch); finally falls
+	back to the legacy SymbolDictionary slot (built-in module data
+	attributes)."
 
 	| val s sym1 sym2 sym3 symVA cls owner |
 	val := self @env0:dynamicInstVarAt: aSym.
@@ -494,7 +510,55 @@ ___moduleAttrLoad___: aSym
 	"Legacy SymbolDictionary fallback for built-in modules that
 	store some attrs in the dict slot."
 	(self @env0:includesKey: aSym) ifTrue: [^ self @env0:at: aSym].
-	NameError @env1:___signal___: 'name ''' @env0:, s @env0:, ''' is not defined'
+	^ aBlock @env0:value
+%
+
+category: 'Grail-Attribute Access'
+method: module
+___globalNames___
+	"Ordered key list for the module's global namespace (the globals()
+	live view -- PyModuleDict).  Union of the three stores the
+	___globalAt___:otherwise: chain reads, deduplicated, as Strings:
+	  1. legacy SymbolDictionary slot entries (built-in module data
+	     attributes, __doc__),
+	  2. dynamic instVars in declaration order (user globals -- the
+	     insertion-ordered common case),
+	  3. the module class's OWN top-level defs ('Grail-Methods'
+	     category) not yet lazily wrapped into a dynamic slot, so
+	     ``'myfunc' in globals()'' is true before the first bare read.
+	Internal ``___...___'' selectors are excluded."
+
+	| names seen add |
+	names := OrderedCollection @env0:new.
+	seen := Set @env0:new.
+	add := [:nm |
+		(seen @env0:includes: nm) ifFalse: [
+			seen @env0:add: nm.
+			names @env0:add: nm]].
+	self @env0:keysDo: [:k | add @env0:value: k @env0:asString].
+	(self @env0:dynamicInstanceVariables) @env0:do: [:k | add @env0:value: k @env0:asString].
+	(self @env0:class @env0:selectorsForEnvironment: 1) @env0:do: [:sel |
+		| s index skip |
+		s := sel @env0:asString.
+		skip := ((s @env0:size @env0:>= 3) @env0:and: [(s @env0:copyFrom: 1 to: 3) @env0:= '___'])
+			@env0:or: [(self @env0:class @env0:categoryOfSelector: sel environmentId: 1) @env0:~~ #'Grail-Methods'].
+		skip ifFalse: [
+			index := s @env0:indexOf: $:.
+			(index @env0:== 0) ifFalse: [s := s @env0:copyFrom: 1 to: (index @env0:- 1)].
+			add @env0:value: s]].
+	^ names
+%
+
+category: 'Grail-Accessors'
+method: module
+__dict__
+	"Python ``mod.__dict__'' -- a LIVE view of the module's global
+	namespace, same object semantics as globals() inside the module
+	(writes create real globals; see PyModuleDict).  Category
+	'Grail-Accessors' so attribute loads PERFORM this getter and hand
+	back the view rather than wrapping it as a BoundMethod."
+
+	^ (Python @env0:at: #'PyModuleDict') @env0:on: self
 %
 
 set compile_env: 0

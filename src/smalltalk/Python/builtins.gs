@@ -126,9 +126,12 @@ _exec: positional kw: kwargs
 		globalsDict := KeyValueDictionary @env0:new
 	].
 	"Build a SymbolDictionary seeded from the globals mapping; module
-	scope must use Symbol keys."
+	scope must use Symbol keys.  The live dict views (PyModuleDict from
+	globals(), PyInstanceDict from obj.__dict__) speak keysAndValuesDo:
+	too -- exec(src, globals()) is the canonical caller."
 	scope := SymbolDictionary @env0:new.
-	(globalsDict @env0:isKindOf: KeyValueDictionary) ifTrue: [
+	((globalsDict @env0:isKindOf: KeyValueDictionary)
+		or: [globalsDict @env0:isKindOf: PyInstanceDict]) ifTrue: [
 		globalsDict @env0:keysAndValuesDo: [:key :value |
 			sym := key @env0:isSymbol ifTrue: [key] ifFalse: [key @env0:asString @env0:asSymbol].
 			scope @env0:at: sym put: value]
@@ -168,9 +171,11 @@ _eval: positional kw: kwargs
 		ifFalse: [nil].
 	globalsDict @env0:isNil ifTrue: [
 		globalsDict := KeyValueDictionary @env0:new].
-	"Seed a fresh SymbolDictionary scope from globals."
+	"Seed a fresh SymbolDictionary scope from globals (live dict views
+	accepted -- see _exec)."
 	scope := SymbolDictionary @env0:new.
-	(globalsDict @env0:isKindOf: KeyValueDictionary) ifTrue: [
+	((globalsDict @env0:isKindOf: KeyValueDictionary)
+		or: [globalsDict @env0:isKindOf: PyInstanceDict]) ifTrue: [
 		globalsDict @env0:keysAndValuesDo: [:key :value |
 			sym := key @env0:isSymbol
 				ifTrue: [key]
@@ -1116,6 +1121,11 @@ vars: anObject
 		or: [(anObject @env0:isKindOf: CharacterCollection)
 		or: [(anObject @env0:class @env0:isPointers) @env0:not]]]]]) ifTrue: [
 		TypeError ___signal___: 'vars() argument must have __dict__ attribute'].
+	"vars(module) IS the module's __dict__ in CPython -- a LIVE mapping.
+	Return the PyModuleDict view (same object semantics as globals()
+	inside the module) instead of a snapshot that would drop writes."
+	(anObject @env0:isKindOf: module) ifTrue: [
+		^ (Python @env0:at: #'PyModuleDict') @env0:on: anObject].
 	d := dict @env1:___new___.
 	(anObject @env0:isKindOf: SymbolDictionary) ifTrue: [
 		anObject @env0:keysDo: [:k |
@@ -1427,8 +1437,12 @@ ___isInstanceSingle___: anObject of: aClass
 		plain KeyValueDictionaries surfaced to Python (module namespaces,
 		some builtins) must still read as dict.  PyDict is-a KVD, so this
 		only widens the check to the superclass (docs/Ordered_Dict.md).
-		PyDict resolved late -- builtins.gs compiles before PyDict.gs."
-		result := anObject @env0:isKindOf: KeyValueDictionary].
+		PyDict resolved late -- builtins.gs compiles before PyDict.gs.
+		The live dict VIEWS (PyInstanceDict for obj.__dict__, PyModuleDict
+		for globals()) also count: CPython's globals() IS a dict, and
+		mapping-duck-typed code checks isinstance(g, dict)."
+		result := (anObject @env0:isKindOf: KeyValueDictionary)
+			or: [anObject @env0:isKindOf: PyInstanceDict]].
 	result ifFalse: [
 		"Secondary (multiple-inheritance) bases are not on the Smalltalk
 		chain isKindOf: walks -- consult the instance class's registered

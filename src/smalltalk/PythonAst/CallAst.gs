@@ -136,16 +136,27 @@ printSmalltalkOn: aStream
 	    varargs form instead)."
 
 	| fastSelector knownBuiltinName |
-	"0. `globals()` — return the enclosing module's namespace. Inside any
-	module-level def, `self` IS the module instance (a SymbolDictionary
-	subclass), so emit `self` directly. This is a hack: it only matches
-	the bare-name 0-arg call at compile time, and breaks down for
-	`globals` aliased through a local. Good enough for module
-	initialization code, which is where ports of CPython sources use it."
+	"0. `globals()` — return the enclosing module's namespace as a LIVE
+	dict view (PyModuleDict).  The raw module instance is incoherent as a
+	Python dict — user globals live in dynamic instVars while the
+	inherited SymbolDictionary slot is empty, so `g['x']` missed real
+	globals and `g.keys()` executed the inherited kernel method
+	(docs/LEGB.md).  The view reads through the same
+	___globalAt___:otherwise: chain bare-name loads use and writes create
+	real globals.  ___moduleStoreReceiverExpr___ picks the receiver:
+	`self` in the module body / top-level defs, the module singleton
+	inside a user class method (where `self` is the Python instance).
+	Still only matches the bare-name 0-arg call shape at compile time —
+	`globals` aliased through a local is not rewritten."
 	((function isKindOf: NameAst)
 		and: [function id = #'globals'
 			and: [arguments isEmpty and: [keywords isEmpty]]])
-				ifTrue: [aStream nextPutAll: 'self'. ^self].
+				ifTrue: [
+					aStream
+						nextPutAll: '(PyModuleDict @env0:on: ';
+						nextPutAll: self ___moduleStoreReceiverExpr___;
+						nextPutAll: ')'.
+					^self].
 
 	"0b. `locals()` / zero-arg `vars()` — compile-time rewrite.  Inside
 	a function body (CallAst functionBeingCompiled is set by
@@ -153,7 +164,8 @@ printSmalltalkOn: aStream
 	the function scope; builtins ___buildLocals___: filters the
 	still-unbound ones (Smalltalk nil ≡ unbound — Python None is the
 	None singleton) and answers a dict.  At module body scope locals()
-	IS globals(), so emit `self` like the globals() case above.
+	IS globals(), so emit the PyModuleDict live view like the globals()
+	case above.
 	vars() with no argument is locals() by definition (the 1-arg form
 	dispatches to builtins vars: normally).  Same caveat as globals():
 	only the bare-name 0-arg call shape is rewritten."
@@ -731,7 +743,14 @@ printLocalsCallOn: aStream
 
 	| fn names paramNames |
 	fn := CallAst functionBeingCompiled.
-	fn isNil ifTrue: [aStream nextPutAll: 'self'. ^self].
+	"Module scope: locals() IS globals() — emit the same live view as the
+	globals() rewrite (docs/LEGB.md)."
+	fn isNil ifTrue: [
+		aStream
+			nextPutAll: '(PyModuleDict @env0:on: ';
+			nextPutAll: self ___moduleStoreReceiverExpr___;
+			nextPutAll: ')'.
+		^self].
 	names := fn body variables asSortedCollection: [:a :b | a asString <= b asString].
 	paramNames := fn allParameterNames.
 	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) ___buildLocals___: { '.

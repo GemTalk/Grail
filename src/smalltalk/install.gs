@@ -340,6 +340,7 @@ run
 	at: #'PythonClass' put: nil;
 	at: #'PythonInstance' put: nil;
 	at: #'PyInstanceDict' put: nil;
+	at: #'PyModuleDict' put: nil;
 	at: #'AbstractPyInt' put: nil;
 	at: #'AbstractPyFloat' put: nil;
 	at: #'Enum' put: nil;
@@ -522,6 +523,7 @@ run
 	at: #'CachedPropertyTestCase' put: nil;
 	at: #'DeployCheckTestCase' put: nil;
 	at: #'PyDictTestCase' put: nil;
+	at: #'GlobalsTestCase' put: nil;
 	at: #'BytesWarningTestCase' put: nil;
 	at: #'CPythonShimTestCase' put: nil;
 	at: #'CPythonHarnessTestCase' put: nil;
@@ -848,6 +850,7 @@ input src/smalltalk/Python/iterator.gs
 input src/smalltalk/Python/module.gs
 input src/smalltalk/Python/PythonInstance.gs
 input src/smalltalk/Python/PyInstanceDict.gs
+input src/smalltalk/Python/PyModuleDict.gs
 input src/smalltalk/Python/AbstractPyInt.gs
 input src/smalltalk/Python/AbstractPyFloat.gs
 input src/smalltalk/Python/NamedIntConstant.gs
@@ -1231,6 +1234,7 @@ input src/smalltalk/PythonTests/BytearrayTestCase.gs
 input src/smalltalk/PythonTests/CachedPropertyTestCase.gs
 input src/smalltalk/PythonTests/DeployCheckTestCase.gs
 input src/smalltalk/PythonTests/PyDictTestCase.gs
+input src/smalltalk/PythonTests/GlobalsTestCase.gs
 input src/smalltalk/PythonTests/BytesTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrsTestCase.gs
 input src/smalltalk/PythonTests/ClassDecoratorTestCase.gs
