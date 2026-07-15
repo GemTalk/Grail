@@ -307,11 +307,48 @@ dir: anObject
 category: 'Grail-Built-in Functions'
 method: builtins
 enumerate: anIterable
-	"Python builtin enumerate(iterable) — fixed-arity fast path."
+	"Python builtin enumerate(iterable) — fixed-arity fast path (start=0)."
+
+	^ self @env1:___enumerate___: anIterable start: 0
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+enumerate: anIterable _: startValue
+	"Python builtin enumerate(iterable, start) — the 2-positional form
+	(enum.py's own _EnumDict / _iter helpers pass an explicit start)."
+
+	^ self @env1:___enumerate___: anIterable start: startValue
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+_enumerate: positional kw: kwargs
+	"Python builtin enumerate(iterable, start=0) — varargs entry for the
+	``start='' keyword (and the positional start) the fixed-arity forms
+	can't accept together."
+
+	| iterable start |
+	iterable := positional @env0:at: 1.
+	start := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [
+			kwargs @env0:isNil
+				ifTrue: [0]
+				ifFalse: [kwargs @env0:at: 'start' ifAbsent: [0]]].
+	^ self @env1:___enumerate___: iterable start: start
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___enumerate___: anIterable start: startValue
+	"Shared enumerate core: yield (index, item) pairs counting from
+	startValue.  Eager (materializes to a list iterator) as the original
+	1-arg form was."
 
 	| iter lst index done |
 	lst := list ___new___.
-	index := 0.
+	index := startValue.
 	iter := anIterable __iter__.
 	done := false.
 	[done] @env0:whileFalse: [

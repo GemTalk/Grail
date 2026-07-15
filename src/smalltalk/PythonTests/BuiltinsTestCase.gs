@@ -1079,3 +1079,18 @@ testChrLoneSurrogateRaisesValueError
 	self assert: (self eval: 'ord(chr(0xD7FF))') equals: 16rD7FF.
 	self assert: (self eval: 'ord(chr(0xE000))') equals: 16rE000
 %
+
+category: 'Grail-Tests - Iteration'
+method: BuiltinsTestCase
+testEnumerateStart
+	"enumerate(iterable, start) — the 2-positional and start= keyword
+	forms, not just the 1-arg fast path (enum.py and many stdlib callers
+	pass an explicit start)."
+
+	self assert: (self eval: 'list(enumerate(["a","b","c"]))') @env1:__repr__
+		equals: '[(0, ''a''), (1, ''b''), (2, ''c'')]'.
+	self assert: (self eval: 'list(enumerate(["a","b","c"], 5))') @env1:__repr__
+		equals: '[(5, ''a''), (6, ''b''), (7, ''c'')]'.
+	self assert: (self eval: 'list(enumerate(["a","b"], start=10))') @env1:__repr__
+		equals: '[(10, ''a''), (11, ''b'')]'
+%
