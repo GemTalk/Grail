@@ -700,6 +700,39 @@ def _func_auto_alias_results():
 FUNC_AUTO_ALIAS_RESULT = _func_auto_alias_results()
 
 
+def _attr_deletion_results():
+    # ``del Cls.method`` removes a class-body method (CPython
+    # test_attribute_deletion), while ``del Cls.MEMBER`` and a missing name
+    # raise AttributeError -- members are enum-store entries, not selectors,
+    # so only 'Grail-Class Methods' selectors are deletable.
+    from enum import Enum
+
+    class Season(Enum):
+        SPRING = 1
+        SUMMER = 2
+        AUTUMN = 3
+        def spam(cls):
+            return 'ni'
+
+    before = hasattr(Season, 'spam')
+    del Season.spam
+    after = hasattr(Season, 'spam')
+    try:
+        del Season.SPRING
+        del_member = 'NO RAISE'
+    except AttributeError:
+        del_member = 'AttributeError'
+    try:
+        del Season.NOPE
+        del_missing = 'NO RAISE'
+    except AttributeError:
+        del_missing = 'AttributeError'
+    return (before, after, del_member, del_missing, Season.SPRING.value)
+
+
+ATTR_DELETION_RESULT = _attr_deletion_results()
+
+
 def _partial_setstate_results():
     # functools.partial.__setstate__ + __dict__ namespace, including the
     # tuple/dict-SUBCLASS coercion path (needs real classdefs, so it

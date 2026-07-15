@@ -1858,7 +1858,7 @@ ___pyAttrDelete___: aName
 	Add a class-side delete mechanism alongside the metaclass dynamic
 	store (see [[dynInstVars-on-metaclass]]) if/when that lands."
 
-	| sym |
+	| sym owned |
 	sym := aName @env0:asSymbol.
 	(self @env0:isKindOf: Behavior) ifTrue: [
 		"Canonical-class overlay: ``del Cls.x'' removes the class's OWN
@@ -1879,6 +1879,31 @@ ___pyAttrDelete___: aName
 					]
 				]
 			].
+		"Class-body method (``def spam(cls): ...''): CPython ``del Cls.spam''
+		removes it from the class dict.  Remove the class's OWN env-1
+		method(s) whose Python base name matches.  Scoped to category
+		'Grail-Class Methods' (user def bodies) so MEMBER accessors
+		('Grail-Class Attrs') and enum members (dynamic-store entries, not
+		selectors at all) are untouched -- ``del Season.SPRING'' still
+		AttributeErrors, matching CPython.  whichClassIncludesSelector:
+		== self keeps it OWN-only: deleting an inherited method raises."
+		owned := (self @env0:selectorsForEnvironment: 1) @env0:select: [:sel |
+			| s idx base |
+			s := sel @env0:asString.
+			idx := s @env0:indexOf: $:.
+			base := (idx @env0:= 0) ifTrue: [s] ifFalse: [s @env0:copyFrom: 1 to: idx @env0:- 1].
+			"A Python def compiles to BOTH a fixed-arity selector (``spam'',
+			``spam:'', ...) whose base is the name, AND a varargs selector
+			``_spam:kw:'' whose base reads as ``_spam'' -- match both so the
+			method is fully removed (a surviving ``_name:kw:'' still answers
+			getattr via the symVA probe)."
+			((base @env0:= aName @env0:asString)
+				or: [s @env0:= ('_' @env0:, aName @env0:asString @env0:, ':kw:')])
+				and: [((self @env0:categoryOfSelector: sel environmentId: 1) @env0:= #'Grail-Class Methods')
+				and: [(self @env0:whichClassIncludesSelector: sel environmentId: 1) @env0:== self]]].
+		owned @env0:isEmpty ifFalse: [
+			owned @env0:do: [:sel | self @env0:removeSelector: sel environmentId: 1].
+			^ self].
 		^ AttributeError @env1:___signal___:
 			'type object ''' @env0:, self @env0:name @env0:asString @env0:,
 				''' has no attribute ''' @env0:, aName @env0:asString @env0:, ''''

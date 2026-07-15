@@ -925,6 +925,19 @@ testFunctionalAutoMarkerAliases
 		equals: '([''first'', ''second'', ''third''], True, 3, [''first'', ''second'', ''third''], True)'
 %
 
+category: 'Grail-Tests - enum internals'
+method: DunderNewTestCase
+testClassMethodDeletion
+	"``del Cls.method'' removes a class-body method (CPython
+	test_attribute_deletion); ``del Cls.MEMBER'' and a missing name raise
+	AttributeError.  Members are enum-store entries (not selectors), so
+	only OWN 'Grail-Class Methods' selectors are deletable -- deleting a
+	member still errors, and the surviving members are intact."
+
+	self assert: (self fixture @env1:ATTR_DELETION_RESULT) @env1:__repr__
+		equals: '(True, False, ''AttributeError'', ''AttributeError'', 1)'
+%
+
 category: 'Grail-Tests - functools'
 method: DunderNewTestCase
 testPartialPlaceholderAndCacheInfo
