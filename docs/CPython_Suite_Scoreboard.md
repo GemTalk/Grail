@@ -32,4 +32,4 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_bytes | SKIP | 0 | 0 | 0 | 0 | a SkipTest occurred (error 2702) |
 | test.test_collections | ERROR | 101 | 45 | 38 | 0 |  |
 | test.test_itertools | ERROR | 135 | 49 | 42 | 3 |  |
-| test.test_enum | ERROR | 1077 | 380 | 252 | 0 |  |
+| test.test_enum | ERROR | 1077 | 378 | 244 | 0 |  |

@@ -129,6 +129,20 @@ ___new___
 	^ self @env0:new
 %
 
+category: 'Grail-Convenience Methods'
+method: object
+___unpackSequence___
+	"Tuple-unpack coercion (``a, b, c = expr'').  AssignAst's unpack
+	codegen indexes the RHS with __getitem__: -- correct for sequences,
+	wrong for iterables WITHOUT positional indexing.  CPython unpacks any
+	iterable via __iter__; receivers that need it (enum classes -- see
+	Enum class>>___unpackSequence___) override this to materialize their
+	iteration order as an indexable list.  Everything sequence-shaped
+	answers itself."
+
+	^ self
+%
+
 category: 'Grail-Attribute Access'
 classmethod: object
 ___setattr__: args kw: kwargs

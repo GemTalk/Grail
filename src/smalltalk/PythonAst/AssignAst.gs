@@ -227,7 +227,11 @@ printSmalltalkTupleStoreOn: aStream target: tgt
 	starIdx := elts findFirst: [:e | e isKindOf: StarredAst].
 	aStream nextPutAll: '[| '; nextPutAll: holder; nextPutAll: ' | '; nextPutAll: holder; nextPutAll: ' := '.
 	value printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: '. '.
+	"___unpackSequence___: sequences answer themselves (Object default);
+	iterables WITHOUT positional __getitem__ (enum classes: `R, W, X =
+	Perm`) materialize their iteration order as an indexable list --
+	CPython unpacks via __iter__, this codegen indexes."
+	aStream nextPutAll: ' ___unpackSequence___. '.
 	starIdx = 0 ifTrue: [
 		elts doWithIndex: [:elt :i |
 			self

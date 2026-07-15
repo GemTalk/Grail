@@ -1055,6 +1055,32 @@ def _enum_protocol_results():
     out['intenum_str'] = (str(Sz.BIG), repr(Sz.BIG),
                           format(Sz.BIG), format(Sz.BIG, '04d'),
                           int(Sz.BIG) == 7)
+
+    # Flag ZERO-valued members are non-canonical (CPython): excluded from
+    # iteration/len/reversed, but reachable by name, by value (Color(0) IS
+    # BLACK) and via membership.  And tuple-unpacking an enum CLASS uses
+    # iteration order (`R, W, X = Perm` -- the unpack codegen's __getitem__
+    # indexing goes through ___unpackSequence___, since class __getitem__
+    # is NAME lookup and raised KeyError: 0).
+    from enum import Flag
+    class ZColor(Flag):
+        BLACK = 0
+        RED = 1
+        GREEN = 2
+        BLUE = 4
+    class ZPerm(Flag):
+        R, W, X = 4, 2, 1
+    r, w, x = ZPerm
+    out['flag_zero'] = (
+        [m.name for m in ZColor],            # ['RED', 'GREEN', 'BLUE']
+        len(ZColor),                          # 3
+        ZColor(0) is ZColor.BLACK,            # True
+        ZColor.BLACK in ZColor,               # True (membership by instance)
+        ZColor.BLACK.name,                    # 'BLACK'
+        (r.name, w.name, x.name),             # ('R', 'W', 'X') definition order
+        ZPerm.X in (ZPerm.R | ZPerm.W),       # False (bit not covered)
+        ZPerm.R in (ZPerm.R | ZPerm.W),       # True
+    )
     return out
 
 

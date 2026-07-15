@@ -268,7 +268,16 @@ ___grailBuildMembers: cls names: attrNames
 						member @env0:dynamicInstVarAt: #'_value_' put: rawValue.
 						member @env0:dynamicInstVarAt: #'_name_' put: nameStr.
 						byValue @env0:at: rawValue put: member.
-						members @env0:add: member]].
+						"A ZERO-valued Flag member (``BLACK = 0``) is reachable
+						by name, by value -- Color(0) -- and as a class
+						attribute, but is NOT canonical: CPython excludes it
+						from iteration, len, reversed and _member_names_
+						(list(Color) yields only single-bit members).  Plain
+						Enum keeps zero members canonical."
+						((rawValue @env0:isKindOf: Integer)
+							and: [rawValue @env0:= 0
+							and: [Enum ___grailIsFlagClass: cls]])
+							ifFalse: [members @env0:add: member]]].
 			byName @env0:at: nameStr put: member.
 			hasAccessor
 				ifTrue: [cls @env0:perform: (nameStr @env0:, ':') @env0:asSymbol env: 1
@@ -545,7 +554,12 @@ ___grailFunctional: cls positional: positional keywords: keywords
 					member @env0:dynamicInstVarAt: #value put: rawValue.
 					member @env0:dynamicInstVarAt: #name put: nameStr.
 					byValue @env0:at: rawValue put: member.
-					members @env0:add: member].
+					"Zero-valued Flag members are non-canonical -- excluded
+					from iteration/len/_member_names_ (same rule as the
+					class-syntax builder)."
+					((rawValue @env0:isKindOf: Integer)
+						and: [rawValue @env0:= 0 and: [isFlag]])
+						ifFalse: [members @env0:add: member]].
 			byName @env0:at: nameStr put: member.
 			"Category MUST be Grail-Class Attrs: the class-receiver branch of
 		Object's attribute load performs only setter-paired accessors or
@@ -656,6 +670,17 @@ category: 'Grail-Enum Metaclass'
 classmethod: Enum
 __iter__
 	^ (Enum ___grailMembers: self) @env1:__iter__
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___unpackSequence___
+	"``R, W, X = Perm'': the unpack codegen indexes with __getitem__:,
+	which on an enum CLASS is name lookup (Perm[0] -> KeyError: 0).
+	Materialize the canonical members in definition order instead --
+	CPython unpacks the class via __iter__."
+
+	^ list @env0:withAll: (Enum ___grailMembers: self)
 %
 
 category: 'Grail-Enum Metaclass'
@@ -822,6 +847,16 @@ category: 'Grail-Enum Metaclass'
 classmethod: IntEnum
 __iter__
 	^ (Enum ___grailMembers: self) @env1:__iter__
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: IntEnum
+___unpackSequence___
+	"Duplicate of Enum class>>___unpackSequence___ -- the IntEnum
+	metaclass chain is AbstractPyInt-rooted and never passes Enum's
+	class side (the established duplicate-onto-int-chain idiom)."
+
+	^ list @env0:withAll: (Enum ___grailMembers: self)
 %
 
 category: 'Grail-Enum Metaclass'

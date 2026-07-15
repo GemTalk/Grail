@@ -1135,7 +1135,14 @@ testEnumMetaclassProtocol
 		equals: '(''Color.RED'', ''Perm.R'', ''Color.RED'')'.
 	"IntEnum member str/format as int value (ReprEnum); repr enum-style."
 	self assert: (r @env1:__getitem__: 'intenum_str') @env1:__repr__
-		equals: '(''7'', ''<Sz.BIG: 7>'', ''7'', ''0007'', True)'
+		equals: '(''7'', ''<Sz.BIG: 7>'', ''7'', ''0007'', True)'.
+	"Flag zero-valued members are NON-canonical (excluded from
+	iteration/len; still reachable by name/value/membership), and
+	tuple-unpacking an enum CLASS follows definition order
+	(___unpackSequence___ -- class __getitem__ is name lookup and
+	raised KeyError: 0 on `R, W, X = Perm`)."
+	self assert: (r @env1:__getitem__: 'flag_zero') @env1:__repr__
+		equals: '([''RED'', ''GREEN'', ''BLUE''], 3, True, True, ''BLACK'', (''R'', ''W'', ''X''), False, True)'
 %
 
 category: 'Grail-Tests - canonical classes'
