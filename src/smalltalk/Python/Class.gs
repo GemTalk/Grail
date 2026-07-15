@@ -94,6 +94,16 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 			@env1:___subclass___: aSymbol
 			instVarNames: ivarNames
 			classInstVarNames: classIvarNames].
+	"NOTE: we deliberately do NOT substitute AbstractPyStr for a plain
+	``class X(str)``.  A boxed str is NOT a CharacterCollection, so
+	framework str subclasses (jinja2 Markup, werkzeug/django text types)
+	passed to env-0 Smalltalk string APIs would break -- three Flask
+	tests regressed when this was tried.  Plain str subclasses stay
+	byte-format Unicode7 subclasses (their content IS the string, working
+	for str behavior; they just can't carry per-instance attributes).
+	StrEnum does NOT need the substitution: it is defined directly as an
+	AbstractPyStr subclass (PyEnumTypes.gs), so ``class C(StrEnum)`` and
+	the functional StrEnum('X', {...}) already root at the boxed base."
 	filteredIvars := ivarNames @env0:reject: [:n |
 		self @env0:allInstVarNames @env0:includes: n].
 	filteredClassIvars := classIvarNames @env0:reject: [:n |

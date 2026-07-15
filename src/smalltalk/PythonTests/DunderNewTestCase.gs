@@ -1232,3 +1232,28 @@ testCanonicalClassAttrOverlay
 		(importlib @env1:modules) removeKey: #'test.grail_dunder_check' ifAbsent: []]
 %
 
+
+category: 'Grail-Tests - str subclass'
+method: DunderNewTestCase
+testStrSubclassBehavesAsString
+	"class MyStr(str): a boxed AbstractPyStr that behaves as a str --
+	str/==/methods/len/getitem/concat/hash all delegate to the wrapped
+	#value; isinstance/issubclass against str hold.  The foundation for
+	StrEnum members (which ARE str subclasses)."
+
+	self assert: (self fixture @env1:STR_SUBCLASS_RESULT) @env1:__repr__
+		equals: '(''hello'', True, ''HELLO'', 5, ''h'', True, True, ''hello world'', ''\''hello\'''', True, True, True, True, True)'
+%
+
+category: 'Grail-Tests - enum internals'
+method: DunderNewTestCase
+testStrEnumMembersAreStrings
+	"StrEnum members ARE strings: value/name, str(member)==value
+	(ReprEnum), repr <Cls.NAME: 'value'>, ==/isinstance/methods,
+	auto()==name.lower(), iteration/lookup/getitem, and the functional
+	StrEnum('X', {...}) API (was the 'decoding str is not supported'
+	wall -- StrEnum used to alias Unicode7).  See AbstractPyStr.gs."
+
+	self assert: (self fixture @env1:STR_ENUM_RESULT) @env1:__repr__
+		equals: '(''red'', ''RED'', ''red'', ''<Color.RED: \''red\''>'', True, True, ''RED'', ''autoed'', [''RED'', ''GREEN'', ''AUTOED''], True, True, ''red'', ''red!'', 3, ''apple'', ''apple'', True)'
+%

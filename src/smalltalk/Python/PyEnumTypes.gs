@@ -86,14 +86,29 @@ IntEnum subclass: 'IntFlag'
   options: #()
 %
 
+! ------- StrEnum: str + Enum.  AbstractPyStr-rooted so members ARE
+! ------- strings (boxed, #value holds the real string); the Enum
+! ------- metaclass protocol is DUPLICATED onto its class side, exactly
+! ------- as for IntEnum (AbstractPyStr never passes Enum's class side).
+expectvalue /Class
+doit
+AbstractPyStr subclass: 'StrEnum'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
 run
 Enum comment: 'Python enum base — see category comment in PyEnumTypes.gs.'.
-#( #Enum #Flag #IntEnum #IntFlag #GrailEnumAuto ) do: [:nm | (Python at: nm) category: 'Grail-Modules'].
+#( #Enum #Flag #IntEnum #IntFlag #StrEnum #GrailEnumAuto ) do: [:nm | (Python at: nm) category: 'Grail-Modules'].
 %
 
 ! ------------------- Remove existing behavior (env 0 + env 1)
 run
-#( #Enum #Flag #IntEnum #IntFlag ) do: [:nm | | c |
+#( #Enum #Flag #IntEnum #IntFlag #StrEnum ) do: [:nm | | c |
   c := Python at: nm.
   c removeAllMethods. c class removeAllMethods.
   c removeAllMethods: 1. c class removeAllMethods: 1].
@@ -218,11 +233,13 @@ ___grailBuildMembers: cls names: attrNames
 				(autoResolved @env0:includesKey: rawValue)
 					ifTrue: [rawValue := autoResolved @env0:at: rawValue]
 					ifFalse: [ | resolved |
-						resolved := (Enum ___grailIsFlagClass: cls)
-							ifTrue: [lastInt @env0:<= 0
-								ifTrue: [1]
-								ifFalse: [1 @env0:bitShift: lastInt @env0:highBit]]
-							ifFalse: [lastInt @env0:+ 1].
+						resolved := (Enum ___grailIsStrEnumClass: cls)
+							ifTrue: [nameStr @env0:asLowercase]
+							ifFalse: [(Enum ___grailIsFlagClass: cls)
+								ifTrue: [lastInt @env0:<= 0
+									ifTrue: [1]
+									ifFalse: [1 @env0:bitShift: lastInt @env0:highBit]]
+								ifFalse: [lastInt @env0:+ 1]].
 						autoResolved @env0:at: rawValue put: resolved.
 						rawValue := resolved]].
 			(rawValue @env0:isKindOf: Integer) ifTrue: [lastInt := rawValue].
@@ -361,6 +378,22 @@ ___grailIsFlagClass: cls
 	((cls @env0:== Flag) or: [cls @env0:inheritsFrom: Flag]) ifTrue: [^ true].
 	((cls @env0:== IntFlag) or: [cls @env0:inheritsFrom: IntFlag]) ifTrue: [^ true].
 	^ [ (cls @env1:__mro__) @env0:includesIdentical: Flag ]
+		@env0:on: Error do: [:e | e @env0:return: false]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailIsStrEnumClass: cls
+	"True when cls is StrEnum-natured: chained under StrEnum, or an MI
+	class whose C3 __mro__ includes StrEnum.  Drives auto() value
+	generation (member name lowercased, CPython
+	StrEnum._generate_next_value_)."
+
+	| se |
+	se := Python @env0:at: #'StrEnum' otherwise: nil.
+	se @env0:== nil ifTrue: [^ false].
+	((cls @env0:== se) or: [cls @env0:inheritsFrom: se]) ifTrue: [^ true].
+	^ [ (cls @env1:__mro__) @env0:includesIdentical: se ]
 		@env0:on: Error do: [:e | e @env0:return: false]
 %
 
@@ -551,11 +584,13 @@ ___grailFunctional: cls positional: positional keywords: keywords
 			(autoResolved @env0:includesKey: rawValue)
 				ifTrue: [rawValue := autoResolved @env0:at: rawValue]
 				ifFalse: [ | resolved |
-					resolved := isFlag
-						ifTrue: [lastInt @env0:<= 0
-							ifTrue: [1]
-							ifFalse: [1 @env0:bitShift: lastInt @env0:highBit]]
-						ifFalse: [lastInt @env0:+ 1].
+					resolved := (Enum ___grailIsStrEnumClass: newCls)
+						ifTrue: [nameStr @env0:asLowercase]
+						ifFalse: [isFlag
+							ifTrue: [lastInt @env0:<= 0
+								ifTrue: [1]
+								ifFalse: [1 @env0:bitShift: lastInt @env0:highBit]]
+							ifFalse: [lastInt @env0:+ 1]].
 					autoResolved @env0:at: rawValue put: resolved.
 					rawValue := resolved]].
 		(rawValue @env0:isKindOf: Integer) ifTrue: [lastInt := rawValue].
@@ -1313,6 +1348,178 @@ __repr__
 	^ '<' @env0:, self @env0:class @env0:name @env0:asString @env0:, '.'
 		@env0:, self ___compositeName___ @env0:, ': '
 		@env0:, v @env0:printString @env0:, '>'
+%
+
+set compile_env: 0
+
+! ===============================================================================
+! StrEnum class: thin delegators to Enum's shared logic (the duplicate-onto-
+! the-str-chain idiom -- StrEnum is AbstractPyStr-rooted and never passes
+! Enum's class side, exactly like IntEnum vs AbstractPyInt).  Members ARE
+! strings (AbstractPyStr #value); str/__format__/__eq__/methods are inherited
+! from AbstractPyStr, so only name + the enum-style __repr__ are defined
+! instance-side.  str(member) == value is the ReprEnum contract, satisfied by
+! AbstractPyStr>>__str__ (returns #value) for free.
+! ===============================================================================
+
+set compile_env: 1
+
+category: 'Grail-Class Attrs'
+classmethod: StrEnum
+_member_type_
+	"StrEnum members ARE strings (AbstractPyStr storage)."
+
+	^ Unicode7
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+___pyClassDefined___: attrNames
+	^ Enum ___grailBuildMembers: self names: attrNames
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+__new__: aValue
+	^ Enum ___grailLookupValue: self value: aValue
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+value: positional value: keywords
+	((positional @env0:size @env0:>= 2)
+		or: [keywords @env0:~~ nil and: [keywords @env0:size @env0:> 0]])
+		ifTrue: [^ Enum ___grailFunctional: self positional: positional keywords: keywords].
+	^ Enum ___grailLookupValue: self value: (positional @env0:at: 1)
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+__contains__: aValue
+	| rec |
+	(aValue @env0:isKindOf: self) ifTrue: [^ true].
+	rec := Enum ___grailRecordFor: self.
+	rec @env0:isNil ifTrue: [^ false].
+	((rec @env0:at: 3) @env0:includesIdentical: aValue) ifTrue: [^ true].
+	((rec @env0:at: 1) @env0:includesKey: aValue) ifTrue: [^ true].
+	^ false
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+__reversed__
+	^ (list @env0:withAll: (Enum ___grailMembers: self) @env0:reverse) @env1:__iter__
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+__getitem__: aName
+	^ Enum ___grailLookupName: self name: aName
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+__iter__
+	^ (Enum ___grailMembers: self) @env1:__iter__
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+___unpackSequence___
+	^ list @env0:withAll: (Enum ___grailMembers: self)
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+__len__
+	^ (Enum ___grailMembers: self) @env0:size
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+__bool__
+	^ true
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+__repr__
+	^ '<enum ''' @env0:, self @env0:name @env0:asString @env0:, '''>'
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+__str__
+	^ self @env1:__repr__
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+__format__: aSpec
+	^ self @env1:__repr__
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+mro
+	^ list @env0:withAll: (self @env1:__mro__)
+%
+
+category: 'Grail-Class Attrs'
+classmethod: StrEnum
+_member_names_
+	| rec |
+	rec := Enum ___grailRecordFor: self.
+	rec @env0:isNil ifTrue: [^ list @env0:withAll: #()].
+	^ list @env0:withAll: ((rec @env0:at: 3)
+		@env0:collect: [:m | m @env0:dynamicInstVarAt: #name])
+%
+
+category: 'Grail-Class Attrs'
+classmethod: StrEnum
+_member_map_
+	| rec |
+	rec := Enum ___grailRecordFor: self.
+	rec @env0:isNil ifTrue: [^ KeyValueDictionary @env0:new].
+	^ rec @env0:at: 2
+%
+
+category: 'Grail-Class Attrs'
+classmethod: StrEnum
+_value2member_map_
+	| rec |
+	rec := Enum ___grailRecordFor: self.
+	rec @env0:isNil ifTrue: [^ KeyValueDictionary @env0:new].
+	^ rec @env0:at: 1
+%
+
+category: 'Grail-Class Attrs'
+classmethod: StrEnum
+_value_repr_
+	^ None
+%
+
+! ------------------- StrEnum members (instance side)
+
+category: 'Grail-Enum Member'
+method: StrEnum
+name
+	^ self @env0:dynamicInstVarAt: #name
+%
+
+category: 'Grail-Enum Member'
+method: StrEnum
+__repr__
+	"<Color.RED: 'red'> -- enum-style, overriding AbstractPyStr's plain
+	string repr.  The value is a string, so its Python repr supplies the
+	quotes.  str(member) stays the bare value (ReprEnum), inherited from
+	AbstractPyStr>>__str__."
+
+	| nm val |
+	nm := self @env0:dynamicInstVarAt: #name.
+	val := (self @env0:dynamicInstVarAt: #value) @env1:__repr__.
+	^ '<' @env0:, self @env0:class @env0:name @env0:asString @env0:, '.'
+		@env0:, nm @env0:asString @env0:, ': ' @env0:, val @env0:asString @env0:, '>'
 %
 
 set compile_env: 0

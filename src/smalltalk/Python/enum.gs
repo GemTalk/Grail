@@ -55,10 +55,11 @@ initialize
 	self @env0:at: #NAMED_FLAGS put: #NAMED_FLAGS.
 	self @env0:at: #ReprEnum put: Enum.
 	self @env0:at: #EnumDict put: dict.
-	"Enum / IntEnum / IntFlag are real classes now (see PyEnumTypes.gs):
-	``class X(IntEnum): A = 1`` builds real members via the metaclass
-	hook ``___pyClassDefined___:``.  StrEnum / Flag remain simple
-	alias (out of scope): StrEnum -> str.  Flag is real (PyEnumTypes.gs)."
+	"Enum / IntEnum / IntFlag / StrEnum / Flag are all real classes now
+	(see PyEnumTypes.gs): ``class X(IntEnum): A = 1`` builds real members
+	via the metaclass hook ``___pyClassDefined___:``.  StrEnum is
+	AbstractPyStr-rooted so its members ARE strings (str(member) == value,
+	the ReprEnum contract)."
 	self @env0:at: #Enum put: Enum.
 	self @env0:at: #EnumType put: Enum @env0:class.
 	self @env0:at: #property put: PropertyDescriptor.
@@ -69,7 +70,7 @@ initialize
 	self @env0:at: #EnumMeta put: Enum @env0:class.
 	self @env0:at: #IntEnum put: IntEnum.
 	self @env0:at: #IntFlag put: IntFlag.
-	self @env0:at: #StrEnum put: Unicode7.
+	self @env0:at: #StrEnum put: StrEnum.
 	self @env0:at: #Flag put: Flag.
 	"Pre-store ``auto'' as a BoundMethod so ``from enum import auto''
 	binds to the callable rather than invoking the unary method

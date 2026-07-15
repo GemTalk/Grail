@@ -1467,7 +1467,8 @@ ___isInstanceSingle___: anObject of: aClass
 		False and re.compile rejected wide-string patterns
 		(test_word_boundaries).  bytes stays distinct: ByteArray is not a
 		CharacterCollection."
-		result := anObject @env0:isKindOf: CharacterCollection].
+		result := (anObject @env0:isKindOf: CharacterCollection)
+			or: [anObject @env0:isKindOf: AbstractPyStr]].
 	(result not and: [aClass @env0:== (Python @env0:at: #'PyDict' otherwise: nil)]) ifTrue: [
 		"dict maps to PyDict (the insertion-ordered subclass) for
 		construction, but CPython counts EVERY dict as a dict: internal
@@ -1664,7 +1665,8 @@ ___isSubclassSingle___: sub of: target
 	"Mirror isinstance's str widening: every text string class is a
 	subclass of str (see ___isInstanceSingle___:of:)."
 	(target @env0:== Unicode7 and: [(sub @env0:== CharacterCollection)
-		or: [sub @env0:inheritsFrom: CharacterCollection]]) ifTrue: [^ true].
+		or: [(sub @env0:inheritsFrom: CharacterCollection)
+		or: [(sub @env0:== AbstractPyStr) or: [sub @env0:inheritsFrom: AbstractPyStr]]]]) ifTrue: [^ true].
 	"int-subclass widening: a class routed onto AbstractPyInt by
 	___subclass___'s sealed-Integer substitution IS a subclass of int."
 	(target @env0:== Integer and: [(sub @env0:== AbstractPyInt)

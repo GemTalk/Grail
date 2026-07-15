@@ -343,6 +343,7 @@ run
 	at: #'PyModuleDict' put: nil;
 	at: #'AbstractPyInt' put: nil;
 	at: #'AbstractPyFloat' put: nil;
+	at: #'AbstractPyStr' put: nil;
 	at: #'Enum' put: nil;
 	at: #'IntEnum' put: nil;
 	at: #'IntFlag' put: nil;
@@ -853,6 +854,7 @@ input src/smalltalk/Python/PyInstanceDict.gs
 input src/smalltalk/Python/PyModuleDict.gs
 input src/smalltalk/Python/AbstractPyInt.gs
 input src/smalltalk/Python/AbstractPyFloat.gs
+input src/smalltalk/Python/AbstractPyStr.gs
 input src/smalltalk/Python/NamedIntConstant.gs
 input src/smalltalk/Python/BoundMethod.gs
 input src/smalltalk/Python/MethodBinding.gs

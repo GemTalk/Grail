@@ -733,6 +733,49 @@ def _attr_deletion_results():
 ATTR_DELETION_RESULT = _attr_deletion_results()
 
 
+def _str_subclass_results():
+    # class MyStr(str): a boxed string (AbstractPyStr) that behaves as a str
+    # -- str/==/methods/len/getitem/concat/hash all delegate to the wrapped
+    # value; isinstance/issubclass against str hold.
+    class MyStr(str):
+        pass
+    m = MyStr('hello')
+    return (
+        str(m), m == 'hello', m.upper(), len(m), m[0],
+        isinstance(m, str), issubclass(MyStr, str),
+        m + ' world', repr(m), hash(m) == hash('hello'),
+        'ell' in m, m.startswith('he'), bool(m), not bool(MyStr('')),
+    )
+
+
+STR_SUBCLASS_RESULT = _str_subclass_results()
+
+
+def _str_enum_results():
+    # StrEnum members ARE strings whose value == the member string; str() is
+    # the value (ReprEnum), repr is <Cls.NAME: 'value'>, auto() lowercases
+    # the name, and the functional API builds real string members.
+    from enum import StrEnum, auto
+
+    class Color(StrEnum):
+        RED = 'red'
+        GREEN = 'green'
+        AUTOED = auto()
+
+    Fruit = StrEnum('Fruit', {'APPLE': 'apple', 'PEAR': 'pear'})
+    return (
+        Color.RED.value, Color.RED.name, str(Color.RED), repr(Color.RED),
+        Color.RED == 'red', isinstance(Color.RED, str), Color.RED.upper(),
+        Color.AUTOED.value, [m.name for m in Color],
+        Color('red') is Color.RED, Color['RED'] is Color.RED,
+        f'{Color.RED}', Color.RED + '!', len(Color),
+        Fruit.APPLE.value, str(Fruit.APPLE), isinstance(Fruit.APPLE, str),
+    )
+
+
+STR_ENUM_RESULT = _str_enum_results()
+
+
 def _partial_setstate_results():
     # functools.partial.__setstate__ + __dict__ namespace, including the
     # tuple/dict-SUBCLASS coercion path (needs real classdefs, so it
