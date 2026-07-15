@@ -5038,10 +5038,7 @@ testWerkzeugDatastructuresImports
 
 	| mod mods keys |
 	mods := importlib @env1:modules.
-	keys := mods @env0:keys @env0:select: [:k |
-		(k @env0:asString @env0:= 'werkzeug')
-			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
-	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	self ___resetImportedFramework___: 'werkzeug'.
 	mods @env0:removeKey: #'use_werkzeug_datastructures' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_datastructures'.
 	self assert: mod @env1:import_succeeded equals: true.
@@ -5061,10 +5058,7 @@ testWerkzeugHttpImports
 
 	| mod mods keys |
 	mods := importlib @env1:modules.
-	keys := mods @env0:keys @env0:select: [:k |
-		(k @env0:asString @env0:= 'werkzeug')
-			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
-	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	self ___resetImportedFramework___: 'werkzeug'.
 	mods @env0:removeKey: #'use_werkzeug_http' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_http'.
 	self assert: mod @env1:import_succeeded equals: true.
@@ -5081,10 +5075,7 @@ testWerkzeugWsgiImports
 
 	| mod mods keys |
 	mods := importlib @env1:modules.
-	keys := mods @env0:keys @env0:select: [:k |
-		(k @env0:asString @env0:= 'werkzeug')
-			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
-	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	self ___resetImportedFramework___: 'werkzeug'.
 	mods @env0:removeKey: #'use_werkzeug_wsgi' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_wsgi'.
 	self assert: mod @env1:import_succeeded equals: true.
@@ -5104,10 +5095,7 @@ testWerkzeugDatastructuresFullExports
 
 	| mod mods keys |
 	mods := importlib @env1:modules.
-	keys := mods @env0:keys @env0:select: [:k |
-		(k @env0:asString @env0:= 'werkzeug')
-			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
-	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	self ___resetImportedFramework___: 'werkzeug'.
 	mods @env0:removeKey: #'use_werkzeug_wrappers' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_wrappers'.
 	self assert: mod @env1:import_succeeded equals: true
@@ -5126,10 +5114,7 @@ testWerkzeugRoutingImports
 
 	| mod mods keys |
 	mods := importlib @env1:modules.
-	keys := mods @env0:keys @env0:select: [:k |
-		(k @env0:asString @env0:= 'werkzeug')
-			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
-	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	self ___resetImportedFramework___: 'werkzeug'.
 	mods @env0:removeKey: #'use_werkzeug_routing' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_routing'.
 	self assert: mod @env1:import_succeeded equals: true.
@@ -5149,10 +5134,7 @@ testWerkzeugLocalImports
 
 	| mod mods keys |
 	mods := importlib @env1:modules.
-	keys := mods @env0:keys @env0:select: [:k |
-		(k @env0:asString @env0:= 'werkzeug')
-			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
-	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	self ___resetImportedFramework___: 'werkzeug'.
 	mods @env0:removeKey: #'use_werkzeug_local' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_local'.
 	self assert: mod @env1:import_succeeded equals: true.
@@ -5172,10 +5154,7 @@ testWerkzeugUtilsImports
 
 	| mod mods keys |
 	mods := importlib @env1:modules.
-	keys := mods @env0:keys @env0:select: [:k |
-		(k @env0:asString @env0:= 'werkzeug')
-			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
-	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	self ___resetImportedFramework___: 'werkzeug'.
 	mods @env0:removeKey: #'use_werkzeug_utils' ifAbsent: [].
 	mods @env0:removeKey: #'pkg_scaffolding.use_werkzeug_utils' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_utils'.
@@ -5199,10 +5178,7 @@ testWerkzeugTestImports
 
 	| mod mods keys |
 	mods := importlib @env1:modules.
-	keys := mods @env0:keys @env0:select: [:k |
-		(k @env0:asString @env0:= 'werkzeug')
-			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
-	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	self ___resetImportedFramework___: 'werkzeug'.
 	mods @env0:removeKey: #'use_werkzeug_test' ifAbsent: [].
 	mods @env0:removeKey: #'pkg_scaffolding.use_werkzeug_test' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_test'.
@@ -5242,10 +5218,7 @@ testWerkzeugWrappersConstructAndClient
 
 	| mod mods keys |
 	mods := importlib @env1:modules.
-	keys := mods @env0:keys @env0:select: [:k |
-		(k @env0:asString @env0:= 'werkzeug')
-			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
-	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	self ___resetImportedFramework___: 'werkzeug'.
 	mods @env0:removeKey: #'use_werkzeug_roundtrip' ifAbsent: [].
 	mods @env0:removeKey: #'pkg_scaffolding.use_werkzeug_roundtrip' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_roundtrip'.
@@ -5278,10 +5251,7 @@ testFlaskHelloWorldWsgiRoundTrip
 
 	| mod mods keys result |
 	mods := importlib @env1:modules.
-	keys := mods @env0:keys @env0:select: [:k |
-		(k @env0:asString @env0:= 'flask')
-			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'flask.') @env0:> 0]].
-	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	self ___resetImportedFramework___: 'flask'.
 	mods @env0:removeKey: #'use_flask_wsgi' ifAbsent: [].
 	mods @env0:removeKey: #'pkg_scaffolding.use_flask_wsgi' ifAbsent: [].
 	mod := self loadFixture: 'use_flask_wsgi'.
@@ -5303,10 +5273,7 @@ testFlaskHelloWorldOverRealSocket
 
 	| mod mods keys result |
 	mods := importlib @env1:modules.
-	keys := mods @env0:keys @env0:select: [:k |
-		(k @env0:asString @env0:= 'flask')
-			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'flask.') @env0:> 0]].
-	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	self ___resetImportedFramework___: 'flask'.
 	mods @env0:removeKey: #'use_flask_serving' ifAbsent: [].
 	mods @env0:removeKey: #'pkg_scaffolding.use_flask_serving' ifAbsent: [].
 	mod := self loadFixture: 'use_flask_serving'.
@@ -5328,10 +5295,7 @@ testFlaskRoutingAndErrorPath
 
 	| mod mods keys r |
 	mods := importlib @env1:modules.
-	keys := mods @env0:keys @env0:select: [:k |
-		(k @env0:asString @env0:= 'flask')
-			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'flask.') @env0:> 0]].
-	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	self ___resetImportedFramework___: 'flask'.
 	mods @env0:removeKey: #'use_flask_routing' ifAbsent: [].
 	mods @env0:removeKey: #'pkg_scaffolding.use_flask_routing' ifAbsent: [].
 	mod := self loadFixture: 'use_flask_routing'.
@@ -5372,10 +5336,7 @@ testFlaskServeGetQueryPost
 
 	| mod mods keys r |
 	mods := importlib @env1:modules.
-	keys := mods @env0:keys @env0:select: [:k |
-		(k @env0:asString @env0:= 'flask')
-			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'flask.') @env0:> 0]].
-	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	self ___resetImportedFramework___: 'flask'.
 	mods @env0:removeKey: #'use_flask_serving' ifAbsent: [].
 	mods @env0:removeKey: #'pkg_scaffolding.use_flask_serving' ifAbsent: [].
 	mod := self loadFixture: 'use_flask_serving'.
@@ -5392,10 +5353,7 @@ _dropServingModules
 
 	| mods keys |
 	mods := importlib @env1:modules.
-	keys := mods @env0:keys @env0:select: [:k |
-		(k @env0:asString @env0:= 'flask')
-			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'flask.') @env0:> 0]].
-	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	self ___resetImportedFramework___: 'flask'.
 	mods @env0:removeKey: #'use_flask_serving' ifAbsent: [].
 	mods @env0:removeKey: #'pkg_scaffolding.use_flask_serving' ifAbsent: []
 %
