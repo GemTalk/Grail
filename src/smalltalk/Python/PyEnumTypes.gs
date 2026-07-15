@@ -529,9 +529,17 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
-	[ | lastInt isFlag |
+	[ | lastInt isFlag autoResolved |
 	lastInt := 0.
 	isFlag := self ___grailIsFlagClass: newCls.
+	"Per-INSTANCE auto() resolution (mirrors ___grailBuildMembers, slice 5):
+	the same GrailEnumAuto marker passed under two names -- the _EnumTests
+	functional MainEnum does ``third = auto(); dupe = third'' then
+	BaseEnum('MainEnum', dict(..., third=third, dupe=dupe)) -- must resolve
+	to ONE value so dupe aliases third (byValue hit) instead of advancing
+	the counter to a distinct value.  Identity-keyed: distinct auto() calls
+	stay distinct."
+	autoResolved := IdentityKeyValueDictionary @env0:new.
 	pairs @env0:do: [:pair |
 		| nameStr rawValue member |
 		nameStr := pair @env0:at: 1.
@@ -540,11 +548,16 @@ ___grailFunctional: cls positional: positional keywords: keywords
 		(BaseEnum('MainEnum', dict(first=auto(), ...))) -- resolve with
 		the same per-class rule as class-body members."
 		(rawValue @env0:isKindOf: GrailEnumAuto) ifTrue: [
-			rawValue := isFlag
-				ifTrue: [lastInt @env0:<= 0
-					ifTrue: [1]
-					ifFalse: [1 @env0:bitShift: lastInt @env0:highBit]]
-				ifFalse: [lastInt @env0:+ 1]].
+			(autoResolved @env0:includesKey: rawValue)
+				ifTrue: [rawValue := autoResolved @env0:at: rawValue]
+				ifFalse: [ | resolved |
+					resolved := isFlag
+						ifTrue: [lastInt @env0:<= 0
+							ifTrue: [1]
+							ifFalse: [1 @env0:bitShift: lastInt @env0:highBit]]
+						ifFalse: [lastInt @env0:+ 1].
+					autoResolved @env0:at: rawValue put: resolved.
+					rawValue := resolved]].
 		(rawValue @env0:isKindOf: Integer) ifTrue: [lastInt := rawValue].
 		((nameStr @env0:size @env0:> 0) and: [(nameStr @env0:at: 1) @env0:= $_]) ifFalse: [
 			(byValue @env0:includesKey: rawValue)

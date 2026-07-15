@@ -911,6 +911,20 @@ testMiSubclassKeepsSecondaryBases
 		equals: '(True, True, 1, 4, [''first'', ''second'', ''third''], 5, True)'
 %
 
+category: 'Grail-Tests - enum internals'
+method: DunderNewTestCase
+testFunctionalAutoMarkerAliases
+	"The FUNCTIONAL API resolves each auto() marker per INSTANCE (like the
+	class-body builder): _EnumTests functional MainEnum passes the SAME
+	marker under ``third'' and ``dupe'' (``third = auto(); dupe = third''),
+	so dupe must alias third -- excluded from iteration, dupe is third --
+	instead of advancing the counter to a distinct value.  Was the
+	Test*Function dupe-in-iteration family."
+
+	self assert: (self fixture @env1:FUNC_AUTO_ALIAS_RESULT) @env1:__repr__
+		equals: '([''first'', ''second'', ''third''], True, 3, [''first'', ''second'', ''third''], True)'
+%
+
 category: 'Grail-Tests - functools'
 method: DunderNewTestCase
 testPartialPlaceholderAndCacheInfo

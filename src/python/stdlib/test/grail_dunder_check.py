@@ -675,6 +675,31 @@ def _mi_subclass_results():
 MI_SUBCLASS_RESULT = _mi_subclass_results()
 
 
+def _func_auto_alias_results():
+    # The FUNCTIONAL API must resolve an auto() marker per INSTANCE, like
+    # the class-body builder (slice 5).  _EnumTests functional MainEnum does
+    # ``third = auto(); dupe = third`` then passes BOTH under the mapping
+    # form -- the same marker object.  Without per-instance caching the
+    # functional builder advanced the counter twice, so dupe got a distinct
+    # value (4) instead of aliasing third (3): dupe wrongly appeared in
+    # iteration and dupe is not third.
+    from enum import Enum, IntEnum, auto
+    first = auto(); second = auto(); third = auto(); dupe = third
+    Main = Enum('Main', dict(first=first, second=second, third=third, dupe=dupe))
+    f2 = auto(); s2 = auto(); t2 = auto(); d2 = t2
+    IMain = IntEnum('IMain', dict(first=f2, second=s2, third=t2, dupe=d2))
+    return (
+        [m.name for m in Main],          # ['first','second','third'] (dupe aliased)
+        Main.dupe is Main.third,         # True
+        Main.third.value,                # 3
+        [m.name for m in IMain],         # ['first','second','third']
+        IMain.dupe is IMain.third,       # True
+    )
+
+
+FUNC_AUTO_ALIAS_RESULT = _func_auto_alias_results()
+
+
 def _partial_setstate_results():
     # functools.partial.__setstate__ + __dict__ namespace, including the
     # tuple/dict-SUBCLASS coercion path (needs real classdefs, so it
