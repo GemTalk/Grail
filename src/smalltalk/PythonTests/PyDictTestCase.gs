@@ -130,3 +130,28 @@ testIsInstanceOfDict
 
 	self assert: (self ordered isKindOf: KeyValueDictionary)
 %
+
+category: 'Grail-Tests-pydict'
+method: PyDictTestCase
+testInstanceDictPreservesInsertionOrder
+	"obj.__dict__ / vars(obj) iterate attributes in INSERTION order (a
+	CPython guarantee, same family as the PyDict work).  Grail's instance
+	__dict__ is a PyInstanceDict live view over the instance's dynamic
+	instVars, which GemStone stores in declaration order -- so this case is
+	ordered independently of PyDict; the test locks that invariant.
+	del + re-assign appends at the end (CPython semantics), matching a
+	dynamic-instVar remove-then-add."
+
+	| m |
+	m := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/instdict_order.py')
+		name: 'instdict_order'.
+	self assert: (m @env1:___pyAttrLoad___: #'BEFORE') @env1:__repr__
+		equals: '[''zz'', ''aa'', ''mm'', ''qq'']'.
+	self assert: (m @env1:___pyAttrLoad___: #'VARSKEYS') @env1:__repr__
+		equals: '[''zz'', ''aa'', ''mm'', ''qq'']'.
+	self assert: (m @env1:___pyAttrLoad___: #'REP')
+		equals: '{''zz'': 1, ''aa'': 2, ''mm'': 3, ''qq'': 4}'.
+	self assert: (m @env1:___pyAttrLoad___: #'AFTER') @env1:__repr__
+		equals: '[''zz'', ''mm'', ''qq'', ''aa'']'
+%

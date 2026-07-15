@@ -140,11 +140,28 @@ Phase 2 (rehash-safety, literals/comprehensions/`dict()`/call-kwargs/param-kwarg
 → PyDict, `__eq__` robustness, `SequenceableCollection` element-wise fallback)
 landed together; **cold gate 3027/3027**.
 
+**Reflection order (measured 2026-07-15, after phase 2):**
+- **Instance `__dict__` / `vars(obj)` — already insertion-ordered.** Not a
+  gap: `obj.__dict__` is a `PyInstanceDict` live view over the instance's
+  dynamic instVars, which GemStone stores in declaration order; `del` +
+  re-assign appends at the end (CPython). Locked by
+  `PyDictTestCase>>testInstanceDictPreservesInsertionOrder`
+  (fixture `tests/python/instdict_order.py`).
+- **Class `__dict__` — a `PyDict`, but populated in scrambled order.**
+  `___classDict___` unions data attributes (metaclass accessor-pairs) and
+  methods (env-1 method dicts) from separate hash-ordered stores, so the
+  snapshot is not in definition order. Preserving it would require tracking
+  class-body definition order and sorting the snapshot — deferred (low value:
+  the case that matters, enum *member* order, is set during class-body
+  execution, not read back from this snapshot).
+- **`globals()`** has a separate pre-existing defect (`globals().keys()`
+  raises `TypeError: 'OrderedCollection' object is not callable`) and module
+  scope is a `SymbolDictionary`; module-attribute ordering is out of scope
+  here.
+
 **Non-goals (v1):** insertion order across the C-shim round-trip; changing
-kernel `KeyValueDictionary`; ordered `set` (separate); flipping `__dict__` /
-`globals()` reflection to `PyDict` (they stay plain KVDs — the equality
-fixes above make that safe, but instance-attribute *order* is not yet
-preserved).
+kernel `KeyValueDictionary`; ordered `set` (separate); class-`__dict__`
+definition-order reflection; `globals()` fidelity.
 
 **Testing lesson (cost me a long debug loop).** The warm/canonical sharded
 gate surfaced `LookupError`/codec crashes that DID NOT reproduce cold or in
