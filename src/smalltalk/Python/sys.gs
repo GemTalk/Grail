@@ -301,6 +301,13 @@ initializeBuiltinModules
 		module (kernel-Fraction binding) remains for direct Smalltalk
 		references (FractionTestCase) and the kernel Fraction dunders."
 		@env0:at: #functools	put: functools 	instance;
+		"_thread is native (GsProcess/Semaphore-backed); in cold sessions it
+		enters sys.modules as a side effect of threading's lazy ``import
+		_thread`` resolving through lookupModule's symbolList fallback, but
+		code reached through a warm-bound committed closure (doc par.10)
+		can hit import paths without that side effect -- seed it like the
+		other natives."
+		@env0:at: #'_thread' 	put: _thread 	instance;
 		@env0:at: #gemstone 	put: gemstone 	instance;
 		@env0:at: #html 		put: html 		instance;
 		@env0:at: #cmath 		put: cmath 		instance;

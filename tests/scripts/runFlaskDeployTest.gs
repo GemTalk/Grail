@@ -38,7 +38,10 @@ out := GsFile stdout.
 (importlib ___canonicalClassesEnabled___)
   ifTrue: [^ self error: 'setup: canonical-classes flag must default to OFF'].
 
-UserGlobals at: #'Grail_flask_pm_before' put: (PythonModules keys asArray).
+"Snapshot the canonical registries + PythonModules BEFORE any import so
+session C removes exactly what this test's deploy adds -- a standing
+framework deployment (from scripts/deployFrameworks.gs) survives."
+UserGlobals at: #'Grail_flask_snap' put: importlib ___canonicalRegistrySnapshot___.
 
 importlib ___canonicalClassesEnabled___: true.
 mod := importlib
@@ -139,20 +142,17 @@ logout
 ! ===========================================================================
 login
 run
-| out failCount before |
+| out failCount |
 out := GsFile stdout.
 failCount := UserGlobals at: #'Grail_flask_failures' ifAbsent: [999].
 
-before := UserGlobals at: #'Grail_flask_pm_before' ifAbsent: [PythonModules keys asArray].
-PythonModules keys do: [:k |
-  (before includes: k) ifFalse: [PythonModules removeKey: k ifAbsent: []]].
-UserGlobals removeKey: #'Grail_flask_pm_before' ifAbsent: [].
+"Surgical cleanup: restore the registries + PythonModules to session A's
+pre-import snapshot, leaving any standing framework deployment intact."
+importlib ___canonicalRegistryRestore___:
+  (UserGlobals at: #'Grail_flask_snap' ifAbsent: [importlib ___canonicalRegistrySnapshot___]).
+UserGlobals removeKey: #'Grail_flask_snap' ifAbsent: [].
 UserGlobals removeKey: #'Grail_flask_module' ifAbsent: [].
 UserGlobals removeKey: #'Grail_flask_failures' ifAbsent: [].
-UserGlobals removeKey: #'GrailCanonicalClasses' ifAbsent: [].
-UserGlobals removeKey: #'GrailCanonicalClassSet' ifAbsent: [].
-UserGlobals removeKey: #'GrailCanonicalModuleHashes' ifAbsent: [].
-UserGlobals removeKey: #'GrailCanonicalModules' ifAbsent: [].
 UserGlobals removeKey: #'GrailPersistentModuleState' ifAbsent: [].
 System commit.
 

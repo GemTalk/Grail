@@ -25,7 +25,17 @@ run
 (dir := System gemEnvironmentVariable: 'GRAIL_DIR') ifNil:[
   System gemEnvironmentVariable: 'GRAIL_DIR' put: (dir := GsFile serverCurrentDirectory)
 ].
-importlib grailDir: dir
+importlib grailDir: dir.
+"GRAIL_TEST_WARM=1: canonical modules ON so the framework deployment
+(scripts/deployFrameworks.gs, run first by run_tests.sh) warm-BINDS
+instead of recompiling per shard -- measured 195s -> ~81s for the full
+gate.  Coherent for the suite (fixtures are never deployed, so their
+per-test re-imports stay fully cold), and the flag-on suite is clean
+WITHOUT a deployment; a KNOWN TAIL of session-tier issues remains WITH
+one (FlaskScaffolding iterator/descriptor families), so warm stays
+opt-in until that round lands.  Default = the classic flag-off run."
+(System gemEnvironmentVariable: 'GRAIL_TEST_WARM') isNil ifFalse: [
+  importlib ___canonicalClassesEnabled___: true]
 %
 level 1
 run

@@ -46,13 +46,11 @@ check := [:label :bool | bool ifFalse: [failures add: label]].
   check value: 'bound module answers its global'
     value: ((modA @env1:value) = 41).
 ] ensure: [
-  UserGlobals removeKey: #'GrailCanonicalClasses' ifAbsent: [].
-  UserGlobals removeKey: #'GrailCanonicalClassSet' ifAbsent: [].
-  UserGlobals removeKey: #'GrailCanonicalModuleHashes' ifAbsent: [].
-  UserGlobals removeKey: #'GrailCanonicalModules' ifAbsent: [].
-  PythonModules keys do: [:k |
-    ((k asString) includesString: 'ccmod') ifTrue: [
-      PythonModules removeKey: k ifAbsent: []]].
+  "Surgical cleanup: restore to the prep snapshot (removes both workers'
+  modules), leaving any standing framework deployment intact."
+  importlib ___canonicalRegistryRestore___:
+    (UserGlobals at: #'Grail_cc_snap' ifAbsent: [importlib ___canonicalRegistrySnapshot___]).
+  UserGlobals removeKey: #'Grail_cc_snap' ifAbsent: [].
   System commitTransaction
 ].
 

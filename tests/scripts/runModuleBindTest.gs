@@ -49,9 +49,10 @@ out := GsFile stdout.
 (importlib ___canonicalClassesEnabled___)
   ifTrue: [^ self error: 'setup: canonical-classes flag must default to OFF'].
 
-"Snapshot PythonModules BEFORE any import so session C can remove exactly
-the module classes this test's commit adds."
-UserGlobals at: #'Grail_bind_pm_before' put: (PythonModules keys asArray).
+"Snapshot the canonical registries + PythonModules BEFORE any import so
+session C removes exactly what this test's commit adds -- a standing
+framework deployment survives."
+UserGlobals at: #'Grail_bind_snap' put: importlib ___canonicalRegistrySnapshot___.
 
 importlib ___canonicalClassesEnabled___: true.
 mod := importlib
@@ -216,24 +217,19 @@ logout
 ! ===========================================================================
 login
 run
-| out failCount before |
+| out failCount |
 out := GsFile stdout.
 failCount := UserGlobals at: #'Grail_bind_failures' ifAbsent: [999].
 
-"Remove everything session A's commit swept: the test keys, the canonical
-registries (classes, hashes, class set, MODULE INSTANCES), and the module
-classes added to PythonModules (snapshot-diff)."
-before := UserGlobals at: #'Grail_bind_pm_before' ifAbsent: [PythonModules keys asArray].
-PythonModules keys do: [:k |
-  (before includes: k) ifFalse: [PythonModules removeKey: k ifAbsent: []]].
-UserGlobals removeKey: #'Grail_bind_pm_before' ifAbsent: [].
+"Surgical cleanup: restore the registries + PythonModules to session A's
+pre-import snapshot (removes this test's fixture + its imported closure),
+leaving any standing framework deployment intact."
+importlib ___canonicalRegistryRestore___:
+  (UserGlobals at: #'Grail_bind_snap' ifAbsent: [importlib ___canonicalRegistrySnapshot___]).
+UserGlobals removeKey: #'Grail_bind_snap' ifAbsent: [].
 UserGlobals removeKey: #'Grail_bind_widget' ifAbsent: [].
 UserGlobals removeKey: #'Grail_bind_module' ifAbsent: [].
 UserGlobals removeKey: #'Grail_bind_failures' ifAbsent: [].
-UserGlobals removeKey: #'GrailCanonicalClasses' ifAbsent: [].
-UserGlobals removeKey: #'GrailCanonicalClassSet' ifAbsent: [].
-UserGlobals removeKey: #'GrailCanonicalModuleHashes' ifAbsent: [].
-UserGlobals removeKey: #'GrailCanonicalModules' ifAbsent: [].
 UserGlobals removeKey: #'GrailPersistentModuleState' ifAbsent: [].
 System commit.
 

@@ -47,6 +47,11 @@ the plain ___subclass___ behaviour.  Checked BEFORE enabling it below."
 (importlib ___canonicalClassesEnabled___)
   ifTrue: [^ self error: 'setup: canonical-classes flag must default to OFF'].
 
+"Snapshot the canonical registries + PythonModules BEFORE any import so
+session 2's cleanup removes exactly what this test adds -- a standing
+framework deployment survives."
+UserGlobals at: #'Grail_canonical_snap' put: importlib ___canonicalRegistrySnapshot___.
+
 importlib ___canonicalClassesEnabled___: true.
 mod := importlib
   loadModuleFromPath: (importlib grailDir , '/tests/python/grail_persist_fixture.py')
@@ -144,13 +149,14 @@ gadget = Gadget()
   GsFile removeServerFile: tmpPath.
   ] value.
 ] ensure: [
+  "Surgical cleanup: restore the registries + PythonModules to session 1's
+  pre-import snapshot (removes this test's fixture entries AND anything
+  this session's own imports added), leaving any standing deployment
+  intact."
+  importlib ___canonicalRegistryRestore___:
+    (UserGlobals at: #'Grail_canonical_snap' ifAbsent: [importlib ___canonicalRegistrySnapshot___]).
+  UserGlobals removeKey: #'Grail_canonical_snap' ifAbsent: [].
   UserGlobals removeKey: #'Grail_canonical_test' ifAbsent: [].
-  UserGlobals removeKey: #'GrailCanonicalClasses' ifAbsent: [].
-  UserGlobals removeKey: #'GrailCanonicalClassSet' ifAbsent: [].
-  UserGlobals removeKey: #'GrailCanonicalModuleHashes' ifAbsent: [].
-  "Phase-5: session 1's commit also swept the canonical MODULE instances
-  (doc par.10) -- drop the registry so their graphs are collectible."
-  UserGlobals removeKey: #'GrailCanonicalModules' ifAbsent: [].
   System commit
 ].
 

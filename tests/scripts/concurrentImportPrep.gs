@@ -21,17 +21,19 @@ importlib grailDir: dir
 %
 level 0
 run
-UserGlobals removeKey: #'GrailCanonicalClasses' ifAbsent: [].
-UserGlobals removeKey: #'GrailCanonicalClassSet' ifAbsent: [].
-UserGlobals removeKey: #'GrailCanonicalModuleHashes' ifAbsent: [].
-UserGlobals removeKey: #'GrailCanonicalModules' ifAbsent: [].
+"Snapshot first (so the verifier restores exactly what this test adds --
+a standing framework deployment survives), then ENSURE the registries
+exist committed: the workers must ADD to existing reduced-conflict
+collections rather than race to lazily create them."
+UserGlobals at: #'Grail_cc_snap' put: importlib ___canonicalRegistrySnapshot___.
 importlib ___canonicalClassRegistry___.
 importlib ___canonicalModules___.
 importlib ___canonicalModuleHashes___.
-UserGlobals at: #'GrailCanonicalClassSet' put: RcIdentityBag new.
+(UserGlobals at: #'GrailCanonicalClassSet' ifAbsent: [nil]) isNil
+  ifTrue: [UserGlobals at: #'GrailCanonicalClassSet' put: RcIdentityBag new].
 System commitTransaction
   ifFalse: [^ self error: 'prep commit failed'].
-GsFile stdout nextPutAll: 'prep: registries pre-created + committed'; cr.
+GsFile stdout nextPutAll: 'prep: registries ensured + snapshot committed'; cr.
 %
 logout
 exit 0

@@ -52,6 +52,24 @@ TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=500000;"
 
 EXIT=0
 
+# GRAIL_TEST_WARM=1 (OPT-IN, experimental): deploy the heavy framework
+# closures (flask/werkzeug/jinja2/twilio) so the flag-on shards warm-bind
+# them instead of recompiling (docs/Persistent_Modules_and_Classes.md
+# par.4.1/par.10). Measured: full gate 195s -> ~81s once deployed
+# (deploy itself is idempotent: ~23s cold, ~10ms on a hash match). A known
+# tail of session-tier issues remains under a standing deployment
+# (FlaskScaffolding iterator/descriptor families; native-module instances
+# captured in committed closures, e.g. the deployed sys snapshot), so this
+# is not yet the default and the acceptance scripts below are not yet
+# deployment-clean. The default run is the classic flag-off suite,
+# byte-identical to before, and assumes no standing deployment
+# (scripts/deployFrameworks.gs leaves one; remove the four
+# GrailCanonical* UserGlobals keys + commit to clear it).
+if [ -n "${GRAIL_TEST_WARM:-}" ]; then
+  GRAIL_DIR="$PROJECT_ROOT" LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S scripts/deployFrameworks.gs < /dev/null \
+    | grep -E "deployFrameworks|skipped" || { echo "framework deploy FAILED"; EXIT=1; }
+fi
+
 # Main SUnit suite, sharded across GRAIL_TEST_WORKERS parallel topaz sessions
 # (default 4; set GRAIL_TEST_WORKERS=1 for the classic single-session run).
 # Each worker runs a disjoint, complete slice of the PythonTestCase classes
