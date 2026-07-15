@@ -175,6 +175,31 @@ sessionDict: name
 %
 
 ! ===============================================================================
+! Deploy audit
+! ===============================================================================
+
+category: 'Grail-Deploy Audit'
+method: gemstone
+deploy_check: aModule
+	"Python gemstone.deploy_check(module) -- a PRE-DEPLOY audit
+	(docs/Persistent_Modules_and_Classes.md par.10.4).  Walks the
+	not-yet-committed object graph reachable from the module and returns a
+	Python list of one-line descriptions of every SESSION-BOUND value it
+	would sweep into the repository (open files/sockets, semaphores,
+	threads, raw C pointers, un-recompilable regex patterns / matches,
+	weak references), each with a class-path from the module.  An empty
+	list means the module's new closure is commit-clean.
+
+	Accepts a module object or its dotted-name string.  Never commits."
+
+	| name |
+	name := (aModule @env0:isKindOf: CharacterCollection)
+		ifTrue: [aModule @env0:asString]
+		ifFalse: [(aModule @env1:__name__) @env0:asString].
+	^ importlib @env0:___deployCheck___: name
+%
+
+! ===============================================================================
 ! Metadata
 ! ===============================================================================
 

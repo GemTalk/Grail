@@ -617,6 +617,151 @@ ___canonicalClassRegister___: aModuleName name: aClassName value: anObject
 	^ anObject
 %
 
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___deployCheck___: aModuleName
+	"Pre-deploy audit (docs/Persistent_Modules_and_Classes.md par.10.4):
+	walk the NOT-YET-COMMITTED object graph reachable from module
+	aModuleName's instance and report every reachable instance of a
+	SESSION-BOUND class -- open GsFile/GsSocket handles,
+	Semaphore/GsProcess, a raw CPointer, an SrePattern that cannot
+	recompile (no compileArgs), an SreMatch, a WeakReference -- each with
+	a short class-path from the module.  These are the values a deploy
+	commit would sweep into the repository, where they fault dead / NULL
+	in a later session.  Run it BEFORE committing a module you intend to
+	deploy; an empty result means the module's new closure is
+	commit-clean.
+
+	Bounded to the deploy's NEW closure by following only NON-committed
+	references -- an already-committed object is the existing image, not
+	this deploy's concern.  Known limitation (v1): a NEW session resource
+	held through a pre-committed-but-dirty object is not reached (that
+	needs the VM dirty-set); the common case (new resources in new module
+	globals / the new class closure) is covered.  Returns a Python list of
+	description strings.  Never commits, never mutates."
+
+	| mod worklist visited parents findings count |
+	mod := self @env1:lookupModule: aModuleName.
+	mod @env0:isNil ifTrue: [
+		^ list @env0:withAll: {
+			('deploy_check: module ''' @env0:, aModuleName @env0:asString
+				@env0:, ''' is not imported in this session') }].
+	worklist := OrderedCollection @env0:with: mod.
+	visited := IdentitySet @env0:new.
+	parents := IdentityKeyValueDictionary @env0:new.
+	findings := OrderedCollection @env0:new.
+	count := 0.
+	[worklist @env0:isEmpty] @env0:whileFalse: [ | obj |
+		obj := worklist @env0:removeFirst.
+		(visited @env0:includes: obj) @env0:ifFalse: [
+			visited @env0:add: obj.
+			count := count @env0:+ 1.
+			count @env0:> 300000
+				ifTrue: [
+					findings @env0:add: '... deploy_check truncated at 300000 objects'.
+					^ list @env0:withAll: findings].
+			(self @env0:___deploySessionBound___: obj) ifTrue: [
+				findings @env0:add:
+					((self @env0:___deployPathFor___: obj parents: parents)
+						@env0:, ' -> ' @env0:, (self @env0:___deployDescribe___: obj))].
+			"Do NOT descend into Behavior (walks whole class/method graph, and
+			classes are committed anyway); bytes hold no object refs."
+			(obj @env0:isKindOf: Behavior) ifFalse: [
+				self @env0:___deployRefsOf: obj do: [:ref |
+					(ref @env0:~~ nil
+						and: [(ref @env0:isSpecial) @env0:not
+						and: [(ref @env0:isCommitted) @env0:not
+						and: [(visited @env0:includes: ref) @env0:not]]]) ifTrue: [
+							(parents @env0:includesKey: ref)
+								ifFalse: [parents @env0:at: ref put: obj].
+							worklist @env0:add: ref]]]]].
+	^ list @env0:withAll: findings
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___deploySessionBound___: obj
+	"True when obj is an instance of a class that cannot survive a
+	commit + fault into a later session (see ___deployCheck___)."
+
+	| cn |
+	(obj @env0:isKindOf: Semaphore) ifTrue: [^ true].
+	(obj @env0:isKindOf: GsProcess) ifTrue: [^ true].
+	(obj @env0:isKindOf: GsFile) ifTrue: [^ true].
+	(obj @env0:isKindOf: CPointer) ifTrue: [^ true].
+	cn := obj @env0:class @env0:name @env0:asString.
+	(cn @env0:= 'GsSocket') ifTrue: [^ true].
+	(cn @env0:= 'SreMatch') ifTrue: [^ true].
+	(cn @env0:= 'WeakReference') ifTrue: [^ true].
+	"An SrePattern is fine IF it remembers its compile args (it recompiles
+	on first use next session); flag only the un-recompilable ones."
+	(cn @env0:= 'SrePattern') ifTrue: [
+		^ (obj @env0:instVarAt: (obj @env0:class @env0:allInstVarNames @env0:indexOf: 'compileArgs')) @env0:isNil].
+	^ false
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___deployRefsOf: obj do: aBlock
+	"Evaluate aBlock with each object directly referenced by obj: named
+	instVars, collection contents (dict keys+values), indexed slots of a
+	non-collection variable object, and dynamic instVars (module globals /
+	PythonInstance attrs).  Bytes objects hold no references."
+
+	obj @env0:class @env0:isBytes ifTrue: [^ self].
+	1 @env0:to: obj @env0:class @env0:instSize do: [:i |
+		aBlock @env0:value: (obj @env0:instVarAt: i)].
+	(obj @env0:isKindOf: Collection) ifTrue: [
+		(obj @env0:respondsTo: #'keysAndValuesDo:')
+			ifTrue: [[obj @env0:keysAndValuesDo: [:k :v | aBlock @env0:value: k. aBlock @env0:value: v]]
+				@env0:on: AbstractException do: [:e | e @env0:return: nil]]
+			ifFalse: [[obj @env0:do: [:e | aBlock @env0:value: e]]
+				@env0:on: AbstractException do: [:e | e @env0:return: nil]]]
+	ifFalse: [
+		(obj @env0:class @env0:isVariable) ifTrue: [
+			1 @env0:to: obj @env0:size do: [:i | aBlock @env0:value: (obj @env0:at: i)]]].
+	(obj @env0:respondsTo: #'dynamicInstVarPairs') ifTrue: [ | pairs |
+		pairs := [obj @env0:dynamicInstVarPairs] @env0:on: AbstractException do: [:e | e @env0:return: #()].
+		1 @env0:to: (pairs @env0:size @env0:- 1) by: 2 do: [:i |
+			aBlock @env0:value: (pairs @env0:at: i @env0:+ 1)]]
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___deployPathFor___: obj parents: parents
+	"A short class-name breadcrumb from the module root down to obj, using
+	the BFS parent map."
+
+	| chain walker steps |
+	chain := OrderedCollection @env0:new.
+	walker := obj.
+	steps := 0.
+	[walker @env0:notNil and: [steps @env0:< 40]] @env0:whileTrue: [
+		chain @env0:addFirst: (walker @env0:class @env0:name @env0:asString).
+		walker := parents @env0:at: walker otherwise: nil.
+		steps := steps @env0:+ 1].
+	^ '.' @env1:join: (list @env0:withAll: chain)
+%
+
+category: 'Grail-Deploy Audit'
+classmethod: importlib
+___deployDescribe___: obj
+	"A one-line description of a flagged session-bound object."
+
+	| cn |
+	cn := obj @env0:class @env0:name @env0:asString.
+	(cn @env0:= 'SrePattern') ifTrue: [
+		^ 'SrePattern (no compileArgs -- cannot recompile in a later session)'].
+	(cn @env0:= 'GsFile') ifTrue: [^ 'GsFile (open OS file handle -- dead after commit/logout)'].
+	(cn @env0:= 'GsSocket') ifTrue: [^ 'GsSocket (open socket -- dead after commit/logout)'].
+	((obj @env0:isKindOf: Semaphore)) ifTrue: [^ 'Semaphore (non-persistable -- commit will FAIL, error 2407)'].
+	((obj @env0:isKindOf: GsProcess)) ifTrue: [^ 'GsProcess (session thread -- not persistable)'].
+	((obj @env0:isKindOf: CPointer)) ifTrue: [^ 'CPointer (raw C address -- NULL after commit/logout)'].
+	(cn @env0:= 'SreMatch') ifTrue: [^ 'SreMatch (match object -- has no recompile path)'].
+	(cn @env0:= 'WeakReference') ifTrue: [^ 'WeakReference (faults in DEAD in a later session)'].
+	^ cn @env0:, ' (session-bound)'
+%
+
 category: 'Grail-Canonical Classes'
 classmethod: importlib
 ___resetClassAttrOverlay___: aClass

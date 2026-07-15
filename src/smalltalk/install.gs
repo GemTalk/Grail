@@ -520,6 +520,7 @@ run
 	at: #'BytearrayTestCase' put: nil;
 	at: #'BytesTestCase' put: nil;
 	at: #'CachedPropertyTestCase' put: nil;
+	at: #'DeployCheckTestCase' put: nil;
 	at: #'BytesWarningTestCase' put: nil;
 	at: #'CPythonShimTestCase' put: nil;
 	at: #'CPythonHarnessTestCase' put: nil;
@@ -1226,6 +1227,7 @@ input src/smalltalk/PythonTests/BuiltinsTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassOverrideTestCase.gs
 input src/smalltalk/PythonTests/BytearrayTestCase.gs
 input src/smalltalk/PythonTests/CachedPropertyTestCase.gs
+input src/smalltalk/PythonTests/DeployCheckTestCase.gs
 input src/smalltalk/PythonTests/BytesTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrsTestCase.gs
 input src/smalltalk/PythonTests/ClassDecoratorTestCase.gs

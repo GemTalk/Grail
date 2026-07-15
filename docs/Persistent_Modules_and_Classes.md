@@ -625,6 +625,23 @@ fixed at the framework/runtime level so app code needs nothing:
    cycles). Audit rule: **framework weakrefs to long-lived objects are a
    session-tier smell** in deployed closures.
 
+**Pre-deploy audit tool — IMPLEMENTED (2026-07-15).**
+`gemstone.deploy_check(module)` (Python) → `importlib
+___deployCheck___:` walks the module's NOT-YET-COMMITTED object graph and
+returns a list of the session-bound values a deploy commit would sweep in
+— open `GsFile`/`GsSocket`, `Semaphore`/`GsProcess`, raw `CPointer`, an
+`SrePattern` with no `compileArgs` (can't recompile), `SreMatch`,
+`WeakReference` — each with a class-path from the module (e.g.
+`Grail_deploy_dirty.PySocket.GsSocket -> GsSocket (open socket — dead
+after commit/logout)`). It is an ON-DEMAND pre-commit check, NOT a write
+barrier: run it before deploying a module you authored. Bounded by
+following only non-committed references (the deploy's new closure);
+known v1 gap — a new resource held through a pre-committed-but-dirty
+object needs the VM dirty-set and is not reached. Tests:
+`DeployCheckTestCase` (clean module = 0 findings; a socket + a
+`threading.Lock` Semaphore each flagged; findings carry the class-path;
+an unimported module returns an explanatory finding, not an error).
+
 ### 10.5 Divergences to document (and their CPython mapping)
 
 - **"Fresh state per forced re-import" is spelled `reload()` — and the old
