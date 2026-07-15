@@ -52,20 +52,18 @@ TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=500000;"
 
 EXIT=0
 
-# GRAIL_TEST_WARM=1 (OPT-IN, experimental): deploy the heavy framework
-# closures (flask/werkzeug/jinja2/twilio) so the flag-on shards warm-bind
-# them instead of recompiling (docs/Persistent_Modules_and_Classes.md
-# par.4.1/par.10). Measured: full gate 195s -> ~81s once deployed
-# (deploy itself is idempotent: ~23s cold, ~10ms on a hash match). A known
-# tail of session-tier issues remains under a standing deployment
-# (FlaskScaffolding iterator/descriptor families; native-module instances
-# captured in committed closures, e.g. the deployed sys snapshot), so this
-# is not yet the default and the acceptance scripts below are not yet
-# deployment-clean. The default run is the classic flag-off suite,
-# byte-identical to before, and assumes no standing deployment
-# (scripts/deployFrameworks.gs leaves one; remove the four
-# GrailCanonical* UserGlobals keys + commit to clear it).
-if [ -n "${GRAIL_TEST_WARM:-}" ]; then
+# Framework deployment (DEFAULT): deploy the heavy closures
+# (flask/werkzeug/jinja2/twilio) once so the flag-on shards below warm-bind
+# them instead of recompiling per shard (docs/Persistent_Modules_and_
+# Classes.md par.4.1/par.10). Measured: full gate 194s -> 104s. Idempotent:
+# ~23s cold, ~10ms on a source-hash match, so re-running is cheap. The
+# suite runs clean warm (3014/3014) because fixtures are never deployed
+# (their per-test re-imports stay cold) and every test that resets a
+# framework module is deploy-aware (___resetImportedFramework___).
+# GRAIL_TEST_COLD=1 skips the deploy and runs the classic flag-off suite
+# (everything recompiled) -- the escape hatch and the warm-vs-cold
+# discrepancy check.
+if [ -z "${GRAIL_TEST_COLD:-}" ]; then
   GRAIL_DIR="$PROJECT_ROOT" LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S scripts/deployFrameworks.gs < /dev/null \
     | grep -E "deployFrameworks|skipped" || { echo "framework deploy FAILED"; EXIT=1; }
 fi

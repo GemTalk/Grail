@@ -707,6 +707,19 @@ before it can ever default on (shape mirrors `runCanonicalClassTest.gs`):
    dataclasses module — same `MISSING` sentinel, so re-decoration is
    coherent. Acceptance: `tests/scripts/runModuleBindTest.gs` (§10.6 as
    specified, plus reload and guard checks), wired into run_tests.sh.
+
+   **The test suite itself is now the largest production use of warm-bind
+   (2026-07-15).** `run_tests.sh` deploys the flask/werkzeug/jinja2/twilio
+   closure once (`scripts/deployFrameworks.gs`) and the sharded flag-on
+   suite warm-binds it — full local gate 194s → ~104-119s, and the suite
+   passes identically (3014/3014 warm). This validates the whole §10 model
+   under real load: coherent (fixtures stay cold, only committed closures
+   bind), the guard works (tests that reset a deployed module go through
+   `PythonTestCase>>___resetImportedFramework___`, which skips deployed
+   modules), and `deployFrameworks.gs` unregisters the reset-prone modules
+   the closure pulls in transitively (dataclasses/threading/itertools/re)
+   so their re-import stays cold. `GRAIL_TEST_COLD=1` restores the classic
+   flag-off run as the warm-vs-cold discrepancy check.
 6. **Session tier:** `__session_init__` hook + SessionTemps-backed storage
    for its names; audit vendored stdlib for process-state snapshots. —
    **IMPLEMENTED** (see the §10.4 status block: hook at all three

@@ -43,10 +43,7 @@ loadFixture
 
 	| mods keys |
 	mods := importlib @env1:modules.
-	keys := mods @env0:keys @env0:select: [:k |
-		(k @env0:asString @env0:= 'werkzeug')
-			@env0:or: [(k @env0:asString @env0:indexOfSubCollection: 'werkzeug.') @env0:> 0]].
-	keys @env0:do: [:k | mods @env0:removeKey: k ifAbsent: []].
+	self ___resetImportedFramework___: 'werkzeug'.
 	mods @env0:removeKey: #'cached_property_demo' ifAbsent: [].
 	^ importlib
 		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/cached_property_demo.py')

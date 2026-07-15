@@ -26,15 +26,16 @@ run
   System gemEnvironmentVariable: 'GRAIL_DIR' put: (dir := GsFile serverCurrentDirectory)
 ].
 importlib grailDir: dir.
-"GRAIL_TEST_WARM=1: canonical modules ON so the framework deployment
-(scripts/deployFrameworks.gs, run first by run_tests.sh) warm-BINDS
-instead of recompiling per shard -- measured 195s -> ~81s for the full
-gate.  Coherent for the suite (fixtures are never deployed, so their
-per-test re-imports stay fully cold), and the flag-on suite is clean
-WITHOUT a deployment; a KNOWN TAIL of session-tier issues remains WITH
-one (FlaskScaffolding iterator/descriptor families), so warm stays
-opt-in until that round lands.  Default = the classic flag-off run."
-(System gemEnvironmentVariable: 'GRAIL_TEST_WARM') isNil ifFalse: [
+"Canonical modules ON BY DEFAULT so the framework deployment
+(scripts/deployFrameworks.gs, run first by run_tests.sh) warm-BINDS the
+committed flask/werkzeug/jinja2/twilio closure instead of recompiling it
+per shard -- measured full gate 194s -> 104s.  Coherent for the suite:
+fixtures are never deployed, so their per-test re-imports stay fully cold
+(CPython semantics); only the committed framework closures bind, and they
+pass identically (3014/3014 warm).  GRAIL_TEST_COLD=1 restores the classic
+flag-off run (no deployment, everything recompiled) -- kept as an escape
+hatch and for isolating any warm-vs-cold discrepancy."
+(System gemEnvironmentVariable: 'GRAIL_TEST_COLD') isNil ifTrue: [
   importlib ___canonicalClassesEnabled___: true]
 %
 level 1
