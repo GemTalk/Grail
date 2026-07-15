@@ -118,3 +118,63 @@ testUnimportedModuleReported
 	self assert: r @env1:__len__ equals: 1.
 	self assert: ((r @env1:__getitem__: 0) @env0:includesString: 'not imported')
 %
+
+category: 'Grail-Tests-deploy'
+method: DeployCheckTestCase
+testStaleGenerationDiscardsCanonicalRegistries
+	"RUNTIME-GENERATION GUARD: install.gs bumps GrailRuntimeGeneration
+	because an install recreates the Python runtime classes -- canonical
+	modules deployed under the previous runtime hold compiled references
+	to the OLD exception classes and raise uncatchably when warm-bound.
+	importlib ___canonicalGenerationCheck___ must discard the stale
+	registries on first touch and stamp the deploy generation current.
+
+	The test simulates the post-install state (registry populated under a
+	back-dated deploy generation), clears the per-session memo to force a
+	re-check, touches an accessor, and asserts the registry was reset.
+	Every mutated global is restored afterwards -- the suite must not
+	disturb a standing deployment."
+
+	| ug st savedMemo savedDeployGen savedMods savedHashes savedClasses savedSet marker |
+	ug := UserGlobals.
+	st := SessionTemps current.
+	savedMemo := st at: #'GrailCanonicalGenChecked' otherwise: nil.
+	savedDeployGen := ug at: #'GrailCanonicalDeployGeneration' otherwise: nil.
+	savedMods := ug at: #'GrailCanonicalModules' otherwise: nil.
+	savedHashes := ug at: #'GrailCanonicalModuleHashes' otherwise: nil.
+	savedClasses := ug at: #'GrailCanonicalClasses' otherwise: nil.
+	savedSet := ug at: #'GrailCanonicalClassSet' otherwise: nil.
+	[
+		"Simulate: a populated registry deployed under an OLDER generation."
+		marker := RcKeyValueDictionary new.
+		marker at: 'stale_marker_module' put: 42.
+		ug at: #'GrailCanonicalModules' put: marker.
+		ug at: #'GrailCanonicalDeployGeneration'
+			put: (ug at: #'GrailRuntimeGeneration' otherwise: 0) - 1.
+		st removeKey: #'GrailCanonicalGenChecked' ifAbsent: [].
+		"First touch must discard the stale registry and stamp current."
+		self deny: (importlib ___canonicalModules___ includesKey: 'stale_marker_module').
+		self assert: (ug at: #'GrailCanonicalDeployGeneration' otherwise: nil)
+			equals: (ug at: #'GrailRuntimeGeneration' otherwise: 0).
+		"Memoised: a second stale-marking within the session is NOT re-checked."
+		ug at: #'GrailCanonicalModules' put: marker.
+		self assert: (importlib ___canonicalModules___ includesKey: 'stale_marker_module')
+	] ensure: [
+		st removeKey: #'GrailCanonicalGenChecked' ifAbsent: [].
+		savedMemo isNil ifFalse: [st at: #'GrailCanonicalGenChecked' put: savedMemo].
+		savedDeployGen isNil
+			ifTrue: [ug removeKey: #'GrailCanonicalDeployGeneration' ifAbsent: []]
+			ifFalse: [ug at: #'GrailCanonicalDeployGeneration' put: savedDeployGen].
+		savedMods isNil
+			ifTrue: [ug removeKey: #'GrailCanonicalModules' ifAbsent: []]
+			ifFalse: [ug at: #'GrailCanonicalModules' put: savedMods].
+		savedHashes isNil
+			ifTrue: [ug removeKey: #'GrailCanonicalModuleHashes' ifAbsent: []]
+			ifFalse: [ug at: #'GrailCanonicalModuleHashes' put: savedHashes].
+		savedClasses isNil
+			ifTrue: [ug removeKey: #'GrailCanonicalClasses' ifAbsent: []]
+			ifFalse: [ug at: #'GrailCanonicalClasses' put: savedClasses].
+		savedSet isNil
+			ifTrue: [ug removeKey: #'GrailCanonicalClassSet' ifAbsent: []]
+			ifFalse: [ug at: #'GrailCanonicalClassSet' put: savedSet]]
+%

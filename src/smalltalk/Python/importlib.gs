@@ -789,6 +789,39 @@ ___resetClassAttrOverlay___: aClass
 
 category: 'Grail-Canonical Classes'
 classmethod: importlib
+___canonicalGenerationCheck___
+	"RUNTIME-GENERATION GUARD (docs/Persistent_Modules_and_Classes.md).
+	install.gs bumps ``GrailRuntimeGeneration'' on every install: the
+	install RECREATES the Python runtime classes (exceptions, builtins),
+	so every previously-deployed canonical module's compiled methods still
+	reference the OLD class objects -- a warm-bound module then raises
+	exceptions no ``except'' clause can match (the class identities
+	diverged; uncatchable).  When the committed registries were deployed
+	under a different generation, discard them IN-TRANSACTION (a
+	non-committing session simply acts cold; the next deploy commits the
+	reset) and stamp the deploy generation current so imports re-record
+	freshly.
+
+	Memoised per session via SessionTemps -- one check per gem, not one
+	per import."
+
+	| st runtimeGen deployGen |
+	st := SessionTemps @env0:current.
+	(st @env0:at: #'GrailCanonicalGenChecked' otherwise: nil) @env0:== true ifTrue: [^ self].
+	st @env0:at: #'GrailCanonicalGenChecked' put: true.
+	runtimeGen := UserGlobals @env0:at: #'GrailRuntimeGeneration' otherwise: 0.
+	deployGen := UserGlobals @env0:at: #'GrailCanonicalDeployGeneration' otherwise: nil.
+	deployGen @env0:== runtimeGen ifTrue: [^ self].
+	"Stale (or first-ever) deployment: drop every canonical registry."
+	#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes'
+	   #'GrailCanonicalClasses' #'GrailCanonicalClassSet' ) @env0:do: [:k |
+		UserGlobals @env0:removeKey: k ifAbsent: []].
+	UserGlobals @env0:at: #'GrailCanonicalDeployGeneration' put: runtimeGen.
+	^ self
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
 ___canonicalModuleHashes___
 	"Committed (module dotted-name -> source sha1Sum) map.  A later
 	session's import compares the current source hash against this to
@@ -797,6 +830,7 @@ ___canonicalModuleHashes___
 	UserGlobals; persists only when the developer / deploy action commits."
 
 	| reg |
+	self ___canonicalGenerationCheck___.
 	reg := UserGlobals @env0:at: #'GrailCanonicalModuleHashes' otherwise: nil.
 	reg @env0:isNil ifTrue: [
 		"Reduced-conflict (doc par.10.7 phase 8): non-overlapping module
@@ -925,6 +959,7 @@ ___canonicalClassRegistry___
 	persists only when that transaction commits."
 
 	| reg |
+	self ___canonicalGenerationCheck___.
 	reg := UserGlobals @env0:at: #'GrailCanonicalClasses' otherwise: nil.
 	reg @env0:isNil ifTrue: [
 		reg := RcKeyValueDictionary @env0:new.
@@ -949,6 +984,7 @@ ___canonicalModules___
 	pattern."
 
 	| reg |
+	self ___canonicalGenerationCheck___.
 	reg := UserGlobals @env0:at: #'GrailCanonicalModules' otherwise: nil.
 	reg @env0:isNil ifTrue: [
 		"Reduced-conflict, same rationale as ___canonicalClassRegistry___."

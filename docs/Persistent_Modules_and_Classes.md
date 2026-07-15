@@ -642,6 +642,33 @@ object needs the VM dirty-set and is not reached. Tests:
 `threading.Lock` Semaphore each flagged; findings carry the class-path;
 an unimported module returns an explanatory finding, not an error).
 
+### 10.4b Runtime upgrades invalidate deployments — the generation guard
+
+**The failure (found 2026-07-15, on a fresh extent):** `install.sh`
+recreates the Python runtime classes — exceptions, builtins — with new
+object identity. A canonical module deployed under the *previous* install
+keeps its compiled methods' captured references to the OLD class objects.
+Warm-binding it afterwards produces exceptions that no `except` clause can
+match (the raised `LookupError`'s Smalltalk class is not the session's
+`LookupError`), i.e. uncatchable crashes in whatever imports the stale
+module. This is systematic — every install-after-deploy cycle triggers it —
+not an artifact of a dirty extent. CI never sees it (one install per
+pipeline); a developer's install→test loop and a customer upgrading Grail
+both would.
+
+**The guard:** `install.gs` bumps `UserGlobals GrailRuntimeGeneration` at
+the end of every install. `importlib ___canonicalGenerationCheck___` —
+memoised once per session, invoked at the top of the three canonical
+registry accessors — compares it against
+`GrailCanonicalDeployGeneration`; on mismatch it discards all four
+`GrailCanonical*` registries in-transaction and stamps the deploy
+generation current. A non-committing session (a test shard) simply acts
+cold from that point; the next deploy action rebuilds the registries
+against the current runtime and commits the reset. Net effect: **an
+install is a runtime upgrade, and a runtime upgrade implies redeploy** —
+enforced automatically instead of by a manual registry wipe. Regression:
+`DeployCheckTestCase>>testStaleGenerationDiscardsCanonicalRegistries`.
+
 ### 10.5 Divergences to document (and their CPython mapping)
 
 - **"Fresh state per forced re-import" is spelled `reload()` — and the old
