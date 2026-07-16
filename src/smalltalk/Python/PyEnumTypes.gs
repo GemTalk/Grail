@@ -737,7 +737,21 @@ ___grailFunctional: cls positional: positional keywords: keywords
 		(rawValue @env0:isKindOf: Integer) ifTrue: [
 			lastInt := rawValue.
 			maxInt := maxInt @env0:max: rawValue].
-		((nameStr @env0:size @env0:> 0) and: [(nameStr @env0:at: 1) @env0:= $_]) ifFalse: [
+		((nameStr @env0:size @env0:> 0) and: [(nameStr @env0:at: 1) @env0:= $_])
+			ifTrue: [
+				"A callable under a DUNDER name is a user method, not a member
+				-- store + compile a forwarder (test_overridden_str/format
+				Function flavors).  Method-local defs are ExecBlocks."
+				(((nameStr @env0:size @env0:>= 5)
+					and: [(nameStr @env0:copyFrom: 1 to: 2) @env0:= '__'
+					and: [(nameStr @env0:copyFrom: nameStr @env0:size @env0:- 1 to: nameStr @env0:size) @env0:= '__'
+					and: [((rawValue @env0:isKindOf: BoundMethod)
+						or: [(rawValue @env0:isKindOf: UnboundMethod)
+						or: [rawValue @env0:isKindOf: ExecBlock]])]]])
+					ifTrue: [
+						Enum ___grailStoreOverride: newCls name: nameStr callable: rawValue.
+						Enum ___grailCompileOverrideForwarder: newCls name: nameStr])]
+			ifFalse: [
 			(byValue @env0:includesKey: rawValue)
 				ifTrue: [member := byValue @env0:at: rawValue]
 				ifFalse: [
@@ -762,6 +776,58 @@ ___grailFunctional: cls positional: positional keywords: keywords
 				category: 'Grail-Class Attrs']]] value.
 	self ___grailRegistry___ @env0:at: newCls put: (Array @env0:with: byValue with: byName with: members).
 	^ newCls
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailStoreOverride: cls name: nm callable: aCallable
+	"Record a functional-API dunder method (Enum('N', [('__str__', f)])):
+	a callable under a dunder NAME is a method, not a member.  Per-session."
+
+	| tbl per |
+	tbl := SessionTemps @env0:current @env0:at: #GrailEnumOverrides otherwise: nil.
+	tbl @env0:isNil ifTrue: [
+		tbl := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailEnumOverrides put: tbl].
+	per := tbl @env0:at: cls otherwise: nil.
+	per @env0:isNil ifTrue: [per := KeyValueDictionary @env0:new. tbl @env0:at: cls put: per].
+	per @env0:at: nm put: aCallable
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailCompileOverrideForwarder: cls name: nm
+	"Compile an env-1 instance forwarder on cls for a functional-API dunder
+	override (see ___grailInvokeOverride:args:).  __format__ takes a spec;
+	__str__/__repr__ are 0-arg."
+
+	| src |
+	nm @env0:= '__format__'
+		ifTrue: [src := '__format__: spec
+	^ self ___grailInvokeOverride: ''__format__'' args: { spec }']
+		ifFalse: [src := nm @env0:, '
+	^ self ___grailInvokeOverride: ''' @env0:, nm @env0:, ''' args: #()'].
+	cls @env1:___compileMethod: src category: 'Grail-Enum Member'
+%
+
+category: 'Grail-Enum Member'
+method: Enum
+___grailInvokeOverride: nm args: argArray
+	"Call the functional-API dunder override for self's class (or nearest
+	ancestor).  self is the enum member, bound as the callable's first arg."
+
+	| tbl walker callable |
+	tbl := SessionTemps @env0:current @env0:at: #GrailEnumOverrides otherwise: nil.
+	callable := nil.
+	(tbl @env0:~~ nil) ifTrue: [
+		walker := self @env0:class.
+		[walker @env0:~~ nil and: [callable @env0:== nil]] @env0:whileTrue: [
+			| per |
+			per := tbl @env0:at: walker otherwise: nil.
+			per @env0:== nil ifFalse: [callable := per @env0:at: nm otherwise: nil].
+			walker := walker @env0:superClass]].
+	callable @env0:== nil ifTrue: [^ self @env1:__repr__].
+	^ callable @env1:value: ({ self } @env0:, argArray) value: nil
 %
 
 ! ------------------- Enum class: metaclass entry points

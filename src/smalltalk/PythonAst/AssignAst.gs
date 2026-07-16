@@ -109,7 +109,8 @@ printSmalltalkOn: aStream
 			targets — mirrors single-target's bypass of the ``attr:''
 			setter dispatch (see printSmalltalkAttributeStoreOn:)."
 			((eachTgt value isKindOf: NameAst)
-				and: [CallAst isSelfReference: eachTgt value id])
+				and: [(CallAst isSelfReference: eachTgt value id)
+					and: [(eachTgt value ___boundInNestedFunction___: eachTgt value id) not]])
 				ifTrue: [
 					"Slot attribute -> direct named-instVar write; else the
 					instances dynamic-instVar storage (as before)."
@@ -314,7 +315,8 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 		paired getter+setter at runtime and dispatches to the setter;
 		otherwise falls through to dynamic-instVar storage."
 		((aTarget value isKindOf: NameAst)
-			and: [CallAst isSelfReference: aTarget value id]) ifTrue: [
+			and: [(CallAst isSelfReference: aTarget value id)
+				and: [(aTarget value ___boundInNestedFunction___: aTarget value id) not]]) ifTrue: [
 			"Slot attribute → assign the mangled instVar directly by bare name."
 			((CallAst classSlotNames notNil)
 				and: [CallAst classSlotNames includes: aTarget attr asSymbol]) ifTrue: [
@@ -401,7 +403,9 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 	to the store path (it remains relevant to call sites that send
 	``obj attr: x'' directly via Smalltalk-style keyword)."
 
-	((tgt value isKindOf: NameAst) and: [CallAst isSelfReference: tgt value id]) ifTrue: [
+	((tgt value isKindOf: NameAst)
+		and: [(CallAst isSelfReference: tgt value id)
+		and: [(tgt value ___boundInNestedFunction___: tgt value id) not]]) ifTrue: [
 		"Slot attribute (Python __slots__ → GemStone named instVar): assign
 		the mangled instVar directly by bare name (this method compiles on
 		the slotted class), bypassing the generic store path."

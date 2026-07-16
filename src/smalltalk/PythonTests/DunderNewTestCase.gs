@@ -1343,3 +1343,30 @@ testMethodReferenceEquality
 	self assert: (self fixture @env1:METHOD_EQUALITY_RESULT) @env1:__repr__
 		equals: '(True, False, False, True, True, True, 2, ''y'', 1)'
 %
+
+category: 'Grail-Tests - codegen'
+method: DunderNewTestCase
+testNestedDefSelfParam
+	"LEGB-self: a nested ``def render(self)'' whose OWN parameter is named
+	``self'' must read/write its own self (the call argument), not the
+	enclosing method's receiver -- including through the ``self.attr'' LOAD
+	fast path (AttributeAst) and the ``self.attr = v'' STORE fast path
+	(AssignAst).  Regression for the codegen bug where a nested def's
+	``self.name'' read / ``self.marker = ...'' wrote the enclosing self."
+
+	self assert: (self fixture @env1:LEGB_SELF_RESULT) @env1:__repr__
+		equals: '(''FIRST'', ''set'')'
+%
+
+category: 'Grail-Tests - enum internals'
+method: DunderNewTestCase
+testEnumFunctionalOverride
+	"A dunder method passed through the FUNCTIONAL API -- ``Enum('N',
+	[('__str__', f)])'' -- is installed as a method (not dropped) and its
+	``self.attr'' reads the member; drives the test_enum
+	test_overridden_str/format Function-flavor cluster.  Relies on the
+	LEGB-self fix (the passed defs are nested)."
+
+	self assert: (self fixture @env1:ENUM_FUNC_OVERRIDE_RESULT) @env1:__repr__
+		equals: '(''FIRST'', ''First'', [''first''])'
+%

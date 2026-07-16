@@ -120,9 +120,16 @@ printSmalltalkOn: aStream
 	attribute (like ``Symbol.symbols`` in blinker._utilities) reaches
 	the class-side accessor rather than chasing an instance instVar
 	that doesn't exist."
+	"The fast path applies only when ``self'' is this method's actual
+	receiver.  Inside a NESTED def whose own parameter is named ``self''
+	(``def outer(self): def __str__(self): return self.name ...''), that
+	``self'' is the nested def's local -- transported to ``_self'' -- not
+	the receiver, so it must take the general path below (LEGB-self: the
+	test_enum functional-API __str__/__format__ override bug)."
 	((value isKindOf: NameAst)
 		and: [(CallAst isSelfReference: value id)
-			and: [CallAst selfParameterName == #self]]) ifTrue: [
+			and: [CallAst selfParameterName == #self
+				and: [(value ___boundInNestedFunction___: value id) not]]]) ifTrue: [
 		"``self.<slot>'' where <slot> is one of this class's own __slots__
 		(Python __slots__ → GemStone named instVar): read the mangled
 		instVar directly by bare name — this method is compiled ON the

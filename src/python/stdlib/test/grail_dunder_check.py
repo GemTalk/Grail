@@ -1452,3 +1452,51 @@ def _method_equality_results():
 
 
 METHOD_EQUALITY_RESULT = _method_equality_results()
+
+
+def _legb_self_results():
+    # A nested def whose OWN parameter is named `self` must read its own
+    # self (the call arg), not the enclosing method's receiver -- including
+    # through the `self.attr` fast path.  Regression for the codegen bug
+    # where `self.name` inside a nested `def render(self)` read the
+    # enclosing method's `self`.
+    class Member:
+        def __init__(inner, n):
+            inner.name = n
+    store = {}
+    class Host:
+        def build(self):
+            self.tag = 'host'                 # enclosing self used
+            def render(self):
+                return self.name.upper()      # LOAD: nested self, self.attr fast path
+            def stamp(self):
+                self.marker = 'set'           # STORE: nested self, self.attr = v
+                return self.marker
+            store['r'] = render
+            store['s'] = stamp
+    Host().build()
+    return (store['r'](Member('first')),      # want 'FIRST'
+            store['s'](Member('x')))          # want 'set'
+
+
+LEGB_SELF_RESULT = _legb_self_results()
+
+
+def _enum_func_override_results():
+    # A dunder method passed through the FUNCTIONAL API is installed as a
+    # method (not dropped as an underscore name), and its `self.attr` reads
+    # the member (relies on the LEGB-self fix, since these defs are nested).
+    from enum import Enum
+
+    def _str(self):
+        return self.name.upper()
+
+    def _fmt(self, spec):
+        return self.name.title()
+
+    SE = Enum('SE', (('first', 1), ('__str__', _str)))
+    FE = Enum('FE', [('first', 1), ('__format__', _fmt)])
+    return (str(SE.first), format(FE.first), [m.name for m in SE])
+
+
+ENUM_FUNC_OVERRIDE_RESULT = _enum_func_override_results()
