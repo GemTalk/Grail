@@ -1326,3 +1326,33 @@ def _enum_protocol_results():
 
 
 ENUM_PROTOCOL_RESULT = _enum_protocol_results()
+
+
+def _flag_auto_max_results():
+    # Flag auto() numbers from the running MAXIMUM value seen, not the
+    # LAST value assigned: a manual member LOWER than the max (an alias,
+    # DOS=2 after FOUR=4) must NOT reset the power-of-two sequence.
+    # Regression for CPython test_number_reset_and_order_cleanup, where
+    # EIGHT=auto() used to compute 1<<bit_length(2)=4 instead of
+    # 1<<bit_length(4)=8.  Covers BOTH the class-body builder and the
+    # functional (dict/pairs) builder.
+    from enum import Flag, IntFlag, auto
+
+    class Confused(Flag):
+        ONE = auto()      # 1
+        TWO = auto()      # 2
+        FOUR = auto()     # 4
+        DOS = 2           # alias of TWO (value 2 < running max 4)
+        EIGHT = auto()    # 8   (from max=4, NOT last=2)
+        SIXTEEN = auto()  # 16
+
+    CF = IntFlag('CF', [('ONE', auto()), ('TWO', auto()),
+                        ('FOUR', auto()), ('DOS', 2),
+                        ('EIGHT', auto()), ('SIXTEEN', auto())])
+    return (Confused.ONE.value, Confused.TWO.value, Confused.FOUR.value,
+            Confused.DOS is Confused.TWO, Confused.EIGHT.value,
+            Confused.SIXTEEN.value,
+            CF.EIGHT.value, CF.SIXTEEN.value)
+
+
+FLAG_AUTO_MAX_RESULT = _flag_auto_max_results()

@@ -1283,3 +1283,17 @@ testEnumOrderValidation
 	self assert: (self fixture @env1:ORDER_VALIDATION_RESULT) @env1:__repr__
 		equals: '([''red'', ''green'', ''blue''], True, True, True)'
 %
+
+category: 'Grail-Tests - enum internals'
+method: DunderNewTestCase
+testFlagAutoNumbersFromMax
+	"Flag auto() numbers from the running MAXIMUM value, not the last
+	value assigned: a manual member LOWER than the max (an alias, DOS=2
+	after FOUR=4) must NOT reset the power-of-two sequence, so EIGHT=auto()
+	is 8 (1<<bit_length(4)), not 4 (1<<bit_length(2)).  Covers both the
+	class-body and functional builders.  (test_enum
+	test_number_reset_and_order_cleanup.)"
+
+	self assert: (self fixture @env1:FLAG_AUTO_MAX_RESULT) @env1:__repr__
+		equals: '(1, 2, 4, True, 8, 16, 8, 16)'
+%

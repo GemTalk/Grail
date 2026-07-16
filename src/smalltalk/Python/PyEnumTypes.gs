@@ -155,7 +155,7 @@ ___grailBuildMembers: cls names: attrNames
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members lastInt allNames dynHolder autoResolved |
+	| byValue byName members lastInt maxInt allNames dynHolder autoResolved |
 	"Names assigned under a class-body ``if`` (the shared test fixture's
 	``if issubclass(...): dupe = 3'') never reach classBodyAttributes --
 	their stores go through ___pyAttrStore___ into the per-class
@@ -207,6 +207,11 @@ ___grailBuildMembers: cls names: attrNames
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
 	lastInt := 0.
+	"maxInt: the running MAXIMUM member value -- Flag auto() numbers from the
+	highest bit seen so far, NOT the last value, so a manual value LOWER
+	than the max (``DOS = 2'' after FOUR = 4) must not reset the sequence
+	(CPython Flag._generate_next_value_ uses max(last_values))."
+	maxInt := 0.
 	"auto() markers resolve ONCE per instance: ``third = auto(); dupe =
 	third`` binds both names to the SAME marker object, so dupe must reuse
 	third's resolved value (-> alias), not advance the counter again
@@ -236,13 +241,15 @@ ___grailBuildMembers: cls names: attrNames
 						resolved := (Enum ___grailIsStrEnumClass: cls)
 							ifTrue: [nameStr @env0:asLowercase]
 							ifFalse: [(Enum ___grailIsFlagClass: cls)
-								ifTrue: [lastInt @env0:<= 0
+								ifTrue: [maxInt @env0:<= 0
 									ifTrue: [1]
-									ifFalse: [1 @env0:bitShift: lastInt @env0:highBit]]
+									ifFalse: [1 @env0:bitShift: maxInt @env0:highBit]]
 								ifFalse: [lastInt @env0:+ 1]].
 						autoResolved @env0:at: rawValue put: resolved.
 						rawValue := resolved]].
-			(rawValue @env0:isKindOf: Integer) ifTrue: [lastInt := rawValue].
+			(rawValue @env0:isKindOf: Integer) ifTrue: [
+				lastInt := rawValue.
+				maxInt := maxInt @env0:max: rawValue].
 			(byValue @env0:includesKey: rawValue)
 				ifTrue: [member := byValue @env0:at: rawValue]
 				ifFalse: [
@@ -588,8 +595,9 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
-	[ | lastInt isFlag autoResolved |
+	[ | lastInt maxInt isFlag autoResolved |
 	lastInt := 0.
+	maxInt := 0.
 	isFlag := self ___grailIsFlagClass: newCls.
 	"Per-INSTANCE auto() resolution (mirrors ___grailBuildMembers, slice 5):
 	the same GrailEnumAuto marker passed under two names -- the _EnumTests
@@ -613,13 +621,15 @@ ___grailFunctional: cls positional: positional keywords: keywords
 					resolved := (Enum ___grailIsStrEnumClass: newCls)
 						ifTrue: [nameStr @env0:asLowercase]
 						ifFalse: [isFlag
-							ifTrue: [lastInt @env0:<= 0
+							ifTrue: [maxInt @env0:<= 0
 								ifTrue: [1]
-								ifFalse: [1 @env0:bitShift: lastInt @env0:highBit]]
+								ifFalse: [1 @env0:bitShift: maxInt @env0:highBit]]
 							ifFalse: [lastInt @env0:+ 1]].
 					autoResolved @env0:at: rawValue put: resolved.
 					rawValue := resolved]].
-		(rawValue @env0:isKindOf: Integer) ifTrue: [lastInt := rawValue].
+		(rawValue @env0:isKindOf: Integer) ifTrue: [
+			lastInt := rawValue.
+			maxInt := maxInt @env0:max: rawValue].
 		((nameStr @env0:size @env0:> 0) and: [(nameStr @env0:at: 1) @env0:= $_]) ifFalse: [
 			(byValue @env0:includesKey: rawValue)
 				ifTrue: [member := byValue @env0:at: rawValue]
