@@ -1356,3 +1356,41 @@ def _flag_auto_max_results():
 
 
 FLAG_AUTO_MAX_RESULT = _flag_auto_max_results()
+
+
+def _enum_init_results():
+    # A class-body ``def __init__`` runs on each member with the value
+    # tuple unpacked as positional args (a scalar value -> a 1-tuple),
+    # matching CPython _proto_member.__set_name__.  The classic Planet
+    # value-carrying enum, a scalar-value __init__, and __init__
+    # exception propagation out of the class definition.
+    from enum import Enum
+
+    class Planet(Enum):
+        MERCURY = (3.303e+23, 2.4397e6)
+        VENUS = (4.869e+24, 6.0518e6)
+        def __init__(self, mass, radius):
+            self.mass = mass
+            self.radius = radius
+
+    class Scalar(Enum):
+        A = 1
+        B = 2
+        def __init__(self, n):
+            self.doubled = n * 2
+
+    init_raised = False
+    try:
+        class Boom(Enum):
+            X = 1
+            def __init__(self, n):
+                raise ValueError('nope')
+    except ValueError:
+        init_raised = True
+
+    return (Planet.MERCURY.mass, Planet.MERCURY.radius, Planet.MERCURY.value,
+            Planet.VENUS.mass, Scalar.A.doubled, Scalar.B.doubled,
+            init_raised)
+
+
+ENUM_INIT_RESULT = _enum_init_results()

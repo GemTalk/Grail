@@ -155,7 +155,7 @@ ___grailBuildMembers: cls names: attrNames
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members lastInt maxInt allNames dynHolder autoResolved |
+	| byValue byName members lastInt maxInt allNames dynHolder autoResolved hasUserInit tupleClass |
 	"Names assigned under a class-body ``if`` (the shared test fixture's
 	``if issubclass(...): dupe = 3'') never reach classBodyAttributes --
 	their stores go through ___pyAttrStore___ into the per-class
@@ -218,10 +218,21 @@ ___grailBuildMembers: cls names: attrNames
 	(CPython _EnumDict semantics).  Identity-keyed so distinct auto() calls
 	stay distinct."
 	autoResolved := IdentityKeyValueDictionary @env0:new.
+	"A class-body ``def __init__(self, ...)'' compiles to an env-1
+	``___init__:kw:'' method ON cls itself (a plain enum inherits object's,
+	so the defining class is NOT cls).  When present, CPython runs it on
+	each freshly-built member with the value's tuple elements as positional
+	args (a scalar value -> a 1-tuple); exceptions propagate out of the
+	class definition (test_init_exception).  Value-carrying enums such as
+	the classic Planet(mass, radius) rely on this."
+	hasUserInit := (cls @env0:whichClassIncludesSelector: #'___init__:kw:'
+		environmentId: 1) @env0:== cls.
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
 	allNames @env0:do: [:nameSym | | nameStr hasAccessor |
 		nameStr := nameSym @env0:asString.
 		((nameStr @env0:size @env0:> 0) and: [(nameStr @env0:at: 1) @env0:= $_]) ifFalse: [
-			| rawValue member |
+			| rawValue member built |
+			built := false.
 			"Declared names read through their compiled accessor pair;
 			dyn-swept names (class-body ``if`` stores) read from the holder."
 			hasAccessor := (cls @env0:class
@@ -277,6 +288,7 @@ ___grailBuildMembers: cls names: attrNames
 							name -- CPython repr(TE.dupe) is <TE.dupe: 3> --
 							while runtime composites (TE(5)) stay nameless."
 							member := cls @env0:basicNew.
+							built := true.
 							member @env0:dynamicInstVarAt: #value put: rawValue.
 							member @env0:dynamicInstVarAt: #name put: nameStr.
 							member @env0:dynamicInstVarAt: #'_value_' put: rawValue.
@@ -284,6 +296,7 @@ ___grailBuildMembers: cls names: attrNames
 							byValue @env0:at: rawValue put: member]].
 					member @env0:isNil ifTrue: [
 						member := cls @env0:basicNew.
+						built := true.
 						member @env0:dynamicInstVarAt: #value put: rawValue.
 						member @env0:dynamicInstVarAt: #name put: nameStr.
 						"CPython's canonical sunder attributes; stored as dynamic
@@ -306,7 +319,19 @@ ___grailBuildMembers: cls names: attrNames
 			hasAccessor
 				ifTrue: [cls @env0:perform: (nameStr @env0:, ':') @env0:asSymbol env: 1
 					withArguments: (Array @env0:with: member)]
-				ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym put: member]]].
+				ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym put: member].
+			"Run a class-body ``def __init__`` on the freshly-built member
+			(CPython _proto_member.__set_name__): value tuple -> positional
+			args, a scalar -> a 1-tuple.  Aliases (member reused from
+			byValue) are NOT re-initialized.  Errors propagate out of the
+			class definition (test_init_exception)."
+			(hasUserInit and: [built]) ifTrue: [
+				| initArgs |
+				initArgs := (rawValue @env0:isKindOf: tupleClass)
+					ifTrue: [rawValue @env0:asArray]
+					ifFalse: [Array @env0:with: rawValue].
+				member @env0:perform: #'___init__:kw:' env: 1
+					withArguments: { initArgs. KeyValueDictionary @env0:new }]]].
 	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members).
 	"_order_ validation (CPython EnumType): when the class declares an
 	``_order_'' string, the canonical member names in DEFINITION order must

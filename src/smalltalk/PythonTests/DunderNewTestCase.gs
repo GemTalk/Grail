@@ -1297,3 +1297,17 @@ testFlagAutoNumbersFromMax
 	self assert: (self fixture @env1:FLAG_AUTO_MAX_RESULT) @env1:__repr__
 		equals: '(1, 2, 4, True, 8, 16, 8, 16)'
 %
+
+category: 'Grail-Tests - enum internals'
+method: DunderNewTestCase
+testEnumMemberInit
+	"A class-body ``def __init__`` runs on each freshly-built member with
+	the value tuple unpacked as positional args (a scalar value -> a
+	1-tuple), matching CPython _proto_member.__set_name__: the classic
+	Planet(mass, radius) value-carrying enum, a scalar-value __init__, and
+	__init__ exception propagation out of the class definition.  (test_enum
+	test_init_exception + the value-carrying-enum pattern.)"
+
+	self assert: (self fixture @env1:ENUM_INIT_RESULT) @env1:__repr__
+		equals: '(3.303e23, 2439700.0, (3.303e23, 2439700.0), 4.869e24, 2, 4, True)'
+%
