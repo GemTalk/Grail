@@ -3,6 +3,16 @@
 # inside PythonTestCase>>eval:).  NOT a vendored CPython module; the
 # name avoids the test_ discovery glob.
 
+# Module-level constants for the Enum._convert_ regression (they must be
+# real module globals -- _convert_ scans a module's __dict__).
+GRAILCONV_D = 5
+GRAILCONV_C = 5
+GRAILCONV_B = 5
+GRAILCONV_A = 5   # shares value 5 with the others; A sorts first
+GRAILUNCMP_A = 5
+GRAILUNCMP_C = (9, 1)
+GRAILUNCMP_B = 'value'   # values not mutually orderable -> sort by name
+
 
 class D:
     def __new__(cls, v):
@@ -1500,3 +1510,22 @@ def _enum_func_override_results():
 
 
 ENUM_FUNC_OVERRIDE_RESULT = _enum_func_override_results()
+
+
+def run_enum_convert():
+    # Enum._convert_(name, module, filter) builds an enum of the receiver's
+    # type from a module's globals passing filter(name).  Members sort by
+    # (value, name) so the value->name reverse map is stable (A wins for the
+    # shared value 5); non-orderable values fall back to sort-by-name.  Runs
+    # for IntEnum (int values) and plain Enum (uncomparable values).  Called
+    # by the SUnit test AFTER this module is loaded (not at module level --
+    # _convert_ scans sys.modules[__name__], which must be fully registered).
+    import enum
+    IT = enum.IntEnum._convert_(
+        'ConvIT', __name__, filter=lambda x: x.startswith('GRAILCONV_'))
+    U = enum.Enum._convert_(
+        'ConvU', __name__, filter=lambda x: x.startswith('GRAILUNCMP_'))
+    return (IT(5).name,                    # 'GRAILCONV_A' (first lexicographic)
+            IT.GRAILCONV_D is IT.GRAILCONV_A,      # True  (alias to A)
+            IT.GRAILCONV_B == 5,               # True
+            [m.name for m in U])           # ['GRAILUNCMP_A', 'GRAILUNCMP_B', 'GRAILUNCMP_C']

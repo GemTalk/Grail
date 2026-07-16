@@ -99,7 +99,10 @@ for i in $(seq 0 $((WORKERS-1))); do
     echo "  shard $i: NO RESULT (crash) -- see out/shard_$i.out"; EXIT=1; continue
   fi
   S_SEEN=$((S_SEEN+1))
-  nums=$(echo "$line" | sed -E 's/.*\|([0-9]+) run, ([0-9]+) passed, ([0-9]+) failed, ([0-9]+) errors.*/\1 \2 \3 \4/')
+  # The result printString singularizes a count of 1 ("1 error" vs "N
+  # errors"), so match the optional plural -- otherwise a shard with exactly
+  # one error fails to parse and breaks the whole aggregation.
+  nums=$(echo "$line" | sed -E 's/.*\|([0-9]+) run, ([0-9]+) passed, ([0-9]+) failed, ([0-9]+) errors?.*/\1 \2 \3 \4/')
   # shellcheck disable=SC2086
   set -- $nums
   S_RUN=$((S_RUN+$1)); S_PASS=$((S_PASS+$2)); S_FAIL=$((S_FAIL+$3)); S_ERR=$((S_ERR+$4))

@@ -780,6 +780,89 @@ ___grailFunctional: cls positional: positional keywords: keywords
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailConvert: positional kw: kwargs forType: etype
+	"``Enum._convert_(name, module, filter, source=None, *, boundary=None,
+	as_global=False)'' -- build a new enum (of THIS type: IntEnum, StrEnum,
+	...) from the constants in ``module''s globals whose NAME passes
+	``filter'', then return it.  Converts C-style constant modules (socket,
+	errno) into enums.  Members are sorted by (value, name) so the
+	value->name reverse map is stable -- the first lexicographic name wins
+	for a shared value (test_convert_value_lookup_priority); when the values
+	are not orderable (complex, tuples) fall back to sorting by name
+	(test_convert_uncomparable / _complex).  The old spelling ``_convert''
+	is intentionally absent, so it raises AttributeError (test_convert_raise).
+
+	Grail scope: builds + returns the enum via the functional API.  The
+	CPython ``as_global'' repr rewrite (members repr as ``module.NAME'') and
+	the dir()-equality assertions (test_convert_int / _str, which need the
+	blocked enum __dir__ / _new_member_ identity) are follow-ons."
+
+	"Temps avoid the Grail globals ``module'' (the module class), ``filter''
+	and ``sorted'' (builtins)."
+	| enumName modName filterFn srcMod srcNs memberPairs sortedPairs |
+	enumName := positional @env0:at: 1.
+	modName := positional @env0:at: 2.
+	filterFn := (kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'filter'])
+		ifTrue: [kwargs @env0:at: 'filter'] ifFalse: [nil].
+	"Source MODULE: an explicit ``source'', else the named module in
+	sys.modules.  Iterate its ``__dict__'' (a PyModuleDict live view whose
+	keysAndValuesDo: yields the global name/value pairs)."
+	srcMod := ((kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'source'])
+		and: [(kwargs @env0:at: 'source') @env0:~~ nil])
+		ifTrue: [kwargs @env0:at: 'source']
+		ifFalse: [(Python @env0:at: #importlib) @env1:modules @env0:at: modName otherwise: nil].
+	srcMod @env0:== nil ifTrue: [
+		^ ValueError @env1:___signal___: 'module ''' @env0:, modName @env0:asString @env0:, ''' not found'].
+	srcNs := srcMod @env1:__dict__.
+	"Collect (name, value) pairs whose name passes filter()."
+	memberPairs := OrderedCollection @env0:new.
+	srcNs @env0:keysAndValuesDo: [:k :v |
+		(filterFn @env0:== nil
+			or: [(filterFn @env1:value: (Array @env0:with: k @env0:asString) value: nil) ___isTruthy___])
+			ifTrue: [memberPairs @env0:add: (Array @env0:with: k @env0:asString with: v)]].
+	"Sort by (value, name); on non-orderable values, sort by name alone."
+	sortedPairs := [(memberPairs @env0:asSortedCollection: [:a :b |
+		((a @env0:at: 2) @env1:__eq__: (b @env0:at: 2)) ___isTruthy___
+			ifTrue: [(a @env0:at: 1) @env0:<= (b @env0:at: 1)]
+			ifFalse: [((a @env0:at: 2) @env1:__lt__: (b @env0:at: 2)) ___isTruthy___]]) @env0:asArray]
+		@env0:on: AbstractException
+		do: [:ex |
+			(memberPairs @env0:asSortedCollection: [:a :b | (a @env0:at: 1) @env0:<= (b @env0:at: 1)]) @env0:asArray].
+	"Build the enum of this type (etype) from the sorted (name, value) pairs."
+	^ Enum ___grailFunctional: etype
+		positional: (Array @env0:with: enumName @env0:asString with: sortedPairs)
+		keywords: nil
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+__convert_: positional kw: kwargs
+	"``cls._convert_(...)'' -- forward to the shared helper with etype = self,
+	so the built enum is of the RECEIVER's type (Enum here)."
+
+	^ Enum ___grailConvert: positional kw: kwargs forType: self
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: IntEnum
+__convert_: positional kw: kwargs
+	"IntEnum._convert_(...) -- the IntEnum metaclass chain is AbstractPyInt-
+	rooted and never reaches Enum class, so the forwarder is duplicated here."
+
+	^ Enum ___grailConvert: positional kw: kwargs forType: self
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+__convert_: positional kw: kwargs
+	"StrEnum._convert_(...) -- duplicated onto the AbstractPyStr-rooted
+	StrEnum metaclass (same reason as IntEnum)."
+
+	^ Enum ___grailConvert: positional kw: kwargs forType: self
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailStoreOverride: cls name: nm callable: aCallable
 	"Record a functional-API dunder method (Enum('N', [('__str__', f)])):
 	a callable under a dunder NAME is a method, not a member.  Per-session."

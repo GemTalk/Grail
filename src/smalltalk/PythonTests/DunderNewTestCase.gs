@@ -1370,3 +1370,25 @@ testEnumFunctionalOverride
 	self assert: (self fixture @env1:ENUM_FUNC_OVERRIDE_RESULT) @env1:__repr__
 		equals: '(''FIRST'', ''First'', [''first''])'
 %
+
+category: 'Grail-Tests - enum internals'
+method: DunderNewTestCase
+testEnumConvert
+	"Enum._convert_(name, module, filter) builds an enum of the receiver's
+	type from a module's globals passing filter(name) (converts C-style
+	constant modules).  Members sort by (value, name) so the value->name
+	reverse map is stable -- the first lexicographic name wins for a shared
+	value (GRAILCONV_A for 5, with the rest aliasing it); non-orderable
+	values (int/tuple/str mix) fall back to sort-by-name.  Runs for both
+	IntEnum and plain Enum.  (test_enum TestConvert.)  Called as a function
+	AFTER load -- _convert_ scans sys.modules[name], which must be
+	registered."
+
+	| r |
+	"Load the function object explicitly, then call it -- a bare
+	``fixture run_enum_convert'' would invoke the 0-arg function via the
+	attribute-expr path and return the tuple, which is not itself callable."
+	r := (self fixture @env1:___pyAttrLoad___: #run_enum_convert) @env1:value: { } value: nil.
+	self assert: r @env1:__repr__
+		equals: '(''GRAILCONV_A'', True, True, [''GRAILUNCMP_A'', ''GRAILUNCMP_B'', ''GRAILUNCMP_C''])'
+%
