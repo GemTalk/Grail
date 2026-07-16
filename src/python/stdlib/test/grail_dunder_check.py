@@ -1428,3 +1428,27 @@ def _enum_new_results():
 
 
 ENUM_NEW_RESULT = _enum_new_results()
+
+
+def _method_equality_results():
+    # Method references compare by VALUE (CPython): a bound method equals
+    # itself (same __self__ + __func__), differs for a different method or
+    # a different instance; a class-accessed function equals itself;
+    # object.__new__ equals object.__new__; and method handles work as set
+    # members / dict keys.  (Each attribute access still mints a fresh
+    # handle, so plain ``is`` is not guaranteed -- matching CPython for
+    # bound methods.)
+    class C:
+        def m(self): return 1
+        def n(self): return 2
+    c = C()
+    d = C()
+    dd = {c.m: 'x'}
+    dd[c.m] = 'y'
+    return (c.m == c.m, c.m == c.n, c.m == d.m,
+            C.m == C.m, object.__new__ == object.__new__,
+            c.m in {c.m, c.n}, len({c.m, c.m, c.n}),
+            dd[c.m], len(dd))
+
+
+METHOD_EQUALITY_RESULT = _method_equality_results()

@@ -1326,3 +1326,20 @@ testEnumMemberNew
 	self assert: (self fixture @env1:ENUM_NEW_RESULT) @env1:__repr__
 		equals: '(''do not use `super().__new__; call the appropriate __new__ directly'', 1, ''alpha'', 2, ''beta'', True)'
 %
+
+category: 'Grail-Tests - method identity'
+method: DunderNewTestCase
+testMethodReferenceEquality
+	"Method references compare by VALUE (CPython): a bound method equals
+	itself (same __self__ + __func__) and differs for a different method or
+	instance; a class-accessed function equals itself; object.__new__ ==
+	object.__new__; and method handles work as set members / dict keys
+	(Grail's Python set/dict key on Smalltalk =/hash, so BoundMethod +
+	UnboundMethod define both those and __eq__/__hash__).  Each access still
+	mints a fresh handle, so ``is'' stays False -- matching CPython for
+	bound methods.  Unblocks method-comparison patterns across the suite
+	(enum _new_member_ etc.)."
+
+	self assert: (self fixture @env1:METHOD_EQUALITY_RESULT) @env1:__repr__
+		equals: '(True, False, False, True, True, True, 2, ''y'', 1)'
+%

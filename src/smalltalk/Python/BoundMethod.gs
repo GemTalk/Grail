@@ -87,6 +87,25 @@ selector
 	^ selector
 %
 
+category: 'Grail-Comparison'
+method: BoundMethod
+= other
+	"Smalltalk equality mirrors the Python __eq__ (receiver identity +
+	selector) so a BoundMethod works as a Python set/dict key -- Grail's
+	set/dict key on Smalltalk =/hash, not on __hash__/__eq__.  BoundMethods
+	are transient (minted per attribute access, never stored in a committed
+	hashed collection), so overriding hash carries no rehash hazard."
+
+	^ (other isKindOf: BoundMethod)
+		and: [receiver == (other receiver) and: [selector == (other selector)]]
+%
+
+category: 'Grail-Comparison'
+method: BoundMethod
+hash
+	^ receiver identityHash bitXor: selector hash
+%
+
 category: 'Grail-Private'
 method: BoundMethod
 _selectorForArgCount: nargs
@@ -325,6 +344,37 @@ __self__
 	bound to."
 
 	^ receiver
+%
+
+category: 'Grail-Comparison'
+method: BoundMethod
+__eq__: other
+	"CPython bound-method equality: equal iff same receiver (__self__) and
+	same underlying method (__func__).  Grail keys on the receiver's
+	IDENTITY and the selector (a Symbol uniquely names the method reached
+	on that receiver), so ``c.m == c.m'' is True and method references
+	compare by value even though each attribute access mints a fresh
+	handle.  Only Python-level __eq__/__hash__ are defined (not Smalltalk
+	=/hash), so Grail-internal collections that key BoundMethods by
+	identity are unaffected."
+
+	(other @env0:isKindOf: BoundMethod) ifFalse: [^ false].
+	^ (receiver @env0:== (other @env0:receiver))
+		and: [selector @env0:== (other @env0:selector)]
+%
+
+category: 'Grail-Comparison'
+method: BoundMethod
+__ne__: other
+	^ (self @env1:__eq__: other) @env0:not
+%
+
+category: 'Grail-Comparison'
+method: BoundMethod
+__hash__
+	"Consistent with __eq__ (receiver identity + selector)."
+
+	^ (receiver @env0:identityHash) @env0:bitXor: (selector @env0:hash)
 %
 
 category: 'Grail-Attribute Access'

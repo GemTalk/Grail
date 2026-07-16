@@ -161,4 +161,60 @@ value: positional value: kwargs
 	^ obj @env0:perform: resolvedSel env: 1 withArguments: rest
 %
 
+category: 'Grail-Comparison'
+method: UnboundMethod
+__eq__: other
+	"CPython class-accessed functions compare equal when they name the same
+	method: keyed on (definingClass, selector).  Makes ``C.m == C.m'' True
+	and lets unbound handles compare by value (only Python-level
+	__eq__/__hash__, not Smalltalk =/hash)."
+
+	(other @env0:isKindOf: UnboundMethod) ifFalse: [^ false].
+	^ (definingClass @env0:== (other @env0:definingClass))
+		and: [selector @env0:== (other @env0:selector)]
+%
+
+category: 'Grail-Comparison'
+method: UnboundMethod
+__ne__: other
+	^ (self @env1:__eq__: other) @env0:not
+%
+
+category: 'Grail-Comparison'
+method: UnboundMethod
+__hash__
+	"Consistent with __eq__ (definingClass identity + selector)."
+
+	^ (definingClass @env0:identityHash) @env0:bitXor: (selector @env0:hash)
+%
+
 set compile_env: 0
+
+category: 'Grail-Accessing'
+method: UnboundMethod
+definingClass
+	^ definingClass
+%
+
+category: 'Grail-Accessing'
+method: UnboundMethod
+selector
+	^ selector
+%
+
+category: 'Grail-Comparison'
+method: UnboundMethod
+= other
+	"Smalltalk equality mirrors the Python __eq__ (definingClass + selector)
+	so an unbound handle works as a Python set/dict key (Grail collections
+	key on Smalltalk =/hash).  Transient wrappers -- no rehash hazard."
+
+	^ (other isKindOf: UnboundMethod)
+		and: [definingClass == (other definingClass) and: [selector == (other selector)]]
+%
+
+category: 'Grail-Comparison'
+method: UnboundMethod
+hash
+	^ definingClass identityHash bitXor: selector hash
+%
