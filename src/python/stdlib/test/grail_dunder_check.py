@@ -819,6 +819,68 @@ def _enum_immutable_results():
 ENUM_IMMUTABLE_RESULT = _enum_immutable_results()
 
 
+def _order_validation_results():
+    # _order_ (CPython): a class declaring _order_ must have its canonical
+    # members in exactly that order, else TypeError at class creation.
+    from enum import Enum
+
+    def make_ok():
+        class C(Enum):
+            _order_ = 'red green blue'
+            red = 1
+            green = 2
+            blue = 3
+            verde = green
+        return [m.name for m in C]
+
+    def make_wrong_order():
+        class C(Enum):
+            _order_ = 'red green blue'
+            red = 1
+            blue = 3
+            green = 2
+
+    def make_extra_member():
+        class C(Enum):
+            _order_ = 'red green blue'
+            red = 1
+            green = 2
+            blue = 3
+            purple = 4
+
+    def make_flag_alias_in_order():
+        # _order_ may list an ALIAS (DOS) beside its canonical name (TWO);
+        # CPython strips aliases before comparing, so this must BUILD.
+        from enum import Flag, auto
+        class F(Flag):
+            _order_ = 'ONE TWO DOS FOUR'
+            ONE = auto()
+            TWO = auto()
+            DOS = 2
+            FOUR = auto()
+        return F.TWO is F.DOS
+
+    def raises(mk):
+        try:
+            mk(); return False
+        except TypeError:
+            return True
+        except BaseException:
+            return False
+
+    def builds(mk):
+        try:
+            return mk()
+        except BaseException:
+            return 'RAISED'
+
+    return (make_ok(), raises(make_wrong_order), raises(make_extra_member),
+            builds(make_flag_alias_in_order))
+
+
+ORDER_VALIDATION_RESULT = _order_validation_results()
+
+
 def _partial_setstate_results():
     # functools.partial.__setstate__ + __dict__ namespace, including the
     # tuple/dict-SUBCLASS coercion path (needs real classdefs, so it

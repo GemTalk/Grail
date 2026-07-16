@@ -1271,3 +1271,15 @@ testEnumMembersAreImmutable
 	self assert: (self fixture @env1:ENUM_IMMUTABLE_RESULT) @env1:__repr__
 		equals: '(True, True, True, True, True, 2, [''SPRING'', ''SUMMER''])'
 %
+
+category: 'Grail-Tests - enum internals'
+method: DunderNewTestCase
+testEnumOrderValidation
+	"``_order_`` (CPython EnumType): a class declaring _order_ must list its
+	canonical members in exactly that order (aliases excluded) -- a wrong
+	order or an extra member raises TypeError at class creation; a correct
+	_order_ (even with an alias present) builds.  (test_enum TestOrder.)"
+
+	self assert: (self fixture @env1:ORDER_VALIDATION_RESULT) @env1:__repr__
+		equals: '([''red'', ''green'', ''blue''], True, True, True)'
+%

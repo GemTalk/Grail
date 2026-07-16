@@ -301,6 +301,32 @@ ___grailBuildMembers: cls names: attrNames
 					withArguments: (Array @env0:with: member)]
 				ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym put: member]]].
 	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members).
+	"_order_ validation (CPython EnumType): when the class declares an
+	``_order_'' string, the canonical member names in DEFINITION order must
+	match it exactly -- a wrong order, or extra names on either side, raises
+	TypeError.  Aliases are excluded from both (``members'' is canonical-
+	only; _order_ conventionally lists canonical names).  Read guarded: no
+	_order_ declared -> nil -> skip."
+	[ | orderVal |
+	orderVal := [cls @env1:___pyAttrLoad___: #'_order_']
+		@env0:on: AbstractException do: [:ex | nil].
+	(orderVal @env0:isKindOf: CharacterCollection) ifTrue: [
+		| orderNames memberNames |
+		memberNames := (members @env0:collect: [:m |
+			(m @env0:dynamicInstVarAt: #name) @env0:asString]) @env0:asArray.
+		"ALIASES may appear in _order_ (a Flag ``DOS = 2'' listed alongside
+		its canonical ``TWO'') -- CPython strips them before comparing.  An
+		alias is a name bound in byName but absent from the canonical member
+		names; a name NOT in byName at all (a bogus extra) is kept so it
+		still forces a mismatch."
+		orderNames := ((orderVal @env0:asString @env0:copyReplaceAll: ',' with: ' ')
+			@env0:subStrings)
+			@env0:reject: [:n |
+				(byName @env0:includesKey: n)
+					and: [(memberNames @env0:includes: n) @env0:not]].
+		orderNames @env0:asArray @env0:= memberNames ifFalse: [
+			TypeError @env1:___signal___: cls @env0:name @env0:asString
+				@env0:, ': member order does not match _order_']] ] @env0:value.
 	"Drop the ClassDefAst-emitted generic instantiation (env-1
 	``value:value:``) so calling the class — Color(value) — reaches the
 	inherited enum value-lookup instead of trying to build an instance.
