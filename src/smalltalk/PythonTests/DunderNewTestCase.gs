@@ -1311,3 +1311,18 @@ testEnumMemberInit
 	self assert: (self fixture @env1:ENUM_INIT_RESULT) @env1:__repr__
 		equals: '(3.303e23, 2439700.0, (3.303e23, 2439700.0), 4.869e24, 2, 4, True)'
 %
+
+category: 'Grail-Tests - enum internals'
+method: DunderNewTestCase
+testEnumMemberNew
+	"A class-body ``def __new__`` runs to build each member.  The
+	super-guard: a member __new__ delegating to ``super().__new__'' (which
+	reaches Enum.__new__ -- the by-value lookup -- while the class has no
+	members yet) raises CPython's ``do not use super().__new__'' TypeError
+	(test_bad_new_super).  A legitimate __new__ that allocates via
+	object.__new__ and sets _value_ plus custom slots builds normally, and
+	the member is reachable by its _value_ (Custom(1) is Custom.A)."
+
+	self assert: (self fixture @env1:ENUM_NEW_RESULT) @env1:__repr__
+		equals: '(''do not use `super().__new__; call the appropriate __new__ directly'', 1, ''alpha'', 2, ''beta'', True)'
+%

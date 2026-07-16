@@ -149,13 +149,52 @@ ___grailRecordFor: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailBuildingSet
+	"Per-SESSION set of enum classes whose members are mid-construction.
+	A class-body ``def __new__`` runs while the class is in this set; if
+	that __new__ delegates to ``super().__new__`` (which reaches Enum's
+	__new__ -- the by-value lookup -- since the class has no members yet),
+	the guard below fires CPython's ``do not use super().__new__'' error.
+	SessionTemps-backed so it never dirties committed state, mirroring
+	___grailRegistry___."
+
+	| s |
+	s := SessionTemps @env0:current @env0:at: #GrailEnumBuilding otherwise: nil.
+	s @env0:isNil ifTrue: [
+		s := IdentitySet @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailEnumBuilding put: s].
+	^ s
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___new__: args kw: kw
+	"Enum.__new__ as a METHOD (not the class-call, which is metaclass
+	value:value:).  Reached by ``super().__new__(cls, value)'' inside a
+	user __new__ -- Python's C3 super-walk finds this on Enum's metaclass.
+	During member construction the class is in ___grailBuildingSet and has
+	no members, so a member __new__ that wrongly delegates up here is the
+	<super>.__new__ misuse CPython rejects (test_bad_new_super).  Outside
+	construction, behave as the ordinary by-value lookup (``Enum.__new__''
+	== ``Enum(value)'').  ``args'' arrives as (cls, value) via super
+	(Python passes cls explicitly); a direct ``Cls.__new__(value)'' passes
+	just (value) -- the value is always the LAST positional."
+
+	(Enum ___grailBuildingSet @env0:includes: self) ifTrue: [
+		^ TypeError @env1:___signal___:
+			'do not use `super().__new__; call the appropriate __new__ directly'].
+	^ Enum ___grailLookupValue: self value: (args @env0:at: args @env0:size)
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailBuildMembers: cls names: attrNames
 	"Turn each class-body NAME=value on cls into a singleton member (an
 	instance of cls).  Equal values alias to the first member (CPython
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members lastInt maxInt allNames dynHolder autoResolved hasUserInit tupleClass |
+	| byValue byName members lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew tupleClass |
 	"Names assigned under a class-body ``if`` (the shared test fixture's
 	``if issubclass(...): dupe = 3'') never reach classBodyAttributes --
 	their stores go through ___pyAttrStore___ into the per-class
@@ -227,7 +266,30 @@ ___grailBuildMembers: cls names: attrNames
 	the classic Planet(mass, radius) rely on this."
 	hasUserInit := (cls @env0:whichClassIncludesSelector: #'___init__:kw:'
 		environmentId: 1) @env0:== cls.
+	"A class-body ``def __new__(cls, ...)'' likewise compiles to an env-1
+	INSTANCE method ON cls (self-param bound to cls).  When present, CPython
+	builds each member by running it (member_type construction + user slots)
+	rather than a bare allocation; a __new__ that delegates to
+	``super().__new__'' trips the guard in Enum>>___new__:kw:."
+	hasUserNew := (cls @env0:whichClassIncludesSelector: #'___new__:kw:'
+		environmentId: 1) @env0:== cls.
 	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	"A method-local class-body ``super()`` resolves its defining class
+	through the ``___cell_<name>___'' closure cell, which ClassDefAst
+	stores only AFTER this hook (after decorators).  A member __new__ runs
+	DURING this hook, so pre-store the cell now -- otherwise super() reads
+	nil and its __new__ walk hits ``nil superClass'' instead of reaching
+	Enum's guard.  Only matters when a user __new__ exists."
+	hasUserNew ifTrue: [
+		cls @env1:___pyAttrStore___:
+			('___cell_' @env0:, cls @env0:name @env0:asString @env0:, '___') @env0:asSymbol
+			put: cls].
+	"Members build while cls is in the building set: a member __new__
+	that delegates to super().__new__ hits the guard in
+	Enum>>___new__:kw:.  ensure: clears it even when that guard (or a
+	user __new__/__init__) raises out of the loop."
+	Enum ___grailBuildingSet @env0:add: cls.
+	[
 	allNames @env0:do: [:nameSym | | nameStr hasAccessor |
 		nameStr := nameSym @env0:asString.
 		((nameStr @env0:size @env0:> 0) and: [(nameStr @env0:at: 1) @env0:= $_]) ifFalse: [
@@ -294,27 +356,46 @@ ___grailBuildMembers: cls names: attrNames
 							member @env0:dynamicInstVarAt: #'_value_' put: rawValue.
 							member @env0:dynamicInstVarAt: #'_name_' put: nameStr.
 							byValue @env0:at: rawValue put: member]].
-					member @env0:isNil ifTrue: [
-						member := cls @env0:basicNew.
-						built := true.
-						member @env0:dynamicInstVarAt: #value put: rawValue.
-						member @env0:dynamicInstVarAt: #name put: nameStr.
-						"CPython's canonical sunder attributes; stored as dynamic
-						instVars so attribute READS see values (the attr-load
-						path probes the instance store before wrapping methods)."
-						member @env0:dynamicInstVarAt: #'_value_' put: rawValue.
-						member @env0:dynamicInstVarAt: #'_name_' put: nameStr.
-						byValue @env0:at: rawValue put: member.
-						"A ZERO-valued Flag member (``BLACK = 0``) is reachable
-						by name, by value -- Color(0) -- and as a class
-						attribute, but is NOT canonical: CPython excludes it
-						from iteration, len, reversed and _member_names_
-						(list(Color) yields only single-bit members).  Plain
-						Enum keeps zero members canonical."
-						((rawValue @env0:isKindOf: Integer)
-							and: [rawValue @env0:= 0
-							and: [Enum ___grailIsFlagClass: cls]])
-							ifFalse: [members @env0:add: member]]].
+						member @env0:isNil ifTrue: [ | memberValue |
+							hasUserNew
+								ifTrue: [ | newArgs v |
+									"Build the member by running the user __new__ (member_type
+									construction + user slots).  args = the value tuple unpacked
+									(a scalar -> a 1-tuple); the receiver is cls (the __new__
+									self-param).  A __new__ that delegates to super().__new__
+									raises the guard in Enum>>___new__:kw: here."
+									newArgs := (rawValue @env0:isKindOf: tupleClass)
+										ifTrue: [rawValue @env0:asArray]
+										ifFalse: [Array @env0:with: rawValue].
+									member := (UnboundMethod @env1:definingClass: cls selector: #'__new__')
+										@env1:value: ({ cls } @env0:, newArgs) value: KeyValueDictionary @env0:new.
+									"CPython: a member's canonical value is its _value_, set by
+									__new__.  When __new__ left it unset, fall back to the raw
+									class-body value (a fuller member_type(*args) reconstruction
+									is a later refinement)."
+									v := [member @env0:dynamicInstVarAt: #'_value_']
+								@env0:on: AbstractException do: [:e | nil].
+									memberValue := v @env0:isNil ifTrue: [rawValue] ifFalse: [v]]
+								ifFalse: [
+									member := cls @env0:basicNew.
+									memberValue := rawValue].
+							built := true.
+							member @env0:dynamicInstVarAt: #value put: memberValue.
+							member @env0:dynamicInstVarAt: #name put: nameStr.
+							"CPython's canonical sunder attributes; stored as dynamic
+							instVars so attribute READS see values (the attr-load path
+							probes the instance store before wrapping methods)."
+							member @env0:dynamicInstVarAt: #'_value_' put: memberValue.
+							member @env0:dynamicInstVarAt: #'_name_' put: nameStr.
+							byValue @env0:at: memberValue put: member.
+							"A ZERO-valued Flag member (``BLACK = 0``) is reachable by
+							name, by value -- Color(0) -- and as a class attribute, but is
+							NOT canonical: CPython excludes it from iteration, len,
+							reversed and _member_names_.  Plain Enum keeps zero canonical."
+							((memberValue @env0:isKindOf: Integer)
+								and: [memberValue @env0:= 0
+								and: [Enum ___grailIsFlagClass: cls]])
+								ifFalse: [members @env0:add: member]]].
 			byName @env0:at: nameStr put: member.
 			hasAccessor
 				ifTrue: [cls @env0:perform: (nameStr @env0:, ':') @env0:asSymbol env: 1
@@ -331,7 +412,8 @@ ___grailBuildMembers: cls names: attrNames
 					ifTrue: [rawValue @env0:asArray]
 					ifFalse: [Array @env0:with: rawValue].
 				member @env0:perform: #'___init__:kw:' env: 1
-					withArguments: { initArgs. KeyValueDictionary @env0:new }]]].
+					withArguments: { initArgs. KeyValueDictionary @env0:new }]]]]
+		@env0:ensure: [Enum ___grailBuildingSet @env0:remove: cls @env0:ifAbsent: []].
 	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members).
 	"_order_ validation (CPython EnumType): when the class declares an
 	``_order_'' string, the canonical member names in DEFINITION order must

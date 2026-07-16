@@ -1394,3 +1394,37 @@ def _enum_init_results():
 
 
 ENUM_INIT_RESULT = _enum_init_results()
+
+
+def _enum_new_results():
+    # A class-body ``def __new__`` runs to build each member.  The
+    # super-guard: a member __new__ that delegates to ``super().__new__``
+    # (which reaches Enum.__new__ -- the by-value lookup -- while the class
+    # has no members) raises CPython's "do not use super().__new__" error
+    # (test_bad_new_super).  A legitimate __new__ that allocates and sets
+    # _value_ + custom slots builds normally.
+    from enum import Enum
+
+    guard_msg = ''
+    try:
+        class BadSuper(Enum):
+            def __new__(cls, value):
+                return super().__new__(cls, value)
+            failed = 1
+    except TypeError as e:
+        guard_msg = str(e)
+
+    class Custom(Enum):
+        def __new__(cls, value, extra):
+            obj = object.__new__(cls)
+            obj._value_ = value
+            obj.extra = extra
+            return obj
+        A = (1, 'alpha')
+        B = (2, 'beta')
+
+    return (guard_msg, Custom.A.value, Custom.A.extra, Custom.B.value,
+            Custom.B.extra, Custom.A is Custom(1))
+
+
+ENUM_NEW_RESULT = _enum_new_results()
