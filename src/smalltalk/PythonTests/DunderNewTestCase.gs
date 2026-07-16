@@ -1257,3 +1257,17 @@ testStrEnumMembersAreStrings
 	self assert: (self fixture @env1:STR_ENUM_RESULT) @env1:__repr__
 		equals: '(''red'', ''RED'', ''red'', ''<Color.RED: \''red\''>'', True, True, ''RED'', ''autoed'', [''RED'', ''GREEN'', ''AUTOED''], True, True, ''red'', ''red!'', 3, ''apple'', ''apple'', True)'
 %
+
+category: 'Grail-Tests - enum internals'
+method: DunderNewTestCase
+testEnumMembersAreImmutable
+	"Enum members are read-only (CPython): reassigning a member
+	(Season.SPRING = x), deleting a member (del Season.SPRING), deleting a
+	member's attribute (del Season.SPRING.name), and deleting a missing
+	name all raise AttributeError; a class-body METHOD can still be
+	deleted; normal reads/iteration are unaffected.  (test_enum
+	test_changing_member_fails + test_attribute_deletion.)"
+
+	self assert: (self fixture @env1:ENUM_IMMUTABLE_RESULT) @env1:__repr__
+		equals: '(True, True, True, True, True, 2, [''SPRING'', ''SUMMER''])'
+%

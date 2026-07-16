@@ -1804,8 +1804,24 @@ __setattr__: name _: value
 	conversion, audit, etc.); to bypass the override and hit the
 	default behavior, call ``super().__setattr__(name, value)''."
 
-	| sym setterSym cls |
+	| sym setterSym cls enumCls rec |
 	sym := name @env0:asSymbol.
+	"Enum members are read-only: ``Color.RED = x'' raises AttributeError
+	(CPython EnumType.__setattr__).  Guard for a class receiver whose enum
+	registry (byName) records `name` as a member -- BEFORE the accessor-
+	setter dispatch below, because members are stored as metaclass
+	accessor pairs and that path would otherwise bypass the guard.  The
+	registry is populated only AFTER the member build (which stores via the
+	accessor / dynInstVar directly, not this method), so definitional
+	writes are unaffected."
+	(self @env0:isKindOf: Behavior) ifTrue: [
+		enumCls := Python @env0:at: #'Enum' otherwise: nil.
+		(enumCls @env0:~~ nil
+			and: [(rec := enumCls @env1:___grailRecordFor: self) @env0:~~ nil
+			and: [(rec @env0:at: 2) @env0:includesKey: name @env0:asString]])
+			ifTrue: [
+				^ AttributeError @env1:___signal___:
+					'cannot reassign member ''' @env0:, name @env0:asString @env0:, '''']].
 	setterSym := (name @env0:asString @env0:, ':') @env0:asSymbol.
 	cls := self @env0:class.
 	((cls @env0:whichClassIncludesSelector: sym environmentId: 1) notNil
@@ -1908,6 +1924,19 @@ ___pyAttrDelete___: aName
 			'type object ''' @env0:, self @env0:name @env0:asString @env0:,
 				''' has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
 	].
+	"Enum MEMBERS are immutable: ``del member.name`` / ``del member.value``
+	raises AttributeError (CPython -- members are read-only).  A member is
+	an INSTANCE of an enum class (one carrying a registry record); deletion
+	never happens during construction, so guarding here is safe."
+	[ | enumCls |
+	enumCls := Python @env0:at: #'Enum' otherwise: nil.
+	(enumCls @env0:~~ nil
+		and: [(enumCls @env1:___grailRecordFor: self @env0:class) @env0:~~ nil])
+		ifTrue: [
+			^ AttributeError @env1:___signal___:
+				'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
+					''' object attribute ''' @env0:, aName @env0:asString
+					@env0:, ''' is read-only'] ] @env0:value.
 	"del obj.<slot> — a __slots__ instVar resets to unset (nil); raise if
 	already unset, matching ``del'' of an unbound slot.  (instVars can't
 	be removed, only nilled — the nil-as-absent convention makes a nilled
@@ -1959,6 +1988,8 @@ ___pyAttrStore___: aName put: aValue
 
 	(self @env0:isKindOf: Behavior) ifTrue: [
 		| setterSym getterSym metaclass |
+		"(Enum member-reassignment is guarded in __setattr__:_:, the single
+		store entry point, BEFORE the accessor-setter dispatch.)"
 		"Canonical-class overlay: runtime stores on a shared canonical
 		class stay session-local (docs/Persistent_Modules_and_Classes.md
 		par.7).  False (the default -- flag off or not canonical) falls

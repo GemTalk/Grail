@@ -776,6 +776,49 @@ def _str_enum_results():
 STR_ENUM_RESULT = _str_enum_results()
 
 
+def _enum_immutable_results():
+    # Enum members are read-only (CPython): reassigning a member on the
+    # class, or deleting a member / a member's attribute, raises
+    # AttributeError; a class-body METHOD can still be deleted; and normal
+    # reads are unaffected.  (test_changing_member_fails / test_attribute_deletion)
+    from enum import Enum
+
+    class Season(Enum):
+        SPRING = 1
+        SUMMER = 2
+        def spam(cls):
+            pass
+
+    def raises(thunk):
+        try:
+            thunk(); return False
+        except AttributeError:
+            return True
+        except BaseException:
+            return False
+
+    def reassign(): Season.SPRING = 'x'
+    def del_member(): del Season.SPRING
+    def del_member_attr(): del Season.SPRING.name
+    def del_missing(): del Season.DRY
+
+    del_method_ok = False
+    try:
+        del Season.spam
+        del_method_ok = not hasattr(Season, 'spam')
+    except BaseException:
+        del_method_ok = False
+
+    return (
+        raises(reassign), raises(del_member), raises(del_member_attr),
+        raises(del_missing), del_method_ok,
+        Season.SUMMER.value, [m.name for m in Season],
+    )
+
+
+ENUM_IMMUTABLE_RESULT = _enum_immutable_results()
+
+
 def _partial_setstate_results():
     # functools.partial.__setstate__ + __dict__ namespace, including the
     # tuple/dict-SUBCLASS coercion path (needs real classdefs, so it
