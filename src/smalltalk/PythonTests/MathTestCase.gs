@@ -615,3 +615,32 @@ testTrunc
 	result := m @env1:trunc: -3.7.
 	self assert: result equals: -3
 %
+
+category: 'Grail-Tests - Added Functions'
+method: MathTestCase
+testAddedFunctions
+	"isqrt / comb / perm / variadic-safe gcd,lcm / exp2 / cbrt / log1p /
+	fmod / erf, and their integer-validation + domain errors."
+
+	| m |
+	m := math @env1:instance.
+	self assert: (m @env1:isqrt: 100) equals: 10.
+	self assert: (m @env1:isqrt: (10 @env0:raisedTo: 20)) equals: (10 @env0:raisedTo: 10).
+	self assert: (m @env1:comb: 5 _: 2) equals: 10.
+	self assert: (m @env1:comb: 3 _: 5) equals: 0.
+	self assert: (m @env1:perm: 5 _: 2) equals: 20.
+	self assert: (m @env1:perm: 5) equals: 120.
+	self assert: (m @env1:gcd: 12 _: 8) equals: 4.
+	self assert: (m @env1:lcm: 4 _: 6) equals: 12.
+	self assert: (m @env1:exp2: 3) equals: 8.0.
+	self assert: (m @env1:cbrt: 27) equals: 3.0.
+	self assert: (((m @env1:cbrt: -8) @env0:+ 2.0) @env0:abs) < 0.00001.
+	self assert: ((m @env1:log1p: 0) @env0:abs) < 0.00001.
+	self assert: (m @env1:fmod: 10 _: 3) equals: 1.0.
+	self assert: (((m @env1:erf: 0.5) @env0:- 0.5204998778) @env0:abs) < 0.00001.
+	"A float argument to an integer function is a TypeError, not a silent
+	truncation; log1p(-1) is a domain error."
+	self should: [m @env1:gcd: 12 _: 1.5] raise: TypeError.
+	self should: [m @env1:log1p: -1] raise: ValueError.
+	self should: [m @env1:isqrt: -1] raise: ValueError
+%

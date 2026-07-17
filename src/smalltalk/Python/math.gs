@@ -298,13 +298,18 @@ factorial: n
 category: 'Grail-Number Theory'
 method: math
 gcd: a _: b
-	^ (a @env0:asInteger) @env0:gcd: (b @env0:asInteger)
+	"Validate integer-ness via __index__ (a float argument is a TypeError,
+	not a silent truncation)."
+	^ (self @env1:___index___: a) @env0:gcd: (self @env1:___index___: b)
 %
 
 category: 'Grail-Number Theory'
 method: math
 lcm: a _: b
-	^ (a @env0:asInteger) @env0:lcm: (b @env0:asInteger)
+	| av bv |
+	av := self @env1:___index___: a.
+	bv := self @env1:___index___: b.
+	^ (av @env0:= 0 or: [bv @env0:= 0]) ifTrue: [0] ifFalse: [av @env0:lcm: bv]
 %
 
 category: 'Grail-Floating Point Functions'
@@ -518,6 +523,237 @@ category: 'Grail-Angle Conversion'
 method: math
 radians: x
 	^ (self @env1:___real___: x) @env0:degreesToRadians
+%
+
+! ===============================================================================
+! Integer-valued number-theory / combinatorics
+! ===============================================================================
+
+category: 'Grail-Number Theory'
+method: math
+___index___: x
+	"Coerce to a Python integer via __index__ (CPython requires an exact
+	integer, not a float).  bool -> 0/1; a float/str/Decimal argument is a
+	TypeError, matching math.isqrt/comb/perm/gcd."
+
+	(x @env0:isKindOf: Boolean) ifTrue: [^ x ifTrue: [1] ifFalse: [0]].
+	(x @env0:isKindOf: Integer) ifTrue: [^ x].
+	((x @env0:class @env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:~~ nil)
+		ifTrue: [^ (x @env0:perform: #'__index__' env: 1) @env0:asInteger].
+	TypeError ___signal___: ('''' @env0:, x @env0:class @env0:name @env0:asString
+		@env0:, ''' object cannot be interpreted as an integer')
+%
+
+category: 'Grail-Number Theory'
+method: math
+isqrt: n
+	"Integer square root: the floor of the exact square root.  Pure-integer
+	Newton iteration so it is exact for arbitrarily large n (a Float sqrt
+	would lose precision)."
+
+	| v x y |
+	v := self @env1:___index___: n.
+	v @env0:< 0 ifTrue: [
+		ValueError ___signal___: 'isqrt() argument must be nonnegative'].
+	v @env0:<= 1 ifTrue: [^ v].
+	x := 1 @env0:bitShift: ((v @env0:highBit @env0:+ 1) @env0:// 2).
+	[y := (x @env0:+ (v @env0:// x)) @env0:// 2. y @env0:< x] @env0:whileTrue: [x := y].
+	^ x
+%
+
+category: 'Grail-Number Theory'
+method: math
+comb: n _: k
+	"Binomial coefficient C(n, k) = n! / (k! (n-k)!), computed by the
+	multiplicative formula (stays integer, no huge factorials).  0 when
+	k > n; both args must be non-negative integers."
+
+	| nn kk r |
+	nn := self @env1:___index___: n.
+	kk := self @env1:___index___: k.
+	(nn @env0:< 0 or: [kk @env0:< 0]) ifTrue: [
+		ValueError ___signal___: 'n and k must be non-negative integers'].
+	kk @env0:> nn ifTrue: [^ 0].
+	(kk @env0:* 2) @env0:> nn ifTrue: [kk := nn @env0:- kk].
+	r := 1.
+	1 @env0:to: kk do: [:i | r := (r @env0:* (nn @env0:- kk @env0:+ i)) @env0:// i].
+	^ r
+%
+
+category: 'Grail-Number Theory'
+method: math
+perm: n
+	"perm(n) = n! (the one-argument form)."
+
+	^ self @env1:perm: n _: None
+%
+
+category: 'Grail-Number Theory'
+method: math
+perm: n _: k
+	"Number of ways to arrange k of n items = n! / (n-k)!.  k=None means
+	n (i.e. n!).  0 when k > n; args must be non-negative integers."
+
+	| nn kk r |
+	nn := self @env1:___index___: n.
+	nn @env0:< 0 ifTrue: [
+		ValueError ___signal___: 'n must be a non-negative integer'].
+	k @env0:== None ifTrue: [^ self @env1:factorial: nn].
+	kk := self @env1:___index___: k.
+	kk @env0:< 0 ifTrue: [
+		ValueError ___signal___: 'k must be a non-negative integer'].
+	kk @env0:> nn ifTrue: [^ 0].
+	r := 1.
+	0 @env0:to: kk @env0:- 1 do: [:i | r := r @env0:* (nn @env0:- i)].
+	^ r
+%
+
+category: 'Grail-Number Theory'
+method: math
+_gcd: positional kw: kwargs
+	"math.gcd(*integers) -- variadic (3.9+).  gcd() = 0, gcd(a) = |a|."
+
+	| r |
+	r := 0.
+	positional @env0:do: [:a | r := r @env0:gcd: (self @env1:___index___: a)].
+	^ r
+%
+
+category: 'Grail-Number Theory'
+method: math
+_lcm: positional kw: kwargs
+	"math.lcm(*integers) -- variadic (3.9+).  lcm() = 1; any 0 -> 0."
+
+	| r |
+	r := 1.
+	positional @env0:do: [:a |
+		| v |
+		v := self @env1:___index___: a.
+		r := v @env0:= 0 ifTrue: [0] ifFalse: [r @env0:lcm: v]].
+	^ r
+%
+
+category: 'Grail-Math Functions'
+method: math
+prod: iterable
+	"math.prod(iterable) -- product with the default start of 1."
+
+	^ self @env1:_prod: (Array @env0:with: iterable) kw: nil
+%
+
+category: 'Grail-Math Functions'
+method: math
+_prod: positional kw: kwargs
+	"math.prod(iterable, *, start=1)."
+
+	| acc |
+	acc := (kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'start'])
+		ifTrue: [kwargs @env0:at: 'start'] ifFalse: [1].
+	(self @env1:___materialize___: (positional @env0:at: 1)) @env0:do: [:v |
+		acc := acc @env1:__mul__: v].
+	^ acc
+%
+
+! ===============================================================================
+! Additional floating-point functions
+! ===============================================================================
+
+category: 'Grail-Exponential and Logarithmic'
+method: math
+exp2: x
+	"2 ** x (as float)."
+
+	| f |
+	f := self @env1:___real___: x.
+	f @env0:_isNaN ifTrue: [^ f].
+	(f @env0:_getKind) @env0:== 3 ifTrue: [
+		^ f @env0:> 0 ifTrue: [PlusInfinity] ifFalse: [0.0]].
+	^ 2.0 @env0:raisedTo: f
+%
+
+category: 'Grail-Exponential and Logarithmic'
+method: math
+log1p: x
+	"log(1 + x), accurate for small x.  1+x <= 0 mirrors log()'s domain."
+
+	| arg |
+	arg := 1.0 @env0:+ (self @env1:___real___: x).
+	"log1p(-1) is log(0): a domain error, like log(x<=0)."
+	arg @env0:<= 0.0 ifTrue: [ValueError ___signal___: 'math domain error'].
+	^ arg @env0:ln
+%
+
+category: 'Grail-Math Functions'
+method: math
+cbrt: x
+	"Real cube root, sign-preserving (cbrt(-27) = -3, cbrt(-0.0) = -0.0)."
+
+	| f |
+	f := self @env1:___real___: x.
+	f @env0:_isNaN ifTrue: [^ f].
+	f @env0:= 0 ifTrue: [^ f].
+	f @env0:< 0 ifTrue: [^ ((f @env0:abs) @env0:raisedTo: (1.0 @env0:/ 3.0)) @env0:negated].
+	^ f @env0:raisedTo: (1.0 @env0:/ 3.0)
+%
+
+category: 'Grail-Math Functions'
+method: math
+erf: x
+	"Gauss error function (GemStone Float>>erf)."
+
+	^ (self @env1:___real___: x) @env0:erf
+%
+
+category: 'Grail-Math Functions'
+method: math
+fmod: x _: y
+	"C fmod: x - n*y with the sign of x (GemStone rem:); y=0 is a domain
+	error."
+
+	| fx fy r |
+	fx := self @env1:___real___: x.
+	fy := self @env1:___real___: y.
+	fy @env0:= 0.0 ifTrue: [ValueError ___signal___: 'math domain error'].
+	r := fx @env0:rem: fy.
+	"C fmod's result carries x's sign, including the sign of a zero result
+	(fmod(-10, 1) is -0.0)."
+	r @env0:= 0.0 ifTrue: [^ self @env1:copysign: 0.0 _: fx].
+	^ r
+%
+
+category: 'Grail-Math Functions'
+method: math
+frexp: x
+	"Return (m, e) with x = m * 2**e and 0.5 <= |m| < 1 (0 and non-finite
+	x give (x, 0))."
+
+	| f e m |
+	f := self @env1:___real___: x.
+	(f @env0:_isNaN or: [(f @env0:_getKind) @env0:== 3]) ifTrue: [
+		^ (Python @env0:at: #tuple) @env0:withAll: (Array @env0:with: f with: 0)].
+	f @env0:= 0 ifTrue: [
+		^ (Python @env0:at: #tuple) @env0:withAll: (Array @env0:with: f with: 0)].
+	e := (f @env0:abs @env0:exponent) @env0:+ 1.
+	m := f @env0:/ (2.0 @env0:raisedTo: e).
+	^ (Python @env0:at: #tuple) @env0:withAll: (Array @env0:with: m with: e)
+%
+
+category: 'Grail-Math Functions'
+method: math
+modf: x
+	"Return (fractional, integer) parts, both floats, each carrying x's
+	sign (modf(INF) = (0.0, INF), modf(-1.5) = (-0.5, -1.0))."
+
+	| f ip |
+	f := self @env1:___real___: x.
+	f @env0:_isNaN ifTrue: [
+		^ (Python @env0:at: #tuple) @env0:withAll: (Array @env0:with: f with: f)].
+	(f @env0:_getKind) @env0:== 3 ifTrue: [
+		^ (Python @env0:at: #tuple) @env0:withAll:
+			(Array @env0:with: (self @env1:copysign: 0.0 _: f) with: f)].
+	ip := f @env0:truncated @env0:asFloat.
+	^ (Python @env0:at: #tuple) @env0:withAll:
+		(Array @env0:with: (f @env0:- ip) with: ip)
 %
 
 set compile_env: 0
