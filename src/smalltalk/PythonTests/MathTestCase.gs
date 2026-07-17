@@ -736,4 +736,13 @@ testAddedFunctions
 	self assert: (m @env1:_nextafter: { 0.0. (m @env1:inf) } kw: nil) equals: 5e-324.
 	self assert: (m @env1:_nextafter: { (m @env1:inf) . 0.0 } kw: nil) equals: 1.7976931348623157e308.
 	self assert: (m @env1:ulp: (m @env1:inf)) equals: (m @env1:inf).
-	self assert: (m @env1:ulp: (2 @env0:raisedTo: 52)) equals: 1.0
+	self assert: (m @env1:ulp: (2 @env0:raisedTo: 52)) equals: 1.0.
+	"sumprod accumulates the dot product exactly (single final rounding), so
+	huge cancelling terms don't wipe out the small ones; an all-integer input
+	stays an exact integer."
+	self assert: (m @env1:sumprod: { 1.0. 10e100. 1.0. -10e100 } _: { 1.0. 1.0. 1.0. 1.0 })
+		equals: 2.0.
+	self assert: (m @env1:sumprod: { 0.1. 0.1. 0.1. 0.1. 0.1. 0.1. 0.1. 0.1. 0.1. 0.1 }
+		_: { 1. 1. 1. 1. 1. 1. 1. 1. 1. 1 }) equals: 1.0.
+	self assert: (m @env1:sumprod: { 1. 2. 3 } _: { 4. 5. 6 }) equals: 32
+

@@ -771,21 +771,53 @@ dist: pIter _: qIter
 category: 'Grail-Math Functions'
 method: math
 sumprod: pIter _: qIter
-	"sumprod(p, q) -> sum of products of parallel elements (3.12+)."
+	"sumprod(p, q) -> sum of the products of parallel elements (3.12+).
 
-	| ps qs sum |
+	When every element is a real number (Float/Integer/Boolean) the dot
+	product is accumulated as an EXACT rational and rounded once at the end,
+	so cancelling magnitudes keep their tail (sumprod([1, 1e101, 1, -1e101],
+	[1]*4) == 2.0, not 0.0) -- a naive running float sum double-rounds.  An
+	all-integer input keeps an exact integer result.  A non-real element
+	(Fraction/Decimal/custom) falls back to the env-1 __add__/__mul__ dunder
+	protocol (env-0 arithmetic would die in the classic 1-arg DNU)."
+
+	| ps qs sum allReal anyFloat check acc |
 	ps := self @env1:___materialize___: pIter.
 	qs := self @env1:___materialize___: qIter.
 	ps @env0:size @env0:= qs @env0:size ifFalse: [
 		ValueError ___signal___: 'Inputs are not the same length'].
+	allReal := true.
+	anyFloat := false.
+	check := [:v |
+		(v @env0:isKindOf: Float)
+			ifTrue: [anyFloat := true]
+			ifFalse: [((v @env0:isKindOf: Integer) or: [v @env0:isKindOf: Boolean])
+				ifFalse: [allReal := false]]].
+	ps @env0:do: check.
+	qs @env0:do: check.
+	allReal ifTrue: [
+		acc := 0.
+		1 @env0:to: ps @env0:size do: [:i |
+			acc := acc @env0:+ ((self @env1:___realToExact___: (ps @env0:at: i))
+				@env0:* (self @env1:___realToExact___: (qs @env0:at: i)))].
+		^ anyFloat ifTrue: [acc @env0:asFloat] ifFalse: [acc]].
 	sum := 0.
 	1 @env0:to: ps @env0:size do: [:i |
-		"env-1 dunders, not env-0 arithmetic: a Python Fraction operand
-		dispatches __mul__/__add__ through the class-attr operator
-		protocol; env-0 sends land in the CLASSIC 1-arg DNU and die."
 		sum := sum @env1:__add__:
 			((ps @env0:at: i) @env1:__mul__: (qs @env0:at: i))].
 	^ sum
+%
+
+category: 'Grail-Math Functions'
+method: math
+___realToExact___: v
+	"Coerce a real number to an exact Smalltalk value for rational
+	accumulation: a Boolean is 1/0, an Integer is itself, a Float is its
+	exact binary Fraction."
+
+	(v @env0:isKindOf: Boolean) ifTrue: [^ v ifTrue: [1] ifFalse: [0]].
+	(v @env0:isKindOf: Integer) ifTrue: [^ v].
+	^ v @env0:asFraction
 %
 
 category: 'Grail-Math Functions'
