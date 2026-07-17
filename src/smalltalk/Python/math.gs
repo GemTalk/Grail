@@ -281,13 +281,26 @@ log10: x
 category: 'Grail-Exponential and Logarithmic'
 method: math
 log2: x
-	"Base-2 log; a huge integer routes through the integer-magnitude
-	natural log rather than overflowing."
+	"Base-2 log.  CPython guarantees EXACT results for powers of two, which
+	a bare ln(x)/ln(2) does not (it drifts to 1023.0000000000001).  An
+	integer power of two (one bit set) is highBit-1; a float power of two is
+	its binary exponent -- but GemStone's Float>>exponent pins every
+	subnormal at -1022, so a small value is first renormalised by 2**52
+	(enough to lift the smallest subnormal 2**-1074 into the normal range).
+	Non-powers and huge integers keep the natural-log path."
 
-	((x @env0:isKindOf: Integer) and: [x @env0:highBit @env0:> 1023]) ifTrue: [
+	| f e |
+	(x @env0:isKindOf: Integer) ifTrue: [
 		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'math domain error'].
-		^ (self @env1:___logHugeInt___: x) @env0:/ (2.0 @env0:ln)].
-	^ (self @env1:___naturalLog___: x) @env0:/ (2.0 @env0:ln)
+		((x @env0:bitAnd: x @env0:- 1) @env0:= 0) ifTrue: [^ (x @env0:highBit @env0:- 1) @env0:asFloat].
+		(x @env0:highBit @env0:> 1023) ifTrue: [^ (self @env1:___logHugeInt___: x) @env0:/ (2.0 @env0:ln)].
+		^ (self @env1:___naturalLog___: x) @env0:/ (2.0 @env0:ln)].
+	f := self @env1:___real___: x.
+	((f @env0:> 0.0) and: [f @env0:_isNaN @env0:not and: [(f @env0:_getKind) @env0:~= 3]]) ifTrue: [
+		e := f @env0:exponent.
+		e @env0:<= -1022 ifTrue: [e := (f @env0:* (2.0 @env0:raisedTo: 52)) @env0:exponent @env0:- 52].
+		((2.0 @env0:raisedTo: e) @env0:= f) ifTrue: [^ e @env0:asFloat]].
+	^ (self @env1:___naturalLog___: f) @env0:/ (2.0 @env0:ln)
 %
 
 category: 'Grail-Exponential and Logarithmic'

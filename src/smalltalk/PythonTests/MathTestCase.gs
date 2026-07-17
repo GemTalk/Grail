@@ -678,4 +678,12 @@ testAddedFunctions
 	self assert: (m @env1:ldexp: 1 _: 3) equals: 8.0.
 	self should: [m @env1:ldexp: 2.0 _: 1.1] raise: TypeError.
 	self should: [m @env1:ldexp: 1.0 _: 1000000] raise: OverflowError.
-	self assert: (m @env1:ldexp: (m @env1:inf) _: 30) equals: (m @env1:inf)
+	self assert: (m @env1:ldexp: (m @env1:inf) _: 30) equals: (m @env1:inf).
+	"log2 is EXACT for powers of two -- integer (highBit), normal float, and
+	subnormal float (renormalised past GemStone's -1022 exponent floor) --
+	where ln(x)/ln(2) would drift (log2(2**1023) = 1023.0000000000001)."
+	self assert: (m @env1:log2: 4) equals: 2.0.
+	self assert: (m @env1:log2: (2 @env0:raisedTo: 1023)) equals: 1023.0.
+	self assert: (m @env1:log2: (m @env1:ldexp: 1.0 _: 1023)) equals: 1023.0.
+	self assert: (m @env1:log2: (m @env1:ldexp: 1.0 _: -1074)) equals: -1074.0.
+	self assert: (m @env1:log2: (m @env1:ldexp: 1.0 _: -1050)) equals: -1050.0
