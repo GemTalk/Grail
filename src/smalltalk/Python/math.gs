@@ -216,9 +216,38 @@ exp: x
 
 category: 'Grail-Exponential and Logarithmic'
 method: math
+___logHugeInt___: x
+	"Natural log of a positive integer too large to represent as a float:
+	ln(x) = ln(x >> shift) + shift*ln(2), keeping ~52 significant bits so
+	the reduced value converts to a finite float (log(10**1000))."
+
+	| shift |
+	shift := x @env0:highBit @env0:- 52.
+	^ ((x @env0:bitShift: shift @env0:negated) @env0:asFloat) @env0:ln
+		@env0:+ (shift @env0:* (2.0 @env0:ln))
+%
+
+category: 'Grail-Exponential and Logarithmic'
+method: math
+___naturalLog___: x
+	"ln(x) with CPython's domain error (x <= 0) and exact handling of a
+	huge integer whose float conversion would overflow to inf."
+
+	| f |
+	(x @env0:isKindOf: Integer) ifTrue: [
+		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'math domain error'].
+		(x @env0:highBit @env0:> 1023) ifTrue: [^ self @env1:___logHugeInt___: x]].
+	f := self @env1:___real___: x.
+	f @env0:<= 0.0 ifTrue: [
+		ValueError ___signal___: 'math domain error'].
+	^ f @env0:ln
+%
+
+category: 'Grail-Exponential and Logarithmic'
+method: math
 log: x
-	"math.log(x) — natural logarithm. Delegates to log:_: with base e."
-	^ self log: x _: (self e)
+	"math.log(x) — natural logarithm."
+	^ self @env1:___naturalLog___: x
 %
 
 category: 'Grail-Exponential and Logarithmic'
@@ -227,17 +256,19 @@ log: x _: base
 	"math.log(x, base) — logarithm of x to the given base.  Domain:
 	x <= 0 raises CPython's ValueError."
 
-	| f |
-	f := self @env1:___real___: x.
-	f @env0:<= 0.0 ifTrue: [
-		ValueError ___signal___: 'math domain error'].
-	^ (f @env0:ln) @env0:/ ((self @env1:___real___: base) @env0:ln)
+	^ (self @env1:___naturalLog___: x) @env0:/ (self @env1:___naturalLog___: base)
 %
 
 category: 'Grail-Exponential and Logarithmic'
 method: math
 log10: x
+	"Base-10 log; a huge integer routes through the integer-magnitude
+	natural log (log10(10**1000) = 1000) rather than overflowing."
+
 	| f |
+	((x @env0:isKindOf: Integer) and: [x @env0:highBit @env0:> 1023]) ifTrue: [
+		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'math domain error'].
+		^ (self @env1:___logHugeInt___: x) @env0:/ (10.0 @env0:ln)].
 	f := self @env1:___real___: x.
 	f @env0:<= 0.0 ifTrue: [
 		ValueError ___signal___: 'math domain error'].
@@ -247,9 +278,13 @@ log10: x
 category: 'Grail-Exponential and Logarithmic'
 method: math
 log2: x
-	| ln2 |
-	ln2 := 2 @env0:ln.
-	^ (x @env0:ln) @env0:/ ln2
+	"Base-2 log; a huge integer routes through the integer-magnitude
+	natural log rather than overflowing."
+
+	((x @env0:isKindOf: Integer) and: [x @env0:highBit @env0:> 1023]) ifTrue: [
+		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'math domain error'].
+		^ (self @env1:___logHugeInt___: x) @env0:/ (2.0 @env0:ln)].
+	^ (self @env1:___naturalLog___: x) @env0:/ (2.0 @env0:ln)
 %
 
 category: 'Grail-Exponential and Logarithmic'

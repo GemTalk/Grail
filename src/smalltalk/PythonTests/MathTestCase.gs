@@ -658,5 +658,10 @@ testAddedFunctions
 	self assert: (((m @env1:gamma: 5) @env0:- 24.0) @env0:abs) < 0.0001.
 	self assert: (((m @env1:gamma: 0.5) @env0:- 1.7724538509) @env0:abs) < 0.000001.
 	self assert: (((m @env1:gamma: -0.5) @env0:+ 3.5449077018) @env0:abs) < 0.000001.
-	self should: [m @env1:gamma: 0] raise: ValueError
+	self should: [m @env1:gamma: 0] raise: ValueError.
+	"log/log10/log2 of an integer too large for a float compute from its
+	magnitude instead of overflowing to inf."
+	self assert: (((m @env1:log: (10 @env0:raisedTo: 1000)) @env0:- 2302.5850929940457) @env0:abs) < 0.0001.
+	self assert: (((m @env1:log10: (10 @env0:raisedTo: 1000)) @env0:- 1000.0) @env0:abs) < 0.0001.
+	self assert: (((m @env1:log2: (2 @env0:raisedTo: 2000)) @env0:- 2000.0) @env0:abs) < 0.0001
 %
