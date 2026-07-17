@@ -652,5 +652,11 @@ testAddedFunctions
 	= 1, remainder(7,2) = -1); y=0 is a domain error."
 	self assert: (m @env1:remainder: 5 _: 2) equals: 1.0.
 	self assert: (m @env1:remainder: 7 _: 2) equals: -1.0.
-	self should: [m @env1:remainder: 5 _: 0] raise: ValueError
+	self should: [m @env1:remainder: 5 _: 0] raise: ValueError.
+	"gamma (Lanczos): gamma(5)=24, gamma(0.5)=sqrt(pi), gamma(-0.5)
+	=-2*sqrt(pi) (reflection), a pole at 0 is a domain error."
+	self assert: (((m @env1:gamma: 5) @env0:- 24.0) @env0:abs) < 0.0001.
+	self assert: (((m @env1:gamma: 0.5) @env0:- 1.7724538509) @env0:abs) < 0.000001.
+	self assert: (((m @env1:gamma: -0.5) @env0:+ 3.5449077018) @env0:abs) < 0.000001.
+	self should: [m @env1:gamma: 0] raise: ValueError
 %

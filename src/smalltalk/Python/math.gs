@@ -725,6 +725,49 @@ erf: x
 
 category: 'Grail-Math Functions'
 method: math
+___gammaLanczos___: x
+	"Lanczos approximation (g=7, 9 coefficients) of the gamma function for
+	x >= 0.5; reflect x < 0.5 through gamma(x)gamma(1-x) = pi/sin(pi x).
+	~15 significant digits."
+
+	| pi c xx a t |
+	pi := self @env1:pi.
+	x @env0:< 0.5 ifTrue: [
+		^ pi @env0:/ ((pi @env0:* x) @env0:sin
+			@env0:* (self @env1:___gammaLanczos___: (1.0 @env0:- x)))].
+	c := #(0.99999999999980993 676.5203681218851 -1259.1392167224028
+		771.32342877765313 -176.61502916214059 12.507343278686905
+		-0.13857109526572012 9.9843695780195716e-6 1.5056327351493116e-7).
+	xx := x @env0:- 1.0.
+	a := c @env0:at: 1.
+	1 @env0:to: 8 do: [:i | a := a @env0:+ ((c @env0:at: i @env0:+ 1) @env0:/ (xx @env0:+ i))].
+	t := xx @env0:+ 7.5.
+	^ (2.0 @env0:* pi) @env0:sqrt
+		@env0:* (t @env0:raisedTo: (xx @env0:+ 0.5))
+		@env0:* (t @env0:negated @env0:exp)
+		@env0:* a
+%
+
+category: 'Grail-Math Functions'
+method: math
+gamma: x
+	"Gamma function.  Poles (ValueError) at 0 and the negative integers;
+	gamma(+inf) = +inf.  GemStone Float has no gamma primitive, so use a
+	Lanczos approximation."
+
+	| f |
+	f := self @env1:___real___: x.
+	f @env0:_isNaN ifTrue: [^ f].
+	(f @env0:_getKind) @env0:== 3 ifTrue: [
+		f @env0:> 0 ifTrue: [^ PlusInfinity].
+		ValueError ___signal___: 'math domain error'].
+	(f @env0:<= 0.0 and: [f @env0:= f @env0:truncated]) ifTrue: [
+		ValueError ___signal___: 'math domain error'].
+	^ self @env1:___gammaLanczos___: f
+%
+
+category: 'Grail-Math Functions'
+method: math
 fmod: x _: y
 	"C fmod: x - n*y with the sign of x (GemStone rem:); y=0 is a domain
 	error."
