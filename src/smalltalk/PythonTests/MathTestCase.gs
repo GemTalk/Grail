@@ -679,6 +679,9 @@ testAddedFunctions
 	self should: [m @env1:ldexp: 2.0 _: 1.1] raise: TypeError.
 	self should: [m @env1:ldexp: 1.0 _: 1000000] raise: OverflowError.
 	self assert: (m @env1:ldexp: (m @env1:inf) _: 30) equals: (m @env1:inf).
+	"ldexp rounds a subnormal result exactly (a bare fx * 2**i flushes it to
+	zero when 2**i underflows first)."
+	self assert: (m @env1:ldexp: 6993274598585239 _: -1126) equals: 1e-323.
 	"log2 is EXACT for powers of two -- integer (highBit), normal float, and
 	subnormal float (renormalised past GemStone's -1022 exponent floor) --
 	where ln(x)/ln(2) would drift (log2(2**1023) = 1023.0000000000001)."
@@ -722,4 +725,15 @@ testAddedFunctions
 	self assert: (m @env1:fma: (m @env1:inf) _: 2.0 _: 3.0) equals: (m @env1:inf).
 	self should: [m @env1:fma: (m @env1:inf) _: 0.0 _: 1.0] raise: ValueError.
 	self should: [m @env1:fma: (m @env1:inf) _: 1.0 _: ((m @env1:inf) @env0:negated)] raise: ValueError.
-	self should: [m @env1:fma: 1e300 _: 1e300 _: 0.0] raise: OverflowError
+	self should: [m @env1:fma: 1e300 _: 1e300 _: 0.0] raise: OverflowError.
+	"nextafter walks one representable step toward y (binade boundaries halve
+	the gap; zero -> smallest subnormal; off the largest normal -> inf), and
+	ulp of inf/nan is inf/nan."
+	self assert: (m @env1:_nextafter: { 4503599627370496.0. (m @env1:inf) @env0:negated } kw: nil)
+		equals: 4503599627370495.5.
+	self assert: (m @env1:_nextafter: { 4503599627370496.0. (m @env1:inf) } kw: nil)
+		equals: 4503599627370497.0.
+	self assert: (m @env1:_nextafter: { 0.0. (m @env1:inf) } kw: nil) equals: 5e-324.
+	self assert: (m @env1:_nextafter: { (m @env1:inf) . 0.0 } kw: nil) equals: 1.7976931348623157e308.
+	self assert: (m @env1:ulp: (m @env1:inf)) equals: (m @env1:inf).
+	self assert: (m @env1:ulp: (2 @env0:raisedTo: 52)) equals: 1.0

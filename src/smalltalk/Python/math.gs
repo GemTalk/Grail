@@ -495,12 +495,24 @@ ldexp: x _: i
 	TypeError).  A finite x whose scaled result overflows raises
 	OverflowError; INF/NAN pass through unchanged."
 
-	| fx ii |
+	| fx ii mag |
 	fx := self @env1:___real___: x.
 	ii := self @env1:___index___: i.
 	(fx @env0:_isNaN or: [(fx @env0:_getKind) @env0:== 3 or: [fx @env0:= 0.0]])
 		ifTrue: [^ fx].
-	^ self @env1:___rangeCheck___: (fx @env0:* (2.0 @env0:raisedTo: ii)) finite: true
+	"Inside the representable exponent window, scale as an exact rational and
+	round once: a bare fx * 2**ii would FLUSH a subnormal result to zero
+	(2**-1126 underflows before the multiply), truncating
+	math.ldexp(6993274598585239, -1126).  Outside the window the result can
+	only be inf or 0, so the float path is safe -- and it avoids building a
+	multi-million-bit 2**ii that would blow GemStone's LargeInteger cap
+	(math.ldexp(1.0, 1000000))."
+	mag := (ii @env0:abs @env0:<= 1200)
+		ifTrue: [ii @env0:>= 0
+			ifTrue: [(fx @env0:asFraction @env0:* (2 @env0:raisedTo: ii)) @env0:asFloat]
+			ifFalse: [(fx @env0:asFraction @env0:/ (2 @env0:raisedTo: ii @env0:negated)) @env0:asFloat]]
+		ifFalse: [fx @env0:* (2.0 @env0:raisedTo: ii)].
+	^ self @env1:___rangeCheck___: mag finite: true
 %
 
 category: 'Grail-Math Functions'
@@ -647,13 +659,76 @@ fsum: iterable
 category: 'Grail-Math Functions'
 method: math
 ulp: x
-	"ulp(x) -> spacing between x and the next float.  0 -> the
-	smallest subnormal; otherwise 2**(exponent - 52)."
+	"ulp(x) -> spacing between x and the next float.  NaN -> NaN and
+	+/-inf -> inf (matching CPython); 0 -> the smallest subnormal;
+	otherwise 2**(exponent - 52)."
 
 	| fx |
 	fx := (self @env1:___real___: x) @env0:abs.
+	fx @env0:_isNaN ifTrue: [^ fx].
+	fx @env0:= PlusInfinity ifTrue: [^ PlusInfinity].
 	fx @env0:= 0 ifTrue: [^ 5e-324].
 	^ 2.0 @env0:raisedTo: (fx @env0:exponent @env0:- 52)
+%
+
+category: 'Grail-Math Functions'
+method: math
+___nextafterStep___: x up: goingUp
+	"One representable step from finite nonzero x toward +inf (goingUp) or
+	-inf.  The gap AWAY from zero is ulp(x); the gap TOWARD zero is the same
+	except just below a normal power of two, where the binade halves it
+	(GemStone's exponent pins subnormals at -1022, so the halving is gated on
+	a true binary exponent > -1022).  A step landing on zero keeps x's sign;
+	a step off the largest normal overflows to the signed infinity."
+
+	| gap e awayFromZero result |
+	awayFromZero := (x @env0:> 0.0) @env0:= goingUp.
+	awayFromZero
+		ifTrue: [gap := self @env1:ulp: x]
+		ifFalse: [
+			e := x @env0:abs @env0:exponent.
+			((x @env0:abs @env0:= (2.0 @env0:raisedTo: e)) and: [e @env0:> -1022])
+				ifTrue: [gap := 2.0 @env0:raisedTo: (e @env0:- 53)]
+				ifFalse: [gap := self @env1:ulp: x]].
+	result := goingUp ifTrue: [x @env0:+ gap] ifFalse: [x @env0:- gap].
+	result @env0:= 0.0 ifTrue: [
+		^ (self @env1:___signBit___: x) ifTrue: [0.0 @env0:negated] ifFalse: [0.0]].
+	^ result
+%
+
+category: 'Grail-Math Functions'
+method: math
+_nextafter: positional kw: kwargs
+	"math.nextafter(x, y, *, steps=1) -- the representable value `steps` ULPs
+	from x toward y (the steps keyword is 3.12+).  NaN in -> NaN; x == y (so
+	also either signed zero to the other) returns y; a negative steps is a
+	ValueError.  Stepping from zero yields the smallest subnormal toward y,
+	and stepping down off an infinity yields the largest normal."
+
+	| fx fy steps up cur fmax |
+	fx := self @env1:___real___: (positional @env0:at: 1).
+	fy := self @env1:___real___: (positional @env0:at: 2).
+	steps := (kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'steps'])
+		ifTrue: [self @env1:___index___: (kwargs @env0:at: 'steps')]
+		ifFalse: [1].
+	(fx @env0:_isNaN or: [fy @env0:_isNaN]) ifTrue: [^ PlusQuietNaN].
+	steps @env0:< 0 ifTrue: [
+		ValueError ___signal___: 'steps must be a non-negative integer'].
+	(fx @env0:= fy) ifTrue: [^ fy].
+	steps @env0:= 0 ifTrue: [^ fx].
+	up := fy @env0:> fx.
+	fmax := ((2 @env0:raisedTo: 53) @env0:- 1) @env0:* (2 @env0:raisedTo: 971).
+	fmax := fmax @env0:asFloat.
+	cur := fx.
+	1 @env0:to: steps do: [:i |
+		(cur @env0:= fy) ifTrue: [^ fy].
+		(cur @env0:abs @env0:= PlusInfinity)
+			ifTrue: [cur := (self @env1:___signBit___: cur) ifTrue: [fmax @env0:negated] ifFalse: [fmax]]
+			ifFalse: [
+				(cur @env0:= 0.0)
+					ifTrue: [cur := up ifTrue: [5e-324] ifFalse: [5e-324 @env0:negated]]
+					ifFalse: [cur := self @env1:___nextafterStep___: cur up: up]]].
+	^ cur
 %
 
 category: 'Grail-Math Functions'
