@@ -742,7 +742,7 @@ _hypot: positional kw: kwargs
 	a perfect square stays exact (hypot(12, 5) == 13, hypot(3*s, 4*s) == 5*s
 	down into the subnormals)."
 
-	| coords floats hasInf hasNan sumSq k scaled |
+	| coords floats hasInf hasNan sumSq k |
 	(kwargs @env0:~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
 		TypeError ___signal___: 'hypot() takes no keyword arguments'].
 	coords := (positional @env0:size @env0:= 1
@@ -764,11 +764,12 @@ _hypot: positional kw: kwargs
 	floats @env0:do: [:f | | fr | fr := f @env0:asFraction. sumSq := sumSq @env0:+ (fr @env0:* fr)].
 	sumSq @env0:= 0 ifTrue: [^ 0.0].
 	k := (self @env1:___fracMagnitudeBits___: sumSq) @env0:// 2.
-	scaled := (sumSq @env0:/ (2 @env0:raisedTo: (2 @env0:* k))) @env0:asFloat.
-	"Re-apply the 2**k scale as an exact rational so the result overflows to
-	inf (NOT an OverflowError -- CPython hypot returns inf) and underflows to
-	the correct subnormal."
-	^ ((scaled @env0:sqrt) @env0:asFraction @env0:* (2 @env0:raisedTo: k)) @env0:asFloat
+	"Correctly-rounded sqrt of the exact sum-of-squares scaled to O(1), then
+	re-apply the 2**k as an exact rational (overflow -> inf, underflow -> the
+	right subnormal; a power-of-two rescale of a normal result is exact, so
+	the single rounding in ___exactSqrtToFloat___ is preserved)."
+	^ ((self @env1:___exactSqrtToFloat___: (sumSq @env0:/ (2 @env0:raisedTo: (2 @env0:* k)))) @env0:asFraction
+		@env0:* (2 @env0:raisedTo: k)) @env0:asFloat
 %
 
 category: 'Grail-Math Functions'
@@ -783,6 +784,32 @@ ___fracMagnitudeBits___: s
 
 category: 'Grail-Math Functions'
 method: math
+___exactSqrtToFloat___: q
+	"Correctly-rounded (nearest) sqrt of a positive exact rational q as a
+	double.  sqrt is monotone, so start from the hardware sqrt of q's float
+	value and step toward the true root while q lies past the EXACT squared
+	midpoint between the candidate and its neighbour -- exact rational
+	comparisons, so no double-rounding.  The caller keeps q ~O(1) (scaled by
+	a power of two) so the float start neither overflows nor underflows."
+
+	| approx |
+	q @env0:= 0 ifTrue: [^ 0.0].
+	approx := q @env0:asFloat @env0:sqrt.
+	[ | up mid |
+		up := self @env1:___nextafterStep___: approx up: true.
+		mid := (approx @env0:asFraction @env0:+ up @env0:asFraction) @env0:/ 2.
+		q @env0:> (mid @env0:* mid) ] @env0:whileTrue: [
+			approx := self @env1:___nextafterStep___: approx up: true ].
+	[ | down mid |
+		down := self @env1:___nextafterStep___: approx up: false.
+		mid := (approx @env0:asFraction @env0:+ down @env0:asFraction) @env0:/ 2.
+		q @env0:< (mid @env0:* mid) ] @env0:whileTrue: [
+			approx := self @env1:___nextafterStep___: approx up: false ].
+	^ approx
+%
+
+category: 'Grail-Math Functions'
+method: math
 dist: pIter _: qIter
 	"dist(p, q) -> Euclidean distance = the norm of the coordinate
 	differences, i.e. hypot(*(p_i - q_i)).  An infinite difference gives inf
@@ -791,7 +818,7 @@ dist: pIter _: qIter
 	magnitudes neither overflow nor underflow and a perfect square stays
 	exact."
 
-	| ps qs hasInf hasNan diffs sumSq k scaled |
+	| ps qs hasInf hasNan diffs sumSq k |
 	ps := (self @env1:___materialize___: pIter)
 		@env0:collect: [:v | self @env1:___real___: v].
 	qs := (self @env1:___materialize___: qIter)
@@ -813,8 +840,8 @@ dist: pIter _: qIter
 	diffs @env0:do: [:d | | dr | dr := d @env0:asFraction. sumSq := sumSq @env0:+ (dr @env0:* dr)].
 	sumSq @env0:= 0 ifTrue: [^ 0.0].
 	k := (self @env1:___fracMagnitudeBits___: sumSq) @env0:// 2.
-	scaled := (sumSq @env0:/ (2 @env0:raisedTo: (2 @env0:* k))) @env0:asFloat.
-	^ ((scaled @env0:sqrt) @env0:asFraction @env0:* (2 @env0:raisedTo: k)) @env0:asFloat
+	^ ((self @env1:___exactSqrtToFloat___: (sumSq @env0:/ (2 @env0:raisedTo: (2 @env0:* k)))) @env0:asFraction
+		@env0:* (2 @env0:raisedTo: k)) @env0:asFloat
 %
 
 category: 'Grail-Math Functions'

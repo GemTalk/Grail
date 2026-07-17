@@ -770,5 +770,12 @@ testAddedFunctions
 	self assert: (m @env1:dist: { 1.0. 2.0. 3.0 } _: { 4.0. 2.0. -1.0 }) equals: 5.0.
 	self assert: (m @env1:dist: { 14.0. 1.0 } _: { 2.0. -4.0 }) equals: 13.0.
 	self assert: (m @env1:dist: { (m @env1:inf). (m @env1:nan) } _: { 0.0. 0.0 }) equals: (m @env1:inf).
-	self should: [m @env1:dist: { 1.0. (10 @env0:raisedTo: 400) } _: { 0.0. 0.0 }] raise: OverflowError
+	self should: [m @env1:dist: { 1.0. (10 @env0:raisedTo: 400) } _: { 0.0. 0.0 }] raise: OverflowError.
+	"hypot is CORRECTLY ROUNDED (sqrt of the exact sum-of-squares via
+	___exactSqrtToFloat___), matching a 500-digit-Decimal reference where a
+	naive scaled float sqrt is 1 ulp off (test_math testHypotAccuracy)."
+	self assert: (m @env1:_hypot:
+		{ ((Python @env0:at: #float) @env1:fromhex: '0x1.10e89518dca48p+29').
+		  ((Python @env0:at: #float) @env1:fromhex: '0x1.1970f7565b7efp+30') } kw: nil)
+		equals: 1311878501.7832494
 

@@ -50,20 +50,24 @@ testAbsoluteValue
 category: 'Grail-Tests - Stub module'
 method: DecimalTestCase
 testStubDecimalArithmetic
-	"The ``from decimal import Decimal'' value type (decimal.py) supports
-	construction, the arithmetic/comparison operators and __float__, so
-	math.dist / math.sumprod can feed Decimals through it and float == Decimal
-	works via float.__eq__'s reflection.  (Distinct from the native
-	ScaledDecimal-backed Decimal exercised by the other tests here.)  The
-	stub must reference its own class via type(self), not the bare ``Decimal''
-	name -- that resolves to ScaledDecimal and asking it for ___instance___
-	is a DNU."
+	"The ``from decimal import Decimal'' value type (decimal.py) carries an
+	EXACT rational, so +/-/*/** are exact (1/3 + 1/3 + 1/3 == 1, not
+	0.999...) and .sqrt() is the correctly-rounded double (via exact-rational
+	midpoint refinement).  float == Decimal works via float.__eq__'s
+	reflection.  math.dist/sumprod/testHypotAccuracy feed Decimals through it.
+	(Distinct from the native ScaledDecimal-backed Decimal exercised by the
+	other tests here.)  Two Grail landmines shaped the module: the class must
+	self-reference via type(self) (the bare ``Decimal'' resolves to
+	ScaledDecimal, ___instance___ DNU), and in a module named ``decimal'' a
+	method's module-level import/helper mis-resolves (so math is imported
+	locally inside sqrt)."
 
 	self assert: (self eval: 'from decimal import Decimal as D
 [str(D(3.5) * D(4.5)), D(13) == 13, 13.0 == D(13), float(D(2.5)),
- str(D(1.5) + D(2.5)), 25 * D(4.0) == D(100), type(D(1) + D(2)).__name__]')
+ str(D(1.5) + D(2.5)), 25 * D(4.0) == D(100), type(D(1) + D(2)).__name__,
+ D(1)/D(3) + D(1)/D(3) + D(1)/D(3) == D(1), float(D(2).sqrt())]')
 		@env1:__repr__
-		equals: '[''15.75'', True, True, 2.5, ''4.0'', True, ''Decimal'']'
+		equals: '[''15.75'', True, True, 2.5, ''4.0'', True, ''Decimal'', True, 1.4142135623730951]'
 %
 
 category: 'Grail-Tests - Arithmetic'
