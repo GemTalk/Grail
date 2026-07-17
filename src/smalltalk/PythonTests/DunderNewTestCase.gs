@@ -305,8 +305,11 @@ testIntSubclassViaAbstractPyInt
 	interoperate as dict keys, keep their own methods, and satisfy
 	isinstance/issubclass against int."
 
+	"The MyInt+MyInt result degrades to a plain int, whose type() is now
+	``int'' (Integer) rather than the concrete SmallInteger -- see
+	int>>__class__."
 	self assert: (self fixture @env1:INT_SUB_RESULTS) @env1:__repr__
-		equals: '[8, 8, ''SmallInteger'', True, True, 5, 20, ''x'', ''v=9'', True]'
+		equals: '[8, 8, ''Integer'', True, True, 5, 20, ''x'', ''v=9'', True]'
 %
 
 category: 'Grail-Tests - math'
@@ -1369,6 +1372,17 @@ testEnumFunctionalOverride
 
 	self assert: (self fixture @env1:ENUM_FUNC_OVERRIDE_RESULT) @env1:__repr__
 		equals: '(''FIRST'', ''First'', [''first''])'
+%
+
+category: 'Grail-Tests - math'
+method: DunderNewTestCase
+testMathDunderRound
+	"math.ceil/floor/trunc honour the __ceil__/__floor__/__trunc__ dunder on
+	the argument's type (Decimal/Fraction rely on this), then fall back to
+	the numeric path (ceil(2.5) = 3)."
+
+	self assert: (self fixture @env1:MATH_DUNDER_ROUND_RESULT) @env1:__repr__
+		equals: '(42, 7, 3, 3)'
 %
 
 category: 'Grail-Tests - enum internals'

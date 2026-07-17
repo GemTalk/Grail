@@ -1512,6 +1512,29 @@ def _enum_func_override_results():
 ENUM_FUNC_OVERRIDE_RESULT = _enum_func_override_results()
 
 
+def _math_dunder_round_results():
+    # math.ceil/floor/trunc honour the __ceil__/__floor__/__trunc__ dunder
+    # on the argument's TYPE (what Decimal/Fraction rely on) before falling
+    # back to the numeric path.
+    import math
+
+    class Roundable:
+        def __ceil__(self):
+            return 42
+
+        def __floor__(self):
+            return 7
+
+        def __trunc__(self):
+            return 3
+
+    r = Roundable()
+    return (math.ceil(r), math.floor(r), math.trunc(r), math.ceil(2.5))
+
+
+MATH_DUNDER_ROUND_RESULT = _math_dunder_round_results()
+
+
 def run_enum_convert():
     # Enum._convert_(name, module, filter) builds an enum of the receiver's
     # type from a module's globals passing filter(name).  Members sort by

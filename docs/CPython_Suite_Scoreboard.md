@@ -15,7 +15,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | Module | Status | tests | fail | err | skip | detail |
 |--------|--------|------:|-----:|----:|-----:|--------|
 | test.test_textwrap | OK | 68 | 0 | 0 | 0 |  |
-| test.test_math | ERROR | 88 | 20 | 18 | 0 |  |
+| test.test_math | ERROR | 88 | 16 | 19 | 0 |  |
 | test.test_int | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd800 is illegal for Unicode |
 | test.test_float | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd8f0 is illegal for Unicode |
 | test.test_heapq | ERROR | 68 | 8 | 14 | 0 |  |
@@ -32,4 +32,4 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_bytes | SKIP | 0 | 0 | 0 | 0 | a SkipTest occurred (error 2702) |
 | test.test_collections | ERROR | 101 | 45 | 38 | 0 |  |
 | test.test_itertools | ERROR | 135 | 49 | 42 | 3 |  |
-| test.test_enum | ERROR | 1077 | 295 | 142 | 0 |  |
+| test.test_enum | ERROR | 1077 | 285 | 142 | 0 |  |

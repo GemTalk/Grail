@@ -268,6 +268,19 @@ from_bytes: bytes _: byteorder _: signed
 	^ result
 %
 
+category: 'Grail-Type'
+method: int
+__class__
+	"Python ``type(n)'' is ``int'' for every integer.  GemStone's concrete
+	subclasses (SmallInteger, LargePositiveInteger, LargeNegativeInteger)
+	are an implementation detail; without this override ``type(5)'' would
+	answer SmallInteger and ``type(5) is int'' would be False (test_math
+	testCeil/Floor/Comb/Isqrt/Perm; test_enum test_programatic_function_*).
+	Bool is a separate type (Boolean) and is unaffected."
+
+	^ int
+%
+
 category: 'Grail-Arithmetic'
 method: int
 __abs__

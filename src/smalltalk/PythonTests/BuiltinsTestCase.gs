@@ -1046,8 +1046,24 @@ testClassQualname
 	nesting).  CPython error messages interpolate it -- textwrap.dedent's
 	type check reads type(x).__qualname__."
 
-	self assert: (self eval: 'type(0).__qualname__') equals: 'SmallInteger'.
+	"type(0) is now int (Integer), not the concrete SmallInteger -- see
+	int>>__class__."
+	self assert: (self eval: 'type(0).__qualname__') equals: 'Integer'.
 	self assert: (self eval: 'type("s").__qualname__ == type("s").__name__')
+%
+
+category: 'Grail-Tests - Type Checks'
+method: BuiltinsTestCase
+testIntegerTypeIsInt
+	"``type(n) is int'' holds for every integer, whatever GemStone's
+	concrete storage class (SmallInteger vs LargeInteger); bool is a
+	separate type.  Regression for int>>__class__."
+
+	self assert: (self eval: 'type(5) is int').
+	self assert: (self eval: 'type(10**40) is int').
+	self assert: (self eval: 'type(-10**40) is int').
+	self assert: (self eval: 'type(True) is bool').
+	self assert: (self eval: 'type(True) is not int')
 %
 
 category: 'Grail-Tests - Type Checks'

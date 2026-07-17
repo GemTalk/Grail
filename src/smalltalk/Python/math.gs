@@ -279,20 +279,33 @@ pow: x _: y
 
 category: 'Grail-Rounding'
 method: math
+___dunderRound___: x selector: dunder default: fallback
+	"ceil/floor/trunc first honour the CORRESPONDING dunder defined on x's
+	TYPE (``__ceil__''/``__floor__''/``__trunc__'' -- an instance attribute
+	of that name is NOT consulted, matching CPython's type-slot lookup);
+	otherwise coerce to a real number and apply the Smalltalk fallback."
+
+	((x @env0:class @env0:whichClassIncludesSelector: dunder environmentId: 1) @env0:~~ nil)
+		ifTrue: [^ x @env0:perform: dunder env: 1].
+	^ (self @env1:___real___: x) @env0:perform: fallback
+%
+
+category: 'Grail-Rounding'
+method: math
 ceil: x
-	^ (self @env1:___real___: x) @env0:ceiling
+	^ self @env1:___dunderRound___: x selector: #'__ceil__' default: #ceiling
 %
 
 category: 'Grail-Rounding'
 method: math
 floor: x
-	^ (self @env1:___real___: x) @env0:floor
+	^ self @env1:___dunderRound___: x selector: #'__floor__' default: #floor
 %
 
 category: 'Grail-Rounding'
 method: math
 trunc: x
-	^ (self @env1:___real___: x) @env0:truncated
+	^ self @env1:___dunderRound___: x selector: #'__trunc__' default: #truncated
 %
 
 category: 'Grail-Rounding'
