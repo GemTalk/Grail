@@ -642,5 +642,10 @@ testAddedFunctions
 	truncation; log1p(-1) is a domain error."
 	self should: [m @env1:gcd: 12 _: 1.5] raise: TypeError.
 	self should: [m @env1:log1p: -1] raise: ValueError.
-	self should: [m @env1:isqrt: -1] raise: ValueError
+	self should: [m @env1:isqrt: -1] raise: ValueError.
+	"A finite input that overflows to infinity is an OverflowError (math
+	range error) for exp/exp2 -- exp(inf) stays inf (not an overflow)."
+	self should: [m @env1:exp: 1000000] raise: OverflowError.
+	self should: [m @env1:exp2: 1000000] raise: OverflowError.
+	self assert: (m @env1:exp: (m @env1:inf)) equals: (m @env1:inf)
 %

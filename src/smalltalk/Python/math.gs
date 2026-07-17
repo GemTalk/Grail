@@ -195,8 +195,23 @@ atanh: x
 
 category: 'Grail-Exponential and Logarithmic'
 method: math
+___rangeCheck___: r finite: inputWasFinite
+	"CPython raises OverflowError (``math range error'') when a FINITE
+	input overflows to an infinite result -- exp(1e6), 2**1e6, pow(2,1e4).
+	An infinite result from an already-infinite input (exp(inf)) is not an
+	overflow.  Returns r unchanged otherwise."
+
+	((r @env0:_getKind) @env0:== 3 and: [inputWasFinite])
+		ifTrue: [OverflowError ___signal___: 'math range error'].
+	^ r
+%
+
+category: 'Grail-Exponential and Logarithmic'
+method: math
 exp: x
-	^ (self @env1:___real___: x) @env0:exp
+	| f |
+	f := self @env1:___real___: x.
+	^ self @env1:___rangeCheck___: (f @env0:exp) finite: ((f @env0:_getKind) @env0:~= 3)
 %
 
 category: 'Grail-Exponential and Logarithmic'
@@ -250,7 +265,11 @@ sqrt: x
 category: 'Grail-Exponential and Logarithmic'
 method: math
 pow: x _: y
-	"math.pow(x, y) — x raised to the power y (as float)."
+	"math.pow(x, y) — x raised to the power y (as float).  NOTE: the full
+	IEEE-754 special-case matrix (pow(1, NAN)=1, pow(0, -2)->ValueError,
+	the INF/NINF/negative-base rules -- test_math testPow) is a separate
+	follow-on; raising OverflowError on a finite-input overflow here would
+	mis-fire on those domain cases as OverflowError instead of ValueError."
 	^ (self @env1:___real___: x) @env0:raisedTo: (self @env1:___real___: y)
 %
 
@@ -668,7 +687,7 @@ exp2: x
 	f @env0:_isNaN ifTrue: [^ f].
 	(f @env0:_getKind) @env0:== 3 ifTrue: [
 		^ f @env0:> 0 ifTrue: [PlusInfinity] ifFalse: [0.0]].
-	^ 2.0 @env0:raisedTo: f
+	^ self @env1:___rangeCheck___: (2.0 @env0:raisedTo: f) finite: true
 %
 
 category: 'Grail-Exponential and Logarithmic'
