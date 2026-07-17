@@ -734,19 +734,51 @@ _nextafter: positional kw: kwargs
 category: 'Grail-Math Functions'
 method: math
 _hypot: positional kw: kwargs
-	"hypot(*coordinates) -> Euclidean norm."
+	"hypot(*coordinates) -> Euclidean norm sqrt(sum of squares).  Rejects
+	keyword arguments.  An infinite coordinate gives inf (even beside a NaN);
+	otherwise any NaN gives NaN.  The sum of squares is accumulated as an
+	EXACT rational and the result is formed by factoring out a power of two
+	before the sqrt, so extreme magnitudes neither overflow nor underflow and
+	a perfect square stays exact (hypot(12, 5) == 13, hypot(3*s, 4*s) == 5*s
+	down into the subnormals)."
 
-	| sum coords |
+	| coords floats hasInf hasNan sumSq k scaled |
+	(kwargs @env0:~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
+		TypeError ___signal___: 'hypot() takes no keyword arguments'].
 	coords := (positional @env0:size @env0:= 1
 		and: [((positional @env0:at: 1) @env0:isKindOf: Number) @env0:not])
 		ifTrue: [self @env1:___materialize___: (positional @env0:at: 1)]
 		ifFalse: [positional].
-	sum := 0.0.
+	floats := OrderedCollection @env0:new.
+	hasInf := false.
+	hasNan := false.
 	coords @env0:do: [:c |
 		| f |
 		f := self @env1:___real___: c.
-		sum := sum @env0:+ (f @env0:* f)].
-	^ sum @env0:sqrt
+		(f @env0:abs @env0:= PlusInfinity) ifTrue: [hasInf := true].
+		f @env0:_isNaN ifTrue: [hasNan := true].
+		floats @env0:add: f].
+	hasInf ifTrue: [^ PlusInfinity].
+	hasNan ifTrue: [^ PlusQuietNaN].
+	sumSq := 0.
+	floats @env0:do: [:f | | fr | fr := f @env0:asFraction. sumSq := sumSq @env0:+ (fr @env0:* fr)].
+	sumSq @env0:= 0 ifTrue: [^ 0.0].
+	k := (self @env1:___fracMagnitudeBits___: sumSq) @env0:// 2.
+	scaled := (sumSq @env0:/ (2 @env0:raisedTo: (2 @env0:* k))) @env0:asFloat.
+	"Re-apply the 2**k scale as an exact rational so the result overflows to
+	inf (NOT an OverflowError -- CPython hypot returns inf) and underflows to
+	the correct subnormal."
+	^ ((scaled @env0:sqrt) @env0:asFraction @env0:* (2 @env0:raisedTo: k)) @env0:asFloat
+%
+
+category: 'Grail-Math Functions'
+method: math
+___fracMagnitudeBits___: s
+	"Approximate floor(log2(|s|)) for an exact Integer or Fraction -- used to
+	pick a power-of-two scale that brings a sqrt argument to O(1)."
+
+	(s @env0:isKindOf: Integer) ifTrue: [^ s @env0:highBit].
+	^ s @env0:numerator @env0:abs @env0:highBit @env0:- (s @env0:denominator @env0:highBit)
 %
 
 category: 'Grail-Math Functions'
@@ -830,7 +862,15 @@ ___real___: x
 	produced downstream uncatchable MNUs (math.exp('x'))."
 
 	(x @env0:isKindOf: Boolean) ifTrue: [^ x ifTrue: [1.0] ifFalse: [0.0]].
-	(x @env0:isKindOf: Number) ifTrue: [^ x @env0:asFloat].
+	(x @env0:isKindOf: Number) ifTrue: [
+		| f |
+		f := x @env0:asFloat.
+		"An integer beyond the float range is an OverflowError, matching
+		CPython's float(int) (hypot/dist and the transcendental functions all
+		reject it).  A Float that is already infinite passes through."
+		((x @env0:isKindOf: Integer) and: [f @env0:abs @env0:= PlusInfinity]) ifTrue: [
+			OverflowError ___signal___: 'int too large to convert to float'].
+		^ f].
 	((x @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) @env0:~~ nil)
 		ifTrue: [^ (x @env0:perform: #'__float__' env: 1) @env0:asFloat].
 	TypeError ___signal___: ('must be real number, not '

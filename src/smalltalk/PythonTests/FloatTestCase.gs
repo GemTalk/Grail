@@ -554,6 +554,24 @@ testEvalMixedArithmetic
 	self assert: (self eval: '2.5 * 2') equals: 5.0.
 %
 
+category: 'Grail-Tests - Comparison'
+method: FloatTestCase
+testEqualsRational
+	"float == Fraction reflects to Fraction.__eq__ (CPython's == falls back to
+	the RHS when the LHS type can't compare), so a float equals a numerically
+	equal Fraction on EITHER side.  Was False: kernel = cannot compare a Float
+	to a PythonInstance Fraction."
+
+	self assert: (self eval: 'from fractions import Fraction as F
+0.40625 == F(13, 32)').
+	self assert: (self eval: 'from fractions import Fraction as F
+F(13, 32) == 0.40625').
+	self assert: (self eval: 'from fractions import Fraction as F
+0.5 != F(13, 32)').
+	self deny: (self eval: 'from fractions import Fraction as F
+0.5 == F(13, 32)')
+%
+
 category: 'Grail-Tests - Float Methods'
 method: FloatTestCase
 testFromHex

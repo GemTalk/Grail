@@ -744,5 +744,18 @@ testAddedFunctions
 		equals: 2.0.
 	self assert: (m @env1:sumprod: { 0.1. 0.1. 0.1. 0.1. 0.1. 0.1. 0.1. 0.1. 0.1. 0.1 }
 		_: { 1. 1. 1. 1. 1. 1. 1. 1. 1. 1 }) equals: 1.0.
-	self assert: (m @env1:sumprod: { 1. 2. 3 } _: { 4. 5. 6 }) equals: 32
+	self assert: (m @env1:sumprod: { 1. 2. 3 } _: { 4. 5. 6 }) equals: 32.
+	"hypot: EXACT for perfect squares, scales without overflow/underflow, an
+	infinite coordinate wins over a NaN, keyword args and a float-range
+	overflow of an integer coordinate are rejected."
+	self assert: (m @env1:_hypot: { 12.0. 5.0 } kw: nil) equals: 13.0.
+	self assert: (m @env1:_hypot: { 0.75. -1.0 } kw: nil) equals: 1.25.
+	self assert: (m @env1:_hypot: { (m @env1:nan). (m @env1:inf) } kw: nil) equals: (m @env1:inf).
+	self assert: (m @env1:isnan: (m @env1:_hypot: { (m @env1:nan). 10.0 } kw: nil)).
+	self should: [m @env1:_hypot: { 1.0 } kw: (Dictionary @env0:new @env0:at: 'x' put: 1; yourself)]
+		raise: TypeError.
+	self should: [m @env1:_hypot: { 1.0. (10 @env0:raisedTo: 400) } kw: nil] raise: OverflowError.
+	"a math argument that is an integer beyond the float range is an
+	OverflowError (___real___), not a silent inf."
+	self should: [m @env1:sqrt: (10 @env0:raisedTo: 400)] raise: OverflowError
 

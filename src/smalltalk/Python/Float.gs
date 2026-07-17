@@ -271,9 +271,19 @@ category: 'Grail-Comparison'
 method: float
 __eq__: other
 	"Equality comparison.  complex first: kernel env-0 = would try
-	GemStone Number coercion and send #_getKind to complex (DNU)."
+	GemStone Number coercion and send #_getKind to complex (DNU).  For a
+	Python object carrying its OWN __eq__ (Fraction/Decimal/user Rational),
+	mirror CPython's reflected == and defer to it -- kernel = cannot compare
+	a Float to such a PythonInstance and just answers false, so
+	0.40625 == Fraction(13, 32) was wrongly False.  A plain object with only
+	the inherited identity __eq__ keeps the kernel = (identity) answer."
 
+	| refOwner |
 	(other @env0:isKindOf: complex) ifTrue: [^ other @env1:__eq__: self].
+	(other @env0:isKindOf: PythonInstance) ifTrue: [
+		refOwner := other @env0:class @env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
+		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
+			^ other @env0:perform: #'__eq__:' env: 1 withArguments: { self }]].
 	^ self @env0:= other
 %
 
