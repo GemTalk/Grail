@@ -185,7 +185,8 @@ atanh: x
 	| f |
 	f := self @env1:___real___: x.
 	(f @env0:<= -1.0 or: [f @env0:>= 1.0]) ifTrue: [
-		ValueError ___signal___: 'math domain error'].
+		ValueError ___signal___: 'expected a number between -1 and 1, got '
+			@env0:, f @env0:printString].
 	^ f @env0:arcTanh
 %
 
@@ -235,11 +236,13 @@ ___naturalLog___: x
 
 	| f |
 	(x @env0:isKindOf: Integer) ifTrue: [
-		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'math domain error'].
+		"An integer argument carries no float value in its message (it could
+		be huge): CPython says just ``expected a positive input''."
+		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'expected a positive input'].
 		(x @env0:highBit @env0:> 1023) ifTrue: [^ self @env1:___logHugeInt___: x]].
 	f := self @env1:___real___: x.
 	f @env0:<= 0.0 ifTrue: [
-		ValueError ___signal___: 'math domain error'].
+		ValueError ___signal___: 'expected a positive input, got ' @env0:, f @env0:printString].
 	^ f @env0:ln
 %
 
@@ -271,7 +274,7 @@ log10: x
 		^ (self @env1:___logHugeInt___: x) @env0:/ (10.0 @env0:ln)].
 	f := self @env1:___real___: x.
 	f @env0:<= 0.0 ifTrue: [
-		ValueError ___signal___: 'math domain error'].
+		ValueError ___signal___: 'expected a positive input, got ' @env0:, f @env0:printString].
 	^ f @env0:log10
 %
 
@@ -293,7 +296,7 @@ sqrt: x
 	| f |
 	f := self @env1:___real___: x.
 	f @env0:< 0.0 ifTrue: [
-		ValueError ___signal___: 'math domain error'].
+		ValueError ___signal___: 'expected a nonnegative input, got ' @env0:, f @env0:printString].
 	^ f @env0:sqrt
 %
 
@@ -352,7 +355,9 @@ factorial: n
 	(test_math's factorial(10**10) huge-input probes)."
 
 	| nInt |
-	nInt := n @env0:asInteger.
+	"factorial requires an exact integer -- a float (even 5.0), Decimal, or
+	string is a TypeError, not a silent truncation (testFactorialNonIntegers)."
+	nInt := self @env1:___index___: n.
 	(nInt @env0:< 0) ifTrue: [
 		ValueError ___signal___: 'factorial() not defined for negative values'
 	].
@@ -810,7 +815,8 @@ gamma: x
 		f @env0:> 0 ifTrue: [^ PlusInfinity].
 		ValueError ___signal___: 'math domain error'].
 	(f @env0:<= 0.0 and: [f @env0:= f @env0:truncated]) ifTrue: [
-		ValueError ___signal___: 'math domain error'].
+		ValueError ___signal___: 'expected a noninteger or positive integer, got '
+			@env0:, f @env0:printString].
 	^ self @env1:___gammaLanczos___: f
 %
 
@@ -823,7 +829,12 @@ fmod: x _: y
 	| fx fy r |
 	fx := self @env1:___real___: x.
 	fy := self @env1:___real___: y.
-	fy @env0:= 0.0 ifTrue: [ValueError ___signal___: 'math domain error'].
+	"NaN propagates; an infinite x or a zero y is a domain error."
+	(fx @env0:_isNaN or: [fy @env0:_isNaN]) ifTrue: [^ fx @env0:+ fy].
+	((fx @env0:_getKind) @env0:== 3 or: [fy @env0:= 0.0]) ifTrue: [
+		ValueError ___signal___: 'math domain error'].
+	"fmod(x, +/-inf) is x for finite x."
+	(fy @env0:_getKind) @env0:== 3 ifTrue: [^ fx].
 	r := fx @env0:rem: fy.
 	"C fmod's result carries x's sign, including the sign of a zero result
 	(fmod(-10, 1) is -0.0)."

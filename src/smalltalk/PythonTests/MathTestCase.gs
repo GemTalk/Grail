@@ -663,5 +663,13 @@ testAddedFunctions
 	magnitude instead of overflowing to inf."
 	self assert: (((m @env1:log: (10 @env0:raisedTo: 1000)) @env0:- 2302.5850929940457) @env0:abs) < 0.0001.
 	self assert: (((m @env1:log10: (10 @env0:raisedTo: 1000)) @env0:- 1000.0) @env0:abs) < 0.0001.
-	self assert: (((m @env1:log2: (2 @env0:raisedTo: 2000)) @env0:- 2000.0) @env0:abs) < 0.0001
-%
+	self assert: (((m @env1:log2: (2 @env0:raisedTo: 2000)) @env0:- 2000.0) @env0:abs) < 0.0001.
+	"factorial rejects non-integers (float/str/Decimal); fmod(inf,y) and
+	fmod(x,0) are domain errors while fmod(x,inf) is x."
+	self should: [m @env1:factorial: 5.0] raise: TypeError.
+	self should: [m @env1:factorial: '5'] raise: TypeError.
+	self should: [m @env1:fmod: (m @env1:inf) _: 1] raise: ValueError.
+	self assert: (m @env1:fmod: 3.0 _: (m @env1:inf)) equals: 3.0.
+	"Domain-error messages name the value (CPython test_exception_messages)."
+	self should: [m @env1:sqrt: -1.1] raise: ValueError.
+	self should: [m @env1:atanh: 1.0] raise: ValueError
