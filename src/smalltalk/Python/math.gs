@@ -501,6 +501,94 @@ fma: x _: y _: z
 
 category: 'Grail-Math Functions'
 method: math
+___fsumCoerce___: item
+	"Coerce one fsum element to a Float.  A huge integer beyond the float
+	range is an OverflowError (matching float(10**1000)) rather than a
+	silent inf; everything else goes through ___real___ (Boolean/Number/
+	__float__, TypeError on non-numerics)."
+
+	(item @env0:isKindOf: Integer) ifTrue: [
+		| f |
+		f := item @env0:asFloat.
+		((f @env0:_getKind) @env0:== 3) ifTrue: [
+			OverflowError ___signal___: 'int too large to convert to float'].
+		^ f].
+	^ self @env1:___real___: item
+%
+
+category: 'Grail-Math Functions'
+method: math
+___fsumTotal___: partials
+	"Round the non-overlapping partial sums (increasing magnitude) to a
+	single correctly-rounded Float.  Combine from the top down until a
+	nonzero low word appears, then apply CPython's half-even correction
+	using the next-lower partial's sign so ties round to even."
+
+	| n hi lo broke xx yy |
+	n := partials @env0:size.
+	n @env0:= 0 ifTrue: [^ 0.0].
+	hi := partials @env0:at: n. n := n @env0:- 1.
+	lo := 0.0.
+	broke := false.
+	[broke @env0:not and: [n @env0:> 0]] @env0:whileTrue: [
+		xx := hi.
+		yy := partials @env0:at: n. n := n @env0:- 1.
+		hi := xx @env0:+ yy.
+		lo := yy @env0:- (hi @env0:- xx).
+		lo @env0:~= 0.0 ifTrue: [broke := true]].
+	(n @env0:> 0 and: [
+		(lo @env0:< 0.0 and: [(partials @env0:at: n) @env0:< 0.0])
+			or: [lo @env0:> 0.0 and: [(partials @env0:at: n) @env0:> 0.0]]]) ifTrue: [
+		| y2 x2 |
+		y2 := lo @env0:* 2.0.
+		x2 := hi @env0:+ y2.
+		(y2 @env0:= (x2 @env0:- hi)) ifTrue: [hi := x2]].
+	^ hi
+%
+
+category: 'Grail-Math Functions'
+method: math
+fsum: iterable
+	"Full-precision summation (CPython's math.fsum): Shewchuk's algorithm
+	keeps a set of non-overlapping partial sums so the total rounds exactly
+	once.  IEEE-754 doubles make the two-sum (hi := x+y; lo := y-(hi-x))
+	exact.  inf/nan summands accumulate separately -- inf + -inf is a
+	ValueError -- and a finite summand whose partial overflows is an
+	OverflowError."
+
+	| partials specialSum infSum i x xsave y hi lo |
+	partials := OrderedCollection @env0:new.
+	specialSum := 0.0.
+	infSum := 0.0.
+	(self @env1:___materialize___: iterable) @env0:do: [:item |
+		x := self @env1:___fsumCoerce___: item.
+		xsave := x.
+		i := 0.
+		1 @env0:to: partials @env0:size do: [:jj |
+			y := partials @env0:at: jj.
+			(x @env0:abs @env0:< y @env0:abs) ifTrue: [ | t | t := x. x := y. y := t ].
+			hi := x @env0:+ y.
+			lo := y @env0:- (hi @env0:- x).
+			(lo @env0:~= 0.0) ifTrue: [ i := i @env0:+ 1. partials @env0:at: i put: lo ].
+			x := hi ].
+		[partials @env0:size @env0:> i] @env0:whileTrue: [ partials @env0:removeLast ].
+		(x @env0:~= 0.0) ifTrue: [
+			(x @env0:_isNaN or: [(x @env0:_getKind) @env0:== 3])
+				ifTrue: [
+					(xsave @env0:_isNaN @env0:not and: [(xsave @env0:_getKind) @env0:~= 3])
+						ifTrue: [ OverflowError ___signal___: 'intermediate overflow in fsum' ].
+					(xsave @env0:_getKind) @env0:== 3 ifTrue: [ infSum := infSum @env0:+ xsave ].
+					specialSum := specialSum @env0:+ xsave.
+					partials := OrderedCollection @env0:new ]
+				ifFalse: [ partials @env0:add: x ] ] ].
+	(specialSum @env0:~= 0.0 or: [specialSum @env0:_isNaN]) ifTrue: [
+		infSum @env0:_isNaN ifTrue: [ ValueError ___signal___: '-inf + inf in fsum' ].
+		^ specialSum ].
+	^ self @env1:___fsumTotal___: partials
+%
+
+category: 'Grail-Math Functions'
+method: math
 ulp: x
 	"ulp(x) -> spacing between x and the next float.  0 -> the
 	smallest subnormal; otherwise 2**(exponent - 52)."

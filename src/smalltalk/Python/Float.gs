@@ -106,42 +106,98 @@ ___newFromString___: str
 category: 'Grail-Class Methods'
 classmethod: float
 fromhex: hexString
-	"Create a floating-point number from a hexadecimal string.
-	Format: [sign] ['0x'] integer ['.' fraction] ['p' exponent]"
+	"Create a float from a hexadecimal string (CPython float.fromhex):
+	[sign] ['0x'] hexdigits ['.' hexdigits] ['p' decimalexponent], plus the
+	inf/infinity/nan keywords.  All the significant digits are gathered into
+	one integer M with a count f of fractional digits; the value is then the
+	EXACT rational M * 2**(p - 4f), converted through Fraction/Integer asFloat
+	so the final rounding is correct (round-half-even).  A magnitude beyond
+	the float range is an OverflowError, matching CPython."
 
-	| str sign val exponent hasP parts intPart fracPart |
+	| str sign lower body expStr binExp pIdx dotIdx intDigits fracDigits digits m shift mag |
 	str := hexString @env0:trimBoth.
-
-	"Handle sign"
 	sign := 1.
-	((str @env0:at: 1) == $-) ifTrue: [
-		sign := -1.
-		str := str @env0:copyFrom: 2 to: str @env0:size.
-	].
-	((str @env0:at: 1) == $+) ifTrue: [
-		str := str @env0:copyFrom: 2 to: str @env0:size.
-	].
+	(str @env0:notEmpty and: [(str @env0:at: 1) @env0:== $-])
+		ifTrue: [sign := -1. str := str @env0:copyFrom: 2 to: str @env0:size].
+	(str @env0:notEmpty and: [(str @env0:at: 1) @env0:== $+])
+		ifTrue: [str := str @env0:copyFrom: 2 to: str @env0:size].
+	lower := str @env0:asLowercase.
+	(lower @env0:= 'inf' or: [lower @env0:= 'infinity']) ifTrue: [
+		^ sign @env0:> 0 ifTrue: [PlusInfinity] ifFalse: [MinusInfinity]].
+	lower @env0:= 'nan' ifTrue: [^ PlusQuietNaN].
+	"drop the 0x/0X prefix"
+	((lower @env0:size @env0:>= 2) and: [(lower @env0:copyFrom: 1 to: 2) @env0:= '0x'])
+		ifTrue: [str := str @env0:copyFrom: 3 to: str @env0:size].
+	"peel off the binary (decimal) exponent after p/P"
+	pIdx := (str @env0:asLowercase) @env0:indexOf: $p.
+	pIdx @env0:> 0
+		ifTrue: [
+			expStr := str @env0:copyFrom: pIdx @env0:+ 1 to: str @env0:size.
+			binExp := self @env1:___parseDecInt___: expStr.
+			body := str @env0:copyFrom: 1 to: pIdx @env0:- 1]
+		ifFalse: [binExp := 0. body := str].
+	"split the mantissa on the radix point"
+	dotIdx := body @env0:indexOf: $..
+	dotIdx @env0:> 0
+		ifTrue: [
+			intDigits := body @env0:copyFrom: 1 to: dotIdx @env0:- 1.
+			fracDigits := body @env0:copyFrom: dotIdx @env0:+ 1 to: body @env0:size]
+		ifFalse: [intDigits := body. fracDigits := ''].
+	digits := intDigits @env0:, fracDigits.
+	digits @env0:isEmpty ifTrue: [
+		ValueError ___signal___: 'invalid hexadecimal floating-point string'].
+	m := self @env1:___parseHexInt___: digits.
+	m @env0:= 0 ifTrue: [^ sign @env0:> 0 ifTrue: [0.0] ifFalse: [0.0 @env0:negated]].
+	shift := binExp @env0:- (4 @env0:* fracDigits @env0:size).
+	mag := shift @env0:>= 0
+		ifTrue: [(m @env0:* (2 @env0:raisedTo: shift)) @env0:asFloat]
+		ifFalse: [(m @env0:/ (2 @env0:raisedTo: shift @env0:negated)) @env0:asFloat].
+	((mag @env0:_getKind) @env0:== 3) ifTrue: [
+		OverflowError ___signal___: 'hexadecimal value too large to represent as a float'].
+	^ sign @env0:> 0 ifTrue: [mag] ifFalse: [mag @env0:negated]
+%
 
-	"Remove 0x or 0X prefix if present"
-	((str @env0:size) @env0:>= 2) ifTrue: [
-		(((str @env0:copyFrom: 1 to: 2) @env0:asLowercase) @env0:= '0x') ifTrue: [
-			str := str @env0:copyFrom: 3 to: str @env0:size.
-		].
-	].
+category: 'Grail-Type Conversion'
+classmethod: float
+___parseDecInt___: s
+	"Parse a signed decimal integer (the p-exponent of a hex float)."
 
-	"Split on 'p' or 'P' for exponent"
-	hasP := (str @env0:includesString: 'p') or: [
-		str @env0:includesString: 'P'
-	].
+	| str sign n |
+	str := s @env0:trimBoth.
+	sign := 1.
+	(str @env0:notEmpty and: [(str @env0:at: 1) @env0:== $-])
+		ifTrue: [sign := -1. str := str @env0:copyFrom: 2 to: str @env0:size].
+	(str @env0:notEmpty and: [(str @env0:at: 1) @env0:== $+])
+		ifTrue: [str := str @env0:copyFrom: 2 to: str @env0:size].
+	str @env0:isEmpty ifTrue: [
+		ValueError ___signal___: 'invalid hexadecimal floating-point string'].
+	n := 0.
+	str @env0:do: [:ch |
+		((ch @env0:>= $0) and: [ch @env0:<= $9]) ifFalse: [
+			ValueError ___signal___: 'invalid hexadecimal floating-point string'].
+		n := (n @env0:* 10) @env0:+ (ch @env0:asInteger @env0:- $0 @env0:asInteger)].
+	^ n @env0:* sign
+%
 
-	hasP ifTrue: [
-		"Implementation simplified - full hex float parsing is complex"
-		NotImplementedError @env0:signal: 'fromhex with exponent not fully implemented'
-	].
+category: 'Grail-Type Conversion'
+classmethod: float
+___parseHexInt___: s
+	"Parse a run of hexadecimal digits into an integer (the combined
+	integer+fraction significand of a hex float).  Character>>digitValue
+	returns nil for lowercase hex letters, so decode by range instead."
 
-	"Parse hex value (simplified)"
-	val := (str @env0:asNumber) @env0:asFloat.
-	^ (val @env0:* sign) @env0:asFloat
+	| n |
+	n := 0.
+	s @env0:asUppercase @env0:do: [:ch |
+		| d |
+		((ch @env0:>= $0) and: [ch @env0:<= $9])
+			ifTrue: [d := ch @env0:asInteger @env0:- $0 @env0:asInteger]
+			ifFalse: [
+				((ch @env0:>= $A) and: [ch @env0:<= $F])
+					ifTrue: [d := (ch @env0:asInteger @env0:- $A @env0:asInteger) @env0:+ 10]
+					ifFalse: [ValueError ___signal___: 'invalid hexadecimal floating-point string']].
+		n := (n @env0:* 16) @env0:+ d].
+	^ n
 %
 
 category: 'Grail-Arithmetic'

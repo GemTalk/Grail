@@ -686,4 +686,17 @@ testAddedFunctions
 	self assert: (m @env1:log2: (2 @env0:raisedTo: 1023)) equals: 1023.0.
 	self assert: (m @env1:log2: (m @env1:ldexp: 1.0 _: 1023)) equals: 1023.0.
 	self assert: (m @env1:log2: (m @env1:ldexp: 1.0 _: -1074)) equals: -1074.0.
-	self assert: (m @env1:log2: (m @env1:ldexp: 1.0 _: -1050)) equals: -1050.0
+	self assert: (m @env1:log2: (m @env1:ldexp: 1.0 _: -1050)) equals: -1050.0.
+	"fsum is full-precision (Shewchuk): a naive left-to-right sum of these
+	cancelling magnitudes loses the tiny tail, fsum keeps it exactly.  inf
+	passes through, inf + -inf is a ValueError, a non-numeric is a TypeError,
+	and a huge integer that overflows the float range is an OverflowError."
+	self assert: (m @env1:fsum: { 1e100. 1.0. -1e100. 1e-100. 1e50. -1.0. -1e50 }) equals: 1e-100.
+	self assert: (m @env1:fsum: { (2.0 @env0:raisedTo: 53). -0.5. (2.0 @env0:raisedTo: -54) @env0:negated })
+		equals: (2.0 @env0:raisedTo: 53) @env0:- 1.0.
+	self assert: (m @env1:fsum: { 1e16. 1.0. 1e-16 }) equals: 10000000000000002.0.
+	self assert: (m @env1:fsum: { }) equals: 0.0.
+	self assert: (m @env1:fsum: { 1.0. (m @env1:inf) }) equals: (m @env1:inf).
+	self should: [m @env1:fsum: { (m @env1:inf). (m @env1:inf) @env0:negated }] raise: ValueError.
+	self should: [m @env1:fsum: { 'spam' }] raise: TypeError.
+	self should: [m @env1:fsum: { 10 @env0:raisedTo: 1000 }] raise: OverflowError

@@ -553,3 +553,27 @@ testEvalMixedArithmetic
 	self assert: (self eval: '10 / 4') equals: 2.5.
 	self assert: (self eval: '2.5 * 2') equals: 5.0.
 %
+
+category: 'Grail-Tests - Float Methods'
+method: FloatTestCase
+testFromHex
+	"float.fromhex parses [sign] 0x hexdigits [.hexdigits] [p decexp] EXACTLY
+	(the value is the rational M * 2**(p - 4f) rounded once), plus the
+	inf/infinity/nan keywords.  Was a NotImplementedError for any p-exponent."
+
+	| fl |
+	fl := Python @env0:at: #float.
+	self assert: (fl @env1:fromhex: '0x1.8p3') equals: 12.0.
+	self assert: (fl @env1:fromhex: '0x10') equals: 16.0.
+	self assert: (fl @env1:fromhex: '0x0.8p1') equals: 1.0.
+	self assert: (fl @env1:fromhex: '-0x1.0p-1') equals: -0.5.
+	"exact round-tripping of a full-precision significand with an exponent"
+	self assert: (fl @env1:fromhex: '0x1.5555555555555p+970')
+		equals: (2.0 @env0:raisedTo: 970) @env0:* ((16r15555555555555 @env0:asFloat) @env0:/ (2.0 @env0:raisedTo: 52)).
+	"signed zero (probed via 1/x -> -inf), keywords, range/format errors"
+	self assert: (1.0 @env0:/ (fl @env1:fromhex: '-0x0p0')) equals: MinusInfinity.
+	self assert: (1.0 @env0:/ (fl @env1:fromhex: '0x0p0')) equals: PlusInfinity.
+	self assert: (fl @env1:fromhex: 'inf') equals: (fl @env1:fromhex: 'Infinity').
+	self should: [fl @env1:fromhex: '0x1p+2000'] raise: OverflowError.
+	self should: [fl @env1:fromhex: '0xGp0'] raise: ValueError
+%
