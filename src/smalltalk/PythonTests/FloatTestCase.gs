@@ -559,17 +559,33 @@ method: FloatTestCase
 testEqualsRational
 	"float == Fraction reflects to Fraction.__eq__ (CPython's == falls back to
 	the RHS when the LHS type can't compare), so a float equals a numerically
-	equal Fraction on EITHER side.  Was False: kernel = cannot compare a Float
-	to a PythonInstance Fraction."
+	equal Fraction on EITHER side (was False: kernel = cannot compare a Float
+	to a PythonInstance Fraction).  != derives from __eq__ so distinct-but-equal
+	Fractions are NOT unequal (the object default's identity fall-through used
+	to miss a compiled __eq__).  int(Fraction) truncates toward zero via the
+	vendored __int__ (the ___int__:kw: varargs selector)."
 
 	self assert: (self eval: 'from fractions import Fraction as F
-0.40625 == F(13, 32)').
-	self assert: (self eval: 'from fractions import Fraction as F
-F(13, 32) == 0.40625').
-	self assert: (self eval: 'from fractions import Fraction as F
-0.5 != F(13, 32)').
-	self deny: (self eval: 'from fractions import Fraction as F
-0.5 == F(13, 32)')
+[0.40625 == F(13, 32), F(13, 32) == 0.40625, 0.5 == F(13, 32),
+ F(-4) != F(-4), F(-4) != -4, 0.40625 != F(13, 32), int(F(7, 2)), int(F(-7, 2))]')
+		@env1:__repr__
+		equals: '[True, True, False, False, False, True, 3, -3]'
+%
+
+category: 'Grail-Tests - Float Methods'
+method: FloatTestCase
+testHex
+	"float.hex() -> CPython form 0x1.{13 hex}p{exp} for normals, 0x0.{..}p-1022
+	for subnormals, signed zero, inf/nan; round-trips through fromhex.  Was a
+	stub emitting decimal digits after 0x (and a signBit-is-int crash)."
+
+	self assert: (1.0 @env1:hex) equals: '0x1.0000000000000p+0'.
+	self assert: (0.1 @env1:hex) equals: '0x1.999999999999ap-4'.
+	self assert: (-3.5 @env1:hex) equals: '-0x1.c000000000000p+1'.
+	self assert: (5e-324 @env1:hex) equals: '0x0.0000000000001p-1022'.
+	self assert: (0.0 @env1:hex) equals: '0x0.0000000000000p+0'.
+	self assert: ((0.0 @env0:negated) @env1:hex) equals: '-0x0.0000000000000p+0'.
+	self assert: ((Python @env0:at: #float) @env1:fromhex: (0.1 @env1:hex)) equals: 0.1
 %
 
 category: 'Grail-Tests - Float Methods'

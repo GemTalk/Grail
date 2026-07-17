@@ -1732,15 +1732,24 @@ __ne__: other
 	"Return self != other.
 
 	Honor a setattr-installed ``__ne__'' if present; otherwise derive
-	from a setattr-installed ``__eq__'' (CPython's default __ne__
-	delegates to __eq__ and negates — dataclasses synthesize only
-	__eq__).  Fall through to identity when neither is installed."
+	from __eq__ and negate (CPython's default __ne__ delegates to __eq__).
+	__eq__ may be setattr-installed (dataclasses synthesize only __eq__) OR a
+	class-body/compiled def -- the vendored fractions.Fraction defines
+	``def __eq__'' as a Smalltalk method, so a check limited to dynamic
+	attributes fell through to IDENTITY and made Fraction != Fraction (and
+	Fraction != int) wrongly True.  Fall through to identity only when no
+	class beyond object defines __eq__ at all."
 
-	| fn |
+	| fn eqOwner |
 	fn := self @env1:___dynamicClassAttr___: #'__ne__'.
 	fn @env0:== nil ifFalse: [^ fn @env1:___pyCallValue___: { self. other } kw: nil].
 	fn := self @env1:___dynamicClassAttr___: #'__eq__'.
 	fn @env0:== nil ifFalse: [^ (fn @env1:___pyCallValue___: { self. other } kw: nil) @env0:not].
+	eqOwner := self @env0:class @env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
+	eqOwner @env0:isNil ifTrue: [
+		eqOwner := self @env0:class @env0:whichClassIncludesSelector: #'___eq__:kw:' environmentId: 1].
+	(eqOwner @env0:notNil and: [eqOwner @env0:~~ object]) ifTrue: [
+		^ (self @env1:__eq__: other) @env0:not].
 	^ (self @env0:= other) @env0:not
 %
 

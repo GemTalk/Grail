@@ -64,7 +64,13 @@ __new__: obj
 	is env-0 only and would miss env-1 ``__int__`` implementations.
 	Walk the env-1 class chain (not just the immediate method dict) so
 	an inherited ``__int__`` — e.g. AbstractPyInt's, inherited by
-	NamedIntConstant / HTTPStatus — is found too."
+	NamedIntConstant / HTTPStatus — is found too.  A VENDORED Python __int__
+	whose def carries parameters (fractions.Fraction: ``def __int__(a,
+	_index=operator.index)'') compiles to the varargs selector
+	``___int__:kw:'', which the bare-selector check below would miss."
+	((obj @env0:class @env0:whichClassIncludesSelector: #'___int__:kw:' environmentId: 1) @env0:notNil) ifTrue: [
+		^ obj @env1:___int__: { } kw: nil
+	].
 	((obj @env0:class @env0:whichClassIncludesSelector: #__int__ environmentId: 1) @env0:notNil) ifTrue: [
 		result := obj @env1:__int__.
 		^ result

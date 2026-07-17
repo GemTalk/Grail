@@ -1187,7 +1187,7 @@ remainder: x _: y
 	|result| <= |y|/2.  remainder(x, inf) is x; remainder(inf, y) and
 	remainder(x, 0) are domain errors; NaN propagates."
 
-	| fx fy n |
+	| fx fy fxr fyr n r |
 	fx := self @env1:___real___: x.
 	fy := self @env1:___real___: y.
 	(fx @env0:_isNaN or: [fy @env0:_isNaN]) ifTrue: [^ fx @env0:+ fy].
@@ -1196,8 +1196,31 @@ remainder: x _: y
 	fy @env0:= 0.0 ifTrue: [
 		ValueError ___signal___: 'math domain error'].
 	(fy @env0:_getKind) @env0:== 3 ifTrue: [^ fx].
-	n := self @env1:___roundHalfEven___: (fx @env0:/ fy).
-	^ fx @env0:- (n @env0:* fy)
+	"Work in EXACT rationals: n = round-half-even(x/y), r = x - n*y.  A naive
+	float ``n * fy'' overflows to inf when n is large even though |r| <= |y|/2
+	is always finite; the rational form is overflow-free and rounds once."
+	fxr := fx @env0:asFraction.
+	fyr := fy @env0:asFraction.
+	n := self @env1:___roundHalfEvenFrac___: (fxr @env0:/ fyr).
+	r := (fxr @env0:- (n @env0:* fyr)) @env0:asFloat.
+	"IEEE: a zero remainder carries the sign of x (remainder(-4, 1) = -0.0),
+	but rational subtraction yields +0.0 either way."
+	r @env0:= 0.0 ifTrue: [^ self @env1:copysign: 0.0 _: fx].
+	^ r
+%
+
+category: 'Grail-Math Functions'
+method: math
+___roundHalfEvenFrac___: q
+	"Round an exact rational to the nearest integer, ties to even."
+
+	| fl frac half |
+	fl := q @env0:floor.
+	frac := q @env0:- fl.
+	half := 1 @env0:/ 2.
+	frac @env0:< half ifTrue: [^ fl].
+	frac @env0:> half ifTrue: [^ fl @env0:+ 1].
+	^ fl @env0:even ifTrue: [fl] ifFalse: [fl @env0:+ 1]
 %
 
 category: 'Grail-Math Functions'

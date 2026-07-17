@@ -555,38 +555,45 @@ conjugate
 category: 'Grail-Float Methods'
 method: float
 hex
-	"Return hexadecimal representation of float."
+	"CPython float.hex(): [-]0x1.{13 hex digits}p{signed exp} for a normal,
+	[-]0x0.{13 hex digits}p-1022 for a subnormal, plus the inf/nan keywords
+	and a signed 0x0.0...0p+0 for zero.  The significand is recovered from the
+	EXACT binary Fraction (frexp is unusable: GemStone's Float>>exponent pins
+	subnormals at -1022), normalised into [1, 2) to read the leading digit."
 
-	| sign absVal exponent mantissa hexStr kind |
-	"Handle special values using _getKind"
+	| kind neg ax fr mant e leadDigit expVal frac52 hexDigits sign |
 	kind := self @env0:_getKind.
-
-	"Check for NaN (kind > 4)"
-	(kind @env0:> 4) ifTrue: [
-		^ 'nan' @env0:asUnicodeString
-	].
-
-	"Check for infinity (kind == 3)"
-	(kind == 3) ifTrue: [
-		^ ((self @env0:< 0)
-			ifTrue: ['-inf']
-			ifFalse: ['inf']) @env0:asUnicodeString
-	].
-
-	"Handle zero"
+	(kind @env0:> 4) ifTrue: [^ 'nan' @env0:asUnicodeString].
+	(kind @env0:== 3) ifTrue: [
+		^ ((self @env0:< 0) ifTrue: ['-inf'] ifFalse: ['inf']) @env0:asUnicodeString].
 	(self @env0:= 0.0) ifTrue: [
-		^ ((self @env0:signBit)
+		^ (((1.0 @env0:/ self) @env0:< 0)
 			ifTrue: ['-0x0.0000000000000p+0']
-			ifFalse: ['0x0.0000000000000p+0']) @env0:asUnicodeString
-	].
-
-	"Simplified hex representation - full implementation would use frexp"
-	sign := (self @env0:< 0) ifTrue: ['-'] ifFalse: [''].
-	absVal := self @env0:abs.
-
-	"Use GemStone's printString as fallback"
-	hexStr := sign @env0:, ('0x' @env0:, (absVal @env0:printString)).
-	^ hexStr @env0:asUnicodeString
+			ifFalse: ['0x0.0000000000000p+0']) @env0:asUnicodeString].
+	neg := self @env0:< 0.
+	ax := self @env0:abs.
+	"normalise the exact value into mant in [1, 2), ax = mant * 2**e"
+	fr := ax @env0:asFraction.
+	e := fr @env0:numerator @env0:highBit @env0:- (fr @env0:denominator @env0:highBit).
+	mant := fr @env0:/ (2 @env0:raisedTo: e).
+	[mant @env0:>= 2] @env0:whileTrue: [mant := mant @env0:/ 2. e := e @env0:+ 1].
+	[mant @env0:< 1] @env0:whileTrue: [mant := mant @env0:* 2. e := e @env0:- 1].
+	e @env0:>= -1022
+		ifTrue: [
+			leadDigit := '1'.
+			expVal := e.
+			frac52 := ((mant @env0:- 1) @env0:* (2 @env0:raisedTo: 52)) @env0:truncated]
+		ifFalse: [
+			"subnormal: 0x0.{k}p-1022 where ax = k * 2**-1074"
+			leadDigit := '0'.
+			expVal := -1022.
+			frac52 := (mant @env0:* (2 @env0:raisedTo: (e @env0:+ 1074))) @env0:truncated].
+	hexDigits := (frac52 @env0:printStringRadix: 16) @env0:asLowercase.
+	[hexDigits @env0:size @env0:< 13] @env0:whileTrue: [hexDigits := '0' @env0:, hexDigits].
+	sign := neg ifTrue: ['-'] ifFalse: [''].
+	^ (sign @env0:, '0x' @env0:, leadDigit @env0:, '.' @env0:, hexDigits @env0:, 'p'
+		@env0:, (expVal @env0:>= 0 ifTrue: ['+'] ifFalse: ['-'])
+		@env0:, expVal @env0:abs @env0:printString) @env0:asUnicodeString
 %
 
 category: 'Grail-Properties'

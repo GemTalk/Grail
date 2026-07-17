@@ -757,5 +757,12 @@ testAddedFunctions
 	self should: [m @env1:_hypot: { 1.0. (10 @env0:raisedTo: 400) } kw: nil] raise: OverflowError.
 	"a math argument that is an integer beyond the float range is an
 	OverflowError (___real___), not a silent inf."
-	self should: [m @env1:sqrt: (10 @env0:raisedTo: 400)] raise: OverflowError
+	self should: [m @env1:sqrt: (10 @env0:raisedTo: 400)] raise: OverflowError.
+	"remainder: exact (x - n*y via rationals so a large n*y cannot overflow),
+	a zero result carries x's sign."
+	self assert: (m @env1:remainder: 5.0 _: 3.0) equals: -1.0.
+	self assert: (m @env1:remainder: 5.5 _: 2.0) equals: -0.5.
+	self assert: (1.0 @env0:/ (m @env1:remainder: -4.0 _: 1.0)) equals: MinusInfinity.
+	self assert: (1.0 @env0:/ (m @env1:remainder: 4.0 _: 1.0)) equals: PlusInfinity.
+	self assert: (m @env1:remainder: 1e308 _: 1e308) equals: 0.0
 
