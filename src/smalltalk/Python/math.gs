@@ -316,12 +316,26 @@ sqrt: x
 category: 'Grail-Exponential and Logarithmic'
 method: math
 pow: x _: y
-	"math.pow(x, y) — x raised to the power y (as float).  NOTE: the full
-	IEEE-754 special-case matrix (pow(1, NAN)=1, pow(0, -2)->ValueError,
-	the INF/NINF/negative-base rules -- test_math testPow) is a separate
-	follow-on; raising OverflowError on a finite-input overflow here would
-	mis-fire on those domain cases as OverflowError instead of ValueError."
-	^ (self @env1:___real___: x) @env0:raisedTo: (self @env1:___real___: y)
+	"math.pow(x, y) -- x raised to the power y (as float).  GemStone's
+	raisedTo: already follows C pow() for the inf/nan-input special cases
+	(pow(1, NAN)=1, pow(INF, -2)=0, ...) and for finite inputs returns the
+	IEEE result -- NaN for a negative base to a non-integer power, inf on
+	overflow or 0**negative.  CPython turns those two finite-input outcomes
+	into exceptions: a NaN result (out of domain) or an inf from 0**negative
+	is a ValueError; an inf from a genuine overflow is an OverflowError."
+
+	| fx fy r |
+	fx := self @env1:___real___: x.
+	fy := self @env1:___real___: y.
+	r := fx @env0:raisedTo: fy.
+	((fx @env0:_isNaN @env0:not and: [fx @env0:abs @env0:~= PlusInfinity])
+		and: [fy @env0:_isNaN @env0:not and: [fy @env0:abs @env0:~= PlusInfinity]]) ifTrue: [
+		r @env0:_isNaN ifTrue: [ValueError ___signal___: 'math domain error'].
+		(r @env0:abs @env0:= PlusInfinity) ifTrue: [
+			fx @env0:= 0.0
+				ifTrue: [ValueError ___signal___: 'math domain error']
+				ifFalse: [OverflowError ___signal___: 'math range error']]].
+	^ r
 %
 
 ! ===============================================================================

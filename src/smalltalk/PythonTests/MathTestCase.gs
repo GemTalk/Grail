@@ -699,4 +699,14 @@ testAddedFunctions
 	self assert: (m @env1:fsum: { 1.0. (m @env1:inf) }) equals: (m @env1:inf).
 	self should: [m @env1:fsum: { (m @env1:inf). (m @env1:inf) @env0:negated }] raise: ValueError.
 	self should: [m @env1:fsum: { 'spam' }] raise: TypeError.
-	self should: [m @env1:fsum: { 10 @env0:raisedTo: 1000 }] raise: OverflowError
+	self should: [m @env1:fsum: { 10 @env0:raisedTo: 1000 }] raise: OverflowError.
+	"pow keeps IEEE results for inf/nan inputs but raises for a finite-input
+	overflow (OverflowError), a 0**negative or negative-base**non-integer
+	(both ValueError)."
+	self assert: (m @env1:pow: 2.0 _: -1.0) equals: 0.5.
+	self assert: (m @env1:pow: -2.0 _: 3.0) equals: -8.0.
+	self assert: (m @env1:pow: 1.0 _: (m @env1:nan)) equals: 1.0.
+	self assert: (m @env1:pow: (m @env1:inf) _: -2.0) equals: 0.0.
+	self should: [m @env1:pow: 1e100 _: 1e100] raise: OverflowError.
+	self should: [m @env1:pow: 0.0 _: -2.0] raise: ValueError.
+	self should: [m @env1:pow: -2.0 _: 0.5] raise: ValueError
