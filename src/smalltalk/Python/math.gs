@@ -742,6 +742,39 @@ fmod: x _: y
 
 category: 'Grail-Math Functions'
 method: math
+___roundHalfEven___: q
+	"Round a Float to the nearest integer, ties to even (IEEE default)."
+
+	| fl frac |
+	fl := q @env0:floor.
+	frac := q @env0:- fl.
+	frac @env0:< 0.5 ifTrue: [^ fl].
+	frac @env0:> 0.5 ifTrue: [^ fl @env0:+ 1].
+	^ fl @env0:even ifTrue: [fl] ifFalse: [fl @env0:+ 1]
+%
+
+category: 'Grail-Math Functions'
+method: math
+remainder: x _: y
+	"IEEE 754 remainder: x - n*y where n = round-half-to-even(x/y), so
+	|result| <= |y|/2.  remainder(x, inf) is x; remainder(inf, y) and
+	remainder(x, 0) are domain errors; NaN propagates."
+
+	| fx fy n |
+	fx := self @env1:___real___: x.
+	fy := self @env1:___real___: y.
+	(fx @env0:_isNaN or: [fy @env0:_isNaN]) ifTrue: [^ fx @env0:+ fy].
+	(fx @env0:_getKind) @env0:== 3 ifTrue: [
+		ValueError ___signal___: 'math domain error'].
+	fy @env0:= 0.0 ifTrue: [
+		ValueError ___signal___: 'math domain error'].
+	(fy @env0:_getKind) @env0:== 3 ifTrue: [^ fx].
+	n := self @env1:___roundHalfEven___: (fx @env0:/ fy).
+	^ fx @env0:- (n @env0:* fy)
+%
+
+category: 'Grail-Math Functions'
+method: math
 frexp: x
 	"Return (m, e) with x = m * 2**e and 0.5 <= |m| < 1 (0 and non-finite
 	x give (x, 0))."

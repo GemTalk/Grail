@@ -647,5 +647,10 @@ testAddedFunctions
 	range error) for exp/exp2 -- exp(inf) stays inf (not an overflow)."
 	self should: [m @env1:exp: 1000000] raise: OverflowError.
 	self should: [m @env1:exp2: 1000000] raise: OverflowError.
-	self assert: (m @env1:exp: (m @env1:inf)) equals: (m @env1:inf)
+	self assert: (m @env1:exp: (m @env1:inf)) equals: (m @env1:inf).
+	"IEEE remainder rounds the quotient to the nearest even (remainder(5,2)
+	= 1, remainder(7,2) = -1); y=0 is a domain error."
+	self assert: (m @env1:remainder: 5 _: 2) equals: 1.0.
+	self assert: (m @env1:remainder: 7 _: 2) equals: -1.0.
+	self should: [m @env1:remainder: 5 _: 0] raise: ValueError
 %
