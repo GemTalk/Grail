@@ -41,10 +41,29 @@ testAbsoluteValue
 
 	| d result |
 	d := (Decimal ___new___: '-42.5').
-	
+
 	result := (d @env1:__abs__).
-	
+
 	self assert: (result @env1:__str__) equals: '42.5'
+%
+
+category: 'Grail-Tests - Stub module'
+method: DecimalTestCase
+testStubDecimalArithmetic
+	"The ``from decimal import Decimal'' value type (decimal.py) supports
+	construction, the arithmetic/comparison operators and __float__, so
+	math.dist / math.sumprod can feed Decimals through it and float == Decimal
+	works via float.__eq__'s reflection.  (Distinct from the native
+	ScaledDecimal-backed Decimal exercised by the other tests here.)  The
+	stub must reference its own class via type(self), not the bare ``Decimal''
+	name -- that resolves to ScaledDecimal and asking it for ___instance___
+	is a DNU."
+
+	self assert: (self eval: 'from decimal import Decimal as D
+[str(D(3.5) * D(4.5)), D(13) == 13, 13.0 == D(13), float(D(2.5)),
+ str(D(1.5) + D(2.5)), 25 * D(4.0) == D(100), type(D(1) + D(2)).__name__]')
+		@env1:__repr__
+		equals: '[''15.75'', True, True, 2.5, ''4.0'', True, ''Decimal'']'
 %
 
 category: 'Grail-Tests - Arithmetic'

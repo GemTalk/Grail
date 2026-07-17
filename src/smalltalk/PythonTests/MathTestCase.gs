@@ -764,5 +764,11 @@ testAddedFunctions
 	self assert: (m @env1:remainder: 5.5 _: 2.0) equals: -0.5.
 	self assert: (1.0 @env0:/ (m @env1:remainder: -4.0 _: 1.0)) equals: MinusInfinity.
 	self assert: (1.0 @env0:/ (m @env1:remainder: 4.0 _: 1.0)) equals: PlusInfinity.
-	self assert: (m @env1:remainder: 1e308 _: 1e308) equals: 0.0
+	self assert: (m @env1:remainder: 1e308 _: 1e308) equals: 0.0.
+	"dist = hypot of the coordinate differences: exact/scaled, an infinite
+	difference beats a NaN, a huge-int coordinate overflows."
+	self assert: (m @env1:dist: { 1.0. 2.0. 3.0 } _: { 4.0. 2.0. -1.0 }) equals: 5.0.
+	self assert: (m @env1:dist: { 14.0. 1.0 } _: { 2.0. -4.0 }) equals: 13.0.
+	self assert: (m @env1:dist: { (m @env1:inf). (m @env1:nan) } _: { 0.0. 0.0 }) equals: (m @env1:inf).
+	self should: [m @env1:dist: { 1.0. (10 @env0:raisedTo: 400) } _: { 0.0. 0.0 }] raise: OverflowError
 

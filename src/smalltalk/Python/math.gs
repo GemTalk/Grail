@@ -784,20 +784,37 @@ ___fracMagnitudeBits___: s
 category: 'Grail-Math Functions'
 method: math
 dist: pIter _: qIter
-	"dist(p, q) -> Euclidean distance between two points."
+	"dist(p, q) -> Euclidean distance = the norm of the coordinate
+	differences, i.e. hypot(*(p_i - q_i)).  An infinite difference gives inf
+	(even beside a NaN); otherwise any NaN gives NaN.  The sum of squares is
+	EXACT-rational and scaled by a power of two before the sqrt, so extreme
+	magnitudes neither overflow nor underflow and a perfect square stays
+	exact."
 
-	| ps qs sum d |
+	| ps qs hasInf hasNan diffs sumSq k scaled |
 	ps := (self @env1:___materialize___: pIter)
 		@env0:collect: [:v | self @env1:___real___: v].
 	qs := (self @env1:___materialize___: qIter)
 		@env0:collect: [:v | self @env1:___real___: v].
 	ps @env0:size @env0:= qs @env0:size ifFalse: [
 		ValueError ___signal___: 'both points must have the same number of dimensions'].
-	sum := 0.0.
+	diffs := OrderedCollection @env0:new.
+	hasInf := false.
+	hasNan := false.
 	1 @env0:to: ps @env0:size do: [:i |
+		| d |
 		d := (ps @env0:at: i) @env0:- (qs @env0:at: i).
-		sum := sum @env0:+ (d @env0:* d)].
-	^ sum @env0:sqrt
+		(d @env0:abs @env0:= PlusInfinity) ifTrue: [hasInf := true].
+		d @env0:_isNaN ifTrue: [hasNan := true].
+		diffs @env0:add: d].
+	hasInf ifTrue: [^ PlusInfinity].
+	hasNan ifTrue: [^ PlusQuietNaN].
+	sumSq := 0.
+	diffs @env0:do: [:d | | dr | dr := d @env0:asFraction. sumSq := sumSq @env0:+ (dr @env0:* dr)].
+	sumSq @env0:= 0 ifTrue: [^ 0.0].
+	k := (self @env1:___fracMagnitudeBits___: sumSq) @env0:// 2.
+	scaled := (sumSq @env0:/ (2 @env0:raisedTo: (2 @env0:* k))) @env0:asFloat.
+	^ ((scaled @env0:sqrt) @env0:asFraction @env0:* (2 @env0:raisedTo: k)) @env0:asFloat
 %
 
 category: 'Grail-Math Functions'
@@ -873,6 +890,11 @@ ___real___: x
 		^ f].
 	((x @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) @env0:~~ nil)
 		ifTrue: [^ (x @env0:perform: #'__float__' env: 1) @env0:asFloat].
+	"__float__ may be a class-body DESCRIPTOR (BadFloat: __float__ = BadDescr())
+	rather than a method def; load it as an attribute so the descriptor's
+	__get__ fires (BadDescr raises ValueError) instead of a spurious TypeError."
+	((x @env0:class @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) @env0:~~ nil)
+		ifTrue: [^ ((x @env1:___pyAttrLoad___: #'__float__') @env1:value: { } value: nil) @env0:asFloat].
 	TypeError ___signal___: ('must be real number, not '
 		@env0:, x @env0:class @env0:name @env0:asString)
 %
