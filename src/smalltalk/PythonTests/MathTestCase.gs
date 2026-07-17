@@ -709,4 +709,17 @@ testAddedFunctions
 	self assert: (m @env1:pow: (m @env1:inf) _: -2.0) equals: 0.0.
 	self should: [m @env1:pow: 1e100 _: 1e100] raise: OverflowError.
 	self should: [m @env1:pow: 0.0 _: -2.0] raise: ValueError.
-	self should: [m @env1:pow: -2.0 _: 0.5] raise: ValueError
+	self should: [m @env1:pow: -2.0 _: 0.5] raise: ValueError.
+	"fma is a TRUE fused multiply-add (single rounding via exact rational
+	arithmetic): (a-1)*(a+1)+1 == a*a exactly where a naive a*b+c double-
+	rounds.  Signed zeros, inf/invalid, and overflow follow IEEE."
+	self assert: (m @env1:fma: ((m @env1:ldexp: 1.0 _: -50) @env0:- 1.0)
+		_: ((m @env1:ldexp: 1.0 _: -50) @env0:+ 1.0) _: 1.0)
+		equals: ((m @env1:ldexp: 1.0 _: -50) @env0:* (m @env1:ldexp: 1.0 _: -50)).
+	self assert: (m @env1:fma: 2.0 _: 2.0 _: -4.0) equals: 0.0.
+	self assert: (1.0 @env0:/ (m @env1:fma: 2.0 _: 2.0 _: -4.0)) equals: PlusInfinity.
+	self assert: (1.0 @env0:/ (m @env1:fma: 0.0 _: -1.0 _: -0.0)) equals: MinusInfinity.
+	self assert: (m @env1:fma: (m @env1:inf) _: 2.0 _: 3.0) equals: (m @env1:inf).
+	self should: [m @env1:fma: (m @env1:inf) _: 0.0 _: 1.0] raise: ValueError.
+	self should: [m @env1:fma: (m @env1:inf) _: 1.0 _: ((m @env1:inf) @env0:negated)] raise: ValueError.
+	self should: [m @env1:fma: 1e300 _: 1e300 _: 0.0] raise: OverflowError

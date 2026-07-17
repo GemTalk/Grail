@@ -505,12 +505,55 @@ ldexp: x _: i
 
 category: 'Grail-Math Functions'
 method: math
-fma: x _: y _: z
-	"fma(x, y, z) -> x*y + z.  DEVIATION: not a fused multiply-add --
-	the intermediate rounds (GemStone has no FMA primitive)."
+___signBit___: f
+	"True when f is negative, INCLUDING negative zero (probed via 1/f, whose
+	sign survives where f = 0.0 = -0.0 does not)."
 
-	^ ((self @env1:___real___: x) @env0:* (self @env1:___real___: y))
-		@env0:+ (self @env1:___real___: z)
+	^ (f @env0:< 0.0) or: [f @env0:= 0.0 and: [(1.0 @env0:/ f) @env0:< 0.0]]
+%
+
+category: 'Grail-Math Functions'
+method: math
+fma: x _: y _: z
+	"fma(x, y, z) -> the correctly-rounded (single rounding) x*y + z, the
+	true fused multiply-add.  GemStone has no FMA primitive, but every finite
+	double is an exact Fraction, so a*b + c is computed exactly as a rational
+	and rounded once through asFloat (which also carries the sign through an
+	underflow to +/-0.0).  IEEE special cases: a NaN input gives NaN; inf*0
+	is an invalid operation (ValueError), as is an infinite product added to
+	an infinity of the opposite sign; a finite product that overflows the
+	float range is an OverflowError; an exact zero result is +0.0 unless both
+	the product and c are negative (round-to-nearest)."
+
+	| fa fb fc aInf bInf cInf prodNeg prod r mag |
+	fa := self @env1:___real___: x.
+	fb := self @env1:___real___: y.
+	fc := self @env1:___real___: z.
+	(fa @env0:_isNaN or: [fb @env0:_isNaN or: [fc @env0:_isNaN]]) ifTrue: [^ PlusQuietNaN].
+	aInf := fa @env0:abs @env0:= PlusInfinity.
+	bInf := fb @env0:abs @env0:= PlusInfinity.
+	cInf := fc @env0:abs @env0:= PlusInfinity.
+	((aInf and: [fb @env0:= 0.0]) or: [bInf and: [fa @env0:= 0.0]]) ifTrue: [
+		ValueError ___signal___: 'invalid operation in fma'].
+	(aInf or: [bInf]) ifTrue: [
+		prodNeg := (self @env1:___signBit___: fa) @env0:~= (self @env1:___signBit___: fb).
+		prod := prodNeg ifTrue: [MinusInfinity] ifFalse: [PlusInfinity].
+		cInf ifTrue: [
+			^ (fc @env0:= prod)
+				ifTrue: [prod]
+				ifFalse: [ValueError ___signal___: 'invalid operation in fma']].
+		^ prod].
+	cInf ifTrue: [^ fc].
+	r := ((fa @env0:asFraction) @env0:* (fb @env0:asFraction)) @env0:+ (fc @env0:asFraction).
+	r @env0:= 0 ifTrue: [
+		^ ((self @env1:___signBit___: fa) @env0:~= (self @env1:___signBit___: fb)
+			and: [self @env1:___signBit___: fc])
+			ifTrue: [0.0 @env0:negated]
+			ifFalse: [0.0]].
+	mag := r @env0:asFloat.
+	(mag @env0:abs @env0:= PlusInfinity) ifTrue: [
+		OverflowError ___signal___: 'overflow in fma'].
+	^ mag
 %
 
 category: 'Grail-Math Functions'
