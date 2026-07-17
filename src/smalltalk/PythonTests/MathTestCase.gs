@@ -672,4 +672,10 @@ testAddedFunctions
 	self assert: (m @env1:fmod: 3.0 _: (m @env1:inf)) equals: 3.0.
 	"Domain-error messages name the value (CPython test_exception_messages)."
 	self should: [m @env1:sqrt: -1.1] raise: ValueError.
-	self should: [m @env1:atanh: 1.0] raise: ValueError
+	self should: [m @env1:atanh: 1.0] raise: ValueError.
+	"ldexp: integer exponent (a float is a TypeError), overflow raises,
+	INF passes through."
+	self assert: (m @env1:ldexp: 1 _: 3) equals: 8.0.
+	self should: [m @env1:ldexp: 2.0 _: 1.1] raise: TypeError.
+	self should: [m @env1:ldexp: 1.0 _: 1000000] raise: OverflowError.
+	self assert: (m @env1:ldexp: (m @env1:inf) _: 30) equals: (m @env1:inf)

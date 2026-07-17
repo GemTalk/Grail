@@ -15,7 +15,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | Module | Status | tests | fail | err | skip | detail |
 |--------|--------|------:|-----:|----:|-----:|--------|
 | test.test_textwrap | OK | 68 | 0 | 0 | 0 |  |
-| test.test_math | ERROR | 88 | 11 | 18 | 0 |  |
+| test.test_math | ERROR | 88 | 10 | 18 | 0 |  |
 | test.test_int | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd800 is illegal for Unicode |
 | test.test_float | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd8f0 is illegal for Unicode |
 | test.test_heapq | ERROR | 68 | 8 | 14 | 0 |  |

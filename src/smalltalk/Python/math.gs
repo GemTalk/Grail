@@ -451,9 +451,16 @@ copysign: x _: y
 category: 'Grail-Math Functions'
 method: math
 ldexp: x _: i
-	"ldexp(x, i) -> x * 2**i."
+	"ldexp(x, i) -> x * 2**i.  i must be an exact integer (a float is a
+	TypeError).  A finite x whose scaled result overflows raises
+	OverflowError; INF/NAN pass through unchanged."
 
-	^ (self @env1:___real___: x) @env0:* (2.0 @env0:raisedTo: i @env0:asInteger)
+	| fx ii |
+	fx := self @env1:___real___: x.
+	ii := self @env1:___index___: i.
+	(fx @env0:_isNaN or: [(fx @env0:_getKind) @env0:== 3 or: [fx @env0:= 0.0]])
+		ifTrue: [^ fx].
+	^ self @env1:___rangeCheck___: (fx @env0:* (2.0 @env0:raisedTo: ii)) finite: true
 %
 
 category: 'Grail-Math Functions'
