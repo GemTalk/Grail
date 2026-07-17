@@ -1535,6 +1535,44 @@ def _math_dunder_round_results():
 MATH_DUNDER_ROUND_RESULT = _math_dunder_round_results()
 
 
+def _math_dunder_round_edges():
+    # The type-slot rules for ceil/floor/trunc:
+    #  - a class-body assignment whose descriptor __get__ raises propagates
+    #    that error (BadDescr -> ValueError), NOT a TypeError;
+    #  - an instance attribute of the dunder name is ignored (type slot only);
+    #  - ceil/floor coerce a __float__-only object, but trunc does NOT -- a
+    #    bare __float__ with no __trunc__ is a TypeError.
+    import math
+
+    class BadDescr:
+        def __get__(self, obj, objtype=None):
+            raise ValueError
+
+    class BadCeil:
+        __ceil__ = BadDescr()
+
+    class FloatOnly:
+        def __float__(self):
+            return 23.5
+
+    def outcome(fn, arg):
+        try:
+            return fn(arg)
+        except ValueError:
+            return "ValueError"
+        except TypeError:
+            return "TypeError"
+
+    return (
+        outcome(math.ceil, BadCeil()),      # descriptor raises -> ValueError
+        outcome(math.ceil, FloatOnly()),    # ceil coerces __float__ -> 24
+        outcome(math.trunc, FloatOnly()),   # trunc refuses __float__ -> TypeError
+    )
+
+
+MATH_DUNDER_ROUND_EDGES = _math_dunder_round_edges()
+
+
 def run_enum_convert():
     # Enum._convert_(name, module, filter) builds an enum of the receiver's
     # type from a module's globals passing filter(name).  Members sort by

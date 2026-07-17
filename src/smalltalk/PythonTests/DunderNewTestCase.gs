@@ -1379,10 +1379,14 @@ method: DunderNewTestCase
 testMathDunderRound
 	"math.ceil/floor/trunc honour the __ceil__/__floor__/__trunc__ dunder on
 	the argument's type (Decimal/Fraction rely on this), then fall back to
-	the numeric path (ceil(2.5) = 3)."
+	the numeric path (ceil(2.5) = 3).  The edges: a class-body descriptor
+	whose __get__ raises propagates its ValueError; ceil/floor coerce a
+	__float__-only object but trunc refuses it with a TypeError."
 
 	self assert: (self fixture @env1:MATH_DUNDER_ROUND_RESULT) @env1:__repr__
-		equals: '(42, 7, 3, 3)'
+		equals: '(42, 7, 3, 3)'.
+	self assert: (self fixture @env1:MATH_DUNDER_ROUND_EDGES) @env1:__repr__
+		equals: '(''ValueError'', 24, ''TypeError'')'
 %
 
 category: 'Grail-Tests - enum internals'

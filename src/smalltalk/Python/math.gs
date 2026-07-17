@@ -317,33 +317,46 @@ pow: x _: y
 
 category: 'Grail-Rounding'
 method: math
-___dunderRound___: x selector: dunder default: fallback
+___dunderRound___: x selector: dunder default: fallback coerceFloat: coerceFloat
 	"ceil/floor/trunc first honour the CORRESPONDING dunder defined on x's
-	TYPE (``__ceil__''/``__floor__''/``__trunc__'' -- an instance attribute
-	of that name is NOT consulted, matching CPython's type-slot lookup);
-	otherwise coerce to a real number and apply the Smalltalk fallback."
+	TYPE -- either a method def (whichClassIncludesSelector) or a class-body
+	assignment / descriptor (the metaclass carries an accessor for it, e.g.
+	``__ceil__ = BadDescr()'').  An instance attribute of that name is NOT a
+	type slot, so it is ignored (CPython).  When a type slot exists, load it
+	as an attribute of x -- which fires a descriptor's __get__ (BadDescr
+	raises ValueError) -- and call the result.
 
-	((x @env0:class @env0:whichClassIncludesSelector: dunder environmentId: 1) @env0:~~ nil)
-		ifTrue: [^ x @env0:perform: dunder env: 1].
-	^ (self @env1:___real___: x) @env0:perform: fallback
+	With no type slot the two families diverge: ceil/floor (coerceFloat)
+	coerce through __float__ and apply the Smalltalk fallback, but trunc
+	(NOT coerceFloat) requires __trunc__ -- a bare __float__ is a TypeError,
+	so only a genuine Smalltalk Number is truncated."
+
+	(((x @env0:class @env0:whichClassIncludesSelector: dunder environmentId: 1) @env0:~~ nil)
+		or: [(x @env0:class @env0:class @env0:whichClassIncludesSelector: dunder environmentId: 1) @env0:~~ nil])
+		ifTrue: [^ (x @env1:___pyAttrLoad___: dunder) @env1:value: { } value: nil].
+	coerceFloat ifTrue: [^ (self @env1:___real___: x) @env0:perform: fallback].
+	(x @env0:isKindOf: Number) ifTrue: [^ x @env0:perform: fallback].
+	TypeError ___signal___: ('type '
+		@env0:, x @env0:class @env0:name @env0:asString
+		@env0:, ' doesn''t define ' @env0:, dunder @env0:asString @env0:, ' method')
 %
 
 category: 'Grail-Rounding'
 method: math
 ceil: x
-	^ self @env1:___dunderRound___: x selector: #'__ceil__' default: #ceiling
+	^ self @env1:___dunderRound___: x selector: #'__ceil__' default: #ceiling coerceFloat: true
 %
 
 category: 'Grail-Rounding'
 method: math
 floor: x
-	^ self @env1:___dunderRound___: x selector: #'__floor__' default: #floor
+	^ self @env1:___dunderRound___: x selector: #'__floor__' default: #floor coerceFloat: true
 %
 
 category: 'Grail-Rounding'
 method: math
 trunc: x
-	^ self @env1:___dunderRound___: x selector: #'__trunc__' default: #truncated
+	^ self @env1:___dunderRound___: x selector: #'__trunc__' default: #truncated coerceFloat: false
 %
 
 category: 'Grail-Rounding'
