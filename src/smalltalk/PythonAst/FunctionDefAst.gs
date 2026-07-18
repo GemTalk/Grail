@@ -85,6 +85,58 @@ isOverloadStub
 
 category: 'Grail-other'
 method: FunctionDefAst
+isBigmemtestDecorated
+	"True if this def carries a CPython ``@support.bigmemtest(size, ...)''
+	decorator (or the ``bigaddrspacetest'' / ``precisionbigmemtest''
+	siblings).  In CPython that decorator wraps the method and, in a
+	dry run (no ``-M'' memory limit), calls it with ``size'' set to a
+	small maxsize (5147).  Grail drops the decorator — test.support's
+	bigmemtest is a passthrough — so the wrapped body keeps its
+	``(self, size)'' signature with ``size'' REQUIRED, and unittest,
+	invoking the method with no arguments, errors.  Recognising the
+	decorator lets applyBigmemtestDefaultIfNeeded inject that dry-run
+	default so the method runs.
+
+	Shapes recognised: ``@bigmemtest(...)'' (Call>Name), ``@support.
+	bigmemtest(...)'' (Call>Attribute), and the uncalled bare forms."
+	| names |
+	decorator_list isNil ifTrue: [^ false].
+	names := #('bigmemtest' 'bigaddrspacetest' 'precisionbigmemtest').
+	^ decorator_list anySatisfy: [:deco | | fn |
+		fn := (deco isKindOf: CallAst) ifTrue: [deco function] ifFalse: [deco].
+		((fn isKindOf: NameAst) and: [names includes: fn id asString])
+			or: [(fn isKindOf: AttributeAst)
+				and: [names includes: fn attr asString]]
+	]
+%
+
+category: 'Grail-other'
+method: FunctionDefAst
+applyBigmemtestDefaultIfNeeded
+	"Normalisation pass for ``@bigmemtest''-family test methods (see
+	isBigmemtestDecorated).  Injects a synthetic trailing default equal
+	to CPython's own no-memlimit maxsize (5147) so the required ``size''
+	parameter becomes optional and the method is callable with no args
+	— the dry-run path CPython itself takes when no ``-M'' limit is set.
+
+	Must run BEFORE compilesAsVarargs is consulted (giving a param a
+	default flips the def to the varargs form, whose prologue binds
+	``size'' from the default), so ClassDefRuntime invokes it up front.
+	Idempotent — guarded on a currently-empty defaults list — and scoped
+	to the bigmemtest family plus a real trailing parameter, so no other
+	method's codegen is touched."
+	(self isBigmemtestDecorated
+		and: [(args defaults isNil or: [args defaults isEmpty])
+		and: [(args posonlyargs size + args args size) > 1]]) ifTrue: [
+			args appendDefault: (ConstantAst buildWithFields:
+				(IdentityKeyValueDictionary new
+					at: #value put: 5147;
+					at: #kind put: nil;
+					yourself))].
+%
+
+category: 'Grail-other'
+method: FunctionDefAst
 name
 
 	^name
@@ -832,6 +884,26 @@ generateInstanceVarargsForwarderSource
 	Smalltalk receiver IS self."
 
 	^ self ___varargsForwarderSourceStripSelf___: true
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+generateBigmemtestUnaryForwarderSource
+	"Fixed-arity 0-arg entry point for a ``@bigmemtest''-decorated test
+	method.  applyBigmemtestDefaultIfNeeded gives the method a synthetic
+	trailing default, which forces it to the varargs ``_name:kw:'' form —
+	right for the CALL path, but invisible to ``dir()'': object>>__dir__
+	reports a varargs selector under its ``_name'' spelling, so unittest's
+	getTestCaseNames — which filters on a ``test'' prefix — never discovers
+	the method.  This companion unary selector restores the plain ``name''
+	entry so discovery finds the test, then forwards into the varargs body
+	with an empty positional so the injected default supplies the dry-run
+	size."
+	| stream |
+	stream := WriteStream on: Unicode7 new.
+	stream nextPutAll: name; lf.
+	stream nextPutAll: '^ self _'; nextPutAll: name; nextPutAll: ': { } kw: nil'.
+	^ stream contents
 %
 
 category: 'Grail-Module Method Compilation'

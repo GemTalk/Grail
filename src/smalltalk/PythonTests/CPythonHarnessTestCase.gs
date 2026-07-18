@@ -48,7 +48,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	#('__main__' 'test.grail_selfcheck' 'test.grail_feature_check' 'test._grail_harness') do: [:name |
+	#('__main__' 'test.grail_selfcheck' 'test.grail_feature_check' 'test.grail_bigmem_check' 'test._grail_harness') do: [:name |
 		mods @env0:removeKey: name @env0:asSymbol ifAbsent: []].
 %
 
@@ -122,6 +122,33 @@ testUnittestFeatureFixture
 	self assert: (result @env1:__getitem__: 0) equals: 3.
 	self assert: (result @env1:__getitem__: 1) equals: 1.
 	self assert: (result @env1:__getitem__: 2) equals: 0.
+	self assert: (result @env1:__getitem__: 3) equals: true
+%
+
+category: 'Grail-Tests - unittest features'
+method: CPythonHarnessTestCase
+testBigmemtestDecoratorInjection
+	"CPython's @bigmemtest / @bigaddrspacetest decorators wrap a test
+	method and, in a dry run (no ``-M'' memory limit), call it with a
+	small maxsize (5147).  Grail drops the decorator, so FunctionDefAst
+	instead recognises it and injects that dry-run ``size'' default plus a
+	unary forwarder: the method becomes callable with no arguments
+	(size == 5147) AND discoverable by unittest's dir()-based
+	getTestCaseNames.  Regresses both the bare-name (``@bigmemtest'')
+	and attribute (``@support.bigaddrspacetest'') decorator shapes.
+	Without the fix, test_math's test_isqrt_huge / test_log_huge_integer
+	errored (required-argument) or vanished from discovery.  Fixture-
+	based: a class can only be instantiated in a real module scope, not
+	in PythonTestCase>>eval:."
+
+	| mod result |
+	mod := self loadByName: 'test.grail_bigmem_check'.
+	result := mod @env1:RESULT.
+	"Dry-run size default injected for a required trailing param."
+	self assert: (result @env1:__getitem__: 0) equals: 5147.
+	self assert: (result @env1:__getitem__: 1) equals: 5147.
+	"Unary forwarder keeps the method visible to dir()-based discovery."
+	self assert: (result @env1:__getitem__: 2) equals: true.
 	self assert: (result @env1:__getitem__: 3) equals: true
 %
 

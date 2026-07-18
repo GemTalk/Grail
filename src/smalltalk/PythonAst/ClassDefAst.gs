@@ -91,6 +91,11 @@ printSmalltalkRuntimeOn: aStream
 	staticMethodDefs do: [:def | staticFuncNames add: def name asSymbol].
 	varargsFuncNames := IdentitySet new.
 	methodDefs do: [:def |
+		"Normalise ``@bigmemtest''-family test methods up front (inject a
+		dry-run ``size'' default) so the compilesAsVarargs classification
+		just below — and the later source generation — both see the def in
+		its adjusted, varargs form.  No-op for every other method."
+		def applyBigmemtestDefaultIfNeeded.
 		funcNames add: def name asSymbol.
 		"A def that compiles to the varargs ``_name:kw:`` form (complex
 		signature, or __init__ which is forced to varargs so it can bind
@@ -191,6 +196,13 @@ printSmalltalkRuntimeOn: aStream
 				def needsVarargsForwarder ifTrue: [
 					methodSources add: ('_' , def name asString)
 						-> def generateInstanceVarargsForwarderSource].
+				"A ``@bigmemtest''-family method was normalised to the varargs
+				form (a dry-run ``size'' default injected above), which hides
+				it from dir()-based test discovery.  Emit a plain unary
+				forwarder so getTestCaseNames finds it."
+				def isBigmemtestDecorated ifTrue: [
+					methodSources add: ('bigmem_' , def name asString)
+						-> def generateBigmemtestUnaryForwarderSource].
 			] ensure: [CallAst selfParameterName: savedSelfForIM].
 		].
 		"@classmethod bodies use the same per-method source generator

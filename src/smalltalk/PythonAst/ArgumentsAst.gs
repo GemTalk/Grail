@@ -51,6 +51,22 @@ defaults
 
 category: 'Grail-other'
 method: ArgumentsAst
+appendDefault: aNode
+	"Append a synthetic trailing default expression.  Used by the
+	bigmemtest decorator shim (FunctionDefAst>>applyBigmemtestDefaultIfNeeded)
+	to give a required trailing parameter a dry-run default, so a stock
+	CPython ``@bigmemtest''-decorated test method — whose decorator Grail
+	drops — is still callable with no arguments.  Copies into an
+	OrderedCollection first: the parser stores ``defaults'' as a fixed
+	Array (``Array new'' when the def has no defaults), which cannot grow."
+	defaults := defaults isNil
+		ifTrue: [OrderedCollection new]
+		ifFalse: [OrderedCollection withAll: defaults].
+	defaults add: aNode.
+%
+
+category: 'Grail-other'
+method: ArgumentsAst
 kw_defaults
 
 	^kw_defaults
