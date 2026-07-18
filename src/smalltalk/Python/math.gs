@@ -849,39 +849,160 @@ method: math
 sumprod: pIter _: qIter
 	"sumprod(p, q) -> sum of the products of parallel elements (3.12+).
 
-	When every element is a real number (Float/Integer/Boolean) the dot
-	product is accumulated as an EXACT rational and rounded once at the end,
-	so cancelling magnitudes keep their tail (sumprod([1, 1e101, 1, -1e101],
-	[1]*4) == 2.0, not 0.0) -- a naive running float sum double-rounds.  An
-	all-integer input keeps an exact integer result.  A non-real element
-	(Fraction/Decimal/custom) falls back to the env-1 __add__/__mul__ dunder
-	protocol (env-0 arithmetic would die in the classic 1-arg DNU)."
+	Faithful port of CPython's math_sumprod (Modules/mathmodule.c): three
+	cooperating accumulators, each disabled the moment a pair no longer fits
+	it, so the observable rounding matches CPython element-for-element:
+	  1. an EXACT integer accumulator for a leading run of int*int pairs
+	     (arbitrary-precision here -- no C-long overflow flush needed);
+	  2. a compensated TripleLength (hi/lo/tiny) accumulator for the
+	     float-involved pairs (float*float, float*int, int*float), giving
+	     correctly-rounded dot products (test_sumprod_accuracy) yet still
+	     matching CPython when a later int*int pair kicks summation back to
+	     ordinary float arithmetic (so sumprod([-7.5, -5*2**62, 10*2**61],
+	     [1,1,1]) == 0.0, the small term lost -- NOT the exact -7.5);
+	  3. a general env-1 __mul__/__add__ path for everything else
+	     (Fraction/Decimal type preservation, and the int-too-large-to-
+	     convert-to-double OverflowError that CPython raises in the multiply).
+	An inf/nan operand naturally leaves the float path (its tl.hi is
+	non-finite) and finishes through the general path with IEEE semantics."
 
-	| ps qs sum allReal anyFloat check acc |
+	| ps qs total intTotal fltHi fltLo fltTiny intOn fltOn intInUse fltInUse |
 	ps := self @env1:___materialize___: pIter.
 	qs := self @env1:___materialize___: qIter.
-	ps @env0:size @env0:= qs @env0:size ifFalse: [
+	(ps @env0:size @env0:= qs @env0:size) @env0:ifFalse: [
 		ValueError ___signal___: 'Inputs are not the same length'].
-	allReal := true.
-	anyFloat := false.
-	check := [:v |
-		(v @env0:isKindOf: Float)
-			ifTrue: [anyFloat := true]
-			ifFalse: [((v @env0:isKindOf: Integer) or: [v @env0:isKindOf: Boolean])
-				ifFalse: [allReal := false]]].
-	ps @env0:do: check.
-	qs @env0:do: check.
-	allReal ifTrue: [
-		acc := 0.
-		1 @env0:to: ps @env0:size do: [:i |
-			acc := acc @env0:+ ((self @env1:___realToExact___: (ps @env0:at: i))
-				@env0:* (self @env1:___realToExact___: (qs @env0:at: i)))].
-		^ anyFloat ifTrue: [acc @env0:asFloat] ifFalse: [acc]].
-	sum := 0.
+	total := 0.
+	intTotal := 0.
+	fltHi := 0.0. fltLo := 0.0. fltTiny := 0.0.
+	intOn := true. fltOn := true.
+	intInUse := false. fltInUse := false.
 	1 @env0:to: ps @env0:size do: [:i |
-		sum := sum @env1:__add__:
-			((ps @env0:at: i) @env1:__mul__: (qs @env0:at: i))].
-	^ sum
+		| p q handled tl |
+		p := ps @env0:at: i.
+		q := qs @env0:at: i.
+		handled := false.
+		"Integer fast path: exact accumulation of a leading int*int run."
+		intOn @env0:ifTrue: [
+			((p @env0:isKindOf: Integer) @env0:and: [q @env0:isKindOf: Integer])
+				@env0:ifTrue: [
+					intTotal := intTotal @env0:+ (p @env0:* q).
+					intInUse := true.
+					handled := true]
+				@env0:ifFalse: [
+					intOn := false.
+					intInUse @env0:ifTrue: [
+						total := total @env1:__add__: intTotal.
+						intTotal := 0. intInUse := false]]].
+		"Float path: TripleLength compensated dot-product accumulation."
+		(handled @env0:not @env0:and: [fltOn]) @env0:ifTrue: [
+			| pFlt qFlt canFlt |
+			pFlt := p @env0:isKindOf: Float.
+			qFlt := q @env0:isKindOf: Float.
+			canFlt := (pFlt @env0:and: [qFlt])
+				@env0:or: [(pFlt @env0:and: [(q @env0:isKindOf: Integer) @env0:or: [q @env0:isKindOf: Boolean]])
+				@env0:or: [qFlt @env0:and: [(p @env0:isKindOf: Integer) @env0:or: [p @env0:isKindOf: Boolean]]]].
+			canFlt @env0:ifTrue: [
+				tl := self @env1:___tlFma___: (p @env0:asFloat) _: (q @env0:asFloat)
+					hi: fltHi lo: fltLo tiny: fltTiny.
+				(self @env1:___fltFinite___: (tl @env0:at: 1)) @env0:ifTrue: [
+					fltHi := tl @env0:at: 1. fltLo := tl @env0:at: 2. fltTiny := tl @env0:at: 3.
+					fltInUse := true.
+					handled := true]].
+			handled @env0:ifFalse: [
+				fltOn := false.
+				fltInUse @env0:ifTrue: [
+					total := total @env1:__add__:
+						(self @env1:___tlToD___: fltHi lo: fltLo tiny: fltTiny).
+					fltHi := 0.0. fltLo := 0.0. fltTiny := 0.0. fltInUse := false]]].
+		"General path: env-1 protocol (Fraction/Decimal, error propagation)."
+		handled @env0:ifFalse: [
+			| pInt qInt pFl qFl |
+			pInt := p @env0:isKindOf: Integer.
+			qInt := q @env0:isKindOf: Integer.
+			pFl := p @env0:isKindOf: Float.
+			qFl := q @env0:isKindOf: Float.
+			"An int too large to convert to a double overflows -- CPython
+			raises OverflowError from PyNumber_Multiply's int->float coercion."
+			((pInt @env0:and: [qFl]) @env0:or: [qInt @env0:and: [pFl]]) @env0:ifTrue: [
+				| theInt |
+				theInt := pInt @env0:ifTrue: [p] @env0:ifFalse: [q].
+				(self @env1:___fltFinite___: (theInt @env0:asFloat)) @env0:ifFalse: [
+					OverflowError ___signal___: 'int too large to convert to float']].
+			total := total @env1:__add__: (p @env1:__mul__: q)]].
+	"Flush any surviving sub-totals -- int before float, matching CPython."
+	intInUse @env0:ifTrue: [total := total @env1:__add__: intTotal].
+	fltInUse @env0:ifTrue: [
+		total := total @env1:__add__: (self @env1:___tlToD___: fltHi lo: fltLo tiny: fltTiny)].
+	^ total
+%
+
+category: 'Grail-Math Functions'
+method: math
+___fltFinite___: f
+	"True if the Float f is finite (not NaN, not +/-inf).  GemStone Float
+	understands neither isNaN nor isInfinite, so probe via _isNaN and a
+	magnitude compare against PlusInfinity."
+
+	^ (f @env0:_isNaN) @env0:not @env0:and: [(f @env0:abs) @env0:~= PlusInfinity]
+%
+
+category: 'Grail-Math Functions'
+method: math
+___dlSum___: a _: b
+	"Error-free transformation of a sum (Knuth 2Sum, Algorithm 3.1):
+	returns {x. y} with x = fl(a+b) and y the exact rounding error, so
+	a + b == x + y with no ordering requirement on |a|,|b|."
+
+	| x z y |
+	x := a @env0:+ b.
+	z := x @env0:- a.
+	y := (a @env0:- (x @env0:- z)) @env0:+ (b @env0:- z).
+	^ Array @env0:with: x @env0:with: y
+%
+
+category: 'Grail-Math Functions'
+method: math
+___dlMul___: x _: y
+	"Error-free transformation of a product: returns {z. zz} with
+	z = fl(x*y) and zz the exact rounding error (x*y == z + zz).  CPython
+	uses fma(x,y,-z); GemStone has no float fma primitive, so the exact low
+	part is recovered from the EXACT rational product (asFraction is exact).
+	A non-finite product short-circuits (zz irrelevant -- the caller rejects
+	a non-finite hi)."
+
+	| z |
+	z := x @env0:* y.
+	(self @env1:___fltFinite___: z) @env0:ifFalse: [^ Array @env0:with: z @env0:with: 0.0].
+	^ Array @env0:with: z
+		@env0:with: (((x @env0:asFraction) @env0:* (y @env0:asFraction))
+			@env0:- (z @env0:asFraction)) @env0:asFloat
+%
+
+category: 'Grail-Math Functions'
+method: math
+___tlFma___: x _: y hi: h lo: l tiny: t
+	"TripleLength fused-multiply-add (CPython tl_fma, Algorithm 5.10 SumKVert
+	K=3): accumulate the exact product x*y into the (hi, lo, tiny)
+	triple-length total.  Returns {hi. lo. tiny}."
+
+	| pr sm r1 r2 |
+	pr := self @env1:___dlMul___: x _: y.
+	sm := self @env1:___dlSum___: h _: (pr @env0:at: 1).
+	r1 := self @env1:___dlSum___: l _: (pr @env0:at: 2).
+	r2 := self @env1:___dlSum___: (r1 @env0:at: 1) _: (sm @env0:at: 2).
+	^ Array @env0:with: (sm @env0:at: 1) @env0:with: (r2 @env0:at: 1)
+		@env0:with: ((t @env0:+ (r1 @env0:at: 2)) @env0:+ (r2 @env0:at: 2))
+%
+
+category: 'Grail-Math Functions'
+method: math
+___tlToD___: h lo: l tiny: t
+	"Collapse a TripleLength (hi, lo, tiny) to the nearest double
+	(CPython tl_to_d)."
+
+	| last |
+	last := self @env1:___dlSum___: l _: h.
+	^ (t @env0:+ (last @env0:at: 2)) @env0:+ (last @env0:at: 1)
 %
 
 category: 'Grail-Math Functions'

@@ -182,6 +182,53 @@ class _NeverEqual:
 NEVER_EQ = _NeverEqual()
 
 
+class BrokenIter:
+    """Iterator whose __init__/__next__/__iter__ can be told to raise, used by
+    test_iter to check the interpreter handles exceptions from the iterator
+    protocol.  Verbatim from CPython's test.support."""
+
+    def __init__(self, init_raises=False, next_raises=False, iter_raises=False):
+        if init_raises:
+            1 / 0
+        self.next_raises = next_raises
+        self.iter_raises = iter_raises
+
+    def __next__(self):
+        if self.next_raises:
+            1 / 0
+
+    def __iter__(self):
+        if self.iter_raises:
+            1 / 0
+        return self
+
+
+def check_free_after_iterating(test, iter, cls, args=()):
+    """Assert that iterating ``cls`` frees the sequence right after iteration
+    ends (CPython issue 26494).  Verbatim from CPython's test.support; relies
+    on __del__ running deterministically."""
+    done = False
+
+    def wrapper():
+        class A(cls):
+            def __del__(self):
+                nonlocal done
+                done = True
+                try:
+                    next(it)
+                except StopIteration:
+                    pass
+
+        it = iter(A(*args))
+        # Issue 26494: Shouldn't crash
+        test.assertRaises(StopIteration, next, it)
+
+    wrapper()
+    # The sequence should be deallocated just after the end of iterating
+    gc_collect()
+    test.assertTrue(done)
+
+
 class EqualToForwardRef:
     """Minimal stand-in used by a few typing-adjacent tests."""
 

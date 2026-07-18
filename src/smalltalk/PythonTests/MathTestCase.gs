@@ -778,4 +778,48 @@ testAddedFunctions
 		{ ((Python @env0:at: #float) @env1:fromhex: '0x1.10e89518dca48p+29').
 		  ((Python @env0:at: #float) @env1:fromhex: '0x1.1970f7565b7efp+30') } kw: nil)
 		equals: 1311878501.7832494
+%
+
+category: 'Grail-Tests - Added Functions'
+method: MathTestCase
+testSumprod
+	"sumprod is a faithful port of CPython's math_sumprod (three-phase
+	accumulation: exact int, compensated TripleLength float, general
+	protocol).  Cases from CPython test_math testSumProd exercise the
+	behaviours the port must reproduce EXACTLY -- including where it
+	deliberately loses accuracy to match CPython (the first case: a small
+	term behind a later int cancellation), not just where it is accurate."
+
+	"Exact integer dot product stays an integer (type preserved)."
+	self assert: (self eval: 'import math
+math.sumprod((10,20,30),(10,20,30))') equals: 1400.
+	self assert: (self eval: 'import math
+type(math.sumprod((10,20,30),(1,2,3))).__name__') equals: 'Integer'.
+	self assert: (self eval: 'import math
+math.sumprod([10**20],[1])') equals: (10 @env0:raisedTo: 20).
+	"Compensated float sum: -7.5 lost behind a later exact int cancellation
+	(CPython gives 0.0, NOT the exact -7.5); a mid-stream small term kept
+	when it stays in the float path (1.0)."
+	self assert: (self eval: 'import math
+math.sumprod([-7.5, -5*2**62, 10*2**61],[1,1,1])') equals: 0.0.
+	self assert: (self eval: 'import math
+math.sumprod([1e100, 1.0, -1e100],[1,1,1])') equals: 1.0.
+	self assert: (self eval: 'import math
+math.sumprod([0.1]*10,[1]*10)') equals: 1.0.
+	self assert: (self eval: 'import math
+math.sumprod((-5,-5,10),(1.5,4611686018427387904,2305843009213693952))') equals: 0.0.
+	"IEEE special values match the pure recipe (inf beats finite, nan wins)."
+	self assert: (self eval: 'import math
+math.sumprod([10.1, math.inf],[20.2,30.3])') equals: PlusInfinity.
+	self assert: (self eval: 'import math
+math.isnan(math.sumprod([10.1, math.inf],[-math.inf, math.inf]))') equals: true.
+	"An int too large to convert to a double is an OverflowError."
+	self should: [self eval: 'import math
+math.sumprod([10**1000],[1.0])'] raise: OverflowError.
+	self should: [self eval: 'import math
+math.sumprod([1.0],[10**1000])'] raise: OverflowError.
+	"Unequal lengths -> ValueError."
+	self should: [self eval: 'import math
+math.sumprod([1,2],[3])'] raise: ValueError
+%
 

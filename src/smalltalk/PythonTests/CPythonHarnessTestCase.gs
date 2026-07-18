@@ -48,7 +48,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	#('__main__' 'test.grail_selfcheck' 'test.grail_feature_check' 'test.grail_bigmem_check' 'test._grail_harness') do: [:name |
+	#('__main__' 'test.grail_selfcheck' 'test.grail_feature_check' 'test.grail_bigmem_check' 'test.grail_iter_check' 'test._grail_harness') do: [:name |
 		mods @env0:removeKey: name @env0:asSymbol ifAbsent: []].
 %
 
@@ -150,6 +150,25 @@ testBigmemtestDecoratorInjection
 	"Unary forwarder keeps the method visible to dir()-based discovery."
 	self assert: (result @env1:__getitem__: 2) equals: true.
 	self assert: (result @env1:__getitem__: 3) equals: true
+%
+
+category: 'Grail-Tests - vendored test deps'
+method: CPythonHarnessTestCase
+testTestIterImportAndSumprod
+	"The vendored test.test_iter imports cleanly (pulling in pickle,
+	traceback, test.support.os_helper, and the check_free_after_iterating /
+	BrokenIter support symbols), so ``from test.test_iter import
+	BasicIterClass'' resolves -- test_math's testSumProd depends on it.
+	math.sumprod also consumes the bare BasicIterClass iterator (values sum
+	to 0).  Fixture-based: the import executes the whole test_iter body and
+	instantiates BasicIterClass, which needs real module scope."
+
+	| mod result |
+	mod := self loadByName: 'test.grail_iter_check'.
+	result := mod @env1:RESULT.
+	self assert: (result @env1:__getitem__: 0) equals: 0.
+	self assert: (result @env1:__getitem__: 1) equals: 0.
+	self assert: (result @env1:__getitem__: 2) equals: 'BasicIterClass'
 %
 
 category: 'Grail-Tests - unittest features'
