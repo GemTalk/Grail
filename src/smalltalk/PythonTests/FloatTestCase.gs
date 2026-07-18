@@ -590,6 +590,24 @@ testHex
 
 category: 'Grail-Tests - Float Methods'
 method: FloatTestCase
+testFromStringSpecials
+	"float() parses inf/infinity/nan CASE-INSENSITIVELY with an optional sign
+	(CPython): float('NaN'), 'Infinity', 'INF', '-Infinity'.  Previously only
+	exact lowercase 'inf'/'nan' matched, so float('NaN') was a ValueError
+	(test.test_math test_sumprod_stress)."
+
+	| fl |
+	fl := Python @env0:at: #float.
+	self assert: ((fl @env1:___newFromString___: 'NaN') @env0:_isNaN).
+	self assert: ((fl @env1:___newFromString___: 'NAN') @env0:_isNaN).
+	self assert: (fl @env1:___newFromString___: 'Infinity') equals: PlusInfinity.
+	self assert: (fl @env1:___newFromString___: 'INF') equals: PlusInfinity.
+	self assert: (fl @env1:___newFromString___: '-Infinity') equals: MinusInfinity.
+	self assert: (fl @env1:___newFromString___: 'inf') equals: PlusInfinity
+%
+
+category: 'Grail-Tests - Float Methods'
+method: FloatTestCase
 testFromHex
 	"float.fromhex parses [sign] 0x hexdigits [.hexdigits] [p decexp] EXACTLY
 	(the value is the rational M * 2**(p - 4f) rounded once), plus the

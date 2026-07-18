@@ -78,19 +78,22 @@ classmethod: float
 ___newFromString___: str
 	"Helper method to convert string to float, handling special values"
 
-	| trimmed |
+	| trimmed lower |
 	trimmed := str @env0:trimBoth.
 
-	"Handle special string values - use GemStone's class variables"
-	(trimmed @env0:= 'inf') ifTrue: [ ^ PlusInfinity ].
-	(trimmed @env0:= '+inf') ifTrue: [ ^ PlusInfinity ].
-	(trimmed @env0:= '-inf') ifTrue: [ ^ MinusInfinity ].
-	(trimmed @env0:= 'infinity') ifTrue: [ ^ PlusInfinity ].
-	(trimmed @env0:= '+infinity') ifTrue: [ ^ PlusInfinity ].
-	(trimmed @env0:= '-infinity') ifTrue: [ ^ MinusInfinity ].
-	(trimmed @env0:= 'nan') ifTrue: [ ^ PlusQuietNaN ].
-	(trimmed @env0:= '+nan') ifTrue: [ ^ PlusQuietNaN ].
-	(trimmed @env0:= '-nan') ifTrue: [ ^ MinusQuietNaN ].
+	"Handle special string values -- CPython float() is CASE-INSENSITIVE and
+	accepts inf/infinity/nan with an optional sign (float('NaN'), 'Infinity',
+	'INF')."
+	lower := trimmed @env0:asLowercase.
+	(lower @env0:= 'inf') ifTrue: [ ^ PlusInfinity ].
+	(lower @env0:= '+inf') ifTrue: [ ^ PlusInfinity ].
+	(lower @env0:= '-inf') ifTrue: [ ^ MinusInfinity ].
+	(lower @env0:= 'infinity') ifTrue: [ ^ PlusInfinity ].
+	(lower @env0:= '+infinity') ifTrue: [ ^ PlusInfinity ].
+	(lower @env0:= '-infinity') ifTrue: [ ^ MinusInfinity ].
+	(lower @env0:= 'nan') ifTrue: [ ^ PlusQuietNaN ].
+	(lower @env0:= '+nan') ifTrue: [ ^ PlusQuietNaN ].
+	(lower @env0:= '-nan') ifTrue: [ ^ MinusQuietNaN ].
 
 	"Parse via the vendor number reader ``Number>>fromStream:'' rather than
 	``CharacterCollection>>asNumber'': some images load a Squeak-compatibility
