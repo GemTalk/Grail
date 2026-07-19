@@ -211,6 +211,19 @@ __abs__
 	^ self @env0:abs
 %
 
+category: 'Grail-Type'
+method: float
+__class__
+	"Python ``type(x)'' is ``float'' for every float.  GemStone's concrete
+	representations (immediate SmallDouble, heap Float) are an
+	implementation detail; without this override ``type(5.0)'' answers
+	SmallDouble and ``type(5.0) is float'' — and test_math test_prod's
+	``type(prod([1, 2.0, ...])) == float'' — are False.  Mirrors
+	int>>__class__ (SmallInteger/LargeInteger → int)."
+
+	^ float
+%
+
 category: 'Grail-String Representation'
 method: float
 __format__: formatSpec

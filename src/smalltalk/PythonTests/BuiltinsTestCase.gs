@@ -1068,6 +1068,23 @@ testIntegerTypeIsInt
 
 category: 'Grail-Tests - Type Checks'
 method: BuiltinsTestCase
+testFloatTypeIsFloat
+	"``type(x) is float'' holds for every float, whatever GemStone's
+	concrete representation (immediate SmallDouble vs heap Float);
+	isinstance is unaffected.  Regression for float>>__class__ (mirrors
+	int>>__class__), which test_math test_prod's type-preservation checks
+	(``type(prod([1, 2.0, ...])) == float'') depend on."
+
+	self assert: (self eval: 'type(5.0) is float').
+	self assert: (self eval: 'type(0.1) is float').
+	self assert: (self eval: 'type(-1e308 * 10) is float').
+	self assert: (self eval: 'type(1.0 + 2) is float').
+	self assert: (self eval: 'isinstance(5.0, float)').
+	self assert: (self eval: 'type(5.0) is not int')
+%
+
+category: 'Grail-Tests - Type Checks'
+method: BuiltinsTestCase
 testIsinstanceStrAcceptsWideStrings
 	"Every text string class counts as str (CPython: all text IS str).
 	str maps to Unicode7 for construction, but wide literals come back

@@ -823,3 +823,45 @@ math.sumprod([1.0],[10**1000])'] raise: OverflowError.
 math.sumprod([1,2],[3])'] raise: ValueError
 %
 
+category: 'Grail-Tests - Added Functions'
+method: MathTestCase
+testProd
+	"math.prod argument validation + type preservation (test_math
+	test_prod).  ``iterable'' is the sole positional argument (``start''
+	is keyword-only): zero or too many positionals is a TypeError, NOT the
+	uncatchable env-0 OffsetError that ``positional at: 1'' raised on an
+	empty array.  Result type follows the operands (int/float/Decimal),
+	which relies on int>>__class__ and float>>__class__."
+
+	"Argument-count errors are catchable TypeErrors, not an OffsetError."
+	self should: [self eval: 'import math
+math.prod()'] raise: TypeError.
+	self should: [self eval: 'import math
+math.prod([10, 20], 1)'] raise: TypeError.
+	"Basic products and a keyword start."
+	self assert: (self eval: 'import math
+math.prod([1, 2, 3, 4, 5])') equals: 120.
+	self assert: (self eval: 'import math
+math.prod(range(1, 10), start=10)') equals: 3628800.
+	"Type preservation: int stays int, a float operand makes it float,
+	huge exact integer stays int."
+	self assert: (self eval: 'import math
+type(math.prod([1, 2, 3, 4, 5, 6])) is int') equals: true.
+	self assert: (self eval: 'import math
+type(math.prod([1, 2.0, 3, 4, 5, 6])) is float') equals: true.
+	self assert: (self eval: 'import math
+math.prod(range(1, 10000)) == math.factorial(9999)') equals: true.
+	"A zero factor short-circuits; an all-float range that overflows then
+	meets 0.0 is NaN."
+	self assert: (self eval: 'import math
+math.prod([1, 2, 3, 0])') equals: 0.
+	self assert: (self eval: 'import math
+math.isnan(math.prod([float(x) for x in range(-1000, 1000)]))') equals: true.
+	"Non-numeric factors raise a catchable TypeError; a string/list start
+	repeats."
+	self should: [self eval: 'import math
+math.prod([[1], [2], [3]])'] raise: TypeError.
+	self assert: (self eval: 'import math
+math.prod([2, 3], start=''ab'')') equals: 'abababababab'
+%
+

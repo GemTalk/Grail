@@ -1211,9 +1211,17 @@ prod: iterable
 category: 'Grail-Math Functions'
 method: math
 _prod: positional kw: kwargs
-	"math.prod(iterable, *, start=1)."
+	"math.prod(iterable, *, start=1).  ``iterable'' is the sole positional
+	argument (``start'' is keyword-only), so anything other than exactly
+	one positional is a TypeError -- guard it BEFORE ``positional at: 1'',
+	which on an empty array (math.prod() with no args) would otherwise be
+	an uncatchable env-0 OffsetError instead of the Python TypeError the
+	call expects."
 
 	| acc |
+	positional @env0:size @env0:= 1 ifFalse: [
+		TypeError ___signal___: 'prod expected 1 positional argument (the iterable), got '
+			@env0:, positional @env0:size @env0:printString].
 	acc := (kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'start'])
 		ifTrue: [kwargs @env0:at: 'start'] ifFalse: [1].
 	(self @env1:___materialize___: (positional @env0:at: 1)) @env0:do: [:v |
