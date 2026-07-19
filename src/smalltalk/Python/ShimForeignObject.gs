@@ -145,3 +145,5 @@ ___pyAttrLoad___: aSym
 	^ AttributeError ___signal___:
 		'foreign object has no attribute ''', aSym @env0:asString, ''''
 %
+
+set compile_env: 0

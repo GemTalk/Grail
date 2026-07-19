@@ -291,3 +291,5 @@ ___compileMethod: aSource category: aCategory
 							@env0:, (ex @env0:messageText @env0:ifNil: ['(no details)']))]].
 	^ self
 %
+
+set compile_env: 0
