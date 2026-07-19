@@ -278,8 +278,8 @@ testSubn
 
 	| result |
 	result := re @env1:subn: 'a' _: 'X' _: 'banana'.
-	self assert: (result @env0:at: 1) equals: 'bXnXnX'.
-	self assert: (result @env0:at: 2) equals: 3.
+	self assert: (result at: 1) equals: 'bXnXnX'.
+	self assert: (result at: 2) equals: 3.
 %
 
 category: 'Grail-Tests - sub with templates'
@@ -335,8 +335,8 @@ testSubnBackref
 
 	| result |
 	result := re @env1:subn: '(\w+)' _: '<\1>' _: 'hello world'.
-	self assert: (result @env0:at: 1) equals: '<hello> <world>'.
-	self assert: (result @env0:at: 2) equals: 2.
+	self assert: (result at: 1) equals: '<hello> <world>'.
+	self assert: (result at: 2) equals: 2.
 %
 
 category: 'Grail-Tests - sub with templates'
@@ -375,10 +375,10 @@ testGroupSpan
 	m := (re @env1:compile: 'h(.)llo') @env1:match: 'hello'.
 	s0 := m @env1:span: 0.
 	s1 := m @env1:span: 1.
-	self assert: (s0 @env0:at: 1) equals: 0.
-	self assert: (s0 @env0:at: 2) equals: 5.
-	self assert: (s1 @env0:at: 1) equals: 1.
-	self assert: (s1 @env0:at: 2) equals: 2.
+	self assert: (s0 at: 1) equals: 0.
+	self assert: (s0 at: 2) equals: 5.
+	self assert: (s1 at: 1) equals: 1.
+	self assert: (s1 at: 2) equals: 2.
 %
 
 category: 'Grail-Tests - Non-ASCII subjects'

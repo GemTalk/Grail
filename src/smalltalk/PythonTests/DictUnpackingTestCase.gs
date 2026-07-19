@@ -42,9 +42,9 @@ method: DictUnpackingTestCase
 loadFixture
 	"Load tests/python/dict_unpacking.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'dict_unpacking' ifAbsent: [].
+	importlib @env1:modules removeKey: #'dict_unpacking' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/dict_unpacking.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/dict_unpacking.py')
 		name: 'dict_unpacking'
 %
 
@@ -57,7 +57,7 @@ testBasicUnpack
 	d := self loadFixture @env1:basic_unpack.
 	self assert: (d @env1:__getitem__: 'x') equals: 1.
 	self assert: (d @env1:__getitem__: 'y') equals: 2.
-	self assert: d @env0:size equals: 2
+	self assert: d size equals: 2
 %
 
 category: 'Grail-Tests-DictUnpacking'
@@ -69,7 +69,7 @@ testMergeTwo
 	d := self loadFixture @env1:merge_two.
 	self assert: (d @env1:__getitem__: 'x') equals: 1.
 	self assert: (d @env1:__getitem__: 'y') equals: 2.
-	self assert: d @env0:size equals: 2
+	self assert: d size equals: 2
 %
 
 category: 'Grail-Tests-DictUnpacking'
@@ -83,7 +83,7 @@ testUnpackBetweenLiterals
 	self assert: (d @env1:__getitem__: 'before') equals: 0.
 	self assert: (d @env1:__getitem__: 'mid') equals: 5.
 	self assert: (d @env1:__getitem__: 'after') equals: 9.
-	self assert: d @env0:size equals: 3
+	self assert: d size equals: 3
 %
 
 category: 'Grail-Tests-DictUnpacking'
@@ -95,7 +95,7 @@ testLaterKeyOverwrites
 	| d |
 	d := self loadFixture @env1:later_key_overwrites.
 	self assert: (d @env1:__getitem__: 'x') equals: 99.
-	self assert: d @env0:size equals: 1
+	self assert: d size equals: 1
 %
 
 category: 'Grail-Tests-DictUnpacking'
@@ -106,5 +106,5 @@ testUnpackEmpty
 	| d |
 	d := self loadFixture @env1:unpack_empty.
 	self assert: (d @env1:__getitem__: 'keep') equals: 1.
-	self assert: d @env0:size equals: 1
+	self assert: d size equals: 1
 %

@@ -51,7 +51,7 @@ testSetattrAndGetattrRoundTrip
 	test of the ExecBlock __setattr__:_: / __getattr__: pair."
 
 	| block |
-	block := [:x | x @env0:+ 1].
+	block := [:x | x + 1].
 	block @env1:__setattr__: 'foo' _: 42.
 	self assert: (block @env1:__getattr__: 'foo') equals: 42
 %
@@ -66,7 +66,7 @@ testGetattrOnUnsetAttrRaisesAttributeError
 	block := [:x | x].
 	raised := false.
 	[block @env1:__getattr__: 'never_set']
-		@env0:on: AttributeError
+		on: AttributeError
 		do: [:ex | raised := true].
 	self assert: raised
 %
@@ -96,7 +96,7 @@ testAttributesAreIdentityScoped
 	blockA @env1:__setattr__: 'tag' _: 'A'.
 	raised := false.
 	[blockB @env1:__getattr__: 'tag']
-		@env0:on: AttributeError
+		on: AttributeError
 		do: [:ex | raised := true].
 	self assert: raised.
 	self assert: (blockA @env1:__getattr__: 'tag') equals: 'A'

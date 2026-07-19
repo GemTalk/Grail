@@ -439,14 +439,14 @@ finditer: aString
 	iterable in Python; werkzeug.routing uses ``for m in p.finditer(s)'').
 	Walks the string with scanner semantics (see
 	___searchFrom___:in:to:mustAdvance:)."
-	^ self @env1:finditer: aString _: 0 _: aString @env0:size
+	^ self finditer: aString _: 0 _: aString @env0:size
 %
 
 category: 'Grail-Methods'
 method: SrePattern
 finditer: aString _: pos
 	"finditer(string, pos) -> iterator of SreMatch."
-	^ self @env1:finditer: aString _: pos _: aString @env0:size
+	^ self finditer: aString _: pos _: aString @env0:size
 %
 
 category: 'Grail-Methods'
@@ -461,11 +461,11 @@ finditer: aString _: pos _: endpos
 	cursor := pos.
 	mustAdvance := false.
 	[cursor @env0:<= endpos] @env0:whileTrue: [
-		m := self @env1:___searchFrom___: cursor in: aString to: endpos mustAdvance: mustAdvance.
+		m := self ___searchFrom___: cursor in: aString to: endpos mustAdvance: mustAdvance.
 		(m == None) ifTrue: [^ matches].
 		matches @env0:add: m.
-		mStart := m @env1:start.
-		mEnd := m @env1:end.
+		mStart := m start.
+		mEnd := m end.
 		mustAdvance := mEnd @env0:= mStart.
 		cursor := mEnd
 	].
@@ -490,7 +490,7 @@ category: 'Grail-Methods'
 method: SrePattern
 sub: repl _: aString
 	"sub(repl, string) -> str"
-	^ self @env1:sub: repl _: aString _: 0
+	^ self sub: repl _: aString _: 0
 %
 
 category: 'Grail-Methods'
@@ -506,12 +506,12 @@ sub: repl _: aString _: count
 	OOP-marshalling can't carry without an SreTemplate wrapper.
 	Literal replacements still take the C fast path."
 
-	(self @env1:___isLiteralRepl___: repl) ifTrue: [
+	(self ___isLiteralRepl___: repl) ifTrue: [
 		^ (CPythonShim @env0:current)
 			@env0:callTyped: '_sre' type: 'Pattern' method: 'sub' selfPtr: (self @env0:cPtrAddress)
 			with: repl with: aString with: count
 	].
-	^ (self @env1:___subWithExpansion___: repl in: aString count: count subn: false)
+	^ (self ___subWithExpansion___: repl in: aString count: count subn: false)
 %
 
 category: 'Grail-Methods'
@@ -531,7 +531,7 @@ category: 'Grail-Methods'
 method: SrePattern
 subn: repl _: aString
 	"subn(repl, string) -> (str, int)"
-	^ self @env1:subn: repl _: aString _: 0
+	^ self subn: repl _: aString _: 0
 %
 
 category: 'Grail-Methods'
@@ -540,12 +540,12 @@ subn: repl _: aString _: count
 	"subn(repl, string, count) -> (str, int).  See sub:_:_: for
 	why non-literal replacements expand on the Grail side."
 
-	(self @env1:___isLiteralRepl___: repl) ifTrue: [
+	(self ___isLiteralRepl___: repl) ifTrue: [
 		^ (CPythonShim @env0:current)
 			@env0:callTyped: '_sre' type: 'Pattern' method: 'subn' selfPtr: (self @env0:cPtrAddress)
 			with: repl with: aString with: count
 	].
-	^ (self @env1:___subWithExpansion___: repl in: aString count: count subn: true)
+	^ (self ___subWithExpansion___: repl in: aString count: count subn: true)
 %
 
 category: 'Grail-Methods'
@@ -582,7 +582,7 @@ method: SrePattern
 ___isLiteralRepl___: repl
 	"Forward to the class-side rule so subn:_:_: shares it too."
 
-	^ self @env0:class @env1:___isLiteralRepl___: repl
+	^ self @env0:class ___isLiteralRepl___: repl
 %
 
 category: 'Grail-Methods - Private'
@@ -598,7 +598,7 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 	(String, count) tuple when true (the subn return shape)."
 
 	| parser template parts pos m mEnd mStart expanded numSubs result tail emptySep mustAdvance |
-	parser := importlib @env1:modules @env0:at: #'re._parser'.
+	parser := importlib modules @env0:at: #'re._parser'.
 	"A bytes pattern substituting over a bytes subject must return
 	bytes (CPython semantics) — join with an empty ByteArray so the
 	result class follows the subject.  The old unconditional '' join
@@ -614,7 +614,7 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 		or: [(repl isKindOf: ExecBlock)
 			or: [repl isKindOf: GsNMethod]])
 		ifTrue: [template := nil]
-		ifFalse: [template := parser @env1:parse_template: repl _: self].
+		ifFalse: [template := parser parse_template: repl _: self].
 	parts := OrderedCollection @env0:new.
 	pos := 0.
 	numSubs := 0.
@@ -624,8 +624,8 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 			"Reached count limit; break with tail kept."
 			parts @env0:add: (aString @env0:copyFrom: pos @env0:+ 1 to: aString @env0:size).
 			^ returnTuple
-				ifTrue: [(tuple @env0:withAll: { (emptySep @env1:join: parts). numSubs })]
-				ifFalse: [emptySep @env1:join: parts]
+				ifTrue: [(tuple @env0:withAll: { (emptySep join: parts). numSubs })]
+				ifFalse: [emptySep join: parts]
 		].
 		"Scanner semantics (CPython pattern_subx): after a zero-width
 		match the next search runs from the SAME position with
@@ -634,15 +634,15 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 		zero-width match at end-of-string, never terminated -- the C
 		engine clamps a pos beyond len back to len, so plain search
 		re-returned the same (len,len) match forever (test_zerowidth)."
-		m := self @env1:___searchFrom___: pos in: aString to: aString @env0:size mustAdvance: mustAdvance.
+		m := self ___searchFrom___: pos in: aString to: aString @env0:size mustAdvance: mustAdvance.
 		(m == nil or: [m == None]) ifTrue: [
 			parts @env0:add: (aString @env0:copyFrom: pos @env0:+ 1 to: aString @env0:size).
 			^ returnTuple
-				ifTrue: [(tuple @env0:withAll: { (emptySep @env1:join: parts). numSubs })]
-				ifFalse: [emptySep @env1:join: parts]
+				ifTrue: [(tuple @env0:withAll: { (emptySep join: parts). numSubs })]
+				ifFalse: [emptySep join: parts]
 		].
-		mStart := m @env1:start.
-		mEnd := m @env1:end.
+		mStart := m start.
+		mEnd := m end.
 		"Prefix from pos to match start."
 		mStart @env0:> pos ifTrue: [
 			parts @env0:add: (aString @env0:copyFrom: pos @env0:+ 1 to: mStart)
@@ -663,10 +663,10 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 						repl @env0:numArgs @env0:= 2
 							ifTrue: [repl @env0:value: { m } value: nil]
 							ifFalse: [repl @env0:value: m]]
-					ifFalse: [repl @env1:value: { m } value: nil]
+					ifFalse: [repl value: { m } value: nil]
 			]
 			ifFalse: [
-				expanded := self @env1:___expandTemplate___: template withMatch: m
+				expanded := self ___expandTemplate___: template withMatch: m
 			].
 		parts @env0:add: expanded.
 		numSubs := numSubs @env0:+ 1.
@@ -688,7 +688,7 @@ ___expandTemplate___: aTemplate withMatch: m
 		(item isKindOf: SmallInteger)
 			ifTrue: [
 				| g |
-				g := m @env1:group: item.
+				g := m group: item.
 				"Unmatched group -> empty string (CPython 3.5+ sub
 				semantics).  group: answers the Python None SINGLETON,
 				not Smalltalk nil -- comparing only against nil let None
@@ -700,8 +700,8 @@ ___expandTemplate___: aTemplate withMatch: m
 	"Bytes templates must expand to bytes — join with an empty
 	ByteArray when the parts are bytes (see ___subWithExpansion___)."
 	^ (parts @env0:notEmpty and: [(parts @env0:at: 1) isKindOf: ByteArray])
-		ifTrue: [(ByteArray @env0:new) @env1:join: parts]
-		ifFalse: ['' @env1:join: parts]
+		ifTrue: [(ByteArray @env0:new) join: parts]
+		ifFalse: ['' join: parts]
 %
 
 ! --------- split -----------------------------------------------------------
@@ -772,8 +772,8 @@ __repr__
 	dropped for str patterns (test_pattern_compile repr checks)."
 
 	| src flagsVal srcRepr names stream |
-	src := self @env1:pattern.
-	flagsVal := self @env1:flags.
+	src := self pattern.
+	flagsVal := self flags.
 	(src isKindOf: ByteArray) ifFalse: [
 		flagsVal := flagsVal @env0:- (flagsVal @env0:bitAnd: 32)
 	].
@@ -784,7 +784,7 @@ __repr__
 		@env0:do: [:pair |
 			((flagsVal @env0:bitAnd: (pair @env0:at: 2)) @env0:= 0) ifFalse: [
 				names @env0:add: (pair @env0:at: 1)]].
-	srcRepr := src @env1:__repr__.
+	srcRepr := src __repr__.
 	srcRepr @env0:size @env0:> 200 ifTrue: [
 		srcRepr := srcRepr @env0:copyFrom: 1 to: 200].
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
@@ -895,7 +895,7 @@ __getitem__: groupArg
 	django.urls.resolvers._route_to_regex reads named groups as
 	``match['parameter']''."
 
-	^ self @env1:group: groupArg
+	^ self group: groupArg
 %
 
 category: 'Grail-Methods'
@@ -953,7 +953,7 @@ groups: defaultValue
 	(defaultValue == nil or: [defaultValue == None]) ifTrue: [^ raw].
 	result := list ___new___.
 	raw @env0:do: [:each |
-		result @env1:append: ((each == None or: [each == nil])
+		result append: ((each == None or: [each == nil])
 			ifTrue: [defaultValue] ifFalse: [each])].
 	^ tuple @env0:withAll: result
 %
@@ -970,8 +970,8 @@ _groups: positional kw: keywords
 	nargs @env0:>= 1 ifTrue: [default := positional @env0:at: 1].
 	(keywords @env0:isNil @env0:not and: [keywords @env0:includesKey: 'default'])
 		ifTrue: [default := keywords @env0:at: 'default'].
-	default @env0:isNil ifTrue: [^ self @env1:groups].
-	^ self @env1:groups: default
+	default @env0:isNil ifTrue: [^ self groups].
+	^ self groups: default
 %
 
 ! --------- groupdict -------------------------------------------------------
@@ -1111,10 +1111,10 @@ expand: template
 	UncontinuableError storm."
 
 	| pat parser parsed |
-	pat := self @env1:re.
-	parser := importlib @env1:modules @env0:at: #'re._parser'.
-	parsed := parser @env1:parse_template: template _: pat.
-	^ pat @env1:___expandTemplate___: parsed withMatch: self
+	pat := self re.
+	parser := importlib modules @env0:at: #'re._parser'.
+	parsed := parser parse_template: template _: pat.
+	^ pat ___expandTemplate___: parsed withMatch: self
 %
 
 category: 'Grail-Methods'

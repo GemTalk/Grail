@@ -57,7 +57,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'module_higher_arity_def' ifAbsent: [].
+	mods removeKey: #'module_higher_arity_def' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/module_higher_arity_def.py')
 		name: 'module_higher_arity_def'.
@@ -68,7 +68,7 @@ method: ModuleHigherArityDefTestCase
 testFnFourArgsReadable
 	"4-arg def — first arity past the original 1..3 fast path."
 
-	self assert: testModule @env1:call_fn_4_via_value_read equals: { 10. 20. 30. 40 } @env0:asOrderedCollection
+	self assert: testModule @env1:call_fn_4_via_value_read equals: { 10. 20. 30. 40 } asOrderedCollection
 %
 
 category: 'Grail-Tests'

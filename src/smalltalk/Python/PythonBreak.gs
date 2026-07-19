@@ -39,7 +39,7 @@ set compile_env: 0
 category: 'Signalling'
 classmethod: PythonBreak
 ___signal___
-	^ self @env0:new @env0:signal
+	^ self new signal
 %
 
 set compile_env: 0

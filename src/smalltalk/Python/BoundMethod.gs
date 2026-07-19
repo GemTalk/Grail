@@ -122,11 +122,11 @@ _selectorForArgCount: nargs
 	nargs == 1 ifTrue: [^ sel1].
 	nargs == 2 ifTrue: [^ sel2].
 	nargs == 3 ifTrue: [^ sel3].
-	nargs @env0:< 0 ifTrue: [^ nil].
+	nargs < 0 ifTrue: [^ nil].
 	"Build ``name:'' followed by ``_:'' repeated (nargs - 1) times."
-	s := selector @env0:asString @env0:, ':'.
-	2 to: nargs do: [:_ | s := s @env0:, '_:'].
-	^ s @env0:asSymbol
+	s := selector asString , ':'.
+	2 to: nargs do: [:_ | s := s , '_:'].
+	^ s asSymbol
 %
 
 category: 'Grail-Private'
@@ -250,7 +250,7 @@ value: positional value: kwargs
 	blind varargs perform was an uncatchable MNU)."
 	((actualReceiver @env0:class @env0:whichClassIncludesSelector: selVarargs environmentId: 1) == nil)
 		ifTrue: [
-			TypeError @env1:___signal___: (selector @env0:asString
+			TypeError ___signal___: (selector @env0:asString
 				@env0:, '() takes a different number of arguments ('
 				@env0:, actualArgs @env0:size @env0:printString
 				@env0:, ' given)')].
@@ -289,7 +289,7 @@ ___pyCallValue___: positional kw: kwargs
 	the default Object>>___pyCallValue___:kw: which raises TypeError —
 	BoundMethod IS the canonical callable wrapper."
 
-	^ self @env1:value: positional value: kwargs
+	^ self value: positional value: kwargs
 %
 
 category: 'Grail-Attribute Access'
@@ -366,7 +366,7 @@ __eq__: other
 category: 'Grail-Comparison'
 method: BoundMethod
 __ne__: other
-	^ (self @env1:__eq__: other) @env0:not
+	^ (self __eq__: other) @env0:not
 %
 
 category: 'Grail-Comparison'
@@ -421,7 +421,7 @@ __annotations__
 	cls := (receiver isKindOf: Class)
 		ifTrue: [receiver]
 		ifFalse: [receiver @env0:class].
-	^ self @env1:___methodAnnotationsForClass___: cls name: selector @env0:asString
+	^ self ___methodAnnotationsForClass___: cls name: selector @env0:asString
 %
 
 category: 'Grail-Attribute Access'
@@ -439,10 +439,10 @@ ___methodAnnotationsForClass___: aClass name: aName
 	| tbl v |
 	aClass == nil ifTrue: [^ KeyValueDictionary @env0:new].
 	((aClass @env0:class @env0:whichClassIncludesSelector: #'___methodAnnotationsTable___' environmentId: 1) ~~ nil) ifTrue: [
-		tbl := aClass @env1:___methodAnnotationsTable___.
+		tbl := aClass ___methodAnnotationsTable___.
 		v := tbl @env0:at: aName otherwise: nil.
 		v == nil ifFalse: [^ v]].
-	^ self @env1:___methodAnnotationsForClass___: (aClass @env0:superclass) name: aName
+	^ self ___methodAnnotationsForClass___: (aClass @env0:superclass) name: aName
 %
 
 category: 'Grail-Attribute Access'
@@ -454,7 +454,7 @@ __qualname__
 	BoundMethods, so the simpler name suffices for inspection
 	consumers that just want a printable identifier."
 
-	^ self @env1:__name__
+	^ self __name__
 %
 
 category: 'Grail-Attribute Access'

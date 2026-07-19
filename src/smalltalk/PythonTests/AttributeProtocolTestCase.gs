@@ -56,7 +56,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'attribute_protocol' ifAbsent: [].
+	mods removeKey: #'attribute_protocol' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/attribute_protocol.py')
 		name: 'attribute_protocol'.

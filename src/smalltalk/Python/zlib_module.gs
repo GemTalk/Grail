@@ -134,14 +134,14 @@ _asBytes: data
 
 	(data isKindOf: ByteArray) ifTrue: [^ data].
 	(data isKindOf: CharacterCollection) ifTrue: [
-		TypeError @env1:___signal___: 'a bytes-like object is required, not ''str'''].
+		TypeError ___signal___: 'a bytes-like object is required, not ''str'''].
 	^ data @env0:asByteArray
 %
 
 category: 'Grail-Compression'
 method: zlib
 compress: data
-	^ self @env1:compress: data _: -1
+	^ self compress: data _: -1
 %
 
 category: 'Grail-Compression'
@@ -150,10 +150,10 @@ compress: data _: level
 	"zlib.compress(data, level=-1) - one-shot zlib-format compression."
 
 	| bytes callouts bound src dest destLen rc n |
-	bytes := self @env1:_asBytes: data.
+	bytes := self _asBytes: data.
 	((level @env0:>= -1) @env0:and: [level @env0:<= 9]) ifFalse: [
-		ZlibError @env1:___signal___: ('Bad compression level: ' @env0:, level @env0:printString)].
-	callouts := self @env1:_callouts.
+		ZlibError ___signal___: ('Bad compression level: ' @env0:, level @env0:printString)].
+	callouts := self _callouts.
 	bound := (callouts @env0:at: #compressBound) @env0:callWith: { bytes @env0:size }.
 	src := bytes @env0:isEmpty
 		ifTrue: [nil]
@@ -163,7 +163,7 @@ compress: data _: level
 	destLen @env0:int64At: 0 put: bound.
 	rc := (callouts @env0:at: #compress2) @env0:callWith: { dest. destLen. src. bytes @env0:size. level }.
 	rc @env0:= 0 ifFalse: [
-		ZlibError @env1:___signal___: ('Error ' @env0:, rc @env0:printString @env0:, ' while compressing data')].
+		ZlibError ___signal___: ('Error ' @env0:, rc @env0:printString @env0:, ' while compressing data')].
 	n := destLen @env0:int64At: 0.
 	^ dest @env0:byteArrayFrom: 0 numBytes: n
 %
@@ -179,19 +179,19 @@ _compress: positional kw: kwargs
 			(kwargs == nil)
 				ifTrue: [-1]
 				ifFalse: [kwargs @env0:at: 'level' ifAbsent: [-1]]].
-	^ self @env1:compress: data _: level
+	^ self compress: data _: level
 %
 
 category: 'Grail-Compression'
 method: zlib
 decompress: data
-	^ self @env1:decompress: data _: 15 _: 16384
+	^ self decompress: data _: 15 _: 16384
 %
 
 category: 'Grail-Compression'
 method: zlib
 decompress: data _: wbits
-	^ self @env1:decompress: data _: wbits _: 16384
+	^ self decompress: data _: wbits _: 16384
 %
 
 category: 'Grail-Compression'
@@ -207,10 +207,10 @@ decompress: data _: wbits _: bufsize
 	that the stream is genuinely incomplete."
 
 	| bytes callouts src dest destLen rc n cap limit |
-	bytes := self @env1:_asBytes: data.
+	bytes := self _asBytes: data.
 	((wbits @env0:>= 9) @env0:and: [wbits @env0:<= 15]) ifFalse: [
-		ZlibError @env1:___signal___: ('Grail zlib only supports wbits 9..15 (zlib format), got ' @env0:, wbits @env0:printString)].
-	callouts := self @env1:_callouts.
+		ZlibError ___signal___: ('Grail zlib only supports wbits 9..15 (zlib format), got ' @env0:, wbits @env0:printString)].
+	callouts := self _callouts.
 	src := bytes @env0:isEmpty
 		ifTrue: [nil]
 		ifFalse: [CByteArray @env0:withAll: bytes].
@@ -230,8 +230,8 @@ decompress: data _: wbits _: bufsize
 			cap := (cap @env0:* 4) @env0:min: limit.
 		] ifFalse: [
 			rc @env0:= -5 ifTrue: [
-				ZlibError @env1:___signal___: 'Error -5 while decompressing data: incomplete or truncated stream'].
-			ZlibError @env1:___signal___: ('Error ' @env0:, rc @env0:printString @env0:, ' while decompressing data')]]
+				ZlibError ___signal___: 'Error -5 while decompressing data: incomplete or truncated stream'].
+			ZlibError ___signal___: ('Error ' @env0:, rc @env0:printString @env0:, ' while decompressing data')]]
 %
 
 category: 'Grail-Compression'
@@ -251,24 +251,24 @@ _decompress: positional kw: kwargs
 			(kwargs == nil)
 				ifTrue: [16384]
 				ifFalse: [kwargs @env0:at: 'bufsize' ifAbsent: [16384]]].
-	^ self @env1:decompress: data _: wbits _: bufsize
+	^ self decompress: data _: wbits _: bufsize
 %
 
 category: 'Grail-Checksums'
 method: zlib
 crc32: data
-	^ self @env1:crc32: data _: 0
+	^ self crc32: data _: 0
 %
 
 category: 'Grail-Checksums'
 method: zlib
 crc32: data _: value
 	| bytes src result |
-	bytes := self @env1:_asBytes: data.
+	bytes := self _asBytes: data.
 	src := bytes @env0:isEmpty
 		ifTrue: [nil]
 		ifFalse: [CByteArray @env0:withAll: bytes].
-	result := ((self @env1:_callouts) @env0:at: #crc32)
+	result := ((self _callouts) @env0:at: #crc32)
 		@env0:callWith: { value @env0:bitAnd: 16rFFFFFFFF. src. bytes @env0:size }.
 	^ result @env0:bitAnd: 16rFFFFFFFF
 %
@@ -279,24 +279,24 @@ _crc32: positional kw: kwargs
 	| data value |
 	data := positional @env0:at: 1.
 	value := (positional @env0:size @env0:>= 2) ifTrue: [positional @env0:at: 2] ifFalse: [0].
-	^ self @env1:crc32: data _: value
+	^ self crc32: data _: value
 %
 
 category: 'Grail-Checksums'
 method: zlib
 adler32: data
-	^ self @env1:adler32: data _: 1
+	^ self adler32: data _: 1
 %
 
 category: 'Grail-Checksums'
 method: zlib
 adler32: data _: value
 	| bytes src result |
-	bytes := self @env1:_asBytes: data.
+	bytes := self _asBytes: data.
 	src := bytes @env0:isEmpty
 		ifTrue: [nil]
 		ifFalse: [CByteArray @env0:withAll: bytes].
-	result := ((self @env1:_callouts) @env0:at: #adler32)
+	result := ((self _callouts) @env0:at: #adler32)
 		@env0:callWith: { value @env0:bitAnd: 16rFFFFFFFF. src. bytes @env0:size }.
 	^ result @env0:bitAnd: 16rFFFFFFFF
 %
@@ -307,33 +307,33 @@ _adler32: positional kw: kwargs
 	| data value |
 	data := positional @env0:at: 1.
 	value := (positional @env0:size @env0:>= 2) ifTrue: [positional @env0:at: 2] ifFalse: [1].
-	^ self @env1:adler32: data _: value
+	^ self adler32: data _: value
 %
 
 category: 'Grail-Streaming'
 method: zlib
 _compressobj: positional kw: kwargs
-	NotImplementedError @env1:___signal___:
+	NotImplementedError ___signal___:
 		'zlib.compressobj() is not implemented in Grail (one-shot compress/decompress only)'
 %
 
 category: 'Grail-Streaming'
 method: zlib
 _decompressobj: positional kw: kwargs
-	NotImplementedError @env1:___signal___:
+	NotImplementedError ___signal___:
 		'zlib.decompressobj() is not implemented in Grail (one-shot compress/decompress only)'
 %
 
 category: 'Grail-Streaming'
 method: zlib
 compressobj
-	^ self @env1:_compressobj: { } kw: nil
+	^ self _compressobj: { } kw: nil
 %
 
 category: 'Grail-Streaming'
 method: zlib
 decompressobj
-	^ self @env1:_decompressobj: { } kw: nil
+	^ self _decompressobj: { } kw: nil
 %
 
 set compile_env: 0

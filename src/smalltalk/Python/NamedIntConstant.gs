@@ -68,7 +68,7 @@ classmethod: NamedIntConstant
 value: aValue name: aName
 	"Construct a NamedIntConstant.  Smalltalk-side entry point."
 
-	^ self @env0:basicNew
+	^ self basicNew
 		setValue: aValue name: aName;
 		yourself
 %
@@ -79,8 +79,8 @@ category: 'Grail-Accessors'
 method: NamedIntConstant
 setValue: aValue name: aName
 
-	self @env0:dynamicInstVarAt: #value put: aValue.
-	self @env0:dynamicInstVarAt: #name put: aName.
+	self dynamicInstVarAt: #value put: aValue.
+	self dynamicInstVarAt: #name put: aName.
 %
 
 set compile_env: 1

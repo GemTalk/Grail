@@ -62,7 +62,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'kwargs_splat' ifAbsent: [].
+	mods removeKey: #'kwargs_splat' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/kwargs_splat.py')
 		name: 'kwargs_splat'.
@@ -173,7 +173,7 @@ testKwargsKeysAreStrings
 
 	| result |
 	result := testModule @env1:keys_check.
-	self assert: result @env0:size equals: 3.
+	self assert: result size equals: 3.
 	self assert: (result @env1:__getitem__: 0) equals: 'alpha'.
 	self assert: (result @env1:__getitem__: 1) equals: 'mid'.
 	self assert: (result @env1:__getitem__: 2) equals: 'zeta'

@@ -51,7 +51,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'dunder_class' ifAbsent: [].
+	mods removeKey: #'dunder_class' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/dunder_class.py')
 		name: 'dunder_class'.

@@ -52,17 +52,17 @@ testWrapsKwargsReturnsIdentityDecorator
 	when kwargs are present)."
 
 	| funct deco wrapped wrappee result kw |
-	funct := functools @env0:___instance___.
-	wrapped := [:x | x @env0:+ 1].
-	kw := KeyValueDictionary @env0:new
-		@env0:at: 'assigned' put: #('__name__');
-		@env0:at: 'updated' put: #();
+	funct := functools ___instance___.
+	wrapped := [:x | x + 1].
+	kw := KeyValueDictionary new
+		at: 'assigned' put: #('__name__');
+		at: 'updated' put: #();
 		yourself.
 	deco := funct @env1:_wraps: { wrapped } kw: kw.
 	"deco is an identity decorator block; apply it to a wrappee"
-	wrappee := [:y | y @env0:* 2].
+	wrappee := [:y | y * 2].
 	result := deco @env1:value: { wrappee } value: nil.
-	self assert: (result @env0:value: 5) equals: 10
+	self assert: (result value: 5) equals: 10
 %
 
 category: 'Grail-Tests - functools'
@@ -73,11 +73,11 @@ testWrapsKwargsRoutesThroughVarargsSelector
 	BoundMethod varargs path that the decorator chain uses."
 
 	| funct |
-	funct := functools @env0:___instance___.
+	funct := functools ___instance___.
 	"Both selectors must exist for the dispatch to pick the right
 	one based on kwarg presence."
-	self assert: (functools @env0:whichClassIncludesSelector: #'wraps:' environmentId: 1) notNil.
-	self assert: (functools @env0:whichClassIncludesSelector: #'_wraps:kw:' environmentId: 1) notNil
+	self assert: (functools whichClassIncludesSelector: #'wraps:' environmentId: 1) notNil.
+	self assert: (functools whichClassIncludesSelector: #'_wraps:kw:' environmentId: 1) notNil
 %
 
 ! Workaround note: the kwargs path ``testWrapsKwargsReturnsIdentityDecorator''

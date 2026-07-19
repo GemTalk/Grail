@@ -367,7 +367,7 @@ _sample: positional kw: kwargs
 			| idx |
 			idx := self _generator @env0:integerBetween: 1 and: n.
 			(selected @env0:includes: idx) ifFalse: [
-				selected @env0:add: idx. result @env1:append: (population @env0:at: idx).
+				selected @env0:add: idx. result append: (population @env0:at: idx).
 			].
 		].
 	] ifFalse: [
@@ -378,7 +378,7 @@ _sample: positional kw: kwargs
 			| j temp |
 			j := self _generator @env0:integerBetween: i and: n.
 			temp := pool @env0:at: j. pool @env0:at: j put: (pool @env0:at: i). pool @env0:at: i put: temp.
-			result @env1:append: temp.
+			result append: temp.
 		].
 	].
 	^ result
@@ -416,14 +416,14 @@ _choices: positional kw: kwargs
 			r := (self _generator @env0:float) @env0:* total.
 			idx := 1.
 			[(idx @env0:< n) and: [(cumWeights @env0:at: idx) @env0:<= r]] @env0:whileTrue: [idx := idx @env0:+ 1].
-			result @env1:append: (population @env0:at: idx).
+			result append: (population @env0:at: idx).
 		].
 	] ifFalse: [
 		result := list ___new___.
 		1 @env0:to: k do: [:unused |
 			| idx |
 			idx := self _generator @env0:integerBetween: 1 and: n.
-			result @env1:append: (population @env0:at: idx).
+			result append: (population @env0:at: idx).
 		].
 	].
 	^ result

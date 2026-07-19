@@ -82,7 +82,7 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	((self == Integer)
 		or: [self == SmallInteger or: [self == LargeInteger]]) ifTrue: [
 		^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #AbstractPyInt)
-			@env1:___subclass___: aSymbol
+			___subclass___: aSymbol
 			instVarNames: ivarNames
 			classInstVarNames: classIvarNames].
 	"``class MyFloat(float)``: same story for the sealed float kernel --
@@ -91,7 +91,7 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	((self == Float)
 		or: [self == SmallDouble or: [self == BinaryFloat]]) ifTrue: [
 		^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #AbstractPyFloat)
-			@env1:___subclass___: aSymbol
+			___subclass___: aSymbol
 			instVarNames: ivarNames
 			classInstVarNames: classIvarNames].
 	"NOTE: we deliberately do NOT substitute AbstractPyStr for a plain
@@ -126,7 +126,7 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 				"TypeError resolved at runtime: this method compiles on the
 				kernel Class class, whose symbol list lacks the Python dict."
 				(System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #TypeError)
-					@env1:___signal___:
+					___signal___:
 						('Grail cannot subclass sealed kernel class '''
 							@env0:, self @env0:name @env0:asString @env0:, '''')]
 %
@@ -285,7 +285,7 @@ ___compileMethod: aSource category: aCategory
 				@env0:on: CompileError
 				do: [:ex2 |
 					(System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #NameError)
-						@env1:___signal___: ('method compile failed ['
+						___signal___: ('method compile failed ['
 							@env0:, (pattern @env0:copyFrom: 1 to: (pattern @env0:size @env0:min: 80)) @env0:asString
 							@env0:, ']: '
 							@env0:, (ex @env0:messageText @env0:ifNil: ['(no details)']))]].

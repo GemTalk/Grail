@@ -64,21 +64,21 @@ on: aModule
 	dynamic-instVar cache on the module would do."
 
 	| st cache key inst |
-	st := SessionTemps @env0:current.
-	cache := st @env0:at: #'GrailModuleDictViews' otherwise: nil.
-	cache @env0:isNil ifTrue: [
-		cache := IdentityKeyValueDictionary @env0:new.
-		st @env0:at: #'GrailModuleDictViews' put: cache].
+	st := SessionTemps current.
+	cache := st at: #'GrailModuleDictViews' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := IdentityKeyValueDictionary new.
+		st at: #'GrailModuleDictViews' put: cache].
 	"The eval/exec path compiles globals()/locals() with a nil receiver
 	(Executed Code has no module instance -- its scope is the symbol-list
 	SymbolDictionary).  nil can't key the identity cache; memoise under a
 	sentinel so ``locals() is globals()'' still holds there, exactly as
 	the old emit-self rewrite did (nil is nil)."
-	key := aModule @env0:isNil ifTrue: [#'GrailNilModule'] ifFalse: [aModule].
-	inst := cache @env0:at: key otherwise: nil.
-	inst @env0:isNil ifTrue: [
-		inst := super @env0:on: aModule.
-		cache @env0:at: key put: inst].
+	key := aModule isNil ifTrue: [#'GrailNilModule'] ifFalse: [aModule].
+	inst := cache at: key otherwise: nil.
+	inst isNil ifTrue: [
+		inst := super on: aModule.
+		cache at: key put: inst].
 	^ inst
 %
 
@@ -87,8 +87,8 @@ method: PyModuleDict
 at: aKey
 	| absent val |
 	absent := Object new.
-	val := source @env1:___globalAt___: aKey @env0:asSymbol otherwise: [absent].
-	val == absent ifTrue: [^ source @env0:_errorKeyNotFound: aKey].
+	val := source @env1:___globalAt___: aKey asSymbol otherwise: [absent].
+	val == absent ifTrue: [^ source _errorKeyNotFound: aKey].
 	^ val
 %
 
@@ -97,8 +97,8 @@ method: PyModuleDict
 at: aKey ifAbsent: aBlock
 	| absent val |
 	absent := Object new.
-	val := source @env1:___globalAt___: aKey @env0:asSymbol otherwise: [absent].
-	val == absent ifTrue: [^ aBlock @env0:value].
+	val := source @env1:___globalAt___: aKey asSymbol otherwise: [absent].
+	val == absent ifTrue: [^ aBlock value].
 	^ val
 %
 
@@ -107,7 +107,7 @@ method: PyModuleDict
 includesKey: aKey
 	| absent |
 	absent := Object new.
-	^ (source @env1:___globalAt___: aKey @env0:asSymbol otherwise: [absent]) ~~ absent
+	^ (source @env1:___globalAt___: aKey asSymbol otherwise: [absent]) ~~ absent
 %
 
 category: 'Grail-Smalltalk-Protocol'
@@ -119,34 +119,34 @@ keysAndValuesDo: aBlock
 
 	| absent |
 	absent := Object new.
-	source @env1:___globalNames___ @env0:do: [:k |
+	source @env1:___globalNames___ do: [:k |
 		| v |
-		v := source @env1:___globalAt___: k @env0:asSymbol otherwise: [absent].
-		v == absent ifFalse: [aBlock @env0:value: k value: v]]
+		v := source @env1:___globalAt___: k asSymbol otherwise: [absent].
+		v == absent ifFalse: [aBlock value: k value: v]]
 %
 
 category: 'Grail-Smalltalk-Protocol'
 method: PyModuleDict
 keys
-	^ (source @env1:___globalNames___) @env0:asArray
+	^ (source @env1:___globalNames___) asArray
 %
 
 category: 'Grail-Smalltalk-Protocol'
 method: PyModuleDict
 size
-	^ source @env1:___globalNames___ @env0:size
+	^ source @env1:___globalNames___ size
 %
 
 category: 'Grail-Smalltalk-Protocol'
 method: PyModuleDict
 isEmpty
-	^ source @env1:___globalNames___ @env0:isEmpty
+	^ source @env1:___globalNames___ isEmpty
 %
 
 category: 'Grail-Smalltalk-Protocol'
 method: PyModuleDict
 notEmpty
-	^ source @env1:___globalNames___ @env0:notEmpty
+	^ source @env1:___globalNames___ notEmpty
 %
 
 set compile_env: 1
@@ -156,9 +156,9 @@ method: PyModuleDict
 __getitem__: key
 	| absent val |
 	absent := Object @env0:new.
-	val := source @env1:___globalAt___: key @env0:asSymbol otherwise: [absent].
+	val := source ___globalAt___: key @env0:asSymbol otherwise: [absent].
 	val == absent ifTrue: [
-		KeyError @env1:___signal___: key @env0:printString].
+		KeyError ___signal___: key @env0:printString].
 	^ val
 %
 
@@ -167,13 +167,13 @@ method: PyModuleDict
 __contains__: key
 	| absent |
 	absent := Object @env0:new.
-	^ (source @env1:___globalAt___: key @env0:asSymbol otherwise: [absent]) ~~ absent
+	^ (source ___globalAt___: key @env0:asSymbol otherwise: [absent]) ~~ absent
 %
 
 category: 'Grail-Python-Protocol'
 method: PyModuleDict
 __len__
-	^ source @env1:___globalNames___ @env0:size
+	^ source ___globalNames___ @env0:size
 %
 
 category: 'Grail-Python-Protocol'
@@ -181,7 +181,7 @@ method: PyModuleDict
 get: key _: default
 	| absent val |
 	absent := Object @env0:new.
-	val := source @env1:___globalAt___: key @env0:asSymbol otherwise: [absent].
+	val := source ___globalAt___: key @env0:asSymbol otherwise: [absent].
 	val == absent ifTrue: [^ default].
 	^ val
 %
@@ -191,8 +191,8 @@ method: PyModuleDict
 keys
 	| result |
 	result := list ___new___.
-	source @env1:___globalNames___ @env0:do: [:k |
-		result @env1:append: k @env0:asString].
+	source ___globalNames___ @env0:do: [:k |
+		result append: k @env0:asString].
 	^ result
 %
 
@@ -201,7 +201,7 @@ method: PyModuleDict
 values
 	| result |
 	result := list ___new___.
-	self @env0:keysAndValuesDo: [:k :v | result @env1:append: v].
+	self @env0:keysAndValuesDo: [:k :v | result append: v].
 	^ result
 %
 
@@ -211,7 +211,7 @@ items
 	| result |
 	result := list ___new___.
 	self @env0:keysAndValuesDo: [:k :v |
-		result @env1:append: (tuple @env0:withAll: { k @env0:asString. v })].
+		result append: (tuple @env0:withAll: { k @env0:asString. v })].
 	^ result
 %
 
@@ -231,7 +231,7 @@ pop: key
 		val := source @env0:at: sym.
 		source @env0:removeKey: sym.
 		^ val].
-	KeyError @env1:___signal___: key @env0:printString
+	KeyError ___signal___: key @env0:printString
 %
 
 category: 'Grail-Python-Protocol'
@@ -258,7 +258,7 @@ setdefault: key _: default
 
 	| absent val |
 	absent := Object @env0:new.
-	val := source @env1:___globalAt___: key @env0:asSymbol otherwise: [absent].
+	val := source ___globalAt___: key @env0:asSymbol otherwise: [absent].
 	val == absent ifTrue: [
 		source @env0:dynamicInstVarAt: key @env0:asSymbol put: default.
 		^ default].

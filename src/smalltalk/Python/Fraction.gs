@@ -181,7 +181,7 @@ __format__: formatSpec
 		^ self __str__
 	].
 	"For other format specs, convert to float and format"
-	^ (self @env0:asFloat) @env1:__format__: spec
+	^ (self @env0:asFloat) __format__: spec
 %
 
 category: 'Grail-Hash'

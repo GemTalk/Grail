@@ -136,7 +136,7 @@ fromhex: hexString
 	pIdx @env0:> 0
 		ifTrue: [
 			expStr := str @env0:copyFrom: pIdx @env0:+ 1 to: str @env0:size.
-			binExp := self @env1:___parseDecInt___: expStr.
+			binExp := self ___parseDecInt___: expStr.
 			body := str @env0:copyFrom: 1 to: pIdx @env0:- 1]
 		ifFalse: [binExp := 0. body := str].
 	"split the mantissa on the radix point"
@@ -149,7 +149,7 @@ fromhex: hexString
 	digits := intDigits @env0:, fracDigits.
 	digits @env0:isEmpty ifTrue: [
 		ValueError ___signal___: 'invalid hexadecimal floating-point string'].
-	m := self @env1:___parseHexInt___: digits.
+	m := self ___parseHexInt___: digits.
 	m @env0:= 0 ifTrue: [^ sign @env0:> 0 ifTrue: [0.0] ifFalse: [0.0 @env0:negated]].
 	shift := binExp @env0:- (4 @env0:* fracDigits @env0:size).
 	mag := shift @env0:>= 0
@@ -233,8 +233,8 @@ __format__: formatSpec
 	float had NO __format__, so ``'{:.2f}'.format(x)`` died in the
 	DNU path with an uncatchable MessageNotUnderstood."
 
-	(formatSpec @env0:isNil or: [formatSpec @env0:isEmpty]) ifTrue: [^ self @env1:__str__].
-	^ (builtins @env1:instance) @env1:___formatValue___: self spec: formatSpec
+	(formatSpec @env0:isNil or: [formatSpec @env0:isEmpty]) ifTrue: [^ self __str__].
+	^ (builtins instance) ___formatValue___: self spec: formatSpec
 %
 
 category: 'Grail-Arithmetic'
@@ -244,7 +244,7 @@ __add__: other
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:+ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:+ (other @env1:__index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:+ (other __index__)].
 	^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'
 %
 
@@ -295,7 +295,7 @@ __eq__: other
 	the inherited identity __eq__ keeps the kernel = (identity) answer."
 
 	| refOwner |
-	(other isKindOf: complex) ifTrue: [^ other @env1:__eq__: self].
+	(other isKindOf: complex) ifTrue: [^ other __eq__: self].
 	(other isKindOf: PythonInstance) ifTrue: [
 		refOwner := other @env0:class @env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
 		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
@@ -326,7 +326,7 @@ __floordiv__: other
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:// other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:// (other @env1:__index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:// (other __index__)].
 	^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'
 %
 
@@ -338,7 +338,7 @@ __ge__: other
 	(other isKindOf: Number) ifTrue: [^ self @env0:>= other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
-		^ self @env0:>= (other @env1:__index__)
+		^ self @env0:>= (other __index__)
 	].
 	^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'
 %
@@ -351,7 +351,7 @@ __gt__: other
 	(other isKindOf: Number) ifTrue: [^ self @env0:> other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
-		^ self @env0:> (other @env1:__index__)
+		^ self @env0:> (other __index__)
 	].
 	^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'
 %
@@ -372,7 +372,7 @@ __le__: other
 	(other isKindOf: Number) ifTrue: [^ self @env0:<= other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
-		^ self @env0:<= (other @env1:__index__)
+		^ self @env0:<= (other __index__)
 	].
 	^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'
 %
@@ -385,7 +385,7 @@ __lt__: other
 	(other isKindOf: Number) ifTrue: [^ self @env0:< other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
-		^ self @env0:< (other @env1:__index__)
+		^ self @env0:< (other __index__)
 	].
 	^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'
 %
@@ -397,7 +397,7 @@ __mod__: other
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:\\ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:\\ (other @env1:__index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:\\ (other __index__)].
 	^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'
 %
 
@@ -408,7 +408,7 @@ __mul__: other
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:* other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:* (other @env1:__index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:* (other __index__)].
 	^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'
 %
 
@@ -443,7 +443,7 @@ __pow__: other
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:raisedTo: other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:raisedTo: (other @env1:__index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:raisedTo: (other __index__)].
 	^ self ___binOpFallback___: other op: '**' reflected: #'__rpow__:'
 %
 
@@ -527,7 +527,7 @@ __sub__: other
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:- (other)].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:- ((other @env1:__index__))].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:- ((other __index__))].
 	^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'
 %
 
@@ -538,7 +538,7 @@ __truediv__: other
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:/ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:/ (other @env1:__index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:/ (other __index__)].
 	^ self ___binOpFallback___: other op: '/' reflected: #'__rtruediv__:'
 %
 

@@ -63,19 +63,19 @@ __getitem__: index
 category: 'Grail-Python protocol'
 classmethod: Integer
 __getitem__: index
-	^ TypeError @env1:___signal___: 'type ''int'' is not subscriptable'
+	^ TypeError ___signal___: 'type ''int'' is not subscriptable'
 %
 
 category: 'Grail-Python protocol'
 classmethod: Float
 __getitem__: index
-	^ TypeError @env1:___signal___: 'type ''float'' is not subscriptable'
+	^ TypeError ___signal___: 'type ''float'' is not subscriptable'
 %
 
 category: 'Grail-Python protocol'
 classmethod: Boolean
 __getitem__: index
-	^ TypeError @env1:___signal___: 'type ''bool'' is not subscriptable'
+	^ TypeError ___signal___: 'type ''bool'' is not subscriptable'
 %
 
 category: 'Grail-Python protocol'
@@ -86,25 +86,25 @@ __getitem__: index
 	CharacterCollection) plus Symbol family (a CharacterCollection
 	subclass)."
 
-	^ TypeError @env1:___signal___: 'type ''str'' is not subscriptable'
+	^ TypeError ___signal___: 'type ''str'' is not subscriptable'
 %
 
 category: 'Grail-Python protocol'
 classmethod: ByteArray
 __getitem__: index
-	^ TypeError @env1:___signal___: 'type ''bytes'' is not subscriptable'
+	^ TypeError ___signal___: 'type ''bytes'' is not subscriptable'
 %
 
 category: 'Grail-Python protocol'
 classmethod: Character
 __getitem__: index
-	^ TypeError @env1:___signal___: 'type ''Character'' is not subscriptable'
+	^ TypeError ___signal___: 'type ''Character'' is not subscriptable'
 %
 
 category: 'Grail-Python protocol'
 classmethod: UndefinedObject
 __getitem__: index
-	^ TypeError @env1:___signal___: 'type ''NoneType'' is not subscriptable'
+	^ TypeError ___signal___: 'type ''NoneType'' is not subscriptable'
 %
 
 set compile_env: 0

@@ -68,7 +68,7 @@ initialize
 	route through encoder instances yet; the class exists so the
 	subclass statement and isinstance checks work.  JSONDecodeError
 	aliases ValueError (its CPython superclass)."
-	self @env0:at: #JSONEncoder put: (PythonInstance @env1:___subclass___: #JSONEncoder instVarNames: #() classInstVarNames: #()).
+	self @env0:at: #JSONEncoder put: (PythonInstance ___subclass___: #JSONEncoder instVarNames: #() classInstVarNames: #()).
 	self @env0:at: #JSONDecodeError put: ValueError
 %
 
@@ -79,7 +79,7 @@ initialize
 category: 'Grail-Public'
 method: json
 dumps: obj
-	^ self @env1:_dumps: { obj } kw: nil
+	^ self _dumps: { obj } kw: nil
 %
 
 category: 'Grail-Public'
@@ -108,8 +108,8 @@ _dumps: positional kw: kwargs
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
 	"Build separator pair: (item, key) - defaults to (', ', ': ') when
 	indent is None, or (',', ': ') when indented."
-	sep := self @env1:_buildSeparators: separators indent: indent.
-	self @env1:_encode: obj onto: stream
+	sep := self _buildSeparators: separators indent: indent.
+	self _encode: obj onto: stream
 		indent: indent depth: 0
 		separators: sep ensureAscii: ensureAscii
 		sortKeys: sortKeys default: default.
@@ -123,7 +123,7 @@ load: fp
 	parse.  fp is any object with a no-arg ``read()'' method that
 	returns the full JSON text (str or bytes)."
 
-	^ self @env1:loads: (fp @env1:read)
+	^ self loads: (fp read)
 %
 
 category: 'Grail-Public'
@@ -139,8 +139,8 @@ _dump: positional kw: kwargs
 	obj := positional @env0:at: 1.
 	fp := positional @env0:at: 2.
 	dumpsArgs := Array @env0:with: obj.
-	text := self @env1:_dumps: dumpsArgs kw: kwargs.
-	^ fp @env1:write: text
+	text := self _dumps: dumpsArgs kw: kwargs.
+	^ fp write: text
 %
 
 category: 'Grail-Public'
@@ -152,14 +152,14 @@ loads: s
 
 	| text state result |
 	text := (s isKindOf: ByteArray)
-		@env0:ifTrue: [s @env1:decode: 'utf-8']
+		@env0:ifTrue: [s decode: 'utf-8']
 		@env0:ifFalse: [s @env0:asString].
 	state := Array @env0:with: text with: 1.
-	self @env1:_skipWs: state.
-	result := self @env1:_parseValue: state.
-	self @env1:_skipWs: state.
+	self _skipWs: state.
+	result := self _parseValue: state.
+	self _skipWs: state.
 	(state @env0:at: 2) @env0:<= (state @env0:at: 1) @env0:size ifTrue: [
-		ValueError @env1:___signal___: 'extra data after JSON document at pos '
+		ValueError ___signal___: 'extra data after JSON document at pos '
 			@env0:, (state @env0:at: 2) @env0:printString
 	].
 	^ result
@@ -176,8 +176,8 @@ _buildSeparators: explicit indent: indent
 
 	explicit @env0:notNil ifTrue: [
 		^ Array
-			@env0:with: (explicit @env1:__getitem__: 0)
-			with: (explicit @env1:__getitem__: 1)
+			@env0:with: (explicit __getitem__: 0)
+			with: (explicit __getitem__: 1)
 	].
 	indent @env0:notNil ifTrue: [
 		^ Array @env0:with: ',' with: ': '
@@ -196,18 +196,18 @@ _encode: obj onto: stream indent: indent depth: depth separators: sep ensureAsci
 	obj == false ifTrue: [^ stream @env0:nextPutAll: 'false'].
 	(obj isKindOf: Integer) ifTrue: [^ stream @env0:nextPutAll: obj @env0:printString].
 	(obj isKindOf: Float) ifTrue: [
-		^ self @env1:_encodeFloat: obj onto: stream
+		^ self _encodeFloat: obj onto: stream
 	].
 	(obj isKindOf: CharacterCollection) ifTrue: [
-		^ self @env1:_encodeString: obj onto: stream ensureAscii: ensureAscii
+		^ self _encodeString: obj onto: stream ensureAscii: ensureAscii
 	].
 	((obj isKindOf: Array) @env0:or: [obj isKindOf: OrderedCollection]) ifTrue: [
-		^ self @env1:_encodeArray: obj onto: stream
+		^ self _encodeArray: obj onto: stream
 			indent: indent depth: depth separators: sep
 			ensureAscii: ensureAscii sortKeys: sortKeys default: default
 	].
 	(obj isKindOf: KeyValueDictionary) ifTrue: [
-		^ self @env1:_encodeObject: obj onto: stream
+		^ self _encodeObject: obj onto: stream
 			indent: indent depth: depth separators: sep
 			ensureAscii: ensureAscii sortKeys: sortKeys default: default
 	].
@@ -215,12 +215,12 @@ _encode: obj onto: stream indent: indent depth: depth separators: sep ensureAsci
 	encode the result.  Otherwise TypeError."
 	default @env0:notNil ifTrue: [
 		| converted |
-		converted := default @env1:value: { obj } value: nil.
-		^ self @env1:_encode: converted onto: stream
+		converted := default value: { obj } value: nil.
+		^ self _encode: converted onto: stream
 			indent: indent depth: depth separators: sep
 			ensureAscii: ensureAscii sortKeys: sortKeys default: nil
 	].
-	TypeError @env1:___signal___: 'Object of type '
+	TypeError ___signal___: 'Object of type '
 		@env0:, obj @env0:class @env0:name @env0:asString
 		@env0:, ' is not JSON serializable'
 %
@@ -260,11 +260,11 @@ _encodeString: s onto: stream ensureAscii: ensureAscii
 		ifFalse: [
 			(cv @env0:< 16r20) ifTrue: [
 				stream @env0:nextPutAll: '\u'.
-				stream @env0:nextPutAll: (self @env1:_hex4: cv)
+				stream @env0:nextPutAll: (self _hex4: cv)
 			] ifFalse: [
 				(ensureAscii @env0:and: [cv @env0:> 16r7E]) ifTrue: [
 					stream @env0:nextPutAll: '\u'.
-					stream @env0:nextPutAll: (self @env1:_hex4: cv)
+					stream @env0:nextPutAll: (self _hex4: cv)
 				] ifFalse: [
 					stream @env0:nextPut: ch
 				]
@@ -306,19 +306,19 @@ _encodeArray: arr onto: stream indent: indent depth: depth separators: sep ensur
 			first ifFalse: [stream @env0:nextPutAll: itemSep].
 			first := false.
 			stream @env0:lf.
-			self @env1:_writeIndent: indent depth: newDepth onto: stream.
-			self @env1:_encode: item onto: stream
+			self _writeIndent: indent depth: newDepth onto: stream.
+			self _encode: item onto: stream
 				indent: indent depth: newDepth separators: sep
 				ensureAscii: ensureAscii sortKeys: sortKeys default: default
 		].
 		stream @env0:lf.
-		self @env1:_writeIndent: indent depth: depth onto: stream
+		self _writeIndent: indent depth: depth onto: stream
 	] ifFalse: [
 		first := true.
 		arr @env0:do: [:item |
 			first ifFalse: [stream @env0:nextPutAll: itemSep].
 			first := false.
-			self @env1:_encode: item onto: stream
+			self _encode: item onto: stream
 				indent: indent depth: depth separators: sep
 				ensureAscii: ensureAscii sortKeys: sortKeys default: default
 		]
@@ -345,23 +345,23 @@ _encodeObject: dict onto: stream indent: indent depth: depth separators: sep ens
 			first ifFalse: [stream @env0:nextPutAll: itemSep].
 			first := false.
 			stream @env0:lf.
-			self @env1:_writeIndent: indent depth: newDepth onto: stream.
-			self @env1:_encodeString: k @env0:asString onto: stream ensureAscii: ensureAscii.
+			self _writeIndent: indent depth: newDepth onto: stream.
+			self _encodeString: k @env0:asString onto: stream ensureAscii: ensureAscii.
 			stream @env0:nextPutAll: keySep.
-			self @env1:_encode: (dict @env0:at: k) onto: stream
+			self _encode: (dict @env0:at: k) onto: stream
 				indent: indent depth: newDepth separators: sep
 				ensureAscii: ensureAscii sortKeys: sortKeys default: default
 		].
 		stream @env0:lf.
-		self @env1:_writeIndent: indent depth: depth onto: stream
+		self _writeIndent: indent depth: depth onto: stream
 	] ifFalse: [
 		first := true.
 		keys @env0:do: [:k |
 			first ifFalse: [stream @env0:nextPutAll: itemSep].
 			first := false.
-			self @env1:_encodeString: k @env0:asString onto: stream ensureAscii: ensureAscii.
+			self _encodeString: k @env0:asString onto: stream ensureAscii: ensureAscii.
 			stream @env0:nextPutAll: keySep.
-			self @env1:_encode: (dict @env0:at: k) onto: stream
+			self _encode: (dict @env0:at: k) onto: stream
 				indent: indent depth: depth separators: sep
 				ensureAscii: ensureAscii sortKeys: sortKeys default: default
 		]
@@ -412,22 +412,22 @@ category: 'Grail-Private'
 method: json
 _parseValue: state
 	| ch src pos |
-	self @env1:_skipWs: state.
+	self _skipWs: state.
 	src := state @env0:at: 1.
 	pos := state @env0:at: 2.
 	pos @env0:> src @env0:size ifTrue: [
-		ValueError @env1:___signal___: 'expected JSON value at end of input'
+		ValueError ___signal___: 'expected JSON value at end of input'
 	].
 	ch := src @env0:at: pos.
-	ch @env0:= ${ ifTrue: [^ self @env1:_parseObject: state].
-	ch @env0:= $[ ifTrue: [^ self @env1:_parseArray: state].
-	ch @env0:= $" ifTrue: [^ self @env1:_parseString: state].
-	(ch @env0:= $t @env0:or: [ch @env0:= $f]) ifTrue: [^ self @env1:_parseBool: state].
-	ch @env0:= $n ifTrue: [^ self @env1:_parseNull: state].
+	ch @env0:= ${ ifTrue: [^ self _parseObject: state].
+	ch @env0:= $[ ifTrue: [^ self _parseArray: state].
+	ch @env0:= $" ifTrue: [^ self _parseString: state].
+	(ch @env0:= $t @env0:or: [ch @env0:= $f]) ifTrue: [^ self _parseBool: state].
+	ch @env0:= $n ifTrue: [^ self _parseNull: state].
 	((ch @env0:= $-) @env0:or: [ch @env0:asInteger @env0:>= $0 @env0:asInteger @env0:and: [ch @env0:asInteger @env0:<= $9 @env0:asInteger]]) ifTrue: [
-		^ self @env1:_parseNumber: state
+		^ self _parseNumber: state
 	].
-	ValueError @env1:___signal___: 'unexpected character at pos '
+	ValueError ___signal___: 'unexpected character at pos '
 		@env0:, pos @env0:printString
 %
 
@@ -438,7 +438,7 @@ _parseNull: state
 	src := state @env0:at: 1.
 	pos := state @env0:at: 2.
 	(src @env0:copyFrom: pos to: pos @env0:+ 3) @env0:= 'null' ifFalse: [
-		ValueError @env1:___signal___: 'expected null at pos ' @env0:, pos @env0:printString
+		ValueError ___signal___: 'expected null at pos ' @env0:, pos @env0:printString
 	].
 	state @env0:at: 2 put: pos @env0:+ 4.
 	^ None
@@ -452,13 +452,13 @@ _parseBool: state
 	pos := state @env0:at: 2.
 	((src @env0:at: pos) @env0:= $t) ifTrue: [
 		(src @env0:copyFrom: pos to: pos @env0:+ 3) @env0:= 'true' ifFalse: [
-			ValueError @env1:___signal___: 'expected true at pos ' @env0:, pos @env0:printString
+			ValueError ___signal___: 'expected true at pos ' @env0:, pos @env0:printString
 		].
 		state @env0:at: 2 put: pos @env0:+ 4.
 		^ true
 	].
 	(src @env0:copyFrom: pos to: pos @env0:+ 4) @env0:= 'false' ifFalse: [
-		ValueError @env1:___signal___: 'expected false at pos ' @env0:, pos @env0:printString
+		ValueError ___signal___: 'expected false at pos ' @env0:, pos @env0:printString
 	].
 	state @env0:at: 2 put: pos @env0:+ 5.
 	^ false
@@ -475,13 +475,13 @@ _parseNumber: state
 	n := src @env0:size.
 	start := pos.
 	(src @env0:at: pos) @env0:= $- ifTrue: [pos := pos @env0:+ 1].
-	[pos @env0:<= n @env0:and: [self @env1:_isDigit: (src @env0:at: pos)]]
+	[pos @env0:<= n @env0:and: [self _isDigit: (src @env0:at: pos)]]
 		@env0:whileTrue: [pos := pos @env0:+ 1].
 	hasFraction := false.
 	(pos @env0:<= n @env0:and: [(src @env0:at: pos) @env0:= $.]) ifTrue: [
 		hasFraction := true.
 		pos := pos @env0:+ 1.
-		[pos @env0:<= n @env0:and: [self @env1:_isDigit: (src @env0:at: pos)]]
+		[pos @env0:<= n @env0:and: [self _isDigit: (src @env0:at: pos)]]
 			@env0:whileTrue: [pos := pos @env0:+ 1]
 	].
 	hasExp := false.
@@ -497,7 +497,7 @@ _parseNumber: state
 			c := src @env0:at: pos.
 			(c @env0:= $+) @env0:or: [c @env0:= $-]
 		]) ifTrue: [pos := pos @env0:+ 1].
-		[pos @env0:<= n @env0:and: [self @env1:_isDigit: (src @env0:at: pos)]]
+		[pos @env0:<= n @env0:and: [self _isDigit: (src @env0:at: pos)]]
 			@env0:whileTrue: [pos := pos @env0:+ 1]
 	].
 	tokenStr := src @env0:copyFrom: start to: pos @env0:- 1.
@@ -527,7 +527,7 @@ _parseString: state
 	pos := state @env0:at: 2.
 	n := src @env0:size.
 	(src @env0:at: pos) @env0:= $" ifFalse: [
-		ValueError @env1:___signal___: 'expected string at pos ' @env0:, pos @env0:printString
+		ValueError ___signal___: 'expected string at pos ' @env0:, pos @env0:printString
 	].
 	pos := pos @env0:+ 1.
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
@@ -536,7 +536,7 @@ _parseString: state
 			ch := src @env0:at: pos.
 			ch @env0:= $\ ifTrue: [
 				pos := pos @env0:+ 1.
-				pos @env0:> n ifTrue: [ValueError @env1:___signal___: 'truncated escape'].
+				pos @env0:> n ifTrue: [ValueError ___signal___: 'truncated escape'].
 				cv := src @env0:at: pos.
 				cv @env0:= $" ifTrue: [stream @env0:nextPut: $"]
 				ifFalse: [cv @env0:= $\ ifTrue: [stream @env0:nextPut: $\]
@@ -553,7 +553,7 @@ _parseString: state
 					stream @env0:nextPut: (Character @env0:codePoint: codepoint).
 					pos := pos @env0:+ 4
 				] ifFalse: [
-					ValueError @env1:___signal___: 'bad escape \' @env0:, cv @env0:asString
+					ValueError ___signal___: 'bad escape \' @env0:, cv @env0:asString
 				]]]]]]]]].
 				pos := pos @env0:+ 1
 			] ifFalse: [
@@ -561,7 +561,7 @@ _parseString: state
 				pos := pos @env0:+ 1
 			]
 		].
-	pos @env0:> n ifTrue: [ValueError @env1:___signal___: 'unterminated string'].
+	pos @env0:> n ifTrue: [ValueError ___signal___: 'unterminated string'].
 	state @env0:at: 2 put: pos @env0:+ 1.
 	^ stream @env0:contents
 %
@@ -575,8 +575,8 @@ _parseArray: state
 	| src result first |
 	src := state @env0:at: 1.
 	state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
-	self @env1:_skipWs: state.
-	result := list @env1:___new___.
+	self _skipWs: state.
+	result := list ___new___.
 	(src @env0:at: (state @env0:at: 2)) @env0:= $] ifTrue: [
 		state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
 		^ result
@@ -584,16 +584,16 @@ _parseArray: state
 	first := true.
 	[
 		first ifFalse: [
-			self @env1:_skipWs: state.
+			self _skipWs: state.
 			(src @env0:at: (state @env0:at: 2)) @env0:= $, ifFalse: [
-				ValueError @env1:___signal___: 'expected , or ] in array at pos '
+				ValueError ___signal___: 'expected , or ] in array at pos '
 					@env0:, (state @env0:at: 2) @env0:printString
 			].
 			state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1
 		].
 		first := false.
-		result @env1:append: (self @env1:_parseValue: state).
-		self @env1:_skipWs: state.
+		result append: (self _parseValue: state).
+		self _skipWs: state.
 		(src @env0:at: (state @env0:at: 2)) @env0:= $]
 	] @env0:whileFalse.
 	state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
@@ -608,8 +608,8 @@ _parseObject: state
 	| src result first key value |
 	src := state @env0:at: 1.
 	state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
-	self @env1:_skipWs: state.
-	result := dict @env1:___new___.
+	self _skipWs: state.
+	result := dict ___new___.
 	(src @env0:at: (state @env0:at: 2)) @env0:= $} ifTrue: [
 		state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
 		^ result
@@ -617,25 +617,25 @@ _parseObject: state
 	first := true.
 	[
 		first ifFalse: [
-			self @env1:_skipWs: state.
+			self _skipWs: state.
 			(src @env0:at: (state @env0:at: 2)) @env0:= $, ifFalse: [
-				ValueError @env1:___signal___: 'expected , or } in object at pos '
+				ValueError ___signal___: 'expected , or } in object at pos '
 					@env0:, (state @env0:at: 2) @env0:printString
 			].
 			state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1
 		].
 		first := false.
-		self @env1:_skipWs: state.
-		key := self @env1:_parseString: state.
-		self @env1:_skipWs: state.
+		self _skipWs: state.
+		key := self _parseString: state.
+		self _skipWs: state.
 		(src @env0:at: (state @env0:at: 2)) @env0:= $: ifFalse: [
-			ValueError @env1:___signal___: 'expected : in object at pos '
+			ValueError ___signal___: 'expected : in object at pos '
 				@env0:, (state @env0:at: 2) @env0:printString
 		].
 		state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
-		value := self @env1:_parseValue: state.
-		result @env1:__setitem__: key _: value.
-		self @env1:_skipWs: state.
+		value := self _parseValue: state.
+		result __setitem__: key _: value.
+		self _skipWs: state.
 		(src @env0:at: (state @env0:at: 2)) @env0:= $}
 	] @env0:whileFalse.
 	state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.

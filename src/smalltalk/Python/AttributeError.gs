@@ -35,8 +35,8 @@ ___checkAttr: aValue ofObject: anObject named: aSymbol
 
 	aValue == nil ifTrue: [
 		^ self @env1:___signal___:
-			('''' , (anObject @env0:class @env0:name @env0:asString) ,
-			 ''' object has no attribute ''' , aSymbol @env0:asString , '''')
+			('''' , (anObject class name asString) ,
+			 ''' object has no attribute ''' , aSymbol asString , '''')
 	].
 	^ aValue
 %

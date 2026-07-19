@@ -74,8 +74,8 @@ do: aBlock
 	``@env0:do:'' send."
 
 	[
-		[aBlock @env0:value: (self @env1:__next__)] @env0:repeat
-	] @env0:on: StopIteration do: [:___ex___ | ^ self]
+		[aBlock value: (self @env1:__next__)] repeat
+	] on: StopIteration do: [:___ex___ | ^ self]
 %
 
 category: 'Grail-Private'
@@ -105,7 +105,7 @@ _forkBody
 	started := true.
 	proc := [
 		[
-			[[returnValue := block @env0:value: self]
+			[[returnValue := block value: self]
 				on: GeneratorExit
 				do: [:ex | nil]]
 				on: AbstractException
@@ -119,11 +119,11 @@ _forkBody
 					test_merge_does_not_suppress_index_error is exactly
 					this contract."
 					escapedException := ex.
-					ex @env0:return: nil]
-		] @env0:ensure: [
+					ex return: nil]
+		] ensure: [
 			done := true.
-			consumerSem @env0:signal]
-	] @env0:fork.
+			consumerSem signal]
+	] fork.
 %
 
 set compile_env: 1
@@ -153,7 +153,7 @@ method: PythonGenerator
 __next__
 	"Advance to the next yield, equivalent to ``send(None)``."
 
-	^ self @env1:send: None
+	^ self send: None
 %
 
 category: 'Grail-Generator Protocol'
@@ -168,12 +168,12 @@ send: aValue
 
 	started ifFalse: [
 		aValue == None ifFalse: [
-			TypeError @env1:___signal___:
+			TypeError ___signal___:
 				'can''t send non-None value to a just-started generator'
 		].
 		self @env0:_forkBody.
 	] ifTrue: [
-		done ifTrue: [StopIteration @env1:___signal___: returnValue].
+		done ifTrue: [StopIteration ___signal___: returnValue].
 		sentValue := aValue.
 		injectedException := nil.
 		producerSem @env0:signal.
@@ -185,7 +185,7 @@ send: aValue
 			ex := escapedException.
 			escapedException := nil.
 			^ ex @env0:signal].
-		StopIteration @env1:___signal___: returnValue].
+		StopIteration ___signal___: returnValue].
 	^ value
 %
 
@@ -217,7 +217,7 @@ throw: anException
 			ex := escapedException.
 			escapedException := nil.
 			^ ex @env0:signal].
-		StopIteration @env1:___signal___: returnValue
+		StopIteration ___signal___: returnValue
 	].
 	^ value
 %
@@ -240,7 +240,7 @@ close
 	producerSem @env0:signal.
 	consumerSem @env0:wait.
 	done ifFalse: [
-		RuntimeError @env1:___signal___: 'generator ignored GeneratorExit'
+		RuntimeError ___signal___: 'generator ignored GeneratorExit'
 	].
 	^ None
 %

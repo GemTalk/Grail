@@ -57,10 +57,10 @@ asFloat
 	MNU.  Compiled twice -- once per environment (see the env-1 copy
 	after the marker below)."
 
-	((self @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) ~~ nil)
+	((self class whichClassIncludesSelector: #'__float__' environmentId: 1) ~~ nil)
 		ifTrue: [^ self perform: #'__float__' env: 1].
 	TypeError @env1:___signal___: ('must be real number, not '
-		@env0:, self @env0:class @env0:name @env0:asString)
+		, self class name asString)
 %
 
 set compile_env: 1
@@ -85,11 +85,11 @@ __iter__
 	items := OrderedCollection @env0:new.
 	idx := 0.
 	[true] @env0:whileTrue: [
-		v := [self @env1:__getitem__: idx]
+		v := [self __getitem__: idx]
 			@env0:on: IndexError
 			do: [:ex | ex @env0:return: #'___stopIteration___'].
 		v == #'___stopIteration___' ifTrue: [
-			^ items @env1:__iter__].
+			^ items __iter__].
 		items @env0:add: v.
 		idx := idx @env0:+ 1]
 %
@@ -186,11 +186,11 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 		(s last = $:) ifTrue: [
 			| selBase varargSel |
 			selBase := s copyFrom: 1 to: s size - (s occurrencesOf: $:).
-			varargSel := ('_' @env0:, selBase @env0:, ':kw:') asSymbol.
-			((self @env0:class @env0:whichClassIncludesSelector: varargSel environmentId: 1) notNil) ifTrue: [
-				^ self @env0:perform: varargSel
+			varargSel := ('_' , selBase , ':kw:') asSymbol.
+			((self class whichClassIncludesSelector: varargSel environmentId: 1) notNil) ifTrue: [
+				^ self perform: varargSel
 					env: 1
-					withArguments: { anArray @env0:asArray. nil }
+					withArguments: { anArray asArray. nil }
 			].
 			"@classmethod called through the instance — codegen emits a
 			direct send for ``self.cls_method(args)`` but the def lives
@@ -201,21 +201,21 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 			Version._parse_create).  Probed BEFORE the setter
 			interpretation; the category gate keeps synthesized
 			class-attr accessors and real setters out of this branch."
-			metaOwner := (self @env0:class @env0:class)
-				@env0:whichClassIncludesSelector: aSelector environmentId: 1.
+			metaOwner := (self class class)
+				whichClassIncludesSelector: aSelector environmentId: 1.
 			(metaOwner notNil and: [
-				(metaOwner @env0:categoryOfSelector: aSelector environmentId: 1)
-					@env0:= #'Grail-Class Methods']) ifTrue: [
-				^ self @env0:class @env0:perform: aSelector
-					env: 1 withArguments: anArray @env0:asArray
+				(metaOwner categoryOfSelector: aSelector environmentId: 1)
+					= #'Grail-Class Methods']) ifTrue: [
+				^ self class perform: aSelector
+					env: 1 withArguments: anArray asArray
 			].
-			metaOwner := (self @env0:class @env0:class)
-				@env0:whichClassIncludesSelector: varargSel environmentId: 1.
+			metaOwner := (self class class)
+				whichClassIncludesSelector: varargSel environmentId: 1.
 			(metaOwner notNil and: [
-				(metaOwner @env0:categoryOfSelector: varargSel environmentId: 1)
-					@env0:= #'Grail-Class Methods']) ifTrue: [
-				^ self @env0:class @env0:perform: varargSel
-					env: 1 withArguments: { anArray @env0:asArray. nil }
+				(metaOwner categoryOfSelector: varargSel environmentId: 1)
+					= #'Grail-Class Methods']) ifTrue: [
+				^ self class perform: varargSel
+					env: 1 withArguments: { anArray asArray. nil }
 			].
 			"Setter — single trailing colon, no other colons.  Phase B:
 			write into the instance's dynamic-instVar storage so the
@@ -225,7 +225,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 				| key val |
 				key := (s copyFrom: 1 to: s size - 1) asSymbol.
 				val := anArray at: 1.
-				self @env0:dynamicInstVarAt: key put: val.
+				self dynamicInstVarAt: key put: val.
 				^ val
 			]
 		] ifFalse: [
@@ -233,7 +233,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 			(the canonical home for instance attributes)."
 			anArray size = 0 ifTrue: [
 				| val |
-				val := self @env0:dynamicInstVarAt: aSelector.
+				val := self dynamicInstVarAt: aSelector.
 				val == nil ifFalse: [^ val]
 			]
 		]
@@ -314,7 +314,7 @@ __dict__
 	empty) dynamic-instVar view.  The marker is emitted by ClassDefAst
 	when the class declares __slots__ without a ``__dict__'' member."
 	(self @env0:class @env0:whichClassIncludesSelector: #'___pySlotsStrict___' environmentId: 1) notNil ifTrue: [
-		^ AttributeError @env1:___signal___:
+		^ AttributeError ___signal___:
 			'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
 				''' object has no attribute ''__dict__'''
 	].

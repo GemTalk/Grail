@@ -54,7 +54,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'twilio_shape' ifAbsent: [].
+	mods removeKey: #'twilio_shape' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/twilio_shape.py')
 		name: 'twilio_shape'.
@@ -131,7 +131,7 @@ testPageIteratorProtocolWithOverride
 
 	| sids |
 	sids := testModule @env1:___pyAttrLoad___: #page_sids.
-	self assert: sids @env0:asArray equals: #('SM1' 'SM2').
+	self assert: sids asArray equals: #('SM1' 'SM2').
 %
 
 category: 'Grail-Tests - Page iteration'

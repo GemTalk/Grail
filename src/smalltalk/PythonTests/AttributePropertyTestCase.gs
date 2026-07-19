@@ -56,7 +56,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'attribute_property' ifAbsent: [].
+	mods removeKey: #'attribute_property' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/attribute_property.py')
 		name: 'attribute_property'.

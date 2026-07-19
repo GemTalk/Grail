@@ -44,9 +44,9 @@ loadFixture
 	| mods keys |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
-	mods @env0:removeKey: #'cached_property_demo' ifAbsent: [].
+	mods removeKey: #'cached_property_demo' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/cached_property_demo.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/cached_property_demo.py')
 		name: 'cached_property_demo'
 %
 

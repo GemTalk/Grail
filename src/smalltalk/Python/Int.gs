@@ -33,8 +33,8 @@ _new: positional kw: kwargs
 	base := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [kwargs @env0:at: 'base' ifAbsent: [nil]].
-	base == nil ifTrue: [^ self @env1:__new__: obj].
-	^ self @env1:__new__: obj _: base
+	base == nil ifTrue: [^ self __new__: obj].
+	^ self __new__: obj _: base
 %
 
 category: 'Grail-Initialization'
@@ -69,10 +69,10 @@ __new__: obj
 	_index=operator.index)'') compiles to the varargs selector
 	``___int__:kw:'', which the bare-selector check below would miss."
 	((obj @env0:class @env0:whichClassIncludesSelector: #'___int__:kw:' environmentId: 1) @env0:notNil) ifTrue: [
-		^ obj @env1:___int__: { } kw: nil
+		^ obj ___int__: { } kw: nil
 	].
 	((obj @env0:class @env0:whichClassIncludesSelector: #__int__ environmentId: 1) @env0:notNil) ifTrue: [
-		result := obj @env1:__int__.
+		result := obj __int__.
 		^ result
 	].
 
@@ -302,7 +302,7 @@ __add__: other
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:+ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:+ (other @env1:__index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:+ (other __index__)].
 	^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'
 %
 
@@ -313,7 +313,7 @@ __and__: other
 
 	(other isKindOf: Integer) ifTrue: [^ self @env0:bitAnd: other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitAnd: (other @env1:__index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitAnd: (other __index__)].
 	^ self ___binOpFallback___: other op: '&' reflected: #'__rand__:'
 %
 
@@ -380,12 +380,12 @@ __eq__: other
 	"complex first: kernel env-0 = would try GemStone Number coercion
 	and send the internal #_getKind to complex (DNU).  complex knows
 	how to compare against reals."
-	(other isKindOf: complex) ifTrue: [^ other @env1:__eq__: self].
+	(other isKindOf: complex) ifTrue: [^ other __eq__: self].
 	(self @env0:= other) ifTrue: [^ true].
 	(other isKindOf: SmallInteger) ifTrue: [^ false].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
-		^ self @env0:= (other @env1:__index__)
+		^ self @env0:= (other __index__)
 	].
 	^ false
 %
@@ -417,7 +417,7 @@ __floordiv__: other
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:// other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:// (other @env1:__index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:// (other __index__)].
 	^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'
 %
 
@@ -428,7 +428,7 @@ __format__: formatSpec
 	(fill/align/sign/#/0/width/grouping/.precision/type) — see the
 	shared engine in builtins ___formatValue___:spec:."
 
-	^ (builtins @env1:instance) @env1:___formatValue___: self spec: formatSpec
+	^ (builtins instance) ___formatValue___: self spec: formatSpec
 %
 
 category: 'Grail-Comparison'
@@ -441,7 +441,7 @@ __ge__: other
 	(other isKindOf: Number) ifTrue: [^ self @env0:>= other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
-		^ self @env0:>= (other @env1:__index__)
+		^ self @env0:>= (other __index__)
 	].
 	^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'
 %
@@ -454,7 +454,7 @@ __gt__: other
 	(other isKindOf: Number) ifTrue: [^ self @env0:> other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
-		^ self @env0:> (other @env1:__index__)
+		^ self @env0:> (other __index__)
 	].
 	^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'
 %
@@ -517,7 +517,7 @@ __le__: other
 	(other isKindOf: Number) ifTrue: [^ self @env0:<= other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
-		^ self @env0:<= (other @env1:__index__)
+		^ self @env0:<= (other __index__)
 	].
 	^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'
 %
@@ -529,7 +529,7 @@ __lshift__: other
 
 	(other isKindOf: Integer) ifTrue: [^ self @env0:bitShift: other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitShift: (other @env1:__index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitShift: (other __index__)].
 	^ self ___binOpFallback___: other op: '<<' reflected: #'__rlshift__:'
 %
 
@@ -541,7 +541,7 @@ __lt__: other
 	(other isKindOf: Number) ifTrue: [^ self @env0:< other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
-		^ self @env0:< (other @env1:__index__)
+		^ self @env0:< (other __index__)
 	].
 	^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'
 %
@@ -557,7 +557,7 @@ __mod__: other
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:\\ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:\\ (other @env1:__index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:\\ (other __index__)].
 	^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'
 %
 
@@ -568,14 +568,14 @@ __mul__: other
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:* other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:* (other @env1:__index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:* (other __index__)].
 	"Sequence repetition is commutative: ``2 * 'ab''' / ``2 * [1]''
 	delegate to the sequence's own __mul__ (CPython reaches the
 	same result via NotImplemented -> str.__rmul__)."
 	((other isKindOf: CharacterCollection)
 		or: [(other isKindOf: SequenceableCollection)
 		or: [other isKindOf: ByteArray]]) ifTrue: [
-		^ other @env1:__mul__: self].
+		^ other __mul__: self].
 	^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'
 %
 
@@ -602,7 +602,7 @@ __or__: other
 
 	(other isKindOf: Integer) ifTrue: [^ self @env0:bitOr: other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitOr: (other @env1:__index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitOr: (other __index__)].
 	^ self ___binOpFallback___: other op: '|' reflected: #'__ror__:'
 %
 
@@ -627,7 +627,7 @@ __pow__: other
 			do: [:ex |
 				OverflowError ___signal___: 'result exceeds Grail integer capacity']].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:raisedTo: (other @env1:__index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:raisedTo: (other __index__)].
 	^ self ___binOpFallback___: other op: '**' reflected: #'__rpow__:'
 %
 
@@ -651,7 +651,7 @@ __radd__: other
 
 	(other isKindOf: Number) ifTrue: [^ other @env0:+ self].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:+ self].
+		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:+ self].
 	^ self ___rbinOpFallback___: other op: '+'
 %
 
@@ -662,7 +662,7 @@ __rand__: other
 
 	(other isKindOf: Integer) ifTrue: [^ other @env0:bitAnd: self].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:bitAnd: self].
+		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:bitAnd: self].
 	^ self ___rbinOpFallback___: other op: '&'
 %
 
@@ -697,7 +697,7 @@ __rfloordiv__: other
 
 	(other isKindOf: Number) ifTrue: [^ other @env0:// self].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:// self].
+		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:// self].
 	^ self ___rbinOpFallback___: other op: '//'
 %
 
@@ -708,7 +708,7 @@ __rlshift__: other
 
 	(other isKindOf: Integer) ifTrue: [^ other @env0:bitShift: self].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:bitShift: self].
+		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:bitShift: self].
 	^ self ___rbinOpFallback___: other op: '<<'
 %
 
@@ -722,7 +722,7 @@ __rmod__: other
 
 	(other isKindOf: Number) ifTrue: [^ other @env0:\\ self].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:\\ self].
+		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:\\ self].
 	^ self ___rbinOpFallback___: other op: '%'
 %
 
@@ -733,7 +733,7 @@ __rmul__: other
 
 	(other isKindOf: Number) ifTrue: [^ other @env0:* self].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:* self].
+		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:* self].
 	^ self ___rbinOpFallback___: other op: '*'
 %
 
@@ -744,7 +744,7 @@ __ror__: other
 
 	(other isKindOf: Integer) ifTrue: [^ other @env0:bitOr: self].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:bitOr: self].
+		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:bitOr: self].
 	^ self ___rbinOpFallback___: other op: '|'
 %
 
@@ -782,7 +782,7 @@ __rpow__: other
 
 	(other isKindOf: Number) ifTrue: [^ other @env0:raisedTo: self].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:raisedTo: self].
+		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:raisedTo: self].
 	^ self ___rbinOpFallback___: other op: '**'
 %
 
@@ -793,7 +793,7 @@ __rrshift__: other
 
 	(other isKindOf: Integer) ifTrue: [^ other @env0:bitShift: (self @env0:negated)].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:bitShift: (self @env0:negated)].
+		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:bitShift: (self @env0:negated)].
 	^ self ___rbinOpFallback___: other op: '>>'
 %
 
@@ -804,7 +804,7 @@ __rshift__: other
 
 	(other isKindOf: Integer) ifTrue: [^ self @env0:bitShift: (other @env0:negated)].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitShift: ((other @env1:__index__) @env0:negated)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitShift: ((other __index__) @env0:negated)].
 	^ self ___binOpFallback___: other op: '>>' reflected: #'__rrshift__:'
 %
 
@@ -815,7 +815,7 @@ __rsub__: other
 
 	(other isKindOf: Number) ifTrue: [^ other @env0:- (self)].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:- (self)].
+		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:- (self)].
 	^ self ___rbinOpFallback___: other op: '-'
 %
 
@@ -829,7 +829,7 @@ __rtruediv__: other
 
 	(other isKindOf: Number) ifTrue: [^ other @env0:/ self].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:/ self].
+		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:/ self].
 	^ self ___rbinOpFallback___: other op: '/'
 %
 
@@ -840,7 +840,7 @@ __rxor__: other
 
 	(other isKindOf: Integer) ifTrue: [^ other @env0:bitXor: self].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:bitXor: self].
+		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:bitXor: self].
 	^ self ___rbinOpFallback___: other op: '^'
 %
 
@@ -859,7 +859,7 @@ __sub__: other
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:- (other)].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:- ((other @env1:__index__))].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:- ((other __index__))].
 	^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'
 %
 
@@ -874,7 +874,7 @@ __truediv__: other
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:/ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:/ (other @env1:__index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:/ (other __index__)].
 	^ self ___binOpFallback___: other op: '/' reflected: #'__rtruediv__:'
 %
 
@@ -893,7 +893,7 @@ __xor__: other
 
 	(other isKindOf: Integer) ifTrue: [^ self @env0:bitXor: other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitXor: (other @env1:__index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitXor: (other __index__)].
 	^ self ___binOpFallback___: other op: '^' reflected: #'__rxor__:'
 %
 
@@ -1016,7 +1016,7 @@ to_bytes: length _: byteorder
 	doesn't exist (Python-keyword style accidentally used instead
 	of Grail's ``_:'' convention)."
 
-	^ self @env1:to_bytes: length _: byteorder _: false
+	^ self to_bytes: length _: byteorder _: false
 %
 
 category: 'Grail-Integer Methods'

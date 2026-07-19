@@ -66,7 +66,7 @@ printSmalltalkOn: aStream
 	].
 	aStream nextPutAll: '([:___d | '.
 	1 to: keys size do: [:i |
-		(keys at: i) @env0:isNil
+		(keys at: i) isNil
 			ifTrue: [
 				"Dictionary unpacking ``{**expr}``: the parser puts the
 				mapping in `values` with a None (nil) at the matching

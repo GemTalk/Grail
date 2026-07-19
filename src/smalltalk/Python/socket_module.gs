@@ -120,7 +120,7 @@ bind: address
 		@env0:ifTrue: [nil]
 		@env0:ifFalse: [sockPort].
 	(gsSocket @env0:bindTo: portArg toAddress: nil) @env0:isNil ifTrue: [
-		^ OSError @env1:___signal___: 'socket.bind failed'
+		^ OSError ___signal___: 'socket.bind failed'
 	].
 	sockPort := gsSocket @env0:port.
 	^ None
@@ -129,7 +129,7 @@ bind: address
 category: 'Grail-Socket Protocol'
 method: PySocket
 listen
-	^ self @env1:listen: 5
+	^ self listen: 5
 %
 
 category: 'Grail-Socket Protocol'
@@ -139,7 +139,7 @@ listen: backlog
 	OS bind."
 
 	(gsSocket @env0:makeListener: backlog) @env0:isNil ifTrue: [
-		^ OSError @env1:___signal___: 'socket.listen failed'
+		^ OSError ___signal___: 'socket.listen failed'
 	].
 	^ None
 %
@@ -153,7 +153,7 @@ accept
 	| conn |
 	conn := gsSocket @env0:accept.
 	conn @env0:isNil ifTrue: [
-		^ OSError @env1:___signal___: 'socket.accept failed'
+		^ OSError ___signal___: 'socket.accept failed'
 	].
 	^ { (PySocket @env0:wrapping: conn) .
 		{ (conn @env0:peerAddress @env0:ifNil: ['']) . (conn @env0:peerPort @env0:ifNil: [0]) } }
@@ -169,7 +169,7 @@ connect: address
 	port := address @env0:at: 2.
 	ok := gsSocket @env0:connectTo: port on: host @env0:asString.
 	ok == true ifFalse: [
-		^ OSError @env1:___signal___: 'socket.connect failed'
+		^ OSError ___signal___: 'socket.connect failed'
 	].
 	sockHost := host.
 	sockPort := port.
@@ -185,7 +185,7 @@ recv: bufsize
 	| ba n |
 	ba := ByteArray @env0:new: bufsize.
 	n := gsSocket @env0:read: bufsize into: ba startingAt: 1.
-	n @env0:isNil ifTrue: [^ OSError @env1:___signal___: 'socket.recv failed'].
+	n @env0:isNil ifTrue: [^ OSError ___signal___: 'socket.recv failed'].
 	n @env0:= 0 ifTrue: [^ ByteArray @env0:new].
 	^ ba @env0:copyFrom: 1 to: n
 %
@@ -199,7 +199,7 @@ send: data
 	| ba n |
 	ba := self @env0:_toByteArray: data.
 	n := gsSocket @env0:write: ba @env0:size from: ba.
-	n @env0:isNil ifTrue: [^ OSError @env1:___signal___: 'socket.send failed'].
+	n @env0:isNil ifTrue: [^ OSError ___signal___: 'socket.send failed'].
 	^ n
 %
 
@@ -214,7 +214,7 @@ sendall: data
 	total := 0.
 	[total @env0:< size] @env0:whileTrue: [
 		n := gsSocket @env0:write: (size @env0:- total) from: ba startingAt: total @env0:+ 1.
-		n @env0:isNil ifTrue: [^ OSError @env1:___signal___: 'socket.sendall failed'].
+		n @env0:isNil ifTrue: [^ OSError ___signal___: 'socket.sendall failed'].
 		total := total @env0:+ n.
 	].
 	^ None
@@ -325,7 +325,7 @@ __enter__
 category: 'Grail-Context Manager'
 method: PySocket
 __exit__: excType _: excValue _: tb
-	self @env1:close.
+	self close.
 	^ false
 %
 
@@ -513,13 +513,13 @@ set compile_env: 1
 category: 'Grail-IO'
 method: PySocketIO
 readline
-	^ self @env1:_readlineLimit: None
+	^ self _readlineLimit: None
 %
 
 category: 'Grail-IO'
 method: PySocketIO
 readline: limit
-	^ self @env1:_readlineLimit: limit
+	^ self _readlineLimit: limit
 %
 
 category: 'Grail-IO'
@@ -536,7 +536,7 @@ _readlineLimit: limit
 		nlIdx := readBuffer @env0:isEmpty ifTrue: [0] ifFalse: [readBuffer @env0:indexOf: 10].
 		nlIdx @env0:> 0 ifTrue: [^ self @env0:_takeBuffer: nlIdx].
 		(hasLimit and: [readBuffer @env0:size @env0:>= limit]) ifTrue: [^ self @env0:_takeBuffer: limit].
-		chunk := sock @env1:recv: 8192.
+		chunk := sock recv: 8192.
 		chunk @env0:isEmpty ifTrue: [^ self @env0:_takeBuffer: readBuffer @env0:size].
 		readBuffer := readBuffer @env0:, chunk.
 	].
@@ -545,7 +545,7 @@ _readlineLimit: limit
 category: 'Grail-IO'
 method: PySocketIO
 read
-	^ self @env1:_readAll
+	^ self _readAll
 %
 
 category: 'Grail-IO'
@@ -555,9 +555,9 @@ read: n
 	EOF."
 
 	| chunk |
-	(n == None or: [n @env0:isNil or: [n @env0:< 0]]) ifTrue: [^ self @env1:_readAll].
+	(n == None or: [n @env0:isNil or: [n @env0:< 0]]) ifTrue: [^ self _readAll].
 	[readBuffer @env0:size @env0:< n] whileTrue: [
-		chunk := sock @env1:recv: 8192.
+		chunk := sock recv: 8192.
 		chunk @env0:isEmpty ifTrue: [^ self @env0:_takeBuffer: readBuffer @env0:size].
 		readBuffer := readBuffer @env0:, chunk.
 	].
@@ -568,7 +568,7 @@ category: 'Grail-IO'
 method: PySocketIO
 _readAll
 	| chunk |
-	[chunk := sock @env1:recv: 8192. chunk @env0:isEmpty @env0:not] whileTrue: [
+	[chunk := sock recv: 8192. chunk @env0:isEmpty @env0:not] whileTrue: [
 		readBuffer := readBuffer @env0:, chunk
 	].
 	^ self @env0:_takeBuffer: readBuffer @env0:size
@@ -579,7 +579,7 @@ method: PySocketIO
 write: data
 	"Write ``data'' (bytes) to the socket; return the number of bytes."
 
-	sock @env1:sendall: data.
+	sock sendall: data.
 	^ data @env0:size
 %
 
@@ -634,7 +634,7 @@ __enter__
 category: 'Grail-Context Manager'
 method: PySocketIO
 __exit__: excType _: excValue _: tb
-	self @env1:close.
+	self close.
 	^ false
 %
 
@@ -650,8 +650,8 @@ __next__
 	"Iterate lines; raise StopIteration at EOF."
 
 	| line |
-	line := self @env1:readline.
-	line @env0:isEmpty ifTrue: [^ StopIteration @env1:___signal___: ''].
+	line := self readline.
+	line @env0:isEmpty ifTrue: [^ StopIteration ___signal___: ''].
 	^ line
 %
 

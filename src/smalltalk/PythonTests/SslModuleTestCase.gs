@@ -44,7 +44,7 @@ method: SslModuleTestCase
 loadFixture
 	"Load tests/python/use_ssl.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'use_ssl' ifAbsent: [].
+	importlib @env1:modules removeKey: #'use_ssl' ifAbsent: [].
 	^ importlib
 		loadModuleFromPath: (importlib grailDir, '/tests/python/use_ssl.py')
 		name: 'use_ssl'

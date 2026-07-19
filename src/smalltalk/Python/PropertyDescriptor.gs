@@ -142,7 +142,7 @@ value: positional value: kwargs
 	doesn't match a fixed-arity ``__new__'') through value:value:
 	on the class metaclass.  Delegate to _new:kw:."
 
-	^ self @env1:_new: positional kw: kwargs
+	^ self _new: positional kw: kwargs
 %
 
 category: 'Grail-Class-Call Fast Path'
@@ -174,7 +174,7 @@ _new: positional kw: kwargs
 		@env0:ifFalse: [kwargs @env0:isNil
 			@env0:ifTrue: [nil]
 			@env0:ifFalse: [kwargs @env0:at: 'doc' ifAbsent: [nil]]].
-	^ self @env1:__new__: fg _: fs _: fd _: dc
+	^ self __new__: fg _: fs _: fd _: dc
 %
 
 set compile_env: 0

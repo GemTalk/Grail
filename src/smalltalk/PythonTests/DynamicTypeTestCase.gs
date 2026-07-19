@@ -42,9 +42,9 @@ method: DynamicTypeTestCase
 loadFixture
 	"Load tests/python/dynamic_type.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'dynamic_type' ifAbsent: [].
+	importlib @env1:modules removeKey: #'dynamic_type' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/dynamic_type.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/dynamic_type.py')
 		name: 'dynamic_type'
 %
 

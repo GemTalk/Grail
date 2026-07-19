@@ -152,25 +152,25 @@ method: NoneType
 < other
 	"Sort blocks send env-1 #< directly (not the dunder)."
 
-	^ self @env1:__lt__: other
+	^ self __lt__: other
 %
 
 category: 'Grail-Python protocol'
 method: NoneType
 <= other
-	^ self @env1:__le__: other
+	^ self __le__: other
 %
 
 category: 'Grail-Python protocol'
 method: NoneType
 > other
-	^ self @env1:__gt__: other
+	^ self __gt__: other
 %
 
 category: 'Grail-Python protocol'
 method: NoneType
 >= other
-	^ self @env1:__ge__: other
+	^ self __ge__: other
 %
 
 category: 'Grail-Python protocol'

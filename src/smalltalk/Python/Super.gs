@@ -74,11 +74,11 @@ _varargsSelectorFor: aSelector
 	a 0-arg selector (no trailing colon — no varargs form to try)."
 
 	| s colonIdx base |
-	s := aSelector @env0:asString.
-	colonIdx := s @env0:indexOf: $:.
-	colonIdx @env0:= 0 ifTrue: [^ nil].
-	base := s @env0:copyFrom: 1 to: colonIdx @env0:- 1.
-	^ ('_' @env0:, base @env0:, ':kw:') @env0:asSymbol
+	s := aSelector asString.
+	colonIdx := s indexOf: $:.
+	colonIdx = 0 ifTrue: [^ nil].
+	base := s copyFrom: 1 to: colonIdx - 1.
+	^ ('_' , base , ':kw:') asSymbol
 %
 
 category: 'Grail-Private'
@@ -89,12 +89,12 @@ _lookupMethod: aSym
 	GsNMethod, or nil if not found."
 
 	| walker |
-	walker := cls @env0:superClass.
+	walker := cls superClass.
 	[walker notNil] whileTrue: [
 		| md |
-		md := walker @env0:methodDictForEnv: 1.
-		(md @env0:includesKey: aSym) ifTrue: [^ md @env0:at: aSym].
-		walker := walker @env0:superClass].
+		md := walker methodDictForEnv: 1.
+		(md includesKey: aSym) ifTrue: [^ md at: aSym].
+		walker := walker superClass].
 	^ nil
 %
 
@@ -131,37 +131,37 @@ _lookupMethodFirstOf: selectors
 	OBJECTS -- which for Grail means the parents' class-side (metaclass)
 	dicts too: object's ``__new__:`` family is compiled class-side."
 	alsoMeta := obj isKindOf: Behavior.
-	il := Python @env0:at: #importlib otherwise: nil.
-	receiverCls := alsoMeta ifTrue: [obj] ifFalse: [obj @env0:class].
+	il := Python at: #importlib otherwise: nil.
+	receiverCls := alsoMeta ifTrue: [obj] ifFalse: [obj class].
 	il == nil ifFalse: [
-		mro := il @env0:___mroOf___: receiverCls.
-		idx := mro @env0:indexOf: cls.
-		idx @env0:> 0 ifTrue: [
-			idx @env0:+ 1 @env0:to: mro @env0:size do: [:i |
+		mro := il ___mroOf___: receiverCls.
+		idx := mro indexOf: cls.
+		idx > 0 ifTrue: [
+			idx + 1 to: mro size do: [:i |
 				| md mdMeta |
-				md := (mro @env0:at: i) @env0:methodDictForEnv: 1.
+				md := (mro at: i) methodDictForEnv: 1.
 				mdMeta := alsoMeta
-					ifTrue: [(mro @env0:at: i) @env0:class @env0:methodDictForEnv: 1]
+					ifTrue: [(mro at: i) class methodDictForEnv: 1]
 					ifFalse: [nil].
-				selectors @env0:do: [:sel |
+				selectors do: [:sel |
 					sel ifNotNil: [
-						(md @env0:includesKey: sel) ifTrue: [^ md @env0:at: sel].
-						(mdMeta ~~ nil and: [mdMeta @env0:includesKey: sel])
-							ifTrue: [^ mdMeta @env0:at: sel]]]].
+						(md includesKey: sel) ifTrue: [^ md at: sel].
+						(mdMeta ~~ nil and: [mdMeta includesKey: sel])
+							ifTrue: [^ mdMeta at: sel]]]].
 			^ nil]].
-	walker := cls @env0:superClass.
+	walker := cls superClass.
 	[walker notNil] whileTrue: [
 		| md mdMeta |
-		md := walker @env0:methodDictForEnv: 1.
+		md := walker methodDictForEnv: 1.
 		mdMeta := alsoMeta
-			ifTrue: [walker @env0:class @env0:methodDictForEnv: 1]
+			ifTrue: [walker class methodDictForEnv: 1]
 			ifFalse: [nil].
-		selectors @env0:do: [:sel |
+		selectors do: [:sel |
 			sel ifNotNil: [
-				(md @env0:includesKey: sel) ifTrue: [^ md @env0:at: sel].
-				(mdMeta ~~ nil and: [mdMeta @env0:includesKey: sel])
-					ifTrue: [^ mdMeta @env0:at: sel]]].
-		walker := walker @env0:superClass].
+				(md includesKey: sel) ifTrue: [^ md at: sel].
+				(mdMeta ~~ nil and: [mdMeta includesKey: sel])
+					ifTrue: [^ mdMeta at: sel]]].
+		walker := walker superClass].
 	^ nil
 %
 
@@ -278,7 +278,7 @@ ___pyAttrLoad___: aSym
 			ifFalse: [self @env0:_lookupMethodFirstOf: { symVA. fixedSel }]].
 	"Wrap (obj, pickMethod) in a callable proxy that resolves the
 	method at call time once arity is known."
-	^ SuperBoundMethod @env1:obj: obj resolver: pickMethod selector: aSym
+	^ SuperBoundMethod obj: obj resolver: pickMethod selector: aSym
 %
 
 set compile_env: 0

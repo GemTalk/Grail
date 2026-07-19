@@ -49,7 +49,7 @@ method: LegbScopeTestCase
 setUp
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'legb_scope' ifAbsent: [].
+	mods removeKey: #'legb_scope' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/legb_scope.py')
 		name: 'legb_scope'.

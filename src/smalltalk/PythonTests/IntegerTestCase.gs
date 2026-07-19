@@ -696,8 +696,8 @@ testToBytesTwoArgForm
 	r2 := 256 @env1:to_bytes: 2 _: 'big'.
 	"to_bytes currently returns a tuple, not bytes — separate gap."
 	self assert: r1 size equals: 1.
-	self assert: (r1 @env0:at: 1) equals: 1.
+	self assert: (r1 at: 1) equals: 1.
 	self assert: r2 size equals: 2.
-	self assert: (r2 @env0:at: 1) equals: 1.
-	self assert: (r2 @env0:at: 2) equals: 0
+	self assert: (r2 at: 1) equals: 1.
+	self assert: (r2 at: 2) equals: 0
 %

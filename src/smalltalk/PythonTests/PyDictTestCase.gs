@@ -46,10 +46,10 @@ ordered
 	which a plain KeyValueDictionary iterates zz|mm|aa)."
 
 	| d |
-	d := PyDict @env0:new.
-	d @env0:at: 'zz' put: 1.
-	d @env0:at: 'aa' put: 2.
-	d @env0:at: 'mm' put: 3.
+	d := PyDict new.
+	d at: 'zz' put: 1.
+	d at: 'aa' put: 2.
+	d at: 'mm' put: 3.
 	^ d
 %
 
@@ -80,12 +80,12 @@ testIterWalksInsertionOrder
 	| d it out done k |
 	d := self ordered.
 	it := d @env1:__iter__.
-	out := WriteStream @env0:on: String @env0:new.
+	out := WriteStream on: String new.
 	done := false.
-	[done] @env0:whileFalse: [
-		[k := it @env1:__next__. out @env0:nextPutAll: k; @env0:nextPut: $|]
-			@env0:on: AbstractException do: [:e | done := true. e @env0:return: nil]].
-	self assert: out @env0:contents equals: 'zz|aa|mm|'
+	[done] whileFalse: [
+		[k := it @env1:__next__. out nextPutAll: k; nextPut: $|]
+			on: AbstractException do: [:e | done := true. e return: nil]].
+	self assert: out contents equals: 'zz|aa|mm|'
 %
 
 category: 'Grail-Tests-pydict'
@@ -96,7 +96,7 @@ testUpdateKeepsPosition
 
 	| d |
 	d := self ordered.
-	d @env0:at: 'zz' put: 99.
+	d at: 'zz' put: 99.
 	self assert: (d @env1:__repr__) equals: '{''zz'': 99, ''aa'': 2, ''mm'': 3}'
 %
 
@@ -105,7 +105,7 @@ method: PyDictTestCase
 testRemoveDropsFromOrder
 	| d |
 	d := self ordered.
-	d @env0:removeKey: 'aa'.
+	d removeKey: 'aa'.
 	self assert: (d @env1:__repr__) equals: '{''zz'': 1, ''mm'': 3}'
 %
 
@@ -117,8 +117,8 @@ testCopyHasIndependentOrder
 
 	| d c |
 	d := self ordered.
-	c := d @env0:copy.
-	c @env0:at: 'new' put: 5.
+	c := d copy.
+	c at: 'new' put: 5.
 	self assert: (d @env1:__repr__) equals: '{''zz'': 1, ''aa'': 2, ''mm'': 3}'.
 	self assert: (c @env1:__repr__) equals: '{''zz'': 1, ''aa'': 2, ''mm'': 3, ''new'': 5}'
 %

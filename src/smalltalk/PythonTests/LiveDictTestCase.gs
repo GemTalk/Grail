@@ -54,7 +54,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'live_dict' ifAbsent: [].
+	mods removeKey: #'live_dict' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/live_dict.py')
 		name: 'live_dict'.
@@ -137,7 +137,7 @@ testDictKeysReflectCurrentState
 
 	| keys |
 	keys := testModule @env1:___pyAttrLoad___: #b3_keys.
-	self assert: keys @env0:size equals: 3.
+	self assert: keys size equals: 3.
 	"Box('iter') sets 'label' in __init__; the body adds 'x' and 'y'."
 	self assert: (keys @env1:__getitem__: 0) equals: 'label'.
 	self assert: (keys @env1:__getitem__: 1) equals: 'x'.

@@ -340,7 +340,7 @@ printSmalltalkOn: aStream
 	enclosing scope (jinja2's ``missing=missing``) resolve there
 	at def-time instead of failing in the inner block where the
 	same name is the local being bound."
-	(args defaults notNil and: [args defaults @env0:notEmpty]) ifTrue: [
+	(args defaults notNil and: [args defaults notEmpty]) ifTrue: [
 		| numDefaults firstWithDefault |
 		numDefaults := args defaults size.
 		firstWithDefault := args args size - numDefaults + 1.
@@ -489,7 +489,7 @@ printSmalltalkOn: aStream
 	the outer block evaluates immediately to capture defaults at
 	def-time, returning the inner block as the actual callable.
 	With no defaults the outer wrapper is the inner block directly."
-	(args defaults notNil and: [args defaults @env0:notEmpty]) ifTrue: [
+	(args defaults notNil and: [args defaults notEmpty]) ifTrue: [
 		aStream nextPutAll: '] value'.
 	].
 	"Stamp the closure's ``__name__'' from the def's lexical name so
@@ -1155,7 +1155,7 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 			default expr inline; the closure path is the only one that
 			needs def-time evaluation because that's the only form
 			where ``X=X`` defaults reference the enclosing scope."
-			(posName @env0:= '___positional___')
+			(posName = '___positional___')
 				ifTrue: [
 					aStream nextPutAll: '___default_'; nextPutAll: pname; nextPutAll: '___'
 				] ifFalse: [
@@ -1395,7 +1395,7 @@ generateModuleMethodSourceOn: aStream
 							transport := '_' , each asString.
 							((allLocals includes: transport)
 								or: [(paramNames includes: transport)
-								or: [(transportNames detect: [:t | t @env0:asString @env0:= transport] ifNone: [nil]) notNil
+								or: [(transportNames detect: [:t | t asString = transport] ifNone: [nil]) notNil
 								or: [paramNames includes: each]]])
 								ifFalse: [allLocals add: transport]]
 				].
@@ -1486,13 +1486,13 @@ generateModuleMethodSourceOn: aStream
 		"asString both sides: paramNames/bodyVars carry Symbols, and
 		GemStone Symbol equality is identity — a bare includes: with a
 		String probe never matches."
-		posMethodParam := ((args vararg notNil and: [args vararg name @env0:asString @env0:= 'positional'])
-			or: [(paramNames detect: [:p | p @env0:asString @env0:= 'positional'] ifNone: [nil]) notNil
-			or: [(bodyVars detect: [:v | v @env0:asString @env0:= 'positional'] ifNone: [nil]) notNil]])
+		posMethodParam := ((args vararg notNil and: [args vararg name asString = 'positional'])
+			or: [(paramNames detect: [:p | p asString = 'positional'] ifNone: [nil]) notNil
+			or: [(bodyVars detect: [:v | v asString = 'positional'] ifNone: [nil]) notNil]])
 			ifTrue: ['___pos___'] ifFalse: ['positional'].
-		kwMethodParam := ((args kwarg notNil and: [args kwarg name @env0:asString @env0:= 'kwargs'])
-			or: [(paramNames detect: [:p | p @env0:asString @env0:= 'kwargs'] ifNone: [nil]) notNil
-			or: [(bodyVars detect: [:v | v @env0:asString @env0:= 'kwargs'] ifNone: [nil]) notNil]])
+		kwMethodParam := ((args kwarg notNil and: [args kwarg name asString = 'kwargs'])
+			or: [(paramNames detect: [:p | p asString = 'kwargs'] ifNone: [nil]) notNil
+			or: [(bodyVars detect: [:v | v asString = 'kwargs'] ifNone: [nil]) notNil]])
 			ifTrue: ['___kw___'] ifFalse: ['kwargs'].
 		aStream nextPut: $_; nextPutAll: name;
 			nextPutAll: ': '; nextPutAll: posMethodParam;
@@ -1707,10 +1707,10 @@ nodeContainsYieldExceptNestedDefs: node
 	"Walk all instVars of this AST node; recurse into AbstractNode
 	children and SequenceableCollection containers.  Skip the
 	``parent`` back-pointer to avoid cycling up the tree."
-	node @env0:class allInstVarNames doWithIndex: [:nameSym :i |
+	node class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [
 			| child |
-			child := node @env0:instVarAt: i.
+			child := node instVarAt: i.
 			(child isKindOf: AbstractNode) ifTrue: [
 				(self nodeContainsYieldExceptNestedDefs: child) ifTrue: [^true]
 			] ifFalse: [
@@ -2196,13 +2196,13 @@ generateMethodSourceOn: aStream
 		"asString both sides: paramNames/bodyVars carry Symbols, and
 		GemStone Symbol equality is identity — a bare includes: with a
 		String probe never matches."
-		posMethodParam := ((args vararg notNil and: [args vararg name @env0:asString @env0:= 'positional'])
-			or: [(paramNames detect: [:p | p @env0:asString @env0:= 'positional'] ifNone: [nil]) notNil
-			or: [(bodyVars detect: [:v | v @env0:asString @env0:= 'positional'] ifNone: [nil]) notNil]])
+		posMethodParam := ((args vararg notNil and: [args vararg name asString = 'positional'])
+			or: [(paramNames detect: [:p | p asString = 'positional'] ifNone: [nil]) notNil
+			or: [(bodyVars detect: [:v | v asString = 'positional'] ifNone: [nil]) notNil]])
 			ifTrue: ['___pos___'] ifFalse: ['positional'].
-		kwMethodParam := ((args kwarg notNil and: [args kwarg name @env0:asString @env0:= 'kwargs'])
-			or: [(paramNames detect: [:p | p @env0:asString @env0:= 'kwargs'] ifNone: [nil]) notNil
-			or: [(bodyVars detect: [:v | v @env0:asString @env0:= 'kwargs'] ifNone: [nil]) notNil]])
+		kwMethodParam := ((args kwarg notNil and: [args kwarg name asString = 'kwargs'])
+			or: [(paramNames detect: [:p | p asString = 'kwargs'] ifNone: [nil]) notNil
+			or: [(bodyVars detect: [:v | v asString = 'kwargs'] ifNone: [nil]) notNil]])
 			ifTrue: ['___kw___'] ifFalse: ['kwargs'].
 		aStream nextPut: $_; nextPutAll: name;
 			nextPutAll: ': '; nextPutAll: posMethodParam;

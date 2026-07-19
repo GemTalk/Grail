@@ -43,9 +43,9 @@ method: StarUnpackIteratorTestCase
 loadFixture
 	"Load tests/python/star_unpack_iterator.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'star_unpack_iterator' ifAbsent: [].
+	importlib @env1:modules removeKey: #'star_unpack_iterator' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/star_unpack_iterator.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/star_unpack_iterator.py')
 		name: 'star_unpack_iterator'
 %
 
@@ -56,7 +56,7 @@ testReversedInTuple
 
 	| r |
 	r := self loadFixture @env1:reversed_in_tuple.
-	self assert: r @env0:size equals: 4.
+	self assert: r size equals: 4.
 	self assert: (r @env1:__getitem__: 0) equals: 0.
 	self assert: (r @env1:__getitem__: 1) equals: 3.
 	self assert: (r @env1:__getitem__: 2) equals: 2.
@@ -70,7 +70,7 @@ testIterInList
 
 	| r |
 	r := self loadFixture @env1:iter_in_list.
-	self assert: r @env0:size equals: 4.
+	self assert: r size equals: 4.
 	self assert: (r @env1:__getitem__: 0) equals: 4.
 	self assert: (r @env1:__getitem__: 3) equals: 7
 %
@@ -83,7 +83,7 @@ testDictKeysInCall
 
 	| r |
 	r := self loadFixture @env1:dict_keys_in_call.
-	self assert: r @env0:size equals: 2.
+	self assert: r size equals: 2.
 	self assert: (r @env1:__contains__: 'a').
 	self assert: (r @env1:__contains__: 'b')
 %
@@ -95,7 +95,7 @@ testGeneratorInList
 
 	| r |
 	r := self loadFixture @env1:generator_in_list.
-	self assert: r @env0:size equals: 3.
+	self assert: r size equals: 3.
 	self assert: (r @env1:__getitem__: 0) equals: 1.
 	self assert: (r @env1:__getitem__: 1) equals: 2.
 	self assert: (r @env1:__getitem__: 2) equals: 3
@@ -108,7 +108,7 @@ testListStillWorks
 
 	| r |
 	r := self loadFixture @env1:list_still_works.
-	self assert: r @env0:size equals: 4.
+	self assert: r size equals: 4.
 	self assert: (r @env1:__getitem__: 0) equals: 0.
 	self assert: (r @env1:__getitem__: 1) equals: 1.
 	self assert: (r @env1:__getitem__: 2) equals: 2.

@@ -112,7 +112,7 @@ test_setitem_new
 	result := gs @env1:__getitem__: key.
 	self assert: result equals: value.
 	"Clean up"
-	UserGlobals @env0:removeKey: #'_grail_test_setitem'.
+	UserGlobals removeKey: #'_grail_test_setitem'.
 %
 
 category: 'Grail-Tests'
@@ -122,7 +122,7 @@ test_version
 	| gs result expected |
 	gs := gemstone @env1:instance.
 	result := gs @env1:version.
-	expected := System @env0:stoneVersionAt: 'gsVersion'.
+	expected := System stoneVersionAt: 'gsVersion'.
 	self assert: result equals: expected.
 %
 
@@ -276,7 +276,7 @@ testEvalGemstoneVersion
 import gemstone
 gemstone.version
 '.
-	expected := System @env0:stoneVersionAt: 'gsVersion'.
+	expected := System stoneVersionAt: 'gsVersion'.
 	self assert: result equals: expected
 %
 
@@ -296,7 +296,7 @@ v
 '.
 	self assert: result equals: 'p4d_value'.
 	"Verify deletion: the key should no longer exist"
-	self deny: (UserGlobals @env0:includesKey: #'_grail_p4d_key')
+	self deny: (UserGlobals includesKey: #'_grail_p4d_key')
 %
 
 category: 'Grail-Tests - Session-Local State'

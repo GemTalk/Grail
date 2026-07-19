@@ -68,7 +68,7 @@ isResolvableSymbol: aSymbol
 	avoid emitting a runtime self-at-lookup for names that already
 	resolve as bare identifiers."
 
-	^ (System myUserProfile symbolList @env0:objectNamed: aSymbol) notNil
+	^ (System myUserProfile symbolList objectNamed: aSymbol) notNil
 %
 
 category: 'other'

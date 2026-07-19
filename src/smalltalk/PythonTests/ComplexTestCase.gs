@@ -76,7 +76,7 @@ testSetattrOverridesRealImag
 
 	| c bi |
 	c := complex ___new___: 5 _: 12.
-	bi := (Python @env0:at: #builtins) @env0:___instance___.
+	bi := (Python at: #builtins) ___instance___.
 	bi @env1:setattr: c _: 'real' _: 99.0.
 	self assert: (c @env1:___pyAttrLoad___: #real) equals: 99.0.
 	self assert: (c @env1:real) equals: 99.0.

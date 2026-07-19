@@ -116,14 +116,14 @@ ___asSmalltalkClassName___: aPythonName
 	  ``_constants``    → ``_constants``"
 
 	| s first sym |
-	s := aPythonName @env0:asString @env0:copyReplaceAll: '.' with: '_'.
-	s @env0:isEmpty ifTrue: [^ s @env0:asSymbol].
-	first := s @env0:at: 1.
-	(first @env0:isLetter and: [first @env0:isLowercase]) ifTrue: [
-		s := first @env0:asUppercase @env0:asString @env0:,
-			(s @env0:copyFrom: 2 to: s @env0:size).
+	s := aPythonName asString copyReplaceAll: '.' with: '_'.
+	s isEmpty ifTrue: [^ s asSymbol].
+	first := s at: 1.
+	(first isLetter and: [first isLowercase]) ifTrue: [
+		s := first asUppercase asString ,
+			(s copyFrom: 2 to: s size).
 	].
-	^ s @env0:asSymbol
+	^ s asSymbol
 %
 
 category: 'Grail-For Tests'
@@ -134,14 +134,14 @@ grailDir
 	and the old classInstVar write dirtied the committed importlib
 	class on every session's setup (multi-user commit conflicts).
 	The classInstVar declaration remains but is unused."
-	^ SessionTemps @env0:current @env0:at: #GrailDir otherwise: nil
+	^ SessionTemps current at: #GrailDir otherwise: nil
 %
 
 category: 'Grail-Configuration'
 classmethod: importlib
 grailDir: aString
 	"Set the absolute path to the Grail project directory (session-local)."
-	SessionTemps @env0:current @env0:at: #GrailDir put: aString
+	SessionTemps current at: #GrailDir put: aString
 %
 
 category: 'Grail-Demo'
@@ -501,9 +501,9 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	| key reg existing minted |
 	self ___canonicalClassesEnabled___ ifFalse: [
 		^ aParent @env1:___subclass___: aName instVarNames: ivNames classInstVarNames: civNames].
-	key := aModuleName @env0:asString @env0:, '.' @env0:, aName @env0:asString.
+	key := aModuleName asString , '.' , aName asString.
 	reg := self ___canonicalClassRegistry___.
-	existing := reg @env0:at: key otherwise: nil.
+	existing := reg at: key otherwise: nil.
 	"Identity-reuse applies ACROSS body executions (the edit workflow, and
 	class stability for re-imports) -- never WITHIN one: a second ``class
 	Bar`` statement in the same body run must mint a distinct class, as
@@ -511,14 +511,14 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	is reset by loadModuleFromPath:/reload: right before the body runs."
 	minted := self ___mintedThisLoad___: aModuleName.
 	((existing isKindOf: Behavior)
-		and: [(minted @env0:includes: key) @env0:not
-		and: [existing @env0:superclass == aParent]])
+		and: [(minted includes: key) not
+		and: [existing superclass == aParent]])
 			ifTrue: [
-				minted @env0:add: key.
+				minted add: key.
 				^ existing].
 	existing := aParent @env1:___subclass___: aName instVarNames: ivNames classInstVarNames: civNames.
-	reg @env0:at: key put: existing.
-	minted @env0:add: key.
+	reg at: key put: existing.
+	minted add: key.
 	^ existing
 %
 
@@ -531,15 +531,15 @@ ___mintedThisLoad___: aModuleName
 	run so cross-execution identity-reuse is unaffected."
 
 	| st map set |
-	st := SessionTemps @env0:current.
-	map := st @env0:at: #'GrailMintedThisLoad' otherwise: nil.
-	map @env0:isNil ifTrue: [
-		map := KeyValueDictionary @env0:new.
-		st @env0:at: #'GrailMintedThisLoad' put: map].
-	set := map @env0:at: aModuleName @env0:asString @env0:asSymbol otherwise: nil.
-	set @env0:isNil ifTrue: [
-		set := Set @env0:new.
-		map @env0:at: aModuleName @env0:asString @env0:asSymbol put: set].
+	st := SessionTemps current.
+	map := st at: #'GrailMintedThisLoad' otherwise: nil.
+	map isNil ifTrue: [
+		map := KeyValueDictionary new.
+		st at: #'GrailMintedThisLoad' put: map].
+	set := map at: aModuleName asString asSymbol otherwise: nil.
+	set isNil ifTrue: [
+		set := Set new.
+		map at: aModuleName asString asSymbol put: set].
 	^ set
 %
 
@@ -549,9 +549,9 @@ ___resetMintedThisLoad___: aModuleName
 	"Called right before a module body executes (cold import / reload)."
 
 	| map |
-	map := SessionTemps @env0:current @env0:at: #'GrailMintedThisLoad' otherwise: nil.
-	map @env0:isNil ifFalse: [
-		map @env0:removeKey: aModuleName @env0:asString @env0:asSymbol ifAbsent: []].
+	map := SessionTemps current at: #'GrailMintedThisLoad' otherwise: nil.
+	map isNil ifFalse: [
+		map removeKey: aModuleName asString asSymbol ifAbsent: []].
 %
 
 category: 'Grail-Canonical Classes'
@@ -573,12 +573,12 @@ ___canonicalClassProbe___: aModuleName name: aClassName
 
 	| state |
 	self ___canonicalClassesEnabled___ ifFalse: [^ nil].
-	state := SessionTemps @env0:current @env0:at: #'GrailModuleHashState' otherwise: nil.
-	state @env0:isNil ifTrue: [^ nil].
-	((state @env0:at: aModuleName @env0:asString @env0:asSymbol otherwise: nil) == #'match')
+	state := SessionTemps current at: #'GrailModuleHashState' otherwise: nil.
+	state isNil ifTrue: [^ nil].
+	((state at: aModuleName asString asSymbol otherwise: nil) == #'match')
 		ifFalse: [^ nil].
 	^ self ___canonicalClassRegistry___
-		@env0:at: (aModuleName @env0:asString @env0:, '.' @env0:, aClassName @env0:asString)
+		at: (aModuleName asString , '.' , aClassName asString)
 		otherwise: nil
 %
 
@@ -593,7 +593,7 @@ ___canonicalClassRegister___: aModuleName name: aClassName value: anObject
 
 	self ___canonicalClassesEnabled___ ifFalse: [^ anObject].
 	self ___canonicalClassRegistry___
-		@env0:at: (aModuleName @env0:asString @env0:, '.' @env0:, aClassName @env0:asString)
+		at: (aModuleName asString , '.' , aClassName asString)
 		put: anObject.
 	"Membership in the canonical-class set is what routes RUNTIME
 	class-attribute stores into the session-local overlay
@@ -603,17 +603,17 @@ ___canonicalClassRegister___: aModuleName name: aClassName value: anObject
 	while post-definition mutation stays session-local."
 	(anObject isKindOf: Behavior) ifTrue: [
 		| set |
-		set := UserGlobals @env0:at: #'GrailCanonicalClassSet' otherwise: nil.
-		set @env0:isNil ifTrue: [
+		set := UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil.
+		set isNil ifTrue: [
 			"Reduced-conflict (doc par.10.7 phase 8): concurrent sessions
 			cold-importing DIFFERENT modules must not conflict on the shared
 			membership structure.  A bag admits duplicates; the only consumer
 			is includes: (___classAttrOverlayStore___), so duplicates are
 			harmless -- the includes:-guard below merely bounds same-session
 			re-registration growth."
-			set := RcIdentityBag @env0:new.
-			UserGlobals @env0:at: #'GrailCanonicalClassSet' put: set].
-		(set @env0:includes: anObject) ifFalse: [set @env0:add: anObject]].
+			set := RcIdentityBag new.
+			UserGlobals at: #'GrailCanonicalClassSet' put: set].
+		(set includes: anObject) ifFalse: [set add: anObject]].
 	^ anObject
 %
 
@@ -642,40 +642,40 @@ ___deployCheck___: aModuleName
 
 	| mod worklist visited parents findings count |
 	mod := self @env1:lookupModule: aModuleName.
-	mod @env0:isNil ifTrue: [
-		^ list @env0:withAll: {
-			('deploy_check: module ''' @env0:, aModuleName @env0:asString
-				@env0:, ''' is not imported in this session') }].
-	worklist := OrderedCollection @env0:with: mod.
-	visited := IdentitySet @env0:new.
-	parents := IdentityKeyValueDictionary @env0:new.
-	findings := OrderedCollection @env0:new.
+	mod isNil ifTrue: [
+		^ list withAll: {
+			('deploy_check: module ''' , aModuleName asString
+				, ''' is not imported in this session') }].
+	worklist := OrderedCollection with: mod.
+	visited := IdentitySet new.
+	parents := IdentityKeyValueDictionary new.
+	findings := OrderedCollection new.
 	count := 0.
-	[worklist @env0:isEmpty] @env0:whileFalse: [ | obj |
-		obj := worklist @env0:removeFirst.
-		(visited @env0:includes: obj) @env0:ifFalse: [
-			visited @env0:add: obj.
-			count := count @env0:+ 1.
-			count @env0:> 300000
+	[worklist isEmpty] whileFalse: [ | obj |
+		obj := worklist removeFirst.
+		(visited includes: obj) ifFalse: [
+			visited add: obj.
+			count := count + 1.
+			count > 300000
 				ifTrue: [
-					findings @env0:add: '... deploy_check truncated at 300000 objects'.
-					^ list @env0:withAll: findings].
-			(self @env0:___deploySessionBound___: obj) ifTrue: [
-				findings @env0:add:
-					((self @env0:___deployPathFor___: obj parents: parents)
-						@env0:, ' -> ' @env0:, (self @env0:___deployDescribe___: obj))].
+					findings add: '... deploy_check truncated at 300000 objects'.
+					^ list withAll: findings].
+			(self ___deploySessionBound___: obj) ifTrue: [
+				findings add:
+					((self ___deployPathFor___: obj parents: parents)
+						, ' -> ' , (self ___deployDescribe___: obj))].
 			"Do NOT descend into Behavior (walks whole class/method graph, and
 			classes are committed anyway); bytes hold no object refs."
 			(obj isKindOf: Behavior) ifFalse: [
-				self @env0:___deployRefsOf: obj do: [:ref |
+				self ___deployRefsOf: obj do: [:ref |
 					(ref ~~ nil
-						and: [(ref @env0:isSpecial) @env0:not
-						and: [(ref @env0:isCommitted) @env0:not
-						and: [(visited @env0:includes: ref) @env0:not]]]) ifTrue: [
-							(parents @env0:includesKey: ref)
-								ifFalse: [parents @env0:at: ref put: obj].
-							worklist @env0:add: ref]]]]].
-	^ list @env0:withAll: findings
+						and: [(ref isSpecial) not
+						and: [(ref isCommitted) not
+						and: [(visited includes: ref) not]]]) ifTrue: [
+							(parents includesKey: ref)
+								ifFalse: [parents at: ref put: obj].
+							worklist add: ref]]]]].
+	^ list withAll: findings
 %
 
 category: 'Grail-Deploy Audit'
@@ -689,14 +689,14 @@ ___deploySessionBound___: obj
 	(obj isKindOf: GsProcess) ifTrue: [^ true].
 	(obj isKindOf: GsFile) ifTrue: [^ true].
 	(obj isKindOf: CPointer) ifTrue: [^ true].
-	cn := obj @env0:class @env0:name @env0:asString.
-	(cn @env0:= 'GsSocket') ifTrue: [^ true].
-	(cn @env0:= 'SreMatch') ifTrue: [^ true].
-	(cn @env0:= 'WeakReference') ifTrue: [^ true].
+	cn := obj class name asString.
+	(cn = 'GsSocket') ifTrue: [^ true].
+	(cn = 'SreMatch') ifTrue: [^ true].
+	(cn = 'WeakReference') ifTrue: [^ true].
 	"An SrePattern is fine IF it remembers its compile args (it recompiles
 	on first use next session); flag only the un-recompilable ones."
-	(cn @env0:= 'SrePattern') ifTrue: [
-		^ (obj @env0:instVarAt: (obj @env0:class @env0:allInstVarNames @env0:indexOf: 'compileArgs')) @env0:isNil].
+	(cn = 'SrePattern') ifTrue: [
+		^ (obj instVarAt: (obj class allInstVarNames indexOf: 'compileArgs')) isNil].
 	^ false
 %
 
@@ -708,22 +708,22 @@ ___deployRefsOf: obj do: aBlock
 	non-collection variable object, and dynamic instVars (module globals /
 	PythonInstance attrs).  Bytes objects hold no references."
 
-	obj @env0:class @env0:isBytes ifTrue: [^ self].
-	1 @env0:to: obj @env0:class @env0:instSize do: [:i |
-		aBlock @env0:value: (obj @env0:instVarAt: i)].
+	obj class isBytes ifTrue: [^ self].
+	1 to: obj class instSize do: [:i |
+		aBlock value: (obj instVarAt: i)].
 	(obj isKindOf: Collection) ifTrue: [
-		(obj @env0:respondsTo: #'keysAndValuesDo:')
-			ifTrue: [[obj @env0:keysAndValuesDo: [:k :v | aBlock @env0:value: k. aBlock @env0:value: v]]
-				@env0:on: AbstractException do: [:e | e @env0:return: nil]]
-			ifFalse: [[obj @env0:do: [:e | aBlock @env0:value: e]]
-				@env0:on: AbstractException do: [:e | e @env0:return: nil]]]
+		(obj respondsTo: #'keysAndValuesDo:')
+			ifTrue: [[obj keysAndValuesDo: [:k :v | aBlock value: k. aBlock value: v]]
+				on: AbstractException do: [:e | e return: nil]]
+			ifFalse: [[obj do: [:e | aBlock value: e]]
+				on: AbstractException do: [:e | e return: nil]]]
 	ifFalse: [
-		(obj @env0:class @env0:isVariable) ifTrue: [
-			1 @env0:to: obj @env0:size do: [:i | aBlock @env0:value: (obj @env0:at: i)]]].
-	(obj @env0:respondsTo: #'dynamicInstVarPairs') ifTrue: [ | pairs |
-		pairs := [obj @env0:dynamicInstVarPairs] @env0:on: AbstractException do: [:e | e @env0:return: #()].
-		1 @env0:to: (pairs @env0:size @env0:- 1) by: 2 do: [:i |
-			aBlock @env0:value: (pairs @env0:at: i @env0:+ 1)]]
+		(obj class isVariable) ifTrue: [
+			1 to: obj size do: [:i | aBlock value: (obj at: i)]]].
+	(obj respondsTo: #'dynamicInstVarPairs') ifTrue: [ | pairs |
+		pairs := [obj dynamicInstVarPairs] on: AbstractException do: [:e | e return: #()].
+		1 to: (pairs size - 1) by: 2 do: [:i |
+			aBlock value: (pairs at: i + 1)]]
 %
 
 category: 'Grail-Deploy Audit'
@@ -733,14 +733,14 @@ ___deployPathFor___: obj parents: parents
 	the BFS parent map."
 
 	| chain walker steps |
-	chain := OrderedCollection @env0:new.
+	chain := OrderedCollection new.
 	walker := obj.
 	steps := 0.
-	[walker @env0:notNil and: [steps @env0:< 40]] @env0:whileTrue: [
-		chain @env0:addFirst: (walker @env0:class @env0:name @env0:asString).
-		walker := parents @env0:at: walker otherwise: nil.
-		steps := steps @env0:+ 1].
-	^ '.' @env1:join: (list @env0:withAll: chain)
+	[walker notNil and: [steps < 40]] whileTrue: [
+		chain addFirst: (walker class name asString).
+		walker := parents at: walker otherwise: nil.
+		steps := steps + 1].
+	^ '.' @env1:join: (list withAll: chain)
 %
 
 category: 'Grail-Deploy Audit'
@@ -749,17 +749,17 @@ ___deployDescribe___: obj
 	"A one-line description of a flagged session-bound object."
 
 	| cn |
-	cn := obj @env0:class @env0:name @env0:asString.
-	(cn @env0:= 'SrePattern') ifTrue: [
+	cn := obj class name asString.
+	(cn = 'SrePattern') ifTrue: [
 		^ 'SrePattern (no compileArgs -- cannot recompile in a later session)'].
-	(cn @env0:= 'GsFile') ifTrue: [^ 'GsFile (open OS file handle -- dead after commit/logout)'].
-	(cn @env0:= 'GsSocket') ifTrue: [^ 'GsSocket (open socket -- dead after commit/logout)'].
+	(cn = 'GsFile') ifTrue: [^ 'GsFile (open OS file handle -- dead after commit/logout)'].
+	(cn = 'GsSocket') ifTrue: [^ 'GsSocket (open socket -- dead after commit/logout)'].
 	((obj isKindOf: Semaphore)) ifTrue: [^ 'Semaphore (non-persistable -- commit will FAIL, error 2407)'].
 	((obj isKindOf: GsProcess)) ifTrue: [^ 'GsProcess (session thread -- not persistable)'].
 	((obj isKindOf: CPointer)) ifTrue: [^ 'CPointer (raw C address -- NULL after commit/logout)'].
-	(cn @env0:= 'SreMatch') ifTrue: [^ 'SreMatch (match object -- has no recompile path)'].
-	(cn @env0:= 'WeakReference') ifTrue: [^ 'WeakReference (faults in DEAD in a later session)'].
-	^ cn @env0:, ' (session-bound)'
+	(cn = 'SreMatch') ifTrue: [^ 'SreMatch (match object -- has no recompile path)'].
+	(cn = 'WeakReference') ifTrue: [^ 'WeakReference (faults in DEAD in a later session)'].
+	^ cn , ' (session-bound)'
 %
 
 category: 'Grail-Canonical Classes'
@@ -779,11 +779,11 @@ ___resetClassAttrOverlay___: aClass
 	aClass so it can sit inline in the class-build emit."
 
 	| st ov |
-	self ___canonicalClassesEnabled___ @env0:ifFalse: [^ aClass].
-	st := SessionTemps @env0:current.
-	ov := st @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+	self ___canonicalClassesEnabled___ ifFalse: [^ aClass].
+	st := SessionTemps current.
+	ov := st at: #'GrailClassAttrOverlay' otherwise: nil.
 	ov == nil ifTrue: [^ aClass].
-	(ov @env0:includesKey: aClass) ifTrue: [ov @env0:removeKey: aClass].
+	(ov includesKey: aClass) ifTrue: [ov removeKey: aClass].
 	^ aClass
 %
 
@@ -806,17 +806,17 @@ ___canonicalGenerationCheck___
 	per import."
 
 	| st runtimeGen deployGen |
-	st := SessionTemps @env0:current.
-	(st @env0:at: #'GrailCanonicalGenChecked' otherwise: nil) == true ifTrue: [^ self].
-	st @env0:at: #'GrailCanonicalGenChecked' put: true.
-	runtimeGen := UserGlobals @env0:at: #'GrailRuntimeGeneration' otherwise: 0.
-	deployGen := UserGlobals @env0:at: #'GrailCanonicalDeployGeneration' otherwise: nil.
+	st := SessionTemps current.
+	(st at: #'GrailCanonicalGenChecked' otherwise: nil) == true ifTrue: [^ self].
+	st at: #'GrailCanonicalGenChecked' put: true.
+	runtimeGen := UserGlobals at: #'GrailRuntimeGeneration' otherwise: 0.
+	deployGen := UserGlobals at: #'GrailCanonicalDeployGeneration' otherwise: nil.
 	deployGen == runtimeGen ifTrue: [^ self].
 	"Stale (or first-ever) deployment: drop every canonical registry."
 	#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes'
-	   #'GrailCanonicalClasses' #'GrailCanonicalClassSet' ) @env0:do: [:k |
-		UserGlobals @env0:removeKey: k ifAbsent: []].
-	UserGlobals @env0:at: #'GrailCanonicalDeployGeneration' put: runtimeGen.
+	   #'GrailCanonicalClasses' #'GrailCanonicalClassSet' ) do: [:k |
+		UserGlobals removeKey: k ifAbsent: []].
+	UserGlobals at: #'GrailCanonicalDeployGeneration' put: runtimeGen.
 	^ self
 %
 
@@ -831,12 +831,12 @@ ___canonicalModuleHashes___
 
 	| reg |
 	self ___canonicalGenerationCheck___.
-	reg := UserGlobals @env0:at: #'GrailCanonicalModuleHashes' otherwise: nil.
-	reg @env0:isNil ifTrue: [
+	reg := UserGlobals at: #'GrailCanonicalModuleHashes' otherwise: nil.
+	reg isNil ifTrue: [
 		"Reduced-conflict (doc par.10.7 phase 8): non-overlapping module
 		keys from concurrent first importers merge instead of conflicting."
-		reg := RcKeyValueDictionary @env0:new.
-		UserGlobals @env0:at: #'GrailCanonicalModuleHashes' put: reg].
+		reg := RcKeyValueDictionary new.
+		UserGlobals at: #'GrailCanonicalModuleHashes' put: reg].
 	^ reg
 %
 
@@ -854,10 +854,10 @@ ___persistentModuleState___
 	shared value that conflicts is the signal to choose a conflict-safe one."
 
 	| store |
-	store := UserGlobals @env0:at: #'GrailPersistentModuleState' otherwise: nil.
-	store @env0:isNil ifTrue: [
-		store := KeyValueDictionary @env0:new.
-		UserGlobals @env0:at: #'GrailPersistentModuleState' put: store].
+	store := UserGlobals at: #'GrailPersistentModuleState' otherwise: nil.
+	store isNil ifTrue: [
+		store := KeyValueDictionary new.
+		UserGlobals at: #'GrailPersistentModuleState' put: store].
 	^ store
 %
 
@@ -881,24 +881,24 @@ ___syncPersistentState___: aModule
 	___flushPersistentState___."
 
 	| names store inner modName |
-	names := aModule @env0:dynamicInstVarAt: #'__persistent__'.
+	names := aModule dynamicInstVarAt: #'__persistent__'.
 	names == nil ifTrue: [^ aModule].
 	(names isKindOf: Collection) ifFalse: [^ aModule].
-	modName := (aModule @env1:__name__) @env0:asString.
+	modName := (aModule @env1:__name__) asString.
 	store := self ___persistentModuleState___.
-	inner := store @env0:at: modName otherwise: nil.
-	inner @env0:isNil ifTrue: [
-		inner := KeyValueDictionary @env0:new.
-		store @env0:at: modName put: inner].
-	names @env0:do: [:each |
+	inner := store at: modName otherwise: nil.
+	inner isNil ifTrue: [
+		inner := KeyValueDictionary new.
+		store at: modName put: inner].
+	names do: [:each |
 		| nameStr sym current |
-		nameStr := each @env0:asString.
-		sym := nameStr @env0:asSymbol.
-		(inner @env0:includesKey: nameStr)
-			ifTrue: [aModule @env0:dynamicInstVarAt: sym put: (inner @env0:at: nameStr)]
+		nameStr := each asString.
+		sym := nameStr asSymbol.
+		(inner includesKey: nameStr)
+			ifTrue: [aModule dynamicInstVarAt: sym put: (inner at: nameStr)]
 			ifFalse: [
-				current := aModule @env0:dynamicInstVarAt: sym.
-				current == nil ifFalse: [inner @env0:at: nameStr put: current]]].
+				current := aModule dynamicInstVarAt: sym.
+				current == nil ifFalse: [inner at: nameStr put: current]]].
 	^ aModule
 %
 
@@ -914,20 +914,20 @@ ___flushPersistentState___
 
 	| store |
 	store := self ___persistentModuleState___.
-	(self @env1:modules) @env0:keysAndValuesDo: [:modKey :mod |
+	(self @env1:modules) keysAndValuesDo: [:modKey :mod |
 		| names inner |
-		names := [mod @env0:dynamicInstVarAt: #'__persistent__']
-			@env0:on: Error do: [:ex | ex @env0:return: nil].
+		names := [mod dynamicInstVarAt: #'__persistent__']
+			on: Error do: [:ex | ex return: nil].
 		(names ~~ nil and: [names isKindOf: Collection]) ifTrue: [
-			inner := store @env0:at: modKey @env0:asString otherwise: nil.
-			inner @env0:isNil ifTrue: [
-				inner := KeyValueDictionary @env0:new.
-				store @env0:at: modKey @env0:asString put: inner].
-			names @env0:do: [:each |
+			inner := store at: modKey asString otherwise: nil.
+			inner isNil ifTrue: [
+				inner := KeyValueDictionary new.
+				store at: modKey asString put: inner].
+			names do: [:each |
 				| current |
-				current := mod @env0:dynamicInstVarAt: each @env0:asString @env0:asSymbol.
+				current := mod dynamicInstVarAt: each asString asSymbol.
 				current == nil ifFalse: [
-					inner @env0:at: each @env0:asString put: current]]]].
+					inner at: each asString put: current]]]].
 	^ self
 %
 
@@ -939,9 +939,9 @@ ___sourceStringForPath___: pathString
 	whether to parse it at all."
 
 	| file sourceString |
-	file := GsFile @env0:open: pathString mode: 'rb' onClient: false.
-	sourceString := file @env0:contentsAsUtf8 @env0:decodeToUnicode.
-	file @env0:close.
+	file := GsFile open: pathString mode: 'rb' onClient: false.
+	sourceString := file contentsAsUtf8 decodeToUnicode.
+	file close.
 	^ sourceString
 %
 
@@ -960,10 +960,10 @@ ___canonicalClassRegistry___
 
 	| reg |
 	self ___canonicalGenerationCheck___.
-	reg := UserGlobals @env0:at: #'GrailCanonicalClasses' otherwise: nil.
-	reg @env0:isNil ifTrue: [
-		reg := RcKeyValueDictionary @env0:new.
-		UserGlobals @env0:at: #'GrailCanonicalClasses' put: reg].
+	reg := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	reg isNil ifTrue: [
+		reg := RcKeyValueDictionary new.
+		UserGlobals at: #'GrailCanonicalClasses' put: reg].
 	^ reg
 %
 
@@ -985,11 +985,11 @@ ___canonicalModules___
 
 	| reg |
 	self ___canonicalGenerationCheck___.
-	reg := UserGlobals @env0:at: #'GrailCanonicalModules' otherwise: nil.
-	reg @env0:isNil ifTrue: [
+	reg := UserGlobals at: #'GrailCanonicalModules' otherwise: nil.
+	reg isNil ifTrue: [
 		"Reduced-conflict, same rationale as ___canonicalClassRegistry___."
-		reg := RcKeyValueDictionary @env0:new.
-		UserGlobals @env0:at: #'GrailCanonicalModules' put: reg].
+		reg := RcKeyValueDictionary new.
+		UserGlobals at: #'GrailCanonicalModules' put: reg].
 	^ reg
 %
 
@@ -1049,7 +1049,7 @@ ___canonicalClassesEnabled___
 	OFF -> ___canonicalSubclassOf: behaves exactly like ___subclass___, so the
 	whole system is unchanged; flip ON per session to exercise reuse."
 
-	^ (SessionTemps @env0:current @env0:at: #'GrailCanonicalClassesEnabled' otherwise: false) == true
+	^ (SessionTemps current at: #'GrailCanonicalClassesEnabled' otherwise: false) == true
 %
 
 category: 'Grail-Canonical Classes'
@@ -1057,7 +1057,7 @@ classmethod: importlib
 ___canonicalClassesEnabled___: aBool
 	"Enable/disable phase-1 canonical-class reuse for THIS session only."
 
-	SessionTemps @env0:current @env0:at: #'GrailCanonicalClassesEnabled' put: aBool == true.
+	SessionTemps current at: #'GrailCanonicalClassesEnabled' put: aBool == true.
 	^ aBool
 %
 
@@ -1085,9 +1085,9 @@ ___canonicalInstanceForModuleClass___: aModuleClass
 
 	self ___canonicalClassesEnabled___ ifFalse: [^ nil].
 	self ___canonicalModules___ keysAndValuesDo: [:name :inst |
-		((inst @env0:class == aModuleClass) and: [inst @env0:isCommitted]) ifTrue: [
-			aModuleClass @env0:___adoptInstance___: inst.
-			self registerModule: name @env0:asString with: inst.
+		((inst class == aModuleClass) and: [inst isCommitted]) ifTrue: [
+			aModuleClass ___adoptInstance___: inst.
+			self registerModule: name asString with: inst.
 			self ___runSessionInit___: inst.
 			^ inst]].
 	^ nil
@@ -1117,8 +1117,8 @@ ___runSessionInit___: moduleInstance
 	declared with parameters fails its unary dispatch loudly rather than
 	being silently skipped."
 
-	((moduleInstance @env0:class @env0:whichClassIncludesSelector: #'__session_init__' environmentId: 1) ~~ nil)
-		ifTrue: [moduleInstance @env0:perform: #'__session_init__' env: 1].
+	((moduleInstance class whichClassIncludesSelector: #'__session_init__' environmentId: 1) ~~ nil)
+		ifTrue: [moduleInstance perform: #'__session_init__' env: 1].
 	^ moduleInstance
 %
 
@@ -1199,7 +1199,7 @@ loadModuleFromPath: pathString name: moduleName
 					ImportError @env1:___signal___: 'module ''' , moduleName ,
 						''' is canonical (deployed); it was removed from sys.modules in this session. Use importlib.reload() to re-execute it, or assign a replacement into sys.modules to substitute it.'].
 				stateMap at: moduleName asSymbol put: #'match'.
-				committedInstance @env0:class @env0:___adoptInstance___: committedInstance.
+				committedInstance class ___adoptInstance___: committedInstance.
 				self registerModule: moduleName with: committedInstance.
 				"Session tier (par.10.4): the body did not run, so this is the
 				one chance to re-bind per-session resources."
@@ -1251,7 +1251,7 @@ loadModuleFromPath: pathString name: moduleName
 	"Create an instance, set metadata, register, then run.
 	Must use @env0:new (not basicNew) because module inherits from
 	SymbolDictionary, which requires internal structure initialization."
-	moduleInstance := moduleClass @env0:new.
+	moduleInstance := moduleClass new.
 	"Adopt as the class's singleton BEFORE running initialize.  Module
 	body code that references its own class names through
 	``(modCls @env0:___instance___) @env1:Foo'' (NameAst's emit for
@@ -1260,7 +1260,7 @@ loadModuleFromPath: pathString name: moduleName
 	run initialize on it, and produce parallel copies of every class
 	the module defines.  See FlaskScaffoldingTestCase >>
 	testModuleSingletonReturnsSameClass for the regression fixture."
-	moduleClass @env0:___adoptInstance___: moduleInstance.
+	moduleClass ___adoptInstance___: moduleInstance.
 	nameParts := $. split: moduleName.
 	packageName := (nameParts size > 1)
 		ifTrue: ['.' @env1:join: (nameParts copyFrom: 1 to: nameParts size - 1)]
@@ -1271,7 +1271,7 @@ loadModuleFromPath: pathString name: moduleName
 	"Record the source path so importlib.reload(module) can re-read it.  Stored
 	in the Phase-A dynamic-instVar store, so Python ``module.__file__'' reads it
 	through ___pyAttrLoad___ like any other module attribute."
-	moduleInstance @env0:dynamicInstVarAt: #'__file__' put: pathString.
+	moduleInstance dynamicInstVarAt: #'__file__' put: pathString.
 	(pathString endsWith: '__init__.py') ifTrue: [
 		| dirPath |
 		dirPath := pathString copyFrom: 1 to: pathString size - '/__init__.py' size.
@@ -1288,9 +1288,9 @@ loadModuleFromPath: pathString name: moduleName
 	it (whole subtree + session caches) on failure so the next import
 	rebuilds cleanly from source, then re-signal."
 	canonical ifTrue: [self ___resetMintedThisLoad___: moduleName].
-	[moduleInstance @env1:initialize] @env0:on: AbstractException do: [:ex |
+	[moduleInstance @env1:initialize] on: AbstractException do: [:ex |
 		self removeModule: moduleName.
-		ex @env0:outer].
+		ex outer].
 	"Persistent-state bind/capture for modules declaring ``__persistent__''
 	(docs/Persistent_Modules_and_Classes.md par.6) -- a no-op for the rest."
 	self ___syncPersistentState___: moduleInstance.
@@ -1342,28 +1342,28 @@ registerModule: aName with: aModule
 
 	| parts parentName parent mods prefix |
 	mods := self @env1:modules.
-	mods @env0:at: aName @env0:asSymbol put: aModule.
-	parts := $. @env0:split: aName.
-	parts @env0:size @env0:> 1 ifTrue: [
-		parentName := '.' @env0:join: (parts @env0:copyFrom: 1 to: parts @env0:size - 1).
+	mods at: aName asSymbol put: aModule.
+	parts := $. split: aName.
+	parts size > 1 ifTrue: [
+		parentName := '.' join: (parts copyFrom: 1 to: parts size - 1).
 		parent := self @env1:lookupModule: parentName.
 		parent notNil ifTrue: [
-			self @env0:___bind: aModule onParent: parent as: parts @env0:last
+			self ___bind: aModule onParent: parent as: parts last
 		].
 	].
 	"Rescue previously-orphaned children: any sys.modules key of
 	form ``aName.child`` should be bound on aModule as `child`."
-	prefix := aName @env0:, '.'.
-	mods @env0:keysAndValuesDo: [:key :child |
+	prefix := aName , '.'.
+	mods keysAndValuesDo: [:key :child |
 		| kStr |
-		kStr := key @env0:asString.
-		((kStr @env0:size @env0:> prefix @env0:size)
-			and: [(kStr @env0:copyFrom: 1 to: prefix @env0:size) @env0:= prefix
-			and: [(kStr @env0:indexOf: $. startingAt: prefix @env0:size + 1) @env0:= 0]])
+		kStr := key asString.
+		((kStr size > prefix size)
+			and: [(kStr copyFrom: 1 to: prefix size) = prefix
+			and: [(kStr indexOf: $. startingAt: prefix size + 1) = 0]])
 			ifTrue: [
 				| childLeafName |
-				childLeafName := kStr @env0:copyFrom: prefix @env0:size + 1 to: kStr @env0:size.
-				self @env0:___bind: child onParent: aModule as: childLeafName
+				childLeafName := kStr copyFrom: prefix size + 1 to: kStr size.
+				self ___bind: child onParent: aModule as: childLeafName
 			]
 	].
 %
@@ -1381,7 +1381,7 @@ ___bind: aChildModule onParent: aParent as: anAttrName
 	storage that NameAst / AssignAst codegen consult."
 
 	| sym |
-	sym := anAttrName @env0:asSymbol.
+	sym := anAttrName asSymbol.
 	"Don't let a like-named submodule clobber a NATIVE parent module's
 	own attribute accessor.  ``html'' (Smalltalk html.gs) compiles an
 	``entities'' method returning Grail's curated HTML-entities table
@@ -1399,11 +1399,11 @@ ___bind: aChildModule onParent: aParent as: anAttrName
 	attributes that a like-named submodule legitimately shadows — e.g.
 	twilio's ``from twilio.base import values'' must see the ``values''
 	SUBMODULE, so binding there must proceed normally."
-	(((aParent @env0:class whichClassIncludesSelector: sym environmentId: 1) notNil)
-		and: [(PythonModules @env0:includesKey: aParent @env0:class name @env0:asSymbol) @env0:not])
+	(((aParent class whichClassIncludesSelector: sym environmentId: 1) notNil)
+		and: [(PythonModules includesKey: aParent class name asSymbol) not])
 		ifTrue: [^ self].
-	aParent @env0:at: sym put: aChildModule.
-	aParent @env0:dynamicInstVarAt: sym put: aChildModule.
+	aParent at: sym put: aChildModule.
+	aParent dynamicInstVarAt: sym put: aChildModule.
 %
 
 category: 'Grail-Module Registry'
@@ -1434,19 +1434,19 @@ removeModule: aName
 
 	| mods prefix toRemove |
 	mods := self @env1:modules.
-	prefix := aName @env0:, '.'.
-	toRemove := OrderedCollection @env0:new.
-	mods @env0:keysDo: [:key |
+	prefix := aName , '.'.
+	toRemove := OrderedCollection new.
+	mods keysDo: [:key |
 		| k |
-		k := key @env0:asString.
-		((k @env0:= aName)
-			or: [(k @env0:size @env0:> prefix @env0:size)
-				and: [(k @env0:copyFrom: 1 to: prefix @env0:size) @env0:= prefix]])
-			ifTrue: [toRemove @env0:add: key]].
-	toRemove @env0:do: [:key |
-		mods @env0:removeKey: key ifAbsent: [].
-		self ___clearSessionCachesFor___: key @env0:asString].
-	^ toRemove @env0:size
+		k := key asString.
+		((k = aName)
+			or: [(k size > prefix size)
+				and: [(k copyFrom: 1 to: prefix size) = prefix]])
+			ifTrue: [toRemove add: key]].
+	toRemove do: [:key |
+		mods removeKey: key ifAbsent: [].
+		self ___clearSessionCachesFor___: key asString].
+	^ toRemove size
 %
 
 category: 'Grail-Module Registry'
@@ -1460,18 +1460,18 @@ ___clearSessionCachesFor___: aName
 	dotted-prefix match sweeps all three when aName is ``re''."
 
 	| temps exact dotPrefix toRemove |
-	temps := SessionTemps @env0:current.
-	exact := ('___GrailSessionDict___' @env0:, aName) @env0:asSymbol.
-	dotPrefix := ('___GrailSessionDict___' @env0:, aName) @env0:, '.'.
-	toRemove := OrderedCollection @env0:new.
-	temps @env0:keysDo: [:key |
+	temps := SessionTemps current.
+	exact := ('___GrailSessionDict___' , aName) asSymbol.
+	dotPrefix := ('___GrailSessionDict___' , aName) , '.'.
+	toRemove := OrderedCollection new.
+	temps keysDo: [:key |
 		| k |
-		k := key @env0:asString.
+		k := key asString.
 		((key == exact)
-			or: [(k @env0:size @env0:> dotPrefix @env0:size)
-				and: [(k @env0:copyFrom: 1 to: dotPrefix @env0:size) @env0:= dotPrefix]])
-			ifTrue: [toRemove @env0:add: key]].
-	toRemove @env0:do: [:key | temps @env0:removeKey: key ifAbsent: []].
+			or: [(k size > dotPrefix size)
+				and: [(k copyFrom: 1 to: dotPrefix size) = dotPrefix]])
+			ifTrue: [toRemove add: key]].
+	toRemove do: [:key | temps removeKey: key ifAbsent: []].
 %
 
 category: 'Grail-Module Loading'
@@ -1608,18 +1608,18 @@ ___codegenTraceDir___
 	changing the env var mid-session."
 
 	| temps dir |
-	temps := SessionTemps @env0:current.
-	(temps @env0:includesKey: #'___grailCodegenTraceDirChecked___')
-		ifTrue: [^ temps @env0:at: #'___grailCodegenTraceDir___' ifAbsent: [nil]].
-	dir := System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR'.
+	temps := SessionTemps current.
+	(temps includesKey: #'___grailCodegenTraceDirChecked___')
+		ifTrue: [^ temps at: #'___grailCodegenTraceDir___' ifAbsent: [nil]].
+	dir := System gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR'.
 	(dir notNil and: [dir isEmpty]) ifTrue: [dir := nil].
 	dir ifNotNil: [
 		(GsFile existsOnServer: dir) ifFalse: [
 			GsFile createServerDirectory: dir
 		].
-		temps @env0:at: #'___grailCodegenTraceDir___' put: dir.
+		temps at: #'___grailCodegenTraceDir___' put: dir.
 	].
-	temps @env0:at: #'___grailCodegenTraceDirChecked___' put: true.
+	temps at: #'___grailCodegenTraceDirChecked___' put: true.
 	^ dir
 %
 
@@ -1631,9 +1631,9 @@ ___codegenTraceDirInvalidate___
 	a topaz session for ad-hoc debugging."
 
 	| temps |
-	temps := SessionTemps @env0:current.
-	temps @env0:removeKey: #'___grailCodegenTraceDir___' ifAbsent: [].
-	temps @env0:removeKey: #'___grailCodegenTraceDirChecked___' ifAbsent: [].
+	temps := SessionTemps current.
+	temps removeKey: #'___grailCodegenTraceDir___' ifAbsent: [].
+	temps removeKey: #'___grailCodegenTraceDirChecked___' ifAbsent: [].
 %
 
 category: 'Grail-Class Compilation'
@@ -1660,26 +1660,26 @@ ___writeMethodSource: aSource on: aStream
 	~53k chars)."
 
 	| lines first |
-	lines := aSource @env0:subStrings: Character lf.
-	lines @env0:isEmpty ifTrue: [^ self].
-	first := lines @env0:first.
+	lines := aSource subStrings: Character lf.
+	lines isEmpty ifTrue: [^ self].
+	first := lines first.
 	"Selector line, blank line, then indented body."
 	aStream nextPutAll: first; lf; lf.
-	aStream @env0:increaseIndent.
-	2 to: lines @env0:size do: [:i |
+	aStream increaseIndent.
+	2 to: lines size do: [:i |
 		| line |
-		line := lines @env0:at: i.
+		line := lines at: i.
 		"Empty lines stay empty (no spurious indent on blanks)."
-		line @env0:isEmpty
+		line isEmpty
 			ifTrue: [aStream lf]
 			ifFalse: [aStream nextPutAll: line; lf].
 	].
 	"Ensure the body ends on its own line — the caller emits ``%''
 	right after this on what should be a fresh line."
-	(aSource @env0:isEmpty
-		or: [aSource @env0:last == Character lf])
+	(aSource isEmpty
+		or: [aSource last == Character lf])
 		ifFalse: [aStream lf].
-	aStream @env0:decreaseIndent.
+	aStream decreaseIndent.
 %
 
 category: 'Grail-Class Compilation'
@@ -1762,7 +1762,7 @@ ___selectStorageBase___: bases
 	the other bases' methods."
 
 	bases do: [:b |
-		((b isKindOf: Behavior) and: [b @env0:inheritsFrom: Collection])
+		((b isKindOf: Behavior) and: [b inheritsFrom: Collection])
 			ifTrue: [^ b]
 	].
 	"No built-in storage base.  Prefer the base with the DEEPEST
@@ -1775,18 +1775,18 @@ ___selectStorageBase___: bases
 	restored to C3 by ___mergeSecondaryBases___, which lets a leftmost
 	mixin OVERRIDE this deeper base (see there)."
 	^ [ | best bestDepth |
-	best := bases @env0:first.
+	best := bases first.
 	bestDepth := -1.
 	bases do: [:b |
 		| d w |
 		(b isKindOf: Behavior) ifTrue: [
 			d := 0.
 			w := b.
-			[w ~~ nil] @env0:whileTrue: [d := d @env0:+ 1. w := w @env0:superclass].
-			d @env0:> bestDepth ifTrue: [bestDepth := d. best := b]
+			[w ~~ nil] whileTrue: [d := d + 1. w := w superclass].
+			d > bestDepth ifTrue: [bestDepth := d. best := b]
 		]
 	].
-	best ] @env0:value
+	best ] value
 %
 
 category: 'Grail-Module Loading'
@@ -1803,10 +1803,10 @@ ___miRegistry___
 	classInstVar declaration remains but is unused."
 
 	| reg |
-	reg := SessionTemps @env0:current @env0:at: #GrailMiRegistry otherwise: nil.
+	reg := SessionTemps current at: #GrailMiRegistry otherwise: nil.
 	reg ifNil: [
 		reg := IdentityKeyValueDictionary new.
-		SessionTemps @env0:current @env0:at: #GrailMiRegistry put: reg].
+		SessionTemps current at: #GrailMiRegistry put: reg].
 	^ reg
 %
 
@@ -1963,9 +1963,9 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 	for now (its approximate precedence is unchanged this phase)."
 	self ___registerBases___: aClass bases: secondaryBases.
 	storageBase := self ___selectStorageBase___: secondaryBases.
-	storageIdx := secondaryBases @env0:indexOf: storageBase.
+	storageIdx := secondaryBases indexOf: storageBase.
 	overrideEligible := (storageBase isKindOf: Behavior)
-		and: [(storageBase @env0:inheritsFrom: Collection) @env0:not].
+		and: [(storageBase inheritsFrom: Collection) not].
 	secondaryBases doWithIndex: [:base :baseIdx |
 		| walker overrideMode |
 		overrideMode := overrideEligible
@@ -2556,7 +2556,7 @@ ___import__: positional kw: kwargs
 								self @env0:class
 									@env0:loadDynamicModuleNamed: subName fromPath: soPath]
 							ifFalse: [
-								provided := [(result @env1:___pyAttrLoad___: fromName @env0:asSymbol). true]
+								provided := [(result ___pyAttrLoad___: fromName @env0:asSymbol). true]
 									@env0:on: AbstractException do: [:ignored | false].
 								provided ifFalse: [
 									ModuleNotFoundError ___signal___:
@@ -2629,7 +2629,7 @@ reload: aModule
 	| path name moduleAst canonical srcHash stateMap |
 	path := aModule @env0:dynamicInstVarAt: #'__file__'.
 	path @env0:isNil ifTrue: [^ aModule].
-	name := (aModule @env1:__name__) @env0:asString.
+	name := (aModule __name__) @env0:asString.
 	"Canonical modules (doc par.10.5): reload IS the explicit re-execution
 	path.  Force the emitted class-def probes COLD for the duration of the
 	body re-run (a #match verdict left over from import would bind the
@@ -2655,7 +2655,7 @@ reload: aModule
 	instance so it stays the module's canonical object before re-running body."
 	(aModule @env0:class) @env0:___adoptInstance___: aModule.
 	canonical ifTrue: [importlib @env0:___resetMintedThisLoad___: name].
-	aModule @env1:initialize.
+	aModule initialize.
 	"After a successful re-run: the current source is what the (same,
 	identity-preserved) instance now reflects -- update the committed hash
 	and registry entry in-transaction and mark the session verdict #match,

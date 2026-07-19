@@ -45,9 +45,9 @@ method: ClassAttrDictSubclassTestCase
 loadFixture
 	"Load tests/python/class_attr_dict_subclass.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'class_attr_dict_subclass' ifAbsent: [].
+	importlib @env1:modules removeKey: #'class_attr_dict_subclass' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/class_attr_dict_subclass.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/class_attr_dict_subclass.py')
 		name: 'class_attr_dict_subclass'
 %
 

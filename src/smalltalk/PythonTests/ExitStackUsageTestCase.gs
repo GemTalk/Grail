@@ -42,9 +42,9 @@ method: ExitStackUsageTestCase
 loadFixture
 	"Load tests/python/exitstack_usage.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'exitstack_usage' ifAbsent: [].
+	importlib @env1:modules removeKey: #'exitstack_usage' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/exitstack_usage.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exitstack_usage.py')
 		name: 'exitstack_usage'
 %
 
@@ -55,7 +55,7 @@ testCloseRunsCallbacks
 
 	| log |
 	log := self loadFixture @env1:close_runs_callbacks.
-	self assert: log @env0:size equals: 2.
+	self assert: log size equals: 2.
 	self assert: (log @env1:__getitem__: 0) equals: 'b'.
 	self assert: (log @env1:__getitem__: 1) equals: 'a'
 %
@@ -78,7 +78,7 @@ testPopAllTransfersCallbacks
 	r := self loadFixture @env1:pop_all_transfers_callbacks.
 	ranAfterPop := r @env1:__getitem__: 0.
 	log := r @env1:__getitem__: 1.
-	self assert: ranAfterPop @env0:size equals: 0.
-	self assert: log @env0:size equals: 1.
+	self assert: ranAfterPop size equals: 0.
+	self assert: log size equals: 1.
 	self assert: (log @env1:__getitem__: 0) equals: 'kept'
 %

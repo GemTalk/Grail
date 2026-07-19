@@ -76,11 +76,11 @@ testPickleTwoArgRegisters
 	key := #'_grail_p4d_copyreg_test_2arg'.
 	fn := [:obj | 'pickled_2arg'].
 	"Pre-clean any prior leftover."
-	dt @env0:removeKey: key ifAbsent: [].
+	dt removeKey: key ifAbsent: [].
 	reg @env1:pickle: key _: fn.
-	self assert: (dt @env0:at: key) identical: fn.
+	self assert: (dt at: key) identical: fn.
 	"Clean up."
-	dt @env0:removeKey: key ifAbsent: []
+	dt removeKey: key ifAbsent: []
 %
 
 category: 'Grail-Tests - pickle: 3-arg'
@@ -100,12 +100,12 @@ testPickleThreeArgRegisters
 	key := #'_grail_p4d_copyreg_test_3arg'.
 	fn := [:obj | 'pickled_3arg'].
 	ctor := [:state | #constructed].
-	dt @env0:removeKey: key ifAbsent: [].
+	dt removeKey: key ifAbsent: [].
 	reg @env1:pickle: key _: fn _: ctor.
 	"Constructor is currently ignored; only the pickle_function is recorded."
-	self assert: (dt @env0:at: key) identical: fn.
+	self assert: (dt at: key) identical: fn.
 	"Clean up."
-	dt @env0:removeKey: key ifAbsent: []
+	dt removeKey: key ifAbsent: []
 %
 
 category: 'Grail-Tests - Phase 4d Attribute Calls'
@@ -129,9 +129,9 @@ copyreg.pickle(int, str)
 	reg := copyreg @env1:instance.
 	dt := reg @env1:dispatch_table.
 	key := Integer.
-	self assert: (dt @env0:includesKey: key).
+	self assert: (dt includesKey: key).
 	"Clean up — the test side-effects on the global dispatch_table."
-	dt @env0:removeKey: key ifAbsent: []
+	dt removeKey: key ifAbsent: []
 %
 
 category: 'Grail-Tests - Phase 4d Attribute Calls'

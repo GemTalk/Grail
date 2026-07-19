@@ -57,7 +57,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'varargs_naming' ifAbsent: [].
+	mods removeKey: #'varargs_naming' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/varargs_naming.py')
 		name: 'varargs_naming'.

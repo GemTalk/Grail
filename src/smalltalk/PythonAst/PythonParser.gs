@@ -424,10 +424,10 @@ parseAtom
 		| scan anyF |
 		scan := position.
 		anyF := false.
-		[scan <= tokens @env0:size
-			and: [(tokens @env0:at: scan) isString
-				or: [(tokens @env0:at: scan) isFString]]] whileTrue: [
-			(tokens @env0:at: scan) isFString ifTrue: [anyF := true].
+		[scan <= tokens size
+			and: [(tokens at: scan) isString
+				or: [(tokens at: scan) isFString]]] whileTrue: [
+			(tokens at: scan) isFString ifTrue: [anyF := true].
 			scan := scan + 1.
 		].
 		anyF ifTrue: [^ self parseFStringLiteral].
@@ -2317,17 +2317,17 @@ parseFStringLiteral
 	[self peek notNil and: [self peek isString or: [self peek isFString]]] whileTrue: [
 		tok := self advance.
 		value := tok value.
-		len := value @env0:size.
+		len := value size.
 		tok isFString ifFalse: [
 			"Plain string token — append as a literal segment."
 			parts add: #literal -> value.
 		] ifTrue: [
 	pos := 1.
 	[pos <= len] whileTrue: [
-		ch := value @env0:at: pos.
+		ch := value at: pos.
 		ch == ${ ifTrue: [
 			"``{{`` is a literal ``{``."
-			((pos < len) and: [(value @env0:at: pos + 1) == ${]) ifTrue: [
+			((pos < len) and: [(value at: pos + 1) == ${]) ifTrue: [
 				parts add: #literal -> '{'.
 				pos := pos + 2.
 			] ifFalse: [
@@ -2348,7 +2348,7 @@ parseFStringLiteral
 				exprEnd := nil.
 				specBuf := WriteStream on: Unicode7 new.
 				[pos <= len and: [exprEnd isNil]] whileTrue: [
-					ch := value @env0:at: pos.
+					ch := value at: pos.
 					strQuote ifNotNil: [
 						"Inside a string literal — only the matching quote
 						closes it.  Escapes (``\\``) skip one char."
@@ -2356,7 +2356,7 @@ parseFStringLiteral
 							inSpec ifTrue: [specBuf nextPut: ch].
 							pos := pos + 1.
 							pos <= len ifTrue: [
-								inSpec ifTrue: [specBuf nextPut: (value @env0:at: pos)].
+								inSpec ifTrue: [specBuf nextPut: (value at: pos)].
 								pos := pos + 1.
 							].
 						] ifFalse: [
@@ -2390,10 +2390,10 @@ parseFStringLiteral
 									(ch == $! and: [bracketDepth == 0
 										and: [(pos < len) and: [
 											| c2 |
-											c2 := value @env0:at: pos + 1.
+											c2 := value at: pos + 1.
 											c2 == $r or: [c2 == $s or: [c2 == $a]]]]])
 										ifTrue: [
-											conversion := value @env0:at: pos + 1.
+											conversion := value at: pos + 1.
 											pos := pos + 2.
 									] ifFalse: [
 										"Format spec opener: ``:`` at depth 0."
@@ -2411,12 +2411,12 @@ parseFStringLiteral
 				].
 				"After loop, pos is at the position past ``}``."
 				pos := exprEnd ifNil: [pos] ifNotNil: [exprEnd + 1].
-				exprText := value @env0:copyFrom: exprStart to: (exprEnd ifNil: [pos - 1] ifNotNil: [
+				exprText := value copyFrom: exprStart to: (exprEnd ifNil: [pos - 1] ifNotNil: [
 					"Trim trailing conversion+spec text from the expression
 					if either was present.  Walk back through specBuf and the
 					conversion bytes from exprEnd."
 					| backCount |
-					backCount := specBuf contents @env0:size.
+					backCount := specBuf contents size.
 					inSpec ifTrue: [backCount := backCount + 1].
 					conversion ifNotNil: [backCount := backCount + 2].
 					exprEnd - 1 - backCount
@@ -2445,7 +2445,7 @@ parseFStringLiteral
 			ch == $} ifTrue: [
 				"``}}`` literal — single ``}`` outside placeholder is a
 				syntax error, but we forgive it (Grail not strict)."
-				((pos < len) and: [(value @env0:at: pos + 1) == $}]) ifTrue: [
+				((pos < len) and: [(value at: pos + 1) == $}]) ifTrue: [
 					parts add: #literal -> '}'.
 					pos := pos + 2.
 				] ifFalse: [
@@ -2457,9 +2457,9 @@ parseFStringLiteral
 				| runStart |
 				runStart := pos.
 				[pos <= len
-					and: [(value @env0:at: pos) ~= ${ and: [(value @env0:at: pos) ~= $}]]]
+					and: [(value at: pos) ~= ${ and: [(value at: pos) ~= $}]]]
 					whileTrue: [pos := pos + 1].
-				parts add: #literal -> (value @env0:copyFrom: runStart to: pos - 1).
+				parts add: #literal -> (value copyFrom: runStart to: pos - 1).
 			]
 		]
 	].
@@ -2539,7 +2539,7 @@ ___wrapFStringExpr: exprAst conversion: conversionChar formatSpec: formatSpec at
 			at: #ctx put: self loadCtx;
 			yourself) from: locTok to: locTok);
 		at: #arguments put: { exprAst.
-			((formatSpec @env0:includes: ${)
+			((formatSpec includes: ${)
 				ifTrue: [self ___fstringSpecExprFor: formatSpec at: locTok]
 				ifFalse: [
 					self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
@@ -2562,21 +2562,21 @@ ___fstringSpecExprFor: spec at: locTok
 	| parts pos len ch runStart exprStart depth innerParser exprAst result piece |
 	parts := OrderedCollection new.
 	pos := 1.
-	len := spec @env0:size.
+	len := spec size.
 	[pos <= len] whileTrue: [
-		ch := spec @env0:at: pos.
+		ch := spec at: pos.
 		ch == ${
 			ifTrue: [
 				exprStart := pos + 1.
 				depth := 1.
 				pos := pos + 1.
 				[pos <= len and: [depth > 0]] whileTrue: [
-					ch := spec @env0:at: pos.
+					ch := spec at: pos.
 					ch == ${ ifTrue: [depth := depth + 1].
 					ch == $} ifTrue: [depth := depth - 1].
 					depth > 0 ifTrue: [pos := pos + 1]].
 				innerParser := PythonParser basicNew
-					source: (spec @env0:copyFrom: exprStart to: pos - 1) asString.
+					source: (spec copyFrom: exprStart to: pos - 1) asString.
 				exprAst := innerParser parseExpression.
 				innerParser ___variableStack___ do: [:innerScope |
 					innerScope do: [:varName | self declareVariable: varName]].
@@ -2585,8 +2585,8 @@ ___fstringSpecExprFor: spec at: locTok
 				pos := pos + 1]
 			ifFalse: [
 				runStart := pos.
-				[pos <= len and: [(spec @env0:at: pos) ~= ${]] whileTrue: [pos := pos + 1].
-				parts add: #literal -> (spec @env0:copyFrom: runStart to: pos - 1)]].
+				[pos <= len and: [(spec at: pos) ~= ${]] whileTrue: [pos := pos + 1].
+				parts add: #literal -> (spec copyFrom: runStart to: pos - 1)]].
 	parts isEmpty ifTrue: [
 		^ self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
 			at: #value put: '';

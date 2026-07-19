@@ -53,7 +53,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'attribute_store' ifAbsent: [].
+	mods removeKey: #'attribute_store' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/attribute_store.py')
 		name: 'attribute_store'.
@@ -121,6 +121,6 @@ testUnshadowedMethodStillCallable
 
 	| sideEffects |
 	sideEffects := testModule @env1:___pyAttrLoad___: #unshadowed_side_effects.
-	self assert: sideEffects @env0:size equals: 1.
-	self assert: (sideEffects @env0:at: 1) equals: 7.
+	self assert: sideEffects size equals: 1.
+	self assert: (sideEffects at: 1) equals: 7.
 %

@@ -85,7 +85,7 @@ value: positional value: kwargs
 	kwOk := kwargs == nil or: [kwargs @env0:isEmpty].
 	method := resolver @env0:value: nargs value: kwOk.
 	method ifNil: [
-		AttributeError @env1:___signal___:
+		AttributeError ___signal___:
 			'super(): no parent method ''' @env0:, selector @env0:asString @env0:, ''''
 	].
 	"Varargs parent: dispatch as (positional, kwargs) via the 2-arg

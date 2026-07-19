@@ -50,7 +50,7 @@ __new__: obj
 	obj @env0:ifNotNil: [
 		(obj isKindOf: CharacterCollection)
 			ifTrue: [source := obj]
-			ifFalse: [source := obj @env1:__str__].
+			ifFalse: [source := obj __str__].
 	].
 	"Allocate a self-typed string of the right size via Behavior's
 	primitive ``new:`` and copy bytes.  Do NOT route through
@@ -78,14 +78,14 @@ __new__: obj _: encoding
 	conversion."
 
 	(obj isKindOf: ByteArray) ifTrue: [
-		^ obj @env1:decode: encoding
+		^ obj decode: encoding
 	].
 	(obj isKindOf: CharacterCollection) ifTrue: [
 		"CPython rejects str(str, encoding) with TypeError —
 		``decoding str is not supported''.  Match the shape."
-		TypeError @env1:___signal___: 'decoding str is not supported'
+		TypeError ___signal___: 'decoding str is not supported'
 	].
-	^ self @env1:__new__: obj
+	^ self __new__: obj
 %
 
 category: 'Grail-Initialization'
@@ -95,7 +95,7 @@ __new__: obj _: encoding _: errors
 	is honored by bytes.decode (currently ignored — Grail's decoders
 	either succeed or raise) — accepted for parity."
 
-	^ self @env1:__new__: obj _: encoding
+	^ self __new__: obj _: encoding
 %
 
 category: 'Grail-Initialization'
@@ -107,19 +107,19 @@ _str: positional kw: kwargs
 
 	| nargs encoding errors obj |
 	nargs := positional @env0:size.
-	nargs @env0:= 0 ifTrue: [^ self @env1:__new__].
+	nargs @env0:= 0 ifTrue: [^ self __new__].
 	obj := positional @env0:at: 1.
 	nargs @env0:= 1 ifTrue: [
 		(kwargs @env0:isNil @env0:not
 			and: [kwargs @env0:includesKey: 'encoding']) ifTrue: [
-			^ self @env1:__new__: obj _: (kwargs @env0:at: 'encoding')
+			^ self __new__: obj _: (kwargs @env0:at: 'encoding')
 		].
-		^ self @env1:__new__: obj
+		^ self __new__: obj
 	].
 	encoding := positional @env0:at: 2.
-	nargs @env0:= 2 ifTrue: [^ self @env1:__new__: obj _: encoding].
+	nargs @env0:= 2 ifTrue: [^ self __new__: obj _: encoding].
 	errors := positional @env0:at: 3.
-	^ self @env1:__new__: obj _: encoding _: errors
+	^ self __new__: obj _: encoding _: errors
 %
 
 category: 'Grail-String Methods'
@@ -165,7 +165,7 @@ __format__: formatSpec
 	___formatValue___:spec:."
 
 	(formatSpec @env0:isNil or: [formatSpec @env0:= '']) ifTrue: [^ self].
-	^ (builtins @env1:instance) @env1:___formatValue___: self spec: formatSpec
+	^ (builtins instance) ___formatValue___: self spec: formatSpec
 %
 
 category: 'Grail-Comparison'
@@ -212,16 +212,16 @@ __getitem__: index
 
 	| size idx char charString |
 	(index isKindOf: slice) ifTrue: [
-		^ self @env1:___getslice___: index @env1:start
-			_: index @env1:stop
-			_: index @env1:step
+		^ self ___getslice___: index start
+			_: index stop
+			_: index step
 	].
 	"Non-integer, non-slice index: catchable TypeError instead of an
 	uncatchable env-0 comparison DNU on the index."
 	((index isKindOf: Integer)
 		or: [(index @env0:class
 			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
-		TypeError @env1:___signal___: ('string indices must be integers, not '
+		TypeError ___signal___: ('string indices must be integers, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	size := self @env0:size.
 	idx := index.
@@ -355,7 +355,7 @@ __mod__: args
 			| key value conv |
 			i := i @env0:+ 1.
 			i @env0:> n ifTrue: [
-				ValueError @env1:___signal___: 'incomplete format'
+				ValueError ___signal___: 'incomplete format'
 			].
 			key := nil.
 			"Optional mapping key '(name)'."
@@ -388,7 +388,7 @@ __mod__: args
 				]
 			]] @env0:whileTrue: [i := i @env0:+ 1].
 			i @env0:> n ifTrue: [
-				ValueError @env1:___signal___: 'incomplete format'
+				ValueError ___signal___: 'incomplete format'
 			].
 			conv := src @env0:at: i.
 			i := i @env0:+ 1.
@@ -398,15 +398,15 @@ __mod__: args
 					ifTrue: [value := args @env0:at: key @env0:asSymbol ifAbsent: [args @env0:at: key]]
 					ifFalse: [
 						argSeq @env0:isNil ifTrue: [
-							TypeError @env1:___signal___: 'format requires a mapping'
+							TypeError ___signal___: 'format requires a mapping'
 						].
 						argIdx @env0:> argSeq @env0:size ifTrue: [
-							TypeError @env1:___signal___: 'not enough arguments for format string'
+							TypeError ___signal___: 'not enough arguments for format string'
 						].
 						value := argSeq @env0:at: argIdx.
 						argIdx := argIdx @env0:+ 1
 					].
-				stream @env0:nextPutAll: (self @env1:___convert___: value with: conv)
+				stream @env0:nextPutAll: (self ___convert___: value with: conv)
 			]
 		]
 	].
@@ -435,7 +435,7 @@ ___convert___: value with: conv
 		].
 		^ s
 	].
-	conv @env0:= $X ifTrue: [^ (self @env1:___convert___: value with: $x) @env0:asUppercase].
+	conv @env0:= $X ifTrue: [^ (self ___convert___: value with: $x) @env0:asUppercase].
 	conv @env0:= $c ifTrue: [
 		"%c — an int is a code point; a 1-char string passes through."
 		(value isKindOf: Integer) ifTrue: [
@@ -621,7 +621,7 @@ method: CharacterCollection
 count: sub _: start
 	"count(sub, start) — occurrences at or after 0-based ``start''."
 
-	^ self @env1:count: sub _: start _: (self @env0:size)
+	^ self count: sub _: start _: (self @env0:size)
 %
 
 category: 'Grail-String Methods'
@@ -640,7 +640,7 @@ count: sub _: start _: stop
 	e @env0:< 0 ifTrue: [e := (e @env0:+ n) @env0:max: 0].
 	e := e @env0:min: n.
 	s @env0:>= e ifTrue: [^ 0].
-	^ (self @env0:copyFrom: s @env0:+ 1 to: e) @env1:count: sub
+	^ (self @env0:copyFrom: s @env0:+ 1 to: e) count: sub
 %
 
 category: 'Grail-String Methods'
@@ -650,16 +650,16 @@ _count: positional kw: kwargs
 
 	| sub start stop |
 	positional @env0:isEmpty ifTrue: [
-		TypeError @env1:___signal___: 'count() takes at least 1 argument'
+		TypeError ___signal___: 'count() takes at least 1 argument'
 	].
 	sub := positional @env0:at: 1.
 	positional @env0:size @env0:>= 2
 		ifTrue: [start := positional @env0:at: 2]
-		ifFalse: [^ self @env1:count: sub].
+		ifFalse: [^ self count: sub].
 	positional @env0:size @env0:>= 3
 		ifTrue: [stop := positional @env0:at: 3]
-		ifFalse: [^ self @env1:count: sub _: start].
-	^ self @env1:count: sub _: start _: stop
+		ifFalse: [^ self count: sub _: start].
+	^ self count: sub _: start _: stop
 %
 
 category: 'Grail-String Methods'
@@ -667,7 +667,7 @@ method: CharacterCollection
 encode
 	"``s.encode()`` with no args — Python default is 'utf-8'."
 
-	^ self @env1:encode: 'utf-8'
+	^ self encode: 'utf-8'
 %
 
 category: 'Grail-String Methods'
@@ -679,7 +679,7 @@ encode: encoding _: errors
 	exercise an error-handling policy is a non-ASCII codepoint, and
 	in those cases we already raise UnicodeEncodeError regardless."
 
-	^ self @env1:encode: encoding
+	^ self encode: encoding
 %
 
 category: 'Grail-String Methods'
@@ -838,7 +838,7 @@ find: sub _: start
 	after ``start'', else -1.  ``start'' follows CPython slice rules:
 	negative counts from the end, out-of-range clamps."
 
-	^ self @env1:find: sub _: start _: self @env0:size
+	^ self find: sub _: start _: self @env0:size
 %
 
 category: 'Grail-String Methods'
@@ -856,7 +856,7 @@ find: sub _: start _: stop
 	the empty-substring decision (a start past the end never matches)."
 	rawStart := start @env0:< 0 ifTrue: [start @env0:+ len] ifFalse: [start].
 	normStart := (rawStart @env0:max: 0) @env0:min: len.
-	normStop := self @env1:___clampSliceIndex: stop len: len.
+	normStop := self ___clampSliceIndex: stop len: len.
 	subLen := sub @env0:size.
 	"Empty substring matches at the start position when that position
 	is within both the string and the [start, stop) window."
@@ -896,13 +896,13 @@ _find: positional kw: kwargs
 
 	| nargs |
 	nargs := positional @env0:size.
-	nargs @env0:= 1 ifTrue: [^ self @env1:find: (positional @env0:at: 1)].
+	nargs @env0:= 1 ifTrue: [^ self find: (positional @env0:at: 1)].
 	nargs @env0:= 2 ifTrue: [
-		^ self @env1:find: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+		^ self find: (positional @env0:at: 1) _: (positional @env0:at: 2)].
 	nargs @env0:= 3 ifTrue: [
-		^ self @env1:find: (positional @env0:at: 1)
+		^ self find: (positional @env0:at: 1)
 			_: (positional @env0:at: 2) _: (positional @env0:at: 3)].
-	TypeError @env1:___signal___:
+	TypeError ___signal___:
 		'find() takes 1 to 3 arguments but ' @env0:, nargs @env0:printString @env0:, ' were given'
 %
 
@@ -913,7 +913,7 @@ format
 	rendered as literal text only if no ``{'' / ``}'' appears.
 	Round-trips ``{{'' / ``}}'' escapes."
 
-	^ self @env1:_format: #() kw: nil
+	^ self _format: #() kw: nil
 %
 
 category: 'Grail-String Methods'
@@ -976,18 +976,18 @@ _format: positional kw: kwargs
 			].
 			"Resolve the field name to a value."
 			value := self
-				@env1:___resolveFormatField___: field
+				___resolveFormatField___: field
 				positional: positional
 				kwargs: kwargs
 				autoIdx: nextAuto.
 			field @env0:isEmpty ifTrue: [nextAuto := nextAuto @env0:+ 1].
 			"Apply conversion flag (r → repr, s → str, a → ascii)."
 			convFlag @env0:isNil ifFalse: [
-				convFlag @env0:= 'r' @env0:ifTrue: [value := value @env1:__repr__].
-				convFlag @env0:= 's' @env0:ifTrue: [value := value @env1:__str__].
+				convFlag @env0:= 'r' @env0:ifTrue: [value := value __repr__].
+				convFlag @env0:= 's' @env0:ifTrue: [value := value __str__].
 			].
 			"Format-spec dispatch.  Delegate to value.__format__(spec)."
-			out @env0:nextPutAll: (value @env1:__format__: spec) @env0:asString.
+			out @env0:nextPutAll: (value __format__: spec) @env0:asString.
 			i := endIdx @env0:+ 1
 		] ifFalse: [
 			out @env0:nextPut: ch.
@@ -1112,7 +1112,7 @@ ___resolveFormatField___: field positional: positional kwargs: kwargs autoIdx: a
 	KeyError, matching the old at:ifAbsent: behavior."
 	kwargs @env0:isNil ifTrue: [
 		KeyError ___signal___: '''' @env0:, field @env0:asString @env0:, ''''].
-	^ kwargs @env1:__getitem__: field @env0:asString
+	^ kwargs __getitem__: field @env0:asString
 %
 
 category: 'Grail-String Methods'
@@ -1123,7 +1123,7 @@ format_map: mapping
 	copy), so mappings with custom item access (regex Match objects,
 	defaultdict-alikes) work."
 
-	^ self @env1:_format: #() kw: mapping
+	^ self _format: #() kw: mapping
 %
 
 category: 'Grail-String Methods'
@@ -1487,7 +1487,7 @@ replace: old _: new _: count
 	| n | n := count.
 	(n == nil or: [n == None or: [n @env0:< 0]]) ifTrue: [
 		^ self @env0:copyReplaceAll: old with: new].
-	^ self @env1:_replaceFirst: old _: new _: n
+	^ self _replaceFirst: old _: new _: n
 %
 
 category: 'Grail-String Methods'
@@ -1528,8 +1528,8 @@ _replace: positional kw: kwargs
 	new := positional @env0:at: 2.
 	positional @env0:size @env0:>= 3
 		ifTrue: [count := positional @env0:at: 3]
-		ifFalse: [^ self @env1:replace: old _: new].
-	^ self @env1:replace: old _: new _: count
+		ifFalse: [^ self replace: old _: new].
+	^ self replace: old _: new _: count
 %
 
 category: 'Grail-String Methods'
@@ -1552,7 +1552,7 @@ rfind: sub
 category: 'Grail-String Methods'
 method: CharacterCollection
 rfind: sub _: start
-	^ self @env1:rfind: sub _: start _: (self @env0:size)
+	^ self rfind: sub _: start _: (self @env0:size)
 %
 
 category: 'Grail-String Methods'
@@ -1571,7 +1571,7 @@ rfind: sub _: start _: stop
 	e @env0:< 0 ifTrue: [e := (e @env0:+ n) @env0:max: 0].
 	e := e @env0:min: n.
 	s @env0:>= e ifTrue: [^ -1].
-	found := (self @env0:copyFrom: s @env0:+ 1 to: e) @env1:rfind: sub.
+	found := (self @env0:copyFrom: s @env0:+ 1 to: e) rfind: sub.
 	found @env0:< 0 ifTrue: [^ -1].
 	^ found @env0:+ s
 %
@@ -1583,13 +1583,13 @@ _rfind: positional kw: kwargs
 
 	| sub |
 	positional @env0:isEmpty ifTrue: [
-		TypeError @env1:___signal___: 'rfind() takes at least 1 argument'
+		TypeError ___signal___: 'rfind() takes at least 1 argument'
 	].
 	sub := positional @env0:at: 1.
-	positional @env0:size @env0:= 1 ifTrue: [^ self @env1:rfind: sub].
+	positional @env0:size @env0:= 1 ifTrue: [^ self rfind: sub].
 	positional @env0:size @env0:= 2 ifTrue: [
-		^ self @env1:rfind: sub _: (positional @env0:at: 2)].
-	^ self @env1:rfind: sub _: (positional @env0:at: 2) _: (positional @env0:at: 3)
+		^ self rfind: sub _: (positional @env0:at: 2)].
+	^ self rfind: sub _: (positional @env0:at: 2) _: (positional @env0:at: 3)
 %
 
 category: 'Grail-String Methods'
@@ -1660,13 +1660,13 @@ method: CharacterCollection
 rsplit: sep
 	"rsplit(sep) with no maxsplit — identical to split(sep)."
 
-	^ self @env1:split: sep
+	^ self split: sep
 %
 
 category: 'Grail-String Methods'
 method: CharacterCollection
 rsplit: sep _: maxsplit
-	^ self @env1:_rsplit: { sep. maxsplit } kw: nil
+	^ self _rsplit: { sep. maxsplit } kw: nil
 %
 
 category: 'Grail-String Methods'
@@ -1712,7 +1712,7 @@ _rsplit: positional kw: kwargs
 category: 'Grail-String Methods'
 method: CharacterCollection
 split: sep _: maxsplit
-	^ self @env1:_split: { sep. maxsplit } kw: nil
+	^ self _split: { sep. maxsplit } kw: nil
 %
 
 category: 'Grail-String Methods'
@@ -1763,7 +1763,7 @@ split: sep
 	sepStr := sep @env0:asString.
 	sepSize := sepStr @env0:size.
 	sepSize @env0:= 0 ifTrue: [
-		ValueError @env1:___signal___: 'empty separator'
+		ValueError ___signal___: 'empty separator'
 	].
 	"Keep ``self'' (don't ``asString'' it) so the ``copyFrom:to:''
 	substrings preserve the receiver's str class (Unicode7) rather than
@@ -2023,7 +2023,7 @@ translate: table
 	self @env0:do: [:ch |
 		| cp replacement |
 		cp := ch @env0:codePoint.
-		replacement := [table @env1:__getitem__: cp]
+		replacement := [table __getitem__: cp]
 			@env0:on: KeyError do: [:ex | ex @env0:return: ch].
 		replacement == ch ifTrue: [stream @env0:nextPut: ch] ifFalse: [
 			replacement == None ifFalse: [

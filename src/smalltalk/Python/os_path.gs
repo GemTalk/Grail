@@ -143,7 +143,7 @@ method: os_path
 realpath: path
 	"No symlink resolution in Grail — same as abspath."
 
-	^ self @env1:abspath: path
+	^ self abspath: path
 %
 
 category: 'Grail-Path Manipulation'

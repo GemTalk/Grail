@@ -48,8 +48,8 @@ setUp
 	calls write the trace files."
 
 	importlib @env1:modules.
-	savedCodegenTraceDir := System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR'.
-	System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: '/tmp/grail'.
+	savedCodegenTraceDir := System gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR'.
+	System gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: '/tmp/grail'.
 	importlib ___codegenTraceDirInvalidate___
 %
 
@@ -63,7 +63,7 @@ tearDown
 	to truly unset a session env var.  Invalidate the cached value so the
 	next reader re-reads the env var."
 
-	System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR'
+	System gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR'
 		put: (savedCodegenTraceDir ifNil: ['']).
 	importlib ___codegenTraceDirInvalidate___
 %
@@ -711,7 +711,7 @@ testExecuteWithScopeCaptureIsOptIn
 	dir first: sequence counters reset on install, so capture filenames
 	are reused and a leftover ___doit_1___ would be overwritten rather
 	than added, hiding the write. ---"
-	System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: dir.
+	System gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: dir.
 	importlib ___codegenTraceDirInvalidate___.
 	self assert: importlib ___codegenTraceDir___ equals: dir.
 	self ___emptyDir: dir.
@@ -726,7 +726,7 @@ testExecuteWithScopeCaptureIsOptIn
 	"--- Tracing OFF: a doit writes NOTHING.  Only this synchronous
 	doit runs between the two counts, so the /tmp/grail delta is 0
 	with the fix and would be +2 (.tpz + .ir) with the old bug. ---"
-	System @env0:gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: ''.
+	System gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: ''.
 	importlib ___codegenTraceDirInvalidate___.
 	self assert: importlib ___codegenTraceDir___ isNil.
 	before := self ___captureCountIn: '/tmp/grail'.
@@ -749,16 +749,16 @@ testCompilationCountersLiveInSessionTempsNotCommitted
 
 	| before after |
 	"Reset the session counter so we get a predictable value."
-	SessionTemps @env0:current
-		@env0:removeKey: #'___grailDoitCounter___' ifAbsent: [].
-	before := SessionTemps @env0:current
-		@env0:at: #'___grailDoitCounter___' ifAbsent: [0].
+	SessionTemps current
+		removeKey: #'___grailDoitCounter___' ifAbsent: [].
+	before := SessionTemps current
+		at: #'___grailDoitCounter___' ifAbsent: [0].
 	ModuleAst
 		evaluateSource: 'x = 1'
 		usingModuleScope: SymbolDictionary new
 		as: #doit.
-	after := SessionTemps @env0:current
-		@env0:at: #'___grailDoitCounter___' ifAbsent: [0].
+	after := SessionTemps current
+		at: #'___grailDoitCounter___' ifAbsent: [0].
 	self assert: after > before.
 %
 
@@ -772,17 +772,17 @@ testCodegenTraceDirLivesInSessionTempsNotCommitted
 	importlib ___codegenTraceDirInvalidate___.
 	"Checked flag must not appear before the first call."
 	self assert:
-		(SessionTemps @env0:current
-			@env0:includesKey: #'___grailCodegenTraceDirChecked___') not.
+		(SessionTemps current
+			includesKey: #'___grailCodegenTraceDirChecked___') not.
 	importlib ___codegenTraceDir___.
 	"After one call the checked flag lives in SessionTemps, nowhere else."
 	self assert:
-		(SessionTemps @env0:current
-			@env0:includesKey: #'___grailCodegenTraceDirChecked___').
+		(SessionTemps current
+			includesKey: #'___grailCodegenTraceDirChecked___').
 	"Invalidate clears the SessionTemps entry so the next call re-reads the env var."
 	importlib ___codegenTraceDirInvalidate___.
 	self assert:
-		(SessionTemps @env0:current
-			@env0:includesKey: #'___grailCodegenTraceDirChecked___') not.
+		(SessionTemps current
+			includesKey: #'___grailCodegenTraceDirChecked___') not.
 	"GRAIL_CODEGEN_TRACE_DIR is restored to its incoming value in tearDown."
 %

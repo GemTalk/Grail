@@ -97,7 +97,7 @@ test_env0_message_to_nil_unaffected
 	backstop is intentionally limited to env-1 to leave Smalltalk
 	semantics unchanged."
 
-	self should: [nil @env0:__bool__] raise: MessageNotUnderstood.
+	self should: [nil __bool__] raise: MessageNotUnderstood.
 %
 
 category: 'Grail-Tests-DNU Backstop'

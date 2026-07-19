@@ -47,7 +47,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'slots' ifAbsent: [].
+	mods removeKey: #'slots' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/slots.py')
 		name: 'slots'.
@@ -73,9 +73,9 @@ testBackingClassHasNamedInstVars
 
 	| cls names |
 	cls := testModule @env1:___pyAttrLoad___: #Point.
-	names := cls @env0:allInstVarNames.
-	self assert: (names @env0:includes: #'___slot_x___').
-	self assert: (names @env0:includes: #'___slot_y___').
+	names := cls allInstVarNames.
+	self assert: (names includes: #'___slot_x___').
+	self assert: (names includes: #'___slot_y___').
 %
 
 category: 'Grail-Tests - Strict'
@@ -145,10 +145,10 @@ testBaseSlotNotDuplicated
 
 	| cls names |
 	cls := testModule @env1:___pyAttrLoad___: #Derived.
-	names := cls @env0:allInstVarNames.
-	self assert: (names @env0:includes: #'___slot_base_v___').
-	self assert: (names @env0:includes: #'___slot_deriv_v___').
-	self assert: (names @env0:occurrencesOf: #'___slot_base_v___') equals: 1.
+	names := cls allInstVarNames.
+	self assert: (names includes: #'___slot_base_v___').
+	self assert: (names includes: #'___slot_deriv_v___').
+	self assert: (names occurrencesOf: #'___slot_base_v___') equals: 1.
 %
 
 category: 'Grail-Tests - Delete'

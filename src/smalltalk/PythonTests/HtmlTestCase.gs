@@ -250,9 +250,9 @@ testUnescapeGreekEntity
 result = html.unescape(''&alpha;&beta;&gamma;'')
 result
 ') equals: (
-	(Character @env0:codePoint: 945) asString,
-	(Character @env0:codePoint: 946) asString,
-	(Character @env0:codePoint: 947) asString
+	(Character codePoint: 945) asString,
+	(Character codePoint: 946) asString,
+	(Character codePoint: 947) asString
 ).
 %
 

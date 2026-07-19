@@ -53,7 +53,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'attribute_inheritance' ifAbsent: [].
+	mods removeKey: #'attribute_inheritance' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/attribute_inheritance.py')
 		name: 'attribute_inheritance'.

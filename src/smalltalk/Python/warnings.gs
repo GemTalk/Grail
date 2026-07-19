@@ -100,7 +100,7 @@ _actionFor: message _: category
 
 	| msgStr |
 	msgStr := message @env0:asString.
-	(self @env1:_filters) @env0:do: [:f |
+	(self _filters) @env0:do: [:f |
 		| catMatch msgMatch fCat fMsg |
 		fCat := f @env0:at: 2.
 		fMsg := f @env0:at: 3.
@@ -119,7 +119,7 @@ method: warnings
 warn: message
 	"warn(message) - emit a UserWarning."
 
-	^ self @env1:warn: message _: nil
+	^ self warn: message _: nil
 %
 
 category: 'Grail-Public'
@@ -128,7 +128,7 @@ warn: message _: category _: stacklevel
 	"warn(message, category, stacklevel) - stacklevel only shapes the
 	reported source location, which Grail does not track; ignore it."
 
-	^ self @env1:warn: message _: category
+	^ self warn: message _: category
 %
 
 category: 'Grail-Public'
@@ -146,7 +146,7 @@ _warn: positional kw: keywords
 	(cat == nil and: [keywords ~~ nil]) ifTrue: [
 		(keywords @env0:includesKey: 'category') ifTrue: [
 			cat := keywords @env0:at: 'category']].
-	^ self @env1:warn: msg _: cat
+	^ self warn: msg _: cat
 %
 
 category: 'Grail-Public'
@@ -156,17 +156,17 @@ warn: message _: category
 	to UserWarning when nil/None)."
 
 	| cat action key |
-	cat := self @env1:_resolveCategory: category.
-	action := self @env1:_actionFor: message _: cat.
+	cat := self _resolveCategory: category.
+	action := self _actionFor: message _: cat.
 	action @env0:= 'ignore' ifTrue: [^ None].
-	action @env0:= 'error' ifTrue: [^ cat @env1:___signal___: message].
+	action @env0:= 'error' ifTrue: [^ cat ___signal___: message].
 	"Default / once / module: dedupe by (text, category) and emit."
 	(action @env0:= 'always') ifFalse: [
 		key := message @env0:asString @env0:, '|' @env0:, cat @env0:name @env0:asString.
-		((self @env1:_seen) @env0:includesKey: key @env0:asSymbol) ifTrue: [^ None].
-		(self @env1:_seen) @env0:at: key @env0:asSymbol put: true
+		((self _seen) @env0:includesKey: key @env0:asSymbol) ifTrue: [^ None].
+		(self _seen) @env0:at: key @env0:asSymbol put: true
 	].
-	Transcript @env0:nextPutAll: (self @env1:formatwarning: message _: cat _: '<unknown>' _: 0).
+	Transcript @env0:nextPutAll: (self formatwarning: message _: cat _: '<unknown>' _: 0).
 	Transcript @env0:cr.
 	^ None
 %
@@ -179,11 +179,11 @@ warn_explicit: message _: category _: filename _: lineno
 	for action 'always' and otherwise behaves like warn()."
 
 	| cat action |
-	cat := self @env1:_resolveCategory: category.
-	action := self @env1:_actionFor: message _: cat.
+	cat := self _resolveCategory: category.
+	action := self _actionFor: message _: cat.
 	action @env0:= 'ignore' ifTrue: [^ None].
-	action @env0:= 'error' ifTrue: [^ cat @env1:___signal___: message].
-	Transcript @env0:nextPutAll: (self @env1:formatwarning: message _: cat _: filename _: lineno).
+	action @env0:= 'error' ifTrue: [^ cat ___signal___: message].
+	Transcript @env0:nextPutAll: (self formatwarning: message _: cat _: filename _: lineno).
 	Transcript @env0:cr.
 	^ None
 %
@@ -212,7 +212,7 @@ simplefilter: action
 	"simplefilter(action) - drop all filters and install one matching
 	every category and message."
 
-	^ self @env1:simplefilter: action _: nil
+	^ self simplefilter: action _: nil
 %
 
 category: 'Grail-Filters'
@@ -221,8 +221,8 @@ simplefilter: action _: category
 	"simplefilter(action, category) - drop all filters and install
 	one that matches `category` (nil means all)."
 
-	(self @env1:_filters) @env0:removeAll: (self @env1:_filters) @env0:copy.
-	(self @env1:_filters) @env0:addFirst: { action. category. nil }.
+	(self _filters) @env0:removeAll: (self _filters) @env0:copy.
+	(self _filters) @env0:addFirst: { action. category. nil }.
 	self @env0:at: #_seen put: IdentityKeyValueDictionary @env0:new.
 	^ None
 %
@@ -232,7 +232,7 @@ method: warnings
 filterwarnings: action
 	"filterwarnings(action) - add a filter matching every warning."
 
-	^ self @env1:filterwarnings: action _: nil _: nil
+	^ self filterwarnings: action _: nil _: nil
 %
 
 category: 'Grail-Filters'
@@ -241,7 +241,7 @@ filterwarnings: action _: messageSubstring
 	"filterwarnings(action, message_pattern) - add a filter scoped
 	to messages containing `messageSubstring`."
 
-	^ self @env1:filterwarnings: action _: messageSubstring _: nil
+	^ self filterwarnings: action _: messageSubstring _: nil
 %
 
 category: 'Grail-Filters'
@@ -253,7 +253,7 @@ filterwarnings: action _: messageSubstring _: category
 	all-or-nothing filters, so the regex compiler isn't worth pulling
 	in yet)."
 
-	(self @env1:_filters) @env0:addFirst: { action. category. messageSubstring }.
+	(self _filters) @env0:addFirst: { action. category. messageSubstring }.
 	^ None
 %
 
@@ -262,7 +262,7 @@ method: warnings
 resetwarnings
 	"resetwarnings() - clear all installed filters."
 
-	(self @env1:_filters) @env0:removeAll: (self @env1:_filters) @env0:copy.
+	(self _filters) @env0:removeAll: (self _filters) @env0:copy.
 	self @env0:at: #_seen put: IdentityKeyValueDictionary @env0:new.
 	^ None
 %
@@ -289,7 +289,7 @@ _catch_warnings: positional kw: kwargs
 	INSTANCE got called -- TypeError 'not callable' (22 test_set
 	tests)."
 
-	^ self @env1:catch_warnings
+	^ self catch_warnings
 %
 
 set compile_env: 0
@@ -335,9 +335,9 @@ method: CatchWarnings
 __enter__
 	"Snapshot the current filter list + dedupe state."
 
-	_savedFilters := (_owner @env1:_filters) @env0:copy.
+	_savedFilters := (_owner _filters) @env0:copy.
 	_savedSeen := IdentityKeyValueDictionary @env0:new.
-	(_owner @env1:_seen) @env0:keysAndValuesDo: [:k :v |
+	(_owner _seen) @env0:keysAndValuesDo: [:k :v |
 		_savedSeen @env0:at: k put: v
 	].
 	^ self
@@ -350,7 +350,7 @@ __exit__: excType _: excValue _: tb
 	exception propagate (we don't suppress)."
 
 	| current |
-	current := _owner @env1:_filters.
+	current := _owner _filters.
 	current @env0:removeAll: current @env0:copy.
 	_savedFilters @env0:do: [:f | current @env0:addLast: f].
 	current := IdentityKeyValueDictionary @env0:new.

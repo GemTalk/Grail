@@ -43,9 +43,9 @@ loadFixture
 	"Load tests/python/global_statement.py fresh (each load is a new
 	module, so module-global state starts from the file's defaults)."
 
-	importlib @env1:modules @env0:removeKey: #'global_statement' ifAbsent: [].
+	importlib @env1:modules removeKey: #'global_statement' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/global_statement.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/global_statement.py')
 		name: 'global_statement'
 %
 

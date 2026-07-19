@@ -51,7 +51,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'generic_class_subscript' ifAbsent: [].
+	mods removeKey: #'generic_class_subscript' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/generic_class_subscript.py')
 		name: 'generic_class_subscript'.
@@ -83,8 +83,8 @@ testMapSubclassWorks
 	| result |
 	result := (testModule @env1:___pyAttrLoad___: #map_subclass_works)
 		@env1:value: { } value: nil.
-	self assert: (result @env0:at: 1) equals: 1.
-	self assert: (result @env0:at: 2) equals: 'missing'
+	self assert: (result at: 1) equals: 1.
+	self assert: (result at: 2) equals: 'missing'
 %
 
 category: 'Grail-Tests'
@@ -97,6 +97,6 @@ testSubscriptionReturnsSelfForAlias
 	| result |
 	result := (testModule @env1:___pyAttrLoad___: #subscription_returns_self_for_use_as_alias)
 		@env1:value: { } value: nil.
-	self assert: (result @env0:at: 1) equals: true.
-	self assert: (result @env0:at: 2) equals: true
+	self assert: (result at: 1) equals: true.
+	self assert: (result at: 2) equals: true
 %

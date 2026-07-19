@@ -37,7 +37,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'makecodes_pattern' ifAbsent: [].
+	mods removeKey: #'makecodes_pattern' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/makecodes_pattern.py')
 		name: 'makecodes_pattern'.

@@ -55,8 +55,8 @@ on: aPythonInstance
 	view land in the instance's dynamic-instVar storage."
 
 	| inst |
-	inst := self @env0:new.
-	inst @env0:_setSource: aPythonInstance.
+	inst := self new.
+	inst _setSource: aPythonInstance.
 	^ inst
 %
 
@@ -78,10 +78,10 @@ at: aKey
 	"Smalltalk-side keyed read.  Raises if absent — match KeyValueDictionary."
 
 	| val sym |
-	sym := aKey @env0:asSymbol.
-	val := source @env0:dynamicInstVarAt: sym.
+	sym := aKey asSymbol.
+	val := source dynamicInstVarAt: sym.
 	val == nil ifTrue: [
-		^ source @env0:_errorKeyNotFound: aKey
+		^ source _errorKeyNotFound: aKey
 	].
 	^ val
 %
@@ -92,9 +92,9 @@ at: aKey ifAbsent: aBlock
 	"Smalltalk-side keyed read with fallback block."
 
 	| val sym |
-	sym := aKey @env0:asSymbol.
-	val := source @env0:dynamicInstVarAt: sym.
-	val == nil ifTrue: [^ aBlock @env0:value].
+	sym := aKey asSymbol.
+	val := source dynamicInstVarAt: sym.
+	val == nil ifTrue: [^ aBlock value].
 	^ val
 %
 
@@ -103,14 +103,14 @@ method: PyInstanceDict
 at: aKey put: aValue
 	"Writes propagate to the source instance's dynamic-instVar storage."
 
-	source @env0:dynamicInstVarAt: aKey @env0:asSymbol put: aValue.
+	source dynamicInstVarAt: aKey asSymbol put: aValue.
 	^ aValue
 %
 
 category: 'Grail-Smalltalk-Protocol'
 method: PyInstanceDict
 includesKey: aKey
-	^ (source @env0:dynamicInstVarAt: aKey @env0:asSymbol) ~~ nil
+	^ (source dynamicInstVarAt: aKey asSymbol) ~~ nil
 %
 
 category: 'Grail-Smalltalk-Protocol'
@@ -119,10 +119,10 @@ keysAndValuesDo: aBlock
 	"Iterate (key, value) pairs in declaration order."
 
 	| pairs |
-	pairs := source @env0:dynamicInstVarPairs.
-	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
-		aBlock @env0:value: (pairs @env0:at: i)
-			value: (pairs @env0:at: i @env0:+ 1)
+	pairs := source dynamicInstVarPairs.
+	1 to: pairs size by: 2 do: [:i |
+		aBlock value: (pairs at: i)
+			value: (pairs at: i + 1)
 	]
 %
 
@@ -132,10 +132,10 @@ keys
 	"Return the keys as an Array (Smalltalk-side iteration target)."
 
 	| pairs result |
-	pairs := source @env0:dynamicInstVarPairs.
-	result := Array @env0:new: pairs @env0:size @env0:// 2.
-	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
-		result @env0:at: (i @env0:+ 1) @env0:// 2 put: (pairs @env0:at: i)
+	pairs := source dynamicInstVarPairs.
+	result := Array new: pairs size // 2.
+	1 to: pairs size by: 2 do: [:i |
+		result at: (i + 1) // 2 put: (pairs at: i)
 	].
 	^ result
 %
@@ -143,19 +143,19 @@ keys
 category: 'Grail-Smalltalk-Protocol'
 method: PyInstanceDict
 size
-	^ source @env0:dynamicInstVarPairs @env0:size @env0:// 2
+	^ source dynamicInstVarPairs size // 2
 %
 
 category: 'Grail-Smalltalk-Protocol'
 method: PyInstanceDict
 isEmpty
-	^ source @env0:dynamicInstVarPairs @env0:isEmpty
+	^ source dynamicInstVarPairs isEmpty
 %
 
 category: 'Grail-Smalltalk-Protocol'
 method: PyInstanceDict
 notEmpty
-	^ source @env0:dynamicInstVarPairs @env0:notEmpty
+	^ source dynamicInstVarPairs notEmpty
 %
 
 set compile_env: 1
@@ -167,7 +167,7 @@ __getitem__: key
 	sym := key @env0:asSymbol.
 	val := source @env0:dynamicInstVarAt: sym.
 	val == nil ifTrue: [
-		KeyError @env1:___signal___: key @env0:printString
+		KeyError ___signal___: key @env0:printString
 	].
 	^ val
 %
@@ -194,7 +194,7 @@ __len__
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
 get: key
-	^ self @env1:get: key _: None
+	^ self get: key _: None
 %
 
 category: 'Grail-Python-Protocol'
@@ -218,7 +218,7 @@ keys
 	pairs := source @env0:dynamicInstVarPairs.
 	result := list ___new___.
 	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
-		result @env1:append: (pairs @env0:at: i) @env0:asString
+		result append: (pairs @env0:at: i) @env0:asString
 	].
 	^ result
 %
@@ -230,7 +230,7 @@ values
 	pairs := source @env0:dynamicInstVarPairs.
 	result := list ___new___.
 	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
-		result @env1:append: (pairs @env0:at: i @env0:+ 1)
+		result append: (pairs @env0:at: i @env0:+ 1)
 	].
 	^ result
 %
@@ -245,7 +245,7 @@ items
 	pairs := source @env0:dynamicInstVarPairs.
 	result := list ___new___.
 	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
-		result @env1:append: (tuple @env0:withAll:
+		result append: (tuple @env0:withAll:
 			{ (pairs @env0:at: i) @env0:asString.
 			  (pairs @env0:at: i @env0:+ 1) })
 	].
@@ -291,7 +291,7 @@ pop: key
 	sym := key @env0:asSymbol.
 	val := source @env0:dynamicInstVarAt: sym.
 	val == nil ifTrue: [
-		KeyError @env1:___signal___: key @env0:printString
+		KeyError ___signal___: key @env0:printString
 	].
 	source @env0:removeDynamicInstVar: sym.
 	^ val
@@ -313,7 +313,7 @@ pop: key _: default
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
 setdefault: key
-	^ self @env1:setdefault: key _: None
+	^ self setdefault: key _: None
 %
 
 category: 'Grail-Python-Protocol'
@@ -335,7 +335,7 @@ __iter__
 	"Iterating a dict yields its KEYS in Python (the values come from
 	indexing).  Match by yielding the dict-keys list's iterator."
 
-	^ self @env1:keys @env1:__iter__
+	^ self keys __iter__
 %
 
 category: 'Grail-Python-Protocol'
@@ -347,7 +347,7 @@ __reversed__
 	| ks |
 	ks := OrderedCollection @env0:new.
 	self @env0:keysAndValuesDo: [:k :v | ks @env0:add: k].
-	^ (ks @env0:reverse) @env1:__iter__
+	^ (ks @env0:reverse) __iter__
 %
 
 category: 'Grail-Python-Protocol'
@@ -365,9 +365,9 @@ __repr__
 		"NO cascade here: a cascade continuation after an @env0: send is
 		compiled in the METHOD's environment (env-1) and MNUs on the
 		kernel WriteStream."
-		stream @env0:nextPutAll: (k @env1:__repr__) @env0:asString.
+		stream @env0:nextPutAll: (k __repr__) @env0:asString.
 		stream @env0:nextPutAll: ': '.
-		stream @env0:nextPutAll: (v @env1:__repr__) @env0:asString
+		stream @env0:nextPutAll: (v __repr__) @env0:asString
 	].
 	stream @env0:nextPutAll: '}'.
 	^ stream @env0:contents

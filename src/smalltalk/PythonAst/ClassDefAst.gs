@@ -431,14 +431,14 @@ printSmalltalkRuntimeOn: aStream
 			registry (same key the probe and register epilogue use)."
 			aStream
 				nextPutAll: ') name: #''';
-				nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
+				nextPutAll: (importlib ___asSmalltalkClassName___: name) asString;
 				nextPutAll: ''' module: '.
 			self printQuotedString: self ___enclosingModuleName___ on: aStream.
 			aStream nextPutAll: ' instVarNames: ']
 		ifFalse: [
 			aStream
 				nextPutAll: ') @env1:___subclass___: #''';
-				nextPutAll: (importlib @env0:___asSmalltalkClassName___: name) asString;
+				nextPutAll: (importlib ___asSmalltalkClassName___: name) asString;
 				nextPutAll: ''' instVarNames: '].
 	"Python ``__slots__'' names become real GemStone named instance
 	variables (name-mangled — see above).  ___subclass___: filters any the
@@ -1419,7 +1419,7 @@ ___mangleSlotName___: aName
 
 	| s stripped i |
 	s := aName asString.
-	((s @env0:beginsWith: '__') and: [(s @env0:endsWith: '__') not]) ifFalse: [^ s].
+	((s beginsWith: '__') and: [(s endsWith: '__') not]) ifFalse: [^ s].
 	stripped := name asString.
 	i := 1.
 	[i <= stripped size and: [(stripped at: i) = $_]] whileTrue: [i := i + 1].

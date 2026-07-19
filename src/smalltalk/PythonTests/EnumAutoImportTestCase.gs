@@ -52,7 +52,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'enum_auto_import' ifAbsent: [].
+	mods removeKey: #'enum_auto_import' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/enum_auto_import.py')
 		name: 'enum_auto_import'.
@@ -70,9 +70,9 @@ testAutoCallableAfterImport
 
 	| result a b c |
 	result := testModule @env1:imported_auto_is_callable.
-	a := result @env0:at: 1.
-	b := result @env0:at: 2.
-	c := result @env0:at: 3.
+	a := result at: 1.
+	b := result at: 2.
+	c := result at: 3.
 	self assert: (a isKindOf: GrailEnumAuto).
 	self assert: (b isKindOf: GrailEnumAuto).
 	self assert: (c isKindOf: GrailEnumAuto).

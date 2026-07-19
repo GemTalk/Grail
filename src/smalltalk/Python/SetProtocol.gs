@@ -100,7 +100,7 @@ method: Set
 __and__: other
 	"Intersection: self & other."
 
-	^ self @env1:intersection: other
+	^ self intersection: other
 %
 
 category: 'Grail-Collection Protocol'
@@ -125,7 +125,7 @@ method: Set
 __ge__: other
 	"Superset test: every element of other is in self."
 
-	^ self @env1:issuperset: other
+	^ self issuperset: other
 %
 
 category: 'Grail-Comparison'
@@ -133,7 +133,7 @@ method: Set
 __gt__: other
 	"Proper superset test."
 
-	^ (self @env1:issuperset: other) @env0:and: [(self @env1:__eq__: other) @env0:not]
+	^ (self issuperset: other) @env0:and: [(self __eq__: other) @env0:not]
 %
 
 category: 'Grail-Iterator Protocol'
@@ -149,7 +149,7 @@ method: Set
 __le__: other
 	"Subset test: every element of self is in other."
 
-	^ self @env1:issubset: other
+	^ self issubset: other
 %
 
 category: 'Grail-Collection Protocol'
@@ -165,7 +165,7 @@ method: Set
 __lt__: other
 	"Proper subset test."
 
-	^ (self @env1:issubset: other) @env0:and: [(self @env1:__eq__: other) @env0:not]
+	^ (self issubset: other) @env0:and: [(self __eq__: other) @env0:not]
 %
 
 category: 'Grail-Comparison'
@@ -173,7 +173,7 @@ method: Set
 __ne__: other
 	"True iff self and other differ."
 
-	^ (self @env1:__eq__: other) @env0:not
+	^ (self __eq__: other) @env0:not
 %
 
 category: 'Grail-Set Operations (Operators)'
@@ -181,7 +181,7 @@ method: Set
 __or__: other
 	"Union: self | other."
 
-	^ self @env1:union: other
+	^ self union: other
 %
 
 category: 'Grail-Set Operations (Operators)'
@@ -189,7 +189,7 @@ method: Set
 __rand__: other
 	"Reverse intersection: other & self."
 
-	^ other @env1:intersection: self
+	^ other intersection: self
 %
 
 category: 'Grail-Set Operations (Operators)'
@@ -197,7 +197,7 @@ method: Set
 __ror__: other
 	"Reverse union: other | self."
 
-	^ other @env1:union: self
+	^ other union: self
 %
 
 category: 'Grail-Set Operations (Operators)'
@@ -205,7 +205,7 @@ method: Set
 __rsub__: other
 	"Reverse difference: other - self."
 
-	^ other @env1:difference: self
+	^ other difference: self
 %
 
 category: 'Grail-Set Operations (Operators)'
@@ -213,7 +213,7 @@ method: Set
 __rxor__: other
 	"Reverse symmetric difference: other ^ self."
 
-	^ other @env1:symmetric_difference: self
+	^ other symmetric_difference: self
 %
 
 category: 'Grail-Set Operations (Operators)'
@@ -221,7 +221,7 @@ method: Set
 __sub__: other
 	"Difference: self - other."
 
-	^ self @env1:difference: other
+	^ self difference: other
 %
 
 category: 'Grail-Set Operations (Operators)'
@@ -229,7 +229,7 @@ method: Set
 __xor__: other
 	"Symmetric difference: self ^ other."
 
-	^ self @env1:symmetric_difference: other
+	^ self symmetric_difference: other
 %
 
 category: 'Grail-Copying'
@@ -248,7 +248,7 @@ difference: other
 	| accumulator |
 	accumulator := Set @env0:new.
 	self @env0:do: [:each |
-		(other @env1:__contains__: each) ifFalse: [
+		(other __contains__: each) ifFalse: [
 			accumulator @env0:add: each
 		]
 	].
@@ -263,7 +263,7 @@ intersection: other
 	| accumulator |
 	accumulator := Set @env0:new.
 	self @env0:do: [:each |
-		(other @env1:__contains__: each) ifTrue: [
+		(other __contains__: each) ifTrue: [
 			accumulator @env0:add: each
 		]
 	].
@@ -276,7 +276,7 @@ isdisjoint: other
 	"True iff self and other share no elements."
 
 	self @env0:do: [:each |
-		(other @env1:__contains__: each) ifTrue: [^ false]
+		(other __contains__: each) ifTrue: [^ false]
 	].
 	^ true
 %
@@ -287,7 +287,7 @@ issubset: other
 	"True iff every element of self is in other."
 
 	self @env0:do: [:each |
-		(other @env1:__contains__: each) ifFalse: [^ false]
+		(other __contains__: each) ifFalse: [^ false]
 	].
 	^ true
 %
@@ -298,7 +298,7 @@ issuperset: other
 	"True iff every element of other is in self."
 
 	other @env0:do: [:each |
-		(self @env1:__contains__: each) ifFalse: [^ false]
+		(self __contains__: each) ifFalse: [^ false]
 	].
 	^ true
 %
@@ -311,12 +311,12 @@ symmetric_difference: other
 	| accumulator |
 	accumulator := Set @env0:new.
 	self @env0:do: [:each |
-		(other @env1:__contains__: each) ifFalse: [
+		(other __contains__: each) ifFalse: [
 			accumulator @env0:add: each
 		]
 	].
 	other @env0:do: [:each |
-		(self @env1:__contains__: each) ifFalse: [
+		(self __contains__: each) ifFalse: [
 			accumulator @env0:add: each
 		]
 	].

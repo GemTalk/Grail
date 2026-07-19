@@ -1541,22 +1541,22 @@ Transcript show: '==============================================='.
 ! cache or post-bind the missing entries.  Post-binding is safer
 ! (won't drop transient registrations from earlier in the session).
 run
-(sys @env1:modules) @env0:at: #'hashlib' put: hashlib @env1:instance.
-(sys @env1:modules) @env0:at: #'socket' put: socket @env1:instance.
-(sys @env1:modules) @env0:at: #'_thread' put: _thread @env1:instance.
-(sys @env1:modules) @env0:at: #'time' put: time @env1:instance.
-(sys @env1:modules) @env0:at: #'secrets' put: secrets @env1:instance.
-(sys @env1:modules) @env0:at: #'warnings' put: warnings @env1:instance.
-(sys @env1:modules) @env0:at: #'struct' put: struct @env1:instance.
-(sys @env1:modules) @env0:at: #'mimetypes' put: mimetypes @env1:instance.
-(sys @env1:modules) @env0:at: #'ipaddress' put: ipaddress @env1:instance.
-(sys @env1:modules) @env0:at: #'datetime' put: datetime @env1:instance.
-(sys @env1:modules) @env0:at: #'json' put: json @env1:instance.
-(sys @env1:modules) @env0:at: #'io' put: io @env1:instance.
+(sys @env1:modules) at: #'hashlib' put: hashlib @env1:instance.
+(sys @env1:modules) at: #'socket' put: socket @env1:instance.
+(sys @env1:modules) at: #'_thread' put: _thread @env1:instance.
+(sys @env1:modules) at: #'time' put: time @env1:instance.
+(sys @env1:modules) at: #'secrets' put: secrets @env1:instance.
+(sys @env1:modules) at: #'warnings' put: warnings @env1:instance.
+(sys @env1:modules) at: #'struct' put: struct @env1:instance.
+(sys @env1:modules) at: #'mimetypes' put: mimetypes @env1:instance.
+(sys @env1:modules) at: #'ipaddress' put: ipaddress @env1:instance.
+(sys @env1:modules) at: #'datetime' put: datetime @env1:instance.
+(sys @env1:modules) at: #'json' put: json @env1:instance.
+(sys @env1:modules) at: #'io' put: io @env1:instance.
 "numbers must resolve to the Smalltalk ABC module (real
 __instancecheck__ + Integer/Float/Fraction registrations); an
 unregistered name would fall through to a filesystem probe."
-(sys @env1:modules) @env0:at: #'numbers' put: numbers @env1:instance.
+(sys @env1:modules) at: #'numbers' put: numbers @env1:instance.
 %
 
 run

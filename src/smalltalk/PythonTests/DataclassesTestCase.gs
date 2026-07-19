@@ -48,10 +48,10 @@ loadFixture
 	"Drop the fixture AND the dataclasses module so each run reflects
 	the current on-disk dataclasses.py (a stale cached copy would mask
 	source edits)."
-	mods @env0:removeKey: #'use_dataclasses' ifAbsent: [].
-	mods @env0:removeKey: #'dataclasses' ifAbsent: [].
+	mods removeKey: #'use_dataclasses' ifAbsent: [].
+	mods removeKey: #'dataclasses' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/use_dataclasses.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/use_dataclasses.py')
 		name: 'use_dataclasses'
 %
 

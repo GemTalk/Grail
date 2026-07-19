@@ -67,10 +67,10 @@ test_check_attr_returns_value_when_set
 	"The check is transparent for non-nil values."
 
 	self
-		assert: (AttributeError @env0:___checkAttr: 42 ofObject: self named: #x)
+		assert: (AttributeError ___checkAttr: 42 ofObject: self named: #x)
 		equals: 42.
 	self
-		assert: (AttributeError @env0:___checkAttr: 'hi' ofObject: self named: #s)
+		assert: (AttributeError ___checkAttr: 'hi' ofObject: self named: #s)
 		equals: 'hi'.
 %
 
@@ -81,7 +81,7 @@ test_check_attr_returns_none_when_none
 	from nil per the singleton design."
 
 	self
-		assert: (AttributeError @env0:___checkAttr: None ofObject: self named: #x) == None.
+		assert: (AttributeError ___checkAttr: None ofObject: self named: #x) == None.
 %
 
 category: 'Grail-Tests-Unset-Attr'
@@ -90,7 +90,7 @@ test_check_attr_raises_when_nil
 	"nil triggers AttributeError."
 
 	self
-		should: [AttributeError @env0:___checkAttr: nil ofObject: self named: #missing]
+		should: [AttributeError ___checkAttr: nil ofObject: self named: #missing]
 		raise: AttributeError.
 %
 
@@ -100,7 +100,7 @@ test_check_attr_message_names_attribute
 	"The error message follows CPython's format and includes the
 	attribute name."
 
-	[AttributeError @env0:___checkAttr: nil ofObject: self named: #missing]
+	[AttributeError ___checkAttr: nil ofObject: self named: #missing]
 		on: AttributeError do: [:ex |
 			self assert:
 				(ex messageText indexOfSubCollection: '''missing''') > 0.

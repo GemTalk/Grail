@@ -102,14 +102,14 @@ check_unused_args: used_args _: args _: keywords
 		error_msg := 'Unused argument(s): '.
 		(((unused_pos @env0:size) @env0:> 0)) ifTrue: [
 			error_msg := error_msg @env0:, 'positional '.
-			error_msg := error_msg @env0:, (unused_pos @env1:__str__)
+			error_msg := error_msg @env0:, (unused_pos __str__)
 		].
 		(((unused_kw @env0:size) @env0:> 0)) ifTrue: [
 			(((unused_pos @env0:size) @env0:> 0)) ifTrue: [
 				error_msg := error_msg @env0:, ', '
 			].
 			error_msg := error_msg @env0:, 'keyword '.
-			error_msg := error_msg @env0:, (unused_kw @env1:__str__)
+			error_msg := error_msg @env0:, (unused_kw __str__)
 		].
 		ValueError ___signal___: error_msg
 	]
@@ -125,14 +125,14 @@ convert_field: value _: conversion
 	conv_char := conversion @env0:at: 1.
 	
 	((conv_char == $r)) ifTrue: [
-		^ value @env1:__repr__
+		^ value __repr__
 	] ifFalse: [
 		((conv_char == $s)) ifTrue: [
-			^ value @env1:__str__
+			^ value __str__
 		] ifFalse: [
 			((conv_char == $a)) ifTrue: [
 				"ASCII conversion - same as repr for now"
-				^ value @env1:__repr__
+				^ value __repr__
 			] ifFalse: [
 				ValueError ___signal___: ('Unknown conversion specifier: ' @env0:, conversion)
 			]
@@ -166,9 +166,9 @@ format_field: value _: format_spec _: conversion
 	
 	"Apply format spec if specified"
 	format_spec == nil ifTrue: [
-		^ converted_value @env1:__str__
+		^ converted_value __str__
 	] ifFalse: [
-		^ converted_value @env1:__format__: format_spec
+		^ converted_value __format__: format_spec
 	]
 %
 

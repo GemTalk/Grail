@@ -841,8 +841,8 @@ testMap
 
 	| b result doubler materialized done |
 	b := builtins ___instance___.
-	doubler := [:positional :_kw | (positional @env0:at: 1) @env1:__mul__: 2].
-	result := b @env1:map: doubler _: (list @env0:withAll: #(1 2 3)).
+	doubler := [:positional :_kw | (positional at: 1) @env1:__mul__: 2].
+	result := b @env1:map: doubler _: (list withAll: #(1 2 3)).
 	materialized := OrderedCollection new.
 	done := false.
 	[done] whileFalse: [
@@ -863,7 +863,7 @@ testMemoryviewStub
 
 	| b bytes result |
 	b := builtins ___instance___.
-	bytes := ByteArray @env0:withAll: #(1 2 3 4).
+	bytes := ByteArray withAll: #(1 2 3 4).
 	result := b @env1:memoryview: bytes.
 	self assert: result == bytes
 %
@@ -1093,7 +1093,7 @@ testIsinstanceStrAcceptsWideStrings
 	Cyrillic patterns (test_re test_word_boundaries)."
 
 	self assert: (self eval: 'isinstance("ьюя", str)') equals: true.
-	self assert: (builtins ___instance___ @env1:isinstance: 'plain' _: (Python @env0:at: #str)) equals: true.
+	self assert: (builtins ___instance___ @env1:isinstance: 'plain' _: (Python at: #str)) equals: true.
 	self assert: (self eval: 'isinstance(b"x", str)') equals: false.
 	self assert: (self eval: 'issubclass(type("ь"), str)') equals: true
 %

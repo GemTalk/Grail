@@ -41,9 +41,9 @@ method: MultipleInheritanceTestCase
 loadFixture
 	"Load tests/python/multiple_inheritance.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'multiple_inheritance' ifAbsent: [].
+	importlib @env1:modules removeKey: #'multiple_inheritance' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/multiple_inheritance.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/multiple_inheritance.py')
 		name: 'multiple_inheritance'
 %
 

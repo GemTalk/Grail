@@ -56,7 +56,7 @@ setUp
 	| mods |
 	mods := importlib @env1:modules.
 	#( 'pkg_autobind' 'pkg_autobind._leaf' ) do: [:n |
-		mods @env0:removeKey: n @env0:asSymbol ifAbsent: []].
+		mods removeKey: n asSymbol ifAbsent: []].
 	importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/pkg_autobind/_leaf.py')
 		name: 'pkg_autobind._leaf'.

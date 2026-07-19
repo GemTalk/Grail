@@ -99,8 +99,8 @@ method: ComprehensionTestCase
 testDictBasic
 	| d |
 	d := testModule @env1:dict_basic.
-	self assert: (d @env0:at: 3) equals: 9.
-	self assert: (d @env0:at: 4) equals: 16.
+	self assert: (d at: 3) equals: 9.
+	self assert: (d at: 4) equals: 16.
 %
 
 category: 'Tests - Dict Comp'
@@ -108,8 +108,8 @@ method: ComprehensionTestCase
 testDictFilter
 	| d |
 	d := testModule @env1:dict_filter.
-	self assert: d @env0:size equals: 2.
-	self assert: (d @env0:at: 2) equals: 4.
+	self assert: d size equals: 2.
+	self assert: (d at: 2) equals: 4.
 %
 
 category: 'Tests - Dict Comp'
@@ -117,7 +117,7 @@ method: ComprehensionTestCase
 testDictUnpack
 	| d |
 	d := testModule @env1:dict_unpack.
-	self assert: (d @env0:at: 2) equals: 'b'.
+	self assert: (d at: 2) equals: 'b'.
 %
 
 ! ===============================================================================
@@ -128,13 +128,13 @@ category: 'Tests - Set Comp'
 method: ComprehensionTestCase
 testSetBasic
 	"{x % 3 for x in [1,2,3,4]} → {1, 2, 0}"
-	self assert: (testModule @env1:set_basic) @env0:size equals: 3.
+	self assert: (testModule @env1:set_basic) size equals: 3.
 %
 
 category: 'Tests - Set Comp'
 method: ComprehensionTestCase
 testSetFilter
-	self assert: (testModule @env1:set_filter) @env0:size equals: 3.
+	self assert: (testModule @env1:set_filter) size equals: 3.
 %
 
 ! ===============================================================================

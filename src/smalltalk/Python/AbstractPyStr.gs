@@ -73,7 +73,7 @@ new
 	pointer allocation is fine (Object new works, but mirror
 	AbstractPyInt's explicit override for clarity)."
 
-	^ self @env0:basicNew
+	^ self basicNew
 %
 
 ! ------------------- Accessors
@@ -84,7 +84,7 @@ value
 	"The wrapped string (a Unicode7).  Enum members store their value
 	here via the member builder; str subclasses via ___new__."
 
-	^ self @env0:dynamicInstVarAt: #value
+	^ self dynamicInstVarAt: #value
 %
 
 category: 'Grail-Accessors'
@@ -95,11 +95,11 @@ ___strValue___
 	reads as the empty string; a non-string value is stringified."
 
 	| v |
-	v := self @env0:dynamicInstVarAt: #value.
-	v == nil ifTrue: [^ Unicode7 @env0:new].
+	v := self dynamicInstVarAt: #value.
+	v == nil ifTrue: [^ Unicode7 new].
 	(v isKindOf: CharacterCollection) ifTrue: [^ v].
-	(v isKindOf: AbstractPyStr) ifTrue: [^ v @env0:___strValue___].
-	^ v @env0:asString
+	(v isKindOf: AbstractPyStr) ifTrue: [^ v ___strValue___].
+	^ v asString
 %
 
 ! ------------------- Smalltalk equality (dict/set keys)
@@ -113,14 +113,14 @@ category: 'Grail-Comparison'
 method: AbstractPyStr
 = other
 	| ov |
-	ov := (other isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
-	^ self @env0:___strValue___ @env0:= ov
+	ov := (other isKindOf: AbstractPyStr) ifTrue: [other ___strValue___] ifFalse: [other].
+	^ self ___strValue___ = ov
 %
 
 category: 'Grail-Comparison'
 method: AbstractPyStr
 hash
-	^ self @env0:___strValue___ @env0:hash
+	^ self ___strValue___ hash
 %
 
 ! ------------------- env-1 message forwarding
@@ -137,12 +137,12 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	value first (e.g. ``a + b`` where both are members)."
 
 	| unwrapped |
-	envId @env0:= 1 ifFalse: [
-		^ super @env0:doesNotUnderstand: aSelector args: anArray envId: envId
+	envId = 1 ifFalse: [
+		^ super doesNotUnderstand: aSelector args: anArray envId: envId
 	].
-	unwrapped := anArray @env0:collect: [:a |
-		(a isKindOf: AbstractPyStr) ifTrue: [a @env0:___strValue___] ifFalse: [a]].
-	^ self @env0:___strValue___ @env0:perform: aSelector env: 1 withArguments: unwrapped
+	unwrapped := anArray collect: [:a |
+		(a isKindOf: AbstractPyStr) ifTrue: [a ___strValue___] ifFalse: [a]].
+	^ self ___strValue___ perform: aSelector env: 1 withArguments: unwrapped
 %
 
 category: 'Grail-Python Protocol'
@@ -150,7 +150,7 @@ method: AbstractPyStr
 cantPerform: aSymbol withArguments: anArray env: envId
 	"Mirror DNU for explicit perform:env: calls."
 
-	^ self @env0:doesNotUnderstand: aSymbol args: anArray envId: envId
+	^ self doesNotUnderstand: aSymbol args: anArray envId: envId
 %
 
 set compile_env: 1
@@ -182,7 +182,7 @@ __new__: source
 
 	| inst |
 	inst := self @env0:basicNew.
-	inst @env0:dynamicInstVarAt: #value put: (source @env1:__str__).
+	inst @env0:dynamicInstVarAt: #value put: (source __str__).
 	^ inst
 %
 
@@ -197,14 +197,14 @@ method: AbstractPyStr
 __eq__: other
 	| ov |
 	ov := (other isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
-	^ self @env0:___strValue___ @env1:__eq__: ov
+	^ self @env0:___strValue___ __eq__: ov
 %
 
 category: 'Grail-Python Protocol'
 method: AbstractPyStr
 __ne__: other
 	| r |
-	r := self @env1:__eq__: other.
+	r := self __eq__: other.
 	r == true ifTrue: [^ false].
 	r == false ifTrue: [^ true].
 	^ r
@@ -215,7 +215,7 @@ method: AbstractPyStr
 __lt__: other
 	| ov |
 	ov := (other isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
-	^ self @env0:___strValue___ @env1:__lt__: ov
+	^ self @env0:___strValue___ __lt__: ov
 %
 
 category: 'Grail-Python Protocol'
@@ -223,7 +223,7 @@ method: AbstractPyStr
 __le__: other
 	| ov |
 	ov := (other isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
-	^ self @env0:___strValue___ @env1:__le__: ov
+	^ self @env0:___strValue___ __le__: ov
 %
 
 category: 'Grail-Python Protocol'
@@ -231,7 +231,7 @@ method: AbstractPyStr
 __gt__: other
 	| ov |
 	ov := (other isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
-	^ self @env0:___strValue___ @env1:__gt__: ov
+	^ self @env0:___strValue___ __gt__: ov
 %
 
 category: 'Grail-Python Protocol'
@@ -239,7 +239,7 @@ method: AbstractPyStr
 __ge__: other
 	| ov |
 	ov := (other isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
-	^ self @env0:___strValue___ @env1:__ge__: ov
+	^ self @env0:___strValue___ __ge__: ov
 %
 
 category: 'Grail-Python Protocol'
@@ -248,7 +248,7 @@ __hash__
 	"Hash by value so a wrapper and its plain string collide -- a member
 	used as a dict key matches its string value (CPython)."
 
-	^ self @env0:___strValue___ @env1:__hash__
+	^ self @env0:___strValue___ __hash__
 %
 
 category: 'Grail-Python Protocol'
@@ -267,13 +267,13 @@ __repr__
 	"Default repr is the string's repr (``'hello'``).  Enum subclasses
 	override with the ``<Cls.NAME: 'value'>`` form."
 
-	^ self @env0:___strValue___ @env1:__repr__
+	^ self @env0:___strValue___ __repr__
 %
 
 category: 'Grail-Python Protocol'
 method: AbstractPyStr
 __format__: aSpec
-	^ self @env0:___strValue___ @env1:__format__: aSpec
+	^ self @env0:___strValue___ __format__: aSpec
 %
 
 category: 'Grail-Python Protocol'
@@ -293,7 +293,7 @@ __getattr__: name
 	it and returns a plain str -- the DNU forwarder only catches direct
 	sends, but ``obj.method()'' compiles as attribute-load-then-call."
 
-	^ self @env0:___strValue___ @env1:___pyAttrLoad___: name @env0:asSymbol
+	^ self @env0:___strValue___ ___pyAttrLoad___: name @env0:asSymbol
 %
 
 set compile_env: 0

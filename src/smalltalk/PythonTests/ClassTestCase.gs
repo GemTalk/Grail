@@ -81,7 +81,7 @@ testPointInstVars
 	has no static instVar declarations for these names."
 
 	| p |
-	p := testModule @env0:dynamicInstVarAt: #p.
+	p := testModule dynamicInstVarAt: #p.
 	self assert: (p @env1:___pyAttrLoad___: #x) equals: 3.
 	self assert: (p @env1:___pyAttrLoad___: #y) equals: 4.
 %
@@ -93,9 +93,9 @@ testPointCreatedDuringInit
 	in the instance's dynamic-instVar storage."
 
 	| p |
-	p := testModule @env0:dynamicInstVarAt: #p.
-	self assert: (p @env0:dynamicInstVarAt: #x) equals: 3.
-	self assert: (p @env0:dynamicInstVarAt: #y) equals: 4.
+	p := testModule dynamicInstVarAt: #p.
+	self assert: (p dynamicInstVarAt: #x) equals: 3.
+	self assert: (p dynamicInstVarAt: #y) equals: 4.
 %
 
 category: 'Grail-Tests - Method Calls'
@@ -168,7 +168,7 @@ testDirectMethodCall
 	"Test calling a method via perform on an instance."
 
 	| p |
-	p := testModule @env0:dynamicInstVarAt: #p.
+	p := testModule dynamicInstVarAt: #p.
 	self assert: (p perform: #sum env: 1) equals: 7.
 %
 
@@ -178,7 +178,7 @@ testPointAccessors
 	"Test that unary accessor methods work for instance variables."
 
 	| p |
-	p := testModule @env0:dynamicInstVarAt: #p.
+	p := testModule dynamicInstVarAt: #p.
 	self assert: (p perform: #x env: 1) equals: 3.
 	self assert: (p perform: #y env: 1) equals: 4.
 %

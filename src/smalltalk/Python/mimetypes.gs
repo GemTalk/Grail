@@ -56,7 +56,7 @@ initialize
 	*including* the leading dot."
 
 	| types encodings suffixes |
-	types := dict @env1:___new___.
+	types := dict ___new___.
 	#(
 		#('.html' 'text/html')
 		#('.htm' 'text/html')
@@ -96,9 +96,9 @@ initialize
 		#('.otf' 'font/otf')
 		#('.eot' 'application/vnd.ms-fontobject')
 	) @env0:do: [:pair |
-		types @env1:__setitem__: (pair @env0:at: 1) _: (pair @env0:at: 2)
+		types __setitem__: (pair @env0:at: 1) _: (pair @env0:at: 2)
 	].
-	encodings := dict @env1:___new___.
+	encodings := dict ___new___.
 	#(
 		#('.gz' 'gzip')
 		#('.Z' 'compress')
@@ -106,9 +106,9 @@ initialize
 		#('.xz' 'xz')
 		#('.br' 'br')
 	) @env0:do: [:pair |
-		encodings @env1:__setitem__: (pair @env0:at: 1) _: (pair @env0:at: 2)
+		encodings __setitem__: (pair @env0:at: 1) _: (pair @env0:at: 2)
 	].
-	suffixes := dict @env1:___new___.
+	suffixes := dict ___new___.
 	#(
 		#('.tgz' '.tar.gz')
 		#('.taz' '.tar.gz')
@@ -116,10 +116,10 @@ initialize
 		#('.tbz2' '.tar.bz2')
 		#('.txz' '.tar.xz')
 	) @env0:do: [:pair |
-		suffixes @env1:__setitem__: (pair @env0:at: 1) _: (pair @env0:at: 2)
+		suffixes __setitem__: (pair @env0:at: 1) _: (pair @env0:at: 2)
 	].
 	self @env0:at: #types_map put: types.
-	self @env0:at: #common_types put: (dict @env1:___new___).
+	self @env0:at: #common_types put: (dict ___new___).
 	self @env0:at: #encodings_map put: encodings.
 	self @env0:at: #suffix_map put: suffixes.
 	self @env0:at: #inited put: true
@@ -173,7 +173,7 @@ init: filenames
 category: 'Grail-Public'
 method: mimetypes
 guess_type: url
-	^ self @env1:guess_type: url _: true
+	^ self guess_type: url _: true
 %
 
 category: 'Grail-Public'
@@ -195,23 +195,23 @@ guess_type: url _: strict
 	idx := path @env0:indexOf: $#.
 	idx @env0:> 0 ifTrue: [path := path @env0:copyFrom: 1 to: idx @env0:- 1].
 	"Suffix map: rewrite known compound extensions."
-	suffixes := self @env1:suffix_map.
-	ext := self @env1:___extOf___: path.
+	suffixes := self suffix_map.
+	ext := self ___extOf___: path.
 	(suffixes @env0:includesKey: ext @env0:asLowercase) ifTrue: [
 		path := (path @env0:copyFrom: 1 to: path @env0:size @env0:- ext @env0:size)
 			@env0:, (suffixes @env0:at: ext @env0:asLowercase).
-		ext := self @env1:___extOf___: path
+		ext := self ___extOf___: path
 	].
 	ext @env0:isEmpty ifTrue: [
 		^ tuple @env0:withAll: { None. None }
 	].
 	"Walk off encoding suffix if present (`.gz` -> gzip, etc.)."
-	(self @env1:encodings_map @env0:includesKey: ext @env0:asLowercase) ifTrue: [
-		encoding := self @env1:encodings_map @env0:at: ext @env0:asLowercase.
+	(self encodings_map @env0:includesKey: ext @env0:asLowercase) ifTrue: [
+		encoding := self encodings_map @env0:at: ext @env0:asLowercase.
 		path := path @env0:copyFrom: 1 to: path @env0:size @env0:- ext @env0:size.
-		ext := self @env1:___extOf___: path
+		ext := self ___extOf___: path
 	].
-	type := self @env1:types_map @env0:at: ext @env0:asLowercase ifAbsent: [nil].
+	type := self types_map @env0:at: ext @env0:asLowercase ifAbsent: [nil].
 	type == nil ifTrue: [
 		^ tuple @env0:withAll: {
 			None.
@@ -227,7 +227,7 @@ guess_type: url _: strict
 category: 'Grail-Public'
 method: mimetypes
 guess_extension: aType
-	^ self @env1:guess_extension: aType _: true
+	^ self guess_extension: aType _: true
 %
 
 category: 'Grail-Public'
@@ -239,7 +239,7 @@ guess_extension: aType _: strict
 
 	| target |
 	target := aType @env0:asString @env0:asLowercase.
-	self @env1:types_map @env0:keysAndValuesDo: [:k :v |
+	self types_map @env0:keysAndValuesDo: [:k :v |
 		v @env0:asLowercase @env0:= target ifTrue: [^ k]
 	].
 	^ None
@@ -248,7 +248,7 @@ guess_extension: aType _: strict
 category: 'Grail-Public'
 method: mimetypes
 add_type: aType _: ext
-	^ self @env1:add_type: aType _: ext _: true
+	^ self add_type: aType _: ext _: true
 %
 
 category: 'Grail-Public'
@@ -257,7 +257,7 @@ add_type: aType _: ext _: strict
 	"add_type(type, ext, strict=True) - register a runtime mapping
 	from extension to MIME type."
 
-	self @env1:types_map @env1:__setitem__: ext _: aType.
+	self types_map __setitem__: ext _: aType.
 	^ None
 %
 

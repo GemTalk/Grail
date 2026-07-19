@@ -142,6 +142,6 @@ ___pyAttrLoad___: aSym
 	(aSym == #'__name__' or: [aSym == #'__qualname__'])
 		ifTrue: [^ self @env0:unqualifiedName].
 	aSym == #'__module__' ifTrue: [^ self @env0:moduleName].
-	^ AttributeError @env1:___signal___:
+	^ AttributeError ___signal___:
 		'foreign object has no attribute ''', aSym @env0:asString, ''''
 %

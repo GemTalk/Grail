@@ -56,9 +56,9 @@ loadDjangoFixture
 	| mods fullName cached |
 	fullName := 'pkg_scaffolding.use_django'.
 	mods := importlib @env1:modules.
-	cached := mods @env0:at: fullName @env0:asSymbol ifAbsent: [nil].
-	cached @env0:notNil ifTrue: [^ cached].
-	(mods @env0:includesKey: #'pkg_scaffolding') ifFalse: [
+	cached := mods at: fullName asSymbol ifAbsent: [nil].
+	cached notNil ifTrue: [^ cached].
+	(mods includesKey: #'pkg_scaffolding') ifFalse: [
 		importlib
 			loadModuleFromPath: (importlib grailDir , '/tests/python/pkg_scaffolding/__init__.py')
 			name: 'pkg_scaffolding'
@@ -78,7 +78,7 @@ testDjangoVersion
 	| mod version |
 	mod := self loadDjangoFixture.
 	version := mod @env1:django_version.
-	self assert: (version @env0:indexOfSubCollection: '5.2') @env0:> 0
+	self assert: (version indexOfSubCollection: '5.2') > 0
 %
 
 category: 'Grail-Tests - django'
@@ -92,7 +92,7 @@ testDjangoWsgiIndex
 	| mod result |
 	mod := self loadDjangoFixture.
 	result := mod @env1:hello_index.
-	self assert: ((result @env1:__getitem__: 0) @env0:indexOfSubCollection: '200') @env0:> 0.
+	self assert: ((result @env1:__getitem__: 0) indexOfSubCollection: '200') > 0.
 	self assert: (result @env1:__getitem__: 1) equals: 'Hello from Django on Grail!'
 %
 
@@ -108,7 +108,7 @@ testDjangoWsgiPathConverter
 	| mod result |
 	mod := self loadDjangoFixture.
 	result := mod @env1:hello_greet.
-	self assert: ((result @env1:__getitem__: 0) @env0:indexOfSubCollection: '200') @env0:> 0.
+	self assert: ((result @env1:__getitem__: 0) indexOfSubCollection: '200') > 0.
 	self assert: (result @env1:__getitem__: 1) equals: 'Hello, World!'
 %
 
@@ -121,11 +121,11 @@ testDjangoWsgiJsonResponse
 	| mod result body |
 	mod := self loadDjangoFixture.
 	result := mod @env1:hello_info.
-	self assert: ((result @env1:__getitem__: 0) @env0:indexOfSubCollection: '200') @env0:> 0.
+	self assert: ((result @env1:__getitem__: 0) indexOfSubCollection: '200') > 0.
 	body := result @env1:__getitem__: 1.
-	self assert: (body @env0:indexOfSubCollection: '"framework"') @env0:> 0.
-	self assert: (body @env0:indexOfSubCollection: '"django"') @env0:> 0.
-	self assert: (body @env0:indexOfSubCollection: '5.2') @env0:> 0
+	self assert: (body indexOfSubCollection: '"framework"') > 0.
+	self assert: (body indexOfSubCollection: '"django"') > 0.
+	self assert: (body indexOfSubCollection: '5.2') > 0
 %
 
 set compile_env: 0

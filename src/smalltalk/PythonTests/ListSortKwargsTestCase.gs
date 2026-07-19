@@ -41,9 +41,9 @@ method: ListSortKwargsTestCase
 loadFixture
 	"Load tests/python/list_sort_kwargs.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'list_sort_kwargs' ifAbsent: [].
+	importlib @env1:modules removeKey: #'list_sort_kwargs' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/list_sort_kwargs.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/list_sort_kwargs.py')
 		name: 'list_sort_kwargs'
 %
 

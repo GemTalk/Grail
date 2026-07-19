@@ -53,9 +53,9 @@ loadFixture: fixtureName
 	| mods fullName cached |
 	fullName := 'pkg_scaffolding.' , fixtureName.
 	mods := importlib @env1:modules.
-	cached := mods @env0:at: fullName @env0:asSymbol ifAbsent: [nil].
-	cached @env0:notNil ifTrue: [^ cached].
-	(mods @env0:includesKey: #'pkg_scaffolding') ifFalse: [
+	cached := mods at: fullName asSymbol ifAbsent: [nil].
+	cached notNil ifTrue: [^ cached].
+	(mods includesKey: #'pkg_scaffolding') ifFalse: [
 		importlib
 			loadModuleFromPath: (importlib grailDir , '/tests/python/pkg_scaffolding/__init__.py')
 			name: 'pkg_scaffolding'
@@ -112,9 +112,9 @@ testAnnAssignComplexAnnotation
 	| mod result |
 	mod := self loadFixture: 'annassign'.
 	result := mod @env1:computed_local_annotation.
-	self assert: result @env0:size equals: 2.
-	self assert: (result @env0:at: 1) equals: 1.
-	self assert: (result @env0:at: 2) equals: 2.
+	self assert: result size equals: 2.
+	self assert: (result at: 1) equals: 1.
+	self assert: (result at: 2) equals: 2.
 %
 
 category: 'Grail-Tests - AnnAssignAst'
@@ -290,9 +290,9 @@ testFnmatchFilter
 	| mod result |
 	mod := self loadFixture: 'use_jinja2_partial'.
 	result := mod @env1:fnmatch_glob.
-	self assert: result @env0:size equals: 2.
-	self assert: (result @env0:at: 1) equals: 'a.py'.
-	self assert: (result @env0:at: 2) equals: 'c.py'
+	self assert: result size equals: 2.
+	self assert: (result at: 1) equals: 'a.py'.
+	self assert: (result at: 2) equals: 'c.py'
 %
 
 category: 'Grail-Tests - jinja2 plumbing'
@@ -361,7 +361,7 @@ testForElseSkipsOnBreak
 	result := mod @env1:for_else_skips_on_break.
 	self assert: (result @env1:__getitem__: 0) equals: 'broke'.
 	"No 'else' element — only 'broke' should be in the log."
-	self assert: result @env0:size equals: 1
+	self assert: result size equals: 1
 %
 
 category: 'Grail-Tests - jinja2 plumbing'
@@ -373,7 +373,7 @@ testForElseRunsOnNaturalDrain
 	| mod result |
 	mod := self loadFixture: 'use_jinja2_partial'.
 	result := mod @env1:for_else_runs_on_natural_drain.
-	self assert: result @env0:size equals: 3.
+	self assert: result size equals: 3.
 	self assert: (result @env1:__getitem__: 0) equals: 1.
 	self assert: (result @env1:__getitem__: 1) equals: 2.
 	self assert: (result @env1:__getitem__: 2) equals: 'done'
@@ -511,7 +511,7 @@ testNestedForTupleUnpack
 	| mod result first second |
 	mod := self loadFixture: 'use_jinja2_partial'.
 	result := mod @env1:nested_for_tuple_unpack.
-	self assert: result @env0:size equals: 2.
+	self assert: result size equals: 2.
 	first := result @env1:__getitem__: 0.
 	self assert: (first @env1:__getitem__: 0) equals: 'a'.
 	self assert: (first @env1:__getitem__: 1) equals: 'load'.
@@ -534,9 +534,9 @@ testSubclassRedeclaresInstvar
 	| mod result |
 	mod := self loadFixture: 'use_jinja2_partial'.
 	result := mod @env1:subclass_redeclares_instvar.
-	self assert: result @env0:size equals: 2.
-	self assert: (result @env0:at: 1) equals: 'a'.
-	self assert: (result @env0:at: 2) equals: 'b'
+	self assert: result size equals: 2.
+	self assert: (result at: 1) equals: 'a'.
+	self assert: (result at: 2) equals: 'b'
 %
 
 category: 'Grail-Tests - jinja2 plumbing'
@@ -598,11 +598,11 @@ testDequeRemoveCountIndex
 	"After removing the first 2 from [1,2,3,2,4]: list is [1,3,2,4],
 	 count of 2 is 1, index of 4 is 3."
 	remaining := result @env1:__getitem__: 0.
-	self assert: remaining @env0:size equals: 4.
-	self assert: (remaining @env0:at: 1) equals: 1.
-	self assert: (remaining @env0:at: 2) equals: 3.
-	self assert: (remaining @env0:at: 3) equals: 2.
-	self assert: (remaining @env0:at: 4) equals: 4.
+	self assert: remaining size equals: 4.
+	self assert: (remaining at: 1) equals: 1.
+	self assert: (remaining at: 2) equals: 3.
+	self assert: (remaining at: 3) equals: 2.
+	self assert: (remaining at: 4) equals: 4.
 	self assert: (result @env1:__getitem__: 1) equals: 1.
 	self assert: (result @env1:__getitem__: 2) equals: 3
 %
@@ -1188,7 +1188,7 @@ testClassNameDoesNotClobberBuiltin
 	sym := mod @env1:Symbol.
 	"The built-in Symbol class still resolves via the symbol
 	list — and it's NOT the Python class."
-	builtin := System myUserProfile symbolList @env0:objectNamed: #Symbol.
+	builtin := System myUserProfile symbolList objectNamed: #Symbol.
 	self assert: builtin notNil.
 	self deny: builtin == sym.
 	"The Python class is the one the module instVar holds, not
@@ -1210,7 +1210,7 @@ testCollidingClassConstructs
 	set := mod @env1:both.
 	self assert: a @env1:name equals: 'a'.
 	self assert: b @env1:name equals: 'b'.
-	self assert: set @env1:items @env0:size equals: 2.
+	self assert: set @env1:items size equals: 2.
 %
 
 ! --- AttributeAst cls vs self ---------------------------------------------
@@ -1269,7 +1269,7 @@ testCallOfClassSideAttribute
 	inst := cls @env1:value: #() value: nil.
 	result := inst @env1:make_via_class_attr.
 	self assert: result class equals: OrderedCollection.
-	self assert: result @env0:size equals: 0.
+	self assert: result size equals: 0.
 %
 
 category: 'Grail-Tests - AttributeAst'
@@ -1367,7 +1367,7 @@ testGeneratorThreeYields
 	| mod gen v1 v2 v3 stopped |
 	mod := self loadFixture: 'generators'.
 	gen := mod @env1:make_three.
-	self assert: gen @env0:class equals: PythonGenerator.
+	self assert: gen class equals: PythonGenerator.
 	v1 := gen @env1:__next__.
 	v2 := gen @env1:__next__.
 	v3 := gen @env1:__next__.
@@ -1394,9 +1394,9 @@ testGeneratorLocalStateAcrossYields
 		[result add: gen @env1:__next__]
 			on: StopIteration do: [:ex | done := true]
 	].
-	self assert: result @env0:size equals: 4.
-	self assert: (result @env0:at: 1) equals: 0.
-	self assert: (result @env0:at: 4) equals: 3.
+	self assert: result size equals: 4.
+	self assert: (result at: 1) equals: 0.
+	self assert: (result at: 4) equals: 3.
 %
 
 category: 'Grail-Tests - Generators'
@@ -1417,9 +1417,9 @@ testGeneratorInsideClassMethod
 		[items add: gen @env1:__next__]
 			on: StopIteration do: [:ex | done := true]
 	].
-	self assert: items @env0:size equals: 3.
-	self assert: (items @env0:at: 1) equals: 'item_0'.
-	self assert: (items @env0:at: 3) equals: 'item_2'.
+	self assert: items size equals: 3.
+	self assert: (items at: 1) equals: 'item_0'.
+	self assert: (items at: 3) equals: 'item_2'.
 %
 
 ! --- hashlib (Tier 1.5) ---------------------------------------------------
@@ -1465,13 +1465,13 @@ testHashlibBlockAndDigestSizes
 	| mod sizes |
 	mod := self loadFixture: 'use_hashlib'.
 	sizes := mod @env1:block_sizes.
-	self assert: (sizes @env0:at: 1) equals: 64.   "md5"
-	self assert: (sizes @env0:at: 2) equals: 64.   "sha256"
-	self assert: (sizes @env0:at: 3) equals: 128.  "sha512"
+	self assert: (sizes at: 1) equals: 64.   "md5"
+	self assert: (sizes at: 2) equals: 64.   "sha256"
+	self assert: (sizes at: 3) equals: 128.  "sha512"
 	sizes := mod @env1:digest_sizes.
-	self assert: (sizes @env0:at: 1) equals: 16.   "md5"
-	self assert: (sizes @env0:at: 2) equals: 32.   "sha256"
-	self assert: (sizes @env0:at: 3) equals: 64.   "sha512"
+	self assert: (sizes at: 1) equals: 16.   "md5"
+	self assert: (sizes at: 2) equals: 32.   "sha256"
+	self assert: (sizes at: 3) equals: 64.   "sha512"
 %
 
 category: 'Grail-Tests - hashlib'
@@ -1496,8 +1496,8 @@ testHashlibCopyIndependent
 	| mod result clone divergent |
 	mod := self loadFixture: 'use_hashlib'.
 	result := mod @env1:hash_copy.
-	clone := result @env0:at: 1.
-	divergent := result @env0:at: 2.
+	clone := result at: 1.
+	divergent := result at: 2.
 	"Clone keeps sha256('hello') digest"
 	self assert: clone
 		equals: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'.
@@ -1601,9 +1601,9 @@ testBase64UrlsafeAlphabet
 	mod := self loadFixture: 'use_base64'.
 	"0xFB 0xEF 0xFF → '++//' in standard b64."
 	data := ByteArray new: 3.
-	data @env0:at: 1 put: 16rFB.
-	data @env0:at: 2 put: 16rEF.
-	data @env0:at: 3 put: 16rFF.
+	data at: 1 put: 16rFB.
+	data at: 2 put: 16rEF.
+	data at: 3 put: 16rFF.
 	stdEnc := mod @env1:encode_standard: data.
 	safeEnc := mod @env1:encode_urlsafe: data.
 	self assert: stdEnc equals: '++//' asByteArray.
@@ -3970,7 +3970,7 @@ testSecretsChoice
 
 	| mod result seq |
 	mod := self loadFixture: 'use_secrets'.
-	seq := list @env1:value: { #( 'a' 'b' 'c' 'd' 'e' ) @env0:asOrderedCollection } value: nil.
+	seq := list @env1:value: { #( 'a' 'b' 'c' 'd' 'e' ) asOrderedCollection } value: nil.
 	result := mod @env1:choice_from: seq.
 	self assert: (#('a' 'b' 'c' 'd' 'e') includes: result)
 %
@@ -4167,7 +4167,7 @@ testBlinkerNamedSignal
 
 	| blinker NS ns |
 	importlib loadModuleFromPath: (importlib grailDir , '/src/python/stdlib/blinker/__init__.py') name: 'blinker'.
-	blinker := (importlib @env1:modules) @env0:at: 'blinker' @env0:asSymbol.
+	blinker := (importlib @env1:modules) at: 'blinker' asSymbol.
 	NS := blinker @env1:NamedSignal.
 	ns := NS @env1:value: { 'my_event'. 'docstring' } value: nil.
 	self assert: (ns @env1:name) equals: 'my_event'.
@@ -4182,7 +4182,7 @@ testBlinkerNamespaceSignalFactory
 
 	| blinker Namespace space sig |
 	importlib loadModuleFromPath: (importlib grailDir , '/src/python/stdlib/blinker/__init__.py') name: 'blinker'.
-	blinker := (importlib @env1:modules) @env0:at: 'blinker' @env0:asSymbol.
+	blinker := (importlib @env1:modules) at: 'blinker' asSymbol.
 	Namespace := blinker @env1:Namespace.
 	space := Namespace @env1:value: #() value: nil.
 	sig := space @env1:signal: 'foo'.
@@ -4243,7 +4243,7 @@ testGeneratorThrowCaught
 	mod := self loadFixture: 'generator_protocol'.
 	g := mod @env1:catches_throw.
 	first := g @env1:__next__.
-	afterCatch := g @env1:throw: (ValueError @env0:new).
+	afterCatch := g @env1:throw: (ValueError new).
 	tail := g @env1:__next__.
 	self assert: first equals: 'before'.
 	self assert: afterCatch equals: 'caught'.
@@ -4266,7 +4266,7 @@ testGeneratorClose
 	g @env1:__next__.
 	closeResult := g @env1:close.
 	self assert: closeResult equals: None.
-	self assert: (holder @env0:at: 1) equals: 'closed'.
+	self assert: (holder at: 1) equals: 'closed'.
 %
 
 ! --- FunctionDefAst: varargs method prologue (kwargs fallback, *args, **kwargs) ---
@@ -4290,14 +4290,14 @@ testKwargFallbackForNamedParam
 			at: 'b' put: 20;
 			at: 'c' put: 300;
 			yourself).
-	self assert: (result @env0:at: 1) equals: 1.
-	self assert: (result @env0:at: 2) equals: 20.
-	self assert: (result @env0:at: 3) equals: 300.
+	self assert: (result at: 1) equals: 1.
+	self assert: (result at: 2) equals: 20.
+	self assert: (result at: 3) equals: 300.
 	"Defaults still fire when no kwargs supplied."
 	result := obj @env1:_by_default: { 1 } kw: nil.
-	self assert: (result @env0:at: 1) equals: 1.
-	self assert: (result @env0:at: 2) equals: 2.
-	self assert: (result @env0:at: 3) equals: 3.
+	self assert: (result at: 1) equals: 1.
+	self assert: (result at: 2) equals: 2.
+	self assert: (result at: 3) equals: 3.
 %
 
 category: 'Grail-Tests - Varargs'
@@ -4322,13 +4322,13 @@ testStarArgsAndStarStarKwargs
 		kw: (KeyValueDictionary new
 			at: 'extra' put: 99;
 			yourself).
-	self assert: (result @env0:at: 1) equals: 'h'.
-	tail := result @env0:at: 2.
-	self assert: tail @env0:size equals: 2.
-	self assert: (tail @env0:at: 1) equals: 'a'.
-	self assert: (tail @env0:at: 2) equals: 'b'.
-	kw := result @env0:at: 3.
-	self assert: (kw @env0:at: 'extra') equals: 99.
+	self assert: (result at: 1) equals: 'h'.
+	tail := result at: 2.
+	self assert: tail size equals: 2.
+	self assert: (tail at: 1) equals: 'a'.
+	self assert: (tail at: 2) equals: 'b'.
+	kw := result at: 3.
+	self assert: (kw at: 'extra') equals: 99.
 %
 
 category: 'Grail-Tests - Varargs'
@@ -4348,14 +4348,14 @@ testKwonlyArgs
 			at: 'x' put: 10;
 			at: 'y' put: 200;
 			yourself).
-	self assert: (result @env0:at: 1) equals: 10.
-	self assert: (result @env0:at: 2) equals: 200.
+	self assert: (result at: 1) equals: 10.
+	self assert: (result at: 2) equals: 200.
 	"y has a default."
 	result := obj
 		@env1:_kwonly: #()
 		kw: (KeyValueDictionary new at: 'x' put: 11; yourself).
-	self assert: (result @env0:at: 1) equals: 11.
-	self assert: (result @env0:at: 2) equals: 20.
+	self assert: (result at: 1) equals: 11.
+	self assert: (result at: 2) equals: 20.
 %
 
 ! --- Class/instance introspection: __name__ and __dict__ -------------------
@@ -4398,11 +4398,11 @@ testInstanceDict
 	"Phase B: ``label'' set in __init__ also shows up here (the old
 	``Smalltalk instVar vs ___dict___'' split is gone — everything
 	lives in dynamic-instVar storage)."
-	self assert: (d @env0:at: #label) equals: 'label-value'.
+	self assert: (d at: #label) equals: 'label-value'.
 	"Runtime attribute through the DNU setter path also lands here."
 	obj @env1:dynamicAttr: 42.
 	d := obj @env1:__dict__.
-	self assert: (d @env0:at: #dynamicAttr) equals: 42.
+	self assert: (d at: #dynamicAttr) equals: 42.
 %
 
 ! --- CallAst: bare zero-arg super() ---------------------------------------
@@ -4477,7 +4477,7 @@ testSubscriptedBuiltinAsBaseClass
 	subclasses are ordered, so subclassing the ordered PyDict is correct."
 	self assert: cls superclass equals: PyDict.
 	inst := mod @env1:make.
-	self assert: (inst @env0:at: 'k') equals: 1.
+	self assert: (inst at: 'k') equals: 1.
 	self assert: (inst @env1:label) equals: 'string-keyed'.
 %
 
@@ -5041,7 +5041,7 @@ testWerkzeugDatastructuresImports
 	| mod mods keys |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
-	mods @env0:removeKey: #'use_werkzeug_datastructures' ifAbsent: [].
+	mods removeKey: #'use_werkzeug_datastructures' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_datastructures'.
 	self assert: mod @env1:import_succeeded equals: true.
 	self assert: mod @env1:multidict_class_resolves equals: true.
@@ -5061,7 +5061,7 @@ testWerkzeugHttpImports
 	| mod mods keys |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
-	mods @env0:removeKey: #'use_werkzeug_http' ifAbsent: [].
+	mods removeKey: #'use_werkzeug_http' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_http'.
 	self assert: mod @env1:import_succeeded equals: true.
 	self assert: mod @env1:quote_header_value_basic equals: '"text/html"'.
@@ -5078,7 +5078,7 @@ testWerkzeugWsgiImports
 	| mod mods keys |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
-	mods @env0:removeKey: #'use_werkzeug_wsgi' ifAbsent: [].
+	mods removeKey: #'use_werkzeug_wsgi' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_wsgi'.
 	self assert: mod @env1:import_succeeded equals: true.
 	self assert: mod @env1:get_path_info_basic equals: '/hello/world'.
@@ -5098,7 +5098,7 @@ testWerkzeugDatastructuresFullExports
 	| mod mods keys |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
-	mods @env0:removeKey: #'use_werkzeug_wrappers' ifAbsent: [].
+	mods removeKey: #'use_werkzeug_wrappers' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_wrappers'.
 	self assert: mod @env1:import_succeeded equals: true
 %
@@ -5117,7 +5117,7 @@ testWerkzeugRoutingImports
 	| mod mods keys |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
-	mods @env0:removeKey: #'use_werkzeug_routing' ifAbsent: [].
+	mods removeKey: #'use_werkzeug_routing' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_routing'.
 	self assert: mod @env1:import_succeeded equals: true.
 	self assert: mod @env1:rule_constructs equals: '/hello'
@@ -5137,7 +5137,7 @@ testWerkzeugLocalImports
 	| mod mods keys |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
-	mods @env0:removeKey: #'use_werkzeug_local' ifAbsent: [].
+	mods removeKey: #'use_werkzeug_local' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_local'.
 	self assert: mod @env1:import_succeeded equals: true.
 	self assert: mod @env1:public_surface_present equals: true.
@@ -5157,8 +5157,8 @@ testWerkzeugUtilsImports
 	| mod mods keys |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
-	mods @env0:removeKey: #'use_werkzeug_utils' ifAbsent: [].
-	mods @env0:removeKey: #'pkg_scaffolding.use_werkzeug_utils' ifAbsent: [].
+	mods removeKey: #'use_werkzeug_utils' ifAbsent: [].
+	mods removeKey: #'pkg_scaffolding.use_werkzeug_utils' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_utils'.
 	self assert: mod @env1:import_succeeded equals: true.
 	self assert: mod @env1:public_surface_present equals: true.
@@ -5181,8 +5181,8 @@ testWerkzeugTestImports
 	| mod mods keys |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
-	mods @env0:removeKey: #'use_werkzeug_test' ifAbsent: [].
-	mods @env0:removeKey: #'pkg_scaffolding.use_werkzeug_test' ifAbsent: [].
+	mods removeKey: #'use_werkzeug_test' ifAbsent: [].
+	mods removeKey: #'pkg_scaffolding.use_werkzeug_test' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_test'.
 	self assert: mod @env1:import_succeeded equals: true.
 	self assert: mod @env1:public_surface_present equals: true.
@@ -5221,8 +5221,8 @@ testWerkzeugWrappersConstructAndClient
 	| mod mods keys |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
-	mods @env0:removeKey: #'use_werkzeug_roundtrip' ifAbsent: [].
-	mods @env0:removeKey: #'pkg_scaffolding.use_werkzeug_roundtrip' ifAbsent: [].
+	mods removeKey: #'use_werkzeug_roundtrip' ifAbsent: [].
+	mods removeKey: #'pkg_scaffolding.use_werkzeug_roundtrip' ifAbsent: [].
 	mod := self loadFixture: 'use_werkzeug_roundtrip'.
 	"Tier 1 — import, construct, output-direction client round-trip."
 	self assert: mod @env1:import_succeeded equals: true.
@@ -5254,11 +5254,11 @@ testFlaskHelloWorldWsgiRoundTrip
 	| mod mods keys result |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'flask'.
-	mods @env0:removeKey: #'use_flask_wsgi' ifAbsent: [].
-	mods @env0:removeKey: #'pkg_scaffolding.use_flask_wsgi' ifAbsent: [].
+	mods removeKey: #'use_flask_wsgi' ifAbsent: [].
+	mods removeKey: #'pkg_scaffolding.use_flask_wsgi' ifAbsent: [].
 	mod := self loadFixture: 'use_flask_wsgi'.
 	result := mod @env1:hello_wsgi.
-	self assert: ((result @env1:__getitem__: 0) @env0:indexOfSubCollection: '200') @env0:> 0.
+	self assert: ((result @env1:__getitem__: 0) indexOfSubCollection: '200') > 0.
 	self assert: (result @env1:__getitem__: 1) equals: 'Hello, Grail!'
 %
 
@@ -5276,11 +5276,11 @@ testFlaskHelloWorldOverRealSocket
 	| mod mods keys result |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'flask'.
-	mods @env0:removeKey: #'use_flask_serving' ifAbsent: [].
-	mods @env0:removeKey: #'pkg_scaffolding.use_flask_serving' ifAbsent: [].
+	mods removeKey: #'use_flask_serving' ifAbsent: [].
+	mods removeKey: #'pkg_scaffolding.use_flask_serving' ifAbsent: [].
 	mod := self loadFixture: 'use_flask_serving'.
 	result := mod @env1:serve_one_request.
-	self assert: ((result @env1:__getitem__: 0) @env0:indexOfSubCollection: '200 OK') @env0:> 0.
+	self assert: ((result @env1:__getitem__: 0) indexOfSubCollection: '200 OK') > 0.
 	self assert: (result @env1:__getitem__: 1) equals: 'Hello, Grail!'
 %
 category: 'Grail-Tests - flask'
@@ -5298,8 +5298,8 @@ testFlaskRoutingAndErrorPath
 	| mod mods keys r |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'flask'.
-	mods @env0:removeKey: #'use_flask_routing' ifAbsent: [].
-	mods @env0:removeKey: #'pkg_scaffolding.use_flask_routing' ifAbsent: [].
+	mods removeKey: #'use_flask_routing' ifAbsent: [].
+	mods removeKey: #'pkg_scaffolding.use_flask_routing' ifAbsent: [].
 	mod := self loadFixture: 'use_flask_routing'.
 	"Tier 1 — dynamic responses via the test client."
 	r := mod @env1:variable_route.
@@ -5315,7 +5315,7 @@ testFlaskRoutingAndErrorPath
 	weakref proxy whose name-mangled internal slot used to recurse)."
 	r := mod @env1:json_response.
 	self assert: (r @env1:__getitem__: 0) equals: 200.
-	self assert: ((r @env1:__getitem__: 1) @env0:indexOfSubCollection: '"ok":true') @env0:> 0.
+	self assert: ((r @env1:__getitem__: 1) indexOfSubCollection: '"ok":true') > 0.
 	"Tier 4 — jinja2 ``render_template_string'' (flask's Environment subclass
 	calls the parent jinja2.Environment.__init__ explicitly — UnboundMethod)."
 	r := mod @env1:template_response.
@@ -5324,7 +5324,7 @@ testFlaskRoutingAndErrorPath
 	"Tier 2 — the HTTP error path returns 404."
 	r := mod @env1:abort_404.
 	self assert: (r @env1:__getitem__: 0) equals: 404.
-	self assert: ((r @env1:__getitem__: 1) @env0:indexOfSubCollection: 'Not Found') @env0:> 0.
+	self assert: ((r @env1:__getitem__: 1) indexOfSubCollection: 'Not Found') > 0.
 	r := mod @env1:unknown_route_404.
 	self assert: (r @env1:__getitem__: 0) equals: 404
 %
@@ -5339,8 +5339,8 @@ testFlaskServeGetQueryPost
 	| mod mods keys r |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'flask'.
-	mods @env0:removeKey: #'use_flask_serving' ifAbsent: [].
-	mods @env0:removeKey: #'pkg_scaffolding.use_flask_serving' ifAbsent: [].
+	mods removeKey: #'use_flask_serving' ifAbsent: [].
+	mods removeKey: #'pkg_scaffolding.use_flask_serving' ifAbsent: [].
 	mod := self loadFixture: 'use_flask_serving'.
 	r := mod @env1:serve_get_query_post.
 	self assert: (r @env1:__getitem__: 0) equals: 'home'.
@@ -5356,8 +5356,8 @@ _dropServingModules
 	| mods keys |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'flask'.
-	mods @env0:removeKey: #'use_flask_serving' ifAbsent: [].
-	mods @env0:removeKey: #'pkg_scaffolding.use_flask_serving' ifAbsent: []
+	mods removeKey: #'use_flask_serving' ifAbsent: [].
+	mods removeKey: #'pkg_scaffolding.use_flask_serving' ifAbsent: []
 %
 category: 'Grail-Tests - flask'
 method: FlaskScaffoldingTestCase
@@ -5693,9 +5693,9 @@ testRestDemoServingOverSocket
 	| mod r |
 	mod := self loadFixture: 'use_rest_demo'.
 	r := mod @env1:serving_over_socket.
-	self assert: ((r @env1:__getitem__: 'get_status') @env0:indexOfSubCollection: '200 OK') @env0:> 0.
+	self assert: ((r @env1:__getitem__: 'get_status') indexOfSubCollection: '200 OK') > 0.
 	self assert: (r @env1:__getitem__: 'empty_prompt') equals: true.
 	self assert: (r @env1:__getitem__: 'closes_connection') equals: true.
-	self assert: ((r @env1:__getitem__: 'post_status') @env0:indexOfSubCollection: '302') @env0:> 0.
+	self assert: ((r @env1:__getitem__: 'post_status') indexOfSubCollection: '302') > 0.
 	self assert: (r @env1:__getitem__: 'shows_after_post') equals: true
 %

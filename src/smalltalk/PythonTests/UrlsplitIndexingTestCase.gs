@@ -43,9 +43,9 @@ method: UrlsplitIndexingTestCase
 loadFixture
 	"Load tests/python/urlsplit_indexing.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'urlsplit_indexing' ifAbsent: [].
+	importlib @env1:modules removeKey: #'urlsplit_indexing' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/urlsplit_indexing.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/urlsplit_indexing.py')
 		name: 'urlsplit_indexing'
 %
 

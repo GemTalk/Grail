@@ -62,10 +62,10 @@ generatedSourceFor: pythonExpression
 	| modAst stmts callAst sb |
 	modAst := ModuleAst parseSource: pythonExpression , (String with: Character lf).
 	"BlockAst's `body` instVar is the statement list (no public getter)."
-	stmts := modAst body @env0:instVarAt:
-		(modAst body class @env0:allInstVarNames @env0:indexOf: #'body').
+	stmts := modAst body instVarAt:
+		(modAst body class allInstVarNames indexOf: #'body').
 	"First statement is an ExprAst-like wrapper; its `value` is the call."
-	callAst := stmts first @env0:value.
+	callAst := stmts first value.
 	sb := WriteStream on: String new.
 	callAst printSmalltalkOn: sb.
 	^ sb contents

@@ -49,9 +49,9 @@ checkModule: shortName
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: shortName @env0:asSymbol ifAbsent: [].
+	mods removeKey: shortName asSymbol ifAbsent: [].
 	importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/' @env0:, shortName @env0:, '.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/' , shortName , '.py')
 		name: shortName.
 	^ (gemstone @env1:instance) @env1:deploy_check: shortName
 %
@@ -64,8 +64,8 @@ findings: shortName includeSubstring: sub
 	| r found |
 	r := self checkModule: shortName.
 	found := false.
-	1 @env0:to: (r @env1:__len__) do: [:i |
-		((r @env1:__getitem__: i @env0:- 1) @env0:includesString: sub) ifTrue: [found := true]].
+	1 to: (r @env1:__len__) do: [:i |
+		((r @env1:__getitem__: i - 1) includesString: sub) ifTrue: [found := true]].
 	^ found
 %
 
@@ -113,10 +113,10 @@ testUnimportedModuleReported
 	explanatory finding rather than raising."
 
 	| r |
-	importlib @env1:modules @env0:removeKey: #'no_such_deploy_mod' ifAbsent: [].
+	importlib @env1:modules removeKey: #'no_such_deploy_mod' ifAbsent: [].
 	r := (gemstone @env1:instance) @env1:deploy_check: 'no_such_deploy_mod'.
 	self assert: r @env1:__len__ equals: 1.
-	self assert: ((r @env1:__getitem__: 0) @env0:includesString: 'not imported')
+	self assert: ((r @env1:__getitem__: 0) includesString: 'not imported')
 %
 
 category: 'Grail-Tests-deploy'

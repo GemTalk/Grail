@@ -48,7 +48,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'use_http_client' ifAbsent: [].
+	mods removeKey: #'use_http_client' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/use_http_client.py')
 		name: 'use_http_client'.

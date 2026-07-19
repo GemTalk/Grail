@@ -165,7 +165,7 @@ initialize
 	"Placeholder: the singleton sentinel for reserved positional slots
 	in partial (Python 3.14).  Its type is functools_Placeholder;
 	``Placeholder'' is that type's sole instance."
-	self @env0:at: #Placeholder put: functools_Placeholder @env1:___singleton___
+	self @env0:at: #Placeholder put: functools_Placeholder ___singleton___
 %
 
 category: 'Grail-Built-in Functions'
@@ -202,7 +202,7 @@ _cmp_to_key: positional kw: kwargs
 			(kwargs ~~ nil and: [kwargs @env0:includesKey: 'mycmp'])
 				ifTrue: [kwargs @env0:at: 'mycmp']
 				ifFalse: [TypeError ___signal___: 'cmp_to_key() missing required argument: mycmp']].
-	^ self @env1:cmp_to_key: f
+	^ self cmp_to_key: f
 %
 
 category: 'Grail-Comparison'
@@ -210,7 +210,7 @@ method: functools_cmpkey
 __lt__: other
 	(other isKindOf: functools_cmpkey) ifFalse: [
 		TypeError ___signal___: 'other argument must be K instance'].
-	^ ((self @env0:dynamicInstVarAt: #cmp) @env1:value:
+	^ ((self @env0:dynamicInstVarAt: #cmp) value:
 		{ self @env0:dynamicInstVarAt: #obj. other @env0:dynamicInstVarAt: #obj } value: nil)
 		@env0:< 0
 %
@@ -220,7 +220,7 @@ method: functools_cmpkey
 __gt__: other
 	(other isKindOf: functools_cmpkey) ifFalse: [
 		TypeError ___signal___: 'other argument must be K instance'].
-	^ ((self @env0:dynamicInstVarAt: #cmp) @env1:value:
+	^ ((self @env0:dynamicInstVarAt: #cmp) value:
 		{ self @env0:dynamicInstVarAt: #obj. other @env0:dynamicInstVarAt: #obj } value: nil)
 		@env0:> 0
 %
@@ -230,7 +230,7 @@ method: functools_cmpkey
 __le__: other
 	(other isKindOf: functools_cmpkey) ifFalse: [
 		TypeError ___signal___: 'other argument must be K instance'].
-	^ ((self @env0:dynamicInstVarAt: #cmp) @env1:value:
+	^ ((self @env0:dynamicInstVarAt: #cmp) value:
 		{ self @env0:dynamicInstVarAt: #obj. other @env0:dynamicInstVarAt: #obj } value: nil)
 		@env0:<= 0
 %
@@ -240,7 +240,7 @@ method: functools_cmpkey
 __ge__: other
 	(other isKindOf: functools_cmpkey) ifFalse: [
 		TypeError ___signal___: 'other argument must be K instance'].
-	^ ((self @env0:dynamicInstVarAt: #cmp) @env1:value:
+	^ ((self @env0:dynamicInstVarAt: #cmp) value:
 		{ self @env0:dynamicInstVarAt: #obj. other @env0:dynamicInstVarAt: #obj } value: nil)
 		@env0:>= 0
 %
@@ -250,7 +250,7 @@ method: functools_cmpkey
 __eq__: other
 	(other isKindOf: functools_cmpkey) ifFalse: [
 		TypeError ___signal___: 'other argument must be K instance'].
-	^ ((self @env0:dynamicInstVarAt: #cmp) @env1:value:
+	^ ((self @env0:dynamicInstVarAt: #cmp) value:
 		{ self @env0:dynamicInstVarAt: #obj. other @env0:dynamicInstVarAt: #obj } value: nil)
 		@env0:= 0
 %
@@ -263,7 +263,7 @@ value: positional value: keywords
 	value:value: uses ___allocateInstance___) and direct calls share
 	one constructor."
 
-	^ self @env1:___allocateInstance___: positional kw: keywords
+	^ self ___allocateInstance___: positional kw: keywords
 %
 
 category: 'Grail-Reflection'
@@ -298,7 +298,7 @@ ___new__: positional kw: keywords
 	kw := keywords == nil
 		ifTrue: [KeyValueDictionary @env0:new]
 		ifFalse: [keywords @env0:copy].
-	ph := functools_Placeholder @env1:___singleton___.
+	ph := functools_Placeholder ___singleton___.
 	"Placeholder is not allowed as a keyword-argument value (checked by
 	identity, so ALWAYS_EQ -- which == everything -- is not treated as
 	a Placeholder)."
@@ -338,7 +338,7 @@ ___applyPlaceholders___: boundArgs with: newArgs
 	Placeholder as a missing argument."
 
 	| ph result newList |
-	ph := functools_Placeholder @env1:___singleton___.
+	ph := functools_Placeholder ___singleton___.
 	result := OrderedCollection @env0:new.
 	newList := OrderedCollection @env0:withAll:
 		(newArgs == nil ifTrue: [#()] ifFalse: [newArgs]).
@@ -357,7 +357,7 @@ category: 'Grail-Placeholder'
 classmethod: functools_partial
 ___countPlaceholders___: anArray
 	| ph n |
-	ph := functools_Placeholder @env1:___singleton___.
+	ph := functools_Placeholder ___singleton___.
 	n := 0.
 	anArray @env0:do: [:a | a == ph ifTrue: [n := n @env0:+ 1]].
 	^ n
@@ -398,7 +398,7 @@ value: morePositional value: moreKw
 	"value:value: is the universal call protocol -- BoundMethod, class
 	objects (partial(int, base=2)), blocks, and nested partials all
 	dispatch through it; ___pyCallValue___ rejects classes."
-	^ fn @env1:value: allArgs value: allKw
+	^ fn value: allArgs value: allKw
 %
 
 category: 'Grail-String Representation'
@@ -410,15 +410,15 @@ __repr__
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
 	stream @env0:nextPutAll: 'functools.partial('.
 	stream @env0:nextPutAll:
-		((self @env0:dynamicInstVarAt: #func) @env1:__repr__) @env0:asString.
+		((self @env0:dynamicInstVarAt: #func) __repr__) @env0:asString.
 	(self @env0:dynamicInstVarAt: #args) @env0:do: [:a |
 		stream @env0:nextPutAll: ', '.
-		stream @env0:nextPutAll: (a @env1:__repr__) @env0:asString].
+		stream @env0:nextPutAll: (a __repr__) @env0:asString].
 	(self @env0:dynamicInstVarAt: #keywords) @env0:keysAndValuesDo: [:k :v |
 		stream @env0:nextPutAll: ', '.
 		stream @env0:nextPutAll: k @env0:asString.
 		stream @env0:nextPutAll: '='.
-		stream @env0:nextPutAll: (v @env1:__repr__) @env0:asString].
+		stream @env0:nextPutAll: (v __repr__) @env0:asString].
 	stream @env0:nextPut: $).
 	^ stream @env0:contents
 %
@@ -445,12 +445,12 @@ __dict__
 	back through it."
 
 	| d pairs |
-	d := dict @env1:___new___.
+	d := dict ___new___.
 	pairs := self @env0:dynamicInstVarPairs.
 	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
 		| nm |
 		nm := pairs @env0:at: i.
-		(self @env1:___reservedName___: nm) ifFalse: [
+		(self ___reservedName___: nm) ifFalse: [
 			d @env0:at: nm @env0:asString put: (pairs @env0:at: i @env0:+ 1)]].
 	^ d
 %
@@ -461,10 +461,10 @@ __setattr__: name _: value
 	"func / args / keywords are read-only (CPython: AttributeError).
 	Everything else is a normal user attribute."
 
-	(self @env1:___reservedName___: name) ifTrue: [
+	(self ___reservedName___: name) ifTrue: [
 		AttributeError ___signal___: 'attribute ''' @env0:, name @env0:asString
 			@env0:, ''' of ''functools.partial'' objects is not writable'].
-	^ super @env1:__setattr__: name _: value
+	^ super __setattr__: name _: value
 %
 
 category: 'Grail-Attribute Access'
@@ -475,7 +475,7 @@ __delattr__: name
 
 	(name @env0:asString @env0:= '__dict__') ifTrue: [
 		TypeError ___signal___: 'a partial object''s dictionary may not be deleted'].
-	^ super @env1:__delattr__: name
+	^ super __delattr__: name
 %
 
 category: 'Grail-Pickle Protocol'
@@ -506,7 +506,7 @@ __setstate__: state
 		TypeError ___signal___: 'invalid partial state (kwds must be a dict)'].
 	((namespace == None) or: [namespace isKindOf: KeyValueDictionary]) ifFalse: [
 		TypeError ___signal___: 'invalid partial state (namespace must be a dict)'].
-	ph := functools_Placeholder @env1:___singleton___.
+	ph := functools_Placeholder ___singleton___.
 	(args @env0:isEmpty @env0:not and: [(args @env0:at: args @env0:size) == ph]) ifTrue: [
 		TypeError ___signal___: 'trailing Placeholders are not allowed'].
 	"Install internal state -- args to a PLAIN tuple, kwds to a PLAIN
@@ -523,7 +523,7 @@ __setstate__: state
 	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
 		| nm |
 		nm := pairs @env0:at: i.
-		(self @env1:___reservedName___: nm) ifFalse: [
+		(self ___reservedName___: nm) ifFalse: [
 			self @env0:removeDynamicInstVar: nm]].
 	(namespace ~~ None) ifTrue: [
 		namespace @env0:keysAndValuesDo: [:k :v |
@@ -624,13 +624,13 @@ __eq__: other
 	| mine theirs |
 	mine := self ___asArray___.
 	theirs := (other isKindOf: functools_CacheInfo)
-		ifTrue: [other @env1:___asArray___]
+		ifTrue: [other ___asArray___]
 		ifFalse: [(other isKindOf: SequenceableCollection)
 			ifTrue: [other @env0:asArray]
 			ifFalse: [^ false]].
 	mine @env0:size @env0:= theirs @env0:size ifFalse: [^ false].
 	1 @env0:to: mine @env0:size do: [:i |
-		((mine @env0:at: i) @env1:__eq__: (theirs @env0:at: i)) == true
+		((mine @env0:at: i) __eq__: (theirs @env0:at: i)) == true
 			ifFalse: [^ false]].
 	^ true
 %
@@ -638,16 +638,16 @@ __eq__: other
 category: 'Grail-Comparison'
 method: functools_CacheInfo
 __ne__: other
-	^ (self @env1:__eq__: other) @env0:not
+	^ (self __eq__: other) @env0:not
 %
 
 category: 'Grail-String Representation'
 method: functools_CacheInfo
 __repr__
-	^ 'CacheInfo(hits=' @env0:, (self @env0:dynamicInstVarAt: #hits) @env1:__repr__ @env0:asString
-		@env0:, ', misses=' @env0:, (self @env0:dynamicInstVarAt: #misses) @env1:__repr__ @env0:asString
-		@env0:, ', maxsize=' @env0:, (self @env0:dynamicInstVarAt: #maxsize) @env1:__repr__ @env0:asString
-		@env0:, ', currsize=' @env0:, (self @env0:dynamicInstVarAt: #currsize) @env1:__repr__ @env0:asString
+	^ 'CacheInfo(hits=' @env0:, (self @env0:dynamicInstVarAt: #hits) __repr__ @env0:asString
+		@env0:, ', misses=' @env0:, (self @env0:dynamicInstVarAt: #misses) __repr__ @env0:asString
+		@env0:, ', maxsize=' @env0:, (self @env0:dynamicInstVarAt: #maxsize) __repr__ @env0:asString
+		@env0:, ', currsize=' @env0:, (self @env0:dynamicInstVarAt: #currsize) __repr__ @env0:asString
 		@env0:, ')'
 %
 
@@ -732,9 +732,9 @@ lru_cache: maxsize
 
 	((maxsize isKindOf: Integer)
 		or: [maxsize == nil or: [maxsize == None]]) ifFalse: [
-		^ LruCacheWrapper @env1:___wrap___: maxsize maxsize: 128].
+		^ LruCacheWrapper ___wrap___: maxsize maxsize: 128].
 	^ [:positional2 :keywords2 |
-		LruCacheWrapper @env1:___wrap___: (positional2 @env0:at: 1) maxsize: maxsize]
+		LruCacheWrapper ___wrap___: (positional2 @env0:at: 1) maxsize: maxsize]
 %
 
 category: 'Grail-Built-in Functions'
@@ -751,7 +751,7 @@ _lru_cache: positional kw: kwargs
 			ifTrue: [positional @env0:at: 1]
 			ifFalse: [128]].
 	^ [:positional2 :keywords2 |
-		LruCacheWrapper @env1:___wrap___: (positional2 @env0:at: 1) maxsize: ms]
+		LruCacheWrapper ___wrap___: (positional2 @env0:at: 1) maxsize: ms]
 %
 
 category: 'Grail-Built-in Functions'
@@ -760,7 +760,7 @@ cache: aFunction
 	"``@cache'' (Python 3.9+) — shorthand for ``@lru_cache(maxsize=None)''
 	with an unbounded cache."
 
-	^ LruCacheWrapper @env1:___wrap___: aFunction maxsize: None
+	^ LruCacheWrapper ___wrap___: aFunction maxsize: None
 %
 
 category: 'Grail-Built-in Functions'
@@ -847,7 +847,7 @@ _partialmethod: positional kw: kwargs
 
 	| fn boundArgs boundKw |
 	(positional @env0:isNil or: [positional @env0:isEmpty]) ifTrue: [
-		TypeError @env1:___signal___: 'partialmethod expected at least 1 argument, got 0'
+		TypeError ___signal___: 'partialmethod expected at least 1 argument, got 0'
 	].
 	fn := positional @env0:at: 1.
 	boundArgs := positional @env0:size @env0:> 1
@@ -875,7 +875,7 @@ _partialmethod: positional kw: kwargs
 						merged := boundKw @env0:copy.
 						moreKwargs @env0:keysAndValuesDo: [:k :v | merged @env0:at: k put: v].
 						merged]].
-		fn @env1:___pyCallValue___: rest kw: allKw]
+		fn ___pyCallValue___: rest kw: allKw]
 %
 
 category: 'Grail-Built-in Functions'
@@ -972,7 +972,7 @@ dispatch: cls
 	"g.dispatch(int): bare builtin-type names arrive as BoundMethod
 	wrappers here too -- normalize, tolerating non-classes."
 	key := (self ___registryKey___: cls) @env0:ifNil: [cls].
-	mro := key @env1:__mro__.
+	mro := key __mro__.
 	mro @env0:do: [:c |
 		(reg @env0:includesKey: c) ifTrue: [^ reg @env0:at: c]].
 	"Python-semantics widenings the Smalltalk chain can't see:
@@ -1059,7 +1059,7 @@ ___inferRegisterType___: aFunc
 	the annotation form is used in (``def _(arg: T)'')."
 
 	| ann candidate |
-	ann := [aFunc @env1:__annotations__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	ann := [aFunc __annotations__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	(ann @env0:isNil or: [ann @env0:isEmpty]) ifTrue: [
 		TypeError ___signal___:
 			'Invalid first argument to `register()`: no type annotation found'].
@@ -1079,7 +1079,7 @@ ___inferRegisterType___: aFunc
 	(candidate isKindOf: CharacterCollection) ifTrue: [
 		| cabc resolved |
 		cabc := (System @env0:myUserProfile @env0:symbolList
-			@env0:objectNamed: #importlib) @env1:modules
+			@env0:objectNamed: #importlib) modules
 			@env0:at: #'collections.abc' otherwise: nil.
 		cabc == nil ifFalse: [
 			resolved := cabc @env0:dynamicInstVarAt: candidate @env0:asString @env0:asSymbol.

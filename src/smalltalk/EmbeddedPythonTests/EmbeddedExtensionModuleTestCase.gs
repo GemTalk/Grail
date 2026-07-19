@@ -35,7 +35,7 @@ setUp
 
 	super setUp.
 	"Drop any cached _sre so each test re-exercises the routing arm."
-	sys @env1:modules @env0:removeKey: #'_sre' ifAbsent: [].
+	sys @env1:modules removeKey: #'_sre' ifAbsent: [].
 	sreModule := self importSre.
 %
 category: 'Grail-Helpers'

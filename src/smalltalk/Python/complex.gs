@@ -147,7 +147,7 @@ __new__: r
 
 	(r @env0:isBehavior) ifTrue: [^ r @env0:new].
 	(r isKindOf: complex) ifTrue: [^ r].
-	^ complex @env1:__new__: r _: 0.0
+	^ complex __new__: r _: 0.0
 %
 
 category: 'Grail-Initialization'

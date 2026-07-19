@@ -110,7 +110,7 @@ value: positional value: kwargs
 
 	| newPositional |
 	newPositional := { instance } @env0:, positional.
-	^ callable @env1:___pyCallValue___: newPositional kw: kwargs
+	^ callable ___pyCallValue___: newPositional kw: kwargs
 %
 
 category: 'Grail-Callable'
@@ -119,7 +119,7 @@ __call__: positional
 	"Make MethodBinding respond to Python''s ``callable(...)'' protocol.
 	Forwards to the varargs entry point with empty kwargs."
 
-	^ self @env1:value: positional value: nil
+	^ self value: positional value: nil
 %
 
 category: 'Grail-Callable'
@@ -128,7 +128,7 @@ ___pyCallValue___: positional kw: kwargs
 	"Forward the Python ``f(args, **kw)'' call site to the
 	descriptor-bound dispatch."
 
-	^ self @env1:value: positional value: kwargs
+	^ self value: positional value: kwargs
 %
 
 set compile_env: 0

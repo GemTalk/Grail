@@ -48,7 +48,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'dynamic_globals' ifAbsent: [].
+	mods removeKey: #'dynamic_globals' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/dynamic_globals.py')
 		name: 'dynamic_globals'.
@@ -124,7 +124,7 @@ testSetattrRespectsDnuDispatch
 
 	| mod mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'setattr_dnu_dispatch' ifAbsent: [].
+	mods removeKey: #'setattr_dnu_dispatch' ifAbsent: [].
 	mod := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/setattr_dnu_dispatch.py')
 		name: 'setattr_dnu_dispatch'.

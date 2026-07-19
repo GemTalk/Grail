@@ -584,8 +584,8 @@ testHex
 	self assert: (-3.5 @env1:hex) equals: '-0x1.c000000000000p+1'.
 	self assert: (5e-324 @env1:hex) equals: '0x0.0000000000001p-1022'.
 	self assert: (0.0 @env1:hex) equals: '0x0.0000000000000p+0'.
-	self assert: ((0.0 @env0:negated) @env1:hex) equals: '-0x0.0000000000000p+0'.
-	self assert: ((Python @env0:at: #float) @env1:fromhex: (0.1 @env1:hex)) equals: 0.1
+	self assert: ((0.0 negated) @env1:hex) equals: '-0x0.0000000000000p+0'.
+	self assert: ((Python at: #float) @env1:fromhex: (0.1 @env1:hex)) equals: 0.1
 %
 
 category: 'Grail-Tests - Float Methods'
@@ -597,9 +597,9 @@ testFromStringSpecials
 	(test.test_math test_sumprod_stress)."
 
 	| fl |
-	fl := Python @env0:at: #float.
-	self assert: ((fl @env1:___newFromString___: 'NaN') @env0:_isNaN).
-	self assert: ((fl @env1:___newFromString___: 'NAN') @env0:_isNaN).
+	fl := Python at: #float.
+	self assert: ((fl @env1:___newFromString___: 'NaN') _isNaN).
+	self assert: ((fl @env1:___newFromString___: 'NAN') _isNaN).
 	self assert: (fl @env1:___newFromString___: 'Infinity') equals: PlusInfinity.
 	self assert: (fl @env1:___newFromString___: 'INF') equals: PlusInfinity.
 	self assert: (fl @env1:___newFromString___: '-Infinity') equals: MinusInfinity.
@@ -614,17 +614,17 @@ testFromHex
 	inf/infinity/nan keywords.  Was a NotImplementedError for any p-exponent."
 
 	| fl |
-	fl := Python @env0:at: #float.
+	fl := Python at: #float.
 	self assert: (fl @env1:fromhex: '0x1.8p3') equals: 12.0.
 	self assert: (fl @env1:fromhex: '0x10') equals: 16.0.
 	self assert: (fl @env1:fromhex: '0x0.8p1') equals: 1.0.
 	self assert: (fl @env1:fromhex: '-0x1.0p-1') equals: -0.5.
 	"exact round-tripping of a full-precision significand with an exponent"
 	self assert: (fl @env1:fromhex: '0x1.5555555555555p+970')
-		equals: (2.0 @env0:raisedTo: 970) @env0:* ((16r15555555555555 @env0:asFloat) @env0:/ (2.0 @env0:raisedTo: 52)).
+		equals: (2.0 raisedTo: 970) * ((16r15555555555555 asFloat) / (2.0 raisedTo: 52)).
 	"signed zero (probed via 1/x -> -inf), keywords, range/format errors"
-	self assert: (1.0 @env0:/ (fl @env1:fromhex: '-0x0p0')) equals: MinusInfinity.
-	self assert: (1.0 @env0:/ (fl @env1:fromhex: '0x0p0')) equals: PlusInfinity.
+	self assert: (1.0 / (fl @env1:fromhex: '-0x0p0')) equals: MinusInfinity.
+	self assert: (1.0 / (fl @env1:fromhex: '0x0p0')) equals: PlusInfinity.
 	self assert: (fl @env1:fromhex: 'inf') equals: (fl @env1:fromhex: 'Infinity').
 	self should: [fl @env1:fromhex: '0x1p+2000'] raise: OverflowError.
 	self should: [fl @env1:fromhex: '0xGp0'] raise: ValueError

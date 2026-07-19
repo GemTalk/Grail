@@ -49,7 +49,7 @@ testGeneratorIsSessionLocalNotCommitted
 	s := secrets ___instance___.
 	s @env1:token_bytes: 8.
 	"Not parked on the committed module singleton..."
-	self assert: (s @env0:at: #_generator ifAbsent: [#GrailAbsent]) == #GrailAbsent.
+	self assert: (s at: #_generator ifAbsent: [#GrailAbsent]) == #GrailAbsent.
 	"...held in this session's SessionTemps instead."
 	self assert: (SessionTemps current includesKey: #'___GrailSecretsGenerator___').
 %

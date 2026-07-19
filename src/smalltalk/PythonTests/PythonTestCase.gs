@@ -78,15 +78,15 @@ ___resetImportedFramework___: aPrefix
 	mods := importlib @env1:modules.
 	deployed := importlib ___canonicalModules___.
 	prefixDot := aPrefix , '.'.
-	(mods @env0:keys @env0:asArray) @env0:do: [:k | | ks |
-		ks := k @env0:asString.
-		((ks @env0:= aPrefix)
-			@env0:or: [(ks @env0:size @env0:> prefixDot @env0:size)
-				and: [(ks @env0:copyFrom: 1 to: prefixDot @env0:size) @env0:= prefixDot]])
+	(mods keys asArray) do: [:k | | ks |
+		ks := k asString.
+		((ks = aPrefix)
+			or: [(ks size > prefixDot size)
+				and: [(ks copyFrom: 1 to: prefixDot size) = prefixDot]])
 			ifTrue: [
 				"Skip only genuinely committed (deployed) instances."
-				((deployed @env0:at: ks otherwise: nil) ifNil: [false] ifNotNil: [:m | m @env0:isCommitted])
-					ifFalse: [mods @env0:removeKey: k ifAbsent: []]]]
+				((deployed at: ks otherwise: nil) ifNil: [false] ifNotNil: [:m | m isCommitted])
+					ifFalse: [mods removeKey: k ifAbsent: []]]]
 %
 
 category: 'Grail-helpers'

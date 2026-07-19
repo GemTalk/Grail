@@ -96,7 +96,7 @@ method: math
 sin: x
 	"sin(+/-inf) is a domain error (ValueError); sin(nan) = nan."
 	| f |
-	f := self @env1:___real___: x.
+	f := self ___real___: x.
 	(f @env0:_getKind) == 3 ifTrue: [ValueError ___signal___: 'math domain error'].
 	^ f @env0:sin
 %
@@ -106,7 +106,7 @@ method: math
 cos: x
 	"cos(+/-inf) is a domain error (ValueError); cos(nan) = nan."
 	| f |
-	f := self @env1:___real___: x.
+	f := self ___real___: x.
 	(f @env0:_getKind) == 3 ifTrue: [ValueError ___signal___: 'math domain error'].
 	^ f @env0:cos
 %
@@ -116,7 +116,7 @@ method: math
 tan: x
 	"tan(+/-inf) is a domain error (ValueError); tan(nan) = nan."
 	| f |
-	f := self @env1:___real___: x.
+	f := self ___real___: x.
 	(f @env0:_getKind) == 3 ifTrue: [ValueError ___signal___: 'math domain error'].
 	^ f @env0:tan
 %
@@ -125,7 +125,7 @@ category: 'Grail-Trigonometric Functions'
 method: math
 asin: x
 	| f |
-	f := self @env1:___real___: x.
+	f := self ___real___: x.
 	(f @env0:< -1.0 or: [f @env0:> 1.0]) ifTrue: [
 		ValueError ___signal___: 'math domain error'].
 	^ f @env0:arcSin
@@ -135,7 +135,7 @@ category: 'Grail-Trigonometric Functions'
 method: math
 acos: x
 	| f |
-	f := self @env1:___real___: x.
+	f := self ___real___: x.
 	(f @env0:< -1.0 or: [f @env0:> 1.0]) ifTrue: [
 		ValueError ___signal___: 'math domain error'].
 	^ f @env0:arcCos
@@ -144,13 +144,13 @@ acos: x
 category: 'Grail-Trigonometric Functions'
 method: math
 atan: x
-	^ (self @env1:___real___: x) @env0:arcTan
+	^ (self ___real___: x) @env0:arcTan
 %
 
 category: 'Grail-Trigonometric Functions'
 method: math
 atan2: y _: x
-	^ (self @env1:___real___: y) @env0:arcTan2: (self @env1:___real___: x)
+	^ (self ___real___: y) @env0:arcTan2: (self ___real___: x)
 %
 
 ! ===============================================================================
@@ -163,8 +163,8 @@ sinh: x
 	"sinh of a finite x that overflows the double range is OverflowError;
 	sinh(+/-inf) = +/-inf (input already infinite, no overflow)."
 	| f |
-	f := self @env1:___real___: x.
-	^ self @env1:___rangeCheck___: (f @env0:sinh) finite: ((f @env0:_getKind) @env0:~= 3)
+	f := self ___real___: x.
+	^ self ___rangeCheck___: (f @env0:sinh) finite: ((f @env0:_getKind) @env0:~= 3)
 %
 
 category: 'Grail-Hyperbolic Functions'
@@ -173,27 +173,27 @@ cosh: x
 	"cosh of a finite x that overflows the double range is OverflowError;
 	cosh(+/-inf) = +inf (input already infinite, no overflow)."
 	| f |
-	f := self @env1:___real___: x.
-	^ self @env1:___rangeCheck___: (f @env0:cosh) finite: ((f @env0:_getKind) @env0:~= 3)
+	f := self ___real___: x.
+	^ self ___rangeCheck___: (f @env0:cosh) finite: ((f @env0:_getKind) @env0:~= 3)
 %
 
 category: 'Grail-Hyperbolic Functions'
 method: math
 tanh: x
-	^ (self @env1:___real___: x) @env0:tanh
+	^ (self ___real___: x) @env0:tanh
 %
 
 category: 'Grail-Hyperbolic Functions'
 method: math
 asinh: x
-	^ (self @env1:___real___: x) @env0:arcSinh
+	^ (self ___real___: x) @env0:arcSinh
 %
 
 category: 'Grail-Hyperbolic Functions'
 method: math
 acosh: x
 	| f |
-	f := self @env1:___real___: x.
+	f := self ___real___: x.
 	f @env0:< 1.0 ifTrue: [
 		ValueError ___signal___: 'math domain error'].
 	^ f @env0:arcCosh
@@ -203,7 +203,7 @@ category: 'Grail-Hyperbolic Functions'
 method: math
 atanh: x
 	| f |
-	f := self @env1:___real___: x.
+	f := self ___real___: x.
 	(f @env0:<= -1.0 or: [f @env0:>= 1.0]) ifTrue: [
 		ValueError ___signal___: 'expected a number between -1 and 1, got '
 			@env0:, f @env0:printString].
@@ -231,8 +231,8 @@ category: 'Grail-Exponential and Logarithmic'
 method: math
 exp: x
 	| f |
-	f := self @env1:___real___: x.
-	^ self @env1:___rangeCheck___: (f @env0:exp) finite: ((f @env0:_getKind) @env0:~= 3)
+	f := self ___real___: x.
+	^ self ___rangeCheck___: (f @env0:exp) finite: ((f @env0:_getKind) @env0:~= 3)
 %
 
 category: 'Grail-Exponential and Logarithmic'
@@ -259,8 +259,8 @@ ___naturalLog___: x
 		"An integer argument carries no float value in its message (it could
 		be huge): CPython says just ``expected a positive input''."
 		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'expected a positive input'].
-		(x @env0:highBit @env0:> 1023) ifTrue: [^ self @env1:___logHugeInt___: x]].
-	f := self @env1:___real___: x.
+		(x @env0:highBit @env0:> 1023) ifTrue: [^ self ___logHugeInt___: x]].
+	f := self ___real___: x.
 	f @env0:<= 0.0 ifTrue: [
 		ValueError ___signal___: 'expected a positive input, got ' @env0:, f @env0:printString].
 	^ f @env0:ln
@@ -270,7 +270,7 @@ category: 'Grail-Exponential and Logarithmic'
 method: math
 log: x
 	"math.log(x) — natural logarithm."
-	^ self @env1:___naturalLog___: x
+	^ self ___naturalLog___: x
 %
 
 category: 'Grail-Exponential and Logarithmic'
@@ -279,7 +279,7 @@ log: x _: base
 	"math.log(x, base) — logarithm of x to the given base.  Domain:
 	x <= 0 raises CPython's ValueError."
 
-	^ (self @env1:___naturalLog___: x) @env0:/ (self @env1:___naturalLog___: base)
+	^ (self ___naturalLog___: x) @env0:/ (self ___naturalLog___: base)
 %
 
 category: 'Grail-Exponential and Logarithmic'
@@ -291,8 +291,8 @@ log10: x
 	| f |
 	((x isKindOf: Integer) and: [x @env0:highBit @env0:> 1023]) ifTrue: [
 		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'math domain error'].
-		^ (self @env1:___logHugeInt___: x) @env0:/ (10.0 @env0:ln)].
-	f := self @env1:___real___: x.
+		^ (self ___logHugeInt___: x) @env0:/ (10.0 @env0:ln)].
+	f := self ___real___: x.
 	f @env0:<= 0.0 ifTrue: [
 		ValueError ___signal___: 'expected a positive input, got ' @env0:, f @env0:printString].
 	^ f @env0:log10
@@ -313,21 +313,21 @@ log2: x
 	(x isKindOf: Integer) ifTrue: [
 		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'math domain error'].
 		((x @env0:bitAnd: x @env0:- 1) @env0:= 0) ifTrue: [^ (x @env0:highBit @env0:- 1) @env0:asFloat].
-		(x @env0:highBit @env0:> 1023) ifTrue: [^ (self @env1:___logHugeInt___: x) @env0:/ (2.0 @env0:ln)].
-		^ (self @env1:___naturalLog___: x) @env0:/ (2.0 @env0:ln)].
-	f := self @env1:___real___: x.
+		(x @env0:highBit @env0:> 1023) ifTrue: [^ (self ___logHugeInt___: x) @env0:/ (2.0 @env0:ln)].
+		^ (self ___naturalLog___: x) @env0:/ (2.0 @env0:ln)].
+	f := self ___real___: x.
 	((f @env0:> 0.0) and: [f @env0:_isNaN @env0:not and: [(f @env0:_getKind) @env0:~= 3]]) ifTrue: [
 		e := f @env0:exponent.
 		e @env0:<= -1022 ifTrue: [e := (f @env0:* (2.0 @env0:raisedTo: 52)) @env0:exponent @env0:- 52].
 		((2.0 @env0:raisedTo: e) @env0:= f) ifTrue: [^ e @env0:asFloat]].
-	^ (self @env1:___naturalLog___: f) @env0:/ (2.0 @env0:ln)
+	^ (self ___naturalLog___: f) @env0:/ (2.0 @env0:ln)
 %
 
 category: 'Grail-Exponential and Logarithmic'
 method: math
 sqrt: x
 	| f |
-	f := self @env1:___real___: x.
+	f := self ___real___: x.
 	f @env0:< 0.0 ifTrue: [
 		ValueError ___signal___: 'expected a nonnegative input, got ' @env0:, f @env0:printString].
 	^ f @env0:sqrt
@@ -345,8 +345,8 @@ pow: x _: y
 	is a ValueError; an inf from a genuine overflow is an OverflowError."
 
 	| fx fy r |
-	fx := self @env1:___real___: x.
-	fy := self @env1:___real___: y.
+	fx := self ___real___: x.
+	fy := self ___real___: y.
 	r := fx @env0:raisedTo: fy.
 	((fx @env0:_isNaN @env0:not and: [fx @env0:abs @env0:~= PlusInfinity])
 		and: [fy @env0:_isNaN @env0:not and: [fy @env0:abs @env0:~= PlusInfinity]]) ifTrue: [
@@ -380,8 +380,8 @@ ___dunderRound___: x selector: dunder default: fallback coerceFloat: coerceFloat
 
 	(((x @env0:class @env0:whichClassIncludesSelector: dunder environmentId: 1) ~~ nil)
 		or: [(x @env0:class @env0:class @env0:whichClassIncludesSelector: dunder environmentId: 1) ~~ nil])
-		ifTrue: [^ (x @env1:___pyAttrLoad___: dunder) @env1:value: { } value: nil].
-	coerceFloat ifTrue: [^ (self @env1:___real___: x) @env0:perform: fallback].
+		ifTrue: [^ (x ___pyAttrLoad___: dunder) value: { } value: nil].
+	coerceFloat ifTrue: [^ (self ___real___: x) @env0:perform: fallback].
 	(x isKindOf: Number) ifTrue: [^ x @env0:perform: fallback].
 	TypeError ___signal___: ('type '
 		@env0:, x @env0:class @env0:name @env0:asString
@@ -391,19 +391,19 @@ ___dunderRound___: x selector: dunder default: fallback coerceFloat: coerceFloat
 category: 'Grail-Rounding'
 method: math
 ceil: x
-	^ self @env1:___dunderRound___: x selector: #'__ceil__' default: #ceiling coerceFloat: true
+	^ self ___dunderRound___: x selector: #'__ceil__' default: #ceiling coerceFloat: true
 %
 
 category: 'Grail-Rounding'
 method: math
 floor: x
-	^ self @env1:___dunderRound___: x selector: #'__floor__' default: #floor coerceFloat: true
+	^ self ___dunderRound___: x selector: #'__floor__' default: #floor coerceFloat: true
 %
 
 category: 'Grail-Rounding'
 method: math
 trunc: x
-	^ self @env1:___dunderRound___: x selector: #'__trunc__' default: #truncated coerceFloat: false
+	^ self ___dunderRound___: x selector: #'__trunc__' default: #truncated coerceFloat: false
 %
 
 category: 'Grail-Rounding'
@@ -417,7 +417,7 @@ factorial: n
 	| nInt |
 	"factorial requires an exact integer -- a float (even 5.0), Decimal, or
 	string is a TypeError, not a silent truncation (testFactorialNonIntegers)."
-	nInt := self @env1:___index___: n.
+	nInt := self ___index___: n.
 	(nInt @env0:< 0) ifTrue: [
 		ValueError ___signal___: 'factorial() not defined for negative values'
 	].
@@ -432,22 +432,22 @@ method: math
 gcd: a _: b
 	"Validate integer-ness via __index__ (a float argument is a TypeError,
 	not a silent truncation)."
-	^ (self @env1:___index___: a) @env0:gcd: (self @env1:___index___: b)
+	^ (self ___index___: a) @env0:gcd: (self ___index___: b)
 %
 
 category: 'Grail-Number Theory'
 method: math
 lcm: a _: b
 	| av bv |
-	av := self @env1:___index___: a.
-	bv := self @env1:___index___: b.
+	av := self ___index___: a.
+	bv := self ___index___: b.
 	^ (av @env0:= 0 or: [bv @env0:= 0]) ifTrue: [0] ifFalse: [av @env0:lcm: bv]
 %
 
 category: 'Grail-Floating Point Functions'
 method: math
 fabs: x
-	^ (self @env1:___real___: x) @env0:abs
+	^ (self ___real___: x) @env0:abs
 %
 
 ! ===============================================================================
@@ -458,20 +458,20 @@ category: 'Grail-Classification'
 method: math
 isfinite: x
 	| kind |
-	kind := (self @env1:___real___: x) @env0:_getKind.
+	kind := (self ___real___: x) @env0:_getKind.
 	^ (kind @env0:<= 2) or: [kind == 4]
 %
 
 category: 'Grail-Classification'
 method: math
 isinf: x
-	^ ((self @env1:___real___: x) @env0:_getKind) == 3
+	^ ((self ___real___: x) @env0:_getKind) == 3
 %
 
 category: 'Grail-Classification'
 method: math
 isnan: x
-	^ (self @env1:___real___: x) @env0:_isNaN
+	^ (self ___real___: x) @env0:_isNaN
 %
 
 category: 'Grail-Math Functions'
@@ -484,9 +484,9 @@ ___materialize___: iterable
 
 	| out it |
 	out := OrderedCollection @env0:new.
-	it := iterable @env1:__iter__.
+	it := iterable __iter__.
 	[true] @env0:whileTrue: [
-		[out @env0:add: (it @env1:__next__)]
+		[out @env0:add: (it __next__)]
 			@env0:on: StopIteration
 			do: [:ex | ^out].
 		].
@@ -500,8 +500,8 @@ copysign: x _: y
 	survives)."
 
 	| mag neg fy |
-	mag := (self @env1:___real___: x) @env0:abs.
-	fy := self @env1:___real___: y.
+	mag := (self ___real___: x) @env0:abs.
+	fy := self ___real___: y.
 	neg := fy @env0:< 0
 		or: [fy @env0:= 0 and: [(1.0 @env0:/ fy) @env0:< 0]].
 	^ neg ifTrue: [mag @env0:negated] ifFalse: [mag]
@@ -515,8 +515,8 @@ ldexp: x _: i
 	OverflowError; INF/NAN pass through unchanged."
 
 	| fx ii mag |
-	fx := self @env1:___real___: x.
-	ii := self @env1:___index___: i.
+	fx := self ___real___: x.
+	ii := self ___index___: i.
 	(fx @env0:_isNaN or: [(fx @env0:_getKind) == 3 or: [fx @env0:= 0.0]])
 		ifTrue: [^ fx].
 	"Inside the representable exponent window, scale as an exact rational and
@@ -531,7 +531,7 @@ ldexp: x _: i
 			ifTrue: [(fx @env0:asFraction @env0:* (2 @env0:raisedTo: ii)) @env0:asFloat]
 			ifFalse: [(fx @env0:asFraction @env0:/ (2 @env0:raisedTo: ii @env0:negated)) @env0:asFloat]]
 		ifFalse: [fx @env0:* (2.0 @env0:raisedTo: ii)].
-	^ self @env1:___rangeCheck___: mag finite: true
+	^ self ___rangeCheck___: mag finite: true
 %
 
 category: 'Grail-Math Functions'
@@ -557,9 +557,9 @@ fma: x _: y _: z
 	the product and c are negative (round-to-nearest)."
 
 	| fa fb fc aInf bInf cInf prodNeg prod r mag |
-	fa := self @env1:___real___: x.
-	fb := self @env1:___real___: y.
-	fc := self @env1:___real___: z.
+	fa := self ___real___: x.
+	fb := self ___real___: y.
+	fc := self ___real___: z.
 	(fa @env0:_isNaN or: [fb @env0:_isNaN or: [fc @env0:_isNaN]]) ifTrue: [^ PlusQuietNaN].
 	aInf := fa @env0:abs @env0:= PlusInfinity.
 	bInf := fb @env0:abs @env0:= PlusInfinity.
@@ -567,7 +567,7 @@ fma: x _: y _: z
 	((aInf and: [fb @env0:= 0.0]) or: [bInf and: [fa @env0:= 0.0]]) ifTrue: [
 		ValueError ___signal___: 'invalid operation in fma'].
 	(aInf or: [bInf]) ifTrue: [
-		prodNeg := (self @env1:___signBit___: fa) @env0:~= (self @env1:___signBit___: fb).
+		prodNeg := (self ___signBit___: fa) @env0:~= (self ___signBit___: fb).
 		prod := prodNeg ifTrue: [MinusInfinity] ifFalse: [PlusInfinity].
 		cInf ifTrue: [
 			^ (fc @env0:= prod)
@@ -577,8 +577,8 @@ fma: x _: y _: z
 	cInf ifTrue: [^ fc].
 	r := ((fa @env0:asFraction) @env0:* (fb @env0:asFraction)) @env0:+ (fc @env0:asFraction).
 	r @env0:= 0 ifTrue: [
-		^ ((self @env1:___signBit___: fa) @env0:~= (self @env1:___signBit___: fb)
-			and: [self @env1:___signBit___: fc])
+		^ ((self ___signBit___: fa) @env0:~= (self ___signBit___: fb)
+			and: [self ___signBit___: fc])
 			ifTrue: [0.0 @env0:negated]
 			ifFalse: [0.0]].
 	mag := r @env0:asFloat.
@@ -601,7 +601,7 @@ ___fsumCoerce___: item
 		((f @env0:_getKind) == 3) ifTrue: [
 			OverflowError ___signal___: 'int too large to convert to float'].
 		^ f].
-	^ self @env1:___real___: item
+	^ self ___real___: item
 %
 
 category: 'Grail-Math Functions'
@@ -648,8 +648,8 @@ fsum: iterable
 	partials := OrderedCollection @env0:new.
 	specialSum := 0.0.
 	infSum := 0.0.
-	(self @env1:___materialize___: iterable) @env0:do: [:item |
-		x := self @env1:___fsumCoerce___: item.
+	(self ___materialize___: iterable) @env0:do: [:item |
+		x := self ___fsumCoerce___: item.
 		xsave := x.
 		i := 0.
 		1 @env0:to: partials @env0:size do: [:jj |
@@ -672,7 +672,7 @@ fsum: iterable
 	(specialSum @env0:~= 0.0 or: [specialSum @env0:_isNaN]) ifTrue: [
 		infSum @env0:_isNaN ifTrue: [ ValueError ___signal___: '-inf + inf in fsum' ].
 		^ specialSum ].
-	^ self @env1:___fsumTotal___: partials
+	^ self ___fsumTotal___: partials
 %
 
 category: 'Grail-Math Functions'
@@ -683,7 +683,7 @@ ulp: x
 	otherwise 2**(exponent - 52)."
 
 	| fx |
-	fx := (self @env1:___real___: x) @env0:abs.
+	fx := (self ___real___: x) @env0:abs.
 	fx @env0:_isNaN ifTrue: [^ fx].
 	fx @env0:= PlusInfinity ifTrue: [^ PlusInfinity].
 	fx @env0:= 0 ifTrue: [^ 5e-324].
@@ -703,15 +703,15 @@ ___nextafterStep___: x up: goingUp
 	| gap e awayFromZero result |
 	awayFromZero := (x @env0:> 0.0) @env0:= goingUp.
 	awayFromZero
-		ifTrue: [gap := self @env1:ulp: x]
+		ifTrue: [gap := self ulp: x]
 		ifFalse: [
 			e := x @env0:abs @env0:exponent.
 			((x @env0:abs @env0:= (2.0 @env0:raisedTo: e)) and: [e @env0:> -1022])
 				ifTrue: [gap := 2.0 @env0:raisedTo: (e @env0:- 53)]
-				ifFalse: [gap := self @env1:ulp: x]].
+				ifFalse: [gap := self ulp: x]].
 	result := goingUp ifTrue: [x @env0:+ gap] ifFalse: [x @env0:- gap].
 	result @env0:= 0.0 ifTrue: [
-		^ (self @env1:___signBit___: x) ifTrue: [0.0 @env0:negated] ifFalse: [0.0]].
+		^ (self ___signBit___: x) ifTrue: [0.0 @env0:negated] ifFalse: [0.0]].
 	^ result
 %
 
@@ -725,10 +725,10 @@ _nextafter: positional kw: kwargs
 	and stepping down off an infinity yields the largest normal."
 
 	| fx fy steps up cur fmax |
-	fx := self @env1:___real___: (positional @env0:at: 1).
-	fy := self @env1:___real___: (positional @env0:at: 2).
+	fx := self ___real___: (positional @env0:at: 1).
+	fy := self ___real___: (positional @env0:at: 2).
 	steps := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'steps'])
-		ifTrue: [self @env1:___index___: (kwargs @env0:at: 'steps')]
+		ifTrue: [self ___index___: (kwargs @env0:at: 'steps')]
 		ifFalse: [1].
 	(fx @env0:_isNaN or: [fy @env0:_isNaN]) ifTrue: [^ PlusQuietNaN].
 	steps @env0:< 0 ifTrue: [
@@ -742,11 +742,11 @@ _nextafter: positional kw: kwargs
 	1 @env0:to: steps do: [:i |
 		(cur @env0:= fy) ifTrue: [^ fy].
 		(cur @env0:abs @env0:= PlusInfinity)
-			ifTrue: [cur := (self @env1:___signBit___: cur) ifTrue: [fmax @env0:negated] ifFalse: [fmax]]
+			ifTrue: [cur := (self ___signBit___: cur) ifTrue: [fmax @env0:negated] ifFalse: [fmax]]
 			ifFalse: [
 				(cur @env0:= 0.0)
 					ifTrue: [cur := up ifTrue: [5e-324] ifFalse: [5e-324 @env0:negated]]
-					ifFalse: [cur := self @env1:___nextafterStep___: cur up: up]]].
+					ifFalse: [cur := self ___nextafterStep___: cur up: up]]].
 	^ cur
 %
 
@@ -766,14 +766,14 @@ _hypot: positional kw: kwargs
 		TypeError ___signal___: 'hypot() takes no keyword arguments'].
 	coords := (positional @env0:size @env0:= 1
 		and: [((positional @env0:at: 1) isKindOf: Number) @env0:not])
-		ifTrue: [self @env1:___materialize___: (positional @env0:at: 1)]
+		ifTrue: [self ___materialize___: (positional @env0:at: 1)]
 		ifFalse: [positional].
 	floats := OrderedCollection @env0:new.
 	hasInf := false.
 	hasNan := false.
 	coords @env0:do: [:c |
 		| f |
-		f := self @env1:___real___: c.
+		f := self ___real___: c.
 		(f @env0:abs @env0:= PlusInfinity) ifTrue: [hasInf := true].
 		f @env0:_isNaN ifTrue: [hasNan := true].
 		floats @env0:add: f].
@@ -782,12 +782,12 @@ _hypot: positional kw: kwargs
 	sumSq := 0.
 	floats @env0:do: [:f | | fr | fr := f @env0:asFraction. sumSq := sumSq @env0:+ (fr @env0:* fr)].
 	sumSq @env0:= 0 ifTrue: [^ 0.0].
-	k := (self @env1:___fracMagnitudeBits___: sumSq) @env0:// 2.
+	k := (self ___fracMagnitudeBits___: sumSq) @env0:// 2.
 	"Correctly-rounded sqrt of the exact sum-of-squares scaled to O(1), then
 	re-apply the 2**k as an exact rational (overflow -> inf, underflow -> the
 	right subnormal; a power-of-two rescale of a normal result is exact, so
 	the single rounding in ___exactSqrtToFloat___ is preserved)."
-	^ ((self @env1:___exactSqrtToFloat___: (sumSq @env0:/ (2 @env0:raisedTo: (2 @env0:* k)))) @env0:asFraction
+	^ ((self ___exactSqrtToFloat___: (sumSq @env0:/ (2 @env0:raisedTo: (2 @env0:* k)))) @env0:asFraction
 		@env0:* (2 @env0:raisedTo: k)) @env0:asFloat
 %
 
@@ -815,15 +815,15 @@ ___exactSqrtToFloat___: q
 	q @env0:= 0 ifTrue: [^ 0.0].
 	approx := q @env0:asFloat @env0:sqrt.
 	[ | up mid |
-		up := self @env1:___nextafterStep___: approx up: true.
+		up := self ___nextafterStep___: approx up: true.
 		mid := (approx @env0:asFraction @env0:+ up @env0:asFraction) @env0:/ 2.
 		q @env0:> (mid @env0:* mid) ] @env0:whileTrue: [
-			approx := self @env1:___nextafterStep___: approx up: true ].
+			approx := self ___nextafterStep___: approx up: true ].
 	[ | down mid |
-		down := self @env1:___nextafterStep___: approx up: false.
+		down := self ___nextafterStep___: approx up: false.
 		mid := (approx @env0:asFraction @env0:+ down @env0:asFraction) @env0:/ 2.
 		q @env0:< (mid @env0:* mid) ] @env0:whileTrue: [
-			approx := self @env1:___nextafterStep___: approx up: false ].
+			approx := self ___nextafterStep___: approx up: false ].
 	^ approx
 %
 
@@ -838,10 +838,10 @@ dist: pIter _: qIter
 	exact."
 
 	| ps qs hasInf hasNan diffs sumSq k |
-	ps := (self @env1:___materialize___: pIter)
-		@env0:collect: [:v | self @env1:___real___: v].
-	qs := (self @env1:___materialize___: qIter)
-		@env0:collect: [:v | self @env1:___real___: v].
+	ps := (self ___materialize___: pIter)
+		@env0:collect: [:v | self ___real___: v].
+	qs := (self ___materialize___: qIter)
+		@env0:collect: [:v | self ___real___: v].
 	ps @env0:size @env0:= qs @env0:size ifFalse: [
 		ValueError ___signal___: 'both points must have the same number of dimensions'].
 	diffs := OrderedCollection @env0:new.
@@ -858,8 +858,8 @@ dist: pIter _: qIter
 	sumSq := 0.
 	diffs @env0:do: [:d | | dr | dr := d @env0:asFraction. sumSq := sumSq @env0:+ (dr @env0:* dr)].
 	sumSq @env0:= 0 ifTrue: [^ 0.0].
-	k := (self @env1:___fracMagnitudeBits___: sumSq) @env0:// 2.
-	^ ((self @env1:___exactSqrtToFloat___: (sumSq @env0:/ (2 @env0:raisedTo: (2 @env0:* k)))) @env0:asFraction
+	k := (self ___fracMagnitudeBits___: sumSq) @env0:// 2.
+	^ ((self ___exactSqrtToFloat___: (sumSq @env0:/ (2 @env0:raisedTo: (2 @env0:* k)))) @env0:asFraction
 		@env0:* (2 @env0:raisedTo: k)) @env0:asFloat
 %
 
@@ -886,8 +886,8 @@ sumprod: pIter _: qIter
 	non-finite) and finishes through the general path with IEEE semantics."
 
 	| ps qs total intTotal fltHi fltLo fltTiny intOn fltOn intInUse fltInUse |
-	ps := self @env1:___materialize___: pIter.
-	qs := self @env1:___materialize___: qIter.
+	ps := self ___materialize___: pIter.
+	qs := self ___materialize___: qIter.
 	(ps @env0:size @env0:= qs @env0:size) @env0:ifFalse: [
 		ValueError ___signal___: 'Inputs are not the same length'].
 	total := 0.
@@ -910,7 +910,7 @@ sumprod: pIter _: qIter
 				@env0:ifFalse: [
 					intOn := false.
 					intInUse @env0:ifTrue: [
-						total := total @env1:__add__: intTotal.
+						total := total __add__: intTotal.
 						intTotal := 0. intInUse := false]]].
 		"Float path: TripleLength compensated dot-product accumulation."
 		(handled @env0:not @env0:and: [fltOn]) @env0:ifTrue: [
@@ -921,17 +921,17 @@ sumprod: pIter _: qIter
 				@env0:or: [(pFlt @env0:and: [(q isKindOf: Integer) @env0:or: [q isKindOf: Boolean]])
 				@env0:or: [qFlt @env0:and: [(p isKindOf: Integer) @env0:or: [p isKindOf: Boolean]]]].
 			canFlt @env0:ifTrue: [
-				tl := self @env1:___tlFma___: (p @env0:asFloat) _: (q @env0:asFloat)
+				tl := self ___tlFma___: (p @env0:asFloat) _: (q @env0:asFloat)
 					hi: fltHi lo: fltLo tiny: fltTiny.
-				(self @env1:___fltFinite___: (tl @env0:at: 1)) @env0:ifTrue: [
+				(self ___fltFinite___: (tl @env0:at: 1)) @env0:ifTrue: [
 					fltHi := tl @env0:at: 1. fltLo := tl @env0:at: 2. fltTiny := tl @env0:at: 3.
 					fltInUse := true.
 					handled := true]].
 			handled @env0:ifFalse: [
 				fltOn := false.
 				fltInUse @env0:ifTrue: [
-					total := total @env1:__add__:
-						(self @env1:___tlToD___: fltHi lo: fltLo tiny: fltTiny).
+					total := total __add__:
+						(self ___tlToD___: fltHi lo: fltLo tiny: fltTiny).
 					fltHi := 0.0. fltLo := 0.0. fltTiny := 0.0. fltInUse := false]]].
 		"General path: env-1 protocol (Fraction/Decimal, error propagation)."
 		handled @env0:ifFalse: [
@@ -945,13 +945,13 @@ sumprod: pIter _: qIter
 			((pInt @env0:and: [qFl]) @env0:or: [qInt @env0:and: [pFl]]) @env0:ifTrue: [
 				| theInt |
 				theInt := pInt @env0:ifTrue: [p] @env0:ifFalse: [q].
-				(self @env1:___fltFinite___: (theInt @env0:asFloat)) @env0:ifFalse: [
+				(self ___fltFinite___: (theInt @env0:asFloat)) @env0:ifFalse: [
 					OverflowError ___signal___: 'int too large to convert to float']].
-			total := total @env1:__add__: (p @env1:__mul__: q)]].
+			total := total __add__: (p __mul__: q)]].
 	"Flush any surviving sub-totals -- int before float, matching CPython."
-	intInUse @env0:ifTrue: [total := total @env1:__add__: intTotal].
+	intInUse @env0:ifTrue: [total := total __add__: intTotal].
 	fltInUse @env0:ifTrue: [
-		total := total @env1:__add__: (self @env1:___tlToD___: fltHi lo: fltLo tiny: fltTiny)].
+		total := total __add__: (self ___tlToD___: fltHi lo: fltLo tiny: fltTiny)].
 	^ total
 %
 
@@ -991,7 +991,7 @@ ___dlMul___: x _: y
 
 	| z |
 	z := x @env0:* y.
-	(self @env1:___fltFinite___: z) @env0:ifFalse: [^ Array @env0:with: z @env0:with: 0.0].
+	(self ___fltFinite___: z) @env0:ifFalse: [^ Array @env0:with: z @env0:with: 0.0].
 	^ Array @env0:with: z
 		@env0:with: (((x @env0:asFraction) @env0:* (y @env0:asFraction))
 			@env0:- (z @env0:asFraction)) @env0:asFloat
@@ -1005,10 +1005,10 @@ ___tlFma___: x _: y hi: h lo: l tiny: t
 	triple-length total.  Returns {hi. lo. tiny}."
 
 	| pr sm r1 r2 |
-	pr := self @env1:___dlMul___: x _: y.
-	sm := self @env1:___dlSum___: h _: (pr @env0:at: 1).
-	r1 := self @env1:___dlSum___: l _: (pr @env0:at: 2).
-	r2 := self @env1:___dlSum___: (r1 @env0:at: 1) _: (sm @env0:at: 2).
+	pr := self ___dlMul___: x _: y.
+	sm := self ___dlSum___: h _: (pr @env0:at: 1).
+	r1 := self ___dlSum___: l _: (pr @env0:at: 2).
+	r2 := self ___dlSum___: (r1 @env0:at: 1) _: (sm @env0:at: 2).
 	^ Array @env0:with: (sm @env0:at: 1) @env0:with: (r2 @env0:at: 1)
 		@env0:with: ((t @env0:+ (r1 @env0:at: 2)) @env0:+ (r2 @env0:at: 2))
 %
@@ -1020,7 +1020,7 @@ ___tlToD___: h lo: l tiny: t
 	(CPython tl_to_d)."
 
 	| last |
-	last := self @env1:___dlSum___: l _: h.
+	last := self ___dlSum___: l _: h.
 	^ (t @env0:+ (last @env0:at: 2)) @env0:+ (last @env0:at: 1)
 %
 
@@ -1061,7 +1061,7 @@ ___real___: x
 	rather than a method def; load it as an attribute so the descriptor's
 	__get__ fires (BadDescr raises ValueError) instead of a spurious TypeError."
 	((x @env0:class @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) ~~ nil)
-		ifTrue: [^ ((x @env1:___pyAttrLoad___: #'__float__') @env1:value: { } value: nil) @env0:asFloat].
+		ifTrue: [^ ((x ___pyAttrLoad___: #'__float__') value: { } value: nil) @env0:asFloat].
 	TypeError ___signal___: ('must be real number, not '
 		@env0:, x @env0:class @env0:name @env0:asString)
 %
@@ -1073,8 +1073,8 @@ _isclose: positional kw: kwargs
 	test_math imports it at module scope."
 
 	| a b relTol absTol diff |
-	a := self @env1:___real___: (positional @env0:at: 1).
-	b := self @env1:___real___: (positional @env0:at: 2).
+	a := self ___real___: (positional @env0:at: 1).
+	b := self ___real___: (positional @env0:at: 2).
 	relTol := (positional @env0:size @env0:>= 3)
 		ifTrue: [positional @env0:at: 3]
 		ifFalse: [(kwargs ~~ nil and: [kwargs @env0:includesKey: 'rel_tol'])
@@ -1102,13 +1102,13 @@ _isclose: positional kw: kwargs
 category: 'Grail-Angle Conversion'
 method: math
 degrees: x
-	^ (self @env1:___real___: x) @env0:radiansToDegrees
+	^ (self ___real___: x) @env0:radiansToDegrees
 %
 
 category: 'Grail-Angle Conversion'
 method: math
 radians: x
-	^ (self @env1:___real___: x) @env0:degreesToRadians
+	^ (self ___real___: x) @env0:degreesToRadians
 %
 
 ! ===============================================================================
@@ -1138,7 +1138,7 @@ isqrt: n
 	would lose precision)."
 
 	| v x y |
-	v := self @env1:___index___: n.
+	v := self ___index___: n.
 	v @env0:< 0 ifTrue: [
 		ValueError ___signal___: 'isqrt() argument must be nonnegative'].
 	v @env0:<= 1 ifTrue: [^ v].
@@ -1155,8 +1155,8 @@ comb: n _: k
 	k > n; both args must be non-negative integers."
 
 	| nn kk r |
-	nn := self @env1:___index___: n.
-	kk := self @env1:___index___: k.
+	nn := self ___index___: n.
+	kk := self ___index___: k.
 	(nn @env0:< 0 or: [kk @env0:< 0]) ifTrue: [
 		ValueError ___signal___: 'n and k must be non-negative integers'].
 	kk @env0:> nn ifTrue: [^ 0].
@@ -1171,7 +1171,7 @@ method: math
 perm: n
 	"perm(n) = n! (the one-argument form)."
 
-	^ self @env1:perm: n _: None
+	^ self perm: n _: None
 %
 
 category: 'Grail-Number Theory'
@@ -1181,11 +1181,11 @@ perm: n _: k
 	n (i.e. n!).  0 when k > n; args must be non-negative integers."
 
 	| nn kk r |
-	nn := self @env1:___index___: n.
+	nn := self ___index___: n.
 	nn @env0:< 0 ifTrue: [
 		ValueError ___signal___: 'n must be a non-negative integer'].
-	k == None ifTrue: [^ self @env1:factorial: nn].
-	kk := self @env1:___index___: k.
+	k == None ifTrue: [^ self factorial: nn].
+	kk := self ___index___: k.
 	kk @env0:< 0 ifTrue: [
 		ValueError ___signal___: 'k must be a non-negative integer'].
 	kk @env0:> nn ifTrue: [^ 0].
@@ -1201,7 +1201,7 @@ _gcd: positional kw: kwargs
 
 	| r |
 	r := 0.
-	positional @env0:do: [:a | r := r @env0:gcd: (self @env1:___index___: a)].
+	positional @env0:do: [:a | r := r @env0:gcd: (self ___index___: a)].
 	^ r
 %
 
@@ -1214,7 +1214,7 @@ _lcm: positional kw: kwargs
 	r := 1.
 	positional @env0:do: [:a |
 		| v |
-		v := self @env1:___index___: a.
+		v := self ___index___: a.
 		r := v @env0:= 0 ifTrue: [0] ifFalse: [r @env0:lcm: v]].
 	^ r
 %
@@ -1224,7 +1224,7 @@ method: math
 prod: iterable
 	"math.prod(iterable) -- product with the default start of 1."
 
-	^ self @env1:_prod: (Array @env0:with: iterable) kw: nil
+	^ self _prod: (Array @env0:with: iterable) kw: nil
 %
 
 category: 'Grail-Math Functions'
@@ -1245,9 +1245,9 @@ _prod: positional kw: kwargs
 	acc := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'start'])
 		ifTrue: [kwargs @env0:at: 'start'] ifFalse: [1].
 	iter := positional @env0:at: 1.
-	elements := self @env1:___materialize___: iter.
+	elements := self ___materialize___: iter.
 	elements @env0:do: [:v |
-		acc := acc @env1:__mul__: v.
+		acc := acc __mul__: v.
 	].
 	^ acc
 %
@@ -1262,11 +1262,11 @@ exp2: x
 	"2 ** x (as float)."
 
 	| f |
-	f := self @env1:___real___: x.
+	f := self ___real___: x.
 	f @env0:_isNaN ifTrue: [^ f].
 	(f @env0:_getKind) == 3 ifTrue: [
 		^ f @env0:> 0 ifTrue: [PlusInfinity] ifFalse: [0.0]].
-	^ self @env1:___rangeCheck___: (2.0 @env0:raisedTo: f) finite: true
+	^ self ___rangeCheck___: (2.0 @env0:raisedTo: f) finite: true
 %
 
 category: 'Grail-Exponential and Logarithmic'
@@ -1278,7 +1278,7 @@ log1p: x
 	is preserved (log1p(-0.0) = -0.0)."
 
 	| f u |
-	f := self @env1:___real___: x.
+	f := self ___real___: x.
 	f @env0:_isNaN ifTrue: [^ f].
 	u := 1.0 @env0:+ f.
 	"log1p(-1) is log(0), and x <= -1 is log of a negative: domain error."
@@ -1296,7 +1296,7 @@ cbrt: x
 	"Real cube root, sign-preserving (cbrt(-27) = -3, cbrt(-0.0) = -0.0)."
 
 	| f |
-	f := self @env1:___real___: x.
+	f := self ___real___: x.
 	f @env0:_isNaN ifTrue: [^ f].
 	f @env0:= 0 ifTrue: [^ f].
 	f @env0:< 0 ifTrue: [^ ((f @env0:abs) @env0:raisedTo: (1.0 @env0:/ 3.0)) @env0:negated].
@@ -1308,7 +1308,7 @@ method: math
 erf: x
 	"Gauss error function (GemStone Float>>erf)."
 
-	^ (self @env1:___real___: x) @env0:erf
+	^ (self ___real___: x) @env0:erf
 %
 
 category: 'Grail-Math Functions'
@@ -1318,7 +1318,7 @@ erfc: x
 	accurate in the tail where 1 - erf(x) would cancel.  erfc(+inf) = 0,
 	erfc(-inf) = 2, erfc(nan) = nan (handled by the primitive)."
 
-	^ (self @env1:___real___: x) @env0:erfc
+	^ (self ___real___: x) @env0:erfc
 %
 
 category: 'Grail-Math Functions'
@@ -1330,7 +1330,7 @@ expm1: x
 	that overflows the double range raises OverflowError (as in CPython)."
 
 	| f u |
-	f := self @env1:___real___: x.
+	f := self ___real___: x.
 	f @env0:_isNaN ifTrue: [^ f].
 	(f @env0:_getKind) == 3 ifTrue: [
 		f @env0:> 0 ifTrue: [^ PlusInfinity].
@@ -1395,7 +1395,7 @@ ___sinpi___: x
 	always finite here."
 
 	| pi y n r |
-	pi := self @env1:pi.
+	pi := self pi.
 	y := (x @env0:abs) @env0:rem: 2.0.
 	n := (2.0 @env0:* y) @env0:rounded.
 	n @env0:= 0 ifTrue: [r := (pi @env0:* y) @env0:sin] ifFalse: [
@@ -1403,7 +1403,7 @@ ___sinpi___: x
 	n @env0:= 2 ifTrue: [r := (pi @env0:* (1.0 @env0:- y)) @env0:sin] ifFalse: [
 	n @env0:= 3 ifTrue: [r := ((pi @env0:* (y @env0:- 1.5)) @env0:cos) @env0:negated] ifFalse: [
 	r := (pi @env0:* (y @env0:- 2.0)) @env0:sin]]]].
-	^ (self @env1:copysign: 1.0 _: x) @env0:* r
+	^ (self copysign: 1.0 _: x) @env0:* r
 %
 
 category: 'Grail-Math Functions'
@@ -1415,7 +1415,7 @@ gamma: x
 	GemStone Float has no gamma primitive."
 
 	| f absx r y z sqrtpow gi domainMsg |
-	f := self @env1:___real___: x.
+	f := self ___real___: x.
 	"CPython's gamma names the value in EVERY domain error (0, the negative
 	integers, and -inf all share this message, not the generic ``math
 	domain error'' -- test_exception_messages checks it)."
@@ -1447,7 +1447,7 @@ gamma: x
 		^ r].
 	"Large arguments: overflow for x > 200; underflow to +/-0.0 for x < -200."
 	absx @env0:> 200.0 ifTrue: [
-		f @env0:< 0.0 ifTrue: [^ 0.0 @env0:/ (self @env1:___sinpi___: f)].
+		f @env0:< 0.0 ifTrue: [^ 0.0 @env0:/ (self ___sinpi___: f)].
 		OverflowError ___signal___: 'math range error'].
 	y := absx @env0:+ 5.524680040776729583740234375.
 	(absx @env0:> 5.524680040776729583740234375)
@@ -1456,8 +1456,8 @@ gamma: x
 	z := (z @env0:* 6.024680040776729583740234375) @env0:/ y.
 	f @env0:< 0.0
 		ifTrue: [
-			r := (((((self @env1:pi) @env0:negated @env0:/ (self @env1:___sinpi___: absx))
-				@env0:/ absx) @env0:* (y @env0:exp)) @env0:/ (self @env1:___lanczosSum___: absx)).
+			r := (((((self pi) @env0:negated @env0:/ (self ___sinpi___: absx))
+				@env0:/ absx) @env0:* (y @env0:exp)) @env0:/ (self ___lanczosSum___: absx)).
 			r := r @env0:- (z @env0:* r).
 			absx @env0:< 140.0
 				ifTrue: [r := r @env0:/ (y @env0:raisedTo: (absx @env0:- 0.5))]
@@ -1465,7 +1465,7 @@ gamma: x
 					sqrtpow := y @env0:raisedTo: ((absx @env0:/ 2.0) @env0:- 0.25).
 					r := (r @env0:/ sqrtpow) @env0:/ sqrtpow]]
 		ifFalse: [
-			r := (self @env1:___lanczosSum___: absx) @env0:/ (y @env0:exp).
+			r := (self ___lanczosSum___: absx) @env0:/ (y @env0:exp).
 			r := r @env0:+ (z @env0:* r).
 			absx @env0:< 140.0
 				ifTrue: [r := r @env0:* (y @env0:raisedTo: (absx @env0:- 0.5))]
@@ -1486,7 +1486,7 @@ lgamma: x
 	has no lgamma primitive."
 
 	| f absx r |
-	f := self @env1:___real___: x.
+	f := self ___real___: x.
 	"Non-finite: nan passes through; +/-inf give +inf."
 	(f @env0:_isNaN) @env0:ifTrue: [^ f].
 	(f @env0:_getKind) == 3 ifTrue: [^ PlusInfinity].
@@ -1497,12 +1497,12 @@ lgamma: x
 	absx := f @env0:abs.
 	"Tiny arguments: lgamma(x) ~ -log|x|."
 	absx @env0:< 1e-20 ifTrue: [^ (absx @env0:ln) @env0:negated].
-	r := ((self @env1:___lanczosSum___: absx) @env0:ln) @env0:- 6.024680040776729583740234375.
+	r := ((self ___lanczosSum___: absx) @env0:ln) @env0:- 6.024680040776729583740234375.
 	r := r @env0:+ ((absx @env0:- 0.5)
 		@env0:* (((absx @env0:+ 6.024680040776729583740234375) @env0:- 0.5) @env0:ln @env0:- 1)).
 	f @env0:< 0.0 ifTrue: [
 		r := ((1.144729885849400174143427351353058711647
-			@env0:- (((self @env1:___sinpi___: absx) @env0:abs) @env0:ln))
+			@env0:- (((self ___sinpi___: absx) @env0:abs) @env0:ln))
 			@env0:- (absx @env0:ln)) @env0:- r].
 	(r @env0:_getKind) == 3 ifTrue: [
 		OverflowError ___signal___: 'math range error'].
@@ -1516,8 +1516,8 @@ fmod: x _: y
 	error."
 
 	| fx fy r |
-	fx := self @env1:___real___: x.
-	fy := self @env1:___real___: y.
+	fx := self ___real___: x.
+	fy := self ___real___: y.
 	"NaN propagates; an infinite x or a zero y is a domain error."
 	(fx @env0:_isNaN or: [fy @env0:_isNaN]) ifTrue: [^ fx @env0:+ fy].
 	((fx @env0:_getKind) == 3 or: [fy @env0:= 0.0]) ifTrue: [
@@ -1527,7 +1527,7 @@ fmod: x _: y
 	r := fx @env0:rem: fy.
 	"C fmod's result carries x's sign, including the sign of a zero result
 	(fmod(-10, 1) is -0.0)."
-	r @env0:= 0.0 ifTrue: [^ self @env1:copysign: 0.0 _: fx].
+	r @env0:= 0.0 ifTrue: [^ self copysign: 0.0 _: fx].
 	^ r
 %
 
@@ -1552,8 +1552,8 @@ remainder: x _: y
 	remainder(x, 0) are domain errors; NaN propagates."
 
 	| fx fy fxr fyr n r |
-	fx := self @env1:___real___: x.
-	fy := self @env1:___real___: y.
+	fx := self ___real___: x.
+	fy := self ___real___: y.
 	(fx @env0:_isNaN or: [fy @env0:_isNaN]) ifTrue: [^ fx @env0:+ fy].
 	(fx @env0:_getKind) == 3 ifTrue: [
 		ValueError ___signal___: 'math domain error'].
@@ -1565,11 +1565,11 @@ remainder: x _: y
 	is always finite; the rational form is overflow-free and rounds once."
 	fxr := fx @env0:asFraction.
 	fyr := fy @env0:asFraction.
-	n := self @env1:___roundHalfEvenFrac___: (fxr @env0:/ fyr).
+	n := self ___roundHalfEvenFrac___: (fxr @env0:/ fyr).
 	r := (fxr @env0:- (n @env0:* fyr)) @env0:asFloat.
 	"IEEE: a zero remainder carries the sign of x (remainder(-4, 1) = -0.0),
 	but rational subtraction yields +0.0 either way."
-	r @env0:= 0.0 ifTrue: [^ self @env1:copysign: 0.0 _: fx].
+	r @env0:= 0.0 ifTrue: [^ self copysign: 0.0 _: fx].
 	^ r
 %
 
@@ -1594,7 +1594,7 @@ frexp: x
 	x give (x, 0))."
 
 	| f e m |
-	f := self @env1:___real___: x.
+	f := self ___real___: x.
 	(f @env0:_isNaN or: [(f @env0:_getKind) == 3]) ifTrue: [
 		^ (Python @env0:at: #tuple) @env0:withAll: (Array @env0:with: f with: 0)].
 	f @env0:= 0 ifTrue: [
@@ -1611,12 +1611,12 @@ modf: x
 	sign (modf(INF) = (0.0, INF), modf(-1.5) = (-0.5, -1.0))."
 
 	| f ip |
-	f := self @env1:___real___: x.
+	f := self ___real___: x.
 	f @env0:_isNaN ifTrue: [
 		^ (Python @env0:at: #tuple) @env0:withAll: (Array @env0:with: f with: f)].
 	(f @env0:_getKind) == 3 ifTrue: [
 		^ (Python @env0:at: #tuple) @env0:withAll:
-			(Array @env0:with: (self @env1:copysign: 0.0 _: f) with: f)].
+			(Array @env0:with: (self copysign: 0.0 _: f) with: f)].
 	ip := f @env0:truncated @env0:asFloat.
 	^ (Python @env0:at: #tuple) @env0:withAll:
 		(Array @env0:with: (f @env0:- ip) with: ip)

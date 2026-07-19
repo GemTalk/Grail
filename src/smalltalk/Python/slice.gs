@@ -67,10 +67,10 @@ ___newStart: aStart stop: aStop step: aStep
 	directly via the ___pyAttrLoad___ dynamic probe."
 
 	| inst |
-	inst := self @env0:new.
-	inst @env0:dynamicInstVarAt: #start put: aStart.
-	inst @env0:dynamicInstVarAt: #stop put: aStop.
-	inst @env0:dynamicInstVarAt: #step put: aStep.
+	inst := self new.
+	inst dynamicInstVarAt: #start put: aStart.
+	inst dynamicInstVarAt: #stop put: aStop.
+	inst dynamicInstVarAt: #step put: aStep.
 	^ inst
 %
 
@@ -136,15 +136,15 @@ __repr__
 	| sep |
 	sep := ', '.
 	^ ('slice(' @env0:,
-		(self start @env1:__repr__) @env0:, sep @env0:,
-		(self stop @env1:__repr__) @env0:, sep @env0:,
-		(self step @env1:__repr__)) @env0:, ')'
+		(self start __repr__) @env0:, sep @env0:,
+		(self stop __repr__) @env0:, sep @env0:,
+		(self step __repr__)) @env0:, ')'
 %
 
 category: 'Python-Conversion'
 method: slice
 __str__
-	^ self @env1:__repr__
+	^ self __repr__
 %
 
 category: 'Python-Comparison'
@@ -154,9 +154,9 @@ __eq__: other
 	equal under Python equality rules."
 
 	(other isKindOf: slice) ifFalse: [^ false].
-	^ ((self start = other @env1:start)
-		and: [self stop = other @env1:stop])
-		and: [self step = other @env1:step]
+	^ ((self start = other start)
+		and: [self stop = other stop])
+		and: [self step = other step]
 %
 
 category: 'Python-Methods'

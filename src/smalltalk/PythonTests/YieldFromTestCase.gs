@@ -53,7 +53,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'yield_from' ifAbsent: [].
+	mods removeKey: #'yield_from' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/yield_from.py')
 		name: 'yield_from'.
@@ -67,11 +67,11 @@ testYieldFromGeneratorForwardsItems
 
 	| result |
 	result := testModule @env1:yield_from_generator.
-	self assert: result @env0:size equals: 4.
-	self assert: (result @env0:at: 1) equals: 1.
-	self assert: (result @env0:at: 2) equals: 2.
-	self assert: (result @env0:at: 3) equals: 3.
-	self assert: (result @env0:at: 4) equals: 99
+	self assert: result size equals: 4.
+	self assert: (result at: 1) equals: 1.
+	self assert: (result at: 2) equals: 2.
+	self assert: (result at: 3) equals: 3.
+	self assert: (result at: 4) equals: 99
 %
 
 category: 'Grail-Tests - yield from sequence'
@@ -81,10 +81,10 @@ testYieldFromListForwardsItems
 
 	| result |
 	result := testModule @env1:yield_from_list.
-	self assert: result @env0:size equals: 3.
-	self assert: (result @env0:at: 1) equals: 10.
-	self assert: (result @env0:at: 2) equals: 20.
-	self assert: (result @env0:at: 3) equals: 30
+	self assert: result size equals: 3.
+	self assert: (result at: 1) equals: 10.
+	self assert: (result at: 2) equals: 20.
+	self assert: (result at: 3) equals: 30
 %
 
 category: 'Grail-Tests - empty inner'
@@ -95,8 +95,8 @@ testYieldFromEmptyGenerator
 
 	| result |
 	result := testModule @env1:yield_from_empty_generator.
-	self assert: result @env0:size equals: 1.
-	self assert: (result @env0:at: 1) equals: 'done'
+	self assert: result size equals: 1.
+	self assert: (result at: 1) equals: 'done'
 %
 
 category: 'Grail-Tests - nested chain'
@@ -107,9 +107,9 @@ testYieldFromNestedChain
 
 	| result |
 	result := testModule @env1:yield_from_nested.
-	self assert: result @env0:size equals: 4.
-	self assert: (result @env0:at: 1) equals: 'a'.
-	self assert: (result @env0:at: 2) equals: 'b'.
-	self assert: (result @env0:at: 3) equals: 'c'.
-	self assert: (result @env0:at: 4) equals: 'd'
+	self assert: result size equals: 4.
+	self assert: (result at: 1) equals: 'a'.
+	self assert: (result at: 2) equals: 'b'.
+	self assert: (result at: 3) equals: 'c'.
+	self assert: (result at: 4) equals: 'd'
 %

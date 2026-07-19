@@ -181,7 +181,7 @@ ___new__: args kw: kw
 	just (value) -- the value is always the LAST positional."
 
 	(Enum ___grailBuildingSet @env0:includes: self) ifTrue: [
-		^ TypeError @env1:___signal___:
+		^ TypeError ___signal___:
 			'do not use `super().__new__; call the appropriate __new__ directly'].
 	^ Enum ___grailLookupValue: self value: (args @env0:at: args @env0:size)
 %
@@ -281,7 +281,7 @@ ___grailBuildMembers: cls names: attrNames
 	nil and its __new__ walk hits ``nil superClass'' instead of reaching
 	Enum's guard.  Only matters when a user __new__ exists."
 	hasUserNew ifTrue: [
-		cls @env1:___pyAttrStore___:
+		cls ___pyAttrStore___:
 			('___cell_' @env0:, cls @env0:name @env0:asString @env0:, '___') @env0:asSymbol
 			put: cls].
 	"Members build while cls is in the building set: a member __new__
@@ -367,8 +367,8 @@ ___grailBuildMembers: cls names: attrNames
 									newArgs := (rawValue isKindOf: tupleClass)
 										ifTrue: [rawValue @env0:asArray]
 										ifFalse: [Array @env0:with: rawValue].
-									member := (UnboundMethod @env1:definingClass: cls selector: #'__new__')
-										@env1:value: ({ cls } @env0:, newArgs) value: KeyValueDictionary @env0:new.
+									member := (UnboundMethod definingClass: cls selector: #'__new__')
+										value: ({ cls } @env0:, newArgs) value: KeyValueDictionary @env0:new.
 									"CPython: a member's canonical value is its _value_, set by
 									__new__.  When __new__ left it unset, fall back to the raw
 									class-body value (a fuller member_type(*args) reconstruction
@@ -422,7 +422,7 @@ ___grailBuildMembers: cls names: attrNames
 	only; _order_ conventionally lists canonical names).  Read guarded: no
 	_order_ declared -> nil -> skip."
 	[ | orderVal |
-	orderVal := [cls @env1:___pyAttrLoad___: #'_order_']
+	orderVal := [cls ___pyAttrLoad___: #'_order_']
 		@env0:on: AbstractException do: [:ex | nil].
 	(orderVal isKindOf: CharacterCollection) ifTrue: [
 		| orderNames memberNames |
@@ -439,7 +439,7 @@ ___grailBuildMembers: cls names: attrNames
 				(byName @env0:includesKey: n)
 					and: [(memberNames @env0:includes: n) @env0:not]].
 		orderNames @env0:asArray @env0:= memberNames ifFalse: [
-			TypeError @env1:___signal___: cls @env0:name @env0:asString
+			TypeError ___signal___: cls @env0:name @env0:asString
 				@env0:, ': member order does not match _order_']] ] @env0:value.
 	"Drop the ClassDefAst-emitted generic instantiation (env-1
 	``value:value:``) so calling the class — Color(value) — reaches the
@@ -517,7 +517,7 @@ ___grailIsFlagClass: cls
 
 	((cls == Flag) or: [cls @env0:inheritsFrom: Flag]) ifTrue: [^ true].
 	((cls == IntFlag) or: [cls @env0:inheritsFrom: IntFlag]) ifTrue: [^ true].
-	^ [ (cls @env1:__mro__) @env0:includesIdentical: Flag ]
+	^ [ (cls __mro__) @env0:includesIdentical: Flag ]
 		@env0:on: Error do: [:e | e @env0:return: false]
 %
 
@@ -533,7 +533,7 @@ ___grailIsStrEnumClass: cls
 	se := Python @env0:at: #'StrEnum' otherwise: nil.
 	se == nil ifTrue: [^ false].
 	((cls == se) or: [cls @env0:inheritsFrom: se]) ifTrue: [^ true].
-	^ [ (cls @env1:__mro__) @env0:includesIdentical: se ]
+	^ [ (cls __mro__) @env0:includesIdentical: se ]
 		@env0:on: Error do: [:e | e @env0:return: false]
 %
 
@@ -810,21 +810,21 @@ ___grailConvert: positional kw: kwargs forType: etype
 	srcMod := ((kwargs ~~ nil and: [kwargs @env0:includesKey: 'source'])
 		and: [(kwargs @env0:at: 'source') ~~ nil])
 		ifTrue: [kwargs @env0:at: 'source']
-		ifFalse: [(Python @env0:at: #importlib) @env1:modules @env0:at: modName otherwise: nil].
+		ifFalse: [(Python @env0:at: #importlib) modules @env0:at: modName otherwise: nil].
 	srcMod == nil ifTrue: [
-		^ ValueError @env1:___signal___: 'module ''' @env0:, modName @env0:asString @env0:, ''' not found'].
-	srcNs := srcMod @env1:__dict__.
+		^ ValueError ___signal___: 'module ''' @env0:, modName @env0:asString @env0:, ''' not found'].
+	srcNs := srcMod __dict__.
 	"Collect (name, value) pairs whose name passes filter()."
 	memberPairs := OrderedCollection @env0:new.
 	srcNs @env0:keysAndValuesDo: [:k :v |
 		(filterFn == nil
-			or: [(filterFn @env1:value: (Array @env0:with: k @env0:asString) value: nil) ___isTruthy___])
+			or: [(filterFn value: (Array @env0:with: k @env0:asString) value: nil) ___isTruthy___])
 			ifTrue: [memberPairs @env0:add: (Array @env0:with: k @env0:asString with: v)]].
 	"Sort by (value, name); on non-orderable values, sort by name alone."
 	sortedPairs := [(memberPairs @env0:asSortedCollection: [:a :b |
-		((a @env0:at: 2) @env1:__eq__: (b @env0:at: 2)) ___isTruthy___
+		((a @env0:at: 2) __eq__: (b @env0:at: 2)) ___isTruthy___
 			ifTrue: [(a @env0:at: 1) @env0:<= (b @env0:at: 1)]
-			ifFalse: [((a @env0:at: 2) @env1:__lt__: (b @env0:at: 2)) ___isTruthy___]]) @env0:asArray]
+			ifFalse: [((a @env0:at: 2) __lt__: (b @env0:at: 2)) ___isTruthy___]]) @env0:asArray]
 		@env0:on: AbstractException
 		do: [:ex |
 			(memberPairs @env0:asSortedCollection: [:a :b | (a @env0:at: 1) @env0:<= (b @env0:at: 1)]) @env0:asArray].
@@ -890,7 +890,7 @@ ___grailCompileOverrideForwarder: cls name: nm
 	^ self ___grailInvokeOverride: ''__format__'' args: { spec }']
 		ifFalse: [src := nm @env0:, '
 	^ self ___grailInvokeOverride: ''' @env0:, nm @env0:, ''' args: #()'].
-	cls @env1:___compileMethod: src category: 'Grail-Enum Member'
+	cls ___compileMethod: src category: 'Grail-Enum Member'
 %
 
 category: 'Grail-Enum Member'
@@ -909,8 +909,8 @@ ___grailInvokeOverride: nm args: argArray
 			per := tbl @env0:at: walker otherwise: nil.
 			per == nil ifFalse: [callable := per @env0:at: nm otherwise: nil].
 			walker := walker @env0:superClass]].
-	callable == nil ifTrue: [^ self @env1:__repr__].
-	^ callable @env1:value: ({ self } @env0:, argArray) value: nil
+	callable == nil ifTrue: [^ self __repr__].
+	^ callable value: ({ self } @env0:, argArray) value: nil
 %
 
 ! ------------------- Enum class: metaclass entry points
@@ -997,7 +997,7 @@ classmethod: Enum
 __reversed__
 	"reversed(Color) -- members in reverse definition order."
 
-	^ (list @env0:withAll: (Enum ___grailMembers: self) @env0:reverse) @env1:__iter__
+	^ (list @env0:withAll: (Enum ___grailMembers: self) @env0:reverse) __iter__
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1009,7 +1009,7 @@ __getitem__: aName
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
 __iter__
-	^ (Enum ___grailMembers: self) @env1:__iter__
+	^ (Enum ___grailMembers: self) __iter__
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1055,13 +1055,13 @@ __repr__
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
 __str__
-	^ self @env1:__repr__
+	^ self __repr__
 %
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
 __format__: aSpec
-	^ self @env1:__repr__
+	^ self __repr__
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1069,7 +1069,7 @@ classmethod: Enum
 mro
 	"cls.mro() -- the resolution order as a LIST (CPython type.mro())."
 
-	^ list @env0:withAll: (self @env1:__mro__)
+	^ list @env0:withAll: (self __mro__)
 %
 
 category: 'Grail-Class Attrs'
@@ -1174,7 +1174,7 @@ __contains__: aValue
 category: 'Grail-Enum Metaclass'
 classmethod: IntEnum
 __reversed__
-	^ (list @env0:withAll: (Enum ___grailMembers: self) @env0:reverse) @env1:__iter__
+	^ (list @env0:withAll: (Enum ___grailMembers: self) @env0:reverse) __iter__
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1186,7 +1186,7 @@ __getitem__: aName
 category: 'Grail-Enum Metaclass'
 classmethod: IntEnum
 __iter__
-	^ (Enum ___grailMembers: self) @env1:__iter__
+	^ (Enum ___grailMembers: self) __iter__
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1225,19 +1225,19 @@ __repr__
 category: 'Grail-Enum Metaclass'
 classmethod: IntEnum
 __str__
-	^ self @env1:__repr__
+	^ self __repr__
 %
 
 category: 'Grail-Enum Metaclass'
 classmethod: IntEnum
 __format__: aSpec
-	^ self @env1:__repr__
+	^ self __repr__
 %
 
 category: 'Grail-Enum Metaclass'
 classmethod: IntEnum
 mro
-	^ list @env0:withAll: (self @env1:__mro__)
+	^ list @env0:withAll: (self __mro__)
 %
 
 category: 'Grail-Class Attrs'
@@ -1333,7 +1333,7 @@ __format__: aSpec
 	(IntEnum, AbstractPyInt-rooted) do NOT inherit this -- they keep the
 	data type's numeric formatting, which is correct."
 
-	^ (self @env1:__str__) @env1:__format__: aSpec
+	^ (self __str__) __format__: aSpec
 %
 
 category: 'Grail-Enum Member'
@@ -1514,7 +1514,7 @@ __str__
 	enum-style (<Size.BIG: 7>, above).  IntFlag < IntEnum inherits this,
 	which is correct (str(anIntFlag) is its int too)."
 
-	^ (self @env0:value) @env1:__str__
+	^ (self @env0:value) __str__
 %
 
 category: 'Grail-Enum Member'
@@ -1524,7 +1524,7 @@ __format__: aSpec
 	numeric spec (format(Size.BIG, 'd')) works and an empty spec yields the
 	int str -- delegate to the int value's __format__."
 
-	^ (self @env0:value) @env1:__format__: aSpec
+	^ (self @env0:value) __format__: aSpec
 %
 
 ! ------------------- IntFlag members: Flag's bitwise algebra over the
@@ -1700,7 +1700,7 @@ __contains__: aValue
 category: 'Grail-Enum Metaclass'
 classmethod: StrEnum
 __reversed__
-	^ (list @env0:withAll: (Enum ___grailMembers: self) @env0:reverse) @env1:__iter__
+	^ (list @env0:withAll: (Enum ___grailMembers: self) @env0:reverse) __iter__
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1712,7 +1712,7 @@ __getitem__: aName
 category: 'Grail-Enum Metaclass'
 classmethod: StrEnum
 __iter__
-	^ (Enum ___grailMembers: self) @env1:__iter__
+	^ (Enum ___grailMembers: self) __iter__
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1742,19 +1742,19 @@ __repr__
 category: 'Grail-Enum Metaclass'
 classmethod: StrEnum
 __str__
-	^ self @env1:__repr__
+	^ self __repr__
 %
 
 category: 'Grail-Enum Metaclass'
 classmethod: StrEnum
 __format__: aSpec
-	^ self @env1:__repr__
+	^ self __repr__
 %
 
 category: 'Grail-Enum Metaclass'
 classmethod: StrEnum
 mro
-	^ list @env0:withAll: (self @env1:__mro__)
+	^ list @env0:withAll: (self __mro__)
 %
 
 category: 'Grail-Class Attrs'
@@ -1809,7 +1809,7 @@ __repr__
 
 	| nm val |
 	nm := self @env0:dynamicInstVarAt: #name.
-	val := (self @env0:dynamicInstVarAt: #value) @env1:__repr__.
+	val := (self @env0:dynamicInstVarAt: #value) __repr__.
 	^ '<' @env0:, self @env0:class @env0:name @env0:asString @env0:, '.'
 		@env0:, nm @env0:asString @env0:, ': ' @env0:, val @env0:asString @env0:, '>'
 %

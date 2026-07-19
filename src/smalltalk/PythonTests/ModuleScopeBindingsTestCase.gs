@@ -51,7 +51,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'module_scope_bindings' ifAbsent: [].
+	mods removeKey: #'module_scope_bindings' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/module_scope_bindings.py')
 		name: 'module_scope_bindings'.

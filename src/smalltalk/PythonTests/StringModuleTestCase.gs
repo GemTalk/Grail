@@ -306,7 +306,7 @@ testWhitespace
 	backslash escapes, so asserting containment of ``\t'' would lock
 	in a bug in the constant."
 	self assert: (result @env1:__contains__: ' ').
-	self assert: (result @env1:__contains__: (Unicode7 @env0:with: (Character @env0:codePoint: 9))).
-	self assert: (result @env1:__contains__: (Unicode7 @env0:with: (Character @env0:codePoint: 10))).
-	self assert: (result @env0:size) equals: 6
+	self assert: (result @env1:__contains__: (Unicode7 with: (Character codePoint: 9))).
+	self assert: (result @env1:__contains__: (Unicode7 with: (Character codePoint: 10))).
+	self assert: (result size) equals: 6
 %

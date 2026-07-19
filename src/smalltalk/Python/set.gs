@@ -66,7 +66,7 @@ method: set
 __iand__: other
 	"In-place intersection: self &= other. Returns self."
 
-	self @env1:intersection_update: other.
+	self intersection_update: other.
 	^ self
 %
 
@@ -75,7 +75,7 @@ method: set
 __ior__: other
 	"In-place union: self |= other. Returns self."
 
-	self @env1:update: other.
+	self update: other.
 	^ self
 %
 
@@ -84,7 +84,7 @@ method: set
 __isub__: other
 	"In-place difference: self -= other. Returns self."
 
-	self @env1:difference_update: other.
+	self difference_update: other.
 	^ self
 %
 
@@ -93,7 +93,7 @@ method: set
 __ixor__: other
 	"In-place symmetric difference: self ^= other. Returns self."
 
-	self @env1:symmetric_difference_update: other.
+	self symmetric_difference_update: other.
 	^ self
 %
 
@@ -116,7 +116,7 @@ __repr__
 	first := true.
 	self @env0:do: [:each |
 		first ifFalse: [stream @env0:nextPutAll: ', '].
-		stream @env0:nextPutAll: each @env1:__repr__.
+		stream @env0:nextPutAll: each __repr__.
 		first := false
 	].
 
@@ -149,7 +149,7 @@ difference_update: other
 	toRemove := list ___new___.
 
 	self @env0:do: [:each |
-		(other @env1:__contains__: each) ifTrue: [
+		(other __contains__: each) ifTrue: [
 			toRemove @env0:add: each
 		]
 	].
@@ -165,7 +165,7 @@ discard: item
 	"Remove an element from the set if it is present."
 
 	self @env0:do: [:each |
-		(each @env1:__eq__: item) ifTrue: [
+		(each __eq__: item) ifTrue: [
 			self @env0:remove: each.
 			^ nil
 		]
@@ -181,7 +181,7 @@ intersection_update: other
 	toRemove := list ___new___.
 
 	self @env0:do: [:each |
-		(other @env1:__contains__: each) ifFalse: [
+		(other __contains__: each) ifFalse: [
 			toRemove @env0:add: each
 		]
 	].
@@ -224,7 +224,7 @@ remove: item
 	| removed |
 	removed := false.
 	self @env0:do: [:each |
-		(each @env1:__eq__: item) ifTrue: [
+		(each __eq__: item) ifTrue: [
 			self @env0:remove: each.
 			removed := true.
 			^ nil
@@ -247,14 +247,14 @@ symmetric_difference_update: other
 
 	"Find elements in self that are also in other (to remove)"
 	self @env0:do: [:each |
-		(other @env1:__contains__: each) ifTrue: [
+		(other __contains__: each) ifTrue: [
 			toRemove @env0:add: each
 		]
 	].
 
 	"Find elements in other that are not in self (to add)"
 	other @env0:do: [:each |
-		(self @env1:__contains__: each) ifFalse: [
+		(self __contains__: each) ifFalse: [
 			toAdd @env0:add: each
 		]
 	].

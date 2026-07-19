@@ -43,7 +43,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'next_iter' ifAbsent: [].
+	mods removeKey: #'next_iter' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/next_iter.py')
 		name: 'next_iter'.

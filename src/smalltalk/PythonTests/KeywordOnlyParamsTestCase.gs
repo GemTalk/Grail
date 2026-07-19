@@ -42,9 +42,9 @@ method: KeywordOnlyParamsTestCase
 loadFixture
 	"Load tests/python/keyword_only_params.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'keyword_only_params' ifAbsent: [].
+	importlib @env1:modules removeKey: #'keyword_only_params' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/keyword_only_params.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/keyword_only_params.py')
 		name: 'keyword_only_params'
 %
 
@@ -59,7 +59,7 @@ testKwonlyBoundAndNotLeaked
 	self assert: (d @env1:__getitem__: 'buffered') equals: true.
 	self assert: (d @env1:__getitem__: 'follow_redirects') equals: false.
 	self assert: (d @env1:__getitem__: 'kwargs_empty') equals: true.
-	self assert: (d @env1:__getitem__: 'extra_keys') @env0:size equals: 0
+	self assert: (d @env1:__getitem__: 'extra_keys') size equals: 0
 %
 
 category: 'Grail-Tests-KeywordOnly'
@@ -83,7 +83,7 @@ testExtrasLandInKwargs
 	d := self loadFixture @env1:extras_land_in_kwargs.
 	self assert: (d @env1:__getitem__: 'buffered') equals: true.
 	extras := d @env1:__getitem__: 'extra_keys'.
-	self assert: extras @env0:size equals: 2.
+	self assert: extras size equals: 2.
 	self assert: (extras @env1:__getitem__: 0) equals: 'ham'.
 	self assert: (extras @env1:__getitem__: 1) equals: 'spam'
 %
@@ -101,11 +101,11 @@ testCallerDictNotMutated
 	self assert: (r @env1:__getitem__: 0) equals: 5.
 	"**kwargs holds only the non-param key x."
 	kwargsKeys := r @env1:__getitem__: 1.
-	self assert: kwargsKeys @env0:size equals: 1.
+	self assert: kwargsKeys size equals: 1.
 	self assert: (kwargsKeys @env1:__getitem__: 0) equals: 'x'.
 	"The caller's dict still has BOTH keys — unmutated."
 	sharedKeys := r @env1:__getitem__: 2.
-	self assert: sharedKeys @env0:size equals: 2.
+	self assert: sharedKeys size equals: 2.
 	self assert: (sharedKeys @env1:__getitem__: 0) equals: 'opt'.
 	self assert: (sharedKeys @env1:__getitem__: 1) equals: 'x'
 %

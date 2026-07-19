@@ -76,7 +76,7 @@ initialize
 	binds to the callable rather than invoking the unary method
 	immediately and binding its result (an integer).  Werkzeug's
 	sansio.multipart hits this via ``State(Enum): PREAMBLE = auto()''."
-	self @env0:dynamicInstVarAt: #auto put: (BoundMethod @env1:receiver: self selector: #auto)
+	self @env0:dynamicInstVarAt: #auto put: (BoundMethod receiver: self selector: #auto)
 %
 
 ! ===============================================================================

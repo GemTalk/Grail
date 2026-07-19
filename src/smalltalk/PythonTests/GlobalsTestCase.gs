@@ -48,7 +48,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'globals_probe' ifAbsent: [].
+	mods removeKey: #'globals_probe' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/globals_probe.py')
 		name: 'globals_probe'

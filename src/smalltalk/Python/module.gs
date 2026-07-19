@@ -97,10 +97,10 @@ ___sessionInstances___
 	extent is rebuilt, so no migration is needed)."
 
 	| reg |
-	reg := SessionTemps @env0:current @env0:at: #GrailModuleInstances otherwise: nil.
-	reg @env0:isNil ifTrue: [
-		reg := IdentityKeyValueDictionary @env0:new.
-		SessionTemps @env0:current @env0:at: #GrailModuleInstances put: reg].
+	reg := SessionTemps current at: #GrailModuleInstances otherwise: nil.
+	reg isNil ifTrue: [
+		reg := IdentityKeyValueDictionary new.
+		SessionTemps current at: #GrailModuleInstances put: reg].
 	^ reg
 %
 
@@ -168,7 +168,7 @@ instance
 	inst == nil ifTrue: [
 		inst := self @env0:new.
 		reg @env0:at: self put: inst.
-		inst @env1:initialize
+		inst initialize
 	].
 	^ inst
 %
@@ -406,8 +406,8 @@ ___moduleAttrLoad___: aSym
 	the NameError — matching ``KeyError → NameError'' in CPython's
 	__globals__[name] lookup."
 
-	^ self @env1:___globalAt___: aSym otherwise: [
-		NameError @env1:___signal___:
+	^ self ___globalAt___: aSym otherwise: [
+		NameError ___signal___:
 			'name ''' @env0:, aSym @env0:asString @env0:, ''' is not defined']
 %
 
@@ -455,7 +455,7 @@ ___globalAt___: aSym otherwise: aBlock
 	the first read."
 	((cls @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil) ifTrue: [
 		| fn |
-		fn := BoundMethod @env1:receiver: self selector: aSym.
+		fn := BoundMethod receiver: self selector: aSym.
 		self @env0:dynamicInstVarAt: aSym put: fn.
 		^ fn
 	].
@@ -474,7 +474,7 @@ ___globalAt___: aSym otherwise: aBlock
 		or: [(cls @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
 		or: [(cls @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil]]) ifTrue: [
 		| fn |
-		fn := BoundMethod @env1:receiver: self selector: aSym.
+		fn := BoundMethod receiver: self selector: aSym.
 		self @env0:dynamicInstVarAt: aSym put: fn.
 		^ fn
 	].
@@ -486,7 +486,7 @@ ___globalAt___: aSym otherwise: aBlock
 		2 to: arity do: [:_ | candidate := candidate @env0:, '_:'].
 		(cls @env0:whichClassIncludesSelector: candidate @env0:asSymbol environmentId: 1) notNil ifTrue: [
 			| fn |
-			fn := BoundMethod @env1:receiver: self selector: aSym.
+			fn := BoundMethod receiver: self selector: aSym.
 			self @env0:dynamicInstVarAt: aSym put: fn.
 			^ fn
 		].
@@ -505,7 +505,7 @@ ___globalAt___: aSym otherwise: aBlock
 	owner notNil ifTrue: [
 		owner == module
 			ifTrue: [^ self @env0:perform: aSym env: 1]
-			ifFalse: [^ BoundMethod @env1:receiver: self selector: aSym]
+			ifFalse: [^ BoundMethod receiver: self selector: aSym]
 	].
 	"Legacy SymbolDictionary fallback for built-in modules that
 	store some attrs in the dict slot."
@@ -578,7 +578,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	with no value) yielded nil rather than MNU."
 
 	| val s sym1 sym2 sym3 symVA cls |
-	val := self @env0:dynamicInstVarAt: aSelector.
+	val := self dynamicInstVarAt: aSelector.
 	val == nil ifFalse: [^ val].
 	"Lazy-wrap top-level def: probe the module class's env-1 method
 	dict for a same-named fixed-arity or varargs selector.  When
@@ -586,18 +586,18 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	(``f = mod.foo'') see a callable handle even though we no
 	longer pre-store one at def time."
 	(anArray isNil or: [anArray isEmpty]) ifTrue: [
-		cls := self @env0:class.
-		s := aSelector @env0:asString.
-		symVA := ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol.
-		((cls @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil) ifTrue: [
+		cls := self class.
+		s := aSelector asString.
+		symVA := ('_' , s , ':kw:') asSymbol.
+		((cls whichClassIncludesSelector: symVA environmentId: 1) notNil) ifTrue: [
 			^ BoundMethod @env1:receiver: self selector: aSelector
 		].
-		sym1 := (s @env0:, ':') @env0:asSymbol.
-		sym2 := (s @env0:, ':_:') @env0:asSymbol.
-		sym3 := (s @env0:, ':_:_:') @env0:asSymbol.
-		(((cls @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil)
-			or: [(cls @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
-			or: [(cls @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil]]) ifTrue: [
+		sym1 := (s , ':') asSymbol.
+		sym2 := (s , ':_:') asSymbol.
+		sym3 := (s , ':_:_:') asSymbol.
+		(((cls whichClassIncludesSelector: sym1 environmentId: 1) notNil)
+			or: [(cls whichClassIncludesSelector: sym2 environmentId: 1) notNil
+			or: [(cls whichClassIncludesSelector: sym3 environmentId: 1) notNil]]) ifTrue: [
 			^ BoundMethod @env1:receiver: self selector: aSelector
 		].
 	].
@@ -615,7 +615,7 @@ cantPerform: aSymbol withArguments: anArray env: envId
 	storage first, then the SymbolDictionary slot."
 
 	| val |
-	val := self @env0:dynamicInstVarAt: aSymbol.
+	val := self dynamicInstVarAt: aSymbol.
 	val == nil ifFalse: [^ val].
 	(self includesKey: aSymbol) ifTrue: [^ self at: aSymbol].
 	^ super cantPerform: aSymbol withArguments: anArray env: envId

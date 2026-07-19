@@ -55,7 +55,7 @@ setUp
 	starts from a known state."
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'grail_smalltalk_class' ifAbsent: [].
+	mods removeKey: #'grail_smalltalk_class' ifAbsent: [].
 	self removeExtensionMethods.
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_smalltalk_class.py')
@@ -68,14 +68,14 @@ removeExtensionMethods
 	"Remove all 'Grail-ST-Extension' methods installed on GrailSTestTarget
 	so each test begins with a clean class."
 	| md toRemove |
-	md := GrailSTestTarget @env0:methodDictForEnv: 1.
+	md := GrailSTestTarget methodDictForEnv: 1.
 	md isNil ifTrue: [^ self].
 	toRemove := OrderedCollection new.
-	md @env0:keysDo: [:sel |
+	md keysDo: [:sel |
 		| cat |
-		cat := GrailSTestTarget @env0:categoryOfSelector: sel environmentId: 1.
+		cat := GrailSTestTarget categoryOfSelector: sel environmentId: 1.
 		(cat notNil and: [cat = 'Grail-ST-Extension']) ifTrue: [toRemove add: sel]].
-	toRemove do: [:sel | GrailSTestTarget @env0:removeSelector: sel environmentId: 1].
+	toRemove do: [:sel | GrailSTestTarget removeSelector: sel environmentId: 1].
 %
 
 ! ===============================================================================
@@ -100,7 +100,7 @@ testNullaryMethodInstalled
 	"A method defined inside @smalltalk_class body is callable on instances
 	of the target Smalltalk class."
 	| inst result |
-	inst := GrailSTestTarget @env0:new.
+	inst := GrailSTestTarget new.
 	result := inst @env1:grail_hello.
 	self assert: result equals: 'hello from grail'.
 %
@@ -110,7 +110,7 @@ method: GrailModuleTestCase
 testMethodWithArguments
 	"A method with positional arguments is installed and returns the correct value."
 	| inst result |
-	inst := GrailSTestTarget @env0:new.
+	inst := GrailSTestTarget new.
 	result := inst @env1:grail_add: 3 _: 4.
 	self assert: result equals: 7.
 %
@@ -135,7 +135,7 @@ testMissingSlotsMustRaiseTypeError
 	"Importing a module whose @smalltalk_class class omits __slots__ raises TypeError."
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'grail_smalltalk_class_no_slots' ifAbsent: [].
+	mods removeKey: #'grail_smalltalk_class_no_slots' ifAbsent: [].
 	self should: [
 		importlib
 			loadModuleFromPath: (importlib grailDir , '/tests/python/grail_smalltalk_class_no_slots.py')
@@ -149,7 +149,7 @@ testWrongSlotsMustRaiseTypeError
 	"Importing a module whose __slots__ don't match the target's instVarNames raises TypeError."
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'grail_smalltalk_class_wrong_slots' ifAbsent: [].
+	mods removeKey: #'grail_smalltalk_class_wrong_slots' ifAbsent: [].
 	self should: [
 		importlib
 			loadModuleFromPath: (importlib grailDir , '/tests/python/grail_smalltalk_class_wrong_slots.py')
@@ -162,7 +162,7 @@ method: GrailModuleTestCase
 testClassNotFoundRaisesAttributeError
 	"Looking up a class that doesn't exist raises AttributeError."
 	self should: [
-		grail @env0:___lookupClass: 'NoSuchClassXYZ987' inDictionary: 'Globals'
+		grail ___lookupClass: 'NoSuchClassXYZ987' inDictionary: 'Globals'
 	] raise: AttributeError.
 %
 

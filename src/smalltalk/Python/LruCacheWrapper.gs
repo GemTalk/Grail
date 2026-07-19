@@ -49,7 +49,7 @@ _setWrapped: aFunction maxsize: aMaxsize
 	maxsize := (aMaxsize == nil or: [aMaxsize == None])
 		ifTrue: [None]
 		ifFalse: [(aMaxsize isKindOf: Integer)
-			ifTrue: [aMaxsize @env0:< 0 ifTrue: [0] ifFalse: [aMaxsize]]
+			ifTrue: [aMaxsize < 0 ifTrue: [0] ifFalse: [aMaxsize]]
 			ifFalse: [None]]
 %
 
@@ -92,7 +92,7 @@ value: positional value: kwargs
 	nothing is retained (test_lru_cache_size_zero / negative maxsize)."
 	maxsize == 0 ifTrue: [
 		misses := (misses == nil ifTrue: [0] ifFalse: [misses]) @env0:+ 1.
-		^ wrapped @env1:value: positional value: kwargs].
+		^ wrapped value: positional value: kwargs].
 	key := (positional == nil ifTrue: [#()] ifFalse: [positional]) @env0:asArray.
 	(kwargs ~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
 		| pairs sortedKeys |
@@ -107,7 +107,7 @@ value: positional value: kwargs
 	result == nil ifFalse: [
 		hits := (hits == nil ifTrue: [0] ifFalse: [hits]) @env0:+ 1.
 		^ result].
-	result := wrapped @env1:value: positional value: kwargs.
+	result := wrapped value: positional value: kwargs.
 	misses := (misses == nil ifTrue: [0] ifFalse: [misses]) @env0:+ 1.
 	cache @env0:at: key put: result.
 	^ result
@@ -120,7 +120,7 @@ ___call___: positional kw: kwargs
 	CallAst fast path tries ``___call___:kw:`` when the receiver
 	doesn't match a simpler shape."
 
-	^ self @env1:value: positional value: kwargs
+	^ self value: positional value: kwargs
 %
 
 category: 'Grail-Calling'
@@ -133,7 +133,7 @@ ___pyCallValue___: positional kw: kwargs
 	@lru_cache-decorated and invoked indirectly through
 	_get_callable_parameters."
 
-	^ self @env1:value: positional value: kwargs
+	^ self value: positional value: kwargs
 %
 
 category: 'Grail-Attributes'

@@ -55,7 +55,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'lambda_starargs' ifAbsent: [].
+	mods removeKey: #'lambda_starargs' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/lambda_starargs.py')
 		name: 'lambda_starargs'.

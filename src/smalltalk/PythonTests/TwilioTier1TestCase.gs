@@ -57,7 +57,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'twilio_tier1' ifAbsent: [].
+	mods removeKey: #'twilio_tier1' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/twilio_tier1.py')
 		name: 'twilio_tier1'.

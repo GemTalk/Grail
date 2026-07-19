@@ -69,7 +69,7 @@ __eq__: other
 		(self @env0:= other) ifTrue: [^ true].
 		(self @env0:size) @env0:= (other @env0:size) ifFalse: [^ false].
 		1 @env0:to: self @env0:size do: [:i |
-			(((self @env0:at: i) @env1:__eq__: (other @env0:at: i)) == true)
+			(((self @env0:at: i) __eq__: (other @env0:at: i)) == true)
 				ifFalse: [^ false]].
 		^ true].
 
@@ -85,7 +85,7 @@ __eq__: other
 		ifTrue: [
 			(self @env0:size) @env0:= (other @env0:size) ifFalse: [^ false].
 			1 @env0:to: self @env0:size do: [:i |
-				(((self @env0:at: i) @env1:__eq__: (other @env0:at: i)) == true)
+				(((self @env0:at: i) __eq__: (other @env0:at: i)) == true)
 					ifFalse: [^ false]].
 			^ true].
 	^ false
@@ -143,7 +143,7 @@ __ge__: other
 	[i @env0:<= minSize] @env0:whileTrue: [
 		a := self @env0:at: i.
 		b := other @env0:at: i.
-		(a @env0:= b) ifFalse: [^ a @env1:__ge__: b].
+		(a @env0:= b) ifFalse: [^ a __ge__: b].
 		i := i @env0:+ 1
 	].
 	^ size @env0:>= otherSize
@@ -168,7 +168,7 @@ __gt__: other
 	[i @env0:<= minSize] @env0:whileTrue: [
 		a := self @env0:at: i.
 		b := other @env0:at: i.
-		(a @env0:= b) ifFalse: [^ a @env1:__gt__: b].
+		(a @env0:= b) ifFalse: [^ a __gt__: b].
 		i := i @env0:+ 1
 	].
 	^ size @env0:> otherSize
@@ -193,7 +193,7 @@ __le__: other
 	[i @env0:<= minSize] @env0:whileTrue: [
 		a := self @env0:at: i.
 		b := other @env0:at: i.
-		(a @env0:= b) ifFalse: [^ a @env1:__le__: b].
+		(a @env0:= b) ifFalse: [^ a __le__: b].
 		i := i @env0:+ 1
 	].
 	^ size @env0:<= otherSize
@@ -218,7 +218,7 @@ __lt__: other
 	[i @env0:<= minSize] @env0:whileTrue: [
 		a := self @env0:at: i.
 		b := other @env0:at: i.
-		(a @env0:= b) ifFalse: [^ a @env1:__lt__: b].
+		(a @env0:= b) ifFalse: [^ a __lt__: b].
 		i := i @env0:+ 1
 	].
 	^ size @env0:< otherSize
@@ -235,16 +235,16 @@ __getitem__: index
 
 	| size idx |
 	(index isKindOf: slice) ifTrue: [
-		^ self @env1:___getslice___: index @env1:start
-			_: index @env1:stop
-			_: index @env1:step
+		^ self ___getslice___: index start
+			_: index stop
+			_: index step
 	].
 	"Non-integer, non-slice index: catchable TypeError (CPython message
 	shape) instead of an uncatchable env-0 comparison DNU on the index."
 	((index isKindOf: Integer)
 		or: [(index @env0:class
 			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
-		TypeError @env1:___signal___: ('indices must be integers or slices, not '
+		TypeError ___signal___: ('indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	size := self @env0:size.
 	idx := index.
@@ -323,7 +323,7 @@ __iter__
 	Array, which is what Interval>>___getslice___ returns) fall through
 	to a generic tuple_iterator wrapping the receiver."
 
-	^ tuple_iterator @env1:___on: self
+	^ tuple_iterator ___on: self
 %
 
 category: 'Grail-Sequence Protocol'

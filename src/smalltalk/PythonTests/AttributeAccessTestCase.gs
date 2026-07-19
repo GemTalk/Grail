@@ -49,7 +49,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'attribute_access' ifAbsent: [].
+	mods removeKey: #'attribute_access' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/attribute_access.py')
 		name: 'attribute_access'.

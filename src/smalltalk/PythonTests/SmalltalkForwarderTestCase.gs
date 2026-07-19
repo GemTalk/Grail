@@ -103,7 +103,7 @@ setUp
 	"Clear the module cache and load the @smalltalk-forwarder fixture."
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'smalltalk_forwarder' ifAbsent: [].
+	mods removeKey: #'smalltalk_forwarder' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/smalltalk_forwarder.py')
 		name: 'smalltalk_forwarder'.
@@ -211,7 +211,7 @@ testVarargsForwarderRaises
 	argument) is rejected at compile time."
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'smalltalk_forwarder_varargs' ifAbsent: [].
+	mods removeKey: #'smalltalk_forwarder_varargs' ifAbsent: [].
 	self should: [
 		importlib
 			loadModuleFromPath: (importlib grailDir , '/tests/python/smalltalk_forwarder_varargs.py')

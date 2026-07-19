@@ -91,7 +91,7 @@ testReloadReThenCallableSubWorks
 	| mod |
 	self eval: 'import re'.
 	importlib removeModule: 're'.
-	importlib @env1:modules @env0:removeKey: #'re_sub_callable' ifAbsent: [].
+	importlib @env1:modules removeKey: #'re_sub_callable' ifAbsent: [].
 	mod := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/re_sub_callable.py')
 		name: 're_sub_callable'.

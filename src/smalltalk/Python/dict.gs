@@ -54,14 +54,14 @@ __new__: source
 	ChainMap, OrderedDict subclasses, and any user mapping that
 	exposes ``keys`` + ``__getitem__`` (jinja2's render path passes
 	a ChainMap through ``dict(globals, **{})``)."
-	keysMethod := [source @env1:keys] @env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: #__noKeys__].
+	keysMethod := [source keys] @env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: #__noKeys__].
 	keysMethod == #__noKeys__ ifFalse: [
 		keysIter := keysMethod __iter__.
 		done := false.
 		[done] @env0:whileFalse: [
 			[
 				k := keysIter __next__.
-				result @env0:at: k put: (source @env1:__getitem__: k).
+				result @env0:at: k put: (source __getitem__: k).
 			] @env0:on: StopIteration do: [:ex | done := true].
 		].
 		^ result
@@ -91,7 +91,7 @@ fromkeys: iterable
 	iterable, each mapped to None.  Used by re._parser to dedupe
 	a list while preserving insertion order (`list(dict.fromkeys(xs))`)."
 
-	^ self @env1:fromkeys: iterable _: None
+	^ self fromkeys: iterable _: None
 %
 
 category: 'Grail-Initialization'
@@ -138,7 +138,7 @@ _new: positional kw: keywords
 	].
 	result := positional @env0:isEmpty
 		ifTrue: [self ___new___]
-		ifFalse: [self @env1:__new__: (positional @env0:at: 1)].
+		ifFalse: [self __new__: (positional @env0:at: 1)].
 	keywords ifNotNil: [
 		keywords @env0:keysAndValuesDo: [:k :v |
 			result @env0:at: k @env0:asString put: v
@@ -197,8 +197,8 @@ __init__: source
 		^ None].
 	"Mapping protocol: iterate keys + index by [k]."
 	((source @env0:class @env0:whichClassIncludesSelector: #'keys' environmentId: 1) notNil) ifTrue: [
-		(source @env1:keys) @env0:do: [:k |
-			self @env0:at: k put: (source @env1:__getitem__: k)].
+		(source keys) @env0:do: [:k |
+			self @env0:at: k put: (source __getitem__: k)].
 		^ None].
 	"Iterable of (k, v) pairs — fall back to plain do."
 	source @env0:do: [:pair |
@@ -224,7 +224,7 @@ ___init__: positional kw: keywords
 	true), so flask.config.Config's ``super().__init__(defaults)''
 	keeps its existing dispatch."
 
-	^ self @env1:___initFrom___: positional kw: keywords
+	^ self ___initFrom___: positional kw: keywords
 %
 
 category: 'Grail-Initialization'
@@ -242,7 +242,7 @@ ___initFrom___: positional kw: keywords
 	(positional @env0:size @env0:> 1) ifTrue: [
 		TypeError ___signal___: 'dict expected at most 1 positional argument'].
 	positional @env0:isEmpty ifFalse: [
-		(dict @env1:__new__: (positional @env0:at: 1)) @env0:keysAndValuesDo: [:k :v |
+		(dict __new__: (positional @env0:at: 1)) @env0:keysAndValuesDo: [:k :v |
 			self @env0:at: k put: v]].
 	keywords ifNotNil: [
 		keywords @env0:keysAndValuesDo: [:k :v |
@@ -298,7 +298,7 @@ __eq__: other
 			^ false
 		].
 		otherValue := other @env0:at: key.
-		(value @env1:__eq__: otherValue) ifFalse: [
+		(value __eq__: otherValue) ifFalse: [
 			^ false
 		]
 	].
@@ -331,7 +331,7 @@ category: 'Grail-Iterator Protocol'
 method: dict
 __iter__
 	"Return an iterator over the keys of the dictionary"
-	^ dict_keyiterator @env1:___on: self
+	^ dict_keyiterator ___on: self
 %
 
 category: 'Grail-Collection Protocol'
@@ -345,7 +345,7 @@ category: 'Grail-Comparison'
 method: dict
 __ne__: other
 	"Return True if dictionaries do not have the same (key, value) pairs"
-	^ (self @env1:__eq__: other) @env0:not
+	^ (self __eq__: other) @env0:not
 %
 
 category: 'Grail-String Representation'
@@ -375,8 +375,8 @@ __repr__
 
 	self @env0:keysAndValuesDo: [:key :value |
 		| keyRepr valueRepr |
-		keyRepr := key @env1:__repr__.
-		valueRepr := value @env1:__repr__.
+		keyRepr := key __repr__.
+		valueRepr := value __repr__.
 		stream @env0:nextPutAll: keyRepr.
 		stream @env0:nextPutAll: ': '.
 		stream @env0:nextPutAll: valueRepr.
@@ -431,7 +431,7 @@ category: 'Grail-Access Methods'
 method: dict
 get: key
 	"Return the value for key if key is in the dictionary, else None"
-	^ self @env1:get: key _: None
+	^ self get: key _: None
 %
 
 category: 'Grail-Access Methods'
@@ -545,7 +545,7 @@ category: 'Grail-Mutation Methods'
 method: dict
 setdefault: key
 	"If key is in the dictionary, return its value. If not, insert key with value None and return None"
-	^ self @env1:setdefault: key _: nil
+	^ self setdefault: key _: nil
 %
 
 category: 'Grail-Mutation Methods'
@@ -574,14 +574,14 @@ update: other
 		^ None].
 	"Python mapping protocol: other exposes keys + __getitem__
 	(PyInstanceDict, user mappings) -- mirrors ___fromMapping___."
-	keysMethod := [other @env1:keys]
+	keysMethod := [other keys]
 		@env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: #__noKeys__].
 	(keysMethod == #__noKeys__) ifFalse: [
 		keysIter := keysMethod __iter__.
 		done := false.
 		[done] @env0:whileFalse: [
 			[k := keysIter __next__.
-			self @env0:at: k put: (other @env1:__getitem__: k)]
+			self @env0:at: k put: (other __getitem__: k)]
 				@env0:on: StopIteration do: [:ex | done := true]].
 		^ None].
 	"Iterable of 2-element pairs, via the __iter__ protocol.  A plain
@@ -602,11 +602,11 @@ update: other
 				@env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) ~~ nil]) ifFalse: [
 			TypeError ___signal___: 'cannot convert dictionary update sequence element #'
 				@env0:, idx @env0:printString @env0:, ' to a sequence'].
-		(pair @env1:__len__ @env0:= 2) ifFalse: [
+		(pair __len__ @env0:= 2) ifFalse: [
 			ValueError ___signal___: 'dictionary update sequence element #'
 				@env0:, idx @env0:printString @env0:, ' has length '
-				@env0:, pair @env1:__len__ @env0:printString @env0:, '; 2 is required'].
-		self @env0:at: (pair @env1:__getitem__: 0) put: (pair @env1:__getitem__: 1).
+				@env0:, pair __len__ @env0:printString @env0:, '; 2 is required'].
+		self @env0:at: (pair __getitem__: 0) put: (pair __getitem__: 1).
 		idx := idx @env0:+ 1]
 			@env0:on: StopIteration do: [:ex | done := true]]
 %
@@ -620,7 +620,7 @@ _update: positional kw: kwargs
 	get_flashed_messages=..., config=...)''."
 
 	positional @env0:isEmpty ifFalse: [
-		self @env1:update: (positional @env0:at: 1)
+		self update: (positional @env0:at: 1)
 	].
 	(kwargs @env0:isNil not and: [kwargs @env0:isEmpty not]) ifTrue: [
 		kwargs @env0:keysAndValuesDo: [:key :value |
@@ -641,7 +641,7 @@ __reversed__
 	| ks |
 	ks := OrderedCollection @env0:new.
 	self @env0:keysDo: [:k | ks @env0:add: k].
-	^ (ks @env0:reverse) @env1:__iter__
+	^ (ks @env0:reverse) __iter__
 %
 
 category: 'Grail-View Methods'

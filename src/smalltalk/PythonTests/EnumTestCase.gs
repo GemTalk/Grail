@@ -47,7 +47,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'use_enum' ifAbsent: [].
+	mods removeKey: #'use_enum' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/use_enum.py')
 		name: 'use_enum'.

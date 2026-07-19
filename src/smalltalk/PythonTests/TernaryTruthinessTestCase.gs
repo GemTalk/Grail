@@ -58,7 +58,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'ternary_truthiness' ifAbsent: [].
+	mods removeKey: #'ternary_truthiness' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/ternary_truthiness.py')
 		name: 'ternary_truthiness'.

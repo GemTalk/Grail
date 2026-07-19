@@ -309,7 +309,7 @@ method: builtins
 enumerate: anIterable
 	"Python builtin enumerate(iterable) — fixed-arity fast path (start=0)."
 
-	^ self @env1:___enumerate___: anIterable start: 0
+	^ self ___enumerate___: anIterable start: 0
 %
 
 category: 'Grail-Built-in Functions'
@@ -318,7 +318,7 @@ enumerate: anIterable _: startValue
 	"Python builtin enumerate(iterable, start) — the 2-positional form
 	(enum.py's own _EnumDict / _iter helpers pass an explicit start)."
 
-	^ self @env1:___enumerate___: anIterable start: startValue
+	^ self ___enumerate___: anIterable start: startValue
 %
 
 category: 'Grail-Built-in Functions'
@@ -336,7 +336,7 @@ _enumerate: positional kw: kwargs
 			kwargs @env0:isNil
 				ifTrue: [0]
 				ifFalse: [kwargs @env0:at: 'start' ifAbsent: [0]]].
-	^ self @env1:___enumerate___: iterable start: start
+	^ self ___enumerate___: iterable start: start
 %
 
 category: 'Grail-Built-in Functions'
@@ -411,7 +411,7 @@ iter: anObject
 				(anObject @env0:class @env0:name) @env0:,
 				''' object is not iterable')
 		].
-	^ anObject @env1:__iter__
+	^ anObject __iter__
 %
 
 category: 'Grail-Built-in Functions'
@@ -427,7 +427,7 @@ next: anIterator
 	its iterator first — ``next(genexp)'' then yields its first
 	element (the ``first match'' idiom in django's accepted_type)."
 
-	^ (self @env1:___asIterator___: anIterator) @env1:__next__
+	^ (self ___asIterator___: anIterator) __next__
 %
 
 category: 'Grail-Built-in Functions'
@@ -440,7 +440,7 @@ ___asIterator___: anIterator
 
 	((anIterator @env0:class @env0:whichClassIncludesSelector: #'__next__' environmentId: 1) isNil
 		and: [(anIterator @env0:class @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) notNil])
-		ifTrue: [^ anIterator @env1:__iter__].
+		ifTrue: [^ anIterator __iter__].
 	^ anIterator
 %
 
@@ -453,7 +453,7 @@ next: anIterator _: aDefault
 	(though that one always pops a real key, so the default path
 	is the safety net)."
 
-	^ [(self @env1:___asIterator___: anIterator) @env1:__next__]
+	^ [(self ___asIterator___: anIterator) __next__]
 		@env0:on: StopIteration
 		do: [:ex | aDefault]
 %
@@ -521,7 +521,7 @@ _min: positional kw: kwargs
 	pick smallest by ``key'' (if given) or natural comparison.
 	``default'' only consulted when iterable is empty."
 
-	^ self @env1:___minOrMax___: positional kw: kwargs lessThan: true
+	^ self ___minOrMax___: positional kw: kwargs lessThan: true
 %
 
 category: 'Grail-Built-in Functions'
@@ -529,7 +529,7 @@ method: builtins
 _max: positional kw: kwargs
 	"Python ``max(iterable, *, key=None, default=...)'' varargs form."
 
-	^ self @env1:___minOrMax___: positional kw: kwargs lessThan: false
+	^ self ___minOrMax___: positional kw: kwargs lessThan: false
 %
 
 category: 'Grail-Built-in Functions'
@@ -548,7 +548,7 @@ ___minOrMax___: positional kw: kwargs lessThan: pickSmaller
 	iterable := (positional @env0:size) @env0:= 1
 		@env0:ifTrue: [positional @env0:at: 1]
 		@env0:ifFalse: [positional].
-	iter := iterable @env1:__iter__.
+	iter := iterable __iter__.
 	gotAny := false.
 	done := false.
 	best := nil.
@@ -556,17 +556,17 @@ ___minOrMax___: positional kw: kwargs lessThan: pickSmaller
 	[done] @env0:whileFalse: [
 		[
 			| item itemKey isBetter |
-			item := iter @env1:__next__.
+			item := iter __next__.
 			itemKey := keyFn @env0:isNil @env0:ifTrue: [item] @env0:ifFalse: [
-				keyFn @env1:___pyCallValue___: { item } kw: nil].
+				keyFn ___pyCallValue___: { item } kw: nil].
 			gotAny @env0:ifFalse: [
 				best := item.
 				bestKey := itemKey.
 				gotAny := true
 			] @env0:ifTrue: [
 				isBetter := pickSmaller
-					@env0:ifTrue: [itemKey @env1:__lt__: bestKey]
-					@env0:ifFalse: [itemKey @env1:__gt__: bestKey].
+					@env0:ifTrue: [itemKey __lt__: bestKey]
+					@env0:ifFalse: [itemKey __gt__: bestKey].
 				isBetter @env0:ifTrue: [best := item. bestKey := itemKey]
 			]
 		] @env0:on: StopIteration do: [:ex | done := true]
@@ -624,10 +624,10 @@ ___buildLocals___: pairsArray
 	function-scope locals() snapshot."
 
 	| d |
-	d := dict @env1:___new___.
+	d := dict ___new___.
 	pairsArray @env0:do: [:pair |
 		(pair @env0:at: 2) == nil ifFalse: [
-			d @env1:__setitem__: ((pair @env0:at: 1) @env0:asUnicodeString) _: (pair @env0:at: 2)]].
+			d __setitem__: ((pair @env0:at: 1) @env0:asUnicodeString) _: (pair @env0:at: 2)]].
 	^ d
 %
 
@@ -637,7 +637,7 @@ open: file
 	"Python builtin open(file) — fixed-arity fast path; text read mode.
 	Implementation lives in FileIO class >> ___open___:mode:encoding:."
 
-	^ FileIO @env1:___open___: file mode: nil encoding: nil
+	^ FileIO ___open___: file mode: nil encoding: nil
 %
 
 category: 'Grail-Built-in Functions'
@@ -645,7 +645,7 @@ method: builtins
 open: file _: mode
 	"Python builtin open(file, mode) — fixed-arity fast path."
 
-	^ FileIO @env1:___open___: file mode: mode encoding: nil
+	^ FileIO ___open___: file mode: mode encoding: nil
 %
 
 category: 'Grail-Built-in Functions'
@@ -654,7 +654,7 @@ open: file _: mode _: buffering
 	"Python builtin open(file, mode, buffering) — fixed-arity fast path.
 	buffering is accepted and ignored (GsFile buffers internally)."
 
-	^ FileIO @env1:___open___: file mode: mode encoding: nil
+	^ FileIO ___open___: file mode: mode encoding: nil
 %
 
 category: 'Grail-Built-in Functions'
@@ -663,7 +663,7 @@ open: file _: mode _: buffering _: encoding
 	"Python builtin open(file, mode, buffering, encoding) — fixed-arity
 	fast path.  buffering is accepted and ignored."
 
-	^ FileIO @env1:___open___: file mode: mode encoding: encoding
+	^ FileIO ___open___: file mode: mode encoding: encoding
 %
 
 category: 'Grail-Built-in Functions'
@@ -696,7 +696,7 @@ _open: positional kw: kwargs
 			(kwargs == nil)
 				ifTrue: [nil]
 				ifFalse: [kwargs @env0:at: 'encoding' ifAbsent: [nil]]].
-	^ FileIO @env1:___open___: file mode: mode encoding: encoding
+	^ FileIO ___open___: file mode: mode encoding: encoding
 %
 
 category: 'Grail-Built-in Functions'
@@ -845,11 +845,11 @@ ___formatIntValue___: value parsed: p
 	alt := p @env0:at: 4. width := p @env0:at: 5. grouping := p @env0:at: 6.
 	type := p @env0:at: 8.
 	(#($e $E $f $F $g $G $%) @env0:includes: type) ifTrue: [
-		^ self @env1:___formatFloatValue___: value @env0:asFloat parsed: p].
+		^ self ___formatFloatValue___: value @env0:asFloat parsed: p].
 	type @env0:= $c ifTrue: [
 		body := String @env0:with: (Character @env0:codePoint: value).
 		align == nil ifTrue: [align := $<].
-		^ self @env1:___formatPadBody___: body fill: fill align: align width: width signLength: 0].
+		^ self ___formatPadBody___: body fill: fill align: align width: width signLength: 0].
 	type @env0:= $s ifTrue: [
 		ValueError ___signal___: 'Unknown format code ''s'' for object of type ''int'''].
 	prefix := ''.
@@ -871,11 +871,11 @@ ___formatIntValue___: value parsed: p
 	grouping == nil ifFalse: [
 		groupSize := (type == nil or: [type @env0:= $d or: [type @env0:= $n]])
 			ifTrue: [3] ifFalse: [4].
-		digits := self @env1:___groupDigits___: digits separator: grouping every: groupSize].
-	signStr := self @env1:___signString___: value @env0:< 0 sign: sign.
+		digits := self ___groupDigits___: digits separator: grouping every: groupSize].
+	signStr := self ___signString___: value @env0:< 0 sign: sign.
 	body := signStr @env0:, prefix @env0:, digits.
 	align == nil ifTrue: [align := $>].
-	^ self @env1:___formatPadBody___: body fill: fill align: align
+	^ self ___formatPadBody___: body fill: fill align: align
 		width: width signLength: signStr @env0:size @env0:+ prefix @env0:size
 %
 
@@ -908,12 +908,12 @@ ___sciDigits___: absValue precision: precision upper: upper
 	m @env0:= 0 ifFalse: [
 		[m @env0:>= 10] @env0:whileTrue: [m := m @env0:/ 10. exp := exp @env0:+ 1].
 		[m @env0:< 1] @env0:whileTrue: [m := m @env0:* 10. exp := exp @env0:- 1]].
-	mstr := self @env1:___fixedDigits___: m precision: precision.
+	mstr := self ___fixedDigits___: m precision: precision.
 	"Rounding can push the mantissa to 10.000...; renormalize."
 	(mstr @env0:size @env0:>= 2 and: [(mstr @env0:at: 1) @env0:= $1 and: [(mstr @env0:at: 2) @env0:= $0]]) ifTrue: [
 		(mstr @env0:copyFrom: 1 to: 2) @env0:= '10' ifTrue: [
 			m := m @env0:/ 10. exp := exp @env0:+ 1.
-			mstr := self @env1:___fixedDigits___: m precision: precision]].
+			mstr := self ___fixedDigits___: m precision: precision]].
 	estr := exp @env0:abs @env0:printString.
 	estr @env0:size @env0:< 2 ifTrue: [estr := '0' @env0:, estr].
 	estr := (exp @env0:< 0 ifTrue: ['-'] ifFalse: ['+']) @env0:, estr.
@@ -963,11 +963,11 @@ ___formatFloatValue___: value parsed: p
 			suffix := '%'.
 			type := $f].
 		(type @env0:= $f or: [type @env0:= $F]) ifTrue: [
-			digits := self @env1:___fixedDigits___: a
+			digits := self ___fixedDigits___: a
 				precision: (precision == nil ifTrue: [6] ifFalse: [precision])]
 		ifFalse: [
 		(type @env0:= $e or: [type @env0:= $E]) ifTrue: [
-			digits := self @env1:___sciDigits___: a
+			digits := self ___sciDigits___: a
 				precision: (precision == nil ifTrue: [6] ifFalse: [precision])
 				upper: type @env0:= $E]
 		ifFalse: [
@@ -984,11 +984,11 @@ ___formatFloatValue___: value parsed: p
 					[probe @env0:< 1] @env0:whileTrue: [probe := probe @env0:* 10. exp10 := exp10 @env0:- 1]].
 				((exp10 @env0:>= -4) @env0:and: [exp10 @env0:< precision])
 					ifTrue: [
-						digits := self @env1:___stripTrailingZeros___:
-							(self @env1:___fixedDigits___: a precision: (precision @env0:- 1 @env0:- exp10 @env0:max: 0))]
+						digits := self ___stripTrailingZeros___:
+							(self ___fixedDigits___: a precision: (precision @env0:- 1 @env0:- exp10 @env0:max: 0))]
 					ifFalse: [
-						digits := self @env1:___stripTrailingZeros___:
-							(self @env1:___sciDigits___: a precision: precision @env0:- 1 upper: type @env0:= $G)]]]].
+						digits := self ___stripTrailingZeros___:
+							(self ___sciDigits___: a precision: precision @env0:- 1 upper: type @env0:= $G)]]]].
 		digits := digits @env0:, suffix].
 	grouping == nil ifFalse: [
 		| dot ip rest |
@@ -997,11 +997,11 @@ ___formatFloatValue___: value parsed: p
 			ifTrue: [ip := digits. rest := '']
 			ifFalse: [ip := digits @env0:copyFrom: 1 to: dot @env0:- 1.
 				rest := digits @env0:copyFrom: dot to: digits @env0:size].
-		digits := (self @env1:___groupDigits___: ip separator: grouping every: 3) @env0:, rest].
-	signStr := self @env1:___signString___: neg sign: sign.
+		digits := (self ___groupDigits___: ip separator: grouping every: 3) @env0:, rest].
+	signStr := self ___signString___: neg sign: sign.
 	body := signStr @env0:, digits.
 	align == nil ifTrue: [align := $>].
-	^ self @env1:___formatPadBody___: body fill: fill align: align
+	^ self ___formatPadBody___: body fill: fill align: align
 		width: width signLength: signStr @env0:size
 %
 
@@ -1022,7 +1022,7 @@ ___formatStrValue___: value parsed: p
 	align == nil ifTrue: [align := $<].
 	align @env0:= $= ifTrue: [
 		ValueError ___signal___: '''='' alignment not allowed in string format specifier'].
-	^ self @env1:___formatPadBody___: body fill: fill align: align width: width signLength: 0
+	^ self ___formatPadBody___: body fill: fill align: align width: width signLength: 0
 %
 
 category: 'Grail-Format Spec Engine'
@@ -1032,15 +1032,15 @@ ___formatValue___: value spec: spec
 	is str(value); otherwise parse once and dispatch by type."
 
 	| p |
-	(spec == nil or: [spec @env0:isEmpty]) ifTrue: [^ value @env1:__str__].
-	p := self @env1:___parseFormatSpec___: spec.
+	(spec == nil or: [spec @env0:isEmpty]) ifTrue: [^ value __str__].
+	p := self ___parseFormatSpec___: spec.
 	(value isKindOf: Float) ifTrue: [
-		^ self @env1:___formatFloatValue___: value parsed: p].
+		^ self ___formatFloatValue___: value parsed: p].
 	(value isKindOf: Integer) ifTrue: [
-		^ self @env1:___formatIntValue___: value parsed: p].
+		^ self ___formatIntValue___: value parsed: p].
 	(value isKindOf: CharacterCollection) ifTrue: [
-		^ self @env1:___formatStrValue___: value @env0:asString parsed: p].
-	^ self @env1:___formatStrValue___: (value @env1:__str__) parsed: p
+		^ self ___formatStrValue___: value @env0:asString parsed: p].
+	^ self ___formatStrValue___: (value __str__) parsed: p
 %
 
 category: 'Grail-Built-in Functions'
@@ -1048,7 +1048,7 @@ method: builtins
 format: aValue
 	"Python builtin format(value) — defaults to format-spec ''''."
 
-	^ aValue @env1:__format__: ''
+	^ aValue __format__: ''
 %
 
 category: 'Grail-Built-in Functions'
@@ -1058,7 +1058,7 @@ format: aValue _: aFormatSpec
 	Delegates to value.__format__(spec).  Emitted by f-string codegen
 	for placeholders that carry a format spec (e.g. ``f''{x:>4d}''``)."
 
-	^ aValue @env1:__format__: aFormatSpec
+	^ aValue __format__: aFormatSpec
 %
 
 category: 'Grail-Built-in Functions'
@@ -1074,7 +1074,7 @@ reversed: aSequence
 	| cls lst |
 	cls := aSequence @env0:class.
 	((cls @env0:whichClassIncludesSelector: #'__reversed__' environmentId: 1) notNil)
-		ifTrue: [^ aSequence @env1:__reversed__].
+		ifTrue: [^ aSequence __reversed__].
 	lst := list ___new___.
 	aSequence @env0:reverseDo: [:item | lst append: item].
 	^ lst __iter__
@@ -1090,7 +1090,7 @@ round: aNumber
 	uncatchable MNU on PythonInstances."
 
 	((aNumber @env0:class @env0:whichClassIncludesSelector: #'___round__:kw:' environmentId: 1) ~~ nil)
-		ifTrue: [^ aNumber @env1:___round__: { } kw: nil].
+		ifTrue: [^ aNumber ___round__: { } kw: nil].
 	((aNumber @env0:class @env0:whichClassIncludesSelector: #'__round__' environmentId: 1) ~~ nil)
 		ifTrue: [^ aNumber @env0:perform: #'__round__' env: 1].
 	^ aNumber @env0:rounded
@@ -1116,7 +1116,7 @@ map: aFunction _: anIterable
 	materialization looped forever (then OOM-killed the session) on
 	infinite sources: take(4, map(f, itertools.count()))."
 
-	^ map_iterator @env1:___on: aFunction source: anIterable __iter__
+	^ map_iterator ___on: aFunction source: anIterable __iter__
 %
 
 category: 'Grail-Built-in Functions'
@@ -1126,7 +1126,7 @@ filter: aFunction _: anIterable
 	is truthy; filter(None, iter) keeps truthy items.  LAZY, as in
 	CPython (see map:_:)."
 
-	^ filter_iterator @env1:___on: aFunction source: anIterable __iter__
+	^ filter_iterator ___on: aFunction source: anIterable __iter__
 %
 
 category: 'Grail-Built-in Functions'
@@ -1134,7 +1134,7 @@ method: builtins
 _filter: positional kw: kwargs
 	"Varargs form of filter() for BoundMethod indirect calls."
 
-	^ self @env1:filter: (positional @env0:at: 1) _: (positional @env0:at: 2)
+	^ self filter: (positional @env0:at: 1) _: (positional @env0:at: 2)
 %
 
 category: 'Grail-Built-in Functions'
@@ -1163,18 +1163,18 @@ vars: anObject
 	inside the module) instead of a snapshot that would drop writes."
 	(anObject isKindOf: module) ifTrue: [
 		^ (Python @env0:at: #'PyModuleDict') @env0:on: anObject].
-	d := dict @env1:___new___.
+	d := dict ___new___.
 	(anObject isKindOf: SymbolDictionary) ifTrue: [
 		anObject @env0:keysDo: [:k |
-			d @env1:__setitem__: k @env0:asString @env0:asUnicodeString _: (anObject @env0:at: k)]].
+			d __setitem__: k @env0:asString @env0:asUnicodeString _: (anObject @env0:at: k)]].
 	(anObject @env0:dynamicInstanceVariables) @env0:do: [:nm |
-		d @env1:__setitem__: (nm @env0:asString @env0:asUnicodeString)
+		d __setitem__: (nm @env0:asString @env0:asUnicodeString)
 			_: (anObject @env0:dynamicInstVarAt: nm)].
 	(anObject @env0:class @env0:allInstVarNames) @env0:doWithIndex: [:nm :i |
 		| v |
 		v := anObject @env0:instVarAt: i.
 		v == nil ifFalse: [
-			d @env1:__setitem__: (nm @env0:asString @env0:asUnicodeString) _: v]].
+			d __setitem__: (nm @env0:asString @env0:asUnicodeString) _: v]].
 	^ d
 %
 
@@ -1227,7 +1227,7 @@ help: anObject
 	"Python builtin help(obj) — minimal: print the docstring."
 
 	| doc |
-	doc := [anObject @env1:__doc__] @env0:on: Error do: [:ex | nil].
+	doc := [anObject __doc__] @env0:on: Error do: [:ex | nil].
 	(doc == nil or: [doc == None]) ifTrue: [
 		doc := 'No documentation available.'].
 	Transcript @env0:nextPutAll: doc @env0:asString.
@@ -1238,8 +1238,8 @@ help: anObject
 category: 'Grail-Built-in Functions'
 method: builtins
 _help: positional kw: kwargs
-	positional @env0:isEmpty ifTrue: [^ self @env1:help].
-	^ self @env1:help: (positional @env0:at: 1)
+	positional @env0:isEmpty ifTrue: [^ self help].
+	^ self help: (positional @env0:at: 1)
 %
 
 category: 'Python-Built-in Functions'
@@ -1310,11 +1310,11 @@ _sorted: positional kw: kwargs
 		ifFalse: [
 			reverse ___isTruthy___
 				ifTrue: [[:a :b |
-					(keyFn @env1:value: { b } value: nil)
-						__lt__: (keyFn @env1:value: { a } value: nil)]]
+					(keyFn value: { b } value: nil)
+						__lt__: (keyFn value: { a } value: nil)]]
 				ifFalse: [[:a :b |
-					(keyFn @env1:value: { a } value: nil)
-						__lt__: (keyFn @env1:value: { b } value: nil)]]].
+					(keyFn value: { a } value: nil)
+						__lt__: (keyFn value: { b } value: nil)]]].
 	"GemStone's sort: returns a fresh sorted Array, not the receiver; copy it
 	back over the list's slots so sorted() returns a Python list (not an Array)."
 	sortedArray := lst @env0:sort: sortBlock.
@@ -1335,7 +1335,7 @@ method: builtins
 sum: anIterable
 	"Python builtin sum(iterable) — fixed-arity fast path."
 
-	^ self @env1:sum: anIterable _: 0
+	^ self sum: anIterable _: 0
 %
 
 category: 'Grail-Built-in Functions'
@@ -1369,7 +1369,7 @@ _sum: positional kw: kwargs
 		ifFalse: [(kwargs notNil and: [kwargs includesKey: 'start'])
 			ifTrue: [kwargs at: 'start']
 			ifFalse: [0]].
-	^ self @env1:sum: iterable _: start
+	^ self sum: iterable _: start
 %
 
 category: 'Grail-Built-in Functions'
@@ -1410,13 +1410,13 @@ isinstance: anObject _: aClassOrTuple
 	element until a match is found."
 
 	| cls |
-	cls := self @env1:___resolveClassRef___: aClassOrTuple.
+	cls := self ___resolveClassRef___: aClassOrTuple.
 	"Tuple-of-classes form: recurse, OR together."
 	(cls isKindOf: tuple) ifTrue: [
 		cls @env0:do: [:eachCls | (self isinstance: anObject _: eachCls) ifTrue: [^ true]].
 		^ false
 	].
-	^ self @env1:___isInstanceSingle___: anObject of: cls
+	^ self ___isInstanceSingle___: anObject of: cls
 %
 
 category: 'Python-Built-in Functions'
@@ -1556,7 +1556,7 @@ delattr: anObject _: aName
 	which removes the dynamic-instVar slot (raising AttributeError
 	if it was never bound).  Returns None per CPython."
 
-	anObject @env1:__delattr__: aName.
+	anObject __delattr__: aName.
 	^ None
 %
 
@@ -1577,7 +1577,7 @@ hasattr: anObject _: aName
 	Used heavily by MarkupSafe, itsdangerous, and Werkzeug to detect
 	``__html__`` / ``__call__`` / duck-typed protocols."
 
-	^ [[anObject @env1:___pyAttrLoad___: aName @env0:asSymbol.
+	^ [[anObject ___pyAttrLoad___: aName @env0:asSymbol.
 	    true]
 		@env0:on: AttributeError do: [:___ex___ | false]]
 		@env0:on: Error do: [:___ex___ | false]
@@ -1590,7 +1590,7 @@ getattr: anObject _: aName
 	AttributeError on miss; the 3-arg form (with default) lives at
 	``_getattr:kw:``."
 
-	^ anObject @env1:___pyAttrLoad___: aName @env0:asSymbol
+	^ anObject ___pyAttrLoad___: aName @env0:asSymbol
 %
 
 category: 'Grail-Built-in Functions'
@@ -1607,10 +1607,10 @@ _getattr: positional kw: kwargs
 	(positional @env0:size) @env0:>= 3 ifTrue: [
 		| default |
 		default := positional @env0:at: 3.
-		^ [anObject @env1:___pyAttrLoad___: aName @env0:asSymbol]
+		^ [anObject ___pyAttrLoad___: aName @env0:asSymbol]
 			@env0:on: AttributeError do: [:ex | ex @env0:return: default]
 	].
-	^ anObject @env1:___pyAttrLoad___: aName @env0:asSymbol
+	^ anObject ___pyAttrLoad___: aName @env0:asSymbol
 %
 
 category: 'Grail-Built-in Functions'
@@ -1624,15 +1624,15 @@ issubclass: aClass _: aClassOrTuple
 	before walking the hierarchy."
 
 	| sub target |
-	sub := self @env1:___resolveClassRef___: aClass.
-	target := self @env1:___resolveClassRef___: aClassOrTuple.
+	sub := self ___resolveClassRef___: aClass.
+	target := self ___resolveClassRef___: aClassOrTuple.
 	(target isKindOf: tuple) ifTrue: [
 		target @env0:do: [:eachCls |
-			(self @env1:___isSubclassSingle___: sub of: eachCls) ifTrue: [^ true]
+			(self ___isSubclassSingle___: sub of: eachCls) ifTrue: [^ true]
 		].
 		^ false
 	].
-	^ self @env1:___isSubclassSingle___: sub of: target
+	^ self ___isSubclassSingle___: sub of: target
 %
 
 category: 'Grail-Built-in Functions'
@@ -1645,7 +1645,7 @@ ___hasProtocol___: anObject _: aName
 	env-1 instance methods -- a direct Smalltalk env-1 send does, for
 	instance and class receivers alike."
 
-	^ anObject @env1:___hasProtocol___: aName
+	^ anObject ___hasProtocol___: aName
 %
 
 category: 'Grail-Built-in Functions'
@@ -1698,7 +1698,7 @@ setattr: anObject _: aName _: aValue
 	Per CPython, setattr returns None regardless of the underlying
 	store's internal return — discard whatever __setattr__ yields."
 
-	anObject @env1:__setattr__: aName _: aValue.
+	anObject __setattr__: aName _: aValue.
 	^ None
 %
 
@@ -1723,7 +1723,7 @@ type: className _: bases _: namespace
 	baseArray @env0:isEmpty ifTrue: [ baseArray := { PythonInstance } ].
 	storageBase := il @env0:___selectStorageBase___: baseArray.
 	nameSym := (il @env0:___asSmalltalkClassName___: className @env0:asString) @env0:asSymbol.
-	newClass := storageBase @env1:___subclass___: nameSym instVarNames: #() classInstVarNames: #().
+	newClass := storageBase ___subclass___: nameSym instVarNames: #() classInstVarNames: #().
 	il @env0:___mergeSecondaryBases___: newClass bases: baseArray.
 	"Non-empty namespace: store each binding as a class attribute via
 	the polymorphic attribute store (values land in the per-class
@@ -1734,7 +1734,7 @@ type: className _: bases _: namespace
 	(namespace @env0:isNil @env0:not and: [namespace @env0:isEmpty @env0:not])
 		ifTrue: [
 			namespace @env0:keysAndValuesDo: [:k :v |
-				newClass @env1:___pyAttrStore___: k @env0:asSymbol put: v
+				newClass ___pyAttrStore___: k @env0:asSymbol put: v
 			]
 		].
 	"Copy inherited class-body data attributes (``X = v'') from the storage
@@ -1884,7 +1884,7 @@ _round: positional kw: kwargs
 	"__round__ first (CPython protocol) -- see round: for the 1-arg
 	rationale; the kernel arithmetic below MNUs on PythonInstances."
 	((number @env0:class @env0:whichClassIncludesSelector: #'___round__:kw:' environmentId: 1) ~~ nil)
-		ifTrue: [^ number @env1:___round__:
+		ifTrue: [^ number ___round__:
 			(ndigits == nil ifTrue: [{ }] ifFalse: [{ ndigits }]) kw: nil].
 	ndigits ifNil: [^ number @env0:rounded].
 	multiplier := 10 @env0:raisedTo: ndigits.
@@ -1913,7 +1913,7 @@ _zip: positional kw: kwargs
 	"LAZY, as in CPython -- an eager zip looped forever (then
 	OOM-killed the session) on infinite sources like
 	zip(count(), count(1))."
-	^ zip_iterator @env1:___on: iterators
+	^ zip_iterator ___on: iterators
 %
 
 set compile_env: 0

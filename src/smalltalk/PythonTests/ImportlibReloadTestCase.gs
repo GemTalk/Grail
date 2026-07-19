@@ -74,16 +74,16 @@ loadProbe: source
 	"Write the probe source, drop any cached copy, and load it fresh."
 
 	self writeProbe: source.
-	importlib @env1:modules @env0:removeKey: #'grail_reload_regression' ifAbsent: [].
+	importlib @env1:modules removeKey: #'grail_reload_regression' ifAbsent: [].
 	^ importlib loadModuleFromPath: self probePath name: 'grail_reload_regression'
 %
 
 category: 'Grail-Tests-Reload'
 method: ImportlibReloadTestCase
 loadFixture
-	importlib @env1:modules @env0:removeKey: #'use_reload' ifAbsent: [].
+	importlib @env1:modules removeKey: #'use_reload' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/use_reload.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/use_reload.py')
 		name: 'use_reload'
 %
 
@@ -96,7 +96,7 @@ testModuleHasFile
 	| probe |
 	probe := self loadProbe: 'X = 0
 '.
-	self assert: ((probe @env0:dynamicInstVarAt: #'__file__') @env0:endsWith: 'grail_reload_regression.py')
+	self assert: ((probe dynamicInstVarAt: #'__file__') endsWith: 'grail_reload_regression.py')
 %
 
 category: 'Grail-Tests-Reload'
@@ -147,7 +147,7 @@ testReloadPreservesIdentity
 '.
 	result := fixture @env1:reload_mod: probe.
 	self assert: result == probe.
-	cached := importlib @env1:modules @env0:at: #'grail_reload_regression' ifAbsent: [nil].
+	cached := importlib @env1:modules at: #'grail_reload_regression' ifAbsent: [nil].
 	self assert: cached == probe.
 	self assert: (fixture @env1:get_VALUE: probe) equals: 2
 %
@@ -164,14 +164,14 @@ testStatReloaderDetectsChange
 '.
 	fixture := self loadFixture.
 	reloader := fixture @env1:make_stat_reloader: self probePath _: 'grail_reload_regression'.
-	self assert: (fixture @env1:reloader_changed: reloader) @env0:isEmpty
+	self assert: (fixture @env1:reloader_changed: reloader) isEmpty
 		description: 'StatReloader reported a change before any edit'.
 	"mtime has whole-second resolution (GsFileStat), so wait past the next
 	second boundary before rewriting to guarantee a detectable change."
 	(Delay forMilliseconds: 1100) wait.
 	self writeProbe: 'VALUE = 2
 '.
-	self assert: ((fixture @env1:reloader_changed: reloader) @env0:includes: 'grail_reload_regression')
+	self assert: ((fixture @env1:reloader_changed: reloader) includes: 'grail_reload_regression')
 		description: 'StatReloader did not detect the source change'
 %
 
@@ -185,7 +185,7 @@ testRunWithReloaderRebuildsApp
 	each cycle."
 
 	| lf appPath v2Path fixture result src1 src2 |
-	lf := String @env0:with: Character lf.
+	lf := String with: Character lf.
 	appPath := '/tmp/grail_rl_app.py'.
 	v2Path := '/tmp/grail_rl_app_v2.py'.
 	src1 := 'MARKER = "R1"', lf,
@@ -203,13 +203,13 @@ testRunWithReloaderRebuildsApp
 	the os.rename in the fixture then moves a newer-mtime file into place."
 	(Delay forMilliseconds: 1100) wait.
 	self writeFile: v2Path contents: src2.
-	importlib @env1:modules @env0:removeKey: #'grail_rl_app' ifAbsent: [].
+	importlib @env1:modules removeKey: #'grail_rl_app' ifAbsent: [].
 	importlib loadModuleFromPath: appPath name: 'grail_rl_app'.
 	fixture := self loadFixture.
 	result := fixture @env1:run_reloader_cycle_test: appPath _: v2Path _: 'grail_rl_app'.
-	self assert: result @env0:size equals: 2.
-	self assert: ((result @env0:at: 1) @env0:at: 2) equals: 'R1'.
-	self assert: ((result @env0:at: 2) @env0:at: 2) equals: 'R2'.
-	self assert: ((result @env0:at: 1) @env0:at: 3)
+	self assert: result size equals: 2.
+	self assert: ((result at: 1) at: 2) equals: 'R1'.
+	self assert: ((result at: 2) at: 2) equals: 'R2'.
+	self assert: ((result at: 1) at: 3)
 		description: 'reloader did not bind a server in cycle 1'
 %

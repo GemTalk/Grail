@@ -109,7 +109,7 @@ monotonic
 	if the system clock is adjusted - for timing intervals over
 	sub-second to minute scales this is fine in practice."
 
-	^ self @env1:time
+	^ self time
 %
 
 category: 'Grail-Monotonic'
@@ -117,7 +117,7 @@ method: time
 monotonic_ns
 	"Monotonic clock in nanoseconds (integer)."
 
-	^ self @env1:time_ns
+	^ self time_ns
 %
 
 category: 'Grail-Monotonic'
@@ -125,13 +125,13 @@ method: time
 perf_counter
 	"High-resolution performance counter.  Mirrors monotonic()."
 
-	^ self @env1:monotonic
+	^ self monotonic
 %
 
 category: 'Grail-Monotonic'
 method: time
 perf_counter_ns
-	^ self @env1:monotonic_ns
+	^ self monotonic_ns
 %
 
 category: 'Grail-Monotonic'
@@ -140,7 +140,7 @@ process_time
 	"Process CPU time.  Grail doesn't separate user/system CPU, so
 	this mirrors monotonic()."
 
-	^ self @env1:monotonic
+	^ self monotonic
 %
 
 category: 'Grail-Sleep'
@@ -165,7 +165,7 @@ gmtime
 	(tm_year=0, tm_mon=1, tm_mday=2, tm_hour=3, tm_min=4, tm_sec=5,
 	tm_wday=6, tm_yday=7, tm_isdst=8)."
 
-	^ self @env1:gmtime: self @env1:time
+	^ self gmtime: self time
 %
 
 category: 'Grail-Calendar'
@@ -184,7 +184,7 @@ gmtime: epochSeconds
 		minutes: 0
 		seconds: 0.
 	dt := epoch @env0:addSeconds: epochSeconds @env0:truncated.
-	^ self @env1:___structTimeUtcFromDateTime___: dt
+	^ self ___structTimeUtcFromDateTime___: dt
 %
 
 category: 'Grail-Calendar'
@@ -192,7 +192,7 @@ method: time
 localtime
 	"Local-time struct_time for current moment."
 
-	^ self @env1:localtime: self @env1:time
+	^ self localtime: self time
 %
 
 category: 'Grail-Calendar'
@@ -209,7 +209,7 @@ localtime: epochSeconds
 		minutes: 0
 		seconds: 0.
 	dt := epoch @env0:addSeconds: epochSeconds @env0:truncated.
-	^ self @env1:___structTimeFromDateTime___: dt
+	^ self ___structTimeFromDateTime___: dt
 %
 
 category: 'Grail-Private'
@@ -218,7 +218,7 @@ ___structTimeFromDateTime___: dt
 	"Local-time struct_time tuple matching CPython's struct_time."
 
 	^ self
-		@env1:___structTimeYear___: dt @env0:year
+		___structTimeYear___: dt @env0:year
 		_month: dt @env0:month
 		_day: dt @env0:dayOfMonth
 		_hour: dt @env0:hour
@@ -234,7 +234,7 @@ ___structTimeUtcFromDateTime___: dt
 	"UTC struct_time tuple — uses DateTime's *Gmt accessors."
 
 	^ self
-		@env1:___structTimeYear___: dt @env0:yearGmt
+		___structTimeYear___: dt @env0:yearGmt
 		_month: dt @env0:monthGmt
 		_day: dt @env0:dayOfMonthGmt
 		_hour: dt @env0:hourGmt
@@ -273,12 +273,12 @@ mktime: structTime
 	the rest."
 
 	| year mon day hour min sec dt |
-	year := structTime @env1:__getitem__: 0.
-	mon := structTime @env1:__getitem__: 1.
-	day := structTime @env1:__getitem__: 2.
-	hour := structTime @env1:__getitem__: 3.
-	min := structTime @env1:__getitem__: 4.
-	sec := structTime @env1:__getitem__: 5.
+	year := structTime __getitem__: 0.
+	mon := structTime __getitem__: 1.
+	day := structTime __getitem__: 2.
+	hour := structTime __getitem__: 3.
+	min := structTime __getitem__: 4.
+	sec := structTime __getitem__: 5.
 	dt := DateTime
 		@env0:newWithYear: year
 		month: mon
@@ -294,7 +294,7 @@ method: time
 strftime: format
 	"strftime() with current time."
 
-	^ self @env1:strftime: format _: self @env1:gmtime
+	^ self strftime: format _: self gmtime
 %
 
 category: 'Grail-Formatting'
@@ -307,14 +307,14 @@ strftime: format _: structTime
 	timestamps."
 
 	| year mon day hour min sec wday yday stream src i ch buf |
-	year := structTime @env1:__getitem__: 0.
-	mon := structTime @env1:__getitem__: 1.
-	day := structTime @env1:__getitem__: 2.
-	hour := structTime @env1:__getitem__: 3.
-	min := structTime @env1:__getitem__: 4.
-	sec := structTime @env1:__getitem__: 5.
-	wday := structTime @env1:__getitem__: 6.
-	yday := structTime @env1:__getitem__: 7.
+	year := structTime __getitem__: 0.
+	mon := structTime __getitem__: 1.
+	day := structTime __getitem__: 2.
+	hour := structTime __getitem__: 3.
+	min := structTime __getitem__: 4.
+	sec := structTime __getitem__: 5.
+	wday := structTime __getitem__: 6.
+	yday := structTime __getitem__: 7.
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
 	src := format @env0:asString.
 	i := 1.
@@ -329,20 +329,20 @@ strftime: format _: structTime
 					buf := (year @env0:rem: 100) @env0:printString.
 					buf @env0:size @env0:< 2 ifTrue: [stream @env0:nextPut: $0].
 					stream @env0:nextPutAll: buf].
-				ch @env0:= $m ifTrue: [stream @env0:nextPutAll: (self @env1:___zeroPad2___: mon)].
-				ch @env0:= $d ifTrue: [stream @env0:nextPutAll: (self @env1:___zeroPad2___: day)].
-				ch @env0:= $H ifTrue: [stream @env0:nextPutAll: (self @env1:___zeroPad2___: hour)].
-				ch @env0:= $M ifTrue: [stream @env0:nextPutAll: (self @env1:___zeroPad2___: min)].
-				ch @env0:= $S ifTrue: [stream @env0:nextPutAll: (self @env1:___zeroPad2___: sec)].
+				ch @env0:= $m ifTrue: [stream @env0:nextPutAll: (self ___zeroPad2___: mon)].
+				ch @env0:= $d ifTrue: [stream @env0:nextPutAll: (self ___zeroPad2___: day)].
+				ch @env0:= $H ifTrue: [stream @env0:nextPutAll: (self ___zeroPad2___: hour)].
+				ch @env0:= $M ifTrue: [stream @env0:nextPutAll: (self ___zeroPad2___: min)].
+				ch @env0:= $S ifTrue: [stream @env0:nextPutAll: (self ___zeroPad2___: sec)].
 				ch @env0:= $j ifTrue: [
 					buf := yday @env0:printString.
 					[buf @env0:size @env0:< 3] @env0:whileTrue: [buf := '0' @env0:, buf].
 					stream @env0:nextPutAll: buf].
 				ch @env0:= $p ifTrue: [stream @env0:nextPutAll: (hour @env0:< 12 ifTrue: ['AM'] ifFalse: ['PM'])].
-				ch @env0:= $a ifTrue: [stream @env0:nextPutAll: (self @env1:___wdayAbbrev___: wday)].
-				ch @env0:= $A ifTrue: [stream @env0:nextPutAll: (self @env1:___wdayName___: wday)].
-				ch @env0:= $b ifTrue: [stream @env0:nextPutAll: (self @env1:___monthAbbrev___: mon)].
-				ch @env0:= $B ifTrue: [stream @env0:nextPutAll: (self @env1:___monthName___: mon)].
+				ch @env0:= $a ifTrue: [stream @env0:nextPutAll: (self ___wdayAbbrev___: wday)].
+				ch @env0:= $A ifTrue: [stream @env0:nextPutAll: (self ___wdayName___: wday)].
+				ch @env0:= $b ifTrue: [stream @env0:nextPutAll: (self ___monthAbbrev___: mon)].
+				ch @env0:= $B ifTrue: [stream @env0:nextPutAll: (self ___monthName___: mon)].
 				ch @env0:= $Z ifTrue: [stream @env0:nextPutAll: 'UTC'].
 				ch @env0:= $% ifTrue: [stream @env0:nextPut: $%].
 			].
@@ -398,7 +398,7 @@ method: time
 asctime
 	"asctime() with current time."
 
-	^ self @env1:asctime: self @env1:gmtime
+	^ self asctime: self gmtime
 %
 
 category: 'Grail-Formatting'
@@ -407,19 +407,19 @@ asctime: structTime
 	"asctime(t) → e.g. 'Sun Jun 20 23:21:05 1993'.  CPython's exact
 	24-character format."
 
-	^ self @env1:strftime: '%a %b %d %H:%M:%S %Y' _: structTime
+	^ self strftime: '%a %b %d %H:%M:%S %Y' _: structTime
 %
 
 category: 'Grail-Formatting'
 method: time
 ctime
-	^ self @env1:asctime: self @env1:localtime
+	^ self asctime: self localtime
 %
 
 category: 'Grail-Formatting'
 method: time
 ctime: epochSeconds
-	^ self @env1:asctime: (self @env1:localtime: epochSeconds)
+	^ self asctime: (self localtime: epochSeconds)
 %
 
 set compile_env: 0

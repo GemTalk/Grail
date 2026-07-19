@@ -47,7 +47,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'use_http_status' ifAbsent: [].
+	mods removeKey: #'use_http_status' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/use_http_status.py')
 		name: 'use_http_status'.

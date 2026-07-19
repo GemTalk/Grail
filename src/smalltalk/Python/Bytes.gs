@@ -253,9 +253,9 @@ __mod__: args
 	which only uses ASCII format specs."
 
 	| fmt formatted |
-	fmt := self @env1:decode: 'latin1'.
-	formatted := fmt @env1:__mod__: args.
-	^ formatted @env1:encode: 'latin1'
+	fmt := self decode: 'latin1'.
+	formatted := fmt __mod__: args.
+	^ formatted encode: 'latin1'
 %
 
 category: 'Grail-Concatenation'
@@ -357,16 +357,16 @@ __getitem__: index
 	"Get byte at index (0-based, supports negative indices) or a slice."
 	| idx size |
 	(index isKindOf: slice) ifTrue: [
-		^ self @env1:___getslice___: index @env1:start
-			_: index @env1:stop
-			_: index @env1:step
+		^ self ___getslice___: index start
+			_: index stop
+			_: index step
 	].
 	"Non-integer, non-slice index: catchable TypeError instead of an
 	uncatchable env-0 comparison DNU on the index."
 	((index isKindOf: Integer)
 		or: [(index @env0:class
 			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
-		TypeError @env1:___signal___: ('byte indices must be integers or slices, not '
+		TypeError ___signal___: ('byte indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	size := self @env0:size.
 	idx := index.
@@ -437,7 +437,7 @@ method: bytes
 __ne__: other
 	"Compare bytes for inequality"
 	| result |
-	result := self @env1:__eq__: other.
+	result := self __eq__: other.
 	^ result @env0:not
 %
 
@@ -502,7 +502,7 @@ capitalize
 		^ bytes ___new___
 	].
 
-	result := self @env1:lower.
+	result := self lower.
 
 	"Capitalize first byte if it's a lowercase letter"
 	firstByte := result @env0:at: 1.
@@ -682,7 +682,7 @@ category: 'Grail-Encoding/Decoding'
 method: bytes
 decode
 	"Decode bytes to string using UTF-8"
-	^ self @env1:decode: 'utf-8'
+	^ self decode: 'utf-8'
 %
 
 category: 'Grail-Encoding/Decoding'
@@ -693,7 +693,7 @@ decode: encoding _: errors
 	either succeed (ASCII / UTF-8 / latin1) or raise; there is no
 	intermediate ``replace''/``ignore'' policy yet."
 
-	^ self @env1:decode: encoding
+	^ self decode: encoding
 %
 
 category: 'Grail-Encoding/Decoding'
@@ -714,7 +714,7 @@ _decode: positional kw: kwargs
 				and: [kwargs @env0:includesKey: 'encoding'])
 				@env0:ifTrue: [kwargs @env0:at: 'encoding']
 				@env0:ifFalse: ['utf-8']].
-	^ self @env1:decode: encoding
+	^ self decode: encoding
 %
 
 category: 'Grail-Encoding/Decoding'
@@ -941,7 +941,7 @@ category: 'Grail-String-like Methods'
 method: bytes
 expandtabs
 	"Expand tabs to spaces (default tabsize=8)"
-	^ self @env1:expandtabs: 8
+	^ self expandtabs: 8
 %
 
 category: 'Grail-String-like Methods'
@@ -1073,7 +1073,7 @@ method: bytes
 index: sub
 	"Find first occurrence of sub, raise ValueError if not found"
 	| result |
-	result := self @env1:find: sub.
+	result := self find: sub.
 	(result == -1) ifTrue: [
 		ValueError ___signal___: 'subsection not found'
 	].
@@ -1335,8 +1335,8 @@ join: iterable
 		ifTrue: [iterable]
 		ifFalse: [
 			(iterClass @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) notNil
-				ifTrue: [list @env1:__new__: iterable]
-				ifFalse: [TypeError @env1:___signal___: 'can only join an iterable']].
+				ifTrue: [list __new__: iterable]
+				ifFalse: [TypeError ___signal___: 'can only join an iterable']].
 
 	"Empty iterable"
 	((parts @env0:size) == 0) ifTrue: [
@@ -1482,7 +1482,7 @@ method: bytes
 partition: sep
 	"Partition bytes at first occurrence of sep, return tuple (before, sep, after)"
 	| idx before after mySize sepSize afterSize |
-	idx := self @env1:find: sep.
+	idx := self find: sep.
 
 	"Not found - return (self, empty, empty)"
 	(idx == -1) ifTrue: [
@@ -1514,7 +1514,7 @@ method: bytes
 removeprefix: prefix
 	"Remove prefix if present, otherwise return copy"
 	| hasPrefix prefixSize mySize result |
-	hasPrefix := self @env1:startswith: prefix.
+	hasPrefix := self startswith: prefix.
 	hasPrefix ifFalse: [
 		^ self @env0:copy
 	].
@@ -1535,7 +1535,7 @@ method: bytes
 removesuffix: suffix
 	"Remove suffix if present, otherwise return copy"
 	| hasSuffix suffixSize mySize result |
-	hasSuffix := self @env1:endswith: suffix.
+	hasSuffix := self endswith: suffix.
 	hasSuffix ifFalse: [
 		^ self @env0:copy
 	].
@@ -1577,8 +1577,8 @@ replace: old _: new
 	].
 
 	"Split by old, then join with new"
-	parts := self @env1:split: old.
-	^ new @env1:join: parts
+	parts := self split: old.
+	^ new join: parts
 %
 
 category: 'Grail-Search Methods'
@@ -1641,7 +1641,7 @@ method: bytes
 rindex: sub
 	"Find last occurrence of sub, raise ValueError if not found"
 	| result |
-	result := self @env1:rfind: sub.
+	result := self rfind: sub.
 	(result == -1) ifTrue: [
 		ValueError ___signal___: 'subsection not found'
 	].
@@ -1682,7 +1682,7 @@ method: bytes
 rpartition: sep
 	"Partition bytes at last occurrence of sep, return tuple (before, sep, after)"
 	| idx before after mySize sepSize afterSize|
-	idx := self @env1:rfind: sep.
+	idx := self rfind: sep.
 
 	"Not found - return (empty, empty, self)"
 	(idx == -1) ifTrue: [
@@ -1713,7 +1713,7 @@ category: 'Grail-Splitting Methods'
 method: bytes
 rsplit: sep
 	"Split from right (same as split for now - full implementation would need maxsplit)"
-	^ self @env1:split: sep
+	^ self split: sep
 %
 
 category: 'Grail-Splitting Methods'
@@ -1738,7 +1738,7 @@ rsplit: sep _: maxsplit
 
 	"If maxsplit is -1 or < 0, do unlimited split"
 	(maxsplit @env0:< 0) ifTrue: [
-		^ self @env1:split: sep
+		^ self split: sep
 	].
 
 	"Find all separator positions from right to left"
@@ -1926,7 +1926,7 @@ split: sep _: maxsplit
 
 	"If maxsplit is -1 or < 0, do unlimited split"
 	(maxsplit @env0:< 0) ifTrue: [
-		^ self @env1:split: sep
+		^ self split: sep
 	].
 
 	parts := list ___new___.
@@ -2169,7 +2169,7 @@ strip: chars
 	"``bytes.strip(chars)`` - drop leading + trailing bytes matching
 	any byte in `chars`."
 
-	^ (self @env1:lstrip: chars) @env1:rstrip: chars
+	^ (self lstrip: chars) rstrip: chars
 %
 
 category: 'Grail-String-like Methods'

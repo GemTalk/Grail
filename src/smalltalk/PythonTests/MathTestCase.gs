@@ -625,7 +625,7 @@ testAddedFunctions
 	| m |
 	m := math @env1:instance.
 	self assert: (m @env1:isqrt: 100) equals: 10.
-	self assert: (m @env1:isqrt: (10 @env0:raisedTo: 20)) equals: (10 @env0:raisedTo: 10).
+	self assert: (m @env1:isqrt: (10 raisedTo: 20)) equals: (10 raisedTo: 10).
 	self assert: (m @env1:comb: 5 _: 2) equals: 10.
 	self assert: (m @env1:comb: 3 _: 5) equals: 0.
 	self assert: (m @env1:perm: 5 _: 2) equals: 20.
@@ -634,10 +634,10 @@ testAddedFunctions
 	self assert: (m @env1:lcm: 4 _: 6) equals: 12.
 	self assert: (m @env1:exp2: 3) equals: 8.0.
 	self assert: (m @env1:cbrt: 27) equals: 3.0.
-	self assert: (((m @env1:cbrt: -8) @env0:+ 2.0) @env0:abs) < 0.00001.
-	self assert: ((m @env1:log1p: 0) @env0:abs) < 0.00001.
+	self assert: (((m @env1:cbrt: -8) + 2.0) abs) < 0.00001.
+	self assert: ((m @env1:log1p: 0) abs) < 0.00001.
 	self assert: (m @env1:fmod: 10 _: 3) equals: 1.0.
-	self assert: (((m @env1:erf: 0.5) @env0:- 0.5204998778) @env0:abs) < 0.00001.
+	self assert: (((m @env1:erf: 0.5) - 0.5204998778) abs) < 0.00001.
 	"A float argument to an integer function is a TypeError, not a silent
 	truncation; log1p(-1) is a domain error."
 	self should: [m @env1:gcd: 12 _: 1.5] raise: TypeError.
@@ -655,15 +655,15 @@ testAddedFunctions
 	self should: [m @env1:remainder: 5 _: 0] raise: ValueError.
 	"gamma (Lanczos): gamma(5)=24, gamma(0.5)=sqrt(pi), gamma(-0.5)
 	=-2*sqrt(pi) (reflection), a pole at 0 is a domain error."
-	self assert: (((m @env1:gamma: 5) @env0:- 24.0) @env0:abs) < 0.0001.
-	self assert: (((m @env1:gamma: 0.5) @env0:- 1.7724538509) @env0:abs) < 0.000001.
-	self assert: (((m @env1:gamma: -0.5) @env0:+ 3.5449077018) @env0:abs) < 0.000001.
+	self assert: (((m @env1:gamma: 5) - 24.0) abs) < 0.0001.
+	self assert: (((m @env1:gamma: 0.5) - 1.7724538509) abs) < 0.000001.
+	self assert: (((m @env1:gamma: -0.5) + 3.5449077018) abs) < 0.000001.
 	self should: [m @env1:gamma: 0] raise: ValueError.
 	"log/log10/log2 of an integer too large for a float compute from its
 	magnitude instead of overflowing to inf."
-	self assert: (((m @env1:log: (10 @env0:raisedTo: 1000)) @env0:- 2302.5850929940457) @env0:abs) < 0.0001.
-	self assert: (((m @env1:log10: (10 @env0:raisedTo: 1000)) @env0:- 1000.0) @env0:abs) < 0.0001.
-	self assert: (((m @env1:log2: (2 @env0:raisedTo: 2000)) @env0:- 2000.0) @env0:abs) < 0.0001.
+	self assert: (((m @env1:log: (10 raisedTo: 1000)) - 2302.5850929940457) abs) < 0.0001.
+	self assert: (((m @env1:log10: (10 raisedTo: 1000)) - 1000.0) abs) < 0.0001.
+	self assert: (((m @env1:log2: (2 raisedTo: 2000)) - 2000.0) abs) < 0.0001.
 	"factorial rejects non-integers (float/str/Decimal); fmod(inf,y) and
 	fmod(x,0) are domain errors while fmod(x,inf) is x."
 	self should: [m @env1:factorial: 5.0] raise: TypeError.
@@ -686,7 +686,7 @@ testAddedFunctions
 	subnormal float (renormalised past GemStone's -1022 exponent floor) --
 	where ln(x)/ln(2) would drift (log2(2**1023) = 1023.0000000000001)."
 	self assert: (m @env1:log2: 4) equals: 2.0.
-	self assert: (m @env1:log2: (2 @env0:raisedTo: 1023)) equals: 1023.0.
+	self assert: (m @env1:log2: (2 raisedTo: 1023)) equals: 1023.0.
 	self assert: (m @env1:log2: (m @env1:ldexp: 1.0 _: 1023)) equals: 1023.0.
 	self assert: (m @env1:log2: (m @env1:ldexp: 1.0 _: -1074)) equals: -1074.0.
 	self assert: (m @env1:log2: (m @env1:ldexp: 1.0 _: -1050)) equals: -1050.0.
@@ -695,14 +695,14 @@ testAddedFunctions
 	passes through, inf + -inf is a ValueError, a non-numeric is a TypeError,
 	and a huge integer that overflows the float range is an OverflowError."
 	self assert: (m @env1:fsum: { 1e100. 1.0. -1e100. 1e-100. 1e50. -1.0. -1e50 }) equals: 1e-100.
-	self assert: (m @env1:fsum: { (2.0 @env0:raisedTo: 53). -0.5. (2.0 @env0:raisedTo: -54) @env0:negated })
-		equals: (2.0 @env0:raisedTo: 53) @env0:- 1.0.
+	self assert: (m @env1:fsum: { (2.0 raisedTo: 53). -0.5. (2.0 raisedTo: -54) negated })
+		equals: (2.0 raisedTo: 53) - 1.0.
 	self assert: (m @env1:fsum: { 1e16. 1.0. 1e-16 }) equals: 10000000000000002.0.
 	self assert: (m @env1:fsum: { }) equals: 0.0.
 	self assert: (m @env1:fsum: { 1.0. (m @env1:inf) }) equals: (m @env1:inf).
-	self should: [m @env1:fsum: { (m @env1:inf). (m @env1:inf) @env0:negated }] raise: ValueError.
+	self should: [m @env1:fsum: { (m @env1:inf). (m @env1:inf) negated }] raise: ValueError.
 	self should: [m @env1:fsum: { 'spam' }] raise: TypeError.
-	self should: [m @env1:fsum: { 10 @env0:raisedTo: 1000 }] raise: OverflowError.
+	self should: [m @env1:fsum: { 10 raisedTo: 1000 }] raise: OverflowError.
 	"pow keeps IEEE results for inf/nan inputs but raises for a finite-input
 	overflow (OverflowError), a 0**negative or negative-base**non-integer
 	(both ValueError)."
@@ -716,27 +716,27 @@ testAddedFunctions
 	"fma is a TRUE fused multiply-add (single rounding via exact rational
 	arithmetic): (a-1)*(a+1)+1 == a*a exactly where a naive a*b+c double-
 	rounds.  Signed zeros, inf/invalid, and overflow follow IEEE."
-	self assert: (m @env1:fma: ((m @env1:ldexp: 1.0 _: -50) @env0:- 1.0)
-		_: ((m @env1:ldexp: 1.0 _: -50) @env0:+ 1.0) _: 1.0)
-		equals: ((m @env1:ldexp: 1.0 _: -50) @env0:* (m @env1:ldexp: 1.0 _: -50)).
+	self assert: (m @env1:fma: ((m @env1:ldexp: 1.0 _: -50) - 1.0)
+		_: ((m @env1:ldexp: 1.0 _: -50) + 1.0) _: 1.0)
+		equals: ((m @env1:ldexp: 1.0 _: -50) * (m @env1:ldexp: 1.0 _: -50)).
 	self assert: (m @env1:fma: 2.0 _: 2.0 _: -4.0) equals: 0.0.
-	self assert: (1.0 @env0:/ (m @env1:fma: 2.0 _: 2.0 _: -4.0)) equals: PlusInfinity.
-	self assert: (1.0 @env0:/ (m @env1:fma: 0.0 _: -1.0 _: -0.0)) equals: MinusInfinity.
+	self assert: (1.0 / (m @env1:fma: 2.0 _: 2.0 _: -4.0)) equals: PlusInfinity.
+	self assert: (1.0 / (m @env1:fma: 0.0 _: -1.0 _: -0.0)) equals: MinusInfinity.
 	self assert: (m @env1:fma: (m @env1:inf) _: 2.0 _: 3.0) equals: (m @env1:inf).
 	self should: [m @env1:fma: (m @env1:inf) _: 0.0 _: 1.0] raise: ValueError.
-	self should: [m @env1:fma: (m @env1:inf) _: 1.0 _: ((m @env1:inf) @env0:negated)] raise: ValueError.
+	self should: [m @env1:fma: (m @env1:inf) _: 1.0 _: ((m @env1:inf) negated)] raise: ValueError.
 	self should: [m @env1:fma: 1e300 _: 1e300 _: 0.0] raise: OverflowError.
 	"nextafter walks one representable step toward y (binade boundaries halve
 	the gap; zero -> smallest subnormal; off the largest normal -> inf), and
 	ulp of inf/nan is inf/nan."
-	self assert: (m @env1:_nextafter: { 4503599627370496.0. (m @env1:inf) @env0:negated } kw: nil)
+	self assert: (m @env1:_nextafter: { 4503599627370496.0. (m @env1:inf) negated } kw: nil)
 		equals: 4503599627370495.5.
 	self assert: (m @env1:_nextafter: { 4503599627370496.0. (m @env1:inf) } kw: nil)
 		equals: 4503599627370497.0.
 	self assert: (m @env1:_nextafter: { 0.0. (m @env1:inf) } kw: nil) equals: 5e-324.
 	self assert: (m @env1:_nextafter: { (m @env1:inf) . 0.0 } kw: nil) equals: 1.7976931348623157e308.
 	self assert: (m @env1:ulp: (m @env1:inf)) equals: (m @env1:inf).
-	self assert: (m @env1:ulp: (2 @env0:raisedTo: 52)) equals: 1.0.
+	self assert: (m @env1:ulp: (2 raisedTo: 52)) equals: 1.0.
 	"sumprod accumulates the dot product exactly (single final rounding), so
 	huge cancelling terms don't wipe out the small ones; an all-integer input
 	stays an exact integer."
@@ -752,31 +752,31 @@ testAddedFunctions
 	self assert: (m @env1:_hypot: { 0.75. -1.0 } kw: nil) equals: 1.25.
 	self assert: (m @env1:_hypot: { (m @env1:nan). (m @env1:inf) } kw: nil) equals: (m @env1:inf).
 	self assert: (m @env1:isnan: (m @env1:_hypot: { (m @env1:nan). 10.0 } kw: nil)).
-	self should: [m @env1:_hypot: { 1.0 } kw: (Dictionary @env0:new @env0:at: 'x' put: 1; yourself)]
+	self should: [m @env1:_hypot: { 1.0 } kw: (Dictionary new at: 'x' put: 1; yourself)]
 		raise: TypeError.
-	self should: [m @env1:_hypot: { 1.0. (10 @env0:raisedTo: 400) } kw: nil] raise: OverflowError.
+	self should: [m @env1:_hypot: { 1.0. (10 raisedTo: 400) } kw: nil] raise: OverflowError.
 	"a math argument that is an integer beyond the float range is an
 	OverflowError (___real___), not a silent inf."
-	self should: [m @env1:sqrt: (10 @env0:raisedTo: 400)] raise: OverflowError.
+	self should: [m @env1:sqrt: (10 raisedTo: 400)] raise: OverflowError.
 	"remainder: exact (x - n*y via rationals so a large n*y cannot overflow),
 	a zero result carries x's sign."
 	self assert: (m @env1:remainder: 5.0 _: 3.0) equals: -1.0.
 	self assert: (m @env1:remainder: 5.5 _: 2.0) equals: -0.5.
-	self assert: (1.0 @env0:/ (m @env1:remainder: -4.0 _: 1.0)) equals: MinusInfinity.
-	self assert: (1.0 @env0:/ (m @env1:remainder: 4.0 _: 1.0)) equals: PlusInfinity.
+	self assert: (1.0 / (m @env1:remainder: -4.0 _: 1.0)) equals: MinusInfinity.
+	self assert: (1.0 / (m @env1:remainder: 4.0 _: 1.0)) equals: PlusInfinity.
 	self assert: (m @env1:remainder: 1e308 _: 1e308) equals: 0.0.
 	"dist = hypot of the coordinate differences: exact/scaled, an infinite
 	difference beats a NaN, a huge-int coordinate overflows."
 	self assert: (m @env1:dist: { 1.0. 2.0. 3.0 } _: { 4.0. 2.0. -1.0 }) equals: 5.0.
 	self assert: (m @env1:dist: { 14.0. 1.0 } _: { 2.0. -4.0 }) equals: 13.0.
 	self assert: (m @env1:dist: { (m @env1:inf). (m @env1:nan) } _: { 0.0. 0.0 }) equals: (m @env1:inf).
-	self should: [m @env1:dist: { 1.0. (10 @env0:raisedTo: 400) } _: { 0.0. 0.0 }] raise: OverflowError.
+	self should: [m @env1:dist: { 1.0. (10 raisedTo: 400) } _: { 0.0. 0.0 }] raise: OverflowError.
 	"hypot is CORRECTLY ROUNDED (sqrt of the exact sum-of-squares via
 	___exactSqrtToFloat___), matching a 500-digit-Decimal reference where a
 	naive scaled float sqrt is 1 ulp off (test_math testHypotAccuracy)."
 	self assert: (m @env1:_hypot:
-		{ ((Python @env0:at: #float) @env1:fromhex: '0x1.10e89518dca48p+29').
-		  ((Python @env0:at: #float) @env1:fromhex: '0x1.1970f7565b7efp+30') } kw: nil)
+		{ ((Python at: #float) @env1:fromhex: '0x1.10e89518dca48p+29').
+		  ((Python at: #float) @env1:fromhex: '0x1.1970f7565b7efp+30') } kw: nil)
 		equals: 1311878501.7832494
 %
 
@@ -796,7 +796,7 @@ math.sumprod((10,20,30),(10,20,30))') equals: 1400.
 	self assert: (self eval: 'import math
 type(math.sumprod((10,20,30),(1,2,3))).__name__') equals: 'Integer'.
 	self assert: (self eval: 'import math
-math.sumprod([10**20],[1])') equals: (10 @env0:raisedTo: 20).
+math.sumprod([10**20],[1])') equals: (10 raisedTo: 20).
 	"Compensated float sum: -7.5 lost behind a later exact int cancellation
 	(CPython gives 0.0, NOT the exact -7.5); a mid-stream small term kept
 	when it stays in the float path (1.0)."

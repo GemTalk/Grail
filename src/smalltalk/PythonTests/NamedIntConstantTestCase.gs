@@ -37,7 +37,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'named_int_constant' ifAbsent: [].
+	mods removeKey: #'named_int_constant' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/named_int_constant.py')
 		name: 'named_int_constant'.

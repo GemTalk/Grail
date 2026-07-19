@@ -147,9 +147,9 @@ nextSeqFor: aKind
 	key := aKind == #exec ifTrue: [#'___grailExecCounter___']
 		ifFalse: [aKind == #eval ifTrue: [#'___grailEvalCounter___']
 		ifFalse: [#'___grailDoitCounter___']].
-	temps := SessionTemps @env0:current.
-	temps @env0:at: key put: (temps @env0:at: key ifAbsent: [0]) + 1.
-	^ temps @env0:at: key
+	temps := SessionTemps current.
+	temps at: key put: (temps at: key ifAbsent: [0]) + 1.
+	^ temps at: key
 %
 
 category: 'Grail-parsing'

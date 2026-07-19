@@ -90,9 +90,9 @@ loadFixture: fixtureName
 	| mods fullName cached |
 	fullName := 'pkg_scaffolding.' , fixtureName.
 	mods := importlib @env1:modules.
-	cached := mods @env0:at: fullName @env0:asSymbol ifAbsent: [nil].
-	cached @env0:notNil ifTrue: [^ cached].
-	(mods @env0:includesKey: #'pkg_scaffolding') ifFalse: [
+	cached := mods at: fullName asSymbol ifAbsent: [nil].
+	cached notNil ifTrue: [^ cached].
+	(mods includesKey: #'pkg_scaffolding') ifFalse: [
 		importlib
 			loadModuleFromPath: (importlib grailDir , '/tests/python/pkg_scaffolding/__init__.py')
 			name: 'pkg_scaffolding'

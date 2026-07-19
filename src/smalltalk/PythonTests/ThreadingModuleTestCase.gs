@@ -42,10 +42,10 @@ loadFixture
 	"Load tests/python/use_threading.py fresh (dropping any cached threading
 	module so the fixture recompiles cleanly)."
 
-	importlib @env1:modules @env0:removeKey: #'use_threading' ifAbsent: [].
-	importlib @env1:modules @env0:removeKey: #'threading' ifAbsent: [].
+	importlib @env1:modules removeKey: #'use_threading' ifAbsent: [].
+	importlib @env1:modules removeKey: #'threading' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/use_threading.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/use_threading.py')
 		name: 'use_threading'
 %
 
@@ -56,10 +56,10 @@ testThreadRoundtrip
 
 	| r |
 	r := self loadFixture @env1:thread_roundtrip.
-	self assert: (r @env0:at: 1) @env0:asArray equals: #(42).  "worker ran"
-	self deny: (r @env0:at: 2).                                "not alive before start"
-	self deny: (r @env0:at: 3).                                "not alive after join"
-	self assert: (r @env0:at: 4)                               "ident was assigned"
+	self assert: (r at: 1) asArray equals: #(42).  "worker ran"
+	self deny: (r at: 2).                                "not alive before start"
+	self deny: (r at: 3).                                "not alive after join"
+	self assert: (r at: 4)                               "ident was assigned"
 %
 
 category: 'Grail-Tests-Threading'
@@ -69,9 +69,9 @@ testLock
 
 	| r |
 	r := self loadFixture @env1:lock_roundtrip.
-	self assert: (r @env0:at: 1).        "acquire returned true"
-	self assert: (r @env0:at: 2).        "locked while held"
-	self deny: (r @env0:at: 3)           "unlocked after release"
+	self assert: (r at: 1).        "acquire returned true"
+	self assert: (r at: 2).        "locked while held"
+	self deny: (r at: 3)           "unlocked after release"
 %
 
 category: 'Grail-Tests-Threading'
@@ -81,8 +81,8 @@ testRLock
 
 	| r |
 	r := self loadFixture @env1:rlock_reentrant.
-	self assert: (r @env0:at: 1).
-	self assert: (r @env0:at: 2)
+	self assert: (r at: 1).
+	self assert: (r at: 2)
 %
 
 category: 'Grail-Tests-Threading'
@@ -100,7 +100,7 @@ testBoundMethodTupleArgs
 	mod := self loadFixture.
 	p := mod @env1:make_probe.
 	bm := p @env1:___pyAttrLoad___: #'hit'.
-	self assert: bm @env0:class @env0:name @env0:asString equals: 'BoundMethod'.
+	self assert: bm class name asString equals: 'BoundMethod'.
 	bm @env1:value: (mod @env1:empty_tuple) value: nil.   "tuple positional"
 	bm @env1:value: #() value: nil.                       "plain-Array positional"
 	self assert: (p @env1:___pyAttrLoad___: #'calls') equals: 2
@@ -114,6 +114,6 @@ testThreadedCounter
 
 	| r |
 	r := self loadFixture @env1:threaded_counter: 5.
-	self assert: (r @env0:at: 1) equals: 5.
-	self assert: (r @env0:at: 2) @env0:asArray equals: #(0 1 2 3 4)
+	self assert: (r at: 1) equals: 5.
+	self assert: (r at: 2) asArray equals: #(0 1 2 3 4)
 %

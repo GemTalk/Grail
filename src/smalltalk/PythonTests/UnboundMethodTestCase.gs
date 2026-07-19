@@ -43,9 +43,9 @@ method: UnboundMethodTestCase
 loadFixture
 	"Load tests/python/unbound_method.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'unbound_method' ifAbsent: [].
+	importlib @env1:modules removeKey: #'unbound_method' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/unbound_method.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/unbound_method.py')
 		name: 'unbound_method'
 %
 

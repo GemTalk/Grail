@@ -59,7 +59,7 @@ setUp
 	System _vmMarkSweep.
 	GcFinalizeNotification new _finalizeEphemerons.
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'weakref_basic' ifAbsent: [].
+	mods removeKey: #'weakref_basic' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/weakref_basic.py')
 		name: 'weakref_basic'.

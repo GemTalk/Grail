@@ -49,7 +49,7 @@ setUp
 	| mods |
 	mods := importlib @env1:modules.
 	#('__main__' 'test.grail_selfcheck' 'test.grail_feature_check' 'test.grail_bigmem_check' 'test.grail_iter_check' 'test.grail_resource_skip_check' 'test._grail_harness') do: [:name |
-		mods @env0:removeKey: name @env0:asSymbol ifAbsent: []].
+		mods removeKey: name asSymbol ifAbsent: []].
 %
 
 category: 'Grail-Helpers'

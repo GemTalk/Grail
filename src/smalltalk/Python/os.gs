@@ -100,9 +100,9 @@ initialize
 	"Pre-store fsdecode as a BoundMethod so ``from os import
 	fsdecode'' (werkzeug's file_storage) reads the callable
 	directly via the ImportFromAst __pyAttrLoad path."
-	self @env0:dynamicInstVarAt: #fsdecode put: (BoundMethod @env1:receiver: self selector: #fsdecode).
-	self @env0:dynamicInstVarAt: #fsencode put: (BoundMethod @env1:receiver: self selector: #fsencode).
-	self @env0:dynamicInstVarAt: #fspath put: (BoundMethod @env1:receiver: self selector: #fspath).
+	self @env0:dynamicInstVarAt: #fsdecode put: (BoundMethod receiver: self selector: #fsdecode).
+	self @env0:dynamicInstVarAt: #fsencode put: (BoundMethod receiver: self selector: #fsencode).
+	self @env0:dynamicInstVarAt: #fspath put: (BoundMethod receiver: self selector: #fspath).
 	"``os.environ'' — process environment dict.  Lazily populated by
 	the accessor below (gem startup doesn't expose every var until
 	first read).  Stored as a KeyValueDictionary so dict-protocol
@@ -135,8 +135,8 @@ fspath: path
 	(path isKindOf: CharacterCollection) ifTrue: [^ path].
 	(path isKindOf: ByteArray) ifTrue: [^ path].
 	((path @env0:class @env0:methodDictForEnv: 1) @env0:includesKey: #'__fspath__')
-		ifTrue: [^ path @env1:__fspath__].
-	TypeError @env1:___signal___: 'expected str, bytes, or os.PathLike'
+		ifTrue: [^ path __fspath__].
+	TypeError ___signal___: 'expected str, bytes, or os.PathLike'
 %
 
 category: 'Grail-Filesystem'
@@ -147,7 +147,7 @@ fsdecode: filename
 	input decodes; str input passes through."
 
 	(filename isKindOf: ByteArray)
-		ifTrue: [^ filename @env1:decode: 'utf-8'].
+		ifTrue: [^ filename decode: 'utf-8'].
 	^ filename
 %
 
@@ -157,7 +157,7 @@ fsencode: filename
 	"``os.fsencode(filename)'' — inverse of fsdecode."
 
 	(filename isKindOf: CharacterCollection)
-		ifTrue: [^ filename @env1:encode: 'utf-8'].
+		ifTrue: [^ filename encode: 'utf-8'].
 	^ filename
 %
 
@@ -462,7 +462,7 @@ method: os
 getenv: name
 	"os.getenv(name) — get environment variable, return None if absent."
 
-	^ self @env1:getenv: name _: None
+	^ self getenv: name _: None
 %
 
 category: 'Grail-Environment Variables'

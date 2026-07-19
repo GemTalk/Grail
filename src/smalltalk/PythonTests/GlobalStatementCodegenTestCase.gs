@@ -49,7 +49,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'global_statement_codegen' ifAbsent: [].
+	mods removeKey: #'global_statement_codegen' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/global_statement_codegen.py')
 		name: 'global_statement_codegen'.

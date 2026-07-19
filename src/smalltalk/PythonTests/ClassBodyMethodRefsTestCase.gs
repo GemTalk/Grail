@@ -61,7 +61,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'class_body_method_refs' ifAbsent: [].
+	mods removeKey: #'class_body_method_refs' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/class_body_method_refs.py')
 		name: 'class_body_method_refs'.

@@ -54,7 +54,7 @@ setUp
 	| mods |
 	mods := importlib @env1:modules.
 	#( 'pkg_class_global' 'pkg_class_global._source' 'pkg_class_global._consumer' ) do: [:n |
-		mods @env0:removeKey: n @env0:asSymbol ifAbsent: []].
+		mods removeKey: n asSymbol ifAbsent: []].
 	importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/pkg_class_global/__init__.py')
 		name: 'pkg_class_global'.
@@ -74,7 +74,7 @@ testStaticGlobalReadable
 	the fix didn't regress the easy case."
 
 	| classifier |
-	classifier := consumerModule @env1:Classifier @env0:new.
+	classifier := consumerModule @env1:Classifier new.
 	self assert: (classifier @env1:is_static: 99) equals: true.
 	self assert: (classifier @env1:is_static: 0) equals: false.
 %
@@ -88,7 +88,7 @@ testDynamicGlobalReadable
 	emitted a bare identifier."
 
 	| classifier |
-	classifier := consumerModule @env1:Classifier @env0:new.
+	classifier := consumerModule @env1:Classifier new.
 	self assert: (classifier @env1:is_dyn_a: 0) equals: true.
 	self assert: (classifier @env1:is_dyn_b: 1) equals: true.
 	self assert: (classifier @env1:is_dyn_a: 1) equals: false.
@@ -101,7 +101,7 @@ testKindDispatch
 	multiple dynamic and static globals."
 
 	| classifier |
-	classifier := consumerModule @env1:Classifier @env0:new.
+	classifier := consumerModule @env1:Classifier new.
 	self assert: (classifier @env1:kind: 0) equals: 'a'.
 	self assert: (classifier @env1:kind: 1) equals: 'b'.
 	self assert: (classifier @env1:kind: 99) equals: 'static'.

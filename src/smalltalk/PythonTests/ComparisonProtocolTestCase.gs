@@ -45,7 +45,7 @@ method: ComparisonProtocolTestCase
 setUp
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'comparison_protocol' ifAbsent: [].
+	mods removeKey: #'comparison_protocol' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/comparison_protocol.py')
 		name: 'comparison_protocol'.

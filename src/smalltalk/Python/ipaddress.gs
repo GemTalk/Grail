@@ -58,8 +58,8 @@ ___fromPacked___: anInt
 	"Build an IPv4Address from a 32-bit unsigned int."
 
 	| inst |
-	inst := self @env0:new.
-	inst @env0:_packed: anInt.
+	inst := self new.
+	inst _packed: anInt.
 	^ inst
 %
 
@@ -71,34 +71,34 @@ ___fromString___: aString
 	does."
 
 	| parts packed |
-	parts := aString @env0:substrings: '.'.
-	parts @env0:size @env0:= 4 ifFalse: [
-		ValueError @env1:___signal___: 'expected four octets in ' @env0:, aString
+	parts := aString substrings: '.'.
+	parts size = 4 ifFalse: [
+		ValueError @env1:___signal___: 'expected four octets in ' , aString
 	].
 	packed := 0.
-	parts @env0:do: [:p |
+	parts do: [:p |
 		| octet |
-		p @env0:isEmpty ifTrue: [
-			ValueError @env1:___signal___: 'empty octet in ' @env0:, aString
+		p isEmpty ifTrue: [
+			ValueError @env1:___signal___: 'empty octet in ' , aString
 		].
-		(p @env0:size @env0:> 1 @env0:and: [(p @env0:at: 1) @env0:= $0]) ifTrue: [
-			ValueError @env1:___signal___: 'leading-zero octet not permitted in ' @env0:, aString
+		(p size > 1 and: [(p at: 1) = $0]) ifTrue: [
+			ValueError @env1:___signal___: 'leading-zero octet not permitted in ' , aString
 		].
-		octet := [p @env0:asNumber] @env0:on: Error do: [:ex |
-			ValueError @env1:___signal___: 'bad octet in ' @env0:, aString
+		octet := [p asNumber] on: Error do: [:ex |
+			ValueError @env1:___signal___: 'bad octet in ' , aString
 		].
-		((octet isKindOf: Integer) @env0:and: [octet @env0:>= 0 @env0:and: [octet @env0:<= 255]]) ifFalse: [
-			ValueError @env1:___signal___: 'octet out of range in ' @env0:, aString
+		((octet isKindOf: Integer) and: [octet >= 0 and: [octet <= 255]]) ifFalse: [
+			ValueError @env1:___signal___: 'octet out of range in ' , aString
 		].
-		packed := (packed @env0:bitShift: 8) @env0:bitOr: octet
+		packed := (packed bitShift: 8) bitOr: octet
 	].
-	^ self @env0:___fromPacked___: packed
+	^ self ___fromPacked___: packed
 %
 
 category: 'Grail-Private'
 method: IPv4Address
 _packed: anInt
-	self @env0:dynamicInstVarAt: #_packed put: anInt.
+	self dynamicInstVarAt: #_packed put: anInt.
 	^ self
 %
 
@@ -136,7 +136,7 @@ __str__
 category: 'Grail-Accessors'
 method: IPv4Address
 __repr__
-	^ 'IPv4Address(''' @env0:, self @env1:__str__ @env0:, ''')'
+	^ 'IPv4Address(''' @env0:, self __str__ @env0:, ''')'
 %
 
 category: 'Grail-Accessors'
@@ -155,7 +155,7 @@ category: 'Grail-Equality'
 method: IPv4Address
 __eq__: other
 	(other isKindOf: IPv4Address) ifFalse: [^ false].
-	^ (self @env0:dynamicInstVarAt: #_packed) @env0:= other @env1:packed
+	^ (self @env0:dynamicInstVarAt: #_packed) @env0:= other packed
 %
 
 category: 'Grail-Equality'
@@ -167,7 +167,7 @@ __hash__
 category: 'Grail-Equality'
 method: IPv4Address
 __lt__: other
-	^ (self @env0:dynamicInstVarAt: #_packed) @env0:< other @env1:packed
+	^ (self @env0:dynamicInstVarAt: #_packed) @env0:< other packed
 %
 
 category: 'Grail-Categories'
@@ -231,9 +231,9 @@ is_private
 category: 'Grail-Categories'
 method: IPv4Address
 is_global
-	^ self @env1:is_private @env0:not @env0:and: [
-		self @env1:is_reserved @env0:not @env0:and: [
-			self @env1:is_multicast @env0:not
+	^ self is_private @env0:not @env0:and: [
+		self is_reserved @env0:not @env0:and: [
+			self is_multicast @env0:not
 		]
 	]
 %
@@ -288,46 +288,46 @@ ___fromString___: aString strict: strict
 	strict mode (default), reject inputs with host bits set."
 
 	| parts addr prefix mask masked |
-	parts := aString @env0:substrings: '/'.
-	parts @env0:size @env0:> 2 ifTrue: [
-		ValueError @env1:___signal___: 'bad network spec: ' @env0:, aString
+	parts := aString substrings: '/'.
+	parts size > 2 ifTrue: [
+		ValueError @env1:___signal___: 'bad network spec: ' , aString
 	].
-	addr := IPv4Address @env0:___fromString___: (parts @env0:at: 1).
-	parts @env0:size @env0:= 2 ifTrue: [
-		prefix := [(parts @env0:at: 2) @env0:asNumber] @env0:on: Error do: [:ex |
-			ValueError @env1:___signal___: 'bad prefix in ' @env0:, aString
+	addr := IPv4Address ___fromString___: (parts at: 1).
+	parts size = 2 ifTrue: [
+		prefix := [(parts at: 2) asNumber] on: Error do: [:ex |
+			ValueError @env1:___signal___: 'bad prefix in ' , aString
 		].
-		((prefix isKindOf: Integer) @env0:and: [prefix @env0:>= 0 @env0:and: [prefix @env0:<= 32]]) ifFalse: [
-			ValueError @env1:___signal___: 'prefix out of range in ' @env0:, aString
+		((prefix isKindOf: Integer) and: [prefix >= 0 and: [prefix <= 32]]) ifFalse: [
+			ValueError @env1:___signal___: 'prefix out of range in ' , aString
 		]
 	] ifFalse: [prefix := 32].
-	mask := prefix @env0:= 0
+	mask := prefix = 0
 		ifTrue: [0]
 		ifFalse: [
-			((1 @env0:bitShift: prefix) @env0:- 1) @env0:bitShift: 32 @env0:- prefix
+			((1 bitShift: prefix) - 1) bitShift: 32 - prefix
 		].
-	masked := addr @env1:packed @env0:bitAnd: mask.
-	(strict @env0:and: [(masked @env0:= addr @env1:packed) @env0:not]) ifTrue: [
+	masked := addr @env1:packed bitAnd: mask.
+	(strict and: [(masked = addr @env1:packed) not]) ifTrue: [
 		ValueError @env1:___signal___:
-			'host bits set in ' @env0:, aString @env0:, ' (use strict=False to coerce)'
+			'host bits set in ' , aString , ' (use strict=False to coerce)'
 	].
-	^ self @env0:___fromAddr___: (IPv4Address @env0:___fromPacked___: masked) prefix: prefix
+	^ self ___fromAddr___: (IPv4Address ___fromPacked___: masked) prefix: prefix
 %
 
 category: 'Grail-Private'
 classmethod: IPv4Network
 ___fromAddr___: addrInst prefix: prefixInt
 	| inst |
-	inst := self @env0:new.
-	inst @env0:_network: addrInst _prefix: prefixInt.
+	inst := self new.
+	inst _network: addrInst _prefix: prefixInt.
 	^ inst
 %
 
 category: 'Grail-Private'
 method: IPv4Network
 _network: addrInst _prefix: prefixInt
-	self @env0:dynamicInstVarAt: #_network put: addrInst.
-	self @env0:dynamicInstVarAt: #_prefix put: prefixInt.
+	self dynamicInstVarAt: #_network put: addrInst.
+	self dynamicInstVarAt: #_prefix put: prefixInt.
 	^ self
 %
 
@@ -359,7 +359,7 @@ broadcast_address
 	| hostBits |
 	hostBits := 32 @env0:- (self @env0:dynamicInstVarAt: #_prefix).
 	^ IPv4Address @env0:___fromPacked___:
-		((self @env0:dynamicInstVarAt: #_network) @env1:packed @env0:bitOr: ((1 @env0:bitShift: hostBits) @env0:- 1))
+		((self @env0:dynamicInstVarAt: #_network) packed @env0:bitOr: ((1 @env0:bitShift: hostBits) @env0:- 1))
 %
 
 category: 'Grail-Accessors'
@@ -371,7 +371,7 @@ num_addresses
 category: 'Grail-Accessors'
 method: IPv4Network
 __str__
-	^ (self @env0:dynamicInstVarAt: #_network) @env1:__str__ @env0:, '/' @env0:, (self @env0:dynamicInstVarAt: #_prefix) @env0:printString
+	^ (self @env0:dynamicInstVarAt: #_network) __str__ @env0:, '/' @env0:, (self @env0:dynamicInstVarAt: #_prefix) @env0:printString
 %
 
 category: 'Grail-Membership'
@@ -381,13 +381,13 @@ __contains__: anAddress
 
 	| addrPacked mask |
 	(anAddress isKindOf: IPv4Address) ifFalse: [^ false].
-	addrPacked := anAddress @env1:packed.
+	addrPacked := anAddress packed.
 	mask := (self @env0:dynamicInstVarAt: #_prefix) @env0:= 0
 		ifTrue: [0]
 		ifFalse: [
 			((1 @env0:bitShift: (self @env0:dynamicInstVarAt: #_prefix)) @env0:- 1) @env0:bitShift: 32 @env0:- (self @env0:dynamicInstVarAt: #_prefix)
 		].
-	^ (addrPacked @env0:bitAnd: mask) @env0:= (self @env0:dynamicInstVarAt: #_network) @env1:packed
+	^ (addrPacked @env0:bitAnd: mask) @env0:= (self @env0:dynamicInstVarAt: #_network) packed
 %
 
 set compile_env: 0
@@ -450,7 +450,7 @@ ip_address: s
 	| str |
 	str := s @env0:asString.
 	(str @env0:indexOf: $:) @env0:> 0 ifTrue: [
-		ValueError @env1:___signal___: 'IPv6 not supported in Grail ipaddress yet'
+		ValueError ___signal___: 'IPv6 not supported in Grail ipaddress yet'
 	].
 	^ IPv4Address @env0:___fromString___: str
 %
@@ -458,7 +458,7 @@ ip_address: s
 category: 'Grail-Public'
 method: ipaddress
 ip_network: s
-	^ self @env1:ip_network: s _: true
+	^ self ip_network: s _: true
 %
 
 category: 'Grail-Public'
@@ -467,7 +467,7 @@ ip_network: s _: strict
 	| str |
 	str := s @env0:asString.
 	(str @env0:indexOf: $:) @env0:> 0 ifTrue: [
-		ValueError @env1:___signal___: 'IPv6 networks not supported in Grail ipaddress yet'
+		ValueError ___signal___: 'IPv6 networks not supported in Grail ipaddress yet'
 	].
 	^ IPv4Network @env0:___fromString___: str strict: strict
 %

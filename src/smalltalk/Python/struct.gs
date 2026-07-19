@@ -74,10 +74,10 @@ calcsize: format
 	"calcsize(format) - byte count needed for format string."
 
 	| parsed total |
-	parsed := self @env1:_parse: format.
+	parsed := self _parse: format.
 	total := 0.
 	(parsed @env0:at: 2) @env0:do: [:spec |
-		total := total @env0:+ (self @env1:_unitSize: (spec @env0:at: 1)) @env0:* (spec @env0:at: 2)
+		total := total @env0:+ (self _unitSize: (spec @env0:at: 1)) @env0:* (spec @env0:at: 2)
 	].
 	^ total
 %
@@ -89,11 +89,11 @@ _pack: positional kw: kwargs
 
 	| format values |
 	positional @env0:size @env0:< 1 ifTrue: [
-		^ self @env1:_raiseError: 'pack requires a format string'
+		^ self _raiseError: 'pack requires a format string'
 	].
 	format := positional @env0:at: 1.
 	values := positional @env0:copyFrom: 2 to: positional @env0:size.
-	^ self @env1:_doPack: format args: values
+	^ self _doPack: format args: values
 %
 
 category: 'Grail-Public'
@@ -101,7 +101,7 @@ method: struct
 _unpack: positional kw: kwargs
 	"unpack(format, buffer) - varargs entry, ignores kwargs."
 
-	^ self @env1:unpack: (positional @env0:at: 1) _: (positional @env0:at: 2)
+	^ self unpack: (positional @env0:at: 1) _: (positional @env0:at: 2)
 %
 
 category: 'Grail-Public'
@@ -113,10 +113,10 @@ unpack: format _: buffer
 	bytes := (buffer isKindOf: ByteArray)
 		ifTrue: [buffer]
 		ifFalse: [buffer @env0:asByteArray].
-	parsed := self @env1:_parse: format.
+	parsed := self _parse: format.
 	order := parsed @env0:at: 1.
 	results := OrderedCollection @env0:new.
-	self @env1:_iterUnpack: parsed bytes: bytes offset: 0
+	self _iterUnpack: parsed bytes: bytes offset: 0
 		do: [:val | results @env0:add: val].
 	^ tuple @env0:withAll: results @env0:asArray
 %
@@ -124,7 +124,7 @@ unpack: format _: buffer
 category: 'Grail-Public'
 method: struct
 unpack_from: format _: buffer
-	^ self @env1:unpack_from: format _: buffer _: 0
+	^ self unpack_from: format _: buffer _: 0
 %
 
 category: 'Grail-Public'
@@ -137,9 +137,9 @@ unpack_from: format _: buffer _: offset
 	bytes := (buffer isKindOf: ByteArray)
 		ifTrue: [buffer]
 		ifFalse: [buffer @env0:asByteArray].
-	parsed := self @env1:_parse: format.
+	parsed := self _parse: format.
 	results := OrderedCollection @env0:new.
-	self @env1:_iterUnpack: parsed bytes: bytes offset: offset
+	self _iterUnpack: parsed bytes: bytes offset: offset
 		do: [:val | results @env0:add: val].
 	^ tuple @env0:withAll: results @env0:asArray
 %
@@ -181,7 +181,7 @@ _parse: format
 		count @env0:= 0 ifTrue: [count := 1].
 		i @env0:> src @env0:size ifTrue: [
 			"Trailing digits with no type char - error."
-			^ self @env1:_raiseError: 'incomplete format'
+			^ self _raiseError: 'incomplete format'
 		].
 		ch := src @env0:at: i.
 		"`s` consumes the repeat count as a single field length; other
@@ -200,7 +200,7 @@ category: 'Grail-Private'
 method: struct
 _doPack: format args: values
 	| parsed order specs out valIdx |
-	parsed := self @env1:_parse: format.
+	parsed := self _parse: format.
 	order := parsed @env0:at: 1.
 	specs := parsed @env0:at: 2.
 	out := WriteStream @env0:on: ByteArray @env0:new.
@@ -209,19 +209,19 @@ _doPack: format args: values
 		| ch count size |
 		ch := spec @env0:at: 1.
 		count := spec @env0:at: 2.
-		size := self @env1:_unitSize: ch.
+		size := self _unitSize: ch.
 		ch @env0:= $x ifTrue: [
 			"Padding - write `count` zero bytes, no value consumed."
 			1 @env0:to: count do: [:k | out @env0:nextPut: 0]
 		] ifFalse: [
 			ch @env0:= $s ifTrue: [
 				"`s` packs a single value of length `count`."
-				self @env1:_packBytes: (values @env0:at: valIdx) onto: out length: count.
+				self _packBytes: (values @env0:at: valIdx) onto: out length: count.
 				valIdx := valIdx @env0:+ 1
 			] ifFalse: [
 				"Other types: pack `count` consecutive values."
 				1 @env0:to: count do: [:k |
-					self @env1:_packOne: ch order: order value: (values @env0:at: valIdx) onto: out.
+					self _packOne: ch order: order value: (values @env0:at: valIdx) onto: out.
 					valIdx := valIdx @env0:+ 1
 				]
 			]
@@ -249,22 +249,22 @@ method: struct
 _packOne: typeChar order: order value: value onto: stream
 	"Dispatch single-value pack by format character."
 
-	typeChar @env0:= $b ifTrue: [^ self @env1:_packIntSigned: value bytes: 1 order: order onto: stream].
-	typeChar @env0:= $B ifTrue: [^ self @env1:_packIntUnsigned: value bytes: 1 order: order onto: stream].
-	typeChar @env0:= $h ifTrue: [^ self @env1:_packIntSigned: value bytes: 2 order: order onto: stream].
-	typeChar @env0:= $H ifTrue: [^ self @env1:_packIntUnsigned: value bytes: 2 order: order onto: stream].
-	(typeChar @env0:= $i @env0:or: [typeChar @env0:= $l]) ifTrue: [^ self @env1:_packIntSigned: value bytes: 4 order: order onto: stream].
-	(typeChar @env0:= $I @env0:or: [typeChar @env0:= $L]) ifTrue: [^ self @env1:_packIntUnsigned: value bytes: 4 order: order onto: stream].
-	typeChar @env0:= $q ifTrue: [^ self @env1:_packIntSigned: value bytes: 8 order: order onto: stream].
-	typeChar @env0:= $Q ifTrue: [^ self @env1:_packIntUnsigned: value bytes: 8 order: order onto: stream].
-	typeChar @env0:= $c ifTrue: [^ self @env1:_packBytes: value onto: stream length: 1].
+	typeChar @env0:= $b ifTrue: [^ self _packIntSigned: value bytes: 1 order: order onto: stream].
+	typeChar @env0:= $B ifTrue: [^ self _packIntUnsigned: value bytes: 1 order: order onto: stream].
+	typeChar @env0:= $h ifTrue: [^ self _packIntSigned: value bytes: 2 order: order onto: stream].
+	typeChar @env0:= $H ifTrue: [^ self _packIntUnsigned: value bytes: 2 order: order onto: stream].
+	(typeChar @env0:= $i @env0:or: [typeChar @env0:= $l]) ifTrue: [^ self _packIntSigned: value bytes: 4 order: order onto: stream].
+	(typeChar @env0:= $I @env0:or: [typeChar @env0:= $L]) ifTrue: [^ self _packIntUnsigned: value bytes: 4 order: order onto: stream].
+	typeChar @env0:= $q ifTrue: [^ self _packIntSigned: value bytes: 8 order: order onto: stream].
+	typeChar @env0:= $Q ifTrue: [^ self _packIntUnsigned: value bytes: 8 order: order onto: stream].
+	typeChar @env0:= $c ifTrue: [^ self _packBytes: value onto: stream length: 1].
 	typeChar @env0:= $? ifTrue: [
 		stream @env0:nextPut: (value == true ifTrue: [1] ifFalse: [0]).
 		^ self
 	].
-	typeChar @env0:= $f ifTrue: [^ self @env1:_packDouble: value bytes: 4 order: order onto: stream].
-	typeChar @env0:= $d ifTrue: [^ self @env1:_packDouble: value bytes: 8 order: order onto: stream].
-	^ self @env1:_raiseError: 'bad format char: ' @env0:, typeChar @env0:asString
+	typeChar @env0:= $f ifTrue: [^ self _packDouble: value bytes: 4 order: order onto: stream].
+	typeChar @env0:= $d ifTrue: [^ self _packDouble: value bytes: 8 order: order onto: stream].
+	^ self _raiseError: 'bad format char: ' @env0:, typeChar @env0:asString
 %
 
 category: 'Grail-Private'
@@ -277,7 +277,7 @@ _packIntSigned: value bytes: n order: order onto: stream
 	v @env0:< 0 ifTrue: [
 		v := v @env0:+ (1 @env0:bitShift: n @env0:* 8)
 	].
-	^ self @env1:_packIntUnsigned: v bytes: n order: order onto: stream
+	^ self _packIntUnsigned: v bytes: n order: order onto: stream
 %
 
 category: 'Grail-Private'
@@ -306,9 +306,9 @@ _packDouble: value bytes: n order: order onto: stream
 	| asFloat raw |
 	asFloat := value @env0:asFloat.
 	n @env0:= 8
-		ifTrue: [raw := self @env1:_doubleToBits: asFloat]
-		ifFalse: [raw := self @env1:_singleToBits: asFloat].
-	^ self @env1:_packIntUnsigned: raw bytes: n order: order onto: stream
+		ifTrue: [raw := self _doubleToBits: asFloat]
+		ifFalse: [raw := self _singleToBits: asFloat].
+	^ self _packIntUnsigned: raw bytes: n order: order onto: stream
 %
 
 ! ===============================================================================
@@ -329,7 +329,7 @@ _iterUnpack: parsed bytes: bytes offset: offset0 do: aBlock
 		| ch count |
 		ch := spec @env0:at: 1.
 		count := spec @env0:at: 2.
-		size := self @env1:_unitSize: ch.
+		size := self _unitSize: ch.
 		ch @env0:= $x ifTrue: [offset := offset @env0:+ count]
 		ifFalse: [ch @env0:= $s
 			ifTrue: [
@@ -338,7 +338,7 @@ _iterUnpack: parsed bytes: bytes offset: offset0 do: aBlock
 				offset := offset @env0:+ count
 			] ifFalse: [
 				1 @env0:to: count do: [:k |
-					value := self @env1:_unpackOne: ch order: order bytes: bytes offset: offset.
+					value := self _unpackOne: ch order: order bytes: bytes offset: offset.
 					aBlock @env0:value: value.
 					offset := offset @env0:+ size
 				]
@@ -353,21 +353,21 @@ _unpackOne: typeChar order: order bytes: bytes offset: offset
 	"Decode one value of typeChar starting at offset (0-based)."
 
 	| size raw |
-	size := self @env1:_unitSize: typeChar.
+	size := self _unitSize: typeChar.
 	typeChar @env0:= $c ifTrue: [^ bytes @env0:copyFrom: offset @env0:+ 1 to: offset @env0:+ 1].
 	typeChar @env0:= $? ifTrue: [^ (bytes @env0:at: offset @env0:+ 1) @env0:= 0 @env0:not].
-	raw := self @env1:_readUnsigned: bytes offset: offset bytes: size order: order.
+	raw := self _readUnsigned: bytes offset: offset bytes: size order: order.
 	(typeChar @env0:= $f @env0:or: [typeChar @env0:= $d]) ifTrue: [
 		^ size @env0:= 8
-			ifTrue: [self @env1:_bitsToDouble: raw]
-			ifFalse: [self @env1:_bitsToSingle: raw]
+			ifTrue: [self _bitsToDouble: raw]
+			ifFalse: [self _bitsToSingle: raw]
 	].
 	(typeChar @env0:= $b
 		@env0:or: [typeChar @env0:= $h
 			@env0:or: [typeChar @env0:= $i
 				@env0:or: [typeChar @env0:= $l
 					@env0:or: [typeChar @env0:= $q]]]]) ifTrue: [
-		^ self @env1:_signed: raw bytes: size
+		^ self _signed: raw bytes: size
 	].
 	^ raw
 %
@@ -508,13 +508,13 @@ _unitSize: typeChar
 	typeChar @env0:= $f ifTrue: [^ 4].
 	typeChar @env0:= $d ifTrue: [^ 8].
 	typeChar @env0:= $s ifTrue: [^ 1].
-	^ self @env1:_raiseError: 'bad format char: ' @env0:, typeChar @env0:asString
+	^ self _raiseError: 'bad format char: ' @env0:, typeChar @env0:asString
 %
 
 category: 'Grail-Private'
 method: struct
 _raiseError: msg
-	^ ValueError @env1:___signal___: msg
+	^ ValueError ___signal___: msg
 %
 
 set compile_env: 0
@@ -583,7 +583,7 @@ format
 category: 'Grail-Accessors'
 method: PyStruct
 size
-	^ struct @env1:instance @env1:calcsize: self format
+	^ struct instance calcsize: self format
 %
 
 category: 'Grail-Public'
@@ -594,25 +594,25 @@ _pack: positional kw: kwargs
 	| args |
 	args := { self format }.
 	positional @env0:do: [:v | args := args @env0:, (Array @env0:with: v)].
-	^ struct @env1:instance @env1:_pack: args kw: kwargs
+	^ struct instance _pack: args kw: kwargs
 %
 
 category: 'Grail-Public'
 method: PyStruct
 unpack: buffer
-	^ struct @env1:instance @env1:unpack: self format _: buffer
+	^ struct instance unpack: self format _: buffer
 %
 
 category: 'Grail-Public'
 method: PyStruct
 unpack_from: buffer
-	^ struct @env1:instance @env1:unpack_from: self format _: buffer _: 0
+	^ struct instance unpack_from: self format _: buffer _: 0
 %
 
 category: 'Grail-Public'
 method: PyStruct
 unpack_from: buffer _: offset
-	^ struct @env1:instance @env1:unpack_from: self format _: buffer _: offset
+	^ struct instance unpack_from: self format _: buffer _: offset
 %
 
 set compile_env: 0

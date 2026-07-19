@@ -474,7 +474,7 @@ testGeneratorIsSessionLocalNotCommitted
 	r @env1:seed: 42.
 	r @env1:random.
 	"Not parked on the committed module singleton..."
-	self assert: (r @env0:at: #_generator ifAbsent: [#GrailAbsent]) == #GrailAbsent.
+	self assert: (r at: #_generator ifAbsent: [#GrailAbsent]) == #GrailAbsent.
 	"...held in this session's SessionTemps instead."
 	self assert: (SessionTemps current includesKey: #'___GrailRandomGenerator___').
 %

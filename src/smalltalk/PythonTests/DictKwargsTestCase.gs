@@ -57,7 +57,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'dict_kwargs' ifAbsent: [].
+	mods removeKey: #'dict_kwargs' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/dict_kwargs.py')
 		name: 'dict_kwargs'.
@@ -92,7 +92,7 @@ testDictFromKwargsKeysAreStrings
 
 	| result |
 	result := testModule @env1:dict_kwargs_iteration.
-	self assert: result @env0:size equals: 2.
+	self assert: result size equals: 2.
 	self assert: (result @env1:__getitem__: 0) equals: 'a'.
 	self assert: (result @env1:__getitem__: 1) equals: 'b'
 %

@@ -104,12 +104,12 @@ __eq__: other
 	].
 
 	"Non-empty ranges must have same start, stop, and step"
-	selfStart := self @env1:start.
-	otherStart := other @env1:start.
+	selfStart := self start.
+	otherStart := other start.
 	(selfStart @env0:= otherStart) ifFalse: [ ^ false ].
 
-	selfStep := self @env1:step.
-	otherStep := other @env1:step.
+	selfStep := self step.
+	otherStep := other step.
 	(selfStep @env0:= otherStep) ifFalse: [ ^ false ].
 
 	^ selfSize @env0:= otherSize
@@ -122,16 +122,16 @@ __getitem__: index
 
 	| idx size |
 	(index isKindOf: slice) ifTrue: [
-		^ self @env1:___getslice___: index @env1:start
-			_: index @env1:stop
-			_: index @env1:step
+		^ self ___getslice___: index start
+			_: index stop
+			_: index step
 	].
 	"Non-integer, non-slice index: catchable TypeError instead of an
 	uncatchable env-0 comparison DNU on the index."
 	((index isKindOf: Integer)
 		or: [(index @env0:class
 			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
-		TypeError @env1:___signal___: ('range indices must be integers or slices, not '
+		TypeError ___signal___: ('range indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	size := self @env0:size.
 	idx := index.
@@ -165,7 +165,7 @@ method: range
 __iter__
 	"Return an iterator over the range."
 
-	^ range_iterator @env1:___on: self
+	^ range_iterator ___on: self
 %
 
 category: 'Grail-Sequence Protocol'
@@ -181,7 +181,7 @@ __ne__: other
 	"Test inequality with another range"
 
 	| eq |
-	eq := self @env1:__eq__: other.
+	eq := self __eq__: other.
 	^ eq @env0:not
 %
 
@@ -227,11 +227,11 @@ __reversed__
 
 	"Empty range returns empty range"
 	(size == 0) ifTrue: [
-		^ range @env1:__new__: 0 _: 0 _: 1
+		^ range __new__: 0 _: 0 _: 1
 	].
 
-	startVal := self @env1:start.
-	stepVal := self @env1:step.
+	startVal := self start.
+	stepVal := self step.
 
 	"Calculate new start: original start + (size - 1) * step"
 	newStart := startVal  @env0:+ ((size @env0:- 1) @env0:* stepVal).
@@ -242,7 +242,7 @@ __reversed__
 	"New stop is original start + newStep (exclusive)"
 	newStop := startVal @env0:+ newStep.
 
-	^ range @env1:__new__: newStart _: newStop _: newStep
+	^ range __new__: newStart _: newStop _: newStep
 %
 
 category: 'Grail-Sequence Methods'

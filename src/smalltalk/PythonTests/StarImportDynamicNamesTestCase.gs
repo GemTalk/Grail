@@ -50,7 +50,7 @@ setUp
 	| mods |
 	mods := importlib @env1:modules.
 	#( 'pkg_star_dyn' 'pkg_star_dyn._source' 'pkg_star_dyn._consumer' ) do: [:n |
-		mods @env0:removeKey: n @env0:asSymbol ifAbsent: []].
+		mods removeKey: n asSymbol ifAbsent: []].
 	"Load package, source, then consumer."
 	importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/pkg_star_dyn/__init__.py')

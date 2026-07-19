@@ -118,7 +118,7 @@ value: positional value: kwargs
 
 	| obj rest nargs kwOk method resolvedSel |
 	(positional == nil or: [positional @env0:isEmpty]) ifTrue: [
-		^ TypeError @env1:___signal___:
+		^ TypeError ___signal___:
 			('unbound method ''' @env0:, selector @env0:asString
 				@env0:, ''' must be called with an instance as the first argument')
 	].
@@ -130,7 +130,7 @@ value: positional value: kwargs
 	kwOk := kwargs == nil or: [kwargs @env0:isEmpty].
 	method := self @env0:_resolveMethodNargs: nargs kwOk: kwOk.
 	method ifNil: [
-		^ AttributeError @env1:___signal___:
+		^ AttributeError ___signal___:
 			('type object ''' @env0:, definingClass @env0:name @env0:asString
 				@env0:, ''' has no method ''' @env0:, selector @env0:asString @env0:, '''')
 	].
@@ -177,7 +177,7 @@ __eq__: other
 category: 'Grail-Comparison'
 method: UnboundMethod
 __ne__: other
-	^ (self @env1:__eq__: other) @env0:not
+	^ (self __eq__: other) @env0:not
 %
 
 category: 'Grail-Comparison'

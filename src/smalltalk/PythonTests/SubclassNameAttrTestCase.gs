@@ -60,7 +60,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'subclass_name_attr' ifAbsent: [].
+	mods removeKey: #'subclass_name_attr' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/subclass_name_attr.py')
 		name: 'subclass_name_attr'.

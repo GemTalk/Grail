@@ -53,7 +53,7 @@ __getattr__: name
 	| value |
 	value := ExecBlockAttrs @env0:at: self attr: name.
 	value == nil ifTrue: [
-		^ AttributeError @env1:___signal___:
+		^ AttributeError ___signal___:
 			('ExecBlock object has no attribute ''' @env0:, name @env0:asString @env0:, '''')
 	].
 	^ value
@@ -84,7 +84,7 @@ method: ExecBlock
 __qualname__
 	"Mirror __name__ — Grail closures don't track lexical nesting."
 
-	^ self @env1:__name__
+	^ self __name__
 %
 
 category: 'Grail-Attribute Access'
@@ -226,7 +226,7 @@ ___pyNamed___: aString
 	``<closure>'' placeholder.  Returns self so it sits transparently in
 	the ``name := <block>'' assignment / decorator pipeline."
 
-	ExecBlockAttrs @env0:at: self attr: '__name__' put: aString.
+	ExecBlockAttrs at: self attr: '__name__' put: aString.
 	^ self
 %
 
@@ -243,7 +243,7 @@ ___pyNamed___: aString annotations: aDict
 	(``functools.singledispatch.register'' reads the first parameter's
 	annotation off a decorated local def this way)."
 
-	ExecBlockAttrs @env0:at: self attr: '__name__' put: aString.
-	ExecBlockAttrs @env0:at: self attr: '__annotations__' put: aDict.
+	ExecBlockAttrs at: self attr: '__name__' put: aString.
+	ExecBlockAttrs at: self attr: '__annotations__' put: aDict.
 	^ self
 %

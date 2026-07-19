@@ -43,9 +43,9 @@ method: NestedDefNameTestCase
 loadFixture
 	"Load tests/python/nested_def_name.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'nested_def_name' ifAbsent: [].
+	importlib @env1:modules removeKey: #'nested_def_name' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/nested_def_name.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/nested_def_name.py')
 		name: 'nested_def_name'
 %
 

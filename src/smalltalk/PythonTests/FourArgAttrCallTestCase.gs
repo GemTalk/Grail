@@ -43,9 +43,9 @@ method: FourArgAttrCallTestCase
 loadFixture
 	"Load tests/python/four_arg_attr_call.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'four_arg_attr_call' ifAbsent: [].
+	importlib @env1:modules removeKey: #'four_arg_attr_call' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/four_arg_attr_call.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/four_arg_attr_call.py')
 		name: 'four_arg_attr_call'
 %
 
@@ -57,7 +57,7 @@ testCall4ArgViaAttributeChain
 
 	| r |
 	r := self loadFixture @env1:call_4arg_via_attribute_chain.
-	self assert: r @env0:size equals: 4.
+	self assert: r size equals: 4.
 	self assert: (r @env1:__getitem__: 0) equals: 1.
 	self assert: (r @env1:__getitem__: 3) equals: 4
 %
@@ -69,7 +69,7 @@ testCall4ArgOnLocal
 
 	| r |
 	r := self loadFixture @env1:call_4arg_on_local.
-	self assert: r @env0:size equals: 4.
+	self assert: r size equals: 4.
 	self assert: (r @env1:__getitem__: 0) equals: 'a'.
 	self assert: (r @env1:__getitem__: 3) equals: 'd'
 %

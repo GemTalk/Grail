@@ -44,9 +44,9 @@ method: ReSubCallableTestCase
 loadFixture
 	"Load tests/python/re_sub_callable.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'re_sub_callable' ifAbsent: [].
+	importlib @env1:modules removeKey: #'re_sub_callable' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/re_sub_callable.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/re_sub_callable.py')
 		name: 're_sub_callable'
 %
 
@@ -64,7 +64,7 @@ testSubBytesCallable
 	"A lambda replacement over a bytes subject (the werkzeug cookie
 	shape)."
 
-	self assert: self loadFixture @env1:sub_bytes_callable equals: 'aXbXc' @env0:asByteArray
+	self assert: self loadFixture @env1:sub_bytes_callable equals: 'aXbXc' asByteArray
 %
 
 category: 'Grail-Tests-ReSubCallable'

@@ -36,7 +36,7 @@ fixture
 	"Load (fresh each test) the descriptor-round fixture module: real
 	class definitions cannot instantiate inside eval:."
 
-	(importlib @env1:modules) @env0:removeKey: #'test.grail_dunder_check' ifAbsent: [].
+	(importlib @env1:modules) removeKey: #'test.grail_dunder_check' ifAbsent: [].
 	^ importlib
 		loadModuleFromPath: (importlib @env1:___moduleNameToPath___: 'test.grail_dunder_check')
 		name: 'test.grail_dunder_check'

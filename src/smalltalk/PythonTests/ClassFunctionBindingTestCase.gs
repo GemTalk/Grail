@@ -52,7 +52,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'class_function_binding' ifAbsent: [].
+	mods removeKey: #'class_function_binding' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/class_function_binding.py')
 		name: 'class_function_binding'.
@@ -66,8 +66,8 @@ testCallGreetViaInstance
 
 	| result |
 	result := testModule @env1:___pyAttrLoad___: #greet_via_instance.
-	self assert: (result @env0:at: 1) equals: 7.
-	self assert: (result @env0:at: 2) equals: 'hi'.
+	self assert: (result at: 1) equals: 7.
+	self assert: (result at: 2) equals: 'hi'.
 %
 
 category: 'Grail-Tests'
@@ -78,8 +78,8 @@ testCallGreetViaClass
 
 	| result |
 	result := testModule @env1:___pyAttrLoad___: #greet_via_class.
-	self assert: (result @env0:at: 1) equals: 9.
-	self assert: (result @env0:at: 2) equals: 'hey'.
+	self assert: (result at: 1) equals: 9.
+	self assert: (result at: 2) equals: 'hey'.
 %
 
 category: 'Grail-Tests'
@@ -123,8 +123,8 @@ testClassReadReturnsFunction
 
 	| result |
 	result := testModule @env1:___pyAttrLoad___: #class_read_returns_function_result.
-	self assert: (result @env0:at: 1) equals: 3.
-	self assert: (result @env0:at: 2) equals: 'direct'.
+	self assert: (result at: 1) equals: 3.
+	self assert: (result at: 2) equals: 'direct'.
 %
 
 category: 'Grail-Tests'

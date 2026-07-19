@@ -92,7 +92,7 @@ method: secrets
 token_bytes
 	"token_bytes() - 32 cryptographically strong random bytes."
 
-	^ self @env1:token_bytes: None
+	^ self token_bytes: None
 %
 
 category: 'Grail-Tokens'
@@ -102,8 +102,8 @@ token_bytes: nbytes
 	(or DEFAULT_ENTROPY=32 if nbytes is None)."
 
 	| n gen ba |
-	n := self @env1:_defaultBytes: nbytes.
-	gen := self @env1:_generator.
+	n := self _defaultBytes: nbytes.
+	gen := self _generator.
 	ba := ByteArray @env0:new: n.
 	1 @env0:to: n do: [:i | ba @env0:at: i put: (gen @env0:integerBetween: 0 and: 255)].
 	^ ba
@@ -112,7 +112,7 @@ token_bytes: nbytes
 category: 'Grail-Tokens'
 method: secrets
 token_hex
-	^ self @env1:token_hex: None
+	^ self token_hex: None
 %
 
 category: 'Grail-Tokens'
@@ -121,13 +121,13 @@ token_hex: nbytes
 	"token_hex(nbytes=None) - lowercase hex string of nbytes random
 	bytes (length 2*nbytes)."
 
-	^ (self @env1:token_bytes: nbytes) @env0:asHexString @env0:asLowercase
+	^ (self token_bytes: nbytes) @env0:asHexString @env0:asLowercase
 %
 
 category: 'Grail-Tokens'
 method: secrets
 token_urlsafe
-	^ self @env1:token_urlsafe: None
+	^ self token_urlsafe: None
 %
 
 category: 'Grail-Tokens'
@@ -137,7 +137,7 @@ token_urlsafe: nbytes
 	token (with `-` and `_` in place of `+` and `/`, and no `=`
 	padding).  Each byte encodes to ~1.3 chars."
 
-	^ self @env1:___b64UrlsafeEncode___: (self @env1:token_bytes: nbytes)
+	^ self ___b64UrlsafeEncode___: (self token_bytes: nbytes)
 %
 
 ! ===============================================================================
@@ -150,14 +150,14 @@ choice: seq
 	"choice(seq) - random element from a non-empty sequence."
 
 	| len idx |
-	len := [seq @env1:__len__]
+	len := [seq __len__]
 		@env0:on: MessageNotUnderstood
 		do: [:ex | seq @env0:size].
 	len @env0:= 0 ifTrue: [
-		IndexError @env1:___signal___: 'Cannot choose from an empty sequence'
+		IndexError ___signal___: 'Cannot choose from an empty sequence'
 	].
-	idx := self @env1:_generator @env0:integerBetween: 0 and: len @env0:- 1.
-	^ seq @env1:__getitem__: idx
+	idx := self _generator @env0:integerBetween: 0 and: len @env0:- 1.
+	^ seq __getitem__: idx
 %
 
 category: 'Grail-Random ints'
@@ -166,9 +166,9 @@ randbelow: n
 	"randbelow(n) - random int in [0, n).  Raises ValueError if n <= 0."
 
 	n @env0:<= 0 ifTrue: [
-		ValueError @env1:___signal___: 'Upper bound must be positive'
+		ValueError ___signal___: 'Upper bound must be positive'
 	].
-	^ self @env1:_generator @env0:integerBetween: 0 and: n @env0:- 1
+	^ self _generator @env0:integerBetween: 0 and: n @env0:- 1
 %
 
 category: 'Grail-Random ints'
@@ -178,12 +178,12 @@ randbits: k
 	Raises ValueError if k < 0."
 
 	k @env0:< 0 ifTrue: [
-		ValueError @env1:___signal___: 'k must be non-negative'
+		ValueError ___signal___: 'k must be non-negative'
 	].
 	k @env0:= 0 ifTrue: [^ 0].
 	"integerBetween:and: with a 2^k-bit range gives a uniform value
 	in [0, 2^k)."
-	^ self @env1:_generator @env0:integerBetween: 0 and: (1 @env0:bitShift: k) @env0:- 1
+	^ self _generator @env0:integerBetween: 0 and: (1 @env0:bitShift: k) @env0:- 1
 %
 
 ! ===============================================================================
@@ -201,7 +201,7 @@ compare_digest: a _: b
 	aIsBytes := a isKindOf: ByteArray.
 	bIsBytes := b isKindOf: ByteArray.
 	aIsBytes @env0:= bIsBytes ifFalse: [
-		TypeError @env1:___signal___: 'compare_digest operands must both be str or both bytes'
+		TypeError ___signal___: 'compare_digest operands must both be str or both bytes'
 	].
 	aSize := a @env0:size.
 	bSize := b @env0:size.

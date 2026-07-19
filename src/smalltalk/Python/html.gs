@@ -58,7 +58,7 @@ initialize
 	this slot. This initialize is kept because `entities` is a stored
 	attribute (a reference to another module instance), not a callable."
 
-	self @env0:at: #entities put: (html_entities @env1:instance)
+	self @env0:at: #entities put: (html_entities instance)
 %
 
 ! ===============================================================================
@@ -119,7 +119,7 @@ unescape: s
 	``entities'' attribute to that module, whose name2codepoint lives in
 	dynamic-instVar storage and is not reachable through ``at:''.  The
 	native html_entities is stable and complete (252 HTML4 names)."
-	n2c := (html_entities @env1:instance) @env0:at: #name2codepoint.
+	n2c := (html_entities instance) @env0:at: #name2codepoint.
 
 	(s @env0:includesString: '&') ifFalse: [^ s].
 

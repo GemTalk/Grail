@@ -52,7 +52,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'twilio_client' ifAbsent: [].
+	mods removeKey: #'twilio_client' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/twilio_client.py')
 		name: 'twilio_client'.
@@ -119,7 +119,7 @@ testMessagesCreate
 	self assert: (self resultAt: #r_create at: 'data_to') equals: '+15558675310'.
 	self assert: (self resultAt: #r_create at: 'data_from') equals: '+15017122661'.
 	self assert: (self resultAt: #r_create at: 'data_body') equals: 'Hello from Grail'.
-	self assert: ((self resultAt: #r_create at: 'auth') @env0:asArray)
+	self assert: ((self resultAt: #r_create at: 'auth') asArray)
 		equals: #('AC00000000000000000000000000000001' 'authtoken99').
 	self assert: (self resultAt: #r_create at: 'msg_sid')
 		equals: 'SM00000000000000000000000000000042'.

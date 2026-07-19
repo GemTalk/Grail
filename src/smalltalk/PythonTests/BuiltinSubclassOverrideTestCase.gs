@@ -45,9 +45,9 @@ method: BuiltinSubclassOverrideTestCase
 loadFixture
 	"Load tests/python/builtin_subclass_override.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'builtin_subclass_override' ifAbsent: [].
+	importlib @env1:modules removeKey: #'builtin_subclass_override' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/builtin_subclass_override.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/builtin_subclass_override.py')
 		name: 'builtin_subclass_override'
 %
 

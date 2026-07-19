@@ -37,7 +37,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'enum_global_inject' ifAbsent: [].
+	mods removeKey: #'enum_global_inject' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/enum_global_inject.py')
 		name: 'enum_global_inject'.

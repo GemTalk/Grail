@@ -55,20 +55,20 @@ ___fromTotalMicros___: totalMicros
 	| inst days secs micros |
 	"Normalize so 0 <= micros < 1e6 and 0 <= secs < 86400, with `days`
 	carrying the sign (matches CPython's storage)."
-	micros := totalMicros @env0:\\ 1000000.
-	secs := (totalMicros @env0:// 1000000) @env0:\\ 86400.
-	days := totalMicros @env0:// 1000000 @env0:// 86400.
-	inst := self @env0:new.
-	inst @env0:_days: days _seconds: secs _microseconds: micros.
+	micros := totalMicros \\ 1000000.
+	secs := (totalMicros // 1000000) \\ 86400.
+	days := totalMicros // 1000000 // 86400.
+	inst := self new.
+	inst _days: days _seconds: secs _microseconds: micros.
 	^ inst
 %
 
 category: 'Grail-Private'
 method: PyTimedelta
 _days: d _seconds: s _microseconds: us
-	self @env0:dynamicInstVarAt: #_days put: (d).
-	self @env0:dynamicInstVarAt: #_seconds put: (s).
-	self @env0:dynamicInstVarAt: #_microseconds put: (us).
+	self dynamicInstVarAt: #_days put: (d).
+	self dynamicInstVarAt: #_seconds put: (s).
+	self dynamicInstVarAt: #_microseconds put: (us).
 	^ self
 %
 
@@ -81,7 +81,7 @@ value: positional value: kwargs
 	varargs assembler.  Bypasses Object class >> value:value: which
 	would dispatch by __new__ arity (no 7-arg __new__ defined)."
 
-	^ self @env1:_timedelta: positional kw: kwargs
+	^ self _timedelta: positional kw: kwargs
 %
 
 category: 'Grail-Initialization'
@@ -118,15 +118,15 @@ ___multiplier___: unit
 	Normalise to Symbol before dispatch."
 
 	| sym |
-	sym := unit @env0:asSymbol.
-	sym @env0:= #days ifTrue: [^ 86400000000].
-	sym @env0:= #seconds ifTrue: [^ 1000000].
-	sym @env0:= #microseconds ifTrue: [^ 1].
-	sym @env0:= #milliseconds ifTrue: [^ 1000].
-	sym @env0:= #minutes ifTrue: [^ 60000000].
-	sym @env0:= #hours ifTrue: [^ 3600000000].
-	sym @env0:= #weeks ifTrue: [^ 604800000000].
-	^ TypeError @env1:___signal___: 'unsupported timedelta unit: ' @env0:, unit @env0:asString
+	sym := unit asSymbol.
+	sym = #days ifTrue: [^ 86400000000].
+	sym = #seconds ifTrue: [^ 1000000].
+	sym = #microseconds ifTrue: [^ 1].
+	sym = #milliseconds ifTrue: [^ 1000].
+	sym = #minutes ifTrue: [^ 60000000].
+	sym = #hours ifTrue: [^ 3600000000].
+	sym = #weeks ifTrue: [^ 604800000000].
+	^ TypeError @env1:___signal___: 'unsupported timedelta unit: ' , unit asString
 %
 
 set compile_env: 1
@@ -171,9 +171,9 @@ method: PyTimedelta
 __add__: other
 	(other isKindOf: PyTimedelta) ifTrue: [
 		^ PyTimedelta @env0:___fromTotalMicros___:
-			(self @env1:___totalMicros___ @env0:+ other @env1:___totalMicros___)
+			(self ___totalMicros___ @env0:+ other ___totalMicros___)
 	].
-	^ TypeError @env1:___signal___: 'unsupported operand for +'
+	^ TypeError ___signal___: 'unsupported operand for +'
 %
 
 category: 'Grail-Arithmetic'
@@ -181,29 +181,29 @@ method: PyTimedelta
 __sub__: other
 	(other isKindOf: PyTimedelta) ifTrue: [
 		^ PyTimedelta @env0:___fromTotalMicros___:
-			(self @env1:___totalMicros___ @env0:- other @env1:___totalMicros___)
+			(self ___totalMicros___ @env0:- other ___totalMicros___)
 	].
-	^ TypeError @env1:___signal___: 'unsupported operand for -'
+	^ TypeError ___signal___: 'unsupported operand for -'
 %
 
 category: 'Grail-Arithmetic'
 method: PyTimedelta
 __neg__
-	^ PyTimedelta @env0:___fromTotalMicros___: self @env1:___totalMicros___ @env0:negated
+	^ PyTimedelta @env0:___fromTotalMicros___: self ___totalMicros___ @env0:negated
 %
 
 category: 'Grail-Arithmetic'
 method: PyTimedelta
 __mul__: scale
 	^ PyTimedelta @env0:___fromTotalMicros___:
-		(self @env1:___totalMicros___ @env0:* scale) @env0:truncated
+		(self ___totalMicros___ @env0:* scale) @env0:truncated
 %
 
 category: 'Grail-Arithmetic'
 method: PyTimedelta
 __abs__
-	self @env1:___totalMicros___ @env0:< 0 ifTrue: [
-		^ self @env1:__neg__
+	self ___totalMicros___ @env0:< 0 ifTrue: [
+		^ self __neg__
 	].
 	^ self
 %
@@ -212,19 +212,19 @@ category: 'Grail-Equality'
 method: PyTimedelta
 __eq__: other
 	(other isKindOf: PyTimedelta) ifFalse: [^ false].
-	^ self @env1:___totalMicros___ @env0:= other @env1:___totalMicros___
+	^ self ___totalMicros___ @env0:= other ___totalMicros___
 %
 
 category: 'Grail-Equality'
 method: PyTimedelta
 __lt__: other
-	^ self @env1:___totalMicros___ @env0:< other @env1:___totalMicros___
+	^ self ___totalMicros___ @env0:< other ___totalMicros___
 %
 
 category: 'Grail-Equality'
 method: PyTimedelta
 __hash__
-	^ self @env1:___totalMicros___ @env0:hash
+	^ self ___totalMicros___ @env0:hash
 %
 
 category: 'Grail-Conversion'
@@ -234,7 +234,7 @@ __str__
 
 	| stream absMicros days hours mins secs us usStr |
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
-	absMicros := self @env1:___totalMicros___.
+	absMicros := self ___totalMicros___.
 	absMicros @env0:< 0 ifTrue: [
 		stream @env0:nextPutAll: '-'.
 		absMicros := absMicros @env0:negated
@@ -330,8 +330,8 @@ ___pythonValueAttrs___
 category: 'Grail-Private'
 method: PyTimezone
 _offset: tdelta _name: nameOrNil
-	self @env0:dynamicInstVarAt: #_offset put: (tdelta).
-	self @env0:dynamicInstVarAt: #_name put: (nameOrNil).
+	self dynamicInstVarAt: #_offset put: (tdelta).
+	self dynamicInstVarAt: #_name put: (nameOrNil).
 	^ self
 %
 
@@ -388,7 +388,7 @@ tzname: dt
 	"Return the human-readable name, e.g. 'UTC' or 'UTC+02:00'."
 
 	(self @env0:dynamicInstVarAt: #_name) @env0:isNil ifFalse: [^ (self @env0:dynamicInstVarAt: #_name)].
-	^ self @env1:___formatOffset___: (self @env0:dynamicInstVarAt: #_offset)
+	^ self ___formatOffset___: (self @env0:dynamicInstVarAt: #_offset)
 %
 
 category: 'Grail-Accessors'
@@ -402,14 +402,14 @@ dst: dt
 category: 'Grail-Accessors'
 method: PyTimezone
 __str__
-	^ self @env1:tzname: None
+	^ self tzname: None
 %
 
 category: 'Grail-Private'
 method: PyTimezone
 ___formatOffset___: tdelta
 	| total stream hours mins sign |
-	total := tdelta @env1:total_seconds @env0:truncated.
+	total := tdelta total_seconds @env0:truncated.
 	total @env0:= 0 ifTrue: [^ 'UTC'].
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
 	stream @env0:nextPutAll: 'UTC'.
@@ -477,9 +477,9 @@ category: 'Grail-Private'
 classmethod: PyDateTime
 ___fromFields___: y _: mo _: d _: h _: mi _: s _: us _: tz
 	| inst |
-	inst := self @env0:new.
+	inst := self new.
 	inst
-		@env0:_year: y _month: mo _day: d
+		_year: y _month: mo _day: d
 		_hour: h _minute: mi _second: s
 		_microsecond: us _tzinfo: tz.
 	^ inst
@@ -488,14 +488,14 @@ ___fromFields___: y _: mo _: d _: h _: mi _: s _: us _: tz
 category: 'Grail-Private'
 method: PyDateTime
 _year: y _month: mo _day: d _hour: h _minute: mi _second: s _microsecond: us _tzinfo: tz
-	self @env0:dynamicInstVarAt: #_year put: (y).
-	self @env0:dynamicInstVarAt: #_month put: (mo).
-	self @env0:dynamicInstVarAt: #_day put: (d).
-	self @env0:dynamicInstVarAt: #_hour put: (h).
-	self @env0:dynamicInstVarAt: #_minute put: (mi).
-	self @env0:dynamicInstVarAt: #_second put: (s).
-	self @env0:dynamicInstVarAt: #_microsecond put: (us).
-	self @env0:dynamicInstVarAt: #_tzinfo put: (tz).
+	self dynamicInstVarAt: #_year put: (y).
+	self dynamicInstVarAt: #_month put: (mo).
+	self dynamicInstVarAt: #_day put: (d).
+	self dynamicInstVarAt: #_hour put: (h).
+	self dynamicInstVarAt: #_minute put: (mi).
+	self dynamicInstVarAt: #_second put: (s).
+	self dynamicInstVarAt: #_microsecond put: (us).
+	self dynamicInstVarAt: #_tzinfo put: (tz).
 	^ self
 %
 
@@ -510,7 +510,7 @@ set compile_env: 1
 category: 'Grail-Callable'
 classmethod: PyDateTime
 value: positional value: kwargs
-	^ self @env1:_datetime: positional kw: kwargs
+	^ self _datetime: positional kw: kwargs
 %
 
 category: 'Grail-Initialization'
@@ -542,7 +542,7 @@ _datetime: positional kw: kwargs
 category: 'Grail-Initialization'
 classmethod: PyDateTime
 now
-	^ self @env1:now: nil
+	^ self now: nil
 %
 
 category: 'Grail-Initialization'
@@ -574,13 +574,13 @@ utcnow
 	"utcnow() - naive UTC datetime (deprecated in CPython 3.12+
 	but still common in libraries like itsdangerous)."
 
-	^ self @env1:now: nil
+	^ self now: nil
 %
 
 category: 'Grail-Initialization'
 classmethod: PyDateTime
 fromtimestamp: ts
-	^ self @env1:fromtimestamp: ts _: nil
+	^ self fromtimestamp: ts _: nil
 %
 
 category: 'Grail-Initialization'
@@ -616,7 +616,7 @@ classmethod: PyDateTime
 utcfromtimestamp: ts
 	"utcfromtimestamp(ts) - naive UTC version."
 
-	^ self @env1:fromtimestamp: ts _: nil
+	^ self fromtimestamp: ts _: nil
 %
 
 category: 'Grail-Initialization'
@@ -629,7 +629,7 @@ fromisoformat: s
 	| str datePart timePart year month day hour min sec micro tz idx pivot |
 	str := s @env0:asString.
 	str @env0:size @env0:< 10 ifTrue: [
-		ValueError @env1:___signal___: 'invalid isoformat: ' @env0:, str
+		ValueError ___signal___: 'invalid isoformat: ' @env0:, str
 	].
 	year := (str @env0:copyFrom: 1 to: 4) @env0:asNumber.
 	month := (str @env0:copyFrom: 6 to: 7) @env0:asNumber.
@@ -664,7 +664,7 @@ fromisoformat: s
 			| tzChar tzMicros |
 			tzChar := str @env0:at: pivot.
 			(tzChar @env0:= $Z @env0:or: [tzChar @env0:= $z]) ifTrue: [
-				tz := PyTimezone @env1:utc
+				tz := PyTimezone utc
 			] ifFalse: [
 				(tzChar @env0:= $+ @env0:or: [tzChar @env0:= $-]) ifTrue: [
 					| h m sign |
@@ -672,7 +672,7 @@ fromisoformat: s
 					h := (str @env0:copyFrom: pivot @env0:+ 1 to: pivot @env0:+ 2) @env0:asNumber.
 					m := (str @env0:copyFrom: pivot @env0:+ 4 to: pivot @env0:+ 5) @env0:asNumber.
 					tzMicros := sign @env0:* ((h @env0:* 3600 @env0:+ (m @env0:* 60)) @env0:* 1000000).
-					tz := PyTimezone @env1:__new__: (PyTimedelta @env0:___fromTotalMicros___: tzMicros)
+					tz := PyTimezone __new__: (PyTimedelta @env0:___fromTotalMicros___: tzMicros)
 				]
 			]
 		]
@@ -763,7 +763,7 @@ timestamp
 category: 'Grail-Conversion'
 method: PyDateTime
 isoformat
-	^ self @env1:isoformat: $T
+	^ self isoformat: $T
 %
 
 category: 'Grail-Conversion'
@@ -773,17 +773,17 @@ isoformat: sep
 
 	| stream micros tzStr |
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
-	stream @env0:nextPutAll: (self @env1:___pad___: (self @env0:dynamicInstVarAt: #_year) width: 4).
+	stream @env0:nextPutAll: (self ___pad___: (self @env0:dynamicInstVarAt: #_year) width: 4).
 	stream @env0:nextPut: $-.
-	stream @env0:nextPutAll: (self @env1:___pad___: (self @env0:dynamicInstVarAt: #_month) width: 2).
+	stream @env0:nextPutAll: (self ___pad___: (self @env0:dynamicInstVarAt: #_month) width: 2).
 	stream @env0:nextPut: $-.
-	stream @env0:nextPutAll: (self @env1:___pad___: (self @env0:dynamicInstVarAt: #_day) width: 2).
+	stream @env0:nextPutAll: (self ___pad___: (self @env0:dynamicInstVarAt: #_day) width: 2).
 	stream @env0:nextPut: (sep @env0:isString ifTrue: [sep @env0:first] ifFalse: [sep]).
-	stream @env0:nextPutAll: (self @env1:___pad___: (self @env0:dynamicInstVarAt: #_hour) width: 2).
+	stream @env0:nextPutAll: (self ___pad___: (self @env0:dynamicInstVarAt: #_hour) width: 2).
 	stream @env0:nextPut: $:.
-	stream @env0:nextPutAll: (self @env1:___pad___: (self @env0:dynamicInstVarAt: #_minute) width: 2).
+	stream @env0:nextPutAll: (self ___pad___: (self @env0:dynamicInstVarAt: #_minute) width: 2).
 	stream @env0:nextPut: $:.
-	stream @env0:nextPutAll: (self @env1:___pad___: (self @env0:dynamicInstVarAt: #_second) width: 2).
+	stream @env0:nextPutAll: (self ___pad___: (self @env0:dynamicInstVarAt: #_second) width: 2).
 	(self @env0:dynamicInstVarAt: #_microsecond) @env0:= 0 ifFalse: [
 		stream @env0:nextPut: $..
 		micros := (self @env0:dynamicInstVarAt: #_microsecond) @env0:printString.
@@ -791,7 +791,7 @@ isoformat: sep
 		stream @env0:nextPutAll: micros
 	].
 	(self @env0:dynamicInstVarAt: #_tzinfo) @env0:isNil ifFalse: [
-		tzStr := (self @env0:dynamicInstVarAt: #_tzinfo) @env1:tzname: self.
+		tzStr := (self @env0:dynamicInstVarAt: #_tzinfo) tzname: self.
 		tzStr @env0:= 'UTC' ifTrue: [
 			stream @env0:nextPutAll: '+00:00'
 		] ifFalse: [
@@ -807,7 +807,7 @@ isoformat: sep
 category: 'Grail-Conversion'
 method: PyDateTime
 __str__
-	^ self @env1:isoformat: ' '
+	^ self isoformat: ' '
 %
 
 category: 'Grail-Conversion'
@@ -833,11 +833,11 @@ strftime: format
 	| structTime |
 	structTime := tuple @env0:withAll: {
 		(self @env0:dynamicInstVarAt: #_year). (self @env0:dynamicInstVarAt: #_month). (self @env0:dynamicInstVarAt: #_day). (self @env0:dynamicInstVarAt: #_hour). (self @env0:dynamicInstVarAt: #_minute). (self @env0:dynamicInstVarAt: #_second).
-		(self @env1:___pyDayOfWeek___).
-		(self @env1:___dayOfYear___).
+		(self ___pyDayOfWeek___).
+		(self ___dayOfYear___).
 		-1
 	}.
-	^ time @env1:instance @env1:strftime: format _: structTime
+	^ time instance strftime: format _: structTime
 %
 
 ! ------- Arithmetic
@@ -851,10 +851,10 @@ __add__: other
 
 	| newTs result |
 	(other isKindOf: PyTimedelta) ifFalse: [
-		^ TypeError @env1:___signal___: 'unsupported operand for +'
+		^ TypeError ___signal___: 'unsupported operand for +'
 	].
-	newTs := self @env1:timestamp @env0:+ other @env1:total_seconds.
-	result := PyDateTime @env1:fromtimestamp: newTs _: (self @env0:dynamicInstVarAt: #_tzinfo).
+	newTs := self timestamp @env0:+ other total_seconds.
+	result := PyDateTime fromtimestamp: newTs _: (self @env0:dynamicInstVarAt: #_tzinfo).
 	^ result
 %
 
@@ -865,12 +865,12 @@ __sub__: other
 
 	(other isKindOf: PyDateTime) ifTrue: [
 		^ PyTimedelta @env0:___fromTotalMicros___:
-			((self @env1:timestamp @env0:- other @env1:timestamp) @env0:* 1000000) @env0:truncated
+			((self timestamp @env0:- other timestamp) @env0:* 1000000) @env0:truncated
 	].
 	(other isKindOf: PyTimedelta) ifTrue: [
-		^ self @env1:__add__: (other @env1:__neg__)
+		^ self __add__: (other __neg__)
 	].
-	^ TypeError @env1:___signal___: 'unsupported operand for -'
+	^ TypeError ___signal___: 'unsupported operand for -'
 %
 
 ! ------- Equality / ordering
@@ -879,19 +879,19 @@ category: 'Grail-Equality'
 method: PyDateTime
 __eq__: other
 	(other isKindOf: PyDateTime) ifFalse: [^ false].
-	^ self @env1:___compareKey___ @env0:= other @env1:___compareKey___
+	^ self ___compareKey___ @env0:= other ___compareKey___
 %
 
 category: 'Grail-Equality'
 method: PyDateTime
 __lt__: other
-	^ self @env1:___compareKey___ @env0:< other @env1:___compareKey___
+	^ self ___compareKey___ @env0:< other ___compareKey___
 %
 
 category: 'Grail-Equality'
 method: PyDateTime
 __hash__
-	^ self @env1:___compareKey___ @env0:hash
+	^ self ___compareKey___ @env0:hash
 %
 
 category: 'Grail-Private'
@@ -1016,17 +1016,17 @@ category: 'Grail-Private'
 classmethod: PyDate
 ___fromFields___: y _: m _: d
 	| inst |
-	inst := self @env0:new.
-	inst @env0:_year: y _month: m _day: d.
+	inst := self new.
+	inst _year: y _month: m _day: d.
 	^ inst
 %
 
 category: 'Grail-Private'
 method: PyDate
 _year: y _month: m _day: d
-	self @env0:dynamicInstVarAt: #_year put: y.
-	self @env0:dynamicInstVarAt: #_month put: m.
-	self @env0:dynamicInstVarAt: #_day put: d.
+	self dynamicInstVarAt: #_year put: y.
+	self dynamicInstVarAt: #_month put: m.
+	self dynamicInstVarAt: #_day put: d.
 	^ self
 %
 
@@ -1140,7 +1140,7 @@ isoformat
 category: 'Grail-Conversion'
 method: PyDate
 __str__
-	^ self @env1:isoformat
+	^ self isoformat
 %
 
 category: 'Grail-Conversion'
@@ -1182,7 +1182,7 @@ method: PyDate
 isoweekday
 	"ISO 8601: Monday=1..Sunday=7."
 
-	^ (self @env1:weekday) @env0:+ 1
+	^ (self weekday) @env0:+ 1
 %
 
 set compile_env: 0
@@ -1191,8 +1191,8 @@ category: 'Grail-Private'
 method: PyDate
 ___pad___: n width: w
 	| s |
-	s := n @env0:printString.
-	[s @env0:size @env0:< w] @env0:whileTrue: [s := '0' @env0:, s].
+	s := n printString.
+	[s size < w] whileTrue: [s := '0' , s].
 	^ s
 %
 
@@ -1202,9 +1202,9 @@ ___asDate___
 	"Materialise a GemStone Date for weekday / ordinal arithmetic."
 
 	^ Date
-		@env0:newDay: (self @env0:dynamicInstVarAt: #_day)
-		monthNumber: (self @env0:dynamicInstVarAt: #_month)
-		year: (self @env0:dynamicInstVarAt: #_year)
+		newDay: (self dynamicInstVarAt: #_day)
+		monthNumber: (self dynamicInstVarAt: #_month)
+		year: (self dynamicInstVarAt: #_year)
 %
 
 set compile_env: 1
@@ -1235,9 +1235,9 @@ __add__: other
 	| days newOrdinal |
 	(other isKindOf: PyTimedelta) ifFalse: [
 		TypeError ___signal___: 'unsupported operand type(s) for +: ''date'' and non-timedelta'].
-	days := other @env1:days.
-	newOrdinal := (self @env1:toordinal) @env0:+ days.
-	^ PyDate @env1:fromordinal: newOrdinal
+	days := other days.
+	newOrdinal := (self toordinal) @env0:+ days.
+	^ PyDate fromordinal: newOrdinal
 %
 
 category: 'Grail-Arithmetic'
@@ -1247,11 +1247,11 @@ __sub__: other
 
 	(other isKindOf: PyTimedelta) ifTrue: [
 		| neg |
-		neg := other @env1:__neg__.
-		^ self @env1:__add__: neg].
+		neg := other __neg__.
+		^ self __add__: neg].
 	(other isKindOf: PyDate) ifTrue: [
 		| diff |
-		diff := (self @env1:toordinal) @env0:- (other @env1:toordinal).
+		diff := (self toordinal) @env0:- (other toordinal).
 		^ PyTimedelta @env0:___fromTotalMicros___:
 			diff @env0:* 86400 @env0:* 1000000].
 	TypeError ___signal___: 'unsupported operand type(s) for -: ''date'''
@@ -1263,7 +1263,7 @@ category: 'Grail-Equality'
 method: PyDate
 __eq__: other
 	(other isKindOf: PyDate) ifFalse: [^ false].
-	^ (self @env1:toordinal) @env0:= (other @env1:toordinal)
+	^ (self toordinal) @env0:= (other toordinal)
 %
 
 category: 'Grail-Equality'
@@ -1271,7 +1271,7 @@ method: PyDate
 __lt__: other
 	(other isKindOf: PyDate) ifFalse: [
 		TypeError ___signal___: 'can''t compare date to non-date'].
-	^ (self @env1:toordinal) @env0:< (other @env1:toordinal)
+	^ (self toordinal) @env0:< (other toordinal)
 %
 
 category: 'Grail-Equality'
@@ -1279,7 +1279,7 @@ method: PyDate
 __le__: other
 	(other isKindOf: PyDate) ifFalse: [
 		TypeError ___signal___: 'can''t compare date to non-date'].
-	^ (self @env1:toordinal) @env0:<= (other @env1:toordinal)
+	^ (self toordinal) @env0:<= (other toordinal)
 %
 
 category: 'Grail-Equality'
@@ -1287,7 +1287,7 @@ method: PyDate
 __gt__: other
 	(other isKindOf: PyDate) ifFalse: [
 		TypeError ___signal___: 'can''t compare date to non-date'].
-	^ (self @env1:toordinal) @env0:> (other @env1:toordinal)
+	^ (self toordinal) @env0:> (other toordinal)
 %
 
 category: 'Grail-Equality'
@@ -1295,19 +1295,19 @@ method: PyDate
 __ge__: other
 	(other isKindOf: PyDate) ifFalse: [
 		TypeError ___signal___: 'can''t compare date to non-date'].
-	^ (self @env1:toordinal) @env0:>= (other @env1:toordinal)
+	^ (self toordinal) @env0:>= (other toordinal)
 %
 
 category: 'Grail-Equality'
 method: PyDate
 __ne__: other
-	^ (self @env1:__eq__: other) @env0:not
+	^ (self __eq__: other) @env0:not
 %
 
 category: 'Grail-Equality'
 method: PyDate
 __hash__
-	^ self @env1:toordinal
+	^ self toordinal
 %
 
 set compile_env: 0
@@ -1359,19 +1359,19 @@ category: 'Grail-Private'
 classmethod: PyTime
 ___fromFields___: h _: mi _: s _: us _: tz
 	| inst |
-	inst := self @env0:new.
-	inst @env0:_hour: h _minute: mi _second: s _microsecond: us _tzinfo: tz.
+	inst := self new.
+	inst _hour: h _minute: mi _second: s _microsecond: us _tzinfo: tz.
 	^ inst
 %
 
 category: 'Grail-Private'
 method: PyTime
 _hour: h _minute: mi _second: s _microsecond: us _tzinfo: tz
-	self @env0:dynamicInstVarAt: #_hour put: h.
-	self @env0:dynamicInstVarAt: #_minute put: mi.
-	self @env0:dynamicInstVarAt: #_second put: s.
-	self @env0:dynamicInstVarAt: #_microsecond put: us.
-	self @env0:dynamicInstVarAt: #_tzinfo put: tz.
+	self dynamicInstVarAt: #_hour put: h.
+	self dynamicInstVarAt: #_minute put: mi.
+	self dynamicInstVarAt: #_second put: s.
+	self dynamicInstVarAt: #_microsecond put: us.
+	self dynamicInstVarAt: #_tzinfo put: tz.
 	^ self
 %
 
@@ -1485,7 +1485,7 @@ isoformat
 category: 'Grail-Conversion'
 method: PyTime
 __str__
-	^ self @env1:isoformat
+	^ self isoformat
 %
 
 category: 'Grail-Conversion'
@@ -1509,8 +1509,8 @@ category: 'Grail-Private'
 method: PyTime
 ___pad___: n width: w
 	| s |
-	s := n @env0:printString.
-	[s @env0:size @env0:< w] @env0:whileTrue: [s := '0' @env0:, s].
+	s := n printString.
+	[s size < w] whileTrue: [s := '0' , s].
 	^ s
 %
 

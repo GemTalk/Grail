@@ -94,8 +94,8 @@ testRedefProducesDistinctClasses
 
 	| mod bar1 bar2 |
 	mod := self loadFixture: 'runtime_class_redef'.
-	bar1 := mod @env0:dynamicInstVarAt: #bar1.
-	bar2 := mod @env0:dynamicInstVarAt: #bar2.
+	bar1 := mod dynamicInstVarAt: #bar1.
+	bar2 := mod dynamicInstVarAt: #bar2.
 	self deny: bar1 class == bar2 class.
 %
 
@@ -158,8 +158,8 @@ testCollisionBothModulesIsolated
 	| modA modB instA instB |
 	modA := self loadFixture: 'runtime_class_collision_a'.
 	modB := self loadFixture: 'runtime_class_collision_b'.
-	instA := modA @env0:dynamicInstVarAt: #inst.
-	instB := modB @env0:dynamicInstVarAt: #inst.
+	instA := modA dynamicInstVarAt: #inst.
+	instB := modB dynamicInstVarAt: #inst.
 	self assert: (instA perform: #kind env: 1) equals: 'A'.
 	self assert: (instB perform: #kind env: 1) equals: 'B'.
 	self deny: instA class == instB class.

@@ -47,7 +47,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'contextvar_basics' ifAbsent: [].
+	mods removeKey: #'contextvar_basics' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/contextvar_basics.py')
 		name: 'contextvar_basics'.

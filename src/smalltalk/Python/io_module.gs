@@ -122,7 +122,7 @@ set compile_env: 1
 category: 'Grail-Initialization'
 classmethod: StringIO
 __new__
-	^ self @env1:__new__: ''
+	^ self __new__: ''
 %
 
 category: 'Grail-Initialization'
@@ -141,7 +141,7 @@ __new__: initialValue
 category: 'Grail-Reading'
 method: StringIO
 read
-	^ self @env1:read: -1
+	^ self read: -1
 %
 
 category: 'Grail-Reading'
@@ -151,7 +151,7 @@ read: n
 	-1 / None means read until EOF."
 
 	| size remaining take result |
-	self @env1:_checkOpen.
+	self _checkOpen.
 	remaining := (self @env0:dynamicInstVarAt: #_buffer) @env0:size @env0:- (self @env0:dynamicInstVarAt: #_pos).
 	(n == nil @env0:or: [n == None @env0:or: [n @env0:< 0]]) ifTrue: [
 		size := remaining
@@ -168,7 +168,7 @@ read: n
 category: 'Grail-Reading'
 method: StringIO
 readline
-	^ self @env1:readline: -1
+	^ self readline: -1
 %
 
 category: 'Grail-Reading'
@@ -178,7 +178,7 @@ readline: limit
 	up to `size` chars (whichever first), or to EOF."
 
 	| n start max |
-	self @env1:_checkOpen.
+	self _checkOpen.
 	n := (self @env0:dynamicInstVarAt: #_buffer) @env0:size.
 	(self @env0:dynamicInstVarAt: #_pos) @env0:>= n ifTrue: [^ ''].
 	start := (self @env0:dynamicInstVarAt: #_pos).
@@ -199,12 +199,12 @@ readlines
 	"Read all remaining lines into a list."
 
 	| out line |
-	self @env1:_checkOpen.
-	out := list @env1:___new___.
+	self _checkOpen.
+	out := list ___new___.
 	[
-		line := self @env1:readline.
+		line := self readline.
 		line @env0:isEmpty
-	] @env0:whileFalse: [out @env1:append: line].
+	] @env0:whileFalse: [out append: line].
 	^ out
 %
 
@@ -214,7 +214,7 @@ write: data
 	"Overwrite from the current position; grow on append."
 
 	| s n endPos |
-	self @env1:_checkOpen.
+	self _checkOpen.
 	s := data @env0:asString.
 	n := s @env0:size.
 	endPos := (self @env0:dynamicInstVarAt: #_pos) @env0:+ n.
@@ -234,15 +234,15 @@ method: StringIO
 writelines: lines
 	"Write each element of lines (an iterable of str) in order."
 
-	self @env1:_checkOpen.
-	lines @env0:do: [:line | self @env1:write: line].
+	self _checkOpen.
+	lines @env0:do: [:line | self write: line].
 	^ None
 %
 
 category: 'Grail-Position'
 method: StringIO
 seek: pos
-	^ self @env1:seek: pos _: 0
+	^ self seek: pos _: 0
 %
 
 category: 'Grail-Position'
@@ -250,12 +250,12 @@ method: StringIO
 seek: pos _: whence
 	"seek(pos, whence=0): 0=set, 1=cur, 2=end."
 
-	self @env1:_checkOpen.
+	self _checkOpen.
 	whence @env0:= 0 ifTrue: [self @env0:dynamicInstVarAt: #_pos put: (pos)]
 	ifFalse: [whence @env0:= 1 ifTrue: [self @env0:dynamicInstVarAt: #_pos put: ((self @env0:dynamicInstVarAt: #_pos) @env0:+ pos)]
 	ifFalse: [whence @env0:= 2 ifTrue: [self @env0:dynamicInstVarAt: #_pos put: ((self @env0:dynamicInstVarAt: #_buffer) @env0:size @env0:+ pos)]
 	ifFalse: [
-		ValueError @env1:___signal___: 'whence must be 0, 1, or 2'
+		ValueError ___signal___: 'whence must be 0, 1, or 2'
 	]]].
 	(self @env0:dynamicInstVarAt: #_pos) @env0:< 0 ifTrue: [self @env0:dynamicInstVarAt: #_pos put: (0)].
 	^ (self @env0:dynamicInstVarAt: #_pos)
@@ -264,20 +264,20 @@ seek: pos _: whence
 category: 'Grail-Position'
 method: StringIO
 tell
-	self @env1:_checkOpen.
+	self _checkOpen.
 	^ (self @env0:dynamicInstVarAt: #_pos)
 %
 
 category: 'Grail-Position'
 method: StringIO
 truncate
-	^ self @env1:truncate: (self @env0:dynamicInstVarAt: #_pos)
+	^ self truncate: (self @env0:dynamicInstVarAt: #_pos)
 %
 
 category: 'Grail-Position'
 method: StringIO
 truncate: size
-	self @env1:_checkOpen.
+	self _checkOpen.
 	size @env0:< (self @env0:dynamicInstVarAt: #_buffer) @env0:size ifTrue: [
 		self @env0:dynamicInstVarAt: #_buffer put: ((self @env0:dynamicInstVarAt: #_buffer) @env0:copyFrom: 1 to: size)].
 	^ size
@@ -313,7 +313,7 @@ __enter__
 category: 'Grail-Context manager'
 method: StringIO
 __exit__: a _: b _: c
-	self @env1:close.
+	self close.
 	^ false
 %
 
@@ -329,9 +329,9 @@ __next__
 	"Iterating yields readline() until empty, then raises StopIteration."
 
 	| line |
-	line := self @env1:readline.
+	line := self readline.
 	line @env0:isEmpty ifTrue: [
-		StopIteration @env1:___signal___: ''
+		StopIteration ___signal___: ''
 	].
 	^ line
 %
@@ -340,7 +340,7 @@ category: 'Grail-Private'
 method: StringIO
 _checkOpen
 	(self @env0:dynamicInstVarAt: #_closed) == true ifTrue: [
-		ValueError @env1:___signal___: 'I/O operation on closed file'
+		ValueError ___signal___: 'I/O operation on closed file'
 	]
 %
 
@@ -389,7 +389,7 @@ set compile_env: 1
 category: 'Grail-Initialization'
 classmethod: BytesIO
 __new__
-	^ self @env1:__new__: #[] @env0:asByteArray
+	^ self __new__: #[] @env0:asByteArray
 %
 
 category: 'Grail-Initialization'
@@ -411,7 +411,7 @@ __new__: initial
 category: 'Grail-Reading'
 method: BytesIO
 read
-	^ self @env1:read: -1
+	^ self read: -1
 %
 
 category: 'Grail-Reading'
@@ -420,7 +420,7 @@ read: n
 	"read(size=-1) - read up to size bytes from the current position."
 
 	| size remaining take result |
-	self @env1:_checkOpen.
+	self _checkOpen.
 	remaining := (self @env0:dynamicInstVarAt: #_buffer) @env0:size @env0:- (self @env0:dynamicInstVarAt: #_pos).
 	(n == nil @env0:or: [n == None @env0:or: [n @env0:< 0]]) ifTrue: [
 		size := remaining
@@ -437,7 +437,7 @@ read: n
 category: 'Grail-Reading'
 method: BytesIO
 readline
-	^ self @env1:readline: -1
+	^ self readline: -1
 %
 
 category: 'Grail-Reading'
@@ -446,7 +446,7 @@ readline: limit
 	"readline(size=-1) - read up to next \\n byte (0x0A)."
 
 	| n start max |
-	self @env1:_checkOpen.
+	self _checkOpen.
 	n := (self @env0:dynamicInstVarAt: #_buffer) @env0:size.
 	(self @env0:dynamicInstVarAt: #_pos) @env0:>= n ifTrue: [^ ByteArray @env0:new].
 	start := (self @env0:dynamicInstVarAt: #_pos).
@@ -464,12 +464,12 @@ category: 'Grail-Reading'
 method: BytesIO
 readlines
 	| out line |
-	self @env1:_checkOpen.
-	out := list @env1:___new___.
+	self _checkOpen.
+	out := list ___new___.
 	[
-		line := self @env1:readline.
+		line := self readline.
 		line @env0:isEmpty
-	] @env0:whileFalse: [out @env1:append: line].
+	] @env0:whileFalse: [out append: line].
 	^ out
 %
 
@@ -479,7 +479,7 @@ write: data
 	"Overwrite from current position with the given bytes."
 
 	| bytes n endPos |
-	self @env1:_checkOpen.
+	self _checkOpen.
 	bytes := (data isKindOf: ByteArray)
 		ifTrue: [data]
 		ifFalse: [data @env0:asByteArray].
@@ -497,26 +497,26 @@ write: data
 category: 'Grail-Writing'
 method: BytesIO
 writelines: lines
-	self @env1:_checkOpen.
-	lines @env0:do: [:line | self @env1:write: line].
+	self _checkOpen.
+	lines @env0:do: [:line | self write: line].
 	^ None
 %
 
 category: 'Grail-Position'
 method: BytesIO
 seek: pos
-	^ self @env1:seek: pos _: 0
+	^ self seek: pos _: 0
 %
 
 category: 'Grail-Position'
 method: BytesIO
 seek: pos _: whence
-	self @env1:_checkOpen.
+	self _checkOpen.
 	whence @env0:= 0 ifTrue: [self @env0:dynamicInstVarAt: #_pos put: (pos)]
 	ifFalse: [whence @env0:= 1 ifTrue: [self @env0:dynamicInstVarAt: #_pos put: ((self @env0:dynamicInstVarAt: #_pos) @env0:+ pos)]
 	ifFalse: [whence @env0:= 2 ifTrue: [self @env0:dynamicInstVarAt: #_pos put: ((self @env0:dynamicInstVarAt: #_buffer) @env0:size @env0:+ pos)]
 	ifFalse: [
-		ValueError @env1:___signal___: 'whence must be 0, 1, or 2'
+		ValueError ___signal___: 'whence must be 0, 1, or 2'
 	]]].
 	(self @env0:dynamicInstVarAt: #_pos) @env0:< 0 ifTrue: [self @env0:dynamicInstVarAt: #_pos put: (0)].
 	^ (self @env0:dynamicInstVarAt: #_pos)
@@ -525,20 +525,20 @@ seek: pos _: whence
 category: 'Grail-Position'
 method: BytesIO
 tell
-	self @env1:_checkOpen.
+	self _checkOpen.
 	^ (self @env0:dynamicInstVarAt: #_pos)
 %
 
 category: 'Grail-Position'
 method: BytesIO
 truncate
-	^ self @env1:truncate: (self @env0:dynamicInstVarAt: #_pos)
+	^ self truncate: (self @env0:dynamicInstVarAt: #_pos)
 %
 
 category: 'Grail-Position'
 method: BytesIO
 truncate: size
-	self @env1:_checkOpen.
+	self _checkOpen.
 	size @env0:< (self @env0:dynamicInstVarAt: #_buffer) @env0:size ifTrue: [
 		self @env0:dynamicInstVarAt: #_buffer put: ((self @env0:dynamicInstVarAt: #_buffer) @env0:copyFrom: 1 to: size)].
 	^ size
@@ -584,7 +584,7 @@ __enter__
 category: 'Grail-Context manager'
 method: BytesIO
 __exit__: a _: b _: c
-	self @env1:close.
+	self close.
 	^ false
 %
 
@@ -598,9 +598,9 @@ category: 'Grail-Iter protocol'
 method: BytesIO
 __next__
 	| line |
-	line := self @env1:readline.
+	line := self readline.
 	line @env0:isEmpty ifTrue: [
-		StopIteration @env1:___signal___: ''
+		StopIteration ___signal___: ''
 	].
 	^ line
 %
@@ -609,7 +609,7 @@ category: 'Grail-Private'
 method: BytesIO
 _checkOpen
 	(self @env0:dynamicInstVarAt: #_closed) == true ifTrue: [
-		ValueError @env1:___signal___: 'I/O operation on closed file'
+		ValueError ___signal___: 'I/O operation on closed file'
 	]
 %
 
@@ -719,11 +719,11 @@ ___resolveEncoding___: anEncoding
 	| e |
 	(anEncoding == nil @env0:or: [anEncoding == None]) ifTrue: [^ 'utf-8'].
 	(anEncoding isKindOf: CharacterCollection) ifFalse: [
-		TypeError @env1:___signal___: 'open() argument ''encoding'' must be str or None'].
+		TypeError ___signal___: 'open() argument ''encoding'' must be str or None'].
 	e := anEncoding @env0:asLowercase.
 	((e @env0:= 'utf-8') @env0:or: [(e @env0:= 'utf8') @env0:or: [(e @env0:= 'ascii') @env0:or: [e @env0:= 'us-ascii']]]) ifTrue: [^ 'utf-8'].
 	((e @env0:= 'latin-1') @env0:or: [(e @env0:= 'latin1') @env0:or: [(e @env0:= 'iso-8859-1') @env0:or: [e @env0:= 'l1']]]) ifTrue: [^ 'latin-1'].
-	LookupError @env1:___signal___: ('unknown encoding: ' @env0:, anEncoding)
+	LookupError ___signal___: ('unknown encoding: ' @env0:, anEncoding)
 %
 
 category: 'Grail-Opening'
@@ -738,11 +738,11 @@ ___open___: fileArg mode: modeArg encoding: encodingArg
 	file := fileArg.
 	(file isKindOf: CharacterCollection) ifFalse: [
 		(file isKindOf: Number) ifTrue: [
-			TypeError @env1:___signal___: 'integer file descriptors are not supported in Grail'].
-		file := file @env1:__str__].
+			TypeError ___signal___: 'integer file descriptors are not supported in Grail'].
+		file := file __str__].
 	mode := (modeArg == nil @env0:or: [modeArg == None]) ifTrue: ['r'] ifFalse: [modeArg].
 	(mode isKindOf: CharacterCollection) ifFalse: [
-		TypeError @env1:___signal___: 'open() argument ''mode'' must be str'].
+		TypeError ___signal___: 'open() argument ''mode'' must be str'].
 	hasR := false. hasW := false. hasA := false. hasX := false.
 	hasPlus := false. hasB := false. hasT := false.
 	mode @env0:do: [:c |
@@ -753,33 +753,33 @@ ___open___: fileArg mode: modeArg encoding: encodingArg
 		ifFalse: [c @env0:= $+ ifTrue: [hasPlus := true]
 		ifFalse: [c @env0:= $b ifTrue: [hasB := true]
 		ifFalse: [c @env0:= $t ifTrue: [hasT := true]
-		ifFalse: [ValueError @env1:___signal___: ('invalid mode: ''' @env0:, mode @env0:, '''')]]]]]]]].
+		ifFalse: [ValueError ___signal___: ('invalid mode: ''' @env0:, mode @env0:, '''')]]]]]]]].
 	count := 0.
 	hasR ifTrue: [count := count @env0:+ 1].
 	hasW ifTrue: [count := count @env0:+ 1].
 	hasA ifTrue: [count := count @env0:+ 1].
 	hasX ifTrue: [count := count @env0:+ 1].
 	count @env0:= 1 ifFalse: [
-		ValueError @env1:___signal___: 'must have exactly one of create/read/write/append mode'].
+		ValueError ___signal___: 'must have exactly one of create/read/write/append mode'].
 	(hasB @env0:and: [hasT]) ifTrue: [
-		ValueError @env1:___signal___: 'can''t have text and binary mode at once'].
+		ValueError ___signal___: 'can''t have text and binary mode at once'].
 	(hasB @env0:and: [(encodingArg == nil @env0:or: [encodingArg == None]) @env0:not]) ifTrue: [
-		ValueError @env1:___signal___: 'binary mode doesn''t take an encoding argument'].
+		ValueError ___signal___: 'binary mode doesn''t take an encoding argument'].
 	"isServerDirectory: answers nil (not false) for a missing path, so
 	guard with existsOnServer: first."
 	((GsFile @env0:existsOnServer: file) @env0:and: [(GsFile @env0:isServerDirectory: file) == true]) ifTrue: [
-		IsADirectoryError @env1:___signal___: ('[Errno 21] Is a directory: ''' @env0:, file @env0:, '''')].
+		IsADirectoryError ___signal___: ('[Errno 21] Is a directory: ''' @env0:, file @env0:, '''')].
 	hasX ifTrue: [
 		(GsFile @env0:existsOnServer: file) ifTrue: [
-			FileExistsError @env1:___signal___: ('[Errno 17] File exists: ''' @env0:, file @env0:, '''')]].
+			FileExistsError ___signal___: ('[Errno 17] File exists: ''' @env0:, file @env0:, '''')]].
 	gsMode := hasR ifTrue: ['r'] ifFalse: [hasA ifTrue: ['a'] ifFalse: ['w']].
 	hasPlus ifTrue: [gsMode := gsMode @env0:, '+'].
 	gsMode := gsMode @env0:, 'b'.
 	gsfile := GsFile @env0:openOnServer: file mode: gsMode.
 	gsfile == nil ifTrue: [
 		(hasR @env0:and: [(GsFile @env0:existsOnServer: file) @env0:not]) ifTrue: [
-			FileNotFoundError @env1:___signal___: ('[Errno 2] No such file or directory: ''' @env0:, file @env0:, '''')].
-		OSError @env1:___signal___: ('could not open file: ''' @env0:, file @env0:, '''')].
+			FileNotFoundError ___signal___: ('[Errno 2] No such file or directory: ''' @env0:, file @env0:, '''')].
+		OSError ___signal___: ('could not open file: ''' @env0:, file @env0:, '''')].
 	inst := (hasB ifTrue: [FileIO] ifFalse: [TextIOWrapper]) @env0:new.
 	inst @env0:dynamicInstVarAt: #_gsfile put: gsfile.
 	inst @env0:dynamicInstVarAt: #_name put: file.
@@ -788,7 +788,7 @@ ___open___: fileArg mode: modeArg encoding: encodingArg
 	inst @env0:dynamicInstVarAt: #_readable put: ((hasR) @env0:or: [hasPlus]).
 	inst @env0:dynamicInstVarAt: #_writable put: ((hasR @env0:not) @env0:or: [hasPlus]).
 	hasB ifFalse: [
-		inst @env0:dynamicInstVarAt: #_encoding put: (FileIO @env1:___resolveEncoding___: encodingArg)].
+		inst @env0:dynamicInstVarAt: #_encoding put: (FileIO ___resolveEncoding___: encodingArg)].
 	^ inst
 %
 
@@ -804,7 +804,7 @@ ___openCompressedPath___: fileArg mode: modeArg
 
 	| file mode reading binary base gsfile inst |
 	file := fileArg.
-	(file isKindOf: CharacterCollection) ifFalse: [file := file @env1:__str__].
+	(file isKindOf: CharacterCollection) ifFalse: [file := file __str__].
 	mode := (modeArg == nil @env0:or: [modeArg == None]) ifTrue: ['rb'] ifFalse: [modeArg].
 	binary := (mode @env0:includes: $t) @env0:not.
 	reading := mode @env0:includes: $r.
@@ -812,10 +812,10 @@ ___openCompressedPath___: fileArg mode: modeArg
 		ifTrue: ['rb']
 		ifFalse: [(mode @env0:includes: $a) ifTrue: ['ab'] ifFalse: ['wb']].
 	((GsFile @env0:existsOnServer: file) @env0:not @env0:and: [reading]) ifTrue: [
-		FileNotFoundError @env1:___signal___: ('[Errno 2] No such file or directory: ''' @env0:, file @env0:, '''')].
+		FileNotFoundError ___signal___: ('[Errno 2] No such file or directory: ''' @env0:, file @env0:, '''')].
 	gsfile := GsFile @env0:openOnServerCompressed: file mode: base.
 	gsfile == nil ifTrue: [
-		OSError @env1:___signal___: ('could not open compressed file: ''' @env0:, file @env0:, '''')].
+		OSError ___signal___: ('could not open compressed file: ''' @env0:, file @env0:, '''')].
 	inst := (binary ifTrue: [FileIO] ifFalse: [TextIOWrapper]) @env0:new.
 	inst @env0:dynamicInstVarAt: #_gsfile put: gsfile.
 	inst @env0:dynamicInstVarAt: #_name put: file.
@@ -832,23 +832,23 @@ category: 'Grail-Private'
 method: FileIO
 _checkOpen
 	(self @env0:dynamicInstVarAt: #_closed) == true ifTrue: [
-		ValueError @env1:___signal___: 'I/O operation on closed file.']
+		ValueError ___signal___: 'I/O operation on closed file.']
 %
 
 category: 'Grail-Private'
 method: FileIO
 _checkReadable
-	self @env1:_checkOpen.
+	self _checkOpen.
 	(self @env0:dynamicInstVarAt: #_readable) == true ifFalse: [
-		OSError @env1:___signal___: 'not readable']
+		OSError ___signal___: 'not readable']
 %
 
 category: 'Grail-Private'
 method: FileIO
 _checkWritable
-	self @env1:_checkOpen.
+	self _checkOpen.
 	(self @env0:dynamicInstVarAt: #_writable) == true ifFalse: [
-		OSError @env1:___signal___: 'not writable']
+		OSError ___signal___: 'not writable']
 %
 
 category: 'Grail-Private'
@@ -901,7 +901,7 @@ _readToEnd
 
 	| out chunk |
 	(self @env0:dynamicInstVarAt: #_streamOnly) == true ifFalse: [
-		^ self @env1:_rawRead: (self @env1:_remaining)].
+		^ self _rawRead: (self _remaining)].
 	out := String @env0:new.
 	[
 		chunk := (self @env0:dynamicInstVarAt: #_gsfile) @env0:next: 65536.
@@ -913,7 +913,7 @@ _readToEnd
 category: 'Grail-Reading'
 method: FileIO
 read
-	^ self @env1:read: -1
+	^ self read: -1
 %
 
 category: 'Grail-Reading'
@@ -921,23 +921,23 @@ method: FileIO
 read: n
 	"read(size=-1) - read up to size bytes; -1 / None means to EOF."
 
-	self @env1:_checkReadable.
+	self _checkReadable.
 	(n == nil @env0:or: [n == None @env0:or: [n @env0:< 0]]) ifTrue: [
-		^ (self @env1:_readToEnd) @env0:asByteArray].
-	^ (self @env1:_rawRead: n) @env0:asByteArray
+		^ (self _readToEnd) @env0:asByteArray].
+	^ (self _rawRead: n) @env0:asByteArray
 %
 
 category: 'Grail-Reading'
 method: FileIO
 readline
-	^ self @env1:readline: -1
+	^ self readline: -1
 %
 
 category: 'Grail-Reading'
 method: FileIO
 readline: limit
-	self @env1:_checkReadable.
-	^ (self @env1:_rawReadline: limit) @env0:asByteArray
+	self _checkReadable.
+	^ (self _rawReadline: limit) @env0:asByteArray
 %
 
 category: 'Grail-Reading'
@@ -947,12 +947,12 @@ readlines
 	so the TextIOWrapper subclass inherits this unchanged."
 
 	| out line |
-	self @env1:_checkReadable.
-	out := list @env1:___new___.
+	self _checkReadable.
+	out := list ___new___.
 	[
-		line := self @env1:readline.
+		line := self readline.
 		line @env0:isEmpty
-	] @env0:whileFalse: [out @env1:append: line].
+	] @env0:whileFalse: [out append: line].
 	^ out
 %
 
@@ -962,30 +962,30 @@ write: data
 	"Write bytes; answer the byte count (CPython contract)."
 
 	| bytes f r |
-	self @env1:_checkWritable.
+	self _checkWritable.
 	(data isKindOf: CharacterCollection) ifTrue: [
-		TypeError @env1:___signal___: 'a bytes-like object is required, not ''str'''].
+		TypeError ___signal___: 'a bytes-like object is required, not ''str'''].
 	bytes := (data isKindOf: ByteArray) ifTrue: [data] ifFalse: [data @env0:asByteArray].
 	bytes @env0:isEmpty ifTrue: [^ 0].
 	f := self @env0:dynamicInstVarAt: #_gsfile.
 	r := f @env0:nextPutAllBytes: bytes.
 	r == nil ifTrue: [
-		OSError @env1:___signal___: ('write failed: ' @env0:, (self @env0:dynamicInstVarAt: #_name))].
+		OSError ___signal___: ('write failed: ' @env0:, (self @env0:dynamicInstVarAt: #_name))].
 	^ bytes @env0:size
 %
 
 category: 'Grail-Writing'
 method: FileIO
 writelines: lines
-	self @env1:_checkWritable.
-	lines @env0:do: [:line | self @env1:write: line].
+	self _checkWritable.
+	lines @env0:do: [:line | self write: line].
 	^ None
 %
 
 category: 'Grail-Position'
 method: FileIO
 seek: pos
-	^ self @env1:seek: pos _: 0
+	^ self seek: pos _: 0
 %
 
 category: 'Grail-Position'
@@ -994,11 +994,11 @@ seek: pos _: whence
 	"seek(pos, whence=0): 0=set, 1=cur, 2=end.  Byte offsets."
 
 	| f |
-	self @env1:_checkOpen.
+	self _checkOpen.
 	f := self @env0:dynamicInstVarAt: #_gsfile.
 	whence @env0:= 0 ifTrue: [
 		pos @env0:< 0 ifTrue: [
-			ValueError @env1:___signal___: ('negative seek position ' @env0:, pos @env0:printString)].
+			ValueError ___signal___: ('negative seek position ' @env0:, pos @env0:printString)].
 		f @env0:position: pos]
 	ifFalse: [whence @env0:= 1 ifTrue: [
 		"GsFile seekFromCurrent: rejects negative offsets; skip: does a
@@ -1006,7 +1006,7 @@ seek: pos _: whence
 		f @env0:skip: pos]
 	ifFalse: [whence @env0:= 2 ifTrue: [f @env0:seekFromEnd: pos]
 	ifFalse: [
-		ValueError @env1:___signal___: 'whence must be 0, 1, or 2'
+		ValueError ___signal___: 'whence must be 0, 1, or 2'
 	]]].
 	^ f @env0:position
 %
@@ -1014,26 +1014,26 @@ seek: pos _: whence
 category: 'Grail-Position'
 method: FileIO
 tell
-	self @env1:_checkOpen.
+	self _checkOpen.
 	^ (self @env0:dynamicInstVarAt: #_gsfile) @env0:position
 %
 
 category: 'Grail-Position'
 method: FileIO
 truncate
-	^ self @env1:truncate: nil
+	^ self truncate: nil
 %
 
 category: 'Grail-Position'
 method: FileIO
 truncate: size
-	OSError @env1:___signal___: 'truncate() is not supported in Grail'
+	OSError ___signal___: 'truncate() is not supported in Grail'
 %
 
 category: 'Grail-State'
 method: FileIO
 flush
-	self @env1:_checkOpen.
+	self _checkOpen.
 	(self @env0:dynamicInstVarAt: #_gsfile) @env0:flush.
 	^ None
 %
@@ -1070,34 +1070,34 @@ mode
 category: 'Grail-State'
 method: FileIO
 fileno
-	OSError @env1:___signal___: 'fileno() is not supported in Grail'
+	OSError ___signal___: 'fileno() is not supported in Grail'
 %
 
 category: 'Grail-State'
 method: FileIO
 isatty
-	self @env1:_checkOpen.
+	self _checkOpen.
 	^ false
 %
 
 category: 'Grail-State'
 method: FileIO
 readable
-	self @env1:_checkOpen.
+	self _checkOpen.
 	^ (self @env0:dynamicInstVarAt: #_readable) == true
 %
 
 category: 'Grail-State'
 method: FileIO
 writable
-	self @env1:_checkOpen.
+	self _checkOpen.
 	^ (self @env0:dynamicInstVarAt: #_writable) == true
 %
 
 category: 'Grail-State'
 method: FileIO
 seekable
-	self @env1:_checkOpen.
+	self _checkOpen.
 	^ true
 %
 
@@ -1110,7 +1110,7 @@ __enter__
 category: 'Grail-Context manager'
 method: FileIO
 __exit__: a _: b _: c
-	self @env1:close.
+	self close.
 	^ false
 %
 
@@ -1124,9 +1124,9 @@ category: 'Grail-Iter protocol'
 method: FileIO
 __next__
 	| line |
-	line := self @env1:readline.
+	line := self readline.
 	line @env0:isEmpty ifTrue: [
-		StopIteration @env1:___signal___: ''
+		StopIteration ___signal___: ''
 	].
 	^ line
 %
@@ -1144,7 +1144,7 @@ _decode: raw
 	enc := self @env0:dynamicInstVarAt: #_encoding.
 	enc @env0:= 'latin-1' ifTrue: [^ raw].
 	^ [raw @env0:decodeFromUTF8] @env0:on: Error do: [:ex |
-		UnicodeDecodeError @env1:___signal___: ('''utf-8'' codec can''t decode bytes from file ' @env0:, (self @env0:dynamicInstVarAt: #_name))]
+		UnicodeDecodeError ___signal___: ('''utf-8'' codec can''t decode bytes from file ' @env0:, (self @env0:dynamicInstVarAt: #_name))]
 %
 
 category: 'Grail-Private'
@@ -1167,7 +1167,7 @@ _completeUtf8Tail: raw
 	lead @env0:< 16rC0 ifTrue: [^ raw].
 	need := lead @env0:>= 16rF0 ifTrue: [3] ifFalse: [lead @env0:>= 16rE0 ifTrue: [2] ifFalse: [1]].
 	have @env0:>= need ifTrue: [^ raw].
-	extra := self @env1:_rawRead: (need @env0:- have).
+	extra := self _rawRead: (need @env0:- have).
 	^ raw @env0:, extra
 %
 
@@ -1179,19 +1179,19 @@ read: n
 	read to EOF."
 
 	| raw |
-	self @env1:_checkReadable.
+	self _checkReadable.
 	(n == nil @env0:or: [n == None @env0:or: [n @env0:< 0]]) ifTrue: [
-		^ self @env1:_decode: (self @env1:_readToEnd)].
-	raw := self @env1:_rawRead: n.
-	raw := self @env1:_completeUtf8Tail: raw.
-	^ self @env1:_decode: raw
+		^ self _decode: (self _readToEnd)].
+	raw := self _rawRead: n.
+	raw := self _completeUtf8Tail: raw.
+	^ self _decode: raw
 %
 
 category: 'Grail-Reading'
 method: TextIOWrapper
 readline: limit
-	self @env1:_checkReadable.
-	^ self @env1:_decode: (self @env1:_rawReadline: limit)
+	self _checkReadable.
+	^ self _decode: (self _rawReadline: limit)
 %
 
 category: 'Grail-Writing'
@@ -1200,9 +1200,9 @@ write: data
 	"Write a str; answer the character count (CPython contract)."
 
 	| f enc out cp |
-	self @env1:_checkWritable.
+	self _checkWritable.
 	(data isKindOf: CharacterCollection) ifFalse: [
-		TypeError @env1:___signal___: 'write() argument must be str'].
+		TypeError ___signal___: 'write() argument must be str'].
 	data @env0:isEmpty ifTrue: [^ 0].
 	f := self @env0:dynamicInstVarAt: #_gsfile.
 	enc := self @env0:dynamicInstVarAt: #_encoding.
@@ -1211,7 +1211,7 @@ write: data
 		1 @env0:to: data @env0:size do: [:i |
 			cp := (data @env0:at: i) @env0:codePoint.
 			cp @env0:> 255 ifTrue: [
-				UnicodeEncodeError @env1:___signal___: '''latin-1'' codec can''t encode character'].
+				UnicodeEncodeError ___signal___: '''latin-1'' codec can''t encode character'].
 			out @env0:at: i put: (Character @env0:codePoint: cp)].
 		f @env0:nextPutAll: out
 	] ifFalse: [
@@ -1306,13 +1306,13 @@ method: io
 open: file
 	"io.open(file) - alias for the open() builtin."
 
-	^ FileIO @env1:___open___: file mode: nil encoding: nil
+	^ FileIO ___open___: file mode: nil encoding: nil
 %
 
 category: 'Grail-Opening'
 method: io
 open: file _: mode
-	^ FileIO @env1:___open___: file mode: mode encoding: nil
+	^ FileIO ___open___: file mode: mode encoding: nil
 %
 
 category: 'Grail-Opening'
@@ -1321,7 +1321,7 @@ _open: positional kw: kwargs
 	"Varargs/kwargs form - delegate to the builtins implementation so
 	the argument parsing lives in exactly one place."
 
-	^ (builtins @env1:instance) @env1:_open: positional kw: kwargs
+	^ (builtins instance) _open: positional kw: kwargs
 %
 
 category: 'Grail-Opening'
@@ -1330,7 +1330,7 @@ _gzip_open: path _: mode
 	"Private hook for the pure-Python gzip module: a file object over
 	a gzip-compressed GsFile."
 
-	^ FileIO @env1:___openCompressedPath___: path mode: mode
+	^ FileIO ___openCompressedPath___: path mode: mode
 %
 
 set compile_env: 0

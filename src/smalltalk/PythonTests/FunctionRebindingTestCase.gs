@@ -49,7 +49,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'function_rebinding' ifAbsent: [].
+	mods removeKey: #'function_rebinding' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/function_rebinding.py')
 		name: 'function_rebinding'.

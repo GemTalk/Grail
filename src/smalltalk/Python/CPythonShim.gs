@@ -232,7 +232,7 @@ wrap: aValue
 	sentinel can.  See is_foreign()/GRAIL_WRAP_MAGIC in cpython.cc."
 	"A reverse proxy round-trips straight back to its original foreign
 	PyObject* — numpy must get its own DType pointer again, not a wrapper."
-	(aValue isKindOf: ShimForeignObject) ifTrue: [ ^ aValue @env0:pyObjectView ].
+	(aValue isKindOf: ShimForeignObject) ifTrue: [ ^ aValue pyObjectView ].
 	(aValue == nil or: [aValue == None]) ifTrue: [
 		noneWrapper ifNil: [
 			noneWrapper := CByteArray gcMalloc: 32.
@@ -284,13 +284,13 @@ foreignProxyForPointer: ptrInt typeName: nameStr
 	SessionTemps, so the committed singleton's shape is untouched."
 
 	| map |
-	map := SessionTemps @env0:current
-		@env0:at: #'GrailForeignProxies'
-		ifAbsentPut: [ IdentityKeyValueDictionary @env0:new ].
-	^ map @env0:at: ptrInt ifAbsent: [ | p |
-		p := ShimForeignObject @env0:new.
-		p @env0:setCPtr: ptrInt typeName: nameStr.
-		map @env0:at: ptrInt put: p.
+	map := SessionTemps current
+		at: #'GrailForeignProxies'
+		ifAbsentPut: [ IdentityKeyValueDictionary new ].
+	^ map at: ptrInt ifAbsent: [ | p |
+		p := ShimForeignObject new.
+		p setCPtr: ptrInt typeName: nameStr.
+		map at: ptrInt put: p.
 		p ]
 %
 
@@ -901,9 +901,9 @@ PySys_GetObject: aName
 
 	^ [ | sysInst |
 	    sysInst := (Python at: #sys) ___instance___.
-	    (self wrap: (sysInst @env1:___pyAttrLoad___: aName @env0:asString @env0:asSymbol))
+	    (self wrap: (sysInst @env1:___pyAttrLoad___: aName asString asSymbol))
 	        memoryAddress
-	  ] @env0:on: AbstractException do: [:ex | 0]
+	  ] on: AbstractException do: [:ex | 0]
 %
 
 category: 'Grail-C API - ContextVar'
@@ -1086,15 +1086,15 @@ PyDict_Next: aDictionary pos: posOop
 	underlying OOP at offset 16 — keeping the round-trip lossless."
 
 	| keys n key value |
-	keys := aDictionary @env0:keys @env0:asArray.
-	n := keys @env0:size.
-	posOop @env0:>= n ifTrue: [^ nil].
-	key := keys @env0:at: posOop @env0:+ 1.
-	value := aDictionary @env0:at: key.
+	keys := aDictionary keys asArray.
+	n := keys size.
+	posOop >= n ifTrue: [^ nil].
+	key := keys at: posOop + 1.
+	value := aDictionary at: key.
 	^ {
-		(self @env0:wrap: key) memoryAddress.
-		(self @env0:wrap: value) memoryAddress.
-		posOop @env0:+ 1.
+		(self wrap: key) memoryAddress.
+		(self wrap: value) memoryAddress.
+		posOop + 1.
 	}
 %
 
@@ -1321,7 +1321,7 @@ loadDynamicModule: moduleName fromPath: pathString
 		].
 	].
 	"Create and initialize the instance"
-	moduleInstance := moduleClass @env0:new.
+	moduleInstance := moduleClass new.
 	moduleInstance @env1:__name__: moduleName;
 		 @env1:__package__: nil.
 	"Expose module-level constants (PyModule_AddIntConstant /

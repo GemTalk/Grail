@@ -274,8 +274,8 @@ __float__
 	vendored fractions.Fraction defines no __float__ of its own and
 	inherits it from here."
 
-	^ ((self @env1:___pyAttrLoad___: #numerator) @env0:asFloat)
-		@env0:/ ((self @env1:___pyAttrLoad___: #denominator) @env0:asFloat)
+	^ ((self ___pyAttrLoad___: #numerator) @env0:asFloat)
+		@env0:/ ((self ___pyAttrLoad___: #denominator) @env0:asFloat)
 %
 
 category: 'Grail-ABC'

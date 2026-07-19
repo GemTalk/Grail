@@ -48,7 +48,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'pep448_starred_literals' ifAbsent: [].
+	mods removeKey: #'pep448_starred_literals' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/pep448_starred_literals.py')
 		name: 'pep448_starred_literals'.
@@ -62,8 +62,8 @@ testTupleLeadingSplat
 	| result |
 	result := testModule @env1:tuple_with_leading_splat.
 	self assert: result size equals: 4.
-	self assert: (result @env0:at: 1) equals: 1.
-	self assert: (result @env0:at: 4) equals: 99
+	self assert: (result at: 1) equals: 1.
+	self assert: (result at: 4) equals: 99
 %
 
 category: 'Grail-Tests'
@@ -74,8 +74,8 @@ testTupleTrailingSplat
 	| result |
 	result := testModule @env1:tuple_with_trailing_splat.
 	self assert: result size equals: 4.
-	self assert: (result @env0:at: 1) equals: 0.
-	self assert: (result @env0:at: 4) equals: 3
+	self assert: (result at: 1) equals: 0.
+	self assert: (result at: 4) equals: 3
 %
 
 category: 'Grail-Tests'
@@ -86,9 +86,9 @@ testTupleMiddleSplat
 	| result |
 	result := testModule @env1:tuple_with_middle_splat.
 	self assert: result size equals: 5.
-	self assert: (result @env0:at: 1) equals: 0.
-	self assert: (result @env0:at: 3) equals: 2.
-	self assert: (result @env0:at: 5) equals: 99
+	self assert: (result at: 1) equals: 0.
+	self assert: (result at: 3) equals: 2.
+	self assert: (result at: 5) equals: 99
 %
 
 category: 'Grail-Tests'
@@ -99,7 +99,7 @@ testTupleTwoSplats
 	| result |
 	result := testModule @env1:tuple_two_splats.
 	self assert: result size equals: 6.
-	self assert: (result @env0:at: 4) equals: 1
+	self assert: (result at: 4) equals: 1
 %
 
 category: 'Grail-Tests'
@@ -110,7 +110,7 @@ testTupleAssignmentTarget
 	| result |
 	result := testModule @env1:tuple_assignment_target.
 	self assert: result size equals: 5.
-	self assert: (result @env0:at: 1) equals: 0
+	self assert: (result at: 1) equals: 0
 %
 
 category: 'Grail-Tests'
@@ -121,6 +121,6 @@ testEmptyTupleWithSplat
 	| result |
 	result := testModule @env1:empty_tuple_with_splat.
 	self assert: result size equals: 2.
-	self assert: (result @env0:at: 1) equals: 1.
-	self assert: (result @env0:at: 2) equals: 2
+	self assert: (result at: 1) equals: 1.
+	self assert: (result at: 2) equals: 2
 %

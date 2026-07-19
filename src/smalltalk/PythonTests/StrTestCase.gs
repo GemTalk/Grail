@@ -812,11 +812,11 @@ testSplitReturnsStrClass
 	fails ``isinstance(x, str)'' downstream (broke
 	urllib.parse.unquote on query-string parsing / req.args)."
 
-	self assert: (('a&b&c' @env1:split: '&') @env0:first @env0:class) equals: Unicode7.
-	self assert: (('a&b&c' @env1:split: '&') @env0:last @env0:class) equals: Unicode7.
-	self assert: (('one two' @env1:split) @env0:first @env0:class) equals: Unicode7.
+	self assert: (('a&b&c' @env1:split: '&') first class) equals: Unicode7.
+	self assert: (('a&b&c' @env1:split: '&') last class) equals: Unicode7.
+	self assert: (('one two' @env1:split) first class) equals: Unicode7.
 	"Content is still correct."
-	self assert: ('a&b&c' @env1:split: '&') equals: #('a' 'b' 'c') @env0:asOrderedCollection
+	self assert: ('a&b&c' @env1:split: '&') equals: #('a' 'b' 'c') asOrderedCollection
 %
 
 category: 'Grail-String Methods'
@@ -1275,10 +1275,10 @@ testUnicodeEscapeEncode
 	s add: (Character codePoint: 181).   "MICRO SIGN"
 	enc := s @env1:encode: 'unicode_escape'.
 	self assert: (enc @env1:__len__) equals: 4.
-	self assert: (enc @env0:at: 1) equals: 92.
-	self assert: (enc @env0:at: 2) equals: 120.
-	self assert: (enc @env0:at: 3) equals: 98.
-	self assert: (enc @env0:at: 4) equals: 53
+	self assert: (enc at: 1) equals: 92.
+	self assert: (enc at: 2) equals: 120.
+	self assert: (enc at: 3) equals: 98.
+	self assert: (enc at: 4) equals: 53
 %
 
 category: 'Grail-Tests - escapes'
@@ -1291,5 +1291,5 @@ testNamedEscapeCapitalDiaeresis
 	| s |
 	s := self eval: '"\N{LATIN CAPITAL LETTER A WITH DIAERESIS}"'.
 	self assert: (s @env1:__len__) equals: 1.
-	self assert: (s @env0:at: 1) @env0:codePoint equals: 16rC4
+	self assert: (s at: 1) codePoint equals: 16rC4
 %

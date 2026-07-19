@@ -154,7 +154,7 @@ testFunctionInstVarIsBoundMethod
 	addValue := testModule @env1:add.
 	self assert: (addValue isKindOf: BoundMethod).
 	"Confirm the raw slot is still empty — no pre-store at def time."
-	self assert: (testModule @env0:dynamicInstVarAt: #add) equals: nil.
+	self assert: (testModule dynamicInstVarAt: #add) equals: nil.
 %
 
 category: 'Grail-Tests - BoundMethod'

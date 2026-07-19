@@ -48,7 +48,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'phase_b_instance_attrs' ifAbsent: [].
+	mods removeKey: #'phase_b_instance_attrs' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/phase_b_instance_attrs.py')
 		name: 'phase_b_instance_attrs'.

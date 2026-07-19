@@ -59,7 +59,7 @@ new
 	"Number disallows #new; route ClassDefAst's ``self new`` +
 	``__init__`` allocation path to basicNew (same as AbstractPyInt)."
 
-	^ self @env0:basicNew
+	^ self basicNew
 %
 
 category: 'Grail-Accessors'
@@ -67,7 +67,7 @@ method: AbstractPyFloat
 value
 	"The underlying SmallDouble."
 
-	^ self @env0:dynamicInstVarAt: #value
+	^ self dynamicInstVarAt: #value
 %
 
 category: 'Grail-Arithmetic Support'
@@ -84,31 +84,31 @@ _coerce: aNumber
 	Float so the retried operation lands in the Float branch, which
 	then strips this wrapper via asFloat."
 
-	^ aNumber @env0:asFloat
+	^ aNumber asFloat
 %
 
 category: 'Grail-Arithmetic Support'
 method: AbstractPyFloat
 asFloat
-	^ self @env0:value
+	^ self value
 %
 
 category: 'Grail-Arithmetic Support'
 method: AbstractPyFloat
 truncated
-	^ self @env0:value truncated
+	^ self value truncated
 %
 
 category: 'Grail-Arithmetic Support'
 method: AbstractPyFloat
 asInteger
-	^ self @env0:value truncated
+	^ self value truncated
 %
 
 category: 'Grail-Arithmetic Support'
 method: AbstractPyFloat
 asFraction
-	^ self @env0:value asFraction
+	^ self value asFraction
 %
 
 ! ------------------- Receiver-side arithmetic (env 0) -- Number's
@@ -118,85 +118,85 @@ asFraction
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 + other
-	^ self @env0:value + ((other isKindOf: AbstractPyFloat)
-		ifTrue: [other @env0:value] ifFalse: [other])
+	^ self value + ((other isKindOf: AbstractPyFloat)
+		ifTrue: [other value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 - other
-	^ self @env0:value - ((other isKindOf: AbstractPyFloat)
-		ifTrue: [other @env0:value] ifFalse: [other])
+	^ self value - ((other isKindOf: AbstractPyFloat)
+		ifTrue: [other value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 * other
-	^ self @env0:value * ((other isKindOf: AbstractPyFloat)
-		ifTrue: [other @env0:value] ifFalse: [other])
+	^ self value * ((other isKindOf: AbstractPyFloat)
+		ifTrue: [other value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 / other
-	^ self @env0:value / ((other isKindOf: AbstractPyFloat)
-		ifTrue: [other @env0:value] ifFalse: [other])
+	^ self value / ((other isKindOf: AbstractPyFloat)
+		ifTrue: [other value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 // other
-	^ self @env0:value // ((other isKindOf: AbstractPyFloat)
-		ifTrue: [other @env0:value] ifFalse: [other])
+	^ self value // ((other isKindOf: AbstractPyFloat)
+		ifTrue: [other value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 \\ other
-	^ self @env0:value \\ ((other isKindOf: AbstractPyFloat)
-		ifTrue: [other @env0:value] ifFalse: [other])
+	^ self value \\ ((other isKindOf: AbstractPyFloat)
+		ifTrue: [other value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 rem: other
-	^ self @env0:value rem: ((other isKindOf: AbstractPyFloat)
-		ifTrue: [other @env0:value] ifFalse: [other])
+	^ self value rem: ((other isKindOf: AbstractPyFloat)
+		ifTrue: [other value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 quo: other
-	^ self @env0:value quo: ((other isKindOf: AbstractPyFloat)
-		ifTrue: [other @env0:value] ifFalse: [other])
+	^ self value quo: ((other isKindOf: AbstractPyFloat)
+		ifTrue: [other value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 raisedTo: other
-	^ self @env0:value raisedTo: ((other isKindOf: AbstractPyFloat)
-		ifTrue: [other @env0:value] ifFalse: [other])
+	^ self value raisedTo: ((other isKindOf: AbstractPyFloat)
+		ifTrue: [other value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 min: other
-	^ self @env0:value min: ((other isKindOf: AbstractPyFloat)
-		ifTrue: [other @env0:value] ifFalse: [other])
+	^ self value min: ((other isKindOf: AbstractPyFloat)
+		ifTrue: [other value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 max: other
-	^ self @env0:value max: ((other isKindOf: AbstractPyFloat)
-		ifTrue: [other @env0:value] ifFalse: [other])
+	^ self value max: ((other isKindOf: AbstractPyFloat)
+		ifTrue: [other value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 negated
-	^ self @env0:value negated
+	^ self value negated
 %
 
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 abs
-	^ self @env0:value abs
+	^ self value abs
 %
 
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 printOn: aStream
-	aStream @env0:nextPutAll: self @env0:value printString
+	aStream nextPutAll: self value printString
 %
 
 ! ------------------- Relational + identity (env 0, receiver side)
@@ -204,42 +204,42 @@ printOn: aStream
 category: 'Grail-Comparison'
 method: AbstractPyFloat
 < other
-	(other isKindOf: AbstractPyFloat) ifTrue: [^ self @env0:value < other @env0:value].
-	^ self @env0:value < other
+	(other isKindOf: AbstractPyFloat) ifTrue: [^ self value < other value].
+	^ self value < other
 %
 
 category: 'Grail-Comparison'
 method: AbstractPyFloat
 <= other
-	(other isKindOf: AbstractPyFloat) ifTrue: [^ self @env0:value <= other @env0:value].
-	^ self @env0:value <= other
+	(other isKindOf: AbstractPyFloat) ifTrue: [^ self value <= other value].
+	^ self value <= other
 %
 
 category: 'Grail-Comparison'
 method: AbstractPyFloat
 > other
-	(other isKindOf: AbstractPyFloat) ifTrue: [^ self @env0:value > other @env0:value].
-	^ self @env0:value > other
+	(other isKindOf: AbstractPyFloat) ifTrue: [^ self value > other value].
+	^ self value > other
 %
 
 category: 'Grail-Comparison'
 method: AbstractPyFloat
 >= other
-	(other isKindOf: AbstractPyFloat) ifTrue: [^ self @env0:value >= other @env0:value].
-	^ self @env0:value >= other
+	(other isKindOf: AbstractPyFloat) ifTrue: [^ self value >= other value].
+	^ self value >= other
 %
 
 category: 'Grail-Comparison'
 method: AbstractPyFloat
 = other
-	(other isKindOf: AbstractPyFloat) ifTrue: [^ self @env0:value = other @env0:value].
-	^ self @env0:value = other
+	(other isKindOf: AbstractPyFloat) ifTrue: [^ self value = other value].
+	^ self value = other
 %
 
 category: 'Grail-Hashing'
 method: AbstractPyFloat
 hash
-	^ self @env0:value hash
+	^ self value hash
 %
 
 ! ------------------- DNU forwarder (env-0, so env-1 misses route here)
@@ -255,9 +255,9 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	envId = 1 ifFalse: [
 		^ super doesNotUnderstand: aSelector args: anArray envId: envId
 	].
-	unwrapped := anArray @env0:collect: [:a |
-		(a isKindOf: AbstractPyFloat) ifTrue: [a @env0:value] ifFalse: [a]].
-	^ self @env0:value perform: aSelector env: 1 withArguments: unwrapped
+	unwrapped := anArray collect: [:a |
+		(a isKindOf: AbstractPyFloat) ifTrue: [a value] ifFalse: [a]].
+	^ self value perform: aSelector env: 1 withArguments: unwrapped
 %
 
 category: 'Grail-Python Protocol'
@@ -280,7 +280,7 @@ ___new__: positional kw: keywords
 	inst := self @env0:new.
 	v := [positional @env0:size @env0:= 0
 			ifTrue: [0.0]
-			ifFalse: [float @env1:__new__: (positional @env0:at: 1)]]
+			ifFalse: [float __new__: (positional @env0:at: 1)]]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: nil].
 	v == nil ifFalse: [
@@ -303,70 +303,70 @@ __int__
 category: 'Grail-Python Protocol'
 method: AbstractPyFloat
 __hash__
-	^ self @env0:value @env1:__hash__
+	^ self @env0:value __hash__
 %
 
 category: 'Grail-Python Protocol'
 method: AbstractPyFloat
 __str__
-	^ self @env0:value @env1:__str__
+	^ self @env0:value __str__
 %
 
 category: 'Grail-Python Protocol'
 method: AbstractPyFloat
 __repr__
-	^ self @env0:value @env1:__repr__
+	^ self @env0:value __repr__
 %
 
 category: 'Grail-Python Protocol'
 method: AbstractPyFloat
 __eq__: other
 	(other isKindOf: AbstractPyFloat) ifTrue: [
-		^ self @env0:value @env1:__eq__: (other @env0:value)
+		^ self @env0:value __eq__: (other @env0:value)
 	].
-	^ self @env0:value @env1:__eq__: other
+	^ self @env0:value __eq__: other
 %
 
 category: 'Grail-Python Protocol'
 method: AbstractPyFloat
 __ne__: other
-	^ (self @env1:__eq__: other) not
+	^ (self __eq__: other) not
 %
 
 category: 'Grail-Python Protocol'
 method: AbstractPyFloat
 __lt__: other
 	(other isKindOf: AbstractPyFloat) ifTrue: [
-		^ self @env0:value @env1:__lt__: (other @env0:value)
+		^ self @env0:value __lt__: (other @env0:value)
 	].
-	^ self @env0:value @env1:__lt__: other
+	^ self @env0:value __lt__: other
 %
 
 category: 'Grail-Python Protocol'
 method: AbstractPyFloat
 __le__: other
 	(other isKindOf: AbstractPyFloat) ifTrue: [
-		^ self @env0:value @env1:__le__: (other @env0:value)
+		^ self @env0:value __le__: (other @env0:value)
 	].
-	^ self @env0:value @env1:__le__: other
+	^ self @env0:value __le__: other
 %
 
 category: 'Grail-Python Protocol'
 method: AbstractPyFloat
 __gt__: other
 	(other isKindOf: AbstractPyFloat) ifTrue: [
-		^ self @env0:value @env1:__gt__: (other @env0:value)
+		^ self @env0:value __gt__: (other @env0:value)
 	].
-	^ self @env0:value @env1:__gt__: other
+	^ self @env0:value __gt__: other
 %
 
 category: 'Grail-Python Protocol'
 method: AbstractPyFloat
 __ge__: other
 	(other isKindOf: AbstractPyFloat) ifTrue: [
-		^ self @env0:value @env1:__ge__: (other @env0:value)
+		^ self @env0:value __ge__: (other @env0:value)
 	].
-	^ self @env0:value @env1:__ge__: other
+	^ self @env0:value __ge__: other
 %
 
 set compile_env: 0

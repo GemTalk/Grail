@@ -67,12 +67,12 @@ testDoubleStarKwargs
 
 	| result keys |
 	result := testModule @env1:take_kwargs_result.
-	self assert: (result @env0:at: 1) equals: 3.
-	keys := result @env0:at: 2.
+	self assert: (result at: 1) equals: 3.
+	keys := result at: 2.
 	"Grail's kwargs dict stores keys as Symbols (CallAst emits
 	`at: #name put: value`), not Strings as CPython does.  This is a
 	pre-existing divergence; compare via asString."
-	self assert: (keys @env0:collect: [:k | k @env0:asString]) asArray equals: #('x' 'y').
+	self assert: (keys collect: [:k | k asString]) asArray equals: #('x' 'y').
 %
 
 ! ===============================================================================
@@ -86,10 +86,10 @@ testMixedPositionalVarargsKwargs
 
 	| result |
 	result := testModule @env1:mixed_result.
-	self assert: (result @env0:at: 1) equals: 1.
-	self assert: (result @env0:at: 2) equals: 2.
-	self assert: (result @env0:at: 3) asArray equals: #(3 4 5).
-	self assert: (result @env0:at: 4) equals: 2.
+	self assert: (result at: 1) equals: 1.
+	self assert: (result at: 2) equals: 2.
+	self assert: (result at: 3) asArray equals: #(3 4 5).
+	self assert: (result at: 4) equals: 2.
 %
 
 ! ===============================================================================

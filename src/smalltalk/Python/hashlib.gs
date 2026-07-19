@@ -64,15 +64,15 @@ ___pythonValueAttrs___
 category: 'Grail-Private'
 method: Hash
 _initAlgo: algoSym data: someBytes
-self @env0:dynamicInstVarAt: #algo put: algoSym.
-self @env0:dynamicInstVarAt: #buffer put: ByteArray @env0:new.
+self dynamicInstVarAt: #algo put: algoSym.
+self dynamicInstVarAt: #buffer put: ByteArray new.
 	someBytes ifNotNil: [
 		(someBytes isKindOf: ByteArray) ifTrue: [
-			self @env0:dynamicInstVarAt: #buffer put: ((self @env0:dynamicInstVarAt: #buffer) @env0:, someBytes)
+			self dynamicInstVarAt: #buffer put: ((self dynamicInstVarAt: #buffer) , someBytes)
 		] ifFalse: [
 			"Treat str-shaped input as UTF-8; CPython hashes only bytes,
 			so this is a permissive convenience."
-			self @env0:dynamicInstVarAt: #buffer put: ((self @env0:dynamicInstVarAt: #buffer) @env0:, someBytes @env0:asByteArray)
+			self dynamicInstVarAt: #buffer put: ((self dynamicInstVarAt: #buffer) , someBytes asByteArray)
 		]
 	].
 %
@@ -83,16 +83,16 @@ _digestBytes
 	"Run the hash algorithm against the current buffer.  Returns a
 	ByteArray.  Unknown algo raises ValueError."
 
-	(self @env0:dynamicInstVarAt: #algo) == #md5 ifTrue: [^ (self @env0:dynamicInstVarAt: #buffer) @env0:md5sumBytes].
-	(self @env0:dynamicInstVarAt: #algo) == #sha1 ifTrue: [^ (self @env0:dynamicInstVarAt: #buffer) @env0:sha1SumBytes].
-	(self @env0:dynamicInstVarAt: #algo) == #sha256 ifTrue: [^ (self @env0:dynamicInstVarAt: #buffer) @env0:sha256SumBytes].
-	(self @env0:dynamicInstVarAt: #algo) == #sha512 ifTrue: [^ (self @env0:dynamicInstVarAt: #buffer) @env0:sha512SumBytes].
-	(self @env0:dynamicInstVarAt: #algo) == #sha3_224 ifTrue: [^ (self @env0:dynamicInstVarAt: #buffer) @env0:sha3_224SumBytes].
-	(self @env0:dynamicInstVarAt: #algo) == #sha3_256 ifTrue: [^ (self @env0:dynamicInstVarAt: #buffer) @env0:sha3_256SumBytes].
-	(self @env0:dynamicInstVarAt: #algo) == #sha3_384 ifTrue: [^ (self @env0:dynamicInstVarAt: #buffer) @env0:sha3_384SumBytes].
-	(self @env0:dynamicInstVarAt: #algo) == #sha3_512 ifTrue: [^ (self @env0:dynamicInstVarAt: #buffer) @env0:sha3_512SumBytes].
+	(self dynamicInstVarAt: #algo) == #md5 ifTrue: [^ (self dynamicInstVarAt: #buffer) md5sumBytes].
+	(self dynamicInstVarAt: #algo) == #sha1 ifTrue: [^ (self dynamicInstVarAt: #buffer) sha1SumBytes].
+	(self dynamicInstVarAt: #algo) == #sha256 ifTrue: [^ (self dynamicInstVarAt: #buffer) sha256SumBytes].
+	(self dynamicInstVarAt: #algo) == #sha512 ifTrue: [^ (self dynamicInstVarAt: #buffer) sha512SumBytes].
+	(self dynamicInstVarAt: #algo) == #sha3_224 ifTrue: [^ (self dynamicInstVarAt: #buffer) sha3_224SumBytes].
+	(self dynamicInstVarAt: #algo) == #sha3_256 ifTrue: [^ (self dynamicInstVarAt: #buffer) sha3_256SumBytes].
+	(self dynamicInstVarAt: #algo) == #sha3_384 ifTrue: [^ (self dynamicInstVarAt: #buffer) sha3_384SumBytes].
+	(self dynamicInstVarAt: #algo) == #sha3_512 ifTrue: [^ (self dynamicInstVarAt: #buffer) sha3_512SumBytes].
 	ValueError @env1:___signal___:
-		'unsupported hash algorithm ''' @env0:, (self @env0:dynamicInstVarAt: #algo) @env0:asString @env0:, ''''
+		'unsupported hash algorithm ''' , (self dynamicInstVarAt: #algo) asString , ''''
 %
 
 set compile_env: 1
@@ -171,7 +171,7 @@ _update: positional kw: kwargs
 	synthesized-instVar pattern (presence of ``<name>:`` paired with
 	unary ``<name>`` getter)."
 
-	^ self @env1:update: (positional @env0:at: 1)
+	^ self update: (positional @env0:at: 1)
 %
 
 category: 'Grail-Hash Protocol'
@@ -213,7 +213,7 @@ copy
 	``@env1:update:`` so dispatch finds the env-1 method (env-0 has
 	no ``update:`` on Hash)."
 	((self @env0:dynamicInstVarAt: #buffer) @env0:size @env0:> 0) ifTrue: [
-		h @env1:update: ((self @env0:dynamicInstVarAt: #buffer) @env0:copyFrom: 1 to: (self @env0:dynamicInstVarAt: #buffer) @env0:size)
+		h update: ((self @env0:dynamicInstVarAt: #buffer) @env0:copyFrom: 1 to: (self @env0:dynamicInstVarAt: #buffer) @env0:size)
 	].
 	^ h
 %
@@ -285,7 +285,7 @@ method: hashlib
 new: name
 	"Generic constructor: ``hashlib.new('sha256')``."
 
-	^ Hash @env1:algo: name @env0:asSymbol data: nil
+	^ Hash algo: name @env0:asSymbol data: nil
 %
 
 category: 'Grail-Constructors'
@@ -293,103 +293,103 @@ method: hashlib
 new: name _: data
 	"``hashlib.new('sha256', b'abc')`` — name + initial data."
 
-	^ Hash @env1:algo: name @env0:asSymbol data: data
+	^ Hash algo: name @env0:asSymbol data: data
 %
 
 category: 'Grail-Constructors'
 method: hashlib
 md5
-	^ Hash @env1:algo: #md5 data: nil
+	^ Hash algo: #md5 data: nil
 %
 
 category: 'Grail-Constructors'
 method: hashlib
 md5: data
-	^ Hash @env1:algo: #md5 data: data
+	^ Hash algo: #md5 data: data
 %
 
 category: 'Grail-Constructors'
 method: hashlib
 sha1
-	^ Hash @env1:algo: #sha1 data: nil
+	^ Hash algo: #sha1 data: nil
 %
 
 category: 'Grail-Constructors'
 method: hashlib
 sha1: data
-	^ Hash @env1:algo: #sha1 data: data
+	^ Hash algo: #sha1 data: data
 %
 
 category: 'Grail-Constructors'
 method: hashlib
 sha256
-	^ Hash @env1:algo: #sha256 data: nil
+	^ Hash algo: #sha256 data: nil
 %
 
 category: 'Grail-Constructors'
 method: hashlib
 sha256: data
-	^ Hash @env1:algo: #sha256 data: data
+	^ Hash algo: #sha256 data: data
 %
 
 category: 'Grail-Constructors'
 method: hashlib
 sha512
-	^ Hash @env1:algo: #sha512 data: nil
+	^ Hash algo: #sha512 data: nil
 %
 
 category: 'Grail-Constructors'
 method: hashlib
 sha512: data
-	^ Hash @env1:algo: #sha512 data: data
+	^ Hash algo: #sha512 data: data
 %
 
 category: 'Grail-Constructors'
 method: hashlib
 sha3_224
-	^ Hash @env1:algo: #sha3_224 data: nil
+	^ Hash algo: #sha3_224 data: nil
 %
 
 category: 'Grail-Constructors'
 method: hashlib
 sha3_224: data
-	^ Hash @env1:algo: #sha3_224 data: data
+	^ Hash algo: #sha3_224 data: data
 %
 
 category: 'Grail-Constructors'
 method: hashlib
 sha3_256
-	^ Hash @env1:algo: #sha3_256 data: nil
+	^ Hash algo: #sha3_256 data: nil
 %
 
 category: 'Grail-Constructors'
 method: hashlib
 sha3_256: data
-	^ Hash @env1:algo: #sha3_256 data: data
+	^ Hash algo: #sha3_256 data: data
 %
 
 category: 'Grail-Constructors'
 method: hashlib
 sha3_384
-	^ Hash @env1:algo: #sha3_384 data: nil
+	^ Hash algo: #sha3_384 data: nil
 %
 
 category: 'Grail-Constructors'
 method: hashlib
 sha3_384: data
-	^ Hash @env1:algo: #sha3_384 data: data
+	^ Hash algo: #sha3_384 data: data
 %
 
 category: 'Grail-Constructors'
 method: hashlib
 sha3_512
-	^ Hash @env1:algo: #sha3_512 data: nil
+	^ Hash algo: #sha3_512 data: nil
 %
 
 category: 'Grail-Constructors'
 method: hashlib
 sha3_512: data
-	^ Hash @env1:algo: #sha3_512 data: data
+	^ Hash algo: #sha3_512 data: data
 %
 
 set compile_env: 0

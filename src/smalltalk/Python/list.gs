@@ -68,7 +68,7 @@ __new__: iterable
 		| n |
 		n := iterable __len__.
 		0 @env0:to: n @env0:- 1 do: [:i |
-			result @env0:add: (iterable @env1:__getitem__: i)
+			result @env0:add: (iterable __getitem__: i)
 		].
 		^ result
 	].
@@ -86,12 +86,12 @@ __delitem__: index
 
 	| size idx |
 	(index isKindOf: slice) ifTrue: [
-		^ self @env1:___delSlice___: index
+		^ self ___delSlice___: index
 	].
 	((index isKindOf: Integer)
 		or: [(index @env0:class
 			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
-		TypeError @env1:___signal___: ('list indices must be integers or slices, not '
+		TypeError ___signal___: ('list indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	size := self @env0:size.
 	idx := index.
@@ -124,7 +124,7 @@ ___delSlice___: aSlice
 
 	| size indices lo hi st indicesArray |
 	size := self @env0:size.
-	indices := aSlice @env1:indices: size.
+	indices := aSlice indices: size.
 	lo := indices @env0:at: 1.
 	hi := indices @env0:at: 2.
 	st := indices @env0:at: 3.
@@ -220,7 +220,7 @@ method: list
 __iter__
 	"Return an iterator over the list."
 
-	^ list_iterator @env1:___on: self
+	^ list_iterator ___on: self
 %
 
 category: 'Grail-String Representation'
@@ -273,12 +273,12 @@ __setitem__: index _: value
 
 	| size idx |
 	(index isKindOf: slice) ifTrue: [
-		^ self @env1:___setSlice___: index _: value
+		^ self ___setSlice___: index _: value
 	].
 	((index isKindOf: Integer)
 		or: [(index @env0:class
 			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
-		TypeError @env1:___signal___: ('list indices must be integers or slices, not '
+		TypeError ___signal___: ('list indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 
 	size := self @env0:size.
@@ -321,10 +321,10 @@ ___setSlice___: aSlice _: anIterable
 	the slice indices must be computed from the post-iteration size."
 	values := (anIterable isKindOf: SequenceableCollection)
 		ifTrue: [anIterable @env0:asArray]
-		ifFalse: [(list @env1:__new__: anIterable) @env0:asArray].
+		ifFalse: [(list __new__: anIterable) @env0:asArray].
 	len := values @env0:size.
 	size := self @env0:size.
-	indices := aSlice @env1:indices: size.
+	indices := aSlice indices: size.
 	lo := indices @env0:at: 1.
 	hi := indices @env0:at: 2.
 	st := indices @env0:at: 3.
@@ -513,7 +513,7 @@ sort
 	receiver's slots to get true in-place semantics."
 
 	| sorted |
-	sorted := self @env0:sort: [:a :b | a @env1:__lt__: b].
+	sorted := self @env0:sort: [:a :b | a __lt__: b].
 	self @env0:replaceFrom: 1 to: self @env0:size with: sorted startingAt: 1.
 	^ None
 %
@@ -537,16 +537,16 @@ _sort: positional kw: kwargs
 	sortBlock := keyFn @env0:isNil
 		ifTrue: [
 			reverse ___isTruthy___
-				ifTrue: [[:a :b | b @env1:__lt__: a]]
-				ifFalse: [[:a :b | a @env1:__lt__: b]]]
+				ifTrue: [[:a :b | b __lt__: a]]
+				ifFalse: [[:a :b | a __lt__: b]]]
 		ifFalse: [
 			reverse ___isTruthy___
 				ifTrue: [[:a :b |
-					(keyFn @env1:value: { b } value: nil)
-						@env1:__lt__: (keyFn @env1:value: { a } value: nil)]]
+					(keyFn value: { b } value: nil)
+						__lt__: (keyFn value: { a } value: nil)]]
 				ifFalse: [[:a :b |
-					(keyFn @env1:value: { a } value: nil)
-						@env1:__lt__: (keyFn @env1:value: { b } value: nil)]]].
+					(keyFn value: { a } value: nil)
+						__lt__: (keyFn value: { b } value: nil)]]].
 	"GemStone's ``sort:'' returns a fresh sorted Array; copy it back
 	over the receiver's slots for true in-place semantics."
 	sorted := self @env0:sort: sortBlock.

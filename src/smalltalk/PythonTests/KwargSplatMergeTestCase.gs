@@ -43,9 +43,9 @@ method: KwargSplatMergeTestCase
 loadFixture
 	"Load tests/python/kwarg_splat_merge.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'kwarg_splat_merge' ifAbsent: [].
+	importlib @env1:modules removeKey: #'kwarg_splat_merge' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/kwarg_splat_merge.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/kwarg_splat_merge.py')
 		name: 'kwarg_splat_merge'
 %
 
@@ -60,7 +60,7 @@ testClassNamedAndSplat
 	| r |
 	r := self loadFixture @env1:class_named_and_splat.
 	self assert: (r @env1:__getitem__: 0) equals: 'rule'.
-	self assert: (r @env1:__getitem__: 1) @env0:size equals: 1.
+	self assert: (r @env1:__getitem__: 1) size equals: 1.
 	self assert: (r @env1:__getitem__: 2) equals: 'hello'.
 	self assert: (r @env1:__getitem__: 3) equals: true
 %
@@ -85,7 +85,7 @@ testSplatOnly
 	| r |
 	r := self loadFixture @env1:splat_only.
 	self assert: (r @env1:__getitem__: 0) equals: 'rule'.
-	self assert: (r @env1:__getitem__: 1) @env0:size equals: 1.
+	self assert: (r @env1:__getitem__: 1) size equals: 1.
 	self assert: (r @env1:__getitem__: 2) equals: 'hello'.
 	self assert: (r @env1:__getitem__: 3) equals: true
 %

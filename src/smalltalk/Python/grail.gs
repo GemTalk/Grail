@@ -178,19 +178,19 @@ ___lookupClass: className inDictionary: dictName
 	if the dictionary or class is not found."
 
 	| dictSym classSym symList |
-	dictSym := dictName @env0:asSymbol.
-	classSym := className @env0:asSymbol.
-	symList := GsCurrentSession @env0:currentSession @env0:symbolList.
-	symList @env0:do: [:dict |
+	dictSym := dictName asSymbol.
+	classSym := className asSymbol.
+	symList := GsCurrentSession currentSession symbolList.
+	symList do: [:dict |
 		| target |
-		(dict @env0:name == dictSym) ifTrue: [
-			target := dict @env0:at: classSym ifAbsent: [nil].
+		(dict name == dictSym) ifTrue: [
+			target := dict at: classSym ifAbsent: [nil].
 			target ifNotNil: [^ target]
 		]
 	].
 	^ AttributeError @env1:___signal___:
-		('grail.smalltalk_class: class ''' , className @env0:asString ,
-		 ''' not found in dictionary ''' , dictName @env0:asString , '''')
+		('grail.smalltalk_class: class ''' , className asString ,
+		 ''' not found in dictionary ''' , dictName asString , '''')
 %
 
 category: 'Grail-smalltalk_class'
@@ -201,28 +201,28 @@ ___validateSlots: tempClass against: targetClass className: className
 	Raises TypeError on any mismatch."
 
 	| slots ownIvars |
-	slots := [tempClass @env0:perform: #'__slots__' env: 1]
+	slots := [tempClass perform: #'__slots__' env: 1]
 		on: MessageNotUnderstood do: [:e | nil].
 	slots isNil ifTrue: [
 		^ TypeError @env1:___signal___:
-			(className @env0:asString ,
+			(className asString ,
 			 ': @smalltalk_class requires a __slots__ declaration')].
-	ownIvars := targetClass @env0:instVarNames.
-	(slots @env0:size = ownIvars @env0:size) ifFalse: [
+	ownIvars := targetClass instVarNames.
+	(slots size = ownIvars size) ifFalse: [
 		^ TypeError @env1:___signal___:
-			(className @env0:asString ,
-			 ': __slots__ has ' , slots @env0:size @env0:printString ,
-			 ' entries but class has ' , ownIvars @env0:size @env0:printString ,
+			(className asString ,
+			 ': __slots__ has ' , slots size printString ,
+			 ' entries but class has ' , ownIvars size printString ,
 			 ' own instVars')].
-	ownIvars @env0:doWithIndex: [:ivarName :i |
+	ownIvars doWithIndex: [:ivarName :i |
 		| slotName |
-		slotName := (slots @env0:at: i) @env0:asString.
-		(slotName = ivarName @env0:asString) ifFalse: [
+		slotName := (slots at: i) asString.
+		(slotName = ivarName asString) ifFalse: [
 			TypeError @env1:___signal___:
-				(className @env0:asString ,
-				 ': __slots__[' , (i - 1) @env0:printString ,
+				(className asString ,
+				 ': __slots__[' , (i - 1) printString ,
 				 '] is ''' , slotName ,
-				 ''' but expected ''' , ivarName @env0:asString , '''')
+				 ''' but expected ''' , ivarName asString , '''')
 		]
 	]
 %
@@ -237,28 +237,28 @@ ___installMethodsFrom: tempClass onto: targetClass
 
 	| md |
 	"Instance-side methods"
-	md := tempClass @env0:methodDictForEnv: 1.
+	md := tempClass methodDictForEnv: 1.
 	md ifNotNil: [
-		md @env0:keys do: [:sel |
+		md keys do: [:sel |
 			| cat src |
-			cat := tempClass @env0:categoryOfSelector: sel environmentId: 1.
-			(cat notNil and: [cat @env0:asSymbol = #'Grail-Class Methods']) ifTrue: [
-				src := tempClass @env0:sourceCodeAt: sel environmentId: 1.
-				targetClass @env0:perform: #'___compileMethod:category:'
+			cat := tempClass categoryOfSelector: sel environmentId: 1.
+			(cat notNil and: [cat asSymbol = #'Grail-Class Methods']) ifTrue: [
+				src := tempClass sourceCodeAt: sel environmentId: 1.
+				targetClass perform: #'___compileMethod:category:'
 					env: 1
 					withArguments: { src. 'Grail-ST-Extension' }
 			]
 		]
 	].
 	"Class/static methods (metaclass-side)"
-	md := tempClass @env0:class @env0:methodDictForEnv: 1.
+	md := tempClass class methodDictForEnv: 1.
 	md ifNotNil: [
-		md @env0:keys do: [:sel |
+		md keys do: [:sel |
 			| cat src |
-			cat := tempClass @env0:class @env0:categoryOfSelector: sel environmentId: 1.
-			(cat notNil and: [cat @env0:asSymbol = #'Grail-Class Methods']) ifTrue: [
-				src := tempClass @env0:class @env0:sourceCodeAt: sel environmentId: 1.
-				targetClass @env0:class @env0:perform: #'___compileMethod:category:'
+			cat := tempClass class categoryOfSelector: sel environmentId: 1.
+			(cat notNil and: [cat asSymbol = #'Grail-Class Methods']) ifTrue: [
+				src := tempClass class sourceCodeAt: sel environmentId: 1.
+				targetClass class perform: #'___compileMethod:category:'
 					env: 1
 					withArguments: { src. 'Grail-ST-Extension' }
 			]

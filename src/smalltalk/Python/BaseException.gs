@@ -241,8 +241,8 @@ __eq__: other
 
 	myClass == otherClass ifFalse: [ ^ false ].
 
-	myArgs := self @env1:args.
-	otherArgs := other @env1:args.
+	myArgs := self args.
+	otherArgs := other args.
 
 	^ myArgs @env0:= otherArgs
 %
@@ -283,7 +283,7 @@ __repr__
 	
 	| className argsArray stream |
 	className := (self @env0:class) @env0:name.
-	argsArray := self @env1:args.
+	argsArray := self args.
 	stream := WriteStream @env0:on: (Unicode7 ___new___).
 	
 	stream @env0:nextPutAll: className.
@@ -319,7 +319,7 @@ __str__
 	Otherwise, return str of the args tuple."
 	
 	| argsArray size |
-	argsArray := self @env1:args.
+	argsArray := self args.
 	size := argsArray @env0:size.
 	
 	size == 0 ifTrue: [ ^ '' ].

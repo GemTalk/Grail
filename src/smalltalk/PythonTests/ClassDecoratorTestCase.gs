@@ -37,7 +37,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	mods @env0:removeKey: #'class_decorators' ifAbsent: [].
+	mods removeKey: #'class_decorators' ifAbsent: [].
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/class_decorators.py')
 		name: 'class_decorators'.

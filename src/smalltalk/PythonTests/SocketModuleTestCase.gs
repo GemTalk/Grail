@@ -43,9 +43,9 @@ method: SocketModuleTestCase
 loadFixture
 	"Load tests/python/use_socket.py fresh."
 
-	importlib @env1:modules @env0:removeKey: #'use_socket' ifAbsent: [].
+	importlib @env1:modules removeKey: #'use_socket' ifAbsent: [].
 	^ importlib
-		loadModuleFromPath: (importlib grailDir @env0:, '/tests/python/use_socket.py')
+		loadModuleFromPath: (importlib grailDir , '/tests/python/use_socket.py')
 		name: 'use_socket'
 %
 
@@ -62,7 +62,7 @@ method: SocketModuleTestCase
 testEphemeralPortAssigned
 	"bind((host, 0)) asks the OS for a port; getsockname reports it."
 
-	self assert: (self loadFixture @env1:ephemeral_port_assigned) @env0:> 0
+	self assert: (self loadFixture @env1:ephemeral_port_assigned) > 0
 %
 
 category: 'Grail-Tests-Socket'
@@ -153,6 +153,6 @@ testHttpServerGet
 
 	| r |
 	r := self loadFixture @env1:http_server_get.
-	self assert: ((r @env1:__getitem__: 0) @env0:indexOfSubCollection: '200 OK') @env0:> 0.
+	self assert: ((r @env1:__getitem__: 0) indexOfSubCollection: '200 OK') > 0.
 	self assert: (r @env1:__getitem__: 1) equals: 'hello from http.server'
 %

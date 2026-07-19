@@ -299,7 +299,7 @@ __iadd__: other
 		TypeError ___signal___: ('can''t concat bytearray to ' @env0:, otherClass)
 	].
 
-	self @env1:extend: other.
+	self extend: other.
 	^ self
 %
 
@@ -335,7 +335,7 @@ __imul__: count
 
 	"Repeat n-1 times"
 	2 @env0:to: n do: [:rep |
-		self @env1:extend: original
+		self extend: original
 	].
 
 	^ self
@@ -389,7 +389,7 @@ ___setSliceItem: aSlice value: value size: size
 	of selected indices (CPython semantics)."
 
 	| idxTuple lo hi st vals newVals indices i |
-	idxTuple := aSlice @env1:indices: size.
+	idxTuple := aSlice indices: size.
 	lo := idxTuple @env0:at: 1.
 	hi := idxTuple @env0:at: 2.
 	st := idxTuple @env0:at: 3.
@@ -655,7 +655,7 @@ method: bytearray
 find: sub
 	"find(sub) → first index where sub occurs, or -1."
 
-	^ self @env1:find: sub _: 0 _: self @env0:size
+	^ self find: sub _: 0 _: self @env0:size
 %
 
 category: 'Grail-Search Methods'
@@ -663,7 +663,7 @@ method: bytearray
 find: sub _: start
 	"find(sub, start) → first index >= start where sub occurs, or -1."
 
-	^ self @env1:find: sub _: start _: self @env0:size
+	^ self find: sub _: start _: self @env0:size
 %
 
 category: 'Grail-Search Methods'
