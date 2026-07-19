@@ -40,3 +40,12 @@ RUN base="GemStone64Bit${GS_VERSION}-x86_64.Linux" \
  && test -x /opt/gemstone/product/bin/topaz
 ENV GEMSTONE=/opt/gemstone/product
 ENV PATH=/opt/gemstone/product/bin:$PATH
+
+# Non-root user for running GemStone.  NetLDI guest mode (-g) is disallowed as
+# root, and GitHub container jobs run as root, so ci.yml hands the stone/netldi/
+# test work off to this user.  uid/gid 1001 matches the GitHub-hosted runner
+# user (tidy ownership of the mounted workspace).  The stone writes its log to
+# $GEMSTONE/data, so make that dir writable by non-root.
+RUN groupadd -g 1001 ci \
+ && useradd -m -u 1001 -g 1001 -s /bin/bash ci \
+ && chmod -R a+rwX /opt/gemstone/product/data
