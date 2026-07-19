@@ -2,7 +2,7 @@
 
 Generated: 2026-07-14T12:21:44Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
 
-**Modules: 19** — OK 1 · FAIL 0 · ERROR 14 · SKIP 2 · IMPORTERROR 2 · STERROR 0 · CRASH 0 · TIMEOUT 0
+**Modules: 19** — OK 2 · FAIL 0 · ERROR 13 · SKIP 2 · IMPORTERROR 2 · STERROR 0 · CRASH 0 · TIMEOUT 0
 
 **Totals:** tests=2919 failures=790 errors=667 skipped=8
 
@@ -15,7 +15,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | Module | Status | tests | fail | err | skip | detail |
 |--------|--------|------:|-----:|----:|-----:|--------|
 | test.test_textwrap | OK | 68 | 0 | 0 | 0 |  |
-| test.test_math | ERROR | 88 | 0 | 2 | 0 | remaining 2 are @requires_resource('cpu') (CPython skips by default) |
+| test.test_math | OK | 88 | 0 | 0 | 2 | 2 skips are @requires_resource('cpu') tests, skipped as in a default CPython run |
 | test.test_int | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd800 is illegal for Unicode |
 | test.test_float | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd8f0 is illegal for Unicode |
 | test.test_heapq | ERROR | 68 | 8 | 14 | 0 |  |

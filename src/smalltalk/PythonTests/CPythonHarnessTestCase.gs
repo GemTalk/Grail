@@ -48,7 +48,7 @@ setUp
 
 	| mods |
 	mods := importlib @env1:modules.
-	#('__main__' 'test.grail_selfcheck' 'test.grail_feature_check' 'test.grail_bigmem_check' 'test.grail_iter_check' 'test._grail_harness') do: [:name |
+	#('__main__' 'test.grail_selfcheck' 'test.grail_feature_check' 'test.grail_bigmem_check' 'test.grail_iter_check' 'test.grail_resource_skip_check' 'test._grail_harness') do: [:name |
 		mods @env0:removeKey: name @env0:asSymbol ifAbsent: []].
 %
 
@@ -150,6 +150,36 @@ testBigmemtestDecoratorInjection
 	"Unary forwarder keeps the method visible to dir()-based discovery."
 	self assert: (result @env1:__getitem__: 2) equals: true.
 	self assert: (result @env1:__getitem__: 3) equals: true
+%
+
+category: 'Grail-Tests'
+method: CPythonHarnessTestCase
+testRequiresResourceDecoratorSkips
+	"CPython's @support.requires_resource(res) skips a test unless the named
+	resource is enabled via regrtest's ``-u'' option; a default
+	``python -m test'' run enables none, so it is SKIPPED.  Grail has no
+	``-u'' mechanism and drops method decorators, so FunctionDefAst
+	recognises the decorator and ClassDefAst emits a self.skipTest(...) body
+	in place of the real one -- the method stays discoverable but is counted
+	as skipped, matching CPython's default.  Regresses BOTH the bare-name
+	(@requires_resource) and attribute (@support.requires_resource) shapes,
+	and that an UNdecorated test in the same class still runs.  This is what
+	turns test_math's two @requires_resource('cpu') tests
+	(test_sumprod_stress / test_sumprod_extended_precision_accuracy) from
+	ERROR into SKIP.  Fixture-based (a class instantiates + is discovered
+	only in real module scope, not in PythonTestCase>>eval:)."
+
+	| mod result |
+	mod := self loadByName: 'test.grail_resource_skip_check'.
+	result := mod @env1:RESULT.
+	"3 tests discovered and run..."
+	self assert: (result @env1:__getitem__: 0) equals: 3.
+	"...with no failures and no errors (a decorated body that RAN would
+	self.fail into the failures column)..."
+	self assert: (result @env1:__getitem__: 1) equals: 0.
+	self assert: (result @env1:__getitem__: 2) equals: 0.
+	"...and both @requires_resource-decorated tests skipped."
+	self assert: (result @env1:__getitem__: 3) equals: 2
 %
 
 category: 'Grail-Tests - vendored test deps'

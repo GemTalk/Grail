@@ -137,6 +137,68 @@ applyBigmemtestDefaultIfNeeded
 
 category: 'Grail-other'
 method: FunctionDefAst
+isRequiresResourceDecorated
+	"True if this def carries a CPython ``@support.requires_resource(res)''
+	(or bare ``@requires_resource(res)'') decorator.  That decorator skips
+	the test unless the named resource is enabled via regrtest's ``-u''
+	option; a default ``python -m test'' run enables NONE of the expensive
+	resources (cpu, network, ...), so the decorated test is SKIPPED.  Grail
+	has no ``-u'' mechanism and drops method decorators, so without help the
+	body would RUN and (for an expensive test) error.  Recognising the
+	decorator lets ClassDefRuntime emit a skipping body instead, matching
+	CPython's default behaviour.
+
+	Shapes recognised: ``@requires_resource(...)'' (Call>Name) and
+	``@support.requires_resource(...)'' (Call>Attribute)."
+	decorator_list isNil ifTrue: [^ false].
+	^ decorator_list anySatisfy: [:deco | | fn |
+		fn := (deco isKindOf: CallAst) ifTrue: [deco function] ifFalse: [deco].
+		((fn isKindOf: NameAst) and: [fn id asString = 'requires_resource'])
+			or: [(fn isKindOf: AttributeAst)
+				and: [fn attr asString = 'requires_resource']]
+	]
+%
+
+category: 'Grail-other'
+method: FunctionDefAst
+requiresResourceName
+	"The resource string from a ``@requires_resource(res)'' decorator (for
+	the skip message), or nil when it is absent or not a plain string
+	literal."
+	decorator_list isNil ifTrue: [^ nil].
+	decorator_list do: [:deco | | fn |
+		fn := (deco isKindOf: CallAst) ifTrue: [deco function] ifFalse: [deco].
+		(((fn isKindOf: NameAst) and: [fn id asString = 'requires_resource'])
+			or: [(fn isKindOf: AttributeAst) and: [fn attr asString = 'requires_resource']])
+			ifTrue: [
+				((deco isKindOf: CallAst)
+					and: [deco arguments notNil and: [deco arguments notEmpty]]) ifTrue: [
+						| a |
+						a := deco arguments first.
+						(a isKindOf: ConstantAst) ifTrue: [^ a value]]]].
+	^ nil
+%
+
+category: 'Grail-other'
+method: FunctionDefAst
+generateResourceSkipSource
+	"Body for a ``@requires_resource''-decorated test method (see
+	isRequiresResourceDecorated): skip it, the way CPython's default (no
+	``-u'') run does.  The method keeps its plain unary selector so
+	unittest's dir()-based discovery still finds it; the body raises
+	SkipTest via TestCase>>skipTest:, so it is counted in the skipped
+	column rather than run."
+	| stream res |
+	res := self requiresResourceName ifNil: ['a'].
+	stream := WriteStream on: Unicode7 new.
+	stream nextPutAll: name; lf.
+	stream nextPutAll: '^ self skipTest: ''resource '; nextPutAll: res asString;
+		nextPutAll: ' is not enabled'''.
+	^ stream contents
+%
+
+category: 'Grail-other'
+method: FunctionDefAst
 name
 
 	^name

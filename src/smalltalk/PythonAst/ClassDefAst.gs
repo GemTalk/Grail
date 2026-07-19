@@ -186,23 +186,34 @@ printSmalltalkRuntimeOn: aStream
 				ifTrue: [savedSelfForIM]
 				ifFalse: [def allParameterNames first asSymbol]).
 			[
-				s := PrettyWriteStream on: Unicode7 new.
-				def generateMethodSourceOn: s.
-				methodSources add: def name asString -> s contents.
-				"Keyword-call companion for a simple-positional instance
-				method: a varargs ``_name:kw:'' forwarder so ``obj.m(a,
-				kw=v)'' binds by name rather than DNU-ing (django calls
-				view/handler methods with keyword arguments)."
-				def needsVarargsForwarder ifTrue: [
-					methodSources add: ('_' , def name asString)
-						-> def generateInstanceVarargsForwarderSource].
-				"A ``@bigmemtest''-family method was normalised to the varargs
-				form (a dry-run ``size'' default injected above), which hides
-				it from dir()-based test discovery.  Emit a plain unary
-				forwarder so getTestCaseNames finds it."
-				def isBigmemtestDecorated ifTrue: [
-					methodSources add: ('bigmem_' , def name asString)
-						-> def generateBigmemtestUnaryForwarderSource].
+				"A ``@requires_resource(res)''-decorated test method skips
+				itself in a default CPython run (the resource is not enabled
+				without regrtest ``-u''); Grail has no ``-u'' and drops method
+				decorators, so emit a self.skipTest(...) body in place of the
+				real one -- the method stays discoverable under its plain
+				selector but is counted as skipped, matching CPython."
+				def isRequiresResourceDecorated
+					ifTrue: [
+						methodSources add: def name asString
+							-> def generateResourceSkipSource]
+					ifFalse: [
+						s := PrettyWriteStream on: Unicode7 new.
+						def generateMethodSourceOn: s.
+						methodSources add: def name asString -> s contents.
+						"Keyword-call companion for a simple-positional instance
+						method: a varargs ``_name:kw:'' forwarder so ``obj.m(a,
+						kw=v)'' binds by name rather than DNU-ing (django calls
+						view/handler methods with keyword arguments)."
+						def needsVarargsForwarder ifTrue: [
+							methodSources add: ('_' , def name asString)
+								-> def generateInstanceVarargsForwarderSource].
+						"A ``@bigmemtest''-family method was normalised to the
+						varargs form (a dry-run ``size'' default injected above),
+						which hides it from dir()-based test discovery.  Emit a
+						plain unary forwarder so getTestCaseNames finds it."
+						def isBigmemtestDecorated ifTrue: [
+							methodSources add: ('bigmem_' , def name asString)
+								-> def generateBigmemtestUnaryForwarderSource]].
 			] ensure: [CallAst selfParameterName: savedSelfForIM].
 		].
 		"@classmethod bodies use the same per-method source generator

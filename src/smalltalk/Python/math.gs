@@ -1414,18 +1414,23 @@ gamma: x
 	overflows the double range raises OverflowError; gamma(+inf) = +inf.
 	GemStone Float has no gamma primitive."
 
-	| f absx r y z sqrtpow gi |
+	| f absx r y z sqrtpow gi domainMsg |
 	f := self @env1:___real___: x.
+	"CPython's gamma names the value in EVERY domain error (0, the negative
+	integers, and -inf all share this message, not the generic ``math
+	domain error'' -- test_exception_messages checks it)."
+	domainMsg := [ValueError ___signal___:
+		'expected a noninteger or positive integer, got ' @env0:, f @env0:printString].
 	"Non-finite: nan and +inf pass through; -inf is a domain error."
 	(f @env0:_isNaN) @env0:ifTrue: [^ f].
 	(f @env0:_getKind) @env0:== 3 ifTrue: [
 		f @env0:> 0.0 ifTrue: [^ f].
-		ValueError ___signal___: 'math domain error'].
+		domainMsg value].
 	"gamma(+/-0.0): pole (CPython flags divide-by-zero)."
-	f @env0:= 0.0 ifTrue: [ValueError ___signal___: 'math domain error'].
+	f @env0:= 0.0 ifTrue: [domainMsg value].
 	"Integer arguments: negative integers are poles; 1..23 are exact."
 	(f @env0:= f @env0:floor) ifTrue: [
-		f @env0:< 0.0 ifTrue: [ValueError ___signal___: 'math domain error'].
+		f @env0:< 0.0 ifTrue: [domainMsg value].
 		f @env0:<= 23.0 ifTrue: [
 			gi := #(1.0 1.0 2.0 6.0 24.0 120.0 720.0 5040.0 40320.0 362880.0
 				3628800.0 39916800.0 479001600.0 6227020800.0 87178291200.0

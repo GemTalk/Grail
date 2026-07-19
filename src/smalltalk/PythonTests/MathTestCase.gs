@@ -872,7 +872,7 @@ testMtestfileTestfileFunctions
 	trig/hyperbolic domain and overflow edges -- the behaviours that flip the
 	vendored test_math test_mtestfile and test_testfile from ERROR to PASS."
 
-	| m inf neg0 |
+	| m inf neg0 gammaMsgOk |
 	m := math @env1:instance.
 	inf := m @env1:inf.
 	neg0 := 1.0 / MinusInfinity.
@@ -909,6 +909,13 @@ testMtestfileTestfileFunctions
 	self should: [m @env1:gamma: 172] raise: OverflowError.
 	self should: [m @env1:gamma: -1] raise: ValueError.
 	self should: [m @env1:gamma: 5e-324] raise: OverflowError.
+	"gamma names the value in its domain error, not the generic 'math domain
+	error' (CPython test_exception_messages checks this exact phrasing)."
+	gammaMsgOk := false.
+	[m @env1:gamma: -123]
+		on: ValueError
+		do: [:e | gammaMsgOk := e messageText includesString: 'noninteger or positive integer'].
+	self assert: gammaMsgOk.
 	self assert: (m @env1:gamma: -1000.5) equals: 0.0.
 	self assert: (1.0 / (m @env1:gamma: -1000.5)) equals: MinusInfinity.
 
