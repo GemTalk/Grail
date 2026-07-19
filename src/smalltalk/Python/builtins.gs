@@ -1343,18 +1343,16 @@ method: builtins
 sum: anIterable _: start
 	"Python ``sum(iterable, start=0)'' two-positional form."
 
-	| iter total done |
+	| iter total |
 	total := start.
 	iter := anIterable __iter__.
-	done := false.
-	[done] @env0:whileFalse: [
+	[true] @env0:whileTrue: [
 		[
 			| item |
 			item := iter __next__.
 			total := total __add__: item
-		] @env0:on: StopIteration do: [:ex | done := true]
+		] @env0:on: StopIteration do: [:ex | ^total].
 	].
-	^ total
 %
 
 category: 'Grail-Built-in Functions'

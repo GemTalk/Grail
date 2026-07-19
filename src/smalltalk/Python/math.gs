@@ -462,15 +462,14 @@ ___materialize___: iterable
 	env-0 do: is not part of the Python surface (list_iterator has
 	none)."
 
-	| out it done |
+	| out it |
 	out := OrderedCollection @env0:new.
 	it := iterable @env1:__iter__.
-	done := false.
-	[done] @env0:whileFalse: [
+	[true] @env0:whileTrue: [
 		[out @env0:add: (it @env1:__next__)]
 			@env0:on: StopIteration
-			do: [:ex | done := true. ex @env0:return: nil]].
-	^ out
+			do: [:ex | ^out].
+		].
 %
 
 category: 'Grail-Math Functions'
@@ -1218,14 +1217,18 @@ _prod: positional kw: kwargs
 	an uncatchable env-0 OffsetError instead of the Python TypeError the
 	call expects."
 
-	| acc |
+	| acc elements iter |
 	positional @env0:size @env0:= 1 ifFalse: [
 		TypeError ___signal___: 'prod expected 1 positional argument (the iterable), got '
-			@env0:, positional @env0:size @env0:printString].
+			@env0:, positional @env0:size @env0:printString.
+	].
 	acc := (kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'start'])
 		ifTrue: [kwargs @env0:at: 'start'] ifFalse: [1].
-	(self @env1:___materialize___: (positional @env0:at: 1)) @env0:do: [:v |
-		acc := acc @env1:__mul__: v].
+	iter := positional @env0:at: 1.
+	elements := self @env1:___materialize___: iter.
+	elements @env0:do: [:v |
+		acc := acc @env1:__mul__: v.
+	].
 	^ acc
 %
 
