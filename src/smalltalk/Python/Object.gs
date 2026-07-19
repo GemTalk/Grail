@@ -1017,7 +1017,22 @@ ___pyAttrLoad___: aSym
 		    losing the function handle."
 		owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
 		owner notNil ifTrue: [
-			(owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Methods'
+			"A 0-arg selector is either a data accessor (``__name__'',
+			``Grail-Constants'') that must be PERFORMED to yield its value,
+			or a native module FUNCTION (random.random, time.time — 0-arg
+			functions compiled to a unary Smalltalk selector) that must read
+			as a first-class BoundMethod, NOT be auto-invoked: ``from random
+			import random'' would otherwise bind the float random() returns.
+			Discriminate by category.  Only the FUNCTION categories below
+			(plus Python defs in ``Grail-Methods'') wrap; the DEFAULT stays
+			perform, so an unlisted category behaves exactly as before — a
+			still-uncallable function at worst, never a newly-broken
+			accessor.  Compare as Strings so a Symbol/String category is
+			matched either way."
+			| cat |
+			cat := (owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:asString.
+			(#('Grail-Methods' 'Grail-Built-in Functions' 'Grail-Wall clock'
+			   'Grail-Monotonic' 'Grail-Formatting' 'Grail-Calendar') @env0:includes: cat)
 				ifTrue: [
 					dynValue := BoundMethod @env1:receiver: self selector: aSym.
 					self @env0:dynamicInstVarAt: aSym put: dynValue.

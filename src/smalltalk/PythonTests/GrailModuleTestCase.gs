@@ -165,3 +165,38 @@ testClassNotFoundRaisesAttributeError
 		grail @env0:___lookupClass: 'NoSuchClassXYZ987' inDictionary: 'Globals'
 	] raise: AttributeError.
 %
+
+category: 'Grail-Tests - grail module'
+method: GrailModuleTestCase
+testModuleFunctionIsFirstClass
+	"A 0-arg native module FUNCTION read as an attribute (``from random
+	import random'', ``time.time'') must be a first-class callable, NOT
+	auto-invoked to its return value.  The getattr dispatch (Object>>
+	___pyAttrLoad___) previously performed any non-``Grail-Methods'' unary
+	module method, so ``random'' (category ``Grail-Built-in Functions'')
+	bound the float random() returns -- test_math's testFsum did
+	``from random import random'' then ``random()'' -> 'SmallDouble' object
+	is not callable.  The fix wraps the FUNCTION categories as BoundMethods
+	while leaving value accessors (``__name__'') performed."
+
+	"random is a first-class callable; calling it yields a float in [0, 1)."
+	self assert: (self eval: 'from random import random
+type(random).__name__') equals: 'BoundMethod'.
+	self assert: (self eval: 'from random import random
+0.0 <= random() < 1.0') equals: true.
+	"Multi-arg functions were already callable -- keep them regressed."
+	self assert: (self eval: 'from random import gauss, shuffle
+type(gauss).__name__ == ''BoundMethod'' and type(shuffle).__name__ == ''BoundMethod''') equals: true.
+	"The fix generalises to other native module functions (time.time)."
+	self assert: (self eval: 'import time
+type(time.time).__name__') equals: 'BoundMethod'.
+	"getstate raises NotImplementedError when CALLED; before the fix,
+	merely importing it auto-invoked it and the import blew up.  Now it is
+	a first-class BoundMethod that only raises on an actual call."
+	self assert: (self eval: 'from random import getstate
+type(getstate).__name__') equals: 'BoundMethod'.
+	"A value accessor (category ``Grail-Accessors'', e.g. sys.stdout) STILL
+	reads as its value, not a BoundMethod -- the default stays perform."
+	self assert: (self eval: 'import sys
+type(sys.stdout).__name__ != ''BoundMethod''') equals: true.
+%
