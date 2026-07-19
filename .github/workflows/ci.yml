@@ -1,0 +1,98 @@
+name: CI
+
+# Installs Grail and runs its test suite against a fresh GemStone stone.
+#
+# The `test` job runs inside the prebuilt ci-base image (Ubuntu 22.04 + Python
+# 3.14 + C toolchain + the GemStone product), published by the build-ci-image
+# workflow to this repo's GitHub Container Registry.  Because the product is
+# baked into the image, the job neither downloads nor unzips it -- it just lays
+# down a fresh extent and runs install.sh + run_tests.sh.
+#
+# Run build-ci-image ONCE before this workflow can run (the container pull needs
+# ci-base:latest to exist).  install.sh and scripts/run_tests.sh are unchanged.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read    # pull ci-base from GHCR (harmless if the package is public)
+
+jobs:
+  # Compute the lowercase GHCR image ref. GHCR rejects uppercase and the
+  # owner/repo slug may contain capitals; a job output is the only place a
+  # computed value can reach `container.image`.
+  image:
+    runs-on: ubuntu-22.04
+    outputs:
+      ref: ${{ steps.n.outputs.ref }}
+    steps:
+      - id: n
+        run: echo "ref=ghcr.io/${GITHUB_REPOSITORY,,}/ci-base:latest" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: image
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    # Runs inside ci-base. --shm-size lifts the container's default 64 MB
+    # /dev/shm so GemStone's shared page cache fits. GEMSTONE/PATH come from the
+    # image ENV.
+    container:
+      image: ${{ needs.image.outputs.ref }}
+      options: --shm-size=1g
+      # Works whether ci-base is public or private; drop this block if you make
+      # it public and prefer a credential-free pull.
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provision stone
+        run: tests/github/setup-testing-env.sh
+
+      - name: Start stone + NetLDI
+        run: |
+          cd "$GEMSTONE_GLOBAL_DIR"
+          startstone -e stone.conf gs64stone
+          waitstone gs64stone 60
+          # Guest-mode NetLDI (-g): the RPC concurrency test drives two remote
+          # sessions from one topaz process; guest mode skips per-login OS auth,
+          # which the runner's OS user is not provisioned for.
+          startnetldi -g gs64ldi
+
+      - name: install.sh
+        run: ./install.sh
+
+      - name: run_tests.sh
+        run: ./scripts/run_tests.sh
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: grail-ci-logs
+          if-no-files-found: ignore
+          retention-days: 7
+          # .out logs + stone/gem logs; the extent is deliberately excluded.
+          path: |
+            *.out
+            out/*.out
+            testing/*.log
+            testing/log/**
+
+      - name: Stop stone
+        if: always()
+        run: |
+          if [ -d "${GEMSTONE_GLOBAL_DIR:-/nonexistent}" ]; then
+            cd "$GEMSTONE_GLOBAL_DIR"
+            stopstone -i gs64stone DataCurator swordfish || true
+            stopnetldi gs64ldi || true
+          fi

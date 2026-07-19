@@ -5,7 +5,7 @@
 # RPC edition: one topaz process drives TWO RPC sessions and interleaves them
 # deterministically (runConcurrentImportRpc.gs, `set session:` -- no marker
 # files, no polling). Requires a running NetLDI; the gemnetid names it via
-# GRAIL_NETLDI (default gs64ldi). CI runs `startnetldi` first (.gitlab-ci.yml).
+# GRAIL_NETLDI (default gs64ldi). CI runs `startnetldi` first (.github/workflows/ci.yml).
 #
 # The two sessions cold-import DISJOINT modules flag-on with overlapping
 # transactions, then commit in sequence: A wins, B conflicts on PythonModules
