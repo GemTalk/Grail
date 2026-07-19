@@ -52,3 +52,12 @@ def uname():
     """Return a 6-tuple (system, node, release, version, machine,
     processor) per CPython's ``platform.uname()'' shape."""
     return (system(), node(), release(), version(), machine(), '')
+
+
+def mac_ver(release='', versioninfo=('', '', ''), machine=''):
+    """Return a 3-tuple (release, versioninfo, machine) describing the
+    macOS version, per CPython's ``platform.mac_ver()'' shape.  Grail
+    runs inside a GemStone gem and does not probe the host OS version;
+    callers (e.g. test.test_math) parse ``mac_ver()[0]'' and fall back
+    gracefully when it is empty, so an empty release is safe."""
+    return (release, versioninfo, machine)

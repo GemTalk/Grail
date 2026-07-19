@@ -54,6 +54,22 @@ def _first_line(err):
     return lines[-1][:200] if lines else ''
 
 
+def detail_full(tc):
+    # Diagnostic helper (not used by the scoreboard): run one TestCase and
+    # return the FULL failure/error/skip text, so a Smalltalk-side probe
+    # can see every line self.fail() emitted, not just the last one.
+    result = unittest.TestResult()
+    tc.run(result)
+    parts = []
+    for _t, txt in result.errors:
+        parts.append('E:\n' + str(txt))
+    for _t, txt in result.failures:
+        parts.append('F:\n' + str(txt))
+    for _t, txt in result.skipped:
+        parts.append('S: ' + str(txt))
+    return '\n'.join(parts) if parts else 'PASS'
+
+
 def run_one(tc):
     # Run a single TestCase; returns (failures, errors, skipped, detail)
     # where detail is a one-line summary of the first failure/error --

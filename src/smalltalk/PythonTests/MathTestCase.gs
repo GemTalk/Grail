@@ -865,3 +865,71 @@ math.prod([[1], [2], [3]])'] raise: TypeError.
 math.prod([2, 3], start=''ab'')') equals: 'abababababab'
 %
 
+category: 'Grail-Tests - Added Functions'
+method: MathTestCase
+testMtestfileTestfileFunctions
+	"erfc/expm1/lgamma/log1p accuracy and the CPython m_tgamma port, plus the
+	trig/hyperbolic domain and overflow edges -- the behaviours that flip the
+	vendored test_math test_mtestfile and test_testfile from ERROR to PASS."
+
+	| m inf neg0 |
+	m := math @env1:instance.
+	inf := m @env1:inf.
+	neg0 := 1.0 / MinusInfinity.
+
+	"--- erfc (complementary error function): erf + erfc = 1 ---"
+	self assert: (m @env1:erfc: 0) equals: 1.0.
+	self assert: (((m @env1:erfc: 1) - 0.15729920705028516) abs) < 1e-15.
+	self assert: ((((m @env1:erf: 0.5) + (m @env1:erfc: 0.5)) - 1.0) abs) < 1e-15.
+
+	"--- expm1: accurate small x, no intermediate overflow near 709.5, IEEE
+	specials, and OverflowError past the exp range ---"
+	self assert: (m @env1:expm1: 0) equals: 0.0.
+	self assert: (((m @env1:expm1: 1e-10) - 1.00000000005e-10) abs) < 1e-25.
+	self assert: (((m @env1:expm1: 709.5) - 1.3549863193146328e308) abs) < 1e293.
+	self assert: (m @env1:expm1: (inf negated)) equals: -1.0.
+	self assert: (m @env1:expm1: inf) equals: inf.
+	self should: [m @env1:expm1: 1000] raise: OverflowError.
+
+	"--- lgamma: accurate log|gamma|, poles (ValueError), infinities, overflow ---"
+	self assert: (m @env1:lgamma: 1) equals: 0.0.
+	self assert: (m @env1:lgamma: 2) equals: 0.0.
+	self assert: (((m @env1:lgamma: 0.5) - 0.5723649429247004) abs) < 1e-15.
+	self assert: (((m @env1:lgamma: 2.5) - 0.2846828704729196) abs) < 1e-14.
+	self assert: (m @env1:lgamma: inf) equals: inf.
+	self assert: (m @env1:lgamma: (inf negated)) equals: inf.
+	self should: [m @env1:lgamma: 0] raise: ValueError.
+	self should: [m @env1:lgamma: -1] raise: ValueError.
+	self should: [m @env1:lgamma: 1.7e308] raise: OverflowError.
+
+	"--- gamma (m_tgamma port): large finite (no premature overflow),
+	overflow past 171.6, negative-integer pole, tiny-argument overflow, and
+	a large-negative argument underflowing to a correctly-signed zero ---"
+	self assert: (((m @env1:gamma: 170) - 4.269068009004705e304) abs) < 1e289.
+	self should: [m @env1:gamma: 172] raise: OverflowError.
+	self should: [m @env1:gamma: -1] raise: ValueError.
+	self should: [m @env1:gamma: 5e-324] raise: OverflowError.
+	self assert: (m @env1:gamma: -1000.5) equals: 0.0.
+	self assert: (1.0 / (m @env1:gamma: -1000.5)) equals: MinusInfinity.
+
+	"--- sin/cos/tan(+/-inf) are domain errors; nan passes through ---"
+	self should: [m @env1:sin: inf] raise: ValueError.
+	self should: [m @env1:cos: inf] raise: ValueError.
+	self should: [m @env1:tan: inf] raise: ValueError.
+	self should: [m @env1:sin: (inf negated)] raise: ValueError.
+	self assert: (m @env1:sin: (m @env1:nan)) _isNaN.
+
+	"--- sinh/cosh overflow on a finite argument; an infinite input passes
+	through (not an overflow) ---"
+	self should: [m @env1:sinh: 720] raise: OverflowError.
+	self should: [m @env1:cosh: 720] raise: OverflowError.
+	self assert: (m @env1:sinh: inf) equals: inf.
+	self assert: (m @env1:cosh: inf) equals: inf.
+
+	"--- log1p: exact for tiny x (returns x), sign of a zero preserved, and
+	accurate where the 1+x rounding would otherwise lose bits ---"
+	self assert: (m @env1:log1p: 1e-20) equals: 1e-20.
+	self assert: (1.0 / (m @env1:log1p: neg0)) equals: MinusInfinity.
+	self assert: (((m @env1:log1p: 0.027625599078135284) - 0.027250897463483054) abs) < 3e-17
+%
+

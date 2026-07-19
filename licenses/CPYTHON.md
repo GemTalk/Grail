@@ -44,6 +44,7 @@ redistributed under the same Python Software Foundation License Version 2.
 | `src/python/stdlib/test/support/threading_helper.py` | `Lib/test/support/threading_helper.py` | **Trimmed** (Grail threading is cooperative) |
 | `src/python/stdlib/test/support/warnings_helper.py` | `Lib/test/support/warnings_helper.py` | **Trimmed** to class-based context managers over the `warnings` shim |
 | `src/python/stdlib/test/support/os_helper.py` | `Lib/test/support/os_helper.py` | **Trimmed** to `TESTFN` + `unlink` (the only names the starter set imports); CPython's original adds unicode/undecodable TESTFN variants and Windows retry loops |
+| `src/python/stdlib/test/mathdata/math_testcases.txt`, `cmath_testcases.txt` | `Lib/test/mathdata/*.txt` | Verbatim (pure test-vector data for `test_math`) |
 | `src/python/stdlib/textwrap.py` | `Lib/textwrap.py` | Verbatim (replaces Grail's earlier reduced port; enabled by the LEGB scope fix and while-else semantics) |
 
 Per PSF License clause 3, these are modified copies: the `support`

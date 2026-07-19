@@ -94,19 +94,31 @@ nan
 category: 'Grail-Trigonometric Functions'
 method: math
 sin: x
-	^ (self @env1:___real___: x) @env0:sin
+	"sin(+/-inf) is a domain error (ValueError); sin(nan) = nan."
+	| f |
+	f := self @env1:___real___: x.
+	(f @env0:_getKind) @env0:== 3 ifTrue: [ValueError ___signal___: 'math domain error'].
+	^ f @env0:sin
 %
 
 category: 'Grail-Trigonometric Functions'
 method: math
 cos: x
-	^ (self @env1:___real___: x) @env0:cos
+	"cos(+/-inf) is a domain error (ValueError); cos(nan) = nan."
+	| f |
+	f := self @env1:___real___: x.
+	(f @env0:_getKind) @env0:== 3 ifTrue: [ValueError ___signal___: 'math domain error'].
+	^ f @env0:cos
 %
 
 category: 'Grail-Trigonometric Functions'
 method: math
 tan: x
-	^ (self @env1:___real___: x) @env0:tan
+	"tan(+/-inf) is a domain error (ValueError); tan(nan) = nan."
+	| f |
+	f := self @env1:___real___: x.
+	(f @env0:_getKind) @env0:== 3 ifTrue: [ValueError ___signal___: 'math domain error'].
+	^ f @env0:tan
 %
 
 category: 'Grail-Trigonometric Functions'
@@ -148,13 +160,21 @@ atan2: y _: x
 category: 'Grail-Hyperbolic Functions'
 method: math
 sinh: x
-	^ (self @env1:___real___: x) @env0:sinh
+	"sinh of a finite x that overflows the double range is OverflowError;
+	sinh(+/-inf) = +/-inf (input already infinite, no overflow)."
+	| f |
+	f := self @env1:___real___: x.
+	^ self @env1:___rangeCheck___: (f @env0:sinh) finite: ((f @env0:_getKind) @env0:~= 3)
 %
 
 category: 'Grail-Hyperbolic Functions'
 method: math
 cosh: x
-	^ (self @env1:___real___: x) @env0:cosh
+	"cosh of a finite x that overflows the double range is OverflowError;
+	cosh(+/-inf) = +inf (input already infinite, no overflow)."
+	| f |
+	f := self @env1:___real___: x.
+	^ self @env1:___rangeCheck___: (f @env0:cosh) finite: ((f @env0:_getKind) @env0:~= 3)
 %
 
 category: 'Grail-Hyperbolic Functions'
@@ -1252,13 +1272,22 @@ exp2: x
 category: 'Grail-Exponential and Logarithmic'
 method: math
 log1p: x
-	"log(1 + x), accurate for small x.  1+x <= 0 mirrors log()'s domain."
+	"log(1 + x), accurate for small x via log(u)*x/(u-1) with u = 1+x, whose
+	x/(u-1) factor corrects the rounding of 1+x (GemStone Float has no log1p
+	primitive).  1+x <= 0 mirrors log()'s domain; the sign of a zero result
+	is preserved (log1p(-0.0) = -0.0)."
 
-	| arg |
-	arg := 1.0 @env0:+ (self @env1:___real___: x).
-	"log1p(-1) is log(0): a domain error, like log(x<=0)."
-	arg @env0:<= 0.0 ifTrue: [ValueError ___signal___: 'math domain error'].
-	^ arg @env0:ln
+	| f u |
+	f := self @env1:___real___: x.
+	f @env0:_isNaN ifTrue: [^ f].
+	u := 1.0 @env0:+ f.
+	"log1p(-1) is log(0), and x <= -1 is log of a negative: domain error."
+	u @env0:<= 0.0 ifTrue: [ValueError ___signal___: 'math domain error'].
+	"x = +inf: log1p(+inf) = +inf."
+	(u @env0:_getKind) @env0:== 3 ifTrue: [^ PlusInfinity].
+	"1+x rounds to 1 for |x| tiny (and for x = +/-0.0): log1p(x) = x."
+	u @env0:= 1.0 ifTrue: [^ f].
+	^ (u @env0:ln) @env0:* (f @env0:/ (u @env0:- 1.0))
 %
 
 category: 'Grail-Math Functions'
@@ -1284,46 +1313,195 @@ erf: x
 
 category: 'Grail-Math Functions'
 method: math
-___gammaLanczos___: x
-	"Lanczos approximation (g=7, 9 coefficients) of the gamma function for
-	x >= 0.5; reflect x < 0.5 through gamma(x)gamma(1-x) = pi/sin(pi x).
-	~15 significant digits."
+erfc: x
+	"Complementary error function, 1 - erf(x) (GemStone Float>>erfc);
+	accurate in the tail where 1 - erf(x) would cancel.  erfc(+inf) = 0,
+	erfc(-inf) = 2, erfc(nan) = nan (handled by the primitive)."
 
-	| pi c xx a t |
+	^ (self @env1:___real___: x) @env0:erfc
+%
+
+category: 'Grail-Math Functions'
+method: math
+expm1: x
+	"exp(x) - 1, accurate for small x via Goldberg's rearrangement
+	(u-1)*x/log(u) with u = exp(x), which cancels the correlated rounding
+	errors of u and log(u).  expm1(+inf) = +inf, expm1(-inf) = -1; a result
+	that overflows the double range raises OverflowError (as in CPython)."
+
+	| f u |
+	f := self @env1:___real___: x.
+	f @env0:_isNaN ifTrue: [^ f].
+	(f @env0:_getKind) @env0:== 3 ifTrue: [
+		f @env0:> 0 ifTrue: [^ PlusInfinity].
+		^ -1.0].
+	u := f @env0:exp.
+	"exp overflow (large positive x): the true expm1 overflows too."
+	(u @env0:_getKind) @env0:== 3 ifTrue: [
+		OverflowError ___signal___: 'math range error'].
+	"exp underflow to 0 (large negative x): expm1 = -1."
+	u @env0:= 0.0 ifTrue: [^ -1.0].
+	"exp(x) rounds to 1 for |x| tiny: expm1(x) = x to full precision."
+	u @env0:= 1.0 ifTrue: [^ f].
+	"Group as (u-1)*(x/log(u)): the correction factor x/log(u) is ~1, so a
+	near-overflow (u-1) (e.g. expm1(709.5)) is not first multiplied by x
+	into an intermediate that overflows before the divide brings it back."
+	^ (u @env0:- 1.0) @env0:* (f @env0:/ (u @env0:ln))
+%
+
+category: 'Grail-Math Functions'
+method: math
+___lanczosSum___: x
+	"Faithful port of CPython's lanczos_sum (Modules/mathmodule.c): the
+	rational Lanczos approximation, evaluated Horner-style ascending for
+	x < 5 and descending (in 1/x) for x >= 5 so the coefficients stay
+	well-scaled.  x is always > 0 here."
+
+	| num den nc dc |
+	num := 0.0. den := 0.0.
+	nc := #(23531376880.410759688572007674451636754734846804940
+		42919803642.649098768957899047001988850926355848959
+		35711959237.355668049440185451547166705960488635843
+		17921034426.037209699919755754458931112671403265390
+		6039542586.3520280050642916443072979210699388420708
+		1439720407.3117216736632230727949123939715485786772
+		248874557.86205415651146038641322942321632125127801
+		31426415.585400194380614231628318205362874684987640
+		2876370.6289353724412254090516208496135991145378768
+		186056.26539522349504029498971604569928220784236328
+		8071.6720023658162106380029022722506138218516325024
+		210.82427775157934587250973392071336271166969580291
+		2.5066282746310002701649081771338373386264310793408).
+	dc := #(0.0 39916800.0 120543840.0 150917976.0 105258076.0 45995730.0
+		13339535.0 2637558.0 357423.0 32670.0 1925.0 66.0 1.0).
+	x @env0:< 5.0
+		ifTrue: [
+			13 @env0:to: 1 @env0:by: -1 do: [:i |
+				num := (num @env0:* x) @env0:+ (nc @env0:at: i).
+				den := (den @env0:* x) @env0:+ (dc @env0:at: i)]]
+		ifFalse: [
+			1 @env0:to: 13 do: [:i |
+				num := (num @env0:/ x) @env0:+ (nc @env0:at: i).
+				den := (den @env0:/ x) @env0:+ (dc @env0:at: i)]].
+	^ num @env0:/ den
+%
+
+category: 'Grail-Math Functions'
+method: math
+___sinpi___: x
+	"Faithful port of CPython's m_sinpi: sin(pi*x) computed by argument
+	reduction to [0, 2) then a nearest-quadrant sin/cos so it stays
+	accurate near integers (needed by gamma/lgamma reflection).  x is
+	always finite here."
+
+	| pi y n r |
 	pi := self @env1:pi.
-	x @env0:< 0.5 ifTrue: [
-		^ pi @env0:/ ((pi @env0:* x) @env0:sin
-			@env0:* (self @env1:___gammaLanczos___: (1.0 @env0:- x)))].
-	c := #(0.99999999999980993 676.5203681218851 -1259.1392167224028
-		771.32342877765313 -176.61502916214059 12.507343278686905
-		-0.13857109526572012 9.9843695780195716e-6 1.5056327351493116e-7).
-	xx := x @env0:- 1.0.
-	a := c @env0:at: 1.
-	1 @env0:to: 8 do: [:i | a := a @env0:+ ((c @env0:at: i @env0:+ 1) @env0:/ (xx @env0:+ i))].
-	t := xx @env0:+ 7.5.
-	^ (2.0 @env0:* pi) @env0:sqrt
-		@env0:* (t @env0:raisedTo: (xx @env0:+ 0.5))
-		@env0:* (t @env0:negated @env0:exp)
-		@env0:* a
+	y := (x @env0:abs) @env0:rem: 2.0.
+	n := (2.0 @env0:* y) @env0:rounded.
+	n @env0:= 0 ifTrue: [r := (pi @env0:* y) @env0:sin] ifFalse: [
+	n @env0:= 1 ifTrue: [r := (pi @env0:* (y @env0:- 0.5)) @env0:cos] ifFalse: [
+	n @env0:= 2 ifTrue: [r := (pi @env0:* (1.0 @env0:- y)) @env0:sin] ifFalse: [
+	n @env0:= 3 ifTrue: [r := ((pi @env0:* (y @env0:- 1.5)) @env0:cos) @env0:negated] ifFalse: [
+	r := (pi @env0:* (y @env0:- 2.0)) @env0:sin]]]].
+	^ (self @env1:copysign: 1.0 _: x) @env0:* r
 %
 
 category: 'Grail-Math Functions'
 method: math
 gamma: x
-	"Gamma function.  Poles (ValueError) at 0 and the negative integers;
-	gamma(+inf) = +inf.  GemStone Float has no gamma primitive, so use a
-	Lanczos approximation."
+	"Gamma function -- faithful port of CPython's m_tgamma.  Poles at 0 and
+	the negative integers raise ValueError; a finite argument whose gamma
+	overflows the double range raises OverflowError; gamma(+inf) = +inf.
+	GemStone Float has no gamma primitive."
 
-	| f |
+	| f absx r y z sqrtpow gi |
 	f := self @env1:___real___: x.
-	f @env0:_isNaN ifTrue: [^ f].
+	"Non-finite: nan and +inf pass through; -inf is a domain error."
+	(f @env0:_isNaN) @env0:ifTrue: [^ f].
 	(f @env0:_getKind) @env0:== 3 ifTrue: [
-		f @env0:> 0 ifTrue: [^ PlusInfinity].
+		f @env0:> 0.0 ifTrue: [^ f].
 		ValueError ___signal___: 'math domain error'].
-	(f @env0:<= 0.0 and: [f @env0:= f @env0:truncated]) ifTrue: [
-		ValueError ___signal___: 'expected a noninteger or positive integer, got '
-			@env0:, f @env0:printString].
-	^ self @env1:___gammaLanczos___: f
+	"gamma(+/-0.0): pole (CPython flags divide-by-zero)."
+	f @env0:= 0.0 ifTrue: [ValueError ___signal___: 'math domain error'].
+	"Integer arguments: negative integers are poles; 1..23 are exact."
+	(f @env0:= f @env0:floor) ifTrue: [
+		f @env0:< 0.0 ifTrue: [ValueError ___signal___: 'math domain error'].
+		f @env0:<= 23.0 ifTrue: [
+			gi := #(1.0 1.0 2.0 6.0 24.0 120.0 720.0 5040.0 40320.0 362880.0
+				3628800.0 39916800.0 479001600.0 6227020800.0 87178291200.0
+				1307674368000.0 20922789888000.0 355687428096000.0
+				6402373705728000.0 121645100408832000.0 2432902008176640000.0
+				51090942171709440000.0 1124000727777607680000.0).
+			^ gi @env0:at: f @env0:truncated]].
+	absx := f @env0:abs.
+	"Tiny arguments: gamma(x) ~ 1/x; a 1/x that overflows is a range error."
+	absx @env0:< 1e-20 ifTrue: [
+		r := 1.0 @env0:/ f.
+		(r @env0:_getKind) @env0:== 3 ifTrue: [
+			OverflowError ___signal___: 'math range error'].
+		^ r].
+	"Large arguments: overflow for x > 200; underflow to +/-0.0 for x < -200."
+	absx @env0:> 200.0 ifTrue: [
+		f @env0:< 0.0 ifTrue: [^ 0.0 @env0:/ (self @env1:___sinpi___: f)].
+		OverflowError ___signal___: 'math range error'].
+	y := absx @env0:+ 5.524680040776729583740234375.
+	(absx @env0:> 5.524680040776729583740234375)
+		ifTrue: [z := (y @env0:- absx) @env0:- 5.524680040776729583740234375]
+		ifFalse: [z := (y @env0:- 5.524680040776729583740234375) @env0:- absx].
+	z := (z @env0:* 6.024680040776729583740234375) @env0:/ y.
+	f @env0:< 0.0
+		ifTrue: [
+			r := (((((self @env1:pi) @env0:negated @env0:/ (self @env1:___sinpi___: absx))
+				@env0:/ absx) @env0:* (y @env0:exp)) @env0:/ (self @env1:___lanczosSum___: absx)).
+			r := r @env0:- (z @env0:* r).
+			absx @env0:< 140.0
+				ifTrue: [r := r @env0:/ (y @env0:raisedTo: (absx @env0:- 0.5))]
+				ifFalse: [
+					sqrtpow := y @env0:raisedTo: ((absx @env0:/ 2.0) @env0:- 0.25).
+					r := (r @env0:/ sqrtpow) @env0:/ sqrtpow]]
+		ifFalse: [
+			r := (self @env1:___lanczosSum___: absx) @env0:/ (y @env0:exp).
+			r := r @env0:+ (z @env0:* r).
+			absx @env0:< 140.0
+				ifTrue: [r := r @env0:* (y @env0:raisedTo: (absx @env0:- 0.5))]
+				ifFalse: [
+					sqrtpow := y @env0:raisedTo: ((absx @env0:/ 2.0) @env0:- 0.25).
+					r := (r @env0:* sqrtpow) @env0:* sqrtpow]].
+	(r @env0:_getKind) @env0:== 3 ifTrue: [
+		OverflowError ___signal___: 'math range error'].
+	^ r
+%
+
+category: 'Grail-Math Functions'
+method: math
+lgamma: x
+	"log|gamma(x)| -- faithful port of CPython's m_lgamma.  Poles at 0 and
+	the negative integers raise ValueError; a finite argument whose result
+	overflows raises OverflowError; lgamma(+/-inf) = +inf.  GemStone Float
+	has no lgamma primitive."
+
+	| f absx r |
+	f := self @env1:___real___: x.
+	"Non-finite: nan passes through; +/-inf give +inf."
+	(f @env0:_isNaN) @env0:ifTrue: [^ f].
+	(f @env0:_getKind) @env0:== 3 ifTrue: [^ PlusInfinity].
+	"Integer arguments <= 2: n<=0 is a pole (ValueError); 1 and 2 give 0.0."
+	((f @env0:= f @env0:floor) and: [f @env0:<= 2.0]) ifTrue: [
+		f @env0:<= 0.0 ifTrue: [ValueError ___signal___: 'math domain error'].
+		^ 0.0].
+	absx := f @env0:abs.
+	"Tiny arguments: lgamma(x) ~ -log|x|."
+	absx @env0:< 1e-20 ifTrue: [^ (absx @env0:ln) @env0:negated].
+	r := ((self @env1:___lanczosSum___: absx) @env0:ln) @env0:- 6.024680040776729583740234375.
+	r := r @env0:+ ((absx @env0:- 0.5)
+		@env0:* (((absx @env0:+ 6.024680040776729583740234375) @env0:- 0.5) @env0:ln @env0:- 1)).
+	f @env0:< 0.0 ifTrue: [
+		r := ((1.144729885849400174143427351353058711647
+			@env0:- (((self @env1:___sinpi___: absx) @env0:abs) @env0:ln))
+			@env0:- (absx @env0:ln)) @env0:- r].
+	(r @env0:_getKind) @env0:== 3 ifTrue: [
+		OverflowError ___signal___: 'math range error'].
+	^ r
 %
 
 category: 'Grail-Math Functions'
