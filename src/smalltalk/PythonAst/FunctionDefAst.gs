@@ -685,7 +685,7 @@ printModuleDecoratorsOn: aStream decorators: decoList
 	self printDecoratorChainOn: aStream decorators: decoList index: 1.
 	aStream
 		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
-		nextPutAll: '	((___de @env0:isKindOf: PythonReturn) @env0:or: [(___de @env0:isKindOf: PythonBreak) @env0:or: [___de @env0:isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass]].'
+		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass]].'
 %
 
 category: 'Grail-code generation'

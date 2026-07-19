@@ -168,7 +168,7 @@ connect: address
 	host := address @env0:at: 1.
 	port := address @env0:at: 2.
 	ok := gsSocket @env0:connectTo: port on: host @env0:asString.
-	ok @env0:== true ifFalse: [
+	ok == true ifFalse: [
 		^ OSError @env1:___signal___: 'socket.connect failed'
 	].
 	sockHost := host.

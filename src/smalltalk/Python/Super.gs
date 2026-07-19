@@ -130,10 +130,10 @@ _lookupMethodFirstOf: selectors
 	``__new__``), Python looks the attribute up on the MRO classes AS
 	OBJECTS -- which for Grail means the parents' class-side (metaclass)
 	dicts too: object's ``__new__:`` family is compiled class-side."
-	alsoMeta := obj @env0:isKindOf: Behavior.
+	alsoMeta := obj isKindOf: Behavior.
 	il := Python @env0:at: #importlib otherwise: nil.
 	receiverCls := alsoMeta ifTrue: [obj] ifFalse: [obj @env0:class].
-	il @env0:== nil ifFalse: [
+	il == nil ifFalse: [
 		mro := il @env0:___mroOf___: receiverCls.
 		idx := mro @env0:indexOf: cls.
 		idx @env0:> 0 ifTrue: [
@@ -146,7 +146,7 @@ _lookupMethodFirstOf: selectors
 				selectors @env0:do: [:sel |
 					sel ifNotNil: [
 						(md @env0:includesKey: sel) ifTrue: [^ md @env0:at: sel].
-						(mdMeta @env0:~~ nil and: [mdMeta @env0:includesKey: sel])
+						(mdMeta ~~ nil and: [mdMeta @env0:includesKey: sel])
 							ifTrue: [^ mdMeta @env0:at: sel]]]].
 			^ nil]].
 	walker := cls @env0:superClass.
@@ -159,7 +159,7 @@ _lookupMethodFirstOf: selectors
 		selectors @env0:do: [:sel |
 			sel ifNotNil: [
 				(md @env0:includesKey: sel) ifTrue: [^ md @env0:at: sel].
-				(mdMeta @env0:~~ nil and: [mdMeta @env0:includesKey: sel])
+				(mdMeta ~~ nil and: [mdMeta @env0:includesKey: sel])
 					ifTrue: [^ mdMeta @env0:at: sel]]].
 		walker := walker @env0:superClass].
 	^ nil

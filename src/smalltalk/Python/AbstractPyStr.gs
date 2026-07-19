@@ -96,9 +96,9 @@ ___strValue___
 
 	| v |
 	v := self @env0:dynamicInstVarAt: #value.
-	v @env0:== nil ifTrue: [^ Unicode7 @env0:new].
-	(v @env0:isKindOf: CharacterCollection) ifTrue: [^ v].
-	(v @env0:isKindOf: AbstractPyStr) ifTrue: [^ v @env0:___strValue___].
+	v == nil ifTrue: [^ Unicode7 @env0:new].
+	(v isKindOf: CharacterCollection) ifTrue: [^ v].
+	(v isKindOf: AbstractPyStr) ifTrue: [^ v @env0:___strValue___].
 	^ v @env0:asString
 %
 
@@ -113,7 +113,7 @@ category: 'Grail-Comparison'
 method: AbstractPyStr
 = other
 	| ov |
-	ov := (other @env0:isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
+	ov := (other isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
 	^ self @env0:___strValue___ @env0:= ov
 %
 
@@ -141,7 +141,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 		^ super @env0:doesNotUnderstand: aSelector args: anArray envId: envId
 	].
 	unwrapped := anArray @env0:collect: [:a |
-		(a @env0:isKindOf: AbstractPyStr) ifTrue: [a @env0:___strValue___] ifFalse: [a]].
+		(a isKindOf: AbstractPyStr) ifTrue: [a @env0:___strValue___] ifFalse: [a]].
 	^ self @env0:___strValue___ @env0:perform: aSelector env: 1 withArguments: unwrapped
 %
 
@@ -196,7 +196,7 @@ category: 'Grail-Python Protocol'
 method: AbstractPyStr
 __eq__: other
 	| ov |
-	ov := (other @env0:isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
+	ov := (other isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
 	^ self @env0:___strValue___ @env1:__eq__: ov
 %
 
@@ -205,8 +205,8 @@ method: AbstractPyStr
 __ne__: other
 	| r |
 	r := self @env1:__eq__: other.
-	r @env0:== true ifTrue: [^ false].
-	r @env0:== false ifTrue: [^ true].
+	r == true ifTrue: [^ false].
+	r == false ifTrue: [^ true].
 	^ r
 %
 
@@ -214,7 +214,7 @@ category: 'Grail-Python Protocol'
 method: AbstractPyStr
 __lt__: other
 	| ov |
-	ov := (other @env0:isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
+	ov := (other isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
 	^ self @env0:___strValue___ @env1:__lt__: ov
 %
 
@@ -222,7 +222,7 @@ category: 'Grail-Python Protocol'
 method: AbstractPyStr
 __le__: other
 	| ov |
-	ov := (other @env0:isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
+	ov := (other isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
 	^ self @env0:___strValue___ @env1:__le__: ov
 %
 
@@ -230,7 +230,7 @@ category: 'Grail-Python Protocol'
 method: AbstractPyStr
 __gt__: other
 	| ov |
-	ov := (other @env0:isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
+	ov := (other isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
 	^ self @env0:___strValue___ @env1:__gt__: ov
 %
 
@@ -238,7 +238,7 @@ category: 'Grail-Python Protocol'
 method: AbstractPyStr
 __ge__: other
 	| ov |
-	ov := (other @env0:isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
+	ov := (other isKindOf: AbstractPyStr) ifTrue: [other @env0:___strValue___] ifFalse: [other].
 	^ self @env0:___strValue___ @env1:__ge__: ov
 %
 

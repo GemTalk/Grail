@@ -233,7 +233,7 @@ get_value: key _: args _: keywords
 	"Get value for a key from args or keywords.
 	key can be an integer (for positional args) or a string (for keyword args)."
 
-	(key @env0:isKindOf: int) ifTrue: [
+	(key isKindOf: int) ifTrue: [
 		(key @env0:>= (args @env0:size)) ifTrue: [
 			IndexError ___signal___: 'Replacement index out of range'
 		].

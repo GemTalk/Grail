@@ -66,7 +66,7 @@ _generator
 	| temps gen |
 	temps := SessionTemps @env0:current.
 	gen := temps @env0:at: #'___GrailSecretsGenerator___' ifAbsent: [nil].
-	(gen @env0:== nil or: [(gen @env0:respondsTo: #isOpen) and: [(gen @env0:isOpen) not]]) ifTrue: [
+	(gen == nil or: [(gen @env0:respondsTo: #isOpen) and: [(gen @env0:isOpen) not]]) ifTrue: [
 		gen := HostRandom @env0:new.
 		temps @env0:at: #'___GrailSecretsGenerator___' put: gen
 	].
@@ -79,7 +79,7 @@ _defaultBytes: nbytes
 	"Resolve the default byte count.  Python's secrets defaults to
 	DEFAULT_ENTROPY (=32) when nbytes is None."
 
-	(nbytes @env0:== nil or: [nbytes @env0:== None]) ifTrue: [^ 32].
+	(nbytes == nil or: [nbytes == None]) ifTrue: [^ 32].
 	^ nbytes
 %
 
@@ -198,8 +198,8 @@ compare_digest: a _: b
 	per the CPython contract."
 
 	| aIsBytes bIsBytes aSize bSize result aByte bByte |
-	aIsBytes := a @env0:isKindOf: ByteArray.
-	bIsBytes := b @env0:isKindOf: ByteArray.
+	aIsBytes := a isKindOf: ByteArray.
+	bIsBytes := b isKindOf: ByteArray.
 	aIsBytes @env0:= bIsBytes ifFalse: [
 		TypeError @env1:___signal___: 'compare_digest operands must both be str or both bytes'
 	].

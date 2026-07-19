@@ -205,7 +205,7 @@ ___grailBuildMembers: cls names: attrNames
 	dynHolder := ((cls @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) notNil)
 		ifTrue: [cls @env0:perform: #dynInstVars env: 1]
 		ifFalse: [nil].
-	dynHolder @env0:== nil ifFalse: [
+	dynHolder == nil ifFalse: [
 		| dynPairs i |
 		"A holder that never received a dynamic instVar has no varying part
 		and dynamicInstVarPairs raises OffsetError -- treat as empty.  The
@@ -265,14 +265,14 @@ ___grailBuildMembers: cls names: attrNames
 	class definition (test_init_exception).  Value-carrying enums such as
 	the classic Planet(mass, radius) rely on this."
 	hasUserInit := (cls @env0:whichClassIncludesSelector: #'___init__:kw:'
-		environmentId: 1) @env0:== cls.
+		environmentId: 1) == cls.
 	"A class-body ``def __new__(cls, ...)'' likewise compiles to an env-1
 	INSTANCE method ON cls (self-param bound to cls).  When present, CPython
 	builds each member by running it (member_type construction + user slots)
 	rather than a bare allocation; a __new__ that delegates to
 	``super().__new__'' trips the guard in Enum>>___new__:kw:."
 	hasUserNew := (cls @env0:whichClassIncludesSelector: #'___new__:kw:'
-		environmentId: 1) @env0:== cls.
+		environmentId: 1) == cls.
 	tupleClass := Python @env0:at: #tuple otherwise: Array.
 	"A method-local class-body ``super()`` resolves its defining class
 	through the ``___cell_<name>___'' closure cell, which ClassDefAst
@@ -307,7 +307,7 @@ ___grailBuildMembers: cls names: attrNames
 			declaration order -- except Flag-natured classes, where the
 			next auto value is the next power of two ABOVE the last
 			(CPython Flag._generate_next_value_)."
-			(rawValue @env0:isKindOf: GrailEnumAuto) ifTrue: [
+			(rawValue isKindOf: GrailEnumAuto) ifTrue: [
 				(autoResolved @env0:includesKey: rawValue)
 					ifTrue: [rawValue := autoResolved @env0:at: rawValue]
 					ifFalse: [ | resolved |
@@ -320,7 +320,7 @@ ___grailBuildMembers: cls names: attrNames
 								ifFalse: [lastInt @env0:+ 1]].
 						autoResolved @env0:at: rawValue put: resolved.
 						rawValue := resolved]].
-			(rawValue @env0:isKindOf: Integer) ifTrue: [
+			(rawValue isKindOf: Integer) ifTrue: [
 				lastInt := rawValue.
 				maxInt := maxInt @env0:max: rawValue].
 			(byValue @env0:includesKey: rawValue)
@@ -332,14 +332,14 @@ ___grailBuildMembers: cls names: attrNames
 					composite -- reachable by name and value, but excluded
 					from iteration and _member_names_."
 					member := nil.
-					((rawValue @env0:isKindOf: Integer)
+					((rawValue isKindOf: Integer)
 						and: [rawValue @env0:> 0
 						and: [Enum ___grailIsFlagClass: cls]]) ifTrue: [
 						| mask |
 						mask := 0.
 						members @env0:do: [:m | | mv |
 							mv := m @env0:dynamicInstVarAt: #value.
-							(mv @env0:isKindOf: Integer) ifTrue: [
+							(mv isKindOf: Integer) ifTrue: [
 								mask := mask @env0:bitOr: mv]].
 						((rawValue @env0:bitAnd: mask) @env0:= rawValue) ifTrue: [
 							"Build the composite pseudo-member inline (the
@@ -364,7 +364,7 @@ ___grailBuildMembers: cls names: attrNames
 									(a scalar -> a 1-tuple); the receiver is cls (the __new__
 									self-param).  A __new__ that delegates to super().__new__
 									raises the guard in Enum>>___new__:kw: here."
-									newArgs := (rawValue @env0:isKindOf: tupleClass)
+									newArgs := (rawValue isKindOf: tupleClass)
 										ifTrue: [rawValue @env0:asArray]
 										ifFalse: [Array @env0:with: rawValue].
 									member := (UnboundMethod @env1:definingClass: cls selector: #'__new__')
@@ -392,7 +392,7 @@ ___grailBuildMembers: cls names: attrNames
 							name, by value -- Color(0) -- and as a class attribute, but is
 							NOT canonical: CPython excludes it from iteration, len,
 							reversed and _member_names_.  Plain Enum keeps zero canonical."
-							((memberValue @env0:isKindOf: Integer)
+							((memberValue isKindOf: Integer)
 								and: [memberValue @env0:= 0
 								and: [Enum ___grailIsFlagClass: cls]])
 								ifFalse: [members @env0:add: member]]].
@@ -408,7 +408,7 @@ ___grailBuildMembers: cls names: attrNames
 			class definition (test_init_exception)."
 			(hasUserInit and: [built]) ifTrue: [
 				| initArgs |
-				initArgs := (rawValue @env0:isKindOf: tupleClass)
+				initArgs := (rawValue isKindOf: tupleClass)
 					ifTrue: [rawValue @env0:asArray]
 					ifFalse: [Array @env0:with: rawValue].
 				member @env0:perform: #'___init__:kw:' env: 1
@@ -424,7 +424,7 @@ ___grailBuildMembers: cls names: attrNames
 	[ | orderVal |
 	orderVal := [cls @env1:___pyAttrLoad___: #'_order_']
 		@env0:on: AbstractException do: [:ex | nil].
-	(orderVal @env0:isKindOf: CharacterCollection) ifTrue: [
+	(orderVal isKindOf: CharacterCollection) ifTrue: [
 		| orderNames memberNames |
 		memberNames := (members @env0:collect: [:m |
 			(m @env0:dynamicInstVarAt: #name) @env0:asString]) @env0:asArray.
@@ -451,7 +451,7 @@ ___grailBuildMembers: cls names: attrNames
 	supported'')."
 	(((cls @env0:class @env0:methodDictForEnv: 1) @env0:includesKey: #'value:value:')
 		and: [((cls @env0:class @env0:categoryOfSelector: #'value:value:' environmentId: 1)
-			@env0:== #'Grail-Enum Metaclass') not])
+			== #'Grail-Enum Metaclass') not])
 		ifTrue: [
 			[cls @env0:class @env0:removeSelector: #'value:value:' environmentId: 1]
 				@env0:on: Error do: [:ex |
@@ -470,9 +470,9 @@ ___grailBuildMembers: cls names: attrNames
 	instantiation compile, so nothing overwrites it afterwards."
 	[ | prov |
 	prov := cls @env0:class @env0:whichClassIncludesSelector: #'value:value:' environmentId: 1.
-	((prov @env0:== Enum @env0:class)
-		or: [(prov @env0:== IntEnum @env0:class)
-		or: [(prov @env0:notNil and: [(cls @env0:class @env0:categoryOfSelector: #'value:value:' environmentId: 1) @env0:== #'Grail-Enum Metaclass'])]]) ifFalse: [
+	((prov == Enum @env0:class)
+		or: [(prov == IntEnum @env0:class)
+		or: [(prov @env0:notNil and: [(cls @env0:class @env0:categoryOfSelector: #'value:value:' environmentId: 1) == #'Grail-Enum Metaclass'])]]) ifFalse: [
 		(cls @env0:class) ___compileMethod:
 			(Enum @env0:class @env0:sourceCodeAt: #'value:value:' environmentId: 1)
 			category: 'Grail-Enum Metaclass']]
@@ -491,8 +491,8 @@ ___grailLookupValue: cls value: aValue
 	rec := self ___grailRecordFor: cls.
 	(rec @env0:notNil and: [(rec @env0:at: 1) @env0:includesKey: aValue])
 		ifTrue: [^ (rec @env0:at: 1) @env0:at: aValue].
-	(aValue @env0:isKindOf: cls) ifTrue: [^ aValue].
-	((aValue @env0:isKindOf: Integer)
+	(aValue isKindOf: cls) ifTrue: [^ aValue].
+	((aValue isKindOf: Integer)
 		and: [self ___grailIsFlagClass: cls]) ifTrue: [
 		| comp |
 		comp := self ___grailFlagComposite: cls value: aValue.
@@ -515,8 +515,8 @@ ___grailIsFlagClass: cls
 	MI class whose C3 __mro__ includes Flag (``class E(int, Flag)``
 	is AbstractPyInt-chained in Smalltalk)."
 
-	((cls @env0:== Flag) or: [cls @env0:inheritsFrom: Flag]) ifTrue: [^ true].
-	((cls @env0:== IntFlag) or: [cls @env0:inheritsFrom: IntFlag]) ifTrue: [^ true].
+	((cls == Flag) or: [cls @env0:inheritsFrom: Flag]) ifTrue: [^ true].
+	((cls == IntFlag) or: [cls @env0:inheritsFrom: IntFlag]) ifTrue: [^ true].
 	^ [ (cls @env1:__mro__) @env0:includesIdentical: Flag ]
 		@env0:on: Error do: [:e | e @env0:return: false]
 %
@@ -531,8 +531,8 @@ ___grailIsStrEnumClass: cls
 
 	| se |
 	se := Python @env0:at: #'StrEnum' otherwise: nil.
-	se @env0:== nil ifTrue: [^ false].
-	((cls @env0:== se) or: [cls @env0:inheritsFrom: se]) ifTrue: [^ true].
+	se == nil ifTrue: [^ false].
+	((cls == se) or: [cls @env0:inheritsFrom: se]) ifTrue: [^ true].
 	^ [ (cls @env1:__mro__) @env0:includesIdentical: se ]
 		@env0:on: Error do: [:e | e @env0:return: false]
 %
@@ -555,7 +555,7 @@ ___grailFlagComposite: cls value: intValue
 		(rec @env0:at: 3) @env0:do: [:m |
 			| mv |
 			mv := m @env0:dynamicInstVarAt: #value.
-			(mv @env0:isKindOf: Integer) ifTrue: [
+			(mv isKindOf: Integer) ifTrue: [
 				((intValue @env0:bitAnd: mv) @env0:= mv) ifTrue: [
 					covered := covered @env0:bitOr: mv]]].
 		covered @env0:= intValue ifFalse: [^ nil]].
@@ -612,7 +612,7 @@ ___grailFlagMask: cls
 	(rec @env0:at: 3) @env0:do: [:m |
 		| mv |
 		mv := m @env0:dynamicInstVarAt: #value.
-		(mv @env0:isKindOf: Integer) ifTrue: [mask := mask @env0:bitOr: mv]].
+		(mv isKindOf: Integer) ifTrue: [mask := mask @env0:bitOr: mv]].
 	^ mask
 %
 
@@ -657,7 +657,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	className := (positional @env0:at: 1) @env0:asSymbol.
 	names := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2] ifFalse: [nil].
-	start := (keywords @env0:~~ nil and: [keywords @env0:includesKey: 'start'])
+	start := (keywords ~~ nil and: [keywords @env0:includesKey: 'start'])
 		ifTrue: [keywords @env0:at: 'start'] ifFalse: [1].
 	pairs := OrderedCollection @env0:new.
 	names @env0:isNil ifFalse: [
@@ -674,7 +674,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 					ifFalse: [autoVal @env0:* 2]]
 				ifFalse: [autoVal := start @env0:+ idx @env0:- 1].
 			autoVal].
-		(names @env0:isKindOf: CharacterCollection)
+		(names isKindOf: CharacterCollection)
 			ifTrue: [
 				| cleaned tokens idx |
 				cleaned := names @env0:copyReplaceAll: ',' with: ' '.
@@ -684,7 +684,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 					idx := idx @env0:+ 1.
 					pairs @env0:add: (Array @env0:with: tok @env0:asString
 						with: (nextAuto @env0:value: idx))]]
-			ifFalse: [(names @env0:isKindOf: KeyValueDictionary)
+			ifFalse: [(names isKindOf: KeyValueDictionary)
 				ifTrue: [
 					names @env0:keysAndValuesDo: [:k :v |
 						pairs @env0:add: (Array @env0:with: k @env0:asString with: v)]]
@@ -693,7 +693,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 					idx := 0.
 					names @env0:do: [:item |
 						idx := idx @env0:+ 1.
-						(item @env0:isKindOf: CharacterCollection)
+						(item isKindOf: CharacterCollection)
 							ifTrue: [pairs @env0:add: (Array @env0:with: item @env0:asString
 								with: (nextAuto @env0:value: idx))]
 							ifFalse: [pairs @env0:add: (Array @env0:with: (item @env0:at: 1) @env0:asString
@@ -721,7 +721,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 		"auto() markers can arrive through the mapping/pairs forms
 		(BaseEnum('MainEnum', dict(first=auto(), ...))) -- resolve with
 		the same per-class rule as class-body members."
-		(rawValue @env0:isKindOf: GrailEnumAuto) ifTrue: [
+		(rawValue isKindOf: GrailEnumAuto) ifTrue: [
 			(autoResolved @env0:includesKey: rawValue)
 				ifTrue: [rawValue := autoResolved @env0:at: rawValue]
 				ifFalse: [ | resolved |
@@ -734,7 +734,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 							ifFalse: [lastInt @env0:+ 1]].
 					autoResolved @env0:at: rawValue put: resolved.
 					rawValue := resolved]].
-		(rawValue @env0:isKindOf: Integer) ifTrue: [
+		(rawValue isKindOf: Integer) ifTrue: [
 			lastInt := rawValue.
 			maxInt := maxInt @env0:max: rawValue].
 		((nameStr @env0:size @env0:> 0) and: [(nameStr @env0:at: 1) @env0:= $_])
@@ -745,9 +745,9 @@ ___grailFunctional: cls positional: positional keywords: keywords
 				(((nameStr @env0:size @env0:>= 5)
 					and: [(nameStr @env0:copyFrom: 1 to: 2) @env0:= '__'
 					and: [(nameStr @env0:copyFrom: nameStr @env0:size @env0:- 1 to: nameStr @env0:size) @env0:= '__'
-					and: [((rawValue @env0:isKindOf: BoundMethod)
-						or: [(rawValue @env0:isKindOf: UnboundMethod)
-						or: [rawValue @env0:isKindOf: ExecBlock]])]]])
+					and: [((rawValue isKindOf: BoundMethod)
+						or: [(rawValue isKindOf: UnboundMethod)
+						or: [rawValue isKindOf: ExecBlock]])]]])
 					ifTrue: [
 						Enum ___grailStoreOverride: newCls name: nameStr callable: rawValue.
 						Enum ___grailCompileOverrideForwarder: newCls name: nameStr])]
@@ -762,7 +762,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 					"Zero-valued Flag members are non-canonical -- excluded
 					from iteration/len/_member_names_ (same rule as the
 					class-syntax builder)."
-					((rawValue @env0:isKindOf: Integer)
+					((rawValue isKindOf: Integer)
 						and: [rawValue @env0:= 0 and: [isFlag]])
 						ifFalse: [members @env0:add: member]].
 			byName @env0:at: nameStr put: member.
@@ -802,22 +802,22 @@ ___grailConvert: positional kw: kwargs forType: etype
 	| enumName modName filterFn srcMod srcNs memberPairs sortedPairs |
 	enumName := positional @env0:at: 1.
 	modName := positional @env0:at: 2.
-	filterFn := (kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'filter'])
+	filterFn := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'filter'])
 		ifTrue: [kwargs @env0:at: 'filter'] ifFalse: [nil].
 	"Source MODULE: an explicit ``source'', else the named module in
 	sys.modules.  Iterate its ``__dict__'' (a PyModuleDict live view whose
 	keysAndValuesDo: yields the global name/value pairs)."
-	srcMod := ((kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'source'])
-		and: [(kwargs @env0:at: 'source') @env0:~~ nil])
+	srcMod := ((kwargs ~~ nil and: [kwargs @env0:includesKey: 'source'])
+		and: [(kwargs @env0:at: 'source') ~~ nil])
 		ifTrue: [kwargs @env0:at: 'source']
 		ifFalse: [(Python @env0:at: #importlib) @env1:modules @env0:at: modName otherwise: nil].
-	srcMod @env0:== nil ifTrue: [
+	srcMod == nil ifTrue: [
 		^ ValueError @env1:___signal___: 'module ''' @env0:, modName @env0:asString @env0:, ''' not found'].
 	srcNs := srcMod @env1:__dict__.
 	"Collect (name, value) pairs whose name passes filter()."
 	memberPairs := OrderedCollection @env0:new.
 	srcNs @env0:keysAndValuesDo: [:k :v |
-		(filterFn @env0:== nil
+		(filterFn == nil
 			or: [(filterFn @env1:value: (Array @env0:with: k @env0:asString) value: nil) ___isTruthy___])
 			ifTrue: [memberPairs @env0:add: (Array @env0:with: k @env0:asString with: v)]].
 	"Sort by (value, name); on non-orderable values, sort by name alone."
@@ -902,14 +902,14 @@ ___grailInvokeOverride: nm args: argArray
 	| tbl walker callable |
 	tbl := SessionTemps @env0:current @env0:at: #GrailEnumOverrides otherwise: nil.
 	callable := nil.
-	(tbl @env0:~~ nil) ifTrue: [
+	(tbl ~~ nil) ifTrue: [
 		walker := self @env0:class.
-		[walker @env0:~~ nil and: [callable @env0:== nil]] @env0:whileTrue: [
+		[walker ~~ nil and: [callable == nil]] @env0:whileTrue: [
 			| per |
 			per := tbl @env0:at: walker otherwise: nil.
-			per @env0:== nil ifFalse: [callable := per @env0:at: nm otherwise: nil].
+			per == nil ifFalse: [callable := per @env0:at: nm otherwise: nil].
 			walker := walker @env0:superClass]].
-	callable @env0:== nil ifTrue: [^ self @env1:__repr__].
+	callable == nil ifTrue: [^ self @env1:__repr__].
 	^ callable @env1:value: ({ self } @env0:, argArray) value: nil
 %
 
@@ -927,19 +927,19 @@ _member_type_
 
 	| walker |
 	walker := self.
-	[walker @env0:~~ nil] @env0:whileTrue: [
-		walker @env0:== Enum ifTrue: [^ object].
-		walker @env0:== IntEnum ifTrue: [^ Integer].
-		walker @env0:== AbstractPyInt ifTrue: [^ Integer].
-		walker @env0:== AbstractPyFloat ifTrue: [^ Float].
-		((walker @env0:== PythonInstance) or: [walker @env0:== Object]) ifTrue: [^ object].
+	[walker ~~ nil] @env0:whileTrue: [
+		walker == Enum ifTrue: [^ object].
+		walker == IntEnum ifTrue: [^ Integer].
+		walker == AbstractPyInt ifTrue: [^ Integer].
+		walker == AbstractPyFloat ifTrue: [^ Float].
+		((walker == PythonInstance) or: [walker == Object]) ifTrue: [^ object].
 		"For MI enums (``class E(date, Enum)``) the Smalltalk chain
 		never passes Enum -- the first ancestor that is NOT itself an
 		enum class (no member record, not Enum-chained) is the data
 		base."
 		((Enum ___grailRecordFor: walker) @env0:isNil
 			and: [(walker @env0:inheritsFrom: Enum) not
-			and: [walker @env0:~~ self]]) ifTrue: [^ walker].
+			and: [walker ~~ self]]) ifTrue: [^ walker].
 		walker := walker @env0:superclass].
 	^ object
 %
@@ -962,7 +962,7 @@ value: positional value: keywords
 	"Generic class-call path: Color(v) value-lookup, or the functional
 	API -- Enum('Name', names, **kw) -- when extra arguments arrive."
 	((positional @env0:size @env0:>= 2)
-		or: [keywords @env0:~~ nil and: [keywords @env0:size @env0:> 0]])
+		or: [keywords ~~ nil and: [keywords @env0:size @env0:> 0]])
 		ifTrue: [^ Enum ___grailFunctional: self positional: positional keywords: keywords].
 	^ Enum ___grailLookupValue: self value: (positional @env0:at: 1)
 %
@@ -979,12 +979,12 @@ __contains__: aValue
 	"Any instance of this enum class -- including Flag composites and
 	aliases, which are not in the canonical members list -- is in
 	(membership by instance, CPython 3.12)."
-	(aValue @env0:isKindOf: self) ifTrue: [^ true].
+	(aValue isKindOf: self) ifTrue: [^ true].
 	rec := Enum ___grailRecordFor: self.
 	rec @env0:isNil ifTrue: [^ false].
 	((rec @env0:at: 3) @env0:includesIdentical: aValue) ifTrue: [^ true].
 	((rec @env0:at: 1) @env0:includesKey: aValue) ifTrue: [^ true].
-	((aValue @env0:isKindOf: Integer)
+	((aValue isKindOf: Integer)
 		and: [Enum ___grailIsFlagClass: self]) ifTrue: [
 		| mask |
 		mask := Enum ___grailFlagMask: self.
@@ -1146,7 +1146,7 @@ category: 'Grail-Enum Metaclass'
 classmethod: IntEnum
 value: positional value: keywords
 	((positional @env0:size @env0:>= 2)
-		or: [keywords @env0:~~ nil and: [keywords @env0:size @env0:> 0]])
+		or: [keywords ~~ nil and: [keywords @env0:size @env0:> 0]])
 		ifTrue: [^ Enum ___grailFunctional: self positional: positional keywords: keywords].
 	^ Enum ___grailLookupValue: self value: (positional @env0:at: 1)
 %
@@ -1158,12 +1158,12 @@ __contains__: aValue
 	"Any instance of this enum class -- including Flag composites and
 	aliases, which are not in the canonical members list -- is in
 	(membership by instance, CPython 3.12)."
-	(aValue @env0:isKindOf: self) ifTrue: [^ true].
+	(aValue isKindOf: self) ifTrue: [^ true].
 	rec := Enum ___grailRecordFor: self.
 	rec @env0:isNil ifTrue: [^ false].
 	((rec @env0:at: 3) @env0:includesIdentical: aValue) ifTrue: [^ true].
 	((rec @env0:at: 1) @env0:includesKey: aValue) ifTrue: [^ true].
-	((aValue @env0:isKindOf: Integer)
+	((aValue isKindOf: Integer)
 		and: [Enum ___grailIsFlagClass: self]) ifTrue: [
 		| mask |
 		mask := Enum ___grailFlagMask: self.
@@ -1339,13 +1339,13 @@ __format__: aSpec
 category: 'Grail-Enum Member'
 method: Enum
 __eq__: other
-	^ self @env0:== other
+	^ self == other
 %
 
 category: 'Grail-Enum Member'
 method: Enum
 __ne__: other
-	^ (self @env0:== other) @env0:not
+	^ (self == other) @env0:not
 %
 
 category: 'Grail-Enum Member'
@@ -1365,14 +1365,14 @@ ___flagOperand___: other
 	classes (class E(int, Flag) is AbstractPyInt-rooted), whose members
 	are NOT Flag-kind."
 
-	((other @env0:isKindOf: Flag)
-		or: [other @env0:class @env0:== self @env0:class]) ifTrue: [
+	((other isKindOf: Flag)
+		or: [other @env0:class == self @env0:class]) ifTrue: [
 		^ other @env0:dynamicInstVarAt: #value].
-	(other @env0:isKindOf: AbstractPyInt) ifTrue: [
+	(other isKindOf: AbstractPyInt) ifTrue: [
 		| v |
 		v := other @env0:dynamicInstVarAt: #value.
 		v @env0:isNil ifFalse: [^ v]].
-	(other @env0:isKindOf: Integer) ifTrue: [^ other].
+	(other isKindOf: Integer) ifTrue: [^ other].
 	^ TypeError ___signal___: 'unsupported operand type(s) for flag operation'
 %
 
@@ -1440,13 +1440,13 @@ ___compositeName___
 
 	| nm v parts |
 	nm := self @env0:dynamicInstVarAt: #name.
-	(nm @env0:isNil or: [nm @env0:== None]) ifFalse: [^ nm].
+	(nm @env0:isNil or: [nm == None]) ifFalse: [^ nm].
 	v := self @env0:dynamicInstVarAt: #value.
 	parts := OrderedCollection @env0:new.
 	(Enum ___grailMembers: self @env0:class) @env0:do: [:m |
 		| mv |
 		mv := m @env0:dynamicInstVarAt: #value.
-		((mv @env0:isKindOf: Integer)
+		((mv isKindOf: Integer)
 			and: [mv @env0:~= 0
 			and: [(v @env0:bitAnd: mv) @env0:= mv]]) ifTrue: [
 			parts @env0:add: (m @env0:dynamicInstVarAt: #name)]].
@@ -1464,8 +1464,8 @@ __repr__
 	| v nm0 |
 	v := self @env0:dynamicInstVarAt: #value.
 	nm0 := self @env0:dynamicInstVarAt: #name.
-	((nm0 @env0:isNil or: [nm0 @env0:== None])
-		and: [(v @env0:isKindOf: Integer) and: [v @env0:= 0]]) ifTrue: [
+	((nm0 @env0:isNil or: [nm0 == None])
+		and: [(v isKindOf: Integer) and: [v @env0:= 0]]) ifTrue: [
 		^ '<' @env0:, self @env0:class @env0:name @env0:asString
 			@env0:, ': 0>'].
 	^ '<' @env0:, self @env0:class @env0:name @env0:asString @env0:, '.'
@@ -1481,8 +1481,8 @@ __str__
 	| v nm0 |
 	v := self @env0:dynamicInstVarAt: #value.
 	nm0 := self @env0:dynamicInstVarAt: #name.
-	((nm0 @env0:isNil or: [nm0 @env0:== None])
-		and: [(v @env0:isKindOf: Integer) and: [v @env0:= 0]]) ifTrue: [
+	((nm0 @env0:isNil or: [nm0 == None])
+		and: [(v isKindOf: Integer) and: [v @env0:= 0]]) ifTrue: [
 		^ self @env0:class @env0:name @env0:asString @env0:, '(0)'].
 	^ self @env0:class @env0:name @env0:asString @env0:, '.' @env0:, self ___compositeName___
 %
@@ -1544,14 +1544,14 @@ ___flagOperand___: other
 	member of any int-enum flavor or a plain int (IntFlag ops interoperate
 	with ints in CPython)."
 
-	((other @env0:isKindOf: IntFlag)
-		or: [other @env0:class @env0:== self @env0:class]) ifTrue: [
+	((other isKindOf: IntFlag)
+		or: [other @env0:class == self @env0:class]) ifTrue: [
 		^ other @env0:dynamicInstVarAt: #value].
-	(other @env0:isKindOf: AbstractPyInt) ifTrue: [
+	(other isKindOf: AbstractPyInt) ifTrue: [
 		| v |
 		v := other @env0:dynamicInstVarAt: #value.
 		v @env0:isNil ifFalse: [^ v]].
-	(other @env0:isKindOf: Integer) ifTrue: [^ other].
+	(other isKindOf: Integer) ifTrue: [^ other].
 	^ TypeError ___signal___: 'unsupported operand type(s) for flag operation'
 %
 
@@ -1609,13 +1609,13 @@ ___compositeName___
 
 	| nm v parts |
 	nm := self @env0:dynamicInstVarAt: #name.
-	(nm @env0:isNil or: [nm @env0:== None]) ifFalse: [^ nm].
+	(nm @env0:isNil or: [nm == None]) ifFalse: [^ nm].
 	v := self @env0:dynamicInstVarAt: #value.
 	parts := OrderedCollection @env0:new.
 	(Enum ___grailMembers: self @env0:class) @env0:do: [:m |
 		| mv |
 		mv := m @env0:dynamicInstVarAt: #value.
-		((mv @env0:isKindOf: Integer)
+		((mv isKindOf: Integer)
 			and: [mv @env0:~= 0
 			and: [(v @env0:bitAnd: mv) @env0:= mv]]) ifTrue: [
 			parts @env0:add: (m @env0:dynamicInstVarAt: #name)]].
@@ -1633,8 +1633,8 @@ __repr__
 	| v nm0 |
 	v := self @env0:dynamicInstVarAt: #value.
 	nm0 := self @env0:dynamicInstVarAt: #name.
-	((nm0 @env0:isNil or: [nm0 @env0:== None])
-		and: [(v @env0:isKindOf: Integer) and: [v @env0:= 0]]) ifTrue: [
+	((nm0 @env0:isNil or: [nm0 == None])
+		and: [(v isKindOf: Integer) and: [v @env0:= 0]]) ifTrue: [
 		^ '<' @env0:, self @env0:class @env0:name @env0:asString
 			@env0:, ': 0>'].
 	^ '<' @env0:, self @env0:class @env0:name @env0:asString @env0:, '.'
@@ -1680,7 +1680,7 @@ category: 'Grail-Enum Metaclass'
 classmethod: StrEnum
 value: positional value: keywords
 	((positional @env0:size @env0:>= 2)
-		or: [keywords @env0:~~ nil and: [keywords @env0:size @env0:> 0]])
+		or: [keywords ~~ nil and: [keywords @env0:size @env0:> 0]])
 		ifTrue: [^ Enum ___grailFunctional: self positional: positional keywords: keywords].
 	^ Enum ___grailLookupValue: self value: (positional @env0:at: 1)
 %
@@ -1689,7 +1689,7 @@ category: 'Grail-Enum Metaclass'
 classmethod: StrEnum
 __contains__: aValue
 	| rec |
-	(aValue @env0:isKindOf: self) ifTrue: [^ true].
+	(aValue isKindOf: self) ifTrue: [^ true].
 	rec := Enum ___grailRecordFor: self.
 	rec @env0:isNil ifTrue: [^ false].
 	((rec @env0:at: 3) @env0:includesIdentical: aValue) ifTrue: [^ true].

@@ -54,7 +54,7 @@ __new__: iterable
 	__next__ loop."
 
 	| items iter done |
-	(iterable @env0:isKindOf: CharacterCollection) ifTrue: [
+	(iterable isKindOf: CharacterCollection) ifTrue: [
 		items := OrderedCollection @env0:new.
 		1 @env0:to: iterable @env0:size do: [:i |
 			| s |
@@ -69,12 +69,12 @@ __new__: iterable
 	VALUES, so the generic Collection fast path below would build the
 	wrong set (twilio.request_validator's ``sorted(set(params))``
 	KeyError'd using a value as a key)."
-	(iterable @env0:isKindOf: AbstractDictionary) ifTrue: [
+	(iterable isKindOf: AbstractDictionary) ifTrue: [
 		items := OrderedCollection @env0:new.
 		iterable @env0:keysDo: [:k | items @env0:add: k].
 		^ self @env0:withAll: items
 	].
-	(iterable @env0:isKindOf: Collection) ifTrue: [
+	(iterable isKindOf: Collection) ifTrue: [
 		^ self @env0:withAll: iterable
 	].
 	items := OrderedCollection @env0:new.
@@ -116,7 +116,7 @@ method: Set
 __eq__: other
 	"True iff self and other are both sets with the same elements."
 
-	(other @env0:isKindOf: Set) ifFalse: [^ false].
+	(other isKindOf: Set) ifFalse: [^ false].
 	^ self @env0:= other
 %
 

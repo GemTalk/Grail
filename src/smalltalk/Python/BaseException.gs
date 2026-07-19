@@ -296,7 +296,7 @@ __repr__
 				stream @env0:nextPutAll: ', '.
 			].
 			argRepr := arg @env0:asString.
-			(arg @env0:isKindOf: Unicode7) ifTrue: [
+			(arg isKindOf: Unicode7) ifTrue: [
 				stream @env0:nextPut: $'.
 				stream @env0:nextPutAll: argRepr.
 				stream @env0:nextPut: $'.

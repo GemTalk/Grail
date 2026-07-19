@@ -51,7 +51,7 @@ commit
 
 	| imp |
 	imp := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'importlib'.
-	imp @env0:== nil ifFalse: [imp @env0:___flushPersistentState___].
+	imp == nil ifFalse: [imp @env0:___flushPersistentState___].
 	^ System @env0:commit
 %
 

@@ -52,7 +52,7 @@ __getattr__: name
 
 	| value |
 	value := ExecBlockAttrs @env0:at: self attr: name.
-	value @env0:== nil ifTrue: [
+	value == nil ifTrue: [
 		^ AttributeError @env1:___signal___:
 			('ExecBlock object has no attribute ''' @env0:, name @env0:asString @env0:, '''')
 	].

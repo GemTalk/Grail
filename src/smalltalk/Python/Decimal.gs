@@ -21,12 +21,12 @@ __new__: value
 	In Python: Decimal(value)."
 
 	"If it's already a Decimal, return it"
-	(value @env0:_isScaledDecimal) ifTrue: [
+	(value _isScaledDecimal) ifTrue: [
 		^ value
 	].
 
 	"If it's a string, parse it"
-	(value @env0:isKindOf: String) ifTrue: [
+	(value isKindOf: String) ifTrue: [
 		^ self @env0:_fromString: value decimalPoint: nil
 	].
 

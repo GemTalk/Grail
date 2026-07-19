@@ -33,7 +33,7 @@ _new: positional kw: kwargs
 	base := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [kwargs @env0:at: 'base' ifAbsent: [nil]].
-	base @env0:== nil ifTrue: [^ self @env1:__new__: obj].
+	base == nil ifTrue: [^ self @env1:__new__: obj].
 	^ self @env1:__new__: obj _: base
 %
 
@@ -56,7 +56,7 @@ __new__: obj
 	obj ifNil: [ ^ 0 ].
 
 	"If already an int, return it"
-	(obj @env0:isKindOf: int) ifTrue: [
+	(obj isKindOf: int) ifTrue: [
 		^ obj
 	].
 
@@ -77,7 +77,7 @@ __new__: obj
 	].
 
 	"Try to convert from float"
-	(obj @env0:isKindOf: Float) ifTrue: [
+	(obj isKindOf: Float) ifTrue: [
 		^ obj @env0:truncated
 	].
 
@@ -90,7 +90,7 @@ __new__: obj
 	vendor asNumber itself uses and is not overridden, so it behaves the same
 	on base and Squeak/GLASS/Seaside images and accepts both ``+'' and ``-''.
 	trimBoth first so surrounding whitespace is tolerated (int('  100  '))."
-	(obj @env0:isKindOf: Unicode7) ifTrue: [
+	(obj isKindOf: Unicode7) ifTrue: [
 		^ [ (Number @env0:fromStream: (ReadStreamPortable @env0:on: obj @env0:trimBoth)) @env0:truncated ]
 			@env0:on: Error
 			do: [:ex | ValueError @env0:signal: 'invalid literal for int()']
@@ -108,7 +108,7 @@ __new__: obj _: base
 
 	| str baseInt |
 	"base must be an integer"
-	(base @env0:isKindOf: int) ifFalse: [
+	(base isKindOf: int) ifFalse: [
 		TypeError @env0:signal: 'int() base must be an integer'
 	].
 
@@ -129,10 +129,10 @@ __new__: obj _: base
 	String character-by-character (GS's ``ByteArray asString``
 	returns the printString, not a re-interpretation of the bytes
 	as characters)."
-	(obj @env0:isKindOf: CharacterCollection) ifTrue: [
+	(obj isKindOf: CharacterCollection) ifTrue: [
 		str := obj
 	] ifFalse: [
-		(obj @env0:isKindOf: ByteArray) ifTrue: [
+		(obj isKindOf: ByteArray) ifTrue: [
 			str := String @env0:new: obj @env0:size.
 			1 @env0:to: obj @env0:size do: [:i |
 				str @env0:at: i put: (Character @env0:codePoint: (obj @env0:at: i))
@@ -222,7 +222,7 @@ __instancecheck__: anObject
 	HTTPStatus, ...) so they report as ints, matching CPython where
 	those types subclass int."
 
-	^ anObject @env0:isKindOf: AbstractPyInt
+	^ anObject isKindOf: AbstractPyInt
 %
 
 category: 'Grail-Class Methods'
@@ -234,7 +234,7 @@ from_bytes: bytes _: byteorder _: signed
 	| bytesArray result isBigEndian isSigned |
 	"Extract bytes - assuming bytes is a Python bytes object or similar"
 	bytesArray := bytes.
-	(bytesArray @env0:isKindOf: tuple) ifFalse: [
+	(bytesArray isKindOf: tuple) ifFalse: [
 		TypeError @env0:signal: 'from_bytes() argument must be bytes-like'
 	].
 
@@ -300,7 +300,7 @@ method: int
 __add__: other
 	"Add two integers or integer and other number."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:+ other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:+ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:+ (other @env1:__index__)].
 	^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'
@@ -311,7 +311,7 @@ method: int
 __and__: other
 	"Bitwise AND."
 
-	(other @env0:isKindOf: Integer) ifTrue: [^ self @env0:bitAnd: other].
+	(other isKindOf: Integer) ifTrue: [^ self @env0:bitAnd: other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitAnd: (other @env1:__index__)].
 	^ self ___binOpFallback___: other op: '&' reflected: #'__rand__:'
@@ -340,7 +340,7 @@ __divmod__: other
 	| quot rem |
 	"CPython: division/modulo by zero raises catchable
 	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
-	((other @env0:isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
+	((other isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
 		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 	quot := self @env0:// other.
 	rem := self @env0:\\ other.
@@ -380,9 +380,9 @@ __eq__: other
 	"complex first: kernel env-0 = would try GemStone Number coercion
 	and send the internal #_getKind to complex (DNU).  complex knows
 	how to compare against reals."
-	(other @env0:isKindOf: complex) ifTrue: [^ other @env1:__eq__: self].
+	(other isKindOf: complex) ifTrue: [^ other @env1:__eq__: self].
 	(self @env0:= other) ifTrue: [^ true].
-	(other @env0:isKindOf: SmallInteger) ifTrue: [^ false].
+	(other isKindOf: SmallInteger) ifTrue: [^ false].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
 		^ self @env0:= (other @env1:__index__)
@@ -412,10 +412,10 @@ __floordiv__: other
 	"Floor division."
 	"CPython: division/modulo by zero raises catchable
 	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
-	((other @env0:isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
+	((other isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
 		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:// other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:// other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:// (other @env1:__index__)].
 	^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'
@@ -438,7 +438,7 @@ __ge__: other
 	so the reverse direction ``10 >= MAXREPEAT`` works when
 	MAXREPEAT is a NamedIntConstant (or any other PEP 357 wrapper)."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:>= other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:>= other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
 		^ self @env0:>= (other @env1:__index__)
@@ -451,7 +451,7 @@ method: int
 __gt__: other
 	"Return self > other.  Same __index__ fallback as __ge__:."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:> other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:> other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
 		^ self @env0:> (other @env1:__index__)
@@ -514,7 +514,7 @@ method: int
 __le__: other
 	"Return self <= other.  Same __index__ fallback as __ge__:."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:<= other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:<= other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
 		^ self @env0:<= (other @env1:__index__)
@@ -527,7 +527,7 @@ method: int
 __lshift__: other
 	"Left shift."
 
-	(other @env0:isKindOf: Integer) ifTrue: [^ self @env0:bitShift: other].
+	(other isKindOf: Integer) ifTrue: [^ self @env0:bitShift: other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitShift: (other @env1:__index__)].
 	^ self ___binOpFallback___: other op: '<<' reflected: #'__rlshift__:'
@@ -538,7 +538,7 @@ method: int
 __lt__: other
 	"Return self < other.  Same __index__ fallback as __ge__:."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:< other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:< other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
 		^ self @env0:< (other @env1:__index__)
@@ -552,10 +552,10 @@ __mod__: other
 	"Modulo operation."
 	"CPython: division/modulo by zero raises catchable
 	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
-	((other @env0:isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
+	((other isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
 		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:\\ other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:\\ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:\\ (other @env1:__index__)].
 	^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'
@@ -566,15 +566,15 @@ method: int
 __mul__: other
 	"Multiply two integers or integer and other number."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:* other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:* other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:* (other @env1:__index__)].
 	"Sequence repetition is commutative: ``2 * 'ab''' / ``2 * [1]''
 	delegate to the sequence's own __mul__ (CPython reaches the
 	same result via NotImplemented -> str.__rmul__)."
-	((other @env0:isKindOf: CharacterCollection)
-		or: [(other @env0:isKindOf: SequenceableCollection)
-		or: [other @env0:isKindOf: ByteArray]]) ifTrue: [
+	((other isKindOf: CharacterCollection)
+		or: [(other isKindOf: SequenceableCollection)
+		or: [other isKindOf: ByteArray]]) ifTrue: [
 		^ other @env1:__mul__: self].
 	^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'
 %
@@ -600,7 +600,7 @@ method: int
 __or__: other
 	"Bitwise OR."
 
-	(other @env0:isKindOf: Integer) ifTrue: [^ self @env0:bitOr: other].
+	(other isKindOf: Integer) ifTrue: [^ self @env0:bitOr: other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitOr: (other @env1:__index__)].
 	^ self ___binOpFallback___: other op: '|' reflected: #'__ror__:'
@@ -621,7 +621,7 @@ __pow__: other
 	resignal its NumericError as catchable OverflowError (DELIBERATE
 	deviation -- CPython ints are unbounded)."
 
-	(other @env0:isKindOf: Number) ifTrue: [
+	(other isKindOf: Number) ifTrue: [
 		^ [self @env0:raisedTo: other]
 			@env0:on: NumericError
 			do: [:ex |
@@ -649,7 +649,7 @@ method: int
 __radd__: other
 	"Reverse add (other + self)."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:+ self].
+	(other isKindOf: Number) ifTrue: [^ other @env0:+ self].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:+ self].
 	^ self ___rbinOpFallback___: other op: '+'
@@ -660,7 +660,7 @@ method: int
 __rand__: other
 	"Reverse bitwise AND (other & self)."
 
-	(other @env0:isKindOf: Integer) ifTrue: [^ other @env0:bitAnd: self].
+	(other isKindOf: Integer) ifTrue: [^ other @env0:bitAnd: self].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:bitAnd: self].
 	^ self ___rbinOpFallback___: other op: '&'
@@ -695,7 +695,7 @@ __rfloordiv__: other
 	(self @env0:= 0) ifTrue: [
 		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 
-	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:// self].
+	(other isKindOf: Number) ifTrue: [^ other @env0:// self].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:// self].
 	^ self ___rbinOpFallback___: other op: '//'
@@ -706,7 +706,7 @@ method: int
 __rlshift__: other
 	"Reverse left shift (other << self)."
 
-	(other @env0:isKindOf: Integer) ifTrue: [^ other @env0:bitShift: self].
+	(other isKindOf: Integer) ifTrue: [^ other @env0:bitShift: self].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:bitShift: self].
 	^ self ___rbinOpFallback___: other op: '<<'
@@ -720,7 +720,7 @@ __rmod__: other
 	(self @env0:= 0) ifTrue: [
 		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 
-	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:\\ self].
+	(other isKindOf: Number) ifTrue: [^ other @env0:\\ self].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:\\ self].
 	^ self ___rbinOpFallback___: other op: '%'
@@ -731,7 +731,7 @@ method: int
 __rmul__: other
 	"Reverse multiply (other * self)."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:* self].
+	(other isKindOf: Number) ifTrue: [^ other @env0:* self].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:* self].
 	^ self ___rbinOpFallback___: other op: '*'
@@ -742,7 +742,7 @@ method: int
 __ror__: other
 	"Reverse bitwise OR (other | self)."
 
-	(other @env0:isKindOf: Integer) ifTrue: [^ other @env0:bitOr: self].
+	(other isKindOf: Integer) ifTrue: [^ other @env0:bitOr: self].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:bitOr: self].
 	^ self ___rbinOpFallback___: other op: '|'
@@ -780,7 +780,7 @@ method: int
 __rpow__: other
 	"Reverse power (other ** self)."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:raisedTo: self].
+	(other isKindOf: Number) ifTrue: [^ other @env0:raisedTo: self].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:raisedTo: self].
 	^ self ___rbinOpFallback___: other op: '**'
@@ -791,7 +791,7 @@ method: int
 __rrshift__: other
 	"Reverse right shift (other >> self)."
 
-	(other @env0:isKindOf: Integer) ifTrue: [^ other @env0:bitShift: (self @env0:negated)].
+	(other isKindOf: Integer) ifTrue: [^ other @env0:bitShift: (self @env0:negated)].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:bitShift: (self @env0:negated)].
 	^ self ___rbinOpFallback___: other op: '>>'
@@ -802,7 +802,7 @@ method: int
 __rshift__: other
 	"Right shift."
 
-	(other @env0:isKindOf: Integer) ifTrue: [^ self @env0:bitShift: (other @env0:negated)].
+	(other isKindOf: Integer) ifTrue: [^ self @env0:bitShift: (other @env0:negated)].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitShift: ((other @env1:__index__) @env0:negated)].
 	^ self ___binOpFallback___: other op: '>>' reflected: #'__rrshift__:'
@@ -813,7 +813,7 @@ method: int
 __rsub__: other
 	"Reverse subtract (other - self)."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:- (self)].
+	(other isKindOf: Number) ifTrue: [^ other @env0:- (self)].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:- (self)].
 	^ self ___rbinOpFallback___: other op: '-'
@@ -827,7 +827,7 @@ __rtruediv__: other
 	(self @env0:= 0) ifTrue: [
 		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 
-	(other @env0:isKindOf: Number) ifTrue: [^ other @env0:/ self].
+	(other isKindOf: Number) ifTrue: [^ other @env0:/ self].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:/ self].
 	^ self ___rbinOpFallback___: other op: '/'
@@ -838,7 +838,7 @@ method: int
 __rxor__: other
 	"Reverse bitwise XOR (other ^ self)."
 
-	(other @env0:isKindOf: Integer) ifTrue: [^ other @env0:bitXor: self].
+	(other isKindOf: Integer) ifTrue: [^ other @env0:bitXor: self].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ (other @env1:__index__) @env0:bitXor: self].
 	^ self ___rbinOpFallback___: other op: '^'
@@ -857,7 +857,7 @@ method: int
 __sub__: other
 	"Subtract other from self."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:- (other)].
+	(other isKindOf: Number) ifTrue: [^ self @env0:- (other)].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:- ((other @env1:__index__))].
 	^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'
@@ -869,10 +869,10 @@ __truediv__: other
 	"True division (returns float)."
 	"CPython: division/modulo by zero raises catchable
 	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
-	((other @env0:isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
+	((other isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
 		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:/ other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:/ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:/ (other @env1:__index__)].
 	^ self ___binOpFallback___: other op: '/' reflected: #'__rtruediv__:'
@@ -891,7 +891,7 @@ method: int
 __xor__: other
 	"Bitwise XOR."
 
-	(other @env0:isKindOf: Integer) ifTrue: [^ self @env0:bitXor: other].
+	(other isKindOf: Integer) ifTrue: [^ self @env0:bitXor: other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitXor: (other @env1:__index__)].
 	^ self ___binOpFallback___: other op: '^' reflected: #'__rxor__:'

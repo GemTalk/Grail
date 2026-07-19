@@ -462,7 +462,7 @@ finditer: aString _: pos _: endpos
 	mustAdvance := false.
 	[cursor @env0:<= endpos] @env0:whileTrue: [
 		m := self @env1:___searchFrom___: cursor in: aString to: endpos mustAdvance: mustAdvance.
-		(m @env0:== None) ifTrue: [^ matches].
+		(m == None) ifTrue: [^ matches].
 		matches @env0:add: m.
 		mStart := m @env1:start.
 		mEnd := m @env1:end.
@@ -573,7 +573,7 @@ ___isLiteralRepl___: repl
 	value containing no backslash and not callable.  Callables and
 	templates with `\` references both need full expansion."
 
-	(repl @env0:isKindOf: CharacterCollection) ifFalse: [^ false].
+	(repl isKindOf: CharacterCollection) ifFalse: [^ false].
 	^ (repl @env0:indexOf: $\) @env0:= 0
 %
 
@@ -605,14 +605,14 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 	returned a str whose ByteArray-equality only held under the
 	kernel's lenient CharacterCollection>>= (a GLASS host extent's
 	Squeak-style override answers false)."
-	emptySep := (aString @env0:isKindOf: ByteArray)
+	emptySep := (aString isKindOf: ByteArray)
 		ifTrue: [ByteArray @env0:new]
 		ifFalse: [''].
 	"For callable repl we use template=nil as the marker; otherwise
 	parse the replacement string once."
-	((repl @env0:isKindOf: BoundMethod)
-		or: [(repl @env0:isKindOf: ExecBlock)
-			or: [repl @env0:isKindOf: GsNMethod]])
+	((repl isKindOf: BoundMethod)
+		or: [(repl isKindOf: ExecBlock)
+			or: [repl isKindOf: GsNMethod]])
 		ifTrue: [template := nil]
 		ifFalse: [template := parser @env1:parse_template: repl _: self].
 	parts := OrderedCollection @env0:new.
@@ -635,7 +635,7 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 		engine clamps a pos beyond len back to len, so plain search
 		re-returned the same (len,len) match forever (test_zerowidth)."
 		m := self @env1:___searchFrom___: pos in: aString to: aString @env0:size mustAdvance: mustAdvance.
-		(m @env0:== nil or: [m @env0:== None]) ifTrue: [
+		(m == nil or: [m == None]) ifTrue: [
 			parts @env0:add: (aString @env0:copyFrom: pos @env0:+ 1 to: aString @env0:size).
 			^ returnTuple
 				ifTrue: [(tuple @env0:withAll: { (emptySep @env1:join: parts). numSubs })]
@@ -648,7 +648,7 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 			parts @env0:add: (aString @env0:copyFrom: pos @env0:+ 1 to: mStart)
 		].
 		"Expand the replacement."
-		template @env0:== nil
+		template == nil
 			ifTrue: [
 				"Callable repl: call with the match, expect a string back.
 				A Grail Python callable (lambda / def) compiles to a 2-arg
@@ -658,7 +658,7 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 				evaluated with 1 argument when 2 were expected''.  A
 				BoundMethod uses its env-1 value:value:; a raw 1-arg
 				Smalltalk block (rare) is called directly."
-				expanded := (repl @env0:isKindOf: ExecBlock)
+				expanded := (repl isKindOf: ExecBlock)
 					ifTrue: [
 						repl @env0:numArgs @env0:= 2
 							ifTrue: [repl @env0:value: { m } value: nil]
@@ -685,7 +685,7 @@ ___expandTemplate___: aTemplate withMatch: m
 	| parts |
 	parts := OrderedCollection @env0:new.
 	aTemplate @env0:do: [:item |
-		(item @env0:isKindOf: SmallInteger)
+		(item isKindOf: SmallInteger)
 			ifTrue: [
 				| g |
 				g := m @env1:group: item.
@@ -693,13 +693,13 @@ ___expandTemplate___: aTemplate withMatch: m
 				semantics).  group: answers the Python None SINGLETON,
 				not Smalltalk nil -- comparing only against nil let None
 				leak into the join and DNU on do: (test_symbolic_refs)."
-				(g @env0:== nil or: [g @env0:== None]) ifFalse: [parts @env0:add: g]
+				(g == nil or: [g == None]) ifFalse: [parts @env0:add: g]
 			]
 			ifFalse: [parts @env0:add: item]
 	].
 	"Bytes templates must expand to bytes — join with an empty
 	ByteArray when the parts are bytes (see ___subWithExpansion___)."
-	^ (parts @env0:notEmpty and: [(parts @env0:at: 1) @env0:isKindOf: ByteArray])
+	^ (parts @env0:notEmpty and: [(parts @env0:at: 1) isKindOf: ByteArray])
 		ifTrue: [(ByteArray @env0:new) @env1:join: parts]
 		ifFalse: ['' @env1:join: parts]
 %
@@ -774,7 +774,7 @@ __repr__
 	| src flagsVal srcRepr names stream |
 	src := self @env1:pattern.
 	flagsVal := self @env1:flags.
-	(src @env0:isKindOf: ByteArray) ifFalse: [
+	(src isKindOf: ByteArray) ifFalse: [
 		flagsVal := flagsVal @env0:- (flagsVal @env0:bitAnd: 32)
 	].
 	names := OrderedCollection @env0:new.
@@ -950,10 +950,10 @@ groups: defaultValue
 	| raw result |
 	raw := (CPythonShim @env0:current)
 		@env0:callTyped: '_sre' type: 'Match' method: 'groups' selfPtr: (self @env0:cPtrAddress).
-	(defaultValue @env0:== nil or: [defaultValue @env0:== None]) ifTrue: [^ raw].
+	(defaultValue == nil or: [defaultValue == None]) ifTrue: [^ raw].
 	result := list ___new___.
 	raw @env0:do: [:each |
-		result @env1:append: ((each @env0:== None or: [each @env0:== nil])
+		result @env1:append: ((each == None or: [each == nil])
 			ifTrue: [defaultValue] ifFalse: [each])].
 	^ tuple @env0:withAll: result
 %

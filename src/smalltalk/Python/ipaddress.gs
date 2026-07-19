@@ -87,7 +87,7 @@ ___fromString___: aString
 		octet := [p @env0:asNumber] @env0:on: Error do: [:ex |
 			ValueError @env1:___signal___: 'bad octet in ' @env0:, aString
 		].
-		((octet @env0:isKindOf: Integer) @env0:and: [octet @env0:>= 0 @env0:and: [octet @env0:<= 255]]) ifFalse: [
+		((octet isKindOf: Integer) @env0:and: [octet @env0:>= 0 @env0:and: [octet @env0:<= 255]]) ifFalse: [
 			ValueError @env1:___signal___: 'octet out of range in ' @env0:, aString
 		].
 		packed := (packed @env0:bitShift: 8) @env0:bitOr: octet
@@ -154,7 +154,7 @@ max_prefixlen
 category: 'Grail-Equality'
 method: IPv4Address
 __eq__: other
-	(other @env0:isKindOf: IPv4Address) ifFalse: [^ false].
+	(other isKindOf: IPv4Address) ifFalse: [^ false].
 	^ (self @env0:dynamicInstVarAt: #_packed) @env0:= other @env1:packed
 %
 
@@ -297,7 +297,7 @@ ___fromString___: aString strict: strict
 		prefix := [(parts @env0:at: 2) @env0:asNumber] @env0:on: Error do: [:ex |
 			ValueError @env1:___signal___: 'bad prefix in ' @env0:, aString
 		].
-		((prefix @env0:isKindOf: Integer) @env0:and: [prefix @env0:>= 0 @env0:and: [prefix @env0:<= 32]]) ifFalse: [
+		((prefix isKindOf: Integer) @env0:and: [prefix @env0:>= 0 @env0:and: [prefix @env0:<= 32]]) ifFalse: [
 			ValueError @env1:___signal___: 'prefix out of range in ' @env0:, aString
 		]
 	] ifFalse: [prefix := 32].
@@ -380,7 +380,7 @@ __contains__: anAddress
 	"True if anAddress falls inside this network."
 
 	| addrPacked mask |
-	(anAddress @env0:isKindOf: IPv4Address) ifFalse: [^ false].
+	(anAddress isKindOf: IPv4Address) ifFalse: [^ false].
 	addrPacked := anAddress @env1:packed.
 	mask := (self @env0:dynamicInstVarAt: #_prefix) @env0:= 0
 		ifTrue: [0]
@@ -478,7 +478,7 @@ IPv4Address: s
 	"IPv4Address(s) constructor.  Accepts either a dotted-quad string
 	or a 32-bit packed integer."
 
-	(s @env0:isKindOf: Integer) ifTrue: [
+	(s isKindOf: Integer) ifTrue: [
 		^ IPv4Address @env0:___fromPacked___: s
 	].
 	^ IPv4Address @env0:___fromString___: s @env0:asString

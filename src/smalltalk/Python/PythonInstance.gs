@@ -57,7 +57,7 @@ asFloat
 	MNU.  Compiled twice -- once per environment (see the env-1 copy
 	after the marker below)."
 
-	((self @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) @env0:~~ nil)
+	((self @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) ~~ nil)
 		ifTrue: [^ self perform: #'__float__' env: 1].
 	TypeError @env1:___signal___: ('must be real number, not '
 		@env0:, self @env0:class @env0:name @env0:asString)
@@ -78,7 +78,7 @@ __iter__
 	the chain)."
 
 	| items idx v |
-	((self @env0:class @env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) @env0:== nil)
+	((self @env0:class @env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) == nil)
 		ifTrue: [
 			TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
 				@env0:, ''' object is not iterable')].
@@ -88,7 +88,7 @@ __iter__
 		v := [self @env1:__getitem__: idx]
 			@env0:on: IndexError
 			do: [:ex | ex @env0:return: #'___stopIteration___'].
-		v @env0:== #'___stopIteration___' ifTrue: [
+		v == #'___stopIteration___' ifTrue: [
 			^ items @env1:__iter__].
 		items @env0:add: v.
 		idx := idx @env0:+ 1]
@@ -142,7 +142,7 @@ method: PythonInstance
 asFloat
 	"env-1 twin of the env-0 bridge above."
 
-	((self @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) @env0:~~ nil)
+	((self @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) ~~ nil)
 		ifTrue: [^ self @env0:perform: #'__float__' env: 1].
 	TypeError ___signal___: ('must be real number, not '
 		@env0:, self @env0:class @env0:name @env0:asString)

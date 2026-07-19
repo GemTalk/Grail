@@ -159,7 +159,7 @@ global_enum: cls
 	"__module__ is the dotted NAME STRING (CPython semantics) -- resolve
 	the instance through sys.modules; tolerate a module INSTANCE stored
 	by older codegen.  Unresolvable name -> decorator is a no-op."
-	(module @env0:isKindOf: CharacterCollection) ifTrue: [
+	(module isKindOf: CharacterCollection) ifTrue: [
 		module := importlib modules
 			@env0:at: (module @env0:asString @env0:asSymbol)
 			otherwise: nil.

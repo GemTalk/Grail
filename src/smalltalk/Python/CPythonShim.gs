@@ -1174,10 +1174,10 @@ PyCallable_Check: obj
 	match.  Pure-value types (str/bytes/int/...) are filtered out
 	on the C side before we get here."
 
-	(obj @env0:isKindOf: BoundMethod) ifTrue: [^ true].
-	(obj @env0:isKindOf: ExecBlock) ifTrue: [^ true].
-	(obj @env0:isKindOf: GsNMethod) ifTrue: [^ true].
-	(obj @env0:isKindOf: Behavior) ifTrue: [^ true].
+	(obj isKindOf: BoundMethod) ifTrue: [^ true].
+	(obj isKindOf: ExecBlock) ifTrue: [^ true].
+	(obj isKindOf: GsNMethod) ifTrue: [^ true].
+	(obj isKindOf: Behavior) ifTrue: [^ true].
 	"Anything else: not callable."
 	^ false
 %

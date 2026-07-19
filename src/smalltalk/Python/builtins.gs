@@ -130,8 +130,8 @@ _exec: positional kw: kwargs
 	globals(), PyInstanceDict from obj.__dict__) speak keysAndValuesDo:
 	too -- exec(src, globals()) is the canonical caller."
 	scope := SymbolDictionary @env0:new.
-	((globalsDict @env0:isKindOf: KeyValueDictionary)
-		or: [globalsDict @env0:isKindOf: PyInstanceDict]) ifTrue: [
+	((globalsDict isKindOf: KeyValueDictionary)
+		or: [globalsDict isKindOf: PyInstanceDict]) ifTrue: [
 		globalsDict @env0:keysAndValuesDo: [:key :value |
 			sym := key @env0:isSymbol ifTrue: [key] ifFalse: [key @env0:asString @env0:asSymbol].
 			scope @env0:at: sym put: value]
@@ -174,8 +174,8 @@ _eval: positional kw: kwargs
 	"Seed a fresh SymbolDictionary scope from globals (live dict views
 	accepted -- see _exec)."
 	scope := SymbolDictionary @env0:new.
-	((globalsDict @env0:isKindOf: KeyValueDictionary)
-		or: [globalsDict @env0:isKindOf: PyInstanceDict]) ifTrue: [
+	((globalsDict isKindOf: KeyValueDictionary)
+		or: [globalsDict isKindOf: PyInstanceDict]) ifTrue: [
 		globalsDict @env0:keysAndValuesDo: [:key :value |
 			sym := key @env0:isSymbol
 				ifTrue: [key]
@@ -272,9 +272,9 @@ callable: anObject
 	which both compile ``__call__:``-shaped entries or value:value:)."
 
 	| objClass |
-	(anObject @env0:isKindOf: Behavior) ifTrue: [^ true].
-	(anObject @env0:isKindOf: BoundMethod) ifTrue: [^ true].
-	(anObject @env0:isKindOf: ExecBlock) ifTrue: [^ true].
+	(anObject isKindOf: Behavior) ifTrue: [^ true].
+	(anObject isKindOf: BoundMethod) ifTrue: [^ true].
+	(anObject isKindOf: ExecBlock) ifTrue: [^ true].
 	objClass := anObject @env0:class.
 	^ (objClass @env0:whichClassIncludesSelector: (#__call__:) environmentId: 1) notNil
 %
@@ -542,7 +542,7 @@ ___minOrMax___: positional kw: kwargs lessThan: pickSmaller
 		@env0:ifTrue: [kwargs @env0:at: 'key']
 		@env0:ifFalse: [nil].
 	"Explicit key=None means no key (CPython)."
-	keyFn @env0:== None ifTrue: [keyFn := nil].
+	keyFn == None ifTrue: [keyFn := nil].
 	hasDefault := kwargs @env0:notNil and: [kwargs @env0:includesKey: 'default'].
 	default := hasDefault @env0:ifTrue: [kwargs @env0:at: 'default'] @env0:ifFalse: [nil].
 	iterable := (positional @env0:size) @env0:= 1
@@ -626,7 +626,7 @@ ___buildLocals___: pairsArray
 	| d |
 	d := dict @env1:___new___.
 	pairsArray @env0:do: [:pair |
-		(pair @env0:at: 2) @env0:== nil ifFalse: [
+		(pair @env0:at: 2) == nil ifFalse: [
 			d @env1:__setitem__: ((pair @env0:at: 1) @env0:asUnicodeString) _: (pair @env0:at: 2)]].
 	^ d
 %
@@ -680,20 +680,20 @@ _open: positional kw: kwargs
 	file := (nargs @env0:>= 1)
 		ifTrue: [positional @env0:at: 1]
 		ifFalse: [
-			(kwargs @env0:== nil) ifTrue: [
+			(kwargs == nil) ifTrue: [
 				TypeError ___signal___: 'open() missing required argument: ''file'''].
 			kwargs @env0:at: 'file' ifAbsent: [
 				TypeError ___signal___: 'open() missing required argument: ''file''']].
 	mode := (nargs @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [
-			(kwargs @env0:== nil)
+			(kwargs == nil)
 				ifTrue: [nil]
 				ifFalse: [kwargs @env0:at: 'mode' ifAbsent: [nil]]].
 	encoding := (nargs @env0:>= 4)
 		ifTrue: [positional @env0:at: 4]
 		ifFalse: [
-			(kwargs @env0:== nil)
+			(kwargs == nil)
 				ifTrue: [nil]
 				ifFalse: [kwargs @env0:at: 'encoding' ifAbsent: [nil]]].
 	^ FileIO @env1:___open___: file mode: mode encoding: encoding
@@ -752,7 +752,7 @@ ___parseFormatSpec___: spec
 	(i @env0:<= n and: [(spec @env0:at: i) @env0:= $#]) ifTrue: [
 		alt := true. i := i @env0:+ 1].
 	(i @env0:<= n and: [(spec @env0:at: i) @env0:= $0]) ifTrue: [
-		align @env0:== nil ifTrue: [align := $=. fill := $0].
+		align == nil ifTrue: [align := $=. fill := $0].
 		i := i @env0:+ 1].
 	[i @env0:<= n and: [(spec @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
 		width := (width @env0:* 10) @env0:+ (spec @env0:at: i) @env0:digitValue.
@@ -848,12 +848,12 @@ ___formatIntValue___: value parsed: p
 		^ self @env1:___formatFloatValue___: value @env0:asFloat parsed: p].
 	type @env0:= $c ifTrue: [
 		body := String @env0:with: (Character @env0:codePoint: value).
-		align @env0:== nil ifTrue: [align := $<].
+		align == nil ifTrue: [align := $<].
 		^ self @env1:___formatPadBody___: body fill: fill align: align width: width signLength: 0].
 	type @env0:= $s ifTrue: [
 		ValueError ___signal___: 'Unknown format code ''s'' for object of type ''int'''].
 	prefix := ''.
-	(type @env0:== nil or: [type @env0:= $d or: [type @env0:= $n]]) ifTrue: [
+	(type == nil or: [type @env0:= $d or: [type @env0:= $n]]) ifTrue: [
 		digits := value @env0:abs @env0:printString]
 	ifFalse: [
 		type @env0:= $b ifTrue: [
@@ -868,13 +868,13 @@ ___formatIntValue___: value parsed: p
 		type @env0:= $X ifTrue: [
 			digits := value @env0:abs @env0:printStringRadix: 16.
 			alt ifTrue: [prefix := '0X']]].
-	grouping @env0:== nil ifFalse: [
-		groupSize := (type @env0:== nil or: [type @env0:= $d or: [type @env0:= $n]])
+	grouping == nil ifFalse: [
+		groupSize := (type == nil or: [type @env0:= $d or: [type @env0:= $n]])
 			ifTrue: [3] ifFalse: [4].
 		digits := self @env1:___groupDigits___: digits separator: grouping every: groupSize].
 	signStr := self @env1:___signString___: value @env0:< 0 sign: sign.
 	body := signStr @env0:, prefix @env0:, digits.
-	align @env0:== nil ifTrue: [align := $>].
+	align == nil ifTrue: [align := $>].
 	^ self @env1:___formatPadBody___: body fill: fill align: align
 		width: width signLength: signStr @env0:size @env0:+ prefix @env0:size
 %
@@ -956,7 +956,7 @@ ___formatFloatValue___: value parsed: p
 		a := value @env0:abs.
 		a @env0:> 1e300 ifTrue: [
 			a @env0:* 0 @env0:= 0 ifFalse: [digits := 'inf']]].
-	digits @env0:== nil ifTrue: [
+	digits == nil ifTrue: [
 		suffix := ''.
 		type @env0:= $% ifTrue: [
 			a := a @env0:* 100.
@@ -964,18 +964,18 @@ ___formatFloatValue___: value parsed: p
 			type := $f].
 		(type @env0:= $f or: [type @env0:= $F]) ifTrue: [
 			digits := self @env1:___fixedDigits___: a
-				precision: (precision @env0:== nil ifTrue: [6] ifFalse: [precision])]
+				precision: (precision == nil ifTrue: [6] ifFalse: [precision])]
 		ifFalse: [
 		(type @env0:= $e or: [type @env0:= $E]) ifTrue: [
 			digits := self @env1:___sciDigits___: a
-				precision: (precision @env0:== nil ifTrue: [6] ifFalse: [precision])
+				precision: (precision == nil ifTrue: [6] ifFalse: [precision])
 				upper: type @env0:= $E]
 		ifFalse: [
 			"g / G / bare precision / bare float."
-			(type @env0:== nil and: [precision @env0:== nil]) ifTrue: [
+			(type == nil and: [precision == nil]) ifTrue: [
 				digits := a @env0:printString]
 			ifFalse: [
-				precision @env0:== nil ifTrue: [precision := 6].
+				precision == nil ifTrue: [precision := 6].
 				precision @env0:= 0 ifTrue: [precision := 1].
 				exp10 := 0.
 				probe := a.
@@ -990,7 +990,7 @@ ___formatFloatValue___: value parsed: p
 						digits := self @env1:___stripTrailingZeros___:
 							(self @env1:___sciDigits___: a precision: precision @env0:- 1 upper: type @env0:= $G)]]]].
 		digits := digits @env0:, suffix].
-	grouping @env0:== nil ifFalse: [
+	grouping == nil ifFalse: [
 		| dot ip rest |
 		dot := digits @env0:indexOf: $..
 		dot @env0:= 0
@@ -1000,7 +1000,7 @@ ___formatFloatValue___: value parsed: p
 		digits := (self @env1:___groupDigits___: ip separator: grouping every: 3) @env0:, rest].
 	signStr := self @env1:___signString___: neg sign: sign.
 	body := signStr @env0:, digits.
-	align @env0:== nil ifTrue: [align := $>].
+	align == nil ifTrue: [align := $>].
 	^ self @env1:___formatPadBody___: body fill: fill align: align
 		width: width signLength: signStr @env0:size
 %
@@ -1014,12 +1014,12 @@ ___formatStrValue___: value parsed: p
 	| fill align width precision type body |
 	fill := p @env0:at: 1. align := p @env0:at: 2. width := p @env0:at: 5.
 	precision := p @env0:at: 7. type := p @env0:at: 8.
-	(type @env0:== nil or: [type @env0:= $s]) ifFalse: [
+	(type == nil or: [type @env0:= $s]) ifFalse: [
 		ValueError ___signal___: ('Unknown format code for object of type ''str''')].
 	body := value.
-	((precision @env0:== nil) @env0:not and: [body @env0:size @env0:> precision]) ifTrue: [
+	((precision == nil) @env0:not and: [body @env0:size @env0:> precision]) ifTrue: [
 		body := body @env0:copyFrom: 1 to: precision].
-	align @env0:== nil ifTrue: [align := $<].
+	align == nil ifTrue: [align := $<].
 	align @env0:= $= ifTrue: [
 		ValueError ___signal___: '''='' alignment not allowed in string format specifier'].
 	^ self @env1:___formatPadBody___: body fill: fill align: align width: width signLength: 0
@@ -1032,13 +1032,13 @@ ___formatValue___: value spec: spec
 	is str(value); otherwise parse once and dispatch by type."
 
 	| p |
-	(spec @env0:== nil or: [spec @env0:isEmpty]) ifTrue: [^ value @env1:__str__].
+	(spec == nil or: [spec @env0:isEmpty]) ifTrue: [^ value @env1:__str__].
 	p := self @env1:___parseFormatSpec___: spec.
-	(value @env0:isKindOf: Float) ifTrue: [
+	(value isKindOf: Float) ifTrue: [
 		^ self @env1:___formatFloatValue___: value parsed: p].
-	(value @env0:isKindOf: Integer) ifTrue: [
+	(value isKindOf: Integer) ifTrue: [
 		^ self @env1:___formatIntValue___: value parsed: p].
-	(value @env0:isKindOf: CharacterCollection) ifTrue: [
+	(value isKindOf: CharacterCollection) ifTrue: [
 		^ self @env1:___formatStrValue___: value @env0:asString parsed: p].
 	^ self @env1:___formatStrValue___: (value @env1:__str__) parsed: p
 %
@@ -1089,9 +1089,9 @@ round: aNumber
 	implements banker's rounding there; the kernel #rounded was an
 	uncatchable MNU on PythonInstances."
 
-	((aNumber @env0:class @env0:whichClassIncludesSelector: #'___round__:kw:' environmentId: 1) @env0:~~ nil)
+	((aNumber @env0:class @env0:whichClassIncludesSelector: #'___round__:kw:' environmentId: 1) ~~ nil)
 		ifTrue: [^ aNumber @env1:___round__: { } kw: nil].
-	((aNumber @env0:class @env0:whichClassIncludesSelector: #'__round__' environmentId: 1) @env0:~~ nil)
+	((aNumber @env0:class @env0:whichClassIncludesSelector: #'__round__' environmentId: 1) ~~ nil)
 		ifTrue: [^ aNumber @env0:perform: #'__round__' env: 1].
 	^ aNumber @env0:rounded
 %
@@ -1151,20 +1151,20 @@ vars: anObject
 	dynamic-instVar API — signaling from inside an on:Error handler
 	around dynamicInstVarPairs on a special (immediate) object loops
 	the signal machinery into AlmostOutOfStack."
-	((anObject @env0:== nil)
-		or: [(anObject @env0:== None)
-		or: [(anObject @env0:isKindOf: Number)
-		or: [(anObject @env0:isKindOf: Boolean)
-		or: [(anObject @env0:isKindOf: CharacterCollection)
+	((anObject == nil)
+		or: [(anObject == None)
+		or: [(anObject isKindOf: Number)
+		or: [(anObject isKindOf: Boolean)
+		or: [(anObject isKindOf: CharacterCollection)
 		or: [(anObject @env0:class @env0:isPointers) @env0:not]]]]]) ifTrue: [
 		TypeError ___signal___: 'vars() argument must have __dict__ attribute'].
 	"vars(module) IS the module's __dict__ in CPython -- a LIVE mapping.
 	Return the PyModuleDict view (same object semantics as globals()
 	inside the module) instead of a snapshot that would drop writes."
-	(anObject @env0:isKindOf: module) ifTrue: [
+	(anObject isKindOf: module) ifTrue: [
 		^ (Python @env0:at: #'PyModuleDict') @env0:on: anObject].
 	d := dict @env1:___new___.
-	(anObject @env0:isKindOf: SymbolDictionary) ifTrue: [
+	(anObject isKindOf: SymbolDictionary) ifTrue: [
 		anObject @env0:keysDo: [:k |
 			d @env1:__setitem__: k @env0:asString @env0:asUnicodeString _: (anObject @env0:at: k)]].
 	(anObject @env0:dynamicInstanceVariables) @env0:do: [:nm |
@@ -1173,7 +1173,7 @@ vars: anObject
 	(anObject @env0:class @env0:allInstVarNames) @env0:doWithIndex: [:nm :i |
 		| v |
 		v := anObject @env0:instVarAt: i.
-		v @env0:== nil ifFalse: [
+		v == nil ifFalse: [
 			d @env1:__setitem__: (nm @env0:asString @env0:asUnicodeString) _: v]].
 	^ d
 %
@@ -1228,7 +1228,7 @@ help: anObject
 
 	| doc |
 	doc := [anObject @env1:__doc__] @env0:on: Error do: [:ex | nil].
-	(doc @env0:== nil or: [doc @env0:== None]) ifTrue: [
+	(doc == nil or: [doc == None]) ifTrue: [
 		doc := 'No documentation available.'].
 	Transcript @env0:nextPutAll: doc @env0:asString.
 	Transcript @env0:cr.
@@ -1287,11 +1287,11 @@ _sorted: positional kw: kwargs
 	"An EXPLICIT key=None means no key (CPython) -- test_heapq passes
 	key in [None, itemgetter(0), ...]; calling the None killed the
 	test with 'NoneType' object is not callable."
-	keyFn @env0:== None ifTrue: [keyFn := nil].
+	keyFn == None ifTrue: [keyFn := nil].
 	reverse := kwargs @env0:isNil
 		ifTrue: [false]
 		ifFalse: [kwargs @env0:at: 'reverse' ifAbsent: [false]].
-	reverse @env0:== None ifTrue: [reverse := false].
+	reverse == None ifTrue: [reverse := false].
 	lst := list ___new___.
 	iter := iterable __iter__.
 	done := false.
@@ -1412,7 +1412,7 @@ isinstance: anObject _: aClassOrTuple
 	| cls |
 	cls := self @env1:___resolveClassRef___: aClassOrTuple.
 	"Tuple-of-classes form: recurse, OR together."
-	(cls @env0:isKindOf: tuple) ifTrue: [
+	(cls isKindOf: tuple) ifTrue: [
 		cls @env0:do: [:eachCls | (self isinstance: anObject _: eachCls) ifTrue: [^ true]].
 		^ false
 	].
@@ -1437,7 +1437,7 @@ ___resolveClassRef___: aRef
 	non-class second argument.  (numpy._utils.set_module does
 	``isinstance(func, type)'' to tell a decorated class from a function.)"
 
-	(aRef @env0:isKindOf: BoundMethod) ifTrue: [
+	(aRef isKindOf: BoundMethod) ifTrue: [
 		(aRef @env0:selector == #'type') ifTrue: [^ Behavior].
 		^ Python @env0:at: aRef @env0:selector ifAbsent: [aRef]
 	].
@@ -1454,10 +1454,10 @@ ___isInstanceSingle___: anObject of: aClass
 	where the attr resolved to a BoundMethod): raise CPython's
 	catchable TypeError -- isKindOf: on a non-Behavior dies with an
 	UNCATCHABLE ArgumentTypeError (killed test_functools)."
-	(aClass @env0:isKindOf: Behavior) ifFalse: [
+	(aClass isKindOf: Behavior) ifFalse: [
 		TypeError ___signal___: 'isinstance() arg 2 must be a type, a tuple of types, or a union'].
-	result := anObject @env0:isKindOf: aClass.
-	(result not and: [aClass @env0:== Unicode7]) ifTrue: [
+	result := anObject isKindOf: aClass.
+	(result not and: [aClass == Unicode7]) ifTrue: [
 		"str maps to Unicode7 for construction, but CPython counts EVERY
 		text string as str: Grail literals may come back Unicode16 /
 		QuadByteString (wide content) and GemStone APIs hand back String /
@@ -1465,9 +1465,9 @@ ___isInstanceSingle___: anObject of: aClass
 		False and re.compile rejected wide-string patterns
 		(test_word_boundaries).  bytes stays distinct: ByteArray is not a
 		CharacterCollection."
-		result := (anObject @env0:isKindOf: CharacterCollection)
-			or: [anObject @env0:isKindOf: AbstractPyStr]].
-	(result not and: [aClass @env0:== (Python @env0:at: #'PyDict' otherwise: nil)]) ifTrue: [
+		result := (anObject isKindOf: CharacterCollection)
+			or: [anObject isKindOf: AbstractPyStr]].
+	(result not and: [aClass == (Python @env0:at: #'PyDict' otherwise: nil)]) ifTrue: [
 		"dict maps to PyDict (the insertion-ordered subclass) for
 		construction, but CPython counts EVERY dict as a dict: internal
 		plain KeyValueDictionaries surfaced to Python (module namespaces,
@@ -1477,15 +1477,15 @@ ___isInstanceSingle___: anObject of: aClass
 		The live dict VIEWS (PyInstanceDict for obj.__dict__, PyModuleDict
 		for globals()) also count: CPython's globals() IS a dict, and
 		mapping-duck-typed code checks isinstance(g, dict)."
-		result := (anObject @env0:isKindOf: KeyValueDictionary)
-			or: [anObject @env0:isKindOf: PyInstanceDict]].
+		result := (anObject isKindOf: KeyValueDictionary)
+			or: [anObject isKindOf: PyInstanceDict]].
 	result ifFalse: [
 		"Secondary (multiple-inheritance) bases are not on the Smalltalk
 		chain isKindOf: walks -- consult the instance class's registered
 		C3 MRO."
 		| il |
 		il := Python @env0:at: #importlib otherwise: nil.
-		il @env0:== nil ifFalse: [
+		il == nil ifFalse: [
 			result := (il @env0:___mroOf___: anObject @env0:class) @env0:includes: aClass]].
 	result ifFalse: [
 		theMetaclass := aClass @env0:class.
@@ -1626,7 +1626,7 @@ issubclass: aClass _: aClassOrTuple
 	| sub target |
 	sub := self @env1:___resolveClassRef___: aClass.
 	target := self @env1:___resolveClassRef___: aClassOrTuple.
-	(target @env0:isKindOf: tuple) ifTrue: [
+	(target isKindOf: tuple) ifTrue: [
 		target @env0:do: [:eachCls |
 			(self @env1:___isSubclassSingle___: sub of: eachCls) ifTrue: [^ true]
 		].
@@ -1656,24 +1656,24 @@ ___isSubclassSingle___: sub of: target
 	bases are visible only through its registered C3 MRO."
 
 	| il |
-	((sub @env0:isKindOf: Behavior) and: [target @env0:isKindOf: Behavior]) ifFalse: [
+	((sub isKindOf: Behavior) and: [target isKindOf: Behavior]) ifFalse: [
 		TypeError ___signal___: 'issubclass() arg must be a type'].
-	(sub @env0:== target) ifTrue: [^ true].
+	(sub == target) ifTrue: [^ true].
 	(sub @env0:inheritsFrom: target) ifTrue: [^ true].
 	"Mirror isinstance's str widening: every text string class is a
 	subclass of str (see ___isInstanceSingle___:of:)."
-	(target @env0:== Unicode7 and: [(sub @env0:== CharacterCollection)
+	(target == Unicode7 and: [(sub == CharacterCollection)
 		or: [(sub @env0:inheritsFrom: CharacterCollection)
-		or: [(sub @env0:== AbstractPyStr) or: [sub @env0:inheritsFrom: AbstractPyStr]]]]) ifTrue: [^ true].
+		or: [(sub == AbstractPyStr) or: [sub @env0:inheritsFrom: AbstractPyStr]]]]) ifTrue: [^ true].
 	"int-subclass widening: a class routed onto AbstractPyInt by
 	___subclass___'s sealed-Integer substitution IS a subclass of int."
-	(target @env0:== Integer and: [(sub @env0:== AbstractPyInt)
+	(target == Integer and: [(sub == AbstractPyInt)
 		or: [sub @env0:inheritsFrom: AbstractPyInt]]) ifTrue: [^ true].
 	"float-subclass widening -- same substitution story."
-	(target @env0:== Float and: [(sub @env0:== AbstractPyFloat)
+	(target == Float and: [(sub == AbstractPyFloat)
 		or: [sub @env0:inheritsFrom: AbstractPyFloat]]) ifTrue: [^ true].
 	il := Python @env0:at: #importlib otherwise: nil.
-	il @env0:== nil ifFalse: [
+	il == nil ifFalse: [
 		((il @env0:___mroOf___: sub) @env0:includes: target) ifTrue: [^ true]].
 	"``__subclasscheck__:'' hook -- the issubclass analog of isinstance's
 	``__instancecheck__:'' probe above.  ABCs (collections.abc, numbers)
@@ -1682,7 +1682,7 @@ ___isSubclassSingle___: sub of: target
 	``type(cls).__subclasscheck__''.  Reached only after the real chain,
 	the widenings, and the C3 MRO all missed."
 	((target @env0:class @env0:whichClassIncludesSelector: #'__subclasscheck__:' environmentId: 1) notNil) ifTrue: [
-		^ (target __subclasscheck__: sub) @env0:== true].
+		^ (target __subclasscheck__: sub) == true].
 	^ false
 %
 
@@ -1883,15 +1883,15 @@ _round: positional kw: kwargs
 		].
 	"__round__ first (CPython protocol) -- see round: for the 1-arg
 	rationale; the kernel arithmetic below MNUs on PythonInstances."
-	((number @env0:class @env0:whichClassIncludesSelector: #'___round__:kw:' environmentId: 1) @env0:~~ nil)
+	((number @env0:class @env0:whichClassIncludesSelector: #'___round__:kw:' environmentId: 1) ~~ nil)
 		ifTrue: [^ number @env1:___round__:
-			(ndigits @env0:== nil ifTrue: [{ }] ifFalse: [{ ndigits }]) kw: nil].
+			(ndigits == nil ifTrue: [{ }] ifFalse: [{ ndigits }]) kw: nil].
 	ndigits ifNil: [^ number @env0:rounded].
 	multiplier := 10 @env0:raisedTo: ndigits.
 	"Match CPython: ``round(1.234, 2)'' returns the Float 1.23.
 	Smalltalk's ``Integer / Integer'' returns a Fraction, so divide
 	by the Float form of the multiplier when the input is a Float."
-	^ (number @env0:isKindOf: Float)
+	^ (number isKindOf: Float)
 		@env0:ifTrue: [
 			((number @env0:* multiplier) @env0:rounded @env0:asFloat)
 				@env0:/ multiplier @env0:asFloat]

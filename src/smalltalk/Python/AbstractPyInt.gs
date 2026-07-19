@@ -144,91 +144,91 @@ _coerce: aNumber
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyInt
 + other
-	^ self @env0:value + ((other @env0:isKindOf: AbstractPyInt)
+	^ self @env0:value + ((other isKindOf: AbstractPyInt)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyInt
 - other
-	^ self @env0:value - ((other @env0:isKindOf: AbstractPyInt)
+	^ self @env0:value - ((other isKindOf: AbstractPyInt)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyInt
 * other
-	^ self @env0:value * ((other @env0:isKindOf: AbstractPyInt)
+	^ self @env0:value * ((other isKindOf: AbstractPyInt)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyInt
 / other
-	^ self @env0:value / ((other @env0:isKindOf: AbstractPyInt)
+	^ self @env0:value / ((other isKindOf: AbstractPyInt)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyInt
 // other
-	^ self @env0:value // ((other @env0:isKindOf: AbstractPyInt)
+	^ self @env0:value // ((other isKindOf: AbstractPyInt)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyInt
 \\ other
-	^ self @env0:value \\ ((other @env0:isKindOf: AbstractPyInt)
+	^ self @env0:value \\ ((other isKindOf: AbstractPyInt)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyInt
 rem: other
-	^ self @env0:value rem: ((other @env0:isKindOf: AbstractPyInt)
+	^ self @env0:value rem: ((other isKindOf: AbstractPyInt)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyInt
 quo: other
-	^ self @env0:value quo: ((other @env0:isKindOf: AbstractPyInt)
+	^ self @env0:value quo: ((other isKindOf: AbstractPyInt)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyInt
 bitAnd: other
-	^ self @env0:value bitAnd: ((other @env0:isKindOf: AbstractPyInt)
+	^ self @env0:value bitAnd: ((other isKindOf: AbstractPyInt)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyInt
 bitOr: other
-	^ self @env0:value bitOr: ((other @env0:isKindOf: AbstractPyInt)
+	^ self @env0:value bitOr: ((other isKindOf: AbstractPyInt)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyInt
 bitXor: other
-	^ self @env0:value bitXor: ((other @env0:isKindOf: AbstractPyInt)
+	^ self @env0:value bitXor: ((other isKindOf: AbstractPyInt)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyInt
 bitShift: other
-	^ self @env0:value bitShift: ((other @env0:isKindOf: AbstractPyInt)
+	^ self @env0:value bitShift: ((other isKindOf: AbstractPyInt)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyInt
 raisedTo: other
-	^ self @env0:value raisedTo: ((other @env0:isKindOf: AbstractPyInt)
+	^ self @env0:value raisedTo: ((other isKindOf: AbstractPyInt)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyInt
 min: other
-	^ self @env0:value min: ((other @env0:isKindOf: AbstractPyInt)
+	^ self @env0:value min: ((other isKindOf: AbstractPyInt)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyInt
 max: other
-	^ self @env0:value max: ((other @env0:isKindOf: AbstractPyInt)
+	^ self @env0:value max: ((other isKindOf: AbstractPyInt)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
@@ -310,7 +310,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 		^ super doesNotUnderstand: aSelector args: anArray envId: envId
 	].
 	unwrapped := anArray @env0:collect: [:a |
-		(a @env0:isKindOf: AbstractPyInt) ifTrue: [a @env0:value] ifFalse: [a]].
+		(a isKindOf: AbstractPyInt) ifTrue: [a @env0:value] ifFalse: [a]].
 	^ self @env0:value perform: aSelector env: 1 withArguments: unwrapped
 %
 
@@ -346,7 +346,7 @@ ___new__: positional kw: keywords
 				ifFalse: [int @env1:__new__: (positional @env0:at: 1) _: (positional @env0:at: 2)]]]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: nil].
-	v @env0:== nil ifFalse: [
+	v == nil ifFalse: [
 		inst @env0:dynamicInstVarAt: #value put: v].
 	^ inst
 %

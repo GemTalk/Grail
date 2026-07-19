@@ -180,7 +180,7 @@ send: aValue
 	].
 	consumerSem @env0:wait.
 	done ifTrue: [
-		escapedException @env0:== nil ifFalse: [
+		escapedException == nil ifFalse: [
 			| ex |
 			ex := escapedException.
 			escapedException := nil.
@@ -212,7 +212,7 @@ throw: anException
 		"Body finished — normal completion raises StopIteration; an
 		exception that bubbled out of the body (stowed by _forkBody)
 		re-signals on THIS (consumer) process."
-		escapedException @env0:== nil ifFalse: [
+		escapedException == nil ifFalse: [
 			| ex |
 			ex := escapedException.
 			escapedException := nil.

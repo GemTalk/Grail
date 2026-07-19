@@ -153,7 +153,7 @@ __eq__: other
 	"Two slices are equal iff their (start, stop, step) tuples are
 	equal under Python equality rules."
 
-	(other @env0:isKindOf: slice) ifFalse: [^ false].
+	(other isKindOf: slice) ifFalse: [^ false].
 	^ ((self start = other @env1:start)
 		and: [self stop = other @env1:stop])
 		and: [self step = other @env1:step]

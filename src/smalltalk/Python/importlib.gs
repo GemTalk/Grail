@@ -510,9 +510,9 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	CPython does (each statement is a fresh type).  ___mintedThisLoad___:
 	is reset by loadModuleFromPath:/reload: right before the body runs."
 	minted := self ___mintedThisLoad___: aModuleName.
-	((existing @env0:isKindOf: Behavior)
+	((existing isKindOf: Behavior)
 		and: [(minted @env0:includes: key) @env0:not
-		and: [existing @env0:superclass @env0:== aParent]])
+		and: [existing @env0:superclass == aParent]])
 			ifTrue: [
 				minted @env0:add: key.
 				^ existing].
@@ -575,7 +575,7 @@ ___canonicalClassProbe___: aModuleName name: aClassName
 	self ___canonicalClassesEnabled___ ifFalse: [^ nil].
 	state := SessionTemps @env0:current @env0:at: #'GrailModuleHashState' otherwise: nil.
 	state @env0:isNil ifTrue: [^ nil].
-	((state @env0:at: aModuleName @env0:asString @env0:asSymbol otherwise: nil) @env0:== #'match')
+	((state @env0:at: aModuleName @env0:asString @env0:asSymbol otherwise: nil) == #'match')
 		ifFalse: [^ nil].
 	^ self ___canonicalClassRegistry___
 		@env0:at: (aModuleName @env0:asString @env0:, '.' @env0:, aClassName @env0:asString)
@@ -601,7 +601,7 @@ ___canonicalClassRegister___: aModuleName name: aClassName value: anObject
 	the build, after the class body / metaclass hook / decorators ran --
 	so definitional class-body stores land on (and commit with) the class,
 	while post-definition mutation stays session-local."
-	(anObject @env0:isKindOf: Behavior) ifTrue: [
+	(anObject isKindOf: Behavior) ifTrue: [
 		| set |
 		set := UserGlobals @env0:at: #'GrailCanonicalClassSet' otherwise: nil.
 		set @env0:isNil ifTrue: [
@@ -666,9 +666,9 @@ ___deployCheck___: aModuleName
 						@env0:, ' -> ' @env0:, (self @env0:___deployDescribe___: obj))].
 			"Do NOT descend into Behavior (walks whole class/method graph, and
 			classes are committed anyway); bytes hold no object refs."
-			(obj @env0:isKindOf: Behavior) ifFalse: [
+			(obj isKindOf: Behavior) ifFalse: [
 				self @env0:___deployRefsOf: obj do: [:ref |
-					(ref @env0:~~ nil
+					(ref ~~ nil
 						and: [(ref @env0:isSpecial) @env0:not
 						and: [(ref @env0:isCommitted) @env0:not
 						and: [(visited @env0:includes: ref) @env0:not]]]) ifTrue: [
@@ -685,10 +685,10 @@ ___deploySessionBound___: obj
 	commit + fault into a later session (see ___deployCheck___)."
 
 	| cn |
-	(obj @env0:isKindOf: Semaphore) ifTrue: [^ true].
-	(obj @env0:isKindOf: GsProcess) ifTrue: [^ true].
-	(obj @env0:isKindOf: GsFile) ifTrue: [^ true].
-	(obj @env0:isKindOf: CPointer) ifTrue: [^ true].
+	(obj isKindOf: Semaphore) ifTrue: [^ true].
+	(obj isKindOf: GsProcess) ifTrue: [^ true].
+	(obj isKindOf: GsFile) ifTrue: [^ true].
+	(obj isKindOf: CPointer) ifTrue: [^ true].
 	cn := obj @env0:class @env0:name @env0:asString.
 	(cn @env0:= 'GsSocket') ifTrue: [^ true].
 	(cn @env0:= 'SreMatch') ifTrue: [^ true].
@@ -711,7 +711,7 @@ ___deployRefsOf: obj do: aBlock
 	obj @env0:class @env0:isBytes ifTrue: [^ self].
 	1 @env0:to: obj @env0:class @env0:instSize do: [:i |
 		aBlock @env0:value: (obj @env0:instVarAt: i)].
-	(obj @env0:isKindOf: Collection) ifTrue: [
+	(obj isKindOf: Collection) ifTrue: [
 		(obj @env0:respondsTo: #'keysAndValuesDo:')
 			ifTrue: [[obj @env0:keysAndValuesDo: [:k :v | aBlock @env0:value: k. aBlock @env0:value: v]]
 				@env0:on: AbstractException do: [:e | e @env0:return: nil]]
@@ -754,9 +754,9 @@ ___deployDescribe___: obj
 		^ 'SrePattern (no compileArgs -- cannot recompile in a later session)'].
 	(cn @env0:= 'GsFile') ifTrue: [^ 'GsFile (open OS file handle -- dead after commit/logout)'].
 	(cn @env0:= 'GsSocket') ifTrue: [^ 'GsSocket (open socket -- dead after commit/logout)'].
-	((obj @env0:isKindOf: Semaphore)) ifTrue: [^ 'Semaphore (non-persistable -- commit will FAIL, error 2407)'].
-	((obj @env0:isKindOf: GsProcess)) ifTrue: [^ 'GsProcess (session thread -- not persistable)'].
-	((obj @env0:isKindOf: CPointer)) ifTrue: [^ 'CPointer (raw C address -- NULL after commit/logout)'].
+	((obj isKindOf: Semaphore)) ifTrue: [^ 'Semaphore (non-persistable -- commit will FAIL, error 2407)'].
+	((obj isKindOf: GsProcess)) ifTrue: [^ 'GsProcess (session thread -- not persistable)'].
+	((obj isKindOf: CPointer)) ifTrue: [^ 'CPointer (raw C address -- NULL after commit/logout)'].
 	(cn @env0:= 'SreMatch') ifTrue: [^ 'SreMatch (match object -- has no recompile path)'].
 	(cn @env0:= 'WeakReference') ifTrue: [^ 'WeakReference (faults in DEAD in a later session)'].
 	^ cn @env0:, ' (session-bound)'
@@ -782,7 +782,7 @@ ___resetClassAttrOverlay___: aClass
 	self ___canonicalClassesEnabled___ @env0:ifFalse: [^ aClass].
 	st := SessionTemps @env0:current.
 	ov := st @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
-	ov @env0:== nil ifTrue: [^ aClass].
+	ov == nil ifTrue: [^ aClass].
 	(ov @env0:includesKey: aClass) ifTrue: [ov @env0:removeKey: aClass].
 	^ aClass
 %
@@ -807,11 +807,11 @@ ___canonicalGenerationCheck___
 
 	| st runtimeGen deployGen |
 	st := SessionTemps @env0:current.
-	(st @env0:at: #'GrailCanonicalGenChecked' otherwise: nil) @env0:== true ifTrue: [^ self].
+	(st @env0:at: #'GrailCanonicalGenChecked' otherwise: nil) == true ifTrue: [^ self].
 	st @env0:at: #'GrailCanonicalGenChecked' put: true.
 	runtimeGen := UserGlobals @env0:at: #'GrailRuntimeGeneration' otherwise: 0.
 	deployGen := UserGlobals @env0:at: #'GrailCanonicalDeployGeneration' otherwise: nil.
-	deployGen @env0:== runtimeGen ifTrue: [^ self].
+	deployGen == runtimeGen ifTrue: [^ self].
 	"Stale (or first-ever) deployment: drop every canonical registry."
 	#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes'
 	   #'GrailCanonicalClasses' #'GrailCanonicalClassSet' ) @env0:do: [:k |
@@ -882,8 +882,8 @@ ___syncPersistentState___: aModule
 
 	| names store inner modName |
 	names := aModule @env0:dynamicInstVarAt: #'__persistent__'.
-	names @env0:== nil ifTrue: [^ aModule].
-	(names @env0:isKindOf: Collection) ifFalse: [^ aModule].
+	names == nil ifTrue: [^ aModule].
+	(names isKindOf: Collection) ifFalse: [^ aModule].
 	modName := (aModule @env1:__name__) @env0:asString.
 	store := self ___persistentModuleState___.
 	inner := store @env0:at: modName otherwise: nil.
@@ -898,7 +898,7 @@ ___syncPersistentState___: aModule
 			ifTrue: [aModule @env0:dynamicInstVarAt: sym put: (inner @env0:at: nameStr)]
 			ifFalse: [
 				current := aModule @env0:dynamicInstVarAt: sym.
-				current @env0:== nil ifFalse: [inner @env0:at: nameStr put: current]]].
+				current == nil ifFalse: [inner @env0:at: nameStr put: current]]].
 	^ aModule
 %
 
@@ -918,7 +918,7 @@ ___flushPersistentState___
 		| names inner |
 		names := [mod @env0:dynamicInstVarAt: #'__persistent__']
 			@env0:on: Error do: [:ex | ex @env0:return: nil].
-		(names @env0:~~ nil and: [names @env0:isKindOf: Collection]) ifTrue: [
+		(names ~~ nil and: [names isKindOf: Collection]) ifTrue: [
 			inner := store @env0:at: modKey @env0:asString otherwise: nil.
 			inner @env0:isNil ifTrue: [
 				inner := KeyValueDictionary @env0:new.
@@ -926,7 +926,7 @@ ___flushPersistentState___
 			names @env0:do: [:each |
 				| current |
 				current := mod @env0:dynamicInstVarAt: each @env0:asString @env0:asSymbol.
-				current @env0:== nil ifFalse: [
+				current == nil ifFalse: [
 					inner @env0:at: each @env0:asString put: current]]]].
 	^ self
 %
@@ -1049,7 +1049,7 @@ ___canonicalClassesEnabled___
 	OFF -> ___canonicalSubclassOf: behaves exactly like ___subclass___, so the
 	whole system is unchanged; flip ON per session to exercise reuse."
 
-	^ (SessionTemps @env0:current @env0:at: #'GrailCanonicalClassesEnabled' otherwise: false) @env0:== true
+	^ (SessionTemps @env0:current @env0:at: #'GrailCanonicalClassesEnabled' otherwise: false) == true
 %
 
 category: 'Grail-Canonical Classes'
@@ -1057,7 +1057,7 @@ classmethod: importlib
 ___canonicalClassesEnabled___: aBool
 	"Enable/disable phase-1 canonical-class reuse for THIS session only."
 
-	SessionTemps @env0:current @env0:at: #'GrailCanonicalClassesEnabled' put: aBool @env0:== true.
+	SessionTemps @env0:current @env0:at: #'GrailCanonicalClassesEnabled' put: aBool == true.
 	^ aBool
 %
 
@@ -1117,7 +1117,7 @@ ___runSessionInit___: moduleInstance
 	declared with parameters fails its unary dispatch loudly rather than
 	being silently skipped."
 
-	((moduleInstance @env0:class @env0:whichClassIncludesSelector: #'__session_init__' environmentId: 1) @env0:~~ nil)
+	((moduleInstance @env0:class @env0:whichClassIncludesSelector: #'__session_init__' environmentId: 1) ~~ nil)
 		ifTrue: [moduleInstance @env0:perform: #'__session_init__' env: 1].
 	^ moduleInstance
 %
@@ -1467,7 +1467,7 @@ ___clearSessionCachesFor___: aName
 	temps @env0:keysDo: [:key |
 		| k |
 		k := key @env0:asString.
-		((key @env0:== exact)
+		((key == exact)
 			or: [(k @env0:size @env0:> dotPrefix @env0:size)
 				and: [(k @env0:copyFrom: 1 to: dotPrefix @env0:size) @env0:= dotPrefix]])
 			ifTrue: [toRemove @env0:add: key]].
@@ -1677,7 +1677,7 @@ ___writeMethodSource: aSource on: aStream
 	"Ensure the body ends on its own line — the caller emits ``%''
 	right after this on what should be a fresh line."
 	(aSource @env0:isEmpty
-		or: [aSource @env0:last @env0:== Character lf])
+		or: [aSource @env0:last == Character lf])
 		ifFalse: [aStream lf].
 	aStream @env0:decreaseIndent.
 %
@@ -1762,7 +1762,7 @@ ___selectStorageBase___: bases
 	the other bases' methods."
 
 	bases do: [:b |
-		((b @env0:isKindOf: Behavior) and: [b @env0:inheritsFrom: Collection])
+		((b isKindOf: Behavior) and: [b @env0:inheritsFrom: Collection])
 			ifTrue: [^ b]
 	].
 	"No built-in storage base.  Prefer the base with the DEEPEST
@@ -1779,10 +1779,10 @@ ___selectStorageBase___: bases
 	bestDepth := -1.
 	bases do: [:b |
 		| d w |
-		(b @env0:isKindOf: Behavior) ifTrue: [
+		(b isKindOf: Behavior) ifTrue: [
 			d := 0.
 			w := b.
-			[w @env0:~~ nil] @env0:whileTrue: [d := d @env0:+ 1. w := w @env0:superclass].
+			[w ~~ nil] @env0:whileTrue: [d := d @env0:+ 1. w := w @env0:superclass].
 			d @env0:> bestDepth ifTrue: [bestDepth := d. best := b]
 		]
 	].
@@ -1964,7 +1964,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 	self ___registerBases___: aClass bases: secondaryBases.
 	storageBase := self ___selectStorageBase___: secondaryBases.
 	storageIdx := secondaryBases @env0:indexOf: storageBase.
-	overrideEligible := (storageBase @env0:isKindOf: Behavior)
+	overrideEligible := (storageBase isKindOf: Behavior)
 		and: [(storageBase @env0:inheritsFrom: Collection) @env0:not].
 	secondaryBases doWithIndex: [:base :baseIdx |
 		| walker overrideMode |
@@ -2195,11 +2195,11 @@ ___moduleNameToPath___: aName
 			errors -- e.g. <name>/__init__.py where <name> is a plain
 			FILE (the ./grail CLI script when probing 'import grail');
 			compare == true so nil routes to not-found."
-			((GsFile @env0:existsOnServer: pyPath) @env0:== true)
+			((GsFile @env0:existsOnServer: pyPath) == true)
 				ifTrue: [result := pyPath]
 				ifFalse: [
 					initPath := base @env0:, '/__init__.py'.
-					((GsFile @env0:existsOnServer: initPath) @env0:== true)
+					((GsFile @env0:existsOnServer: initPath) == true)
 						ifTrue: [result := initPath]]]].
 	^ result
 %
@@ -2265,9 +2265,9 @@ ___moduleNameToSoPath___: aName
 				dir := dirPart @env0:isNil
 					ifTrue: [root]
 					ifFalse: [(root @env0:, '/') @env0:, dirPart].
-				((GsFile @env0:isServerDirectory: dir) @env0:== true) ifTrue: [
+				((GsFile @env0:isServerDirectory: dir) == true) ifTrue: [
 					entries := GsFile @env0:contentsOfDirectory: dir onClient: false.
-					(entries @env0:isKindOf: Array) ifTrue: [
+					(entries isKindOf: Array) ifTrue: [
 						entries @env0:do: [:each | | nm idx |
 							result @env0:isNil ifTrue: [
 								nm := each @env0:asString.
@@ -2313,7 +2313,7 @@ lookupModule: aName
 		cls := System @env0:myUserProfile @env0:symbolList
 			@env0:objectNamed: (aName @env0:copyReplaceAll: '.' with: '_') @env0:asSymbol].
 	((cls @env0:notNil)
-		and: [(cls @env0:isKindOf: Behavior)
+		and: [(cls isKindOf: Behavior)
 		and: [cls @env0:inheritsFrom: module]]) ifTrue: [
 		inst := cls @env0:___instance___.
 		self modules @env0:at: sym put: inst.
@@ -2494,7 +2494,7 @@ ___import__: positional kw: kwargs
 			alreadyBound := (fromName @env0:= '*')
 				or: [(fromName @env0:= absoluteName)
 				or: [(fromName @env0:= (nameParts @env0:last))
-				or: [(result @env0:isKindOf: module)
+				or: [(result isKindOf: module)
 				ifTrue: [
 					"Check dynamic instVars first (fast path), then env-1
 					methods (varargs _name:kw:, unary name, fixed-arity

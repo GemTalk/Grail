@@ -46,7 +46,7 @@ __new__: source
 	].
 
 	"If source is a string, raise TypeError (need encoding)"
-	(source @env0:isKindOf: String) ifTrue: [
+	(source isKindOf: String) ifTrue: [
 		TypeError ___signal___: 'string argument without an encoding'
 	].
 
@@ -56,7 +56,7 @@ __new__: source
 	from any bytearray and broke re._compiler._optimize_charset's
 	BIGCHARSET path (``charmap = bytes(charmap)`` lost all 256 bytes
 	of the bitmap)."
-	((sourceClass == bytes) or: [source @env0:isKindOf: bytearray]) ifTrue: [
+	((sourceClass == bytes) or: [source isKindOf: bytearray]) ifTrue: [
 		result := self ___new___: source @env0:size.
 		1 @env0:to: source @env0:size do: [:i |
 			result @env0:at: i put: (source @env0:at: i)
@@ -119,7 +119,7 @@ __new__: source _: encoding
 
 	| result encodingStr |
 	"Source must be a string (String or Unicode7)"
-	((source @env0:isKindOf: String) not) ifTrue: [
+	((source isKindOf: String) not) ifTrue: [
 		TypeError ___signal___: 'encoding without a string argument'
 	].
 
@@ -305,12 +305,12 @@ __contains__: item
 	always reports false because indexOfSubCollection: only handles
 	subcollection-against-subcollection."
 
-	(item @env0:isKindOf: Integer) ifTrue: [
+	(item isKindOf: Integer) ifTrue: [
 		^ self @env0:includes: item
 	].
-	((item @env0:isKindOf: ByteArray) @env0:or: [item @env0:isKindOf: CharacterCollection]) ifTrue: [
+	((item isKindOf: ByteArray) @env0:or: [item isKindOf: CharacterCollection]) ifTrue: [
 		| needle |
-		needle := (item @env0:isKindOf: ByteArray)
+		needle := (item isKindOf: ByteArray)
 			ifTrue: [item]
 			ifFalse: [item @env0:asByteArray].
 		^ (self @env0:indexOfSubCollection: needle) @env0:> 0
@@ -356,16 +356,16 @@ method: bytes
 __getitem__: index
 	"Get byte at index (0-based, supports negative indices) or a slice."
 	| idx size |
-	(index @env0:isKindOf: slice) ifTrue: [
+	(index isKindOf: slice) ifTrue: [
 		^ self @env1:___getslice___: index @env1:start
 			_: index @env1:stop
 			_: index @env1:step
 	].
 	"Non-integer, non-slice index: catchable TypeError instead of an
 	uncatchable env-0 comparison DNU on the index."
-	((index @env0:isKindOf: Integer)
+	((index isKindOf: Integer)
 		or: [(index @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:~~ nil]) ifFalse: [
+			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
 		TypeError @env1:___signal___: ('byte indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	size := self @env0:size.
@@ -589,13 +589,13 @@ rfind: sub _: start _: end
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size.
-	subSize := (sub @env0:isKindOf: SmallInteger)
+	subSize := (sub isKindOf: SmallInteger)
 		@env0:ifTrue: [1] @env0:ifFalse: [sub @env0:size].
 	i := e @env0:- subSize.
 	[i @env0:>= s] @env0:whileTrue: [
 		| match |
 		match := true.
-		(sub @env0:isKindOf: SmallInteger)
+		(sub isKindOf: SmallInteger)
 			ifTrue: [match := (self @env0:at: i @env0:+ 1) @env0:= sub]
 			ifFalse: [
 				1 @env0:to: subSize do: [:j |
@@ -2129,7 +2129,7 @@ rstrip: chars
 	base64.urlsafe_b64encode."
 
 	| charsBytes size end result |
-	charsBytes := (chars @env0:isKindOf: ByteArray)
+	charsBytes := (chars isKindOf: ByteArray)
 		ifTrue: [chars]
 		ifFalse: [chars @env0:asByteArray].
 	size := self @env0:size.
@@ -2149,7 +2149,7 @@ lstrip: chars
 	in `chars`."
 
 	| charsBytes size start result newSize |
-	charsBytes := (chars @env0:isKindOf: ByteArray)
+	charsBytes := (chars isKindOf: ByteArray)
 		ifTrue: [chars]
 		ifFalse: [chars @env0:asByteArray].
 	size := self @env0:size.

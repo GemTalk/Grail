@@ -43,7 +43,7 @@ __new__: cls _: numerator _: denominator
 	result := (num @env0:asFraction) @env0:/ (den @env0:asFraction).
 
 	"Ensure we always return a Fraction, not an Integer"
-	(result @env0:isKindOf: AbstractFraction) ifFalse: [
+	(result isKindOf: AbstractFraction) ifFalse: [
 		result := result @env0:asFraction.
 	].
 	^ result
@@ -55,7 +55,7 @@ __new__: cls _: value
 	"Fraction(value) -> rational equivalent of value"
 
 	value ifNil: [ ^ 0 @env0:asFraction ].
-	(value @env0:isKindOf: Fraction) ifTrue: [ ^ value ].
+	(value isKindOf: Fraction) ifTrue: [ ^ value ].
 
 	"Try to use the Smalltalk asFraction conversion"
 	^ [ value @env0:asFraction ]
@@ -71,7 +71,7 @@ from_decimal: d
 
 	| frac |
 	"Must be a ScaledDecimal (Decimal)"
-	(d @env0:_isScaledDecimal) ifFalse: [
+	(d _isScaledDecimal) ifFalse: [
 		TypeError ___signal___: 'Fraction.from_decimal() argument must be a Decimal'
 	].
 
@@ -88,12 +88,12 @@ from_float: f
 
 	| frac kind |
 	"Handle integers by converting to float first"
-	(f @env0:isKindOf: Integer) ifTrue: [
+	(f isKindOf: Integer) ifTrue: [
 		^ Fraction ___new___: Fraction _: f _: 1
 	].
 
 	"Must be a float"
-	(f @env0:isKindOf: Float) ifFalse: [
+	(f isKindOf: Float) ifFalse: [
 		TypeError ___signal___: 'Fraction.from_float() argument must be a float'
 	].
 

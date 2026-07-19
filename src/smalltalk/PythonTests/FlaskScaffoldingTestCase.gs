@@ -4394,7 +4394,7 @@ testInstanceDict
 	cls := mod @env1:FirstParamSelf.
 	obj := cls @env1:value: { 'label-value' } value: nil.
 	d := obj @env1:__dict__.
-	self assert: (d @env0:isKindOf: PyInstanceDict).
+	self assert: (d isKindOf: PyInstanceDict).
 	"Phase B: ``label'' set in __init__ also shows up here (the old
 	``Smalltalk instVar vs ___dict___'' split is gone — everything
 	lives in dynamic-instVar storage)."

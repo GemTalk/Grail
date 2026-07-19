@@ -80,7 +80,7 @@ at: aKey
 	| val sym |
 	sym := aKey @env0:asSymbol.
 	val := source @env0:dynamicInstVarAt: sym.
-	val @env0:== nil ifTrue: [
+	val == nil ifTrue: [
 		^ source @env0:_errorKeyNotFound: aKey
 	].
 	^ val
@@ -94,7 +94,7 @@ at: aKey ifAbsent: aBlock
 	| val sym |
 	sym := aKey @env0:asSymbol.
 	val := source @env0:dynamicInstVarAt: sym.
-	val @env0:== nil ifTrue: [^ aBlock @env0:value].
+	val == nil ifTrue: [^ aBlock @env0:value].
 	^ val
 %
 
@@ -110,7 +110,7 @@ at: aKey put: aValue
 category: 'Grail-Smalltalk-Protocol'
 method: PyInstanceDict
 includesKey: aKey
-	^ (source @env0:dynamicInstVarAt: aKey @env0:asSymbol) @env0:~~ nil
+	^ (source @env0:dynamicInstVarAt: aKey @env0:asSymbol) ~~ nil
 %
 
 category: 'Grail-Smalltalk-Protocol'
@@ -166,7 +166,7 @@ __getitem__: key
 	| val sym |
 	sym := key @env0:asSymbol.
 	val := source @env0:dynamicInstVarAt: sym.
-	val @env0:== nil ifTrue: [
+	val == nil ifTrue: [
 		KeyError @env1:___signal___: key @env0:printString
 	].
 	^ val
@@ -182,7 +182,7 @@ __setitem__: key _: value
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
 __contains__: key
-	^ (source @env0:dynamicInstVarAt: key @env0:asSymbol) @env0:~~ nil
+	^ (source @env0:dynamicInstVarAt: key @env0:asSymbol) ~~ nil
 %
 
 category: 'Grail-Python-Protocol'
@@ -203,7 +203,7 @@ get: key _: default
 	| val sym |
 	sym := key @env0:asSymbol.
 	val := source @env0:dynamicInstVarAt: sym.
-	val @env0:== nil ifTrue: [^ default].
+	val == nil ifTrue: [^ default].
 	^ val
 %
 
@@ -290,7 +290,7 @@ pop: key
 	| sym val |
 	sym := key @env0:asSymbol.
 	val := source @env0:dynamicInstVarAt: sym.
-	val @env0:== nil ifTrue: [
+	val == nil ifTrue: [
 		KeyError @env1:___signal___: key @env0:printString
 	].
 	source @env0:removeDynamicInstVar: sym.
@@ -305,7 +305,7 @@ pop: key _: default
 	| sym val |
 	sym := key @env0:asSymbol.
 	val := source @env0:dynamicInstVarAt: sym.
-	val @env0:== nil ifTrue: [^ default].
+	val == nil ifTrue: [^ default].
 	source @env0:removeDynamicInstVar: sym.
 	^ val
 %
@@ -322,7 +322,7 @@ setdefault: key _: default
 	| sym val |
 	sym := key @env0:asSymbol.
 	val := source @env0:dynamicInstVarAt: sym.
-	val @env0:== nil ifTrue: [
+	val == nil ifTrue: [
 		source @env0:dynamicInstVarAt: sym put: default.
 		^ default
 	].

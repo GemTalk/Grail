@@ -46,9 +46,9 @@ _setWrapped: aFunction maxsize: aMaxsize
 	unbounded, an acceptable perf-only deviation); a NEGATIVE integer
 	-> 0, which DOES change behavior (0 disables caching entirely, so
 	every call is a miss).  cache_info reports the normalized value."
-	maxsize := (aMaxsize @env0:== nil or: [aMaxsize @env0:== None])
+	maxsize := (aMaxsize == nil or: [aMaxsize == None])
 		ifTrue: [None]
-		ifFalse: [(aMaxsize @env0:isKindOf: Integer)
+		ifFalse: [(aMaxsize isKindOf: Integer)
 			ifTrue: [aMaxsize @env0:< 0 ifTrue: [0] ifFalse: [aMaxsize]]
 			ifFalse: [None]]
 %
@@ -90,11 +90,11 @@ value: positional value: kwargs
 	| key result |
 	"maxsize 0 disables caching entirely -- every call misses and
 	nothing is retained (test_lru_cache_size_zero / negative maxsize)."
-	maxsize @env0:== 0 ifTrue: [
-		misses := (misses @env0:== nil ifTrue: [0] ifFalse: [misses]) @env0:+ 1.
+	maxsize == 0 ifTrue: [
+		misses := (misses == nil ifTrue: [0] ifFalse: [misses]) @env0:+ 1.
 		^ wrapped @env1:value: positional value: kwargs].
-	key := (positional @env0:== nil ifTrue: [#()] ifFalse: [positional]) @env0:asArray.
-	(kwargs @env0:~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
+	key := (positional == nil ifTrue: [#()] ifFalse: [positional]) @env0:asArray.
+	(kwargs ~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
 		| pairs sortedKeys |
 		pairs := OrderedCollection @env0:new.
 		sortedKeys := kwargs @env0:keys @env0:asSortedCollection.
@@ -102,13 +102,13 @@ value: positional value: kwargs
 			pairs @env0:add: k.
 			pairs @env0:add: (kwargs @env0:at: k)].
 		key := key @env0:, pairs @env0:asArray].
-	cache @env0:== nil ifTrue: [cache := KeyValueDictionary @env0:new].
+	cache == nil ifTrue: [cache := KeyValueDictionary @env0:new].
 	result := cache @env0:at: key ifAbsent: [nil].
-	result @env0:== nil ifFalse: [
-		hits := (hits @env0:== nil ifTrue: [0] ifFalse: [hits]) @env0:+ 1.
+	result == nil ifFalse: [
+		hits := (hits == nil ifTrue: [0] ifFalse: [hits]) @env0:+ 1.
 		^ result].
 	result := wrapped @env1:value: positional value: kwargs.
-	misses := (misses @env0:== nil ifTrue: [0] ifFalse: [misses]) @env0:+ 1.
+	misses := (misses == nil ifTrue: [0] ifFalse: [misses]) @env0:+ 1.
 	cache @env0:at: key put: result.
 	^ result
 %
@@ -156,10 +156,10 @@ cache_info
 	count."
 
 	^ functools_CacheInfo
-		hits: (hits @env0:== nil ifTrue: [0] ifFalse: [hits])
-		misses: (misses @env0:== nil ifTrue: [0] ifFalse: [misses])
-		maxsize: (maxsize @env0:== nil ifTrue: [None] ifFalse: [maxsize])
-		currsize: (cache @env0:== nil ifTrue: [0] ifFalse: [cache @env0:size])
+		hits: (hits == nil ifTrue: [0] ifFalse: [hits])
+		misses: (misses == nil ifTrue: [0] ifFalse: [misses])
+		maxsize: (maxsize == nil ifTrue: [None] ifFalse: [maxsize])
+		currsize: (cache == nil ifTrue: [0] ifFalse: [cache @env0:size])
 %
 
 category: 'Grail-Attributes'

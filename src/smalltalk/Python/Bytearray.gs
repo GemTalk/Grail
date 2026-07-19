@@ -91,7 +91,7 @@ __new__: source
 	].
 
 	"If source is a string, raise TypeError (need encoding)"
-	(source @env0:isKindOf: String) ifTrue: [
+	(source isKindOf: String) ifTrue: [
 		TypeError ___signal___: 'string argument without an encoding'
 	].
 
@@ -161,7 +161,7 @@ __new__: source _: encoding
 
 	| result encodingStr |
 	"Source must be a string"
-	((source @env0:isKindOf: String) not) ifTrue: [
+	((source isKindOf: String) not) ifTrue: [
 		TypeError ___signal___: 'encoding without a string argument'
 	].
 
@@ -349,7 +349,7 @@ __setitem__: index _: value
 	size := self @env0:size.
 
 	"Slice assignment: bytearray[i:j[:k]] = bytes-like."
-	(index @env0:isKindOf: slice) ifTrue: [
+	(index isKindOf: slice) ifTrue: [
 		^ self ___setSliceItem: index value: value size: size
 	].
 
@@ -430,8 +430,8 @@ ___bytesFrom: value
 
 	| cls out |
 	cls := value @env0:class.
-	((cls @env0:== bytes) or: [(cls @env0:== bytearray)
-		or: [(cls @env0:== list) or: [cls @env0:== tuple]]]) ifFalse: [
+	((cls == bytes) or: [(cls == bytearray)
+		or: [(cls == list) or: [cls == tuple]]]) ifFalse: [
 			TypeError ___signal___:
 				'can assign only a bytes-like object to a bytearray slice'
 	].
@@ -678,7 +678,7 @@ find: sub _: start _: end
 	lo := start @env0:max: 0.
 	hi := end @env0:min: size.
 	"Single byte value: linear scan."
-	(sub @env0:isKindOf: SmallInteger) ifTrue: [
+	(sub isKindOf: SmallInteger) ifTrue: [
 		lo @env0:+ 1 @env0:to: hi do: [:i |
 			(self @env0:at: i) @env0:= sub ifTrue: [
 				^ i @env0:- 1

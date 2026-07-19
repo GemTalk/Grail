@@ -70,7 +70,7 @@ __next__
 	| item keep |
 	[true] @env0:whileTrue: [
 		item := source __next__.
-		(func @env0:== None)
+		(func == None)
 			ifTrue: [keep := item ___isTruthy___]
 			ifFalse: [keep := (func value: { item } value: nil) ___isTruthy___].
 		keep ifTrue: [^ item]]

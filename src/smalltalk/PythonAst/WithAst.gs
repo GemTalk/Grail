@@ -106,7 +106,7 @@ printItem: anIndex onStream: aStream
 	says the manager sees a clean __exit__(None, None, None) and the
 	control-flow signal continues to its real target.  Filter them out
 	before invoking __exit__ with exception details."
-	aStream nextPutAll: '((___ex___ @env0:isKindOf: PythonReturn) @env0:or: [(___ex___ @env0:isKindOf: PythonBreak) @env0:or: [___ex___ @env0:isKindOf: PythonContinue]]) ifTrue: ['; lf.
+	aStream nextPutAll: '((___ex___ isKindOf: PythonReturn) @env0:or: [(___ex___ isKindOf: PythonBreak) @env0:or: [___ex___ isKindOf: PythonContinue]]) ifTrue: ['; lf.
 	aStream nextPutAll: '    ___cm___ @env1:__exit__: None _: None _: None.'; lf.
 	aStream nextPutAll: '    ___ex___ @env0:pass'; lf.
 	aStream nextPutAll: '].'; lf.

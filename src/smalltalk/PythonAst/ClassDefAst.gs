@@ -385,7 +385,7 @@ printSmalltalkRuntimeOn: aStream
 		aStream nextPutAll: ' name: '.
 		self printQuotedString: name asString on: aStream.
 		aStream nextPutAll: '.'; lf;
-			nextPutAll: name; nextPutAll: ' @env0:== nil ifTrue: ['; lf.
+			nextPutAll: name; nextPutAll: ' == nil ifTrue: ['; lf.
 	].
 	"Phase B: instance attributes live in dynamic-instVar storage on
 	each instance (created on first write via ``dynamicInstVarAt:put:'').
@@ -897,7 +897,7 @@ printSmalltalkRuntimeOn: aStream
 	attr-value section already forced the holder into existence --
 	an unconditional overwrite here wiped it (Outer.A vanished)."
 	aStream nextPutAll: name;
-		nextPutAll: ' dynInstVars @env0:== nil ifTrue: [';
+		nextPutAll: ' dynInstVars == nil ifTrue: [';
 		nextPutAll: name;
 		nextPutAll: ' dynInstVars: (Object @env0:new)].'; lf.
 
@@ -1276,7 +1276,7 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 	src
 		nextPutAll: 'dynInit := self @env1:___dynamicClassAttr___: #''__init__''.';
 		nextPutAll: lf;
-		nextPutAll: 'dynInit @env0:== nil ifFalse: [';
+		nextPutAll: 'dynInit == nil ifFalse: [';
 		nextPutAll: 'dynInit @env1:___pyCallValue___: ({ instance } @env0:, ___pos___) kw: ___kw___.';
 		nextPutAll: '^ instance].';
 		nextPutAll: lf.

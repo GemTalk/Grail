@@ -193,7 +193,7 @@ deploy_check: aModule
 	Accepts a module object or its dotted-name string.  Never commits."
 
 	| name |
-	name := (aModule @env0:isKindOf: CharacterCollection)
+	name := (aModule isKindOf: CharacterCollection)
 		ifTrue: [aModule @env0:asString]
 		ifFalse: [(aModule @env1:__name__) @env0:asString].
 	^ importlib @env0:___deployCheck___: name

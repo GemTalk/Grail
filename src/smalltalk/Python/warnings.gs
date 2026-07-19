@@ -86,7 +86,7 @@ method: warnings
 _resolveCategory: category
 	"Default to UserWarning when caller passes nil/None."
 
-	(category @env0:== nil @env0:or: [category @env0:== None]) ifTrue: [^ UserWarning].
+	(category == nil @env0:or: [category == None]) ifTrue: [^ UserWarning].
 	^ category
 %
 
@@ -104,10 +104,10 @@ _actionFor: message _: category
 		| catMatch msgMatch fCat fMsg |
 		fCat := f @env0:at: 2.
 		fMsg := f @env0:at: 3.
-		catMatch := fCat @env0:== nil
-			@env0:or: [category @env0:== fCat
+		catMatch := fCat == nil
+			@env0:or: [category == fCat
 				@env0:or: [category @env0:inheritsFrom: fCat]].
-		msgMatch := fMsg @env0:== nil
+		msgMatch := fMsg == nil
 			@env0:or: [(msgStr @env0:indexOfSubCollection: fMsg) @env0:> 0].
 		(catMatch @env0:and: [msgMatch]) ifTrue: [^ f @env0:at: 1]
 	].
@@ -143,7 +143,7 @@ _warn: positional kw: keywords
 		TypeError ___signal___: 'warn() missing required argument: message'].
 	msg := positional @env0:at: 1.
 	cat := nargs @env0:>= 2 ifTrue: [positional @env0:at: 2] ifFalse: [nil].
-	(cat @env0:== nil and: [keywords @env0:~~ nil]) ifTrue: [
+	(cat == nil and: [keywords ~~ nil]) ifTrue: [
 		(keywords @env0:includesKey: 'category') ifTrue: [
 			cat := keywords @env0:at: 'category']].
 	^ self @env1:warn: msg _: cat

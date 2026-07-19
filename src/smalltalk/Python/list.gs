@@ -46,7 +46,7 @@ __new__: iterable
 
 	| result iter done cls hasIter hasGetitem |
 	result := self ___new___.
-	(iterable @env0:isKindOf: SequenceableCollection) ifTrue: [
+	(iterable isKindOf: SequenceableCollection) ifTrue: [
 		1 @env0:to: iterable @env0:size do: [:i |
 			result @env0:add: (iterable @env0:at: i)
 		].
@@ -85,12 +85,12 @@ __delitem__: index
 	literal-buffer reset) and friends compile to."
 
 	| size idx |
-	(index @env0:isKindOf: slice) ifTrue: [
+	(index isKindOf: slice) ifTrue: [
 		^ self @env1:___delSlice___: index
 	].
-	((index @env0:isKindOf: Integer)
+	((index isKindOf: Integer)
 		or: [(index @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:~~ nil]) ifFalse: [
+			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
 		TypeError @env1:___signal___: ('list indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	size := self @env0:size.
@@ -206,7 +206,7 @@ _new: positional kw: kwargs
 	more than one positional; raise the catchable TypeError instead of
 	an uncatchable MNU (list_tests' test_keyword_args)."
 
-	(kwargs @env0:~~ nil and: [kwargs @env0:size @env0:> 0]) ifTrue: [
+	(kwargs ~~ nil and: [kwargs @env0:size @env0:> 0]) ifTrue: [
 		TypeError ___signal___: 'list() takes no keyword arguments'].
 	positional @env0:size @env0:> 1 ifTrue: [
 		TypeError ___signal___: 'list expected at most 1 argument, got '
@@ -272,12 +272,12 @@ __setitem__: index _: value
 	via ``subpattern[i:i+1] = p``."
 
 	| size idx |
-	(index @env0:isKindOf: slice) ifTrue: [
+	(index isKindOf: slice) ifTrue: [
 		^ self @env1:___setSlice___: index _: value
 	].
-	((index @env0:isKindOf: Integer)
+	((index isKindOf: Integer)
 		or: [(index @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:~~ nil]) ifFalse: [
+			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
 		TypeError @env1:___signal___: ('list indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 
@@ -319,7 +319,7 @@ ___setSlice___: aSlice _: anIterable
 	asArray -- and that loop runs USER __iter__ code which may mutate
 	self (gh-120384: an evil iterable clearing the target list), so
 	the slice indices must be computed from the post-iteration size."
-	values := (anIterable @env0:isKindOf: SequenceableCollection)
+	values := (anIterable isKindOf: SequenceableCollection)
 		ifTrue: [anIterable @env0:asArray]
 		ifFalse: [(list @env1:__new__: anIterable) @env0:asArray].
 	len := values @env0:size.
@@ -399,11 +399,11 @@ extend: iterable
 	non-collections (a.extend(None)) -- probe for iterability and route
 	Python-protocol iterables through __iter__/__next__ instead."
 
-	(iterable @env0:isKindOf: Collection) ifTrue: [
+	(iterable isKindOf: Collection) ifTrue: [
 		self @env0:addAll: iterable.
 		^ None].
 	((iterable @env0:class
-		@env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) @env0:~~ nil) ifTrue: [
+		@env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) ~~ nil) ifTrue: [
 		| iter done |
 		iter := iterable __iter__.
 		done := false.

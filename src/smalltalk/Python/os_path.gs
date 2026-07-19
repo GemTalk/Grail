@@ -76,7 +76,7 @@ join: paths
 	the elements when called with a list/tuple.  Variadic calls
 	``join(a, b, c)'' go through ``_join:kw:'' (2+ positional args)."
 
-	((paths @env0:isKindOf: CharacterCollection)) ifTrue: [^ paths].
+	((paths isKindOf: CharacterCollection)) ifTrue: [^ paths].
 	^ self ___joinComponents___: paths
 %
 

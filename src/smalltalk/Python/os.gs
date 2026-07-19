@@ -132,8 +132,8 @@ fspath: path
 	short-circuits: strings and bytes pass through; user objects
 	delegate to __fspath__ if defined."
 
-	(path @env0:isKindOf: CharacterCollection) ifTrue: [^ path].
-	(path @env0:isKindOf: ByteArray) ifTrue: [^ path].
+	(path isKindOf: CharacterCollection) ifTrue: [^ path].
+	(path isKindOf: ByteArray) ifTrue: [^ path].
 	((path @env0:class @env0:methodDictForEnv: 1) @env0:includesKey: #'__fspath__')
 		ifTrue: [^ path @env1:__fspath__].
 	TypeError @env1:___signal___: 'expected str, bytes, or os.PathLike'
@@ -146,7 +146,7 @@ fsdecode: filename
 	the filesystem encoding.  Grail uses UTF-8 throughout.  Bytes
 	input decodes; str input passes through."
 
-	(filename @env0:isKindOf: ByteArray)
+	(filename isKindOf: ByteArray)
 		ifTrue: [^ filename @env1:decode: 'utf-8'].
 	^ filename
 %
@@ -156,7 +156,7 @@ method: os
 fsencode: filename
 	"``os.fsencode(filename)'' — inverse of fsdecode."
 
-	(filename @env0:isKindOf: CharacterCollection)
+	(filename isKindOf: CharacterCollection)
 		ifTrue: [^ filename @env1:encode: 'utf-8'].
 	^ filename
 %
@@ -222,9 +222,9 @@ getcwd
 
 	| result |
 	result := GsFile @env0:_directoryPrim: 2 with: nil with: nil.
-	(result @env0:isKindOf: String) ifTrue: [^ result].
-	(result @env0:isKindOf: Utf8) ifTrue: [^ result @env0:decodeToUnicode].
-	(result @env0:isKindOf: Utf16) ifTrue: [^ result @env0:decodeToUnicode].
+	(result isKindOf: String) ifTrue: [^ result].
+	(result isKindOf: Utf8) ifTrue: [^ result @env0:decodeToUnicode].
+	(result isKindOf: Utf16) ifTrue: [^ result @env0:decodeToUnicode].
 	^ result @env0:asUnicodeString
 %
 
@@ -350,16 +350,16 @@ _listdir: positional kw: kwargs
 	actualPath := (positional @env0:size @env0:>= 1) ifTrue: [positional @env0:at: 1] ifFalse: [nil].
 	actualPath == nil ifTrue: [actualPath := self getcwd].
 	dirContents := GsFile @env0:contentsOfDirectory: actualPath onClient: false.
-	(dirContents @env0:isKindOf: Array) ifFalse: [
+	(dirContents isKindOf: Array) ifFalse: [
 		OSError ___signal___: ('Cannot list directory: ' @env0:, (actualPath @env0:printString))
 	].
 	result := list ___new___.
 	dirContents @env0:do: [:each |
 		| decoded basename reversedPath index lastSlashIndex |
 		decoded := each.
-		(each @env0:isKindOf: Utf8) ifTrue: [decoded := each @env0:decodeToUnicode].
-		(each @env0:isKindOf: Utf16) ifTrue: [decoded := each @env0:decodeToUnicode].
-		(each @env0:isKindOf: String) ifFalse: [decoded := each @env0:asUnicodeString].
+		(each isKindOf: Utf8) ifTrue: [decoded := each @env0:decodeToUnicode].
+		(each isKindOf: Utf16) ifTrue: [decoded := each @env0:decodeToUnicode].
+		(each isKindOf: String) ifFalse: [decoded := each @env0:asUnicodeString].
 		reversedPath := decoded @env0:reverse.
 		index := reversedPath @env0:findString: '/' startingAt: 1.
 		(index == 0) ifFalse: [

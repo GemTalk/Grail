@@ -73,9 +73,9 @@ testAutoCallableAfterImport
 	a := result @env0:at: 1.
 	b := result @env0:at: 2.
 	c := result @env0:at: 3.
-	self assert: (a @env0:isKindOf: GrailEnumAuto).
-	self assert: (b @env0:isKindOf: GrailEnumAuto).
-	self assert: (c @env0:isKindOf: GrailEnumAuto).
+	self assert: (a isKindOf: GrailEnumAuto).
+	self assert: (b isKindOf: GrailEnumAuto).
+	self assert: (c isKindOf: GrailEnumAuto).
 	"Each call returns a distinct marker object."
 	self deny: a == b.
 	self deny: b == c.

@@ -53,7 +53,7 @@ value: positional value: keywords
 	instance := SymbolDictionary @env0:new.
 	"Copy all entries from class to instance, wrapping closures as bound methods"
 	self @env0:keysAndValuesDo: [:k :v |
-		(v @env0:isKindOf: ExecBlock) ifTrue: [
+		(v isKindOf: ExecBlock) ifTrue: [
 			"Wrap closure to auto-inject instance as first positional arg"
 			instance @env0:at: k put: [:pos :kw | v value: (({instance} @env0:, pos)) value: kw].
 		] ifFalse: [

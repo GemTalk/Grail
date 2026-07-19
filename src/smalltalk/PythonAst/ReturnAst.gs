@@ -74,8 +74,8 @@ printSmalltalkOn: aStream
 	                   Python function the user wants to return
 	                   from."
 
-	((CallAst returnEmitMode @env0:== #direct)
-		or: [CallAst returnEmitMode @env0:== #directMethod])
+	((CallAst returnEmitMode == #direct)
+		or: [CallAst returnEmitMode == #directMethod])
 		ifTrue: [aStream nextPutAll: '^ ']
 		ifFalse: [aStream nextPutAll: 'PythonReturn ___signal___: '].
 	value ifNil: [

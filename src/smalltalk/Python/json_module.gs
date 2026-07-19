@@ -97,13 +97,13 @@ _dumps: positional kw: kwargs
 	default := nil.
 	kwargs @env0:isNil ifFalse: [
 		indent := kwargs @env0:at: 'indent' ifAbsent: [nil].
-		indent @env0:== None ifTrue: [indent := nil].
+		indent == None ifTrue: [indent := nil].
 		separators := kwargs @env0:at: 'separators' ifAbsent: [nil].
-		separators @env0:== None ifTrue: [separators := nil].
-		sortKeys := (kwargs @env0:at: 'sort_keys' ifAbsent: [false]) @env0:== true.
-		ensureAscii := (kwargs @env0:at: 'ensure_ascii' ifAbsent: [true]) @env0:~~ false.
+		separators == None ifTrue: [separators := nil].
+		sortKeys := (kwargs @env0:at: 'sort_keys' ifAbsent: [false]) == true.
+		ensureAscii := (kwargs @env0:at: 'ensure_ascii' ifAbsent: [true]) ~~ false.
 		default := kwargs @env0:at: 'default' ifAbsent: [nil].
-		default @env0:== None ifTrue: [default := nil]
+		default == None ifTrue: [default := nil]
 	].
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
 	"Build separator pair: (item, key) - defaults to (', ', ': ') when
@@ -151,7 +151,7 @@ loads: s
 	per CPython 3.6+."
 
 	| text state result |
-	text := (s @env0:isKindOf: ByteArray)
+	text := (s isKindOf: ByteArray)
 		@env0:ifTrue: [s @env1:decode: 'utf-8']
 		@env0:ifFalse: [s @env0:asString].
 	state := Array @env0:with: text with: 1.
@@ -190,23 +190,23 @@ method: json
 _encode: obj onto: stream indent: indent depth: depth separators: sep ensureAscii: ensureAscii sortKeys: sortKeys default: default
 	"Dispatch to a type-specific encoder."
 
-	obj @env0:== nil ifTrue: [^ stream @env0:nextPutAll: 'null'].
-	obj @env0:== None ifTrue: [^ stream @env0:nextPutAll: 'null'].
-	obj @env0:== true ifTrue: [^ stream @env0:nextPutAll: 'true'].
-	obj @env0:== false ifTrue: [^ stream @env0:nextPutAll: 'false'].
-	(obj @env0:isKindOf: Integer) ifTrue: [^ stream @env0:nextPutAll: obj @env0:printString].
-	(obj @env0:isKindOf: Float) ifTrue: [
+	obj == nil ifTrue: [^ stream @env0:nextPutAll: 'null'].
+	obj == None ifTrue: [^ stream @env0:nextPutAll: 'null'].
+	obj == true ifTrue: [^ stream @env0:nextPutAll: 'true'].
+	obj == false ifTrue: [^ stream @env0:nextPutAll: 'false'].
+	(obj isKindOf: Integer) ifTrue: [^ stream @env0:nextPutAll: obj @env0:printString].
+	(obj isKindOf: Float) ifTrue: [
 		^ self @env1:_encodeFloat: obj onto: stream
 	].
-	(obj @env0:isKindOf: CharacterCollection) ifTrue: [
+	(obj isKindOf: CharacterCollection) ifTrue: [
 		^ self @env1:_encodeString: obj onto: stream ensureAscii: ensureAscii
 	].
-	((obj @env0:isKindOf: Array) @env0:or: [obj @env0:isKindOf: OrderedCollection]) ifTrue: [
+	((obj isKindOf: Array) @env0:or: [obj isKindOf: OrderedCollection]) ifTrue: [
 		^ self @env1:_encodeArray: obj onto: stream
 			indent: indent depth: depth separators: sep
 			ensureAscii: ensureAscii sortKeys: sortKeys default: default
 	].
-	(obj @env0:isKindOf: KeyValueDictionary) ifTrue: [
+	(obj isKindOf: KeyValueDictionary) ifTrue: [
 		^ self @env1:_encodeObject: obj onto: stream
 			indent: indent depth: depth separators: sep
 			ensureAscii: ensureAscii sortKeys: sortKeys default: default
@@ -376,7 +376,7 @@ _writeIndent: indent depth: depth onto: stream
 	emit that many spaces, both times the depth."
 
 	| chunk buf |
-	(indent @env0:isKindOf: Integer) ifTrue: [
+	(indent isKindOf: Integer) ifTrue: [
 		buf := WriteStream @env0:on: Unicode7 @env0:new.
 		1 @env0:to: indent do: [:i | buf @env0:nextPut: Character @env0:space].
 		chunk := buf @env0:contents

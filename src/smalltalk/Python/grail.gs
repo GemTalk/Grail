@@ -143,7 +143,7 @@ _smalltalk: args kw: kw
 	first := (args @env0:isNil or: [args @env0:isEmpty])
 		ifTrue: [nil]
 		ifFalse: [args @env0:at: 1].
-	(first @env0:isKindOf: CharacterCollection) ifTrue: [
+	(first isKindOf: CharacterCollection) ifTrue: [
 		"Factory form @smalltalk('sel'): return an identity decorator."
 		^ [:a2 :k2 | a2 @env0:at: 1]].
 	"Bare form @smalltalk applied to the function: return it unchanged."

@@ -157,7 +157,7 @@ __getitem__: key
 	| absent val |
 	absent := Object @env0:new.
 	val := source @env1:___globalAt___: key @env0:asSymbol otherwise: [absent].
-	val @env0:== absent ifTrue: [
+	val == absent ifTrue: [
 		KeyError @env1:___signal___: key @env0:printString].
 	^ val
 %
@@ -167,7 +167,7 @@ method: PyModuleDict
 __contains__: key
 	| absent |
 	absent := Object @env0:new.
-	^ (source @env1:___globalAt___: key @env0:asSymbol otherwise: [absent]) @env0:~~ absent
+	^ (source @env1:___globalAt___: key @env0:asSymbol otherwise: [absent]) ~~ absent
 %
 
 category: 'Grail-Python-Protocol'
@@ -182,7 +182,7 @@ get: key _: default
 	| absent val |
 	absent := Object @env0:new.
 	val := source @env1:___globalAt___: key @env0:asSymbol otherwise: [absent].
-	val @env0:== absent ifTrue: [^ default].
+	val == absent ifTrue: [^ default].
 	^ val
 %
 
@@ -224,7 +224,7 @@ pop: key
 	| sym val |
 	sym := key @env0:asSymbol.
 	val := source @env0:dynamicInstVarAt: sym.
-	val @env0:== nil ifFalse: [
+	val == nil ifFalse: [
 		source @env0:removeDynamicInstVar: sym.
 		^ val].
 	(source @env0:includesKey: sym) ifTrue: [
@@ -240,7 +240,7 @@ pop: key _: default
 	| sym val |
 	sym := key @env0:asSymbol.
 	val := source @env0:dynamicInstVarAt: sym.
-	val @env0:== nil ifFalse: [
+	val == nil ifFalse: [
 		source @env0:removeDynamicInstVar: sym.
 		^ val].
 	(source @env0:includesKey: sym) ifTrue: [
@@ -259,7 +259,7 @@ setdefault: key _: default
 	| absent val |
 	absent := Object @env0:new.
 	val := source @env1:___globalAt___: key @env0:asSymbol otherwise: [absent].
-	val @env0:== absent ifTrue: [
+	val == absent ifTrue: [
 		source @env0:dynamicInstVarAt: key @env0:asSymbol put: default.
 		^ default].
 	^ val

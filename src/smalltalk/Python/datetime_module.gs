@@ -169,7 +169,7 @@ ___totalMicros___
 category: 'Grail-Arithmetic'
 method: PyTimedelta
 __add__: other
-	(other @env0:isKindOf: PyTimedelta) ifTrue: [
+	(other isKindOf: PyTimedelta) ifTrue: [
 		^ PyTimedelta @env0:___fromTotalMicros___:
 			(self @env1:___totalMicros___ @env0:+ other @env1:___totalMicros___)
 	].
@@ -179,7 +179,7 @@ __add__: other
 category: 'Grail-Arithmetic'
 method: PyTimedelta
 __sub__: other
-	(other @env0:isKindOf: PyTimedelta) ifTrue: [
+	(other isKindOf: PyTimedelta) ifTrue: [
 		^ PyTimedelta @env0:___fromTotalMicros___:
 			(self @env1:___totalMicros___ @env0:- other @env1:___totalMicros___)
 	].
@@ -211,7 +211,7 @@ __abs__
 category: 'Grail-Equality'
 method: PyTimedelta
 __eq__: other
-	(other @env0:isKindOf: PyTimedelta) ifFalse: [^ false].
+	(other isKindOf: PyTimedelta) ifFalse: [^ false].
 	^ self @env1:___totalMicros___ @env0:= other @env1:___totalMicros___
 %
 
@@ -535,7 +535,7 @@ _datetime: positional kw: kwargs
 		micro := kwargs @env0:at: 'microsecond' ifAbsent: [micro].
 		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz]
 	].
-	tz @env0:== None ifTrue: [tz := nil].
+	tz == None ifTrue: [tz := nil].
 	^ self @env0:___fromFields___: year _: month _: day _: hour _: minute _: second _: micro _: tz
 %
 
@@ -556,7 +556,7 @@ now: tz
 	| dt micros tz2 |
 	dt := DateTime @env0:now.
 	micros := ((dt @env0:instVarAt: 3) @env0:\\ 1000) @env0:* 1000.
-	tz2 := tz @env0:== None ifTrue: [nil] ifFalse: [tz].
+	tz2 := tz == None ifTrue: [nil] ifFalse: [tz].
 	^ self @env0:___fromFields___:
 		(dt @env0:yearGmt)
 		_: (dt @env0:monthGmt)
@@ -589,7 +589,7 @@ fromtimestamp: ts _: tz
 	"fromtimestamp(ts[, tz]) - Unix epoch seconds to PyDateTime."
 
 	| epoch dt secs micros tz2 |
-	tz2 := tz @env0:== None ifTrue: [nil] ifFalse: [tz].
+	tz2 := tz == None ifTrue: [nil] ifFalse: [tz].
 	secs := ts @env0:truncated.
 	micros := ((ts @env0:- secs) @env0:* 1000000) @env0:truncated.
 	epoch := DateTime
@@ -850,7 +850,7 @@ __add__: other
 	by DateTime arithmetic."
 
 	| newTs result |
-	(other @env0:isKindOf: PyTimedelta) ifFalse: [
+	(other isKindOf: PyTimedelta) ifFalse: [
 		^ TypeError @env1:___signal___: 'unsupported operand for +'
 	].
 	newTs := self @env1:timestamp @env0:+ other @env1:total_seconds.
@@ -863,11 +863,11 @@ method: PyDateTime
 __sub__: other
 	"datetime - datetime -> timedelta; datetime - timedelta -> datetime."
 
-	(other @env0:isKindOf: PyDateTime) ifTrue: [
+	(other isKindOf: PyDateTime) ifTrue: [
 		^ PyTimedelta @env0:___fromTotalMicros___:
 			((self @env1:timestamp @env0:- other @env1:timestamp) @env0:* 1000000) @env0:truncated
 	].
-	(other @env0:isKindOf: PyTimedelta) ifTrue: [
+	(other isKindOf: PyTimedelta) ifTrue: [
 		^ self @env1:__add__: (other @env1:__neg__)
 	].
 	^ TypeError @env1:___signal___: 'unsupported operand for -'
@@ -878,7 +878,7 @@ __sub__: other
 category: 'Grail-Equality'
 method: PyDateTime
 __eq__: other
-	(other @env0:isKindOf: PyDateTime) ifFalse: [^ false].
+	(other isKindOf: PyDateTime) ifFalse: [^ false].
 	^ self @env1:___compareKey___ @env0:= other @env1:___compareKey___
 %
 
@@ -922,7 +922,7 @@ _replace: positional kw: kwargs
 		s := kwargs @env0:at: 'second' ifAbsent: [s].
 		us := kwargs @env0:at: 'microsecond' ifAbsent: [us].
 		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz].
-		tz @env0:== None ifTrue: [tz := nil]
+		tz == None ifTrue: [tz := nil]
 	].
 	^ PyDateTime @env0:___fromFields___: y _: mo _: d _: h _: mi _: s _: us _: tz
 %
@@ -1233,7 +1233,7 @@ __add__: other
 	"date + timedelta → date (days component only)."
 
 	| days newOrdinal |
-	(other @env0:isKindOf: PyTimedelta) ifFalse: [
+	(other isKindOf: PyTimedelta) ifFalse: [
 		TypeError ___signal___: 'unsupported operand type(s) for +: ''date'' and non-timedelta'].
 	days := other @env1:days.
 	newOrdinal := (self @env1:toordinal) @env0:+ days.
@@ -1245,11 +1245,11 @@ method: PyDate
 __sub__: other
 	"date - timedelta → date; date - date → timedelta."
 
-	(other @env0:isKindOf: PyTimedelta) ifTrue: [
+	(other isKindOf: PyTimedelta) ifTrue: [
 		| neg |
 		neg := other @env1:__neg__.
 		^ self @env1:__add__: neg].
-	(other @env0:isKindOf: PyDate) ifTrue: [
+	(other isKindOf: PyDate) ifTrue: [
 		| diff |
 		diff := (self @env1:toordinal) @env0:- (other @env1:toordinal).
 		^ PyTimedelta @env0:___fromTotalMicros___:
@@ -1262,14 +1262,14 @@ __sub__: other
 category: 'Grail-Equality'
 method: PyDate
 __eq__: other
-	(other @env0:isKindOf: PyDate) ifFalse: [^ false].
+	(other isKindOf: PyDate) ifFalse: [^ false].
 	^ (self @env1:toordinal) @env0:= (other @env1:toordinal)
 %
 
 category: 'Grail-Equality'
 method: PyDate
 __lt__: other
-	(other @env0:isKindOf: PyDate) ifFalse: [
+	(other isKindOf: PyDate) ifFalse: [
 		TypeError ___signal___: 'can''t compare date to non-date'].
 	^ (self @env1:toordinal) @env0:< (other @env1:toordinal)
 %
@@ -1277,7 +1277,7 @@ __lt__: other
 category: 'Grail-Equality'
 method: PyDate
 __le__: other
-	(other @env0:isKindOf: PyDate) ifFalse: [
+	(other isKindOf: PyDate) ifFalse: [
 		TypeError ___signal___: 'can''t compare date to non-date'].
 	^ (self @env1:toordinal) @env0:<= (other @env1:toordinal)
 %
@@ -1285,7 +1285,7 @@ __le__: other
 category: 'Grail-Equality'
 method: PyDate
 __gt__: other
-	(other @env0:isKindOf: PyDate) ifFalse: [
+	(other isKindOf: PyDate) ifFalse: [
 		TypeError ___signal___: 'can''t compare date to non-date'].
 	^ (self @env1:toordinal) @env0:> (other @env1:toordinal)
 %
@@ -1293,7 +1293,7 @@ __gt__: other
 category: 'Grail-Equality'
 method: PyDate
 __ge__: other
-	(other @env0:isKindOf: PyDate) ifFalse: [
+	(other isKindOf: PyDate) ifFalse: [
 		TypeError ___signal___: 'can''t compare date to non-date'].
 	^ (self @env1:toordinal) @env0:>= (other @env1:toordinal)
 %
@@ -1396,7 +1396,7 @@ value: positional value: kwargs
 		s := kwargs @env0:at: 'second' ifAbsent: [s].
 		us := kwargs @env0:at: 'microsecond' ifAbsent: [us].
 		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz]].
-	tz @env0:== None ifTrue: [tz := nil].
+	tz == None ifTrue: [tz := nil].
 	^ self @env0:___fromFields___: h _: mi _: s _: us _: tz
 %
 
@@ -1521,7 +1521,7 @@ set compile_env: 1
 category: 'Grail-Equality'
 method: PyTime
 __eq__: other
-	(other @env0:isKindOf: PyTime) ifFalse: [^ false].
+	(other isKindOf: PyTime) ifFalse: [^ false].
 	^ (self @env0:dynamicInstVarAt: #_hour) @env0:= (other @env0:dynamicInstVarAt: #_hour)
 		and: [(self @env0:dynamicInstVarAt: #_minute) @env0:= (other @env0:dynamicInstVarAt: #_minute)
 		and: [(self @env0:dynamicInstVarAt: #_second) @env0:= (other @env0:dynamicInstVarAt: #_second)

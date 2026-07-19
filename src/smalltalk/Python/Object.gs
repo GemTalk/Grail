@@ -264,14 +264,14 @@ ___allocateInstance___: positional kw: keywords
 	first positional, which here is the class itself."
 
 	| n sel stream found |
-	found := (self @env0:whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) @env0:~~ nil.
+	found := (self @env0:whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) ~~ nil.
 	found ifFalse: [
 		n := positional @env0:size.
 		stream := WriteStream @env0:on: String @env0:new.
 		stream @env0:nextPutAll: '__new__:'.
 		2 @env0:to: n do: [:i | stream @env0:nextPutAll: '_:'].
 		sel := stream @env0:contents @env0:asSymbol.
-		found := n @env0:> 0 and: [(self @env0:whichClassIncludesSelector: sel environmentId: 1) @env0:~~ nil]].
+		found := n @env0:> 0 and: [(self @env0:whichClassIncludesSelector: sel environmentId: 1) ~~ nil]].
 	found ifFalse: [
 		"A sealed kernel class (ExecBlock via type(lambda)(), ...) refuses
 		#new with an UNCATCHABLE ShouldNotImplement/ImproperOperation --
@@ -484,8 +484,8 @@ ___descriptorGet___: aValue
 	(e.g. itsdangerous' ``digest_method = staticmethod(hashlib.sha1)'')
 	would redirect such calls at the holder instance and DNU."
 
-	(aValue @env0:== nil or: [aValue @env0:== None]) ifTrue: [^ aValue].
-	(aValue @env0:isKindOf: BoundMethod) ifTrue: [^ aValue].
+	(aValue == nil or: [aValue == None]) ifTrue: [^ aValue].
+	(aValue isKindOf: BoundMethod) ifTrue: [^ aValue].
 	"``__get__(self, instance, cls=None)'' — the ``cls'' default makes
 	it compile to the varargs selector ``___get__:kw:''; a defaultless
 	one would be the fixed ``__get__:_:''.  Try both."
@@ -511,7 +511,7 @@ ___dynamicClassAttr___: aSym
 	raw callable (typically by prepending the receiver itself)."
 
 	| walker |
-	walker := (self @env0:isKindOf: Behavior)
+	walker := (self isKindOf: Behavior)
 		ifTrue: [self]
 		ifFalse: [self @env0:class].
 	"Canonical-class overlay first: a runtime setattr on a canonical class
@@ -520,14 +520,14 @@ ___dynamicClassAttr___: aSym
 	superclass chain this method does."
 	(self @env1:___classAttrOverlayLookup___: walker name: aSym)
 		@env0:ifNotNil: [:___ovv | ^ ___ovv].
-	[walker @env0:== nil] whileFalse: [
+	[walker == nil] whileFalse: [
 		((walker @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) notNil)
 			ifTrue: [
 				| holder dynValue |
 				holder := walker @env0:perform: #dynInstVars env: 1.
-				holder @env0:== nil ifFalse: [
+				holder == nil ifFalse: [
 					dynValue := holder @env0:dynamicInstVarAt: aSym.
-					dynValue @env0:== nil ifFalse: [^ dynValue]
+					dynValue == nil ifFalse: [^ dynValue]
 				]
 			].
 		walker := walker @env0:superClass
@@ -551,7 +551,7 @@ ___hasProtocol___: aName
 
 	| walker s found |
 	s := aName @env0:asString.
-	walker := (self @env0:isKindOf: Behavior)
+	walker := (self isKindOf: Behavior)
 		ifTrue: [self]
 		ifFalse: [self @env0:class].
 	{ s @env0:asSymbol.
@@ -563,11 +563,11 @@ ___hasProtocol___: aName
 		fallbacks; NoneType and Integer compile raising-TypeError stubs for
 		__iter__/__getitem__ (catchable errors instead of env-1 MNUs) --
 		none of those are real protocol implementations."
-		(found @env0:~~ nil
-			and: [found @env0:~~ PythonInstance
-			and: [found @env0:~~ Object
-			and: [found @env0:~~ Integer
-			and: [found @env0:name @env0:~~ #'NoneType']]]])
+		(found ~~ nil
+			and: [found ~~ PythonInstance
+			and: [found ~~ Object
+			and: [found ~~ Integer
+			and: [found @env0:name ~~ #'NoneType']]]])
 				ifTrue: [^ true]].
 	^ false
 %
@@ -588,13 +588,13 @@ ___classAttrOverlayLookup___: aClass name: aSym
 	| st ov walker inner v |
 	st := SessionTemps @env0:current.
 	ov := st @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
-	ov @env0:== nil ifTrue: [^ nil].
+	ov == nil ifTrue: [^ nil].
 	walker := aClass.
-	[walker @env0:== nil] whileFalse: [
+	[walker == nil] whileFalse: [
 		inner := ov @env0:at: walker otherwise: nil.
-		inner @env0:== nil ifFalse: [
+		inner == nil ifFalse: [
 			v := inner @env0:at: aSym otherwise: nil.
-			v @env0:== nil ifFalse: [^ v]].
+			v == nil ifFalse: [^ v]].
 		walker := walker @env0:superClass].
 	^ nil
 %
@@ -616,7 +616,7 @@ ___classAttrOverlayStore___: aClass name: aSym value: aValue
 
 	| st set ov inner ug |
 	st := SessionTemps @env0:current.
-	((st @env0:at: #'GrailCanonicalClassesEnabled' otherwise: false) @env0:== true)
+	((st @env0:at: #'GrailCanonicalClassesEnabled' otherwise: false) == true)
 		ifFalse: [^ false].
 	"UserGlobals is PER-USER and this file compiles as SystemUser (shared
 	classes), while the canonical set is registered under the session
@@ -624,16 +624,16 @@ ___classAttrOverlayStore___: aClass name: aSym value: aValue
 	reference here would silently probe the wrong dictionary.  Resolve the
 	SESSION user's binding at runtime."
 	ug := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'UserGlobals'.
-	ug @env0:== nil ifTrue: [^ false].
+	ug == nil ifTrue: [^ false].
 	set := ug @env0:at: #'GrailCanonicalClassSet' otherwise: nil.
-	set @env0:== nil ifTrue: [^ false].
+	set == nil ifTrue: [^ false].
 	(set @env0:includes: aClass) ifFalse: [^ false].
 	ov := st @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
-	ov @env0:== nil ifTrue: [
+	ov == nil ifTrue: [
 		ov := IdentityKeyValueDictionary @env0:new.
 		st @env0:at: #'GrailClassAttrOverlay' put: ov].
 	inner := ov @env0:at: aClass otherwise: nil.
-	inner @env0:== nil ifTrue: [
+	inner == nil ifTrue: [
 		inner := KeyValueDictionary @env0:new.
 		ov @env0:at: aClass put: inner].
 	inner @env0:at: aSym put: aValue.
@@ -649,10 +649,10 @@ ___classAttrOverlayRemove___: aClass name: aSym
 
 	| ov inner |
 	ov := SessionTemps @env0:current @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
-	ov @env0:== nil ifTrue: [^ false].
+	ov == nil ifTrue: [^ false].
 	inner := ov @env0:at: aClass otherwise: nil.
-	inner @env0:== nil ifTrue: [^ false].
-	(inner @env0:at: aSym otherwise: nil) @env0:== nil ifTrue: [^ false].
+	inner == nil ifTrue: [^ false].
+	(inner @env0:at: aSym otherwise: nil) == nil ifTrue: [^ false].
 	inner @env0:removeKey: aSym.
 	^ true
 %
@@ -695,11 +695,11 @@ ___classDict___
 				(UnboundMethod @env1:definingClass: defCls selector: nm @env0:asSymbol)]].
 	"(c) own instance-side methods."
 	imd := [self @env0:methodDictForEnv: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
-	imd @env0:== nil ifFalse: [
+	imd == nil ifFalse: [
 		imd @env0:keys @env0:do: [:sel | addSel @env0:value: sel value: self]].
 	"(b) metaclass own: accessor PAIRS read as data; the rest wrap."
 	cmd := [self @env0:class @env0:methodDictForEnv: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
-	cmd @env0:== nil ifFalse: [
+	cmd == nil ifFalse: [
 		cmd @env0:keys @env0:do: [:sel |
 			| nm setter v |
 			nm := sel @env0:asString.
@@ -709,30 +709,30 @@ ___classDict___
 				(cmd @env0:includesKey: setter)
 					ifTrue: [
 						v := [self @env0:perform: sel env: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
-						v @env0:== nil ifFalse: [d @env0:at: nm put: v]]
+						v == nil ifFalse: [d @env0:at: nm put: v]]
 					ifFalse: [addSel @env0:value: sel value: self @env0:class]]]].
 	"(a) per-class dynamic attrs: data ALWAYS wins over a same-named
 	method wrap (enum members shadow their accessor machinery).
 	dynamicInstVarPairs answers a FLAT alternating array and raises on a
 	never-stored holder -- guard and iterate by 2."
-	((self @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) @env0:~~ nil) ifTrue: [
+	((self @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) ~~ nil) ifTrue: [
 		holder := [self @env0:perform: #dynInstVars env: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
-		holder @env0:== nil ifFalse: [
+		holder == nil ifFalse: [
 			pairs := [holder @env0:dynamicInstVarPairs] @env0:on: AbstractException do: [:e | e @env0:return: #()].
 			1 @env0:to: pairs @env0:size @env0:- 1 by: 2 do: [:i |
 				| v |
 				v := pairs @env0:at: i @env0:+ 1.
-				v @env0:== nil ifFalse: [
+				v == nil ifFalse: [
 					d @env0:at: (pairs @env0:at: i) @env0:asString put: v]]]].
 	"(d) session-local overlay entries shadow everything (last setattr
 	wins; flag-on only, so the common case adds nothing)."
 	[ | ov inner |
 	ov := SessionTemps @env0:current @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
-	ov @env0:== nil ifFalse: [
+	ov == nil ifFalse: [
 		inner := ov @env0:at: self otherwise: nil.
-		inner @env0:== nil ifFalse: [
+		inner == nil ifFalse: [
 			inner @env0:keysAndValuesDo: [:k :v |
-				v @env0:== nil ifFalse: [d @env0:at: k @env0:asString put: v]]]] ]
+				v == nil ifFalse: [d @env0:at: k @env0:asString put: v]]]] ]
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	^ d
 %
@@ -752,7 +752,7 @@ ___classCell___: aSym
 
 	| v |
 	v := self @env1:___dynamicClassAttr___: aSym.
-	v @env0:== nil ifTrue: [
+	v == nil ifTrue: [
 		NameError ___signal___: ('free variable '''
 			@env0:, (aSym @env0:asString @env0:copyFrom: 9 to: aSym @env0:asString @env0:size - 3)
 			@env0:, ''' referenced before assignment in enclosing scope')].
@@ -777,11 +777,11 @@ ___classAttrDunder___: baseSym
 		@env0:ifNotNil: [:___ovv | ^ ___ovv].
 	metaclass := cls @env0:class.
 	sym1 := (baseSym @env0:asString @env0:, ':') @env0:asSymbol.
-	((metaclass @env0:whichClassIncludesSelector: baseSym environmentId: 1) @env0:~~ nil
-		and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) @env0:~~ nil])
+	((metaclass @env0:whichClassIncludesSelector: baseSym environmentId: 1) ~~ nil
+		and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) ~~ nil])
 		ifTrue: [
 			v := cls @env0:perform: baseSym env: 1.
-			v @env0:== nil ifFalse: [^ v]].
+			v == nil ifFalse: [^ v]].
 	^ self @env1:___dynamicClassAttr___: baseSym
 %
 
@@ -801,9 +801,9 @@ ___isDescriptorCallable___: aValue
 	primitives) return false — Python doesn't apply descriptor
 	binding to them either."
 
-	(aValue @env0:isKindOf: MethodBinding) ifTrue: [^ false].
-	(aValue @env0:isKindOf: BoundMethod) ifTrue: [^ true].
-	(aValue @env0:isKindOf: ExecBlock) ifTrue: [^ true].
+	(aValue isKindOf: MethodBinding) ifTrue: [^ false].
+	(aValue isKindOf: BoundMethod) ifTrue: [^ true].
+	(aValue isKindOf: ExecBlock) ifTrue: [^ true].
 	^ false
 %
 
@@ -962,7 +962,7 @@ ___pyAttrLoad___: aSym
 	loaded module classes derived from `module`) always treat unary
 	attribute reads as value reads (an attribute holds a function,
 	submodule, constant, ...).  Bound-method wrapping doesn't apply."
-	isModule := self @env0:isKindOf: module.
+	isModule := self isKindOf: module.
 	isModule ifTrue: [
 		"Phase A module attribute load.  Resolution order:
 		  (1) Varargs callable forwarder ``_<name>:kw:`` — C extension
@@ -1079,7 +1079,7 @@ ___pyAttrLoad___: aSym
 	((s @env0:= '__class__' or: [s @env0:= '__doc__'])
 		and: [(self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil])
 			ifTrue: [^ self @env0:perform: aSym env: 1].
-	(self @env0:isKindOf: Behavior) ifTrue: [
+	(self isKindOf: Behavior) ifTrue: [
 		"Class-level dunders that should always read as values, never
 		wrap as BoundMethods.  Without this, ``type(node).__name__``
 		on any class would wrap the inherited Behavior-side getter
@@ -1129,12 +1129,12 @@ ___pyAttrLoad___: aSym
 		subclasses see values stored on an ancestor."
 		[ | walker holder v |
 		walker := self.
-		[walker @env0:~~ nil and: [walker @env0:~~ Object]] @env0:whileTrue: [
-			((walker @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) @env0:~~ nil) ifTrue: [
+		[walker ~~ nil and: [walker ~~ Object]] @env0:whileTrue: [
+			((walker @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) ~~ nil) ifTrue: [
 				holder := walker @env0:perform: #dynInstVars env: 1.
-				holder @env0:== nil ifFalse: [
+				holder == nil ifFalse: [
 					v := holder @env0:dynamicInstVarAt: aSym.
-					v @env0:== nil ifFalse: [^ v]
+					v == nil ifFalse: [^ v]
 				]
 			].
 			walker := walker @env0:superclass
@@ -1177,8 +1177,8 @@ ___pyAttrLoad___: aSym
 	___subclass___) get the same ClassDefAst-synthesized getter/setter
 	pairs as PythonInstance ones -- the @property pair-read applies
 	equally (CustomInt's ``numerator`` property in test_fractions)."
-	isGenerated := (self @env0:isKindOf: PythonInstance)
-		or: [self @env0:isKindOf: AbstractPyInt].
+	isGenerated := (self isKindOf: PythonInstance)
+		or: [self isKindOf: AbstractPyInt].
 	"Walk the full class chain for both the unary getter and the
 	1-arg setter — TestResponse(Response) inherits ``status'' /
 	``status:'' through two parent classes; checking only the
@@ -1223,7 +1223,7 @@ ___pyAttrLoad___: aSym
 	the time we reach the PythonInstance branch the instance store
 	has already missed — fall through to the class-side metaclass
 	lookup directly."
-	(self @env0:isKindOf: PythonInstance) ifTrue: [
+	(self isKindOf: PythonInstance) ifTrue: [
 		| metaclass |
 		"Canonical-class overlay first: an ``self.x'' read falling back to
 		the class must see a runtime ``Cls.x = v'' overlay store before the
@@ -1280,7 +1280,7 @@ ___pyAttrLoad___: aSym
 	``dynamicInstVarAt:'' probe above).  flask's SecureCookieSession
 	(a ``dict'' subclass) reads ``session.accessed'' / ``modified''
 	through here."
-	(self @env0:isKindOf: Behavior) ifFalse: [
+	(self isKindOf: Behavior) ifFalse: [
 		| attrOwner |
 		attrOwner := self @env0:class @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
 		(attrOwner notNil and: [(attrOwner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs'])
@@ -1319,7 +1319,7 @@ ___pyAttrLoad___: aSym
 	``_GroupTuple.__repr__'' (skip NamedTuple's auto repr and use
 	plain tuple's) — without this branch the call falls through to
 	AttributeError."
-	((self @env0:isKindOf: Behavior)
+	((self isKindOf: Behavior)
 		and: [(self @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
 			or: [(self @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
 				or: [(self @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
@@ -1340,17 +1340,17 @@ ___pyAttrLoad___: aSym
 	    and class-side accessor miss above to find values dynamically
 	    stored on the class chain (``A.x = 42; b = A(); b.x''
 	    must return 42 — see AttributeInheritanceTestCase)."
-	walker := (self @env0:isKindOf: Behavior)
+	walker := (self isKindOf: Behavior)
 		ifTrue: [self]
 		ifFalse: [self @env0:class].
-	[walker @env0:== nil] whileFalse: [
+	[walker == nil] whileFalse: [
 		((walker @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) notNil)
 			ifTrue: [
 				| holder dynValue |
 				holder := walker @env0:perform: #dynInstVars env: 1.
-				holder @env0:== nil ifFalse: [
+				holder == nil ifFalse: [
 					dynValue := holder @env0:dynamicInstVarAt: aSym.
-					dynValue @env0:== nil ifFalse: [
+					dynValue == nil ifFalse: [
 						"Python descriptor protocol: a callable stored as a
 						class attribute and accessed THROUGH AN INSTANCE
 						binds the instance as ``self''.  Wrap in a
@@ -1360,7 +1360,7 @@ ___pyAttrLoad___: aSym
 						CPython's ``Cls.method'' yielding the function
 						unchanged.  Non-callable class attributes (ints,
 						strings, classes) return raw on both paths."
-						((self @env0:isKindOf: Behavior) not
+						((self isKindOf: Behavior) not
 							and: [self @env1:___isDescriptorCallable___: dynValue])
 							ifTrue: [^ MethodBinding @env1:instance: self callable: dynValue].
 						^ dynValue
@@ -1379,7 +1379,7 @@ ___pyAttrLoad___: aSym
 	``fahrenheit'' on demand from the stored ``celsius'')."
 	((self @env0:class @env0:whichClassIncludesSelector: #'__getattr__:' environmentId: 1) notNil
 		and: [(self @env0:class @env0:whichClassIncludesSelector: #'__getattr__:' environmentId: 1)
-			@env0:~~ object])
+			~~ object])
 		ifTrue: [^ self @env1:__getattr__: s].
 	"A ``__getattr__'' bound as a class ATTRIBUTE (a function value,
 	not a ``def'') — django's LazyObject does ``__getattr__ =
@@ -1387,7 +1387,7 @@ ___pyAttrLoad___: aSym
 	dynInstVars holder rather than as an env-1 method, so probe the
 	class chain and invoke it with (self, name); CPython passes the
 	instance as the descriptor's first arg."
-	(self @env0:isKindOf: Behavior) ifFalse: [
+	(self isKindOf: Behavior) ifFalse: [
 		| getattrFn metaCls |
 		"``__getattr__'' bound as a class attribute lands in EITHER the
 		per-class dynInstVars holder (setattr / MI merge) OR a
@@ -1395,14 +1395,14 @@ ___pyAttrLoad___: aSym
 		``__getattr__ = fn'' class-body assignment — django's
 		LazyObject).  Probe both."
 		getattrFn := self @env1:___dynamicClassAttr___: #'__getattr__'.
-		getattrFn @env0:== nil ifTrue: [
+		getattrFn == nil ifTrue: [
 			metaCls := self @env0:class @env0:class.
 			(metaCls @env0:whichClassIncludesSelector: #'__getattr__' environmentId: 1) notNil ifTrue: [
 				getattrFn := [self @env0:class @env0:perform: #'__getattr__' env: 1]
 					@env0:on: Error do: [:e | nil]
 			]
 		].
-		(getattrFn @env0:== nil or: [getattrFn @env0:== None]) ifFalse: [
+		(getattrFn == nil or: [getattrFn == None]) ifFalse: [
 			^ getattrFn @env1:value: { self. s } value: nil
 		]
 	].
@@ -1518,7 +1518,7 @@ __eq__: other
 
 	| fn |
 	fn := self @env1:___dynamicClassAttr___: #'__eq__'.
-	fn @env0:== nil ifFalse: [^ fn @env1:___pyCallValue___: { self. other } kw: nil].
+	fn == nil ifFalse: [^ fn @env1:___pyCallValue___: { self. other } kw: nil].
 	^ self @env0:= other
 %
 
@@ -1654,14 +1654,14 @@ ___binOpFallback___: other op: opString reflected: refSelector
 	fwdBase := ('__' @env0:, (refBase @env0:asString @env0:copyFrom: 4
 		to: refBase @env0:asString @env0:size)) @env0:asSymbol.
 	fn := self @env1:___classAttrDunder___: fwdBase.
-	fn @env0:== nil ifFalse: [
+	fn == nil ifFalse: [
 		result := fn @env1:___pyCallValue___: { self. other } kw: nil.
-		result @env0:== (Python @env0:at: #NotImplemented otherwise: nil)
+		result == (Python @env0:at: #NotImplemented otherwise: nil)
 			ifFalse: [^ result]].
 	fn := other @env1:___classAttrDunder___: refBase.
-	fn @env0:== nil ifFalse: [
+	fn == nil ifFalse: [
 		result := fn @env1:___pyCallValue___: { other. self } kw: nil.
-		result @env0:== (Python @env0:at: #NotImplemented otherwise: nil)
+		result == (Python @env0:at: #NotImplemented otherwise: nil)
 			ifFalse: [^ result]].
 	"Unlike ___cmpFallback___ (whose lt<->gt selector symmetry could
 	recurse between two built-ins), the __r*__ family is distinct and
@@ -1672,8 +1672,8 @@ ___binOpFallback___: other op: opString reflected: refSelector
 	and our approximation must skip it for same-FAMILY operands, or two
 	strings' delegating __rmul__/__mul__ pair would ping-pong forever
 	(``'a' * 'b''' recursed to stack exhaustion)."
-	((other @env0:isKindOf: self @env0:class)
-		or: [self @env0:isKindOf: other @env0:class]) ifFalse: [
+	((other isKindOf: self @env0:class)
+		or: [self isKindOf: other @env0:class]) ifFalse: [
 		refOwner := other @env0:class
 			@env0:whichClassIncludesSelector: refSelector environmentId: 1.
 		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
@@ -1721,7 +1721,7 @@ ___cmpFallback___: other op: opString reflected: refSelector
 	test_heapq / test_re.)"
 
 	| refOwner |
-	(other @env0:isKindOf: PythonInstance) ifTrue: [
+	(other isKindOf: PythonInstance) ifTrue: [
 		refOwner := other @env0:class
 			@env0:whichClassIncludesSelector: refSelector environmentId: 1.
 		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
@@ -1757,13 +1757,13 @@ __ne__: other
 
 	| fn eqOwner |
 	fn := self @env1:___dynamicClassAttr___: #'__ne__'.
-	fn @env0:== nil ifFalse: [^ fn @env1:___pyCallValue___: { self. other } kw: nil].
+	fn == nil ifFalse: [^ fn @env1:___pyCallValue___: { self. other } kw: nil].
 	fn := self @env1:___dynamicClassAttr___: #'__eq__'.
-	fn @env0:== nil ifFalse: [^ (fn @env1:___pyCallValue___: { self. other } kw: nil) @env0:not].
+	fn == nil ifFalse: [^ (fn @env1:___pyCallValue___: { self. other } kw: nil) @env0:not].
 	eqOwner := self @env0:class @env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
 	eqOwner @env0:isNil ifTrue: [
 		eqOwner := self @env0:class @env0:whichClassIncludesSelector: #'___eq__:kw:' environmentId: 1].
-	(eqOwner @env0:notNil and: [eqOwner @env0:~~ object]) ifTrue: [
+	(eqOwner @env0:notNil and: [eqOwner ~~ object]) ifTrue: [
 		^ (self @env1:__eq__: other) @env0:not].
 	^ (self @env0:= other) @env0:not
 %
@@ -1797,7 +1797,7 @@ __repr__
 
 	| myClass className stream fn |
 	fn := self @env1:___dynamicClassAttr___: #'__repr__'.
-	fn @env0:== nil ifFalse: [^ fn @env1:___pyCallValue___: { self } kw: nil].
+	fn == nil ifFalse: [^ fn @env1:___pyCallValue___: { self } kw: nil].
 	myClass := self @env0:class.
 	className := myClass @env0:name.
 	stream := WriteStream @env0:on: (Unicode7 ___new___).
@@ -1838,10 +1838,10 @@ __setattr__: name _: value
 	registry is populated only AFTER the member build (which stores via the
 	accessor / dynInstVar directly, not this method), so definitional
 	writes are unaffected."
-	(self @env0:isKindOf: Behavior) ifTrue: [
+	(self isKindOf: Behavior) ifTrue: [
 		enumCls := Python @env0:at: #'Enum' otherwise: nil.
-		(enumCls @env0:~~ nil
-			and: [(rec := enumCls @env1:___grailRecordFor: self) @env0:~~ nil
+		(enumCls ~~ nil
+			and: [(rec := enumCls @env1:___grailRecordFor: self) ~~ nil
 			and: [(rec @env0:at: 2) @env0:includesKey: name @env0:asString]])
 			ifTrue: [
 				^ AttributeError @env1:___signal___:
@@ -1900,7 +1900,7 @@ ___pyAttrDelete___: aName
 
 	| sym owned |
 	sym := aName @env0:asSymbol.
-	(self @env0:isKindOf: Behavior) ifTrue: [
+	(self isKindOf: Behavior) ifTrue: [
 		"Canonical-class overlay: ``del Cls.x'' removes the class's OWN
 		session-local overlay entry when one exists (a runtime setattr
 		being undone) before consulting the committed store."
@@ -1913,8 +1913,8 @@ ___pyAttrDelete___: aName
 			ifTrue: [
 				| holder |
 				holder := self @env0:perform: #dynInstVars env: 1.
-				(holder @env0:== nil) ifFalse: [
-					(holder @env0:dynamicInstVarAt: sym) @env0:== nil ifFalse: [
+				(holder == nil) ifFalse: [
+					(holder @env0:dynamicInstVarAt: sym) == nil ifFalse: [
 						^ holder @env0:removeDynamicInstVar: sym
 					]
 				]
@@ -1940,7 +1940,7 @@ ___pyAttrDelete___: aName
 			((base @env0:= aName @env0:asString)
 				or: [s @env0:= ('_' @env0:, aName @env0:asString @env0:, ':kw:')])
 				and: [((self @env0:categoryOfSelector: sel environmentId: 1) @env0:= #'Grail-Class Methods')
-				and: [(self @env0:whichClassIncludesSelector: sel environmentId: 1) @env0:== self]]].
+				and: [(self @env0:whichClassIncludesSelector: sel environmentId: 1) == self]]].
 		owned @env0:isEmpty ifFalse: [
 			owned @env0:do: [:sel | self @env0:removeSelector: sel environmentId: 1].
 			^ self].
@@ -1954,8 +1954,8 @@ ___pyAttrDelete___: aName
 	never happens during construction, so guarding here is safe."
 	[ | enumCls |
 	enumCls := Python @env0:at: #'Enum' otherwise: nil.
-	(enumCls @env0:~~ nil
-		and: [(enumCls @env1:___grailRecordFor: self @env0:class) @env0:~~ nil])
+	(enumCls ~~ nil
+		and: [(enumCls @env1:___grailRecordFor: self @env0:class) ~~ nil])
 		ifTrue: [
 			^ AttributeError @env1:___signal___:
 				'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
@@ -1970,14 +1970,14 @@ ___pyAttrDelete___: aName
 		slotIdx := self @env0:class @env0:allInstVarNames
 			@env0:indexOf: (('___slot_' @env0:, sym @env0:asString @env0:, '___') @env0:asSymbol).
 		slotIdx @env0:~= 0 ifTrue: [
-			(self @env0:instVarAt: slotIdx) @env0:== nil ifTrue: [
+			(self @env0:instVarAt: slotIdx) == nil ifTrue: [
 				^ AttributeError @env1:___signal___:
 					'''' @env0:, aName @env0:asString @env0:, ''''
 			].
 			^ self @env0:instVarAt: slotIdx put: nil
 		]
 	].
-	(self @env0:dynamicInstVarAt: sym) @env0:== nil ifTrue: [
+	(self @env0:dynamicInstVarAt: sym) == nil ifTrue: [
 		AttributeError @env1:___signal___:
 			'''' @env0:, aName @env0:asString @env0:, ''''
 	].
@@ -2010,7 +2010,7 @@ ___pyAttrStore___: aName put: aValue
 	Returns aValue so the codegen can use this as an expression
 	(e.g. inside a tuple unpack or chained assignment)."
 
-	(self @env0:isKindOf: Behavior) ifTrue: [
+	(self isKindOf: Behavior) ifTrue: [
 		| setterSym getterSym metaclass |
 		"(Enum member-reassignment is guarded in __setattr__:_:, the single
 		store entry point, BEFORE the accessor-setter dispatch.)"
@@ -2182,7 +2182,7 @@ ___pyStarToArray___
 	the crash flask's ``preprocess_request'' hit via
 	``(None, *reversed(request.blueprints))''."
 
-	(self @env0:isKindOf: SequenceableCollection) ifTrue: [^ self @env0:asArray].
+	(self isKindOf: SequenceableCollection) ifTrue: [^ self @env0:asArray].
 	^ (list @env1:__new__: self) @env0:asArray
 %
 
@@ -2214,14 +2214,14 @@ ___tryBinaryDunderDNU___: aSelector args: anArray
 	aSelector == #'__or__:' ifTrue: [binOp := { '|'. #'__ror__:' }].
 	aSelector == #'__xor__:' ifTrue: [binOp := { '^'. #'__rxor__:' }].
 	aSelector == #'__matmul__:' ifTrue: [binOp := { '@'. #'__rmatmul__:' }].
-	binOp @env0:== nil ifTrue: [^ #'___noBinOp___'].
+	binOp == nil ifTrue: [^ #'___noBinOp___'].
 	"A dunder compiled VARARGS-ONLY (``def __pow__(a, b, modulo=None)``
 	in vendored fractions.py) has no fixed ``__pow__:`` selector, so the
 	send landed here -- dispatch the ``___pow__:kw:`` form before
 	running the fallback protocol."
 	vaSel := ('_' @env0:, (aSelector @env0:asString @env0:copyFrom: 1
 		to: aSelector @env0:asString @env0:size - 1) @env0:, ':kw:') @env0:asSymbol.
-	((self @env0:class @env0:whichClassIncludesSelector: vaSel environmentId: 1) @env0:~~ nil)
+	((self @env0:class @env0:whichClassIncludesSelector: vaSel environmentId: 1) ~~ nil)
 		ifTrue: [^ self @env0:perform: vaSel env: 1
 			withArguments: { anArray. nil }].
 	^ self @env1:___binOpFallback___: (anArray @env0:at: 1)
@@ -2258,24 +2258,24 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	``Color.RED + 1'' resolves through this very handler's
 	BoundMethod/varargs machinery)."
 	binOp := self ___tryBinaryDunderDNU___: aSelector args: anArray.
-	binOp @env0:== #'___noBinOp___' ifFalse: [^ binOp].
+	binOp == #'___noBinOp___' ifFalse: [^ binOp].
 	"A missing ``__contains__:'' (``x in None'') raises CPython's
 	catchable TypeError.  Only this ONE container dunder is intercepted:
 	__len__ / __iter__ / __getitem__ double as soft-miss PROBES all over
 	Grail's own machinery (truthiness checks on user instances,
 	PyDateTime formatting, ...) and intercepting them broke Twilio --
 	len(None)-style calls remain a documented residual."
-	((self @env0:isKindOf: PythonInstance) @env0:not
+	((self isKindOf: PythonInstance) @env0:not
 		and: [aSelector == #'__contains__:']) ifTrue: [
 		TypeError @env1:___signal___: ('argument of type ''',
 			self @env0:class @env0:name @env0:asString,
 			''' is not iterable')].
-	((self @env0:isKindOf: PythonInstance) @env0:not
+	((self isKindOf: PythonInstance) @env0:not
 		and: [aSelector == #'__setitem__:_:']) ifTrue: [
 		TypeError @env1:___signal___: ('''',
 			self @env0:class @env0:name @env0:asString,
 			''' object does not support item assignment')].
-	((self @env0:isKindOf: PythonInstance) @env0:not
+	((self isKindOf: PythonInstance) @env0:not
 		and: [aSelector == #'__delitem__:']) ifTrue: [
 		TypeError @env1:___signal___: ('''',
 			self @env0:class @env0:name @env0:asString,
@@ -2284,12 +2284,12 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	raise CPython's catchable TypeError.  Same non-PythonInstance
 	restriction as __contains__ -- user-instance unary sends stay on the
 	attribute-semantics path."
-	(self @env0:isKindOf: PythonInstance) ifFalse: [ | unaryOp |
+	(self isKindOf: PythonInstance) ifFalse: [ | unaryOp |
 		unaryOp := nil.
 		aSelector == #'__invert__' ifTrue: [unaryOp := '~'].
 		aSelector == #'__neg__' ifTrue: [unaryOp := '-'].
 		aSelector == #'__pos__' ifTrue: [unaryOp := '+'].
-		unaryOp @env0:== nil ifFalse: [
+		unaryOp == nil ifFalse: [
 			TypeError @env1:___signal___: ('bad operand type for unary ',
 				unaryOp, ': ''', self @env0:class @env0:name @env0:asString, '''')]].
 	(s @env0:size @env0:> 0 @env0:and: [s @env0:last @env0:= $:]) ifTrue: [

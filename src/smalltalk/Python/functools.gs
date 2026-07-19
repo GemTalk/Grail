@@ -177,10 +177,10 @@ cmp_to_key: mycmp
 
 	^ [:___p___ :___k___ |
 		| w o |
-		o := (___p___ @env0:~~ nil and: [___p___ @env0:size @env0:>= 1])
+		o := (___p___ ~~ nil and: [___p___ @env0:size @env0:>= 1])
 			ifTrue: [___p___ @env0:at: 1]
 			ifFalse: [
-				(___k___ @env0:~~ nil and: [___k___ @env0:includesKey: 'obj'])
+				(___k___ ~~ nil and: [___k___ @env0:includesKey: 'obj'])
 					ifTrue: [___k___ @env0:at: 'obj']
 					ifFalse: [TypeError ___signal___: 'K() missing required argument: obj']].
 		w := functools_cmpkey @env0:new.
@@ -199,7 +199,7 @@ _cmp_to_key: positional kw: kwargs
 	f := (positional @env0:size @env0:>= 1)
 		ifTrue: [positional @env0:at: 1]
 		ifFalse: [
-			(kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'mycmp'])
+			(kwargs ~~ nil and: [kwargs @env0:includesKey: 'mycmp'])
 				ifTrue: [kwargs @env0:at: 'mycmp']
 				ifFalse: [TypeError ___signal___: 'cmp_to_key() missing required argument: mycmp']].
 	^ self @env1:cmp_to_key: f
@@ -208,7 +208,7 @@ _cmp_to_key: positional kw: kwargs
 category: 'Grail-Comparison'
 method: functools_cmpkey
 __lt__: other
-	(other @env0:isKindOf: functools_cmpkey) ifFalse: [
+	(other isKindOf: functools_cmpkey) ifFalse: [
 		TypeError ___signal___: 'other argument must be K instance'].
 	^ ((self @env0:dynamicInstVarAt: #cmp) @env1:value:
 		{ self @env0:dynamicInstVarAt: #obj. other @env0:dynamicInstVarAt: #obj } value: nil)
@@ -218,7 +218,7 @@ __lt__: other
 category: 'Grail-Comparison'
 method: functools_cmpkey
 __gt__: other
-	(other @env0:isKindOf: functools_cmpkey) ifFalse: [
+	(other isKindOf: functools_cmpkey) ifFalse: [
 		TypeError ___signal___: 'other argument must be K instance'].
 	^ ((self @env0:dynamicInstVarAt: #cmp) @env1:value:
 		{ self @env0:dynamicInstVarAt: #obj. other @env0:dynamicInstVarAt: #obj } value: nil)
@@ -228,7 +228,7 @@ __gt__: other
 category: 'Grail-Comparison'
 method: functools_cmpkey
 __le__: other
-	(other @env0:isKindOf: functools_cmpkey) ifFalse: [
+	(other isKindOf: functools_cmpkey) ifFalse: [
 		TypeError ___signal___: 'other argument must be K instance'].
 	^ ((self @env0:dynamicInstVarAt: #cmp) @env1:value:
 		{ self @env0:dynamicInstVarAt: #obj. other @env0:dynamicInstVarAt: #obj } value: nil)
@@ -238,7 +238,7 @@ __le__: other
 category: 'Grail-Comparison'
 method: functools_cmpkey
 __ge__: other
-	(other @env0:isKindOf: functools_cmpkey) ifFalse: [
+	(other isKindOf: functools_cmpkey) ifFalse: [
 		TypeError ___signal___: 'other argument must be K instance'].
 	^ ((self @env0:dynamicInstVarAt: #cmp) @env1:value:
 		{ self @env0:dynamicInstVarAt: #obj. other @env0:dynamicInstVarAt: #obj } value: nil)
@@ -248,7 +248,7 @@ __ge__: other
 category: 'Grail-Comparison'
 method: functools_cmpkey
 __eq__: other
-	(other @env0:isKindOf: functools_cmpkey) ifFalse: [
+	(other isKindOf: functools_cmpkey) ifFalse: [
 		TypeError ___signal___: 'other argument must be K instance'].
 	^ ((self @env0:dynamicInstVarAt: #cmp) @env1:value:
 		{ self @env0:dynamicInstVarAt: #obj. other @env0:dynamicInstVarAt: #obj } value: nil)
@@ -289,25 +289,25 @@ ___new__: positional kw: keywords
 	also makes ``class Sub(partial): pass`` construct Sub instances."
 
 	| inst fn rest kw ph |
-	(positional @env0:== nil or: [positional @env0:isEmpty]) ifTrue: [
+	(positional == nil or: [positional @env0:isEmpty]) ifTrue: [
 		TypeError ___signal___: 'partial expected at least 1 argument, got 0'].
 	fn := positional @env0:at: 1.
 	rest := positional @env0:size @env0:> 1
 		ifTrue: [positional @env0:copyFrom: 2 to: positional @env0:size]
 		ifFalse: [#()].
-	kw := keywords @env0:== nil
+	kw := keywords == nil
 		ifTrue: [KeyValueDictionary @env0:new]
 		ifFalse: [keywords @env0:copy].
 	ph := functools_Placeholder @env1:___singleton___.
 	"Placeholder is not allowed as a keyword-argument value (checked by
 	identity, so ALWAYS_EQ -- which == everything -- is not treated as
 	a Placeholder)."
-	kw @env0:valuesDo: [:v | v @env0:== ph ifTrue: [
+	kw @env0:valuesDo: [:v | v == ph ifTrue: [
 		TypeError ___signal___: 'Placeholder cannot be passed as a keyword argument']].
 	"CPython flattens partial-of-partial: adopt the inner func, and the
 	outer positional args FILL the inner's Placeholder slots (leftover
 	outer args append); the OUTER keywords override the inner."
-	(fn @env0:isKindOf: functools_partial) ifTrue: [
+	(fn isKindOf: functools_partial) ifTrue: [
 		| merged |
 		rest := functools_partial
 			___applyPlaceholders___: (fn @env0:dynamicInstVarAt: #args) @env0:asArray
@@ -318,7 +318,7 @@ ___new__: positional kw: keywords
 		fn := fn @env0:dynamicInstVarAt: #func].
 	"Trailing Placeholders are not allowed (they could never be filled
 	at call time)."
-	(rest @env0:isEmpty @env0:not and: [(rest @env0:last) @env0:== ph]) ifTrue: [
+	(rest @env0:isEmpty @env0:not and: [(rest @env0:last) == ph]) ifTrue: [
 		TypeError ___signal___: 'trailing Placeholders are not allowed'].
 	inst := self @env0:new.
 	inst @env0:dynamicInstVarAt: #func put: fn.
@@ -341,9 +341,9 @@ ___applyPlaceholders___: boundArgs with: newArgs
 	ph := functools_Placeholder @env1:___singleton___.
 	result := OrderedCollection @env0:new.
 	newList := OrderedCollection @env0:withAll:
-		(newArgs @env0:== nil ifTrue: [#()] ifFalse: [newArgs]).
+		(newArgs == nil ifTrue: [#()] ifFalse: [newArgs]).
 	boundArgs @env0:do: [:a |
-		(a @env0:== ph)
+		(a == ph)
 			ifTrue: [
 				newList @env0:isEmpty
 					ifTrue: [result @env0:add: a]
@@ -359,7 +359,7 @@ ___countPlaceholders___: anArray
 	| ph n |
 	ph := functools_Placeholder @env1:___singleton___.
 	n := 0.
-	anArray @env0:do: [:a | a @env0:== ph ifTrue: [n := n @env0:+ 1]].
+	anArray @env0:do: [:a | a == ph ifTrue: [n := n @env0:+ 1]].
 	^ n
 %
 
@@ -376,19 +376,19 @@ value: morePositional value: moreKw
 	caller supplied too few positionals -- CPython's exact message."
 	allArgs := functools_partial
 		___applyPlaceholders___: (self @env0:dynamicInstVarAt: #args) @env0:asArray
-		with: (morePositional @env0:== nil ifTrue: [#()] ifFalse: [morePositional]).
+		with: (morePositional == nil ifTrue: [#()] ifFalse: [morePositional]).
 	remaining := functools_partial ___countPlaceholders___: allArgs.
 	remaining @env0:> 0 ifTrue: [
 		TypeError ___signal___: ('missing positional arguments in ''partial'' call; expected at least '
 			@env0:, (functools_partial ___countPlaceholders___:
 				(self @env0:dynamicInstVarAt: #args) @env0:asArray) @env0:printString
 			@env0:, ', got '
-			@env0:, (morePositional @env0:== nil ifTrue: [0] ifFalse: [morePositional @env0:size]) @env0:printString)].
+			@env0:, (morePositional == nil ifTrue: [0] ifFalse: [morePositional @env0:size]) @env0:printString)].
 	bk := self @env0:dynamicInstVarAt: #keywords.
-	allKw := (bk @env0:== nil or: [bk @env0:isEmpty])
+	allKw := (bk == nil or: [bk @env0:isEmpty])
 		ifTrue: [moreKw]
 		ifFalse: [
-			(moreKw @env0:== nil or: [moreKw @env0:isEmpty])
+			(moreKw == nil or: [moreKw @env0:isEmpty])
 				ifTrue: [bk]
 				ifFalse: [
 					| merged |
@@ -489,7 +489,7 @@ __setstate__: state
 	installs namespace as the instance __dict__ (None clears it)."
 
 	| ph fn args kwds namespace kd pairs |
-	(state @env0:isKindOf: tuple) ifFalse: [
+	(state isKindOf: tuple) ifFalse: [
 		TypeError ___signal___: 'argument to __setstate__ must be a tuple'].
 	(state @env0:size @env0:= 4) ifFalse: [
 		TypeError ___signal___: 'expected 4 items in state, got '
@@ -498,23 +498,23 @@ __setstate__: state
 	args := state @env0:at: 2.
 	kwds := state @env0:at: 3.
 	namespace := state @env0:at: 4.
-	(fn @env0:== None or: [fn @env0:== nil]) ifTrue: [
+	(fn == None or: [fn == nil]) ifTrue: [
 		TypeError ___signal___: 'the first argument must be callable'].
-	(args @env0:isKindOf: tuple) ifFalse: [
+	(args isKindOf: tuple) ifFalse: [
 		TypeError ___signal___: 'invalid partial state (args must be a tuple)'].
-	((kwds @env0:== None) or: [kwds @env0:isKindOf: KeyValueDictionary]) ifFalse: [
+	((kwds == None) or: [kwds isKindOf: KeyValueDictionary]) ifFalse: [
 		TypeError ___signal___: 'invalid partial state (kwds must be a dict)'].
-	((namespace @env0:== None) or: [namespace @env0:isKindOf: KeyValueDictionary]) ifFalse: [
+	((namespace == None) or: [namespace isKindOf: KeyValueDictionary]) ifFalse: [
 		TypeError ___signal___: 'invalid partial state (namespace must be a dict)'].
 	ph := functools_Placeholder @env1:___singleton___.
-	(args @env0:isEmpty @env0:not and: [(args @env0:at: args @env0:size) @env0:== ph]) ifTrue: [
+	(args @env0:isEmpty @env0:not and: [(args @env0:at: args @env0:size) == ph]) ifTrue: [
 		TypeError ___signal___: 'trailing Placeholders are not allowed'].
 	"Install internal state -- args to a PLAIN tuple, kwds to a PLAIN
 	dict (test_setstate_subclasses requires exact tuple/dict types)."
 	self @env0:dynamicInstVarAt: #func put: fn.
 	self @env0:dynamicInstVarAt: #args put: (tuple @env0:withAll: args).
 	kd := KeyValueDictionary @env0:new.
-	(kwds @env0:~~ None) ifTrue: [
+	(kwds ~~ None) ifTrue: [
 		kwds @env0:keysAndValuesDo: [:k :v | kd @env0:at: k put: v]].
 	self @env0:dynamicInstVarAt: #keywords put: kd.
 	"Reset the instance __dict__: drop every user attribute (all
@@ -525,7 +525,7 @@ __setstate__: state
 		nm := pairs @env0:at: i.
 		(self @env1:___reservedName___: nm) ifFalse: [
 			self @env0:removeDynamicInstVar: nm]].
-	(namespace @env0:~~ None) ifTrue: [
+	(namespace ~~ None) ifTrue: [
 		namespace @env0:keysAndValuesDo: [:k :v |
 			self @env0:dynamicInstVarAt: k @env0:asSymbol put: v]].
 	^ None
@@ -555,9 +555,9 @@ value: positional value: keywords
 
 	| pick |
 	pick := [:idx :key |
-		(positional @env0:~~ nil and: [positional @env0:size @env0:>= idx])
+		(positional ~~ nil and: [positional @env0:size @env0:>= idx])
 			ifTrue: [positional @env0:at: idx]
-			ifFalse: [(keywords @env0:~~ nil and: [keywords @env0:includesKey: key])
+			ifFalse: [(keywords ~~ nil and: [keywords @env0:includesKey: key])
 				ifTrue: [keywords @env0:at: key]
 				ifFalse: [None]]].
 	^ self
@@ -623,14 +623,14 @@ __eq__: other
 
 	| mine theirs |
 	mine := self ___asArray___.
-	theirs := (other @env0:isKindOf: functools_CacheInfo)
+	theirs := (other isKindOf: functools_CacheInfo)
 		ifTrue: [other @env1:___asArray___]
-		ifFalse: [(other @env0:isKindOf: SequenceableCollection)
+		ifFalse: [(other isKindOf: SequenceableCollection)
 			ifTrue: [other @env0:asArray]
 			ifFalse: [^ false]].
 	mine @env0:size @env0:= theirs @env0:size ifFalse: [^ false].
 	1 @env0:to: mine @env0:size do: [:i |
-		((mine @env0:at: i) @env1:__eq__: (theirs @env0:at: i)) @env0:== true
+		((mine @env0:at: i) @env1:__eq__: (theirs @env0:at: i)) == true
 			ifFalse: [^ false]].
 	^ true
 %
@@ -678,8 +678,8 @@ value: positional value: keywords
 	"type(Placeholder)() returns the singleton; any argument raises
 	TypeError (CPython: the Placeholder type takes no arguments)."
 
-	((positional @env0:~~ nil and: [positional @env0:isEmpty @env0:not])
-		or: [keywords @env0:~~ nil and: [keywords @env0:isEmpty @env0:not]]) ifTrue: [
+	((positional ~~ nil and: [positional @env0:isEmpty @env0:not])
+		or: [keywords ~~ nil and: [keywords @env0:isEmpty @env0:not]]) ifTrue: [
 		TypeError ___signal___: 'Placeholder() takes no arguments'].
 	^ self ___singleton___
 %
@@ -730,8 +730,8 @@ lru_cache: maxsize
 	function, so wrap it immediately (default 128).  django.views.debug
 	uses the bare form."
 
-	((maxsize @env0:isKindOf: Integer)
-		or: [maxsize @env0:== nil or: [maxsize @env0:== None]]) ifFalse: [
+	((maxsize isKindOf: Integer)
+		or: [maxsize == nil or: [maxsize == None]]) ifFalse: [
 		^ LruCacheWrapper @env1:___wrap___: maxsize maxsize: 128].
 	^ [:positional2 :keywords2 |
 		LruCacheWrapper @env1:___wrap___: (positional2 @env0:at: 1) maxsize: maxsize]
@@ -745,9 +745,9 @@ _lru_cache: positional kw: kwargs
 	CPython); ``typed'' is accepted and ignored."
 
 	| ms |
-	ms := (kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'maxsize'])
+	ms := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'maxsize'])
 		ifTrue: [kwargs @env0:at: 'maxsize']
-		ifFalse: [(positional @env0:~~ nil and: [positional @env0:isEmpty @env0:not])
+		ifFalse: [(positional ~~ nil and: [positional @env0:isEmpty @env0:not])
 			ifTrue: [positional @env0:at: 1]
 			ifFalse: [128]].
 	^ [:positional2 :keywords2 |
@@ -979,10 +979,10 @@ dispatch: cls
 	isinstance(x, str) is true for EVERY CharacterCollection (str maps
 	to Unicode7 but a plain String's chain never passes it), and int
 	subclasses are AbstractPyInt siblings of Integer."
-	((key @env0:== CharacterCollection)
+	((key == CharacterCollection)
 		or: [key @env0:inheritsFrom: CharacterCollection]) ifTrue: [
 		(reg @env0:includesKey: Unicode7) ifTrue: [^ reg @env0:at: Unicode7]].
-	((key @env0:== AbstractPyInt)
+	((key == AbstractPyInt)
 		or: [key @env0:inheritsFrom: AbstractPyInt]) ifTrue: [
 		(reg @env0:includesKey: Integer) ifTrue: [^ reg @env0:at: Integer]].
 	"ABC fallback: a registered key that is neither on the chain nor a
@@ -993,9 +993,9 @@ dispatch: cls
 	ambiguity resolution between multiple matching ABCs -- Grail dicts are
 	hash-ordered, so the first matching ABC wins."
 	reg @env0:keysAndValuesDo: [:k :impl |
-		((k @env0:isKindOf: Behavior)
+		((k isKindOf: Behavior)
 			and: [(k @env0:class @env0:whichClassIncludesSelector: #'__subclasscheck__:' environmentId: 1) notNil
-			and: [(k __subclasscheck__: key) @env0:== true]])
+			and: [(k __subclasscheck__: key) == true]])
 				ifTrue: [^ impl]].
 	^ self @env0:dynamicInstVarAt: #default
 %
@@ -1009,12 +1009,12 @@ ___registryKey___: aKey
 	symbol dictionary to the class it names."
 
 	| sel resolved |
-	(aKey @env0:isKindOf: Behavior) ifTrue: [^ aKey].
-	(aKey @env0:isKindOf: BoundMethod) ifTrue: [
+	(aKey isKindOf: Behavior) ifTrue: [^ aKey].
+	(aKey isKindOf: BoundMethod) ifTrue: [
 		sel := aKey @env0:selector.
 		resolved := (System @env0:myUserProfile @env0:symbolList
 			@env0:objectNamed: #Python) @env0:at: sel @env0:asSymbol otherwise: nil.
-		(resolved @env0:notNil and: [resolved @env0:isKindOf: Behavior]) ifTrue: [
+		(resolved @env0:notNil and: [resolved isKindOf: Behavior]) ifTrue: [
 			^ resolved]].
 	^ nil
 %
@@ -1070,20 +1070,20 @@ ___inferRegisterType___: aFunc
 		TypeError ___signal___:
 			'Invalid first argument to `register()`: no parameter annotation found'].
 	"Resolve a forward-reference string against the Python globals."
-	(candidate @env0:isKindOf: CharacterCollection) ifTrue: [
+	(candidate isKindOf: CharacterCollection) ifTrue: [
 		candidate := (System @env0:myUserProfile @env0:symbolList
 			@env0:objectNamed: candidate @env0:asSymbol) @env0:ifNil: [candidate]].
 	"Still a string?  ABC names ('Mapping', 'Sequence', ...) live as
 	classes on the collections.abc module, not in the symbol list --
 	resolve through sys.modules when that module has been imported."
-	(candidate @env0:isKindOf: CharacterCollection) ifTrue: [
+	(candidate isKindOf: CharacterCollection) ifTrue: [
 		| cabc resolved |
 		cabc := (System @env0:myUserProfile @env0:symbolList
 			@env0:objectNamed: #importlib) @env1:modules
 			@env0:at: #'collections.abc' otherwise: nil.
-		cabc @env0:== nil ifFalse: [
+		cabc == nil ifFalse: [
 			resolved := cabc @env0:dynamicInstVarAt: candidate @env0:asString @env0:asSymbol.
-			(resolved @env0:~~ nil and: [resolved @env0:isKindOf: Behavior])
+			(resolved ~~ nil and: [resolved isKindOf: Behavior])
 				ifTrue: [candidate := resolved]]].
 	^ (self ___registryKey___: candidate) @env0:ifNil: [candidate]
 %

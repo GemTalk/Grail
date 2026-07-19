@@ -146,7 +146,7 @@ __new__: r
 	object.__new__(cls) protocol (copy/pickle) working."
 
 	(r @env0:isBehavior) ifTrue: [^ r @env0:new].
-	(r @env0:isKindOf: complex) ifTrue: [^ r].
+	(r isKindOf: complex) ifTrue: [^ r].
 	^ complex @env1:__new__: r _: 0.0
 %
 
@@ -231,15 +231,15 @@ __eq__: other
 	"Test equality with another complex number."
 	
 	| otherReal otherImag |
-	(other @env0:isKindOf: complex) ifFalse: [
+	(other isKindOf: complex) ifFalse: [
 		"CPython: complex(5) == 5 is True -- a real number compares
 		equal when the imaginary part is zero."
-		((other @env0:isKindOf: Number) or: [other @env0:isKindOf: Boolean]) ifTrue: [
+		((other isKindOf: Number) or: [other isKindOf: Boolean]) ifTrue: [
 			"Compare EXACTLY (no asFloat): CPython's int-vs-float real
 			comparison is exact, so 10**23 != complex(10**23) -- the
 			float real is 1e23, a different integer."
 			| o |
-			o := (other @env0:isKindOf: Boolean)
+			o := (other isKindOf: Boolean)
 				ifTrue: [other ifTrue: [1] ifFalse: [0]]
 				ifFalse: [other].
 			^ ((self imag) @env0:= 0) and: [(self real) @env0:= o]].

@@ -118,67 +118,67 @@ asFraction
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 + other
-	^ self @env0:value + ((other @env0:isKindOf: AbstractPyFloat)
+	^ self @env0:value + ((other isKindOf: AbstractPyFloat)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 - other
-	^ self @env0:value - ((other @env0:isKindOf: AbstractPyFloat)
+	^ self @env0:value - ((other isKindOf: AbstractPyFloat)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 * other
-	^ self @env0:value * ((other @env0:isKindOf: AbstractPyFloat)
+	^ self @env0:value * ((other isKindOf: AbstractPyFloat)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 / other
-	^ self @env0:value / ((other @env0:isKindOf: AbstractPyFloat)
+	^ self @env0:value / ((other isKindOf: AbstractPyFloat)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 // other
-	^ self @env0:value // ((other @env0:isKindOf: AbstractPyFloat)
+	^ self @env0:value // ((other isKindOf: AbstractPyFloat)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 \\ other
-	^ self @env0:value \\ ((other @env0:isKindOf: AbstractPyFloat)
+	^ self @env0:value \\ ((other isKindOf: AbstractPyFloat)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 rem: other
-	^ self @env0:value rem: ((other @env0:isKindOf: AbstractPyFloat)
+	^ self @env0:value rem: ((other isKindOf: AbstractPyFloat)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 quo: other
-	^ self @env0:value quo: ((other @env0:isKindOf: AbstractPyFloat)
+	^ self @env0:value quo: ((other isKindOf: AbstractPyFloat)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 raisedTo: other
-	^ self @env0:value raisedTo: ((other @env0:isKindOf: AbstractPyFloat)
+	^ self @env0:value raisedTo: ((other isKindOf: AbstractPyFloat)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 min: other
-	^ self @env0:value min: ((other @env0:isKindOf: AbstractPyFloat)
+	^ self @env0:value min: ((other isKindOf: AbstractPyFloat)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
 method: AbstractPyFloat
 max: other
-	^ self @env0:value max: ((other @env0:isKindOf: AbstractPyFloat)
+	^ self @env0:value max: ((other isKindOf: AbstractPyFloat)
 		ifTrue: [other @env0:value] ifFalse: [other])
 %
 category: 'Grail-Arithmetic Forward'
@@ -256,7 +256,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 		^ super doesNotUnderstand: aSelector args: anArray envId: envId
 	].
 	unwrapped := anArray @env0:collect: [:a |
-		(a @env0:isKindOf: AbstractPyFloat) ifTrue: [a @env0:value] ifFalse: [a]].
+		(a isKindOf: AbstractPyFloat) ifTrue: [a @env0:value] ifFalse: [a]].
 	^ self @env0:value perform: aSelector env: 1 withArguments: unwrapped
 %
 
@@ -283,7 +283,7 @@ ___new__: positional kw: keywords
 			ifFalse: [float @env1:__new__: (positional @env0:at: 1)]]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: nil].
-	v @env0:== nil ifFalse: [
+	v == nil ifFalse: [
 		inst @env0:dynamicInstVarAt: #value put: v].
 	^ inst
 %

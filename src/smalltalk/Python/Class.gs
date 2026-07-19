@@ -79,8 +79,8 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	int-subclass operator semantics) and whose value slot carries the
 	real Integer.  isinstance/issubclass against int recognize the
 	substitute (Int.gs __instancecheck__, builtins issubclass)."
-	((self @env0:== Integer)
-		or: [self @env0:== SmallInteger or: [self @env0:== LargeInteger]]) ifTrue: [
+	((self == Integer)
+		or: [self == SmallInteger or: [self == LargeInteger]]) ifTrue: [
 		^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #AbstractPyInt)
 			@env1:___subclass___: aSymbol
 			instVarNames: ivarNames
@@ -88,8 +88,8 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	"``class MyFloat(float)``: same story for the sealed float kernel --
 	substitute the AbstractPyFloat Number-sibling (generality 80 strips
 	the wrapper in mixed arithmetic; see AbstractPyFloat.gs)."
-	((self @env0:== Float)
-		or: [self @env0:== SmallDouble or: [self @env0:== BinaryFloat]]) ifTrue: [
+	((self == Float)
+		or: [self == SmallDouble or: [self == BinaryFloat]]) ifTrue: [
 		^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #AbstractPyFloat)
 			@env1:___subclass___: aSymbol
 			instVarNames: ivarNames
@@ -162,10 +162,10 @@ __mro__
 	issubclass(sub, Flag) both hinge on it).  Fall back to the bare chain
 	only before importlib exists (Class.gs loads early)."
 	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
-	il @env0:== nil ifFalse: [^ il @env0:___mroOf___: self].
+	il == nil ifFalse: [^ il @env0:___mroOf___: self].
 	result := OrderedCollection @env0:new.
 	c := self.
-	[c @env0:== nil] whileFalse: [
+	[c == nil] whileFalse: [
 		result @env0:add: c.
 		c := c @env0:superclass.
 	].
@@ -189,7 +189,7 @@ __base__
 
 	| s |
 	s := self @env0:superclass.
-	^ s @env0:== nil
+	^ s == nil
 		ifTrue: [System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'None']
 		ifFalse: [s]
 %
@@ -205,12 +205,12 @@ __bases__
 	| il s |
 	"Multiple-inheritance classes report their TRUE declared bases."
 	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
-	il @env0:== nil ifFalse: [
+	il == nil ifFalse: [
 		| entry |
 		entry := il @env0:___miRegistry___ @env0:at: self otherwise: nil.
-		entry @env0:== nil ifFalse: [^ entry @env0:at: 1]].
+		entry == nil ifFalse: [^ entry @env0:at: 1]].
 	s := self @env0:superclass.
-	^ s @env0:== nil ifTrue: [Array @env0:new] ifFalse: [Array @env0:with: s]
+	^ s == nil ifTrue: [Array @env0:new] ifFalse: [Array @env0:with: s]
 %
 
 category: 'Grail-Class Compilation'

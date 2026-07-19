@@ -181,7 +181,7 @@ __new__: iterable
 	Receiver is the class."
 
 	| items iter done |
-	(iterable @env0:isKindOf: SequenceableCollection) ifTrue: [
+	(iterable isKindOf: SequenceableCollection) ifTrue: [
 		^ self @env0:withAll: iterable
 	].
 	items := OrderedCollection @env0:new.
@@ -201,7 +201,7 @@ _new: positional kw: kwargs
 	arguments and >1 positional; raise the catchable TypeError instead
 	of an uncatchable MNU (test_tuple's test_keyword_args)."
 
-	(kwargs @env0:~~ nil and: [kwargs @env0:size @env0:> 0]) ifTrue: [
+	(kwargs ~~ nil and: [kwargs @env0:size @env0:> 0]) ifTrue: [
 		TypeError ___signal___: 'tuple() takes no keyword arguments'].
 	positional @env0:size @env0:> 1 ifTrue: [
 		TypeError ___signal___: 'tuple expected at most 1 argument, got '
@@ -219,7 +219,7 @@ __add__: other
 	| accumulator |
 	"Accept tuple + plain Array too -- the Array is Grail's ambiguous
 	*args/splat carrier (see ___sameSequenceKindAs___)."
-	((other @env0:isKindOf: tuple) or: [other @env0:class == Array]) ifFalse: [
+	((other isKindOf: tuple) or: [other @env0:class == Array]) ifFalse: [
 		^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'].
 
 	accumulator := OrderedCollection @env0:new.
@@ -280,9 +280,9 @@ __mul__: n
 	tuples because the empty instance is already frozen."
 
 	| accumulator |
-	((n @env0:isKindOf: Integer)
+	((n isKindOf: Integer)
 		or: [(n @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:~~ nil]) ifFalse: [
+			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
 	(n @env0:<= 0) ifTrue: [^ tuple @env0:new].
 	accumulator := OrderedCollection @env0:new.

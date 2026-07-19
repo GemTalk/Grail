@@ -80,8 +80,8 @@ __eq__: other
 	the Array side uses an exact-class check -- [1] == (1,) stays False.
 	Elements compare through env-1 __eq__ so Python semantics (nested
 	lists, None, cross-class strings) hold."
-	((myClass == Array or: [self @env0:isKindOf: OrderedCollection])
-		and: [otherClass == Array or: [other @env0:isKindOf: OrderedCollection]])
+	((myClass == Array or: [self isKindOf: OrderedCollection])
+		and: [otherClass == Array or: [other isKindOf: OrderedCollection]])
 		ifTrue: [
 			(self @env0:size) @env0:= (other @env0:size) ifFalse: [^ false].
 			1 @env0:to: self @env0:size do: [:i |
@@ -99,9 +99,9 @@ ___sameSequenceKindAs___: other
 	(OrderedCollection or exact plain Array), or both bytes-like."
 
 	| selfList otherList |
-	((self @env0:isKindOf: tuple) and: [other @env0:isKindOf: tuple])
+	((self isKindOf: tuple) and: [other isKindOf: tuple])
 		ifTrue: [^ true].
-	((self @env0:isKindOf: ByteArray) and: [other @env0:isKindOf: ByteArray])
+	((self isKindOf: ByteArray) and: [other isKindOf: ByteArray])
 		ifTrue: [^ true].
 	"Plain Array (EXACT class) is Grail's ambiguous sequence carrier:
 	*args captures, splat results, and legacy subStrings products all
@@ -112,8 +112,8 @@ ___sameSequenceKindAs___: other
 	strict pairs (OrderedCollection vs tuple) still raise."
 	(self @env0:class == Array or: [other @env0:class == Array])
 		ifTrue: [^ true].
-	selfList := self @env0:isKindOf: OrderedCollection.
-	otherList := other @env0:isKindOf: OrderedCollection.
+	selfList := self isKindOf: OrderedCollection.
+	otherList := other isKindOf: OrderedCollection.
 	^ selfList and: [otherList]
 %
 
@@ -234,16 +234,16 @@ __getitem__: index
 	receivers that want list-style slicing dispatch here)."
 
 	| size idx |
-	(index @env0:isKindOf: slice) ifTrue: [
+	(index isKindOf: slice) ifTrue: [
 		^ self @env1:___getslice___: index @env1:start
 			_: index @env1:stop
 			_: index @env1:step
 	].
 	"Non-integer, non-slice index: catchable TypeError (CPython message
 	shape) instead of an uncatchable env-0 comparison DNU on the index."
-	((index @env0:isKindOf: Integer)
+	((index isKindOf: Integer)
 		or: [(index @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:~~ nil]) ifFalse: [
+			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
 		TypeError @env1:___signal___: ('indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	size := self @env0:size.
@@ -340,9 +340,9 @@ __mul__: n
 	"Repeat the sequence n times. Returns a new sequence."
 
 	| result |
-	((n @env0:isKindOf: Integer)
+	((n isKindOf: Integer)
 		or: [(n @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:~~ nil]) ifFalse: [
+			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
 	result := (self @env0:species) ___new___.
 	(n @env0:<= 0) ifTrue: [

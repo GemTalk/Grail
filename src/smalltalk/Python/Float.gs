@@ -25,7 +25,7 @@ __instancecheck__: anObject
 	recognize AbstractPyFloat wrappers (float subclasses), matching
 	CPython (see int's twin hook)."
 
-	^ anObject @env0:isKindOf: AbstractPyFloat
+	^ anObject isKindOf: AbstractPyFloat
 %
 
 category: 'Grail-Instance Creation'
@@ -47,25 +47,25 @@ __new__: obj
 	obj ifNil: [ ^ 0.0 ].
 
 	"If already a float, return it"
-	(obj @env0:isKindOf: float) ifTrue: [
+	(obj isKindOf: float) ifTrue: [
 		^ obj
 	].
 
 	"Try to call __float__ on the object if it has one.  Probe the
 	ENV-1 dict (a Python user class's __float__ is an env-1 method;
 	env-0 respondsTo: missed vendored Fraction's)."
-	((obj @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) @env0:~~ nil) ifTrue: [
+	((obj @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) ~~ nil) ifTrue: [
 		result := obj @env0:perform: #'__float__' env: 1.
 		^ result
 	].
 
 	"Try to convert from integer"
-	(obj @env0:isKindOf: Integer) ifTrue: [
+	(obj isKindOf: Integer) ifTrue: [
 		^ obj @env0:asFloat
 	].
 
 	"Try to convert from string"
-	(obj @env0:isKindOf: Unicode7) ifTrue: [
+	(obj isKindOf: Unicode7) ifTrue: [
 		^ self ___newFromString___: obj
 	].
 
@@ -120,9 +120,9 @@ fromhex: hexString
 	| str sign lower body expStr binExp pIdx dotIdx intDigits fracDigits digits m shift mag |
 	str := hexString @env0:trimBoth.
 	sign := 1.
-	(str @env0:notEmpty and: [(str @env0:at: 1) @env0:== $-])
+	(str @env0:notEmpty and: [(str @env0:at: 1) == $-])
 		ifTrue: [sign := -1. str := str @env0:copyFrom: 2 to: str @env0:size].
-	(str @env0:notEmpty and: [(str @env0:at: 1) @env0:== $+])
+	(str @env0:notEmpty and: [(str @env0:at: 1) == $+])
 		ifTrue: [str := str @env0:copyFrom: 2 to: str @env0:size].
 	lower := str @env0:asLowercase.
 	(lower @env0:= 'inf' or: [lower @env0:= 'infinity']) ifTrue: [
@@ -155,7 +155,7 @@ fromhex: hexString
 	mag := shift @env0:>= 0
 		ifTrue: [(m @env0:* (2 @env0:raisedTo: shift)) @env0:asFloat]
 		ifFalse: [(m @env0:/ (2 @env0:raisedTo: shift @env0:negated)) @env0:asFloat].
-	((mag @env0:_getKind) @env0:== 3) ifTrue: [
+	((mag @env0:_getKind) == 3) ifTrue: [
 		OverflowError ___signal___: 'hexadecimal value too large to represent as a float'].
 	^ sign @env0:> 0 ifTrue: [mag] ifFalse: [mag @env0:negated]
 %
@@ -168,9 +168,9 @@ ___parseDecInt___: s
 	| str sign n |
 	str := s @env0:trimBoth.
 	sign := 1.
-	(str @env0:notEmpty and: [(str @env0:at: 1) @env0:== $-])
+	(str @env0:notEmpty and: [(str @env0:at: 1) == $-])
 		ifTrue: [sign := -1. str := str @env0:copyFrom: 2 to: str @env0:size].
-	(str @env0:notEmpty and: [(str @env0:at: 1) @env0:== $+])
+	(str @env0:notEmpty and: [(str @env0:at: 1) == $+])
 		ifTrue: [str := str @env0:copyFrom: 2 to: str @env0:size].
 	str @env0:isEmpty ifTrue: [
 		ValueError ___signal___: 'invalid hexadecimal floating-point string'].
@@ -242,7 +242,7 @@ method: float
 __add__: other
 	"Add two floats or float and other number."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:+ other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:+ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:+ (other @env1:__index__)].
 	^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'
@@ -295,8 +295,8 @@ __eq__: other
 	the inherited identity __eq__ keeps the kernel = (identity) answer."
 
 	| refOwner |
-	(other @env0:isKindOf: complex) ifTrue: [^ other @env1:__eq__: self].
-	(other @env0:isKindOf: PythonInstance) ifTrue: [
+	(other isKindOf: complex) ifTrue: [^ other @env1:__eq__: self].
+	(other isKindOf: PythonInstance) ifTrue: [
 		refOwner := other @env0:class @env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
 		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
 			^ other @env0:perform: #'__eq__:' env: 1 withArguments: { self }]].
@@ -324,7 +324,7 @@ method: float
 __floordiv__: other
 	"Floor division."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:// other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:// other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:// (other @env1:__index__)].
 	^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'
@@ -335,7 +335,7 @@ method: float
 __ge__: other
 	"Greater than or equal comparison."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:>= other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:>= other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
 		^ self @env0:>= (other @env1:__index__)
@@ -348,7 +348,7 @@ method: float
 __gt__: other
 	"Greater than comparison."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:> other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:> other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
 		^ self @env0:> (other @env1:__index__)
@@ -369,7 +369,7 @@ method: float
 __le__: other
 	"Less than or equal comparison."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:<= other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:<= other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
 		^ self @env0:<= (other @env1:__index__)
@@ -382,7 +382,7 @@ method: float
 __lt__: other
 	"Less than comparison."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:< other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:< other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
 		^ self @env0:< (other @env1:__index__)
@@ -395,7 +395,7 @@ method: float
 __mod__: other
 	"Modulo operation."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:\\ other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:\\ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:\\ (other @env1:__index__)].
 	^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'
@@ -406,7 +406,7 @@ method: float
 __mul__: other
 	"Multiply two floats or float and other number."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:* other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:* other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:* (other @env1:__index__)].
 	^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'
@@ -441,7 +441,7 @@ method: float
 __pow__: other
 	"Raise self to the power of other."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:raisedTo: other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:raisedTo: other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:raisedTo: (other @env1:__index__)].
 	^ self ___binOpFallback___: other op: '**' reflected: #'__rpow__:'
@@ -525,7 +525,7 @@ method: float
 __sub__: other
 	"Subtract other from self."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:- (other)].
+	(other isKindOf: Number) ifTrue: [^ self @env0:- (other)].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:- ((other @env1:__index__))].
 	^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'
@@ -536,7 +536,7 @@ method: float
 __truediv__: other
 	"True division (always returns float)."
 
-	(other @env0:isKindOf: Number) ifTrue: [^ self @env0:/ other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:/ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:/ (other @env1:__index__)].
 	^ self ___binOpFallback___: other op: '/' reflected: #'__rtruediv__:'
@@ -580,7 +580,7 @@ hex
 	| kind neg ax fr mant e leadDigit expVal frac52 hexDigits sign |
 	kind := self @env0:_getKind.
 	(kind @env0:> 4) ifTrue: [^ 'nan' @env0:asUnicodeString].
-	(kind @env0:== 3) ifTrue: [
+	(kind == 3) ifTrue: [
 		^ ((self @env0:< 0) ifTrue: ['-inf'] ifFalse: ['inf']) @env0:asUnicodeString].
 	(self @env0:= 0.0) ifTrue: [
 		^ (((1.0 @env0:/ self) @env0:< 0)

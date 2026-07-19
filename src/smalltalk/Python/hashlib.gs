@@ -67,7 +67,7 @@ _initAlgo: algoSym data: someBytes
 self @env0:dynamicInstVarAt: #algo put: algoSym.
 self @env0:dynamicInstVarAt: #buffer put: ByteArray @env0:new.
 	someBytes ifNotNil: [
-		(someBytes @env0:isKindOf: ByteArray) ifTrue: [
+		(someBytes isKindOf: ByteArray) ifTrue: [
 			self @env0:dynamicInstVarAt: #buffer put: ((self @env0:dynamicInstVarAt: #buffer) @env0:, someBytes)
 		] ifFalse: [
 			"Treat str-shaped input as UTF-8; CPython hashes only bytes,
@@ -155,7 +155,7 @@ update: data
 	"Append ``data`` (bytes / str / bytearray) to the buffer."
 
 	data ifNil: [^ None].
-	(data @env0:isKindOf: ByteArray) ifTrue: [
+	(data isKindOf: ByteArray) ifTrue: [
 		self @env0:dynamicInstVarAt: #buffer put: ((self @env0:dynamicInstVarAt: #buffer) @env0:, data)
 	] ifFalse: [
 		self @env0:dynamicInstVarAt: #buffer put: ((self @env0:dynamicInstVarAt: #buffer) @env0:, data @env0:asByteArray)

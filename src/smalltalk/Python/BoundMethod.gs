@@ -221,7 +221,7 @@ value: positional value: kwargs
 		list; when positional is itself a tuple -- e.g. threading
 		start_new_thread(fn, ()) re-invokes the target with the () args tuple --
 		coerce to an exact Array."
-		(actualArgs @env0:class @env0:== Array)
+		(actualArgs @env0:class == Array)
 			@env0:ifFalse: [actualArgs := Array @env0:withAll: actualArgs].
 	(kwargs == nil or: [kwargs @env0:isEmpty]) ifTrue: [
 		nargs := actualArgs @env0:size.
@@ -248,7 +248,7 @@ value: positional value: kwargs
 	CPython's catchable TypeError (``assertRaises(TypeError,
 	math.acos)`` calls a 1-arg module function with 0 args -- the
 	blind varargs perform was an uncatchable MNU)."
-	((actualReceiver @env0:class @env0:whichClassIncludesSelector: selVarargs environmentId: 1) @env0:== nil)
+	((actualReceiver @env0:class @env0:whichClassIncludesSelector: selVarargs environmentId: 1) == nil)
 		ifTrue: [
 			TypeError @env1:___signal___: (selector @env0:asString
 				@env0:, '() takes a different number of arguments ('
@@ -301,7 +301,7 @@ __name__
 	identifier matching the Python ``def'' name.  Falls back to the
 	receiver class name for an unbound class-method handle."
 
-	selector @env0:== nil ifTrue: [^ receiver @env0:class @env0:name @env0:asString].
+	selector == nil ifTrue: [^ receiver @env0:class @env0:name @env0:asString].
 	^ selector @env0:asString
 %
 
@@ -358,9 +358,9 @@ __eq__: other
 	=/hash), so Grail-internal collections that key BoundMethods by
 	identity are unaffected."
 
-	(other @env0:isKindOf: BoundMethod) ifFalse: [^ false].
-	^ (receiver @env0:== (other @env0:receiver))
-		and: [selector @env0:== (other @env0:selector)]
+	(other isKindOf: BoundMethod) ifFalse: [^ false].
+	^ (receiver == (other @env0:receiver))
+		and: [selector == (other @env0:selector)]
 %
 
 category: 'Grail-Comparison'
@@ -415,10 +415,10 @@ __annotations__
 	reports an empty dict, matching CPython's ``always has one''."
 
 	| cls |
-	receiver @env0:== nil ifTrue: [^ KeyValueDictionary @env0:new].
-	(receiver @env0:isKindOf: module)
+	receiver == nil ifTrue: [^ KeyValueDictionary @env0:new].
+	(receiver isKindOf: module)
 		ifTrue: [^ receiver @env0:___functionAnnotationsFor___: selector @env0:asString].
-	cls := (receiver @env0:isKindOf: Class)
+	cls := (receiver isKindOf: Class)
 		ifTrue: [receiver]
 		ifFalse: [receiver @env0:class].
 	^ self @env1:___methodAnnotationsForClass___: cls name: selector @env0:asString
@@ -437,11 +437,11 @@ ___methodAnnotationsForClass___: aClass name: aName
 	see it."
 
 	| tbl v |
-	aClass @env0:== nil ifTrue: [^ KeyValueDictionary @env0:new].
-	((aClass @env0:class @env0:whichClassIncludesSelector: #'___methodAnnotationsTable___' environmentId: 1) @env0:~~ nil) ifTrue: [
+	aClass == nil ifTrue: [^ KeyValueDictionary @env0:new].
+	((aClass @env0:class @env0:whichClassIncludesSelector: #'___methodAnnotationsTable___' environmentId: 1) ~~ nil) ifTrue: [
 		tbl := aClass @env1:___methodAnnotationsTable___.
 		v := tbl @env0:at: aName otherwise: nil.
-		v @env0:== nil ifFalse: [^ v]].
+		v == nil ifFalse: [^ v]].
 	^ self @env1:___methodAnnotationsForClass___: (aClass @env0:superclass) name: aName
 %
 

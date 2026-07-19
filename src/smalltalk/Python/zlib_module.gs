@@ -109,7 +109,7 @@ _callouts
 
 	| d lib libName |
 	d := SessionTemps @env0:current @env0:at: #Grail_zlib_callouts otherwise: nil.
-	d @env0:== nil ifTrue: [
+	d == nil ifTrue: [
 		"libz lives at a different path/extension per OS; pass a bare soname
 		and let the loader resolve it (avoids Linux multiarch dir differences).
 		libz.so.1 is the runtime soname from zlib1g - present without -dev."
@@ -132,8 +132,8 @@ method: zlib
 _asBytes: data
 	"Coerce a bytes-like argument to ByteArray; reject str like CPython."
 
-	(data @env0:isKindOf: ByteArray) ifTrue: [^ data].
-	(data @env0:isKindOf: CharacterCollection) ifTrue: [
+	(data isKindOf: ByteArray) ifTrue: [^ data].
+	(data isKindOf: CharacterCollection) ifTrue: [
 		TypeError @env1:___signal___: 'a bytes-like object is required, not ''str'''].
 	^ data @env0:asByteArray
 %
@@ -176,7 +176,7 @@ _compress: positional kw: kwargs
 	level := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [
-			(kwargs @env0:== nil)
+			(kwargs == nil)
 				ifTrue: [-1]
 				ifFalse: [kwargs @env0:at: 'level' ifAbsent: [-1]]].
 	^ self @env1:compress: data _: level
@@ -242,13 +242,13 @@ _decompress: positional kw: kwargs
 	wbits := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [
-			(kwargs @env0:== nil)
+			(kwargs == nil)
 				ifTrue: [15]
 				ifFalse: [kwargs @env0:at: 'wbits' ifAbsent: [15]]].
 	bufsize := (positional @env0:size @env0:>= 3)
 		ifTrue: [positional @env0:at: 3]
 		ifFalse: [
-			(kwargs @env0:== nil)
+			(kwargs == nil)
 				ifTrue: [16384]
 				ifFalse: [kwargs @env0:at: 'bufsize' ifAbsent: [16384]]].
 	^ self @env1:decompress: data _: wbits _: bufsize

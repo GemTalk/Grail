@@ -212,15 +212,15 @@ guess_type: url _: strict
 		ext := self @env1:___extOf___: path
 	].
 	type := self @env1:types_map @env0:at: ext @env0:asLowercase ifAbsent: [nil].
-	type @env0:== nil ifTrue: [
+	type == nil ifTrue: [
 		^ tuple @env0:withAll: {
 			None.
-			encoding @env0:== nil ifTrue: [None] ifFalse: [encoding]
+			encoding == nil ifTrue: [None] ifFalse: [encoding]
 		}
 	].
 	^ tuple @env0:withAll: {
 		type.
-		encoding @env0:== nil ifTrue: [None] ifFalse: [encoding]
+		encoding == nil ifTrue: [None] ifFalse: [encoding]
 	}
 %
 

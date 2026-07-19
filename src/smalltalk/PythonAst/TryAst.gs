@@ -123,7 +123,7 @@ printSmalltalkOn: aStream
 		PythonReturn that carries the render result and dispatches
 		into the handler with a BoundMethod-shaped ``___ex``."
 		aStream
-			nextPutAll: '((___ex @env0:isKindOf: PythonReturn) or: [(___ex @env0:isKindOf: PythonBreak) or: [___ex @env0:isKindOf: PythonContinue]]) ifTrue: [___ex @env0:pass].';
+			nextPutAll: '((___ex isKindOf: PythonReturn) or: [(___ex isKindOf: PythonBreak) or: [___ex isKindOf: PythonContinue]]) ifTrue: [___ex @env0:pass].';
 			lf.
 		handler name ifNotNil: [
 			"Route ``except X as e'' through the module-scope-aware store so

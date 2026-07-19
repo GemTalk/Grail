@@ -42,7 +42,7 @@ __new__: source
 	result := self ___new___.
 
 	"Mapping fast path: source is a dict (or KeyValueDictionary)"
-	(source @env0:isKindOf: KeyValueDictionary) ifTrue: [
+	(source isKindOf: KeyValueDictionary) ifTrue: [
 		source @env0:keysAndValuesDo: [:_k :_v |
 			result @env0:at: _k put: _v
 		].
@@ -102,7 +102,7 @@ fromkeys: iterable _: value
 
 	| result iter done |
 	result := self ___new___.
-	(iterable @env0:isKindOf: SequenceableCollection) ifTrue: [
+	(iterable isKindOf: SequenceableCollection) ifTrue: [
 		1 @env0:to: iterable @env0:size do: [:i |
 			result @env0:at: (iterable @env0:at: i) put: value
 		].
@@ -189,9 +189,9 @@ __init__: source
 	the source-copy behaviour instead of bouncing off the
 	``no parent method __init__'' miss."
 
-	source @env0:== nil ifTrue: [^ None].
-	source @env0:== None ifTrue: [^ None].
-	(source @env0:isKindOf: KeyValueDictionary) ifTrue: [
+	source == nil ifTrue: [^ None].
+	source == None ifTrue: [^ None].
+	(source isKindOf: KeyValueDictionary) ifTrue: [
 		source @env0:keysAndValuesDo: [:_k :_v |
 			self @env0:at: _k put: _v].
 		^ None].
@@ -281,7 +281,7 @@ __eq__: other
 	__dict__, C-shim results, dicts committed before the PyDict flip).  A
 	Python dict must compare equal to any of them by contents -- exactly
 	what this guard meant when ``dict'' was itself KeyValueDictionary."
-	(other @env0:isKindOf: KeyValueDictionary) ifFalse: [
+	(other isKindOf: KeyValueDictionary) ifFalse: [
 		^ false
 	].
 	
@@ -508,7 +508,7 @@ pop: key _: default
 		self @env0:removeKey: key.
 		^ value
 	].
-	((key @env0:isKindOf: String) and: [self @env0:includesKey: key @env0:asSymbol])
+	((key isKindOf: String) and: [self @env0:includesKey: key @env0:asSymbol])
 		ifTrue: [
 			value := self @env0:at: key @env0:asSymbol.
 			self @env0:removeKey: key @env0:asSymbol.
@@ -568,7 +568,7 @@ update: other
 	"Update the dictionary with key/value pairs from other, overwriting existing keys"
 
 	| keysMethod keysIter iter done k idx |
-	(other @env0:isKindOf: KeyValueDictionary) ifTrue: [
+	(other isKindOf: KeyValueDictionary) ifTrue: [
 		other @env0:keysAndValuesDo: [:key :value |
 			self @env0:at: key put: value].
 		^ None].
@@ -576,7 +576,7 @@ update: other
 	(PyInstanceDict, user mappings) -- mirrors ___fromMapping___."
 	keysMethod := [other @env1:keys]
 		@env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: #__noKeys__].
-	(keysMethod @env0:== #__noKeys__) ifFalse: [
+	(keysMethod == #__noKeys__) ifFalse: [
 		keysIter := keysMethod __iter__.
 		done := false.
 		[done] @env0:whileFalse: [
@@ -588,7 +588,7 @@ update: other
 	do: here was an uncatchable MNU for d.update(None) / d.update(42)
 	(test_dict, mapping_tests)."
 	((other @env0:class
-		@env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) @env0:~~ nil) ifFalse: [
+		@env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) ~~ nil) ifFalse: [
 		TypeError ___signal___: '''' @env0:, other @env0:class @env0:name @env0:asString
 			@env0:, ''' object is not iterable'].
 	iter := other __iter__.
@@ -597,9 +597,9 @@ update: other
 	[done] @env0:whileFalse: [
 		[| pair |
 		pair := iter __next__.
-		((pair @env0:isKindOf: SequenceableCollection)
+		((pair isKindOf: SequenceableCollection)
 			or: [(pair @env0:class
-				@env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) @env0:~~ nil]) ifFalse: [
+				@env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) ~~ nil]) ifFalse: [
 			TypeError ___signal___: 'cannot convert dictionary update sequence element #'
 				@env0:, idx @env0:printString @env0:, ' to a sequence'].
 		(pair @env1:__len__ @env0:= 2) ifFalse: [

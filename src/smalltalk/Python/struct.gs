@@ -110,7 +110,7 @@ unpack: format _: buffer
 	"unpack(format, buffer) - return tuple of values."
 
 	| parsed bytes order results |
-	bytes := (buffer @env0:isKindOf: ByteArray)
+	bytes := (buffer isKindOf: ByteArray)
 		ifTrue: [buffer]
 		ifFalse: [buffer @env0:asByteArray].
 	parsed := self @env1:_parse: format.
@@ -134,7 +134,7 @@ unpack_from: format _: buffer _: offset
 	at offset; doesn't require buffer to be exactly calcsize(format)."
 
 	| parsed bytes results |
-	bytes := (buffer @env0:isKindOf: ByteArray)
+	bytes := (buffer isKindOf: ByteArray)
 		ifTrue: [buffer]
 		ifFalse: [buffer @env0:asByteArray].
 	parsed := self @env1:_parse: format.
@@ -234,7 +234,7 @@ category: 'Grail-Private'
 method: struct
 _packBytes: bytesVal onto: stream length: n
 	| bytes |
-	bytes := (bytesVal @env0:isKindOf: ByteArray)
+	bytes := (bytesVal isKindOf: ByteArray)
 		ifTrue: [bytesVal]
 		ifFalse: [bytesVal @env0:asByteArray].
 	1 @env0:to: n do: [:i |
@@ -259,7 +259,7 @@ _packOne: typeChar order: order value: value onto: stream
 	typeChar @env0:= $Q ifTrue: [^ self @env1:_packIntUnsigned: value bytes: 8 order: order onto: stream].
 	typeChar @env0:= $c ifTrue: [^ self @env1:_packBytes: value onto: stream length: 1].
 	typeChar @env0:= $? ifTrue: [
-		stream @env0:nextPut: (value @env0:== true ifTrue: [1] ifFalse: [0]).
+		stream @env0:nextPut: (value == true ifTrue: [1] ifFalse: [0]).
 		^ self
 	].
 	typeChar @env0:= $f ifTrue: [^ self @env1:_packDouble: value bytes: 4 order: order onto: stream].

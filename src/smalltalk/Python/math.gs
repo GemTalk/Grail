@@ -97,7 +97,7 @@ sin: x
 	"sin(+/-inf) is a domain error (ValueError); sin(nan) = nan."
 	| f |
 	f := self @env1:___real___: x.
-	(f @env0:_getKind) @env0:== 3 ifTrue: [ValueError ___signal___: 'math domain error'].
+	(f @env0:_getKind) == 3 ifTrue: [ValueError ___signal___: 'math domain error'].
 	^ f @env0:sin
 %
 
@@ -107,7 +107,7 @@ cos: x
 	"cos(+/-inf) is a domain error (ValueError); cos(nan) = nan."
 	| f |
 	f := self @env1:___real___: x.
-	(f @env0:_getKind) @env0:== 3 ifTrue: [ValueError ___signal___: 'math domain error'].
+	(f @env0:_getKind) == 3 ifTrue: [ValueError ___signal___: 'math domain error'].
 	^ f @env0:cos
 %
 
@@ -117,7 +117,7 @@ tan: x
 	"tan(+/-inf) is a domain error (ValueError); tan(nan) = nan."
 	| f |
 	f := self @env1:___real___: x.
-	(f @env0:_getKind) @env0:== 3 ifTrue: [ValueError ___signal___: 'math domain error'].
+	(f @env0:_getKind) == 3 ifTrue: [ValueError ___signal___: 'math domain error'].
 	^ f @env0:tan
 %
 
@@ -222,7 +222,7 @@ ___rangeCheck___: r finite: inputWasFinite
 	An infinite result from an already-infinite input (exp(inf)) is not an
 	overflow.  Returns r unchanged otherwise."
 
-	((r @env0:_getKind) @env0:== 3 and: [inputWasFinite])
+	((r @env0:_getKind) == 3 and: [inputWasFinite])
 		ifTrue: [OverflowError ___signal___: 'math range error'].
 	^ r
 %
@@ -255,7 +255,7 @@ ___naturalLog___: x
 	huge integer whose float conversion would overflow to inf."
 
 	| f |
-	(x @env0:isKindOf: Integer) ifTrue: [
+	(x isKindOf: Integer) ifTrue: [
 		"An integer argument carries no float value in its message (it could
 		be huge): CPython says just ``expected a positive input''."
 		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'expected a positive input'].
@@ -289,7 +289,7 @@ log10: x
 	natural log (log10(10**1000) = 1000) rather than overflowing."
 
 	| f |
-	((x @env0:isKindOf: Integer) and: [x @env0:highBit @env0:> 1023]) ifTrue: [
+	((x isKindOf: Integer) and: [x @env0:highBit @env0:> 1023]) ifTrue: [
 		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'math domain error'].
 		^ (self @env1:___logHugeInt___: x) @env0:/ (10.0 @env0:ln)].
 	f := self @env1:___real___: x.
@@ -310,7 +310,7 @@ log2: x
 	Non-powers and huge integers keep the natural-log path."
 
 	| f e |
-	(x @env0:isKindOf: Integer) ifTrue: [
+	(x isKindOf: Integer) ifTrue: [
 		x @env0:<= 0 ifTrue: [ValueError ___signal___: 'math domain error'].
 		((x @env0:bitAnd: x @env0:- 1) @env0:= 0) ifTrue: [^ (x @env0:highBit @env0:- 1) @env0:asFloat].
 		(x @env0:highBit @env0:> 1023) ifTrue: [^ (self @env1:___logHugeInt___: x) @env0:/ (2.0 @env0:ln)].
@@ -378,11 +378,11 @@ ___dunderRound___: x selector: dunder default: fallback coerceFloat: coerceFloat
 	(NOT coerceFloat) requires __trunc__ -- a bare __float__ is a TypeError,
 	so only a genuine Smalltalk Number is truncated."
 
-	(((x @env0:class @env0:whichClassIncludesSelector: dunder environmentId: 1) @env0:~~ nil)
-		or: [(x @env0:class @env0:class @env0:whichClassIncludesSelector: dunder environmentId: 1) @env0:~~ nil])
+	(((x @env0:class @env0:whichClassIncludesSelector: dunder environmentId: 1) ~~ nil)
+		or: [(x @env0:class @env0:class @env0:whichClassIncludesSelector: dunder environmentId: 1) ~~ nil])
 		ifTrue: [^ (x @env1:___pyAttrLoad___: dunder) @env1:value: { } value: nil].
 	coerceFloat ifTrue: [^ (self @env1:___real___: x) @env0:perform: fallback].
-	(x @env0:isKindOf: Number) ifTrue: [^ x @env0:perform: fallback].
+	(x isKindOf: Number) ifTrue: [^ x @env0:perform: fallback].
 	TypeError ___signal___: ('type '
 		@env0:, x @env0:class @env0:name @env0:asString
 		@env0:, ' doesn''t define ' @env0:, dunder @env0:asString @env0:, ' method')
@@ -517,7 +517,7 @@ ldexp: x _: i
 	| fx ii mag |
 	fx := self @env1:___real___: x.
 	ii := self @env1:___index___: i.
-	(fx @env0:_isNaN or: [(fx @env0:_getKind) @env0:== 3 or: [fx @env0:= 0.0]])
+	(fx @env0:_isNaN or: [(fx @env0:_getKind) == 3 or: [fx @env0:= 0.0]])
 		ifTrue: [^ fx].
 	"Inside the representable exponent window, scale as an exact rational and
 	round once: a bare fx * 2**ii would FLUSH a subnormal result to zero
@@ -595,10 +595,10 @@ ___fsumCoerce___: item
 	silent inf; everything else goes through ___real___ (Boolean/Number/
 	__float__, TypeError on non-numerics)."
 
-	(item @env0:isKindOf: Integer) ifTrue: [
+	(item isKindOf: Integer) ifTrue: [
 		| f |
 		f := item @env0:asFloat.
-		((f @env0:_getKind) @env0:== 3) ifTrue: [
+		((f @env0:_getKind) == 3) ifTrue: [
 			OverflowError ___signal___: 'int too large to convert to float'].
 		^ f].
 	^ self @env1:___real___: item
@@ -661,11 +661,11 @@ fsum: iterable
 			x := hi ].
 		[partials @env0:size @env0:> i] @env0:whileTrue: [ partials @env0:removeLast ].
 		(x @env0:~= 0.0) ifTrue: [
-			(x @env0:_isNaN or: [(x @env0:_getKind) @env0:== 3])
+			(x @env0:_isNaN or: [(x @env0:_getKind) == 3])
 				ifTrue: [
 					(xsave @env0:_isNaN @env0:not and: [(xsave @env0:_getKind) @env0:~= 3])
 						ifTrue: [ OverflowError ___signal___: 'intermediate overflow in fsum' ].
-					(xsave @env0:_getKind) @env0:== 3 ifTrue: [ infSum := infSum @env0:+ xsave ].
+					(xsave @env0:_getKind) == 3 ifTrue: [ infSum := infSum @env0:+ xsave ].
 					specialSum := specialSum @env0:+ xsave.
 					partials := OrderedCollection @env0:new ]
 				ifFalse: [ partials @env0:add: x ] ] ].
@@ -727,7 +727,7 @@ _nextafter: positional kw: kwargs
 	| fx fy steps up cur fmax |
 	fx := self @env1:___real___: (positional @env0:at: 1).
 	fy := self @env1:___real___: (positional @env0:at: 2).
-	steps := (kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'steps'])
+	steps := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'steps'])
 		ifTrue: [self @env1:___index___: (kwargs @env0:at: 'steps')]
 		ifFalse: [1].
 	(fx @env0:_isNaN or: [fy @env0:_isNaN]) ifTrue: [^ PlusQuietNaN].
@@ -762,10 +762,10 @@ _hypot: positional kw: kwargs
 	down into the subnormals)."
 
 	| coords floats hasInf hasNan sumSq k |
-	(kwargs @env0:~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
+	(kwargs ~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
 		TypeError ___signal___: 'hypot() takes no keyword arguments'].
 	coords := (positional @env0:size @env0:= 1
-		and: [((positional @env0:at: 1) @env0:isKindOf: Number) @env0:not])
+		and: [((positional @env0:at: 1) isKindOf: Number) @env0:not])
 		ifTrue: [self @env1:___materialize___: (positional @env0:at: 1)]
 		ifFalse: [positional].
 	floats := OrderedCollection @env0:new.
@@ -797,7 +797,7 @@ ___fracMagnitudeBits___: s
 	"Approximate floor(log2(|s|)) for an exact Integer or Fraction -- used to
 	pick a power-of-two scale that brings a sqrt argument to O(1)."
 
-	(s @env0:isKindOf: Integer) ifTrue: [^ s @env0:highBit].
+	(s isKindOf: Integer) ifTrue: [^ s @env0:highBit].
 	^ s @env0:numerator @env0:abs @env0:highBit @env0:- (s @env0:denominator @env0:highBit)
 %
 
@@ -902,7 +902,7 @@ sumprod: pIter _: qIter
 		handled := false.
 		"Integer fast path: exact accumulation of a leading int*int run."
 		intOn @env0:ifTrue: [
-			((p @env0:isKindOf: Integer) @env0:and: [q @env0:isKindOf: Integer])
+			((p isKindOf: Integer) @env0:and: [q isKindOf: Integer])
 				@env0:ifTrue: [
 					intTotal := intTotal @env0:+ (p @env0:* q).
 					intInUse := true.
@@ -915,11 +915,11 @@ sumprod: pIter _: qIter
 		"Float path: TripleLength compensated dot-product accumulation."
 		(handled @env0:not @env0:and: [fltOn]) @env0:ifTrue: [
 			| pFlt qFlt canFlt |
-			pFlt := p @env0:isKindOf: Float.
-			qFlt := q @env0:isKindOf: Float.
+			pFlt := p isKindOf: Float.
+			qFlt := q isKindOf: Float.
 			canFlt := (pFlt @env0:and: [qFlt])
-				@env0:or: [(pFlt @env0:and: [(q @env0:isKindOf: Integer) @env0:or: [q @env0:isKindOf: Boolean]])
-				@env0:or: [qFlt @env0:and: [(p @env0:isKindOf: Integer) @env0:or: [p @env0:isKindOf: Boolean]]]].
+				@env0:or: [(pFlt @env0:and: [(q isKindOf: Integer) @env0:or: [q isKindOf: Boolean]])
+				@env0:or: [qFlt @env0:and: [(p isKindOf: Integer) @env0:or: [p isKindOf: Boolean]]]].
 			canFlt @env0:ifTrue: [
 				tl := self @env1:___tlFma___: (p @env0:asFloat) _: (q @env0:asFloat)
 					hi: fltHi lo: fltLo tiny: fltTiny.
@@ -936,10 +936,10 @@ sumprod: pIter _: qIter
 		"General path: env-1 protocol (Fraction/Decimal, error propagation)."
 		handled @env0:ifFalse: [
 			| pInt qInt pFl qFl |
-			pInt := p @env0:isKindOf: Integer.
-			qInt := q @env0:isKindOf: Integer.
-			pFl := p @env0:isKindOf: Float.
-			qFl := q @env0:isKindOf: Float.
+			pInt := p isKindOf: Integer.
+			qInt := q isKindOf: Integer.
+			pFl := p isKindOf: Float.
+			qFl := q isKindOf: Float.
 			"An int too large to convert to a double overflows -- CPython
 			raises OverflowError from PyNumber_Multiply's int->float coercion."
 			((pInt @env0:and: [qFl]) @env0:or: [qInt @env0:and: [pFl]]) @env0:ifTrue: [
@@ -1031,8 +1031,8 @@ ___realToExact___: v
 	accumulation: a Boolean is 1/0, an Integer is itself, a Float is its
 	exact binary Fraction."
 
-	(v @env0:isKindOf: Boolean) ifTrue: [^ v ifTrue: [1] ifFalse: [0]].
-	(v @env0:isKindOf: Integer) ifTrue: [^ v].
+	(v isKindOf: Boolean) ifTrue: [^ v ifTrue: [1] ifFalse: [0]].
+	(v isKindOf: Integer) ifTrue: [^ v].
 	^ v @env0:asFraction
 %
 
@@ -1045,22 +1045,22 @@ ___real___: x
 	convert through the protocol.  Bare @env0:asFloat on a string
 	produced downstream uncatchable MNUs (math.exp('x'))."
 
-	(x @env0:isKindOf: Boolean) ifTrue: [^ x ifTrue: [1.0] ifFalse: [0.0]].
-	(x @env0:isKindOf: Number) ifTrue: [
+	(x isKindOf: Boolean) ifTrue: [^ x ifTrue: [1.0] ifFalse: [0.0]].
+	(x isKindOf: Number) ifTrue: [
 		| f |
 		f := x @env0:asFloat.
 		"An integer beyond the float range is an OverflowError, matching
 		CPython's float(int) (hypot/dist and the transcendental functions all
 		reject it).  A Float that is already infinite passes through."
-		((x @env0:isKindOf: Integer) and: [f @env0:abs @env0:= PlusInfinity]) ifTrue: [
+		((x isKindOf: Integer) and: [f @env0:abs @env0:= PlusInfinity]) ifTrue: [
 			OverflowError ___signal___: 'int too large to convert to float'].
 		^ f].
-	((x @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) @env0:~~ nil)
+	((x @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) ~~ nil)
 		ifTrue: [^ (x @env0:perform: #'__float__' env: 1) @env0:asFloat].
 	"__float__ may be a class-body DESCRIPTOR (BadFloat: __float__ = BadDescr())
 	rather than a method def; load it as an attribute so the descriptor's
 	__get__ fires (BadDescr raises ValueError) instead of a spurious TypeError."
-	((x @env0:class @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) @env0:~~ nil)
+	((x @env0:class @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) ~~ nil)
 		ifTrue: [^ ((x @env1:___pyAttrLoad___: #'__float__') @env1:value: { } value: nil) @env0:asFloat].
 	TypeError ___signal___: ('must be real number, not '
 		@env0:, x @env0:class @env0:name @env0:asString)
@@ -1077,11 +1077,11 @@ _isclose: positional kw: kwargs
 	b := self @env1:___real___: (positional @env0:at: 2).
 	relTol := (positional @env0:size @env0:>= 3)
 		ifTrue: [positional @env0:at: 3]
-		ifFalse: [(kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'rel_tol'])
+		ifFalse: [(kwargs ~~ nil and: [kwargs @env0:includesKey: 'rel_tol'])
 			ifTrue: [kwargs @env0:at: 'rel_tol'] ifFalse: [1e-09]].
 	absTol := (positional @env0:size @env0:>= 4)
 		ifTrue: [positional @env0:at: 4]
-		ifFalse: [(kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'abs_tol'])
+		ifFalse: [(kwargs ~~ nil and: [kwargs @env0:includesKey: 'abs_tol'])
 			ifTrue: [kwargs @env0:at: 'abs_tol'] ifFalse: [0.0]].
 	(relTol @env0:< 0 or: [absTol @env0:< 0]) ifTrue: [
 		ValueError ___signal___: 'tolerances must be non-negative'].
@@ -1122,9 +1122,9 @@ ___index___: x
 	integer, not a float).  bool -> 0/1; a float/str/Decimal argument is a
 	TypeError, matching math.isqrt/comb/perm/gcd."
 
-	(x @env0:isKindOf: Boolean) ifTrue: [^ x ifTrue: [1] ifFalse: [0]].
-	(x @env0:isKindOf: Integer) ifTrue: [^ x].
-	((x @env0:class @env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:~~ nil)
+	(x isKindOf: Boolean) ifTrue: [^ x ifTrue: [1] ifFalse: [0]].
+	(x isKindOf: Integer) ifTrue: [^ x].
+	((x @env0:class @env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil)
 		ifTrue: [^ (x @env0:perform: #'__index__' env: 1) @env0:asInteger].
 	TypeError ___signal___: ('''' @env0:, x @env0:class @env0:name @env0:asString
 		@env0:, ''' object cannot be interpreted as an integer')
@@ -1184,7 +1184,7 @@ perm: n _: k
 	nn := self @env1:___index___: n.
 	nn @env0:< 0 ifTrue: [
 		ValueError ___signal___: 'n must be a non-negative integer'].
-	k @env0:== None ifTrue: [^ self @env1:factorial: nn].
+	k == None ifTrue: [^ self @env1:factorial: nn].
 	kk := self @env1:___index___: k.
 	kk @env0:< 0 ifTrue: [
 		ValueError ___signal___: 'k must be a non-negative integer'].
@@ -1242,7 +1242,7 @@ _prod: positional kw: kwargs
 		TypeError ___signal___: 'prod expected 1 positional argument (the iterable), got '
 			@env0:, positional @env0:size @env0:printString.
 	].
-	acc := (kwargs @env0:~~ nil and: [kwargs @env0:includesKey: 'start'])
+	acc := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'start'])
 		ifTrue: [kwargs @env0:at: 'start'] ifFalse: [1].
 	iter := positional @env0:at: 1.
 	elements := self @env1:___materialize___: iter.
@@ -1264,7 +1264,7 @@ exp2: x
 	| f |
 	f := self @env1:___real___: x.
 	f @env0:_isNaN ifTrue: [^ f].
-	(f @env0:_getKind) @env0:== 3 ifTrue: [
+	(f @env0:_getKind) == 3 ifTrue: [
 		^ f @env0:> 0 ifTrue: [PlusInfinity] ifFalse: [0.0]].
 	^ self @env1:___rangeCheck___: (2.0 @env0:raisedTo: f) finite: true
 %
@@ -1284,7 +1284,7 @@ log1p: x
 	"log1p(-1) is log(0), and x <= -1 is log of a negative: domain error."
 	u @env0:<= 0.0 ifTrue: [ValueError ___signal___: 'math domain error'].
 	"x = +inf: log1p(+inf) = +inf."
-	(u @env0:_getKind) @env0:== 3 ifTrue: [^ PlusInfinity].
+	(u @env0:_getKind) == 3 ifTrue: [^ PlusInfinity].
 	"1+x rounds to 1 for |x| tiny (and for x = +/-0.0): log1p(x) = x."
 	u @env0:= 1.0 ifTrue: [^ f].
 	^ (u @env0:ln) @env0:* (f @env0:/ (u @env0:- 1.0))
@@ -1332,12 +1332,12 @@ expm1: x
 	| f u |
 	f := self @env1:___real___: x.
 	f @env0:_isNaN ifTrue: [^ f].
-	(f @env0:_getKind) @env0:== 3 ifTrue: [
+	(f @env0:_getKind) == 3 ifTrue: [
 		f @env0:> 0 ifTrue: [^ PlusInfinity].
 		^ -1.0].
 	u := f @env0:exp.
 	"exp overflow (large positive x): the true expm1 overflows too."
-	(u @env0:_getKind) @env0:== 3 ifTrue: [
+	(u @env0:_getKind) == 3 ifTrue: [
 		OverflowError ___signal___: 'math range error'].
 	"exp underflow to 0 (large negative x): expm1 = -1."
 	u @env0:= 0.0 ifTrue: [^ -1.0].
@@ -1423,7 +1423,7 @@ gamma: x
 		'expected a noninteger or positive integer, got ' @env0:, f @env0:printString].
 	"Non-finite: nan and +inf pass through; -inf is a domain error."
 	(f @env0:_isNaN) @env0:ifTrue: [^ f].
-	(f @env0:_getKind) @env0:== 3 ifTrue: [
+	(f @env0:_getKind) == 3 ifTrue: [
 		f @env0:> 0.0 ifTrue: [^ f].
 		domainMsg value].
 	"gamma(+/-0.0): pole (CPython flags divide-by-zero)."
@@ -1442,7 +1442,7 @@ gamma: x
 	"Tiny arguments: gamma(x) ~ 1/x; a 1/x that overflows is a range error."
 	absx @env0:< 1e-20 ifTrue: [
 		r := 1.0 @env0:/ f.
-		(r @env0:_getKind) @env0:== 3 ifTrue: [
+		(r @env0:_getKind) == 3 ifTrue: [
 			OverflowError ___signal___: 'math range error'].
 		^ r].
 	"Large arguments: overflow for x > 200; underflow to +/-0.0 for x < -200."
@@ -1472,7 +1472,7 @@ gamma: x
 				ifFalse: [
 					sqrtpow := y @env0:raisedTo: ((absx @env0:/ 2.0) @env0:- 0.25).
 					r := (r @env0:* sqrtpow) @env0:* sqrtpow]].
-	(r @env0:_getKind) @env0:== 3 ifTrue: [
+	(r @env0:_getKind) == 3 ifTrue: [
 		OverflowError ___signal___: 'math range error'].
 	^ r
 %
@@ -1489,7 +1489,7 @@ lgamma: x
 	f := self @env1:___real___: x.
 	"Non-finite: nan passes through; +/-inf give +inf."
 	(f @env0:_isNaN) @env0:ifTrue: [^ f].
-	(f @env0:_getKind) @env0:== 3 ifTrue: [^ PlusInfinity].
+	(f @env0:_getKind) == 3 ifTrue: [^ PlusInfinity].
 	"Integer arguments <= 2: n<=0 is a pole (ValueError); 1 and 2 give 0.0."
 	((f @env0:= f @env0:floor) and: [f @env0:<= 2.0]) ifTrue: [
 		f @env0:<= 0.0 ifTrue: [ValueError ___signal___: 'math domain error'].
@@ -1504,7 +1504,7 @@ lgamma: x
 		r := ((1.144729885849400174143427351353058711647
 			@env0:- (((self @env1:___sinpi___: absx) @env0:abs) @env0:ln))
 			@env0:- (absx @env0:ln)) @env0:- r].
-	(r @env0:_getKind) @env0:== 3 ifTrue: [
+	(r @env0:_getKind) == 3 ifTrue: [
 		OverflowError ___signal___: 'math range error'].
 	^ r
 %
@@ -1520,10 +1520,10 @@ fmod: x _: y
 	fy := self @env1:___real___: y.
 	"NaN propagates; an infinite x or a zero y is a domain error."
 	(fx @env0:_isNaN or: [fy @env0:_isNaN]) ifTrue: [^ fx @env0:+ fy].
-	((fx @env0:_getKind) @env0:== 3 or: [fy @env0:= 0.0]) ifTrue: [
+	((fx @env0:_getKind) == 3 or: [fy @env0:= 0.0]) ifTrue: [
 		ValueError ___signal___: 'math domain error'].
 	"fmod(x, +/-inf) is x for finite x."
-	(fy @env0:_getKind) @env0:== 3 ifTrue: [^ fx].
+	(fy @env0:_getKind) == 3 ifTrue: [^ fx].
 	r := fx @env0:rem: fy.
 	"C fmod's result carries x's sign, including the sign of a zero result
 	(fmod(-10, 1) is -0.0)."
@@ -1555,11 +1555,11 @@ remainder: x _: y
 	fx := self @env1:___real___: x.
 	fy := self @env1:___real___: y.
 	(fx @env0:_isNaN or: [fy @env0:_isNaN]) ifTrue: [^ fx @env0:+ fy].
-	(fx @env0:_getKind) @env0:== 3 ifTrue: [
+	(fx @env0:_getKind) == 3 ifTrue: [
 		ValueError ___signal___: 'math domain error'].
 	fy @env0:= 0.0 ifTrue: [
 		ValueError ___signal___: 'math domain error'].
-	(fy @env0:_getKind) @env0:== 3 ifTrue: [^ fx].
+	(fy @env0:_getKind) == 3 ifTrue: [^ fx].
 	"Work in EXACT rationals: n = round-half-even(x/y), r = x - n*y.  A naive
 	float ``n * fy'' overflows to inf when n is large even though |r| <= |y|/2
 	is always finite; the rational form is overflow-free and rounds once."
@@ -1595,7 +1595,7 @@ frexp: x
 
 	| f e m |
 	f := self @env1:___real___: x.
-	(f @env0:_isNaN or: [(f @env0:_getKind) @env0:== 3]) ifTrue: [
+	(f @env0:_isNaN or: [(f @env0:_getKind) == 3]) ifTrue: [
 		^ (Python @env0:at: #tuple) @env0:withAll: (Array @env0:with: f with: 0)].
 	f @env0:= 0 ifTrue: [
 		^ (Python @env0:at: #tuple) @env0:withAll: (Array @env0:with: f with: 0)].
@@ -1614,7 +1614,7 @@ modf: x
 	f := self @env1:___real___: x.
 	f @env0:_isNaN ifTrue: [
 		^ (Python @env0:at: #tuple) @env0:withAll: (Array @env0:with: f with: f)].
-	(f @env0:_getKind) @env0:== 3 ifTrue: [
+	(f @env0:_getKind) == 3 ifTrue: [
 		^ (Python @env0:at: #tuple) @env0:withAll:
 			(Array @env0:with: (self @env1:copysign: 0.0 _: f) with: f)].
 	ip := f @env0:truncated @env0:asFloat.

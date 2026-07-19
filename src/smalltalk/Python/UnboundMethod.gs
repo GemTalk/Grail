@@ -169,9 +169,9 @@ __eq__: other
 	and lets unbound handles compare by value (only Python-level
 	__eq__/__hash__, not Smalltalk =/hash)."
 
-	(other @env0:isKindOf: UnboundMethod) ifFalse: [^ false].
-	^ (definingClass @env0:== (other @env0:definingClass))
-		and: [selector @env0:== (other @env0:selector)]
+	(other isKindOf: UnboundMethod) ifFalse: [^ false].
+	^ (definingClass == (other @env0:definingClass))
+		and: [selector == (other @env0:selector)]
 %
 
 category: 'Grail-Comparison'

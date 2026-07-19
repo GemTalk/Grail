@@ -110,7 +110,7 @@ testLruCacheDecoratorPassesThrough
 	fn := [:pos :kw | 42].
 	result := decorator value: {fn} value: nil.
 	"The wrapper is an LruCacheWrapper, not the original block."
-	self assert: (result @env0:isKindOf: LruCacheWrapper).
+	self assert: (result isKindOf: LruCacheWrapper).
 	"Calling the wrapper delegates to the wrapped function."
 	self assert: (result @env1:value: #() value: nil) equals: 42.
 	"The wrapper exposes ``cache_clear`` as a no-op and

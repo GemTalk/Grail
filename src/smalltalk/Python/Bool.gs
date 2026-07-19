@@ -371,7 +371,7 @@ __new__: obj
 	(obj == nil or: [obj == None]) ifTrue: [ ^ false ].
 
 	"If already a bool, return it"
-	(obj @env0:isKindOf: bool) ifTrue: [
+	(obj isKindOf: bool) ifTrue: [
 		^ obj
 	].
 
@@ -392,22 +392,22 @@ __new__: obj
 	result == #__noLen__ ifFalse: [^ result @env0:~= 0].
 
 	"For integers, 0 is False, everything else is True"
-	(obj @env0:isKindOf: int) ifTrue: [
+	(obj isKindOf: int) ifTrue: [
 		^ obj @env0:~= 0
 	].
 
 	"For floats, 0.0 is False, everything else is True"
-	(obj @env0:isKindOf: Float) ifTrue: [
+	(obj isKindOf: Float) ifTrue: [
 		^ obj @env0:~= 0.0
 	].
 
 	"For strings, empty string is False"
-	(obj @env0:isKindOf: Unicode7) ifTrue: [
+	(obj isKindOf: Unicode7) ifTrue: [
 		^ (obj @env0:size) @env0:> 0
 	].
 
 	"For collections, empty is False"
-	(obj @env0:isKindOf: Collection) ifTrue: [
+	(obj isKindOf: Collection) ifTrue: [
 		^ (obj @env0:size) @env0:> 0
 	].
 
@@ -446,7 +446,7 @@ method: bool
 __add__: other
 	"Add bool (as int) to other."
 
-	((other @env0:isKindOf: Number) or: [other @env0:isKindOf: Boolean]) ifFalse: [
+	((other isKindOf: Number) or: [other isKindOf: Boolean]) ifFalse: [
 		^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:+ other
 %
@@ -461,7 +461,7 @@ __and__: other
 	otherwise forward #bitAnd: to the Boolean argument and DNU
 	(twilio.request_validator's ``result &= c1 == c2``)."
 
-	(other @env0:isKindOf: Boolean) ifTrue: [
+	(other isKindOf: Boolean) ifTrue: [
 		^ self @env0:and: [other]
 	].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:bitAnd: other
@@ -521,7 +521,7 @@ method: bool
 __floordiv__: other
 	"Floor division of bool (as int) by other."
 
-	((other @env0:isKindOf: Number) or: [other @env0:isKindOf: Boolean]) ifFalse: [
+	((other isKindOf: Number) or: [other isKindOf: Boolean]) ifFalse: [
 		^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:// other
 %
@@ -536,7 +536,7 @@ __ge__: other
 	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	((otherInt @env0:isKindOf: Number) or: [otherInt @env0:isKindOf: Boolean])
+	((otherInt isKindOf: Number) or: [otherInt isKindOf: Boolean])
 		ifFalse: [^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'].
 	^ selfInt @env0:>= otherInt
 %
@@ -551,7 +551,7 @@ __gt__: other
 	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	((otherInt @env0:isKindOf: Number) or: [otherInt @env0:isKindOf: Boolean])
+	((otherInt isKindOf: Number) or: [otherInt isKindOf: Boolean])
 		ifFalse: [^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'].
 	^ selfInt @env0:> otherInt
 %
@@ -590,7 +590,7 @@ __le__: other
 	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	((otherInt @env0:isKindOf: Number) or: [otherInt @env0:isKindOf: Boolean])
+	((otherInt isKindOf: Number) or: [otherInt isKindOf: Boolean])
 		ifFalse: [^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'].
 	^ selfInt @env0:<= otherInt
 %
@@ -605,7 +605,7 @@ __lt__: other
 	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
 		ifFalse: [other].
-	((otherInt @env0:isKindOf: Number) or: [otherInt @env0:isKindOf: Boolean])
+	((otherInt isKindOf: Number) or: [otherInt isKindOf: Boolean])
 		ifFalse: [^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'].
 	^ selfInt @env0:< otherInt
 %
@@ -615,7 +615,7 @@ method: bool
 __mod__: other
 	"Modulo of bool (as int) by other."
 
-	((other @env0:isKindOf: Number) or: [other @env0:isKindOf: Boolean]) ifFalse: [
+	((other isKindOf: Number) or: [other isKindOf: Boolean]) ifFalse: [
 		^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:\\ other
 %
@@ -625,7 +625,7 @@ method: bool
 __mul__: other
 	"Multiply bool (as int) by other."
 
-	((other @env0:isKindOf: Number) or: [other @env0:isKindOf: Boolean]) ifFalse: [
+	((other isKindOf: Number) or: [other isKindOf: Boolean]) ifFalse: [
 		^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:* other
 %
@@ -657,7 +657,7 @@ __or__: other
 	"Bitwise OR.  bool | bool stays bool (see __and__: for the
 	coercion rationale); bool | int degrades to int semantics."
 
-	(other @env0:isKindOf: Boolean) ifTrue: [
+	(other isKindOf: Boolean) ifTrue: [
 		^ self @env0:or: [other]
 	].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:bitOr: other
@@ -676,7 +676,7 @@ method: bool
 __pow__: other
 	"Raise bool (as int) to power of other."
 
-	((other @env0:isKindOf: Number) or: [other @env0:isKindOf: Boolean]) ifFalse: [
+	((other isKindOf: Number) or: [other isKindOf: Boolean]) ifFalse: [
 		^ self ___binOpFallback___: other op: '**' reflected: #'__rpow__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:raisedTo: other
 %
@@ -702,7 +702,7 @@ method: bool
 __sub__: other
 	"Subtract other from bool (as int)."
 
-	((other @env0:isKindOf: Number) or: [other @env0:isKindOf: Boolean]) ifFalse: [
+	((other isKindOf: Number) or: [other isKindOf: Boolean]) ifFalse: [
 		^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:- (other)
 %
@@ -712,7 +712,7 @@ method: bool
 __truediv__: other
 	"True division of bool (as int) by other."
 
-	((other @env0:isKindOf: Number) or: [other @env0:isKindOf: Boolean]) ifFalse: [
+	((other isKindOf: Number) or: [other isKindOf: Boolean]) ifFalse: [
 		^ self ___binOpFallback___: other op: '/' reflected: #'__rtruediv__:'].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:/ other
 %
@@ -723,7 +723,7 @@ __xor__: other
 	"Bitwise XOR.  bool ^ bool stays bool (see __and__: for the
 	coercion rationale); bool ^ int degrades to int semantics."
 
-	(other @env0:isKindOf: Boolean) ifTrue: [
+	(other isKindOf: Boolean) ifTrue: [
 		^ self @env0:xor: other
 	].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:bitXor: other

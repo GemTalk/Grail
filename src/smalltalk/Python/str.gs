@@ -48,7 +48,7 @@ __new__: obj
 	| source result |
 	obj @env0:ifNil: [source := ''].
 	obj @env0:ifNotNil: [
-		(obj @env0:isKindOf: CharacterCollection)
+		(obj isKindOf: CharacterCollection)
 			ifTrue: [source := obj]
 			ifFalse: [source := obj @env1:__str__].
 	].
@@ -77,10 +77,10 @@ __new__: obj _: encoding
 	bytes into text.  Delegates to bytes.decode for the actual
 	conversion."
 
-	(obj @env0:isKindOf: ByteArray) ifTrue: [
+	(obj isKindOf: ByteArray) ifTrue: [
 		^ obj @env1:decode: encoding
 	].
-	(obj @env0:isKindOf: CharacterCollection) ifTrue: [
+	(obj isKindOf: CharacterCollection) ifTrue: [
 		"CPython rejects str(str, encoding) with TypeError —
 		``decoding str is not supported''.  Match the shape."
 		TypeError @env1:___signal___: 'decoding str is not supported'
@@ -135,7 +135,7 @@ method: CharacterCollection
 __add__: other
 	"Concatenate two strings. In Python: str1 + str2"
 
-	(other @env0:isKindOf: CharacterCollection) ifTrue: [^ self @env0:, other].
+	(other isKindOf: CharacterCollection) ifTrue: [^ self @env0:, other].
 	^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'
 %
 
@@ -197,7 +197,7 @@ method: CharacterCollection
 __ge__: other
 	"Return self >= other (codepoint order for strings)"
 
-	(other @env0:isKindOf: CharacterCollection) ifTrue: [
+	(other isKindOf: CharacterCollection) ifTrue: [
 		^ (self ___codePointCompare___: other) @env0:>= 0
 	].
 	^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'
@@ -211,16 +211,16 @@ __getitem__: index
 	Supports negative indices (counting from end)."
 
 	| size idx char charString |
-	(index @env0:isKindOf: slice) ifTrue: [
+	(index isKindOf: slice) ifTrue: [
 		^ self @env1:___getslice___: index @env1:start
 			_: index @env1:stop
 			_: index @env1:step
 	].
 	"Non-integer, non-slice index: catchable TypeError instead of an
 	uncatchable env-0 comparison DNU on the index."
-	((index @env0:isKindOf: Integer)
+	((index isKindOf: Integer)
 		or: [(index @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:~~ nil]) ifFalse: [
+			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
 		TypeError @env1:___signal___: ('string indices must be integers, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	size := self @env0:size.
@@ -253,7 +253,7 @@ method: CharacterCollection
 __gt__: other
 	"Return self > other (codepoint order for strings)"
 
-	(other @env0:isKindOf: CharacterCollection) ifTrue: [
+	(other isKindOf: CharacterCollection) ifTrue: [
 		^ (self ___codePointCompare___: other) @env0:> 0
 	].
 	^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'
@@ -289,7 +289,7 @@ method: CharacterCollection
 __le__: other
 	"Return self <= other (codepoint order for strings)"
 
-	(other @env0:isKindOf: CharacterCollection) ifTrue: [
+	(other isKindOf: CharacterCollection) ifTrue: [
 		^ (self ___codePointCompare___: other) @env0:<= 0
 	].
 	^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'
@@ -308,7 +308,7 @@ method: CharacterCollection
 __lt__: other
 	"Return self < other (codepoint order for strings)"
 
-	(other @env0:isKindOf: CharacterCollection) ifTrue: [
+	(other isKindOf: CharacterCollection) ifTrue: [
 		^ (self ___codePointCompare___: other) @env0:< 0
 	].
 	^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'
@@ -331,13 +331,13 @@ __mod__: args
 	src := self @env0:asString.
 	n := src @env0:size.
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
-	isMap := args @env0:isKindOf: KeyValueDictionary.
+	isMap := args isKindOf: KeyValueDictionary.
 	"Python treats a string on the RHS as a single positional, not a
 	sequence of characters; same for ByteArray."
 	(isMap not @env0:and: [
-		(args @env0:isKindOf: Array) @env0:or: [
-			(args @env0:isKindOf: OrderedCollection)
-				@env0:or: [args @env0:isKindOf: tuple]
+		(args isKindOf: Array) @env0:or: [
+			(args isKindOf: OrderedCollection)
+				@env0:or: [args isKindOf: tuple]
 		]
 	]) ifTrue: [argSeq := args]
 	ifFalse: [
@@ -438,7 +438,7 @@ ___convert___: value with: conv
 	conv @env0:= $X ifTrue: [^ (self @env1:___convert___: value with: $x) @env0:asUppercase].
 	conv @env0:= $c ifTrue: [
 		"%c — an int is a code point; a 1-char string passes through."
-		(value @env0:isKindOf: Integer) ifTrue: [
+		(value isKindOf: Integer) ifTrue: [
 			^ Unicode7 @env0:with: (Character @env0:codePoint: value)].
 		^ value @env0:asString
 	].
@@ -462,9 +462,9 @@ __mul__: n
 	"Repeat string n times. In Python: str * n"
 
 	| count result stream |
-	((n @env0:isKindOf: Integer)
+	((n isKindOf: Integer)
 		or: [(n @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:~~ nil]) ifFalse: [
+			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
 	count := n @env0:asInteger.
 	(count @env0:<= 0) ifTrue: [ ^ '' @env0:copy ].
@@ -634,8 +634,8 @@ count: sub _: start _: stop
 	n := self @env0:size.
 	s := start.
 	e := stop.
-	(s @env0:== nil or: [s @env0:== None]) ifTrue: [s := 0].
-	(e @env0:== nil or: [e @env0:== None]) ifTrue: [e := n].
+	(s == nil or: [s == None]) ifTrue: [s := 0].
+	(e == nil or: [e == None]) ifTrue: [e := n].
 	s @env0:< 0 ifTrue: [s := (s @env0:+ n) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (e @env0:+ n) @env0:max: 0].
 	e := e @env0:min: n.
@@ -939,19 +939,19 @@ _format: positional kw: kwargs
 	nextAuto := 0.
 	[i @env0:<= size] @env0:whileTrue: [
 		ch := self @env0:at: i.
-		(ch @env0:== ${ and: [
-			(i @env0:< size) and: [(self @env0:at: i @env0:+ 1) @env0:== ${]])
+		(ch == ${ and: [
+			(i @env0:< size) and: [(self @env0:at: i @env0:+ 1) == ${]])
 			ifTrue: [
 				out @env0:nextPut: ${.
 				i := i @env0:+ 2
 			] ifFalse: [
-		(ch @env0:== $} and: [
-			(i @env0:< size) and: [(self @env0:at: i @env0:+ 1) @env0:== $}]])
+		(ch == $} and: [
+			(i @env0:< size) and: [(self @env0:at: i @env0:+ 1) == $}]])
 			ifTrue: [
 				out @env0:nextPut: $}.
 				i := i @env0:+ 2
 			] ifFalse: [
-		(ch @env0:== ${) ifTrue: [
+		(ch == ${) ifTrue: [
 			| endIdx field convFlag spec value autoIdx |
 			endIdx := self @env0:___findFormatBraceEnd___: i @env0:+ 1.
 			endIdx @env0:isNil ifTrue: [
@@ -1422,7 +1422,7 @@ lstrip: chars
 	``chars'' removed.  None / nil means whitespace, matching
 	Python's str.lstrip()."
 
-	(chars @env0:== nil or: [chars @env0:== None])
+	(chars == nil or: [chars == None])
 		ifTrue: [^ self @env0:trimLeft].
 	^ self @env0:___lstripChars___: chars
 %
@@ -1485,7 +1485,7 @@ replace: old _: new _: count
 	path handling uses ``path_info.replace('/', '', 1)''."
 
 	| n | n := count.
-	(n @env0:== nil or: [n @env0:== None or: [n @env0:< 0]]) ifTrue: [
+	(n == nil or: [n == None or: [n @env0:< 0]]) ifTrue: [
 		^ self @env0:copyReplaceAll: old with: new].
 	^ self @env1:_replaceFirst: old _: new _: n
 %
@@ -1565,8 +1565,8 @@ rfind: sub _: start _: stop
 	n := self @env0:size.
 	s := start.
 	e := stop.
-	(s @env0:== nil or: [s @env0:== None]) ifTrue: [s := 0].
-	(e @env0:== nil or: [e @env0:== None]) ifTrue: [e := n].
+	(s == nil or: [s == None]) ifTrue: [s := 0].
+	(e == nil or: [e == None]) ifTrue: [e := n].
 	s @env0:< 0 ifTrue: [s := (s @env0:+ n) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (e @env0:+ n) @env0:max: 0].
 	e := e @env0:min: n.
@@ -1691,14 +1691,14 @@ _rsplit: positional kw: kwargs
 		sep := kwargs @env0:at: 'sep' ifAbsent: [sep].
 		maxsplit := kwargs @env0:at: 'maxsplit' ifAbsent: [maxsplit].
 	].
-	(sep @env0:== nil or: [sep @env0:== None])
+	(sep == nil or: [sep == None])
 		ifTrue: [base := self split]
 		ifFalse: [base := self split: sep].
 	(maxsplit @env0:< 0 or: [base @env0:size @env0:<= (maxsplit @env0:+ 1)])
 		ifTrue: [^ base].
 	keep := base @env0:copyFrom: (base @env0:size @env0:- maxsplit @env0:+ 1) to: base @env0:size.
 	head := (base @env0:copyFrom: 1 to: base @env0:size @env0:- maxsplit).
-	(sep @env0:== nil or: [sep @env0:== None])
+	(sep == nil or: [sep == None])
 		ifTrue: [
 			head := (head @env0:inject: '' into: [:acc :each |
 				acc @env0:isEmpty ifTrue: [each] ifFalse: [acc @env0:, ' ' @env0:, each]])
@@ -1730,7 +1730,7 @@ rstrip: chars
 	``chars'' removed.  None / nil means whitespace, matching
 	Python's str.rstrip()."
 
-	(chars @env0:== nil or: [chars @env0:== None])
+	(chars == nil or: [chars == None])
 		ifTrue: [^ self @env0:trimRight].
 	^ self @env0:___rstripChars___: chars
 %
@@ -1850,9 +1850,9 @@ splitlines: keepends
 	each line retains its terminator."
 
 	| ke |
-	ke := (keepends @env0:== true)
-		or: [(keepends @env0:~~ false) and: [(keepends @env0:~~ nil)
-			and: [(keepends @env0:~~ None) and: [keepends @env0:~~ 0]]]].
+	ke := (keepends == true)
+		or: [(keepends ~~ false) and: [(keepends ~~ nil)
+			and: [(keepends ~~ None) and: [keepends ~~ 0]]]].
 	^ self ___splitlinesKeepends: ke
 %
 
@@ -1925,7 +1925,7 @@ strip: chars
 	ends.  None / nil means whitespace, matching Python's str.strip().
 	Empty string strips nothing."
 
-	(chars @env0:== nil or: [chars @env0:== None])
+	(chars == nil or: [chars == None])
 		ifTrue: [^ self @env0:trimBoth].
 	^ (self @env0:___lstripChars___: chars) @env0:___rstripChars___: chars
 %
@@ -2027,7 +2027,7 @@ translate: table
 			@env0:on: KeyError do: [:ex | ex @env0:return: ch].
 		replacement == ch ifTrue: [stream @env0:nextPut: ch] ifFalse: [
 			replacement == None ifFalse: [
-				(replacement @env0:isKindOf: Integer) ifTrue: [
+				(replacement isKindOf: Integer) ifTrue: [
 					stream @env0:nextPut: (Character @env0:codePoint: replacement)
 				] ifFalse: [
 					stream @env0:nextPutAll: replacement

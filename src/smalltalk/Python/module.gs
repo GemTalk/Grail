@@ -156,15 +156,15 @@ instance
 		| implib pyDict |
 		pyDict := System @env0:myUserProfile @env0:symbolList
 			@env0:objectNamed: #'Python'.
-		implib := pyDict @env0:== nil
+		implib := pyDict == nil
 			ifTrue: [nil]
 			ifFalse: [pyDict @env0:at: #'importlib' otherwise: nil].
-		implib @env0:== nil ifFalse: [
+		implib == nil ifFalse: [
 			inst := implib @env0:___canonicalInstanceForModuleClass___: self.
 			"The helper already adopted inst as this class's session
 			singleton (before running its __session_init__), so just
 			answer it."
-			inst @env0:== nil ifFalse: [^ inst]]].
+			inst == nil ifFalse: [^ inst]]].
 	inst == nil ifTrue: [
 		inst := self @env0:new.
 		reg @env0:at: self put: inst.
@@ -218,7 +218,7 @@ __dir__
 		skip := (s @env0:size @env0:>= 3) @env0:and: [(s @env0:copyFrom: 1 to: 3) @env0:= '___'].
 		skip ifFalse: [
 			index := s @env0:indexOf: $:.
-			(index @env0:== 0) ifFalse: [s := s @env0:copyFrom: 1 to: (index @env0:- 1)].
+			(index == 0) ifFalse: [s := s @env0:copyFrom: 1 to: (index @env0:- 1)].
 			names @env0:add: s]].
 	^ (names @env0:asSortedCollection: [:a :b | a @env0:<= b]) @env0:asArray
 %
@@ -338,7 +338,7 @@ update: other
 	subsequent bare ``X'' reference in the module body."
 
 	| isDict |
-	isDict := other @env0:isKindOf: dict.
+	isDict := other isKindOf: dict.
 	isDict ifTrue: [
 		other @env0:keysAndValuesDo: [:key :value |
 			self @env0:dynamicInstVarAt: key @env0:asSymbol put: value
@@ -377,7 +377,7 @@ ___mergePublicAttrsFrom: aModule
 		s := nm @env0:asString.
 		(s @env0:size @env0:> 0
 			and: [(s @env0:at: 1) @env0:~= $_]) ifTrue: [
-			val @env0:== nil ifFalse: [
+			val == nil ifFalse: [
 				importlib @env0:___bind: val onParent: self as: nm @env0:asSymbol
 			]
 		]
@@ -442,7 +442,7 @@ ___globalAt___: aSym otherwise: aBlock
 	branch further down."
 	owner := cls @env0:whichClassIncludesSelector: aSym environmentId: 1.
 	(owner notNil
-		and: [(owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:== #'Grail-Accessors'])
+		and: [(owner @env0:categoryOfSelector: aSym environmentId: 1) == #'Grail-Accessors'])
 			ifTrue: [^ self @env0:perform: aSym env: 1].
 	"Lazy-wrap a top-level def as BoundMethod.  The def itself
 	compiled as a real env-1 method on the module class; this is
@@ -503,7 +503,7 @@ ___globalAt___: aSym otherwise: aBlock
 	    would auto-call the generator and lose the function handle."
 	owner := cls @env0:whichClassIncludesSelector: aSym environmentId: 1.
 	owner notNil ifTrue: [
-		owner @env0:== module
+		owner == module
 			ifTrue: [^ self @env0:perform: aSym env: 1]
 			ifFalse: [^ BoundMethod @env1:receiver: self selector: aSym]
 	].
@@ -541,10 +541,10 @@ ___globalNames___
 		| s index skip |
 		s := sel @env0:asString.
 		skip := ((s @env0:size @env0:>= 3) @env0:and: [(s @env0:copyFrom: 1 to: 3) @env0:= '___'])
-			@env0:or: [(self @env0:class @env0:categoryOfSelector: sel environmentId: 1) @env0:~~ #'Grail-Methods'].
+			@env0:or: [(self @env0:class @env0:categoryOfSelector: sel environmentId: 1) ~~ #'Grail-Methods'].
 		skip ifFalse: [
 			index := s @env0:indexOf: $:.
-			(index @env0:== 0) ifFalse: [s := s @env0:copyFrom: 1 to: (index @env0:- 1)].
+			(index == 0) ifFalse: [s := s @env0:copyFrom: 1 to: (index @env0:- 1)].
 			add @env0:value: s]].
 	^ names
 %
