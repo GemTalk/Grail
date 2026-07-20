@@ -642,7 +642,13 @@ __pow__: other
 	deviation -- CPython ints are unbounded)."
 
 	(other isKindOf: Number) ifTrue: [
-		^ [self @env0:raisedTo: other]
+		^ [ | r |
+			r := self @env0:raisedTo: other.
+			"Python: int ** a NEGATIVE int is a float (``4 ** -3`` == 0.015625),
+			not an exact Fraction; positive-int and float exponents keep the
+			GemStone result (int / float respectively)."
+			((other @env0:isKindOf: Integer) and: [other @env0:< 0])
+				ifTrue: [r @env0:asFloat] ifFalse: [r] ]
 			@env0:on: NumericError
 			do: [:ex |
 				OverflowError ___signal___: 'result exceeds Grail integer capacity']].
