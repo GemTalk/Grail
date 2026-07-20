@@ -409,9 +409,10 @@ class TestCase:
     def assertAlmostEqual(self, first, second, places=None, msg=None, delta=None):
         if delta is not None and places is not None:
             raise TypeError("specify delta or places, not both")
-        diff = first - second
-        if diff < 0:
-            diff = 0 - diff
+        # abs() (not `if diff < 0`) so complex operands work: |a-b| is the
+        # magnitude, and complex has no ordering (test_fractions asserts
+        # almost-equality of complex powers, e.g. against 3.375j).
+        diff = abs(first - second)
         if delta is not None:
             if diff <= delta:
                 return None
