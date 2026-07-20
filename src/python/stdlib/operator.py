@@ -204,6 +204,9 @@ class attrgetter:
 
     def __init__(self, attr, *attrs):
         self._attrs = (attr,) + attrs
+        for a in self._attrs:
+            if not isinstance(a, str):
+                raise TypeError('attribute name must be a string')
 
     def __call__(self, obj):
         if len(self._attrs) == 1:
@@ -232,7 +235,9 @@ class itemgetter:
 class methodcaller:
     """``operator.methodcaller('upper')(s)`` returns ``s.upper()``."""
 
-    def __init__(self, name, *args, **kwargs):
+    def __init__(self, name, /, *args, **kwargs):
+        if not isinstance(name, str):
+            raise TypeError('method name must be a string')
         self._name = name
         self._args = args
         self._kwargs = kwargs
@@ -324,7 +329,7 @@ def inv(a):
     return ~a
 
 
-def call(obj, *args, **kwargs):
+def call(obj, /, *args, **kwargs):
     return obj(*args, **kwargs)
 
 

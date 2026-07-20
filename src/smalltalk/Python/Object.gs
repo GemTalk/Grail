@@ -911,6 +911,13 @@ ___pyAttrLoad___: aSym
 	    produce the appropriate error or fallback."
 
 	| md sym1 sym2 sym3 sym4 sym5 sym6 symVA s isModule isGenerated dynValue walker owner |
+	"An empty attribute name (``getattr(obj, '')'' -- e.g. attrgetter('child.')
+	whose dotted split has an empty part) must raise the catchable
+	AttributeError, not the uncatchable GemStone ``instVar names cannot be
+	empty symbol'' that ``dynamicInstVarAt: #''''`` below would signal."
+	(aSym @env0:size @env0:= 0) ifTrue: [
+		^ AttributeError ___signal___: (self @env0:class @env0:name @env0:asString
+			@env0:, ' object has no attribute (empty name)')].
 	"Phase B: probe the receiver's dynamic-instVar storage first.
 	After Phase A + Phase B this is the canonical home for module
 	globals (any receiver of class module), instance attributes (any
@@ -1568,6 +1575,47 @@ method: object
 __exit__: excType _: excValue _: excTb
 	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
 		@env0:, ''' object does not support the context manager protocol')
+%
+
+category: 'Grail-Container'
+method: object
+__contains__: item
+	"Default membership test (``item in self'') for a receiver whose class
+	defines no __contains__.  CPython falls back to iteration: walk __iter__
+	(else the __getitem__ sequence protocol) and return true on the first
+	element identical OR equal to ``item'' (identity-then-equality, with a
+	NotImplemented __eq__ result treated as unequal).  A receiver supporting
+	neither raises the catchable TypeError, and any exception raised WHILE
+	iterating propagates -- ``1 in BadIterable()'' where __iter__ raises
+	ZeroDivisionError must surface it (test_operator's test_contains).
+
+	Without this default, ``obj __contains__: item'' on a PythonInstance with
+	__iter__ but no __contains__ fell through to the DNU attribute-setter
+	misread and silently returned ``item'' instead of iterating."
+
+	| cls ni |
+	cls := self @env0:class.
+	ni := Python @env0:at: #NotImplemented otherwise: nil.
+	(cls @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) notNil ifTrue: [
+		| it |
+		it := self __iter__.
+		[true] @env0:whileTrue: [ | elem eq |
+			elem := [ it __next__ ] @env0:on: StopIteration do: [:ex | ^ false].
+			(item @env0:== elem) ifTrue: [^ true].
+			eq := item __eq__: elem.
+			(eq @env0:~~ ni and: [eq @env1:___isTruthy___]) ifTrue: [^ true]]].
+	((cls @env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) notNil
+		or: [(cls @env0:whichClassIncludesSelector: #'___getitem__:kw:' environmentId: 1) notNil]) ifTrue: [
+		| i |
+		i := 0.
+		[true] @env0:whileTrue: [ | elem eq |
+			elem := [ self __getitem__: i ] @env0:on: IndexError do: [:ex | ^ false].
+			(item @env0:== elem) ifTrue: [^ true].
+			eq := item __eq__: elem.
+			(eq @env0:~~ ni and: [eq @env1:___isTruthy___]) ifTrue: [^ true].
+			i := i @env0:+ 1]].
+	^ TypeError ___signal___: ('argument of type ''' @env0:,
+		cls @env0:name @env0:asString @env0:, ''' is not iterable')
 %
 
 category: 'Grail-Augmented Assignment'

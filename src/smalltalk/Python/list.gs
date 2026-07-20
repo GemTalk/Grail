@@ -46,7 +46,13 @@ __new__: iterable
 
 	| result iter done cls hasIter hasGetitem |
 	result := self ___new___.
-	(iterable isKindOf: SequenceableCollection) ifTrue: [
+	"Strings are SequenceableCollections, but ``at:'' yields Characters, not
+	the 1-char Python strings CPython's ``list(str)'' produces.  Route
+	CharacterCollections through the __iter__ / sequence-protocol paths below
+	instead.  bytes/bytearray are NOT CharacterCollections, so they keep the
+	fast path (elements are ints, matching CPython)."
+	((iterable isKindOf: SequenceableCollection)
+		and: [(iterable isKindOf: CharacterCollection) not]) ifTrue: [
 		1 @env0:to: iterable @env0:size do: [:i |
 			result @env0:add: (iterable @env0:at: i)
 		].

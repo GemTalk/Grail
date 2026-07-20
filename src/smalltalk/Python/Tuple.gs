@@ -181,7 +181,15 @@ __new__: iterable
 	Receiver is the class."
 
 	| items iter done |
-	(iterable isKindOf: SequenceableCollection) ifTrue: [
+	"Strings are SequenceableCollections, but the ``withAll:'' fast path
+	iterates them with Smalltalk ``do:'' -- yielding Characters, not the
+	1-char Python strings CPython's ``tuple(str)'' produces.  Route
+	CharacterCollections through the Python ``__iter__'' path below instead
+	(``tuple('abcde')[-1]'' must be 'e', a str, not $e -- test_operator's
+	test_itemgetter).  bytes/bytearray are NOT CharacterCollections, so they
+	keep the fast path (their elements are ints, matching CPython)."
+	((iterable isKindOf: SequenceableCollection)
+		and: [(iterable isKindOf: CharacterCollection) not]) ifTrue: [
 		^ self @env0:withAll: iterable
 	].
 	items := OrderedCollection @env0:new.
@@ -238,25 +246,31 @@ ___getslice___: lower _: upper _: step
 	normalization by collecting into a mutable OrderedCollection
 	first, then freezing via ``tuple withAll:``."
 
-	| size lo hi st accumulator i |
+	| size lo hi st accumulator i lwr upr |
 	size := self @env0:size.
-	st := step ifNil: [1].
+	"The subscript slice passes the Python None singleton (not Smalltalk nil)
+	for an unset bound/step; normalise so the ifNil: defaults fire instead of
+	comparing None with an integer (test_operator's test_itemgetter slices a
+	tuple with ``slice(2, 4)'' -- step None)."
+	lwr := (lower @env0:== None) ifTrue: [nil] ifFalse: [lower].
+	upr := (upper @env0:== None) ifTrue: [nil] ifFalse: [upper].
+	st := ((step @env0:== None) or: [step @env0:isNil]) ifTrue: [1] ifFalse: [step].
 	st @env0:= 0 ifTrue: [ValueError ___signal___: 'slice step cannot be zero'].
 
-	lo := lower
+	lo := lwr
 		ifNil: [st @env0:> 0 ifTrue: [0] ifFalse: [size @env0:- 1]]
-		ifNotNil: [lower @env0:< 0
-			ifTrue: [(size @env0:+ lower) @env0:max:
+		ifNotNil: [lwr @env0:< 0
+			ifTrue: [(size @env0:+ lwr) @env0:max:
 				(st @env0:> 0 ifTrue: [0] ifFalse: [-1])]
-			ifFalse: [lower @env0:min:
+			ifFalse: [lwr @env0:min:
 				(st @env0:> 0 ifTrue: [size] ifFalse: [size @env0:- 1])]].
 
-	hi := upper
+	hi := upr
 		ifNil: [st @env0:> 0 ifTrue: [size] ifFalse: [-1]]
-		ifNotNil: [upper @env0:< 0
-			ifTrue: [(size @env0:+ upper) @env0:max:
+		ifNotNil: [upr @env0:< 0
+			ifTrue: [(size @env0:+ upr) @env0:max:
 				(st @env0:> 0 ifTrue: [0] ifFalse: [-1])]
-			ifFalse: [upper @env0:min:
+			ifFalse: [upr @env0:min:
 				(st @env0:> 0 ifTrue: [size] ifFalse: [size @env0:- 1])]].
 
 	accumulator := OrderedCollection @env0:new.
