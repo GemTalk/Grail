@@ -1398,10 +1398,17 @@ type: anObject
 category: 'Grail-Built-in Functions'
 method: builtins
 divmod: x _: y
-	"Python builtin divmod(x, y) — fixed-arity fast path.
-	Returns (x // y, x % y) as a tuple."
+	"Python builtin divmod(x, y) = (x // y, x % y).  A complex operand has no
+	divmod: CPython raises TypeError naming ``divmod()'' (not ``//'' from the
+	pair below) -- test_fractions test_complex_handling."
 
-	| quotient remainder |
+	| quotient remainder tn |
+	((x @env0:isKindOf: complex) or: [y @env0:isKindOf: complex]) ifTrue: [
+		tn := [:v | | n | n := v @env0:class @env0:name @env0:asString.
+			(#('Integer' 'SmallInteger' 'LargeInteger' 'LargePositiveInteger'
+				'LargeNegativeInteger') @env0:includes: n) ifTrue: ['int'] ifFalse: [n]].
+		^ TypeError ___signal___: ('unsupported operand type(s) for divmod(): '''
+			@env0:, (tn @env0:value: x) @env0:, ''' and ''' @env0:, (tn @env0:value: y) @env0:, '''')].
 	quotient := x __floordiv__: y.
 	remainder := x __mod__: y.
 	^ tuple @env0:withAll: {quotient. remainder}
