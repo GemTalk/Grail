@@ -147,6 +147,17 @@ __new__: r
 
 	(r @env0:isBehavior) ifTrue: [^ r @env0:new].
 	(r isKindOf: complex) ifTrue: [^ r].
+	"CPython's complex(x) protocol tries x.__complex__() first.  A non-numeric
+	object (a user class registered as numbers.Complex, e.g. test_fractions'
+	Rect) is converted through it; int/float/str have no __complex__ so they
+	fall through to the real-part path below."
+	((r @env0:class @env0:whichClassIncludesSelector: #'__complex__' environmentId: 1) @env0:notNil) ifTrue: [
+		| c |
+		c := r __complex__.
+		(c isKindOf: complex) ifFalse: [
+			TypeError ___signal___: '__complex__ returned non-complex (type '
+				@env0:, (c @env0:class @env0:name @env0:asString) @env0:, ')'].
+		^ c].
 	^ complex __new__: r _: 0.0
 %
 

@@ -47,6 +47,33 @@ test___real_imaginary
 
 category: 'Grail-Initialization'
 method: ComplexTestCase
+testConstructorHonorsDunderComplex
+	"complex(x) follows CPython's protocol: a non-numeric object that
+	defines __complex__ is converted through it.  test_fractions
+	testMixedMultiplication needs complex(Rect(4, 3)) inside Fraction's
+	reflected __rmul__; complex() used to ignore __complex__ and coerce the
+	object as a real number ('must be real number, not Rect').  A
+	__complex__ that returns a non-complex is a TypeError."
+
+	| mods mod pt c raised |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_complex_convert' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_complex_convert.py')
+		name: 'grail_complex_convert'.
+	pt := mod @env1:___pyAttrLoad___: #point.
+	c := complex @env1:__new__: pt.
+	self assert: c class equals: complex.
+	self assert: (c @env1:real) equals: 4.0.
+	self assert: (c @env1:imag) equals: 3.0.
+	raised := false.
+	[complex @env1:__new__: (mod @env1:___pyAttrLoad___: #bad)]
+		@env0:on: (Python @env0:at: #TypeError) do: [:ex | raised := true].
+	self assert: raised.
+%
+
+category: 'Grail-Initialization'
+method: ComplexTestCase
 testPythonAttrLoadReturnsValue
 	"Phase B+1 red light: ``cpx.real'' from Python should return the
 	float value, not a BoundMethod.  Before the dynamic-instVar sweep
