@@ -346,6 +346,36 @@ test__new__fromWideString
 	self assert: (self eval: 'int((chr(0x2192) + "-47")[1:])') equals: -47.
 %
 
+category: 'Grail-Tests - Arithmetic'
+method: IntegerTestCase
+testTrueDivisionReturnsFloat
+	"CPython int/int is float division (PEP 238): the result is ALWAYS a
+	float, never an exact rational -- even when it divides evenly.  Grail's
+	`/` used to return a GemStone Fraction (1/2 -> Fraction(1, 2)), which
+	broke reflected-operator dispatch expecting a float (test_fractions
+	testMixedDivision: Rect.__rtruediv__ computes 4/25 then multiplies a
+	Fraction by it)."
+
+	"direct dunder: 3/2 -> 1.5, a float"
+	self assert: ((3 @env1:__truediv__: 2) @env0:isKindOf: Float).
+	self assert: (3 @env1:__truediv__: 2) equals: 1.5.
+	"even division still yields a float: 10/5 -> 2.0"
+	self assert: ((10 @env1:__truediv__: 5) @env0:isKindOf: Float).
+	"reverse (self is the divisor): 1 / 4 -> 0.25"
+	self assert: (4 @env1:__rtruediv__: 1) equals: 0.25.
+	"through the Python operator, including exact-value and repeating cases"
+	self assert: (self eval: 'isinstance(1/2, float) and 1/2 == 0.5').
+	self assert: (self eval: 'isinstance(10/5, float) and 10/5 == 2.0').
+	self assert: (self eval: 'isinstance(4/25, float) and abs(4/25 - 0.16) < 1e-12').
+	"a finite quotient too large for the float range raises OverflowError"
+	self assert: (self eval: 'r = "noraise"
+try:
+    10**400 / 1
+except OverflowError:
+    r = "overflow"
+r == "overflow"')
+%
+
 category: 'Grail-Tests - Conversion'
 method: IntegerTestCase
 testIntMaxStrDigitsLimit

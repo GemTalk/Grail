@@ -894,15 +894,34 @@ __rsub__: other
 category: 'Grail-Arithmetic - Reverse'
 method: int
 __rtruediv__: other
-	"Reverse true division (other / self)."
+	"Reverse true division (other / self).  As with __truediv__, int/int is
+	float division (self is the divisor here)."
 	"Reverse form: other OP self -- self is the divisor."
 	(self @env0:= 0) ifTrue: [
 		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 
+	(other isKindOf: Integer) ifTrue: [^ other ___intTrueDivFloat___: self].
 	(other isKindOf: Number) ifTrue: [^ other @env0:/ self].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:/ self].
+		@env0:includesKey: #'__index__') ifTrue: [
+			^ (other __index__) ___intTrueDivFloat___: self].
 	^ self ___rbinOpFallback___: other op: '/'
+%
+
+category: 'Grail-Arithmetic'
+method: int
+___intTrueDivFloat___: other
+	"int/int true division: the exact rational quotient rounded to the
+	nearest float (GemStone Fraction>>asFloat is correctly rounded).  A
+	finite quotient too large for the float range raises OverflowError,
+	matching CPython's 'integer division result too large for a float'."
+
+	| f |
+	f := [(self @env0:/ other) @env0:asFloat] @env0:on: Error do: [:ex |
+		OverflowError ___signal___: 'integer division result too large for a float'].
+	((f @env0:_getKind) @env0:== 3) ifTrue: [
+		OverflowError ___signal___: 'integer division result too large for a float'].
+	^ f
 %
 
 category: 'Grail-Bitwise Operations - Reverse'
@@ -938,15 +957,20 @@ __sub__: other
 category: 'Grail-Arithmetic'
 method: int
 __truediv__: other
-	"True division (returns float)."
-	"CPython: division/modulo by zero raises catchable
-	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
+	"True division.  CPython's `/` is ALWAYS float division: int/int yields
+	a float (the exact quotient rounded to nearest), NOT an exact rational.
+	Only int/int is coerced here; int/float already gives a float and
+	int/<GemStone Fraction> keeps its (pre-existing) exact result."
+	"CPython: division/modulo by zero raises catchable ZeroDivisionError;
+	the kernel ZeroDivide is uncatchable."
 	((other isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
 		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
 
+	(other isKindOf: Integer) ifTrue: [^ self ___intTrueDivFloat___: other].
 	(other isKindOf: Number) ifTrue: [^ self @env0:/ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:/ (other __index__)].
+		@env0:includesKey: #'__index__') ifTrue: [
+			^ self ___intTrueDivFloat___: (other __index__)].
 	^ self ___binOpFallback___: other op: '/' reflected: #'__rtruediv__:'
 %
 
