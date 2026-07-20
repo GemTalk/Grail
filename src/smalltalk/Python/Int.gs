@@ -377,6 +377,7 @@ __eq__: other
 	unwrap and re-compare.  This makes the reverse direction
 	``16 == LITERAL`` agree with ``LITERAL == 16``."
 
+	| refOwner |
 	"complex first: kernel env-0 = would try GemStone Number coercion
 	and send the internal #_getKind to complex (DNU).  complex knows
 	how to compare against reals."
@@ -387,6 +388,14 @@ __eq__: other
 		@env0:includesKey: #'__index__') ifTrue: [
 		^ self @env0:= (other __index__)
 	].
+	"A Python object carrying its OWN __eq__ (Fraction/Decimal/user Rational)
+	compares via CPython's reflected ==: defer to it rather than answering
+	false, so ``2 == Fraction(4, 2)`` is True (mirrors Float>>__eq__).  A plain
+	object with only the inherited identity __eq__ keeps the false answer."
+	(other isKindOf: PythonInstance) ifTrue: [
+		refOwner := other @env0:class @env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
+		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
+			^ other @env0:perform: #'__eq__:' env: 1 withArguments: { self }]].
 	^ false
 %
 
