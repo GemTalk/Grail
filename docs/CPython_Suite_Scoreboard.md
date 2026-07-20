@@ -1,10 +1,10 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-07-14T12:21:44Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
+Generated: 2026-07-20T04:05:34Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
 
 **Modules: 19** — OK 2 · FAIL 0 · ERROR 13 · SKIP 2 · IMPORTERROR 2 · STERROR 0 · CRASH 0 · TIMEOUT 0
 
-**Totals:** tests=2919 failures=790 errors=667 skipped=8
+**Totals:** tests=3082 failures=737 errors=509 skipped=12
 
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
@@ -15,21 +15,21 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | Module | Status | tests | fail | err | skip | detail |
 |--------|--------|------:|-----:|----:|-----:|--------|
 | test.test_textwrap | OK | 68 | 0 | 0 | 0 |  |
-| test.test_math | OK | 88 | 0 | 0 | 2 | 2 skips are @requires_resource('cpu') tests, skipped as in a default CPython run |
+| test.test_math | OK | 88 | 0 | 0 | 2 |  |
 | test.test_int | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd800 is illegal for Unicode |
 | test.test_float | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd8f0 is illegal for Unicode |
-| test.test_heapq | ERROR | 68 | 8 | 14 | 0 |  |
-| test.test_bisect | ERROR | 42 | 8 | 8 | 0 |  |
-| test.test_operator | ERROR | 110 | 30 | 16 | 0 |  |
-| test.test_fractions | ERROR | 49 | 18 | 13 | 0 |  |
+| test.test_heapq | ERROR | 68 | 6 | 10 | 0 |  |
+| test.test_bisect | ERROR | 42 | 2 | 12 | 0 |  |
+| test.test_operator | ERROR | 110 | 18 | 14 | 0 |  |
+| test.test_fractions | ERROR | 49 | 18 | 12 | 0 |  |
 | test.test_datetime | SKIP | 0 | 0 | 0 | 0 |  |
-| test.test_re | ERROR | 165 | 32 | 34 | 2 |  |
-| test.test_functools | ERROR | 253 | 80 | 81 | 0 |  |
-| test.test_list | ERROR | 68 | 17 | 9 | 2 |  |
-| test.test_tuple | ERROR | 38 | 11 | 9 | 0 |  |
+| test.test_re | ERROR | 165 | 32 | 31 | 3 |  |
+| test.test_functools | ERROR | 325 | 94 | 89 | 0 |  |
+| test.test_list | ERROR | 68 | 15 | 9 | 2 |  |
+| test.test_tuple | ERROR | 38 | 12 | 8 | 0 |  |
 | test.test_dict | ERROR | 120 | 35 | 21 | 1 |  |
-| test.test_set | ERROR | 537 | 74 | 69 | 0 |  |
+| test.test_set | ERROR | 628 | 138 | 77 | 0 |  |
 | test.test_bytes | SKIP | 0 | 0 | 0 | 0 | a SkipTest occurred (error 2702) |
-| test.test_collections | ERROR | 101 | 45 | 38 | 0 |  |
-| test.test_itertools | ERROR | 135 | 49 | 42 | 3 |  |
-| test.test_enum | ERROR | 1077 | 285 | 142 | 0 |  |
+| test.test_collections | ERROR | 101 | 40 | 41 | 1 |  |
+| test.test_itertools | ERROR | 135 | 42 | 45 | 3 |  |
+| test.test_enum | ERROR | 1077 | 285 | 140 | 0 |  |
