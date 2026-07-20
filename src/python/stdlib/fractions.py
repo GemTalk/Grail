@@ -250,8 +250,19 @@ class Fraction(numbers.Rational):
             elif (isinstance(numerator, float) or
                   (not isinstance(numerator, type) and
                    hasattr(numerator, 'as_integer_ratio'))):
-                # Exact conversion
-                self._numerator, self._denominator = numerator.as_integer_ratio()
+                # Exact conversion.  CPython lets the tuple-unpack raise;
+                # Grail unpacks a wrong-length tuple as IndexError (not the
+                # Python ValueError) and a non-tuple differently, so validate
+                # the as_integer_ratio() result explicitly.
+                ratio = numerator.as_integer_ratio()
+                if not isinstance(ratio, tuple):
+                    raise TypeError(
+                        "as_integer_ratio() must return a 2-tuple")
+                if len(ratio) != 2:
+                    raise ValueError(
+                        "not enough values to unpack" if len(ratio) < 2
+                        else "too many values to unpack")
+                self._numerator, self._denominator = ratio
                 return self
 
             elif isinstance(numerator, str):
