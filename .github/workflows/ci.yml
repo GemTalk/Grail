@@ -1,15 +1,22 @@
 name: CI
 
-# Installs Grail and runs its test suite against a fresh GemStone stone.
+# Installs Grail and runs its test suites against a fresh GemStone stone.
 #
 # The `test` job runs inside the prebuilt ci-base image (Ubuntu 22.04 + Python
 # 3.14 + C toolchain + the GemStone product), published by the build-ci-image
 # workflow to this repo's GitHub Container Registry.  Because the product is
 # baked into the image, the job neither downloads nor unzips it -- it just lays
-# down a fresh extent and runs install.sh + run_tests.sh.
+# down a fresh extent and runs install.sh + a suite.
+#
+# `test` is a 2-way MATRIX that runs in PARALLEL on separate runners (each does
+# its own ~4s install against its own extent):
+#   * sunit   -- scripts/run_tests.sh (the authoritative pass/fail gate).
+#   * cpython -- scripts/run_cpython_suite.sh (CPython conformance scoreboard)
+#     + scripts/check_cpython_regressions.sh (fails on a negative delta vs the
+#     committed scoreboard).  Wall-clock is max(sunit, cpython), not the sum.
 #
 # Run build-ci-image ONCE before this workflow can run (the container pull needs
-# ci-base:latest to exist).  install.sh and scripts/run_tests.sh are unchanged.
+# ci-base:latest to exist).
 
 on:
   push:
@@ -41,6 +48,11 @@ jobs:
     needs: image
     runs-on: ubuntu-22.04
     timeout-minutes: 45
+    strategy:
+      # Don't let one suite's failure cancel the other -- we want both signals.
+      fail-fast: false
+      matrix:
+        suite: [sunit, cpython]
     # Runs inside ci-base. --shm-size lifts the container's default 64 MB
     # /dev/shm so GemStone's shared page cache fits. GEMSTONE/PATH come from the
     # image ENV.
@@ -62,13 +74,14 @@ jobs:
       # first (checkout wrote it as root).  Everything runs in one shell, so no
       # $GITHUB_ENV hand-off is needed (and ci can't write those root files, so
       # they're dropped with `env -u`).
-      - name: install + run tests (as non-root 'ci')
+      - name: install + run ${{ matrix.suite }} (as non-root 'ci')
         run: |
           chown -R ci:ci "$GITHUB_WORKSPACE"
           runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
             HOME=/home/ci \
             GEMSTONE=/opt/gemstone/product \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            SUITE="${{ matrix.suite }}" \
             bash -ex -c '
               export PATH="$GEMSTONE/bin:$PATH"
               export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"
@@ -79,19 +92,38 @@ jobs:
               startnetldi -g gs64ldi
               cd "$GITHUB_WORKSPACE"
               ./install.sh
-              ./scripts/run_tests.sh
+              if [ "$SUITE" = cpython ]; then
+                # Generous per-module cap: CI cores differ from the machine that
+                # generated the committed baseline, and a contention-induced
+                # TIMEOUT would be a spurious "regression".
+                GRAIL_TEST_TIMEOUT=900 ./scripts/run_cpython_suite.sh
+                # NON-BLOCKING for now: the committed baseline was generated
+                # locally, so the first CI runs establish whether CI produces
+                # the same numbers.  Once a CI-generated scoreboard is committed
+                # as the baseline, make this a hard gate by replacing the
+                # block below with a bare:  ./scripts/check_cpython_regressions.sh
+                if ! ./scripts/check_cpython_regressions.sh; then
+                  echo "::warning::cpython conformance regressed vs the committed scoreboard (see log + the grail-ci-logs-cpython artifact). NOT blocking yet -- see .github/workflows/ci.yml to enable hard-gating."
+                fi
+              else
+                ./scripts/run_tests.sh
+              fi
             '
 
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: grail-ci-logs
+          # Per-suite name: matrix jobs must not collide on artifact names.
+          name: grail-ci-logs-${{ matrix.suite }}
           if-no-files-found: ignore
           retention-days: 7
-          # .out logs + stone/gem logs; the extent is deliberately excluded.
+          # .out logs + stone/gem logs + the (re)generated scoreboard so a
+          # CI-representative baseline can be committed.  Extent is excluded.
           path: |
             *.out
             out/*.out
+            out/cpython/*.out
+            docs/CPython_Suite_Scoreboard.md
             testing/*.log
             testing/log/**
