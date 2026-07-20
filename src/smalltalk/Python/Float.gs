@@ -453,9 +453,19 @@ __pos__
 category: 'Grail-Arithmetic'
 method: float
 __pow__: other
-	"Raise self to the power of other."
+	"Raise self to the power of other.  A NEGATIVE base to a non-integer power
+	is COMPLEX in Python (``(-1.0) ** 0.5`` is ~1j, not NaN): the angle of a
+	negative real is pi, so the result is |self|**other * (cos + i*sin)(other*pi)."
 
-	(other isKindOf: Number) ifTrue: [^ self @env0:raisedTo: other].
+	(other isKindOf: Number) ifTrue: [
+		((self @env0:< 0) and: [(other @env0:isKindOf: Integer) @env0:not
+			and: [(other @env0:fractionPart) @env0:~= 0]]) ifTrue: [
+				| mag angle |
+				mag := (self @env0:abs) @env0:raisedTo: other.
+				angle := other @env0:* (Float @env0:pi).
+				^ complex __new__: (mag @env0:* (angle @env0:cos))
+					_: (mag @env0:* (angle @env0:sin))].
+		^ self @env0:raisedTo: other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:raisedTo: (other __index__)].
 	^ self ___binOpFallback___: other op: '**' reflected: #'__rpow__:'
