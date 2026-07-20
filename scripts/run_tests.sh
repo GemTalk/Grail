@@ -52,6 +52,24 @@ TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=500000;"
 
 EXIT=0
 
+# --- Phase timing -----------------------------------------------------------
+# Almost all of the CI wall-clock is in this script (install.sh is seconds), so
+# print a per-phase breakdown.  Uses the portable bash `SECONDS` builtin (whole
+# seconds; works identically on macOS and the Linux CI image -- BSD `date` has
+# no %N).  Every line is prefixed `TIMING |` so it greps cleanly out of a log.
+# `timed LABEL cmd...` wraps a single command: put env/redirects INSIDE the
+# wrapped command (e.g. `env LC_ALL=C topaz ... < /dev/null`) so nothing leaks
+# into the calling shell, and it preserves the command's exit status for the
+# usual `|| EXIT=$?`.
+SUITE_T0=$SECONDS
+timed() {
+  local label="$1"; shift
+  local t0=$SECONDS rc=0
+  "$@" || rc=$?
+  printf 'TIMING | %-26s | %4ds\n' "$label" "$((SECONDS - t0))"
+  return $rc
+}
+
 # Framework deployment (DEFAULT): deploy the heavy closures
 # (flask/werkzeug/jinja2/twilio) once so the flag-on shards below warm-bind
 # them instead of recompiling per shard (docs/Persistent_Modules_and_
@@ -64,8 +82,10 @@ EXIT=0
 # (everything recompiled) -- the escape hatch and the warm-vs-cold
 # discrepancy check.
 if [ -z "${GRAIL_TEST_COLD:-}" ]; then
+  DEPLOY_T0=$SECONDS
   GRAIL_DIR="$PROJECT_ROOT" LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S scripts/deployFrameworks.gs < /dev/null \
     | grep -E "deployFrameworks|skipped" || { echo "framework deploy FAILED"; EXIT=1; }
+  printf 'TIMING | %-26s | %4ds\n' "framework-deploy" "$((SECONDS - DEPLOY_T0))"
 fi
 
 # Main SUnit suite, sharded across GRAIL_TEST_WORKERS parallel topaz sessions
@@ -77,6 +97,7 @@ fi
 # genuine multi-session concurrency exercise against a single stone.  The
 # suite does not commit, so the shards share the committed image read-only.
 WORKERS="${GRAIL_TEST_WORKERS:-4}"
+SHARD_T0=$SECONDS
 mkdir -p "$PROJECT_ROOT/out"
 rm -f "$PROJECT_ROOT"/out/shard_*.out
 SHARD_PIDS=()
@@ -109,17 +130,18 @@ for i in $(seq 0 $((WORKERS-1))); do
   grep -E "debug: #" "$f" | sed 's/^/  /'
 done
 echo "main suite (sharded x$S_SEEN): $S_RUN run, $S_PASS passed, $S_FAIL failed, $S_ERR errors"
+printf 'TIMING | %-26s | %4ds\n' "sharded-sunit (x$WORKERS)" "$((SECONDS - SHARD_T0))"
 if [ "$S_SEEN" -ne "$WORKERS" ] || [ "$S_FAIL" -ne 0 ] || [ "$S_ERR" -ne 0 ]; then EXIT=1; fi
 
 # Run embedded CPython tests in a separate session (can't coexist with shim)
-LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCPythonTests.gs < /dev/null || EXIT=$?
+timed "cpython-embedded" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCPythonTests.gs < /dev/null || EXIT=$?
 
 # Regression for commit 4a46289 (boxed SrePattern/SreMatch C pointers). The
 # bug only manifests across a commit + session boundary, so it can't live in
 # the in-session SUnit suite -- this script commits a pattern/match, re-logs
 # in to fault them with a NULL CPointer, asserts the guards signal instead of
 # SEGVing, then removes the key and commits to leave the repository clean.
-LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runIssue2Test.gs < /dev/null || EXIT=$?
+timed "issue2-sre-ptr" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runIssue2Test.gs < /dev/null || EXIT=$?
 
 # Functional test for gemstone.system.commit()/abort() (env-1 class-side
 # methods on System reached via the gemstone module). Commit/abort cannot
@@ -127,7 +149,7 @@ LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runIssue2Test.gs < /dev/null
 # gemstone.system.commit(), re-logs in to verify persistence, discards an
 # uncommitted overwrite via gemstone.system.abort(), then removes the key
 # and commits to leave the repository clean.
-LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runGemstoneSystemTest.gs < /dev/null || EXIT=$?
+timed "gemstone-system" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runGemstoneSystemTest.gs < /dev/null || EXIT=$?
 
 # Grail-side WeakReference commit-safety regression. Builds a Grail
 # WeakReference, commits the UserGlobals graph that holds it, re-logs in,
@@ -135,7 +157,7 @@ LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runGemstoneSystemTest.gs < /
 # holder reference persists by identity, the holder's slots come back nil
 # (including the link to the inner ephemeron), the ref reports dead, and
 # the frozen hashCache survives so the ref stays usable as a dict key.
-LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runEphemeronCommitTest.gs < /dev/null || EXIT=$?
+timed "ephemeron-commit" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runEphemeronCommitTest.gs < /dev/null || EXIT=$?
 
 # Phase-1 canonical-class regression (docs/Persistent_Modules_and_Classes.md).
 # Reuse can only be observed across a commit + logout + login boundary, so it
@@ -144,7 +166,7 @@ LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runEphemeronCommitTest.gs < 
 # re-imported class IS the committed instance's class, then removes the
 # UserGlobals keys and commits to leave the repository clean. Also asserts
 # the flag defaults OFF in a fresh session.
-LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCanonicalClassTest.gs < /dev/null || EXIT=$?
+timed "canonical-class" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCanonicalClassTest.gs < /dev/null || EXIT=$?
 
 # Phase-2 persistent-module-state regression (__persistent__ marker; see
 # docs/Persistent_Modules_and_Classes.md). Session 1 imports a module that
@@ -153,7 +175,7 @@ LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCanonicalClassTest.gs < /
 # point); session 2 re-imports and asserts the committed values win over the
 # re-run initializers while unlisted globals stay session-local. Cleans up
 # the store key and temp module file.
-LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runPersistentStateTest.gs < /dev/null || EXIT=$?
+timed "persistent-state" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runPersistentStateTest.gs < /dev/null || EXIT=$?
 
 # Canonical-class session-local attribute-overlay regression
 # (docs/Persistent_Modules_and_Classes.md par.7). The overlay only carries
@@ -163,7 +185,7 @@ LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runPersistentStateTest.gs < 
 # per-class ___resetClassAttrOverlay___ (no stale overlay leaks across a
 # re-import) and the instance-read descriptor binding through the overlay
 # (a class-stored function binds self). No commit.
-LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runOverlayReuseTest.gs < /dev/null || EXIT=$?
+timed "overlay-reuse" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runOverlayReuseTest.gs < /dev/null || EXIT=$?
 
 # Phase-5 module-bind acceptance (docs/Persistent_Modules_and_Classes.md
 # par.10.6). Session A (flag on) imports a fixture exercising @dataclass,
@@ -172,7 +194,7 @@ LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runOverlayReuseTest.gs < /de
 # instances get their defaults), importlib.reload() must be the explicit
 # cold path, and delete-and-reimport of the deployed module must raise the
 # par.10.5 ImportError. Session C cleans the repository.
-LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runModuleBindTest.gs < /dev/null || EXIT=$?
+timed "module-bind" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runModuleBindTest.gs < /dev/null || EXIT=$?
 
 # REAL-APPLICATION acceptance (par.10): session A deploys a module-level
 # Flask app (committing the whole flask/werkzeug closure); session B
@@ -180,12 +202,13 @@ LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runModuleBindTest.gs < /dev/
 # context, dynamic converters, jsonify, 404s). Exercises the session-tier
 # fixes this surfaced: dbTransient PyThreadLock, SrePattern per-session
 # recompile, lazy first-touch canonical bind, strong-ref flask provider.
-LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runFlaskDeployTest.gs < /dev/null || EXIT=$?
+timed "flask-deploy" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runFlaskDeployTest.gs < /dev/null || EXIT=$?
 
 # Interleaved-commit concurrency (par.10.7 phase 8): two concurrent topaz
 # processes cold-import disjoint modules flag-on with overlapping
 # transactions, then commit in sequence; the loser follows the abort-retry
 # protocol and a fresh session must see both registry entries merged.
-./tests/scripts/run_concurrent_import_test.sh || EXIT=$?
+timed "concurrent-import" ./tests/scripts/run_concurrent_import_test.sh || EXIT=$?
 
+printf 'TIMING | %-26s | %4ds\n' "TOTAL run_tests.sh" "$((SECONDS - SUITE_T0))"
 exit $EXIT

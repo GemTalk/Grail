@@ -2,6 +2,13 @@
 
 # This script assumes a stone is already running per the stone name defined in .topazini
 
+# Wall-clock timing (portable bash SECONDS builtin).  An EXIT trap prints on
+# every exit path -- success or the error branches below -- so CI logs show
+# install vs. run_tests.sh split (they share one CI `run:` step).  Prefixed
+# `TIMING |` to grep cleanly, matching scripts/run_tests.sh.
+INSTALL_T0=$SECONDS
+trap 'printf "TIMING | %-26s | %4ds\n" "TOTAL install.sh" "$((SECONDS - INSTALL_T0))"' EXIT
+
 # Auto-source .setenv when $GEMSTONE isn't in the environment.  Lets
 # ``./install.sh`` succeed from a fresh shell without remembering to
 # ``source .setenv`` first — a missing $SHIM_LIB_PATH at topaz time
