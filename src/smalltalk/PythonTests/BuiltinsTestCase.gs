@@ -153,6 +153,32 @@ testEvalPow3Arg
 
 category: 'Grail-Tests - Phase 4b Varargs'
 method: BuiltinsTestCase
+testEvalPowModularInverse
+	"pow(a, -1, m) (Python 3.8+) is the INTEGER modular inverse of a modulo
+	m, and pow(a, -k, m) inverts a**k -- not the float a**-k.  A base that
+	shares a factor with m raises ValueError.  fractions._hash_algorithm
+	depends on this; the old code returned the float a**-1, breaking
+	numeric-hash consistency."
+
+	self assert: (self eval: 'pow(3, -1, 11)') equals: 4.   "3*4 == 1 (mod 11)"
+	self assert: (self eval: 'pow(1, -1, 97)') equals: 1.
+	self assert: (self eval: 'pow(3, -2, 11)') equals: 5.   "inverse of 9 (mod 11)"
+	"the result is an int, not a float"
+	self assert: (self eval: 'isinstance(pow(1, -1, 97), int)').
+	"a non-invertible base raises ValueError (caught in Python here so the
+	assertion does not depend on how ValueError surfaces to Smalltalk)"
+	self assert: (self eval:
+'def _mi():
+    try:
+        pow(2, -1, 6)
+        return False
+    except ValueError:
+        return True
+_mi()')
+%
+
+category: 'Grail-Tests - Phase 4b Varargs'
+method: BuiltinsTestCase
 testEvalRound2Arg
 	"Phase 4b: round(x, n) — varargs fast path through `_round:kw:`."
 

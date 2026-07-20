@@ -1847,6 +1847,15 @@ _pow: positional kw: kwargs
 		(x**y) % z."
 		((x @env0:isKindOf: Integer) and: [(y @env0:isKindOf: Integer)
 			and: [z @env0:isKindOf: Integer]]) ifTrue: [
+			(z @env0:= 0) ifTrue: [
+				ValueError ___signal___: 'pow() 3rd argument cannot be 0'].
+			"Negative exponent: CPython (3.8+) defines pow(x, -k, z) as the
+			modular inverse of x**k modulo z — an integer — rather than the
+			float x**-k.  Raises ValueError when x is not invertible mod z."
+			(y @env0:< 0) ifTrue: [
+				| inv |
+				inv := self ___modInverse___: x mod: z.
+				^ self ___modPow___: inv exp: (y @env0:negated) mod: z].
 			result := x __pow__: y.
 			^ result __mod__: z].
 		tn := [:v | | n | n := v @env0:class @env0:name @env0:asString.
@@ -1857,6 +1866,47 @@ _pow: positional kw: kwargs
 			@env0:, ''', ''' @env0:, (tn @env0:value: z) @env0:, '''')
 	].
 	TypeError ___signal___: 'pow expected 2 or 3 arguments'
+%
+
+category: 'Grail-Numeric Helpers'
+method: builtins
+___modInverse___: a mod: m
+	"Modular inverse of integer `a` modulo integer `m` via the extended
+	Euclidean algorithm.  Returns an integer in the sign range of `m`
+	(GemStone `\\` follows the divisor's sign, matching Python `%`).
+	Raises ValueError when gcd(a, m) ~= 1, mirroring CPython's
+	pow(a, -1, m)."
+
+	| oldR r oldS s q tmp |
+	oldR := a.  r := m @env0:abs.
+	oldS := 1.  s := 0.
+	[r @env0:~= 0] @env0:whileTrue: [
+		q := oldR @env0:// r.
+		tmp := oldR @env0:- (q @env0:* r).  oldR := r.  r := tmp.
+		tmp := oldS @env0:- (q @env0:* s).  oldS := s.  s := tmp].
+	(oldR @env0:abs @env0:~= 1) ifTrue: [
+		ValueError ___signal___: 'base is not invertible for the given modulus'].
+	"oldR is +/-1 = gcd; normalise the coefficient's sign accordingly."
+	^ (oldS @env0:* oldR) @env0:\\ m
+%
+
+category: 'Grail-Numeric Helpers'
+method: builtins
+___modPow___: base exp: e mod: m
+	"base ** e modulo m for e >= 0 via square-and-multiply, keeping every
+	intermediate reduced mod m so huge exponents stay cheap.  Result sign
+	follows m (Python `%` semantics via GemStone `\\`)."
+
+	| result b ee |
+	result := 1.
+	b := base @env0:\\ m.
+	ee := e.
+	[ee @env0:> 0] @env0:whileTrue: [
+		((ee @env0:bitAnd: 1) @env0:= 1) ifTrue: [
+			result := (result @env0:* b) @env0:\\ m].
+		ee := ee @env0:bitShift: -1.
+		b := (b @env0:* b) @env0:\\ m].
+	^ result @env0:\\ m
 %
 
 category: 'Grail-Built-in Functions'

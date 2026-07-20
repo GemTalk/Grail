@@ -477,9 +477,19 @@ __gt__: other
 category: 'Grail-Hashing'
 method: int
 __hash__
-	"Return hash value (self for integers)."
+	"CPython numeric hash: n mod (2^61-1), with the sign carried and the
+	-1 -> -2 special case.  For |n| < the modulus this equals n (so small-int
+	hashing and hash(int)==hash(float)==hash(Fraction) consistency are
+	unchanged), but GemStone's Smalltalk hash COLLIDES for large integers --
+	e.g. hash(10**23) and hash(int(float(10**23))) came out equal, breaking
+	test_fractions testHash's ``hash(float(10**23)) != hash(F(10**23))''."
 
-	^ self @env0:hash
+	| p h |
+	p := 2305843009213693951.   "2^61 - 1 (sys.hash_info.modulus on 64-bit)"
+	h := (self @env0:abs) @env0:\\ p.
+	(self @env0:< 0) ifTrue: [h := h @env0:negated].
+	(h @env0:= -1) ifTrue: [^ -2].
+	^ h
 %
 
 category: 'Grail-Conversion'

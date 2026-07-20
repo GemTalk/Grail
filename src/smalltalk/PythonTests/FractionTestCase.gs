@@ -128,6 +128,38 @@ test__hash__
 	self assert: (result isKindOf: Integer).
 %
 
+category: 'Grail-Tests - Hash'
+method: FractionTestCase
+testNumericHashConsistency
+	"CPython requires equal numeric values to hash equally across int,
+	float and Fraction (test_fractions testHash).  Regresses three linked
+	fixes: int.__hash__ = n mod (2**61 - 1); float.__hash__ = the same
+	numeric hash of the exact dyadic value; and 3-arg pow(a, -1, m)
+	returning the integer modular inverse (fractions._hash_algorithm relies
+	on it -- it used to return the float a**-1, poisoning every non-trivial
+	Fraction hash).  Uses a fresh `import fractions` (not the canonical
+	module singleton) so the module rebuilds from disk against the current
+	pow/hash code."
+
+	"hash(F(5,2)) == hash(2.5): the fraction path runs pow(2, -1, P)."
+	self assert: (self eval: 'import fractions
+hash(fractions.Fraction(5, 2)) == hash(2.5)').
+
+	"hash(F(2)) == hash(2) == hash(2.0): integer-valued consistency."
+	self assert: (self eval: 'import fractions
+hash(fractions.Fraction(2, 1)) == hash(2) and hash(2.0) == hash(2)').
+
+	"hash(F(10**50)) == hash(10**50): the large-int path, where the old
+	float-valued pow(1, -1, P) collapsed the hash to a lossy float."
+	self assert: (self eval: 'import fractions
+hash(fractions.Fraction(10**50)) == hash(10**50)').
+
+	"hash(float(10**23)) != hash(F(10**23)): the float is inexact, so its
+	numeric hash must differ from the exact integer's."
+	self assert: (self eval: 'import fractions
+hash(float(10**23)) != hash(fractions.Fraction(10**23))').
+%
+
 category: 'Grail-Tests - Repr'
 method: FractionTestCase
 test__repr__

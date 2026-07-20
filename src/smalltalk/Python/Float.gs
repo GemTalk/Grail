@@ -592,6 +592,37 @@ as_integer_ratio
 	^ tuple @env0:with: (frac @env0:numerator) with: (frac @env0:denominator)
 %
 
+category: 'Grail-Hashing'
+method: float
+__hash__
+	"CPython numeric hash for a finite double.  The value is exactly the
+	dyadic rational numer/den (den a power of two), so its hash is
+	(|numer| * inverse(den)) mod P with the sign of numer, P = 2**61 - 1
+	(sys.hash_info.modulus).  This makes hash agree across numeric types:
+	hash(2.0) == hash(2) == hash(Fraction(2)) and hash(2.5) ==
+	hash(Fraction(5, 2)) (test_fractions testHash; mixed int/float/Fraction
+	dict and set lookups).  Because 2**61 == 1 (mod P), the inverse of
+	2**k is simply 2**((61 - k mod 61) mod 61) — no extended-gcd needed.
+	Infinity hashes to +/-314159 (sys.hash_info.inf); NaN keeps its
+	identity-based hash."
+
+	| kind fr numer den p dinv h |
+	p := 2305843009213693951.
+	kind := self @env0:_getKind.
+	(kind @env0:> 4) ifTrue: [^ self @env0:hash].
+	(kind @env0:== 3) ifTrue: [
+		^ (self @env0:< 0) ifTrue: [-314159] ifFalse: [314159]].
+	(self @env0:= 0.0) ifTrue: [^ 0].
+	fr := self @env0:asFraction.
+	numer := fr @env0:numerator.
+	den := fr @env0:denominator.
+	dinv := 2 @env0:raisedTo: ((61 @env0:- (((den @env0:highBit) @env0:- 1) @env0:\\ 61)) @env0:\\ 61).
+	h := ((numer @env0:abs @env0:\\ p) @env0:* dinv) @env0:\\ p.
+	(numer @env0:< 0) ifTrue: [h := h @env0:negated].
+	(h @env0:= -1) ifTrue: [^ -2].
+	^ h
+%
+
 category: 'Grail-Float Methods'
 method: float
 conjugate
