@@ -1935,6 +1935,91 @@ ___rbinOpFallback___: other op: opString
 		@env0:, ''' and ''' @env0:, self @env0:class @env0:name @env0:asString @env0:, '''')
 %
 
+! ------------------- Comparison NotImplemented protocol
+! CmpOpAst routes the rich comparison operators through these per-op helpers so
+! an explicit ``return NotImplemented'' from a forward comparison dunder
+! (Fraction vs a Dummy/complex operand) triggers the reflected op instead of
+! leaking the NotImplemented singleton into a boolean context (``Symbol does not
+! understand not'').  Ordering falls back via ___cmpFallback___ (reflected dunder
+! else catchable TypeError); ==/!= fall back to the reflected __eq__ then
+! identity (== never raises).  DIRECT sends preserve built-in behavior (they
+! never return the singleton), so ComparisonProtocolTestCase stays green.
+
+category: 'Grail-Comparison'
+method: object
+___cmpLt___: other
+	| r |
+	r := self __lt__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'].
+	^ r
+%
+
+category: 'Grail-Comparison'
+method: object
+___cmpLe___: other
+	| r |
+	r := self __le__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'].
+	^ r
+%
+
+category: 'Grail-Comparison'
+method: object
+___cmpGt___: other
+	| r |
+	r := self __gt__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'].
+	^ r
+%
+
+category: 'Grail-Comparison'
+method: object
+___cmpGe___: other
+	| r |
+	r := self __ge__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'].
+	^ r
+%
+
+category: 'Grail-Comparison'
+method: object
+___cmpEq___: other
+	| r |
+	r := self __eq__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [^ self ___eqValue___: other].
+	^ r
+%
+
+category: 'Grail-Comparison'
+method: object
+___cmpNe___: other
+	| r |
+	r := self __ne__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [^ (self ___eqValue___: other) @env0:not].
+	^ r
+%
+
+category: 'Grail-Comparison'
+method: object
+___eqValue___: other
+	"The == result when the forward __eq__ returned NotImplemented: try the
+	reflected __eq__ on a user-defined ``other'', else fall back to identity
+	(== never raises).  Shared by ___cmpEq___/___cmpNe___."
+
+	| refOwner rr |
+	(other @env0:isKindOf: PythonInstance) ifTrue: [
+		refOwner := other @env0:class
+			@env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
+		(refOwner @env0:~~ nil and: [refOwner @env0:~~ object]) ifTrue: [
+			rr := other @env0:perform: #'__eq__:' env: 1 withArguments: { self }.
+			(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]]].
+	^ self @env0:== other
+%
+
 category: 'Grail-Comparison'
 method: object
 ___cmpFallback___: other op: opString reflected: refSelector
