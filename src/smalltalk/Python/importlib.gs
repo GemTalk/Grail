@@ -820,6 +820,57 @@ ___canonicalGenerationCheck___
 	^ self
 %
 
+category: 'Grail-Session'
+classmethod: importlib
+resetSessionForReinstall
+	"Post-install refresh for a LONG-LIVED session (e.g. an MCP / topaz
+	session that stays logged in across an ``install.sh'' run).
+
+	install.sh commits recompiled code and bumps ``GrailRuntimeGeneration'',
+	but a session that already ran its one-shot ___canonicalGenerationCheck___
+	(memoised in SessionTemps as #GrailCanonicalGenChecked) never notices, and
+	already-imported module instances stay cached in sys.modules (also
+	SessionTemps).  A bare ``abort'' refreshes the DB VIEW -- so recompiled
+	Smalltalk methods (AST codegen, Object, ...) are picked up -- but touches
+	NEITHER cache, so canonical/built-in Python MODULE instances (operator,
+	math, a vendored .py, ...) keep serving their old committed code.  A fresh
+	login would rebuild everything; this reproduces that WITHOUT reconnecting.
+
+	Run it from the MCP after each install.sh:
+	  importlib resetSessionForReinstall
+
+	Steps: abort (refresh view) -> un-memoise + re-run the generation guard
+	(drops the stale canonical registries so imports rebuild cold) -> evict
+	every non-bootstrap module from sys.modules, clearing each one's hash-state
+	verdict and SessionDict caches, so the next import re-reads it from disk.
+
+	Returns the number of modules evicted."
+
+	| st mods keep hashState toEvict |
+	System @env0:abortTransaction.
+	st := SessionTemps @env0:current.
+	"1. Un-memoise + re-run the generation guard.  With the deploy generation
+	now behind the freshly-installed runtime generation, it drops the stale
+	canonical registries; imports then rebuild cold from disk."
+	st @env0:removeKey: #'GrailCanonicalGenChecked' ifAbsent: [].
+	self ___canonicalGenerationCheck___.
+	"2. Evict cached module instances so the next import rebuilds from source.
+	Keep the bootstrap modules the import machinery itself rides on -- their
+	Smalltalk methods already refreshed via the abort above."
+	keep := Set @env0:withAll: #('sys' 'builtins' 'importlib' '_imp' '_thread' 'gc').
+	mods := self @env1:modules.
+	hashState := st @env0:at: #'GrailModuleHashState' otherwise: nil.
+	toEvict := OrderedCollection @env0:new.
+	mods @env0:keysDo: [:k |
+		(keep @env0:includes: k @env0:asString) @env0:ifFalse: [toEvict @env0:add: k]].
+	toEvict @env0:do: [:k |
+		self removeModule: k @env0:asString.
+		hashState @env0:ifNotNil: [:hs |
+			hs @env0:removeKey: k ifAbsent: [].
+			hs @env0:removeKey: k @env0:asString ifAbsent: []]].
+	^ toEvict @env0:size
+%
+
 category: 'Grail-Canonical Classes'
 classmethod: importlib
 ___canonicalModuleHashes___

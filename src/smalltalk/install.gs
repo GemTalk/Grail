@@ -580,6 +580,8 @@ run
 	at: #'LegbScopeTestCase' put: nil;
 	at: #'KwargsSplatTestCase' put: nil;
 	at: #'SubclassNameAttrTestCase' put: nil;
+	at: #'CallingConventionTestCase' put: nil;
+	at: #'OperatorSemanticsTestCase' put: nil;
 	at: #'TernaryTruthinessTestCase' put: nil;
 	at: #'VarargsNamingTestCase' put: nil;
 	at: #'YieldFromTestCase' put: nil;
@@ -1282,6 +1284,8 @@ input src/smalltalk/PythonTests/KwargsSplatTestCase.gs
 input src/smalltalk/PythonTests/SubclassNameAttrTestCase.gs
 input src/smalltalk/PythonTests/LiveDictTestCase.gs
 input src/smalltalk/PythonTests/LegbScopeTestCase.gs
+input src/smalltalk/PythonTests/CallingConventionTestCase.gs
+input src/smalltalk/PythonTests/OperatorSemanticsTestCase.gs
 input src/smalltalk/PythonTests/TernaryTruthinessTestCase.gs
 input src/smalltalk/PythonTests/VarargsNamingTestCase.gs
 input src/smalltalk/PythonTests/YieldFromTestCase.gs

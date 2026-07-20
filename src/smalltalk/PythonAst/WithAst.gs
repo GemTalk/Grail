@@ -96,7 +96,7 @@ printItem: anIndex onStream: aStream
 			self printItem: anIndex + 1 onStream: aStream.
 			aStream nextPut: $.; lf
 		].
-	aStream nextPutAll: '___cm___ @env1:__exit__: None _: None _: None'.
+	aStream nextPutAll: '(___cm___ @env1:___pyAttrLoad___: #''__exit__'') @env1:value: { None. None. None } value: nil'.
 	aStream decreaseIndent; lf.
 	aStream nextPutAll: '] @env0:on: BaseException do: [:___ex___ |'.
 	aStream increaseIndent; lf.
@@ -107,10 +107,10 @@ printItem: anIndex onStream: aStream
 	control-flow signal continues to its real target.  Filter them out
 	before invoking __exit__ with exception details."
 	aStream nextPutAll: '((___ex___ isKindOf: PythonReturn) @env0:or: [(___ex___ isKindOf: PythonBreak) @env0:or: [___ex___ isKindOf: PythonContinue]]) ifTrue: ['; lf.
-	aStream nextPutAll: '    ___cm___ @env1:__exit__: None _: None _: None.'; lf.
+	aStream nextPutAll: '    (___cm___ @env1:___pyAttrLoad___: #''__exit__'') @env1:value: { None. None. None } value: nil.'; lf.
 	aStream nextPutAll: '    ___ex___ @env0:pass'; lf.
 	aStream nextPutAll: '].'; lf.
-	aStream nextPutAll: '(___cm___ @env1:__exit__: ___ex___ @env0:class _: ___ex___ _: nil) @env1:___isTruthy___ ifFalse: [___ex___ @env0:pass]'.
+	aStream nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #''__exit__'') @env1:value: { ___ex___ @env0:class. ___ex___. nil } value: nil) @env1:___isTruthy___ ifFalse: [___ex___ @env0:pass]'.
 	aStream decreaseIndent; lf.
 	aStream nextPut: $].
 	aStream decreaseIndent; lf.

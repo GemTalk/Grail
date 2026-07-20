@@ -527,9 +527,14 @@ method: int
 __lshift__: other
 	"Left shift."
 
-	(other isKindOf: Integer) ifTrue: [^ self @env0:bitShift: other].
+	(other isKindOf: Integer) ifTrue: [
+		(other @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
+		^ self @env0:bitShift: other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitShift: (other __index__)].
+		@env0:includesKey: #'__index__') ifTrue: [ | idx |
+		idx := other __index__.
+		(idx @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
+		^ self @env0:bitShift: idx].
 	^ self ___binOpFallback___: other op: '<<' reflected: #'__rlshift__:'
 %
 
@@ -706,6 +711,7 @@ method: int
 __rlshift__: other
 	"Reverse left shift (other << self)."
 
+	(self @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
 	(other isKindOf: Integer) ifTrue: [^ other @env0:bitShift: self].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:bitShift: self].
@@ -791,6 +797,7 @@ method: int
 __rrshift__: other
 	"Reverse right shift (other >> self)."
 
+	(self @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
 	(other isKindOf: Integer) ifTrue: [^ other @env0:bitShift: (self @env0:negated)].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:bitShift: (self @env0:negated)].
@@ -802,9 +809,14 @@ method: int
 __rshift__: other
 	"Right shift."
 
-	(other isKindOf: Integer) ifTrue: [^ self @env0:bitShift: (other @env0:negated)].
+	(other isKindOf: Integer) ifTrue: [
+		(other @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
+		^ self @env0:bitShift: (other @env0:negated)].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:bitShift: ((other __index__) @env0:negated)].
+		@env0:includesKey: #'__index__') ifTrue: [ | idx |
+		idx := other __index__.
+		(idx @env0:< 0) ifTrue: [^ ValueError ___signal___: 'negative shift count'].
+		^ self @env0:bitShift: (idx @env0:negated)].
 	^ self ___binOpFallback___: other op: '>>' reflected: #'__rrshift__:'
 %
 

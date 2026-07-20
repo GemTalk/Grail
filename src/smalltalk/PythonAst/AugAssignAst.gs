@@ -78,6 +78,7 @@ category: 'Grail-other'
 method: AugAssignAst
 printSmalltalkOn: aStream
 
+	| binSel iSel opStream |
 	(target isKindOf: AttributeAst) ifTrue: [
 		^self printSmalltalkAttributeAugAssignOn: aStream.
 	].
@@ -111,11 +112,24 @@ printSmalltalkOn: aStream
 			aStream nextPutAll: ').'.
 			^ self
 		].
+	"Simple (local Name) target.  CPython augmented assignment tries the
+	in-place dunder (``a.__iadd__(b)'') first and only falls back to the
+	binary dunder (``a.__add__(b)'') when the type has no in-place form.
+	Derive the in-place selector from the operator's binary selector
+	(``__add__:'' -> ``__iadd__:'') and route both through the runtime
+	helper ``object>>___augmentedOp___:inplace:binary:''.  (Attribute /
+	subscript / module-scope targets keep the plain binary form above.)"
+	opStream := WriteStream on: String new.
+	op printSmalltalkOn: opStream.
+	binSel := opStream contents trimSeparators.
+	iSel := '__i' , (binSel copyFrom: 3 to: binSel size).
 	target printSmalltalkOn: aStream.
 	aStream nextPutAll: ' := '.
 	target printSmalltalkWithParenthesisOn: aStream.
-	op printSmalltalkOn: aStream.
+	aStream nextPutAll: ' @env1:___augmentedOp___: '.
 	value printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' inplace: #'''; nextPutAll: iSel;
+		nextPutAll: ''' binary: #'''; nextPutAll: binSel; nextPutAll: ''''.
 	aStream nextPut: $..
 %
 

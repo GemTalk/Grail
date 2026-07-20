@@ -485,11 +485,22 @@ class WeakMethod:
             user_cb(outer)
         return cb
 
-    def __call__(self):
+    def __call__(self, *args, **kwargs):
         obj = self._inst_ref()
         if obj is None:
             return None
-        return self._func.__get__(obj, self._cls)
+        meth = self._func.__get__(obj, self._cls)
+        # Grail-specific: WeakMethod is NOT a subclass of `ref` (Grail's `ref`
+        # is a Smalltalk class Python can't subclass with the needed slots), so
+        # a consumer that dereferences weak receivers by ``isinstance(r, ref)''
+        # -- notably Django's signal dispatcher -- never derefs a WeakMethod and
+        # instead calls it DIRECTLY as the receiver (``wm(signal=..., sender=...,
+        # **named)''). Without forwarding, the bound method was returned but
+        # never invoked, so bound-method signal receivers silently never ran.
+        # Bare ``wm()'' keeps CPython semantics (return the bound method / None).
+        if args or kwargs:
+            return meth(*args, **kwargs)
+        return meth
 
     def __eq__(self, other):
         if not isinstance(other, WeakMethod):

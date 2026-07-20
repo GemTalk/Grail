@@ -1224,7 +1224,7 @@ ___pyAttrLoad___: aSym
 	has already missed — fall through to the class-side metaclass
 	lookup directly."
 	(self isKindOf: PythonInstance) ifTrue: [
-		| metaclass |
+		| metaclass metaOwns |
 		"Canonical-class overlay first: an ``self.x'' read falling back to
 		the class must see a runtime ``Cls.x = v'' overlay store before the
 		committed class-body accessor -- with the SAME descriptor binding the
@@ -1247,14 +1247,29 @@ ___pyAttrLoad___: aSym
 		``name:`` or ``_name:kw:`` selectors but NO paired unary
 		setter (so the value-attr branch above doesn't catch them).
 		Wrap as a BoundMethod whose receiver is the class object so
-		``self.cls_method(args)`` dispatches correctly."
-		((metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
-			or: [(metaclass @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
-				or: [(metaclass @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
-					or: [(metaclass @env0:whichClassIncludesSelector: sym4 environmentId: 1) notNil
-						or: [(metaclass @env0:whichClassIncludesSelector: sym5 environmentId: 1) notNil
-							or: [(metaclass @env0:whichClassIncludesSelector: sym6 environmentId: 1) notNil
-								or: [(metaclass @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]]]])
+		``self.cls_method(args)`` dispatches correctly.
+
+		Gate on the owning class being a TRUE metaclass (``isMeta'').
+		The metaclass chain ends in the Smalltalk kernel (``... Class ->
+		Behavior -> Object''), and ``object'' installs default dunder
+		methods on that kernel tail: ``__exit__:_:_:'' (the context-manager
+		protocol) and the comparison dunders ``__eq__:''/``__lt__:''/....
+		Without the ``isMeta'' gate those object-level defaults are found
+		on the metaclass chain and masquerade as class-side methods, so
+		``self.__exit__(...)'' / ``self.__eq__(...)'' wrongly bind to the
+		CLASS instead of the instance -- breaking every context manager
+		whose ``__exit__'' is reached through a normal call
+		(test.support.swap_item) and any ``inst.__eq__''-style dunder call."
+		metaOwns := [:sel | | o |
+			o := metaclass @env0:whichClassIncludesSelector: sel environmentId: 1.
+			o notNil and: [o @env0:isMeta]].
+		((metaOwns @env0:value: sym1)
+			or: [(metaOwns @env0:value: sym2)
+				or: [(metaOwns @env0:value: sym3)
+					or: [(metaOwns @env0:value: sym4)
+						or: [(metaOwns @env0:value: sym5)
+							or: [(metaOwns @env0:value: sym6)
+								or: [metaOwns @env0:value: symVA]]]]]])
 			ifTrue: [^ BoundMethod receiver: self @env0:class selector: aSym].
 	].
 	"Shim wrapper classes (SrePattern, SreMatch, ...) advertise the
@@ -1553,6 +1568,36 @@ method: object
 __exit__: excType _: excValue _: excTb
 	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
 		@env0:, ''' object does not support the context manager protocol')
+%
+
+category: 'Grail-Augmented Assignment'
+method: object
+___augmentedOp___: other inplace: iSel binary: bSel
+	"CPython augmented-assignment (``a OP= b'') semantics for a simple
+	(local Name) target: use the in-place dunder (``__iadd__'' etc.) when
+	the receiver's class defines one, honouring a NotImplemented return by
+	falling through; otherwise fall back to the binary dunder (``__add__''),
+	which itself handles the reflected operation.  ``iSel'' is the fixed
+	1-arg in-place selector (``__iadd__:''); its varargs form
+	(``___iadd__:kw:'') is probed too.  Emitted by
+	AugAssignAst.printSmalltalkOn: -- without this, ``a += b'' compiled to
+	``a := a.__add__(b)'' and a class defining only ``__iadd__'' raised a
+	spurious ``unsupported operand'' TypeError (test_operator.test_inplace)."
+
+	| cls iVa result niSingleton |
+	cls := self @env0:class.
+	niSingleton := Python @env0:at: #NotImplemented otherwise: nil.
+	(cls @env0:whichClassIncludesSelector: iSel environmentId: 1) notNil
+		ifTrue: [
+			result := self @env0:perform: iSel env: 1 withArguments: { other }.
+			result == niSingleton ifFalse: [^ result]]
+		ifFalse: [
+			iVa := ('_' @env0:, (iSel @env0:asString @env0:copyFrom: 1
+				to: iSel @env0:asString @env0:size @env0:- 1) @env0:, ':kw:') @env0:asSymbol.
+			(cls @env0:whichClassIncludesSelector: iVa environmentId: 1) notNil ifTrue: [
+				result := self @env0:perform: iVa env: 1 withArguments: { { other }. nil }.
+				result == niSingleton ifFalse: [^ result]]].
+	^ self @env0:perform: bSel env: 1 withArguments: { other }
 %
 
 category: 'Grail-Comparison'

@@ -1022,6 +1022,10 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 					nextPutAll: p asString; nextPutAll: '''' ].
 		stream nextPutAll: ']].'; lf.
 	].
+	"Reject extra positional / unexpected keyword args (the fixed selector
+	we forward to would otherwise silently drop them)."
+	self printArgCountChecksOn: stream
+		positionalName: '___pos___' kwargsName: '___kw___' nPositional: callParams size.
 	"Forward to the fixed-arity selector."
 	stream nextPutAll: '^ self '.
 	stripSelf
@@ -1168,7 +1172,63 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 				nextPutAll: ''''
 		].
 		aStream nextPutAll: ']].'; lf
-	]
+	].
+	self printArgCountChecksOn: aStream
+		positionalName: posName kwargsName: kwName nPositional: numParams
+%
+
+category: 'Module Method Compilation'
+method: FunctionDefAst
+printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPositional: nPos
+	"Emit the CPython arg-count guards for a varargs entry, raising the
+	catchable TypeError instead of silently dropping the extras:
+
+	  1. too-many-positional -- more positional args than accepted (skipped
+	     when the def has *args to absorb the tail).
+	  2. unexpected-keyword -- a keyword matching no parameter (skipped when
+	     the def has **kwargs to collect it).  Accepted names = every param
+	     that may be passed by keyword (positional + keyword-only; posonly
+	     kept lenient, included here).
+
+	Without these, ``f(a, b)'' called ``f(1, 2, 3)'' or ``f(1, 2, z=3)''
+	quietly ignored the extras (test_operator's pow/attrgetter/itemgetter/
+	methodcaller).  ``nPos'' is the count of accepted positional params at
+	this site (self already stripped for instance methods).  Emitted right
+	after the named-param unpacking.  Messages skip CPython's exact
+	singular/plural + quoting since no caller inspects them.
+
+	HISTORY: the unexpected-keyword guard first regressed Django's WSGI stack
+	-- it exposed a latent bug where ``WeakMethod'' (not a `ref` subclass, so
+	Django's dispatcher never dereferenced it) was invoked directly as a
+	signal receiver with ``signal=/sender=/**named''.  Fixed at the source
+	(WeakMethod.__call__ now derefs + forwards), after which the guard is
+	regression-clean."
+
+	"1. Too many positional args -- skipped when *args absorbs the tail."
+	args vararg isNil ifTrue: [
+		aStream
+			nextPutAll: '(('; nextPutAll: posName;
+			nextPutAll: ' @env0:size) @env0:> '; print: nPos;
+			nextPutAll: ') ifTrue: [TypeError ___signal___: (''';
+			nextPutAll: name;
+			nextPutAll: '() takes '; print: nPos;
+			nextPutAll: ' positional arguments but '' @env0:, ('; nextPutAll: posName;
+			nextPutAll: ' @env0:size) @env0:printString @env0:, '' were given'')].'; lf ].
+	"2. Unexpected keyword -- skipped when **kwargs collects the extras."
+	args kwarg isNil ifTrue: [ | kwNames |
+		kwNames := OrderedCollection new.
+		args posonlyargs do: [:a | kwNames add: a name asString].
+		args args do: [:a | kwNames add: a name asString].
+		args kwonlyargs do: [:a | kwNames add: a name asString].
+		aStream
+			nextPutAll: '('; nextPutAll: kwName;
+			nextPutAll: ' @env0:isNil) @env0:not ifTrue: [';
+			nextPutAll: kwName; nextPutAll: ' @env0:keysDo: [:___k___ | ({ '.
+		kwNames do: [:n | aStream nextPutAll: ''''; nextPutAll: n; nextPutAll: '''. '].
+		aStream
+			nextPutAll: '} @env0:includes: (___k___ @env0:asString)) ifFalse: [TypeError ___signal___: (''';
+			nextPutAll: name;
+			nextPutAll: '() got an unexpected keyword argument: '' @env0:, (___k___ @env0:asString))]]].'; lf ].
 %
 
 category: 'Module Method Compilation'
