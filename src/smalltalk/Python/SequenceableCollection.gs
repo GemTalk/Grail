@@ -276,27 +276,33 @@ ___getslice___: lower _: upper _: step
 	This is the runtime target for Python `self[lower:upper:step]`
 	expressions emitted by SubscriptAst when its slice is a SliceAst."
 
-	| size lo hi st result i |
+	| size lo hi st result i lwr upr |
 	size := self @env0:size.
-	st := step ifNil: [1].
+	"The subscript slice passes the Python None singleton (not Smalltalk nil)
+	for an unset bound/step; normalise so the ifNil: defaults fire instead of
+	comparing None with an integer (a[2:4] has step None -- test_list's
+	test_getslice / test_subscript)."
+	lwr := (lower @env0:== None) ifTrue: [nil] ifFalse: [lower].
+	upr := (upper @env0:== None) ifTrue: [nil] ifFalse: [upper].
+	st := ((step @env0:== None) or: [step @env0:isNil]) ifTrue: [1] ifFalse: [step].
 	st @env0:= 0 ifTrue: [ValueError ___signal___: 'slice step cannot be zero'].
 
 	"Normalize lower"
-	lo := lower
+	lo := lwr
 		ifNil: [st @env0:> 0 ifTrue: [0] ifFalse: [size @env0:- 1]]
-		ifNotNil: [lower @env0:< 0
-			ifTrue: [(size @env0:+ lower) @env0:max:
+		ifNotNil: [lwr @env0:< 0
+			ifTrue: [(size @env0:+ lwr) @env0:max:
 				(st @env0:> 0 ifTrue: [0] ifFalse: [-1])]
-			ifFalse: [lower @env0:min:
+			ifFalse: [lwr @env0:min:
 				(st @env0:> 0 ifTrue: [size] ifFalse: [size @env0:- 1])]].
 
 	"Normalize upper"
-	hi := upper
+	hi := upr
 		ifNil: [st @env0:> 0 ifTrue: [size] ifFalse: [-1]]
-		ifNotNil: [upper @env0:< 0
-			ifTrue: [(size @env0:+ upper) @env0:max:
+		ifNotNil: [upr @env0:< 0
+			ifTrue: [(size @env0:+ upr) @env0:max:
 				(st @env0:> 0 ifTrue: [0] ifFalse: [-1])]
-			ifFalse: [upper @env0:min:
+			ifFalse: [upr @env0:min:
 				(st @env0:> 0 ifTrue: [size] ifFalse: [size @env0:- 1])]].
 
 	"Walk lo, lo+st, lo+2st, ... while the index is on the correct side

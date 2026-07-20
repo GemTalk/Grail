@@ -1581,41 +1581,38 @@ category: 'Grail-Container'
 method: object
 __contains__: item
 	"Default membership test (``item in self'') for a receiver whose class
-	defines no __contains__.  CPython falls back to iteration: walk __iter__
-	(else the __getitem__ sequence protocol) and return true on the first
-	element identical OR equal to ``item'' (identity-then-equality, with a
-	NotImplemented __eq__ result treated as unequal).  A receiver supporting
-	neither raises the catchable TypeError, and any exception raised WHILE
-	iterating propagates -- ``1 in BadIterable()'' where __iter__ raises
-	ZeroDivisionError must surface it (test_operator's test_contains).
+	defines no __contains__.  CPython falls back to iterating __iter__ and
+	returns true on the first element identical OR equal to ``item''
+	(identity-then-equality, a NotImplemented __eq__ result treated as
+	unequal).  A receiver with no __iter__ raises the catchable TypeError, and
+	any exception raised WHILE iterating propagates -- ``1 in BadIterable()''
+	where __iter__ raises ZeroDivisionError must surface it (test_operator's
+	test_contains).
 
 	Without this default, ``obj __contains__: item'' on a PythonInstance with
 	__iter__ but no __contains__ fell through to the DNU attribute-setter
-	misread and silently returned ``item'' instead of iterating."
+	misread and silently returned ``item'' instead of iterating.
 
-	| cls ni |
+	NOTE: only the __iter__ protocol is used, NOT CPython's older
+	__getitem__(0..n) sequence protocol.  Grail advertises a Grail-specific
+	``__getitem__:'' on non-sequence objects (e.g. BoundMethod) that does not
+	bound-check, so a __getitem__ index walk here spins forever -- e.g.
+	``x in operator.add'' via set.difference (test_set's TestOnlySetsOperator).
+	Real sequences that only define __getitem__ are vanishingly rare in the
+	suite and CPython raises TypeError for BoundMethod-like objects anyway."
+
+	| cls ni it |
 	cls := self @env0:class.
+	(cls @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) notNil ifFalse: [
+		^ TypeError ___signal___: ('argument of type ''' @env0:,
+			cls @env0:name @env0:asString @env0:, ''' is not iterable')].
 	ni := Python @env0:at: #NotImplemented otherwise: nil.
-	(cls @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) notNil ifTrue: [
-		| it |
-		it := self __iter__.
-		[true] @env0:whileTrue: [ | elem eq |
-			elem := [ it __next__ ] @env0:on: StopIteration do: [:ex | ^ false].
-			(item @env0:== elem) ifTrue: [^ true].
-			eq := item __eq__: elem.
-			(eq @env0:~~ ni and: [eq @env1:___isTruthy___]) ifTrue: [^ true]]].
-	((cls @env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) notNil
-		or: [(cls @env0:whichClassIncludesSelector: #'___getitem__:kw:' environmentId: 1) notNil]) ifTrue: [
-		| i |
-		i := 0.
-		[true] @env0:whileTrue: [ | elem eq |
-			elem := [ self __getitem__: i ] @env0:on: IndexError do: [:ex | ^ false].
-			(item @env0:== elem) ifTrue: [^ true].
-			eq := item __eq__: elem.
-			(eq @env0:~~ ni and: [eq @env1:___isTruthy___]) ifTrue: [^ true].
-			i := i @env0:+ 1]].
-	^ TypeError ___signal___: ('argument of type ''' @env0:,
-		cls @env0:name @env0:asString @env0:, ''' is not iterable')
+	it := self __iter__.
+	[true] @env0:whileTrue: [ | elem eq |
+		elem := [ it __next__ ] @env0:on: StopIteration do: [:ex | ^ false].
+		(item @env0:== elem) ifTrue: [^ true].
+		eq := item __eq__: elem.
+		(eq @env0:~~ ni and: [eq @env1:___isTruthy___]) ifTrue: [^ true]]
 %
 
 category: 'Grail-Augmented Assignment'

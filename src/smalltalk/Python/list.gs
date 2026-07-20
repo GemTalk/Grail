@@ -325,7 +325,10 @@ ___setSlice___: aSlice _: anIterable
 	asArray -- and that loop runs USER __iter__ code which may mutate
 	self (gh-120384: an evil iterable clearing the target list), so
 	the slice indices must be computed from the post-iteration size."
-	values := (anIterable isKindOf: SequenceableCollection)
+	"CharacterCollections take the constructor path too (asArray would yield
+	Characters, not 1-char strings) -- ``a[i:j] = 'ham''' assigns strings."
+	values := ((anIterable isKindOf: SequenceableCollection)
+			and: [(anIterable isKindOf: CharacterCollection) not])
 		ifTrue: [anIterable @env0:asArray]
 		ifFalse: [(list __new__: anIterable) @env0:asArray].
 	len := values @env0:size.
@@ -405,7 +408,13 @@ extend: iterable
 	non-collections (a.extend(None)) -- probe for iterability and route
 	Python-protocol iterables through __iter__/__next__ instead."
 
-	(iterable isKindOf: Collection) ifTrue: [
+	"Strings are Collections, but addAll: iterates them with Smalltalk do:
+	yielding Characters, not the 1-char Python strings CPython's
+	``list.extend(str)'' appends -- route CharacterCollections through the
+	__iter__ path below so ``a.extend('eggs')'' matches ``a += list('eggs')''
+	(test_list's test_extend / test_iadd)."
+	((iterable isKindOf: Collection)
+		and: [(iterable isKindOf: CharacterCollection) not]) ifTrue: [
 		self @env0:addAll: iterable.
 		^ None].
 	((iterable @env0:class
