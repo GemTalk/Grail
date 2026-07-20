@@ -330,6 +330,22 @@ test__new__fromString
 	self assert: result equals: 100.
 %
 
+category: 'Grail-Tests - Conversion'
+method: IntegerTestCase
+test__new__fromWideString
+	"int() of a wide string (DoubleByteString / Unicode16) whose digits are
+	ASCII must still parse.  A string that contains any non-Latin-1
+	codepoint is stored wide, and slices of it stay wide -- e.g. a numeric
+	group extracted from a format spec whose fill is '->' (U+2192).  The
+	1-arg constructor used to accept only Unicode7, so int() on the wide
+	'2' raised a bare TypeError (Fraction.__format__, test_fractions
+	test_format_f_presentation_type)."
+
+	"(chr(0x2192) + '2')[1:2] is a DoubleByteString containing just '2'"
+	self assert: (self eval: 'int((chr(0x2192) + "2")[1:2])') equals: 2.
+	self assert: (self eval: 'int((chr(0x2192) + "-47")[1:])') equals: -47.
+%
+
 category: 'Grail-Tests - Bitwise'
 method: IntegerTestCase
 test__or__

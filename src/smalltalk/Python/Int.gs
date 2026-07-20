@@ -89,8 +89,13 @@ __new__: obj
 	and can diverge in other ways.  ``fromStream:'' is the primitive the
 	vendor asNumber itself uses and is not overridden, so it behaves the same
 	on base and Squeak/GLASS/Seaside images and accepts both ``+'' and ``-''.
-	trimBoth first so surrounding whitespace is tolerated (int('  100  '))."
-	(obj isKindOf: Unicode7) ifTrue: [
+	trimBoth first so surrounding whitespace is tolerated (int('  100  ')).
+	Accept EVERY CharacterCollection, not just Unicode7: a string that
+	contains any non-Latin-1 codepoint is widened to a DoubleByteString /
+	Unicode16 (e.g. a format spec with a '→' fill widens its digit groups),
+	and int('2') on that wide string must still parse — matching the
+	explicit-base path below, which already keys off CharacterCollection."
+	(obj isKindOf: CharacterCollection) ifTrue: [
 		^ [ (Number @env0:fromStream: (ReadStreamPortable @env0:on: obj @env0:trimBoth)) @env0:truncated ]
 			@env0:on: Error
 			do: [:ex | ValueError @env0:signal: 'invalid literal for int()']
