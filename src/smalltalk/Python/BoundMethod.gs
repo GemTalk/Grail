@@ -213,6 +213,28 @@ ___pythonValueAttrs___
 
 set compile_env: 1
 
+category: 'Grail-Class Compilation'
+method: BoundMethod
+___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarNames
+	"``class M(type)`` uses the canonical `type` singleton (a BoundMethod) as
+	its base.  Grail doesn't model metaclasses, but CPython allows subclassing
+	`type` and the class definition must SUCCEED -- create M as a plain
+	subclass of object (metaclass semantics are ignored, exactly as Grail
+	already ignores `metaclass=`/ABCMeta).  Any OTHER BoundMethod base is a
+	genuine error (subclassing a module function, e.g. functools.cached_property
+	-- see object>>___subclass___)."
+
+	| bcls |
+	bcls := Python @env0:at: #builtins otherwise: nil.
+	(bcls @env0:notNil
+		and: [self @env0:selector == #'type'
+		and: [self @env0:receiver @env0:isKindOf: bcls]]) ifTrue: [
+			^ object @env1:___subclass___: aSymbol
+				instVarNames: ivarNames classInstVarNames: classIvarNames].
+	^ TypeError ___signal___: ('cannot subclass a non-class base ('
+		@env0:, self @env0:class @env0:name @env0:asString @env0:, ')')
+%
+
 category: 'Grail-Calling'
 method: BoundMethod
 value: positional value: kwargs
