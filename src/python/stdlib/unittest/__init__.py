@@ -277,6 +277,28 @@ class TestCase:
         if first == second:
             self._failWith(msg, repr(first) + " == " + repr(second))
 
+    def assertSequenceEqual(self, seq1, seq2, msg=None, seq_type=None):
+        # Length- and element-wise sequence equality with an optional type
+        # check (test_fractions' testLargeArithmetic uses assertTupleEqual).
+        if seq_type is not None:
+            if not isinstance(seq1, seq_type):
+                self._failWith(msg, "First sequence is not a %s: %r"
+                               % (getattr(seq_type, '__name__', seq_type), seq1))
+            if not isinstance(seq2, seq_type):
+                self._failWith(msg, "Second sequence is not a %s: %r"
+                               % (getattr(seq_type, '__name__', seq_type), seq2))
+        if len(seq1) != len(seq2):
+            self._failWith(msg, repr(seq1) + " != " + repr(seq2))
+        for i in range(len(seq1)):
+            if not (seq1[i] == seq2[i]):
+                self._failWith(msg, repr(seq1) + " != " + repr(seq2))
+
+    def assertTupleEqual(self, tuple1, tuple2, msg=None):
+        self.assertSequenceEqual(tuple1, tuple2, msg, seq_type=tuple)
+
+    def assertListEqual(self, list1, list2, msg=None):
+        self.assertSequenceEqual(list1, list2, msg, seq_type=list)
+
     def assertSetEqual(self, set1, set2, msg=None):
         # Set-specific equality with a symmetric-difference failure message
         # (test_operator's test___all__).

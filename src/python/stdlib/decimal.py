@@ -103,6 +103,19 @@ class Decimal:
     def __int__(self):
         return self._num // self._den
 
+    def as_integer_ratio(self):
+        """Exact value as a coprime (numerator, denominator) pair with a
+        positive denominator.  ``Fraction(Decimal(...))'' and
+        ``Fraction.from_decimal()'' consume this (the internal _num/_den are
+        not kept reduced, so divide out the gcd here).  math is imported
+        LOCALLY -- a module-level import mis-resolves in a module named
+        ``decimal'' (see the header note)."""
+        import math
+        g = math.gcd(self._num, self._den)
+        if g == 0:
+            g = 1
+        return (self._num // g, self._den // g)
+
     def __bool__(self):
         return self._num != 0
 
