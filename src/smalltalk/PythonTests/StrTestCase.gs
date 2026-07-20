@@ -35,6 +35,22 @@ set compile_env: 0
 
 category: 'Grail-String Operations'
 method: StrTestCase
+testUnboundMethodViaStrType
+	"``str.strip'' etc. accessed on the str builtin is an UNBOUND method:
+	str.strip(x) == x.strip(), and it composes with map().  The str builtin
+	is a BoundMethod (there is no single str class -- strings span
+	Unicode7/Unicode16/... under CharacterCollection), so attribute access
+	delegates to CharacterCollection's methods, mirroring int.bit_length
+	against Integer.  test_fractions test_float_format_testfile relies on
+	``map(str.strip, ...)''."
+
+	self assert: (self eval: 'str.strip("  hi  ") == "hi"').
+	self assert: (self eval: 'str.upper("hi") == "HI"').
+	self assert: (self eval: 'list(map(str.strip, ["  a  ", " b ", "c"])) == ["a", "b", "c"]').
+%
+
+category: 'Grail-String Operations'
+method: StrTestCase
 test__add__
 	"Test string concatenation with +"
 

@@ -135,11 +135,19 @@ ___unpackSequence___
 	"Tuple-unpack coercion (``a, b, c = expr'').  AssignAst's unpack
 	codegen indexes the RHS with __getitem__: -- correct for sequences,
 	wrong for iterables WITHOUT positional indexing.  CPython unpacks any
-	iterable via __iter__; receivers that need it (enum classes -- see
-	Enum class>>___unpackSequence___) override this to materialize their
-	iteration order as an indexable list.  Everything sequence-shaped
-	answers itself."
+	iterable via __iter__.  An INDEXABLE receiver (list/tuple/str/range/...)
+	answers itself so the fast index path runs unchanged; a receiver that is
+	iterable but NOT indexable (map/zip/filter/generator/enumerate/... ) is
+	materialized into a list in iteration order so the index-based unpack
+	works (``lhs, rhs = map(str.strip, line.split('->'))'' in test_fractions
+	test_float_format_testfile).  Enum classes keep their own override; a
+	non-iterable answers itself and the __getitem__: index then raises."
 
+	((self @env0:class @env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) @env0:notNil)
+		ifTrue: [^ self].
+	((self @env0:class @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) @env0:notNil
+		@env0:or: [(self @env0:class @env0:whichClassIncludesSelector: #'__next__' environmentId: 1) @env0:notNil])
+		ifTrue: [^ list @env1:__new__: self].
 	^ self
 %
 
@@ -1291,6 +1299,25 @@ ___pyAttrLoad___: aSym
 	((self @env0:class @env0:respondsTo: #'___pythonValueAttrs___')
 		and: [(self @env0:class @env0:___pythonValueAttrs___) @env0:includes: aSym])
 		ifTrue: [^ self @env0:perform: aSym env: 1].
+	"``str.strip'' / ``str.split'' etc.: the str builtin is a BoundMethod, not
+	a class (there is no single `str' class -- strings span Unicode7 /
+	Unicode16 / ... under CharacterCollection), so a str METHOD name accessed
+	on it must resolve to an UnboundMethod on CharacterCollection (where the
+	str methods live), mirroring how ``int.bit_length'' resolves against the
+	Integer class.  ``map(str.strip, ...)'' in test_fractions
+	test_float_format_testfile needs this.  Value dunders (__name__, ...)
+	were already answered just above; only the str constructor delegates."
+	((self @env0:isKindOf: BoundMethod)
+		and: [self @env0:selector == #'str'
+			and: [(Python @env0:at: #builtins otherwise: nil)
+				@env0:ifNil: [false] ifNotNil: [:bc | self @env0:receiver @env0:isKindOf: bc]]])
+		ifTrue: [
+			((CharacterCollection @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
+				or: [(CharacterCollection @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
+				or: [(CharacterCollection @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
+				or: [(CharacterCollection @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
+				or: [(CharacterCollection @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]])
+				ifTrue: [^ UnboundMethod definingClass: CharacterCollection selector: aSym]].
 	"Instance of a Grail class that subclasses a built-in (dict, list,
 	...).  Such an instance is NOT a PythonInstance, so the
 	PythonInstance branch above was skipped — yet its class can still

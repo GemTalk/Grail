@@ -179,6 +179,26 @@ _mi()')
 
 category: 'Grail-Tests - Phase 4b Varargs'
 method: BuiltinsTestCase
+testUnpackNonIndexableIterable
+	"Tuple-unpacking assignment iterates the RHS (CPython's __iter__
+	protocol): a non-indexable iterable -- map/zip/generator -- is
+	materialized in iteration order rather than indexed with __getitem__
+	(which map_iterator/zip/generator do not support).  test_fractions
+	test_float_format_testfile: ``lhs, rhs = map(str.strip, ...)''."
+
+	self assert: (self eval: 'a, b = map(str, [1, 2])
+a == "1" and b == "2"').
+	self assert: (self eval: 'a, b, c = (x*x for x in range(3))
+(a, b, c) == (0, 1, 4)').
+	self assert: (self eval: 'a, b = zip([1, 2], [3, 4])
+a == (1, 3) and b == (2, 4)').
+	"indexable sequences still unpack unchanged"
+	self assert: (self eval: 'a, b = [10, 20]
+a == 10 and b == 20')
+%
+
+category: 'Grail-Tests - Phase 4b Varargs'
+method: BuiltinsTestCase
 testEvalRound2Arg
 	"Phase 4b: round(x, n) — varargs fast path through `_round:kw:`."
 
