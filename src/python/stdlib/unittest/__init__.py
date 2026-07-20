@@ -277,6 +277,27 @@ class TestCase:
         if first == second:
             self._failWith(msg, repr(first) + " == " + repr(second))
 
+    def assertSetEqual(self, set1, set2, msg=None):
+        # Set-specific equality with a symmetric-difference failure message
+        # (test_operator's test___all__).
+        try:
+            diff1 = set1 - set2
+            diff2 = set2 - set1
+        except TypeError as e:
+            self._failWith(msg, "invalid set arguments: " + str(e))
+            return
+        if diff1 or diff2:
+            lines = []
+            if diff1:
+                lines.append("Items in the first set but not the second:")
+                for item in diff1:
+                    lines.append(repr(item))
+            if diff2:
+                lines.append("Items in the second set but not the first:")
+                for item in diff2:
+                    lines.append(repr(item))
+            self._failWith(msg, "\n".join(lines))
+
     def assertTrue(self, expr, msg=None):
         if not expr:
             self._failWith(msg, repr(expr) + " is not true")

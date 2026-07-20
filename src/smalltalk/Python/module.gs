@@ -545,6 +545,16 @@ ___globalNames___
 		skip ifFalse: [
 			index := s @env0:indexOf: $:.
 			(index == 0) ifFalse: [s := s @env0:copyFrom: 1 to: (index @env0:- 1)].
+			"A varargs def / forwarder compiles to ``_<name>:kw:''; its base
+			carries a leading underscore that is NOT part of the Python name
+			(``abs'' -> forwarder ``_abs:kw:'').  Strip one leading underscore
+			for :kw: selectors so globals()/__dict__ reads the real name and not
+			a stray ``_abs'' (test_operator's test___all__).  A genuine ``_foo''
+			def forwards as ``__foo:kw:'' -> base ``__foo'' -> ``_foo'', so the
+			real name is preserved."
+			((sel @env0:asString @env0:endsWith: ':kw:')
+				and: [(s @env0:size @env0:> 1) and: [(s @env0:at: 1) @env0:== $_]])
+				ifTrue: [s := s @env0:copyFrom: 2 to: s @env0:size].
 			add @env0:value: s]].
 	^ names
 %

@@ -460,11 +460,16 @@ __qualname__
 category: 'Grail-Attribute Access'
 method: BoundMethod
 __module__
-	"Python's ``func.__module__'' — best-effort identifier so
-	decorators that stamp ``__module__'' (functools.wraps') have
-	something to read.  Returns the receiver's class name; the real
-	value would need to walk back to the defining module class."
+	"Python's ``func.__module__''.  For a module-level function the receiver
+	IS the defining module, whose ``__name__'' is the dotted Python module
+	name (``operator'') -- returning the receiver's CLASS name gave the
+	capitalised Smalltalk class (``Operator''), which broke test___all__'s
+	``value.__module__ in ('operator', '_operator')'' check and would give a
+	bad module in pickle global refs.  Non-module receivers (bound instance
+	methods) keep the class-name best-effort."
 
+	(receiver isKindOf: module) ifTrue: [
+		^ receiver @env1:___pyAttrLoad___: #'__name__'].
 	^ receiver @env0:class @env0:name @env0:asString
 %
 
