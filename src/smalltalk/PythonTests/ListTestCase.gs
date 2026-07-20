@@ -66,9 +66,27 @@ test__contains__
 
 	| lst |
 	lst := OrderedCollection withAll: #(1 2 3).
-	
+
 	self assert: (lst @env1:__contains__: 2).
 	self deny: (lst @env1:__contains__: 4).
+%
+
+category: 'Grail-Tests - Sequence Protocol'
+method: ListTestCase
+testRichEqualityMembership
+	"list __contains__ / count / index (incl. start/stop) / remove compare
+	elements to the target by Python rich equality (element.__eq__ first,
+	then reflected), honoring custom __eq__ -- not Smalltalk `=`.  Uses a
+	fixture with AlwaysEq/NeverEq (custom __eq__) since such classes cannot
+	be instantiated in eval: scope."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_rich_eq' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_rich_eq.py')
+		name: 'grail_rich_eq'.
+	self assert: (mod @env1:check).
 %
 
 category: 'Grail-Tests - Sequence Protocol'

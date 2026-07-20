@@ -2032,6 +2032,23 @@ ___cmpNe___: other
 
 category: 'Grail-Comparison'
 method: object
+___pyRichEqBool___: target
+	"CPython's PyObject_RichCompareBool(self, target, Py_EQ) as a Smalltalk
+	boolean: identity first (so a raising/side-effecting __eq__ is skipped
+	when self IS target), otherwise the rich == comparison (self.__eq__ then
+	the reflected target.__eq__, via ___cmpEq___) coerced with
+	___isTruthy___.  self is the collection ELEMENT and target the search
+	value, matching CPython's element-first comparison order.  Sequence
+	__contains__ / count / index / remove use this so element identity and
+	custom __eq__ are honored (seq_tests test_contains_fake /
+	test_contains_order / test_count / test_index, list_tests test_remove)."
+
+	(self @env0:== target) ifTrue: [^ true].
+	^ (self ___cmpEq___: target) ___isTruthy___
+%
+
+category: 'Grail-Comparison'
+method: object
 ___eqValue___: other
 	"The == result when the forward __eq__ returned NotImplemented: try the
 	reflected __eq__ on a user-defined ``other'', else fall back to identity

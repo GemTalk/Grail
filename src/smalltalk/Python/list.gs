@@ -501,10 +501,20 @@ pop: index
 category: 'Grail-List Methods'
 method: list
 remove: value
-	"Remove the first occurrence of value. Raises ValueError if not found."
+	"Remove the first element equal to value (Python rich equality: identity,
+	then element.__eq__, then reflected), NOT Smalltalk `remove:` (`=`) which
+	misses custom __eq__ and identity (list_tests test_remove: ALWAYS_EQ /
+	NEVER_EQ / BadCmp).  Raises ValueError if no element matches.  Size is
+	re-read each step so a mutating/raising __eq__ is safe."
 
-	self @env0:remove: value ifAbsent: [ValueError ___signal___: 'list.remove(x): x not in list'].
-	^ None
+	| i |
+	i := 1.
+	[i @env0:<= self @env0:size] @env0:whileTrue: [
+		((self @env0:at: i) ___pyRichEqBool___: value) ifTrue: [
+			self @env0:removeAtIndex: i.
+			^ None].
+		i := i @env0:+ 1].
+	^ ValueError ___signal___: 'list.remove(x): x not in list'
 %
 
 category: 'Grail-List Methods'

@@ -1156,6 +1156,33 @@ index: sub
 	^ idx
 %
 
+category: 'Grail-String Methods'
+method: CharacterCollection
+index: sub _: start
+	"str.index(sub, start): lowest index of substring sub at or after start;
+	ValueError if absent.  Defined so str does NOT inherit the sequence
+	(element-wise) index:_: from SequenceableCollection -- str.index takes a
+	SUBSTRING, delegating to find:_: (CPython str.index(sub[, start[, end]]))."
+
+	| idx |
+	idx := self find: sub _: start.
+	(idx == -1) ifTrue: [ValueError ___signal___: 'substring not found'].
+	^ idx
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+index: sub _: start _: stop
+	"str.index(sub, start, stop): lowest index of substring sub within the
+	half-open range [start, stop); ValueError if absent.  Shields str from
+	the sequence index:_:_: and delegates to find:_:_:."
+
+	| idx |
+	idx := self find: sub _: start _: stop.
+	(idx == -1) ifTrue: [ValueError ___signal___: 'substring not found'].
+	^ idx
+%
+
 category: 'Grail-String Test Methods'
 method: CharacterCollection
 isalnum

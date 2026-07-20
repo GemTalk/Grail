@@ -36,9 +36,19 @@ __add__: other
 category: 'Grail-Sequence Protocol'
 method: SequenceableCollection
 __contains__: item
-	"Return True if item is in the sequence, False otherwise."
+	"Return True if item is in the sequence.  CPython compares each element
+	with the target via rich equality (identity first, then element.__eq__,
+	then reflected), in order -- NOT Smalltalk `includes:` (`=`), which
+	misses custom __eq__ (ALWAYS_EQ in [1]) and ignores comparison order /
+	side effects (seq_tests test_contains_fake / test_contains_order).  Size
+	is re-read each step so an __eq__ that mutates the sequence stays safe."
 
-	^ self @env0:includes: item
+	| i |
+	i := 1.
+	[i @env0:<= self @env0:size] @env0:whileTrue: [
+		((self @env0:at: i) ___pyRichEqBool___: item) ifTrue: [^ true].
+		i := i @env0:+ 1].
+	^ false
 %
 
 category: 'Grail-Other'
@@ -411,29 +421,66 @@ __str__
 category: 'Grail-Sequence Methods'
 method: SequenceableCollection
 count: value
-	"Return the number of times value appears in the sequence."
+	"Return the number of times value appears in the sequence, comparing by
+	Python rich equality (see __contains__), not Smalltalk `=` -- so custom
+	__eq__ is honored (seq_tests test_count: [0,1,2]*3 count ALWAYS_EQ == 9)."
 
-	| count |
+	| count i |
 	count := 0.
-	self @env0:do: [:each |
-		(each @env0:= value) ifTrue: [
-			count := count @env0:+ 1
-		]
-	].
+	i := 1.
+	[i @env0:<= self @env0:size] @env0:whileTrue: [
+		((self @env0:at: i) ___pyRichEqBool___: value) ifTrue: [count := count @env0:+ 1].
+		i := i @env0:+ 1].
 	^ count
 %
 
 category: 'Grail-Sequence Methods'
 method: SequenceableCollection
 index: value
-	"Return the index of the first occurrence of value.
-	Raises ValueError if value is not found."
+	"list.index(value): first index of value (Python rich equality),
+	ValueError if absent."
 
-	| idx |
-	idx := self @env0:indexOf: value ifAbsent: [ValueError ___signal___: 'list.index(x): x not in list'].
+	^ self ___pyIndex___: value from: 0 to: self @env0:size
+%
 
-	"Convert from 1-based Smalltalk to 0-based Python"
-	^ idx @env0:- (1)
+category: 'Grail-Sequence Methods'
+method: SequenceableCollection
+index: value _: start
+	"list.index(value, start): search from Python index `start`."
+
+	^ self ___pyIndex___: value from: start to: self @env0:size
+%
+
+category: 'Grail-Sequence Methods'
+method: SequenceableCollection
+index: value _: start _: stop
+	"list.index(value, start, stop): search the Python half-open range
+	[start, stop)."
+
+	^ self ___pyIndex___: value from: start to: stop
+%
+
+category: 'Grail-Sequence Methods'
+method: SequenceableCollection
+___pyIndex___: value from: pStart to: pStop
+	"Shared index() scan.  pStart/pStop are Python indices (negative allowed,
+	slice-style clamped to [0, size]); compare each element in the half-open
+	range by rich equality and answer the first 0-based match, else raise
+	ValueError.  Size is re-read each step so an __eq__ mutating the sequence
+	cannot walk off the end (list_tests test_index EvilCmp)."
+
+	| n lo hi i |
+	n := self @env0:size.
+	lo := pStart.  hi := pStop.
+	(lo @env0:< 0) ifTrue: [lo := lo @env0:+ n.  (lo @env0:< 0) ifTrue: [lo := 0]].
+	(lo @env0:> n) ifTrue: [lo := n].
+	(hi @env0:< 0) ifTrue: [hi := hi @env0:+ n.  (hi @env0:< 0) ifTrue: [hi := 0]].
+	(hi @env0:> n) ifTrue: [hi := n].
+	i := lo.
+	[(i @env0:< hi) and: [i @env0:< self @env0:size]] @env0:whileTrue: [
+		((self @env0:at: i @env0:+ 1) ___pyRichEqBool___: value) ifTrue: [^ i].
+		i := i @env0:+ 1].
+	^ ValueError ___signal___: 'list.index(x): x not in list'
 %
 
 set compile_env: 0
