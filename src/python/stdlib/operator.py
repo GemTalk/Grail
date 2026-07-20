@@ -213,6 +213,9 @@ class attrgetter:
             return self._resolve(obj, self._attrs[0])
         return tuple(self._resolve(obj, a) for a in self._attrs)
 
+    def __reduce__(self):
+        return self.__class__, self._attrs
+
     @staticmethod
     def _resolve(obj, dotted):
         for part in dotted.split('.'):
@@ -231,6 +234,9 @@ class itemgetter:
             return obj[self._items[0]]
         return tuple(obj[i] for i in self._items)
 
+    def __reduce__(self):
+        return self.__class__, self._items
+
 
 class methodcaller:
     """``operator.methodcaller('upper')(s)`` returns ``s.upper()``."""
@@ -244,6 +250,16 @@ class methodcaller:
 
     def __call__(self, obj):
         return getattr(obj, self._name)(*self._args, **self._kwargs)
+
+    def __reduce__(self):
+        if not self._kwargs:
+            return self.__class__, (self._name,) + self._args
+        # kwargs can't ride the constructor's positional reduce args; restore
+        # them via __setstate__ (CPython uses functools.partial here).
+        return (self.__class__, (self._name,) + self._args, self._kwargs)
+
+    def __setstate__(self, state):
+        self._kwargs = state
 
 
 # In-place arithmetic — used less often, but keep parity.
