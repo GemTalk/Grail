@@ -553,9 +553,17 @@ __trunc__
 category: 'Grail-Float Methods'
 method: float
 as_integer_ratio
-	"Return (numerator, denominator) pair."
+	"Return (numerator, denominator) pair.  Infinity/NaN have no integer
+	ratio: raise the same exceptions CPython does (bug 16469) so
+	Fraction(float('inf'))/from_float(nan) surface OverflowError/ValueError
+	instead of a bogus ratio."
 
-	| frac |
+	| kind frac |
+	kind := self @env0:_getKind.
+	(kind @env0:> 4) ifTrue: [
+		^ ValueError ___signal___: 'cannot convert NaN to integer ratio'].
+	(kind @env0:== 3) ifTrue: [
+		^ OverflowError ___signal___: 'cannot convert Infinity to integer ratio'].
 	frac := self @env0:asFraction.
 	^ tuple @env0:with: (frac @env0:numerator) with: (frac @env0:denominator)
 %

@@ -260,10 +260,13 @@ class Fraction(numbers.Rational):
                 if m is None:
                     raise ValueError('Invalid literal for Fraction: %r' %
                                      numerator)
-                numerator = int(m.group('num') or '0')
+                # CPython relies on int() accepting PEP 515 '_' separators;
+                # Grail's int(str) does not, so strip them here (the regex
+                # already permits '1_2_3' in each digit group).
+                numerator = int((m.group('num') or '0').replace('_', ''))
                 denom = m.group('denom')
                 if denom:
-                    denominator = int(denom)
+                    denominator = int(denom.replace('_', ''))
                 else:
                     denominator = 1
                     decimal = m.group('decimal')
@@ -274,7 +277,7 @@ class Fraction(numbers.Rational):
                         denominator *= scale
                     exp = m.group('exp')
                     if exp:
-                        exp = int(exp)
+                        exp = int(exp.replace('_', ''))
                         if exp >= 0:
                             numerator *= 10**exp
                         else:
@@ -943,6 +946,19 @@ class Fraction(numbers.Rational):
     def __abs__(a):
         """abs(a)"""
         return Fraction._from_coprime_ints(abs(a._numerator), a._denominator)
+
+    def __float__(a):
+        """float(a), correctly rounded.
+
+        GRAIL: CPython returns ``a._numerator / a._denominator`` directly --
+        int true-division is correctly rounded even for huge operands.  In
+        Grail ``int / int`` yields an exact (GemStone) Fraction, so wrap it in
+        float(): float() of that exact rational is the correctly-rounded
+        double and still doesn't overflow on a huge numerator/denominator
+        (float(num)/float(den) would give inf/inf -> nan).  This is NOT the
+        Python Fraction being divided, so there is no recursion.
+        """
+        return float(a._numerator / a._denominator)
 
     def __int__(a, _index=operator.index):
         """int(a)"""

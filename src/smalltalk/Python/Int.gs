@@ -393,9 +393,15 @@ __eq__: other
 category: 'Grail-Conversion'
 method: int
 __float__
-	"Convert to float."
+	"Convert to float.  An integer whose magnitude exceeds the double range
+	coerces to an IEEE infinity in GemStone; CPython raises OverflowError
+	instead (test_fractions' testConversions checks float(int('2'*400+'7')))."
 
-	^ self @env0:asFloat
+	| f |
+	f := self @env0:asFloat.
+	(f @env0:_getKind @env0:== 3) ifTrue: [
+		OverflowError ___signal___: 'int too large to convert to float'].
+	^ f
 %
 
 category: 'Grail-Rounding'

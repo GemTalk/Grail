@@ -49,6 +49,19 @@ class Decimal:
             neg = s.startswith('-')
             if neg or s.startswith('+'):
                 s = s[1:]
+            # Special values: this Decimal is rational-backed and can't hold a
+            # real inf/nan, but Fraction(Decimal('inf')) / from_decimal() only
+            # need construction + the right as_integer_ratio() exception, so a
+            # marker suffices (arithmetic on specials is out of scope here).
+            sl = s.lower()
+            if sl == 'inf' or sl == 'infinity':
+                self._special = 'inf'
+                self._num, self._den = (-1 if neg else 1), 1
+                return
+            if sl == 'nan' or sl == 'snan':
+                self._special = 'nan'
+                self._num, self._den = 0, 1
+                return
             s = s.replace('E', 'e')
             exp = 0
             if 'e' in s:
@@ -110,6 +123,11 @@ class Decimal:
         not kept reduced, so divide out the gcd here).  math is imported
         LOCALLY -- a module-level import mis-resolves in a module named
         ``decimal'' (see the header note)."""
+        sp = getattr(self, '_special', None)
+        if sp == 'inf':
+            raise OverflowError("cannot convert Infinity to integer ratio")
+        if sp == 'nan':
+            raise ValueError("cannot convert NaN to integer ratio")
         import math
         g = math.gcd(self._num, self._den)
         if g == 0:
