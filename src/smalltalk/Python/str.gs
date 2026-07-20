@@ -142,11 +142,28 @@ __add__: other
 category: 'Grail-Sequence Operations'
 method: CharacterCollection
 __contains__: item
-	"Test if item is in string. In Python: item in str"
+	"Test if item is in string (Python: item in str).  MUST be case-SENSITIVE:
+	GemStone's includesString: uses the Unicode collation and is
+	case-INSENSITIVE under enableUnicodeComparisonMode (''e'' matches ''E''),
+	which violates Python semantics -- e.g. ``'e' in 'EFG'`` is False.  Scan by
+	CODEPOINT (mode-independent), mirroring ___codePointCompare___."
 
-	| result |
-	result := self @env0:includesString: item.
-	^ result
+	| sn subn last |
+	(item @env0:isKindOf: CharacterCollection) ifFalse: [
+		^ TypeError ___signal___: ('''in <string>'' requires string as left operand, not '
+			@env0:, item @env0:class @env0:name @env0:asString)].
+	subn := item @env0:size.
+	subn @env0:= 0 ifTrue: [^ true].
+	sn := self @env0:size.
+	last := sn @env0:- subn @env0:+ 1.
+	1 @env0:to: last do: [:i |
+		| match |
+		match := true.
+		1 @env0:to: subn do: [:j |
+			(((self @env0:at: (i @env0:+ j @env0:- 1)) @env0:codePoint)
+				@env0:= ((item @env0:at: j) @env0:codePoint)) ifFalse: [match := false]].
+		match ifTrue: [^ true]].
+	^ false
 %
 
 category: 'Grail-Comparison'
