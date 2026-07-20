@@ -377,12 +377,23 @@ __pos__
 category: 'Grail-Arithmetic'
 method: complex
 __pow__: other
-	"Raise complex number to a power.
-	For now, only support integer powers."
+	"Raise complex number to a power.  Integer exponents use exact repeated
+	multiplication; a REAL non-integer exponent (float / Fraction, e.g.
+	``(1+0j) ** Fraction(1,10)'') uses the polar form
+	r^w * (cos + i*sin)(w*theta) -- previously ``other asInteger'' truncated a
+	fraction (or DNU'd) and returned the wrong value / crashed."
 
-	| result n |
-	"Convert other to integer"
-	n := other @env0:asInteger.
+	| result n mag angle w rmag rang |
+	(other @env0:isKindOf: Integer) ifFalse: [
+		(other @env0:isKindOf: complex) ifTrue: [^ #'___NotImplemented___'].
+		w := other __float__.
+		mag := self __abs__.
+		angle := self ___phase___.
+		rmag := mag @env0:raisedTo: w.
+		rang := w @env0:* angle.
+		^ complex __new__: (rmag @env0:* (rang @env0:cos)) _: (rmag @env0:* (rang @env0:sin))].
+
+	n := other.
 
 	"Handle special cases"
 	n == 0 ifTrue: [^ complex __new__: 1.0 _: 0.0].
@@ -449,11 +460,27 @@ __rmul__: other
 
 category: 'Grail-Arithmetic'
 method: complex
-__rpow__: other
-	"Right-hand power (other ** self).
-	This is complex and requires logarithms - stub for now."
+___phase___
+	"Argument (angle) of this complex number = atan2(imag, real)."
 
-	NotImplementedError @env0:signal: 'complex __rpow__ not yet implemented'
+	^ (self imag) @env0:asFloat @env0:arcTan2: (self real) @env0:asFloat
+%
+
+category: 'Grail-Arithmetic'
+method: complex
+__rpow__: other
+	"Right-hand power ``other ** self'' where self is the complex EXPONENT and
+	``other'' a real base (the float/int __pow__ fallback lands here, e.g.
+	``0.1 ** (1+0j)'').  base**(a+bi) = base^a * (cos + i*sin)(b*ln(base))."
+
+	| a b base lnBase mag theta |
+	a := self real.
+	b := self imag.
+	base := other @env0:asFloat.
+	lnBase := base @env0:ln.
+	mag := base @env0:raisedTo: a.
+	theta := b @env0:* lnBase.
+	^ complex __new__: (mag @env0:* (theta @env0:cos)) _: (mag @env0:* (theta @env0:sin))
 %
 
 category: 'Grail-Arithmetic'
