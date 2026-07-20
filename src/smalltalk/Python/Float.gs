@@ -322,11 +322,15 @@ __floor__
 category: 'Grail-Arithmetic'
 method: float
 __floordiv__: other
-	"Floor division."
+	"Floor division.  Python ``float // x'' always yields a FLOAT (``0.1 //
+	1.0'' is 0.0, not 0) -- GemStone's // answers an Integer, so coerce."
 
-	(other isKindOf: Number) ifTrue: [^ self @env0:// other].
+	(other isKindOf: Number) ifTrue: [
+		(other @env0:= 0) ifTrue: [
+			ZeroDivisionError ___signal___: 'float floor division by zero'].
+		^ (self @env0:// other) @env0:asFloat].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:// (other __index__)].
+		@env0:includesKey: #'__index__') ifTrue: [^ (self @env0:// (other __index__)) @env0:asFloat].
 	^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'
 %
 
@@ -393,9 +397,19 @@ __lt__: other
 category: 'Grail-Arithmetic'
 method: float
 __mod__: other
-	"Modulo operation."
+	"Modulo operation.  Python float % takes the divisor's sign; an INFINITE
+	divisor returns self (finite self same-signed as inf) or the infinity
+	(opposite sign) -- fmod(self, inf)=self then CPython's sign-adjust -- where
+	GemStone's \\ yields NaN."
 
-	(other isKindOf: Number) ifTrue: [^ self @env0:\\ other].
+	(other isKindOf: Number) ifTrue: [
+		((other @env0:isKindOf: Float) and: [(other @env0:_getKind) @env0:== 3]) ifTrue: [
+			| mod |
+			mod := self.
+			((mod @env0:~= 0) and: [(other @env0:< 0) @env0:~= (mod @env0:< 0)])
+				ifTrue: [mod := mod @env0:+ other].
+			^ mod @env0:asFloat].
+		^ self @env0:\\ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:\\ (other __index__)].
 	^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'
