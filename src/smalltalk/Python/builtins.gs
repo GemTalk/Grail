@@ -1375,8 +1375,19 @@ _sum: positional kw: kwargs
 category: 'Grail-Built-in Functions'
 method: builtins
 type: anObject
-	"Python builtin type(x) — fixed-arity fast path."
+	"Python builtin type(x) — fixed-arity fast path.
 
+	A class argument's metaclass is, in Grail, the single canonical ``type''
+	object (a memoized BoundMethod interned in BoundMethod class), so
+	``type(cls) is type'' holds and stays consistent with
+	``isinstance(cls, type)'' — both key off ``isKindOf: Behavior''.  Every
+	non-class returns its Python class as before.  (The previous behavior
+	returned the per-class Smalltalk metaclass, whose ``__name__'' was a bare
+	UnboundMethod — nothing depended on it, and enum/abc carry no Python-level
+	metaclass machinery.)"
+
+	(anObject isKindOf: Behavior) ifTrue: [
+		^ BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #'type'].
 	^ anObject __class__
 %
 

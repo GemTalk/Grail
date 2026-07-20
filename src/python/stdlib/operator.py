@@ -135,8 +135,20 @@ def length_hint(obj, default=0):
     integer >= 0.
     """
     if not isinstance(default, int):
+        # Grail's ``type(x).__name__`` reports the backing Smalltalk class name
+        # (``Unicode7`` for str, ``Integer`` for int, ...); CPython names the
+        # *Python* type in this error.  Kept local (only reached on the error
+        # path) so operator gains no module-level member -- test___all__ walks
+        # ``vars(operator)`` and reads ``.__module__`` on each.
+        _names = {'Unicode7': 'str', 'Unicode16': 'str', 'Unicode32': 'str',
+                  'String': 'str', 'DoubleByteString': 'str',
+                  'QuadByteString': 'str', 'Symbol': 'str',
+                  'Integer': 'int', 'SmallInteger': 'int', 'LargeInteger': 'int',
+                  'SmallDouble': 'float', 'Float': 'float', 'Boolean': 'bool',
+                  'ByteArray': 'bytes'}
+        tn = type(default).__name__
         msg = ("'%s' object cannot be interpreted as an integer" %
-               type(default).__name__)
+               _names.get(tn, tn))
         raise TypeError(msg)
 
     try:

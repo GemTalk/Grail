@@ -246,3 +246,63 @@ testOperatorDunderAliasesAreOriginal
 
 	self assert: (testModule @env1:op_dunder_is_original) equals: 'ALL_MATCH'
 %
+
+! --- 5. type() metaclass identity ---
+
+category: 'Grail-Tests - type identity'
+method: OperatorSemanticsTestCase
+testTypeIsType
+	"``type is type'' — the type builtin is an identity-stable singleton."
+
+	self assert: (testModule @env1:type_is_type) equals: true
+%
+
+category: 'Grail-Tests - type identity'
+method: OperatorSemanticsTestCase
+testTypeOfClassIsType
+	"``type(cls) is type'' for classes (int / TypeError / LookupError)."
+
+	self assert: (testModule @env1:type_of_class_is_type) equals: true
+%
+
+category: 'Grail-Tests - type identity'
+method: OperatorSemanticsTestCase
+testTypeOfInstanceIsNotType
+	"``type(x) is type'' is False for instances (incl. NotImplemented)."
+
+	self assert: (testModule @env1:type_of_instance_is_not_type) equals: true
+%
+
+category: 'Grail-Tests - type identity'
+method: OperatorSemanticsTestCase
+testTypeOfInstanceReturnsClass
+	"``type(instance)'' still returns the instance's class (unchanged)."
+
+	self assert: (testModule @env1:type_of_instance_returns_class) equals: true
+%
+
+category: 'Grail-Tests - type identity'
+method: OperatorSemanticsTestCase
+testIsinstanceClassOfType
+	"isinstance(cls, type) stays True; isinstance(instance, type) False."
+
+	self assert: (testModule @env1:isinstance_class_of_type) equals: true
+%
+
+category: 'Grail-Tests - type identity'
+method: OperatorSemanticsTestCase
+testLengthHintClassValuedHint
+	"operator.length_hint: a class-valued __length_hint__ raises via
+	``type(v) is type'' — TypeError swallowed to default, LookupError propagates."
+
+	self assert: (testModule @env1:length_hint_class_raises_default) equals: true
+%
+
+category: 'Grail-Tests - type identity'
+method: OperatorSemanticsTestCase
+testLengthHintIterator
+	"operator.length_hint(iter(seq)) uses list_iterator __length_hint__
+	(remaining count), decreasing as items are consumed."
+
+	self assert: (testModule @env1:length_hint_iterator) equals: true
+%

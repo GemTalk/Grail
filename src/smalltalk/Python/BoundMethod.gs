@@ -149,12 +149,40 @@ classmethod: BoundMethod
 receiver: aReceiver selector: aSymbol
 	"Create a BoundMethod that, when called, will send `aSymbol` to
 	`aReceiver` with the call''s arguments. Precomputes arity-resolved
-	selectors for fast dispatch."
+	selectors for fast dispatch.
 
-	| inst |
+	The Python ``type'' builtin, referenced as a value, must be an
+	identity-stable singleton so ``type is type'' and ``type(cls) is type''
+	hold (the latter is what ``builtins>>type:'' returns for a class).  A
+	module instance is session-local, so intern the (builtins-instance, #type)
+	BoundMethod in SessionTemps.  The guard is a single identity compare on the
+	hot path; the lookup + intern only run for the #type selector."
+
+	| inst bcls |
+	(aSymbol @env0:== #'type') ifTrue: [
+		bcls := Python @env0:at: #builtins otherwise: nil.
+		(bcls @env0:notNil and: [aReceiver @env0:isKindOf: bcls])
+			ifTrue: [^ self ___internTypeSingleton: aReceiver]].
 	inst := self @env0:new.
 	inst @env0:_setReceiver: aReceiver selector: aSymbol.
 	^ inst
+%
+
+category: 'Grail-Instance creation'
+classmethod: BoundMethod
+___internTypeSingleton: aReceiver
+	"Return the session-cached canonical ``type'' BoundMethod for the builtins
+	instance ``aReceiver'', minting it once per session (module instances are
+	session-local, so re-mint when the cached receiver no longer matches)."
+
+	| st cached |
+	st := SessionTemps @env0:current.
+	cached := st @env0:at: #'GrailTypeBuiltin' otherwise: nil.
+	(cached @env0:notNil and: [cached @env0:receiver == aReceiver]) ifTrue: [^ cached].
+	cached := self @env0:new.
+	cached @env0:_setReceiver: aReceiver selector: #'type'.
+	st @env0:at: #'GrailTypeBuiltin' put: cached.
+	^ cached
 %
 
 set compile_env: 0

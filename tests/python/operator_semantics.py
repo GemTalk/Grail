@@ -196,3 +196,67 @@ def op_dunder_is_original():
         if dunder and dunder is not orig:
             return 'MISMATCH:' + name
     return 'ALL_MATCH'
+
+
+# --------------------------------------------------------------------------
+# 5. type() metaclass identity (operator.length_hint's user-class path uses
+#    ``type(x) is type`` to distinguish a class from an instance).
+# --------------------------------------------------------------------------
+def type_is_type():
+    return type is type                          # True (identity-stable)
+
+
+def type_of_class_is_type():
+    # A class' metaclass is the canonical ``type`` object.
+    return (type(int) is type
+            and type(TypeError) is type
+            and type(LookupError) is type)       # True
+
+
+def type_of_instance_is_not_type():
+    return (type(5) is not type
+            and type("x") is not type
+            and type(NotImplemented) is not type)  # True
+
+
+def type_of_instance_returns_class():
+    class C:
+        pass
+    return type(C()) is C                        # True (unchanged)
+
+
+def isinstance_class_of_type():
+    class C:
+        pass
+    return isinstance(C, type) and not isinstance(5, type)   # True
+
+
+def length_hint_class_raises_default():
+    class X:
+        def __init__(self, value):
+            self.value = value
+
+        def __length_hint__(self):
+            if type(self.value) is type:
+                raise self.value
+            else:
+                return self.value
+
+    # TypeError-valued hint is swallowed -> default; LookupError propagates.
+    caught = operator.length_hint(X(TypeError), 12)
+    try:
+        operator.length_hint(X(LookupError))
+        propagated = 'no error'
+    except LookupError:
+        propagated = 'LookupError'
+    return caught == 12 and propagated == 'LookupError'
+
+
+def length_hint_iterator():
+    # len(iterator) raises TypeError -> length_hint falls back to
+    # type(it).__length_hint__, which reports the remaining count.
+    it = iter([1, 2, 3])
+    a = operator.length_hint(it)      # 3
+    next(it)
+    b = operator.length_hint(it)      # 2 after consuming one
+    return a == 3 and b == 2

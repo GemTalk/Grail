@@ -85,6 +85,21 @@ ___position: anInteger
 
 category: 'Grail-Iterator Protocol'
 method: list_iterator
+__length_hint__
+	"Python ``__length_hint__'' — the (here exact) count of items still to be
+	produced.  ``operator.length_hint(iter(seq))'' consumes it, and CPython
+	uses it to presize containers built from an iterator.  Remaining items are
+	``collection size - position'' (position is the 0-based next index),
+	clamped at 0 for a spent iterator."
+
+	| remaining |
+	remaining := collection @env0:size @env0:- position.
+	remaining @env0:< 0 ifTrue: [^ 0].
+	^ remaining
+%
+
+category: 'Grail-Iterator Protocol'
+method: list_iterator
 __next__
 	"Return the next item from the list.
 	If there are no further items, raise StopIteration."
