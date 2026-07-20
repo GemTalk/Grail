@@ -2035,12 +2035,15 @@ ___cmpFallback___: other op: opString reflected: refSelector
 	class that blocked CPython's test_bisect / test_operator /
 	test_heapq / test_re.)"
 
-	| refOwner |
+	| refOwner rr |
 	(other isKindOf: PythonInstance) ifTrue: [
 		refOwner := other @env0:class
 			@env0:whichClassIncludesSelector: refSelector environmentId: 1.
 		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
-			^ other @env0:perform: refSelector env: 1 withArguments: { self }]].
+			rr := other @env0:perform: refSelector env: 1 withArguments: { self }.
+			"A NotImplemented reflected result means neither side can order the
+			pair -- fall through to the TypeError, don't leak the singleton."
+			(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]]].
 	TypeError ___signal___: ('''' @env0:, opString @env0:, ''' not supported between instances of '''
 		@env0:, self @env0:class @env0:name @env0:asString
 		@env0:, ''' and ''' @env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
@@ -2070,16 +2073,24 @@ __ne__: other
 	Fraction != int) wrongly True.  Fall through to identity only when no
 	class beyond object defines __eq__ at all."
 
-	| fn eqOwner |
+	| fn eqOwner eqr |
 	fn := self ___dynamicClassAttr___: #'__ne__'.
 	fn == nil ifFalse: [^ fn ___pyCallValue___: { self. other } kw: nil].
 	fn := self ___dynamicClassAttr___: #'__eq__'.
-	fn == nil ifFalse: [^ (fn ___pyCallValue___: { self. other } kw: nil) @env0:not].
+	fn == nil ifFalse: [
+		eqr := fn ___pyCallValue___: { self. other } kw: nil.
+		"A NotImplemented __eq__ must NOT be negated (``NI not'' is an
+		uncatchable Symbol DNU); return it so ___cmpNe___ / the caller runs
+		the reflected-op / identity fallback."
+		(eqr @env0:== #'___NotImplemented___') ifTrue: [^ eqr].
+		^ eqr @env0:not].
 	eqOwner := self @env0:class @env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
 	eqOwner @env0:isNil ifTrue: [
 		eqOwner := self @env0:class @env0:whichClassIncludesSelector: #'___eq__:kw:' environmentId: 1].
 	(eqOwner @env0:notNil and: [eqOwner ~~ object]) ifTrue: [
-		^ (self __eq__: other) @env0:not].
+		eqr := self __eq__: other.
+		(eqr @env0:== #'___NotImplemented___') ifTrue: [^ eqr].
+		^ eqr @env0:not].
 	^ (self @env0:= other) @env0:not
 %
 
