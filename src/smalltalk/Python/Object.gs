@@ -1722,6 +1722,146 @@ __le__: other
 	^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'
 %
 
+! ------------------- Binary-op NotImplemented protocol
+! BinOpAst routes the arithmetic operators through these per-op helpers so an
+! explicit ``return NotImplemented'' from a forward dunder (vendored Fraction,
+! user classes) triggers the reflected op / catchable TypeError instead of
+! leaking the NotImplemented singleton.  Each does a DIRECT send (preserving
+! Grail's normal dispatch, incl. DNU->varargs routing and built-ins' own
+! internal ___binOpFallback___), then checks the result: built-ins never return
+! the singleton, so for them the check is a no-op and behavior is unchanged
+! (ComparisonProtocolTestCase invariants preserved).
+
+category: 'Grail-Arithmetic'
+method: object
+___binOpAdd___: other
+	| r |
+	r := self __add__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'].
+	^ r
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___binOpSub___: other
+	| r |
+	r := self __sub__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'].
+	^ r
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___binOpMul___: other
+	| r |
+	r := self __mul__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'].
+	^ r
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___binOpTrueDiv___: other
+	| r |
+	r := self __truediv__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___binOpFallback___: other op: '/' reflected: #'__rtruediv__:'].
+	^ r
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___binOpFloorDiv___: other
+	| r |
+	r := self __floordiv__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'].
+	^ r
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___binOpMod___: other
+	| r |
+	r := self __mod__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'].
+	^ r
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___binOpPow___: other
+	| r |
+	r := self __pow__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___binOpFallback___: other op: '**' reflected: #'__rpow__:'].
+	^ r
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___binOpLShift___: other
+	| r |
+	r := self __lshift__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___binOpFallback___: other op: '<<' reflected: #'__rlshift__:'].
+	^ r
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___binOpRShift___: other
+	| r |
+	r := self __rshift__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___binOpFallback___: other op: '>>' reflected: #'__rrshift__:'].
+	^ r
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___binOpAnd___: other
+	| r |
+	r := self __and__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___binOpFallback___: other op: '&' reflected: #'__rand__:'].
+	^ r
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___binOpOr___: other
+	| r |
+	r := self __or__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___binOpFallback___: other op: '|' reflected: #'__ror__:'].
+	^ r
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___binOpXor___: other
+	| r |
+	r := self __xor__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___binOpFallback___: other op: '^' reflected: #'__rxor__:'].
+	^ r
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___binOpMatMul___: other
+	| r |
+	r := self __matmul__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		^ self ___binOpFallback___: other op: '@' reflected: #'__rmatmul__:'].
+	^ r
+%
+
 category: 'Grail-Arithmetic'
 method: object
 ___binOpFallback___: other op: opString reflected: refSelector

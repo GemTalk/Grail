@@ -576,8 +576,11 @@ testSmalltalkForSource
 	self assert: smalltalkCode isString.
 	self assert: smalltalkCode notEmpty.
 
-	"The generated code should contain addition"
-	self assert: (smalltalkCode includesString: ' __add__: ')
+	"The generated code should contain addition.  ``+'' now routes through the
+	per-op NotImplemented-protocol helper (object>>___binOpAdd___:, a direct
+	__add__: send + reflected-op/TypeError fallback) rather than a bare
+	``__add__:'' send."
+	self assert: (smalltalkCode includesString: ' ___binOpAdd___: ')
 %
 
 ! ===============================================================================

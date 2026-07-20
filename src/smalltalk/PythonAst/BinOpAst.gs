@@ -76,10 +76,51 @@ initializeLeft: newLeft operand: operand right: newRight
 category: 'Grail-other'
 method: BinOpAst
 printSmalltalkOn: aStream
+	"For the arithmetic operators, route through object>>___binOpXxx___: (a
+	per-op helper doing a DIRECT dunder send + NotImplemented check) so an
+	explicit ``return NotImplemented'' from a forward dunder (vendored Fraction,
+	user classes) triggers the reflected op / catchable TypeError instead of
+	leaking the NotImplemented singleton.  The direct send preserves normal
+	dispatch, so built-ins (which never return the singleton) are unchanged.
+	Non-arithmetic operators keep the bare dunder send."
 
+	| opStream sel helper |
+	opStream := WriteStream on: String new.
+	op printSmalltalkOn: opStream.
+	sel := opStream contents trimSeparators.
+	helper := self ___pyBinOpHelperFor___: sel.
+	helper isNil ifTrue: [
+		left printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: opStream contents.
+		right printSmalltalkWithParenthesisOn: aStream.
+		^ self].
 	left printSmalltalkWithParenthesisOn: aStream.
-	op printSmalltalkOn: aStream.
+	aStream nextPutAll: ' '; nextPutAll: helper; nextPutAll: ' '.
 	right printSmalltalkWithParenthesisOn: aStream.
+%
+
+category: 'Grail-other'
+method: BinOpAst
+___pyBinOpHelperFor___: sel
+	"Map an arithmetic dunder selector to its NotImplemented-aware helper on
+	object; nil for non-arithmetic operators (which keep the bare send)."
+
+	| m |
+	m := Dictionary new.
+	m at: '__add__:' put: '___binOpAdd___:';
+		at: '__sub__:' put: '___binOpSub___:';
+		at: '__mul__:' put: '___binOpMul___:';
+		at: '__truediv__:' put: '___binOpTrueDiv___:';
+		at: '__floordiv__:' put: '___binOpFloorDiv___:';
+		at: '__mod__:' put: '___binOpMod___:';
+		at: '__pow__:' put: '___binOpPow___:';
+		at: '__lshift__:' put: '___binOpLShift___:';
+		at: '__rshift__:' put: '___binOpRShift___:';
+		at: '__and__:' put: '___binOpAnd___:';
+		at: '__or__:' put: '___binOpOr___:';
+		at: '__xor__:' put: '___binOpXor___:';
+		at: '__matmul__:' put: '___binOpMatMul___:'.
+	^ m at: sel otherwise: nil
 %
 
 category: 'Grail-annotations'
