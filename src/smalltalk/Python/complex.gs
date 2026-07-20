@@ -564,35 +564,28 @@ __sub__: other
 category: 'Grail-Arithmetic'
 method: complex
 __truediv__: other
-	"Divide two complex numbers or complex by real.
-	(a+bi)/(c+di) = [(ac+bd) + (bc-ad)i] / (c²+d²)"
+	"Divide (a+bi)/(c+di) using Smith's algorithm (scale by the larger of
+	|c|,|d|) for numerical stability, matching CPython.  The naive
+	(ac+bd)/(c²+d²) loses precision -- e.g. (1+0j)/(0.1+0j) gave 9.999...
+	instead of 10.0 because 0.1² rounds to 0.010000000000000002."
 
-	| otherReal otherImag denom ac bd bc ad newReal newImag |
+	| c d a b newReal newImag r den |
 	(other @env0:class) == complex
+		ifTrue: [c := other real. d := other imag]
+		ifFalse: [c := other @env0:asFloat. d := 0.0].
+	a := self real.
+	b := self imag.
+	((c @env0:abs) @env0:>= (d @env0:abs))
 		ifTrue: [
-			otherReal := other real.
-			otherImag := other imag.
-		]
+			r := d @env0:/ c.
+			den := c @env0:+ (d @env0:* r).
+			newReal := (a @env0:+ (b @env0:* r)) @env0:/ den.
+			newImag := (b @env0:- (a @env0:* r)) @env0:/ den]
 		ifFalse: [
-			otherReal := other @env0:asFloat.
-			otherImag := 0.0.
-		].
-
-	"Calculate denominator: c² + d²"
-	denom := (otherReal @env0:* otherReal)
-		@env0:+ (otherImag @env0:* otherImag).
-
-	"Calculate numerator components"
-	ac := (self real) @env0:* otherReal.
-	bd := (self imag) @env0:* otherImag.
-	bc := (self imag) @env0:* otherReal.
-	ad := (self real) @env0:* otherImag.
-
-	newReal := (ac @env0:+ bd)
-		@env0:/ denom.
-	newImag := (bc @env0:- (ad))
-		@env0:/ denom.
-
+			r := c @env0:/ d.
+			den := (c @env0:* r) @env0:+ d.
+			newReal := ((a @env0:* r) @env0:+ b) @env0:/ den.
+			newImag := ((b @env0:* r) @env0:- a) @env0:/ den].
 	^ complex __new__: newReal _: newImag
 %
 
