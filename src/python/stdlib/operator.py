@@ -202,7 +202,12 @@ class attrgetter:
     """``operator.attrgetter('x.y')(obj)`` returns ``obj.x.y``.
     Multi-arg form returns a tuple of attribute values."""
 
-    def __init__(self, attr, *attrs):
+    # CPython exposes these via C __text_signature__; inspect.signature reads
+    # them (Grail retains no per-function parameter metadata).
+    __text_signature__ = '(attr, /, *attrs)'
+    __call_signature__ = '(obj, /)'
+
+    def __init__(self, attr, /, *attrs):
         self._attrs = (attr,) + attrs
         for a in self._attrs:
             if not isinstance(a, str):
@@ -226,7 +231,10 @@ class attrgetter:
 class itemgetter:
     """``operator.itemgetter(0)(seq)`` returns ``seq[0]``."""
 
-    def __init__(self, item, *items):
+    __text_signature__ = '(item, /, *items)'
+    __call_signature__ = '(obj, /)'
+
+    def __init__(self, item, /, *items):
         self._items = (item,) + items
 
     def __call__(self, obj):
@@ -240,6 +248,9 @@ class itemgetter:
 
 class methodcaller:
     """``operator.methodcaller('upper')(s)`` returns ``s.upper()``."""
+
+    __text_signature__ = '(name, /, *args, **kwargs)'
+    __call_signature__ = '(obj, /)'
 
     def __init__(self, name, /, *args, **kwargs):
         if not isinstance(name, str):

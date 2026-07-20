@@ -128,22 +128,52 @@ class Parameter:
 def _signature_from_callable(obj, *, follow_wrapped=True, globals=None,
                              locals=None, eval_str=False,
                              annotation_format=None, sigcls=None):
-    """CPython-private constructor behind signature(); django.utils.
-    inspect partials it with an annotation format.  Grail ignores
-    every knob and returns the same stub signature() does."""
-    return _Signature()
+    """CPython-private constructor behind signature()."""
+    return signature(obj)
 
 
 def signature(obj, *args, **kwargs):
-    """Stub Signature with no parameters.  Accepts (and ignores) the
-    extra positional/keyword args CPython 3.14 grew (globals=,
-    locals=, eval_str=, annotation_format=) so keyword call sites in
-    django.utils.inspect bind."""
+    """Return a Signature for ``obj``.
+
+    Grail doesn't retain per-function parameter metadata, so a full
+    introspective signature isn't available; instead this honours the
+    CPython ``__text_signature__`` convention when a callable advertises one
+    (e.g. operator.attrgetter/itemgetter/methodcaller), and otherwise returns
+    an empty stub Signature -- which the django.utils.inspect / functools call
+    sites only use via ``.parameters`` / ``.bind``.
+
+    An explicit ``__signature__`` (already a _Signature) wins.  For a class the
+    call signature comes from ``__text_signature__``; for any other callable it
+    comes from its ``__call_signature__`` (the signature of invoking the
+    instance), falling back to its type's ``__text_signature__``."""
+    sig = getattr(obj, '__signature__', None)
+    if isinstance(sig, _Signature):
+        return sig
+    if isinstance(obj, type):
+        text = getattr(obj, '__text_signature__', None)
+    else:
+        text = getattr(obj, '__call_signature__', None)
+        if not isinstance(text, str):
+            call = getattr(type(obj), '__call__', None)
+            text = getattr(call, '__text_signature__', None) if call is not None else None
+    if isinstance(text, str):
+        return _Signature(text)
     return _Signature()
 
 
 class _Signature:
-    parameters = {}
+    def __init__(self, text=None):
+        self._text = text
+
+    @property
+    def parameters(self):
+        return {}
+
+    def __str__(self):
+        return self._text if self._text is not None else '()'
+
+    def __repr__(self):
+        return '<Signature ' + self.__str__() + '>'
 
     def bind(self, *args, **kwargs):
         return _BoundArguments()
