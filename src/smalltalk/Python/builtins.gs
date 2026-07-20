@@ -1830,11 +1830,24 @@ _pow: positional kw: kwargs
 		^ x __pow__: y
 	].
 	(nargs == 3) ifTrue: [
+		| tn |
 		x := positional @env0:at: 1.
 		y := positional @env0:at: 2.
 		z := positional @env0:at: 3.
-		result := x __pow__: y.
-		^ result __mod__: z
+		"3-arg pow is modular exponentiation, defined only for integers.  Any
+		non-int operand raises CPython's TypeError naming all three types
+		(test_fractions test_three_argument_pow), rather than silently doing
+		(x**y) % z."
+		((x @env0:isKindOf: Integer) and: [(y @env0:isKindOf: Integer)
+			and: [z @env0:isKindOf: Integer]]) ifTrue: [
+			result := x __pow__: y.
+			^ result __mod__: z].
+		tn := [:v | | n | n := v @env0:class @env0:name @env0:asString.
+			(#('Integer' 'SmallInteger' 'LargeInteger' 'LargePositiveInteger'
+				'LargeNegativeInteger') @env0:includes: n) ifTrue: ['int'] ifFalse: [n]].
+		TypeError ___signal___: ('unsupported operand type(s) for ** or pow(): '''
+			@env0:, (tn @env0:value: x) @env0:, ''', ''' @env0:, (tn @env0:value: y)
+			@env0:, ''', ''' @env0:, (tn @env0:value: z) @env0:, '''')
 	].
 	TypeError ___signal___: 'pow expected 2 or 3 arguments'
 %
