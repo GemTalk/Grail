@@ -96,6 +96,7 @@ __new__: obj
 	and int('2') on that wide string must still parse — matching the
 	explicit-base path below, which already keys off CharacterCollection."
 	(obj isKindOf: CharacterCollection) ifTrue: [
+		self ___checkStrDigitLimit___: obj.
 		^ [ (Number @env0:fromStream: (ReadStreamPortable @env0:on: obj @env0:trimBoth)) @env0:truncated ]
 			@env0:on: Error
 			do: [:ex | ValueError @env0:signal: 'invalid literal for int()']
@@ -103,6 +104,29 @@ __new__: obj
 
 	"Otherwise, error"
 	TypeError @env0:signal: 'int() argument must be a string or a number'
+%
+
+category: 'Grail-Initialization'
+classmethod: int
+___checkStrDigitLimit___: aString
+	"Enforce CPython's integer string conversion length limit
+	(sys.set_int_max_str_digits, CVE-2020-10735): raise ValueError when the
+	number of decimal digits in aString exceeds the per-session limit
+	(default 4300; 0 disables the check).  Only digit characters count --
+	sign, whitespace, underscores and a radix point do not, matching how
+	CPython measures the value's length."
+
+	| limit count |
+	limit := (SessionTemps @env0:current) @env0:at: #GrailIntMaxStrDigits ifAbsent: [4300].
+	(limit @env0:= 0) ifTrue: [^ self].
+	count := 0.
+	aString @env0:do: [:c | (c @env0:isDigit) ifTrue: [count := count @env0:+ 1]].
+	(count @env0:> limit) ifTrue: [
+		ValueError ___signal___: ('Exceeds the limit (' @env0:,
+			limit @env0:printString @env0:,
+			' digits) for integer string conversion: value has ' @env0:,
+			count @env0:printString @env0:,
+			' digits; use sys.set_int_max_str_digits() to increase the limit')]
 %
 
 category: 'Grail-Initialization'

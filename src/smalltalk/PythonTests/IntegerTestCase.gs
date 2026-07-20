@@ -346,6 +346,31 @@ test__new__fromWideString
 	self assert: (self eval: 'int((chr(0x2192) + "-47")[1:])') equals: -47.
 %
 
+category: 'Grail-Tests - Conversion'
+method: IntegerTestCase
+testIntMaxStrDigitsLimit
+	"CPython's integer string conversion length limit
+	(sys.set_int_max_str_digits, CVE-2020-10735): int(str) raises ValueError
+	when the number of digits exceeds the per-session limit, and the message
+	names the limit.  Regresses test_fractions test_limit_int and, via the
+	message check, that a Grail-signalled ValueError reaches Python str(e)
+	(``___signal___'' rather than the raw Smalltalk ``signal:'')."
+
+	self assert: (self eval: 'import sys
+_old = sys.get_int_max_str_digits()
+sys.set_int_max_str_digits(5000)
+try:
+    within = int("1" * 5000) > 0
+    try:
+        int("1" * 5001)
+        raised, msg = False, ""
+    except ValueError as e:
+        raised, msg = True, str(e)
+finally:
+    sys.set_int_max_str_digits(_old)
+within and raised and ("Exceeds the limit" in msg)').
+%
+
 category: 'Grail-Tests - Bitwise'
 method: IntegerTestCase
 test__or__

@@ -737,8 +737,11 @@ exception
 category: 'Grail-Built-in Functions'
 method: sys
 get_int_max_str_digits
-	"get_int_max_str_digits() -> 4300"
-	^ 4300
+	"get_int_max_str_digits() -> the per-session limit on the number of
+	digits in an int<->str conversion (CPython's default is 4300; 0 means
+	no limit).  Stored in SessionTemps so it resets per session and never
+	commits to the DB."
+	^ (SessionTemps @env0:current) @env0:at: #GrailIntMaxStrDigits ifAbsent: [4300]
 %
 
 category: 'Grail-Built-in Functions'
@@ -843,7 +846,14 @@ intern: aString
 category: 'Grail-Built-in Functions'
 method: sys
 set_int_max_str_digits: maxdigits
-	"set_int_max_str_digits(maxdigits) - stub."
+	"set_int_max_str_digits(maxdigits): set the per-session limit on the
+	number of digits int(str) will convert.  0 disables the limit; CPython
+	rejects a positive value below 640 (the minimum threshold)."
+	(maxdigits @env0:isKindOf: Integer) ifFalse: [
+		TypeError ___signal___: 'an integer is required'].
+	((maxdigits @env0:~= 0) and: [maxdigits @env0:< 640]) ifTrue: [
+		ValueError ___signal___: 'maxdigits must be 0 or larger than 640'].
+	(SessionTemps @env0:current) @env0:at: #GrailIntMaxStrDigits put: maxdigits.
 	^ None
 %
 
