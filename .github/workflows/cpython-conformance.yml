@@ -1,0 +1,98 @@
+name: CPython conformance
+
+# The CPython regression-suite scoreboard (scripts/run_cpython_suite.sh) is a
+# heavy job -- ~20-30 min on a CI runner, dominated by the biggest modules
+# (test_enum, test_set) contending on the single shared stone -- so it is too
+# slow for the every-push critical path (that is the SUnit gate in ci.yml).
+# It runs here on a NIGHTLY schedule + on-demand instead.
+#
+# The run regenerates docs/CPython_Suite_Scoreboard.md and gates on a NEGATIVE
+# delta vs the committed baseline (scripts/check_cpython_regressions.sh): a
+# module with more fail+err, an OK module that stopped passing, or a new
+# CRASH/TIMEOUT/IMPORTERROR fails the job.  A red scheduled run is a
+# NOTIFICATION, not a merge blocker.
+#
+# Baseline maintenance: when conformance IMPROVES (or the CI-measured numbers
+# legitimately differ from a locally-generated baseline), download the
+# `cpython-scoreboard` artifact and commit its CPython_Suite_Scoreboard.md to
+# move the baseline forward.  The committed baseline should be CI-generated so
+# the gate compares like-with-like.
+
+on:
+  schedule:
+    - cron: '17 7 * * *'   # 07:17 UTC daily (off-peak; avoids top-of-hour load)
+  workflow_dispatch:
+
+concurrency:
+  group: cpython-conformance-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read    # pull ci-base from GHCR (harmless if the package is public)
+
+jobs:
+  # Compute the lowercase GHCR image ref (GHCR rejects uppercase; the owner/repo
+  # slug may contain capitals). Mirrors ci.yml.
+  image:
+    runs-on: ubuntu-22.04
+    outputs:
+      ref: ${{ steps.n.outputs.ref }}
+    steps:
+      - id: n
+        run: echo "ref=ghcr.io/${GITHUB_REPOSITORY,,}/ci-base:latest" >> "$GITHUB_OUTPUT"
+
+  conformance:
+    needs: image
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    container:
+      image: ${{ needs.image.outputs.ref }}
+      options: --shm-size=1g
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same non-root 'ci' pattern as ci.yml (NetLDI guest mode needs it).
+      - name: install + cpython conformance (as non-root 'ci')
+        run: |
+          chown -R ci:ci "$GITHUB_WORKSPACE"
+          runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
+            HOME=/home/ci \
+            GEMSTONE=/opt/gemstone/product \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            bash -ex -c '
+              export PATH="$GEMSTONE/bin:$PATH"
+              export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"
+              tests/github/setup-testing-env.sh
+              cd "$GEMSTONE_GLOBAL_DIR"
+              startstone -e stone.conf gs64stone
+              waitstone gs64stone 60
+              startnetldi -g gs64ldi
+              cd "$GITHUB_WORKSPACE"
+              ./install.sh
+              # Lower concurrency (2, not the default 4) + a generous per-module
+              # cap so the heavy modules COMPLETE on slower CI cores instead of
+              # false-TIMEOUTing under 4-way stone contention.  Deterministic
+              # per-module numbers are what make the regression gate trustworthy.
+              GRAIL_CPYTHON_WORKERS=2 GRAIL_TEST_TIMEOUT=1800 ./scripts/run_cpython_suite.sh
+              ./scripts/check_cpython_regressions.sh
+            '
+
+      - name: Upload scoreboard + logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpython-scoreboard
+          if-no-files-found: ignore
+          retention-days: 14
+          # The regenerated scoreboard (commit it to move the baseline forward)
+          # + per-module logs + JSON + stone/gem logs.
+          path: |
+            docs/CPython_Suite_Scoreboard.md
+            out/cpython/*.out
+            out/cpython/scoreboard.json
+            testing/*.log
+            testing/log/**

@@ -97,23 +97,31 @@ fi
 # genuine multi-session concurrency exercise against a single stone.  The
 # suite does not commit, so the shards share the committed image read-only.
 WORKERS="${GRAIL_TEST_WORKERS:-4}"
+# Which of the WORKERS partitions THIS invocation runs (space-separated shard
+# indices; default all).  The partition COUNT is always WORKERS, so the stable
+# class->shard mapping in runTestsShard.gs is identical no matter how the shards
+# are divided.  CI splits them across parallel runner jobs by setting e.g.
+# GRAIL_TEST_SHARDS="0 1" on one runner and "2 3" on another -- each runner does
+# half the classes, roughly halving the (dominant) shard wall-clock.
+SHARDS="${GRAIL_TEST_SHARDS:-$(seq 0 $((WORKERS-1)))}"
+N_SHARDS=$(set -- $SHARDS; echo "$#")
 SHARD_T0=$SECONDS
 mkdir -p "$PROJECT_ROOT/out"
 rm -f "$PROJECT_ROOT"/out/shard_*.out
 SHARD_PIDS=()
-for i in $(seq 0 $((WORKERS-1))); do
+for i in $SHARDS; do
   GRAIL_TEST_WORKERS="$WORKERS" GRAIL_TEST_SHARD="$i" \
     LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runTestsShard.gs < /dev/null \
     > "$PROJECT_ROOT/out/shard_$i.out" 2>&1 &
   SHARD_PIDS+=("$!")
 done
-for i in $(seq 0 $((WORKERS-1))); do
-  wait "${SHARD_PIDS[$i]}" || EXIT=$?
+for pid in "${SHARD_PIDS[@]}"; do
+  wait "$pid" || EXIT=$?
 done
 # Aggregate shard results into one summary line (portable: no gawk-isms) and
 # surface any per-shard failures/errors.
 S_RUN=0; S_PASS=0; S_FAIL=0; S_ERR=0; S_SEEN=0
-for i in $(seq 0 $((WORKERS-1))); do
+for i in $SHARDS; do
   f="$PROJECT_ROOT/out/shard_$i.out"
   line=$(grep GRAIL_SHARD_RESULT "$f" 2>/dev/null)
   if [ -z "$line" ]; then
@@ -129,9 +137,9 @@ for i in $(seq 0 $((WORKERS-1))); do
   S_RUN=$((S_RUN+$1)); S_PASS=$((S_PASS+$2)); S_FAIL=$((S_FAIL+$3)); S_ERR=$((S_ERR+$4))
   grep -E "debug: #" "$f" | sed 's/^/  /'
 done
-echo "main suite (sharded x$S_SEEN): $S_RUN run, $S_PASS passed, $S_FAIL failed, $S_ERR errors"
-printf 'TIMING | %-26s | %4ds\n' "sharded-sunit (x$WORKERS)" "$((SECONDS - SHARD_T0))"
-if [ "$S_SEEN" -ne "$WORKERS" ] || [ "$S_FAIL" -ne 0 ] || [ "$S_ERR" -ne 0 ]; then EXIT=1; fi
+echo "main suite (sharded: $N_SHARDS of x$WORKERS): $S_RUN run, $S_PASS passed, $S_FAIL failed, $S_ERR errors"
+printf 'TIMING | %-26s | %4ds\n' "sunit shards [$SHARDS]" "$((SECONDS - SHARD_T0))"
+if [ "$S_SEEN" -ne "$N_SHARDS" ] || [ "$S_FAIL" -ne 0 ] || [ "$S_ERR" -ne 0 ]; then EXIT=1; fi
 
 # Run embedded CPython tests in a separate session (can't coexist with shim)
 timed "cpython-embedded" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCPythonTests.gs < /dev/null || EXIT=$?

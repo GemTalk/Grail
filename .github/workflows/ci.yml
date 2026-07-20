@@ -1,19 +1,19 @@
 name: CI
 
-# Installs Grail and runs its test suites against a fresh GemStone stone.
+# Installs Grail and runs its SUnit gate against a fresh GemStone stone.
 #
 # The `test` job runs inside the prebuilt ci-base image (Ubuntu 22.04 + Python
 # 3.14 + C toolchain + the GemStone product), published by the build-ci-image
 # workflow to this repo's GitHub Container Registry.  Because the product is
 # baked into the image, the job neither downloads nor unzips it -- it just lays
-# down a fresh extent and runs install.sh + a suite.
+# down a fresh extent and runs install.sh + scripts/run_tests.sh.
 #
-# `test` is a 2-way MATRIX that runs in PARALLEL on separate runners (each does
-# its own ~4s install against its own extent):
-#   * sunit   -- scripts/run_tests.sh (the authoritative pass/fail gate).
-#   * cpython -- scripts/run_cpython_suite.sh (CPython conformance scoreboard)
-#     + scripts/check_cpython_regressions.sh (fails on a negative delta vs the
-#     committed scoreboard).  Wall-clock is max(sunit, cpython), not the sum.
+# `test` is a MATRIX that splits the SUnit shards across parallel runners (each
+# does its own ~10s install against its own extent and runs HALF the shards),
+# so the dominant shard phase roughly halves.  This is the authoritative
+# pass/fail gate.  The heavier CPython conformance scoreboard (~20-30 min on CI)
+# is too slow for the per-push path and lives in .github/workflows/
+# cpython-conformance.yml (nightly + on-demand).
 #
 # Run build-ci-image ONCE before this workflow can run (the container pull needs
 # ci-base:latest to exist).
@@ -49,10 +49,17 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     strategy:
-      # Don't let one suite's failure cancel the other -- we want both signals.
+      # Don't let one shard group's failure cancel the other -- we want both.
       fail-fast: false
       matrix:
-        suite: [sunit, cpython]
+        # Split the 4 SUnit shards across 2 parallel runners (2 each).  The
+        # partition COUNT stays 4 (GRAIL_TEST_WORKERS default), so the stable
+        # class->shard mapping is unchanged; only which shards a runner executes
+        # differs.  `name` gives collision-free artifact names (matrix.shards
+        # contains a space).
+        include:
+          - { name: a, shards: "0 1" }
+          - { name: b, shards: "2 3" }
     # Runs inside ci-base. --shm-size lifts the container's default 64 MB
     # /dev/shm so GemStone's shared page cache fits. GEMSTONE/PATH come from the
     # image ENV.
@@ -74,14 +81,14 @@ jobs:
       # first (checkout wrote it as root).  Everything runs in one shell, so no
       # $GITHUB_ENV hand-off is needed (and ci can't write those root files, so
       # they're dropped with `env -u`).
-      - name: install + run ${{ matrix.suite }} (as non-root 'ci')
+      - name: install + run SUnit shards ${{ matrix.shards }} (as non-root 'ci')
         run: |
           chown -R ci:ci "$GITHUB_WORKSPACE"
           runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
             HOME=/home/ci \
             GEMSTONE=/opt/gemstone/product \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
-            SUITE="${{ matrix.suite }}" \
+            GRAIL_TEST_SHARDS="${{ matrix.shards }}" \
             bash -ex -c '
               export PATH="$GEMSTONE/bin:$PATH"
               export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"
@@ -92,38 +99,20 @@ jobs:
               startnetldi -g gs64ldi
               cd "$GITHUB_WORKSPACE"
               ./install.sh
-              if [ "$SUITE" = cpython ]; then
-                # Generous per-module cap: CI cores differ from the machine that
-                # generated the committed baseline, and a contention-induced
-                # TIMEOUT would be a spurious "regression".
-                GRAIL_TEST_TIMEOUT=900 ./scripts/run_cpython_suite.sh
-                # NON-BLOCKING for now: the committed baseline was generated
-                # locally, so the first CI runs establish whether CI produces
-                # the same numbers.  Once a CI-generated scoreboard is committed
-                # as the baseline, make this a hard gate by replacing the
-                # block below with a bare:  ./scripts/check_cpython_regressions.sh
-                if ! ./scripts/check_cpython_regressions.sh; then
-                  echo "::warning::cpython conformance regressed vs the committed scoreboard (see log + the grail-ci-logs-cpython artifact). NOT blocking yet -- see .github/workflows/ci.yml to enable hard-gating."
-                fi
-              else
-                ./scripts/run_tests.sh
-              fi
+              ./scripts/run_tests.sh
             '
 
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          # Per-suite name: matrix jobs must not collide on artifact names.
-          name: grail-ci-logs-${{ matrix.suite }}
+          # Per-group name: matrix jobs must not collide on artifact names.
+          name: grail-ci-logs-shards-${{ matrix.name }}
           if-no-files-found: ignore
           retention-days: 7
-          # .out logs + stone/gem logs + the (re)generated scoreboard so a
-          # CI-representative baseline can be committed.  Extent is excluded.
+          # .out logs + stone/gem logs; the extent is deliberately excluded.
           path: |
             *.out
             out/*.out
-            out/cpython/*.out
-            docs/CPython_Suite_Scoreboard.md
             testing/*.log
             testing/log/**
