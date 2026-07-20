@@ -160,6 +160,53 @@ def runtime_checkable(cls):
     return cls
 
 
+# typing.SupportsInt / SupportsFloat / ... — runtime-checkable protocols that
+# CPython implements via a metaclass __instancecheck__ doing a structural (hasattr)
+# test.  Grail ignores `metaclass=`, but its isinstance() invokes
+# ``aClass.__instancecheck__(obj)`` when the class advertises one, so a
+# @classmethod __instancecheck__ wires the structural check directly.
+class SupportsInt:
+    @classmethod
+    def __instancecheck__(cls, instance):
+        return hasattr(instance, '__int__')
+
+
+class SupportsFloat:
+    @classmethod
+    def __instancecheck__(cls, instance):
+        return hasattr(instance, '__float__')
+
+
+class SupportsComplex:
+    @classmethod
+    def __instancecheck__(cls, instance):
+        return hasattr(instance, '__complex__')
+
+
+class SupportsIndex:
+    @classmethod
+    def __instancecheck__(cls, instance):
+        return hasattr(instance, '__index__')
+
+
+class SupportsBytes:
+    @classmethod
+    def __instancecheck__(cls, instance):
+        return hasattr(instance, '__bytes__')
+
+
+class SupportsAbs:
+    @classmethod
+    def __instancecheck__(cls, instance):
+        return hasattr(instance, '__abs__')
+
+
+class SupportsRound:
+    @classmethod
+    def __instancecheck__(cls, instance):
+        return hasattr(instance, '__round__')
+
+
 def cast(typ, val):
     return val
 
