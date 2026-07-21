@@ -130,3 +130,24 @@ import functools
 functools.reduce(lambda x, y: x + y, [1, 2, 3, 4, 5])
 ') equals: 15
 %
+
+category: 'Grail-Tests - repr'
+method: FunctoolsTestCase
+testPartialReprReentrantMutationSafety
+	"partial.__repr__ must snapshot func/args/keywords at entry: an element
+	whose own __repr__ reentrantly mutates the partial (via __setstate__)
+	must NOT change what the in-progress repr reports.  Regression for
+	CPython test_functools test_repr_safety_against_reentrant_mutation --
+	the old __repr__ re-read #keywords AFTER the args loop, so a mutation
+	while formatting an arg leaked the replacement keywords into the output.
+	Uses a fixture (user classes with __repr__ can't be instantiated in
+	eval: scope)."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_partial_reentrant' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_partial_reentrant.py')
+		name: 'grail_partial_reentrant'.
+	self assert: (mod @env1:check)
+%

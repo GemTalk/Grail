@@ -406,15 +406,22 @@ method: functools_partial
 __repr__
 	"functools.partial(<func repr>, args..., k=v...)"
 
-	| stream |
+	| stream func args kw |
+	"Snapshot func/args/keywords BEFORE formatting any element: an element's
+	 own __repr__ may reentrantly mutate this partial via __setstate__ (see
+	 test_repr_safety_against_reentrant_mutation), rebinding these instVars.
+	 CPython captures them at entry; re-reading #keywords after the args loop
+	 would pick up the mutated value."
+	func := self @env0:dynamicInstVarAt: #func.
+	args := self @env0:dynamicInstVarAt: #args.
+	kw := self @env0:dynamicInstVarAt: #keywords.
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
 	stream @env0:nextPutAll: 'functools.partial('.
-	stream @env0:nextPutAll:
-		((self @env0:dynamicInstVarAt: #func) __repr__) @env0:asString.
-	(self @env0:dynamicInstVarAt: #args) @env0:do: [:a |
+	stream @env0:nextPutAll: (func __repr__) @env0:asString.
+	args @env0:do: [:a |
 		stream @env0:nextPutAll: ', '.
 		stream @env0:nextPutAll: (a __repr__) @env0:asString].
-	(self @env0:dynamicInstVarAt: #keywords) @env0:keysAndValuesDo: [:k :v |
+	kw @env0:keysAndValuesDo: [:k :v |
 		stream @env0:nextPutAll: ', '.
 		stream @env0:nextPutAll: k @env0:asString.
 		stream @env0:nextPutAll: '='.
