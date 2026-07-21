@@ -1,10 +1,10 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-07-21T03:29:49Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
+Generated: 2026-07-21T04:40:43Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
 
 **Modules: 19** — OK 5 · FAIL 0 · ERROR 10 · SKIP 2 · IMPORTERROR 2 · STERROR 0 · CRASH 0 · TIMEOUT 0
 
-**Totals:** tests=3082 failures=684 errors=419 skipped=14
+**Totals:** tests=3082 failures=680 errors=420 skipped=14
 
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
@@ -18,13 +18,13 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_math | OK | 88 | 0 | 0 | 2 |  |
 | test.test_int | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd800 is illegal for Unicode |
 | test.test_float | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd8f0 is illegal for Unicode |
-| test.test_heapq | ERROR | 68 | 5 | 7 | 0 |  |
+| test.test_heapq | ERROR | 68 | 5 | 8 | 0 |  |
 | test.test_bisect | ERROR | 42 | 0 | 12 | 0 |  |
 | test.test_operator | OK | 110 | 0 | 0 | 0 |  |
 | test.test_fractions | OK | 49 | 0 | 0 | 0 |  |
 | test.test_datetime | SKIP | 0 | 0 | 0 | 0 |  |
 | test.test_re | ERROR | 165 | 30 | 31 | 3 |  |
-| test.test_functools | ERROR | 325 | 97 | 84 | 0 |  |
+| test.test_functools | ERROR | 325 | 93 | 84 | 0 |  |
 | test.test_list | OK | 68 | 0 | 0 | 3 |  |
 | test.test_tuple | ERROR | 38 | 6 | 3 | 1 |  |
 | test.test_dict | ERROR | 120 | 34 | 16 | 1 |  |
