@@ -748,18 +748,18 @@ ___classDict___
 category: 'Grail-Convenience Methods - Attribute'
 method: object
 ___classCell___: aSym
-	"Closure-cell read for class-method bodies: the value of an
-	enclosing-function local captured at class-DEFINITION time into
-	the class's per-class dynamic attrs (see NameAst's class-method
-	closure-cell branch).  Works for instance methods (receiver is the
-	instance) and class-side receivers alike; the chain walk lets
-	subclasses inherit the cells.  An absent cell is a NameError --
-	capture is by VALUE at definition, so a sibling bound after the
-	classdef is not visible (documented deviation from CPython's
-	by-reference cells)."
+	"Closure-cell read for class-method bodies.  The cell is a zero-arg block
+	captured at class-DEFINITION time (see ClassDefAst / NameAst's
+	closure-cell branch) that closes over the enclosing-function local BY
+	REFERENCE; evaluating it here reads the local's CURRENT value, so a value
+	bound after the classdef is visible (CPython by-reference cells).  Works
+	for instance- and class-side receivers; the chain walk lets subclasses
+	inherit the cells.  An absent cell, or a cell whose local is still
+	unbound (Smalltalk nil), is a NameError."
 
-	| v |
-	v := self ___dynamicClassAttr___: aSym.
+	| blk v |
+	blk := self ___dynamicClassAttr___: aSym.
+	v := blk @env0:isNil ifTrue: [nil] ifFalse: [blk @env0:value].
 	v == nil ifTrue: [
 		NameError ___signal___: ('free variable '''
 			@env0:, (aSym @env0:asString @env0:copyFrom: 9 to: aSym @env0:asString @env0:size - 3)

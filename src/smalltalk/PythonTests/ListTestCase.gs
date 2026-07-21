@@ -134,6 +134,24 @@ except ValueError:
 all(ok)')
 %
 
+category: 'Grail-Tests - Closures'
+method: ListTestCase
+testClosureCellByReference
+	"A method-local class whose method reads an enclosing-function local
+	captures it by REFERENCE (CPython closure cell): a value bound after the
+	class def is visible when the method runs, so no 'referenced before
+	assignment' NameError (test_list test_count_index_remove_crashes and
+	friends)."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_closure_cell' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_closure_cell.py')
+		name: 'grail_closure_cell'.
+	self assert: (mod @env1:check).
+%
+
 category: 'Grail-Tests - Initialization'
 method: ListTestCase
 testConstructorRespectsIter

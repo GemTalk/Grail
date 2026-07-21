@@ -1044,7 +1044,12 @@ printSmalltalkRuntimeOn: aStream
 	method bodies referenced (NameAst emitted ___classCell___ reads for
 	them) onto the class's per-class dynamic attrs.  Emitted AFTER the
 	decorator loop so the self-name cell holds the FINAL class object.
-	Capture is by VALUE at definition time (see object>>___classCell___:)."
+	Captured BY REFERENCE: stored as a zero-arg block ``[cap]'' closing over
+	the enclosing method temp (Smalltalk blocks capture by reference), so a
+	value assigned to ``cap'' AFTER this class def is still seen when a method
+	body reads it (CPython closure-cell semantics -- test_list
+	test_equal_operator_modifying_operand / test_count_index_remove_crashes /
+	test_repr_mutate).  object>>___classCell___: evaluates the block on read."
 	(CallAst classCapturedNames notNil and: [CallAst classCapturedNames notEmpty])
 		ifTrue: [
 			CallAst classCapturedNames do: [:cap |
@@ -1052,9 +1057,9 @@ printSmalltalkRuntimeOn: aStream
 					nextPutAll: name;
 					nextPutAll: ' @env1:___pyAttrStore___: #''___cell_';
 					nextPutAll: cap asString;
-					nextPutAll: '___'' put: ';
+					nextPutAll: '___'' put: [';
 					nextPutAll: cap asString;
-					nextPut: $.;
+					nextPutAll: '].';
 					lf]].
 	CallAst classCapturedNames: savedCapturedNames.
 
