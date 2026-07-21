@@ -58,6 +58,21 @@ testEvalSetContains
 
 category: 'Grail-Tests - Eval - Set Operations'
 method: SetTestCase
+testIteratorLengthHint
+	"A set/frozenset iterator reports __length_hint__ (the exact remaining
+	count, since iteration is over a snapshot) -- test_set's
+	test_iterator_pickling asserts iter(s).__length_hint__() == len(s)."
+
+	self assert: (self eval: 'it = iter({1, 2, 3})
+h0 = it.__length_hint__()
+next(it)
+h1 = it.__length_hint__()
+fh = iter(frozenset({1, 2, 3, 4})).__length_hint__()
+h0 == 3 and h1 == 2 and fh == 4')
+%
+
+category: 'Grail-Tests - Eval - Set Operations'
+method: SetTestCase
 testEvalSetDifference
 	"Test set - set via Python source"
 

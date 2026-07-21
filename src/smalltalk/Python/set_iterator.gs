@@ -124,6 +124,18 @@ __next__
 	^ item
 %
 
+category: 'Grail-Iterator Protocol'
+method: set_iterator
+__length_hint__
+	"Number of items not yet produced (CPython's set_iterator exposes this;
+	test_set's test_iterator_pickling asserts iter(s).__length_hint__() ==
+	len(s)).  Iteration is over a snapshot (elements), so the hint is exact."
+
+	| remaining |
+	remaining := elements @env0:size @env0:- position.
+	^ remaining @env0:< 0 ifTrue: [0] ifFalse: [remaining]
+%
+
 category: 'Grail-String Representation'
 method: set_iterator
 __repr__
