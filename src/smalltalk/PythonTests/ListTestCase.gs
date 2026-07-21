@@ -89,6 +89,24 @@ testRichEqualityMembership
 	self assert: (mod @env1:check).
 %
 
+category: 'Grail-Tests - Sequence Protocol'
+method: ListTestCase
+testIteratorLatchesExhaustion
+	"A list_iterator stays exhausted once it runs off the end: appending to
+	the list afterwards does not revive it (list_tests test_exhausted_iterator,
+	test_list test_tier2_invalidates_iterator).  A partially-consumed
+	iterator still sees later appends."
+
+	self assert: (self eval: 'a = [1, 2, 3]
+exhit = iter(a)
+for _ in exhit:
+    pass
+empit = iter(a)
+next(empit)
+a.append(9)
+list(exhit) == [] and list(empit) == [2, 3, 9]')
+%
+
 category: 'Grail-Tests - Initialization'
 method: ListTestCase
 testInitClearsAndReplaces

@@ -93,6 +93,7 @@ __length_hint__
 	clamped at 0 for a spent iterator."
 
 	| remaining |
+	collection @env0:isNil ifTrue: [^ 0].
 	remaining := collection @env0:size @env0:- position.
 	remaining @env0:< 0 ifTrue: [^ 0].
 	^ remaining
@@ -105,10 +106,18 @@ __next__
 	If there are no further items, raise StopIteration."
 
 	| size item |
+	"A list_iterator LATCHES exhaustion: once it runs off the end it drops
+	its collection reference (CPython sets it_seq = NULL) and stays spent,
+	so appending to the list afterwards does NOT revive it (list_tests
+	test_exhausted_iterator, test_list test_tier2_invalidates_iterator).
+	Re-reading size WITHOUT latching made a spent iterator yield freshly
+	appended items."
+	collection @env0:isNil ifTrue: [StopIteration @env0:signal].
 	size := collection @env0:size.
 
-	"Check if we've reached the end"
+	"Reached the end: latch as permanently exhausted, then stop."
 	(position @env0:>= size) ifTrue: [
+		collection := nil.
 		StopIteration @env0:signal
 	].
 
