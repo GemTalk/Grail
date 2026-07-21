@@ -7,7 +7,7 @@ iterator ifNil: [self error: 'iterator is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 iterator subclass: 'list_iterator'
-  instVarNames: #( collection position)
+  instVarNames: #( collection position reverse exhausted)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -54,80 +54,92 @@ set compile_env: 1
 category: 'Grail-Instance Creation'
 classmethod: list_iterator
 ___on: aCollection
-	"Create a new list_iterator for the given collection.
-	This is a Grail-internal method (triple underscore).
-	Position starts at 0 (Python 0-based indexing)."
+	"Create a FORWARD list_iterator over the collection (position 0)."
+
+	^ self _new_from: aCollection _: 0 _: false _: false
+%
+
+category: 'Grail-Instance Creation'
+classmethod: list_iterator
+___onReverse: aCollection
+	"Create a REVERSE list_iterator over the collection, sharing it (so a
+	later mutation of the list is reflected, matching CPython's
+	list_reverseiterator).  Position starts at the last index."
+
+	^ self _new_from: aCollection _: (aCollection @env0:size @env0:- 1)
+		_: true _: (aCollection @env0:size @env0:= 0)
+%
+
+category: 'Grail-Instance Creation'
+classmethod: list_iterator
+_new_from: aCollection _: pos _: rev _: exh
+	"Reconstruct a list_iterator with an explicit state (used by iter()/
+	reversed() and by pickle round-trip -- see pickle.py's iterator tags)."
 
 	| instance |
 	instance := self ___new___.
-	instance ___collection: aCollection.
-	instance ___position: 0.
+	instance ___setState: aCollection _: pos _: rev _: exh.
 	^ instance
 %
 
 category: 'Grail-Private'
 method: list_iterator
-___collection: aCollection
-	"Set the collection being iterated over.
-	This is a Grail-internal method (triple underscore)."
+___setState: aCollection _: pos _: rev _: exh
+	"Set the full iterator state (collection, 0-based next index, reverse
+	flag, exhausted flag)."
 
-	collection := aCollection
+	collection := aCollection.
+	position := pos.
+	reverse := rev.
+	exhausted := exh
 %
 
 category: 'Grail-Private'
 method: list_iterator
-___position: anInteger
-	"Set the current position.
-	This is a Grail-internal method (triple underscore)."
+_getstate
+	"Answer this iterator's state as a tuple (collection, position, reverse,
+	exhausted) for pickling -- see pickle.py's iterator tags.  A plain
+	Python-visible method (no ``___'' prefix) so pickle.py can call it."
 
-	position := anInteger
+	^ tuple @env0:withAll: { collection. position. reverse. exhausted }
 %
 
 category: 'Grail-Iterator Protocol'
 method: list_iterator
 __length_hint__
-	"Python ``__length_hint__'' — the (here exact) count of items still to be
-	produced.  ``operator.length_hint(iter(seq))'' consumes it, and CPython
-	uses it to presize containers built from an iterator.  Remaining items are
-	``collection size - position'' (position is the 0-based next index),
-	clamped at 0 for a spent iterator."
+	"Count of items not yet produced (operator.length_hint presizes with
+	it).  Forward: collection size - position; reverse: position + 1.
+	Zero for a spent iterator."
 
-	| remaining |
-	collection @env0:isNil ifTrue: [^ 0].
-	remaining := collection @env0:size @env0:- position.
-	remaining @env0:< 0 ifTrue: [^ 0].
-	^ remaining
+	exhausted ifTrue: [^ 0].
+	reverse ifTrue: [^ (position @env0:+ 1) @env0:max: 0].
+	^ (collection @env0:size @env0:- position) @env0:max: 0
 %
 
 category: 'Grail-Iterator Protocol'
 method: list_iterator
 __next__
-	"Return the next item from the list.
-	If there are no further items, raise StopIteration."
+	"Return the next item; StopIteration at the end.  A list_iterator LATCHES
+	exhaustion via a flag (NOT by dropping the collection, which pickling
+	needs): once spent it stays spent, so appending to the list afterwards
+	does not revive it (list_tests test_exhausted_iterator,
+	test_tier2_invalidates_iterator).  Reverse iteration walks the shared
+	collection from the last index down (list_reverseiterator)."
 
-	| size item |
-	"A list_iterator LATCHES exhaustion: once it runs off the end it drops
-	its collection reference (CPython sets it_seq = NULL) and stays spent,
-	so appending to the list afterwards does NOT revive it (list_tests
-	test_exhausted_iterator, test_list test_tier2_invalidates_iterator).
-	Re-reading size WITHOUT latching made a spent iterator yield freshly
-	appended items."
-	collection @env0:isNil ifTrue: [StopIteration @env0:signal].
-	size := collection @env0:size.
-
-	"Reached the end: latch as permanently exhausted, then stop."
-	(position @env0:>= size) ifTrue: [
-		collection := nil.
-		StopIteration @env0:signal
-	].
-
-	"Get the item at current position (convert to 1-based Smalltalk index)"
-	item := collection @env0:at: (position @env0:+ 1).
-
-	"Increment position"
-	position := position @env0:+ 1.
-
-	^ item
+	| item |
+	exhausted ifTrue: [StopIteration @env0:signal].
+	reverse
+		ifTrue: [
+			(position @env0:< 0) ifTrue: [exhausted := true. StopIteration @env0:signal].
+			item := collection @env0:at: (position @env0:+ 1).
+			position := position @env0:- 1.
+			^ item]
+		ifFalse: [
+			(position @env0:>= (collection @env0:size)) ifTrue: [
+				exhausted := true. StopIteration @env0:signal].
+			item := collection @env0:at: (position @env0:+ 1).
+			position := position @env0:+ 1.
+			^ item]
 %
 
 set compile_env: 0

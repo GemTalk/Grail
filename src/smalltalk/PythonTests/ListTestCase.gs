@@ -153,6 +153,36 @@ testSubclassConstruction
 	self assert: (mod @env1:check).
 %
 
+category: 'Grail-Tests - Pickle'
+method: ListTestCase
+testIteratorPickleRoundtrip
+	"A list iterator (forward, reversed, or exhausted) pickles and unpickles
+	sharing its list with the co-pickled list, resuming at its saved position
+	(test_list test_iterator_pickle / test_reversed_pickle).  Relies on the
+	pickle memo (shared object identity) and the iterator's picklable state."
+
+	self assert: (self eval: 'import pickle
+ok = []
+a = [4, 5, 6, 7]
+it = iter(a)
+next(it)
+it2, a2 = pickle.loads(pickle.dumps((it, a)))
+a2[:] = [10, 11, 12, 13, 14, 15]
+ok.append(list(it2) == [11, 12, 13, 14, 15])
+b = [4, 5, 6, 7]
+r = reversed(b)
+r2, b2 = pickle.loads(pickle.dumps((r, b)))
+b2[:] = [10, 11, 12, 13, 14, 15]
+ok.append(list(r2) == [13, 12, 11, 10])
+c = [1, 2]
+e = iter(c)
+list(e)
+e2, c2 = pickle.loads(pickle.dumps((e, c)))
+c2[:] = [9, 9, 9]
+ok.append(list(e2) == [])
+all(ok)')
+%
+
 category: 'Grail-Tests - Repr'
 method: ListTestCase
 testReprStaticmethodAndMutation

@@ -16,6 +16,11 @@
 
 import sys
 
+# The list_iterator type (shared by list iterators AND reversed(list)).
+# Pickled explicitly (below) rather than via a picklable reconstructor,
+# since Grail's builtin functions/types are not picklable-as-globals.
+_LIST_ITER = type(iter([]))
+
 _HIGHEST_PROTOCOL = 5
 HIGHEST_PROTOCOL = 5
 DEFAULT_PROTOCOL = 4
@@ -86,7 +91,33 @@ def _emit_global(out, obj):
     _emit_blob(out, nm.encode("utf-8"))
 
 
-def _encode(obj, out):
+def _memoizable(obj):
+    # Objects that may be SHARED across the graph and must round-trip as one
+    # identity (so a mutation through one reference is seen through another --
+    # test_list test_iterator_pickle pickles (iterator, list) where the
+    # iterator's list IS the list).  Immutable scalars/tuples are not memoized.
+    return (type(obj) is _LIST_ITER
+            or isinstance(obj, (list, dict, set, frozenset)))
+
+
+def _encode(obj, out, memo):
+    # Memoized reference: emit a back-ref to the already-encoded object so the
+    # decoder rebuilds ONE shared object.  Indices are explicit in the stream,
+    # so encode/decode order need not implicitly align.
+    if _memoizable(obj):
+        oid = id(obj)
+        ref = memo.get(oid)
+        if ref is not None:
+            out.append(b"R")
+            _emit_len(out, ref)
+            return
+        memo[oid] = len(memo)
+        out.append(b"P")
+        _emit_len(out, memo[oid])
+    _encode_body(obj, out, memo)
+
+
+def _encode_body(obj, out, memo):
     if obj is None:
         out.append(b"N")
     elif obj is True:
@@ -108,32 +139,42 @@ def _encode(obj, out):
     elif isinstance(obj, (bytes, bytearray)):
         out.append(b"b")
         _emit_blob(out, bytes(obj))
+    elif type(obj) is _LIST_ITER:
+        # A list_iterator (forward OR reversed): (collection, position,
+        # reverse, exhausted); the collection is encoded through _encode so it
+        # is memoized and shared with any other reference to it.
+        coll, pos, rev, exh = obj._getstate()
+        out.append(b"I")
+        _encode(coll, out, memo)
+        _emit_len(out, pos)
+        out.append(b"T" if rev else b"F")
+        out.append(b"T" if exh else b"F")
     elif isinstance(obj, tuple):
         out.append(b"t")
         _emit_len(out, len(obj))
         for x in obj:
-            _encode(x, out)
+            _encode(x, out, memo)
     elif isinstance(obj, list):
         out.append(b"l")
         _emit_len(out, len(obj))
         for x in obj:
-            _encode(x, out)
+            _encode(x, out, memo)
     elif isinstance(obj, dict):
         out.append(b"c")
         _emit_len(out, len(obj))
         for k, v in obj.items():
-            _encode(k, out)
-            _encode(v, out)
+            _encode(k, out, memo)
+            _encode(v, out, memo)
     elif isinstance(obj, frozenset):
         out.append(b"z")
         _emit_len(out, len(obj))
         for x in obj:
-            _encode(x, out)
+            _encode(x, out, memo)
     elif isinstance(obj, set):
         out.append(b"s")
         _emit_len(out, len(obj))
         for x in obj:
-            _encode(x, out)
+            _encode(x, out, memo)
     elif isinstance(obj, type):
         _emit_global(out, obj)
     else:
@@ -147,14 +188,14 @@ def _encode(obj, out):
         if not isinstance(rv, tuple) or len(rv) < 2:
             raise PicklingError("Can't pickle %r: bad __reduce__" % (obj,))
         out.append(b"r")
-        _encode(rv[0], out)          # callable
-        _encode(rv[1], out)          # args tuple
-        _encode(rv[2] if len(rv) > 2 else None, out)   # state
+        _encode(rv[0], out, memo)          # callable
+        _encode(rv[1], out, memo)          # args tuple
+        _encode(rv[2] if len(rv) > 2 else None, out, memo)   # state
 
 
 def dumps(obj, protocol=None, *, fix_imports=True):
     out = []
-    _encode(obj, out)
+    _encode(obj, out, {})
     return b"".join(out)
 
 
@@ -165,6 +206,7 @@ class _Unpickler:
     def __init__(self, data):
         self.data = data
         self.pos = 0
+        self.memo = []
 
     def _tag(self):
         t = self.data[self.pos:self.pos + 1]
@@ -192,6 +234,22 @@ class _Unpickler:
 
     def load(self):
         t = self._tag()
+        if t == b"P":
+            # Memoized object: reserve the (explicit) slot, decode, then fill.
+            idx = int(self._line())
+            obj = self.load()
+            while len(self.memo) <= idx:
+                self.memo.append(None)
+            self.memo[idx] = obj
+            return obj
+        if t == b"R":
+            return self.memo[int(self._line())]
+        if t == b"I":
+            coll = self.load()
+            pos = int(self._line())
+            rev = self._tag() == b"T"
+            exh = self._tag() == b"T"
+            return _LIST_ITER._new_from(coll, pos, rev, exh)
         if t == b"N":
             return None
         if t == b"T":

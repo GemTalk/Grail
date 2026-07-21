@@ -261,6 +261,17 @@ __iter__
 	^ list_iterator ___on: self
 %
 
+category: 'Grail-Sequence Protocol'
+method: list
+__reversed__
+	"reversed(list): a reverse iterator SHARING this list (so later mutation
+	is reflected -- test_list test_reversed_pickle), walking from the last
+	index down.  builtins.reversed prefers this over the reverse-copy
+	fallback."
+
+	^ list_iterator ___onReverse: self
+%
+
 category: 'Grail-String Representation'
 method: list
 __repr__
