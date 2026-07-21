@@ -89,6 +89,37 @@ testRichEqualityMembership
 	self assert: (mod @env1:check).
 %
 
+category: 'Grail-Tests - Initialization'
+method: ListTestCase
+testInitClearsAndReplaces
+	"list.__init__() clears the list; list.__init__(iterable) replaces its
+	contents (list_tests test_init).  Also verifies plain list(x) is not
+	double-populated now that __init__ exists."
+
+	self assert: (self eval: 'a = [1, 2, 3]
+a.__init__()
+ok1 = a == []
+a.__init__([4, 5, 6])
+ok2 = a == [4, 5, 6]
+ok3 = list([7, 8, 9]) == [7, 8, 9]
+ok1 and ok2 and ok3')
+%
+
+category: 'Grail-Tests - Sequence Protocol'
+method: ListTestCase
+testGetitemErrorMessage
+	"A non-integer/slice subscript raises TypeError naming the sequence type
+	(CPython: 'list indices must be integers or slices, not str' --
+	list_tests test_getitem_error)."
+
+	self assert: (self eval: 'try:
+    [1, 2, 3]["a"]
+    r = "noraise"
+except TypeError as e:
+    r = str(e)
+r.startswith("list indices must be integers or slices")')
+%
+
 category: 'Grail-Tests - Sequence Protocol'
 method: ListTestCase
 test__delitem__

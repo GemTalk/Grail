@@ -254,7 +254,15 @@ __getitem__: index
 	((index isKindOf: Integer)
 		or: [(index @env0:class
 			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
-		TypeError ___signal___: ('indices must be integers or slices, not '
+		| seqName |
+		"CPython names the sequence type: 'list indices must be integers or
+		slices, not str' (list_tests test_getitem_error).  list is a raw
+		OrderedCollection, tuple is Array/its subclass."
+		seqName := (self @env0:isKindOf: OrderedCollection)
+			ifTrue: ['list']
+			ifFalse: [(self @env0:isKindOf: Array) ifTrue: ['tuple']
+				ifFalse: [self @env0:class @env0:name @env0:asString]].
+		TypeError ___signal___: (seqName @env0:, ' indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	size := self @env0:size.
 	idx := index.

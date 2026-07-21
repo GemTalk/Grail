@@ -82,6 +82,32 @@ __new__: iterable
 		('''' @env0:, cls @env0:name @env0:, ''' object is not iterable')
 %
 
+category: 'Grail-Initialization'
+method: list
+__init__
+	"list.__init__() with no iterable clears the list (CPython list___init__
+	with no argument).  `a = [1,2,3]; a.__init__()` -> []  (list_tests
+	test_init)."
+
+	self @env0:size: 0.
+	^ None
+%
+
+category: 'Grail-Initialization'
+method: list
+__init__: iterable
+	"list.__init__(iterable) resets the list to the iterable's elements.
+	CPython clears then extends; clearing first keeps this idempotent with
+	the __new__: population (so plain `list(x)` stays single-populated) while
+	an explicit `a.__init__(y)` -- or a list subclass's `super().__init__(y)`
+	(list_tests test_init, test_list test_keywords_in_subclass) -- replaces
+	the contents."
+
+	self @env0:size: 0.
+	self extend: iterable.
+	^ None
+%
+
 category: 'Grail-Sequence Protocol'
 method: list
 __delitem__: index
