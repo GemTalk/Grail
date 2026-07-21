@@ -77,11 +77,7 @@ __eq__: other
 	semantics), the same rule the cross-class branch below uses."
 	myClass == otherClass ifTrue: [
 		(self @env0:= other) ifTrue: [^ true].
-		(self @env0:size) @env0:= (other @env0:size) ifFalse: [^ false].
-		1 @env0:to: self @env0:size do: [:i |
-			(((self @env0:at: i) __eq__: (other @env0:at: i)) == true)
-				ifFalse: [^ false]].
-		^ true].
+		^ self ___pyEqElementsCurrentSizes___: other].
 
 	"Cross-class LIST comparison: plain Array and OrderedCollection both
 	surrogate Python ``list'' (historically str.split returned Arrays;
@@ -92,13 +88,37 @@ __eq__: other
 	lists, None, cross-class strings) hold."
 	((myClass == Array or: [self isKindOf: OrderedCollection])
 		and: [otherClass == Array or: [other isKindOf: OrderedCollection]])
-		ifTrue: [
-			(self @env0:size) @env0:= (other @env0:size) ifFalse: [^ false].
-			1 @env0:to: self @env0:size do: [:i |
-				(((self @env0:at: i) __eq__: (other @env0:at: i)) == true)
-					ifFalse: [^ false]].
-			^ true].
+		ifTrue: [^ self ___pyEqElementsCurrentSizes___: other].
 	^ false
+%
+
+category: 'Grail-Other'
+method: SequenceableCollection
+___pyEqElementsCurrentSizes___: other
+	"Element-wise == matching CPython's list_richcompare(Py_EQ): walk while
+	the index is within the CURRENT size of BOTH sequences, re-reading sizes
+	each step because an element's __eq__ may resize either sequence
+	mid-comparison (bpo-38588: __eq__ clears the operands).  Once the shorter
+	end is reached -- or an unequal element is found while still in bounds --
+	equality is decided by the CURRENT sizes.  So two lists that each get
+	cleared during the first element compare end up 0-length and compare
+	EQUAL, exactly as CPython does."
+
+	| i |
+	i := 0.
+	[(i @env0:< self @env0:size) and: [i @env0:< other @env0:size]] @env0:whileTrue: [
+		"Full rich equality (identity, element.__eq__, then reflected) -- like
+		CPython's PyObject_RichCompareBool.  The reflected call matters for
+		bpo-38588: BOTH operands' __eq__ run, so both lists get cleared."
+		((self @env0:at: i @env0:+ 1) ___pyRichEqBool___: (other @env0:at: i @env0:+ 1)) ifFalse: [
+			"Unequal at i.  If a mutating __eq__ shrank a sequence past i,
+			CPython re-reads the sizes and treats it as reaching the end
+			(compare sizes); otherwise the elements genuinely differ."
+			((i @env0:< self @env0:size) and: [i @env0:< other @env0:size])
+				ifTrue: [^ false]
+				ifFalse: [^ self @env0:size @env0:= other @env0:size]].
+		i := i @env0:+ 1].
+	^ self @env0:size @env0:= other @env0:size
 %
 
 category: 'Grail-Comparison'

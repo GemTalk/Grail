@@ -30,5 +30,26 @@ def cleared_during_index():
         return "nameerror"
 
 
+def eq_clears_both():
+    # bpo-38588: comparing two lists whose elements' __eq__ clear the OTHER
+    # list must not crash; CPython re-reads sizes after each element compare,
+    # so both lists end up empty and compare EQUAL (0 == 0).
+    class X:
+        def __eq__(self, other):
+            b.clear()
+            return NotImplemented
+
+    class Y:
+        def __eq__(self, other):
+            a.clear()
+            return NotImplemented
+
+    a = [X()]
+    b = [Y()]
+    return a == b
+
+
 def check():
-    return read_after_def() == 42 and cleared_during_index() == "valueerror"
+    return (read_after_def() == 42
+            and cleared_during_index() == "valueerror"
+            and eq_clears_both() is True)
