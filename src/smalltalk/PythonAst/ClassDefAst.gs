@@ -1269,7 +1269,21 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 					as receiver before __init__ -- see object class >>
 					___allocateInstance___:kw: (vendored fractions.py's
 					Fraction.__new__ carries ALL of its construction)."
-					src nextPutAll: 'instance := self @env1:___allocateInstance___: ___pos___ kw: ___kw___.'; nextPutAll: lf]]].
+					src nextPutAll: 'instance := self @env1:___allocateInstance___: ___pos___ kw: ___kw___.'; nextPutAll: lf.
+					"A subclass of a built-in COLLECTION (list, ...) with no
+					__init__ of its own inherits population from the built-in
+					__init__.  Detected at RUNTIME (isKindOf) so DYNAMIC bases --
+					``class T(self.type2test)'' (list_tests test_getitemoverwriteiter)
+					-- work too, unlike the static firstBaseIsX paths above.
+					``new:'' says whether the class defined its own __new__;
+					CPython then makes the inherited __init__ lenient about the
+					args __new__ already consumed (test_keywords_in_subclass's
+					subclass_with_new)."
+					initSelector isNil ifTrue: [
+						src
+							nextPutAll: 'instance @env1:___pyBuiltinCollectionInit___: ___pos___ kw: ___kw___ new: ';
+							nextPutAll: (self definesOwnNew ifTrue: ['true'] ifFalse: ['false']);
+							nextPutAll: '.'; nextPutAll: lf]]]].
 	"Descriptor-bound __init__ override: a setattr-installed
 	``cls.__init__ = synth_fn'' lands in the class''s dynInstVars
 	store.  Probe for it BEFORE the static dispatch so dataclass-
@@ -1847,6 +1861,19 @@ firstBaseIsTuple
 	bases isEmpty ifTrue: [^ false].
 	^ (bases first isKindOf: NameAst)
 		and: [bases first id asSymbol = #'tuple']
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+definesOwnNew
+	"True when the class body defines its own ``__new__''.  When it does, a
+	built-in-collection subclass's inherited __init__ is lenient about the
+	extra constructor args (CPython: __new__ consumed them) -- see
+	___pyBuiltinCollectionInit___ (test_list test_keywords_in_subclass's
+	subclass_with_new)."
+
+	^ (self instanceMethodDefs
+		detect: [:def | def name asSymbol == #'__new__'] ifNone: [nil]) notNil
 %
 
 category: 'Grail-Class Compilation'

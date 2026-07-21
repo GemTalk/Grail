@@ -767,6 +767,35 @@ ___classCell___: aSym
 	^ v
 %
 
+category: 'Grail-Initialization'
+method: object
+___pyBuiltinCollectionInit___: positional kw: keywords new: hasNew
+	"Populate a built-in-collection subclass instance during Cls(*args, **kw)
+	when the subclass defines no __init__ of its own (population is inherited
+	from the built-in type's __init__).  ClassDefAst emits this on the
+	general (runtime-allocated) construction path, so it works for DYNAMIC
+	bases -- ``class T(self.type2test)'' -- detecting the collection kind by
+	isKindOf at RUNTIME.  Currently handles list subclasses; a non-collection
+	receiver is a NO-OP, leaving ordinary classes unaffected.
+
+	``hasNew'' = the class overrode __new__.  CPython then makes the
+	inherited __init__ lenient about the leftover constructor args __new__
+	already consumed (test_list test_keywords_in_subclass's subclass_with_new
+	passes newarg=... which __new__ handled); when false, list()'s strict
+	arity applies (at most one positional iterable, no keyword arguments)."
+
+	(self @env0:isKindOf: OrderedCollection) ifTrue: [
+		hasNew ifFalse: [
+			(keywords @env0:notNil and: [keywords @env0:isEmpty @env0:not]) ifTrue: [
+				TypeError ___signal___: 'list() takes no keyword arguments'].
+			(positional @env0:size @env0:> 1) ifTrue: [
+				TypeError ___signal___: ('list expected at most 1 argument, got '
+					@env0:, positional @env0:size @env0:printString)]].
+		positional @env0:isEmpty ifFalse: [
+			self @env1:__init__: (positional @env0:at: 1)]].
+	^ self
+%
+
 category: 'Grail-Convenience Methods - Attribute'
 method: object
 ___classAttrDunder___: baseSym

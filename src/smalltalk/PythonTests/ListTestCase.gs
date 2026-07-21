@@ -134,6 +134,25 @@ except ValueError:
 all(ok)')
 %
 
+category: 'Grail-Tests - Initialization'
+method: ListTestCase
+testSubclassConstruction
+	"A list subclass with no __init__ is populated from the constructor
+	iterable (inherited list.__init__), for literal AND dynamic bases; a
+	subclass with __init__ or __new__ owns/participates in population;
+	keyword args are rejected only when neither __new__ nor __init__ is
+	overridden (list_tests test_getitemoverwriteiter, test_list
+	test_keywords_in_subclass)."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_list_subclass' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_list_subclass.py')
+		name: 'grail_list_subclass'.
+	self assert: (mod @env1:check).
+%
+
 category: 'Grail-Tests - Closures'
 method: ListTestCase
 testClosureCellByReference
