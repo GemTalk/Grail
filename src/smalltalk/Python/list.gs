@@ -578,7 +578,12 @@ _sort: positional kw: kwargs
 	place (and returns None).  flask's routing sorts the rule list with
 	a key at request time."
 
-	| keyFn reverse sortBlock sorted |
+	| keyFn reverse sortBlock sorted n0 |
+	"key and reverse are keyword-ONLY (Python ``sort(*, key=None,
+	reverse=False)``); any positional argument is a TypeError (list_tests
+	test_sort: u.sort(42, 42))."
+	(positional @env0:notNil and: [positional @env0:isEmpty @env0:not]) ifTrue: [
+		TypeError ___signal___: 'sort() takes no positional arguments'].
 	keyFn := kwargs @env0:isNil
 		ifTrue: [nil]
 		ifFalse: [kwargs @env0:at: 'key' ifAbsent: [nil]].
@@ -598,10 +603,18 @@ _sort: positional kw: kwargs
 				ifFalse: [[:a :b |
 					(keyFn value: { a } value: nil)
 						__lt__: (keyFn value: { b } value: nil)]]].
-	"GemStone's ``sort:'' returns a fresh sorted Array; copy it back
-	over the receiver's slots for true in-place semantics."
-	sorted := self @env0:sort: sortBlock.
-	self @env0:replaceFrom: 1 to: self @env0:size with: sorted startingAt: 1.
+	"Sort a SNAPSHOT (asArray) rather than self, so a comparison callback
+	that mutates self during the sort cannot corrupt the sort primitive
+	(GemStone's in-place sort walks stale offsets -> OffsetError otherwise).
+	CPython forbids mutating a list while it is being sorted and raises
+	``ValueError: list modified during sort'' (list_tests test_sort's
+	selfmodifyingComparison); detect the size change and do the same before
+	copying the sorted snapshot back over the (unchanged-length) receiver."
+	n0 := self @env0:size.
+	sorted := (self @env0:asArray) @env0:sort: sortBlock.
+	(self @env0:size @env0:~= n0) ifTrue: [
+		ValueError ___signal___: 'list modified during sort'].
+	self @env0:replaceFrom: 1 to: n0 with: sorted startingAt: 1.
 	^ None
 %
 

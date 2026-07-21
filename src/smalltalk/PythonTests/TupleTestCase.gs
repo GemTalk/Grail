@@ -41,6 +41,17 @@ set compile_env: 0
 
 category: 'Grail-Tests - Sequence Operations'
 method: TupleTestCase
+testMulByOneReturnsSelf
+	"t * 1 returns the SAME tuple object when t's type is exactly tuple
+	(CPython identity optimization -- seq_tests test_repeat: id(s)==id(s*1));
+	other multipliers build a fresh tuple."
+
+	self assert: (self eval: 't = (1, 2, 3)
+(t * 1) is t and (t * 2) == (1, 2, 3, 1, 2, 3) and (t * 0) == ()')
+%
+
+category: 'Grail-Tests - Sequence Operations'
+method: TupleTestCase
 test__add__
 	"Test tuple.__add__(other) - concatenation"
 

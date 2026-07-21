@@ -299,6 +299,10 @@ __mul__: n
 			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
 	(n @env0:<= 0) ifTrue: [^ tuple @env0:new].
+	"CPython: t * 1 returns t ITSELF when t's type is exactly tuple (an
+	identity optimization -- seq_tests test_repeat: id(s) == id(s*1)); a
+	tuple subclass still gets a fresh plain tuple."
+	((n @env0:= 1) and: [self @env0:class == tuple]) ifTrue: [^ self].
 	accumulator := OrderedCollection @env0:new.
 	n @env0:timesRepeat: [accumulator @env0:addAll: self].
 	^ tuple @env0:withAll: accumulator

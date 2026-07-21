@@ -107,6 +107,33 @@ a.append(9)
 list(exhit) == [] and list(empit) == [2, 3, 9]')
 %
 
+category: 'Grail-Tests - Sequence Methods'
+method: ListTestCase
+testSortPositionalAndMutation
+	"list.sort is keyword-only: a positional argument raises TypeError; and a
+	comparison callback that mutates the list mid-sort raises ValueError
+	rather than corrupting the sort (list_tests test_sort)."
+
+	self assert: (self eval: 'from functools import cmp_to_key
+ok = []
+u = [3, 1, 2]
+try:
+    u.sort(42, 42)
+    ok.append(False)
+except TypeError:
+    ok.append(True)
+z = list(range(6))
+def bad(x, y):
+    z.append(0)
+    return 0
+try:
+    z.sort(key=cmp_to_key(bad))
+    ok.append(False)
+except ValueError:
+    ok.append(True)
+all(ok)')
+%
+
 category: 'Grail-Tests - Initialization'
 method: ListTestCase
 testInitClearsAndReplaces
