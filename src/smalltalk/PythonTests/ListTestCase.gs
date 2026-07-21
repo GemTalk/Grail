@@ -153,6 +153,23 @@ testSubclassConstruction
 	self assert: (mod @env1:check).
 %
 
+category: 'Grail-Tests - Repr'
+method: ListTestCase
+testReprStaticmethodAndMutation
+	"repr() and list repr invoke a @staticmethod __repr__ (a dunder with no
+	self, on the class's own metaclass); and list repr re-reads its size each
+	step so an element __repr__ that mutates the list is handled like
+	CPython's list_repr (test_list test_repr_mutate)."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_repr_mutate' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_repr_mutate.py')
+		name: 'grail_repr_mutate'.
+	self assert: (mod @env1:check).
+%
+
 category: 'Grail-Tests - Closures'
 method: ListTestCase
 testClosureCellByReference

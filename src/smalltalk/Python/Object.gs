@@ -2194,9 +2194,18 @@ __repr__
 	closure renders ``ClassName(field=value, ...)''.  When absent,
 	fall through to the default ``<ClassName object>''."
 
-	| myClass className stream fn |
+	| myClass className stream fn mcOwner |
 	fn := self ___dynamicClassAttr___: #'__repr__'.
 	fn == nil ifFalse: [^ fn ___pyCallValue___: { self } kw: nil].
+	"A ``@staticmethod def __repr__()'' (a dunder with no self) defined in the
+	class body lands on the class's OWN metaclass (class side); CPython
+	invokes it as the instance repr.  Reached here only when there is no
+	instance-side __repr__.  Guard on the OWN metaclass so an inherited
+	metaclass __repr__ (which reprs the CLASS) is not misfired for instances
+	(test_list test_repr_mutate)."
+	mcOwner := self @env0:class @env0:class @env0:whichClassIncludesSelector: #'__repr__' environmentId: 1.
+	(mcOwner @env0:notNil and: [mcOwner @env0:== (self @env0:class @env0:class)]) ifTrue: [
+		^ self @env0:class @env0:perform: #'__repr__' env: 1].
 	myClass := self @env0:class.
 	className := myClass @env0:name.
 	stream := WriteStream @env0:on: (Unicode7 ___new___).

@@ -283,13 +283,17 @@ __repr__
 	seen @env0:size @env0:> 200 ifTrue: [
 		RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object'].
 	seen @env0:add: self.
-	^ [[stream := WriteStream @env0:on: (String ___new___).
+	^ [[ | i |
+	stream := WriteStream @env0:on: (String ___new___).
 	stream @env0:nextPut: $[.
-	self @env0:do: [:each |
-			| reprStr |
-			reprStr := each __repr__.
-			stream @env0:nextPutAll: reprStr
-		] separatedBy: [stream @env0:nextPutAll: ', '].
+	"Index walk re-reading size each step (like CPython's list_repr): an
+	element __repr__ may mutate this very list (test_list test_repr_mutate
+	pops during repr), so the visited count follows the CURRENT size."
+	i := 1.
+	[i @env0:<= self @env0:size] @env0:whileTrue: [
+		i @env0:> 1 ifTrue: [stream @env0:nextPutAll: ', '].
+		stream @env0:nextPutAll: ((self @env0:at: i) __repr__).
+		i := i @env0:+ 1].
 	stream @env0:nextPut: $].
 	stream @env0:contents]
 		@env0:on: AlmostOutOfStack do: [:ex |
