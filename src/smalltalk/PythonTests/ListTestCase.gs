@@ -136,6 +136,22 @@ all(ok)')
 
 category: 'Grail-Tests - Initialization'
 method: ListTestCase
+testConstructorRespectsIter
+	"list(x) builds via the iterator protocol, so a list/tuple subclass that
+	overrides __iter__ is honored (seq_tests test_constructors, issue
+	#23757); plain built-in sequences keep the fast index-copy path."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_lying_iter' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_lying_iter.py')
+		name: 'grail_lying_iter'.
+	self assert: (mod @env1:check).
+%
+
+category: 'Grail-Tests - Initialization'
+method: ListTestCase
 testInitClearsAndReplaces
 	"list.__init__() clears the list; list.__init__(iterable) replaces its
 	contents (list_tests test_init).  Also verifies plain list(x) is not

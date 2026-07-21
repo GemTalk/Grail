@@ -44,15 +44,21 @@ __new__: iterable
 	     calling __getitem__ on each, matching CPython's iter()
 	     behaviour for classes that lack __iter__."
 
-	| result iter done cls hasIter hasGetitem |
+	| result iter done cls hasIter hasGetitem ic |
 	result := self ___new___.
 	"Strings are SequenceableCollections, but ``at:'' yields Characters, not
 	the 1-char Python strings CPython's ``list(str)'' produces.  Route
 	CharacterCollections through the __iter__ / sequence-protocol paths below
 	instead.  bytes/bytearray are NOT CharacterCollections, so they keep the
-	fast path (elements are ints, matching CPython)."
-	((iterable isKindOf: SequenceableCollection)
-		and: [(iterable isKindOf: CharacterCollection) not]) ifTrue: [
+	fast path (elements are ints, matching CPython).
+
+	The index-copy fast path is used ONLY for the EXACT built-in sequence
+	classes: a subclass may override __iter__ to iterate in a different order
+	(seq_tests test_constructors' LyingList/LyingTuple, issue #23757), and
+	CPython always constructs via the iterator protocol -- so any subclass
+	falls through to the __iter__ path below."
+	ic := iterable @env0:class.
+	((ic == OrderedCollection) or: [(ic == Array) or: [ic == tuple]]) ifTrue: [
 		1 @env0:to: iterable @env0:size do: [:i |
 			result @env0:add: (iterable @env0:at: i)
 		].
