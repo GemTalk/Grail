@@ -50,6 +50,34 @@ fi
 export GRAIL_DIR=$(cd "$(dirname "$0")" && pwd)
 echo "Grail directory: $GRAIL_DIR"
 
+# ---------------------------------------------------------------------------
+# Guard: the shared base must already exist on this extent.
+# ---------------------------------------------------------------------------
+# install.sh is the PER-USER layer -- it logs in as an ordinary (non-SystemUser)
+# .topazini user and so CANNOT create the SystemUser-owned base itself.  If the
+# base is missing, install.gs would otherwise die deep in module init with a
+# cryptic SecurityError (a per-user session cannot modify the policy-1 kernel
+# method dictionaries).  Probe for a base marker as the .topazini user and fail
+# fast -- before the shim build -- with a clear pointer to ./install_base.sh.
+# Only a POSITIVE "absent" blocks; an inconclusive probe (login/stone failure,
+# etc.) steps aside and lets install.gs surface that error itself.
+echo "Checking for the shared Grail base..."
+BASE_PROBE=$(LC_ALL=C topaz -lq -S "$GRAIL_DIR/scripts/check_base_installed.gs" 2>/dev/null)
+if printf '%s\n' "$BASE_PROBE" | grep -q 'GRAIL_BASE=absent'; then
+    echo ""
+    echo "Error: the shared Grail base is not installed on this extent."
+    echo "  install.sh is the per-user layer and runs as an ordinary user; it"
+    echo "  cannot create the SystemUser-owned base (env-1 session-method support,"
+    echo "  Unicode comparison mode, shared restricted-class methods)."
+    echo ""
+    echo "  Run the base setup ONCE per extent first (as SystemUser):"
+    echo ""
+    echo "      ./install_base.sh"
+    echo ""
+    echo "  then re-run ./install.sh."
+    exit 1
+fi
+
 # Build the CPython shim User Action library (requires GEMSTONE)
 export SHIM_LIB_PATH=""
 if [ -n "$GEMSTONE" ]; then
