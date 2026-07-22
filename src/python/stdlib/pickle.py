@@ -21,6 +21,11 @@ import sys
 # since Grail's builtin functions/types are not picklable-as-globals.
 _LIST_ITER = type(iter([]))
 
+# The tuple_iterator type (forward iter() over a tuple).  Pickled explicitly
+# for the same reason as _LIST_ITER; its collection is an immutable tuple, so
+# the state is just (collection, position) -- no reverse/exhausted flags.
+_TUPLE_ITER = type(iter(()))
+
 _HIGHEST_PROTOCOL = 5
 HIGHEST_PROTOCOL = 5
 DEFAULT_PROTOCOL = 4
@@ -149,6 +154,14 @@ def _encode_body(obj, out, memo):
         _emit_len(out, pos)
         out.append(b"T" if rev else b"F")
         out.append(b"T" if exh else b"F")
+    elif type(obj) is _TUPLE_ITER:
+        # A tuple_iterator (forward iter() over a tuple): (collection,
+        # position).  The collection is an immutable tuple, so there are no
+        # reverse/exhausted flags and no memoization is needed.
+        coll, pos = obj._getstate()
+        out.append(b"J")
+        _encode(coll, out, memo)
+        _emit_len(out, pos)
     elif isinstance(obj, tuple):
         out.append(b"t")
         _emit_len(out, len(obj))
@@ -250,6 +263,10 @@ class _Unpickler:
             rev = self._tag() == b"T"
             exh = self._tag() == b"T"
             return _LIST_ITER._new_from(coll, pos, rev, exh)
+        if t == b"J":
+            coll = self.load()
+            pos = int(self._line())
+            return _TUPLE_ITER._new_from(coll, pos)
         if t == b"N":
             return None
         if t == b"T":

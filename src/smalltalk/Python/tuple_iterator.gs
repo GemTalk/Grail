@@ -106,4 +106,30 @@ __next__
 	^ item
 %
 
+category: 'Grail-Instance Creation'
+classmethod: tuple_iterator
+_new_from: aCollection _: pos
+	"Reconstruct a tuple_iterator with an explicit state (collection, 0-based
+	next index).  Used by the pickle round-trip -- see pickle.py's iterator
+	tags.  A single-underscore (Python-visible) method so pickle.py can call
+	it on the type."
+
+	| instance |
+	instance := self ___new___.
+	instance ___collection: aCollection.
+	instance ___position: pos.
+	^ instance
+%
+
+category: 'Grail-Private'
+method: tuple_iterator
+_getstate
+	"Answer this iterator's state as a tuple (collection, position) for
+	pickling -- see pickle.py's iterator tags.  A tuple is forward-only and
+	immutable, so (unlike list_iterator) there is no reverse/exhausted flag.
+	A plain Python-visible method (no ``___'' prefix) so pickle.py can call it."
+
+	^ tuple @env0:withAll: { collection. position }
+%
+
 set compile_env: 0

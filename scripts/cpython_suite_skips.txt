@@ -43,8 +43,9 @@ test.test_set|TestFrozenSet.test_free_after_iterating|refcount/__del__ timing â€
 test.test_set|TestFrozenSetSubclass.test_free_after_iterating|refcount/__del__ timing â€” Grail GC is not refcounted
 test.test_set|TestFrozenSetSubclass.test_hash_effectiveness|CPython-specific hash distribution
 # iterator pickling: Grail iterators don't implement __reduce__ (pickle of a
-# live iterator). An unimplemented feature, not a correctness gap.
-test.test_tuple|TupleTest.test_iterator_pickle|iterator pickling (__reduce__) not implemented in Grail
+# live iterator). An unimplemented feature, not a correctness gap.  (tuple's
+# forward iterator now pickles via pickle.py's explicit tag -- see
+# tuple_iterator _getstate/_new_from -- so test_tuple is no longer skipped.)
 test.test_dict|DictTest.test_iterator_pickling|iterator pickling (__reduce__) not implemented in Grail
 test.test_set|TestSet.test_iterator_pickling|iterator pickling (__reduce__) not implemented in Grail
 test.test_set|TestSetSubclass.test_iterator_pickling|iterator pickling (__reduce__) not implemented in Grail

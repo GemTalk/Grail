@@ -321,3 +321,30 @@ testIndex
 	"Not found"
 	self should: [tup @env1:index: 4] raise: ValueError.
 %
+
+category: 'Grail-Tests - Pickle'
+method: TupleTestCase
+testIteratorPickleRoundtrip
+	"A forward tuple iterator pickles and unpickles, resuming at its saved
+	position -- fresh, mid-iteration, and exhausted (test_tuple
+	test_iterator_pickle).  Grail pickles it via pickle.py's explicit
+	tuple_iterator tag (tuple_iterator _getstate/_new_from), since builtin
+	reconstructors like iter() are not picklable-as-globals."
+
+	self assert: (self eval: 'import pickle
+ok = []
+data = (4, 5, 6, 7)
+it = iter(data)
+it2 = pickle.loads(pickle.dumps(it))
+ok.append(type(it2) is type(it))
+ok.append(tuple(it2) == data)
+it = iter(data)
+next(it)
+it3 = pickle.loads(pickle.dumps(it))
+ok.append(tuple(it3) == data[1:])
+e = iter(data)
+list(e)
+e2 = pickle.loads(pickle.dumps(e))
+ok.append(list(e2) == [])
+all(ok)').
+%
