@@ -5065,7 +5065,14 @@ testWerkzeugHttpImports
 	mod := self loadFixture: 'use_werkzeug_http'.
 	self assert: mod @env1:import_succeeded equals: true.
 	self assert: mod @env1:quote_header_value_basic equals: '"text/html"'.
-	self assert: mod @env1:dump_header_simple equals: 'charset="UTF-8"'
+	"'UTF-8' is entirely HTTP token characters, so werkzeug's
+	quote_header_value leaves it UNquoted -- dump_header of {charset: UTF-8}
+	is charset=UTF-8 (verified against CPython).  The old expectation (a
+	quoted UTF-8) reflected a set>>issuperset: bug: with a string argument it
+	iterated Smalltalk Characters and never matched the set's
+	1-character-string elements, so it wrongly answered false and every value
+	got quoted.  set>>issuperset: now coerces its argument like CPython."
+	self assert: mod @env1:dump_header_simple equals: 'charset=UTF-8'
 %
 
 category: 'Grail-Tests - werkzeug'

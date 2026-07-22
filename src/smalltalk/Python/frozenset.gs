@@ -63,19 +63,32 @@ classmethod: frozenset
 new
 	"Return an empty, frozen frozenset."
 
-	^ super new immediateInvariant
+	^ self ___frozenInstance: super new
+%
+
+category: 'Grail-instance creation'
+classmethod: frozenset
+___frozenInstance: inst
+	"Freeze EXACT frozensets (immutable, so element storage never changes);
+	leave SUBCLASS instances mutable so they can carry instance attributes --
+	a frozenset subclass has a __dict__ in CPython, and test_keywords_in_subclass's
+	subclass_with_new sets ``self.newarg''.  Python exposes no element mutation
+	on either (no add/remove), so subclass elements stay effectively immutable."
+
+	self == frozenset ifTrue: [^ inst immediateInvariant].
+	^ inst
 %
 
 category: 'Grail-instance creation'
 classmethod: frozenset
 withAll: aCollection
 	"Build a frozenset containing every element of aCollection (no duplicates),
-	then freeze it."
+	then freeze it (exact frozensets only -- see ___frozenInstance:)."
 
 	| inst |
 	inst := super new.
 	aCollection do: [:each | inst add: each].
-	^ inst immediateInvariant
+	^ self ___frozenInstance: inst
 %
 
 ! ===============================================================================
@@ -83,6 +96,21 @@ withAll: aCollection
 ! ===============================================================================
 
 set compile_env: 1
+
+category: 'Grail-Initialization'
+method: frozenset
+___init__: positional kw: keywords
+	"Varargs frozenset.__init__(*args, **kw).  frozenset takes NO keyword
+	arguments (test_new_or_init: frozenset().__init__(a=1)).  frozenset is
+	immutable, so a positional iterable was already consumed by __new__ --
+	there is nothing to populate here (a no-op apart from the kwarg check).
+	A subclass WITH its own __init__ dispatches to that and never reaches here."
+
+	(keywords @env0:notNil @env0:and: [keywords @env0:notEmpty]) ifTrue: [
+		TypeError ___signal___: (self @env0:class @env0:name @env0:asString
+			@env0:, '() takes no keyword arguments')].
+	^ None
+%
 
 category: 'Grail-Hashing'
 method: frozenset

@@ -7,7 +7,7 @@ iterator ifNil: [self error: 'iterator is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 iterator subclass: 'dict_valueiterator'
-  instVarNames: #( dict values position)
+  instVarNames: #( dict values position startVersion)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -61,6 +61,8 @@ ___on: aDict
 	iter ___dict: aDict.
 	iter ___values: valuesArray.
 	iter ___position: 0.
+	iter ___startVersion: ((aDict @env0:respondsTo: #'___version___')
+		ifTrue: [aDict @env0:___version___] ifFalse: [nil]).
 	^ iter
 %
 
@@ -76,6 +78,14 @@ method: dict_valueiterator
 ___position: anInteger
 	"Set the current position in the iteration"
 	position := anInteger
+%
+
+category: 'Grail-Internal'
+method: dict_valueiterator
+___startVersion: anIntegerOrNil
+	"Snapshot of the dict's structural-mutation version at creation (nil for
+	a non-PyDict dict that has no version counter)."
+	startVersion := anIntegerOrNil
 %
 
 category: 'Grail-Internal'
@@ -105,6 +115,10 @@ __next__
 	"Return the next value from the dictionary"
 
 	| size nextValue |
+	((dict @env0:size) @env0:= (values @env0:size)) ifFalse: [
+		RuntimeError ___signal___: 'dictionary changed size during iteration'].
+	(startVersion @env0:notNil @env0:and: [((dict @env0:___version___) @env0:= startVersion) @env0:not]) ifTrue: [
+		RuntimeError ___signal___: 'dictionary changed size during iteration'].
 	size := values @env0:size.
 	position := position @env0:+ 1.
 	

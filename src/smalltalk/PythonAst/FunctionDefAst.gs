@@ -199,6 +199,44 @@ generateResourceSkipSource
 
 category: 'Grail-other'
 method: FunctionDefAst
+isCpythonOnlyDecorated
+	"True if this def carries a ``@cpython_only'' (or ``@support.cpython_only'')
+	decorator.  In CPython that marks a test of an implementation detail not
+	required of other Python implementations; alternative implementations
+	(PyPy, ...) skip such tests.  Grail drops method decorators, so without help
+	the body RUNS and fails on behaviour Grail is not obliged to match (gc
+	tracking, exact object identity of interned singletons, split-table dict
+	internals, ...).  Recognising the decorator lets ClassDefRuntime emit a
+	skipping body instead.
+
+	Shapes recognised: bare ``@cpython_only'' (NameAst) and
+	``@support.cpython_only'' / ``@test.support.cpython_only'' (AttributeAst)."
+	decorator_list isNil ifTrue: [^ false].
+	^ decorator_list anySatisfy: [:deco | | fn |
+		fn := (deco isKindOf: CallAst) ifTrue: [deco function] ifFalse: [deco].
+		((fn isKindOf: NameAst) and: [fn id asString = 'cpython_only'])
+			or: [(fn isKindOf: AttributeAst)
+				and: [fn attr asString = 'cpython_only']]
+	]
+%
+
+category: 'Grail-other'
+method: FunctionDefAst
+generateCpythonOnlySkipSource
+	"Body for a ``@cpython_only''-decorated test method (see
+	isCpythonOnlyDecorated): skip it, the way an alternative Python
+	implementation does.  Keeps the plain unary selector so unittest's
+	dir()-based discovery still finds it; the body raises SkipTest via
+	TestCase>>skipTest:, counting it in the skipped column rather than run."
+	| stream |
+	stream := WriteStream on: Unicode7 new.
+	stream nextPutAll: name; lf.
+	stream nextPutAll: '^ self skipTest: ''CPython implementation detail'''.
+	^ stream contents
+%
+
+category: 'Grail-other'
+method: FunctionDefAst
 name
 
 	^name

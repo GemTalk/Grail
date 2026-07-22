@@ -26,7 +26,7 @@ KeyValueDictionary ifNil: [self error: 'KeyValueDictionary is not defined.'].
 expectvalue /Class
 doit
 KeyValueDictionary subclass: 'PyDict'
-  instVarNames: #( order rehashing )
+  instVarNames: #( order rehashing version )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -78,6 +78,29 @@ ___setOrder___: anOrderedCollection
 	order := anOrderedCollection
 %
 
+! ------------------- structural-mutation version (iteration guard)
+
+category: 'Grail-Order'
+method: PyDict
+___version___
+	"A monotonic counter bumped by every STRUCTURAL mutation (a key added or
+	removed -- NOT a value update of an existing key).  An iterator snapshots
+	it at creation and re-checks on each step; a mismatch means the dict was
+	structurally changed during iteration (CPython's ``dictionary changed size
+	during iteration'' RuntimeError).  A plain size compare misses ``del d[k];
+	d[k]=v'' (net size unchanged) -- test_mutating_iteration_delete.  Lazily
+	0 so a faulted-in committed instance (nil slot) starts clean."
+
+	version isNil ifTrue: [version := 0].
+	^ version
+%
+
+category: 'Grail-Order'
+method: PyDict
+___bumpVersion___
+	version := self ___version___ + 1
+%
+
 ! ------------------- table rebuild (rehash) -- the single choke point
 
 category: 'Grail-Order'
@@ -107,7 +130,7 @@ at: aKey put: aValue
 	rehashing == true ifTrue: [^ super at: aKey put: aValue].
 	isNew := (self includesKey: aKey) not.
 	super at: aKey put: aValue.
-	isNew ifTrue: [self ___order___ addLast: aKey].
+	isNew ifTrue: [self ___order___ addLast: aKey. self ___bumpVersion___].
 	^ aValue
 %
 
@@ -118,21 +141,26 @@ add: anAssociation
 	rehashing == true ifTrue: [^ super add: anAssociation].
 	isNew := (self includesKey: anAssociation key) not.
 	super add: anAssociation.
-	isNew ifTrue: [self ___order___ addLast: anAssociation key].
+	isNew ifTrue: [self ___order___ addLast: anAssociation key. self ___bumpVersion___].
 	^ anAssociation
 %
 
 category: 'Grail-Mutation'
 method: PyDict
 removeKey: aKey
+	| r |
 	self ___order___ remove: aKey ifAbsent: [].
-	^ super removeKey: aKey
+	r := super removeKey: aKey.
+	self ___bumpVersion___.
+	^ r
 %
 
 category: 'Grail-Mutation'
 method: PyDict
 removeKey: aKey ifAbsent: aBlock
-	(self includesKey: aKey) ifTrue: [self ___order___ remove: aKey ifAbsent: []].
+	(self includesKey: aKey) ifTrue: [
+		self ___order___ remove: aKey ifAbsent: [].
+		self ___bumpVersion___].
 	^ super removeKey: aKey ifAbsent: aBlock
 %
 
@@ -140,6 +168,7 @@ category: 'Grail-Mutation'
 method: PyDict
 removeAllKeys: aCollection
 	aCollection do: [:k | self ___order___ remove: k ifAbsent: []].
+	self ___bumpVersion___.
 	^ super removeAllKeys: aCollection
 %
 

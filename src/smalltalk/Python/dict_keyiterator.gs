@@ -7,7 +7,7 @@ iterator ifNil: [self error: 'iterator is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 iterator subclass: 'dict_keyiterator'
-  instVarNames: #( dict keys position)
+  instVarNames: #( dict keys position startVersion)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -61,6 +61,8 @@ ___on: aDict
 	iter ___dict: aDict.
 	iter ___keys: keysArray.
 	iter ___position: 0.
+	iter ___startVersion: ((aDict @env0:respondsTo: #'___version___')
+		ifTrue: [aDict @env0:___version___] ifFalse: [nil]).
 	^ iter
 %
 
@@ -85,6 +87,14 @@ ___position: anInteger
 	position := anInteger
 %
 
+category: 'Grail-Internal'
+method: dict_keyiterator
+___startVersion: anIntegerOrNil
+	"Snapshot of the dict's structural-mutation version at creation (nil for
+	a non-PyDict dict that has no version counter)."
+	startVersion := anIntegerOrNil
+%
+
 category: 'Grail-Type'
 method: dict_keyiterator
 __class__
@@ -105,6 +115,15 @@ __next__
 	"Return the next key from the dictionary"
 
 	| size nextKey |
+	"CPython raises RuntimeError if the dict is structurally changed
+	mid-iteration.  Two guards: (1) a live-size divergence from the fixed
+	`keys' snapshot catches net grow/shrink on ANY dict; (2) a version-tag
+	divergence catches a PyDict ``del d[k]; d[k]=v'' that leaves size
+	unchanged (test_mutating_iteration_delete)."
+	((dict @env0:size) @env0:= (keys @env0:size)) ifFalse: [
+		RuntimeError ___signal___: 'dictionary changed size during iteration'].
+	(startVersion @env0:notNil @env0:and: [((dict @env0:___version___) @env0:= startVersion) @env0:not]) ifTrue: [
+		RuntimeError ___signal___: 'dictionary changed size during iteration'].
 	size := keys @env0:size.
 	position := position @env0:+ 1.
 	

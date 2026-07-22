@@ -20,6 +20,16 @@ list class removeAllMethods: 1.
 
 set compile_env: 1
 
+category: 'Grail-Hashing'
+method: list
+__hash__
+	"Lists are mutable and therefore unhashable (matches CPython).  Grail
+	collections key on Smalltalk hashing, so this makes the Python rule
+	explicit: hash([]) and using a list as a set element / dict key raise."
+
+	TypeError ___signal___: 'unhashable type: ''list'''
+%
+
 category: 'Grail-Initialization'
 classmethod: list
 __new__

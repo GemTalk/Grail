@@ -56,14 +56,16 @@ ordered
 category: 'Grail-Tests-pydict'
 method: PyDictTestCase
 testKeysInInsertionOrder
-	self assert: (self ordered @env1:keys) @env1:__repr__ equals: '[''zz'', ''aa'', ''mm'']'
+	"keys() is a Python 3 view: repr is dict_keys([...]), in insertion order."
+	self assert: (self ordered @env1:keys) @env1:__repr__ equals: 'dict_keys([''zz'', ''aa'', ''mm''])'
 %
 
 category: 'Grail-Tests-pydict'
 method: PyDictTestCase
 testItemsInInsertionOrder
+	"items() is a Python 3 view: repr is dict_items([...]), in insertion order."
 	self assert: (self ordered @env1:items) @env1:__repr__
-		equals: '[(''zz'', 1), (''aa'', 2), (''mm'', 3)]'
+		equals: 'dict_items([(''zz'', 1), (''aa'', 2), (''mm'', 3)])'
 %
 
 category: 'Grail-Tests-pydict'

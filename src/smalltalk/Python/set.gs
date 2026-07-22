@@ -61,11 +61,73 @@ __hash__
 	TypeError ___signal___: 'unhashable type: ''set'''
 %
 
+category: 'Grail-Initialization'
+method: set
+__init__
+	"set().__init__() -- CPython set_init clears then adds nothing, so an
+	explicit no-arg re-init empties the set.  (Only reached by an EXPLICIT
+	``s.__init__()'' call; base/subclass construction populate through
+	__new__ / ___pyBuiltinCollectionInit___, never this fixed-arity form.)"
+
+	self clear.
+	^ None
+%
+
+category: 'Grail-Initialization'
+method: set
+__init__: iterable
+	"set.__init__(iterable) -- CLEAR then repopulate (CPython allows re-init;
+	test_init calls it twice and expects replacement).  This fixed-arity form
+	is what an explicit ``s.__init__(word)'' and a subclass's
+	``super().__init__(arg)'' resolve to (test_keywords_in_subclass's
+	subclass_with_init); the varargs ___init__:kw: construction fallback is
+	deliberately NOT defined here so __new__-consumed args stay lenient."
+
+	self clear.
+	self update: iterable.
+	^ None
+%
+
+category: 'Grail-Initialization'
+method: set
+__init__: a _: b
+	"set.__init__ takes at most one positional argument (test_init:
+	``s.__init__(s, 2)'' raises TypeError)."
+
+	TypeError ___signal___: (self @env0:class @env0:name @env0:asString
+		@env0:, ' expected at most 1 argument, got 2')
+%
+
+category: 'Grail-Initialization'
+method: set
+___init__: positional kw: keywords
+	"Varargs set.__init__(*args, **kw).  VALIDATES ONLY -- never populates.
+	It is reached by (a) an explicit ``set().__init__(a=1)'' (test_new_or_init:
+	set takes NO keyword arguments, bpo-43413) and (b) the construction
+	fallback for a set subclass with no own __init__.  Population is NOT done
+	here: an explicit ``s.__init__(word)'' dispatches to the fixed-arity
+	__init__: form, and during construction the positional was already consumed
+	by ___pyBuiltinCollectionInit___ -- re-updating here would double-consume a
+	one-shot iterator argument (test_setOfFrozensets: 0 != 3).  A subclass WITH
+	its own __init__ dispatches to that instead and never reaches here."
+
+	(keywords @env0:notNil @env0:and: [keywords @env0:notEmpty]) ifTrue: [
+		TypeError ___signal___: (self @env0:class @env0:name @env0:asString
+			@env0:, '() takes no keyword arguments')].
+	positional @env0:size @env0:> 1 ifTrue: [
+		TypeError ___signal___: (self @env0:class @env0:name @env0:asString
+			@env0:, ' expected at most 1 argument, got ' @env0:, positional @env0:size @env0:printString)].
+	^ None
+%
+
 category: 'Grail-In-Place Operators'
 method: set
 __iand__: other
-	"In-place intersection: self &= other. Returns self."
+	"In-place intersection: self &= other. Returns self.  The OPERATOR
+	requires a set operand (intersection_update accepts iterables)."
 
+	(other isKindOf: Set) ifFalse: [
+		^ self ___binOpFallback___: other op: '&=' reflected: #'__rand__:'].
 	self intersection_update: other.
 	^ self
 %
@@ -73,8 +135,11 @@ __iand__: other
 category: 'Grail-In-Place Operators'
 method: set
 __ior__: other
-	"In-place union: self |= other. Returns self."
+	"In-place union: self |= other. Returns self.  The OPERATOR requires a
+	set operand (update accepts iterables)."
 
+	(other isKindOf: Set) ifFalse: [
+		^ self ___binOpFallback___: other op: '|=' reflected: #'__ror__:'].
 	self update: other.
 	^ self
 %
@@ -82,8 +147,11 @@ __ior__: other
 category: 'Grail-In-Place Operators'
 method: set
 __isub__: other
-	"In-place difference: self -= other. Returns self."
+	"In-place difference: self -= other. Returns self.  The OPERATOR requires
+	a set operand (difference_update accepts iterables)."
 
+	(other isKindOf: Set) ifFalse: [
+		^ self ___binOpFallback___: other op: '-=' reflected: #'__rsub__:'].
 	self difference_update: other.
 	^ self
 %
@@ -91,8 +159,12 @@ __isub__: other
 category: 'Grail-In-Place Operators'
 method: set
 __ixor__: other
-	"In-place symmetric difference: self ^= other. Returns self."
+	"In-place symmetric difference: self ^= other. Returns self.  The
+	OPERATOR requires a set operand (symmetric_difference_update accepts
+	iterables)."
 
+	(other isKindOf: Set) ifFalse: [
+		^ self ___binOpFallback___: other op: '^=' reflected: #'__rxor__:'].
 	self symmetric_difference_update: other.
 	^ self
 %
@@ -129,6 +201,7 @@ method: set
 add: item
 	"Add an element to the set."
 
+	item ___requireHashableAsSetElement___.
 	self @env0:add: item
 %
 
@@ -143,29 +216,36 @@ clear
 category: 'Grail-Mutation Methods'
 method: set
 difference_update: other
-	"Update the set, removing elements found in other."
+	"Update the set, removing elements found in other.  Accepts any iterable."
 
-	| toRemove |
+	| coerced toRemove |
+	coerced := self ___asElementSet___: other.
 	toRemove := list ___new___.
 
 	self @env0:do: [:each |
-		(other __contains__: each) ifTrue: [
+		(coerced __contains__: each) ifTrue: [
 			toRemove @env0:add: each
 		]
 	].
 
 	toRemove @env0:do: [:each |
 		self @env0:remove: each
-	]
+	].
+	^ None
 %
 
 category: 'Grail-Mutation Methods'
 method: set
 discard: item
-	"Remove an element from the set if it is present."
+	"Remove an element from the set if it is present.  A mutable-set argument
+	is matched as the equivalent frozenset (CPython set-membership rule); a
+	list/dict/bytearray argument raises TypeError."
 
+	| probe |
+	probe := (item isKindOf: set) ifTrue: [frozenset @env1:__new__: item] ifFalse: [item].
+	probe ___requireHashableAsSetElement___.
 	self @env0:do: [:each |
-		(each __eq__: item) ifTrue: [
+		(each __eq__: probe) ifTrue: [
 			self @env0:remove: each.
 			^ nil
 		]
@@ -175,20 +255,23 @@ discard: item
 category: 'Grail-Mutation Methods'
 method: set
 intersection_update: other
-	"Update the set, keeping only elements found in it and other."
+	"Update the set, keeping only elements found in it and other.  Accepts
+	any iterable."
 
-	| toRemove |
+	| coerced toRemove |
+	coerced := self ___asElementSet___: other.
 	toRemove := list ___new___.
 
 	self @env0:do: [:each |
-		(other __contains__: each) ifFalse: [
+		(coerced __contains__: each) ifFalse: [
 			toRemove @env0:add: each
 		]
 	].
 
 	toRemove @env0:do: [:each |
 		self @env0:remove: each
-	]
+	].
+	^ None
 %
 
 category: 'Grail-Mutation Methods'
@@ -219,12 +302,16 @@ pop
 category: 'Grail-Mutation Methods'
 method: set
 remove: item
-	"Remove an element from the set. Raises KeyError if not found."
+	"Remove an element from the set. Raises KeyError if not found.  A
+	mutable-set argument is matched as the equivalent frozenset (CPython
+	set-membership rule); a list/dict/bytearray argument raises TypeError."
 
-	| removed |
+	| probe removed |
+	probe := (item isKindOf: set) ifTrue: [frozenset @env1:__new__: item] ifFalse: [item].
+	probe ___requireHashableAsSetElement___.
 	removed := false.
 	self @env0:do: [:each |
-		(each __eq__: item) ifTrue: [
+		(each __eq__: probe) ifTrue: [
 			self @env0:remove: each.
 			removed := true.
 			^ nil
@@ -239,21 +326,23 @@ remove: item
 category: 'Grail-Mutation Methods'
 method: set
 symmetric_difference_update: other
-	"Update the set, keeping only elements found in either set, but not in both."
+	"Update the set, keeping only elements found in either set, but not in
+	both.  Accepts any iterable."
 
-	| toAdd toRemove |
+	| coerced toAdd toRemove |
+	coerced := self ___asElementSet___: other.
 	toAdd := list ___new___.
 	toRemove := list ___new___.
 
 	"Find elements in self that are also in other (to remove)"
 	self @env0:do: [:each |
-		(other __contains__: each) ifTrue: [
+		(coerced __contains__: each) ifTrue: [
 			toRemove @env0:add: each
 		]
 	].
 
 	"Find elements in other that are not in self (to add)"
-	other @env0:do: [:each |
+	coerced @env0:do: [:each |
 		(self __contains__: each) ifFalse: [
 			toAdd @env0:add: each
 		]
@@ -267,17 +356,49 @@ symmetric_difference_update: other
 	"Add unique elements from other"
 	toAdd @env0:do: [:each |
 		self @env0:add: each
-	]
+	].
+	^ None
 %
 
 category: 'Grail-Mutation Methods'
 method: set
 update: other
-	"Update the set, adding elements from other."
+	"Update the set, adding elements from any iterable."
 
-	other @env0:do: [:each |
+	| coerced |
+	coerced := self ___asElementSet___: other.
+	coerced @env0:do: [:each |
 		self @env0:add: each
-	]
+	].
+	^ None
+%
+
+category: 'Grail-Mutation Methods'
+method: set
+_update: positional kw: kwargs
+	"Variadic set.update(*others): apply update for each argument (0 args is
+	a no-op).  BoundMethod routes a multi-/zero-arg call here."
+
+	positional @env0:do: [:each | self update: each].
+	^ None
+%
+
+category: 'Grail-Mutation Methods'
+method: set
+_intersection_update: positional kw: kwargs
+	"Variadic set.intersection_update(*others)."
+
+	positional @env0:do: [:each | self intersection_update: each].
+	^ None
+%
+
+category: 'Grail-Mutation Methods'
+method: set
+_difference_update: positional kw: kwargs
+	"Variadic set.difference_update(*others)."
+
+	positional @env0:do: [:each | self difference_update: each].
+	^ None
 %
 
 set compile_env: 0

@@ -352,6 +352,23 @@ class TestCase:
         if member in container:
             self._failWith(msg, repr(member) + " unexpectedly found in " + repr(container))
 
+    def assertStartsWith(self, s, prefix, msg=None):
+        # Python 3.12 addition (test_set et al. use it).
+        if not s.startswith(prefix):
+            self._failWith(msg, repr(s) + " doesn't start with " + repr(prefix))
+
+    def assertNotStartsWith(self, s, prefix, msg=None):
+        if s.startswith(prefix):
+            self._failWith(msg, repr(s) + " starts with " + repr(prefix))
+
+    def assertEndsWith(self, s, suffix, msg=None):
+        if not s.endswith(suffix):
+            self._failWith(msg, repr(s) + " doesn't end with " + repr(suffix))
+
+    def assertNotEndsWith(self, s, suffix, msg=None):
+        if s.endswith(suffix):
+            self._failWith(msg, repr(s) + " ends with " + repr(suffix))
+
     def assertHasAttr(self, obj, name, msg=None):
         # Python 3.14 addition (test_enum et al. use it).
         if not hasattr(obj, name):

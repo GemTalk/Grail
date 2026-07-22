@@ -197,6 +197,14 @@ printSmalltalkRuntimeOn: aStream
 						methodSources add: def name asString
 							-> def generateResourceSkipSource]
 					ifFalse: [
+					def isCpythonOnlyDecorated
+					ifTrue: [
+						"A ``@cpython_only''-decorated test skips under an
+						alternative Python implementation (see
+						isCpythonOnlyDecorated); emit a skipping body."
+						methodSources add: def name asString
+							-> def generateCpythonOnlySkipSource]
+					ifFalse: [
 						s := PrettyWriteStream on: Unicode7 new.
 						def generateMethodSourceOn: s.
 						methodSources add: def name asString -> s contents.
@@ -213,7 +221,7 @@ printSmalltalkRuntimeOn: aStream
 						plain unary forwarder so getTestCaseNames finds it."
 						def isBigmemtestDecorated ifTrue: [
 							methodSources add: ('bigmem_' , def name asString)
-								-> def generateBigmemtestUnaryForwarderSource]].
+								-> def generateBigmemtestUnaryForwarderSource]]].
 			] ensure: [CallAst selfParameterName: savedSelfForIM].
 		].
 		"@classmethod bodies use the same per-method source generator
@@ -1235,17 +1243,27 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 				nextPutAll: 'instance := self @env1:__new__: ((___pos___ @env0:size @env0:>= 1) ifTrue: [___pos___ @env0:at: 1] ifFalse: ['''']).';
 				nextPutAll: lf
 		]
-		ifFalse: [self firstBaseIsTuple
+		ifFalse: [(self firstBaseIsTuple and: [self definesOwnNew not])
 			ifTrue: [
 				"Tuple subclasses — route a single-positional construction
 				through tuple's ``__new__:`` so the iterable populates the
 				instance (matches CPython's ``tuple(iterable)`` semantics).
 				Used by jinja2's ``OptionalLStrip`` factory which builds a
 				marker tuple from an iterable.  Empty positional yields
-				the empty-tuple fast path."
+				the empty-tuple fast path.  A subclass that defines its OWN
+				__new__ falls through to the runtime allocator below so that
+				__new__ runs with all args (test_keywords_in_subclass's
+				subclass_with_new)."
 				src
 					nextPutAll: 'instance := ___pos___ @env0:size @env0:= 0 ifTrue: [self @env0:new] ifFalse: [self @env1:__new__: (___pos___ @env0:at: 1)].';
-					nextPutAll: lf
+					nextPutAll: lf.
+				"tuple.__new__ takes no keyword arguments; a plain subclass
+				(no own __new__/__init__ to consume them) must reject them
+				(test_keywords_in_subclass)."
+				(initSelector isNil and: [self definesOwnNew not]) ifTrue: [
+					src
+						nextPutAll: '((___kw___ @env0:notNil) @env0:and: [___kw___ @env0:notEmpty]) ifTrue: [TypeError ___signal___: ''tuple() takes no keyword arguments''].';
+						nextPutAll: lf]
 			]
 			ifFalse: [self firstBaseIsDict
 				ifTrue: [

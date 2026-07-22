@@ -359,9 +359,22 @@ category: 'Grail-Attribute Access'
 method: BaseException
 args
 	"Return the tuple of arguments passed to the exception."
-	
+
 	^ args ifNil: [ #() ]
 %
+
+set compile_env: 0
+category: 'Grail-Python Attribute Hook'
+classmethod: BaseException
+___pythonValueAttrs___
+	"``e.args'' is the args TUPLE (a value attribute), not a callable -- so
+	``___pyAttrLoad___'' invokes the accessor and returns the tuple rather than
+	wrapping it as a BoundMethod (test_dict test_tuple_keyerror / test_missing
+	check ``exc.args == (key,)'')."
+
+	^ IdentitySet new add: #'args'; yourself
+%
+set compile_env: 1
 
 category: 'Grail-Exception Methods'
 method: BaseException

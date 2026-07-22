@@ -277,6 +277,11 @@ run
 	at: #'dict_itemiterator' put: nil;
 	at: #'dict_keyiterator' put: nil;
 	at: #'dict_valueiterator' put: nil;
+	at: #'dict_view' put: nil;
+	at: #'dict_set_view' put: nil;
+	at: #'dict_keys' put: nil;
+	at: #'dict_values' put: nil;
+	at: #'dict_items' put: nil;
 	at: #'gemstone' put: nil;
 	at: #'grail' put: nil;
 	at: #'html' put: nil;
@@ -1027,6 +1032,7 @@ input src/smalltalk/Python/Object.gs
 input src/smalltalk/Python/Range.gs
 input src/smalltalk/Python/SequenceableCollection.gs
 input src/smalltalk/Python/set.gs
+input src/smalltalk/Python/dict_view.gs
 input src/smalltalk/Python/str.gs
 input src/smalltalk/Python/Subscript.gs
 input src/smalltalk/Python/Tuple.gs

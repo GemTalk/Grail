@@ -65,6 +65,15 @@ bytearray class removeAllMethods: 1.
 
 set compile_env: 1
 
+category: 'Grail-Hashing'
+method: bytearray
+__hash__
+	"bytearray is mutable and therefore unhashable (matches CPython).
+	bytes (the superclass) stays hashable."
+
+	TypeError ___signal___: 'unhashable type: ''bytearray'''
+%
+
 category: 'Grail-Constructors'
 classmethod: bytearray
 __new__

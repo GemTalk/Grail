@@ -20,6 +20,14 @@ dict class removeAllMethods: 1.
 
 set compile_env: 1
 
+category: 'Grail-Hashing'
+method: dict
+__hash__
+	"Dicts are mutable and therefore unhashable (matches CPython)."
+
+	TypeError ___signal___: 'unhashable type: ''dict'''
+%
+
 category: 'Grail-Initialization'
 classmethod: dict
 __new__
@@ -102,6 +110,17 @@ fromkeys: iterable _: value
 
 	| result iter done |
 	result := self ___new___.
+	"A string yields its 1-character SUBSTRINGS as keys, not Smalltalk
+	 Characters (CPython quirk: dict.fromkeys('abc') == {'a':v,'b':v,'c':v})."
+	(iterable isKindOf: CharacterCollection) ifTrue: [
+		1 @env0:to: iterable @env0:size do: [:i |
+			| s |
+			s := Unicode7 ___new___: 1.
+			s @env0:at: 1 put: (iterable @env0:at: i).
+			result @env0:at: s put: value
+		].
+		^ result
+	].
 	(iterable isKindOf: SequenceableCollection) ifTrue: [
 		1 @env0:to: iterable @env0:size do: [:i |
 			result @env0:at: (iterable @env0:at: i) put: value
@@ -141,6 +160,12 @@ _new: positional kw: keywords
 		ifFalse: [self __new__: (positional @env0:at: 1)].
 	keywords ifNotNil: [
 		keywords @env0:keysAndValuesDo: [:k :v |
+			"CPython: ``dict(**mapping)'' requires string keys -- a non-string
+			key (dict(**{1:2})) is a TypeError, not silently stringified
+			(test_invalid_keyword_arguments).  Symbols (the normal a=1 kwarg
+			carrier) and Strings are both CharacterCollections."
+			(k @env0:isKindOf: CharacterCollection) ifFalse: [
+				TypeError ___signal___: 'keywords must be strings'].
 			result @env0:at: k @env0:asString put: v
 		]
 	].
@@ -253,8 +278,12 @@ ___initFrom___: positional kw: keywords
 category: 'Grail-Collection Protocol'
 method: dict
 __contains__: key
-	"Return True if key is in the dictionary, else False"
-	^ self @env0:includesKey: key
+	"Return True if key is in the dictionary, else False.  An unhashable key
+	can never be present; CPython raises TypeError (checked only on the miss
+	path so a present key stays fast)."
+	(self @env0:includesKey: key) ifTrue: [^ true].
+	key ___requireHashableAsDictKey___.
+	^ false
 %
 
 category: 'Grail-Subscript Protocol'
@@ -314,6 +343,12 @@ __getitem__: key
 	| hasKey |
 	hasKey := self @env0:includesKey: key.
 	hasKey ifFalse: [
+		key ___requireHashableAsDictKey___.
+		"__missing__ protocol: a dict SUBCLASS may define __missing__(key) to
+		supply/raise for absent keys (base dict has none).  An instance-var
+		__missing__ is (correctly) ignored -- this is a method-dict lookup."
+		(self @env0:class @env0:whichClassIncludesSelector: #'__missing__:' environmentId: 1) notNil
+			ifTrue: [^ self __missing__: key].
 		KeyError ___signal___: key
 	].
 	^ self @env0:at: key
@@ -338,6 +373,47 @@ method: dict
 __ne__: other
 	"Return True if dictionaries do not have the same (key, value) pairs"
 	^ (self __eq__: other) @env0:not
+%
+
+category: 'Grail-Merge Operators'
+method: dict
+__or__: other
+	"PEP 584 ``self | other'' — a new dict with other's entries merged over
+	self's (other wins on key conflicts).  Only mappings merge; a non-mapping
+	yields NotImplemented (so the ``|'' operator raises TypeError, but a direct
+	``d.__or__(x)'' answers NotImplemented, per test_dict.test_merge_operator)."
+
+	| result |
+	(other isKindOf: AbstractDictionary) ifFalse: [
+		^ Python @env0:at: #'NotImplemented' otherwise: nil].
+	result := dict ___new___.
+	result update: self.
+	result update: other.
+	^ result
+%
+
+category: 'Grail-Merge Operators'
+method: dict
+__ror__: other
+	"PEP 584 reflected merge ``other | self'' — self wins on conflicts."
+
+	| result |
+	(other isKindOf: AbstractDictionary) ifFalse: [
+		^ Python @env0:at: #'NotImplemented' otherwise: nil].
+	result := dict ___new___.
+	result update: other.
+	result update: self.
+	^ result
+%
+
+category: 'Grail-Merge Operators'
+method: dict
+__ior__: other
+	"PEP 584 in-place merge ``self |= other'' — like update(), accepts a
+	mapping OR an iterable of key/value pairs; returns self."
+
+	self update: other.
+	^ self
 %
 
 category: 'Grail-String Representation'
@@ -392,6 +468,7 @@ category: 'Grail-Subscript Protocol'
 method: dict
 __setitem__: key _: value
 	"Set d[key] to value"
+	key ___requireHashableAsDictKey___.
 	self @env0:at: key put: value.
 	^ None
 %
@@ -424,6 +501,7 @@ get: key _: default
 
 	| hasKey |
 	hasKey := self @env0:includesKey: key.
+	hasKey ifFalse: [key ___requireHashableAsDictKey___].
 	hasKey ifTrue: [
 		^ self @env0:at: key
 	].
@@ -433,29 +511,19 @@ get: key _: default
 category: 'Grail-View Methods'
 method: dict
 items
-	"Return a new view of the dictionary's (key, value) pairs"
+	"Return a live view of the dictionary's (key, value) pairs (a dict_items,
+	set-like, repr'd as ``dict_items([...])'')."
 
-	| itemsArray |
-	itemsArray := list ___new___.
-	self @env0:keysAndValuesDo: [:key :value |
-		| pair |
-		pair := tuple @env0:with: key with: value.
-		itemsArray append: pair
-	].
-	^ itemsArray
+	^ dict_items ___on: self
 %
 
 category: 'Grail-View Methods'
 method: dict
 keys
-	"Return a new view of the dictionary's keys"
+	"Return a live view of the dictionary's keys (a dict_keys, set-like,
+	repr'd as ``dict_keys([...])'')."
 
-	| keysArray |
-	keysArray := list ___new___.
-	self @env0:keysDo: [:key |
-		keysArray append: key
-	].
-	^ keysArray
+	^ dict_keys ___on: self
 %
 
 category: 'Grail-Mutation Methods'
@@ -466,6 +534,7 @@ pop: key
 	| hasKey value |
 	hasKey := self @env0:includesKey: key.
 	hasKey ifFalse: [
+		key ___requireHashableAsDictKey___.
 		KeyError ___signal___: key
 	].
 		value := self @env0:at: key.
@@ -528,7 +597,7 @@ category: 'Grail-Mutation Methods'
 method: dict
 setdefault: key
 	"If key is in the dictionary, return its value. If not, insert key with value None and return None"
-	^ self setdefault: key _: nil
+	^ self setdefault: key _: None
 %
 
 category: 'Grail-Mutation Methods'
@@ -541,6 +610,7 @@ setdefault: key _: default
 	hasKey ifTrue: [
 		^ self @env0:at: key
 	].
+	key ___requireHashableAsDictKey___.
 	self @env0:at: key put: default.
 	^ default
 %
@@ -607,7 +677,11 @@ _update: positional kw: kwargs
 	].
 	(kwargs @env0:isNil not and: [kwargs @env0:isEmpty not]) ifTrue: [
 		kwargs @env0:keysAndValuesDo: [:key :value |
-			self @env0:at: key put: value
+			"``d.update(**mapping)'' requires string keys; a non-string key
+			(update(**{1:2})) is a TypeError (test_invalid_keyword_arguments)."
+			(key @env0:isKindOf: CharacterCollection) ifFalse: [
+				TypeError ___signal___: 'keywords must be strings'].
+			self @env0:at: key @env0:asString put: value
 		]
 	].
 	^ None
@@ -630,14 +704,10 @@ __reversed__
 category: 'Grail-View Methods'
 method: dict
 values
-	"Return a new view of the dictionary's values"
+	"Return a live view of the dictionary's values (a dict_values, repr'd as
+	``dict_values([...])'')."
 
-	| valuesArray |
-	valuesArray := list ___new___.
-	self @env0:valuesDo: [:value |
-		valuesArray append: value
-	].
-	^ valuesArray
+	^ dict_values ___on: self
 %
 
 set compile_env: 0

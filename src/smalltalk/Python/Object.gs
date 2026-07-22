@@ -76,6 +76,46 @@ ___new___
 	^ self @env0:new
 %
 
+category: 'Grail-Hashability'
+method: object
+___requireHashableAsSetElement___
+	"Raise CPython's context-specific TypeError if the receiver is unhashable.
+	Detected by actually invoking __hash__ (its being None/raising is the ONE
+	true signal), so frozenset, tuples and custom-__hash__ set subclasses pass
+	while set/list/dict/bytearray raise -- matching how CPython hashes each
+	element on insert.  Grail sets/dicts otherwise key on Smalltalk hashing,
+	which accepts anything."
+
+	[self __hash__] @env0:on: TypeError do: [:ex |
+		self ___raiseUnhashableUse___: ex context: 'a set element']
+%
+
+category: 'Grail-Hashability'
+method: object
+___requireHashableAsDictKey___
+	"As ___requireHashableAsSetElement___, for dict keys."
+
+	[self __hash__] @env0:on: TypeError do: [:ex |
+		self ___raiseUnhashableUse___: ex context: 'a dict key']
+%
+
+category: 'Grail-Hashability'
+method: object
+___raiseUnhashableUse___: ex context: ctx
+	"Re-raise an ``unhashable type: 'X''' TypeError from __hash__ as CPython's
+	richer ``cannot use 'X' as <ctx> (unhashable type: 'X')''.  A __hash__ that
+	failed for any OTHER reason propagates unchanged."
+
+	| m idx tn |
+	m := ex @env0:messageText.
+	m == nil ifTrue: [m := ''].
+	idx := m @env0:indexOfSubCollection: 'unhashable type: '.
+	idx == 0 ifTrue: [^ ex @env0:pass].
+	tn := m @env0:copyFrom: (idx @env0:+ 17) to: (m @env0:size).
+	TypeError ___signal___: ('cannot use ' @env0:, tn @env0:, ' as ' @env0:, ctx
+		@env0:, ' (unhashable type: ' @env0:, tn @env0:, ')')
+%
+
 category: 'Grail-Convenience Methods'
 method: object
 ___unpackSequence___
@@ -202,6 +242,27 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 
 category: 'Grail-Instantiation'
 classmethod: object
+___hasUserInit___
+	"True if this class defines its OWN Python __init__ (any arity), as
+	opposed to only inheriting a built-in no-op (object / Set / set /
+	frozenset / tuple all provide a do-nothing __init__ or ___init__:kw:).
+	The immutable-collection construction routing uses this to decide
+	whether excess constructor keyword arguments are a TypeError: kwargs
+	are rejected precisely when no user __init__ exists to consume them
+	(bpo-43413 / test_keywords_in_subclass).  A plain
+	``whichClassIncludesSelector:'' is not enough because object always
+	provides a no-op ___init__:kw:."
+
+	| owner builtins |
+	builtins := { object. Set. set. frozenset. tuple }.
+	#( #'___init__:kw:' #'__init__:' #'__init__:_:' #'__init__' ) @env0:do: [:sel |
+		owner := self @env0:whichClassIncludesSelector: sel environmentId: 1.
+		(owner @env0:notNil @env0:and: [(builtins @env0:includes: owner) @env0:not])
+			ifTrue: [^ true]].
+	^ false
+%
+
+classmethod: object
 ___allocateInstance___: positional kw: keywords
 	"Allocate an instance of self (a class) for ``Cls(*args, **kw)``.
 	A class-body ``def __new__(cls, ...)`` compiles as an INSTANCE-side
@@ -228,6 +289,28 @@ ___allocateInstance___: positional kw: keywords
 		sel := stream @env0:contents @env0:asSymbol.
 		found := n @env0:> 0 and: [(self @env0:whichClassIncludesSelector: sel environmentId: 1) ~~ nil]].
 	found ifFalse: [
+		"A subclass of an IMMUTABLE built-in collection (tuple / frozenset) is
+		populated by the built-in's __new__ (a classmethod), NOT by a mutable
+		__init__ -- the general allocate-then-init path can't fill a frozen /
+		fixed-size instance, so a DYNAMIC-base subclass (``class T(self.type2test)'')
+		would otherwise construct EMPTY.  Route to the inherited __new__: iterable
+		so it builds populated.  (Static-base subclasses take the firstBaseIsX
+		path in ClassDefAst and never reach here.)"
+		((self @env0:inheritsFrom: tuple) @env0:or: [self @env0:inheritsFrom: frozenset]) ifTrue: [
+			"tuple/frozenset __new__ takes NO keyword arguments; reject them
+			unless the subclass defines its own __init__ (varargs form) that
+			would consume them (test_keywords_in_subclass)."
+			(((keywords @env0:notNil) @env0:and: [keywords @env0:notEmpty])
+				@env0:and: [(self ___hasUserInit___) @env0:not])
+				ifTrue: [TypeError ___signal___: (self @env0:name @env0:asString
+					@env0:, '() takes no keyword arguments')].
+				"tuple/frozenset take at most ONE positional argument; a plain subclass (no own __init__ to absorb extras) rejects >1 (test_new_or_init: self.thetype([], 2))."
+				((positional @env0:size @env0:> 1) @env0:and: [(self ___hasUserInit___) @env0:not])
+					ifTrue: [TypeError ___signal___: (self @env0:name @env0:asString
+						@env0:, ' expected at most 1 argument, got ' @env0:, positional @env0:size @env0:printString)].
+			^ positional @env0:isEmpty
+				ifTrue: [self @env1:__new__]
+				ifFalse: [self @env1:__new__: (positional @env0:at: 1)]].
 		"A sealed kernel class (ExecBlock via type(lambda)(), ...) refuses
 		#new with an UNCATCHABLE ShouldNotImplement/ImproperOperation --
 		resignal as CPython's catchable TypeError."
@@ -740,6 +823,28 @@ ___pyBuiltinCollectionInit___: positional kw: keywords new: hasNew
 					@env0:, positional @env0:size @env0:printString)]].
 		positional @env0:isEmpty ifFalse: [
 			self @env1:__init__: (positional @env0:at: 1)]].
+	"A mutable-set subclass (``class S(set)'') is allocated empty by the general
+	 path, then populated from its iterable argument via update (which coerces
+	 like set.__new__:).  frozenset subclasses are immutable once allocated, so
+	 they are NOT handled here (they build populated through __new__)."
+	((self @env0:isKindOf: set) and: [(self @env0:isKindOf: frozenset) @env0:not]) ifTrue: [
+		"This method only runs when the subclass has no __init__ of its own, so
+		keyword arguments can never be consumed -- reject them even when __new__
+		took the positionals (bpo-43413: ``disallow kwargs in __new__ only'',
+		test_keywords_in_subclass's subclass_with_new)."
+		((keywords @env0:notNil and: [keywords @env0:isEmpty @env0:not]) and: [(self @env0:class ___hasUserInit___) @env0:not]) ifTrue: [
+			TypeError ___signal___: 'set() takes no keyword arguments'].
+		hasNew ifFalse: [
+			(positional @env0:size @env0:> 1) ifTrue: [
+				TypeError ___signal___: ('set expected at most 1 argument, got '
+					@env0:, positional @env0:size @env0:printString)]].
+		positional @env0:isEmpty ifFalse: [
+			self update: (positional @env0:at: 1)]].
+	"A frozenset subclass is immutable and already populated through __new__;
+	only the keyword-argument rule (above) still applies to it."
+	(self @env0:isKindOf: frozenset) ifTrue: [
+		((keywords @env0:notNil and: [keywords @env0:isEmpty @env0:not]) and: [(self @env0:class ___hasUserInit___) @env0:not]) ifTrue: [
+			TypeError ___signal___: 'frozenset() takes no keyword arguments']].
 	^ self
 %
 
@@ -1910,7 +2015,9 @@ ___binOpFallback___: other op: opString reflected: refSelector
 		refOwner := other @env0:class
 			@env0:whichClassIncludesSelector: refSelector environmentId: 1.
 		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
-			^ other @env0:perform: refSelector env: 1 withArguments: { self }].
+			result := other @env0:perform: refSelector env: 1 withArguments: { self }.
+			result == (Python @env0:at: #NotImplemented otherwise: nil)
+				ifFalse: [^ result]].
 		"Reflected dunder compiled VARARGS-ONLY (``def __rpow__(b, a,
 		modulo=None)`` in vendored fractions.py) -- probe the
 		``_<name>:kw:`` form too."
@@ -1919,7 +2026,9 @@ ___binOpFallback___: other op: opString reflected: refSelector
 		refOwner := other @env0:class
 			@env0:whichClassIncludesSelector: refVa environmentId: 1.
 		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
-			^ other @env0:perform: refVa env: 1 withArguments: { { self }. nil }]].
+			result := other @env0:perform: refVa env: 1 withArguments: { { self }. nil }.
+			result == (Python @env0:at: #NotImplemented otherwise: nil)
+				ifFalse: [^ result]]].
 	TypeError ___signal___: ('unsupported operand type(s) for ' @env0:, opString
 		@env0:, ': ''' @env0:, self @env0:class @env0:name @env0:asString
 		@env0:, ''' and ''' @env0:, other @env0:class @env0:name @env0:asString @env0:, '''')

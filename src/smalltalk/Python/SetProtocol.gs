@@ -36,6 +36,21 @@ __new__
 
 category: 'Grail-Initialization'
 classmethod: Set
+__new__: a _: b
+	"Two positional arguments.  Distinguish the CPython convention
+	``set.__new__(cls, iterable)'' -- where the FIRST arg is the target
+	CLASS, produced by a subclass ``super().__new__(cls, arg)''
+	(test_keywords_in_subclass's subclass_with_new) -- from a genuine
+	mis-call ``set(x, y)'' with two values (test_new_or_init:
+	``self.thetype([], 2)'' raises TypeError)."
+
+	(a @env0:isBehavior) ifTrue: [^ a @env1:__new__: b].
+	^ TypeError ___signal___: (self @env0:name @env0:asString
+		@env0:, ' expected at most 1 argument, got 2')
+%
+
+category: 'Grail-Initialization'
+classmethod: Set
 __new__: iterable
 	"set(iterable) / frozenset(iterable) — populate from iterable's
 	elements. Set semantics deduplicate equal elements. Concrete type
@@ -75,16 +90,49 @@ __new__: iterable
 		^ self @env0:withAll: items
 	].
 	(iterable isKindOf: Collection) ifTrue: [
+		iterable @env0:do: [:e | e ___requireHashableAsSetElement___].
 		^ self @env0:withAll: iterable
 	].
+	"A non-iterable argument is a Python TypeError, not a Smalltalk DNU on
+	 __iter__ (test_set's TestOnlySetsNumeric ``set(42)'')."
+	(iterable @env0:class @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) @env0:isNil ifTrue: [
+		TypeError ___signal___: ('''' @env0:, iterable @env0:class @env0:name @env0:asString
+			@env0:, ''' object is not iterable')].
 	items := OrderedCollection @env0:new.
 	iter := iterable __iter__.
 	done := false.
 	[done] @env0:whileFalse: [
-		[items @env0:add: iter __next__]
+		[ | e | e := iter __next__. e ___requireHashableAsSetElement___. items @env0:add: e]
 			@env0:on: StopIteration do: [:ex | done := true]
 	].
 	^ self @env0:withAll: items
+%
+
+category: 'Grail-Private'
+method: Set
+___asElementSet___: other
+	"Coerce an arbitrary iterable to a `set` of its Python elements, for the
+	iterable-accepting set METHODS (union, difference, update, issubset, ...).
+	A set/frozenset is returned as-is (already the right element domain, with
+	fast membership + iteration).  Strings yield their 1-character substrings
+	and dicts yield their keys (both CPython quirks handled by set>>__new__:),
+	and a non-iterable raises a Python TypeError -- so the methods never DNU on
+	``42 do:'' nor leak Smalltalk Characters."
+
+	(other isKindOf: Set) ifTrue: [^ other].
+	^ set @env1:__new__: other
+%
+
+category: 'Grail-Private'
+method: Set
+___resultSetClass___
+	"The Python type a set OPERATION result should have.  CPython returns the
+	BASE type (set / frozenset), never a subclass -- ``MySet().union(x)'' is a
+	plain set (test_set TestSetSubclass/TestFrozenSetSubclass).  set and
+	frozenset are sibling subclasses of Set, so a frozenset (or its subclass)
+	answers frozenset; everything else answers set."
+
+	^ (self isKindOf: frozenset) ifTrue: [frozenset] ifFalse: [set]
 %
 
 category: 'Grail-Type Information'
@@ -98,42 +146,62 @@ __class__
 category: 'Grail-Set Operations (Operators)'
 method: Set
 __and__: other
-	"Intersection: self & other."
+	"Intersection: self & other.  The OPERATOR requires a set operand;
+	only the ``intersection'' method accepts arbitrary iterables."
 
-	^ self intersection: other
+	(other isKindOf: Set) ifTrue: [^ self intersection: other].
+	^ self ___binOpFallback___: other op: '&' reflected: #'__rand__:'
 %
 
 category: 'Grail-Collection Protocol'
 method: Set
 __contains__: item
-	"Test if item is in the set."
+	"Test if item is in the set.  A mutable-set argument is looked up as the
+	equivalent frozenset (CPython's ``set in set'' optimization), so
+	``{frozenset(x)}.__contains__(set(x))'' is true.  A genuinely unhashable
+	argument (list/dict/bytearray) raises TypeError rather than answering
+	False -- checked only on the miss path so present elements stay fast."
 
-	^ self @env0:includes: item
+	| probe |
+	probe := (item isKindOf: set) ifTrue: [frozenset @env1:__new__: item] ifFalse: [item].
+	(self @env0:includes: probe) ifTrue: [^ true].
+	probe ___requireHashableAsSetElement___.
+	^ false
 %
 
 category: 'Grail-Comparison'
 method: Set
 __eq__: other
-	"True iff self and other are both sets with the same elements."
+	"True iff self and other have the same elements.  A set/frozenset compares
+	directly; a dict keys/items view (set-like) compares as its element set
+	(``{1} == {1:1}.keys()''); anything else is unequal (never raises)."
 
-	(other isKindOf: Set) ifFalse: [^ false].
-	^ self @env0:= other
+	| o |
+	((other isKindOf: Set) @env0:or: [other isKindOf: dict_set_view]) ifFalse: [^ false].
+	"Compare by ELEMENTS, so set == frozenset and subclass == base hold
+	(GemStone's Set>>= is class-sensitive)."
+	o := self ___asElementSet___: other.
+	^ ((self @env0:size) @env0:= (o @env0:size)) @env0:and: [self issubset: o]
 %
 
 category: 'Grail-Comparison'
 method: Set
 __ge__: other
-	"Superset test: every element of other is in self."
+	"Superset test: self >= other.  The OPERATOR requires a set operand
+	(the ``issuperset'' method accepts arbitrary iterables)."
 
-	^ self issuperset: other
+	(other isKindOf: Set) ifTrue: [^ self issuperset: other].
+	^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'
 %
 
 category: 'Grail-Comparison'
 method: Set
 __gt__: other
-	"Proper superset test."
+	"Proper superset test: self > other (requires a set operand)."
 
-	^ (self issuperset: other) @env0:and: [(self __eq__: other) @env0:not]
+	(other isKindOf: Set) ifTrue: [
+		^ (self issuperset: other) @env0:and: [(self __eq__: other) @env0:not]].
+	^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'
 %
 
 category: 'Grail-Iterator Protocol'
@@ -147,9 +215,11 @@ __iter__
 category: 'Grail-Comparison'
 method: Set
 __le__: other
-	"Subset test: every element of self is in other."
+	"Subset test: self <= other.  The OPERATOR requires a set operand
+	(the ``issubset'' method accepts arbitrary iterables)."
 
-	^ self issubset: other
+	(other isKindOf: Set) ifTrue: [^ self issubset: other].
+	^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'
 %
 
 category: 'Grail-Collection Protocol'
@@ -163,9 +233,11 @@ __len__
 category: 'Grail-Comparison'
 method: Set
 __lt__: other
-	"Proper subset test."
+	"Proper subset test: self < other (requires a set operand)."
 
-	^ (self issubset: other) @env0:and: [(self __eq__: other) @env0:not]
+	(other isKindOf: Set) ifTrue: [
+		^ (self issubset: other) @env0:and: [(self __eq__: other) @env0:not]].
+	^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'
 %
 
 category: 'Grail-Comparison'
@@ -179,104 +251,128 @@ __ne__: other
 category: 'Grail-Set Operations (Operators)'
 method: Set
 __or__: other
-	"Union: self | other."
+	"Union: self | other.  The OPERATOR requires a set operand; only the
+	``union'' method accepts arbitrary iterables."
 
-	^ self union: other
+	(other isKindOf: Set) ifTrue: [^ self union: other].
+	^ self ___binOpFallback___: other op: '|' reflected: #'__ror__:'
 %
 
 category: 'Grail-Set Operations (Operators)'
 method: Set
 __rand__: other
-	"Reverse intersection: other & self."
+	"Reverse intersection: other & self (only reached when ``other'' did not
+	handle ``&''; requires a set operand)."
 
-	^ other intersection: self
+	(other isKindOf: Set) ifTrue: [^ other intersection: self].
+	^ self ___rbinOpFallback___: other op: '&'
 %
 
 category: 'Grail-Set Operations (Operators)'
 method: Set
 __ror__: other
-	"Reverse union: other | self."
+	"Reverse union: other | self (requires a set operand)."
 
-	^ other union: self
+	(other isKindOf: Set) ifTrue: [^ other union: self].
+	^ self ___rbinOpFallback___: other op: '|'
 %
 
 category: 'Grail-Set Operations (Operators)'
 method: Set
 __rsub__: other
-	"Reverse difference: other - self."
+	"Reverse difference: other - self (requires a set operand)."
 
-	^ other difference: self
+	(other isKindOf: Set) ifTrue: [^ other difference: self].
+	^ self ___rbinOpFallback___: other op: '-'
 %
 
 category: 'Grail-Set Operations (Operators)'
 method: Set
 __rxor__: other
-	"Reverse symmetric difference: other ^ self."
+	"Reverse symmetric difference: other ^ self (requires a set operand)."
 
-	^ other symmetric_difference: self
+	(other isKindOf: Set) ifTrue: [^ other symmetric_difference: self].
+	^ self ___rbinOpFallback___: other op: '^'
 %
 
 category: 'Grail-Set Operations (Operators)'
 method: Set
 __sub__: other
-	"Difference: self - other."
+	"Difference: self - other.  The OPERATOR requires a set operand; only
+	the ``difference'' method accepts arbitrary iterables."
 
-	^ self difference: other
+	(other isKindOf: Set) ifTrue: [^ self difference: other].
+	^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'
 %
 
 category: 'Grail-Set Operations (Operators)'
 method: Set
 __xor__: other
-	"Symmetric difference: self ^ other."
+	"Symmetric difference: self ^ other.  The OPERATOR requires a set
+	operand; only the ``symmetric_difference'' method accepts iterables."
 
-	^ self symmetric_difference: other
+	(other isKindOf: Set) ifTrue: [^ self symmetric_difference: other].
+	^ self ___binOpFallback___: other op: '^' reflected: #'__rxor__:'
 %
 
 category: 'Grail-Copying'
 method: Set
 copy
-	"Shallow copy. Same Python type as the receiver (set or frozenset)."
+	"set: a NEW base set.  frozenset: ITSELF when it is exactly a frozenset
+	(immutable -- CPython interns, and TestFrozenSet.test_copy asserts the id
+	is unchanged), else a new base frozenset.  Never a subclass (test_copy:
+	``type(s.copy()) is self.basetype'')."
 
-	^ (self @env0:class) @env0:withAll: self
+	(self isKindOf: frozenset) ifTrue: [
+		^ (self @env0:class == frozenset)
+			ifTrue: [self]
+			ifFalse: [frozenset @env0:withAll: self]].
+	^ set @env0:withAll: self
 %
 
 category: 'Grail-Set Operations (Methods)'
 method: Set
 difference: other
-	"Elements in self but not in other. Result type matches self."
+	"Elements in self but not in other.  Accepts any iterable; result is the
+	base type (set/frozenset), never a subclass."
 
-	| accumulator |
+	| coerced accumulator |
+	coerced := self ___asElementSet___: other.
 	accumulator := Set @env0:new.
 	self @env0:do: [:each |
-		(other __contains__: each) ifFalse: [
+		(coerced __contains__: each) ifFalse: [
 			accumulator @env0:add: each
 		]
 	].
-	^ (self @env0:class) @env0:withAll: accumulator
+	^ self ___resultSetClass___ @env0:withAll: accumulator
 %
 
 category: 'Grail-Set Operations (Methods)'
 method: Set
 intersection: other
-	"Elements common to self and other. Result type matches self."
+	"Elements common to self and other.  Accepts any iterable; result is the
+	base type (set/frozenset), never a subclass."
 
-	| accumulator |
+	| coerced accumulator |
+	coerced := self ___asElementSet___: other.
 	accumulator := Set @env0:new.
 	self @env0:do: [:each |
-		(other __contains__: each) ifTrue: [
+		(coerced __contains__: each) ifTrue: [
 			accumulator @env0:add: each
 		]
 	].
-	^ (self @env0:class) @env0:withAll: accumulator
+	^ self ___resultSetClass___ @env0:withAll: accumulator
 %
 
 category: 'Grail-Set Tests'
 method: Set
 isdisjoint: other
-	"True iff self and other share no elements."
+	"True iff self and other share no elements.  Accepts any iterable."
 
+	| coerced |
+	coerced := self ___asElementSet___: other.
 	self @env0:do: [:each |
-		(other __contains__: each) ifTrue: [^ false]
+		(coerced __contains__: each) ifTrue: [^ false]
 	].
 	^ true
 %
@@ -284,10 +380,12 @@ isdisjoint: other
 category: 'Grail-Set Tests'
 method: Set
 issubset: other
-	"True iff every element of self is in other."
+	"True iff every element of self is in other.  Accepts any iterable."
 
+	| coerced |
+	coerced := self ___asElementSet___: other.
 	self @env0:do: [:each |
-		(other __contains__: each) ifFalse: [^ false]
+		(coerced __contains__: each) ifFalse: [^ false]
 	].
 	^ true
 %
@@ -295,9 +393,11 @@ issubset: other
 category: 'Grail-Set Tests'
 method: Set
 issuperset: other
-	"True iff every element of other is in self."
+	"True iff every element of other is in self.  Accepts any iterable."
 
-	other @env0:do: [:each |
+	| coerced |
+	coerced := self ___asElementSet___: other.
+	coerced @env0:do: [:each |
 		(self __contains__: each) ifFalse: [^ false]
 	].
 	^ true
@@ -306,33 +406,71 @@ issuperset: other
 category: 'Grail-Set Operations (Methods)'
 method: Set
 symmetric_difference: other
-	"Elements in either self or other but not both. Result type matches self."
+	"Elements in either self or other but not both.  Accepts any iterable;
+	result is the base type (set/frozenset), never a subclass."
 
-	| accumulator |
+	| coerced accumulator |
+	coerced := self ___asElementSet___: other.
 	accumulator := Set @env0:new.
 	self @env0:do: [:each |
-		(other __contains__: each) ifFalse: [
+		(coerced __contains__: each) ifFalse: [
 			accumulator @env0:add: each
 		]
 	].
-	other @env0:do: [:each |
+	coerced @env0:do: [:each |
 		(self __contains__: each) ifFalse: [
 			accumulator @env0:add: each
 		]
 	].
-	^ (self @env0:class) @env0:withAll: accumulator
+	^ self ___resultSetClass___ @env0:withAll: accumulator
 %
 
 category: 'Grail-Set Operations (Methods)'
 method: Set
 union: other
-	"Elements from self and other. Result type matches self."
+	"Elements from self and other.  Accepts any iterable; result is the base
+	type (set/frozenset), never a subclass."
 
-	| accumulator |
+	| coerced accumulator |
+	coerced := self ___asElementSet___: other.
 	accumulator := Set @env0:new.
 	accumulator @env0:addAll: self.
-	other @env0:do: [:each | accumulator @env0:add: each].
-	^ (self @env0:class) @env0:withAll: accumulator
+	coerced @env0:do: [:each | accumulator @env0:add: each].
+	^ self ___resultSetClass___ @env0:withAll: accumulator
+%
+
+category: 'Grail-Set Operations (Methods)'
+method: Set
+_union: positional kw: kwargs
+	"Variadic set.union(*others): fold union over every argument (0 args
+	yields a copy).  BoundMethod routes a multi-/zero-arg call here."
+
+	| result |
+	result := self ___resultSetClass___ @env0:withAll: self.
+	positional @env0:do: [:each | result := result union: each].
+	^ result
+%
+
+category: 'Grail-Set Operations (Methods)'
+method: Set
+_intersection: positional kw: kwargs
+	"Variadic set.intersection(*others)."
+
+	| result |
+	result := self ___resultSetClass___ @env0:withAll: self.
+	positional @env0:do: [:each | result := result intersection: each].
+	^ result
+%
+
+category: 'Grail-Set Operations (Methods)'
+method: Set
+_difference: positional kw: kwargs
+	"Variadic set.difference(*others)."
+
+	| result |
+	result := self ___resultSetClass___ @env0:withAll: self.
+	positional @env0:do: [:each | result := result difference: each].
+	^ result
 %
 
 set compile_env: 0

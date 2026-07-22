@@ -115,6 +115,9 @@ __next__
 	If there are no further items, raise StopIteration."
 
 	| size item |
+	"CPython raises RuntimeError if the set's size changes mid-iteration."
+	((collection @env0:size) @env0:= (elements @env0:size)) ifFalse: [
+		RuntimeError ___signal___: 'Set changed size during iteration'].
 	size := elements @env0:size.
 	(position @env0:>= size) ifTrue: [
 		StopIteration @env0:signal

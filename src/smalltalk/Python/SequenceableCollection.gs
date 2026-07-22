@@ -89,6 +89,13 @@ __eq__: other
 	((myClass == Array or: [self isKindOf: OrderedCollection])
 		and: [otherClass == Array or: [other isKindOf: OrderedCollection]])
 		ifTrue: [^ self ___pyEqElementsCurrentSizes___: other].
+	"Cross-class TUPLE comparison: a base tuple and a tuple subclass (or two
+	subclasses) with equal elements are == (Python ignores subclass for tuple
+	equality -- test_tuple test_mul's ``subclass * 1 == subclass'').  tuple is
+	an Array SUBCLASS, so a plain Array (list) is NOT isKindOf: tuple and
+	``[1] == (1,)'' stays False via the list branch above / the fall-through."
+	((self isKindOf: tuple) and: [other isKindOf: tuple])
+		ifTrue: [^ self ___pyEqElementsCurrentSizes___: other].
 	^ false
 %
 

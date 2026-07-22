@@ -67,7 +67,20 @@ classmethod: tuple
 new
 	"Return an empty, frozen tuple."
 
-	^ (self new: 0) immediateInvariant
+	^ self ___frozenInstance: (self new: 0)
+%
+
+category: 'Grail-instance creation'
+classmethod: tuple
+___frozenInstance: inst
+	"Freeze EXACT tuples (immutable, so element storage never changes);
+	leave SUBCLASS instances mutable so they can carry instance attributes
+	-- a tuple subclass has a __dict__ in CPython, and test_keywords_in_subclass's
+	subclass_with_init sets ``self.newarg''.  Python exposes no element
+	mutation on either, so subclass elements stay effectively immutable."
+
+	self == tuple ifTrue: [^ inst immediateInvariant].
+	^ inst
 %
 
 category: 'Grail-instance creation'
@@ -77,7 +90,7 @@ with: a
 	| inst |
 	inst := self new: 1.
 	inst at: 1 put: a.
-	^ inst immediateInvariant
+	^ self ___frozenInstance: inst
 %
 
 category: 'Grail-instance creation'
@@ -88,7 +101,7 @@ with: a with: b
 	inst := self new: 2.
 	inst at: 1 put: a.
 	inst at: 2 put: b.
-	^ inst immediateInvariant
+	^ self ___frozenInstance: inst
 %
 
 category: 'Grail-instance creation'
@@ -100,7 +113,7 @@ with: a with: b with: c
 	inst at: 1 put: a.
 	inst at: 2 put: b.
 	inst at: 3 put: c.
-	^ inst immediateInvariant
+	^ self ___frozenInstance: inst
 %
 
 category: 'Grail-instance creation'
@@ -113,7 +126,7 @@ with: a with: b with: c with: d
 	inst at: 2 put: b.
 	inst at: 3 put: c.
 	inst at: 4 put: d.
-	^ inst immediateInvariant
+	^ self ___frozenInstance: inst
 %
 
 category: 'Grail-instance creation'
@@ -127,7 +140,7 @@ withAll: aCollection
 		inst at: i put: each.
 		i := i + 1.
 	].
-	^ inst immediateInvariant
+	^ self ___frozenInstance: inst
 %
 
 category: 'Grail-instance creation'
@@ -141,7 +154,7 @@ new: anInteger fill: aBlock
 	| inst |
 	inst := self new: anInteger.
 	aBlock value: inst.
-	^ inst immediateInvariant
+	^ self ___frozenInstance: inst
 %
 
 category: 'Grail-Exception handling'
@@ -180,16 +193,19 @@ __new__: iterable
 	"tuple(iterable) — create a frozen tuple from iterable's items.
 	Receiver is the class."
 
-	| items iter done |
-	"Strings are SequenceableCollections, but the ``withAll:'' fast path
-	iterates them with Smalltalk ``do:'' -- yielding Characters, not the
-	1-char Python strings CPython's ``tuple(str)'' produces.  Route
-	CharacterCollections through the Python ``__iter__'' path below instead
-	(``tuple('abcde')[-1]'' must be 'e', a str, not $e -- test_operator's
-	test_itemgetter).  bytes/bytearray are NOT CharacterCollections, so they
-	keep the fast path (their elements are ints, matching CPython)."
-	((iterable isKindOf: SequenceableCollection)
-		and: [(iterable isKindOf: CharacterCollection) not]) ifTrue: [
+	| items iter done ic |
+	"Fast index-copy ONLY for the EXACT built-in sequence classes.  A SUBCLASS
+	may override __iter__ to iterate differently (seq_tests test_constructors'
+	LyingTuple, issue #23757), and CPython always constructs via the iterator
+	protocol -- so any subclass falls through to the __iter__ path below.
+	Strings (CharacterCollection) also fall through: ``withAll:'' would iterate
+	them as Characters, not the 1-char Python strings CPython yields."
+	ic := iterable @env0:class.
+	((ic == OrderedCollection) @env0:or: [(ic == Array) @env0:or: [ic == tuple]]) ifTrue: [
+		"tuple(t) returns the SAME object when t is already an exact tuple and
+		we're building an exact tuple -- CPython's identity optimization for
+		immutables (test_constructors: ``tuple(t0_3) is t0_3'')."
+		((self @env0:== tuple) @env0:and: [ic == tuple]) ifTrue: [^ iterable].
 		^ self @env0:withAll: iterable
 	].
 	items := OrderedCollection @env0:new.
@@ -216,6 +232,18 @@ _new: positional kw: kwargs
 			@env0:, positional @env0:size @env0:printString].
 	positional @env0:size @env0:= 0 ifTrue: [^ self __new__].
 	^ self __new__: (positional @env0:at: 1)
+%
+
+category: 'Grail-Initialization'
+classmethod: tuple
+__new__: cls _: iterable
+	"CPython convention ``tuple.__new__(cls, iterable)'': the FIRST positional
+	is the TARGET class (a tuple subclass), the second the contents.  A
+	subclass __new__ doing ``super().__new__(cls, arg)'' lands here
+	(test_keywords_in_subclass's subclass_with_new).  Build an instance of
+	cls, which ___frozenInstance: leaves mutable so it can carry attributes."
+
+	^ cls @env0:withAll: iterable
 %
 
 category: 'Grail-Sequence Operations'

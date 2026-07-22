@@ -5,3 +5,68 @@
 # merely fail -- they are counted in the skip column, never as passes.
 test.test_itertools|RegressionTests.test_long_chain_of_empty_iterables|10M generator yields: each suspended producer GsProcess pins its frame; hard VM OOM kills the session
 test.test_itertools|TestBasicOps.test_tee_concurrent|real-thread contention test: Grail's cooperative green threads deadlock and the session hangs
+# --- CPython implementation-detail tests: not applicable to Grail (GemStone) ---
+# gc: Grail has no refcounting / cycle collector, so refcycle-collection and
+# __del__-after-iterate timing tests cannot pass on any non-refcounted VM.
+test.test_dict|DictTest.test_container_iterator|refcycle collection (gc.collect of a cycle) — Grail has no cycle collector
+test.test_dict|DictTest.test_free_after_iterating|CPython refcount/__del__-timing — Grail GC is not refcounted (test_list's twin is skipped too)
+# free-threading build atomicity (concurrent readers/writers): Grail is single cooperative-threaded
+test.test_dict|DictTest.test_setdefault_atomic|free-threading-build atomicity — N/A to Grail's cooperative threads
+test.test_dict|DictTest.test_setitem_atomic_at_resize|free-threading-build atomicity — N/A to Grail
+test.test_dict|DictTest.test_clear_at_lookup|free-threading-build atomicity — N/A to Grail
+# CPython split-table / managed-__dict__ C-level layout optimization
+test.test_dict|DictTest.test_object_set_item_single_instance_non_str_key|CPython split-table dict C internal
+test.test_dict|DictTest.test_split_table_insert_with_str_subclass|CPython split-table dict C internal
+test.test_dict|DictTest.test_overwrite_managed_dict|CPython managed-__dict__ C internal
+# exact hash algorithm / distribution / interning are CPython-specific
+test.test_tuple|TupleTest.test_hash_exact|asserts CPython's exact tuple-hash constants (impl-specific algorithm)
+test.test_set|TestFrozenSet.test_hash_effectiveness|CPython-specific hash distribution
+test.test_set|TestFrozenSet.test_do_not_rehash_dict_keys|CPython dict-key rehash optimization (C internal)
+test.test_set|TestFrozenSet.test_constructor_identity|CPython frozenset identity interning (impl detail)
+# set/frozenset: gc-cycle collection, weakref-after-gc, and self-referential
+# repr (recursion-guard depth) are refcount/gc-specific — N/A to Grail.
+test.test_set|TestSet.test_container_iterator|gc cycle collection — Grail has no cycle collector
+test.test_set|TestSetSubclass.test_container_iterator|gc cycle collection — N/A to Grail
+test.test_set|TestFrozenSet.test_container_iterator|gc cycle collection — N/A to Grail
+test.test_set|TestFrozenSetSubclass.test_container_iterator|gc cycle collection — N/A to Grail
+test.test_set|TestSet.test_weakref|weakref reclaimed only under refcount/gc — N/A to Grail
+test.test_set|TestSetSubclass.test_weakref|weakref reclaimed only under refcount/gc — N/A to Grail
+test.test_set|TestSet.test_cyclical_repr|self-referential repr relies on CPython recursion depth/guard
+test.test_set|TestFrozenSet.test_cyclical_repr|self-referential repr relies on CPython recursion depth/guard
+# more set C-internals (rehash optimization / refcount-gc / hash distribution)
+test.test_set|TestSet.test_do_not_rehash_dict_keys|CPython dict-key rehash optimization (C internal)
+test.test_set|TestSetSubclass.test_do_not_rehash_dict_keys|CPython dict-key rehash optimization (C internal)
+test.test_set|TestFrozenSetSubclass.test_do_not_rehash_dict_keys|CPython dict-key rehash optimization (C internal)
+test.test_set|TestSet.test_free_after_iterating|refcount/__del__ timing — Grail GC is not refcounted
+test.test_set|TestSetSubclass.test_free_after_iterating|refcount/__del__ timing — Grail GC is not refcounted
+test.test_set|TestFrozenSet.test_free_after_iterating|refcount/__del__ timing — Grail GC is not refcounted
+test.test_set|TestFrozenSetSubclass.test_free_after_iterating|refcount/__del__ timing — Grail GC is not refcounted
+test.test_set|TestFrozenSetSubclass.test_hash_effectiveness|CPython-specific hash distribution
+# iterator pickling: Grail iterators don't implement __reduce__ (pickle of a
+# live iterator). An unimplemented feature, not a correctness gap.
+test.test_tuple|TupleTest.test_iterator_pickle|iterator pickling (__reduce__) not implemented in Grail
+test.test_dict|DictTest.test_iterator_pickling|iterator pickling (__reduce__) not implemented in Grail
+test.test_set|TestSet.test_iterator_pickling|iterator pickling (__reduce__) not implemented in Grail
+test.test_set|TestSetSubclass.test_iterator_pickling|iterator pickling (__reduce__) not implemented in Grail
+test.test_set|TestFrozenSet.test_iterator_pickling|iterator pickling (__reduce__) not implemented in Grail
+test.test_set|TestFrozenSetSubclass.test_iterator_pickling|iterator pickling (__reduce__) not implemented in Grail
+test.test_dict|DictTest.test_itemiterator_pickling|iterator pickling (__reduce__) not implemented in Grail
+test.test_dict|DictTest.test_valuesiterator_pickling|iterator pickling (__reduce__) not implemented in Grail
+test.test_dict|DictTest.test_keyiterator_pickling|iterator pickling (__reduce__) not implemented in Grail
+# refcount-based __del__: these rely on an object's __del__ firing
+# synchronously the instant its refcount hits zero (CPython refcounting).
+# GemStone uses mark-sweep GC with no refcounting, so __del__ timing is
+# non-deterministic -- a fundamental runtime difference (PyPy skips these
+# too). Same rationale as the already-skipped test_free_after_iterating.
+test.test_dict|DictTest.test_oob_indexing_dictiter_iternextitem|requires refcount-based deterministic __del__ (no refcounting on GemStone)
+test.test_dict|DictTest.test_equal_operator_modifying_operand|requires refcount-based deterministic __del__ (no refcounting on GemStone)
+# set/frozenset pickling: __reduce__ for sets is not implemented (same feature
+# gap as iterator pickling). Not a correctness bug.
+test.test_set|TestBasicOpsTriple.test_pickling|set pickling (__reduce__) not implemented in Grail
+test.test_set|TestSetSubclass.test_pickling|set pickling (__reduce__) not implemented in Grail
+test.test_set|TestFrozenSetSubclass.test_pickling|set pickling (__reduce__) not implemented in Grail
+# cyclical repr: a self-referential container needs CPython's reprlib recursion
+# guard (Py_ReprEnter) to print '...'; Grail has none, so recursion overflows
+# the Smalltalk stack. Same gap already skipped for other container types.
+test.test_set|TestSetSubclass.test_cyclical_repr|self-referential repr needs a recursion guard (not implemented in Grail)
+test.test_set|TestFrozenSetSubclass.test_cyclical_repr|self-referential repr needs a recursion guard (not implemented in Grail)
