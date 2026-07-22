@@ -87,6 +87,8 @@ jobs:
           runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
             HOME=/home/ci \
             GEMSTONE=/opt/gemstone/product \
+            GEMSTONE_NAME=gs64stone \
+            GRAIL_NETLDI=gs64ldi \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
             GRAIL_TEST_SHARDS="${{ matrix.shards }}" \
             bash -ex -c '

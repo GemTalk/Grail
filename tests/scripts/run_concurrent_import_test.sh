@@ -5,7 +5,7 @@
 # RPC edition: one topaz process drives TWO RPC sessions and interleaves them
 # deterministically (runConcurrentImportRpc.gs, `set session:` -- no marker
 # files, no polling). Requires a running NetLDI; the gemnetid names it via
-# GRAIL_NETLDI (default gs64ldi). CI runs `startnetldi` first (.github/workflows/ci.yml).
+# GRAIL_NETLDI (set in .setenv, no default). CI runs `startnetldi` first (.github/workflows/ci.yml).
 #
 # The two sessions cold-import DISJOINT modules flag-on with overlapping
 # transactions, then commit in sequence: A wins, B conflicts on PythonModules
@@ -24,8 +24,12 @@ if [ -z "${GEMSTONE:-}" ] && [ -f "$PROJECT_ROOT/.setenv" ]; then
 fi
 export GRAIL_DIR="$PROJECT_ROOT"
 
-NETLDI="${GRAIL_NETLDI:-gs64ldi}"
-STONE="${GEMSTONE_NAME:-gs64stone}"
+# Stone + NetLDI come from .setenv (GEMSTONE_NAME / GRAIL_NETLDI) -- the single
+# source of truth, kept in step with the GEMSTONE product selected there.  No
+# hardcoded stone/netldi name: an unset var is a configuration error (fail fast
+# with guidance) rather than a stale default that silently targets the wrong DB.
+NETLDI="${GRAIL_NETLDI:?set GRAIL_NETLDI in .setenv (the running NetLDI, e.g. ldi40 / gs64ldi)}"
+STONE="${GEMSTONE_NAME:?set GEMSTONE_NAME in .setenv (the running stone, e.g. gs40 / gs64stone)}"
 HOST="${GRAIL_CC_HOST:-localhost}"
 GEMNETID="!tcp@${HOST}#netldi:${NETLDI}!gemnetobject"
 
