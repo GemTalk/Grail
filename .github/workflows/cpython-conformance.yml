@@ -72,6 +72,7 @@ jobs:
               waitstone gs64stone 60
               startnetldi -g gs64ldi
               cd "$GITHUB_WORKSPACE"
+              ./install_base.sh
               ./install.sh
               # Lower concurrency (2, not the default 4) + a generous per-module
               # cap so the heavy modules COMPLETE on slower CI cores instead of

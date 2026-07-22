@@ -98,6 +98,7 @@ jobs:
               waitstone gs64stone 60
               startnetldi -g gs64ldi
               cd "$GITHUB_WORKSPACE"
+              ./install_base.sh
               ./install.sh
               ./scripts/run_tests.sh
             '
