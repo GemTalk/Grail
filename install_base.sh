@@ -45,15 +45,22 @@ fi
 cd "$SCRIPT_DIR" || exit 1
 
 # 1. GsPackagePolicy env-1 session-method support (3.7.x only).
-case "$GEMSTONE" in
-    *3.7*)
+# Detect the version from $GEMSTONE/version.txt, NOT the $GEMSTONE path -- CI
+# installs to an unversioned /opt/gemstone/product, so a `case "$GEMSTONE" in
+# *3.7*` test silently skipped this patch there and every env-1 session method
+# (e.g. the numbers ABC registry on IdentitySet) then failed at install time.
+GS_VERSION=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$GEMSTONE/version.txt" 2>/dev/null | head -1)
+echo "GemStone version: ${GS_VERSION:-unknown} (from $GEMSTONE/version.txt)"
+case "$GS_VERSION" in
+    3.7.*)
         echo "GemStone 3.7.x detected -- applying env-1 session-method policy patch..."
         LC_ALL=C topaz -lq -S scripts/session_methods_env1_base_37.gs || {
             echo "Error: env-1 session-method policy patch failed."; exit 1; }
         ;;
     *)
-        echo "Not GemStone 3.7.x -- assuming the base image already supports env-1"
-        echo "session methods (GemStone MR #6); skipping the 3.7.x policy patch."
+        echo "Not GemStone 3.7.x (${GS_VERSION:-unknown}) -- assuming the base image"
+        echo "already supports env-1 session methods (GemStone MR #6); skipping the"
+        echo "3.7.x policy patch."
         ;;
 esac
 
