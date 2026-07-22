@@ -44,23 +44,31 @@ fi
 
 cd "$SCRIPT_DIR" || exit 1
 
-# 1. GsPackagePolicy env-1 session-method support (3.7.x only).
+# 1. GsPackagePolicy env-1 session-method support (version-specific patch).
 # Detect the version from $GEMSTONE/version.txt, NOT the $GEMSTONE path -- CI
 # installs to an unversioned /opt/gemstone/product, so a `case "$GEMSTONE" in
 # *3.7*` test silently skipped this patch there and every env-1 session method
 # (e.g. the numbers ABC registry on IdentitySet) then failed at install time.
+# Each supported version has its own patch script under scripts/ because the
+# session-method compile path differs across releases (3.7.x patches
+# GsPackagePolicy's install path; 4.0 patches Behavior>>compileMethod: to route
+# env-1 through GsPackagePolicy -- stock 4.0 does so for env-0 only).
 GS_VERSION=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$GEMSTONE/version.txt" 2>/dev/null | head -1)
 echo "GemStone version: ${GS_VERSION:-unknown} (from $GEMSTONE/version.txt)"
 case "$GS_VERSION" in
     3.7.*)
-        echo "GemStone 3.7.x detected -- applying env-1 session-method policy patch..."
+        echo "GemStone 3.7.x detected -- applying env-1 session-method policy patch (3.7 variant)..."
         LC_ALL=C topaz -lq -S scripts/session_methods_env1_base_37.gs || {
-            echo "Error: env-1 session-method policy patch failed."; exit 1; }
+            echo "Error: env-1 session-method policy patch (3.7) failed."; exit 1; }
+        ;;
+    4.0.*)
+        echo "GemStone 4.0.x detected -- applying env-1 session-method policy patch (4.0 variant)..."
+        LC_ALL=C topaz -lq -S scripts/session_methods_env1_base_40.gs || {
+            echo "Error: env-1 session-method policy patch (4.0) failed."; exit 1; }
         ;;
     *)
-        echo "Not GemStone 3.7.x (${GS_VERSION:-unknown}) -- assuming the base image"
-        echo "already supports env-1 session methods (GemStone MR #6); skipping the"
-        echo "3.7.x policy patch."
+        echo "GemStone ${GS_VERSION:-unknown}: no env-1 session-method patch for this version --"
+        echo "assuming the base image already supports env-1 session methods (GemStone MR #6)."
         ;;
 esac
 

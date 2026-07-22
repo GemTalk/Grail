@@ -265,8 +265,12 @@ testUnicode16StrMethod
 	greek := (Character codePoint: 945) asString,
 		(Character codePoint: 946) asString,
 		(Character codePoint: 947) asString.
-	"greek is a DoubleByteString (MultiByteString subclass)"
-	self assert: (greek class name) equals: #'DoubleByteString'.
+	"greek is a wide (multi-byte) string, NOT a Unicode7: it is a
+	DoubleByteString on 3.7.x and its Unicode16 subclass on 4.0.  Assert the
+	KIND rather than the exact class name so the test is portable across
+	GemStone versions -- the point of the test is that __str__ works on a
+	non-Unicode7 string."
+	self assert: (greek @env0:isKindOf: DoubleByteString).
 	"__str__ should return self"
 	result := greek @env1:__str__.
 	self assert: result equals: greek.
