@@ -11,7 +11,7 @@ per-user layer. This is the standard workflow on `main`: several users can each
 install their own Grail (per-user session methods + `Python*` dictionaries) on
 one shared stone.
 
-* `./install_base.sh` # run ONCE per extent, as SystemUser, BEFORE the first `./install.sh`. Installs the shared, user-independent base (GsPackagePolicy env-1 session-method support, unicode comparison mode, restricted-class base methods). Idempotent. On a fresh stone this MUST run first, or `./install.sh` fails with a SecurityError (a per-user session cannot modify SystemUser-owned method dictionaries in objectSecurityPolicyId 1).
+* `./install_base.sh` # run ONCE per extent, as SystemUser, BEFORE the first `./install.sh`. Installs the shared, user-independent base (GsPackagePolicy env-1 session-method support, unicode comparison mode, restricted-class base methods). Idempotent. Selects the env-1 session-method patch by `$GEMSTONE/version.txt`: 3.7.x → `scripts/session_methods_env1_base_37.gs`; 4.0.x → `scripts/session_methods_env1_base_40.gs` (4.0's `Behavior>>compileMethod:` only routes env-0 through GsPackagePolicy, so the 4.0 patch recompiles it to route env-1 too — otherwise env-1 kernel-class methods fail with SecurityError 2257 on the class's SystemUser-owned policy). On a fresh stone this MUST run first, or `./install.sh` fails with a SecurityError (a per-user session cannot modify SystemUser-owned method dictionaries in objectSecurityPolicyId 1). Grail passes the full SUnit suite on both 3.7.5 and 4.0.
 * `./install.sh` # per-user install (runs as the `.topazini` user, no SystemUser step). Installs this user's Grail: env-1 kernel-extension session methods + the `Python`/`PythonTests` dictionaries. Re-run after every Smalltalk edit.
 * `./scripts/run_tests.sh` # run all Python-related tests (fresh worker sessions; picks up the install automatically)
 * `source .setenv` # needed for stand-alone Topaz scripts
@@ -23,6 +23,20 @@ commits Grail as SystemUser into objectSecurityPolicyId 1; running it against an
 extent set up the split way corrupts it (per-user re-install then fails with
 SecurityError 2116 modifying a policy-1 method dictionary). If you check out such
 an old commit, use a fresh stone.
+
+## Selecting the stone + NetLDI (two files, per checkout)
+Both are gitignored (per-machine); when switching GemStone versions edit BOTH so
+they agree:
+* `.setenv` — `GEMSTONE` (product dir) + `GEMSTONE_NAME` (stone) + `GRAIL_NETLDI`
+  (netldi). Sourced by install/test scripts; the RPC concurrency test
+  (`tests/scripts/run_concurrent_import_test.sh`) reads `GEMSTONE_NAME`/`GRAIL_NETLDI`
+  and fails fast if unset — there is no hardcoded stone/netldi default.
+* `./.topazini` — credentials (`set user … pass …`) + `set gemstone <stone>`.
+  Linked topaz (install.sh, install_base.sh, run_tests.sh, …) reads this to log
+  in. Keep its `set gemstone` in step with `GEMSTONE_NAME` in `.setenv`.
+
+CI does not use these local files: `tests/github/setup-testing-env.sh` writes its
+own `~/.topazini`, and the workflows export `GEMSTONE_NAME`/`GRAIL_NETLDI` inline.
 
 ## After `install.sh`, refresh a long-lived MCP/topaz session
 A session that stays logged in across an `install.sh` will NOT see rebuilt
