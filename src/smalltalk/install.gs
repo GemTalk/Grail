@@ -21,7 +21,7 @@ output pushnew install.out only
 ! ===============================================================================
 
 fileformat utf8
-set user SystemUser pass swordfish
+set user DataCurator pass swordfish
 iferr 1 exit 1
 login
 
@@ -30,7 +30,8 @@ iferr 2 output pop
 iferr 3 where
 iferr 4 exit 1
 
-send String enableUnicodeComparisonMode
+! Unicode comparison mode is set as SystemUser by scripts/setUnicodeMode.sh
+! (run from install.sh before this script); DataCurator cannot set it.
 send Stream installPortableStreamImplementation
 
 ! ===============================================================================
@@ -51,62 +52,36 @@ Transcript := TranscriptStreamPortable new.
 %
 
 ! ===============================================================================
-! Step 0: Hygiene — scrub Grail-tagged env-0 methods from every class
+! Set up the per-user session-method policy for kernel-class extensions
 ! ===============================================================================
-! Per-file ``Foo removeAllMethods: 1`` directives at the top of each
-! source file clear env-1 methods on the class that owns the file
-! (e.g. ``NoneType``), so env-1 doesn't accumulate stale methods across
-! installs.  Env-0 is different: we deliberately can't do
-! ``Object removeAllMethods: 0`` — that would nuke GemStone's own
-! kernel.  So env-0 methods we previously added to shared GemStone
-! classes (Object, SequenceableCollection, ...) silently linger when
-! removed from source.
-!
-! Every Grail method is now categorised under the ``Grail-`` prefix.
-! Iterate every class, find env-0 methods whose category starts with
-! ``Grail-`` (or the legacy ``Python-`` prefix that pre-dates this
-! convention), and remove them.  The .gs files re-add them with
-! current source on the next pass, so nothing is lost.
-!
-! Runs as SystemUser because we mutate shared system classes.
-
+! Grail extends shared, SystemUser-owned kernel classes (str/CharacterCollection,
+! Set, SequenceableCollection, Fraction, Object, Class, System, ...), which an
+! ordinary user cannot modify persistently.  With GsPackagePolicy enabled and
+! externalSymbolList = { Globals }, compiling such a method (env 0 OR env 1) is
+! captured as a per-user SESSION METHOD in the GrailSessionMethods package:
+! committed and isolated, and re-installed into this session's transient method
+! dictionaries at every login.  Grail's OWN classes live in the Python* dicts
+! (NOT reachable through externalSymbolList), so their methods compile
+! persistently as usual.  No SystemUser needed here; this relies on the
+! env-aware GsPackagePolicy patch, a one-time base-extent setup (see
+! specs/SessionMethods-Env1-Setup.md).  It also replaces the old Step-0 env-0
+! hygiene scrub: recreating the package below drops previously-captured session
+! methods so kernel extensions removed from source do not linger.
 run
-| total |
-total := 0.
-Object @env0:allSubclasses do: [:cls |
-	| md toRemove |
-	md := cls @env0:methodDictForEnv: 0.
-	toRemove := OrderedCollection new.
-	md @env0:keysDo: [:sel |
-		| cat |
-		cat := cls @env0:categoryOfSelector: sel environmentId: 0.
-		cat notNil ifTrue: [
-			((cat @env0:beginsWith: 'Grail-')
-				or: [cat @env0:beginsWith: 'Python-'])
-				ifTrue: [toRemove @env0:add: sel]
-		]
-	].
-	toRemove @env0:do: [:sel |
-		cls @env0:removeSelector: sel environmentId: 0.
-		total := total @env0:+ 1
-	]
-].
-Transcript show: 'Step 0 hygiene: scrubbed ', total printString,
-	' Grail-tagged env-0 method(s) from shared classes'.
+| policy home |
+policy := GsPackagePolicy current.
+policy disable.
+(System myUserProfile symbolList names includes: #'GrailSessionMethods')
+	ifFalse: [ GsPackageLibrary installPackage: (GsPackageLibrary createPackageNamed: #'GrailSessionMethods') ].
+home := System myUserProfile symbolList objectNamed: #'GrailSessionMethods'.
+home removeKey: #GsPackage_Current ifAbsent: [].
+GsPackage installIn: home.
+policy homeSymbolDict: home.
+policy externalSymbolList: { Globals }.
+policy enable.
+System commitTransaction.
+Transcript show: 'Session-method policy enabled (home=GrailSessionMethods, external={Globals})'.
 %
-
-! ------------------- Grail extensions to GemStone system classes
-! Filed in as SystemUser because shared classes like ``Class'' are
-! owned by SystemUser and DataCurator can't compile env-0 methods on
-! them.  The Step 0 hygiene loop above will scrub these on the next
-! install (the methods carry the ``Grail-'' category prefix), and
-! this input re-adds them.
-input src/smalltalk/Python/Class.gs
-
-commit
-logout
-set user DataCurator pass swordfish
-login
 
 ! ------------------- Repair known-broken host-extent kernel patches
 ! No-op on a stock extent; idempotent on a patched one.  Runs here —
@@ -1011,42 +986,25 @@ input src/smalltalk/Python/UnicodeDecodeError.gs
 input src/smalltalk/Python/UnicodeEncodeError.gs
 input src/smalltalk/Python/UnicodeTranslateError.gs
 
-! ------------------- Switch to SystemUser for adding methods to base classes
+! ------------------- Grail extensions to kernel classes (as DataCurator)
+! With the session-method policy enabled (set up near the top of this script),
+! methods compiled on shared kernel classes (str/CharacterCollection, Set,
+! SequenceableCollection, Fraction, Object, Class, System, ...) are captured as
+! per-user SESSION METHODS -- the shared classes are never modified.  Methods on
+! Grail's OWN classes (dict/list/set/PyDict/... in the Python dict) compile
+! persistently, since those classes are not reachable through externalSymbolList.
+! (Per-file ``<KernelClass> removeAllMethods: 1'' directives are harmless no-ops
+! on the shared classes under the policy; old session methods were already
+! dropped by the package recreation at the top of this script.)
 commit
-logout
-set user SystemUser pass swordfish
-login
-
-! ------- Add Python dictionary to SystemUser's symbol list
-run
-| pythonDict systemUserProfile dataCurator |
-systemUserProfile := System myUserProfile.
-dataCurator := AllUsers userWithId: 'DataCurator' ifAbsent: [self error: 'DataCurator not found'].
-pythonDict := dataCurator symbolList objectNamed: #'Python'.
-pythonDict ifNil: [self error: 'Python dictionary not found in DataCurator''s symbol list'].
-systemUserProfile insertDictionary: pythonDict at: 1.
-Transcript show: 'Added Python dictionary to SystemUser''s symbol list'.
-%
-
-run
-| symList |
-symList := System myUserProfile symbolList .
-(symList includesIdentical: GsCompilerClasses) ifFalse:[
-  symList add: GsCompilerClasses.
-  Transcript show: 'Added GsCompilerClasses dictionary to DataCurator''s symbol list'.
-].
-%
-
-! ------------------- GemStone base class methods (as SystemUser)
+input src/smalltalk/Python/Class.gs
 input src/smalltalk/Python/Bool.gs
-input src/smalltalk/Python/builtin_function_or_method.gs
 input src/smalltalk/Python/Bytes.gs
 input src/smalltalk/Python/Decimal.gs
 input src/smalltalk/Python/Fraction.gs
 input src/smalltalk/Python/dict.gs
 input src/smalltalk/Python/PyDict.gs
 input src/smalltalk/Python/ExecBlockAttrs.gs
-input src/smalltalk/Python/ExecBlock.gs
 input src/smalltalk/Python/Float.gs
 input src/smalltalk/Python/SetProtocol.gs
 input src/smalltalk/Python/frozenset.gs
@@ -1058,22 +1016,51 @@ input src/smalltalk/Python/SequenceableCollection.gs
 input src/smalltalk/Python/set.gs
 input src/smalltalk/Python/str.gs
 input src/smalltalk/Python/Subscript.gs
-input src/smalltalk/Python/System.gs
 input src/smalltalk/Python/Tuple.gs
 input src/smalltalk/Python/UndefinedObject.gs
+commit
 
-! ------- Remove Python dictionary from SystemUser's symbol list
+! ------------------- Restricted-class methods (as SystemUser, persistent + shared)
+! Two reasons a kernel-extension file must be filed here rather than as a
+! per-user session method:
+!  (1) restrictedClasses -- GsNMethod (mapped to builtin_function_or_method),
+!      System, and SymbolDictionary back VM-core functionality, so env-1 session
+!      methods are (currently) not permitted on them; and
+!  (2) VM-special selectors -- ExecBlock's value / value: / ... block-invocation
+!      selectors cannot be compiled as session methods (CompileError 1001).
+! Grail adds a small, stable set of env-1 methods here; compile them persistently
+! as SystemUser.  These are SHARED across all users (identical for everyone,
+! rarely modified) -- the only Grail methods not per-user isolated.  The core
+! team is being asked to relax the restrictedClasses guard for env != 0; once
+! done, the (1) files can move up into the DataCurator session-method section.
+commit
+logout
+set user SystemUser pass swordfish
+login
+
+! Share the Python dictionary into SystemUser's symbol list so Grail globals
+! (builtin_function_or_method, None, AttributeError, ...) resolve during compile.
 run
-| systemUserProfile names |
-systemUserProfile := System myUserProfile.
-names := systemUserProfile symbolList names.
-(names includes: #'Python') ifTrue: [
-	systemUserProfile symbolList removeAtIndex: (names indexOf: #'Python').
-	Transcript show: 'Removed Python dictionary from SystemUser''s symbol list'.
-].
+| pythonDict |
+pythonDict := (AllUsers userWithId: 'DataCurator') symbolList objectNamed: #'Python'.
+pythonDict ifNil: [self error: 'Python dictionary not found in DataCurator''s symbol list'].
+(System myUserProfile symbolList names includes: #'Python')
+	ifFalse: [ System myUserProfile insertDictionary: pythonDict at: 1 ].
 %
 
-! ------------------- Switch back to DataCurator
+input src/smalltalk/Python/builtin_function_or_method.gs
+input src/smalltalk/Python/System.gs
+input src/smalltalk/Python/SymbolDictionary.gs
+input src/smalltalk/Python/ExecBlock.gs
+input src/smalltalk/Python/Object_perform.gs
+
+! Remove the Python dictionary from SystemUser's symbol list again.
+run
+| names |
+names := System myUserProfile symbolList names.
+(names includes: #'Python') ifTrue: [
+	System myUserProfile symbolList removeAtIndex: (names indexOf: #'Python') ].
+%
 commit
 logout
 set user DataCurator pass swordfish

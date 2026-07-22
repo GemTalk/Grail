@@ -40,7 +40,11 @@ classes := { Integer. Float. Boolean. CharacterCollection.
     ByteArray. Character. Symbol. UndefinedObject }.
 metaclasses := { Metaclass3 } , (classes collect: [:c | c class]).
 metaclasses do: [:c |
-    c removeSelector: #'__getitem__:' environmentId: 1
+    "Guarded: under GsPackagePolicy this env-1 method is a per-user SESSION
+     method, which removeSelector: can't remove (protected) and which the
+     package recreation at install start has already dropped -- so this
+     hygiene is redundant and must not fail."
+    [ c removeSelector: #'__getitem__:' environmentId: 1 ] on: Error do: [:e | ]
 ].
 %
 

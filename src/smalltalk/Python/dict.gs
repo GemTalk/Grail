@@ -319,14 +319,6 @@ __getitem__: key
 	^ self @env0:at: key
 %
 
-category: 'Grail-Subscript Protocol'
-method: SymbolDictionary
-__getitem__: key
-	"Return the value for key. Raises KeyError if key is not in the dictionary"
-
-	^ super __getitem__: (key @env0:asSymbol)
-%
-
 category: 'Grail-Iterator Protocol'
 method: dict
 __iter__
@@ -401,15 +393,6 @@ method: dict
 __setitem__: key _: value
 	"Set d[key] to value"
 	self @env0:at: key put: value.
-	^ None
-%
-
-category: 'Grail-Subscript Protocol'
-method: SymbolDictionary
-__setitem__: key _: value
-	"Set d[key] to value"
-
-	super __setitem__: (key @env0:asSymbol) _: value.
 	^ None
 %
 

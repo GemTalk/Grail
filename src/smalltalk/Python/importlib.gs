@@ -848,6 +848,12 @@ resetSessionForReinstall
 
 	| st mods keep hashState toEvict |
 	System @env0:abortTransaction.
+	"Rebuild the session's transient method dictionaries from the (now
+	refreshed) committed GsPackage, so recompiled env-1 kernel extensions
+	installed as session methods are picked up without a fresh login.  Guarded:
+	only when a session-method policy is enabled for this user."
+	(GsPackagePolicy @env0:currentOrNil) @env0:ifNotNil: [:pol |
+		pol @env0:enabled @env0:ifTrue: [pol @env0:refreshSessionMethodDictionary]].
 	st := SessionTemps @env0:current.
 	"1. Un-memoise + re-run the generation guard.  With the deploy generation
 	now behind the freshly-installed runtime generation, it drops the stale

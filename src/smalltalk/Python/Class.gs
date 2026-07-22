@@ -20,7 +20,10 @@ md keysDo: [:sel |
 	cat := Class categoryOfSelector: sel environmentId: 1.
 	(cat notNil and: [cat beginsWith: 'Grail-']) ifTrue: [toRemove add: sel]
 ].
-toRemove do: [:sel | Class removeSelector: sel environmentId: 1].
+"Guarded: under GsPackagePolicy these env-1 methods are per-user SESSION
+ methods that removeSelector: can't remove (protected) and that the package
+ recreation at install start has already dropped -- redundant, must not fail."
+toRemove do: [:sel | [Class removeSelector: sel environmentId: 1] on: Error do: [:e | ]].
 %
 
 set compile_env: 1

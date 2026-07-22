@@ -56,69 +56,16 @@ dynamicInstVarAt: aSymbol ifAbsent: absentBlock
 	^ val
 %
 
-category: 'Grail-Bridge'
-classmethod: object
-___new___: arg
-	"Convenience method: self perform: #__new__: env: 1 withArguments: {arg}"
-	^ self @env1:__new__: arg
-%
-
-category: 'Grail-Bridge'
-classmethod: object
-___new___: arg1 _: arg2
-	"Convenience method: self perform: #__new__:_: env: 1 withArguments: {arg1. arg2}"
-	^ self @env1:__new__: arg1 _: arg2
-%
-
-category: 'Grail-Bridge'
-classmethod: object
-___new___: arg1 _: arg2 _: arg3
-	"Convenience method: self perform: #__new__:_:_: env: 1 withArguments: {arg1. arg2. arg3}"
-	^ self @env1:__new__: arg1 _: arg2 _: arg3
-%
-
-! ------- performMethod variants for higher arities -------
-! GemStone ships ``performMethod:`` (0-arg) and ``with:performMethod:``
-! (1-arg) on Object env-0.  Both invoke primitive 2027, which dispatches
-! by inspecting the supplied selector's arity.  Add 2- through 4-arg
-! variants so ``Super >> doesNotUnderstand:args:envId:`` can invoke a
-! parent class's compiled method on the substituted receiver without
-! going through the receiver's class dispatch (which would re-fire the
-! same override).  These fit on the SystemUser side of install.gs;
-! DataCurator can't modify Object.
-
-category: 'Grail-perform method'
-method: object
-with: argOne with: argTwo performMethod: aGsNMethod
-	"Execute aGsNMethod as if it were a 2-arg keyword send to self."
-
-	<primitive: 2027>
-	aGsNMethod _validateClass: GsNMethod.
-	^ self _primitiveFailed: #'with:with:performMethod:'
-		args: { argOne. argTwo. aGsNMethod }
-%
-
-category: 'Grail-perform method'
-method: object
-with: argOne with: argTwo with: argThree performMethod: aGsNMethod
-	"Execute aGsNMethod as if it were a 3-arg keyword send to self."
-
-	<primitive: 2027>
-	aGsNMethod _validateClass: GsNMethod.
-	^ self _primitiveFailed: #'with:with:with:performMethod:'
-		args: { argOne. argTwo. argThree. aGsNMethod }
-%
-
-category: 'Grail-perform method'
-method: object
-with: argOne with: argTwo with: argThree with: argFour performMethod: aGsNMethod
-	"Execute aGsNMethod as if it were a 4-arg keyword send to self."
-
-	<primitive: 2027>
-	aGsNMethod _validateClass: GsNMethod.
-	^ self _primitiveFailed: #'with:with:with:with:performMethod:'
-		args: { argOne. argTwo. argThree. argFour. aGsNMethod }
-%
+! Grail's env-0 methods on Object that must be filed as SystemUser live in
+! Object_perform.gs:
+!  - the ___new___: / ___new___:_: / ___new___:_:_: env-0 bridge allocators
+!    (moved here because ___new___:_: and ___new___:_:_: also exist in env 1 on
+!    Object class; the simplified 3.7.5 session-method store keys by selector
+!    only, so env-1 would overwrite env-0 -- MR #6 on 4.0 fixes this properly
+!    with per-environment storage); and
+!  - the with:...performMethod: variants (which carry <primitive: 2027>).
+! DataCurator can neither write Object persistently nor compile primitives, so
+! these are compiled by SystemUser (persistent, shared).
 
 set compile_env: 1
 
@@ -2516,7 +2463,10 @@ perform: aSelectorSymbol env: environmentId
  specifying a method lookup environment.
 "
 
-<primitive: 2014>
+"No <primitive:> here: DataCurator (the session-method install user) may not
+ compile primitive methods.  The body below is the correct implementation --
+ it delegates to the native env-0 _perform:env:withArguments:, which carries
+ the real primitive -- so dropping the pragma only loses a fast path."
 ^self @env0:_perform: (aSelectorSymbol @env0:asSymbol) env: environmentId withArguments: #()
 %
 
@@ -2535,7 +2485,7 @@ perform: aSelectorSymbol env: environmentId withArguments: anArray
  environmentId must be a SmallInteger >= 0 and <= 255,
  specifying a method lookup environment."
 
-<primitive: 2015>
+"No <primitive:> here (see perform:env: above); delegates to native env-0 _perform:."
 anArray @env0:_validateClass: Array.
 
 "Now just try the primitive again, but send asSymbol to the selector to convert
@@ -2555,7 +2505,7 @@ with: anObject perform: aSelectorSymbol env: environmentId
  environmentId must be a SmallInteger >= 0 and <= 255,
  specifying a method lookup environment."
 
-<primitive: 2014>
+"No <primitive:> here (see perform:env: above); delegates to native env-0 _perform:."
 | sel |
 sel := aSelectorSymbol @env0:asSymbol.
 ^self @env0:_perform: sel env: environmentId withArguments: { anObject }
