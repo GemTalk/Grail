@@ -44,16 +44,15 @@ test.test_set|TestFrozenSetSubclass.test_free_after_iterating|refcount/__del__ t
 test.test_set|TestFrozenSetSubclass.test_hash_effectiveness|CPython-specific hash distribution
 # iterator pickling: Grail iterators don't implement __reduce__ (pickle of a
 # live iterator). An unimplemented feature, not a correctness gap.  (tuple's
-# forward iterator now pickles via pickle.py's explicit tag -- see
-# tuple_iterator _getstate/_new_from -- so test_tuple is no longer skipped.)
-test.test_dict|DictTest.test_iterator_pickling|iterator pickling (__reduce__) not implemented in Grail
+# forward iterator AND dict's forward key/value/item iterators now pickle via
+# pickle.py's explicit tags -- see {tuple_iterator,dict_*iterator}
+# _getstate/_new_from -- so those tests are no longer skipped.  set/frozenset
+# iterators still lack it.  reversed(dict) already pickles via the list/tuple
+# iterator tags.)
 test.test_set|TestSet.test_iterator_pickling|iterator pickling (__reduce__) not implemented in Grail
 test.test_set|TestSetSubclass.test_iterator_pickling|iterator pickling (__reduce__) not implemented in Grail
 test.test_set|TestFrozenSet.test_iterator_pickling|iterator pickling (__reduce__) not implemented in Grail
 test.test_set|TestFrozenSetSubclass.test_iterator_pickling|iterator pickling (__reduce__) not implemented in Grail
-test.test_dict|DictTest.test_itemiterator_pickling|iterator pickling (__reduce__) not implemented in Grail
-test.test_dict|DictTest.test_valuesiterator_pickling|iterator pickling (__reduce__) not implemented in Grail
-test.test_dict|DictTest.test_keyiterator_pickling|iterator pickling (__reduce__) not implemented in Grail
 # refcount-based __del__: these rely on an object's __del__ firing
 # synchronously the instant its refcount hits zero (CPython refcounting).
 # GemStone uses mark-sweep GC with no refcounting, so __del__ timing is

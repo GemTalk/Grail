@@ -26,6 +26,15 @@ _LIST_ITER = type(iter([]))
 # the state is just (collection, position) -- no reverse/exhausted flags.
 _TUPLE_ITER = type(iter(()))
 
+# The three forward dict iterator types: iter(d) / iter(d.values()) /
+# iter(d.items()).  Pickled explicitly like the others; state is (dict,
+# position), the dict encoded through _encode so it memoizes and the
+# key/value/item snapshot is re-derived on rebuild (dicts are insertion-
+# ordered).  reversed(d) returns a plain list/tuple iterator, already handled.
+_DICT_KEYITER = type(iter({}))
+_DICT_VALUEITER = type(iter({}.values()))
+_DICT_ITEMITER = type(iter({}.items()))
+
 _HIGHEST_PROTOCOL = 5
 HIGHEST_PROTOCOL = 5
 DEFAULT_PROTOCOL = 4
@@ -162,6 +171,23 @@ def _encode_body(obj, out, memo):
         out.append(b"J")
         _encode(coll, out, memo)
         _emit_len(out, pos)
+    elif type(obj) is _DICT_KEYITER:
+        # dict key/value/item iterators: (dict, consumed-count).  Encode the
+        # dict through _encode (memoized); the snapshot is re-derived on rebuild.
+        d, pos = obj._getstate()
+        out.append(b"K")
+        _encode(d, out, memo)
+        _emit_len(out, pos)
+    elif type(obj) is _DICT_VALUEITER:
+        d, pos = obj._getstate()
+        out.append(b"V")
+        _encode(d, out, memo)
+        _emit_len(out, pos)
+    elif type(obj) is _DICT_ITEMITER:
+        d, pos = obj._getstate()
+        out.append(b"M")
+        _encode(d, out, memo)
+        _emit_len(out, pos)
     elif isinstance(obj, tuple):
         out.append(b"t")
         _emit_len(out, len(obj))
@@ -267,6 +293,18 @@ class _Unpickler:
             coll = self.load()
             pos = int(self._line())
             return _TUPLE_ITER._new_from(coll, pos)
+        if t == b"K":
+            d = self.load()
+            pos = int(self._line())
+            return _DICT_KEYITER._new_from(d, pos)
+        if t == b"V":
+            d = self.load()
+            pos = int(self._line())
+            return _DICT_VALUEITER._new_from(d, pos)
+        if t == b"M":
+            d = self.load()
+            pos = int(self._line())
+            return _DICT_ITEMITER._new_from(d, pos)
         if t == b"N":
             return None
         if t == b"T":

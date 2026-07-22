@@ -135,4 +135,28 @@ __next__
 	^ nextKey
 %
 
+category: 'Grail-Instance Creation'
+classmethod: dict_keyiterator
+_new_from: aDict _: pos
+	"Reconstruct a dict_keyiterator over aDict, resuming after `pos' consumed
+	keys.  Used by the pickle round-trip (see pickle.py's iterator tags): the
+	keys snapshot is re-derived from aDict (insertion order is stable) and the
+	mutation-guard version re-baselined, so only (dict, position) round-trips.
+	A single-underscore (Python-visible) name so pickle.py can call it."
+
+	| iter |
+	iter := self ___on: aDict.
+	iter ___position: pos.
+	^ iter
+%
+
+category: 'Grail-Internal'
+method: dict_keyiterator
+_getstate
+	"Answer (dict, position) for pickling -- see pickle.py's iterator tags.
+	A single-underscore (Python-visible) name so pickle.py can call it."
+
+	^ tuple @env0:withAll: { dict. position }
+%
+
 set compile_env: 0

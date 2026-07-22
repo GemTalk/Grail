@@ -528,3 +528,28 @@ testEvalEmptyDict
 	result := self eval: '{}'.
 	self assert: result size equals: 0.
 %
+
+category: 'Grail-Tests - Pickle'
+method: DictTestCase
+testIteratorPickleRoundtrip
+	"Forward dict key/value/item iterators pickle and unpickle, resuming at
+	their saved position -- fresh and mid-iteration (test_dict
+	test_iterator_pickling / test_valuesiterator_pickling /
+	test_itemiterator_pickling).  Grail pickles them via pickle.py's explicit
+	dict-iterator tags (dict_*iterator _getstate/_new_from); the dict is
+	memoized and the key/value/item snapshot re-derived on rebuild."
+
+	self assert: (self eval: 'import pickle
+ok = []
+data = {1: ''a'', 2: ''b'', 3: ''c''}
+ok.append(list(pickle.loads(pickle.dumps(iter(data)))) == list(data))
+it = iter(data); next(it)
+ok.append(list(pickle.loads(pickle.dumps(it))) == [2, 3])
+ok.append(list(pickle.loads(pickle.dumps(iter(data.values())))) == [''a'', ''b'', ''c''])
+it = iter(data.values()); next(it)
+ok.append(list(pickle.loads(pickle.dumps(it))) == [''b'', ''c''])
+ok.append(dict(pickle.loads(pickle.dumps(iter(data.items())))) == data)
+it = iter(data.items()); next(it)
+ok.append(list(pickle.loads(pickle.dumps(it))) == [(2, ''b''), (3, ''c'')])
+all(ok)').
+%
