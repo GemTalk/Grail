@@ -6,10 +6,10 @@
 
 # Install Changes and Run Tests
 
-Development currently happens on the **`session-methods`** branch, whose install
-is split into a shared base (installed once, as SystemUser) plus a per-user
-layer. `main` is being fast-forwarded onto this branch, so this is the standard
-workflow going forward.
+The install is split into a shared base (installed once, as SystemUser) plus a
+per-user layer. This is the standard workflow on `main`: several users can each
+install their own Grail (per-user session methods + `Python*` dictionaries) on
+one shared stone.
 
 * `./install_base.sh` # run ONCE per extent, as SystemUser, BEFORE the first `./install.sh`. Installs the shared, user-independent base (GsPackagePolicy env-1 session-method support, unicode comparison mode, restricted-class base methods). Idempotent. On a fresh stone this MUST run first, or `./install.sh` fails with a SecurityError (a per-user session cannot modify SystemUser-owned method dictionaries in objectSecurityPolicyId 1).
 * `./install.sh` # per-user install (runs as the `.topazini` user, no SystemUser step). Installs this user's Grail: env-1 kernel-extension session methods + the `Python`/`PythonTests` dictionaries. Re-run after every Smalltalk edit.
@@ -18,10 +18,11 @@ workflow going forward.
 
 On a brand-new / freshly-restarted stone: `./install_base.sh` then `./install.sh`.
 For iterating on edits after the base exists: just `./install.sh`.
-NOTE: never run `install.sh` from a git branch based on `main` that lacks the
-base/per-user split — the monolithic `main` install commits Grail as SystemUser
-into policy 1 and corrupts a session-methods extent (per-user re-install then
-SecurityErrors). Keep this work on `session-methods`.
+NOTE: an older checkout predating this split has a MONOLITHIC `install.sh` that
+commits Grail as SystemUser into objectSecurityPolicyId 1; running it against an
+extent set up the split way corrupts it (per-user re-install then fails with
+SecurityError 2116 modifying a policy-1 method dictionary). If you check out such
+an old commit, use a fresh stone.
 
 ## After `install.sh`, refresh a long-lived MCP/topaz session
 A session that stays logged in across an `install.sh` will NOT see rebuilt
