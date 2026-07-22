@@ -91,8 +91,10 @@ echo "PYTHON_PREFIX = $PYTHON_PREFIX"
 export PYTHON_PACKAGE_PATH="$GRAIL_DIR/src/python"
 echo "PYTHON_PACKAGE_PATH = $PYTHON_PACKAGE_PATH"
 
-./scripts/setUnicodeMode.sh
-
+# This is the PER-USER install: it runs entirely as the .topazini user, with NO
+# SystemUser step.  The shared, user-independent base (GsPackagePolicy env-1
+# support, Unicode mode, and the restricted-class methods) must already be
+# installed on the extent -- run ./install_base.sh ONCE, as SystemUser, first.
 LC_ALL=C topaz -lq -S src/smalltalk/install.gs
 
 if [ $? -ne 0 ]; then
@@ -102,4 +104,7 @@ if [ $? -ne 0 ]; then
     echo "  - Is .topazini present and configured? (topaz looks in the current directory and ~/)"
     echo "  - Check install.out for details."
     exit 1
+else
+    echo ""
+    echo "Successful install of Grail!"
 fi

@@ -7,6 +7,14 @@
 !
 ! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
+!
+! ExecBlock's value-family selectors are VM-special, so these methods can't be
+! per-user session methods; they are filed persistently as SystemUser (one copy
+! shared by every user).  So the one shared copy never binds to the install
+! user's Python globals, the per-user objects it needs -- the ExecBlockAttrs
+! side-table class and AttributeError -- are resolved at run time through the
+! calling session's own symbol list (___pyAttrsClass___ below; same idiom as
+! Class.gs>>__base__).  Each caller therefore gets ITS OWN classes.
 ! ===============================================================================
 
 ! ------------------- Remove existing Python methods from ExecBlock
@@ -39,7 +47,7 @@ __setattr__: name _: value
 	= True'' on the nested decorator-output closure) round-trips
 	through a subsequent ``__getattr__'' read."
 
-	^ ExecBlockAttrs @env0:at: self attr: name put: value
+	^ (ExecBlock @env0:___pyAttrsClass___) @env0:at: self attr: name put: value
 %
 
 category: 'Grail-Attribute Access'
@@ -51,9 +59,9 @@ __getattr__: name
 	expected truth value."
 
 	| value |
-	value := ExecBlockAttrs @env0:at: self attr: name.
+	value := (ExecBlock @env0:___pyAttrsClass___) @env0:at: self attr: name.
 	value == nil ifTrue: [
-		^ AttributeError ___signal___:
+		^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'AttributeError') ___signal___:
 			('ExecBlock object has no attribute ''' @env0:, name @env0:asString @env0:, '''')
 	].
 	^ value
@@ -75,7 +83,7 @@ __name__
 	Phrased as a normal env-1 method (not a __getattr__ branch) so
 	``hasattr(block, '__name__')'' is always true."
 
-	^ (ExecBlockAttrs @env0:at: self attr: '__name__')
+	^ ((ExecBlock @env0:___pyAttrsClass___) @env0:at: self attr: '__name__')
 		ifNil: ['<closure>']
 %
 
@@ -94,7 +102,7 @@ __module__
 	Same side-table-first semantics as __name__; falls back to the
 	placeholder string when no decorator has stamped a value."
 
-	^ (ExecBlockAttrs @env0:at: self attr: '__module__')
+	^ ((ExecBlock @env0:___pyAttrsClass___) @env0:at: self attr: '__module__')
 		ifNil: ['<closure>']
 %
 
@@ -109,7 +117,7 @@ __annotations__
 	(see ___pythonValueAttrs___) so the read returns the dict rather
 	than a BoundMethod wrap."
 
-	^ (ExecBlockAttrs @env0:at: self attr: '__annotations__')
+	^ ((ExecBlock @env0:___pyAttrsClass___) @env0:at: self attr: '__annotations__')
 		ifNil: [KeyValueDictionary @env0:new]
 %
 
@@ -198,6 +206,18 @@ set compile_env: 0
 
 category: 'Grail-Python Attribute Hook'
 classmethod: ExecBlock
+___pyAttrsClass___
+	"Resolve the ExecBlockAttrs side-table class from the CALLING session's
+	symbol list.  These ExecBlock methods are one shared SystemUser copy (see
+	the file header); resolving ExecBlockAttrs at run time keeps each session on
+	ITS OWN class -- whose storage is session-local SessionTemps anyway -- rather
+	than hard-binding to the install user's copy."
+
+	^ System myUserProfile symbolList objectNamed: #'ExecBlockAttrs'
+%
+
+category: 'Grail-Python Attribute Hook'
+classmethod: ExecBlock
 ___pythonValueAttrs___
 	"``__name__'' / ``__qualname__'' / ``__module__'' are Python
 	identifying-metadata *value* attributes (the name STRING), not
@@ -226,7 +246,7 @@ ___pyNamed___: aString
 	``<closure>'' placeholder.  Returns self so it sits transparently in
 	the ``name := <block>'' assignment / decorator pipeline."
 
-	ExecBlockAttrs at: self attr: '__name__' put: aString.
+	(ExecBlock ___pyAttrsClass___) at: self attr: '__name__' put: aString.
 	^ self
 %
 
@@ -243,7 +263,7 @@ ___pyNamed___: aString annotations: aDict
 	(``functools.singledispatch.register'' reads the first parameter's
 	annotation off a decorated local def this way)."
 
-	ExecBlockAttrs at: self attr: '__name__' put: aString.
-	ExecBlockAttrs at: self attr: '__annotations__' put: aDict.
+	(ExecBlock ___pyAttrsClass___) at: self attr: '__name__' put: aString.
+	(ExecBlock ___pyAttrsClass___) at: self attr: '__annotations__' put: aDict.
 	^ self
 %

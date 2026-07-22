@@ -10,10 +10,15 @@
 !
 ! They carry a <primitive:> and there is no native N-arg performMethod: to
 ! delegate to (GemStone ships only 0/1-arg), so they must be compiled by
-! SystemUser (DataCurator lacks CompilePrimitives).  Filed in via install.gs's
-! restricted/primitive SystemUser section, persistent + shared -- they are
-! env-0 dispatch infrastructure, identical for every user and rarely modified.
-! (They previously lived at the top of Object.gs.)
+! SystemUser (an ordinary install user lacks CompilePrimitives).  Filed in once
+! via install_base.gs (the shared SystemUser base setup), persistent + shared --
+! they are env-0 dispatch infrastructure, identical for every user and rarely
+! modified.  (They previously lived at the top of Object.gs.)
+!
+! Target the kernel class `Object' directly (not the Python alias `object')
+! so this file compiles without the per-user Python dictionary on the symbol
+! list -- `object' and `Object' are the identical class object, and `Object'
+! is in Globals.
 ! ===============================================================================
 
 set compile_env: 0
@@ -26,28 +31,28 @@ set compile_env: 0
 ! per-environment and removes this constraint.)
 
 category: 'Grail-Bridge'
-classmethod: object
+classmethod: Object
 ___new___: arg
 	"Convenience method: self perform: #__new__: env: 1 withArguments: {arg}"
 	^ self @env1:__new__: arg
 %
 
 category: 'Grail-Bridge'
-classmethod: object
+classmethod: Object
 ___new___: arg1 _: arg2
 	"Convenience method: self perform: #__new__:_: env: 1 withArguments: {arg1. arg2}"
 	^ self @env1:__new__: arg1 _: arg2
 %
 
 category: 'Grail-Bridge'
-classmethod: object
+classmethod: Object
 ___new___: arg1 _: arg2 _: arg3
 	"Convenience method: self perform: #__new__:_:_: env: 1 withArguments: {arg1. arg2. arg3}"
 	^ self @env1:__new__: arg1 _: arg2 _: arg3
 %
 
 category: 'Grail-perform method'
-method: object
+method: Object
 with: argOne with: argTwo performMethod: aGsNMethod
 	"Execute aGsNMethod as if it were a 2-arg keyword send to self."
 
@@ -58,7 +63,7 @@ with: argOne with: argTwo performMethod: aGsNMethod
 %
 
 category: 'Grail-perform method'
-method: object
+method: Object
 with: argOne with: argTwo with: argThree performMethod: aGsNMethod
 	"Execute aGsNMethod as if it were a 3-arg keyword send to self."
 
@@ -69,7 +74,7 @@ with: argOne with: argTwo with: argThree performMethod: aGsNMethod
 %
 
 category: 'Grail-perform method'
-method: object
+method: Object
 with: argOne with: argTwo with: argThree with: argFour performMethod: aGsNMethod
 	"Execute aGsNMethod as if it were a 4-arg keyword send to self."
 

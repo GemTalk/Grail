@@ -9,7 +9,7 @@ run
 ! ------- broke the inheritance chain and prevented access to Python exception methods.
 
 ! ===============================================================================
-! Python Exception Class Definitions (as DataCurator)
+! Python Exception Class Definitions (as the install user)
 ! ===============================================================================
 ! Define Python exception classes BEFORE switching to SystemUser.
 ! This ensures that exception classes like IndexError, ValueError, TypeError

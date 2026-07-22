@@ -78,7 +78,7 @@ table
 	per-session and mutable without security-policy gymnastics —
 	committed mutable storage (class-side instVars on a class
 	whose policy is owned by SystemUser) raises SecurityError when
-	a DataCurator-owned test session tries to write.  ExecBlocks
+	an ordinary (non-SystemUser) user's session tries to write.  ExecBlocks
 	themselves are transient (not committable), so per-session
 	storage matches the lifetime of the values being indexed."
 

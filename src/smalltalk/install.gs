@@ -10,18 +10,29 @@ output pushnew install.out only
 ! 2. Creates forward references for ALL dictionaries (so names resolve
 !    during method compilation before actual classes are defined)
 ! 3. Maps Python type names to existing GemStone classes
-! 4. Loads Python built-in type classes (handles user switching internally)
+! 4. Loads Python built-in type classes (as the .topazini user)
 ! 5. Loads AST node classes
 ! 6. Loads test classes
 ! 7. Verifies installation
 !
 ! PERMISSIONS:
-! - This script should be started as DataCurator
-! - User switching to SystemUser is handled internally
+! - The install user + stone come from .topazini in the current directory (NOT
+!   hardcoded), so any user can install their own Grail (per-user session methods
+!   + dictionaries) by pointing .topazini at themselves.
+! - This script runs ENTIRELY as that .topazini user -- NO SystemUser step.
+! - PREREQUISITE: the shared, user-independent base must already be installed on
+!   the extent (once, as SystemUser) via ./install_base.sh -- the GsPackagePolicy
+!   env-1 patch, Unicode mode, and the restricted-class methods on GsNMethod /
+!   System / SymbolDictionary / ExecBlock / Object.  This per-user script relies
+!   on those already being committed.
 ! ===============================================================================
 
 fileformat utf8
-set user DataCurator pass swordfish
+! The login user + stone come from .topazini (set user .../set gems ...) in the
+! current directory -- NOT hardcoded -- so different users can each install their
+! own Grail (per-user session methods + dictionaries) by pointing .topazini at
+! themselves.  This script runs entirely as that user; the shared base
+! (restricted-class methods + policy support) is installed once by ./install_base.sh.
 iferr 1 exit 1
 login
 
@@ -30,8 +41,9 @@ iferr 2 output pop
 iferr 3 where
 iferr 4 exit 1
 
-! Unicode comparison mode is set as SystemUser by scripts/setUnicodeMode.sh
-! (run from install.sh before this script); DataCurator cannot set it.
+! Unicode comparison mode is an extent-global SystemUser setting; it is applied
+! once by ./install_base.sh (via scripts/setUnicodeMode.sh), not here -- an
+! ordinary .topazini user cannot set it.
 send Stream installPortableStreamImplementation
 
 ! ===============================================================================
@@ -44,9 +56,10 @@ send Stream installPortableStreamImplementation
 ! and a GsFile does not understand show: (TranscriptStream protocol used here and
 ! throughout).  Reassign a fresh TranscriptStreamPortable -- it understands
 ! show:/cr/nextPutAll:, routes to the session's stdout, and carries no transient
-! state, so it survives the commit below cleanly.  Doing it here (as SystemUser,
-! before this segment's commit and before the first Transcript show: at Step 0)
-! self-heals the image on every install, independent of how it was left.
+! state, so it survives the commit below cleanly.  Doing it here (as the .topazini
+! install user, before this segment's commit and before the first Transcript
+! show: at Step 0) self-heals the image on every install, independent of how it
+! was left.
 run
 Transcript := TranscriptStreamPortable new.
 %
@@ -85,7 +98,7 @@ Transcript show: 'Session-method policy enabled (home=GrailSessionMethods, exter
 
 ! ------------------- Repair known-broken host-extent kernel patches
 ! No-op on a stock extent; idempotent on a patched one.  Runs here —
-! as DataCurator, not SystemUser — because the known patches are
+! as the install user, not SystemUser — because the known patches are
 ! GsPackagePolicy session methods living in the GsPackage held by the
 ! application's UserGlobals; recompiling under the same user + policy
 ! replaces the override in that package.  Commits on success.
@@ -140,7 +153,7 @@ run
 symList := System myUserProfile symbolList .
 (symList includesIdentical: GsCompilerClasses) ifFalse:[
   symList add: GsCompilerClasses.
-  Transcript show: 'Added GsCompilerClasses dictionary to DataCurator''s symbol list'.
+  Transcript show: 'Added GsCompilerClasses dictionary to ', System myUserProfile userId, '''s symbol list'.
 ].
 %
 
@@ -756,7 +769,7 @@ Transcript show: 'Step 2 complete: All forward references created'.
 %
 
 ! ===============================================================================
-! Step 3: Python type mappings (as DataCurator)
+! Step 3: Python type mappings (as the install user)
 ! ===============================================================================
 ! Map Python type names to existing GemStone Smalltalk classes.
 ! These classes already exist in GemStone; we just add them to the Python dictionary.
@@ -810,7 +823,7 @@ Transcript show: 'Step 3 complete: Python type mappings created'.
 ! Step 4: Load Python built-in type classes
 ! ===============================================================================
 
-! ------------------- New Python classes (as DataCurator)
+! ------------------- New Python classes (as the install user)
 ! Files are ordered so superclasses load before subclasses.
 run
 Transcript show: 'Step 4: Loading Python built-in type classes...'.
@@ -986,7 +999,7 @@ input src/smalltalk/Python/UnicodeDecodeError.gs
 input src/smalltalk/Python/UnicodeEncodeError.gs
 input src/smalltalk/Python/UnicodeTranslateError.gs
 
-! ------------------- Grail extensions to kernel classes (as DataCurator)
+! ------------------- Grail extensions to kernel classes (as the install user)
 ! With the session-method policy enabled (set up near the top of this script),
 ! methods compiled on shared kernel classes (str/CharacterCollection, Set,
 ! SequenceableCollection, Fraction, Object, Class, System, ...) are captured as
@@ -1020,51 +1033,13 @@ input src/smalltalk/Python/Tuple.gs
 input src/smalltalk/Python/UndefinedObject.gs
 commit
 
-! ------------------- Restricted-class methods (as SystemUser, persistent + shared)
-! Two reasons a kernel-extension file must be filed here rather than as a
-! per-user session method:
-!  (1) restrictedClasses -- GsNMethod (mapped to builtin_function_or_method),
-!      System, and SymbolDictionary back VM-core functionality, so env-1 session
-!      methods are (currently) not permitted on them; and
-!  (2) VM-special selectors -- ExecBlock's value / value: / ... block-invocation
-!      selectors cannot be compiled as session methods (CompileError 1001).
-! Grail adds a small, stable set of env-1 methods here; compile them persistently
-! as SystemUser.  These are SHARED across all users (identical for everyone,
-! rarely modified) -- the only Grail methods not per-user isolated.  The core
-! team is being asked to relax the restrictedClasses guard for env != 0; once
-! done, the (1) files can move up into the DataCurator session-method section.
-commit
-logout
-set user SystemUser pass swordfish
-login
-
-! Share the Python dictionary into SystemUser's symbol list so Grail globals
-! (builtin_function_or_method, None, AttributeError, ...) resolve during compile.
-run
-| pythonDict |
-pythonDict := (AllUsers userWithId: 'DataCurator') symbolList objectNamed: #'Python'.
-pythonDict ifNil: [self error: 'Python dictionary not found in DataCurator''s symbol list'].
-(System myUserProfile symbolList names includes: #'Python')
-	ifFalse: [ System myUserProfile insertDictionary: pythonDict at: 1 ].
-%
-
-input src/smalltalk/Python/builtin_function_or_method.gs
-input src/smalltalk/Python/System.gs
-input src/smalltalk/Python/SymbolDictionary.gs
-input src/smalltalk/Python/ExecBlock.gs
-input src/smalltalk/Python/Object_perform.gs
-
-! Remove the Python dictionary from SystemUser's symbol list again.
-run
-| names |
-names := System myUserProfile symbolList names.
-(names includes: #'Python') ifTrue: [
-	System myUserProfile symbolList removeAtIndex: (names indexOf: #'Python') ].
-%
-commit
-logout
-set user DataCurator pass swordfish
-login
+! Grail's restricted-class methods (GsNMethod via builtin_function_or_method,
+! System, SymbolDictionary, ExecBlock's value-family, and Object's <primitive:>
+! methods + env-0 ___new___ allocators) are NOT filed here -- they are shared,
+! user-independent infrastructure installed once as SystemUser by
+! ./install_base.sh (scripts/install_base.gs).  This per-user script assumes they
+! are already committed; the env-1 module-instantiation blocks below dispatch to
+! them.
 
 ! ------- Register built-in numeric types with numbers module ABCs
 run

@@ -38,7 +38,9 @@ __setitem__: key _: value
 	"Set d[key] to value"
 
 	super __setitem__: (key @env0:asSymbol) _: value.
-	^ None
+	"Resolve None from the calling session's symbol list -- this shared method
+	 (SymbolDictionary is a restrictedClass) must not bind to the install user's None."
+	^ System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'None'
 %
 
 set compile_env: 0

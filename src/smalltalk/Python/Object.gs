@@ -64,7 +64,7 @@ dynamicInstVarAt: aSymbol ifAbsent: absentBlock
 !    only, so env-1 would overwrite env-0 -- MR #6 on 4.0 fixes this properly
 !    with per-environment storage); and
 !  - the with:...performMethod: variants (which carry <primitive: 2027>).
-! DataCurator can neither write Object persistently nor compile primitives, so
+! An ordinary install user can neither write Object persistently nor compile primitives, so
 ! these are compiled by SystemUser (persistent, shared).
 
 set compile_env: 1
@@ -575,7 +575,7 @@ ___classAttrOverlayStore___: aClass name: aSym value: aValue
 		ifFalse: [^ false].
 	"UserGlobals is PER-USER and this file compiles as SystemUser (shared
 	classes), while the canonical set is registered under the session
-	user's UserGlobals (importlib compiles as DataCurator) -- a static
+	user's UserGlobals (importlib compiles as the install user) -- a static
 	reference here would silently probe the wrong dictionary.  Resolve the
 	SESSION user's binding at runtime."
 	ug := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'UserGlobals'.
@@ -2463,8 +2463,8 @@ perform: aSelectorSymbol env: environmentId
  specifying a method lookup environment.
 "
 
-"No <primitive:> here: DataCurator (the session-method install user) may not
- compile primitive methods.  The body below is the correct implementation --
+"No <primitive:> here: the session-method install user (an ordinary, non-SystemUser
+ user) may not compile primitive methods.  The body below is the correct implementation --
  it delegates to the native env-0 _perform:env:withArguments:, which carries
  the real primitive -- so dropping the pragma only loses a fast path."
 ^self @env0:_perform: (aSelectorSymbol @env0:asSymbol) env: environmentId withArguments: #()

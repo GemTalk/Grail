@@ -9,11 +9,12 @@
 ! patched one — rerunning install.sh after each refresh of the host database
 ! reapplies whatever is needed.
 !
-! Filed in from install.gs at the START of the DataCurator segment — NOT the
-! SystemUser one — because the known patches are GsPackagePolicy SESSION
-! METHODS: they live in the GsPackage held in the application's UserGlobals
-! (key #GsPackage_Current) and are merged into method lookup at login for
-! every user sharing that UserGlobals.  Recompiling as DataCurator with the
+! Filed in from install.gs at the START of the per-user install segment (it runs
+! as the ordinary .topazini install user, never SystemUser) — because the known
+! patches are GsPackagePolicy SESSION METHODS: they live in the GsPackage held in
+! the application's UserGlobals (key #GsPackage_Current) and are merged into
+! method lookup at login for every user sharing that UserGlobals.  Recompiling as
+! the install user with the
 ! package policy enabled routes the fixed method back into that same
 ! GsPackage (no SystemUser privilege needed; the persistent kernel method
 ! underneath is never touched).

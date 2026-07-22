@@ -4,10 +4,10 @@ bytes ifNil: [self error: 'bytes is not defined. Check file ordering.'].
 %
 
 ! ===============================================================================
-! Python Class Definitions - Other New Python Classes (as DataCurator)
+! Python Class Definitions - Other New Python Classes (as the install user)
 ! ===============================================================================
 ! Define new classes specific to Python that don't exist in GemStone.
-! These are created as DataCurator.
+! These are created as the install user.
 ! ===============================================================================
 
 ! ------- bytearray class (Python 'bytearray' type - mutable bytes)
