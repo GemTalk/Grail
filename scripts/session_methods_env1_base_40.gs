@@ -5,8 +5,11 @@
 !
 !     topaz -l -S scripts/session_methods_env1_base_40.gs
 !
-! (install_base.sh selects this on 4.0.x; the 3.7.x sibling is
-! session_methods_env1_base_37.gs.)
+! (install_base.sh applies this ONLY when a 4.0+ build LACKS native env-1 session
+! methods -- i.e. GemStone MR #6 is absent, as detected by
+! scripts/detect_env1_session_methods.gs.  A 4.0 build WITH MR #6 routes env-1
+! through GsPackagePolicy natively and needs no patch, so this script is skipped.
+! The 3.7.x sibling is session_methods_env1_base_37.gs.)
 !
 ! Grail installs its ~196 env-1 kernel-class extensions (str/CharacterCollection,
 ! Set, SequenceableCollection, Fraction, Object, Class, ...) as PER-USER SESSION

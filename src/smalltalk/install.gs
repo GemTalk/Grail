@@ -80,20 +80,48 @@ Transcript := TranscriptStreamPortable new.
 ! specs/SessionMethods-Env1-Setup.md).  It also replaces the old Step-0 env-0
 ! hygiene scrub: recreating the package below drops previously-captured session
 ! methods so kernel extensions removed from source do not linger.
+!
+! MULTI-USER OWNERSHIP -- why the GrailSessionMethods dictionary is created
+! DIRECTLY in this user's own symbol list, and NOT via GsPackageLibrary:
+!   GsPackageLibrary's package registry is a single, DataCurator-owned structure
+!   shared by every user.  Routing package creation through
+!   GsPackageLibrary createPackageNamed:/installPackage: entangles all users'
+!   packages in one shared object graph, so internal nodes -- the
+!   class->method-dict IdentityKeyValueDictionary and its collision buckets -- end
+!   up owned by whichever user first grew them.  A later compile by a *different*
+!   user then tries to modify a foreign-owned bucket and fails with
+!       SecurityError 2116: ... modify the object anIdentityCollisionBucket
+!                            in objectSecurityPolicyId <n> ...
+!   even for an ordinary persistent compile, because with the policy enabled every
+!   env-0 compile records a method stamp into the (shared) package.  Creating the
+!   dictionary here, in this user's own symbol list, makes the ENTIRE package graph
+!   single-owner (this user), so every session-method and stamp write stays inside
+!   this user's own object security policy.  externalSymbolList={Globals} is only a
+!   read (World-readable) eligibility path and does not write foreign objects.
+!   See specs/SessionMethods-MultiUser-PackageLibrary-Bug.md in the gemstone repo.
 run
-| policy home |
+| policy home symList idx |
 policy := GsPackagePolicy current.
 policy disable.
-(System myUserProfile symbolList names includes: #'GrailSessionMethods')
-	ifFalse: [ GsPackageLibrary installPackage: (GsPackageLibrary createPackageNamed: #'GrailSessionMethods') ].
-home := System myUserProfile symbolList objectNamed: #'GrailSessionMethods'.
-home removeKey: #GsPackage_Current ifAbsent: [].
+symList := System myUserProfile symbolList.
+"Drop any pre-existing GrailSessionMethods -- notably a shared, foreign-owned one
+ left by an earlier GsPackageLibrary-based install -- from THIS user's symbol list.
+ Removing the reference only mutates this user's own symbol list; it does not touch
+ the (possibly foreign) old dictionary object."
+[ (idx := symList names indexOf: #'GrailSessionMethods') > 0 ]
+	whileTrue: [ symList removeAtIndex: idx ].
+"Create a fresh, user-owned GrailSessionMethods dictionary at the front of this
+ user's symbol list and install a new GsPackage into it.  Recreating it each
+ install also drops previously-captured session methods, so kernel extensions
+ removed from source do not linger."
+home := SymbolDictionary new name: #'GrailSessionMethods'; yourself.
+System myUserProfile insertDictionary: home at: 1.
 GsPackage installIn: home.
 policy homeSymbolDict: home.
 policy externalSymbolList: { Globals }.
 policy enable.
 System commitTransaction.
-Transcript show: 'Session-method policy enabled (home=GrailSessionMethods, external={Globals})'.
+Transcript show: 'Session-method policy enabled (per-user home=GrailSessionMethods, external={Globals})'.
 %
 
 ! ------------------- Repair known-broken host-extent kernel patches

@@ -44,31 +44,41 @@ fi
 
 cd "$SCRIPT_DIR" || exit 1
 
-# 1. GsPackagePolicy env-1 session-method support (version-specific patch).
-# Detect the version from $GEMSTONE/version.txt, NOT the $GEMSTONE path -- CI
-# installs to an unversioned /opt/gemstone/product, so a `case "$GEMSTONE" in
-# *3.7*` test silently skipped this patch there and every env-1 session method
-# (e.g. the numbers ABC registry on IdentitySet) then failed at install time.
-# Each supported version has its own patch script under scripts/ because the
-# session-method compile path differs across releases (3.7.x patches
-# GsPackagePolicy's install path; 4.0 patches Behavior>>compileMethod: to route
-# env-1 through GsPackagePolicy -- stock 4.0 does so for env-0 only).
+# 1. GsPackagePolicy env-1 session-method support.
+# Stock 3.7.x wires session methods for environment 0 ONLY, so it always needs
+# Grail's env-1 patch (scripts/session_methods_env1_base_37.gs, which makes the
+# GsPackagePolicy install path env-aware).  4.0+ MAY support env-1 session
+# methods NATIVELY via GemStone MR #6 ("Support session methods in environments
+# other than 0"); a stock pre-MR#6 4.0 does NOT -- its Behavior>>compileMethod:
+# routes only env-0 through GsPackagePolicy, so an env-1 kernel-class method
+# fails at install time with SecurityError 2257, and
+# scripts/session_methods_env1_base_40.gs recompiles compileMethod: to route
+# env-1 too.
+#
+# version.txt CANNOT distinguish an MR#6 4.0 from a stock 4.0 (both report
+# 4.0.x), so for 4.0+ we FEATURE-PROBE for MR#6
+# (scripts/detect_env1_session_methods.gs) and apply the compile-path patch only
+# when MR#6 is absent.  (Version is still read from version.txt, never the
+# $GEMSTONE path -- CI installs to an unversioned /opt/gemstone/product, where a
+# `case "$GEMSTONE" in *3.7*` test would silently skip the 3.7 patch.)
 GS_VERSION=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$GEMSTONE/version.txt" 2>/dev/null | head -1)
 echo "GemStone version: ${GS_VERSION:-unknown} (from $GEMSTONE/version.txt)"
 case "$GS_VERSION" in
     3.7.*)
-        echo "GemStone 3.7.x detected -- applying env-1 session-method policy patch (3.7 variant)..."
+        echo "GemStone 3.7.x detected -- applying Grail env-1 session-method policy patch (3.7 variant)..."
         LC_ALL=C topaz -lq -S scripts/session_methods_env1_base_37.gs || {
             echo "Error: env-1 session-method policy patch (3.7) failed."; exit 1; }
         ;;
-    4.0.*)
-        echo "GemStone 4.0.x detected -- applying env-1 session-method policy patch (4.0 variant)..."
-        LC_ALL=C topaz -lq -S scripts/session_methods_env1_base_40.gs || {
-            echo "Error: env-1 session-method policy patch (4.0) failed."; exit 1; }
-        ;;
     *)
-        echo "GemStone ${GS_VERSION:-unknown}: no env-1 session-method patch for this version --"
-        echo "assuming the base image already supports env-1 session methods (GemStone MR #6)."
+        # 4.0 and later: rely on native MR #6 support if present; else (pre-MR#6
+        # 4.0) apply Grail's env-1 compile-path patch.
+        if LC_ALL=C topaz -lq -S scripts/detect_env1_session_methods.gs 2>/dev/null | grep -q 'GRAIL_MR6=yes'; then
+            echo "GemStone ${GS_VERSION:-unknown}: MR #6 present -- env-1 session methods are native; no patch needed."
+        else
+            echo "GemStone ${GS_VERSION:-unknown}: env-1 session methods not native (pre-MR #6) -- applying Grail compile-path patch (4.0 variant)..."
+            LC_ALL=C topaz -lq -S scripts/session_methods_env1_base_40.gs || {
+                echo "Error: env-1 session-method policy patch (4.0) failed."; exit 1; }
+        fi
         ;;
 esac
 
