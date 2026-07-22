@@ -5,9 +5,23 @@
 * [include](~/Documents/GemStone/GemStone64Bit3.7.5-arm64.Darwin/include)
 
 # Install Changes and Run Tests
-* `./install.sh` # installs all Smalltalk code
+
+Development currently happens on the **`session-methods`** branch, whose install
+is split into a shared base (installed once, as SystemUser) plus a per-user
+layer. `main` is being fast-forwarded onto this branch, so this is the standard
+workflow going forward.
+
+* `./install_base.sh` # run ONCE per extent, as SystemUser, BEFORE the first `./install.sh`. Installs the shared, user-independent base (GsPackagePolicy env-1 session-method support, unicode comparison mode, restricted-class base methods). Idempotent. On a fresh stone this MUST run first, or `./install.sh` fails with a SecurityError (a per-user session cannot modify SystemUser-owned method dictionaries in objectSecurityPolicyId 1).
+* `./install.sh` # per-user install (runs as the `.topazini` user, no SystemUser step). Installs this user's Grail: env-1 kernel-extension session methods + the `Python`/`PythonTests` dictionaries. Re-run after every Smalltalk edit.
 * `./scripts/run_tests.sh` # run all Python-related tests (fresh worker sessions; picks up the install automatically)
 * `source .setenv` # needed for stand-alone Topaz scripts
+
+On a brand-new / freshly-restarted stone: `./install_base.sh` then `./install.sh`.
+For iterating on edits after the base exists: just `./install.sh`.
+NOTE: never run `install.sh` from a git branch based on `main` that lacks the
+base/per-user split — the monolithic `main` install commits Grail as SystemUser
+into policy 1 and corrupts a session-methods extent (per-user re-install then
+SecurityErrors). Keep this work on `session-methods`.
 
 ## After `install.sh`, refresh a long-lived MCP/topaz session
 A session that stays logged in across an `install.sh` will NOT see rebuilt
