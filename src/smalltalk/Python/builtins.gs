@@ -1260,8 +1260,10 @@ sorted: anIterable
 	].
 	"GemStone's sort: returns a fresh sorted Array, not the receiver; copy it
 	back over the list's slots so sorted() returns a Python list (not an Array,
-	which is not a list: isinstance/== against a list literal would fail)."
-	sortedArray := lst @env0:sort: [:a :b | a __lt__: b].
+	which is not a list: isinstance/== against a list literal would fail).
+	___stableSortedArray: gives CPython-stable ordering (GemStone's @env0:sort:
+	is not stable)."
+	sortedArray := lst ___stableSortedArray: nil reverse: false.
 	lst @env0:replaceFrom: 1 to: lst @env0:size with: sortedArray startingAt: 1.
 	^ lst
 %
@@ -1279,7 +1281,7 @@ _sorted: positional kw: kwargs
 	optimized selector, and a host extent that removed it from
 	GsNMethod optimizedSelectors compiles a bare isNil as a real
 	send — which nothing implements in env 1."
-	| iterable keyFn reverse lst iter done sortBlock sortedArray |
+	| iterable keyFn reverse lst iter done sortedArray |
 	iterable := positional @env0:at: 1.
 	keyFn := kwargs @env0:isNil
 		ifTrue: [nil]
@@ -1302,22 +1304,12 @@ _sorted: positional kw: kwargs
 			lst append: item
 		] @env0:on: StopIteration do: [:ex | done := true]
 	].
-	sortBlock := keyFn @env0:isNil
-		ifTrue: [
-			reverse ___isTruthy___
-				ifTrue: [[:a :b | b __lt__: a]]
-				ifFalse: [[:a :b | a __lt__: b]]]
-		ifFalse: [
-			reverse ___isTruthy___
-				ifTrue: [[:a :b |
-					(keyFn value: { b } value: nil)
-						__lt__: (keyFn value: { a } value: nil)]]
-				ifFalse: [[:a :b |
-					(keyFn value: { a } value: nil)
-						__lt__: (keyFn value: { b } value: nil)]]].
 	"GemStone's sort: returns a fresh sorted Array, not the receiver; copy it
-	back over the list's slots so sorted() returns a Python list (not an Array)."
-	sortedArray := lst @env0:sort: sortBlock.
+	back over the list's slots so sorted() returns a Python list (not an Array).
+	___stableSortedArray: gives CPython-stable ordering and evaluates the key
+	once per element (GemStone's @env0:sort: is not stable, and the old inline
+	sortBlock recomputed the key on every comparison)."
+	sortedArray := lst ___stableSortedArray: keyFn reverse: (reverse ___isTruthy___).
 	lst @env0:replaceFrom: 1 to: lst @env0:size with: sortedArray startingAt: 1.
 	^ lst
 %

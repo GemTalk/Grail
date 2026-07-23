@@ -588,14 +588,56 @@ reverse
 
 category: 'Grail-List Methods'
 method: list
+___stableSortedArray: keyFn reverse: rev
+	"Return a fresh Array of the receiver's elements in Python-stable sorted
+	order.  GemStone's @env0:sort: is NOT stable -- it reverses equal-key
+	runs -- so decorate each element with its ORIGINAL index and break
+	comparison ties by that index.  Equal-key elements then keep their input
+	order, and for reverse=true they keep input order too, matching CPython's
+	stable sorted() / sorted(..., reverse=True).  The key, when supplied, is
+	evaluated ONCE per element (Python semantics), not once per comparison.
+	Reads a snapshot up front, so the receiver is never indexed during the
+	sort itself (a mutating comparator can't corrupt the sort primitive)."
+
+	| snapshot n dec sortedArr |
+	snapshot := self @env0:asArray.
+	n := snapshot @env0:size.
+	dec := Array @env0:new: n.
+	1 @env0:to: n do: [:i | | elem sortVal |
+		elem := snapshot @env0:at: i.
+		sortVal := keyFn @env0:isNil
+			ifTrue: [elem]
+			ifFalse: [keyFn value: { elem } value: nil].
+		dec @env0:at: i put: { sortVal. i. elem }].
+	sortedArr := dec @env0:sort: [:pa :pb | | sa sb |
+		sa := pa @env0:at: 1.
+		sb := pb @env0:at: 1.
+		rev
+			ifTrue: [
+				(sb __lt__: sa)
+					ifTrue: [true]
+					ifFalse: [(sa __lt__: sb)
+						ifTrue: [false]
+						ifFalse: [(pa @env0:at: 2) @env0:< (pb @env0:at: 2)]]]
+			ifFalse: [
+				(sa __lt__: sb)
+					ifTrue: [true]
+					ifFalse: [(sb __lt__: sa)
+						ifTrue: [false]
+						ifFalse: [(pa @env0:at: 2) @env0:< (pb @env0:at: 2)]]]].
+	^ sortedArr @env0:collect: [:p | p @env0:at: 3]
+%
+
+category: 'Grail-List Methods'
+method: list
 sort
-	"Sort the list IN PLACE using Python's __lt__ for comparison.
+	"Sort the list IN PLACE using Python's __lt__ for comparison (stable).
 	GemStone's ``sort:'' returns a fresh sorted Array rather than
 	reordering the receiver, so copy the result back over the
 	receiver's slots to get true in-place semantics."
 
 	| sorted |
-	sorted := self @env0:sort: [:a :b | a __lt__: b].
+	sorted := self ___stableSortedArray: nil reverse: false.
 	self @env0:replaceFrom: 1 to: self @env0:size with: sorted startingAt: 1.
 	^ None
 %
@@ -609,7 +651,7 @@ _sort: positional kw: kwargs
 	place (and returns None).  flask's routing sorts the rule list with
 	a key at request time."
 
-	| keyFn reverse sortBlock sorted n0 |
+	| keyFn reverse sorted n0 |
 	"key and reverse are keyword-ONLY (Python ``sort(*, key=None,
 	reverse=False)``); any positional argument is a TypeError (list_tests
 	test_sort: u.sort(42, 42))."
@@ -618,31 +660,21 @@ _sort: positional kw: kwargs
 	keyFn := kwargs @env0:isNil
 		ifTrue: [nil]
 		ifFalse: [kwargs @env0:at: 'key' ifAbsent: [nil]].
+	"An EXPLICIT key=None means no key (as in _sorted:kw:); calling the None
+	singleton as a key would raise 'NoneType is not callable'."
+	keyFn == None ifTrue: [keyFn := nil].
 	reverse := kwargs @env0:isNil
 		ifTrue: [false]
 		ifFalse: [kwargs @env0:at: 'reverse' ifAbsent: [false]].
-	sortBlock := keyFn @env0:isNil
-		ifTrue: [
-			reverse ___isTruthy___
-				ifTrue: [[:a :b | b __lt__: a]]
-				ifFalse: [[:a :b | a __lt__: b]]]
-		ifFalse: [
-			reverse ___isTruthy___
-				ifTrue: [[:a :b |
-					(keyFn value: { b } value: nil)
-						__lt__: (keyFn value: { a } value: nil)]]
-				ifFalse: [[:a :b |
-					(keyFn value: { a } value: nil)
-						__lt__: (keyFn value: { b } value: nil)]]].
-	"Sort a SNAPSHOT (asArray) rather than self, so a comparison callback
-	that mutates self during the sort cannot corrupt the sort primitive
-	(GemStone's in-place sort walks stale offsets -> OffsetError otherwise).
-	CPython forbids mutating a list while it is being sorted and raises
-	``ValueError: list modified during sort'' (list_tests test_sort's
-	selfmodifyingComparison); detect the size change and do the same before
-	copying the sorted snapshot back over the (unchanged-length) receiver."
+	"Sort a SNAPSHOT rather than self, so a comparison callback that mutates
+	self during the sort cannot corrupt the sort (___stableSortedArray:
+	reads its own asArray snapshot up front).  CPython forbids mutating a
+	list while it is being sorted and raises ``ValueError: list modified
+	during sort'' (list_tests test_sort's selfmodifyingComparison); detect
+	the size change and do the same before copying the sorted snapshot back
+	over the (unchanged-length) receiver."
 	n0 := self @env0:size.
-	sorted := (self @env0:asArray) @env0:sort: sortBlock.
+	sorted := self ___stableSortedArray: keyFn reverse: (reverse ___isTruthy___).
 	(self @env0:size @env0:~= n0) ifTrue: [
 		ValueError ___signal___: 'list modified during sort'].
 	self @env0:replaceFrom: 1 to: n0 with: sorted startingAt: 1.

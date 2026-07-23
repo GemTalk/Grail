@@ -4923,8 +4923,13 @@ testJinja2RenderGroupbyFilter
 	| mod result |
 	mod := self loadFixture: 'use_jinja2_partial'.
 	result := mod @env1:jinja2_render_groupby_filter.
+	"Within the age-30 group, Alice precedes Bob: jinja2's groupby does a
+	STABLE sorted(people, key=age), so the two age-30 rows keep their input
+	order (Alice, then Bob).  (This assertion previously expected Bob before
+	Alice, which only held because Grail's sorted() was not stable; see the
+	___stableSortedArray: fix in list.gs.)"
 	self assert: result equals:
-		'[(25, [{''name'': ''Carol'', ''age'': 25}]), (30, [{''name'': ''Bob'', ''age'': 30}, {''name'': ''Alice'', ''age'': 30}])]'
+		'[(25, [{''name'': ''Carol'', ''age'': 25}]), (30, [{''name'': ''Alice'', ''age'': 30}, {''name'': ''Bob'', ''age'': 30}])]'
 %
 
 category: 'Grail-Tests - Jinja2 render'

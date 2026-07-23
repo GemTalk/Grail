@@ -50,6 +50,19 @@ _sequenceLength: seq
 
 category: 'Grail-Private'
 method: random
+_sequenceElement: seq at: oneBasedIndex
+	"Read the element at a 1-based index from a Python sequence via
+	__getitem__ (0-based) so a str yields a length-1 str -- NOT a bare
+	Smalltalk Character, which has no env-1 comparison and breaks
+	sorted()/heapq over choice()/sample()/choices() results (test_heapq
+	test_merge).  Falls back to env-0 at: for plain Smalltalk collections
+	that lack __getitem__ (mirrors _sequenceLength:)."
+	^ [seq __getitem__: (oneBasedIndex @env0:- 1)]
+		@env0:on: MessageNotUnderstood do: [:ex | seq @env0:at: oneBasedIndex]
+%
+
+category: 'Grail-Private'
+method: random
 _generator
 	"Return this session's random generator, creating it on first use.
 
@@ -129,7 +142,7 @@ choice: seq
 	len := self _sequenceLength: seq.
 	(len == 0) ifTrue: [IndexError ___signal___: 'Cannot choose from an empty sequence'].
 	idx := self _generator @env0:integerBetween: 1 and: len.
-	^ seq @env0:at: idx
+	^ self _sequenceElement: seq at: idx
 %
 
 category: 'Grail-Built-in Functions'
@@ -367,13 +380,13 @@ _sample: positional kw: kwargs
 			| idx |
 			idx := self _generator @env0:integerBetween: 1 and: n.
 			(selected @env0:includes: idx) ifFalse: [
-				selected @env0:add: idx. result append: (population @env0:at: idx).
+				selected @env0:add: idx. result append: (self _sequenceElement: population at: idx).
 			].
 		].
 	] ifFalse: [
 		| pool |
 		pool := Array ___new___: n.
-		1 @env0:to: n do: [:i | pool @env0:at: i put: (population @env0:at: i)].
+		1 @env0:to: n do: [:i | pool @env0:at: i put: (self _sequenceElement: population at: i)].
 		1 @env0:to: k do: [:i |
 			| j temp |
 			j := self _generator @env0:integerBetween: i and: n.
@@ -416,14 +429,14 @@ _choices: positional kw: kwargs
 			r := (self _generator @env0:float) @env0:* total.
 			idx := 1.
 			[(idx @env0:< n) and: [(cumWeights @env0:at: idx) @env0:<= r]] @env0:whileTrue: [idx := idx @env0:+ 1].
-			result append: (population @env0:at: idx).
+			result append: (self _sequenceElement: population at: idx).
 		].
 	] ifFalse: [
 		result := list ___new___.
 		1 @env0:to: k do: [:unused |
 			| idx |
 			idx := self _generator @env0:integerBetween: 1 and: n.
-			result append: (population @env0:at: idx).
+			result append: (self _sequenceElement: population at: idx).
 		].
 	].
 	^ result

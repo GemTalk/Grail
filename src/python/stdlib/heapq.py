@@ -96,11 +96,14 @@ def nlargest(n, iterable, key=None):
     """Return a list with the n largest elements from the dataset."""
     if n <= 0:
         return []
+    # Use reverse=True (a stable descending sort) rather than
+    # reversed(sorted(...)): reversing an ascending sort also reverses the
+    # order of equal elements, breaking the stability CPython guarantees
+    # (test_heapq test_nlargest compares against sorted(..., reverse=True)).
     if key is None:
-        result = sorted(iterable)
+        result = sorted(iterable, reverse=True)
     else:
-        result = sorted(iterable, key=key)
-    result = list(reversed(result))
+        result = sorted(iterable, key=key, reverse=True)
     return result[:n]
 
 
@@ -110,12 +113,14 @@ def merge(*iterables, key=None, reverse=False):
     for it in iterables:
         for item in it:
             out.append(item)
+    # sorted(..., reverse=reverse), not reversed(sorted(...)): the latter
+    # reverses the order of equal elements and breaks the stability a k-way
+    # merge guarantees (test_heapq test_merge compares against
+    # sorted(chain(*inputs), key=key, reverse=reverse)).
     if key is None:
-        out = sorted(out)
+        out = sorted(out, reverse=reverse)
     else:
-        out = sorted(out, key=key)
-    if reverse:
-        out = list(reversed(out))
+        out = sorted(out, key=key, reverse=reverse)
     return iter(out)
 
 
