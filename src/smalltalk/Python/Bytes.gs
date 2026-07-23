@@ -292,8 +292,11 @@ __add__: other
 category: 'Grail-Type'
 method: bytes
 __class__
-	"Return the Python type for bytes"
-	^ bytes
+	"Return the Python type -- the receiver's ACTUAL class, so a
+	``class MyBytes(bytes)'' instance reports MyBytes while a plain
+	bytes literal still reports bytes (a bytes literal's class IS the
+	ByteArray kernel, which is the ``bytes'' type object)."
+	^ self @env0:class
 %
 
 category: 'Grail-Sequence Protocol'
@@ -443,45 +446,42 @@ __ne__: other
 
 category: 'Grail-String Representation'
 method: bytes
-__repr__
-	"Return string representation of bytes (e.g., b'hello')"
-	| result size |
-	result := 'b'''.
+___reprBody___
+	"The ``b'...'''-style representation shared by bytes and bytearray repr.
+	Matches CPython: single quotes, unless the data holds a single quote and
+	no double quote (then double quotes); escape backslash, \t, \n, \r and the
+	active quote; other non-printable bytes as LOWERCASE \xNN; printable ASCII
+	(32-126) literally."
+	| size hasSingle hasDouble quote out bs |
 	size := self @env0:size.
+	hasSingle := false. hasDouble := false.
+	1 @env0:to: size do: [:i | | b |
+		b := self @env0:at: i.
+		(b @env0:= 39) ifTrue: [hasSingle := true].
+		(b @env0:= 34) ifTrue: [hasDouble := true]].
+	quote := (hasSingle @env0:and: [hasDouble @env0:not]) ifTrue: [34] ifFalse: [39].
+	bs := Character @env0:codePoint: 92.
+	out := WriteStream @env0:on: Unicode7 @env0:new.
+	out @env0:nextPut: $b; @env0:nextPut: (Character @env0:codePoint: quote).
+	1 @env0:to: size do: [:i | | b |
+		b := self @env0:at: i.
+		((b @env0:= 92) @env0:or: [b @env0:= quote]) ifTrue: [out @env0:nextPut: bs; @env0:nextPut: (Character @env0:codePoint: b)] ifFalse: [
+		(b @env0:= 9)  ifTrue: [out @env0:nextPut: bs; @env0:nextPut: $t] ifFalse: [
+		(b @env0:= 10) ifTrue: [out @env0:nextPut: bs; @env0:nextPut: $n] ifFalse: [
+		(b @env0:= 13) ifTrue: [out @env0:nextPut: bs; @env0:nextPut: $r] ifFalse: [
+		((b @env0:>= 32) @env0:and: [b @env0:<= 126]) ifTrue: [out @env0:nextPut: (Character @env0:codePoint: b)] ifFalse: [
+		| hx | hx := (b @env0:printStringRadix: 16) @env0:asLowercase.
+		(hx @env0:size @env0:= 1) ifTrue: [hx := '0' @env0:, hx].
+		out @env0:nextPut: bs; @env0:nextPut: $x; @env0:nextPutAll: hx ]]]]]].
+	out @env0:nextPut: (Character @env0:codePoint: quote).
+	^ out @env0:contents
+%
 
-	1 @env0:to: size do: [:i |
-		| byte |
-		byte := self @env0:at: i.
-
-		"Printable ASCII characters (32-126)"
-		((byte @env0:>= 32) and: [
-			byte @env0:<= 126
-		]) ifTrue: [
-			"Special cases that need escaping"
-			(byte == 39) ifTrue: [  "single quote"
-				result := result @env0:, '\'''
-			] ifFalse: [
-				(byte == 92) ifTrue: [  "backslash"
-					result := result @env0:, '\\'
-				] ifFalse: [
-					| char |
-					char := Character @env0:codePoint: byte.
-					result := result @env0:, (char @env0:asString)
-				]
-			]
-		] ifFalse: [
-			"Non-printable: use \xNN format"
-			| hex |
-			hex := byte @env0:printStringRadix: 16.
-			((hex @env0:size) == 1) ifTrue: [
-				hex := '0' @env0:, hex
-			].
-			result := result @env0:, ('\x' @env0:, hex)
-		]
-	].
-
-	result := result @env0:, ''''.
-	^ result
+category: 'Grail-String Representation'
+method: bytes
+__repr__
+	"Return the bytes representation, e.g. b'hello'."
+	^ self ___reprBody___
 %
 
 category: 'Grail-Sequence Protocol'
@@ -518,37 +518,9 @@ capitalize
 category: 'Grail-Padding Methods'
 method: bytes
 center: width
-	"Center bytes in field of given width"
-	| mySize result totalPadding leftPadding rightPadding |
-	mySize := self @env0:size.
-
-	"If already wide enough, return copy"
-	(width @env0:<= mySize) ifTrue: [
-		^ self @env0:copy
-	].
-
-	"Calculate padding"
-	totalPadding := width @env0:- (mySize).
-	leftPadding := totalPadding @env0:// 2.
-	rightPadding := totalPadding @env0:- (leftPadding).
-	result := bytes ___new___: width.
-
-	"Add left spaces"
-	1 @env0:to: leftPadding do: [:i |
-		result @env0:at: i put: 32
-	].
-
-	"Copy original"
-	1 @env0:to: mySize do: [:i |
-		result @env0:at: (leftPadding @env0:+ i) put: (self @env0:at: i)
-	].
-
-	"Add right spaces"
-	1 @env0:to: rightPadding do: [:i |
-		result @env0:at: (leftPadding @env0:+ (mySize @env0:+ i)) put: 32
-	].
-
-	^ result
+	"bytes.center(width) -- centered in a field of the given width, padded
+	with spaces.  center(width, fillbyte) supplies a different fill."
+	^ self center: width _: 32
 %
 
 category: 'Grail-Search Methods'
@@ -1049,7 +1021,8 @@ find: sub
 category: 'Grail-Encoding/Decoding'
 method: bytes
 hex
-	"Return hex representation of bytes"
+	"Return the lowercase hex representation of the bytes (CPython
+	bytes.hex() -- e.g. b'\xfe\x01'.hex() = 'fe01')."
 	| result size |
 	result := ''.
 	size := self @env0:size.
@@ -1057,7 +1030,7 @@ hex
 	1 @env0:to: size do: [:i |
 		| byte hexStr |
 		byte := self @env0:at: i.
-		hexStr := byte @env0:printStringRadix: 16.
+		hexStr := (byte @env0:printStringRadix: 16) @env0:asLowercase.
 		"Pad with leading zero if needed"
 		((hexStr @env0:size) == 1) ifTrue: [
 			hexStr := '0' @env0:, hexStr
@@ -1386,30 +1359,9 @@ join: iterable
 category: 'Grail-Padding Methods'
 method: bytes
 ljust: width
-	"Left justify bytes in field of given width"
-	| mySize result padding |
-	mySize := self @env0:size.
-
-	"If already wide enough, return copy"
-	(width @env0:<= mySize) ifTrue: [
-		^ self @env0:copy
-	].
-
-	"Pad with spaces"
-	padding := width @env0:- (mySize).
-	result := bytes ___new___: width.
-
-	"Copy original"
-	1 @env0:to: mySize do: [:i |
-		result @env0:at: i put: (self @env0:at: i)
-	].
-
-	"Add spaces"
-	1 @env0:to: padding do: [:i |
-		result @env0:at: (mySize @env0:+ i) put: 32
-	].
-
-	^ result
+	"bytes.ljust(width) -- left-justified in a field of the given width,
+	padded with spaces.  ljust(width, fillbyte) supplies a different fill."
+	^ self ljust: width _: 32
 %
 
 category: 'Grail-String-like Methods'
@@ -1651,30 +1603,9 @@ rindex: sub
 category: 'Grail-Padding Methods'
 method: bytes
 rjust: width
-	"Right justify bytes in field of given width"
-	| mySize result padding |
-	mySize := self @env0:size.
-
-	"If already wide enough, return copy"
-	(width @env0:<= mySize) ifTrue: [
-		^ self @env0:copy
-	].
-
-	"Pad with spaces"
-	padding := width @env0:- (mySize).
-	result := bytes ___new___: width.
-
-	"Add spaces"
-	1 @env0:to: padding do: [:i |
-		result @env0:at: i put: 32
-	].
-
-	"Copy original"
-	1 @env0:to: mySize do: [:i |
-		result @env0:at: (padding @env0:+ i) put: (self @env0:at: i)
-	].
-
-	^ result
+	"bytes.rjust(width) -- right-justified in a field of the given width,
+	padded with spaces.  rjust(width, fillbyte) supplies a different fill."
+	^ self rjust: width _: 32
 %
 
 category: 'Grail-Splitting Methods'
@@ -1843,8 +1774,10 @@ rstrip
 category: 'Grail-String-like Methods'
 method: bytes
 split: sep
-	"Split bytes by separator, return list of bytes"
+	"Split bytes by separator, return list of bytes.  A ``None'' separator
+	(``b.split(None)'') splits on runs of ASCII whitespace."
 	| sepClass sepSize mySize parts currentPart i |
+	(sep @env0:== None) ifTrue: [^ self ___splitWhitespace___].
 	sepClass := sep @env0:class.
 
 	"sep must be bytes"
@@ -2254,8 +2187,9 @@ title
 category: 'Grail-Translation Methods'
 method: bytes
 translate: table
-	"Translate bytes using translation table"
+	"Translate bytes using a 256-entry table (None = identity copy)."
 	| tableSize mySize result |
+	(table @env0:== None) ifTrue: [^ self @env0:copy].
 	tableSize := table @env0:size.
 	mySize := self @env0:size.
 
@@ -2326,6 +2260,282 @@ zfill: width
 		result @env0:at: (padding @env0:+ i) put: (self @env0:at: i)
 	].
 
+	^ result
+%
+
+! ===============================================================================
+! Optional-argument signatures (CPython accepts more arg counts than Grail
+! originally defined). Python maps ``b.m(a, b)'' to the ``m:_:'' selector, so
+! each accepted arity needs its own method.  bytearray inherits these (it only
+! overrides find).
+! ===============================================================================
+
+category: 'Grail-Search Methods'
+method: bytes
+find: sub _: start
+	"bytes.find(sub, start) -- first index >= start, else -1."
+	^ self find: sub _: start _: self @env0:size
+%
+
+category: 'Grail-Search Methods'
+method: bytes
+find: sub _: start _: end
+	"bytes.find(sub, start, end) -- first 0-based index of sub within the
+	[start, end) slice (CPython negative-index clamping), else -1.  Reuses the
+	1-arg scan on the slice and offsets the hit back to an absolute index."
+	| size s e r |
+	size := self @env0:size.
+	s := start. e := end.
+	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
+	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
+	e := e @env0:min: size. s := s @env0:min: size.
+	s @env0:> e ifTrue: [^ -1].
+	r := (self @env0:copyFrom: s @env0:+ 1 to: e) find: sub.
+	^ (r @env0:= -1) ifTrue: [-1] ifFalse: [r @env0:+ s]
+%
+
+category: 'Grail-Search Methods'
+method: bytes
+index: sub _: start
+	"bytes.index(sub, start) -- like find, ValueError if absent."
+	| r |
+	r := self find: sub _: start.
+	(r @env0:= -1) ifTrue: [ValueError ___signal___: 'subsection not found'].
+	^ r
+%
+
+category: 'Grail-Search Methods'
+method: bytes
+index: sub _: start _: end
+	"bytes.index(sub, start, end)."
+	| r |
+	r := self find: sub _: start _: end.
+	(r @env0:= -1) ifTrue: [ValueError ___signal___: 'subsection not found'].
+	^ r
+%
+
+category: 'Grail-Search Methods'
+method: bytes
+rindex: sub _: start
+	"bytes.rindex(sub, start) -- like rfind, ValueError if absent."
+	| r |
+	r := self rfind: sub _: start.
+	(r @env0:= -1) ifTrue: [ValueError ___signal___: 'subsection not found'].
+	^ r
+%
+
+category: 'Grail-Search Methods'
+method: bytes
+rindex: sub _: start _: end
+	"bytes.rindex(sub, start, end)."
+	| r |
+	r := self rfind: sub _: start _: end.
+	(r @env0:= -1) ifTrue: [ValueError ___signal___: 'subsection not found'].
+	^ r
+%
+
+category: 'Grail-Padding Methods'
+method: bytes
+___byteValueOf___: aFill
+	"The single byte value of a padding/fill argument: an int is used
+	directly; a length-1 bytes/bytearray yields its one byte (CPython
+	requires the fill to be a single byte)."
+	(aFill isKindOf: SmallInteger) ifTrue: [^ aFill].
+	(aFill @env0:size @env0:= 1) ifFalse: [
+		TypeError ___signal___: 'fill character must be a byte or a bytes of length 1'].
+	^ aFill @env0:at: 1
+%
+
+category: 'Grail-Padding Methods'
+method: bytes
+center: width _: fillchar
+	"bytes.center(width, fillbyte) -- centered, padded with the given fill."
+	| mySize result totalPadding leftPadding rightPadding fill |
+	mySize := self @env0:size.
+	(width @env0:<= mySize) ifTrue: [^ self @env0:copy].
+	fill := self ___byteValueOf___: fillchar.
+	totalPadding := width @env0:- mySize.
+	leftPadding := totalPadding @env0:// 2.
+	rightPadding := totalPadding @env0:- leftPadding.
+	result := bytes ___new___: width.
+	1 @env0:to: leftPadding do: [:i | result @env0:at: i put: fill].
+	1 @env0:to: mySize do: [:i | result @env0:at: (leftPadding @env0:+ i) put: (self @env0:at: i)].
+	1 @env0:to: rightPadding do: [:i | result @env0:at: (leftPadding @env0:+ (mySize @env0:+ i)) put: fill].
+	^ result
+%
+
+category: 'Grail-String-like Methods'
+method: bytes
+ljust: width _: fillchar
+	"bytes.ljust(width, fillbyte)."
+	| mySize result padding fill |
+	mySize := self @env0:size.
+	(width @env0:<= mySize) ifTrue: [^ self @env0:copy].
+	fill := self ___byteValueOf___: fillchar.
+	padding := width @env0:- mySize.
+	result := bytes ___new___: width.
+	1 @env0:to: mySize do: [:i | result @env0:at: i put: (self @env0:at: i)].
+	1 @env0:to: padding do: [:i | result @env0:at: (mySize @env0:+ i) put: fill].
+	^ result
+%
+
+category: 'Grail-Padding Methods'
+method: bytes
+rjust: width _: fillchar
+	"bytes.rjust(width, fillbyte)."
+	| mySize result padding fill |
+	mySize := self @env0:size.
+	(width @env0:<= mySize) ifTrue: [^ self @env0:copy].
+	fill := self ___byteValueOf___: fillchar.
+	padding := width @env0:- mySize.
+	result := bytes ___new___: width.
+	1 @env0:to: padding do: [:i | result @env0:at: i put: fill].
+	1 @env0:to: mySize do: [:i | result @env0:at: (padding @env0:+ i) put: (self @env0:at: i)].
+	^ result
+%
+
+category: 'Grail-String-like Methods'
+method: bytes
+replace: old _: new _: count
+	"bytes.replace(old, new, count) -- replace the first ``count''
+	occurrences (count < 0 = all, count = 0 = none).  Splitting at the first
+	``count'' separators then joining with ``new'' performs exactly ``count''
+	replacements."
+	(count @env0:< 0) ifTrue: [^ self replace: old _: new].
+	(count @env0:= 0) ifTrue: [^ self @env0:copy].
+	((old @env0:class) @env0:== bytes) ifFalse: [TypeError ___signal___: 'first argument must be bytes'].
+	((new @env0:class) @env0:== bytes) ifFalse: [TypeError ___signal___: 'second argument must be bytes'].
+	(old @env0:size @env0:= 0) ifTrue: [^ self @env0:copy].
+	^ new join: (self split: old _: count)
+%
+
+category: 'Grail-Splitting Methods'
+method: bytes
+___splitWhitespace___
+	"split() / split(None): split on runs of ASCII whitespace
+	(HT LF VT FF CR SP), discarding empty parts (no leading/trailing/
+	repeated-whitespace empty strings)."
+	| parts current mySize |
+	parts := list ___new___.
+	current := bytes ___new___.
+	mySize := self @env0:size.
+	1 @env0:to: mySize do: [:i | | byte nb |
+		byte := self @env0:at: i.
+		(#(9 10 11 12 13 32) @env0:includes: byte)
+			ifTrue: [(current @env0:size @env0:> 0) ifTrue: [parts append: current. current := bytes ___new___]]
+			ifFalse: [nb := bytes ___new___: 1. nb @env0:at: 1 put: byte. current := current @env0:, nb]].
+	(current @env0:size @env0:> 0) ifTrue: [parts append: current].
+	^ parts
+%
+
+category: 'Grail-Splitting Methods'
+method: bytes
+split
+	"bytes.split() -- split on runs of ASCII whitespace."
+	^ self ___splitWhitespace___
+%
+
+category: 'Grail-Splitting Methods'
+method: bytes
+rsplit
+	"bytes.rsplit() -- with no separator, identical to split()."
+	^ self ___splitWhitespace___
+%
+
+category: 'Grail-Splitting Methods'
+method: bytes
+___boundedSlice___: start end: end
+	"self[start:end] with CPython negative-index clamping -- shared by the
+	bounded startswith/endswith forms."
+	| size s e |
+	size := self @env0:size.
+	s := start. e := end.
+	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
+	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
+	e := e @env0:min: size. s := s @env0:min: size.
+	e @env0:< s ifTrue: [e := s].
+	^ self @env0:copyFrom: s @env0:+ 1 to: e
+%
+
+category: 'Grail-Prefix/Suffix Methods'
+method: bytes
+startswith: prefix _: start
+	"bytes.startswith(prefix, start)."
+	^ self startswith: prefix _: start _: self @env0:size
+%
+
+category: 'Grail-Prefix/Suffix Methods'
+method: bytes
+startswith: prefix _: start _: end
+	"bytes.startswith(prefix, start, end) -- tested against the [start, end)
+	slice."
+	^ (self ___boundedSlice___: start end: end) startswith: prefix
+%
+
+category: 'Grail-Prefix/Suffix Methods'
+method: bytes
+endswith: suffix _: start
+	"bytes.endswith(suffix, start)."
+	^ self endswith: suffix _: start _: self @env0:size
+%
+
+category: 'Grail-Prefix/Suffix Methods'
+method: bytes
+endswith: suffix _: start _: end
+	"bytes.endswith(suffix, start, end) -- tested against the [start, end)
+	slice."
+	^ (self ___boundedSlice___: start end: end) endswith: suffix
+%
+
+category: 'Grail-String-like Methods'
+method: bytes
+splitlines: keepends
+	"bytes.splitlines(keepends) -- split at LF / CR / CRLF boundaries; when
+	keepends is truthy the boundary bytes are retained in each line."
+	| parts current size i keep |
+	size := self @env0:size.
+	keep := keepends ___isTruthy___.
+	parts := list ___new___.
+	current := bytes ___new___.
+	i := 1.
+	[i @env0:<= size] @env0:whileTrue: [ | byte nb crlf |
+		byte := self @env0:at: i.
+		(byte @env0:= 10) ifTrue: [
+			keep ifTrue: [nb := bytes ___new___: 1. nb @env0:at: 1 put: 10. current := current @env0:, nb].
+			parts append: current. current := bytes ___new___. i := i @env0:+ 1]
+		ifFalse: [(byte @env0:= 13) ifTrue: [
+			crlf := (i @env0:< size) and: [(self @env0:at: i @env0:+ 1) @env0:= 10].
+			keep ifTrue: [
+				nb := bytes ___new___: (crlf ifTrue: [2] ifFalse: [1]).
+				nb @env0:at: 1 put: 13. crlf ifTrue: [nb @env0:at: 2 put: 10].
+				current := current @env0:, nb].
+			parts append: current. current := bytes ___new___.
+			i := i @env0:+ (crlf ifTrue: [2] ifFalse: [1])]
+		ifFalse: [
+			nb := bytes ___new___: 1. nb @env0:at: 1 put: byte. current := current @env0:, nb.
+			i := i @env0:+ 1]]].
+	(current @env0:size @env0:> 0) ifTrue: [parts append: current].
+	^ parts
+%
+
+category: 'Grail-String-like Methods'
+method: bytes
+translate: table _: delete
+	"bytes.translate(table, delete) -- map each byte through the 256-entry
+	table (None = identity) and drop every byte present in ``delete''."
+	| mySize kept tableIsNone result |
+	mySize := self @env0:size.
+	tableIsNone := table @env0:== None.
+	tableIsNone ifFalse: [
+		(table @env0:size @env0:= 256) ifFalse: [
+			ValueError ___signal___: 'translation table must be 256 characters long']].
+	kept := OrderedCollection @env0:new.
+	1 @env0:to: mySize do: [:i | | byte |
+		byte := self @env0:at: i.
+		(delete @env0:includes: byte) ifFalse: [
+			kept @env0:add: (tableIsNone ifTrue: [byte] ifFalse: [table @env0:at: byte @env0:+ 1])]].
+	result := bytes ___new___: kept @env0:size.
+	1 @env0:to: kept @env0:size do: [:i | result @env0:at: i put: (kept @env0:at: i)].
 	^ result
 %
 

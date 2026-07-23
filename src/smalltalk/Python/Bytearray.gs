@@ -264,8 +264,18 @@ fromhex: hexString
 category: 'Grail-Type'
 method: bytearray
 __class__
-	"Return the Python type for bytearray"
-	^ bytearray
+	"Return the Python type -- the receiver's ACTUAL class, so a
+	``class MyBA(bytearray)'' instance reports MyBA while a plain
+	bytearray still reports bytearray."
+	^ self @env0:class
+%
+
+category: 'Grail-String Representation'
+method: bytearray
+__repr__
+	"bytearray repr wraps the shared b'...' body: bytearray(b'...').  Inherited
+	bytes>>__repr__ would drop the wrapper (so bytearray(b'') printed as b'')."
+	^ 'bytearray(' @env0:, self ___reprBody___ @env0:, ')'
 %
 
 category: 'Grail-Sequence Protocol'

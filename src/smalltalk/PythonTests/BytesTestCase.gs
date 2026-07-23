@@ -502,12 +502,12 @@ test_fromhex
 category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
 test_hex
-	"Test bytes.hex()"
+	"Test bytes.hex() -- CPython returns LOWERCASE hex."
 
 	| b result |
 	b :=  bytes withAll: {255. 0. 16}.
 	result := b @env1:hex.
-	self assert: result equals: 'FF0010'.
+	self assert: result equals: 'ff0010'.
 %
 
 category: 'Grail-Tests - Sequence Methods'

@@ -1249,6 +1249,7 @@ input src/smalltalk/PythonTests/DeployCheckTestCase.gs
 input src/smalltalk/PythonTests/PyDictTestCase.gs
 input src/smalltalk/PythonTests/GlobalsTestCase.gs
 input src/smalltalk/PythonTests/BytesTestCase.gs
+input src/smalltalk/PythonTests/BytesSubclassTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrsTestCase.gs
 input src/smalltalk/PythonTests/ClassDecoratorTestCase.gs
 input src/smalltalk/PythonTests/SmalltalkForwarderTestCase.gs
