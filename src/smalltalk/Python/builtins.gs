@@ -271,12 +271,10 @@ callable: anObject
 	``__call__`` (or the Grail call protocol on BoundMethod/closures,
 	which both compile ``__call__:``-shaped entries or value:value:)."
 
-	| objClass |
 	(anObject isKindOf: Behavior) ifTrue: [^ true].
 	(anObject isKindOf: BoundMethod) ifTrue: [^ true].
 	(anObject isKindOf: ExecBlock) ifTrue: [^ true].
-	objClass := anObject @env0:class.
-	^ (objClass @env0:whichClassIncludesSelector: (#__call__:) environmentId: 1) notNil
+	^ anObject ___respondsTo___: #'__call__:'
 %
 
 category: 'Grail-Built-in Functions'
@@ -401,12 +399,11 @@ iter: anObject
 	implemented yet (see TODO.md) — none of the current Flask-path
 	modules use it."
 
-	"`whichClassIncludesSelector:environmentId:` walks the
-	inheritance chain — needed because ``__iter__`` lives on
-	CharacterCollection for strings, on SetProtocol for sets, etc.,
-	not on the leaf class."
-	(anObject @env0:class @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1)
-		ifNil: [
+	"``___respondsTo___:`` walks the inheritance chain — needed because
+	``__iter__`` lives on CharacterCollection for strings, on SetProtocol
+	for sets, etc., not on the leaf class."
+	(anObject ___respondsTo___: #'__iter__')
+		ifFalse: [
 			TypeError @env0:signal: ('''' @env0:,
 				(anObject @env0:class @env0:name) @env0:,
 				''' object is not iterable')
@@ -438,8 +435,8 @@ ___asIterator___: anIterator
 	generator-expression collections into the next()/StopIteration
 	protocol."
 
-	((anIterator @env0:class @env0:whichClassIncludesSelector: #'__next__' environmentId: 1) isNil
-		and: [(anIterator @env0:class @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) notNil])
+	((anIterator ___respondsTo___: #'__next__') not
+		and: [anIterator ___respondsTo___: #'__iter__'])
 		ifTrue: [^ anIterator __iter__].
 	^ anIterator
 %
@@ -1158,9 +1155,8 @@ reversed: aSequence
 	classes like collections.deque (which has __reversed__ but no
 	env-0 reverseDo:) hit MNU."
 
-	| cls lst |
-	cls := aSequence @env0:class.
-	((cls @env0:whichClassIncludesSelector: #'__reversed__' environmentId: 1) notNil)
+	| lst |
+	(aSequence ___respondsTo___: #'__reversed__')
 		ifTrue: [^ aSequence __reversed__].
 	lst := list ___new___.
 	aSequence @env0:reverseDo: [:item | lst append: item].
@@ -1176,9 +1172,9 @@ round: aNumber
 	implements banker's rounding there; the kernel #rounded was an
 	uncatchable MNU on PythonInstances."
 
-	((aNumber @env0:class @env0:whichClassIncludesSelector: #'___round__:kw:' environmentId: 1) ~~ nil)
+	(aNumber ___respondsTo___: #'___round__:kw:')
 		ifTrue: [^ aNumber ___round__: { } kw: nil].
-	((aNumber @env0:class @env0:whichClassIncludesSelector: #'__round__' environmentId: 1) ~~ nil)
+	(aNumber ___respondsTo___: #'__round__')
 		ifTrue: [^ aNumber @env0:perform: #'__round__' env: 1].
 	^ aNumber @env0:rounded
 %
@@ -1546,7 +1542,7 @@ method: builtins
 ___isInstanceSingle___: anObject of: aClass
 	"isinstance with a single class argument (post-tuple-expansion)."
 
-	| result theMetaclass |
+	| result |
 	"Non-class classinfo (isinstance(x, functools.cached_property)
 	where the attr resolved to a BoundMethod): raise CPython's
 	catchable TypeError -- isKindOf: on a non-Behavior dies with an
@@ -1585,7 +1581,6 @@ ___isInstanceSingle___: anObject of: aClass
 		il == nil ifFalse: [
 			result := (il @env0:___mroOf___: anObject @env0:class) @env0:includes: aClass]].
 	result ifFalse: [
-		theMetaclass := aClass @env0:class.
 		"Walk the metaclass chain (not just the own method dict) for
 		``__instancecheck__:'' — ABCs define it once on a base
 		(``numbers.Number'', ``collections.abc._ABCStub'') and the
@@ -1594,8 +1589,9 @@ ___isInstanceSingle___: anObject of: aClass
 		and every ``isinstance(x, collections.abc.Mapping/Sequence/...)''
 		because those classes carry the method only by inheritance.
 		Matches CPython, where the hook lives on the (shared) metaclass
-		``type(cls).__instancecheck__''."
-		((theMetaclass @env0:whichClassIncludesSelector: #'__instancecheck__:' environmentId: 1) notNil) ifTrue: [
+		``type(cls).__instancecheck__''.  ``aClass ___respondsTo___: s''
+		probes aClass's metaclass chain (class-side responds-to)."
+		(aClass ___respondsTo___: #'__instancecheck__:') ifTrue: [
 			result := aClass __instancecheck__: anObject
 		]
 	].
@@ -1778,7 +1774,7 @@ ___isSubclassSingle___: sub of: target
 	walk the METACLASS chain, mirroring CPython's
 	``type(cls).__subclasscheck__''.  Reached only after the real chain,
 	the widenings, and the C3 MRO all missed."
-	((target @env0:class @env0:whichClassIncludesSelector: #'__subclasscheck__:' environmentId: 1) notNil) ifTrue: [
+	(target ___respondsTo___: #'__subclasscheck__:') ifTrue: [
 		^ (target __subclasscheck__: sub) == true].
 	^ false
 %
@@ -2043,7 +2039,7 @@ _round: positional kw: kwargs
 		].
 	"__round__ first (CPython protocol) -- see round: for the 1-arg
 	rationale; the kernel arithmetic below MNUs on PythonInstances."
-	((number @env0:class @env0:whichClassIncludesSelector: #'___round__:kw:' environmentId: 1) ~~ nil)
+	(number ___respondsTo___: #'___round__:kw:')
 		ifTrue: [^ number ___round__:
 			(ndigits == nil ifTrue: [{ }] ifFalse: [{ ndigits }]) kw: nil].
 	ndigits ifNil: [^ number @env0:rounded].
