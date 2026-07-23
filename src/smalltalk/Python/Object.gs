@@ -2152,27 +2152,56 @@ ___eqValue___: other
 category: 'Grail-Comparison'
 method: object
 ___cmpFallback___: other op: opString reflected: refSelector
-	"Python rich-comparison fallback for an unsupported operand pair.
-	First try the REFLECTED dunder on ``other'' when a user class
-	defines it (``1 < Meters(2)'' runs Meters.__gt__) -- restricted to
-	PythonInstance descendants because a built-in's reflected
-	implementation would just re-guard and recurse.  Otherwise raise
-	the catchable Python TypeError CPython raises for unorderable
-	types.  (Previously these paths fell through to env-0 comparison
-	primitives, whose ArgumentTypeError / 'Expected a Number' /
-	_generality errors escape Python try/except entirely -- the STERROR
-	class that blocked CPython's test_bisect / test_operator /
-	test_heapq / test_re.)"
+	"Python rich-comparison fallback for an unsupported operand pair: the
+	forward dunder returned NotImplemented / punted, so try the REFLECTED
+	dunder on ``other'' (``1 < Meters(2)'' runs Meters.__gt__), else raise the
+	catchable Python TypeError CPython raises for unorderable types.
+	(Previously these paths fell through to env-0 comparison primitives, whose
+	ArgumentTypeError / 'Expected a Number' / _generality errors escape Python
+	try/except entirely -- the STERROR class that blocked CPython's test_bisect
+	/ test_operator / test_heapq / test_re.)
 
-	| refOwner rr |
-	(other isKindOf: PythonInstance) ifTrue: [
-		refOwner := other @env0:class
-			@env0:whichClassIncludesSelector: refSelector environmentId: 1.
-		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
-			rr := other @env0:perform: refSelector env: 1 withArguments: { self }.
-			"A NotImplemented reflected result means neither side can order the
-			pair -- fall through to the TypeError, don't leak the singleton."
-			(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]]].
+	Two operand kinds:
+	  * a PythonInstance ``other'' that overrides the reflected dunder -- call
+	    it directly; a NotImplemented result falls through to the TypeError.
+	  * a BUILT-IN ``other'' that overrides it -- e.g. a plain int vs an int
+	    SUBCLASS whose forward __lt__ returned NotImplemented (test_heapq's
+	    EvilClass / g / h heap-mutation cases; int subclasses are AbstractPyInt,
+	    not PythonInstance, so the first branch skips them).  Built-in
+	    comparison dunders ESCALATE back here rather than returning the
+	    NotImplemented singleton, so a symmetric unorderable pair (``(1,) < 2'')
+	    would ping-pong forward<->reflected forever.  A session re-entrancy
+	    flag guards ONLY this built-in-reflected path: the outermost call tries
+	    the reflected op; a recursive re-entry skips straight to the TypeError,
+	    unwinding to a single clean error.  A TypeError raised by the built-in
+	    (it cannot order the pair) is likewise swallowed so the message stays
+	    self-op-other."
+
+	| refOwner rr temps |
+	refOwner := other @env0:class
+		@env0:whichClassIncludesSelector: refSelector environmentId: 1.
+	(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
+		(other isKindOf: PythonInstance)
+			ifTrue: [
+				rr := other @env0:perform: refSelector env: 1 withArguments: { self }.
+				(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]]
+			ifFalse: [
+				"Restrict the built-in-reflected path to a NUMERIC ``other'' (plain
+				int/float AND their subclasses are all isKindOf: Number).  That is
+				exactly what the heap-mutation cases need -- a plain int reflected
+				against an int subclass whose __lt__ punted -- while leaving
+				CONTAINER comparison untouched: a list/tuple/str reflected op can
+				clear/mutate an operand or escalate in ways that change list
+				comparison semantics (CPython gh-120298, list_tests
+				test_lt_operator_modifying_operand)."
+				(other isKindOf: Number) ifTrue: [
+					temps := SessionTemps @env0:current.
+					(temps @env0:at: #'___GrailReflectingBuiltinCmp___' otherwise: false) ifFalse: [
+						temps @env0:at: #'___GrailReflectingBuiltinCmp___' put: true.
+						rr := [[other @env0:perform: refSelector env: 1 withArguments: { self }]
+								@env0:on: TypeError do: [:e | #'___NotImplemented___']]
+							@env0:ensure: [temps @env0:at: #'___GrailReflectingBuiltinCmp___' put: false].
+						(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]]]]].
 	TypeError ___signal___: ('''' @env0:, opString @env0:, ''' not supported between instances of '''
 		@env0:, self @env0:class @env0:name @env0:asString
 		@env0:, ''' and ''' @env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
