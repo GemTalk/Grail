@@ -311,6 +311,21 @@ ___allocateInstance___: positional kw: keywords
 			^ positional @env0:isEmpty
 				ifTrue: [self @env1:__new__]
 				ifFalse: [self @env1:__new__: (positional @env0:at: 1)]].
+		"bytes/bytearray build their ENTIRE content in a classmethod
+		``__new__:'' too (bytes is immutable; Bytearray.gs likewise does
+		the whole copy there -- there is no ``__init__:'' for either), so
+		a subclass with no __init__ of its own must be routed the same
+		way as tuple/frozenset above, or it allocates via plain #new and
+		stays permanently empty (test_int.py's
+		test_non_numeric_input_types: ``class CustomBytes(bytes): pass;
+		CustomBytes(b'100')'' must copy the source, not construct b'')."
+		((self @env0:inheritsFrom: bytes) @env0:or: [self @env0:inheritsFrom: bytearray]) ifTrue: [
+			((positional @env0:size @env0:> 1) @env0:and: [(self ___hasUserInit___) @env0:not])
+				ifTrue: [TypeError ___signal___: (self @env0:name @env0:asString
+					@env0:, ' expected at most 1 argument, got ' @env0:, positional @env0:size @env0:printString)].
+			^ positional @env0:isEmpty
+				ifTrue: [self @env1:__new__]
+				ifFalse: [self @env1:__new__: (positional @env0:at: 1)]].
 		"A sealed kernel class (ExecBlock via type(lambda)(), ...) refuses
 		#new with an UNCATCHABLE ShouldNotImplement/ImproperOperation --
 		resignal as CPython's catchable TypeError."

@@ -327,6 +327,29 @@ set compile_env: 1
 ! ------------------- Constructor (allocator protocol)
 
 category: 'Grail-Instantiation'
+classmethod: AbstractPyInt
+___hasUserInit___
+	"True if this class defines its OWN Python __init__ (any arity),
+	walking up to (but not including) AbstractPyInt or kernel Object
+	itself.  Mirrors object class>>___hasUserInit___, but AbstractPyInt
+	does not descend from Grail's ``object'' root (it's a Number
+	sibling -- see the class comment), so it cannot inherit that
+	version; needed so ___new__:kw:'s conversion-failure swallow only
+	fires for classes that truly have an __init__ left to fill the
+	#value slot.  Every class -- AbstractPyInt included -- ultimately
+	inherits kernel Object's own env-1 ``__init__'' (a no-op returning
+	None), so that has to be excluded too, or whichClassIncludesSelector:
+	always finds SOME owner and every subclass looks user-init'd."
+
+	| owner builtins |
+	builtins := { AbstractPyInt. Object }.
+	#( #'___init__:kw:' #'__init__:' #'__init__:_:' #'__init__' ) @env0:do: [:sel |
+		owner := self @env0:whichClassIncludesSelector: sel environmentId: 1.
+		(owner @env0:notNil and: [(builtins @env0:includes: owner) @env0:not]) ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-Instantiation'
 method: AbstractPyInt
 ___new__: positional kw: keywords
 	"int-subclass constructor: ``self`` is the CLASS (object class>>
@@ -335,7 +358,14 @@ ___new__: positional kw: keywords
 	pass`` constructs through int's conversion: MyInt(3), MyInt('7'),
 	MyInt('101', 2).  A conversion failure leaves the value slot for
 	__init__ to fill -- enum-style AbstractPyInt subclasses construct
-	with non-numeric args and set #value themselves."
+	with non-numeric args and set #value themselves.  But that swallow
+	is only sound when the class actually HAS its own __init__ to fill
+	the slot afterward: a plain ``class IntSubclass(int): pass`` (no
+	__init__) has nothing to recover with, so a genuine conversion
+	failure (invalid literal, digit-limit ValueError, ...) must
+	propagate exactly as it would for plain int() -- test_int.py's
+	IntSubclassStrDigitLimitsTests otherwise never sees the ValueError
+	its assertRaises blocks expect."
 
 	| inst v |
 	inst := self @env0:new.
@@ -345,7 +375,7 @@ ___new__: positional kw: keywords
 				ifTrue: [int __new__: (positional @env0:at: 1)]
 				ifFalse: [int __new__: (positional @env0:at: 1) _: (positional @env0:at: 2)]]]
 		@env0:on: AbstractException
-		do: [:ex | ex @env0:return: nil].
+		do: [:ex | (self ___hasUserInit___) ifTrue: [ex @env0:return: nil] ifFalse: [ex @env0:pass]].
 	v == nil ifFalse: [
 		inst @env0:dynamicInstVarAt: #value put: v].
 	^ inst

@@ -437,7 +437,12 @@ ___convert___: value with: conv
 	precision specifiers are ignored; just produce the bare rendering."
 
 	conv @env0:= $s ifTrue: [^ value @env0:asString].
-	conv @env0:= $r ifTrue: [^ value @env0:printString].
+	"Python __repr__, NOT Smalltalk printString: printString only
+	doubles embedded quotes, but %r must escape control characters
+	the way repr() does (e.g. a NUL byte -> the 4 chars '\x00', not a
+	raw NUL) -- test_int.py's test_error_message compares against
+	'%r' % ('123\x00',) verbatim."
+	conv @env0:= $r ifTrue: [^ value __repr__].
 	(conv @env0:= $d @env0:or: [conv @env0:= $i]) ifTrue: [^ value @env0:asInteger @env0:printString].
 	conv @env0:= $f ifTrue: [^ value @env0:asFloat @env0:printString].
 	conv @env0:= $x ifTrue: [
