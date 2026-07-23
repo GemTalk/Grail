@@ -504,6 +504,20 @@ printSmalltalkRuntimeOn: aStream
 			onStream: aStream.
 	].
 
+	"Compile sibling-method aliases (``__lt__ = __eq__'') as real delegating
+	instance methods, so operator dispatch and normal sends find them.  A
+	class-attribute BoundMethod is invisible to ``a < b''s #__lt__: send and
+	mis-binds when called through an instance (test_heapq test_cmp_err)."
+	self ___classBodyMethodAliases___ do: [:assoc |
+		self
+			emitCompileMethodOn: name
+			source: (self ___methodAliasSourceFor___: assoc key def: assoc value)
+			category: 'Grail-Method Aliases'
+			env: 1
+			classSide: false
+			onStream: aStream.
+	].
+
 	"Compile each @classmethod onto the metaclass.  ``self`` inside
 	the body refers to the class (matches Python's ``cls``), so the
 	source generated for class methods is identical in shape to the
@@ -1387,13 +1401,18 @@ classBodyAttributes
 	(e.g. ``class Color: RED = 1``) as Smalltalk classInstVars +
 	class-side accessor/setter pairs on the new class."
 
-	| pairs |
+	| pairs aliasNames |
+	"Sibling-method aliases (``__lt__ = __eq__'') are compiled as real
+	delegating methods (see ___classBodyMethodAliases___), NOT materialized
+	as class attributes -- exclude their names here."
+	aliasNames := (self ___classBodyMethodAliases___ collect: [:a | a key]) asIdentitySet.
 	pairs := OrderedCollection new.
 	body body do: [:stmt |
 		(stmt isKindOf: AssignAst) ifTrue: [
 			(stmt targets allSatisfy: [:t | t isKindOf: NameAst]) ifTrue: [
 				stmt targets do: [:t |
-					pairs add: t id asSymbol -> stmt value.
+					(aliasNames includes: t id asSymbol) ifFalse: [
+						pairs add: t id asSymbol -> stmt value].
 				].
 			].
 			"Tuple-target class-body assignment: ``__add__, __radd__ =
@@ -1439,6 +1458,67 @@ classBodyAttributes
 		].
 	].
 	^ pairs
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyMethodAliases___
+	"Class-body simple assignments that alias a SIBLING instance method --
+	``__ne__ = __lt__ = __le__ = __gt__ = __ge__ = __eq__'' (test_heapq's
+	CmpErr) or ``bar = foo''.  Answer an OrderedCollection of
+	(aliasNameSymbol -> originalFunctionDefAst) in source order.
+
+	Such an alias MUST become a real delegating method, not a class
+	attribute: the class-attribute path stores a receiver-less BoundMethod
+	that (1) is invisible to operator dispatch -- ``a < b'' sends #__lt__:,
+	which resolves only to compiled methods, not to attributes -- and (2)
+	mis-binds when read and called through an instance (OffsetError).
+	Restricted to NON-varargs instance methods (the aliased selector arity
+	must be known to emit the delegating header); @staticmethod /
+	@classmethod and varargs defs are left on the class-attribute path."
+
+	| defsByName aliases |
+	defsByName := IdentityDictionary new.
+	self instanceMethodDefs do: [:d |
+		d compilesAsVarargs ifFalse: [defsByName at: d name asSymbol put: d]].
+	aliases := OrderedCollection new.
+	body body do: [:stmt |
+		((stmt isKindOf: AssignAst)
+			and: [(stmt value isKindOf: NameAst)
+			and: [stmt targets allSatisfy: [:t | t isKindOf: NameAst]]]) ifTrue: [
+				| origDef |
+				origDef := defsByName at: stmt value id asSymbol ifAbsent: [nil].
+				origDef ifNotNil: [
+					stmt targets do: [:t |
+						"skip a self-alias, and a name that is itself a def (the
+						real method wins)"
+						((t id asSymbol == stmt value id asSymbol)
+							or: [defsByName includesKey: t id asSymbol]) ifFalse: [
+								aliases add: t id asSymbol -> origDef]]]]].
+	^ aliases
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___methodAliasSourceFor___: aliasName def: origDef
+	"Source of an instance method that aliases origDef: the same (non-varargs)
+	selector arity, delegating to origDef's selector with the same arguments.
+	``__lt__ = __eq__'' with ``def __eq__(self, other)'' yields
+	``__lt__: ___1'' / ``^ self __eq__: ___1''."
+
+	| stream arity emitSel |
+	stream := WriteStream on: Unicode7 new.
+	arity := origDef instanceMethodArity.
+	emitSel := [:sel |
+		stream nextPutAll: sel asString.
+		arity >= 1 ifTrue: [
+			stream nextPutAll: ': ___1'.
+			2 to: arity do: [:i | stream nextPutAll: ' _: ___'; nextPutAll: i printString]]].
+	emitSel value: aliasName.
+	stream nextPut: Character lf.
+	stream nextPutAll: '^ self '.
+	emitSel value: origDef name.
+	^ stream contents
 %
 
 category: 'Grail-Class Compilation'
