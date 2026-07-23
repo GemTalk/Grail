@@ -1027,6 +1027,90 @@ ___formatStrValue___: value parsed: p
 
 category: 'Grail-Format Spec Engine'
 method: builtins
+___printfConvert___: value conv: conv flags: flags width: width precision: precision
+	"Render one printf %-field for str.__mod__: apply flags (- + space # 0),
+	width and precision per the conversion char, reusing the str.format()
+	value formatters for padding/sign/precision.  Conversions: s r a c
+	(string-like) · d i u o x X (integer) · e E f F g G (float)."
+
+	| leftAlign zeroPad plusSign spaceSign altForm body align fill iv neg absval digits prefix signStr signLen p |
+	leftAlign := flags @env0:includes: $-.
+	zeroPad := (flags @env0:includes: $0) @env0:and: [leftAlign @env0:not].
+	plusSign := flags @env0:includes: $+.
+	spaceSign := flags @env0:includes: (Character @env0:space).
+	altForm := flags @env0:includes: $#.
+
+	"--- string-like conversions: s r a c ---"
+	(conv @env0:= $s @env0:or: [conv @env0:= $r @env0:or: [
+		conv @env0:= $a @env0:or: [conv @env0:= $c]]]) ifTrue: [
+		conv @env0:= $s ifTrue: [body := value __str__ @env0:asString].
+		conv @env0:= $r ifTrue: [body := value __repr__ @env0:asString].
+		conv @env0:= $a ifTrue: [body := (self ascii: value) @env0:asString].
+		conv @env0:= $c ifTrue: [
+			(value isKindOf: Integer)
+				ifTrue: [body := String @env0:with: (Character @env0:codePoint: value @env0:asInteger)]
+				ifFalse: [body := value @env0:asString]].
+		"precision truncates s/r/a (not c)."
+		(conv @env0:~= $c @env0:and: [
+			precision ~~ nil @env0:and: [body @env0:size @env0:> precision]]) ifTrue: [
+			body := body @env0:copyFrom: 1 to: precision].
+		align := leftAlign ifTrue: [$<] ifFalse: [$>].
+		^ self ___formatPadBody___: body fill: (Character @env0:space)
+			align: align width: width signLength: 0].
+
+	"--- float conversions: e E f F g G ---"
+	(#($e $E $f $F $g $G) @env0:includes: conv) ifTrue: [
+		fill := zeroPad ifTrue: [$0] ifFalse: [Character @env0:space].
+		align := leftAlign ifTrue: [$<] ifFalse: [zeroPad ifTrue: [$=] ifFalse: [$>]].
+		p := {
+			fill.
+			align.
+			(plusSign ifTrue: [$+] ifFalse: [
+				spaceSign ifTrue: [Character @env0:space] ifFalse: [$-]]).
+			altForm.
+			width.
+			nil.
+			precision.
+			conv }.
+		^ self ___formatFloatValue___: value @env0:asFloat parsed: p].
+
+	"--- integer conversions: d i u o x X ---"
+	iv := value @env0:asInteger.
+	neg := iv @env0:< 0.
+	absval := iv @env0:abs.
+	prefix := ''.
+	(conv @env0:= $d @env0:or: [conv @env0:= $i @env0:or: [conv @env0:= $u]]) ifTrue: [
+		digits := absval @env0:printString].
+	conv @env0:= $o ifTrue: [
+		digits := absval @env0:printStringRadix: 8.
+		altForm ifTrue: [prefix := '0o']].
+	conv @env0:= $x ifTrue: [
+		digits := (absval @env0:printStringRadix: 16) @env0:asLowercase.
+		altForm ifTrue: [prefix := '0x']].
+	conv @env0:= $X ifTrue: [
+		digits := (absval @env0:printStringRadix: 16) @env0:asUppercase.
+		altForm ifTrue: [prefix := '0X']].
+	digits == nil ifTrue: [
+		ValueError ___signal___: 'unsupported format character in %-format'].
+	"integer precision = minimum digit count; the 0 flag is ignored when given."
+	precision ~~ nil ifTrue: [
+		((precision @env0:= 0) @env0:and: [absval @env0:= 0])
+			ifTrue: [digits := '']
+			ifFalse: [[digits @env0:size @env0:< precision]
+				@env0:whileTrue: [digits := '0' @env0:, digits]]].
+	signStr := neg ifTrue: ['-'] ifFalse: [
+		plusSign ifTrue: ['+'] ifFalse: [spaceSign ifTrue: [' '] ifFalse: ['']]].
+	body := signStr @env0:, prefix @env0:, digits.
+	signLen := signStr @env0:size @env0:+ prefix @env0:size.
+	(zeroPad @env0:and: [precision == nil])
+		ifTrue: [fill := $0. align := $=]
+		ifFalse: [fill := Character @env0:space.
+			align := leftAlign ifTrue: [$<] ifFalse: [$>]].
+	^ self ___formatPadBody___: body fill: fill align: align width: width signLength: signLen
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
 ___formatValue___: value spec: spec
 	"Shared entry point behind int/float/str __format__.  Empty spec
 	is str(value); otherwise parse once and dispatch by type."
