@@ -2787,7 +2787,8 @@ parseWhile
 category: 'Grail-parsing - compound statements'
 method: PythonParser
 parseWith
-	"Parse: with expr [as target], ...: body"
+	"Parse: with expr [as target], ...: body -- also handles the PEP 617
+	parenthesized form: with (expr [as target], ...): body."
 
 	| tok items body |
 	tok := self advance. "consume 'with'"
@@ -2797,10 +2798,13 @@ parseWith
 	can't coexist with.  FunctionDefAst reads this off the body's
 	BlockAst to choose PythonReturn-exception return codegen."
 	self markScopeReturnBlocking.
-	items := Array new.
-	items add: self parseWithItem.
-	[self matchOp: ','] whileTrue: [
+	items := (self atOp: '(') ifTrue: [self tryParseParenthesizedWithItems] ifFalse: [nil].
+	items ifNil: [
+		items := Array new.
 		items add: self parseWithItem.
+		[self matchOp: ','] whileTrue: [
+			items add: self parseWithItem.
+		].
 	].
 	self expect: #OP value: ':'.
 	body := self parseBlock.
@@ -2809,6 +2813,39 @@ parseWith
 		at: #body put: (self wrapSuite: body);
 		at: #type_comment put: nil;
 		yourself) from: tok to: self lastToken
+%
+
+category: 'Grail-parsing - compound statements'
+method: PythonParser
+tryParseParenthesizedWithItems
+	"Tentatively parse the PEP 617 parenthesized with-items list --
+	'(' with_item (',' with_item)* ','? ')' -- called only when the
+	next token is '('.  On success returns the parsed Array of
+	WithItemAst; on failure restores the token position and returns
+	nil so the caller falls back to treating the parenthesized group
+	as an ordinary single with-item's context expression (a grouped
+	expression, tuple, or generator expression -- e.g. ``with (a + b):''
+	or ``with (x for x in y):'').  This mirrors CPython's PEG grammar,
+	which tries the parenthesized-items alternative first and backtracks
+	to the plain form on failure -- and matches CPython's (surprising)
+	behavior that ``with (a, b):'' means two context managers, not one
+	tuple (verified against CPython 3.14's own ast.parse)."
+
+	| saved items ok |
+	saved := position.
+	items := OrderedCollection new.
+	ok := true.
+	[
+		self advance. "consume '('"
+		items add: self parseWithItem.
+		[self atOp: ','] whileTrue: [
+			self advance.
+			(self atOp: ')') ifFalse: [items add: self parseWithItem].
+		].
+		self expect: #OP value: ')'.
+	] on: SyntaxError do: [:e | ok := false].
+	(ok and: [self atOp: ':']) ifFalse: [position := saved. ^ nil].
+	^ items asArray
 %
 
 category: 'Grail-parsing - compound statements'

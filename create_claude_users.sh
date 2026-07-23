@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ===========================================================================
-# Create Claude1..Claude4 GemStone users, mirroring DataCurator.
+# Create Claude0..Claude3 GemStone users, mirroring DataCurator.
 # ===========================================================================
 # Each user gets DataCurator's privileges + group memberships and its OWN
 # write-isolated object security policy (ClaudeNObjectSecurityPolicy;

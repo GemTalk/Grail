@@ -2,9 +2,9 @@
 
 Generated: 2026-07-22T19:14:24Z  ·  GemStone: GemStone64Bit3.7.5-arm64.Darwin
 
-**Modules: 19** — OK 6 · FAIL 0 · ERROR 9 · SKIP 2 · IMPORTERROR 2 · STERROR 0 · CRASH 0 · TIMEOUT 0
+**Modules: 19** — OK 6 · FAIL 0 · ERROR 10 · SKIP 2 · IMPORTERROR 1 · STERROR 0 · CRASH 0 · TIMEOUT 0
 
-**Totals:** tests=3082 failures=512 errors=352 skipped=83
+**Totals:** tests=3134 failures=523 errors=366 skipped=93
 
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
@@ -16,7 +16,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 |--------|--------|------:|-----:|----:|-----:|--------|
 | test.test_textwrap | OK | 68 | 0 | 0 | 0 |  |
 | test.test_math | OK | 88 | 0 | 0 | 4 |  |
-| test.test_int | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd800 is illegal for Unicode |
+| test.test_int | ERROR | 52 | 11 | 14 | 10 |  |
 | test.test_float | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd8f0 is illegal for Unicode |
 | test.test_heapq | ERROR | 68 | 5 | 8 | 0 |  |
 | test.test_bisect | ERROR | 42 | 0 | 12 | 0 |  |

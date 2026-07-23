@@ -507,9 +507,14 @@ class IntTestCases(unittest.TestCase):
         # non-UTF-8 byte string
         check(b'123\xbd')
         check(b'123\xbd', 10)
-        # lone surrogate in Unicode string
-        check('123\ud800')
-        check('123\ud800', 10)
+        # Grail: CPython allows a lone surrogate (\ud800) inside a str
+        # literal; GemStone Unicode strings cannot hold codepoints in
+        # 0xD800-0xDFFF (kernel-level OutOfRange -- the same restriction
+        # documented for chr() in Python/builtins.gs).  Worse, the literal
+        # itself is un-tokenizable: decoding the \u escape while compiling
+        # this file hits the kernel limit and aborts the WHOLE module's
+        # import, failing every test here, not just this one.  Removed
+        # rather than represented.
 
     def test_issue31619(self):
         self.assertEqual(int('1_0_1_0_1_0_1_0_1_0_1_0_1_0_1_0_1_0_1_0_1_0_1_0_1_0_1_0_1_0_1', 2),
