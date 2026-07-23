@@ -236,8 +236,7 @@ __getitem__: index
 	"Non-integer, non-slice index: catchable TypeError instead of an
 	uncatchable env-0 comparison DNU on the index."
 	((index isKindOf: Integer)
-		or: [(index @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
+		or: [index ___respondsTo___: #'__index__']) ifFalse: [
 		TypeError ___signal___: ('string indices must be integers, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	size := self @env0:size.
@@ -334,20 +333,19 @@ __lt__: other
 category: 'Grail-String Operations'
 method: CharacterCollection
 __mod__: args
-	"String formatting using % operator.  In Python: 'format %s' % args.
+	"printf-style % formatting: '%[(key)][flags][width][.precision][len]conv'
+	% args.  Flags - + space # 0, width and precision (each a number or '*'
+	that consumes an argument), and conversions s r a c d i u o x X e E f F
+	g G % are supported.  Mapping form '%(key)s' indexes args as a dict;
+	sequence form '%s %d' consumes positionally.  Width/precision/padding/
+	sign handling is shared with the str.format() engine
+	(builtins>>___printfConvert___:...)."
 
-	Supported conversion characters: s (str), r (repr), d (int),
-	i (int), x / X (hex), o (octal), f (float), %.  Mapping form
-	'%(key)s' indexes args as a dict; sequence form '%s %d'
-	consumes positionally.  Anything more elaborate (width / precision
-	specifiers, flags) is passed through verbatim - good enough for
-	logging Formatter and the modest printf usage in itsdangerous /
-	Werkzeug."
-
-	| stream src n i ch isMap argSeq argIdx |
+	| stream src n i ch isMap argSeq argIdx bi nextArg |
 	src := self @env0:asString.
 	n := src @env0:size.
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	bi := builtins instance.
 	isMap := args isKindOf: KeyValueDictionary.
 	"Python treats a string on the RHS as a single positional, not a
 	sequence of characters; same for ByteArray."
@@ -362,6 +360,15 @@ __mod__: args
 		ifFalse: [argSeq := Array @env0:with: args]
 	].
 	argIdx := 1.
+	"Pull the next positional argument (also used by '*' width/precision)."
+	nextArg := [ | v |
+		argSeq @env0:isNil ifTrue: [
+			TypeError ___signal___: 'format requires a mapping' ].
+		argIdx @env0:> argSeq @env0:size ifTrue: [
+			TypeError ___signal___: 'not enough arguments for format string' ].
+		v := argSeq @env0:at: argIdx.
+		argIdx := argIdx @env0:+ 1.
+		v ].
 	i := 1.
 	[i @env0:<= n] @env0:whileTrue: [
 		ch := src @env0:at: i.
@@ -369,7 +376,7 @@ __mod__: args
 			stream @env0:nextPut: ch.
 			i := i @env0:+ 1
 		] ifTrue: [
-			| key value conv |
+			| key flags width precision conv value |
 			i := i @env0:+ 1.
 			i @env0:> n ifTrue: [
 				ValueError ___signal___: 'incomplete format'
@@ -385,25 +392,45 @@ __mod__: args
 				key := src @env0:copyFrom: keyStart to: keyEnd @env0:- 1.
 				i := keyEnd @env0:+ 1
 			].
-			"Skip optional width/precision/flag chars - bare passthrough
-			to keep the implementation small.  CPython's spec is rich; we
-			only need to read past digits / '.' / '-' / ' ' / '+' / '#'."
-			[i @env0:<= n @env0:and: [
-				| c |
+			"Flags: - + space # 0 (any order, repeatable)."
+			flags := OrderedCollection @env0:new.
+			[i @env0:<= n @env0:and: [ | c |
 				c := src @env0:at: i.
-				(c @env0:= $-) @env0:or: [
-					(c @env0:= $+) @env0:or: [
-						(c @env0:= Character @env0:space) @env0:or: [
-							(c @env0:= $#) @env0:or: [
-								(c @env0:= $.) @env0:or: [
-									(c @env0:asInteger @env0:>= $0 @env0:asInteger)
-										@env0:and: [c @env0:asInteger @env0:<= $9 @env0:asInteger]
-								]
-							]
-						]
-					]
+				(c @env0:= $-) @env0:or: [(c @env0:= $+) @env0:or: [
+					(c @env0:= Character @env0:space) @env0:or: [
+						(c @env0:= $#) @env0:or: [c @env0:= $0]]]] ]]
+				@env0:whileTrue: [ flags @env0:add: (src @env0:at: i). i := i @env0:+ 1 ].
+			"Width: digits or '*' (consumes an argument; negative -> '-' flag)."
+			width := 0.
+			(i @env0:<= n @env0:and: [(src @env0:at: i) @env0:= $*]) ifTrue: [
+				width := (nextArg @env0:value) @env0:asInteger.
+				width @env0:< 0 ifTrue: [ flags @env0:add: $-. width := width @env0:abs ].
+				i := i @env0:+ 1
+			] ifFalse: [
+				[i @env0:<= n @env0:and: [(src @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
+					width := (width @env0:* 10) @env0:+ (src @env0:at: i) @env0:digitValue.
+					i := i @env0:+ 1 ]
+			].
+			"Precision: '.' then digits or '*' ('.' alone means 0)."
+			precision := nil.
+			(i @env0:<= n @env0:and: [(src @env0:at: i) @env0:= $.]) ifTrue: [
+				i := i @env0:+ 1.
+				(i @env0:<= n @env0:and: [(src @env0:at: i) @env0:= $*]) ifTrue: [
+					precision := (nextArg @env0:value) @env0:asInteger.
+					precision @env0:< 0 ifTrue: [precision := nil].
+					i := i @env0:+ 1
+				] ifFalse: [
+					precision := 0.
+					[i @env0:<= n @env0:and: [(src @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
+						precision := (precision @env0:* 10) @env0:+ (src @env0:at: i) @env0:digitValue.
+						i := i @env0:+ 1 ]
 				]
-			]] @env0:whileTrue: [i := i @env0:+ 1].
+			].
+			"Skip C length modifiers (h l L) -- Python ignores them."
+			[i @env0:<= n @env0:and: [ | c |
+				c := src @env0:at: i.
+				(c @env0:= $h) @env0:or: [(c @env0:= $l) @env0:or: [c @env0:= $L]] ]]
+				@env0:whileTrue: [i := i @env0:+ 1].
 			i @env0:> n ifTrue: [
 				ValueError ___signal___: 'incomplete format'
 			].
@@ -413,17 +440,9 @@ __mod__: args
 			ifFalse: [
 				key @env0:notNil
 					ifTrue: [value := args @env0:at: key @env0:asSymbol ifAbsent: [args @env0:at: key]]
-					ifFalse: [
-						argSeq @env0:isNil ifTrue: [
-							TypeError ___signal___: 'format requires a mapping'
-						].
-						argIdx @env0:> argSeq @env0:size ifTrue: [
-							TypeError ___signal___: 'not enough arguments for format string'
-						].
-						value := argSeq @env0:at: argIdx.
-						argIdx := argIdx @env0:+ 1
-					].
-				stream @env0:nextPutAll: (self ___convert___: value with: conv)
+					ifFalse: [value := nextArg @env0:value].
+				stream @env0:nextPutAll: (bi ___printfConvert___: value conv: conv
+					flags: flags width: width precision: precision)
 			]
 		]
 	].
@@ -485,8 +504,7 @@ __mul__: n
 
 	| count result stream |
 	((n isKindOf: Integer)
-		or: [(n @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
+		or: [n ___respondsTo___: #'__index__']) ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
 	count := n @env0:asInteger.
 	(count @env0:<= 0) ifTrue: [ ^ '' @env0:copy ].

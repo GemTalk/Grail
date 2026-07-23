@@ -76,6 +76,33 @@ ___new___
 	^ self @env0:new
 %
 
+category: 'Grail-Introspection'
+method: object
+___respondsTo___: aSymbol
+	"True if the receiver understands aSymbol in environment 1 (Python).
+
+	A fast, cached replacement for the idiom
+	``(self @env0:class @env0:whichClassIncludesSelector: aSymbol
+	environmentId: 1) notNil''.  The ``_respondsTo:flags:'' primitive walks
+	the receiver's class hierarchy once and caches the hit in the sending
+	method's code, whereas ``whichClassIncludesSelector:environmentId:''
+	re-walks the hierarchy in Smalltalk on every send (and additionally
+	allocates the answering class it then discards).  The two agree exactly:
+	``x ___respondsTo___: s'' == ``(x @env0:class
+	@env0:whichClassIncludesSelector: s environmentId: 1) notNil'' for every
+	receiver x and selector s (both consult the same env-1 method dictionaries
+	up the class chain).
+
+	flags 16r10001 = environmentId 1 (low byte 16rFF) + 16r10000 (cache
+	successes in the caller's code_gen).  Sent via ``@env0:'' so the kernel
+	primitive is reached directly rather than any env-1 override, and so a
+	receiver that is itself a class resolves the primitive on its metaclass
+	chain (class-side responds-to) exactly as the whichClassIncludesSelector:
+	idiom did."
+
+	^ self @env0:_respondsTo: aSymbol flags: 16r10001
+%
+
 category: 'Grail-Hashability'
 method: object
 ___requireHashableAsSetElement___
@@ -130,10 +157,10 @@ ___unpackSequence___
 	test_float_format_testfile).  Enum classes keep their own override; a
 	non-iterable answers itself and the __getitem__: index then raises."
 
-	((self @env0:class @env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) @env0:notNil)
+	(self ___respondsTo___: #'__getitem__:')
 		ifTrue: [^ self].
-	((self @env0:class @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) @env0:notNil
-		@env0:or: [(self @env0:class @env0:whichClassIncludesSelector: #'__next__' environmentId: 1) @env0:notNil])
+	((self ___respondsTo___: #'__iter__')
+		@env0:or: [self ___respondsTo___: #'__next__'])
 		ifTrue: [^ list @env1:__new__: self].
 	^ self
 %
@@ -542,9 +569,9 @@ ___descriptorGet___: aValue
 	"``__get__(self, instance, cls=None)'' — the ``cls'' default makes
 	it compile to the varargs selector ``___get__:kw:''; a defaultless
 	one would be the fixed ``__get__:_:''.  Try both."
-	((aValue @env0:class @env0:whichClassIncludesSelector: #'___get__:kw:' environmentId: 1) notNil)
+	(aValue ___respondsTo___: #'___get__:kw:')
 		ifTrue: [^ aValue ___get__: { self. self @env0:class } kw: nil].
-	((aValue @env0:class @env0:whichClassIncludesSelector: #'__get__:_:' environmentId: 1) notNil)
+	(aValue ___respondsTo___: #'__get__:_:')
 		ifTrue: [^ aValue __get__: self _: self @env0:class].
 	^ aValue
 %
@@ -574,7 +601,7 @@ ___dynamicClassAttr___: aSym
 	(self ___classAttrOverlayLookup___: walker name: aSym)
 		@env0:ifNotNil: [:___ovv | ^ ___ovv].
 	[walker == nil] whileFalse: [
-		((walker @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) notNil)
+		(walker ___respondsTo___: #dynInstVars)
 			ifTrue: [
 				| holder dynValue |
 				holder := walker @env0:perform: #dynInstVars env: 1.
@@ -768,7 +795,7 @@ ___classDict___
 	method wrap (enum members shadow their accessor machinery).
 	dynamicInstVarPairs answers a FLAT alternating array and raises on a
 	never-stored holder -- guard and iterate by 2."
-	((self @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) ~~ nil) ifTrue: [
+	(self ___respondsTo___: #dynInstVars) ifTrue: [
 		holder := [self @env0:perform: #dynInstVars env: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
 		holder == nil ifFalse: [
 			pairs := [holder @env0:dynamicInstVarPairs] @env0:on: AbstractException do: [:e | e @env0:return: #()].
@@ -873,16 +900,18 @@ ___classAttrDunder___: baseSym
 	metaclass first (ClassDefAst class attrs), then per-class dynamic
 	attrs (setattr'd overrides).  Returns nil when absent."
 
-	| cls metaclass sym1 v |
+	| cls sym1 v |
 	cls := self @env0:class.
 	"Canonical-class overlay first: setattr(Cls, '__add__', fn) at runtime
 	lands session-locally and must shadow the committed accessor pair."
 	(self ___classAttrOverlayLookup___: cls name: baseSym)
 		@env0:ifNotNil: [:___ovv | ^ ___ovv].
-	metaclass := cls @env0:class.
 	sym1 := (baseSym @env0:asString @env0:, ':') @env0:asSymbol.
-	((metaclass @env0:whichClassIncludesSelector: baseSym environmentId: 1) ~~ nil
-		and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) ~~ nil])
+	"``cls ___respondsTo___: s'' asks whether the CLASS cls understands s
+	class-side (i.e. its metaclass chain defines s) -- what the old
+	``cls class whichClassIncludesSelector: s environmentId: 1'' probed."
+	((cls ___respondsTo___: baseSym)
+		and: [cls ___respondsTo___: sym1])
 		ifTrue: [
 			v := cls @env0:perform: baseSym env: 1.
 			v == nil ifFalse: [^ v]].
@@ -1044,7 +1073,7 @@ ___pyAttrLoad___: aSym
 	receiver also has built-in named instVars.  A set slot returns its value;
 	an unset slot (nil) falls through to the resolution chain below (class
 	attrs / __getattr__ / AttributeError)."
-	((self @env0:class @env0:whichClassIncludesSelector: #'___pyHasSlots___' environmentId: 1) notNil) ifTrue: [
+	(self ___respondsTo___: #'___pyHasSlots___') ifTrue: [
 		| slotIdx slotVal |
 		"allInstVarNames returns Symbols; indexOf: gives the instVarAt:
 		index (0 when absent).  This image's kernel has no instVarNamed:,
@@ -1108,7 +1137,7 @@ ___pyAttrLoad___: aSym
 		module function return the SAME object -- CPython functions are
 		first-class module attributes with stable identity
 		(g.dispatch(int) is g_int)."
-		((self @env0:class @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil) ifTrue: [
+		(self ___respondsTo___: symVA) ifTrue: [
 			dynValue := BoundMethod receiver: self selector: aSym.
 			self @env0:dynamicInstVarAt: aSym put: dynValue.
 			^ dynValue
@@ -1150,12 +1179,12 @@ ___pyAttrLoad___: aSym
 					^ dynValue]
 				ifFalse: [^ self @env0:perform: aSym env: 1]
 		].
-		(((self @env0:class @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil)
-			or: [(self @env0:class @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
-			or: [(self @env0:class @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
-			or: [(self @env0:class @env0:whichClassIncludesSelector: sym4 environmentId: 1) notNil
-			or: [(self @env0:class @env0:whichClassIncludesSelector: sym5 environmentId: 1) notNil
-			or: [(self @env0:class @env0:whichClassIncludesSelector: sym6 environmentId: 1) notNil]]]]]) ifTrue: [
+		((self ___respondsTo___: sym1)
+			or: [(self ___respondsTo___: sym2)
+			or: [(self ___respondsTo___: sym3)
+			or: [(self ___respondsTo___: sym4)
+			or: [(self ___respondsTo___: sym5)
+			or: [self ___respondsTo___: sym6]]]]]) ifTrue: [
 			dynValue := BoundMethod receiver: self selector: aSym.
 			self @env0:dynamicInstVarAt: aSym put: dynValue.
 			^ dynValue
@@ -1188,7 +1217,7 @@ ___pyAttrLoad___: aSym
 	idtracking.Symbols.copy() does ``object.__new__(self.__class__)''
 	and trips the BoundMethod-wrap fallback."
 	((s @env0:= '__class__' or: [s @env0:= '__doc__'])
-		and: [(self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil])
+		and: [self ___respondsTo___: aSym])
 			ifTrue: [^ self @env0:perform: aSym env: 1].
 	(self isKindOf: Behavior) ifTrue: [
 		"Class-level dunders that should always read as values, never
@@ -1197,7 +1226,7 @@ ___pyAttrLoad___: aSym
 		and break visitor dispatch
 		(``getattr(self, 'visit_' + type(node).__name__)``)."
 		((s @env0:= '__name__' or: [s @env0:= '__module__' or: [s @env0:= '__qualname__' or: [s @env0:= '__mro__' or: [s @env0:= '__base__' or: [s @env0:= '__bases__']]]]])
-			and: [(self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil])
+			and: [self ___respondsTo___: aSym])
 				ifTrue: [^ self @env0:perform: aSym env: 1].
 		"Python ``cls.__dict__``: the class's OWN attribute dict.  MUST
 		precede the unbound-method wrap below -- PythonInstance defines an
@@ -1217,8 +1246,8 @@ ___pyAttrLoad___: aSym
 		"Setter-paired class-level accessor on a Python user class —
 		value attribute (``class C: X = 1``)."
 		((self @env0:inheritsFrom: PythonInstance)
-			and: [(self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
-				and: [(self @env0:class @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil]])
+			and: [(self ___respondsTo___: aSym)
+				and: [(self ___respondsTo___: sym1)]])
 			ifTrue: [
 				^ self @env0:perform: aSym env: 1
 		].
@@ -1241,7 +1270,7 @@ ___pyAttrLoad___: aSym
 		[ | walker holder v |
 		walker := self.
 		[walker ~~ nil and: [walker ~~ Object]] @env0:whileTrue: [
-			((walker @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) ~~ nil) ifTrue: [
+			(walker ___respondsTo___: #dynInstVars) ifTrue: [
 				holder := walker @env0:perform: #dynInstVars env: 1.
 				holder == nil ifFalse: [
 					v := holder @env0:dynamicInstVarAt: aSym.
@@ -1297,8 +1326,8 @@ ___pyAttrLoad___: aSym
 	pairs and wraps the unary as a BoundMethod instead of treating
 	it as a property read."
 	(isGenerated
-		and: [(self @env0:class @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
-			and: [(self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil]])
+		and: [(self ___respondsTo___: sym1)
+			and: [(self ___respondsTo___: aSym)]])
 		ifTrue: [
 			| instVal metaclass |
 			instVal := self @env0:perform: aSym env: 1.
@@ -1443,14 +1472,14 @@ ___pyAttrLoad___: aSym
 	For a class receiver this picks up @classmethod selectors on the
 	metaclass (``Cls.classmeth()'' returns a bound class method),
 	taking precedence over the unbound-instance-method branch below."
-	((self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
-		or: [(self @env0:class @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
-			or: [(self @env0:class @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
-				or: [(self @env0:class @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
-					or: [(self @env0:class @env0:whichClassIncludesSelector: sym4 environmentId: 1) notNil
-						or: [(self @env0:class @env0:whichClassIncludesSelector: sym5 environmentId: 1) notNil
-							or: [(self @env0:class @env0:whichClassIncludesSelector: sym6 environmentId: 1) notNil
-								or: [(self @env0:class @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]]]]])
+	((self ___respondsTo___: aSym)
+		or: [(self ___respondsTo___: sym1)
+			or: [(self ___respondsTo___: sym2)
+				or: [(self ___respondsTo___: sym3)
+					or: [(self ___respondsTo___: sym4)
+						or: [(self ___respondsTo___: sym5)
+							or: [(self ___respondsTo___: sym6)
+								or: [self ___respondsTo___: symVA]]]]]]])
 		ifTrue: [^ BoundMethod receiver: self selector: aSym].
 	"Unbound class-method lookup: ``Cls.method'' where ``method'' is
 	an instance method defined on Cls itself (env 1).  Python returns
@@ -1489,7 +1518,7 @@ ___pyAttrLoad___: aSym
 		ifTrue: [self]
 		ifFalse: [self @env0:class].
 	[walker == nil] whileFalse: [
-		((walker @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) notNil)
+		(walker ___respondsTo___: #dynInstVars)
 			ifTrue: [
 				| holder dynValue |
 				holder := walker @env0:perform: #dynInstVars env: 1.
@@ -1726,7 +1755,7 @@ __contains__: item
 
 	| cls ni it |
 	cls := self @env0:class.
-	(cls @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) notNil ifFalse: [
+	(self ___respondsTo___: #'__iter__') ifFalse: [
 		^ TypeError ___signal___: ('argument of type ''' @env0:,
 			cls @env0:name @env0:asString @env0:, ''' is not iterable')].
 	ni := Python @env0:at: #NotImplemented otherwise: nil.
@@ -1752,17 +1781,16 @@ ___augmentedOp___: other inplace: iSel binary: bSel
 	``a := a.__add__(b)'' and a class defining only ``__iadd__'' raised a
 	spurious ``unsupported operand'' TypeError (test_operator.test_inplace)."
 
-	| cls iVa result niSingleton |
-	cls := self @env0:class.
+	| iVa result niSingleton |
 	niSingleton := Python @env0:at: #NotImplemented otherwise: nil.
-	(cls @env0:whichClassIncludesSelector: iSel environmentId: 1) notNil
+	(self ___respondsTo___: iSel)
 		ifTrue: [
 			result := self @env0:perform: iSel env: 1 withArguments: { other }.
 			result == niSingleton ifFalse: [^ result]]
 		ifFalse: [
 			iVa := ('_' @env0:, (iSel @env0:asString @env0:copyFrom: 1
 				to: iSel @env0:asString @env0:size @env0:- 1) @env0:, ':kw:') @env0:asSymbol.
-			(cls @env0:whichClassIncludesSelector: iVa environmentId: 1) notNil ifTrue: [
+			(self ___respondsTo___: iVa) ifTrue: [
 				result := self @env0:perform: iVa env: 1 withArguments: { { other }. nil }.
 				result == niSingleton ifFalse: [^ result]]].
 	^ self @env0:perform: bSel env: 1 withArguments: { other }
@@ -2356,7 +2384,7 @@ __setattr__: name _: value
 	conversion, audit, etc.); to bypass the override and hit the
 	default behavior, call ``super().__setattr__(name, value)''."
 
-	| sym setterSym cls enumCls rec |
+	| sym setterSym enumCls rec |
 	sym := name @env0:asSymbol.
 	"Enum members are read-only: ``Color.RED = x'' raises AttributeError
 	(CPython EnumType.__setattr__).  Guard for a class receiver whose enum
@@ -2375,9 +2403,8 @@ __setattr__: name _: value
 				^ AttributeError ___signal___:
 					'cannot reassign member ''' @env0:, name @env0:asString @env0:, '''']].
 	setterSym := (name @env0:asString @env0:, ':') @env0:asSymbol.
-	cls := self @env0:class.
-	((cls @env0:whichClassIncludesSelector: sym environmentId: 1) notNil
-		and: [(cls @env0:whichClassIncludesSelector: setterSym environmentId: 1) notNil])
+	((self ___respondsTo___: sym)
+		and: [self ___respondsTo___: setterSym])
 		ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { value }].
 	^ self ___pyAttrStore___: name put: value
 %
@@ -2437,7 +2464,7 @@ ___pyAttrDelete___: aName
 		"Class receiver — remove from dynInstVars dict (Python user
 		class).  Built-in / non-Python classes have no dynInstVars
 		slot and immediately AttributeError."
-		((self @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) notNil)
+		(self ___respondsTo___: #dynInstVars)
 			ifTrue: [
 				| holder |
 				holder := self @env0:perform: #dynInstVars env: 1.
@@ -2493,7 +2520,7 @@ ___pyAttrDelete___: aName
 	already unset, matching ``del'' of an unbound slot.  (instVars can't
 	be removed, only nilled — the nil-as-absent convention makes a nilled
 	slot indistinguishable from never-set, which is the desired result.)"
-	((self @env0:class @env0:whichClassIncludesSelector: #'___pyHasSlots___' environmentId: 1) notNil) ifTrue: [
+	(self ___respondsTo___: #'___pyHasSlots___') ifTrue: [
 		| slotIdx |
 		slotIdx := self @env0:class @env0:allInstVarNames
 			@env0:indexOf: (('___slot_' @env0:, sym @env0:asString @env0:, '___') @env0:asSymbol).
@@ -2539,7 +2566,7 @@ ___pyAttrStore___: aName put: aValue
 	(e.g. inside a tuple unpack or chained assignment)."
 
 	(self isKindOf: Behavior) ifTrue: [
-		| setterSym getterSym metaclass |
+		| setterSym getterSym |
 		"(Enum member-reassignment is guarded in __setattr__:_:, the single
 		store entry point, BEFORE the accessor-setter dispatch.)"
 		"Canonical-class overlay: runtime stores on a shared canonical
@@ -2551,7 +2578,6 @@ ___pyAttrStore___: aName put: aValue
 			ifTrue: [^ aValue].
 		setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
 		getterSym := aName @env0:asString @env0:asSymbol.
-		metaclass := self @env0:class.
 		"Dispatch to a static setter ONLY when a PAIRED unary getter
 		also exists — real class attributes / @property are always a
 		getter+setter pair.  Probing the setter alone mis-fires for
@@ -2561,11 +2587,11 @@ ___pyAttrStore___: aName put: aValue
 		fn)'' would dispatch ``cls __eq__: fn'' instead of storing fn.
 		The dataclass decorator relies on this store landing in
 		dynInstVars so object>>__eq__ can find it."
-		((metaclass @env0:whichClassIncludesSelector: setterSym environmentId: 1) notNil
-			and: [(metaclass @env0:whichClassIncludesSelector: getterSym environmentId: 1) notNil])
+		((self ___respondsTo___: setterSym)
+			and: [self ___respondsTo___: getterSym])
 			ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { aValue }].
 		"Python user class — store in the per-class dynInstVars dict."
-		(metaclass @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) notNil
+		(self ___respondsTo___: #dynInstVars)
 			ifTrue: [
 				| holder |
 				holder := self @env0:perform: #dynInstVars env: 1.
@@ -2588,7 +2614,7 @@ ___pyAttrStore___: aName put: aValue
 	AttributeError (CPython semantics).  Any other instance — including a
 	non-strict slotted class (it has a __dict__) — falls back to
 	dynamic-instVar storage."
-	((self @env0:class @env0:whichClassIncludesSelector: #'___pyHasSlots___' environmentId: 1) notNil) ifTrue: [
+	(self ___respondsTo___: #'___pyHasSlots___') ifTrue: [
 		| slotIdx |
 		slotIdx := self @env0:class @env0:allInstVarNames
 			@env0:indexOf: (('___slot_' @env0:, aName @env0:asString @env0:, '___') @env0:asSymbol).
@@ -2596,7 +2622,7 @@ ___pyAttrStore___: aName put: aValue
 			self @env0:instVarAt: slotIdx put: aValue.
 			^ aValue
 		].
-		(self @env0:class @env0:whichClassIncludesSelector: #'___pySlotsStrict___' environmentId: 1) notNil ifTrue: [
+		(self ___respondsTo___: #'___pySlotsStrict___') ifTrue: [
 			^ AttributeError ___signal___:
 				'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
 					''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
@@ -2752,7 +2778,7 @@ ___tryBinaryDunderDNU___: aSelector args: anArray
 	running the fallback protocol."
 	vaSel := ('_' , (aSelector asString copyFrom: 1
 		to: aSelector asString size - 1) , ':kw:') asSymbol.
-	((self class whichClassIncludesSelector: vaSel environmentId: 1) ~~ nil)
+	(self @env1:___respondsTo___: vaSel)
 		ifTrue: [^ self perform: vaSel env: 1
 			withArguments: { anArray. nil }].
 	^ self @env1:___binOpFallback___: (anArray at: 1)

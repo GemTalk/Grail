@@ -1001,7 +1001,7 @@ dispatch: cls
 	hash-ordered, so the first matching ABC wins."
 	reg @env0:keysAndValuesDo: [:k :impl |
 		((k isKindOf: Behavior)
-			and: [(k @env0:class @env0:whichClassIncludesSelector: #'__subclasscheck__:' environmentId: 1) notNil
+			and: [(k ___respondsTo___: #'__subclasscheck__:')
 			and: [(k __subclasscheck__: key) == true]])
 				ifTrue: [^ impl]].
 	^ self @env0:dynamicInstVarAt: #default

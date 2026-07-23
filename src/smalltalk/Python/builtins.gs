@@ -271,12 +271,10 @@ callable: anObject
 	``__call__`` (or the Grail call protocol on BoundMethod/closures,
 	which both compile ``__call__:``-shaped entries or value:value:)."
 
-	| objClass |
 	(anObject isKindOf: Behavior) ifTrue: [^ true].
 	(anObject isKindOf: BoundMethod) ifTrue: [^ true].
 	(anObject isKindOf: ExecBlock) ifTrue: [^ true].
-	objClass := anObject @env0:class.
-	^ (objClass @env0:whichClassIncludesSelector: (#__call__:) environmentId: 1) notNil
+	^ anObject ___respondsTo___: #'__call__:'
 %
 
 category: 'Grail-Built-in Functions'
@@ -401,12 +399,11 @@ iter: anObject
 	implemented yet (see TODO.md) — none of the current Flask-path
 	modules use it."
 
-	"`whichClassIncludesSelector:environmentId:` walks the
-	inheritance chain — needed because ``__iter__`` lives on
-	CharacterCollection for strings, on SetProtocol for sets, etc.,
-	not on the leaf class."
-	(anObject @env0:class @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1)
-		ifNil: [
+	"``___respondsTo___:`` walks the inheritance chain — needed because
+	``__iter__`` lives on CharacterCollection for strings, on SetProtocol
+	for sets, etc., not on the leaf class."
+	(anObject ___respondsTo___: #'__iter__')
+		ifFalse: [
 			TypeError @env0:signal: ('''' @env0:,
 				(anObject @env0:class @env0:name) @env0:,
 				''' object is not iterable')
@@ -438,8 +435,8 @@ ___asIterator___: anIterator
 	generator-expression collections into the next()/StopIteration
 	protocol."
 
-	((anIterator @env0:class @env0:whichClassIncludesSelector: #'__next__' environmentId: 1) isNil
-		and: [(anIterator @env0:class @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) notNil])
+	((anIterator ___respondsTo___: #'__next__') not
+		and: [anIterator ___respondsTo___: #'__iter__'])
 		ifTrue: [^ anIterator __iter__].
 	^ anIterator
 %
@@ -1027,6 +1024,93 @@ ___formatStrValue___: value parsed: p
 
 category: 'Grail-Format Spec Engine'
 method: builtins
+___printfConvert___: value conv: conv flags: flags width: width precision: precision
+	"Render one printf %-field for str.__mod__: apply flags (- + space # 0),
+	width and precision per the conversion char, reusing the str.format()
+	value formatters for padding/sign/precision.  Conversions: s r a c
+	(string-like) · d i u o x X (integer) · e E f F g G (float)."
+
+	| leftAlign zeroPad plusSign spaceSign altForm body align fill iv neg absval digits prefix signStr signLen p |
+	leftAlign := flags @env0:includes: $-.
+	zeroPad := (flags @env0:includes: $0) @env0:and: [leftAlign @env0:not].
+	plusSign := flags @env0:includes: $+.
+	spaceSign := flags @env0:includes: (Character @env0:space).
+	altForm := flags @env0:includes: $#.
+
+	"--- string-like conversions: s r a c ---"
+	(conv @env0:= $s @env0:or: [conv @env0:= $r @env0:or: [
+		conv @env0:= $a @env0:or: [conv @env0:= $c]]]) ifTrue: [
+		"s/r match the pre-existing rendering (asString / printString) exactly
+		-- routing %s through __str__ would newly surface latent __repr__ bugs
+		in dict subclasses (e.g. Counter's associationAt: MNU)."
+		conv @env0:= $s ifTrue: [body := value @env0:asString].
+		conv @env0:= $r ifTrue: [body := value @env0:printString].
+		conv @env0:= $a ifTrue: [body := (self ascii: value) @env0:asString].
+		conv @env0:= $c ifTrue: [
+			(value isKindOf: Integer)
+				ifTrue: [body := String @env0:with: (Character @env0:codePoint: value @env0:asInteger)]
+				ifFalse: [body := value @env0:asString]].
+		"precision truncates s/r/a (not c)."
+		(conv @env0:~= $c @env0:and: [
+			precision ~~ nil @env0:and: [body @env0:size @env0:> precision]]) ifTrue: [
+			body := body @env0:copyFrom: 1 to: precision].
+		align := leftAlign ifTrue: [$<] ifFalse: [$>].
+		^ self ___formatPadBody___: body fill: (Character @env0:space)
+			align: align width: width signLength: 0].
+
+	"--- float conversions: e E f F g G ---"
+	(#($e $E $f $F $g $G) @env0:includes: conv) ifTrue: [
+		fill := zeroPad ifTrue: [$0] ifFalse: [Character @env0:space].
+		align := leftAlign ifTrue: [$<] ifFalse: [zeroPad ifTrue: [$=] ifFalse: [$>]].
+		p := {
+			fill.
+			align.
+			(plusSign ifTrue: [$+] ifFalse: [
+				spaceSign ifTrue: [Character @env0:space] ifFalse: [$-]]).
+			altForm.
+			width.
+			nil.
+			precision.
+			conv }.
+		^ self ___formatFloatValue___: value @env0:asFloat parsed: p].
+
+	"--- integer conversions: d i u o x X ---"
+	iv := value @env0:asInteger.
+	neg := iv @env0:< 0.
+	absval := iv @env0:abs.
+	prefix := ''.
+	(conv @env0:= $d @env0:or: [conv @env0:= $i @env0:or: [conv @env0:= $u]]) ifTrue: [
+		digits := absval @env0:printString].
+	conv @env0:= $o ifTrue: [
+		digits := absval @env0:printStringRadix: 8.
+		altForm ifTrue: [prefix := '0o']].
+	conv @env0:= $x ifTrue: [
+		digits := (absval @env0:printStringRadix: 16) @env0:asLowercase.
+		altForm ifTrue: [prefix := '0x']].
+	conv @env0:= $X ifTrue: [
+		digits := (absval @env0:printStringRadix: 16) @env0:asUppercase.
+		altForm ifTrue: [prefix := '0X']].
+	digits == nil ifTrue: [
+		ValueError ___signal___: 'unsupported format character in %-format'].
+	"integer precision = minimum digit count; the 0 flag is ignored when given."
+	precision ~~ nil ifTrue: [
+		((precision @env0:= 0) @env0:and: [absval @env0:= 0])
+			ifTrue: [digits := '']
+			ifFalse: [[digits @env0:size @env0:< precision]
+				@env0:whileTrue: [digits := '0' @env0:, digits]]].
+	signStr := neg ifTrue: ['-'] ifFalse: [
+		plusSign ifTrue: ['+'] ifFalse: [spaceSign ifTrue: [' '] ifFalse: ['']]].
+	body := signStr @env0:, prefix @env0:, digits.
+	signLen := signStr @env0:size @env0:+ prefix @env0:size.
+	(zeroPad @env0:and: [precision == nil])
+		ifTrue: [fill := $0. align := $=]
+		ifFalse: [fill := Character @env0:space.
+			align := leftAlign ifTrue: [$<] ifFalse: [$>]].
+	^ self ___formatPadBody___: body fill: fill align: align width: width signLength: signLen
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
 ___formatValue___: value spec: spec
 	"Shared entry point behind int/float/str __format__.  Empty spec
 	is str(value); otherwise parse once and dispatch by type."
@@ -1071,9 +1155,8 @@ reversed: aSequence
 	classes like collections.deque (which has __reversed__ but no
 	env-0 reverseDo:) hit MNU."
 
-	| cls lst |
-	cls := aSequence @env0:class.
-	((cls @env0:whichClassIncludesSelector: #'__reversed__' environmentId: 1) notNil)
+	| lst |
+	(aSequence ___respondsTo___: #'__reversed__')
 		ifTrue: [^ aSequence __reversed__].
 	lst := list ___new___.
 	aSequence @env0:reverseDo: [:item | lst append: item].
@@ -1089,9 +1172,9 @@ round: aNumber
 	implements banker's rounding there; the kernel #rounded was an
 	uncatchable MNU on PythonInstances."
 
-	((aNumber @env0:class @env0:whichClassIncludesSelector: #'___round__:kw:' environmentId: 1) ~~ nil)
+	(aNumber ___respondsTo___: #'___round__:kw:')
 		ifTrue: [^ aNumber ___round__: { } kw: nil].
-	((aNumber @env0:class @env0:whichClassIncludesSelector: #'__round__' environmentId: 1) ~~ nil)
+	(aNumber ___respondsTo___: #'__round__')
 		ifTrue: [^ aNumber @env0:perform: #'__round__' env: 1].
 	^ aNumber @env0:rounded
 %
@@ -1459,7 +1542,7 @@ method: builtins
 ___isInstanceSingle___: anObject of: aClass
 	"isinstance with a single class argument (post-tuple-expansion)."
 
-	| result theMetaclass |
+	| result |
 	"Non-class classinfo (isinstance(x, functools.cached_property)
 	where the attr resolved to a BoundMethod): raise CPython's
 	catchable TypeError -- isKindOf: on a non-Behavior dies with an
@@ -1498,7 +1581,6 @@ ___isInstanceSingle___: anObject of: aClass
 		il == nil ifFalse: [
 			result := (il @env0:___mroOf___: anObject @env0:class) @env0:includes: aClass]].
 	result ifFalse: [
-		theMetaclass := aClass @env0:class.
 		"Walk the metaclass chain (not just the own method dict) for
 		``__instancecheck__:'' — ABCs define it once on a base
 		(``numbers.Number'', ``collections.abc._ABCStub'') and the
@@ -1507,8 +1589,9 @@ ___isInstanceSingle___: anObject of: aClass
 		and every ``isinstance(x, collections.abc.Mapping/Sequence/...)''
 		because those classes carry the method only by inheritance.
 		Matches CPython, where the hook lives on the (shared) metaclass
-		``type(cls).__instancecheck__''."
-		((theMetaclass @env0:whichClassIncludesSelector: #'__instancecheck__:' environmentId: 1) notNil) ifTrue: [
+		``type(cls).__instancecheck__''.  ``aClass ___respondsTo___: s''
+		probes aClass's metaclass chain (class-side responds-to)."
+		(aClass ___respondsTo___: #'__instancecheck__:') ifTrue: [
 			result := aClass __instancecheck__: anObject
 		]
 	].
@@ -1691,7 +1774,7 @@ ___isSubclassSingle___: sub of: target
 	walk the METACLASS chain, mirroring CPython's
 	``type(cls).__subclasscheck__''.  Reached only after the real chain,
 	the widenings, and the C3 MRO all missed."
-	((target @env0:class @env0:whichClassIncludesSelector: #'__subclasscheck__:' environmentId: 1) notNil) ifTrue: [
+	(target ___respondsTo___: #'__subclasscheck__:') ifTrue: [
 		^ (target __subclasscheck__: sub) == true].
 	^ false
 %
@@ -1956,7 +2039,7 @@ _round: positional kw: kwargs
 		].
 	"__round__ first (CPython protocol) -- see round: for the 1-arg
 	rationale; the kernel arithmetic below MNUs on PythonInstances."
-	((number @env0:class @env0:whichClassIncludesSelector: #'___round__:kw:' environmentId: 1) ~~ nil)
+	(number ___respondsTo___: #'___round__:kw:')
 		ifTrue: [^ number ___round__:
 			(ndigits == nil ifTrue: [{ }] ifFalse: [{ ndigits }]) kw: nil].
 	ndigits ifNil: [^ number @env0:rounded].

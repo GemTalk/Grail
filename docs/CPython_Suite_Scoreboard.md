@@ -23,7 +23,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_operator | OK | 110 | 0 | 0 | 0 |  |
 | test.test_fractions | OK | 49 | 0 | 0 | 0 |  |
 | test.test_datetime | SKIP | 0 | 0 | 0 | 0 |  |
-| test.test_re | ERROR | 165 | 30 | 29 | 3 |  |
+| test.test_re | ERROR | 165 | 32 | 25 | 3 |  |
 | test.test_functools | ERROR | 325 | 93 | 83 | 2 |  |
 | test.test_list | OK | 68 | 0 | 0 | 3 |  |
 | test.test_tuple | OK | 38 | 0 | 0 | 6 |  |
