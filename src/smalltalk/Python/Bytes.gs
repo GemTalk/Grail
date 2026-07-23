@@ -446,45 +446,42 @@ __ne__: other
 
 category: 'Grail-String Representation'
 method: bytes
-__repr__
-	"Return string representation of bytes (e.g., b'hello')"
-	| result size |
-	result := 'b'''.
+___reprBody___
+	"The ``b'...'''-style representation shared by bytes and bytearray repr.
+	Matches CPython: single quotes, unless the data holds a single quote and
+	no double quote (then double quotes); escape backslash, \t, \n, \r and the
+	active quote; other non-printable bytes as LOWERCASE \xNN; printable ASCII
+	(32-126) literally."
+	| size hasSingle hasDouble quote out bs |
 	size := self @env0:size.
+	hasSingle := false. hasDouble := false.
+	1 @env0:to: size do: [:i | | b |
+		b := self @env0:at: i.
+		(b @env0:= 39) ifTrue: [hasSingle := true].
+		(b @env0:= 34) ifTrue: [hasDouble := true]].
+	quote := (hasSingle @env0:and: [hasDouble @env0:not]) ifTrue: [34] ifFalse: [39].
+	bs := Character @env0:codePoint: 92.
+	out := WriteStream @env0:on: Unicode7 @env0:new.
+	out @env0:nextPut: $b; @env0:nextPut: (Character @env0:codePoint: quote).
+	1 @env0:to: size do: [:i | | b |
+		b := self @env0:at: i.
+		((b @env0:= 92) @env0:or: [b @env0:= quote]) ifTrue: [out @env0:nextPut: bs; @env0:nextPut: (Character @env0:codePoint: b)] ifFalse: [
+		(b @env0:= 9)  ifTrue: [out @env0:nextPut: bs; @env0:nextPut: $t] ifFalse: [
+		(b @env0:= 10) ifTrue: [out @env0:nextPut: bs; @env0:nextPut: $n] ifFalse: [
+		(b @env0:= 13) ifTrue: [out @env0:nextPut: bs; @env0:nextPut: $r] ifFalse: [
+		((b @env0:>= 32) @env0:and: [b @env0:<= 126]) ifTrue: [out @env0:nextPut: (Character @env0:codePoint: b)] ifFalse: [
+		| hx | hx := (b @env0:printStringRadix: 16) @env0:asLowercase.
+		(hx @env0:size @env0:= 1) ifTrue: [hx := '0' @env0:, hx].
+		out @env0:nextPut: bs; @env0:nextPut: $x; @env0:nextPutAll: hx ]]]]]].
+	out @env0:nextPut: (Character @env0:codePoint: quote).
+	^ out @env0:contents
+%
 
-	1 @env0:to: size do: [:i |
-		| byte |
-		byte := self @env0:at: i.
-
-		"Printable ASCII characters (32-126)"
-		((byte @env0:>= 32) and: [
-			byte @env0:<= 126
-		]) ifTrue: [
-			"Special cases that need escaping"
-			(byte == 39) ifTrue: [  "single quote"
-				result := result @env0:, '\'''
-			] ifFalse: [
-				(byte == 92) ifTrue: [  "backslash"
-					result := result @env0:, '\\'
-				] ifFalse: [
-					| char |
-					char := Character @env0:codePoint: byte.
-					result := result @env0:, (char @env0:asString)
-				]
-			]
-		] ifFalse: [
-			"Non-printable: use \xNN format"
-			| hex |
-			hex := byte @env0:printStringRadix: 16.
-			((hex @env0:size) == 1) ifTrue: [
-				hex := '0' @env0:, hex
-			].
-			result := result @env0:, ('\x' @env0:, hex)
-		]
-	].
-
-	result := result @env0:, ''''.
-	^ result
+category: 'Grail-String Representation'
+method: bytes
+__repr__
+	"Return the bytes representation, e.g. b'hello'."
+	^ self ___reprBody___
 %
 
 category: 'Grail-Sequence Protocol'
@@ -1024,7 +1021,8 @@ find: sub
 category: 'Grail-Encoding/Decoding'
 method: bytes
 hex
-	"Return hex representation of bytes"
+	"Return the lowercase hex representation of the bytes (CPython
+	bytes.hex() -- e.g. b'\xfe\x01'.hex() = 'fe01')."
 	| result size |
 	result := ''.
 	size := self @env0:size.
@@ -1032,7 +1030,7 @@ hex
 	1 @env0:to: size do: [:i |
 		| byte hexStr |
 		byte := self @env0:at: i.
-		hexStr := byte @env0:printStringRadix: 16.
+		hexStr := (byte @env0:printStringRadix: 16) @env0:asLowercase.
 		"Pad with leading zero if needed"
 		((hexStr @env0:size) == 1) ifTrue: [
 			hexStr := '0' @env0:, hexStr

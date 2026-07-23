@@ -270,6 +270,14 @@ __class__
 	^ self @env0:class
 %
 
+category: 'Grail-String Representation'
+method: bytearray
+__repr__
+	"bytearray repr wraps the shared b'...' body: bytearray(b'...').  Inherited
+	bytes>>__repr__ would drop the wrapper (so bytearray(b'') printed as b'')."
+	^ 'bytearray(' @env0:, self ___reprBody___ @env0:, ')'
+%
+
 category: 'Grail-Sequence Protocol'
 method: bytearray
 __delitem__: index
