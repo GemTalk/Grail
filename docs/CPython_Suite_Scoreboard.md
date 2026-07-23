@@ -1,10 +1,10 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-07-23T18:59:25Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
+Generated: 2026-07-23T20:39:41Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
 
-**Modules: 19** — OK 8 · FAIL 0 · ERROR 7 · SKIP 2 · IMPORTERROR 2 · STERROR 0 · CRASH 0 · TIMEOUT 0
+**Modules: 19** — OK 9 · FAIL 0 · ERROR 7 · SKIP 2 · IMPORTERROR 1 · STERROR 0 · CRASH 0 · TIMEOUT 0
 
-**Totals:** tests=3082 failures=509 errors=327 skipped=81
+**Totals:** tests=3134 failures=503 errors=335 skipped=98
 
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
@@ -16,7 +16,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 |--------|--------|------:|-----:|----:|-----:|--------|
 | test.test_textwrap | OK | 68 | 0 | 0 | 0 |  |
 | test.test_math | OK | 88 | 0 | 0 | 4 |  |
-| test.test_int | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd800 is illegal for Unicode |
+| test.test_int | OK | 52 | 0 | 0 | 17 |  |
 | test.test_float | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd8f0 is illegal for Unicode |
 | test.test_heapq | OK | 68 | 0 | 0 | 1 |  |
 | test.test_bisect | OK | 42 | 0 | 0 | 0 |  |
@@ -32,4 +32,4 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_bytes | SKIP | 0 | 0 | 0 | 0 | a SkipTest occurred (error 2702) |
 | test.test_collections | ERROR | 101 | 39 | 35 | 4 |  |
 | test.test_itertools | ERROR | 135 | 32 | 42 | 10 |  |
-| test.test_enum | ERROR | 1077 | 287 | 136 | 0 |  |
+| test.test_enum | ERROR | 1077 | 283 | 140 | 0 |  |

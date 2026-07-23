@@ -31,17 +31,38 @@ modName := (System gemEnvironmentVariable: 'GRAIL_TEST_MODULE') ifNil: ['<unset>
 out := GsFile stdout.
 
 "Strip the delimiter and control characters from a detail string so it
- cannot break the single-line GRAIL_RESULT format."
-clean := [:s | | str lf cr tab |
+ cannot break the single-line GRAIL_RESULT format.  Also collapse any
+ non-ASCII codepoint to a \u{HEX} escape and rebuild into a byte-format
+ String via a WriteStream: a detail string can be Unicode16/32 (e.g. a
+ ValueError repr-quoting a string with a codepoint above Latin-1, from
+ test_int.py's ``int('\\u0200')``), and blitting THAT straight through
+ ``nextPutAll:`` to this byte-oriented GsFile writes 2/4 raw bytes per
+ character (mostly 0x00) instead of transcoding -- corrupting the log
+ with embedded NULs that make a stock (non -a) ``grep`` treat the whole
+ file as binary, so the harness script's ``grep -m1 '^GRAIL_RESULT|'``
+ finds nothing and misreports a clean run as CRASH."
+clean := [:s | | str lf cr tab ws cp |
   str := s isNil
     ifTrue: ['']
     ifFalse: [(s isKindOf: CharacterCollection) ifTrue: [s] ifFalse: [s printString]].
   "Cap length -- some Smalltalk errors embed a whole dict printString."
   str size > 240 ifTrue: [str := (str copyFrom: 1 to: 240) , ' ...'].
   lf := Character lf. cr := Character cr. tab := Character tab.
-  str collect: [:c |
+  ws := WriteStream on: String new.
+  str do: [:c |
     ((c == $|) or: [(c == lf) or: [(c == cr) or: [c == tab]]])
-      ifTrue: [$ ] ifFalse: [c]]].
+      ifTrue: [ws nextPut: $ ]
+      ifFalse: [
+        cp := c codePoint.
+        (cp between: 32 and: 126)
+          ifTrue: [ws nextPut: c]
+          ifFalse: [ | hexWs hex |
+            hexWs := WriteStream on: String new.
+            cp printOn: hexWs base: 16.
+            "printOn:base: emits a '16r' radix prefix -- strip it, keep just the digits."
+            hex := hexWs contents.
+            ws nextPutAll: '\u{'; nextPutAll: (hex copyFrom: 4 to: hex size); nextPutAll: '}']]].
+  ws contents].
 
 "Emit the one result line (6 args -> valueWithArguments:)."
 emit := [:st :tt :ff :ee :ss :dd |

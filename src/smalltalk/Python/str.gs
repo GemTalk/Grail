@@ -451,6 +451,54 @@ __mod__: args
 
 category: 'Grail-String Operations'
 method: CharacterCollection
+___convert___: value with: conv
+	"Format `value` per the printf conversion character.  Width and
+	precision specifiers are ignored; just produce the bare rendering."
+
+	conv @env0:= $s ifTrue: [^ value @env0:asString].
+	"Python __repr__, NOT Smalltalk printString: printString only
+	doubles embedded quotes, but %r must escape control characters
+	the way repr() does (e.g. a NUL byte -> the 4 chars '\x00', not a
+	raw NUL) -- test_int.py's test_error_message compares against
+	'%r' % ('123\x00',) verbatim."
+	conv @env0:= $r ifTrue: [^ value __repr__].
+	(conv @env0:= $d @env0:or: [conv @env0:= $i]) ifTrue: [^ value @env0:asInteger @env0:printString].
+	conv @env0:= $f ifTrue: [^ value @env0:asFloat @env0:printString].
+	conv @env0:= $x ifTrue: [
+		| digits n s |
+		digits := '0123456789abcdef'.
+		n := value @env0:asInteger.
+		n @env0:= 0 ifTrue: [^ '0'].
+		s := Unicode7 @env0:new.
+		[n @env0:> 0] @env0:whileTrue: [
+			s := (Unicode7 @env0:with: (digits @env0:at: (n @env0:bitAnd: 15) @env0:+ 1)) @env0:, s.
+			n := n @env0:bitShift: -4
+		].
+		^ s
+	].
+	conv @env0:= $X ifTrue: [^ (self ___convert___: value with: $x) @env0:asUppercase].
+	conv @env0:= $c ifTrue: [
+		"%c — an int is a code point; a 1-char string passes through."
+		(value isKindOf: Integer) ifTrue: [
+			^ Unicode7 @env0:with: (Character @env0:codePoint: value)].
+		^ value @env0:asString
+	].
+	conv @env0:= $o ifTrue: [
+		| n s |
+		n := value @env0:asInteger.
+		n @env0:= 0 ifTrue: [^ '0'].
+		s := Unicode7 @env0:new.
+		[n @env0:> 0] @env0:whileTrue: [
+			s := (Unicode7 @env0:with: (Character @env0:codePoint: (n @env0:bitAnd: 7) @env0:+ $0 @env0:asInteger)) @env0:, s.
+			n := n @env0:bitShift: -3
+		].
+		^ s
+	].
+	^ value @env0:asString
+%
+
+category: 'Grail-String Operations'
+method: CharacterCollection
 __mul__: n
 	"Repeat string n times. In Python: str * n"
 

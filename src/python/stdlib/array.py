@@ -25,6 +25,12 @@ class _array:
     def tolist(self):
         return list(self._data)
 
+    def tobytes(self):
+        # Only meaningful for typecode 'B' (unsigned byte) -- the only
+        # code this stub's callers (int(array('B', b)), test_int.py)
+        # actually exercise; no per-typecode packing is implemented.
+        return bytes(self._data)
+
     def __len__(self):
         return len(self._data)
 

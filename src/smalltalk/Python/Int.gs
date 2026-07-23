@@ -27,9 +27,21 @@ _new: positional kw: kwargs
 	partial(int, base=2)('101') reaches this via the partial invoke."
 
 	| obj base |
+	"CPython's int() takes its value POSITIONALLY ONLY -- 'x' is not a
+	nameable keyword (int(x=1.2) raises TypeError), unlike Grail's own
+	convenience of allowing kwargs at: 'x'.  Reject it up front to match
+	(test_int.py test_keyword_args)."
+	(kwargs @env0:notNil and: [kwargs @env0:includesKey: 'x']) ifTrue: [
+		TypeError ___signal___: 'int() got an unexpected keyword argument ''x'''
+	].
 	obj := (positional @env0:size @env0:>= 1)
 		ifTrue: [positional @env0:at: 1]
-		ifFalse: [kwargs @env0:at: 'x' ifAbsent: [^ 0]].
+		ifFalse: [
+			(kwargs @env0:notNil and: [kwargs @env0:includesKey: 'base']) ifTrue: [
+				TypeError ___signal___: 'int() missing string argument'
+			].
+			^ 0
+		].
 	base := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [kwargs @env0:at: 'base' ifAbsent: [nil]].
@@ -48,11 +60,25 @@ __new__
 
 category: 'Grail-Initialization'
 classmethod: int
+__new__: obj _: base _: extra
+	"int() takes at most 2 positional arguments -- a 3rd falls through
+	the generic class-call dispatch's arity-named-selector convention
+	(object class>>value:value: builds ``__new__:_:_:`` for 3
+	positionals) straight to a raw, uncatchable MessageNotUnderstood
+	on Integer class since (unlike Grail's own PythonInstance
+	hierarchy) the kernel Integer/Number/Object metaclass chain has no
+	env-1 DNU backstop.  Raise the same TypeError CPython does instead
+	(test_int.py: assertRaises(TypeError, int, '10', 2, 1))."
+
+	TypeError ___signal___: 'int expected at most 2 arguments, got 3'
+%
+
+category: 'Grail-Initialization'
+classmethod: int
 __new__: obj
 	"Create a new int instance from an object.
 	In Python: int(obj) or int.__new__(int, obj)"
 
-	| result |
 	obj ifNil: [ ^ 0 ].
 
 	"If already an int, return it"
@@ -69,11 +95,16 @@ __new__: obj
 	_index=operator.index)'') compiles to the varargs selector
 	``___int__:kw:'', which the bare-selector check below would miss."
 	((obj @env0:class @env0:whichClassIncludesSelector: #'___int__:kw:' environmentId: 1) @env0:notNil) ifTrue: [
-		^ obj ___int__: { } kw: nil
+		^ self ___coerceIntResult___: (obj ___int__: { } kw: nil) from: '__int__'
 	].
 	((obj @env0:class @env0:whichClassIncludesSelector: #__int__ environmentId: 1) @env0:notNil) ifTrue: [
-		result := obj __int__.
-		^ result
+		^ self ___coerceIntResult___: obj __int__ from: '__int__'
+	].
+
+	"No __int__: fall back to __index__ (PEP 357) -- e.g. a class that
+	implements only __index__ (test_int.py's BadIndex)."
+	((obj @env0:class @env0:whichClassIncludesSelector: #__index__ environmentId: 1) @env0:notNil) ifTrue: [
+		^ self ___coerceIntResult___: obj __index__ from: '__index__'
 	].
 
 	"Try to convert from float"
@@ -81,29 +112,105 @@ __new__: obj
 		^ obj @env0:truncated
 	].
 
-	"Try to convert from string.  Parse via the vendor number reader
-	``Number>>fromStream:'' rather than ``CharacterCollection>>asNumber'':
-	some images load a Squeak-compatibility package that OVERRIDES asNumber
-	(category ``*squeak-converting'', body ``^Number readFrom: self readStream''),
-	and that Squeak reader rejects a leading unary ``+'' (int('+5') must work)
-	and can diverge in other ways.  ``fromStream:'' is the primitive the
-	vendor asNumber itself uses and is not overridden, so it behaves the same
-	on base and Squeak/GLASS/Seaside images and accepts both ``+'' and ``-''.
-	trimBoth first so surrounding whitespace is tolerated (int('  100  ')).
-	Accept EVERY CharacterCollection, not just Unicode7: a string that
-	contains any non-Latin-1 codepoint is widened to a DoubleByteString /
-	Unicode16 (e.g. a format spec with a '→' fill widens its digit groups),
-	and int('2') on that wide string must still parse — matching the
-	explicit-base path below, which already keys off CharacterCollection."
+	"Try to convert from string.  Parse via the same explicit-base radix
+	walker the ``int(obj, base)`` path below uses (base 10), rather than
+	the vendor number reader ``Number>>fromStream:'': that reader is a
+	PREFIX parser (happily reads '1' out of '1x' and leaves the 'x'
+	unconsumed) with no notion of PEP 515 underscores, whereas CPython's
+	int() requires the WHOLE (trimmed) string to be a valid base-10
+	literal, underscores included.  ``___parseInt:radix:`` also accepts
+	Unicode decimal digits (``digitValue``), matching CPython's
+	int('١٢٣') support.  trimBoth first so surrounding whitespace is
+	tolerated (int('  100  ')).  Accept EVERY CharacterCollection, not
+	just Unicode7: a string that contains any non-Latin-1 codepoint is
+	widened to a DoubleByteString / Unicode16 (e.g. a format spec with a
+	'→' fill widens its digit groups), and int('2') on that wide string
+	must still parse."
 	(obj isKindOf: CharacterCollection) ifTrue: [
 		self ___checkStrDigitLimit___: obj.
-		^ [ (Number @env0:fromStream: (ReadStreamPortable @env0:on: obj @env0:trimBoth)) @env0:truncated ]
+		^ [self ___parseInt: (obj @env0:trimBoth: [:c | c @env0:unicodeIsWhitespace]) radix: 10]
 			@env0:on: Error
-			do: [:ex | ValueError @env0:signal: 'invalid literal for int()']
+			do: [:ex | self ___invalidLiteral___: obj base: 10]
+	].
+
+	"Bytes-like objects parse the same as the equivalent str, base 10 --
+	CPython accepts bytes for the implicit-base int(x) form too, not just
+	int(x, base) (test_int.py: int(b'1_00') == 100)."
+	(obj isKindOf: ByteArray) ifTrue: [
+		^ self ___parseIntFromBytes___: obj original: obj
+	].
+
+	"Any other buffer-protocol-like object (real CPython's int() accepts
+	anything exposing the buffer protocol, not just literal bytes/
+	bytearray) -- recognized here via a tobytes() method, which is all
+	Grail's array.array stub offers (test_int.py:
+	int(array.array('B', b'100')) == 100)."
+	((obj @env0:class @env0:whichClassIncludesSelector: #tobytes environmentId: 1) @env0:notNil) ifTrue: [
+		^ self ___parseIntFromBytes___: obj tobytes original: obj
 	].
 
 	"Otherwise, error"
-	TypeError @env0:signal: 'int() argument must be a string or a number'
+	TypeError ___signal___: 'int() argument must be a string or a number'
+%
+
+category: 'Grail-Initialization'
+classmethod: int
+___coerceIntResult___: result from: dunderName
+	"CPython's int()/index() protocol: __int__/__index__ must return an
+	int.  A bool IS technically an int subclass, so it's accepted --
+	but as a non-exact-int return it is DEPRECATED (warns, then coerces
+	to plain 0/1); anything else raises TypeError.  ``dunderName`` names
+	the dunder actually consulted, matching CPython's exact wording
+	(test_int.py's test_int_returns_int_subclass / test_int_subclass_with_int)."
+
+	| warningsMod |
+	(result isKindOf: int) ifTrue: [^ result].
+	(result == true or: [result == false]) ifTrue: [
+		warningsMod := (importlib @env1:modules) @env0:at: #warnings ifAbsent: [nil].
+		warningsMod ifNotNil: [
+			warningsMod warn: (dunderName @env0:,
+				' returned non-int (type bool).  The ability to return an instance of '
+				@env0:, 'a strict subclass of int is deprecated, and may be removed in a future '
+				@env0:, 'version of Python.')
+				_: DeprecationWarning].
+		^ result == true ifTrue: [1] ifFalse: [0]].
+	TypeError ___signal___: (dunderName @env0:, ' returned non-int (type '
+		@env0:, result @env0:class @env0:name @env0:asString @env0:, ')')
+%
+
+category: 'Grail-Initialization'
+classmethod: int
+___parseIntFromBytes___: byteObj original: original
+	"Shared base-10 parse for any ByteArray-shaped value -- interpret
+	each byte as its ASCII character (Python bytes([codepoint, ...])
+	semantics), then reuse the string parser.  ``original`` is the
+	value CPython would show in an invalid-literal error (the actual
+	bytes/array/etc argument, not an intermediate)."
+
+	| str |
+	str := String @env0:new: byteObj @env0:size.
+	1 @env0:to: byteObj @env0:size do: [:i |
+		str @env0:at: i put: (Character @env0:codePoint: (byteObj @env0:at: i))
+	].
+	self ___checkStrDigitLimit___: str.
+	^ [self ___parseInt: (str @env0:trimBoth: [:c | c @env0:unicodeIsWhitespace]) radix: 10]
+		@env0:on: Error
+		do: [:ex | self ___invalidLiteral___: original base: 10]
+%
+
+category: 'Grail-Initialization'
+classmethod: int
+___invalidLiteral___: obj base: baseInt
+	"Raise the exact ValueError CPython raises for an unparseable
+	int(obj[, base]) literal: 'invalid literal for int() with base N:
+	REPR(obj)' -- REPR is the ORIGINAL (untrimmed) obj's Python repr,
+	matching test_int.py's test_error_message which asserts on
+	exception.args[0] verbatim."
+
+	ValueError ___signal___: ('invalid literal for int() with base ' @env0:,
+		baseInt @env0:printString @env0:,
+		': ' @env0:,
+		(obj __repr__))
 %
 
 category: 'Grail-Initialization'
@@ -136,12 +243,16 @@ __new__: obj _: base
 	In Python: int(obj, base)"
 
 	| str baseInt |
-	"base must be an integer"
-	(base isKindOf: int) ifFalse: [
-		TypeError @env0:signal: 'int() base must be an integer'
-	].
-
-	baseInt := base.
+	"base must be an integer -- or an object implementing __index__
+	(PEP 357), e.g. a class with a plain __index__ method, coerced the
+	same way the arithmetic dunders above fall back to __index__ for a
+	non-int operand (test_int.py: int('101', base=MyIndexable(2)))."
+	baseInt := (base isKindOf: int)
+		ifTrue: [base]
+		ifFalse: [
+			((base @env0:class @env0:whichClassIncludesSelector: #__index__ environmentId: 1) @env0:notNil)
+				ifTrue: [base __index__]
+				ifFalse: [TypeError ___signal___: 'int() base must be an integer']].
 
 	"base must be 0 or 2-36"
 	((baseInt == 0) not and: [
@@ -149,7 +260,7 @@ __new__: obj _: base
 			baseInt @env0:> 36
 		]
 	]) ifTrue: [
-		ValueError @env0:signal: 'int() base must be >= 2 and <= 36, or 0'
+		ValueError ___signal___: 'int() base must be >= 2 and <= 36, or 0'
 	].
 
 	"obj must be a string or bytes-like.  CPython accepts both —
@@ -167,11 +278,19 @@ __new__: obj _: base
 				str @env0:at: i put: (Character @env0:codePoint: (obj @env0:at: i))
 			]
 		] ifFalse: [
-			TypeError @env0:signal: 'int() can''t convert non-string with explicit base'
+			TypeError ___signal___: 'int() can''t convert non-string with explicit base'
 		]
 	].
 
-	str := str @env0:trimBoth.
+	str := str @env0:trimBoth: [:c | c @env0:unicodeIsWhitespace].
+
+	"sys.set_int_max_str_digits digit-limit check -- CPython exempts
+	power-of-2 bases (2, 4, 8, 16, 32) since conversion for those is
+	linear, never quadratic (test_int.py test_power_of_two_bases_unlimited).
+	Every other base, including plain decimal 10, is checked."
+	((baseInt @env0:= 2) or: [(baseInt @env0:= 4) or: [(baseInt @env0:= 8)
+		or: [(baseInt @env0:= 16) or: [baseInt @env0:= 32]]]]) ifFalse: [
+		self ___checkStrDigitLimit___: str].
 
 	"Parse the string with the given base.  GemStone has no public
 	radix-aware Integer parser (only ``fromString:`` for base 10 and
@@ -180,7 +299,7 @@ __new__: obj _: base
 	prefixes and Python's ``0b``/``0o``/``0x`` discriminators."
 	^ [self ___parseInt: str radix: baseInt
 	] @env0:on: Error do: [:ex |
-		ValueError @env0:signal: ('invalid literal for int() with base ' @env0:, (baseInt @env0:printString))
+		self ___invalidLiteral___: obj base: baseInt
 	]
 %
 
@@ -189,13 +308,21 @@ classmethod: int
 ___parseInt: aString radix: baseInt
 	"Parse aString as an integer in the given base.  baseInt = 0
 	means infer from prefix (``0b`` / ``0o`` / ``0x``) and fall back
-	to base 10.  Raises if the result has no digits or contains a
-	non-digit for the chosen base."
+	to base 10.  Raises if the result has no digits, contains a
+	non-digit for the chosen base, has a misplaced underscore (PEP
+	515: an underscore must sit strictly between two digits, one
+	allowed right after a recognized 0b/0o/0x prefix — never
+	leading/trailing/doubled), or — base 0 only, no recognized prefix
+	matched — is old-style-octal-ambiguous (a leading ``0`` followed
+	by any nonzero digit, e.g. ``07``; CPython 3 disallows this for
+	base 0 even though the bare int() constructor otherwise tolerates
+	leading zeros)."
 
-	| chars sign idx effectiveBase result digitChars ch d pfxChar |
+	| chars sign idx effectiveBase result digitChars ch d pfxChar hadPrefix digitStart |
 	chars := aString.
 	idx := 1.
 	sign := 1.
+	hadPrefix := false.
 	(chars @env0:size @env0:>= 1) ifTrue: [
 		((chars @env0:at: 1) @env0:= $-) ifTrue: [sign := -1. idx := 2].
 		((chars @env0:at: 1) @env0:= $+) ifTrue: [idx := 2].
@@ -210,10 +337,17 @@ ___parseInt: aString radix: baseInt
 		(chars @env0:size @env0:>= (idx @env0:+ 1)) ifTrue: [
 			((chars @env0:at: idx) @env0:= $0) ifTrue: [
 				pfxChar := (chars @env0:at: idx @env0:+ 1) @env0:asLowercase.
-				pfxChar @env0:= $b ifTrue: [effectiveBase := 2. idx := idx @env0:+ 2].
-				pfxChar @env0:= $o ifTrue: [effectiveBase := 8. idx := idx @env0:+ 2].
-				pfxChar @env0:= $x ifTrue: [effectiveBase := 16. idx := idx @env0:+ 2].
+				pfxChar @env0:= $b ifTrue: [effectiveBase := 2. idx := idx @env0:+ 2. hadPrefix := true].
+				pfxChar @env0:= $o ifTrue: [effectiveBase := 8. idx := idx @env0:+ 2. hadPrefix := true].
+				pfxChar @env0:= $x ifTrue: [effectiveBase := 16. idx := idx @env0:+ 2. hadPrefix := true].
 			].
+		].
+	].
+	(baseInt @env0:= 0 and: [hadPrefix @env0:not and: [(idx @env0:<= chars @env0:size) and: [(chars @env0:at: idx) @env0:= $0]]]) ifTrue: [
+		(idx @env0:+ 1) @env0:to: chars @env0:size do: [:i |
+			| c |
+			c := chars @env0:at: i.
+			((c @env0:= $0) or: [c @env0:= $_]) ifFalse: [^ self @env0:error: 'invalid old-style octal'].
 		].
 	].
 	effectiveBase @env0:= 0 ifTrue: [effectiveBase := 10].
@@ -221,13 +355,27 @@ ___parseInt: aString radix: baseInt
 	(idx @env0:> chars @env0:size) ifTrue: [
 		^ self @env0:error: 'no digits'
 	].
+	digitStart := idx.
 	result := 0.
 	[idx @env0:<= chars @env0:size] @env0:whileTrue: [
-		ch := (chars @env0:at: idx) @env0:asLowercase.
-		(ch @env0:= $_) ifFalse: [
-			d := digitChars @env0:indexOf: ch.
-			(d @env0:= 0) ifTrue: [^ self @env0:error: 'bad digit'].
-			result := (result @env0:* effectiveBase) @env0:+ (d @env0:- 1).
+		ch := chars @env0:at: idx.
+		(ch @env0:= $_) ifTrue: [
+			"PEP 515: underscore must sit strictly between two digits --
+			never trailing, never doubled, and never leading unless right
+			after a recognized 0b/0o/0x prefix."
+			(idx @env0:= chars @env0:size) ifTrue: [^ self @env0:error: 'trailing underscore'].
+			(idx @env0:= digitStart)
+				ifTrue: [hadPrefix ifFalse: [^ self @env0:error: 'leading underscore']]
+				ifFalse: [((chars @env0:at: idx @env0:- 1) @env0:= $_) ifTrue: [^ self @env0:error: 'doubled underscore']].
+		] ifFalse: [
+			d := ch @env0:digitValue.
+			d @env0:isNil ifTrue: [
+				d := digitChars @env0:indexOf: ch @env0:asLowercase.
+				(d @env0:= 0) ifTrue: [^ self @env0:error: 'bad digit'].
+				d := d @env0:- 1.
+			].
+			(d @env0:>= effectiveBase) ifTrue: [^ self @env0:error: 'bad digit'].
+			result := (result @env0:* effectiveBase) @env0:+ d.
 		].
 		idx := idx @env0:+ 1.
 	].
@@ -264,7 +412,7 @@ from_bytes: bytes _: byteorder _: signed
 	"Extract bytes - assuming bytes is a Python bytes object or similar"
 	bytesArray := bytes.
 	(bytesArray isKindOf: tuple) ifFalse: [
-		TypeError @env0:signal: 'from_bytes() argument must be bytes-like'
+		TypeError ___signal___: 'from_bytes() argument must be bytes-like'
 	].
 
 	isBigEndian := (byteorder @env0:= 'big').
@@ -749,6 +897,7 @@ method: int
 __repr__
 	"Return string representation of integer."
 
+	self ___checkIntStrDigitLimit___.
 	^ (self @env0:printString) @env0:asUnicodeString
 %
 
@@ -940,7 +1089,31 @@ method: int
 __str__
 	"Return string representation of integer."
 
+	self ___checkIntStrDigitLimit___.
 	^ (self @env0:printString) @env0:asUnicodeString
+%
+
+category: 'Grail-String Representation'
+method: int
+___checkIntStrDigitLimit___
+	"Enforce sys.set_int_max_str_digits (CVE-2020-10735) for int-to-str
+	conversion (str(i)/repr(i)) -- the str-from-int counterpart of the
+	class-side ___checkStrDigitLimit___: used for int(str).  CPython
+	pre-checks via bit-length to dodge its OWN quadratic conversion;
+	GemStone's Integer>>printString is not quadratic and LargeInteger is
+	capped at ~130144 bits regardless, so a plain post-hoc digit count
+	is both correct and cheap here."
+
+	| limit count |
+	limit := (SessionTemps @env0:current) @env0:at: #GrailIntMaxStrDigits ifAbsent: [4300].
+	(limit @env0:= 0) ifTrue: [^ self].
+	count := self @env0:abs @env0:printString @env0:size.
+	(count @env0:> limit) ifTrue: [
+		ValueError ___signal___: ('Exceeds the limit (' @env0:,
+			limit @env0:printString @env0:,
+			' digits) for integer string conversion: value has ' @env0:,
+			count @env0:printString @env0:,
+			' digits; use sys.set_int_max_str_digits() to increase the limit')]
 %
 
 category: 'Grail-Arithmetic'
@@ -1130,7 +1303,7 @@ to_bytes: length _: byteorder _: signed
 	"Handle negative numbers"
 	(val @env0:< 0) ifTrue: [
 		isSigned ifFalse: [
-			OverflowError @env0:signal: 'can''t convert negative int to unsigned'
+			OverflowError ___signal___: 'can''t convert negative int to unsigned'
 		].
 		"Two's complement"
 		val := ((1 @env0:bitShift: (numBytes @env0:* 8))
@@ -1141,7 +1314,7 @@ to_bytes: length _: byteorder _: signed
 	((val @env0:< 0) or: [
 		val @env0:>= (1 @env0:bitShift: (numBytes @env0:* 8))
 	]) ifTrue: [
-		OverflowError @env0:signal: 'int too big to convert'
+		OverflowError ___signal___: 'int too big to convert'
 	].
 
 	"Convert to bytes - #'new:fill:' freezes it"
