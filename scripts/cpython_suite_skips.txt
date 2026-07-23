@@ -70,3 +70,9 @@ test.test_set|TestFrozenSetSubclass.test_pickling|set pickling (__reduce__) not 
 # the Smalltalk stack. Same gap already skipped for other container types.
 test.test_set|TestSetSubclass.test_cyclical_repr|self-referential repr needs a recursion guard (not implemented in Grail)
 test.test_set|TestFrozenSetSubclass.test_cyclical_repr|self-referential repr needs a recursion guard (not implemented in Grail)
+# heapq: the C-accelerated _heapq vs pure-Python module-identity check. Grail
+# ships a SINGLE heapq (no separate _heapq extension module), so its functions
+# report __module__ == 'heapq', never '_heapq'.  A C-vs-pure-Python build-variant
+# distinction, not a correctness gap — test_py_functions (the pure-Python half)
+# passes, and every TestHeap/TestErrorHandling case runs against both variants.
+test.test_heapq|TestModules.test_c_functions|Grail has one heapq module; the C-accel _heapq module-identity check (__module__ == '_heapq') is N/A
