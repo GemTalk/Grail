@@ -2161,9 +2161,16 @@ ___cmpFallback___: other op: opString reflected: refSelector
 	try/except entirely -- the STERROR class that blocked CPython's test_bisect
 	/ test_operator / test_heapq / test_re.)
 
-	Two operand kinds:
-	  * a PythonInstance ``other'' that overrides the reflected dunder -- call
-	    it directly; a NotImplemented result falls through to the TypeError.
+	Three operand kinds:
+	  * a PythonInstance ``other'' whose class defines the reflected dunder as a
+	    COMPILED method (``def __gt__'') -- call it directly; a NotImplemented
+	    result falls through to the TypeError.
+	  * a PythonInstance ``other'' whose reflected dunder is a CLASS ATTRIBUTE
+	    (``__gt__ = __lt__'' alias in the class body, or a runtime setattr) --
+	    invisible to whichClassIncludesSelector:, so consult ___classAttrDunder___
+	    (the lookup ___binOpFallback___ uses for __radd__ & co.).  test_bisect's
+	    CmpErr aliases its comparison dunders this way; without it ``10 < CmpErr()''
+	    raised TypeError instead of propagating CmpErr.__gt__'s ZeroDivisionError.
 	  * a BUILT-IN ``other'' that overrides it -- e.g. a plain int vs an int
 	    SUBCLASS whose forward __lt__ returned NotImplemented (test_heapq's
 	    EvilClass / g / h heap-mutation cases; int subclasses are AbstractPyInt,
@@ -2177,7 +2184,7 @@ ___cmpFallback___: other op: opString reflected: refSelector
 	    (it cannot order the pair) is likewise swallowed so the message stays
 	    self-op-other."
 
-	| refOwner rr temps |
+	| refOwner rr temps refBase fn |
 	refOwner := other @env0:class
 		@env0:whichClassIncludesSelector: refSelector environmentId: 1.
 	(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
@@ -2202,6 +2209,19 @@ ___cmpFallback___: other op: opString reflected: refSelector
 								@env0:on: TypeError do: [:e | #'___NotImplemented___']]
 							@env0:ensure: [temps @env0:at: #'___GrailReflectingBuiltinCmp___' put: false].
 						(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]]]]].
+	"Reflected dunder stored as a CLASS ATTRIBUTE on a PythonInstance ``other''
+	(``__gt__ = __lt__'' alias or runtime setattr) -- the compiled-selector probe
+	above (refOwner) never sees it.  Strip the trailing ':' (#'__gt__:' ->
+	#'__gt__') and call it reflected: other.__gt__(self).  Same ___classAttrDunder___
+	lookup ___binOpFallback___ uses for __radd__ & co.; user code returns the real
+	NotImplemented singleton here, not the internal symbol."
+	(other isKindOf: PythonInstance) ifTrue: [
+		refBase := (refSelector @env0:asString @env0:copyFrom: 1
+			to: refSelector @env0:asString @env0:size - 1) @env0:asSymbol.
+		fn := other ___classAttrDunder___: refBase.
+		fn == nil ifFalse: [
+			rr := fn ___pyCallValue___: { other. self } kw: nil.
+			(rr == (Python @env0:at: #NotImplemented otherwise: nil)) ifFalse: [^ rr]]].
 	TypeError ___signal___: ('''' @env0:, opString @env0:, ''' not supported between instances of '''
 		@env0:, self @env0:class @env0:name @env0:asString
 		@env0:, ''' and ''' @env0:, other @env0:class @env0:name @env0:asString @env0:, '''')

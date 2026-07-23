@@ -88,6 +88,23 @@ testReflectedDunderGetsFirstChance
 	self assert: (self resultAt: 'reflected_gt') equals: true
 %
 
+category: 'Grail-Tests - Reflected'
+method: ComparisonProtocolTestCase
+testReflectedAliasedDunderPropagatesError
+	"A reflected comparison dunder assigned as a class-body ALIAS
+	(``__gt__ = __lt__'', not a compiled ``def'') must still be found and
+	called: ``10 < AliasCmp()'' dispatches AliasCmp.__gt__(alias, 10) and
+	propagates its ZeroDivisionError, matching CPython (test_bisect's
+	CmpErr / TestErrorHandling.test_cmp_err).  Regression: ___cmpFallback___
+	probed only compiled selectors (whichClassIncludesSelector:) and so
+	raised a bogus ``'<' not supported'' TypeError; it now also consults
+	___classAttrDunder___ for the class-attribute form.  The direct
+	``AliasCmp() < 10'' path (compiled __lt__) must keep propagating too."
+
+	self assert: (self resultAt: 'alias_reflected_lt') equals: 'zde'.
+	self assert: (self resultAt: 'alias_direct_lt') equals: 'zde'
+%
+
 category: 'Grail-Tests - Arithmetic TypeError'
 method: ComparisonProtocolTestCase
 testMixedArithmeticRaisesCatchableTypeError

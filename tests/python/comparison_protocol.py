@@ -15,6 +15,27 @@ def _t(f):
         return "type-error"
 
 
+def _zde(f):
+    try:
+        f()
+        return "no-error"
+    except ZeroDivisionError:
+        return "zde"
+    except BaseException as e:
+        return "other:" + type(e).__name__
+
+
+class AliasCmp:
+    "Reflected comparison dunders assigned as class-body ALIASES (`__gt__ ="
+    " __lt__`), not compiled `def`s -- materialized as class attributes, not"
+    " compiled selectors (test_bisect's CmpErr)."
+    def __lt__(self, other):
+        raise ZeroDivisionError
+    __gt__ = __lt__
+    __le__ = __lt__
+    __ge__ = __lt__
+
+
 class Meters:
     def __init__(self, v):
         self.v = v
@@ -53,6 +74,13 @@ RESULTS = {
     "bool_lt_int": True < 2,
     # reflected dunder on a user class
     "reflected_gt": 1 < Meters(5),
+    # reflected comparison dunder stored as a class-body ALIAS (`__gt__ =
+    # __lt__`), not a compiled `def`: `10 < AliasCmp()` must dispatch
+    # AliasCmp.__gt__(alias, 10) and propagate its ZeroDivisionError (was
+    # raising a bogus TypeError -- ___cmpFallback___ only probed compiled
+    # selectors).  Direct `AliasCmp() < 10` uses the compiled __lt__.
+    "alias_reflected_lt": _zde(lambda: 10 < AliasCmp()),
+    "alias_direct_lt": _zde(lambda: AliasCmp() < 10),
     # sorting with mixed types inside raises catchably
     "sort_mixed": _t(lambda: sorted([3, "a", 1])),
     # --- arithmetic protocol (the sibling) ---

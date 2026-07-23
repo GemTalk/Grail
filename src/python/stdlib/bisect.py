@@ -1,60 +1,122 @@
 # GRAIL bisect - pure-Python binary search over sorted lists, same
-# algorithm and API as CPython's bisect.  The registered _bisect C shim
-# is not used here (a `from _bisect import *` would lean on the
-# star-import path; the pure forms are tiny and dependency-free).
-# Deviation: the key= parameter (CPython 3.10+) is not supported.
+# algorithm and API as CPython's bisect (including the key= parameter,
+# CPython 3.10+).  The registered _bisect C shim is intentionally NOT
+# wired in here (no `from _bisect import *`): the pure forms are tiny and
+# dependency-free, and test_bisect's C variant -- import_fresh_module
+# with fresh=['_bisect'] -- simply exercises this same pure implementation.
+"""Bisection algorithms."""
 
-__all__ = ["bisect_right", "bisect_left", "insort_right", "insort_left",
-           "bisect", "insort"]
+__all__ = ['bisect_left', 'bisect_right', 'insort_left', 'insort_right',
+           'bisect', 'insort']
 
 
-def bisect_right(a, x, lo=0, hi=None):
+def insort_right(a, x, lo=0, hi=None, *, key=None):
+    """Insert item x in list a, and keep it sorted assuming a is sorted.
+
+    If x is already in a, insert it to the right of the rightmost x.
+
+    Optional args lo (default 0) and hi (default len(a)) bound the
+    slice of a to be searched.
+
+    A custom key function can be supplied to customize the sort order.
+    """
+    if key is None:
+        lo = bisect_right(a, x, lo, hi)
+    else:
+        lo = bisect_right(a, key(x), lo, hi, key=key)
+    a.insert(lo, x)
+
+
+def bisect_right(a, x, lo=0, hi=None, *, key=None):
     """Return the index where to insert item x in list a, assuming a is sorted.
 
     The return value i is such that all e in a[:i] have e <= x, and all e in
-    a[i:] have e > x.
+    a[i:] have e > x.  So if x already appears in the list, a.insert(i, x) will
+    insert just after the rightmost x already there.
+
+    Optional args lo (default 0) and hi (default len(a)) bound the
+    slice of a to be searched.
+
+    A custom key function can be supplied to customize the sort order.
     """
+
     if lo < 0:
-        raise ValueError("lo must be non-negative")
+        raise ValueError('lo must be non-negative')
     if hi is None:
         hi = len(a)
-    while lo < hi:
-        mid = (lo + hi) // 2
-        if x < a[mid]:
-            hi = mid
-        else:
-            lo = mid + 1
+    # Note, the comparison uses "<" to match the
+    # __lt__() logic in list.sort() and in heapq.
+    if key is None:
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if x < a[mid]:
+                hi = mid
+            else:
+                lo = mid + 1
+    else:
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if x < key(a[mid]):
+                hi = mid
+            else:
+                lo = mid + 1
     return lo
 
 
-def bisect_left(a, x, lo=0, hi=None):
+def insort_left(a, x, lo=0, hi=None, *, key=None):
+    """Insert item x in list a, and keep it sorted assuming a is sorted.
+
+    If x is already in a, insert it to the left of the leftmost x.
+
+    Optional args lo (default 0) and hi (default len(a)) bound the
+    slice of a to be searched.
+
+    A custom key function can be supplied to customize the sort order.
+    """
+
+    if key is None:
+        lo = bisect_left(a, x, lo, hi)
+    else:
+        lo = bisect_left(a, key(x), lo, hi, key=key)
+    a.insert(lo, x)
+
+
+def bisect_left(a, x, lo=0, hi=None, *, key=None):
     """Return the index where to insert item x in list a, assuming a is sorted.
 
     The return value i is such that all e in a[:i] have e < x, and all e in
-    a[i:] have e >= x.
+    a[i:] have e >= x.  So if x already appears in the list, a.insert(i, x) will
+    insert just before the leftmost x already there.
+
+    Optional args lo (default 0) and hi (default len(a)) bound the
+    slice of a to be searched.
+
+    A custom key function can be supplied to customize the sort order.
     """
+
     if lo < 0:
-        raise ValueError("lo must be non-negative")
+        raise ValueError('lo must be non-negative')
     if hi is None:
         hi = len(a)
-    while lo < hi:
-        mid = (lo + hi) // 2
-        if a[mid] < x:
-            lo = mid + 1
-        else:
-            hi = mid
+    # Note, the comparison uses "<" to match the
+    # __lt__() logic in list.sort() and in heapq.
+    if key is None:
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if a[mid] < x:
+                lo = mid + 1
+            else:
+                hi = mid
+    else:
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if key(a[mid]) < x:
+                lo = mid + 1
+            else:
+                hi = mid
     return lo
 
 
-def insort_right(a, x, lo=0, hi=None):
-    """Insert item x in list a, and keep it sorted assuming a is sorted."""
-    a.insert(bisect_right(a, x, lo, hi), x)
-
-
-def insort_left(a, x, lo=0, hi=None):
-    """Insert item x in list a, and keep it sorted assuming a is sorted."""
-    a.insert(bisect_left(a, x, lo, hi), x)
-
-
+# Create aliases
 bisect = bisect_right
 insort = insort_right
