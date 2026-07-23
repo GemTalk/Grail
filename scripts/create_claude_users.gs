@@ -23,7 +23,7 @@
 !   * the default login password 'swordfish'.
 !
 ! Idempotent: a user that already exists is left untouched (skipped), so re-running
-! only fills in whichever of Claude1..Claude4 are missing.
+! only fills in whichever of Claude0..Claude3 are missing.
 ! ===============================================================================
 
 set user SystemUser pass swordfish
@@ -39,7 +39,7 @@ dc := AllUsers userWithId: 'DataCurator' ifAbsent: [nil].
 dc isNil ifTrue: [
 	^ System error: 'DataCurator user not found; cannot mirror its permissions.' ].
 
-userIds := #( 'Claude1' 'Claude2' 'Claude3' 'Claude4' ).
+userIds := #( 'Claude0' 'Claude1' 'Claude2' 'Claude3' ).
 createdCount := 0.
 
 userIds do: [:uid |

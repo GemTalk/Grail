@@ -35,6 +35,6 @@ fi
 
 cd "$SCRIPT_DIR" || exit 1
 
-echo "Creating Claude1..Claude4 (mirroring DataCurator) as SystemUser..."
+echo "Creating Claude0..Claude3 (mirroring DataCurator) as SystemUser..."
 LC_ALL=C topaz -lq -S scripts/create_claude_users.gs || {
     echo "Error: create_claude_users.gs failed."; exit 1; }
