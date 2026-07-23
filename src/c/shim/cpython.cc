@@ -30,6 +30,19 @@ extern "C" {
 #include <stdarg.h>
 #include <dlfcn.h>
 #include <ctype.h>
+#include "grail_case_tables.h"   /* generated simple Unicode case tables */
+
+/* Binary-search a sorted GrailCasePair table; return mapped code or ch. */
+static unsigned int grail_case_lookup(const GrailCasePair *map, int len, unsigned int ch) {
+    int lo = 0, hi = len - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) >> 1;
+        unsigned int f = map[mid].from;
+        if (f == ch) return map[mid].to;
+        if (f < ch) lo = mid + 1; else hi = mid - 1;
+    }
+    return ch;
+}
 
 /* Maximum number of dynamically loaded modules */
 #define MAX_MODULES 64
@@ -2812,16 +2825,32 @@ extern "C" int PyErr_WarnEx(PyObject *category, const char *message,
  * CPython API — Unicode helpers (for SRE)
  * ==================================================================== */
 
+/* Simple Unicode case mappings (the regex engine's Py_UNICODE_TOLOWER /
+   TOUPPER).  ASCII via ctype; non-ASCII via the generated tables
+   (grail_case_tables.h).  A code point not in the table maps to itself. */
 extern "C" Py_UCS4 _grail_unicode_tolower(Py_UCS4 ch) {
     if (ch < 128) return (Py_UCS4)tolower((int)ch);
-    /* For non-ASCII, return unchanged (full Unicode case folding would
-       require ICU or a case table). */
-    return ch;
+    return (Py_UCS4)grail_case_lookup(grail_lower_map, grail_lower_map_len, ch);
 }
 
 extern "C" Py_UCS4 _grail_unicode_toupper(Py_UCS4 ch) {
     if (ch < 128) return (Py_UCS4)toupper((int)ch);
-    return ch;
+    return (Py_UCS4)grail_case_lookup(grail_upper_map, grail_upper_map_len, ch);
+}
+
+/* True for cased code points that have NO simple case mapping (sharp-s,
+   dotted-I, the ﬅ/ﬆ ligatures, ...): the regex iscased test derives most
+   cased chars from a lower/upper mapping difference, but must still treat
+   these as cased so IGNORECASE folding (via _casefix._EXTRA_CASES) applies. */
+extern "C" int _grail_unicode_iscased_extra(Py_UCS4 ch) {
+    int lo = 0, hi = grail_cased_extra_len - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) >> 1;
+        unsigned int f = grail_cased_extra[mid];
+        if (f == ch) return 1;
+        if (f < ch) lo = mid + 1; else hi = mid - 1;
+    }
+    return 0;
 }
 
 extern "C" int _grail_unicode_isalnum(Py_UCS4 ch) {

@@ -847,6 +847,7 @@ void      *_grail_PyUnicode_DATA(PyObject *op);
 Py_UCS4 _grail_unicode_tolower(Py_UCS4 ch);
 Py_UCS4 _grail_unicode_toupper(Py_UCS4 ch);
 int     _grail_unicode_isalnum(Py_UCS4 ch);
+int     _grail_unicode_iscased_extra(Py_UCS4 ch);
 
 /* ========== Tuple API (additional) ========== */
 

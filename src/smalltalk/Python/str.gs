@@ -1469,9 +1469,10 @@ ljust: width
 category: 'Grail-String Methods'
 method: CharacterCollection
 lower
-	"Return a copy of the string with all characters converted to lowercase."
+	"Return a copy of the string with all characters converted to lowercase,
+	including multi-character SpecialCasing expansions (İ->i̇)."
 
-	^ self @env0:asLowercase
+	^ self ___applyFullCase___: false
 %
 
 category: 'Grail-String Methods'
@@ -2108,9 +2109,122 @@ translate: table
 category: 'Grail-String Methods'
 method: CharacterCollection
 upper
-	"Return a copy of the string with all characters converted to uppercase."
+	"Return a copy of the string with all characters converted to uppercase,
+	including the multi-character SpecialCasing expansions (ß->SS, ﬅ->ST)."
 
-	^ self @env0:asUppercase
+	^ self ___applyFullCase___: true
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___applyFullCase___: toUpper
+	"Full Unicode upper/lowercase.  GemStone asUppercase/asLowercase already
+	does the simple 1:1 mappings correctly (incl. Kelvin, long-s, Cyrillic);
+	this only adds the ~100 multi-character SpecialCasing expansions where a
+	single code point maps to several (ß->SS, ﬅ->ST, İ->i̇).  Pure-ASCII
+	(Unicode7) receivers take the fast path unchanged."
+
+	| map stream needsExpand |
+	(self @env0:isKindOf: Unicode7) ifTrue: [
+		^ toUpper ifTrue: [self @env0:asUppercase] ifFalse: [self @env0:asLowercase]].
+	map := toUpper ifTrue: [self ___multicharUpperMap___] ifFalse: [self ___multicharLowerMap___].
+	needsExpand := false.
+	self @env0:do: [:ch |
+		(map @env0:includesKey: ch @env0:asInteger) ifTrue: [needsExpand := true]].
+	needsExpand ifFalse: [
+		^ toUpper ifTrue: [self @env0:asUppercase] ifFalse: [self @env0:asLowercase]].
+	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	self @env0:do: [:ch | | seq |
+		seq := map @env0:at: ch @env0:asInteger ifAbsent: [nil].
+		seq @env0:isNil
+			ifTrue: [stream @env0:nextPut:
+				(toUpper ifTrue: [ch @env0:asUppercase] ifFalse: [ch @env0:asLowercase])]
+			ifFalse: [seq @env0:do: [:cp | stream @env0:nextPut: (Character @env0:codePoint: cp)]]].
+	^ stream @env0:contents
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___buildCaseMap___: flat
+	"Build a code-point -> Array-of-code-points map from a flat integer
+	array laid out as: key, count, cp1, ..., cpCount, key, count, ..."
+
+	| d i n |
+	d := Dictionary @env0:new.
+	i := 1. n := flat @env0:size.
+	[i @env0:<= n] @env0:whileTrue: [ | key cnt seq |
+		key := flat @env0:at: i.
+		cnt := flat @env0:at: i @env0:+ 1.
+		seq := Array @env0:new: cnt.
+		1 @env0:to: cnt do: [:j | seq @env0:at: j put: (flat @env0:at: i @env0:+ 1 @env0:+ j)].
+		d @env0:at: key put: seq.
+		i := i @env0:+ 2 @env0:+ cnt].
+	^ d
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___multicharUpperMap___
+	"Cached multi-character uppercase SpecialCasing map (session-local)."
+
+	| m st |
+	st := SessionTemps @env0:current.
+	m := st @env0:at: #'___GrailMcUpper___' otherwise: nil.
+	m @env0:isNil ifTrue: [
+		m := self ___buildCaseMap___: self ___multicharUpperData___.
+		st @env0:at: #'___GrailMcUpper___' put: m].
+	^ m
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___multicharLowerMap___
+	"Cached multi-character lowercase SpecialCasing map (session-local)."
+
+	| m st |
+	st := SessionTemps @env0:current.
+	m := st @env0:at: #'___GrailMcLower___' otherwise: nil.
+	m @env0:isNil ifTrue: [
+		m := self ___buildCaseMap___: self ___multicharLowerData___.
+		st @env0:at: #'___GrailMcLower___' put: m].
+	^ m
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___multicharLowerData___
+	"GENERATED (CPython 3.14 str.lower multi-char mappings): İ -> i + combining dot."
+
+	^ #(304 2 105 775)
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___multicharUpperData___
+	"GENERATED (CPython 3.14 str.upper multi-char SpecialCasing mappings).
+	Flat: key, count, cp1..cpCount, ...  See scripts/generate_grail_case_tables.py."
+
+	^ #(
+		223 2 83 83 329 2 700 78 496 2 74 780 912 3 921 776 769 944 3 933 776 769 1415 2
+		1333 1362 7830 2 72 817 7831 2 84 776 7832 2 87 778 7833 2 89 778 7834 2 65 702 8016
+		2 933 787 8018 3 933 787 768 8020 3 933 787 769 8022 3 933 787 834 8064 2 7944 921
+		8065 2 7945 921 8066 2 7946 921 8067 2 7947 921 8068 2 7948 921 8069 2 7949 921 8070
+		2 7950 921 8071 2 7951 921 8072 2 7944 921 8073 2 7945 921 8074 2 7946 921 8075 2
+		7947 921 8076 2 7948 921 8077 2 7949 921 8078 2 7950 921 8079 2 7951 921 8080 2 7976
+		921 8081 2 7977 921 8082 2 7978 921 8083 2 7979 921 8084 2 7980 921 8085 2 7981 921
+		8086 2 7982 921 8087 2 7983 921 8088 2 7976 921 8089 2 7977 921 8090 2 7978 921 8091
+		2 7979 921 8092 2 7980 921 8093 2 7981 921 8094 2 7982 921 8095 2 7983 921 8096 2
+		8040 921 8097 2 8041 921 8098 2 8042 921 8099 2 8043 921 8100 2 8044 921 8101 2 8045
+		921 8102 2 8046 921 8103 2 8047 921 8104 2 8040 921 8105 2 8041 921 8106 2 8042 921
+		8107 2 8043 921 8108 2 8044 921 8109 2 8045 921 8110 2 8046 921 8111 2 8047 921 8114
+		2 8122 921 8115 2 913 921 8116 2 902 921 8118 2 913 834 8119 3 913 834 921 8124 2
+		913 921 8130 2 8138 921 8131 2 919 921 8132 2 905 921 8134 2 919 834 8135 3 919 834
+		921 8140 2 919 921 8146 3 921 776 768 8147 3 921 776 769 8150 2 921 834 8151 3 921
+		776 834 8162 3 933 776 768 8163 3 933 776 769 8164 2 929 787 8166 2 933 834 8167 3
+		933 776 834 8178 2 8186 921 8179 2 937 921 8180 2 911 921 8182 2 937 834 8183 3 937
+		834 921 8188 2 937 921 64256 2 70 70 64257 2 70 73 64258 2 70 76 64259 3 70 70 73
+		64260 3 70 70 76 64261 2 83 84 64262 2 83 84 64275 2 1348 1350 64276 2 1348 1333
+		64277 2 1348 1339 64278 2 1358 1350 64279 2 1348 1341)
 %
 
 category: 'Grail-String Methods'

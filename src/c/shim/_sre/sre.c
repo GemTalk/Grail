@@ -458,7 +458,8 @@ _sre_unicode_iscased_impl(PyObject *module, int character)
 /*[clinic end generated code: output=9c5ddee0dc2bc258 input=51e42c3b8dddb78e]*/
 {
     unsigned int ch = (unsigned int)character;
-    return ch != sre_lower_unicode(ch) || ch != sre_upper_unicode(ch);
+    return ch != sre_lower_unicode(ch) || ch != sre_upper_unicode(ch)
+        || _grail_unicode_iscased_extra((Py_UCS4)ch);
 }
 
 /*[clinic input]
