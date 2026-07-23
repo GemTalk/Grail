@@ -86,10 +86,33 @@ esac
 echo "Setting Unicode comparison mode..."
 ./scripts/setUnicodeMode.sh || { echo "Error: setUnicodeMode.sh failed."; exit 1; }
 
-# 3. Shared restricted-class methods.
-echo "Filing shared restricted-class methods (SystemUser)..."
-LC_ALL=C topaz -lq -S scripts/install_base.gs || {
-    echo "Error: install_base.gs failed."; exit 1; }
+# 3. Shared restricted-class methods (LEGACY kernels only).
+# On a MODERN kernel (scripts/detect_modern_kernel.gs -> GRAIL_MODERN=yes) these
+# move to PER-USER session methods filed by install.sh/install.gs, and the
+# 2/3/4-arg performMethod: primitives are kernel-native -- so this SystemUser
+# step is skipped entirely.  Only the Unicode-mode config above then remains
+# SystemUser (it is kernel-enforced SystemUser-only + extent-global).  On a
+# LEGACY kernel this files the shared restricted-class methods as before.
+GRAIL_MODERN=$(LC_ALL=C topaz -lq -S scripts/detect_modern_kernel.gs 2>/dev/null \
+    | grep -oE 'GRAIL_MODERN=(yes|no)' | head -1)
+echo "Kernel capability: ${GRAIL_MODERN:-GRAIL_MODERN=? (probe failed -> legacy)}"
+if [ "$GRAIL_MODERN" = "GRAIL_MODERN=yes" ]; then
+    echo "Modern kernel -- skipping SystemUser restricted-class filing (moves per-user via ./install.sh)."
+else
+    echo "Filing shared restricted-class methods (SystemUser)..."
+    LC_ALL=C topaz -lq -S scripts/install_base.gs || {
+        echo "Error: install_base.gs failed."; exit 1; }
+fi
+
+# 4. Base marker (SystemUser) -- ALWAYS, on both kernels, as the LAST step.
+# Writes a unique Grail-owned key (#GrailBaseInstalled) into Globals so
+# ./install.sh's guard (scripts/check_base_installed.gs) has an unambiguous signal
+# that the base setup completed -- rather than inferring it from Unicode mode,
+# which a site could enable for its own reasons.  Last so it means "everything
+# above succeeded" (this script exits on any earlier error).
+echo "Setting the Grail base marker..."
+LC_ALL=C topaz -lq -S scripts/set_base_marker.gs || {
+    echo "Error: set_base_marker.gs failed."; exit 1; }
 
 echo ""
 echo "Base setup complete.  Any user can now run ./install.sh (no SystemUser)."

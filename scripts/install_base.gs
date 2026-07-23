@@ -11,20 +11,33 @@
 !
 !     topaz -lq -S scripts/install_base.gs
 !
-! A few of Grail's env-1 kernel extensions cannot be per-user GsPackagePolicy
-! session methods, so they are filed once here -- persistent and SHARED by every
-! user (identical for everyone, rarely changed):
+! On a LEGACY kernel a few of Grail's kernel extensions cannot be per-user
+! GsPackagePolicy session methods, so they are filed once here -- persistent and
+! SHARED by every user (identical for everyone, rarely changed):
 !   * builtin_function_or_method.gs (GsNMethod), System.gs, SymbolDictionary.gs
 !       -- GsNMethod / System / SymbolDictionary are GsPackagePolicy
-!          restrictedClasses; env-1 session methods are not permitted on them.
+!          restrictedClasses; pre-MR#6 env-1 session methods are not permitted on
+!          them.
 !   * ExecBlock.gs
-!       -- ExecBlock's value-family selectors are VM-special (compiling them as
-!          session methods raises CompileError 1001).
-!   * Object_perform.gs
-!       -- env-0 <primitive:> performMethod: variants + the env-0 ___new___
-!          allocators (a plain user lacks CompilePrimitives; the allocators would
-!          also collide with their env-1 namesakes in the selector-keyed 3.7.5
-!          session store).
+!       -- reached here only on a legacy kernel.  (Its fixed-arity value-family
+!          wrappers were removed from the source -- those selectors are VM-reserved
+!          and the compiler auto-routes `aBlock @env1:value:...' to env-0 block
+!          invocation with no wrapper, so they were redundant AND could never be
+!          session methods (CompileError 1001).  The remaining methods ARE
+!          session-method-eligible.)
+!   * Object_perform_allocators.gs (env-0 ___new___ bridges)
+!       -- env-0 `SomeClass ___new___: arg' construction bridges; on a pre-MR#6
+!          selector-keyed store they collide with the env-1 ___new___:_: /
+!          ___new___:_:_: convenience methods, so they are shared/persistent here.
+!   * Object_perform_primitives.gs (env-0 <primitive:2027> performMethod: 2/3/4-arg)
+!       -- a plain user lacks CompilePrimitives.
+!
+! On a MODERN kernel (native env-1 session methods on restricted classes + native
+! performMethod: 2/3/4-arg + per-env storage) install_base.sh SKIPS this whole file
+! (see its probe): builtin_function_or_method / System / SymbolDictionary /
+! ExecBlock / Object_perform_allocators are then filed PER-USER as session methods
+! by install.sh/install.gs, and the performMethod: primitives are kernel-native.
+! Only Unicode comparison mode then remains as a SystemUser (extent-global) step.
 !
 ! These files reference NO per-user Python globals at compile time: their targets
 ! are the kernel classes Object / GsNMethod (in Globals), and None / AttributeError
@@ -32,10 +45,6 @@
 ! (see each file's header).  So SystemUser compiles them with only Globals, and
 ! each user's runtime gets its own None / AttributeError -- the one shared copy is
 ! never bound to the install user's objects.
-!
-! Once committed, every per-user ./install.sh runs with NO SystemUser step: the
-! two env-1 blocks it executes (module singleton instantiation) simply dispatch to
-! these already-committed shared methods.
 ! ===============================================================================
 
 set user SystemUser pass swordfish
@@ -49,7 +58,8 @@ input src/smalltalk/Python/builtin_function_or_method.gs
 input src/smalltalk/Python/System.gs
 input src/smalltalk/Python/SymbolDictionary.gs
 input src/smalltalk/Python/ExecBlock.gs
-input src/smalltalk/Python/Object_perform.gs
+input src/smalltalk/Python/Object_perform_allocators.gs
+input src/smalltalk/Python/Object_perform_primitives.gs
 
 run
 System commitTransaction.

@@ -146,53 +146,18 @@ ___pyCallValue___: positional kw: kwargs
 		@env0:ifFalse: [self @env0:valueWithArguments: positional]
 %
 
-category: 'Grail-Block Evaluation'
-method: ExecBlock
-value
-	"Evaluate a zero-argument block"
-
-	^ self @env0:value
-%
-
-category: 'Grail-Block Evaluation'
-method: ExecBlock
-value: arg1
-	"Evaluate a one-argument block"
-
-	^ self @env0:value: arg1
-%
-
-category: 'Grail-Block Evaluation'
-method: ExecBlock
-value: arg1 value: arg2
-	"Evaluate a two-argument block"
-
-	^ self @env0:value: arg1 value: arg2
-%
-
-category: 'Grail-Block Evaluation'
-method: ExecBlock
-value: arg1 value: arg2 value: arg3
-	"Evaluate a three-argument block"
-
-	^ self @env0:value: arg1 value: arg2 value: arg3
-%
-
-category: 'Grail-Block Evaluation'
-method: ExecBlock
-value: arg1 value: arg2 value: arg3 value: arg4
-	"Evaluate a four-argument block"
-
-	^ self @env0:value: arg1 value: arg2 value: arg3 value: arg4
-%
-
-category: 'Grail-Block Evaluation'
-method: ExecBlock
-value: arg1 value: arg2 value: arg3 value: arg4 value: arg5
-	"Evaluate a five-argument block"
-
-	^ self @env0:value: arg1 value: arg2 value: arg3 value: arg4 value: arg5
-%
+! ------------------- NOTE: no fixed-arity value / value: ... value:*5 here.
+! The fixed-arity block-invocation selectors (value, value:, value:value:, ...)
+! are VM-reserved: the compiler inlines them as block invocation regardless of
+! the send's environment, so an env-1 `aBlock @env1:value: x' already reaches the
+! env-0 block invocation WITHOUT any env-1 wrapper (verified).  Grail's former
+! env-1 wrappers here were pure redirects (`^ self @env0:value: ...') and thus
+! redundant; they also could NOT be per-user session methods (the VM rejects
+! compiling a method for a reserved selector -- CompileError 1001).  Removing them
+! is transparent to callers (they hit the VM auto-route) AND lets the rest of this
+! file be filed as per-user session methods on a modern kernel.  `valueWithArguments:'
+! is NOT auto-routed (it DNUs without a method) and is NOT a reserved selector, so
+! it stays below as a real (session-method-eligible) wrapper.
 
 category: 'Grail-Block Evaluation'
 method: ExecBlock
