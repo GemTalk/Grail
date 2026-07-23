@@ -110,8 +110,12 @@ test__eq__
 	"Different contents"
 	self deny: (tup1 @env1:__eq__: tup3).
 	
-	"Different types (tuple vs list)"
-	self deny: (tup1 @env1:__eq__: lst).
+	"Different types (tuple vs list): CPython's tuple.__eq__ returns
+	NotImplemented for a non-tuple operand, so the raw dunder answers the
+	NotImplemented sentinel while the == operator (___cmpEq___) reflects to
+	list.__eq__ (also NotImplemented) and settles on identity -> not equal."
+	self assert: (tup1 @env1:__eq__: lst) == #'___NotImplemented___'.
+	self deny: (tup1 @env1:___cmpEq___: lst).
 %
 
 category: 'Grail-Tests - Sequence Protocol'

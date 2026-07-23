@@ -96,7 +96,16 @@ __eq__: other
 	``[1] == (1,)'' stays False via the list branch above / the fall-through."
 	((self isKindOf: tuple) and: [other isKindOf: tuple])
 		ifTrue: [^ self ___pyEqElementsCurrentSizes___: other].
-	^ false
+	"CPython: ``list.__eq__''/``tuple.__eq__'' return NotImplemented for an
+	operand that is not the same kind of sequence, so the ``=='' operator then
+	consults the REFLECTED ``other.__eq__(self)''.  Return the internal
+	NotImplemented sentinel (not False) so ___cmpEq___/___cmpNe___ do that --
+	e.g. ``[..] == UserList([..])'' defers to UserList.__eq__ and is True
+	(test_bisect.test_vsBuiltinSort).  A non-PythonInstance operand (a tuple vs
+	list, an int, a str) has no reflected __eq__ that applies, so ___eqValue___
+	falls back to identity and the result stays False -- ``[1] == (1,)'' etc.
+	are unchanged."
+	^ #'___NotImplemented___'
 %
 
 category: 'Grail-Other'
@@ -412,9 +421,15 @@ __mul__: n
 category: 'Grail-Comparison'
 method: SequenceableCollection
 __ne__: other
-	"Return True if sequences are not equal."
+	"Return True if sequences are not equal.  Mirror __eq__:'s NotImplemented
+	fall-through: when __eq__: punts (a non-sequence operand), return the
+	sentinel so the ``!='' operator (___cmpNe___) tries the reflected
+	comparison rather than negating a non-Boolean."
 
-	^ (self __eq__: other) @env0:not
+	| eqr |
+	eqr := self __eq__: other.
+	(eqr @env0:== #'___NotImplemented___') ifTrue: [^ eqr].
+	^ eqr @env0:not
 %
 
 category: 'Grail-String Representation'

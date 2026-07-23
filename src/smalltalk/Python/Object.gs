@@ -1654,14 +1654,33 @@ __dir__
 		] ifFalse: [false]
 	].
 	result := selectors @env0:collect: [:selector |
-		| index |
-		"Convert selector to string, removing trailing colon(s) for keyword methods"
-		index := selector @env0:indexOf: $:.
-		index == 0
-			ifTrue: [selector @env0:asString]
-			ifFalse: [selector @env0:copyFrom: 1 to: (index @env0:- 1)]
+		| s sz index |
+		s := selector @env0:asString.
+		sz := s @env0:size.
+		"A def with optional / keyword / *args parameters compiles to the
+		varargs transport selector ``_<name>:kw:'' (FunctionDefAst), whose
+		Python-visible name is <name>.  Report <name> -- not the leading-
+		underscore transport spelling -- so dir() matches CPython and
+		getattr(obj, name) (unittest's getTestCaseNames, inspect, ...) resolves
+		the method.  Recover it by dropping the single leading ``_'' and the
+		trailing ``:kw:''.  (``___''-prefixed selectors were rejected above, so
+		this never fires on a Grail-internal helper.)"
+		((sz @env0:> 4)
+			and: [((s @env0:at: 1) == $_)
+			and: [(s @env0:copyFrom: (sz @env0:- 3) to: sz) @env0:= ':kw:']])
+			ifTrue: [s @env0:copyFrom: 2 to: (sz @env0:- 4)]
+			ifFalse: [
+				"Fixed-arity keyword selector (``name:_:'') -- strip at the first
+				colon; a unary selector has none and passes through unchanged."
+				index := s @env0:indexOf: $:.
+				index == 0
+					ifTrue: [s]
+					ifFalse: [s @env0:copyFrom: 1 to: (index @env0:- 1)]]
 	].
-	^ (result @env0:asSortedCollection) @env0:asArray
+	"CPython dir() returns unique names; a simple-positional def can yield BOTH
+	a fixed-arity selector and a ``_name:kw:'' keyword companion, which now
+	debang to the same name -- dedup before sorting."
+	^ ((result @env0:asSet) @env0:asSortedCollection) @env0:asArray
 %
 
 category: 'Grail-Other'
@@ -1764,7 +1783,12 @@ __contains__: item
 		elem := [ it __next__ ] @env0:on: StopIteration do: [:ex | ^ false].
 		(item @env0:== elem) ifTrue: [^ true].
 		eq := item __eq__: elem.
-		(eq @env0:~~ ni and: [eq @env1:___isTruthy___]) ifTrue: [^ true]]
+		"``eq'' may be the Python NotImplemented singleton (``ni'') OR the
+		internal ``#'___NotImplemented___''' sentinel that built-in dunders
+		(e.g. sequence __eq__: vs a non-sequence) return -- neither counts as a
+		match here."
+		((eq @env0:~~ ni and: [eq @env0:~~ #'___NotImplemented___'])
+			and: [eq @env1:___isTruthy___]) ifTrue: [^ true]]
 %
 
 category: 'Grail-Augmented Assignment'
