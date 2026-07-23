@@ -292,8 +292,11 @@ __add__: other
 category: 'Grail-Type'
 method: bytes
 __class__
-	"Return the Python type for bytes"
-	^ bytes
+	"Return the Python type -- the receiver's ACTUAL class, so a
+	``class MyBytes(bytes)'' instance reports MyBytes while a plain
+	bytes literal still reports bytes (a bytes literal's class IS the
+	ByteArray kernel, which is the ``bytes'' type object)."
+	^ self @env0:class
 %
 
 category: 'Grail-Sequence Protocol'

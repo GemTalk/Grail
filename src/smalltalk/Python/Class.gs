@@ -126,12 +126,31 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 		options: #()]
 			@env0:on: ImproperOperation
 			do: [:ex |
-				"TypeError resolved at runtime: this method compiles on the
-				kernel Class class, whose symbol list lacks the Python dict."
-				(System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #TypeError)
-					___signal___:
-						('Grail cannot subclass sealed kernel class '''
-							@env0:, self @env0:name @env0:asString @env0:, '''')]
+				"A byte-format kernel base (bytes / bytearray / str) cannot carry
+				NAMED instance variables, so a subclass that declares __slots__
+				(test_bytes' ByteArraySubclassWithSlots) lands here.  Retry with NO
+				named instVars: the slots then live as DYNAMIC instVars, which
+				byte-format Python subclasses already support (plain attribute
+				assignment works on them) -- so the subclass stays usable, minus
+				strict __slots__ enforcement (a documented deviation).  A class
+				that is genuinely unsubclassable (an immediate/special kernel not
+				substituted above) fails the retry too and re-signals the catchable
+				TypeError (resolved at runtime: this method compiles on the kernel
+				Class class, whose symbol list lacks the Python dict)."
+				[self
+					@env0:subclass: aSymbol
+					instVarNames: #()
+					classVars: #()
+					classInstVars: filteredClassIvars
+					poolDictionaries: #()
+					inDictionary: nil
+					options: #()]
+					@env0:on: ImproperOperation
+					do: [:ex2 |
+						(System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #TypeError)
+							___signal___:
+								('Grail cannot subclass sealed kernel class '''
+									@env0:, self @env0:name @env0:asString @env0:, '''')]]
 %
 
 category: 'Grail-Reflection'

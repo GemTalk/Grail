@@ -1251,11 +1251,22 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 	src := WriteStream on: Unicode7 new.
 	src nextPutAll: 'value: ___pos___ value: ___kw___'; nextPutAll: lf.
 	src nextPutAll: '| instance dynInit |'; nextPutAll: lf.
-	self firstBaseIsStr
+	(self firstBaseIsStr or: [self firstBaseIsBytesLike and: [self definesOwnNew not]])
 		ifTrue: [
-			src
-				nextPutAll: 'instance := self @env1:__new__: ((___pos___ @env0:size @env0:>= 1) ifTrue: [___pos___ @env0:at: 1] ifFalse: ['''']).';
-				nextPutAll: lf
+			self firstBaseIsStr
+				ifTrue: [
+					"str subclass: route through CharacterCollection>>__new__: (self-typed)."
+					src
+						nextPutAll: 'instance := self @env1:__new__: ((___pos___ @env0:size @env0:>= 1) ifTrue: [___pos___ @env0:at: 1] ifFalse: ['''']).';
+						nextPutAll: lf ]
+				ifFalse: [
+					"bytes/bytearray subclass: bytes>>__new__: is self-typed, so
+					``C(arg)'' allocates a C carrying the content.  No positional ->
+					the 0-arg __new__ (empty); do NOT pass '''' -- bytes __new__: with
+					a str source is a ''string without encoding'' TypeError."
+					src
+						nextPutAll: 'instance := (___pos___ @env0:size @env0:>= 1) ifTrue: [self @env1:__new__: (___pos___ @env0:at: 1)] ifFalse: [self @env1:__new__].';
+						nextPutAll: lf ]
 		]
 		ifFalse: [(self firstBaseIsTuple and: [self definesOwnNew not])
 			ifTrue: [
@@ -1959,6 +1970,23 @@ firstBaseIsTuple
 	bases isEmpty ifTrue: [^ false].
 	^ (bases first isKindOf: NameAst)
 		and: [bases first id asSymbol = #'tuple']
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+firstBaseIsBytesLike
+	"True when this class is a direct ``bytes'' or ``bytearray'' subclass.
+	Gates the bytes-specific instantiation path: ``bytes''/``bytearray''
+	are byte-format kernel classes (like ``str''), and ``bytes>>__new__:''
+	is self-typed, so ``C(arg)'' must route through it to allocate a
+	C-typed instance carrying the content -- the generic allocator returns
+	an empty base ByteArray otherwise (test_bytes ByteArraySubclass /
+	BytesSubclass).  Static check on the bases list; Grail can't resolve
+	transitive ancestry at codegen."
+
+	bases isEmpty ifTrue: [^ false].
+	^ (bases first isKindOf: NameAst)
+		and: [#(#bytes #bytearray) includes: bases first id asSymbol]
 %
 
 category: 'Grail-Class Compilation'

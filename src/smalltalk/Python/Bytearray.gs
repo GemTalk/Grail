@@ -264,8 +264,10 @@ fromhex: hexString
 category: 'Grail-Type'
 method: bytearray
 __class__
-	"Return the Python type for bytearray"
-	^ bytearray
+	"Return the Python type -- the receiver's ACTUAL class, so a
+	``class MyBA(bytearray)'' instance reports MyBA while a plain
+	bytearray still reports bytearray."
+	^ self @env0:class
 %
 
 category: 'Grail-Sequence Protocol'
