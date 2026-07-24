@@ -277,25 +277,6 @@ class TestCase:
         if first == second:
             self._failWith(msg, repr(first) + " == " + repr(second))
 
-    def assertRegex(self, text, expected_regex, msg=None):
-        import re
-        if isinstance(expected_regex, (str, bytes)):
-            expected_regex = re.compile(expected_regex)
-        if expected_regex.search(text) is None:
-            standardMsg = "Regex didn't match: " + repr(expected_regex.pattern) \
-                + " not found in " + repr(text)
-            self._failWith(msg, standardMsg)
-
-    def assertNotRegex(self, text, unexpected_regex, msg=None):
-        import re
-        if isinstance(unexpected_regex, (str, bytes)):
-            unexpected_regex = re.compile(unexpected_regex)
-        match = unexpected_regex.search(text)
-        if match:
-            standardMsg = "Regex matched: " + repr(text[match.start():match.end()]) \
-                + " matches " + repr(unexpected_regex.pattern)
-            self._failWith(msg, standardMsg)
-
     def assertSequenceEqual(self, seq1, seq2, msg=None, seq_type=None):
         # Length- and element-wise sequence equality with an optional type
         # check (test_fractions' testLargeArithmetic uses assertTupleEqual).
@@ -510,6 +491,27 @@ class TestCase:
         with ctx:
             fn(*rest, **call_kw)
         return None
+
+    def assertRegex(self, text, expected_regex, msg=None):
+        # Fail unless expected_regex (a str/bytes pattern or a compiled
+        # pattern) matches somewhere in text (test_re test_match_repr).
+        import re
+        if isinstance(expected_regex, (str, bytes)):
+            expected_regex = re.compile(expected_regex)
+        if expected_regex.search(text) is None:
+            self._failWith(msg, "Regex didn't match: %r not found in %r"
+                           % (expected_regex.pattern, text))
+
+    def assertNotRegex(self, text, unexpected_regex, msg=None):
+        # Fail if unexpected_regex matches anywhere in text.
+        import re
+        if isinstance(unexpected_regex, (str, bytes)):
+            unexpected_regex = re.compile(unexpected_regex)
+        match = unexpected_regex.search(text)
+        if match is not None:
+            self._failWith(msg, "Regex matched: %r matches %r in %r"
+                           % (text[match.start():match.end()],
+                              unexpected_regex.pattern, text))
 
     # -- running --
 

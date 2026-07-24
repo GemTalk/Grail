@@ -995,26 +995,31 @@ __repr__
 	flag names in sre.c's table order, and the implicit re.UNICODE
 	dropped for str patterns (test_pattern_compile repr checks)."
 
-	| src flagsVal srcRepr names stream |
+	| src flagsVal srcRepr names stream remaining |
 	src := self pattern.
 	flagsVal := self flags.
+	"For a str (non-bytes) pattern, drop the implicit re.UNICODE, but only when
+	UNICODE is the sole charset flag -- matching CPython pattern_repr's
+	(flags & (LOCALE|UNICODE|ASCII)) == UNICODE test."
 	(src isKindOf: ByteArray) ifFalse: [
-		flagsVal := flagsVal @env0:- (flagsVal @env0:bitAnd: 32)
+		((flagsVal @env0:bitAnd: 292) @env0:= 32) ifTrue: [   "292 = LOCALE|UNICODE|ASCII (4|32|256)"
+			flagsVal := flagsVal @env0:- 32]
 	].
 	names := OrderedCollection @env0:new.
-	{ { 're.TEMPLATE'. 1 }. { 're.IGNORECASE'. 2 }. { 're.LOCALE'. 4 }.
+	remaining := flagsVal.
+	"re.TEMPLATE (value 1) is intentionally absent: CPython 3.14 removed it from
+	the repr table, so bit 0 surfaces via the 0x remainder below, not as a name."
+	{ { 're.IGNORECASE'. 2 }. { 're.LOCALE'. 4 }.
 	  { 're.MULTILINE'. 8 }. { 're.DOTALL'. 16 }. { 're.UNICODE'. 32 }.
 	  { 're.VERBOSE'. 64 }. { 're.DEBUG'. 128 }. { 're.ASCII'. 256 } }
 		@env0:do: [:pair |
-			((flagsVal @env0:bitAnd: (pair @env0:at: 2)) @env0:= 0) ifFalse: [
+			((remaining @env0:bitAnd: (pair @env0:at: 2)) @env0:= 0) ifFalse: [
 				names @env0:add: (pair @env0:at: 1).
-				flagsVal := flagsVal @env0:- (pair @env0:at: 2)]].
-	"Any bits left over aren't one of the named RegexFlag members --
-	CPython still shows them, as a raw hex literal (test_re.py's
-	PatternReprTests.test_unknown_flags: 're.compile(..., 0x123000)'
-	when nothing else matches, or 're.IGNORECASE|0x123000' mixed in)."
-	(flagsVal @env0:~= 0) ifTrue: [
-		names @env0:add: ('0x' @env0:, (flagsVal @env0:printStringRadix: 16 showRadix: false) @env0:asLowercase)].
+				remaining := remaining @env0:- (pair @env0:at: 2)]].
+	"Flags with no name are appended as one 0x hex literal after the named
+	flags, mirroring CPython (test_unknown_flags)."
+	(remaining @env0:= 0) ifFalse: [
+		names @env0:add: '0x' @env0:, ((remaining @env0:printStringRadix: 16 showRadix: false) @env0:asLowercase)].
 	srcRepr := src __repr__.
 	srcRepr @env0:size @env0:> 200 ifTrue: [
 		srcRepr := srcRepr @env0:copyFrom: 1 to: 200].

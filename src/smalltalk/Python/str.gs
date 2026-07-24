@@ -528,26 +528,28 @@ __ne__: other
 category: 'Grail-String Representation'
 method: CharacterCollection
 __repr__
-	"Return a string representation for debugging. In Python: repr(str)
-	CPython's smart quote selection: prefer single quotes, but switch
-	to double quotes (unescaped) when the string contains a single
-	quote and no double quote -- test_re.py's PatternReprTests.
-	test_quotes checks this via a compiled pattern's repr, which just
-	delegates to the source string's own __repr__."
+	"Return a string representation for debugging. In Python: repr(str).
+	CPython unicode_repr uses single quotes by default, switching to double
+	quotes when the string contains a single quote but no double quote, so the
+	delimiter need not be backslash-escaped (test_re test_quotes)."
 
-	| stream quoteChar quoteCp |
-	quoteChar := $'.
-	((self @env0:includes: $') and: [(self @env0:includes: $") @env0:not]) ifTrue: [
-		quoteChar := $"].
-	quoteCp := quoteChar @env0:codePoint.
+	| stream quote quoteCp hasSingle hasDouble |
+	hasSingle := false.
+	hasDouble := false.
+	self @env0:do: [:char | | cp |
+		cp := char @env0:codePoint.
+		cp == 39 ifTrue: [ hasSingle := true ].
+		cp == 34 ifTrue: [ hasDouble := true ]].
+	quote := (hasSingle and: [hasDouble @env0:not]) ifTrue: [$"] ifFalse: [$'].
+	quoteCp := quote @env0:codePoint.
 	stream := WriteStream @env0:on: (Unicode7 ___new___).
-	stream @env0:nextPut: quoteChar.
+	stream @env0:nextPut: quote.
 	self @env0:do: [:char |
 		| cp |
 		cp := char @env0:codePoint.
-		(cp == quoteCp) ifTrue: [  "the active quote char -> \<quote>"
+		(cp == quoteCp) ifTrue: [  "the active delimiter -> escaped"
 			stream @env0:nextPutAll: '\'.
-			stream @env0:nextPut: quoteChar.
+			stream @env0:nextPut: quote.
 		] ifFalse: [ (cp == 92) ifTrue: [  "backslash -> \\"
 			stream @env0:nextPutAll: '\\'.
 		] ifFalse: [ (cp == 10) ifTrue: [  "newline -> \n"
@@ -571,7 +573,7 @@ __repr__
 			stream @env0:nextPut: char.
 		]]]]]]
 	].
-	stream @env0:nextPut: quoteChar.
+	stream @env0:nextPut: quote.
 	^ stream @env0:contents
 %
 
