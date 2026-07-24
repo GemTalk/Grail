@@ -420,9 +420,16 @@ extend: iterable
 		TypeError ___signal___: 'expected iterable of integers; got: ''str'''
 	].
 
-	"A non-iterable can't extend at all."
-	((iterable ___respondsTo___: #'__iter__')
-		or: [iterable ___respondsTo___: #'__getitem__']) ifFalse: [
+	"A non-iterable can't extend at all.  ___hasProtocol___: (not
+	___respondsTo___:) -- object now carries a generic __iter__ default
+	(raises a catchable TypeError for a non-iterable receiver), which makes
+	___respondsTo___: #'__iter__' true for EVERY object; ___hasProtocol___:
+	specifically excludes that Object-level fallback so a genuinely
+	non-iterable receiver (e.g. a float) is still caught here, with
+	bytearray's own by-name message, rather than falling through to the
+	generic one from calling __iter__ below."
+	((iterable ___hasProtocol___: #'__iter__')
+		or: [iterable ___hasProtocol___: #'__getitem__']) ifFalse: [
 		TypeError ___signal___: ('can''t extend bytearray with '
 			@env0:, (iterable @env1:__class__ @env1:__name__) @env0:asLowercase)
 	].
