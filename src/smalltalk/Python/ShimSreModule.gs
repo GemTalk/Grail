@@ -1052,13 +1052,35 @@ group
 		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: (self @env0:cPtrAddress)
 %
 
+category: 'Grail-Methods - Private'
+method: SreMatch
+___groupKey___: arg
+	"Normalize a group() argument.  A group name (string) passes through;
+	an integer (directly or via __index__ on an index-like object such as
+	numpy ints or the test's Index wrapper) is range-checked.  An index
+	outside the SmallInteger range cannot name any group and would be
+	silently truncated by the C marshalling, so raise IndexError -- CPython
+	raises IndexError for out-of-range / oversized group indices."
+	| idx |
+	(arg @env0:isKindOf: CharacterCollection) ifTrue: [^ arg].
+	idx := (arg @env0:isKindOf: Integer)
+		ifTrue: [arg]
+		ifFalse: [
+			((arg @env0:class @env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil)
+				ifTrue: [arg __index__]
+				ifFalse: [^ arg]].
+	(idx @env0:isKindOf: SmallInteger) ifFalse: [
+		IndexError ___signal___: 'no such group'].
+	^ idx
+%
+
 category: 'Grail-Methods'
 method: SreMatch
 group: groupArg
 	"group(groupN) -> str"
 	^ (CPythonShim @env0:current)
 		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: (self @env0:cPtrAddress)
-		with: groupArg
+		with: (self ___groupKey___: groupArg)
 %
 
 category: 'Grail-Methods'
@@ -1077,7 +1099,7 @@ group: g1 _: g2
 	"group(g1, g2) -> tuple"
 	^ (CPythonShim @env0:current)
 		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: (self @env0:cPtrAddress)
-		with: g1 with: g2
+		with: (self ___groupKey___: g1) with: (self ___groupKey___: g2)
 %
 
 category: 'Grail-Methods'
@@ -1086,7 +1108,7 @@ group: g1 _: g2 _: g3
 	"group(g1, g2, g3) -> tuple"
 	^ (CPythonShim @env0:current)
 		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: (self @env0:cPtrAddress)
-		with: g1 with: g2 with: g3
+		with: (self ___groupKey___: g1) with: (self ___groupKey___: g2) with: (self ___groupKey___: g3)
 %
 
 category: 'Grail-Methods'
