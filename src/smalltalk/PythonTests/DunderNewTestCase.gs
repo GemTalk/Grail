@@ -1146,7 +1146,7 @@ testEnumMetaclassProtocol
 	| r |
 	r := self fixture @env1:ENUM_PROTOCOL_RESULT.
 	self assert: (r @env1:__getitem__: 'class_repr') @env1:__repr__
-		equals: '("<enum ''Color''>", "<enum ''Color''>", "<enum ''Color''>", "<flag ''Perm''>")'.
+		equals: '(''<enum \''Color\''>'', ''<enum \''Color\''>'', ''<enum \''Color\''>'', ''<flag \''Perm\''>'')'.
 	self assert: (r @env1:__getitem__: 'class_bool') @env1:__repr__
 		equals: '(True, True)'.
 	self assert: (r @env1:__getitem__: 'internals') @env1:__repr__
@@ -1245,7 +1245,7 @@ testStrSubclassBehavesAsString
 	StrEnum members (which ARE str subclasses)."
 
 	self assert: (self fixture @env1:STR_SUBCLASS_RESULT) @env1:__repr__
-		equals: '(''hello'', True, ''HELLO'', 5, ''h'', True, True, ''hello world'', "''hello''", True, True, True, True, True)'
+		equals: '(''hello'', True, ''HELLO'', 5, ''h'', True, True, ''hello world'', ''\''hello\'''', True, True, True, True, True)'
 %
 
 category: 'Grail-Tests - enum internals'
@@ -1258,7 +1258,7 @@ testStrEnumMembersAreStrings
 	wall -- StrEnum used to alias Unicode7).  See AbstractPyStr.gs."
 
 	self assert: (self fixture @env1:STR_ENUM_RESULT) @env1:__repr__
-		equals: '(''red'', ''RED'', ''red'', "<Color.RED: ''red''>", True, True, ''RED'', ''autoed'', [''RED'', ''GREEN'', ''AUTOED''], True, True, ''red'', ''red!'', 3, ''apple'', ''apple'', True)'
+		equals: '(''red'', ''RED'', ''red'', ''<Color.RED: \''red\''>'', True, True, ''RED'', ''autoed'', [''RED'', ''GREEN'', ''AUTOED''], True, True, ''red'', ''red!'', 3, ''apple'', ''apple'', True)'
 %
 
 category: 'Grail-Tests - enum internals'

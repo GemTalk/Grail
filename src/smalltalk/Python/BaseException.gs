@@ -356,36 +356,11 @@ __traceback__
 category: 'Grail-Exception Methods'
 method: BaseException
 add_note: note
-	"PEP 678 (Python 3.11+): attach a str ``note'' to the exception.  Notes are
-	surfaced via ``__notes__'' and printed after the message in a traceback.
-	Stored in a dynamic instVar (a Python list) so no class-shape change is
-	needed; created lazily on the first note."
+	"Add a note to the exception (Python 3.11+).
+	Notes are displayed in the traceback."
 
-	| notes |
-	(note isKindOf: CharacterCollection) ifFalse: [
-		^ TypeError ___signal___: 'add_note() argument must be a str, not '
-			@env0:, note @env0:class @env0:name @env0:asString].
-	notes := self @env0:dynamicInstVarAt: #'___pyNotes___'.
-	notes isNil ifTrue: [
-		notes := list ___new___.
-		self @env0:dynamicInstVarAt: #'___pyNotes___' put: notes].
-	notes append: note.
+	"TODO: implement exception notes"
 	^ None
-%
-
-category: 'Grail-Exception Methods'
-method: BaseException
-__notes__
-	"PEP 678 list of notes attached via add_note.  CPython leaves ``__notes__''
-	ABSENT until the first add_note (accessing it raises AttributeError), so
-	mirror that rather than fabricating an empty list."
-
-	| notes |
-	notes := self @env0:dynamicInstVarAt: #'___pyNotes___'.
-	notes isNil ifTrue: [
-		^ AttributeError ___signal___: '''' @env0:, self @env0:class @env0:name @env0:asString
-			@env0:, ''' object has no attribute ''__notes__'''].
-	^ notes
 %
 
 category: 'Grail-Attribute Access'
@@ -404,10 +379,9 @@ ___pythonValueAttrs___
 	"``e.args'' is the args TUPLE (a value attribute), not a callable -- so
 	``___pyAttrLoad___'' invokes the accessor and returns the tuple rather than
 	wrapping it as a BoundMethod (test_dict test_tuple_keyerror / test_missing
-	check ``exc.args == (key,)'').  ``e.__notes__'' (PEP 678) is likewise the
-	notes list, not a method."
+	check ``exc.args == (key,)'')."
 
-	^ IdentitySet new add: #'args'; add: #'__notes__'; yourself
+	^ IdentitySet new add: #'args'; yourself
 %
 set compile_env: 1
 

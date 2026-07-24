@@ -583,24 +583,6 @@ _scanner: positional kw: keywords
 	^ self scanner: s
 %
 
-category: 'Grail-Instance Creation'
-classmethod: SreScanner
-__new__
-	"CPython's _sre.SRE_Scanner type disallows direct instantiation
-	(bpo-43916) -- scanner objects only ever come from
-	pattern.scanner(...).  Grail-side instances are created via
-	___init___:string:cursor:endpos: (called through Pattern>>scanner:),
-	not the Python-facing constructor, so this is safe to reject
-	unconditionally (test_re.py's test_disallow_instantiation).
-
-	NOTE: the zero-arg Python call ``SreScanner()`` dispatches through
-	Object class>>value:value: to bare __new__, NOT _new:kw: (that
-	varargs entry is only consulted when kwargs is non-empty) --
-	overriding _new:kw: alone left the plain 0-arg call unblocked."
-
-	TypeError ___signal___: 'cannot create ''_sre.SRE_Scanner'' instances'
-%
-
 category: 'Grail-Scanner'
 method: SreScanner
 ___init___: aPattern string: aString cursor: c endpos: e
@@ -740,39 +722,6 @@ _subn: positional kw: keywords
 ! a Grail workaround for the missing TemplateObject marshalling — the C
 ! side handles the literal case (no template object needed); we walk
 ! the matches in Smalltalk for the non-literal case.
-
-category: 'Grail-Instance Creation'
-classmethod: SrePattern
-__new__
-	"CPython's re.Pattern type disallows direct instantiation (bpo-43916)
-	-- Pattern objects only ever come from re.compile()/_sre.compile().
-	Grail-side instances are all created via newFromCPtr:(compileArgs:),
-	not the Python-facing constructor, so this is safe to reject
-	unconditionally (test_re.py's test_disallow_instantiation).
-
-	NOTE: the zero-arg Python call ``re.Pattern()`` dispatches through
-	Object class>>value:value: to bare __new__, NOT _new:kw: (that
-	varargs entry is only consulted when kwargs is non-empty) --
-	overriding _new:kw: alone left the plain 0-arg call unblocked."
-
-	TypeError ___signal___: 'cannot create ''re.Pattern'' instances'
-%
-
-category: 'Grail-Python Attribute Hook'
-classmethod: SrePattern
-__module__
-	"type(pattern).__module__ (test_re.py's test_match_repr formats its
-	regex against this)."
-	^ 're'
-%
-
-category: 'Grail-Python Attribute Hook'
-classmethod: SrePattern
-__qualname__
-	"type(pattern).__qualname__ -- CPython spells it 'Pattern', not the
-	Smalltalk class name 'SrePattern'."
-	^ 'Pattern'
-%
 
 category: 'Grail-Methods - Private'
 classmethod: SrePattern
@@ -995,31 +944,19 @@ __repr__
 	flag names in sre.c's table order, and the implicit re.UNICODE
 	dropped for str patterns (test_pattern_compile repr checks)."
 
-	| src flagsVal srcRepr names stream remaining |
+	| src flagsVal srcRepr names stream |
 	src := self pattern.
 	flagsVal := self flags.
-	"For a str (non-bytes) pattern, drop the implicit re.UNICODE, but only when
-	UNICODE is the sole charset flag -- matching CPython pattern_repr's
-	(flags & (LOCALE|UNICODE|ASCII)) == UNICODE test."
 	(src isKindOf: ByteArray) ifFalse: [
-		((flagsVal @env0:bitAnd: 292) @env0:= 32) ifTrue: [   "292 = LOCALE|UNICODE|ASCII (4|32|256)"
-			flagsVal := flagsVal @env0:- 32]
+		flagsVal := flagsVal @env0:- (flagsVal @env0:bitAnd: 32)
 	].
 	names := OrderedCollection @env0:new.
-	remaining := flagsVal.
-	"re.TEMPLATE (value 1) is intentionally absent: CPython 3.14 removed it from
-	the repr table, so bit 0 surfaces via the 0x remainder below, not as a name."
-	{ { 're.IGNORECASE'. 2 }. { 're.LOCALE'. 4 }.
+	{ { 're.TEMPLATE'. 1 }. { 're.IGNORECASE'. 2 }. { 're.LOCALE'. 4 }.
 	  { 're.MULTILINE'. 8 }. { 're.DOTALL'. 16 }. { 're.UNICODE'. 32 }.
 	  { 're.VERBOSE'. 64 }. { 're.DEBUG'. 128 }. { 're.ASCII'. 256 } }
 		@env0:do: [:pair |
-			((remaining @env0:bitAnd: (pair @env0:at: 2)) @env0:= 0) ifFalse: [
-				names @env0:add: (pair @env0:at: 1).
-				remaining := remaining @env0:- (pair @env0:at: 2)]].
-	"Flags with no name are appended as one 0x hex literal after the named
-	flags, mirroring CPython (test_unknown_flags)."
-	(remaining @env0:= 0) ifFalse: [
-		names @env0:add: '0x' @env0:, ((remaining @env0:printStringRadix: 16 showRadix: false) @env0:asLowercase)].
+			((flagsVal @env0:bitAnd: (pair @env0:at: 2)) @env0:= 0) ifFalse: [
+				names @env0:add: (pair @env0:at: 1)]].
 	srcRepr := src __repr__.
 	srcRepr @env0:size @env0:> 200 ifTrue: [
 		srcRepr := srcRepr @env0:copyFrom: 1 to: 200].
@@ -1104,65 +1041,6 @@ cPtrAddress
 ! ===============================================================================
 
 set compile_env: 1
-
-category: 'Grail-Instance Creation'
-classmethod: SreMatch
-__new__
-	"CPython's re.Match type disallows direct instantiation (bpo-43916)
-	-- Match objects only ever come from a successful match/search/
-	fullmatch call.  Grail-side instances are all created via
-	newFromCPtr:, not the Python-facing constructor, so this is safe to
-	reject unconditionally (test_re.py's test_disallow_instantiation).
-
-	NOTE: the zero-arg Python call ``re.Match()`` dispatches through
-	Object class>>value:value: to bare __new__, NOT _new:kw: (that
-	varargs entry is only consulted when kwargs is non-empty) --
-	overriding _new:kw: alone left the plain 0-arg call unblocked."
-
-	TypeError ___signal___: 'cannot create ''re.Match'' instances'
-%
-
-category: 'Grail-Python Attribute Hook'
-classmethod: SreMatch
-__module__
-	"type(match).__module__ (test_re.py's test_match_repr formats its
-	regex against this)."
-	^ 're'
-%
-
-category: 'Grail-Python Attribute Hook'
-classmethod: SreMatch
-__qualname__
-	"type(match).__qualname__ -- CPython spells it 'Match', not the
-	Smalltalk class name 'SreMatch'."
-	^ 'Match'
-%
-
-category: 'Grail-Printing'
-method: SreMatch
-__repr__
-	"repr(match) -> <re.Match object; span=(a, b), match='...'> mirroring
-	CPython's match_repr (test_re.py's test_match_repr).  Long matches
-	are elided to the first/last 25 chars, same as CPython."
-
-	| whole sp groupRepr stream |
-	whole := self group.
-	sp := self span.
-	groupRepr := whole __repr__.
-	groupRepr @env0:size @env0:> 53 ifTrue: [
-		groupRepr := (whole @env0:copyFrom: 1 to: 25) __repr__
-			@env0:, '...'
-			@env0:, (whole @env0:copyFrom: whole @env0:size @env0:- 24 to: whole @env0:size) __repr__].
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
-	stream @env0:nextPutAll: '<re.Match object; span=('.
-	stream @env0:print: (sp @env0:at: 1).
-	stream @env0:nextPutAll: ', '.
-	stream @env0:print: (sp @env0:at: 2).
-	stream @env0:nextPutAll: '), match='.
-	stream @env0:nextPutAll: groupRepr.
-	stream @env0:nextPutAll: '>'.
-	^ stream @env0:contents
-%
 
 ! --------- group -----------------------------------------------------------
 

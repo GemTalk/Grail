@@ -789,14 +789,9 @@ __mul__: other
 category: 'Grail-Comparison'
 method: int
 __ne__: other
-	"Return self != other.  Delegates to __eq__: (not a raw native ~=)
-	so it shares its __index__/complex/PythonInstance fallback logic --
-	a bare @env0:~= disagreed with __eq__: for e.g. 0 != False (Boolean
-	has an __index__, so __eq__: finds them equal via that path, but
-	native ~= just sees an Integer and a Boolean as unrelated types and
-	always answers 'not equal') (test_re.py's test_case_helpers)."
+	"Return self != other"
 
-	^ (self __eq__: other) @env0:not
+	^ self @env0:~= other
 %
 
 category: 'Grail-Arithmetic'

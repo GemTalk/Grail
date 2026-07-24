@@ -293,14 +293,12 @@ test__repr__
 category: 'Grail-String Representation'
 method: StrTestCase
 test__repr__WithApostrophe
-	"Test __repr__ switches to a double-quote delimiter when the string contains
-	a single quote and no double quote, so the quote is not backslash-escaped --
-	matching CPython repr of it-apostrophe-s."
+	"Test __repr__ escapes apostrophes"
 
 	| s result |
 	s := 'it''s'.
 	result := s @env1:__repr__.
-	self assert: result equals: '"it''s"'.
+	self assert: result equals: '''it\''s'''.
 %
 
 category: 'Grail-String Operations'
