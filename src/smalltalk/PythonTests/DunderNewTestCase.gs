@@ -1312,7 +1312,7 @@ testEnumMemberInit
 	test_init_exception + the value-carrying-enum pattern.)"
 
 	self assert: (self fixture @env1:ENUM_INIT_RESULT) @env1:__repr__
-		equals: '(3.303e23, 2439700.0, (3.303e23, 2439700.0), 4.869e24, 2, 4, True)'
+		equals: '(3.303e+23, 2439700.0, (3.303e+23, 2439700.0), 4.869e+24, 2, 4, True)'
 %
 
 category: 'Grail-Tests - enum internals'

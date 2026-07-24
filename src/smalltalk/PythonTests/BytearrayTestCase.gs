@@ -148,10 +148,10 @@ test__imul__zero
 category: 'Grail-Tests - Initialization'
 method: BytearrayTestCase
 test__new__empty
-	"Test bytearray() constructor"
+	"Test bytearray() constructor -- the genuine no-argument empty case."
 
 	| result |
-	result := bytearray ___new___: bytearray.
+	result := bytearray @env1:__new__.
 	self assert: result size equals: 0.
 %
 
