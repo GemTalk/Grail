@@ -244,6 +244,23 @@ testExtendIterable
 		self assert: ((self resultAt: key) = true) description: key]
 %
 
+category: 'Grail-Tests - fromhex'
+method: BytesSubclassTestCase
+testFromHex
+	"bytes/bytearray.fromhex: hex-digit pairs with ASCII whitespace ignored
+	between pairs, a str or bytes-like argument, self-typed result, and
+	CPython's error kinds -- TypeError for a non-(str|bytes-like) arg (naming
+	the type), ValueError for an odd count / a non-ASCII-whitespace or invalid
+	character (reporting the 0-based position)."
+
+	#('fromhex_basic' 'fromhex_ws' 'fromhex_ws_kinds' 'fromhex_empty'
+	  'fromhex_bytes_arg' 'fromhex_array_arg' 'fromhex_bytearray_type' 'fromhex_bytearray_val'
+	  'fromhex_reject_int' 'fromhex_reject_tuple' 'fromhex_odd'
+	  'fromhex_pos_first' 'fromhex_pos_second' 'fromhex_pos_ws_in_pair'
+	  'fromhex_nonascii_ws' 'fromhex_single_char') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
 category: 'Grail-Tests - base types'
 method: BytesSubclassTestCase
 testBaseTypesUnaffected

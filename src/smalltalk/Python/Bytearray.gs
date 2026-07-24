@@ -100,36 +100,10 @@ __new__: source _: encoding
 	^ self ___encodeSourceToSelf___: source _: encoding _: 'strict'
 %
 
-category: 'Grail-Constructors'
-classmethod: bytearray
-fromhex: hexString
-	"Create bytearray from hex string (e.g., 'deadbeef'). Receiver is
-	the class. In Python: bytearray.fromhex('deadbeef')."
-
-	| cleaned size ba |
-	"Remove spaces from hex string"
-	cleaned := hexString @env0:select: [:ch |
-		(ch @env0:~= $ )
-	].
-
-	"Hex string must have even length"
-	size := cleaned @env0:size.
-	((size @env0:\\ 2) @env0:~= 0) ifTrue: [
-		ValueError ___signal___: 'non-hexadecimal number found in fromhex() arg'
-	].
-
-	"Create bytearray and fill with hex values"
-	ba := self ___new___: (size @env0:// 2).
-	1 @env0:to: size by: 2 do: [:i |
-		| hexPair byte stream |
-		hexPair := cleaned @env0:copyFrom: i to: (i @env0:+ 1).
-		stream := ReadStream @env0:on: ('16r' @env0:, hexPair).
-		byte := Integer @env0:fromStream: stream.
-		ba @env0:at: ((i @env0:+ 1) @env0:// 2) put: byte
-	].
-
-	^ ba
-%
+! bytearray.fromhex intentionally has NO override -- it inherits the self-typed
+! bytes>>fromhex: (which builds via `self ___new___:', so bytearray is built
+! here).  The old duplicate only stripped spaces and mis-parsed ASCII
+! whitespace, bytes-like arguments, and invalid digits.
 
 category: 'Grail-Type'
 method: bytearray

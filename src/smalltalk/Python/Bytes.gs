@@ -193,33 +193,78 @@ __new__: source _: encoding _: errors
 
 category: 'Grail-Constructors'
 classmethod: bytes
-fromhex: hexString
-	"Create bytes from hex string (e.g., 'deadbeef'). Receiver is the
-	class. In Python: bytes.fromhex('deadbeef')."
+fromhex: source
+	"bytes.fromhex(s) -- parse pairs of hex digits, ignoring ASCII whitespace
+	BETWEEN pairs (not within one), matching CPython.  ``source'' may be a str
+	or a bytes-like buffer (bytes / bytearray / memoryview / array); anything
+	else is a TypeError.  Errors report the 0-based position of the offending
+	character.  Self-typed via ``self ___new___:'' so a subclass fromhex builds
+	that subclass."
 
-	| cleaned size ba |
-	"Remove spaces from hex string"
-	cleaned := hexString @env0:select: [:ch |
-		(ch @env0:~= $ )
-	].
+	| src size out i result contents |
+	src := self ___hexSourceCodes___: source.
+	size := src @env0:size.
+	out := WriteStream @env0:on: (ByteArray @env0:new).
+	i := 1.
+	[i @env0:<= size] @env0:whileTrue: [
+		| c hi |
+		c := src @env0:at: i.
+		(self ___isHexWhitespace___: c)
+			ifTrue: [i := i @env0:+ 1]
+			ifFalse: [
+				hi := self ___hexDigitValue___: c.
+				(hi @env0:== nil) ifTrue: [
+					ValueError ___signal___: ('non-hexadecimal number found in fromhex() arg at position '
+						@env0:, (i @env0:- 1) @env0:printString)].
+				(i @env0:>= size) ifTrue: [
+					ValueError ___signal___:
+						'fromhex() arg must contain an even number of hexadecimal digits'].
+				[ | lo |
+					lo := self ___hexDigitValue___: (src @env0:at: (i @env0:+ 1)).
+					(lo @env0:== nil) ifTrue: [
+						ValueError ___signal___: ('non-hexadecimal number found in fromhex() arg at position '
+							@env0:, i @env0:printString)].
+					out @env0:nextPut: ((hi @env0:* 16) @env0:+ lo) ] value.
+				i := i @env0:+ 2]].
+	contents := out @env0:contents.
+	result := self ___new___: contents @env0:size.
+	1 @env0:to: contents @env0:size do: [:j | result @env0:at: j put: (contents @env0:at: j)].
+	^ result
+%
 
-	"Hex string must have even length"
-	size := cleaned @env0:size.
-	((size @env0:\\ 2) @env0:~= 0) ifTrue: [
-		ValueError ___signal___: 'non-hexadecimal number found in fromhex() arg'
-	].
+category: 'Grail-Encoding/Decoding'
+classmethod: bytes
+___hexSourceCodes___: source
+	"The fromhex() argument as an indexable of codepoints: a str yields its
+	characters' code points; a bytes-like buffer yields its byte values.
+	Anything else is a TypeError (CPython names the offending type)."
 
-	"Create bytes and fill with hex values"
-	ba := self ___new___: (size @env0:// 2).
-	1 @env0:to: size by: 2 do: [:i |
-		| hexPair byte stream |
-		hexPair := cleaned @env0:copyFrom: i to: (i @env0:+ 1).
-		stream := ReadStream @env0:on: ('16r' @env0:, hexPair).
-		byte := Number @env0:fromStream: stream.
-		ba @env0:at: ((i @env0:+ 1) @env0:// 2) put: byte
-	].
+	(source isKindOf: CharacterCollection) ifTrue: [
+		^ (1 @env0:to: source @env0:size) @env0:collect: [:i | (source @env0:at: i) @env0:asInteger]].
+	(source isKindOf: bytes) ifTrue: [^ source].
+	"A non-str bytes-like buffer (array.array, ...): materialize its bytes via
+	the bytes CONSTRUCTOR (__new__:, not the size allocator ___new___:)."
+	(source ___respondsTo___: #'tobytes') ifTrue: [^ bytes __new__: source].
+	TypeError ___signal___: ('fromhex() argument must be str or bytes-like, not '
+		@env0:, (source @env1:__class__ @env1:__name__))
+%
 
-	^ ba
+category: 'Grail-Encoding/Decoding'
+classmethod: bytes
+___isHexWhitespace___: code
+	"ASCII whitespace CPython's fromhex() skips between pairs: TAB, LF, VT, FF,
+	CR, and space -- NOT other Unicode whitespace (which is rejected)."
+	^ #(9 10 11 12 13 32) @env0:includes: code
+%
+
+category: 'Grail-Encoding/Decoding'
+classmethod: bytes
+___hexDigitValue___: code
+	"0..15 for an ASCII hex digit code point (0-9, A-F, a-f), else nil."
+	((code @env0:>= 48) and: [code @env0:<= 57]) ifTrue: [^ code @env0:- 48].
+	((code @env0:>= 65) and: [code @env0:<= 70]) ifTrue: [^ code @env0:- 55].
+	((code @env0:>= 97) and: [code @env0:<= 102]) ifTrue: [^ code @env0:- 87].
+	^ nil
 %
 
 category: 'Grail-Translation Methods'
