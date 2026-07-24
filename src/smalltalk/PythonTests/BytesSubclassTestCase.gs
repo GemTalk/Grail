@@ -181,6 +181,23 @@ testSearchBoundsEdges
 		self assert: ((self resultAt: key) = true) description: key]
 %
 
+category: 'Grail-Tests - hex separator'
+method: BytesSubclassTestCase
+testHexSeparator
+	"hex(sep[, bytes_per_sep]): a one-ASCII-character separator (str or bytes)
+	between byte groups -- positive bytes_per_sep counts from the right,
+	negative from the left, 0 or |n| >= len yields no separator; the keyword
+	form and bytearray are covered; an empty/multi-char/non-ASCII sep raises
+	ValueError and a None sep raises TypeError."
+
+	#('hex_sep_default' 'hex_sep_bytes' 'hex_sep_pos2' 'hex_sep_neg2'
+	  'hex_sep_zero' 'hex_sep_ge_len' 'hex_sep_six_from_right'
+	  'hex_sep_six_from_left' 'hex_sep_null' 'hex_sep_del7f' 'hex_kw'
+	  'hex_bytearray_sep' 'hex_empty_sep_raises' 'hex_multichar_sep_raises'
+	  'hex_nonascii_sep_raises' 'hex_none_sep_raises') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
 category: 'Grail-Tests - base types'
 method: BytesSubclassTestCase
 testBaseTypesUnaffected

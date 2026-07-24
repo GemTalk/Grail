@@ -1113,6 +1113,95 @@ hex
 	^ result
 %
 
+category: 'Grail-Encoding/Decoding'
+method: bytes
+hex: sep
+	"bytes.hex(sep) -- group the hex digits with a one-character separator
+	(bytes_per_sep defaults to 1)."
+	^ self ___hexWithSep___: sep bytesPerSep: 1
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+hex: sep _: bytesPerSep
+	"bytes.hex(sep, bytes_per_sep) -- a separator every ``bytes_per_sep''
+	bytes, counting from the right (positive) or left (negative)."
+	^ self ___hexWithSep___: sep bytesPerSep: bytesPerSep
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+_hex: positional kw: kwargs
+	"Varargs/keyword form: hex() / hex(sep) / hex(sep, bytes_per_sep) /
+	hex(sep=..., bytes_per_sep=...)."
+	| sep n |
+	(positional @env0:size @env0:>= 1)
+		ifTrue: [sep := positional @env0:at: 1]
+		ifFalse: [
+			(kwargs @env0:isNil @env0:not and: [kwargs @env0:includesKey: 'sep'])
+				ifTrue: [sep := kwargs @env0:at: 'sep']
+				ifFalse: [^ self hex]].
+	n := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [
+			(kwargs @env0:isNil @env0:not and: [kwargs @env0:includesKey: 'bytes_per_sep'])
+				ifTrue: [kwargs @env0:at: 'bytes_per_sep']
+				ifFalse: [1]].
+	^ self ___hexWithSep___: sep bytesPerSep: n
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___hexSepCode___: sep
+	"Resolve a hex() separator to its single ASCII code point (0..127).
+	CPython: None / any non-str-non-bytes -> TypeError; a separator that is
+	not exactly one character, or whose code point exceeds 127 -> ValueError."
+	| code |
+	(sep @env0:== None) ifTrue: [
+		TypeError ___signal___: 'hex() argument must be str or bytes, not None'].
+	(sep isKindOf: CharacterCollection) ifTrue: [
+		(sep @env0:size @env0:= 1) ifFalse: [
+			ValueError ___signal___: 'sep must be length 1.'].
+		code := (sep @env0:at: 1) @env0:asInteger.
+		(code @env0:> 127) ifTrue: [ValueError ___signal___: 'sep must be ASCII.'].
+		^ code].
+	(sep isKindOf: bytes) ifTrue: [
+		(sep @env0:size @env0:= 1) ifFalse: [
+			ValueError ___signal___: 'sep must be length 1.'].
+		code := sep @env0:at: 1.
+		(code @env0:> 127) ifTrue: [ValueError ___signal___: 'sep must be ASCII.'].
+		^ code].
+	TypeError ___signal___: 'sep must be str or bytes.'
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___hexWithSep___: sep bytesPerSep: nArg
+	"Lowercase hex with a validated one-ASCII-character separator inserted
+	between groups of ``nArg'' bytes: positive counts groups from the right,
+	negative from the left, and 0 or |nArg| >= size yields no separator (the
+	modulo test never fires for a divisor larger than the gap)."
+	| size n sepCode ws |
+	size := self @env0:size.
+	sepCode := self ___hexSepCode___: sep.
+	n := nArg.
+	ws := WriteStream @env0:on: String @env0:new.
+	1 @env0:to: size do: [:i |
+		| idx0 needSep byte hexStr |
+		idx0 := i @env0:- 1.
+		needSep := false.
+		((idx0 @env0:> 0) and: [(n @env0:= 0) @env0:not]) ifTrue: [
+			(n @env0:> 0)
+				ifTrue: [needSep := ((size @env0:- idx0) @env0:\\ n) @env0:= 0]
+				ifFalse: [needSep := (idx0 @env0:\\ (n @env0:negated)) @env0:= 0]].
+		needSep ifTrue: [ws @env0:nextPut: (Character @env0:value: sepCode)].
+		byte := self @env0:at: i.
+		hexStr := (byte @env0:printStringRadix: 16) @env0:asLowercase.
+		(hexStr @env0:size @env0:= 1) ifTrue: [hexStr := '0' @env0:, hexStr].
+		ws @env0:nextPutAll: hexStr].
+	^ ws @env0:contents
+%
+
 category: 'Grail-Search Methods'
 method: bytes
 index: sub
