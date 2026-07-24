@@ -98,6 +98,20 @@ testByteArrayIsNotBytes
 		self assert: ((self resultAt: key) = true) description: key]
 %
 
+category: 'Grail-Tests - bytes-like arguments'
+method: BytesSubclassTestCase
+testBytesMethodsAcceptBytesLikeArguments
+	"bytes methods accept any bytes-like ARGUMENT (a bytearray -- and its
+	subclasses), matching CPython: split/replace/find/count/startswith/
+	endswith, concatenation, ==, and the bytes() constructor.  A str is still
+	rejected (not bytes-like)."
+
+	#('arg_split_ba' 'arg_replace_ba' 'arg_find_ba' 'arg_count_ba'
+	  'arg_startswith_ba' 'arg_endswith_ba' 'arg_concat_ba' 'arg_eq_ba'
+	  'arg_ctor_ba' 'arg_reject_str') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
 category: 'Grail-Tests - base types'
 method: BytesSubclassTestCase
 testBaseTypesUnaffected

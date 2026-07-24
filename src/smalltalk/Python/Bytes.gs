@@ -50,13 +50,13 @@ __new__: source
 		TypeError ___signal___: 'string argument without an encoding'
 	].
 
-	"If source is bytes (or bytearray — same byte-storage layout),
-	make a copy.  Previously the bytearray path fell through to the
-	default empty-bytes branch, which silently produced ``bytes(0)``
-	from any bytearray and broke re._compiler._optimize_charset's
-	BIGCHARSET path (``charmap = bytes(charmap)`` lost all 256 bytes
-	of the bitmap)."
-	((sourceClass == bytes) or: [source isKindOf: bytearray]) ifTrue: [
+	"If source is any bytes-like object (bytes / bytearray / subclasses --
+	all ByteArray, same byte-storage layout), make a copy.  Previously the
+	bytearray path fell through to the default empty-bytes branch, which
+	silently produced ``bytes(0)`` from any bytearray and broke
+	re._compiler._optimize_charset's BIGCHARSET path (``charmap =
+	bytes(charmap)`` lost all 256 bytes of the bitmap)."
+	(source isKindOf: bytes) ifTrue: [
 		result := self ___new___: source @env0:size.
 		1 @env0:to: source @env0:size do: [:i |
 			result @env0:at: i put: (source @env0:at: i)
@@ -265,10 +265,8 @@ __add__: other
 	| otherClass size1 size2 result |
 	otherClass := other @env0:class.
 
-	"Can only concatenate with bytes or bytearray"
-	((otherClass == bytes) or: [
-		otherClass == bytearray
-	]) ifFalse: [
+	"Concatenate with any bytes-like object (bytes / bytearray / subclasses)."
+	(other isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: ('can''t concat bytes to ' @env0:, otherClass)
 	].
 
@@ -328,10 +326,9 @@ __eq__: other
 	| otherClass size |
 	otherClass := other @env0:class.
 
-	"Can only concatenate with bytes or bytearray"
-	((otherClass == bytes) or: [
-		otherClass == bytearray
-	]) ifFalse: [
+	"Equal only to a bytes-like object (bytes / bytearray / subclasses); CPython
+	compares bytes and bytearray by value across the two types."
+	(other isKindOf: bytes) ifFalse: [
 		^ false
 	].
 
@@ -612,8 +609,8 @@ count: sub
 		^ count
 	].
 
-	"sub must be bytes"
-	subClass == bytes ifFalse: [
+	"sub must be a bytes-like object (bytes / bytearray / subclasses) or an int"
+	(sub isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'argument should be bytes or integer'
 	].
 
@@ -881,8 +878,8 @@ endswith: suffix
 	| suffixClass suffixSize mySize offset |
 	suffixClass := suffix @env0:class.
 
-	"suffix must be bytes"
-	(suffixClass == bytes) ifFalse: [
+	"suffix must be a bytes-like object (bytes / bytearray / subclasses)"
+	(suffix isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'argument should be bytes'
 	].
 
@@ -963,7 +960,7 @@ category: 'Grail-Search Methods'
 method: bytes
 find: sub
 	"Find first occurrence of sub, return index or -1"
-	| subClass subSize mySize i w x y z |
+	| subClass subSize mySize i |
 	subClass := sub @env0:class.
 
 	"sub must be bytes or integer"
@@ -980,12 +977,8 @@ find: sub
 		^ -1
 	].
 
-	"sub must be bytes"
-	w := bytearray.
-	x := subClass == bytes.
-	y := subClass == bytearray.
-	z := x or: [y].
-	(subClass == bytes or: [subClass == bytearray]) ifFalse: [
+	"sub must be a bytes-like object (bytes / bytearray / subclasses)"
+	(sub isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'argument should be bytes, bytearray or int'
 	].
 
@@ -1511,11 +1504,11 @@ replace: old _: new
 	oldClass := old @env0:class.
 	newClass := new @env0:class.
 
-	"old and new must be bytes"
-	(oldClass == bytes) ifFalse: [
+	"old and new must be bytes-like (bytes / bytearray / subclasses)"
+	(old isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'first argument must be bytes'
 	].
-	(newClass == bytes) ifFalse: [
+	(new isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'second argument must be bytes'
 	].
 
@@ -1554,8 +1547,8 @@ rfind: sub
 		^ -1
 	].
 
-	"sub must be bytes"
-	(subClass == bytes or: [subClass == bytearray]) ifFalse: [
+	"sub must be a bytes-like object (bytes / bytearray / subclasses)"
+	(sub isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'argument should be bytes, bytearray or int'
 	].
 
@@ -1654,8 +1647,8 @@ rsplit: sep _: maxsplit
 	| sepClass sepSize mySize parts positions i actualSplits lastEnd firstPart firstPartSize |
 	sepClass := sep @env0:class.
 
-	"sep must be bytes"
-	(sepClass == bytes) ifFalse: [
+	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
+	(sep isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'sep must be bytes'
 	].
 
@@ -1780,8 +1773,8 @@ split: sep
 	(sep @env0:== None) ifTrue: [^ self ___splitWhitespace___].
 	sepClass := sep @env0:class.
 
-	"sep must be bytes"
-	(sepClass == bytes) ifFalse: [
+	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
+	(sep isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'sep must be bytes'
 	].
 
@@ -1844,8 +1837,8 @@ split: sep _: maxsplit
 	| sepClass sepSize mySize parts currentPart i splitCount match |
 	sepClass := sep @env0:class.
 
-	"sep must be bytes"
-	(sepClass == bytes) ifFalse: [
+	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
+	(sep isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'sep must be bytes'
 	].
 
@@ -1969,8 +1962,8 @@ startswith: prefix
 	| prefixClass prefixSize mySize |
 	prefixClass := prefix @env0:class.
 
-	"prefix must be bytes"
-	(prefixClass == bytes) ifFalse: [
+	"prefix must be a bytes-like object (bytes / bytearray / subclasses)"
+	(prefix isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'argument should be bytes'
 	].
 
@@ -2403,8 +2396,8 @@ replace: old _: new _: count
 	replacements."
 	(count @env0:< 0) ifTrue: [^ self replace: old _: new].
 	(count @env0:= 0) ifTrue: [^ self @env0:copy].
-	((old @env0:class) @env0:== bytes) ifFalse: [TypeError ___signal___: 'first argument must be bytes'].
-	((new @env0:class) @env0:== bytes) ifFalse: [TypeError ___signal___: 'second argument must be bytes'].
+	(old isKindOf: bytes) ifFalse: [TypeError ___signal___: 'first argument must be bytes'].
+	(new isKindOf: bytes) ifFalse: [TypeError ___signal___: 'second argument must be bytes'].
 	(old @env0:size @env0:= 0) ifTrue: [^ self @env0:copy].
 	^ new join: (self split: old _: count)
 %

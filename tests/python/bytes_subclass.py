@@ -31,6 +31,14 @@ def _slots():
     return list(o) == [122, 122] and o.x == 1 and o.y == 2
 
 
+def _reject_str_arg():
+    # a str is NOT bytes-like: bytes methods must still reject it
+    try:
+        b'a x'.split('x'); return False
+    except TypeError:
+        return True
+
+
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
     'bytes_type_is_subclass': type(MyBytes(b'abc')) is MyBytes,
@@ -77,4 +85,17 @@ RESULTS = {
     'ba_is_bytearray':
         isinstance(bytearray(b'x'), bytearray) and isinstance(MyBA(b'x'), bytearray)
         and issubclass(bytearray, bytearray) and issubclass(MyBA, bytearray),
+
+    # --- bytes methods accept any bytes-like ARGUMENT (bytearray), matching
+    # CPython -- while still rejecting a str. ---
+    'arg_split_ba': b'a b'.split(bytearray(b' ')) == [b'a', b'b'],
+    'arg_replace_ba': b'aaa'.replace(bytearray(b'a'), bytearray(b'X')) == b'XXX',
+    'arg_find_ba': b'abcb'.find(bytearray(b'b')) == 1,
+    'arg_count_ba': b'abcb'.count(bytearray(b'b')) == 2,
+    'arg_startswith_ba': b'abc'.startswith(bytearray(b'a')),
+    'arg_endswith_ba': b'abc'.endswith(bytearray(b'c')),
+    'arg_concat_ba': (b'a' + bytearray(b'b')) == b'ab',
+    'arg_eq_ba': b'ab' == bytearray(b'ab'),
+    'arg_ctor_ba': bytes(bytearray(b'xyz')) == b'xyz',
+    'arg_reject_str': _reject_str_arg(),
 }
