@@ -528,17 +528,26 @@ __ne__: other
 category: 'Grail-String Representation'
 method: CharacterCollection
 __repr__
-	"Return a string representation for debugging. In Python: repr(str)"
+	"Return a string representation for debugging. In Python: repr(str)
+	CPython's smart quote selection: prefer single quotes, but switch
+	to double quotes (unescaped) when the string contains a single
+	quote and no double quote -- test_re.py's PatternReprTests.
+	test_quotes checks this via a compiled pattern's repr, which just
+	delegates to the source string's own __repr__."
 
-	| stream |
+	| stream quoteChar quoteCp |
+	quoteChar := $'.
+	((self @env0:includes: $') and: [(self @env0:includes: $") @env0:not]) ifTrue: [
+		quoteChar := $"].
+	quoteCp := quoteChar @env0:codePoint.
 	stream := WriteStream @env0:on: (Unicode7 ___new___).
-	stream @env0:nextPut: $'.
+	stream @env0:nextPut: quoteChar.
 	self @env0:do: [:char |
 		| cp |
 		cp := char @env0:codePoint.
-		(cp == 39) ifTrue: [  "apostrophe -> \'"
+		(cp == quoteCp) ifTrue: [  "the active quote char -> \<quote>"
 			stream @env0:nextPutAll: '\'.
-			stream @env0:nextPut: $'.
+			stream @env0:nextPut: quoteChar.
 		] ifFalse: [ (cp == 92) ifTrue: [  "backslash -> \\"
 			stream @env0:nextPutAll: '\\'.
 		] ifFalse: [ (cp == 10) ifTrue: [  "newline -> \n"
@@ -562,7 +571,7 @@ __repr__
 			stream @env0:nextPut: char.
 		]]]]]]
 	].
-	stream @env0:nextPut: $'.
+	stream @env0:nextPut: quoteChar.
 	^ stream @env0:contents
 %
 

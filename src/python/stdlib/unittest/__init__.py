@@ -277,6 +277,25 @@ class TestCase:
         if first == second:
             self._failWith(msg, repr(first) + " == " + repr(second))
 
+    def assertRegex(self, text, expected_regex, msg=None):
+        import re
+        if isinstance(expected_regex, (str, bytes)):
+            expected_regex = re.compile(expected_regex)
+        if expected_regex.search(text) is None:
+            standardMsg = "Regex didn't match: " + repr(expected_regex.pattern) \
+                + " not found in " + repr(text)
+            self._failWith(msg, standardMsg)
+
+    def assertNotRegex(self, text, unexpected_regex, msg=None):
+        import re
+        if isinstance(unexpected_regex, (str, bytes)):
+            unexpected_regex = re.compile(unexpected_regex)
+        match = unexpected_regex.search(text)
+        if match:
+            standardMsg = "Regex matched: " + repr(text[match.start():match.end()]) \
+                + " matches " + repr(unexpected_regex.pattern)
+            self._failWith(msg, standardMsg)
+
     def assertSequenceEqual(self, seq1, seq2, msg=None, seq_type=None):
         # Length- and element-wise sequence equality with an optional type
         # check (test_fractions' testLargeArithmetic uses assertTupleEqual).
