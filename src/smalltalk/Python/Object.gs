@@ -1843,7 +1843,7 @@ __iter__
 	(test_collections.TestNamedTuple.test_defaults: ``tuple(False)'' must
 	raise TypeError to be caught by ``assertRaises'', not crash)."
 
-	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
+	TypeError ___signal___: ('''' @env0:, (self @env0:class @env1:__name__) @env0:asString
 		@env0:, ''' object is not iterable')
 %
 
