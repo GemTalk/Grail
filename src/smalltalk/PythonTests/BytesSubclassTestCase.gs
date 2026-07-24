@@ -112,6 +112,19 @@ testBytesMethodsAcceptBytesLikeArguments
 		self assert: ((self resultAt: key) = true) description: key]
 %
 
+category: 'Grail-Tests - whitespace split'
+method: BytesSubclassTestCase
+testWhitespaceSplitWithMaxsplit
+	"split(None, maxsplit) / rsplit(None, maxsplit) split on runs of ASCII
+	whitespace and honor maxsplit -- the piece after the split limit is kept
+	whole (leading whitespace stripped, internal/trailing retained); rsplit
+	counts from the right."
+
+	#('ws_split_1' 'ws_split_2' 'ws_split_0' 'ws_split_lead' 'ws_split_empty'
+	  'ws_split_none' 'ws_rsplit_1' 'ws_rsplit_2' 'ws_rsplit_pad') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
 category: 'Grail-Tests - base types'
 method: BytesSubclassTestCase
 testBaseTypesUnaffected

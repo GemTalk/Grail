@@ -1643,8 +1643,10 @@ rsplit: sep
 category: 'Grail-Splitting Methods'
 method: bytes
 rsplit: sep _: maxsplit
-	"Split from right with maximum number of splits"
+	"Split from right with maximum number of splits.  A None separator splits
+	on runs of ASCII whitespace, from the right (honoring maxsplit)."
 	| sepClass sepSize mySize parts positions i actualSplits lastEnd firstPart firstPartSize |
+	(sep @env0:== None) ifTrue: [^ self ___rsplitWhitespace___: maxsplit].
 	sepClass := sep @env0:class.
 
 	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
@@ -1833,8 +1835,10 @@ split: sep
 category: 'Grail-String-like Methods'
 method: bytes
 split: sep _: maxsplit
-	"Split bytes by separator with maximum number of splits"
+	"Split bytes by separator with maximum number of splits.  A None separator
+	splits on runs of ASCII whitespace (honoring maxsplit)."
 	| sepClass sepSize mySize parts currentPart i splitCount match |
+	(sep @env0:== None) ifTrue: [^ self ___splitWhitespace___: maxsplit].
 	sepClass := sep @env0:class.
 
 	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
@@ -2419,6 +2423,66 @@ ___splitWhitespace___
 			ifFalse: [nb := bytes ___new___: 1. nb @env0:at: 1 put: byte. current := current @env0:, nb]].
 	(current @env0:size @env0:> 0) ifTrue: [parts append: current].
 	^ parts
+%
+
+category: 'Grail-Splitting Methods'
+method: bytes
+___splitWhitespace___: maxsplit
+	"split(None, maxsplit): at most maxsplit splits on runs of ASCII
+	whitespace, from the LEFT.  The piece after the maxsplit-th token is kept
+	whole -- its leading whitespace stripped, internal/trailing retained.
+	maxsplit < 0 means unlimited."
+	| parts size i splits ws |
+	(maxsplit @env0:< 0) ifTrue: [^ self ___splitWhitespace___].
+	parts := list ___new___.
+	size := self @env0:size.
+	ws := #(9 10 11 12 13 32).
+	i := 1.
+	splits := 0.
+	[splits @env0:< maxsplit] @env0:whileTrue: [
+		| start |
+		[(i @env0:<= size) and: [ws @env0:includes: (self @env0:at: i)]] @env0:whileTrue: [i := i @env0:+ 1].
+		(i @env0:> size) ifTrue: [^ parts].
+		start := i.
+		[(i @env0:<= size) and: [(ws @env0:includes: (self @env0:at: i)) @env0:not]] @env0:whileTrue: [i := i @env0:+ 1].
+		parts append: (self @env0:copyFrom: start to: i @env0:- 1).
+		splits := splits @env0:+ 1].
+	"remainder: strip leading whitespace, keep the rest whole"
+	[(i @env0:<= size) and: [ws @env0:includes: (self @env0:at: i)]] @env0:whileTrue: [i := i @env0:+ 1].
+	(i @env0:<= size) ifTrue: [parts append: (self @env0:copyFrom: i to: size)].
+	^ parts
+%
+
+category: 'Grail-Splitting Methods'
+method: bytes
+___rsplitWhitespace___: maxsplit
+	"rsplit(None, maxsplit): like ___splitWhitespace___: but from the RIGHT --
+	the piece before the maxsplit-th token (counting from the end) is kept
+	whole (its trailing whitespace stripped, leading/internal retained).
+	maxsplit < 0 means unlimited (identical to split)."
+	| acc size i splits ws result done |
+	(maxsplit @env0:< 0) ifTrue: [^ self ___splitWhitespace___].
+	acc := OrderedCollection @env0:new.
+	size := self @env0:size.
+	ws := #(9 10 11 12 13 32).
+	i := size.
+	splits := 0.
+	done := false.
+	[(splits @env0:< maxsplit) and: [done @env0:not]] @env0:whileTrue: [
+		[(i @env0:>= 1) and: [ws @env0:includes: (self @env0:at: i)]] @env0:whileTrue: [i := i @env0:- 1].
+		(i @env0:< 1)
+			ifTrue: [done := true]
+			ifFalse: [ | stop |
+				stop := i.
+				[(i @env0:>= 1) and: [(ws @env0:includes: (self @env0:at: i)) @env0:not]] @env0:whileTrue: [i := i @env0:- 1].
+				acc @env0:add: (self @env0:copyFrom: i @env0:+ 1 to: stop).
+				splits := splits @env0:+ 1]].
+	"left remainder: strip trailing whitespace, keep whole"
+	[(i @env0:>= 1) and: [ws @env0:includes: (self @env0:at: i)]] @env0:whileTrue: [i := i @env0:- 1].
+	(i @env0:>= 1) ifTrue: [acc @env0:add: (self @env0:copyFrom: 1 to: i)].
+	result := list ___new___.
+	acc @env0:reverseDo: [:p | result append: p].
+	^ result
 %
 
 category: 'Grail-Splitting Methods'

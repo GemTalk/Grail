@@ -98,4 +98,16 @@ RESULTS = {
     'arg_eq_ba': b'ab' == bytearray(b'ab'),
     'arg_ctor_ba': bytes(bytearray(b'xyz')) == b'xyz',
     'arg_reject_str': _reject_str_arg(),
+
+    # --- split/rsplit with sep=None split on runs of ASCII whitespace,
+    # honoring maxsplit (the piece after the split limit is kept whole). ---
+    'ws_split_1': b'a b c d'.split(None, 1) == [b'a', b'b c d'],
+    'ws_split_2': b'a b c d'.split(None, 2) == [b'a', b'b', b'c d'],
+    'ws_split_0': b'a b c d'.split(None, 0) == [b'a b c d'],
+    'ws_split_lead': b'  a    b   c   '.split(None, 1) == [b'a', b'b   c   '],
+    'ws_split_empty': b'   '.split(None, 1) == [],
+    'ws_split_none': b' a  b '.split(None) == [b'a', b'b'],
+    'ws_rsplit_1': b'a b c d'.rsplit(None, 1) == [b'a b c', b'd'],
+    'ws_rsplit_2': b'a b c d'.rsplit(None, 2) == [b'a b', b'c', b'd'],
+    'ws_rsplit_pad': b'  a  b  c  '.rsplit(None, 1) == [b'  a  b', b'c'],
 }
