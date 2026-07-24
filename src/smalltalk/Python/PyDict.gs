@@ -1,6 +1,44 @@
 ! ------------------- Superclass check
 run
 KeyValueDictionary ifNil: [self error: 'KeyValueDictionary is not defined.'].
+CollisionBucket ifNil: [self error: 'CollisionBucket is not defined.'].
+%
+
+! ------- PyDictCollisionBucket — a collision bucket whose key comparison
+! defers to the owning PyDict's Python-aware compareKey:with:.  The kernel
+! CollisionBucket compares colliding keys with Smalltalk ``='', which would
+! bypass a key's Python __eq__ once two keys share a hash bucket (test_dict
+! test_str_nonstr: a str key colliding with a custom-__hash__ key).  PyDict
+! sets `collisionBucketClass` to this so bucket lookups stay Python-correct.
+expectvalue /Class
+doit
+CollisionBucket subclass: 'PyDictCollisionBucket'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Metaclass3
+doit
+PyDictCollisionBucket removeAllMethods: 0.
+PyDictCollisionBucket removeAllMethods: 1.
+%
+
+set compile_env: 0
+
+category: 'Grail-Hashing'
+method: PyDictCollisionBucket
+compareKey: key1 with: key2
+	"Compare colliding keys via the owning PyDict's compareKey:with: (Python
+	__eq__ for PythonInstance keys), so a custom __eq__ is honored inside a
+	collision bucket -- the kernel default is Smalltalk ``=''.  Falls back to
+	``='' if the owning dict is somehow unset."
+
+	keyValueDictionary ifNil: [^ key1 = key2].
+	^ keyValueDictionary compareKey: key1 with: key2
 %
 
 ! ------- PyDict — the Python 'dict' type: a KeyValueDictionary that
@@ -155,6 +193,16 @@ compareKey: aKey with: hashKey
 			aKey == hashKey ifTrue: [^ true].
 			^ hashKey @env1:___pyRichEqBool___: aKey].
 	^ super compareKey: aKey with: hashKey
+%
+
+category: 'Grail-Hashing'
+method: PyDict
+collisionBucketClass
+	"Collision buckets must compare keys the same way this dict does (Python
+	__eq__ for PythonInstance keys), so use a bucket that defers to our
+	compareKey:with: rather than the kernel's Smalltalk-``='' bucket."
+
+	^ PyDictCollisionBucket
 %
 
 ! ------------------- mutators (maintain order; guard with O(1) includesKey:)
