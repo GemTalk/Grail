@@ -195,17 +195,29 @@ __neg__
 category: 'Grail-Arithmetic'
 method: PyTimedelta
 __mul__: scale
+	(scale isKindOf: Number) ifFalse: [^ #'___NotImplemented___'].
 	^ PyTimedelta @env0:___fromTotalMicros___:
 		(self ___totalMicros___ @env0:* scale) @env0:truncated
 %
 
 category: 'Grail-Arithmetic'
 method: PyTimedelta
+__pos__
+	"Unary plus returns self (CPython)."
+
+	^ self
+%
+
+category: 'Grail-Arithmetic'
+method: PyTimedelta
 __truediv__: other
-	"td / td -> float; td / number -> td."
+	"td / td -> float; td / number -> td.  Zero divisor -> ZeroDivisionError."
 
 	(other isKindOf: PyTimedelta) ifTrue: [
+		other ___totalMicros___ @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
 		^ (self ___totalMicros___ @env0:/ other ___totalMicros___) @env0:asFloat].
+	(other isKindOf: Number) ifFalse: [^ #'___NotImplemented___'].
+	other @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
 	^ PyTimedelta @env0:___fromTotalMicros___:
 		(self ___totalMicros___ @env0:/ other) @env0:rounded
 %
@@ -213,20 +225,52 @@ __truediv__: other
 category: 'Grail-Arithmetic'
 method: PyTimedelta
 __floordiv__: other
-	"td // td -> int; td // number -> td."
+	"td // td -> int; td // number -> td.  Zero divisor -> ZeroDivisionError."
 
 	(other isKindOf: PyTimedelta) ifTrue: [
+		other ___totalMicros___ @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
 		^ self ___totalMicros___ @env0:// other ___totalMicros___].
+	(other isKindOf: Number) ifFalse: [^ #'___NotImplemented___'].
+	other @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
 	^ PyTimedelta @env0:___fromTotalMicros___: (self ___totalMicros___ @env0:// other)
 %
 
 category: 'Grail-Arithmetic'
 method: PyTimedelta
 __mod__: other
-	"td % td -> td."
+	"td % td -> td (only a timedelta divisor is valid).  Zero -> ZeroDivisionError."
 
+	(other isKindOf: PyTimedelta) ifFalse: [^ #'___NotImplemented___'].
+	other ___totalMicros___ @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
 	^ PyTimedelta @env0:___fromTotalMicros___:
 		(self ___totalMicros___ @env0:\\ other ___totalMicros___)
+%
+
+category: 'Grail-Arithmetic'
+method: PyTimedelta
+__radd__: other
+	"other + self (addition commutes for timedeltas)."
+
+	^ self __add__: other
+%
+
+category: 'Grail-Arithmetic'
+method: PyTimedelta
+__rsub__: other
+	"other - self."
+
+	(other isKindOf: PyTimedelta) ifTrue: [
+		^ PyTimedelta @env0:___fromTotalMicros___:
+			(other ___totalMicros___ @env0:- self ___totalMicros___)].
+	^ TypeError ___signal___: 'unsupported operand for -'
+%
+
+category: 'Grail-Arithmetic'
+method: PyTimedelta
+__rmul__: scale
+	"scale * self (multiplication commutes)."
+
+	^ self __mul__: scale
 %
 
 category: 'Grail-Arithmetic'
@@ -241,13 +285,17 @@ __abs__
 category: 'Grail-Equality'
 method: PyTimedelta
 __eq__: other
-	(other isKindOf: PyTimedelta) ifFalse: [^ false].
+	"NotImplemented (not false) for a non-timedelta, so the reflected
+	comparison runs (e.g. ALWAYS_EQ == timedelta is True)."
+
+	(other isKindOf: PyTimedelta) ifFalse: [^ #'___NotImplemented___'].
 	^ self ___totalMicros___ @env0:= other ___totalMicros___
 %
 
 category: 'Grail-Equality'
 method: PyTimedelta
 __lt__: other
+	(other isKindOf: PyTimedelta) ifFalse: [^ #'___NotImplemented___'].
 	^ self ___totalMicros___ @env0:< other ___totalMicros___
 %
 
@@ -282,38 +330,42 @@ __qualname__
 	^ 'timedelta'
 %
 
+category: 'Grail-Introspection'
+classmethod: PyTimedelta
+__name__
+	"CPython name is 'timedelta', not the Smalltalk class name."
+
+	^ 'timedelta'
+%
+
 category: 'Grail-Conversion'
 method: PyTimedelta
 __str__
 	"Roughly CPython's repr: e.g. '1 day, 3:04:05.000006'."
 
-	| stream absMicros days hours mins secs us usStr |
+	| days secs us stream hh mm ss usStr |
+	"Format from the normalized fields: days is signed, 0<=seconds<86400,
+	0<=microseconds<1e6.  A negative delta shows a negative day count with
+	a POSITIVE time-of-day (e.g. timedelta(-1) -> '-1 day, 0:00:00')."
+	days := self @env0:dynamicInstVarAt: #_days.
+	secs := self @env0:dynamicInstVarAt: #_seconds.
+	us := self @env0:dynamicInstVarAt: #_microseconds.
+	hh := secs @env0:// 3600.
+	mm := (secs @env0:\\ 3600) @env0:// 60.
+	ss := secs @env0:\\ 60.
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
-	absMicros := self ___totalMicros___.
-	absMicros @env0:< 0 ifTrue: [
-		stream @env0:nextPutAll: '-'.
-		absMicros := absMicros @env0:negated
-	].
-	days := absMicros @env0:// 86400000000.
-	absMicros := absMicros @env0:\\ 86400000000.
-	hours := absMicros @env0:// 3600000000.
-	absMicros := absMicros @env0:\\ 3600000000.
-	mins := absMicros @env0:// 60000000.
-	absMicros := absMicros @env0:\\ 60000000.
-	secs := absMicros @env0:// 1000000.
-	us := absMicros @env0:\\ 1000000.
-	days @env0:= 0 ifFalse: [
+	days @env0:~= 0 ifTrue: [
 		stream @env0:nextPutAll: days @env0:printString.
-		stream @env0:nextPutAll: (days @env0:= 1 ifTrue: [' day, '] ifFalse: [' days, '])
+		stream @env0:nextPutAll: ((days @env0:abs @env0:= 1) ifTrue: [' day, '] ifFalse: [' days, '])
 	].
-	stream @env0:nextPutAll: hours @env0:printString.
+	stream @env0:nextPutAll: hh @env0:printString.
 	stream @env0:nextPut: $:.
-	mins @env0:< 10 ifTrue: [stream @env0:nextPut: $0].
-	stream @env0:nextPutAll: mins @env0:printString.
+	mm @env0:< 10 ifTrue: [stream @env0:nextPut: $0].
+	stream @env0:nextPutAll: mm @env0:printString.
 	stream @env0:nextPut: $:.
-	secs @env0:< 10 ifTrue: [stream @env0:nextPut: $0].
-	stream @env0:nextPutAll: secs @env0:printString.
-	us @env0:= 0 ifFalse: [
+	ss @env0:< 10 ifTrue: [stream @env0:nextPut: $0].
+	stream @env0:nextPutAll: ss @env0:printString.
+	us @env0:~= 0 ifTrue: [
 		stream @env0:nextPut: $..
 		usStr := us @env0:printString.
 		[usStr @env0:size @env0:< 6] @env0:whileTrue: [usStr := '0' @env0:, usStr].
@@ -325,25 +377,31 @@ __str__
 category: 'Grail-Equality'
 method: PyTimedelta
 __le__: other
+	(other isKindOf: PyTimedelta) ifFalse: [^ #'___NotImplemented___'].
 	^ self ___totalMicros___ @env0:<= other ___totalMicros___
 %
 
 category: 'Grail-Equality'
 method: PyTimedelta
 __gt__: other
+	(other isKindOf: PyTimedelta) ifFalse: [^ #'___NotImplemented___'].
 	^ self ___totalMicros___ @env0:> other ___totalMicros___
 %
 
 category: 'Grail-Equality'
 method: PyTimedelta
 __ge__: other
+	(other isKindOf: PyTimedelta) ifFalse: [^ #'___NotImplemented___'].
 	^ self ___totalMicros___ @env0:>= other ___totalMicros___
 %
 
 category: 'Grail-Equality'
 method: PyTimedelta
 __ne__: other
-	^ (self __eq__: other) @env0:not
+	| eq |
+	eq := self __eq__: other.
+	(eq @env0:== #'___NotImplemented___') ifTrue: [^ eq].
+	^ eq @env0:not
 %
 
 category: 'Grail-Conversion'
@@ -507,8 +565,13 @@ utc
 category: 'Grail-Initialization'
 classmethod: PyTimezone
 __new__: tdelta
-	"timezone(offset) constructor."
+	"timezone(offset) constructor.  A zero offset with no name returns the
+	canonical utc singleton (CPython interns timezone(timedelta(0)) as utc)."
 
+	(tdelta ___totalMicros___ @env0:= 0) ifTrue: [^ PyTimezone utc].
+	(tdelta ___totalMicros___) @env0:abs @env0:> 86399999999 ifTrue: [
+		^ ValueError ___signal___:
+			'offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24).'].
 	^ self @env0:new @env0:_offset: tdelta _name: nil
 %
 
@@ -517,6 +580,9 @@ classmethod: PyTimezone
 __new__: tdelta _: aName
 	"timezone(offset, name) constructor."
 
+	(tdelta ___totalMicros___) @env0:abs @env0:> 86399999999 ifTrue: [
+		^ ValueError ___signal___:
+			'offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24).'].
 	^ self @env0:new @env0:_offset: tdelta _name: aName
 %
 
@@ -553,6 +619,48 @@ fromutc: dt
 	^ dt __add__: (self @env0:dynamicInstVarAt: #_offset)
 %
 
+category: 'Grail-Abstract'
+method: PyTzinfo
+utcoffset: dt
+	"Abstract: a tzinfo subclass must override utcoffset()."
+
+	^ NotImplementedError ___signal___: 'tzinfo subclass must override utcoffset()'
+%
+
+category: 'Grail-Abstract'
+method: PyTzinfo
+tzname: dt
+	^ NotImplementedError ___signal___: 'tzinfo subclass must override tzname()'
+%
+
+category: 'Grail-Abstract'
+method: PyTzinfo
+dst: dt
+	^ NotImplementedError ___signal___: 'tzinfo subclass must override dst()'
+%
+
+category: 'Grail-Abstract'
+method: PyTzinfo
+fromutc: dt
+	"Default tzinfo.fromutc (CPython): shift a UTC datetime tagged with
+	self into local time via utcoffset()/dst()."
+
+	| dtoff dtdst delta d |
+	d := dt.
+	(d tzinfo @env0:== self) ifFalse: [^ ValueError ___signal___: 'dt.tzinfo is not self'].
+	dtoff := d utcoffset.
+	dtdst := d dst.
+	(dtoff @env0:== None or: [dtdst @env0:== None]) ifTrue: [
+		^ ValueError ___signal___: 'fromutc() requires a non-None utcoffset() result'].
+	delta := dtoff __sub__: dtdst.
+	(delta __bool__) ifTrue: [
+		d := d __add__: delta.
+		dtdst := d dst.
+		dtdst @env0:== None ifTrue: [
+			^ ValueError ___signal___: 'fromutc(): dt.dst gave inconsistent results; cannot convert']].
+	^ d __add__: dtdst
+%
+
 category: 'Grail-Accessors'
 method: PyTimezone
 __str__
@@ -562,21 +670,34 @@ __str__
 category: 'Grail-Private'
 method: PyTimezone
 ___formatOffset___: tdelta
-	| total stream hours mins sign |
-	total := tdelta total_seconds @env0:truncated.
-	total @env0:= 0 ifTrue: [^ 'UTC'].
+	"CPython _name_from_offset: 'UTC±HH:MM', extended with ':SS' and
+	'.ffffff' when the offset has a seconds / microseconds component."
+
+	| micros stream sign hh mm ss us pad |
+	micros := tdelta ___totalMicros___.
+	micros @env0:= 0 ifTrue: [^ 'UTC'].
+	pad := [:n | | s | s := n @env0:printString. s @env0:size @env0:< 2 ifTrue: ['0' @env0:, s] ifFalse: [s]].
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
 	stream @env0:nextPutAll: 'UTC'.
-	sign := total @env0:< 0 ifTrue: [$-] ifFalse: [$+].
+	sign := micros @env0:< 0 ifTrue: [$-] ifFalse: [$+].
 	stream @env0:nextPut: sign.
-	total := total @env0:abs.
-	hours := total @env0:// 3600.
-	mins := (total @env0:\\ 3600) @env0:// 60.
-	hours @env0:< 10 ifTrue: [stream @env0:nextPut: $0].
-	stream @env0:nextPutAll: hours @env0:printString.
+	micros := micros @env0:abs.
+	hh := micros @env0:// 3600000000.
+	mm := (micros @env0:\\ 3600000000) @env0:// 60000000.
+	ss := (micros @env0:\\ 60000000) @env0:// 1000000.
+	us := micros @env0:\\ 1000000.
+	stream @env0:nextPutAll: (pad @env0:value: hh).
 	stream @env0:nextPut: $:.
-	mins @env0:< 10 ifTrue: [stream @env0:nextPut: $0].
-	stream @env0:nextPutAll: mins @env0:printString.
+	stream @env0:nextPutAll: (pad @env0:value: mm).
+	(ss @env0:~= 0 or: [us @env0:~= 0]) ifTrue: [
+		stream @env0:nextPut: $:.
+		stream @env0:nextPutAll: (pad @env0:value: ss).
+		us @env0:~= 0 ifTrue: [
+			| usStr |
+			stream @env0:nextPut: $..
+			usStr := us @env0:printString.
+			[usStr @env0:size @env0:< 6] @env0:whileTrue: [usStr := '0' @env0:, usStr].
+			stream @env0:nextPutAll: usStr]].
 	^ stream @env0:contents
 %
 
@@ -584,16 +705,20 @@ category: 'Grail-Equality'
 method: PyTimezone
 __eq__: other
 	"Two timezones are equal iff their offsets are equal (CPython
-	compares offset only, not name)."
+	compares offset only, not name).  NotImplemented for a non-timezone
+	so the reflected comparison runs (e.g. ALWAYS_EQ == tz)."
 
-	(other isKindOf: PyTimezone) ifFalse: [^ false].
+	(other isKindOf: PyTimezone) ifFalse: [^ #'___NotImplemented___'].
 	^ (self @env0:dynamicInstVarAt: #_offset) __eq__: (other @env0:dynamicInstVarAt: #_offset)
 %
 
 category: 'Grail-Equality'
 method: PyTimezone
 __ne__: other
-	^ (self __eq__: other) @env0:not
+	| eq |
+	eq := self __eq__: other.
+	(eq @env0:== #'___NotImplemented___') ifTrue: [^ eq].
+	^ eq @env0:not
 %
 
 category: 'Grail-Equality'
@@ -605,9 +730,15 @@ __hash__
 category: 'Grail-Pickle'
 method: PyTimezone
 __reduce__
-	"(class, (offset[, name]))."
+	"(class, (offset[, name])).  The utc singleton pickles with offset ONLY
+	so it re-interns to timezone.utc on unpickling (timezone(timedelta(0))
+	is utc), preserving identity."
 
 	| name fields |
+	(self @env0:== (PyTimezone utc)) ifTrue: [
+		^ tuple @env0:withAll: {
+			(self @env0:class).
+			(tuple @env0:withAll: { (self @env0:dynamicInstVarAt: #_offset) }) }].
 	name := self @env0:dynamicInstVarAt: #_name.
 	fields := OrderedCollection @env0:new.
 	fields @env0:add: (self @env0:dynamicInstVarAt: #_offset).
@@ -626,6 +757,12 @@ __module__
 category: 'Grail-Introspection'
 classmethod: PyTimezone
 __qualname__
+	^ 'timezone'
+%
+
+category: 'Grail-Introspection'
+classmethod: PyTimezone
+__name__
 	^ 'timezone'
 %
 
@@ -1367,6 +1504,12 @@ __qualname__
 	^ 'datetime'
 %
 
+category: 'Grail-Introspection'
+classmethod: PyDateTime
+__name__
+	^ 'datetime'
+%
+
 category: 'Grail-Class Attrs'
 classmethod: PyDateTime
 resolution
@@ -1917,6 +2060,12 @@ __qualname__
 	^ 'date'
 %
 
+category: 'Grail-Introspection'
+classmethod: PyDate
+__name__
+	^ 'date'
+%
+
 category: 'Grail-Class Attrs'
 classmethod: PyDate
 min
@@ -2354,6 +2503,12 @@ __qualname__
 	^ 'time'
 %
 
+category: 'Grail-Introspection'
+classmethod: PyTime
+__name__
+	^ 'time'
+%
+
 category: 'Grail-Class Attrs'
 classmethod: PyTime
 min
@@ -2441,6 +2596,7 @@ ___pythonValueAttrs___
 		add: #UTC;
 		add: #MINYEAR;
 		add: #MAXYEAR;
+		add: #'__all__';
 		yourself
 %
 
@@ -2508,6 +2664,14 @@ UTC
 	"datetime.UTC — alias for timezone.utc (added in CPython 3.11)."
 
 	^ PyTimezone utc
+%
+
+category: 'Grail-Introspection'
+method: datetime
+__all__
+	^ tuple @env0:withAll: {
+		'date'. 'datetime'. 'time'. 'timedelta'. 'timezone'. 'tzinfo'.
+		'MINYEAR'. 'MAXYEAR'. 'UTC' }
 %
 
 set compile_env: 0

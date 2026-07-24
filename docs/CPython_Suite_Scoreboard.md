@@ -2,9 +2,9 @@
 
 Generated: 2026-07-24T19:51:00Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
 
-**Modules: 19** — OK 12 · FAIL 0 · ERROR 6 · SKIP 1 · IMPORTERROR 0 · STERROR 0 · CRASH 0 · TIMEOUT 0
+**Modules: 19** — OK 12 · FAIL 0 · ERROR 7 · SKIP 0 · IMPORTERROR 0 · STERROR 0 · CRASH 0 · TIMEOUT 0
 
-**Totals:** tests=3510 failures=518 errors=382 skipped=141
+**Totals:** tests=3568 failures=535 errors=393 skipped=141
 
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
@@ -22,7 +22,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_bisect | OK | 46 | 0 | 0 | 0 |  |
 | test.test_operator | OK | 110 | 0 | 0 | 0 |  |
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
-| test.test_datetime | SKIP | 0 | 0 | 0 | 0 |  |
+| test.test_datetime | ERROR | 58 | 17 | 11 | 0 | 30 pass; Grail-trimmed subset (TestModule/TZInfo/TimeZone/TimeDelta) vs native datetime |
 | test.test_re | OK | 165 | 0 | 0 | 28 |  |
 | test.test_functools | ERROR | 325 | 93 | 83 | 2 |  |
 | test.test_list | OK | 68 | 0 | 0 | 3 |  |
