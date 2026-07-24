@@ -81,7 +81,7 @@ printSmalltalkRuntimeOn: aStream
 	  savedSelfParam savedClassAttrNames settersByName
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames
 	  savedInBodyEmit savedBoundNames savedNestedNames
-	  savedCapturedNames |
+	  savedCapturedNames savedCapturedWriteNames |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -167,6 +167,8 @@ printSmalltalkRuntimeOn: aStream
 
 	savedCapturedNames := CallAst classCapturedNames.
 	CallAst classCapturedNames: IdentitySet new.
+	savedCapturedWriteNames := CallAst classCapturedWriteNames.
+	CallAst classCapturedWriteNames: IdentitySet new.
 	methodSources := OrderedCollection new.
 	classMethodSources := OrderedCollection new.
 	staticMethodSources := OrderedCollection new.
@@ -1100,7 +1102,38 @@ printSmalltalkRuntimeOn: aStream
 						savedCapturedNames add: cap asSymbol]
 					ifFalse: [aStream nextPutAll: cap asString].
 				aStream nextPutAll: '].'; lf]].
+	"SETTER CELLS: for every enclosing-function local a method body ASSIGNS
+	(``nonlocal x; x = ...''), store a one-arg block that writes the binding
+	BY REFERENCE, so the mutation reaches the enclosing scope (a method
+	string-compiles with no lexical link to the outer temp, so it cannot
+	assign it directly -- test_dict test_str_nonstr's Key3.__eq__ doing
+	``nonlocal eq_count; eq_count += 1'').  Same enclosing-scope resolution as
+	the reader above: bare temp at the binding scope, else forward through the
+	enclosing method's own setter cell (registering on the enclosing class)."
+	(CallAst classCapturedWriteNames notNil and: [CallAst classCapturedWriteNames notEmpty])
+		ifTrue: [
+			CallAst classCapturedWriteNames do: [:cap |
+				aStream
+					nextPutAll: name;
+					nextPutAll: ' @env1:___pyAttrStore___: #''___cellSetter_';
+					nextPutAll: cap asString;
+					nextPutAll: '___'' put: [:___cellSetVal___ | '.
+				((self ___enclosingFunctionLocalBeyondClass___: cap asSymbol)
+					and: [savedCapturedWriteNames notNil])
+					ifTrue: [
+						aStream
+							nextPutAll: '(self @env1:___classCellSetter___: #''___cellSetter_';
+							nextPutAll: cap asString;
+							nextPutAll: '___'') value: ___cellSetVal___].';
+							lf.
+						savedCapturedWriteNames add: cap asSymbol]
+					ifFalse: [
+						aStream
+							nextPutAll: cap asString;
+							nextPutAll: ' := ___cellSetVal___].';
+							lf]]].
 	CallAst classCapturedNames: savedCapturedNames.
+	CallAst classCapturedWriteNames: savedCapturedWriteNames.
 
 	"Phase A: close the wrapping block (opened at the top of this
 	method) and store the final class object into the module

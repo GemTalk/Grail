@@ -1388,6 +1388,32 @@ addCapturedClassName: aSymbol
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classCapturedWriteNames
+	"Enclosing-function locals ASSIGNED (``nonlocal x; x = ...'') from the
+	CLASS-METHOD bodies being generated.  A write needs a MUTABLE cell, so
+	ClassDefAst emits, in addition to the ___cell_<name>___ reader, a
+	___cellSetter_<name>___ one-arg block ``[:v | <name> := v]'' that writes
+	the enclosing binding by reference.  AugAssignAst / AssignAst add names as
+	they emit setter-cell stores.  nil outside a class compile."
+
+	^ self ___compileContext___ at: #'classCapturedWriteNames' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classCapturedWriteNames: aSetOrNil
+	self ___compileContext___ at: #'classCapturedWriteNames' put: aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+addCapturedWriteName: aSymbol
+	self classCapturedWriteNames == nil ifTrue: [self classCapturedWriteNames: IdentitySet new].
+	self classCapturedWriteNames add: aSymbol asSymbol
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 classNestedClassNames
 	"Names bound by NESTED classdefs in the class body being compiled.
 	They live in the outer class's per-class DYNAMIC attr store (no
