@@ -689,10 +689,22 @@ method: dict
 update: other
 	"Update the dictionary with key/value pairs from other, overwriting existing keys"
 
-	| keysMethod keysIter iter done k idx |
+	| keysMethod keysIter iter done k idx ver pairs |
 	(other isKindOf: KeyValueDictionary) ifTrue: [
+		"CPython raises RuntimeError if `other` is structurally mutated while it
+		is being merged -- a key's __eq__/__hash__, run as THIS dict inserts,
+		can clear or resize `other` (test_dict test_merge_and_mutate).  Snapshot
+		the pairs first (so the live-storage walk can't fault on the mutation),
+		then insert, re-checking `other`'s structural version after each step."
+		ver := (other @env0:respondsTo: #'___version___')
+			ifTrue: [other @env0:___version___] ifFalse: [nil].
+		pairs := OrderedCollection @env0:new.
 		other @env0:keysAndValuesDo: [:key :value |
-			self @env0:at: key put: value].
+			pairs @env0:add: key. pairs @env0:add: value].
+		1 @env0:to: (pairs @env0:size @env0:- 1) by: 2 do: [:i |
+			self @env0:at: (pairs @env0:at: i) put: (pairs @env0:at: i @env0:+ 1).
+			(ver @env0:notNil @env0:and: [(other @env0:___version___) @env0:~= ver]) ifTrue: [
+				^ RuntimeError ___signal___: 'dictionary changed size during iteration']].
 		^ None].
 	"Python mapping protocol: other exposes keys + __getitem__
 	(PyInstanceDict, user mappings) -- mirrors ___fromMapping___."
