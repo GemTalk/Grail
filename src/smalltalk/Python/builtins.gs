@@ -289,6 +289,14 @@ chr: anInteger
 	whole test_re module run via test_bigcharset).  Raise a catchable
 	ValueError at the source instead."
 
+	(anInteger @env0:< 0 or: [anInteger @env0:> 16r10FFFF]) ifTrue: [
+		"CPython raises ValueError for a codepoint outside 0..0x10FFFF;
+		without this guard Character codePoint: raises an UNCATCHABLE Smalltalk
+		OutOfRange (error 2723), which escaped as an ST error rather than the
+		re parser's expected `bad escape` PatternError -- the parser probes
+		chr(c) precisely to catch that ValueError (test_re
+		test_sre_character_literals / _class_literals: \U00110000)."
+		ValueError ___signal___: 'chr() arg not in range(0x110000)'].
 	(anInteger @env0:>= 16rD800 and: [anInteger @env0:<= 16rDFFF]) ifTrue: [
 		ValueError ___signal___: 'chr() arg is a lone surrogate, which Grail strings cannot represent'].
 	^ (Character @env0:codePoint: anInteger) @env0:asString
