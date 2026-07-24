@@ -188,10 +188,14 @@ compareKey: aKey with: hashKey
 	involved; otherwise the kernel's Smalltalk ``=''.  ``aKey'' is the probe
 	key, ``hashKey'' the stored key; compare stored-first like CPython."
 
-	((aKey isKindOf: PythonInstance) or: [hashKey isKindOf: PythonInstance])
-		ifTrue: [
-			aKey == hashKey ifTrue: [^ true].
-			^ hashKey @env1:___pyRichEqBool___: aKey].
+	aKey == hashKey ifTrue: [^ true].
+	"Consult the CUSTOM (PythonInstance) side's __eq__.  A built-in's __eq__
+	(str/int) does not reflect to a custom operand, so a str key stored against
+	a custom-__eq__ probe -- or the reverse -- must be compared from the
+	PythonInstance side (test_str_nonstr: Key3 == 'key3' / StrSub('key3')).  A
+	raising __eq__ propagates (test_bad_key)."
+	(aKey isKindOf: PythonInstance) ifTrue: [^ aKey @env1:___pyRichEqBool___: hashKey].
+	(hashKey isKindOf: PythonInstance) ifTrue: [^ hashKey @env1:___pyRichEqBool___: aKey].
 	^ super compareKey: aKey with: hashKey
 %
 
