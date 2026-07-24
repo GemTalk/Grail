@@ -560,16 +560,18 @@ testEqualsRational
 	"float == Fraction reflects to Fraction.__eq__ (CPython's == falls back to
 	the RHS when the LHS type can't compare), so a float equals a numerically
 	equal Fraction on EITHER side (was False: kernel = cannot compare a Float
-	to a PythonInstance Fraction).  != derives from __eq__ so distinct-but-equal
-	Fractions are NOT unequal (the object default's identity fall-through used
-	to miss a compiled __eq__).  int(Fraction) truncates toward zero via the
-	vendored __int__ (the ___int__:kw: varargs selector)."
+	to a PythonInstance Fraction).  != derives from __eq__ (via Float>>__ne__:
+	delegating to (self __eq__: other) not, rather than a raw kernel ~=, which
+	disagreed with __eq__: for exactly this cross-type case) so distinct-but-
+	equal Fractions are NOT unequal, and a float that DOES equal a Fraction is
+	NOT != it either.  int(Fraction) truncates toward zero via the vendored
+	__int__ (the ___int__:kw: varargs selector)."
 
 	self assert: (self eval: 'from fractions import Fraction as F
 [0.40625 == F(13, 32), F(13, 32) == 0.40625, 0.5 == F(13, 32),
  F(-4) != F(-4), F(-4) != -4, 0.40625 != F(13, 32), int(F(7, 2)), int(F(-7, 2))]')
 		@env1:__repr__
-		equals: '[True, True, False, False, False, True, 3, -3]'
+		equals: '[True, True, False, False, False, False, 3, -3]'
 %
 
 category: 'Grail-Tests - Float Methods'
