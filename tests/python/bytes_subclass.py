@@ -134,6 +134,63 @@ def _set_slice_backward():
     return list(b) == [0, 1, 2, 42, 42, 42, 3, 4, 5, 6, 7, 8, 9]
 
 
+class _Idx:
+    def __init__(self, value): self.value = value
+    def __index__(self): return self.value
+
+def _setitem_index_value():
+    b = bytearray([1, 2, 3]); b[0] = _Idx(10); return list(b) == [10, 2, 3]
+
+def _setitem_index_position():
+    b = bytearray([1, 2, 3]); b[_Idx(1)] = 9; return list(b) == [1, 9, 3]
+
+def _setitem_neg_value_raises():
+    b = bytearray([1, 2, 3])
+    try: b[0] = _Idx(-1); return False
+    except ValueError: return True
+
+def _setitem_object_value_raises():
+    b = bytearray([1, 2, 3])
+    try: b[0] = object(); return False
+    except TypeError: return True
+
+def _setitem_oob_raises():
+    b = bytearray([1, 2, 3])
+    try: b[3] = 0; return False
+    except IndexError: return True
+
+def _mutating_index_oob():
+    # index.__index__ clears the buffer -> index 0 is now out of range
+    class Boom:
+        def __index__(self): b.clear(); return 0
+    b = bytearray(b'hello')
+    try: b[Boom()] = 65; return False
+    except IndexError: return True
+
+def _mutating_value_oob():
+    # value.__index__ clears the buffer AFTER the index bounds check
+    # (gh-91153); bounds must be re-checked -> IndexError.
+    class Boom:
+        def __index__(self): b.clear(); return 0
+    b = bytearray(b'hello')
+    try: b[0] = Boom(); return False
+    except IndexError: return True
+
+def _ctor_index_oob_raises(v):
+    try: bytes([_Idx(v)]); return False
+    except ValueError: return True
+
+def _ctor_reject_elem(x):
+    try: bytes([x]); return False
+    except TypeError: return True
+
+def _ctor_source_index_raises():
+    class BadInt:
+        def __index__(self): 1 / 0
+    try: bytes(BadInt()); return False
+    except ZeroDivisionError: return True
+
+
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
     'bytes_type_is_subclass': type(MyBytes(b'abc')) is MyBytes,
@@ -295,4 +352,26 @@ RESULTS = {
     'del_slice_big': _del_slice_big(),
     'del_slice_backward': _del_slice_backward(),
     'set_slice_backward': _set_slice_backward(),
+
+    # --- __index__ coercion: setitem value and index position, the bytes/
+    # bytearray constructor's elements, and an __index__ source used as a
+    # count -- with CPython's error kinds (ValueError out of range, TypeError
+    # for a non-__index__, IndexError for out-of-bounds, and a raising
+    # __index__ propagating its own exception). ---
+    'setitem_index_value': _setitem_index_value(),
+    'setitem_index_position': _setitem_index_position(),
+    'setitem_neg_value_raises': _setitem_neg_value_raises(),
+    'setitem_object_value_raises': _setitem_object_value_raises(),
+    'setitem_oob_raises': _setitem_oob_raises(),
+    'mutating_index_oob': _mutating_index_oob(),
+    'mutating_value_oob': _mutating_value_oob(),
+    'ctor_from_index': list(bytes([_Idx(0), _Idx(1), _Idx(254), _Idx(255)])) == [0, 1, 254, 255],
+    'ctor_from_index_bytearray': list(bytearray([_Idx(7)])) == [7],
+    'ctor_index_neg_raises': _ctor_index_oob_raises(-1),
+    'ctor_index_256_raises': _ctor_index_oob_raises(256),
+    'ctor_reject_str_elem': _ctor_reject_elem('0'),
+    'ctor_reject_float_elem': _ctor_reject_elem(0.0),
+    'ctor_reject_none_elem': _ctor_reject_elem(None),
+    'ctor_source_index': bytes(_Idx(5)) == b'\x00\x00\x00\x00\x00',
+    'ctor_source_index_raises': _ctor_source_index_raises(),
 }

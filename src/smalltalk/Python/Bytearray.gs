@@ -82,85 +82,12 @@ __new__
 	^ self ___new___
 %
 
-category: 'Grail-Constructors'
-classmethod: bytearray
-__new__: source
-	"bytearray(source) — create bytearray from various sources.
-	Receiver is the class."
-
-	| result sourceClass |
-	sourceClass := source @env0:class.
-
-	"If source is an integer, create bytearray of that size filled with zeros"
-	sourceClass == SmallInteger ifTrue: [
-		(source @env0:< 0) ifTrue: [
-			ValueError ___signal___: 'negative count'
-		].
-		^ self ___new___: source
-	].
-
-	"If source is a string, raise TypeError (need encoding)"
-	(source isKindOf: String) ifTrue: [
-		TypeError ___signal___: 'string argument without an encoding'
-	].
-
-	"If source is bytes or bytearray, make a copy"
-	((sourceClass == bytes) or: [
-		sourceClass == bytearray
-	]) ifTrue: [
-		result := self ___new___: (source @env0:size).
-		1 @env0:to: source @env0:size do: [:i |
-			result @env0:at: i put: (source @env0:at: i)
-		].
-		^ result
-	].
-
-	"If source is a list, tuple, or array, convert elements to bytes"
-	((sourceClass == list) or: [
-		(sourceClass == tuple) or: [
-			sourceClass == Array
-		]
-	]) ifTrue: [
-		| ba size |
-		size := source @env0:size.
-		ba := self ___new___: size.
-		1 @env0:to: size do: [:i |
-			| elem val |
-			elem := source @env0:at: i.
-			val := elem.
-			"Validate byte value (0-255)"
-			((val @env0:< 0) or: [
-				val @env0:> 255
-			]) ifTrue: [
-				ValueError ___signal___: 'bytes must be in range(0, 256)'
-			].
-			ba @env0:at: i put: val
-		].
-		^ ba
-	].
-
-	"If source is a range, convert to bytearray"
-	(sourceClass == Interval) ifTrue: [
-		| ba size |
-		size := source @env0:size.
-		ba := self ___new___: size.
-		1 @env0:to: size do: [:i |
-			| val |
-			val := source @env0:at: i.
-			"Validate byte value (0-255)"
-			((val @env0:< 0) or: [
-				val @env0:> 255
-			]) ifTrue: [
-				ValueError ___signal___: 'bytes must be in range(0, 256)'
-			].
-			ba @env0:at: i put: val
-		].
-		^ ba
-	].
-
-	"Default: empty bytearray"
-	^ self ___new___
-%
+! bytearray(source) intentionally has NO 1-arg __new__: override -- it inherits
+! the self-typed bytes>>__new__: source (which builds via ``self ___new___:'', so
+! the receiver class bytearray is instantiated here).  That shared constructor
+! handles ints, bytes-likes, sequences, general iterables, __index__ elements /
+! __index__ count-source, and their CPython error kinds; duplicating it here let
+! bytearray drift (old empty fall-through + no __index__ coercion).
 
 category: 'Grail-Constructors'
 classmethod: bytearray
@@ -312,38 +239,36 @@ __imul__: count
 category: 'Grail-Sequence Protocol'
 method: bytearray
 __setitem__: index _: value
-	"Set byte at index, or assign to a slice (mutable)."
+	"Set the byte at an index, or assign to a slice (mutable)."
 	| idx size val |
-	size := self @env0:size.
 
 	"Slice assignment: bytearray[i:j[:k]] = bytes-like."
 	(index isKindOf: slice) ifTrue: [
-		^ self ___setSliceItem: index value: value size: size
+		^ self ___setSliceItem: index value: value size: self @env0:size
 	].
 
-	idx := index.
-	val := value.
-
-	"Handle negative indices"
-	(idx @env0:< 0) ifTrue: [
-		idx := size @env0:+ idx
-	].
-
-	"Check bounds"
-	((idx @env0:< 0) or: [
-		idx @env0:>= size
-	]) ifTrue: [
+	"Coerce the index via __index__ FIRST -- that may run Python code which
+	reallocates/clears the receiver (gh-91153), so read size AFTERWARD and
+	bounds-check against the current buffer."
+	idx := bytes ___coerceIndex___: index.
+	size := self @env0:size.
+	(idx @env0:< 0) ifTrue: [idx := size @env0:+ idx].
+	((idx @env0:< 0) or: [idx @env0:>= size]) ifTrue: [
 		IndexError ___signal___: 'bytearray index out of range'
 	].
 
-	"Validate byte value"
-	((val @env0:< 0) or: [
-		val @env0:> 255
-	]) ifTrue: [
-		ValueError ___signal___: 'byte must be in range(0, 256)'
+	"Coerce + range-check the value via __index__ (CPython order: after the
+	index bounds check)."
+	val := bytes ___coerceByteValue___: value.
+
+	"Re-check bounds: coercing the value may have run __index__ that shrank
+	self (gh-91153).  idx is already non-negative here, so only the upper
+	bound can have been invalidated."
+	(idx @env0:>= self @env0:size) ifTrue: [
+		IndexError ___signal___: 'bytearray index out of range'
 	].
 
-	"Set value (convert to 1-based index)"
+	"Set value (convert to 1-based index)."
 	self @env0:at: (idx @env0:+ 1) put: val.
 	^ None
 %

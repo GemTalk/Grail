@@ -211,6 +211,25 @@ testDeleteSlice
 		self assert: ((self resultAt: key) = true) description: key]
 %
 
+category: 'Grail-Tests - __index__ coercion'
+method: BytesSubclassTestCase
+testIndexCoercion
+	"__index__ coercion: bytearray __setitem__ value and index position, the
+	bytes/bytearray constructor elements, and an __index__ object used as a
+	count source -- with CPython's error kinds (ValueError / TypeError /
+	IndexError, and a raising __index__ propagating its own exception).  The
+	index is coerced before the bounds check, so an __index__ that clears the
+	buffer yields IndexError."
+
+	#('setitem_index_value' 'setitem_index_position' 'setitem_neg_value_raises'
+	  'setitem_object_value_raises' 'setitem_oob_raises' 'mutating_index_oob'
+	  'mutating_value_oob'
+	  'ctor_from_index' 'ctor_from_index_bytearray' 'ctor_index_neg_raises'
+	  'ctor_index_256_raises' 'ctor_reject_str_elem' 'ctor_reject_float_elem'
+	  'ctor_reject_none_elem' 'ctor_source_index' 'ctor_source_index_raises') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
 category: 'Grail-Tests - base types'
 method: BytesSubclassTestCase
 testBaseTypesUnaffected
