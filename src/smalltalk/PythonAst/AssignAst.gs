@@ -92,6 +92,25 @@ printSmalltalkOn: aStream
 			ifTrue: [
 				^ self printSmalltalkModuleStoreOn: aStream target: tgt
 			].
+		"``nonlocal x; x = v'' inside a class METHOD: x is an enclosing-function
+		local reached past the class, so the method must write it through its
+		setter closure cell (``___cellSetter_x___'', emitted by ClassDefAst) --
+		a bare ``x := v'' would bind a fresh undeclared temp.  Mirrors the
+		AugAssignAst closure-cell branch."
+		((tgt isKindOf: NameAst)
+			and: [CallAst classBeingCompiled notNil
+			and: [CallAst inClassBodyValueEmit ~~ true
+			and: [CallAst inBasesEmit ~~ true
+			and: [tgt ___enclosingFunctionLocalBeyondClass___: tgt id]]]]) ifTrue: [
+				CallAst addCapturedWriteName: tgt id.
+				aStream
+					nextPutAll: '(self @env1:___classCellSetter___: #''___cellSetter_';
+					nextPutAll: tgt id;
+					nextPutAll: '___'') value: '.
+				value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPut: $..
+				^ self
+			].
 		tgt printSmalltalkOn: aStream.
 		aStream nextPutAll: ' := '.
 		value printSmalltalkOn: aStream.

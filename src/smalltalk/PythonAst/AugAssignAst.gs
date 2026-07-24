@@ -112,17 +112,44 @@ printSmalltalkOn: aStream
 			aStream nextPutAll: ').'.
 			^ self
 		].
-	"Simple (local Name) target.  CPython augmented assignment tries the
-	in-place dunder (``a.__iadd__(b)'') first and only falls back to the
-	binary dunder (``a.__add__(b)'') when the type has no in-place form.
-	Derive the in-place selector from the operator's binary selector
-	(``__add__:'' -> ``__iadd__:'') and route both through the runtime
-	helper ``object>>___augmentedOp___:inplace:binary:''.  (Attribute /
-	subscript / module-scope targets keep the plain binary form above.)"
+	"Derive the in-place / binary dunder selectors (shared by the
+	closure-cell and simple-local paths below)."
 	opStream := WriteStream on: String new.
 	op printSmalltalkOn: opStream.
 	binSel := opStream contents trimSeparators.
 	iSel := '__i' , (binSel copyFrom: 3 to: binSel size).
+	"``nonlocal x; x op= v'' inside a class METHOD: x is an enclosing-function
+	local reached past the class, so the method has no lexical link to the
+	outer temp -- read AND write must go through closure cells (the read cell
+	``___cell_x___'' and the setter cell ``___cellSetter_x___'', both emitted
+	by ClassDefAst at definition time).  The target NameAst carries a Store
+	ctx here, so its printSmalltalkOn: would emit a bare identifier for both
+	the store and the (parenthesised) load; emit the cell forms explicitly.
+	test_dict test_str_nonstr's Key3.__eq__ does exactly ``eq_count += 1''."
+	((target isKindOf: NameAst)
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst inClassBodyValueEmit ~~ true
+		and: [CallAst inBasesEmit ~~ true
+		and: [target ___enclosingFunctionLocalBeyondClass___: target id]]]]) ifTrue: [
+			CallAst addCapturedClassName: target id.
+			CallAst addCapturedWriteName: target id.
+			aStream
+				nextPutAll: '(self @env1:___classCellSetter___: #''___cellSetter_';
+				nextPutAll: target id;
+				nextPutAll: '___'') value: ((self @env1:___classCell___: #''___cell_';
+				nextPutAll: target id;
+				nextPutAll: '___'') @env1:___augmentedOp___: '.
+			value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPutAll: ' inplace: #'''; nextPutAll: iSel;
+				nextPutAll: ''' binary: #'''; nextPutAll: binSel; nextPutAll: ''').'.
+			^ self
+		].
+	"Simple (local Name) target.  CPython augmented assignment tries the
+	in-place dunder (``a.__iadd__(b)'') first and only falls back to the
+	binary dunder (``a.__add__(b)'') when the type has no in-place form.
+	Route both through the runtime helper
+	``object>>___augmentedOp___:inplace:binary:''.  (Attribute / subscript /
+	module-scope / closure-cell targets are handled above.)"
 	target printSmalltalkOn: aStream.
 	aStream nextPutAll: ' := '.
 	target printSmalltalkWithParenthesisOn: aStream.
