@@ -704,59 +704,51 @@ _count: positional kw: kwargs
 
 category: 'Grail-String Methods'
 method: CharacterCollection
+___pyEncodeUTF16___: withBOM be: bigEndian
+	"Encode the receiver as UTF-16 bytes.  BMP codepoints -> one 16-bit unit;
+	supplementary -> a surrogate pair.  ``withBOM'' prepends U+FEFF; ``bigEndian''
+	selects byte order (little-endian otherwise)."
+	| ws emit |
+	ws := WriteStream @env0:on: ByteArray @env0:new.
+	emit := [:u | | hi lo |
+		hi := (u @env0:bitShift: -8) @env0:bitAnd: 16rFF.
+		lo := u @env0:bitAnd: 16rFF.
+		bigEndian ifTrue: [ws @env0:nextPut: hi; @env0:nextPut: lo]
+			ifFalse: [ws @env0:nextPut: lo; @env0:nextPut: hi]].
+	withBOM ifTrue: [emit value: 16rFEFF].
+	1 @env0:to: self @env0:size do: [:i | | cp |
+		cp := (self @env0:at: i) @env0:codePoint.
+		cp @env0:<= 16rFFFF
+			ifTrue: [emit value: cp]
+			ifFalse: [ | v |
+				v := cp @env0:- 16r10000.
+				emit value: (16rD800 @env0:+ (v @env0:bitShift: -10)).
+				emit value: (16rDC00 @env0:+ (v @env0:bitAnd: 16r3FF))]].
+	^ bytes @env0:withAll: ws @env0:contents
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
 encode
 	"``s.encode()`` with no args — Python default is 'utf-8'."
 
-	^ self encode: 'utf-8'
+	^ self encode: 'utf-8' _: 'strict'
 %
 
 category: 'Grail-String Methods'
 method: CharacterCollection
 encode: encoding _: errors
-	"``s.encode(encoding, errors)`` - the `errors` argument is
-	accepted for CPython parity but ignored.  Grail's encoder only
-	emits ASCII/UTF-8-clean output; the only situation that would
-	exercise an error-handling policy is a non-ASCII codepoint, and
-	in those cases we already raise UnicodeEncodeError regardless."
-
-	^ self encode: encoding
-%
-
-category: 'Grail-String Methods'
-method: CharacterCollection
-encode: encoding
-	"``s.encode(encoding)`` — return the bytes representation under
-	``encoding``.  ASCII and UTF-8 cover the Tier 1.5 use cases
-	(base64 / hmac / hashlib); other encodings raise NotImplementedError
-	until something asks.
-
-	Implementation: walk the receiver's characters, raise UnicodeEncodeError
-	on ASCII when a non-ASCII codepoint shows up, otherwise pack into
-	a ByteArray.  UTF-8 currently shares the ASCII path (Grail's
-	Unicode7 stores ASCII directly; higher codepoints would need
-	a real UTF-8 encoder)."
-
-	| enc size result |
+	"Encode the receiver to bytes under ``encoding'', honoring ``errors''
+	('strict' raises UnicodeEncodeError on an un-encodable character; 'ignore'
+	drops it).  UTF-8 is a real multi-byte encoder (GemStone encodeAsUTF8);
+	UTF-16 (BOM/LE/BE) is supported; ascii and latin-1 / idna are single-byte."
+	| enc size ignore result |
 	enc := encoding @env0:asLowercase.
 	size := self @env0:size.
-	"ASCII / UTF-8 / latin1 share the same byte representation for
-	codepoints 0..127 (Grail's Unicode7 string type only stores those
-	directly).  latin1 is the WSGI standard for byte→str smuggling
-	and is required by werkzeug._internal's encoding dance.
-	Codepoints 128..255 in latin1 (and any non-ASCII byte in UTF-8)
-	land in the encoder loop below, which raises UnicodeEncodeError
-	for now — a real multi-byte encoder is left for whichever caller
-	actually needs it."
-	"``idna'' is RFC 3490 internationalized domain name encoding —
-	ASCII names pass through unchanged, non-ASCII would need real
-	punycode.  Werkzeug uses ``hostname.encode('idna')'' on every
-	request URL build; for the M7 Flask demo path (defaults to
-	``localhost'') ASCII passthrough is sufficient.  Real punycode
-	can land on top of this when a downstream test depends on it."
-	"unicode_escape: backslash-escape control and non-ASCII characters
-	(backslash, LF, CR, TAB named; ''BSxXX'' below U+0100, ''BSuXXXX''
-	beyond -- BS denoting a single backslash), yielding ASCII bytes.
-	django.utils.log escapes response-log arguments with it."
+	ignore := errors @env0:= 'ignore'.
+
+	"unicode_escape: backslash-escape control and non-ASCII characters,
+	yielding ASCII bytes (django.utils.log uses it)."
 	(enc @env0:= 'unicode_escape') ifTrue: [
 		| ws hexFor |
 		hexFor := [:cp :width | | h |
@@ -773,36 +765,53 @@ encode: encoding
 			cp @env0:= 9 ifTrue: [ws @env0:nextPutAll: '\t'] ifFalse: [
 			((cp @env0:>= 32) and: [cp @env0:<= 126]) ifTrue: [ws @env0:nextPut: ch] ifFalse: [
 			cp @env0:< 256
-				ifTrue: [
-					ws @env0:nextPutAll: '\x'.
-					ws @env0:nextPutAll: (hexFor value: cp value: 2)]
-				ifFalse: [
-					ws @env0:nextPutAll: '\u'.
-					ws @env0:nextPutAll: (hexFor value: cp value: 4)]]]]]]].
-		^ bytes @env0:withAll: (ws @env0:contents @env0:asByteArray)
-	].
-	((enc @env0:= 'ascii')
-		or: [enc @env0:= 'utf-8'
-		or: [enc @env0:= 'utf8'
-		or: [enc @env0:= 'latin1'
-		or: [enc @env0:= 'latin-1'
-		or: [enc @env0:= 'iso-8859-1'
-		or: [enc @env0:= 'idna']]]]]]) ifFalse: [
-		LookupError ___signal___: ('unknown encoding: ' @env0:, encoding)
-	].
-	result := ByteArray @env0:new: size.
-	1 @env0:to: size do: [:i |
-		| cv |
-		cv := (self @env0:at: i) @env0:asInteger.
-		(enc @env0:= 'ascii' and: [cv @env0:> 127]) ifTrue: [
-			UnicodeEncodeError ___signal___: 'ascii codec can''t encode non-ASCII byte'
-		].
-		(cv @env0:> 255) ifTrue: [
-			UnicodeEncodeError ___signal___: 'codec can''t encode codepoint > 255 (UTF-8 multi-byte not yet supported)'
-		].
-		result @env0:at: i put: cv
-	].
-	^ result
+				ifTrue: [ws @env0:nextPutAll: '\x'. ws @env0:nextPutAll: (hexFor value: cp value: 2)]
+				ifFalse: [ws @env0:nextPutAll: '\u'. ws @env0:nextPutAll: (hexFor value: cp value: 4)]]]]]]].
+		^ bytes @env0:withAll: (ws @env0:contents @env0:asByteArray)].
+
+	"UTF-8: real multi-byte encoder (GemStone)."
+	((enc @env0:= 'utf-8') or: [enc @env0:= 'utf8']) ifTrue: [
+		| u8 |
+		u8 := self @env0:encodeAsUTF8.
+		result := bytes ___new___: u8 @env0:size.
+		1 @env0:to: u8 @env0:size do: [:i | result @env0:at: i put: (u8 @env0:at: i)].
+		^ result].
+
+	"UTF-16 family (utf-16 = BOM + little-endian, matching CPython)."
+	(enc @env0:= 'utf-16') ifTrue: [^ self ___pyEncodeUTF16___: true be: false].
+	((enc @env0:= 'utf-16-le') or: [enc @env0:= 'utf-16le']) ifTrue: [^ self ___pyEncodeUTF16___: false be: false].
+	((enc @env0:= 'utf-16-be') or: [enc @env0:= 'utf-16be']) ifTrue: [^ self ___pyEncodeUTF16___: false be: true].
+
+	"Single-byte: ascii / idna (<=127), latin-1 / iso-8859-1 (<=255)."
+	((enc @env0:= 'ascii') or: [(enc @env0:= 'us-ascii')
+		or: [(enc @env0:= 'latin1') or: [(enc @env0:= 'latin-1')
+		or: [(enc @env0:= 'iso-8859-1') or: [enc @env0:= 'idna']]]]]) ifTrue: [
+		| max ws |
+		max := ((enc @env0:= 'ascii') or: [(enc @env0:= 'us-ascii') or: [enc @env0:= 'idna']])
+			ifTrue: [127] ifFalse: [255].
+		ws := WriteStream @env0:on: ByteArray @env0:new.
+		1 @env0:to: size do: [:i | | cv |
+			cv := (self @env0:at: i) @env0:codePoint.
+			cv @env0:> max
+				ifTrue: [ignore ifFalse: [
+					UnicodeEncodeError ___signal___:
+						((max @env0:= 127)
+							ifTrue: ['''ascii'' codec can''t encode character']
+							ifFalse: ['''latin-1'' codec can''t encode character (ordinal not in range(256))'])]]
+				ifFalse: [ws @env0:nextPut: cv]].
+		^ bytes @env0:withAll: ws @env0:contents].
+
+	LookupError ___signal___: ('unknown encoding: ' @env0:, encoding)
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+encode: encoding
+	"``s.encode(encoding)`` -- default 'strict' error policy.  See
+	encode:_: for the full codec (utf-8 multi-byte, utf-16, ascii, latin-1,
+	idna, unicode_escape)."
+
+	^ self encode: encoding _: 'strict'
 %
 
 category: 'Grail-String Methods'

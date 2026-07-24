@@ -1737,7 +1737,7 @@ method: builtins
 ___isInstanceSingle___: anObject of: aClass
 	"isinstance with a single class argument (post-tuple-expansion)."
 
-	| result |
+	| result baCls |
 	"Non-class classinfo (isinstance(x, functools.cached_property)
 	where the attr resolved to a BoundMethod): raise CPython's
 	catchable TypeError -- isKindOf: on a non-Behavior dies with an
@@ -1790,6 +1790,14 @@ ___isInstanceSingle___: anObject of: aClass
 			result := aClass __instancecheck__: anObject
 		]
 	].
+	"CPython: a bytearray is NOT a bytes -- they are distinct types.  Grail
+	stores bytearray as a ByteArray(=bytes) subclass for storage/method reuse,
+	so the isKindOf: chain above counts a bytearray as bytes; narrow it back
+	here as a FINAL override (after every widening path).  A plain bytes
+	subclass (class X(bytes)) is NOT under bytearray, so it stays bytes."
+	(aClass == ByteArray) ifTrue: [
+		baCls := Python @env0:at: #bytearray otherwise: nil.
+		(baCls @env0:notNil and: [anObject isKindOf: baCls]) ifTrue: [result := false]].
 	^ result
 %
 
@@ -1943,10 +1951,16 @@ ___isSubclassSingle___: sub of: target
 	covers single inheritance; a multiple-inheritance class's secondary
 	bases are visible only through its registered C3 MRO."
 
-	| il |
+	| il baCls |
 	((sub isKindOf: Behavior) and: [target isKindOf: Behavior]) ifFalse: [
 		TypeError ___signal___: 'issubclass() arg must be a type'].
 	(sub == target) ifTrue: [^ true].
+	"CPython: bytearray is NOT a subclass of bytes (distinct types), though
+	Grail stores bytearray as a ByteArray(=bytes) subclass.  Exclude the
+	bytearray subtree from issubclass(..., bytes) before the inheritsFrom check."
+	baCls := Python @env0:at: #bytearray otherwise: nil.
+	(target == ByteArray and: [baCls @env0:notNil
+		and: [(sub == baCls) or: [sub @env0:inheritsFrom: baCls]]]) ifTrue: [^ false].
 	(sub @env0:inheritsFrom: target) ifTrue: [^ true].
 	"Mirror isinstance's str widening: every text string class is a
 	subclass of str (see ___isInstanceSingle___:of:)."

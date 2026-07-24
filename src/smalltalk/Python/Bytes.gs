@@ -50,13 +50,13 @@ __new__: source
 		TypeError ___signal___: 'string argument without an encoding'
 	].
 
-	"If source is bytes (or bytearray — same byte-storage layout),
-	make a copy.  Previously the bytearray path fell through to the
-	default empty-bytes branch, which silently produced ``bytes(0)``
-	from any bytearray and broke re._compiler._optimize_charset's
-	BIGCHARSET path (``charmap = bytes(charmap)`` lost all 256 bytes
-	of the bitmap)."
-	((sourceClass == bytes) or: [source isKindOf: bytearray]) ifTrue: [
+	"If source is any bytes-like object (bytes / bytearray / subclasses --
+	all ByteArray, same byte-storage layout), make a copy.  Previously the
+	bytearray path fell through to the default empty-bytes branch, which
+	silently produced ``bytes(0)`` from any bytearray and broke
+	re._compiler._optimize_charset's BIGCHARSET path (``charmap =
+	bytes(charmap)`` lost all 256 bytes of the bitmap)."
+	(source isKindOf: bytes) ifTrue: [
 		result := self ___new___: source @env0:size.
 		1 @env0:to: source @env0:size do: [:i |
 			result @env0:at: i put: (source @env0:at: i)
@@ -127,70 +127,34 @@ __new__: source
 
 category: 'Grail-Constructors'
 classmethod: bytes
+___encodeSourceToSelf___: source _: enc _: errs
+	"Encode a string ``source'' to bytes via str>>encode:_: (the single codec
+	authority -- utf-8 multi-byte, utf-16, ascii, latin-1, idna,
+	unicode_escape, with 'strict'/'ignore' errors), then copy into a fresh
+	instance of the RECEIVER class so a bytearray subclass ctor is self-typed."
+	| encoded r |
+	(source isKindOf: CharacterCollection) ifFalse: [
+		TypeError ___signal___: 'encoding without a string argument'].
+	encoded := source encode: enc _: errs.
+	r := self ___new___: encoded @env0:size.
+	1 @env0:to: encoded @env0:size do: [:i | r @env0:at: i put: (encoded @env0:at: i)].
+	^ r
+%
+
+category: 'Grail-Constructors'
+classmethod: bytes
 __new__: source _: encoding
-	"bytes(string, encoding) — encode string to bytes. Receiver is the
-	class (so subclasses like bytearray instantiate themselves)."
+	"bytes(str, encoding) -- encode the string to bytes, self-typed (so a
+	bytearray subclass instantiates itself), default 'strict' error policy."
+	^ self ___encodeSourceToSelf___: source _: encoding _: 'strict'
+%
 
-	| result encodingStr |
-	"Source must be a string (String or Unicode7)"
-	((source isKindOf: String) not) ifTrue: [
-		TypeError ___signal___: 'encoding without a string argument'
-	].
-
-	"Get encoding as a Smalltalk string"
-	encodingStr := encoding.
-
-	"Support ASCII encoding"
-	(encodingStr @env0:= 'ascii') ifTrue: [
-		| ba size |
-		size := source @env0:size.
-		ba := self ___new___: size.
-		1 @env0:to: size do: [:i |
-			| char codePoint |
-			char := source @env0:at: i.
-			codePoint := char @env0:codePoint.
-			(codePoint @env0:> 127) ifTrue: [
-				UnicodeEncodeError ___signal___: 'ordinal not in range(128)'
-			].
-			ba @env0:at: i put: codePoint
-		].
-		^ ba
-	].
-
-	"Support UTF-8 encoding"
-	((encodingStr @env0:= 'utf-8') or: [
-		encodingStr @env0:= 'utf8'
-	]) ifTrue: [
-		| utf8Bytes |
-		utf8Bytes := source @env0:encodeAsUTF8.
-		result := self ___new___: (utf8Bytes @env0:size).
-		1 @env0:to: utf8Bytes @env0:size do: [:i |
-			result @env0:at: i put: (utf8Bytes @env0:at: i)
-		].
-		^ result
-	].
-
-	"Support Latin-1 encoding"
-	((encodingStr @env0:= 'latin-1') or: [
-		encodingStr @env0:= 'latin1'
-	]) ifTrue: [
-		| ba size |
-		size := source @env0:size.
-		ba := self ___new___: size.
-		1 @env0:to: size do: [:i |
-			| char codePoint |
-			char := source @env0:at: i.
-			codePoint := char @env0:codePoint.
-			(codePoint @env0:> 255) ifTrue: [
-				UnicodeEncodeError ___signal___: 'ordinal not in range(256)'
-			].
-			ba @env0:at: i put: codePoint
-		].
-		^ ba
-	].
-
-	"Unsupported encoding"
-	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)
+category: 'Grail-Constructors'
+classmethod: bytes
+__new__: source _: encoding _: errors
+	"bytes(str, encoding, errors) -- 3-arg form with an explicit error policy
+	('strict' raises, 'ignore' drops un-encodable characters)."
+	^ self ___encodeSourceToSelf___: source _: encoding _: errors
 %
 
 category: 'Grail-Constructors'
@@ -279,10 +243,8 @@ __add__: other
 	| otherClass size1 size2 result |
 	otherClass := other @env0:class.
 
-	"Can only concatenate with bytes or bytearray"
-	((otherClass == bytes) or: [
-		otherClass == bytearray
-	]) ifFalse: [
+	"Concatenate with any bytes-like object (bytes / bytearray / subclasses)."
+	(other isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: ('can''t concat bytes to ' @env0:, otherClass)
 	].
 
@@ -342,10 +304,9 @@ __eq__: other
 	| otherClass size |
 	otherClass := other @env0:class.
 
-	"Can only concatenate with bytes or bytearray"
-	((otherClass == bytes) or: [
-		otherClass == bytearray
-	]) ifFalse: [
+	"Equal only to a bytes-like object (bytes / bytearray / subclasses); CPython
+	compares bytes and bytearray by value across the two types."
+	(other isKindOf: bytes) ifFalse: [
 		^ false
 	].
 
@@ -626,8 +587,8 @@ count: sub
 		^ count
 	].
 
-	"sub must be bytes"
-	subClass == bytes ifFalse: [
+	"sub must be a bytes-like object (bytes / bytearray / subclasses) or an int"
+	(sub isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'argument should be bytes or integer'
 	].
 
@@ -674,11 +635,15 @@ decode
 category: 'Grail-Encoding/Decoding'
 method: bytes
 decode: encoding _: errors
-	"``bytes.decode(encoding, errors)`` 2-arg form.  ``errors''
-	is accepted for CPython parity but ignored — Grail's decoders
-	either succeed (ASCII / UTF-8 / latin1) or raise; there is no
-	intermediate ``replace''/``ignore'' policy yet."
+	"``bytes.decode(encoding, errors)`` 2-arg form.  For UTF-8 with
+	errors='ignore', invalid bytes are skipped; otherwise (strict, or a
+	non-UTF-8 codec) decode via the 1-arg form, which raises on ill-formed
+	input."
 
+	| enc |
+	enc := encoding @env0:asLowercase.
+	(((enc @env0:= 'utf-8') or: [enc @env0:= 'utf8']) and: [errors @env0:= 'ignore'])
+		ifTrue: [^ self ___pyDecodeUTF8Ignore___].
 	^ self decode: encoding
 %
 
@@ -692,7 +657,7 @@ _decode: positional kw: kwargs
 	for its WSGI encoding dance, which the fixed-arity selectors above
 	don't catch."
 
-	| encoding |
+	| encoding errors |
 	encoding := (positional @env0:size @env0:>= 1)
 		@env0:ifTrue: [positional @env0:at: 1]
 		@env0:ifFalse: [
@@ -700,7 +665,14 @@ _decode: positional kw: kwargs
 				and: [kwargs @env0:includesKey: 'encoding'])
 				@env0:ifTrue: [kwargs @env0:at: 'encoding']
 				@env0:ifFalse: ['utf-8']].
-	^ self decode: encoding
+	errors := (positional @env0:size @env0:>= 2)
+		@env0:ifTrue: [positional @env0:at: 2]
+		@env0:ifFalse: [
+			(kwargs @env0:isNil @env0:not
+				and: [kwargs @env0:includesKey: 'errors'])
+				@env0:ifTrue: [kwargs @env0:at: 'errors']
+				@env0:ifFalse: ['strict']].
+	^ self decode: encoding _: errors
 %
 
 category: 'Grail-Encoding/Decoding'
@@ -767,6 +739,13 @@ decode: encoding
 		^ self @env0:___decodeUnicodeEscape___
 	].
 
+	"UTF-16 (BOM-detected for plain 'utf-16', explicit for -le/-be) --
+	the inverse of str>>___pyEncodeUTF16___."
+	((encodingStr @env0:= 'utf-16') or: [(encodingStr @env0:= 'utf-16-le')
+		or: [(encodingStr @env0:= 'utf-16le') or: [(encodingStr @env0:= 'utf-16-be')
+		or: [encodingStr @env0:= 'utf-16be']]]]) ifTrue: [
+		^ self ___pyDecodeUTF16___: encodingStr].
+
 	"``idna'' is RFC 3490 internationalized-domain decoding —
 	ASCII names pass through unchanged, full punycode handling is
 	left for a downstream test that needs it.  Werkzeug.urls
@@ -790,6 +769,71 @@ decode: encoding
 
 	"Unsupported encoding"
 	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___pyDecodeUTF16___: enc
+	"Decode UTF-16 bytes to a str.  Plain 'utf-16' detects a leading BOM
+	(FE FF = big-endian, FF FE = little-endian; default little-endian);
+	'utf-16-le'/'utf-16-be' force the byte order.  Surrogate pairs are
+	reassembled into supplementary codepoints."
+	| e n start bigEndian ws i |
+	e := enc @env0:asLowercase.
+	n := self @env0:size. start := 1.
+	((e @env0:= 'utf-16-be') or: [e @env0:= 'utf-16be'])
+		ifTrue: [bigEndian := true]
+		ifFalse: [((e @env0:= 'utf-16-le') or: [e @env0:= 'utf-16le'])
+			ifTrue: [bigEndian := false]
+			ifFalse: [
+				bigEndian := false.
+				(n @env0:>= 2) ifTrue: [
+					((self @env0:at: 1) @env0:= 16rFE and: [(self @env0:at: 2) @env0:= 16rFF])
+						ifTrue: [bigEndian := true. start := 3]
+						ifFalse: [((self @env0:at: 1) @env0:= 16rFF and: [(self @env0:at: 2) @env0:= 16rFE])
+							ifTrue: [bigEndian := false. start := 3]]]]].
+	ws := WriteStream @env0:on: Unicode16 @env0:new.
+	i := start.
+	[i @env0:+ 1 @env0:<= n] @env0:whileTrue: [ | b0 b1 unit cp |
+		b0 := self @env0:at: i. b1 := self @env0:at: i @env0:+ 1.
+		unit := bigEndian ifTrue: [(b0 @env0:bitShift: 8) @env0:+ b1] ifFalse: [(b1 @env0:bitShift: 8) @env0:+ b0].
+		((unit @env0:>= 16rD800) and: [(unit @env0:<= 16rDBFF) and: [i @env0:+ 3 @env0:<= n]])
+			ifTrue: [ | b2 b3 lo |
+				b2 := self @env0:at: i @env0:+ 2. b3 := self @env0:at: i @env0:+ 3.
+				lo := bigEndian ifTrue: [(b2 @env0:bitShift: 8) @env0:+ b3] ifFalse: [(b3 @env0:bitShift: 8) @env0:+ b2].
+				cp := 16r10000 @env0:+ (((unit @env0:- 16rD800) @env0:bitShift: 10) @env0:+ (lo @env0:- 16rDC00)).
+				i := i @env0:+ 4]
+			ifFalse: [cp := unit. i := i @env0:+ 2].
+		ws @env0:nextPut: (Character @env0:codePoint: cp)].
+	^ ws @env0:contents
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___pyDecodeUTF8Ignore___
+	"UTF-8 decode with errors='ignore': decode well-formed sequences and skip
+	invalid bytes.  (Strict decoding uses GemStone's decodeFromUTF8.)"
+	| n i ws |
+	n := self @env0:size. i := 1.
+	ws := WriteStream @env0:on: Unicode16 @env0:new.
+	[i @env0:<= n] @env0:whileTrue: [ | b0 cp nbytes ok |
+		b0 := self @env0:at: i.
+		b0 @env0:< 16r80 ifTrue: [cp := b0. nbytes := 1] ifFalse: [
+		(b0 @env0:bitAnd: 16rE0) @env0:= 16rC0 ifTrue: [cp := b0 @env0:bitAnd: 16r1F. nbytes := 2] ifFalse: [
+		(b0 @env0:bitAnd: 16rF0) @env0:= 16rE0 ifTrue: [cp := b0 @env0:bitAnd: 16r0F. nbytes := 3] ifFalse: [
+		(b0 @env0:bitAnd: 16rF8) @env0:= 16rF0 ifTrue: [cp := b0 @env0:bitAnd: 16r07. nbytes := 4] ifFalse: [
+		nbytes := 0]]]].
+		ok := (nbytes @env0:> 0) and: [i @env0:+ nbytes @env0:- 1 @env0:<= n].
+		ok ifTrue: [
+			2 @env0:to: nbytes do: [:k | | bk |
+				bk := self @env0:at: i @env0:+ k @env0:- 1.
+				(bk @env0:bitAnd: 16rC0) @env0:= 16r80
+					ifTrue: [cp := (cp @env0:bitShift: 6) @env0:+ (bk @env0:bitAnd: 16r3F)]
+					ifFalse: [ok := false]]].
+		ok
+			ifTrue: [ws @env0:nextPut: (Character @env0:codePoint: cp). i := i @env0:+ nbytes]
+			ifFalse: [i := i @env0:+ 1]].
+	^ ws @env0:contents
 %
 
 set compile_env: 0
@@ -895,9 +939,18 @@ endswith: suffix
 	| suffixClass suffixSize mySize offset |
 	suffixClass := suffix @env0:class.
 
-	"suffix must be bytes"
-	(suffixClass == bytes) ifFalse: [
-		TypeError ___signal___: 'argument should be bytes'
+	"A tuple of suffixes: True if self ends with ANY of them (CPython).
+	Each element is validated by the recursive single-suffix call."
+	(suffix isKindOf: tuple) ifTrue: [
+		1 @env0:to: (suffix @env0:size) do: [:ti |
+			(self endswith: (suffix @env0:at: ti)) ifTrue: [^ true]].
+		^ false
+	].
+
+	"otherwise the suffix must be a single bytes-like object"
+	(suffix isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: ('endswith first arg must be bytes or a tuple of bytes, not '
+			@env0:, (suffix @env0:class @env0:name @env0:asString))
 	].
 
 	suffixSize := suffix @env0:size.
@@ -977,7 +1030,7 @@ category: 'Grail-Search Methods'
 method: bytes
 find: sub
 	"Find first occurrence of sub, return index or -1"
-	| subClass subSize mySize i w x y z |
+	| subClass subSize mySize i |
 	subClass := sub @env0:class.
 
 	"sub must be bytes or integer"
@@ -994,12 +1047,8 @@ find: sub
 		^ -1
 	].
 
-	"sub must be bytes"
-	w := bytearray.
-	x := subClass == bytes.
-	y := subClass == bytearray.
-	z := x or: [y].
-	(subClass == bytes or: [subClass == bytearray]) ifFalse: [
+	"sub must be a bytes-like object (bytes / bytearray / subclasses)"
+	(sub isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'argument should be bytes, bytearray or int'
 	].
 
@@ -1478,8 +1527,12 @@ partition: sep
 category: 'Grail-Prefix/Suffix Methods'
 method: bytes
 removeprefix: prefix
-	"Remove prefix if present, otherwise return copy"
+	"Remove prefix if present, otherwise return copy.  Unlike startswith,
+	removeprefix accepts only a single bytes-like object -- NOT a tuple."
 	| hasPrefix prefixSize mySize result |
+	(prefix isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: ('removeprefix() argument must be a bytes-like object, not '
+			@env0:, (prefix @env0:class @env0:name @env0:asString))].
 	hasPrefix := self startswith: prefix.
 	hasPrefix ifFalse: [
 		^ self @env0:copy
@@ -1499,8 +1552,12 @@ removeprefix: prefix
 category: 'Grail-Prefix/Suffix Methods'
 method: bytes
 removesuffix: suffix
-	"Remove suffix if present, otherwise return copy"
+	"Remove suffix if present, otherwise return copy.  Unlike endswith,
+	removesuffix accepts only a single bytes-like object -- NOT a tuple."
 	| hasSuffix suffixSize mySize result |
+	(suffix isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: ('removesuffix() argument must be a bytes-like object, not '
+			@env0:, (suffix @env0:class @env0:name @env0:asString))].
 	hasSuffix := self endswith: suffix.
 	hasSuffix ifFalse: [
 		^ self @env0:copy
@@ -1525,11 +1582,11 @@ replace: old _: new
 	oldClass := old @env0:class.
 	newClass := new @env0:class.
 
-	"old and new must be bytes"
-	(oldClass == bytes) ifFalse: [
+	"old and new must be bytes-like (bytes / bytearray / subclasses)"
+	(old isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'first argument must be bytes'
 	].
-	(newClass == bytes) ifFalse: [
+	(new isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'second argument must be bytes'
 	].
 
@@ -1568,8 +1625,8 @@ rfind: sub
 		^ -1
 	].
 
-	"sub must be bytes"
-	(subClass == bytes or: [subClass == bytearray]) ifFalse: [
+	"sub must be a bytes-like object (bytes / bytearray / subclasses)"
+	(sub isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'argument should be bytes, bytearray or int'
 	].
 
@@ -1664,12 +1721,14 @@ rsplit: sep
 category: 'Grail-Splitting Methods'
 method: bytes
 rsplit: sep _: maxsplit
-	"Split from right with maximum number of splits"
+	"Split from right with maximum number of splits.  A None separator splits
+	on runs of ASCII whitespace, from the right (honoring maxsplit)."
 	| sepClass sepSize mySize parts positions i actualSplits lastEnd firstPart firstPartSize |
+	(sep @env0:== None) ifTrue: [^ self ___rsplitWhitespace___: maxsplit].
 	sepClass := sep @env0:class.
 
-	"sep must be bytes"
-	(sepClass == bytes) ifFalse: [
+	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
+	(sep isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'sep must be bytes'
 	].
 
@@ -1794,8 +1853,8 @@ split: sep
 	(sep @env0:== None) ifTrue: [^ self ___splitWhitespace___].
 	sepClass := sep @env0:class.
 
-	"sep must be bytes"
-	(sepClass == bytes) ifFalse: [
+	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
+	(sep isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'sep must be bytes'
 	].
 
@@ -1854,12 +1913,14 @@ split: sep
 category: 'Grail-String-like Methods'
 method: bytes
 split: sep _: maxsplit
-	"Split bytes by separator with maximum number of splits"
+	"Split bytes by separator with maximum number of splits.  A None separator
+	splits on runs of ASCII whitespace (honoring maxsplit)."
 	| sepClass sepSize mySize parts currentPart i splitCount match |
+	(sep @env0:== None) ifTrue: [^ self ___splitWhitespace___: maxsplit].
 	sepClass := sep @env0:class.
 
-	"sep must be bytes"
-	(sepClass == bytes) ifFalse: [
+	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
+	(sep isKindOf: bytes) ifFalse: [
 		TypeError ___signal___: 'sep must be bytes'
 	].
 
@@ -1983,9 +2044,19 @@ startswith: prefix
 	| prefixClass prefixSize mySize |
 	prefixClass := prefix @env0:class.
 
-	"prefix must be bytes"
-	(prefixClass == bytes) ifFalse: [
-		TypeError ___signal___: 'argument should be bytes'
+	"A tuple of prefixes: True if self starts with ANY of them (CPython).
+	Each element is validated by the recursive single-prefix call, so a
+	non-bytes-like element raises the same TypeError."
+	(prefix isKindOf: tuple) ifTrue: [
+		1 @env0:to: (prefix @env0:size) do: [:ti |
+			(self startswith: (prefix @env0:at: ti)) ifTrue: [^ true]].
+		^ false
+	].
+
+	"otherwise the prefix must be a single bytes-like object"
+	(prefix isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: ('startswith first arg must be bytes or a tuple of bytes, not '
+			@env0:, (prefix @env0:class @env0:name @env0:asString))
 	].
 
 	prefixSize := prefix @env0:size.
@@ -2417,8 +2488,8 @@ replace: old _: new _: count
 	replacements."
 	(count @env0:< 0) ifTrue: [^ self replace: old _: new].
 	(count @env0:= 0) ifTrue: [^ self @env0:copy].
-	((old @env0:class) @env0:== bytes) ifFalse: [TypeError ___signal___: 'first argument must be bytes'].
-	((new @env0:class) @env0:== bytes) ifFalse: [TypeError ___signal___: 'second argument must be bytes'].
+	(old isKindOf: bytes) ifFalse: [TypeError ___signal___: 'first argument must be bytes'].
+	(new isKindOf: bytes) ifFalse: [TypeError ___signal___: 'second argument must be bytes'].
 	(old @env0:size @env0:= 0) ifTrue: [^ self @env0:copy].
 	^ new join: (self split: old _: count)
 %
@@ -2440,6 +2511,66 @@ ___splitWhitespace___
 			ifFalse: [nb := bytes ___new___: 1. nb @env0:at: 1 put: byte. current := current @env0:, nb]].
 	(current @env0:size @env0:> 0) ifTrue: [parts append: current].
 	^ parts
+%
+
+category: 'Grail-Splitting Methods'
+method: bytes
+___splitWhitespace___: maxsplit
+	"split(None, maxsplit): at most maxsplit splits on runs of ASCII
+	whitespace, from the LEFT.  The piece after the maxsplit-th token is kept
+	whole -- its leading whitespace stripped, internal/trailing retained.
+	maxsplit < 0 means unlimited."
+	| parts size i splits ws |
+	(maxsplit @env0:< 0) ifTrue: [^ self ___splitWhitespace___].
+	parts := list ___new___.
+	size := self @env0:size.
+	ws := #(9 10 11 12 13 32).
+	i := 1.
+	splits := 0.
+	[splits @env0:< maxsplit] @env0:whileTrue: [
+		| start |
+		[(i @env0:<= size) and: [ws @env0:includes: (self @env0:at: i)]] @env0:whileTrue: [i := i @env0:+ 1].
+		(i @env0:> size) ifTrue: [^ parts].
+		start := i.
+		[(i @env0:<= size) and: [(ws @env0:includes: (self @env0:at: i)) @env0:not]] @env0:whileTrue: [i := i @env0:+ 1].
+		parts append: (self @env0:copyFrom: start to: i @env0:- 1).
+		splits := splits @env0:+ 1].
+	"remainder: strip leading whitespace, keep the rest whole"
+	[(i @env0:<= size) and: [ws @env0:includes: (self @env0:at: i)]] @env0:whileTrue: [i := i @env0:+ 1].
+	(i @env0:<= size) ifTrue: [parts append: (self @env0:copyFrom: i to: size)].
+	^ parts
+%
+
+category: 'Grail-Splitting Methods'
+method: bytes
+___rsplitWhitespace___: maxsplit
+	"rsplit(None, maxsplit): like ___splitWhitespace___: but from the RIGHT --
+	the piece before the maxsplit-th token (counting from the end) is kept
+	whole (its trailing whitespace stripped, leading/internal retained).
+	maxsplit < 0 means unlimited (identical to split)."
+	| acc size i splits ws result done |
+	(maxsplit @env0:< 0) ifTrue: [^ self ___splitWhitespace___].
+	acc := OrderedCollection @env0:new.
+	size := self @env0:size.
+	ws := #(9 10 11 12 13 32).
+	i := size.
+	splits := 0.
+	done := false.
+	[(splits @env0:< maxsplit) and: [done @env0:not]] @env0:whileTrue: [
+		[(i @env0:>= 1) and: [ws @env0:includes: (self @env0:at: i)]] @env0:whileTrue: [i := i @env0:- 1].
+		(i @env0:< 1)
+			ifTrue: [done := true]
+			ifFalse: [ | stop |
+				stop := i.
+				[(i @env0:>= 1) and: [(ws @env0:includes: (self @env0:at: i)) @env0:not]] @env0:whileTrue: [i := i @env0:- 1].
+				acc @env0:add: (self @env0:copyFrom: i @env0:+ 1 to: stop).
+				splits := splits @env0:+ 1]].
+	"left remainder: strip trailing whitespace, keep whole"
+	[(i @env0:>= 1) and: [ws @env0:includes: (self @env0:at: i)]] @env0:whileTrue: [i := i @env0:- 1].
+	(i @env0:>= 1) ifTrue: [acc @env0:add: (self @env0:copyFrom: 1 to: i)].
+	result := list ___new___.
+	acc @env0:reverseDo: [:p | result append: p].
+	^ result
 %
 
 category: 'Grail-Splitting Methods'
