@@ -1680,6 +1680,13 @@ __dir__
 	"CPython dir() returns unique names; a simple-positional def can yield BOTH
 	a fixed-arity selector and a ``_name:kw:'' keyword companion, which now
 	debang to the same name -- dedup before sorting."
+	result := result @env0:reject: [:name | name @env0:= 'new'].
+	"``new'' is a raw Smalltalk class-side selector (Object class>>new)
+	reachable through allSelectorsForEnvironment: on a kernel-backed
+	class's metaclass (e.g. dict's PyDict class) -- it isn't a genuine
+	Python attribute (CPython's dict has __new__, never a bare .new), so
+	it would spuriously fail dir(UserDict) >= dir(dict)-style superset
+	checks (test_collections.TestUserObjects)."
 	^ ((result @env0:asSet) @env0:asSortedCollection) @env0:asArray
 %
 
@@ -1746,6 +1753,22 @@ method: object
 __exit__: excType _: excValue _: excTb
 	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
 		@env0:, ''' object does not support the context manager protocol')
+%
+
+category: 'Grail-Iterator Protocol'
+method: object
+__iter__
+	"Default: not iterable.  ``iter(obj)''/``for x in obj''/``tuple(obj)''
+	etc. on a receiver with no __iter__ must raise the catchable Python
+	TypeError, not an uncatchable env-1 MessageNotUnderstood.
+	PythonInstance-backed classes already get a per-instance compiled
+	fallback for this (___hasProtocol___'s comment above), but kernel-backed
+	types (Boolean, ...) had no fallback at all until now
+	(test_collections.TestNamedTuple.test_defaults: ``tuple(False)'' must
+	raise TypeError to be caught by ``assertRaises'', not crash)."
+
+	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
+		@env0:, ''' object is not iterable')
 %
 
 category: 'Grail-Container'
@@ -2203,16 +2226,27 @@ category: 'Grail-Comparison'
 method: object
 ___eqValue___: other
 	"The == result when the forward __eq__ returned NotImplemented: try the
-	reflected __eq__ on a user-defined ``other'', else fall back to identity
-	(== never raises).  Shared by ___cmpEq___/___cmpNe___."
+	reflected __eq__ on ``other'' if its class defines its own (not just
+	inheriting the generic Object default), else fall back to identity
+	(== never raises).  Shared by ___cmpEq___/___cmpNe___.
+
+	NOT gated on ``other isKindOf: PythonInstance'' -- that excluded
+	kernel-backed builtins (dict, list, ...) from ever being tried as the
+	reflected side, so e.g. ``Counter('abcaba') == {'a': 3, 'b': 2, 'c': 1}''
+	(Counter.__eq__ correctly returns NotImplemented for a non-Counter
+	operand) silently degraded to identity comparison instead of trying
+	dict.__eq__(counter), which would (correctly) find them equal
+	(test_collections.TestCounter.test_basics).  whichClassIncludesSelector:
+	already distinguishes ``has its own __eq__:'' from ``inherits Object's'',
+	regardless of whether the class is kernel- or PythonInstance-backed, so
+	the extra isKindOf: guard was redundant as well as overly narrow."
 
 	| refOwner rr |
-	(other @env0:isKindOf: PythonInstance) ifTrue: [
-		refOwner := other @env0:class
-			@env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
-		(refOwner @env0:~~ nil and: [refOwner @env0:~~ object]) ifTrue: [
-			rr := other @env0:perform: #'__eq__:' env: 1 withArguments: { self }.
-			(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]]].
+	refOwner := other @env0:class
+		@env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
+	(refOwner @env0:~~ nil and: [refOwner @env0:~~ object]) ifTrue: [
+		rr := other @env0:perform: #'__eq__:' env: 1 withArguments: { self }.
+		(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]].
 	^ self @env0:== other
 %
 
