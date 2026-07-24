@@ -341,13 +341,14 @@ __iter__
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
 __reversed__
-	"reversed(d) -- see dict>>__reversed__ (working iterator instead of
-	an uncatchable reverseDo: MNU; order caveat identical)."
+	"reversed(d) -- keys in reverse insertion order.  Reuse ``keys'' (which
+	exposes the dynamic-instVar Symbols as Python ``str''s) so reverse
+	iteration yields the SAME string keys as forward ``keys''/``__iter__'';
+	collecting raw keysAndValuesDo: keys here would leak Symbols
+	(test_dict test_reverse_iterator_for_shared_shared_dicts: reversed(__dict__)
+	== ['y', 'x'])."
 
-	| ks |
-	ks := OrderedCollection @env0:new.
-	self @env0:keysAndValuesDo: [:k :v | ks @env0:add: k].
-	^ (ks @env0:reverse) __iter__
+	^ (self keys @env0:reverse) __iter__
 %
 
 category: 'Grail-Python-Protocol'
