@@ -1455,10 +1455,33 @@ ___pyAttrLoad___: aSym
 	(a ``dict'' subclass) reads ``session.accessed'' / ``modified''
 	through here."
 	(self isKindOf: Behavior) ifFalse: [
-		| attrOwner |
+		| attrOwner metaOwns |
 		attrOwner := self @env0:class @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
 		(attrOwner notNil and: [(attrOwner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs'])
 			ifTrue: [^ self @env0:class @env0:perform: aSym env: 1].
+		"@classmethod (and @staticmethod) reached through an INSTANCE of a
+		built-in-subclass — ``d.fromkeys(...)'' where d is a dict-subclass
+		instance.  Python makes a classmethod reachable from an instance,
+		binding the call to the CLASS.  These live on the metaclass with
+		``name:'' / ``name:_:'' / ``_name:kw:'' selectors and no paired unary
+		setter (so the Grail-Class Attrs value branch above doesn't catch
+		them).  Gate on the owning class being a TRUE metaclass (``isMeta'')
+		so object-level dunder defaults on the metaclass's kernel tail
+		(``__eq__'', ``__exit__'', ...) don't masquerade as classmethods
+		bound to the class.  Return a BoundMethod on the class so
+		``d.fromkeys(x)'' dispatches as ``type(d).fromkeys(x)'' (test_dict
+		test_fromkeys); this mirrors the PythonInstance branch above."
+		metaOwns := [:sel | | o |
+			o := self @env0:class @env0:class @env0:whichClassIncludesSelector: sel environmentId: 1.
+			o notNil and: [o @env0:isMeta and: [(self ___respondsTo___: sel) not]]].
+		((metaOwns @env0:value: sym1)
+			or: [(metaOwns @env0:value: sym2)
+				or: [(metaOwns @env0:value: sym3)
+					or: [(metaOwns @env0:value: sym4)
+						or: [(metaOwns @env0:value: sym5)
+							or: [(metaOwns @env0:value: sym6)
+								or: [metaOwns @env0:value: symVA]]]]]])
+			ifTrue: [^ BoundMethod receiver: self @env0:class selector: aSym].
 	].
 	"Other classes (built-in collections, strings, ...): if any class
 	in the receiver's class chain implements a same-named callable
