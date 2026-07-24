@@ -1311,3 +1311,29 @@ testNamedEscapeCapitalDiaeresis
 	self assert: (s @env1:__len__) equals: 1.
 	self assert: (s at: 1) codePoint equals: 16rC4
 %
+
+category: 'Grail-Tests - prefix/suffix bounds'
+method: StrTestCase
+testStartswithEndswithBounds
+	"str.startswith/endswith accept start[, end] bounds (CPython None /
+	negative-index clamping), and a getattr-bound-method call routes through
+	the varargs form -- exercises the 2/3-arg + _startswith:kw: additions
+	(the actual cause of test_bytes' test_find_periodic_pattern, whose
+	reference_find calls s.startswith(p, i) on a str)."
+
+	self assert: (self eval: '"helloworld".startswith("rld", 7)').
+	self assert: (self eval: 'not "helloworld".startswith("rld", 3)').
+	self assert: (self eval: '"helloworld".startswith("hellowo", 0, 7)').
+	self assert: (self eval: '"helloworld".startswith("rld", -3)').
+	self assert: (self eval: '"helloworld".endswith("hello", 0, 5)').
+	self assert: (self eval: '"helloworld".endswith("world", -5)').
+	self assert: (self eval: 'getattr("abcabc", "startswith")("b", 1)').
+	self assert: (self eval: '[i for i in range(6) if "ababab".startswith("ab", i)] == [0, 2, 4]').
+	"an empty prefix/suffix is always a match (GemStone beginsWith:/endsWith:
+	return false for empty)."
+	self assert: (self eval: '"abc".startswith("")').
+	self assert: (self eval: '"".startswith("")').
+	self assert: (self eval: '"abc".startswith("", 2)').
+	self assert: (self eval: '"abc".endswith("")').
+	self assert: (self eval: '"abc".endswith("", 1, 2)')
+%
