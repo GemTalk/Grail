@@ -1,0 +1,90 @@
+name: Diagnose bytes fixture
+
+# Manual, targeted diagnostic for the CI-only BytesSubclassTestCase failure
+# (all 15 tests ERROR on the Linux CI host but pass on macOS).  Runs the SAME
+# install flow as ci.yml, then executes scripts/diagnose_bytes_fixture.gs under
+# the same `LC_ALL=C` topaz the SUnit shards use -- so it reproduces the shard
+# environment exactly -- and prints DIAG| lines plus a full stack if the fixture
+# load throws.  Does NOT run the suite; it just loads the one fixture and probes
+# the suspect operations.  Trigger from the Actions tab (workflow_dispatch).
+
+on:
+  workflow_dispatch:
+  # Also auto-run when pushed to a throwaway diag branch, so this can be
+  # triggered without first landing on the default branch (a workflow_dispatch
+  # button only appears for workflows already on the default branch).  A plain
+  # branch push does NOT trigger ci.yml (that runs only on push to main + PRs),
+  # so this stays isolated -- no full-suite re-run.
+  push:
+    branches: [ 'diag/**' ]
+
+concurrency:
+  group: diag-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  image:
+    runs-on: ubuntu-22.04
+    outputs:
+      ref: ${{ steps.n.outputs.ref }}
+    steps:
+      - id: n
+        run: echo "ref=ghcr.io/${GITHUB_REPOSITORY,,}/ci-base:latest" >> "$GITHUB_OUTPUT"
+
+  diagnose:
+    needs: image
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    container:
+      image: ${{ needs.image.outputs.ref }}
+      options: --shm-size=1g
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same non-root bootstrap as ci.yml: lay a fresh extent, start the stone +
+      # netldi, install Grail, then run the diagnostic instead of the suite.
+      - name: install + run bytes-fixture diagnostic (as non-root 'ci')
+        run: |
+          chown -R ci:ci "$GITHUB_WORKSPACE"
+          runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
+            HOME=/home/ci \
+            GEMSTONE=/opt/gemstone/product \
+            GEMSTONE_NAME=gs64stone \
+            GRAIL_NETLDI=gs64ldi \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            bash -ex -c '
+              export PATH="$GEMSTONE/bin:$PATH"
+              export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"
+              tests/github/setup-testing-env.sh
+              cd "$GEMSTONE_GLOBAL_DIR"
+              startstone -e stone.conf gs64stone
+              waitstone gs64stone 60
+              startnetldi -g gs64ldi
+              cd "$GITHUB_WORKSPACE"
+              ./install_base.sh
+              ./install.sh
+              # Same LC_ALL=C + topaz config as the SUnit shards in run_tests.sh.
+              GRAIL_DIR="$GITHUB_WORKSPACE" LC_ALL=C topaz -lq \
+                -C "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=500000;" \
+                -S scripts/diagnose_bytes_fixture.gs < /dev/null
+            '
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: grail-diagnose-bytes-logs
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            *.out
+            out/*.out
+            testing/*.log
+            testing/log/**
