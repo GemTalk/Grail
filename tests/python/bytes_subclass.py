@@ -258,6 +258,26 @@ def _fromhex_array_arg():
     return bytes.fromhex(array.array('B', b' 41 42 ')) == b'AB'
 
 
+def _ord_slice():
+    # ord() of each 1-byte slice returns the byte value (not a Character path).
+    b = b'\x00A\x7f\x80\xff'
+    return [ord(b[i:i+1]) for i in range(len(b))] == [0, 65, 127, 128, 255]
+
+def _strip_int_raises():
+    try: bytearray(b' abc ').strip(32); return False
+    except TypeError: return True
+def _lstrip_int_raises():
+    try: bytearray(b' abc ').lstrip(32); return False
+    except TypeError: return True
+def _rstrip_int_raises():
+    try: bytearray(b' abc ').rstrip(32); return False
+    except TypeError: return True
+def _strip_str_raises():
+    # a str is not bytes-like either
+    try: b' abc '.strip('x'); return False
+    except TypeError: return True
+
+
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
     'bytes_type_is_subclass': type(MyBytes(b'abc')) is MyBytes,
@@ -474,4 +494,21 @@ RESULTS = {
     'fromhex_pos_ws_in_pair': _fromhex_pos('a ', 1),
     'fromhex_nonascii_ws': _fromhex_reject_value('\xa0'),
     'fromhex_single_char': _fromhex_reject_value('a'),
+
+    # --- ord() of a 1-byte bytes/bytearray returns the byte value (a byte is
+    # an int element, not a Character); strip/lstrip/rstrip take a bytes-like
+    # chars or None (whitespace) and reject an int/str with TypeError. ---
+    'ord_bytes_a': ord(b'A') == 65,
+    'ord_bytes_zero': ord(b'\x00') == 0,
+    'ord_bytes_high': ord(b'\xff') == 255,
+    'ord_bytearray': ord(bytearray(b'A')) == 65,
+    'ord_slice': _ord_slice(),
+    'strip_int_raises': _strip_int_raises(),
+    'lstrip_int_raises': _lstrip_int_raises(),
+    'rstrip_int_raises': _rstrip_int_raises(),
+    'strip_str_raises': _strip_str_raises(),
+    'strip_bytes_ok': b'xxabcyy'.strip(b'xy') == b'abc',
+    'strip_none_ws': b'  abc  '.strip(None) == b'abc',
+    'lstrip_none_ws': b'  abc  '.lstrip(None) == b'abc  ',
+    'rstrip_none_ws': b'  abc  '.rstrip(None) == b'  abc',
 }

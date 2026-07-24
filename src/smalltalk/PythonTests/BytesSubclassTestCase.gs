@@ -272,3 +272,16 @@ testBaseTypesUnaffected
 	self assert: ((self resultAt: 'base_bytearray_type') = true)
 		description: 'base_bytearray_type'
 %
+
+category: 'Grail-Tests - ord + strip type-checking'
+method: BytesSubclassTestCase
+testOrdAndStripTypes
+	"ord() of a 1-byte bytes/bytearray returns the byte value (a byte is an int
+	element, not a Character); strip/lstrip/rstrip take a bytes-like chars or
+	None (ASCII whitespace) and reject an int or str with TypeError."
+
+	#('ord_bytes_a' 'ord_bytes_zero' 'ord_bytes_high' 'ord_bytearray' 'ord_slice'
+	  'strip_int_raises' 'lstrip_int_raises' 'rstrip_int_raises' 'strip_str_raises'
+	  'strip_bytes_ok' 'strip_none_ws' 'lstrip_none_ws' 'rstrip_none_ws') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%

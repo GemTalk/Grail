@@ -718,7 +718,9 @@ ord: aString
 		TypeError ___signal___: errorMsg
 	].
 	char := aString @env0:at: 1.
-	^ char @env0:codePoint
+	"A str yields a Character (-> codePoint); a bytes/bytearray yields the
+	byte value directly as an Integer (ord(b'A') == 65)."
+	^ (char @env0:isKindOf: Integer) ifTrue: [char] ifFalse: [char @env0:codePoint]
 %
 
 category: 'Grail-Built-in Functions'

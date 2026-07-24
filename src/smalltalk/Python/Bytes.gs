@@ -2324,9 +2324,13 @@ rstrip: chars
 	base64.urlsafe_b64encode."
 
 	| charsBytes size end result |
-	charsBytes := (chars isKindOf: ByteArray)
-		ifTrue: [chars]
-		ifFalse: [chars @env0:asByteArray].
+	"None (or the no-arg form) strips ASCII whitespace; a non-bytes-like
+	chars is a TypeError, matching CPython (a str/int is NOT accepted)."
+	(chars @env0:== None) ifTrue: [^ self rstrip].
+	(chars isKindOf: ByteArray) ifFalse: [
+		TypeError ___signal___: ('a bytes-like object is required, not '''
+			@env0:, (chars @env1:__class__ @env1:__name__) @env0:, '''')].
+	charsBytes := chars.
 	size := self @env0:size.
 	end := size.
 	[(end @env0:>= 1) @env0:and: [charsBytes @env0:includes: (self @env0:at: end)]]
@@ -2344,9 +2348,13 @@ lstrip: chars
 	in `chars`."
 
 	| charsBytes size start result newSize |
-	charsBytes := (chars isKindOf: ByteArray)
-		ifTrue: [chars]
-		ifFalse: [chars @env0:asByteArray].
+	"None (or the no-arg form) strips ASCII whitespace; a non-bytes-like
+	chars is a TypeError, matching CPython (a str/int is NOT accepted)."
+	(chars @env0:== None) ifTrue: [^ self lstrip].
+	(chars isKindOf: ByteArray) ifFalse: [
+		TypeError ___signal___: ('a bytes-like object is required, not '''
+			@env0:, (chars @env1:__class__ @env1:__name__) @env0:, '''')].
+	charsBytes := chars.
 	size := self @env0:size.
 	start := 1.
 	[(start @env0:<= size) @env0:and: [charsBytes @env0:includes: (self @env0:at: start)]]
