@@ -125,6 +125,21 @@ testWhitespaceSplitWithMaxsplit
 		self assert: ((self resultAt: key) = true) description: key]
 %
 
+category: 'Grail-Tests - tuple prefix'
+method: BytesSubclassTestCase
+testStartswithEndswithTuplePrefix
+	"startswith/endswith accept a TUPLE of prefixes/suffixes -- True if the
+	receiver starts/ends with ANY element (also with start/end bounds) -- and
+	raise a TypeError naming both 'bytes' and 'tuple' for a non-bytes/non-tuple
+	argument.  removeprefix/removesuffix take a single bytes-like object and
+	must still REJECT a tuple."
+
+	#('tup_startswith_any' 'tup_startswith_bounded' 'tup_startswith_empty'
+	  'tup_endswith_any' 'tup_bad_arg_msg' 'removeprefix_ok' 'removesuffix_ok'
+	  'removeprefix_rejects_tuple') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
 category: 'Grail-Tests - base types'
 method: BytesSubclassTestCase
 testBaseTypesUnaffected

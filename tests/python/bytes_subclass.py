@@ -39,6 +39,22 @@ def _reject_str_arg():
         return True
 
 
+def _startswith_bad_arg_msg():
+    # a non-bytes/non-tuple arg -> TypeError whose message names bytes AND tuple
+    try:
+        b'x'.startswith([b'h']); return False
+    except TypeError as e:
+        m = str(e); return ('bytes' in m) and ('tuple' in m)
+
+
+def _removeprefix_rejects_tuple():
+    # removeprefix/removesuffix take a single bytes-like arg, NOT a tuple
+    try:
+        b'spam'.removeprefix((b'sp',)); return False
+    except TypeError:
+        return True
+
+
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
     'bytes_type_is_subclass': type(MyBytes(b'abc')) is MyBytes,
@@ -110,4 +126,19 @@ RESULTS = {
     'ws_rsplit_1': b'a b c d'.rsplit(None, 1) == [b'a b c', b'd'],
     'ws_rsplit_2': b'a b c d'.rsplit(None, 2) == [b'a b', b'c', b'd'],
     'ws_rsplit_pad': b'  a  b  c  '.rsplit(None, 1) == [b'  a  b', b'c'],
+
+    # --- startswith/endswith accept a TUPLE of prefixes/suffixes (True if ANY
+    # match); a non-bytes/non-tuple arg raises TypeError naming bytes AND tuple.
+    # removeprefix/removesuffix, by contrast, take a single bytes-like (no tuple).
+    'tup_startswith_any':
+        b'hello'.startswith((b'he', b'ha')) and not b'hello'.startswith((b'lo', b'x')),
+    'tup_startswith_bounded':
+        b'helloworld'.startswith((b'hellowo', b'rld', b'lowo'), 3),
+    'tup_startswith_empty': not b'hello'.startswith(()),
+    'tup_endswith_any':
+        b'hello'.endswith((b'lo', b'x')) and not b'hello'.endswith((b'ab', b'cd')),
+    'tup_bad_arg_msg': _startswith_bad_arg_msg(),
+    'removeprefix_ok': b'spam'.removeprefix(b'sp') == b'am',
+    'removesuffix_ok': b'spam'.removesuffix(b'am') == b'sp',
+    'removeprefix_rejects_tuple': _removeprefix_rejects_tuple(),
 }

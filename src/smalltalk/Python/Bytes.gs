@@ -878,9 +878,18 @@ endswith: suffix
 	| suffixClass suffixSize mySize offset |
 	suffixClass := suffix @env0:class.
 
-	"suffix must be a bytes-like object (bytes / bytearray / subclasses)"
+	"A tuple of suffixes: True if self ends with ANY of them (CPython).
+	Each element is validated by the recursive single-suffix call."
+	(suffix isKindOf: tuple) ifTrue: [
+		1 @env0:to: (suffix @env0:size) do: [:ti |
+			(self endswith: (suffix @env0:at: ti)) ifTrue: [^ true]].
+		^ false
+	].
+
+	"otherwise the suffix must be a single bytes-like object"
 	(suffix isKindOf: bytes) ifFalse: [
-		TypeError ___signal___: 'argument should be bytes'
+		TypeError ___signal___: ('endswith first arg must be bytes or a tuple of bytes, not '
+			@env0:, (suffix @env0:class @env0:name @env0:asString))
 	].
 
 	suffixSize := suffix @env0:size.
@@ -1457,8 +1466,12 @@ partition: sep
 category: 'Grail-Prefix/Suffix Methods'
 method: bytes
 removeprefix: prefix
-	"Remove prefix if present, otherwise return copy"
+	"Remove prefix if present, otherwise return copy.  Unlike startswith,
+	removeprefix accepts only a single bytes-like object -- NOT a tuple."
 	| hasPrefix prefixSize mySize result |
+	(prefix isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: ('removeprefix() argument must be a bytes-like object, not '
+			@env0:, (prefix @env0:class @env0:name @env0:asString))].
 	hasPrefix := self startswith: prefix.
 	hasPrefix ifFalse: [
 		^ self @env0:copy
@@ -1478,8 +1491,12 @@ removeprefix: prefix
 category: 'Grail-Prefix/Suffix Methods'
 method: bytes
 removesuffix: suffix
-	"Remove suffix if present, otherwise return copy"
+	"Remove suffix if present, otherwise return copy.  Unlike endswith,
+	removesuffix accepts only a single bytes-like object -- NOT a tuple."
 	| hasSuffix suffixSize mySize result |
+	(suffix isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: ('removesuffix() argument must be a bytes-like object, not '
+			@env0:, (suffix @env0:class @env0:name @env0:asString))].
 	hasSuffix := self endswith: suffix.
 	hasSuffix ifFalse: [
 		^ self @env0:copy
@@ -1966,9 +1983,19 @@ startswith: prefix
 	| prefixClass prefixSize mySize |
 	prefixClass := prefix @env0:class.
 
-	"prefix must be a bytes-like object (bytes / bytearray / subclasses)"
+	"A tuple of prefixes: True if self starts with ANY of them (CPython).
+	Each element is validated by the recursive single-prefix call, so a
+	non-bytes-like element raises the same TypeError."
+	(prefix isKindOf: tuple) ifTrue: [
+		1 @env0:to: (prefix @env0:size) do: [:ti |
+			(self startswith: (prefix @env0:at: ti)) ifTrue: [^ true]].
+		^ false
+	].
+
+	"otherwise the prefix must be a single bytes-like object"
 	(prefix isKindOf: bytes) ifFalse: [
-		TypeError ___signal___: 'argument should be bytes'
+		TypeError ___signal___: ('startswith first arg must be bytes or a tuple of bytes, not '
+			@env0:, (prefix @env0:class @env0:name @env0:asString))
 	].
 
 	prefixSize := prefix @env0:size.
