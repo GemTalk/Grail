@@ -80,6 +80,31 @@ def _ba_index_neg_raises():
         return True
 
 
+def _hex_empty_sep_raises():
+    try:
+        b'\xb9\x01\xef'.hex(''); return False
+    except ValueError:
+        return True
+
+def _hex_multichar_sep_raises():
+    try:
+        b'\xb9\x01\xef'.hex('xx'); return False
+    except ValueError:
+        return True
+
+def _hex_nonascii_sep_raises():
+    try:
+        b'\xb9\x01\xef'.hex('\xff'); return False
+    except ValueError:
+        return True
+
+def _hex_none_sep_raises():
+    try:
+        b'\xb9\x01\xef'.hex(None, 0); return False
+    except TypeError:
+        return True
+
+
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
     'bytes_type_is_subclass': type(MyBytes(b'abc')) is MyBytes,
@@ -210,4 +235,24 @@ RESULTS = {
     'ba_find_neg_start': bytearray(b'abcdefghi').find(b'ghi', -1) == -1,
     'ba_find_neg_start_found': bytearray(b'abcabc').find(b'b', -3) == 4,
     'ba_index_neg_raises': _ba_index_neg_raises(),
+
+    # --- hex(sep[, bytes_per_sep]): a one-ASCII-character separator inserted
+    # between groups of bytes -- positive counts from the right, negative from
+    # the left, 0 or |n| >= len yields no separator; str or bytes sep. ---
+    'hex_sep_default': b'\xb9\x01\xef'.hex(':') == 'b9:01:ef',
+    'hex_sep_bytes': b'\xb9\x01\xef'.hex(b'$') == 'b9$01$ef',
+    'hex_sep_pos2': b'\xb9\x01\xef'.hex(':', 2) == 'b9:01ef',
+    'hex_sep_neg2': b'\xb9\x01\xef'.hex('*', -2) == 'b901*ef',
+    'hex_sep_zero': b'\xb9\x01\xef'.hex(':', 0) == 'b901ef',
+    'hex_sep_ge_len': b'\xb9\x01\xef'.hex(':', 4) == 'b901ef',
+    'hex_sep_six_from_right': bytes([3, 6, 9, 12, 15, 18]).hex(' ', 2) == '0306 090c 0f12',
+    'hex_sep_six_from_left': bytes([3, 6, 9, 12, 15, 18]).hex('-', 3) == '030609-0c0f12',
+    'hex_sep_null': b'\xb9\x01\xef'.hex(b'\x00') == 'b9\x0001\x00ef',
+    'hex_sep_del7f': b'\xb9\x01\xef'.hex('\x7f') == 'b9\x7f01\x7fef',
+    'hex_kw': b'\xb9\x01\xef'.hex(sep=':', bytes_per_sep=2) == 'b9:01ef',
+    'hex_bytearray_sep': bytearray(b'\xb9\x01\xef').hex(':') == 'b9:01:ef',
+    'hex_empty_sep_raises': _hex_empty_sep_raises(),
+    'hex_multichar_sep_raises': _hex_multichar_sep_raises(),
+    'hex_nonascii_sep_raises': _hex_nonascii_sep_raises(),
+    'hex_none_sep_raises': _hex_none_sep_raises(),
 }
