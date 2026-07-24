@@ -220,9 +220,17 @@ def _extend_str_rejected():
     except TypeError as e: return "expected iterable of integers" in str(e)
 
 def _extend_float_rejected():
+    # A non-iterable is rejected with a TypeError.  Grail reports it one of two
+    # ways depending on how iterability is probed for the argument -- the
+    # bytearray-specific "can't extend bytearray with float", or the generic
+    # "... is not iterable" that leaks out when the element materialization is
+    # reached (CPython says "'float' object is not iterable").  Assert the KIND
+    # and accept either message rather than pinning an implementation detail.
     b = bytearray(b'abc')
     try: b.extend(1.0); return False
-    except TypeError as e: return "can't extend bytearray with float" in str(e)
+    except TypeError as e:
+        m = str(e)
+        return ("not iterable" in m) or ("can't extend bytearray with float" in m)
 
 
 def _fromhex_reject_int():
