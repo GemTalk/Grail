@@ -18,13 +18,22 @@ name: CI
 # Run build-ci-image ONCE before this workflow can run (the container pull needs
 # ci-base:latest to exist).
 
+# Runs on every branch push (not just main) so work is gated before it reaches
+# a PR.  `pull_request` is deliberately OMITTED: an in-repo PR branch already
+# runs via its push, and listening to both events would double-run the same
+# commit -- no single concurrency key dedupes a push ref (refs/heads/x) against
+# a pull_request ref (refs/pull/N/merge).  Trade-off: PRs opened from FORKS
+# (which can't push to this repo) won't be tested; add `pull_request:` back with
+# a `github.event.pull_request.head.repo.full_name != github.repository` job
+# guard if fork contributions ever need CI.  `branches: ['**']` matches branch
+# pushes only, not tags.
 on:
   push:
-    branches: [ main ]
-  pull_request:
+    branches: ['**']
   workflow_dispatch:
 
 concurrency:
+  # Per-branch: a new push to the same branch cancels the older in-flight run.
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
