@@ -168,6 +168,99 @@ testSearchAcceptsNoneBounds
 		self assert: ((self resultAt: key) = true) description: key]
 %
 
+category: 'Grail-Tests - search bounds'
+method: BytesSubclassTestCase
+testSearchBoundsEdges
+	"An empty subsequence is always contained (so rfind/index/rindex agree
+	with ``in'' for an empty needle), and bytearray.find (which overrides
+	bytes) counts a negative start/end from the end rather than clamping to 0."
+
+	#('contains_empty_bytes' 'contains_empty_in_empty' 'contains_empty_bytearray'
+	  'rfind_empty_matches_contains' 'index_empty_no_raise' 'ba_find_neg_start'
+	  'ba_find_neg_start_found' 'ba_index_neg_raises') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
+category: 'Grail-Tests - hex separator'
+method: BytesSubclassTestCase
+testHexSeparator
+	"hex(sep[, bytes_per_sep]): a one-ASCII-character separator (str or bytes)
+	between byte groups -- positive bytes_per_sep counts from the right,
+	negative from the left, 0 or |n| >= len yields no separator; the keyword
+	form and bytearray are covered; an empty/multi-char/non-ASCII sep raises
+	ValueError and a None sep raises TypeError."
+
+	#('hex_sep_default' 'hex_sep_bytes' 'hex_sep_pos2' 'hex_sep_neg2'
+	  'hex_sep_zero' 'hex_sep_ge_len' 'hex_sep_six_from_right'
+	  'hex_sep_six_from_left' 'hex_sep_null' 'hex_sep_del7f' 'hex_kw'
+	  'hex_bytearray_sep' 'hex_empty_sep_raises' 'hex_multichar_sep_raises'
+	  'hex_nonascii_sep_raises' 'hex_none_sep_raises') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
+category: 'Grail-Tests - slice deletion'
+method: BytesSubclassTestCase
+testDeleteSlice
+	"del bytearray[i:j[:k]] -- a contiguous run (step 1, incl. negative bounds
+	and the whole [:]), an extended slice (positive and negative step), and a
+	delete-then-extend resize -- all resizing the bytearray in place."
+
+	#('del_slice_step1' 'del_slice_neg' 'del_slice_all' 'del_slice_step2'
+	  'del_slice_neg_step' 'del_slice_big' 'del_slice_backward'
+	  'set_slice_backward') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
+category: 'Grail-Tests - __index__ coercion'
+method: BytesSubclassTestCase
+testIndexCoercion
+	"__index__ coercion: bytearray __setitem__ value and index position, the
+	bytes/bytearray constructor elements, and an __index__ object used as a
+	count source -- with CPython's error kinds (ValueError / TypeError /
+	IndexError, and a raising __index__ propagating its own exception).  The
+	index is coerced before the bounds check, so an __index__ that clears the
+	buffer yields IndexError."
+
+	#('setitem_index_value' 'setitem_index_position' 'setitem_neg_value_raises'
+	  'setitem_object_value_raises' 'setitem_oob_raises' 'mutating_index_oob'
+	  'mutating_value_oob'
+	  'ctor_from_index' 'ctor_from_index_bytearray' 'ctor_index_neg_raises'
+	  'ctor_index_256_raises' 'ctor_reject_str_elem' 'ctor_reject_float_elem'
+	  'ctor_reject_none_elem' 'ctor_source_index' 'ctor_source_index_raises') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
+category: 'Grail-Tests - extend'
+method: BytesSubclassTestCase
+testExtendIterable
+	"bytearray.extend accepts any iterable of ints -- range, generator,
+	iterator, map, the receiver itself, and __index__ elements -- validates
+	every element before mutating (a bad element leaves it unchanged), and
+	rejects a str or a non-iterable with CPython's by-name TypeError."
+
+	#('extend_range' 'extend_generator' 'extend_iterator' 'extend_map'
+	  'extend_self' 'extend_index_elem' 'extend_atomic_valueerror'
+	  'extend_str_rejected' 'extend_float_rejected') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
+category: 'Grail-Tests - fromhex'
+method: BytesSubclassTestCase
+testFromHex
+	"bytes/bytearray.fromhex: hex-digit pairs with ASCII whitespace ignored
+	between pairs, a str or bytes-like argument, self-typed result, and
+	CPython's error kinds -- TypeError for a non-(str|bytes-like) arg (naming
+	the type), ValueError for an odd count / a non-ASCII-whitespace or invalid
+	character (reporting the 0-based position)."
+
+	#('fromhex_basic' 'fromhex_ws' 'fromhex_ws_kinds' 'fromhex_empty'
+	  'fromhex_bytes_arg' 'fromhex_array_arg' 'fromhex_bytearray_type' 'fromhex_bytearray_val'
+	  'fromhex_reject_int' 'fromhex_reject_tuple' 'fromhex_odd'
+	  'fromhex_pos_first' 'fromhex_pos_second' 'fromhex_pos_ws_in_pair'
+	  'fromhex_nonascii_ws' 'fromhex_single_char') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
 category: 'Grail-Tests - base types'
 method: BytesSubclassTestCase
 testBaseTypesUnaffected

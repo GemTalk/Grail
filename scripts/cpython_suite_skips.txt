@@ -92,3 +92,8 @@ test.test_bytes|BytesAsStringTest.test_find_with_memory|naive O(n*m) find hangs 
 test.test_bytes|FreeThreadingTest.test_free_threading_bytearray|real-thread concurrency deadlocks Grail's cooperative threads
 test.test_bytes|FreeThreadingTest.test_free_threading_bytearrayiter|real-thread concurrency deadlocks Grail's cooperative threads
 test.test_bytes|FreeThreadingTest.test_free_threading_bytearray_resize|real-thread concurrency deadlocks Grail's cooperative threads
+# CPython buffer-protocol UAF guard: expects BufferError when sep.__len__
+# re-entrantly clears the bytearray mid-hex. Grail has no buffer export / UAF
+# machinery and reads the sep length via Smalltalk size (no reentrant __len__),
+# so there is nothing to guard against and no BufferError to raise.
+test.test_bytes|ByteArrayTest.test_hex_use_after_free|BufferError-on-reentrant-sep.__len__ is a CPython buffer-protocol UAF guard; N/A to Grail's object model
