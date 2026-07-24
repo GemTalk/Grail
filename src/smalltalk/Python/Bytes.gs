@@ -1273,7 +1273,7 @@ ___hexWithSep___: sep bytesPerSep: nArg
 			(n @env0:> 0)
 				ifTrue: [needSep := ((size @env0:- idx0) @env0:\\ n) @env0:= 0]
 				ifFalse: [needSep := (idx0 @env0:\\ (n @env0:negated)) @env0:= 0]].
-		needSep ifTrue: [ws @env0:nextPut: (Character @env0:value: sepCode)].
+		needSep ifTrue: [ws @env0:nextPut: (Character @env0:codePoint: sepCode)].
 		byte := self @env0:at: i.
 		hexStr := (byte @env0:printStringRadix: 16) @env0:asLowercase.
 		(hexStr @env0:size @env0:= 1) ifTrue: [hexStr := '0' @env0:, hexStr].
