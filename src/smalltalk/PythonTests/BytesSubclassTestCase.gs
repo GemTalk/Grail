@@ -198,6 +198,19 @@ testHexSeparator
 		self assert: ((self resultAt: key) = true) description: key]
 %
 
+category: 'Grail-Tests - slice deletion'
+method: BytesSubclassTestCase
+testDeleteSlice
+	"del bytearray[i:j[:k]] -- a contiguous run (step 1, incl. negative bounds
+	and the whole [:]), an extended slice (positive and negative step), and a
+	delete-then-extend resize -- all resizing the bytearray in place."
+
+	#('del_slice_step1' 'del_slice_neg' 'del_slice_all' 'del_slice_step2'
+	  'del_slice_neg_step' 'del_slice_big' 'del_slice_backward'
+	  'set_slice_backward') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
 category: 'Grail-Tests - base types'
 method: BytesSubclassTestCase
 testBaseTypesUnaffected
