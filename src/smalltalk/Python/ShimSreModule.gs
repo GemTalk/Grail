@@ -93,6 +93,30 @@ faults into a fresh session as NULL rather than a stale integer address;
 cPtrAddress then signals instead of dereferencing it in C.'
 %
 
+! ------- SreScanner class (Grail-side pattern.scanner() state)
+expectvalue /Class
+doit
+Object subclass: 'SreScanner'
+  instVarNames: #(pattern string cursor endpos mustAdvance)
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+SreScanner comment:
+'The object returned by pattern.scanner(string[, pos[, endpos]]): a stateful
+cursor whose match()/search() return successive SreMatch objects (or None),
+advancing an internal position.  A real C SRE_Scanner cannot be kept across
+shim calls (its SRE_STATE points into the per-call UCS4 buffer cache), so this
+reuses SrePattern>>___searchFrom___:in:to:mustAdvance: -- the same one-shot
+primitive finditer uses -- with must_advance semantics after a zero-width
+match.'
+%
+
 expectvalue /Metaclass3
 doit
 _sre removeAllMethods.
@@ -101,6 +125,8 @@ SrePattern removeAllMethods.
 SrePattern class removeAllMethods.
 SreMatch removeAllMethods.
 SreMatch class removeAllMethods.
+SreScanner removeAllMethods.
+SreScanner class removeAllMethods.
 %
 
 set compile_env: 1
@@ -257,16 +283,51 @@ match: aString _: pos _: endpos
 	^ (result == 0) ifTrue: [None] ifFalse: [SreMatch @env0:newFromCPtr: result]
 %
 
+category: 'Grail-Methods - Private'
+method: SrePattern
+___resolveSPE___: positional kw: keywords for: fname
+	"Bind positional + keyword arguments for the (string, pos, endpos)
+	Pattern methods (match/search/fullmatch/findall/finditer).  Returns
+	{ string. posOrNil. endposOrNil }; a nil pos/endpos means 'use the
+	method default'.  Accepts CPython's keyword names and raises TypeError
+	on a duplicate, an unknown keyword, or a missing string -- matching
+	`pat.match(string=..., pos=..., endpos=...)`."
+
+	| s p e recognized |
+	s := nil. p := nil. e := nil.
+	positional @env0:size @env0:> 3 ifTrue: [
+		TypeError ___signal___: fname @env0:, '() takes 1 to 3 arguments'].
+	positional @env0:size @env0:>= 1 ifTrue: [s := positional @env0:at: 1].
+	positional @env0:size @env0:>= 2 ifTrue: [p := positional @env0:at: 2].
+	positional @env0:size @env0:>= 3 ifTrue: [e := positional @env0:at: 3].
+	(keywords ~~ nil @env0:and: [keywords @env0:isEmpty @env0:not]) ifTrue: [
+		recognized := 0.
+		(keywords @env0:includesKey: 'string') ifTrue: [
+			s ~~ nil ifTrue: [TypeError ___signal___: fname @env0:, '() got multiple values for argument ''string'''].
+			s := keywords @env0:at: 'string'. recognized := recognized @env0:+ 1].
+		(keywords @env0:includesKey: 'pos') ifTrue: [
+			p ~~ nil ifTrue: [TypeError ___signal___: fname @env0:, '() got multiple values for argument ''pos'''].
+			p := keywords @env0:at: 'pos'. recognized := recognized @env0:+ 1].
+		(keywords @env0:includesKey: 'endpos') ifTrue: [
+			e ~~ nil ifTrue: [TypeError ___signal___: fname @env0:, '() got multiple values for argument ''endpos'''].
+			e := keywords @env0:at: 'endpos'. recognized := recognized @env0:+ 1].
+		keywords @env0:size @env0:> recognized ifTrue: [
+			TypeError ___signal___: fname @env0:, '() got an unexpected keyword argument']].
+	s == nil ifTrue: [
+		TypeError ___signal___: fname @env0:, '() missing required argument: ''string'''].
+	^ { s. p. e }
+%
+
 category: 'Grail-Methods'
 method: SrePattern
 _match: positional kw: keywords
-	"Varargs dispatcher for match() — used for first-class calls and keyword args."
-	| nargs |
-	nargs := positional @env0:size.
-	(nargs == 1) ifTrue: [^ self match: (positional @env0:at: 1)].
-	(nargs == 2) ifTrue: [^ self match: (positional @env0:at: 1) _: (positional @env0:at: 2)].
-	(nargs == 3) ifTrue: [^ self match: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
-	TypeError ___signal___: 'match() takes 1 to 3 arguments'
+	"Varargs dispatcher for match() — first-class calls and keyword args."
+	| r s p e |
+	r := self ___resolveSPE___: positional kw: keywords for: 'match'.
+	s := r @env0:at: 1. p := r @env0:at: 2. e := r @env0:at: 3.
+	e ~~ nil ifTrue: [^ self match: s _: (p == nil ifTrue: [0] ifFalse: [p]) _: e].
+	p ~~ nil ifTrue: [^ self match: s _: p].
+	^ self match: s
 %
 
 ! --------- search ----------------------------------------------------------
@@ -308,12 +369,12 @@ category: 'Grail-Methods'
 method: SrePattern
 _search: positional kw: keywords
 	"Varargs dispatcher for search()."
-	| nargs |
-	nargs := positional @env0:size.
-	(nargs == 1) ifTrue: [^ self search: (positional @env0:at: 1)].
-	(nargs == 2) ifTrue: [^ self search: (positional @env0:at: 1) _: (positional @env0:at: 2)].
-	(nargs == 3) ifTrue: [^ self search: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
-	TypeError ___signal___: 'search() takes 1 to 3 arguments'
+	| r s p e |
+	r := self ___resolveSPE___: positional kw: keywords for: 'search'.
+	s := r @env0:at: 1. p := r @env0:at: 2. e := r @env0:at: 3.
+	e ~~ nil ifTrue: [^ self search: s _: (p == nil ifTrue: [0] ifFalse: [p]) _: e].
+	p ~~ nil ifTrue: [^ self search: s _: p].
+	^ self search: s
 %
 
 ! --------- fullmatch -------------------------------------------------------
@@ -355,12 +416,12 @@ category: 'Grail-Methods'
 method: SrePattern
 _fullmatch: positional kw: keywords
 	"Varargs dispatcher for fullmatch()."
-	| nargs |
-	nargs := positional @env0:size.
-	(nargs == 1) ifTrue: [^ self fullmatch: (positional @env0:at: 1)].
-	(nargs == 2) ifTrue: [^ self fullmatch: (positional @env0:at: 1) _: (positional @env0:at: 2)].
-	(nargs == 3) ifTrue: [^ self fullmatch: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
-	TypeError ___signal___: 'fullmatch() takes 1 to 3 arguments'
+	| r s p e |
+	r := self ___resolveSPE___: positional kw: keywords for: 'fullmatch'.
+	s := r @env0:at: 1. p := r @env0:at: 2. e := r @env0:at: 3.
+	e ~~ nil ifTrue: [^ self fullmatch: s _: (p == nil ifTrue: [0] ifFalse: [p]) _: e].
+	p ~~ nil ifTrue: [^ self fullmatch: s _: p].
+	^ self fullmatch: s
 %
 
 ! --------- findall ---------------------------------------------------------
@@ -396,12 +457,12 @@ category: 'Grail-Methods'
 method: SrePattern
 _findall: positional kw: keywords
 	"Varargs dispatcher for findall()."
-	| nargs |
-	nargs := positional @env0:size.
-	(nargs == 1) ifTrue: [^ self findall: (positional @env0:at: 1)].
-	(nargs == 2) ifTrue: [^ self findall: (positional @env0:at: 1) _: (positional @env0:at: 2)].
-	(nargs == 3) ifTrue: [^ self findall: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
-	TypeError ___signal___: 'findall() takes 1 to 3 arguments'
+	| r s p e |
+	r := self ___resolveSPE___: positional kw: keywords for: 'findall'.
+	s := r @env0:at: 1. p := r @env0:at: 2. e := r @env0:at: 3.
+	e ~~ nil ifTrue: [^ self findall: s _: (p == nil ifTrue: [0] ifFalse: [p]) _: e].
+	p ~~ nil ifTrue: [^ self findall: s _: p].
+	^ self findall: s
 %
 
 ! --------- scanner-semantics search ----------------------------------------
@@ -452,9 +513,11 @@ finditer: aString _: pos
 category: 'Grail-Methods'
 method: SrePattern
 finditer: aString _: pos _: endpos
-	"finditer(string, pos, endpos) -> iterator of SreMatch.  Scanner
-	semantics: after a zero-width match the next search runs from the
-	SAME position with must_advance set, so a longer match starting
+	"finditer(string, pos, endpos) -> iterator of SreMatch.  Returns a
+	real iterator (CPython's finditer is lazy and single-pass; `for m in
+	...` and next()/StopIteration both work), built by walking with
+	scanner semantics: after a zero-width match the next search runs from
+	the SAME position with must_advance set, so a longer match starting
 	there is still found (test_zerowidth)."
 	| matches cursor m mStart mEnd mustAdvance |
 	matches := OrderedCollection @env0:new.
@@ -462,26 +525,121 @@ finditer: aString _: pos _: endpos
 	mustAdvance := false.
 	[cursor @env0:<= endpos] @env0:whileTrue: [
 		m := self ___searchFrom___: cursor in: aString to: endpos mustAdvance: mustAdvance.
-		(m == None) ifTrue: [^ matches].
+		(m == None) ifTrue: [^ matches __iter__].
 		matches @env0:add: m.
 		mStart := m start.
 		mEnd := m end.
 		mustAdvance := mEnd @env0:= mStart.
 		cursor := mEnd
 	].
-	^ matches
+	^ matches __iter__
 %
 
 category: 'Grail-Methods'
 method: SrePattern
 _finditer: positional kw: keywords
 	"Varargs dispatcher for finditer()."
-	| nargs |
-	nargs := positional @env0:size.
-	(nargs == 1) ifTrue: [^ self finditer: (positional @env0:at: 1)].
-	(nargs == 2) ifTrue: [^ self finditer: (positional @env0:at: 1) _: (positional @env0:at: 2)].
-	(nargs == 3) ifTrue: [^ self finditer: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)].
-	TypeError ___signal___: 'finditer() takes 1 to 3 arguments'
+	| r s p e |
+	r := self ___resolveSPE___: positional kw: keywords for: 'finditer'.
+	s := r @env0:at: 1. p := r @env0:at: 2. e := r @env0:at: 3.
+	e ~~ nil ifTrue: [^ self finditer: s _: (p == nil ifTrue: [0] ifFalse: [p]) _: e].
+	p ~~ nil ifTrue: [^ self finditer: s _: p].
+	^ self finditer: s
+%
+
+! --------- scanner (pattern.scanner()) ------------------------------------
+
+category: 'Grail-Methods'
+method: SrePattern
+scanner: aString
+	"scanner(string) -> SreScanner positioned at 0."
+	^ (SreScanner @env0:new) ___init___: self string: aString cursor: 0 endpos: aString @env0:size
+%
+
+category: 'Grail-Methods'
+method: SrePattern
+scanner: aString _: pos
+	"scanner(string, pos) -> SreScanner."
+	^ (SreScanner @env0:new) ___init___: self string: aString cursor: pos endpos: aString @env0:size
+%
+
+category: 'Grail-Methods'
+method: SrePattern
+scanner: aString _: pos _: endpos
+	"scanner(string, pos, endpos) -> SreScanner."
+	^ (SreScanner @env0:new) ___init___: self string: aString cursor: pos endpos: endpos
+%
+
+category: 'Grail-Methods'
+method: SrePattern
+_scanner: positional kw: keywords
+	"Varargs dispatcher for scanner() — positional and keyword args
+	(string, pos, endpos)."
+	| r s p e |
+	r := self ___resolveSPE___: positional kw: keywords for: 'scanner'.
+	s := r @env0:at: 1. p := r @env0:at: 2. e := r @env0:at: 3.
+	e ~~ nil ifTrue: [^ self scanner: s _: (p == nil ifTrue: [0] ifFalse: [p]) _: e].
+	p ~~ nil ifTrue: [^ self scanner: s _: p].
+	^ self scanner: s
+%
+
+category: 'Grail-Scanner'
+method: SreScanner
+___init___: aPattern string: aString cursor: c endpos: e
+	"Initialize the scanner state."
+	pattern := aPattern.
+	string := aString.
+	cursor := c.
+	endpos := e.
+	mustAdvance := false.
+	^ self
+%
+
+category: 'Grail-Scanner'
+method: SreScanner
+pattern
+	"The SrePattern this scanner is scanning with (CPython SRE_Scanner.pattern)."
+	^ pattern
+%
+
+category: 'Grail-Scanner'
+method: SreScanner
+search
+	"scanner.search() -> the next SreMatch (advancing the internal cursor),
+	or None when exhausted.  Mirrors finditer's per-step logic: after a
+	zero-width match the next search runs with must_advance set."
+	| m mStart mEnd |
+	cursor @env0:> endpos ifTrue: [^ None].
+	m := pattern ___searchFrom___: cursor in: string to: endpos mustAdvance: mustAdvance.
+	m == None ifTrue: [^ None].
+	mStart := m start.
+	mEnd := m end.
+	mustAdvance := mEnd @env0:= mStart.
+	cursor := mEnd.
+	^ m
+%
+
+category: 'Grail-Scanner'
+method: SreScanner
+match
+	"scanner.match() -> an SreMatch anchored at the cursor (advancing), or
+	None.  A forced (must_advance) zero-width match at the cursor is
+	rejected and the cursor steps forward, matching CPython."
+	| m mStart mEnd |
+	cursor @env0:> endpos ifTrue: [^ None].
+	m := pattern match: string _: cursor _: endpos.
+	m == None ifTrue: [
+		mustAdvance ifTrue: [cursor := cursor @env0:+ 1].
+		^ None].
+	mStart := m start.
+	mEnd := m end.
+	(mustAdvance @env0:and: [mEnd @env0:= mStart]) ifTrue: [
+		cursor := cursor @env0:+ 1.
+		mustAdvance := false.
+		^ None].
+	mustAdvance := mEnd @env0:= mStart.
+	cursor := mEnd.
+	^ m
 %
 
 ! --------- sub -------------------------------------------------------------
@@ -727,12 +885,27 @@ split: aString _: maxsplit
 category: 'Grail-Methods'
 method: SrePattern
 _split: positional kw: keywords
-	"Varargs dispatcher for split()."
-	| nargs |
-	nargs := positional @env0:size.
-	(nargs == 1) ifTrue: [^ self split: (positional @env0:at: 1)].
-	(nargs == 2) ifTrue: [^ self split: (positional @env0:at: 1) _: (positional @env0:at: 2)].
-	TypeError ___signal___: 'split() takes 1 or 2 arguments'
+	"Varargs dispatcher for split() — positional and keyword args
+	(string, maxsplit)."
+	| s m recognized |
+	s := nil. m := nil.
+	positional @env0:size @env0:> 2 ifTrue: [
+		TypeError ___signal___: 'split() takes 1 or 2 arguments'].
+	positional @env0:size @env0:>= 1 ifTrue: [s := positional @env0:at: 1].
+	positional @env0:size @env0:>= 2 ifTrue: [m := positional @env0:at: 2].
+	(keywords ~~ nil @env0:and: [keywords @env0:isEmpty @env0:not]) ifTrue: [
+		recognized := 0.
+		(keywords @env0:includesKey: 'string') ifTrue: [
+			s ~~ nil ifTrue: [TypeError ___signal___: 'split() got multiple values for argument ''string'''].
+			s := keywords @env0:at: 'string'. recognized := recognized @env0:+ 1].
+		(keywords @env0:includesKey: 'maxsplit') ifTrue: [
+			m ~~ nil ifTrue: [TypeError ___signal___: 'split() got multiple values for argument ''maxsplit'''].
+			m := keywords @env0:at: 'maxsplit'. recognized := recognized @env0:+ 1].
+		keywords @env0:size @env0:> recognized ifTrue: [
+			TypeError ___signal___: 'split() got an unexpected keyword argument']].
+	s == nil ifTrue: [TypeError ___signal___: 'split() missing required argument: ''string'''].
+	m ~~ nil ifTrue: [^ self split: s _: m].
+	^ self split: s
 %
 
 category: 'Grail-Properties'
@@ -879,13 +1052,35 @@ group
 		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: (self @env0:cPtrAddress)
 %
 
+category: 'Grail-Methods - Private'
+method: SreMatch
+___groupKey___: arg
+	"Normalize a group() argument.  A group name (string) passes through;
+	an integer (directly or via __index__ on an index-like object such as
+	numpy ints or the test's Index wrapper) is range-checked.  An index
+	outside the SmallInteger range cannot name any group and would be
+	silently truncated by the C marshalling, so raise IndexError -- CPython
+	raises IndexError for out-of-range / oversized group indices."
+	| idx |
+	(arg @env0:isKindOf: CharacterCollection) ifTrue: [^ arg].
+	idx := (arg @env0:isKindOf: Integer)
+		ifTrue: [arg]
+		ifFalse: [
+			((arg @env0:class @env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil)
+				ifTrue: [arg __index__]
+				ifFalse: [^ arg]].
+	(idx @env0:isKindOf: SmallInteger) ifFalse: [
+		IndexError ___signal___: 'no such group'].
+	^ idx
+%
+
 category: 'Grail-Methods'
 method: SreMatch
 group: groupArg
 	"group(groupN) -> str"
 	^ (CPythonShim @env0:current)
 		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: (self @env0:cPtrAddress)
-		with: groupArg
+		with: (self ___groupKey___: groupArg)
 %
 
 category: 'Grail-Methods'
@@ -904,7 +1099,7 @@ group: g1 _: g2
 	"group(g1, g2) -> tuple"
 	^ (CPythonShim @env0:current)
 		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: (self @env0:cPtrAddress)
-		with: g1 with: g2
+		with: (self ___groupKey___: g1) with: (self ___groupKey___: g2)
 %
 
 category: 'Grail-Methods'
@@ -913,7 +1108,7 @@ group: g1 _: g2 _: g3
 	"group(g1, g2, g3) -> tuple"
 	^ (CPythonShim @env0:current)
 		@env0:callTyped: '_sre' type: 'Match' method: 'group' selfPtr: (self @env0:cPtrAddress)
-		with: g1 with: g2 with: g3
+		with: (self ___groupKey___: g1) with: (self ___groupKey___: g2) with: (self ___groupKey___: g3)
 %
 
 category: 'Grail-Methods'
@@ -1239,11 +1434,18 @@ callUnicodeTolower: character
 category: 'Grail-Private'
 classmethod: _sre
 callCompile: pattern flags: flags code: code groups: groups groupindex: groupindex indexgroup: indexgroup
-	"Call _sre.compile(...) → returns C pointer (SmallInteger)."
+	"Call _sre.compile(...) → returns C pointer (SmallInteger).
 
+	A nil/None pattern is legal in CPython (re.Scanner compiles a combined
+	SubPattern with pattern=None; the C side only stores it as .pattern),
+	but the shim's marshalling wants a string, so substitute '' -- the
+	compiled matcher is driven entirely by `code`, not by `pattern`."
+
+	| pat |
+	pat := (pattern == nil @env0:or: [pattern == None]) ifTrue: [''] ifFalse: [pattern].
 	^ CPythonShim current
 		callModule6ReturnCPtr: '_sre.compile'
-		with: pattern with: flags with: code
+		with: pat with: flags with: code
 		with: groups with: groupindex with: indexgroup
 %
 

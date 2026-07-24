@@ -717,7 +717,16 @@ tokenizeString
 			ifFalse: [escaped == $b ifTrue: [writeStream nextPut: (Character codePoint: 8)]
 			ifFalse: [escaped == $f ifTrue: [writeStream nextPut: (Character codePoint: 12)]
 			ifFalse: [escaped == $v ifTrue: [writeStream nextPut: (Character codePoint: 11)]
-			ifFalse: [escaped == $0 ifTrue: [writeStream nextPut: (Character codePoint: 0)]
+			ifFalse: [(escaped isDigit and: [escaped digitValue < 8]) ifTrue: [
+				"Octal escape \ooo: 1 to 3 octal digits (0-7).  \8 and \9
+				are NOT octal and fall through to the unknown-escape branch."
+				| octStr |
+				octStr := escaped asString.
+				[octStr size < 3 and: [self atEnd not
+					and: [self peek isDigit and: [self peek digitValue < 8]]]]
+						whileTrue: [octStr := octStr , self advance asString].
+				writeStream nextPut: (Character codePoint: (PythonParser integerFrom: octStr radix: 8)).
+			]
 			ifFalse: [escaped == $x ifTrue: [
 				| hex |
 				hex := (self advance asString , self advance asString).
