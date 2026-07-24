@@ -161,43 +161,55 @@ class _SubTest:
 # ---- assertWarns context manager ------------------------------------------
 
 class _AssertWarnsContext:
-    # Grail's warnings module routes action 'error' to a real raise of
-    # the warning category, so triggering is detected by installing an
-    # 'error' filter for the expected category and catching it here.
-    # On exit ALL filters are reset (the module keeps no filter stack).
+    # Grail's warnings module RECORDS warnings while a context is active
+    # (warnings._grail_start_recording): warn() appends (message, category)
+    # to a buffer and returns instead of raising, so code after the warn()
+    # call in the with-block still runs -- matching CPython, which records
+    # warnings rather than raising them.  __exit__ then inspects the buffer.
+    # (The earlier implementation installed an 'error' filter and caught the
+    # raise, which aborted any statement in the block that triggered a
+    # warning -- e.g. ``p = re.compile(...)'' left p unbound.)
     def __init__(self, expected, expected_regex=None):
         self.expected = expected
         self.expected_regex = expected_regex
         self.warning = None
-        # CPython fills these from the warning's source; Grail does not
-        # track warning origins, so they carry placeholders.
+        # filename is stamped by TestCase.assertWarns from the test's module
+        # (Grail has no frame introspection for the warn() call site); lineno
+        # is unavailable.
         self.filename = "<unknown>"
         self.lineno = 0
 
     def __enter__(self):
+        # The receiver must be an import-bound NAME (see __exit__): reaching a
+        # module method through a stored attribute trips Grail's unary-getter
+        # protocol.
         import warnings
-        warnings.simplefilter("error", self.expected)
+        warnings._grail_start_recording()
         return self
 
     def __exit__(self, exc_type, exc_value, tb):
-        # The receiver must be an import-bound NAME: a zero-arg module
-        # method reached through an attribute expression (stored module
-        # ref) trips Grail's unary-getter protocol -- the attribute load
-        # already executes the method and the call then invokes None.
         import warnings
-        warnings.resetwarnings()
-        if exc_type is None:
-            raise AssertionError(self.expected.__name__ + " not triggered")
-        if not issubclass(exc_type, self.expected):
+        recorded = warnings._grail_stop_recording()
+        if exc_type is not None:
+            # A real exception escaped the block -- let it propagate.
             return False
-        self.warning = exc_value
-        if self.expected_regex is not None:
-            import re
-            if re.search(self.expected_regex, str(exc_value)) is None:
-                raise AssertionError(
-                    "'" + self.expected_regex + "' does not match '"
-                    + str(exc_value) + "'")
-        return True
+        category_matched = False
+        for rec in recorded:
+            message = rec[0]
+            category = rec[1]
+            if issubclass(category, self.expected):
+                category_matched = True
+                if self.expected_regex is not None:
+                    import re
+                    if re.search(self.expected_regex, str(message)) is None:
+                        continue
+                self.warning = message
+                return None
+        if category_matched and self.expected_regex is not None:
+            raise AssertionError(
+                "'" + self.expected_regex
+                + "' does not match any triggered warning")
+        raise AssertionError(self.expected.__name__ + " not triggered")
 
 
 # ---- TestCase -------------------------------------------------------------
@@ -471,23 +483,40 @@ class TestCase:
             fn(*rest, **call_kw)
         return None
 
+    def _warnSourceFile(self):
+        # Best-effort filename for a warning caught by assertWarns.  Grail
+        # has no frame/traceback introspection (BaseException.__traceback__
+        # is nil), so the warn() call site CPython records for w.filename is
+        # unavailable.  In the assertWarns idiom the warning is triggered by
+        # code in the test method itself, whose file is the test class's
+        # defining module -- so report that (test_re test_qualified_re_sub /
+        # _re_subn / _re_split / test_possible_set_operations / test_misuse_flags
+        # check w.filename == __file__).
+        import sys
+        try:
+            return sys.modules.get(type(self).__module__).__file__
+        except BaseException:
+            return "<unknown>"
+
     def assertWarns(self, expected_warning, *call_args, **call_kw):
+        ctx = _AssertWarnsContext(expected_warning)
+        ctx.filename = self._warnSourceFile()
         if len(call_args) == 0:
-            return _AssertWarnsContext(expected_warning)
+            return ctx
         fn = call_args[0]
         rest = call_args[1:]
-        ctx = _AssertWarnsContext(expected_warning)
         with ctx:
             fn(*rest, **call_kw)
         return None
 
     def assertWarnsRegex(self, expected_warning, expected_regex,
                          *call_args, **call_kw):
+        ctx = _AssertWarnsContext(expected_warning, expected_regex)
+        ctx.filename = self._warnSourceFile()
         if len(call_args) == 0:
-            return _AssertWarnsContext(expected_warning, expected_regex)
+            return ctx
         fn = call_args[0]
         rest = call_args[1:]
-        ctx = _AssertWarnsContext(expected_warning, expected_regex)
         with ctx:
             fn(*rest, **call_kw)
         return None

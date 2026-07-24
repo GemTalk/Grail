@@ -83,6 +83,42 @@ _seen
 
 category: 'Grail-Private'
 method: warnings
+_recordList
+	"The active recording buffer (an OrderedCollection) while an
+	assertWarns context is capturing warnings, or nil when not recording.
+	See _grail_start_recording / warn:_:."
+
+	^ self @env0:at: #_recordList ifAbsent: [nil]
+%
+
+category: 'Grail-Recording'
+method: warnings
+_grail_start_recording
+	"Begin capturing warnings for unittest.assertWarns: while active, warn()
+	APPENDS each (message, category) to this buffer and returns without
+	raising, printing, or deduping -- so code after the warn() call in the
+	assertWarns with-block still runs (CPython records warnings; it does not
+	raise them).  Returns None (the caller discards it)."
+
+	self @env0:at: #_recordList put: OrderedCollection @env0:new.
+	^ None
+%
+
+category: 'Grail-Recording'
+method: warnings
+_grail_stop_recording
+	"Stop capturing and return the recorded warnings as a list of
+	[message, category] pairs (empty if none fired).  Resets the buffer to
+	nil so subsequent warnings resume normal filter processing."
+
+	| oc |
+	oc := self @env0:at: #_recordList ifAbsent: [nil].
+	self @env0:at: #_recordList put: nil.
+	^ oc == nil ifTrue: [OrderedCollection @env0:new] ifFalse: [oc]
+%
+
+category: 'Grail-Private'
+method: warnings
 _resolveCategory: category
 	"Default to UserWarning when caller passes nil/None."
 
@@ -155,8 +191,15 @@ warn: message _: category
 	"warn(message, category) - emit a warning of `category` (defaults
 	to UserWarning when nil/None)."
 
-	| cat action key |
+	| cat action key recList |
 	cat := self _resolveCategory: category.
+	"Recording mode (unittest.assertWarns): capture (message, category)
+	without raising or printing, so code after warn() in the with-block
+	still runs (test_re test_possible_set_operations binds a name there)."
+	recList := self _recordList.
+	recList == nil ifFalse: [
+		recList @env0:add: (OrderedCollection @env0:with: message with: cat).
+		^ None].
 	action := self _actionFor: message _: cat.
 	action @env0:= 'ignore' ifTrue: [^ None].
 	action @env0:= 'error' ifTrue: [^ cat ___signal___: message].
@@ -178,8 +221,12 @@ warn_explicit: message _: category _: filename _: lineno
 	form used by the C implementation; here it bypasses the dedupe
 	for action 'always' and otherwise behaves like warn()."
 
-	| cat action |
+	| cat action recList |
 	cat := self _resolveCategory: category.
+	recList := self _recordList.
+	recList == nil ifFalse: [
+		recList @env0:add: (OrderedCollection @env0:with: message with: cat).
+		^ None].
 	action := self _actionFor: message _: cat.
 	action @env0:= 'ignore' ifTrue: [^ None].
 	action @env0:= 'error' ifTrue: [^ cat ___signal___: message].
