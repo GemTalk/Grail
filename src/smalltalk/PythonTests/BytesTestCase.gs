@@ -183,10 +183,13 @@ test__ne__
 category: 'Grail-Tests - Initialization'
 method: BytesTestCase
 test__new__empty
-	"Test bytes() constructor"
+	"Test bytes() constructor -- the genuine no-argument empty case.
+	(Not ``bytes ___new___: bytes'': passing the class as the SOURCE is
+	``bytes(bytes)'', which correctly raises now that a non-iterable source no
+	longer silently degrades to empty bytes.)"
 
 	| result |
-	result := bytes ___new___: bytes.
+	result := bytes @env1:__new__.
 	self assert: result size equals: 0.
 %
 
