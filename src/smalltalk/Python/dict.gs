@@ -49,12 +49,22 @@ __new__: source
 	| result iter done keysMethod keysIter k |
 	result := self ___new___.
 
-	"Mapping fast path: source is a dict (or KeyValueDictionary)"
+	"Mapping fast path: a plain dict / raw KeyValueDictionary copies straight
+	from Smalltalk storage (insertion order).  A dict SUBCLASS that overrides
+	Python iteration order -- collections.OrderedDict after move_to_end, or any
+	class overriding keys()/__iter__ -- must be copied through its Python
+	keys() so the override is honored, exactly as CPython dict() does
+	(test_dict_copy_order).  Detect an override by whether keys() resolves
+	BELOW the base ``dict'' class; if so, fall through to the keys() protocol."
 	(source isKindOf: KeyValueDictionary) ifTrue: [
-		source @env0:keysAndValuesDo: [:_k :_v |
-			result @env0:at: _k put: _v
-		].
-		^ result
+		| keysOwner |
+		keysOwner := source @env0:class @env0:whichClassIncludesSelector: #'keys' environmentId: 1.
+		(keysOwner == nil or: [keysOwner == dict]) ifTrue: [
+			source @env0:keysAndValuesDo: [:_k :_v |
+				result @env0:at: _k put: _v
+			].
+			^ result
+		]
 	].
 
 	"Python mapping protocol: source has a ``keys`` method.  Iterate
@@ -216,10 +226,17 @@ __init__: source
 
 	source == nil ifTrue: [^ None].
 	source == None ifTrue: [^ None].
+	"Plain dict / raw KVD: copy from Smalltalk storage (insertion order).  A
+	subclass overriding Python iteration (OrderedDict, keys()/__iter__ override)
+	falls through to the keys() protocol so the override is honored, as CPython
+	does -- keys() resolving below base ``dict'' signals the override."
 	(source isKindOf: KeyValueDictionary) ifTrue: [
-		source @env0:keysAndValuesDo: [:_k :_v |
-			self @env0:at: _k put: _v].
-		^ None].
+		| keysOwner |
+		keysOwner := source @env0:class @env0:whichClassIncludesSelector: #'keys' environmentId: 1.
+		(keysOwner == nil or: [keysOwner == dict]) ifTrue: [
+			source @env0:keysAndValuesDo: [:_k :_v |
+				self @env0:at: _k put: _v].
+			^ None]].
 	"Mapping protocol: iterate keys + index by [k]."
 	((source @env0:class @env0:whichClassIncludesSelector: #'keys' environmentId: 1) notNil) ifTrue: [
 		(source keys) @env0:do: [:k |
