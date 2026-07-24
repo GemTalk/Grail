@@ -172,12 +172,41 @@ __rxor__: other
 	^ (set @env1:__new__: self) symmetric_difference: other
 %
 
+! Set-like comparison uses CPython's dictview_richcompare: a size test plus a
+! containment walk (``all item of A are in B'') driven by the view's Python
+! __contains__.  NOT a set-of-(key,value)-pairs comparison -- a dict_items
+! __contains__ compares the VALUE with __eq__, so a raising value __eq__
+! propagates (test_dict test_errors_in_view_containment_check) and unhashable
+! values (which a pair-set would choke on) are handled.
+
+category: 'Grail-Comparison'
+method: dict_set_view
+___cmpElements___: other
+	"other's elements as a Smalltalk collection (another view's ___elements, or
+	any set-like materialized via list())."
+
+	(other isKindOf: dict_view) ifTrue: [^ other @env0:___elements].
+	^ (list @env1:__new__: other) @env0:asArray
+%
+
+category: 'Grail-Comparison'
+method: dict_set_view
+___each___: elemColl containedIn: container
+	"True iff every element of elemColl tests `in` container via Python
+	__contains__ (whose value __eq__, for dict_items, may raise -- let it)."
+
+	elemColl @env0:do: [:item |
+		(container @env1:__contains__: item) @env1:___isTruthy___ ifFalse: [^ false]].
+	^ true
+%
+
 category: 'Grail-Comparison'
 method: dict_set_view
 __eq__: other
 	((other isKindOf: Set) @env0:or: [other isKindOf: dict_set_view])
 		ifFalse: [^ false].
-	^ (set @env1:__new__: self) __eq__: (set @env1:__new__: other)
+	(self @env0:size @env0:= (other @env0:size)) ifFalse: [^ false].
+	^ self ___each___: (self @env0:___elements) containedIn: other
 %
 
 category: 'Grail-Comparison'
@@ -189,25 +218,29 @@ __ne__: other
 category: 'Grail-Comparison'
 method: dict_set_view
 __le__: other
-	^ (set @env1:__new__: self) __le__: (set @env1:__new__: other)
+	(self @env0:size @env0:> (other @env0:size)) ifTrue: [^ false].
+	^ self ___each___: (self @env0:___elements) containedIn: other
 %
 
 category: 'Grail-Comparison'
 method: dict_set_view
 __lt__: other
-	^ (set @env1:__new__: self) __lt__: (set @env1:__new__: other)
+	(self @env0:size @env0:< (other @env0:size)) ifFalse: [^ false].
+	^ self ___each___: (self @env0:___elements) containedIn: other
 %
 
 category: 'Grail-Comparison'
 method: dict_set_view
 __ge__: other
-	^ (set @env1:__new__: self) __ge__: (set @env1:__new__: other)
+	(self @env0:size @env0:< (other @env0:size)) ifTrue: [^ false].
+	^ self ___each___: (self ___cmpElements___: other) containedIn: self
 %
 
 category: 'Grail-Comparison'
 method: dict_set_view
 __gt__: other
-	^ (set @env1:__new__: self) __gt__: (set @env1:__new__: other)
+	(self @env0:size @env0:> (other @env0:size)) ifFalse: [^ false].
+	^ self ___each___: (self ___cmpElements___: other) containedIn: self
 %
 
 category: 'Grail-Set Tests'

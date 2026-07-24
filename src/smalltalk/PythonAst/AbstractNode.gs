@@ -336,6 +336,35 @@ ___pythonLocalInEnclosingFunctions___: aSymbol
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___enclosingFunctionLocalBeyondClass___: aSymbol
+	"True iff aSymbol is a python-local of an enclosing function BEYOND
+	the nearest enclosing ClassDefAst -- i.e. this node sits in a
+	class-method body (or a class nested in one) and the name belongs
+	to an ENCLOSING def, not to the method itself (or a def nested in
+	it).  The first binding function wins: bound before crossing a
+	classdef -> a real temp of the compiled method -> false.
+
+	On a NameAst this drives the closure-cell read for a method body's
+	free variable; on a ClassDefAst it drives the cell-FORWARD store
+	emitted in the enclosing method (the store's value must itself be
+	read from the method's own cell, since a class-method body
+	string-compiles with no lexical link to the outer temp)."
+
+	| node passedClass |
+	node := parent.
+	passedClass := false.
+	[node notNil] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [passedClass := true].
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [
+				(self ___functionBindsPythonLocal___: node named: aSymbol)
+					ifTrue: [^ passedClass]].
+		node := node parent].
+	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___moduleStoreReceiverExpr___
 	"Smalltalk receiver expression for a module dynamic-instVar store /
 	delete.  Inside the module body's initialize and top-level defs,
