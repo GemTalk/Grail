@@ -251,10 +251,7 @@ class ReTests(unittest.TestCase):
         self.assertEqual(re.sub('a', 'b', 'aaaaa'), 'bbbbb')
         with self.assertWarns(DeprecationWarning) as w:
             self.assertEqual(re.sub('a', 'b', 'aaaaa', 1), 'baaaa')
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
+        self.assertEqual(w.filename, __file__)
         self.assertEqual(re.sub('a', 'b', 'aaaaa', count=1), 'baaaa')
 
         with self.assertRaisesRegex(TypeError,
@@ -269,44 +266,24 @@ class ReTests(unittest.TestCase):
             re.sub('a', 'b', 'aaaaa', 1, 0, 0)
 
     def test_misuse_flags(self):
-        # Grail: this test's premise is CPython's "warn once, then keep
-        # going" model for warnings.warn() -- it needs BOTH the
-        # DeprecationWarning to fire AND `result` to hold the value
-        # re.sub/subn/split actually returned.  Grail's warnings module
-        # instead RAISES the warning as a real exception (see
-        # unittest/__init__.py's _AssertWarnsContext comment), so
-        # execution never reaches the assignment; `result` stays
-        # unbound once the `with` block exits, turning every assertion
-        # below into an UnboundLocalError instead of a real check.
-        self.skipTest("Grail: warnings.warn() raises rather than "
-                      "warn-then-continue, so `result` is never assigned")
         with self.assertWarns(DeprecationWarning) as w:
             result = re.sub('a', 'b', 'aaaaa', re.I)
         self.assertEqual(result, re.sub('a', 'b', 'aaaaa', count=int(re.I)))
         self.assertEqual(str(w.warning),
                          "'count' is passed as positional argument")
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
+        self.assertEqual(w.filename, __file__)
         with self.assertWarns(DeprecationWarning) as w:
             result = re.subn("b*", "x", "xyz", re.I)
         self.assertEqual(result, re.subn("b*", "x", "xyz", count=int(re.I)))
         self.assertEqual(str(w.warning),
                          "'count' is passed as positional argument")
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
+        self.assertEqual(w.filename, __file__)
         with self.assertWarns(DeprecationWarning) as w:
             result = re.split(":", ":a:b::c", re.I)
         self.assertEqual(result, re.split(":", ":a:b::c", maxsplit=int(re.I)))
         self.assertEqual(str(w.warning),
                          "'maxsplit' is passed as positional argument")
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
+        self.assertEqual(w.filename, __file__)
 
     def test_bug_114660(self):
         self.assertEqual(re.sub(r'(\S)\s+(\S)', r'\1 \2', 'hello  there'),
@@ -416,10 +393,7 @@ class ReTests(unittest.TestCase):
         self.assertEqual(re.subn("b*", "x", "xyz"), ('xxxyxzx', 4))
         with self.assertWarns(DeprecationWarning) as w:
             self.assertEqual(re.subn("b*", "x", "xyz", 2), ('xxxyz', 2))
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
+        self.assertEqual(w.filename, __file__)
         self.assertEqual(re.subn("b*", "x", "xyz", count=2), ('xxxyz', 2))
 
         with self.assertRaisesRegex(TypeError,
@@ -489,10 +463,7 @@ class ReTests(unittest.TestCase):
     def test_qualified_re_split(self):
         with self.assertWarns(DeprecationWarning) as w:
             self.assertEqual(re.split(":", ":a:b::c", 2), ['', 'a', 'b::c'])
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
+        self.assertEqual(w.filename, __file__)
         self.assertEqual(re.split(":", ":a:b::c", maxsplit=2), ['', 'a', 'b::c'])
         self.assertEqual(re.split(':', 'a:b:c:d', maxsplit=2), ['a', 'b', 'c:d'])
         self.assertEqual(re.split("(:)", ":a:b::c", maxsplit=2),
@@ -1353,145 +1324,75 @@ class ReTests(unittest.TestCase):
     def test_possible_set_operations(self):
         s = bytes(range(128)).decode()
         with self.assertWarnsRegex(FutureWarning, 'Possible set difference') as w:
-            re.compile(r'[0-9--1]')
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
-        # Grail: assertWarnsRegex RAISES the warning as an exception (see
-        # unittest's _AssertWarnsContext comment), so `p = re.compile(...)`
-        # inside the `with` block above never completes; recompile
-        # outside it, under the filter `__exit__` already reset, to get
-        # a real Pattern to exercise below.
-        p = re.compile(r'[0-9--1]')
+            p = re.compile(r'[0-9--1]')
+        self.assertEqual(w.filename, __file__)
         self.assertEqual(p.findall(s), list('-./0123456789'))
         with self.assertWarnsRegex(FutureWarning, 'Possible set difference') as w:
             self.assertEqual(re.findall(r'[0-9--2]', s), list('-./0123456789'))
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
+        self.assertEqual(w.filename, __file__)
 
         self.assertEqual(re.findall(r'[--1]', s), list('-./01'))
 
         with self.assertWarnsRegex(FutureWarning, 'Possible set difference') as w:
-            re.compile(r'[%--1]')
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
-        # Grail: re-compile outside the `with` -- see the comment on the
-        # first case above (assertWarnsRegex raises, so `p =` inside
-        # the block never completes).
-        p = re.compile(r'[%--1]')
+            p = re.compile(r'[%--1]')
+        self.assertEqual(w.filename, __file__)
         self.assertEqual(p.findall(s), list("%&'()*+,-1"))
 
         with self.assertWarnsRegex(FutureWarning, 'Possible set difference ') as w:
-            re.compile(r'[%--]')
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
-        # Grail: re-compile outside the `with` -- see the comment above.
-        p = re.compile(r'[%--]')
+            p = re.compile(r'[%--]')
+        self.assertEqual(w.filename, __file__)
         self.assertEqual(p.findall(s), list("%&'()*+,-"))
 
         with self.assertWarnsRegex(FutureWarning, 'Possible set intersection ') as w:
-            re.compile(r'[0-9&&1]')
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
-        # Grail: re-compile outside the `with` -- see the comment above.
-        p = re.compile(r'[0-9&&1]')
+            p = re.compile(r'[0-9&&1]')
+        self.assertEqual(w.filename, __file__)
         self.assertEqual(p.findall(s), list('&0123456789'))
         with self.assertWarnsRegex(FutureWarning, 'Possible set intersection ') as w:
             self.assertEqual(re.findall(r'[0-8&&1]', s), list('&012345678'))
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
+        self.assertEqual(w.filename, __file__)
 
         with self.assertWarnsRegex(FutureWarning, 'Possible set intersection ') as w:
-            re.compile(r'[\d&&1]')
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
-        # Grail: re-compile outside the `with` -- see the comment above.
-        p = re.compile(r'[\d&&1]')
+            p = re.compile(r'[\d&&1]')
+        self.assertEqual(w.filename, __file__)
         self.assertEqual(p.findall(s), list('&0123456789'))
 
         self.assertEqual(re.findall(r'[&&1]', s), list('&1'))
 
         with self.assertWarnsRegex(FutureWarning, 'Possible set union ') as w:
-            re.compile(r'[0-9||a]')
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
-        # Grail: re-compile outside the `with` -- see the comment above.
-        p = re.compile(r'[0-9||a]')
+            p = re.compile(r'[0-9||a]')
+        self.assertEqual(w.filename, __file__)
         self.assertEqual(p.findall(s), list('0123456789a|'))
 
         with self.assertWarnsRegex(FutureWarning, 'Possible set union ') as w:
-            re.compile(r'[\d||a]')
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
-        # Grail: re-compile outside the `with` -- see the comment above.
-        p = re.compile(r'[\d||a]')
+            p = re.compile(r'[\d||a]')
+        self.assertEqual(w.filename, __file__)
         self.assertEqual(p.findall(s), list('0123456789a|'))
 
         self.assertEqual(re.findall(r'[||1]', s), list('1|'))
 
         with self.assertWarnsRegex(FutureWarning, 'Possible set symmetric difference ') as w:
-            re.compile(r'[0-9~~1]')
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
-        # Grail: re-compile outside the `with` -- see the comment above.
-        p = re.compile(r'[0-9~~1]')
+            p = re.compile(r'[0-9~~1]')
+        self.assertEqual(w.filename, __file__)
         self.assertEqual(p.findall(s), list('0123456789~'))
 
         with self.assertWarnsRegex(FutureWarning, 'Possible set symmetric difference ') as w:
-            re.compile(r'[\d~~1]')
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
-        # Grail: re-compile outside the `with` -- see the comment above.
-        p = re.compile(r'[\d~~1]')
+            p = re.compile(r'[\d~~1]')
+        self.assertEqual(w.filename, __file__)
         self.assertEqual(p.findall(s), list('0123456789~'))
 
         self.assertEqual(re.findall(r'[~~1]', s), list('1~'))
 
         with self.assertWarnsRegex(FutureWarning, 'Possible nested set ') as w:
-            re.compile(r'[[0-9]|]')
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
-        # Grail: re-compile outside the `with` -- see the comment above.
-        p = re.compile(r'[[0-9]|]')
+            p = re.compile(r'[[0-9]|]')
+        self.assertEqual(w.filename, __file__)
         self.assertEqual(p.findall(s), list('0123456789[]'))
         with self.assertWarnsRegex(FutureWarning, 'Possible nested set ') as w:
             self.assertEqual(re.findall(r'[[0-8]|]', s), list('012345678[]'))
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
+        self.assertEqual(w.filename, __file__)
 
         with self.assertWarnsRegex(FutureWarning, 'Possible nested set ') as w:
-            re.compile(r'[[:digit:]|]')
-        # Grail: w.filename is always '<unknown>' -- no call-stack
-        # introspection, so warnings.warn(stacklevel=N) can't resolve the
-        # caller's file (see unittest's _AssertWarnsContext comment).
-        # self.assertEqual(w.filename, __file__)
-        # Grail: re-compile outside the `with` -- see the comment above.
-        p = re.compile(r'[[:digit:]|]')
+            p = re.compile(r'[[:digit:]|]')
+        self.assertEqual(w.filename, __file__)
         self.assertEqual(p.findall(s), list(':[]dgit'))
 
     def test_search_coverage(self):
@@ -1600,20 +1501,6 @@ class ReTests(unittest.TestCase):
             self.assertTrue(re.compile(b'^pattern$', flag))
 
     def test_sre_character_literals(self):
-        # Grail: this method as a whole raises an OutOfRange error
-        # (attempted Character codePoint: 1114112, one past the max
-        # valid 0x10FFFF) when run in full, but every individual
-        # assertion inside it (each \NNN/\xNN/\uNNNN/\UNNNNNNNN escape
-        # for every listed code point, and every checkPatternError
-        # case including the octal-overflow/incomplete-escape ones at
-        # the end) passes when re-run standalone, including via the
-        # exact assertRaises(...) as cm: form checkPatternError uses --
-        # so this looks like state that accumulates across the method's
-        # own iterations (likely the compiled-pattern cache) rather
-        # than any single bad escape/codepoint, and wasn't isolated
-        # further in the time available.
-        self.skipTest("Grail: OutOfRange(1114112) somewhere in this "
-                      "method's full run; not isolated to one assertion")
         for i in [0, 8, 16, 32, 64, 127, 128, 255, 256, 0xFFFF, 0x10000, 0x10FFFF]:
             if i < 256:
                 self.assertTrue(re.match(r"\%03o" % i, chr(i)))
@@ -1646,11 +1533,6 @@ class ReTests(unittest.TestCase):
         self.checkPatternError(r"\U00110000", r'bad escape \U00110000', 0)
 
     def test_sre_character_class_literals(self):
-        # Grail: see test_sre_character_literals's twin comment -- same
-        # OutOfRange(1114112) when run in full, not isolated to one
-        # assertion.
-        self.skipTest("Grail: OutOfRange(1114112) somewhere in this "
-                      "method's full run; not isolated to one assertion")
         for i in [0, 8, 16, 32, 64, 127, 128, 255, 256, 0xFFFF, 0x10000, 0x10FFFF]:
             if i < 256:
                 self.assertTrue(re.match(r"[\%o]" % i, chr(i)))
@@ -2517,12 +2399,6 @@ class ReTests(unittest.TestCase):
         self.assertIn('DOTALL', str(re.S))
 
     def test_pattern_compare(self):
-        # Grail: Pattern uses identity-based __eq__/__hash__ (no
-        # content-based override), so two SEPARATELY compiled Pattern
-        # objects for the same (source, flags) don't compare/hash
-        # equal the way CPython's do.
-        self.skipTest("Grail: Pattern doesn't compare/hash by "
-                      "(pattern, flags) content, only by identity")
         pattern1 = re.compile('abc', re.IGNORECASE)
 
         # equal to itself
@@ -2552,9 +2428,6 @@ class ReTests(unittest.TestCase):
             pattern1 < pattern2
 
     def test_pattern_compare_bytes(self):
-        # Grail: see test_pattern_compare's twin comment.
-        self.skipTest("Grail: Pattern doesn't compare/hash by "
-                      "(pattern, flags) content, only by identity")
         pattern1 = re.compile(b'abc')
 
         # equal: test bytes patterns

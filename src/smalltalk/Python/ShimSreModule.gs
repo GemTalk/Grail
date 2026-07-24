@@ -1034,6 +1034,53 @@ __repr__
 	^ stream @env0:contents
 %
 
+category: 'Grail-Comparison'
+method: SrePattern
+___isBytesPattern___
+	"True when compiled from bytes (the source is a ByteArray) -- the C
+	PatternObject isbytes flag, used by __eq__/__hash__."
+	^ (self pattern) @env0:isKindOf: ByteArray
+%
+
+category: 'Grail-Comparison'
+method: SrePattern
+__eq__: other
+	"Two compiled patterns are equal iff same source, flags, and
+	str/bytes-ness -- mirroring C pattern_richcompare, which compares
+	flags/isbytes/code (the same source and flags produce the same code
+	outside re.LOCALE; groups/groupindex are derived from the source).  A
+	non-pattern operand returns the NotImplemented sentinel so == defers to
+	the reflected comparison / identity (test_pattern_compare / _bytes)."
+	(other @env0:isKindOf: SrePattern) ifFalse: [^ #'___NotImplemented___'].
+	(self @env0:== other) ifTrue: [^ true].
+	((self flags) @env0:= (other flags)) ifFalse: [^ false].
+	((self ___isBytesPattern___) @env0:= (other ___isBytesPattern___)) ifFalse: [^ false].
+	^ (self pattern) @env0:= (other pattern)
+%
+
+category: 'Grail-Comparison'
+method: SrePattern
+__ne__: other
+	"Inverse of __eq__, preserving the NotImplemented sentinel for a
+	non-pattern operand so != can defer to the reflected comparison."
+	| eqr |
+	eqr := self __eq__: other.
+	(eqr @env0:== #'___NotImplemented___') ifTrue: [^ eqr].
+	^ eqr @env0:not
+%
+
+category: 'Grail-Comparison'
+method: SrePattern
+__hash__
+	"Hash from the value fields (source, flags, isbytes) so patterns that
+	compare equal hash equal, mirroring C pattern_hash (test_pattern_compare)."
+	| h |
+	h := (self pattern) __hash__.
+	h := h @env0:bitXor: (self flags).
+	h := h @env0:bitXor: ((self ___isBytesPattern___) @env0:ifTrue: [1] ifFalse: [0]).
+	^ h
+%
+
 ! ===============================================================================
 ! SreMatch - env 0 class methods
 ! ===============================================================================
