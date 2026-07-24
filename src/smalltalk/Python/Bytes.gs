@@ -516,6 +516,9 @@ count: sub _: start _: end
 	| size s e |
 	size := self @env0:size.
 	s := start. e := end.
+	"CPython accepts None for start/end (== the default bound)."
+	(s @env0:== None) ifTrue: [s := 0].
+	(e @env0:== None) ifTrue: [e := size].
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size.
@@ -533,6 +536,9 @@ rfind: sub _: start _: end
 	| size s e subSize i |
 	size := self @env0:size.
 	s := start. e := end.
+	"CPython accepts None for start/end (== the default bound)."
+	(s @env0:== None) ifTrue: [s := 0].
+	(e @env0:== None) ifTrue: [e := size].
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size.
@@ -2371,6 +2377,9 @@ find: sub _: start _: end
 	| size s e r |
 	size := self @env0:size.
 	s := start. e := end.
+	"CPython accepts None for start/end (== the default bound)."
+	(s @env0:== None) ifTrue: [s := 0].
+	(e @env0:== None) ifTrue: [e := size].
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size. s := s @env0:min: size.
@@ -2595,6 +2604,9 @@ ___boundedSlice___: start end: end
 	| size s e |
 	size := self @env0:size.
 	s := start. e := end.
+	"CPython accepts None for start/end (== the default bound)."
+	(s @env0:== None) ifTrue: [s := 0].
+	(e @env0:== None) ifTrue: [e := size].
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size. s := s @env0:min: size.

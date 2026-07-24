@@ -172,4 +172,20 @@ RESULTS = {
     'codec_decode_kwargs': bytes("ab\x80", "latin-1").decode(errors="ignore", encoding="utf-8") == "ab",
     'codec_decode_strict_raises': _decode_strict_raises(),
     'codec_bytearray_utf16': bytearray(_UNI, "utf-16").decode("utf-16") == _UNI,
+
+    # --- the search family accepts None for start/end (== the default
+    # bound), matching CPython: find/rfind/index/rindex/count and the
+    # bounded startswith/endswith.  Grail previously did `None < 0` and
+    # raised a TypeError. ---
+    'none_find': b'abcabc'.find(b'b', None, None) == 1,
+    'none_rfind': b'abcabc'.rfind(b'b', None, None) == 4,
+    'none_index': b'abcabc'.index(b'b', None) == 1,
+    'none_rindex': b'abcabc'.rindex(b'b', None, None) == 4,
+    'none_count': b'abcabc'.count(b'b', None, None) == 2,
+    'none_find_realstart': b'abcabc'.find(b'b', 2, None) == 4,
+    'none_find_realend': b'abcabc'.find(b'b', None, 2) == 1,
+    'none_startswith': b'abc'.startswith(b'a', None, None),
+    'none_endswith': b'abc'.endswith(b'c', None, None),
+    'none_startswith_realstart': b'abcabc'.startswith(b'b', 1, None),
+    'none_bytearray_find': bytearray(b'abcabc').find(b'b', None, None) == 1,
 }
