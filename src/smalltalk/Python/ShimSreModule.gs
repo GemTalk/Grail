@@ -944,19 +944,31 @@ __repr__
 	flag names in sre.c's table order, and the implicit re.UNICODE
 	dropped for str patterns (test_pattern_compile repr checks)."
 
-	| src flagsVal srcRepr names stream |
+	| src flagsVal srcRepr names stream remaining |
 	src := self pattern.
 	flagsVal := self flags.
+	"For a str (non-bytes) pattern, drop the implicit re.UNICODE, but only when
+	UNICODE is the sole charset flag -- matching CPython pattern_repr's
+	(flags & (LOCALE|UNICODE|ASCII)) == UNICODE test."
 	(src isKindOf: ByteArray) ifFalse: [
-		flagsVal := flagsVal @env0:- (flagsVal @env0:bitAnd: 32)
+		((flagsVal @env0:bitAnd: 292) @env0:= 32) ifTrue: [   "292 = LOCALE|UNICODE|ASCII (4|32|256)"
+			flagsVal := flagsVal @env0:- 32]
 	].
 	names := OrderedCollection @env0:new.
-	{ { 're.TEMPLATE'. 1 }. { 're.IGNORECASE'. 2 }. { 're.LOCALE'. 4 }.
+	remaining := flagsVal.
+	"re.TEMPLATE (value 1) is intentionally absent: CPython 3.14 removed it from
+	the repr table, so bit 0 surfaces via the 0x remainder below, not as a name."
+	{ { 're.IGNORECASE'. 2 }. { 're.LOCALE'. 4 }.
 	  { 're.MULTILINE'. 8 }. { 're.DOTALL'. 16 }. { 're.UNICODE'. 32 }.
 	  { 're.VERBOSE'. 64 }. { 're.DEBUG'. 128 }. { 're.ASCII'. 256 } }
 		@env0:do: [:pair |
-			((flagsVal @env0:bitAnd: (pair @env0:at: 2)) @env0:= 0) ifFalse: [
-				names @env0:add: (pair @env0:at: 1)]].
+			((remaining @env0:bitAnd: (pair @env0:at: 2)) @env0:= 0) ifFalse: [
+				names @env0:add: (pair @env0:at: 1).
+				remaining := remaining @env0:- (pair @env0:at: 2)]].
+	"Flags with no name are appended as one 0x hex literal after the named
+	flags, mirroring CPython (test_unknown_flags)."
+	(remaining @env0:= 0) ifFalse: [
+		names @env0:add: '0x' @env0:, ((remaining @env0:printStringRadix: 16 showRadix: false) @env0:asLowercase)].
 	srcRepr := src __repr__.
 	srcRepr @env0:size @env0:> 200 ifTrue: [
 		srcRepr := srcRepr @env0:copyFrom: 1 to: 200].
@@ -1369,6 +1381,44 @@ method: SreMatch
 regs
 	"A tuple of (start, end) for each group."
 	^ (CPythonShim @env0:current) @env0:callTyped: '_sre' type: 'Match' method: 'regs' selfPtr: (self @env0:cPtrAddress)
+%
+
+category: 'Grail-Introspection'
+classmethod: SreMatch
+__module__
+	"Python ``type(m).__module__`` -> 're' (CPython exposes the match type as
+	re.Match).  object's env-1 metaclass supplies __name__/__qualname__ but not
+	__module__, so type(match).__module__ would otherwise raise AttributeError
+	-- test_re test_match_repr builds its expected repr string from it.  Must be
+	env-1 (Python-visible), like object class >> __name__."
+
+	^ 're'
+%
+
+category: 'Grail-Printing'
+method: SreMatch
+__repr__
+	"repr(match) -> <SreMatch object; span=(s, e), match='...'> mirroring
+	CPython match_repr: the whole-match group(0) repr truncated to 50
+	characters.  The class name stands in for CPython's re.Match tp_name;
+	test_re test_match_repr allows an optional module prefix, so the bare
+	class name matches."
+
+	| g0repr stream |
+	g0repr := self group __repr__.
+	g0repr @env0:size @env0:> 50 ifTrue: [
+		g0repr := g0repr @env0:copyFrom: 1 to: 50].
+	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream @env0:nextPut: $<.
+	stream @env0:nextPutAll: self @env0:class @env0:name @env0:asString.
+	stream @env0:nextPutAll: ' object; span=('.
+	stream @env0:nextPutAll: self start @env0:printString.
+	stream @env0:nextPutAll: ', '.
+	stream @env0:nextPutAll: self end @env0:printString.
+	stream @env0:nextPutAll: '), match='.
+	stream @env0:nextPutAll: g0repr.
+	stream @env0:nextPut: $>.
+	^ stream @env0:contents
 %
 
 ! ===============================================================================
