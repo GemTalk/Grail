@@ -285,3 +285,15 @@ testOrdAndStripTypes
 	  'strip_bytes_ok' 'strip_none_ws' 'lstrip_none_ws' 'rstrip_none_ws') do: [:key |
 		self assert: ((self resultAt: key) = true) description: key]
 %
+
+category: 'Grail-Tests - concatenation type-checking'
+method: BytesSubclassTestCase
+testConcatTypes
+	"bytes/bytearray + (and bytearray +=) a bytes-like object works; a str
+	operand raises a (catchable) TypeError -- the message is built from the
+	Python type names, not by appending the class object (which crashed)."
+
+	#('concat_bytes_bytes' 'concat_bytes_ba' 'concat_ba_bytes'
+	  'concat_bytes_str_raises' 'iadd_ok' 'iadd_str_raises') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%

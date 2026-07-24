@@ -158,14 +158,14 @@ method: bytearray
 __iadd__: other
 	"In-place concatenation"
 
-	| otherClass |
-	otherClass := other @env0:class.
-
-	"Can only concatenate with bytes or bytearray"
-	((otherClass == bytes) or: [
-		otherClass == bytearray
-	]) ifFalse: [
-		TypeError ___signal___: ('can''t concat bytearray to ' @env0:, otherClass)
+	"Can only concatenate in place with a bytes-like object (bytes / bytearray /
+	subclasses).  Message uses the Python type NAMES (``can't concat str to
+	bytearray''); appending the class OBJECT used to raise an uncatchable MNU."
+	(other isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: ('can''t concat '
+			@env0:, (other @env1:__class__ @env1:__name__)
+			@env0:, ' to '
+			@env0:, (self @env1:__class__ @env1:__name__))
 	].
 
 	self extend: other.

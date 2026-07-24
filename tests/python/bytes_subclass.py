@@ -277,6 +277,17 @@ def _strip_str_raises():
     try: b' abc '.strip('x'); return False
     except TypeError: return True
 
+def _concat_bytes_str_raises():
+    # bytes + str -> TypeError (message built from type names, not a crash)
+    try: b'abc' + 'def'; return False
+    except TypeError: return True
+def _iadd_str_raises():
+    b = bytearray(b'abc')
+    try: b += 'def'; return False
+    except TypeError: return True
+def _iadd_ok():
+    b = bytearray(b'ab'); b += b'cd'; return list(b) == [97, 98, 99, 100]
+
 
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
@@ -511,4 +522,13 @@ RESULTS = {
     'strip_none_ws': b'  abc  '.strip(None) == b'abc',
     'lstrip_none_ws': b'  abc  '.lstrip(None) == b'abc  ',
     'rstrip_none_ws': b'  abc  '.rstrip(None) == b'  abc',
+
+    # --- concatenation: bytes/bytearray + bytes-like works; a str operand is a
+    # TypeError (built from type names, not a crash), for both + and += . ---
+    'concat_bytes_bytes': (b'ab' + b'cd') == b'abcd',
+    'concat_bytes_ba': (b'ab' + bytearray(b'cd')) == b'abcd',
+    'concat_ba_bytes': list(bytearray(b'ab') + b'cd') == [97, 98, 99, 100],
+    'concat_bytes_str_raises': _concat_bytes_str_raises(),
+    'iadd_ok': _iadd_ok(),
+    'iadd_str_raises': _iadd_str_raises(),
 }

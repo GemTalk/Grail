@@ -319,12 +319,17 @@ category: 'Grail-Concatenation'
 method: bytes
 __add__: other
 	"Concatenate bytes"
-	| otherClass size1 size2 result |
-	otherClass := other @env0:class.
+	| size1 size2 result |
 
-	"Concatenate with any bytes-like object (bytes / bytearray / subclasses)."
+	"Concatenate with any bytes-like object (bytes / bytearray / subclasses).
+	A non-bytes-like operand is a TypeError -- built from the Python type NAMES
+	(``can't concat str to bytes''); appending the class OBJECT to the message
+	string used to blow up with an uncatchable MNU (Unicode7 class do:)."
 	(other isKindOf: bytes) ifFalse: [
-		TypeError ___signal___: ('can''t concat bytes to ' @env0:, otherClass)
+		TypeError ___signal___: ('can''t concat '
+			@env0:, (other @env1:__class__ @env1:__name__)
+			@env0:, ' to '
+			@env0:, (self @env1:__class__ @env1:__name__))
 	].
 
 	size1 := self @env0:size.
