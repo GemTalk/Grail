@@ -41,7 +41,7 @@ test__class__
 	"Test that type(bytearray()) returns bytearray"
 
 	| result cls |
-	result := bytearray @env1:__new__.
+	result := bytearray ___new___: bytearray.
 	cls := result @env1:__class__.
 	
 	self assert: cls equals: (Python at: #'bytearray').
@@ -53,7 +53,7 @@ test__delitem__
 	"Test del bytearray[index]"
 
 	| ba |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 65.
 	ba @env1:append: 66.
 	ba @env1:append: 67.
@@ -71,7 +71,7 @@ test__delitem__negativeIndex
 	"Test del bytearray[-1]"
 
 	| ba |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 65.
 	ba @env1:append: 66.
 	ba @env1:append: 67.
@@ -89,7 +89,7 @@ test__iadd__
 	"Test bytearray += other"
 
 	| ba bytes result |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 65.
 	ba @env1:append: 66.
 
@@ -112,7 +112,7 @@ test__imul__
 	"Test bytearray *= count"
 
 	| ba result |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 65.
 	ba @env1:append: 66.
 
@@ -136,7 +136,7 @@ test__imul__zero
 	"Test bytearray *= 0 clears the bytearray"
 
 	| ba |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 65.
 	ba @env1:append: 66.
 
@@ -264,7 +264,7 @@ testAppend
 	"Test bytearray.append(byte)"
 
 	| ba |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 
 	ba @env1:append: 65.
 	ba @env1:append: 66.
@@ -282,7 +282,7 @@ testAppendInvalidValue
 	"Test that append with invalid value raises ValueError"
 
 	| ba |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 
 	self
 		should: [ba @env1:append: 256]
@@ -295,7 +295,7 @@ testClear
 	"Test bytearray.clear()"
 
 	| ba |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 65.
 	ba @env1:append: 66.
 	ba @env1:append: 67.
@@ -311,7 +311,7 @@ testConcatenation
 	"Test bytearray + bytes returns new bytearray"
 
 	| ba bytes result |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 65.
 	ba @env1:append: 66.
 
@@ -331,7 +331,7 @@ testCopy
 	"Test bytearray.copy()"
 
 	| ba copy |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 65.
 	ba @env1:append: 66.
 
@@ -353,11 +353,11 @@ testEqualityWithBytearray
 	"Test bytearray == bytearray comparison"
 
 	| ba1 ba2 |
-	ba1 := bytearray @env1:__new__.
+	ba1 := bytearray ___new___: bytearray.
 	ba1 @env1:append: 65.
 	ba1 @env1:append: 66.
 
-	ba2 := bytearray @env1:__new__.
+	ba2 := bytearray ___new___: bytearray.
 	ba2 @env1:append: 65.
 	ba2 @env1:append: 66.
 
@@ -370,7 +370,7 @@ testEqualityWithBytes
 	"Test bytearray == bytes comparison"
 
 	| ba bytes |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 65.
 	ba @env1:append: 66.
 
@@ -385,7 +385,7 @@ testExtendWithBytes
 	"Test bytearray.extend(b'hello')"
 
 	| ba bytes |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	bytes := bytearray @env1:__new__: 'hello' _: 'ascii'.
 
 	ba @env1:extend: bytes.
@@ -400,7 +400,7 @@ testExtendWithList
 	"Test bytearray.extend([65, 66, 67])"
 
 	| ba list |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	list := OrderedCollection new.
 	list add: 65.
 	list add: 66.
@@ -436,7 +436,7 @@ testInheritedDecode
 	"Test that bytearray inherits decode() from bytes"
 
 	| ba result |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 72.   "H"
 	ba @env1:append: 101.  "e"
 	ba @env1:append: 108.  "l"
@@ -455,7 +455,7 @@ testInheritedFind
 	"Test that bytearray inherits find() from bytes"
 
 	| ba bytes result |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 72.   "H"
 	ba @env1:append: 101.  "e"
 	ba @env1:append: 108.  "l"
@@ -475,13 +475,13 @@ testInheritedIsascii
 
 	| ba1 ba2 |
 	"Create bytearray with ASCII bytes"
-	ba1 := bytearray @env1:__new__.
+	ba1 := bytearray ___new___: bytearray.
 	ba1 @env1:append: 65.   "A"
 	ba1 @env1:append: 66.   "B"
 	ba1 @env1:append: 67.   "C"
 
 	"Create bytearray with non-ASCII byte"
-	ba2 := bytearray @env1:__new__.
+	ba2 := bytearray ___new___: bytearray.
 	ba2 @env1:append: 65.   "A"
 	ba2 @env1:append: 200.  "non-ASCII"
 	ba2 @env1:append: 67.   "C"
@@ -496,7 +496,7 @@ testInheritedUpper
 	"Test that bytearray inherits upper() from bytes"
 
 	| ba result |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 97.   "a"
 	ba @env1:append: 98.   "b"
 	ba @env1:append: 99.   "c"
@@ -516,7 +516,7 @@ testInsert
 	"Test bytearray.insert(index, byte)"
 
 	| ba |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 65.
 	ba @env1:append: 67.
 
@@ -535,7 +535,7 @@ testPop
 	"Test bytearray.pop() - remove and return last byte"
 
 	| ba result |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 65.
 	ba @env1:append: 66.
 	ba @env1:append: 67.
@@ -552,7 +552,7 @@ testPopEmpty
 	"Test that pop on empty bytearray raises IndexError"
 
 	| ba |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 
 	self
 		should: [ba @env1:pop]
@@ -565,7 +565,7 @@ testPopIndex
 	"Test bytearray.pop(index)"
 
 	| ba result |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 65.
 	ba @env1:append: 66.
 	ba @env1:append: 67.
@@ -584,7 +584,7 @@ testRemove
 	"Test bytearray.remove(value)"
 
 	| ba |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 65.
 	ba @env1:append: 66.
 	ba @env1:append: 67.
@@ -602,7 +602,7 @@ testRemoveNotFound
 	"Test that remove raises ValueError if value not found"
 
 	| ba |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 65.
 
 	self
@@ -616,7 +616,7 @@ testReverse
 	"Test bytearray.reverse()"
 
 	| ba |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	ba @env1:append: 65.
 	ba @env1:append: 66.
 	ba @env1:append: 67.
@@ -635,7 +635,7 @@ baFrom: anArray
 	"Build a Grail bytearray from a Smalltalk Array of byte ints."
 
 	| ba |
-	ba := bytearray @env1:__new__.
+	ba := bytearray ___new___: bytearray.
 	anArray do: [:b | ba @env1:append: b].
 	^ ba
 %

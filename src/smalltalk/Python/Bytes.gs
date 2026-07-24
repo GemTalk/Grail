@@ -74,8 +74,15 @@ __new__: source
 		size := source @env0:size.
 		ba := self ___new___: size.
 		1 @env0:to: size do: [:i |
-			| val |
-			val := self ___coerceByteValue___: (source @env0:at: i).
+			| elem val |
+			elem := source @env0:at: i.
+			val := elem.
+			"Validate byte value (0-255)"
+			((val @env0:< 0) or: [
+				val @env0:> 255
+			]) ifTrue: [
+				ValueError ___signal___: 'bytes must be in range(0, 256)'
+			].
 			ba @env0:at: i put: val
 		].
 		^ ba
@@ -88,18 +95,16 @@ __new__: source
 		ba := self ___new___: size.
 		1 @env0:to: size do: [:i |
 			| val |
-			val := self ___coerceByteValue___: (source @env0:at: i).
+			val := source @env0:at: i.
+			"Validate byte value (0-255)"
+			((val @env0:< 0) or: [
+				val @env0:> 255
+			]) ifTrue: [
+				ValueError ___signal___: 'bytes must be in range(0, 256)'
+			].
 			ba @env0:at: i put: val
 		].
 		^ ba
-	].
-
-	"A non-integer source with __index__ (and not a sequence handled above)
-	is treated as a count, like bytes(n) -- so bytes(Indexable(5)) is five
-	zero bytes and bytes(BadInt()) propagates BadInt.__index__'s exception."
-	((source isKindOf: Integer) @env0:not
-		and: [source ___respondsTo___: #'__index__']) ifTrue: [
-		^ self __new__: (source __index__)
 	].
 
 	"Any other iterable (generators, reversed_iterator, __iter__/__next__
@@ -113,50 +118,11 @@ __new__: source
 	ba := self ___new___: size.
 	1 @env0:to: size do: [:i |
 		| val |
-		val := self ___coerceByteValue___: (materialized @env0:at: i).
+		val := materialized @env0:at: i.
+		((val @env0:< 0) or: [val @env0:> 255]) ifTrue: [
+			ValueError ___signal___: 'bytes must be in range(0, 256)'].
 		ba @env0:at: i put: val].
 	^ ba
-%
-
-category: 'Grail-Constructors'
-classmethod: bytes
-___coerceByteValue___: obj
-	"Coerce obj to an int in [0, 255] for use as a byte, honoring __index__
-	(CPython): an int is used directly; a non-int with __index__ is converted
-	(and its exception, e.g. from a raising __index__, propagates unchanged);
-	anything else is a TypeError; an out-of-range result is a ValueError."
-
-	| v |
-	v := (obj isKindOf: Integer)
-		ifTrue: [obj]
-		ifFalse: [
-			(obj ___respondsTo___: #'__index__')
-				ifTrue: [obj __index__]
-				ifFalse: [TypeError ___signal___:
-					('''' @env0:, obj @env0:class @env0:name @env0:,
-					''' object cannot be interpreted as an integer')]].
-	(v isKindOf: Integer) ifFalse: [
-		TypeError ___signal___: '__index__ returned non-int'].
-	((v @env0:< 0) or: [v @env0:> 255]) ifTrue: [
-		ValueError ___signal___: 'bytes must be in range(0, 256)'].
-	^ v
-%
-
-category: 'Grail-Constructors'
-classmethod: bytes
-___coerceIndex___: obj
-	"Coerce obj to an integer index, honoring __index__ (which may run Python
-	code that mutates the receiver -- callers must re-read the size after)."
-
-	(obj isKindOf: Integer) ifTrue: [^ obj].
-	(obj ___respondsTo___: #'__index__') ifTrue: [
-		| v |
-		v := obj __index__.
-		(v isKindOf: Integer) ifTrue: [^ v].
-		TypeError ___signal___: '__index__ returned non-int'].
-	TypeError ___signal___:
-		('''' @env0:, obj @env0:class @env0:name @env0:,
-		''' object cannot be interpreted as an integer')
 %
 
 category: 'Grail-Constructors'
@@ -193,78 +159,33 @@ __new__: source _: encoding _: errors
 
 category: 'Grail-Constructors'
 classmethod: bytes
-fromhex: source
-	"bytes.fromhex(s) -- parse pairs of hex digits, ignoring ASCII whitespace
-	BETWEEN pairs (not within one), matching CPython.  ``source'' may be a str
-	or a bytes-like buffer (bytes / bytearray / memoryview / array); anything
-	else is a TypeError.  Errors report the 0-based position of the offending
-	character.  Self-typed via ``self ___new___:'' so a subclass fromhex builds
-	that subclass."
+fromhex: hexString
+	"Create bytes from hex string (e.g., 'deadbeef'). Receiver is the
+	class. In Python: bytes.fromhex('deadbeef')."
 
-	| src size out i result contents |
-	src := self ___hexSourceCodes___: source.
-	size := src @env0:size.
-	out := WriteStream @env0:on: (ByteArray @env0:new).
-	i := 1.
-	[i @env0:<= size] @env0:whileTrue: [
-		| c hi |
-		c := src @env0:at: i.
-		(self ___isHexWhitespace___: c)
-			ifTrue: [i := i @env0:+ 1]
-			ifFalse: [
-				hi := self ___hexDigitValue___: c.
-				(hi @env0:== nil) ifTrue: [
-					ValueError ___signal___: ('non-hexadecimal number found in fromhex() arg at position '
-						@env0:, (i @env0:- 1) @env0:printString)].
-				(i @env0:>= size) ifTrue: [
-					ValueError ___signal___:
-						'fromhex() arg must contain an even number of hexadecimal digits'].
-				[ | lo |
-					lo := self ___hexDigitValue___: (src @env0:at: (i @env0:+ 1)).
-					(lo @env0:== nil) ifTrue: [
-						ValueError ___signal___: ('non-hexadecimal number found in fromhex() arg at position '
-							@env0:, i @env0:printString)].
-					out @env0:nextPut: ((hi @env0:* 16) @env0:+ lo) ] value.
-				i := i @env0:+ 2]].
-	contents := out @env0:contents.
-	result := self ___new___: contents @env0:size.
-	1 @env0:to: contents @env0:size do: [:j | result @env0:at: j put: (contents @env0:at: j)].
-	^ result
-%
+	| cleaned size ba |
+	"Remove spaces from hex string"
+	cleaned := hexString @env0:select: [:ch |
+		(ch @env0:~= $ )
+	].
 
-category: 'Grail-Encoding/Decoding'
-classmethod: bytes
-___hexSourceCodes___: source
-	"The fromhex() argument as an indexable of codepoints: a str yields its
-	characters' code points; a bytes-like buffer yields its byte values.
-	Anything else is a TypeError (CPython names the offending type)."
+	"Hex string must have even length"
+	size := cleaned @env0:size.
+	((size @env0:\\ 2) @env0:~= 0) ifTrue: [
+		ValueError ___signal___: 'non-hexadecimal number found in fromhex() arg'
+	].
 
-	(source isKindOf: CharacterCollection) ifTrue: [
-		^ (1 @env0:to: source @env0:size) @env0:collect: [:i | (source @env0:at: i) @env0:asInteger]].
-	(source isKindOf: bytes) ifTrue: [^ source].
-	"A non-str bytes-like buffer (array.array, ...): materialize its bytes via
-	the bytes CONSTRUCTOR (__new__:, not the size allocator ___new___:)."
-	(source ___respondsTo___: #'tobytes') ifTrue: [^ bytes __new__: source].
-	TypeError ___signal___: ('fromhex() argument must be str or bytes-like, not '
-		@env0:, (source @env1:__class__ @env1:__name__))
-%
+	"Create bytes and fill with hex values"
+	ba := self ___new___: (size @env0:// 2).
+	1 @env0:to: size by: 2 do: [:i |
+		| hexPair byte stream |
+		hexPair := cleaned @env0:copyFrom: i to: (i @env0:+ 1).
+		stream := ReadStream @env0:on: ('16r' @env0:, hexPair).
+		byte := Number @env0:fromStream: stream.
+		ba @env0:at: ((i @env0:+ 1) @env0:// 2) put: byte
+	].
 
-category: 'Grail-Encoding/Decoding'
-classmethod: bytes
-___isHexWhitespace___: code
-	"ASCII whitespace CPython's fromhex() skips between pairs: TAB, LF, VT, FF,
-	CR, and space -- NOT other Unicode whitespace (which is rejected)."
-	^ #(9 10 11 12 13 32) @env0:includes: code
-%
-
-category: 'Grail-Encoding/Decoding'
-classmethod: bytes
-___hexDigitValue___: code
-	"0..15 for an ASCII hex digit code point (0-9, A-F, a-f), else nil."
-	((code @env0:>= 48) and: [code @env0:<= 57]) ifTrue: [^ code @env0:- 48].
-	((code @env0:>= 65) and: [code @env0:<= 70]) ifTrue: [^ code @env0:- 55].
-	((code @env0:>= 97) and: [code @env0:<= 102]) ifTrue: [^ code @env0:- 87].
-	^ nil
+	^ ba
 %
 
 category: 'Grail-Translation Methods'
@@ -371,9 +292,6 @@ __contains__: item
 		needle := (item isKindOf: ByteArray)
 			ifTrue: [item]
 			ifFalse: [item @env0:asByteArray].
-		"An empty subsequence is always contained (CPython); GemStone's
-		indexOfSubCollection: reports 0 (not found) for it."
-		needle @env0:isEmpty ifTrue: [^ true].
 		^ (self @env0:indexOfSubCollection: needle) @env0:> 0
 	].
 	^ self @env0:includes: item
@@ -1190,95 +1108,6 @@ hex
 	].
 
 	^ result
-%
-
-category: 'Grail-Encoding/Decoding'
-method: bytes
-hex: sep
-	"bytes.hex(sep) -- group the hex digits with a one-character separator
-	(bytes_per_sep defaults to 1)."
-	^ self ___hexWithSep___: sep bytesPerSep: 1
-%
-
-category: 'Grail-Encoding/Decoding'
-method: bytes
-hex: sep _: bytesPerSep
-	"bytes.hex(sep, bytes_per_sep) -- a separator every ``bytes_per_sep''
-	bytes, counting from the right (positive) or left (negative)."
-	^ self ___hexWithSep___: sep bytesPerSep: bytesPerSep
-%
-
-category: 'Grail-Encoding/Decoding'
-method: bytes
-_hex: positional kw: kwargs
-	"Varargs/keyword form: hex() / hex(sep) / hex(sep, bytes_per_sep) /
-	hex(sep=..., bytes_per_sep=...)."
-	| sep n |
-	(positional @env0:size @env0:>= 1)
-		ifTrue: [sep := positional @env0:at: 1]
-		ifFalse: [
-			(kwargs @env0:isNil @env0:not and: [kwargs @env0:includesKey: 'sep'])
-				ifTrue: [sep := kwargs @env0:at: 'sep']
-				ifFalse: [^ self hex]].
-	n := (positional @env0:size @env0:>= 2)
-		ifTrue: [positional @env0:at: 2]
-		ifFalse: [
-			(kwargs @env0:isNil @env0:not and: [kwargs @env0:includesKey: 'bytes_per_sep'])
-				ifTrue: [kwargs @env0:at: 'bytes_per_sep']
-				ifFalse: [1]].
-	^ self ___hexWithSep___: sep bytesPerSep: n
-%
-
-category: 'Grail-Encoding/Decoding'
-method: bytes
-___hexSepCode___: sep
-	"Resolve a hex() separator to its single ASCII code point (0..127).
-	CPython: None / any non-str-non-bytes -> TypeError; a separator that is
-	not exactly one character, or whose code point exceeds 127 -> ValueError."
-	| code |
-	(sep @env0:== None) ifTrue: [
-		TypeError ___signal___: 'hex() argument must be str or bytes, not None'].
-	(sep isKindOf: CharacterCollection) ifTrue: [
-		(sep @env0:size @env0:= 1) ifFalse: [
-			ValueError ___signal___: 'sep must be length 1.'].
-		code := (sep @env0:at: 1) @env0:asInteger.
-		(code @env0:> 127) ifTrue: [ValueError ___signal___: 'sep must be ASCII.'].
-		^ code].
-	(sep isKindOf: bytes) ifTrue: [
-		(sep @env0:size @env0:= 1) ifFalse: [
-			ValueError ___signal___: 'sep must be length 1.'].
-		code := sep @env0:at: 1.
-		(code @env0:> 127) ifTrue: [ValueError ___signal___: 'sep must be ASCII.'].
-		^ code].
-	TypeError ___signal___: 'sep must be str or bytes.'
-%
-
-category: 'Grail-Encoding/Decoding'
-method: bytes
-___hexWithSep___: sep bytesPerSep: nArg
-	"Lowercase hex with a validated one-ASCII-character separator inserted
-	between groups of ``nArg'' bytes: positive counts groups from the right,
-	negative from the left, and 0 or |nArg| >= size yields no separator (the
-	modulo test never fires for a divisor larger than the gap)."
-	| size n sepCode ws |
-	size := self @env0:size.
-	sepCode := self ___hexSepCode___: sep.
-	n := nArg.
-	ws := WriteStream @env0:on: String @env0:new.
-	1 @env0:to: size do: [:i |
-		| idx0 needSep byte hexStr |
-		idx0 := i @env0:- 1.
-		needSep := false.
-		((idx0 @env0:> 0) and: [(n @env0:= 0) @env0:not]) ifTrue: [
-			(n @env0:> 0)
-				ifTrue: [needSep := ((size @env0:- idx0) @env0:\\ n) @env0:= 0]
-				ifFalse: [needSep := (idx0 @env0:\\ (n @env0:negated)) @env0:= 0]].
-		needSep ifTrue: [ws @env0:nextPut: (Character @env0:value: sepCode)].
-		byte := self @env0:at: i.
-		hexStr := (byte @env0:printStringRadix: 16) @env0:asLowercase.
-		(hexStr @env0:size @env0:= 1) ifTrue: [hexStr := '0' @env0:, hexStr].
-		ws @env0:nextPutAll: hexStr].
-	^ ws @env0:contents
 %
 
 category: 'Grail-Search Methods'

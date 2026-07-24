@@ -82,12 +82,85 @@ __new__
 	^ self ___new___
 %
 
-! bytearray(source) intentionally has NO 1-arg __new__: override -- it inherits
-! the self-typed bytes>>__new__: source (which builds via ``self ___new___:'', so
-! the receiver class bytearray is instantiated here).  That shared constructor
-! handles ints, bytes-likes, sequences, general iterables, __index__ elements /
-! __index__ count-source, and their CPython error kinds; duplicating it here let
-! bytearray drift (old empty fall-through + no __index__ coercion).
+category: 'Grail-Constructors'
+classmethod: bytearray
+__new__: source
+	"bytearray(source) — create bytearray from various sources.
+	Receiver is the class."
+
+	| result sourceClass |
+	sourceClass := source @env0:class.
+
+	"If source is an integer, create bytearray of that size filled with zeros"
+	sourceClass == SmallInteger ifTrue: [
+		(source @env0:< 0) ifTrue: [
+			ValueError ___signal___: 'negative count'
+		].
+		^ self ___new___: source
+	].
+
+	"If source is a string, raise TypeError (need encoding)"
+	(source isKindOf: String) ifTrue: [
+		TypeError ___signal___: 'string argument without an encoding'
+	].
+
+	"If source is bytes or bytearray, make a copy"
+	((sourceClass == bytes) or: [
+		sourceClass == bytearray
+	]) ifTrue: [
+		result := self ___new___: (source @env0:size).
+		1 @env0:to: source @env0:size do: [:i |
+			result @env0:at: i put: (source @env0:at: i)
+		].
+		^ result
+	].
+
+	"If source is a list, tuple, or array, convert elements to bytes"
+	((sourceClass == list) or: [
+		(sourceClass == tuple) or: [
+			sourceClass == Array
+		]
+	]) ifTrue: [
+		| ba size |
+		size := source @env0:size.
+		ba := self ___new___: size.
+		1 @env0:to: size do: [:i |
+			| elem val |
+			elem := source @env0:at: i.
+			val := elem.
+			"Validate byte value (0-255)"
+			((val @env0:< 0) or: [
+				val @env0:> 255
+			]) ifTrue: [
+				ValueError ___signal___: 'bytes must be in range(0, 256)'
+			].
+			ba @env0:at: i put: val
+		].
+		^ ba
+	].
+
+	"If source is a range, convert to bytearray"
+	(sourceClass == Interval) ifTrue: [
+		| ba size |
+		size := source @env0:size.
+		ba := self ___new___: size.
+		1 @env0:to: size do: [:i |
+			| val |
+			val := source @env0:at: i.
+			"Validate byte value (0-255)"
+			((val @env0:< 0) or: [
+				val @env0:> 255
+			]) ifTrue: [
+				ValueError ___signal___: 'bytes must be in range(0, 256)'
+			].
+			ba @env0:at: i put: val
+		].
+		^ ba
+	].
+
+	"Default: empty bytearray"
+	^ self ___new___
+%
 
 category: 'Grail-Constructors'
 classmethod: bytearray
@@ -100,10 +173,36 @@ __new__: source _: encoding
 	^ self ___encodeSourceToSelf___: source _: encoding _: 'strict'
 %
 
-! bytearray.fromhex intentionally has NO override -- it inherits the self-typed
-! bytes>>fromhex: (which builds via `self ___new___:', so bytearray is built
-! here).  The old duplicate only stripped spaces and mis-parsed ASCII
-! whitespace, bytes-like arguments, and invalid digits.
+category: 'Grail-Constructors'
+classmethod: bytearray
+fromhex: hexString
+	"Create bytearray from hex string (e.g., 'deadbeef'). Receiver is
+	the class. In Python: bytearray.fromhex('deadbeef')."
+
+	| cleaned size ba |
+	"Remove spaces from hex string"
+	cleaned := hexString @env0:select: [:ch |
+		(ch @env0:~= $ )
+	].
+
+	"Hex string must have even length"
+	size := cleaned @env0:size.
+	((size @env0:\\ 2) @env0:~= 0) ifTrue: [
+		ValueError ___signal___: 'non-hexadecimal number found in fromhex() arg'
+	].
+
+	"Create bytearray and fill with hex values"
+	ba := self ___new___: (size @env0:// 2).
+	1 @env0:to: size by: 2 do: [:i |
+		| hexPair byte stream |
+		hexPair := cleaned @env0:copyFrom: i to: (i @env0:+ 1).
+		stream := ReadStream @env0:on: ('16r' @env0:, hexPair).
+		byte := Integer @env0:fromStream: stream.
+		ba @env0:at: ((i @env0:+ 1) @env0:// 2) put: byte
+	].
+
+	^ ba
+%
 
 category: 'Grail-Type'
 method: bytearray
@@ -125,16 +224,10 @@ __repr__
 category: 'Grail-Sequence Protocol'
 method: bytearray
 __delitem__: index
-	"Delete the byte at an index, or the bytes selected by a slice."
+	"Delete byte at index"
 
 	| idx size |
 	size := self @env0:size.
-
-	"Slice deletion: del bytearray[i:j[:k]]."
-	(index isKindOf: slice) ifTrue: [
-		^ self ___delSliceItem: index size: size
-	].
-
 	idx := index.
 
 	"Handle negative indices"
@@ -213,36 +306,38 @@ __imul__: count
 category: 'Grail-Sequence Protocol'
 method: bytearray
 __setitem__: index _: value
-	"Set the byte at an index, or assign to a slice (mutable)."
+	"Set byte at index, or assign to a slice (mutable)."
 	| idx size val |
+	size := self @env0:size.
 
 	"Slice assignment: bytearray[i:j[:k]] = bytes-like."
 	(index isKindOf: slice) ifTrue: [
-		^ self ___setSliceItem: index value: value size: self @env0:size
+		^ self ___setSliceItem: index value: value size: size
 	].
 
-	"Coerce the index via __index__ FIRST -- that may run Python code which
-	reallocates/clears the receiver (gh-91153), so read size AFTERWARD and
-	bounds-check against the current buffer."
-	idx := bytes ___coerceIndex___: index.
-	size := self @env0:size.
-	(idx @env0:< 0) ifTrue: [idx := size @env0:+ idx].
-	((idx @env0:< 0) or: [idx @env0:>= size]) ifTrue: [
+	idx := index.
+	val := value.
+
+	"Handle negative indices"
+	(idx @env0:< 0) ifTrue: [
+		idx := size @env0:+ idx
+	].
+
+	"Check bounds"
+	((idx @env0:< 0) or: [
+		idx @env0:>= size
+	]) ifTrue: [
 		IndexError ___signal___: 'bytearray index out of range'
 	].
 
-	"Coerce + range-check the value via __index__ (CPython order: after the
-	index bounds check)."
-	val := bytes ___coerceByteValue___: value.
-
-	"Re-check bounds: coercing the value may have run __index__ that shrank
-	self (gh-91153).  idx is already non-negative here, so only the upper
-	bound can have been invalidated."
-	(idx @env0:>= self @env0:size) ifTrue: [
-		IndexError ___signal___: 'bytearray index out of range'
+	"Validate byte value"
+	((val @env0:< 0) or: [
+		val @env0:> 255
+	]) ifTrue: [
+		ValueError ___signal___: 'byte must be in range(0, 256)'
 	].
 
-	"Set value (convert to 1-based index)."
+	"Set value (convert to 1-based index)"
 	self @env0:at: (idx @env0:+ 1) put: val.
 	^ None
 %
@@ -263,10 +358,6 @@ ___setSliceItem: aSlice value: value size: size
 	vals := self ___bytesFrom: value.
 
 	(st @env0:= 1) ifTrue: [
-		"A backward slice (stop < start) selects nothing: clamp the tail's
-		start so the kept suffix does not overlap the kept prefix (CPython
-		uses max(start, stop) as the effective stop for a step-1 slice)."
-		hi := hi @env0:max: lo.
 		newVals := OrderedCollection @env0:new.
 		1 @env0:to: lo do: [:j | newVals @env0:add: (self @env0:at: j)].
 		newVals @env0:addAll: vals.
@@ -290,46 +381,6 @@ ___setSliceItem: aSlice value: value size: size
 	].
 	1 @env0:to: indices @env0:size do: [:k |
 		self @env0:at: ((indices @env0:at: k) @env0:+ 1) put: (vals @env0:at: k)].
-	^ None
-%
-
-category: 'Grail-Sequence Protocol'
-method: bytearray
-___delSliceItem: aSlice size: size
-	"del bytearray[i:j[:k]].  Step 1 removes the contiguous [lo, hi) run; an
-	extended slice removes exactly the selected indices.  Either way the
-	receiver is resized IN PLACE (identity preserved) via ``size:''."
-
-	| idxTuple lo hi st toRemove newVals i |
-	idxTuple := aSlice indices: size.
-	lo := idxTuple @env0:at: 1.
-	hi := idxTuple @env0:at: 2.
-	st := idxTuple @env0:at: 3.
-
-	(st @env0:= 1) ifTrue: [
-		"Backward slice (stop < start) deletes nothing: clamp so the kept
-		suffix does not overlap the kept prefix."
-		hi := hi @env0:max: lo.
-		newVals := OrderedCollection @env0:new.
-		1 @env0:to: lo do: [:j | newVals @env0:add: (self @env0:at: j)].
-		(hi @env0:+ 1) @env0:to: size do: [:j | newVals @env0:add: (self @env0:at: j)].
-		self @env0:size: newVals @env0:size.
-		1 @env0:to: newVals @env0:size do: [:j | self @env0:at: j put: (newVals @env0:at: j)].
-		^ None
-	].
-
-	"Extended slice: mark the selected 0-based indices, keep the rest."
-	toRemove := Set @env0:new.
-	i := lo.
-	st @env0:> 0
-		ifTrue: [[i @env0:< hi] @env0:whileTrue: [toRemove @env0:add: i. i := i @env0:+ st]]
-		ifFalse: [[i @env0:> hi] @env0:whileTrue: [toRemove @env0:add: i. i := i @env0:+ st]].
-	newVals := OrderedCollection @env0:new.
-	1 @env0:to: size do: [:j |
-		(toRemove @env0:includes: (j @env0:- 1)) ifFalse: [
-			newVals @env0:add: (self @env0:at: j)]].
-	self @env0:size: newVals @env0:size.
-	1 @env0:to: newVals @env0:size do: [:j | self @env0:at: j put: (newVals @env0:at: j)].
 	^ None
 %
 
@@ -401,42 +452,44 @@ copy
 category: 'Grail-Mutation Methods'
 method: bytearray
 extend: iterable
-	"Extend the bytearray with the bytes from any iterable of ints (CPython
-	bytearray.extend).  Elements are coerced via __index__ and validated FIRST,
-	so a bad element leaves the receiver unchanged."
+	"Extend bytearray with bytes from iterable"
 
-	| vals coerced |
+	| iterClass size |
+	iterClass := iterable @env0:class.
 
-	"bytes / bytearray: copy by captured size (safe when extending with self)."
-	(iterable isKindOf: bytes) ifTrue: [
-		| size |
+	"Handle bytes or bytearray"
+	((iterClass == bytes) or: [
+		iterClass == bytearray
+	]) ifTrue: [
 		size := iterable @env0:size.
-		1 @env0:to: size do: [:i | self append: (iterable @env0:at: i)].
+		1 @env0:to: size do: [:i |
+			| byte |
+			byte := iterable @env0:at: i.
+			self append: byte
+		].
 		^ None
 	].
 
-	"A str is iterable but not of integers -- CPython rejects it by name."
-	(iterable isKindOf: CharacterCollection) ifTrue: [
-		TypeError ___signal___: 'expected iterable of integers; got: ''str'''
+	"Handle list or tuple"
+	((iterClass == list) or: [
+		iterClass == tuple
+	]) ifTrue: [
+		size := iterable @env0:size.
+		1 @env0:to: size do: [:i |
+			| val |
+			val := iterable @env0:at: i.
+			"Validate byte value"
+			((val @env0:< 0) or: [
+				val @env0:> 255
+			]) ifTrue: [
+				ValueError ___signal___: 'byte must be in range(0, 256)'
+			].
+			self append: val
+		].
+		^ None
 	].
 
-	"A non-iterable can't extend at all."
-	((iterable ___respondsTo___: #'__iter__')
-		or: [iterable ___respondsTo___: #'__getitem__']) ifFalse: [
-		TypeError ___signal___: ('can''t extend bytearray with '
-			@env0:, (iterable @env1:__class__ @env1:__name__) @env0:asLowercase)
-	].
-
-	"Any other iterable (list/tuple/range/generator/iterator/__getitem__):
-	materialize, coerce+validate EVERY element (__index__, 0..255) before
-	touching the receiver, then append -- so a ValueError/TypeError midway
-	leaves the bytearray unchanged."
-	vals := list __new__: iterable.
-	coerced := OrderedCollection @env0:new.
-	1 @env0:to: vals @env0:size do: [:i |
-		coerced @env0:add: (bytes ___coerceByteValue___: (vals @env0:at: i))].
-	coerced @env0:do: [:b | self append: b].
-	^ None
+	TypeError ___signal___: 'extend() argument must be iterable'
 %
 
 category: 'Grail-Mutation Methods'
@@ -584,15 +637,11 @@ find: sub _: start _: end
 
 	| size lo hi subSize |
 	size := self @env0:size.
-	"CPython bound handling (bytearray overrides find; bytes inherits the rest
-	of the search family and normalizes there): None == the default bound, and
-	a negative index counts from the end (size + i, floored at 0)."
-	lo := start. hi := end.
-	(lo @env0:== None) ifTrue: [lo := 0].
-	(hi @env0:== None) ifTrue: [hi := size].
-	lo @env0:< 0 ifTrue: [lo := (size @env0:+ lo) @env0:max: 0].
-	hi @env0:< 0 ifTrue: [hi := (size @env0:+ hi) @env0:max: 0].
-	lo := lo @env0:min: size. hi := hi @env0:min: size.
+	"CPython accepts None for start/end (== the default bound).  bytearray
+	overrides find (bytes inherits the rest of the search family and already
+	normalizes None there)."
+	lo := (start @env0:== None) ifTrue: [0] ifFalse: [start @env0:max: 0].
+	hi := (end @env0:== None) ifTrue: [size] ifFalse: [end @env0:min: size].
 	"Single byte value: linear scan."
 	(sub isKindOf: SmallInteger) ifTrue: [
 		lo @env0:+ 1 @env0:to: hi do: [:i |
