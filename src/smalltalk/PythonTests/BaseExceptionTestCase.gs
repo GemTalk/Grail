@@ -54,7 +54,10 @@ test_creation_with_args
 
 	| exc args |
 	exc := BaseException @env1:__new__: 'error message'.
-	exc @env1:__init__: #('error message').
+	"__init__(x) takes ONE positional; args becomes the 1-tuple (x,) --
+	CPython's BaseException.args.  (Pass the raw value, not #(...): an Array
+	argument would be the single element of a 1-tuple, args == (#(...),).)"
+	exc @env1:__init__: 'error message'.
 
 	args := exc @env1:args.
 	self assert: args size equals: 1.
@@ -97,7 +100,7 @@ test_repr
 
 	| exc repr |
 	exc := BaseException @env1:__new__: 'test message'.
-	exc @env1:__init__: #('test message').
+	exc @env1:__init__: 'test message'.
 	repr := exc @env1:__repr__.
 
 	self assert: (repr includesString: 'BaseException').
@@ -134,7 +137,7 @@ test_str_single_arg
 
 	| exc str |
 	exc := BaseException @env1:__new__: 'test'.
-	exc @env1:__init__: #('test').
+	exc @env1:__init__: 'test'.
 	str := exc @env1:__str__.
 	self assert: str equals: 'test'.
 %

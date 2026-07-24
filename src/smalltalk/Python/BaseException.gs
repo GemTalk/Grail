@@ -206,9 +206,15 @@ ___signalNew___: positional kw: kwargs
 category: 'Grail-Private'
 method: BaseException
 ___args___: anArray
-	"Setter for args instance variable."
+	"Store the constructor arguments as a Python tuple.  CPython's
+	``BaseException.args'' is ALWAYS a tuple of the positional constructor
+	arguments -- ``RuntimeError(42).args == (42,)'', and ``{}[(1,)]'' raises a
+	KeyError whose ``args == ((1,),)'' (test_dict test_missing /
+	test_tuple_keyerror).  Callers pass a Smalltalk Array of the positionals;
+	normalise it to a tuple here so every construction path is consistent and
+	every reader (args accessor, __str__, __repr__, __eq__) sees a tuple."
 
-	args := anArray
+	args := tuple @env0:withAll: anArray
 %
 
 category: 'Grail-Exception Chaining'
@@ -252,17 +258,19 @@ method: BaseException
 __init__
 	"Initialize with no arguments."
 
-	args := #().
+	self ___args___: #().
 	^ None
 %
 
 category: 'Grail-Initialization'
 method: BaseException
 __init__: a
-	"Initialize with arguments.
-	a should be a tuple (Array) of arguments."
+	"Initialize with ONE positional constructor argument ``a''.  CPython's
+	``BaseException.__init__(self, *args)'' sets ``self.args = args'', so a
+	single argument yields the 1-tuple ``(a,)'' -- e.g. ``RuntimeError(42).args
+	== (42,)''.  (Smalltalk nil, the no-arg sentinel, yields the empty tuple.)"
 
-	a ifNil: [ args := #() ] ifNotNil: [ args := a ].
+	a ifNil: [ self ___args___: #() ] ifNotNil: [ self ___args___: { a } ].
 	^ None
 %
 
@@ -358,9 +366,10 @@ add_note: note
 category: 'Grail-Attribute Access'
 method: BaseException
 args
-	"Return the tuple of arguments passed to the exception."
+	"Return the tuple of arguments passed to the exception (CPython
+	``BaseException.args'', always a tuple)."
 
-	^ args ifNil: [ #() ]
+	^ args ifNil: [ tuple @env0:withAll: #() ]
 %
 
 set compile_env: 0
