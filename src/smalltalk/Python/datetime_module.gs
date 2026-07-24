@@ -201,6 +201,36 @@ __mul__: scale
 
 category: 'Grail-Arithmetic'
 method: PyTimedelta
+__truediv__: other
+	"td / td -> float; td / number -> td."
+
+	(other isKindOf: PyTimedelta) ifTrue: [
+		^ (self ___totalMicros___ @env0:/ other ___totalMicros___) @env0:asFloat].
+	^ PyTimedelta @env0:___fromTotalMicros___:
+		(self ___totalMicros___ @env0:/ other) @env0:rounded
+%
+
+category: 'Grail-Arithmetic'
+method: PyTimedelta
+__floordiv__: other
+	"td // td -> int; td // number -> td."
+
+	(other isKindOf: PyTimedelta) ifTrue: [
+		^ self ___totalMicros___ @env0:// other ___totalMicros___].
+	^ PyTimedelta @env0:___fromTotalMicros___: (self ___totalMicros___ @env0:// other)
+%
+
+category: 'Grail-Arithmetic'
+method: PyTimedelta
+__mod__: other
+	"td % td -> td."
+
+	^ PyTimedelta @env0:___fromTotalMicros___:
+		(self ___totalMicros___ @env0:\\ other ___totalMicros___)
+%
+
+category: 'Grail-Arithmetic'
+method: PyTimedelta
 __abs__
 	self ___totalMicros___ @env0:< 0 ifTrue: [
 		^ self __neg__
@@ -488,6 +518,14 @@ dst: dt
 	"timezone instances do not represent DST transitions."
 
 	^ None
+%
+
+category: 'Grail-Accessors'
+method: PyTimezone
+fromutc: dt
+	"Convert a UTC datetime (tzinfo == self) to this zone: dt + offset."
+
+	^ dt __add__: (self @env0:dynamicInstVarAt: #_offset)
 %
 
 category: 'Grail-Accessors'
@@ -986,6 +1024,89 @@ strftime: format
 	^ time instance strftime: format _: structTime
 %
 
+category: 'Grail-Conversion'
+method: PyDateTime
+__format__: spec
+	"datetime.__format__: empty spec -> str(self); else strftime(spec)."
+
+	(spec @env0:isNil or: [spec @env0:isEmpty]) ifTrue: [^ self __str__].
+	^ self strftime: spec
+%
+
+category: 'Grail-Conversion'
+method: PyDateTime
+timetuple
+	"struct_time-shaped 9-tuple; tm_isdst = -1."
+
+	^ tuple @env0:withAll: {
+		(self @env0:dynamicInstVarAt: #_year).
+		(self @env0:dynamicInstVarAt: #_month).
+		(self @env0:dynamicInstVarAt: #_day).
+		(self @env0:dynamicInstVarAt: #_hour).
+		(self @env0:dynamicInstVarAt: #_minute).
+		(self @env0:dynamicInstVarAt: #_second).
+		(self ___pyDayOfWeek___).
+		(self ___dayOfYear___).
+		-1 }
+%
+
+category: 'Grail-Accessors'
+method: PyDateTime
+date
+	"The date() part as a naive PyDate."
+
+	^ PyDate @env0:___fromFields___:
+		(self @env0:dynamicInstVarAt: #_year)
+		_: (self @env0:dynamicInstVarAt: #_month)
+		_: (self @env0:dynamicInstVarAt: #_day)
+%
+
+category: 'Grail-Accessors'
+method: PyDateTime
+time
+	"The time() part as a NAIVE PyTime (tzinfo dropped, per CPython)."
+
+	^ PyTime @env0:___fromFields___:
+		(self @env0:dynamicInstVarAt: #_hour)
+		_: (self @env0:dynamicInstVarAt: #_minute)
+		_: (self @env0:dynamicInstVarAt: #_second)
+		_: (self @env0:dynamicInstVarAt: #_microsecond)
+		_: nil
+%
+
+category: 'Grail-Accessors'
+method: PyDateTime
+isocalendar
+	"(ISO year, ISO week, ISO weekday) — delegates to the date part."
+
+	^ (PyDate @env0:___fromFields___:
+		(self @env0:dynamicInstVarAt: #_year)
+		_: (self @env0:dynamicInstVarAt: #_month)
+		_: (self @env0:dynamicInstVarAt: #_day)) isocalendar
+%
+
+category: 'Grail-Initialization'
+classmethod: PyDateTime
+combine: aDate _: aTime
+	"datetime.combine(date, time) — merge fields; inherit time's tzinfo."
+
+	^ PyDateTime @env0:___fromFields___:
+		(aDate year) _: (aDate month) _: (aDate day)
+		_: (aTime hour) _: (aTime minute) _: (aTime second)
+		_: (aTime microsecond) _: (aTime @env0:dynamicInstVarAt: #_tzinfo)
+%
+
+category: 'Grail-Initialization'
+classmethod: PyDateTime
+fromordinal: ordinal
+	"Proleptic Gregorian ordinal -> naive datetime at midnight."
+
+	| d |
+	d := PyDate fromordinal: ordinal.
+	^ PyDateTime @env0:___fromFields___:
+		(d year) _: (d month) _: (d day) _: 0 _: 0 _: 0 _: 0 _: nil
+%
+
 ! ------- Arithmetic
 
 category: 'Grail-Arithmetic'
@@ -1383,6 +1504,100 @@ isoweekday
 	^ (self weekday) @env0:+ 1
 %
 
+category: 'Grail-Conversion'
+method: PyDate
+timetuple
+	"struct_time-shaped 9-tuple (time fields zero); tm_isdst = -1."
+
+	^ tuple @env0:withAll: {
+		(self @env0:dynamicInstVarAt: #_year).
+		(self @env0:dynamicInstVarAt: #_month).
+		(self @env0:dynamicInstVarAt: #_day).
+		0. 0. 0.
+		(self weekday).
+		((self @env0:___asDate___) @env0:dayOfYear).
+		-1 }
+%
+
+category: 'Grail-Conversion'
+method: PyDate
+strftime: format
+	"Delegate to the time module's formatter with a midnight struct_time."
+
+	^ time instance strftime: format _: self timetuple
+%
+
+category: 'Grail-Conversion'
+method: PyDate
+__format__: spec
+	"date.__format__: empty spec -> str(self); else strftime(spec)."
+
+	(spec @env0:isNil or: [spec @env0:isEmpty]) ifTrue: [^ self __str__].
+	^ self strftime: spec
+%
+
+category: 'Grail-Conversion'
+method: PyDate
+ctime
+	"C asctime-style, e.g. 'Thu Jan  1 00:00:00 2004' (day space-padded
+	to width 2, time always 00:00:00)."
+
+	| head dayStr |
+	head := time instance strftime: '%a %b' _: self timetuple.
+	dayStr := (self @env0:dynamicInstVarAt: #_day) @env0:printString.
+	dayStr @env0:size @env0:< 2 ifTrue: [dayStr := ' ' @env0:, dayStr].
+	^ head @env0:, ' ' @env0:, dayStr @env0:, ' 00:00:00 ' @env0:,
+		(self @env0:___pad___: (self @env0:dynamicInstVarAt: #_year) width: 4)
+%
+
+category: 'Grail-Private'
+classmethod: PyDate
+___isoweek1monday___: year
+	"Proleptic-ordinal of the Monday starting ISO week 1 of `year`."
+
+	| firstday firstweekday week1monday |
+	firstday := (PyDate @env0:___fromFields___: year _: 1 _: 1) toordinal.
+	firstweekday := (firstday @env0:+ 6) @env0:\\ 7.
+	week1monday := firstday @env0:- firstweekday.
+	firstweekday @env0:> 3 ifTrue: [week1monday := week1monday @env0:+ 7].
+	^ week1monday
+%
+
+category: 'Grail-Accessors'
+method: PyDate
+isocalendar
+	"(ISO year, ISO week 1..53, ISO weekday 1..7)."
+
+	| today year week1monday week day |
+	year := self @env0:dynamicInstVarAt: #_year.
+	week1monday := PyDate ___isoweek1monday___: year.
+	today := self toordinal.
+	week := (today @env0:- week1monday) @env0:// 7.
+	day := (today @env0:- week1monday) @env0:\\ 7.
+	week @env0:< 0 ifTrue: [
+		year := year @env0:- 1.
+		week1monday := PyDate ___isoweek1monday___: year.
+		week := (today @env0:- week1monday) @env0:// 7.
+		day := (today @env0:- week1monday) @env0:\\ 7].
+	week @env0:>= 52 ifTrue: [
+		(today @env0:>= (PyDate ___isoweek1monday___: (year @env0:+ 1))) ifTrue: [
+			year := year @env0:+ 1.
+			week := 0]].
+	^ tuple @env0:withAll: { year. week @env0:+ 1. day @env0:+ 1 }
+%
+
+category: 'Grail-Initialization'
+classmethod: PyDate
+fromisocalendar: year _: week _: day
+	"Inverse of isocalendar()."
+
+	| ord |
+	ord := (PyDate ___isoweek1monday___: year)
+		@env0:+ (7 @env0:* (week @env0:- 1))
+		@env0:+ (day @env0:- 1).
+	^ PyDate fromordinal: ord
+%
+
 set compile_env: 0
 
 category: 'Grail-Private'
@@ -1719,6 +1934,80 @@ __repr__
 		body := body @env0:, ', ' @env0:, s @env0:printString.
 		us @env0:~= 0 ifTrue: [body := body @env0:, ', ' @env0:, us @env0:printString]].
 	^ 'datetime.time(' @env0:, body @env0:, ')'
+%
+
+category: 'Grail-Mutation'
+method: PyTime
+_replace: positional kw: kwargs
+	"time.replace(hour=..., minute=..., second=..., microsecond=...,
+	tzinfo=...)."
+
+	| h mi s us tz |
+	h := self @env0:dynamicInstVarAt: #_hour.
+	mi := self @env0:dynamicInstVarAt: #_minute.
+	s := self @env0:dynamicInstVarAt: #_second.
+	us := self @env0:dynamicInstVarAt: #_microsecond.
+	tz := self @env0:dynamicInstVarAt: #_tzinfo.
+	kwargs @env0:isNil ifFalse: [
+		h := kwargs @env0:at: 'hour' ifAbsent: [h].
+		mi := kwargs @env0:at: 'minute' ifAbsent: [mi].
+		s := kwargs @env0:at: 'second' ifAbsent: [s].
+		us := kwargs @env0:at: 'microsecond' ifAbsent: [us].
+		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz].
+		tz == None ifTrue: [tz := nil]].
+	^ PyTime @env0:___fromFields___: h _: mi _: s _: us _: tz
+%
+
+category: 'Grail-Conversion'
+method: PyTime
+strftime: format
+	"Delegate to the time module's formatter; date fields are the CPython
+	placeholder 1900-01-01."
+
+	| structTime |
+	structTime := tuple @env0:withAll: {
+		1900. 1. 1.
+		(self @env0:dynamicInstVarAt: #_hour).
+		(self @env0:dynamicInstVarAt: #_minute).
+		(self @env0:dynamicInstVarAt: #_second).
+		0. 1. -1 }.
+	^ time instance strftime: format _: structTime
+%
+
+category: 'Grail-Conversion'
+method: PyTime
+__format__: spec
+	(spec @env0:isNil or: [spec @env0:isEmpty]) ifTrue: [^ self __str__].
+	^ self strftime: spec
+%
+
+category: 'Grail-Accessors'
+method: PyTime
+utcoffset
+	"tzinfo.utcoffset(None), or None when naive."
+
+	| tz |
+	tz := self @env0:dynamicInstVarAt: #_tzinfo.
+	tz @env0:isNil ifTrue: [^ None].
+	^ tz utcoffset: None
+%
+
+category: 'Grail-Accessors'
+method: PyTime
+dst
+	| tz |
+	tz := self @env0:dynamicInstVarAt: #_tzinfo.
+	tz @env0:isNil ifTrue: [^ None].
+	^ tz dst: None
+%
+
+category: 'Grail-Accessors'
+method: PyTime
+tzname
+	| tz |
+	tz := self @env0:dynamicInstVarAt: #_tzinfo.
+	tz @env0:isNil ifTrue: [^ None].
+	^ tz tzname: None
 %
 
 set compile_env: 0
