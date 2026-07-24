@@ -225,6 +225,31 @@ def _extend_float_rejected():
     except TypeError as e: return "can't extend bytearray with float" in str(e)
 
 
+def _fromhex_reject_int():
+    try: bytes.fromhex(1); return False
+    except TypeError: return True
+
+def _fromhex_reject_tuple():
+    try: bytes.fromhex(()); return False
+    except TypeError as e: return "not tuple" in str(e)
+
+def _fromhex_odd():
+    try: bytes.fromhex('aaa'); return False
+    except ValueError as e: return "even number of hexadecimal digits" in str(e)
+
+def _fromhex_pos(s, pos):
+    try: bytes.fromhex(s); return False
+    except ValueError as e: return ("at position %d" % pos) in str(e)
+
+def _fromhex_reject_value(s):
+    try: bytes.fromhex(s); return False
+    except ValueError: return True
+
+def _fromhex_array_arg():
+    import array
+    return bytes.fromhex(array.array('B', b' 41 42 ')) == b'AB'
+
+
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
     'bytes_type_is_subclass': type(MyBytes(b'abc')) is MyBytes,
@@ -421,4 +446,24 @@ RESULTS = {
     'extend_atomic_valueerror': _extend_atomic_valueerror(),
     'extend_str_rejected': _extend_str_rejected(),
     'extend_float_rejected': _extend_float_rejected(),
+
+    # --- fromhex(): pairs of hex digits, ASCII whitespace ignored BETWEEN
+    # pairs, str or bytes-like arg, self-typed, with CPython's error kinds and
+    # 0-based positions. ---
+    'fromhex_basic': bytes.fromhex('1a2B30') == b'\x1a\x2b\x30',
+    'fromhex_ws': bytes.fromhex('  1A 2B  30   ') == b'\x1a\x2b\x30',
+    'fromhex_ws_kinds': bytes.fromhex(' 1A\n2B\t30\x0b') == b'\x1a\x2b\x30',
+    'fromhex_empty': bytes.fromhex('') == b'',
+    'fromhex_bytes_arg': bytes.fromhex(b' 1A 2B 30 ') == b'\x1a\x2b\x30',
+    'fromhex_array_arg': _fromhex_array_arg(),
+    'fromhex_bytearray_type': type(bytearray.fromhex('4142')) is bytearray,
+    'fromhex_bytearray_val': bytearray.fromhex('4142') == bytearray(b'AB'),
+    'fromhex_reject_int': _fromhex_reject_int(),
+    'fromhex_reject_tuple': _fromhex_reject_tuple(),
+    'fromhex_odd': _fromhex_odd(),
+    'fromhex_pos_first': _fromhex_pos('12 x4 56', 3),
+    'fromhex_pos_second': _fromhex_pos('12 3x 56', 4),
+    'fromhex_pos_ws_in_pair': _fromhex_pos('a ', 1),
+    'fromhex_nonascii_ws': _fromhex_reject_value('\xa0'),
+    'fromhex_single_char': _fromhex_reject_value('a'),
 }
