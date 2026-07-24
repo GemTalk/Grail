@@ -165,6 +165,14 @@ __contains__: item
 	| probe |
 	probe := (item isKindOf: set) ifTrue: [frozenset @env1:__new__: item] ifFalse: [item].
 	(self @env0:includes: probe) ifTrue: [^ true].
+	"A native hash-table miss doesn't necessarily mean absence: IEEE NaN
+	is never = to itself (even the SAME object), so it can never be
+	found via includes:'s hash+= lookup -- but CPython's set/dict
+	membership check compares candidates by IDENTITY before ==, so 'the
+	exact same NaN object' IS considered present (test_float.py's
+	test_float_containment: nan in {nan}).  Only a linear fallback, so
+	only pay for it once the fast path has already missed."
+	(self @env0:anySatisfy: [:e | e @env0:== probe]) ifTrue: [^ true].
 	probe ___requireHashableAsSetElement___.
 	^ false
 %

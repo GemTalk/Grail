@@ -725,14 +725,23 @@ category: 'Grail-Format Spec Engine'
 method: builtins
 ___parseFormatSpec___: spec
 	"Parse Python's format-spec mini-language
-	    [[fill]align][sign][#][0][width][,|_][.precision][type]
-	into an 8-slot Array: {fill. align. sign. alt. width. grouping.
-	precision. type}.  align/grouping/precision/type are nil when
-	absent; raises ValueError on trailing junk or empty precision."
+	    [[fill]align][sign][#][0][width][,|_][.precision[,|_]][type]
+	into a 9-slot Array: {fill. align. sign. alt. width. grouping.
+	precision. type. fracGrouping}.  align/grouping/precision/type/
+	fracGrouping are nil when absent.  fracGrouping is a SEPARATE,
+	optional grouping char for the digits after the decimal point
+	(only meaningful for f/F/e/E; test_format's '.10_f' ->
+	'123456.123_456_000_0') -- it sits right after the precision
+	digits (if any), so it's parsed at the tail of the precision
+	clause, not alongside the integer-part `grouping` before it.
+	Raises ValueError on trailing junk, empty precision (a dot with
+	neither digits nor a grouping char after it), or 'n' combined
+	with either grouping (CPython: ``Cannot specify ',' with 'n'.'')."
 
-	| fill align sign alt width grouping precision type i n c |
+	| fill align sign alt width grouping precision type i n c fracGrouping |
 	fill := $ . align := nil. sign := $-. alt := false.
 	width := 0. grouping := nil. precision := nil. type := nil.
+	fracGrouping := nil.
 	i := 1. n := spec @env0:size.
 	(n @env0:>= 2 and: [#($< $> $^ $=) @env0:includes: (spec @env0:at: 2)])
 		ifTrue: [
@@ -749,7 +758,12 @@ ___parseFormatSpec___: spec
 	(i @env0:<= n and: [(spec @env0:at: i) @env0:= $#]) ifTrue: [
 		alt := true. i := i @env0:+ 1].
 	(i @env0:<= n and: [(spec @env0:at: i) @env0:= $0]) ifTrue: [
-		align == nil ifTrue: [align := $=. fill := $0].
+		"The '0' flag always sets the fill char, even when align was
+		already given explicitly -- it only DEFAULTS align to '=' (the
+		sign-aware zero-pad) when align is otherwise unset (test_format:
+		format(x, '>021_._f') keeps align '>' but still zero-fills)."
+		align == nil ifTrue: [align := $=].
+		fill := $0.
 		i := i @env0:+ 1].
 	[i @env0:<= n and: [(spec @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
 		width := (width @env0:* 10) @env0:+ (spec @env0:at: i) @env0:digitValue.
@@ -758,12 +772,24 @@ ___parseFormatSpec___: spec
 		grouping := spec @env0:at: i. i := i @env0:+ 1].
 	(i @env0:<= n and: [(spec @env0:at: i) @env0:= $.]) ifTrue: [
 		i := i @env0:+ 1.
-		(i @env0:> n or: [(spec @env0:at: i) @env0:isDigit @env0:not]) ifTrue: [
-			ValueError ___signal___: 'Format specifier missing precision'].
-		precision := 0.
-		[i @env0:<= n and: [(spec @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
-			precision := (precision @env0:* 10) @env0:+ (spec @env0:at: i) @env0:digitValue.
-			i := i @env0:+ 1]].
+		"A dot needs SOMETHING after it -- either precision digits or
+		(new in 3.14) a fraction grouping char directly; a dot at the
+		very end, or followed by neither, is 'missing precision'."
+		((i @env0:> n) or: [(spec @env0:at: i) @env0:isDigit @env0:not
+			and: [(#($, $_) @env0:includes: (spec @env0:at: i)) @env0:not]])
+			ifTrue: [ValueError ___signal___: 'Format specifier missing precision'].
+		((i @env0:<= n) and: [(spec @env0:at: i) @env0:isDigit]) ifTrue: [
+			precision := 0.
+			[i @env0:<= n and: [(spec @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
+				precision := (precision @env0:* 10) @env0:+ (spec @env0:at: i) @env0:digitValue.
+				i := i @env0:+ 1]].
+		"Optional fraction-part grouping char, right after the precision
+		digits (if any) -- e.g. '.10_f' or the digit-less '._f'.  A
+		SECOND such char (or leftover digits after it) isn't consumed
+		here and falls through to the type check below, which rejects
+		it as an invalid format specifier (test_format: '.6_,f' etc.)."
+		(i @env0:<= n and: [#($, $_) @env0:includes: (spec @env0:at: i)]) ifTrue: [
+			fracGrouping := spec @env0:at: i. i := i @env0:+ 1]].
 	i @env0:<= n ifTrue: [
 		c := spec @env0:at: i.
 		(#($b $c $d $e $E $f $F $g $G $n $o $s $x $X $%) @env0:includes: c) ifFalse: [
@@ -772,7 +798,10 @@ ___parseFormatSpec___: spec
 		i := i @env0:+ 1].
 	i @env0:<= n ifTrue: [
 		ValueError ___signal___: ('Invalid format specifier ''' @env0:, spec @env0:asString @env0:, '''')].
-	^ { fill. align. sign. alt. width. grouping. precision. type }
+	(type @env0:= $n and: [grouping @env0:notNil or: [fracGrouping @env0:notNil]]) ifTrue: [
+		ValueError ___signal___: ('Cannot specify ''' @env0:,
+			(String @env0:with: (grouping @env0:ifNil: [fracGrouping])) @env0:, ''' with ''n''.')].
+	^ { fill. align. sign. alt. width. grouping. precision. type. fracGrouping }
 %
 
 category: 'Grail-Format Spec Engine'
@@ -819,6 +848,28 @@ ___groupDigits___: digits separator: sep every: groupSize
 		(count @env0:\\ groupSize @env0:= 0 and: [i @env0:> 1]) ifTrue: [
 			out := (String @env0:with: sep) @env0:, out].
 		i := i @env0:- 1].
+	^ out
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___groupDigitsFromLeft___: digits separator: sep every: groupSize
+	"Insert sep into a digit string every groupSize digits from the
+	LEFT: '1234560000' -> '123_456_000_0'.  Used for the fractional
+	part of a float format (grouping counts out from the decimal
+	point, unlike the integer part's from-the-right thousands
+	grouping in ___groupDigits___:)."
+
+	| out i n |
+	n := digits @env0:size.
+	n @env0:<= groupSize ifTrue: [^ digits].
+	out := ''.
+	i := 1.
+	[i @env0:<= n] @env0:whileTrue: [
+		out := out @env0:, (String @env0:with: (digits @env0:at: i)).
+		(i @env0:\\ groupSize @env0:= 0 and: [i @env0:< n]) ifTrue: [
+			out := out @env0:, (String @env0:with: sep)].
+		i := i @env0:+ 1].
 	^ out
 %
 
@@ -880,15 +931,29 @@ category: 'Grail-Format Spec Engine'
 method: builtins
 ___fixedDigits___: absValue precision: precision
 	"Fixed-point digit string for a non-negative Float: 'II.FFF' with
-	exactly `precision` fraction digits ('II' when precision = 0)."
+	exactly `precision` fraction digits ('II' when precision = 0).
+	Uses EXACT Fraction arithmetic throughout -- ``(absValue * factor)
+	rounded'' multiplies in FLOAT space and can itself introduce
+	rounding error (the same class of bug float>>__round__:'s rewrite
+	fixed), which made format()'s '.Nf' and round(x, N) occasionally
+	disagree (test_matches_float_format).  Round-half-to-even, matching
+	CPython's correctly-rounded dtoa (formatfloat_testcases.txt:
+	'%.0f' of 2.5 -> '2', of 3.5 -> '4')."
 
-	| factor scaled ip fp frac |
+	| factor fr num den scaledNum q r ip frac |
 	factor := 10 @env0:raisedTo: precision.
-	scaled := (absValue @env0:* factor) @env0:rounded.
-	ip := scaled @env0:// factor.
-	fp := scaled @env0:\\ factor.
+	fr := absValue @env0:asFraction.
+	num := fr @env0:numerator.
+	den := fr @env0:denominator.
+	scaledNum := num @env0:* factor.
+	q := scaledNum @env0:// den.
+	r := scaledNum @env0:- (q @env0:* den).
+	((r @env0:* 2) @env0:> den) ifTrue: [q := q @env0:+ 1]
+		ifFalse: [((r @env0:* 2) @env0:= den) ifTrue: [(q @env0:even) ifFalse: [q := q @env0:+ 1]]].
+	ip := q @env0:// factor.
+	frac := q @env0:\\ factor.
 	precision @env0:= 0 ifTrue: [^ ip @env0:printString].
-	frac := fp @env0:printString.
+	frac := frac @env0:printString.
 	[frac @env0:size @env0:< precision] @env0:whileTrue: [frac := '0' @env0:, frac].
 	^ (ip @env0:printString) @env0:, '.' @env0:, frac
 %
@@ -921,16 +986,26 @@ ___sciDigits___: absValue precision: precision upper: upper
 category: 'Grail-Format Spec Engine'
 method: builtins
 ___stripTrailingZeros___: digitString
-	"For %g: drop trailing fraction zeros and a bare trailing dot."
+	"For %g/g: drop trailing fraction zeros (and a bare trailing dot)
+	from the MANTISSA.  An exponent suffix ('e+03') must survive
+	verbatim, so locate it first rather than stripping from the raw
+	string's end -- which silently no-ops whenever an exponent is
+	present ('1.0e+03' has a trailing '3', not '0'), leaving bogus
+	un-stripped zeros in the mantissa (test_format_testfile: '%.2g' of
+	1000 must be '1e+03', not '1.0e+03')."
 
-	| s |
-	s := digitString.
-	(s @env0:includes: $.) ifFalse: [^ s].
-	[s @env0:size @env0:> 0 and: [(s @env0:at: s @env0:size) @env0:= $0]]
-		@env0:whileTrue: [s := s @env0:copyFrom: 1 to: s @env0:size @env0:- 1].
-	(s @env0:size @env0:> 0 and: [(s @env0:at: s @env0:size) @env0:= $.]) ifTrue: [
-		s := s @env0:copyFrom: 1 to: s @env0:size @env0:- 1].
-	^ s
+	| ePos mant suffix |
+	(digitString @env0:includes: $.) ifFalse: [^ digitString].
+	ePos := 0.
+	1 @env0:to: digitString @env0:size do: [:k |
+		((digitString @env0:at: k) @env0:= $e or: [(digitString @env0:at: k) @env0:= $E]) ifTrue: [ePos := k]].
+	mant := ePos @env0:= 0 ifTrue: [digitString] ifFalse: [digitString @env0:copyFrom: 1 to: ePos @env0:- 1].
+	suffix := ePos @env0:= 0 ifTrue: [''] ifFalse: [digitString @env0:copyFrom: ePos to: digitString @env0:size].
+	[mant @env0:size @env0:> 0 and: [(mant @env0:at: mant @env0:size) @env0:= $0]]
+		@env0:whileTrue: [mant := mant @env0:copyFrom: 1 to: mant @env0:size @env0:- 1].
+	(mant @env0:size @env0:> 0 and: [(mant @env0:at: mant @env0:size) @env0:= $.]) ifTrue: [
+		mant := mant @env0:copyFrom: 1 to: mant @env0:size @env0:- 1].
+	^ mant @env0:, suffix
 %
 
 category: 'Grail-Format Spec Engine'
@@ -939,20 +1014,23 @@ ___formatFloatValue___: value parsed: p
 	"Format a Float per a parsed spec (types f F e E g G % and the
 	bare-precision form)."
 
-	| fill align sign width grouping precision type neg a digits signStr body suffix exp10 probe |
+	| fill align sign alt width grouping precision type neg a digits signStr body suffix exp10 probe fracGrouping |
 	fill := p @env0:at: 1. align := p @env0:at: 2. sign := p @env0:at: 3.
-	width := p @env0:at: 5. grouping := p @env0:at: 6.
-	precision := p @env0:at: 7. type := p @env0:at: 8.
+	alt := p @env0:at: 4. width := p @env0:at: 5. grouping := p @env0:at: 6.
+	precision := p @env0:at: 7. type := p @env0:at: 8. fracGrouping := p @env0:at: 9.
 	(#($b $o $x $X $c $d $n $s) @env0:includes: type) ifTrue: [
 		ValueError ___signal___: ('Unknown format code for object of type ''float''')].
 	"Non-finite values format as their str with sign/width only."
 	(value @env0:= value) ifFalse: [
 		digits := 'nan'. neg := false]
 	ifTrue: [
-		neg := value @env0:< 0.
+		"Use the sign bit (not < 0) so -0.0 is recognized as negative."
+		neg := value @env0:signBit @env0:= 1.
 		a := value @env0:abs.
 		a @env0:> 1e300 ifTrue: [
 			a @env0:* 0 @env0:= 0 ifFalse: [digits := 'inf']]].
+	(digits @env0:notNil and: [#($F $E $G) @env0:includes: type]) ifTrue: [
+		digits := digits @env0:asUppercase].
 	digits == nil ifTrue: [
 		suffix := ''.
 		type @env0:= $% ifTrue: [
@@ -979,23 +1057,78 @@ ___formatFloatValue___: value parsed: p
 				probe @env0:= 0 ifFalse: [
 					[probe @env0:>= 10] @env0:whileTrue: [probe := probe @env0:/ 10. exp10 := exp10 @env0:+ 1].
 					[probe @env0:< 1] @env0:whileTrue: [probe := probe @env0:* 10. exp10 := exp10 @env0:- 1]].
-				((exp10 @env0:>= -4) @env0:and: [exp10 @env0:< precision])
+				((exp10 @env0:>= -4) @env0:and: [exp10 @env0:< (type == nil ifTrue: [precision @env0:- 1] ifFalse: [precision])])
 					ifTrue: [
-						digits := self ___stripTrailingZeros___:
-							(self ___fixedDigits___: a precision: (precision @env0:- 1 @env0:- exp10 @env0:max: 0))]
+						digits := self ___fixedDigits___: a precision: (precision @env0:- 1 @env0:- exp10 @env0:max: 0).
+						"'#' (alt form) keeps trailing fraction zeros that plain g/G
+						would otherwise strip (test_format_testfile: '%#.4g' of 0.2
+						-> '0.2000', not '0.2')."
+						alt ifFalse: [digits := self ___stripTrailingZeros___: digits]]
 					ifFalse: [
-						digits := self ___stripTrailingZeros___:
-							(self ___sciDigits___: a precision: precision @env0:- 1 upper: type @env0:= $G)]]]].
-		digits := digits @env0:, suffix].
-	grouping == nil ifFalse: [
-		| dot ip rest |
-		dot := digits @env0:indexOf: $..
-		dot @env0:= 0
-			ifTrue: [ip := digits. rest := '']
-			ifFalse: [ip := digits @env0:copyFrom: 1 to: dot @env0:- 1.
-				rest := digits @env0:copyFrom: dot to: digits @env0:size].
-		digits := (self ___groupDigits___: ip separator: grouping every: 3) @env0:, rest].
+						digits := self ___sciDigits___: a precision: precision @env0:- 1 upper: type @env0:= $G.
+						alt ifFalse: [digits := self ___stripTrailingZeros___: digits]]]]].
+		digits := digits @env0:, suffix.
+		"'#' also forces a decimal point even with zero fraction digits
+		('%#.0f' of 0 -> '0.', '%#.0e' of 1 -> '1.e+00', '%#.0g' of 2 ->
+		'2.') -- insert it right before any exponent marker (or at the
+		very end for f/F/plain g without one) when not already present."
+		(alt @env0:and: [(digits @env0:includes: $.) @env0:not]) ifTrue: [
+			| ePos2 |
+			ePos2 := 0.
+			1 @env0:to: digits @env0:size do: [:k |
+				((digits @env0:at: k) @env0:= $e or: [(digits @env0:at: k) @env0:= $E]) ifTrue: [ePos2 := k]].
+			digits := ePos2 @env0:= 0
+				ifTrue: [digits @env0:, '.']
+				ifFalse: [(digits @env0:copyFrom: 1 to: ePos2 @env0:- 1) @env0:, '.'
+					@env0:, (digits @env0:copyFrom: ePos2 to: digits @env0:size)]]].
 	signStr := self ___signString___: neg sign: sign.
+	(grouping @env0:notNil or: [fracGrouping @env0:notNil]) ifTrue: [
+		| ePos dotPos mainPart expSuffix ip fp dotStr zeroFillWithGrouping |
+		"Split '<int>[.<frac>][e[+-]<exp>]' into its three pieces so the
+		integer part and fraction part can be grouped INDEPENDENTLY
+		(different separators, and the fraction groups LEFT-to-right
+		from the point while the integer part groups RIGHT-to-left from
+		it -- test_format's '+.11_e' -> '+1.234_561_234_56e+05' groups
+		only the mantissa's fraction digits, never the exponent)."
+		ePos := 0.
+		1 @env0:to: digits @env0:size do: [:k |
+			((digits @env0:at: k) @env0:= $e or: [(digits @env0:at: k) @env0:= $E]) ifTrue: [ePos := k]].
+		expSuffix := ePos @env0:= 0 ifTrue: [''] ifFalse: [digits @env0:copyFrom: ePos to: digits @env0:size].
+		mainPart := ePos @env0:= 0 ifTrue: [digits] ifFalse: [digits @env0:copyFrom: 1 to: ePos @env0:- 1].
+		dotPos := mainPart @env0:indexOf: $..
+		ip := dotPos @env0:= 0 ifTrue: [mainPart] ifFalse: [mainPart @env0:copyFrom: 1 to: dotPos @env0:- 1].
+		fp := dotPos @env0:= 0 ifTrue: [''] ifFalse: [mainPart @env0:copyFrom: dotPos @env0:+ 1 to: mainPart @env0:size].
+		dotStr := dotPos @env0:= 0 ifTrue: [''] ifFalse: ['.'].
+		(fracGrouping @env0:notNil and: [fp @env0:notEmpty]) ifTrue: [
+			fp := self ___groupDigitsFromLeft___: fp separator: fracGrouping every: 3].
+		zeroFillWithGrouping := (align @env0:= $=) and: [grouping @env0:notNil].
+		zeroFillWithGrouping
+			ifTrue: [
+				"CPython merges the sign-aware zero-fill with grouping: the
+				synthetic zeros used to reach `width` are grouped together
+				WITH the original integer digits as one continuous run, not
+				appended after an already-grouped '123_456' (test_format:
+				format(x, '021_._f') -> '0_000_123_456.123_456', not
+				'000000123_456.123_456').  Grow the un-grouped integer digit
+				count k (from its natural size) until grouping it would meet
+				or exceed the target width, then group once at that size --
+				this mirrors ___formatPadBody___:'s zero-fill for the plain
+				(no grouping) case, just solved in digit-count space instead
+				of character space because separators add extra characters
+				that themselves count toward width."
+				| fixedLen target k zeros |
+				fixedLen := signStr @env0:size @env0:+ dotStr @env0:size @env0:+ fp @env0:size @env0:+ expSuffix @env0:size.
+				target := width @env0:- fixedLen.
+				k := ip @env0:size.
+				[(k @env0:+ ((k @env0:+ 2) @env0:// 3) @env0:- 1) @env0:< target] @env0:whileTrue: [k := k @env0:+ 1].
+				(k @env0:> ip @env0:size) ifTrue: [
+					zeros := String @env0:new: k @env0:- ip @env0:size.
+					zeros @env0:atAllPut: $0.
+					ip := zeros @env0:, ip].
+				ip := self ___groupDigits___: ip separator: grouping every: 3]
+			ifFalse: [
+				grouping @env0:notNil ifTrue: [ip := self ___groupDigits___: ip separator: grouping every: 3]].
+		digits := ip @env0:, dotStr @env0:, fp @env0:, expSuffix].
 	body := signStr @env0:, digits.
 	align == nil ifTrue: [align := $>].
 	^ self ___formatPadBody___: body fill: fill align: align
@@ -1048,7 +1181,25 @@ ___printfConvert___: value conv: conv flags: flags width: width precision: preci
 		CPython: a value whose __repr__ raises propagates that from %r rather
 		than being masked by printString."
 		conv @env0:= $s ifTrue: [body := value @env0:asString].
-		conv @env0:= $r ifTrue: [body := value __repr__].
+		conv @env0:= $r ifTrue: [
+			"ByteArray's Smalltalk printString ('aByteArray( 32, 32, ...)')
+			bears no resemblance to Python's bytes repr ('b'...''), and
+			CharacterCollection's printString does not escape control
+			characters the way repr() does (a raw embedded tab/NUL stays
+			raw instead of becoming '\t'/'\x00') -- special-case both
+			rather than routing EVERY type through __repr__, which would
+			resurface the dict-subclass __repr__ bugs the comment above
+			warns about (test_float.py's test_error_message: '%r' %
+			(s,) for a string containing '\t \n', and '%r' % (b'...',)).
+			Float also needs its own __repr__ rather than raw printString
+			-- GemStone's native spelling omits the '+' on a positive
+			scientific exponent and doesn't use CPython's inf/nan/-0.0
+			spellings (test_format_testfile: '%r' % 1e16 -> '1e+16', not
+			'1e16')."
+			body := (((value isKindOf: ByteArray) or: [value isKindOf: CharacterCollection])
+				or: [value isKindOf: Float])
+				ifTrue: [value __repr__]
+				ifFalse: [value @env0:printString]].
 		conv @env0:= $a ifTrue: [body := (self ascii: value) @env0:asString].
 		conv @env0:= $c ifTrue: [
 			(value isKindOf: Integer)
@@ -1075,7 +1226,8 @@ ___printfConvert___: value conv: conv flags: flags width: width precision: preci
 			width.
 			nil.
 			precision.
-			conv }.
+			conv.
+			nil "fracGrouping: printf-style '%' formatting has no grouping syntax" }.
 		^ self ___formatFloatValue___: value @env0:asFloat parsed: p].
 
 	"--- integer conversions: d i u o x X ---"
@@ -1174,11 +1326,31 @@ round: aNumber
 	The 2-arg form `round(x, ndigits)` lives at `_round:kw:`.
 	__round__ first (CPython protocol): vendored fractions.Fraction
 	implements banker's rounding there; the kernel #rounded was an
-	uncatchable MNU on PythonInstances."
+	uncatchable MNU on PythonInstances.
 
-	(aNumber ___respondsTo___: #'___round__:kw:')
-		ifTrue: [^ aNumber ___round__: { } kw: nil].
-	(aNumber ___respondsTo___: #'__round__')
+	Three possible shapes for a type's __round__, tried in order:
+	  1. ___round__:kw: -- the VARARGS form Grail's Python-class
+	     compiler generates for a user-defined dunder with a keyword/
+	     default argument, e.g. fractions.py's
+	     ``def __round__(self, ndigits=None)``.  This is NOT dead code
+	     (a previous pass here deleted an earlier copy of this check
+	     believing no class ever defines it, having only grepped for
+	     OTHER call sites of the same selector) -- every Python-source
+	     class with a defaulted dunder parameter compiles to exactly
+	     this selector, never a bare __round__.
+	  2. __round__ -- the plain 0-arg kernel-style dunder (Float, Int,
+	     the native AbstractFraction kernel classes).
+	  3. neither -- fall back to the kernel's own #rounded.
+	whichClassIncludesSelector:environmentId: (not ___respondsTo___:)
+	because a small Fraction value is a native GemStone SmallFraction
+	under the hood, which -- like AbstractPyInt/AbstractPyFloat's
+	kernel siblings -- does NOT descend from Grail's ``object'' root,
+	so it does not understand ___respondsTo___: at all
+	(MessageNotUnderstood, not just a false answer)."
+
+	((aNumber @env0:class @env0:whichClassIncludesSelector: #'___round__:kw:' environmentId: 1) @env0:notNil)
+		ifTrue: [^ aNumber perform: #'___round__:kw:' env: 1 withArguments: { { }. nil }].
+	((aNumber @env0:class @env0:whichClassIncludesSelector: #'__round__' environmentId: 1) @env0:notNil)
 		ifTrue: [^ aNumber @env0:perform: #'__round__' env: 1].
 	^ aNumber @env0:rounded
 %
@@ -1404,8 +1576,27 @@ _sorted: positional kw: kwargs
 category: 'Grail-Built-in Functions'
 method: builtins
 str: anObject
-	"Python builtin str(x) — fixed-arity fast path."
+	"Python builtin str(x) — fixed-arity fast path.  A user-defined str
+	SUBCLASS instance (``class FooStr(str): ...'') must coerce down to
+	a genuine plain str here, mirroring CPython (str(subclass_instance)
+	is exactly type str, never the subclass) -- the inherited __str__
+	just answers self unchanged, which would otherwise retain the
+	subclass's own overrides (test_float.py's test_floatconversion:
+	FooStr.__float__ calls str(self) and, without this, gets back
+	ANOTHER FooStr, re-entering __float__ and recursing forever).
+	Checked against the specific sealed/kernel string classes (not
+	just ``isKindOf: CharacterCollection``) so a plain WIDE string
+	(Unicode16/32, auto-promoted by content, not a user subclass)
+	takes the untouched fast path -- str.gs's __new__: always builds a
+	narrow Unicode7 copy, which would corrupt a wide one."
 
+	((anObject isKindOf: CharacterCollection) and: [
+		(anObject @env0:class @env0:== Unicode7) @env0:not and: [
+		(anObject @env0:class @env0:== Unicode16) @env0:not and: [
+		(anObject @env0:class @env0:== Unicode32) @env0:not and: [
+		(anObject @env0:class @env0:== String) @env0:not and: [
+		(anObject @env0:class @env0:== Symbol) @env0:not]]]]]) ifTrue: [
+		^ str __new__: anObject].
 	^ [anObject __str__] @env0:on: MessageNotUnderstood do: [:ex | anObject __repr__]
 %
 
@@ -2041,11 +2232,18 @@ _round: positional kw: kwargs
 				ifTrue: [nil]
 				ifFalse: [kwargs @env0:at: 'ndigits' ifAbsent: [nil]]
 		].
-	"__round__ first (CPython protocol) -- see round: for the 1-arg
-	rationale; the kernel arithmetic below MNUs on PythonInstances."
-	(number ___respondsTo___: #'___round__:kw:')
-		ifTrue: [^ number ___round__:
-			(ndigits == nil ifTrue: [{ }] ifFalse: [{ ndigits }]) kw: nil].
+	"__round__:/___round__:kw: first (CPython protocol) -- see round:'s
+	twin comment for the three-shape dispatch order (varargs form for
+	a Python-source dunder with a defaulted parameter e.g. fractions.py,
+	then the plain kernel-style 1-arg dunder, then the raw fallback);
+	the kernel arithmetic below MNUs on PythonInstances, including
+	round(x, None) which must raise a TypeError from the type's own
+	None-check rather than crash in `10 raisedTo: nil`."
+	((number @env0:class @env0:whichClassIncludesSelector: #'___round__:kw:' environmentId: 1) @env0:notNil)
+		ifTrue: [^ number perform: #'___round__:kw:' env: 1
+			withArguments: { (ndigits @env0:isNil ifTrue: [{ }] ifFalse: [{ ndigits }]). nil }].
+	((number @env0:class @env0:whichClassIncludesSelector: #'__round__:' environmentId: 1) @env0:notNil)
+		ifTrue: [^ number perform: #'__round__:' env: 1 withArguments: { ndigits }].
 	ndigits ifNil: [^ number @env0:rounded].
 	multiplier := 10 @env0:raisedTo: ndigits.
 	"Match CPython: ``round(1.234, 2)'' returns the Float 1.23.

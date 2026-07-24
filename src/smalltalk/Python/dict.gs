@@ -280,8 +280,18 @@ method: dict
 __contains__: key
 	"Return True if key is in the dictionary, else False.  An unhashable key
 	can never be present; CPython raises TypeError (checked only on the miss
-	path so a present key stays fast)."
+	path so a present key stays fast).
+
+	A native hash-table miss doesn't necessarily mean absence: IEEE NaN
+	is never = to itself, so a NaN key can never be found via
+	includesKey:'s hash+= lookup -- but CPython's dict lookup compares
+	candidate keys by IDENTITY before ==, so 'the exact same NaN
+	object' IS considered present (test_float.py's
+	test_float_containment: nan in {nan: None}).  Only a linear
+	fallback, so only pay for it once the fast path has already
+	missed."
 	(self @env0:includesKey: key) ifTrue: [^ true].
+	(self @env0:keys @env0:anySatisfy: [:k | k @env0:== key]) ifTrue: [^ true].
 	key ___requireHashableAsDictKey___.
 	^ false
 %
@@ -305,6 +315,11 @@ __eq__: other
 	"Return True if dictionaries have the same (key, value) pairs"
 
 	| mySize otherSize |
+	"Identity fast path: also sidesteps a NaN key's value being
+	fundamentally unretrievable by GemStone's native hash lookup (see
+	the keysAndValuesDo: comment below) when self and other are the
+	SAME dict (test_float.py's test_float_containment: ``d == d``)."
+	(self @env0:== other) ifTrue: [^ true].
 	"Accept EVERY KeyValueDictionary, not just the PyDict subclass: Grail
 	hands plain KVDs to Python from many places (globals(), a module's
 	__dict__, C-shim results, dicts committed before the PyDict flip).  A
@@ -321,17 +336,29 @@ __eq__: other
 	].
 	
 	self @env0:keysAndValuesDo: [:key :value |
-		| otherHasKey otherValue |
-		otherHasKey := other @env0:includesKey: key.
-		otherHasKey ifFalse: [
-			^ false
-		].
-		otherValue := other @env0:at: key.
+		| found otherValue |
+		"IEEE NaN is never = to itself, so a NaN key can hit an
+		inconsistent state in GemStone's native hash lookup (includesKey:
+		can report true via a hash-bucket match while the follow-up at:
+		then fails to confirm it by =, raising rtErrKeyNotFound) --
+		treat ANY failure from the fast path as a miss and fall back to
+		an identity-first manual scan, matching CPython's key-lookup
+		semantics (identity before ==; test_float.py's
+		test_float_containment: {nan: None} == {nan: None})."
+		found := false.
+		[(other @env0:includesKey: key) ifTrue: [
+			otherValue := other @env0:at: key.
+			found := true]]
+			@env0:on: Error do: [:ex | found := false].
+		found ifFalse: [
+			other @env0:keysAndValuesDo: [:k2 :v2 |
+				(found @env0:not and: [k2 @env0:== key]) ifTrue: [otherValue := v2. found := true]]].
+		found ifFalse: [^ false].
 		(value __eq__: otherValue) ifFalse: [
 			^ false
 		]
 	].
-	
+
 	^ true
 %
 

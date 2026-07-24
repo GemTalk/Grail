@@ -217,21 +217,30 @@ __repr__
 category: 'Grail-Rounding'
 method: AbstractFraction
 __round__
-	"Round to nearest integer, ties go to even."
+	"Round to nearest integer, ties go to even.
 
-	| n d floor remainder doubleRemainder sign |
+	// is FLOOR division (always rounds toward negative infinity,
+	regardless of sign), so the remainder n - floor*d is always in
+	[0, d) and the two candidates bracketing self are ALWAYS `floor`
+	and `floor + 1` -- never `floor + sign`.  The previous ``+ sign''
+	logic assumed a TRUNCATING (round-toward-zero) floor, which // is
+	not: for n=-1, d=10 (self = -0.1) it produced -2 instead of 0, and
+	for an exact negative tie like -5/2 it produced -4 instead of the
+	correct -2 (test_fractions.py's testConversions: round(F(-1, 10))
+	== 0; testRound: round(F(-25, 100), 1) == F(-2, 10))."
+
+	| n d floor remainder doubleRemainder |
 	n := self @env0:numerator.
 	d := self @env0:denominator.
 	floor := n @env0:// d.
-	remainder := ((n @env0:- (floor @env0:* d)) @env0:abs).
+	remainder := n @env0:- (floor @env0:* d).
 	doubleRemainder := remainder @env0:* 2.
-	sign := (n @env0:>= 0) ifTrue: [1] ifFalse: [-1].
 	(doubleRemainder @env0:< d) ifTrue: [ ^ floor ].
-	(doubleRemainder @env0:> d) ifTrue: [ ^ floor @env0:+ sign ].
+	(doubleRemainder @env0:> d) ifTrue: [ ^ floor @env0:+ 1 ].
 	"Exactly halfway - round to even"
 	((floor @env0:bitAnd: 1) == 0)
 		ifTrue: [ ^ floor ]
-		ifFalse: [ ^ floor @env0:+ sign ]
+		ifFalse: [ ^ floor @env0:+ 1 ]
 %
 
 category: 'Grail-Rounding'
