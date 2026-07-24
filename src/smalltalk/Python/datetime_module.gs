@@ -257,6 +257,31 @@ __hash__
 	^ self ___totalMicros___ @env0:hash
 %
 
+category: 'Grail-Pickle'
+method: PyTimedelta
+__reduce__
+	"(class, (days, seconds, microseconds))."
+
+	^ tuple @env0:withAll: {
+		(self @env0:class).
+		(tuple @env0:withAll: {
+			(self @env0:dynamicInstVarAt: #_days).
+			(self @env0:dynamicInstVarAt: #_seconds).
+			(self @env0:dynamicInstVarAt: #_microseconds) }) }
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyTimedelta
+__module__
+	^ 'datetime'
+%
+
+category: 'Grail-Introspection'
+classmethod: PyTimedelta
+__qualname__
+	^ 'timedelta'
+%
+
 category: 'Grail-Conversion'
 method: PyTimedelta
 __str__
@@ -577,6 +602,33 @@ __hash__
 	^ (self @env0:dynamicInstVarAt: #_offset) __hash__
 %
 
+category: 'Grail-Pickle'
+method: PyTimezone
+__reduce__
+	"(class, (offset[, name]))."
+
+	| name fields |
+	name := self @env0:dynamicInstVarAt: #_name.
+	fields := OrderedCollection @env0:new.
+	fields @env0:add: (self @env0:dynamicInstVarAt: #_offset).
+	name @env0:isNil ifFalse: [fields @env0:add: name].
+	^ tuple @env0:withAll: {
+		(self @env0:class).
+		(tuple @env0:withAll: fields @env0:asArray) }
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyTimezone
+__module__
+	^ 'datetime'
+%
+
+category: 'Grail-Introspection'
+classmethod: PyTimezone
+__qualname__
+	^ 'timezone'
+%
+
 category: 'Grail-Conversion'
 method: PyTimezone
 __repr__
@@ -654,6 +706,7 @@ ___pythonValueAttrs___
 		add: #second;
 		add: #microsecond;
 		add: #tzinfo;
+		add: #fold;
 		yourself
 %
 
@@ -703,7 +756,7 @@ _datetime: positional kw: kwargs
 	"datetime(...) varargs constructor accepting optional second,
 	microsecond, tzinfo."
 
-	| year month day hour minute second micro tz |
+	| year month day hour minute second micro tz fold inst |
 	year := positional @env0:at: 1.
 	month := positional @env0:at: 2.
 	day := positional @env0:at: 3.
@@ -712,15 +765,19 @@ _datetime: positional kw: kwargs
 	second := positional @env0:size @env0:>= 6 ifTrue: [positional @env0:at: 6] ifFalse: [0].
 	micro := positional @env0:size @env0:>= 7 ifTrue: [positional @env0:at: 7] ifFalse: [0].
 	tz := positional @env0:size @env0:>= 8 ifTrue: [positional @env0:at: 8] ifFalse: [nil].
+	fold := 0.
 	kwargs @env0:isNil ifFalse: [
 		hour := kwargs @env0:at: 'hour' ifAbsent: [hour].
 		minute := kwargs @env0:at: 'minute' ifAbsent: [minute].
 		second := kwargs @env0:at: 'second' ifAbsent: [second].
 		micro := kwargs @env0:at: 'microsecond' ifAbsent: [micro].
-		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz]
+		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz].
+		fold := kwargs @env0:at: 'fold' ifAbsent: [0]
 	].
 	tz == None ifTrue: [tz := nil].
-	^ self @env0:___fromFields___: year _: month _: day _: hour _: minute _: second _: micro _: tz
+	inst := self @env0:___fromFields___: year _: month _: day _: hour _: minute _: second _: micro _: tz.
+	fold @env0:= 0 ifFalse: [inst @env0:dynamicInstVarAt: #_fold put: fold].
+	^ inst
 %
 
 category: 'Grail-Initialization'
@@ -915,6 +972,67 @@ tzinfo
 	^ (self @env0:dynamicInstVarAt: #_tzinfo)
 %
 
+category: 'Grail-Accessors'
+method: PyDateTime
+fold
+	"PEP 495 fold flag; 0 unless set via the constructor's fold= keyword
+	(Grail does not model DST-fold ambiguity)."
+
+	| f |
+	f := self @env0:dynamicInstVarAt: #_fold.
+	^ f @env0:isNil ifTrue: [0] ifFalse: [f]
+%
+
+category: 'Grail-Accessors'
+method: PyDateTime
+utcoffset
+	"tzinfo.utcoffset(self), or None when naive."
+
+	| tz |
+	tz := self @env0:dynamicInstVarAt: #_tzinfo.
+	tz @env0:isNil ifTrue: [^ None].
+	^ tz utcoffset: self
+%
+
+category: 'Grail-Accessors'
+method: PyDateTime
+dst
+	| tz |
+	tz := self @env0:dynamicInstVarAt: #_tzinfo.
+	tz @env0:isNil ifTrue: [^ None].
+	^ tz dst: self
+%
+
+category: 'Grail-Accessors'
+method: PyDateTime
+tzname
+	| tz |
+	tz := self @env0:dynamicInstVarAt: #_tzinfo.
+	tz @env0:isNil ifTrue: [^ None].
+	^ tz tzname: self
+%
+
+category: 'Grail-Conversion'
+method: PyDateTime
+astimezone: tz
+	"Convert an aware datetime to zone `tz`.  Grail treats a naive
+	datetime as UTC (offset 0), since it has no portable local zone."
+
+	| mytz myoffset utcWall |
+	mytz := self @env0:dynamicInstVarAt: #_tzinfo.
+	(mytz @env0:notNil and: [mytz @env0:== tz]) ifTrue: [^ self].
+	myoffset := mytz @env0:isNil
+		ifTrue: [PyTimedelta @env0:___fromTotalMicros___: 0]
+		ifFalse: [mytz utcoffset: self].
+	"Shift to UTC wall-clock, retag with the target zone, then let the
+	target zone map UTC -> local."
+	utcWall := self __sub__: myoffset.
+	^ tz fromutc: (PyDateTime @env0:___fromFields___:
+		(utcWall year) _: (utcWall month) _: (utcWall day)
+		_: (utcWall hour) _: (utcWall minute) _: (utcWall second)
+		_: (utcWall microsecond) _: tz)
+%
+
 ! ------- Conversion
 
 category: 'Grail-Conversion'
@@ -1107,6 +1225,19 @@ fromordinal: ordinal
 		(d year) _: (d month) _: (d day) _: 0 _: 0 _: 0 _: 0 _: nil
 %
 
+category: 'Grail-Initialization'
+classmethod: PyDateTime
+strptime: dateStr _: fmt
+	"datetime.strptime(date_string, format) delegates to the vendored
+	_strptime module (CPython's C datetime does the same).  The module is
+	cached in sys.modules after first load."
+
+	| path strptimeMod |
+	path := importlib ___moduleNameToPath___: '_strptime'.
+	strptimeMod := importlib @env0:loadModuleFromPath: path name: '_strptime'.
+	^ strptimeMod _strptime_datetime_datetime: self _: dateStr _: fmt
+%
+
 ! ------- Arithmetic
 
 category: 'Grail-Arithmetic'
@@ -1201,6 +1332,39 @@ category: 'Grail-Equality'
 method: PyDateTime
 __ne__: other
 	^ (self __eq__: other) @env0:not
+%
+
+category: 'Grail-Pickle'
+method: PyDateTime
+__reduce__
+	"(class, (y, mo, d, h, mi, s, us[, tzinfo]))."
+
+	| tz fields |
+	tz := self @env0:dynamicInstVarAt: #_tzinfo.
+	fields := OrderedCollection @env0:new.
+	fields @env0:add: (self @env0:dynamicInstVarAt: #_year).
+	fields @env0:add: (self @env0:dynamicInstVarAt: #_month).
+	fields @env0:add: (self @env0:dynamicInstVarAt: #_day).
+	fields @env0:add: (self @env0:dynamicInstVarAt: #_hour).
+	fields @env0:add: (self @env0:dynamicInstVarAt: #_minute).
+	fields @env0:add: (self @env0:dynamicInstVarAt: #_second).
+	fields @env0:add: (self @env0:dynamicInstVarAt: #_microsecond).
+	tz @env0:isNil ifFalse: [fields @env0:add: tz].
+	^ tuple @env0:withAll: {
+		(self @env0:class).
+		(tuple @env0:withAll: fields @env0:asArray) }
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyDateTime
+__module__
+	^ 'datetime'
+%
+
+category: 'Grail-Introspection'
+classmethod: PyDateTime
+__qualname__
+	^ 'datetime'
 %
 
 category: 'Grail-Class Attrs'
@@ -1723,6 +1887,36 @@ __hash__
 	^ self toordinal
 %
 
+category: 'Grail-Pickle'
+method: PyDate
+__reduce__
+	"(class, (year, month, day)) — pickle reconstructs via date(y, m, d)."
+
+	^ tuple @env0:withAll: {
+		(self @env0:class).
+		(tuple @env0:withAll: {
+			(self @env0:dynamicInstVarAt: #_year).
+			(self @env0:dynamicInstVarAt: #_month).
+			(self @env0:dynamicInstVarAt: #_day) }) }
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyDate
+__module__
+	"So pickle's _find_global can locate `datetime.date`."
+
+	^ 'datetime'
+%
+
+category: 'Grail-Introspection'
+classmethod: PyDate
+__qualname__
+	"CPython-visible name (datetime.date), so pickle's _find_global
+	resolves getattr(datetime, 'date') is PyDate."
+
+	^ 'date'
+%
+
 category: 'Grail-Class Attrs'
 classmethod: PyDate
 min
@@ -1785,6 +1979,7 @@ ___pythonValueAttrs___
 		add: #second;
 		add: #microsecond;
 		add: #tzinfo;
+		add: #fold;
 		yourself
 %
 
@@ -1817,20 +2012,24 @@ classmethod: PyTime
 value: positional value: kwargs
 	"time(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)."
 
-	| h mi s us tz |
+	| h mi s us tz fold inst |
 	h := positional @env0:size @env0:>= 1 ifTrue: [positional @env0:at: 1] ifFalse: [0].
 	mi := positional @env0:size @env0:>= 2 ifTrue: [positional @env0:at: 2] ifFalse: [0].
 	s := positional @env0:size @env0:>= 3 ifTrue: [positional @env0:at: 3] ifFalse: [0].
 	us := positional @env0:size @env0:>= 4 ifTrue: [positional @env0:at: 4] ifFalse: [0].
 	tz := positional @env0:size @env0:>= 5 ifTrue: [positional @env0:at: 5] ifFalse: [nil].
+	fold := 0.
 	kwargs @env0:isNil ifFalse: [
 		h := kwargs @env0:at: 'hour' ifAbsent: [h].
 		mi := kwargs @env0:at: 'minute' ifAbsent: [mi].
 		s := kwargs @env0:at: 'second' ifAbsent: [s].
 		us := kwargs @env0:at: 'microsecond' ifAbsent: [us].
-		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz]].
+		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz].
+		fold := kwargs @env0:at: 'fold' ifAbsent: [0]].
 	tz == None ifTrue: [tz := nil].
-	^ self @env0:___fromFields___: h _: mi _: s _: us _: tz
+	inst := self @env0:___fromFields___: h _: mi _: s _: us _: tz.
+	fold @env0:= 0 ifFalse: [inst @env0:dynamicInstVarAt: #_fold put: fold].
+	^ inst
 %
 
 category: 'Grail-Initialization'
@@ -1897,6 +2096,17 @@ tzinfo
 	^ tz @env0:isNil ifTrue: [None] ifFalse: [tz]
 %
 
+category: 'Grail-Accessors'
+method: PyTime
+fold
+	"PEP 495 fold flag.  Grail does not model DST-fold ambiguity, so it
+	is 0 unless explicitly set via the constructor's fold= keyword."
+
+	| f |
+	f := self @env0:dynamicInstVarAt: #_fold.
+	^ f @env0:isNil ifTrue: [0] ifFalse: [f]
+%
+
 ! ------- ISO / string
 
 category: 'Grail-Conversion'
@@ -1911,6 +2121,35 @@ isoformat
 		(self @env0:___pad___: (self @env0:dynamicInstVarAt: #_minute) width: 2) @env0:,
 		':' @env0:,
 		(self @env0:___pad___: (self @env0:dynamicInstVarAt: #_second) width: 2).
+	us @env0:= 0 ifTrue: [^ body].
+	^ body @env0:, '.' @env0:, (self @env0:___pad___: us width: 6)
+%
+
+category: 'Grail-Conversion'
+method: PyTime
+_isoformat: positional kw: kwargs
+	"isoformat(timespec='auto'|'hours'|'minutes'|'seconds'|'milliseconds'
+	|'microseconds') — the keyword/positional timespec form."
+
+	| timespec h mi s us body |
+	timespec := 'auto'.
+	(positional @env0:notNil and: [positional @env0:isEmpty @env0:not])
+		ifTrue: [timespec := positional @env0:at: 1].
+	kwargs @env0:isNil ifFalse: [timespec := kwargs @env0:at: 'timespec' ifAbsent: [timespec]].
+	h := self @env0:dynamicInstVarAt: #_hour.
+	mi := self @env0:dynamicInstVarAt: #_minute.
+	s := self @env0:dynamicInstVarAt: #_second.
+	us := self @env0:dynamicInstVarAt: #_microsecond.
+	timespec @env0:= 'hours' ifTrue: [^ self @env0:___pad___: h width: 2].
+	body := (self @env0:___pad___: h width: 2) @env0:, ':' @env0:, (self @env0:___pad___: mi width: 2).
+	timespec @env0:= 'minutes' ifTrue: [^ body].
+	body := body @env0:, ':' @env0:, (self @env0:___pad___: s width: 2).
+	timespec @env0:= 'seconds' ifTrue: [^ body].
+	timespec @env0:= 'milliseconds' ifTrue: [
+		^ body @env0:, '.' @env0:, (self @env0:___pad___: (us @env0:// 1000) width: 3)].
+	timespec @env0:= 'microseconds' ifTrue: [
+		^ body @env0:, '.' @env0:, (self @env0:___pad___: us width: 6)].
+	"auto"
 	us @env0:= 0 ifTrue: [^ body].
 	^ body @env0:, '.' @env0:, (self @env0:___pad___: us width: 6)
 %
@@ -2083,6 +2322,36 @@ category: 'Grail-Equality'
 method: PyTime
 __ne__: other
 	^ (self __eq__: other) @env0:not
+%
+
+category: 'Grail-Pickle'
+method: PyTime
+__reduce__
+	"(class, (hour, minute, second, microsecond[, tzinfo]))."
+
+	| tz fields |
+	tz := self @env0:dynamicInstVarAt: #_tzinfo.
+	fields := OrderedCollection @env0:new.
+	fields @env0:add: (self @env0:dynamicInstVarAt: #_hour).
+	fields @env0:add: (self @env0:dynamicInstVarAt: #_minute).
+	fields @env0:add: (self @env0:dynamicInstVarAt: #_second).
+	fields @env0:add: (self @env0:dynamicInstVarAt: #_microsecond).
+	tz @env0:isNil ifFalse: [fields @env0:add: tz].
+	^ tuple @env0:withAll: {
+		(self @env0:class).
+		(tuple @env0:withAll: fields @env0:asArray) }
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyTime
+__module__
+	^ 'datetime'
+%
+
+category: 'Grail-Introspection'
+classmethod: PyTime
+__qualname__
+	^ 'time'
 %
 
 category: 'Grail-Class Attrs'
