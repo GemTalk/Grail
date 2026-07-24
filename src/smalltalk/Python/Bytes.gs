@@ -74,15 +74,8 @@ __new__: source
 		size := source @env0:size.
 		ba := self ___new___: size.
 		1 @env0:to: size do: [:i |
-			| elem val |
-			elem := source @env0:at: i.
-			val := elem.
-			"Validate byte value (0-255)"
-			((val @env0:< 0) or: [
-				val @env0:> 255
-			]) ifTrue: [
-				ValueError ___signal___: 'bytes must be in range(0, 256)'
-			].
+			| val |
+			val := self ___coerceByteValue___: (source @env0:at: i).
 			ba @env0:at: i put: val
 		].
 		^ ba
@@ -95,16 +88,18 @@ __new__: source
 		ba := self ___new___: size.
 		1 @env0:to: size do: [:i |
 			| val |
-			val := source @env0:at: i.
-			"Validate byte value (0-255)"
-			((val @env0:< 0) or: [
-				val @env0:> 255
-			]) ifTrue: [
-				ValueError ___signal___: 'bytes must be in range(0, 256)'
-			].
+			val := self ___coerceByteValue___: (source @env0:at: i).
 			ba @env0:at: i put: val
 		].
 		^ ba
+	].
+
+	"A non-integer source with __index__ (and not a sequence handled above)
+	is treated as a count, like bytes(n) -- so bytes(Indexable(5)) is five
+	zero bytes and bytes(BadInt()) propagates BadInt.__index__'s exception."
+	((source isKindOf: Integer) @env0:not
+		and: [source ___respondsTo___: #'__index__']) ifTrue: [
+		^ self __new__: (source __index__)
 	].
 
 	"Any other iterable (generators, reversed_iterator, __iter__/__next__
@@ -118,11 +113,50 @@ __new__: source
 	ba := self ___new___: size.
 	1 @env0:to: size do: [:i |
 		| val |
-		val := materialized @env0:at: i.
-		((val @env0:< 0) or: [val @env0:> 255]) ifTrue: [
-			ValueError ___signal___: 'bytes must be in range(0, 256)'].
+		val := self ___coerceByteValue___: (materialized @env0:at: i).
 		ba @env0:at: i put: val].
 	^ ba
+%
+
+category: 'Grail-Constructors'
+classmethod: bytes
+___coerceByteValue___: obj
+	"Coerce obj to an int in [0, 255] for use as a byte, honoring __index__
+	(CPython): an int is used directly; a non-int with __index__ is converted
+	(and its exception, e.g. from a raising __index__, propagates unchanged);
+	anything else is a TypeError; an out-of-range result is a ValueError."
+
+	| v |
+	v := (obj isKindOf: Integer)
+		ifTrue: [obj]
+		ifFalse: [
+			(obj ___respondsTo___: #'__index__')
+				ifTrue: [obj __index__]
+				ifFalse: [TypeError ___signal___:
+					('''' @env0:, obj @env0:class @env0:name @env0:,
+					''' object cannot be interpreted as an integer')]].
+	(v isKindOf: Integer) ifFalse: [
+		TypeError ___signal___: '__index__ returned non-int'].
+	((v @env0:< 0) or: [v @env0:> 255]) ifTrue: [
+		ValueError ___signal___: 'bytes must be in range(0, 256)'].
+	^ v
+%
+
+category: 'Grail-Constructors'
+classmethod: bytes
+___coerceIndex___: obj
+	"Coerce obj to an integer index, honoring __index__ (which may run Python
+	code that mutates the receiver -- callers must re-read the size after)."
+
+	(obj isKindOf: Integer) ifTrue: [^ obj].
+	(obj ___respondsTo___: #'__index__') ifTrue: [
+		| v |
+		v := obj __index__.
+		(v isKindOf: Integer) ifTrue: [^ v].
+		TypeError ___signal___: '__index__ returned non-int'].
+	TypeError ___signal___:
+		('''' @env0:, obj @env0:class @env0:name @env0:,
+		''' object cannot be interpreted as an integer')
 %
 
 category: 'Grail-Constructors'
