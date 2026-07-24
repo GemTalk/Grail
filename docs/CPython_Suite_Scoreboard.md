@@ -32,4 +32,4 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_bytes | ERROR | 316 | 52 | 59 | 16 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | ERROR | 136 | 32 | 42 | 10 |  |
-| test.test_enum | ERROR | 1077 | 267 | 141 | 0 |  |
+| test.test_enum | ERROR | 1077 | 269 | 126 | 0 |  |
