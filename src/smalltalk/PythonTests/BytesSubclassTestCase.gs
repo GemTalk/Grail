@@ -168,6 +168,19 @@ testSearchAcceptsNoneBounds
 		self assert: ((self resultAt: key) = true) description: key]
 %
 
+category: 'Grail-Tests - search bounds'
+method: BytesSubclassTestCase
+testSearchBoundsEdges
+	"An empty subsequence is always contained (so rfind/index/rindex agree
+	with ``in'' for an empty needle), and bytearray.find (which overrides
+	bytes) counts a negative start/end from the end rather than clamping to 0."
+
+	#('contains_empty_bytes' 'contains_empty_in_empty' 'contains_empty_bytearray'
+	  'rfind_empty_matches_contains' 'index_empty_no_raise' 'ba_find_neg_start'
+	  'ba_find_neg_start_found' 'ba_index_neg_raises') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
 category: 'Grail-Tests - base types'
 method: BytesSubclassTestCase
 testBaseTypesUnaffected

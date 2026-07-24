@@ -72,6 +72,14 @@ def _decode_strict_raises():
         return True
 
 
+def _ba_index_neg_raises():
+    # bytearray.index(sub, -1): start=-1 -> from the last byte -> 'ghi' absent
+    try:
+        bytearray(b'abcdefghi').index(b'ghi', -1); return False
+    except ValueError:
+        return True
+
+
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
     'bytes_type_is_subclass': type(MyBytes(b'abc')) is MyBytes,
@@ -188,4 +196,18 @@ RESULTS = {
     'none_endswith': b'abc'.endswith(b'c', None, None),
     'none_startswith_realstart': b'abcabc'.startswith(b'b', 1, None),
     'none_bytearray_find': bytearray(b'abcabc').find(b'b', None, None) == 1,
+
+    # --- an empty subsequence is always contained (CPython); this also makes
+    # rfind/index/rindex agree with `in` for an empty needle. ---
+    'contains_empty_bytes': b'' in b'abc',
+    'contains_empty_in_empty': b'' in b'',
+    'contains_empty_bytearray': b'' in bytearray(b'abc'),
+    'rfind_empty_matches_contains': (b'abc'.rfind(b'') != -1) == (b'' in b'abc'),
+    'index_empty_no_raise': b'abc'.index(b'') == 0,
+
+    # --- a negative start/end counts from the end in bytearray.find (which
+    # overrides bytes' find); previously it clamped to 0 and found spuriously. ---
+    'ba_find_neg_start': bytearray(b'abcdefghi').find(b'ghi', -1) == -1,
+    'ba_find_neg_start_found': bytearray(b'abcabc').find(b'b', -3) == 4,
+    'ba_index_neg_raises': _ba_index_neg_raises(),
 }
