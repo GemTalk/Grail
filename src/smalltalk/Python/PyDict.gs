@@ -116,6 +116,47 @@ rebuildTable: newSize
 	^ [super rebuildTable: newSize] ensure: [rehashing := false]
 %
 
+! ------------------- Python key hashing / equality
+! CPython dicts bucket and match keys by the key's own __hash__ / __eq__, so a
+! key with a custom __hash__ collides with an equal key and a raising __eq__
+! propagates (test_dict test_bad_key / test_getitem / test_pop / test_setdefault
+! / test_eq / test_mutating_lookup / test_merge_and_mutate).  KeyValueDictionary
+! instead buckets by ``aKey hash'' and matches by ``aKey = hashKey'' (Smalltalk),
+! so two distinct instances of a custom-key class never met.  Override the two
+! kernel hooks for PythonInstance keys ONLY: object>>__hash__ is ``self hash''
+! and default __eq__ is identity, so a PLAIN instance behaves exactly as before
+! (same bucket, so committed dicts are unaffected) while a custom __hash__/__eq__
+! now drives lookup.  Built-in keys (str/int/tuple/...) keep the kernel path
+! unchanged -- and since Grail's Python hash(x) equals x's Smalltalk hash for
+! them, a custom __hash__ that returns hash('k') still lands in the string 'k's
+! bucket (test_str_nonstr).
+
+category: 'Grail-Hashing'
+method: PyDict
+hashFunction: aKey
+	"Bucket a PythonInstance key by its Python __hash__ (aligned with Smalltalk
+	hash for the default/object case); everything else uses the kernel hash."
+
+	(aKey isKindOf: PythonInstance) ifTrue: [
+		^ ((aKey @env1:__hash__) \\ tableSize) + 1].
+	^ super hashFunction: aKey
+%
+
+category: 'Grail-Hashing'
+method: PyDict
+compareKey: aKey with: hashKey
+	"Match keys by Python equality (identity first, then __eq__, honoring a
+	raising __eq__ by letting it propagate) whenever a PythonInstance key is
+	involved; otherwise the kernel's Smalltalk ``=''.  ``aKey'' is the probe
+	key, ``hashKey'' the stored key; compare stored-first like CPython."
+
+	((aKey isKindOf: PythonInstance) or: [hashKey isKindOf: PythonInstance])
+		ifTrue: [
+			aKey == hashKey ifTrue: [^ true].
+			^ hashKey @env1:___pyRichEqBool___: aKey].
+	^ super compareKey: aKey with: hashKey
+%
+
 ! ------------------- mutators (maintain order; guard with O(1) includesKey:)
 
 category: 'Grail-Mutation'
