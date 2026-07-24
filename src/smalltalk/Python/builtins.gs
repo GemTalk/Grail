@@ -1596,7 +1596,15 @@ str: anObject
 		(anObject @env0:class @env0:== Unicode32) @env0:not and: [
 		(anObject @env0:class @env0:== String) @env0:not and: [
 		(anObject @env0:class @env0:== Symbol) @env0:not]]]]]) ifTrue: [
-		^ str __new__: anObject].
+			"Coerce the __str__ RESULT, not the input: a plain str subclass
+			inherits str.__str__ (answers self), so this stays the input's
+			character content; but a subclass with an OVERRIDING __str__ --
+			notably a str-mixin enum member (``class E(str, Enum)``), whose
+			forced Enum __str__ answers 'E.name' while its own char content is
+			empty -- is honored (CPython str(x) calls type(x).__str__)."
+			| r |
+			r := [anObject __str__] @env0:on: AbstractException do: [:ex | anObject].
+			^ (r isKindOf: CharacterCollection) ifTrue: [str __new__: r] ifFalse: [r]].
 	^ [anObject __str__] @env0:on: MessageNotUnderstood do: [:ex | anObject __repr__]
 %
 

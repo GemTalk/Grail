@@ -46,15 +46,25 @@ __new__: source
 	its entries. Otherwise treat it as an iterable of 2-element
 	sequences."
 
-	| result iter done keysMethod keysIter k |
+	| result iter done keysMethod keysIter k idx |
 	result := self ___new___.
 
-	"Mapping fast path: source is a dict (or KeyValueDictionary)"
+	"Mapping fast path: a plain dict / raw KeyValueDictionary copies straight
+	from Smalltalk storage (insertion order).  A dict SUBCLASS that overrides
+	Python iteration order -- collections.OrderedDict after move_to_end, or any
+	class overriding keys()/__iter__ -- must be copied through its Python
+	keys() so the override is honored, exactly as CPython dict() does
+	(test_dict_copy_order).  Detect an override by whether keys() resolves
+	BELOW the base ``dict'' class; if so, fall through to the keys() protocol."
 	(source isKindOf: KeyValueDictionary) ifTrue: [
-		source @env0:keysAndValuesDo: [:_k :_v |
-			result @env0:at: _k put: _v
-		].
-		^ result
+		| keysOwner |
+		keysOwner := source @env0:class @env0:whichClassIncludesSelector: #'keys' environmentId: 1.
+		(keysOwner == nil or: [keysOwner == dict]) ifTrue: [
+			source @env0:keysAndValuesDo: [:_k :_v |
+				result @env0:at: _k put: _v
+			].
+			^ result
+		]
 	].
 
 	"Python mapping protocol: source has a ``keys`` method.  Iterate
@@ -75,18 +85,17 @@ __new__: source
 		^ result
 	].
 
-	"Iterable of 2-element sequences"
+	"Iterable of (key, value) pairs -- each element is converted like CPython's
+	dict (materialize-then-check, PEP 678 note on failure)."
 	iter := source __iter__.
+	idx := 0.
 	done := false.
 	[done] @env0:whileFalse: [
 		[
 			| pair |
-			pair := iter __next__.
-			(pair @env0:size @env0:= 2) ifFalse: [
-				ValueError ___signal___:
-					'dictionary update sequence element has wrong length'
-			].
-			result @env0:at: (pair @env0:at: 1) put: (pair @env0:at: 2)
+			pair := dict ___updateSeqPairAt___: idx from: iter __next__.
+			result @env0:at: (pair @env0:at: 1) put: (pair @env0:at: 2).
+			idx := idx @env0:+ 1
 		] @env0:on: StopIteration do: [:ex | done := true]
 	].
 	^ result
@@ -134,6 +143,32 @@ fromkeys: iterable _: value
 			@env0:on: StopIteration do: [:ex | done := true]
 	].
 	^ result
+%
+
+category: 'Grail-Initialization'
+classmethod: dict
+___updateSeqPairAt___: idx from: element
+	"Convert one dict-update sequence element to a (key, value) pair the way
+	CPython does: materialize it by ITERATING (so a non-iterable element, or a
+	generator that raises mid-iteration, fails right here).  On failure attach
+	the PEP 678 note ``Cannot convert dictionary update sequence element #N to a
+	sequence'' to the raised exception and reraise -- the base error (e.g.
+	``... is not iterable'', or a generator's own error) stays as the message
+	and the note carries the positional context (test_update_type_error).
+	Require exactly two elements.  Answers a 2-element Array {key. value}."
+
+	| seq |
+	seq := [ list @env1:__new__: element ]
+		@env0:on: BaseException
+		do: [:ex |
+			ex @env1:add_note: ('Cannot convert dictionary update sequence element #'
+				@env0:, idx @env0:printString @env0:, ' to a sequence').
+			ex @env0:pass].
+	(seq @env0:size @env0:= 2) ifFalse: [
+		^ ValueError ___signal___: 'dictionary update sequence element #'
+			@env0:, idx @env0:printString @env0:, ' has length '
+			@env0:, seq @env0:size @env0:printString @env0:, '; 2 is required'].
+	^ { seq @env0:at: 1. seq @env0:at: 2 }
 %
 
 category: 'Grail-Initialization'
@@ -216,10 +251,17 @@ __init__: source
 
 	source == nil ifTrue: [^ None].
 	source == None ifTrue: [^ None].
+	"Plain dict / raw KVD: copy from Smalltalk storage (insertion order).  A
+	subclass overriding Python iteration (OrderedDict, keys()/__iter__ override)
+	falls through to the keys() protocol so the override is honored, as CPython
+	does -- keys() resolving below base ``dict'' signals the override."
 	(source isKindOf: KeyValueDictionary) ifTrue: [
-		source @env0:keysAndValuesDo: [:_k :_v |
-			self @env0:at: _k put: _v].
-		^ None].
+		| keysOwner |
+		keysOwner := source @env0:class @env0:whichClassIncludesSelector: #'keys' environmentId: 1.
+		(keysOwner == nil or: [keysOwner == dict]) ifTrue: [
+			source @env0:keysAndValuesDo: [:_k :_v |
+				self @env0:at: _k put: _v].
+			^ None]].
 	"Mapping protocol: iterate keys + index by [k]."
 	((source @env0:class @env0:whichClassIncludesSelector: #'keys' environmentId: 1) notNil) ifTrue: [
 		(source keys) @env0:do: [:k |
@@ -676,17 +718,8 @@ update: other
 	done := false.
 	[done] @env0:whileFalse: [
 		[| pair |
-		pair := iter __next__.
-		((pair isKindOf: SequenceableCollection)
-			or: [(pair @env0:class
-				@env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) ~~ nil]) ifFalse: [
-			TypeError ___signal___: 'cannot convert dictionary update sequence element #'
-				@env0:, idx @env0:printString @env0:, ' to a sequence'].
-		(pair __len__ @env0:= 2) ifFalse: [
-			ValueError ___signal___: 'dictionary update sequence element #'
-				@env0:, idx @env0:printString @env0:, ' has length '
-				@env0:, pair __len__ @env0:printString @env0:, '; 2 is required'].
-		self @env0:at: (pair __getitem__: 0) put: (pair __getitem__: 1).
+		pair := dict ___updateSeqPairAt___: idx from: iter __next__.
+		self @env0:at: (pair @env0:at: 1) put: (pair @env0:at: 2).
 		idx := idx @env0:+ 1]
 			@env0:on: StopIteration do: [:ex | done := true]]
 %
