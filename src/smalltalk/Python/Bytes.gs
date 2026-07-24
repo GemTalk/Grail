@@ -292,6 +292,9 @@ __contains__: item
 		needle := (item isKindOf: ByteArray)
 			ifTrue: [item]
 			ifFalse: [item @env0:asByteArray].
+		"An empty subsequence is always contained (CPython); GemStone's
+		indexOfSubCollection: reports 0 (not found) for it."
+		needle @env0:isEmpty ifTrue: [^ true].
 		^ (self @env0:indexOfSubCollection: needle) @env0:> 0
 	].
 	^ self @env0:includes: item

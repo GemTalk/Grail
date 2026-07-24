@@ -637,11 +637,15 @@ find: sub _: start _: end
 
 	| size lo hi subSize |
 	size := self @env0:size.
-	"CPython accepts None for start/end (== the default bound).  bytearray
-	overrides find (bytes inherits the rest of the search family and already
-	normalizes None there)."
-	lo := (start @env0:== None) ifTrue: [0] ifFalse: [start @env0:max: 0].
-	hi := (end @env0:== None) ifTrue: [size] ifFalse: [end @env0:min: size].
+	"CPython bound handling (bytearray overrides find; bytes inherits the rest
+	of the search family and normalizes there): None == the default bound, and
+	a negative index counts from the end (size + i, floored at 0)."
+	lo := start. hi := end.
+	(lo @env0:== None) ifTrue: [lo := 0].
+	(hi @env0:== None) ifTrue: [hi := size].
+	lo @env0:< 0 ifTrue: [lo := (size @env0:+ lo) @env0:max: 0].
+	hi @env0:< 0 ifTrue: [hi := (size @env0:+ hi) @env0:max: 0].
+	lo := lo @env0:min: size. hi := hi @env0:min: size.
 	"Single byte value: linear scan."
 	(sub isKindOf: SmallInteger) ifTrue: [
 		lo @env0:+ 1 @env0:to: hi do: [:i |
