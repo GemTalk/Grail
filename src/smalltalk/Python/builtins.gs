@@ -1040,11 +1040,15 @@ ___printfConvert___: value conv: conv flags: flags width: width precision: preci
 	"--- string-like conversions: s r a c ---"
 	(conv @env0:= $s @env0:or: [conv @env0:= $r @env0:or: [
 		conv @env0:= $a @env0:or: [conv @env0:= $c]]]) ifTrue: [
-		"s/r match the pre-existing rendering (asString / printString) exactly
-		-- routing %s through __str__ would newly surface latent __repr__ bugs
-		in dict subclasses (e.g. Counter's associationAt: MNU)."
+		"%s keeps Smalltalk asString.  %r uses Python repr (__repr__), matching
+		CPython (%r is repr(value)): repr escapes control characters -- a NUL
+		becomes the 4 chars '\x00' -- which Smalltalk printString does NOT, so
+		''%r'' % ('123\x00',) now equals repr('123\x00') and int()'s own
+		error message (test_int.test_error_message).  Consequence, also matching
+		CPython: a value whose __repr__ raises propagates that from %r rather
+		than being masked by printString."
 		conv @env0:= $s ifTrue: [body := value @env0:asString].
-		conv @env0:= $r ifTrue: [body := value @env0:printString].
+		conv @env0:= $r ifTrue: [body := value __repr__].
 		conv @env0:= $a ifTrue: [body := (self ascii: value) @env0:asString].
 		conv @env0:= $c ifTrue: [
 			(value isKindOf: Integer)
