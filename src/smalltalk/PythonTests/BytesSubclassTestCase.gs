@@ -230,6 +230,20 @@ testIndexCoercion
 		self assert: ((self resultAt: key) = true) description: key]
 %
 
+category: 'Grail-Tests - extend'
+method: BytesSubclassTestCase
+testExtendIterable
+	"bytearray.extend accepts any iterable of ints -- range, generator,
+	iterator, map, the receiver itself, and __index__ elements -- validates
+	every element before mutating (a bad element leaves it unchanged), and
+	rejects a str or a non-iterable with CPython's by-name TypeError."
+
+	#('extend_range' 'extend_generator' 'extend_iterator' 'extend_map'
+	  'extend_self' 'extend_index_elem' 'extend_atomic_valueerror'
+	  'extend_str_rejected' 'extend_float_rejected') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
 category: 'Grail-Tests - base types'
 method: BytesSubclassTestCase
 testBaseTypesUnaffected

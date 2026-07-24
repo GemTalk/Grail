@@ -427,44 +427,42 @@ copy
 category: 'Grail-Mutation Methods'
 method: bytearray
 extend: iterable
-	"Extend bytearray with bytes from iterable"
+	"Extend the bytearray with the bytes from any iterable of ints (CPython
+	bytearray.extend).  Elements are coerced via __index__ and validated FIRST,
+	so a bad element leaves the receiver unchanged."
 
-	| iterClass size |
-	iterClass := iterable @env0:class.
+	| vals coerced |
 
-	"Handle bytes or bytearray"
-	((iterClass == bytes) or: [
-		iterClass == bytearray
-	]) ifTrue: [
+	"bytes / bytearray: copy by captured size (safe when extending with self)."
+	(iterable isKindOf: bytes) ifTrue: [
+		| size |
 		size := iterable @env0:size.
-		1 @env0:to: size do: [:i |
-			| byte |
-			byte := iterable @env0:at: i.
-			self append: byte
-		].
+		1 @env0:to: size do: [:i | self append: (iterable @env0:at: i)].
 		^ None
 	].
 
-	"Handle list or tuple"
-	((iterClass == list) or: [
-		iterClass == tuple
-	]) ifTrue: [
-		size := iterable @env0:size.
-		1 @env0:to: size do: [:i |
-			| val |
-			val := iterable @env0:at: i.
-			"Validate byte value"
-			((val @env0:< 0) or: [
-				val @env0:> 255
-			]) ifTrue: [
-				ValueError ___signal___: 'byte must be in range(0, 256)'
-			].
-			self append: val
-		].
-		^ None
+	"A str is iterable but not of integers -- CPython rejects it by name."
+	(iterable isKindOf: CharacterCollection) ifTrue: [
+		TypeError ___signal___: 'expected iterable of integers; got: ''str'''
 	].
 
-	TypeError ___signal___: 'extend() argument must be iterable'
+	"A non-iterable can't extend at all."
+	((iterable ___respondsTo___: #'__iter__')
+		or: [iterable ___respondsTo___: #'__getitem__']) ifFalse: [
+		TypeError ___signal___: ('can''t extend bytearray with '
+			@env0:, (iterable @env1:__class__ @env1:__name__) @env0:asLowercase)
+	].
+
+	"Any other iterable (list/tuple/range/generator/iterator/__getitem__):
+	materialize, coerce+validate EVERY element (__index__, 0..255) before
+	touching the receiver, then append -- so a ValueError/TypeError midway
+	leaves the bytearray unchanged."
+	vals := list __new__: iterable.
+	coerced := OrderedCollection @env0:new.
+	1 @env0:to: vals @env0:size do: [:i |
+		coerced @env0:add: (bytes ___coerceByteValue___: (vals @env0:at: i))].
+	coerced @env0:do: [:b | self append: b].
+	^ None
 %
 
 category: 'Grail-Mutation Methods'

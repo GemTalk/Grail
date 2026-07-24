@@ -191,6 +191,40 @@ def _ctor_source_index_raises():
     except ZeroDivisionError: return True
 
 
+def _extend_range():
+    b = bytearray(b''); b.extend(range(65, 68)); return list(b) == [65, 66, 67]
+
+def _extend_generator():
+    b = bytearray(b''); b.extend(x for x in [1, 2, 3]); return list(b) == [1, 2, 3]
+
+def _extend_iterator():
+    b = bytearray(b''); b.extend(iter([10, 20])); return list(b) == [10, 20]
+
+def _extend_map():
+    b = bytearray(b''); b.extend(map(int, b'ab')); return list(b) == [97, 98]
+
+def _extend_self():
+    b = bytearray(b'hi'); b.extend(b); return list(b) == [104, 105, 104, 105]
+
+def _extend_index_elem():
+    b = bytearray(b''); b.extend([_Idx(97)]); return list(b) == [97]
+
+def _extend_atomic_valueerror():
+    b = bytearray(b'')
+    try: b.extend([0, 1, 2, 256]); return False
+    except ValueError: return len(b) == 0
+
+def _extend_str_rejected():
+    b = bytearray(b'abc')
+    try: b.extend('def'); return False
+    except TypeError as e: return "expected iterable of integers" in str(e)
+
+def _extend_float_rejected():
+    b = bytearray(b'abc')
+    try: b.extend(1.0); return False
+    except TypeError as e: return "can't extend bytearray with float" in str(e)
+
+
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
     'bytes_type_is_subclass': type(MyBytes(b'abc')) is MyBytes,
@@ -374,4 +408,17 @@ RESULTS = {
     'ctor_reject_none_elem': _ctor_reject_elem(None),
     'ctor_source_index': bytes(_Idx(5)) == b'\x00\x00\x00\x00\x00',
     'ctor_source_index_raises': _ctor_source_index_raises(),
+
+    # --- bytearray.extend(iterable): any iterable of ints (range, generator,
+    # iterator, map, self, __index__ elements), atomic on a bad element, and
+    # CPython's by-name rejection of a str / a non-iterable. ---
+    'extend_range': _extend_range(),
+    'extend_generator': _extend_generator(),
+    'extend_iterator': _extend_iterator(),
+    'extend_map': _extend_map(),
+    'extend_self': _extend_self(),
+    'extend_index_elem': _extend_index_elem(),
+    'extend_atomic_valueerror': _extend_atomic_valueerror(),
+    'extend_str_rejected': _extend_str_rejected(),
+    'extend_float_rejected': _extend_float_rejected(),
 }
