@@ -1079,10 +1079,27 @@ printSmalltalkRuntimeOn: aStream
 					nextPutAll: name;
 					nextPutAll: ' @env1:___pyAttrStore___: #''___cell_';
 					nextPutAll: cap asString;
-					nextPutAll: '___'' put: [';
-					nextPutAll: cap asString;
-					nextPutAll: '].';
-					lf]].
+					nextPutAll: '___'' put: ['.
+				"The store's VALUE is `cap` read in THIS classdef's enclosing
+				scope.  If that scope is a class METHOD where `cap` is itself a
+				free variable (an enclosing-function local reached past an
+				intervening class), the method cannot name the outer temp -- it
+				must read its OWN closure cell, and the enclosing class must
+				forward `cap` in turn.  Register `cap` on the enclosing class's
+				captured set (savedCapturedNames) so its own classdef emits the
+				next forward; the recursion terminates at the scope that binds
+				`cap` as a real temp, where the bare name is emitted.  Otherwise
+				`cap` is a reachable temp here (the single-level case): bare."
+				((self ___enclosingFunctionLocalBeyondClass___: cap asSymbol)
+					and: [savedCapturedNames notNil])
+					ifTrue: [
+						aStream
+							nextPutAll: 'self @env1:___classCell___: #''___cell_';
+							nextPutAll: cap asString;
+							nextPutAll: '___'''.
+						savedCapturedNames add: cap asSymbol]
+					ifFalse: [aStream nextPutAll: cap asString].
+				aStream nextPutAll: '].'; lf]].
 	CallAst classCapturedNames: savedCapturedNames.
 
 	"Phase A: close the wrapping block (opened at the top of this
