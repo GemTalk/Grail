@@ -140,6 +140,21 @@ testStartswithEndswithTuplePrefix
 		self assert: ((self resultAt: key) = true) description: key]
 %
 
+category: 'Grail-Tests - codecs'
+method: BytesSubclassTestCase
+testCodecEncodeDecode
+	"Encode/decode codecs: UTF-8 (multi-byte) and UTF-16 round-trip, the bytes
+	constructor agrees with str.encode, latin-1 raises (strict) / drops (ignore),
+	and decode honors the default utf-8, 'ignore', keyword args, strict errors,
+	and the bytearray path."
+
+	#('codec_utf8_roundtrip' 'codec_utf16_roundtrip' 'codec_utf8_ctor_eq_encode'
+	  'codec_utf16_ctor_eq_encode' 'codec_latin1_raises' 'codec_latin1_ignore'
+	  'codec_decode_default_multibyte' 'codec_decode_ignore' 'codec_decode_kwargs'
+	  'codec_decode_strict_raises' 'codec_bytearray_utf16') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
 category: 'Grail-Tests - base types'
 method: BytesSubclassTestCase
 testBaseTypesUnaffected

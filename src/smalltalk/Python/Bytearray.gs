@@ -165,69 +165,12 @@ __new__: source
 category: 'Grail-Constructors'
 classmethod: bytearray
 __new__: source _: encoding
-	"bytearray(string, encoding) — encode string to bytearray.
-	Receiver is the class."
-
-	| result encodingStr |
-	"Source must be a string"
-	((source isKindOf: String) not) ifTrue: [
-		TypeError ___signal___: 'encoding without a string argument'
-	].
-
-	"Get encoding as a Smalltalk string"
-	encodingStr := encoding.
-
-	"Support ASCII encoding"
-	(encodingStr @env0:= 'ascii') ifTrue: [
-		| ba size |
-		size := source @env0:size.
-		ba := self ___new___: size.
-		1 @env0:to: size do: [:i |
-			| char codePoint |
-			char := source @env0:at: i.
-			codePoint := char @env0:codePoint.
-			(codePoint @env0:> 127) ifTrue: [
-				UnicodeEncodeError ___signal___: 'ordinal not in range(128)'
-			].
-			ba @env0:at: i put: codePoint
-		].
-		^ ba
-	].
-
-	"Support UTF-8 encoding"
-	((encodingStr @env0:= 'utf-8') or: [
-		encodingStr @env0:= 'utf8'
-	]) ifTrue: [
-		| utf8Bytes |
-		utf8Bytes := source @env0:encodeAsUTF8.
-		result := self ___new___: (utf8Bytes @env0:size).
-		1 @env0:to: utf8Bytes @env0:size do: [:i |
-			result @env0:at: i put: (utf8Bytes @env0:at: i)
-		].
-		^ result
-	].
-
-	"Support Latin-1 encoding"
-	((encodingStr @env0:= 'latin-1') or: [
-		encodingStr @env0:= 'latin1'
-	]) ifTrue: [
-		| ba size |
-		size := source @env0:size.
-		ba := self ___new___: size.
-		1 @env0:to: size do: [:i |
-			| char codePoint |
-			char := source @env0:at: i.
-			codePoint := char @env0:codePoint.
-			(codePoint @env0:> 255) ifTrue: [
-				UnicodeEncodeError ___signal___: 'ordinal not in range(256)'
-			].
-			ba @env0:at: i put: codePoint
-		].
-		^ ba
-	].
-
-	"Unsupported encoding"
-	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)
+	"bytearray(str, encoding) -- encode the string to a bytearray, self-typed.
+	Shares the single codec authority (bytes>>___encodeSourceToSelf___ ->
+	str>>encode:_:), so utf-8 multi-byte / utf-16 / ascii / latin-1 / errors all
+	behave exactly as for bytes.  (The 3-arg bytearray(str, enc, errors) form is
+	inherited from bytes.)"
+	^ self ___encodeSourceToSelf___: source _: encoding _: 'strict'
 %
 
 category: 'Grail-Constructors'

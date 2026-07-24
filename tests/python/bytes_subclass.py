@@ -55,6 +55,23 @@ def _removeprefix_rejects_tuple():
         return True
 
 
+_UNI = "Hiሴ噸"   # 2 ASCII + 2 multi-byte BMP codepoints
+
+
+def _latin1_raises():
+    try:
+        bytes(_UNI, "latin-1"); return False
+    except UnicodeEncodeError:
+        return True
+
+
+def _decode_strict_raises():
+    try:
+        bytes("\x80\xff", "latin-1").decode("utf-8"); return False
+    except UnicodeDecodeError:
+        return True
+
+
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
     'bytes_type_is_subclass': type(MyBytes(b'abc')) is MyBytes,
@@ -141,4 +158,18 @@ RESULTS = {
     'removeprefix_ok': b'spam'.removeprefix(b'sp') == b'am',
     'removesuffix_ok': b'spam'.removesuffix(b'am') == b'sp',
     'removeprefix_rejects_tuple': _removeprefix_rejects_tuple(),
+
+    # --- codecs: utf-8 (multi-byte) + utf-16 round-trip, ctor == encode,
+    # latin-1 strict/ignore, decode default/ignore/strict. ---
+    'codec_utf8_roundtrip': bytes(_UNI, "utf-8").decode("utf-8") == _UNI,
+    'codec_utf16_roundtrip': bytes(_UNI, "utf-16").decode("utf-16") == _UNI,
+    'codec_utf8_ctor_eq_encode': bytes(_UNI, "utf-8") == bytes(_UNI.encode("utf-8")),
+    'codec_utf16_ctor_eq_encode': bytes(_UNI, "utf-16") == bytes(_UNI.encode("utf-16")),
+    'codec_latin1_raises': _latin1_raises(),
+    'codec_latin1_ignore': bytes(_UNI, "latin-1", "ignore") == bytes(_UNI[:2], "utf-8"),
+    'codec_decode_default_multibyte': bytes(b'\xe2\x98\x83').decode() == '☃',
+    'codec_decode_ignore': bytes("ab\x80\xff", "latin-1").decode("utf-8", "ignore") == "ab",
+    'codec_decode_kwargs': bytes("ab\x80", "latin-1").decode(errors="ignore", encoding="utf-8") == "ab",
+    'codec_decode_strict_raises': _decode_strict_raises(),
+    'codec_bytearray_utf16': bytearray(_UNI, "utf-16").decode("utf-16") == _UNI,
 }

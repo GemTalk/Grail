@@ -113,70 +113,34 @@ __new__: source
 
 category: 'Grail-Constructors'
 classmethod: bytes
+___encodeSourceToSelf___: source _: enc _: errs
+	"Encode a string ``source'' to bytes via str>>encode:_: (the single codec
+	authority -- utf-8 multi-byte, utf-16, ascii, latin-1, idna,
+	unicode_escape, with 'strict'/'ignore' errors), then copy into a fresh
+	instance of the RECEIVER class so a bytearray subclass ctor is self-typed."
+	| encoded r |
+	(source isKindOf: CharacterCollection) ifFalse: [
+		TypeError ___signal___: 'encoding without a string argument'].
+	encoded := source encode: enc _: errs.
+	r := self ___new___: encoded @env0:size.
+	1 @env0:to: encoded @env0:size do: [:i | r @env0:at: i put: (encoded @env0:at: i)].
+	^ r
+%
+
+category: 'Grail-Constructors'
+classmethod: bytes
 __new__: source _: encoding
-	"bytes(string, encoding) — encode string to bytes. Receiver is the
-	class (so subclasses like bytearray instantiate themselves)."
+	"bytes(str, encoding) -- encode the string to bytes, self-typed (so a
+	bytearray subclass instantiates itself), default 'strict' error policy."
+	^ self ___encodeSourceToSelf___: source _: encoding _: 'strict'
+%
 
-	| result encodingStr |
-	"Source must be a string (String or Unicode7)"
-	((source isKindOf: String) not) ifTrue: [
-		TypeError ___signal___: 'encoding without a string argument'
-	].
-
-	"Get encoding as a Smalltalk string"
-	encodingStr := encoding.
-
-	"Support ASCII encoding"
-	(encodingStr @env0:= 'ascii') ifTrue: [
-		| ba size |
-		size := source @env0:size.
-		ba := self ___new___: size.
-		1 @env0:to: size do: [:i |
-			| char codePoint |
-			char := source @env0:at: i.
-			codePoint := char @env0:codePoint.
-			(codePoint @env0:> 127) ifTrue: [
-				UnicodeEncodeError ___signal___: 'ordinal not in range(128)'
-			].
-			ba @env0:at: i put: codePoint
-		].
-		^ ba
-	].
-
-	"Support UTF-8 encoding"
-	((encodingStr @env0:= 'utf-8') or: [
-		encodingStr @env0:= 'utf8'
-	]) ifTrue: [
-		| utf8Bytes |
-		utf8Bytes := source @env0:encodeAsUTF8.
-		result := self ___new___: (utf8Bytes @env0:size).
-		1 @env0:to: utf8Bytes @env0:size do: [:i |
-			result @env0:at: i put: (utf8Bytes @env0:at: i)
-		].
-		^ result
-	].
-
-	"Support Latin-1 encoding"
-	((encodingStr @env0:= 'latin-1') or: [
-		encodingStr @env0:= 'latin1'
-	]) ifTrue: [
-		| ba size |
-		size := source @env0:size.
-		ba := self ___new___: size.
-		1 @env0:to: size do: [:i |
-			| char codePoint |
-			char := source @env0:at: i.
-			codePoint := char @env0:codePoint.
-			(codePoint @env0:> 255) ifTrue: [
-				UnicodeEncodeError ___signal___: 'ordinal not in range(256)'
-			].
-			ba @env0:at: i put: codePoint
-		].
-		^ ba
-	].
-
-	"Unsupported encoding"
-	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)
+category: 'Grail-Constructors'
+classmethod: bytes
+__new__: source _: encoding _: errors
+	"bytes(str, encoding, errors) -- 3-arg form with an explicit error policy
+	('strict' raises, 'ignore' drops un-encodable characters)."
+	^ self ___encodeSourceToSelf___: source _: encoding _: errors
 %
 
 category: 'Grail-Constructors'
@@ -657,11 +621,15 @@ decode
 category: 'Grail-Encoding/Decoding'
 method: bytes
 decode: encoding _: errors
-	"``bytes.decode(encoding, errors)`` 2-arg form.  ``errors''
-	is accepted for CPython parity but ignored — Grail's decoders
-	either succeed (ASCII / UTF-8 / latin1) or raise; there is no
-	intermediate ``replace''/``ignore'' policy yet."
+	"``bytes.decode(encoding, errors)`` 2-arg form.  For UTF-8 with
+	errors='ignore', invalid bytes are skipped; otherwise (strict, or a
+	non-UTF-8 codec) decode via the 1-arg form, which raises on ill-formed
+	input."
 
+	| enc |
+	enc := encoding @env0:asLowercase.
+	(((enc @env0:= 'utf-8') or: [enc @env0:= 'utf8']) and: [errors @env0:= 'ignore'])
+		ifTrue: [^ self ___pyDecodeUTF8Ignore___].
 	^ self decode: encoding
 %
 
@@ -675,7 +643,7 @@ _decode: positional kw: kwargs
 	for its WSGI encoding dance, which the fixed-arity selectors above
 	don't catch."
 
-	| encoding |
+	| encoding errors |
 	encoding := (positional @env0:size @env0:>= 1)
 		@env0:ifTrue: [positional @env0:at: 1]
 		@env0:ifFalse: [
@@ -683,7 +651,14 @@ _decode: positional kw: kwargs
 				and: [kwargs @env0:includesKey: 'encoding'])
 				@env0:ifTrue: [kwargs @env0:at: 'encoding']
 				@env0:ifFalse: ['utf-8']].
-	^ self decode: encoding
+	errors := (positional @env0:size @env0:>= 2)
+		@env0:ifTrue: [positional @env0:at: 2]
+		@env0:ifFalse: [
+			(kwargs @env0:isNil @env0:not
+				and: [kwargs @env0:includesKey: 'errors'])
+				@env0:ifTrue: [kwargs @env0:at: 'errors']
+				@env0:ifFalse: ['strict']].
+	^ self decode: encoding _: errors
 %
 
 category: 'Grail-Encoding/Decoding'
@@ -750,6 +725,13 @@ decode: encoding
 		^ self @env0:___decodeUnicodeEscape___
 	].
 
+	"UTF-16 (BOM-detected for plain 'utf-16', explicit for -le/-be) --
+	the inverse of str>>___pyEncodeUTF16___."
+	((encodingStr @env0:= 'utf-16') or: [(encodingStr @env0:= 'utf-16-le')
+		or: [(encodingStr @env0:= 'utf-16le') or: [(encodingStr @env0:= 'utf-16-be')
+		or: [encodingStr @env0:= 'utf-16be']]]]) ifTrue: [
+		^ self ___pyDecodeUTF16___: encodingStr].
+
 	"``idna'' is RFC 3490 internationalized-domain decoding —
 	ASCII names pass through unchanged, full punycode handling is
 	left for a downstream test that needs it.  Werkzeug.urls
@@ -773,6 +755,71 @@ decode: encoding
 
 	"Unsupported encoding"
 	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___pyDecodeUTF16___: enc
+	"Decode UTF-16 bytes to a str.  Plain 'utf-16' detects a leading BOM
+	(FE FF = big-endian, FF FE = little-endian; default little-endian);
+	'utf-16-le'/'utf-16-be' force the byte order.  Surrogate pairs are
+	reassembled into supplementary codepoints."
+	| e n start bigEndian ws i |
+	e := enc @env0:asLowercase.
+	n := self @env0:size. start := 1.
+	((e @env0:= 'utf-16-be') or: [e @env0:= 'utf-16be'])
+		ifTrue: [bigEndian := true]
+		ifFalse: [((e @env0:= 'utf-16-le') or: [e @env0:= 'utf-16le'])
+			ifTrue: [bigEndian := false]
+			ifFalse: [
+				bigEndian := false.
+				(n @env0:>= 2) ifTrue: [
+					((self @env0:at: 1) @env0:= 16rFE and: [(self @env0:at: 2) @env0:= 16rFF])
+						ifTrue: [bigEndian := true. start := 3]
+						ifFalse: [((self @env0:at: 1) @env0:= 16rFF and: [(self @env0:at: 2) @env0:= 16rFE])
+							ifTrue: [bigEndian := false. start := 3]]]]].
+	ws := WriteStream @env0:on: Unicode16 @env0:new.
+	i := start.
+	[i @env0:+ 1 @env0:<= n] @env0:whileTrue: [ | b0 b1 unit cp |
+		b0 := self @env0:at: i. b1 := self @env0:at: i @env0:+ 1.
+		unit := bigEndian ifTrue: [(b0 @env0:bitShift: 8) @env0:+ b1] ifFalse: [(b1 @env0:bitShift: 8) @env0:+ b0].
+		((unit @env0:>= 16rD800) and: [(unit @env0:<= 16rDBFF) and: [i @env0:+ 3 @env0:<= n]])
+			ifTrue: [ | b2 b3 lo |
+				b2 := self @env0:at: i @env0:+ 2. b3 := self @env0:at: i @env0:+ 3.
+				lo := bigEndian ifTrue: [(b2 @env0:bitShift: 8) @env0:+ b3] ifFalse: [(b3 @env0:bitShift: 8) @env0:+ b2].
+				cp := 16r10000 @env0:+ (((unit @env0:- 16rD800) @env0:bitShift: 10) @env0:+ (lo @env0:- 16rDC00)).
+				i := i @env0:+ 4]
+			ifFalse: [cp := unit. i := i @env0:+ 2].
+		ws @env0:nextPut: (Character @env0:codePoint: cp)].
+	^ ws @env0:contents
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___pyDecodeUTF8Ignore___
+	"UTF-8 decode with errors='ignore': decode well-formed sequences and skip
+	invalid bytes.  (Strict decoding uses GemStone's decodeFromUTF8.)"
+	| n i ws |
+	n := self @env0:size. i := 1.
+	ws := WriteStream @env0:on: Unicode16 @env0:new.
+	[i @env0:<= n] @env0:whileTrue: [ | b0 cp nbytes ok |
+		b0 := self @env0:at: i.
+		b0 @env0:< 16r80 ifTrue: [cp := b0. nbytes := 1] ifFalse: [
+		(b0 @env0:bitAnd: 16rE0) @env0:= 16rC0 ifTrue: [cp := b0 @env0:bitAnd: 16r1F. nbytes := 2] ifFalse: [
+		(b0 @env0:bitAnd: 16rF0) @env0:= 16rE0 ifTrue: [cp := b0 @env0:bitAnd: 16r0F. nbytes := 3] ifFalse: [
+		(b0 @env0:bitAnd: 16rF8) @env0:= 16rF0 ifTrue: [cp := b0 @env0:bitAnd: 16r07. nbytes := 4] ifFalse: [
+		nbytes := 0]]]].
+		ok := (nbytes @env0:> 0) and: [i @env0:+ nbytes @env0:- 1 @env0:<= n].
+		ok ifTrue: [
+			2 @env0:to: nbytes do: [:k | | bk |
+				bk := self @env0:at: i @env0:+ k @env0:- 1.
+				(bk @env0:bitAnd: 16rC0) @env0:= 16r80
+					ifTrue: [cp := (cp @env0:bitShift: 6) @env0:+ (bk @env0:bitAnd: 16r3F)]
+					ifFalse: [ok := false]]].
+		ok
+			ifTrue: [ws @env0:nextPut: (Character @env0:codePoint: cp). i := i @env0:+ nbytes]
+			ifFalse: [i := i @env0:+ 1]].
+	^ ws @env0:contents
 %
 
 set compile_env: 0
