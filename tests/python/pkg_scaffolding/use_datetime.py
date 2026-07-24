@@ -56,21 +56,16 @@ def subtract_datetimes():
 
 
 def utc_timezone():
-    # In CPython, `timezone.utc` is a class attribute (the singleton).
-    # Grail's metaclass attribute lookup doesn't yet promote
-    # `___pythonValueAttrs___` to class-side reads, so we call the
-    # singleton accessor explicitly.  Werkzeug / itsdangerous calls
-    # the parens form via from-import too, so this still mirrors a
-    # realistic shape.
-    return datetime.timezone.utc()
+    # `timezone.utc` is a class attribute (the singleton), matching CPython.
+    return datetime.timezone.utc
 
 
 def datetime_with_tz():
-    return datetime.datetime(2024, 5, 18, 12, 0, 0, 0, datetime.timezone.utc())
+    return datetime.datetime(2024, 5, 18, 12, 0, 0, 0, datetime.timezone.utc)
 
 
 def datetime_now_utc():
-    return datetime.datetime.now(datetime.timezone.utc()).tzinfo
+    return datetime.datetime.now(datetime.timezone.utc).tzinfo
 
 
 def iso_with_tz(s):

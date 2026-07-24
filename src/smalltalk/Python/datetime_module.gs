@@ -267,6 +267,97 @@ __str__
 	^ stream @env0:contents
 %
 
+category: 'Grail-Equality'
+method: PyTimedelta
+__le__: other
+	^ self ___totalMicros___ @env0:<= other ___totalMicros___
+%
+
+category: 'Grail-Equality'
+method: PyTimedelta
+__gt__: other
+	^ self ___totalMicros___ @env0:> other ___totalMicros___
+%
+
+category: 'Grail-Equality'
+method: PyTimedelta
+__ge__: other
+	^ self ___totalMicros___ @env0:>= other ___totalMicros___
+%
+
+category: 'Grail-Equality'
+method: PyTimedelta
+__ne__: other
+	^ (self __eq__: other) @env0:not
+%
+
+category: 'Grail-Conversion'
+method: PyTimedelta
+__bool__
+	"False iff the delta is exactly zero (CPython)."
+
+	^ self ___totalMicros___ @env0:~= 0
+%
+
+category: 'Grail-Conversion'
+method: PyTimedelta
+__repr__
+	"CPython repr: 'datetime.timedelta(days=1, seconds=2, microseconds=3)',
+	omitting zero components; 'datetime.timedelta(0)' when all zero."
+
+	| d s us stream any |
+	d := self @env0:dynamicInstVarAt: #_days.
+	s := self @env0:dynamicInstVarAt: #_seconds.
+	us := self @env0:dynamicInstVarAt: #_microseconds.
+	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream @env0:nextPutAll: 'datetime.timedelta('.
+	any := false.
+	d @env0:~= 0 ifTrue: [
+		stream @env0:nextPutAll: 'days='.
+		stream @env0:nextPutAll: d @env0:printString.
+		any := true].
+	s @env0:~= 0 ifTrue: [
+		any ifTrue: [stream @env0:nextPutAll: ', '].
+		stream @env0:nextPutAll: 'seconds='.
+		stream @env0:nextPutAll: s @env0:printString.
+		any := true].
+	us @env0:~= 0 ifTrue: [
+		any ifTrue: [stream @env0:nextPutAll: ', '].
+		stream @env0:nextPutAll: 'microseconds='.
+		stream @env0:nextPutAll: us @env0:printString.
+		any := true].
+	any ifFalse: [stream @env0:nextPutAll: '0'].
+	stream @env0:nextPut: $).
+	^ stream @env0:contents
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyTimedelta
+resolution
+	"timedelta.resolution == timedelta(microseconds=1)."
+
+	^ PyTimedelta @env0:___fromTotalMicros___: 1
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyTimedelta
+min
+	"timedelta.min == timedelta(-999999999)."
+
+	^ PyTimedelta @env0:___fromTotalMicros___:
+		(-999999999 @env0:* 86400 @env0:* 1000000)
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyTimedelta
+max
+	"timedelta.max == timedelta(days=999999999, hours=23, minutes=59,
+	seconds=59, microseconds=999999)."
+
+	^ PyTimedelta @env0:___fromTotalMicros___:
+		((999999999 @env0:* 86400 @env0:+ 86399) @env0:* 1000000 @env0:+ 999999)
+%
+
 ! ===============================================================================
 ! PyTimezone - Python `datetime.timezone`.  Stored as a PyTimedelta offset
 ! plus optional name.  `timezone.utc` is the canonical UTC singleton.
@@ -337,7 +428,7 @@ _offset: tdelta _name: nameOrNil
 
 set compile_env: 1
 
-category: 'Grail-Singletons'
+category: 'Grail-Class Attrs'
 classmethod: PyTimezone
 utc
 	"timezone.utc - canonical singleton for UTC.  SESSION-LOCAL
@@ -424,6 +515,61 @@ ___formatOffset___: tdelta
 	mins @env0:< 10 ifTrue: [stream @env0:nextPut: $0].
 	stream @env0:nextPutAll: mins @env0:printString.
 	^ stream @env0:contents
+%
+
+category: 'Grail-Equality'
+method: PyTimezone
+__eq__: other
+	"Two timezones are equal iff their offsets are equal (CPython
+	compares offset only, not name)."
+
+	(other isKindOf: PyTimezone) ifFalse: [^ false].
+	^ (self @env0:dynamicInstVarAt: #_offset) __eq__: (other @env0:dynamicInstVarAt: #_offset)
+%
+
+category: 'Grail-Equality'
+method: PyTimezone
+__ne__: other
+	^ (self __eq__: other) @env0:not
+%
+
+category: 'Grail-Equality'
+method: PyTimezone
+__hash__
+	^ (self @env0:dynamicInstVarAt: #_offset) __hash__
+%
+
+category: 'Grail-Conversion'
+method: PyTimezone
+__repr__
+	"CPython: 'datetime.timezone.utc' for the singleton; otherwise
+	'datetime.timezone(<offset repr>[, '<name>'])'."
+
+	| offsetRepr name |
+	(self @env0:== (PyTimezone utc)) ifTrue: [^ 'datetime.timezone.utc'].
+	offsetRepr := (self @env0:dynamicInstVarAt: #_offset) __repr__.
+	name := self @env0:dynamicInstVarAt: #_name.
+	name @env0:isNil ifTrue: [
+		^ 'datetime.timezone(' @env0:, offsetRepr @env0:, ')'].
+	^ 'datetime.timezone(' @env0:, offsetRepr @env0:, ', ''' @env0:, name @env0:asString @env0:, ''')'
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyTimezone
+min
+	"timezone.min == timezone(-timedelta(hours=23, minutes=59))."
+
+	^ self __new__:
+		(PyTimedelta @env0:___fromTotalMicros___: ((23 @env0:* 3600 @env0:+ (59 @env0:* 60)) @env0:* -1000000))
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyTimezone
+max
+	"timezone.max == timezone(timedelta(hours=23, minutes=59))."
+
+	^ self __new__:
+		(PyTimedelta @env0:___fromTotalMicros___: ((23 @env0:* 3600 @env0:+ (59 @env0:* 60)) @env0:* 1000000))
 %
 
 ! ===============================================================================
@@ -897,9 +1043,61 @@ __hash__
 category: 'Grail-Private'
 method: PyDateTime
 ___compareKey___
-	"Tuple of fields suitable for ordering."
+	"Single integer preserving (year, month, day, hour, minute, second,
+	microsecond) tuple order — used by every comparison and __hash__.
+	(Naive; tzinfo-aware comparison is deferred to a later tier.)  Built
+	as an integer rather than an Array because GemStone's `Array with:`
+	tops out at 6 arguments and there are 7 fields."
 
-	^ Array @env0:with: (self @env0:dynamicInstVarAt: #_year) with: (self @env0:dynamicInstVarAt: #_month) with: (self @env0:dynamicInstVarAt: #_day) with: (self @env0:dynamicInstVarAt: #_hour) with: (self @env0:dynamicInstVarAt: #_minute) with: (self @env0:dynamicInstVarAt: #_second) with: (self @env0:dynamicInstVarAt: #_microsecond)
+	^ ((((((self @env0:dynamicInstVarAt: #_year) @env0:* 12
+		@env0:+ ((self @env0:dynamicInstVarAt: #_month) @env0:- 1)) @env0:* 31
+		@env0:+ ((self @env0:dynamicInstVarAt: #_day) @env0:- 1)) @env0:* 24
+		@env0:+ (self @env0:dynamicInstVarAt: #_hour)) @env0:* 60
+		@env0:+ (self @env0:dynamicInstVarAt: #_minute)) @env0:* 60
+		@env0:+ (self @env0:dynamicInstVarAt: #_second)) @env0:* 1000000
+		@env0:+ (self @env0:dynamicInstVarAt: #_microsecond)
+%
+
+category: 'Grail-Equality'
+method: PyDateTime
+__le__: other
+	^ self ___compareKey___ @env0:<= other ___compareKey___
+%
+
+category: 'Grail-Equality'
+method: PyDateTime
+__gt__: other
+	^ self ___compareKey___ @env0:> other ___compareKey___
+%
+
+category: 'Grail-Equality'
+method: PyDateTime
+__ge__: other
+	^ self ___compareKey___ @env0:>= other ___compareKey___
+%
+
+category: 'Grail-Equality'
+method: PyDateTime
+__ne__: other
+	^ (self __eq__: other) @env0:not
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyDateTime
+resolution
+	^ PyTimedelta @env0:___fromTotalMicros___: 1
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyDateTime
+min
+	^ PyDateTime @env0:___fromFields___: 1 _: 1 _: 1 _: 0 _: 0 _: 0 _: 0 _: nil
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyDateTime
+max
+	^ PyDateTime @env0:___fromFields___: 9999 _: 12 _: 31 _: 23 _: 59 _: 59 _: 999999 _: nil
 %
 
 ! ------- Replace
@@ -1310,6 +1508,26 @@ __hash__
 	^ self toordinal
 %
 
+category: 'Grail-Class Attrs'
+classmethod: PyDate
+min
+	^ PyDate @env0:___fromFields___: 1 _: 1 _: 1
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyDate
+max
+	^ PyDate @env0:___fromFields___: 9999 _: 12 _: 31
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyDate
+resolution
+	"date.resolution == timedelta(days=1)."
+
+	^ PyTimedelta @env0:___fromTotalMicros___: (86400 @env0:* 1000000)
+%
+
 set compile_env: 0
 
 ! ===============================================================================
@@ -1536,6 +1754,66 @@ __hash__
 		@env0:+ (self @env0:dynamicInstVarAt: #_second)) @env0:hash
 %
 
+category: 'Grail-Private'
+method: PyTime
+___cmpKey___
+	"Microseconds since midnight — a total order for naive times.
+	(tzinfo-aware comparison is deferred; CPython converts to UTC.)"
+
+	^ (((self @env0:dynamicInstVarAt: #_hour) @env0:* 60
+		@env0:+ (self @env0:dynamicInstVarAt: #_minute)) @env0:* 60
+		@env0:+ (self @env0:dynamicInstVarAt: #_second)) @env0:* 1000000
+		@env0:+ (self @env0:dynamicInstVarAt: #_microsecond)
+%
+
+category: 'Grail-Equality'
+method: PyTime
+__lt__: other
+	^ self ___cmpKey___ @env0:< other ___cmpKey___
+%
+
+category: 'Grail-Equality'
+method: PyTime
+__le__: other
+	^ self ___cmpKey___ @env0:<= other ___cmpKey___
+%
+
+category: 'Grail-Equality'
+method: PyTime
+__gt__: other
+	^ self ___cmpKey___ @env0:> other ___cmpKey___
+%
+
+category: 'Grail-Equality'
+method: PyTime
+__ge__: other
+	^ self ___cmpKey___ @env0:>= other ___cmpKey___
+%
+
+category: 'Grail-Equality'
+method: PyTime
+__ne__: other
+	^ (self __eq__: other) @env0:not
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyTime
+min
+	^ PyTime @env0:___fromFields___: 0 _: 0 _: 0 _: 0 _: nil
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyTime
+max
+	^ PyTime @env0:___fromFields___: 23 _: 59 _: 59 _: 999999 _: nil
+%
+
+category: 'Grail-Class Attrs'
+classmethod: PyTime
+resolution
+	^ PyTimedelta @env0:___fromTotalMicros___: 1
+%
+
 set compile_env: 0
 
 ! ===============================================================================
@@ -1601,6 +1879,8 @@ ___pythonValueAttrs___
 		add: #datetime;
 		add: #timedelta;
 		add: #timezone;
+		add: #tzinfo;
+		add: #UTC;
 		add: #MINYEAR;
 		add: #MAXYEAR;
 		yourself
@@ -1662,6 +1942,14 @@ category: 'Grail-Accessors'
 method: datetime
 MAXYEAR
 	^ 9999
+%
+
+category: 'Grail-Accessors'
+method: datetime
+UTC
+	"datetime.UTC — alias for timezone.utc (added in CPython 3.11)."
+
+	^ PyTimezone utc
 %
 
 set compile_env: 0
