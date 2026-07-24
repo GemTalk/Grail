@@ -100,3 +100,17 @@ testWsgiLikePattern
 
 	self assert: testModule @env1:wsgi_like_pattern equals: true
 %
+
+category: 'Grail-Tests'
+method: NonlocalClosureTestCase
+testFreevarThroughNestedClassMethod
+	"A free variable read by a nested class's method, where the nested
+	class is defined inside a METHOD of an outer class, so the closure
+	cell must be FORWARDED through the intervening method's own cell
+	(two class boundaries between reference and binding).  This is the
+	shape of CPython test_dict.test_update's BogonIter raising the
+	enclosing function's Exc; pre-fix the outer method string-compiled
+	with a bare, undefined reference (a codegen gap)."
+
+	self assert: testModule @env1:freevar_through_nested_class_method equals: true
+%

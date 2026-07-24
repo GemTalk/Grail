@@ -656,29 +656,6 @@ ___boundInNestedFunction___: aSymbol
 
 category: 'other'
 method: NameAst
-___enclosingFunctionLocalBeyondClass___: aSymbol
-	"True iff aSymbol is a python-local of an enclosing function BEYOND
-	the nearest enclosing ClassDefAst -- i.e. this NameAst sits in a
-	class-method body and the name belongs to the method's ENCLOSING
-	def, not to the method itself (or a def nested in it).  The first
-	binding function wins: bound before crossing a classdef -> a real
-	temp of the compiled method -> false."
-
-	| node passedClass |
-	node := parent.
-	passedClass := false.
-	[node notNil] whileTrue: [
-		(node isKindOf: ClassDefAst) ifTrue: [passedClass := true].
-		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
-			ifTrue: [
-				(self ___functionBindsPythonLocal___: node named: aSymbol)
-					ifTrue: [^ passedClass]].
-		node := node parent].
-	^ false
-%
-
-category: 'other'
-method: NameAst
 ___enclosingFuncDeclaresReservedParam___: aSymbol
 	"True iff aSymbol is a Smalltalk pseudo-variable (``self'', etc.)
 	AND some enclosing FunctionDef/Lambda binds it as a PARAMETER or
