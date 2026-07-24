@@ -24,6 +24,14 @@ def copy(obj):
         return set(obj)
     if t is frozenset:
         return frozenset(obj)
+    # A dict/list SUBCLASS without its own __copy__ (Counter, OrderedDict,
+    # ...) -- reconstruct via the subclass's own constructor rather than
+    # falling to the atom passthrough below, which would return ``obj``
+    # itself instead of an independent copy.
+    if isinstance(obj, dict):
+        return t(obj)
+    if isinstance(obj, list):
+        return t(obj)
     # Atoms (int, str, None, ...) — copy returns the same object.
     return obj
 
@@ -69,6 +77,20 @@ def deepcopy(obj, memo=None):
     if t is frozenset:
         result = frozenset(deepcopy(item, memo) for item in obj)
         memo[obj_id] = result
+        return result
+    # A dict/list SUBCLASS without its own __deepcopy__ -- same rationale
+    # as the isinstance fallback in copy() above.
+    if isinstance(obj, dict):
+        result = t()
+        memo[obj_id] = result
+        for k in obj:
+            result[deepcopy(k, memo)] = deepcopy(obj[k], memo)
+        return result
+    if isinstance(obj, list):
+        result = t()
+        memo[obj_id] = result
+        for item in obj:
+            result.append(deepcopy(item, memo))
         return result
     # Atoms — deepcopy returns the same object.
     memo[obj_id] = obj
