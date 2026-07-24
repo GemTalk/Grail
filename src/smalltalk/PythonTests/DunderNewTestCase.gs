@@ -305,11 +305,12 @@ testIntSubclassViaAbstractPyInt
 	interoperate as dict keys, keep their own methods, and satisfy
 	isinstance/issubclass against int."
 
-	"The MyInt+MyInt result degrades to a plain int, whose type() is now
-	``int'' (Integer) rather than the concrete SmallInteger -- see
-	int>>__class__."
+	"The MyInt+MyInt result degrades to a plain int, whose type().__name__
+	is now the Python name ``int'' (built-in-type name mapping), not the
+	concrete Smalltalk class -- see int>>__class__ and
+	object class>>__name__."
 	self assert: (self fixture @env1:INT_SUB_RESULTS) @env1:__repr__
-		equals: '[8, 8, ''Integer'', True, True, 5, 20, ''x'', ''v=9'', True]'
+		equals: '[8, 8, ''int'', True, True, 5, 20, ''x'', ''v=9'', True]'
 %
 
 category: 'Grail-Tests - math'

@@ -431,22 +431,53 @@ __new__
 
 category: 'Grail-Introspection'
 classmethod: object
+___pythonBuiltinTypeName___
+	"The Python type name for the reused GemStone KERNEL classes that back
+	Python's built-in types (install.gs Step 3 maps e.g. ``int'' ->
+	Integer, ``list'' -> OrderedCollection), so ``type(x).__name__'' /
+	``cls.__name__'' report the PYTHON spelling (``int'', not ``Integer'').
+	Answers nil for everything else: Grail-defined built-in types
+	(tuple/set/frozenset/complex/bytearray/NoneType) are class-named with
+	their Python name already, and non-type classes (BoundMethod, ExecBlock,
+	...) plus user Python classes MUST keep their own name (the inspect
+	stubs and PythonClass>>__name__ depend on it).  Keyed by Smalltalk class
+	NAME so no class-global resolution is needed and concrete subclass
+	variants (SmallInteger, LargePositiveInteger, ...) are covered
+	explicitly."
+
+	| n |
+	n := self @env0:name @env0:asString.
+	(#('Object') @env0:includes: n) ifTrue: [^ 'object'].
+	(#('Integer' 'SmallInteger' 'LargeInteger' 'LargePositiveInteger'
+		'LargeNegativeInteger' 'AbstractPyInt') @env0:includes: n) ifTrue: [^ 'int'].
+	(#('Boolean') @env0:includes: n) ifTrue: [^ 'bool'].
+	(#('Float' 'SmallDouble' 'AbstractPyFloat') @env0:includes: n) ifTrue: [^ 'float'].
+	(#('Unicode7' 'Unicode16' 'Unicode32' 'String' 'DoubleByteString'
+		'QuadByteString' 'AbstractPyStr') @env0:includes: n) ifTrue: [^ 'str'].
+	(#('ByteArray') @env0:includes: n) ifTrue: [^ 'bytes'].
+	(#('OrderedCollection') @env0:includes: n) ifTrue: [^ 'list'].
+	(#('PyDict' 'KeyValueDictionary') @env0:includes: n) ifTrue: [^ 'dict'].
+	(#('Interval') @env0:includes: n) ifTrue: [^ 'range'].
+	(#('ScaledDecimal') @env0:includes: n) ifTrue: [^ 'Decimal'].
+	(#('GsNMethod') @env0:includes: n) ifTrue: [^ 'builtin_function_or_method'].
+	^ nil
+%
+
+category: 'Grail-Introspection'
+classmethod: object
 __name__
 	"Python ``cls.__name__`` returns the class's short name as a string.
-	Inherited through the metaclass chain to every class, so
-	``OrderedCollection.__name__`` answers 'OrderedCollection',
-	``ExecBlock.__name__`` answers 'ExecBlock', etc.  Grail uses the
-	Smalltalk class name unchanged — downstream inspect.ismethod /
-	isfunction stubs are written to match the Smalltalk names
-	('BoundMethod', 'ExecBlock').
+	Inherited through the metaclass chain to every class.  For the reused
+	kernel classes that back Python built-ins, answer the PYTHON name
+	(``int'' for Integer, ``list'' for OrderedCollection, ``object'' for
+	Object, ...) via ___pythonBuiltinTypeName___; every other class keeps
+	its Smalltalk name — downstream inspect.ismethod / isfunction stubs are
+	written to match the Smalltalk names ('BoundMethod', 'ExecBlock').
 
-	User Python classes (created via ClassDefAst) get a unique
-	encoded name (e.g. ``Blinker_base_Signal``); their ``__name__``
-	therefore reflects the encoded form, not the original Python
-	identifier.  Python-side code that compares __name__ to a
-	literal (rare outside introspection helpers) may need updating."
+	User Python classes (created via ClassDefAst) resolve __name__ through
+	PythonClass>>__name__ (their stored Python identifier), not this method."
 
-	^ self @env0:name @env0:asString
+	^ self ___pythonBuiltinTypeName___ @env0:ifNil: [self @env0:name @env0:asString]
 %
 
 category: 'Grail-Introspection'
@@ -454,11 +485,12 @@ classmethod: object
 __qualname__
 	"Python ``cls.__qualname__`` — the qualified name.  Grail does not
 	track lexical nesting of classes, so answer the same string as
-	__name__ (correct for top-level classes, which is the common case).
+	__name__ (correct for top-level classes, which is the common case),
+	including the Python-name mapping for built-in kernel classes.
 	CPython error messages interpolate it (e.g. textwrap.dedent's
 	``expected str object, not {type(text).__qualname__!r}'')."
 
-	^ self @env0:name @env0:asString
+	^ self ___pythonBuiltinTypeName___ @env0:ifNil: [self @env0:name @env0:asString]
 %
 
 category: 'Grail-Callable'

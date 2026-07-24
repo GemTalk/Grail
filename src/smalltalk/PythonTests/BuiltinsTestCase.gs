@@ -1093,8 +1093,9 @@ testClassQualname
 	type check reads type(x).__qualname__."
 
 	"type(0) is now int (Integer), not the concrete SmallInteger -- see
-	int>>__class__."
-	self assert: (self eval: 'type(0).__qualname__') equals: 'Integer'.
+	int>>__class__.  __qualname__ reports the Python name ('int') via the
+	built-in-type name mapping in object class>>__qualname__."
+	self assert: (self eval: 'type(0).__qualname__') equals: 'int'.
 	self assert: (self eval: 'type("s").__qualname__ == type("s").__name__')
 %
 
