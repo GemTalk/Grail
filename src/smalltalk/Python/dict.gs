@@ -46,7 +46,7 @@ __new__: source
 	its entries. Otherwise treat it as an iterable of 2-element
 	sequences."
 
-	| result iter done keysMethod keysIter k |
+	| result iter done keysMethod keysIter k idx |
 	result := self ___new___.
 
 	"Mapping fast path: a plain dict / raw KeyValueDictionary copies straight
@@ -85,18 +85,17 @@ __new__: source
 		^ result
 	].
 
-	"Iterable of 2-element sequences"
+	"Iterable of (key, value) pairs -- each element is converted like CPython's
+	dict (materialize-then-check, PEP 678 note on failure)."
 	iter := source __iter__.
+	idx := 0.
 	done := false.
 	[done] @env0:whileFalse: [
 		[
 			| pair |
-			pair := iter __next__.
-			(pair @env0:size @env0:= 2) ifFalse: [
-				ValueError ___signal___:
-					'dictionary update sequence element has wrong length'
-			].
-			result @env0:at: (pair @env0:at: 1) put: (pair @env0:at: 2)
+			pair := dict ___updateSeqPairAt___: idx from: iter __next__.
+			result @env0:at: (pair @env0:at: 1) put: (pair @env0:at: 2).
+			idx := idx @env0:+ 1
 		] @env0:on: StopIteration do: [:ex | done := true]
 	].
 	^ result
@@ -144,6 +143,32 @@ fromkeys: iterable _: value
 			@env0:on: StopIteration do: [:ex | done := true]
 	].
 	^ result
+%
+
+category: 'Grail-Initialization'
+classmethod: dict
+___updateSeqPairAt___: idx from: element
+	"Convert one dict-update sequence element to a (key, value) pair the way
+	CPython does: materialize it by ITERATING (so a non-iterable element, or a
+	generator that raises mid-iteration, fails right here).  On failure attach
+	the PEP 678 note ``Cannot convert dictionary update sequence element #N to a
+	sequence'' to the raised exception and reraise -- the base error (e.g.
+	``... is not iterable'', or a generator's own error) stays as the message
+	and the note carries the positional context (test_update_type_error).
+	Require exactly two elements.  Answers a 2-element Array {key. value}."
+
+	| seq |
+	seq := [ list @env1:__new__: element ]
+		@env0:on: BaseException
+		do: [:ex |
+			ex @env1:add_note: ('Cannot convert dictionary update sequence element #'
+				@env0:, idx @env0:printString @env0:, ' to a sequence').
+			ex @env0:pass].
+	(seq @env0:size @env0:= 2) ifFalse: [
+		^ ValueError ___signal___: 'dictionary update sequence element #'
+			@env0:, idx @env0:printString @env0:, ' has length '
+			@env0:, seq @env0:size @env0:printString @env0:, '; 2 is required'].
+	^ { seq @env0:at: 1. seq @env0:at: 2 }
 %
 
 category: 'Grail-Initialization'
@@ -693,17 +718,8 @@ update: other
 	done := false.
 	[done] @env0:whileFalse: [
 		[| pair |
-		pair := iter __next__.
-		((pair isKindOf: SequenceableCollection)
-			or: [(pair @env0:class
-				@env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) ~~ nil]) ifFalse: [
-			TypeError ___signal___: 'cannot convert dictionary update sequence element #'
-				@env0:, idx @env0:printString @env0:, ' to a sequence'].
-		(pair __len__ @env0:= 2) ifFalse: [
-			ValueError ___signal___: 'dictionary update sequence element #'
-				@env0:, idx @env0:printString @env0:, ' has length '
-				@env0:, pair __len__ @env0:printString @env0:, '; 2 is required'].
-		self @env0:at: (pair __getitem__: 0) put: (pair __getitem__: 1).
+		pair := dict ___updateSeqPairAt___: idx from: iter __next__.
+		self @env0:at: (pair @env0:at: 1) put: (pair @env0:at: 2).
 		idx := idx @env0:+ 1]
 			@env0:on: StopIteration do: [:ex | done := true]]
 %
