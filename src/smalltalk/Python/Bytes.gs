@@ -2985,6 +2985,64 @@ rsplit
 
 category: 'Grail-Splitting Methods'
 method: bytes
+_split: positional kw: kwargs
+	"Varargs form of split(sep=None, maxsplit=-1) -- reached via the
+	BoundMethod fallback (getattr(obj,'split')(...)) when the fixed-arity
+	fast path does not resolve.  sep=None splits on ASCII whitespace runs."
+
+	| sep maxsplit |
+	positional @env0:size @env0:> 2 ifTrue: [
+		TypeError ___signal___: ('split() takes at most 2 arguments ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	sep := (positional @env0:size @env0:>= 1)
+		@env0:ifTrue: [positional @env0:at: 1]
+		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'sep'])
+			@env0:ifTrue: [kwargs @env0:at: 'sep'] @env0:ifFalse: [None]].
+	maxsplit := (positional @env0:size @env0:>= 2)
+		@env0:ifTrue: [positional @env0:at: 2]
+		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'maxsplit'])
+			@env0:ifTrue: [kwargs @env0:at: 'maxsplit'] @env0:ifFalse: [-1]].
+	^ self split: sep _: maxsplit
+%
+
+category: 'Grail-Splitting Methods'
+method: bytes
+_rsplit: positional kw: kwargs
+	"Varargs form of rsplit(sep=None, maxsplit=-1) -- see _split:kw:."
+
+	| sep maxsplit |
+	positional @env0:size @env0:> 2 ifTrue: [
+		TypeError ___signal___: ('rsplit() takes at most 2 arguments ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	sep := (positional @env0:size @env0:>= 1)
+		@env0:ifTrue: [positional @env0:at: 1]
+		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'sep'])
+			@env0:ifTrue: [kwargs @env0:at: 'sep'] @env0:ifFalse: [None]].
+	maxsplit := (positional @env0:size @env0:>= 2)
+		@env0:ifTrue: [positional @env0:at: 2]
+		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'maxsplit'])
+			@env0:ifTrue: [kwargs @env0:at: 'maxsplit'] @env0:ifFalse: [-1]].
+	^ self rsplit: sep _: maxsplit
+%
+
+category: 'Grail-Splitting Methods'
+method: bytes
+_splitlines: positional kw: kwargs
+	"Varargs form of splitlines(keepends=False) -- see _split:kw:."
+
+	| keepends |
+	positional @env0:size @env0:> 1 ifTrue: [
+		TypeError ___signal___: ('splitlines() takes at most 1 argument ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	keepends := (positional @env0:size @env0:>= 1)
+		@env0:ifTrue: [positional @env0:at: 1]
+		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'keepends'])
+			@env0:ifTrue: [kwargs @env0:at: 'keepends'] @env0:ifFalse: [false]].
+	^ self splitlines: keepends
+%
+
+category: 'Grail-Splitting Methods'
+method: bytes
 ___boundedSlice___: start end: end
 	"self[start:end] with CPython negative-index clamping -- shared by the
 	bounded startswith/endswith forms."

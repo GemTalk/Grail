@@ -300,6 +300,23 @@ def _mod_c_bad_raises():
 def _imod_bytearray():
     b = bytearray(b'hi %b'); b %= b'x'; return bytes(b) == b'hi x'
 
+# split/rsplit/splitlines reached as bound methods (getattr) -- exercises the
+# varargs _name:kw: fallback that the arity dispatcher uses when the fixed-arity
+# fast path does not resolve the selector.
+def _gsplit_ws():
+    return getattr(b'a b c', 'split')() == [b'a', b'b', b'c']
+def _gsplit_sep():
+    return getattr(b'a|b|c', 'split')(b'|', 1) == [b'a', b'b|c']
+def _grsplit_ws():
+    return getattr(b'a b c', 'rsplit')() == [b'a', b'b', b'c']
+def _gsplitlines():
+    return getattr(b'a\nb\nc', 'splitlines')() == [b'a', b'b', b'c']
+def _gsplitlines_keepends():
+    return getattr(b'a\nb', 'splitlines')(True) == [b'a\n', b'b']
+def _gsplitlines_toomany():
+    try: getattr(b'abc', 'splitlines')(42, 42); return False
+    except TypeError: return True
+
 
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
@@ -564,4 +581,13 @@ RESULTS = {
     'mod_u_complex_raises': _mod_u_complex_raises(),
     'mod_c_bad_raises': _mod_c_bad_raises(),
     'imod_bytearray': _imod_bytearray(),
+
+    # --- split/rsplit/splitlines via a bound method (getattr): the varargs
+    # _name:kw: fallback, incl. the too-many-args TypeError guard. ---
+    'gsplit_ws': _gsplit_ws(),
+    'gsplit_sep': _gsplit_sep(),
+    'grsplit_ws': _grsplit_ws(),
+    'gsplitlines': _gsplitlines(),
+    'gsplitlines_keepends': _gsplitlines_keepends(),
+    'gsplitlines_toomany': _gsplitlines_toomany(),
 }

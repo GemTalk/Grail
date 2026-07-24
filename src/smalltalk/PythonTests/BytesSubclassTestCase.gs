@@ -311,3 +311,15 @@ testPercentFormat
 	  'imod_bytearray') do: [:key |
 		self assert: ((self resultAt: key) = true) description: key]
 %
+
+category: 'Grail-Tests - bound-method split family'
+method: BytesSubclassTestCase
+testBoundMethodSplitFamily
+	"split/rsplit/splitlines reached as bound methods (getattr) route through
+	the varargs _name:kw: fallback when the fixed-arity fast path does not
+	resolve the selector -- including the too-many-args TypeError guard."
+
+	#('gsplit_ws' 'gsplit_sep' 'grsplit_ws' 'gsplitlines' 'gsplitlines_keepends'
+	  'gsplitlines_toomany') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
