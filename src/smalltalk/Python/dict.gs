@@ -225,8 +225,33 @@ __getitem__: item
 category: 'Grail-Type'
 method: dict
 __class__
-	"Return the Python type for dict"
-	^ dict
+	"Return the receiver's ACTUAL class, so a ``class Counter(dict): ...''
+	instance reports Counter (not the ``dict'' global, which is re-bound to
+	PyDict after this file loads -- see Bytes.gs's / SetProtocol.gs's twin
+	__class__ overrides for the same fix, and Class.gs's dict comment for
+	why hardcoding a fixed answer was wrong here: unlike Int/Float/Bool,
+	dict subclasses are genuine, distinct Smalltalk classes, not a kernel
+	concrete-representation detail to paper over
+	(test_collections.TestCounter/TestNamedTuple: type(Counter(...)) and
+	type(OrderedDict(...)) were both reporting PyDict).
+
+	EXCEPT when the receiver's class is EXACTLY KeyValueDictionary (not a
+	genuine Python subclass): Grail hands plain, un-upgraded KVDs to Python
+	from many places (globals(), a module's __dict__, C-shim results, dicts
+	committed before the PyDict flip -- same rationale as dict>>__eq__'s
+	KeyValueDictionary guard above) that must still identify as the
+	canonical ``dict'' type, not the internal kernel class name
+	(test_functools regression: type(globals()) reporting
+	KeyValueDictionary instead of PyDict).  Answers via the ``dict'' global
+	(not a literal ``PyDict'' reference) because PyDict.gs files in AFTER
+	this file and re-binds ``dict'' to it -- a literal ``PyDict'' here would
+	be an undefined symbol at THIS file's compile time; ``dict'' already
+	exists as a global (initially KeyValueDictionary) whose binding is
+	transparently updated later, exactly like every other ``dict'' send in
+	this file (e.g. __new__:'s ``dict ___new___``)."
+
+	(self @env0:class == KeyValueDictionary) ifTrue: [^ dict].
+	^ self @env0:class
 %
 
 category: 'Grail-Initialization'
