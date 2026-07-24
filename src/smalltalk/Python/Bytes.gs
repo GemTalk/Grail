@@ -34,7 +34,7 @@ __new__: source
 	"bytes(source) — create bytes from various sources. Receiver is
 	the class (so subclasses like bytearray instantiate themselves)."
 
-	| result sourceClass |
+	| result sourceClass materialized ba size |
 	sourceClass := source @env0:class.
 
 	"If source is an integer, create bytes of that size filled with zeros"
@@ -107,8 +107,22 @@ __new__: source
 		^ ba
 	].
 
-	"Default: empty bytes"
-	^ self ___new___
+	"Any other iterable (generators, reversed_iterator, __iter__/__next__
+	or __getitem__-protocol objects, ...) -- materialize via list()'s
+	general iterable handling, then validate/convert elements the same
+	way as the list/tuple/Array branch above (test_float.py:
+	bytes(reversed(b'...')) -- previously fell through to 'empty bytes'
+	below, silently losing the whole byte string)."
+	materialized := list __new__: source.
+	size := materialized @env0:size.
+	ba := self ___new___: size.
+	1 @env0:to: size do: [:i |
+		| val |
+		val := materialized @env0:at: i.
+		((val @env0:< 0) or: [val @env0:> 255]) ifTrue: [
+			ValueError ___signal___: 'bytes must be in range(0, 256)'].
+		ba @env0:at: i put: val].
+	^ ba
 %
 
 category: 'Grail-Constructors'

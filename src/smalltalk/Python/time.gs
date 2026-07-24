@@ -146,11 +146,14 @@ process_time
 category: 'Grail-Sleep'
 method: time
 sleep: seconds
-	"Suspend the current process for ``seconds`` (int or float).
-	Backed by GemStone Delay."
+	"Suspend the current process for ``seconds`` (int or float, or
+	anything float()-convertible).  Backed by GemStone Delay."
 
-	| ms |
-	ms := (seconds @env0:* 1000) @env0:truncated.
+	| secs ms |
+	secs := ((seconds isKindOf: Float) or: [seconds isKindOf: Integer])
+		ifTrue: [seconds]
+		ifFalse: [float __new__: seconds].
+	ms := (secs @env0:* 1000) @env0:truncated.
 	ms @env0:<= 0 ifTrue: [^ None].
 	(Delay @env0:forMilliseconds: ms) @env0:wait.
 	^ None

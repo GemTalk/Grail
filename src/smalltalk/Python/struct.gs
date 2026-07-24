@@ -447,7 +447,7 @@ _bitsToDouble: bits
 		exponent @env0:= 16r7FF ifTrue: [
 			"Inf / NaN - return Inf for either since GemStone Float
 			doesn't have a portable NaN literal."
-			^ sign @env0:= 0 ifTrue: [Float fmax @env0:* 2.0] ifFalse: [Float fmax @env0:* -2.0]
+			^ sign @env0:= 0 ifTrue: [Float @env0:fmax @env0:* 2.0] ifFalse: [Float @env0:fmax @env0:* -2.0]
 		].
 		magnitude := (1.0 @env0:+ (mantissa @env0:asFloat @env0:/ 4503599627370496.0))
 			@env0:* (2.0 @env0:raisedTo: exponent @env0:- 1023)

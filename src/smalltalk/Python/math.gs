@@ -495,15 +495,16 @@ ___materialize___: iterable
 category: 'Grail-Math Functions'
 method: math
 copysign: x _: y
-	"copysign(x, y) -> magnitude of x with the sign of y.  The 1/y
-	probe distinguishes -0.0 from 0.0 (its reciprocal's sign
-	survives)."
+	"copysign(x, y) -> magnitude of x with the sign of y.  Read the
+	actual IEEE sign bit rather than comparing (fy < 0 / fy = 0 with a
+	1/y probe for -0.0): both are always false for a NaN y regardless
+	of ITS sign bit, which used to make copysign(x, nan)/copysign(x,
+	-nan) indistinguishable (test_float.py's test_nan_signs)."
 
 	| mag neg fy |
 	mag := (self ___real___: x) @env0:abs.
 	fy := self ___real___: y.
-	neg := fy @env0:< 0
-		or: [fy @env0:= 0 and: [(1.0 @env0:/ fy) @env0:< 0]].
+	neg := (fy @env0:signBit) @env0:== 1.
 	^ neg ifTrue: [mag @env0:negated] ifFalse: [mag]
 %
 
