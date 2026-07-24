@@ -839,6 +839,27 @@ ___classCell___: aSym
 	^ v
 %
 
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___classCellSetter___: aSym
+	"Closure-cell WRITE for class-method bodies: the counterpart to
+	``___classCell___:'' for ``nonlocal x; x = ...'' inside a method.  The
+	stored value is a ONE-ARG block ``[:v | <local> := v]'' captured at
+	class-DEFINITION time that assigns the enclosing-function local BY
+	REFERENCE, so a mutation from the method is visible to the enclosing
+	scope (CPython by-reference cells).  Answers the block; the caller sends
+	it ``value: <newValue>''.  A missing setter cell means codegen failed to
+	register the write -- a NameError (catchable) beats a bare DNU."
+
+	| blk |
+	blk := self ___dynamicClassAttr___: aSym.
+	blk @env0:isNil ifTrue: [
+		NameError ___signal___: ('free variable '''
+			@env0:, (aSym @env0:asString @env0:copyFrom: 15 to: aSym @env0:asString @env0:size - 3)
+			@env0:, ''' has no enclosing binding to assign')].
+	^ blk
+%
+
 category: 'Grail-Initialization'
 method: object
 ___pyBuiltinCollectionInit___: positional kw: keywords new: hasNew

@@ -114,3 +114,33 @@ testFreevarThroughNestedClassMethod
 
 	self assert: testModule @env1:freevar_through_nested_class_method equals: true
 %
+
+category: 'Grail-Tests'
+method: NonlocalClosureTestCase
+testNonlocalWriteInMethodAug
+	"``nonlocal x; x += 1'' inside a method of a function-local class
+	mutates the enclosing local through a setter closure cell (the method
+	has no lexical link to the outer temp).  CPython test_dict
+	test_str_nonstr's Key3.__eq__ shape."
+
+	self assert: testModule @env1:nonlocal_write_in_method_aug equals: true
+%
+
+category: 'Grail-Tests'
+method: NonlocalClosureTestCase
+testNonlocalWriteInMethodPlain
+	"Plain ``nonlocal x; x = v'' inside a method reaches the enclosing
+	binding through the setter cell."
+
+	self assert: testModule @env1:nonlocal_write_in_method_plain equals: true
+%
+
+category: 'Grail-Tests'
+method: NonlocalClosureTestCase
+testNonlocalWriteThroughNestedClassMethod
+	"``nonlocal'' write from a method of a class nested inside another
+	class's method: the setter cell is FORWARDED through the intervening
+	method's own setter cell (two class boundaries)."
+
+	self assert: testModule @env1:nonlocal_write_through_nested_class_method equals: true
+%
