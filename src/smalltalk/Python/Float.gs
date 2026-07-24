@@ -770,9 +770,12 @@ __mul__: other
 category: 'Grail-Comparison'
 method: float
 __ne__: other
-	"Not equal comparison."
+	"Not equal comparison.  Delegates to __eq__: (not a raw native ~=)
+	so it shares its __index__/complex/PythonInstance fallback logic --
+	see Int.gs's twin __ne__: comment for the concrete Boolean case
+	this fixes (0.0 != False must be False)."
 
-	^ self @env0:~= other
+	^ (self __eq__: other) @env0:not
 %
 
 category: 'Grail-Arithmetic'

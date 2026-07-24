@@ -477,6 +477,12 @@ ___grailBuildMembers: cls names: attrNames
 			(Enum @env0:class @env0:sourceCodeAt: #'value:value:' environmentId: 1)
 			category: 'Grail-Enum Metaclass']]
 		@env0:on: Error do: [:ex | "best effort" ].
+	"CPython repr/str/format replacement: a mixed-in enum (``class E(int,
+	Enum)``) inherits its data-type's output methods through the storage base
+	and would str a member as its raw value; force Enum's (or Flag's) unless a
+	user or enum method already provides them.  No-op for a pure Enum/Flag
+	(members are Enum-rooted) and for IntEnum/IntFlag (own value-str methods)."
+	[Enum ___grailInstallEnumOutput: cls] @env0:on: Error do: [:ex | "best effort"].
 	^ cls
 %
 
@@ -641,6 +647,154 @@ ___grailMembers: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailMemberTypeFor: cls
+	"The mix-in data type of enum class cls (int/str/float/data base/object),
+	computed by walking cls's superclass chain -- the cls-parameterized form
+	of Enum class>>_member_type_.  A mixed enum's metaclass does not inherit
+	the Grail-Class Attrs ``_member_type_'' accessor, so the metaclass hook
+	(___grailBuildMembers:) can't just send it to cls."
+
+	| walker |
+	walker := cls.
+	[walker ~~ nil] @env0:whileTrue: [
+		walker == Enum ifTrue: [^ object].
+		walker == IntEnum ifTrue: [^ Integer].
+		walker == AbstractPyInt ifTrue: [^ Integer].
+		walker == AbstractPyFloat ifTrue: [^ Float].
+		((walker == PythonInstance) or: [walker == Object]) ifTrue: [^ object].
+		((Enum ___grailRecordFor: walker) @env0:isNil
+			and: [(walker @env0:inheritsFrom: Enum) not
+			and: [walker ~~ cls]]) ifTrue: [^ walker].
+		walker := walker @env0:superclass].
+	^ object
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailCompositeNameFor: m
+	"Composite/plain name for a (possibly flag) member: 'first|third' for a
+	composite, the plain name for a named member, the value's printString when
+	no named bit covers it.  Storage-agnostic (reads #name/#value dynInstVars),
+	so it works on the int-rooted members of a mixed flag (``class E(int,
+	Flag)``), which do NOT inherit Flag>>___compositeName___."
+
+	| cls nm v parts |
+	cls := m @env0:class.
+	nm := m @env0:dynamicInstVarAt: #name.
+	(nm @env0:isNil or: [nm == None]) ifFalse: [^ nm @env0:asString].
+	v := m @env0:dynamicInstVarAt: #value.
+	parts := OrderedCollection @env0:new.
+	(Enum ___grailMembers: cls) @env0:do: [:mm | | mv |
+		mv := mm @env0:dynamicInstVarAt: #value.
+		((mv isKindOf: Integer)
+			and: [mv @env0:~= 0
+			and: [(v @env0:bitAnd: mv) @env0:= mv]]) ifTrue: [
+			parts @env0:add: (mm @env0:dynamicInstVarAt: #name) @env0:asString]].
+	parts @env0:isEmpty ifTrue: [^ v @env0:printString].
+	^ parts @env0:inject: nil into: [:acc :p |
+		acc @env0:isNil ifTrue: [p] ifFalse: [acc @env0:, '|' @env0:, p]]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailMemberStr: m
+	"Enum/Flag member str for a mixed-in (non-ReprEnum) enum: 'Cls.name' for a
+	plain member; 'Cls.a|b' / 'Cls(0)' for flag members.  Installed as the
+	member __str__ on mixed enums whose data-type root (int/str/...) would
+	otherwise str the raw value (``class E(int, Enum)`` -> '3' instead of
+	'E.name').  Class-side receiver (Enum) so int/str-rooted members, which are
+	NOT Enum instances, can still call it via ``Enum ___grailMemberStr: self''."
+
+	| cls |
+	cls := m @env0:class.
+	(Enum ___grailIsFlagClass: cls) ifTrue: [
+		| v nm |
+		v := m @env0:dynamicInstVarAt: #value.
+		nm := m @env0:dynamicInstVarAt: #name.
+		((nm @env0:isNil or: [nm == None])
+			and: [(v isKindOf: Integer) and: [v @env0:= 0]]) ifTrue: [
+			^ cls @env0:name @env0:asString @env0:, '(0)'].
+		^ cls @env0:name @env0:asString @env0:, '.' @env0:, (Enum ___grailCompositeNameFor: m)].
+	^ cls @env0:name @env0:asString @env0:, '.' @env0:, (m @env0:dynamicInstVarAt: #name) @env0:asString
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailMemberRepr: m
+	"Enum/Flag member repr for a mixed-in enum: '<Cls.name: valrepr>' (Flag:
+	'<Cls.a|b: N>' / '<Cls: 0>').  Companion of ___grailMemberStr:."
+
+	| cls |
+	cls := m @env0:class.
+	(Enum ___grailIsFlagClass: cls) ifTrue: [
+		| v nm |
+		v := m @env0:dynamicInstVarAt: #value.
+		nm := m @env0:dynamicInstVarAt: #name.
+		((nm @env0:isNil or: [nm == None])
+			and: [(v isKindOf: Integer) and: [v @env0:= 0]]) ifTrue: [
+			^ '<' @env0:, cls @env0:name @env0:asString @env0:, ': 0>'].
+		^ '<' @env0:, cls @env0:name @env0:asString @env0:, '.'
+			@env0:, (Enum ___grailCompositeNameFor: m) @env0:, ': '
+			@env0:, v @env0:printString @env0:, '>'].
+	^ '<' @env0:, cls @env0:name @env0:asString @env0:, '.'
+		@env0:, (m @env0:dynamicInstVarAt: #name) @env0:asString @env0:, ': '
+		@env0:, (m @env0:dynamicInstVarAt: #value) @env0:printString @env0:, '>'
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailInstallEnumOutput: cls
+	"CPython EnumType.__new__ replaces a member's __repr__/__str__/__format__
+	with Enum's when the class only inherited the mix-in data type's (or
+	object's) -- so ``class E(int, Enum)'' members str as 'E.name', not '3'.
+	Grail picks the data type as the storage base, so its str/repr/format are
+	inherited and would win; force Enum's (or Flag's, for a flag-natured class)
+	onto cls unless a user/enum method already provides them.
+
+	Skipped for StrEnum-natured classes: StrEnum is a ReprEnum -- it
+	deliberately inherits str's __str__/__format__ (bare value) and defines
+	only its own __repr__.  IntEnum/IntFlag are ReprEnum too but DEFINE their
+	value-str __str__/__format__ in category Grail-Enum Member, so the
+	per-selector guard below already keeps them."
+
+	(Enum ___grailIsStrEnumClass: cls) ifTrue: [^ cls].
+	"Nested {selector. source} pairs (NOT Associations -- a bare ``->'' would
+	be an env-1 send and DNU here)."
+	{ { #'__repr__'. '__repr__
+	^ Enum ___grailMemberRepr: self' }.
+	  { #'__str__'. '__str__
+	^ Enum ___grailMemberStr: self' }.
+	  { #'__format__:'. '__format__: aSpec
+	^ (self __str__) __format__: aSpec' } }
+		@env0:do: [:pair |
+			(Enum ___grailShouldForceOutput: cls selector: (pair @env0:at: 1)) ifTrue: [
+				cls ___compileMethod: (pair @env0:at: 2) category: 'Grail-Enum Member']].
+	^ cls
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailShouldForceOutput: cls selector: sel
+	"True when cls only inherits the mix-in data type's (or object's) output
+	method for sel, so ___grailInstallEnumOutput: should replace it with
+	Enum's.  False when a USER class-body definition (category Grail-Class
+	Methods / Grail-Method Aliases) or an already-enum-style method (Grail-Enum
+	Member / Grail-Flag Member / Grail-IntFlag Member) provides it -- those are
+	correct and must be kept."
+
+	| p cat |
+	p := cls @env0:whichClassIncludesSelector: sel environmentId: 1.
+	p @env0:isNil ifTrue: [^ true].
+	"categoryOfSelector: answers a Symbol -- compare against Symbols."
+	cat := [p @env0:categoryOfSelector: sel environmentId: 1]
+		@env0:on: AbstractException do: [:e | nil].
+	^ (#(#'Grail-Class Methods' #'Grail-Method Aliases' #'Grail-Property-ReadOnly'
+		#'Grail-CachedProperty-Setter' #'Grail-Enum Member' #'Grail-Flag Member'
+		#'Grail-IntFlag Member') @env0:includes: cat) @env0:not
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailFunctional: cls positional: positional keywords: keywords
 	"Enum('Name', names, *, module=, qualname=, type=, start=1) -- the
 	FUNCTIONAL API: build a new enum class at runtime.  ``names'' may be
@@ -775,6 +929,10 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	^ self __getitem__: ''' @env0:, nameStr @env0:, '''')
 				category: 'Grail-Class Attrs']]] value.
 	self ___grailRegistry___ @env0:at: newCls put: (Array @env0:with: byValue with: byName with: members).
+	"Same repr/str/format replacement as the class-syntax builder (harmless
+	no-op for the Enum-rooted classes the functional API produces today, but
+	correct if a data-mixed functional enum lands here later)."
+	[Enum ___grailInstallEnumOutput: newCls] @env0:on: Error do: [:ex | "best effort"].
 	^ newCls
 %
 

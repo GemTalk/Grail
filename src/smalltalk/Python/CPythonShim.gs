@@ -976,20 +976,48 @@ PyLong_FromSsize_t: anInteger
 category: 'Grail-CPython API'
 method: CPythonShim
 PyUnicode_FromString: aString
-	^ (self wrap: aString) memoryAddress
+	"aString arrives as a plain GciNewString-built kernel String (7-bit/
+	byte-oriented) -- Grail's canonical Python str representation is
+	Unicode7, not String, so wrapping the raw String unchanged leaked
+	the wrong Smalltalk class through every C-shim-built str result
+	(re.sub()/subn()/split() etc. via _sre's PyUnicode_Join ->
+	PyUnicode_FromString): test_re.py's test_basic_re_sub expects
+	type(re.sub(...)) to be the SAME class as a plain string literal."
+
+	^ (self wrap: aString @env0:asUnicodeString) memoryAddress
 %
 
 category: 'CPython API'
 method: CPythonShim
 PyUnicode_Substring: aString from: start to: end
-	"Python slice semantics: 0-based, end exclusive, clamped to length."
+	"Python slice semantics: 0-based, end exclusive, clamped to length.
 
-	| len lo hi |
+	copyFrom:to: is species-preserving -- slicing a str-SUBCLASS
+	instance (re.findall()/finditer() on a ``class S(str): ...``) would
+	otherwise hand back MORE ``S`` instances instead of coercing to
+	plain str, same class of bug as PyUnicode_FromString: above
+	(test_re.py's test_re_findall/test_re_split).  asUnicodeString
+	alone doesn't fix this: sent to something that's ALREADY a kind of
+	Unicode (a str subclass qualifies via isKindOf:), it takes a
+	same-species fast path and answers self unchanged -- exactly
+	builtins.gs's str: has to work around for the same reason (see its
+	comment).  Explicitly checking the exact class and routing through
+	str __new__: (which always builds a genuine plain instance) is the
+	only way to actually re-narrow it."
+
+	| len lo hi sliced |
 	len := aString size.
 	lo := start max: 0.
 	hi := end min: len.
 	hi < lo ifTrue: [hi := lo].
-	^ (self wrap: (aString copyFrom: lo + 1 to: hi)) memoryAddress
+	sliced := aString copyFrom: lo + 1 to: hi.
+	((sliced @env0:class @env0:== Unicode7) or: [
+		(sliced @env0:class @env0:== Unicode16) or: [
+		(sliced @env0:class @env0:== Unicode32) or: [
+		(sliced @env0:class @env0:== String) or: [
+		sliced @env0:class @env0:== Symbol]]]]) ifFalse: [
+		sliced := str @env1:__new__: sliced].
+	^ (self wrap: sliced) memoryAddress
 %
 
 ! --------------- Bytes API ---------------
