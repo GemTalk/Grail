@@ -59,4 +59,22 @@ RESULTS = {
     # --- base cases must stay correct after the __class__ change ---
     'base_bytes_type': type(b'abc') is bytes,
     'base_bytearray_type': type(bytearray(b'x')) is bytearray,
+
+    # --- bytes and bytearray are DISTINCT types (CPython): neither is a
+    # subclass of the other, though Grail stores bytearray as a ByteArray
+    # (=bytes) subclass for storage/method reuse. ---
+    'ba_not_isinstance_bytes':
+        (not isinstance(bytearray(b'x'), bytes)) and (not isinstance(MyBA(b'x'), bytes)),
+    'bytes_not_isinstance_bytearray':
+        (not isinstance(b'x', bytearray)) and (not isinstance(MyBytes(b'x'), bytearray)),
+    'ba_not_subclass_bytes':
+        (not issubclass(bytearray, bytes)) and (not issubclass(MyBA, bytes)),
+    'bytes_not_subclass_bytearray': not issubclass(bytes, bytearray),
+    # ...but the positive checks must still hold
+    'bytes_is_bytes':
+        isinstance(b'x', bytes) and isinstance(MyBytes(b'x'), bytes)
+        and issubclass(bytes, bytes) and issubclass(MyBytes, bytes),
+    'ba_is_bytearray':
+        isinstance(bytearray(b'x'), bytearray) and isinstance(MyBA(b'x'), bytearray)
+        and issubclass(bytearray, bytearray) and issubclass(MyBA, bytearray),
 }

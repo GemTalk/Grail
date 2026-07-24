@@ -83,6 +83,21 @@ testByteArraySubclass
 		self assert: ((self resultAt: key) = true) description: key]
 %
 
+category: 'Grail-Tests - type distinction'
+method: BytesSubclassTestCase
+testByteArrayIsNotBytes
+	"CPython: bytes and bytearray are DISTINCT types -- neither is a subclass
+	of the other -- even though Grail stores bytearray as a ByteArray(=bytes)
+	subclass for storage/method reuse.  isinstance/issubclass must reflect the
+	distinction (both directions, plus subclasses), while the positive checks
+	still hold."
+
+	#('ba_not_isinstance_bytes' 'bytes_not_isinstance_bytearray'
+	  'ba_not_subclass_bytes' 'bytes_not_subclass_bytearray'
+	  'bytes_is_bytes' 'ba_is_bytearray') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
 category: 'Grail-Tests - base types'
 method: BytesSubclassTestCase
 testBaseTypesUnaffected
