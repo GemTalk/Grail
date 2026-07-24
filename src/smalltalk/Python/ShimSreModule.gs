@@ -513,9 +513,11 @@ finditer: aString _: pos
 category: 'Grail-Methods'
 method: SrePattern
 finditer: aString _: pos _: endpos
-	"finditer(string, pos, endpos) -> iterator of SreMatch.  Scanner
-	semantics: after a zero-width match the next search runs from the
-	SAME position with must_advance set, so a longer match starting
+	"finditer(string, pos, endpos) -> iterator of SreMatch.  Returns a
+	real iterator (CPython's finditer is lazy and single-pass; `for m in
+	...` and next()/StopIteration both work), built by walking with
+	scanner semantics: after a zero-width match the next search runs from
+	the SAME position with must_advance set, so a longer match starting
 	there is still found (test_zerowidth)."
 	| matches cursor m mStart mEnd mustAdvance |
 	matches := OrderedCollection @env0:new.
@@ -523,14 +525,14 @@ finditer: aString _: pos _: endpos
 	mustAdvance := false.
 	[cursor @env0:<= endpos] @env0:whileTrue: [
 		m := self ___searchFrom___: cursor in: aString to: endpos mustAdvance: mustAdvance.
-		(m == None) ifTrue: [^ matches].
+		(m == None) ifTrue: [^ matches __iter__].
 		matches @env0:add: m.
 		mStart := m start.
 		mEnd := m end.
 		mustAdvance := mEnd @env0:= mStart.
 		cursor := mEnd
 	].
-	^ matches
+	^ matches __iter__
 %
 
 category: 'Grail-Methods'
@@ -591,6 +593,13 @@ ___init___: aPattern string: aString cursor: c endpos: e
 	endpos := e.
 	mustAdvance := false.
 	^ self
+%
+
+category: 'Grail-Scanner'
+method: SreScanner
+pattern
+	"The SrePattern this scanner is scanning with (CPython SRE_Scanner.pattern)."
+	^ pattern
 %
 
 category: 'Grail-Scanner'
@@ -1403,11 +1412,18 @@ callUnicodeTolower: character
 category: 'Grail-Private'
 classmethod: _sre
 callCompile: pattern flags: flags code: code groups: groups groupindex: groupindex indexgroup: indexgroup
-	"Call _sre.compile(...) → returns C pointer (SmallInteger)."
+	"Call _sre.compile(...) → returns C pointer (SmallInteger).
 
+	A nil/None pattern is legal in CPython (re.Scanner compiles a combined
+	SubPattern with pattern=None; the C side only stores it as .pattern),
+	but the shim's marshalling wants a string, so substitute '' -- the
+	compiled matcher is driven entirely by `code`, not by `pattern`."
+
+	| pat |
+	pat := (pattern == nil @env0:or: [pattern == None]) ifTrue: [''] ifFalse: [pattern].
 	^ CPythonShim current
 		callModule6ReturnCPtr: '_sre.compile'
-		with: pattern with: flags with: code
+		with: pat with: flags with: code
 		with: groups with: groupindex with: indexgroup
 %
 
