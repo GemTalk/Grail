@@ -288,6 +288,18 @@ def _iadd_str_raises():
 def _iadd_ok():
     b = bytearray(b'ab'); b += b'cd'; return list(b) == [97, 98, 99, 100]
 
+def _mod_x_float_raises():
+    try: b'%x' % 3.14; return False
+    except TypeError as e: return "%x format: an integer is required, not float" in str(e)
+def _mod_u_complex_raises():
+    try: b'%u' % 3j; return False
+    except TypeError as e: return "a real number is required, not complex" in str(e)
+def _mod_c_bad_raises():
+    try: b'%c' % 3.14; return False
+    except TypeError: return True
+def _imod_bytearray():
+    b = bytearray(b'hi %b'); b %= b'x'; return bytes(b) == b'hi x'
+
 
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
@@ -531,4 +543,25 @@ RESULTS = {
     'concat_bytes_str_raises': _concat_bytes_str_raises(),
     'iadd_ok': _iadd_ok(),
     'iadd_str_raises': _iadd_str_raises(),
+
+    # --- bytes % args printf engine (PEP 461): %b/%s/%c/%d/%x, %%, mapping
+    # (bytes key, balanced parens), width/precision, self-typed result, %=,
+    # and the numeric type-error messages. ---
+    'mod_b': (b'hello, %b!' % b'world') == b'hello, world!',
+    'mod_s_d': (b'%s / 100 = %d%%' % (b'x', 79)) == b'x / 100 = 79%',
+    'mod_c': (b'%c' % b'a') == b'a',
+    'mod_c_int': (b'%c' % 65) == b'A',
+    'mod_x': (b'%x' % 255) == b'ff',
+    'mod_map': (b'%(foo)b' % {b'foo': b'abc'}) == b'abc',
+    'mod_map_nested': (b'%(f(o)o)b' % {b'f(o)o': b'ok'}) == b'ok',
+    'mod_ba_map': (bytearray(b'%(foo)b') % {b'foo': b'abc'}) == b'abc',
+    'mod_width': (b'%*b' % (5, b'abc')) == b'  abc',
+    'mod_width_neg': (b'%*b' % (-5, b'abc')) == b'abc  ',
+    'mod_prec': (b'%*.*b' % (5, 2, b'abc')) == b'   ab',
+    'mod_type_bytes': type(b'%d' % 5) is bytes,
+    'mod_type_ba': type(bytearray(b'%d') % 5) is bytearray,
+    'mod_x_float_raises': _mod_x_float_raises(),
+    'mod_u_complex_raises': _mod_u_complex_raises(),
+    'mod_c_bad_raises': _mod_c_bad_raises(),
+    'imod_bytearray': _imod_bytearray(),
 }

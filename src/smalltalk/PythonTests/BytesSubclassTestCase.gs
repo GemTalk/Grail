@@ -297,3 +297,17 @@ testConcatTypes
 	  'concat_bytes_str_raises' 'iadd_ok' 'iadd_str_raises') do: [:key |
 		self assert: ((self resultAt: key) = true) description: key]
 %
+
+category: 'Grail-Tests - percent formatting'
+method: BytesSubclassTestCase
+testPercentFormat
+	"``bytes % args'' printf engine (PEP 461): %b/%s/%c/%d/%x, %% literal,
+	mapping with a (hashable bytes) key incl. balanced parens, width/precision
+	with '*', self-typed result, %=, and CPython's numeric type-error messages."
+
+	#('mod_b' 'mod_s_d' 'mod_c' 'mod_c_int' 'mod_x' 'mod_map' 'mod_map_nested'
+	  'mod_ba_map' 'mod_width' 'mod_width_neg' 'mod_prec' 'mod_type_bytes'
+	  'mod_type_ba' 'mod_x_float_raises' 'mod_u_complex_raises' 'mod_c_bad_raises'
+	  'imod_bytearray') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
