@@ -155,6 +155,19 @@ testCodecEncodeDecode
 		self assert: ((self resultAt: key) = true) description: key]
 %
 
+category: 'Grail-Tests - None search bounds'
+method: BytesSubclassTestCase
+testSearchAcceptsNoneBounds
+	"find/rfind/index/rindex/count and the bounded startswith/endswith accept
+	None for start/end (== the default bound), matching CPython -- both the
+	all-None form and None mixed with a real bound; inherited by bytearray."
+
+	#('none_find' 'none_rfind' 'none_index' 'none_rindex' 'none_count'
+	  'none_find_realstart' 'none_find_realend' 'none_startswith'
+	  'none_endswith' 'none_startswith_realstart' 'none_bytearray_find') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
 category: 'Grail-Tests - base types'
 method: BytesSubclassTestCase
 testBaseTypesUnaffected
