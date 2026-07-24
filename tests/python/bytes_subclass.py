@@ -105,6 +105,35 @@ def _hex_none_sep_raises():
         return True
 
 
+def _del_slice_step1():
+    b = bytearray(range(10)); del b[0:5]; return list(b) == [5, 6, 7, 8, 9]
+
+def _del_slice_neg():
+    b = bytearray(range(10)); del b[0:-5]; return list(b) == [5, 6, 7, 8, 9]
+
+def _del_slice_all():
+    b = bytearray(b'hello'); del b[:]; return list(b) == []
+
+def _del_slice_step2():
+    b = bytearray(range(10)); del b[::2]; return list(b) == [1, 3, 5, 7, 9]
+
+def _del_slice_neg_step():
+    b = bytearray(range(10)); del b[::-2]; return list(b) == [0, 2, 4, 6, 8]
+
+def _del_slice_big():
+    b = bytearray(range(100)); del b[:10]
+    return list(b) == list(range(10, 100))
+
+def _del_slice_backward():
+    # stop < start selects nothing -> deletes nothing (no overlap/duplication)
+    b = bytearray(range(10)); del b[5:2]; return list(b) == list(range(10))
+
+def _set_slice_backward():
+    # b[3:0] = xs inserts xs at index 3 (empty backward slice)
+    b = bytearray(range(10)); b[3:0] = [42, 42, 42]
+    return list(b) == [0, 1, 2, 42, 42, 42, 3, 4, 5, 6, 7, 8, 9]
+
+
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
     'bytes_type_is_subclass': type(MyBytes(b'abc')) is MyBytes,
@@ -255,4 +284,15 @@ RESULTS = {
     'hex_multichar_sep_raises': _hex_multichar_sep_raises(),
     'hex_nonascii_sep_raises': _hex_nonascii_sep_raises(),
     'hex_none_sep_raises': _hex_none_sep_raises(),
+
+    # --- del bytearray[i:j[:k]]: contiguous run (step 1) and extended slice,
+    # resizing in place. ---
+    'del_slice_step1': _del_slice_step1(),
+    'del_slice_neg': _del_slice_neg(),
+    'del_slice_all': _del_slice_all(),
+    'del_slice_step2': _del_slice_step2(),
+    'del_slice_neg_step': _del_slice_neg_step(),
+    'del_slice_big': _del_slice_big(),
+    'del_slice_backward': _del_slice_backward(),
+    'set_slice_backward': _set_slice_backward(),
 }

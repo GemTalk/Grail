@@ -224,10 +224,16 @@ __repr__
 category: 'Grail-Sequence Protocol'
 method: bytearray
 __delitem__: index
-	"Delete byte at index"
+	"Delete the byte at an index, or the bytes selected by a slice."
 
 	| idx size |
 	size := self @env0:size.
+
+	"Slice deletion: del bytearray[i:j[:k]]."
+	(index isKindOf: slice) ifTrue: [
+		^ self ___delSliceItem: index size: size
+	].
+
 	idx := index.
 
 	"Handle negative indices"
@@ -358,6 +364,10 @@ ___setSliceItem: aSlice value: value size: size
 	vals := self ___bytesFrom: value.
 
 	(st @env0:= 1) ifTrue: [
+		"A backward slice (stop < start) selects nothing: clamp the tail's
+		start so the kept suffix does not overlap the kept prefix (CPython
+		uses max(start, stop) as the effective stop for a step-1 slice)."
+		hi := hi @env0:max: lo.
 		newVals := OrderedCollection @env0:new.
 		1 @env0:to: lo do: [:j | newVals @env0:add: (self @env0:at: j)].
 		newVals @env0:addAll: vals.
@@ -381,6 +391,46 @@ ___setSliceItem: aSlice value: value size: size
 	].
 	1 @env0:to: indices @env0:size do: [:k |
 		self @env0:at: ((indices @env0:at: k) @env0:+ 1) put: (vals @env0:at: k)].
+	^ None
+%
+
+category: 'Grail-Sequence Protocol'
+method: bytearray
+___delSliceItem: aSlice size: size
+	"del bytearray[i:j[:k]].  Step 1 removes the contiguous [lo, hi) run; an
+	extended slice removes exactly the selected indices.  Either way the
+	receiver is resized IN PLACE (identity preserved) via ``size:''."
+
+	| idxTuple lo hi st toRemove newVals i |
+	idxTuple := aSlice indices: size.
+	lo := idxTuple @env0:at: 1.
+	hi := idxTuple @env0:at: 2.
+	st := idxTuple @env0:at: 3.
+
+	(st @env0:= 1) ifTrue: [
+		"Backward slice (stop < start) deletes nothing: clamp so the kept
+		suffix does not overlap the kept prefix."
+		hi := hi @env0:max: lo.
+		newVals := OrderedCollection @env0:new.
+		1 @env0:to: lo do: [:j | newVals @env0:add: (self @env0:at: j)].
+		(hi @env0:+ 1) @env0:to: size do: [:j | newVals @env0:add: (self @env0:at: j)].
+		self @env0:size: newVals @env0:size.
+		1 @env0:to: newVals @env0:size do: [:j | self @env0:at: j put: (newVals @env0:at: j)].
+		^ None
+	].
+
+	"Extended slice: mark the selected 0-based indices, keep the rest."
+	toRemove := Set @env0:new.
+	i := lo.
+	st @env0:> 0
+		ifTrue: [[i @env0:< hi] @env0:whileTrue: [toRemove @env0:add: i. i := i @env0:+ st]]
+		ifFalse: [[i @env0:> hi] @env0:whileTrue: [toRemove @env0:add: i. i := i @env0:+ st]].
+	newVals := OrderedCollection @env0:new.
+	1 @env0:to: size do: [:j |
+		(toRemove @env0:includes: (j @env0:- 1)) ifFalse: [
+			newVals @env0:add: (self @env0:at: j)]].
+	self @env0:size: newVals @env0:size.
+	1 @env0:to: newVals @env0:size do: [:j | self @env0:at: j put: (newVals @env0:at: j)].
 	^ None
 %
 
