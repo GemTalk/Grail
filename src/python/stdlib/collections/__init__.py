@@ -8,6 +8,8 @@
 # (move_to_end, popitem(last=False)).  Counter is a dict-with-counts
 # subclass.  ChainMap is a wrapper around a list of dicts.
 
+from .abc import Mapping, MutableMapping
+
 
 class defaultdict(dict):
     """Minimal defaultdict: dict that auto-creates missing keys
@@ -205,7 +207,10 @@ class deque:
         return "deque(" + repr(self._items) + ")"
 
 
-def namedtuple(typename, field_names):
+import keyword as _keyword
+
+
+def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
     """Lightweight namedtuple factory.  Returns a sequence-like class
     that supports indexed access, iteration, len(), ``_fields``,
     ``_asdict()``, and ``_replace(**kwargs)``.
@@ -214,7 +219,17 @@ def namedtuple(typename, field_names):
     automatically, but Grail's class-call protocol doesn't pipe
     constructor arguments through to the underlying tuple storage when
     the class overrides `__new__`.  Storing values in an instVar and
-    fronting them with the sequence protocol is the workaround.
+    fronting them with the sequence protocol is the workaround -- so
+    ``isinstance(nt, tuple)`` does NOT hold here (a documented gap;
+    see test_collections.TestNamedTuple.test_tupleness).
+
+    ``rename``/``defaults``/``module`` are keyword-only in real CPython
+    (a bare ``*`` in the signature) -- Grail's def-codegen doesn't support
+    the keyword-only marker (confirmed: ``def f(a, *, b=1)`` mis-binds
+    ``b``), so they're ordinary keyword-or-positional parameters here;
+    ``namedtuple('NT', fields, True)`` (rename passed positionally) does
+    NOT raise TypeError as it does upstream
+    (test_collections.TestNamedTuple.test_keyword_only_arguments).
 
     field_names may be a string ('x y' or 'x,y') or a sequence."""
 
@@ -224,19 +239,111 @@ def namedtuple(typename, field_names):
         else:
             fields = field_names.split()
     else:
-        fields = list(field_names)
+        fields = [str(f) for f in field_names]
+
+    typename = str(typename)
+
+    if rename:
+        seen = set()
+        for index in range(len(fields)):
+            name = fields[index]
+            if (not name.isidentifier()
+                    or _keyword.iskeyword(name)
+                    or name.startswith('_')
+                    or name in seen):
+                fields[index] = '_' + str(index)
+            seen.add(name)
+
+    for name in [typename] + fields:
+        if not isinstance(name, str):
+            raise TypeError('Type names and field names must be strings')
+        if not name.isidentifier():
+            raise ValueError(
+                'Type names and field names must be valid identifiers: '
+                + repr(name))
+        if _keyword.iskeyword(name):
+            raise ValueError(
+                'Type names and field names cannot be a keyword: '
+                + repr(name))
+
+    seen = set()
+    for name in fields:
+        if name.startswith('_') and not rename:
+            raise ValueError(
+                'Field names cannot start with an underscore: '
+                + repr(name))
+        if name in seen:
+            raise ValueError('Encountered duplicate field name: ' + repr(name))
+        seen.add(name)
+
+    fields = tuple(fields)
+
+    if defaults is None:
+        default_values = ()
+    else:
+        default_values = tuple(defaults)
+    if len(default_values) > len(fields):
+        raise TypeError('Got more default values than field names')
+    field_defaults = {}
+    for i in range(len(default_values)):
+        field_defaults[fields[len(fields) - len(default_values) + i]] = default_values[i]
 
     class _NT:
-        _fields = tuple(fields)
+        _fields = fields
         _typename = typename
+        _field_defaults = field_defaults
+        __match_args__ = fields
 
-        def __init__(self, *values):
-            if len(values) != len(self._fields):
+        def __init__(self, *args, **kwargs):
+            nfields = len(self._fields)
+            typename = self._typename
+            if len(args) > nfields:
                 raise TypeError(
-                    self._typename + ' takes ' + str(len(self._fields))
-                    + ' arguments (' + str(len(values)) + ' given)'
-                )
-            self._values = list(values)
+                    typename + '() takes ' + str(nfields)
+                    + ' positional arguments but ' + str(len(args))
+                    + ' were given')
+            values = list(args)
+            for i in range(len(args), nfields):
+                name = self._fields[i]
+                if name in kwargs:
+                    values.append(kwargs.pop(name))
+                elif name in self._field_defaults:
+                    values.append(self._field_defaults[name])
+                else:
+                    raise TypeError(
+                        typename + '() missing required argument: '
+                        + repr(name))
+            for name in kwargs:
+                if name not in self._fields:
+                    raise TypeError(
+                        typename
+                        + '() got an unexpected keyword argument: '
+                        + repr(name))
+                idx = self._fields.index(name)
+                if idx < len(args):
+                    raise TypeError(
+                        typename
+                        + '() got multiple values for argument: '
+                        + repr(name))
+            object.__setattr__(self, '_values', values)
+
+        def __getattr__(self, name):
+            fields = self._fields
+            if name in fields:
+                return self._values[fields.index(name)]
+            raise AttributeError(
+                type(self).__name__ + ' object has no attribute '
+                + repr(name))
+
+        def __setattr__(self, name, value):
+            if name in self._fields:
+                raise AttributeError("can't set attribute " + repr(name))
+            object.__setattr__(self, name, value)
+
+        def __delattr__(self, name):
+            if name in self._fields:
+                raise AttributeError("can't delete attribute " + repr(name))
+            object.__delattr__(self, name)
 
         def __getitem__(self, i):
             return self._values[i]
@@ -246,6 +353,9 @@ def namedtuple(typename, field_names):
 
         def __iter__(self):
             return iter(self._values)
+
+        def __hash__(self):
+            return hash(tuple(self._values))
 
         def __eq__(self, other):
             if hasattr(other, '_values'):
@@ -257,6 +367,9 @@ def namedtuple(typename, field_names):
             for i in range(len(self._fields)):
                 result[self._fields[i]] = self._values[i]
             return result
+
+        def __getnewargs__(self):
+            return tuple(self._values)
 
         @classmethod
         def _make(cls, iterable):
@@ -274,6 +387,9 @@ def namedtuple(typename, field_names):
             return cls(*values)
 
         def _replace(self, **kwargs):
+            extra = [k for k in kwargs if k not in self._fields]
+            if extra:
+                raise TypeError('Got unexpected field names: ' + repr(extra))
             values = list(self._values)
             for k in kwargs:
                 values[self._fields.index(k)] = kwargs[k]
@@ -286,11 +402,20 @@ def namedtuple(typename, field_names):
             return cls(*values)
 
         def __repr__(self):
+            # ``self._typename`` is fixed at factory-call time (the
+            # underlying Smalltalk class is always literally ``_NT'',
+            # so it can't carry a per-call name) -- a REAL subclass
+            # (``class B(A): pass'') has its own genuine class name, so
+            # prefer that when this instance isn't a direct ``_NT''.
+            cls = type(self)
+            name = cls.__name__ if cls is not _NT else self._typename
             parts = []
             for i in range(len(self._fields)):
                 parts.append(self._fields[i] + '=' + repr(self._values[i]))
-            return self._typename + '(' + ', '.join(parts) + ')'
+            return name + '(' + ', '.join(parts) + ')'
 
+    if module is not None:
+        _NT.__module__ = module
     return _NT
 
 
@@ -300,6 +425,9 @@ class Counter(dict):
 
     def __init__(self, *args, **kwargs):
         super().__init__()
+        if len(args) > 1:
+            raise TypeError(
+                'expected at most 1 arguments, got ' + str(len(args)))
         if args:
             iterable = args[0]
             if iterable is not None:
@@ -315,24 +443,77 @@ class Counter(dict):
             return super().__getitem__(key)
         return 0
 
-    def update(self, iterable):
-        if isinstance(iterable, dict):
-            for k in iterable:
-                self[k] = self[k] + iterable[k]
-        else:
-            for item in iterable:
-                self[item] = self[item] + 1
+    def __delitem__(self, key):
+        """Like dict.__delitem__ but does not raise KeyError for a
+        missing key (test_basics: ``del c['c']`` twice in a row)."""
+        if key in self:
+            super().__delitem__(key)
 
-    def subtract(self, iterable):
+    def update(self, *args, **kwargs):
+        # Real CPython's ``iterable`` parameter is positional-only (``/``),
+        # letting ``update(iterable=42)`` land the literal key 'iterable'
+        # in **kwds instead of binding the parameter -- Grail's codegen
+        # doesn't support ``/``, so this takes the count via *args instead.
+        if len(args) > 1:
+            raise TypeError(
+                'expected at most 1 arguments, got ' + str(len(args)))
+        if args:
+            iterable = args[0]
+            if iterable is not None:
+                if isinstance(iterable, dict):
+                    if self:
+                        for k in iterable:
+                            self[k] = self[k] + iterable[k]
+                    else:
+                        # Fast path when self is empty: a direct set (no
+                        # addition) so e.g. Counter(iterable=None) sets the
+                        # count to None rather than computing 0 + None.
+                        # NOT ``dict.update(self, iterable)`` -- Grail's
+                        # dict primitives assume the receiver's own kernel
+                        # representation, which a Python-level dict
+                        # subclass (Counter) doesn't share, and crash
+                        # (MessageNotUnderstood: #associationAt:).
+                        for k in iterable:
+                            self[k] = iterable[k]
+                else:
+                    for item in iterable:
+                        self[item] = self[item] + 1
+        if kwargs:
+            self.update(kwargs)
+
+    def subtract(self, *args, **kwargs):
         """Subtract counts from an iterable / mapping.  Both inputs and
         outputs may be zero or negative — unlike ``__sub__`` which
         drops non-positive counts."""
-        if isinstance(iterable, dict):
-            for k in iterable:
-                self[k] = self[k] - iterable[k]
-        else:
-            for item in iterable:
-                self[item] = self[item] - 1
+        if len(args) > 1:
+            raise TypeError(
+                'expected at most 1 arguments, got ' + str(len(args)))
+        if args:
+            iterable = args[0]
+            if iterable is not None:
+                if isinstance(iterable, dict):
+                    for k in iterable:
+                        self[k] = self[k] - iterable[k]
+                else:
+                    for item in iterable:
+                        self[item] = self[item] - 1
+        if kwargs:
+            self.subtract(kwargs)
+
+    def copy(self):
+        """dict.copy() always returns a plain dict, dropping subclass-ness
+        (test_copy_subclass expects type(d.copy()) == type(c))."""
+        return self.__class__(self)
+
+    __copy__ = copy
+
+    @classmethod
+    def fromkeys(cls, iterable, v=None):
+        # No equivalent method for counters -- semantics would be ambiguous
+        # (Counter.fromkeys('aaabbc', v=2)?).  Zero is already the default
+        # lookup value; use Counter(set(iterable)) for all-ones.
+        raise NotImplementedError(
+            'Counter.fromkeys() is undefined.  Use Counter(iterable) instead.')
 
     def most_common(self, n=None):
         # list.sort(key=...) varargs is missing in Grail; do a simple
@@ -390,6 +571,11 @@ class Counter(dict):
             v = self[k] - other[k]
             if v > 0:
                 result[k] = v
+        for k in other:
+            if k not in self:
+                v = other[k]
+                if v < 0:
+                    result[k] = 0 - v
         return result
 
     def __and__(self, other):
@@ -420,8 +606,109 @@ class Counter(dict):
                     result[k] = v
         return result
 
+    def __pos__(self):
+        """Adds an empty counter, stripping negative and zero counts."""
+        return self + Counter()
 
-class ChainMap:
+    def __neg__(self):
+        """Subtracts from an empty counter, stripping positive and zero
+        counts and flipping the sign on negative counts."""
+        return Counter() - self
+
+    def _keep_positive(self):
+        nonpositive = [k for k in self if not self[k] > 0]
+        for k in nonpositive:
+            del self[k]
+        return self
+
+    def __iadd__(self, other):
+        for k in other:
+            self[k] = self[k] + other[k]
+        return self._keep_positive()
+
+    def __isub__(self, other):
+        for k in other:
+            self[k] = self[k] - other[k]
+        return self._keep_positive()
+
+    def __ior__(self, other):
+        for k in other:
+            other_count = other[k]
+            if other_count > self[k]:
+                self[k] = other_count
+        return self._keep_positive()
+
+    def __iand__(self, other):
+        for k in list(self):
+            other_count = other[k]
+            if other_count < self[k]:
+                self[k] = other_count
+        return self._keep_positive()
+
+    # Multiset comparisons — every element's count in ``self`` compares to
+    # its count in ``other`` (missing keys read as 0 via __getitem__), per
+    # CPython's Counter.  NOT the same as dict equality: zero/absent counts
+    # compare equal, so Counter(a=1, b=0) == Counter(a=1).
+    def __eq__(self, other):
+        if not isinstance(other, Counter):
+            return NotImplemented
+        for k in self:
+            if self[k] != other[k]:
+                return False
+        for k in other:
+            if self[k] != other[k]:
+                return False
+        return True
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
+
+    def __le__(self, other):
+        if not isinstance(other, Counter):
+            return NotImplemented
+        for k in self:
+            if self[k] > other[k]:
+                return False
+        for k in other:
+            if self[k] > other[k]:
+                return False
+        return True
+
+    def __lt__(self, other):
+        if not isinstance(other, Counter):
+            return NotImplemented
+        return self.__le__(other) and self != other
+
+    def __ge__(self, other):
+        if not isinstance(other, Counter):
+            return NotImplemented
+        for k in self:
+            if self[k] < other[k]:
+                return False
+        for k in other:
+            if self[k] < other[k]:
+                return False
+        return True
+
+    def __gt__(self, other):
+        if not isinstance(other, Counter):
+            return NotImplemented
+        return self.__ge__(other) and self != other
+
+    def __repr__(self):
+        if not self:
+            return self.__class__.__name__ + '()'
+        try:
+            items = self.most_common()
+        except TypeError:
+            items = list(self.items())
+        return self.__class__.__name__ + '(' + repr(dict(items)) + ')'
+
+
+class ChainMap(MutableMapping):
     """View over a sequence of mappings; reads consult them in order,
     writes target the first mapping."""
 
@@ -435,7 +722,14 @@ class ChainMap:
         for m in self.maps:
             if key in m:
                 return m[key]
+        return self.__missing__(key)
+
+    def __missing__(self, key):
         raise KeyError(key)
+
+    def __repr__(self):
+        return (self.__class__.__name__ + '('
+                + ', '.join([repr(m) for m in self.maps]) + ')')
 
     def __setitem__(self, key, value):
         self.maps[0][key] = value
@@ -459,12 +753,16 @@ class ChainMap:
         return len(keys)
 
     def __iter__(self):
-        seen = set()
-        for m in self.maps:
-            for k in m:
-                if k not in seen:
-                    seen.add(k)
-                    yield k
+        # Combined order matches a series of dict updates from LAST map to
+        # FIRST (not first-map-first) -- build a plain dict by updating
+        # with each map in reverse, so an earlier map's keys/positions win
+        # (dict.update reordering rules), matching CPython's actual
+        # ChainMap.__iter__ (test_collections.TestChainMap.test_ordering /
+        # test_order_preservation).
+        d = {}
+        for m in reversed(self.maps):
+            d.update(dict.fromkeys(m))
+        return iter(d)
 
     def get(self, key, default=None):
         for m in self.maps:
@@ -481,15 +779,43 @@ class ChainMap:
     def items(self):
         return [(k, self[k]) for k in self]
 
-    def new_child(self, m=None):
+    def new_child(self, m=None, **kwargs):
         if m is None:
-            m = {}
-        child = ChainMap()
+            m = kwargs
+        elif kwargs:
+            m.update(kwargs)
+        child = self.__class__()
         # Replace the auto-created empty dict with our prepended view.
         child.maps = [m]
         for old in self.maps:
             child.maps.append(old)
         return child
+
+    def copy(self):
+        """New ChainMap or subclass with a new copy of maps[0] and
+        refs to maps[1:]."""
+        return self.__class__(self.maps[0].copy(), *self.maps[1:])
+
+    __copy__ = copy
+
+    def __or__(self, other):
+        if not isinstance(other, Mapping):
+            return NotImplemented
+        m = self.copy()
+        m.maps[0].update(other)
+        return m
+
+    def __ror__(self, other):
+        if not isinstance(other, Mapping):
+            return NotImplemented
+        m = dict(other)
+        for mapping in reversed(self.maps):
+            m.update(mapping)
+        return self.__class__(m)
+
+    def __ior__(self, other):
+        self.maps[0].update(other)
+        return self
 
     # CPython exposes ``parents'' as a property; Grail's property
     # codegen on a class-body method is incomplete, so expose it as a
@@ -613,6 +939,16 @@ class UserList:
         result.data = list(self.data)
         return result
 
+    def __copy__(self):
+        # Unlike ``.copy()'' above, ``copy.copy()'' must carry over ANY
+        # instance attribute the caller added (test_collections'
+        # TestUserObjects._copy_test sets ``obj.test`` and expects the
+        # copy to keep it), not just ``.data''.
+        inst = self.__class__()
+        inst.__dict__.update(self.__dict__)
+        inst.data = list(self.data)
+        return inst
+
     def count(self, item):
         return self.data.count(item)
 
@@ -711,6 +1047,20 @@ class UserDict:
         result = self.__class__()
         result.data = dict(self.data)
         return result
+
+    def __copy__(self):
+        # See UserList.__copy__: must carry over ad-hoc instance attrs too.
+        inst = self.__class__()
+        inst.__dict__.update(self.__dict__)
+        inst.data = dict(self.data)
+        return inst
+
+    @classmethod
+    def fromkeys(cls, iterable, value=None):
+        d = cls()
+        for key in iterable:
+            d[key] = value
+        return d
 
 
 class UserString:
