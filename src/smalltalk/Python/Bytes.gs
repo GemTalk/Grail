@@ -812,7 +812,9 @@ count: sub _: start _: end
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size.
-	s @env0:>= e ifTrue: [^ 0].
+	"``> e'' (not ``>= e'') so an empty window (s = e) still yields the
+	one empty-substring match that count: returns for an empty slice."
+	s @env0:> e ifTrue: [^ 0].
 	^ (self @env0:copyFrom: s @env0:+ 1 to: e) count: sub
 %
 
@@ -891,9 +893,9 @@ count: sub
 	subSize := sub @env0:size.
 	mySize := self @env0:size.
 
-	"Empty sub always returns 0"
+	"Empty sub matches between every position (CPython: len+1)."
 	(subSize == 0) ifTrue: [
-		^ 0
+		^ mySize @env0:+ 1
 	].
 
 	count := 0.
@@ -2769,7 +2771,9 @@ find: sub _: start _: end
 	(e @env0:== None) ifTrue: [e := size].
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
-	e := e @env0:min: size. s := s @env0:min: size.
+	e := e @env0:min: size.
+	"Do NOT clamp s to size: a start past the end must miss (empty sub
+	included) -- ``s > e'' then rejects it, since e <= size < s."
 	s @env0:> e ifTrue: [^ -1].
 	r := (self @env0:copyFrom: s @env0:+ 1 to: e) find: sub.
 	^ (r @env0:= -1) ifTrue: [-1] ifFalse: [r @env0:+ s]
@@ -2888,6 +2892,30 @@ replace: old _: new _: count
 	(new isKindOf: bytes) ifFalse: [TypeError ___signal___: 'second argument must be bytes'].
 	(old @env0:size @env0:= 0) ifTrue: [^ self @env0:copy].
 	^ new join: (self split: old _: count)
+%
+
+category: 'Grail-Search Methods'
+method: bytes
+_replace: positional kw: kwargs
+	"Varargs form of replace(old, new, count=-1) -- reached via the
+	BoundMethod fallback (getattr(obj,'replace')(...)) when a ``count=''
+	keyword is present (the fixed-arity replace:_: / replace:_:_: fast paths
+	take positionals only)."
+
+	| old new count |
+	positional @env0:size @env0:< 2 ifTrue: [
+		TypeError ___signal___: ('replace() takes at least 2 arguments ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	positional @env0:size @env0:> 3 ifTrue: [
+		TypeError ___signal___: ('replace() takes at most 3 arguments ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	old := positional @env0:at: 1.
+	new := positional @env0:at: 2.
+	count := (positional @env0:size @env0:>= 3)
+		@env0:ifTrue: [positional @env0:at: 3]
+		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'count'])
+			@env0:ifTrue: [kwargs @env0:at: 'count'] @env0:ifFalse: [-1]].
+	^ self replace: old _: new _: count
 %
 
 category: 'Grail-Splitting Methods'

@@ -317,6 +317,33 @@ def _gsplitlines_toomany():
     try: getattr(b'abc', 'splitlines')(42, 42); return False
     except TypeError: return True
 
+# count/find with an EMPTY needle: an empty substring matches between every
+# position, so count == len+1 within the window and find returns the start
+# (or -1 once start moves past the end).  bytearray inherits both from bytes.
+def _count_empty():
+    return (b'aaa'.count(b'') == 4 and b'aaa'.count(b'', 1) == 3
+            and b'aaa'.count(b'', 3) == 1 and b'aaa'.count(b'', 10) == 0
+            and b''.count(b'') == 1)
+def _count_empty_ba():
+    return (bytearray(b'aaa').count(b'') == 4
+            and bytearray(b'aaa').count(b'', 1) == 3)
+def _find_empty_past_end():
+    # start == len still matches at len; start > len misses.
+    return (b'abc'.find(b'', 3) == 3 and b'abc'.find(b'', 4) == -1
+            and b'abc'.find(b'', 0) == 0)
+def _find_empty_past_end_ba():
+    return (bytearray(b'abc').find(b'', 3) == 3
+            and bytearray(b'abc').find(b'', 4) == -1)
+
+# replace() honors the ``count'' keyword (reached via the varargs fallback,
+# since the fixed-arity replace forms take positionals only).
+def _replace_count_kw():
+    return (b'aa'.replace(b'a', b'b', count=0) == b'aa'
+            and b'aa'.replace(b'a', b'b', count=1) == b'ba'
+            and b'aaa'.replace(b'a', b'b', count=2) == b'bba')
+def _replace_count_kw_ba():
+    return bytearray(b'aa').replace(b'a', b'b', count=1) == bytearray(b'ba')
+
 
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
@@ -590,4 +617,12 @@ RESULTS = {
     'gsplitlines': _gsplitlines(),
     'gsplitlines_keepends': _gsplitlines_keepends(),
     'gsplitlines_toomany': _gsplitlines_toomany(),
+
+    # --- empty-needle count/find + replace(count=) keyword ---
+    'count_empty': _count_empty(),
+    'count_empty_ba': _count_empty_ba(),
+    'find_empty_past_end': _find_empty_past_end(),
+    'find_empty_past_end_ba': _find_empty_past_end_ba(),
+    'replace_count_kw': _replace_count_kw(),
+    'replace_count_kw_ba': _replace_count_kw_ba(),
 }

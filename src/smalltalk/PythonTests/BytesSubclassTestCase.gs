@@ -323,3 +323,16 @@ testBoundMethodSplitFamily
 	  'gsplitlines_toomany') do: [:key |
 		self assert: ((self resultAt: key) = true) description: key]
 %
+
+category: 'Grail-Tests - empty-needle search + replace keyword'
+method: BytesSubclassTestCase
+testEmptyNeedleAndReplaceCount
+	"count/find with an empty needle (matches between every position: count is
+	len+1 within the window, find returns the start until it passes the end),
+	and replace() honoring the ``count'' keyword via the varargs fallback.
+	bytearray inherits all three from bytes."
+
+	#('count_empty' 'count_empty_ba' 'find_empty_past_end' 'find_empty_past_end_ba'
+	  'replace_count_kw' 'replace_count_kw_ba') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%

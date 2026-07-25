@@ -592,7 +592,9 @@ find: sub _: start _: end
 	(hi @env0:== None) ifTrue: [hi := size].
 	lo @env0:< 0 ifTrue: [lo := (size @env0:+ lo) @env0:max: 0].
 	hi @env0:< 0 ifTrue: [hi := (size @env0:+ hi) @env0:max: 0].
-	lo := lo @env0:min: size. hi := hi @env0:min: size.
+	"Clamp only hi to size: a start past the end must miss (an empty sub
+	included), so leave lo unclamped and let the ``lo > hi'' guards reject it."
+	hi := hi @env0:min: size.
 	"Single byte value: linear scan."
 	(sub isKindOf: SmallInteger) ifTrue: [
 		lo @env0:+ 1 @env0:to: hi do: [:i |
@@ -605,7 +607,9 @@ find: sub _: start _: end
 	"Sub-sequence: O(n*m) scan.  ``sub`` is itself a bytes /
 	bytearray / sequence of ints."
 	subSize := sub @env0:size.
-	subSize @env0:= 0 ifTrue: [^ lo].
+	"Empty sub matches at lo, but only if lo is within the window (a start
+	past the end -- lo > hi -- misses)."
+	subSize @env0:= 0 ifTrue: [^ lo @env0:<= hi ifTrue: [lo] ifFalse: [-1]].
 	subSize @env0:> (hi @env0:- lo) ifTrue: [^ -1].
 	lo @env0:+ 1 @env0:to: hi @env0:- subSize @env0:+ 1 do: [:i |
 		| match |
