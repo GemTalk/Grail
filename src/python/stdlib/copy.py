@@ -36,6 +36,23 @@ def copy(obj):
     return obj
 
 
+def replace(obj, /, **changes):
+    """PEP 8046 ``copy.replace`` (Python 3.13+): return a copy of *obj*
+    with the named attributes replaced.  CPython dispatches to
+    ``type(obj).__replace__(obj, **changes)``; Grail honors that dunder
+    when present, then falls back to a ``.replace(**changes)`` method,
+    which the native date/time/datetime immutables already provide."""
+    cls = obj.__class__
+    func = getattr(cls, '__replace__', None)
+    if func is not None:
+        return func(obj, **changes)
+    meth = getattr(obj, 'replace', None)
+    if meth is None:
+        raise TypeError("replace() does not support %s objects"
+                        % cls.__name__)
+    return meth(**changes)
+
+
 def deepcopy(obj, memo=None):
     """Recursive copy.  Honors ``__deepcopy__'' dunder for opt-in
     custom semantics; otherwise walks lists / tuples / dicts / sets

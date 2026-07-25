@@ -317,6 +317,189 @@ def _gsplitlines_toomany():
     try: getattr(b'abc', 'splitlines')(42, 42); return False
     except TypeError: return True
 
+# count/find with an EMPTY needle: an empty substring matches between every
+# position, so count == len+1 within the window and find returns the start
+# (or -1 once start moves past the end).  bytearray inherits both from bytes.
+def _count_empty():
+    return (b'aaa'.count(b'') == 4 and b'aaa'.count(b'', 1) == 3
+            and b'aaa'.count(b'', 3) == 1 and b'aaa'.count(b'', 10) == 0
+            and b''.count(b'') == 1)
+def _count_empty_ba():
+    return (bytearray(b'aaa').count(b'') == 4
+            and bytearray(b'aaa').count(b'', 1) == 3)
+def _find_empty_past_end():
+    # start == len still matches at len; start > len misses.
+    return (b'abc'.find(b'', 3) == 3 and b'abc'.find(b'', 4) == -1
+            and b'abc'.find(b'', 0) == 0)
+def _find_empty_past_end_ba():
+    return (bytearray(b'abc').find(b'', 3) == 3
+            and bytearray(b'abc').find(b'', 4) == -1)
+
+# replace() honors the ``count'' keyword (reached via the varargs fallback,
+# since the fixed-arity replace forms take positionals only).
+def _replace_count_kw():
+    return (b'aa'.replace(b'a', b'b', count=0) == b'aa'
+            and b'aa'.replace(b'a', b'b', count=1) == b'ba'
+            and b'aaa'.replace(b'a', b'b', count=2) == b'bba')
+def _replace_count_kw_ba():
+    return bytearray(b'aa').replace(b'a', b'b', count=1) == bytearray(b'ba')
+
+# strip/lstrip/rstrip (no arg) trim the full ASCII whitespace set, including
+# \v (0x0b) and \f (0x0c) which were previously omitted.
+def _strip_ws_full():
+    b = b' \t\n\r\f\vabc \t\n\r\f\v'
+    return (b.strip() == b'abc'
+            and b.lstrip() == b'abc \t\n\r\f\v'
+            and b.rstrip() == b' \t\n\r\f\vabc')
+def _strip_ws_full_ba():
+    return bytearray(b'\vabc\f').strip() == bytearray(b'abc')
+
+# expandtabs: \r resets the column like \n; tabsize accepted positionally or as
+# a keyword; more than one positional arg is a TypeError (via the getattr path).
+def _expandtabs_cr():
+    return (b'abc\rab\tdef\ng\thi'.expandtabs() == b'abc\rab      def\ng       hi'
+            and b'abc\rab\tdef\ng\thi'.expandtabs(4) == b'abc\rab  def\ng   hi'
+            and b'abc\r\nab\tdef'.expandtabs(4) == b'abc\r\nab  def')
+def _expandtabs_kw():
+    return getattr(b'abc\rab\tdef', 'expandtabs')(tabsize=4) == b'abc\rab  def'
+def _expandtabs_toomany():
+    try: getattr(b'abc', 'expandtabs')(1, 2); return False
+    except TypeError: return True
+
+# zfill keeps a leading +/- sign in front of the zero fill.
+def _zfill_sign():
+    return (b'+123'.zfill(5) == b'+0123' and b'-123'.zfill(5) == b'-0123'
+            and b'123'.zfill(4) == b'0123' and b''.zfill(3) == b'000')
+def _zfill_sign_ba():
+    return bytearray(b'+1').zfill(4) == b'+001'
+
+# An int needle out of byte range (0..255) is a ValueError; membership of a
+# non-int, non-bytes-like object (None, float, str) is a TypeError.
+def _contains_int_range():
+    import sys
+    b = b'abc'
+    for x in (300, -1, sys.maxsize + 1):
+        try:
+            x in b
+            return False
+        except ValueError:
+            pass
+    return True
+def _contains_typeerror():
+    b = b'abc'
+    for x in (None, 97.0, 'a'):
+        try:
+            x in b
+            return False
+        except TypeError:
+            pass
+    return True
+def _search_int_range():
+    import sys
+    b = b'hello'
+    for m in (b.find, b.count, b.index, b.rfind, b.rindex):
+        for x in (-1, 256, 9999, sys.maxsize + 1):
+            try:
+                m(x)
+                return False
+            except ValueError:
+                pass
+    return True
+def _search_int_range_ba():
+    b = bytearray(b'hello')
+    for m in (b.find, b.count, b.index, b.rfind, b.rindex):
+        for x in (-1, 256):
+            try:
+                m(x)
+                return False
+            except ValueError:
+                pass
+    return True
+
+# center/ljust/rjust require a bytes-like fill of length 1; an int (or str) is
+# a TypeError.
+def _xjust_int_fill():
+    for m in ('center', 'ljust', 'rjust'):
+        try:
+            getattr(b'abc', m)(7, 32)
+            return False
+        except TypeError:
+            pass
+    return True
+def _xjust_bytes_fill():
+    return (b'abc'.center(7, b'*') == b'**abc**'
+            and b'abc'.ljust(5, b'-') == b'abc--'
+            and b'abc'.rjust(5, b'-') == b'--abc')
+def _xjust_int_fill_ba():
+    try:
+        bytearray(b'abc').center(7, 32)
+        return False
+    except TypeError:
+        return True
+
+# partition/rpartition reject a non-bytes-like separator (int/str) with a
+# TypeError, and an empty separator with a ValueError.
+def _partition_int_sep():
+    for m in ('partition', 'rpartition'):
+        try:
+            getattr(b'a b', m)(32)
+            return False
+        except TypeError:
+            pass
+    return True
+def _partition_str_sep():
+    for m in ('partition', 'rpartition'):
+        try:
+            getattr(b'a b', m)(' ')
+            return False
+        except TypeError:
+            pass
+    return True
+def _partition_empty_sep():
+    try:
+        b'abc'.partition(b'')
+        return False
+    except ValueError:
+        return True
+def _partition_ok():
+    return (b'a.b.c'.partition(b'.') == (b'a', b'.', b'b.c')
+            and b'a.b.c'.rpartition(b'.') == (b'a.b', b'.', b'c'))
+def _partition_int_sep_ba():
+    try:
+        bytearray(b'a b').partition(32)
+        return False
+    except TypeError:
+        return True
+
+# replace() with an empty ``old'' inserts ``new'' at every gap (before each
+# byte and after the last), honoring a replacement count (CPython interleave).
+def _replace_empty_old():
+    return (b''.replace(b'', b'A') == b'A'
+            and b''.replace(b'', b'', 100) == b''
+            and b'A'.replace(b'', b'*') == b'*A*'
+            and b'A'.replace(b'', b'*1') == b'*1A*1'
+            and b'AA'.replace(b'', b'*-') == b'*-A*-A*-'
+            and b'AA'.replace(b'', b'*-', -1) == b'*-A*-A*-'
+            and b'AA'.replace(b'', b'*-', 4) == b'*-A*-A*-'
+            and b'AA'.replace(b'', b'*-', 3) == b'*-A*-A*-'
+            and b'AA'.replace(b'', b'*-', 2) == b'*-A*-A'
+            and b'AA'.replace(b'', b'*-', 1) == b'*-AA'
+            and b'AA'.replace(b'', b'*-', 0) == b'AA')
+def _replace_empty_old_ba():
+    return bytearray(b'AA').replace(b'', b'*-') == bytearray(b'*-A*-A*-')
+
+# A replace whose result would be gigabytes raises OverflowError rather than
+# exhausting VM memory (test_replace_overflow: empty and non-empty old).
+def _replace_overflow():
+    a = b'A' * (2**16)
+    for args in ((b'', a), (b'A', a), (b'AA', a + a)):
+        try:
+            a.replace(*args)
+            return False
+        except OverflowError:
+            pass
+    return True
+
 
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
@@ -590,4 +773,44 @@ RESULTS = {
     'gsplitlines': _gsplitlines(),
     'gsplitlines_keepends': _gsplitlines_keepends(),
     'gsplitlines_toomany': _gsplitlines_toomany(),
+
+    # --- empty-needle count/find + replace(count=) keyword ---
+    'count_empty': _count_empty(),
+    'count_empty_ba': _count_empty_ba(),
+    'find_empty_past_end': _find_empty_past_end(),
+    'find_empty_past_end_ba': _find_empty_past_end_ba(),
+    'replace_count_kw': _replace_count_kw(),
+    'replace_count_kw_ba': _replace_count_kw_ba(),
+
+    # --- string-like methods: strip whitespace set, expandtabs \r + tabsize
+    # keyword, zfill sign ---
+    'strip_ws_full': _strip_ws_full(),
+    'strip_ws_full_ba': _strip_ws_full_ba(),
+    'expandtabs_cr': _expandtabs_cr(),
+    'expandtabs_kw': _expandtabs_kw(),
+    'expandtabs_toomany': _expandtabs_toomany(),
+    'zfill_sign': _zfill_sign(),
+    'zfill_sign_ba': _zfill_sign_ba(),
+
+    # --- int needle byte-range (ValueError) + membership type-check ---
+    'contains_int_range': _contains_int_range(),
+    'contains_typeerror': _contains_typeerror(),
+    'search_int_range': _search_int_range(),
+    'search_int_range_ba': _search_int_range_ba(),
+
+    # --- justify int/str fill TypeError; partition non-bytes/empty sep ---
+    'xjust_int_fill': _xjust_int_fill(),
+    'xjust_bytes_fill': _xjust_bytes_fill(),
+    'xjust_int_fill_ba': _xjust_int_fill_ba(),
+    'partition_int_sep': _partition_int_sep(),
+    'partition_str_sep': _partition_str_sep(),
+    'partition_empty_sep': _partition_empty_sep(),
+    'partition_ok': _partition_ok(),
+    'partition_int_sep_ba': _partition_int_sep_ba(),
+
+    # --- replace() with an empty old inserts new at every gap; gigabyte
+    # results raise OverflowError instead of OOM-crashing ---
+    'replace_empty_old': _replace_empty_old(),
+    'replace_empty_old_ba': _replace_empty_old_ba(),
+    'replace_overflow': _replace_overflow(),
 }

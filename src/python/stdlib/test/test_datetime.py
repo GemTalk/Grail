@@ -14,6 +14,8 @@ from test.datetimetester import (
     TestTZInfo,
     TestTimeZone,
     TestTimeDelta,
+    TestDateOnly,
+    TestDate,
 )
 
 
