@@ -344,6 +344,35 @@ def _replace_count_kw():
 def _replace_count_kw_ba():
     return bytearray(b'aa').replace(b'a', b'b', count=1) == bytearray(b'ba')
 
+# strip/lstrip/rstrip (no arg) trim the full ASCII whitespace set, including
+# \v (0x0b) and \f (0x0c) which were previously omitted.
+def _strip_ws_full():
+    b = b' \t\n\r\f\vabc \t\n\r\f\v'
+    return (b.strip() == b'abc'
+            and b.lstrip() == b'abc \t\n\r\f\v'
+            and b.rstrip() == b' \t\n\r\f\vabc')
+def _strip_ws_full_ba():
+    return bytearray(b'\vabc\f').strip() == bytearray(b'abc')
+
+# expandtabs: \r resets the column like \n; tabsize accepted positionally or as
+# a keyword; more than one positional arg is a TypeError (via the getattr path).
+def _expandtabs_cr():
+    return (b'abc\rab\tdef\ng\thi'.expandtabs() == b'abc\rab      def\ng       hi'
+            and b'abc\rab\tdef\ng\thi'.expandtabs(4) == b'abc\rab  def\ng   hi'
+            and b'abc\r\nab\tdef'.expandtabs(4) == b'abc\r\nab  def')
+def _expandtabs_kw():
+    return getattr(b'abc\rab\tdef', 'expandtabs')(tabsize=4) == b'abc\rab  def'
+def _expandtabs_toomany():
+    try: getattr(b'abc', 'expandtabs')(1, 2); return False
+    except TypeError: return True
+
+# zfill keeps a leading +/- sign in front of the zero fill.
+def _zfill_sign():
+    return (b'+123'.zfill(5) == b'+0123' and b'-123'.zfill(5) == b'-0123'
+            and b'123'.zfill(4) == b'0123' and b''.zfill(3) == b'000')
+def _zfill_sign_ba():
+    return bytearray(b'+1').zfill(4) == b'+001'
+
 
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
@@ -625,4 +654,14 @@ RESULTS = {
     'find_empty_past_end_ba': _find_empty_past_end_ba(),
     'replace_count_kw': _replace_count_kw(),
     'replace_count_kw_ba': _replace_count_kw_ba(),
+
+    # --- string-like methods: strip whitespace set, expandtabs \r + tabsize
+    # keyword, zfill sign ---
+    'strip_ws_full': _strip_ws_full(),
+    'strip_ws_full_ba': _strip_ws_full_ba(),
+    'expandtabs_cr': _expandtabs_cr(),
+    'expandtabs_kw': _expandtabs_kw(),
+    'expandtabs_toomany': _expandtabs_toomany(),
+    'zfill_sign': _zfill_sign(),
+    'zfill_sign_ba': _zfill_sign_ba(),
 }

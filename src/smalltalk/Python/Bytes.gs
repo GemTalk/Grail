@@ -1305,7 +1305,7 @@ expandtabs: tabsize
 			].
 			column := column @env0:+ spaces
 		] ifFalse: [
-			(byte == 10) ifTrue: [  "Newline"
+			((byte == 10) or: [byte == 13]) ifTrue: [  "LF or CR both reset the column"
 				| newByte |
 				newByte := bytes ___new___: 1.
 				newByte @env0:at: 1 put: byte.
@@ -1322,6 +1322,24 @@ expandtabs: tabsize
 	].
 
 	^ result
+%
+
+category: 'Grail-String-like Methods'
+method: bytes
+_expandtabs: positional kw: kwargs
+	"Varargs form of expandtabs(tabsize=8) -- reached via the BoundMethod
+	fallback (getattr(obj,'expandtabs')(...)), accepting tabsize positionally
+	or as a keyword."
+
+	| tabsize |
+	positional @env0:size @env0:> 1 ifTrue: [
+		TypeError ___signal___: ('expandtabs() takes at most 1 argument ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	tabsize := (positional @env0:size @env0:>= 1)
+		@env0:ifTrue: [positional @env0:at: 1]
+		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'tabsize'])
+			@env0:ifTrue: [kwargs @env0:at: 'tabsize'] @env0:ifFalse: [8]].
+	^ self expandtabs: tabsize
 %
 
 category: 'Grail-Search Methods'
@@ -1840,6 +1858,16 @@ lower
 
 category: 'Grail-String-like Methods'
 method: bytes
+___isAsciiSpaceByte___: byte
+	"True if ``byte'' is one of CPython's six ASCII whitespace bytes:
+	TAB(9) LF(10) VT(11) FF(12) CR(13) SPACE(32).  The no-argument
+	strip/lstrip/rstrip forms trim exactly this set (VT and FF were
+	previously omitted)."
+	^ #(9 10 11 12 13 32) @env0:includes: byte
+%
+
+category: 'Grail-String-like Methods'
+method: bytes
 lstrip
 	"Remove leading whitespace bytes"
 	| start size result newSize |
@@ -1851,15 +1879,7 @@ lstrip
 	"Find first non-whitespace"
 	start := 1.
 	[(start @env0:<= size) and: [
-		| byte |
-		byte := self @env0:at: start.
-		(byte == 32) or: [
-			(byte == 9) or: [
-				(byte == 10) or: [
-					byte == 13
-				]
-			]
-		]
+		self ___isAsciiSpaceByte___: (self @env0:at: start)
 	]] @env0:whileTrue: [
 		start := start @env0:+ 1
 	].
@@ -2204,15 +2224,7 @@ rstrip
 	"Find last non-whitespace"
 	end := size.
 	[(end @env0:>= 1) and: [
-		| byte |
-		byte := self @env0:at: end.
-		(byte == 32) or: [
-			(byte == 9) or: [
-				(byte == 10) or: [
-					byte == 13
-				]
-			]
-		]
+		self ___isAsciiSpaceByte___: (self @env0:at: end)
 	]] @env0:whileTrue: [
 		end := end @env0:- (1)
 	].
@@ -2481,16 +2493,7 @@ strip
 	"Find first non-whitespace"
 	start := 1.
 	[(start @env0:<= size) and: [
-		| byte |
-		byte := self @env0:at: start.
-		"Whitespace: space(32), tab(9), newline(10), carriage return(13)"
-		(byte == 32) or: [
-			(byte == 9) or: [
-				(byte == 10) or: [
-					byte == 13
-				]
-			]
-		]
+		self ___isAsciiSpaceByte___: (self @env0:at: start)
 	]] @env0:whileTrue: [
 		start := start @env0:+ 1
 	].
@@ -2503,15 +2506,7 @@ strip
 	"Find last non-whitespace"
 	end := size.
 	[(end @env0:>= start) and: [
-		| byte |
-		byte := self @env0:at: end.
-		(byte == 32) or: [
-			(byte == 9) or: [
-				(byte == 10) or: [
-					byte == 13
-				]
-			]
-		]
+		self ___isAsciiSpaceByte___: (self @env0:at: end)
 	]] @env0:whileTrue: [
 		end := end @env0:- (1)
 	].
@@ -2717,8 +2712,10 @@ upper
 category: 'Grail-Padding Methods'
 method: bytes
 zfill: width
-	"Pad bytes with zeros on the left to fill width"
-	| mySize result padding |
+	"Pad bytes with zeros on the left to fill width.  A leading ASCII sign
+	(``+'' / ``-'') stays in front of the zero fill (b'+1'.zfill(4) -> b'+01',
+	not b'0+1')."
+	| mySize result padding hasSign |
 	mySize := self @env0:size.
 
 	"If already wide enough, return copy"
@@ -2726,18 +2723,19 @@ zfill: width
 		^ self @env0:copy
 	].
 
-	"Pad with zeros"
 	padding := width @env0:- (mySize).
 	result := bytes ___new___: width.
 
-	"Add zeros"
-	1 @env0:to: padding do: [:i |
-		result @env0:at: i put: 48  "ASCII '0'"
-	].
-
-	"Copy original"
-	1 @env0:to: mySize do: [:i |
-		result @env0:at: (padding @env0:+ i) put: (self @env0:at: i)
+	hasSign := (mySize @env0:> 0) and: [
+		| b | b := self @env0:at: 1. (b == 43) or: [b == 45]].
+	hasSign ifTrue: [
+		"Sign first, then the zero fill, then the digits after the sign."
+		result @env0:at: 1 put: (self @env0:at: 1).
+		1 @env0:to: padding do: [:i | result @env0:at: (i @env0:+ 1) put: 48].
+		2 @env0:to: mySize do: [:i | result @env0:at: (padding @env0:+ i) put: (self @env0:at: i)]
+	] ifFalse: [
+		1 @env0:to: padding do: [:i | result @env0:at: i put: 48  "ASCII '0'"].
+		1 @env0:to: mySize do: [:i | result @env0:at: (padding @env0:+ i) put: (self @env0:at: i)]
 	].
 
 	^ result

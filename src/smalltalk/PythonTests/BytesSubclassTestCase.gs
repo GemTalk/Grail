@@ -336,3 +336,16 @@ testEmptyNeedleAndReplaceCount
 	  'replace_count_kw' 'replace_count_kw_ba') do: [:key |
 		self assert: ((self resultAt: key) = true) description: key]
 %
+
+category: 'Grail-Tests - string-like methods'
+method: BytesSubclassTestCase
+testStripExpandtabsZfill
+	"strip/lstrip/rstrip (no arg) trim the full ASCII whitespace set incl.
+	VT/FF; expandtabs resets the column on CR as well as LF and honors a
+	tabsize (positional or keyword, at most one positional); zfill keeps a
+	leading +/- sign ahead of the zero fill.  bytearray inherits all three."
+
+	#('strip_ws_full' 'strip_ws_full_ba' 'expandtabs_cr' 'expandtabs_kw'
+	  'expandtabs_toomany' 'zfill_sign' 'zfill_sign_ba') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
