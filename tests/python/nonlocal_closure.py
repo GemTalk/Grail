@@ -84,3 +84,62 @@ def freevar_through_nested_class_method():
     except Marker:
         raised = True
     return first == 'a' and raised
+
+
+def nonlocal_write_in_method_aug():
+    """A method of a function-local class mutates an enclosing-function
+    local via `nonlocal` + augmented assignment.  The method
+    string-compiles with no lexical link to the outer temp, so the write
+    must route through a setter closure cell.  This is the exact shape of
+    CPython test_dict.test_str_nonstr's Key3.__eq__ (`eq_count += 1`)."""
+
+    count = 0
+
+    class Counter:
+        def bump(self):
+            nonlocal count
+            count += 1
+
+    c = Counter()
+    c.bump()
+    c.bump()
+    c.bump()
+    return count == 3
+
+
+def nonlocal_write_in_method_plain():
+    """Plain (non-augmented) `nonlocal x; x = v` inside a method reaches
+    the enclosing binding through the setter cell too."""
+
+    val = "before"
+
+    class Setter:
+        def go(self):
+            nonlocal val
+            val = "after"
+
+    Setter().go()
+    return val == "after"
+
+
+def nonlocal_write_through_nested_class_method():
+    """`nonlocal` write where the writing method lives in a class nested
+    inside another class's method (two class boundaries) -- the setter
+    cell must be FORWARDED through the intervening method's own setter
+    cell, mirroring the reader-side forwarding."""
+
+    total = 0
+
+    class Outer:
+        def make(self):
+            class Inner:
+                def add(self, n):
+                    nonlocal total
+                    total += n
+
+            return Inner()
+
+    it = Outer().make()
+    it.add(5)
+    it.add(7)
+    return total == 12
