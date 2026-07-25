@@ -323,3 +323,68 @@ testBoundMethodSplitFamily
 	  'gsplitlines_toomany') do: [:key |
 		self assert: ((self resultAt: key) = true) description: key]
 %
+
+category: 'Grail-Tests - empty-needle search + replace keyword'
+method: BytesSubclassTestCase
+testEmptyNeedleAndReplaceCount
+	"count/find with an empty needle (matches between every position: count is
+	len+1 within the window, find returns the start until it passes the end),
+	and replace() honoring the ``count'' keyword via the varargs fallback.
+	bytearray inherits all three from bytes."
+
+	#('count_empty' 'count_empty_ba' 'find_empty_past_end' 'find_empty_past_end_ba'
+	  'replace_count_kw' 'replace_count_kw_ba') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
+category: 'Grail-Tests - string-like methods'
+method: BytesSubclassTestCase
+testStripExpandtabsZfill
+	"strip/lstrip/rstrip (no arg) trim the full ASCII whitespace set incl.
+	VT/FF; expandtabs resets the column on CR as well as LF and honors a
+	tabsize (positional or keyword, at most one positional); zfill keeps a
+	leading +/- sign ahead of the zero fill.  bytearray inherits all three."
+
+	#('strip_ws_full' 'strip_ws_full_ba' 'expandtabs_cr' 'expandtabs_kw'
+	  'expandtabs_toomany' 'zfill_sign' 'zfill_sign_ba') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
+category: 'Grail-Tests - int-needle range + membership type'
+method: BytesSubclassTestCase
+testByteNeedleRangeAndMembership
+	"An int used as a single-byte needle (count/find/index/rfind/rindex) or a
+	membership test must be in range(0, 256), else ValueError -- including a
+	large int (sys.maxsize + 1).  Membership of a non-int, non-bytes-like
+	object (None/float/str) is a TypeError.  bytearray inherits/overrides the
+	same behavior."
+
+	#('contains_int_range' 'contains_typeerror' 'search_int_range'
+	  'search_int_range_ba') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
+category: 'Grail-Tests - justify fill + partition separator types'
+method: BytesSubclassTestCase
+testJustifyFillAndPartitionSep
+	"center/ljust/rjust require a bytes-like fill of length 1 (an int/str is a
+	TypeError); partition/rpartition require a bytes-like separator (int/str ->
+	TypeError) that is non-empty (empty -> ValueError).  bytearray inherits."
+
+	#('xjust_int_fill' 'xjust_bytes_fill' 'xjust_int_fill_ba' 'partition_int_sep'
+	  'partition_str_sep' 'partition_empty_sep' 'partition_ok'
+	  'partition_int_sep_ba') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
+category: 'Grail-Tests - replace empty old interleave'
+method: BytesSubclassTestCase
+testReplaceEmptyOld
+	"replace(b'', new[, count]) inserts new at every gap -- before each byte
+	and after the last -- honoring the replacement count (CPython interleave).
+	A gigabyte-scale result raises OverflowError instead of exhausting VM
+	memory.  bytearray inherits."
+
+	#('replace_empty_old' 'replace_empty_old_ba' 'replace_overflow') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%

@@ -334,7 +334,20 @@ strftime: format _: structTime
 			i := i @env0:+ 1.
 			i @env0:<= src @env0:size ifTrue: [
 				ch := src @env0:at: i.
-				ch @env0:= $Y ifTrue: [stream @env0:nextPutAll: (year @env0:printString)].
+				ch @env0:= $Y ifTrue: [
+					"Python's datetime %Y zero-pads the year to at least 4
+					digits (date(1,1,1).strftime('%Y') -> '0001')."
+					stream @env0:nextPutAll: (self ___zeroPad4___: year)].
+				ch @env0:= $F ifTrue: [
+					"ISO date %Y-%m-%d (C99)."
+					stream @env0:nextPutAll: (self ___zeroPad4___: year).
+					stream @env0:nextPut: $-.
+					stream @env0:nextPutAll: (self ___zeroPad2___: mon).
+					stream @env0:nextPut: $-.
+					stream @env0:nextPutAll: (self ___zeroPad2___: day)].
+				ch @env0:= $C ifTrue: [
+					"Century, zero-padded to 2 digits (C99)."
+					stream @env0:nextPutAll: (self ___zeroPad2___: (year @env0:// 100))].
 				ch @env0:= $y ifTrue: [
 					buf := (year @env0:rem: 100) @env0:printString.
 					buf @env0:size @env0:< 2 ifTrue: [stream @env0:nextPut: $0].
@@ -371,6 +384,17 @@ ___zeroPad2___: n
 	| s |
 	s := n @env0:printString.
 	s @env0:size @env0:< 2 ifTrue: [^ '0' @env0:, s].
+	^ s
+%
+
+category: 'Grail-Private'
+method: time
+___zeroPad4___: n
+	"Zero-pad to at least 4 digits (years wider than 4 pass through)."
+
+	| s |
+	s := n @env0:printString.
+	[s @env0:size @env0:< 4] @env0:whileTrue: [s := '0' @env0:, s].
 	^ s
 %
 

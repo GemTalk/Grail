@@ -74,7 +74,9 @@ test__contains__
 	self assert: (b @env1:__contains__: 65).
 	self assert: (b @env1:__contains__: 66).
 	self deny: (b @env1:__contains__: 68).
-	self deny: (b @env1:__contains__: 256).
+	"An int out of byte range (0..255) raises ValueError, matching CPython
+	(``256 in b'' is a ValueError, not False)."
+	self should: [b @env1:__contains__: 256] raise: ValueError.
 %
 
 category: 'Grail-Tests - Comparison'

@@ -748,6 +748,19 @@ testReplace
 
 category: 'Grail-String Methods'
 method: StrTestCase
+testReplaceCountKeyword
+	"replace() accepts ``count'' positionally or as a keyword; count=0 means
+	no replacement (CPython string_tests.test_count_keyword)."
+
+	self assert: (self eval: '"aa".replace("a", "b", count=0) == "aa"').
+	self assert: (self eval: '"aa".replace("a", "b", count=1) == "ba"').
+	self assert: (self eval: '"aa".replace("a", "b", count=2) == "bb"').
+	self assert: (self eval: '"aa".replace("a", "b", 0) == "aa"').
+	self assert: (self eval: '"aa".replace("a", "b") == "bb"').
+%
+
+category: 'Grail-String Methods'
+method: StrTestCase
 testRfind
 	"Test rfind() method"
 
