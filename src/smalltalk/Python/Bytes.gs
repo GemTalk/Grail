@@ -302,29 +302,237 @@ maketrans: frm _: to
 category: 'Grail-String Operations'
 method: bytes
 __mod__: args
-	"``bytes % args'' printf-style formatting (CPython 3.5+).  Grail
-	delegates to the str formatter: decode the format spec as
-	latin1 (round-trips arbitrary bytes), format using args, then
-	re-encode the result.  Lossy for non-latin1 args but covers
-	Werkzeug.http's cookie escape table (``b'\\%03o' % v'')
-	which only uses ASCII format specs."
+	"``bytes % args'' printf-style formatting (PEP 461).  Byte-native engine:
+	%b/%s take a bytes-like (or __bytes__) object; %a is ascii(obj); %c is an
+	int in range(256) or a single byte; %d %i %u %o %x %X %e %E %f %F %g %G are
+	numeric (rendered ASCII via the shared str %-converter); %% is a literal %.
+	Mapping form %(key)conv indexes a dict by the (bytes) key (balanced parens).
+	Flags, width and precision (including '*' args) are honored.  The result is
+	the receiver's own type (bytes -> bytes, bytearray -> bytearray)."
 
-	| fmt formatted |
-	fmt := self decode: 'latin1'.
-	formatted := fmt __mod__: args.
-	^ formatted encode: 'latin1'
+	| n out i isMap argSeq argIdx nextArg content result |
+	n := self @env0:size.
+	out := WriteStream @env0:on: ByteArray @env0:new.
+	isMap := args isKindOf: KeyValueDictionary.
+	(isMap @env0:not @env0:and: [
+		(args isKindOf: Array) @env0:or: [
+			(args isKindOf: OrderedCollection) @env0:or: [args isKindOf: tuple]]])
+		ifTrue: [argSeq := args]
+		ifFalse: [isMap ifTrue: [argSeq := nil] ifFalse: [argSeq := Array @env0:with: args]].
+	argIdx := 1.
+	nextArg := [ | v |
+		argSeq @env0:isNil ifTrue: [TypeError ___signal___: 'format requires a mapping'].
+		argIdx @env0:> argSeq @env0:size ifTrue: [
+			TypeError ___signal___: 'not enough arguments for format string'].
+		v := argSeq @env0:at: argIdx. argIdx := argIdx @env0:+ 1. v ].
+	i := 1.
+	[i @env0:<= n] @env0:whileTrue: [
+		| byte |
+		byte := self @env0:at: i.
+		byte @env0:= 37 ifFalse: [ out @env0:nextPut: byte. i := i @env0:+ 1 ]
+		ifTrue: [
+			| key flags width precision conv value |
+			i := i @env0:+ 1.
+			i @env0:> n ifTrue: [ValueError ___signal___: 'incomplete format'].
+			"mapping key: %(...) matching balanced parens"
+			key := nil.
+			(self @env0:at: i) @env0:= 40 ifTrue: [
+				| depth start kk klen |
+				i := i @env0:+ 1. start := i. depth := 1.
+				[depth @env0:> 0] @env0:whileTrue: [
+					i @env0:> n ifTrue: [ValueError ___signal___: 'incomplete format key'].
+					(self @env0:at: i) @env0:= 40 ifTrue: [depth := depth @env0:+ 1].
+					(self @env0:at: i) @env0:= 41 ifTrue: [depth := depth @env0:- 1].
+					depth @env0:> 0 ifTrue: [i := i @env0:+ 1]].
+				"Key is always a plain (hashable) bytes -- a slice of a bytearray
+				receiver would be an unhashable bytearray, unusable as a dict key."
+				klen := i @env0:- start.
+				kk := bytes @env0:___new___: klen.
+				1 @env0:to: klen do: [:z | kk @env0:at: z put: (self @env0:at: start @env0:+ z @env0:- 1)].
+				key := kk.
+				i := i @env0:+ 1].
+			"flags: - + space # 0  (45 43 32 35 48)"
+			flags := OrderedCollection @env0:new.
+			[i @env0:<= n @env0:and: [ | c | c := self @env0:at: i.
+				(c @env0:= 45) @env0:or: [(c @env0:= 43) @env0:or: [(c @env0:= 32) @env0:or: [
+					(c @env0:= 35) @env0:or: [c @env0:= 48]]]] ]]
+				@env0:whileTrue: [
+					flags @env0:add: (Character @env0:codePoint: (self @env0:at: i)). i := i @env0:+ 1 ].
+			"width: digits or '*' (consumes an arg; negative -> '-' flag)"
+			width := 0.
+			(i @env0:<= n @env0:and: [(self @env0:at: i) @env0:= 42]) ifTrue: [
+				width := (nextArg @env0:value) @env0:asInteger.
+				width @env0:< 0 ifTrue: [ flags @env0:add: $-. width := width @env0:abs ].
+				i := i @env0:+ 1
+			] ifFalse: [
+				[i @env0:<= n @env0:and: [ | c | c := self @env0:at: i. (c @env0:>= 48) @env0:and: [c @env0:<= 57]]]
+					@env0:whileTrue: [
+						width := (width @env0:* 10) @env0:+ ((self @env0:at: i) @env0:- 48). i := i @env0:+ 1 ]].
+			"precision: '.' then digits or '*'  ('.' alone means 0)"
+			precision := nil.
+			(i @env0:<= n @env0:and: [(self @env0:at: i) @env0:= 46]) ifTrue: [
+				i := i @env0:+ 1.
+				(i @env0:<= n @env0:and: [(self @env0:at: i) @env0:= 42]) ifTrue: [
+					precision := (nextArg @env0:value) @env0:asInteger.
+					precision @env0:< 0 ifTrue: [precision := nil].
+					i := i @env0:+ 1
+				] ifFalse: [
+					precision := 0.
+					[i @env0:<= n @env0:and: [ | c | c := self @env0:at: i. (c @env0:>= 48) @env0:and: [c @env0:<= 57]]]
+						@env0:whileTrue: [
+							precision := (precision @env0:* 10) @env0:+ ((self @env0:at: i) @env0:- 48). i := i @env0:+ 1 ]]].
+			"skip C length modifiers h l L (104 108 76)"
+			[i @env0:<= n @env0:and: [ | c | c := self @env0:at: i.
+				(c @env0:= 104) @env0:or: [(c @env0:= 108) @env0:or: [c @env0:= 76]] ]]
+				@env0:whileTrue: [i := i @env0:+ 1].
+			i @env0:> n ifTrue: [ValueError ___signal___: 'incomplete format'].
+			conv := self @env0:at: i. i := i @env0:+ 1.
+			conv @env0:= 37 ifTrue: [ out @env0:nextPut: 37 ]
+			ifFalse: [
+				key @env0:notNil
+					ifTrue: [value := args @env1:__getitem__: key]
+					ifFalse: [value := nextArg @env0:value].
+				self ___modEmit___: value conv: conv flags: flags width: width
+					precision: precision into: out ]
+		]
+	].
+	content := out @env0:contents.
+	result := (self @env0:class) ___new___: content @env0:size.
+	1 @env0:to: content @env0:size do: [:k | result @env0:at: k put: (content @env0:at: k)].
+	^ result
+%
+
+category: 'Grail-String Operations'
+method: bytes
+___modEmit___: value conv: conv flags: flags width: width precision: precision into: out
+	"Emit one formatted %-field (conv is the conversion byte) into the ByteArray
+	stream ``out''.  b/s/a produce a byte sequence (precision truncates, width
+	pads with spaces); c is a single byte; the numeric conversions render ASCII
+	via the shared str %-converter."
+
+	| content leftAlign num res |
+	leftAlign := flags @env0:includes: $-.
+	"b (98) / s (115) / a (97): byte-sequence conversions."
+	((conv @env0:= 98) @env0:or: [(conv @env0:= 115) @env0:or: [conv @env0:= 97]]) ifTrue: [
+		conv @env0:= 97
+			ifTrue: [ | s |
+				s := (builtins instance ascii: value) @env0:asString.
+				content := ByteArray @env0:new: s @env0:size.
+				1 @env0:to: s @env0:size do: [:k | content @env0:at: k put: (s @env0:at: k) @env0:codePoint] ]
+			ifFalse: [ content := self ___modBytesArg___: value ].
+		(precision ~~ nil @env0:and: [content @env0:size @env0:> precision]) ifTrue: [
+			content := content @env0:copyFrom: 1 to: precision].
+		^ self ___modPad___: content width: width leftAlign: leftAlign into: out ].
+	"c (99): a single byte, width-padded (no precision)."
+	conv @env0:= 99 ifTrue: [
+		content := ByteArray @env0:with: (self ___modCharByte___: value).
+		^ self ___modPad___: content width: width leftAlign: leftAlign into: out ].
+	"numeric: d i u o x X e E f F g G -- render ASCII, emit as bytes."
+	num := self ___modNumeric___: value conv: (Character @env0:codePoint: conv).
+	res := builtins instance ___printfConvert___: num conv: (Character @env0:codePoint: conv)
+		flags: flags width: width precision: precision.
+	1 @env0:to: res @env0:size do: [:k | out @env0:nextPut: (res @env0:at: k) @env0:codePoint]
+%
+
+category: 'Grail-String Operations'
+method: bytes
+___modPad___: content width: width leftAlign: leftAlign into: out
+	"Emit ``content'' (a ByteArray) into ``out'', space-padded to ``width''."
+
+	| pad |
+	pad := width @env0:- content @env0:size.
+	(pad @env0:> 0 @env0:and: [leftAlign @env0:not]) ifTrue: [
+		pad @env0:timesRepeat: [out @env0:nextPut: 32]].
+	1 @env0:to: content @env0:size do: [:k | out @env0:nextPut: (content @env0:at: k)].
+	(pad @env0:> 0 @env0:and: [leftAlign]) ifTrue: [
+		pad @env0:timesRepeat: [out @env0:nextPut: 32]]
+%
+
+category: 'Grail-String Operations'
+method: bytes
+___modBytesArg___: value
+	"%b/%s operand: a bytes-like object, or one implementing __bytes__."
+
+	(value isKindOf: ByteArray) ifTrue: [^ value].
+	(value ___respondsTo___: #'__bytes__') ifTrue: [^ value __bytes__].
+	TypeError ___signal___: ('%b requires a bytes-like object, or an object that implements __bytes__, not '''
+		@env0:, (self ___modTypeName___: value) @env0:, '''')
+%
+
+category: 'Grail-String Operations'
+method: bytes
+___modTypeName___: value
+	"CPython-facing type name for %-format error messages: a few kernel-backed
+	builtins carry a Smalltalk class name (Float, Integer, Unicode7, ...) that
+	does not match their Python name, so map those; everything else (complex,
+	tuple, user classes) already reports the right __name__."
+
+	(value isKindOf: Float) ifTrue: [^ 'float'].
+	(value isKindOf: Boolean) ifTrue: [^ 'bool'].
+	(value isKindOf: Integer) ifTrue: [^ 'int'].
+	(value isKindOf: bytearray) ifTrue: [^ 'bytearray'].
+	(value isKindOf: ByteArray) ifTrue: [^ 'bytes'].
+	(value isKindOf: CharacterCollection) ifTrue: [^ 'str'].
+	^ value @env1:__class__ @env1:__name__
+%
+
+category: 'Grail-String Operations'
+method: bytes
+___modCharByte___: value
+	"%c operand: an int in range(256) or a single byte."
+
+	(value isKindOf: Integer) ifTrue: [
+		((value @env0:>= 0) @env0:and: [value @env0:<= 255]) ifTrue: [^ value].
+		OverflowError ___signal___: '%c arg not in range(256)'].
+	((value isKindOf: ByteArray) @env0:and: [value @env0:size @env0:= 1]) ifTrue: [^ value @env0:at: 1].
+	TypeError ___signal___: ('%c requires an integer in range(256) or a single byte, not '
+		@env0:, (self ___modTypeName___: value))
+%
+
+category: 'Grail-String Operations'
+method: bytes
+___modNumeric___: value conv: conv
+	"Resolve a numeric %-arg to a Smalltalk Integer/Float per the conversion,
+	raising CPython's message on a type mismatch.  o/x/X require a strict
+	integer (via __index__); e/E/f/F/g/G a float; d/i/u a real number."
+
+	| tn |
+	tn := self ___modTypeName___: value.
+	((conv @env0:= $o) @env0:or: [(conv @env0:= $x) @env0:or: [conv @env0:= $X]]) ifTrue: [
+		(value isKindOf: Integer) ifTrue: [^ value].
+		(value ___respondsTo___: #'__index__') ifTrue: [^ value __index__].
+		TypeError ___signal___: ('%' @env0:, (String @env0:with: conv)
+			@env0:, ' format: an integer is required, not ' @env0:, tn)].
+	(#($e $E $f $F $g $G) @env0:includes: conv) ifTrue: [
+		(value isKindOf: Integer) ifTrue: [^ value @env0:asFloat].
+		(value isKindOf: Float) ifTrue: [^ value].
+		(value ___respondsTo___: #'__float__') ifTrue: [^ value __float__].
+		TypeError ___signal___: ('%' @env0:, (String @env0:with: conv)
+			@env0:, ' format: a real number is required, not ' @env0:, tn)].
+	"d i u: a real number (int or float or __index__/__int__)."
+	(value isKindOf: Integer) ifTrue: [^ value].
+	(value isKindOf: Float) ifTrue: [^ value].
+	(value ___respondsTo___: #'__index__') ifTrue: [^ value __index__].
+	(value ___respondsTo___: #'__int__') ifTrue: [^ value __int__].
+	TypeError ___signal___: ('%' @env0:, (String @env0:with: conv)
+		@env0:, ' format: a real number is required, not ' @env0:, tn)
 %
 
 category: 'Grail-Concatenation'
 method: bytes
 __add__: other
 	"Concatenate bytes"
-	| otherClass size1 size2 result |
-	otherClass := other @env0:class.
+	| size1 size2 result |
 
-	"Concatenate with any bytes-like object (bytes / bytearray / subclasses)."
+	"Concatenate with any bytes-like object (bytes / bytearray / subclasses).
+	A non-bytes-like operand is a TypeError -- built from the Python type NAMES
+	(``can't concat str to bytes''); appending the class OBJECT to the message
+	string used to blow up with an uncatchable MNU (Unicode7 class do:)."
 	(other isKindOf: bytes) ifFalse: [
-		TypeError ___signal___: ('can''t concat bytes to ' @env0:, otherClass)
+		TypeError ___signal___: ('can''t concat '
+			@env0:, (other @env1:__class__ @env1:__name__)
+			@env0:, ' to '
+			@env0:, (self @env1:__class__ @env1:__name__))
 	].
 
 	size1 := self @env0:size.
@@ -2324,9 +2532,13 @@ rstrip: chars
 	base64.urlsafe_b64encode."
 
 	| charsBytes size end result |
-	charsBytes := (chars isKindOf: ByteArray)
-		ifTrue: [chars]
-		ifFalse: [chars @env0:asByteArray].
+	"None (or the no-arg form) strips ASCII whitespace; a non-bytes-like
+	chars is a TypeError, matching CPython (a str/int is NOT accepted)."
+	(chars @env0:== None) ifTrue: [^ self rstrip].
+	(chars isKindOf: ByteArray) ifFalse: [
+		TypeError ___signal___: ('a bytes-like object is required, not '''
+			@env0:, (chars @env1:__class__ @env1:__name__) @env0:, '''')].
+	charsBytes := chars.
 	size := self @env0:size.
 	end := size.
 	[(end @env0:>= 1) @env0:and: [charsBytes @env0:includes: (self @env0:at: end)]]
@@ -2344,9 +2556,13 @@ lstrip: chars
 	in `chars`."
 
 	| charsBytes size start result newSize |
-	charsBytes := (chars isKindOf: ByteArray)
-		ifTrue: [chars]
-		ifFalse: [chars @env0:asByteArray].
+	"None (or the no-arg form) strips ASCII whitespace; a non-bytes-like
+	chars is a TypeError, matching CPython (a str/int is NOT accepted)."
+	(chars @env0:== None) ifTrue: [^ self lstrip].
+	(chars isKindOf: ByteArray) ifFalse: [
+		TypeError ___signal___: ('a bytes-like object is required, not '''
+			@env0:, (chars @env1:__class__ @env1:__name__) @env0:, '''')].
+	charsBytes := chars.
 	size := self @env0:size.
 	start := 1.
 	[(start @env0:<= size) @env0:and: [charsBytes @env0:includes: (self @env0:at: start)]]
@@ -2765,6 +2981,64 @@ method: bytes
 rsplit
 	"bytes.rsplit() -- with no separator, identical to split()."
 	^ self ___splitWhitespace___
+%
+
+category: 'Grail-Splitting Methods'
+method: bytes
+_split: positional kw: kwargs
+	"Varargs form of split(sep=None, maxsplit=-1) -- reached via the
+	BoundMethod fallback (getattr(obj,'split')(...)) when the fixed-arity
+	fast path does not resolve.  sep=None splits on ASCII whitespace runs."
+
+	| sep maxsplit |
+	positional @env0:size @env0:> 2 ifTrue: [
+		TypeError ___signal___: ('split() takes at most 2 arguments ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	sep := (positional @env0:size @env0:>= 1)
+		@env0:ifTrue: [positional @env0:at: 1]
+		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'sep'])
+			@env0:ifTrue: [kwargs @env0:at: 'sep'] @env0:ifFalse: [None]].
+	maxsplit := (positional @env0:size @env0:>= 2)
+		@env0:ifTrue: [positional @env0:at: 2]
+		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'maxsplit'])
+			@env0:ifTrue: [kwargs @env0:at: 'maxsplit'] @env0:ifFalse: [-1]].
+	^ self split: sep _: maxsplit
+%
+
+category: 'Grail-Splitting Methods'
+method: bytes
+_rsplit: positional kw: kwargs
+	"Varargs form of rsplit(sep=None, maxsplit=-1) -- see _split:kw:."
+
+	| sep maxsplit |
+	positional @env0:size @env0:> 2 ifTrue: [
+		TypeError ___signal___: ('rsplit() takes at most 2 arguments ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	sep := (positional @env0:size @env0:>= 1)
+		@env0:ifTrue: [positional @env0:at: 1]
+		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'sep'])
+			@env0:ifTrue: [kwargs @env0:at: 'sep'] @env0:ifFalse: [None]].
+	maxsplit := (positional @env0:size @env0:>= 2)
+		@env0:ifTrue: [positional @env0:at: 2]
+		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'maxsplit'])
+			@env0:ifTrue: [kwargs @env0:at: 'maxsplit'] @env0:ifFalse: [-1]].
+	^ self rsplit: sep _: maxsplit
+%
+
+category: 'Grail-Splitting Methods'
+method: bytes
+_splitlines: positional kw: kwargs
+	"Varargs form of splitlines(keepends=False) -- see _split:kw:."
+
+	| keepends |
+	positional @env0:size @env0:> 1 ifTrue: [
+		TypeError ___signal___: ('splitlines() takes at most 1 argument ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	keepends := (positional @env0:size @env0:>= 1)
+		@env0:ifTrue: [positional @env0:at: 1]
+		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'keepends'])
+			@env0:ifTrue: [kwargs @env0:at: 'keepends'] @env0:ifFalse: [false]].
+	^ self splitlines: keepends
 %
 
 category: 'Grail-Splitting Methods'

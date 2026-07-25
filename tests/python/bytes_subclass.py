@@ -258,6 +258,66 @@ def _fromhex_array_arg():
     return bytes.fromhex(array.array('B', b' 41 42 ')) == b'AB'
 
 
+def _ord_slice():
+    # ord() of each 1-byte slice returns the byte value (not a Character path).
+    b = b'\x00A\x7f\x80\xff'
+    return [ord(b[i:i+1]) for i in range(len(b))] == [0, 65, 127, 128, 255]
+
+def _strip_int_raises():
+    try: bytearray(b' abc ').strip(32); return False
+    except TypeError: return True
+def _lstrip_int_raises():
+    try: bytearray(b' abc ').lstrip(32); return False
+    except TypeError: return True
+def _rstrip_int_raises():
+    try: bytearray(b' abc ').rstrip(32); return False
+    except TypeError: return True
+def _strip_str_raises():
+    # a str is not bytes-like either
+    try: b' abc '.strip('x'); return False
+    except TypeError: return True
+
+def _concat_bytes_str_raises():
+    # bytes + str -> TypeError (message built from type names, not a crash)
+    try: b'abc' + 'def'; return False
+    except TypeError: return True
+def _iadd_str_raises():
+    b = bytearray(b'abc')
+    try: b += 'def'; return False
+    except TypeError: return True
+def _iadd_ok():
+    b = bytearray(b'ab'); b += b'cd'; return list(b) == [97, 98, 99, 100]
+
+def _mod_x_float_raises():
+    try: b'%x' % 3.14; return False
+    except TypeError as e: return "%x format: an integer is required, not float" in str(e)
+def _mod_u_complex_raises():
+    try: b'%u' % 3j; return False
+    except TypeError as e: return "a real number is required, not complex" in str(e)
+def _mod_c_bad_raises():
+    try: b'%c' % 3.14; return False
+    except TypeError: return True
+def _imod_bytearray():
+    b = bytearray(b'hi %b'); b %= b'x'; return bytes(b) == b'hi x'
+
+# split/rsplit/splitlines reached as bound methods (getattr) -- exercises the
+# varargs _name:kw: fallback that the arity dispatcher uses when the fixed-arity
+# fast path does not resolve the selector.
+def _gsplit_ws():
+    return getattr(b'a b c', 'split')() == [b'a', b'b', b'c']
+def _gsplit_sep():
+    return getattr(b'a|b|c', 'split')(b'|', 1) == [b'a', b'b|c']
+def _grsplit_ws():
+    return getattr(b'a b c', 'rsplit')() == [b'a', b'b', b'c']
+def _gsplitlines():
+    return getattr(b'a\nb\nc', 'splitlines')() == [b'a', b'b', b'c']
+def _gsplitlines_keepends():
+    return getattr(b'a\nb', 'splitlines')(True) == [b'a\n', b'b']
+def _gsplitlines_toomany():
+    try: getattr(b'abc', 'splitlines')(42, 42); return False
+    except TypeError: return True
+
+
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
     'bytes_type_is_subclass': type(MyBytes(b'abc')) is MyBytes,
@@ -474,4 +534,60 @@ RESULTS = {
     'fromhex_pos_ws_in_pair': _fromhex_pos('a ', 1),
     'fromhex_nonascii_ws': _fromhex_reject_value('\xa0'),
     'fromhex_single_char': _fromhex_reject_value('a'),
+
+    # --- ord() of a 1-byte bytes/bytearray returns the byte value (a byte is
+    # an int element, not a Character); strip/lstrip/rstrip take a bytes-like
+    # chars or None (whitespace) and reject an int/str with TypeError. ---
+    'ord_bytes_a': ord(b'A') == 65,
+    'ord_bytes_zero': ord(b'\x00') == 0,
+    'ord_bytes_high': ord(b'\xff') == 255,
+    'ord_bytearray': ord(bytearray(b'A')) == 65,
+    'ord_slice': _ord_slice(),
+    'strip_int_raises': _strip_int_raises(),
+    'lstrip_int_raises': _lstrip_int_raises(),
+    'rstrip_int_raises': _rstrip_int_raises(),
+    'strip_str_raises': _strip_str_raises(),
+    'strip_bytes_ok': b'xxabcyy'.strip(b'xy') == b'abc',
+    'strip_none_ws': b'  abc  '.strip(None) == b'abc',
+    'lstrip_none_ws': b'  abc  '.lstrip(None) == b'abc  ',
+    'rstrip_none_ws': b'  abc  '.rstrip(None) == b'  abc',
+
+    # --- concatenation: bytes/bytearray + bytes-like works; a str operand is a
+    # TypeError (built from type names, not a crash), for both + and += . ---
+    'concat_bytes_bytes': (b'ab' + b'cd') == b'abcd',
+    'concat_bytes_ba': (b'ab' + bytearray(b'cd')) == b'abcd',
+    'concat_ba_bytes': list(bytearray(b'ab') + b'cd') == [97, 98, 99, 100],
+    'concat_bytes_str_raises': _concat_bytes_str_raises(),
+    'iadd_ok': _iadd_ok(),
+    'iadd_str_raises': _iadd_str_raises(),
+
+    # --- bytes % args printf engine (PEP 461): %b/%s/%c/%d/%x, %%, mapping
+    # (bytes key, balanced parens), width/precision, self-typed result, %=,
+    # and the numeric type-error messages. ---
+    'mod_b': (b'hello, %b!' % b'world') == b'hello, world!',
+    'mod_s_d': (b'%s / 100 = %d%%' % (b'x', 79)) == b'x / 100 = 79%',
+    'mod_c': (b'%c' % b'a') == b'a',
+    'mod_c_int': (b'%c' % 65) == b'A',
+    'mod_x': (b'%x' % 255) == b'ff',
+    'mod_map': (b'%(foo)b' % {b'foo': b'abc'}) == b'abc',
+    'mod_map_nested': (b'%(f(o)o)b' % {b'f(o)o': b'ok'}) == b'ok',
+    'mod_ba_map': (bytearray(b'%(foo)b') % {b'foo': b'abc'}) == b'abc',
+    'mod_width': (b'%*b' % (5, b'abc')) == b'  abc',
+    'mod_width_neg': (b'%*b' % (-5, b'abc')) == b'abc  ',
+    'mod_prec': (b'%*.*b' % (5, 2, b'abc')) == b'   ab',
+    'mod_type_bytes': type(b'%d' % 5) is bytes,
+    'mod_type_ba': type(bytearray(b'%d') % 5) is bytearray,
+    'mod_x_float_raises': _mod_x_float_raises(),
+    'mod_u_complex_raises': _mod_u_complex_raises(),
+    'mod_c_bad_raises': _mod_c_bad_raises(),
+    'imod_bytearray': _imod_bytearray(),
+
+    # --- split/rsplit/splitlines via a bound method (getattr): the varargs
+    # _name:kw: fallback, incl. the too-many-args TypeError guard. ---
+    'gsplit_ws': _gsplit_ws(),
+    'gsplit_sep': _gsplit_sep(),
+    'grsplit_ws': _grsplit_ws(),
+    'gsplitlines': _gsplitlines(),
+    'gsplitlines_keepends': _gsplitlines_keepends(),
+    'gsplitlines_toomany': _gsplitlines_toomany(),
 }

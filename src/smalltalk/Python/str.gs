@@ -828,9 +828,47 @@ encode: encoding
 category: 'Grail-String Methods'
 method: CharacterCollection
 endswith: suffix
-	"Test whether string ends with the specified suffix."
+	"Test whether string ends with the specified suffix.  An empty suffix is
+	always a suffix (CPython) -- GemStone's endsWith: returns false for an
+	empty argument, so special-case it."
 
+	suffix @env0:isEmpty ifTrue: [^ true].
 	^ self @env0:endsWith: suffix
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+endswith: suffix _: start
+	"str.endswith(suffix, start) -- test self[start:]."
+
+	^ self endswith: suffix _: start _: None
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+endswith: suffix _: start _: end
+	"str.endswith(suffix, start, end) -- test whether self[start:end] ends
+	with suffix (CPython None / negative-index clamping)."
+
+	^ (self ___boundedSlice___: start end: end) endswith: suffix
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+_endswith: positional kw: kwargs
+	"Varargs form of endswith(suffix[, start[, end]]) -- reached via the
+	BoundMethod fallback (getattr(s,'endswith')(...))."
+
+	| suffix start end |
+	positional @env0:size @env0:< 1 ifTrue: [
+		TypeError ___signal___: 'endswith() takes at least 1 argument (0 given)'].
+	positional @env0:size @env0:> 3 ifTrue: [
+		TypeError ___signal___: ('endswith() takes at most 3 arguments ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	suffix := positional @env0:at: 1.
+	start := (positional @env0:size @env0:>= 2) @env0:ifTrue: [positional @env0:at: 2] @env0:ifFalse: [None].
+	end := (positional @env0:size @env0:>= 3) @env0:ifTrue: [positional @env0:at: 3] @env0:ifFalse: [None].
+	^ self endswith: suffix _: start _: end
 %
 
 category: 'Grail-String Methods'
@@ -1993,9 +2031,65 @@ ___splitlinesKeepends: keepends
 category: 'Grail-String Methods'
 method: CharacterCollection
 startswith: prefix
-	"Test whether string starts with the specified prefix."
+	"Test whether string starts with the specified prefix.  An empty prefix
+	is always a prefix (CPython) -- GemStone's beginsWith: returns false for
+	an empty argument, so special-case it."
 
+	prefix @env0:isEmpty ifTrue: [^ true].
 	^ self @env0:beginsWith: prefix
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___boundedSlice___: start end: end
+	"self[start:end] with CPython None / negative-index clamping -- shared by
+	the bounded startswith/endswith forms (mirrors bytes>>___boundedSlice___)."
+
+	| size s e |
+	size := self @env0:size.
+	s := start. e := end.
+	(s @env0:== None) ifTrue: [s := 0].
+	(e @env0:== None) ifTrue: [e := size].
+	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
+	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
+	e := e @env0:min: size. s := s @env0:min: size.
+	e @env0:< s ifTrue: [e := s].
+	^ self @env0:copyFrom: s @env0:+ 1 to: e
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+startswith: prefix _: start
+	"str.startswith(prefix, start) -- test self[start:]."
+
+	^ self startswith: prefix _: start _: None
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+startswith: prefix _: start _: end
+	"str.startswith(prefix, start, end) -- test whether self[start:end] starts
+	with prefix (CPython None / negative-index clamping)."
+
+	^ (self ___boundedSlice___: start end: end) startswith: prefix
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+_startswith: positional kw: kwargs
+	"Varargs form of startswith(prefix[, start[, end]]) -- reached via the
+	BoundMethod fallback (getattr(s,'startswith')(...))."
+
+	| prefix start end |
+	positional @env0:size @env0:< 1 ifTrue: [
+		TypeError ___signal___: 'startswith() takes at least 1 argument (0 given)'].
+	positional @env0:size @env0:> 3 ifTrue: [
+		TypeError ___signal___: ('startswith() takes at most 3 arguments ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	prefix := positional @env0:at: 1.
+	start := (positional @env0:size @env0:>= 2) @env0:ifTrue: [positional @env0:at: 2] @env0:ifFalse: [None].
+	end := (positional @env0:size @env0:>= 3) @env0:ifTrue: [positional @env0:at: 3] @env0:ifFalse: [None].
+	^ self startswith: prefix _: start _: end
 %
 
 category: 'Grail-String Methods'
