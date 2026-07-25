@@ -565,26 +565,24 @@ __class__
 category: 'Grail-Sequence Protocol'
 method: bytes
 __contains__: item
-	"Python: `int in bytes` checks for that byte; `bytes/bytearray
-	in bytes` does substring search.  Without the substring branch
-	itsdangerous's `self.sep not in signed_value` (with sep = b'.')
-	always reports false because indexOfSubCollection: only handles
-	subcollection-against-subcollection."
+	"Python membership: ``int in bytes'' tests for that byte value (which must
+	be in range(0, 256), else ValueError); ``bytes/bytearray in bytes'' does a
+	subsequence search (itsdangerous's ``self.sep not in signed_value'' with a
+	bytes sep relies on it).  Any other type -- None, float, str -- is a
+	TypeError (``'a' in b'abc''' raises, matching CPython)."
 
 	(item isKindOf: Integer) ifTrue: [
+		self ___checkByteValue___: item.
 		^ self @env0:includes: item
 	].
-	((item isKindOf: ByteArray) @env0:or: [item isKindOf: CharacterCollection]) ifTrue: [
-		| needle |
-		needle := (item isKindOf: ByteArray)
-			ifTrue: [item]
-			ifFalse: [item @env0:asByteArray].
+	(item isKindOf: ByteArray) ifTrue: [
 		"An empty subsequence is always contained (CPython); GemStone's
 		indexOfSubCollection: reports 0 (not found) for it."
-		needle @env0:isEmpty ifTrue: [^ true].
-		^ (self @env0:indexOfSubCollection: needle) @env0:> 0
+		item @env0:isEmpty ifTrue: [^ true].
+		^ (self @env0:indexOfSubCollection: item) @env0:> 0
 	].
-	^ self @env0:includes: item
+	^ TypeError ___signal___: ('a bytes-like object is required, not '''
+		@env0:, (item @env1:__class__ @env1:__name__) @env0:, '''')
 %
 
 category: 'Grail-Comparison'
@@ -785,7 +783,7 @@ method: bytes
 center: width
 	"bytes.center(width) -- centered in a field of the given width, padded
 	with spaces.  center(width, fillbyte) supplies a different fill."
-	^ self center: width _: 32
+	^ self center: width _: self ___spaceByteString___
 %
 
 category: 'Grail-Search Methods'
@@ -812,7 +810,9 @@ count: sub _: start _: end
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size.
-	s @env0:>= e ifTrue: [^ 0].
+	"``> e'' (not ``>= e'') so an empty window (s = e) still yields the
+	one empty-substring match that count: returns for an empty slice."
+	s @env0:> e ifTrue: [^ 0].
 	^ (self @env0:copyFrom: s @env0:+ 1 to: e) count: sub
 %
 
@@ -863,14 +863,25 @@ rfind: sub
 
 category: 'Grail-Search Methods'
 method: bytes
+___checkByteValue___: n
+	"An int used as a single-byte needle (count/find/index/rfind/rindex) or
+	membership test must be in range(0, 256); CPython raises ValueError
+	otherwise -- including for a large int such as sys.maxsize + 1."
+	((n @env0:>= 0) and: [n @env0:<= 255]) ifFalse: [
+		ValueError ___signal___: 'byte must be in range(0, 256)'].
+	^ n
+%
+
+category: 'Grail-Search Methods'
+method: bytes
 count: sub
 	"Count non-overlapping occurrences of sub"
-	| subClass subSize mySize count i |
-	subClass := sub @env0:class.
+	| subSize mySize count i |
 
 	"sub must be bytes or integer"
-	subClass == SmallInteger ifTrue: [
-		"Count occurrences of single byte"
+	(sub isKindOf: Integer) ifTrue: [
+		"Count occurrences of a single byte value (range-checked)."
+		self ___checkByteValue___: sub.
 		count := 0.
 		mySize := self @env0:size.
 		1 @env0:to: mySize do: [:idx |
@@ -891,9 +902,9 @@ count: sub
 	subSize := sub @env0:size.
 	mySize := self @env0:size.
 
-	"Empty sub always returns 0"
+	"Empty sub matches between every position (CPython: len+1)."
 	(subSize == 0) ifTrue: [
-		^ 0
+		^ mySize @env0:+ 1
 	].
 
 	count := 0.
@@ -1303,7 +1314,7 @@ expandtabs: tabsize
 			].
 			column := column @env0:+ spaces
 		] ifFalse: [
-			(byte == 10) ifTrue: [  "Newline"
+			((byte == 10) or: [byte == 13]) ifTrue: [  "LF or CR both reset the column"
 				| newByte |
 				newByte := bytes ___new___: 1.
 				newByte @env0:at: 1 put: byte.
@@ -1322,16 +1333,34 @@ expandtabs: tabsize
 	^ result
 %
 
+category: 'Grail-String-like Methods'
+method: bytes
+_expandtabs: positional kw: kwargs
+	"Varargs form of expandtabs(tabsize=8) -- reached via the BoundMethod
+	fallback (getattr(obj,'expandtabs')(...)), accepting tabsize positionally
+	or as a keyword."
+
+	| tabsize |
+	positional @env0:size @env0:> 1 ifTrue: [
+		TypeError ___signal___: ('expandtabs() takes at most 1 argument ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	tabsize := (positional @env0:size @env0:>= 1)
+		@env0:ifTrue: [positional @env0:at: 1]
+		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'tabsize'])
+			@env0:ifTrue: [kwargs @env0:at: 'tabsize'] @env0:ifFalse: [8]].
+	^ self expandtabs: tabsize
+%
+
 category: 'Grail-Search Methods'
 method: bytes
 find: sub
 	"Find first occurrence of sub, return index or -1"
-	| subClass subSize mySize i |
-	subClass := sub @env0:class.
+	| subSize mySize i |
 
 	"sub must be bytes or integer"
-	subClass == SmallInteger ifTrue: [
-		"Find first occurrence of single byte"
+	(sub isKindOf: Integer) ifTrue: [
+		"Find first occurrence of a single byte value (range-checked)."
+		self ___checkByteValue___: sub.
 		mySize := self @env0:size.
 		1 @env0:to: mySize do: [:idx |
 			| byte |
@@ -1809,7 +1838,7 @@ method: bytes
 ljust: width
 	"bytes.ljust(width) -- left-justified in a field of the given width,
 	padded with spaces.  ljust(width, fillbyte) supplies a different fill."
-	^ self ljust: width _: 32
+	^ self ljust: width _: self ___spaceByteString___
 %
 
 category: 'Grail-String-like Methods'
@@ -1838,6 +1867,16 @@ lower
 
 category: 'Grail-String-like Methods'
 method: bytes
+___isAsciiSpaceByte___: byte
+	"True if ``byte'' is one of CPython's six ASCII whitespace bytes:
+	TAB(9) LF(10) VT(11) FF(12) CR(13) SPACE(32).  The no-argument
+	strip/lstrip/rstrip forms trim exactly this set (VT and FF were
+	previously omitted)."
+	^ #(9 10 11 12 13 32) @env0:includes: byte
+%
+
+category: 'Grail-String-like Methods'
+method: bytes
 lstrip
 	"Remove leading whitespace bytes"
 	| start size result newSize |
@@ -1849,15 +1888,7 @@ lstrip
 	"Find first non-whitespace"
 	start := 1.
 	[(start @env0:<= size) and: [
-		| byte |
-		byte := self @env0:at: start.
-		(byte == 32) or: [
-			(byte == 9) or: [
-				(byte == 10) or: [
-					byte == 13
-				]
-			]
-		]
+		self ___isAsciiSpaceByte___: (self @env0:at: start)
 	]] @env0:whileTrue: [
 		start := start @env0:+ 1
 	].
@@ -1882,6 +1913,11 @@ method: bytes
 partition: sep
 	"Partition bytes at first occurrence of sep, return tuple (before, sep, after)"
 	| idx before after mySize sepSize afterSize |
+	"sep must be a bytes-like object (an int/str is a TypeError) and non-empty."
+	(sep isKindOf: ByteArray) ifFalse: [
+		TypeError ___signal___: ('a bytes-like object is required, not '''
+			@env0:, (sep @env1:__class__ @env1:__name__) @env0:, '''')].
+	sep @env0:isEmpty ifTrue: [ValueError ___signal___: 'empty separator'].
 	idx := self find: sep.
 
 	"Not found - return (self, empty, empty)"
@@ -1979,10 +2015,15 @@ replace: old _: new
 	newSize := new @env0:size.
 	mySize := self @env0:size.
 
-	"Empty old not allowed"
+	"Empty old: insert new at every gap (CPython interleave)."
 	(oldSize == 0) ifTrue: [
-		^ self @env0:copy
+		^ self ___replaceEmptyOld___: new count: -1
 	].
+
+	"Guard against a gigabyte-scale result before building it (OverflowError,
+	not an OOM VM crash): resultLen = mySize + occurrences * (newSize - oldSize)."
+	self ___checkReplaceResultLen___:
+		(mySize @env0:+ ((self count: old) @env0:* (newSize @env0:- oldSize))).
 
 	"Split by old, then join with new"
 	parts := self split: old.
@@ -1991,14 +2032,54 @@ replace: old _: new
 
 category: 'Grail-Search Methods'
 method: bytes
+___checkReplaceResultLen___: resultLen
+	"CPython raises OverflowError (``replace bytes is too long'') when the
+	result length overflows Py_ssize_t.  Grail additionally cannot materialize
+	a multi-gigabyte result in the temp-object cache, so cap at 2**31 - 1 (the
+	32-bit ssize_t limit test_replace_overflow checks) and raise rather than
+	exhaust VM memory."
+	resultLen @env0:> 2147483647 ifTrue: [
+		OverflowError ___signal___: 'replace bytes is too long'].
+%
+
+category: 'Grail-Search Methods'
+method: bytes
+___replaceEmptyOld___: new count: count
+	"replace(b'', new, count): CPython inserts ``new'' at every gap -- before
+	each byte and after the last -- for the first ``count'' gaps (all of them
+	when count < 0).  A string of length n has n + 1 gaps, so b''.replace(b'',
+	x) is x and b'AA'.replace(b'', b'*-') is b'*-A*-A*-'."
+	| n newSize maxInsert result pos |
+	n := self @env0:size.
+	newSize := new @env0:size.
+	maxInsert := n @env0:+ 1.
+	((count @env0:>= 0) and: [count @env0:< maxInsert]) ifTrue: [maxInsert := count].
+	self ___checkReplaceResultLen___: (n @env0:+ (maxInsert @env0:* newSize)).
+	result := bytes ___new___: (n @env0:+ (maxInsert @env0:* newSize)).
+	pos := 1.
+	1 @env0:to: n do: [:i |
+		"insert ``new'' before byte i for the first maxInsert bytes"
+		(i @env0:<= maxInsert) ifTrue: [
+			1 @env0:to: newSize do: [:k |
+				result @env0:at: pos put: (new @env0:at: k). pos := pos @env0:+ 1]].
+		result @env0:at: pos put: (self @env0:at: i). pos := pos @env0:+ 1].
+	"final gap after the last byte, when the whole (n+1) budget is available"
+	(n @env0:< maxInsert) ifTrue: [
+		1 @env0:to: newSize do: [:k |
+			result @env0:at: pos put: (new @env0:at: k). pos := pos @env0:+ 1]].
+	^ result
+%
+
+category: 'Grail-Search Methods'
+method: bytes
 rfind: sub
 	"Find last occurrence of sub, return index or -1"
-	| subClass subSize mySize i |
-	subClass := sub @env0:class.
+	| subSize mySize i |
 
 	"sub must be bytes or integer"
-	subClass == SmallInteger ifTrue: [
-		"Find last occurrence of single byte"
+	(sub isKindOf: Integer) ifTrue: [
+		"Find last occurrence of a single byte value (range-checked)."
+		self ___checkByteValue___: sub.
 		mySize := self @env0:size.
 		mySize @env0:to: 1 by: -1 do: [:idx |
 			| byte |
@@ -2061,7 +2142,7 @@ method: bytes
 rjust: width
 	"bytes.rjust(width) -- right-justified in a field of the given width,
 	padded with spaces.  rjust(width, fillbyte) supplies a different fill."
-	^ self rjust: width _: 32
+	^ self rjust: width _: self ___spaceByteString___
 %
 
 category: 'Grail-Splitting Methods'
@@ -2069,6 +2150,11 @@ method: bytes
 rpartition: sep
 	"Partition bytes at last occurrence of sep, return tuple (before, sep, after)"
 	| idx before after mySize sepSize afterSize|
+	"sep must be a bytes-like object (an int/str is a TypeError) and non-empty."
+	(sep isKindOf: ByteArray) ifFalse: [
+		TypeError ___signal___: ('a bytes-like object is required, not '''
+			@env0:, (sep @env1:__class__ @env1:__name__) @env0:, '''')].
+	sep @env0:isEmpty ifTrue: [ValueError ___signal___: 'empty separator'].
 	idx := self rfind: sep.
 
 	"Not found - return (empty, empty, self)"
@@ -2202,15 +2288,7 @@ rstrip
 	"Find last non-whitespace"
 	end := size.
 	[(end @env0:>= 1) and: [
-		| byte |
-		byte := self @env0:at: end.
-		(byte == 32) or: [
-			(byte == 9) or: [
-				(byte == 10) or: [
-					byte == 13
-				]
-			]
-		]
+		self ___isAsciiSpaceByte___: (self @env0:at: end)
 	]] @env0:whileTrue: [
 		end := end @env0:- (1)
 	].
@@ -2479,16 +2557,7 @@ strip
 	"Find first non-whitespace"
 	start := 1.
 	[(start @env0:<= size) and: [
-		| byte |
-		byte := self @env0:at: start.
-		"Whitespace: space(32), tab(9), newline(10), carriage return(13)"
-		(byte == 32) or: [
-			(byte == 9) or: [
-				(byte == 10) or: [
-					byte == 13
-				]
-			]
-		]
+		self ___isAsciiSpaceByte___: (self @env0:at: start)
 	]] @env0:whileTrue: [
 		start := start @env0:+ 1
 	].
@@ -2501,15 +2570,7 @@ strip
 	"Find last non-whitespace"
 	end := size.
 	[(end @env0:>= start) and: [
-		| byte |
-		byte := self @env0:at: end.
-		(byte == 32) or: [
-			(byte == 9) or: [
-				(byte == 10) or: [
-					byte == 13
-				]
-			]
-		]
+		self ___isAsciiSpaceByte___: (self @env0:at: end)
 	]] @env0:whileTrue: [
 		end := end @env0:- (1)
 	].
@@ -2715,8 +2776,10 @@ upper
 category: 'Grail-Padding Methods'
 method: bytes
 zfill: width
-	"Pad bytes with zeros on the left to fill width"
-	| mySize result padding |
+	"Pad bytes with zeros on the left to fill width.  A leading ASCII sign
+	(``+'' / ``-'') stays in front of the zero fill (b'+1'.zfill(4) -> b'+01',
+	not b'0+1')."
+	| mySize result padding hasSign |
 	mySize := self @env0:size.
 
 	"If already wide enough, return copy"
@@ -2724,18 +2787,19 @@ zfill: width
 		^ self @env0:copy
 	].
 
-	"Pad with zeros"
 	padding := width @env0:- (mySize).
 	result := bytes ___new___: width.
 
-	"Add zeros"
-	1 @env0:to: padding do: [:i |
-		result @env0:at: i put: 48  "ASCII '0'"
-	].
-
-	"Copy original"
-	1 @env0:to: mySize do: [:i |
-		result @env0:at: (padding @env0:+ i) put: (self @env0:at: i)
+	hasSign := (mySize @env0:> 0) and: [
+		| b | b := self @env0:at: 1. (b == 43) or: [b == 45]].
+	hasSign ifTrue: [
+		"Sign first, then the zero fill, then the digits after the sign."
+		result @env0:at: 1 put: (self @env0:at: 1).
+		1 @env0:to: padding do: [:i | result @env0:at: (i @env0:+ 1) put: 48].
+		2 @env0:to: mySize do: [:i | result @env0:at: (padding @env0:+ i) put: (self @env0:at: i)]
+	] ifFalse: [
+		1 @env0:to: padding do: [:i | result @env0:at: i put: 48  "ASCII '0'"].
+		1 @env0:to: mySize do: [:i | result @env0:at: (padding @env0:+ i) put: (self @env0:at: i)]
 	].
 
 	^ result
@@ -2769,7 +2833,9 @@ find: sub _: start _: end
 	(e @env0:== None) ifTrue: [e := size].
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
-	e := e @env0:min: size. s := s @env0:min: size.
+	e := e @env0:min: size.
+	"Do NOT clamp s to size: a start past the end must miss (empty sub
+	included) -- ``s > e'' then rejects it, since e <= size < s."
 	s @env0:> e ifTrue: [^ -1].
 	r := (self @env0:copyFrom: s @env0:+ 1 to: e) find: sub.
 	^ (r @env0:= -1) ifTrue: [-1] ifFalse: [r @env0:+ s]
@@ -2817,13 +2883,27 @@ rindex: sub _: start _: end
 
 category: 'Grail-Padding Methods'
 method: bytes
+___spaceByteString___
+	"A length-1 bytes holding the ASCII space -- the default fill for the
+	no-fill center/ljust/rjust forms, passed through the same (int-rejecting)
+	fill validation as an explicit fill argument."
+	| b |
+	b := bytes ___new___: 1.
+	b @env0:at: 1 put: 32.
+	^ b
+%
+
+category: 'Grail-Padding Methods'
+method: bytes
 ___byteValueOf___: aFill
-	"The single byte value of a padding/fill argument: an int is used
-	directly; a length-1 bytes/bytearray yields its one byte (CPython
-	requires the fill to be a single byte)."
-	(aFill isKindOf: SmallInteger) ifTrue: [^ aFill].
+	"The single byte value of a center/ljust/rjust fill argument.  CPython
+	requires the fill to be a byte STRING of length 1 -- an int (or str) is a
+	TypeError, unlike the fills accepted elsewhere (e.g. a bytes constructor)."
+	(aFill isKindOf: ByteArray) ifFalse: [
+		TypeError ___signal___: ('a bytes-like object of length 1 is required, not '''
+			@env0:, (aFill @env1:__class__ @env1:__name__) @env0:, '''')].
 	(aFill @env0:size @env0:= 1) ifFalse: [
-		TypeError ___signal___: 'fill character must be a byte or a bytes of length 1'].
+		TypeError ___signal___: 'The fill character must be a byte string of length 1'].
 	^ aFill @env0:at: 1
 %
 
@@ -2886,8 +2966,37 @@ replace: old _: new _: count
 	(count @env0:= 0) ifTrue: [^ self @env0:copy].
 	(old isKindOf: bytes) ifFalse: [TypeError ___signal___: 'first argument must be bytes'].
 	(new isKindOf: bytes) ifFalse: [TypeError ___signal___: 'second argument must be bytes'].
-	(old @env0:size @env0:= 0) ifTrue: [^ self @env0:copy].
+	"Empty old: interleave new at the first ``count'' gaps (count > 0 here)."
+	(old @env0:size @env0:= 0) ifTrue: [^ self ___replaceEmptyOld___: new count: count].
+	"Guard against a gigabyte-scale result: at most ``count'' replacements happen."
+	self ___checkReplaceResultLen___:
+		(self @env0:size @env0:+ (((self count: old) @env0:min: count)
+			@env0:* (new @env0:size @env0:- old @env0:size))).
 	^ new join: (self split: old _: count)
+%
+
+category: 'Grail-Search Methods'
+method: bytes
+_replace: positional kw: kwargs
+	"Varargs form of replace(old, new, count=-1) -- reached via the
+	BoundMethod fallback (getattr(obj,'replace')(...)) when a ``count=''
+	keyword is present (the fixed-arity replace:_: / replace:_:_: fast paths
+	take positionals only)."
+
+	| old new count |
+	positional @env0:size @env0:< 2 ifTrue: [
+		TypeError ___signal___: ('replace() takes at least 2 arguments ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	positional @env0:size @env0:> 3 ifTrue: [
+		TypeError ___signal___: ('replace() takes at most 3 arguments ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	old := positional @env0:at: 1.
+	new := positional @env0:at: 2.
+	count := (positional @env0:size @env0:>= 3)
+		@env0:ifTrue: [positional @env0:at: 3]
+		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'count'])
+			@env0:ifTrue: [kwargs @env0:at: 'count'] @env0:ifFalse: [-1]].
+	^ self replace: old _: new _: count
 %
 
 category: 'Grail-Splitting Methods'
