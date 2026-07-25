@@ -129,6 +129,23 @@ ___multiplier___: unit
 	^ TypeError @env1:___signal___: 'unsupported timedelta unit: ' , unit asString
 %
 
+category: 'Grail-Hash'
+method: PyTimedelta
+= other
+	"Smalltalk value-equality + hash so equal timedeltas collapse as
+	PyDict/set keys: those bucket non-PythonInstance keys by Smalltalk
+	hash and match by Smalltalk =, which default to identity."
+
+	^ (other isKindOf: PyTimedelta)
+		and: [(self @env1:___totalMicros___) = (other @env1:___totalMicros___)]
+%
+
+category: 'Grail-Hash'
+method: PyTimedelta
+hash
+	^ (self @env1:___totalMicros___) hash
+%
+
 set compile_env: 1
 
 category: 'Grail-Accessors'
@@ -861,6 +878,23 @@ ___fromFields___: y _: mo _: d _: h _: mi _: s _: us _: tz
 		_hour: h _minute: mi _second: s
 		_microsecond: us _tzinfo: tz.
 	^ inst
+%
+
+category: 'Grail-Hash'
+method: PyDateTime
+= other
+	"Smalltalk value-equality + hash so equal datetimes collapse as
+	PyDict/set keys (naive compare key; tzinfo-aware deferred, matching
+	__eq__/__hash__)."
+
+	^ (other isKindOf: PyDateTime)
+		and: [(self @env1:___compareKey___) = (other @env1:___compareKey___)]
+%
+
+category: 'Grail-Hash'
+method: PyDateTime
+hash
+	^ (self @env1:___compareKey___) hash
 %
 
 category: 'Grail-Private'
@@ -1710,6 +1744,23 @@ ___fromFields___: y _: m _: d
 	^ inst
 %
 
+category: 'Grail-Hash'
+method: PyDate
+= other
+	"Smalltalk value-equality + hash so equal dates collapse as PyDict/set
+	keys (they bucket non-PythonInstance keys by Smalltalk hash and match
+	by Smalltalk =, which default to identity)."
+
+	^ (other isKindOf: PyDate)
+		and: [(self @env1:toordinal) = (other @env1:toordinal)]
+%
+
+category: 'Grail-Hash'
+method: PyDate
+hash
+	^ (self @env1:toordinal) hash
+%
+
 category: 'Grail-Private'
 method: PyDate
 _year: y _month: m _day: d
@@ -2215,6 +2266,24 @@ ___fromFields___: h _: mi _: s _: us _: tz
 	inst := self new.
 	inst _hour: h _minute: mi _second: s _microsecond: us _tzinfo: tz.
 	^ inst
+%
+
+category: 'Grail-Hash'
+method: PyTime
+= other
+	"Smalltalk value-equality + hash so equal times collapse as PyDict/set
+	keys (they bucket non-PythonInstance keys by Smalltalk hash and match
+	by Smalltalk =, which default to identity).  Naive key; tzinfo-aware
+	deferred, matching __eq__."
+
+	^ (other isKindOf: PyTime)
+		and: [(self @env1:___cmpKey___) = (other @env1:___cmpKey___)]
+%
+
+category: 'Grail-Hash'
+method: PyTime
+hash
+	^ (self @env1:___cmpKey___) hash
 %
 
 category: 'Grail-Private'
