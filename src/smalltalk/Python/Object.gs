@@ -2801,9 +2801,14 @@ ___pyAttrStore___: aName put: aValue
 category: 'Grail-String Representation'
 method: object
 __str__
-	"Return a string representation for display"
+	"CPython: object.__str__ delegates to __repr__ -- str() falls back to
+	repr() for any object that does not override __str__.  Grail previously
+	returned the GemStone printString here, so a class whose only str
+	customization was a __repr__ (or ``__str__ = object.__str__'', which is
+	defined to route through __repr__) rendered the Smalltalk printString
+	instead of the Python repr (test_enum's test_object_str_override)."
 
-	^ (self @env0:printString) @env0:asUnicodeString
+	^ self __repr__
 %
 
 category: 'Grail-Other'

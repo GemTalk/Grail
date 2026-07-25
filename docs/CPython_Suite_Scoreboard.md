@@ -1,6 +1,6 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-07-25T01:35:13Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
+Generated: 2026-07-25T04:04:05Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
 
 **Modules: 21** — OK 13 · FAIL 0 · ERROR 8 · SKIP 0 · IMPORTERROR 0 · STERROR 0 · CRASH 0 · TIMEOUT 0
 
@@ -34,4 +34,4 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_bytes | ERROR | 316 | 52 | 43 | 16 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
-| test.test_enum | ERROR | 1077 | 267 | 119 | 0 |  |
+| test.test_enum | ERROR | 1077 | 232 | 117 | 0 |  |
