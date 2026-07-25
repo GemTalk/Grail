@@ -1647,14 +1647,18 @@ _replaceFirst: old _: new _: count
 category: 'Grail-String Methods'
 method: CharacterCollection
 _replace: positional kw: kwargs
-	"Varargs entry for ``replace(old, new[, count])''."
+	"Varargs entry for ``replace(old, new[, count])'' -- ``count'' is
+	accepted positionally or as a keyword (str.replace(old, new, count=N))."
 
 	| old new count |
 	old := positional @env0:at: 1.
 	new := positional @env0:at: 2.
-	positional @env0:size @env0:>= 3
-		ifTrue: [count := positional @env0:at: 3]
-		ifFalse: [^ self replace: old _: new].
+	count := (positional @env0:size @env0:>= 3)
+		@env0:ifTrue: [positional @env0:at: 3]
+		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'count'])
+			@env0:ifTrue: [kwargs @env0:at: 'count'] @env0:ifFalse: [nil]].
+	"nil count (neither positional nor keyword) -> replace all, matching the
+	2-arg form; the 3-arg form also treats nil/None/negative as ``all''."
 	^ self replace: old _: new _: count
 %
 
