@@ -373,6 +373,49 @@ def _zfill_sign():
 def _zfill_sign_ba():
     return bytearray(b'+1').zfill(4) == b'+001'
 
+# An int needle out of byte range (0..255) is a ValueError; membership of a
+# non-int, non-bytes-like object (None, float, str) is a TypeError.
+def _contains_int_range():
+    import sys
+    b = b'abc'
+    for x in (300, -1, sys.maxsize + 1):
+        try:
+            x in b
+            return False
+        except ValueError:
+            pass
+    return True
+def _contains_typeerror():
+    b = b'abc'
+    for x in (None, 97.0, 'a'):
+        try:
+            x in b
+            return False
+        except TypeError:
+            pass
+    return True
+def _search_int_range():
+    import sys
+    b = b'hello'
+    for m in (b.find, b.count, b.index, b.rfind, b.rindex):
+        for x in (-1, 256, 9999, sys.maxsize + 1):
+            try:
+                m(x)
+                return False
+            except ValueError:
+                pass
+    return True
+def _search_int_range_ba():
+    b = bytearray(b'hello')
+    for m in (b.find, b.count, b.index, b.rfind, b.rindex):
+        for x in (-1, 256):
+            try:
+                m(x)
+                return False
+            except ValueError:
+                pass
+    return True
+
 
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
@@ -664,4 +707,10 @@ RESULTS = {
     'expandtabs_toomany': _expandtabs_toomany(),
     'zfill_sign': _zfill_sign(),
     'zfill_sign_ba': _zfill_sign_ba(),
+
+    # --- int needle byte-range (ValueError) + membership type-check ---
+    'contains_int_range': _contains_int_range(),
+    'contains_typeerror': _contains_typeerror(),
+    'search_int_range': _search_int_range(),
+    'search_int_range_ba': _search_int_range_ba(),
 }

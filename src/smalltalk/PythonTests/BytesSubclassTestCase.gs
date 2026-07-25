@@ -349,3 +349,17 @@ testStripExpandtabsZfill
 	  'expandtabs_toomany' 'zfill_sign' 'zfill_sign_ba') do: [:key |
 		self assert: ((self resultAt: key) = true) description: key]
 %
+
+category: 'Grail-Tests - int-needle range + membership type'
+method: BytesSubclassTestCase
+testByteNeedleRangeAndMembership
+	"An int used as a single-byte needle (count/find/index/rfind/rindex) or a
+	membership test must be in range(0, 256), else ValueError -- including a
+	large int (sys.maxsize + 1).  Membership of a non-int, non-bytes-like
+	object (None/float/str) is a TypeError.  bytearray inherits/overrides the
+	same behavior."
+
+	#('contains_int_range' 'contains_typeerror' 'search_int_range'
+	  'search_int_range_ba') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%

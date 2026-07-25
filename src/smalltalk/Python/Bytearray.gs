@@ -595,8 +595,9 @@ find: sub _: start _: end
 	"Clamp only hi to size: a start past the end must miss (an empty sub
 	included), so leave lo unclamped and let the ``lo > hi'' guards reject it."
 	hi := hi @env0:min: size.
-	"Single byte value: linear scan."
-	(sub isKindOf: SmallInteger) ifTrue: [
+	"Single byte value (range-checked): linear scan."
+	(sub isKindOf: Integer) ifTrue: [
+		self ___checkByteValue___: sub.
 		lo @env0:+ 1 @env0:to: hi do: [:i |
 			(self @env0:at: i) @env0:= sub ifTrue: [
 				^ i @env0:- 1

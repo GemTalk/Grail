@@ -565,26 +565,24 @@ __class__
 category: 'Grail-Sequence Protocol'
 method: bytes
 __contains__: item
-	"Python: `int in bytes` checks for that byte; `bytes/bytearray
-	in bytes` does substring search.  Without the substring branch
-	itsdangerous's `self.sep not in signed_value` (with sep = b'.')
-	always reports false because indexOfSubCollection: only handles
-	subcollection-against-subcollection."
+	"Python membership: ``int in bytes'' tests for that byte value (which must
+	be in range(0, 256), else ValueError); ``bytes/bytearray in bytes'' does a
+	subsequence search (itsdangerous's ``self.sep not in signed_value'' with a
+	bytes sep relies on it).  Any other type -- None, float, str -- is a
+	TypeError (``'a' in b'abc''' raises, matching CPython)."
 
 	(item isKindOf: Integer) ifTrue: [
+		self ___checkByteValue___: item.
 		^ self @env0:includes: item
 	].
-	((item isKindOf: ByteArray) @env0:or: [item isKindOf: CharacterCollection]) ifTrue: [
-		| needle |
-		needle := (item isKindOf: ByteArray)
-			ifTrue: [item]
-			ifFalse: [item @env0:asByteArray].
+	(item isKindOf: ByteArray) ifTrue: [
 		"An empty subsequence is always contained (CPython); GemStone's
 		indexOfSubCollection: reports 0 (not found) for it."
-		needle @env0:isEmpty ifTrue: [^ true].
-		^ (self @env0:indexOfSubCollection: needle) @env0:> 0
+		item @env0:isEmpty ifTrue: [^ true].
+		^ (self @env0:indexOfSubCollection: item) @env0:> 0
 	].
-	^ self @env0:includes: item
+	^ TypeError ___signal___: ('a bytes-like object is required, not '''
+		@env0:, (item @env1:__class__ @env1:__name__) @env0:, '''')
 %
 
 category: 'Grail-Comparison'
@@ -865,14 +863,25 @@ rfind: sub
 
 category: 'Grail-Search Methods'
 method: bytes
+___checkByteValue___: n
+	"An int used as a single-byte needle (count/find/index/rfind/rindex) or
+	membership test must be in range(0, 256); CPython raises ValueError
+	otherwise -- including for a large int such as sys.maxsize + 1."
+	((n @env0:>= 0) and: [n @env0:<= 255]) ifFalse: [
+		ValueError ___signal___: 'byte must be in range(0, 256)'].
+	^ n
+%
+
+category: 'Grail-Search Methods'
+method: bytes
 count: sub
 	"Count non-overlapping occurrences of sub"
-	| subClass subSize mySize count i |
-	subClass := sub @env0:class.
+	| subSize mySize count i |
 
 	"sub must be bytes or integer"
-	subClass == SmallInteger ifTrue: [
-		"Count occurrences of single byte"
+	(sub isKindOf: Integer) ifTrue: [
+		"Count occurrences of a single byte value (range-checked)."
+		self ___checkByteValue___: sub.
 		count := 0.
 		mySize := self @env0:size.
 		1 @env0:to: mySize do: [:idx |
@@ -1346,12 +1355,12 @@ category: 'Grail-Search Methods'
 method: bytes
 find: sub
 	"Find first occurrence of sub, return index or -1"
-	| subClass subSize mySize i |
-	subClass := sub @env0:class.
+	| subSize mySize i |
 
 	"sub must be bytes or integer"
-	subClass == SmallInteger ifTrue: [
-		"Find first occurrence of single byte"
+	(sub isKindOf: Integer) ifTrue: [
+		"Find first occurrence of a single byte value (range-checked)."
+		self ___checkByteValue___: sub.
 		mySize := self @env0:size.
 		1 @env0:to: mySize do: [:idx |
 			| byte |
@@ -2015,12 +2024,12 @@ category: 'Grail-Search Methods'
 method: bytes
 rfind: sub
 	"Find last occurrence of sub, return index or -1"
-	| subClass subSize mySize i |
-	subClass := sub @env0:class.
+	| subSize mySize i |
 
 	"sub must be bytes or integer"
-	subClass == SmallInteger ifTrue: [
-		"Find last occurrence of single byte"
+	(sub isKindOf: Integer) ifTrue: [
+		"Find last occurrence of a single byte value (range-checked)."
+		self ___checkByteValue___: sub.
 		mySize := self @env0:size.
 		mySize @env0:to: 1 by: -1 do: [:idx |
 			| byte |
