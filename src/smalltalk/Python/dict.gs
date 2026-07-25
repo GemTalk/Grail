@@ -114,11 +114,28 @@ fromkeys: iterable
 category: 'Grail-Initialization'
 classmethod: dict
 fromkeys: iterable _: value
-	"dict.fromkeys(iterable, value) — return a new dict with keys
-	from iterable, each mapped to ``value``."
+	"dict.fromkeys(iterable, value): a new mapping with keys from iterable,
+	each mapped to ``value''.  Mirrors CPython dict.fromkeys(cls, ...): build
+	the result via cls() -- honoring a user __new__ (which may return a
+	DIFFERENT type, e.g. ``class mydict(dict): __new__ -> UserDict'') and
+	__init__ -- then d[key] = value for each key via __setitem__ (so an
+	overriding __setitem__ fires, test_fromkeys' baddict2).
+
+	Grail's dict-subclass cls() (ClassDefAst instantiation) bypasses __new__ (a
+	documented limitation), so allocate through ___allocateInstance___ (which
+	DOES run a user __new__) and run __init__() only when __new__ yielded a
+	genuine cls instance -- CPython's type.__call__ skips __init__ when
+	__new__'s result isn't an instance of cls (test_fromkeys mydict/baddict3
+	return a foreign type; baddict1 __init__ raises; baddict4 __init__ fills)."
 
 	| result iter done |
-	result := self ___new___.
+	result := self @env1:___allocateInstance___: #() kw: nil.
+	(result @env0:isKindOf: self) ifTrue: [
+		"object supplies a no-op ___init__:kw: so this resolves for every
+		class; a user __init__ runs with no args, as cls() would."
+		[result @env0:perform: #'___init__:kw:' env: 1
+			withArguments: (Array @env0:with: #() @env0:with: nil)]
+			@env0:on: MessageNotUnderstood do: [:ex | nil]].
 	"A string yields its 1-character SUBSTRINGS as keys, not Smalltalk
 	 Characters (CPython quirk: dict.fromkeys('abc') == {'a':v,'b':v,'c':v})."
 	(iterable isKindOf: CharacterCollection) ifTrue: [
@@ -126,20 +143,20 @@ fromkeys: iterable _: value
 			| s |
 			s := Unicode7 ___new___: 1.
 			s @env0:at: 1 put: (iterable @env0:at: i).
-			result @env0:at: s put: value
+			result @env1:__setitem__: s _: value
 		].
 		^ result
 	].
 	(iterable isKindOf: SequenceableCollection) ifTrue: [
 		1 @env0:to: iterable @env0:size do: [:i |
-			result @env0:at: (iterable @env0:at: i) put: value
+			result @env1:__setitem__: (iterable @env0:at: i) _: value
 		].
 		^ result
 	].
 	iter := iterable __iter__.
 	done := false.
 	[done] @env0:whileFalse: [
-		[result @env0:at: iter __next__ put: value]
+		[result @env1:__setitem__: iter __next__ _: value]
 			@env0:on: StopIteration do: [:ex | done := true]
 	].
 	^ result
