@@ -782,12 +782,21 @@ ___grailInstallEnumOutput: cls
 	per-selector guard below already keeps them."
 
 	| strOverridden |
-	(Enum ___grailIsStrEnumClass: cls) ifTrue: [^ cls].
-	"A user __str__ override (a class-body def, or one inherited from a user
-	base) with NO matching __format__ override makes format() follow str():
-	CPython's EnumType replaces __format__ with the str-delegating one so
-	``format(member)'' == ``str(member)'' rather than the mix-in value format."
+	"A user __str__ override (a class-body def, one inherited from a user base,
+	or a functional-API forwarder) with NO matching __format__ override makes
+	format() follow str(): CPython's EnumType replaces __format__ with the
+	str-delegating one so ``format(member)'' == ``str(member)'' rather than the
+	mix-in value format."
 	strOverridden := Enum ___grailUserProvides: cls selector: #'__str__'.
+	(Enum ___grailIsStrEnumClass: cls) ifTrue: [
+		"StrEnum keeps str's value __str__/__format__ and its own __repr__ -- do
+		not force Enum's.  The format-follows-str rule is the one exception: a
+		StrEnum subclass overriding __str__ (but not __format__) must format via
+		str."
+		(strOverridden and: [(Enum ___grailUserProvides: cls selector: #'__format__:') @env0:not])
+			ifTrue: [cls ___compileMethod: '__format__: aSpec
+	^ (self __str__) __format__: aSpec' category: 'Grail-Enum Member'].
+		^ cls].
 	"Nested {selector. source} pairs (NOT Associations -- a bare ``->'' would
 	be an env-1 send and DNU here)."
 	{ { #'__repr__'. '__repr__
@@ -825,7 +834,8 @@ ___grailShouldForceOutput: cls selector: sel
 	"categoryOfSelector: answers a Symbol -- compare against Symbols."
 	cat := [p @env0:categoryOfSelector: sel environmentId: 1]
 		@env0:on: AbstractException do: [:e | nil].
-	^ (#(#'Grail-Class Methods' #'Grail-Method Aliases' #'Grail-Property-ReadOnly'
+	^ (#(#'Grail-Class Methods' #'Grail-Method Aliases' #'Grail-Enum Override'
+		#'Grail-Property-ReadOnly'
 		#'Grail-CachedProperty-Setter' #'Grail-Enum Member' #'Grail-Flag Member'
 		#'Grail-IntFlag Member') @env0:includes: cat) @env0:not
 %
@@ -843,7 +853,7 @@ ___grailUserProvides: cls selector: sel
 	p @env0:isNil ifTrue: [^ false].
 	cat := [p @env0:categoryOfSelector: sel environmentId: 1]
 		@env0:on: AbstractException do: [:e | nil].
-	^ #(#'Grail-Class Methods' #'Grail-Method Aliases') @env0:includes: cat
+	^ #(#'Grail-Class Methods' #'Grail-Method Aliases' #'Grail-Enum Override') @env0:includes: cat
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1136,30 +1146,35 @@ ___grailCompileOverrideForwarder: cls name: nm
 	| src |
 	nm @env0:= '__format__'
 		ifTrue: [src := '__format__: spec
-	^ self ___grailInvokeOverride: ''__format__'' args: { spec }']
+	^ Enum ___grailInvokeOverride: self name: ''__format__'' args: { spec }']
 		ifFalse: [src := nm @env0:, '
-	^ self ___grailInvokeOverride: ''' @env0:, nm @env0:, ''' args: #()'].
-	cls ___compileMethod: src category: 'Grail-Enum Member'
+	^ Enum ___grailInvokeOverride: self name: ''' @env0:, nm @env0:, ''' args: #()'].
+	cls ___compileMethod: src category: 'Grail-Enum Override'
 %
 
 category: 'Grail-Enum Member'
-method: Enum
-___grailInvokeOverride: nm args: argArray
-	"Call the functional-API dunder override for self's class (or nearest
-	ancestor).  self is the enum member, bound as the callable's first arg."
+classmethod: Enum
+___grailInvokeOverride: member name: nm args: argArray
+	"Call the functional-API dunder override for member's class (or nearest
+	ancestor).  member is the enum member, bound as the callable's first arg.
+	A CLASS method (reached via the always-global ``Enum'') so a data-mixed
+	member -- IntEnum/IntFlag/StrEnum, whose class does NOT inherit Enum --
+	can still invoke it; an instance method on Enum would DNU on such a member
+	and get forwarded to its primitive int/str value (a SmallInteger that does
+	not understand ___grailInvokeOverride:)."
 
 	| tbl walker callable |
 	tbl := SessionTemps @env0:current @env0:at: #GrailEnumOverrides otherwise: nil.
 	callable := nil.
 	(tbl ~~ nil) ifTrue: [
-		walker := self @env0:class.
+		walker := member @env0:class.
 		[walker ~~ nil and: [callable == nil]] @env0:whileTrue: [
 			| per |
 			per := tbl @env0:at: walker otherwise: nil.
 			per == nil ifFalse: [callable := per @env0:at: nm otherwise: nil].
 			walker := walker @env0:superClass]].
-	callable == nil ifTrue: [^ self __repr__].
-	^ callable value: ({ self } @env0:, argArray) value: nil
+	callable == nil ifTrue: [^ member __repr__].
+	^ callable value: ({ member } @env0:, argArray) value: nil
 %
 
 ! ------------------- Enum class: metaclass entry points
