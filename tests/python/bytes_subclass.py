@@ -416,6 +416,61 @@ def _search_int_range_ba():
                 pass
     return True
 
+# center/ljust/rjust require a bytes-like fill of length 1; an int (or str) is
+# a TypeError.
+def _xjust_int_fill():
+    for m in ('center', 'ljust', 'rjust'):
+        try:
+            getattr(b'abc', m)(7, 32)
+            return False
+        except TypeError:
+            pass
+    return True
+def _xjust_bytes_fill():
+    return (b'abc'.center(7, b'*') == b'**abc**'
+            and b'abc'.ljust(5, b'-') == b'abc--'
+            and b'abc'.rjust(5, b'-') == b'--abc')
+def _xjust_int_fill_ba():
+    try:
+        bytearray(b'abc').center(7, 32)
+        return False
+    except TypeError:
+        return True
+
+# partition/rpartition reject a non-bytes-like separator (int/str) with a
+# TypeError, and an empty separator with a ValueError.
+def _partition_int_sep():
+    for m in ('partition', 'rpartition'):
+        try:
+            getattr(b'a b', m)(32)
+            return False
+        except TypeError:
+            pass
+    return True
+def _partition_str_sep():
+    for m in ('partition', 'rpartition'):
+        try:
+            getattr(b'a b', m)(' ')
+            return False
+        except TypeError:
+            pass
+    return True
+def _partition_empty_sep():
+    try:
+        b'abc'.partition(b'')
+        return False
+    except ValueError:
+        return True
+def _partition_ok():
+    return (b'a.b.c'.partition(b'.') == (b'a', b'.', b'b.c')
+            and b'a.b.c'.rpartition(b'.') == (b'a.b', b'.', b'c'))
+def _partition_int_sep_ba():
+    try:
+        bytearray(b'a b').partition(32)
+        return False
+    except TypeError:
+        return True
+
 
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
@@ -713,4 +768,14 @@ RESULTS = {
     'contains_typeerror': _contains_typeerror(),
     'search_int_range': _search_int_range(),
     'search_int_range_ba': _search_int_range_ba(),
+
+    # --- justify int/str fill TypeError; partition non-bytes/empty sep ---
+    'xjust_int_fill': _xjust_int_fill(),
+    'xjust_bytes_fill': _xjust_bytes_fill(),
+    'xjust_int_fill_ba': _xjust_int_fill_ba(),
+    'partition_int_sep': _partition_int_sep(),
+    'partition_str_sep': _partition_str_sep(),
+    'partition_empty_sep': _partition_empty_sep(),
+    'partition_ok': _partition_ok(),
+    'partition_int_sep_ba': _partition_int_sep_ba(),
 }

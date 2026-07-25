@@ -783,7 +783,7 @@ method: bytes
 center: width
 	"bytes.center(width) -- centered in a field of the given width, padded
 	with spaces.  center(width, fillbyte) supplies a different fill."
-	^ self center: width _: 32
+	^ self center: width _: self ___spaceByteString___
 %
 
 category: 'Grail-Search Methods'
@@ -1838,7 +1838,7 @@ method: bytes
 ljust: width
 	"bytes.ljust(width) -- left-justified in a field of the given width,
 	padded with spaces.  ljust(width, fillbyte) supplies a different fill."
-	^ self ljust: width _: 32
+	^ self ljust: width _: self ___spaceByteString___
 %
 
 category: 'Grail-String-like Methods'
@@ -1913,6 +1913,11 @@ method: bytes
 partition: sep
 	"Partition bytes at first occurrence of sep, return tuple (before, sep, after)"
 	| idx before after mySize sepSize afterSize |
+	"sep must be a bytes-like object (an int/str is a TypeError) and non-empty."
+	(sep isKindOf: ByteArray) ifFalse: [
+		TypeError ___signal___: ('a bytes-like object is required, not '''
+			@env0:, (sep @env1:__class__ @env1:__name__) @env0:, '''')].
+	sep @env0:isEmpty ifTrue: [ValueError ___signal___: 'empty separator'].
 	idx := self find: sep.
 
 	"Not found - return (self, empty, empty)"
@@ -2092,7 +2097,7 @@ method: bytes
 rjust: width
 	"bytes.rjust(width) -- right-justified in a field of the given width,
 	padded with spaces.  rjust(width, fillbyte) supplies a different fill."
-	^ self rjust: width _: 32
+	^ self rjust: width _: self ___spaceByteString___
 %
 
 category: 'Grail-Splitting Methods'
@@ -2100,6 +2105,11 @@ method: bytes
 rpartition: sep
 	"Partition bytes at last occurrence of sep, return tuple (before, sep, after)"
 	| idx before after mySize sepSize afterSize|
+	"sep must be a bytes-like object (an int/str is a TypeError) and non-empty."
+	(sep isKindOf: ByteArray) ifFalse: [
+		TypeError ___signal___: ('a bytes-like object is required, not '''
+			@env0:, (sep @env1:__class__ @env1:__name__) @env0:, '''')].
+	sep @env0:isEmpty ifTrue: [ValueError ___signal___: 'empty separator'].
 	idx := self rfind: sep.
 
 	"Not found - return (empty, empty, self)"
@@ -2828,13 +2838,27 @@ rindex: sub _: start _: end
 
 category: 'Grail-Padding Methods'
 method: bytes
+___spaceByteString___
+	"A length-1 bytes holding the ASCII space -- the default fill for the
+	no-fill center/ljust/rjust forms, passed through the same (int-rejecting)
+	fill validation as an explicit fill argument."
+	| b |
+	b := bytes ___new___: 1.
+	b @env0:at: 1 put: 32.
+	^ b
+%
+
+category: 'Grail-Padding Methods'
+method: bytes
 ___byteValueOf___: aFill
-	"The single byte value of a padding/fill argument: an int is used
-	directly; a length-1 bytes/bytearray yields its one byte (CPython
-	requires the fill to be a single byte)."
-	(aFill isKindOf: SmallInteger) ifTrue: [^ aFill].
+	"The single byte value of a center/ljust/rjust fill argument.  CPython
+	requires the fill to be a byte STRING of length 1 -- an int (or str) is a
+	TypeError, unlike the fills accepted elsewhere (e.g. a bytes constructor)."
+	(aFill isKindOf: ByteArray) ifFalse: [
+		TypeError ___signal___: ('a bytes-like object of length 1 is required, not '''
+			@env0:, (aFill @env1:__class__ @env1:__name__) @env0:, '''')].
 	(aFill @env0:size @env0:= 1) ifFalse: [
-		TypeError ___signal___: 'fill character must be a byte or a bytes of length 1'].
+		TypeError ___signal___: 'The fill character must be a byte string of length 1'].
 	^ aFill @env0:at: 1
 %
 

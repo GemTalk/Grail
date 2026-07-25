@@ -363,3 +363,16 @@ testByteNeedleRangeAndMembership
 	  'search_int_range_ba') do: [:key |
 		self assert: ((self resultAt: key) = true) description: key]
 %
+
+category: 'Grail-Tests - justify fill + partition separator types'
+method: BytesSubclassTestCase
+testJustifyFillAndPartitionSep
+	"center/ljust/rjust require a bytes-like fill of length 1 (an int/str is a
+	TypeError); partition/rpartition require a bytes-like separator (int/str ->
+	TypeError) that is non-empty (empty -> ValueError).  bytearray inherits."
+
+	#('xjust_int_fill' 'xjust_bytes_fill' 'xjust_int_fill_ba' 'partition_int_sep'
+	  'partition_str_sep' 'partition_empty_sep' 'partition_ok'
+	  'partition_int_sep_ba') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
