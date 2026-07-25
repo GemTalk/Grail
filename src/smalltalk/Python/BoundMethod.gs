@@ -206,6 +206,7 @@ ___pythonValueAttrs___
 		add: #'__func__';
 		add: #'__self__';
 		add: #'__annotations__';
+		add: #'__dict__';
 		yourself
 %
 
@@ -353,6 +354,25 @@ __name__
 
 	selector == nil ifTrue: [^ receiver @env0:class @env0:name @env0:asString].
 	^ selector @env0:asString
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__dict__
+	"The ``type'' builtin's namespace as a read-only mappingproxy, so
+	``type(type.__dict__)'' yields the mappingproxy type (test_dict
+	test_views_mapping).  Grail models ``type'' as a BoundMethod, not a real
+	metaclass object, so the proxy wraps an empty dict -- only its TYPE is
+	consulted here.  Every OTHER BoundMethod has no __dict__ (AttributeError,
+	the prior behavior)."
+
+	| bcls |
+	bcls := Python @env0:at: #builtins otherwise: nil.
+	(bcls @env0:notNil
+		and: [selector @env0:== #'type'
+		and: [receiver @env0:isKindOf: bcls]]) ifTrue: [
+			^ mappingproxy ___on: (dict ___new___)].
+	^ AttributeError ___signal___: 'BoundMethod object has no attribute ''__dict__'''
 %
 
 category: 'Grail-Attribute Access'
