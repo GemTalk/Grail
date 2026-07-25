@@ -169,11 +169,15 @@ ___totalMicros___
 category: 'Grail-Arithmetic'
 method: PyTimedelta
 __add__: other
+	"NotImplemented (not a direct TypeError) for a non-timedelta, so the
+	reflected op runs: timedelta + date/datetime dispatches to the
+	date/datetime __radd__."
+
 	(other isKindOf: PyTimedelta) ifTrue: [
 		^ PyTimedelta @env0:___fromTotalMicros___:
 			(self ___totalMicros___ @env0:+ other ___totalMicros___)
 	].
-	^ TypeError ___signal___: 'unsupported operand for +'
+	^ #'___NotImplemented___'
 %
 
 category: 'Grail-Arithmetic'
@@ -1284,7 +1288,13 @@ method: PyDateTime
 __format__: spec
 	"datetime.__format__: empty spec -> str(self); else strftime(spec)."
 
-	(spec @env0:isNil or: [spec @env0:isEmpty]) ifTrue: [^ self __str__].
+	| tn |
+	spec @env0:isNil ifTrue: [^ self __str__].
+	(spec @env0:isKindOf: CharacterCollection) ifFalse: [
+		tn := spec @env0:class ___pythonBuiltinTypeName___.
+		tn @env0:isNil ifTrue: [tn := spec @env0:class @env0:name @env0:asString].
+		^ TypeError ___signal___: '__format__() argument must be str, not ' @env0:, tn].
+	spec @env0:isEmpty ifTrue: [^ self __str__].
 	^ self strftime: spec
 %
 
@@ -1426,6 +1436,14 @@ __add__: other
 	newTs := self timestamp @env0:+ other total_seconds.
 	result := PyDateTime fromtimestamp: newTs _: (self @env0:dynamicInstVarAt: #_tzinfo).
 	^ result
+%
+
+category: 'Grail-Arithmetic'
+method: PyDateTime
+__radd__: other
+	"timedelta + datetime -> datetime (addition is commutative here)."
+
+	^ self __add__: other
 %
 
 category: 'Grail-Arithmetic'
@@ -1764,14 +1782,11 @@ fromordinal: ordinal
 category: 'Grail-Initialization'
 classmethod: PyDate
 fromtimestamp: ts
-	"Local-time date from POSIX timestamp."
+	"date.fromtimestamp(ts) == datetime.fromtimestamp(ts).date().  Delegate
+	to PyDateTime's epoch+addSeconds path (Duration>>fromSeconds: is absent
+	in this GemStone, which crashed the old implementation)."
 
-	| epoch dt d |
-	epoch := DateTime @env0:newGmtWithYear: 1970 month: 1 day: 1 hours: 0 minutes: 0 seconds: 0.
-	dt := epoch @env0:+ (Duration @env0:fromSeconds: ts).
-	d := dt @env0:asDate.
-	^ self @env0:___fromFields___:
-		d @env0:year _: d @env0:monthIndex _: d @env0:dayOfMonth
+	^ (PyDateTime fromtimestamp: ts) date
 %
 
 ! ------- Accessors
@@ -1884,7 +1899,13 @@ method: PyDate
 __format__: spec
 	"date.__format__: empty spec -> str(self); else strftime(spec)."
 
-	(spec @env0:isNil or: [spec @env0:isEmpty]) ifTrue: [^ self __str__].
+	| tn |
+	spec @env0:isNil ifTrue: [^ self __str__].
+	(spec @env0:isKindOf: CharacterCollection) ifFalse: [
+		tn := spec @env0:class ___pythonBuiltinTypeName___.
+		tn @env0:isNil ifTrue: [tn := spec @env0:class @env0:name @env0:asString].
+		^ TypeError ___signal___: '__format__() argument must be str, not ' @env0:, tn].
+	spec @env0:isEmpty ifTrue: [^ self __str__].
 	^ self strftime: spec
 %
 
@@ -2003,6 +2024,14 @@ __add__: other
 	days := other days.
 	newOrdinal := (self toordinal) @env0:+ days.
 	^ PyDate fromordinal: newOrdinal
+%
+
+category: 'Grail-Arithmetic'
+method: PyDate
+__radd__: other
+	"timedelta + date -> date (addition is commutative here)."
+
+	^ self __add__: other
 %
 
 category: 'Grail-Arithmetic'
@@ -2412,7 +2441,13 @@ strftime: format
 category: 'Grail-Conversion'
 method: PyTime
 __format__: spec
-	(spec @env0:isNil or: [spec @env0:isEmpty]) ifTrue: [^ self __str__].
+	| tn |
+	spec @env0:isNil ifTrue: [^ self __str__].
+	(spec @env0:isKindOf: CharacterCollection) ifFalse: [
+		tn := spec @env0:class ___pythonBuiltinTypeName___.
+		tn @env0:isNil ifTrue: [tn := spec @env0:class @env0:name @env0:asString].
+		^ TypeError ___signal___: '__format__() argument must be str, not ' @env0:, tn].
+	spec @env0:isEmpty ifTrue: [^ self __str__].
 	^ self strftime: spec
 %
 
