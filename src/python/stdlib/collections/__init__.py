@@ -1003,6 +1003,24 @@ class UserDict:
     def __repr__(self):
         return repr(self.data)
 
+    def __eq__(self, other):
+        # CPython's UserDict inherits Mapping.__eq__
+        # (``isinstance(other, Mapping) and dict(self) == dict(other)``); this
+        # simplified stand-in has no ABC base, so compare .data directly.  A
+        # UserDict compares equal to a plain dict with the same items
+        # (test_dict test_fromkeys: mydict.__new__ returns a UserDict).
+        if isinstance(other, UserDict):
+            return self.data == other.data
+        return self.data == other
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
+
+    __hash__ = None  # mappings are unhashable, as in CPython
+
     def get(self, key, default=None):
         if key in self.data:
             return self.data[key]

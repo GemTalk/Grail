@@ -1,10 +1,10 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-07-25T04:04:05Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
+Generated: 2026-07-25T15:18:42Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
 
-**Modules: 21** — OK 13 · FAIL 0 · ERROR 8 · SKIP 0 · IMPORTERROR 0 · STERROR 0 · CRASH 0 · TIMEOUT 0
+**Modules: 21** — OK 14 · FAIL 0 · ERROR 7 · SKIP 0 · IMPORTERROR 0 · STERROR 0 · CRASH 0 · TIMEOUT 0
 
-**Totals:** tests=3743 failures=496 errors=320 skipped=200
+**Totals:** tests=3743 failures=432 errors=317 skipped=200
 
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
@@ -22,16 +22,16 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_bisect | OK | 46 | 0 | 0 | 0 |  |
 | test.test_operator | OK | 110 | 0 | 0 | 0 |  |
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
-| test.test_datetime | ERROR | 111 | 30 | 29 | 0 | 52 pass; Grail-trimmed subset (core + TestDateOnly/TestDate) vs native datetime |
+| test.test_datetime | ERROR | 111 | 29 | 29 | 0 | 53 pass; Grail-trimmed subset (core + TestDateOnly/TestDate) vs native datetime |
 | test.test_datetime_datetime | ERROR | 92 | 30 | 36 | 0 | 26 pass; TestDateTime split out (compile budget) |
 | test.test_datetime_time | ERROR | 30 | 11 | 8 | 0 | 11 pass; TestTime split out (compile budget) |
 | test.test_re | OK | 165 | 0 | 0 | 28 |  |
 | test.test_functools | ERROR | 325 | 93 | 83 | 2 |  |
 | test.test_list | OK | 68 | 0 | 0 | 3 |  |
 | test.test_tuple | OK | 38 | 0 | 0 | 6 |  |
-| test.test_dict | ERROR | 120 | 1 | 1 | 20 |  |
+| test.test_dict | OK | 120 | 0 | 0 | 20 |  |
 | test.test_set | ERROR | 628 | 12 | 1 | 28 |  |
-| test.test_bytes | ERROR | 316 | 52 | 43 | 16 |  |
+| test.test_bytes | ERROR | 316 | 25 | 43 | 16 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
 | test.test_enum | ERROR | 1077 | 232 | 117 | 0 |  |

@@ -100,8 +100,10 @@ ___setMapping: aDict
 category: 'Grail-Accessors'
 method: dict_view
 mapping
-	"The backing dict (CPython 3.10+ dict view .mapping)."
-	^ mapping
+	"CPython dict-view ``.mapping'' (3.10+): a read-only mappingproxy over
+	the LIVE backing dict, not the dict itself (test_dict
+	test_views_mapping)."
+	^ mappingproxy ___on: mapping
 %
 
 ! ------------------- Python protocol (env-1)
@@ -317,6 +319,18 @@ __iter__
 %
 
 set compile_env: 0
+
+! ------------------- Python value-attribute hook
+category: 'Grail-Python Attribute Hook'
+classmethod: dict_view
+___pythonValueAttrs___
+	"``view.mapping'' is a VALUE attribute (the read-only mappingproxy over
+	the backing dict), not a callable -- without this ___pyAttrLoad___ wraps
+	the accessor as a BoundMethod (test_dict test_views_mapping).  Inherited
+	by dict_keys / dict_values / dict_items."
+
+	^ IdentitySet @env0:new @env0:add: #'mapping'; yourself
+%
 
 ! ------------------- element materialisation (env-0 subclass hook)
 category: 'Grail-Private'
