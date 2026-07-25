@@ -368,34 +368,39 @@ test__pow__positive
 category: 'Grail-String Representation'
 method: ComplexTestCase
 test__repr__negative_imag
-	"Test __repr__ with negative imaginary part"
-	
+	"Test __repr__ with negative imaginary part.  Real CPython drops the
+	trailing '.0' for whole-number components (repr(complex(3,-4)) ==
+	'(3-4j)', confirmed against actual CPython -- unlike plain float repr,
+	which always keeps it)."
+
 	| c repr |
 	c := complex ___new___: 3 _: -4.
 	repr := c @env1:__repr__.
-	self assert: repr equals: '(3.0-4.0j)'.
+	self assert: repr equals: '(3-4j)'.
 %
 
 category: 'Grail-String Representation'
 method: ComplexTestCase
 test__repr__positive_imag
-	"Test __repr__ with positive imaginary part"
-	
+	"Test __repr__ with positive imaginary part.  See
+	test__repr__negative_imag for why there's no trailing '.0'."
+
 	| c repr |
 	c := complex ___new___: 3 _: 4.
 	repr := c @env1:__repr__.
-	self assert: repr equals: '(3.0+4.0j)'.
+	self assert: repr equals: '(3+4j)'.
 %
 
 category: 'Grail-String Representation'
 method: ComplexTestCase
 test__repr__pure_imaginary
-	"Test __repr__ for pure imaginary number"
-	
+	"Test __repr__ for pure imaginary number.  See
+	test__repr__negative_imag for why there's no trailing '.0'."
+
 	| c repr |
 	c := complex ___new___: 0 _: 5.
 	repr := c @env1:__repr__.
-	self assert: repr equals: '5.0j'.
+	self assert: repr equals: '5j'.
 %
 
 category: 'Grail-String Representation'
@@ -525,13 +530,14 @@ test_real
 category: 'Grail-Edge Cases'
 method: ComplexTestCase
 test_zero_complex
-	"Test complex number with zero real and imaginary parts"
+	"Test complex number with zero real and imaginary parts.  See
+	test__repr__negative_imag for why the repr has no trailing '.0'."
 
 	| c |
 	c := complex ___new___: 0 _: 0.
 	self assert: (c @env1:real) equals: 0.0.
 	self assert: (c @env1:imag) equals: 0.0.
-	self assert: (c @env1:__repr__) equals: '0.0j'.
+	self assert: (c @env1:__repr__) equals: '0j'.
 %
 
 category: 'Grail-Tests - Eval - Complex Functions'

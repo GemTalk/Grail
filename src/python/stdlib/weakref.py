@@ -98,6 +98,20 @@ class _Proxy:
             raise AttributeError(name)
         return getattr(self.__get(), name)
 
+    def __class__(self):
+        # ``p.__class__`` must report the REFERENT's class (real weakref
+        # proxies are meant to be indistinguishable from their target), not
+        # _Proxy's own -- but __getattr__ above never fires for it: Grail
+        # resolves ``.__class__`` through object>>__class__ (a plain
+        # method, not a real descriptor protocol) before any user-level
+        # attribute miss would fall through to __getattr__.  Defining
+        # __class__ as a plain method here (matching how kernel classes
+        # like dict.gs/Bytearray.gs override it) intercepts that same
+        # special-cased lookup (test_itertools.TestPurePythonRoughEquivalents.
+        # test_tee_recipe: ``getattr(weakref.proxy(a), '__class__')`` must
+        # equal ``type(b)``, not _Proxy).
+        return type(self.__get())
+
     def __setattr__(self, name, value):
         setattr(self.__get(), name, value)
 

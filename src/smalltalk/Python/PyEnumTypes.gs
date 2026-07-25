@@ -194,7 +194,7 @@ ___grailBuildMembers: cls names: attrNames
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew tupleClass |
+	| byValue byName members lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew tupleClass gnvClass genValues |
 	"Names assigned under a class-body ``if`` (the shared test fixture's
 	``if issubclass(...): dupe = 3'') never reach classBodyAttributes --
 	their stores go through ___pyAttrStore___ into the per-class
@@ -284,6 +284,16 @@ ___grailBuildMembers: cls names: attrNames
 		cls ___pyAttrStore___:
 			('___cell_' @env0:, cls @env0:name @env0:asString @env0:, '___') @env0:asSymbol
 			put: cls].
+	"A class-body ``def _generate_next_value_(name, start, count, last_values)''
+	overrides how auto() numbers members (CPython): the mixed date/float enum
+	fixtures return values[count].  It compiles to a 4-param env-1 method
+	``_generate_next_value_:_:_:'' whose self-param is ``name'' (EnumType adds
+	the staticmethod wrapper).  gnvClass is the class in cls's chain that
+	provides it, or nil (use the built-in per-base rule).  genValues collects
+	the resolved values in order to pass as ``last_values''."
+	gnvClass := cls @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:'
+		environmentId: 1.
+	genValues := OrderedCollection @env0:new.
 	"Members build while cls is in the building set: a member __new__
 	that delegates to super().__new__ hits the guard in
 	Enum>>___new__:kw:.  ensure: clears it even when that guard (or a
@@ -311,15 +321,25 @@ ___grailBuildMembers: cls names: attrNames
 				(autoResolved @env0:includesKey: rawValue)
 					ifTrue: [rawValue := autoResolved @env0:at: rawValue]
 					ifFalse: [ | resolved |
-						resolved := (Enum ___grailIsStrEnumClass: cls)
-							ifTrue: [nameStr @env0:asLowercase]
-							ifFalse: [(Enum ___grailIsFlagClass: cls)
-								ifTrue: [maxInt @env0:<= 0
-									ifTrue: [1]
-									ifFalse: [1 @env0:bitShift: maxInt @env0:highBit]]
-								ifFalse: [lastInt @env0:+ 1]].
+						resolved := gnvClass @env0:notNil
+							ifTrue: [
+								"User _generate_next_value_(name, start=1, count, last_values).
+								count = members built so far; invoke via UnboundMethod (the
+								method's self-param is the NAME, not an instance of cls)."
+								(UnboundMethod definingClass: gnvClass selector: #'_generate_next_value_')
+									value: { nameStr. 1. members @env0:size.
+										(list @env0:withAll: genValues) }
+									value: KeyValueDictionary @env0:new]
+							ifFalse: [(Enum ___grailIsStrEnumClass: cls)
+								ifTrue: [nameStr @env0:asLowercase]
+								ifFalse: [(Enum ___grailIsFlagClass: cls)
+									ifTrue: [maxInt @env0:<= 0
+										ifTrue: [1]
+										ifFalse: [1 @env0:bitShift: maxInt @env0:highBit]]
+									ifFalse: [lastInt @env0:+ 1]]].
 						autoResolved @env0:at: rawValue put: resolved.
 						rawValue := resolved]].
+			genValues @env0:add: rawValue.
 			(rawValue isKindOf: Integer) ifTrue: [
 				lastInt := rawValue.
 				maxInt := maxInt @env0:max: rawValue].
@@ -477,6 +497,10 @@ ___grailBuildMembers: cls names: attrNames
 			(Enum @env0:class @env0:sourceCodeAt: #'value:value:' environmentId: 1)
 			category: 'Grail-Enum Metaclass']]
 		@env0:on: Error do: [:ex | "best effort" ].
+	"A data-mixed enum's metaclass lacks the Enum class-side protocol
+	(_member_names_, _value_repr_, mro, __reversed__, class repr, ...); install
+	it.  No-op for pure Enum/Flag and IntEnum/StrEnum-rooted classes."
+	[Enum ___grailInstallClassProtocol: cls] @env0:on: Error do: [:ex | "best effort"].
 	"CPython repr/str/format replacement: a mixed-in enum (``class E(int,
 	Enum)``) inherits its data-type's output methods through the storage base
 	and would str a member as its raw value; force Enum's (or Flag's) unless a
@@ -757,7 +781,13 @@ ___grailInstallEnumOutput: cls
 	value-str __str__/__format__ in category Grail-Enum Member, so the
 	per-selector guard below already keeps them."
 
+	| strOverridden |
 	(Enum ___grailIsStrEnumClass: cls) ifTrue: [^ cls].
+	"A user __str__ override (a class-body def, or one inherited from a user
+	base) with NO matching __format__ override makes format() follow str():
+	CPython's EnumType replaces __format__ with the str-delegating one so
+	``format(member)'' == ``str(member)'' rather than the mix-in value format."
+	strOverridden := Enum ___grailUserProvides: cls selector: #'__str__'.
 	"Nested {selector. source} pairs (NOT Associations -- a bare ``->'' would
 	be an env-1 send and DNU here)."
 	{ { #'__repr__'. '__repr__
@@ -767,7 +797,14 @@ ___grailInstallEnumOutput: cls
 	  { #'__format__:'. '__format__: aSpec
 	^ (self __str__) __format__: aSpec' } }
 		@env0:do: [:pair |
-			(Enum ___grailShouldForceOutput: cls selector: (pair @env0:at: 1)) ifTrue: [
+			| sel force |
+			sel := pair @env0:at: 1.
+			force := Enum ___grailShouldForceOutput: cls selector: sel.
+			(sel @env0:= #'__format__:'
+				and: [strOverridden
+				and: [(Enum ___grailUserProvides: cls selector: sel) @env0:not]])
+					ifTrue: [force := true].
+			force ifTrue: [
 				cls ___compileMethod: (pair @env0:at: 2) category: 'Grail-Enum Member']].
 	^ cls
 %
@@ -791,6 +828,59 @@ ___grailShouldForceOutput: cls selector: sel
 	^ (#(#'Grail-Class Methods' #'Grail-Method Aliases' #'Grail-Property-ReadOnly'
 		#'Grail-CachedProperty-Setter' #'Grail-Enum Member' #'Grail-Flag Member'
 		#'Grail-IntFlag Member') @env0:includes: cat) @env0:not
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailUserProvides: cls selector: sel
+	"True when cls's method for sel is a USER definition -- a class-body def
+	or one inherited from a user base (category Grail-Class Methods or
+	Grail-Method Aliases) -- rather than an inherited data-type/enum method.
+	Used to decide whether format() should follow an overridden __str__."
+
+	| p cat |
+	p := cls @env0:whichClassIncludesSelector: sel environmentId: 1.
+	p @env0:isNil ifTrue: [^ false].
+	cat := [p @env0:categoryOfSelector: sel environmentId: 1]
+		@env0:on: AbstractException do: [:e | nil].
+	^ #(#'Grail-Class Methods' #'Grail-Method Aliases') @env0:includes: cat
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailInstallClassProtocol: cls
+	"A data-mixed enum (``class E(int, Enum)'') is rooted at its data type in
+	Smalltalk, so its METACLASS does not inherit Enum class and is missing the
+	enum class-side protocol (_member_names_, _value_repr_, mro, __reversed__,
+	the ``<enum 'Name'>'' class repr, ...).  ___mergeSecondaryBases___ does not
+	fill these (Enum class is not a dynInstVars-bearing Python metaclass), so
+	`reversed(E)` fell to reverseDo: and `E._value_repr_` raised AttributeError.
+	Copy Enum class's own source for each protocol selector onto cls's metaclass
+	unless an enum metaclass already provides it (pure Enum/Flag, and the
+	IntEnum/StrEnum-rooted classes that carry the duplicated protocol -- their
+	provider category is Grail-Enum Metaclass / Grail-Class Attrs, so they are
+	left untouched)."
+
+	| mc |
+	mc := cls @env0:class.
+	#(#'__reversed__' #'mro' #'__repr__' #'__str__' #'__format__:'
+		#'_member_names_' #'_member_map_' #'_value2member_map_' #'_value_repr_')
+		@env0:do: [:sel |
+			| prov provCat |
+			prov := mc @env0:whichClassIncludesSelector: sel environmentId: 1.
+			provCat := prov @env0:isNil
+				ifTrue: [nil]
+				ifFalse: [[prov @env0:categoryOfSelector: sel environmentId: 1]
+					@env0:on: AbstractException do: [:e | nil]].
+			((provCat @env0:= #'Grail-Enum Metaclass')
+				or: [provCat @env0:= #'Grail-Class Attrs']) ifFalse: [
+				[ | src cat |
+				src := Enum @env0:class @env0:sourceCodeAt: sel environmentId: 1.
+				cat := Enum @env0:class @env0:categoryOfSelector: sel environmentId: 1.
+				src @env0:isNil ifFalse: [
+					mc ___compileMethod: src category: cat @env0:asString]]
+					@env0:on: Error do: [:e | "best effort"]]].
+	^ cls
 %
 
 category: 'Grail-Enum Metaclass'
@@ -929,9 +1019,10 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	^ self __getitem__: ''' @env0:, nameStr @env0:, '''')
 				category: 'Grail-Class Attrs']]] value.
 	self ___grailRegistry___ @env0:at: newCls put: (Array @env0:with: byValue with: byName with: members).
-	"Same repr/str/format replacement as the class-syntax builder (harmless
-	no-op for the Enum-rooted classes the functional API produces today, but
-	correct if a data-mixed functional enum lands here later)."
+	"Same class-protocol + repr/str/format installs as the class-syntax builder
+	(harmless no-op for the Enum-rooted classes the functional API produces
+	today, but correct if a data-mixed functional enum lands here later)."
+	[Enum ___grailInstallClassProtocol: newCls] @env0:on: Error do: [:ex | "best effort"].
 	[Enum ___grailInstallEnumOutput: newCls] @env0:on: Error do: [:ex | "best effort"].
 	^ newCls
 %

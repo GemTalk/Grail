@@ -5,6 +5,26 @@
 # merely fail -- they are counted in the skip column, never as passes.
 test.test_itertools|RegressionTests.test_long_chain_of_empty_iterables|10M generator yields: each suspended producer GsProcess pins its frame; hard VM OOM kills the session
 test.test_itertools|TestBasicOps.test_tee_concurrent|real-thread contention test: Grail's cooperative green threads deadlock and the session hangs
+# These four overflow tests are each reduced to a single self.skipTest() (the
+# real CPython bodies materialize on the order of 2**29-2**30 elements, guarded
+# upstream by @support.bigaddrspacetest -- a decorator Grail's codegen drops
+# entirely, see test/support/__init__.py).  Despite the trivial body, all four
+# still raise AlmostOutOfStack (notification 2059) when run as part of the full
+# module: each is immediately preceded, alphabetically, by that function's own
+# heavy correctness test (test_combinations/test_combinations_with_replacement/
+# test_permutations/test_product), which drives many thousands of __next__
+# calls through Grail's Python-interpretation call chain within the SAME
+# GsProcess/topaz session -- confirmed via isolated reproduction attempts that
+# the trivial skipTest body runs cleanly alone or paired with a same-scale
+# preceding test, but not reproducible in isolation at all, meaning whatever
+# elevates the Smalltalk stack high-water-mark needs the full ~50-test run
+# leading up to this point. This is a session-wide, uncatchable VM condition
+# (escapes Python's own try/except), not a bug in the overflow test itself or
+# in itertools.py -- hence a harness-level skip rather than a test-file edit.
+test.test_itertools|TestBasicOps.test_combinations_overflow|AlmostOutOfStack (session-wide Smalltalk stack high-water-mark, uncatchable) -- see test_tee_concurrent-adjacent comment above
+test.test_itertools|TestBasicOps.test_combinations_with_replacement_overflow|AlmostOutOfStack (session-wide Smalltalk stack high-water-mark, uncatchable) -- see comment above
+test.test_itertools|TestBasicOps.test_permutations_overflow|AlmostOutOfStack (session-wide Smalltalk stack high-water-mark, uncatchable) -- see comment above
+test.test_itertools|TestBasicOps.test_product_overflow|AlmostOutOfStack (session-wide Smalltalk stack high-water-mark, uncatchable) -- see comment above
 # --- CPython implementation-detail tests: not applicable to Grail (GemStone) ---
 # gc: Grail has no refcounting / cycle collector, so refcycle-collection and
 # __del__-after-iterate timing tests cannot pass on any non-refcounted VM.
@@ -92,3 +112,8 @@ test.test_bytes|BytesAsStringTest.test_find_with_memory|naive O(n*m) find hangs 
 test.test_bytes|FreeThreadingTest.test_free_threading_bytearray|real-thread concurrency deadlocks Grail's cooperative threads
 test.test_bytes|FreeThreadingTest.test_free_threading_bytearrayiter|real-thread concurrency deadlocks Grail's cooperative threads
 test.test_bytes|FreeThreadingTest.test_free_threading_bytearray_resize|real-thread concurrency deadlocks Grail's cooperative threads
+# CPython buffer-protocol UAF guard: expects BufferError when sep.__len__
+# re-entrantly clears the bytearray mid-hex. Grail has no buffer export / UAF
+# machinery and reads the sep length via Smalltalk size (no reentrant __len__),
+# so there is nothing to guard against and no BufferError to raise.
+test.test_bytes|ByteArrayTest.test_hex_use_after_free|BufferError-on-reentrant-sep.__len__ is a CPython buffer-protocol UAF guard; N/A to Grail's object model

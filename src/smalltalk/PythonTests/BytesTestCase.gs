@@ -1219,7 +1219,7 @@ testDecodeIllFormedUtf8RaisesUnicodeDecodeError
 	killed CPython test_re's locale tests)."
 
 	| ba |
-	ba := bytearray ___new___: bytearray.
+	ba := bytearray @env1:__new__.
 	ba @env1:append: 16rB5.
 	self should: [ba @env1:decode: 'utf-8'] raise: UnicodeDecodeError.
 	"latin-1 decodes the same byte fine."
@@ -1234,7 +1234,7 @@ testCountAndRfindWithBounds
 	the 3-arg forms on byte patterns."
 
 	| ba |
-	ba := bytearray ___new___: bytearray.
+	ba := bytearray @env1:__new__.
 	#(97 98 97 98 97) do: [:b | ba @env1:append: b].   "b'ababa'"
 	self assert: (ba @env1:count: 97 _: 0 _: 5) equals: 3.
 	self assert: (ba @env1:count: 97 _: 1 _: 4) equals: 1.
