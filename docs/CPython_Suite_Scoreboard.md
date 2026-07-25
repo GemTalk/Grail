@@ -4,7 +4,7 @@ Generated: 2026-07-25T01:35:13Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
 
 **Modules: 19** — OK 13 · FAIL 0 · ERROR 6 · SKIP 0 · IMPORTERROR 0 · STERROR 0 · CRASH 0 · TIMEOUT 0
 
-**Totals:** tests=3568 failures=442 errors=258 skipped=200
+**Totals:** tests=3621 failures=454 errors=283 skipped=200
 
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
@@ -22,7 +22,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_bisect | OK | 46 | 0 | 0 | 0 |  |
 | test.test_operator | OK | 110 | 0 | 0 | 0 |  |
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
-| test.test_datetime | ERROR | 58 | 17 | 11 | 0 |  |
+| test.test_datetime | ERROR | 111 | 29 | 36 | 0 | 46 pass; Grail-trimmed subset (core + TestDateOnly/TestDate) vs native datetime |
 | test.test_re | OK | 165 | 0 | 0 | 28 |  |
 | test.test_functools | ERROR | 325 | 93 | 83 | 2 |  |
 | test.test_list | OK | 68 | 0 | 0 | 3 |  |
