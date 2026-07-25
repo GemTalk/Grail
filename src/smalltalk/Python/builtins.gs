@@ -1378,6 +1378,39 @@ memoryview: aBytesObject
 	^ aBytesObject
 %
 
+category: 'Grail-Built-in Functions'
+method: builtins
+___pyIter___: anIterable
+	"Smalltalk-level mirror of itertools._iter's eager validation (see that
+	function's docstring for the full rationale).  Real CPython's iter() /
+	PyObject_GetIter does not just call __iter__ and trust the result -- it
+	raises TypeError immediately for an object missing both __iter__ and
+	__getitem__, and ALSO raises immediately when __iter__() returns an
+	object that itself lacks __next__ (an ``iter() returned non-iterator of
+	type ...'' TypeError).  Grail's PythonInstance fallback compiles catchable
+	__iter__/__next__/__getitem__ stubs onto every instance, so a plain
+	getattr-style probe can't tell a genuine iterable from one that merely
+	inherited the fallback -- ___hasProtocolForCall___ tests method
+	OWNERSHIP below that fallback level (and, unlike ___hasProtocol___,
+	answers for a CLASS receiver whether calling aName on that class
+	itself works, via its METACLASS -- needed for e.g. Enum classes,
+	which are iterable through their metaclass's __iter__: iter(MainEnum)
+	must not raise, see test_enum).  Used by map:_:/filter:_:/zip so those
+	builtins reject non-iterables as eagerly as CPython does (see
+	test_itertools.TestVariousIteratorArgs)."
+
+	| result |
+	(anIterable ___hasProtocolForCall___: '__getitem__') ifTrue: [^ anIterable __iter__].
+	(anIterable ___hasProtocolForCall___: '__iter__') ifTrue: [
+		result := anIterable __iter__.
+		(result ___hasProtocolForCall___: '__next__') ifFalse: [
+			TypeError ___signal___: ('iter() returned non-iterator of type '''
+				@env0:, (result @env0:class @env0:name)) @env0:, ''''].
+		^ result].
+	TypeError ___signal___: (('''' @env0:, (anIterable @env0:class @env0:name))
+		@env0:, ''' object is not iterable')
+%
+
 category: 'Python-Built-in Functions'
 method: builtins
 map: aFunction _: anIterable
@@ -1385,7 +1418,7 @@ map: aFunction _: anIterable
 	materialization looped forever (then OOM-killed the session) on
 	infinite sources: take(4, map(f, itertools.count()))."
 
-	^ map_iterator ___on: aFunction source: anIterable __iter__
+	^ map_iterator ___on: aFunction sources: { self ___pyIter___: anIterable }
 %
 
 category: 'Grail-Built-in Functions'
@@ -1395,14 +1428,25 @@ filter: aFunction _: anIterable
 	is truthy; filter(None, iter) keeps truthy items.  LAZY, as in
 	CPython (see map:_:)."
 
-	^ filter_iterator ___on: aFunction source: anIterable __iter__
+	^ filter_iterator ___on: aFunction source: (self ___pyIter___: anIterable)
 %
 
 category: 'Grail-Built-in Functions'
 method: builtins
 _filter: positional kw: kwargs
-	"Varargs form of filter() for BoundMethod indirect calls."
+	"Varargs form of filter() for BoundMethod indirect calls -- reached
+	whenever the call's arg count isn't exactly 2 (including 0 or 1,
+	which filter:_:'s fixed arity can't match at all).  Unconditionally
+	indexing positional at 1/2 without a size check crashed with a raw
+	VM-level OffsetError for filter() / filter(f) rather than a Python
+	TypeError (test_itertools.TestBasicOps.test_filter's
+	``self.assertRaises(TypeError, filter)'')."
 
+	(kwargs @env0:notNil and: [kwargs @env0:size @env0:> 0]) ifTrue: [
+		TypeError ___signal___: 'filter() takes no keyword arguments'].
+	positional @env0:size @env0:= 2 ifFalse: [
+		TypeError ___signal___: (('filter expected 2 arguments, got '
+			@env0:, positional @env0:size @env0:printString))].
 	^ self filter: (positional @env0:at: 1) _: (positional @env0:at: 2)
 %
 
@@ -1964,6 +2008,17 @@ ___hasProtocol___: anObject _: aName
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___hasProtocolForCall___: anObject _: aName
+	"Grail-internal builtin bridging itertools._iter's eager iterator
+	validation to object >> ___hasProtocolForCall___: (see that method's
+	comment) -- same Python-attribute-call-path reason as
+	___hasProtocol___:_: above."
+
+	^ anObject ___hasProtocolForCall___: aName
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___isSubclassSingle___: sub of: target
 	"issubclass with a single class argument.  The Smalltalk chain
 	covers single inheritance; a multiple-inheritance class's secondary
@@ -2299,11 +2354,30 @@ _zip: positional kw: kwargs
 	| iterators |
 	iterators := Array @env0:new: positional @env0:size.
 	1 @env0:to: positional @env0:size do: [:i |
-		iterators @env0:at: i put: (positional @env0:at: i) __iter__].
+		iterators @env0:at: i put: (self ___pyIter___: (positional @env0:at: i))].
 	"LAZY, as in CPython -- an eager zip looped forever (then
 	OOM-killed the session) on infinite sources like
 	zip(count(), count(1))."
 	^ zip_iterator ___on: iterators
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+_map: positional kw: kwargs
+	"Python builtin map(func, *iterables) — varargs fast path for 3+
+	positional args (func plus 2 or more iterables); the 1-iterable case
+	goes through the fixed-arity map:_: instead.  map() takes no keyword
+	arguments."
+
+	| iterators |
+	(kwargs @env0:notNil and: [kwargs @env0:size @env0:> 0]) ifTrue: [
+		TypeError ___signal___: 'map() takes no keyword arguments'].
+	positional @env0:size @env0:< 2 ifTrue: [
+		TypeError ___signal___: 'map() must have at least two arguments.'].
+	iterators := Array @env0:new: positional @env0:size @env0:- 1.
+	2 @env0:to: positional @env0:size do: [:i |
+		iterators @env0:at: i @env0:- 1 put: (self ___pyIter___: (positional @env0:at: i))].
+	^ map_iterator ___on: (positional @env0:at: 1) sources: iterators
 %
 
 set compile_env: 0

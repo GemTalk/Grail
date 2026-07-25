@@ -368,6 +368,27 @@ class captured_stderr:
         return False
 
 
+class captured_output:
+    """Redirect sys.stdout or sys.stderr (by name) to an io.StringIO for
+    the duration of the block; generalizes captured_stdout/captured_stderr
+    to an arbitrary stream name (test_itertools.test_bug_7244:
+    ``with support.captured_output('stdout'): ...``)."""
+
+    def __init__(self, stream_name):
+        self.stream_name = stream_name
+
+    def __enter__(self):
+        import io
+        self.buf = io.StringIO()
+        self.old = getattr(sys, self.stream_name)
+        setattr(sys, self.stream_name, self.buf)
+        return self.buf
+
+    def __exit__(self, *exc):
+        setattr(sys, self.stream_name, self.old)
+        return False
+
+
 class Stopwatch:
     """Minimal timing context manager."""
 
