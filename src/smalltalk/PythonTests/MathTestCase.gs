@@ -794,7 +794,7 @@ testSumprod
 	self assert: (self eval: 'import math
 math.sumprod((10,20,30),(10,20,30))') equals: 1400.
 	self assert: (self eval: 'import math
-type(math.sumprod((10,20,30),(1,2,3))).__name__') equals: 'Integer'.
+type(math.sumprod((10,20,30),(1,2,3))).__name__') equals: 'int'.
 	self assert: (self eval: 'import math
 math.sumprod([10**20],[1])') equals: (10 raisedTo: 20).
 	"Compensated float sum: -7.5 lost behind a later exact int cancellation

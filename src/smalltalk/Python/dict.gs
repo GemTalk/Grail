@@ -152,13 +152,33 @@ ___updateSeqPairAt___: idx from: element
 	CPython does: materialize it by ITERATING (so a non-iterable element, or a
 	generator that raises mid-iteration, fails right here).  On failure attach
 	the PEP 678 note ``Cannot convert dictionary update sequence element #N to a
-	sequence'' to the raised exception and reraise -- the base error (e.g.
-	``... is not iterable'', or a generator's own error) stays as the message
-	and the note carries the positional context (test_update_type_error).
-	Require exactly two elements.  Answers a 2-element Array {key. value}."
+	sequence'' to the raised exception and reraise -- the note carries the
+	positional context (test_update_type_error).  Require exactly two elements.
+	Answers a 2-element Array {key. value}.
+
+	A NON-iterable element gets CPython's dict-update wording ``<type> is not
+	iterable'' (bare Python type name, no ``'...' object'' wrapper -- distinct
+	from the generic iter() message list() would raise).  An element that IS
+	iterable but errors mid-iteration keeps its OWN error message (the badgen
+	``oops'' case).  Both then carry the note (attached by the shared handler)."
 
 	| seq |
-	seq := [ list @env1:__new__: element ]
+	seq := [
+		"Get-iterator phase (CPython's PySequence_Fast -> PyObject_GetIter): a
+		genuinely non-iterable element fails HERE.  `element __iter__` raising
+		with no `__getitem__` old-style sequence fallback means not iterable;
+		re-signal with CPython's dict-update wording ``<type> is not iterable''
+		(bare Python type name, no ``'...' object'' wrapper), distinct from the
+		iter() message list() would raise.  A working __iter__ (or a
+		__getitem__ sequence) falls through to materialization, where a
+		mid-iteration error keeps its OWN message (the badgen ``oops'' case)."
+		([ element @env1:__iter__. true ]
+			@env0:on: TypeError
+			do: [:iterEx |
+				(element @env0:class @env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) @env0:isNil
+					ifTrue: [TypeError ___signal___: (element @env0:class @env1:__name__) @env0:, ' is not iterable']
+					ifFalse: [true]]).
+		list @env1:__new__: element ]
 		@env0:on: BaseException
 		do: [:ex |
 			ex @env1:add_note: ('Cannot convert dictionary update sequence element #'
