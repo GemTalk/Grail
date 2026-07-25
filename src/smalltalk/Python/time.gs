@@ -70,7 +70,14 @@ initialize
 	plain tuples (matching CPython for non-struct_time tuples) and
 	the import path can find the name.  Werkzeug.http hits this via
 	``from time import struct_time''."
-	self @env0:dynamicInstVarAt: #struct_time put: tuple
+	self @env0:dynamicInstVarAt: #struct_time put: tuple.
+	"Timezone globals.  Grail has no portable local zone and treats wall
+	clocks as UTC, so these report a fixed non-DST UTC (enough for
+	_strptime's locale-cache invalidation check and email.utils)."
+	self @env0:dynamicInstVarAt: #tzname put: (tuple @env0:withAll: { 'UTC'. 'UTC' }).
+	self @env0:dynamicInstVarAt: #timezone put: 0.
+	self @env0:dynamicInstVarAt: #altzone put: 0.
+	self @env0:dynamicInstVarAt: #daylight put: 0
 %
 
 category: 'Grail-Wall clock'

@@ -22,7 +22,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_bisect | OK | 46 | 0 | 0 | 0 |  |
 | test.test_operator | OK | 110 | 0 | 0 | 0 |  |
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
-| test.test_datetime | SKIP | 0 | 0 | 0 | 0 |  |
+| test.test_datetime | ERROR | 58 | 17 | 11 | 0 | 30 pass; Grail-trimmed subset (TestModule/TZInfo/TimeZone/TimeDelta) vs native datetime |
 | test.test_re | OK | 165 | 0 | 0 | 28 |  |
 | test.test_functools | ERROR | 325 | 93 | 83 | 2 |  |
 | test.test_list | OK | 68 | 0 | 0 | 3 |  |
