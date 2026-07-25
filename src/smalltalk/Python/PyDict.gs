@@ -297,6 +297,17 @@ associationsDo: aBlock
 
 category: 'Grail-Iteration'
 method: PyDict
+associationAt: aKey
+	"KeyValueDictionary has no Association-based storage, so associationAt:
+	is undefined here -- build one on demand from the current value.  Used by
+	associationsDo: (hence printOn:/printString); previously a bare printString
+	of a PyDict raised ``does not understand associationAt:''.  Raises if the
+	key is absent, matching the kernel associationAt: contract."
+	^ aKey -> (self at: aKey)
+%
+
+category: 'Grail-Iteration'
+method: PyDict
 do: aBlock
 	"KeyValueDictionary>>do: iterates VALUES."
 	rehashing == true ifTrue: [^ super do: aBlock].
