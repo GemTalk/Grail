@@ -302,7 +302,29 @@ ___grailBuildMembers: cls names: attrNames
 	[
 	allNames @env0:do: [:nameSym | | nameStr hasAccessor |
 		nameStr := nameSym @env0:asString.
-		((nameStr @env0:size @env0:> 0) and: [(nameStr @env0:at: 1) @env0:= $_]) ifFalse: [
+		((nameStr @env0:size @env0:> 0) and: [(nameStr @env0:at: 1) @env0:= $_])
+			ifTrue: [
+				"A callable bound to __str__/__repr__/__format__ in the class body
+				(``__str__ = object.__str__'') is a user output-method override,
+				not a member -- route it through the same forwarder machinery the
+				functional API uses so it dispatches (and format() follows it).
+				A ``def __str__'' is a real compiled method, not an attr here, so
+				it is untouched; the callable guard skips non-method dunder attrs
+				(__doc__/__module__/...) and every sunder/private name."
+				(#('__str__' '__repr__' '__format__') @env0:includes: nameStr) ifTrue: [
+					| dunVal |
+					dunVal := [ | ha |
+						ha := (cls @env0:class @env0:whichClassIncludesSelector:
+							(nameStr @env0:, ':') @env0:asSymbol environmentId: 1) @env0:notNil.
+						ha ifTrue: [cls @env0:perform: nameSym env: 1]
+							ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym]]
+						@env0:on: AbstractException do: [:e | nil].
+					((dunVal isKindOf: BoundMethod)
+						or: [(dunVal isKindOf: UnboundMethod)
+						or: [dunVal isKindOf: ExecBlock]]) ifTrue: [
+							Enum ___grailStoreOverride: cls name: nameStr callable: dunVal.
+							Enum ___grailCompileOverrideForwarder: cls name: nameStr]]]
+			ifFalse: [
 			| rawValue member built |
 			built := false.
 			"Declared names read through their compiled accessor pair;
