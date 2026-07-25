@@ -272,3 +272,54 @@ testBaseTypesUnaffected
 	self assert: ((self resultAt: 'base_bytearray_type') = true)
 		description: 'base_bytearray_type'
 %
+
+category: 'Grail-Tests - ord + strip type-checking'
+method: BytesSubclassTestCase
+testOrdAndStripTypes
+	"ord() of a 1-byte bytes/bytearray returns the byte value (a byte is an int
+	element, not a Character); strip/lstrip/rstrip take a bytes-like chars or
+	None (ASCII whitespace) and reject an int or str with TypeError."
+
+	#('ord_bytes_a' 'ord_bytes_zero' 'ord_bytes_high' 'ord_bytearray' 'ord_slice'
+	  'strip_int_raises' 'lstrip_int_raises' 'rstrip_int_raises' 'strip_str_raises'
+	  'strip_bytes_ok' 'strip_none_ws' 'lstrip_none_ws' 'rstrip_none_ws') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
+category: 'Grail-Tests - concatenation type-checking'
+method: BytesSubclassTestCase
+testConcatTypes
+	"bytes/bytearray + (and bytearray +=) a bytes-like object works; a str
+	operand raises a (catchable) TypeError -- the message is built from the
+	Python type names, not by appending the class object (which crashed)."
+
+	#('concat_bytes_bytes' 'concat_bytes_ba' 'concat_ba_bytes'
+	  'concat_bytes_str_raises' 'iadd_ok' 'iadd_str_raises') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
+category: 'Grail-Tests - percent formatting'
+method: BytesSubclassTestCase
+testPercentFormat
+	"``bytes % args'' printf engine (PEP 461): %b/%s/%c/%d/%x, %% literal,
+	mapping with a (hashable bytes) key incl. balanced parens, width/precision
+	with '*', self-typed result, %=, and CPython's numeric type-error messages."
+
+	#('mod_b' 'mod_s_d' 'mod_c' 'mod_c_int' 'mod_x' 'mod_map' 'mod_map_nested'
+	  'mod_ba_map' 'mod_width' 'mod_width_neg' 'mod_prec' 'mod_type_bytes'
+	  'mod_type_ba' 'mod_x_float_raises' 'mod_u_complex_raises' 'mod_c_bad_raises'
+	  'imod_bytearray') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
+category: 'Grail-Tests - bound-method split family'
+method: BytesSubclassTestCase
+testBoundMethodSplitFamily
+	"split/rsplit/splitlines reached as bound methods (getattr) route through
+	the varargs _name:kw: fallback when the fixed-arity fast path does not
+	resolve the selector -- including the too-many-args TypeError guard."
+
+	#('gsplit_ws' 'gsplit_sep' 'grsplit_ws' 'gsplitlines' 'gsplitlines_keepends'
+	  'gsplitlines_toomany') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
