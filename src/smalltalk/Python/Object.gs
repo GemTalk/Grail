@@ -649,23 +649,15 @@ ___dynamicClassAttr___: aSym
 
 category: 'Grail-Python Protocol'
 method: object
-___hasProtocol___: aName
-	"True when the receiver's class chain REALLY defines the Python method
-	aName -- i.e. below the PythonInstance / Object fallback level.
-	collections.abc's structural checks (isinstance(x, Iterable) etc.) need
-	method OWNERSHIP, and a plain getattr probe cannot provide it:
-	PythonInstance compiles catchable-TypeError fallbacks for __iter__ /
-	__next__ / __getitem__ / ... onto EVERY instance (so the legacy
-	protocols raise catchably instead of MNUing), which makes
-	``getattr(x, '__iter__')'' non-None for any object whatsoever.
-	Works for instance receivers (probe the class) and class receivers
-	(probe the class itself -- the issubclass side)."
+___protocolOwnedBy___: walker name: aName
+	"Shared search used by both ___hasProtocol___: and
+	___hasProtocolForCall___: -- true when walker's class chain REALLY
+	defines the Python method aName, i.e. below the PythonInstance / Object
+	fallback level.  See ___hasProtocol___:'s comment for why a plain
+	getattr probe cannot tell this apart from the generic legacy fallback."
 
-	| walker s found |
+	| s found |
 	s := aName @env0:asString.
-	walker := (self isKindOf: Behavior)
-		ifTrue: [self]
-		ifFalse: [self @env0:class].
 	{ s @env0:asSymbol.
 	  (s @env0:, ':') @env0:asSymbol.
 	  (s @env0:, ':_:') @env0:asSymbol.
@@ -682,6 +674,46 @@ ___hasProtocol___: aName
 			and: [found @env0:name ~~ #'NoneType']]]])
 				ifTrue: [^ true]].
 	^ false
+%
+
+category: 'Grail-Python Protocol'
+method: object
+___hasProtocol___: aName
+	"True when the receiver's class chain REALLY defines the Python method
+	aName -- i.e. below the PythonInstance / Object fallback level.
+	collections.abc's structural checks (isinstance(x, Iterable) etc.) need
+	method OWNERSHIP, and a plain getattr probe cannot provide it:
+	PythonInstance compiles catchable-TypeError fallbacks for __iter__ /
+	__next__ / __getitem__ / ... onto EVERY instance (so the legacy
+	protocols raise catchably instead of MNUing), which makes
+	``getattr(x, '__iter__')'' non-None for any object whatsoever.
+	Works for instance receivers (probe the class) and class receivers
+	(probe the class itself -- the issubclass side)."
+
+	| walker |
+	walker := (self isKindOf: Behavior)
+		ifTrue: [self]
+		ifFalse: [self @env0:class].
+	^ self ___protocolOwnedBy___: walker name: aName
+%
+
+category: 'Grail-Python Protocol'
+method: object
+___hasProtocolForCall___: aName
+	"Like ___hasProtocol___:, but answers the DIFFERENT question real
+	CPython's iter(x) (type(x).__iter__(x)) asks: does CALLING aName on
+	THIS SPECIFIC OBJECT actually work, always probing type(self) -- even
+	when self itself is a class/metaclass instance.  ___hasProtocol___:'s
+	class-receiver branch probes the class itself (the issubclass-style
+	question 'do INSTANCES of this class support aName'), which gives the
+	wrong answer for e.g. an Enum class: MainEnum IS iterable (its
+	METACLASS EnumMeta defines __iter__), but instances of MainEnum
+	(individual members) are not -- ___hasProtocol___: would wrongly say
+	no; this says yes, matching iter(MainEnum) in real CPython.  Used by
+	itertools._iter / builtins>>___pyIter___: (test_enum's TestXxxClass
+	suites iterate the enum class directly, e.g. `list(MainEnum)`)."
+
+	^ self ___protocolOwnedBy___: self @env0:class name: aName
 %
 
 category: 'Grail-Class Attr Overlay'

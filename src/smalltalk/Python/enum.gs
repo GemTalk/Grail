@@ -234,6 +234,73 @@ _iter_bits_lsb: num
 	^ result
 %
 
+category: 'Grail-Built-in Functions'
+method: enum
+_is_descriptor: obj
+	"_is_descriptor(obj) — True if obj defines __get__, __set__ or
+	__delete__ (CPython enum._is_descriptor)."
+
+	| bi |
+	bi := builtins instance.
+	^ (bi hasattr: obj _: '__get__')
+		or: [(bi hasattr: obj _: '__set__')
+		or: [bi hasattr: obj _: '__delete__']]
+%
+
+category: 'Grail-Built-in Functions'
+method: enum
+_is_dunder: name
+	"_is_dunder(name) — True for a __dunder__ name: len > 4, starts and
+	ends with '__', and neither name[2] nor name[-3] is '_'
+	(CPython enum._is_dunder)."
+
+	| n sz |
+	n := name @env0:asString.
+	sz := n @env0:size.
+	^ (sz @env0:> 4)
+		and: [((n @env0:at: 1) @env0:= $_)
+		and: [((n @env0:at: 2) @env0:= $_)
+		and: [((n @env0:at: (sz @env0:- 1)) @env0:= $_)
+		and: [((n @env0:at: sz) @env0:= $_)
+		and: [((n @env0:at: 3) @env0:~= $_)
+		and: [(n @env0:at: (sz @env0:- 2)) @env0:~= $_]]]]]]
+%
+
+category: 'Grail-Built-in Functions'
+method: enum
+_is_sunder: name
+	"_is_sunder(name) — True for a _sunder_ name: len > 2, starts and ends
+	with '_', and neither name[1] nor name[-2] is '_'
+	(CPython enum._is_sunder)."
+
+	| n sz |
+	n := name @env0:asString.
+	sz := n @env0:size.
+	^ (sz @env0:> 2)
+		and: [((n @env0:at: 1) @env0:= $_)
+		and: [((n @env0:at: sz) @env0:= $_)
+		and: [((n @env0:at: 2) @env0:~= $_)
+		and: [(n @env0:at: (sz @env0:- 1)) @env0:~= $_]]]]
+%
+
+category: 'Grail-Built-in Functions'
+method: enum
+_is_private: clsName _: name
+	"_is_private(cls_name, name) — True for a name-mangled private name
+	'_ClsName__x' that is not also dunder-terminated
+	(CPython enum._is_private)."
+
+	| n pat patLen sz |
+	n := name @env0:asString.
+	pat := '_' @env0:, clsName @env0:asString @env0:, '__'.
+	patLen := pat @env0:size.
+	sz := n @env0:size.
+	^ (sz @env0:> patLen)
+		and: [((n @env0:copyFrom: 1 to: patLen) @env0:= pat)
+		and: [((n @env0:at: sz) @env0:~= $_)
+			or: [(n @env0:at: (sz @env0:- 1)) @env0:~= $_]]]
+%
+
 set compile_env: 0
 
 ! The module singleton is committed and lazily initialized; clear it so

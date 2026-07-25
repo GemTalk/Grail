@@ -434,13 +434,31 @@ __radd__: other
 
 category: 'Grail-String Representation'
 method: complex
+___formatComponent___: aFloat
+	"Format one real/imaginary component the way CPython's complex repr
+	does -- unlike plain float repr (which always keeps a trailing '.0',
+	e.g. repr(1.0) == '1.0'), complex drops it for whole-number finite
+	components: repr(1+0j) == '(1+0j)', not '(1.0+0.0j)'.  Delegate to
+	float's own __repr__ for the general/non-finite case (inf/nan
+	spellings, exponent formatting, ...) and only strip the trailing
+	'.0' when present."
+
+	| str |
+	str := aFloat __repr__.
+	(str @env0:endsWith: '.0') ifTrue: [
+		^ str @env0:copyFrom: 1 to: str @env0:size @env0:- 2].
+	^ str
+%
+
+category: 'Grail-String Representation'
+method: complex
 __repr__
 	"Return string representation of complex number."
 
 	| realStr imagStr |
-	realStr := (self real) @env0:printString.
+	realStr := self ___formatComponent___: self real.
 	imagStr := (self imag) @env0:abs.
-	imagStr := imagStr @env0:printString.
+	imagStr := self ___formatComponent___: imagStr.
 
 	^ (((self real) @env0:= 0.0)
 		ifTrue: [imagStr @env0:, 'j']

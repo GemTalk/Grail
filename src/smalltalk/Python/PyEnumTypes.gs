@@ -781,7 +781,13 @@ ___grailInstallEnumOutput: cls
 	value-str __str__/__format__ in category Grail-Enum Member, so the
 	per-selector guard below already keeps them."
 
+	| strOverridden |
 	(Enum ___grailIsStrEnumClass: cls) ifTrue: [^ cls].
+	"A user __str__ override (a class-body def, or one inherited from a user
+	base) with NO matching __format__ override makes format() follow str():
+	CPython's EnumType replaces __format__ with the str-delegating one so
+	``format(member)'' == ``str(member)'' rather than the mix-in value format."
+	strOverridden := Enum ___grailUserProvides: cls selector: #'__str__'.
 	"Nested {selector. source} pairs (NOT Associations -- a bare ``->'' would
 	be an env-1 send and DNU here)."
 	{ { #'__repr__'. '__repr__
@@ -791,7 +797,14 @@ ___grailInstallEnumOutput: cls
 	  { #'__format__:'. '__format__: aSpec
 	^ (self __str__) __format__: aSpec' } }
 		@env0:do: [:pair |
-			(Enum ___grailShouldForceOutput: cls selector: (pair @env0:at: 1)) ifTrue: [
+			| sel force |
+			sel := pair @env0:at: 1.
+			force := Enum ___grailShouldForceOutput: cls selector: sel.
+			(sel @env0:= #'__format__:'
+				and: [strOverridden
+				and: [(Enum ___grailUserProvides: cls selector: sel) @env0:not]])
+					ifTrue: [force := true].
+			force ifTrue: [
 				cls ___compileMethod: (pair @env0:at: 2) category: 'Grail-Enum Member']].
 	^ cls
 %
@@ -815,6 +828,22 @@ ___grailShouldForceOutput: cls selector: sel
 	^ (#(#'Grail-Class Methods' #'Grail-Method Aliases' #'Grail-Property-ReadOnly'
 		#'Grail-CachedProperty-Setter' #'Grail-Enum Member' #'Grail-Flag Member'
 		#'Grail-IntFlag Member') @env0:includes: cat) @env0:not
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailUserProvides: cls selector: sel
+	"True when cls's method for sel is a USER definition -- a class-body def
+	or one inherited from a user base (category Grail-Class Methods or
+	Grail-Method Aliases) -- rather than an inherited data-type/enum method.
+	Used to decide whether format() should follow an overridden __str__."
+
+	| p cat |
+	p := cls @env0:whichClassIncludesSelector: sel environmentId: 1.
+	p @env0:isNil ifTrue: [^ false].
+	cat := [p @env0:categoryOfSelector: sel environmentId: 1]
+		@env0:on: AbstractException do: [:e | nil].
+	^ #(#'Grail-Class Methods' #'Grail-Method Aliases') @env0:includes: cat
 %
 
 category: 'Grail-Enum Metaclass'
