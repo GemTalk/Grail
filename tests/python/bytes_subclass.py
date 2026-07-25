@@ -471,6 +471,35 @@ def _partition_int_sep_ba():
     except TypeError:
         return True
 
+# replace() with an empty ``old'' inserts ``new'' at every gap (before each
+# byte and after the last), honoring a replacement count (CPython interleave).
+def _replace_empty_old():
+    return (b''.replace(b'', b'A') == b'A'
+            and b''.replace(b'', b'', 100) == b''
+            and b'A'.replace(b'', b'*') == b'*A*'
+            and b'A'.replace(b'', b'*1') == b'*1A*1'
+            and b'AA'.replace(b'', b'*-') == b'*-A*-A*-'
+            and b'AA'.replace(b'', b'*-', -1) == b'*-A*-A*-'
+            and b'AA'.replace(b'', b'*-', 4) == b'*-A*-A*-'
+            and b'AA'.replace(b'', b'*-', 3) == b'*-A*-A*-'
+            and b'AA'.replace(b'', b'*-', 2) == b'*-A*-A'
+            and b'AA'.replace(b'', b'*-', 1) == b'*-AA'
+            and b'AA'.replace(b'', b'*-', 0) == b'AA')
+def _replace_empty_old_ba():
+    return bytearray(b'AA').replace(b'', b'*-') == bytearray(b'*-A*-A*-')
+
+# A replace whose result would be gigabytes raises OverflowError rather than
+# exhausting VM memory (test_replace_overflow: empty and non-empty old).
+def _replace_overflow():
+    a = b'A' * (2**16)
+    for args in ((b'', a), (b'A', a), (b'AA', a + a)):
+        try:
+            a.replace(*args)
+            return False
+        except OverflowError:
+            pass
+    return True
+
 
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
@@ -778,4 +807,10 @@ RESULTS = {
     'partition_empty_sep': _partition_empty_sep(),
     'partition_ok': _partition_ok(),
     'partition_int_sep_ba': _partition_int_sep_ba(),
+
+    # --- replace() with an empty old inserts new at every gap; gigabyte
+    # results raise OverflowError instead of OOM-crashing ---
+    'replace_empty_old': _replace_empty_old(),
+    'replace_empty_old_ba': _replace_empty_old_ba(),
+    'replace_overflow': _replace_overflow(),
 }

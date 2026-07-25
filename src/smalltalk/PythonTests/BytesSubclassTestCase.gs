@@ -376,3 +376,15 @@ testJustifyFillAndPartitionSep
 	  'partition_int_sep_ba') do: [:key |
 		self assert: ((self resultAt: key) = true) description: key]
 %
+
+category: 'Grail-Tests - replace empty old interleave'
+method: BytesSubclassTestCase
+testReplaceEmptyOld
+	"replace(b'', new[, count]) inserts new at every gap -- before each byte
+	and after the last -- honoring the replacement count (CPython interleave).
+	A gigabyte-scale result raises OverflowError instead of exhausting VM
+	memory.  bytearray inherits."
+
+	#('replace_empty_old' 'replace_empty_old_ba' 'replace_overflow') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%

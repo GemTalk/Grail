@@ -2015,14 +2015,59 @@ replace: old _: new
 	newSize := new @env0:size.
 	mySize := self @env0:size.
 
-	"Empty old not allowed"
+	"Empty old: insert new at every gap (CPython interleave)."
 	(oldSize == 0) ifTrue: [
-		^ self @env0:copy
+		^ self ___replaceEmptyOld___: new count: -1
 	].
+
+	"Guard against a gigabyte-scale result before building it (OverflowError,
+	not an OOM VM crash): resultLen = mySize + occurrences * (newSize - oldSize)."
+	self ___checkReplaceResultLen___:
+		(mySize @env0:+ ((self count: old) @env0:* (newSize @env0:- oldSize))).
 
 	"Split by old, then join with new"
 	parts := self split: old.
 	^ new join: parts
+%
+
+category: 'Grail-Search Methods'
+method: bytes
+___checkReplaceResultLen___: resultLen
+	"CPython raises OverflowError (``replace bytes is too long'') when the
+	result length overflows Py_ssize_t.  Grail additionally cannot materialize
+	a multi-gigabyte result in the temp-object cache, so cap at 2**31 - 1 (the
+	32-bit ssize_t limit test_replace_overflow checks) and raise rather than
+	exhaust VM memory."
+	resultLen @env0:> 2147483647 ifTrue: [
+		OverflowError ___signal___: 'replace bytes is too long'].
+%
+
+category: 'Grail-Search Methods'
+method: bytes
+___replaceEmptyOld___: new count: count
+	"replace(b'', new, count): CPython inserts ``new'' at every gap -- before
+	each byte and after the last -- for the first ``count'' gaps (all of them
+	when count < 0).  A string of length n has n + 1 gaps, so b''.replace(b'',
+	x) is x and b'AA'.replace(b'', b'*-') is b'*-A*-A*-'."
+	| n newSize maxInsert result pos |
+	n := self @env0:size.
+	newSize := new @env0:size.
+	maxInsert := n @env0:+ 1.
+	((count @env0:>= 0) and: [count @env0:< maxInsert]) ifTrue: [maxInsert := count].
+	self ___checkReplaceResultLen___: (n @env0:+ (maxInsert @env0:* newSize)).
+	result := bytes ___new___: (n @env0:+ (maxInsert @env0:* newSize)).
+	pos := 1.
+	1 @env0:to: n do: [:i |
+		"insert ``new'' before byte i for the first maxInsert bytes"
+		(i @env0:<= maxInsert) ifTrue: [
+			1 @env0:to: newSize do: [:k |
+				result @env0:at: pos put: (new @env0:at: k). pos := pos @env0:+ 1]].
+		result @env0:at: pos put: (self @env0:at: i). pos := pos @env0:+ 1].
+	"final gap after the last byte, when the whole (n+1) budget is available"
+	(n @env0:< maxInsert) ifTrue: [
+		1 @env0:to: newSize do: [:k |
+			result @env0:at: pos put: (new @env0:at: k). pos := pos @env0:+ 1]].
+	^ result
 %
 
 category: 'Grail-Search Methods'
@@ -2921,7 +2966,12 @@ replace: old _: new _: count
 	(count @env0:= 0) ifTrue: [^ self @env0:copy].
 	(old isKindOf: bytes) ifFalse: [TypeError ___signal___: 'first argument must be bytes'].
 	(new isKindOf: bytes) ifFalse: [TypeError ___signal___: 'second argument must be bytes'].
-	(old @env0:size @env0:= 0) ifTrue: [^ self @env0:copy].
+	"Empty old: interleave new at the first ``count'' gaps (count > 0 here)."
+	(old @env0:size @env0:= 0) ifTrue: [^ self ___replaceEmptyOld___: new count: count].
+	"Guard against a gigabyte-scale result: at most ``count'' replacements happen."
+	self ___checkReplaceResultLen___:
+		(self @env0:size @env0:+ (((self count: old) @env0:min: count)
+			@env0:* (new @env0:size @env0:- old @env0:size))).
 	^ new join: (self split: old _: count)
 %
 
