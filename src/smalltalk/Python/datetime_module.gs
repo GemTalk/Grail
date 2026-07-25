@@ -129,6 +129,23 @@ ___multiplier___: unit
 	^ TypeError @env1:___signal___: 'unsupported timedelta unit: ' , unit asString
 %
 
+category: 'Grail-Hash'
+method: PyTimedelta
+= other
+	"Smalltalk value-equality + hash so equal timedeltas collapse as
+	PyDict/set keys: those bucket non-PythonInstance keys by Smalltalk
+	hash and match by Smalltalk =, which default to identity."
+
+	^ (other isKindOf: PyTimedelta)
+		and: [(self @env1:___totalMicros___) = (other @env1:___totalMicros___)]
+%
+
+category: 'Grail-Hash'
+method: PyTimedelta
+hash
+	^ (self @env1:___totalMicros___) hash
+%
+
 set compile_env: 1
 
 category: 'Grail-Accessors'
@@ -169,11 +186,15 @@ ___totalMicros___
 category: 'Grail-Arithmetic'
 method: PyTimedelta
 __add__: other
+	"NotImplemented (not a direct TypeError) for a non-timedelta, so the
+	reflected op runs: timedelta + date/datetime dispatches to the
+	date/datetime __radd__."
+
 	(other isKindOf: PyTimedelta) ifTrue: [
 		^ PyTimedelta @env0:___fromTotalMicros___:
 			(self ___totalMicros___ @env0:+ other ___totalMicros___)
 	].
-	^ TypeError ___signal___: 'unsupported operand for +'
+	^ #'___NotImplemented___'
 %
 
 category: 'Grail-Arithmetic'
@@ -859,6 +880,23 @@ ___fromFields___: y _: mo _: d _: h _: mi _: s _: us _: tz
 	^ inst
 %
 
+category: 'Grail-Hash'
+method: PyDateTime
+= other
+	"Smalltalk value-equality + hash so equal datetimes collapse as
+	PyDict/set keys (naive compare key; tzinfo-aware deferred, matching
+	__eq__/__hash__)."
+
+	^ (other isKindOf: PyDateTime)
+		and: [(self @env1:___compareKey___) = (other @env1:___compareKey___)]
+%
+
+category: 'Grail-Hash'
+method: PyDateTime
+hash
+	^ (self @env1:___compareKey___) hash
+%
+
 category: 'Grail-Private'
 method: PyDateTime
 _year: y _month: mo _day: d _hour: h _minute: mi _second: s _microsecond: us _tzinfo: tz
@@ -1284,7 +1322,13 @@ method: PyDateTime
 __format__: spec
 	"datetime.__format__: empty spec -> str(self); else strftime(spec)."
 
-	(spec @env0:isNil or: [spec @env0:isEmpty]) ifTrue: [^ self __str__].
+	| tn |
+	spec @env0:isNil ifTrue: [^ self __str__].
+	(spec @env0:isKindOf: CharacterCollection) ifFalse: [
+		tn := spec @env0:class ___pythonBuiltinTypeName___.
+		tn @env0:isNil ifTrue: [tn := spec @env0:class @env0:name @env0:asString].
+		^ TypeError ___signal___: '__format__() argument must be str, not ' @env0:, tn].
+	spec @env0:isEmpty ifTrue: [^ self __str__].
 	^ self strftime: spec
 %
 
@@ -1340,6 +1384,32 @@ isocalendar
 		_: (self @env0:dynamicInstVarAt: #_day)) isocalendar
 %
 
+category: 'Grail-Accessors'
+method: PyDateTime
+toordinal
+	"Proleptic Gregorian ordinal of the date part (datetime IS-A date in
+	CPython; Grail's PyDateTime is a separate class, so delegate)."
+
+	^ self date toordinal
+%
+
+category: 'Grail-Conversion'
+method: PyDateTime
+ctime
+	"C asctime-style, e.g. 'Thu Jan  1 13:14:15 2004' (day space-padded
+	to width 2; the real time, unlike date.ctime's fixed 00:00:00)."
+
+	| head dayStr timeStr |
+	head := time instance strftime: '%a %b' _: self timetuple.
+	dayStr := (self @env0:dynamicInstVarAt: #_day) @env0:printString.
+	dayStr @env0:size @env0:< 2 ifTrue: [dayStr := ' ' @env0:, dayStr].
+	timeStr := (self @env0:___pad___: (self @env0:dynamicInstVarAt: #_hour) width: 2) @env0:, ':' @env0:,
+		(self @env0:___pad___: (self @env0:dynamicInstVarAt: #_minute) width: 2) @env0:, ':' @env0:,
+		(self @env0:___pad___: (self @env0:dynamicInstVarAt: #_second) width: 2).
+	^ head @env0:, ' ' @env0:, dayStr @env0:, ' ' @env0:, timeStr @env0:, ' ' @env0:,
+		(self @env0:___pad___: (self @env0:dynamicInstVarAt: #_year) width: 4)
+%
+
 category: 'Grail-Initialization'
 classmethod: PyDateTime
 combine: aDate _: aTime
@@ -1360,6 +1430,15 @@ fromordinal: ordinal
 	d := PyDate fromordinal: ordinal.
 	^ PyDateTime @env0:___fromFields___:
 		(d year) _: (d month) _: (d day) _: 0 _: 0 _: 0 _: 0 _: nil
+%
+
+category: 'Grail-Initialization'
+classmethod: PyDateTime
+fromisocalendar: year _: week _: day
+	"datetime.fromisocalendar(y, w, d) -> naive datetime at midnight
+	(inverse of isocalendar(), via the date-part ordinal)."
+
+	^ PyDateTime fromordinal: (PyDate fromisocalendar: year _: week _: day) toordinal
 %
 
 category: 'Grail-Initialization'
@@ -1395,6 +1474,14 @@ __add__: other
 
 category: 'Grail-Arithmetic'
 method: PyDateTime
+__radd__: other
+	"timedelta + datetime -> datetime (addition is commutative here)."
+
+	^ self __add__: other
+%
+
+category: 'Grail-Arithmetic'
+method: PyDateTime
 __sub__: other
 	"datetime - datetime -> timedelta; datetime - timedelta -> datetime."
 
@@ -1413,13 +1500,17 @@ __sub__: other
 category: 'Grail-Equality'
 method: PyDateTime
 __eq__: other
-	(other isKindOf: PyDateTime) ifFalse: [^ false].
+	"NotImplemented (not false) for a non-datetime, so ALWAYS_EQ and the
+	reflected comparison work; foreign operands never crash."
+
+	(other isKindOf: PyDateTime) ifFalse: [^ #'___NotImplemented___'].
 	^ self ___compareKey___ @env0:= other ___compareKey___
 %
 
 category: 'Grail-Equality'
 method: PyDateTime
 __lt__: other
+	(other isKindOf: PyDateTime) ifFalse: [^ #'___NotImplemented___'].
 	^ self ___compareKey___ @env0:< other ___compareKey___
 %
 
@@ -1450,25 +1541,31 @@ ___compareKey___
 category: 'Grail-Equality'
 method: PyDateTime
 __le__: other
+	(other isKindOf: PyDateTime) ifFalse: [^ #'___NotImplemented___'].
 	^ self ___compareKey___ @env0:<= other ___compareKey___
 %
 
 category: 'Grail-Equality'
 method: PyDateTime
 __gt__: other
+	(other isKindOf: PyDateTime) ifFalse: [^ #'___NotImplemented___'].
 	^ self ___compareKey___ @env0:> other ___compareKey___
 %
 
 category: 'Grail-Equality'
 method: PyDateTime
 __ge__: other
+	(other isKindOf: PyDateTime) ifFalse: [^ #'___NotImplemented___'].
 	^ self ___compareKey___ @env0:>= other ___compareKey___
 %
 
 category: 'Grail-Equality'
 method: PyDateTime
 __ne__: other
-	^ (self __eq__: other) @env0:not
+	| eq |
+	eq := self __eq__: other.
+	(eq @env0:== #'___NotImplemented___') ifTrue: [^ eq].
+	^ eq @env0:not
 %
 
 category: 'Grail-Pickle'
@@ -1647,6 +1744,23 @@ ___fromFields___: y _: m _: d
 	^ inst
 %
 
+category: 'Grail-Hash'
+method: PyDate
+= other
+	"Smalltalk value-equality + hash so equal dates collapse as PyDict/set
+	keys (they bucket non-PythonInstance keys by Smalltalk hash and match
+	by Smalltalk =, which default to identity)."
+
+	^ (other isKindOf: PyDate)
+		and: [(self @env1:toordinal) = (other @env1:toordinal)]
+%
+
+category: 'Grail-Hash'
+method: PyDate
+hash
+	^ (self @env1:toordinal) hash
+%
+
 category: 'Grail-Private'
 method: PyDate
 _year: y _month: m _day: d
@@ -1719,14 +1833,11 @@ fromordinal: ordinal
 category: 'Grail-Initialization'
 classmethod: PyDate
 fromtimestamp: ts
-	"Local-time date from POSIX timestamp."
+	"date.fromtimestamp(ts) == datetime.fromtimestamp(ts).date().  Delegate
+	to PyDateTime's epoch+addSeconds path (Duration>>fromSeconds: is absent
+	in this GemStone, which crashed the old implementation)."
 
-	| epoch dt d |
-	epoch := DateTime @env0:newGmtWithYear: 1970 month: 1 day: 1 hours: 0 minutes: 0 seconds: 0.
-	dt := epoch @env0:+ (Duration @env0:fromSeconds: ts).
-	d := dt @env0:asDate.
-	^ self @env0:___fromFields___:
-		d @env0:year _: d @env0:monthIndex _: d @env0:dayOfMonth
+	^ (PyDateTime fromtimestamp: ts) date
 %
 
 ! ------- Accessors
@@ -1839,7 +1950,13 @@ method: PyDate
 __format__: spec
 	"date.__format__: empty spec -> str(self); else strftime(spec)."
 
-	(spec @env0:isNil or: [spec @env0:isEmpty]) ifTrue: [^ self __str__].
+	| tn |
+	spec @env0:isNil ifTrue: [^ self __str__].
+	(spec @env0:isKindOf: CharacterCollection) ifFalse: [
+		tn := spec @env0:class ___pythonBuiltinTypeName___.
+		tn @env0:isNil ifTrue: [tn := spec @env0:class @env0:name @env0:asString].
+		^ TypeError ___signal___: '__format__() argument must be str, not ' @env0:, tn].
+	spec @env0:isEmpty ifTrue: [^ self __str__].
 	^ self strftime: spec
 %
 
@@ -1962,6 +2079,14 @@ __add__: other
 
 category: 'Grail-Arithmetic'
 method: PyDate
+__radd__: other
+	"timedelta + date -> date (addition is commutative here)."
+
+	^ self __add__: other
+%
+
+category: 'Grail-Arithmetic'
+method: PyDate
 __sub__: other
 	"date - timedelta → date; date - date → timedelta."
 
@@ -1982,46 +2107,48 @@ __sub__: other
 category: 'Grail-Equality'
 method: PyDate
 __eq__: other
-	(other isKindOf: PyDate) ifFalse: [^ false].
+	"NotImplemented (not false) for a non-date, so ALWAYS_EQ and the
+	reflected comparison work; foreign operands never crash."
+
+	(other isKindOf: PyDate) ifFalse: [^ #'___NotImplemented___'].
 	^ (self toordinal) @env0:= (other toordinal)
 %
 
 category: 'Grail-Equality'
 method: PyDate
 __lt__: other
-	(other isKindOf: PyDate) ifFalse: [
-		TypeError ___signal___: 'can''t compare date to non-date'].
+	(other isKindOf: PyDate) ifFalse: [^ #'___NotImplemented___'].
 	^ (self toordinal) @env0:< (other toordinal)
 %
 
 category: 'Grail-Equality'
 method: PyDate
 __le__: other
-	(other isKindOf: PyDate) ifFalse: [
-		TypeError ___signal___: 'can''t compare date to non-date'].
+	(other isKindOf: PyDate) ifFalse: [^ #'___NotImplemented___'].
 	^ (self toordinal) @env0:<= (other toordinal)
 %
 
 category: 'Grail-Equality'
 method: PyDate
 __gt__: other
-	(other isKindOf: PyDate) ifFalse: [
-		TypeError ___signal___: 'can''t compare date to non-date'].
+	(other isKindOf: PyDate) ifFalse: [^ #'___NotImplemented___'].
 	^ (self toordinal) @env0:> (other toordinal)
 %
 
 category: 'Grail-Equality'
 method: PyDate
 __ge__: other
-	(other isKindOf: PyDate) ifFalse: [
-		TypeError ___signal___: 'can''t compare date to non-date'].
+	(other isKindOf: PyDate) ifFalse: [^ #'___NotImplemented___'].
 	^ (self toordinal) @env0:>= (other toordinal)
 %
 
 category: 'Grail-Equality'
 method: PyDate
 __ne__: other
-	^ (self __eq__: other) @env0:not
+	| eq |
+	eq := self __eq__: other.
+	(eq @env0:== #'___NotImplemented___') ifTrue: [^ eq].
+	^ eq @env0:not
 %
 
 category: 'Grail-Equality'
@@ -2139,6 +2266,24 @@ ___fromFields___: h _: mi _: s _: us _: tz
 	inst := self new.
 	inst _hour: h _minute: mi _second: s _microsecond: us _tzinfo: tz.
 	^ inst
+%
+
+category: 'Grail-Hash'
+method: PyTime
+= other
+	"Smalltalk value-equality + hash so equal times collapse as PyDict/set
+	keys (they bucket non-PythonInstance keys by Smalltalk hash and match
+	by Smalltalk =, which default to identity).  Naive key; tzinfo-aware
+	deferred, matching __eq__."
+
+	^ (other isKindOf: PyTime)
+		and: [(self @env1:___cmpKey___) = (other @env1:___cmpKey___)]
+%
+
+category: 'Grail-Hash'
+method: PyTime
+hash
+	^ (self @env1:___cmpKey___) hash
 %
 
 category: 'Grail-Private'
@@ -2365,7 +2510,13 @@ strftime: format
 category: 'Grail-Conversion'
 method: PyTime
 __format__: spec
-	(spec @env0:isNil or: [spec @env0:isEmpty]) ifTrue: [^ self __str__].
+	| tn |
+	spec @env0:isNil ifTrue: [^ self __str__].
+	(spec @env0:isKindOf: CharacterCollection) ifFalse: [
+		tn := spec @env0:class ___pythonBuiltinTypeName___.
+		tn @env0:isNil ifTrue: [tn := spec @env0:class @env0:name @env0:asString].
+		^ TypeError ___signal___: '__format__() argument must be str, not ' @env0:, tn].
+	spec @env0:isEmpty ifTrue: [^ self __str__].
 	^ self strftime: spec
 %
 
@@ -2416,7 +2567,10 @@ set compile_env: 1
 category: 'Grail-Equality'
 method: PyTime
 __eq__: other
-	(other isKindOf: PyTime) ifFalse: [^ false].
+	"NotImplemented (not false) for a non-time, so ALWAYS_EQ and the
+	reflected comparison work; foreign operands never crash."
+
+	(other isKindOf: PyTime) ifFalse: [^ #'___NotImplemented___'].
 	^ (self @env0:dynamicInstVarAt: #_hour) @env0:= (other @env0:dynamicInstVarAt: #_hour)
 		and: [(self @env0:dynamicInstVarAt: #_minute) @env0:= (other @env0:dynamicInstVarAt: #_minute)
 		and: [(self @env0:dynamicInstVarAt: #_second) @env0:= (other @env0:dynamicInstVarAt: #_second)
@@ -2446,31 +2600,38 @@ ___cmpKey___
 category: 'Grail-Equality'
 method: PyTime
 __lt__: other
+	(other isKindOf: PyTime) ifFalse: [^ #'___NotImplemented___'].
 	^ self ___cmpKey___ @env0:< other ___cmpKey___
 %
 
 category: 'Grail-Equality'
 method: PyTime
 __le__: other
+	(other isKindOf: PyTime) ifFalse: [^ #'___NotImplemented___'].
 	^ self ___cmpKey___ @env0:<= other ___cmpKey___
 %
 
 category: 'Grail-Equality'
 method: PyTime
 __gt__: other
+	(other isKindOf: PyTime) ifFalse: [^ #'___NotImplemented___'].
 	^ self ___cmpKey___ @env0:> other ___cmpKey___
 %
 
 category: 'Grail-Equality'
 method: PyTime
 __ge__: other
+	(other isKindOf: PyTime) ifFalse: [^ #'___NotImplemented___'].
 	^ self ___cmpKey___ @env0:>= other ___cmpKey___
 %
 
 category: 'Grail-Equality'
 method: PyTime
 __ne__: other
-	^ (self __eq__: other) @env0:not
+	| eq |
+	eq := self __eq__: other.
+	(eq @env0:== #'___NotImplemented___') ifTrue: [^ eq].
+	^ eq @env0:not
 %
 
 category: 'Grail-Pickle'

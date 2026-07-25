@@ -1,8 +1,8 @@
 """Test the datetime module — GRAIL-TRIMMED subset of CPython 3.14's
-datetimetester.  Only the self-contained core classes (TestModule,
-TestTZInfo, TestTimeZone, TestTimeDelta) are kept so the module compiles
-within Grail's per-import budget; the very large TestDate/TestDateTime/
-TZ classes are omitted for now.  Runs against Grail's native datetime.
+datetimetester.  Kept: TestModule, TestTZInfo, TestTimeZone,
+TestTimeDelta, TestDateOnly, TestDate.  Still omitted (per-import compile
+budget): the very large TestDateTime/TestTime/TZ-conversion classes.
+Runs against Grail's native datetime.
 
 Grail adaptations: trimmed imports; local LARGEST/SMALLEST sentinels
 (absent from Grail's test.support); lone-surrogate string literals
@@ -10,14 +10,18 @@ neutralized (Grail cannot compile them)."""
 import copy
 import pickle
 import random
+import re
 import sys
 import unittest
 import warnings
+
+import time as _time
 
 from operator import lt, le, gt, ge, eq, ne, truediv, floordiv, mod
 
 from test import support
 from test.support import is_resource_enabled, ALWAYS_EQ
+from test.support import warnings_helper
 
 import datetime as datetime_module
 from datetime import MINYEAR, MAXYEAR
@@ -53,6 +57,10 @@ SMALLEST = _Smallest()
 
 pickle_choices = [(pickle, pickle, proto)
                   for proto in range(pickle.HIGHEST_PROTOCOL + 1)]
+
+# GRAIL: CPython uses {pickle.loads, pickle._loads} to test both the C and
+# pure-Python unpicklers; Grail has one pickle, so just the one loads.
+pickle_loads = {pickle.loads}
 
 EPOCH_NAIVE = datetime(1970, 1, 1, 0, 0)
 OTHERSTUFF = (10, 34.5, "abc", {}, [], ())
@@ -1096,6 +1104,1092 @@ class TestTimeDelta(HarmlessMixedComparison, unittest.TestCase):
 #############################################################################
 # date tests
 
+class TestDateOnly(unittest.TestCase):
+    # Tests here won't pass if also run on datetime objects, so don't
+    # subclass this to test datetimes too.
+
+    def test_delta_non_days_ignored(self):
+        dt = date(2000, 1, 2)
+        delta = timedelta(days=1, hours=2, minutes=3, seconds=4,
+                          microseconds=5)
+        days = timedelta(delta.days)
+        self.assertEqual(days, timedelta(1))
+
+        dt2 = dt + delta
+        self.assertEqual(dt2, dt + days)
+
+        dt2 = delta + dt
+        self.assertEqual(dt2, dt + days)
+
+        dt2 = dt - delta
+        self.assertEqual(dt2, dt - days)
+
+        delta = -delta
+        days = timedelta(delta.days)
+        self.assertEqual(days, timedelta(-2))
+
+        dt2 = dt + delta
+        self.assertEqual(dt2, dt + days)
+
+        dt2 = delta + dt
+        self.assertEqual(dt2, dt + days)
+
+        dt2 = dt - delta
+        self.assertEqual(dt2, dt - days)
+
+    def test_strptime(self):
+        inputs = [
+            # Basic valid cases
+            (date(1998, 2, 3), '1998-02-03', '%Y-%m-%d'),
+            (date(2004, 12, 2), '2004-12-02', '%Y-%m-%d'),
+
+            # Edge cases: Leap year
+            (date(2020, 2, 29), '2020-02-29', '%Y-%m-%d'),  # Valid leap year date
+
+            # bpo-34482: Handle surrogate pairs
+            (date(2004, 12, 2), '2004-12\u080002', '%Y-%m\u0800%d'),
+            (date(2004, 12, 2), '2004\u080012-02', '%Y\u0800%m-%d'),
+
+            # Month/day variations
+            (date(2004, 2, 1), '2004-02', '%Y-%m'),  # No day provided
+            (date(2004, 2, 1), '02-2004', '%m-%Y'),  # Month and year swapped
+
+            # Different day-month-year formats
+            (date(2004, 12, 2), '02/12/2004', '%d/%m/%Y'),  # Day/Month/Year
+            (date(2004, 12, 2), '12/02/2004', '%m/%d/%Y'),  # Month/Day/Year
+
+            # Different separators
+            (date(2023, 9, 24), '24.09.2023', '%d.%m.%Y'),  # Dots as separators
+            (date(2023, 9, 24), '24-09-2023', '%d-%m-%Y'),  # Dashes
+            (date(2023, 9, 24), '2023/09/24', '%Y/%m/%d'),  # Slashes
+
+            # Handling years with fewer digits
+            (date(127, 2, 3), '0127-02-03', '%Y-%m-%d'),
+            (date(99, 2, 3), '0099-02-03', '%Y-%m-%d'),
+            (date(5, 2, 3), '0005-02-03', '%Y-%m-%d'),
+
+            # Variations on ISO 8601 format
+            (date(2023, 9, 25), '2023-W39-1', '%G-W%V-%u'),  # ISO week date (Week 39, Monday)
+            (date(2023, 9, 25), '2023-268', '%Y-%j'),  # Year and day of the year (Julian)
+        ]
+        for expected, string, format in inputs:
+            with self.subTest(string=string, format=format):
+                got = date.strptime(string, format)
+                self.assertEqual(expected, got)
+                self.assertIs(type(got), date)
+
+    def test_strptime_single_digit(self):
+        # bpo-34903: Check that single digit dates are allowed.
+        strptime = date.strptime
+        with self.assertRaises(ValueError):
+            # %y does require two digits.
+            newdate = strptime('01/02/3', '%d/%m/%y')
+
+        d1 = date(2003, 2, 1)
+        d2 = date(2003, 1, 2)
+        d3 = date(2003, 1, 25)
+        inputs = [
+            ('%d', '1/02/03',  '%d/%m/%y', d1),
+            ('%m', '01/2/03',  '%d/%m/%y', d1),
+            ('%j', '2/03',     '%j/%y',    d2),
+            ('%w', '6/04/03',  '%w/%U/%y', d1),
+            # %u requires a single digit.
+            ('%W', '6/4/2003', '%u/%W/%Y', d1),
+            ('%V', '6/4/2003', '%u/%V/%G', d3),
+        ]
+        for reason, string, format, target in inputs:
+            reason = 'test single digit ' + reason
+            with self.subTest(reason=reason,
+                              string=string,
+                              format=format,
+                              target=target):
+                newdate = strptime(string, format)
+                self.assertEqual(newdate, target, msg=reason)
+
+    @warnings_helper.ignore_warnings(category=DeprecationWarning)
+    def test_strptime_leap_year(self):
+        # GH-70647: warns if parsing a format with a day and no year.
+        with self.assertRaises(ValueError):
+            # The existing behavior that GH-70647 seeks to change.
+            date.strptime('02-29', '%m-%d')
+        with self._assertNotWarns(DeprecationWarning):
+            date.strptime('20-03-14', '%y-%m-%d')
+            date.strptime('02-29,2024', '%m-%d,%Y')
+
+class SubclassDate(date):
+    sub_var = 1
+
+class TestDate(HarmlessMixedComparison, unittest.TestCase):
+    # Tests here should pass for both dates and datetimes, except for a
+    # few tests that TestDateTime overrides.
+
+    theclass = date
+
+    def test_basic_attributes(self):
+        dt = self.theclass(2002, 3, 1)
+        self.assertEqual(dt.year, 2002)
+        self.assertEqual(dt.month, 3)
+        self.assertEqual(dt.day, 1)
+
+    def test_roundtrip(self):
+        for dt in (self.theclass(1, 2, 3),
+                   self.theclass.today()):
+            # Verify dt -> string -> date identity.
+            s = repr(dt)
+            self.assertStartsWith(s, 'datetime.')
+            s = s[9:]
+            dt2 = eval(s)
+            self.assertEqual(dt, dt2)
+
+            # Verify identity via reconstructing from pieces.
+            dt2 = self.theclass(dt.year, dt.month, dt.day)
+            self.assertEqual(dt, dt2)
+
+    def test_repr_subclass(self):
+        """Subclasses should have bare names in the repr (gh-107773)."""
+        td = SubclassDate(1, 2, 3)
+        self.assertEqual(repr(td), "SubclassDate(1, 2, 3)")
+        td = SubclassDate(2014, 1, 1)
+        self.assertEqual(repr(td), "SubclassDate(2014, 1, 1)")
+        td = SubclassDate(2010, 10, day=10)
+        self.assertEqual(repr(td), "SubclassDate(2010, 10, 10)")
+
+    def test_ordinal_conversions(self):
+        # Check some fixed values.
+        for y, m, d, n in [(1, 1, 1, 1),      # calendar origin
+                           (1, 12, 31, 365),
+                           (2, 1, 1, 366),
+                           # first example from "Calendrical Calculations"
+                           (1945, 11, 12, 710347)]:
+            d = self.theclass(y, m, d)
+            self.assertEqual(n, d.toordinal())
+            fromord = self.theclass.fromordinal(n)
+            self.assertEqual(d, fromord)
+            if hasattr(fromord, "hour"):
+            # if we're checking something fancier than a date, verify
+            # the extra fields have been zeroed out
+                self.assertEqual(fromord.hour, 0)
+                self.assertEqual(fromord.minute, 0)
+                self.assertEqual(fromord.second, 0)
+                self.assertEqual(fromord.microsecond, 0)
+
+        # Check first and last days of year spottily across the whole
+        # range of years supported.
+        for year in range(MINYEAR, MAXYEAR+1, 7):
+            # Verify (year, 1, 1) -> ordinal -> y, m, d is identity.
+            d = self.theclass(year, 1, 1)
+            n = d.toordinal()
+            d2 = self.theclass.fromordinal(n)
+            self.assertEqual(d, d2)
+            # Verify that moving back a day gets to the end of year-1.
+            if year > 1:
+                d = self.theclass.fromordinal(n-1)
+                d2 = self.theclass(year-1, 12, 31)
+                self.assertEqual(d, d2)
+                self.assertEqual(d2.toordinal(), n-1)
+
+        # Test every day in a leap-year and a non-leap year.
+        dim = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        for year, isleap in (2000, True), (2002, False):
+            n = self.theclass(year, 1, 1).toordinal()
+            for month, maxday in zip(range(1, 13), dim):
+                if month == 2 and isleap:
+                    maxday += 1
+                for day in range(1, maxday+1):
+                    d = self.theclass(year, month, day)
+                    self.assertEqual(d.toordinal(), n)
+                    self.assertEqual(d, self.theclass.fromordinal(n))
+                    n += 1
+
+    def test_extreme_ordinals(self):
+        a = self.theclass.min
+        a = self.theclass(a.year, a.month, a.day)  # get rid of time parts
+        aord = a.toordinal()
+        b = a.fromordinal(aord)
+        self.assertEqual(a, b)
+
+        self.assertRaises(ValueError, lambda: a.fromordinal(aord - 1))
+
+        b = a + timedelta(days=1)
+        self.assertEqual(b.toordinal(), aord + 1)
+        self.assertEqual(b, self.theclass.fromordinal(aord + 1))
+
+        a = self.theclass.max
+        a = self.theclass(a.year, a.month, a.day)  # get rid of time parts
+        aord = a.toordinal()
+        b = a.fromordinal(aord)
+        self.assertEqual(a, b)
+
+        self.assertRaises(ValueError, lambda: a.fromordinal(aord + 1))
+
+        b = a - timedelta(days=1)
+        self.assertEqual(b.toordinal(), aord - 1)
+        self.assertEqual(b, self.theclass.fromordinal(aord - 1))
+
+    def test_bad_constructor_arguments(self):
+        # bad years
+        self.theclass(MINYEAR, 1, 1)  # no exception
+        self.theclass(MAXYEAR, 1, 1)  # no exception
+        self.assertRaises(ValueError, self.theclass, MINYEAR-1, 1, 1)
+        self.assertRaises(ValueError, self.theclass, MAXYEAR+1, 1, 1)
+        # bad months
+        self.theclass(2000, 1, 1)    # no exception
+        self.theclass(2000, 12, 1)   # no exception
+        self.assertRaises(ValueError, self.theclass, 2000, 0, 1)
+        self.assertRaises(ValueError, self.theclass, 2000, 13, 1)
+        # bad days
+        self.theclass(2000, 2, 29)   # no exception
+        self.theclass(2004, 2, 29)   # no exception
+        self.theclass(2400, 2, 29)   # no exception
+        self.assertRaises(ValueError, self.theclass, 2000, 2, 30)
+        self.assertRaises(ValueError, self.theclass, 2001, 2, 29)
+        self.assertRaises(ValueError, self.theclass, 2100, 2, 29)
+        self.assertRaises(ValueError, self.theclass, 1900, 2, 29)
+        self.assertRaises(ValueError, self.theclass, 2000, 1, 0)
+        self.assertRaises(ValueError, self.theclass, 2000, 1, 32)
+
+    def test_hash_equality(self):
+        d = self.theclass(2000, 12, 31)
+        # same thing
+        e = self.theclass(2000, 12, 31)
+        self.assertEqual(d, e)
+        self.assertEqual(hash(d), hash(e))
+
+        dic = {d: 1}
+        dic[e] = 2
+        self.assertEqual(len(dic), 1)
+        self.assertEqual(dic[d], 2)
+        self.assertEqual(dic[e], 2)
+
+        d = self.theclass(2001,  1,  1)
+        # same thing
+        e = self.theclass(2001,  1,  1)
+        self.assertEqual(d, e)
+        self.assertEqual(hash(d), hash(e))
+
+        dic = {d: 1}
+        dic[e] = 2
+        self.assertEqual(len(dic), 1)
+        self.assertEqual(dic[d], 2)
+        self.assertEqual(dic[e], 2)
+
+    def test_computations(self):
+        a = self.theclass(2002, 1, 31)
+        b = self.theclass(1956, 1, 31)
+        c = self.theclass(2001,2,1)
+
+        diff = a-b
+        self.assertEqual(diff.days, 46*365 + len(range(1956, 2002, 4)))
+        self.assertEqual(diff.seconds, 0)
+        self.assertEqual(diff.microseconds, 0)
+
+        day = timedelta(1)
+        week = timedelta(7)
+        a = self.theclass(2002, 3, 2)
+        self.assertEqual(a + day, self.theclass(2002, 3, 3))
+        self.assertEqual(day + a, self.theclass(2002, 3, 3))
+        self.assertEqual(a - day, self.theclass(2002, 3, 1))
+        self.assertEqual(-day + a, self.theclass(2002, 3, 1))
+        self.assertEqual(a + week, self.theclass(2002, 3, 9))
+        self.assertEqual(a - week, self.theclass(2002, 2, 23))
+        self.assertEqual(a + 52*week, self.theclass(2003, 3, 1))
+        self.assertEqual(a - 52*week, self.theclass(2001, 3, 3))
+        self.assertEqual((a + week) - a, week)
+        self.assertEqual((a + day) - a, day)
+        self.assertEqual((a - week) - a, -week)
+        self.assertEqual((a - day) - a, -day)
+        self.assertEqual(a - (a + week), -week)
+        self.assertEqual(a - (a + day), -day)
+        self.assertEqual(a - (a - week), week)
+        self.assertEqual(a - (a - day), day)
+        self.assertEqual(c - (c - day), day)
+
+        # Add/sub ints or floats should be illegal
+        for i in 1, 1.0:
+            self.assertRaises(TypeError, lambda: a+i)
+            self.assertRaises(TypeError, lambda: a-i)
+            self.assertRaises(TypeError, lambda: i+a)
+            self.assertRaises(TypeError, lambda: i-a)
+
+        # delta - date is senseless.
+        self.assertRaises(TypeError, lambda: day - a)
+        # mixing date and (delta or date) via * or // is senseless
+        self.assertRaises(TypeError, lambda: day * a)
+        self.assertRaises(TypeError, lambda: a * day)
+        self.assertRaises(TypeError, lambda: day // a)
+        self.assertRaises(TypeError, lambda: a // day)
+        self.assertRaises(TypeError, lambda: a * a)
+        self.assertRaises(TypeError, lambda: a // a)
+        # date + date is senseless
+        self.assertRaises(TypeError, lambda: a + a)
+
+    def test_overflow(self):
+        tiny = self.theclass.resolution
+
+        for delta in [tiny, timedelta(1), timedelta(2)]:
+            dt = self.theclass.min + delta
+            dt -= delta  # no problem
+            self.assertRaises(OverflowError, dt.__sub__, delta)
+            self.assertRaises(OverflowError, dt.__add__, -delta)
+
+            dt = self.theclass.max - delta
+            dt += delta  # no problem
+            self.assertRaises(OverflowError, dt.__add__, delta)
+            self.assertRaises(OverflowError, dt.__sub__, -delta)
+
+    def test_fromtimestamp(self):
+        import time
+
+        # Try an arbitrary fixed value.
+        year, month, day = 1999, 9, 19
+        ts = time.mktime((year, month, day, 0, 0, 0, 0, 0, -1))
+        d = self.theclass.fromtimestamp(ts)
+        self.assertEqual(d.year, year)
+        self.assertEqual(d.month, month)
+        self.assertEqual(d.day, day)
+
+    def test_insane_fromtimestamp(self):
+        # It's possible that some platform maps time_t to double,
+        # and that this test will fail there.  This test should
+        # exempt such platforms (provided they return reasonable
+        # results!).
+        for insane in -1e200, 1e200:
+            self.assertRaises(OverflowError, self.theclass.fromtimestamp,
+                              insane)
+
+    def test_fromtimestamp_with_none_arg(self):
+        # See gh-120268 for more details
+        with self.assertRaises(TypeError):
+            self.theclass.fromtimestamp(None)
+
+    def test_today(self):
+        import time
+
+        # We claim that today() is like fromtimestamp(time.time()), so
+        # prove it.
+        for dummy in range(3):
+            today = self.theclass.today()
+            ts = time.time()
+            todayagain = self.theclass.fromtimestamp(ts)
+            if today == todayagain:
+                break
+            # There are several legit reasons that could fail:
+            # 1. It recently became midnight, between the today() and the
+            #    time() calls.
+            # 2. The platform time() has such fine resolution that we'll
+            #    never get the same value twice.
+            # 3. The platform time() has poor resolution, and we just
+            #    happened to call today() right before a resolution quantum
+            #    boundary.
+            # 4. The system clock got fiddled between calls.
+            # In any case, wait a little while and try again.
+            time.sleep(0.1)
+
+        # It worked or it didn't.  If it didn't, assume it's reason #2, and
+        # let the test pass if they're within half a second of each other.
+        if today != todayagain:
+            self.assertAlmostEqual(todayagain, today,
+                                   delta=timedelta(seconds=0.5))
+
+    def test_weekday(self):
+        for i in range(7):
+            # March 4, 2002 is a Monday
+            self.assertEqual(self.theclass(2002, 3, 4+i).weekday(), i)
+            self.assertEqual(self.theclass(2002, 3, 4+i).isoweekday(), i+1)
+            # January 2, 1956 is a Monday
+            self.assertEqual(self.theclass(1956, 1, 2+i).weekday(), i)
+            self.assertEqual(self.theclass(1956, 1, 2+i).isoweekday(), i+1)
+
+    def test_isocalendar(self):
+        # Check examples from
+        # http://www.phys.uu.nl/~vgent/calendar/isocalendar.htm
+        week_mondays = [
+                ((2003, 12, 22), (2003, 52, 1)),
+                ((2003, 12, 29), (2004, 1, 1)),
+                ((2004, 1, 5), (2004, 2, 1)),
+                ((2009, 12, 21), (2009, 52, 1)),
+                ((2009, 12, 28), (2009, 53, 1)),
+                ((2010, 1, 4), (2010, 1, 1)),
+        ]
+
+        test_cases = []
+        for cal_date, iso_date in week_mondays:
+            base_date = self.theclass(*cal_date)
+            # Adds one test case for every day of the specified weeks
+            for i in range(7):
+                new_date = base_date + timedelta(i)
+                new_iso = iso_date[0:2] + (iso_date[2] + i,)
+                test_cases.append((new_date, new_iso))
+
+        for d, exp_iso in test_cases:
+            with self.subTest(d=d, comparison="tuple"):
+                self.assertEqual(d.isocalendar(), exp_iso)
+
+            # Check that the tuple contents are accessible by field name
+            with self.subTest(d=d, comparison="fields"):
+                t = d.isocalendar()
+                self.assertEqual((t.year, t.week, t.weekday), exp_iso)
+
+    def test_isocalendar_pickling(self):
+        """Test that the result of datetime.isocalendar() can be pickled.
+
+        The result of a round trip should be a plain tuple.
+        """
+        d = self.theclass(2019, 1, 1)
+        p = pickle.dumps(d.isocalendar())
+        res = pickle.loads(p)
+        self.assertEqual(type(res), tuple)
+        self.assertEqual(res, (2019, 1, 2))
+
+    def test_iso_long_years(self):
+        # Calculate long ISO years and compare to table from
+        # http://www.phys.uu.nl/~vgent/calendar/isocalendar.htm
+        ISO_LONG_YEARS_TABLE = """
+              4   32   60   88
+              9   37   65   93
+             15   43   71   99
+             20   48   76
+             26   54   82
+
+            105  133  161  189
+            111  139  167  195
+            116  144  172
+            122  150  178
+            128  156  184
+
+            201  229  257  285
+            207  235  263  291
+            212  240  268  296
+            218  246  274
+            224  252  280
+
+            303  331  359  387
+            308  336  364  392
+            314  342  370  398
+            320  348  376
+            325  353  381
+        """
+        iso_long_years = sorted(map(int, ISO_LONG_YEARS_TABLE.split()))
+        L = []
+        for i in range(400):
+            d = self.theclass(2000+i, 12, 31)
+            d1 = self.theclass(1600+i, 12, 31)
+            self.assertEqual(d.isocalendar()[1:], d1.isocalendar()[1:])
+            if d.isocalendar()[1] == 53:
+                L.append(i)
+        self.assertEqual(L, iso_long_years)
+
+    def test_isoformat(self):
+        t = self.theclass(2, 3, 2)
+        self.assertEqual(t.isoformat(), "0002-03-02")
+
+    def test_ctime(self):
+        t = self.theclass(2002, 3, 2)
+        self.assertEqual(t.ctime(), "Sat Mar  2 00:00:00 2002")
+
+    def test_strftime(self):
+        t = self.theclass(2005, 3, 2)
+        self.assertEqual(t.strftime("m:%m d:%d y:%y"), "m:03 d:02 y:05")
+        self.assertEqual(t.strftime(""), "") # SF bug #761337
+        self.assertEqual(t.strftime('x'*1000), 'x'*1000) # SF bug #1556784
+
+        self.assertRaises(TypeError, t.strftime) # needs an arg
+        self.assertRaises(TypeError, t.strftime, "one", "two") # too many args
+        self.assertRaises(TypeError, t.strftime, 42) # arg wrong type
+
+        # test that unicode input is allowed (issue 2782)
+        self.assertEqual(t.strftime("%m"), "03")
+
+        # A naive object replaces %z, %:z and %Z w/ empty strings.
+        self.assertEqual(t.strftime("'%z' '%:z' '%Z'"), "'' '' ''")
+
+        #make sure that invalid format specifiers are handled correctly
+        #self.assertRaises(ValueError, t.strftime, "%e")
+        #self.assertRaises(ValueError, t.strftime, "%")
+        #self.assertRaises(ValueError, t.strftime, "%#")
+
+        #oh well, some systems just ignore those invalid ones.
+        #at least, exercise them to make sure that no crashes
+        #are generated
+        for f in ["%e", "%", "%#"]:
+            try:
+                t.strftime(f)
+            except ValueError:
+                pass
+
+        # bpo-34482: Check that surrogates don't cause a crash.
+        try:
+            t.strftime('%y\u0800%m')
+        except UnicodeEncodeError:
+            pass
+
+        #check that this standard extension works
+        t.strftime("%f")
+
+        # bpo-41260: The parameter was named "fmt" in the pure python impl.
+        t.strftime(format="%f")
+
+    def test_strftime_trailing_percent(self):
+        # bpo-35066: Make sure trailing '%' doesn't cause datetime's strftime to
+        # complain. Different libcs have different handling of trailing
+        # percents, so we simply check datetime's strftime acts the same as
+        # time.strftime.
+        t = self.theclass(2005, 3, 2)
+        try:
+            _time.strftime('%')
+        except ValueError:
+            self.skipTest('time module does not support trailing %')
+        self.assertEqual(t.strftime('%'), _time.strftime('%', t.timetuple()))
+        self.assertEqual(
+            t.strftime("m:%m d:%d y:%y %"),
+            _time.strftime("m:03 d:02 y:05 %", t.timetuple()),
+        )
+
+    def test_format(self):
+        dt = self.theclass(2007, 9, 10)
+        self.assertEqual(dt.__format__(''), str(dt))
+
+        with self.assertRaisesRegex(TypeError, 'must be str, not int'):
+            dt.__format__(123)
+
+        # check that a derived class's __str__() gets called
+        class A(self.theclass):
+            def __str__(self):
+                return 'A'
+        a = A(2007, 9, 10)
+        self.assertEqual(a.__format__(''), 'A')
+
+        # check that a derived class's strftime gets called
+        class B(self.theclass):
+            def strftime(self, format_spec):
+                return 'B'
+        b = B(2007, 9, 10)
+        self.assertEqual(b.__format__(''), str(dt))
+
+        for fmt in ["m:%m d:%d y:%y",
+                    "m:%m d:%d y:%y H:%H M:%M S:%S",
+                    "%z %:z %Z",
+                    ]:
+            self.assertEqual(dt.__format__(fmt), dt.strftime(fmt))
+            self.assertEqual(a.__format__(fmt), dt.strftime(fmt))
+            self.assertEqual(b.__format__(fmt), 'B')
+
+    def test_resolution_info(self):
+        # XXX: Should min and max respect subclassing?
+        if issubclass(self.theclass, datetime):
+            expected_class = datetime
+        else:
+            expected_class = date
+        self.assertIsInstance(self.theclass.min, expected_class)
+        self.assertIsInstance(self.theclass.max, expected_class)
+        self.assertIsInstance(self.theclass.resolution, timedelta)
+        self.assertTrue(self.theclass.max > self.theclass.min)
+
+    def test_extreme_timedelta(self):
+        big = self.theclass.max - self.theclass.min
+        # 3652058 days, 23 hours, 59 minutes, 59 seconds, 999999 microseconds
+        n = (big.days*24*3600 + big.seconds)*1000000 + big.microseconds
+        # n == 315537897599999999 ~= 2**58.13
+        justasbig = timedelta(0, 0, n)
+        self.assertEqual(big, justasbig)
+        self.assertEqual(self.theclass.min + big, self.theclass.max)
+        self.assertEqual(self.theclass.max - big, self.theclass.min)
+
+    def test_timetuple(self):
+        for i in range(7):
+            # January 2, 1956 is a Monday (0)
+            d = self.theclass(1956, 1, 2+i)
+            t = d.timetuple()
+            self.assertEqual(t, (1956, 1, 2+i, 0, 0, 0, i, 2+i, -1))
+            # February 1, 1956 is a Wednesday (2)
+            d = self.theclass(1956, 2, 1+i)
+            t = d.timetuple()
+            self.assertEqual(t, (1956, 2, 1+i, 0, 0, 0, (2+i)%7, 32+i, -1))
+            # March 1, 1956 is a Thursday (3), and is the 31+29+1 = 61st day
+            # of the year.
+            d = self.theclass(1956, 3, 1+i)
+            t = d.timetuple()
+            self.assertEqual(t, (1956, 3, 1+i, 0, 0, 0, (3+i)%7, 61+i, -1))
+            self.assertEqual(t.tm_year, 1956)
+            self.assertEqual(t.tm_mon, 3)
+            self.assertEqual(t.tm_mday, 1+i)
+            self.assertEqual(t.tm_hour, 0)
+            self.assertEqual(t.tm_min, 0)
+            self.assertEqual(t.tm_sec, 0)
+            self.assertEqual(t.tm_wday, (3+i)%7)
+            self.assertEqual(t.tm_yday, 61+i)
+            self.assertEqual(t.tm_isdst, -1)
+
+    def test_pickling(self):
+        args = 6, 7, 23
+        orig = self.theclass(*args)
+        for pickler, unpickler, proto in pickle_choices:
+            green = pickler.dumps(orig, proto)
+            derived = unpickler.loads(green)
+            self.assertEqual(orig, derived)
+        self.assertEqual(orig.__reduce__(), orig.__reduce_ex__(2))
+
+    def test_compat_unpickle(self):
+        tests = [
+            b"cdatetime\ndate\n(S'\\x07\\xdf\\x0b\\x1b'\ntR.",
+            b'cdatetime\ndate\n(U\x04\x07\xdf\x0b\x1btR.',
+            b'\x80\x02cdatetime\ndate\nU\x04\x07\xdf\x0b\x1b\x85R.',
+        ]
+        args = 2015, 11, 27
+        expected = self.theclass(*args)
+        for data in tests:
+            for loads in pickle_loads:
+                derived = loads(data, encoding='latin1')
+                self.assertEqual(derived, expected)
+
+    def test_compare(self):
+        t1 = self.theclass(2, 3, 4)
+        t2 = self.theclass(2, 3, 4)
+        self.assertEqual(t1, t2)
+        self.assertTrue(t1 <= t2)
+        self.assertTrue(t1 >= t2)
+        self.assertFalse(t1 != t2)
+        self.assertFalse(t1 < t2)
+        self.assertFalse(t1 > t2)
+
+        for args in (3, 3, 3), (2, 4, 4), (2, 3, 5):
+            t2 = self.theclass(*args)   # this is larger than t1
+            self.assertTrue(t1 < t2)
+            self.assertTrue(t2 > t1)
+            self.assertTrue(t1 <= t2)
+            self.assertTrue(t2 >= t1)
+            self.assertTrue(t1 != t2)
+            self.assertTrue(t2 != t1)
+            self.assertFalse(t1 == t2)
+            self.assertFalse(t2 == t1)
+            self.assertFalse(t1 > t2)
+            self.assertFalse(t2 < t1)
+            self.assertFalse(t1 >= t2)
+            self.assertFalse(t2 <= t1)
+
+        for badarg in OTHERSTUFF:
+            self.assertEqual(t1 == badarg, False)
+            self.assertEqual(t1 != badarg, True)
+            self.assertEqual(badarg == t1, False)
+            self.assertEqual(badarg != t1, True)
+
+            self.assertRaises(TypeError, lambda: t1 < badarg)
+            self.assertRaises(TypeError, lambda: t1 > badarg)
+            self.assertRaises(TypeError, lambda: t1 >= badarg)
+            self.assertRaises(TypeError, lambda: badarg <= t1)
+            self.assertRaises(TypeError, lambda: badarg < t1)
+            self.assertRaises(TypeError, lambda: badarg > t1)
+            self.assertRaises(TypeError, lambda: badarg >= t1)
+
+    def test_mixed_compare(self):
+        our = self.theclass(2000, 4, 5)
+
+        # Our class can be compared for equality to other classes
+        self.assertEqual(our == 1, False)
+        self.assertEqual(1 == our, False)
+        self.assertEqual(our != 1, True)
+        self.assertEqual(1 != our, True)
+
+        # But the ordering is undefined
+        self.assertRaises(TypeError, lambda: our < 1)
+        self.assertRaises(TypeError, lambda: 1 < our)
+
+        # Repeat those tests with a different class
+
+        class SomeClass:
+            pass
+
+        their = SomeClass()
+        self.assertEqual(our == their, False)
+        self.assertEqual(their == our, False)
+        self.assertEqual(our != their, True)
+        self.assertEqual(their != our, True)
+        self.assertRaises(TypeError, lambda: our < their)
+        self.assertRaises(TypeError, lambda: their < our)
+
+    def test_bool(self):
+        # All dates are considered true.
+        self.assertTrue(self.theclass.min)
+        self.assertTrue(self.theclass.max)
+
+    def check_strftime_y2k(self, specifier):
+        # Test that years less than 1000 are 0-padded; note that the beginning
+        # of an ISO 8601 year may fall in an ISO week of the year before, and
+        # therefore needs an offset of -1 when formatting with '%G'.
+        dataset = (
+            (1, 0),
+            (49, -1),
+            (70, 0),
+            (99, 0),
+            (100, -1),
+            (999, 0),
+            (1000, 0),
+            (1970, 0),
+        )
+        for year, g_offset in dataset:
+            with self.subTest(year=year, specifier=specifier):
+                d = self.theclass(year, 1, 1)
+                if specifier == 'G':
+                    year += g_offset
+                if specifier == 'C':
+                    expected = f"{year // 100:02d}"
+                else:
+                    expected = f"{year:04d}"
+                    if specifier == 'F':
+                        expected += f"-01-01"
+                self.assertEqual(d.strftime(f"%{specifier}"), expected)
+
+    def test_strftime_y2k(self):
+        self.check_strftime_y2k('Y')
+        self.check_strftime_y2k('G')
+
+    def test_strftime_y2k_c99(self):
+        # CPython requires C11; specifiers new in C99 must work.
+        # (Other implementations may want to disable this test.)
+        self.check_strftime_y2k('F')
+        self.check_strftime_y2k('C')
+
+    def test_replace(self):
+        cls = self.theclass
+        args = [1, 2, 3]
+        base = cls(*args)
+        self.assertEqual(base.replace(), base)
+        self.assertEqual(copy.replace(base), base)
+
+        changes = (("year", 2),
+                   ("month", 3),
+                   ("day", 4))
+        for i, (name, newval) in enumerate(changes):
+            newargs = args[:]
+            newargs[i] = newval
+            expected = cls(*newargs)
+            self.assertEqual(base.replace(**{name: newval}), expected)
+            self.assertEqual(copy.replace(base, **{name: newval}), expected)
+
+        # Out of bounds.
+        base = cls(2000, 2, 29)
+        self.assertRaises(ValueError, base.replace, year=2001)
+        self.assertRaises(ValueError, copy.replace, base, year=2001)
+
+    def test_subclass_replace(self):
+        class DateSubclass(self.theclass):
+            def __new__(cls, *args, **kwargs):
+                result = self.theclass.__new__(cls, *args, **kwargs)
+                result.extra = 7
+                return result
+
+        dt = DateSubclass(2012, 1, 1)
+
+        test_cases = [
+            ('self.replace', dt.replace(year=2013)),
+            ('copy.replace', copy.replace(dt, year=2013)),
+        ]
+
+        for name, res in test_cases:
+            with self.subTest(name):
+                self.assertIs(type(res), DateSubclass)
+                self.assertEqual(res.year, 2013)
+                self.assertEqual(res.month, 1)
+                self.assertEqual(res.extra, 7)
+
+    def test_subclass_date(self):
+
+        class C(self.theclass):
+            theAnswer = 42
+
+            def __new__(cls, *args, **kws):
+                temp = kws.copy()
+                extra = temp.pop('extra')
+                result = self.theclass.__new__(cls, *args, **temp)
+                result.extra = extra
+                return result
+
+            def newmeth(self, start):
+                return start + self.year + self.month
+
+        args = 2003, 4, 14
+
+        dt1 = self.theclass(*args)
+        dt2 = C(*args, **{'extra': 7})
+
+        self.assertEqual(dt2.__class__, C)
+        self.assertEqual(dt2.theAnswer, 42)
+        self.assertEqual(dt2.extra, 7)
+        self.assertEqual(dt1.toordinal(), dt2.toordinal())
+        self.assertEqual(dt2.newmeth(-7), dt1.year + dt1.month - 7)
+
+    def test_subclass_alternate_constructors(self):
+        # Test that alternate constructors call the constructor
+        class DateSubclass(self.theclass):
+            def __new__(cls, *args, **kwargs):
+                result = self.theclass.__new__(cls, *args, **kwargs)
+                result.extra = 7
+
+                return result
+
+        args = (2003, 4, 14)
+        d_ord = 731319              # Equivalent ordinal date
+        d_isoformat = '2003-04-14'  # Equivalent isoformat()
+
+        base_d = DateSubclass(*args)
+        self.assertIsInstance(base_d, DateSubclass)
+        self.assertEqual(base_d.extra, 7)
+
+        # Timestamp depends on time zone, so we'll calculate the equivalent here
+        ts = datetime.combine(base_d, time(0)).timestamp()
+
+        test_cases = [
+            ('fromordinal', (d_ord,)),
+            ('fromtimestamp', (ts,)),
+            ('fromisoformat', (d_isoformat,)),
+        ]
+
+        for constr_name, constr_args in test_cases:
+            for base_obj in (DateSubclass, base_d):
+                # Test both the classmethod and method
+                with self.subTest(base_obj_type=type(base_obj),
+                                  constr_name=constr_name):
+                    constr = getattr(base_obj, constr_name)
+
+                    dt = constr(*constr_args)
+
+                    # Test that it creates the right subclass
+                    self.assertIsInstance(dt, DateSubclass)
+
+                    # Test that it's equal to the base object
+                    self.assertEqual(dt, base_d)
+
+                    # Test that it called the constructor
+                    self.assertEqual(dt.extra, 7)
+
+    def test_pickling_subclass_date(self):
+
+        args = 6, 7, 23
+        orig = SubclassDate(*args)
+        for pickler, unpickler, proto in pickle_choices:
+            green = pickler.dumps(orig, proto)
+            derived = unpickler.loads(green)
+            self.assertEqual(orig, derived)
+            self.assertTrue(isinstance(derived, SubclassDate))
+
+    def test_backdoor_resistance(self):
+        # For fast unpickling, the constructor accepts a pickle byte string.
+        # This is a low-overhead backdoor.  A user can (by intent or
+        # mistake) pass a string directly, which (if it's the right length)
+        # will get treated like a pickle, and bypass the normal sanity
+        # checks in the constructor.  This can create insane objects.
+        # The constructor doesn't want to burn the time to validate all
+        # fields, but does check the month field.  This stops, e.g.,
+        # datetime.datetime('1995-03-25') from yielding an insane object.
+        base = b'1995-03-25'
+        if not issubclass(self.theclass, datetime):
+            base = base[:4]
+        for month_byte in b'9', b'\0', b'\r', b'\xff':
+            self.assertRaises(TypeError, self.theclass,
+                                         base[:2] + month_byte + base[3:])
+        if issubclass(self.theclass, datetime):
+            # Good bytes, but bad tzinfo:
+            with self.assertRaisesRegex(TypeError, '^bad tzinfo state arg$'):
+                self.theclass(bytes([1] * len(base)), 'EST')
+
+        for ord_byte in range(1, 13):
+            # This shouldn't blow up because of the month byte alone.  If
+            # the implementation changes to do more-careful checking, it may
+            # blow up because other fields are insane.
+            self.theclass(base[:2] + bytes([ord_byte]) + base[3:])
+
+    def test_valuerror_messages(self):
+        pattern = re.compile(
+            r"(year|month|day) must be in \d+\.\.\d+, not \d+"
+        )
+        test_cases = [
+            (2009, 13, 1),      # Month out of range
+            (2009, 0, 1),       # Month out of range
+            (10000, 12, 31),    # Year out of range
+            (0, 12, 31),        # Year out of range
+        ]
+        for case in test_cases:
+            with self.subTest(case):
+                with self.assertRaisesRegex(ValueError, pattern):
+                    self.theclass(*case)
+
+        # days out of range have their own error message, see issue 70647
+        with self.assertRaises(ValueError) as msg:
+            self.theclass(2009, 1, 32)
+        self.assertIn(f"day 32 must be in range 1..31 for month 1 in year 2009", str(msg.exception))
+
+    def test_fromisoformat(self):
+        # Test that isoformat() is reversible
+        base_dates = [
+            (1, 1, 1),
+            (1000, 2, 14),
+            (1900, 1, 1),
+            (2000, 2, 29),
+            (2004, 11, 12),
+            (2004, 4, 3),
+            (2017, 5, 30)
+        ]
+
+        for dt_tuple in base_dates:
+            dt = self.theclass(*dt_tuple)
+            dt_str = dt.isoformat()
+            with self.subTest(dt_str=dt_str):
+                dt_rt = self.theclass.fromisoformat(dt.isoformat())
+
+                self.assertEqual(dt, dt_rt)
+
+    def test_fromisoformat_date_examples(self):
+        examples = [
+            ('00010101', self.theclass(1, 1, 1)),
+            ('20000101', self.theclass(2000, 1, 1)),
+            ('20250102', self.theclass(2025, 1, 2)),
+            ('99991231', self.theclass(9999, 12, 31)),
+            ('0001-01-01', self.theclass(1, 1, 1)),
+            ('2000-01-01', self.theclass(2000, 1, 1)),
+            ('2025-01-02', self.theclass(2025, 1, 2)),
+            ('9999-12-31', self.theclass(9999, 12, 31)),
+            ('2025W01', self.theclass(2024, 12, 30)),
+            ('2025-W01', self.theclass(2024, 12, 30)),
+            ('2025W014', self.theclass(2025, 1, 2)),
+            ('2025-W01-4', self.theclass(2025, 1, 2)),
+            ('2026W01', self.theclass(2025, 12, 29)),
+            ('2026-W01', self.theclass(2025, 12, 29)),
+            ('2026W013', self.theclass(2025, 12, 31)),
+            ('2026-W01-3', self.theclass(2025, 12, 31)),
+            ('2022W52', self.theclass(2022, 12, 26)),
+            ('2022-W52', self.theclass(2022, 12, 26)),
+            ('2022W527', self.theclass(2023, 1, 1)),
+            ('2022-W52-7', self.theclass(2023, 1, 1)),
+            ('2015W534', self.theclass(2015, 12, 31)),      # Has week 53
+            ('2015-W53-4', self.theclass(2015, 12, 31)),    # Has week 53
+            ('2015-W53-5', self.theclass(2016, 1, 1)),
+            ('2020W531', self.theclass(2020, 12, 28)),      # Leap year
+            ('2020-W53-1', self.theclass(2020, 12, 28)),    # Leap year
+            ('2020-W53-6', self.theclass(2021, 1, 2)),
+        ]
+
+        for input_str, expected in examples:
+            with self.subTest(input_str=input_str):
+                actual = self.theclass.fromisoformat(input_str)
+                self.assertEqual(actual, expected)
+
+    def test_fromisoformat_subclass(self):
+        class DateSubclass(self.theclass):
+            pass
+
+        dt = DateSubclass(2014, 12, 14)
+
+        dt_rt = DateSubclass.fromisoformat(dt.isoformat())
+
+        self.assertIsInstance(dt_rt, DateSubclass)
+
+    def test_fromisoformat_fails(self):
+        # Test that fromisoformat() fails on invalid values
+        bad_strs = [
+            '',                 # Empty string
+            '\u0800',           # bpo-34454: Surrogate code point
+            '009-03-04',        # Not 10 characters
+            '123456789',        # Not a date
+            '200a-12-04',       # Invalid character in year
+            '2009-1a-04',       # Invalid character in month
+            '2009-12-0a',       # Invalid character in day
+            '2009-01-32',       # Invalid day
+            '2009-02-29',       # Invalid leap day
+            '2019-W53-1',       # No week 53 in 2019
+            '2020-W54-1',       # No week 54
+            '0000-W25-1',       # Invalid year
+            '10000-W25-1',      # Invalid year
+            '2020-W25-0',       # Invalid day-of-week
+            '2020-W25-8',       # Invalid day-of-week
+            '٢025-03-09'        # Unicode characters
+            '2009\u080002\u080028',     # Separators are surrogate codepoints
+        ]
+
+        for bad_str in bad_strs:
+            with self.assertRaises(ValueError):
+                self.theclass.fromisoformat(bad_str)
+
+    def test_fromisoformat_fails_typeerror(self):
+        # Test that fromisoformat fails when passed the wrong type
+        bad_types = [b'2009-03-01', None, io.StringIO('2009-03-01')]
+        for bad_type in bad_types:
+            with self.assertRaises(TypeError):
+                self.theclass.fromisoformat(bad_type)
+
+    def test_fromisocalendar(self):
+        # For each test case, assert that fromisocalendar is the
+        # inverse of the isocalendar function
+        dates = [
+            (2016, 4, 3),
+            (2005, 1, 2),       # (2004, 53, 7)
+            (2008, 12, 30),     # (2009, 1, 2)
+            (2010, 1, 2),       # (2009, 53, 6)
+            (2009, 12, 31),     # (2009, 53, 4)
+            (1900, 1, 1),       # Unusual non-leap year (year % 100 == 0)
+            (1900, 12, 31),
+            (2000, 1, 1),       # Unusual leap year (year % 400 == 0)
+            (2000, 12, 31),
+            (2004, 1, 1),       # Leap year
+            (2004, 12, 31),
+            (1, 1, 1),
+            (9999, 12, 31),
+            (MINYEAR, 1, 1),
+            (MAXYEAR, 12, 31),
+        ]
+
+        for datecomps in dates:
+            with self.subTest(datecomps=datecomps):
+                dobj = self.theclass(*datecomps)
+                isocal = dobj.isocalendar()
+
+                d_roundtrip = self.theclass.fromisocalendar(*isocal)
+
+                self.assertEqual(dobj, d_roundtrip)
+
+    def test_fromisocalendar_value_errors(self):
+        isocals = [
+            (2019, 0, 1),
+            (2019, -1, 1),
+            (2019, 54, 1),
+            (2019, 1, 0),
+            (2019, 1, -1),
+            (2019, 1, 8),
+            (2019, 53, 1),
+            (10000, 1, 1),
+            (0, 1, 1),
+            (9999999, 1, 1),
+            (2<<32, 1, 1),
+            (2019, 2<<32, 1),
+            (2019, 1, 2<<32),
+        ]
+
+        for isocal in isocals:
+            with self.subTest(isocal=isocal):
+                with self.assertRaises(ValueError):
+                    self.theclass.fromisocalendar(*isocal)
+
+    def test_fromisocalendar_type_errors(self):
+        err_txformers = [
+            str,
+            float,
+            lambda x: None,
+        ]
+
+        # Take a valid base tuple and transform it to contain one argument
+        # with the wrong type. Repeat this for each argument, e.g.
+        # [("2019", 1, 1), (2019, "1", 1), (2019, 1, "1"), ...]
+        isocals = []
+        base = (2019, 1, 1)
+        for i in range(3):
+            for txformer in err_txformers:
+                err_val = list(base)
+                err_val[i] = txformer(err_val[i])
+                isocals.append(tuple(err_val))
+
+        for isocal in isocals:
+            with self.subTest(isocal=isocal):
+                with self.assertRaises(TypeError):
+                    self.theclass.fromisocalendar(*isocal)
 
 
 if __name__ == "__main__":
