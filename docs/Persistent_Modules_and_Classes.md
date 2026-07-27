@@ -1,6 +1,10 @@
 # Persistent Modules and Classes in Grail
 
-**Status:** design proposal (not yet implemented)
+**Status:** implemented — the canonical class/module machinery is
+flag-guarded (default off; enable per session via
+`importlib ___canonicalClassesEnabled___: true`), while `__persistent__`
+module state needs no flag. §§6–10 record each phase as landed, including
+the §10 revision of the original §4/§9.1 semantics
 **Author:** design discussion, 2026-07
 **Related:** [LEGB.md](LEGB.md), the module-loading path in
 [../src/smalltalk/Python/importlib.gs](../src/smalltalk/Python/importlib.gs),

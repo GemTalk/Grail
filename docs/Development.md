@@ -74,14 +74,14 @@ separate scope-manager class. (An early approach had a dedicated
 
 ### `Object` vs. `object` — how Python values are represented
 
-When working in the `smalltalk` folder, keep the distinction in mind between
-Python code (modeled by the `*Ast` objects) and Smalltalk code (the
-`smalltalk/*.gs` files, subclasses of `Object`).
+When working in the `src/smalltalk` folder, keep the distinction in mind
+between Python code (modeled by the `*Ast` objects) and Smalltalk code (the
+`.gs` files under `src/smalltalk/`, subclasses of `Object`).
 
 Python's built-in types are **mapped directly onto existing GemStone classes**
 — there is *no* wrapper object with a `value` instance variable. A Python
 `str` *is* a GemStone string, a Python `int` *is* a GemStone integer, and so
-on. The mapping is established in `install.gs`, e.g.:
+on. The mapping is established in `src/smalltalk/install.gs`, e.g.:
 
 | Python | GemStone class |
 |--------|----------------|
@@ -116,8 +116,10 @@ A GemStone class can carry more than one method dictionary, each tagged with an
 
 Because the two protocols live in separate environments, Python's `str.index`
 and Smalltalk's `String>>index:` can coexist on `Unicode7` without clobbering
-each other. There are over 2,000 `perform:env: 1` sites in the codebase
-(see [Perform_Env1_Summary.md](Perform_Env1_Summary.md)).
+each other. There are over 5,000 env-1 send sites in the codebase, now mostly
+written with the `@env1:` source syntax below (an earlier census of the
+`perform:env: 1` form is in
+[Perform_Env1_Summary.md](Perform_Env1_Summary.md)).
 
 **Source syntax.** In `.gs` files the markers `recv @env1:selector: arg` and
 `recv @env0:selector: arg` force a send into a specific environment (handled in

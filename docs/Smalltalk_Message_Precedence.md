@@ -2,6 +2,16 @@
 
 This guide explains Smalltalk message precedence rules and how to apply them correctly when writing Grail code.
 
+> **Syntax update.** The examples below (including the "from the Grail
+> codebase" ones) were captured before commit `c2d60aad` (2026-04-06)
+> replaced literal `perform: #sel env: N withArguments: {…}` source syntax
+> with the `@env0:`/`@env1:` send markers — e.g. `math.gs`'s tau is now
+> computed as `(Float @env0:pi) @env0:* 2`, and `builtins.gs`'s `len:`
+> reads `(anObject @env0:class) @env0:name`.  The precedence rules are
+> unchanged: an `@envN:` send has the precedence of its underlying
+> selector (unary / binary / keyword), so the same parenthesization
+> applies.
+
 ## Message Types
 
 Smalltalk has three types of messages, listed in order of precedence (highest to lowest):

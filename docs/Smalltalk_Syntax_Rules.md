@@ -2,6 +2,16 @@
 
 This guide covers critical Smalltalk syntax rules that must be followed when writing Grail code. These rules are **mandatory** and violations will cause compilation errors.
 
+> **Syntax update.** The examples below were captured before commit
+> `c2d60aad` (2026-04-06) replaced literal
+> `perform: #sel env: N withArguments: {…}` source syntax with the
+> `@env0:`/`@env1:` send markers (e.g. the `__repr__` shown in Example 1
+> now reads `result := '<built-in function ' @env0:, name`).  The three
+> rules themselves — temporaries declared at the top, exact keyword-message
+> arity, and parenthesization — are unchanged and apply identically to
+> `@envN:` sends, whose precedence follows the underlying selector
+> (unary / binary / keyword).
+
 ## Rule 1: Temporary Variables Must Be Declared at the Top
 
 ### The Rule

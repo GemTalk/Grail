@@ -13,12 +13,12 @@ This guide explains how to write tests for Grail, following the established patt
 
 ### Test Class Organization
 
-Tests are organized in `smalltalk/tests/` with the following structure:
+Tests are organized in `src/smalltalk/PythonTests/` with the following structure:
 
-1. **Test class definitions** are in `smalltalk/tests/_PythonTests.gs`
-2. **Test method implementations** are in separate files (e.g., `smalltalk/tests/BuiltinsTestCase.gs`)
-3. **Exception tests** are in `smalltalk/tests/exceptions/` subdirectory
-4. All test classes inherit from `PythonTestCase` (which inherits from `TestCase`)
+1. **Each test class lives in its own file** (e.g., `src/smalltalk/PythonTests/BuiltinsTestCase.gs`) containing the class definition followed by the test methods
+2. **Test files are loaded via `input` lines** in `src/smalltalk/install.gs`
+3. **Exception tests** follow the same pattern in the same directory (e.g., `src/smalltalk/PythonTests/TypeErrorTestCase.gs`)
+4. All test classes inherit from `PythonTestCase` (which inherits from `TestCase`; see `src/smalltalk/PythonTests/PythonTestCase.gs`)
 
 ### Test Class Naming
 
@@ -37,20 +37,46 @@ Tests are organized in `smalltalk/tests/` with the following structure:
 Every test file follows this structure:
 
 ```smalltalk
+! ------------------- Superclass check
+run
+PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file ordering.'].
+%
+
+! ------------------- Class definition for {ClassName}TestCase
+expectvalue /Class
+doit
+PythonTestCase subclass: '{ClassName}TestCase'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: PythonTests
+  options: #()
+%
+
+expectvalue /Class
+doit
+{ClassName}TestCase category: 'Grail-SUnit'
+%
+
 ! ===============================================================================
 ! {ClassName}TestCase - Tests for Python {module/type}
 ! ===============================================================================
 
+set compile_env: 0
+
 ! ------------------- Remove existing test methods
 expectvalue /Metaclass3
 doit
-{ClassName}TestCase removeAllMethods: 0.
-{ClassName}TestCase class removeAllMethods: 0.
+{ClassName}TestCase removeAllMethods.
+{ClassName}TestCase class removeAllMethods.
 %
+
+set compile_env: 0
 
 ! ------------------- Test methods for {ClassName}TestCase
 
-category: 'Tests - {Category Name}'
+category: 'Grail-Tests - {Category Name}'
 method: {ClassName}TestCase
 test{FeatureName}
 	"Test {description of what is being tested}"
@@ -59,7 +85,7 @@ test{FeatureName}
 	"Setup code here"
 	
 	"Test code here"
-	result := object perform: #methodName: env: 1 withArguments: {arg}.
+	result := object @env1:methodName: arg.
 	
 	"Assertions here"
 	self assert: result equals: expectedValue
@@ -71,19 +97,21 @@ test{FeatureName}
 ### Basic Test Structure
 
 ```smalltalk
-category: 'Tests - Numeric Functions'
+category: 'Grail-Tests - Numeric Functions'
 method: BuiltinsTestCase
 testAbs
 	"Test abs() function"
 
-	| result |
-	result := builtins perform: #abs: env: 1 withArguments: {5}.
+	| b result |
+	b := builtins ___instance___.
+
+	result := b @env1:abs: 5.
 	self assert: result equals: 5.
 
-	result := builtins perform: #abs: env: 1 withArguments: {-5}.
+	result := b @env1:abs: -5.
 	self assert: result equals: 5.
 
-	result := builtins perform: #abs: env: 1 withArguments: {0}.
+	result := b @env1:abs: 0.
 	self assert: result equals: 0
 %
 ```
@@ -91,14 +119,14 @@ testAbs
 ### Key Points:
 
 1. **Declare all temporary variables at the top** - Smalltalk requires this
-2. **Use `env: 1` for Python methods** - This ensures methods are called in the Python environment
-3. **Use direct Smalltalk messages for basic operations** - e.g., `obj at: 1` instead of `obj perform: #at: env: 0 withArguments: {1}`
+2. **Use `@env1:` sends for Python methods** - The `@env1:` marker forces the send into environment 1, where the Python protocol lives (e.g., `lst @env1:append: 4`)
+3. **Use direct Smalltalk messages for basic operations** - e.g., `obj at: 1` or `lst size` for setup and plumbing
 4. **Use descriptive comments** - Explain what the test verifies
 
 ### Testing Multiple Cases
 
 ```smalltalk
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: ListTestCase
 test__getitem__
 	"Test list.__getitem__(index)"
@@ -107,14 +135,14 @@ test__getitem__
 	lst := OrderedCollection withAll: #(10 20 30 40 50).
 	
 	"Positive indices"
-	self assert: (lst perform: #__getitem__: env: 1 withArguments: {0}) equals: 10.
-	self assert: (lst perform: #__getitem__: env: 1 withArguments: {2}) equals: 30.
+	self assert: (lst @env1:__getitem__: 0) equals: 10.
+	self assert: (lst @env1:__getitem__: 2) equals: 30.
 	
 	"Negative indices"
-	self assert: (lst perform: #__getitem__: env: 1 withArguments: {-1}) equals: 50.
+	self assert: (lst @env1:__getitem__: -1) equals: 50.
 	
 	"Out of bounds"
-	self should: [lst perform: #__getitem__: env: 1 withArguments: {5}] raise: IndexError
+	self should: [lst @env1:__getitem__: 5] raise: IndexError
 %
 ```
 
@@ -123,13 +151,13 @@ test__getitem__
 Use `should:raise:` to test that exceptions are raised correctly:
 
 ```smalltalk
-category: 'Tests - Type Functions'
+category: 'Grail-Tests - Type Functions'
 method: BuiltinsTestCase
 testLenTypeError
 	"Test that len() raises TypeError for objects without __len__"
 
 	self should: [
-		builtins perform: #len: env: 1 withArguments: {42}
+		builtins ___instance___ @env1:len: 42
 	] raise: TypeError
 %
 ```
@@ -139,27 +167,30 @@ testLenTypeError
 For floating point comparisons, use approximate equality:
 
 ```smalltalk
-category: 'Tests - Power and Logarithmic'
+category: 'Grail-Tests - Power and Logarithmic'
 method: MathTestCase
 testSqrt
 	"Test math.sqrt()"
 
-	| result |
-	result := (math perform: #sqrt: env: 1 withArguments: {2}).
-	self assert: ((result - 1.41421) abs < 0.001)
+	| m result |
+	m := math @env1:instance.
+
+	result := m @env1:sqrt: 4.
+	self assert: result equals: 2.0
 %
 ```
 
 ### Testing Constants
 
 ```smalltalk
-category: 'Tests - Constants'
+category: 'Grail-Tests - Constants'
 method: MathTestCase
 testPi
 	"Test math.pi constant"
 
-	| result |
-	result := math perform: #pi env: 1.
+	| m result |
+	m := math @env1:instance.
+	result := m @env1:pi.
 
 	self assert: ((result - 3.14159) abs < 0.001)
 %
@@ -168,22 +199,23 @@ testPi
 ### Testing Object Creation
 
 ```smalltalk
-category: 'Python-Attribute Access'
-method: ObjectTestCase
+category: 'Grail-Tests - Type'
+method: BytearrayTestCase
 test__class__
-	"Test that __class__ returns the class of the object"
+	"Test that type(bytearray()) returns bytearray"
 
-	| obj result |
-	obj := object perform: #__new__ env: 1.
-	result := obj perform: #__class__ env: 1.
-	self assert: result equals: object
+	| result cls |
+	result := bytearray @env1:__new__.
+	cls := result @env1:__class__.
+
+	self assert: cls equals: (Python at: #'bytearray')
 %
 ```
 
 ### Testing Mutating Operations
 
 ```smalltalk
-category: 'Tests - List Methods'
+category: 'Grail-Tests - List Methods'
 method: ListTestCase
 testAppend
 	"Test list.append(item)"
@@ -191,7 +223,7 @@ testAppend
 	| lst |
 	lst := OrderedCollection withAll: #(1 2 3).
 
-	lst perform: #append: env: 1 withArguments: {4}.
+	lst @env1:append: 4.
 
 	self assert: lst size equals: 4.
 	self assert: (lst at: 4) equals: 4
@@ -201,7 +233,7 @@ testAppend
 ### Testing Comparisons
 
 ```smalltalk
-category: 'Tests - Comparison'
+category: 'Grail-Tests - Comparison'
 method: ListTestCase
 test__eq__
 	"Test list.__eq__(other)"
@@ -212,10 +244,10 @@ test__eq__
 	lst3 := OrderedCollection withAll: #(1 2 4).
 	
 	"Same contents"
-	self assert: (lst1 perform: #__eq__: env: 1 withArguments: {lst2}).
+	self assert: (lst1 @env1:__eq__: lst2).
 	
 	"Different contents"
-	self deny: (lst1 perform: #__eq__: env: 1 withArguments: {lst3})
+	self deny: (lst1 @env1:__eq__: lst3)
 %
 ```
 
@@ -238,14 +270,14 @@ self assert: (result includes: '__class__')
 ### `deny:`
 Tests that a boolean is false:
 ```smalltalk
-self deny: (lst1 perform: #__eq__: env: 1 withArguments: {lst3})
+self deny: (lst1 @env1:__eq__: lst3)
 ```
 
 ### `should:raise:`
 Tests that a block raises a specific exception:
 ```smalltalk
 self should: [
-	lst perform: #__getitem__: env: 1 withArguments: {5}
+	lst @env1:__getitem__: 5
 ] raise: IndexError
 ```
 
@@ -253,61 +285,46 @@ self should: [
 
 Understanding environment IDs is crucial:
 
-- **`env: 1`** - Python environment (Python methods)
+- **`@env1:` sends** - Python environment (Python methods)
   - Use for: Calling Python methods, Python protocol methods
-  - Example: `obj perform: #__len__ env: 1`
+  - Example: `obj @env1:__len__`, `lst @env1:__getitem__: 0`
+  - The equivalent `perform:env:` form (`obj perform: #__len__ env: 1`) still works but the `@env1:` syntax is the established style
 
 - **Direct Smalltalk messages** - For basic Smalltalk operations
   - Use for: Creating objects, basic operations, type checks
-  - Example: `obj at: 1` instead of `obj perform: #at: env: 0 withArguments: {1}`
-  - Example: `list add: item` instead of `list perform: #add: env: 0 withArguments: {item}`
+  - Example: `obj at: 1`, `list add: item`, `lst size`
 
 ## Test Categories
 
-Organize tests into logical categories:
+Organize tests into logical categories (all prefixed `Grail-`):
 
-- `'Tests - Numeric Functions'`
-- `'Tests - Type Functions'`
-- `'Tests - Sequence Protocol'`
-- `'Tests - List Methods'`
-- `'Tests - Constants'`
-- `'Tests - Power and Logarithmic'`
-- `'Tests - Comparison'`
-- `'Python-Attribute Access'`
-- `'Python-Tests-{ExceptionName}'` (for exception tests)
+- `'Grail-Tests - Numeric Functions'`
+- `'Grail-Tests - Type Functions'`
+- `'Grail-Tests - Sequence Protocol'`
+- `'Grail-Tests - List Methods'`
+- `'Grail-Tests - Constants'`
+- `'Grail-Tests - Power and Logarithmic'`
+- `'Grail-Tests - Comparison'`
+- `'Grail-Tests-{ExceptionName}'` (for exception tests)
 
 ## Creating New Test Classes
 
-### Step 1: Add Class Definition to `_PythonTests.gs`
+### Step 1: Create Test File
 
+Create `src/smalltalk/PythonTests/{ClassName}TestCase.gs` with the template
+structure above — the file starts with the superclass check and the class
+definition, followed by the test methods.
+
+### Step 2: Register the Test File in `src/smalltalk/install.gs`
+
+Add an `input` line alongside the other test files:
 ```smalltalk
-! ------------------- Class definition for {ClassName}TestCase
-expectvalue /Class
-doit
-PythonTestCase subclass: '{ClassName}TestCase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: PythonTests
-  options: #()
-%
-expectvalue /Class
-doit
-{ClassName}TestCase category: 'SUnit'
-%
+input src/smalltalk/PythonTests/{ClassName}TestCase.gs
 ```
 
-### Step 2: Create Test File
+### Step 3: Re-run the Install
 
-Create `smalltalk/tests/{ClassName}TestCase.gs` with the template structure.
-
-### Step 3: Load Test File in `_PythonTests.gs`
-
-Add at the end of `_PythonTests.gs`:
-```smalltalk
-input smalltalk/tests/{ClassName}TestCase.gs
-```
+Run `./install.sh` so the new class is compiled into the image.
 
 ## Best Practices
 
@@ -316,8 +333,9 @@ input smalltalk/tests/{ClassName}TestCase.gs
 Start with the happy path:
 ```smalltalk
 testAbs
-	| result |
-	result := builtins perform: #abs: env: 1 withArguments: {5}.
+	| b result |
+	b := builtins ___instance___.
+	result := b @env1:abs: 5.
 	self assert: result equals: 5
 %
 ```
@@ -327,11 +345,12 @@ testAbs
 Include boundary conditions:
 ```smalltalk
 testAbs
-	| result |
-	result := builtins perform: #abs: env: 1 withArguments: {0}.
+	| b result |
+	b := builtins ___instance___.
+	result := b @env1:abs: 0.
 	self assert: result equals: 0.
 
-	result := builtins perform: #abs: env: 1 withArguments: {-3.14}.
+	result := b @env1:abs: -3.14.
 	self assert: ((result - 3.14) abs < 0.0001)
 %
 ```
@@ -342,7 +361,7 @@ Verify exceptions are raised correctly:
 ```smalltalk
 testLenTypeError
 	self should: [
-		builtins perform: #len: env: 1 withArguments: {42}
+		builtins ___instance___ @env1:len: 42
 	] raise: TypeError
 %
 ```
@@ -356,13 +375,13 @@ test__getitem__
 	lst := OrderedCollection withAll: #(10 20 30 40 50).
 	
 	"Positive indices"
-	self assert: (lst perform: #__getitem__: env: 1 withArguments: {0}) equals: 10.
+	self assert: (lst @env1:__getitem__: 0) equals: 10.
 	
 	"Negative indices"
-	self assert: (lst perform: #__getitem__: env: 1 withArguments: {-1}) equals: 50.
+	self assert: (lst @env1:__getitem__: -1) equals: 50.
 	
 	"Out of bounds"
-	self should: [lst perform: #__getitem__: env: 1 withArguments: {5}] raise: IndexError
+	self should: [lst @env1:__getitem__: 5] raise: IndexError
 %
 ```
 
@@ -379,13 +398,13 @@ Test method names should clearly indicate what is being tested:
 
 Use categories to organize related tests:
 ```smalltalk
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: ListTestCase
 test__len__
 	...
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: ListTestCase
 test__getitem__
 	...
@@ -401,54 +420,47 @@ When possible, verify behavior matches CPython:
 
 ## Running Tests
 
-Tests are run using the SUnit framework:
+The standard way to run the whole suite (fresh worker sessions; picks up the
+install automatically):
 
 ```bash
-. ./setenv
+./scripts/run_tests.sh
+```
+
+To run a single test class interactively (`.setenv` and `.topazini` are the
+per-machine, gitignored config files — see the project README/CLAUDE.md):
+
+```bash
+source .setenv
 topaz -lq <<EOF
 login
 run
-PythonTestCase suite run printString
+BuiltinsTestCase suite run printString
 %
 logout
 EOF
 ```
 
-Or run a specific test class:
-```smalltalk
-BuiltinsTestCase suite run printString
-```
+## Example: Test Methods from a Real File
 
-## Example: Complete Test File
-
-Here's a complete example from `ListTestCase.gs`:
+Here are two test methods from `src/smalltalk/PythonTests/ListTestCase.gs`:
 
 ```smalltalk
-! ===============================================================================
-! ListTestCase - Tests for Python list (OrderedCollection)
-! ===============================================================================
-
-! ------------------- Remove existing test methods
-expectvalue /Metaclass3
-doit
-ListTestCase removeAllMethods: 0.
-ListTestCase class removeAllMethods: 0.
-%
-
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - List Methods'
 method: ListTestCase
-test__len__
-	"Test list.__len__()"
+testAppend
+	"Test list.append(item)"
 
 	| lst |
-	lst := OrderedCollection new.
-	self assert: (lst perform: #__len__ env: 1) equals: 0.
-	
-	lst add: 1; add: 2; add: 3.
-	self assert: (lst perform: #__len__ env: 1) equals: 3
+	lst := OrderedCollection withAll: #(1 2 3).
+
+	lst @env1:append: 4.
+
+	self assert: lst size equals: 4.
+	self assert: (lst at: 4) equals: 4.
 %
 
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: ListTestCase
 test__getitem__
 	"Test list.__getitem__(index)"
@@ -457,13 +469,13 @@ test__getitem__
 	lst := OrderedCollection withAll: #(10 20 30 40 50).
 	
 	"Positive indices"
-	self assert: (lst perform: #__getitem__: env: 1 withArguments: {0}) equals: 10.
+	self assert: (lst @env1:__getitem__: 0) equals: 10.
 	
 	"Negative indices"
-	self assert: (lst perform: #__getitem__: env: 1 withArguments: {-1}) equals: 50.
+	self assert: (lst @env1:__getitem__: -1) equals: 50.
 	
 	"Out of bounds"
-	self should: [lst perform: #__getitem__: env: 1 withArguments: {5}] raise: IndexError
+	self should: [lst @env1:__getitem__: 5] raise: IndexError.
 %
 ```
 
@@ -480,7 +492,7 @@ When implementing a new feature, ensure you:
 - [ ] Use appropriate categories
 - [ ] Use descriptive test method names
 - [ ] Declare all temporary variables at the top
-- [ ] Use `env: 1` for Python methods, direct Smalltalk messages for basic operations
+- [ ] Use `@env1:` sends for Python methods, direct Smalltalk messages for basic operations
 - [ ] Run tests and ensure they pass
 
 ## Common Patterns
@@ -488,11 +500,12 @@ When implementing a new feature, ensure you:
 ### Pattern 1: Testing Built-in Functions
 
 ```smalltalk
-category: 'Tests - Numeric Functions'
+category: 'Grail-Tests - Numeric Functions'
 method: BuiltinsTestCase
 test{FunctionName}
-	| result |
-	result := builtins perform: #{functionName}: env: 1 withArguments: {arg}.
+	| b result |
+	b := builtins ___instance___.
+	result := b @env1:{functionName}: arg.
 	self assert: result equals: expectedValue
 %
 ```
@@ -500,12 +513,12 @@ test{FunctionName}
 ### Pattern 2: Testing Type Methods
 
 ```smalltalk
-category: 'Tests - Sequence Protocol'
+category: 'Grail-Tests - Sequence Protocol'
 method: ListTestCase
 test{MethodName}
 	| lst result |
 	lst := OrderedCollection withAll: #(1 2 3).
-	result := lst perform: #{methodName}: env: 1 withArguments: {args}.
+	result := lst @env1:{methodName}: arg.
 	self assert: result equals: expectedValue
 %
 ```
@@ -513,19 +526,19 @@ test{MethodName}
 ### Pattern 3: Testing Exceptions
 
 ```smalltalk
-category: 'Python-Tests-{ExceptionName}'
+category: 'Grail-Tests-{ExceptionName}'
 method: {ExceptionName}TestCase
 test_inheritance
 	| exc |
-	exc := {ExceptionName} perform: #__new__: env: 1 withArguments: { {ExceptionName} }.
+	exc := {ExceptionName} ___new___: {ExceptionName}.
 	self assert: (exc isKindOf: Exception)
 %
 
-category: 'Python-Tests-{ExceptionName}'
+category: 'Grail-Tests-{ExceptionName}'
 method: {ExceptionName}TestCase
 test_creation
 	| exc |
-	exc := {ExceptionName} perform: #__new__: env: 1 withArguments: { {ExceptionName} }.
+	exc := {ExceptionName} ___new___: {ExceptionName}.
 	self assert: exc notNil
 %
 ```
@@ -535,7 +548,7 @@ test_creation
 - **Tests are essential** - Write tests alongside implementation
 - **Follow the structure** - Use the established patterns
 - **Test comprehensively** - Normal cases, edge cases, error cases
-- **Use `env: 1` for Python methods** - Direct Smalltalk messages for basic operations
+- **Use `@env1:` sends for Python methods** - Direct Smalltalk messages for basic operations
 - **Be descriptive** - Clear test names and comments
 - **Organize logically** - Use categories to group related tests
 - **Verify CPython compatibility** - When possible, compare with CPython behavior

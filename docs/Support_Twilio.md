@@ -126,8 +126,11 @@ are part of `./scripts/run_tests.sh`:
   (GsSecureSocket), which the Flask work already exercises server-side
   but client-side TLS to a public endpoint is unverified.
 * **`Fraction(...)` constructor convention** (see fix 1).
-* **property setters** (`@x.setter`) — V2010's `account` setter was
-  dropped in the trim; Grail properties are read-only today.
+* **property setters** (`@x.setter`) — supported: an explicit
+  `@<name>.setter` method compiles to the setter selector (ClassDefAst
+  skips the read-only stub; exercised by `AttributePropertyTestCase`).
+  V2010's `account` setter is still dropped in the trim; restore it if
+  anything ever assigns `version.account`.
 
 ## Test inventory
 

@@ -100,7 +100,7 @@ Retrospective — walls actually cleared driving `import numpy`:
 | _add_dtype_helper(DType) — foreign DType into Grail | FOREIGN-BRIDGE |
 | PyObject_Call(StringDType) — foreign callable | FOREIGN-BRIDGE (+inline args) |
 | RichCompareBool over bridged tuples of foreign proxies | FOREIGN-BRIDGE (+inline) |
-| numpy.int64.__index__ (foreign scalar numeric slot) — *current* | FOREIGN-BRIDGE |
+| numpy.int64.__index__ (foreign scalar numeric slot) — *since fixed (commit 77fc0704)* | FOREIGN-BRIDGE |
 
 Forward sample — temporarily swallowed the int-conversion wall and re-probed:
 the next genuine gaps were `PyComplex_AsCComplex` and `PyUnicode_AsUTF8String`
@@ -125,8 +125,9 @@ dominate the run: `numpy._DTypeMeta` ×1120, `numpy._ArrayMethod` ×508,
    * Reverse-proxy **protocol forwarding** for foreign objects: numeric
      (`nb_index`/`nb_int`/`nb_float` → `PyLong_As*`/`PyNumber_Index`), `str`,
      and likely buffer/sequence — invoked via the foreign object's own C slots
-     in C, not the proxy's absent Python dunders.  (Current frontier:
-     `numpy.int64` in ufunc-identity setup.)
+     in C, not the proxy's absent Python dunders.  (Since implemented —
+     commit 77fc0704, `foreign_number_oop` / `foreign_str` in
+     `cpython.cc`; the live frontier is in Shim_NumPy.md.)
    * On-demand function implementations as walls surface (the numpy symbol gap
      is already 0; blind stubs are latent crashes, not progress).
 3. **Cheap fragility insurance now:** a build-time file that `#include`s the

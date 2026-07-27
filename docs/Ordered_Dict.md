@@ -92,7 +92,7 @@ Everywhere else they walk `order`.
 | `func.__annotations__` | `PythonAst/FunctionDefAst.gs` (annotation-dict builder) | emit `PyDict` |
 | `type(name, bases, ns)` / functional `Enum(...)` | already receive a dict from the above | free once above land |
 | `dict` alias | `install.gs` aliases `dict`→`KeyValueDictionary` before `PyDict` exists; **re-aliased `dict`→`PyDict` at the end of `Python/PyDict.gs`** (which files in after `dict.gs`) | `put: PyDict` |
-| internal `dict ___new___` sites | grep `Python/*.gs` | those that hand a dict to Python code → `PyDict`; pure-internal KVDs stay KVD. **Instance/class `__dict__` reflection and `globals()` still mint plain KVDs (v1 gap — see equality note)** |
+| internal `dict ___new___` sites | grep `Python/*.gs` | those that hand a dict to Python code → `PyDict`; pure-internal KVDs stay KVD. **Instance `__dict__` is a `PyInstanceDict` live view and `globals()` a `PyModuleDict` (see reflection-order notes below); class `__dict__` still snapshots into a plain KVD — the equality note keeps mixed flavours comparing equal** |
 
 **Equality across dict flavours (load-bearing).** With two dict classes in
 play (`PyDict` for freshly-minted Python dicts, plain `KeyValueDictionary`
@@ -147,21 +147,24 @@ landed together; **cold gate 3027/3027**.
   re-assign appends at the end (CPython). Locked by
   `PyDictTestCase>>testInstanceDictPreservesInsertionOrder`
   (fixture `tests/python/instdict_order.py`).
-- **Class `__dict__` — a `PyDict`, but populated in scrambled order.**
+- **Class `__dict__` — a snapshot dict (plain `KeyValueDictionary` in
+  `Object>>___classDict___`), populated in scrambled order.**
   `___classDict___` unions data attributes (metaclass accessor-pairs) and
   methods (env-1 method dicts) from separate hash-ordered stores, so the
   snapshot is not in definition order. Preserving it would require tracking
   class-body definition order and sorting the snapshot — deferred (low value:
   the case that matters, enum *member* order, is set during class-body
   execution, not read back from this snapshot).
-- **`globals()`** has a separate pre-existing defect (`globals().keys()`
-  raises `TypeError: 'OrderedCollection' object is not callable`) and module
-  scope is a `SymbolDictionary`; module-attribute ordering is out of scope
-  here.
+- **`globals()`** had a separate pre-existing defect (`globals().keys()`
+  raised `TypeError: 'OrderedCollection' object is not callable`);
+  module-attribute ordering was out of scope here. Both were since
+  addressed by the `PyModuleDict` live view (e0a1dc4 — user globals
+  enumerate in insertion order; see docs/LEGB.md).
 
 **Non-goals (v1):** insertion order across the C-shim round-trip; changing
 kernel `KeyValueDictionary`; ordered `set` (separate); class-`__dict__`
-definition-order reflection; `globals()` fidelity.
+definition-order reflection; `globals()` fidelity (since delivered
+separately by `PyModuleDict`, see above).
 
 **Testing lesson (cost me a long debug loop).** The warm/canonical sharded
 gate surfaced `LookupError`/codec crashes that DID NOT reproduce cold or in

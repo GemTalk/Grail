@@ -7,13 +7,13 @@ This guide documents the key resources available when developing Grail, includin
 When implementing Python features in Grail, you have access to several valuable resources:
 
 1. **`gemstone/` directory** - GemStone Smalltalk reference implementations
-2. **`smalltalk/classes/` directory** - Existing Python type implementations
-3. **`smalltalk/tests/` directory** - Test examples and patterns
-4. **`smalltalk/ast/` directory** - AST node implementations
+2. **`src/smalltalk/Python/` directory** - Existing Python type implementations
+3. **`src/smalltalk/PythonTests/` directory** - Test examples and patterns
+4. **`src/smalltalk/PythonAst/` directory** - AST node implementations
 
 ## The `gemstone/` Directory
 
-The `gemstone/` directory contains **GemStone Smalltalk reference implementations** that define what GemStone supports. This is your primary reference for understanding available GemStone methods and capabilities.
+The `gemstone/` directory contains **GemStone Smalltalk reference implementations** that define what GemStone supports. This is your primary reference for understanding available GemStone methods and capabilities. (It is a per-machine reference checkout — `gemstone` is gitignored, so it is not part of a fresh clone.)
 
 ### Key Subdirectories
 
@@ -181,28 +181,27 @@ To see what collection methods are available:
 # Useful for system-level operations
 ```
 
-## The `smalltalk/classes/` Directory
+## The `src/smalltalk/Python/` Directory
 
-The `smalltalk/classes/` directory contains **existing Python type implementations**. Use these as examples when implementing new features.
+The `src/smalltalk/Python/` directory contains **existing Python type implementations**. Use these as examples when implementing new features. Class definitions live at the top of each class's own `.gs` file, and every file is loaded via an `input` line in `src/smalltalk/install.gs`.
 
 ### Key Files
 
-- **`_PythonClasses.gs`** - Class definitions (DO NOT create subclasses elsewhere)
 - **`builtins.gs`** - Built-in functions implementation
-- **`object.gs`** - Object Python methods
+- **`Object.gs`** - Object Python methods
 - **`str.gs`** - String (Unicode7) Python methods
 - **`list.gs`** - List (OrderedCollection) Python methods
 - **`dict.gs`** - Dictionary Python methods
-- **`int.gs`** - Integer Python methods
-- **`float.gs`** - Float Python methods
-- **`tuple.gs`** - Tuple (InvariantArray) Python methods
+- **`Int.gs`** - Integer Python methods
+- **`Float.gs`** - Float Python methods
+- **`Tuple.gs`** - Tuple Python methods
 - **`set.gs`** - Set Python methods
-- **`range.gs`** - Range (Interval) Python methods
+- **`Range.gs`** - Range (Interval) Python methods
 - **`math.gs`** - Math module implementation
 - **`cmath.gs`** - CMath module implementation
 - **`complex.gs`** - Complex number implementation
 
-### How to Use `smalltalk/classes/` Files
+### How to Use `src/smalltalk/Python/` Files
 
 1. **Find similar implementations**: Look for classes that do similar things
 2. **Copy patterns**: Use the same structure and style
@@ -211,15 +210,15 @@ The `smalltalk/classes/` directory contains **existing Python type implementatio
 
 ### Example: Implementing a New Built-in Function
 
-Look at `smalltalk/classes/builtins.gs`:
+Look at `src/smalltalk/Python/builtins.gs`:
 
 ```smalltalk
-category: 'Python-Built-in Functions'
+category: 'Grail-Built-in Functions'
 method: builtins
 abs: aNumber
-	"Return the absolute value of a number"
+	"Python builtin abs(x) — fixed-arity fast path."
 
-	[^ aNumber __abs__] perform: #on:do: env: 0 withArguments: {MessageNotUnderstood. [:ex | TypeError perform: #signal env: 0]}
+	^ [aNumber __abs__] @env0:on: MessageNotUnderstood do: [:ex | TypeError @env0:signal]
 %
 ```
 
@@ -231,33 +230,33 @@ This shows:
 
 ### Example: Implementing Sequence Methods
 
-Look at `smalltalk/classes/list.gs` or `smalltalk/classes/SequenceableCollection.gs`:
+Look at `src/smalltalk/Python/list.gs` or `src/smalltalk/Python/SequenceableCollection.gs`. Here is the core of `SequenceableCollection >> __getitem__:` (the current method also handles slice subscripts and non-integer indices first):
 
 ```smalltalk
-category: 'Python-Sequence Protocol'
+category: 'Grail-Sequence Protocol'
 method: SequenceableCollection
 __getitem__: index
 	"Return the item at the given index.
 	Supports negative indices (counting from end)."
 
 	| size idx |
-	size := self perform: #size env: 0.
+	size := self @env0:size.
 	idx := index.
-	
+
 	"Handle negative indices"
-	(idx perform: #< env: 0 withArguments: {0}) ifTrue: [
-		idx := size perform: #+ env: 0 withArguments: {idx}
+	(idx @env0:< 0) ifTrue: [
+		idx := size @env0:+ idx
 	].
-	
-	"Check bounds"
-	((idx perform: #< env: 0 withArguments: {0}) or: [
-		idx perform: #>= env: 0 withArguments: {size}
+
+	"Check bounds (Python uses 0-based indexing)"
+	((idx @env0:< 0) or: [
+		idx @env0:>= size
 	]) ifTrue: [
-		IndexError perform: #signal: env: 0 withArguments: {'list index out of range'}
+		IndexError ___signal___: 'list index out of range'
 	].
-	
+
 	"Convert to 1-based Smalltalk index"
-	^ self perform: #at: env: 0 withArguments: {idx perform: #+ env: 0 withArguments: {1}}
+	^ self @env0:at: (idx @env0:+ 1)
 %
 ```
 
@@ -268,21 +267,20 @@ This shows:
 - How to convert between Python (0-based) and Smalltalk (1-based) indexing
 - How to raise Python exceptions
 
-## The `smalltalk/tests/` Directory
+## The `src/smalltalk/PythonTests/` Directory
 
-The `smalltalk/tests/` directory contains **test implementations**. Use these as examples when writing tests for new features.
+The `src/smalltalk/PythonTests/` directory contains **test implementations**. Use these as examples when writing tests for new features. Each test class is defined at the top of its own file (there is no separate class-definitions file), and exception tests live in the same flat directory.
 
 ### Key Files
 
-- **`_PythonTests.gs`** - Test class definitions
 - **`PythonTestCase.gs`** - Base test class
 - **`BuiltinsTestCase.gs`** - Built-in functions tests
 - **`ListTestCase.gs`** - List tests
 - **`MathTestCase.gs`** - Math module tests
 - **`StrTestCase.gs`** - String tests
-- **`exceptions/`** - Exception tests
+- **`TypeErrorTestCase.gs`, `ValueErrorTestCase.gs`, ...** - Exception tests
 
-### How to Use `smalltalk/tests/` Files
+### How to Use `src/smalltalk/PythonTests/` Files
 
 1. **Find similar tests**: Look for tests that test similar functionality
 2. **Copy test structure**: Use the same test method structure
@@ -291,24 +289,24 @@ The `smalltalk/tests/` directory contains **test implementations**. Use these as
 
 ### Example: Testing a Built-in Function
 
-Look at `smalltalk/tests/BuiltinsTestCase.gs`:
+Look at `src/smalltalk/PythonTests/BuiltinsTestCase.gs`:
 
 ```smalltalk
-category: 'Tests - Numeric Functions'
+category: 'Grail-Tests - Numeric Functions'
 method: BuiltinsTestCase
 testAbs
 	"Test abs() function"
 
 	| b result |
-	b := builtins perform: #new env: 0.
-	
-	result := b perform: #abs: env: 1 withArguments: {5}.
+	b := builtins ___instance___.
+
+	result := b @env1:abs: 5.
 	self assert: result equals: 5.
-	
-	result := b perform: #abs: env: 1 withArguments: {-5}.
+
+	result := b @env1:abs: -5.
 	self assert: result equals: 5.
-	
-	result := b perform: #abs: env: 1 withArguments: {0}.
+
+	result := b @env1:abs: 0.
 	self assert: result equals: 0
 %
 ```
@@ -321,16 +319,16 @@ This shows:
 
 ### Example: Testing Exceptions
 
-Look at `smalltalk/tests/exceptions/TypeErrorTestCase.gs`:
+Look at `src/smalltalk/PythonTests/TypeErrorTestCase.gs`:
 
 ```smalltalk
-category: 'Python-Tests-TypeError'
+category: 'Grail-Tests-TypeError'
 method: TypeErrorTestCase
 test_inheritance
 	"Test that TypeError inherits from Exception."
 	
 	| exc |
-	exc := TypeError perform: #__new__: env: 1 withArguments: { TypeError }.
+	exc := TypeError ___new___: TypeError.
 	self assert: (exc isKindOf: Exception)
 %
 ```
@@ -350,7 +348,7 @@ This shows:
 
 ### Method 2: Check Existing Grail Code
 
-1. Look in `smalltalk/classes/` for similar implementations
+1. Look in `src/smalltalk/Python/` for similar implementations
 2. See what GemStone methods they use
 3. Follow the same pattern
 
@@ -446,15 +444,19 @@ String allSelectors do: [:each |
 
 Understanding environment IDs is crucial:
 
-- **`env: 0`** - Smalltalk environment (base GemStone methods)
+- **Environment 0 (`@env0:`)** - Smalltalk environment (base GemStone methods)
   - Use for: Creating objects, calling GemStone base methods
-  - Example: `builtins perform: #new env: 0`
-  - Example: `self perform: #size env: 0`
-  
-- **`env: 1`** - Python environment (Python methods)
+  - Example: `self @env0:size`
+  - Example: `self @env0:at: index`
+
+- **Environment 1 (`@env1:`)** - Python environment (Python methods)
   - Use for: Calling Python protocol methods
-  - Example: `obj perform: #__len__ env: 1`
-  - Example: `lst perform: #__getitem__: env: 1 withArguments: {0}`
+  - Example: `obj @env1:__len__`
+  - Example: `lst @env1:__getitem__: 0`
+
+A bare send uses the enclosing method's own compile environment (chosen by the
+`set compile_env: N` topaz directive), and the older
+`perform: #selector env: N withArguments: {...}` form still works.
 
 ## Code Patterns
 
@@ -462,40 +464,39 @@ Understanding environment IDs is crucial:
 
 ```smalltalk
 "Call a unary method"
-result := self perform: #size env: 0
+result := self @env0:size
 
 "Call a binary method"
-result := x perform: #+ env: 0 withArguments: {y}
+result := x @env0:+ y
 
 "Call a keyword method"
-result := self perform: #at: env: 0 withArguments: {index}
+result := self @env0:at: index
 ```
 
 ### Pattern 2: Calling Python Methods
 
 ```smalltalk
 "Call a Python method"
-result := obj perform: #__len__ env: 1
+result := obj @env1:__len__
 
 "Call a Python method with arguments"
-result := lst perform: #__getitem__: env: 1 withArguments: {0}
+result := lst @env1:__getitem__: 0
 ```
 
 ### Pattern 3: Error Handling
 
 ```smalltalk
 "Try to call a method, catch error"
-[^ obj perform: #__len__ env: 1] perform: #on:do: env: 0 withArguments: {
-	MessageNotUnderstood. 
-	[:ex | TypeError perform: #signal: env: 0 withArguments: {'object has no len()'}]
-}
+^ [obj __len__] @env0:on: MessageNotUnderstood do: [:ex |
+	TypeError ___signal___: 'object has no len()'
+]
 ```
 
 ### Pattern 4: Type Checking
 
 ```smalltalk
 "Check if object is instance of class"
-(obj perform: #isKindOf: env: 0 withArguments: {str}) ifTrue: [
+(obj @env0:isKindOf: str) ifTrue: [
 	^ obj
 ]
 ```
@@ -509,26 +510,26 @@ result := lst perform: #__getitem__: env: 1 withArguments: {0}
 | Base GemStone methods | `gemstone/monticello/{classname}.gs` |
 | Extended GemStone methods | `gemstone/rowan/src/Filein*/{ClassName}.extension.st` |
 | New GemStone classes | `gemstone/rowan/src/Filein*/{ClassName}.class.st` |
-| Python type implementation examples | `smalltalk/classes/{typename}.gs` |
-| Test examples | `smalltalk/tests/{ClassName}TestCase.gs` |
-| Class definitions | `smalltalk/classes/_PythonClasses.gs` |
-| AST node examples | `smalltalk/ast/{NodeName}Ast.gs` |
-| Built-in function examples | `smalltalk/classes/builtins.gs` |
-| Math function examples | `smalltalk/classes/math.gs` |
-| Exception examples | `smalltalk/classes/BaseException.gs` |
+| Python type implementation examples | `src/smalltalk/Python/{typename}.gs` |
+| Test examples | `src/smalltalk/PythonTests/{ClassName}TestCase.gs` |
+| Class definitions | top of each `src/smalltalk/Python/*.gs` file (loaded via `src/smalltalk/install.gs`) |
+| AST node examples | `src/smalltalk/PythonAst/{NodeName}Ast.gs` |
+| Built-in function examples | `src/smalltalk/Python/builtins.gs` |
+| Math function examples | `src/smalltalk/Python/math.gs` |
+| Exception examples | `src/smalltalk/Python/BaseException.gs` |
 
 ### Common Tasks
 
 | Task | Example File |
 |------|--------------|
-| Implement a built-in function | `smalltalk/classes/builtins.gs` |
-| Implement a list method | `smalltalk/classes/list.gs` |
-| Implement a string method | `smalltalk/classes/str.gs` |
-| Implement a dict method | `smalltalk/classes/dict.gs` |
-| Implement a math function | `smalltalk/classes/math.gs` |
-| Write tests for built-ins | `smalltalk/tests/BuiltinsTestCase.gs` |
-| Write tests for lists | `smalltalk/tests/ListTestCase.gs` |
-| Write tests for exceptions | `smalltalk/tests/exceptions/TypeErrorTestCase.gs` |
+| Implement a built-in function | `src/smalltalk/Python/builtins.gs` |
+| Implement a list method | `src/smalltalk/Python/list.gs` |
+| Implement a string method | `src/smalltalk/Python/str.gs` |
+| Implement a dict method | `src/smalltalk/Python/dict.gs` |
+| Implement a math function | `src/smalltalk/Python/math.gs` |
+| Write tests for built-ins | `src/smalltalk/PythonTests/BuiltinsTestCase.gs` |
+| Write tests for lists | `src/smalltalk/PythonTests/ListTestCase.gs` |
+| Write tests for exceptions | `src/smalltalk/PythonTests/TypeErrorTestCase.gs` |
 
 ## Best Practices
 
@@ -537,7 +538,7 @@ result := lst perform: #__getitem__: env: 1 withArguments: {0}
    - Check `gemstone/rowan/src/` for extensions and additional classes
 2. **Look for similar code** - Find existing implementations that do similar things
 3. **Follow existing patterns** - Use the same structure and style as existing code
-4. **Use correct environment IDs** - `env: 0` for Smalltalk, `env: 1` for Python
+4. **Use correct environment IDs** - `@env0:` for Smalltalk, `@env1:` for Python
 5. **Write tests** - Always write tests alongside implementation
 6. **Reference CPython** - Verify behavior matches CPython when possible
 7. **Search both monticello and rowan** - Base methods may be in monticello, extensions in rowan
@@ -548,15 +549,15 @@ result := lst perform: #__getitem__: env: 1 withArguments: {0}
 - **`gemstone/rowan/src/`** - GemStone source code in Tonel format (`.st` files)
   - Extensions to existing classes (`.extension.st`)
   - New class definitions (`.class.st`)
-- **`smalltalk/classes/`** - Examples of Python implementations
-- **`smalltalk/tests/`** - Examples of test patterns
+- **`src/smalltalk/Python/`** - Examples of Python implementations
+- **`src/smalltalk/PythonTests/`** - Examples of test patterns
 - **Use existing code as templates** - Don't reinvent the wheel
 - **Check GemStone methods first** - See what's already available
   - Check both `monticello/` for base methods and `rowan/src/` for extensions
 - **Follow established patterns** - Maintain consistency
 
 Remember: 
-- The existing code in `smalltalk/classes/` and `smalltalk/tests/` are your best examples for how to implement new features!
+- The existing code in `src/smalltalk/Python/` and `src/smalltalk/PythonTests/` are your best examples for how to implement new features!
 - The `gemstone/` directory (both `monticello/` and `rowan/src/`) shows what GemStone supports
 - Always check both locations when looking for available methods
 

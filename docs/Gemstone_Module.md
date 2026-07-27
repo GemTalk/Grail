@@ -31,9 +31,11 @@ gemstone.system.abort()    # System abort   — discards uncommitted changes
 `System` (see `src/smalltalk/Python/System.gs`). Because they live on the
 real kernel class, any reference to that class — `gemstone.system` or
 `gemstone["System"]` — supports them. `System` belongs to the
-SystemUser-owned security policy, so `System.gs` is loaded in
-`install.gs`'s SystemUser section alongside the other kernel-class method
-files.
+SystemUser-owned security policy, so `System.gs` is filed like the other
+kernel-class method files: per-user as session methods by `install.gs` on
+a modern kernel, or once per extent as SystemUser by
+`scripts/install_base.gs` on a legacy kernel (see the kernel-class
+extensions section of `install.sh`).
 
 > **History:** these calls replace the former module-level
 > `gemstone.commit()` / `gemstone.abort()`, which now raise
