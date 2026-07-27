@@ -4,6 +4,100 @@ module ifNil: [self error: 'module is not defined. Check file ordering.'].
 %
 
 ! ===============================================================================
+! IsoCalendarDate - Python `datetime.date.isocalendar()`'s return type: a
+! tuple subclass with named year/week/weekday field access.  test_isocalendar
+! checks both plain-tuple equality/unpacking AND ``t.year``-style attribute
+! access; test_isocalendar_pickling checks that pickling round-trips to a
+! PLAIN tuple (CPython's own deliberate behavior -- IsoCalendarDate.__reduce__
+! returns (tuple, (tuple(self),))).
+! ===============================================================================
+
+expectvalue /Class
+doit
+tuple subclass: 'IsoCalendarDate'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+IsoCalendarDate category: 'Grail-Modules'
+%
+
+expectvalue /Metaclass3
+doit
+IsoCalendarDate removeAllMethods: 0.
+IsoCalendarDate removeAllMethods: 1.
+IsoCalendarDate class removeAllMethods: 0.
+IsoCalendarDate class removeAllMethods: 1.
+%
+
+set compile_env: 0
+
+category: 'Grail-Introspection'
+classmethod: IsoCalendarDate
+___pythonValueAttrs___
+	"Register year/week/weekday as auto-invoked DATA attributes (like
+	PyDate's own year/month/day) rather than plain callables -- without
+	this, ``t.year'' resolves to a bound method object instead of the
+	int value (test_isocalendar)."
+
+	^ IdentitySet new
+		add: #year;
+		add: #week;
+		add: #weekday;
+		yourself
+%
+
+set compile_env: 1
+
+category: 'Grail-Accessors'
+method: IsoCalendarDate
+year
+	^ self @env0:at: 1
+%
+
+category: 'Grail-Accessors'
+method: IsoCalendarDate
+week
+	^ self @env0:at: 2
+%
+
+category: 'Grail-Accessors'
+method: IsoCalendarDate
+weekday
+	^ self @env0:at: 3
+%
+
+category: 'Grail-Conversion'
+method: IsoCalendarDate
+__repr__
+	^ 'IsoCalendarDate(year=' @env0:, (self @env0:at: 1) @env0:printString
+		@env0:, ', week=' @env0:, (self @env0:at: 2) @env0:printString
+		@env0:, ', weekday=' @env0:, (self @env0:at: 3) @env0:printString
+		@env0:, ')'
+%
+
+category: 'Grail-Pickling'
+method: IsoCalendarDate
+__reduce__
+	"CPython: pickling an IsoCalendarDate deliberately loses the type,
+	round-tripping to a plain tuple (test_isocalendar_pickling).  Returns
+	(tuple, (plain_tuple_copy_of_self,)) -- unpickling calls
+	tuple(plain_tuple_copy_of_self), reconstructing a bare tuple."
+
+	| plain |
+	plain := tuple @env0:withAll: self.
+	^ tuple @env0:withAll: { tuple. (tuple @env0:withAll: { plain }) }
+%
+
+set compile_env: 0
+
+! ===============================================================================
 ! PyTimedelta - Python `datetime.timedelta`
 ! Stored as normalized (days, seconds, microseconds) per CPython:
 !   0 <= microseconds < 1_000_000
@@ -50,7 +144,10 @@ ___pythonValueAttrs___
 category: 'Grail-Private'
 classmethod: PyTimedelta
 ___fromTotalMicros___: totalMicros
-	"Build a normalized timedelta from total signed microseconds."
+	"Build a normalized timedelta from total signed microseconds.  Shared
+	by every arithmetic operator (__add__/__sub__/__neg__/__mul__/...) as
+	well as the constructor path, so the |days| > 999999999 OverflowError
+	check belongs here too (test_overflow: timedelta.min - resolution)."
 
 	| inst days secs micros |
 	"Normalize so 0 <= micros < 1e6 and 0 <= secs < 86400, with `days`
@@ -58,9 +155,55 @@ ___fromTotalMicros___: totalMicros
 	micros := totalMicros \\ 1000000.
 	secs := (totalMicros // 1000000) \\ 86400.
 	days := totalMicros // 1000000 // 86400.
+	(days @env0:abs @env0:> 999999999) ifTrue: [
+		^ OverflowError @env1:___signal___:
+			'timedelta # of days is too large: ' @env0:, days @env0:printString].
 	inst := self new.
 	inst _days: days _seconds: secs _microseconds: micros.
 	^ inst
+%
+
+category: 'Grail-Private'
+classmethod: PyTimedelta
+___roundHalfEven___: x
+	"Python's round(float) on an exact-.5 boundary rounds to the nearest
+	EVEN integer; GemStone's kernel Float>>rounded (and float>>__round__,
+	which just forwards to it) rounds half AWAY from zero instead -- a
+	pre-existing gap in the shared primitive, out of scope to fix
+	globally here, so timedelta's constructor (which needs the correct
+	rule to match CPython's _pydatetime.timedelta.__new__ exactly --
+	test_microsecond_rounding) does its own banker's rounding locally."
+
+	| whole frac |
+	whole := x @env0:truncated.
+	frac := x @env0:- whole.
+	(frac @env0:abs @env0:= 0.5) ifTrue: [
+		^ (whole @env0:even)
+			ifTrue: [whole]
+			ifFalse: [whole @env0:+ frac @env0:sign]].
+	^ x @env0:rounded
+%
+
+category: 'Grail-Private'
+classmethod: PyTimedelta
+___divideAndRound___: a by: b
+	"CPython's _pydatetime._divide_and_round: divide a by b (both
+	EXACT integers -- callers feed it a numerator/denominator pair
+	derived from a float's as_integer_ratio(), never the float itself,
+	so no binary representation error survives into the rounding
+	decision), round-half-to-even.  Ported from the reference impl for
+	divmod_near in CPython's Objects/longobject.c."
+
+	| q r doubled greaterThanHalf |
+	q := a @env0:// b.
+	r := a @env0:\\ b.
+	doubled := r @env0:* 2.
+	greaterThanHalf := (b @env0:> 0)
+		ifTrue: [doubled @env0:> b]
+		ifFalse: [doubled @env0:< b].
+	(greaterThanHalf @env0:or: [(doubled @env0:= b) @env0:and: [(q @env0:\\ 2) @env0:= 1]])
+		ifTrue: [q := q @env0:+ 1].
+	^ q
 %
 
 category: 'Grail-Private'
@@ -70,6 +213,19 @@ _days: d _seconds: s _microseconds: us
 	self dynamicInstVarAt: #_seconds put: (s).
 	self dynamicInstVarAt: #_microseconds put: (us).
 	^ self
+%
+
+category: 'Grail-Private'
+classmethod: PyTimedelta
+___fromDaysSecondsMicros___: d _: s _: us
+	"Build from already-normalized (0 <= s < 86400, 0 <= us < 1e6) fields
+	-- unlike ___fromTotalMicros___:, does no re-normalization, since
+	_timedelta:kw: already did the CPython-exact float/rounding dance."
+
+	| inst |
+	inst := self new.
+	inst _days: d _seconds: s _microseconds: us.
+	^ inst
 %
 
 set compile_env: 1
@@ -87,24 +243,135 @@ value: positional value: kwargs
 category: 'Grail-Initialization'
 classmethod: PyTimedelta
 _timedelta: positional kw: kwargs
-	"Varargs constructor accepting any combination of named time
-	units: days, seconds, microseconds, milliseconds, minutes,
-	hours, weeks."
+	"Varargs constructor accepting any combination of named time units:
+	days, seconds, microseconds, milliseconds, minutes, hours, weeks.
 
-	| total positionalKeys keys idx |
-	total := 0.
-	positionalKeys := #(#days #seconds #microseconds #milliseconds #minutes #hours #weeks).
-	idx := 1.
-	positional @env0:do: [:val |
-		total := total @env0:+ ((self @env0:___multiplier___: (positionalKeys @env0:at: idx)) @env0:* val).
-		idx := idx @env0:+ 1
-	].
+	Ported from CPython's _pydatetime.timedelta.__new__ verbatim
+	(including its float-precision-preserving modf/divmod accumulation
+	order and its use of banker's rounding at the end) rather than the
+	previous single 'multiply every unit into a total microsecond count,
+	then truncate' approach -- that lost precision + used the wrong
+	rounding rule for float components landing exactly on a .5 boundary
+	(test_microsecond_rounding: e.g. milliseconds=0.5/1000 must round to
+	microseconds=0, not 1 -- round-half-to-even, not truncation)."
+
+	| names vals d s us dayfrac daysecondsfrac daysecondswhole
+	  secondsfrac secWhole usdouble days seconds microseconds |
+	names := #(#days #seconds #microseconds #milliseconds #minutes #hours #weeks).
+	vals := Array @env0:new: 7.
+	1 @env0:to: 7 do: [:i | vals @env0:at: i put: 0].
+	positional @env0:doWithIndex: [:val :i |
+		(val @env0:isKindOf: Number) ifFalse: [
+			TypeError ___signal___: 'unsupported type for timedelta '
+				@env0:, (names @env0:at: i) @env0:asString
+				@env0:, ' component: ' @env0:, val @env0:class __name__].
+		vals @env0:at: i put: val].
 	kwargs @env0:isNil ifFalse: [
-		kwargs @env0:keysAndValuesDo: [:k :v |
-			total := total @env0:+ ((self @env0:___multiplier___: k) @env0:* v)
-		]
+		kwargs @env0:keysAndValuesDo: [:k :v | | sym idx |
+			sym := k @env0:asSymbol.
+			idx := names @env0:indexOf: sym.
+			(v @env0:isKindOf: Number) ifFalse: [
+				TypeError ___signal___: 'unsupported type for timedelta '
+					@env0:, sym @env0:asString
+					@env0:, ' component: ' @env0:, v @env0:class __name__].
+			vals @env0:at: idx put: v]].
+
+	days := (vals @env0:at: 1) @env0:+ ((vals @env0:at: 7) @env0:* 7).
+	seconds := (vals @env0:at: 2)
+		@env0:+ ((vals @env0:at: 5) @env0:* 60)
+		@env0:+ ((vals @env0:at: 6) @env0:* 3600).
+	microseconds := (vals @env0:at: 3) @env0:+ ((vals @env0:at: 4) @env0:* 1000).
+
+	(days @env0:isKindOf: Float) ifTrue: [
+		| d0 |
+		d0 := days @env0:truncated.
+		dayfrac := days @env0:- d0.
+		daysecondswhole := (dayfrac @env0:* 86400.0) @env0:truncated.
+		daysecondsfrac := (dayfrac @env0:* 86400.0) @env0:- daysecondswhole.
+		s := daysecondswhole.
+		d := d0
+	] ifFalse: [
+		daysecondsfrac := 0.0.
+		d := days.
+		s := 0
 	].
-	^ self @env0:___fromTotalMicros___: total @env0:truncated
+
+	(seconds @env0:isKindOf: Float) ifTrue: [
+		secWhole := seconds @env0:truncated.
+		secondsfrac := (seconds @env0:- secWhole) @env0:+ daysecondsfrac.
+		seconds := secWhole
+	] ifFalse: [
+		secondsfrac := daysecondsfrac
+	].
+
+	"days, seconds = divmod(seconds, 86400)"
+	d := d @env0:+ (seconds @env0:// 86400).
+	s := s @env0:+ (seconds @env0:\\ 86400).
+
+	usdouble := secondsfrac @env0:* 1000000.0.
+
+	(microseconds @env0:isKindOf: Float) ifTrue: [
+		| rounded secs2 |
+		rounded := self @env0:___roundHalfEven___: microseconds @env0:+ usdouble.
+		secs2 := rounded @env0:// 1000000.
+		microseconds := rounded @env0:\\ 1000000.
+		d := d @env0:+ (secs2 @env0:// 86400).
+		s := s @env0:+ (secs2 @env0:\\ 86400)
+	] ifFalse: [
+		| micrTrunc secs2 |
+		micrTrunc := microseconds @env0:truncated.
+		secs2 := micrTrunc @env0:// 1000000.
+		microseconds := micrTrunc @env0:\\ 1000000.
+		d := d @env0:+ (secs2 @env0:// 86400).
+		s := s @env0:+ (secs2 @env0:\\ 86400).
+		microseconds := self @env0:___roundHalfEven___: microseconds @env0:+ usdouble
+	].
+
+	"Final carry: microseconds/seconds might have overflowed their range."
+	s := s @env0:+ (microseconds @env0:// 1000000).
+	us := microseconds @env0:\\ 1000000.
+	d := d @env0:+ (s @env0:// 86400).
+	s := s @env0:\\ 86400.
+
+	(d @env0:abs @env0:> 999999999) ifTrue: [
+		OverflowError ___signal___:
+			'timedelta # of days is too large: ' @env0:, d @env0:printString].
+
+	^ self @env0:___fromDaysSecondsMicros___: d _: s _: us
+%
+
+category: 'Grail-Instantiation'
+method: PyTimedelta
+___new__: positional kw: kwargs
+	"Python-level `timedelta.__new__(cls, ...)`, reached via
+	object >> ___allocateInstance___:kw: when a PYTHON SUBCLASS of
+	timedelta is instantiated (``class A(timedelta): ...``).  Direct
+	construction (``timedelta(...)``) instead goes through the class-side
+	Grail-Callable ``value:value:`` above -- but ClassDefAst synthesizes a
+	FRESH ``value:value:`` on every Python-defined subclass (see
+	Object.gs's ``value:value:`` comment), which shadows timedelta's own
+	and routes through the allocate-then-__init__ protocol instead.
+	Without this method, a subclass instance's _days/_seconds/_microseconds
+	stay nil (test_repr_subclass, test_subclass_timedelta).  Called
+	non-virtually with the actual class as receiver (self=cls), so this
+	simply forwards to the same varargs assembler used by value:value:.
+
+	EXCEPT: a mixed-in Enum (``class E(timedelta, Enum): def __new__
+	(cls, v): return super().__new__(cls, v)'') reaches this SAME
+	selector via super()'s MRO walk (Enum's classmethod of the same
+	name lives further down the registered MRO, past timedelta) --
+	Grail's super() picks the nearest class defining the selector by
+	position, unlike CPython's EnumType, which installs its own
+	__new__ directly onto the mixed-in class so it's found FIRST
+	regardless of mixin order.  Defer to Enum's guard (test_enum's
+	test_bad_new_super) whenever this class is a mid-construction enum
+	member, rather than actually allocating a timedelta -- keeps the
+	fix local instead of touching Enum's class-creation machinery."
+
+	(Enum ___grailBuildingSet @env0:includes: self) ifTrue: [
+		^ TypeError @env1:___signal___:
+			'do not use `super().__new__; call the appropriate __new__ directly'].
+	^ self _timedelta: positional kw: kwargs
 %
 
 set compile_env: 0
@@ -169,10 +436,18 @@ microseconds
 category: 'Grail-Accessors'
 method: PyTimedelta
 total_seconds
-	"Float total over all stored fields."
+	"Float total over all stored fields.  Matches CPython's exact
+	implementation: combine everything into ONE integer microsecond
+	count first, then do a SINGLE float division at the very end --
+	two separate float operations (int part asFloat, PLUS a separately-
+	computed microseconds/1e6 float) accumulates binary representation
+	error that a single division avoids (test_total_seconds:
+	timedelta(microseconds=-1).total_seconds() must be exactly -1e-06,
+	not -1.0000000000287557e-06)."
 
-	^ ((self @env0:dynamicInstVarAt: #_days) @env0:* 86400 @env0:+ (self @env0:dynamicInstVarAt: #_seconds)) @env0:asFloat
-		@env0:+ ((self @env0:dynamicInstVarAt: #_microseconds) @env0:asFloat @env0:/ 1000000.0)
+	^ (((self @env0:dynamicInstVarAt: #_days) @env0:* 86400 @env0:+ (self @env0:dynamicInstVarAt: #_seconds))
+		@env0:* 1000000 @env0:+ (self @env0:dynamicInstVarAt: #_microseconds))
+		@env0:/ 1000000.0
 %
 
 category: 'Grail-Accessors'
@@ -216,9 +491,27 @@ __neg__
 category: 'Grail-Arithmetic'
 method: PyTimedelta
 __mul__: scale
+	"Int scale: exact, `totalMicros * scale` has no fraction to round.
+	Float scale: CPython ports the float to its EXACT integer ratio
+	(as_integer_ratio -- a power-of-2 denominator, no representation
+	error) and does the multiply/round in that exact integer domain
+	(_pydatetime.timedelta.__mul__ + _divide_and_round) -- naive
+	float multiplication here would reintroduce the same binary
+	representation error CPython's approach specifically avoids
+	(test_computations' Issue #23521 cases, e.g. seconds=1 * 0.123456
+	must land on EXACTLY 123456 microseconds)."
+
+	| ratio a b usec |
 	(scale isKindOf: Number) ifFalse: [^ #'___NotImplemented___'].
+	(scale @env0:isKindOf: Float) ifFalse: [
+		^ PyTimedelta @env0:___fromTotalMicros___:
+			(self ___totalMicros___ @env0:* scale) @env0:truncated].
+	ratio := scale as_integer_ratio.
+	a := ratio @env0:at: 1.
+	b := ratio @env0:at: 2.
+	usec := self ___totalMicros___.
 	^ PyTimedelta @env0:___fromTotalMicros___:
-		(self ___totalMicros___ @env0:* scale) @env0:truncated
+		(PyTimedelta @env0:___divideAndRound___: usec @env0:* a by: b)
 %
 
 category: 'Grail-Arithmetic'
@@ -232,26 +525,42 @@ __pos__
 category: 'Grail-Arithmetic'
 method: PyTimedelta
 __truediv__: other
-	"td / td -> float; td / number -> td.  Zero divisor -> ZeroDivisionError."
+	"td / td -> float; td / int -> td (exact _divide_and_round, matching
+	CPython -- NOT naive float division + rounded, which reintroduces
+	binary representation error); td / float -> td, via the float's
+	EXACT integer ratio (as_integer_ratio) same as __mul__ above.
+	Zero divisor -> ZeroDivisionError."
 
+	| usec |
 	(other isKindOf: PyTimedelta) ifTrue: [
 		other ___totalMicros___ @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
 		^ (self ___totalMicros___ @env0:/ other ___totalMicros___) @env0:asFloat].
 	(other isKindOf: Number) ifFalse: [^ #'___NotImplemented___'].
 	other @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
+	usec := self ___totalMicros___.
+	(other @env0:isKindOf: Float) ifTrue: [
+		| ratio a b |
+		ratio := other as_integer_ratio.
+		a := ratio @env0:at: 1.
+		b := ratio @env0:at: 2.
+		^ PyTimedelta @env0:___fromTotalMicros___:
+			(PyTimedelta @env0:___divideAndRound___: b @env0:* usec by: a)].
 	^ PyTimedelta @env0:___fromTotalMicros___:
-		(self ___totalMicros___ @env0:/ other) @env0:rounded
+		(PyTimedelta @env0:___divideAndRound___: usec by: other)
 %
 
 category: 'Grail-Arithmetic'
 method: PyTimedelta
 __floordiv__: other
-	"td // td -> int; td // number -> td.  Zero divisor -> ZeroDivisionError."
+	"td // td -> int; td // int -> td.  A float divisor is NOT accepted
+	(matches CPython: timedelta.__floordiv__ only handles (int,
+	timedelta), unlike __truediv__/__mul__).  Zero divisor ->
+	ZeroDivisionError."
 
 	(other isKindOf: PyTimedelta) ifTrue: [
 		other ___totalMicros___ @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
 		^ self ___totalMicros___ @env0:// other ___totalMicros___].
-	(other isKindOf: Number) ifFalse: [^ #'___NotImplemented___'].
+	((other isKindOf: Number) and: [(other isKindOf: Float) not]) ifFalse: [^ #'___NotImplemented___'].
 	other @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
 	^ PyTimedelta @env0:___fromTotalMicros___: (self ___totalMicros___ @env0:// other)
 %
@@ -348,15 +657,25 @@ __module__
 category: 'Grail-Introspection'
 classmethod: PyTimedelta
 __qualname__
-	^ 'timedelta'
+	"Only PyTimedelta ITSELF is 'timedelta' -- a Python subclass
+	(``class SubclassTimeDelta(timedelta):``) must see its own name here
+	(test_repr_subclass), so fall back to the generic object-level
+	__qualname__ (self name asString) for anything else."
+
+	^ self @env0:== PyTimedelta
+		ifTrue: ['timedelta']
+		ifFalse: [super __qualname__]
 %
 
 category: 'Grail-Introspection'
 classmethod: PyTimedelta
 __name__
-	"CPython name is 'timedelta', not the Smalltalk class name."
+	"CPython name is 'timedelta', not the Smalltalk class name -- but only
+	for PyTimedelta itself; see __qualname__ above."
 
-	^ 'timedelta'
+	^ self @env0:== PyTimedelta
+		ifTrue: ['timedelta']
+		ifFalse: [super __name__]
 %
 
 category: 'Grail-Conversion'
@@ -437,14 +756,23 @@ category: 'Grail-Conversion'
 method: PyTimedelta
 __repr__
 	"CPython repr: 'datetime.timedelta(days=1, seconds=2, microseconds=3)',
-	omitting zero components; 'datetime.timedelta(0)' when all zero."
+	omitting zero components; 'datetime.timedelta(0)' when all zero.  Bare
+	subclass names (gh-107773): only the real datetime module's own
+	timedelta gets the 'datetime.' prefix -- a Python subclass's
+	synthesized __module__ is its own defining module, so it prints bare
+	(see test_repr_subclass)."
 
-	| d s us stream any |
+	| d s us stream any prefix |
 	d := self @env0:dynamicInstVarAt: #_days.
 	s := self @env0:dynamicInstVarAt: #_seconds.
 	us := self @env0:dynamicInstVarAt: #_microseconds.
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
-	stream @env0:nextPutAll: 'datetime.timedelta('.
+	prefix := (self @env0:class __module__) @env0:= 'datetime'
+		ifTrue: ['datetime.']
+		ifFalse: [''].
+	stream @env0:nextPutAll: prefix.
+	stream @env0:nextPutAll: (self @env0:class __qualname__).
+	stream @env0:nextPut: $(.
 	any := false.
 	d @env0:~= 0 ifTrue: [
 		stream @env0:nextPutAll: 'days='.
@@ -589,6 +917,8 @@ __new__: tdelta
 	"timezone(offset) constructor.  A zero offset with no name returns the
 	canonical utc singleton (CPython interns timezone(timedelta(0)) as utc)."
 
+	(tdelta @env0:isKindOf: PyTimedelta) ifFalse: [
+		^ TypeError ___signal___: 'offset must be a timedelta'].
 	(tdelta ___totalMicros___ @env0:= 0) ifTrue: [^ PyTimezone utc].
 	(tdelta ___totalMicros___) @env0:abs @env0:> 86399999999 ifTrue: [
 		^ ValueError ___signal___:
@@ -601,17 +931,39 @@ classmethod: PyTimezone
 __new__: tdelta _: aName
 	"timezone(offset, name) constructor."
 
+	(tdelta @env0:isKindOf: PyTimedelta) ifFalse: [
+		^ TypeError ___signal___: 'offset must be a timedelta'].
+	(aName @env0:isKindOf: CharacterCollection) ifFalse: [
+		^ TypeError ___signal___: 'name must be a string'].
 	(tdelta ___totalMicros___) @env0:abs @env0:> 86399999999 ifTrue: [
 		^ ValueError ___signal___:
 			'offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24).'].
 	^ self @env0:new @env0:_offset: tdelta _name: aName
 %
 
+category: 'Grail-Initialization'
+classmethod: PyTimezone
+__new__: tdelta _: aName _: extra
+	"timezone() takes at most 2 arguments -- a 3rd is a TypeError
+	(test_constructor: ``timezone(ZERO, 'ABC', 'extra')'').  Without this,
+	object class >> value:value:'s arity-dispatch builds the selector
+	__new__:_:_: and performs it directly with NO such-selector guard,
+	which would otherwise crash with an uncaught MessageNotUnderstood
+	instead of a catchable TypeError."
+
+	^ TypeError ___signal___: 'timezone() takes at most 2 arguments'
+%
+
 category: 'Grail-Accessors'
 method: PyTimezone
 utcoffset: dt
-	"Return the configured offset (independent of `dt`)."
+	"Return the configured offset (independent of `dt`) -- but `dt` must
+	still be None or a datetime instance (test_utcoffset: a bare string/
+	int argument is a TypeError, matching CPython's argument check even
+	though the offset itself doesn't depend on dt's value)."
 
+	(dt @env0:isNil @env0:or: [dt @env0:== None @env0:or: [dt @env0:isKindOf: PyDateTime]]) ifFalse: [
+		^ TypeError ___signal___: 'utcoffset() argument must be a datetime instance or None'].
 	^ (self @env0:dynamicInstVarAt: #_offset)
 %
 
@@ -620,6 +972,8 @@ method: PyTimezone
 tzname: dt
 	"Return the human-readable name, e.g. 'UTC' or 'UTC+02:00'."
 
+	(dt @env0:isNil @env0:or: [dt @env0:== None @env0:or: [dt @env0:isKindOf: PyDateTime]]) ifFalse: [
+		^ TypeError ___signal___: 'tzname() argument must be a datetime instance or None'].
 	(self @env0:dynamicInstVarAt: #_name) @env0:isNil ifFalse: [^ (self @env0:dynamicInstVarAt: #_name)].
 	^ self ___formatOffset___: (self @env0:dynamicInstVarAt: #_offset)
 %
@@ -629,6 +983,8 @@ method: PyTimezone
 dst: dt
 	"timezone instances do not represent DST transitions."
 
+	(dt @env0:isNil @env0:or: [dt @env0:== None @env0:or: [dt @env0:isKindOf: PyDateTime]]) ifFalse: [
+		^ TypeError ___signal___: 'dst() argument must be a datetime instance or None'].
 	^ None
 %
 
@@ -637,6 +993,10 @@ method: PyTimezone
 fromutc: dt
 	"Convert a UTC datetime (tzinfo == self) to this zone: dt + offset."
 
+	(dt @env0:isKindOf: PyDateTime) ifFalse: [
+		^ TypeError ___signal___: 'fromutc() argument must be a datetime instance'].
+	(dt tzinfo @env0:== self) ifFalse: [
+		^ ValueError ___signal___: 'fromutc: dt.tzinfo is not self'].
 	^ dt __add__: (self @env0:dynamicInstVarAt: #_offset)
 %
 
@@ -778,13 +1138,17 @@ __module__
 category: 'Grail-Introspection'
 classmethod: PyTimezone
 __qualname__
-	^ 'timezone'
+	^ self @env0:== PyTimezone
+		ifTrue: ['timezone']
+		ifFalse: [super __qualname__]
 %
 
 category: 'Grail-Introspection'
 classmethod: PyTimezone
 __name__
-	^ 'timezone'
+	^ self @env0:== PyTimezone
+		ifTrue: ['timezone']
+		ifFalse: [super __name__]
 %
 
 category: 'Grail-Conversion'
@@ -1002,9 +1366,16 @@ fromtimestamp: ts
 category: 'Grail-Initialization'
 classmethod: PyDateTime
 fromtimestamp: ts _: tz
-	"fromtimestamp(ts[, tz]) - Unix epoch seconds to PyDateTime."
+	"fromtimestamp(ts[, tz]) - Unix epoch seconds to PyDateTime.  ts must
+	be a real number (None/str/... -> TypeError, gh-120268); a value so
+	extreme the resulting date falls outside year 1..9999 -> OverflowError
+	(GemStone's DateTime signals an uncatchable-by-Python ArgumentError
+	for this -- resignal, test_insane_fromtimestamp)."
 
 	| epoch dt secs micros tz2 |
+	(ts @env0:isKindOf: Number) ifFalse: [
+		^ TypeError @env1:___signal___:
+			'an integer is required (got type ' @env0:, ts @env0:class __name__ @env0:, ')'].
 	tz2 := tz == None ifTrue: [nil] ifFalse: [tz].
 	secs := ts @env0:truncated.
 	micros := ((ts @env0:- secs) @env0:* 1000000) @env0:truncated.
@@ -1015,7 +1386,9 @@ fromtimestamp: ts _: tz
 		hours: 0
 		minutes: 0
 		seconds: 0.
-	dt := epoch @env0:addSeconds: secs.
+	dt := [epoch @env0:addSeconds: secs]
+		@env0:on: Error
+		do: [:ex | ^ OverflowError @env1:___signal___: 'timestamp out of range for platform time_t'].
 	^ self @env0:___fromFields___:
 		(dt @env0:yearGmt)
 		_: (dt @env0:monthGmt)
@@ -1216,9 +1589,15 @@ timestamp
 	"Unix epoch seconds with sub-second precision.  Treats naive
 	datetimes as UTC (CPython treats them as local; the gem doesn't
 	have a portable local definition, so we pick a deterministic
-	stand-in)."
+	stand-in).  AWARE datetimes (tzinfo set) additionally subtract the
+	utcoffset -- the wall-clock fields are LOCAL to that offset, and the
+	true UTC instant is ``local - offset'' (matching CPython's
+	``(self - self.utcoffset()).replace(tzinfo=timezone.utc)'' epoch
+	derivation).  Missing this subtraction double-counts the offset on
+	any round trip through __add__/__sub__'s timestamp+fromtimestamp
+	implementation for an aware datetime (test_issue23600)."
 
-	| epoch dt |
+	| epoch dt secs off |
 	epoch := DateTime
 		@env0:newGmtWithYear: 1970
 		month: 1
@@ -1233,8 +1612,11 @@ timestamp
 		hours: (self @env0:dynamicInstVarAt: #_hour)
 		minutes: (self @env0:dynamicInstVarAt: #_minute)
 		seconds: (self @env0:dynamicInstVarAt: #_second).
-	^ (dt @env0:asSeconds @env0:- epoch @env0:asSeconds)
-		@env0:asFloat @env0:+ ((self @env0:dynamicInstVarAt: #_microsecond) @env0:asFloat @env0:/ 1000000.0)
+	secs := (dt @env0:asSeconds @env0:- epoch @env0:asSeconds)
+		@env0:asFloat @env0:+ ((self @env0:dynamicInstVarAt: #_microsecond) @env0:asFloat @env0:/ 1000000.0).
+	off := self utcoffset.
+	off @env0:== None ifTrue: [^ secs].
+	^ secs @env0:- (off total_seconds)
 %
 
 category: 'Grail-Conversion'
@@ -1598,13 +1980,17 @@ __module__
 category: 'Grail-Introspection'
 classmethod: PyDateTime
 __qualname__
-	^ 'datetime'
+	^ self @env0:== PyDateTime
+		ifTrue: ['datetime']
+		ifFalse: [super __qualname__]
 %
 
 category: 'Grail-Introspection'
 classmethod: PyDateTime
 __name__
-	^ 'datetime'
+	^ self @env0:== PyDateTime
+		ifTrue: ['datetime']
+		ifFalse: [super __name__]
 %
 
 category: 'Grail-Class Attrs'
@@ -1764,6 +2150,25 @@ hash
 category: 'Grail-Private'
 method: PyDate
 _year: y _month: m _day: d
+	"Shared by every construction path (direct call, subclass __new__,
+	fromordinal/fromtimestamp/replace/fromisocalendar...) so the field
+	validation CPython's _check_date_fields does applies uniformly.
+	Ported error messages/ranges verbatim from _pydatetime.py."
+
+	| dim |
+	(y @env0:< 1 or: [y @env0:> 9999]) ifTrue: [
+		^ ValueError @env1:___signal___:
+			'year must be in 1..9999, not ' @env0:, y @env0:printString].
+	(m @env0:< 1 or: [m @env0:> 12]) ifTrue: [
+		^ ValueError @env1:___signal___:
+			'month must be in 1..12, not ' @env0:, m @env0:printString].
+	dim := (Date @env0:newDay: 1 monthNumber: m year: y) @env0:daysInMonth.
+	(d @env0:< 1 or: [d @env0:> dim]) ifTrue: [
+		^ ValueError @env1:___signal___:
+			'day ' @env0:, d @env0:printString
+				@env0:, ' must be in range 1..' @env0:, dim @env0:printString
+				@env0:, ' for month ' @env0:, m @env0:printString
+				@env0:, ' in year ' @env0:, y @env0:printString].
 	self dynamicInstVarAt: #_year put: y.
 	self dynamicInstVarAt: #_month put: m.
 	self dynamicInstVarAt: #_day put: d.
@@ -1788,6 +2193,51 @@ value: positional value: kwargs
 		m := kwargs @env0:at: 'month' ifAbsent: [m].
 		d := kwargs @env0:at: 'day' ifAbsent: [d]].
 	^ self @env0:___fromFields___: y _: m _: d
+%
+
+category: 'Grail-Instantiation'
+method: PyDate
+___new__: positional kw: kwargs
+	"Python-level `date.__new__(cls, year, month, day)`, reached via
+	object >> ___allocateInstance___:kw: when a PYTHON SUBCLASS of date
+	is instantiated (``class A(date): ...``; ``A(y, m, d)``).  Direct
+	construction (``date(y, m, d)``) instead goes through the class-side
+	Grail-Callable ``value:value:`` above -- but ClassDefAst synthesizes a
+	FRESH ``value:value:`` on every Python-defined subclass (see
+	Object.gs's ``value:value:`` comment), which shadows date's own and
+	routes through the allocate-then-__init__ protocol instead.  Without
+	this method, that protocol falls back to plain ``self new`` with no
+	field population, leaving a subclass instance's _year/_month/_day
+	nil (test_repr_subclass, test_format's derived-class checks).  Called
+	non-virtually with the actual class as receiver (self), matching a
+	real ``def __new__(cls, ...)`` -- mirrors ___fromFields___:_:_:.
+
+	EXCEPT: a mixed-in Enum (``class E(date, Enum): def __new__(cls, ...):
+	return super().__new__(cls, ...)'') reaches this SAME selector via
+	super()'s MRO walk (Enum's classmethod of the same name lives
+	further down the registered MRO, past date) -- Grail's super()
+	picks the nearest class defining the selector by position, unlike
+	CPython's EnumType, which installs its own __new__ directly onto
+	the mixed-in class so it's found FIRST regardless of mixin order.
+	Defer to Enum's guard (test_enum's test_bad_new_super) whenever this
+	class is a mid-construction enum member, rather than actually
+	allocating a date -- keeps the fix local instead of touching Enum's
+	class-creation machinery."
+
+	| y m d inst |
+	(Enum ___grailBuildingSet @env0:includes: self) ifTrue: [
+		^ TypeError @env1:___signal___:
+			'do not use `super().__new__; call the appropriate __new__ directly'].
+	y := positional @env0:at: 1 ifAbsent: [nil].
+	m := positional @env0:at: 2 ifAbsent: [nil].
+	d := positional @env0:at: 3 ifAbsent: [nil].
+	kwargs @env0:isNil ifFalse: [
+		y := kwargs @env0:at: 'year' ifAbsent: [y].
+		m := kwargs @env0:at: 'month' ifAbsent: [m].
+		d := kwargs @env0:at: 'day' ifAbsent: [d]].
+	inst := self @env0:new.
+	inst @env0:_year: y _month: m _day: d.
+	^ inst
 %
 
 category: 'Grail-Initialization'
@@ -1883,7 +2333,17 @@ __str__
 category: 'Grail-Conversion'
 method: PyDate
 __repr__
-	^ 'datetime.date(' @env0:,
+	"Bare subclass names in the repr (gh-107773): only the real datetime
+	module's own ``date'' gets the ``datetime.'' prefix -- a Python
+	subclass's synthesized __module__ is its OWN defining module, not
+	the literal string 'datetime', so it prints bare (matches CPython's
+	_pydatetime._get_class_module; see test_repr_subclass)."
+
+	| prefix |
+	prefix := (self @env0:class __module__) @env0:= 'datetime'
+		ifTrue: ['datetime.']
+		ifFalse: [''].
+	^ prefix @env0:, (self @env0:class __qualname__) @env0:, '(' @env0:,
 		(self @env0:dynamicInstVarAt: #_year) @env0:printString @env0:, ', ' @env0:,
 		(self @env0:dynamicInstVarAt: #_month) @env0:printString @env0:, ', ' @env0:,
 		(self @env0:dynamicInstVarAt: #_day) @env0:printString @env0:, ')'
@@ -1940,9 +2400,21 @@ timetuple
 category: 'Grail-Conversion'
 method: PyDate
 strftime: format
-	"Delegate to the time module's formatter with a midnight struct_time."
+	"Delegate to the time module's formatter with a midnight struct_time.
+	%z/%Z/%:z are intercepted first: a date (always naive -- no tzinfo
+	concept at all) formats them as empty, matching CPython's real
+	datetime.strftime (which special-cases these BEFORE the C library
+	call for exactly this naive/aware distinction -- the generic `time`
+	module formatter doesn't know about tzinfo and mustn't guess 'UTC')."
 
-	^ time instance strftime: format _: self timetuple
+	| pre |
+	(format @env0:isKindOf: CharacterCollection) ifFalse: [
+		^ TypeError @env1:___signal___: 'strftime() argument must be str, not '
+			@env0:, format @env0:class __name__].
+	pre := format @env0:copyReplaceAll: '%:z' with: ''.
+	pre := pre @env0:copyReplaceAll: '%z' with: ''.
+	pre := pre @env0:copyReplaceAll: '%Z' with: ''.
+	^ time instance strftime: pre _: self timetuple
 %
 
 category: 'Grail-Conversion'
@@ -2007,15 +2479,41 @@ isocalendar
 		(today @env0:>= (PyDate ___isoweek1monday___: (year @env0:+ 1))) ifTrue: [
 			year := year @env0:+ 1.
 			week := 0]].
-	^ tuple @env0:withAll: { year. week @env0:+ 1. day @env0:+ 1 }
+	^ IsoCalendarDate @env0:withAll: { year. week @env0:+ 1. day @env0:+ 1 }
 %
 
 category: 'Grail-Initialization'
 classmethod: PyDate
 fromisocalendar: year _: week _: day
-	"Inverse of isocalendar()."
+	"Inverse of isocalendar().  Ported validation verbatim from
+	_pydatetime._isoweek_to_gregorian: real CPython gets its TypeErrors
+	'for free' from comparing an int bound to a non-int (str/float/None)
+	argument; Smalltalk's < / > raise an uncatchable low-level error
+	instead for a class mismatch, so check types explicitly first."
 
-	| ord |
+	| ord outOfRange firstWeekday isLeap |
+	(year @env0:isKindOf: Integer) ifFalse: [
+		^ TypeError @env1:___signal___: 'ISO year must be an integer'].
+	(week @env0:isKindOf: Integer) ifFalse: [
+		^ TypeError @env1:___signal___: 'ISO week must be an integer'].
+	(day @env0:isKindOf: Integer) ifFalse: [
+		^ TypeError @env1:___signal___: 'ISO weekday must be an integer'].
+	(year @env0:< 1 or: [year @env0:> 9999]) ifTrue: [
+		^ ValueError @env1:___signal___:
+			'year must be in 1..9999, not ' @env0:, year @env0:printString].
+	((week @env0:> 0) @env0:and: [week @env0:< 53]) ifFalse: [
+		outOfRange := true.
+		(week @env0:= 53) ifTrue: [
+			firstWeekday := (PyDate @env0:___fromFields___: year _: 1 _: 1) toordinal @env0:\\ 7.
+			isLeap := (year @env0:\\ 4 @env0:= 0)
+				@env0:and: [(year @env0:\\ 100 @env0:~= 0) @env0:or: [year @env0:\\ 400 @env0:= 0]].
+			((firstWeekday @env0:= 4) @env0:or: [(firstWeekday @env0:= 3) @env0:and: [isLeap]])
+				ifTrue: [outOfRange := false]].
+		outOfRange ifTrue: [
+			^ ValueError @env1:___signal___: 'Invalid week: ' @env0:, week @env0:printString]].
+	((day @env0:> 0) @env0:and: [day @env0:< 8]) ifFalse: [
+		^ ValueError @env1:___signal___:
+			'Invalid weekday: ' @env0:, day @env0:printString @env0:, ' (range is [1, 7])'].
 	ord := (PyDate ___isoweek1monday___: year)
 		@env0:+ (7 @env0:* (week @env0:- 1))
 		@env0:+ (day @env0:- 1).
@@ -2067,14 +2565,19 @@ _replace: positional kw: kwargs
 category: 'Grail-Arithmetic'
 method: PyDate
 __add__: other
-	"date + timedelta → date (days component only)."
+	"date + timedelta → date (days component only).  A result outside
+	[MINYEAR, MAXYEAR] is an OverflowError (CPython), not the ValueError
+	fromordinal/field construction raises for an out-of-range year --
+	catch and re-signal (test_overflow: date.min - timedelta.resolution)."
 
 	| days newOrdinal |
 	(other isKindOf: PyTimedelta) ifFalse: [
 		TypeError ___signal___: 'unsupported operand type(s) for +: ''date'' and non-timedelta'].
 	days := other days.
 	newOrdinal := (self toordinal) @env0:+ days.
-	^ PyDate fromordinal: newOrdinal
+	^ [PyDate fromordinal: newOrdinal]
+		@env0:on: ValueError
+		do: [:ex | OverflowError @env1:___signal___: 'date value out of range']
 %
 
 category: 'Grail-Arithmetic'
@@ -2182,15 +2685,25 @@ category: 'Grail-Introspection'
 classmethod: PyDate
 __qualname__
 	"CPython-visible name (datetime.date), so pickle's _find_global
-	resolves getattr(datetime, 'date') is PyDate."
+	resolves getattr(datetime, 'date') is PyDate.  Only for PyDate ITSELF
+	-- a Python subclass (``class SubclassDate(date):``) must see its OWN
+	name here (test_repr_subclass), so fall back to the generic
+	object-level __qualname__ (self name asString) for anything else."
 
-	^ 'date'
+	^ self @env0:== PyDate
+		ifTrue: ['date']
+		ifFalse: [super __qualname__]
 %
 
 category: 'Grail-Introspection'
 classmethod: PyDate
 __name__
-	^ 'date'
+	"See __qualname__ above: only PyDate itself is 'date' -- a subclass
+	must see its own name."
+
+	^ self @env0:== PyDate
+		ifTrue: ['date']
+		ifFalse: [super __name__]
 %
 
 category: 'Grail-Class Attrs'
@@ -2661,13 +3174,17 @@ __module__
 category: 'Grail-Introspection'
 classmethod: PyTime
 __qualname__
-	^ 'time'
+	^ self @env0:== PyTime
+		ifTrue: ['time']
+		ifFalse: [super __qualname__]
 %
 
 category: 'Grail-Introspection'
 classmethod: PyTime
 __name__
-	^ 'time'
+	^ self @env0:== PyTime
+		ifTrue: ['time']
+		ifFalse: [super __name__]
 %
 
 category: 'Grail-Class Attrs'
@@ -2762,11 +3279,6 @@ ___pythonValueAttrs___
 %
 
 set compile_env: 1
-
-category: 'Grail-Initialization'
-method: datetime
-initialize
-%
 
 category: 'Grail-Accessors'
 method: datetime

@@ -1741,8 +1741,8 @@ divmod: x _: y
 				'LargeNegativeInteger') @env0:includes: n) ifTrue: ['int'] ifFalse: [n]].
 		^ TypeError ___signal___: ('unsupported operand type(s) for divmod(): '''
 			@env0:, (tn @env0:value: x) @env0:, ''' and ''' @env0:, (tn @env0:value: y) @env0:, '''')].
-	quotient := x __floordiv__: y.
-	remainder := x __mod__: y.
+	quotient := x ___binOpFloorDiv___: y.
+	remainder := x ___binOpMod___: y.
 	^ tuple @env0:withAll: {quotient. remainder}
 %
 
