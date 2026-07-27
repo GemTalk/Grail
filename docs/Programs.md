@@ -6,7 +6,7 @@
 There is a [Python Benchmark Suite](https://github.com/python/performance) that "is intended to be an authoritative source of benchmarks for all Python implementations." This seems like a good target for our work.
 
 ### Regression Tests
-Python comes with a [regression test package](https://docs.python.org/3/library/test.html) that can be launched with `python3 -m test`. This generates a number of errors and even some crashes on macOS, so before trying to get it to run we would need to understand more about what it does and how it is expected to work. Following is the output from a CPython 3.14.4 test run on macOS 26.5.2:
+Python comes with a [regression test package](https://docs.python.org/3/library/test.html) that can be launched with `python3 -m test`. Grail now runs vendored modules from this package via its own harness — `scripts/run_cpython_suite.sh` drives the manifest in `scripts/cpython_suite_manifest.txt` (one topaz session per module) and writes results to [CPython_Suite_Scoreboard.md](CPython_Suite_Scoreboard.md); stock `python3 -m test` itself cannot run because libregrtest's subprocess-worker model needs child processes, which Grail stubs out. For reference, `python3 -m test` generates a number of errors and even some crashes even on stock CPython. Following is the output from a CPython 3.14.4 test run on macOS 26.5.2:
 
 ```
 == Tests result: FAILURE ==

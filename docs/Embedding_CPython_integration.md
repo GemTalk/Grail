@@ -1,6 +1,6 @@
 # Embed CPython inside GemStone
 
-This branch embeds CPython 3.14 inside a Gem process so Python becomes peer of Smalltalk. We then have a long-lived Python interpreter that shares the object database, participates in commit/abort, and exposes a persistent REPL.
+Grail embeds CPython 3.14 inside a Gem process so Python becomes peer of Smalltalk. We then have a long-lived Python interpreter that shares the object database, participates in commit/abort, and exposes a persistent REPL.
 
 To do this, `libpython3.14.so` is `dlopen`'d directly into the Gem. As we're running in the same process, we have no IPC and a single address space.
 

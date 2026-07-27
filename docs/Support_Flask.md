@@ -107,7 +107,9 @@ Pieces landed during the push:
 * **Generators** — full PEP 255 + PEP 380 protocol (`yield`,
   `__iter__`, `__next__`, `send`, `throw`, `close`) via a forked
   `GsProcess` synchronised through a Semaphore pair.  `yield from`
-  delegation is still a stub.
+  delegation was still a stub at this stage; it has since been
+  implemented via the `__iter__`/`__next__` + `StopIteration`
+  protocol (see M6, commit 6ebabe1).
 * **Unified attribute call** — `obj.X()` routes through
   `___pyAttrLoad___` + `@env1:value:value:` so classes, BoundMethods,
   and ExecBlocks all resolve through the same call protocol.  The
@@ -182,9 +184,10 @@ Existing stub modules that need extending later: `typing`,
   `time.strftime`.
 * `traceback` — **done.**  3.10+ single-exception form,
   `format_list` / `walk_tb` / `TracebackException`.
-* `weakref` — strong-ref stub; deferred.  See [Weakref.md] for
-  the GemStone ephemeron mechanism that could back a real
-  implementation and the four reasons we're parked on the stub.
+* `weakref` — **done.**  Real weak references backed by GemStone
+  ephemerons (commit 23e391f2 replaced the old strong-ref stub;
+  Smalltalk layer in `src/weakref/WeakReference.gs`, Python layer
+  in `src/python/stdlib/weakref.py`).  See [Weakref.md].
 
 [Weakref.md]: Weakref.md
 
@@ -199,7 +202,9 @@ Existing stub modules that need extending later: `typing`,
   the synthesized dunders are reached through the
   `object>>__repr__`/`__eq__`/`__ne__` dynamic-dunder probe).
   Not yet: `frozen` enforcement, `order=True` comparisons,
-  `make_dataclass` (no `type(name, bases, ns)`), cross-class field
+  `make_dataclass` (still raises `NotImplementedError` in
+  `dataclasses.py`, though the 3-arg `type(name, bases, ns)` it
+  lacked has since landed — see M7), cross-class field
   merging for dataclass inheritance, and `@dataclass` recognised only
   by name (not via an import alias).
 
@@ -271,9 +276,8 @@ Existing stub modules that need extending later: `typing`,
   backed, wrapping GemStone DateTime) and `json` (pure-Smalltalk
   recursive descent) went the Smalltalk route — faster and fewer
   bugs.  `collections`, `logging`, `traceback` went the port route
-  for closer CPython parity.  `weakref` would need either a
-  Smalltalk-backed ephemeron implementation or stay a port-side
-  stub; see [Weakref.md] for the trade-offs.
+  for closer CPython parity.  `weakref` ultimately went the
+  Smalltalk-backed ephemeron route; see [Weakref.md].
 - **MarkupSafe `_speedups`** — stays off.  Pure-Python fallback is
   fine and the C extension uses CPython internals we don't shim.
 - **`asyncio` / `pickle` / `zlib`** — none required for the minimum
@@ -386,7 +390,9 @@ Existing stub modules that need extending later: `typing`,
 
   Known remaining gaps (none blocking Flask hello-world):
 
-  * `|wordwrap` needs the `textwrap` stdlib stub.
+  * `|wordwrap` needed the `textwrap` stdlib module; `textwrap` has
+    since landed (`src/python/stdlib/textwrap.py`, with the full
+    CPython `test_textwrap` passing).
   * `{% include %}` needs an environment loader (`DictLoader` etc.
     import but aren't wired up to template lookup yet).
   * `|map(attribute=...)` returns a `PythonGenerator` whose
@@ -402,9 +408,9 @@ Existing stub modules that need extending later: `typing`,
 - **M5 — Tier-2 stdlib in place.**  Done across the `datetime`,
   `json`, `io`, `collections`, `logging`, `traceback` branches
   (each squash-merged to main).  Suite at 2237 / 2237 after the
-  last merge.  `weakref` parked at the strong-ref stub — see
-  [Weakref.md] for the ephemeron-based path forward and why
-  it's deferred.
+  last merge.  `weakref` was parked at the strong-ref stub at the
+  time; the real ephemeron-backed implementation has since replaced
+  it — see [Weakref.md].
 - **M6 — `werkzeug.wrappers.Request/Response` round-trip a WSGI
   environ.**  **COMPLETE (2026-05-30).**  The full Request/Response
   round-trip is green and registered.  Pre-requisite stdlib gaps and
@@ -580,10 +586,11 @@ Existing stub modules that need extending later: `typing`,
     (`dict.update([E], **F)`).  Tests: `UnboundMethodTestCase` (varargs/fixed
     parent init + a non-`__init__` unbound call) and jinja2 render in
     `FlaskScaffoldingTestCase >> testFlaskRoutingAndErrorPath`.
-    *Note:* `super().__init__()` (the `Super` proxy) still has the same
-    inherited-`object.__init__` shadowing bug in its own resolver — flask uses
-    the explicit form, so it's unblocked, but `Super.gs` could borrow this
-    closest-class resolver in a follow-up.
+    *Note:* `super().__init__()` (the `Super` proxy) had the same
+    inherited-`object.__init__` shadowing bug in its own resolver at the
+    time — flask uses the explicit form, so it was unblocked.  `Super.gs`
+    has since adopted the closest-class walk that probes both arity forms
+    at each class (`Super>>_lookupMethodFirstOf:`), fixing it.
 
   *Working:* `import flask` succeeds; `app = Flask(__name__)` constructs;
   `@app.route('/')` registers a view (the decorator + rule machinery
@@ -731,16 +738,19 @@ Existing stub modules that need extending later: `typing`,
   SecureCookieSession redeclares `accessed`/`modified` on its own body,
   so the hello-world path is unaffected.
 
-  *Known general gaps surfaced (not yet fixed):* tuple-unpacking drives
-  `__getitem__` rather than the iterator protocol, so a class with only
-  `__iter__` won't unpack; `PythonInstance >> doesNotUnderstand:` treats
+  *Known general gaps surfaced (not yet fixed):*
+  `PythonInstance >> doesNotUnderstand:` treats
   any unknown `name:` (including dunders like `__getitem__:`) as an
   attribute *setter* that returns the value, masking real errors; the
   closure form of keyword-only params still leaks into `**kwargs`; and
   werkzeug's full WSGI error path turns an app exception into an
   `UncontinuableError` ("exception already signaled") that hides the
   underlying error — drive dispatch via `app.full_dispatch_request()`
-  (a request context) to see the real exception.
+  (a request context) to see the real exception.  (A gap listed here
+  originally — tuple-unpacking driving `__getitem__` only, so a class
+  with just `__iter__` wouldn't unpack — has since been fixed:
+  `Object>>___unpackSequence___` materialises a non-indexable iterable
+  in iteration order before the index-based unpack.)
 - **M8 — `flask run` serves a real HTTP request.**  **Thin path DONE
   (2026-05-31).**  A Flask hello-world now answers a real HTTP/1.1 `GET`
   over a TCP socket with `200 OK` + `Hello, Grail!` — verified end to end
@@ -794,9 +804,11 @@ Existing stub modules that need extending later: `typing`,
     (makefile / select / selectors / socketserver / http.server) +
     `testFlaskHelloWorldOverRealSocket`.
 
-  *Still deferred:* the auto-reloader (needs `subprocess` + file watching);
-  HTTPS / `ssl_context`; HTTP keep-alive (every response sends `Connection:
-  close`); chunked transfer-encoding; `email`-based header parsing.
+  *Since landed (commit 607383ac):* HTTPS / `ssl_context`
+  (`testFlaskServeHttps`), persistent HTTP/1.1 keep-alive connections,
+  and chunked transfer-encoding.  *Still deferred:* the auto-reloader
+  (needs `subprocess` + file watching); `email`-based header parsing
+  (still a line split in `http/server.py`).
   `threaded=True` uses `ThreadingMixIn` but GsProcess threads are
   cooperative, not parallel.  `signal` not needed; `weakref` was always real.
 

@@ -25,6 +25,7 @@
 |  ✅  | `erf`          | Error function.                                    |
 |  ✅  | `erfc`         | Complementary error function.                      |
 |  ✅  | `exp`          | e raised to the given power.                       |
+|  ✅  | `exp2`         | 2 raised to the given power.                       |
 |  ✅  | `expm1`        | exp(x) - 1 with improved precision for small x.    |
 |  ✅  | `fabs`         | Absolute value (float).                            |
 |  ✅  | `factorial`    | Factorial as integer.                              |

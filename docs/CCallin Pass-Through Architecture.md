@@ -1,5 +1,15 @@
 # CCallin Pass-Through Architecture for the Shim
 
+> **Status: historical design record — not the implemented architecture.**
+> The shipped shim routes the "Category B" APIs below through a GCI *user
+> action* library instead of CCallins: the C side calls
+> `GciPerform(server, "PyXxx_Yyy:", ...)` on the `CPythonShim` server
+> object via the generic `shimCall` user action (`src/c/shim/cpython.cc`,
+> `src/smalltalk/Python/CPythonShim.gs`).  The handle table,
+> `PY_SHIM_GS_OBJECT` kind tag, and `PyShim_RegisterCallbacks` proposed
+> here were never built; see `docs/Shim_Object_Model.md` for the object
+> model actually in use.
+
 ## How GemStone CCallins Work
 
 A `CCallin` defines a callback signature — a Smalltalk block that C code can invoke as a function pointer:

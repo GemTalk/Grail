@@ -2,6 +2,15 @@
 
 This checklist helps ensure all `perform:env:0` expressions and conditionals have proper parentheses.
 
+> **Syntax update.** The examples and search patterns below predate commit
+> `c2d60aad` (2026-04-06), which replaced literal
+> `perform: #sel env: N withArguments: {…}` source syntax with the
+> `@env0:`/`@env1:` send markers (e.g. `x perform: #> env: 0 withArguments:
+> {y}` is now written `x @env0:> y`).  The parenthesization rules are
+> unchanged — an `@envN:` send has the precedence of its underlying selector
+> (unary / binary / keyword), so e.g. `(idx @env0:< 0) ifTrue: […]` still
+> needs the parentheses.
+
 ## Quick Reference Rules
 
 1. **`perform:env:0` before `ifTrue:`/`ifFalse:`**: Always wrap in parentheses
@@ -15,7 +24,7 @@ This checklist helps ensure all `perform:env:0` expressions and conditionals hav
 
 ```bash
 # Search for potential issues:
-grep -n "perform:.*env: 0.*ifTrue:\|perform:.*env: 0.*ifFalse:" smalltalk/classes/*.gs
+grep -n "perform:.*env: 0.*ifTrue:\|perform:.*env: 0.*ifFalse:" src/smalltalk/Python/*.gs
 ```
 
 **What to look for:**
@@ -28,7 +37,7 @@ grep -n "perform:.*env: 0.*ifTrue:\|perform:.*env: 0.*ifFalse:" smalltalk/classe
 
 ```bash
 # Search for binary operators that might need perform:env:0:
-grep -n "[^)] > \|[^)] < \|[^)] >= \|[^)] <=" smalltalk/classes/*.gs
+grep -n "[^)] > \|[^)] < \|[^)] >= \|[^)] <=" src/smalltalk/Python/*.gs
 ```
 
 **What to look for:**
@@ -41,7 +50,7 @@ grep -n "[^)] > \|[^)] < \|[^)] >= \|[^)] <=" smalltalk/classes/*.gs
 
 ```bash
 # Search for chained perform:env:0:
-grep -n ") perform:.*env: 0.*ifTrue:\|) perform:.*env: 0.*ifFalse:" smalltalk/classes/*.gs
+grep -n ") perform:.*env: 0.*ifTrue:\|) perform:.*env: 0.*ifFalse:" src/smalltalk/Python/*.gs
 ```
 
 **What to look for:**
@@ -54,7 +63,7 @@ grep -n ") perform:.*env: 0.*ifTrue:\|) perform:.*env: 0.*ifFalse:" smalltalk/cl
 
 ```bash
 # Search for = comparisons that might need perform:env:0:
-grep -n "perform: #=" smalltalk/classes/*.gs
+grep -n "perform: #=" src/smalltalk/Python/*.gs
 ```
 
 **What to look for:**
@@ -96,19 +105,21 @@ Before committing code, verify:
 
 ## Automated Checking Script
 
-You can create a simple script to check for common patterns:
+A fuller version of this script exists at `scripts/check_parentheses.sh`
+(note: its grep paths still reference the pre-reorg `smalltalk/classes/`
+layout — the sources now live under `src/smalltalk/`):
 
 ```bash
 #!/bin/bash
 # check_parentheses.sh
 
 echo "Checking for perform:env:0 before conditionals without parentheses..."
-grep -n "perform:.*env: 0.*ifTrue:\|perform:.*env: 0.*ifFalse:" smalltalk/classes/*.gs | \
+grep -n "perform:.*env: 0.*ifTrue:\|perform:.*env: 0.*ifFalse:" src/smalltalk/Python/*.gs | \
   grep -v "^.*(.*perform:" && echo "⚠️  Found potential issues!"
 
 echo ""
 echo "Checking for binary operators that might need perform:env:0..."
-grep -n "[^)] > \|[^)] < \|[^)] >= \|[^)] <=" smalltalk/classes/*.gs | \
+grep -n "[^)] > \|[^)] < \|[^)] >= \|[^)] <=" src/smalltalk/Python/*.gs | \
   grep -v "== " && echo "⚠️  Found potential issues!"
 ```
 

@@ -53,12 +53,16 @@ These break programs that look ordinary in CPython.
 Real Python class semantics that the current Smalltalk-class translation
 doesn't preserve.
 
-- [ ] **No multiple inheritance** — `class C(A, B):` picks the first
-  base only.  Blocks `werkzeug.utils.cached_property(property,
-  t.Generic[_T])` and the `BadRequestKeyError(BadRequest, KeyError)`
-  pattern in `werkzeug.exceptions` (worked around by inheriting from
-  `KeyError` alone in the shim).  Fix would need C3 MRO + per-method
-  resolution walking multiple parent chains.
+- [~] **Multiple inheritance** — real C3 MRO landed (commits 5cd833ce
+  + 12e92eaa): `class C(A, B):` records its true bases, and `__mro__` /
+  `__bases__` / `isinstance` / `issubclass` / MRO-positional `super()`
+  all consult the C3 linearization, with secondary bases' methods
+  merged in (`importlib >> ___mergeSecondaryBases___:bases:`; see
+  `MultipleInheritanceTestCase`).  Remaining: dispatch is still a
+  copy-down merge (approximate precedence) rather than a per-send MRO
+  walk, and the werkzeug shims written against the old first-base-only
+  behaviour (`cached_property`, `BadRequestKeyError` — see the
+  Werkzeug section below) have not been reverted.
 
 - [x] **Single inheritance** — works, including cross-module parents
   and `super().__init__` chains (verified by `TwilioShapeTestCase`:
@@ -77,13 +81,18 @@ doesn't preserve.
   backstop — added for twilio's ``raise self.exception(...)``).
   Remaining: `Cls.cls_method(...)` through the CallAst bare-name
   class-call fast path emits `__new__`-style dispatch and misses the
-  metaclass method; @staticmethod still unverified.
+  metaclass method.  (@staticmethod has since landed: ClassDefAst
+  compiles each `@staticmethod` onto the metaclass with no implicit
+  first arg, exercised by `tests/python/grail_repr_mutate.py` and
+  `tests/python/smalltalk_forwarder.py`.)
 
-- [ ] **No dynamic attribute access** — `setattr()` / `getattr()` /
-  `delattr()` don't work on user-class instances.  Attributes are
-  instVars, so dynamic access would need reflection (`instVarAt:put:`
-  via name lookup) plus a fallback for names that don't have an instVar
-  slot.
+- [x] **Dynamic attribute access** — RESOLVED (commit 7e1502e5, the
+  dynamic-instVar storage rewrite).  `setattr()` / `getattr()` /
+  `delattr()` work on user-class instances: attributes now live in
+  per-instance `dynamicInstVarAt:` storage rather than fixed instVar
+  slots, `delattr` removes via `removeDynamicInstVar:`, and user
+  `__setattr__` / `__getattr__` / `__delattr__` overrides are honored.
+  See `DynamicInstanceAttrsTestCase` + `AttributeProtocolTestCase`.
 
 ## Twilio Trajectory
 
@@ -111,12 +120,13 @@ all work.  Outstanding:
   `yield from` expression's result.  Add targeted tests before
   claiming complete.
 
-- [ ] **Cross-process exception forwarding** — when the body raises
-  an unhandled exception inside the forked producer, the consumer
-  sees `done := true` and raises StopIteration.  The original
-  exception is lost (logged by GemStone's process-level handler).
-  Two earlier attempts at re-raising in the consumer broke other
-  cases — needs careful design.
+- [x] **Cross-process exception forwarding** — RESOLVED (commit
+  5b75fbbe).  An exception raised inside the forked producer is now
+  stowed by `_forkBody` (`escapedException`) and re-signaled on the
+  CONSUMER process when it next advances the generator, matching
+  CPython (the exception propagates out of `next()` / `send` /
+  `throw`).  Regressed by test_heapq's
+  `test_merge_does_not_suppress_index_error`.
 
 ## Unbound-Name Detection — Remaining Edges
 
@@ -133,15 +143,10 @@ AttributeError check are in place.  Edges left:
   on `NameAst` that ignores ctx and is emitted from any context that
   needs a forced load.
 
-- [ ] **Lambda parameters are not declared** — `LambdaAst` does not
-  call `declareVariable:` on its parameters, so `isVariableIsDeclared:`
-  returns false for them and the load-site check is not emitted.
-  Lambda parameters are always bound by the caller, so there is no
-  false negative in practice — but a free variable read inside a
-  lambda that resolves to an unbound enclosing-scope local would slip
-  past the check (the DNU backstop still catches it).  Fix: add
-  `declareVariable:` calls during lambda parameter parsing, mirroring
-  `FunctionDefAst`.
+- [x] **Lambda parameters are not declared** — RESOLVED (commit
+  5e818795): `PythonParser >> parseLambda` now calls
+  `declareVariable:` on every parameter shape (posonly / args /
+  kwonly / vararg / kwarg), mirroring the function-def parse.
 
 ## Bridge / Boundary nil Leaks
 
@@ -160,7 +165,7 @@ env-1 audit.  Most are documented deviations rather than fixable bugs.
   user-written Smalltalk extensions appear.
 
 - [ ] **Kwargs `ifAbsent: [nil]` sentinels in varargs handlers** —
-  `random.gs`, `statistics.gs`, `os.gs`, `builtins.gs`.  The local nil
+  `random.gs`, `statistics.gs`, `builtins.gs`.  The local nil
   is then compared with `a == nil or: [a == None]` to detect "argument
   not given".  Intentional (distinguishes absent from explicit `None`)
   and stays as nil; documented here so a future blanket nil-sweep
@@ -174,12 +179,13 @@ Each has a tracked root cause elsewhere in this file or in
 ``docs/Support_Flask.md``.
 
 - [ ] **`werkzeug/utils.py`** — hand-rolled shim, NOT upstream source.
-  Upstream's ``cached_property(property, t.Generic[_T])`` blocks on
-  multi-inheritance (see Class System Limitations above).  Shim
-  exposes the same public surface (cached_property, redirect,
-  header_property, environ_property, import_string, find_modules,
-  get_content_type) with reduced semantics.  Replace once multi-
-  inheritance lands.
+  Upstream's ``cached_property(property, t.Generic[_T])`` blocked on
+  multi-inheritance when the shim was written.  Shim exposes the same
+  public surface (cached_property, redirect, header_property,
+  environ_property, import_string, find_modules, get_content_type)
+  with reduced semantics.  Multi-inheritance has since landed (see
+  Class System Limitations above); the shim just hasn't been replaced
+  yet.
 
 - [ ] **`werkzeug/exceptions.py`** — hand-rolled shim, NOT upstream.
   Upstream runs ``_find_exceptions()`` at module-init time which
@@ -191,10 +197,11 @@ Each has a tracked root cause elsewhere in this file or in
   globals()/values() / issubclass introspection AND multi-inheritance.
 
 - [ ] **`werkzeug/urls.py:47-51`** — one commented-out line:
-  ``_unquote_partial.__name__ = f"_unquote_{name}"``.  Blocked on
-  ExecBlock not supporting dynamic instVar storage (so ``fn.__name__
-  = ...`` raises ImproperOperation).  Low impact — only loses a
-  debug tag.
+  ``_unquote_partial.__name__ = f"_unquote_{name}"``.  The original
+  blocker (ExecBlock not supporting dynamic attribute storage) has
+  since landed (``ExecBlockAttrs`` side-table + ``ExecBlock >>
+  __setattr__``); the commented-out line just hasn't been restored.
+  Low impact — only loses a debug tag.
 
 - [ ] **`werkzeug/wsgi.py:430`** — `LimitedStream` does not inherit
   from `io.RawIOBase`.  Blocked on Grail's `io` module shimming
@@ -209,9 +216,12 @@ Each has a tracked root cause elsewhere in this file or in
 
 ## Flask Source-Drop — Remaining Blockers
 
-Flask 3.1 source is dropped under ``src/python/stdlib/flask/`` and
-``import flask`` succeeds end-to-end.  Outstanding work to get
-``Flask(__name__).test_client().get('/')`` working:
+Flask 3.1 source is dropped under ``src/python/stdlib/flask/``,
+``import flask`` succeeds end-to-end, and
+``Flask(__name__).test_client().get('/')`` now works (M7, commit
+9f87ec04 — exercised by
+``tests/python/pkg_scaffolding/use_flask_routing.py``).  Shims /
+in-place patches still outstanding:
 
 - [ ] **`flask/cli.py`** — hand-rolled minimal shim, NOT upstream.
   Upstream applies ``@click.command'' / ``@click.option'' decorator
@@ -244,10 +254,11 @@ Flask 3.1 source is dropped under ``src/python/stdlib/flask/`` and
 - [ ] **`werkzeug/datastructures/structures.py:961`** — ImmutableDict
   base-order flipped + explicit ``__init__'' / ``__setitem__'' /
   ``__delitem__''.  Upstream is ``ImmutableDict(ImmutableDictMixin[K,
-  V], dict[K, V])''; Grail's class machinery picks the first base
-  only, so dict has to be first.  The mixin's TypeError-on-setitem
-  semantics are then re-asserted via explicit overrides on the
-  subclass.  Resolve when multi-inheritance lands.
+  V], dict[K, V])''; when this was patched Grail's class machinery
+  picked the first base only, so dict had to be first.  The mixin's
+  TypeError-on-setitem semantics are then re-asserted via explicit
+  overrides on the subclass.  Multi-inheritance has since landed;
+  the patch just hasn't been reverted.
 
 - [x] **`Flask(name)` constructor trips ``Boolean does not understand
   value:value:''**.  Fixed: ``___pyAttrLoad___'' on a module receiver
