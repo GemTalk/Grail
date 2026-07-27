@@ -1296,9 +1296,13 @@ _datetime: positional kw: kwargs
 	microsecond, tzinfo."
 
 	| year month day hour minute second micro tz fold inst |
-	year := positional @env0:at: 1.
-	month := positional @env0:at: 2.
-	day := positional @env0:at: 3.
+	"year/month/day are ordinary parameters in CPython, so they may arrive
+	as keywords (``datetime(2010, 10, day=10)'').  Reading them with a
+	bare ``at:'' made any such call die with an out-of-bounds Smalltalk
+	OffsetError instead (test_repr_subclass)."
+	year := positional @env0:at: 1 ifAbsent: [nil].
+	month := positional @env0:at: 2 ifAbsent: [nil].
+	day := positional @env0:at: 3 ifAbsent: [nil].
 	hour := positional @env0:size @env0:>= 4 ifTrue: [positional @env0:at: 4] ifFalse: [0].
 	minute := positional @env0:size @env0:>= 5 ifTrue: [positional @env0:at: 5] ifFalse: [0].
 	second := positional @env0:size @env0:>= 6 ifTrue: [positional @env0:at: 6] ifFalse: [0].
@@ -1306,6 +1310,9 @@ _datetime: positional kw: kwargs
 	tz := positional @env0:size @env0:>= 8 ifTrue: [positional @env0:at: 8] ifFalse: [nil].
 	fold := 0.
 	kwargs @env0:isNil ifFalse: [
+		year := kwargs @env0:at: 'year' ifAbsent: [year].
+		month := kwargs @env0:at: 'month' ifAbsent: [month].
+		day := kwargs @env0:at: 'day' ifAbsent: [day].
 		hour := kwargs @env0:at: 'hour' ifAbsent: [hour].
 		minute := kwargs @env0:at: 'minute' ifAbsent: [minute].
 		second := kwargs @env0:at: 'second' ifAbsent: [second].
@@ -1317,6 +1324,28 @@ _datetime: positional kw: kwargs
 	inst := self @env0:___fromFields___: year _: month _: day _: hour _: minute _: second _: micro _: tz.
 	fold @env0:= 0 ifFalse: [inst @env0:dynamicInstVarAt: #_fold put: fold].
 	^ inst
+%
+
+category: 'Grail-Instantiation'
+method: PyDateTime
+___new__: positional kw: kwargs
+	"Python-level `datetime.__new__(cls, ...)`, reached via
+	object >> ___allocateInstance___:kw: when a PYTHON SUBCLASS of
+	datetime is instantiated (``class A(datetime): ...``).  Direct
+	construction goes through the class-side Grail-Callable
+	``value:value:'' instead -- but ClassDefAst synthesizes a FRESH
+	``value:value:'' on every Python-defined subclass, which shadows
+	datetime's own and routes through the allocate-then-__init__
+	protocol.  Without this, a subclass instance's _year/_month/... stay
+	nil (test_repr_subclass, test_format).  Called non-virtually with the
+	actual class as receiver, so forwarding to the same varargs assembler
+	used by value:value: allocates via `self ___fromFields___:' and keeps
+	the subclass.  See PyDate>>___new__:kw: for the Enum-mixin rationale."
+
+	(Enum ___grailBuildingSet @env0:includes: self) ifTrue: [
+		^ TypeError @env1:___signal___:
+			'do not use `super().__new__; call the appropriate __new__ directly'].
+	^ self _datetime: positional kw: kwargs
 %
 
 category: 'Grail-Initialization'
@@ -1350,6 +1379,16 @@ now: tz
 
 category: 'Grail-Initialization'
 classmethod: PyDateTime
+today
+	"datetime.today() — CPython defines it as exactly now() with no tz
+	(datetime IS-A date there, but it OVERRIDES date.today; Grail's
+	PyDateTime is a separate class, so it needs its own — test_today)."
+
+	^ self now: nil
+%
+
+category: 'Grail-Initialization'
+classmethod: PyDateTime
 utcnow
 	"utcnow() - naive UTC datetime (deprecated in CPython 3.12+
 	but still common in libraries like itsdangerous)."
@@ -1361,6 +1400,26 @@ category: 'Grail-Initialization'
 classmethod: PyDateTime
 fromtimestamp: ts
 	^ self fromtimestamp: ts _: nil
+%
+
+category: 'Grail-Initialization'
+classmethod: PyDateTime
+_fromtimestamp: positional kw: kwargs
+	"fromtimestamp(timestamp, tz=None) — varargs/keyword form.  CPython
+	names the first parameter ``timestamp'' (gh-85432), so
+	``fromtimestamp(timestamp=...)'' must bind
+	(test_fromtimestamp_keyword_arg)."
+
+	| ts tz |
+	ts := nil.
+	tz := nil.
+	positional @env0:isNil ifFalse: [
+		positional @env0:size @env0:>= 1 ifTrue: [ts := positional @env0:at: 1].
+		positional @env0:size @env0:>= 2 ifTrue: [tz := positional @env0:at: 2]].
+	kwargs @env0:isNil ifFalse: [
+		ts := kwargs @env0:at: 'timestamp' ifAbsent: [ts].
+		tz := kwargs @env0:at: 'tz' ifAbsent: [tz]].
+	^ self fromtimestamp: ts _: tz
 %
 
 category: 'Grail-Initialization'
@@ -1567,6 +1626,11 @@ astimezone: tz
 	datetime as UTC (offset 0), since it has no portable local zone."
 
 	| mytz myoffset utcWall |
+	"astimezone() with no argument converts to the local zone; Grail has
+	no portable local zone and documents wall clocks as UTC, so an
+	omitted/None tz means UTC (test_astimezone)."
+	tz == None ifTrue: [^ self astimezone: PyTimezone utc].
+	tz @env0:isNil ifTrue: [^ self astimezone: PyTimezone utc].
 	mytz := self @env0:dynamicInstVarAt: #_tzinfo.
 	(mytz @env0:notNil and: [mytz @env0:== tz]) ifTrue: [^ self].
 	myoffset := mytz @env0:isNil
@@ -1597,32 +1661,113 @@ timestamp
 	any round trip through __add__/__sub__'s timestamp+fromtimestamp
 	implementation for an aware datetime (test_issue23600)."
 
-	| epoch dt secs off |
-	epoch := DateTime
-		@env0:newGmtWithYear: 1970
-		month: 1
-		day: 1
-		hours: 0
-		minutes: 0
-		seconds: 0.
-	dt := DateTime
-		@env0:newGmtWithYear: (self @env0:dynamicInstVarAt: #_year)
-		month: (self @env0:dynamicInstVarAt: #_month)
-		day: (self @env0:dynamicInstVarAt: #_day)
-		hours: (self @env0:dynamicInstVarAt: #_hour)
-		minutes: (self @env0:dynamicInstVarAt: #_minute)
-		seconds: (self @env0:dynamicInstVarAt: #_second).
-	secs := (dt @env0:asSeconds @env0:- epoch @env0:asSeconds)
-		@env0:asFloat @env0:+ ((self @env0:dynamicInstVarAt: #_microsecond) @env0:asFloat @env0:/ 1000000.0).
+	| secs off |
+	secs := self ___naiveEpochSeconds___.
 	off := self utcoffset.
 	off @env0:== None ifTrue: [^ secs].
 	^ secs @env0:- (off total_seconds)
 %
 
+category: 'Grail-Private'
+method: PyDateTime
+___naiveEpochSeconds___
+	"The wall-clock fields as epoch seconds, tzinfo IGNORED (i.e. read as
+	if UTC).  Pure civil-calendar arithmetic, NOT DateTime>>asSeconds:
+	asSeconds carries the gem's standard UTC offset, so a difference
+	straddling a DST boundary is an hour off (see
+	time>>___unixEpochDays___)."
+
+	| days whole |
+	days := time @env0:___epochDaysForYear___: (self @env0:dynamicInstVarAt: #_year)
+		_month: (self @env0:dynamicInstVarAt: #_month)
+		_day: (self @env0:dynamicInstVarAt: #_day).
+	whole := (days @env0:* 86400)
+		@env0:+ ((self @env0:dynamicInstVarAt: #_hour) @env0:* 3600)
+		@env0:+ ((self @env0:dynamicInstVarAt: #_minute) @env0:* 60)
+		@env0:+ (self @env0:dynamicInstVarAt: #_second).
+	^ whole @env0:asFloat
+		@env0:+ ((self @env0:dynamicInstVarAt: #_microsecond) @env0:asFloat @env0:/ 1000000.0)
+%
+
 category: 'Grail-Conversion'
 method: PyDateTime
 isoformat
-	^ self isoformat: $T
+	^ self _isoformat: nil kw: nil
+%
+
+category: 'Grail-Private'
+method: PyDateTime
+___isoDatePart___
+	"'YYYY-MM-DD'."
+
+	^ (self ___pad___: (self @env0:dynamicInstVarAt: #_year) width: 4) @env0:, '-' @env0:,
+		(self ___pad___: (self @env0:dynamicInstVarAt: #_month) width: 2) @env0:, '-' @env0:,
+		(self ___pad___: (self @env0:dynamicInstVarAt: #_day) width: 2)
+%
+
+category: 'Grail-Private'
+method: PyDateTime
+___isoTimePart___: timespec
+	"The time half of isoformat(), honouring CPython's timespec values.
+	An unrecognised value is a ValueError, as in CPython."
+
+	| h mi s us body |
+	h := self @env0:dynamicInstVarAt: #_hour.
+	mi := self @env0:dynamicInstVarAt: #_minute.
+	s := self @env0:dynamicInstVarAt: #_second.
+	us := self @env0:dynamicInstVarAt: #_microsecond.
+	timespec @env0:= 'hours' ifTrue: [^ self ___pad___: h width: 2].
+	body := (self ___pad___: h width: 2) @env0:, ':' @env0:, (self ___pad___: mi width: 2).
+	timespec @env0:= 'minutes' ifTrue: [^ body].
+	body := body @env0:, ':' @env0:, (self ___pad___: s width: 2).
+	timespec @env0:= 'seconds' ifTrue: [^ body].
+	timespec @env0:= 'milliseconds' ifTrue: [
+		^ body @env0:, '.' @env0:, (self ___pad___: (us @env0:// 1000) width: 3)].
+	timespec @env0:= 'microseconds' ifTrue: [
+		^ body @env0:, '.' @env0:, (self ___pad___: us width: 6)].
+	timespec @env0:= 'auto' ifFalse: [
+		^ ValueError @env1:___signal___: 'Unknown timespec value'].
+	us @env0:= 0 ifTrue: [^ body].
+	^ body @env0:, '.' @env0:, (self ___pad___: us width: 6)
+%
+
+category: 'Grail-Private'
+method: PyDateTime
+___isoTzSuffix___
+	"'+HH:MM'-style UTC-offset suffix, or '' when naive."
+
+	| tzStr |
+	(self @env0:dynamicInstVarAt: #_tzinfo) @env0:isNil ifTrue: [^ ''].
+	tzStr := (self @env0:dynamicInstVarAt: #_tzinfo) tzname: self.
+	tzStr @env0:= 'UTC' ifTrue: [^ '+00:00'].
+	tzStr @env0:size @env0:>= 6 ifTrue: [^ tzStr @env0:copyFrom: 4 to: tzStr @env0:size].
+	^ ''
+%
+
+category: 'Grail-Conversion'
+method: PyDateTime
+_isoformat: positional kw: kwargs
+	"isoformat(sep='T', timespec='auto') — the varargs/keyword form.
+	Grail routes ``dt.isoformat(...)'' with ANY argument through the
+	``_<name>:kw:'' selector (Object.gs), so without this the fixed-arity
+	``isoformat:'' alone made every call that passed sep or timespec fail
+	with ``takes a different number of arguments'' (test_isoformat,
+	test_fromisoformat_timespecs, test_fromisoformat_separators)."
+
+	| sep timespec sepCh |
+	sep := $T.
+	timespec := 'auto'.
+	positional @env0:isNil ifFalse: [
+		positional @env0:size @env0:>= 1 ifTrue: [sep := positional @env0:at: 1].
+		positional @env0:size @env0:>= 2 ifTrue: [timespec := positional @env0:at: 2]].
+	kwargs @env0:isNil ifFalse: [
+		sep := kwargs @env0:at: 'sep' ifAbsent: [sep].
+		timespec := kwargs @env0:at: 'timespec' ifAbsent: [timespec]].
+	sepCh := sep @env0:isString ifTrue: [sep @env0:first] ifFalse: [sep].
+	^ self ___isoDatePart___
+		@env0:, (Unicode7 @env0:with: sepCh)
+		@env0:, (self ___isoTimePart___: timespec)
+		@env0:, self ___isoTzSuffix___
 %
 
 category: 'Grail-Conversion'
@@ -1630,37 +1775,7 @@ method: PyDateTime
 isoformat: sep
 	"ISO 8601 representation; sep is `T` by default but can be space."
 
-	| stream micros tzStr |
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
-	stream @env0:nextPutAll: (self ___pad___: (self @env0:dynamicInstVarAt: #_year) width: 4).
-	stream @env0:nextPut: $-.
-	stream @env0:nextPutAll: (self ___pad___: (self @env0:dynamicInstVarAt: #_month) width: 2).
-	stream @env0:nextPut: $-.
-	stream @env0:nextPutAll: (self ___pad___: (self @env0:dynamicInstVarAt: #_day) width: 2).
-	stream @env0:nextPut: (sep @env0:isString ifTrue: [sep @env0:first] ifFalse: [sep]).
-	stream @env0:nextPutAll: (self ___pad___: (self @env0:dynamicInstVarAt: #_hour) width: 2).
-	stream @env0:nextPut: $:.
-	stream @env0:nextPutAll: (self ___pad___: (self @env0:dynamicInstVarAt: #_minute) width: 2).
-	stream @env0:nextPut: $:.
-	stream @env0:nextPutAll: (self ___pad___: (self @env0:dynamicInstVarAt: #_second) width: 2).
-	(self @env0:dynamicInstVarAt: #_microsecond) @env0:= 0 ifFalse: [
-		stream @env0:nextPut: $..
-		micros := (self @env0:dynamicInstVarAt: #_microsecond) @env0:printString.
-		[micros @env0:size @env0:< 6] @env0:whileTrue: [micros := '0' @env0:, micros].
-		stream @env0:nextPutAll: micros
-	].
-	(self @env0:dynamicInstVarAt: #_tzinfo) @env0:isNil ifFalse: [
-		tzStr := (self @env0:dynamicInstVarAt: #_tzinfo) tzname: self.
-		tzStr @env0:= 'UTC' ifTrue: [
-			stream @env0:nextPutAll: '+00:00'
-		] ifFalse: [
-			"UTC+HH:MM -> +HH:MM"
-			tzStr @env0:size @env0:>= 6 ifTrue: [
-				stream @env0:nextPutAll: (tzStr @env0:copyFrom: 4 to: tzStr @env0:size)
-			]
-		]
-	].
-	^ stream @env0:contents
+	^ self _isoformat: { sep } kw: nil
 %
 
 category: 'Grail-Conversion'
@@ -1672,13 +1787,25 @@ __str__
 category: 'Grail-Conversion'
 method: PyDateTime
 __repr__
-	^ 'datetime.datetime(' @env0:,
-		(self @env0:dynamicInstVarAt: #_year) @env0:printString @env0:, ', ' @env0:,
+	"Bare subclass names in the repr (gh-107773) and CPython's trailing-
+	zero elision: second/microsecond are omitted when both are 0.  Same
+	rules as PyDate>>__repr__ and PyTime>>__repr__ (test_repr_subclass)."
+
+	| prefix s us body |
+	prefix := (self @env0:class __module__) @env0:= 'datetime'
+		ifTrue: ['datetime.']
+		ifFalse: [''].
+	s := self @env0:dynamicInstVarAt: #_second.
+	us := self @env0:dynamicInstVarAt: #_microsecond.
+	body := (self @env0:dynamicInstVarAt: #_year) @env0:printString @env0:, ', ' @env0:,
 		(self @env0:dynamicInstVarAt: #_month) @env0:printString @env0:, ', ' @env0:,
 		(self @env0:dynamicInstVarAt: #_day) @env0:printString @env0:, ', ' @env0:,
 		(self @env0:dynamicInstVarAt: #_hour) @env0:printString @env0:, ', ' @env0:,
-		(self @env0:dynamicInstVarAt: #_minute) @env0:printString @env0:, ', ' @env0:,
-		(self @env0:dynamicInstVarAt: #_second) @env0:printString @env0:, ')'
+		(self @env0:dynamicInstVarAt: #_minute) @env0:printString.
+	(s @env0:~= 0 or: [us @env0:~= 0]) ifTrue: [
+		body := body @env0:, ', ' @env0:, s @env0:printString.
+		us @env0:~= 0 ifTrue: [body := body @env0:, ', ' @env0:, us @env0:printString]].
+	^ prefix @env0:, (self @env0:class __qualname__) @env0:, '(' @env0:, body @env0:, ')'
 %
 
 category: 'Grail-Conversion'
@@ -1689,14 +1816,29 @@ strftime: format
 	expiration / log timestamps need: %Y %m %d %H %M %S %y %j %p %a %A
 	%b %B %Z %%."
 
-	| structTime |
-	structTime := tuple @env0:withAll: {
+	| structTime fmt |
+	(format @env0:isKindOf: CharacterCollection) ifFalse: [
+		^ TypeError @env1:___signal___: 'strftime() argument must be str, not '
+			@env0:, format @env0:class __name__].
+	structTime := struct_time @env0:withAll: {
 		(self @env0:dynamicInstVarAt: #_year). (self @env0:dynamicInstVarAt: #_month). (self @env0:dynamicInstVarAt: #_day). (self @env0:dynamicInstVarAt: #_hour). (self @env0:dynamicInstVarAt: #_minute). (self @env0:dynamicInstVarAt: #_second).
 		(self ___pyDayOfWeek___).
 		(self ___dayOfYear___).
 		-1
 	}.
-	^ time instance strftime: format _: structTime
+	"%f carries sub-second precision that struct_time cannot represent, so
+	expand it here (test_more_strftime)."
+	fmt := time @env0:___substituteMicroseconds___: format
+		_: (self @env0:dynamicInstVarAt: #_microsecond).
+	"A NAIVE datetime renders %z / %:z / %Z as empty strings, as CPython
+	does before the generic formatter runs -- the `time' module's
+	formatter has no tzinfo concept and would otherwise emit a guessed
+	'UTC' (test_strftime).  An AWARE one keeps them for the formatter."
+	(self @env0:dynamicInstVarAt: #_tzinfo) @env0:isNil ifTrue: [
+		fmt := fmt @env0:copyReplaceAll: '%:z' with: ''.
+		fmt := fmt @env0:copyReplaceAll: '%z' with: ''.
+		fmt := fmt @env0:copyReplaceAll: '%Z' with: ''].
+	^ time instance strftime: fmt _: structTime
 %
 
 category: 'Grail-Conversion'
@@ -1717,9 +1859,10 @@ __format__: spec
 category: 'Grail-Conversion'
 method: PyDateTime
 timetuple
-	"struct_time-shaped 9-tuple; tm_isdst = -1."
+	"A real time.struct_time (tm_* named fields, not a bare tuple);
+	tm_isdst = -1."
 
-	^ tuple @env0:withAll: {
+	^ struct_time @env0:withAll: {
 		(self @env0:dynamicInstVarAt: #_year).
 		(self @env0:dynamicInstVarAt: #_month).
 		(self @env0:dynamicInstVarAt: #_day).
@@ -1775,6 +1918,23 @@ toordinal
 	^ self date toordinal
 %
 
+category: 'Grail-Accessors'
+method: PyDateTime
+weekday
+	"Monday=0..Sunday=6.  Inherited from date in CPython; delegated here
+	because Grail's PyDateTime is not a PyDate subclass (test_weekday)."
+
+	^ self ___pyDayOfWeek___
+%
+
+category: 'Grail-Accessors'
+method: PyDateTime
+isoweekday
+	"ISO 8601: Monday=1..Sunday=7."
+
+	^ (self ___pyDayOfWeek___) @env0:+ 1
+%
+
 category: 'Grail-Conversion'
 method: PyDateTime
 ctime
@@ -1785,11 +1945,11 @@ ctime
 	head := time instance strftime: '%a %b' _: self timetuple.
 	dayStr := (self @env0:dynamicInstVarAt: #_day) @env0:printString.
 	dayStr @env0:size @env0:< 2 ifTrue: [dayStr := ' ' @env0:, dayStr].
-	timeStr := (self @env0:___pad___: (self @env0:dynamicInstVarAt: #_hour) width: 2) @env0:, ':' @env0:,
-		(self @env0:___pad___: (self @env0:dynamicInstVarAt: #_minute) width: 2) @env0:, ':' @env0:,
-		(self @env0:___pad___: (self @env0:dynamicInstVarAt: #_second) width: 2).
+	timeStr := (self ___pad___: (self @env0:dynamicInstVarAt: #_hour) width: 2) @env0:, ':' @env0:,
+		(self ___pad___: (self @env0:dynamicInstVarAt: #_minute) width: 2) @env0:, ':' @env0:,
+		(self ___pad___: (self @env0:dynamicInstVarAt: #_second) width: 2).
 	^ head @env0:, ' ' @env0:, dayStr @env0:, ' ' @env0:, timeStr @env0:, ' ' @env0:,
-		(self @env0:___pad___: (self @env0:dynamicInstVarAt: #_year) width: 4)
+		(self ___pad___: (self @env0:dynamicInstVarAt: #_year) width: 4)
 %
 
 category: 'Grail-Initialization'
@@ -1797,10 +1957,42 @@ classmethod: PyDateTime
 combine: aDate _: aTime
 	"datetime.combine(date, time) — merge fields; inherit time's tzinfo."
 
-	^ PyDateTime @env0:___fromFields___:
+	^ self combine: aDate _: aTime _: (aTime @env0:dynamicInstVarAt: #_tzinfo)
+%
+
+category: 'Grail-Initialization'
+classmethod: PyDateTime
+combine: aDate _: aTime _: tz
+	"datetime.combine(date, time, tzinfo) — the explicit-tzinfo form
+	(test_combine).  Allocates through `self', so a subclass receiver
+	yields a subclass instance, as in CPython."
+
+	| tz2 |
+	tz2 := tz == None ifTrue: [nil] ifFalse: [tz].
+	^ self @env0:___fromFields___:
 		(aDate year) _: (aDate month) _: (aDate day)
 		_: (aTime hour) _: (aTime minute) _: (aTime second)
-		_: (aTime microsecond) _: (aTime @env0:dynamicInstVarAt: #_tzinfo)
+		_: (aTime microsecond) _: tz2
+%
+
+category: 'Grail-Initialization'
+classmethod: PyDateTime
+_combine: positional kw: kwargs
+	"combine(date, time, tzinfo=...) — varargs/keyword form."
+
+	| d t tz |
+	"CPython requires both date and time; too few args is a catchable
+	TypeError, not an out-of-bounds Smalltalk OffsetError (test_combine)."
+	(positional @env0:isNil or: [positional @env0:size @env0:< 2]) ifTrue: [
+		^ TypeError @env1:___signal___:
+			'combine() takes at least 2 arguments'].
+	d := positional @env0:at: 1.
+	t := positional @env0:at: 2.
+	tz := positional @env0:size @env0:>= 3
+		ifTrue: [positional @env0:at: 3]
+		ifFalse: [t @env0:dynamicInstVarAt: #_tzinfo].
+	kwargs @env0:isNil ifFalse: [tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz]].
+	^ self combine: d _: t _: tz
 %
 
 category: 'Grail-Initialization'
@@ -1849,7 +2041,15 @@ __add__: other
 	(other isKindOf: PyTimedelta) ifFalse: [
 		^ TypeError ___signal___: 'unsupported operand for +'
 	].
-	newTs := self timestamp @env0:+ other total_seconds.
+	"Operate on the NAIVE wall-clock fields and carry tzinfo through
+	unchanged, as CPython does -- adding a timedelta never re-interprets
+	the zone.  Using `timestamp' here instead would subtract utcoffset on
+	the way out without adding it back on the way in, so every aware
+	datetime drifted by its offset per operation (test_issue23600, which
+	previously passed only because that drift cancelled the equal-and-
+	opposite DST skew in the old asSeconds-based timestamp)."
+
+	newTs := self ___naiveEpochSeconds___ @env0:+ other total_seconds.
 	result := PyDateTime fromtimestamp: newTs _: (self @env0:dynamicInstVarAt: #_tzinfo).
 	^ result
 %
@@ -2033,7 +2233,11 @@ _replace: positional kw: kwargs
 		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz].
 		tz == None ifTrue: [tz := nil]
 	].
-	^ PyDateTime @env0:___fromFields___: y _: mo _: d _: h _: mi _: s _: us _: tz
+	"type(self), not PyDateTime: CPython's replace() preserves the
+	subclass (test_subclass_replace, test_subclass_replace_fold).
+	___fromFields___ allocates with `self new', so a subclass receiver
+	yields a subclass instance."
+	^ self @env0:class @env0:___fromFields___: y _: mo _: d _: h _: mi _: s _: us _: tz
 %
 
 ! ------- Private formatting helpers
@@ -2050,32 +2254,29 @@ ___pad___: n width: w
 category: 'Grail-Private'
 method: PyDateTime
 ___pyDayOfWeek___
-	"Python tm_wday: Monday=0..Sunday=6.  Compute via GemStone Date."
+	"Python tm_wday: Monday=0..Sunday=6.  Computed from a plain Date, NOT
+	from a GMT DateTime: DateTime>>dayOfWeek answers in LOCAL time, so a
+	GMT-midnight instant lands on the PREVIOUS day in any timezone west of
+	Greenwich, making every tm_wday/tm_yday one too low (test_timetuple,
+	test_more_timetuple, test_more_strftime).  Date is timezone-free."
 
-	| dt dow |
-	dt := DateTime
-		@env0:newGmtWithYear: (self @env0:dynamicInstVarAt: #_year)
-		month: (self @env0:dynamicInstVarAt: #_month)
-		day: (self @env0:dynamicInstVarAt: #_day)
-		hours: 0
-		minutes: 0
-		seconds: 0.
-	dow := dt @env0:dayOfWeek.
+	| dow |
+	dow := (Date
+		@env0:newDay: (self @env0:dynamicInstVarAt: #_day)
+		monthNumber: (self @env0:dynamicInstVarAt: #_month)
+		year: (self @env0:dynamicInstVarAt: #_year)) @env0:dayOfWeek.
 	^ dow @env0:= 1 ifTrue: [6] ifFalse: [dow @env0:- 2]
 %
 
 category: 'Grail-Private'
 method: PyDateTime
 ___dayOfYear___
-	| dt |
-	dt := DateTime
-		@env0:newGmtWithYear: (self @env0:dynamicInstVarAt: #_year)
-		month: (self @env0:dynamicInstVarAt: #_month)
-		day: (self @env0:dynamicInstVarAt: #_day)
-		hours: 0
-		minutes: 0
-		seconds: 0.
-	^ dt @env0:dayOfYear
+	"Plain Date, not a GMT DateTime -- see ___pyDayOfWeek___ for why."
+
+	^ (Date
+		@env0:newDay: (self @env0:dynamicInstVarAt: #_day)
+		monthNumber: (self @env0:dynamicInstVarAt: #_month)
+		year: (self @env0:dynamicInstVarAt: #_year)) @env0:dayOfYear
 %
 
 set compile_env: 0
@@ -2253,6 +2454,19 @@ today
 
 category: 'Grail-Initialization'
 classmethod: PyDate
+strptime: dateStr _: fmt
+	"date.strptime(date_string, format) (CPython 3.14+) — delegates to the
+	vendored _strptime, exactly as PyDateTime>>strptime:_: does
+	(test_strptime, test_strptime_single_digit, test_strptime_leap_year)."
+
+	| path strptimeMod |
+	path := importlib ___moduleNameToPath___: '_strptime'.
+	strptimeMod := importlib @env0:loadModuleFromPath: path name: '_strptime'.
+	^ strptimeMod _strptime_datetime_date: self _: dateStr _: fmt
+%
+
+category: 'Grail-Initialization'
+classmethod: PyDate
 fromisoformat: s
 	"date.fromisoformat('YYYY-MM-DD')."
 
@@ -2385,9 +2599,10 @@ isoweekday
 category: 'Grail-Conversion'
 method: PyDate
 timetuple
-	"struct_time-shaped 9-tuple (time fields zero); tm_isdst = -1."
+	"A real time.struct_time (tm_* named fields, not a bare tuple), with
+	the time fields zero; tm_isdst = -1."
 
-	^ tuple @env0:withAll: {
+	^ struct_time @env0:withAll: {
 		(self @env0:dynamicInstVarAt: #_year).
 		(self @env0:dynamicInstVarAt: #_month).
 		(self @env0:dynamicInstVarAt: #_day).
@@ -2414,6 +2629,9 @@ strftime: format
 	pre := format @env0:copyReplaceAll: '%:z' with: ''.
 	pre := pre @env0:copyReplaceAll: '%z' with: ''.
 	pre := pre @env0:copyReplaceAll: '%Z' with: ''.
+	"A date has no sub-second component, but CPython still expands %f --
+	to all zeros."
+	pre := time @env0:___substituteMicroseconds___: pre _: 0.
 	^ time instance strftime: pre _: self timetuple
 %
 
@@ -2559,7 +2777,9 @@ _replace: positional kw: kwargs
 		y := kwargs @env0:at: 'year' ifAbsent: [y].
 		m := kwargs @env0:at: 'month' ifAbsent: [m].
 		d := kwargs @env0:at: 'day' ifAbsent: [d]].
-	^ PyDate @env0:___fromFields___: y _: m _: d
+	"type(self), not PyDate — replace() preserves the subclass
+	(test_subclass_replace)."
+	^ self @env0:class @env0:___fromFields___: y _: m _: d
 %
 
 category: 'Grail-Arithmetic'
@@ -2839,6 +3059,54 @@ value: positional value: kwargs
 	^ inst
 %
 
+category: 'Grail-Instantiation'
+method: PyTime
+___new__: positional kw: kwargs
+	"Python-level `time.__new__(cls, ...)`, reached via
+	object >> ___allocateInstance___:kw: when a PYTHON SUBCLASS of time
+	is instantiated (``class A(time): ...``).  Without it a subclass
+	instance's _hour/_minute/_second/_microsecond stay nil, so repr and
+	every formatter print ``nil'' (test_repr_subclass, test_subclass_time,
+	test_format).  Mirrors the class-side value:value: assembler, and
+	allocates through `self ___fromFields___:' so the subclass is kept.
+	See PyDate>>___new__:kw: for the Enum-mixin rationale."
+
+	| h mi s us tz fold inst |
+	(Enum ___grailBuildingSet @env0:includes: self) ifTrue: [
+		^ TypeError @env1:___signal___:
+			'do not use `super().__new__; call the appropriate __new__ directly'].
+	h := positional @env0:size @env0:>= 1 ifTrue: [positional @env0:at: 1] ifFalse: [0].
+	mi := positional @env0:size @env0:>= 2 ifTrue: [positional @env0:at: 2] ifFalse: [0].
+	s := positional @env0:size @env0:>= 3 ifTrue: [positional @env0:at: 3] ifFalse: [0].
+	us := positional @env0:size @env0:>= 4 ifTrue: [positional @env0:at: 4] ifFalse: [0].
+	tz := positional @env0:size @env0:>= 5 ifTrue: [positional @env0:at: 5] ifFalse: [nil].
+	fold := 0.
+	kwargs @env0:isNil ifFalse: [
+		h := kwargs @env0:at: 'hour' ifAbsent: [h].
+		mi := kwargs @env0:at: 'minute' ifAbsent: [mi].
+		s := kwargs @env0:at: 'second' ifAbsent: [s].
+		us := kwargs @env0:at: 'microsecond' ifAbsent: [us].
+		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz].
+		fold := kwargs @env0:at: 'fold' ifAbsent: [0]].
+	tz == None ifTrue: [tz := nil].
+	inst := self @env0:___fromFields___: h _: mi _: s _: us _: tz.
+	fold @env0:= 0 ifFalse: [inst @env0:dynamicInstVarAt: #_fold put: fold].
+	^ inst
+%
+
+category: 'Grail-Initialization'
+classmethod: PyTime
+strptime: dateStr _: fmt
+	"time.strptime(date_string, format) (CPython 3.14+) — delegates to the
+	vendored _strptime, exactly as PyDateTime>>strptime:_: does
+	(test_strptime, test_strptime_errors, test_strptime_tz)."
+
+	| path strptimeMod |
+	path := importlib ___moduleNameToPath___: '_strptime'.
+	strptimeMod := importlib @env0:loadModuleFromPath: path name: '_strptime'.
+	^ strptimeMod _strptime_datetime_time: self _: dateStr _: fmt
+%
+
 category: 'Grail-Initialization'
 classmethod: PyTime
 fromisoformat: s
@@ -2970,7 +3238,10 @@ __str__
 category: 'Grail-Conversion'
 method: PyTime
 __repr__
-	| h mi s us body |
+	"Bare subclass names in the repr (gh-107773) -- see PyDate>>__repr__
+	(test_repr_subclass)."
+
+	| h mi s us body prefix |
 	h := self @env0:dynamicInstVarAt: #_hour.
 	mi := self @env0:dynamicInstVarAt: #_minute.
 	s := self @env0:dynamicInstVarAt: #_second.
@@ -2979,7 +3250,10 @@ __repr__
 	(s @env0:~= 0 or: [us @env0:~= 0]) ifTrue: [
 		body := body @env0:, ', ' @env0:, s @env0:printString.
 		us @env0:~= 0 ifTrue: [body := body @env0:, ', ' @env0:, us @env0:printString]].
-	^ 'datetime.time(' @env0:, body @env0:, ')'
+	prefix := (self @env0:class __module__) @env0:= 'datetime'
+		ifTrue: ['datetime.']
+		ifFalse: [''].
+	^ prefix @env0:, (self @env0:class __qualname__) @env0:, '(' @env0:, body @env0:, ')'
 %
 
 category: 'Grail-Mutation'
@@ -3001,7 +3275,9 @@ _replace: positional kw: kwargs
 		us := kwargs @env0:at: 'microsecond' ifAbsent: [us].
 		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz].
 		tz == None ifTrue: [tz := nil]].
-	^ PyTime @env0:___fromFields___: h _: mi _: s _: us _: tz
+	"type(self), not PyTime — replace() preserves the subclass
+	(test_subclass_replace)."
+	^ self @env0:class @env0:___fromFields___: h _: mi _: s _: us _: tz
 %
 
 category: 'Grail-Conversion'
@@ -3010,14 +3286,27 @@ strftime: format
 	"Delegate to the time module's formatter; date fields are the CPython
 	placeholder 1900-01-01."
 
-	| structTime |
-	structTime := tuple @env0:withAll: {
+	| structTime fmt |
+	(format @env0:isKindOf: CharacterCollection) ifFalse: [
+		^ TypeError @env1:___signal___: 'strftime() argument must be str, not '
+			@env0:, format @env0:class __name__].
+	structTime := struct_time @env0:withAll: {
 		1900. 1. 1.
 		(self @env0:dynamicInstVarAt: #_hour).
 		(self @env0:dynamicInstVarAt: #_minute).
 		(self @env0:dynamicInstVarAt: #_second).
 		0. 1. -1 }.
-	^ time instance strftime: format _: structTime
+	"%f carries sub-second precision struct_time cannot represent
+	(test_strftime)."
+	fmt := time @env0:___substituteMicroseconds___: format
+		_: (self @env0:dynamicInstVarAt: #_microsecond).
+	"A NAIVE time renders %z / %:z / %Z as empty -- see
+	PyDateTime>>strftime: (test_strftime)."
+	(self @env0:dynamicInstVarAt: #_tzinfo) @env0:isNil ifTrue: [
+		fmt := fmt @env0:copyReplaceAll: '%:z' with: ''.
+		fmt := fmt @env0:copyReplaceAll: '%z' with: ''.
+		fmt := fmt @env0:copyReplaceAll: '%Z' with: ''].
+	^ time instance strftime: fmt _: structTime
 %
 
 category: 'Grail-Conversion'
