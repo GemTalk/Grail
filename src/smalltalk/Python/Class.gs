@@ -82,6 +82,12 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	int-subclass operator semantics) and whose value slot carries the
 	real Integer.  isinstance/issubclass against int recognize the
 	substitute (Int.gs __instancecheck__, builtins issubclass)."
+	"``class MyTimezone(timezone): pass'': real CPython's timezone type
+	does not set Py_TPFLAGS_BASETYPE (unlike date/datetime/time/timedelta,
+	which DO allow subclassing) -- it is documented as final.  test_datetime's
+	TestTimeZone.test_cannot_subclass expects a catchable TypeError."
+	(self == (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #PyTimezone)) ifTrue: [
+		^ TypeError ___signal___: 'type ''timezone'' is not an acceptable base type'].
 	((self == Integer)
 		or: [self == SmallInteger or: [self == LargeInteger]]) ifTrue: [
 		^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #AbstractPyInt)

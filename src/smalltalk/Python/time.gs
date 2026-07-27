@@ -348,6 +348,12 @@ strftime: format _: structTime
 				ch @env0:= $C ifTrue: [
 					"Century, zero-padded to 2 digits (C99)."
 					stream @env0:nextPutAll: (self ___zeroPad2___: (year @env0:// 100))].
+				ch @env0:= $G ifTrue: [
+					"ISO 8601 year (can differ from %Y near year boundaries --
+					the first/last few days of a calendar year can belong to
+					an ISO week of the adjacent year), zero-padded like %Y."
+					stream @env0:nextPutAll:
+						(self ___zeroPad4___: (self ___isoYear___: year month: mon day: day))].
 				ch @env0:= $y ifTrue: [
 					buf := (year @env0:rem: 100) @env0:printString.
 					buf @env0:size @env0:< 2 ifTrue: [stream @env0:nextPut: $0].
@@ -396,6 +402,47 @@ ___zeroPad4___: n
 	s := n @env0:printString.
 	[s @env0:size @env0:< 4] @env0:whileTrue: [s := '0' @env0:, s].
 	^ s
+%
+
+category: 'Grail-Private'
+method: time
+___isoWeek1Monday___: y
+	"Ordinal (GemStone Date>>asDays epoch -- any fixed epoch works since
+	only used for relative comparison below) of the Monday starting ISO
+	week 1 of year y.  Same algorithm as datetime_module's own
+	PyDate class >> ___isoweek1monday___:, duplicated here so time's
+	strftime doesn't need to depend on the datetime module -- BUT that
+	original computes `firstweekday` from ordinals in PYTHON's toordinal
+	epoch (ordinal 1 = Monday), which GemStone's Date>>asDays epoch does
+	NOT share (different start-of-week alignment); deriving the weekday
+	via Date>>dayOfWeek instead (a semantic day-of-week query, immune to
+	whatever epoch asDays anchors to) avoids porting a magic-number
+	offset tuned for a numbering asDays doesn't use."
+
+	| firstDate firstday dow0Monday firstweekday week1monday |
+	firstDate := Date @env0:newDay: 1 monthNumber: 1 year: y.
+	firstday := firstDate @env0:asDays.
+	"Date>>dayOfWeek: 1=Sunday..7=Saturday (confirmed: 2001-01-01, a real
+	Monday, reports 2).  Convert to 0=Monday..6=Sunday (Python's scheme)."
+	dow0Monday := (firstDate @env0:dayOfWeek @env0:- 2) @env0:\\ 7.
+	firstweekday := dow0Monday.
+	week1monday := firstday @env0:- firstweekday.
+	firstweekday @env0:> 3 ifTrue: [week1monday := week1monday @env0:+ 7].
+	^ week1monday
+%
+
+category: 'Grail-Private'
+method: time
+___isoYear___: y month: mon day: day
+	"The ISO 8601 year for calendar date (y, mon, day) -- %G."
+
+	| ord week1monday nextWeek1monday |
+	ord := (Date @env0:newDay: day monthNumber: mon year: y) @env0:asDays.
+	week1monday := self ___isoWeek1Monday___: y.
+	ord @env0:< week1monday ifTrue: [^ y @env0:- 1].
+	nextWeek1monday := self ___isoWeek1Monday___: y @env0:+ 1.
+	ord @env0:>= nextWeek1monday ifTrue: [^ y @env0:+ 1].
+	^ y
 %
 
 category: 'Grail-Private'

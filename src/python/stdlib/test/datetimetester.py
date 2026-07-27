@@ -23,6 +23,7 @@ from test import support
 from test.support import is_resource_enabled, ALWAYS_EQ
 from test.support import warnings_helper
 
+import _pydatetime
 import datetime as datetime_module
 from datetime import MINYEAR, MAXYEAR
 from datetime import timedelta
@@ -73,6 +74,56 @@ ZERO = timedelta(0)
 MINUTE = timedelta(minutes=1)
 HOUR = timedelta(hours=1)
 DAY = timedelta(days=1)
+
+# GRAIL: USTimeZone/Eastern (a DST-aware tzinfo fixture) also lives near the
+# omitted TZ-conversion tests but is referenced by TestTimeZone.test_fromutc,
+# which IS retained -- ported verbatim from CPython's datetimetester.py.
+DSTSTART = datetime(1, 4, 1, 2)
+DSTEND = datetime(1, 10, 25, 1)
+
+
+def first_sunday_on_or_after(dt):
+    days_to_go = 6 - dt.weekday()
+    if days_to_go:
+        dt += timedelta(days_to_go)
+    return dt
+
+
+class USTimeZone(tzinfo):
+
+    def __init__(self, hours, reprname, stdname, dstname):
+        self.stdoffset = timedelta(hours=hours)
+        self.reprname = reprname
+        self.stdname = stdname
+        self.dstname = dstname
+
+    def __repr__(self):
+        return self.reprname
+
+    def tzname(self, dt):
+        if self.dst(dt):
+            return self.dstname
+        else:
+            return self.stdname
+
+    def utcoffset(self, dt):
+        return self.stdoffset + self.dst(dt)
+
+    def dst(self, dt):
+        if dt is None or dt.tzinfo is None:
+            return ZERO
+        assert dt.tzinfo is self
+
+        start = first_sunday_on_or_after(DSTSTART.replace(year=dt.year))
+        end = first_sunday_on_or_after(DSTEND.replace(year=dt.year))
+
+        if start <= dt.replace(tzinfo=None) < end:
+            return HOUR
+        else:
+            return ZERO
+
+
+Eastern = USTimeZone(-5, "Eastern", "EST", "EDT")
 
 
 class TestModule(unittest.TestCase):
@@ -276,11 +327,16 @@ class TestTimeZone(unittest.TestCase):
 
     def test_repr(self):
         datetime = datetime_module
+        # Grail: bare eval() does not capture the caller's globals/locals
+        # (see test_roundtrip); build an explicit scope carrying the local
+        # `datetime` rebind above (real CPython's eval() sees locals too).
+        evalScope = dict(globals())
+        evalScope['datetime'] = datetime
         for tz in [self.ACDT, self.EST, timezone.utc,
                    timezone.min, timezone.max]:
             # test round-trip
             tzrep = repr(tz)
-            self.assertEqual(tz, eval(tzrep))
+            self.assertEqual(tz, eval(tzrep, evalScope))
 
     def test_class_members(self):
         limit = timedelta(hours=23, minutes=59)
@@ -820,7 +876,7 @@ class TestTimeDelta(HarmlessMixedComparison, unittest.TestCase):
             s = repr(td)
             self.assertStartsWith(s, 'datetime.')
             s = s[9:]
-            td2 = eval(s)
+            td2 = eval(s, globals())  # Grail: bare eval() does not capture caller globals; pass explicitly
             self.assertEqual(td, td2)
 
             # Verify identity via reconstructing from pieces.
@@ -1238,7 +1294,7 @@ class TestDate(HarmlessMixedComparison, unittest.TestCase):
             s = repr(dt)
             self.assertStartsWith(s, 'datetime.')
             s = s[9:]
-            dt2 = eval(s)
+            dt2 = eval(s, globals())  # Grail: bare eval() does not capture caller globals; pass explicitly
             self.assertEqual(dt, dt2)
 
             # Verify identity via reconstructing from pieces.
