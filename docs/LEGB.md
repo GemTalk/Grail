@@ -88,7 +88,9 @@ are **dynamic**, not statically declared:
   dynamic-instVar namespace — this is how the "one namespace for variables
   and functions" gap is bridged.
 * **`globals()` / module-scope `locals()` / 0-arg `vars()`** are
-  compile-time rewrites to `self` (bare-name 0-arg call shape only).
+  compile-time rewrites to a live `PyModuleDict` view over the module
+  instance (bare-name 0-arg call shape only) — see the `globals()` seam
+  below.
 * **Function-vs-module-shadow guards** (b8d85e9): a method local, parameter,
   or comprehension target that collides with a module-level function name
   resolves to the local (`indent = self.initial_indent` in textwrap; Django
@@ -143,21 +145,28 @@ need `module` for this today); and `globals()` returns a live view object
 instead of the raw instance. The payoff would be eliminating the dual-store
 confusion below; the cost is a sweeping edit. **Decision for now: keep the
 SymbolDictionary superclass, fix the dual-store seam at the `globals()`
-boundary** (a live view, like `PyInstanceDict`, unioning the dynamic-instVar
-globals with any dict-slot entries).
+boundary** — done, see below.
 
-### Known seam: `globals()` on a user module (open defect)
+### Former seam: `globals()` on a user module (fixed — `PyModuleDict`)
 
 Because user-module globals live in dynamic instVars while the inherited
 dictionary slot is (for user modules) empty, the raw `self` that `globals()`
-returns is incoherent as a Python dict: `g['name']` probes the DICT SLOT and
-raises KeyError for a real global; `g['new'] = v` writes the dict slot where
-codegen never looks; `g.keys()` resolves to the kernel Smalltalk `keys`
-(returns a collection → "'OrderedCollection' object is not callable");
-membership/iteration see the empty slot. `exec`/`eval` sidestep this by
-seeding real SymbolDictionary scopes and reflecting bindings back. The fix
-(planned) is a `PyInstanceDict`-style live view over the module's
-dynamic-instVar namespace.
+used to return was incoherent as a Python dict: `g['name']` probed the DICT
+SLOT and raised KeyError for a real global; `g['new'] = v` wrote the dict
+slot where codegen never looks; `g.keys()` resolved to the kernel Smalltalk
+`keys` (returns a collection → "'OrderedCollection' object is not
+callable"); membership/iteration saw the empty slot.
+
+**The fix landed in e0a1dc4:** `globals()`, module-scope `locals()`/0-arg
+`vars()`, and `mod.__dict__` all return a `PyModuleDict`
+(`src/smalltalk/Python/PyModuleDict.gs`, a `PyInstanceDict` subclass) — a
+live view over the module's three-store namespace that reads through the
+same `module>>___globalAt___:otherwise:` chain bare-name loads use (dynamic
+instVars, lazily-wrapped top-level defs, legacy dict-slot entries) and
+writes to dynamic instVars, the canonical home. Views are memoised per
+module per session, so `globals() is globals()` holds. `exec`/`eval` still
+seed real SymbolDictionary scopes (and accept the view as their globals
+argument). Pinned by `GlobalsTestCase`.
 
 ---
 

@@ -6,13 +6,13 @@ Run [Python](https://docs.python.org/3/reference/index.html) on the GemStone/S 6
 
 ### Git Checkout
 
-Checkout this [GitHub project](git@github.com:jgfoster/Grail.git) to `$HOME/code/GemStone/Grail` (or to some other place and be prepared to edit things to match your path).
+Checkout this [GitHub project](git@github.com:GemTalk/Grail.git) to `$HOME/code/GemStone/Grail` (or to some other place and be prepared to edit things to match your path).
 
 ### GemStone/S
 
 [GemStone/S](https://gemtalksystems.com/products/gs64/) can be most easily run using the [GemStone Smalltalk IDE](https://marketplace.visualstudio.com/items?itemName=GemTalkSystems.gemstone-ide) (a Visual Studio Code Extension).
 
-Copy the provided `topazini` to `~/.topazini` and edit `gs64stone` to show the name of your database if different. Copy the provided `setenv` to `.setenv` and edit the path to point to your GemStone install. Then open a terminal in this directory and run `./install.sh`. If this finishes without errors then you may proceed to the next step.
+Copy the provided `scripts/topazini` to `~/.topazini` and edit `gs64stone` to show the name of your database if different. Copy the provided `scripts/setenv` to `.setenv` and edit the path to point to your GemStone install. Then open a terminal in this directory and run `./install_base.sh` (once per stone, as SystemUser) followed by `./install.sh` (per user). If these finish without errors then you may proceed to the next step.
 
 ## Tests
 
@@ -21,10 +21,10 @@ To run the test suite, run `./scripts/run_tests.sh`.
 ## Running Python Code in Grail
 
 ### Hello World
-Our first task is a "Hello World!" program (`python/hello.py`). From a command line execute:
+Our first task is a "Hello World!" program (`src/python/hello.py`). From a command line execute:
 
 ```
-./grail python/hello.py
+./grail src/python/hello.py
 ```
 
 ### REPL

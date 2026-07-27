@@ -84,41 +84,45 @@ was removed.
 
 **Regression test:** `CPythonShimTestCase >> testShimSingletonLivesInSessionTempsNotCommitted`
 
-### Tier 2 — Design risk (no fix yet, tracked here)
+### Tier 2 — Design risk (all fixed by the 2026-07-12 session-state refactor, commit `2900b14f`)
 
-These are correct for the current single-session development model but
-will need attention before running concurrent production sessions.
+These were correct for the single-session development model but needed
+attention before running concurrent production sessions. All three have
+since been moved to SessionTemps.
 
 #### `sys.modules` — module registry
 
-`sys` holds `modules` (a `SymbolDictionary`) as a classInstVar. It is
+`sys` held `modules` (a `SymbolDictionary`) as a classInstVar. It was
 pre-populated at install time with references to committed built-in module
-singletons, making the read path safe. The write path is not: `import
-someUserModule` from running Python code modifies this dict. Two sessions
-doing dynamic imports will conflict.
+singletons, making the read path safe. The write path was not: `import
+someUserModule` from running Python code modified this dict. Two sessions
+doing dynamic imports would conflict.
 
-**Planned fix:** Session-local overlay — keep the committed baseline for
-built-ins; store per-session dynamic imports in SessionTemps. The committed
-`modules` classInstVar becomes an "installed modules" registry; `sys >>
-modules` returns a session-local `SymbolDictionary` pre-populated from it.
+**Fixed:** `sys >> modules` now returns a session-local `SymbolDictionary`
+stored in SessionTemps (`#GrailSysModules`), populated with the built-in
+modules on first access. The `modules` classInstVar declaration remains but
+is unused.
 
 #### `module.instance` — module singleton per class
 
-Every module subclass inherits `instance` (a classInstVar from `module`).
-For built-in modules this is set during `install.sh` and never touched
-again — safe. The risk is narrower: if two sessions simultaneously `import`
-the same user-defined module for the first time (first access after a fresh
-install that didn't pre-run it), both create an instance and conflict on
-the classInstVar. The `___adoptInstance___:` pattern prevents the
-double-initialization race within a single session but not across sessions.
+Every module subclass inherited `instance` (a classInstVar from `module`).
+If two sessions simultaneously imported the same user-defined module for
+the first time, both created an instance and conflicted on the classInstVar.
+
+**Fixed:** module singletons now live in a SessionTemps registry
+(`#GrailModuleInstances`), and the `instance` classInstVar was removed
+entirely (commit `c82923a6`, 2026-07-12) so a module-level Python global
+has no committed slot to persist to.
 
 #### `numbers_Number.registeredTypes` — ABC registration
 
-Set by `registerBuiltinTypes` during `numbers >> initialize`, which runs at
-install time. All registered types are committed classes (Integer, Float,
-etc.), so the set is stable after install. The risk is latent: CPython
-supports `numbers.Integral.register(MyClass)` from user code. Two sessions
-doing this at runtime would conflict.
+Set by `registerBuiltinTypes` during `numbers >> initialize`. CPython
+supports `numbers.Integral.register(MyClass)` from user code; two sessions
+doing this at runtime would conflict on the classInstVar.
+
+**Fixed:** registrations now live in SessionTemps
+(`#GrailNumbersRegistry`, keyed per ABC class). The classInstVar
+declaration remains but is unused.
 
 ### Tier 3 — Acceptable as committed state
 
@@ -127,27 +131,35 @@ or hold immutable singletons.
 
 | Variable | Why it's safe |
 |---|---|
-| `importlib.grailDir` | Set once by `install.sh`, never modified at runtime |
 | `NoneType.instance` | Immutable singleton; set at install |
-| `PyTimezone._utc` | Immutable UTC timezone; set on first access, never changes |
-| `AbstractNode.escapeCharacters` | Constant lookup table |
 | `CPythonLibrary.libraryPath` etc. | Deployment configuration; write-once |
 
-### Latent risk — `CallAst` compile-time context
+Three entries originally listed here have since changed: `importlib.grailDir`
+moved to SessionTemps (`#GrailDir` — the path differs per host/checkout, and
+the lazy write dirtied the committed class), `PyTimezone._utc` moved to
+SessionTemps (`#GrailTimezoneUtc`, same reason), and
+`AbstractNode.escapeCharacters` was removed outright (commit `c82923a6`).
 
-`CallAst` has ten classInstVars used as thread-local-like storage during
-code generation (`moduleClassBeingCompiled`, `classBeingCompiled`, etc.).
-These are cleared in `ensure:` blocks at compilation boundaries, so they
-are nil at every commit point during normal operation. The latent risk is
-a VM-level crash (not a Smalltalk exception) mid-compilation leaving
-non-nil state committed. This is low probability and has no fix today;
-a future defensive measure would be a class-side `verifyClean` assertion
-in tests confirming all ten vars are nil after every compilation round-trip.
+### Latent risk — `CallAst` compile-time context (since fixed)
+
+`CallAst` had ten (later 19) classInstVars used as thread-local-like storage
+during code generation (`moduleClassBeingCompiled`, `classBeingCompiled`,
+etc.). These were cleared in `ensure:` blocks at compilation boundaries, so
+they were nil at every commit point during normal operation — but any two
+sessions that each compiled Python and both committed still collided on the
+cleared slots.
+
+**Fixed** (2026-07-14, commit `283f086f`): the whole compile context moved
+to a SessionTemps-backed store (`#GrailCompileContext`, accessed via
+`CallAst class >> ___compileContext___`), eliminating both the latent
+mid-compilation-crash risk and the real any-two-compiling-sessions commit
+conflict. The classInstVar declarations were removed.
 
 ## SessionTemps key registry
 
-To avoid key collisions across modules, all Grail SessionTemps keys follow
-the `___grailXxx___` naming convention. Current keys:
+To avoid key collisions across modules, the keys from the original audit
+follow the `___grailXxx___` naming convention; keys added by later work
+use a shorter `GrailXxx` form. Keys as of the 2026-06-08 audit:
 
 | Key | Owner | Purpose |
 |---|---|---|
@@ -164,3 +176,12 @@ the `___grailXxx___` naming convention. Current keys:
 | `#PythonStoreRootsMap` | `PythonStore` | IncRef'd PyObject roots map |
 | `#'___GrailSessionDict___*'` | `gemstone` | Per-session `SessionDict` backing stores (one key per dict) |
 | `ExecBlockAttrs` | `ExecBlockAttrs` | Per-session exec-block attribute dictionary |
+
+The 2026-07 session-state refactor (`2900b14f`, `283f086f`) and the
+canonical-modules work (docs/Persistent_Modules_and_Classes.md) added many
+more `GrailXxx` keys, among them `#GrailSysModules`,
+`#GrailModuleInstances`, `#GrailNumbersRegistry`, `#GrailTimezoneUtc`,
+`#GrailDir`, `#GrailCompileContext`, `#GrailClassAttrOverlay`,
+`#GrailModuleHashState`, `#GrailCanonicalClassesEnabled`, and
+`#GrailMiRegistry`. This table is the audit snapshot, not an exhaustive
+registry; grep for `SessionTemps` for the current set.

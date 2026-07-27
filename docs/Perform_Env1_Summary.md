@@ -1,6 +1,17 @@
 # Summary of `perform:env: 1` Message Senders
 
-This document provides a comprehensive summary of all places in the codebase that use `perform:env: 1` to send messages to environment 1 (Python methods).
+> **Historical snapshot (early 2026).** The counts and file paths below
+> predate three changes: the directory reorganization (`smalltalk/tests/`
+> is now `src/smalltalk/PythonTests/`, commit `3b79ccaa`), the replacement
+> of literal `perform:env:` source syntax with the `@env0:`/`@env1:` send
+> markers (commit `c2d60aad`, 2026-04-06), and the dispatch-model rewrite
+> ([Rewrite_Dispatch_Model.md](Rewrite_Dispatch_Model.md)). Today env-1
+> sends are written `recv @env1:selector:` (5,400+ sites in `src/`); only
+> ~120 reflective `perform:...env: 1` sends remain, mostly dynamic-selector
+> dispatch (e.g. `BoundMethod`). The selector tables below still describe
+> the env-1 protocol surface as it stood at the snapshot.
+
+This document provides a comprehensive summary of all places in the codebase that used `perform:env: 1` to send messages to environment 1 (Python methods).
 
 ## Overview
 
@@ -216,4 +227,8 @@ When Smalltalk code (env 0) needs to interact with Python objects (env 1), it us
 ## Potential Refactoring Opportunities
 
 While most `perform:env: 1` calls are necessary for cross-environment communication, some frequently-used patterns might benefit from convenience methods similar to the `___` methods created for `perform:env: 0` calls. However, this would need to be evaluated on a case-by-case basis, as the primary use case (tests) may benefit from the explicit `perform:env: 1` syntax for clarity.
+
+*Resolution:* this refactoring happened as the `@env0:`/`@env1:` source
+syntax (commit `c2d60aad`), which replaced nearly all literal
+`perform:env:` call sites.
 

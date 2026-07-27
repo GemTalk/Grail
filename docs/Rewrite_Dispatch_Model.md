@@ -201,10 +201,12 @@ it avoids implying that `math` IS-A `builtins`.
 | `range(start, stop, step)` | `self range: start _: stop _: step`       |
 | `f(a, b, c, d)`            | `self f: a _: b _: c _: d`                |
 
-Each additional positional argument appends `_:`. Keyword arguments by name
-(e.g. `foo(x, sep='-')`) compile using the real keyword name: `self foo: x
-sep: '-'`. This is possible whenever the callee's signature is known at
-compile time.
+Each additional positional argument appends `_:`. (An earlier sketch had
+keyword arguments compiling to real keyword selectors — `self foo: x
+sep: '-'` — but as implemented any keyword argument disables the
+fixed-arity fast path: the selector builders in `CallAst` bail when
+`keywords` is non-empty, and the call goes through the varargs form below
+with the kwargs packed into a dictionary.)
 
 **Varargs fallback (slow path).** When a `def` uses `*args`/`**kwargs`, or
 when the call site cannot prove the callee's signature, the varargs form is
@@ -213,7 +215,11 @@ used. It is a two-keyword selector prefixed with a single underscore:
 | Python call        | Smalltalk emitted                         |
 |--------------------|-------------------------------------------|
 | `foo(*a, **kw)`    | `self _foo: positionalArray kw: kwargDict` |
-| `bar(1, 2, k=3)`   | `self _bar: { 1. 2. } kw: (IdentityKeyValueDictionary new at: #k put: 3; yourself)` |
+| `bar(1, 2, k=3)`   | `self _bar: { 1. 2. } kw: ((PyDict new) at: 'k' put: 3; yourself)` |
+
+(The kwargs dictionary was originally an `IdentityKeyValueDictionary` with
+Symbol keys; it is now an insertion-ordered `PyDict` with Python-`str`
+keys — see `CallAst>>printKeywordsDictOn:` and docs/Ordered_Dict.md.)
 
 Rationale for the underscore prefix:
 
@@ -242,8 +248,9 @@ through the slow path, the compiler distinguishes calls from reads:
   `BoundMethod receiver: self selector: #abs:`. A small wrapper object is
   allocated once at this read site.
 
-`BoundMethod` is a lightweight class with two instance variables,
-`receiver` and `selector`, and implements `value:`, `value:value:`,
+`BoundMethod` is a lightweight class built around two instance variables,
+`receiver` and `selector` (plus precomputed arity-selector slots — see
+"BoundMethod forwarder arity" under Follow-ups), and implements `value:`, `value:value:`,
 `value:value:value:`, and a generic `value:value:` for the varargs form.
 Each `value:...` method forwards via `perform:with[Arguments]:`, which
 measured at ~16 ns in the profiling data. That is the budget for calling
@@ -386,17 +393,16 @@ What's still **not** supported:
 For user module top-level defs, rebinding fully works; see
 `FunctionRebindingTestCase` for the pinned semantics.
 
-### `global` and `nonlocal` are not supported
+### `global` and `nonlocal` *are* now supported (LEGB rework)
 
-These parse successfully but have no runtime effect in v1. A name declared
-`global` inside a function does not currently rebind the module-level name;
-`nonlocal` does not rebind an enclosing-scope name. Correct support for
-either requires tracking binding-target scope separately from read-resolve
-scope, which is out of scope for the dispatch rewrite.
-
-**Failure mode:** should be a clear warning or runtime error at the point
-of the `global`/`nonlocal` declaration, not silent misbehavior. Revisit
-this when enclosing-scope support is added.
+The original v1 limitation — both parsed but had no runtime effect — was
+lifted by the LEGB scoping rework (commit `b8d85e9`, 2026-07-10), which
+tracks binding-target scope separately from read-resolve scope. A name
+declared `global` inside a function rebinds the module-level name (even
+from a nested def whose enclosing function has a same-named local);
+`nonlocal` write-back rides the Smalltalk block-capture mechanics. See
+[LEGB.md](LEGB.md) and `GlobalStatementTestCase` /
+`NonlocalClosureTestCase` for the pinned semantics.
 
 ### Nested `def`s remain as blocks
 
@@ -1625,11 +1631,15 @@ cost is acceptable.
   existing check; the heavy lifting is detecting "object whose class
   defines `__set__`" at the right point in `___pyAttrLoad___` /
   `__setattr__`.
-- **MRO walk.** AP-7's class-chain walk uses GemStone's `superClass`
-  pointer, which is single-inheritance.  Python's C3 linearization
-  for multiple inheritance is not yet implemented; classes with
-  diamond hierarchies will see inconsistent attribute lookup.  The
-  Super proxy has the same limitation (see `Super.gs` comment).
+- **MRO walk** — since resolved for the reflective paths.  Python's C3
+  linearization landed in commit `5cd833ce` (2026-07-10, extended by
+  `12e92eaa`): `importlib ___mroOf___:` / `___c3Linearize___:bases:`
+  derive the real MRO for multiple-inheritance classes (stored in the
+  `#GrailMiRegistry` SessionTemps registry), and `__mro__`, `super()`
+  (MRO-positional, see `Super.gs`), `isinstance` and `issubclass` all
+  consult it.  AP-7's per-class `dynInstVars` walk
+  (`___dynamicClassAttr___`) still follows the Smalltalk `superClass`
+  pointer, which for an MI class carries only its primary base.
 - **Monkey-patching `builtins`.** The `builtins.abs = my_abs` pattern
   still bypasses fast-path call sites (which optimistically emit
   direct `abs:` sends).  Extending the probe-then-branch shape to

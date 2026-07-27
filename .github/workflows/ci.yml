@@ -18,22 +18,25 @@ name: CI
 # Run build-ci-image ONCE before this workflow can run (the container pull needs
 # ci-base:latest to exist).
 
-# Runs on every branch push (not just main) so work is gated before it reaches
-# a PR.  `pull_request` is deliberately OMITTED: an in-repo PR branch already
-# runs via its push, and listening to both events would double-run the same
-# commit -- no single concurrency key dedupes a push ref (refs/heads/x) against
-# a pull_request ref (refs/pull/N/merge).  Trade-off: PRs opened from FORKS
-# (which can't push to this repo) won't be tested; add `pull_request:` back with
-# a `github.event.pull_request.head.repo.full_name != github.repository` job
-# guard if fork contributions ever need CI.  `branches: ['**']` matches branch
-# pushes only, not tags.
+# Triggers: exactly ONE run per commit that matters, and a run the merge queue
+# can gate on.  `push` is deliberately OMITTED -- the original reason for
+# avoiding a push+pull_request pair still holds (no single concurrency key
+# dedupes a push ref (refs/heads/x) against a pull_request ref
+# (refs/pull/N/merge)), so listening to both would double-run the same commit.
+# We keep `pull_request` rather than `push` because it is the only trigger that
+# gives PRs opened from FORKS any checks at all, which the push-only setup could
+# not do.  A post-merge run on `main` adds nothing: `merge_group` already tests
+# the exact merge commit that is about to land, so `main` is validated before
+# the fact instead of after it.  Work on a branch with no PR open is
+# intentionally not tested -- open the PR (or use `workflow_dispatch`).
 on:
-  push:
-    branches: ['**']
+  pull_request:
+  merge_group:
   workflow_dispatch:
 
 concurrency:
-  # Per-branch: a new push to the same branch cancels the older in-flight run.
+  # Per-ref: a new commit on the same PR cancels the older in-flight run.  Merge
+  # queue entries each get their own ref, so they never cancel one another.
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
@@ -128,3 +131,22 @@ jobs:
             out/*.out
             testing/*.log
             testing/log/**
+
+  # Single stable check for branch protection / the merge queue to require.
+  # The matrix job's own check names embed the matrix values, so requiring
+  # `test` directly is brittle; this fans them in to one name instead.
+  # `if: always()` is essential: without it the job would be SKIPPED whenever a
+  # dependency fails, a required check would never report a conclusion, and the
+  # PR (or queue entry) would hang forever.
+  ci-complete:
+    name: ci-complete
+    if: always()
+    needs: [image, test]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Verify all CI jobs succeeded
+        run: |
+          if [ "${{ needs.image.result }}" != "success" ] || [ "${{ needs.test.result }}" != "success" ]; then
+            echo "image=${{ needs.image.result }} test=${{ needs.test.result }}"
+            exit 1
+          fi
