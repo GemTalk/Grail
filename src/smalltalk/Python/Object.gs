@@ -2492,9 +2492,16 @@ __reduce__
 category: 'Grail-Serialization'
 method: object
 __reduce_ex__: protocol
-	"Return state for pickling with protocol version"
+	"Return state for pickling with protocol version.
 
-	self @env0:error: 'Not yet implemented: __reduce_ex__'
+	CPython's object.__reduce_ex__ defers to __reduce__ whenever the class
+	overrides it, so any type that defines __reduce__ gets __reduce_ex__
+	for free -- date/time/datetime/timedelta/timezone all rely on that
+	(``orig.__reduce__() == orig.__reduce_ex__(2)'' in test_pickling).
+	A class that overrides NEITHER still lands on object>>__reduce__
+	below, which reports that it is not implemented."
+
+	^ self __reduce__
 %
 
 category: 'Grail-String Representation'

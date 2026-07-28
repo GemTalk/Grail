@@ -1042,6 +1042,63 @@ fromutc: dt
 	^ d __add__: dtdst
 %
 
+category: 'Grail-Pickle'
+method: PyTzinfo
+__reduce__
+	"(class, initargs, state) — CPython's tzinfo.__reduce__.
+
+	tzinfo itself carries no data, but it must still be picklable so that
+	concrete subclasses can be (test_pickling_base).  Args come from
+	__getinitargs__ when the subclass defines one (timezone does);
+	otherwise the subclass is reconstructed by calling it with NO
+	arguments and its instance namespace is reapplied as state, which is
+	how PicklableFixedOffset's offset/name survive the round trip
+	(test_pickling_subclass) -- pickle.py's `r' opcode hands the third
+	element to __setstate__, or merges it into the instance when it is a
+	plain dict."
+
+	| args state names |
+	args := (self ___respondsTo___: #'__getinitargs__')
+		ifTrue: [self __getinitargs__]
+		ifFalse: [tuple @env0:new].
+	state := dict ___new___.
+	names := [self @env0:dynamicInstanceVariables]
+		@env0:on: AbstractException do: [:e | e @env0:return: #()].
+	names @env0:do: [:nm |
+		| v |
+		v := self @env0:dynamicInstVarAt: nm.
+		v == nil ifFalse: [
+			state __setitem__: nm @env0:asString @env0:asUnicodeString _: v]].
+	^ tuple @env0:withAll: { self @env0:class. args. state }
+%
+
+category: 'Grail-Introspection'
+classmethod: PyTzinfo
+__module__
+	"Pickling a tzinfo pickles its CLASS by (module, qualname), and
+	pickle.py's _find_global rejects a class whose __module__ is not a
+	string (test_pickling_base).  PyTimezone declares its own; the base
+	class had none."
+
+	^ 'datetime'
+%
+
+category: 'Grail-Introspection'
+classmethod: PyTzinfo
+__qualname__
+	^ self @env0:== PyTzinfo
+		ifTrue: ['tzinfo']
+		ifFalse: [super __qualname__]
+%
+
+category: 'Grail-Introspection'
+classmethod: PyTzinfo
+__name__
+	^ self @env0:== PyTzinfo
+		ifTrue: ['tzinfo']
+		ifFalse: [super __name__]
+%
+
 category: 'Grail-Accessors'
 method: PyTimezone
 __str__
@@ -2383,17 +2440,93 @@ set compile_env: 1
 category: 'Grail-Callable'
 classmethod: PyDate
 value: positional value: kwargs
-	"date(year, month, day) — three positionals required."
+	"date(year, month, day) — three positionals required.
+
+	A lone 4-byte bytes/str first argument whose month byte is 1..12 is
+	CPython's pickle backdoor: date(b'\x07\xdf\x0b\x1b') rebuilds
+	2015-11-27 without re-validating each field.  An ill-formed byte
+	string deliberately does NOT take that path; it falls through to
+	normal construction, where a non-integer year is a catchable
+	TypeError instead of the raw Smalltalk indexing error this used to
+	raise (test_backdoor_resistance)."
 
 	| y m d |
-	y := positional @env0:at: 1.
-	m := positional @env0:at: 2.
-	d := positional @env0:at: 3.
+	y := positional @env0:at: 1 ifAbsent: [nil].
+	m := positional @env0:at: 2 ifAbsent: [nil].
+	d := positional @env0:at: 3 ifAbsent: [nil].
 	kwargs @env0:isNil ifFalse: [
 		y := kwargs @env0:at: 'year' ifAbsent: [y].
 		m := kwargs @env0:at: 'month' ifAbsent: [m].
 		d := kwargs @env0:at: 'day' ifAbsent: [d]].
+	(m @env0:isNil and: [PyDate ___isPickleState___: y width: 4 monthAt: 3 mask: false])
+		ifTrue: [^ self ___fromDateState___: y].
+	PyDate ___requireIntegers___: { y. m. d }.
 	^ self @env0:___fromFields___: y _: m _: d
+%
+
+category: 'Grail-Pickle'
+classmethod: PyDate
+___isPickleState___: obj width: n monthAt: i mask: maskFold
+	"True when obj is a bytes/str of exactly n items whose month byte is a
+	plausible 1..12 -- CPython's test for the constructor pickle backdoor.
+	time/datetime steal the high bit of that byte for `fold', so they mask
+	it off first; date has no fold and checks the raw value."
+
+	| b |
+	((obj @env0:isKindOf: ByteArray)
+		@env0:or: [obj @env0:isKindOf: CharacterCollection]) ifFalse: [^ false].
+	obj @env0:size @env0:= n ifFalse: [^ false].
+	b := PyDate ___byteValueOf___: obj at: i.
+	maskFold ifTrue: [b := b @env0:bitAnd: 127].
+	^ b @env0:between: 1 and: 12
+%
+
+category: 'Grail-Pickle'
+classmethod: PyDate
+___byteValueOf___: obj at: i
+	"The i-th item of a pickle state as an integer, whether the state
+	arrived as bytes (SmallIntegers) or str (Characters)."
+
+	| e |
+	e := obj @env0:at: i.
+	^ (e @env0:isKindOf: Character) ifTrue: [e @env0:asInteger] ifFalse: [e]
+%
+
+category: 'Grail-Pickle'
+classmethod: PyDate
+___requireIntegers___: fields
+	"CPython's constructors reject a non-integer field with TypeError.
+	Grail previously let e.g. a byte string reach the field setters and
+	die with an uncatchable Smalltalk error instead."
+
+	fields @env0:do: [:f |
+		(f @env0:isKindOf: Integer) ifFalse: [
+			^ TypeError @env1:___signal___: 'an integer is required']].
+	^ nil
+%
+
+category: 'Grail-Pickle'
+classmethod: PyDate
+___fromDateState___: s
+	"Rebuild from the 4-byte pickle state (yhi, ylo, month, day).  A
+	classmethod: the constructors that reach it are class-side, so `self'
+	is the class -- and going through it keeps a subclass receiver.
+
+	Fields are stored DIRECTLY rather than through _year:_month:_day:,
+	because the whole point of the backdoor is to skip revalidation: the
+	byte pair can encode a year outside 1..9999 and CPython accepts it
+	(``this shouldn't blow up because of the month byte alone'' --
+	test_backdoor_resistance).  Only the month byte is ever checked, by
+	___isPickleState___ before we get here."
+
+	| inst |
+	inst := self @env0:new.
+	inst @env0:dynamicInstVarAt: #_year
+		put: ((PyDate ___byteValueOf___: s at: 1) @env0:* 256)
+			@env0:+ (PyDate ___byteValueOf___: s at: 2).
+	inst @env0:dynamicInstVarAt: #_month put: (PyDate ___byteValueOf___: s at: 3).
+	inst @env0:dynamicInstVarAt: #_day put: (PyDate ___byteValueOf___: s at: 4).
+	^ inst
 %
 
 category: 'Grail-Instantiation'
@@ -2436,6 +2569,11 @@ ___new__: positional kw: kwargs
 		y := kwargs @env0:at: 'year' ifAbsent: [y].
 		m := kwargs @env0:at: 'month' ifAbsent: [m].
 		d := kwargs @env0:at: 'day' ifAbsent: [d]].
+	"Same pickle backdoor as the class-side constructor, so a SUBCLASS of
+	date unpickles too (test_backdoor_resistance runs over subclasses)."
+	(m @env0:isNil and: [PyDate ___isPickleState___: y width: 4 monthAt: 3 mask: false])
+		ifTrue: [^ self ___fromDateState___: y].
+	PyDate ___requireIntegers___: { y. m. d }.
 	inst := self @env0:new.
 	inst @env0:_year: y _month: m _day: d.
 	^ inst
