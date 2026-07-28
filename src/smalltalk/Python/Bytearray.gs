@@ -742,12 +742,13 @@ find: sub _: start
 
 category: 'Grail-Search Methods'
 method: bytearray
-find: sub _: start _: end
+find: rawSub _: start _: end
 	"find(sub, start, end) → first index in [start, end) where ``sub``
 	matches, or -1.  Single-int ``sub`` searches for that byte value;
 	a sequence ``sub`` searches for the contiguous run."
 
-	| size lo hi subSize |
+	| size lo hi subSize sub |
+	sub := self ___searchOperand___: rawSub.
 	size := self @env0:size.
 	"CPython bound handling (bytearray overrides find; bytes inherits the rest
 	of the search family and normalizes there): None == the default bound, and

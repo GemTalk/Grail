@@ -124,6 +124,13 @@ the same name):
    logging.config stub) — extend the existing logging port.
 5. **smtplib / ftplib / http.cookiejar / xmlrpc** — only if a target
    library demands them; socket + ssl exist to build on.
+6. **memoryview / the buffer protocol** — `memoryview(x)` is an identity
+   stub that returns `x` (see docs/Built-in&nbsp;Functions.md).  A real
+   implementation needs a view object over shared storage plus an export
+   count on the exporter, which is what CPython's `BufferError` guards
+   are built on.  Two `test.test_bytes` cases are skipped for it; the
+   tripwire is `BytearrayTestCase >> testMemoryviewIsIdentityStub`,
+   which fails as soon as the stub is replaced.
 
 ## Out of scope on the GemStone VM (P3)
 

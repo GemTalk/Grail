@@ -511,8 +511,22 @@ __mod__: args
 	Flags, width and precision (including '*' args) are honored.  The result is
 	the receiver's own type (bytes -> bytes, bytearray -> bytearray)."
 
-	| n out i isMap argSeq argIdx nextArg content result |
+	| n out i isMap argSeq argIdx nextArg content result fmt checkStable |
 	n := self @env0:size.
+	"Drive the scan off a SNAPSHOT of the format bytes.  A conversion can run
+	arbitrary Python (%a calls repr, %s calls str, a '*' width calls __index__)
+	and that code may clear or shrink a bytearray receiver -- indexing the live
+	object with the captured length then died with an uncatchable GemStone
+	OffsetError (CPython's gh-142557 crash, same cause)."
+	fmt := ByteArray @env0:new: n.
+	1 @env0:to: n do: [:z | fmt @env0:at: z put: (self @env0:at: z)].
+	"CPython holds a buffer export over the format string for the duration, so
+	a mid-format mutation is a BufferError.  Grail has no export machinery;
+	compare the length instead, which catches every case the tests describe."
+	checkStable := [
+		self @env0:size @env0:= n ifFalse: [
+			BufferError ___signal___:
+				'Existing exports of data: object cannot be re-sized']].
 	out := WriteStream @env0:on: ByteArray @env0:new.
 	isMap := args isKindOf: KeyValueDictionary.
 	(isMap @env0:not @env0:and: [
@@ -529,7 +543,7 @@ __mod__: args
 	i := 1.
 	[i @env0:<= n] @env0:whileTrue: [
 		| byte |
-		byte := self @env0:at: i.
+		byte := fmt @env0:at: i.
 		byte @env0:= 37 ifFalse: [ out @env0:nextPut: byte. i := i @env0:+ 1 ]
 		ifTrue: [
 			| key flags width precision conv value |
@@ -537,64 +551,67 @@ __mod__: args
 			i @env0:> n ifTrue: [ValueError ___signal___: 'incomplete format'].
 			"mapping key: %(...) matching balanced parens"
 			key := nil.
-			(self @env0:at: i) @env0:= 40 ifTrue: [
+			(fmt @env0:at: i) @env0:= 40 ifTrue: [
 				| depth start kk klen |
 				i := i @env0:+ 1. start := i. depth := 1.
 				[depth @env0:> 0] @env0:whileTrue: [
 					i @env0:> n ifTrue: [ValueError ___signal___: 'incomplete format key'].
-					(self @env0:at: i) @env0:= 40 ifTrue: [depth := depth @env0:+ 1].
-					(self @env0:at: i) @env0:= 41 ifTrue: [depth := depth @env0:- 1].
+					(fmt @env0:at: i) @env0:= 40 ifTrue: [depth := depth @env0:+ 1].
+					(fmt @env0:at: i) @env0:= 41 ifTrue: [depth := depth @env0:- 1].
 					depth @env0:> 0 ifTrue: [i := i @env0:+ 1]].
 				"Key is always a plain (hashable) bytes -- a slice of a bytearray
 				receiver would be an unhashable bytearray, unusable as a dict key."
 				klen := i @env0:- start.
 				kk := bytes @env0:___new___: klen.
-				1 @env0:to: klen do: [:z | kk @env0:at: z put: (self @env0:at: start @env0:+ z @env0:- 1)].
+				1 @env0:to: klen do: [:z | kk @env0:at: z put: (fmt @env0:at: start @env0:+ z @env0:- 1)].
 				key := kk.
 				i := i @env0:+ 1].
 			"flags: - + space # 0  (45 43 32 35 48)"
 			flags := OrderedCollection @env0:new.
-			[i @env0:<= n @env0:and: [ | c | c := self @env0:at: i.
+			[i @env0:<= n @env0:and: [ | c | c := fmt @env0:at: i.
 				(c @env0:= 45) @env0:or: [(c @env0:= 43) @env0:or: [(c @env0:= 32) @env0:or: [
 					(c @env0:= 35) @env0:or: [c @env0:= 48]]]] ]]
 				@env0:whileTrue: [
-					flags @env0:add: (Character @env0:codePoint: (self @env0:at: i)). i := i @env0:+ 1 ].
+					flags @env0:add: (Character @env0:codePoint: (fmt @env0:at: i)). i := i @env0:+ 1 ].
 			"width: digits or '*' (consumes an arg; negative -> '-' flag)"
 			width := 0.
-			(i @env0:<= n @env0:and: [(self @env0:at: i) @env0:= 42]) ifTrue: [
+			(i @env0:<= n @env0:and: [(fmt @env0:at: i) @env0:= 42]) ifTrue: [
 				width := (nextArg @env0:value) @env0:asInteger.
+				checkStable @env0:value.
 				width @env0:< 0 ifTrue: [ flags @env0:add: $-. width := width @env0:abs ].
 				i := i @env0:+ 1
 			] ifFalse: [
-				[i @env0:<= n @env0:and: [ | c | c := self @env0:at: i. (c @env0:>= 48) @env0:and: [c @env0:<= 57]]]
+				[i @env0:<= n @env0:and: [ | c | c := fmt @env0:at: i. (c @env0:>= 48) @env0:and: [c @env0:<= 57]]]
 					@env0:whileTrue: [
-						width := (width @env0:* 10) @env0:+ ((self @env0:at: i) @env0:- 48). i := i @env0:+ 1 ]].
+						width := (width @env0:* 10) @env0:+ ((fmt @env0:at: i) @env0:- 48). i := i @env0:+ 1 ]].
 			"precision: '.' then digits or '*'  ('.' alone means 0)"
 			precision := nil.
-			(i @env0:<= n @env0:and: [(self @env0:at: i) @env0:= 46]) ifTrue: [
+			(i @env0:<= n @env0:and: [(fmt @env0:at: i) @env0:= 46]) ifTrue: [
 				i := i @env0:+ 1.
-				(i @env0:<= n @env0:and: [(self @env0:at: i) @env0:= 42]) ifTrue: [
+				(i @env0:<= n @env0:and: [(fmt @env0:at: i) @env0:= 42]) ifTrue: [
 					precision := (nextArg @env0:value) @env0:asInteger.
+					checkStable @env0:value.
 					precision @env0:< 0 ifTrue: [precision := nil].
 					i := i @env0:+ 1
 				] ifFalse: [
 					precision := 0.
-					[i @env0:<= n @env0:and: [ | c | c := self @env0:at: i. (c @env0:>= 48) @env0:and: [c @env0:<= 57]]]
+					[i @env0:<= n @env0:and: [ | c | c := fmt @env0:at: i. (c @env0:>= 48) @env0:and: [c @env0:<= 57]]]
 						@env0:whileTrue: [
-							precision := (precision @env0:* 10) @env0:+ ((self @env0:at: i) @env0:- 48). i := i @env0:+ 1 ]]].
+							precision := (precision @env0:* 10) @env0:+ ((fmt @env0:at: i) @env0:- 48). i := i @env0:+ 1 ]]].
 			"skip C length modifiers h l L (104 108 76)"
-			[i @env0:<= n @env0:and: [ | c | c := self @env0:at: i.
+			[i @env0:<= n @env0:and: [ | c | c := fmt @env0:at: i.
 				(c @env0:= 104) @env0:or: [(c @env0:= 108) @env0:or: [c @env0:= 76]] ]]
 				@env0:whileTrue: [i := i @env0:+ 1].
 			i @env0:> n ifTrue: [ValueError ___signal___: 'incomplete format'].
-			conv := self @env0:at: i. i := i @env0:+ 1.
+			conv := fmt @env0:at: i. i := i @env0:+ 1.
 			conv @env0:= 37 ifTrue: [ out @env0:nextPut: 37 ]
 			ifFalse: [
 				key @env0:notNil
 					ifTrue: [value := args @env1:__getitem__: key]
 					ifFalse: [value := nextArg @env0:value].
 				self ___modEmit___: value conv: conv flags: flags width: width
-					precision: precision into: out ]
+					precision: precision into: out.
+				checkStable @env0:value ]
 		]
 	].
 	content := out @env0:contents.
@@ -828,13 +845,15 @@ __class__
 
 category: 'Grail-Sequence Protocol'
 method: bytes
-__contains__: item
+__contains__: rawItem
 	"Python membership: ``int in bytes'' tests for that byte value (which must
 	be in range(0, 256), else ValueError); ``bytes/bytearray in bytes'' does a
 	subsequence search (itsdangerous's ``self.sep not in signed_value'' with a
 	bytes sep relies on it).  Any other type -- None, float, str -- is a
 	TypeError (``'a' in b'abc''' raises, matching CPython)."
 
+	| item |
+	item := self ___searchOperand___: rawItem.
 	(item isKindOf: Integer) ifTrue: [
 		self ___checkByteValue___: item.
 		^ self @env0:includes: item
@@ -846,7 +865,7 @@ __contains__: item
 		^ (self @env0:indexOfSubCollection: item) @env0:> 0
 	].
 	^ TypeError ___signal___: ('a bytes-like object is required, not '''
-		@env0:, (item @env1:__class__ @env1:__name__) @env0:, '''')
+		@env0:, (bytes ___pyTypeNameOf___: item) @env0:, '''')
 %
 
 category: 'Grail-Comparison'
@@ -1113,12 +1132,13 @@ count: sub _: start _: end
 
 category: 'Grail-Search Methods'
 method: bytes
-rfind: sub _: start _: end
+rfind: rawSub _: start _: end
 	"bytes.rfind(sub, start, end) -- highest 0-based index of sub within
 	[start, end), or -1.  re._constants.PatternError computes error
 	column positions with it on byte patterns."
 
-	| size s e subSize i |
+	| size s e subSize i sub |
+	sub := self ___searchOperand___: rawSub.
 	size := self @env0:size.
 	s := start. e := end.
 	"CPython accepts None for start/end (== the default bound)."
@@ -1158,6 +1178,45 @@ rfind: sub
 
 category: 'Grail-Search Methods'
 method: bytes
+___searchOperand___: sub
+	"Resolve a search / membership operand to an int byte value or a bytes-like
+	object, honoring the two protocols CPython's converters use: __index__ (an
+	int needle) and PEP 688's __buffer__ (a bytes-like needle).  Either can run
+	arbitrary Python that shrinks a bytearray receiver mid-call; CPython holds a
+	buffer export over the receiver and raises BufferError, which we reproduce
+	by comparing the receiver's length across the conversion (gh-142560).
+
+	Before this existed an arbitrary object fell through to the sub-sequence
+	branch, where ``sub @env0:size'' on a PythonInstance answers 0, so
+	``ba.find(obj)'' silently reported an empty-needle match at index 0."
+
+	| size0 resolved |
+	"Fast paths -- the overwhelmingly common operands.  Neither can run Python
+	code, so neither needs the stability check below."
+	(sub isKindOf: bytes) ifTrue: [^ sub].
+	(sub isKindOf: Integer) ifTrue: [^ sub].
+
+	size0 := self @env0:size.
+	resolved := nil.
+	(sub ___respondsTo___: #'__buffer__:')
+		ifTrue: [
+			resolved := sub @env1:__buffer__: 0.
+			(resolved isKindOf: bytes) ifFalse: [
+				TypeError ___signal___: '__buffer__ returned a non-buffer object']]
+		ifFalse: [
+			(sub ___respondsTo___: #'__index__') ifTrue: [
+				resolved := bytes ___coerceIndex___: sub]].
+	resolved @env0:isNil ifTrue: [
+		TypeError ___signal___: ('a bytes-like object is required, not '''
+			@env0:, (bytes ___pyTypeNameOf___: sub) @env0:, '''')].
+	self @env0:size @env0:= size0 ifFalse: [
+		BufferError ___signal___:
+			'Existing exports of data: object cannot be re-sized'].
+	^ resolved
+%
+
+category: 'Grail-Search Methods'
+method: bytes
 ___checkByteValue___: n
 	"An int used as a single-byte needle (count/find/index/rfind/rindex) or
 	membership test must be in range(0, 256); CPython raises ValueError
@@ -1169,9 +1228,10 @@ ___checkByteValue___: n
 
 category: 'Grail-Search Methods'
 method: bytes
-count: sub
+count: rawSub
 	"Count non-overlapping occurrences of sub"
-	| subSize mySize count i |
+	| subSize mySize count i sub |
+	sub := self ___searchOperand___: rawSub.
 
 	"sub must be bytes or integer"
 	(sub isKindOf: Integer) ifTrue: [
@@ -1648,9 +1708,10 @@ _expandtabs: positional kw: kwargs
 
 category: 'Grail-Search Methods'
 method: bytes
-find: sub
+find: rawSub
 	"Find first occurrence of sub, return index or -1"
-	| subSize mySize i |
+	| subSize mySize i sub |
+	sub := self ___searchOperand___: rawSub.
 
 	"sub must be bytes or integer"
 	(sub isKindOf: Integer) ifTrue: [
@@ -2376,9 +2437,10 @@ ___replaceEmptyOld___: new count: count
 
 category: 'Grail-Search Methods'
 method: bytes
-rfind: sub
+rfind: rawSub
 	"Find last occurrence of sub, return index or -1"
-	| subSize mySize i |
+	| subSize mySize i sub |
+	sub := self ___searchOperand___: rawSub.
 
 	"sub must be bytes or integer"
 	(sub isKindOf: Integer) ifTrue: [
@@ -2497,11 +2559,12 @@ rsplit: sep
 
 category: 'Grail-Splitting Methods'
 method: bytes
-rsplit: sep _: maxsplit
+rsplit: rawSep _: maxsplit
 	"Split from right with maximum number of splits.  A None separator splits
 	on runs of ASCII whitespace, from the right (honoring maxsplit)."
-	| sepClass sepSize mySize parts positions i actualSplits lastEnd firstPart firstPartSize cap |
-	(sep @env0:== None) ifTrue: [^ self ___rsplitWhitespace___: maxsplit].
+	| sepClass sepSize mySize parts positions i actualSplits lastEnd firstPart firstPartSize cap sep |
+	(rawSep @env0:== None) ifTrue: [^ self ___rsplitWhitespace___: maxsplit].
+	sep := self ___searchOperand___: rawSep.
 	sepClass := sep @env0:class.
 
 	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
@@ -2623,11 +2686,14 @@ rstrip
 
 category: 'Grail-String-like Methods'
 method: bytes
-split: sep
+split: rawSep
 	"Split bytes by separator, return list of bytes.  A ``None'' separator
 	(``b.split(None)'') splits on runs of ASCII whitespace."
-	| sepClass sepSize mySize parts currentPart i |
-	(sep @env0:== None) ifTrue: [^ self ___splitWhitespace___].
+	| sepClass sepSize mySize parts currentPart i sep |
+	"None is the whitespace-split sentinel, checked BEFORE operand resolution
+	(which requires a bytes-like or an int)."
+	(rawSep @env0:== None) ifTrue: [^ self ___splitWhitespace___].
+	sep := self ___searchOperand___: rawSep.
 	sepClass := sep @env0:class.
 
 	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
@@ -2689,11 +2755,12 @@ split: sep
 
 category: 'Grail-String-like Methods'
 method: bytes
-split: sep _: maxsplit
+split: rawSep _: maxsplit
 	"Split bytes by separator with maximum number of splits.  A None separator
 	splits on runs of ASCII whitespace (honoring maxsplit)."
-	| sepClass sepSize mySize parts currentPart i splitCount match |
-	(sep @env0:== None) ifTrue: [^ self ___splitWhitespace___: maxsplit].
+	| sepClass sepSize mySize parts currentPart i splitCount match sep |
+	(rawSep @env0:== None) ifTrue: [^ self ___splitWhitespace___: maxsplit].
+	sep := self ___searchOperand___: rawSep.
 	sepClass := sep @env0:class.
 
 	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
