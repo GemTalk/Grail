@@ -77,6 +77,19 @@ __new__: obj _: encoding
 	bytes into text.  Delegates to bytes.decode for the actual
 	conversion."
 
+	"Also CPython's EXPLICIT-cls spelling ``str.__new__(cls, value)'', which a
+	hand-written str-subclass __new__ uses to build its instance (test_bytes'
+	StrWithBytes).  Grail models __new__ as a classmethod whose receiver is
+	already the class, so the class arrives as the first POSITIONAL and shifts
+	the real source into ``encoding'' -- without this the content was silently
+	dropped and an empty instance came back.  Unambiguous: decoding a CLASS
+	under an encoding is meaningless, so a str-subclass class here can only be
+	the explicit-cls form.  (The 1-arg ``__new__: obj'' deliberately does NOT
+	get this treatment -- ``str(SomeClass)'' must still stringify the class.)"
+	((obj @env0:isKindOf: Behavior)
+		@env0:and: [obj @env0:inheritsFrom: CharacterCollection])
+			ifTrue: [^ obj __new__: encoding].
+
 	(obj isKindOf: ByteArray) ifTrue: [
 		^ obj decode: encoding
 	].
@@ -94,6 +107,12 @@ __new__: obj _: encoding _: errors
 	"3-arg form: ``str(bytes_obj, encoding, errors)''.  Errors policy
 	is honored by bytes.decode (currently ignored — Grail's decoders
 	either succeed or raise) — accepted for parity."
+
+	"Explicit-cls spelling ``str.__new__(cls, value, encoding)'' -- see
+	__new__:_: for why this is unambiguous."
+	((obj @env0:isKindOf: Behavior)
+		@env0:and: [obj @env0:inheritsFrom: CharacterCollection])
+			ifTrue: [^ obj __new__: encoding _: errors].
 
 	^ self __new__: obj _: encoding
 %
