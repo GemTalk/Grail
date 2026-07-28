@@ -35,6 +35,12 @@ _DICT_KEYITER = type(iter({}))
 _DICT_VALUEITER = type(iter({}.values()))
 _DICT_ITEMITER = type(iter({}.items()))
 
+# The set_iterator type (shared by iterators over both set and frozenset).
+# Set order is undefined, so -- like CPython -- a set iterator pickles as a
+# list_iterator over its remaining elements: the encoder emits the same "I"
+# tag used for list iterators, so it unpickles as a plain list_iterator.
+_SET_ITER = type(iter(set()))
+
 _HIGHEST_PROTOCOL = 5
 HIGHEST_PROTOCOL = 5
 DEFAULT_PROTOCOL = 4
@@ -188,6 +194,16 @@ def _encode_body(obj, out, memo):
         out.append(b"M")
         _encode(d, out, memo)
         _emit_len(out, pos)
+    elif type(obj) is _SET_ITER:
+        # A set/frozenset iterator: pickle as a list_iterator (tag "I") over
+        # its elements snapshot resuming at `position'.  Set order is
+        # undefined, so CPython also unpickles set iterators as list iterators.
+        coll, pos = obj._getstate()
+        out.append(b"I")
+        _encode(coll, out, memo)
+        _emit_len(out, pos)
+        out.append(b"F")   # not reversed
+        out.append(b"F")   # not exhausted
     elif isinstance(obj, tuple):
         out.append(b"t")
         _emit_len(out, len(obj))
@@ -204,19 +220,40 @@ def _encode_body(obj, out, memo):
         for k, v in obj.items():
             _encode(k, out, memo)
             _encode(v, out, memo)
-    elif isinstance(obj, frozenset):
+    elif type(obj) is frozenset:
         out.append(b"z")
         _emit_len(out, len(obj))
         for x in obj:
             _encode(x, out, memo)
-    elif isinstance(obj, set):
+    elif type(obj) is set:
         out.append(b"s")
         _emit_len(out, len(obj))
         for x in obj:
             _encode(x, out, memo)
+    elif isinstance(obj, (set, frozenset)):
+        # A set/frozenset SUBCLASS: preserve its type (pickled by reference,
+        # like a class) AND its instance state (via __getstate__), so
+        # attributes set on the instance survive the round-trip.  Reconstructed
+        # as cls(elements) with the state dict re-applied.
+        out.append(b"y")
+        _emit_global(out, type(obj))
+        _emit_len(out, len(obj))
+        for x in obj:
+            _encode(x, out, memo)
+        _encode(obj.__getstate__(), out, memo)
     elif isinstance(obj, type):
         _emit_global(out, obj)
     else:
+        # Functions / builtins reachable as a module global pickle by
+        # reference (the "g" tag), matching CPython's save_global.  Grail's
+        # operator.add and friends are BoundMethods whose __reduce__ is
+        # unimplemented, so try the by-reference path (which only succeeds when
+        # the object IS a module global) before falling back to __reduce__.
+        try:
+            _emit_global(out, obj)
+            return
+        except PicklingError:
+            pass
         reduce = getattr(obj, "__reduce__", None)
         if reduce is None:
             raise PicklingError("Can't pickle %r" % (obj,))
@@ -340,6 +377,17 @@ class _Unpickler:
         if t == b"z":
             n = int(self._line())
             return frozenset([self.load() for _ in range(n)])
+        if t == b"y":
+            # A set/frozenset subclass: cls(elements) + restored __dict__.
+            cls = self.load()
+            n = int(self._line())
+            items = [self.load() for _ in range(n)]
+            state = self.load()
+            obj = cls(items)
+            if state:
+                for k, v in state.items():
+                    setattr(obj, k, v)
+            return obj
         if t == b"g":
             mn = int(self._line())
             modname = self._take(mn).decode("utf-8")

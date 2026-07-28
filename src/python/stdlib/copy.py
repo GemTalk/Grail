@@ -109,6 +109,21 @@ def deepcopy(obj, memo=None):
         for item in obj:
             result.append(deepcopy(item, memo))
         return result
+    # A frozenset/set SUBCLASS without its own __deepcopy__.  Checked before
+    # the atom passthrough, which would otherwise return ``obj`` itself (same
+    # id) instead of an independent copy.  frozenset first: it is immutable, so
+    # it is rebuilt in one shot from the deep-copied items; a set subclass is
+    # pre-registered empty (cycle-safe) then populated via .add.
+    if isinstance(obj, frozenset):
+        result = t(deepcopy(item, memo) for item in obj)
+        memo[obj_id] = result
+        return result
+    if isinstance(obj, set):
+        result = t()
+        memo[obj_id] = result
+        for item in obj:
+            result.add(deepcopy(item, memo))
+        return result
     # Atoms — deepcopy returns the same object.
     memo[obj_id] = obj
     return obj

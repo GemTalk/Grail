@@ -1972,9 +1972,20 @@ __getattribute__: name
 category: 'Grail-Serialization'
 method: object
 __getstate__
-	"Return state for pickling"
+	"Python object.__getstate__ (CPython 3.11+): the instance state used by
+	pickling / copying.  Grail stores Python instance attributes as dynamic
+	instance variables, so answer a dict of them (name -> value); answer None
+	when there are none, matching CPython (an empty __dict__ with no slots
+	getstates to None so the reconstructor skips restoring state)."
 
-	self @env0:error: 'Not yet implemented: __getstate__'
+	| names d |
+	names := self @env0:dynamicInstanceVariables.
+	names @env0:isEmpty ifTrue: [^ None].
+	d := dict ___new___.
+	names @env0:do: [:nm |
+		d __setitem__: (nm @env0:asString @env0:asUnicodeString)
+			_: (self @env0:dynamicInstVarAt: nm)].
+	^ d
 %
 
 category: 'Grail-Comparison'

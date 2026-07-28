@@ -139,6 +139,18 @@ __length_hint__
 	^ remaining @env0:< 0 ifTrue: [0] ifFalse: [remaining]
 %
 
+category: 'Grail-Internal'
+method: set_iterator
+_getstate
+	"Answer (elements-snapshot, position) for pickling -- see pickle.py's
+	iterator tags.  A set iterator pickles as a list_iterator over its
+	elements snapshot resuming at `position' (set order is undefined, so
+	CPython likewise unpickles set iterators as list iterators).  A
+	single-underscore (Python-visible) name so pickle.py can call it."
+
+	^ tuple @env0:withAll: { elements. position }
+%
+
 category: 'Grail-String Representation'
 method: set_iterator
 __repr__
