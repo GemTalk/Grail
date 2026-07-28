@@ -24,6 +24,8 @@ def copy(obj):
         return set(obj)
     if t is frozenset:
         return frozenset(obj)
+    if t is bytearray:
+        return bytearray(obj)
     # A dict/list SUBCLASS without its own __copy__ (Counter, OrderedDict,
     # ...) -- reconstruct via the subclass's own constructor rather than
     # falling to the atom passthrough below, which would return ``obj``
@@ -32,8 +34,36 @@ def copy(obj):
         return t(obj)
     if isinstance(obj, list):
         return t(obj)
+    # A bytes/bytearray SUBCLASS is not an atom: CPython rebuilds it through
+    # __reduce_ex__, producing a distinct object of the same type that carries
+    # the instance attributes.  (An EXACT bytes falls through to the atom
+    # passthrough below, which is what CPython does for immutables.)
+    if isinstance(obj, (bytes, bytearray)):
+        result = t(obj)
+        _copy_attrs(obj, result, None)
+        return result
     # Atoms (int, str, None, ...) — copy returns the same object.
     return obj
+
+
+def _instance_attrs(obj):
+    """The instance-attribute mapping of *obj*, or None when it has none."""
+    try:
+        d = obj.__dict__
+    except AttributeError:
+        return None
+    return d
+
+
+def _copy_attrs(src, dst, memo):
+    """Carry src's instance attributes onto dst, deep-copying when *memo*
+    is not None."""
+    d = _instance_attrs(src)
+    if not d:
+        return
+    for k in list(d.keys()):
+        v = d[k]
+        setattr(dst, k, v if memo is None else deepcopy(v, memo))
 
 
 def replace(obj, /, **changes):
@@ -95,6 +125,10 @@ def deepcopy(obj, memo=None):
         result = frozenset(deepcopy(item, memo) for item in obj)
         memo[obj_id] = result
         return result
+    if t is bytearray:
+        result = bytearray(obj)
+        memo[obj_id] = result
+        return result
     # A dict/list SUBCLASS without its own __deepcopy__ -- same rationale
     # as the isinstance fallback in copy() above.
     if isinstance(obj, dict):
@@ -108,6 +142,12 @@ def deepcopy(obj, memo=None):
         memo[obj_id] = result
         for item in obj:
             result.append(deepcopy(item, memo))
+        return result
+    # bytes/bytearray SUBCLASS -- see the matching branch in copy().
+    if isinstance(obj, (bytes, bytearray)):
+        result = t(obj)
+        memo[obj_id] = result
+        _copy_attrs(obj, result, memo)
         return result
     # Atoms — deepcopy returns the same object.
     memo[obj_id] = obj

@@ -168,24 +168,30 @@ indices: length
 	CPython's PySlice_GetIndicesEx semantics including negative-index
 	wrap and bounds clamping."
 
-	| st lo hi |
-	st := self step @env0:= None ifTrue: [1] ifFalse: [self step].
+	| st lo hi rawStart rawStop |
+	"start / stop / step may be any __index__ object (gh-91153 uses one whose
+	__index__ mutates the sequence).  Coerce them here so the comparisons
+	below see integers instead of dying on an uncatchable env-0 ``#< not
+	understood'' DNU."
+	st := self step @env0:= None ifTrue: [1] ifFalse: [bytes ___coerceIndex___: self step].
 	(st @env0:= 0) ifTrue: [
 		ValueError ___signal___: 'slice step cannot be zero'
 	].
-	lo := self start @env0:= None
+	rawStart := self start @env0:= None ifTrue: [None] ifFalse: [bytes ___coerceIndex___: self start].
+	rawStop := self stop @env0:= None ifTrue: [None] ifFalse: [bytes ___coerceIndex___: self stop].
+	lo := rawStart @env0:= None
 		ifTrue: [st @env0:> 0 ifTrue: [0] ifFalse: [length @env0:- 1]]
-		ifFalse: [self start @env0:< 0
-			ifTrue: [(length @env0:+ self start) @env0:max:
+		ifFalse: [rawStart @env0:< 0
+			ifTrue: [(length @env0:+ rawStart) @env0:max:
 				(st @env0:> 0 ifTrue: [0] ifFalse: [-1])]
-			ifFalse: [self start @env0:min:
+			ifFalse: [rawStart @env0:min:
 				(st @env0:> 0 ifTrue: [length] ifFalse: [length @env0:- 1])]].
-	hi := self stop @env0:= None
+	hi := rawStop @env0:= None
 		ifTrue: [st @env0:> 0 ifTrue: [length] ifFalse: [-1]]
-		ifFalse: [self stop @env0:< 0
-			ifTrue: [(length @env0:+ self stop) @env0:max:
+		ifFalse: [rawStop @env0:< 0
+			ifTrue: [(length @env0:+ rawStop) @env0:max:
 				(st @env0:> 0 ifTrue: [0] ifFalse: [-1])]
-			ifFalse: [self stop @env0:min:
+			ifFalse: [rawStop @env0:min:
 				(st @env0:> 0 ifTrue: [length] ifFalse: [length @env0:- 1])]].
 	^ tuple @env0:with: lo with: hi with: st
 %

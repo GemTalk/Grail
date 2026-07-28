@@ -702,3 +702,34 @@ testSetSliceExtendedWrongLengthRaises
 		ba @env1:__setitem__: (slice @env1:__new__: None _: None _: 2) _: (self baFrom: #(88 89))
 	] raise: ValueError.
 %
+
+category: 'Grail-Tests - Buffer protocol'
+method: BytearrayTestCase
+testMemoryviewIsIdentityStub
+	"TRIPWIRE, not an endorsement.  Grail has no memoryview: `PyMemoryView`
+	(src/smalltalk/install.gs) is an empty marker class so that
+	``isinstance(x, memoryview)'' guards answer False, and calling
+	``memoryview(x)'' hands back x ITSELF.  Consequences worth knowing:
+
+	  * bytes/bytearray tests that pass a memoryview (test_bytes' test_join,
+	    test_setslice, test_fromhex, test_hex) are green because the call is a
+	    no-op, not because memoryview works;
+	  * nothing can hold a buffer export, so bytearray.resize() cannot refuse
+	    to run and a 0-length re-entrant clear() cannot be detected -- hence
+	    the two remaining buffer skips in scripts/cpython_suite_skips.txt,
+	    test_resize_forbidden and
+	    test_search_methods_reentrancy_raises_buffererror.
+
+	When a real memoryview lands this test FAILS, which is the cue to drop
+	those skips and re-check the four tests listed above.  See the
+	memoryview note in docs/Built-in Functions.md."
+
+	| probe |
+	probe := (self eval: 'ba = bytearray(b"hi")
+mv = memoryview(ba)
+[mv is ba, isinstance(mv, memoryview)]') @env1:__repr__.
+	self assert: probe = '[True, False]'
+		description: 'expected the identity stub ([True, False]) but got '
+			, probe printString
+			, ' -- a real memoryview may have landed; see this method''s comment'
+%

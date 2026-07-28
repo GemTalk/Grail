@@ -34,19 +34,50 @@ __new__: source
 	"bytes(source) — create bytes from various sources. Receiver is
 	the class (so subclasses like bytearray instantiate themselves)."
 
-	| result sourceClass materialized ba size |
+	| sourceClass materialized ba size hook |
 	sourceClass := source @env0:class.
+
+	"Fast paths: the kernel classes that can never carry a __bytes__ hook
+	(a Python subclass of int / bytes / bytearray has its own class, so it
+	falls through to the general path below and IS hook-checked)."
 
 	"If source is an integer, create bytes of that size filled with zeros"
 	sourceClass == SmallInteger ifTrue: [
-		(source @env0:< 0) ifTrue: [
-			ValueError ___signal___: 'negative count'
-		].
-		^ self ___new___: source
+		^ self ___newZeroed___: source
+	].
+	(sourceClass == ByteArray or: [sourceClass == bytearray]) ifTrue: [
+		^ self ___copyBytesOf___: source
+	].
+
+	"CPython's bytes_new_impl consults __bytes__ BEFORE the
+	str / buffer / int / iterable fallbacks.  A class may also set
+	``__bytes__ = None'' to BLOCK the conversion (gh-24731 /
+	test_bytes_blocking), which is a TypeError even for a bytes subclass."
+	hook := [source @env1:___pyAttrLoad___: #'__bytes__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	hook @env0:== None ifTrue: [
+		TypeError ___signal___: ('cannot convert '''
+			@env0:, (bytes ___pyTypeNameOf___: source)
+			@env0:, ''' object to bytes')].
+	(hook @env0:notNil and: [(source isKindOf: bytes) @env0:not]) ifTrue: [
+		| converted |
+		converted := source @env1:__bytes__.
+		(converted isKindOf: bytes) ifFalse: [
+			TypeError ___signal___: ('__bytes__ returned non-bytes (type '
+				@env0:, (bytes ___pyTypeNameOf___: converted) @env0:, ')')].
+		"CPython returns the hook's object as-is for a plain bytes() call and
+		re-types it for a subclass constructor."
+		^ (self == ByteArray)
+			ifTrue: [converted]
+			ifFalse: [self ___copyBytesOf___: converted]].
+
+	"Any other integer (LargePositiveInteger, a bool, ...) is still a count."
+	(source isKindOf: Integer) ifTrue: [
+		^ self ___newZeroed___: source
 	].
 
 	"If source is a string, raise TypeError (need encoding)"
-	(source isKindOf: String) ifTrue: [
+	(source isKindOf: CharacterCollection) ifTrue: [
 		TypeError ___signal___: 'string argument without an encoding'
 	].
 
@@ -57,28 +88,28 @@ __new__: source
 	re._compiler._optimize_charset's BIGCHARSET path (``charmap =
 	bytes(charmap)`` lost all 256 bytes of the bitmap)."
 	(source isKindOf: bytes) ifTrue: [
-		result := self ___new___: source @env0:size.
-		1 @env0:to: source @env0:size do: [:i |
-			result @env0:at: i put: (source @env0:at: i)
-		].
-		^ result
+		^ self ___copyBytesOf___: source
 	].
 
-	"If source is a list, tuple, or array, convert elements to bytes"
+	"If source is a list, tuple, or array, convert elements to bytes.
+	The length is re-read on every step (as CPython's _PyBytes_FromList does):
+	an element's __index__ may mutate the very list being consumed (gh-34973 --
+	bytes([X(), X()]) where X.__index__ clears the list yields b'*', and a
+	self-appending Y grows it to 1000), and indexing a stale length crashed
+	with an uncatchable OffsetError."
 	(sourceClass == list or: [
 		sourceClass == tuple or: [
 			sourceClass == Array
 		]
 	]) ifTrue: [
-		| ba size |
-		size := source @env0:size.
-		ba := self ___new___: size.
-		1 @env0:to: size do: [:i |
-			| val |
-			val := self ___coerceByteValue___: (source @env0:at: i).
-			ba @env0:at: i put: val
+		| collected i |
+		collected := WriteStream @env0:on: ByteArray @env0:new.
+		i := 1.
+		[i @env0:<= source @env0:size] @env0:whileTrue: [
+			collected @env0:nextPut: (self ___coerceByteValue___: (source @env0:at: i)).
+			i := i @env0:+ 1
 		].
-		^ ba
+		^ self ___copyBytesOf___: collected @env0:contents
 	].
 
 	"If source is a range, convert to bytes"
@@ -116,6 +147,117 @@ __new__: source
 		val := self ___coerceByteValue___: (materialized @env0:at: i).
 		ba @env0:at: i put: val].
 	^ ba
+%
+
+category: 'Grail-Introspection'
+classmethod: bytes
+__doc__
+	"``bytes.__doc__'' -- CPython's constructor docstring.  Without this the
+	class-side lookup reached object>>__doc__ and reported object's docstring
+	(classes are objects, so the instance-side method is on the metaclass
+	chain).  bytearray overrides it with its own text."
+
+	^ 'bytes(iterable_of_ints) -> bytes
+bytes(string, encoding[, errors]) -> bytes
+bytes(bytes_or_buffer) -> immutable copy of bytes_or_buffer
+bytes(int) -> bytes object of size given by the parameter initialized with null bytes
+bytes() -> empty bytes object
+
+Construct an immutable array of bytes from:
+  - an iterable yielding integers in range(256)
+  - a text string encoded using the specified encoding
+  - any object implementing the buffer API.
+  - an integer
+'
+%
+
+category: 'Grail-Constructors'
+classmethod: bytes
+___newZeroed___: count
+	"bytes(n) / bytearray(n) -- n zero bytes, self-typed.  CPython raises
+	ValueError for a negative count, OverflowError for a count that does not
+	fit a Py_ssize_t, and MemoryError for one that does fit but cannot be
+	allocated; without these guards GemStone's ``new:'' signalled an
+	uncatchable OutOfRange."
+
+	(count @env0:< 0) ifTrue: [
+		ValueError ___signal___: 'negative count'].
+	"Beyond sys.maxsize (which Grail defines as SmallInteger maximumValue)
+	the count does not fit an index at all -- CPython's OverflowError."
+	(count @env0:> (SmallInteger @env0:maximumValue)) ifTrue: [
+		OverflowError ___signal___:
+			'cannot fit ''int'' into an index-sized integer'].
+	"A GemStone byte object cannot approach Py_ssize_t max; anything at that
+	scale is the MemoryError CPython raises for the same request."
+	(count @env0:> 1073741823) ifTrue: [
+		MemoryError ___signal___: 'cannot allocate bytes object'].
+	^ self ___new___: count
+%
+
+category: 'Grail-Constructors'
+classmethod: bytes
+___copyBytesOf___: source
+	"A fresh instance of the RECEIVER class holding source's bytes."
+
+	| size result |
+	size := source @env0:size.
+	result := self ___new___: size.
+	1 @env0:to: size do: [:i | result @env0:at: i put: (source @env0:at: i)].
+	^ result
+%
+
+category: 'Grail-Constructors'
+classmethod: bytes
+_new: positional kw: kwargs
+	"bytes(...) / bytearray(...) called with KEYWORD arguments.  CPython's
+	signature is ``bytes(source=b'', encoding=None, errors=None)'': encoding
+	or errors given without a str source is a TypeError, and so is a non-str
+	encoding / errors.  Without this entry point any keyword call died with an
+	uncatchable ``#_new:kw: not understood'' on the metaclass."
+
+	| args source encoding errors n |
+	args := positional ifNil: [#()].
+	n := args @env0:size.
+	source := n @env0:>= 1 ifTrue: [args @env0:at: 1] ifFalse: [nil].
+	encoding := n @env0:>= 2 ifTrue: [args @env0:at: 2] ifFalse: [nil].
+	errors := n @env0:>= 3 ifTrue: [args @env0:at: 3] ifFalse: [nil].
+	n @env0:> 3 ifTrue: [
+		TypeError ___signal___: 'bytes() takes at most 3 arguments'].
+	kwargs ifNotNil: [
+		kwargs @env0:keysAndValuesDo: [:k :v | | key |
+			key := k @env0:asString.
+			key @env0:= 'source' ifTrue: [
+				source ifNotNil: [TypeError ___signal___:
+					'argument for bytes() given by name (''source'') and position (1)'].
+				source := v]
+			ifFalse: [key @env0:= 'encoding' ifTrue: [
+				encoding ifNotNil: [TypeError ___signal___:
+					'argument for bytes() given by name (''encoding'') and position (2)'].
+				encoding := v]
+			ifFalse: [key @env0:= 'errors' ifTrue: [
+				errors ifNotNil: [TypeError ___signal___:
+					'argument for bytes() given by name (''errors'') and position (3)'].
+				errors := v]
+			ifFalse: [
+				TypeError ___signal___: ('bytes() got an unexpected keyword argument '''
+					@env0:, key @env0:, '''')]]]]].
+
+	"encoding / errors are only meaningful for a str source."
+	(encoding @env0:notNil or: [errors @env0:notNil]) ifTrue: [
+		(source isKindOf: CharacterCollection) ifFalse: [
+			TypeError ___signal___: (encoding @env0:notNil
+				ifTrue: ['encoding without a string argument']
+				ifFalse: ['errors without a string argument'])].
+		(encoding @env0:notNil and: [(encoding isKindOf: CharacterCollection) @env0:not])
+			ifTrue: [TypeError ___signal___: 'bytes() argument ''encoding'' must be str'].
+		(errors @env0:notNil and: [(errors isKindOf: CharacterCollection) @env0:not])
+			ifTrue: [TypeError ___signal___: 'bytes() argument ''errors'' must be str'].
+		encoding ifNil: [
+			TypeError ___signal___: 'string argument without an encoding'].
+		^ self ___encodeSourceToSelf___: source _: encoding _: (errors ifNil: ['strict'])].
+
+	source ifNil: [^ self __new__].
+	^ self __new__: source
 %
 
 category: 'Grail-Constructors'
@@ -168,7 +310,15 @@ ___encodeSourceToSelf___: source _: enc _: errs
 	instance of the RECEIVER class so a bytearray subclass ctor is self-typed."
 	| encoded r |
 	(source isKindOf: CharacterCollection) ifFalse: [
+		"A non-str source with a __bytes__ hook still converts through it
+		(gh-25766: bytes(StrWithBytes(b'abc'), 'iso8859-15'))."
 		TypeError ___signal___: 'encoding without a string argument'].
+	(enc isKindOf: CharacterCollection) ifFalse: [
+		TypeError ___signal___: ('bytes() argument ''encoding'' must be str, not '
+			@env0:, (bytes ___pyTypeNameOf___: enc))].
+	(errs isKindOf: CharacterCollection) ifFalse: [
+		TypeError ___signal___: ('bytes() argument ''errors'' must be str, not '
+			@env0:, (bytes ___pyTypeNameOf___: errs))].
 	encoded := source encode: enc _: errs.
 	r := self ___new___: encoded @env0:size.
 	1 @env0:to: encoded @env0:size do: [:i | r @env0:at: i put: (encoded @env0:at: i)].
@@ -179,7 +329,16 @@ category: 'Grail-Constructors'
 classmethod: bytes
 __new__: source _: encoding
 	"bytes(str, encoding) -- encode the string to bytes, self-typed (so a
-	bytearray subclass instantiates itself), default 'strict' error policy."
+	bytearray subclass instantiates itself), default 'strict' error policy.
+
+	Also accepts CPython's EXPLICIT-cls spelling ``bytes.__new__(cls, x)'':
+	Grail models __new__ as a classmethod whose receiver is already the
+	class, so a hand-written subclass __new__ that forwards to the base
+	arrives here with the class as the first positional.  A class is never a
+	valid bytes() source, so the two forms are unambiguous."
+	((source @env0:isKindOf: Behavior)
+		@env0:and: [(source == ByteArray) @env0:or: [source @env0:inheritsFrom: ByteArray]])
+			ifTrue: [^ source __new__: encoding].
 	^ self ___encodeSourceToSelf___: source _: encoding _: 'strict'
 %
 
@@ -187,7 +346,12 @@ category: 'Grail-Constructors'
 classmethod: bytes
 __new__: source _: encoding _: errors
 	"bytes(str, encoding, errors) -- 3-arg form with an explicit error policy
-	('strict' raises, 'ignore' drops un-encodable characters)."
+	('strict' raises, 'ignore' drops un-encodable characters).  Also the
+	explicit-cls spelling ``bytes.__new__(cls, str, encoding)'' -- see
+	__new__:_:."
+	((source @env0:isKindOf: Behavior)
+		@env0:and: [(source == ByteArray) @env0:or: [source @env0:inheritsFrom: ByteArray]])
+			ifTrue: [^ source __new__: encoding _: errors].
 	^ self ___encodeSourceToSelf___: source _: encoding _: errors
 %
 
@@ -198,10 +362,9 @@ fromhex: source
 	BETWEEN pairs (not within one), matching CPython.  ``source'' may be a str
 	or a bytes-like buffer (bytes / bytearray / memoryview / array); anything
 	else is a TypeError.  Errors report the 0-based position of the offending
-	character.  Self-typed via ``self ___new___:'' so a subclass fromhex builds
-	that subclass."
+	character.  Self-typed, so a subclass fromhex builds that subclass."
 
-	| src size out i result contents |
+	| src size out i contents |
 	src := self ___hexSourceCodes___: source.
 	size := src @env0:size.
 	out := WriteStream @env0:on: (ByteArray @env0:new).
@@ -227,9 +390,13 @@ fromhex: source
 					out @env0:nextPut: ((hi @env0:* 16) @env0:+ lo) ] value.
 				i := i @env0:+ 2]].
 	contents := out @env0:contents.
-	result := self ___new___: contents @env0:size.
-	1 @env0:to: contents @env0:size do: [:j | result @env0:at: j put: (contents @env0:at: j)].
-	^ result
+	"On a SUBCLASS, run the subclass CONSTRUCTOR rather than allocating raw
+	storage: CPython's bytes.fromhex calls the type, so a user __new__ /
+	__init__ that sets instance attributes still fires (test_bytes'
+	SubclassTest.test_fromhex checks b.foo)."
+	((self == ByteArray) @env0:or: [self == bytearray]) ifTrue: [
+		^ self ___copyBytesOf___: contents].
+	^ self value: { contents } value: nil
 %
 
 category: 'Grail-Encoding/Decoding'
@@ -274,6 +441,15 @@ maketrans: frm _: to
 	Note: This is actually a staticmethod in Python (doesn't receive cls),
 	but Grail doesn't have a staticmethod: directive for hand-written methods."
 	| frmSize toSize table |
+	"Both arguments must be bytes-like: CPython rejects str with a TypeError
+	(without the check, ``frm at: i'' handed a Character to arithmetic below
+	and died with an uncatchable env-0 DNU)."
+	(frm isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: ('a bytes-like object is required, not '''
+			@env0:, (bytes ___pyTypeNameOf___: frm) @env0:, '''')].
+	(to isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: ('a bytes-like object is required, not '''
+			@env0:, (bytes ___pyTypeNameOf___: to) @env0:, '''')].
 	frmSize := frm @env0:size.
 	toSize := to @env0:size.
 
@@ -301,6 +477,31 @@ maketrans: frm _: to
 
 category: 'Grail-String Operations'
 method: bytes
+__rmod__: other
+	"``other % bytes'' -- CPython's bytes.__rmod__ always returns
+	NotImplemented (it exists only so the binary-op protocol can fall through
+	to the left operand's error), so ``object() % b'abc''' is a TypeError."
+
+	^ #'___NotImplemented___'
+%
+
+category: 'Grail-Type'
+method: bytes
+__bytes__
+	"bytes(obj) protocol hook.  CPython defines bytes.__bytes__ (gh-100242)
+	returning a plain ``bytes'' -- for a bytes SUBCLASS instance it returns a
+	base-class copy, not the subclass."
+
+	| size result |
+	(self @env0:class == ByteArray) ifTrue: [^ self].
+	size := self @env0:size.
+	result := ByteArray @env0:new: size.
+	1 @env0:to: size do: [:i | result @env0:at: i put: (self @env0:at: i)].
+	^ result
+%
+
+category: 'Grail-String Operations'
+method: bytes
 __mod__: args
 	"``bytes % args'' printf-style formatting (PEP 461).  Byte-native engine:
 	%b/%s take a bytes-like (or __bytes__) object; %a is ascii(obj); %c is an
@@ -310,8 +511,22 @@ __mod__: args
 	Flags, width and precision (including '*' args) are honored.  The result is
 	the receiver's own type (bytes -> bytes, bytearray -> bytearray)."
 
-	| n out i isMap argSeq argIdx nextArg content result |
+	| n out i isMap argSeq argIdx nextArg content result fmt checkStable |
 	n := self @env0:size.
+	"Drive the scan off a SNAPSHOT of the format bytes.  A conversion can run
+	arbitrary Python (%a calls repr, %s calls str, a '*' width calls __index__)
+	and that code may clear or shrink a bytearray receiver -- indexing the live
+	object with the captured length then died with an uncatchable GemStone
+	OffsetError (CPython's gh-142557 crash, same cause)."
+	fmt := ByteArray @env0:new: n.
+	1 @env0:to: n do: [:z | fmt @env0:at: z put: (self @env0:at: z)].
+	"CPython holds a buffer export over the format string for the duration, so
+	a mid-format mutation is a BufferError.  Grail has no export machinery;
+	compare the length instead, which catches every case the tests describe."
+	checkStable := [
+		self @env0:size @env0:= n ifFalse: [
+			BufferError ___signal___:
+				'Existing exports of data: object cannot be re-sized']].
 	out := WriteStream @env0:on: ByteArray @env0:new.
 	isMap := args isKindOf: KeyValueDictionary.
 	(isMap @env0:not @env0:and: [
@@ -328,7 +543,7 @@ __mod__: args
 	i := 1.
 	[i @env0:<= n] @env0:whileTrue: [
 		| byte |
-		byte := self @env0:at: i.
+		byte := fmt @env0:at: i.
 		byte @env0:= 37 ifFalse: [ out @env0:nextPut: byte. i := i @env0:+ 1 ]
 		ifTrue: [
 			| key flags width precision conv value |
@@ -336,64 +551,67 @@ __mod__: args
 			i @env0:> n ifTrue: [ValueError ___signal___: 'incomplete format'].
 			"mapping key: %(...) matching balanced parens"
 			key := nil.
-			(self @env0:at: i) @env0:= 40 ifTrue: [
+			(fmt @env0:at: i) @env0:= 40 ifTrue: [
 				| depth start kk klen |
 				i := i @env0:+ 1. start := i. depth := 1.
 				[depth @env0:> 0] @env0:whileTrue: [
 					i @env0:> n ifTrue: [ValueError ___signal___: 'incomplete format key'].
-					(self @env0:at: i) @env0:= 40 ifTrue: [depth := depth @env0:+ 1].
-					(self @env0:at: i) @env0:= 41 ifTrue: [depth := depth @env0:- 1].
+					(fmt @env0:at: i) @env0:= 40 ifTrue: [depth := depth @env0:+ 1].
+					(fmt @env0:at: i) @env0:= 41 ifTrue: [depth := depth @env0:- 1].
 					depth @env0:> 0 ifTrue: [i := i @env0:+ 1]].
 				"Key is always a plain (hashable) bytes -- a slice of a bytearray
 				receiver would be an unhashable bytearray, unusable as a dict key."
 				klen := i @env0:- start.
 				kk := bytes @env0:___new___: klen.
-				1 @env0:to: klen do: [:z | kk @env0:at: z put: (self @env0:at: start @env0:+ z @env0:- 1)].
+				1 @env0:to: klen do: [:z | kk @env0:at: z put: (fmt @env0:at: start @env0:+ z @env0:- 1)].
 				key := kk.
 				i := i @env0:+ 1].
 			"flags: - + space # 0  (45 43 32 35 48)"
 			flags := OrderedCollection @env0:new.
-			[i @env0:<= n @env0:and: [ | c | c := self @env0:at: i.
+			[i @env0:<= n @env0:and: [ | c | c := fmt @env0:at: i.
 				(c @env0:= 45) @env0:or: [(c @env0:= 43) @env0:or: [(c @env0:= 32) @env0:or: [
 					(c @env0:= 35) @env0:or: [c @env0:= 48]]]] ]]
 				@env0:whileTrue: [
-					flags @env0:add: (Character @env0:codePoint: (self @env0:at: i)). i := i @env0:+ 1 ].
+					flags @env0:add: (Character @env0:codePoint: (fmt @env0:at: i)). i := i @env0:+ 1 ].
 			"width: digits or '*' (consumes an arg; negative -> '-' flag)"
 			width := 0.
-			(i @env0:<= n @env0:and: [(self @env0:at: i) @env0:= 42]) ifTrue: [
+			(i @env0:<= n @env0:and: [(fmt @env0:at: i) @env0:= 42]) ifTrue: [
 				width := (nextArg @env0:value) @env0:asInteger.
+				checkStable @env0:value.
 				width @env0:< 0 ifTrue: [ flags @env0:add: $-. width := width @env0:abs ].
 				i := i @env0:+ 1
 			] ifFalse: [
-				[i @env0:<= n @env0:and: [ | c | c := self @env0:at: i. (c @env0:>= 48) @env0:and: [c @env0:<= 57]]]
+				[i @env0:<= n @env0:and: [ | c | c := fmt @env0:at: i. (c @env0:>= 48) @env0:and: [c @env0:<= 57]]]
 					@env0:whileTrue: [
-						width := (width @env0:* 10) @env0:+ ((self @env0:at: i) @env0:- 48). i := i @env0:+ 1 ]].
+						width := (width @env0:* 10) @env0:+ ((fmt @env0:at: i) @env0:- 48). i := i @env0:+ 1 ]].
 			"precision: '.' then digits or '*'  ('.' alone means 0)"
 			precision := nil.
-			(i @env0:<= n @env0:and: [(self @env0:at: i) @env0:= 46]) ifTrue: [
+			(i @env0:<= n @env0:and: [(fmt @env0:at: i) @env0:= 46]) ifTrue: [
 				i := i @env0:+ 1.
-				(i @env0:<= n @env0:and: [(self @env0:at: i) @env0:= 42]) ifTrue: [
+				(i @env0:<= n @env0:and: [(fmt @env0:at: i) @env0:= 42]) ifTrue: [
 					precision := (nextArg @env0:value) @env0:asInteger.
+					checkStable @env0:value.
 					precision @env0:< 0 ifTrue: [precision := nil].
 					i := i @env0:+ 1
 				] ifFalse: [
 					precision := 0.
-					[i @env0:<= n @env0:and: [ | c | c := self @env0:at: i. (c @env0:>= 48) @env0:and: [c @env0:<= 57]]]
+					[i @env0:<= n @env0:and: [ | c | c := fmt @env0:at: i. (c @env0:>= 48) @env0:and: [c @env0:<= 57]]]
 						@env0:whileTrue: [
-							precision := (precision @env0:* 10) @env0:+ ((self @env0:at: i) @env0:- 48). i := i @env0:+ 1 ]]].
+							precision := (precision @env0:* 10) @env0:+ ((fmt @env0:at: i) @env0:- 48). i := i @env0:+ 1 ]]].
 			"skip C length modifiers h l L (104 108 76)"
-			[i @env0:<= n @env0:and: [ | c | c := self @env0:at: i.
+			[i @env0:<= n @env0:and: [ | c | c := fmt @env0:at: i.
 				(c @env0:= 104) @env0:or: [(c @env0:= 108) @env0:or: [c @env0:= 76]] ]]
 				@env0:whileTrue: [i := i @env0:+ 1].
 			i @env0:> n ifTrue: [ValueError ___signal___: 'incomplete format'].
-			conv := self @env0:at: i. i := i @env0:+ 1.
+			conv := fmt @env0:at: i. i := i @env0:+ 1.
 			conv @env0:= 37 ifTrue: [ out @env0:nextPut: 37 ]
 			ifFalse: [
 				key @env0:notNil
 					ifTrue: [value := args @env1:__getitem__: key]
 					ifFalse: [value := nextArg @env0:value].
 				self ___modEmit___: value conv: conv flags: flags width: width
-					precision: precision into: out ]
+					precision: precision into: out.
+				checkStable @env0:value ]
 		]
 	].
 	content := out @env0:contents.
@@ -462,18 +680,53 @@ ___modBytesArg___: value
 category: 'Grail-String Operations'
 method: bytes
 ___modTypeName___: value
-	"CPython-facing type name for %-format error messages: a few kernel-backed
+	"CPython-facing type name for %-format error messages."
+
+	^ bytes ___pyTypeNameOf___: value
+%
+
+category: 'Grail-Type'
+classmethod: bytes
+___pyTypeNameOf___: value
+	"CPython-facing type name for error messages: a few kernel-backed
 	builtins carry a Smalltalk class name (Float, Integer, Unicode7, ...) that
 	does not match their Python name, so map those; everything else (complex,
 	tuple, user classes) already reports the right __name__."
 
+	(value @env0:== None) ifTrue: [^ 'NoneType'].
 	(value isKindOf: Float) ifTrue: [^ 'float'].
 	(value isKindOf: Boolean) ifTrue: [^ 'bool'].
 	(value isKindOf: Integer) ifTrue: [^ 'int'].
 	(value isKindOf: bytearray) ifTrue: [^ 'bytearray'].
 	(value isKindOf: ByteArray) ifTrue: [^ 'bytes'].
 	(value isKindOf: CharacterCollection) ifTrue: [^ 'str'].
-	^ value @env1:__class__ @env1:__name__
+	^ [(value @env1:__class__ @env1:__name__) @env0:asString]
+		@env0:on: Error do: [:ex | ex @env0:return: value @env0:class @env0:name @env0:asString]
+%
+
+category: 'Grail-Introspection'
+method: bytes
+__dict__
+	"``obj.__dict__'' for a bytes / bytearray SUBCLASS instance -- a live view
+	of its dynamic-instVar storage, the same one PythonInstance publishes.
+	Subclassing bytes is how user code attaches attributes (``a.x = 10''), and
+	copy / pickle round-trips need to enumerate them.  An EXACT bytes or
+	bytearray has no instance dict, exactly as in CPython."
+
+	((self @env0:class == ByteArray) @env0:or: [self @env0:class == bytearray])
+		ifTrue: [
+			^ AttributeError ___signal___: ('''' @env0:, (bytes ___pyTypeNameOf___: self)
+				@env0:, ''' object has no attribute ''__dict__''')].
+	^ PyInstanceDict @env0:on: self
+%
+
+category: 'Grail-Type'
+method: bytes
+___indexTypeName___
+	"The type name CPython puts in ``<T> indices must be integers or slices'':
+	``byte'' for bytes (and its subclasses), ``bytearray'' for bytearray."
+
+	^ (self isKindOf: bytearray) ifTrue: ['bytearray'] ifFalse: ['byte']
 %
 
 category: 'Grail-String Operations'
@@ -485,8 +738,36 @@ ___modCharByte___: value
 		((value @env0:>= 0) @env0:and: [value @env0:<= 255]) ifTrue: [^ value].
 		OverflowError ___signal___: '%c arg not in range(256)'].
 	((value isKindOf: ByteArray) @env0:and: [value @env0:size @env0:= 1]) ifTrue: [^ value @env0:at: 1].
+	"CPython's byte_converter formats the type with %T, i.e. the FULLY
+	QUALIFIED module.qualname -- unlike the %x/%o/%d converters next door,
+	which print the bare tp_name.  test_mod pins both spellings."
 	TypeError ___signal___: ('%c requires an integer in range(256) or a single byte, not '
-		@env0:, (self ___modTypeName___: value))
+		@env0:, (bytes ___pyQualifiedTypeNameOf___: value))
+%
+
+category: 'Grail-String Operations'
+classmethod: bytes
+___pyQualifiedTypeNameOf___: value
+	"``module.qualname'' for a user-defined class, matching CPython's %T
+	format code; built-ins keep their bare name (CPython's %T prints
+	``float'', not ``builtins.float'')."
+
+	"``name'' is an instance variable of Class, so a class-side temp cannot
+	use that identifier -- hence shortName."
+	| shortName cls modName |
+	shortName := bytes ___pyTypeNameOf___: value.
+	(#('NoneType' 'float' 'bool' 'int' 'bytearray' 'bytes' 'str')
+		@env0:includes: shortName) ifTrue: [^ shortName].
+	cls := [value @env1:__class__] @env0:on: Error do: [:ex | ex @env0:return: nil].
+	cls @env0:isNil ifTrue: [^ shortName].
+	"ClassDefAst emits a ``__module__'' class-side accessor on every Python
+	class, holding the defining module's dotted name string."
+	modName := [ | m | m := cls @env1:__module__.
+		m @env0:isNil ifTrue: [nil] ifFalse: [m @env0:asString] ]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(modName @env0:isNil or: [modName @env0:isEmpty or: [modName @env0:= 'builtins']])
+		ifTrue: [^ shortName].
+	^ modName @env0:, '.' @env0:, shortName
 %
 
 category: 'Grail-String Operations'
@@ -564,13 +845,15 @@ __class__
 
 category: 'Grail-Sequence Protocol'
 method: bytes
-__contains__: item
+__contains__: rawItem
 	"Python membership: ``int in bytes'' tests for that byte value (which must
 	be in range(0, 256), else ValueError); ``bytes/bytearray in bytes'' does a
 	subsequence search (itsdangerous's ``self.sep not in signed_value'' with a
 	bytes sep relies on it).  Any other type -- None, float, str -- is a
 	TypeError (``'a' in b'abc''' raises, matching CPython)."
 
+	| item |
+	item := self ___searchOperand___: rawItem.
 	(item isKindOf: Integer) ifTrue: [
 		self ___checkByteValue___: item.
 		^ self @env0:includes: item
@@ -582,7 +865,7 @@ __contains__: item
 		^ (self @env0:indexOfSubCollection: item) @env0:> 0
 	].
 	^ TypeError ___signal___: ('a bytes-like object is required, not '''
-		@env0:, (item @env1:__class__ @env1:__name__) @env0:, '''')
+		@env0:, (bytes ___pyTypeNameOf___: item) @env0:, '''')
 %
 
 category: 'Grail-Comparison'
@@ -632,10 +915,13 @@ __getitem__: index
 	((index isKindOf: Integer)
 		or: [(index @env0:class
 			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
-		TypeError ___signal___: ('byte indices must be integers or slices, not '
-			@env0:, index @env0:class @env0:name @env0:asString)].
+		TypeError ___signal___: (self ___indexTypeName___
+			@env0:, ' indices must be integers or slices, not '
+			@env0:, (bytes ___pyTypeNameOf___: index))].
+	"__index__ may run Python code that mutates the receiver, so coerce the
+	index BEFORE reading the size."
+	idx := bytes ___coerceIndex___: index.
 	size := self @env0:size.
-	idx := index.
 
 	"Handle negative indices"
 	(idx @env0:< 0) ifTrue: [
@@ -674,18 +960,32 @@ __mul__: count
 	| n size result offset |
 	n := count.
 
-	"Validate count is an integer"
-	(n @env0:class) == SmallInteger ifFalse: [
-		TypeError ___signal___: 'can''t multiply sequence by non-int'
+	"Validate count is an integer (an __index__ object counts, as in CPython;
+	a float does not)."
+	(n isKindOf: Integer) ifFalse: [
+		(n ___respondsTo___: #'__index__')
+			ifTrue: [n := bytes ___coerceIndex___: n]
+			ifFalse: [TypeError ___signal___: 'can''t multiply sequence by non-int']
 	].
 
-	"If count <= 0, return empty bytes"
+	"If count <= 0, return an empty object of the receiver's base type"
 	(n @env0:<= 0) ifTrue: [
-		^ bytes ___new___
+		^ self ___translateResultClass___ ___new___
 	].
+
+	"b * 1 hands back the identical object when b is an EXACT bytes (CPython
+	short-circuits the no-op repeat); a SUBCLASS instance (and any bytearray,
+	which must stay mutable and distinct) still gets a fresh base-type object
+	-- test_repeat_id_preserving checks both directions."
+	(n @env0:= 1 and: [self @env0:class == ByteArray]) ifTrue: [^ self].
 
 	size := self @env0:size.
-	result := bytes ___new___: (size @env0:* n).
+	"A repeat count that would overflow the allocatable size is CPython's
+	OverflowError / MemoryError, not an uncatchable GemStone OutOfRange."
+	(size @env0:* n) @env0:> 1073741823 ifTrue: [
+		OverflowError ___signal___: 'repeated bytes are too long'
+	].
+	result := self ___translateResultClass___ ___new___: (size @env0:* n).
 	offset := 0.
 
 	1 @env0:to: n do: [:rep |
@@ -710,11 +1010,23 @@ __ne__: other
 category: 'Grail-String Representation'
 method: bytes
 ___reprBody___
+	"The ``b'...'''-style representation used by bytes repr."
+	^ self ___reprBody___: false
+%
+
+category: 'Grail-String Representation'
+method: bytes
+___reprBody___: alwaysEscapeSingle
 	"The ``b'...'''-style representation shared by bytes and bytearray repr.
 	Matches CPython: single quotes, unless the data holds a single quote and
 	no double quote (then double quotes); escape backslash, \t, \n, \r and the
 	active quote; other non-printable bytes as LOWERCASE \xNN; printable ASCII
-	(32-126) literally."
+	(32-126) literally.
+
+	``alwaysEscapeSingle'' reproduces bytearray_repr, which backslash-escapes
+	an apostrophe even when the chosen quote is a double quote -- so a
+	bytearray holding one apostrophe reprs with a backslash before it, while
+	the corresponding bytes object does not."
 	| size hasSingle hasDouble quote out bs |
 	size := self @env0:size.
 	hasSingle := false. hasDouble := false.
@@ -728,7 +1040,9 @@ ___reprBody___
 	out @env0:nextPut: $b; @env0:nextPut: (Character @env0:codePoint: quote).
 	1 @env0:to: size do: [:i | | b |
 		b := self @env0:at: i.
-		((b @env0:= 92) @env0:or: [b @env0:= quote]) ifTrue: [out @env0:nextPut: bs; @env0:nextPut: (Character @env0:codePoint: b)] ifFalse: [
+		((b @env0:= 92) @env0:or: [(b @env0:= quote)
+			@env0:or: [alwaysEscapeSingle @env0:and: [b @env0:= 39]]])
+				ifTrue: [out @env0:nextPut: bs; @env0:nextPut: (Character @env0:codePoint: b)] ifFalse: [
 		(b @env0:= 9)  ifTrue: [out @env0:nextPut: bs; @env0:nextPut: $t] ifFalse: [
 		(b @env0:= 10) ifTrue: [out @env0:nextPut: bs; @env0:nextPut: $n] ifFalse: [
 		(b @env0:= 13) ifTrue: [out @env0:nextPut: bs; @env0:nextPut: $r] ifFalse: [
@@ -818,12 +1132,13 @@ count: sub _: start _: end
 
 category: 'Grail-Search Methods'
 method: bytes
-rfind: sub _: start _: end
+rfind: rawSub _: start _: end
 	"bytes.rfind(sub, start, end) -- highest 0-based index of sub within
 	[start, end), or -1.  re._constants.PatternError computes error
 	column positions with it on byte patterns."
 
-	| size s e subSize i |
+	| size s e subSize i sub |
+	sub := self ___searchOperand___: rawSub.
 	size := self @env0:size.
 	s := start. e := end.
 	"CPython accepts None for start/end (== the default bound)."
@@ -863,6 +1178,45 @@ rfind: sub
 
 category: 'Grail-Search Methods'
 method: bytes
+___searchOperand___: sub
+	"Resolve a search / membership operand to an int byte value or a bytes-like
+	object, honoring the two protocols CPython's converters use: __index__ (an
+	int needle) and PEP 688's __buffer__ (a bytes-like needle).  Either can run
+	arbitrary Python that shrinks a bytearray receiver mid-call; CPython holds a
+	buffer export over the receiver and raises BufferError, which we reproduce
+	by comparing the receiver's length across the conversion (gh-142560).
+
+	Before this existed an arbitrary object fell through to the sub-sequence
+	branch, where ``sub @env0:size'' on a PythonInstance answers 0, so
+	``ba.find(obj)'' silently reported an empty-needle match at index 0."
+
+	| size0 resolved |
+	"Fast paths -- the overwhelmingly common operands.  Neither can run Python
+	code, so neither needs the stability check below."
+	(sub isKindOf: bytes) ifTrue: [^ sub].
+	(sub isKindOf: Integer) ifTrue: [^ sub].
+
+	size0 := self @env0:size.
+	resolved := nil.
+	(sub ___respondsTo___: #'__buffer__:')
+		ifTrue: [
+			resolved := sub @env1:__buffer__: 0.
+			(resolved isKindOf: bytes) ifFalse: [
+				TypeError ___signal___: '__buffer__ returned a non-buffer object']]
+		ifFalse: [
+			(sub ___respondsTo___: #'__index__') ifTrue: [
+				resolved := bytes ___coerceIndex___: sub]].
+	resolved @env0:isNil ifTrue: [
+		TypeError ___signal___: ('a bytes-like object is required, not '''
+			@env0:, (bytes ___pyTypeNameOf___: sub) @env0:, '''')].
+	self @env0:size @env0:= size0 ifFalse: [
+		BufferError ___signal___:
+			'Existing exports of data: object cannot be re-sized'].
+	^ resolved
+%
+
+category: 'Grail-Search Methods'
+method: bytes
 ___checkByteValue___: n
 	"An int used as a single-byte needle (count/find/index/rfind/rindex) or
 	membership test must be in range(0, 256); CPython raises ValueError
@@ -874,9 +1228,10 @@ ___checkByteValue___: n
 
 category: 'Grail-Search Methods'
 method: bytes
-count: sub
+count: rawSub
 	"Count non-overlapping occurrences of sub"
-	| subSize mySize count i |
+	| subSize mySize count i sub |
+	sub := self ___searchOperand___: rawSub.
 
 	"sub must be bytes or integer"
 	(sub isKindOf: Integer) ifTrue: [
@@ -1353,9 +1708,10 @@ _expandtabs: positional kw: kwargs
 
 category: 'Grail-Search Methods'
 method: bytes
-find: sub
+find: rawSub
 	"Find first occurrence of sub, return index or -1"
-	| subSize mySize i |
+	| subSize mySize i sub |
+	sub := self ___searchOperand___: rawSub.
 
 	"sub must be bytes or integer"
 	(sub isKindOf: Integer) ifTrue: [
@@ -1788,10 +2144,19 @@ join: iterable
 				ifTrue: [list __new__: iterable]
 				ifFalse: [TypeError ___signal___: 'can only join an iterable']].
 
-	"Empty iterable"
+	"Empty iterable -- still a NEW object of the receiver's base type
+	(PEP 3137: a bytearray method must never hand back the receiver)."
 	((parts @env0:size) == 0) ifTrue: [
-		^ bytes ___new___
+		^ self ___translateResultClass___ ___new___
 	].
+
+	"Every item must be bytes-like; CPython names the offending index/type
+	rather than dying on a Character inside the copy loop below."
+	1 @env0:to: parts @env0:size do: [:i |
+		((parts @env0:at: i) isKindOf: bytes) ifFalse: [
+			TypeError ___signal___: ('sequence item ' @env0:, (i @env0:- 1) @env0:printString
+				@env0:, ': expected a bytes-like object, '
+				@env0:, (bytes ___pyTypeNameOf___: (parts @env0:at: i)) @env0:, ' found')]].
 
 	"Calculate total size"
 	totalSize := 0.
@@ -1804,8 +2169,8 @@ join: iterable
 		]
 	].
 
-	"Build result"
-	result := bytes ___new___: totalSize.
+	"Build result -- always a fresh object of the receiver's base type."
+	result := self ___translateResultClass___ ___new___: totalSize.
 	offset := 0.
 
 	1 @env0:to: parts @env0:size do: [:i |
@@ -2072,9 +2437,10 @@ ___replaceEmptyOld___: new count: count
 
 category: 'Grail-Search Methods'
 method: bytes
-rfind: sub
+rfind: rawSub
 	"Find last occurrence of sub, return index or -1"
-	| subSize mySize i |
+	| subSize mySize i sub |
+	sub := self ___searchOperand___: rawSub.
 
 	"sub must be bytes or integer"
 	(sub isKindOf: Integer) ifTrue: [
@@ -2185,17 +2551,20 @@ rpartition: sep
 category: 'Grail-Splitting Methods'
 method: bytes
 rsplit: sep
-	"Split from right (same as split for now - full implementation would need maxsplit)"
-	^ self split: sep
+	"bytes.rsplit(sep) -- unlimited split, scanning from the RIGHT.  Not the
+	same as split(): with an overlapping separator the two disagree
+	(b'abbbc'.rsplit(b'bb') is [b'ab', b'c'], split() gives [b'a', b'bc'])."
+	^ self rsplit: sep _: -1
 %
 
 category: 'Grail-Splitting Methods'
 method: bytes
-rsplit: sep _: maxsplit
+rsplit: rawSep _: maxsplit
 	"Split from right with maximum number of splits.  A None separator splits
 	on runs of ASCII whitespace, from the right (honoring maxsplit)."
-	| sepClass sepSize mySize parts positions i actualSplits lastEnd firstPart firstPartSize |
-	(sep @env0:== None) ifTrue: [^ self ___rsplitWhitespace___: maxsplit].
+	| sepClass sepSize mySize parts positions i actualSplits lastEnd firstPart firstPartSize cap sep |
+	(rawSep @env0:== None) ifTrue: [^ self ___rsplitWhitespace___: maxsplit].
+	sep := self ___searchOperand___: rawSep.
 	sepClass := sep @env0:class.
 
 	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
@@ -2211,10 +2580,11 @@ rsplit: sep _: maxsplit
 		ValueError ___signal___: 'empty separator'
 	].
 
-	"If maxsplit is -1 or < 0, do unlimited split"
-	(maxsplit @env0:< 0) ifTrue: [
-		^ self split: sep
-	].
+	"A negative maxsplit means UNLIMITED, but it cannot be delegated to
+	split(): with an overlapping separator the two disagree
+	(b'abbbc'.rsplit(b'bb') is [b'ab', b'c'], split() gives [b'a', b'bc']),
+	so scan right-to-left here with no split cap."
+	cap := maxsplit @env0:< 0 ifTrue: [mySize @env0:+ 1] ifFalse: [maxsplit].
 
 	"Find all separator positions from right to left"
 	positions := list ___new___.
@@ -2232,17 +2602,24 @@ rsplit: sep _: maxsplit
 			]
 		].
 		match ifTrue: [
-			positions append: i
+			positions append: i.
+			"Matches must not OVERLAP (CPython scans for disjoint separators):
+			skip the whole separator, or 'a////b'.rsplit('//', 2) would record
+			adjacent starts 14 and 13 and then build a negative-length part."
+			i := i @env0:- sepSize
+		] ifFalse: [
+			i := i @env0:- 1
 		].
-		i := i @env0:- (1)
+		"Nothing beyond the first maxsplit (rightmost) separators can matter."
+		(positions @env0:size @env0:>= cap) ifTrue: [i := 0]
 	].
 
 	"Limit to maxsplit splits (take first maxsplit positions since we collected from right)"
 	actualSplits := positions @env0:size.
-	(actualSplits @env0:> maxsplit) ifTrue: [
+	(actualSplits @env0:> cap) ifTrue: [
 		| newPositions |
 		newPositions := list ___new___.
-		1 @env0:to: maxsplit do: [:idx |
+		1 @env0:to: cap do: [:idx |
 			newPositions append: (positions @env0:at: idx)
 		].
 		positions := newPositions
@@ -2309,11 +2686,14 @@ rstrip
 
 category: 'Grail-String-like Methods'
 method: bytes
-split: sep
+split: rawSep
 	"Split bytes by separator, return list of bytes.  A ``None'' separator
 	(``b.split(None)'') splits on runs of ASCII whitespace."
-	| sepClass sepSize mySize parts currentPart i |
-	(sep @env0:== None) ifTrue: [^ self ___splitWhitespace___].
+	| sepClass sepSize mySize parts currentPart i sep |
+	"None is the whitespace-split sentinel, checked BEFORE operand resolution
+	(which requires a bytes-like or an int)."
+	(rawSep @env0:== None) ifTrue: [^ self ___splitWhitespace___].
+	sep := self ___searchOperand___: rawSep.
 	sepClass := sep @env0:class.
 
 	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
@@ -2375,11 +2755,12 @@ split: sep
 
 category: 'Grail-String-like Methods'
 method: bytes
-split: sep _: maxsplit
+split: rawSep _: maxsplit
 	"Split bytes by separator with maximum number of splits.  A None separator
 	splits on runs of ASCII whitespace (honoring maxsplit)."
-	| sepClass sepSize mySize parts currentPart i splitCount match |
-	(sep @env0:== None) ifTrue: [^ self ___splitWhitespace___: maxsplit].
+	| sepClass sepSize mySize parts currentPart i splitCount match sep |
+	(rawSep @env0:== None) ifTrue: [^ self ___splitWhitespace___: maxsplit].
+	sep := self ___searchOperand___: rawSep.
 	sepClass := sep @env0:class.
 
 	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
@@ -2604,8 +2985,10 @@ rstrip: chars
 	end := size.
 	[(end @env0:>= 1) @env0:and: [charsBytes @env0:includes: (self @env0:at: end)]]
 		@env0:whileTrue: [end := end @env0:- 1].
-	end @env0:= size ifTrue: [^ self].
-	result := bytes @env0:___new___: end.
+	"Even a no-op strip yields a NEW object of the BASE type: CPython only
+	returns the receiver for an exact-bytes receiver, and string_tests'
+	checkequal asserts a subclass never gets itself back."
+	result := self ___translateResultClass___ ___new___: end.
 	1 @env0:to: end do: [:i | result @env0:at: i put: (self @env0:at: i)].
 	^ result
 %
@@ -2628,9 +3011,8 @@ lstrip: chars
 	start := 1.
 	[(start @env0:<= size) @env0:and: [charsBytes @env0:includes: (self @env0:at: start)]]
 		@env0:whileTrue: [start := start @env0:+ 1].
-	start @env0:= 1 ifTrue: [^ self].
 	newSize := size @env0:- start @env0:+ 1.
-	result := bytes @env0:___new___: newSize.
+	result := self ___translateResultClass___ ___new___: newSize.
 	1 @env0:to: newSize do: [:i | result @env0:at: i put: (self @env0:at: start @env0:+ i @env0:- 1)].
 	^ result
 %
@@ -2726,9 +3108,14 @@ title
 category: 'Grail-Translation Methods'
 method: bytes
 translate: table
-	"Translate bytes using a 256-entry table (None = identity copy)."
+	"Translate bytes using a 256-entry table (None = identity copy).  The
+	result is the receiver's own base type (bytes -> bytes, bytearray ->
+	bytearray), as in CPython."
 	| tableSize mySize result |
-	(table @env0:== None) ifTrue: [^ self @env0:copy].
+	(table @env0:== None) ifTrue: [^ self ___translateResultClass___ ___copyBytesOf___: self].
+	(table isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: ('a bytes-like object is required, not '''
+			@env0:, (bytes ___pyTypeNameOf___: table) @env0:, '''')].
 	tableSize := table @env0:size.
 	mySize := self @env0:size.
 
@@ -2737,7 +3124,7 @@ translate: table
 		ValueError ___signal___: 'translation table must be 256 characters long'
 	].
 
-	result := bytes ___new___: mySize.
+	result := self ___translateResultClass___ ___new___: mySize.
 
 	1 @env0:to: mySize do: [:i |
 		| byte newByte |
@@ -2747,6 +3134,16 @@ translate: table
 	].
 
 	^ result
+%
+
+category: 'Grail-Translation Methods'
+method: bytes
+___translateResultClass___
+	"CPython's translate() / string methods on a SUBCLASS return the base
+	type, never the subclass -- bytearray subclasses yield bytearray, bytes
+	subclasses yield bytes."
+
+	^ (self isKindOf: bytearray) ifTrue: [bytearray] ifFalse: [ByteArray]
 %
 
 category: 'Grail-String-like Methods'
@@ -3231,6 +3628,31 @@ splitlines: keepends
 
 category: 'Grail-String-like Methods'
 method: bytes
+_translate: positional kw: kwargs
+	"Varargs/keyword form: translate(table) / translate(table, delete) /
+	translate(table, delete=...).  CPython makes ``delete'' keyword-passable,
+	and test_bytes uses that spelling."
+
+	| table delete |
+	positional @env0:size @env0:< 1 ifTrue: [
+		TypeError ___signal___:
+			'translate() takes at least 1 argument (0 given)'].
+	positional @env0:size @env0:> 2 ifTrue: [
+		TypeError ___signal___: ('translate() takes at most 2 arguments ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	table := positional @env0:at: 1.
+	delete := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [
+			((kwargs @env0:isNil @env0:not) and: [kwargs @env0:includesKey: 'delete'])
+				ifTrue: [kwargs @env0:at: 'delete']
+				ifFalse: [nil]].
+	delete @env0:isNil ifTrue: [^ self translate: table].
+	^ self translate: table _: delete
+%
+
+category: 'Grail-String-like Methods'
+method: bytes
 translate: table _: delete
 	"bytes.translate(table, delete) -- map each byte through the 256-entry
 	table (None = identity) and drop every byte present in ``delete''."
@@ -3238,16 +3660,39 @@ translate: table _: delete
 	mySize := self @env0:size.
 	tableIsNone := table @env0:== None.
 	tableIsNone ifFalse: [
+		(table isKindOf: bytes) ifFalse: [
+			TypeError ___signal___: ('a bytes-like object is required, not '''
+				@env0:, (bytes ___pyTypeNameOf___: table) @env0:, '''')].
 		(table @env0:size @env0:= 256) ifFalse: [
 			ValueError ___signal___: 'translation table must be 256 characters long']].
+	"``delete'' is positional-only and must be bytes-like; None is a TypeError
+	(CPython: b'x'.translate(None, None) raises), not an identity copy."
+	(delete isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: ('a bytes-like object is required, not '''
+			@env0:, (bytes ___pyTypeNameOf___: delete) @env0:, '''')].
 	kept := OrderedCollection @env0:new.
 	1 @env0:to: mySize do: [:i | | byte |
 		byte := self @env0:at: i.
 		(delete @env0:includes: byte) ifFalse: [
 			kept @env0:add: (tableIsNone ifTrue: [byte] ifFalse: [table @env0:at: byte @env0:+ 1])]].
-	result := bytes ___new___: kept @env0:size.
+	result := self ___translateResultClass___ ___new___: kept @env0:size.
 	1 @env0:to: kept @env0:size do: [:i | result @env0:at: i put: (kept @env0:at: i)].
 	^ result
 %
 
 set compile_env: 0
+
+! ___pythonValueAttrs___ is consulted through an ENV-0 ``respondsTo:'' in
+! Object>>___pyAttrLoad___, so (like PythonInstance's copy) it must be an
+! env-0 method -- an env-1 one is invisible there.
+category: 'Grail-Introspection'
+classmethod: bytes
+___pythonValueAttrs___
+	"Selectors ___pyAttrLoad___ must treat as VALUE attribute reads rather
+	than BoundMethod wraps.  Without this, ``obj.__dict__'' on a bytes
+	subclass answers a callable wrapper and ``.keys()'' on it fails."
+
+	^ IdentitySet new
+		add: #'__dict__';
+		yourself
+%

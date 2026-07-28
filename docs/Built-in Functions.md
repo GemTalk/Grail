@@ -51,7 +51,7 @@ table.
 |  ✅  | `locals()`       | Update and return a dictionary representing the current local symbol table.                                                 |
 |  ✅  | `map()`          | Return an iterator that applies function to every item of iterable.                                                         |
 |  ✅  | `max()`          | Return the largest item in an iterable or the largest of two or more arguments.                                             |
-|  ✅  | `memoryview()`   | Return a memory view object created from the given argument.                                                                |
+|  ⚠️  | `memoryview()`   | Return a memory view object created from the given argument. **Identity stub** — see note below.                            |
 |  ✅  | `min()`          | Return the smallest item in an iterable or the smallest of two or more arguments.                                           |
 |  ✅  | `next()`         | Retrieve the next item from the iterator by calling its `__next__()` method.                                                |
 |  ✅  | `object()`       | Return a new featureless object.                                                                                            |
@@ -94,6 +94,21 @@ table.
 - **`super()`** — zero-arg and explicit `super(Cls, self)` forms work
   via the CallAst rewrite; other shapes (e.g. `super` aliased through
   a local) fall through to NameError (see TODO.md).
+- **`memoryview()` (⚠️)** — an IDENTITY STUB, not a view.  `PyMemoryView`
+  (src/smalltalk/install.gs) is an empty marker class defined only so that
+  `isinstance(x, (bytes, memoryview, str))` guards answer False, and
+  `memoryview(x)` returns **x itself**.  Reads therefore "work" on a
+  bytes-like argument (`len`, indexing, `.hex()`, `bytes(v)`), and a
+  "view" trivially sees mutations because it *is* the object — but there
+  is no buffer export, so nothing can hold a reference that blocks a
+  resize, and `isinstance(v, memoryview)` is False.  Two CPython tests are
+  skipped for this (`test.test_bytes` `test_resize_forbidden` and
+  `test_search_methods_reentrancy_raises_buffererror`, both in
+  scripts/cpython_suite_skips.txt), and several bytes tests that pass a
+  memoryview are green only because the call is a no-op.  `BytearrayTestCase
+  >> testMemoryviewIsIdentityStub` pins this behaviour and fails the moment a
+  real memoryview lands, which is the cue to revisit those.
+
 - **`delattr()`** — works on real instances.  (Beware testing it on
   `mock.Mock`: Mock's `__getattr__` auto-creates attributes, so
   `hasattr` is always True there.)
