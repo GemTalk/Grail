@@ -244,6 +244,29 @@ ___new__: positional kw: kwargs
 	Ignores extra positional / keyword args (object.__new__ accepts
 	them silently when __init__ is overridden)."
 
+	"...EXCEPT when the class is a built-in whose own class-side __new__
+	CONSTRUCTS from those arguments (str, bytes, bytearray, tuple, ...).
+	``T.__new__(cls, value)'' is how a hand-written subclass __new__ forwards
+	to its base, and every such call landed here -- ``cls new'' then produced
+	an EMPTY instance and silently dropped the content (markupsafe.Markup's
+	``super().__new__(cls, object)'', test_bytes' StrWithBytes).  Route to the
+	class's real allocator when it publishes one for this arity; the owner
+	check excludes object's own generic ``__new__: cls'', which takes the
+	CLASS as its argument and would mis-bind."
+	(positional @env0:size @env0:> 1) ifTrue: [
+		| cls rest sel owner |
+		cls := positional @env0:at: 1.
+		rest := positional @env0:copyFrom: 2 to: positional @env0:size.
+		sel := WriteStream @env0:on: String @env0:new.
+		sel @env0:nextPutAll: '__new__:'.
+		2 @env0:to: rest @env0:size do: [:i | sel @env0:nextPutAll: '_:'].
+		sel := sel @env0:contents @env0:asSymbol.
+		owner := (cls @env0:isKindOf: Behavior)
+			ifTrue: [cls @env0:class @env0:whichClassIncludesSelector: sel environmentId: 1]
+			ifFalse: [nil].
+		(owner @env0:notNil and: [owner ~~ (Object @env0:class)]) ifTrue: [
+			^ cls @env0:perform: sel env: 1 withArguments: rest]].
+
 	^ [(positional @env0:at: 1) @env0:new]
 		@env0:on: Error
 		do: [:ex |
