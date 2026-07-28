@@ -774,6 +774,13 @@ tokenizeString
 				writeStream nextPut: $\; nextPut: escaped.
 			]]]]]]]]]]]]]]].
 		] ifFalse: [
+			"A bytes literal may only hold ASCII SOURCE characters -- CPython
+			rejects b'<non-ascii>' at compile time (escapes like \xaa are fine
+			and never reach here, having been decoded above)."
+			(isBytes and: [char codePoint > 127]) ifTrue: [
+				SyntaxError signal:
+					'bytes can only contain ASCII literal characters at line '
+						, startLine printString].
 			writeStream nextPut: self advance.
 		]].
 		true

@@ -89,21 +89,40 @@ __new__
 ! __index__ count-source, and their CPython error kinds; duplicating it here let
 ! bytearray drift (old empty fall-through + no __index__ coercion).
 
-category: 'Grail-Constructors'
-classmethod: bytearray
-__new__: source _: encoding
-	"bytearray(str, encoding) -- encode the string to a bytearray, self-typed.
-	Shares the single codec authority (bytes>>___encodeSourceToSelf___ ->
-	str>>encode:_:), so utf-8 multi-byte / utf-16 / ascii / latin-1 / errors all
-	behave exactly as for bytes.  (The 3-arg bytearray(str, enc, errors) form is
-	inherited from bytes.)"
-	^ self ___encodeSourceToSelf___: source _: encoding _: 'strict'
-%
+! bytearray(str, encoding) intentionally has NO 2-arg __new__:_: override
+! either -- it inherits the self-typed bytes>>__new__: source _: encoding,
+! which shares the single codec authority (___encodeSourceToSelf___ ->
+! str>>encode:_:) AND also recognizes CPython's explicit-cls spelling
+! ``bytearray.__new__(cls, x)''.  The old duplicate here shadowed that, so a
+! subclass __new__ forwarding to bytearray.__new__(cls, value) mistook the
+! class for the string and raised ``encoding without a string argument''.
 
 ! bytearray.fromhex intentionally has NO override -- it inherits the self-typed
 ! bytes>>fromhex: (which builds via `self ___new___:', so bytearray is built
 ! here).  The old duplicate only stripped spaces and mis-parsed ASCII
 ! whitespace, bytes-like arguments, and invalid digits.
+
+category: 'Grail-Introspection'
+classmethod: bytearray
+__doc__
+	"``bytearray.__doc__'' -- CPython's constructor docstring (bytes supplies
+	its own; without either, the class-side lookup fell through to
+	object>>__doc__)."
+
+	^ 'bytearray(iterable_of_ints) -> bytearray
+bytearray(string, encoding[, errors]) -> bytearray
+bytearray(bytes_or_buffer) -> mutable copy of bytes_or_buffer
+bytearray(int) -> bytes array of size given by the parameter initialized with null bytes
+bytearray() -> empty bytes array
+
+Construct a mutable bytearray object from:
+  - an iterable yielding integers in range(256)
+  - a text string encoded using the specified encoding
+  - a bytes or a buffer object
+  - any object implementing the buffer API.
+  - an integer
+'
+%
 
 category: 'Grail-Type'
 method: bytearray
@@ -118,8 +137,15 @@ category: 'Grail-String Representation'
 method: bytearray
 __repr__
 	"bytearray repr wraps the shared b'...' body: bytearray(b'...').  Inherited
-	bytes>>__repr__ would drop the wrapper (so bytearray(b'') printed as b'')."
-	^ 'bytearray(' @env0:, self ___reprBody___ @env0:, ')'
+	bytes>>__repr__ would drop the wrapper (so bytearray(b'') printed as b'').
+	The wrapper carries the RECEIVER's class name, so a subclass reprs as
+	MySubclass(b'...') like CPython's bytearray_repr; that routine also always
+	backslash-escapes an apostrophe, hence the ___reprBody___: true."
+
+	| name |
+	name := [(self @env1:__class__ @env1:__name__) @env0:asString]
+		@env0:on: Error do: [:ex | ex @env0:return: self @env0:class @env0:name @env0:asString].
+	^ name @env0:, '(' @env0:, (self ___reprBody___: true) @env0:, ')'
 %
 
 category: 'Grail-Sequence Protocol'
@@ -180,9 +206,11 @@ __imul__: count
 	| n originalSize original |
 	n := count.
 
-	"Validate count is an integer"
-	(n @env0:class) == SmallInteger ifFalse: [
-		TypeError ___signal___: 'can''t multiply sequence by non-int'
+	"Validate count is an integer (an __index__ object counts; a float does not)."
+	(n isKindOf: Integer) ifFalse: [
+		(n ___respondsTo___: #'__index__')
+			ifTrue: [n := bytes ___coerceIndex___: n]
+			ifFalse: [TypeError ___signal___: 'can''t multiply sequence by non-int']
 	].
 
 	"If count <= 1, nothing to do (or clear if <= 0)"
@@ -193,6 +221,12 @@ __imul__: count
 
 	(n == 1) ifTrue: [
 		^ self
+	].
+
+	"A repeat that cannot be allocated is CPython's OverflowError, NOT an
+	extend loop that exhausts the gem's temporary object memory."
+	(self @env0:size @env0:* n) @env0:> 1073741823 ifTrue: [
+		OverflowError ___signal___: 'repeated bytes are too long'
 	].
 
 	"Save original content"
@@ -212,6 +246,18 @@ __imul__: count
 
 category: 'Grail-Sequence Protocol'
 method: bytearray
+__iter__
+	"A bytearray is MUTABLE, so its iterator must latch exhaustion the way
+	CPython's bytearray_iterator does -- once spent it stays spent even if the
+	bytearray later grows.  list_iterator carries that flag (and round-trips
+	it through pickle); the inherited tuple_iterator, built for immutable
+	sequences, carries only a position and so revived itself after a resize."
+
+	^ list_iterator ___on: self
+%
+
+category: 'Grail-Sequence Protocol'
+method: bytearray
 __setitem__: index _: value
 	"Set the byte at an index, or assign to a slice (mutable)."
 	| idx size val |
@@ -220,6 +266,15 @@ __setitem__: index _: value
 	(index isKindOf: slice) ifTrue: [
 		^ self ___setSliceItem: index value: value size: self @env0:size
 	].
+
+	"A non-integer, non-slice subscript is CPython's ``bytearray indices must
+	be integers or slices'' TypeError -- report that rather than the generic
+	__index__ coercion message."
+	((index isKindOf: Integer)
+		or: [(index @env0:class
+			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
+		TypeError ___signal___: ('bytearray indices must be integers or slices, not '
+			@env0:, (bytes ___pyTypeNameOf___: index))].
 
 	"Coerce the index via __index__ FIRST -- that may run Python code which
 	reallocates/clears the receiver (gh-91153), so read size AFTERWARD and
@@ -336,52 +391,77 @@ ___delSliceItem: aSlice size: size
 category: 'Grail-Sequence Protocol'
 method: bytearray
 ___bytesFrom: value
-	"Materialize a bytes-like value (bytes / bytearray / list / tuple of
-	ints) into an OrderedCollection of validated byte ints (0..255)."
+	"Materialize the right-hand side of a bytearray slice assignment into an
+	OrderedCollection of validated byte ints (0..255).  Accepted: any
+	bytes-like object (bytes / bytearray / subclasses) and any iterable of
+	ints (list / tuple / Array / range / generator).  A str is iterable but
+	explicitly rejected, as in CPython, and so is any non-iterable (an int,
+	a float).  Elements go through __index__ so a non-int element is a
+	TypeError and an out-of-range one a ValueError."
 
-	| cls out |
+	| cls src out |
 	cls := value @env0:class.
-	((cls == bytes) or: [(cls == bytearray)
-		or: [(cls == list) or: [cls == tuple]]]) ifFalse: [
-			TypeError ___signal___:
-				'can assign only a bytes-like object to a bytearray slice'
-	].
+	(value isKindOf: CharacterCollection) ifTrue: [
+		TypeError ___signal___:
+			'can assign only a bytes-like object to a bytearray slice'].
+	src := ((value isKindOf: bytes)
+			or: [(cls == list) or: [(cls == tuple)
+				or: [(cls == Array) or: [cls == Interval]]]])
+		ifTrue: [value]
+		ifFalse: [
+			((value ___respondsTo___: #'__iter__')
+				or: [value ___respondsTo___: #'__getitem__'])
+				ifTrue: [list __new__: value]
+				ifFalse: [TypeError ___signal___:
+					'can assign only a bytes-like object to a bytearray slice']].
 	out := OrderedCollection @env0:new.
-	1 @env0:to: value @env0:size do: [:i | | b |
-		b := value @env0:at: i.
-		((b @env0:< 0) or: [b @env0:> 255]) ifTrue: [
-			ValueError ___signal___: 'byte must be in range(0, 256)'
-		].
-		out @env0:add: b
-	].
+	1 @env0:to: src @env0:size do: [:i |
+		out @env0:add: (bytes ___coerceByteValue___: (src @env0:at: i))].
 	^ out
 %
 
 category: 'Grail-Mutation Methods'
 method: bytearray
 append: item
-	"Append a single byte to the end"
+	"bytearray.append(int) -- append one byte, returning None.  The argument
+	goes through __index__ (so Indexable(65) appends 'A') and is range-checked,
+	so a str/bytes argument is a TypeError and 256 is a ValueError."
 
-	| val |
-	val := item.
-
-	"Validate byte value"
-	((val @env0:< 0) or: [
-		val @env0:> 255
-	]) ifTrue: [
-		ValueError ___signal___: 'byte must be in range(0, 256)'
-	].
-
-	"Add to end"
-	self @env0:add: val
+	self @env0:add: (bytes ___coerceByteValue___: item).
+	^ None
 %
 
 category: 'Grail-Mutation Methods'
 method: bytearray
 clear
-	"Remove all bytes"
+	"Remove all bytes (CPython returns None)."
 
-	self @env0:size: 0
+	self @env0:size: 0.
+	^ None
+%
+
+category: 'Grail-Mutation Methods'
+method: bytearray
+resize: size
+	"bytearray.resize(n) -- grow or shrink in place, zero-filling new bytes.
+	Returns None.  A negative size is a ValueError; a size beyond what the
+	object model can hold is a MemoryError (CPython raises the same for
+	sys.maxsize)."
+
+	| n old |
+	n := bytes ___coerceIndex___: size.
+	n @env0:< 0 ifTrue: [
+		ValueError ___signal___: 'negative resize value'].
+	"64-bit CPython accepts up to PY_SSIZE_T_MAX but cannot allocate it; a
+	GemStone byte object is bounded well below that, so anything at that
+	scale is the MemoryError CPython raises."
+	n @env0:> 1073741823 ifTrue: [
+		MemoryError ___signal___: 'cannot allocate bytearray'].
+	old := self @env0:size.
+	self @env0:size: n.
+	"``size:'' leaves grown bytes zeroed on GemStone, but do not rely on it."
+	old @env0:+ 1 @env0:to: n do: [:i | self @env0:at: i put: 0].
+	^ None
 %
 
 category: 'Grail-Mutation Methods'
@@ -420,11 +500,16 @@ extend: iterable
 		TypeError ___signal___: 'expected iterable of integers; got: ''str'''
 	].
 
-	"A non-iterable can't extend at all."
-	((iterable ___respondsTo___: #'__iter__')
-		or: [iterable ___respondsTo___: #'__getitem__']) ifFalse: [
+	"A non-iterable can't extend at all.  Numbers are checked by kind rather
+	than by protocol: a Float answers ___respondsTo___: #'__getitem__' through
+	the generic object fallbacks, so the protocol probe alone let ``extend(1.0)''
+	reach list() and report list's ``'float' object is not iterable'' instead
+	of CPython's extend-specific message."
+	((iterable isKindOf: Number)
+		or: [((iterable ___respondsTo___: #'__iter__')
+			or: [iterable ___respondsTo___: #'__getitem__']) @env0:not]) ifTrue: [
 		TypeError ___signal___: ('can''t extend bytearray with '
-			@env0:, (iterable @env1:__class__ @env1:__name__) @env0:asLowercase)
+			@env0:, (bytes ___pyTypeNameOf___: iterable))
 	].
 
 	"Any other iterable (list/tuple/range/generator/iterator/__getitem__):
@@ -442,35 +527,23 @@ extend: iterable
 category: 'Grail-Mutation Methods'
 method: bytearray
 insert: index _: item
-"Insert byte at index"
+	"bytearray.insert(i, byte) -- insert before index i, returning None.
+	A negative index counts from the end (floored at 0) and an index past
+	the end appends, matching CPython's list-style clamping."
 
 	| idx size val |
 	size := self @env0:size.
-	idx := index.
-	val := item.
+	idx := bytes ___coerceIndex___: index.
+	val := bytes ___coerceByteValue___: item.
 
-	"Handle negative indices"
-	(index @env0:< 0) ifTrue: [
-		idx := size @env0:+ idx
-	].
-
-	"Clamp to valid range"
-	(index @env0:< 0) ifTrue: [
-		idx := 0
-	].
-	(index @env0:> size) ifTrue: [
-		idx := size
-	].
-
-	"Validate byte value"
-	((val @env0:< 0) or: [
-		val @env0:> 255
-	]) ifTrue: [
-		ValueError ___signal___: 'byte must be in range(0, 256)'
-	].
+	"Negative counts from the end; then clamp into [0, size]."
+	(idx @env0:< 0) ifTrue: [idx := size @env0:+ idx].
+	(idx @env0:< 0) ifTrue: [idx := 0].
+	(idx @env0:> size) ifTrue: [idx := size].
 
 	"Insert at position (convert to 1-based)"
-	self @env0:insertAll: (bytearray @env0:with: val) at: (index @env0:+ 1)
+	self @env0:insertAll: (ByteArray @env0:with: val) at: (idx @env0:+ 1).
+	^ None
 %
 
 category: 'Grail-Mutation Methods'
@@ -518,27 +591,29 @@ pop: index
 category: 'Grail-Mutation Methods'
 method: bytearray
 remove: value
-	"Remove first occurrence of value"
+	"bytearray.remove(byte) -- delete the first occurrence, returning None.
+	The argument is coerced through __index__ and range-checked first, so
+	remove('e') / remove(b'e') is a TypeError and remove(400) a ValueError,
+	as in CPython."
 
-	| size |
+	| val size |
+	val := bytes ___coerceByteValue___: value.
 	size := self @env0:size.
 
 	1 @env0:to: size do: [:i |
-		| byte |
-		byte := self @env0:at: i.
-		(byte @env0:= value) ifTrue: [
+		((self @env0:at: i) @env0:= val) ifTrue: [
 			self @env0:removeAtIndex: i.
-			^ nil
+			^ None
 		]
 	].
 
-	ValueError ___signal___: 'value not in bytearray'
+	ValueError ___signal___: 'value not found in bytearray'
 %
 
 category: 'Grail-Mutation Methods'
 method: bytearray
 reverse
-	"Reverse bytearray in place"
+	"Reverse bytearray in place (CPython returns None)."
 
 	| size |
 	size := self @env0:size.
@@ -549,7 +624,97 @@ reverse
 		temp := self @env0:at: i.
 		self @env0:at: i put: (self @env0:at: j).
 		self @env0:at: j put: temp
-	]
+	].
+	^ None
+%
+
+category: 'Grail-Mutation Methods'
+method: bytearray
+__alloc__
+	"bytearray.__alloc__() -- CPython reports the allocated buffer size,
+	which is always strictly greater than len() (it reserves the trailing
+	NUL).  GemStone byte objects carry no separate capacity, so report the
+	only value that is both honest and satisfies the documented invariant."
+
+	^ self @env0:size @env0:+ 1
+%
+
+category: 'Grail-Constructors'
+method: bytearray
+__init__
+	"bytearray() re-initialization: empty the receiver."
+
+	self @env0:size: 0.
+	^ None
+%
+
+category: 'Grail-Constructors'
+method: bytearray
+__init__: source
+	"bytearray.__init__(source) re-initializes an EXISTING bytearray in
+	place (CPython's bytearray_init).  test_bytes' test_init_alloc calls
+	``b.__init__(generator)'' on a live object and watches it fill
+	incrementally, so build straight onto the receiver rather than
+	returning a fresh object."
+
+	self @env0:size: 0.
+	(source isKindOf: Integer) ifTrue: [
+		source @env0:< 0 ifTrue: [ValueError ___signal___: 'negative count'].
+		self @env0:size: source.
+		1 @env0:to: source do: [:i | self @env0:at: i put: 0].
+		^ None].
+	(source isKindOf: CharacterCollection) ifTrue: [
+		TypeError ___signal___: 'string argument without an encoding'].
+	^ self extend: source
+%
+
+category: 'Grail-Constructors'
+method: bytearray
+___init__: positional kw: kwargs
+	"bytearray.__init__(self, *args, **kwargs) -- the varargs form, reached
+	when a subclass forwards its own constructor arguments
+	(``bytearray.__init__(me, source=b'abcd')'', test_init_override)."
+
+	| args source encoding errors n |
+	args := positional ifNil: [#()].
+	n := args @env0:size.
+	source := n @env0:>= 1 ifTrue: [args @env0:at: 1] ifFalse: [nil].
+	encoding := n @env0:>= 2 ifTrue: [args @env0:at: 2] ifFalse: [nil].
+	errors := n @env0:>= 3 ifTrue: [args @env0:at: 3] ifFalse: [nil].
+	kwargs ifNotNil: [
+		kwargs @env0:keysAndValuesDo: [:k :v | | key |
+			key := k @env0:asString.
+			key @env0:= 'source' ifTrue: [source := v]
+			ifFalse: [key @env0:= 'encoding' ifTrue: [encoding := v]
+			ifFalse: [key @env0:= 'errors' ifTrue: [errors := v]
+			ifFalse: [TypeError ___signal___:
+				('bytearray() got an unexpected keyword argument ''' @env0:, key @env0:, '''')]]]]].
+	source ifNil: [^ self __init__].
+	encoding ifNil: [^ self __init__: source].
+	errors ifNil: [^ self __init__: source _: encoding].
+	^ self __init__: source _: encoding _: errors
+%
+
+category: 'Grail-Constructors'
+method: bytearray
+__init__: source _: encoding
+	"bytearray(str, encoding) re-initialization."
+
+	| encoded |
+	encoded := bytes __new__: source _: encoding.
+	self @env0:size: 0.
+	^ self extend: encoded
+%
+
+category: 'Grail-Constructors'
+method: bytearray
+__init__: source _: encoding _: errors
+	"bytearray(str, encoding, errors) re-initialization."
+
+	| encoded |
+	encoded := bytes __new__: source _: encoding _: errors.
+	self @env0:size: 0.
+	^ self extend: encoded
 %
 
 ! ===============================================================================

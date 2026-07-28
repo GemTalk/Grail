@@ -1839,8 +1839,13 @@ __format__: formatSpec
 	(formatSpec @env0:isNil or: [formatSpec @env0:= '']) ifTrue: [
 		^ self __str__
 	].
+	"Concatenate in env 0: Unicode7 has no env-1 ``,'', so the env-1 sends
+	this message used to build with died as an uncatchable DNU instead of
+	raising the intended TypeError."
 	TypeError ___signal___:
-		'unsupported format string passed to ', self __class__ __name__, '.__format__'
+		('unsupported format string passed to '
+			@env0:, (self __class__ __name__) @env0:asString
+			@env0:, '.__format__')
 %
 
 category: 'Grail-Context Manager'

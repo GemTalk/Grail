@@ -117,3 +117,24 @@ test.test_bytes|FreeThreadingTest.test_free_threading_bytearray_resize|real-thre
 # machinery and reads the sep length via Smalltalk size (no reentrant __len__),
 # so there is nothing to guard against and no BufferError to raise.
 test.test_bytes|ByteArrayTest.test_hex_use_after_free|BufferError-on-reentrant-sep.__len__ is a CPython buffer-protocol UAF guard; N/A to Grail's object model
+# Same buffer-export machinery, three more entry points: CPython refuses to
+# resize / reallocate a bytearray while a memoryview export is live, and
+# raises BufferError from a re-entrant mutation during a search or a %-format.
+# Grail has no buffer-export refcount, so the mutation simply succeeds and
+# there is no BufferError to raise.
+test.test_bytes|ByteArrayTest.test_resize_forbidden|BufferError-on-live-memoryview-export; Grail has no buffer-export protocol
+test.test_bytes|ByteArrayTest.test_search_methods_reentrancy_raises_buffererror|BufferError on re-entrant mutation during a search; Grail has no buffer-export protocol
+test.test_bytes|ByteArrayTest.test_mod_concurrent_mutation|BufferError on re-entrant clear() from __repr__ during %-format; Grail has no buffer-export protocol
+# check_free_after_iterating: asserts __del__ fires the moment the last
+# reference to the iterated sequence drops.  Grail's GC is not refcounted, so
+# this cannot pass on any non-refcounted VM (test_dict/test_list twins are
+# skipped for the same reason).
+test.test_bytes|ByteArrayTest.test_free_after_iterating|CPython refcount/__del__-timing — Grail GC is not refcounted
+test.test_bytes|BytesTest.test_free_after_iterating|CPython refcount/__del__-timing — Grail GC is not refcounted
+# Real filesystem I/O: these need tempfile.mktemp() plus binary file objects
+# with readinto() (test_bytearray_api) and os.open() on a file descriptor
+# (test_buffer_is_readonly).  Grail's tempfile is a stub that refuses to create
+# files and its os module exposes no fd-level open, so both are stdlib-surface
+# gaps well outside bytes semantics.
+test.test_bytes|ByteArrayTest.test_bytearray_api|needs tempfile.mktemp + file.readinto; Grail's tempfile is a no-file stub
+test.test_bytes|BytesTest.test_buffer_is_readonly|needs os.open(fd) + unbuffered binary file readinto; not implemented in Grail's os/io
