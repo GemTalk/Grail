@@ -210,3 +210,24 @@ testInstanceDictUnaffectedByClassDict
 
 	self assert: (testModule @env1:___pyAttrLoad___: #inst_dict_y) equals: 5.
 %
+
+category: 'Grail-Tests - Reserved names'
+method: ClassAttributeTestCase
+testReservedClassObjectNamesIsolated
+	"A Python class attribute whose name is an inherited kernel class-object
+	instVar (``name'', ``format'', ...) is an ordinary Python attribute stored
+	in dynInstVars, NOT the class's structural slot.  So ``cls.name'' reads the
+	Python value, ``cls.__name__'' still reports the real class name, and each
+	class keeps its own per-class value -- and importing such a class no longer
+	overwrites the Smalltalk class name (which crashed GemStone 4.0 MR#6's
+	permitSessionMethodFor: with ``None asSymbol'').  This is the Django
+	cached_property (`name = None`) regression.  See
+	docs/Python_Class_Attribute_Namespaces.md."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #reserved_name_is_none).
+	self assert: (testModule @env1:___pyAttrLoad___: #reserved_format) equals: 'custom'.
+	self assert: (testModule @env1:___pyAttrLoad___: #reserved_qualname) equals: 'ReservedName'.
+	self assert: (testModule @env1:___pyAttrLoad___: #reserved_child_name) equals: 'child'.
+	self assert: (testModule @env1:___pyAttrLoad___: #reserved_parent_still_none).
+	self assert: (testModule @env1:___pyAttrLoad___: #reserved_child_qualname) equals: 'ReservedChild'.
+%

@@ -81,7 +81,7 @@ printSmalltalkRuntimeOn: aStream
 	  savedSelfParam savedClassAttrNames settersByName
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames
 	  savedInBodyEmit savedBoundNames savedNestedNames
-	  savedCapturedNames savedCapturedWriteNames |
+	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -120,6 +120,22 @@ printSmalltalkRuntimeOn: aStream
 	class-side attribute (Smalltalk classInstVar + class-side getter/
 	setter)."
 	classAttrs := self classBodyAttributes.
+
+	"A Python class-body data attribute whose name is an inherited kernel
+	class-object instance variable (``name'', ``format'', ``timeStamp'', ...)
+	must NOT back its getter/setter with a same-named classInstVar: that slot
+	coalesces with the inherited one, so the generated ``name := value'' would
+	overwrite the class's real Smalltalk name (silent on 3.7.x; a hard crash on
+	4.0 MR#6, where the kernel permitSessionMethodFor: does ``thisClass name
+	asSymbol'').  Such attributes get a MANGLED backing slot (``___cattr_name___'')
+	instead -- the same isolation __slots__ get via ___slot_x___ -- so ``Foo.name''
+	(Python, through the still-named ``name'' accessor) and ``Foo name''
+	(Smalltalk, the real class name) stay independent.  Object's metaclass carries
+	exactly the kernel class-object instVars (no Grail additions like __module__
+	/ dynInstVars), so it is the reserved set.  See
+	docs/Python_Class_Attribute_Namespaces.md."
+	reservedClassObjIvars := IdentitySet @env0:withAll:
+		(Object @env0:class @env0:allInstVarNames).
 
 	"Python ``__slots__'' → GemStone named instance variables on the
 	backing class.  ``slotNamesOrdered'' is the declaration-order slot
@@ -307,7 +323,13 @@ printSmalltalkRuntimeOn: aStream
 	new class gets its own per-class value (Smalltalk class-side
 	instVars are per-class storage, matching Python's
 	``A.attr != B.attr`` semantics)."
-	allClassInstVars := (classAttrs collect: [:p | p key]) asOrderedCollection.
+	allClassInstVars := (classAttrs collect: [:p |
+		"Reserved kernel class-object names are declared under their MANGLED
+		slot so the classInstVar does not coalesce with the inherited structural
+		slot (see the accessor emit below)."
+		(reservedClassObjIvars includes: p key)
+			ifTrue: [('___cattr_' , p key asString , '___') asSymbol]
+			ifFalse: [p key]]) asOrderedCollection.
 	"Always request a ``__module__'' slot — unless the user already
 	declared one in the class body (e.g. re._constants's
 	``class PatternError(Exception): __module__ = 're''').
@@ -566,10 +588,22 @@ printSmalltalkRuntimeOn: aStream
 	distinguish a value-attribute (paired getter+setter) from a
 	regular method (which would be wrapped as a BoundMethod)."
 	classAttrs do: [:pair |
-		| attrName lf accessorSrc setterSrc |
+		"Reserved kernel class-object names (``name'', ``format'', ...) get a
+		MANGLED backing slot so the generated ``attr := value'' setter writes a
+		FRESH classInstVar instead of coalescing with -- and overwriting -- the
+		inherited structural slot (silent corruption of the class's real name /
+		format / ...; a hard crash on 4.0 MR#6 permitSessionMethodFor: at
+		``name asSymbol'').  The accessor is still NAMED ``attr'' so ``cls.attr''
+		(Python) works unchanged; only the physical slot moves -- the same
+		isolation __slots__ get via ___slot_x___.  Non-reserved names use the
+		attribute name directly.  See docs/Python_Class_Attribute_Namespaces.md."
+		| attrName backingSlot lf accessorSrc setterSrc |
 		attrName := pair key.
+		backingSlot := (reservedClassObjIvars includes: attrName)
+			ifTrue: ['___cattr_' , attrName asString , '___']
+			ifFalse: [attrName asString].
 		lf := Character lf asString.
-		accessorSrc := attrName , lf , '	^ ' , attrName.
+		accessorSrc := attrName , lf , '	^ ' , backingSlot.
 		self
 			emitCompileMethodOn: name
 			source: accessorSrc
@@ -577,7 +611,7 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream.
-		setterSrc := attrName , ': ___1' , lf , '	' , attrName , ' := ___1.'.
+		setterSrc := attrName , ': ___1' , lf , '	' , backingSlot , ' := ___1.'.
 		self
 			emitCompileMethodOn: name
 			source: setterSrc
