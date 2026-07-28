@@ -3,6 +3,143 @@ run
 module ifNil: [self error: 'module is not defined. Check file ordering.'].
 %
 
+! ===============================================================================
+! struct_time - Python `time.struct_time`.  A tuple subclass carrying the nine
+! calendar fields, with the documented tm_* names as DATA attributes on top of
+! plain index access.  It was previously aliased straight to ``tuple'', so
+! ``t.tm_year'' raised AttributeError on every value returned by gmtime() /
+! localtime() / date.timetuple() / datetime.timetuple() (test_timetuple,
+! test_more_timetuple, test_fromtimestamp), and _strptime's
+! ``time.struct_time(tt[:9])'' could not round-trip.
+!
+! Construction (``struct_time(seq)'') is inherited from tuple's __new__:/_new:kw:
+! and equality against a plain tuple still holds, both matching CPython.
+! ===============================================================================
+
+expectvalue /Class
+doit
+tuple subclass: 'struct_time'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+struct_time category: 'Grail-Modules'
+%
+
+expectvalue /Metaclass3
+doit
+struct_time removeAllMethods: 0.
+struct_time removeAllMethods: 1.
+struct_time class removeAllMethods: 0.
+struct_time class removeAllMethods: 1.
+%
+
+set compile_env: 0
+
+category: 'Grail-Introspection'
+classmethod: struct_time
+___pythonValueAttrs___
+	"Register the tm_* names as auto-invoked DATA attributes rather than
+	plain callables -- without this ``t.tm_year'' resolves to a bound
+	method object instead of the int (same mechanism as IsoCalendarDate's
+	year/week/weekday in datetime_module.gs)."
+
+	^ IdentitySet new
+		add: #tm_year;
+		add: #tm_mon;
+		add: #tm_mday;
+		add: #tm_hour;
+		add: #tm_min;
+		add: #tm_sec;
+		add: #tm_wday;
+		add: #tm_yday;
+		add: #tm_isdst;
+		yourself
+%
+
+set compile_env: 1
+
+category: 'Grail-Accessors'
+method: struct_time
+tm_year
+	^ self @env0:at: 1
+%
+
+category: 'Grail-Accessors'
+method: struct_time
+tm_mon
+	^ self @env0:at: 2
+%
+
+category: 'Grail-Accessors'
+method: struct_time
+tm_mday
+	^ self @env0:at: 3
+%
+
+category: 'Grail-Accessors'
+method: struct_time
+tm_hour
+	^ self @env0:at: 4
+%
+
+category: 'Grail-Accessors'
+method: struct_time
+tm_min
+	^ self @env0:at: 5
+%
+
+category: 'Grail-Accessors'
+method: struct_time
+tm_sec
+	^ self @env0:at: 6
+%
+
+category: 'Grail-Accessors'
+method: struct_time
+tm_wday
+	^ self @env0:at: 7
+%
+
+category: 'Grail-Accessors'
+method: struct_time
+tm_yday
+	^ self @env0:at: 8
+%
+
+category: 'Grail-Accessors'
+method: struct_time
+tm_isdst
+	^ self @env0:at: 9
+%
+
+category: 'Grail-Conversion'
+method: struct_time
+__repr__
+	"CPython: time.struct_time(tm_year=2004, tm_mon=12, ..., tm_isdst=-1)."
+
+	| ws names |
+	names := #('tm_year' 'tm_mon' 'tm_mday' 'tm_hour' 'tm_min' 'tm_sec'
+		'tm_wday' 'tm_yday' 'tm_isdst').
+	ws := WriteStream @env0:on: Unicode7 @env0:new.
+	ws @env0:nextPutAll: 'time.struct_time('.
+	1 @env0:to: 9 @env0:do: [:i |
+		i @env0:> 1 ifTrue: [ws @env0:nextPutAll: ', '].
+		ws @env0:nextPutAll: (names @env0:at: i).
+		ws @env0:nextPut: $=.
+		ws @env0:nextPutAll: (self @env0:at: i) @env0:printString].
+	ws @env0:nextPut: $).
+	^ ws @env0:contents
+%
+
+set compile_env: 0
+
 ! ------- time module class
 expectvalue /Class
 doit
@@ -49,14 +186,75 @@ set compile_env: 0
 
 category: 'Grail-Private'
 classmethod: time
-___unixEpochSeconds___
-	"Cached Smalltalk-asSeconds value for 1970-01-01 00:00:00 UTC.
-	DateTime asSeconds counts from a Smalltalk epoch (Jan 1 1901) so
-	we subtract this to land in Unix epoch terms.  Cached once per
-	session in a class-side dict to avoid recomputing on every
-	time() call."
+___unixEpochDays___
+	"Date>>asDays for 1970-01-01, the anchor for all epoch<->civil
+	conversions here.
 
-	^ 2177424000
+	Epoch math deliberately goes through Date (pure civil-calendar day
+	counting, no timezone) rather than DateTime>>asSeconds.  asSeconds
+	bakes in the gem's STANDARD UTC offset, so the difference between two
+	asSeconds values that straddle a DST boundary is off by the DST shift
+	-- e.g. with the default US/Pacific zone, `DateTime now asSeconds -
+	(DateTime newGmtWithYear: 1970 ...) asSeconds' ran a full hour ahead
+	of the true Unix epoch every summer, which is what made time.time()
+	(and everything derived from it) wrong half the year."
+
+	^ 25202
+%
+
+category: 'Grail-Private'
+classmethod: time
+___epochSecondsFromGmtOf___: dt
+	"Whole Unix-epoch seconds for the instant `dt`, read through its *Gmt
+	accessors and converted with pure civil-calendar arithmetic (see
+	___unixEpochDays___ for why not asSeconds)."
+
+	^ (time ___epochDaysForYear___: dt yearGmt _month: dt monthGmt _day: dt dayOfMonthGmt)
+		* 86400
+		+ (dt hourGmt * 3600)
+		+ (dt minuteGmt * 60)
+		+ dt secondGmt
+%
+
+category: 'Grail-Private'
+classmethod: time
+___substituteMicroseconds___: fmt _: micros
+	"Expand the %f directive to 6-digit zero-padded microseconds BEFORE
+	handing the format to the struct_time formatter.  struct_time has no
+	sub-second field, so %f cannot be resolved there -- CPython's
+	datetime.strftime runs the same pre-pass.  The scan steps over whole
+	directives so an escaped ``%%f'' keeps its literal ``f'', and a lone
+	trailing ``%'' is passed through untouched.
+
+	(Named `fmt', not `format': ``format'' is already declared as a
+	global -- Python's builtin -- and shadowing it is a compile error.)"
+
+	| ws i sz us c |
+	us := micros printString.
+	[us size < 6] whileTrue: [us := '0' , us].
+	ws := WriteStream on: Unicode7 new.
+	i := 1.
+	sz := fmt size.
+	[i <= sz] whileTrue: [
+		c := fmt at: i.
+		((c = $%) and: [i < sz])
+			ifTrue: [
+				(fmt at: i + 1) = $f
+					ifTrue: [ws nextPutAll: us]
+					ifFalse: [ws nextPut: c; nextPut: (fmt at: i + 1)].
+				i := i + 2]
+			ifFalse: [
+				ws nextPut: c.
+				i := i + 1]].
+	^ ws contents
+%
+
+category: 'Grail-Private'
+classmethod: time
+___epochDaysForYear___: y _month: m _day: d
+	"Days since 1970-01-01 for a civil date; timezone-free."
+
+	^ (Date newDay: d monthNumber: m year: y) asDays - time ___unixEpochDays___
 %
 
 set compile_env: 1
@@ -64,13 +262,11 @@ set compile_env: 1
 category: 'Grail-Initialization'
 method: time
 initialize
-	"Pre-store ``struct_time'' as a marker class.  CPython has a
-	real namedtuple-like class for this; Grail aliases it to
-	``tuple'' so ``isinstance(t, struct_time)'' returns false for
-	plain tuples (matching CPython for non-struct_time tuples) and
-	the import path can find the name.  Werkzeug.http hits this via
-	``from time import struct_time''."
-	self @env0:dynamicInstVarAt: #struct_time put: tuple.
+	"Publish the real struct_time class (a tuple subclass with tm_* named
+	fields, defined at the top of this file) as ``time.struct_time'', so
+	``from time import struct_time'' -- which werkzeug.http and _strptime
+	both do -- and ``isinstance(t, struct_time)'' behave as in CPython."
+	self @env0:dynamicInstVarAt: #struct_time put: struct_time.
 	"Timezone globals.  Grail has no portable local zone and treats wall
 	clocks as UTC, so these report a fixed non-DST UTC (enough for
 	_strptime's locale-cache invalidation check and email.utils)."
@@ -88,9 +284,11 @@ time
 
 	| dt secs msInDay subSecond |
 	dt := DateTime @env0:now.
-	secs := dt @env0:asSeconds @env0:- time @env0:___unixEpochSeconds___.
+	secs := time @env0:___epochSecondsFromGmtOf___: dt.
 	"Sub-second component comes from msAfterMidnight; rem: 1000 strips
-	the whole-seconds part that is already in `secs`."
+	the whole-seconds part that is already in `secs`.  Timezone offsets
+	are whole minutes, so the millisecond-within-second is the same in
+	any zone."
 	msInDay := dt @env0:instVarAt: 3.
 	subSecond := (msInDay @env0:rem: 1000) @env0:/ 1000.0.
 	^ secs @env0:+ subSecond
@@ -103,7 +301,7 @@ time_ns
 
 	| dt secs msInDay |
 	dt := DateTime @env0:now.
-	secs := dt @env0:asSeconds @env0:- time @env0:___unixEpochSeconds___.
+	secs := time @env0:___epochSecondsFromGmtOf___: dt.
 	msInDay := dt @env0:instVarAt: 3.
 	^ (secs @env0:* 1000000000) @env0:+ ((msInDay @env0:rem: 1000) @env0:* 1000000)
 %
@@ -208,34 +406,18 @@ localtime
 category: 'Grail-Calendar'
 method: time
 localtime: epochSeconds
-	"Local-time struct_time for a given epoch-seconds value."
+	"struct_time for a given epoch-seconds value.
 
-	| epoch dt |
-	epoch := DateTime
-		@env0:newWithYear: 1970
-		month: 1
-		day: 1
-		hours: 0
-		minutes: 0
-		seconds: 0.
-	dt := epoch @env0:addSeconds: epochSeconds @env0:truncated.
-	^ self ___structTimeFromDateTime___: dt
-%
+	Grail has no portable local zone and documents wall clocks as UTC --
+	initialize sets timezone=0, altzone=0, daylight=0 and
+	tzname=('UTC','UTC').  So localtime IS gmtime here.  It previously
+	anchored on `DateTime newWithYear: 1970' (LOCAL midnight) while the
+	epoch constant is the GMT anchor; the two differ by the gem's UTC
+	offset, so localtime disagreed with gmtime by 8 hours under the
+	default US/Pacific zone and mktime(localtime(t)) did not round-trip
+	(test_more_ctime)."
 
-category: 'Grail-Private'
-method: time
-___structTimeFromDateTime___: dt
-	"Local-time struct_time tuple matching CPython's struct_time."
-
-	^ self
-		___structTimeYear___: dt @env0:year
-		_month: dt @env0:month
-		_day: dt @env0:dayOfMonth
-		_hour: dt @env0:hour
-		_minute: dt @env0:minute
-		_second: dt @env0:seconds
-		_dayOfWeek: dt @env0:dayOfWeek
-		_dayOfYear: dt @env0:dayOfYear
+	^ self gmtime: epochSeconds
 %
 
 category: 'Grail-Private'
@@ -262,7 +444,7 @@ ___structTimeYear___: year _month: mon _day: day _hour: hour _minute: min _secon
 
 	| isoDow |
 	isoDow := dow @env0:= 1 ifTrue: [6] ifFalse: [dow @env0:- 2].
-	^ tuple @env0:withAll: {
+	^ struct_time @env0:withAll: {
 		year.
 		mon.
 		day.
@@ -282,21 +464,22 @@ mktime: structTime
 	seconds.  Reads the first six fields (year..second) and ignores
 	the rest."
 
-	| year mon day hour min sec dt |
+	| year mon day hour min sec |
 	year := structTime __getitem__: 0.
 	mon := structTime __getitem__: 1.
 	day := structTime __getitem__: 2.
 	hour := structTime __getitem__: 3.
 	min := structTime __getitem__: 4.
 	sec := structTime __getitem__: 5.
-	dt := DateTime
-		@env0:newWithYear: year
-		month: mon
-		day: day
-		hours: hour
-		minutes: min
-		seconds: sec.
-	^ (dt @env0:asSeconds @env0:- time @env0:___unixEpochSeconds___) @env0:asFloat
+	"Pure civil arithmetic -- the exact inverse of localtime:/gmtime:.
+	The old DateTime>>asSeconds form mixed a LOCAL-anchored DateTime with
+	the GMT epoch constant and was additionally DST-skewed, so
+	mktime(t.timetuple()) came back 8 hours off (test_more_ctime)."
+
+	^ ((time @env0:___epochDaysForYear___: year _month: mon _day: day) @env0:* 86400
+		@env0:+ (hour @env0:* 3600)
+		@env0:+ (min @env0:* 60)
+		@env0:+ sec) @env0:asFloat
 %
 
 category: 'Grail-Formatting'
