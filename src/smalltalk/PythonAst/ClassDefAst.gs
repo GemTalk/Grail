@@ -1325,17 +1325,23 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 	positional[0]`` (or an empty value when no arg is supplied),
 	which routes through CharacterCollection >> __new__: — the env-1
 	allocator that creates a self-typed string carrying the input
-	content.  Markup's own (instance-side) ``__new__`` override is
-	intentionally bypassed; the user-defined ``__html__`` detour
-	does not fire here and is a known limitation worth revisiting
-	once Python ``__new__`` becomes a first-class class method."
+	content.
+
+	A str subclass that defines its OWN ``__new__`` now falls through
+	to the runtime allocator instead, exactly as the bytes-like path
+	already did, so that constructor runs (markupsafe.Markup's
+	``__html__`` detour, and any __new__ that sets attributes on the
+	instance before returning it — test_bytes' StrWithBytes).  Only a
+	subclass with no __new__ of its own takes the direct allocator
+	shortcut above."
 
 	| src lf |
 	lf := Character lf asString.
 	src := WriteStream on: Unicode7 new.
 	src nextPutAll: 'value: ___pos___ value: ___kw___'; nextPutAll: lf.
 	src nextPutAll: '| instance dynInit |'; nextPutAll: lf.
-	(self firstBaseIsStr or: [self firstBaseIsBytesLike and: [self definesOwnNew not]])
+	((self firstBaseIsStr or: [self firstBaseIsBytesLike])
+		and: [self definesOwnNew not])
 		ifTrue: [
 			self firstBaseIsStr
 				ifTrue: [

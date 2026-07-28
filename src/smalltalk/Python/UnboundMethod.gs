@@ -135,6 +135,25 @@ value: positional value: kwargs
 				@env0:, ''' has no method ''' @env0:, selector @env0:asString @env0:, '''')
 	].
 	resolvedSel := method @env0:selector.
+	"``Cls.method(x, ...)'' with a SPECIAL x (SmallInteger, Character,
+	Boolean, nil, SmallDouble) that does not itself understand the resolved
+	selector: performMethod: on a special receiver dies with the UNCATCHABLE
+	GemStone error 2156 (``Self is not a ram oop''), so raise CPython's
+	``descriptor ... doesn't apply to'' TypeError instead -- test_bytes calls
+	bytes.hex(1).  The test is deliberately narrow: a non-special receiver
+	keeps the old behavior, because an UnboundMethod is also how Grail invokes
+	class-body helpers whose first positional is a plain function rather than
+	an instance (fractions.py's ``_operator_fallbacks(monomorphic, fallback)'')."
+	(obj @env0:isSpecial
+		@env0:and: [(obj @env0:class
+			@env0:whichClassIncludesSelector: resolvedSel environmentId: 1) isNil])
+		ifTrue: [
+			^ TypeError ___signal___:
+				('descriptor ''' @env0:, selector @env0:asString
+					@env0:, ''' for ''' @env0:, definingClass @env1:__name__ @env0:asString
+					@env0:, ''' objects doesn''t apply to a '''
+					@env0:, obj @env0:class @env1:__name__ @env0:asString @env0:, ''' object')
+	].
 	(resolvedSel @env0:asString @env0:endsWith: ':kw:') ifTrue: [
 		^ obj @env0:with: rest with: kwargs performMethod: method
 	].

@@ -208,14 +208,30 @@ __dir__
 	their side effects.  unittest.TestLoader.loadTestsFromModule was
 	the first caller to trip over this."
 
-	| names |
+	| names cls |
 	names := Set @env0:new.
+	cls := self @env0:class.
 	self @env0:keysDo: [:k | names @env0:add: k @env0:asString].
 	(self @env0:dynamicInstanceVariables) @env0:do: [:k | names @env0:add: k @env0:asString].
-	(self @env0:class @env0:selectorsForEnvironment: 1) @env0:do: [:sel |
+	(cls @env0:selectorsForEnvironment: 1) @env0:do: [:sel |
 		| s index skip |
 		s := sel @env0:asString.
 		skip := (s @env0:size @env0:>= 3) @env0:and: [(s @env0:copyFrom: 1 to: 3) @env0:= '___'].
+		"The module BODY is compiled as an env-1 ``initialize'' method in
+		category 'Grail-Module Body' (importlib class >>
+		___defineModuleClass___).  It is an implementation artifact, not a
+		Python attribute -- and reporting it here was actively destructive:
+		a caller that walks dir() and getattr()s each name (unittest's
+		loadTestsFromModule does exactly that) RE-RAN the whole module body,
+		rebuilding every class the module defines.  The already-constructed
+		TestCase classes then held first-generation classes while the module
+		namespace answered second-generation ones, so pickle could not name
+		them (test_bytes' SubclassTest.test_pickle).  Filter by CATEGORY, not
+		by the name, so a module that legitimately defines ``def initialize()''
+		still shows up."
+		skip ifFalse: [
+			skip := (cls @env0:categoryOfSelector: sel environmentId: 1)
+				@env0:= #'Grail-Module Body'].
 		skip ifFalse: [
 			index := s @env0:indexOf: $:.
 			(index == 0) ifFalse: [s := s @env0:copyFrom: 1 to: (index @env0:- 1)].

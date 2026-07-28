@@ -117,6 +117,7 @@ def _memoizable(obj):
     # test_list test_iterator_pickle pickles (iterator, list) where the
     # iterator's list IS the list).  Immutable scalars/tuples are not memoized.
     return (type(obj) is _LIST_ITER
+            or type(obj) is bytearray
             or isinstance(obj, (list, dict, set, frozenset)))
 
 
@@ -156,9 +157,26 @@ def _encode_body(obj, out, memo):
     elif isinstance(obj, str):
         out.append(b"u")
         _emit_blob(out, obj.encode("utf-8"))
-    elif isinstance(obj, (bytes, bytearray)):
+    elif type(obj) is bytes:
         out.append(b"b")
+        _emit_blob(out, obj)
+    elif type(obj) is bytearray:
+        # Distinct tag so a bytearray round-trips MUTABLE -- decoding it as
+        # plain bytes broke ``b[:] = data`` on the unpickled object.
+        out.append(b"B")
         _emit_blob(out, bytes(obj))
+    elif isinstance(obj, (bytes, bytearray)):
+        # A bytes/bytearray SUBCLASS: rebuild through the subclass itself and
+        # restore its instance attributes, the way CPython's __reduce_ex__
+        # does.  Encoding it as a plain blob lost both the type and the attrs.
+        try:
+            state = dict(obj.__dict__)
+        except AttributeError:
+            state = None
+        out.append(b"r")
+        _encode(type(obj), out, memo)
+        _encode((bytes(obj),), out, memo)
+        _encode(state if state else None, out, memo)
     elif type(obj) is _LIST_ITER:
         # A list_iterator (forward OR reversed): (collection, position,
         # reverse, exhausted); the collection is encoded through _encode so it
@@ -358,6 +376,9 @@ class _Unpickler:
         if t == b"b":
             n = int(self._line())
             return self._take(n)
+        if t == b"B":
+            n = int(self._line())
+            return bytearray(self._take(n))
         if t == b"t":
             n = int(self._line())
             return tuple([self.load() for _ in range(n)])

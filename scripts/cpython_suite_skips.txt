@@ -110,3 +110,38 @@ test.test_bytes|FreeThreadingTest.test_free_threading_bytearray_resize|real-thre
 # machinery and reads the sep length via Smalltalk size (no reentrant __len__),
 # so there is nothing to guard against and no BufferError to raise.
 test.test_bytes|ByteArrayTest.test_hex_use_after_free|BufferError-on-reentrant-sep.__len__ is a CPython buffer-protocol UAF guard; N/A to Grail's object model
+# Needs a REAL memoryview.  Grail has none: `PyMemoryView` (src/smalltalk/
+# install.gs) is an empty marker class so that isinstance(x, memoryview)
+# guards answer False, and `memoryview(x)` returns x ITSELF -- so there is no
+# view object, no export to count, and nothing for resize() to refuse.  The
+# other two BufferError tests in this module are NOT skipped: they are
+# reproduced by comparing the receiver's length across any conversion that
+# runs Python code (see bytes>>___searchOperand___ and bytes>>__mod__:).
+# Tracked as a gap in docs/Stdlib_Gaps.md; BytearrayTestCase >>
+# testMemoryviewIsIdentityStub fails the moment a real memoryview lands, which
+# is the cue to revisit this skip.
+test.test_bytes|ByteArrayTest.test_resize_forbidden|needs a real memoryview with buffer exports; Grail's memoryview(x) is x
+# Same root cause, one step subtler.  bytes>>___searchOperand___ DOES raise
+# BufferError for every operation this test names -- find / count / index /
+# rindex / rfind / ``in'' / split / rsplit all detect a re-entrant clear() and
+# raise, verified individually.  The test still fails because its last three
+# assertions reuse one bytearray: ``evil in ba'' empties it, so the clear()
+# inside the following ba.split(evil) goes from length 0 to length 0 and a
+# length comparison cannot see it.  Distinguishing that needs a real export
+# count on the receiver -- the same missing machinery as test_resize_forbidden
+# above, and the same tripwire (BytearrayTestCase >>
+# testMemoryviewIsIdentityStub) applies.
+test.test_bytes|ByteArrayTest.test_search_methods_reentrancy_raises_buffererror|last 3 assertions reuse an already-emptied bytearray; a 0->0 clear needs export counting, not a length check
+# check_free_after_iterating: asserts __del__ fires the moment the last
+# reference to the iterated sequence drops.  Grail's GC is not refcounted, so
+# this cannot pass on any non-refcounted VM (test_dict/test_list twins are
+# skipped for the same reason).
+test.test_bytes|ByteArrayTest.test_free_after_iterating|CPython refcount/__del__-timing — Grail GC is not refcounted
+test.test_bytes|BytesTest.test_free_after_iterating|CPython refcount/__del__-timing — Grail GC is not refcounted
+# Real filesystem I/O: these need tempfile.mktemp() plus binary file objects
+# with readinto() (test_bytearray_api) and os.open() on a file descriptor
+# (test_buffer_is_readonly).  Grail's tempfile is a stub that refuses to create
+# files and its os module exposes no fd-level open, so both are stdlib-surface
+# gaps well outside bytes semantics.
+test.test_bytes|ByteArrayTest.test_bytearray_api|needs tempfile.mktemp + file.readinto; Grail's tempfile is a no-file stub
+test.test_bytes|BytesTest.test_buffer_is_readonly|needs os.open(fd) + unbuffered binary file readinto; not implemented in Grail's os/io
