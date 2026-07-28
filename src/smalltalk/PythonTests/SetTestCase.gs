@@ -500,3 +500,56 @@ testSetUpdate
 	self assert: (s1 @env1:__contains__: 3).
 	self assert: (s1 @env1:__contains__: 4)
 %
+
+category: 'Grail-Tests - Pickling'
+method: SetTestCase
+testIteratorPickling
+	"A set/frozenset iterator round-trips through pickle.  Set order is
+	undefined, so (like CPython) it unpickles as a list_iterator over the
+	remaining elements -- rebuilding the set from it yields the original,
+	and re-pickling after consuming one element drops exactly that element.
+	Covers test_set's test_iterator_pickling."
+
+	self assert: (self eval: 'import pickle
+s = {1, 2, 3}
+it = iter(s)
+d = pickle.dumps(it)
+r1 = set(pickle.loads(d)) == s
+it2 = pickle.loads(d)
+drop = next(it2)
+d2 = pickle.dumps(it2)
+r2 = set(pickle.loads(d2)) == (s - {drop})
+fit = iter(frozenset({4, 5, 6}))
+r3 = frozenset(pickle.loads(pickle.dumps(fit))) == frozenset({4, 5, 6})
+r1 and r2 and r3')
+%
+
+category: 'Grail-Tests - Pickling'
+method: SetTestCase
+testSetPickling
+	"A plain set/frozenset round-trips through pickle (tags s/z).  A set
+	containing a builtin function (operator.add) round-trips too: the
+	function is pickled BY REFERENCE (module + name, the g tag), like a
+	class.  Covers test_set's TestBasicOps.test_pickling (TestBasicOpsTriple
+	pickles {0, 'zero', operator.add})."
+
+	self assert: (self eval: 'import pickle, operator
+s = {1, 2, 3}
+r1 = pickle.loads(pickle.dumps(s)) == s
+fs = frozenset({4, 5, 6})
+r2 = pickle.loads(pickle.dumps(fs)) == fs
+t = {0, "zero", operator.add}
+r3 = pickle.loads(pickle.dumps(t)) == t
+r1 and r2 and r3')
+%
+
+! NOTE: the set/frozenset SUBCLASS deepcopy + pickle round-trips (copy.py's
+! subclass fallback, pickle.py's y tag, and object>>__getstate__) are exercised
+! by the vendored CPython suite -- test.test_set's TestSetSubclass /
+! TestFrozenSetSubclass test_deepcopy + test_pickling -- which now pass and run
+! in an ISOLATED topaz session (the scoreboard), free of the sharded SUnit
+! suite's parallel memory pressure.  An SUnit fixture-load version of that test
+! flaked here only under peak 4-shard contention (GC starvation while compiling
+! the fixture module), so the isolated CPython test is the regression guard.
+! The eval-based testSetPickling / testIteratorPickling below cover the
+! iterator- and function-by-reference pickle paths directly.

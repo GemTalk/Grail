@@ -103,3 +103,28 @@ dict_after_setattr = DictHolder.__dict__['later']                     # 9
 _inst = DictHolder()
 _inst.y = 5
 inst_dict_y = _inst.__dict__['y']                                     # 5 (instance view still live)
+
+
+# --- Reserved class-object names must not clobber Smalltalk class structure ---
+# `name`, `format`, ... are instance-variable names on the Smalltalk class
+# OBJECT.  A Python class attribute of that name is an ordinary attribute
+# (routed to dynInstVars), NOT the structural slot -- pre-fix `name = None`
+# overwrote the class's real name and crashed `import` on GemStone 4.0 MR#6.
+# See docs/Python_Class_Attribute_Namespaces.md.
+class ReservedName:
+    name = None
+    format = "custom"
+
+
+reserved_name_is_none = ReservedName.name is None          # True
+reserved_format = ReservedName.format                      # 'custom'
+reserved_qualname = ReservedName.__name__                  # 'ReservedName' (not None)
+
+
+class ReservedChild(ReservedName):
+    name = "child"
+
+
+reserved_child_name = ReservedChild.name                   # 'child'
+reserved_parent_still_none = ReservedName.name is None     # True (per-class storage)
+reserved_child_qualname = ReservedChild.__name__           # 'ReservedChild'
