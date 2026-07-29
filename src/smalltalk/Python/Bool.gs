@@ -508,6 +508,18 @@ __eq__: other
 	^ selfInt @env0:= otherInt
 %
 
+category: 'Grail-Hashing'
+method: bool
+__hash__
+	"Python hash(True) == hash(1) == 1 and hash(False) == hash(0) == 0 (bool is
+	an int subclass in CPython).  Grail's bool maps to the kernel Boolean, which
+	does NOT inherit int>>__hash__, so without this override hash(True) falls to
+	object>>__hash__ (Smalltalk identity hash) and True fails to hash-collapse
+	with 1 / 1.0 in a set or dict keyed by Python __hash__."
+
+	^ self ifTrue: [1] ifFalse: [0]
+%
+
 category: 'Grail-Conversion'
 method: bool
 __float__

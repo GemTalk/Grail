@@ -623,6 +623,12 @@ __eq__: other
 
 	| refOwner |
 	(other isKindOf: complex) ifTrue: [^ other __eq__: self].
+	"bool is an int subclass in Python (True == 1.0, False == 0.0), but Grail's
+	bool maps to the kernel Boolean (not a Number), so ``self = other'' would
+	answer false.  Defer to bool>>__eq__, which compares as an integer -- WITHOUT
+	this, equality is non-transitive (1 == 1.0, 1 == True, but 1.0 != True),
+	which corrupts a set/dict bucket where 1 / 1.0 / True collapse together."
+	(other isKindOf: Boolean) ifTrue: [^ other @env1:__eq__: self].
 	(other isKindOf: PythonInstance) ifTrue: [
 		refOwner := other @env0:class @env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
 		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
