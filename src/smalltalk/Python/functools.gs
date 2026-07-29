@@ -769,7 +769,7 @@ __repr__
 	^ 'Placeholder'
 %
 
-category: 'Grail-Built-in Functions'
+category: 'Grail-Constants'
 method: functools
 WRAPPER_ASSIGNMENTS
 	"Tuple of attribute names ``functools.update_wrapper`` copies
@@ -781,7 +781,7 @@ WRAPPER_ASSIGNMENTS
 	^ tuple @env0:withAll: #('__module__' '__name__' '__qualname__' '__annotations__' '__type_params__' '__doc__')
 %
 
-category: 'Grail-Built-in Functions'
+category: 'Grail-Constants'
 method: functools
 WRAPPER_UPDATES
 	"Tuple of attribute names ``functools.update_wrapper`` MERGES

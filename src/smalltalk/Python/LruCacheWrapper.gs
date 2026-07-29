@@ -267,3 +267,31 @@ __wrapped__
 %
 
 set compile_env: 0
+
+! ___pythonValueAttrs___ MUST be compiled in env 0: Object >>
+! ___pyAttrLoad___ consults it through an env-0 ``respondsTo:'', so an
+! env-1 definition is invisible to the probe and the hook silently does
+! nothing (the same trap Bytes.gs documents).
+
+category: 'Grail-Python Attribute Hook'
+classmethod: LruCacheWrapper
+___pythonValueAttrs___
+	"``__wrapped__'' is a VALUE attribute -- the wrapped function itself --
+	not a callable to be wrapped.
+
+	Without this, reading ``f.__wrapped__'' from Python answered a
+	BoundMethod around the ACCESSOR rather than invoking it, so
+	``f.__wrapped__ is orig'' was false and ``f.__wrapped__(x, y)'' called
+	the accessor instead of bypassing the cache (test_lru).
+
+	This looked like a function-identity bug and is not one: the stored
+	instVar, the Smalltalk accessor result and the module attribute are all
+	the SAME oop.  It was purely the attribute-load wrapping, and it hid
+	behind the type name -- type(f.__wrapped__) reported 'BoundMethod',
+	which is also what a module-level function is, so the wrapper and the
+	wrapped value were indistinguishable by type alone."
+
+	^ IdentitySet new
+		add: #'__wrapped__';
+		yourself
+%
