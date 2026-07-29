@@ -344,6 +344,28 @@ modules
 
 category: 'Grail-Accessors'
 method: sys
+modules
+	"The Python-level ``sys.modules'' read.  Delegates to the class-side
+	registry (SESSION-LOCAL, SessionTemps #GrailSysModules) so EVERY holder
+	of a sys instance -- cold session-loaded modules AND canonical/deployed
+	modules -- sees the SAME session dict.
+
+	Without this instance accessor, ``sys.modules'' fell through
+	``___pyAttrLoad___'' to the instance's captured ``#modules'' slot.  A
+	deployed module (e.g. pickle) warm-binds a COMMITTED module instance whose
+	``import sys'' global points at the DEPLOY session's sys instance, whose
+	slot pins the DEPLOY session's (stale, committed) dict -- so the deployed
+	module's ``sys.modules'' never saw a module the CURRENT session cold-loaded
+	(via loadModuleFromPath:).  That broke pickle-by-reference of a cold class
+	under canonical mode: pickle._find_global did ``sys.modules.get(modname)''
+	against the stale dict.  Because method lookup is dynamic, this accessor
+	shadows the stale slot even on a committed sys instance."
+
+	^ sys modules
+%
+
+category: 'Grail-Accessors'
+method: sys
 __breakpointhook__
 	^ self @env0:at: #__breakpointhook__
 %
@@ -1019,7 +1041,10 @@ initialize_runtime_info
 		(self @env0:at: #argv) append: arg.
 		(self @env0:at: #orig_argv) append: arg.
 	].
-	self @env0:at: #modules put: (sys modules).
+	"``sys.modules'' is served by the instance accessor (-> the session-local
+	class-side registry), so do NOT snapshot the dict into a #modules instance
+	slot here: a committed/deployed sys instance would otherwise pin a stale
+	deploy-time dict (the canonical sys.modules seam)."
 	self @env0:at: #builtin_module_names put: (tuple @env0:withAll: {'builtins'. 'cmath'. 'fractions'. 'gemstone'. 'importlib'. 'math'. 'os'. 'string'. 'sys'}).
 	self @env0:at: #stdlib_module_names put: (frozenset ___new___).
 	self @env0:at: #copyright put: 'Copyright (c) GemTalk Systems LLC. All rights reserved.'.
