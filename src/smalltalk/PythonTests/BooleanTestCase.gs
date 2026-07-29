@@ -904,3 +904,18 @@ testTypeIdentity
 	self assert: (true @env1:__eq__: 1).
 	self assert: (false @env1:__eq__: 0).
 %
+
+category: 'Grail-Tests - Hashing'
+method: BooleanTestCase
+testHash
+	"Python hash(True) == hash(1) == 1 and hash(False) == hash(0) == 0 (bool is
+	an int subclass in CPython), so a bool hash-collapses with the matching int
+	in a set / dict.  Grail's bool maps to the kernel Boolean, which does not
+	inherit int>>__hash__, so this is an explicit override."
+
+	self assert: (true @env1:__hash__) equals: 1.
+	self assert: (false @env1:__hash__) equals: 0.
+	self assert: (true @env1:__hash__) equals: (1 @env1:__hash__).
+	self assert: (false @env1:__hash__) equals: (0 @env1:__hash__).
+	self assert: (self eval: 'hash(True) == hash(1) == 1 and hash(False) == hash(0) == 0')
+%

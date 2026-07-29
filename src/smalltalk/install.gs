@@ -539,6 +539,7 @@ run
 	at: #'BufferErrorTestCase' put: nil;
 	at: #'BuiltinExtrasTestCase' put: nil;
 	at: #'BuiltinSubclassOverrideTestCase' put: nil;
+	at: #'ClassMethodViaInstanceTestCase' put: nil;
 	at: #'StrSubclassWideTestCase' put: nil;
 	at: #'StrSubclassConstructionTestCase' put: nil;
 	at: #'DatetimeLocalTimeTestCase' put: nil;
@@ -1248,6 +1249,7 @@ input src/smalltalk/PythonTests/BooleanTestCase.gs
 input src/smalltalk/PythonTests/BoundMethodNameTestCase.gs
 input src/smalltalk/PythonTests/BuiltinsTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassOverrideTestCase.gs
+input src/smalltalk/PythonTests/ClassMethodViaInstanceTestCase.gs
 input src/smalltalk/PythonTests/StrSubclassWideTestCase.gs
 input src/smalltalk/PythonTests/StrSubclassConstructionTestCase.gs
 input src/smalltalk/PythonTests/DatetimeLocalTimeTestCase.gs
@@ -1392,6 +1394,7 @@ input src/smalltalk/PythonTests/SliceAndLoopsTestCase.gs
 input src/smalltalk/PythonTests/SreTestCase.gs
 input src/smalltalk/PythonTests/StarUnpackIteratorTestCase.gs
 input src/smalltalk/PythonTests/StatisticsTestCase.gs
+input src/smalltalk/PythonTests/SubclassCopyPickleTestCase.gs
 input src/smalltalk/PythonTests/StrTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodGlobalFallbackTestCase.gs
 input src/smalltalk/PythonTests/FlaskScaffoldingTestCase.gs

@@ -544,12 +544,12 @@ r1 and r2 and r3')
 %
 
 ! NOTE: the set/frozenset SUBCLASS deepcopy + pickle round-trips (copy.py's
-! subclass fallback, pickle.py's y tag, and object>>__getstate__) are exercised
-! by the vendored CPython suite -- test.test_set's TestSetSubclass /
-! TestFrozenSetSubclass test_deepcopy + test_pickling -- which now pass and run
-! in an ISOLATED topaz session (the scoreboard), free of the sharded SUnit
-! suite's parallel memory pressure.  An SUnit fixture-load version of that test
-! flaked here only under peak 4-shard contention (GC starvation while compiling
-! the fixture module), so the isolated CPython test is the regression guard.
-! The eval-based testSetPickling / testIteratorPickling below cover the
+! subclass fallback, pickle.py's y tag, and object>>__getstate__) live in their
+! OWN class -- SubclassCopyPickleTestCase -- rather than here.  A builtin
+! subclass can't be defined in the eval: path (class-body #new DNU), so that
+! coverage needs a loaded fixture module, and the fixture COMPILE flaked when it
+! ran on THIS class's shard (shard 0, the allocation-heavy collections shard:
+! Set/Dict/Frozenset) under 4-way parallel peak (temp-cache exhaustion).
+! SubclassCopyPickleTestCase is named to hash to a shard with headroom.
+! The eval-based testSetPickling / testIteratorPickling above cover the
 ! iterator- and function-by-reference pickle paths directly.

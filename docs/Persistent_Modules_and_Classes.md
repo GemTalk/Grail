@@ -587,6 +587,21 @@ names are transient).
   modules — rebuilt per session by construction and never
   canonical-bound (they don't go through `loadModuleFromPath:`);
   `os.environ` is lazily populated per session on the native module.
+  **Correction (the `sys.modules` seam):** the native singletons are
+  rebuilt per session, but a *canonical/deployed* module reaches them by a
+  committed reference the audit missed. A deployed module (e.g. `pickle`)
+  warm-binds a COMMITTED instance whose `import sys` global (`#sys` dynamic
+  instVar) points at the DEPLOY session's `sys` instance; that instance's
+  captured `#modules` slot pinned the deploy session's (committed) module
+  dict. So the deployed module's `sys.modules` was a *different, stale* dict
+  than the current session's — and `pickle._find_global` could not resolve a
+  module the session had cold-loaded, breaking pickle-by-reference of a cold
+  class under canonical mode. Fix: an instance-side `sys>>modules` accessor
+  delegates to the session-local class-side registry, so every holder of a
+  `sys` instance (cold or committed) reads the ONE session dict; and
+  `initialize_runtime_info` no longer snapshots the dict into the instance
+  slot, so no committed `sys` instance can pin a deploy-time dict.
+  (`SubclassCopyPickleTestCase` regresses this per-push under canonical mode.)
   Vendored `logging`'s StreamHandler deliberately defaults to `print()`
   (no captured stream handle); no vendored module binds
   `open()`/sockets/`sys.std*`/clock snapshots at module level. The two
