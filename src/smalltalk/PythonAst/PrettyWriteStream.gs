@@ -46,7 +46,7 @@ method: PrettyWriteStream
 nextPut: aChar
 	"Add tabs if we are at the beginning of a line."
 
-	(self contents notEmpty and: [self contents last == Character lf]) ifTrue: [
+	self ___atLineStart ifTrue: [
 		indentCount timesRepeat: [self tab].
 	].
 	super nextPut: aChar.
@@ -57,10 +57,28 @@ method: PrettyWriteStream
 nextPutAll: aString
 	"Add tabs if we are at the beginning of a line."
 
-	(self contents notEmpty and: [self contents last == Character lf]) ifTrue: [
+	self ___atLineStart ifTrue: [
 		indentCount timesRepeat: [self tab].
 	].
 	super nextPutAll: aString.
+%
+
+category: 'Grail-other'
+method: PrettyWriteStream
+___atLineStart
+	"True iff the last character written was a linefeed — i.e. the next write
+	begins a new line and must be indented.
+
+	O(1): reads the write position and the backing collection's last element
+	directly.  The previous form ``self contents notEmpty and: [self contents
+	last == Character lf]'' copied the ENTIRE buffer twice per write
+	(WriteStream>>contents is a copyFrom:1:to:position), making every
+	nextPut:/nextPutAll: O(output-size) and whole-module codegen O(output^2)
+	-- the dominant cost when transpiling large modules.  This is exactly
+	equivalent: contents notEmpty == position > 0, and contents last ==
+	collection at: position."
+
+	^ self position > 0 and: [(collection at: self position) == Character lf]
 %
 
 category: 'Grail-other'

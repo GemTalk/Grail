@@ -836,6 +836,36 @@ encode: encoding _: errors
 				ifFalse: [ws @env0:nextPut: cv]].
 		^ bytes @env0:withAll: ws @env0:contents].
 
+	"iso-8859-15 (latin-9): latin-1 with 8 code points replaced -- U+20AC EURO
+	and 7 letters (Š š Ž ž Œ œ Ÿ) map to bytes A4/A6/A8/B4/B8/BC/BD/BE; the
+	latin-1 chars normally at those bytes (currency / broken-bar / diaeresis /
+	acute / cedilla / fractions) are NOT representable in latin-9.
+	test_bytes BytesTest.test_custom: bytes('€', 'iso8859-15') == b'\xa4'."
+	((enc @env0:= 'iso-8859-15') or: [(enc @env0:= 'iso8859-15')
+		or: [(enc @env0:= 'iso8859_15') or: [(enc @env0:= 'latin-9')
+		or: [(enc @env0:= 'latin9') or: [enc @env0:= 'l9']]]]]) ifTrue: [
+		| ws |
+		ws := WriteStream @env0:on: ByteArray @env0:new.
+		1 @env0:to: size do: [:i | | cp b |
+			cp := (self @env0:at: i) @env0:codePoint.
+			b := nil.
+			cp @env0:= 16r20AC ifTrue: [b := 16rA4].
+			cp @env0:= 16r0160 ifTrue: [b := 16rA6].
+			cp @env0:= 16r0161 ifTrue: [b := 16rA8].
+			cp @env0:= 16r017D ifTrue: [b := 16rB4].
+			cp @env0:= 16r017E ifTrue: [b := 16rB8].
+			cp @env0:= 16r0152 ifTrue: [b := 16rBC].
+			cp @env0:= 16r0153 ifTrue: [b := 16rBD].
+			cp @env0:= 16r0178 ifTrue: [b := 16rBE].
+			(b == nil and: [cp @env0:< 256]) ifTrue: [
+				(#(16rA4 16rA6 16rA8 16rB4 16rB8 16rBC 16rBD 16rBE) @env0:includes: cp)
+					ifFalse: [b := cp]].
+			b == nil
+				ifTrue: [ignore ifFalse: [UnicodeEncodeError ___signal___:
+					'''iso8859-15'' codec can''t encode character']]
+				ifFalse: [ws @env0:nextPut: b]].
+		^ bytes @env0:withAll: ws @env0:contents].
+
 	LookupError ___signal___: ('unknown encoding: ' @env0:, encoding)
 %
 
