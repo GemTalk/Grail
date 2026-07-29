@@ -1075,6 +1075,51 @@ result = eval("(captured := 99)", g)
 
 category: 'Grail-Tests - Eval and Exec'
 method: BuiltinsTestCase
+testEvalReadsCallerLocals
+	"A bare eval(expr) inside a FUNCTION (no explicit globals/locals) reads
+	the enclosing function's locals -- CPython evaluates in the caller's
+	namespace.  Regression for test_bytes BytearrayPEP3137Test.
+	test_returns_new_copy (``eval('val.split()[0]')'' in a method); the empty
+	eval scope previously raised ``undefined symbol''."
+
+	self assert: (self eval: '
+def f():
+    val = 42
+    return eval("val + 1")
+f()') equals: 43
+%
+
+category: 'Grail-Tests - Eval and Exec'
+method: BuiltinsTestCase
+testEvalCallerLocalShadows
+	"The injected locals win: a bare in-function eval resolves a name to the
+	enclosing LOCAL, even when a module global of the same name exists."
+
+	self assert: (self eval: '
+Z = 1
+def h():
+    Z = 2
+    return eval("Z")
+h()') equals: 2
+%
+
+category: 'Grail-Tests - Eval and Exec'
+method: BuiltinsTestCase
+testExecReadsCallerLocals
+	"exec(src) inside a function likewise sees the enclosing locals (sibling
+	of eval); a mutation of an in-scope mutable persists through its identity."
+
+	self assert: (self eval: '
+def f():
+    val = 7
+    holder = []
+    exec("holder.append(val * 3)")
+    return holder[0]
+f()') equals: 21
+%
+
+category: 'Grail-Tests - Eval and Exec'
+method: BuiltinsTestCase
 testModuleAstEvaluateExpressionSource
 	"Class-side helper used by the eval() builtin — direct AST entry
 	point.  Useful for callers that want the eval() semantics
