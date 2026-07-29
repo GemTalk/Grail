@@ -17,13 +17,11 @@ test.test_heapq
 test.test_bisect
 test.test_operator
 test.test_fractions
+# test_datetime runs the FULL CPython 3.14 datetimetester (vendored, only
+# GemStone-forced # GRAIL: adaptations). The former 3-way split existed only
+# because whole-module codegen was O(output^2); fixed (PrettyWriteStream O(1)),
+# so the ~7300-line combined file now transpiles in ~0.3s.
 test.test_datetime
-# datetime tester is split across three modules: the combined CPython
-# datetimetester exceeds Grail's whole-module compile budget, so the big
-# TestDateTime/TestTime classes live in their own modules (see
-# test/datetimetester_datetime.py, test/datetimetester_time.py).
-test.test_datetime_datetime
-test.test_datetime_time
 test.test_re
 test.test_functools
 
