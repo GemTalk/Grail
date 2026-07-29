@@ -184,6 +184,44 @@ testMultiBaseStrSubclassSurvives
 
 category: 'Grail-Tests-StrSubclassWide'
 method: StrSubclassWideTestCase
+testNoMigrationOccursAtAll
+	"Pin the INVARIANT rather than its observable consequence.
+
+	GemStone's in-place widening always preserved object IDENTITY -- the
+	oop never changed -- so identity was never what broke.  What it did
+	not preserve was the CLASS, and that was the whole bug:
+
+	    subclass of Unicode7:  alloc=P/1234 ascii=P/1234
+	                           latin1=Unicode16/1234 astral=Unicode32/1234
+	    subclass of Unicode32: alloc=P/1234 ascii=P/1234
+	                           latin1=P/1234           astral=P/1234
+
+	So the fix is not ``preserve the class across a migration'' -- it is
+	``leave no migration to survive''.  Unicode32 is the widest storage
+	GemStone has, so no store can force one.  This asserts both halves:
+	the class is unchanged AND the oop is unchanged, after storing
+	characters at each of the three widths.
+
+	Driven from Smalltalk because Python strings are immutable, so there
+	is no Python-level way to store into one."
+
+	| cls inst oop |
+	cls := self loadFixture @env1:S.
+	inst := cls new: 3.
+	oop := inst asOop.
+	self assert: inst class == cls
+		description: 'freshly allocated instance must be the subclass'.
+	inst at: 1 put: $a.
+	self assert: inst class == cls description: 'ascii store migrated'.
+	inst at: 2 put: (Character codePoint: 233).
+	self assert: inst class == cls description: 'latin-1 store migrated'.
+	inst at: 3 put: (Character codePoint: 16r1F600).
+	self assert: inst class == cls description: 'astral store migrated'.
+	self assert: inst asOop equals: oop.
+%
+
+category: 'Grail-Tests-StrSubclassWide'
+method: StrSubclassWideTestCase
 testPlainStringsStayNarrow
 	"Guard on the SCOPE of the change: only subclass construction
 	widened.  Repointing the ``str'' binding itself would also have made
