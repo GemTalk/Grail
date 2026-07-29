@@ -541,6 +541,7 @@ run
 	at: #'BuiltinSubclassOverrideTestCase' put: nil;
 	at: #'StrSubclassWideTestCase' put: nil;
 	at: #'StrSubclassConstructionTestCase' put: nil;
+	at: #'DatetimeLocalTimeTestCase' put: nil;
 	at: #'FormatSpecTestCase' put: nil;
 	at: #'BuiltinsTestCase' put: nil;
 	at: #'BytearrayTestCase' put: nil;
@@ -1249,6 +1250,7 @@ input src/smalltalk/PythonTests/BuiltinsTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassOverrideTestCase.gs
 input src/smalltalk/PythonTests/StrSubclassWideTestCase.gs
 input src/smalltalk/PythonTests/StrSubclassConstructionTestCase.gs
+input src/smalltalk/PythonTests/DatetimeLocalTimeTestCase.gs
 input src/smalltalk/PythonTests/BytearrayTestCase.gs
 input src/smalltalk/PythonTests/CachedPropertyTestCase.gs
 input src/smalltalk/PythonTests/DeployCheckTestCase.gs

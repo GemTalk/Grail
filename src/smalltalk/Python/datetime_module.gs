@@ -1414,22 +1414,97 @@ now
 category: 'Grail-Initialization'
 classmethod: PyDateTime
 now: tz
-	"now() / now(tz) - current local or zone-tagged datetime.  We
-	read GemStone DateTime now and pull GMT components (so the wall
-	clock is unaffected by the gem's local timezone), then attach
-	the supplied tzinfo."
+	"now() / now(tz) - current local or zone-tagged datetime.
+
+	NAIVE now() is the HOST-LOCAL wall clock, per CPython.  This used to
+	pull GMT components deliberately, ``so the wall clock is unaffected by
+	the gem's local timezone'' -- a defensible workaround while the gem's
+	timezone was GemStone's PST default no matter which host the gem ran
+	on.  ___ensureSessionTimeZone___ now aligns the session zone with the
+	OS, so the local accessors are the correct ones and naive now() finally
+	tracks the machine's clock.
+
+	An explicit tz keeps the previous GMT-components behaviour (correct for
+	timezone.utc, which is how Grail's callers use it; a genuine conversion
+	into an arbitrary offset is a separate piece of work)."
 
 	| dt micros tz2 |
+	self ___ensureSessionTimeZone___.
 	dt := DateTime @env0:now.
 	micros := ((dt @env0:instVarAt: 3) @env0:\\ 1000) @env0:* 1000.
 	tz2 := tz == None ifTrue: [nil] ifFalse: [tz].
+	^ self
+		___fromDateTime___: dt
+		micros: micros
+		tz: tz2
+		gmt: tz2 @env0:notNil
+%
+
+category: 'Grail-Initialization'
+classmethod: PyDateTime
+___ensureSessionTimeZone___
+	"Align this SESSION's TimeZone with the host OS, once per session.
+
+	GemStone's session TimeZone is its built-in default (PST) regardless of
+	the host the gem runs on, so ``local time'' bore no relation to the
+	machine's clock -- on an EDT host the gem read UTC-7.  That is why the
+	naive constructors here originally used GMT components throughout: UTC
+	was at least a coherent answer, where the gem's ``local'' was simply
+	wrong.
+
+	The visible symptom was that ``date.today()'' (GemStone Date today,
+	session-zone) and ``date.fromtimestamp(time.time())'' (GMT components)
+	disagreed by a day whenever the session-zone date and the UTC date
+	differed -- for the PST default, exactly when the UTC hour is
+	00:00-06:59.  test_datetime's TestDate.test_today failed in that
+	7-hour window each day and passed outside it, which is why it looked
+	intermittent rather than broken.
+
+	SESSION-LOCAL ON PURPOSE.  TimeZone class >> installOsTimeZone would
+	``become:'' the repository-wide default AND commit, letting whichever
+	host last ran it redefine local time for every user of the extent.
+	``installAsCurrentTimeZone'' only writes session state (slot 17), needs
+	no SystemUser and leaves needsCommit false.
+
+	Memoised in SessionTemps: the zone lookup reads /etc/localtime, so it
+	should not run on every now() call.  A failure leaves GemStone's
+	default in place rather than breaking every date operation."
+
+	| temps |
+	temps := SessionTemps @env0:current.
+	(temps @env0:at: #'GrailSessionTimeZoneSet' otherwise: false)
+		ifTrue: [^ self].
+	temps @env0:at: #'GrailSessionTimeZoneSet' put: true.
+	[TimeZone @env0:fromOS @env0:installAsCurrentTimeZone]
+		@env0:on: Error
+		do: [:ex | "keep GemStone's default zone rather than fail the call"].
+%
+
+category: 'Grail-Initialization'
+classmethod: PyDateTime
+___fromDateTime___: dt micros: micros tz: tz2 gmt: useGmt
+	"Build a PyDateTime from a GemStone DateTime, reading either the GMT
+	or the session-local field accessors.  The two families are otherwise
+	identical, so this keeps the local/UTC choice in ONE place instead of
+	duplicating the eight-field call at every entry point."
+
+	useGmt ifTrue: [
+		^ self @env0:___fromFields___:
+			(dt @env0:yearGmt)
+			_: (dt @env0:monthGmt)
+			_: (dt @env0:dayOfMonthGmt)
+			_: (dt @env0:hourGmt)
+			_: (dt @env0:minuteGmt)
+			_: (dt @env0:secondGmt)
+			_: micros
+			_: tz2].
 	^ self @env0:___fromFields___:
-		(dt @env0:yearGmt)
-		_: (dt @env0:monthGmt)
-		_: (dt @env0:dayOfMonthGmt)
-		_: (dt @env0:hourGmt)
-		_: (dt @env0:minuteGmt)
-		_: (dt @env0:secondGmt)
+		(dt @env0:year)
+		_: (dt @env0:month)
+		_: (dt @env0:dayOfMonth)
+		_: (dt @env0:hour)
+		_: (dt @env0:minute)
+		_: (dt @env0:second)
 		_: micros
 		_: tz2
 %
@@ -1448,9 +1523,17 @@ category: 'Grail-Initialization'
 classmethod: PyDateTime
 utcnow
 	"utcnow() - naive UTC datetime (deprecated in CPython 3.12+
-	but still common in libraries like itsdangerous)."
+	but still common in libraries like itsdangerous).
 
-	^ self now: nil
+	No longer ``self now: nil''.  That was harmless only while now() also
+	answered UTC; now that naive now() is host-local, utcnow has to read
+	the GMT components itself or it would silently start returning local
+	time to every caller that asked for UTC."
+
+	| dt micros |
+	dt := DateTime @env0:now.
+	micros := ((dt @env0:instVarAt: 3) @env0:\\ 1000) @env0:* 1000.
+	^ self ___fromDateTime___: dt micros: micros tz: nil gmt: true
 %
 
 category: 'Grail-Initialization'
@@ -1482,17 +1565,38 @@ _fromtimestamp: positional kw: kwargs
 category: 'Grail-Initialization'
 classmethod: PyDateTime
 fromtimestamp: ts _: tz
-	"fromtimestamp(ts[, tz]) - Unix epoch seconds to PyDateTime.  ts must
-	be a real number (None/str/... -> TypeError, gh-120268); a value so
-	extreme the resulting date falls outside year 1..9999 -> OverflowError
-	(GemStone's DateTime signals an uncatchable-by-Python ArgumentError
-	for this -- resignal, test_insane_fromtimestamp)."
+	"fromtimestamp(ts[, tz]) - Unix epoch seconds to PyDateTime.
 
-	| epoch dt secs micros tz2 |
+	NAIVE fromtimestamp(ts) converts the epoch instant to HOST-LOCAL wall
+	time in CPython -- it is NOT utcfromtimestamp.  Reading GMT components
+	is what made ``date.fromtimestamp(time.time())'' disagree with
+	``date.today()'' by a day for part of every day.  An explicit tz keeps
+	the GMT components (correct for timezone.utc; see now:)."
+
+	| tz2 |
+	tz2 := tz == None ifTrue: [nil] ifFalse: [tz].
+	tz2 @env0:isNil ifTrue: [self ___ensureSessionTimeZone___].
+	^ self ___fromTimestamp___: ts tz: tz2 gmt: tz2 @env0:notNil
+%
+
+category: 'Grail-Initialization'
+classmethod: PyDateTime
+___fromTimestamp___: ts tz: tz2 gmt: useGmt
+	"Shared epoch-to-PyDateTime worker for fromtimestamp / utcfromtimestamp.
+	``ts'' must be a real number (None/str/... -> TypeError, gh-120268); a
+	value so extreme the resulting date falls outside year 1..9999 ->
+	OverflowError (GemStone's DateTime signals an uncatchable-by-Python
+	ArgumentError for this -- resignal, test_insane_fromtimestamp).
+
+	Split out so the two public entry points share this validation and
+	epoch arithmetic while differing only in which field family they read;
+	they used to be literally the same method, which is why utcfromtimestamp
+	silently followed fromtimestamp onto local time."
+
+	| epoch dt secs micros |
 	(ts @env0:isKindOf: Number) ifFalse: [
 		^ TypeError @env1:___signal___:
 			'an integer is required (got type ' @env0:, ts @env0:class __name__ @env0:, ')'].
-	tz2 := tz == None ifTrue: [nil] ifFalse: [tz].
 	secs := ts @env0:truncated.
 	micros := ((ts @env0:- secs) @env0:* 1000000) @env0:truncated.
 	epoch := DateTime
@@ -1505,23 +1609,21 @@ fromtimestamp: ts _: tz
 	dt := [epoch @env0:addSeconds: secs]
 		@env0:on: Error
 		do: [:ex | ^ OverflowError @env1:___signal___: 'timestamp out of range for platform time_t'].
-	^ self @env0:___fromFields___:
-		(dt @env0:yearGmt)
-		_: (dt @env0:monthGmt)
-		_: (dt @env0:dayOfMonthGmt)
-		_: (dt @env0:hourGmt)
-		_: (dt @env0:minuteGmt)
-		_: (dt @env0:secondGmt)
-		_: micros
-		_: tz2
+	^ self ___fromDateTime___: dt micros: micros tz: tz2 gmt: useGmt
 %
 
 category: 'Grail-Initialization'
 classmethod: PyDateTime
 utcfromtimestamp: ts
-	"utcfromtimestamp(ts) - naive UTC version."
+	"utcfromtimestamp(ts) - naive UTC version.
 
-	^ self fromtimestamp: ts _: nil
+	No longer delegates to ``fromtimestamp: ts _: nil'': that answers
+	HOST-LOCAL wall time now, so the two had to stop being the same method
+	or every caller asking for UTC would quietly have started getting local
+	time.  Shares the epoch arithmetic and error handling via
+	___fromTimestamp___:tz:gmt: and simply asks for the GMT field family."
+
+	^ self ___fromTimestamp___: ts tz: nil gmt: true
 %
 
 category: 'Grail-Initialization'
@@ -1707,22 +1809,76 @@ astimezone: tz
 category: 'Grail-Conversion'
 method: PyDateTime
 timestamp
-	"Unix epoch seconds with sub-second precision.  Treats naive
-	datetimes as UTC (CPython treats them as local; the gem doesn't
-	have a portable local definition, so we pick a deterministic
-	stand-in).  AWARE datetimes (tzinfo set) additionally subtract the
-	utcoffset -- the wall-clock fields are LOCAL to that offset, and the
-	true UTC instant is ``local - offset'' (matching CPython's
-	``(self - self.utcoffset()).replace(tzinfo=timezone.utc)'' epoch
-	derivation).  Missing this subtraction double-counts the offset on
-	any round trip through __add__/__sub__'s timestamp+fromtimestamp
-	implementation for an aware datetime (test_issue23600)."
+	"Unix epoch seconds with sub-second precision.
 
-	| secs off |
-	secs := self ___naiveEpochSeconds___.
+	NAIVE datetimes are read as HOST-LOCAL wall time, as in CPython.  They
+	used to be read as UTC -- a deliberate ``deterministic stand-in'' while
+	the gem had no trustworthy local zone.  Now that now()/fromtimestamp()
+	answer local time, reading them back as UTC would break the round trip
+	by the local offset: ``datetime.now().timestamp()'' came out 14400
+	seconds adrift of ``time.time()'' on an EDT host, and
+	``fromtimestamp(now().timestamp())'' lost four hours.
+
+	AWARE datetimes (tzinfo set) subtract the utcoffset instead -- the
+	wall-clock fields are local to THAT offset, and the true UTC instant is
+	``local - offset'' (matching CPython's
+	``(self - self.utcoffset()).replace(tzinfo=timezone.utc)'' derivation).
+	Missing this subtraction double-counts the offset on any round trip
+	through __add__/__sub__'s timestamp+fromtimestamp implementation for an
+	aware datetime (test_issue23600).  Unchanged."
+
+	| off |
 	off := self utcoffset.
-	off @env0:== None ifTrue: [^ secs].
-	^ secs @env0:- (off total_seconds)
+	off @env0:== None ifTrue: [^ self ___localNaiveEpochSeconds___].
+	^ self ___naiveEpochSeconds___ @env0:- (off total_seconds)
+%
+
+category: 'Grail-Private'
+method: PyDateTime
+___localNaiveEpochSeconds___
+	"Epoch seconds for wall-clock fields read as HOST-LOCAL time.
+
+	Rather than computing an offset and applying it by hand -- which has to
+	get DST right, including the ambiguous and non-existent wall times
+	either side of a transition -- hand the fields to GemStone's LOCAL
+	DateTime constructor and read the GMT fields back out.  The session
+	TimeZone (aligned with the OS by
+	PyDateTime class >> ___ensureSessionTimeZone___) does the DST-aware
+	local->UTC mapping, and the civil arithmetic below is then the same
+	___naiveEpochSeconds___ uses, just on the GMT fields.
+
+	Falls back to the naive-as-UTC reading if the local constructor rejects
+	the fields (year 1 / 9999 edges): answering a slightly-off epoch is
+	better than turning ``timestamp()'' into an error where it previously
+	returned a number.
+
+	Ensures the session zone ITSELF, rather than relying on a now()/today()
+	call having already done it.  ``datetime(2024,1,1).timestamp()'' reaches
+	local time without constructing anything from the clock, so on a fresh
+	session it would otherwise have been converted under GemStone's PST
+	default -- 1704096000 (a PST reading) instead of 1704085200 (EST)."
+
+	| localDt days whole |
+	PyDateTime ___ensureSessionTimeZone___.
+	localDt := [DateTime
+		@env0:newWithYear: (self @env0:dynamicInstVarAt: #_year)
+		month: (self @env0:dynamicInstVarAt: #_month)
+		day: (self @env0:dynamicInstVarAt: #_day)
+		hours: (self @env0:dynamicInstVarAt: #_hour)
+		minutes: (self @env0:dynamicInstVarAt: #_minute)
+		seconds: (self @env0:dynamicInstVarAt: #_second)]
+			@env0:on: Error
+			do: [:ex | nil].
+	localDt @env0:isNil ifTrue: [^ self ___naiveEpochSeconds___].
+	days := time @env0:___epochDaysForYear___: (localDt @env0:yearGmt)
+		_month: (localDt @env0:monthGmt)
+		_day: (localDt @env0:dayOfMonthGmt).
+	whole := (days @env0:* 86400)
+		@env0:+ ((localDt @env0:hourGmt) @env0:* 3600)
+		@env0:+ ((localDt @env0:minuteGmt) @env0:* 60)
+		@env0:+ (localDt @env0:secondGmt).
+	^ whole @env0:asFloat
+		@env0:+ ((self @env0:dynamicInstVarAt: #_microsecond) @env0:asFloat @env0:/ 1000000.0)
 %
 
 category: 'Grail-Private'
@@ -2094,7 +2250,7 @@ __add__: other
 	timestamp + microseconds so day/month/year overflow are handled
 	by DateTime arithmetic."
 
-	| newTs result |
+	| newTs result tz |
 	(other isKindOf: PyTimedelta) ifFalse: [
 		^ TypeError ___signal___: 'unsupported operand for +'
 	].
@@ -2106,8 +2262,19 @@ __add__: other
 	previously passed only because that drift cancelled the equal-and-
 	opposite DST skew in the old asSeconds-based timestamp)."
 
+	"``___naiveEpochSeconds___'' reads the wall-clock fields AS UTC, so the
+	inverse has to read them back as UTC too -- hence the explicit
+	``gmt: true'' rather than ``fromtimestamp:_:''.  The two cancel and the
+	whole operation stays pure civil arithmetic, which is what CPython does
+	for both naive and aware operands.  Once naive fromtimestamp became
+	HOST-LOCAL, going through it here dropped the local offset on every
+	addition: ``datetime(2024,1,1) + timedelta(days=10, hours=5)'' answered
+	2024-01-11 00:00 instead of 05:00."
+
 	newTs := self ___naiveEpochSeconds___ @env0:+ other total_seconds.
-	result := PyDateTime fromtimestamp: newTs _: (self @env0:dynamicInstVarAt: #_tzinfo).
+	tz := self @env0:dynamicInstVarAt: #_tzinfo.
+	tz @env0:== None ifTrue: [tz := nil].
+	result := PyDateTime ___fromTimestamp___: newTs tz: tz gmt: true.
 	^ result
 %
 
@@ -2125,8 +2292,26 @@ __sub__: other
 	"datetime - datetime -> timedelta; datetime - timedelta -> datetime."
 
 	(other isKindOf: PyDateTime) ifTrue: [
+		| diff bothNaive |
+		"BOTH NAIVE: CPython subtracts the wall-clock fields with no timezone
+		involved, so a span straddling a DST change is the exact civil
+		difference -- 30 days, not 30 days less an hour.  ``timestamp'' now
+		applies the host offset at each end, which loses that hour
+		(datetime(2024,3,31) - datetime(2024,3,1) answered 2588400 instead of
+		2592000).  Read the naive fields directly instead.
+
+		Otherwise at least one side is AWARE, where the difference IS between
+		true instants and ``timestamp'' is the right basis (test_issue23600).
+		CPython raises TypeError for a naive/aware mix; that check is not
+		added here, leaving the previous behaviour for that case."
+		bothNaive := (self utcoffset) @env0:== None
+			@env0:and: [(other utcoffset) @env0:== None].
+		diff := bothNaive
+			ifTrue: [self ___naiveEpochSeconds___
+				@env0:- other ___naiveEpochSeconds___]
+			ifFalse: [self timestamp @env0:- other timestamp].
 		^ PyTimedelta @env0:___fromTotalMicros___:
-			((self timestamp @env0:- other timestamp) @env0:* 1000000) @env0:truncated
+			(diff @env0:* 1000000) @env0:truncated
 	].
 	(other isKindOf: PyTimedelta) ifTrue: [
 		^ self __add__: (other __neg__)
@@ -2582,9 +2767,15 @@ ___new__: positional kw: kwargs
 category: 'Grail-Initialization'
 classmethod: PyDate
 today
-	"Local-time date of today."
+	"Local-time date of today.
+
+	``Date today'' reads the SESSION's TimeZone, which GemStone defaults to
+	PST regardless of host -- so this was local to the wrong zone.  Aligning
+	the session zone with the OS first makes it the real local date, and
+	makes it agree with fromtimestamp(time.time()) at every hour."
 
 	| d |
+	PyDateTime ___ensureSessionTimeZone___.
 	d := Date @env0:today.
 	^ self @env0:___fromFields___:
 		d @env0:year _: d @env0:monthIndex _: d @env0:dayOfMonth
