@@ -820,17 +820,25 @@ category: 'Grail-Built-in Functions'
 method: functools
 _lru_cache: positional kw: kwargs
 	"Varargs entry — ``lru_cache(maxsize=128, typed=False)'' from user
-	code.  Honors the ``maxsize'' keyword (default 128, matching
-	CPython); ``typed'' is accepted and ignored."
+	code.  Honors BOTH keywords (maxsize default 128, matching CPython);
+	``typed'' used to be accepted and discarded here, which is why
+	typed=True cached 3 and 3.0 together.  Also accepts typed
+	positionally, as ``lru_cache(128, True)''."
 
-	| ms |
+	| ms ty |
 	ms := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'maxsize'])
 		ifTrue: [kwargs @env0:at: 'maxsize']
 		ifFalse: [(positional ~~ nil and: [positional @env0:isEmpty @env0:not])
 			ifTrue: [positional @env0:at: 1]
 			ifFalse: [128]].
+	ty := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'typed'])
+		ifTrue: [kwargs @env0:at: 'typed']
+		ifFalse: [(positional ~~ nil and: [positional @env0:size @env0:>= 2])
+			ifTrue: [positional @env0:at: 2]
+			ifFalse: [false]].
 	^ [:positional2 :keywords2 |
-		LruCacheWrapper ___wrap___: (positional2 @env0:at: 1) maxsize: ms]
+		LruCacheWrapper ___wrap___: (positional2 @env0:at: 1)
+			maxsize: ms typed: ty]
 %
 
 category: 'Grail-Built-in Functions'
