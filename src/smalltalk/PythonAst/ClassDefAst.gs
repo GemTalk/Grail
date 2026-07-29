@@ -1269,6 +1269,15 @@ printSuperclassOn: aStream
 		BoundMethods instead of invoking them)."
 		((only isKindOf: NameAst) and: [only id asString = 'object'])
 			ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
+		"``class X(str):`` subclasses Unicode32, not the Unicode7 that the
+		name ``str'' resolves to.  GemStone migrates a Unicode string to
+		the canonical wider class IN PLACE when it is handed a character
+		out of range, which silently stripped the Python subclass off any
+		instance holding non-ASCII.  See importlib >>
+		___widenStrBase___: for the measured migration table and why
+		Unicode16 is not enough."
+		((only isKindOf: NameAst) and: [only id asString = 'str'])
+			ifTrue: [^ aStream nextPutAll: 'Unicode32'].
 		^ only printSmalltalkOn: aStream].
 	aStream nextPutAll: '((Python @env0:at: #importlib) @env0:___selectStorageBase___: { '.
 	1 to: bases size do: [:i |

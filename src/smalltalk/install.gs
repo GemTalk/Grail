@@ -539,6 +539,7 @@ run
 	at: #'BufferErrorTestCase' put: nil;
 	at: #'BuiltinExtrasTestCase' put: nil;
 	at: #'BuiltinSubclassOverrideTestCase' put: nil;
+	at: #'StrSubclassWideTestCase' put: nil;
 	at: #'FormatSpecTestCase' put: nil;
 	at: #'BuiltinsTestCase' put: nil;
 	at: #'BytearrayTestCase' put: nil;
@@ -1245,6 +1246,7 @@ input src/smalltalk/PythonTests/BooleanTestCase.gs
 input src/smalltalk/PythonTests/BoundMethodNameTestCase.gs
 input src/smalltalk/PythonTests/BuiltinsTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassOverrideTestCase.gs
+input src/smalltalk/PythonTests/StrSubclassWideTestCase.gs
 input src/smalltalk/PythonTests/BytearrayTestCase.gs
 input src/smalltalk/PythonTests/CachedPropertyTestCase.gs
 input src/smalltalk/PythonTests/DeployCheckTestCase.gs

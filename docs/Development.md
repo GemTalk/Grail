@@ -85,7 +85,7 @@ on. The mapping is established in `src/smalltalk/install.gs`, e.g.:
 
 | Python | GemStone class |
 |--------|----------------|
-| `str`   | `Unicode7` (methods compiled on `CharacterCollection` so all string subclasses share them) |
+| `str`   | `Unicode7` (methods compiled on `CharacterCollection` so all string subclasses share them; a Python `class X(str)` subclasses `Unicode32` instead — see below) |
 | `int`   | `Integer` (`SmallInteger` / `LargeInteger`) |
 | `float` | `Float` |
 | `bool`  | `Boolean` |
@@ -103,6 +103,32 @@ flavors by naming convention: CPython "dunder" methods (double underscores,
 e.g. `__add__:`), ordinary Python methods (no underscores, e.g. `append:`),
 and Grail-internal helpers called from Smalltalk (triple underscores, e.g.
 `___new___`).
+
+**Why a Python `str` subclass is backed by `Unicode32`.** GemStone widens a
+Unicode string **in place** when it is handed a character outside the
+receiver's range, and it migrates the object to the *canonical* wider class —
+never to a wide counterpart of the receiver's own class, because none exists.
+Measured on subclasses of each width:
+
+| declared superclass | ASCII | latin-1 (`é`) | astral (`😀`) |
+|---------------------|-------|---------------|---------------|
+| `Unicode7`  | keeps subclass | **→ `Unicode16`** | → `Unicode32` |
+| `Unicode16` | keeps subclass | keeps subclass    | **→ `Unicode32`** |
+| `Unicode32` | keeps subclass | keeps subclass    | keeps subclass |
+
+So a `Unicode7`-backed subclass silently lost its Python class the moment it
+held non-ASCII: same oop, class rewritten underneath it. `Markup('abc')` was a
+`Markup` while `Markup('café')` was a plain `str`. `Unicode32` spans the whole
+code-point range, so no store can force a migration.
+
+Only *subclass* construction is affected — the `str` binding itself is
+untouched, so ordinary strings keep GemStone's compact narrow representation.
+The two places that pick the superclass are `ClassDefAst >>
+printSuperclassOn:` (single base) and `importlib >> ___selectStorageBase___:`
+(multi-base), both routed through `importlib >> ___widenStrBase___:`.
+`isinstance(x, str)` still holds, because `___isInstanceSingle___:of:` answers
+the `str` check against `CharacterCollection`. The cost is 4 bytes per
+character for str-subclass instances.
 
 ### Environments 0 and 1 (the dispatch model)
 

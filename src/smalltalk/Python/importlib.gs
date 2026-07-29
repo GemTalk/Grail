@@ -1820,7 +1820,7 @@ ___selectStorageBase___: bases
 
 	bases do: [:b |
 		((b isKindOf: Behavior) and: [b inheritsFrom: Collection])
-			ifTrue: [^ b]
+			ifTrue: [^ self ___widenStrBase___: b]
 	].
 	"No built-in storage base.  Prefer the base with the DEEPEST
 	superclass chain: the ``class DateField(DateTimeCheckMixin, Field)''
@@ -1843,7 +1843,46 @@ ___selectStorageBase___: bases
 			d > bestDepth ifTrue: [bestDepth := d. best := b]
 		]
 	].
-	best ] value
+	self ___widenStrBase___: best ] value
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___widenStrBase___: aClass
+	"Map ``Unicode7'' (what the Python name ``str'' resolves to) onto
+	``Unicode32'' when it is about to become the SMALLTALK SUPERCLASS of
+	a Python class.
+
+	GemStone widens a Unicode string IN PLACE the moment a character
+	outside the receiver's range is stored, and it migrates to the
+	CANONICAL wider class -- never to a wide counterpart of the
+	receiver's own class, because none exists.  A Unicode7-backed
+	subclass therefore lost its identity as soon as it held non-ASCII:
+	the object kept its oop but its class silently became Unicode16, so
+	``Markup('café')'' answered a plain ``str'' while ``Markup('abc')''
+	answered a ``Markup''.  Measured migration behaviour:
+
+	    subclass of Unicode7   ascii ok | latin-1 -> Unicode16 | astral -> Unicode32
+	    subclass of Unicode16  ascii ok | latin-1 ok           | astral -> Unicode32
+	    subclass of Unicode32  ascii ok | latin-1 ok           | astral ok
+
+	Unicode32 spans the entire code-point range, so no store can force a
+	migration and the subclass survives any content.  Unicode16 would fix
+	the common case and still lose the subclass on astral characters
+	(emoji) -- a data-dependent silent failure of exactly the kind this
+	is fixing, so it is not used.
+
+	Only SUBCLASS construction is affected; the ``str'' binding itself is
+	untouched, so plain strings keep GemStone's compact narrow
+	representation.  ``isinstance(x, str)'' still answers true for these
+	instances: ___isInstanceSingle___:of: widens the str check to
+	CharacterCollection.
+
+	Cost: 4 bytes per character for str-subclass instances, against 1 for
+	pure-ASCII content before.  Correctness is worth it -- the failure it
+	replaces was silent and depended on the data."
+
+	^ aClass == Unicode7 ifTrue: [Unicode32] ifFalse: [aClass]
 %
 
 category: 'Grail-Module Loading'
