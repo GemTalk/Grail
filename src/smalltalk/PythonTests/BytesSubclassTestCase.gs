@@ -155,6 +155,37 @@ testCodecEncodeDecode
 		self assert: ((self resultAt: key) = true) description: key]
 %
 
+category: 'Grail-Tests - subclass ctor encoding'
+method: BytesSubclassTestCase
+testSubclassConstructWithEncoding
+	"A bytes/bytearray SUBCLASS constructed with (source, encoding[, errors])
+	must forward ALL positionals to the self-typed ``__new__:_:'' / ``__new__:_:_:''
+	encode form -- the firstBaseIsBytesLike instantiation path previously
+	passed only the first positional, so ``MyBytes(strWithBytes, 'latin-1')''
+	dropped the encoding and returned the __bytes__ payload (test_bytes
+	BytesTest.test_custom)."
+
+	#('sub_ctor_encoding_bytes' 'sub_ctor_encoding_ba'
+	  'sub_ctor_encoding_plain' 'sub_ctor_encoding_plain_ba'
+	  'sub_ctor_errors_bytes' 'sub_ctor_errors_ba'
+	  'sub_user_init_forwards') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
+category: 'Grail-Tests - constructor __bytes__ override'
+method: BytesSubclassTestCase
+testConstructorHonorsBytesOverride
+	"gh-24731: bytes(x) must consult an OVERRIDDEN __bytes__ even when x is
+	itself a bytes subclass (Grail previously gated the hook out for any
+	bytes-like source, copying its raw content instead).  A plain bytearray,
+	which only inherits the gh-100242 default __bytes__, still copies +
+	re-types to bytes rather than aliasing."
+
+	#('ctor_override_uses_hook' 'ctor_override_retypes'
+	  'ctor_bytearray_retypes') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key]
+%
+
 category: 'Grail-Tests - None search bounds'
 method: BytesSubclassTestCase
 testSearchAcceptsNoneBounds

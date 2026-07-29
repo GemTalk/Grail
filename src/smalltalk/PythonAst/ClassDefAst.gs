@@ -1374,9 +1374,35 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 					``C(arg)'' allocates a C carrying the content.  No positional ->
 					the 0-arg __new__ (empty); do NOT pass '''' -- bytes __new__: with
 					a str source is a ''string without encoding'' TypeError."
-					src
-						nextPutAll: 'instance := (___pos___ @env0:size @env0:>= 1) ifTrue: [self @env1:__new__: (___pos___ @env0:at: 1)] ifFalse: [self @env1:__new__].';
-						nextPutAll: lf ]
+					initSelector isNil
+						ifTrue: [
+							"No user __init__: __new__ builds the content, so forward a
+							SECOND and THIRD positional to the ``__new__:_:'' /
+							``__new__:_:_:'' encode arities (``bytes'' takes source,
+							encoding, errors).  Passing only the first meant
+							``C(str, 'ascii')'' dropped the encoding and fell to the
+							1-arg __bytes__/buffer path (test_bytes' BytesTest.test_custom:
+							a bytes-subclass of a str carrying __bytes__ returned the
+							__bytes__ payload instead of the encoded string)."
+							src
+								nextPutAll: 'instance := ___pos___ @env0:size @env0:= 0';
+								nextPutAll: ' ifTrue: [self @env1:__new__]';
+								nextPutAll: ' ifFalse: [___pos___ @env0:size @env0:= 1';
+								nextPutAll: ' ifTrue: [self @env1:__new__: (___pos___ @env0:at: 1)]';
+								nextPutAll: ' ifFalse: [___pos___ @env0:size @env0:= 2';
+								nextPutAll: ' ifTrue: [self @env1:__new__: (___pos___ @env0:at: 1) _: (___pos___ @env0:at: 2)]';
+								nextPutAll: ' ifFalse: [self @env1:__new__: (___pos___ @env0:at: 1) _: (___pos___ @env0:at: 2) _: (___pos___ @env0:at: 3)]]].';
+								nextPutAll: lf ]
+						ifFalse: [
+							"A user __init__ owns the constructor positionals (they are
+							ITS signature -- e.g. ``(newarg=1, *args)'' forwarding *args
+							to bytearray.__init__, test_init_override), so __new__ must
+							NOT read arg 2 as an encoding.  Allocate self-typed from the
+							first positional (a mutable bytearray __init__ repopulates)
+							and let __init__ run below."
+							src
+								nextPutAll: 'instance := (___pos___ @env0:size @env0:>= 1) ifTrue: [self @env1:__new__: (___pos___ @env0:at: 1)] ifFalse: [self @env1:__new__].';
+								nextPutAll: lf ] ]
 		]
 		ifFalse: [(self firstBaseIsTuple and: [self definesOwnNew not])
 			ifTrue: [

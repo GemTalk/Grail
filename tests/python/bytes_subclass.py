@@ -501,6 +501,79 @@ def _replace_overflow():
     return True
 
 
+class _StrWithPayload(str):
+    """A str subclass that also carries an unrelated __bytes__ payload.
+
+    CPython's bytes_new_impl consults __bytes__ only for the 1-arg form;
+    the 2-/3-arg form (source, encoding[, errors]) ENCODES the str content
+    and never looks at __bytes__.  The str content is 'ä' (U+00E4 -> latin-1
+    0xE4), distinct from the payload, so the two paths give distinct bytes."""
+    def __new__(cls, payload):
+        self = str.__new__(cls, 'ä')
+        self._payload = payload
+        return self
+    def __bytes__(self):
+        return self._payload
+
+
+def _sub_ctor_encoding(cls):
+    # Cls(strObj, encoding) on a bytes/bytearray SUBCLASS must encode the str
+    # content (0xE4), not fall to the 1-arg __bytes__/buffer path (the payload).
+    got = cls(_StrWithPayload(b'xyz'), 'latin-1')
+    return bytes(got) == b'\xe4' and type(got) is cls
+
+def _sub_ctor_encoding_plain(cls):
+    got = cls('AB', 'ascii')
+    return bytes(got) == b'AB' and type(got) is cls
+
+def _sub_ctor_errors(cls):
+    # 3-arg (source, encoding, errors) must reach the subclass too: 'ignore'
+    # drops the un-encodable char, keeping the ASCII tail.
+    got = cls('aäb', 'ascii', 'ignore')
+    return bytes(got) == b'ab' and type(got) is cls
+
+
+class _BytesWithOverride(bytes):
+    """A bytes subclass whose raw content (0xA4) differs from its OVERRIDDEN
+    __bytes__ payload, so we can tell which the constructor uses."""
+    def __new__(cls, value):
+        self = bytes.__new__(cls, b'\xa4')
+        self.value = value
+        return self
+    def __bytes__(self):
+        return self.value
+
+def _bytes_of_override_uses_hook():
+    # bytes(x) where x is a bytes SUBCLASS overriding __bytes__ must use the
+    # override (gh-24731), not copy the raw content (b'\xa4').
+    got = bytes(_BytesWithOverride(b'abc'))
+    return got == b'abc' and type(got) is bytes
+
+def _subclass_of_override_retypes():
+    got = MyBytes(_BytesWithOverride(b'abc'))
+    return got == b'abc' and type(got) is MyBytes
+
+def _plain_bytes_of_bytearray_retypes():
+    # a plain bytearray only inherits the default __bytes__, so bytes(ba)
+    # still COPIES + re-types to bytes rather than aliasing the bytearray.
+    got = bytes(bytearray(b'xy'))
+    return got == b'xy' and type(got) is bytes
+
+def _sub_user_init_forwards():
+    # A bytearray subclass whose __init__ takes an extra LEADING arg and
+    # forwards the rest to bytearray.__init__ (test_bytes' test_init_override).
+    # The extra positional belongs to __init__, so __new__ must NOT read arg 2
+    # as an encoding -- the encoding forwarding is gated on the subclass having
+    # no user __init__.
+    class _S(bytearray):
+        def __init__(me, newarg=1, *args, **kwargs):
+            bytearray.__init__(me, *args, **kwargs)
+    a = _S(4, b'abcd')
+    b = _S(4, source=b'abcd')
+    c = _S(newarg=4, source=b'abcd')
+    return a == b'abcd' and b == b'abcd' and c == b'abcd'
+
+
 RESULTS = {
     # --- class X(bytes): self-typed, populated construction ---
     'bytes_type_is_subclass': type(MyBytes(b'abc')) is MyBytes,
@@ -601,6 +674,27 @@ RESULTS = {
     'codec_decode_kwargs': bytes("ab\x80", "latin-1").decode(errors="ignore", encoding="utf-8") == "ab",
     'codec_decode_strict_raises': _decode_strict_raises(),
     'codec_bytearray_utf16': bytearray(_UNI, "utf-16").decode("utf-16") == _UNI,
+
+    # --- a bytes/bytearray SUBCLASS constructed with (source, encoding[,
+    # errors]) must forward ALL positionals to the encode form, not just the
+    # first.  Regression (test_bytes BytesTest.test_custom): the
+    # firstBaseIsBytesLike instantiation path dropped the encoding and fell
+    # to the 1-arg __bytes__/buffer path, so MyBytes(strWithBytes, enc)
+    # returned the __bytes__ payload instead of the encoded str. ---
+    'sub_ctor_encoding_bytes': _sub_ctor_encoding(MyBytes),
+    'sub_ctor_encoding_ba': _sub_ctor_encoding(MyBA),
+    'sub_ctor_encoding_plain': _sub_ctor_encoding_plain(MyBytes),
+    'sub_ctor_encoding_plain_ba': _sub_ctor_encoding_plain(MyBA),
+    'sub_ctor_errors_bytes': _sub_ctor_errors(MyBytes),
+    'sub_ctor_errors_ba': _sub_ctor_errors(MyBA),
+    'sub_user_init_forwards': _sub_user_init_forwards(),
+
+    # --- gh-24731: bytes(x) consults an OVERRIDDEN __bytes__ even when x is
+    # itself bytes-like, while a plain bytes/bytearray (inherited default
+    # __bytes__) still copies + re-types. ---
+    'ctor_override_uses_hook': _bytes_of_override_uses_hook(),
+    'ctor_override_retypes': _subclass_of_override_retypes(),
+    'ctor_bytearray_retypes': _plain_bytes_of_bytearray_retypes(),
 
     # --- the search family accepts None for start/end (== the default
     # bound), matching CPython: find/rfind/index/rindex/count and the
