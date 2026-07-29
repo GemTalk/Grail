@@ -1183,33 +1183,41 @@ ___printfConvert___: value conv: conv flags: flags width: width precision: preci
 	"--- string-like conversions: s r a c ---"
 	(conv @env0:= $s @env0:or: [conv @env0:= $r @env0:or: [
 		conv @env0:= $a @env0:or: [conv @env0:= $c]]]) ifTrue: [
-		"%s keeps Smalltalk asString.  %r uses Python repr (__repr__), matching
-		CPython (%r is repr(value)): repr escapes control characters -- a NUL
-		becomes the 4 chars '\x00' -- which Smalltalk printString does NOT, so
-		''%r'' % ('123\x00',) now equals repr('123\x00') and int()'s own
-		error message (test_int.test_error_message).  Consequence, also matching
-		CPython: a value whose __repr__ raises propagates that from %r rather
-		than being masked by printString."
-		conv @env0:= $s ifTrue: [body := value @env0:asString].
-		conv @env0:= $r ifTrue: [
-			"ByteArray's Smalltalk printString ('aByteArray( 32, 32, ...)')
-			bears no resemblance to Python's bytes repr ('b'...''), and
-			CharacterCollection's printString does not escape control
-			characters the way repr() does (a raw embedded tab/NUL stays
-			raw instead of becoming '\t'/'\x00') -- special-case both
-			rather than routing EVERY type through __repr__, which would
-			resurface the dict-subclass __repr__ bugs the comment above
-			warns about (test_float.py's test_error_message: '%r' %
-			(s,) for a string containing '\t \n', and '%r' % (b'...',)).
-			Float also needs its own __repr__ rather than raw printString
-			-- GemStone's native spelling omits the '+' on a positive
-			scientific exponent and doesn't use CPython's inf/nan/-0.0
-			spellings (test_format_testfile: '%r' % 1e16 -> '1e+16', not
-			'1e16')."
-			body := (((value isKindOf: ByteArray) or: [value isKindOf: CharacterCollection])
-				or: [value isKindOf: Float])
-				ifTrue: [value __repr__]
-				ifFalse: [value @env0:printString]].
+		"%s IS str(value) and %r IS repr(value), so both delegate to the
+		builtins that already implement them.  They used to fall back to
+		Smalltalk asString / printString for anything outside a hand-kept
+		list of types (ByteArray, CharacterCollection, Float), which leaked
+		Smalltalk spellings into Python output for everything else:
+
+		    '%s' % True        -> 'true'                  not 'True'
+		    '%s' % None        -> 'aNoneType'             not 'None'
+		    '%s' % [1, 2]      -> 'anOrderedCollection'   not '[1, 2]'
+		    '%r' % [1, 2]      -> 'anOrderedCollection( 1, 2)'
+		    '%r' % {'k': 1}    -> 'aPyDict( ''k''->1)'
+		    '%r' % a_function  -> 'aBoundMethod'
+		    '%r' % obj         -> 'aFoo', IGNORING a user __repr__
+
+		The list grew one type at a time as individual tests demanded it,
+		which is why str/bytes/float looked right while everything else did
+		not.  Delegating instead fixes the whole matrix at once, and keeps
+		the reasons those three were special-cased: bytes repr is ``b'...'''
+		rather than 'aByteArray( 32, ...)'; str repr escapes control
+		characters, so an embedded tab becomes '\t' and a NUL the four chars
+		'\x00' (test_int / test_float test_error_message); and Float repr
+		uses CPython's exponent-sign and inf/nan/-0.0 spellings rather than
+		GemStone's ('%r' % 1e16 -> '1e+16').  All three now arrive via their
+		own __repr__ through repr(), which is where that behaviour lives.
+
+		No DNU risk: object carries env-1 __repr__ and __str__ defaults, so
+		every value -- including nil, booleans and kernel numbers -- answers
+		both.  And a value whose __repr__ RAISES still propagates rather than
+		being masked, as before and as in CPython, because nothing here
+		catches: builtins>>repr: is a bare ``anObject __repr__''.
+
+		``self str:'' rather than ``value __str__'' so a str SUBCLASS coerces
+		down to a plain str exactly as str() does."
+		conv @env0:= $s ifTrue: [body := (self str: value) @env0:asString].
+		conv @env0:= $r ifTrue: [body := (self repr: value) @env0:asString].
 		conv @env0:= $a ifTrue: [body := (self ascii: value) @env0:asString].
 		conv @env0:= $c ifTrue: [
 			(value isKindOf: Integer)
