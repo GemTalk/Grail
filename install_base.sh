@@ -74,6 +74,33 @@ case "$GS_VERSION" in
         # 4.0) apply Grail's env-1 compile-path patch.
         if LC_ALL=C topaz -lq -S scripts/detect_env1_session_methods.gs 2>/dev/null | grep -q 'GRAIL_MR6=yes'; then
             echo "GemStone ${GS_VERSION:-unknown}: MR #6 present -- env-1 session methods are native; no patch needed."
+            # 1b. MR#6 is present, but does it actually reach RESTRICTED classes?
+            # In 4.0.0 (build 2026-07-23) the env-aware predicate is dead code: the
+            # 3-arg permitSessionMethodFor:selector:environmentId: keeps the OLD
+            # unconditional restrictedClasses check ABOVE its new env-0-only one, so
+            # GsNMethod / System / SymbolDictionary refuse env-1 session methods at
+            # every environment.  Grail then has to file its extensions to those
+            # classes as SHARED SystemUser methods, which multiple users on one
+            # stone overwrite for each other.
+            #
+            # Probe the BEHAVIOUR (never the version), so a rebuilt base image that
+            # answers correctly is detected automatically and the interim patch
+            # simply stops being applied.
+            if LC_ALL=C topaz -lq -S scripts/detect_env1_restricted_classes.gs 2>/dev/null \
+                | grep -q 'GRAIL_ENV1_PERMITTED=yes'; then
+                echo "  Restricted classes accept env-1 session methods -- no patch needed."
+            else
+                echo "  Restricted classes REFUSE env-1 session methods -- applying Grail's interim predicate patch..."
+                LC_ALL=C topaz -lq -S scripts/fix_env1_restricted_classes.gs || {
+                    echo "Error: fix_env1_restricted_classes.gs failed."; exit 1; }
+                if LC_ALL=C topaz -lq -S scripts/detect_env1_restricted_classes.gs 2>/dev/null \
+                    | grep -q 'GRAIL_ENV1_PERMITTED=yes'; then
+                    echo "  Patch verified: restricted classes now accept env-1 session methods."
+                else
+                    echo "Error: patch applied but restricted classes still refuse env-1 session methods."
+                    exit 1
+                fi
+            fi
         else
             echo "GemStone ${GS_VERSION:-unknown}: env-1 session methods not native (pre-MR #6) -- applying Grail compile-path patch (4.0 variant)..."
             LC_ALL=C topaz -lq -S scripts/session_methods_env1_base_40.gs || {
@@ -95,9 +122,34 @@ echo "Setting Unicode comparison mode..."
 # LEGACY kernel this files the shared restricted-class methods as before.
 GRAIL_MODERN=$(LC_ALL=C topaz -lq -S scripts/detect_modern_kernel.gs 2>/dev/null \
     | grep -oE 'GRAIL_MODERN=(yes|no)' | head -1)
+GRAIL_ENV1_PERMITTED=$(LC_ALL=C topaz -lq -S scripts/detect_env1_restricted_classes.gs 2>/dev/null \
+    | grep -oE 'GRAIL_ENV1_PERMITTED=(yes|no)' | head -1)
 echo "Kernel capability: ${GRAIL_MODERN:-GRAIL_MODERN=? (probe failed -> legacy)}"
+echo "                   ${GRAIL_ENV1_PERMITTED:-GRAIL_ENV1_PERMITTED=? (probe failed -> no)}"
+# Three tiers, because the two capabilities are INDEPENDENT and were previously
+# collapsed into one all-or-nothing flag:
+#
+#   GRAIL_MODERN=yes           -- nothing shared: env-1 session methods reach the
+#                                 restricted classes AND the wider performMethod:
+#                                 arities are kernel-native.
+#   GRAIL_ENV1_PERMITTED=yes   -- the four env-1 kernel-extension files go PER-USER;
+#                                 only Object's env-0 dispatch stays shared, because
+#                                 compiling a <primitive:> needs a privilege an
+#                                 ordinary user lacks.  This is 4.0 today.
+#   otherwise (legacy)         -- all six files shared, as before.  3.7.x lands here.
+#
+# Tiering on PERMITTED (the base image's own capability), not on RESTRICTED (which
+# also requires that no shared copies are in the way): clearing those shared copies
+# is this step's job, so gating on RESTRICTED would never let the handover start.
 if [ "$GRAIL_MODERN" = "GRAIL_MODERN=yes" ]; then
-    echo "Modern kernel -- skipping SystemUser restricted-class filing (moves per-user via ./install.sh)."
+    echo "Modern kernel -- skipping SystemUser filing entirely (all moves per-user via ./install.sh)."
+elif [ "$GRAIL_ENV1_PERMITTED" = "GRAIL_ENV1_PERMITTED=yes" ]; then
+    echo "Filing shared Object env-0 dispatch only (SystemUser); env-1 kernel extensions move per-user..."
+    echo "NOTE: this REMOVES any shared env-1 methods on GsNMethod / System /"
+    echo "      SymbolDictionary / ExecBlock.  Every user on this stone must re-run"
+    echo "      ./install.sh afterwards to get their own copies."
+    LC_ALL=C topaz -lq -S scripts/install_base_perform.gs || {
+        echo "Error: install_base_perform.gs failed."; exit 1; }
 else
     echo "Filing shared restricted-class methods (SystemUser)..."
     LC_ALL=C topaz -lq -S scripts/install_base.gs || {
