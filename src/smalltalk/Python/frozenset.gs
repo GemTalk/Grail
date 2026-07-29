@@ -100,13 +100,23 @@ set compile_env: 1
 category: 'Grail-Initialization'
 method: frozenset
 ___init__: positional kw: keywords
-	"Varargs frozenset.__init__(*args, **kw).  frozenset takes NO keyword
-	arguments (test_new_or_init: frozenset().__init__(a=1)).  frozenset is
-	immutable, so a positional iterable was already consumed by __new__ --
-	there is nothing to populate here (a no-op apart from the kwarg check).
-	A subclass WITH its own __init__ dispatches to that and never reaches here."
+	"Varargs frozenset.__init__(*args, **kw).  frozenset has NO __init__ of its
+	own in CPython -- it inherits object.__init__, which rejects keyword/excess
+	arguments UNLESS the class overrides __new__ (then the leftover args were
+	__new__'s to consume, and object.__init__ stays lenient).  So reject keyword
+	arguments only when the receiver's class does NOT define its own __new__:
+	  - frozenset() or a plain frozenset subclass -> reject (test_new_or_init:
+	    frozenset().__init__(a=1); test_keywords_in_subclass: subclass(seq=())).
+	  - a subclass that overrides __new__ (a user def compiles to ___new__:kw:)
+	    already consumed the kwarg there -> stay lenient
+	    (test_keywords_in_subclass's frozenset subclass_with_new(arg, newarg=3);
+	    the set case, by contrast, has a strict set.__init__ and still rejects).
+	frozenset is immutable, so a positional iterable was already consumed by
+	__new__ -- there is nothing to populate here.  A subclass WITH its own
+	__init__ dispatches to that and never reaches here."
 
-	(keywords @env0:notNil @env0:and: [keywords @env0:notEmpty]) ifTrue: [
+	((keywords @env0:notNil @env0:and: [keywords @env0:notEmpty])
+		@env0:and: [(self @env0:class @env0:whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) @env0:isNil]) ifTrue: [
 		TypeError ___signal___: (self @env0:class @env0:name @env0:asString
 			@env0:, '() takes no keyword arguments')].
 	^ None

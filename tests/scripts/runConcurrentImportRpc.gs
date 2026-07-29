@@ -19,7 +19,6 @@
 !
 ! Env: GRAIL_DIR, GRAIL_CC_SYNC (dir holding grail_ccmod_a.py / _b.py, written
 ! by the wrapper).
-set user DataCurator pass swordfish
 iferr 1 where
 iferr 2 output pop
 iferr 3 where
