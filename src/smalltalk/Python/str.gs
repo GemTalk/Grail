@@ -91,7 +91,12 @@ __new__: obj _: encoding
 			ifTrue: [^ obj __new__: encoding].
 
 	(obj isKindOf: ByteArray) ifTrue: [
-		^ obj decode: encoding
+		"Re-wrap through the 1-arg SELF-TYPED allocator.  ``decode:''
+		answers a plain string, so returning it directly dropped the
+		subclass: ``Markup(b'x', 'ascii')'' decoded correctly but came
+		back a bare ``str'' rather than a ``Markup''.  When self IS the
+		canonical str class this is the same string, one copy later."
+		^ self __new__: (obj decode: encoding)
 	].
 	(obj isKindOf: CharacterCollection) ifTrue: [
 		"CPython rejects str(str, encoding) with TypeError —
