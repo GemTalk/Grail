@@ -3004,6 +3004,58 @@ ___tryBinaryDunderDNU___: aSelector args: anArray
 
 category: 'Grail-Attribute Access'
 method: object
+___tryClassMethodDNU___: aSelector args: anArray
+	"@classmethod reached through an INSTANCE.
+
+	Codegen emits a direct instance-side send for ``self.cm(args)'',
+	but ClassDefAst compiles @classmethod/@staticmethod defs onto the
+	METACLASS (category ``Grail-Class Methods'').  Forward with the
+	class as the receiver, matching Python's classmethod-via-instance
+	binding.
+
+	PythonInstance carries its own copy of this probe because there it
+	must run BEFORE that class's attribute-setter interpretation (a
+	1-arg ``cm:'' would otherwise be stored as an instance attribute).
+	This one serves every OTHER receiver -- in particular subclasses of
+	kernel classes (str/bytes/tuple/list/dict), which are NOT
+	PythonInstances and so never reach that copy.  markupsafe's
+	``Markup.__add__'' calling ``self.escape(value)'' is the motivating
+	case.
+
+	Both the plain selector and the varargs form (``_cm:kw:'', emitted
+	when the def has *args/**kwargs or defaults) are probed.  The
+	category gate keeps synthesized class-attribute accessors
+	(``Grail-Class Attrs'') and ordinary Smalltalk class-side methods
+	out.  Answers #'___noClassMethod___' when nothing matches."
+
+	| meta owner s |
+	meta := self class class.
+	owner := meta whichClassIncludesSelector: aSelector environmentId: 1.
+	(owner notNil and: [
+		(owner categoryOfSelector: aSelector environmentId: 1)
+			= #'Grail-Class Methods']) ifTrue: [
+		^ self class perform: aSelector env: 1
+			withArguments: anArray asArray].
+	s := aSelector asString.
+	(s size > 0 and: [s last = $:]) ifTrue: [
+		| colonIdx baseName varargsSel |
+		colonIdx := s indexOf: $:.
+		baseName := s copyFrom: 1 to: colonIdx - 1.
+		varargsSel := ('_' , baseName , ':kw:') asSymbol.
+		owner := meta whichClassIncludesSelector: varargsSel environmentId: 1.
+		(owner notNil and: [
+			(owner categoryOfSelector: varargsSel environmentId: 1)
+				= #'Grail-Class Methods']) ifTrue: [
+			| wrapped |
+			wrapped := Array new: 2.
+			wrapped at: 1 put: anArray asArray.
+			wrapped at: 2 put: nil.
+			^ self class perform: varargsSel env: 1 withArguments: wrapped]].
+	^ #'___noClassMethod___'
+%
+
+category: 'Grail-Attribute Access'
+method: object
 doesNotUnderstand: aSelector args: anArray envId: envId
 	"Bound-method-via-attribute-load fallback.
 
@@ -3019,7 +3071,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	``attr:_:`` etc., or the varargs form ``_attr:kw:``).
 	All other unknown sends fall through to super."
 
-	| s md cls binOp |
+	| s md cls binOp clsMeth |
 	envId = 1 ifFalse: [^ MessageNotUnderstood signal:
 	'env-1 ', aSelector printString, ' not understood by ', self class name asString].
 	s := aSelector asString.
@@ -3084,6 +3136,9 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 			wrapped at: 2 put: nil.
 			^ self perform: varargsSel env: 1 withArguments: wrapped
 		].
+		"@classmethod through an instance -- see ___tryClassMethodDNU___:."
+		clsMeth := self ___tryClassMethodDNU___: aSelector args: anArray.
+		clsMeth == #'___noClassMethod___' ifFalse: [^ clsMeth].
 		^ MessageNotUnderstood signal:
 			'env-1 ', aSelector printString, ' not understood by ', cls name asString
 	].
@@ -3096,6 +3151,11 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 			or: [(md includesKey: (s , ':_:_:') asSymbol)
 				or: [md includesKey: ('_' , s , ':kw:') asSymbol]]])
 		ifTrue: [^ BoundMethod @env1:receiver: self selector: aSelector].
+	"A 0-arg @classmethod called through an instance (``self.cm()'').
+	Grail resolves the ``obj.m'' / ``obj.m()'' ambiguity in favour of
+	CALLING for 0-arg instance methods, so do the same here."
+	clsMeth := self ___tryClassMethodDNU___: aSelector args: anArray.
+	clsMeth == #'___noClassMethod___' ifFalse: [^ clsMeth].
 	^ MessageNotUnderstood signal:
 		'env-1 ', aSelector printString, ' not understood by ', cls name asString
 %
