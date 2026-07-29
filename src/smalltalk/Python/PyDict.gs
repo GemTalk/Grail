@@ -156,47 +156,64 @@ rebuildTable: newSize
 
 ! ------------------- Python key hashing / equality
 ! CPython dicts bucket and match keys by the key's own __hash__ / __eq__, so a
-! key with a custom __hash__ collides with an equal key and a raising __eq__
+! key with a custom __hash__ collides with an equal key, a raising __eq__
 ! propagates (test_dict test_bad_key / test_getitem / test_pop / test_setdefault
-! / test_eq / test_mutating_lookup / test_merge_and_mutate).  KeyValueDictionary
-! instead buckets by ``aKey hash'' and matches by ``aKey = hashKey'' (Smalltalk),
-! so two distinct instances of a custom-key class never met.  Override the two
-! kernel hooks for PythonInstance keys ONLY: object>>__hash__ is ``self hash''
-! and default __eq__ is identity, so a PLAIN instance behaves exactly as before
-! (same bucket, so committed dicts are unaffected) while a custom __hash__/__eq__
-! now drives lookup.  Built-in keys (str/int/tuple/...) keep the kernel path
-! unchanged -- and since Grail's Python hash(x) equals x's Smalltalk hash for
-! them, a custom __hash__ that returns hash('k') still lands in the string 'k's
-! bucket (test_str_nonstr).
+! / test_eq / test_mutating_lookup / test_merge_and_mutate), and equal numeric
+! keys of different types collapse to one entry (1 == 1.0 == True).
+! KeyValueDictionary instead buckets by ``aKey hash'' and matches by
+! ``aKey = hashKey'' (Smalltalk).  We override the two kernel hooks (plus the
+! collision-bucket class) so EVERY key -- not just PythonInstance keys -- routes
+! through the Python protocol (Phase 1 of docs/Python_Robust_Hashtable_Design.md).
+!
+! Safety: for str / int / tuple / a plain object, Grail's Python __hash__ already
+! equals the Smalltalk ``hash'' the kernel would use (object>>__hash__ is ``self
+! hash''), so their bucketing is UNCHANGED.  Only keys whose Python hash differs
+! -- bool (hash==1, not the Smalltalk identity hash), non-integer float, int(-1)
+! (Python's special hashes) -- move buckets, and always consistently, since
+! lookup/rebuild use this same hashFunction:.  A key's __hash__ is invoked only
+! for bucketing (never mutating the table), and __eq__ only during a probe walk
+! BEFORE any insert, so a raising __eq__ propagates without corrupting the table.
 
 category: 'Grail-Hashing'
 method: PyDict
 hashFunction: aKey
-	"Bucket a PythonInstance key by its Python __hash__ (aligned with Smalltalk
-	hash for the default/object case); everything else uses the kernel hash."
+	"Bucket EVERY key by its Python __hash__ so numeric keys collapse across
+	types (1/1.0/True share a bucket) and a custom __hash__ drives lookup.  For
+	str/int/tuple/plain-object keys this equals the kernel hash (no rebucketing);
+	bool / non-integer float / int(-1) move to their Python-hash bucket.
 
-	(aKey isKindOf: PythonInstance) ifTrue: [
-		^ ((aKey @env1:__hash__) \\ tableSize) + 1].
-	^ super hashFunction: aKey
+	An unhashable key's __hash__ raises TypeError; re-raise it as CPython's rich
+	``cannot use 'X' as a dict key (unhashable type: 'X')'' -- the same message
+	__setitem__'s explicit ___requireHashableAsDictKey___ gate produces -- so the
+	READ paths (key in d, d[key], .get/.pop/.setdefault), which reach __hash__
+	through this bucketing function before any explicit gate, report it too
+	rather than the bare ``unhashable type: 'X'''.  A non-TypeError from __hash__
+	(e.g. a KeyError) propagates unchanged (test_dict test_unhashable_key)."
+
+	| h |
+	h := [aKey @env1:__hash__] on: TypeError do: [:ex |
+		aKey @env1:___raiseUnhashableUse___: ex context: 'a dict key'].
+	^ (h \\ tableSize) + 1
 %
 
 category: 'Grail-Hashing'
 method: PyDict
 compareKey: aKey with: hashKey
-	"Match keys by Python equality (identity first, then __eq__, honoring a
-	raising __eq__ by letting it propagate) whenever a PythonInstance key is
-	involved; otherwise the kernel's Smalltalk ``=''.  ``aKey'' is the probe
-	key, ``hashKey'' the stored key; compare stored-first like CPython."
+	"Match keys by Python equality (identity first, then __eq__, a raising __eq__
+	propagates).  ``aKey'' is the probe key, ``hashKey'' the stored key."
 
 	aKey == hashKey ifTrue: [^ true].
-	"Consult the CUSTOM (PythonInstance) side's __eq__.  A built-in's __eq__
-	(str/int) does not reflect to a custom operand, so a str key stored against
-	a custom-__eq__ probe -- or the reverse -- must be compared from the
+	"Consult the CUSTOM (PythonInstance) side's __eq__ first.  A built-in's
+	__eq__ (str/int) does not reflect to a custom operand, so a str key stored
+	against a custom-__eq__ probe -- or the reverse -- must be compared from the
 	PythonInstance side (test_str_nonstr: Key3 == 'key3' / StrSub('key3')).  A
 	raising __eq__ propagates (test_bad_key)."
 	(aKey isKindOf: PythonInstance) ifTrue: [^ aKey @env1:___pyRichEqBool___: hashKey].
 	(hashKey isKindOf: PythonInstance) ifTrue: [^ hashKey @env1:___pyRichEqBool___: aKey].
-	^ super compareKey: aKey with: hashKey
+	"Both built-in: Python equality (not the kernel Smalltalk ``='', whose
+	Boolean/Number comparison is asymmetric -- ``true = 1'' vs ``1 = true'') so
+	1 / 1.0 / True compare equal in whichever probe/stored order they meet."
+	^ aKey @env1:___pyRichEqBool___: hashKey
 %
 
 category: 'Grail-Hashing'

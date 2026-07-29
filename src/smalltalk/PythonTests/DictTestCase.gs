@@ -553,3 +553,20 @@ it = iter(data.items()); next(it)
 ok.append(list(pickle.loads(pickle.dumps(it))) == [(2, ''b''), (3, ''c'')])
 all(ok)').
 %
+
+category: 'Grail-Tests - Python key hashing'
+method: DictTestCase
+testNumericKeyCollapse
+	"Dict keys hash and compare by Python __hash__/__eq__, not Smalltalk =/hash
+	(Phase 1 of docs/Python_Robust_Hashtable_Design.md).  So equal numeric keys
+	of different types collapse to ONE entry -- 1 == 1.0 == True -- keeping the
+	first-inserted key and the last-assigned value, and a float key retrieves an
+	int-keyed entry (and vice versa).  Custom-__hash__ and raising-__eq__ dict
+	keys need class-def fixtures (which would risk the collections-shard fixture-
+	compile flake); they are covered per-run by the nightly test.test_dict."
+
+	self assert: (self eval: 'd = {1: "a", 1.0: "b", True: "c"}
+len(d) == 1 and d[1] == "c" and d[1.0] == "c" and d[True] == "c" and type(next(iter(d))) is int').
+	self assert: (self eval: 'd = {2: "x"}
+d[2.0] == "x" and 2.0 in d and (True in {1: "y"}) and (1 in {True: "z"})')
+%
