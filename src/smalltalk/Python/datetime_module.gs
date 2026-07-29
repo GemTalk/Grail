@@ -1731,7 +1731,7 @@ fromisoformat: s
 	Tolerant of either `T` or space as separator; rejects anything
 	more exotic."
 
-	| str datePart timePart year month day hour min sec micro tz idx pivot |
+	| str datePart timePart year month day hour min sec micro tz idx pivot field |
 	str := s @env0:asString.
 	str @env0:size @env0:< 10 ifTrue: [
 		ValueError ___signal___: 'invalid isoformat: ' @env0:, str
@@ -1740,13 +1740,32 @@ fromisoformat: s
 	month := (str @env0:copyFrom: 6 to: 7) @env0:asNumber.
 	day := (str @env0:copyFrom: 9 to: 10) @env0:asNumber.
 	hour := 0. min := 0. sec := 0. micro := 0. tz := nil.
+	"Two ASCII digits at pos..pos+1 as an Integer.  Raises a Python ValueError
+	 (not a low-level Smalltalk OffsetError) when the position runs past the end
+	 of the string or the characters are not both digits -- fromisoformat must
+	 reject malformed input with ValueError."
+	field := [:pos |
+		| a b |
+		(pos @env0:< 1 @env0:or: [pos @env0:+ 1 @env0:> str @env0:size]) ifTrue: [
+			ValueError ___signal___: 'invalid isoformat: ' @env0:, str].
+		a := str @env0:at: pos.
+		b := str @env0:at: pos @env0:+ 1.
+		((a @env0:isDigit) @env0:and: [b @env0:isDigit]) ifFalse: [
+			ValueError ___signal___: 'invalid isoformat: ' @env0:, str].
+		((a @env0:asInteger @env0:- 48) @env0:* 10) @env0:+ (b @env0:asInteger @env0:- 48)].
 	str @env0:size @env0:> 10 ifTrue: [
-		idx := 12.
-		"Skip separator (T or space)."
-		hour := (str @env0:copyFrom: idx to: idx @env0:+ 1) @env0:asNumber.
-		min := (str @env0:copyFrom: idx @env0:+ 3 to: idx @env0:+ 4) @env0:asNumber.
-		sec := (str @env0:copyFrom: idx @env0:+ 6 to: idx @env0:+ 7) @env0:asNumber.
-		pivot := idx @env0:+ 8.
+		"char 11 is the date/time separator (T or space); the time begins at 12.
+		 Parse HH then optional :MM and :SS incrementally so valid short forms
+		 (HH, HH:MM) parse instead of over-reading a string that has no seconds."
+		hour := field @env0:value: 12.
+		idx := 14.
+		((idx @env0:+ 2 @env0:<= str @env0:size) @env0:and: [(str @env0:at: idx) @env0:= $:]) ifTrue: [
+			min := field @env0:value: idx @env0:+ 1.
+			idx := idx @env0:+ 3].
+		((idx @env0:+ 2 @env0:<= str @env0:size) @env0:and: [(str @env0:at: idx) @env0:= $:]) ifTrue: [
+			sec := field @env0:value: idx @env0:+ 1.
+			idx := idx @env0:+ 3].
+		pivot := idx.
 		"Optional .ffffff."
 		(pivot @env0:<= str @env0:size @env0:and: [(str @env0:at: pivot) @env0:= $.]) ifTrue: [
 			| fracEnd fracStr |
@@ -1774,8 +1793,10 @@ fromisoformat: s
 				(tzChar @env0:= $+ @env0:or: [tzChar @env0:= $-]) ifTrue: [
 					| h m sign |
 					sign := tzChar @env0:= $- ifTrue: [-1] ifFalse: [1].
-					h := (str @env0:copyFrom: pivot @env0:+ 1 to: pivot @env0:+ 2) @env0:asNumber.
-					m := (str @env0:copyFrom: pivot @env0:+ 4 to: pivot @env0:+ 5) @env0:asNumber.
+					h := field @env0:value: pivot @env0:+ 1.
+					m := (pivot @env0:+ 5 @env0:<= str @env0:size)
+						ifTrue: [field @env0:value: pivot @env0:+ 4]
+						ifFalse: [0].
 					tzMicros := sign @env0:* ((h @env0:* 3600 @env0:+ (m @env0:* 60)) @env0:* 1000000).
 					tz := PyTimezone __new__: (PyTimedelta @env0:___fromTotalMicros___: tzMicros)
 				]
