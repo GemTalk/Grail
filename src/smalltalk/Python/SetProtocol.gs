@@ -163,7 +163,16 @@ __contains__: item
 	False -- checked only on the miss path so present elements stay fast."
 
 	| probe |
-	probe := (item isKindOf: set) ifTrue: [frozenset @env1:__new__: item] ifFalse: [item].
+	probe := item.
+	(item isKindOf: set) ifTrue: [
+		"A plain (unhashable) set is looked up as its frozenset equivalent
+		(CPython's ``set in set'' optimization: {frozenset(x)}.__contains__(set(x))
+		is true).  But a HASHABLE set subclass (its own __hash__, e.g.
+		test_subclass_with_custom_hash's H) IS a valid element -- look it up as
+		itself, or the frozenset conversion changes its hash and the lookup
+		misses.  Distinguish by whether __hash__ raises."
+		[item @env1:__hash__] @env0:on: TypeError do: [:ex |
+			probe := frozenset @env1:__new__: item]].
 	(self @env0:includes: probe) ifTrue: [^ true].
 	"A native hash-table miss doesn't necessarily mean absence: IEEE NaN
 	is never = to itself (even the SAME object), so it can never be
@@ -346,7 +355,7 @@ difference: other
 
 	| coerced accumulator |
 	coerced := self ___asElementSet___: other.
-	accumulator := Set @env0:new.
+	accumulator := set @env0:new.
 	self @env0:do: [:each |
 		(coerced __contains__: each) ifFalse: [
 			accumulator @env0:add: each
@@ -363,7 +372,7 @@ intersection: other
 
 	| coerced accumulator |
 	coerced := self ___asElementSet___: other.
-	accumulator := Set @env0:new.
+	accumulator := set @env0:new.
 	self @env0:do: [:each |
 		(coerced __contains__: each) ifTrue: [
 			accumulator @env0:add: each
@@ -419,7 +428,7 @@ symmetric_difference: other
 
 	| coerced accumulator |
 	coerced := self ___asElementSet___: other.
-	accumulator := Set @env0:new.
+	accumulator := set @env0:new.
 	self @env0:do: [:each |
 		(coerced __contains__: each) ifFalse: [
 			accumulator @env0:add: each
@@ -441,7 +450,7 @@ union: other
 
 	| coerced accumulator |
 	coerced := self ___asElementSet___: other.
-	accumulator := Set @env0:new.
+	accumulator := set @env0:new.
 	accumulator @env0:addAll: self.
 	coerced @env0:do: [:each | accumulator @env0:add: each].
 	^ self ___resultSetClass___ @env0:withAll: accumulator

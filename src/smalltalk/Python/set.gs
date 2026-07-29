@@ -17,7 +17,7 @@ Set ifNil: [self error: 'Set is not defined.'].
 expectvalue /Class
 doit
 Set subclass: 'set'
-  instVarNames: #()
+  instVarNames: #( table )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -199,10 +199,10 @@ __repr__
 category: 'Grail-Mutation Methods'
 method: set
 add: item
-	"Add an element to the set."
+	"Python set.add(x).  The facade @env0:add: performs the hashability check
+	(set-element message) and the table store."
 
-	item ___requireHashableAsSetElement___.
-	self @env0:add: item
+	^ self @env0:add: item
 %
 
 category: 'Grail-Mutation Methods'
@@ -402,3 +402,141 @@ _difference_update: positional kw: kwargs
 %
 
 set compile_env: 0
+
+! ===============================================================================
+! Facade element storage (env 0).  A set's elements live in a PyDict `table`
+! (keys = elements, value = a sentinel), keyed by Python __hash__/__eq__ (Phase 1)
+! rather than the kernel Set's Smalltalk =/hash.  These override the native
+! Collection selectors so that EVERY caller -- the Python protocol on Set
+! (SetProtocol.gs), the mutation methods above, set-literal/comprehension codegen,
+! the C-shim, and set_iterator -- routes through Python semantics unchanged,
+! because they all send @env0:do:/add:/includes:/size/remove:/... which now
+! dispatch here for a facade set.  A nil `table` (a set reached before ___pyInitTable___)
+! falls back to native kernel storage, and bare kernel Set instances (never a
+! `set`/`frozenset`) keep the kernel methods entirely.
+! ===============================================================================
+
+category: 'Grail-Facade Construction'
+classmethod: set
+new
+	"Return an empty facade set with its PyDict element table initialized."
+
+	| inst |
+	inst := super new.
+	inst ___pyInitTable___.
+	^ inst
+%
+
+category: 'Grail-Facade Construction'
+classmethod: set
+withAll: aCollection
+	"Build a facade set from aCollection (dedup by Python __hash__/__eq__ via the
+	table).  Overrides kernel Collection class>>withAll: so the instance gets a
+	table (the kernel path could allocate via new: and skip our new).
+
+	SNAPSHOT the source first: populating the table calls the elements' Python
+	__eq__ (for dedup), and a pathological __eq__ may mutate/clear the source
+	mid-iteration (bpo-46615's TestMethodsMutating_Set_List).  Iterating a live
+	Grail list being cleared crashes with a kernel OffsetError; copying to an
+	Array up front (no user code runs during the copy) makes construction robust
+	-- the __eq__ mutation then hits only the original, not our snapshot."
+
+	| inst |
+	inst := self new.
+	(Array @env0:withAll: aCollection) @env0:do: [:each | inst add: each].
+	^ inst
+%
+
+category: 'Grail-Facade Storage'
+method: set
+___pyInitTable___
+	"Install a fresh PyDict as the element table (keys = elements)."
+
+	table := PyDict new
+%
+
+category: 'Grail-Facade Storage'
+method: set
+do: aBlock
+	"Iterate the elements (the table's keys, in insertion order)."
+
+	table isNil ifTrue: [^ super do: aBlock].
+	^ table keysDo: aBlock
+%
+
+category: 'Grail-Facade Storage'
+method: set
+add: anElement
+	"Add an element (dedup by Python __hash__/__eq__; first-inserted key kept).
+	The value is a fixed sentinel that is never read.  An unhashable element must
+	report CPython's ``cannot use 'X' as a set element'' (the PyDict store raises
+	it as a ``dict key'').  Re-label only on the exception path -- zero overhead
+	for a hashable add -- and let a genuine __eq__ TypeError (not unhashability)
+	propagate unchanged.  Covers EVERY add path: s.add(x), set-literal/comprehension
+	codegen (@env0:add:), construction (withAll:), and the C-shim."
+
+	table isNil ifTrue: [^ super add: anElement].
+	[table at: anElement put: true]
+		on: TypeError
+		do: [:ex | anElement @env1:___requireHashableAsSetElement___. ex pass].
+	^ anElement
+%
+
+category: 'Grail-Facade Storage'
+method: set
+includes: anElement
+	"Membership by Python __hash__/__eq__ (via PyDict includesKey:).  An
+	unhashable element is re-labelled to the set-element TypeError (only on the
+	exception path); a stored element's __eq__ raising during the compare is not
+	unhashability, so it propagates unchanged."
+
+	table isNil ifTrue: [^ super includes: anElement].
+	^ [table includesKey: anElement]
+		on: TypeError
+		do: [:ex | anElement @env1:___requireHashableAsSetElement___. ex pass]
+%
+
+category: 'Grail-Facade Storage'
+method: set
+size
+	table isNil ifTrue: [^ super size].
+	^ table size
+%
+
+category: 'Grail-Facade Storage'
+method: set
+isEmpty
+	table isNil ifTrue: [^ super isEmpty].
+	^ table isEmpty
+%
+
+category: 'Grail-Facade Storage'
+method: set
+remove: anElement
+	"Remove a present element (callers locate it first).  A no-op if absent."
+
+	table isNil ifTrue: [^ super remove: anElement].
+	table removeKey: anElement ifAbsent: [nil].
+	^ anElement
+%
+
+category: 'Grail-Facade Storage'
+method: set
+remove: anElement ifAbsent: aBlock
+	table isNil ifTrue: [^ super remove: anElement ifAbsent: aBlock].
+	(table includesKey: anElement) ifFalse: [^ aBlock value].
+	table removeKey: anElement ifAbsent: [nil].
+	^ anElement
+%
+
+category: 'Grail-Facade Storage'
+method: set
+removeAll: aCollection
+	"Remove every element of aCollection.  ``removeAll: self'' (set>>clear) resets
+	the table -- iterating it while removing would mutate mid-iteration."
+
+	table isNil ifTrue: [^ super removeAll: aCollection].
+	aCollection == self ifTrue: [table := PyDict new. ^ aCollection].
+	aCollection do: [:each | table removeKey: each ifAbsent: [nil]].
+	^ aCollection
+%
