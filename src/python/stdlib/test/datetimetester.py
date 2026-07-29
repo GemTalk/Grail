@@ -2248,5 +2248,169 @@ class TestDate(HarmlessMixedComparison, unittest.TestCase):
                     self.theclass.fromisocalendar(*isocal)
 
 
+class TZInfoBase:
+    """Shared tzinfo-argument-passing tests, mixed into both TestTimeTZ (not
+    yet ported) and TestDateTimeTZ (test.datetimetester_tz) -- lives here,
+    not in either split module, so a future TestTimeTZ port can import it
+    too without duplicating it."""
+
+    def test_argument_passing(self):
+        cls = self.theclass
+        # A datetime passes itself on, a time passes None.
+        class introspective(tzinfo):
+            def tzname(self, dt):    return dt and "real" or "none"
+            def utcoffset(self, dt):
+                return timedelta(minutes = dt and 42 or -42)
+            dst = utcoffset
+
+        obj = cls(1, 2, 3, tzinfo=introspective())
+
+        expected = cls is time and "none" or "real"
+        self.assertEqual(obj.tzname(), expected)
+
+        expected = timedelta(minutes=(cls is time and -42 or 42))
+        self.assertEqual(obj.utcoffset(), expected)
+        self.assertEqual(obj.dst(), expected)
+
+    def test_bad_tzinfo_classes(self):
+        cls = self.theclass
+        self.assertRaises(TypeError, cls, 1, 1, 1, tzinfo=12)
+
+        class NiceTry(object):
+            def __init__(self): pass
+            def utcoffset(self, dt): pass
+        self.assertRaises(TypeError, cls, 1, 1, 1, tzinfo=NiceTry)
+
+        class BetterTry(tzinfo):
+            def __init__(self): pass
+            def utcoffset(self, dt): pass
+        b = BetterTry()
+        t = cls(1, 1, 1, tzinfo=b)
+        self.assertIs(t.tzinfo, b)
+
+    def test_utc_offset_out_of_bounds(self):
+        class Edgy(tzinfo):
+            def __init__(self, offset):
+                self.offset = timedelta(minutes=offset)
+            def utcoffset(self, dt):
+                return self.offset
+
+        cls = self.theclass
+        for offset, legit in ((-1440, False),
+                              (-1439, True),
+                              (1439, True),
+                              (1440, False)):
+            if cls is time:
+                t = cls(1, 2, 3, tzinfo=Edgy(offset))
+            elif cls is datetime:
+                t = cls(6, 6, 6, 1, 2, 3, tzinfo=Edgy(offset))
+            else:
+                assert 0, "impossible"
+            if legit:
+                aofs = abs(offset)
+                h, m = divmod(aofs, 60)
+                tag = "%c%02d:%02d" % (offset < 0 and '-' or '+', h, m)
+                if isinstance(t, datetime):
+                    t = t.timetz()
+                self.assertEqual(str(t), "01:02:03" + tag)
+            else:
+                self.assertRaises(ValueError, str, t)
+
+    def test_tzinfo_classes(self):
+        cls = self.theclass
+        class C1(tzinfo):
+            def utcoffset(self, dt): return None
+            def dst(self, dt): return None
+            def tzname(self, dt): return None
+        for t in (cls(1, 1, 1),
+                  cls(1, 1, 1, tzinfo=None),
+                  cls(1, 1, 1, tzinfo=C1())):
+            self.assertIsNone(t.utcoffset())
+            self.assertIsNone(t.dst())
+            self.assertIsNone(t.tzname())
+
+        class C3(tzinfo):
+            def utcoffset(self, dt): return timedelta(minutes=-1439)
+            def dst(self, dt): return timedelta(minutes=1439)
+            def tzname(self, dt): return "aname"
+        t = cls(1, 1, 1, tzinfo=C3())
+        self.assertEqual(t.utcoffset(), timedelta(minutes=-1439))
+        self.assertEqual(t.dst(), timedelta(minutes=1439))
+        self.assertEqual(t.tzname(), "aname")
+
+        # Wrong types.
+        class C4(tzinfo):
+            def utcoffset(self, dt): return "aname"
+            def dst(self, dt): return 7
+            def tzname(self, dt): return 0
+        t = cls(1, 1, 1, tzinfo=C4())
+        self.assertRaises(TypeError, t.utcoffset)
+        self.assertRaises(TypeError, t.dst)
+        self.assertRaises(TypeError, t.tzname)
+
+        # Offset out of range.
+        class C6(tzinfo):
+            def utcoffset(self, dt): return timedelta(hours=-24)
+            def dst(self, dt): return timedelta(hours=24)
+        t = cls(1, 1, 1, tzinfo=C6())
+        self.assertRaises(ValueError, t.utcoffset)
+        self.assertRaises(ValueError, t.dst)
+
+        # Not a whole number of seconds.
+        class C7(tzinfo):
+            def utcoffset(self, dt): return timedelta(microseconds=61)
+            def dst(self, dt): return timedelta(microseconds=-81)
+        t = cls(1, 1, 1, tzinfo=C7())
+        self.assertEqual(t.utcoffset(), timedelta(microseconds=61))
+        self.assertEqual(t.dst(), timedelta(microseconds=-81))
+
+    def test_aware_compare(self):
+        cls = self.theclass
+
+        # Ensure that utcoffset() gets ignored if the comparands have
+        # the same tzinfo member.
+        class OperandDependentOffset(tzinfo):
+            def utcoffset(self, t):
+                if t.minute < 10:
+                    # d0 and d1 equal after adjustment
+                    return timedelta(minutes=t.minute)
+                else:
+                    # d2 off in the weeds
+                    return timedelta(minutes=59)
+
+        base = cls(8, 9, 10, tzinfo=OperandDependentOffset())
+        d0 = base.replace(minute=3)
+        d1 = base.replace(minute=9)
+        d2 = base.replace(minute=11)
+        for x in d0, d1, d2:
+            for y in d0, d1, d2:
+                for op in lt, le, gt, ge, eq, ne:
+                    got = op(x, y)
+                    expected = op(x.minute, y.minute)
+                    self.assertEqual(got, expected)
+
+        # However, if they're different members, uctoffset is not ignored.
+        # Note that a time can't actually have an operand-dependent offset,
+        # though (and time.utcoffset() passes None to tzinfo.utcoffset()),
+        # so skip this test for time.
+        if cls is not time:
+            d0 = base.replace(minute=3, tzinfo=OperandDependentOffset())
+            d1 = base.replace(minute=9, tzinfo=OperandDependentOffset())
+            d2 = base.replace(minute=11, tzinfo=OperandDependentOffset())
+            for x in d0, d1, d2:
+                for y in d0, d1, d2:
+                    got = (x > y) - (x < y)
+                    if (x is d0 or x is d1) and (y is d0 or y is d1):
+                        expected = 0
+                    elif x is y is d2:
+                        expected = 0
+                    elif x is d2:
+                        expected = -1
+                    else:
+                        assert y is d2
+                        expected = 1
+                    self.assertEqual(got, expected)
+
+
 if __name__ == "__main__":
     unittest.main()

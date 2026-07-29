@@ -18,12 +18,14 @@ test.test_bisect
 test.test_operator
 test.test_fractions
 test.test_datetime
-# datetime tester is split across three modules: the combined CPython
+# datetime tester is split across four modules: the combined CPython
 # datetimetester exceeds Grail's whole-module compile budget, so the big
-# TestDateTime/TestTime classes live in their own modules (see
-# test/datetimetester_datetime.py, test/datetimetester_time.py).
+# TestDateTime/TestTime/TestDateTimeTZ classes live in their own modules
+# (see test/datetimetester_datetime.py, test/datetimetester_time.py,
+# test/datetimetester_tz.py).
 test.test_datetime_datetime
 test.test_datetime_time
+test.test_datetime_tz
 test.test_re
 test.test_functools
 

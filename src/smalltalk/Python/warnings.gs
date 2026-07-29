@@ -276,6 +276,33 @@ simplefilter: action _: category
 
 category: 'Grail-Filters'
 method: warnings
+_simplefilter: positional kw: kwargs
+	"Varargs entry for simplefilter(action, category=...) -- the fixed-
+	arity simplefilter:/simplefilter:_: pair is positional-only, so a
+	call passing category by keyword (test_tzinfo_utcfromtimestamp's
+	``simplefilter('ignore', category=DeprecationWarning)'') falls
+	through to here (see PyDateTime>>_now:kw: for why)."
+
+	| n action category |
+	n := positional @env0:size.
+	n @env0:< 1 ifTrue: [
+		TypeError ___signal___: 'simplefilter() missing required argument: ''action'''].
+	n @env0:> 2 ifTrue: [
+		TypeError ___signal___: ('simplefilter() takes at most 2 arguments (' @env0:,
+			n @env0:printString @env0:, ' given)')].
+	action := positional @env0:at: 1.
+	category := n @env0:= 2 ifTrue: [positional @env0:at: 2] ifFalse: [nil].
+	kwargs ifNotNil: [
+		kwargs @env0:keysAndValuesDo: [:k :v | | key |
+			key := k @env0:asString.
+			key @env0:= 'category' ifTrue: [category := v]
+			ifFalse: [TypeError ___signal___:
+				('simplefilter() got an unexpected keyword argument ''' @env0:, key @env0:, '''')]]].
+	^ self simplefilter: action _: category
+%
+
+category: 'Grail-Filters'
+method: warnings
 filterwarnings: action
 	"filterwarnings(action) - add a filter matching every warning."
 
