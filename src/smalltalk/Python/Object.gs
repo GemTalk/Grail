@@ -991,9 +991,19 @@ ___pyBuiltinCollectionInit___: positional kw: keywords new: hasNew
 		positional @env0:isEmpty ifFalse: [
 			self update: (positional @env0:at: 1)]].
 	"A frozenset subclass is immutable and already populated through __new__;
-	only the keyword-argument rule (above) still applies to it."
+	only the keyword-argument rule still applies to it.  Unlike set (which has
+	its own strict set.__init__, so a kwarg is rejected even when __new__ took
+	it -- above), frozenset has NO __init__ of its own: it inherits the LENIENT
+	object.__init__, which ignores leftover constructor args when the subclass
+	overrode __new__.  So reject kwargs only when NEITHER __new__ NOR __init__
+	is overridden (a plain frozenset subclass); a subclass_with_new already
+	consumed the kwarg in its __new__ (bpo-43413 disallows kwargs for the
+	DEFAULT new/init pair only -- test_keywords_in_subclass's frozenset case
+	expects subclass_with_new(arg, newarg=3) to succeed, while its set case
+	expects the same call to raise)."
 	(self @env0:isKindOf: frozenset) ifTrue: [
-		((keywords @env0:notNil and: [keywords @env0:isEmpty @env0:not]) and: [(self @env0:class ___hasUserInit___) @env0:not]) ifTrue: [
+		((keywords @env0:notNil and: [keywords @env0:isEmpty @env0:not])
+			and: [hasNew @env0:not and: [(self @env0:class ___hasUserInit___) @env0:not]]) ifTrue: [
 			TypeError ___signal___: 'frozenset() takes no keyword arguments']].
 	^ self
 %
