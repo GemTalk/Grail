@@ -59,6 +59,16 @@ messagePrecendence
 	^3
 %
 
+category: 'Grail-accessing'
+method: ExprAst
+value
+	"The wrapped expression node.  Read by FunctionDefAst
+	___docString___, which recognises a leading bare string literal as the
+	def's docstring."
+
+	^ value
+%
+
 category: 'Grail-other'
 method: ExprAst
 printSmalltalkOn: aStream

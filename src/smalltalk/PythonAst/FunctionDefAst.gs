@@ -536,20 +536,22 @@ printSmalltalkOn: aStream
 	the assignment / decorator pipeline.  flask's ``@app.route'' reads
 	``view_func.__name__'' to key ``view_functions'' and the rule
 	endpoint; without a real name the lookup KeyErrors."
-	"Stamp __name__ (always) and, when the def carries annotations,
-	__annotations__ too -- via a single combined keyword send so the
-	two don't parse as one ``___pyNamed___:___pyAnnotated___:'' message.
-	Both stamps return self, so this composes transparently in the
-	``name := <block>'' assignment / decorator pipeline.  The
-	annotation dict is built HERE, in the enclosing scope, so its
-	expressions resolve at def-time."
-	self hasAnnotations
-		ifTrue: [
-			aStream nextPutAll: ' @env0:___pyNamed___: '''; nextPutAll: name;
-				nextPutAll: ''' annotations: '.
-			self emitAnnotationsDictOn: aStream]
-		ifFalse: [
-			aStream nextPutAll: ' @env0:___pyNamed___: '''; nextPutAll: name; nextPutAll: ''''].
+	"Stamp __name__ (always), plus __annotations__ when the def carries
+	annotations and __doc__ when it opens with a docstring -- as ONE
+	keyword send, because two chained keyword sends would parse as a
+	single combined selector.  The four shapes are
+	``___pyNamed___:''/``:annotations:''/``:doc:''/``:annotations:doc:'',
+	each defined on ExecBlock.  All stamps return self, so this composes
+	transparently in the ``name := <block>'' assignment / decorator
+	pipeline.  The annotation dict is built HERE, in the enclosing scope,
+	so its expressions resolve at def-time."
+	aStream nextPutAll: ' @env0:___pyNamed___: '''; nextPutAll: name; nextPutAll: ''''.
+	self hasAnnotations ifTrue: [
+		aStream nextPutAll: ' annotations: '.
+		self emitAnnotationsDictOn: aStream].
+	self ___docString___ ifNotNil: [:doc |
+		aStream nextPutAll: ' doc: '.
+		self emitStringLiteral: doc on: aStream].
 	"Phase A: close the dynamicInstVarAt:put: paren opened above when
 	this is a module-scope nested def; otherwise just emit the
 	statement-terminating period."
@@ -875,6 +877,34 @@ emitAnnotationsDictOn: aStream
 		self emitStringLiteral: returns ___annotationSourceString___ on: aStream.
 		aStream nextPut: $;].
 	aStream nextPutAll: ' @env0:yourself)'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___docString___
+	"The def's docstring — the value of a leading bare string-literal
+	statement — or nil when the body doesn't open with one.  CPython's
+	compiler lifts exactly that expression into ``__doc__''.
+
+	Without this, every Grail function inherited ``object''`s own docstring
+	via Object>>__doc__ and claimed to be documented as ``The base class of
+	the class hierarchy...''; ExecBlock>>__doc__ now answers None instead,
+	and this supplies the real text when there is one.
+
+	Gated on CharacterCollection rather than String so a docstring holding
+	non-Latin-1 text (a Unicode16/32 literal) is still recognised."
+
+	| stmts first inner |
+	body isNil ifTrue: [^ nil].
+	stmts := body body.
+	(stmts isNil or: [stmts isEmpty]) ifTrue: [^ nil].
+	first := stmts at: 1.
+	(first isKindOf: ExprAst) ifFalse: [^ nil].
+	inner := first value.
+	(inner isKindOf: ConstantAst) ifFalse: [^ nil].
+	^ (inner value isKindOf: CharacterCollection)
+		ifTrue: [inner value]
+		ifFalse: [nil]
 %
 
 category: 'Grail-code generation'

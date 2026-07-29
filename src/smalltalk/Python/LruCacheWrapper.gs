@@ -266,6 +266,21 @@ __wrapped__
 	^ wrapped
 %
 
+category: 'Grail-Attributes'
+method: LruCacheWrapper
+__dict__
+	"``cached_fn.__dict__'' — a LIVE view of the dynamic-instVar store,
+	the same shape PythonInstance uses.
+
+	Needed because ``lru_cache'' now runs its wrapper through
+	``functools.update_wrapper'', whose merge phase does
+	``getattr(wrapper, '__dict__').update(...)''.  Liveness matters for the
+	same reason it does on ExecBlock: a snapshot would absorb the merge and
+	leave the wrapper's own attributes untouched."
+
+	^ PyInstanceDict @env0:on: self
+%
+
 set compile_env: 0
 
 ! ___pythonValueAttrs___ MUST be compiled in env 0: Object >>
@@ -289,9 +304,17 @@ ___pythonValueAttrs___
 	the SAME oop.  It was purely the attribute-load wrapping, and it hid
 	behind the type name -- type(f.__wrapped__) reported 'BoundMethod',
 	which is also what a module-level function is, so the wrapper and the
-	wrapped value were indistinguishable by type alone."
+	wrapped value were indistinguishable by type alone.
+
+	``__dict__'' is here for the same reason and was found the same way:
+	lru_cache now runs its wrapper through functools.update_wrapper, whose
+	merge phase does ``getattr(wrapper, '__dict__').update(...)''.  Without
+	the entry that read answered a BoundMethod around the accessor, so the
+	update landed on the WRAPPER handle -- ``AttributeError: BoundMethod
+	object has no attribute 'update'''."
 
 	^ IdentitySet new
 		add: #'__wrapped__';
+		add: #'__dict__';
 		yourself
 %
