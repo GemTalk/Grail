@@ -267,7 +267,7 @@ initialize
 	``from time import struct_time'' -- which werkzeug.http and _strptime
 	both do -- and ``isinstance(t, struct_time)'' behave as in CPython."
 
-	| tz |
+	| tz stdName dstName |
 	self @env0:dynamicInstVarAt: #struct_time put: struct_time.
 	"Timezone globals, read from the SESSION zone (aligned with the host OS
 	by PyDateTime class >> ___ensureSessionTimeZone___).  These used to
@@ -279,10 +279,17 @@ initialize
 	US/Eastern is secondsFromGmt = -18000 and time.timezone = 18000."
 	PyDateTime ___ensureSessionTimeZone___.
 	tz := TimeZone @env0:current.
+	"A zone with no DST rule answers an EMPTY dstPrintString -- the UTC zone
+	reports std='UTC' dst=''.  CPython repeats the standard name instead
+	(time.tzname is ('UTC', 'UTC') on a UTC host, not ('UTC', '')), so fall
+	back rather than publish an empty name.  Caught by CI: this machine is
+	US/Eastern, where both names are populated, and the UTC runner was the
+	only place the empty one showed up."
+	stdName := tz @env0:standardPrintString @env0:asString.
+	dstName := tz @env0:dstPrintString @env0:asString.
+	dstName @env0:isEmpty ifTrue: [dstName := stdName].
 	self @env0:dynamicInstVarAt: #tzname
-		put: (tuple @env0:withAll: {
-			tz @env0:standardPrintString @env0:asString.
-			tz @env0:dstPrintString @env0:asString }).
+		put: (tuple @env0:withAll: { stdName. dstName }).
 	self @env0:dynamicInstVarAt: #timezone
 		put: (tz @env0:secondsFromGmt) @env0:negated.
 	self @env0:dynamicInstVarAt: #altzone
