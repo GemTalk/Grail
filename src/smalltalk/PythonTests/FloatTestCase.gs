@@ -111,6 +111,15 @@ test__eq__
 
 	self assert: (5.0 @env1:__eq__: 5.0).
 	self deny: (5.0 @env1:__eq__: 3.0).
+	"int / bool operands (bool is an int subclass in Python): 1.0 == 1,
+	1.0 == True, 0.0 == False; 2.5 != True.  The bool cases must hold so
+	equality stays TRANSITIVE with int (1 == 1.0 == True) -- otherwise a
+	set/dict bucket collapsing 1 / 1.0 / True corrupts."
+	self assert: (1.0 @env1:__eq__: 1).
+	self assert: (1.0 @env1:__eq__: true).
+	self assert: (0.0 @env1:__eq__: false).
+	self deny: (2.5 @env1:__eq__: true).
+	self assert: (self eval: '1.0 == True and 0.0 == False and 2.5 != True and True == 1.0')
 %
 
 category: 'Grail-Tests - Conversion'
