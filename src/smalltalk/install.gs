@@ -1386,6 +1386,7 @@ input src/smalltalk/PythonTests/SliceAndLoopsTestCase.gs
 input src/smalltalk/PythonTests/SreTestCase.gs
 input src/smalltalk/PythonTests/StarUnpackIteratorTestCase.gs
 input src/smalltalk/PythonTests/StatisticsTestCase.gs
+input src/smalltalk/PythonTests/SubclassCopyPickleTestCase.gs
 input src/smalltalk/PythonTests/StrTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodGlobalFallbackTestCase.gs
 input src/smalltalk/PythonTests/FlaskScaffoldingTestCase.gs
