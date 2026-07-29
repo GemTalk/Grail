@@ -19,7 +19,7 @@ Set ifNil: [self error: 'Set is not defined.'].
 expectvalue /Class
 doit
 Set subclass: 'frozenset'
-  instVarNames: #()
+  instVarNames: #( table )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -61,9 +61,13 @@ set compile_env: 0
 category: 'Grail-instance creation'
 classmethod: frozenset
 new
-	"Return an empty, frozen frozenset."
+	"Return an empty, frozen frozenset.  The PyDict element table is installed
+	BEFORE freezing (a frozen instance can't have its `table` slot reassigned)."
 
-	^ self ___frozenInstance: super new
+	| inst |
+	inst := super new.
+	inst ___pyInitTable___.
+	^ self ___frozenInstance: inst
 %
 
 category: 'Grail-instance creation'
@@ -87,7 +91,11 @@ withAll: aCollection
 
 	| inst |
 	inst := super new.
-	aCollection do: [:each | inst add: each].
+	inst ___pyInitTable___.
+	"Snapshot the source: dedup calls the elements' Python __eq__, which (bpo-46615)
+	may clear the source mid-iteration -- iterating a live list being cleared would
+	crash with a kernel OffsetError.  See set class>>withAll:."
+	(Array @env0:withAll: aCollection) @env0:do: [:each | inst add: each].
 	^ self ___frozenInstance: inst
 %
 
@@ -159,3 +167,99 @@ __repr__
 %
 
 set compile_env: 0
+
+! ===============================================================================
+! Facade element storage (env 0) -- identical to set's; a frozenset's elements
+! live in a PyDict `table` keyed by Python __hash__/__eq__.  The table is
+! populated during construction (before immediateInvariant); frozenset exposes
+! no element mutators, so it is effectively immutable.  remove:/removeAll: are
+! provided for symmetry (never reached by the frozenset Python protocol).
+! ===============================================================================
+
+category: 'Grail-Facade Storage'
+method: frozenset
+___pyInitTable___
+	"Install a fresh PyDict as the element table (keys = elements)."
+
+	table := PyDict new
+%
+
+category: 'Grail-Facade Storage'
+method: frozenset
+do: aBlock
+	table isNil ifTrue: [^ super do: aBlock].
+	^ table keysDo: aBlock
+%
+
+category: 'Grail-Facade Storage'
+method: frozenset
+add: anElement
+	"Add an element (only during construction; dedup by Python __hash__/__eq__).
+	An unhashable element is re-labelled to the set-element TypeError (frozenset([[]])
+	reports ``cannot use 'list' as a set element''); a genuine __eq__ TypeError
+	propagates.  Zero overhead on the hashable path.
+
+	Once the frozenset is frozen (immediateInvariant, exact frozensets), mutation
+	is REJECTED: the table object is not itself frozen, so guard explicitly to
+	preserve immutability -- a native frozen Set raised on add: (testFrozensetImmutable).
+	Construction adds BEFORE ___frozenInstance: freezes, so this never blocks it."
+
+	self isInvariant ifTrue: [^ self error: 'frozenset object is immutable'].
+	table isNil ifTrue: [^ super add: anElement].
+	[table at: anElement put: true]
+		on: TypeError
+		do: [:ex | anElement @env1:___requireHashableAsSetElement___. ex pass].
+	^ anElement
+%
+
+category: 'Grail-Facade Storage'
+method: frozenset
+includes: anElement
+	"Membership by Python __hash__/__eq__; an unhashable element re-labels to the
+	set-element TypeError (only on the exception path)."
+
+	table isNil ifTrue: [^ super includes: anElement].
+	^ [table includesKey: anElement]
+		on: TypeError
+		do: [:ex | anElement @env1:___requireHashableAsSetElement___. ex pass]
+%
+
+category: 'Grail-Facade Storage'
+method: frozenset
+size
+	table isNil ifTrue: [^ super size].
+	^ table size
+%
+
+category: 'Grail-Facade Storage'
+method: frozenset
+isEmpty
+	table isNil ifTrue: [^ super isEmpty].
+	^ table isEmpty
+%
+
+category: 'Grail-Facade Storage'
+method: frozenset
+remove: anElement
+	table isNil ifTrue: [^ super remove: anElement].
+	table removeKey: anElement ifAbsent: [nil].
+	^ anElement
+%
+
+category: 'Grail-Facade Storage'
+method: frozenset
+remove: anElement ifAbsent: aBlock
+	table isNil ifTrue: [^ super remove: anElement ifAbsent: aBlock].
+	(table includesKey: anElement) ifFalse: [^ aBlock value].
+	table removeKey: anElement ifAbsent: [nil].
+	^ anElement
+%
+
+category: 'Grail-Facade Storage'
+method: frozenset
+removeAll: aCollection
+	table isNil ifTrue: [^ super removeAll: aCollection].
+	aCollection == self ifTrue: [table := PyDict new. ^ aCollection].
+	aCollection do: [:each | table removeKey: each ifAbsent: [nil]].
+	^ aCollection
+%

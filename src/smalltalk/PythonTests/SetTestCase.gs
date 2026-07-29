@@ -543,6 +543,35 @@ r3 = pickle.loads(pickle.dumps(t)) == t
 r1 and r2 and r3')
 %
 
+category: 'Grail-Tests - Python element hashing'
+method: SetTestCase
+testNumericElementCollapse
+	"A set keys elements by Python __hash__/__eq__ (Phase 2 of the Python-robust
+	hash table): equal numeric elements of different types collapse to ONE, the
+	first-inserted kept -- 1 == 1.0 == True -- and cross-type membership holds.
+	Before the facade, the kernel Set keyed by Smalltalk =/hash (true hash != 1
+	hash), so {1, 1.0, True} kept two elements."
+
+	self assert: (self eval: 's = {1, 1.0, True}
+len(s) == 1 and type(s.pop()) is int').
+	self assert: (self eval: '1.0 in {1} and True in {1} and 1 in {True}').
+	self deny: (self eval: '2 in {1, 3}')
+%
+
+category: 'Grail-Tests - Python element hashing'
+method: SetTestCase
+testSetOfFrozensetsDedup
+	"frozensets are hashed by contents (Python __hash__), so equal frozensets
+	collapse in a set and a frozenset works as a dict key across distinct but
+	equal instances -- exercises the facade keying by __hash__/__eq__ for a
+	non-trivial element type."
+
+	self assert: (self eval: 'len({frozenset({1, 2}), frozenset({2, 1}), frozenset({3})})') equals: 2.
+	self assert: (self eval: 'd = {frozenset({1, 2}): "a"}
+d[frozenset({2, 1})]') equals: 'a'.
+	self assert: (self eval: 'frozenset({1, 2}) in {frozenset({2, 1})}')
+%
+
 ! NOTE: the set/frozenset SUBCLASS deepcopy + pickle round-trips (copy.py's
 ! subclass fallback, pickle.py's y tag, and object>>__getstate__) live in their
 ! OWN class -- SubclassCopyPickleTestCase -- rather than here.  A builtin

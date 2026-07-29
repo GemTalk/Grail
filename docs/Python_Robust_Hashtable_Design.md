@@ -169,3 +169,95 @@ Each phase keeps the full SUnit suite green (commit gate) and is its own PR.
 - **Deferred/related:** the `test_contains` frozenset-subclass case and
   `test_8420_set_merge` (error during a large rehash) both fall out of §4 for
   free (cached-hash bucketing + propagating `__eq__`).
+
+## 8. Phase 2 concrete implementation spec (set / frozenset re-backing)
+
+Investigated surface (2026-07-29). The shared Python set protocol is compiled
+onto the **kernel `Set` class** (`method: Set` in `SetProtocol.gs`); `set` and
+`frozenset` are sibling `Set` subclasses adding overrides. Bare kernel `Set`s
+DO leak into Python (`hashlib.algorithms_guaranteed` = `names asSet`), so the
+facade must tolerate a set-typed receiver with no table.
+
+### 8.1 Backing store & instVar
+- Add instVar `table` to **`set`** and **`frozenset`** (change `instVarNames:
+  #()` → `#( table )` in set.gs / frozenset.gs class defs). NOT on kernel `Set`
+  (a per-user install cannot safely reshape a kernel class).
+- `table` is a **PyDict** (elements = keys, value = a fixed non-nil sentinel,
+  e.g. `true`). Reuses Phase 1's Python `__hash__`/`___pyRichEqBool___` keying.
+  PyDict insertion `order` gives first-inserted-key-wins on collision (CPython
+  set semantics) and a stable iteration order; its `version` guard reused for
+  "set changed size during iteration".
+
+### 8.2 Polymorphic element primitives (define on `Set`, native fallback)
+Put these on kernel `Set`; `set`/`frozenset` get the table via
+`___pySetTable___`. A nil table ⇒ bare kernel Set ⇒ native storage.
+- `Set>>___pySetTable___` → `^ nil`  (override `set>>___pySetTable___ ^ table`,
+  `frozenset>>___pySetTable___ ^ table`)
+- `Set>>___pySetDo___: b` → `t := self ___pySetTable___. t isNil ifTrue: [^ self
+  @env0:do: b]. ^ t @env0:keysDo: b`
+- `Set>>___pySetSize___` → nil→`self @env0:size` else `t @env0:size`
+- `Set>>___pySetIsEmpty___` → nil→`self @env0:isEmpty` else `t @env0:isEmpty`
+- `Set>>___pySetIncludesKey___: x` → nil→`self @env0:includes: x` else
+  `t @env0:includesKey: x`  (PyDict includesKey: keys by Python hash/eq)
+- `Set>>___pySetAddKey___: x` → nil→`self @env0:add: x` else `t @env0:at: x put:
+  true`  (dedups by Python hash/eq; first key kept)
+- `Set>>___pySetRemoveKey___: x` (answer Boolean found) → nil→native
+  `remove:ifAbsent:[^false]. ^true`; else `t @env0:removeKey: x ifAbsent:
+  [^ false]. ^ true`
+- `Set>>___pySetClear___` → nil→`self @env0:removeAll: self`; else
+  `t @env0:removeAllKeys` (or a fresh PyDict)
+
+### 8.3 Construction — every path must create the table BEFORE use (and before freeze)
+- Add `set class>>new` and keep `frozenset class>>new`: allocate via `super new`,
+  then set `table := PyDict new`. (frozenset: create+populate+`immediateInvariant`
+  LAST; the frozen instance's `table` reference is set once — never reassigned.)
+- Add `set class>>withAll: coll` and rewrite `frozenset class>>withAll:` to:
+  `inst := self new. coll do: [:e | inst ___pySetAddKey___: e]. freeze if
+  frozenset. ^ inst`.  (Do NOT lazy-init `table` in the accessor — frozensets are
+  frozen, so assignment there fails.)
+- `SetProtocol Set class>>__new__` / `__new__:` / `__new__:_:` already route to
+  `self @env0:new` / `self @env0:withAll:` — now table-backed via the overrides.
+
+### 8.4 Per-file edit checklist (route every native element send through §8.2)
+- **set.gs**: `add:`→`___pySetAddKey___:` (keep the hashable gate); `clear`→
+  `___pySetClear___`; `discard:`/`remove:`/`pop`/`*_update:`/`update:` — replace
+  `self @env0:do:`/`@env0:add:`/`@env0:remove:`/`@env0:isEmpty` with the
+  primitives; `__repr__` uses `___pySetSize___`/`___pySetDo___:`.
+- **SetProtocol.gs**: `__contains__:` → `___pySetIncludesKey___:` + iterate the
+  NaN identity fallback via `___pySetDo___:` (detect on `==`); `__len__`→
+  `___pySetSize___`; `__iter__` (set_iterator snapshots via `___pySetDo___:`);
+  `__eq__:` via `___pySetSize___`+`issubset:`; `difference:`/`intersection:`/
+  `symmetric_difference:`/`union:` — build accumulator as a facade `set @env0:new`
+  and `accumulator ___pySetAddKey___:` (NOT `Set new`/native add:, which would
+  re-dedup by Smalltalk =); `isdisjoint:`/`issubset:`/`issuperset:` iterate via
+  `___pySetDo___:`; `copy` via `withAll:`.
+- **frozenset.gs**: `__hash__` XOR via `___pySetDo___:`; `__repr__` via
+  `___pySetSize___`/`___pySetDo___:`; `new`/`withAll:`/`___frozenInstance:` per §8.3.
+- **set_iterator.gs**: `___on:` snapshot via `aSet ___pySetDo___:`; `__next__`
+  mutation guard via `collection ___pySetSize___`.
+- **PythonAst/SetAst.gs** (literal) + **SetCompAst.gs** (comprehension): emit the
+  build through the facade — send `add:` in **env 1** (so it hits `set>>add:` →
+  `___pySetAddKey___:`), NOT `@env0:add:` (native kernel storage). Currently both
+  emit `set new` (env 0) + `@env0:add:`.
+- **CPythonShim.gs** `PySet_New:/Add:/Contains:/Discard:/Clear:` — call the env-1
+  facade methods (`add:`/`__contains__:`/`discard:`/`clear`) instead of native
+  kernel selectors.
+- **dict_view.gs** `dict_set_view` comparisons (`__eq__`/`__le__`/…): replace
+  `other @env0:size` with `other @env1:__len__` (facade-safe for a set operand).
+- **hashlib.gs:267–268** — expose `frozenset withAll: names` (real facade sets),
+  not bare `names asSet`. (The Set native-fallback in §8.2 also covers it, but a
+  real frozenset is cleaner.)
+
+### 8.5 Validation
+- `test.test_set` scoreboard: target the 10 remaining (badcmp×4,
+  subclass_with_custom_hash×2, set_literal_insertion_order×2, contains×1,
+  8420_set_merge×1) → 0. Add per-push SUnit: numeric collapse `{1,1.0,True}` (len
+  1, stored int), and — via an off-collections-shard fixture class (avoid the
+  shard-0 flake, cf. SubclassCopyPickleTestCase) — custom-`__hash__` collision +
+  bad-`__eq__` propagation.
+- Full SUnit suite GREEN (commit gate) — watch for any consumer that built data
+  in a Python `set` and read it via native `do:`/`asArray` (the §6 audit found
+  only hashlib Python-visible; internal `Set new` temporaries are unaffected).
+- Corruption is structurally avoided: the table is a PyDict (Phase-1-proven), and
+  `__eq__` is only called during a probe walk before any mutation; resize
+  re-buckets by cached hash with no `__eq__`.
