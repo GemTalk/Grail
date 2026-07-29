@@ -9,7 +9,7 @@ doit
 Object subclass: 'PythonTokenizer'
   instVarNames: #( source position line column
                     tokens indentStack parenDepth atLineStart)
-  classVars: #()
+  classVars: #( KeywordSet )
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: PythonAst
@@ -63,6 +63,18 @@ keywords
 	   'finally' 'for' 'from' 'global' 'if' 'import' 'in' 'is'
 	   'lambda' 'nonlocal' 'not' 'or' 'pass' 'raise' 'return'
 	   'try' 'while' 'with' 'yield')
+%
+
+category: 'Grail-tokenizing'
+classmethod: PythonTokenizer
+keywordSet
+	"Cached Set of the Python keywords for O(1) membership.  tokenizeIdentifier
+	tests every identifier token against this; the previous `keywords includes:`
+	linearly scanned a 35-element Array (up to 35 String= compares per token, the
+	full scan for the common case of a NON-keyword identifier).  Built once and
+	memoized in the KeywordSet class var."
+
+	^ KeywordSet ifNil: [ KeywordSet := Set withAll: self keywords ]
 %
 
 category: 'Grail-instance creation'
@@ -364,7 +376,7 @@ tokenizeIdentifier
 		writeStream nextPut: self advance.
 	].
 	name := writeStream contents.
-	(self class keywords includes: name)
+	(self class keywordSet includes: name)
 		ifTrue: [self addToken: #KEYWORD value: name line: startLine column: startCol endLine: line endColumn: column]
 		ifFalse: [self addToken: #NAME value: name line: startLine column: startCol endLine: line endColumn: column].
 %
