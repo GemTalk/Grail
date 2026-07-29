@@ -462,6 +462,40 @@ __dict__
 	^ d
 %
 
+category: 'Grail-Pickle'
+method: functools_partial
+__reduce__
+	"(class, (func,), (func, args, keywords or None, __dict__ or None)).
+
+	The counterpart __setstate__ already described but that was missing:
+	Object >> __reduce__ raises ``Not yet implemented: __reduce__'' through
+	``self error:'', an env-0 Smalltalk error that Python cannot catch, so
+	all four partial variants failed test_pickle and test_recursive_pickle
+	as uncatchable ST errors rather than as ordinary failures.
+
+	Shape matches CPython's functools.partial.__reduce__ exactly, including
+	the two ``or None'' collapses -- an EMPTY keywords dict or __dict__ is
+	pickled as None, not as an empty container.  __setstate__ already
+	accepts None for both, so the round trip closes without touching it.
+
+	``self class'' rather than the partial class, so a SUBCLASS pickles
+	back as itself (TestPartialCSubclass / TestPartialPySubclass)."
+
+	| kw ns |
+	kw := self @env0:dynamicInstVarAt: #keywords.
+	((kw @env0:isNil) @env0:or: [kw @env0:isEmpty]) ifTrue: [kw := None].
+	ns := self __dict__.
+	(ns @env0:isEmpty) ifTrue: [ns := None].
+	^ tuple @env0:withAll: {
+		(self @env0:class).
+		(tuple @env0:withAll: (Array @env0:with: (self @env0:dynamicInstVarAt: #func))).
+		(tuple @env0:withAll: {
+			(self @env0:dynamicInstVarAt: #func).
+			(self @env0:dynamicInstVarAt: #args).
+			kw.
+			ns }) }
+%
+
 category: 'Grail-Attribute Access'
 method: functools_partial
 __setattr__: name _: value
