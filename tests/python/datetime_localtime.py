@@ -200,6 +200,33 @@ def localtime_and_gmtime_differ_by_the_offset():
     return offset_west == expected
 
 
+def isdst_tracks_the_zone():
+    """tm_isdst must reflect the zone, on a DST-less zone as well as a DST one.
+
+    Two instants six months apart, so this has real coverage either way:
+
+      * no DST rule (daylight == 0, e.g. a UTC host) -- tm_isdst must be 0 at
+        BOTH.  The first implementation reported 1 for every instant here,
+        because with equal standard and DST offsets the comparison deciding
+        the flag was trivially true.  Nothing caught it: on such a zone
+        timezone == altzone, so tests that pick between them by tm_isdst
+        agree whichever branch they take.
+      * a DST rule (daylight == 1) -- the two must DIFFER, whichever
+        hemisphere the zone is in.
+
+    Values are also required to be exactly 0 or 1: localtime never reports
+    the -1 "unknown" that the UTC path uses.
+    """
+    winter = time.localtime(1768435200.0)   # 2026-01-15 00:00 UTC
+    summer = time.localtime(1784073600.0)   # 2026-07-14 00:00 UTC
+    flags = (winter.tm_isdst, summer.tm_isdst)
+    if not all(f in (0, 1) for f in flags):
+        return "not-a-flag:%r" % (flags,)
+    if time.daylight == 0:
+        return "ok" if flags == (0, 0) else "dstless-but-flagged:%r" % (flags,)
+    return "ok" if flags[0] != flags[1] else "dst-zone-but-constant:%r" % (flags,)
+
+
 def gmtime_is_still_utc():
     """Guard: converting the module to local must not have moved gmtime."""
     g = time.gmtime(TS)
