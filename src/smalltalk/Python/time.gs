@@ -266,14 +266,36 @@ initialize
 	fields, defined at the top of this file) as ``time.struct_time'', so
 	``from time import struct_time'' -- which werkzeug.http and _strptime
 	both do -- and ``isinstance(t, struct_time)'' behave as in CPython."
+
+	| tz stdName dstName |
 	self @env0:dynamicInstVarAt: #struct_time put: struct_time.
-	"Timezone globals.  Grail has no portable local zone and treats wall
-	clocks as UTC, so these report a fixed non-DST UTC (enough for
-	_strptime's locale-cache invalidation check and email.utils)."
-	self @env0:dynamicInstVarAt: #tzname put: (tuple @env0:withAll: { 'UTC'. 'UTC' }).
-	self @env0:dynamicInstVarAt: #timezone put: 0.
-	self @env0:dynamicInstVarAt: #altzone put: 0.
-	self @env0:dynamicInstVarAt: #daylight put: 0
+	"Timezone globals, read from the SESSION zone (aligned with the host OS
+	by PyDateTime class >> ___ensureSessionTimeZone___).  These used to
+	report a fixed non-DST UTC, because Grail had no trustworthy local zone
+	and documented its wall clocks as UTC throughout.
+
+	CPython's sign convention is seconds WEST of UTC, the opposite of
+	GemStone's secondsFromGmt (seconds EAST), hence the negation:
+	US/Eastern is secondsFromGmt = -18000 and time.timezone = 18000."
+	PyDateTime ___ensureSessionTimeZone___.
+	tz := TimeZone @env0:current.
+	"A zone with no DST rule answers an EMPTY dstPrintString -- the UTC zone
+	reports std='UTC' dst=''.  CPython repeats the standard name instead
+	(time.tzname is ('UTC', 'UTC') on a UTC host, not ('UTC', '')), so fall
+	back rather than publish an empty name.  Caught by CI: this machine is
+	US/Eastern, where both names are populated, and the UTC runner was the
+	only place the empty one showed up."
+	stdName := tz @env0:standardPrintString @env0:asString.
+	dstName := tz @env0:dstPrintString @env0:asString.
+	dstName @env0:isEmpty ifTrue: [dstName := stdName].
+	self @env0:dynamicInstVarAt: #tzname
+		put: (tuple @env0:withAll: { stdName. dstName }).
+	self @env0:dynamicInstVarAt: #timezone
+		put: (tz @env0:secondsFromGmt) @env0:negated.
+	self @env0:dynamicInstVarAt: #altzone
+		put: ((tz @env0:secondsFromGmt) @env0:+ (tz @env0:secondsForDst)) @env0:negated.
+	self @env0:dynamicInstVarAt: #daylight
+		put: ((tz @env0:secondsForDst) @env0:= 0 ifTrue: [0] ifFalse: [1])
 %
 
 category: 'Grail-Wall clock'
@@ -406,18 +428,75 @@ localtime
 category: 'Grail-Calendar'
 method: time
 localtime: epochSeconds
-	"struct_time for a given epoch-seconds value.
+	"struct_time in HOST-LOCAL time for a given epoch-seconds value.
 
-	Grail has no portable local zone and documents wall clocks as UTC --
-	initialize sets timezone=0, altzone=0, daylight=0 and
-	tzname=('UTC','UTC').  So localtime IS gmtime here.  It previously
-	anchored on `DateTime newWithYear: 1970' (LOCAL midnight) while the
-	epoch constant is the GMT anchor; the two differ by the gem's UTC
-	offset, so localtime disagreed with gmtime by 8 hours under the
-	default US/Pacific zone and mktime(localtime(t)) did not round-trip
-	(test_more_ctime)."
+	This used to BE gmtime.  Grail had no trustworthy local zone -- the
+	gem's session TimeZone is GemStone's PST default whatever host it runs
+	on -- so the module documented its wall clocks as UTC throughout and
+	set timezone=0, tzname=('UTC','UTC').  Self-consistent, and correct
+	enough while datetime also answered UTC everywhere.
 
-	^ self gmtime: epochSeconds
+	Once datetime's naive constructors became host-local, that stopped
+	holding: mktime is localtime's inverse, so a UTC mktime feeding a local
+	datetime.fromtimestamp broke the round trip CPython's
+	TestDate.test_fromtimestamp checks (``18 != 19'' -- a whole day out at
+	the wrong hour).  PyDateTime class >> ___ensureSessionTimeZone___ aligns
+	the session zone with the OS, so real local time is now available and
+	both modules can use it."
+
+	| epoch dt |
+	PyDateTime ___ensureSessionTimeZone___.
+	epoch := DateTime
+		@env0:newGmtWithYear: 1970
+		month: 1
+		day: 1
+		hours: 0
+		minutes: 0
+		seconds: 0.
+	dt := epoch @env0:addSeconds: epochSeconds @env0:truncated.
+	^ self ___structTimeLocalFromDateTime___: dt
+%
+
+category: 'Grail-Private'
+method: time
+___structTimeLocalFromDateTime___: dt
+	"Local struct_time — uses DateTime's session-zone accessors, and
+	reports a REAL tm_isdst rather than the -1 ``unknown'' the UTC path
+	uses.
+
+	tm_isdst is derived by comparing the actual offset at this instant
+	(local civil seconds minus GMT civil seconds) against the zone's
+	standard offset, rather than by testing the instant against
+	startOfDstFor:/endOfDstFor: -- that keeps it correct without having to
+	reproduce the transition-boundary rules here."
+
+	| localSecs gmtSecs offset tz isdst |
+	localSecs := ((time @env0:___epochDaysForYear___: dt @env0:year
+			_month: dt @env0:month
+			_day: dt @env0:dayOfMonth) @env0:* 86400)
+		@env0:+ (dt @env0:hour @env0:* 3600)
+		@env0:+ (dt @env0:minute @env0:* 60)
+		@env0:+ dt @env0:second.
+	gmtSecs := ((time @env0:___epochDaysForYear___: dt @env0:yearGmt
+			_month: dt @env0:monthGmt
+			_day: dt @env0:dayOfMonthGmt) @env0:* 86400)
+		@env0:+ (dt @env0:hourGmt @env0:* 3600)
+		@env0:+ (dt @env0:minuteGmt @env0:* 60)
+		@env0:+ dt @env0:secondGmt.
+	offset := localSecs @env0:- gmtSecs.
+	tz := TimeZone @env0:current.
+	isdst := (offset @env0:= (tz @env0:secondsFromGmt @env0:+ tz @env0:secondsForDst))
+		ifTrue: [1] ifFalse: [0].
+	^ self
+		___structTimeYear___: dt @env0:year
+		_month: dt @env0:month
+		_day: dt @env0:dayOfMonth
+		_hour: dt @env0:hour
+		_minute: dt @env0:minute
+		_second: dt @env0:second
+		_dayOfWeek: dt @env0:dayOfWeek
+		_dayOfYear: dt @env0:dayOfYear
+		_isdst: isdst
 %
 
 category: 'Grail-Private'
@@ -439,6 +518,24 @@ ___structTimeUtcFromDateTime___: dt
 category: 'Grail-Private'
 method: time
 ___structTimeYear___: year _month: mon _day: day _hour: hour _minute: min _second: sec _dayOfWeek: dow _dayOfYear: doy
+	"Build a struct_time tuple with tm_isdst UNKNOWN (-1).  Right for the
+	UTC path, where DST is not a concept."
+
+	^ self
+		___structTimeYear___: year
+		_month: mon
+		_day: day
+		_hour: hour
+		_minute: min
+		_second: sec
+		_dayOfWeek: dow
+		_dayOfYear: doy
+		_isdst: -1
+%
+
+category: 'Grail-Private'
+method: time
+___structTimeYear___: year _month: mon _day: day _hour: hour _minute: min _second: sec _dayOfWeek: dow _dayOfYear: doy _isdst: isdst
 	"Build a struct_time tuple from components.  Python tm_wday is
 	Monday=0..Sunday=6; Smalltalk dayOfWeek is Sunday=1..Saturday=7."
 
@@ -453,7 +550,7 @@ ___structTimeYear___: year _month: mon _day: day _hour: hour _minute: min _secon
 		sec.
 		isoDow.
 		doy.
-		-1 "tm_isdst unknown"
+		isdst
 	}
 %
 
@@ -464,30 +561,64 @@ mktime: structTime
 	seconds.  Reads the first six fields (year..second) and ignores
 	the rest."
 
-	| year mon day hour min sec |
+	| year mon day hour min sec localDt |
 	year := structTime __getitem__: 0.
 	mon := structTime __getitem__: 1.
 	day := structTime __getitem__: 2.
 	hour := structTime __getitem__: 3.
 	min := structTime __getitem__: 4.
 	sec := structTime __getitem__: 5.
-	"Pure civil arithmetic -- the exact inverse of localtime:/gmtime:.
-	The old DateTime>>asSeconds form mixed a LOCAL-anchored DateTime with
-	the GMT epoch constant and was additionally DST-skewed, so
-	mktime(t.timetuple()) came back 8 hours off (test_more_ctime)."
+	"The exact inverse of localtime:, which means interpreting the fields as
+	HOST-LOCAL wall time.  This was pure civil arithmetic while localtime
+	WAS gmtime; now that localtime is genuinely local, a civil inverse would
+	be a gmtime inverse and the round trip would be off by the local offset
+	(CPython's TestDate.test_fromtimestamp does
+	``date.fromtimestamp(mktime((1999, 9, 19, 0, 0, 0, 0, 0, -1)))'' and
+	expects day 19; a UTC mktime feeding a local fromtimestamp gave 18).
 
-	^ ((time @env0:___epochDaysForYear___: year _month: mon _day: day) @env0:* 86400
-		@env0:+ (hour @env0:* 3600)
-		@env0:+ (min @env0:* 60)
-		@env0:+ sec) @env0:asFloat
+	Hands the fields to GemStone's LOCAL DateTime constructor and reads the
+	GMT fields back, so the session zone does the DST-aware local->UTC
+	mapping.  tm_isdst (field 8) is NOT consulted -- GemStone resolves the
+	ambiguous hour itself; CPython would use it to disambiguate.
+
+	Falls back to the civil (UTC-reading) inverse if the local constructor
+	rejects the fields, rather than raising where it previously returned."
+
+	PyDateTime ___ensureSessionTimeZone___.
+	localDt := [DateTime
+		@env0:newWithYear: year
+		month: mon
+		day: day
+		hours: hour
+		minutes: min
+		seconds: sec]
+			@env0:on: Error
+			do: [:ex | nil].
+	localDt @env0:isNil ifTrue: [
+		^ ((time @env0:___epochDaysForYear___: year _month: mon _day: day) @env0:* 86400
+			@env0:+ (hour @env0:* 3600)
+			@env0:+ (min @env0:* 60)
+			@env0:+ sec) @env0:asFloat].
+	^ (((time @env0:___epochDaysForYear___: localDt @env0:yearGmt
+			_month: localDt @env0:monthGmt
+			_day: localDt @env0:dayOfMonthGmt) @env0:* 86400)
+		@env0:+ (localDt @env0:hourGmt @env0:* 3600)
+		@env0:+ (localDt @env0:minuteGmt @env0:* 60)
+		@env0:+ localDt @env0:secondGmt) @env0:asFloat
 %
 
 category: 'Grail-Formatting'
 method: time
 strftime: format
-	"strftime() with current time."
+	"strftime() with current time.
 
-	^ self strftime: format _: self gmtime
+	CPython defaults to LOCAL time here (``time.strftime(fmt)'' is
+	``strftime(fmt, localtime())''); this used to pass gmtime, which was
+	right while every wall clock in the module was UTC.  Callers that need
+	GMT -- HTTP dates, cookie expiry -- pass an explicit gmtime() tuple and
+	are unaffected."
+
+	^ self strftime: format _: self localtime
 %
 
 category: 'Grail-Formatting'

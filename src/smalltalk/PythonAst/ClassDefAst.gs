@@ -1269,6 +1269,15 @@ printSuperclassOn: aStream
 		BoundMethods instead of invoking them)."
 		((only isKindOf: NameAst) and: [only id asString = 'object'])
 			ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
+		"``class X(str):`` subclasses Unicode32, not the Unicode7 that the
+		name ``str'' resolves to.  GemStone migrates a Unicode string to
+		the canonical wider class IN PLACE when it is handed a character
+		out of range, which silently stripped the Python subclass off any
+		instance holding non-ASCII.  See importlib >>
+		___widenStrBase___: for the measured migration table and why
+		Unicode16 is not enough."
+		((only isKindOf: NameAst) and: [only id asString = 'str'])
+			ifTrue: [^ aStream nextPutAll: 'Unicode32'].
 		^ only printSmalltalkOn: aStream].
 	aStream nextPutAll: '((Python @env0:at: #importlib) @env0:___selectStorageBase___: { '.
 	1 to: bases size do: [:i |
@@ -1345,9 +1354,20 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 		ifTrue: [
 			self firstBaseIsStr
 				ifTrue: [
-					"str subclass: route through CharacterCollection>>__new__: (self-typed)."
+					"str subclass: route through CharacterCollection>>__new__:
+					(self-typed).  Forward a SECOND and THIRD positional to the
+					``__new__:_:'' / ``__new__:_:_:'' arities -- ``str'' takes
+					(object, encoding, errors), and passing only the first meant
+					``S(b'x', 'ascii')'' silently stringified the bytes OBJECT
+					instead of decoding it, yielding the 4 characters b'x'."
 					src
-						nextPutAll: 'instance := self @env1:__new__: ((___pos___ @env0:size @env0:>= 1) ifTrue: [___pos___ @env0:at: 1] ifFalse: ['''']).';
+						nextPutAll: 'instance := ___pos___ @env0:size @env0:= 0';
+						nextPutAll: ' ifTrue: [self @env1:__new__: '''']';
+						nextPutAll: ' ifFalse: [___pos___ @env0:size @env0:= 1';
+						nextPutAll: ' ifTrue: [self @env1:__new__: (___pos___ @env0:at: 1)]';
+						nextPutAll: ' ifFalse: [___pos___ @env0:size @env0:= 2';
+						nextPutAll: ' ifTrue: [self @env1:__new__: (___pos___ @env0:at: 1) _: (___pos___ @env0:at: 2)]';
+						nextPutAll: ' ifFalse: [self @env1:__new__: (___pos___ @env0:at: 1) _: (___pos___ @env0:at: 2) _: (___pos___ @env0:at: 3)]]].';
 						nextPutAll: lf ]
 				ifFalse: [
 					"bytes/bytearray subclass: bytes>>__new__: is self-typed, so
@@ -2022,15 +2042,37 @@ staticMethodDefs
 category: 'Grail-Class Compilation'
 method: ClassDefAst
 firstBaseIsStr
-	"True when this class is a direct ``str`` subclass — used to gate
-	the str-specific value:value: instantiation path that creates a
+	"True when ``str`` is this class's STORAGE base — used to gate the
+	str-specific value:value: instantiation path that creates a
 	self-typed string carrying the first positional argument.  Static
 	check on the bases list; Grail can't resolve transitive ancestry
-	at codegen time."
+	at codegen time.
 
-	bases isEmpty ifTrue: [^ false].
-	^ (bases first isKindOf: NameAst)
-		and: [bases first id asSymbol = #'str']
+	``str'' need not be written FIRST.  ``class X(Mixin, str)'' takes its
+	Smalltalk superclass from importlib >> ___selectStorageBase___:, which
+	answers the leftmost base with built-in storage and so still picks
+	str -- but this gate used to test ``bases first'' alone, so the
+	population step was skipped and every instance came out EMPTY, at
+	ASCII width too (``X('abc')'' answered ``''''').  str is the only
+	builtin base with that gap: bytes/tuple/list/dict all get populated
+	on other paths, verified directly.
+
+	Scanning stops at the first base naming a builtin storage type, which
+	mirrors ___selectStorageBase___:'s leftmost-wins rule, so
+	``class X(SomeDict, str)'' would still be treated as dict-backed.
+	CPython forbids inheriting from two different builtin types anyway
+	(instance layout conflict), so in practice at most one such base
+	exists and the earlier bases are storage-less mixins."
+
+	| storageNames |
+	storageNames := #(#str #bytes #bytearray #tuple #list #dict #set
+		#frozenset).
+	bases do: [:b |
+		(b isKindOf: NameAst) ifTrue: [
+			| n |
+			n := b id asSymbol.
+			(storageNames includes: n) ifTrue: [^ n = #'str']]].
+	^ false
 %
 
 category: 'Grail-Class Compilation'
