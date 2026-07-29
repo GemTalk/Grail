@@ -404,9 +404,36 @@ value: morePositional value: moreKw
 category: 'Grail-String Representation'
 method: functools_partial
 __repr__
-	"functools.partial(<func repr>, args..., k=v...)"
+	"<module>.<qualname>(<func repr>, args..., k=v...), or the bare ``...''
+	when re-entered on the SAME partial.
 
-	| stream func args kw |
+	CYCLE HANDLING matches CPython, where partial.__repr__ is wrapped in
+	reprlib.recursive_repr(): re-entering on an object already being repr'd
+	yields just the ellipsis, so a self-referential partial prints
+	``functools.partial(...)'' instead of recursing until the gem's stack
+	dies (it used to fail as an uncatchable AlmostOutOfStack, and as the
+	FIRST of two overflows in the session it also made the second one
+	fatal).  test_recursive_repr covers all three positions the cycle can
+	sit in -- func, an arg, and a keyword value -- and each falls out of the
+	same guard.
+
+	The seen set is the #GrailReprSeen session set that list / tuple / dict
+	__repr__ already use, so a cycle running through a MIX of containers and
+	partials is still detected wherever it closes.
+
+	The NAME is read from the receiver's own class rather than hardcoded:
+	ClassDefAst gives a subclass its defining module, so
+	``class partial(functools.partial)'' in test.test_functools must repr as
+	``test.test_functools.partial(...)'' (test_repr)."
+
+	| stream func args kw seen name |
+	seen := SessionTemps @env0:current @env0:at: #GrailReprSeen otherwise: nil.
+	seen @env0:isNil ifTrue: [
+		seen := IdentitySet @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailReprSeen put: seen].
+	(seen @env0:includes: self) ifTrue: [^ '...'].
+	seen @env0:add: self.
+	^ [[
 	"Snapshot func/args/keywords BEFORE formatting any element: an element's
 	 own __repr__ may reentrantly mutate this partial via __setstate__ (see
 	 test_repr_safety_against_reentrant_mutation), rebinding these instVars.
@@ -415,8 +442,11 @@ __repr__
 	func := self @env0:dynamicInstVarAt: #func.
 	args := self @env0:dynamicInstVarAt: #args.
 	kw := self @env0:dynamicInstVarAt: #keywords.
+	name := (self @env0:class __module__) @env0:asString @env0:, '.'
+		@env0:, (self @env0:class __qualname__) @env0:asString.
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
-	stream @env0:nextPutAll: 'functools.partial('.
+	stream @env0:nextPutAll: name.
+	stream @env0:nextPut: $(.
 	stream @env0:nextPutAll: (func __repr__) @env0:asString.
 	args @env0:do: [:a |
 		stream @env0:nextPutAll: ', '.
@@ -427,7 +457,15 @@ __repr__
 		stream @env0:nextPutAll: '='.
 		stream @env0:nextPutAll: (v __repr__) @env0:asString].
 	stream @env0:nextPut: $).
-	^ stream @env0:contents
+	stream @env0:contents]
+		@env0:on: AlmostOutOfStack do: [:ex |
+			"Belt and braces, as in list >> __repr__: a nesting that is deep
+			but NOT cyclic still reaches the gem's stack limit, and the
+			resumable notification is uncatchable from Python unless it is
+			converted here."
+			RecursionError ___signal___:
+				'maximum recursion depth exceeded while getting the repr of an object']]
+		@env0:ensure: [seen @env0:remove: self otherwise: nil]
 %
 
 category: 'Grail-Pickle Protocol'

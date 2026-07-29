@@ -151,12 +151,16 @@ test.test_bytes|BytesTest.test_buffer_is_readonly|needs os.open(fd) + unbuffered
 # (f.__setstate__((f, (), {}, {}))) and asserts that pickling it raises
 # RecursionError.  Grail has no RecursionError: deep recursion surfaces as
 # AlmostOutOfStack (notification 2059), which Python cannot catch, so the
-# assertRaises never sees it.  Worse, this is the SECOND stack overflow in the
-# session -- test_recursive_repr is the first -- and the pair pushes the gem
-# into an unrecoverable cascade of UncontinuableError 6011 ('execution of
-# ensure blocks would cross frame of C primitive'), killing topaz and taking
-# the whole module's score with it (CRASH, 0 tests counted, rather than 325).
-# One overflow per session is survivable; two are not.
+# assertRaises never sees it.  Worse, the overflow on THIS path is fatal to the
+# session on its own: it drives the gem into an unrecoverable cascade of
+# UncontinuableError 6011 ('execution of ensure blocks would cross frame of C
+# primitive'), killing topaz and taking the whole module's score with it
+# (CRASH, 0 tests counted, rather than 325).
+#
+# Verified by re-running with these four skips REMOVED after test_recursive_repr
+# was made cycle-aware and stopped overflowing: still CRASH.  So this is not a
+# "second overflow" effect -- pickle's recursion crosses C-primitive and ensure
+# frames that repr's does not, and that is what cannot be unwound.
 #
 # These were already failing before functools_partial>>__reduce__ existed --
 # as uncatchable ST errors on the missing __reduce__ -- so skipping them hides
