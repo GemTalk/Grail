@@ -1082,6 +1082,25 @@ testEncodeUnknownEncodingRaisesLookupError
 	] raise: LookupError
 %
 
+category: 'Grail-String Methods'
+method: StrTestCase
+testEncodeIso8859_15
+	"iso-8859-15 (latin-9): latin-1 with 8 code points remapped -- the EURO sign
+	U+20AC and 7 letters (Š š Ž ž Œ œ Ÿ) take bytes A4/A6/A8/B4/B8/BC/BD/BE; every
+	other char < 256 keeps its latin-1 byte.  test_bytes BytesTest.test_custom
+	needs bytes('€', 'iso8859-15') == b'\xa4'.  Accepts the name aliases too."
+
+	self assert: (self eval: '"€".encode("iso8859-15") == b"\xa4"').
+	self assert: (self eval: '"abc".encode("iso8859-15") == b"abc"').
+	self assert: (self eval: 'bytes("€", "iso8859-15") == b"\xa4"').
+	"the 8 special letters + a plain latin-1 passthrough, via aliases"
+	self assert: (self eval: '"Š".encode("latin-9") == b"\xa6"').
+	self assert: (self eval: '"Ÿ".encode("iso-8859-15") == b"\xbe"').
+	self assert: (self eval: '"é".encode("latin9") == b"\xe9"').
+	"a char with no latin-9 byte (U+00A4 ¤, whose byte position now holds €) is unencodable"
+	self should: [self eval: '"¤".encode("iso8859-15")'] raise: UnicodeEncodeError
+%
+
 category: 'Grail-Initialization'
 method: StrTestCase
 testStrFromBytesWithEncoding
