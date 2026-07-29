@@ -293,13 +293,38 @@ Existing stub modules that need extending later: `typing`,
 - **M3 — `import itsdangerous` + `import markupsafe`.**  Both
   import.  `itsdangerous.Signer` sign/unsign round-trips end-to-
   end.  `markupsafe.escape()` returns a populated `Markup`
-  instance: `class Markup(str):` instantiation now routes through
-  `str.__new__(Markup, value)` (a class-side
-  `CharacterCollection >> __new__:` that allocates a self-typed
-  byte object and copies the input bytes), bypassing Markup's
-  user-defined `__new__` body.  The `__html__` detour on objects
-  that implement that hook is therefore skipped — revisit when
-  Python `__new__` becomes a first-class class method.
+  instance.
+
+  A str subclass that defines its own `__new__` now runs it:
+  `ClassDefAst` only routes construction through the self-typed
+  class-side `CharacterCollection >> __new__:` when the subclass
+  does NOT define `__new__` (the `definesOwnNew` guard).  So
+  `Markup.__new__` executes and the `__html__` detour works —
+  `Markup(obj)` on an object implementing that hook yields
+  `Markup('<i>…</i>')`.  (Before this, `__new__` was bypassed
+  entirely and the hook was skipped.)
+
+  Two gaps remain, both type loss rather than wrong content:
+
+  * **Non-ASCII content drops the subclass.**  `Markup('café')`
+    and `escape('café <b>')` escape correctly but return a plain
+    `str`, not a `Markup`.  A str subclass whose content needs
+    Unicode16 storage falls back to a bare Unicode16 — the same
+    wide-content str-subclass gap behind one of the two remaining
+    `test.test_bytes` errors.
+  * **The encoding path drops the subclass.**  `Markup(b'x',
+    'ascii')` returns `str`; the 3-arg
+    `super().__new__(cls, object, encoding, errors)` form is not
+    self-typed the way the 1-arg form is.
+
+  `Markup + str` used to raise a Smalltalk `MessageNotUnderstood`
+  that escaped Python's `except`: `Markup.__add__` calls
+  `self.escape(value)`, and the @classmethod-through-an-instance
+  forward lived only on `PythonInstance`, which a str subclass is
+  not.  `Object >> ___tryClassMethodDNU___:args:` now serves every
+  receiver, so `Markup('<a>') + '<b>'` yields
+  `Markup('<a>&lt;b&gt;')`.  Covered by
+  `ClassMethodViaInstanceTestCase`.
 - **M4 — Jinja2 renders a template** standalone, no Flask yet.
   **Done.** `env.from_string('Hello world').render()` worked since
   the M4 trivial-template push.  Coverage broadened on
