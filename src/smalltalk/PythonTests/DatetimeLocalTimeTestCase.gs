@@ -236,6 +236,24 @@ testLocaltimeAndGmtimeDifferByTheOffset
 
 category: 'Grail-Tests-DatetimeLocalTime'
 method: DatetimeLocalTimeTestCase
+testIsdstTracksTheZone
+	"tm_isdst must reflect the zone on a DST-LESS zone as well as a DST one.
+
+	Checks two instants six months apart, so it has real coverage either
+	way: with no DST rule both must be 0, with a DST rule they must differ.
+	The first implementation reported 1 for EVERY instant on a DST-less zone
+	(equal standard and DST offsets made the deciding comparison trivially
+	true), and nothing caught it -- on such a zone timezone == altzone, so
+	the offset assertions agree whichever branch they take.  A green CI run
+	would not have found this; it took auditing for the same shape of
+	assumption after the tzname empty-name bug."
+
+	self assert: (self loadFixture @env1:isdst_tracks_the_zone) @env0:asString
+		equals: 'ok'
+%
+
+category: 'Grail-Tests-DatetimeLocalTime'
+method: DatetimeLocalTimeTestCase
 testGmtimeIsStillUtc
 	"Guard: converting localtime to real local time must not move gmtime."
 
