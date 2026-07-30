@@ -1732,27 +1732,24 @@ category: 'Grail-Initialization'
 classmethod: PyDateTime
 fromisoformat: s
 	"Parse ISO 8601 YYYY-MM-DD[ T]HH:MM:SS[.ffffff][+HH:MM | Z] -- also the
-	'basic format' YYYYMMDD (no dashes) date prefix, which real CPython
-	accepts equally (test_fromisoformat_date_examples).  Tolerant of
-	either `T` or space as the date/time separator; rejects anything more
-	exotic (week-date forms are not handled)."
+	'basic format' YYYYMMDD (no dashes) date prefix and the ISO week-date
+	forms 'YYYY-Www[-D]' / 'YYYYWww[D]' (test_fromisoformat_datetime_examples),
+	all of which real CPython accepts equally.  Tolerant of either `T` or
+	space as the date/time separator; the week-date-plus-time forms with
+	NO separator character at all resolve the date/time split via
+	___findIsoDatetimeSeparator___:, which ports CPython's own 'best
+	effort' digit-run disambiguation for that spec extension."
 
-	| str year month day hour min sec micro tz idx pivot field dateLen |
+	| str year month day hour min sec micro tz idx pivot field dateLen dateFields |
 	str := s @env0:asString.
-	dateLen := (str @env0:size @env0:>= 8 @env0:and: [(str @env0:at: 5) @env0:isDigit])
-		ifTrue: [8] ifFalse: [10].
-	str @env0:size @env0:< dateLen ifTrue: [
+	str @env0:size @env0:< 7 ifTrue: [
 		ValueError ___signal___: 'invalid isoformat: ' @env0:, str
 	].
-	dateLen @env0:= 8 ifTrue: [
-		year := (str @env0:copyFrom: 1 to: 4) @env0:asNumber.
-		month := (str @env0:copyFrom: 5 to: 6) @env0:asNumber.
-		day := (str @env0:copyFrom: 7 to: 8) @env0:asNumber.
-	] ifFalse: [
-		year := (str @env0:copyFrom: 1 to: 4) @env0:asNumber.
-		month := (str @env0:copyFrom: 6 to: 7) @env0:asNumber.
-		day := (str @env0:copyFrom: 9 to: 10) @env0:asNumber.
-	].
+	dateLen := PyDate @env1:___findIsoDatetimeSeparator___: str.
+	dateFields := PyDate @env1:___parseIsoDateFields___: (str @env0:copyFrom: 1 to: dateLen).
+	year := dateFields @env0:at: 1.
+	month := dateFields @env0:at: 2.
+	day := dateFields @env0:at: 3.
 	hour := 0. min := 0. sec := 0. micro := 0. tz := nil.
 	"Two ASCII digits at pos..pos+1 as an Integer.  Raises a Python ValueError
 	 (not a low-level Smalltalk OffsetError) when the position runs past the end
@@ -1768,21 +1765,44 @@ fromisoformat: s
 			ValueError ___signal___: 'invalid isoformat: ' @env0:, str].
 		((a @env0:asInteger @env0:- 48) @env0:* 10) @env0:+ (b @env0:asInteger @env0:- 48)].
 	str @env0:size @env0:> dateLen ifTrue: [
-		"char dateLen+1 is the date/time separator (T or space); the time
-		 begins at dateLen+2.  Parse HH then optional :MM and :SS
-		 incrementally so valid short forms (HH, HH:MM) parse instead of
-		 over-reading a string that has no seconds."
+		| hasColonSep nextChar |
+		"char dateLen+1 is the date/time separator (T or space, or -- in
+		 the rare week-date 'digit-eating' cases described on
+		 ___findIsoDatetimeSeparator___: -- a phantom position); the time
+		 begins at dateLen+2.  Mirrors CPython's _parse_hh_mm_ss_ff: HH is
+		 mandatory; MM and SS are each read only while input remains, and
+		 once a ':' is seen after HH every subsequent component must also
+		 be colon-separated -- otherwise it's the compact 'HHMMSS' form,
+		 with no separator to consume between components
+		 (test_fromisoformat_datetime_examples)."
 		hour := field @env0:value: dateLen @env0:+ 2.
 		idx := dateLen @env0:+ 4.
-		((idx @env0:+ 2 @env0:<= str @env0:size) @env0:and: [(str @env0:at: idx) @env0:= $:]) ifTrue: [
-			min := field @env0:value: idx @env0:+ 1.
-			idx := idx @env0:+ 3].
-		((idx @env0:+ 2 @env0:<= str @env0:size) @env0:and: [(str @env0:at: idx) @env0:= $:]) ifTrue: [
-			sec := field @env0:value: idx @env0:+ 1.
-			idx := idx @env0:+ 3].
+		nextChar := (idx @env0:<= str @env0:size) ifTrue: [str @env0:at: idx] ifFalse: [nil].
+		hasColonSep := nextChar @env0:= $:.
+		"Continue to the next component only when colon-mode sees an
+		 ACTUAL colon here (not just 'some character') -- otherwise a
+		 trailing timezone offset's leading digits get misread as
+		 seconds once hasColonSep was set true by HH:MM
+		 (test_fromisoformat_timespecs)."
+		(hasColonSep ifTrue: [nextChar @env0:= $:] ifFalse: [nextChar @env0:notNil @env0:and: [nextChar @env0:isDigit]])
+			ifTrue: [
+				hasColonSep ifTrue: [idx := idx @env0:+ 1].
+				min := field @env0:value: idx.
+				idx := idx @env0:+ 2.
+				nextChar := (idx @env0:<= str @env0:size) ifTrue: [str @env0:at: idx] ifFalse: [nil].
+				(hasColonSep ifTrue: [nextChar @env0:= $:] ifFalse: [nextChar @env0:notNil @env0:and: [nextChar @env0:isDigit]])
+					ifTrue: [
+						hasColonSep ifTrue: [idx := idx @env0:+ 1].
+						sec := field @env0:value: idx.
+						idx := idx @env0:+ 2.
+					]
+			].
 		pivot := idx.
-		"Optional .ffffff."
-		(pivot @env0:<= str @env0:size @env0:and: [(str @env0:at: pivot) @env0:= $.]) ifTrue: [
+		"Optional .ffffff -- ISO 8601 also permits ',' as the decimal
+		 separator (test_fromisoformat_datetime_examples)."
+		(pivot @env0:<= str @env0:size
+			@env0:and: [(str @env0:at: pivot) @env0:= $. @env0:or: [(str @env0:at: pivot) @env0:= $,]])
+			ifTrue: [
 			| fracEnd fracStr |
 			fracEnd := pivot @env0:+ 1.
 			[fracEnd @env0:<= str @env0:size
@@ -1817,6 +1837,22 @@ fromisoformat: s
 				]
 			]
 		]
+	].
+	"ISO 8601 permits the midnight-of-next-day spelling '24:00:00' --
+	valid only with minute/second/microsecond all 0.  Validate the
+	ORIGINAL date first (a day/month that's out of range must still
+	raise, even though its fields are about to be replaced by the
+	wrapped date's), then advance one day via ordinal arithmetic
+	(test_fromisoformat_fails_datetime_valueerror,
+	test_fromisoformat_datetime_examples)."
+	hour @env0:= 24 ifTrue: [
+		| nd |
+		(min @env0:= 0 @env0:and: [sec @env0:= 0 @env0:and: [micro @env0:= 0]]) ifFalse: [
+			ValueError ___signal___: 'minute, second, and microsecond must be 0 when hour is 24'].
+		nd := PyDate @env1:___allocateInstance___: { year. month. day } kw: nil.
+		nd := PyDate @env1:fromordinal: nd @env1:toordinal @env0:+ 1.
+		year := nd @env1:year. month := nd @env1:month. day := nd @env1:day.
+		hour := 0.
 	].
 	"___allocateInstance___:kw: (not ___fromFields___:) so a subclass's
 	overridden __new__ runs (test_subclass_alternate_constructors)."
@@ -3195,22 +3231,19 @@ category: 'Grail-Initialization'
 classmethod: PyDate
 fromisoformat: s
 	"date.fromisoformat('YYYY-MM-DD') -- also the CPython 'basic format'
-	'YYYYMMDD' (no dashes, 8 chars), which real CPython accepts equally
-	(test_fromisoformat_date_examples).  Week-date forms ('2025-W01-4' /
-	'2025W014') are NOT handled here -- a separate, larger feature."
+	'YYYYMMDD' (no dashes, 8 chars) and the ISO week-date forms
+	'YYYY-Www[-D]' / 'YYYYWww[D]' (test_fromisoformat_date_examples), all
+	of which real CPython accepts equally.  ___allocateInstance___:kw:
+	(not ___fromFields___:) so a subclass's overridden __new__ runs
+	(test_fromisoformat_subclass)."
 
-	| y m d |
-	(s @env0:size) @env0:= 8 ifTrue: [
-		y := (s @env0:copyFrom: 1 to: 4) @env0:asNumber.
-		m := (s @env0:copyFrom: 5 to: 6) @env0:asNumber.
-		d := (s @env0:copyFrom: 7 to: 8) @env0:asNumber.
-		^ self @env1:___allocateInstance___: { y. m. d } kw: nil].
-	(s @env0:size) @env0:= 10 @env0:ifFalse: [
-		ValueError ___signal___: 'Invalid isoformat string: ''' @env0:, s @env0:, ''''].
-	y := (s @env0:copyFrom: 1 to: 4) @env0:asNumber.
-	m := (s @env0:copyFrom: 6 to: 7) @env0:asNumber.
-	d := (s @env0:copyFrom: 9 to: 10) @env0:asNumber.
-	^ self @env1:___allocateInstance___: { y. m. d } kw: nil
+	| str fields |
+	str := s @env0:asString.
+	((str @env0:size @env0:= 7) @env0:or: [(str @env0:size @env0:= 8) @env0:or: [str @env0:size @env0:= 10]])
+		ifFalse: [ValueError ___signal___: 'Invalid isoformat string: ''' @env0:, str @env0:, ''''].
+	fields := self @env1:___parseIsoDateFields___: str.
+	^ self @env1:___allocateInstance___:
+		{ fields @env0:at: 1. fields @env0:at: 2. fields @env0:at: 3 } kw: nil
 %
 
 category: 'Grail-Initialization'
@@ -3426,6 +3459,78 @@ ctime
 	dayStr @env0:size @env0:< 2 ifTrue: [dayStr := ' ' @env0:, dayStr].
 	^ head @env0:, ' ' @env0:, dayStr @env0:, ' 00:00:00 ' @env0:,
 		(self @env0:___pad___: (self @env0:dynamicInstVarAt: #_year) width: 4)
+%
+
+category: 'Grail-Private'
+classmethod: PyDate
+___parseIsoDateFields___: dateStr
+	"Port of CPython's _parse_isoformat_date: extract { year. month. day }
+	from an isolated ISO 8601 date token of length 7, 8, or 10 --
+	'YYYY-MM-DD', 'YYYYMMDD' ('basic format'), or the ISO week-date forms
+	'YYYY-Www[-D]' / 'YYYYWww[D]'.  Week forms delegate the
+	(year,week,day) -> (year,month,day) conversion to fromisocalendar:,
+	which already ports _isoweek_to_gregorian's validation, so both stay
+	in sync (test_fromisoformat_date_examples)."
+
+	| year hasSep pos month day weekno dayno wd |
+	year := (dateStr @env0:copyFrom: 1 to: 4) @env0:asNumber.
+	hasSep := (dateStr @env0:at: 5) @env0:= $-.
+	pos := 5 @env0:+ (hasSep ifTrue: [1] ifFalse: [0]).
+	((dateStr @env0:at: pos) @env0:= $W) ifTrue: [
+		pos := pos @env0:+ 1.
+		weekno := (dateStr @env0:copyFrom: pos to: pos @env0:+ 1) @env0:asNumber.
+		pos := pos @env0:+ 2.
+		dayno := 1.
+		(dateStr @env0:size @env0:>= pos) ifTrue: [
+			(((dateStr @env0:at: pos) @env0:= $-) @env0:~= hasSep) ifTrue: [
+				ValueError ___signal___: 'Inconsistent use of dash separator'].
+			hasSep ifTrue: [pos := pos @env0:+ 1].
+			dayno := (dateStr @env0:copyFrom: pos to: pos) @env0:asNumber.
+		].
+		wd := PyDate @env1:fromisocalendar: year _: weekno _: dayno.
+		^ { wd @env1:year. wd @env1:month. wd @env1:day }
+	].
+	month := (dateStr @env0:copyFrom: pos to: pos @env0:+ 1) @env0:asNumber.
+	pos := pos @env0:+ 2.
+	(((dateStr @env0:at: pos) @env0:= $-) @env0:~= hasSep) ifTrue: [
+		ValueError ___signal___: 'Inconsistent use of dash separator'].
+	hasSep ifTrue: [pos := pos @env0:+ 1].
+	day := (dateStr @env0:copyFrom: pos to: pos @env0:+ 1) @env0:asNumber.
+	^ { year. month. day }
+%
+
+category: 'Grail-Private'
+classmethod: PyDate
+___findIsoDatetimeSeparator___: str
+	"Port of CPython's _find_isoformat_datetime_separator: locates the
+	length of the DATE portion of a combined ISO 8601 date[-time] string
+	-- the char immediately after it is the date/time separator (T or
+	space), consumed by the caller (see PyDateTime>>fromisoformat:).
+	Handles the 'best effort' digit-run disambiguation CPython itself
+	documents for the separator-less week-date-plus-time extension of
+	the spec (test_fromisoformat_datetime_examples)."
+
+	| len0 idx |
+	len0 := str @env0:size.
+	len0 @env0:= 7 ifTrue: [^ 7].
+	((str @env0:at: 5) @env0:= $-) ifTrue: [
+		((str @env0:at: 6) @env0:= $W) ifTrue: [
+			len0 @env0:< 8 ifTrue: [ValueError ___signal___: 'Invalid ISO string'].
+			(len0 @env0:> 8 @env0:and: [(str @env0:at: 9) @env0:= $-]) ifTrue: [
+				len0 @env0:= 9 ifTrue: [ValueError ___signal___: 'Invalid ISO string'].
+				(len0 @env0:> 10 @env0:and: [(str @env0:at: 11) @env0:isDigit]) ifTrue: [^ 8].
+				^ 10
+			] ifFalse: [^ 8]
+		] ifFalse: [^ 10]
+	] ifFalse: [
+		((str @env0:at: 5) @env0:= $W) ifTrue: [
+			idx := 7.
+			[idx @env0:< len0 @env0:and: [(str @env0:at: idx @env0:+ 1) @env0:isDigit]]
+				@env0:whileTrue: [idx := idx @env0:+ 1].
+			idx @env0:< 9 ifTrue: [^ idx].
+			(idx @env0:\\ 2 @env0:= 0) ifTrue: [^ 7] ifFalse: [^ 8]
+		] ifFalse: [^ 8]
+	]
 %
 
 category: 'Grail-Private'
