@@ -874,15 +874,15 @@ Transcript show: 'Step 4: Loading Python built-in type classes...'.
 input src/smalltalk/Python/NoneType.gs
 
 ! ------------------- Kernel-class extensions (env-1 + env-0 bridges) -------------
-! On a MODERN kernel (see scripts/detect_modern_kernel.gs) Grail's extensions to
-! shared kernel classes -- GsNMethod / System / SymbolDictionary / ExecBlock and
-! Object's env-0 ___new___ bridge allocators -- are filed HERE, PER-USER, as
-! session methods (each user gets its own), with NO SystemUser step.  install.sh
-! regenerates out/gen/kernel_class_extensions.gs from the capability probe just
-! before running this script: on a modern kernel it lists those files; on a
-! legacy kernel it is empty (a no-op comment) because install_base.gs already
-! filed them as shared SystemUser methods.  Filed right after NoneType so `None`
-! is bound, and before the rest of Step 4 + module init that dispatch to them.
+! On GemStone 4.0+ Grail's extensions to shared kernel classes -- GsNMethod /
+! System / SymbolDictionary / ExecBlock and Object's env-0 ___new___ bridge
+! allocators -- are filed HERE, PER-USER, as session methods (each user gets its
+! own), with NO SystemUser step.  install.sh regenerates
+! out/gen/kernel_class_extensions.gs from the GemStone version just before running
+! this script: on 4.0+ it lists those files; on 3.7.x it is empty (a no-op
+! comment) because install_base.gs already filed them as shared SystemUser
+! methods.  Filed right after NoneType so `None` is bound, and before the rest of
+! Step 4 + module init that dispatch to them.
 input out/gen/kernel_class_extensions.gs
 
 input src/smalltalk/Python/BaseException.gs

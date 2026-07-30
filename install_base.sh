@@ -9,17 +9,24 @@
 # users can each install their own Grail (per-user session methods + Python*
 # dictionaries) on ONE shared stone.
 #
-# Steps (all idempotent):
-#   1. GsPackagePolicy env-1 session-method support -- the 3.7.x stand-in for
-#      GemStone MR #6 ("Support session methods in environments other than 0").
-#      Skipped on 4.0+, whose base image already has it.
-#   2. Unicode comparison mode (extent-global).
-#   3. The shared restricted-class methods (scripts/install_base.gs): env-1
-#      dunders on GsNMethod / System / SymbolDictionary / ExecBlock and Object's
-#      env-0 <primitive:> / ___new___ dispatch infrastructure.
+# What gets installed depends on ONE test -- 4.0+ or 3.7.x:
+#
+#   4.0+   NOTHING of Grail's.  Only Unicode comparison mode (extent-global and
+#          kernel-enforced SystemUser-only) and the base marker.  All five
+#          kernel-class extension files are per-user session methods filed by
+#          ./install.sh.  Needs a 4.0 build of 2026-07-29 or later.
+#
+#   3.7.x  The env-1 session-method policy patch, Unicode mode, AND the shared
+#          filing of all six kernel-extension files -- 3.7 is published and
+#          cannot be fixed in the base image.
+#
+# Every step logs in as SystemUser, so this script does NOT require the per-user
+# login accounts to exist: ./create_claude_users.sh may run before or after it.
+# ./install.sh is the one that needs them.
 #
 # The stone + SystemUser password come from the SystemUser logins inside the
 # .gs scripts (stone via .topazini `set gems`).  Assumes the stone is running.
+# Idempotent.
 # ===========================================================================
 
 BASE_T0=$SECONDS
@@ -44,148 +51,67 @@ fi
 
 cd "$SCRIPT_DIR" || exit 1
 
-# 0. The ./.topazini user must EXIST before any capability probe runs.
-# Both capability probes below (detect_env1_restricted_classes.gs and
-# detect_modern_kernel.gs) log in as that user -- they must, because what they
-# measure is what a NON-SystemUser installer may do.  A failed login prints
-# nothing, which this script would otherwise read as a capability answer of "no"
-# and drop to the LEGACY tier: filing all six kernel-extension files as shared
-# SystemUser methods.  On a modern kernel that re-creates the shared base the
-# per-user layer exists to avoid, and every later per-user ./install.sh then dies
-# with SecurityError 2116 clearing a policy-1 method dictionary.
-#
-# On a FRESH extent the per-user accounts do not exist yet, so this is the normal
-# first-run state, not an exotic one.  Fail loudly with the fix.
-TOPAZINI_USER=$(LC_ALL=C topaz -lq -S scripts/check_topazini_user.gs 2>/dev/null \
-    | grep -oE 'GRAIL_TOPAZINI_USER=[A-Za-z0-9_]+' | head -1)
-if [ -z "$TOPAZINI_USER" ]; then
-    echo "Error: the ./.topazini user cannot log in."
-    echo ""
-    echo "  Capability probes run AS that user, so without it this script would"
-    echo "  silently choose the legacy shared-base layout -- which then makes every"
-    echo "  per-user ./install.sh fail with SecurityError 2116."
-    echo ""
-    echo "  On a fresh extent, create the login accounts first:"
-    echo "      ./create_claude_users.sh"
-    echo "  Then re-run ./install_base.sh."
-    echo ""
-    echo "  If the accounts exist, check the stone is running (gslist) and that"
-    echo "  ./.topazini has the right user/password and 'set gemstone'."
-    exit 1
-fi
-echo "Installer user: ${TOPAZINI_USER#GRAIL_TOPAZINI_USER=}"
 
-# 1. GsPackagePolicy env-1 session-method support.
-# Stock 3.7.x wires session methods for environment 0 ONLY, so it always needs
-# Grail's env-1 patch (scripts/session_methods_env1_base_37.gs, which makes the
-# GsPackagePolicy install path env-aware).  4.0+ MAY support env-1 session
-# methods NATIVELY via GemStone MR #6 ("Support session methods in environments
-# other than 0"); a stock pre-MR#6 4.0 does NOT -- its Behavior>>compileMethod:
-# routes only env-0 through GsPackagePolicy, so an env-1 kernel-class method
-# fails at install time with SecurityError 2257, and
-# scripts/session_methods_env1_base_40.gs recompiles compileMethod: to route
-# env-1 too.
+# 1-3. Everything version-dependent, decided by ONE test: 4.0+ or 3.7.x.
 #
-# version.txt CANNOT distinguish an MR#6 4.0 from a stock 4.0 (both report
-# 4.0.x), so for 4.0+ we FEATURE-PROBE for MR#6
-# (scripts/detect_env1_session_methods.gs) and apply the compile-path patch only
-# when MR#6 is absent.  (Version is still read from version.txt, never the
-# $GEMSTONE path -- CI installs to an unversioned /opt/gemstone/product, where a
-# `case "$GEMSTONE" in *3.7*` test would silently skip the 3.7 patch.)
+# This replaced a set of behavioural capability probes.  Those existed only to
+# bridge an interim period: a 4.0 build could not be told from version.txt alone
+# whether it had MR #6, whether MR #6's env-aware predicate actually reached the
+# restricted classes, and whether the wider-arity performMethod: variants were
+# kernel-native.  The 2026-07-29 4.0 build settles all three, so the version IS
+# the answer and the probes are gone (with the interim patches they selected).
+#
+#   4.0+   -- NO Grail code in the shared base.  MR #6 permits env-1 session
+#             methods on GsNMethod / System / SymbolDictionary, and the 2/3/4-arg
+#             with:...performMethod: variants are kernel-native, so all five
+#             kernel-extension files are filed PER-USER by ./install.sh.  Only
+#             Unicode comparison mode (extent-global, kernel-enforced SystemUser)
+#             and the base marker happen here.
+#
+#             REQUIRES a 4.0 build of 2026-07-29 or later.  An older 4.0 lacks one
+#             or more of those three fixes, and this script no longer detects or
+#             patches around that -- ./install.sh would fail while filing the
+#             kernel extensions.  Upgrade the product rather than reinstating the
+#             probes.
+#
+#   3.7.x  -- unchanged, and it stays that way: 3.7 is published and cannot be
+#             fixed, so it needs both the env-1 session-method policy patch (stock
+#             3.7 wires session methods for env-0 only) and the SHARED filing of
+#             all six kernel-extension files.
+#
+# Version comes from $GEMSTONE/version.txt, never the $GEMSTONE path -- CI
+# installs to an unversioned /opt/gemstone/product, where a `case "$GEMSTONE" in
+# *3.7*` test would silently skip the 3.7 patch.
+#
+# Every step below logs in as SystemUser, so this script does NOT need the
+# per-user login accounts to exist.  That is why ./create_claude_users.sh may run
+# before or after it.  ./install.sh is the one that needs them.
 GS_VERSION=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$GEMSTONE/version.txt" 2>/dev/null | head -1)
 echo "GemStone version: ${GS_VERSION:-unknown} (from $GEMSTONE/version.txt)"
+
 case "$GS_VERSION" in
     3.7.*)
-        echo "GemStone 3.7.x detected -- applying Grail env-1 session-method policy patch (3.7 variant)..."
+        echo "GemStone 3.7.x -- applying the env-1 session-method policy patch..."
         LC_ALL=C topaz -lq -S scripts/session_methods_env1_base_37.gs || {
             echo "Error: env-1 session-method policy patch (3.7) failed."; exit 1; }
+
+        echo "Setting Unicode comparison mode..."
+        ./scripts/setUnicodeMode.sh || { echo "Error: setUnicodeMode.sh failed."; exit 1; }
+
+        echo "Filing the shared kernel-class extensions (SystemUser)..."
+        LC_ALL=C topaz -lq -S scripts/install_base.gs || {
+            echo "Error: install_base.gs failed."; exit 1; }
         ;;
     *)
-        # 4.0 and later: rely on native MR #6 support if present; else (pre-MR#6
-        # 4.0) apply Grail's env-1 compile-path patch.
-        if LC_ALL=C topaz -lq -S scripts/detect_env1_session_methods.gs 2>/dev/null | grep -q 'GRAIL_MR6=yes'; then
-            echo "GemStone ${GS_VERSION:-unknown}: MR #6 present -- env-1 session methods are native; no patch needed."
-            # 1b. MR#6 is present, but does it actually reach RESTRICTED classes?
-            # In 4.0.0 (build 2026-07-23) the env-aware predicate is dead code: the
-            # 3-arg permitSessionMethodFor:selector:environmentId: keeps the OLD
-            # unconditional restrictedClasses check ABOVE its new env-0-only one, so
-            # GsNMethod / System / SymbolDictionary refuse env-1 session methods at
-            # every environment.  Grail then has to file its extensions to those
-            # classes as SHARED SystemUser methods, which multiple users on one
-            # stone overwrite for each other.
-            #
-            # Probe the BEHAVIOUR (never the version), so a rebuilt base image that
-            # answers correctly is detected automatically and the interim patch
-            # simply stops being applied.
-            if LC_ALL=C topaz -lq -S scripts/detect_env1_restricted_classes.gs 2>/dev/null \
-                | grep -q 'GRAIL_ENV1_PERMITTED=yes'; then
-                echo "  Restricted classes accept env-1 session methods -- no patch needed."
-            else
-                echo "  Restricted classes REFUSE env-1 session methods -- applying Grail's interim predicate patch..."
-                LC_ALL=C topaz -lq -S scripts/fix_env1_restricted_classes.gs || {
-                    echo "Error: fix_env1_restricted_classes.gs failed."; exit 1; }
-                if LC_ALL=C topaz -lq -S scripts/detect_env1_restricted_classes.gs 2>/dev/null \
-                    | grep -q 'GRAIL_ENV1_PERMITTED=yes'; then
-                    echo "  Patch verified: restricted classes now accept env-1 session methods."
-                else
-                    echo "Error: patch applied but restricted classes still refuse env-1 session methods."
-                    exit 1
-                fi
-            fi
-        else
-            echo "GemStone ${GS_VERSION:-unknown}: env-1 session methods not native (pre-MR #6) -- applying Grail compile-path patch (4.0 variant)..."
-            LC_ALL=C topaz -lq -S scripts/session_methods_env1_base_40.gs || {
-                echo "Error: env-1 session-method policy patch (4.0) failed."; exit 1; }
-        fi
+        echo "GemStone ${GS_VERSION:-unknown} (4.0+) -- no Grail code goes in the shared base."
+        echo "  env-1 session methods on restricted classes: native (MR #6)"
+        echo "  2/3/4-arg with:...performMethod:            : kernel-native"
+        echo "  kernel-class extensions                     : filed PER-USER by ./install.sh"
+
+        echo "Setting Unicode comparison mode..."
+        ./scripts/setUnicodeMode.sh || { echo "Error: setUnicodeMode.sh failed."; exit 1; }
         ;;
 esac
-
-# 2. Unicode comparison mode (extent-global).
-echo "Setting Unicode comparison mode..."
-./scripts/setUnicodeMode.sh || { echo "Error: setUnicodeMode.sh failed."; exit 1; }
-
-# 3. Shared restricted-class methods (LEGACY kernels only).
-# On a MODERN kernel (scripts/detect_modern_kernel.gs -> GRAIL_MODERN=yes) these
-# move to PER-USER session methods filed by install.sh/install.gs, and the
-# 2/3/4-arg performMethod: primitives are kernel-native -- so this SystemUser
-# step is skipped entirely.  Only the Unicode-mode config above then remains
-# SystemUser (it is kernel-enforced SystemUser-only + extent-global).  On a
-# LEGACY kernel this files the shared restricted-class methods as before.
-GRAIL_MODERN=$(LC_ALL=C topaz -lq -S scripts/detect_modern_kernel.gs 2>/dev/null \
-    | grep -oE 'GRAIL_MODERN=(yes|no)' | head -1)
-GRAIL_ENV1_PERMITTED=$(LC_ALL=C topaz -lq -S scripts/detect_env1_restricted_classes.gs 2>/dev/null \
-    | grep -oE 'GRAIL_ENV1_PERMITTED=(yes|no)' | head -1)
-echo "Kernel capability: ${GRAIL_MODERN:-GRAIL_MODERN=? (probe failed -> legacy)}"
-echo "                   ${GRAIL_ENV1_PERMITTED:-GRAIL_ENV1_PERMITTED=? (probe failed -> no)}"
-# Three tiers, because the two capabilities are INDEPENDENT and were previously
-# collapsed into one all-or-nothing flag:
-#
-#   GRAIL_MODERN=yes           -- nothing shared: env-1 session methods reach the
-#                                 restricted classes AND the wider performMethod:
-#                                 arities are kernel-native.
-#   GRAIL_ENV1_PERMITTED=yes   -- the four env-1 kernel-extension files go PER-USER;
-#                                 only Object's env-0 dispatch stays shared, because
-#                                 compiling a <primitive:> needs a privilege an
-#                                 ordinary user lacks.  This is 4.0 today.
-#   otherwise (legacy)         -- all six files shared, as before.  3.7.x lands here.
-#
-# Tiering on PERMITTED (the base image's own capability), not on RESTRICTED (which
-# also requires that no shared copies are in the way): clearing those shared copies
-# is this step's job, so gating on RESTRICTED would never let the handover start.
-if [ "$GRAIL_MODERN" = "GRAIL_MODERN=yes" ]; then
-    echo "Modern kernel -- skipping SystemUser filing entirely (all moves per-user via ./install.sh)."
-elif [ "$GRAIL_ENV1_PERMITTED" = "GRAIL_ENV1_PERMITTED=yes" ]; then
-    echo "Filing shared Object env-0 dispatch only (SystemUser); env-1 kernel extensions move per-user..."
-    echo "NOTE: this REMOVES any shared env-1 methods on GsNMethod / System /"
-    echo "      SymbolDictionary / ExecBlock.  Every user on this stone must re-run"
-    echo "      ./install.sh afterwards to get their own copies."
-    LC_ALL=C topaz -lq -S scripts/install_base_perform.gs || {
-        echo "Error: install_base_perform.gs failed."; exit 1; }
-else
-    echo "Filing shared restricted-class methods (SystemUser)..."
-    LC_ALL=C topaz -lq -S scripts/install_base.gs || {
-        echo "Error: install_base.gs failed."; exit 1; }
-fi
 
 # 4. Base marker (SystemUser) -- ALWAYS, on both kernels, as the LAST step.
 # Writes a unique Grail-owned key (#GrailBaseInstalled) into Globals so
