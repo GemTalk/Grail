@@ -1549,25 +1549,29 @@ ___fromDateTime___: dt micros: micros tz: tz2 gmt: useGmt
 	identical, so this keeps the local/UTC choice in ONE place instead of
 	duplicating the eight-field call at every entry point."
 
+	"self @env1:___allocateInstance___:kw: (not the low-level ___fromFields___:
+	bypass) so a subclass's overridden __new__ runs -- an attribute it
+	stashes (e.g. `result.extra = 7') must survive now()/utcnow()
+	(test_subclass_now)."
 	useGmt ifTrue: [
-		^ self @env0:___fromFields___:
-			(dt @env0:yearGmt)
-			_: (dt @env0:monthGmt)
-			_: (dt @env0:dayOfMonthGmt)
-			_: (dt @env0:hourGmt)
-			_: (dt @env0:minuteGmt)
-			_: (dt @env0:secondGmt)
-			_: micros
-			_: tz2].
-	^ self @env0:___fromFields___:
-		(dt @env0:year)
-		_: (dt @env0:month)
-		_: (dt @env0:dayOfMonth)
-		_: (dt @env0:hour)
-		_: (dt @env0:minute)
-		_: (dt @env0:second)
-		_: micros
-		_: tz2
+		^ self @env1:___allocateInstance___:
+			{ (dt @env0:yearGmt).
+			  (dt @env0:monthGmt).
+			  (dt @env0:dayOfMonthGmt).
+			  (dt @env0:hourGmt).
+			  (dt @env0:minuteGmt).
+			  (dt @env0:secondGmt).
+			  micros.
+			  tz2 } kw: nil].
+	^ self @env1:___allocateInstance___:
+		{ (dt @env0:year).
+		  (dt @env0:month).
+		  (dt @env0:dayOfMonth).
+		  (dt @env0:hour).
+		  (dt @env0:minute).
+		  (dt @env0:second).
+		  micros.
+		  tz2 } kw: nil
 %
 
 category: 'Grail-Initialization'
@@ -1727,18 +1731,28 @@ utcfromtimestamp: ts
 category: 'Grail-Initialization'
 classmethod: PyDateTime
 fromisoformat: s
-	"Parse ISO 8601 YYYY-MM-DD[ T]HH:MM:SS[.ffffff][+HH:MM | Z].
-	Tolerant of either `T` or space as separator; rejects anything
-	more exotic."
+	"Parse ISO 8601 YYYY-MM-DD[ T]HH:MM:SS[.ffffff][+HH:MM | Z] -- also the
+	'basic format' YYYYMMDD (no dashes) date prefix, which real CPython
+	accepts equally (test_fromisoformat_date_examples).  Tolerant of
+	either `T` or space as the date/time separator; rejects anything more
+	exotic (week-date forms are not handled)."
 
-	| str datePart timePart year month day hour min sec micro tz idx pivot field |
+	| str year month day hour min sec micro tz idx pivot field dateLen |
 	str := s @env0:asString.
-	str @env0:size @env0:< 10 ifTrue: [
+	dateLen := (str @env0:size @env0:>= 8 @env0:and: [(str @env0:at: 5) @env0:isDigit])
+		ifTrue: [8] ifFalse: [10].
+	str @env0:size @env0:< dateLen ifTrue: [
 		ValueError ___signal___: 'invalid isoformat: ' @env0:, str
 	].
-	year := (str @env0:copyFrom: 1 to: 4) @env0:asNumber.
-	month := (str @env0:copyFrom: 6 to: 7) @env0:asNumber.
-	day := (str @env0:copyFrom: 9 to: 10) @env0:asNumber.
+	dateLen @env0:= 8 ifTrue: [
+		year := (str @env0:copyFrom: 1 to: 4) @env0:asNumber.
+		month := (str @env0:copyFrom: 5 to: 6) @env0:asNumber.
+		day := (str @env0:copyFrom: 7 to: 8) @env0:asNumber.
+	] ifFalse: [
+		year := (str @env0:copyFrom: 1 to: 4) @env0:asNumber.
+		month := (str @env0:copyFrom: 6 to: 7) @env0:asNumber.
+		day := (str @env0:copyFrom: 9 to: 10) @env0:asNumber.
+	].
 	hour := 0. min := 0. sec := 0. micro := 0. tz := nil.
 	"Two ASCII digits at pos..pos+1 as an Integer.  Raises a Python ValueError
 	 (not a low-level Smalltalk OffsetError) when the position runs past the end
@@ -1753,12 +1767,13 @@ fromisoformat: s
 		((a @env0:isDigit) @env0:and: [b @env0:isDigit]) ifFalse: [
 			ValueError ___signal___: 'invalid isoformat: ' @env0:, str].
 		((a @env0:asInteger @env0:- 48) @env0:* 10) @env0:+ (b @env0:asInteger @env0:- 48)].
-	str @env0:size @env0:> 10 ifTrue: [
-		"char 11 is the date/time separator (T or space); the time begins at 12.
-		 Parse HH then optional :MM and :SS incrementally so valid short forms
-		 (HH, HH:MM) parse instead of over-reading a string that has no seconds."
-		hour := field @env0:value: 12.
-		idx := 14.
+	str @env0:size @env0:> dateLen ifTrue: [
+		"char dateLen+1 is the date/time separator (T or space); the time
+		 begins at dateLen+2.  Parse HH then optional :MM and :SS
+		 incrementally so valid short forms (HH, HH:MM) parse instead of
+		 over-reading a string that has no seconds."
+		hour := field @env0:value: dateLen @env0:+ 2.
+		idx := dateLen @env0:+ 4.
 		((idx @env0:+ 2 @env0:<= str @env0:size) @env0:and: [(str @env0:at: idx) @env0:= $:]) ifTrue: [
 			min := field @env0:value: idx @env0:+ 1.
 			idx := idx @env0:+ 3].
@@ -1803,7 +1818,10 @@ fromisoformat: s
 			]
 		]
 	].
-	^ self @env0:___fromFields___: year _: month _: day _: hour _: min _: sec _: micro _: tz
+	"___allocateInstance___:kw: (not ___fromFields___:) so a subclass's
+	overridden __new__ runs (test_subclass_alternate_constructors)."
+	^ self @env1:___allocateInstance___:
+		{ year. month. day. hour. min. sec. micro. tz } kw: nil
 %
 
 ! ------- Accessors
@@ -2483,34 +2501,74 @@ category: 'Grail-Initialization'
 classmethod: PyDateTime
 combine: aDate _: aTime _: tz
 	"datetime.combine(date, time, tzinfo) — the explicit-tzinfo form
-	(test_combine).  Allocates through `self', so a subclass receiver
-	yields a subclass instance, as in CPython."
+	(test_combine).  Allocates via ___allocateInstance___:kw: (not the
+	low-level ___fromFields___: bypass), so a subclass receiver yields a
+	subclass instance AND routes through a subclass-overridden __new__,
+	as in CPython.
+
+	The REAL type checks live HERE, not in the varargs _combine:kw:
+	entry: a fixed-arity call (``combine = datetime.combine;
+	combine(t, d)'', args reversed) reaches this 3-arg selector DIRECTLY
+	via BoundMethod>>value:value: -- which prefers a matching fixed-arity
+	selector over the varargs fallback -- bypassing whatever validation
+	only _combine:kw: performed.  A bare `aDate year' on a receiver of
+	the wrong type previously raised an uncatchable env-1
+	MessageNotUnderstood instead of Python's TypeError (test_combine).
+	PyDateTime is not a PyDate subclass in Grail (see
+	PyDateTime>>weekday's comment), so date accepts either."
 
 	| tz2 |
+	((aDate @env0:isKindOf: PyDate) @env0:or: [aDate @env0:isKindOf: PyDateTime]) ifFalse: [
+		^ TypeError @env1:___signal___: 'date argument must be a date instance'].
+	(aTime @env0:isKindOf: PyTime) ifFalse: [
+		^ TypeError @env1:___signal___: 'time argument must be a time instance'].
+	(tz @env0:== None @env0:or: [tz @env0:isNil @env0:or: [tz @env0:isKindOf: PyTzinfo]]) ifFalse: [
+		^ TypeError @env1:___signal___: 'tzinfo argument must be None or of a tzinfo subclass'].
 	tz2 := tz == None ifTrue: [nil] ifFalse: [tz].
-	^ self @env0:___fromFields___:
-		(aDate year) _: (aDate month) _: (aDate day)
-		_: (aTime hour) _: (aTime minute) _: (aTime second)
-		_: (aTime microsecond) _: tz2
+	^ self @env1:___allocateInstance___:
+		{ (aDate year). (aDate month). (aDate day).
+		  (aTime hour). (aTime minute). (aTime second).
+		  (aTime microsecond). tz2 } kw: nil
 %
 
 category: 'Grail-Initialization'
 classmethod: PyDateTime
 _combine: positional kw: kwargs
-	"combine(date, time, tzinfo=...) — varargs/keyword form."
+	"combine(date, time, tzinfo=...) — varargs/keyword form.  date and time
+	may each arrive positionally OR by keyword (test_combine calls
+	``combine(time=t, date=d)''), so both are resolved the same way tz
+	already was: positional slot first, keyword name as fallback."
 
-	| d t tz |
+	| posSize d t tz missing |
+	posSize := positional @env0:isNil ifTrue: [0] ifFalse: [positional @env0:size].
+	posSize @env0:> 3 ifTrue: [
+		^ TypeError @env1:___signal___:
+			'combine() takes at most 3 arguments (' @env0:, posSize @env0:printString @env0:, ' given)'].
+	missing := Object @env0:new.
+	d := posSize @env0:>= 1 ifTrue: [positional @env0:at: 1] ifFalse: [missing].
+	kwargs @env0:isNil ifFalse: [d := kwargs @env0:at: 'date' ifAbsent: [d]].
+	t := posSize @env0:>= 2 ifTrue: [positional @env0:at: 2] ifFalse: [missing].
+	kwargs @env0:isNil ifFalse: [t := kwargs @env0:at: 'time' ifAbsent: [t]].
 	"CPython requires both date and time; too few args is a catchable
 	TypeError, not an out-of-bounds Smalltalk OffsetError (test_combine)."
-	(positional @env0:isNil or: [positional @env0:size @env0:< 2]) ifTrue: [
+	(d @env0:== missing @env0:or: [t @env0:== missing]) ifTrue: [
 		^ TypeError @env1:___signal___:
 			'combine() takes at least 2 arguments'].
-	d := positional @env0:at: 1.
-	t := positional @env0:at: 2.
-	tz := positional @env0:size @env0:>= 3
+	"Real type checks (test_combine: combine(t, d) with args reversed, or
+	either argument a non-date/non-time value, must raise TypeError -- a
+	bare `aDate year' on a PyTime receiver instead raised an uncatchable
+	env-1 MessageNotUnderstood).  PyDateTime is not a PyDate subclass in
+	Grail (see PyDateTime>>weekday's comment), so date accepts either."
+	((d @env0:isKindOf: PyDate) @env0:or: [d @env0:isKindOf: PyDateTime]) ifFalse: [
+		^ TypeError @env1:___signal___: 'date argument must be a date instance'].
+	(t @env0:isKindOf: PyTime) ifFalse: [
+		^ TypeError @env1:___signal___: 'time argument must be a time instance'].
+	tz := posSize @env0:>= 3
 		ifTrue: [positional @env0:at: 3]
 		ifFalse: [t @env0:dynamicInstVarAt: #_tzinfo].
 	kwargs @env0:isNil ifFalse: [tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz]].
+	(tz @env0:== None @env0:or: [tz @env0:isNil @env0:or: [tz @env0:isKindOf: PyTzinfo]]) ifFalse: [
+		^ TypeError @env1:___signal___: 'tzinfo argument must be None or of a tzinfo subclass'].
 	^ self combine: d _: t _: tz
 %
 
@@ -2519,19 +2577,23 @@ classmethod: PyDateTime
 fromordinal: ordinal
 	"Proleptic Gregorian ordinal -> naive datetime at midnight."
 
+	"self, not PyDateTime: fromordinal() preserves the subclass, AND (via
+	___allocateInstance___:kw: rather than ___fromFields___:) routes
+	through a subclass-overridden __new__ (test_subclass_alternate_constructors)."
 	| d |
 	d := PyDate fromordinal: ordinal.
-	^ PyDateTime @env0:___fromFields___:
-		(d year) _: (d month) _: (d day) _: 0 _: 0 _: 0 _: 0 _: nil
+	^ self @env1:___allocateInstance___:
+		{ (d year). (d month). (d day). 0. 0. 0. 0. nil } kw: nil
 %
 
 category: 'Grail-Initialization'
 classmethod: PyDateTime
 fromisocalendar: year _: week _: day
 	"datetime.fromisocalendar(y, w, d) -> naive datetime at midnight
-	(inverse of isocalendar(), via the date-part ordinal)."
+	(inverse of isocalendar(), via the date-part ordinal).  self, not
+	PyDateTime: preserves the subclass."
 
-	^ PyDateTime fromordinal: (PyDate fromisocalendar: year _: week _: day) toordinal
+	^ self @env1:fromordinal: (PyDate fromisocalendar: year _: week _: day) toordinal
 %
 
 category: 'Grail-Initialization'
@@ -2784,9 +2846,13 @@ _replace: positional kw: kwargs
 	"replace(year=..., month=..., ..., tzinfo=...) - return a new
 	datetime with the named fields overridden."
 
-	| y mo d h mi s us tz |
+	| y mo d h mi s us tz fold |
 	y := (self @env0:dynamicInstVarAt: #_year). mo := (self @env0:dynamicInstVarAt: #_month). d := (self @env0:dynamicInstVarAt: #_day).
 	h := (self @env0:dynamicInstVarAt: #_hour). mi := (self @env0:dynamicInstVarAt: #_minute). s := (self @env0:dynamicInstVarAt: #_second). us := (self @env0:dynamicInstVarAt: #_microsecond). tz := (self @env0:dynamicInstVarAt: #_tzinfo).
+	"fold defaults to self's OWN fold (preserved), not 0 -- CPython's
+	replace() keeps fold unless the caller overrides it (test_subclass_replace_fold)."
+	fold := self @env0:dynamicInstVarAt: #_fold.
+	fold @env0:isNil ifTrue: [fold := 0].
 	kwargs @env0:isNil ifFalse: [
 		y := kwargs @env0:at: 'year' ifAbsent: [y].
 		mo := kwargs @env0:at: 'month' ifAbsent: [mo].
@@ -2796,13 +2862,19 @@ _replace: positional kw: kwargs
 		s := kwargs @env0:at: 'second' ifAbsent: [s].
 		us := kwargs @env0:at: 'microsecond' ifAbsent: [us].
 		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz].
+		fold := kwargs @env0:at: 'fold' ifAbsent: [fold].
 		tz == None ifTrue: [tz := nil]
 	].
+	(fold @env0:= 0 @env0:or: [fold @env0:= 1]) ifFalse: [
+		^ ValueError @env1:___signal___:
+			'fold must be either 0 or 1, not ' @env0:, fold @env0:printString].
 	"type(self), not PyDateTime: CPython's replace() preserves the
-	subclass (test_subclass_replace, test_subclass_replace_fold).
-	___fromFields___ allocates with `self new', so a subclass receiver
-	yields a subclass instance."
-	^ self @env0:class @env0:___fromFields___: y _: mo _: d _: h _: mi _: s _: us _: tz
+	subclass (test_subclass_replace, test_subclass_replace_fold), AND
+	routes through a subclass-overridden __new__ (see PyDate>>_replace:kw:
+	for why ___allocateInstance___:kw: replaces the old ___fromFields___:
+	bypass -- a custom __new__'s stashed attribute must survive replace())."
+	^ self @env0:class @env1:___allocateInstance___:
+		{ y. mo. d. h. mi. s. us. tz } kw: (Dictionary @env0:new @env0:at: 'fold' put: fold; @env0:yourself)
 %
 
 ! ------- Private formatting helpers
@@ -3100,8 +3172,10 @@ today
 	| d |
 	PyDateTime ___ensureSessionTimeZone___.
 	d := Date @env0:today.
-	^ self @env0:___fromFields___:
-		d @env0:year _: d @env0:monthIndex _: d @env0:dayOfMonth
+	"___allocateInstance___:kw: (not ___fromFields___:) so a subclass's
+	overridden __new__ runs (test_subclass_alternate_constructors)."
+	^ self @env1:___allocateInstance___:
+		{ d @env0:year. d @env0:monthIndex. d @env0:dayOfMonth } kw: nil
 %
 
 category: 'Grail-Initialization'
@@ -3120,15 +3194,23 @@ strptime: dateStr _: fmt
 category: 'Grail-Initialization'
 classmethod: PyDate
 fromisoformat: s
-	"date.fromisoformat('YYYY-MM-DD')."
+	"date.fromisoformat('YYYY-MM-DD') -- also the CPython 'basic format'
+	'YYYYMMDD' (no dashes, 8 chars), which real CPython accepts equally
+	(test_fromisoformat_date_examples).  Week-date forms ('2025-W01-4' /
+	'2025W014') are NOT handled here -- a separate, larger feature."
 
 	| y m d |
+	(s @env0:size) @env0:= 8 ifTrue: [
+		y := (s @env0:copyFrom: 1 to: 4) @env0:asNumber.
+		m := (s @env0:copyFrom: 5 to: 6) @env0:asNumber.
+		d := (s @env0:copyFrom: 7 to: 8) @env0:asNumber.
+		^ self @env1:___allocateInstance___: { y. m. d } kw: nil].
 	(s @env0:size) @env0:= 10 @env0:ifFalse: [
 		ValueError ___signal___: 'Invalid isoformat string: ''' @env0:, s @env0:, ''''].
 	y := (s @env0:copyFrom: 1 to: 4) @env0:asNumber.
 	m := (s @env0:copyFrom: 6 to: 7) @env0:asNumber.
 	d := (s @env0:copyFrom: 9 to: 10) @env0:asNumber.
-	^ self @env0:___fromFields___: y _: m _: d
+	^ self @env1:___allocateInstance___: { y. m. d } kw: nil
 %
 
 category: 'Grail-Initialization'
@@ -3140,10 +3222,8 @@ fromordinal: ordinal
 	| epoch result |
 	epoch := Date @env0:newDay: 1 monthNumber: 1 year: 1.
 	result := epoch @env0:addDays: (ordinal @env0:- 1).
-	^ self @env0:___fromFields___:
-		result @env0:year
-		_: result @env0:monthIndex
-		_: result @env0:dayOfMonth
+	^ self @env1:___allocateInstance___:
+		{ result @env0:year. result @env0:monthIndex. result @env0:dayOfMonth } kw: nil
 %
 
 category: 'Grail-Initialization'
@@ -3151,9 +3231,14 @@ classmethod: PyDate
 fromtimestamp: ts
 	"date.fromtimestamp(ts) == datetime.fromtimestamp(ts).date().  Delegate
 	to PyDateTime's epoch+addSeconds path (Duration>>fromSeconds: is absent
-	in this GemStone, which crashed the old implementation)."
+	in this GemStone, which crashed the old implementation) for the field
+	arithmetic/validation, but allocate via self (not the plain PyDate
+	`.date()' would hand back) so a subclass's overridden __new__ runs
+	(test_subclass_alternate_constructors)."
 
-	^ (PyDateTime fromtimestamp: ts) date
+	| dt |
+	dt := PyDateTime fromtimestamp: ts.
+	^ self @env1:___allocateInstance___: { dt year. dt month. dt day } kw: nil
 %
 
 ! ------- Accessors
@@ -3414,7 +3499,8 @@ fromisocalendar: year _: week _: day
 	ord := (PyDate ___isoweek1monday___: year)
 		@env0:+ (7 @env0:* (week @env0:- 1))
 		@env0:+ (day @env0:- 1).
-	^ PyDate fromordinal: ord
+	"self, not PyDate: fromisocalendar() preserves the subclass too."
+	^ self @env1:fromordinal: ord
 %
 
 set compile_env: 0
@@ -3456,9 +3542,13 @@ _replace: positional kw: kwargs
 		y := kwargs @env0:at: 'year' ifAbsent: [y].
 		m := kwargs @env0:at: 'month' ifAbsent: [m].
 		d := kwargs @env0:at: 'day' ifAbsent: [d]].
-	"type(self), not PyDate — replace() preserves the subclass
-	(test_subclass_replace)."
-	^ self @env0:class @env0:___fromFields___: y _: m _: d
+	"type(self), not PyDate — replace() preserves the subclass AND, unlike
+	___fromFields___: (a low-level field-setting bypass), routes through a
+	subclass-overridden __new__ the same way direct construction does --
+	so an attribute a custom __new__ stashes (e.g. `result.extra = 7')
+	survives replace() too (test_subclass_replace: DateSubclass.__new__
+	sets .extra, and replace()'d instances must keep it)."
+	^ self @env0:class @env1:___allocateInstance___: { y. m. d } kw: nil
 %
 
 category: 'Grail-Arithmetic'
@@ -3733,6 +3823,8 @@ value: positional value: kwargs
 		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz].
 		fold := kwargs @env0:at: 'fold' ifAbsent: [0]].
 	tz == None ifTrue: [tz := nil].
+	(tz @env0:isNil or: [tz @env0:isKindOf: PyTzinfo]) ifFalse: [
+		^ TypeError @env1:___signal___: 'tzinfo argument must be None or of a tzinfo subclass'].
 	inst := self @env0:___fromFields___: h _: mi _: s _: us _: tz.
 	fold @env0:= 0 ifFalse: [inst @env0:dynamicInstVarAt: #_fold put: fold].
 	^ inst
@@ -3768,6 +3860,8 @@ ___new__: positional kw: kwargs
 		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz].
 		fold := kwargs @env0:at: 'fold' ifAbsent: [0]].
 	tz == None ifTrue: [tz := nil].
+	(tz @env0:isNil or: [tz @env0:isKindOf: PyTzinfo]) ifFalse: [
+		^ TypeError @env1:___signal___: 'tzinfo argument must be None or of a tzinfo subclass'].
 	inst := self @env0:___fromFields___: h _: mi _: s _: us _: tz.
 	fold @env0:= 0 ifFalse: [inst @env0:dynamicInstVarAt: #_fold put: fold].
 	^ inst
@@ -3811,7 +3905,9 @@ fromisoformat: s
 			[padded @env0:size @env0:< 6] @env0:whileTrue: [
 				padded := padded @env0:, '0'].
 			us := padded @env0:asNumber]].
-	^ self @env0:___fromFields___: h _: mi _: sec _: us _: nil
+	"___allocateInstance___:kw: (not ___fromFields___:) so a subclass's
+	overridden __new__ runs (test_subclass_alternate_constructors)."
+	^ self @env1:___allocateInstance___: { h. mi. sec. us. nil } kw: nil
 %
 
 ! ------- Accessors
@@ -3941,22 +4037,31 @@ _replace: positional kw: kwargs
 	"time.replace(hour=..., minute=..., second=..., microsecond=...,
 	tzinfo=...)."
 
-	| h mi s us tz |
+	| h mi s us tz fold |
 	h := self @env0:dynamicInstVarAt: #_hour.
 	mi := self @env0:dynamicInstVarAt: #_minute.
 	s := self @env0:dynamicInstVarAt: #_second.
 	us := self @env0:dynamicInstVarAt: #_microsecond.
 	tz := self @env0:dynamicInstVarAt: #_tzinfo.
+	"fold defaults to self's OWN fold (preserved), not 0 (test_subclass_replace_fold)."
+	fold := self @env0:dynamicInstVarAt: #_fold.
+	fold @env0:isNil ifTrue: [fold := 0].
 	kwargs @env0:isNil ifFalse: [
 		h := kwargs @env0:at: 'hour' ifAbsent: [h].
 		mi := kwargs @env0:at: 'minute' ifAbsent: [mi].
 		s := kwargs @env0:at: 'second' ifAbsent: [s].
 		us := kwargs @env0:at: 'microsecond' ifAbsent: [us].
 		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz].
+		fold := kwargs @env0:at: 'fold' ifAbsent: [fold].
 		tz == None ifTrue: [tz := nil]].
-	"type(self), not PyTime — replace() preserves the subclass
-	(test_subclass_replace)."
-	^ self @env0:class @env0:___fromFields___: h _: mi _: s _: us _: tz
+	(fold @env0:= 0 @env0:or: [fold @env0:= 1]) ifFalse: [
+		^ ValueError @env1:___signal___:
+			'fold must be either 0 or 1, not ' @env0:, fold @env0:printString].
+	"type(self), not PyTime — replace() preserves the subclass, AND (see
+	PyDate>>_replace:kw:) routes through a subclass-overridden __new__ so
+	a stashed attribute survives replace() too."
+	^ self @env0:class @env1:___allocateInstance___:
+		{ h. mi. s. us. tz } kw: (Dictionary @env0:new @env0:at: 'fold' put: fold; @env0:yourself)
 %
 
 category: 'Grail-Conversion'

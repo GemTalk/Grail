@@ -212,6 +212,22 @@ class _AssertWarnsContext:
         raise AssertionError(self.expected.__name__ + " not triggered")
 
 
+class _AssertNotWarnsContext(_AssertWarnsContext):
+    # The opposite of _AssertWarnsContext: fails if the expected category
+    # WAS recorded.  Reuses __enter__ (same recording setup) and just
+    # inverts __exit__'s pass/fail condition.
+    def __exit__(self, exc_type, exc_value, tb):
+        import warnings
+        recorded = warnings._grail_stop_recording()
+        if exc_type is not None:
+            return False
+        for rec in recorded:
+            category = rec[1]
+            if issubclass(category, self.expected):
+                raise AssertionError(self.expected.__name__ + " triggered")
+        return None
+
+
 # ---- TestCase -------------------------------------------------------------
 
 class TestCase:
@@ -500,6 +516,18 @@ class TestCase:
 
     def assertWarns(self, expected_warning, *call_args, **call_kw):
         ctx = _AssertWarnsContext(expected_warning)
+        ctx.filename = self._warnSourceFile()
+        if len(call_args) == 0:
+            return ctx
+        fn = call_args[0]
+        rest = call_args[1:]
+        with ctx:
+            fn(*rest, **call_kw)
+        return None
+
+    def _assertNotWarns(self, expected_warning, *call_args, **call_kw):
+        # Private due to low demand (matches CPython's unittest.case).
+        ctx = _AssertNotWarnsContext(expected_warning)
         ctx.filename = self._warnSourceFile()
         if len(call_args) == 0:
             return ctx
