@@ -16,7 +16,36 @@ one shared stone.
 * `./scripts/run_tests.sh` # run all Python-related tests (fresh worker sessions; picks up the install automatically)
 * `source .setenv` # needed for stand-alone Topaz scripts
 
-On a brand-new / freshly-restarted stone: `./install_base.sh` then `./install.sh`.
+On a brand-new extent (new image): `./create_claude_users.sh`, THEN
+`./install_base.sh`, THEN `./install.sh`. On a freshly-restarted stone whose
+extent already has the accounts: `./install_base.sh` then `./install.sh`.
+
+**The user-creation step comes FIRST, before `install_base.sh`** — not between it
+and `install.sh`, as the ordering intuitively suggests. `install_base.sh`'s
+capability probes (`detect_modern_kernel.gs`,
+`detect_env1_restricted_classes.gs`) log in **as the `.topazini` user**, because
+what they measure is what a *non-SystemUser* installer may do. On a fresh extent
+that account does not exist yet, both probes print nothing, and a missing line
+reads the same as a capability answer of "no" — so `install_base.sh` would
+silently drop to the **legacy shared-base tier** and file all six
+kernel-extension files as SystemUser methods. That is the opposite of the right
+answer on 4.0, and every later per-user `./install.sh` then fails with
+SecurityError 2116 clearing a policy-1 method dictionary. `install_base.sh` now
+guards against this (`scripts/check_topazini_user.gs`) and fails with the fix
+rather than mis-tiering.
+
+## 4.0 needs NO Grail code in the shared base
+As of the 2026-07-29 4.0 build, `detect_modern_kernel.gs` reports
+`GRAIL_MODERN=yes`: MR #6 permits env-1 session methods on the restricted classes
+(`GsNMethod` / `System` / `SymbolDictionary`), and the 2/3/4-arg
+`with:…performMethod:` variants are kernel-native (category `Message Handling`).
+So `install_base.sh` files **no Grail code at all** — only Unicode comparison
+mode (extent-global, kernel-enforced SystemUser) and the base marker. All five
+kernel-extension files are per-user session methods, verified isolated: an
+installed user sees its env-1 methods entirely in the transient session
+dictionary, and a second user who has not run `install.sh` sees none of them.
+3.7.x still needs the shared base (`scripts/session_methods_env1_base_37.gs` plus
+`scripts/install_base.gs`).
 For iterating on edits after the base exists: just `./install.sh`.
 NOTE: an older checkout predating this split has a MONOLITHIC `install.sh` that
 commits Grail as SystemUser into objectSecurityPolicyId 1; running it against an

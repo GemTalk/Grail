@@ -44,6 +44,37 @@ fi
 
 cd "$SCRIPT_DIR" || exit 1
 
+# 0. The ./.topazini user must EXIST before any capability probe runs.
+# Both capability probes below (detect_env1_restricted_classes.gs and
+# detect_modern_kernel.gs) log in as that user -- they must, because what they
+# measure is what a NON-SystemUser installer may do.  A failed login prints
+# nothing, which this script would otherwise read as a capability answer of "no"
+# and drop to the LEGACY tier: filing all six kernel-extension files as shared
+# SystemUser methods.  On a modern kernel that re-creates the shared base the
+# per-user layer exists to avoid, and every later per-user ./install.sh then dies
+# with SecurityError 2116 clearing a policy-1 method dictionary.
+#
+# On a FRESH extent the per-user accounts do not exist yet, so this is the normal
+# first-run state, not an exotic one.  Fail loudly with the fix.
+TOPAZINI_USER=$(LC_ALL=C topaz -lq -S scripts/check_topazini_user.gs 2>/dev/null \
+    | grep -oE 'GRAIL_TOPAZINI_USER=[A-Za-z0-9_]+' | head -1)
+if [ -z "$TOPAZINI_USER" ]; then
+    echo "Error: the ./.topazini user cannot log in."
+    echo ""
+    echo "  Capability probes run AS that user, so without it this script would"
+    echo "  silently choose the legacy shared-base layout -- which then makes every"
+    echo "  per-user ./install.sh fail with SecurityError 2116."
+    echo ""
+    echo "  On a fresh extent, create the login accounts first:"
+    echo "      ./create_claude_users.sh"
+    echo "  Then re-run ./install_base.sh."
+    echo ""
+    echo "  If the accounts exist, check the stone is running (gslist) and that"
+    echo "  ./.topazini has the right user/password and 'set gemstone'."
+    exit 1
+fi
+echo "Installer user: ${TOPAZINI_USER#GRAIL_TOPAZINI_USER=}"
+
 # 1. GsPackagePolicy env-1 session-method support.
 # Stock 3.7.x wires session methods for environment 0 ONLY, so it always needs
 # Grail's env-1 patch (scripts/session_methods_env1_base_37.gs, which makes the
