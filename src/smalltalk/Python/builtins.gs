@@ -407,6 +407,23 @@ iter: anObject
 	implemented yet (see TODO.md) — none of the current Flask-path
 	modules use it."
 
+	"CPython sentinel: a class that explicitly sets ``__iter__ = None''
+	is NOT iterable, and iter(x) raises TypeError even when x defines
+	__getitem__.  Without this, Grail falls through (below) to
+	``anObject __iter__'', whose PythonInstance fallback walks the legacy
+	__getitem__(0..n) sequence protocol EAGERLY — on an unbounded
+	__getitem__ (test_iter's NoIterClass) that materialises without bound
+	into an uncatchable VM OutOfMemory.  ___classAttrDunder___ reads a
+	dunder set as a class-body ATTRIBUTE (the None singleton here) and
+	answers nil for a real __iter__ method or an absent one, so a genuine
+	iterable is unaffected."
+	(anObject ___classAttrDunder___: #'__iter__') == None
+		ifTrue: [
+			TypeError @env0:signal: ('''' @env0:,
+				(anObject @env0:class @env0:name) @env0:,
+				''' object is not iterable')
+		].
+
 	"``___respondsTo___:`` walks the inheritance chain — needed because
 	``__iter__`` lives on CharacterCollection for strings, on SetProtocol
 	for sets, etc., not on the leaf class."
