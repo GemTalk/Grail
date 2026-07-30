@@ -404,9 +404,36 @@ value: morePositional value: moreKw
 category: 'Grail-String Representation'
 method: functools_partial
 __repr__
-	"functools.partial(<func repr>, args..., k=v...)"
+	"<module>.<qualname>(<func repr>, args..., k=v...), or the bare ``...''
+	when re-entered on the SAME partial.
 
-	| stream func args kw |
+	CYCLE HANDLING matches CPython, where partial.__repr__ is wrapped in
+	reprlib.recursive_repr(): re-entering on an object already being repr'd
+	yields just the ellipsis, so a self-referential partial prints
+	``functools.partial(...)'' instead of recursing until the gem's stack
+	dies (it used to fail as an uncatchable AlmostOutOfStack, and as the
+	FIRST of two overflows in the session it also made the second one
+	fatal).  test_recursive_repr covers all three positions the cycle can
+	sit in -- func, an arg, and a keyword value -- and each falls out of the
+	same guard.
+
+	The seen set is the #GrailReprSeen session set that list / tuple / dict
+	__repr__ already use, so a cycle running through a MIX of containers and
+	partials is still detected wherever it closes.
+
+	The NAME is read from the receiver's own class rather than hardcoded:
+	ClassDefAst gives a subclass its defining module, so
+	``class partial(functools.partial)'' in test.test_functools must repr as
+	``test.test_functools.partial(...)'' (test_repr)."
+
+	| stream func args kw seen name |
+	seen := SessionTemps @env0:current @env0:at: #GrailReprSeen otherwise: nil.
+	seen @env0:isNil ifTrue: [
+		seen := IdentitySet @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailReprSeen put: seen].
+	(seen @env0:includes: self) ifTrue: [^ '...'].
+	seen @env0:add: self.
+	^ [[
 	"Snapshot func/args/keywords BEFORE formatting any element: an element's
 	 own __repr__ may reentrantly mutate this partial via __setstate__ (see
 	 test_repr_safety_against_reentrant_mutation), rebinding these instVars.
@@ -415,8 +442,11 @@ __repr__
 	func := self @env0:dynamicInstVarAt: #func.
 	args := self @env0:dynamicInstVarAt: #args.
 	kw := self @env0:dynamicInstVarAt: #keywords.
+	name := (self @env0:class __module__) @env0:asString @env0:, '.'
+		@env0:, (self @env0:class __qualname__) @env0:asString.
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
-	stream @env0:nextPutAll: 'functools.partial('.
+	stream @env0:nextPutAll: name.
+	stream @env0:nextPut: $(.
 	stream @env0:nextPutAll: (func __repr__) @env0:asString.
 	args @env0:do: [:a |
 		stream @env0:nextPutAll: ', '.
@@ -427,7 +457,15 @@ __repr__
 		stream @env0:nextPutAll: '='.
 		stream @env0:nextPutAll: (v __repr__) @env0:asString].
 	stream @env0:nextPut: $).
-	^ stream @env0:contents
+	stream @env0:contents]
+		@env0:on: AlmostOutOfStack do: [:ex |
+			"Belt and braces, as in list >> __repr__: a nesting that is deep
+			but NOT cyclic still reaches the gem's stack limit, and the
+			resumable notification is uncatchable from Python unless it is
+			converted here."
+			RecursionError ___signal___:
+				'maximum recursion depth exceeded while getting the repr of an object']]
+		@env0:ensure: [seen @env0:remove: self otherwise: nil]
 %
 
 category: 'Grail-Pickle Protocol'
@@ -460,6 +498,40 @@ __dict__
 		(self ___reservedName___: nm) ifFalse: [
 			d @env0:at: nm @env0:asString put: (pairs @env0:at: i @env0:+ 1)]].
 	^ d
+%
+
+category: 'Grail-Pickle'
+method: functools_partial
+__reduce__
+	"(class, (func,), (func, args, keywords or None, __dict__ or None)).
+
+	The counterpart __setstate__ already described but that was missing:
+	Object >> __reduce__ raises ``Not yet implemented: __reduce__'' through
+	``self error:'', an env-0 Smalltalk error that Python cannot catch, so
+	all four partial variants failed test_pickle and test_recursive_pickle
+	as uncatchable ST errors rather than as ordinary failures.
+
+	Shape matches CPython's functools.partial.__reduce__ exactly, including
+	the two ``or None'' collapses -- an EMPTY keywords dict or __dict__ is
+	pickled as None, not as an empty container.  __setstate__ already
+	accepts None for both, so the round trip closes without touching it.
+
+	``self class'' rather than the partial class, so a SUBCLASS pickles
+	back as itself (TestPartialCSubclass / TestPartialPySubclass)."
+
+	| kw ns |
+	kw := self @env0:dynamicInstVarAt: #keywords.
+	((kw @env0:isNil) @env0:or: [kw @env0:isEmpty]) ifTrue: [kw := None].
+	ns := self __dict__.
+	(ns @env0:isEmpty) ifTrue: [ns := None].
+	^ tuple @env0:withAll: {
+		(self @env0:class).
+		(tuple @env0:withAll: (Array @env0:with: (self @env0:dynamicInstVarAt: #func))).
+		(tuple @env0:withAll: {
+			(self @env0:dynamicInstVarAt: #func).
+			(self @env0:dynamicInstVarAt: #args).
+			kw.
+			ns }) }
 %
 
 category: 'Grail-Attribute Access'
@@ -697,19 +769,29 @@ __repr__
 	^ 'Placeholder'
 %
 
-category: 'Grail-Built-in Functions'
+category: 'Grail-Constants'
 method: functools
 WRAPPER_ASSIGNMENTS
-	"Tuple of attribute names ``functools.update_wrapper`` copies
-	from wrapped to wrapper.  Matches CPython 3.x.  Grail's
-	update_wrapper stub doesn't actually copy anything, but the
-	constant is exported for callers that read it (jinja2.compiler
-	splices it into a decorator's signature)."
+	"Tuple of attribute names ``functools.update_wrapper`` copies from
+	wrapped to wrapper.  Also read directly by callers that splice it into
+	a decorator's own signature (jinja2.compiler).
 
-	^ tuple @env0:withAll: #('__module__' '__name__' '__qualname__' '__annotations__' '__type_params__' '__doc__')
+	ONE deviation from CPython 3.14, whose list is
+
+	    ('__module__', '__name__', '__qualname__', '__doc__',
+	     '__annotate__', '__type_params__')
+
+	Grail has no ``__annotate__'' (PEP 649 lazily-evaluated annotations),
+	so ``__annotations__'' -- which Grail computes eagerly at def time --
+	stands in for it.  Naming ``__annotate__'' here would be worse than
+	the deviation: update_wrapper skips a name the WRAPPED object lacks, so
+	nothing would be copied, and the wrapper would then answer
+	AttributeError for a name its own WRAPPER_ASSIGNMENTS advertises."
+
+	^ tuple @env0:withAll: #('__module__' '__name__' '__qualname__' '__doc__' '__annotations__' '__type_params__')
 %
 
-category: 'Grail-Built-in Functions'
+category: 'Grail-Constants'
 method: functools
 WRAPPER_UPDATES
 	"Tuple of attribute names ``functools.update_wrapper`` MERGES
@@ -739,26 +821,53 @@ lru_cache: maxsize
 
 	((maxsize isKindOf: Integer)
 		or: [maxsize == nil or: [maxsize == None]]) ifFalse: [
-		^ LruCacheWrapper ___wrap___: maxsize maxsize: 128].
+		^ self ___lruWrap___: maxsize maxsize: 128 typed: false].
 	^ [:positional2 :keywords2 |
-		LruCacheWrapper ___wrap___: (positional2 @env0:at: 1) maxsize: maxsize]
+		self ___lruWrap___: (positional2 @env0:at: 1) maxsize: maxsize typed: false]
+%
+
+category: 'Grail-Private'
+method: functools
+___lruWrap___: aFunction maxsize: aMaxsize typed: aTyped
+	"Build the cache wrapper AND give it the wrapped function's identifying
+	metadata, which is what CPython's lru_cache does as its final step
+	(``update_wrapper(wrapper, user_function)'').
+
+	Without the copy a decorated function lost its identity: ``square.
+	__name__'' / ``__doc__'' / ``__module__'' all raised AttributeError on
+	the LruCacheWrapper (test_lru_cache_decoration compares every one of
+	WRAPPER_ASSIGNMENTS between the cached function and the original)."
+
+	^ self
+		___updateWrapper___: (LruCacheWrapper
+			___wrap___: aFunction maxsize: aMaxsize typed: aTyped)
+		wrapped: aFunction
+		assigned: self WRAPPER_ASSIGNMENTS
+		updated: self WRAPPER_UPDATES
 %
 
 category: 'Grail-Built-in Functions'
 method: functools
 _lru_cache: positional kw: kwargs
 	"Varargs entry — ``lru_cache(maxsize=128, typed=False)'' from user
-	code.  Honors the ``maxsize'' keyword (default 128, matching
-	CPython); ``typed'' is accepted and ignored."
+	code.  Honors BOTH keywords (maxsize default 128, matching CPython);
+	``typed'' used to be accepted and discarded here, which is why
+	typed=True cached 3 and 3.0 together.  Also accepts typed
+	positionally, as ``lru_cache(128, True)''."
 
-	| ms |
+	| ms ty |
 	ms := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'maxsize'])
 		ifTrue: [kwargs @env0:at: 'maxsize']
 		ifFalse: [(positional ~~ nil and: [positional @env0:isEmpty @env0:not])
 			ifTrue: [positional @env0:at: 1]
 			ifFalse: [128]].
+	ty := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'typed'])
+		ifTrue: [kwargs @env0:at: 'typed']
+		ifFalse: [(positional ~~ nil and: [positional @env0:size @env0:>= 2])
+			ifTrue: [positional @env0:at: 2]
+			ifFalse: [false]].
 	^ [:positional2 :keywords2 |
-		LruCacheWrapper ___wrap___: (positional2 @env0:at: 1) maxsize: ms]
+		self ___lruWrap___: (positional2 @env0:at: 1) maxsize: ms typed: ty]
 %
 
 category: 'Grail-Built-in Functions'
@@ -767,7 +876,7 @@ cache: aFunction
 	"``@cache'' (Python 3.9+) — shorthand for ``@lru_cache(maxsize=None)''
 	with an unbounded cache."
 
-	^ LruCacheWrapper ___wrap___: aFunction maxsize: None
+	^ self ___lruWrap___: aFunction maxsize: None typed: false
 %
 
 category: 'Grail-Built-in Functions'
@@ -786,48 +895,131 @@ cached_property: aFunction
 category: 'Grail-Built-in Functions'
 method: functools
 wraps: wrapped
-	"wraps(wrapped) → decorator that copies metadata from wrapped
-	onto the wrapper.  Stub: identity decorator."
+	"wraps(wrapped) → decorator that copies identifying metadata from
+	wrapped onto the wrapper it is applied to."
 
-	^ [:positional :keywords | positional @env0:at: 1]
+	^ [:positional :keywords |
+		self ___updateWrapper___: (positional @env0:at: 1)
+			wrapped: wrapped
+			assigned: self WRAPPER_ASSIGNMENTS
+			updated: self WRAPPER_UPDATES]
 %
 
 category: 'Grail-Built-in Functions'
 method: functools
 _wraps: positional kw: kwargs
-	"Varargs form of wraps for the ``assigned=...'' / ``updated=...''
-	keyword variants used by jinja2.async_utils and CPython
-	decorator chains.  Same identity-decorator stub — the kwargs
-	carry attribute-list tuples that the real implementation would
-	copy through; Grail's BoundMethod / closure shapes don't honour
-	user-stamped ``__name__'' / ``__doc__'' anyway, so dropping them
-	matches the behaviour of the 1-arg form."
+	"Varargs form of wraps covering the ``assigned=`` / ``updated=``
+	variants (positional or keyword), used by jinja2.async_utils and by
+	CPython decorator chains that narrow what gets copied."
 
-	^ [:positional2 :keywords2 | positional2 @env0:at: 1]
+	| wrapped assigned updated |
+	(positional @env0:isNil or: [positional @env0:isEmpty]) ifTrue: [
+		TypeError ___signal___: 'wraps() missing required argument: wrapped'].
+	wrapped := positional @env0:at: 1.
+	assigned := self ___wrapperArg___: positional kw: kwargs
+		at: 2 named: 'assigned' default: self WRAPPER_ASSIGNMENTS.
+	updated := self ___wrapperArg___: positional kw: kwargs
+		at: 3 named: 'updated' default: self WRAPPER_UPDATES.
+	^ [:positional2 :keywords2 |
+		self ___updateWrapper___: (positional2 @env0:at: 1)
+			wrapped: wrapped assigned: assigned updated: updated]
 %
 
 category: 'Grail-Built-in Functions'
 method: functools
 update_wrapper: wrapper _: wrapped
-	"functools.update_wrapper(wrapper, wrapped[, ...]) — copy
-	identifying metadata (``__module__``, ``__name__``, ``__doc__``,
-	``__dict__``, ``__wrapped__``) from wrapped onto wrapper.  Used
-	by Jinja2's ``optimizeconst`` (and the rest of the decorator
-	ecosystem) at module-init time.  Stub: return wrapper
-	unchanged.  Grail's BoundMethod / closure shapes don't honor
-	user-stamped ``__name__`` anyway, so the copy is a no-op until
-	there's a real need."
+	"functools.update_wrapper(wrapper, wrapped) — copy the
+	WRAPPER_ASSIGNMENTS metadata from wrapped onto wrapper, merge
+	WRAPPER_UPDATES (``__dict__``), and set ``wrapper.__wrapped__``.
+	The decorator ecosystem (jinja2's ``optimizeconst``, every
+	``@wraps``-using library) leans on this at module-init time."
 
-	^ wrapper
+	^ self ___updateWrapper___: wrapper wrapped: wrapped
+		assigned: self WRAPPER_ASSIGNMENTS
+		updated: self WRAPPER_UPDATES
 %
 
 category: 'Grail-Built-in Functions'
 method: functools
 _update_wrapper: positional kw: kwargs
-	"Varargs form of update_wrapper for the ``assigned=`` /
-	``updated=`` keyword variants — same identity stub."
+	"Varargs form of update_wrapper covering the ``assigned=`` /
+	``updated=`` variants, positional or keyword."
 
-	^ positional @env0:at: 1
+	| wrapper wrapped assigned updated |
+	(positional @env0:isNil or: [positional @env0:size @env0:< 2]) ifTrue: [
+		TypeError ___signal___:
+			'update_wrapper() missing required argument: wrapped'].
+	wrapper := positional @env0:at: 1.
+	wrapped := positional @env0:at: 2.
+	assigned := self ___wrapperArg___: positional kw: kwargs
+		at: 3 named: 'assigned' default: self WRAPPER_ASSIGNMENTS.
+	updated := self ___wrapperArg___: positional kw: kwargs
+		at: 4 named: 'updated' default: self WRAPPER_UPDATES.
+	^ self ___updateWrapper___: wrapper wrapped: wrapped
+		assigned: assigned updated: updated
+%
+
+category: 'Grail-Private'
+method: functools
+___wrapperArg___: positional kw: kwargs at: anIndex named: aName default: aDefault
+	"Resolve one of update_wrapper / wraps' optional ``assigned`` /
+	``updated`` arguments, accepted either positionally at anIndex or by
+	keyword.  An EMPTY tuple is a meaningful value (``wraps(f, (), ())``
+	copies nothing), so absence is decided by arity and key presence, never
+	by emptiness."
+
+	(kwargs @env0:notNil and: [kwargs @env0:includesKey: aName])
+		ifTrue: [^ kwargs @env0:at: aName].
+	(positional @env0:notNil and: [positional @env0:size @env0:>= anIndex])
+		ifTrue: [^ positional @env0:at: anIndex].
+	^ aDefault
+%
+
+category: 'Grail-Private'
+method: functools
+___updateWrapper___: wrapper wrapped: wrapped assigned: assigned updated: updated
+	"The body shared by update_wrapper and wraps, following CPython's
+	three phases exactly:
+
+	  1. ASSIGN each name in ``assigned``, skipping the ones the wrapped
+	     object doesn't have (CPython swallows AttributeError here, which
+	     is what lets ``@wraps`` decorate a builtin).
+	  2. MERGE each name in ``updated`` -- ``getattr(wrapper, n).update(
+	     getattr(wrapped, n, {}))``.  Note the asymmetry: a name missing on
+	     the WRAPPED object defaults to an empty dict, but one missing on
+	     the WRAPPER raises, and so does a wrapper attribute that has no
+	     ``update`` (test_missing_attributes deletes the slot, then sets it
+	     to 1, and expects AttributeError both times).  Both errors are
+	     produced by going through the attribute protocol rather than by
+	     hand-coding a check.
+	  3. Set ``__wrapped__`` LAST, so step 2 can't leave the wrapped
+	     function's own stale ``__wrapped__`` in place (CPython issue
+	     17482).
+
+	Grail's ExecBlock side-table gives closures the __dict__ / __doc__ /
+	__type_params__ this needs; see ExecBlockAttrs for why __name__ and
+	friends are deliberately NOT __dict__ entries."
+
+	assigned @env0:do: [:name |
+		| value found |
+		found := true.
+		value := [wrapped ___pyAttrLoad___: name @env0:asSymbol]
+			@env0:on: AttributeError
+			do: [:ex | found := false. ex @env0:return: nil].
+		found ifTrue: [wrapper __setattr__: name _: value]].
+	updated @env0:do: [:name |
+		| target source updater |
+		target := wrapper ___pyAttrLoad___: name @env0:asSymbol.
+		source := [wrapped ___pyAttrLoad___: name @env0:asSymbol]
+			@env0:on: AttributeError do: [:ex | ex @env0:return: dict ___new___].
+		"Reach ``update'' through the attribute protocol so a non-mapping
+		wrapper attribute raises Python AttributeError, matching
+		``getattr(wrapper, n).update(...)''.  A direct Smalltalk send would
+		be an uncatchable MessageNotUnderstood instead."
+		updater := target ___pyAttrLoad___: #'update'.
+		updater ___pyCallValue___: (Array @env0:with: source) kw: nil].
+	wrapper __setattr__: '__wrapped__' _: wrapped.
+	^ wrapper
 %
 
 category: 'Grail-Built-in Functions'

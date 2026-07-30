@@ -11,18 +11,34 @@ per-user layer. This is the standard workflow on `main`: several users can each
 install their own Grail (per-user session methods + `Python*` dictionaries) on
 one shared stone.
 
-* `./install_base.sh` # run ONCE per extent, as SystemUser, BEFORE the first `./install.sh`. Installs the shared, user-independent base (GsPackagePolicy env-1 session-method support, unicode comparison mode, restricted-class base methods). Idempotent. Chooses the env-1 session-method support by GemStone version (from `$GEMSTONE/version.txt`) plus a capability probe: **3.7.x** always applies `scripts/session_methods_env1_base_37.gs` (stock 3.7 wires session methods for env-0 only). **4.0+** feature-probes for GemStone **MR #6** ("Support session methods in environments other than 0") via `scripts/detect_env1_session_methods.gs` (marker: `GsPackagePolicy>>permitSessionMethodFor:selector:environmentId:`) — if MR #6 is present, env-1 routing is **native** and **no patch is applied**; if absent (stock pre-MR#6 4.0), it falls back to `scripts/session_methods_env1_base_40.gs`, which recompiles `Behavior>>compileMethod:` to route env-1 through GsPackagePolicy (stock pre-MR#6 4.0 gates that consult on env-0 only, so env-1 kernel-class methods otherwise fail with SecurityError 2257 on the class's SystemUser-owned policy). A version alone can't tell an MR#6 4.0 from a stock 4.0 (both report 4.0.x), hence the probe. On a fresh stone `install_base.sh` MUST run first, or `./install.sh` fails with a SecurityError (a per-user session cannot modify SystemUser-owned method dictionaries in objectSecurityPolicyId 1). Grail passes the full SUnit suite on 3.7.5 and on 4.0 (both stock+patch and MR#6-native).
+* `./install_base.sh` # run ONCE per extent, as SystemUser, BEFORE the first `./install.sh`. Idempotent, and entirely SystemUser, so it does NOT need the per-user login accounts to exist. What it installs is chosen by ONE test, the GemStone version from `$GEMSTONE/version.txt` (never the `$GEMSTONE` path — CI installs to an unversioned `/opt/gemstone/product`, where a `case "$GEMSTONE" in *3.7*` test would silently skip the 3.7 patch): **4.0+** installs **no Grail code at all** — only Unicode comparison mode (extent-global, kernel-enforced SystemUser-only) and the base marker, because MR #6 permits env-1 session methods on the restricted classes (`GsNMethod`/`System`/`SymbolDictionary`) and the 2/3/4-arg `with:…performMethod:` variants are kernel-native, so all five kernel-extension files are per-user session methods filed by `install.sh`. **Requires a 4.0 build of 2026-07-29 or later**; an older 4.0 lacks one or more of those fixes and `install.sh` will fail filing the kernel extensions — upgrade the product rather than reinstating the removed capability probes. **3.7.x** applies `scripts/session_methods_env1_base_37.gs` (stock 3.7 wires session methods for env-0 only) plus `scripts/install_base.gs`, which files all six kernel-extension files as SHARED SystemUser methods — 3.7 is published and cannot be fixed in the base image. On a fresh stone `install_base.sh` MUST run before `install.sh`, or `install.sh` fails with a SecurityError (a per-user session cannot modify SystemUser-owned method dictionaries in objectSecurityPolicyId 1). Grail passes the full SUnit suite on 3.7.5 and on 4.0.
 * `./install.sh` # per-user install (runs as the `.topazini` user, no SystemUser step). Installs this user's Grail: env-1 kernel-extension session methods + the `Python`/`PythonTests` dictionaries. Re-run after every Smalltalk edit.
 * `./scripts/run_tests.sh` # run all Python-related tests (fresh worker sessions; picks up the install automatically)
 * `source .setenv` # needed for stand-alone Topaz scripts
 
-On a brand-new / freshly-restarted stone: `./install_base.sh` then `./install.sh`.
-For iterating on edits after the base exists: just `./install.sh`.
-NOTE: an older checkout predating this split has a MONOLITHIC `install.sh` that
-commits Grail as SystemUser into objectSecurityPolicyId 1; running it against an
-extent set up the split way corrupts it (per-user re-install then fails with
-SecurityError 2116 modifying a policy-1 method dictionary). If you check out such
-an old commit, use a fresh stone.
+On a brand-new extent (new image): `./create_claude_users.sh`, `./install_base.sh`,
+`./install.sh` — the first two in either order, since `install_base.sh` is entirely
+SystemUser. On a stone whose extent already has the accounts:
+`./install_base.sh` then `./install.sh`.
+
+**A fresh extent has no per-user login accounts**, so `create_claude_users.sh` is
+easy to miss: `.topazini` names a user (e.g. `Claude1`) that does not exist yet.
+`install.sh` now checks for it up front (`scripts/check_topazini_user.gs`) and
+fails with that instruction, instead of building the C shim and then dying on
+topaz's bare "userId/password is invalid". CI is unaffected — it logs in as
+`DataCurator`, which every extent has.
+
+## 4.0 needs NO Grail code in the shared base
+On 4.0 (build 2026-07-29 or later) `install_base.sh` files nothing of Grail's:
+MR #6 permits env-1 session methods on `GsNMethod`/`System`/`SymbolDictionary`,
+and the 2/3/4-arg `with:…performMethod:` variants are kernel-native. All five
+kernel-extension files are per-user session methods, verified isolated: an
+installed user sees its env-1 methods entirely in the *transient session*
+dictionary, and a second user who has not run `install.sh` sees none of them and
+has no `Python` dictionary. So several users can work on one stone without
+overwriting each other — which shared filing did, in both directions.
+
+3.7.x still needs the shared base and always will (published, unfixable).
 
 ## Selecting the stone + NetLDI (two files, per checkout)
 Both are gitignored (per-machine); when switching GemStone versions edit BOTH so

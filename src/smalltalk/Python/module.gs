@@ -278,7 +278,22 @@ __loader__: aValue
 category: 'Grail-Accessors'
 method: module
 __name__
-	^ self @env0:at: #__name__
+	"The module's dotted name.  Guard the dict read with includesKey: — an
+	unguarded ``at:'' raises a raw Smalltalk LookupError for a module with
+	no ``__name__'' slot, and a Smalltalk error is invisible to Python's
+	``except AttributeError''.  ``builtins'' is exactly such a module, so
+	``max.__module__'' (BoundMethod>>__module__ forwards to the receiving
+	module's __name__) killed any caller that merely PROBED for it —
+	functools.update_wrapper reads __module__ off the wrapped function
+	inside a try/except AttributeError.
+
+	The fallback is the module class's own name, which is where a built-in
+	module's identity actually lives (Grail names the class after the
+	module).  Python-defined modules always carry the dict entry, set at
+	import time, so they never reach the fallback."
+
+	(self @env0:includesKey: #__name__) ifTrue: [^ self @env0:at: #__name__].
+	^ self @env0:class @env0:name @env0:asString
 %
 
 category: 'Grail-Accessors'

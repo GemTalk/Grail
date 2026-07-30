@@ -175,7 +175,8 @@ use a shorter `GrailXxx` form. Keys as of the 2026-06-08 audit:
 | `#'___GrailSecretsGenerator___'` | `secrets` | Per-session CSPRNG state |
 | `#PythonStoreRootsMap` | `PythonStore` | IncRef'd PyObject roots map |
 | `#'___GrailSessionDict___*'` | `gemstone` | Per-session `SessionDict` backing stores (one key per dict) |
-| `ExecBlockAttrs` | `ExecBlockAttrs` | Per-session exec-block attribute dictionary |
+| `#'___ExecBlockAttrsTable___'` | `ExecBlockAttrs` | Per-session exec-block `__dict__` (user attributes) |
+| `#'___ExecBlockSlotsTable___'` | `ExecBlockAttrs` | Per-session exec-block SLOTS (`__name__`, `__qualname__`, `__module__`, `__doc__`, `__annotations__`, `__type_params__`) — kept out of `__dict__` so `functools.update_wrapper`'s `__dict__` merge doesn't copy Grail's def-time stamps |
 
 The 2026-07 session-state refactor (`2900b14f`, `283f086f`) and the
 canonical-modules work (docs/Persistent_Modules_and_Classes.md) added many

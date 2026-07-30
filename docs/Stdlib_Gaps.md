@@ -156,3 +156,32 @@ aliases defeat the native-module call fast path.  Since resolved:
 descriptor protocol (`__get__`) on class attributes and user `__new__`
 (both 2026-07-10), and isinstance(x, type) / issubclass-on-non-class
 now raise catchable Python errors.
+
+### Function metadata (2026-07-29)
+
+`functools.update_wrapper` / `wraps` really copy now, and closures
+(`ExecBlock`) carry `__dict__`, `__doc__`, `__type_params__` and support
+`__delattr__`.  The side table splits Grail's def-time `__name__` /
+`__annotations__` stamps into a SLOT namespace so they stay out of
+`func.__dict__`, matching CPython — otherwise `update_wrapper`'s
+`__dict__` merge copies them onto every wrapper.  A leading string
+literal in a `def` is captured as `__doc__` (FunctionDefAst).
+
+Still missing, in the order they cost conformance:
+
+* **PEP 695 type params.** `def f[T](...)` parses, but the bracket is
+  discarded: `__type_params__` is always `()`.  Blocks
+  `test_functools`' `TestUpdateWrapper.test_default_update`.
+* **PEP 649 `__annotate__`**, and annotations are PEP 563 *source
+  strings* rather than evaluated objects (`{'x': 'int'}`, not
+  `{'x': int}`).  `WRAPPER_ASSIGNMENTS` therefore names
+  `__annotations__` where CPython 3.14 names `__annotate__`.  Blocks
+  `test_update_wrapper_annotations`.
+* **Docstrings on built-in functions.** `max.__doc__` answers `object`'s
+  docstring, not CPython's `max(iterable, ...)` signature text.  Blocks
+  `test_builtin_update`.
+* **Docstrings on module-level `def`s.** These compile to real methods
+  reached through a `BoundMethod`, not to closures, so the
+  FunctionDefAst docstring stamp doesn't apply; they still inherit
+  `object`'s docstring.  A `module`-side table keyed by function name
+  (like `___setFunctionAnnotations___`) is the shape that would fix it.
