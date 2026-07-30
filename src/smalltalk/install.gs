@@ -545,6 +545,7 @@ run
 	at: #'DatetimeLocalTimeTestCase' put: nil;
 	at: #'FunctionMetadataTestCase' put: nil;
 	at: #'SingleDispatchRegisterTestCase' put: nil;
+	at: #'CrossVersionSelectorTestCase' put: nil;
 	at: #'FormatSpecTestCase' put: nil;
 	at: #'BuiltinsTestCase' put: nil;
 	at: #'BytearrayTestCase' put: nil;
@@ -1257,6 +1258,7 @@ input src/smalltalk/PythonTests/StrSubclassConstructionTestCase.gs
 input src/smalltalk/PythonTests/DatetimeLocalTimeTestCase.gs
 input src/smalltalk/PythonTests/FunctionMetadataTestCase.gs
 input src/smalltalk/PythonTests/SingleDispatchRegisterTestCase.gs
+input src/smalltalk/PythonTests/CrossVersionSelectorTestCase.gs
 input src/smalltalk/PythonTests/BytearrayTestCase.gs
 input src/smalltalk/PythonTests/CachedPropertyTestCase.gs
 input src/smalltalk/PythonTests/DeployCheckTestCase.gs
