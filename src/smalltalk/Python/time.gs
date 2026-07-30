@@ -485,8 +485,15 @@ ___structTimeLocalFromDateTime___: dt
 		@env0:+ dt @env0:secondGmt.
 	offset := localSecs @env0:- gmtSecs.
 	tz := TimeZone @env0:current.
-	isdst := (offset @env0:= (tz @env0:secondsFromGmt @env0:+ tz @env0:secondsForDst))
-		ifTrue: [1] ifFalse: [0].
+	"The secondsForDst = 0 guard is load-bearing.  For a zone with NO DST
+	rule -- UTC being the obvious one -- the standard and DST offsets are
+	equal, so the comparison below is trivially true and tm_isdst came back
+	1 for every instant.  No test caught that: on a DST-less zone
+	time.timezone = time.altzone, so assertions that pick between them by
+	tm_isdst agree whichever branch they take."
+	isdst := ((tz @env0:secondsForDst @env0:~= 0)
+		@env0:and: [offset @env0:= (tz @env0:secondsFromGmt @env0:+ tz @env0:secondsForDst)])
+			ifTrue: [1] ifFalse: [0].
 	^ self
 		___structTimeYear___: dt @env0:year
 		_month: dt @env0:month

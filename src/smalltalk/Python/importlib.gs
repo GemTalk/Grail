@@ -1601,6 +1601,7 @@ smalltalkForPath: pathString
 	"
 	| module stream |
 	module := self astForPath: pathString.
+	module setParent: nil.  "link the tree so codegen temps (e.g. chained-compare rhsTemp) are allocated, as the real import path does"
 	stream := PrettyWriteStream on: Unicode7 new.
 	module printSmalltalkOn: stream.
 	^ stream contents
@@ -1616,6 +1617,7 @@ smalltalkForSource: aString
 	"
 	| module stream |
 	module := self astForSource: aString.
+	module setParent: nil.  "link the tree so codegen temps (e.g. chained-compare rhsTemp) are allocated, as the real import path does"
 	stream := PrettyWriteStream on: Unicode7 new.
 	module printSmalltalkOn: stream.
 	^ stream contents
@@ -1632,6 +1634,7 @@ irForPath: pathString
 	"
 	| module stream mySymbolList |
 	module := self astForPath: pathString.
+	module setParent: nil.  "link the tree so codegen temps (e.g. chained-compare rhsTemp) are allocated, as the real import path does"
 	stream := PrettyWriteStream on: Unicode7 new.
 	module printSmalltalkOn: stream.
 	mySymbolList := SymbolList with: Python.

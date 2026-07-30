@@ -59,7 +59,15 @@ __new__: source
 		TypeError ___signal___: ('cannot convert '''
 			@env0:, (bytes ___pyTypeNameOf___: source)
 			@env0:, ''' object to bytes')].
-	(hook @env0:notNil and: [(source isKindOf: bytes) @env0:not]) ifTrue: [
+	"Consult __bytes__ for a non-bytes-like source, OR for a bytes-like source
+	whose class OVERRIDES __bytes__ (gh-24731: a bytes subclass with a custom
+	__bytes__ -- e.g. test_bytes' BytesWithBytes -- must use the override, not
+	copy its raw content).  A plain bytes/bytearray, or a subclass that only
+	inherits the gh-100242 default (owner == ByteArray), still routes to the
+	byte-copy path below so ``bytes(bytearray)'' re-types rather than aliasing."
+	(hook @env0:notNil and: [(source isKindOf: bytes) @env0:not
+		or: [(source @env0:class @env0:whichClassIncludesSelector: #'__bytes__' environmentId: 1)
+			@env0:~~ ByteArray]]) ifTrue: [
 		| converted |
 		converted := source @env1:__bytes__.
 		(converted isKindOf: bytes) ifFalse: [

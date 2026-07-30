@@ -174,6 +174,28 @@ printSmalltalkOn: aStream
 			and: [arguments isEmpty and: [keywords isEmpty]]])
 				ifTrue: [^ self printLocalsCallOn: aStream].
 
+	"0c. Bare `eval(expr)` / `exec(src)` INSIDE A FUNCTION with NO explicit
+	globals/locals — compile-time rewrite that injects the enclosing
+	function's locals as the evaluation namespace, so an expression can see
+	enclosing locals (CPython evaluates in the caller's namespace).  Grail's
+	_eval/_exec otherwise run in an EMPTY scope, so ``eval('val.split()[0]')''
+	referencing the local ``val'' raised ``undefined symbol'' (test_bytes
+	BytearrayPEP3137Test.test_returns_new_copy).  Only the bare-name
+	single-positional shape in FUNCTION scope is rewritten: at module scope
+	locals() IS globals() and the empty-scope form already resolves module
+	names, and an explicit globals/locals argument, kwargs, or an aliased
+	`eval` is left to the normal dispatch (same V1 limitation as
+	globals()/locals()/super()).  Module globals are NOT injected -- reading a
+	module global (vs a local) from a bare in-function eval is an accepted
+	gap; injecting the live module view here is unsafe when eval runs outside
+	a real module instance (the eval()/exec() harness passes a nil receiver)."
+	((function isKindOf: NameAst)
+		and: [(function id = #'eval' or: [function id = #'exec'])
+			and: [arguments size = 1
+				and: [keywords isEmpty
+					and: [CallAst functionBeingCompiled notNil]]]])
+				ifTrue: [^ self printBareEvalExecOn: aStream].
+
 	"Bare zero-arg ``super()`` inside a class method.  Rewrite to a
 	Super proxy bound to (lexical class, first-arg-of-method).  The
 	lexical class is reachable via the module instance's class-name
@@ -741,7 +763,7 @@ printLocalsCallOn: aStream
 	(not the class namespace); free variables of enclosing closures
 	are not included."
 
-	| fn names paramNames |
+	| fn |
 	fn := CallAst functionBeingCompiled.
 	"Module scope: locals() IS globals() — emit the same live view as the
 	globals() rewrite (docs/LEGB.md)."
@@ -751,6 +773,47 @@ printLocalsCallOn: aStream
 			nextPutAll: self ___moduleStoreReceiverExpr___;
 			nextPutAll: ')'.
 		^self].
+	self printFunctionLocalsSnapshotOn: aStream
+%
+
+category: 'Grail-other'
+method: CallAst
+printBareEvalExecOn: aStream
+	"Emit the compile-time rewrite of a bare single-argument ``eval(expr)'' /
+	``exec(src)'' in a FUNCTION body (no explicit globals/locals), passing the
+	enclosing function's locals snapshot as the evaluation namespace so the
+	evaluated code can read enclosing locals -- e.g. ``eval('val.split()[0]')''
+	sees the local ``val''.  The snapshot is the same ___buildLocals___ dict
+	the locals() rewrite builds (a plain PyDict, so it works regardless of
+	whether eval runs inside a real module instance), passed as _eval/_exec's
+	``globals'' argument, which they already seed the scope from.
+
+	The caller (printSmalltalkOn: section 0c) guarantees a NameAst eval/exec, a
+	single positional, no keywords, and function scope (functionBeingCompiled
+	not nil).  Module globals are intentionally not injected (see 0c)."
+
+	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) _'.
+	aStream nextPutAll: function id asString.
+	aStream nextPutAll: ': { '.
+	(arguments at: 1) printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: '. '.
+	self printFunctionLocalsSnapshotOn: aStream.
+	aStream nextPutAll: '. } kw: nil)'
+%
+
+category: 'Grail-other'
+method: CallAst
+printFunctionLocalsSnapshotOn: aStream
+	"Emit ``((builtins instance) ___buildLocals___: { {name. value}. ... })'' --
+	a pair-array snapshot of every name in the enclosing FUNCTION scope, which
+	builtins ___buildLocals___: turns into a dict (dropping still-unbound names,
+	whose Smalltalk value is nil).  Shared body of the locals()/vars() rewrite
+	(printLocalsCallOn:) and the bare eval()/exec() caller-locals injection
+	(printBareEvalExecOn:).  MUST be called only in function scope
+	(CallAst functionBeingCompiled not nil -- the caller guards this)."
+
+	| fn names paramNames |
+	fn := CallAst functionBeingCompiled.
 	names := fn body variables asSortedCollection: [:a :b | a asString <= b asString].
 	paramNames := fn allParameterNames.
 	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) ___buildLocals___: { '.
