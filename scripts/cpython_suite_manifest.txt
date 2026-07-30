@@ -36,6 +36,24 @@ test.test_bytes
 test.test_collections
 test.test_itertools
 test.test_enum
+
+# --- Phase 3 (added 2026-07-30: easier P1 "core language & built-in types"
+#     modules from docs/Grail_CPython_Scope.md.  Selected by trialing the P1
+#     tier and keeping those that import cleanly and score OK / low-error;
+#     harder P1 modules (test_isinstance/index/listcomps errors, test_iter
+#     CRASH, test_enumerate/global IMPORTERROR, test_genexps doctest-only) are
+#     deferred until the underlying codegen/builtin gaps close.) ---
+test.test_unary
+test.test_int_literal
+test.test_unpack
+test.test_augassign
+test.test_contains
+test.test_dictcomps
+test.test_setcomps
+test.test_pow
+test.test_richcmp
+test.test_slice
+test.test_bool
 #
 # NOTE: test_json and test_string are PACKAGES (directories) in 3.14, not
 # single modules -- out of scope for the V1 single-module harness.

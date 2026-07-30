@@ -1,10 +1,10 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-07-30T11:46:58Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
+Generated: 2026-07-30T13:05:16Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
 
-**Modules: 19** — OK 16 · FAIL 0 · ERROR 3 · SKIP 0 · IMPORTERROR 0 · STERROR 0 · CRASH 0 · TIMEOUT 0
+**Modules: 30** — OK 19 · FAIL 2 · ERROR 9 · SKIP 0 · IMPORTERROR 0 · STERROR 0 · CRASH 0 · TIMEOUT 0
 
-**Totals:** tests=4035 failures=395 errors=241 skipped=205
+**Totals:** tests=4130 failures=413 errors=258 skipped=205
 
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
@@ -33,3 +33,14 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
 | test.test_enum | ERROR | 1077 | 232 | 117 | 0 |  |
+| test.test_unary | OK | 6 | 0 | 0 | 0 |  |
+| test.test_int_literal | OK | 6 | 0 | 0 | 0 |  |
+| test.test_unpack | OK | 1 | 0 | 0 | 0 |  |
+| test.test_augassign | FAIL | 7 | 2 | 0 | 0 |  |
+| test.test_contains | FAIL | 4 | 3 | 0 | 0 |  |
+| test.test_dictcomps | ERROR | 10 | 1 | 1 | 0 |  |
+| test.test_setcomps | ERROR | 1 | 0 | 1 | 0 |  |
+| test.test_pow | ERROR | 7 | 0 | 2 | 0 |  |
+| test.test_richcmp | ERROR | 11 | 1 | 3 | 0 |  |
+| test.test_slice | ERROR | 11 | 3 | 5 | 0 |  |
+| test.test_bool | ERROR | 31 | 8 | 5 | 0 |  |
