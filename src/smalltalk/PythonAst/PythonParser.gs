@@ -134,29 +134,34 @@ buildNode: aClass fields: aDictionary
 category: 'Grail-node construction'
 method: PythonParser
 buildNode: aClass fields: aDictionary from: startToken to: endToken
-	"Build an AST node with location info spanning two tokens."
+	"Build an AST node with location info spanning two tokens.
 
-	| dict |
-	dict := aDictionary copy.
-	dict at: #beginLine put: startToken line.
-	dict at: #beginColumn put: startToken column.
-	dict at: #endLine put: endToken endLine.
-	dict at: #endColumn put: endToken endColumn.
-	^aClass buildWithFields: dict
+	Every call site passes a freshly-constructed, single-use
+	IdentityKeyValueDictionary, so add the location keys to it directly
+	rather than copying first -- the old ``aDictionary copy'' allocated and
+	populated a throwaway dictionary for every located node built."
+
+	aDictionary at: #beginLine put: startToken line.
+	aDictionary at: #beginColumn put: startToken column.
+	aDictionary at: #endLine put: endToken endLine.
+	aDictionary at: #endColumn put: endToken endColumn.
+	^aClass buildWithFields: aDictionary
 %
 
 category: 'Grail-node construction'
 method: PythonParser
 buildNode: aClass fields: aDictionary token: aToken
-	"Build an AST node with location info from a token."
+	"Build an AST node with location info from a token.
 
-	| dict |
-	dict := aDictionary copy.
-	dict at: #beginLine put: aToken line.
-	dict at: #beginColumn put: aToken column.
-	dict at: #endLine put: aToken endLine.
-	dict at: #endColumn put: aToken endColumn.
-	^aClass buildWithFields: dict
+	As with the from:to: variant, the fields dictionary is always a
+	freshly-constructed single-use IdentityKeyValueDictionary, so add the
+	location keys directly instead of copying."
+
+	aDictionary at: #beginLine put: aToken line.
+	aDictionary at: #beginColumn put: aToken column.
+	aDictionary at: #endLine put: aToken endLine.
+	aDictionary at: #endColumn put: aToken endColumn.
+	^aClass buildWithFields: aDictionary
 %
 
 category: 'Grail-node construction'

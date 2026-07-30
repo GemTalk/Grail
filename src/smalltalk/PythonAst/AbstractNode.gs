@@ -16,7 +16,7 @@ doit
 Object subclass: 'AbstractNode'
   instVarNames: #( parent)
   classVars: #()
-  classInstVars: #()
+  classInstVars: #( fieldIndexMap)
   poolDictionaries: #()
   inDictionary: PythonAst
   options: #()
@@ -60,15 +60,37 @@ buildWithFields: aDictionary
 	"Create an AST node from a dictionary of field name -> value mappings.
 	Used by PythonParser to construct nodes."
 
-	| node varNames |
+	| node map |
 	node := self basicNew.
-	varNames := self allInstVarNames.
+	map := self fieldIndexMap.
 	aDictionary keysAndValuesDo: [:key :value |
 		| index |
-		index := varNames indexOf: key.
+		index := map at: key ifAbsent: [0].
 		index > 0 ifTrue: [node instVarAt: index put: value].
 	].
 	^node
+%
+
+category: 'Grail-parser construction'
+classmethod: AbstractNode
+fieldIndexMap
+	"Symbol(field name) -> 1-based instVarAt: index, cached per class.
+
+	buildWithFields: is called once per AST node the parser builds -- many
+	per expression -- and previously recomputed ``self allInstVarNames'' and
+	then did a linear ``indexOf:'' (a Symbol= scan of the whole instVar list)
+	for EVERY field of EVERY node: O(fields x instVars) per node.  The layout
+	is fixed per class, so cache the field-name -> slot-index mapping in a
+	class-instance variable and make each field lookup O(1).  The cache is
+	per class (classInstVar, not classVar) because each AST subclass has its
+	own instVar layout; it rebuilds automatically if the class is recompiled
+	(the slot resets to nil)."
+
+	^fieldIndexMap ifNil: [ | names m |
+		names := self allInstVarNames.
+		m := IdentityKeyValueDictionary new.
+		1 to: names size do: [:i | m at: (names at: i) asSymbol put: i ].
+		fieldIndexMap := m ]
 %
 
 category: 'Grail-other'
