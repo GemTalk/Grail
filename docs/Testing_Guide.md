@@ -441,6 +441,48 @@ logout
 EOF
 ```
 
+### Reading a failure
+
+`run_tests.sh` reports each defect with its **message** and, for errors, a
+**stack**, not just the test's name. A red shard looks like this:
+
+```
+  [ERROR] SomeTestCase>>testThing
+      ValueError: something specific went wrong: 42
+      stack:
+        16 Zz_fixture >> inner (env 1) @2 line 2  [GsNMethod 1085671425]
+        18 Zz_fixture >> boom (env 1) @3 line 2  [GsNMethod 1085670913]
+        19 SomeTestCase >> testThing @6 line 5  [GsNMethod 1085670657]
+      repro: SomeTestCase debug: #testThing
+```
+
+Python-level frames are marked `(env 1)`, and the last line is a
+copy-pasteable one-liner that re-runs just that test.
+
+This is not stock SUnit. `TestResult` keeps only the failing `TestCase` — the
+exception, its `messageText` and its stack are discarded in the handler — so a
+CI log could say no more than `SomeTestCase debug: #testThing` and diagnosing a
+red build meant reproducing the run by hand. `GrailTestResult`
+(`src/smalltalk/PythonTests/GrailTestResult.gs`) is a `TestResult` subclass that
+captures the diagnosis instead; `runTests.gs` and `runTestsShard.gs` use it in
+place of the result `TestSuite>>run` would build.
+
+Two knobs:
+
+| variable | effect |
+| --- | --- |
+| `GRAIL_TEST_STACK_FRAMES` | frames reported per error (default 20; `0` suppresses stacks). Failures never get a stack — the assertion message says everything. |
+| `GRAIL_TEST_COLD=1` | disables canonical-class warm binding, so every import recompiles |
+
+Frames that describe the *capture* (the exception handler, the signal
+machinery) are trimmed off the top, and everything below SUnit's
+`TestCase>>performTest` is dropped, so the frames shown are the ones specific to
+this failure.
+
+If you write a runner of your own, use `GrailTestResult run: aSuite` rather than
+`aSuite run` — it mirrors `TestSuite>>run` including the `TestResource` reset,
+which `TestSuite>>run` cannot be reused for because it hardcodes `TestResult new`.
+
 ## Example: Test Methods from a Real File
 
 Here are two test methods from `src/smalltalk/PythonTests/ListTestCase.gs`:

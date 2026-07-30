@@ -547,6 +547,7 @@ run
 	at: #'FunctionMetadataTestCase' put: nil;
 	at: #'SingleDispatchRegisterTestCase' put: nil;
 	at: #'CrossVersionSelectorTestCase' put: nil;
+	at: #'GrailTestResult' put: nil;
 	at: #'FormatSpecTestCase' put: nil;
 	at: #'BuiltinsTestCase' put: nil;
 	at: #'BytearrayTestCase' put: nil;
@@ -1242,6 +1243,9 @@ Transcript show: 'Step 5 complete: AST classes loaded'.
 ! Step 6: Load test classes
 ! ===============================================================================
 ! PythonTestCase loaded first (base class), then all others.
+! GrailTestResult is not a test case at all -- it is the TestResult subclass the
+! runner scripts use to report WHY a test failed -- but it belongs to the same
+! per-user test install, so it is filed here.
 ! ===============================================================================
 run
 Transcript show: 'Step 6: Loading test classes...'.
@@ -1249,6 +1253,7 @@ Transcript show: 'Step 6: Loading test classes...'.
 
 set compile_env: 0
 
+input src/smalltalk/PythonTests/GrailTestResult.gs
 input src/smalltalk/PythonTests/PythonTestCase.gs
 input src/smalltalk/PythonTests/BooleanTestCase.gs
 input src/smalltalk/PythonTests/BoundMethodNameTestCase.gs

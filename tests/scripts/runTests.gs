@@ -15,15 +15,15 @@ importlib grailDir: dir
 level 1
 run
 | result |
-result := PythonTestCase suite run.
+"GrailTestResult so that a defect reports its message and stack, not just its
+name -- see src/smalltalk/PythonTests/GrailTestResult.gs."
+result := GrailTestResult run: PythonTestCase suite.
 result hasPassed ifTrue: [
     Transcript show: result printString; cr.
     ExitClientError signal: 'Tests passed!' status: 0.
 ] ifFalse: [
-    Transcript nextPutAll: 'Test failures:'; cr.
-    result failures do: [:each | Transcript tab; show: each; cr.].
-    Transcript nextPutAll: 'Test errors:'; cr.
-    result errors do: [:each | Transcript tab; show: each; cr.].
+    Transcript nextPutAll: 'Test defects:'; cr.
+    result reportOn: GsFile stdout prefix: ''.
     Transcript show: result printString; cr.
     ExitClientError signal: 'Tests failed!' status: 1.
 ].
