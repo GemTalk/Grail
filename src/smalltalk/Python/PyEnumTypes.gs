@@ -1599,6 +1599,14 @@ __repr__
 	| nm val |
 	nm := self @env0:dynamicInstVarAt: #name.
 	val := (self @env0:dynamicInstVarAt: #value) @env0:printString.
+	"A member can reach here with no stored #name -- e.g. a malformed/partial
+	object produced by a reconstruction Grail could not complete (pickle-by-
+	name of a mixed-in data-subclass enum whose member_type() construction is
+	unimplemented).  repr must still return a Python string; a nil name would
+	make `, nm' fail inside Unicode concatenation (`nil doesNotUnderstand
+	#do:'), leaking a raw Smalltalk error out of a mere repr -- typically
+	while unittest formats an assertion failure.  Fall back to the value repr."
+	nm @env0:isNil ifTrue: [ nm := val ].
 	^ '<' @env0:, self @env0:class @env0:name @env0:asString @env0:, '.'
 		@env0:, nm @env0:, ': ' @env0:, val @env0:, '>'
 %
