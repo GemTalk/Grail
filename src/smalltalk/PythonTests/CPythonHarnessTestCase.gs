@@ -130,7 +130,8 @@ method: CPythonHarnessTestCase
 testBigmemtestDecoratorInjection
 	"CPython's @bigmemtest / @bigaddrspacetest decorators wrap a test
 	method and, in a dry run (no ``-M'' memory limit), call it with a
-	small maxsize (5147).  Grail drops the decorator, so FunctionDefAst
+	small maxsize (5147).  Grail excludes this decorator from class-body
+	decorator application (the def is normalised instead), so FunctionDefAst
 	instead recognises it and injects that dry-run ``size'' default plus a
 	unary forwarder: the method becomes callable with no arguments
 	(size == 5147) AND discoverable by unittest's dir()-based
@@ -158,7 +159,8 @@ testRequiresResourceDecoratorSkips
 	"CPython's @support.requires_resource(res) skips a test unless the named
 	resource is enabled via regrtest's ``-u'' option; a default
 	``python -m test'' run enables none, so it is SKIPPED.  Grail has no
-	``-u'' mechanism and drops method decorators, so FunctionDefAst
+	``-u'' mechanism, and this decorator is excluded from class-body decorator
+	application (the body is replaced instead), so FunctionDefAst
 	recognises the decorator and ClassDefAst emits a self.skipTest(...) body
 	in place of the real one -- the method stays discoverable but is counted
 	as skipped, matching CPython's default.  Regresses BOTH the bare-name

@@ -274,6 +274,19 @@ callable: anObject
 	(anObject isKindOf: Behavior) ifTrue: [^ true].
 	(anObject isKindOf: BoundMethod) ifTrue: [^ true].
 	(anObject isKindOf: ExecBlock) ifTrue: [^ true].
+	"UnboundMethod is what ``Cls.method'' answers -- CPython's plain function
+	taking self first -- and it is obviously callable, but it implements the
+	Grail call protocol as ``value:value:'' rather than ``__call__:'', so the
+	respondsTo: probe below missed it and ``callable(Cls.method)'' was False.
+
+	This surfaced through unittest discovery, which is the reason it matters
+	beyond introspection: getTestCaseNames keeps a name only if
+	``callable(getattr(cls, name))''.  A test method that a decorator had
+	rebound (``@unittest.skipIf'' returns the function unchanged, so the
+	class attribute becomes the UnboundMethod it was handed) was therefore
+	dropped from discovery entirely -- not failed, not skipped, just never
+	found."
+	(anObject isKindOf: UnboundMethod) ifTrue: [^ true].
 	^ anObject ___respondsTo___: #'__call__:'
 %
 

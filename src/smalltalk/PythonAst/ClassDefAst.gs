@@ -1071,6 +1071,26 @@ printSmalltalkRuntimeOn: aStream
 		initSelector: initSelector
 		onStream: aStream.
 
+	"Class-body METHOD decorators.  ``@deco def m'' rebinds m to deco(m); in
+	CPython that happens while the class body executes, so the class dict only
+	ever holds the wrapper.  Grail compiles the def to a real method first, so
+	the decorator runs once the class exists and stores OVER the compiled
+	method -- see FunctionDefAst >> printMethodDecoratorsOn:decorators:className:
+	for why that store is visible and why it is definitional.
+
+	Emitted here, after the methods are compiled but BEFORE the metaclass hook
+	and the class decorators, because that is CPython's order: the class body
+	is complete -- decorated methods included -- before either of them sees the
+	class."
+	methodDefs do: [:def |
+		| decos |
+		decos := def applicableMethodDecorators.
+		decos isEmpty ifFalse: [
+			def
+				printMethodDecoratorsOn: aStream
+				decorators: decos
+				className: name]].
+
 	"Metaclass post-population hook.  Send a class-side
 	``___pyClassDefined___:`` to the freshly-populated class with its
 	class-body attribute names (declaration order).  Dispatched through

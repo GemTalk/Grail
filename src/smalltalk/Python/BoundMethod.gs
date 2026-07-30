@@ -378,9 +378,11 @@ __dict__
 category: 'Grail-Attribute Access'
 method: BoundMethod
 cache_clear
-	"``@functools.cache`` / ``@lru_cache`` on a METHOD is dropped by
-	Grail's class-body codegen (method decorators aren't applied), so
-	``self.cached_method`` is a plain BoundMethod.  Callers that invoke
+	"``@functools.cache`` / ``@lru_cache`` on a METHOD does not yet give a
+	working cache wrapper -- class-body method decorators ARE applied now,
+	but the lru_cache-on-a-method shape still does not bind correctly (see
+	test.test_functools TestLRUC.test_lru_method), so ``self.cached_method``
+	can still be a plain BoundMethod.  Callers that invoke
 	``self.cached_method.cache_clear()'' (django.apps.registry.
 	clear_cache) must still find the selector — Grail never caches, so
 	this is a no-op.  Returns None (CPython's cache_clear return)."

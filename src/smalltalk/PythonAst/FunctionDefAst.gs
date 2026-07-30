@@ -90,7 +90,9 @@ isBigmemtestDecorated
 	decorator (or the ``bigaddrspacetest'' / ``precisionbigmemtest''
 	siblings).  In CPython that decorator wraps the method and, in a
 	dry run (no ``-M'' memory limit), calls it with ``size'' set to a
-	small maxsize (5147).  Grail drops the decorator — test.support's
+	small maxsize (5147).  Grail does not apply this ONE decorator — the def is
+	normalised to a dry-run varargs form instead, so applicableMethodDecorators
+	excludes it — and test.support's
 	bigmemtest is a passthrough — so the wrapped body keeps its
 	``(self, size)'' signature with ``size'' REQUIRED, and unittest,
 	invoking the method with no arguments, errors.  Recognising the
@@ -143,7 +145,9 @@ isRequiresResourceDecorated
 	the test unless the named resource is enabled via regrtest's ``-u''
 	option; a default ``python -m test'' run enables NONE of the expensive
 	resources (cpu, network, ...), so the decorated test is SKIPPED.  Grail
-	has no ``-u'' mechanism and drops method decorators, so without help the
+	has no ``-u'' mechanism, and this decorator is excluded from the class-body
+	decorator application (applicableMethodDecorators) because the BODY is
+	replaced instead, so without help the
 	body would RUN and (for an expensive test) error.  Recognising the
 	decorator lets ClassDefRuntime emit a skipping body instead, matching
 	CPython's default behaviour.
@@ -203,7 +207,9 @@ isCpythonOnlyDecorated
 	"True if this def carries a ``@cpython_only'' (or ``@support.cpython_only'')
 	decorator.  In CPython that marks a test of an implementation detail not
 	required of other Python implementations; alternative implementations
-	(PyPy, ...) skip such tests.  Grail drops method decorators, so without help
+	(PyPy, ...) skip such tests.  This decorator is excluded from class-body
+	decorator application (applicableMethodDecorators) because the BODY is
+	replaced instead, so without help
 	the body RUNS and fails on behaviour Grail is not obliged to match (gc
 	tracking, exact object identity of interned singletons, split-table dict
 	internals, ...).  Recognising the decorator lets ClassDefRuntime emit a
@@ -694,6 +700,152 @@ applicableModuleDecorators
 
 	decorator_list isNil ifTrue: [^ #()].
 	^ decorator_list reject: [:deco | self isClassDeclarativeDecorator: deco]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+applicableMethodDecorators
+	"Decorators to apply at class-build time for a CLASS-BODY method, as
+	``Cls.m = A(B(Cls.m))'' -- the module-scope ``applicableModuleDecorators''
+	for methods.  Source order preserved (outermost first).
+
+	Empty for a def Grail already handles some other way, because applying the
+	decorator on top of that handling would either double-apply it or wrap a
+	body that is deliberately not the Python one:
+
+	  * @staticmethod / @classmethod / @property -- handled at PARSE time by
+	    re-classing this node (isClassDeclarativeDecorator:), and @property is
+	    additionally paired with a synthesized setter.
+	  * @cached_property -- ClassDefAst realises it as the same getter/setter
+	    pair, using the setter as the cache slot.
+	  * @x.setter / @x.getter / @x.deleter -- property accessor forms; the def
+	    IS the accessor and compiles to the paired selector.
+	  * @typing.overload -- the stub is not the implementation.
+	  * @requires_resource / @cpython_only -- ClassDefAst replaced the BODY
+	    with a self.skipTest(...), so there is no real method to wrap.
+	  * @bigmemtest and friends -- the def was normalised to a dry-run
+	    varargs form with an injected size default.
+	  * grail's @smalltalk -- the body is rewritten into an env-0 forwarder."
+
+	(self isOverloadStub
+		or: [self isBigmemtestDecorated
+		or: [self isRequiresResourceDecorated
+		or: [self isCpythonOnlyDecorated
+		or: [self isSmalltalkForwarder]]]]) ifTrue: [^ #()].
+	decorator_list isNil ifTrue: [^ #()].
+	^ decorator_list reject: [:deco |
+		(self isClassDeclarativeDecorator: deco)
+			or: [(self isCachedPropertyDecorator: deco)
+				or: [self isPropertyAccessorDecorator: deco]]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+isCachedPropertyDecorator: deco
+	"Bare ``@cached_property'' -- ClassDefAst turns it into a getter/setter
+	pair, so it must not also be applied as a runtime decorator call."
+
+	(deco isKindOf: Symbol) ifFalse: [^ false].
+	^ deco asSymbol == #'cached_property'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+isPropertyAccessorDecorator: deco
+	"``@x.setter'' / ``@x.getter'' / ``@x.deleter'' -- an AttributeAst whose
+	value is a plain name.  The decorated def IS the accessor and compiles to
+	the property's paired selector; calling ``x.setter(...)'' at class-build
+	time would be meaningless."
+
+	| a |
+	(deco isKindOf: AttributeAst) ifFalse: [^ false].
+	(deco value isKindOf: NameAst) ifFalse: [^ false].
+	a := deco attr asString.
+	^ a = 'setter' or: [a = 'getter' or: [a = 'deleter']]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+printMethodDecoratorsOn: aStream decorators: decoList className: aClassName
+	"Rebind a decorated class-body method: ``Cls.m = A(B(Cls.m))''.
+
+	This is what CPython does, one step removed.  There, the decorator runs
+	during class-body execution and the class dict never holds anything but
+	the final wrapper.  Grail compiles the def to a real Smalltalk method
+	first, so the earliest the decorator can run is once the class exists --
+	hence a store over the compiled method rather than in place of it.  For
+	that store to be visible the class-attribute lookup has to beat the
+	compiled method on BOTH the class and the instance path; see
+	object >> ___classChainAttrLookup___: and its caller.
+
+	Emitted BEFORE the metaclass hook and class decorators, matching CPython's
+	order: the class body -- decorated methods and all -- is complete before
+	either of those sees the class.  It also has to precede
+	___canonicalClassRegister___, which is what makes the store DEFINITIONAL
+	rather than a runtime mutation, and the store goes straight to the
+	committed per-class holder so it cannot be dropped by the warm-reuse
+	overlay reset.
+
+	The original method is read ONCE as the innermost base of the chain, so a
+	chain threads correctly even when an inner decorator returns a fresh
+	wrapper.
+
+	Wrapped in a handler, like the module-scope path: if applying a decorator
+	raises, the store never runs and the compiled method stays in place --
+	exactly the previous behaviour of dropping the decorator.  That keeps this
+	strictly additive; decorators that apply take effect, decorators that
+	cannot are no worse than before.  Python control-flow signals are
+	re-raised rather than swallowed."
+
+	aStream
+		nextPutAll: '[';
+		nextPutAll: aClassName;
+		nextPutAll: ' @env1:___classHolderAttrStore___: #''';
+		nextPutAll: name;
+		nextPutAll: ''' put: '.
+	self
+		printMethodDecoratorChainOn: aStream
+		decorators: decoList
+		index: 1
+		className: aClassName.
+	aStream
+		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
+		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass]].';
+		lf
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aClassName
+	"Nested decorator application A(B(...(the method)...)).  At the base case
+	emit an UnboundMethod naming the COMPILED method -- what CPython hands a
+	decorator, a plain function taking self first.
+
+	Minted DIRECTLY rather than read back as ``Cls.m''.  The read is not
+	idempotent: the rebinding this chain feeds stores onto the committed class,
+	so a second execution of the class body would read the FIRST run's wrapper
+	as its base and wrap the wrapper.  Flask's ``@setupmethod'' showed exactly
+	that -- two nested setupmethod frames around one _add_url_rule, and the
+	inner guard raising NotImplementedError.  Naming the compiled method
+	directly makes re-execution replace the wrapper instead of stacking on it."
+
+	i > decoList size ifTrue: [
+		aStream
+			nextPutAll: '(UnboundMethod definingClass: ';
+			nextPutAll: aClassName;
+			nextPutAll: ' selector: #''';
+			nextPutAll: name;
+			nextPutAll: ''')'.
+		^ self].
+	aStream nextPutAll: '(('.
+	self printDecoratorReceiverOn: aStream deco: (decoList at: i).
+	aStream nextPutAll: ') @env1:___pyCallValue___: { '.
+	self
+		printMethodDecoratorChainOn: aStream
+		decorators: decoList
+		index: i + 1
+		className: aClassName.
+	aStream nextPutAll: ' } kw: nil)'
 %
 
 category: 'Grail-code generation'
