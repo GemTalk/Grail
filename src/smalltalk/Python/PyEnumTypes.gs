@@ -1640,6 +1640,25 @@ __hash__
 	^ self @env0:identityHash
 %
 
+category: 'Grail-Pickle'
+method: Enum
+__reduce__
+	"(cls, (value,)) -- CPython Enum.__reduce_ex__.  object>>__reduce_ex__:
+	forwards to __reduce__, so pickling a member serializes its enum class
+	plus its value; unpickling calls cls(value), which returns the canonical
+	singleton member (so a round-tripped member is `is`-identical, as the
+	pickle tests require).  Without this, pickling an enum member fell through
+	to object>>__reduce__ and leaked a raw Smalltalk error (`Not yet
+	implemented: __reduce__`).  Enum-rooted only (plain Enum + Flag); mixed
+	int/str-rooted members do not inherit this."
+
+	| tupleClass |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	^ tupleClass @env0:withAll: {
+		self @env0:class.
+		(tupleClass @env0:withAll: { self @env0:dynamicInstVarAt: #value }) }
+%
+
 ! ------------------- Flag members: bitwise algebra over member values.
 ! Results resolve through ___grailLookupValue:, so known combinations
 ! come back as the SAME cached composite pseudo-member.

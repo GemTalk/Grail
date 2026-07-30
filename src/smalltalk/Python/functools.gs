@@ -1132,9 +1132,19 @@ singledispatch: aFunc
 	Returns a wrapper that dispatches on the TYPE of its first
 	positional argument, walking that type's __mro__ (C3-aware for MI
 	classes) for the most specific registered implementation and
-	falling back to func."
+	falling back to func.
 
-	^ functools_singledispatch ___on: aFunc
+	The wrapper carries the wrapped function's identifying metadata, as
+	CPython's does (``update_wrapper(wrapper, func)'' is singledispatch's
+	last step).  Without it ``g.__name__'' / ``g.__doc__'' raised
+	AttributeError on the wrapper (test_wrapping_attributes), and the
+	arity error below could not name the function."
+
+	^ self
+		___updateWrapper___: (functools_singledispatch ___on: aFunc)
+		wrapped: aFunc
+		assigned: self WRAPPER_ASSIGNMENTS
+		updated: self WRAPPER_UPDATES
 %
 
 category: 'Grail-Instance Creation'
@@ -1154,9 +1164,26 @@ value: positional value: keywords
 
 	| impl |
 	positional @env0:isEmpty ifTrue: [
-		TypeError ___signal___: 'singledispatch function requires at least 1 positional argument'].
+		"CPython names the FUNCTION, not the machinery:
+		``f requires at least 1 positional argument''.  The name comes from
+		the update_wrapper copy done in functools>>singledispatch:; read it
+		straight out of the dynamic-instVar store rather than sending
+		``__name__'', which is not a method on this class."
+		TypeError ___signal___: (self ___dispatchName___)
+			@env0:, ' requires at least 1 positional argument'].
 	impl := self dispatch: (positional @env0:at: 1) @env0:class.
 	^ impl value: positional value: keywords
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___dispatchName___
+	"The wrapped function's name for error messages, falling back to a
+	generic label if update_wrapper never ran (a wrapper built directly via
+	___on:)."
+
+	^ (self @env0:dynamicInstVarAt: #'__name__')
+		@env0:ifNil: ['singledispatch function']
 %
 
 category: 'Grail-Single Dispatch'
@@ -1253,23 +1280,45 @@ ___inferRegisterType___: aFunc
 	usable annotation is present -- CPython requires the first
 	parameter be annotated with a class in this form.
 
-	Note: Grail dicts are hash-ordered, so ``first parameter'' is only
-	unambiguous when exactly one parameter is annotated -- the shape
-	the annotation form is used in (``def _(arg: T)'')."
+	The FIRST parameter's annotation is the one that counts, and Grail's
+	annotation dicts ARE insertion-ordered (verified: ``def f(a: int,
+	b: str) -> bool'' yields keys a, b, return in that order), so the first
+	non-``return'' key is that parameter.  This used to keep the LAST entry
+	instead -- the loop overwrote its candidate -- on the belief that the
+	dict was hash-ordered.  So ``def _(arg: str, arg2: undefined = None)''
+	inferred from ARG2, whose unresolvable annotation then silently became
+	the registry key and the registration never matched anything
+	(test_forward_reference).
 
-	| ann candidate |
+	An annotation that cannot be resolved to a class is a TypeError, not a
+	silent string key -- two distinct cases, because CPython distinguishes
+	them and so do the tests:
+	  * subscripted or unioned (``list[int]'', ``typing.List[float] |
+	    bytes'') -- not a class, and never will be
+	    (test_register_genericalias_annotation);
+	  * a bare unresolved name -- an unresolved forward reference
+	    (test_unresolved_forward_reference).
+	Grail keeps annotations as PEP 563 SOURCE STRINGS, which is what makes
+	the first case detectable at all: ``arg: list[int]'' arrives as the
+	string ``list[int]''.  The runtime value would not help -- Grail's
+	__class_getitem__ is an identity stub, so ``list[int] is list''."
+
+	| ann candidate paramName text |
 	ann := [aFunc __annotations__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	(ann @env0:isNil or: [ann @env0:isEmpty]) ifTrue: [
 		TypeError ___signal___:
 			'Invalid first argument to `register()`: no type annotation found'].
 	candidate := nil.
+	paramName := nil.
 	ann @env0:keysAndValuesDo: [:k :v |
-		(k @env0:asString @env0:= 'return') ifFalse: [candidate := v]].
+		(paramName @env0:isNil and: [(k @env0:asString @env0:= 'return') @env0:not])
+			ifTrue: [paramName := k @env0:asString. candidate := v]].
 	candidate @env0:isNil ifTrue: [
 		TypeError ___signal___:
 			'Invalid first argument to `register()`: no parameter annotation found'].
 	"Resolve a forward-reference string against the Python globals."
 	(candidate isKindOf: CharacterCollection) ifTrue: [
+		text := candidate @env0:asString.
 		candidate := (System @env0:myUserProfile @env0:symbolList
 			@env0:objectNamed: candidate @env0:asSymbol) @env0:ifNil: [candidate]].
 	"Still a string?  ABC names ('Mapping', 'Sequence', ...) live as
@@ -1284,7 +1333,66 @@ ___inferRegisterType___: aFunc
 			resolved := cabc @env0:dynamicInstVarAt: candidate @env0:asString @env0:asSymbol.
 			(resolved ~~ nil and: [resolved isKindOf: Behavior])
 				ifTrue: [candidate := resolved]]].
+	"Unresolvable: raise rather than register an unusable string key -- EXCEPT
+	for a union of plain classes, which is valid CPython that Grail cannot
+	dispatch on yet.  Raising there would turn working user code into a hard
+	error; leaving it unregistered keeps the previous (soft) behaviour of
+	falling through to the default implementation.  See
+	___annotationUnionOfClasses___: for why this needs its own test."
+	(candidate isKindOf: CharacterCollection) ifTrue: [
+		(self ___annotationUnionOfClasses___: text) ifFalse: [
+			(text @env0:includes: $[) ifTrue: [
+				TypeError ___signal___: 'Invalid annotation for ''' @env0:, paramName
+					@env0:, '''. ' @env0:, text @env0:, ' is not a class.'].
+			TypeError ___signal___: 'Invalid annotation for ''' @env0:, paramName
+				@env0:, '''. ' @env0:, text
+				@env0:, ' is an unresolved forward reference.']].
 	^ (self ___registryKey___: candidate) @env0:ifNil: [candidate]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___annotationUnionOfClasses___: aText
+	"True when aText is a union annotation whose members are all plain class
+	names -- ``typing.Union[int, str]'', ``typing.Optional[str]'', ``int |
+	str''.  CPython ACCEPTS these in register() and dispatches for each
+	member; Grail cannot yet, so the caller leaves them unregistered rather
+	than raising on valid code.
+
+	False for a union with a SUBSCRIPTED member (``list[int] | str'',
+	``typing.List[float] | bytes''), which CPython rejects -- ``not all
+	arguments are classes''.  That distinction is the whole point: a bare
+	``contains a bracket'' test would reject every union too, since
+	``typing.Union[int, str]'' has brackets as well."
+
+	| inner members bar bracket |
+	"The two characters come from indexing one-character STRINGS.
+	``Character value:'' would be the obvious spelling and works on 4.0, but it
+	does not exist on 3.7.5 -- ``a Character class does not understand
+	#value:'' -- so it broke every caller of this method there while passing
+	locally on 4.0.  ``withValue:'' and ``codePoint:'' both exist on 3.7.5 and
+	4.0, and so does a bare $| literal; ``at: 1'' on a String literal is used
+	here because it needs neither a version-specific selector nor a $| literal,
+	which the source tooling misreads as an unclosed parenthesis."
+	bar := '|' @env0:at: 1.
+	bracket := '[' @env0:at: 1.
+	inner := nil.
+	(aText @env0:includes: bar) ifTrue: [inner := aText].
+	inner == nil ifTrue: [
+		(((aText @env0:indexOfSubCollection: 'typing.Union[') == 1)
+			or: [(aText @env0:indexOfSubCollection: 'typing.Optional[') == 1])
+			ifFalse: [^ false].
+		inner := aText
+			@env0:copyFrom: ((aText @env0:indexOf: bracket) @env0:+ 1)
+			to: (aText @env0:size @env0:- 1)].
+	"subStrings: takes any collection of separator characters, so the two
+	separators are given as a plain two-character String."
+	members := (inner @env0:subStrings: '|,')
+		@env0:collect: [:m | m @env0:trimSeparators].
+	members @env0:isEmpty ifTrue: [^ false].
+	"A subscripted member means this is not a union of plain classes."
+	members @env0:do: [:m | (m @env0:includes: bracket) ifTrue: [^ false]].
+	^ true
 %
 
 category: 'Grail-Single Dispatch'
