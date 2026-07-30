@@ -1366,10 +1366,16 @@ ___annotationUnionOfClasses___: aText
 	``typing.Union[int, str]'' has brackets as well."
 
 	| inner members bar bracket |
-	"Character literals for ``|'' and ``['' are built via Character value: --
-	a literal $| in this file confuses the source tooling."
-	bar := Character @env0:value: 124.
-	bracket := Character @env0:value: 91.
+	"The two characters come from indexing one-character STRINGS.
+	``Character value:'' would be the obvious spelling and works on 4.0, but it
+	does not exist on 3.7.5 -- ``a Character class does not understand
+	#value:'' -- so it broke every caller of this method there while passing
+	locally on 4.0.  ``withValue:'' and ``codePoint:'' both exist on 3.7.5 and
+	4.0, and so does a bare $| literal; ``at: 1'' on a String literal is used
+	here because it needs neither a version-specific selector nor a $| literal,
+	which the source tooling misreads as an unclosed parenthesis."
+	bar := '|' @env0:at: 1.
+	bracket := '[' @env0:at: 1.
 	inner := nil.
 	(aText @env0:includes: bar) ifTrue: [inner := aText].
 	inner == nil ifTrue: [
