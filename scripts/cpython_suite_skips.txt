@@ -172,3 +172,18 @@ test.test_functools|TestPartialC.test_recursive_pickle|needs RecursionError; Alm
 test.test_functools|TestPartialCSubclass.test_recursive_pickle|needs RecursionError; AlmostOutOfStack is uncatchable and the 2nd overflow crashes the session
 test.test_functools|TestPartialPy.test_recursive_pickle|needs RecursionError; AlmostOutOfStack is uncatchable and the 2nd overflow crashes the session
 test.test_functools|TestPartialPySubclass.test_recursive_pickle|needs RecursionError; AlmostOutOfStack is uncatchable and the 2nd overflow crashes the session
+
+# --- test_iter: iter() on an UNBOUNDED __getitem__ sequence ------------------
+# UnlimitedSequenceClass defines __getitem__(i) -> i (a value for EVERY index,
+# never raising IndexError). Grail's iter() reaches the legacy __getitem__(0..n)
+# sequence protocol via the PythonInstance __iter__ fallback and materialises it
+# EAGERLY -> unbounded -> uncatchable VM OutOfMemory (topaz dies mid-module, the
+# whole score lost). CPython returns a LAZY seqiterator that only advances on
+# next(), so these two tests (iter() the unbounded sequence, then __setstate__ +
+# a couple of next() calls) are fine there. The sibling test_error_iter
+# (NoIterClass, which ALSO sets __iter__ = None) is NOT skipped: builtins>>iter:
+# now honours the __iter__ = None sentinel and raises TypeError up front (see
+# IteratorTestCase>>testIterHonorsIterNoneSentinel). Drop these when the
+# __getitem__ fallback iterator is made lazy.
+test.test_iter|TestCase.test_iter_neg_setstate|iter(UnlimitedSequenceClass()) eagerly materialises an unbounded __getitem__ -> uncatchable VM OOM; needs a lazy seqiterator
+test.test_iter|TestCase.test_iter_overflow|iter(UnlimitedSequenceClass()) eagerly materialises an unbounded __getitem__ -> uncatchable VM OOM; needs a lazy seqiterator

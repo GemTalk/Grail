@@ -54,6 +54,31 @@ testCollectionsAreIterableNotIterators
 	self assert: (lst class whichClassIncludesSelector: #__next__ environmentId: 1) isNil.
 %
 
+category: 'Grail-Tests - Iterator Protocol'
+method: IteratorTestCase
+testIterHonorsIterNoneSentinel
+	"CPython data model: setting ``__iter__ = None'' marks a class explicitly
+	NON-iterable, so iter(x) raises TypeError even when x defines __getitem__.
+	Regression for the test_iter CRASH -- without builtins>>iter:'s sentinel
+	check, iter() fell through to the EAGER __getitem__(0..n) sequence protocol
+	and materialised an UNBOUNDED __getitem__ into an uncatchable VM
+	OutOfMemory.  Loaded as a module because such a class cannot be
+	instantiated in eval: scope (#new DNU).  The fixture also verifies a
+	BOUNDED __getitem__-only class still iterates (the fix must not regress
+	the legacy sequence protocol)."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'iter_none_sentinel' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/iter_none_sentinel.py')
+		name: 'iter_none_sentinel'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	self assert: ((results @env1:__getitem__: 'iter_none_raises_typeerror') = true)
+		description: 'iter(x) with __iter__ = None must raise TypeError'.
+	self assert: ((results @env1:__getitem__: 'bounded_getitem_still_iterates') = true)
+		description: 'a bounded __getitem__-only class must still iterate'.
+%
+
 category: 'Grail-Tests - Dict Key Iterator'
 method: IteratorTestCase
 testDictKeyIteratorBasicIteration
