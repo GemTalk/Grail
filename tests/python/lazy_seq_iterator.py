@@ -46,9 +46,39 @@ def _bounded_for_loop():
     return out == [0, 1, 2]
 
 
+import pickle
+
+
+class _Attrs:
+    # A plain user object with instance attributes: exercises Grail's default
+    # object pickling (object.__reduce__ -> pickle.newobj + __getstate__).
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+
+
+def _generic_object_pickle():
+    # Round-trips through the default object.__reduce__ path (previously
+    # "Not yet implemented: __reduce__").
+    o = pickle.loads(pickle.dumps(_Attrs(7, "x")))
+    return o.a == 7 and o.b == "x"
+
+
+def _seq_iterator_pickle():
+    # Pickle a partially-consumed seq_iterator (over a __getitem__ source):
+    # unpickling must resume at the same index, which also pickles the source
+    # object through the generic-object path.
+    it = iter(Bounded())
+    next(it)                    # consume 0
+    it2 = pickle.loads(pickle.dumps(it))
+    return list(it2) == [1, 2]
+
+
 RESULTS = {
     'unbounded_take3': _unbounded_take3(),
     'setstate_negative_clamps': _setstate_negative_clamps(),
     'bounded_iterates_fully': _bounded_iterates_fully(),
     'bounded_for_loop': _bounded_for_loop(),
+    'generic_object_pickle': _generic_object_pickle(),
+    'seq_iterator_pickle': _seq_iterator_pickle(),
 }
