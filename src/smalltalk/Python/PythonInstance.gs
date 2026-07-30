@@ -70,28 +70,28 @@ method: PythonInstance
 __iter__
 	"CPython's LEGACY sequence-iteration protocol: an object with
 	__getitem__ but no __iter__ iterates by successive integer indices
-	until IndexError (test_heapq's __getitem__-only fixtures).
-	Materialized eagerly (v1: fine for finite fixtures; a lazy
-	iterator is a refinement).  Without __getitem__ raise CPython's
-	catchable TypeError -- the bare env-1 MNU was uncatchable.
-	A user class defining its own __iter__ overrides this (nearer in
-	the chain)."
+	until IndexError (test_heapq's __getitem__-only fixtures).  Returns a
+	LAZY seq_iterator that calls __getitem__ one index at a time on each
+	__next__ -- a class whose __getitem__ answers a value for EVERY index
+	(an unbounded sequence) must not be materialized; the former eager walk
+	spun forever and OOM-killed the session (test_iter's NoIterClass /
+	UnlimitedSequenceClass).  Without __getitem__ raise CPython's catchable
+	TypeError -- the bare env-1 MNU was uncatchable.  A user class defining
+	its own __iter__ overrides this (nearer in the chain)."
 
-	| items idx v |
-	((self @env0:class @env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) == nil)
-		ifTrue: [
+	"Gate on REAL __getitem__ OWNERSHIP (below the PythonInstance/Object
+	fallback): every instance carries a fallback __getitem__: that itself
+	raises 'not subscriptable', so whichClassIncludesSelector never sees
+	nil and cannot tell a genuine sequence from a non-subscriptable object.
+	CPython's iter(x) raises TypeError up front for the latter (its
+	PySequence_Check tests a real sq_item); the former eager walk did too,
+	incidentally, by probing __getitem__(0).  ___hasProtocolForCall___
+	restores that (test_error_iter's DefaultIterClass)."
+	(self ___hasProtocolForCall___: '__getitem__')
+		ifFalse: [
 			TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
 				@env0:, ''' object is not iterable')].
-	items := OrderedCollection @env0:new.
-	idx := 0.
-	[true] @env0:whileTrue: [
-		v := [self __getitem__: idx]
-			@env0:on: IndexError
-			do: [:ex | ex @env0:return: #'___stopIteration___'].
-		v == #'___stopIteration___' ifTrue: [
-			^ items __iter__].
-		items @env0:add: v.
-		idx := idx @env0:+ 1]
+	^ seq_iterator ___on: self
 %
 
 category: 'Grail-Python Protocol'

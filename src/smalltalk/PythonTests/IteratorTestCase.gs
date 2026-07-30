@@ -79,6 +79,30 @@ testIterHonorsIterNoneSentinel
 		description: 'a bounded __getitem__-only class must still iterate'.
 %
 
+category: 'Grail-Tests - Iterator Protocol'
+method: IteratorTestCase
+testLazyGetitemSeqIterator
+	"CPython's legacy sequence protocol: iter(x) for an object with __getitem__
+	but no __iter__ returns a LAZY iterator (seq_iterator) that pulls one index
+	at a time.  Regression for bug #2 of the test_iter CRASH -- the former
+	PythonInstance>>__iter__ materialised __getitem__ EAGERLY, so an unbounded
+	__getitem__ spun forever into an uncatchable VM OutOfMemory.  Merely loading
+	the fixture proves laziness: Unbounded.__getitem__ never raises IndexError,
+	so an eager walk would OOM before RESULTS is built.  Also covers
+	__setstate__ (negative index clamps to 0) and that a bounded __getitem__
+	still iterates fully (list() and for-loop)."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'lazy_seq_iterator' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/lazy_seq_iterator.py')
+		name: 'lazy_seq_iterator'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#('unbounded_take3' 'setstate_negative_clamps'
+	  'bounded_iterates_fully' 'bounded_for_loop') do: [:key |
+		self assert: ((results @env1:__getitem__: key) = true) description: key]
+%
+
 category: 'Grail-Tests - Dict Key Iterator'
 method: IteratorTestCase
 testDictKeyIteratorBasicIteration

@@ -174,16 +174,14 @@ test.test_functools|TestPartialPy.test_recursive_pickle|needs RecursionError; Al
 test.test_functools|TestPartialPySubclass.test_recursive_pickle|needs RecursionError; AlmostOutOfStack is uncatchable and the 2nd overflow crashes the session
 
 # --- test_iter: iter() on an UNBOUNDED __getitem__ sequence ------------------
-# UnlimitedSequenceClass defines __getitem__(i) -> i (a value for EVERY index,
-# never raising IndexError). Grail's iter() reaches the legacy __getitem__(0..n)
-# sequence protocol via the PythonInstance __iter__ fallback and materialises it
-# EAGERLY -> unbounded -> uncatchable VM OutOfMemory (topaz dies mid-module, the
-# whole score lost). CPython returns a LAZY seqiterator that only advances on
-# next(), so these two tests (iter() the unbounded sequence, then __setstate__ +
-# a couple of next() calls) are fine there. The sibling test_error_iter
-# (NoIterClass, which ALSO sets __iter__ = None) is NOT skipped: builtins>>iter:
-# now honours the __iter__ = None sentinel and raises TypeError up front (see
-# IteratorTestCase>>testIterHonorsIterNoneSentinel). Drop these when the
-# __getitem__ fallback iterator is made lazy.
-test.test_iter|TestCase.test_iter_neg_setstate|iter(UnlimitedSequenceClass()) eagerly materialises an unbounded __getitem__ -> uncatchable VM OOM; needs a lazy seqiterator
-test.test_iter|TestCase.test_iter_overflow|iter(UnlimitedSequenceClass()) eagerly materialises an unbounded __getitem__ -> uncatchable VM OOM; needs a lazy seqiterator
+# The __getitem__ fallback iterator is now LAZY (Python/seq_iterator.gs, via
+# PythonInstance>>__iter__): iter(UnlimitedSequenceClass()) pulls ONE index at a
+# time instead of materialising, so it no longer OOMs. test_iter_neg_setstate
+# now passes and is un-skipped. Only test_iter_overflow remains skipped, and no
+# longer as a hard-OOM: it is @cpython_only and a CPython C-implementation
+# detail -- it __setstate__'s the iterator index to PY_SSIZE_T_MAX-2 and asserts
+# the next increment raises OverflowError. Grail's seq_iterator index is an
+# arbitrary-precision Integer, so it never overflows and no OverflowError is
+# raised (same class as the other @cpython_only / C-internal skips). N/A to
+# Grail rather than a bug.
+test.test_iter|TestCase.test_iter_overflow|@cpython_only: asserts OverflowError at PY_SSIZE_T_MAX; Grail's seq_iterator index is arbitrary-precision (never overflows) -- CPython C-internal, N/A
