@@ -123,7 +123,33 @@ ___asSmalltalkClassName___: aPythonName
 		s := first asUppercase asString ,
 			(s copyFrom: 2 to: s size).
 	].
-	^ s asSymbol
+	sym := s asSymbol.
+	"Record mangled -> original Python name so cls.__name__ / __qualname__ can
+	report the real Python spelling ('base_set') rather than this capitalized
+	GemStone class name ('Base_set').  Only when mangling actually changed the
+	name; session-local (repopulated whenever a module is (re)compiled)."
+	(sym asString = aPythonName asString) ifFalse: [
+		| reg |
+		reg := SessionTemps current at: #GrailPyClassNames otherwise: nil.
+		reg ifNil: [
+			reg := KeyValueDictionary new.
+			SessionTemps current at: #GrailPyClassNames put: reg].
+		reg at: sym put: aPythonName asString].
+	^ sym
+%
+
+category: 'Grail-Naming'
+classmethod: importlib
+___pyClassNameFor___: aSmalltalkName
+	"The original Python name for a mangled GemStone class name (recorded by
+	___asSmalltalkClassName___:), or nil if none -- e.g. an unmangled name, a
+	kernel class, or a class whose module was not compiled this session.  Used
+	by object>>__name__ / __qualname__."
+
+	| reg |
+	reg := SessionTemps current at: #GrailPyClassNames otherwise: nil.
+	reg ifNil: [^ nil].
+	^ reg at: aSmalltalkName asSymbol otherwise: nil
 %
 
 category: 'Grail-For Tests'
