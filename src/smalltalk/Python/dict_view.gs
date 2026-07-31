@@ -217,6 +217,28 @@ __ne__: other
 	^ (self __eq__: other) @env0:not
 %
 
+category: 'Grail-Hashing'
+method: dict_set_view
+__hash__
+	"CPython sets __hash__ = None on the SET-LIKE views, so hash(d.keys()) and
+	hash(d.items()) raise.  They are unhashable for the ordinary reason: they
+	define a set-like __eq__ over contents that change with the dict, so no
+	stable hash exists.
+
+	Placed on dict_set_view, which is exactly dict_keys + dict_items.
+	dict_values descends from dict_view instead and is deliberately NOT
+	covered: it has no set-like __eq__, so CPython leaves it with object's
+	identity hash and ``hash(d.values())'' SUCCEEDS.  Grail already inherits
+	that, so following CPython here means changing only the two set-like
+	views -- the class hierarchy happens to draw the line in the same place.
+
+	Names the receiver's own class, so dict_keys and dict_items each report
+	themselves as CPython does."
+
+	TypeError ___signal___: 'unhashable type: ''' @env0:,
+		(self @env0:class @env0:name @env0:asString) @env0:, ''''
+%
+
 category: 'Grail-Comparison'
 method: dict_set_view
 __le__: other
