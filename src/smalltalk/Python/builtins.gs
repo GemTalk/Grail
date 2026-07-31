@@ -2281,8 +2281,10 @@ _pow: positional kw: kwargs
 				| inv |
 				inv := self ___modInverse___: x mod: z.
 				^ self ___modPow___: inv exp: (y @env0:negated) mod: z].
-			result := x __pow__: y.
-			^ result __mod__: z].
+			"Positive exponent: modular exponentiation (square-and-multiply)
+			so a huge exponent never materializes x**y -- test_pow
+			test_big_exp does pow(a, b, prime) with b up to 2**50000."
+			^ self ___modPow___: x exp: y mod: z].
 		tn := [:v | | n | n := v @env0:class @env0:name @env0:asString.
 			(#('Integer' 'SmallInteger' 'LargeInteger' 'LargePositiveInteger'
 				'LargeNegativeInteger') @env0:includes: n) ifTrue: ['int'] ifFalse: [n]].

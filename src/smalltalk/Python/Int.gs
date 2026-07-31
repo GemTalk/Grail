@@ -834,6 +834,12 @@ __pow__: other
 	deviation -- CPython ints are unbounded)."
 
 	(other isKindOf: Number) ifTrue: [
+		"CPython: 0 raised to a NEGATIVE power is a ZeroDivisionError (an int
+		exponent coerces to float, so it is 0.0 ** -n -> division by zero),
+		not Grail's capacity OverflowError or an IEEE infinity."
+		((self @env0:= 0) and: [other @env0:< 0]) ifTrue: [
+			^ ZeroDivisionError ___signal___:
+				'0.0 cannot be raised to a negative power'].
 		^ [ | r |
 			r := self @env0:raisedTo: other.
 			"Python: int ** a NEGATIVE int is a float (``4 ** -3`` == 0.015625),
