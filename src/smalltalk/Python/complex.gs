@@ -90,6 +90,34 @@ method: complex
 	^ self @env1:__eq__: anObject
 %
 
+category: 'Grail-Arithmetic Operators'
+method: complex
+hash
+	"Smalltalk hash, paired with ``=`` above.
+
+	Overriding ``=`` without overriding ``hash`` breaks the collection
+	invariant ``a = b implies a hash = b hash'': complex inherited Object's
+	IDENTITY hash, so two separately-computed equal complex values hashed
+	differently and dict -- backed by a GemStone KeyValueDictionary, which
+	buckets on this selector -- could not find a key it already held.
+	``d[3j] = 'a'; d[3j]'' raised, and ``{0j: 1j} == {0j: 1j}'' was False.
+	It showed up as an intermittent failure in test.test_richcmp's
+	DictTest.test_dicts, whose dicts are keyed by ``random.randrange(100)*1j''
+	-- so whether it fired at all depended on the random draw.
+
+	A ZERO imaginary part must answer the real part's OWN hash, unmasked,
+	because __eq__ says ``complex(5) == 5'': an equal Number key has to land
+	in the same bucket, and GemStone already agrees across numeric types
+	(``5 hash = 5.0 hash'').  Only the genuinely-complex case is folded, where
+	no cross-type equality can apply."
+
+	| im |
+	im := self @env0:dynamicInstVarAt: #imag.
+	(im @env0:= 0) ifTrue: [^ (self @env0:dynamicInstVarAt: #real) @env0:hash].
+	^ (((self @env0:dynamicInstVarAt: #real) @env0:hash)
+		@env0:bitXor: (im @env0:hash) @env0:* 1000003) @env0:bitAnd: 16r3FFFFFFF
+%
+
 category: 'Grail-Arithmetic Support'
 method: complex
 _coerce: aNumber
@@ -259,6 +287,40 @@ __eq__: other
 	otherImag := other imag.
 	^ ((self real) @env0:= otherReal) 
 		and: [(self imag) @env0:= otherImag]
+%
+
+category: 'Grail-Hashing'
+method: complex
+__hash__
+	"CPython's complex hash, exactly:
+
+	    combined = hash(real) + sys.hash_info.imag * hash(imag)
+
+	computed in unsigned 64-bit and reinterpreted as signed, with -1 mapped to
+	-2 (CPython reserves -1 for the error return).  sys.hash_info.imag is
+	1000003.  Verified against CPython 3.14 for 0j, 3j, complex(5,0),
+	complex(1.5,2.5), complex(-2,3), -1j and complex(1e308,1e308).
+
+	A zero imaginary part contributes nothing, so hash(complex(x, 0)) is
+	hash(x) -- which is what makes hash(complex(5)) == hash(5) == hash(5.0)
+	hold, matching __eq__.  Float>>__hash__ supplies the per-part values and is
+	already CPython-compatible (mod 2**61-1).
+
+	Distinct from the Smalltalk ``hash'' above, which is what dict's
+	KeyValueDictionary backing store actually buckets on; this is what Python
+	code sees from ``hash(z)''."
+
+	| p m h |
+	p := self real __hash__.
+	m := self imag __hash__.
+	h := p @env0:+ (1000003 @env0:* m).
+	"Unsigned 64-bit wraparound, then back to signed -- CPython's Py_uhash_t
+	arithmetic cast to Py_hash_t."
+	h := h @env0:\\ 18446744073709551616.
+	h @env0:>= 9223372036854775808 ifTrue: [
+		h := h @env0:- 18446744073709551616].
+	h @env0:= -1 ifTrue: [^ -2].
+	^ h
 %
 
 category: 'Grail-String Representation'
