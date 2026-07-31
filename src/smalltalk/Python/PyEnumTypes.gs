@@ -180,10 +180,29 @@ ___new__: args kw: kw
 	(Python passes cls explicitly); a direct ``Cls.__new__(value)'' passes
 	just (value) -- the value is always the LAST positional."
 
-	(Enum ___grailBuildingSet @env0:includes: self) ifTrue: [
-		^ TypeError ___signal___:
-			'do not use `super().__new__; call the appropriate __new__ directly'].
+	Enum ___grailSuperNewGuard: self.
 	^ Enum ___grailLookupValue: self value: (args @env0:at: args @env0:size)
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailSuperNewGuard: cls
+	"CPython forbids a member ``def __new__'' from delegating to
+	``super().__new__'' while the enum is being built (test_bad_new_super) --
+	it must call the appropriate data-type __new__ DIRECTLY.  A class whose
+	members are mid-construction is in ___grailBuildingSet.  Called from
+	SuperBoundMethod>>value:value: (the super().__new__ dispatch point) BEFORE
+	the parent-method walk, so it fires uniformly no matter which storage
+	__new__ the walk would land on -- Enum's for a pure enum, Integer/
+	AbstractPyInt/AbstractPyFloat/str's for a mixed one.  Raise CPython's error
+	when cls is building; no-op otherwise, so a legitimate super().__new__ on a
+	non-enum subclass, and a direct member_type.__new__, proceed untouched."
+
+	((cls @env0:isKindOf: Behavior)
+		and: [Enum ___grailBuildingSet @env0:includes: cls]) ifTrue: [
+			^ TypeError ___signal___:
+				'do not use `super().__new__; call the appropriate __new__ directly'].
+	^ nil
 %
 
 category: 'Grail-Enum Metaclass'
