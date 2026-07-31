@@ -1047,20 +1047,25 @@ printSmalltalkRuntimeOn: aStream
 			category: 'Grail-Unhashable'
 			env: 1
 			classSide: false
-			onStream: aStream].
-	"NOT also bound as a class ATTRIBUTE (__hash__ = None), though that is what
-	CPython's class dict holds and what collections.abc.Hashable reads:
-	_check_methods walks the MRO and answers ``not hashable'' on a present-and-
-	None __hash__.  Binding it made isinstance(x, Hashable) correct for the
-	implicit case but WRONG for a subclass that restores a hash -- Grail's
-	class-attribute walk runs BEFORE the unbound-method wrap, so the subclass's
-	own __hash__ def lost to the ancestor's stored None, inverting CPython's MRO
-	order.  Getting that right means teaching ___classChainAttrLookup___ where a
-	method definition should cut the walk short, which is a wider change than
-	this one.  So isinstance(x, collections.abc.Hashable) still reports True for
-	an IMPLICITLY unhashable class (it is correctly False for an explicit
-	``__hash__ = None'', which the ordinary class-attribute machinery binds);
-	hash(), dict keys and set elements are all correct either way."
+			onStream: aStream.
+		"Also bind __hash__ = None as a class ATTRIBUTE, because that is
+		literally what CPython's class dict holds and what reads it care about:
+		collections.abc.Hashable is _check_methods, which walks the MRO and
+		answers ``not hashable'' on a present-and-None __hash__.  With only the
+		raising method, isinstance(x, Hashable) was True for an implicitly
+		unhashable class while correctly False for an explicit
+		``__hash__ = None'' -- which gets this attribute from the ordinary
+		class-attribute machinery, so this just gives the implicit form the same
+		shape.  The raising method above is what the hash SEND finds.
+
+		This depends on object >> ___classChainAttrLookup___ resolving in MRO
+		order.  Before that fix, binding this broke a SUBCLASS that restores a
+		hash: the attribute walk ran ahead of the unbound-method wrap, so the
+		subclass's own __hash__ def lost to the ancestor's stored None."
+		aStream
+			nextPutAll: name;
+			nextPutAll: ' @env1:___classHolderAttrStore___: #''__hash__'' put: None.';
+			lf].
 
 	"Multiple inheritance: aClass inherits whichever base
 	printSuperclassOn: selected as the Smalltalk superclass (the
