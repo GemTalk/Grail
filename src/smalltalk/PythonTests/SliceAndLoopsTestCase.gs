@@ -147,6 +147,41 @@ testIntIsNotSlice
 	self assert: (testModule @env1:s_notint) equals: false.
 %
 
+category: 'Tests - Slice Class'
+method: SliceAndLoopsTestCase
+testSliceEquality
+	"slice.__eq__ compares (start, stop, step) with Python equality.  The
+	former bare Smalltalk ``='' compiled to an env-1 send a SmallInteger field
+	could not answer -- an uncatchable escape that felled test_slice's test_cmp
+	/ test_deepcopy / test_setslice_without_getslice."
+
+	self assert: (testModule @env1:slice_eq_equal) equals: true.
+	self assert: (testModule @env1:slice_eq_unequal) equals: true.
+	self assert: (testModule @env1:slice_eq_vs_nonslice) equals: true.
+%
+
+category: 'Tests - Slice Class'
+method: SliceAndLoopsTestCase
+testSliceEqualityFieldSemantics
+	"Field comparison is identity-before-equality (test_cmp's BadCmp): ``s ==
+	s'' skips a field's __eq__, but distinct field objects invoke it (a raising
+	__eq__ propagates); mutable list fields compare by value (test_deepcopy)."
+
+	self assert: (testModule @env1:slice_eq_identity_skips_field_eq) equals: true.
+	self assert: (testModule @env1:slice_eq_field_eq_propagates) equals: 'Exc'.
+	self assert: (testModule @env1:slice_eq_mutable_fields) equals: true.
+%
+
+category: 'Tests - Slice Class'
+method: SliceAndLoopsTestCase
+testSliceDeepcopy
+	"copy.deepcopy(slice) produces a NEW slice with deep-copied fields
+	(test_slice test_deepcopy) -- it used to fall through to copy's atom
+	passthrough and return the same slice object."
+
+	self assert: (testModule @env1:slice_deepcopy) equals: true.
+%
+
 ! ===============================================================================
 ! Tests - break in for-loop
 ! ===============================================================================

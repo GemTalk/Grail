@@ -151,12 +151,23 @@ category: 'Python-Comparison'
 method: slice
 __eq__: other
 	"Two slices are equal iff their (start, stop, step) tuples are
-	equal under Python equality rules."
+	equal under Python equality rules.
+
+	Compare each field with ___pyRichEqBool___ (identity-before-equality, then
+	rich ==), NOT a bare Smalltalk ``='': a bare ``self start = other start''
+	compiled to an env-1 ``='' send, which a SmallInteger field does not
+	understand -- an uncatchable escape that took down test_slice's test_cmp /
+	test_deepcopy / test_setslice_without_getslice.  ___pyRichEqBool___ also
+	gives CPython's tuple-comparison semantics for free: identity-first means
+	``s == s'' does not invoke a field's __eq__ (so a field whose __eq__ raises
+	is only reached when the fields differ by identity -- test_cmp's BadCmp),
+	and rich == compares mutable fields by value (test_deepcopy's list
+	start/stop/step)."
 
 	(other isKindOf: slice) ifFalse: [^ false].
-	^ ((self start = other start)
-		and: [self stop = other stop])
-		and: [self step = other step]
+	^ ((self start ___pyRichEqBool___: other start)
+		and: [self stop ___pyRichEqBool___: other stop])
+		and: [self step ___pyRichEqBool___: other step]
 %
 
 category: 'Python-Methods'
