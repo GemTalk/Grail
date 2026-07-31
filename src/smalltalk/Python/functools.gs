@@ -37,7 +37,7 @@ doit
 PythonInstance subclass: 'functools_cmpkey'
   instVarNames: #()
   classVars: #()
-  classInstVars: #()
+  classInstVars: #( dynInstVars )
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -165,7 +165,19 @@ initialize
 	"Placeholder: the singleton sentinel for reserved positional slots
 	in partial (Python 3.14).  Its type is functools_Placeholder;
 	``Placeholder'' is that type's sole instance."
-	self @env0:at: #Placeholder put: functools_Placeholder ___singleton___
+	self @env0:at: #Placeholder put: functools_Placeholder ___singleton___.
+	"``__hash__ = None'' as a class ATTRIBUTE, matching CPython's class dict for
+	the cmp_to_key wrapper.  The raising __hash__ method above is what a hash
+	SEND finds; this is what READS of the attribute see, and reads are what
+	collections.abc.Hashable consults (``getattr(x, '__hash__') is not None'').
+	Without it isinstance(k, Hashable) stayed True even though hash(k) raised --
+	test_functools TestCmpToKey.test_hash asserts both.
+
+	Safe to sit alongside the method because object >> ___classChainAttrLookup___
+	resolves in MRO order and excludes the attribute's OWN class from the
+	nearer-method check: an attribute assigned over a method on the SAME class
+	is CPython's last-write-wins, so the attribute is the class-dict entry."
+	functools_cmpkey @env1:___classHolderAttrStore___: #'__hash__' put: None
 %
 
 category: 'Grail-Built-in Functions'
@@ -253,6 +265,23 @@ __eq__: other
 	^ ((self @env0:dynamicInstVarAt: #cmp) value:
 		{ self @env0:dynamicInstVarAt: #obj. other @env0:dynamicInstVarAt: #obj } value: nil)
 		@env0:= 0
+%
+
+category: 'Grail-Class Attrs'
+classmethod: functools_cmpkey
+dynInstVars
+	"The per-class attribute holder object >> ___classHolderAttrStore___ writes
+	into.  ClassDefAst synthesises this pair for every generated Python class;
+	a hand-written one needs it spelled out before it can carry a class
+	attribute (see functools >> initialize, which binds __hash__ = None)."
+
+	^ dynInstVars
+%
+
+category: 'Grail-Class Attrs'
+classmethod: functools_cmpkey
+dynInstVars: anObject
+	dynInstVars := anObject
 %
 
 category: 'Grail-Hashing'
