@@ -55,9 +55,11 @@ printSmalltalkOn: aStream
 category: 'Grail-other'
 method: NotInAst
 printSmalltalkOn: aStream left: left rightList: right rhsTemp: rhsName lhsTemp: lhsName
-	"Emit Python ``X not in Y`` as `((Y __contains__: X) ___isTruthy___)
-	@env0:not`.  `__contains__` may return a non-Boolean (e.g. integer
-	from C extensions), so coerce through ___isTruthy___ before negating."
+	"Emit Python ``X not in Y`` as `((Y ___pyContains___: X) ___isTruthy___)
+	@env0:not`.  `___pyContains___:` (see Object) enforces the
+	``__contains__ = None'' block and falls back to __contains__: / iteration;
+	it may return a non-Boolean (e.g. integer from C extensions), so coerce
+	through ___isTruthy___ before negating."
 
 	aStream nextPutAll: '(('.
 
@@ -69,7 +71,7 @@ printSmalltalkOn: aStream left: left rightList: right rhsTemp: rhsName lhsTemp: 
 		aStream nextPutAll: ')'.
 	].
 
-	aStream nextPutAll: ' __contains__: '.
+	aStream nextPutAll: ' ___pyContains___: '.
 
 	left ifNil: [
 		aStream nextPutAll: rhsName.

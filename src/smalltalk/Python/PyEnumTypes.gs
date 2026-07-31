@@ -180,10 +180,29 @@ ___new__: args kw: kw
 	(Python passes cls explicitly); a direct ``Cls.__new__(value)'' passes
 	just (value) -- the value is always the LAST positional."
 
-	(Enum ___grailBuildingSet @env0:includes: self) ifTrue: [
-		^ TypeError ___signal___:
-			'do not use `super().__new__; call the appropriate __new__ directly'].
+	Enum ___grailSuperNewGuard: self.
 	^ Enum ___grailLookupValue: self value: (args @env0:at: args @env0:size)
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailSuperNewGuard: cls
+	"CPython forbids a member ``def __new__'' from delegating to
+	``super().__new__'' while the enum is being built (test_bad_new_super) --
+	it must call the appropriate data-type __new__ DIRECTLY.  A class whose
+	members are mid-construction is in ___grailBuildingSet.  Called from
+	SuperBoundMethod>>value:value: (the super().__new__ dispatch point) BEFORE
+	the parent-method walk, so it fires uniformly no matter which storage
+	__new__ the walk would land on -- Enum's for a pure enum, Integer/
+	AbstractPyInt/AbstractPyFloat/str's for a mixed one.  Raise CPython's error
+	when cls is building; no-op otherwise, so a legitimate super().__new__ on a
+	non-enum subclass, and a direct member_type.__new__, proceed untouched."
+
+	((cls @env0:isKindOf: Behavior)
+		and: [Enum ___grailBuildingSet @env0:includes: cls]) ifTrue: [
+			^ TypeError ___signal___:
+				'do not use `super().__new__; call the appropriate __new__ directly'].
+	^ nil
 %
 
 category: 'Grail-Enum Metaclass'
@@ -194,7 +213,7 @@ ___grailBuildMembers: cls names: attrNames
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew tupleClass gnvClass genValues foreignMixin |
+	| byValue byName members lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass genValues foreignMixin |
 	"Names assigned under a class-body ``if`` (the shared test fixture's
 	``if issubclass(...): dupe = 3'') never reach classBodyAttributes --
 	their stores go through ___pyAttrStore___ into the per-class
@@ -270,9 +289,19 @@ ___grailBuildMembers: cls names: attrNames
 	INSTANCE method ON cls (self-param bound to cls).  When present, CPython
 	builds each member by running it (member_type construction + user slots)
 	rather than a bare allocation; a __new__ that delegates to
-	``super().__new__'' trips the guard in Enum>>___new__:kw:."
-	hasUserNew := (cls @env0:whichClassIncludesSelector: #'___new__:kw:'
-		environmentId: 1) == cls.
+	``super().__new__'' trips the guard in Enum>>___new__:kw:.
+
+	Only a __new__ defined ON cls is honored here.  An INHERITED user __new__
+	(``class LabelledList(LabelledIntEnum)'' reusing LabelledIntEnum's __new__,
+	test_conflicting_types_resolved_in_new) would also need running, but a bare
+	``notNil'' over-fires: it runs a base __new__ on member-less subclasses and
+	on mixin chains it should not (regressing test_multiple_mixin_inherited/_mro
+	and several dir/repr fixtures).  Matching CPython's _find_new_ (which weighs
+	member_type, object.__new__/Enum.__new__ identity, and _new_member_) is a
+	separate refinement; keep the cls-only test for now."
+	newDefClass := cls @env0:whichClassIncludesSelector: #'___new__:kw:'
+		environmentId: 1.
+	hasUserNew := newDefClass == cls.
 	tupleClass := Python @env0:at: #tuple otherwise: Array.
 	"An MI enum whose storage base is Enum (``cls inheritsFrom: Enum'') but
 	which mixes in a FOREIGN data type -- ``class E(date, Enum)'', where date is
@@ -432,7 +461,7 @@ ___grailBuildMembers: cls names: attrNames
 									newArgs := (rawValue isKindOf: tupleClass)
 										ifTrue: [rawValue @env0:asArray]
 										ifFalse: [Array @env0:with: rawValue].
-									member := (UnboundMethod definingClass: cls selector: #'__new__')
+									member := (UnboundMethod definingClass: newDefClass selector: #'__new__')
 										value: ({ cls } @env0:, newArgs) value: KeyValueDictionary @env0:new.
 									"CPython: a member's canonical value is its _value_, set by
 									__new__.  When __new__ left it unset, fall back to the raw

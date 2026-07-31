@@ -81,6 +81,14 @@ value: positional value: kwargs
 	The 0..4-arg variants cover the same range Super >> DNU does."
 
 	| nargs kwOk method resolvedSel |
+	"CPython forbids a member ``def __new__'' from delegating to
+	``super().__new__'' while the enum is being built (test_bad_new_super): it
+	must call the data type's __new__ directly.  Catch it here, BEFORE the
+	parent-method walk resolves to whichever storage __new__ the MRO happens to
+	expose (int/str/float differ, so guarding the individual constructors was
+	incomplete).  ``obj'' is super()'s substituted receiver -- the enum class
+	(cls) inside __new__; the guard no-ops unless it is mid-construction."
+	selector == #'__new__' ifTrue: [Enum ___grailSuperNewGuard: obj].
 	nargs := positional @env0:size.
 	kwOk := kwargs == nil or: [kwargs @env0:isEmpty].
 	method := resolver @env0:value: nargs value: kwOk.

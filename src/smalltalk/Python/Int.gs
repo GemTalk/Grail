@@ -243,6 +243,18 @@ __new__: obj _: base
 	In Python: int(obj, base)"
 
 	| str baseInt |
+	"CPython ``int.__new__(cls, value)'': Python's __new__ always takes the
+	target CLASS as its first positional, so a hand-written int-subclass
+	__new__ forwarding to its base -- ``obj = int.__new__(cls, value)'' in an
+	enum member (test_conflicting_types_resolved_in_new, test_flag_with_custom_new)
+	-- lands here with obj = the class and base = the value, NOT a string and a
+	radix.  int(obj, base) never passes a class, so a leading Behavior is
+	unambiguously the allocation form: build a cls instance carrying int(value)."
+	(obj isKindOf: Behavior) ifTrue: [
+		| inst |
+		inst := obj @env0:new.
+		inst @env0:dynamicInstVarAt: #value put: (self __new__: base).
+		^ inst].
 	"base must be an integer -- or an object implementing __index__
 	(PEP 357), e.g. a class with a plain __index__ method, coerced the
 	same way the arithmetic dunders above fall back to __index__ for a
@@ -834,6 +846,12 @@ __pow__: other
 	deviation -- CPython ints are unbounded)."
 
 	(other isKindOf: Number) ifTrue: [
+		"CPython: 0 raised to a NEGATIVE power is a ZeroDivisionError (an int
+		exponent coerces to float, so it is 0.0 ** -n -> division by zero),
+		not Grail's capacity OverflowError or an IEEE infinity."
+		((self @env0:= 0) and: [other @env0:< 0]) ifTrue: [
+			^ ZeroDivisionError ___signal___:
+				'0.0 cannot be raised to a negative power'].
 		^ [ | r |
 			r := self @env0:raisedTo: other.
 			"Python: int ** a NEGATIVE int is a float (``4 ** -3`` == 0.015625),

@@ -514,10 +514,18 @@ __name__
 	its Smalltalk name — downstream inspect.ismethod / isfunction stubs are
 	written to match the Smalltalk names ('BoundMethod', 'ExecBlock').
 
-	User Python classes (created via ClassDefAst) resolve __name__ through
-	PythonClass>>__name__ (their stored Python identifier), not this method."
+	User Python classes defined with a lower-case name (``class base_set:``)
+	are stored under a capitalized GemStone class name (``Base_set''); return
+	their ORIGINAL Python spelling, recorded mangled->original by
+	importlib>>___asSmalltalkClassName___: and looked up here.  CPython error
+	messages interpolate this (test_contains: ``argument of type 'base_set'
+	...'')."
 
-	^ self ___pythonBuiltinTypeName___ @env0:ifNil: [self @env0:name @env0:asString]
+	| bt |
+	bt := self ___pythonBuiltinTypeName___.
+	bt @env0:notNil ifTrue: [^ bt].
+	^ (importlib @env0:___pyClassNameFor___: self @env0:name @env0:asString)
+		@env0:ifNil: [self @env0:name @env0:asString]
 %
 
 category: 'Grail-Introspection'
@@ -530,7 +538,11 @@ __qualname__
 	CPython error messages interpolate it (e.g. textwrap.dedent's
 	``expected str object, not {type(text).__qualname__!r}'')."
 
-	^ self ___pythonBuiltinTypeName___ @env0:ifNil: [self @env0:name @env0:asString]
+	| bt |
+	bt := self ___pythonBuiltinTypeName___.
+	bt @env0:notNil ifTrue: [^ bt].
+	^ (importlib @env0:___pyClassNameFor___: self @env0:name @env0:asString)
+		@env0:ifNil: [self @env0:name @env0:asString]
 %
 
 category: 'Grail-Callable'
@@ -2111,11 +2123,19 @@ __contains__: item
 	Real sequences that only define __getitem__ are vanishingly rare in the
 	suite and CPython raises TypeError for BoundMethod-like objects anyway."
 
-	| cls ni it |
-	cls := self @env0:class.
-	(self ___respondsTo___: #'__iter__') ifFalse: [
-		^ TypeError ___signal___: ('argument of type ''' @env0:,
-			cls @env0:name @env0:asString @env0:, ''' is not iterable')].
+	| ni it |
+	"No real iteration protocol -- neither __iter__ nor the legacy
+	__getitem__ sequence protocol.  ___respondsTo___ would see the
+	PythonInstance fallback __iter__ (which itself raises the ITERATION
+	'not iterable' message) and wrongly proceed, so probe the REAL protocol.
+	CPython's containment error uses the Python type name, lower-case
+	(test_contains test_common_tests: ``argument of type 'base_set' is not a
+	container or iterable'')."
+	((self ___hasProtocolForCall___: '__iter__')
+		or: [self ___hasProtocolForCall___: '__getitem__']) ifFalse: [
+			^ TypeError ___signal___: ('argument of type ''' @env0:,
+				(self @env0:class @env1:__name__) @env0:asString @env0:,
+				''' is not a container or iterable')].
 	ni := Python @env0:at: #NotImplemented otherwise: nil.
 	it := self __iter__.
 	[true] @env0:whileTrue: [ | elem eq |
@@ -2128,6 +2148,30 @@ __contains__: item
 		match here."
 		((eq @env0:~~ ni and: [eq @env0:~~ #'___NotImplemented___'])
 			and: [eq @env1:___isTruthy___]) ifTrue: [^ true]]
+%
+
+category: 'Grail-Container'
+method: object
+___pyContains___: item
+	"Membership test for ``item in self'' -- the compiled `in` / `not in`
+	(InAst / NotInAst) route here rather than sending __contains__: directly,
+	so an explicit ``__contains__ = None'' on the receiver's class BLOCKS the
+	container protocol: ``item in obj'' raises TypeError instead of dispatching
+	an inherited __contains__ or falling back to iteration (CPython;
+	test_contains test_block_fallback's BlockContains, which sets
+	``__contains__ = None'' while inheriting a working __contains__ and
+	__iter__).  A class-attribute None is invisible to normal method dispatch
+	(which sees the inherited compiled __contains__:), so probe
+	___classAttrDunder___ for the sentinel.  Gated on PythonInstance --
+	kernel-backed containers never carry it and keep the direct __contains__:
+	path (one extra send)."
+
+	(self @env0:isKindOf: PythonInstance) ifTrue: [
+		(self ___classAttrDunder___: #'__contains__') == None ifTrue: [
+			^ TypeError ___signal___: ('argument of type ''' @env0:,
+				(self @env0:class @env1:__name__) @env0:asString @env0:,
+				''' is not a container or iterable')]].
+	^ self __contains__: item
 %
 
 category: 'Grail-Augmented Assignment'
