@@ -286,3 +286,54 @@ log'.
 	self assert: (result @env1:__len__) equals: 1.
 	self assert: (result @env1:__getitem__: 0) equals: 'else-b'
 %
+
+category: 'Grail-Tests - Slice Hashing'
+method: SliceAndLoopsTestCase
+testSliceEqualityComparesComponents
+	"__eq__ compiles in env 1, so a bare ``self start = other start'' was an
+	ENV-1 ``='' send to the component, and SmallInteger has no env-1 ``='':
+	every slice comparison died with the UNCATCHABLE ``env-1 #'=' not
+	understood by SmallInteger''.  It took out test_slice's test_cmp,
+	test_deepcopy and test_setslice_without_getslice outright."
+
+	self assert: (self eval: 'slice(1, 2, 3) == slice(1, 2, 3)') equals: true.
+	self assert: (self eval: 'slice(1, 2, 3) == slice(1, 2, 4)') equals: false.
+	self assert: (self eval: 'slice(5) != slice(6)') equals: true.
+	self assert: (self eval: 'slice(1, 2, 3) != (1, 2, 3)') equals: true.
+	self assert: (self eval: 'slice(1, 2, 3) != None') equals: true.
+	"Non-int components go through Python equality, not Smalltalk ``=''."
+	self assert: (self eval: 'slice("a", "b", "c") == slice("a", "b", "c")')
+		equals: true
+%
+
+category: 'Grail-Tests - Slice Hashing'
+method: SliceAndLoopsTestCase
+testSliceHashIsValueBased
+	"CPython made slices hashable in 3.12 (gh-101264).  Grail defined __eq__
+	without __hash__, so slices kept object's IDENTITY hash and test_slice's
+	``assertEqual(hash(slice(5)), slice(5).__hash__())'' -- which builds TWO
+	slice objects -- read as ``8915172 != 8915169'', consecutive identity
+	hashes."
+
+	self assert: (self eval: 'hash(slice(5)) == slice(5).__hash__()') equals: true.
+	self assert: (self eval: 'hash(slice(1, 2)) == slice(1, 2).__hash__()')
+		equals: true.
+	self assert: (self eval: 'hash(slice(1, 2, 3)) == hash(slice(1, 2, 3))')
+		equals: true.
+	"Consistent with __eq__ in the direction that matters for collections."
+	self assert: (self eval: 'len({slice(1, 2), slice(1, 2)})') equals: 1.
+	self assert: (self eval: 'd = {}; d[slice(1, 2)] = "v"; d[slice(1, 2)]')
+		equals: 'v'
+%
+
+category: 'Grail-Tests - Slice Hashing'
+method: SliceAndLoopsTestCase
+testSliceWithUnhashableComponentRaises
+	"Sending __hash__ to each component is what propagates CPython's TypeError
+	for an unhashable member, rather than needing a separate check.  Note this
+	is NOT inherited from tuple hashing -- ``hash((1, 2, []))'' still wrongly
+	SUCCEEDS in Grail, which is why slice hashes its components directly."
+
+	self should: [self eval: 'hash(slice(1, 2, []))'] raise: TypeError.
+	self should: [self eval: 'hash(slice(4, {}))'] raise: TypeError
+%
