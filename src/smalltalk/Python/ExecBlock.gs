@@ -144,9 +144,16 @@ __code__
 	block is not one).  #'__code__' is in ___pythonValueAttrs___ so a read
 	returns the PyCode value, not a BoundMethod-wrapped selector."
 
-	^ ((ExecBlock @env0:___pyAttrsClass___) @env0:slotAt: self attr: '__code__')
-		ifNil: [ AttributeError ___signal___:
-			'''function'' object has no attribute ''__code__''' ]
+	| c |
+	c := (ExecBlock @env0:___pyAttrsClass___) @env0:slotAt: self attr: '__code__'.
+	c ifNotNil: [ ^ c ].
+	"AttributeError lives in the Python dictionary, which is NOT on the symbol
+	list when this kernel-extension file is filed by install_base (SystemUser,
+	3.7.x) -- naming the class directly there is a compile-time ``undefined
+	symbol''.  Resolve it at RUNTIME via the symbol list, the same rule
+	___pyNone___ uses."
+	^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'AttributeError')
+		___signal___: '''function'' object has no attribute ''__code__'''
 %
 
 category: 'Grail-Attribute Access'
