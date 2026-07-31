@@ -115,7 +115,7 @@ printSmalltalkOn: aStream
 						it merges with the surrounding ``on:...do:`` into one
 						mashed selector."
 						handler type printSmalltalkWithParenthesisOn: aStream]].
-		aStream nextPutAll: ' do: [:___ex |'; increaseIndent; lf.
+		aStream nextPutAll: ' do: [:___ex | | ___savedExc |'; increaseIndent; lf.
 		"Always re-raise Grail's control-flow signals so a Python
 		``except Exception`` doesn't swallow a pending ``return`` /
 		``break`` / ``continue``.  Without this guard, jinja2's
@@ -125,6 +125,14 @@ printSmalltalkOn: aStream
 		aStream
 			nextPutAll: '((___ex isKindOf: PythonReturn) or: [(___ex isKindOf: PythonBreak) or: [___ex isKindOf: PythonContinue]]) ifTrue: [___ex @env0:pass].';
 			lf.
+		"Record ___ex as this session's currently-handled exception (CPython
+		sys.exc_info()), restoring the prior value when the handler exits --
+		via ensure: so a return/break/continue or a re-raise still restores.
+		Runs AFTER the control-flow guard so a pending signal never becomes
+		'the current exception'."
+		aStream
+			nextPutAll: '___savedExc := BaseException @env0:___currentException___. BaseException @env0:___setCurrentException___: ___ex. [';
+			lf.
 		handler name ifNotNil: [
 			"Route ``except X as e'' through the module-scope-aware store so
 			a module-level e binds the module variable rather than an
@@ -133,6 +141,10 @@ printSmalltalkOn: aStream
 			aStream lf.
 		].
 		handler body printSmalltalkOn: aStream.
+		aStream
+			lf;
+			nextPutAll: '] @env0:ensure: [BaseException @env0:___setCurrentException___: ___savedExc]';
+			lf.
 	].
 
 	"Close final blocks"

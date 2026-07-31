@@ -745,15 +745,26 @@ breakpointhook
 category: 'Grail-Built-in Functions'
 method: sys
 exc_info
-	"exc_info() -> (type, value, traceback)"
-	^ tuple @env0:withAll: {None. None. None}
+	"exc_info() -> (type, value, traceback) of the exception currently being
+	handled in this session (set by TryAst around an except handler), or
+	(None, None, None) outside any except block.  Grail populates a real
+	traceback for comprehension iterator-protocol errors today; other raises
+	still carry an empty (None) traceback until general traceback population
+	lands."
+
+	| e |
+	e := BaseException @env0:___currentException___.
+	e ifNil: [ ^ tuple @env0:withAll: {None. None. None} ].
+	^ tuple @env0:withAll: { e @env0:class. e. e @env1:__traceback__ }
 %
 
 category: 'Grail-Built-in Functions'
 method: sys
 exception
-	"exception() -> current exception instance"
-	^ None
+	"exception() -> the exception instance currently being handled (CPython
+	3.11+), or None outside any except block."
+
+	^ (BaseException @env0:___currentException___) ifNil: [ None ]
 %
 
 category: 'Grail-Built-in Functions'

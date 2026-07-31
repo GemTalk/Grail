@@ -199,12 +199,24 @@ Greens `test_dictcomps` and `test_setcomps` `test_exception_locations`
 (ERROR→OK). Grail's `beginColumn`/`endColumn` are already 0-based / end-exclusive
 (matching Python `col_offset`), so no column adjustment was needed.
 
-**Deferred (future) — general traceback population.** The broad per-statement
+**Phase 3a — `sys.exc_info()` backing (DONE).** The zero-happy-path-overhead
+slice of the general-population phase. A session-local "currently-handled
+exception" register (`BaseException class>>___currentException___` /
+`___setCurrentException___:`, in `SessionTemps`) is set by `TryAst` codegen at
+each except-handler entry (after the control-flow guard) and restored on exit via
+`ensure:`, so nested handlers stack correctly. `sys.exc_info()` /
+`sys.exception()` return it (were hardcoded `(None,None,None)` / `None`), which
+also gives `traceback.format_exc()` a real exception to render. No per-statement
+instrumentation, so no happy-path cost; the only added work is per except
+handler. (`finally`-during-propagation isn't tracked yet — a minor gap.)
+
+**Deferred (future) — general frame population.** The broad per-statement
 `setPos` + body-wrapper/except-binding frame prepends (correct line-level
-tracebacks for *any* raise, multi-frame chains, `sys.exc_info()` backing) remain
-future work; the data model (Phase 1) and code objects (Phase 2a) already
-support them. Today a non-comprehension exception still has an empty
-`__traceback__`.
+tracebacks + multi-frame chains for *any* raise, not just comprehensions) remain
+future work — that is the part with per-statement happy-path overhead. Today a
+non-comprehension exception still has an empty `__traceback__` (so
+`sys.exc_info()`'s traceback element is `None` for those), but its type/value are
+now correct.
 
 ## 6. Risks & non-goals
 
