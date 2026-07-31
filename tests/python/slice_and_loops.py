@@ -21,6 +21,66 @@ s_three  = slice(0, 10, 2)
 s_isinst = isinstance(s_two, slice)
 s_notint = isinstance(5, slice)
 
+
+# --- slice equality (test_slice test_cmp / test_deepcopy) ---
+# slice.__eq__ compares (start, stop, step) with Python's identity-before-
+# equality rule.  The former bare Smalltalk ``='' compiled to an env-1 send a
+# SmallInteger field could not answer, an uncatchable escape.
+def slice_eq_equal():
+    return slice(1, 2, 3) == slice(1, 2, 3)              # True
+
+
+def slice_eq_unequal():
+    return slice(1, 2, 3) != slice(1, 2, 4)             # True
+
+
+def slice_eq_vs_nonslice():
+    # A slice equals no non-slice (None / tuple / str), so != is True.
+    return (slice(1, 2, 3) != None) \
+        and (slice(1, 2, 3) != (1, 2, 3)) \
+        and (slice(1, 2, 3) != "")
+
+
+def slice_eq_identity_skips_field_eq():
+    # Identity-first: ``s == s'' must NOT call a field's __eq__, so a slice
+    # whose field would raise on __eq__ still equals itself.
+    class BadCmp:
+        def __eq__(self, other):
+            raise RuntimeError("field __eq__ must not run for s == s")
+    s = slice(BadCmp())
+    return s == s
+
+
+def slice_eq_field_eq_propagates():
+    # Distinct field objects DO invoke __eq__, so a raising __eq__ propagates.
+    class Exc(Exception):
+        pass
+
+    class BadCmp:
+        def __eq__(self, other):
+            raise Exc
+    try:
+        slice(1, BadCmp()) == slice(1, BadCmp())
+    except Exc:
+        return 'Exc'
+    return 'no error'
+
+
+def slice_eq_mutable_fields():
+    # Mutable (list) fields compare by value, not identity
+    # (test_deepcopy's corner case).
+    return slice([1, 2], [3, 4], [5, 6]) == slice([1, 2], [3, 4], [5, 6])
+
+
+def slice_deepcopy():
+    # copy.deepcopy(slice) must produce a NEW slice with deep-copied fields
+    # (test_slice test_deepcopy) -- was returning the same slice (atom
+    # passthrough), so assertIsNot(s, c) failed.
+    import copy
+    s = slice([1, 2], [3, 4], [5, 6])
+    c = copy.deepcopy(s)
+    return (s is not c) and (s == c) and (s.start is not c.start)
+
 # --- break in for ---
 def find_first_even(xs):
     for x in xs:
