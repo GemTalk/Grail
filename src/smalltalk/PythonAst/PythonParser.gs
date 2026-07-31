@@ -901,6 +901,29 @@ parseDecorators
 	^decorators
 %
 
+category: 'Grail-parsing - compound statements'
+method: PythonParser
+___declarativeDecoratorSymbolFor: aDecoratorNode
+	"Normalize a dotted property/staticmethod/classmethod decorator --
+	``@enum.property'' (types.DynamicClassAttribute, how enum member
+	properties are written), ``@builtins.property'', ``@bltns.property'' -- to
+	the bare declarative symbol (#property etc.), so it re-classes the def
+	exactly like the plain ``@property'' form.  Without this the def stayed a
+	plain method and ``member.surface_gravity'' returned the getter itself, so
+	e.g. round(member.surface_gravity, 2) sent #* to a BoundMethod and leaked a
+	raw Smalltalk error.  Restricted to those known module bases and the three
+	declarative names, so an unrelated dotted decorator (``@abc.abstractproperty'',
+	``@functools.cached_property'', a user's ``@obj.property'') is unaffected --
+	it is returned unchanged for the normal runtime-decorator path."
+
+	((aDecoratorNode isKindOf: AttributeAst)
+		and: [(aDecoratorNode value isKindOf: NameAst)
+		and: [(#('enum' 'builtins' 'bltns') includes: aDecoratorNode value id asString)
+		and: [#('property' 'staticmethod' 'classmethod') includes: aDecoratorNode attr asString]]])
+			ifTrue: [^ aDecoratorNode attr asSymbol].
+	^ aDecoratorNode
+%
+
 category: 'Grail-parsing - simple statements'
 method: PythonParser
 parseDelete
@@ -1355,7 +1378,9 @@ parseFunctionDefWithDecorators: decorators
 		at: #globalNames put: (scope at: 4);
 		yourself).
 	decoratorNames := decorators collect: [:each |
-		(each isKindOf: NameAst) ifTrue: [each id] ifFalse: [each]
+		(each isKindOf: NameAst)
+			ifTrue: [each id]
+			ifFalse: [self ___declarativeDecoratorSymbolFor: each]
 	].
 	funcNode := self buildNode: FunctionDefAst fields: (IdentityKeyValueDictionary new
 		at: #name put: nameTok value asSymbol;
