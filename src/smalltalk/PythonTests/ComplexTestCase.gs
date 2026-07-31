@@ -644,3 +644,96 @@ testNumericEqualityWithComplex
 	self assert: (self eval: '5 == complex(5, 1)') equals: false.
 	self assert: (self eval: '10**23 == complex(10**23)') equals: false
 %
+
+category: 'Grail-Tests - Hashing'
+method: ComplexTestCase
+testHashIsValueBasedNotIdentityBased
+	"complex overrode ``='' but not ``hash'', so it inherited Object's
+	IDENTITY hash and two separately-computed equal values hashed
+	differently -- ``hash(3j) == hash(3j)'' was False."
+
+	self assert: (self eval: 'hash(3j) == hash(3j)') equals: true.
+	self assert: (self eval: 'hash(complex(1.5, 2.5)) == hash(complex(1.5, 2.5))')
+		equals: true.
+	self assert: (self eval: 'hash(-1j) == hash(-1j)') equals: true
+%
+
+category: 'Grail-Tests - Hashing'
+method: ComplexTestCase
+testHashAgreesAcrossNumericTypes
+	"__eq__ says complex(5) == 5 == 5.0, so the hashes must agree too --
+	otherwise an equal Number key lands in a different bucket.  A zero
+	imaginary part contributes nothing to CPython's formula, which is
+	exactly what makes this hold."
+
+	self assert: (self eval: 'hash(0j) == hash(0)') equals: true.
+	self assert: (self eval: 'hash(complex(5)) == hash(5)') equals: true.
+	self assert: (self eval: 'hash(complex(5)) == hash(5.0)') equals: true.
+	self assert: (self eval: 'hash(complex(2.5)) == hash(2.5)') equals: true
+%
+
+category: 'Grail-Tests - Hashing'
+method: ComplexTestCase
+testHashMatchesCPythonValues
+	"CPython's combine is hash(real) + sys.hash_info.imag * hash(imag), in
+	unsigned 64-bit reinterpreted as signed.  These are CPython 3.14's actual
+	answers, including the wraparound case."
+
+	self assert: (self eval: 'hash(0j)') equals: 0.
+	self assert: (self eval: 'hash(3j)') equals: 3000009.
+	self assert: (self eval: 'hash(complex(5, 0))') equals: 5.
+	self assert: (self eval: 'hash(complex(-2, 3))') equals: 3000007.
+	self assert: (self eval: 'hash(-1j)') equals: -2000006.
+	self assert: (self eval: 'hash(complex(1.5, 2.5))')
+		equals: 4611686018429387911
+%
+
+category: 'Grail-Tests - Hashing'
+method: ComplexTestCase
+testComplexWorksAsADictKey
+	"dict buckets on the SMALLTALK hash (its backing store is a
+	KeyValueDictionary), so the identity hash meant a dict could not find a
+	complex key it already held: ``d[3j] = 'a'; d[3j]'' RAISED, and a
+	re-stored key added a second entry instead of replacing.  Surfaced as an
+	intermittent test.test_richcmp DictTest.test_dicts failure -- its dicts
+	are keyed by ``random.randrange(100)*1j'', so whether it fired depended on
+	the random draw."
+
+	self assert: (self eval: 'len({3j: "a", 3j: "b"})') equals: 1.
+	self assert: (self eval: '{3j: "a", 3j: "b"}[3j]') equals: 'b'.
+	self assert: (self eval: 'd = {}; d[3j] = "x"; d[3j]') equals: 'x'.
+	"A zero-imaginary key is reachable as the equal int, as in CPython."
+	self assert: (self eval: 'd = {}; d[0j] = "c"; 0 in d') equals: true
+%
+
+category: 'Grail-Tests - Hashing'
+method: ComplexTestCase
+testDictsOfComplexKeysCompareEqual
+	"``{0j: 1j} == {0j: 1j}'' was False: dict equality looks each key up in
+	the other dict, and the lookup missed."
+
+	| lf src |
+	self assert: (self eval: '{0j: 1j} == {0j: 1j}') equals: true.
+	self assert: (self eval: '{5j: 1j} == {5j: 1j}') equals: true.
+	"A build / re-insert / compare round trip, the shape test_dicts uses.
+	Assembled with real linefeeds -- a Smalltalk literal has no escapes."
+	lf := String with: Character lf.
+	src := 'a = {}' , lf
+		, 'for i in range(50):' , lf
+		, '    a[i * 1j] = i' , lf
+		, 'b = {}' , lf
+		, 'for k, v in list(a.items()):' , lf
+		, '    b[k] = v' , lf
+		, 'a == b' , lf.
+	self assert: (self eval: src) equals: true
+%
+
+category: 'Grail-Tests - Hashing'
+method: ComplexTestCase
+testComplexWorksInASet
+	"Same contract, the other hashed collection."
+
+	self assert: (self eval: 'len({3j, 3j, 3j})') equals: 1.
+	self assert: (self eval: '3j in {1j, 2j, 3j}') equals: true.
+	self assert: (self eval: 'len({0j, 0, 0.0})') equals: 1
+%
