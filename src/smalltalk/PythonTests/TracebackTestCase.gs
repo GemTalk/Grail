@@ -86,6 +86,28 @@ testFuncCodeFirstlineno
 	self assert: ((results @env1:__getitem__: 'co_name') = 'inner').
 %
 
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testComprehensionExceptionTraceback
+	"Phase 2 runtime population: an exception from a comprehension's iterator
+	protocol carries a real traceback whose frame [0] is located at the iterable
+	expression (PEP 657) inside the enclosing function.  This is the end-to-end
+	path (def-time PyCode stamp + ComprehensionAst frame wrapper + extract_tb)
+	that greens test_dictcomps/test_setcomps test_exception_locations.  See
+	tests/python/comprehension_traceback.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'comprehension_traceback' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/comprehension_traceback.py')
+		name: 'comprehension_traceback'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'has_frame' 'name_is_g' 'line_has_boom' 'colno_is_int'
+	   'iterable_span_width' 'iterable_span_is_boom' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'comprehension-traceback check failed: ' , k].
+%
+
 category: 'Grail-Tests - Traceback Data Model'
 method: TracebackTestCase
 testExtractTbWalksPyTracebackChain

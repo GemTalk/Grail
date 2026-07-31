@@ -154,6 +154,11 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 	isTupleTarget := gen target isKindOf: TupleAst.
 	hasIfs := gen ifs notNil and: [gen ifs size > 0].
 
+	"Outermost generator: open a traceback-frame wrapper block (closed by
+	___emitTracebackFrameCloseFor:on:) so an iterator-protocol error surfaces
+	with a PEP 657 location."
+	anIndex = 1 ifTrue: [aStream nextPutAll: '['; lf].
+
 	"Open block + StopIteration handler"
 	aStream nextPutAll: '[| ', iterTemp.
 	isTupleTarget ifTrue: [aStream nextPutAll: ' ', itemTemp].
@@ -202,7 +207,57 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 		self emitGenerators: aCollection from: anIndex + 1 on: aStream innerBody: aBlock
 	].
 
-	"Close whileTrue:, handler"
+	"Close whileTrue:, handler.  The OUTERMOST generator (anIndex = 1) also
+	gets wrapped in a traceback-frame handler (opened above) so an iterator-
+	protocol error carries a PEP 657 location -- see ___emitTracebackFrameClose."
 	aStream decreaseIndent; nextPutAll: '].'; lf.
-	aStream decreaseIndent; nextPutAll: '] @env0:on: StopIteration do: [:___ex___ | nil].'; lf
+	anIndex = 1
+		ifTrue: [
+			aStream decreaseIndent; nextPutAll: '] @env0:on: StopIteration do: [:___ex___ | nil]'; lf.
+			self ___emitTracebackFrameCloseFor: gen iter on: aStream]
+		ifFalse: [
+			aStream decreaseIndent; nextPutAll: '] @env0:on: StopIteration do: [:___ex___ | nil].'; lf]
+%
+
+category: 'code generation'
+classmethod: ComprehensionAst
+___stLiteral: aString
+	"A Smalltalk single-quoted string literal for aString, doubling embedded
+	single quotes.  Emits the comprehension's source line + enclosing function
+	name into the traceback-frame handler."
+
+	| ws |
+	ws := WriteStream on: String new.
+	ws nextPut: $'.
+	aString do: [:c | c == $' ifTrue: [ws nextPut: $']. ws nextPut: c].
+	ws nextPut: $'.
+	^ ws contents
+%
+
+category: 'code generation'
+classmethod: ComprehensionAst
+___emitTracebackFrameCloseFor: iterNode on: aStream
+	"Close the outermost comprehension generator with a handler that prepends
+	ONE traceback frame (PEP 657: located at the iterable expression) for any
+	Python exception escaping the iterator protocol, then re-raises.  The
+	frame's code is the enclosing function's (CallAst functionBeingCompiled);
+	its position + source line come from iterNode -- the first for-clause's
+	iterable.  ___pushTracebackFrame___ no-ops for StopIteration / control-flow,
+	so normal loop termination and a pending return/break/continue are
+	unaffected."
+
+	| func funcName funcLine |
+	func := CallAst functionBeingCompiled.
+	funcName := func isNil ifTrue: ['<module>'] ifFalse: [func name asString].
+	funcLine := func isNil ifTrue: [1] ifFalse: [func beginLine].
+	aStream
+		nextPutAll: '] @env0:on: Exception do: [:___tex___ | ___tex___ @env0:___pushTracebackFrame___: (PyCode @env0:name: ';
+		nextPutAll: (self ___stLiteral: funcName);
+		nextPutAll: ' firstlineno: '; nextPutAll: funcLine printString;
+		nextPutAll: ') lineno: '; nextPutAll: iterNode beginLine printString;
+		nextPutAll: ' colno: '; nextPutAll: iterNode column printString;
+		nextPutAll: ' endLineno: '; nextPutAll: (iterNode endLine ifNil: [iterNode beginLine]) printString;
+		nextPutAll: ' endColno: '; nextPutAll: (iterNode endColumn ifNil: [iterNode column]) printString;
+		nextPutAll: ' line: '; nextPutAll: (self ___stLiteral: (iterNode sourceLine ifNil: ['']));
+		nextPutAll: '. ___tex___ @env0:pass].'; lf
 %

@@ -2,9 +2,9 @@
 
 Generated: 2026-07-31T11:29:04Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
 
-**Modules: 31** — OK 20 · FAIL 1 · ERROR 10 · SKIP 0 · IMPORTERROR 0 · STERROR 0 · CRASH 0 · TIMEOUT 0
+**Modules: 31** — OK 22 · FAIL 1 · ERROR 8 · SKIP 0 · IMPORTERROR 0 · STERROR 0 · CRASH 0 · TIMEOUT 0
 
-**Totals:** tests=4188 failures=400 errors=240 skipped=207
+**Totals:** tests=4188 failures=400 errors=238 skipped=207
 
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
@@ -38,8 +38,8 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_unpack | OK | 1 | 0 | 0 | 0 |  |
 | test.test_augassign | OK | 7 | 0 | 0 | 0 |  |
 | test.test_contains | OK | 4 | 0 | 0 | 0 |  |
-| test.test_dictcomps | ERROR | 10 | 0 | 1 | 0 |  |
-| test.test_setcomps | ERROR | 1 | 0 | 1 | 0 |  |
+| test.test_dictcomps | OK | 10 | 0 | 0 | 0 |  |
+| test.test_setcomps | OK | 1 | 0 | 0 | 0 |  |
 | test.test_pow | ERROR | 7 | 0 | 2 | 0 |  |
 | test.test_richcmp | ERROR | 11 | 1 | 2 | 0 |  |
 | test.test_slice | ERROR | 11 | 2 | 2 | 0 |  |
