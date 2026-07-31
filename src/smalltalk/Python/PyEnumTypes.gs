@@ -194,7 +194,7 @@ ___grailBuildMembers: cls names: attrNames
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew tupleClass gnvClass genValues |
+	| byValue byName members lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew tupleClass gnvClass genValues foreignMixin |
 	"Names assigned under a class-body ``if`` (the shared test fixture's
 	``if issubclass(...): dupe = 3'') never reach classBodyAttributes --
 	their stores go through ___pyAttrStore___ into the per-class
@@ -274,6 +274,17 @@ ___grailBuildMembers: cls names: attrNames
 	hasUserNew := (cls @env0:whichClassIncludesSelector: #'___new__:kw:'
 		environmentId: 1) == cls.
 	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	"An MI enum whose storage base is Enum (``cls inheritsFrom: Enum'') but
+	which mixes in a FOREIGN data type -- ``class E(date, Enum)'', where date is
+	merged as a SECONDARY base -- must carry member_type(*source_args) as each
+	member's value (CPython builds each via member_type.__new__(cls, *args)).
+	nil for a pure Enum/Flag (no mix-in -> object) and for int/str/float-storage
+	enums, whose Smalltalk chain does NOT pass Enum and whose member already IS
+	the data type (rawValue is already correct)."
+	foreignMixin := (cls @env0:inheritsFrom: Enum)
+		ifTrue: [ | mt | mt := Enum ___grailMemberTypeFor: cls.
+			mt == object ifTrue: [nil] ifFalse: [mt] ]
+		ifFalse: [nil].
 	"A method-local class-body ``super()`` resolves its defining class
 	through the ``___cell_<name>___'' closure cell, which ClassDefAst
 	stores only AFTER this hook (after decorators).  A member __new__ runs
@@ -325,7 +336,7 @@ ___grailBuildMembers: cls names: attrNames
 							Enum ___grailStoreOverride: cls name: nameStr callable: dunVal.
 							Enum ___grailCompileOverrideForwarder: cls name: nameStr]]]
 			ifFalse: [
-			| rawValue member built |
+			| rawValue member built effVal |
 			built := false.
 			"Declared names read through their compiled accessor pair;
 			dyn-swept names (class-body ``if`` stores) read from the holder."
@@ -365,8 +376,20 @@ ___grailBuildMembers: cls names: attrNames
 			(rawValue isKindOf: Integer) ifTrue: [
 				lastInt := rawValue.
 				maxInt := maxInt @env0:max: rawValue].
-			(byValue @env0:includesKey: rawValue)
-				ifTrue: [member := byValue @env0:at: rawValue]
+			"A foreign-mixin enum (``class E(date, Enum)'') carries
+			member_type(*args) -- date(2023, 12, 1) -- as its canonical value.
+			Construct it up front so alias detection, value-lookup and storage
+			all key off the SAME value: ``dupe = third'' must still alias third
+			(both resolve to date(2009, 1, 1)), which a byValue keyed by the raw
+			tuple while the check used the constructed date would miss.  effVal ==
+			rawValue for every non-foreign case (int/str/float/plain), so
+			behaviour there is unchanged."
+			effVal := (foreignMixin @env0:notNil
+				and: [(rawValue isKindOf: foreignMixin) not])
+					ifTrue: [Enum ___grailConstructMemberValue: foreignMixin args: rawValue]
+					ifFalse: [rawValue].
+			(byValue @env0:includesKey: effVal)
+				ifTrue: [member := byValue @env0:at: effVal]
 				ifFalse: [
 					"Flag composite-alias (CPython): a class-body value whose
 					bits are all covered by the ALREADY-DEFINED members
@@ -420,7 +443,9 @@ ___grailBuildMembers: cls names: attrNames
 									memberValue := v @env0:isNil ifTrue: [rawValue] ifFalse: [v]]
 								ifFalse: [
 									member := cls @env0:basicNew.
-									memberValue := rawValue].
+									"effVal already carries member_type(*args) for a
+									foreign-mixin enum (else the raw value)."
+									memberValue := effVal].
 							built := true.
 							member @env0:dynamicInstVarAt: #value put: memberValue.
 							member @env0:dynamicInstVarAt: #name put: nameStr.
@@ -694,25 +719,79 @@ ___grailMembers: cls
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
 ___grailMemberTypeFor: cls
-	"The mix-in data type of enum class cls (int/str/float/data base/object),
-	computed by walking cls's superclass chain -- the cls-parameterized form
-	of Enum class>>_member_type_.  A mixed enum's metaclass does not inherit
-	the Grail-Class Attrs ``_member_type_'' accessor, so the metaclass hook
-	(___grailBuildMembers:) can't just send it to cls."
+	"The mix-in data type of enum class cls (Integer/Float/a data base/object),
+	the cls-parameterized form of Enum class>>_member_type_.  A mixed enum's
+	metaclass does not inherit the Grail-Class Attrs ``_member_type_'' accessor,
+	so the metaclass hook (___grailBuildMembers:) can't just send it to cls.
+
+	Two passes: first the Smalltalk storage chain (int/str/float storage bases,
+	whose data type IS the superclass); then, for an MI enum whose storage base
+	is Enum but which mixes in a FOREIGN data type (``class E(date, Enum)'' --
+	date is merged as a SECONDARY base, absent from cls's superclass chain), the
+	registered C3 MRO.  object when there is no mix-in."
 
 	| walker |
 	walker := cls.
 	[walker ~~ nil] @env0:whileTrue: [
-		walker == Enum ifTrue: [^ object].
+		walker == Enum ifTrue: [^ self ___grailMixinFromMro: cls].
 		walker == IntEnum ifTrue: [^ Integer].
 		walker == AbstractPyInt ifTrue: [^ Integer].
 		walker == AbstractPyFloat ifTrue: [^ Float].
-		((walker == PythonInstance) or: [walker == Object]) ifTrue: [^ object].
+		((walker == PythonInstance) or: [walker == Object])
+			ifTrue: [^ self ___grailMixinFromMro: cls].
 		((Enum ___grailRecordFor: walker) @env0:isNil
 			and: [(walker @env0:inheritsFrom: Enum) not
 			and: [walker ~~ cls]]) ifTrue: [^ walker].
 		walker := walker @env0:superclass].
+	^ self ___grailMixinFromMro: cls
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailMixinFromMro: cls
+	"Scan cls's registered C3 MRO for a mixed-in data type the Smalltalk
+	storage chain missed: the first ancestor that is neither an Enum class nor
+	a universal root (object/PythonInstance/Object) nor another enum in the
+	build.  ``class E(date, Enum)'' picks Enum as the storage base and merges
+	date as a SECONDARY base, so date is absent from cls superclass yet present
+	in the MRO.  object when there is no such mix-in (a plain Enum/Flag)."
+
+	| mro |
+	mro := [(Python @env0:at: #importlib) @env0:___mroOf___: cls]
+		@env0:on: AbstractException do: [:e | #()].
+	mro @env0:do: [:c |
+		((c ~~ cls)
+			and: [(c == Enum) @env0:not
+			and: [(c == PythonInstance) @env0:not
+			and: [(c == Object) @env0:not
+			and: [(c == object) @env0:not
+			and: [(c @env0:inheritsFrom: Enum) @env0:not
+			and: [(Enum ___grailRecordFor: c) @env0:isNil]]]]]])
+				ifTrue: [
+					c == AbstractPyInt ifTrue: [^ Integer].
+					c == AbstractPyFloat ifTrue: [^ Float].
+					^ c]].
 	^ object
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailConstructMemberValue: memberType args: rawValue
+	"Build the mixed-in data value member_type(*args): a scalar rawValue -> a
+	1-arg call, a tuple -> its elements spread, mirroring CPython's
+	member_type.__new__(cls, *args).  ``class E(date, Enum): d = 2023, 12, 1''
+	yields date(2023, 12, 1) as the member's _value_ (Grail stores it as #value
+	rather than making the member itself a date, since the storage base is
+	Enum).  Best-effort: on any failure keep the raw class-body value."
+
+	| tupleClass args |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	args := (rawValue isKindOf: tupleClass)
+		ifTrue: [rawValue @env0:asArray]
+		ifFalse: [Array @env0:with: rawValue].
+	^ [memberType @env0:perform: #'value:value:' env: 1
+		withArguments: { args. KeyValueDictionary @env0:new }]
+		@env0:on: AbstractException do: [:e | rawValue]
 %
 
 category: 'Grail-Enum Metaclass'
@@ -978,10 +1057,19 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
-	[ | lastInt maxInt isFlag autoResolved |
+	[ | lastInt maxInt isFlag autoResolved foreignMixin |
 	lastInt := 0.
 	maxInt := 0.
 	isFlag := self ___grailIsFlagClass: newCls.
+	"A functional enum built on a foreign-mixin base (``class enum_type(date,
+	Enum)'' then enum_type('MinorEnum', (('june', (2021,12,25)), ...))) carries
+	member_type(*args) as each value, like the class-syntax builder.  nil for a
+	plain Enum-rooted functional enum and for int/str/float storage.  (A bare
+	``type=date'' kwarg is still ignored, so that shape stays plain.)"
+	foreignMixin := (newCls @env0:inheritsFrom: Enum)
+		ifTrue: [ | mt | mt := Enum ___grailMemberTypeFor: newCls.
+			mt == object ifTrue: [nil] ifFalse: [mt] ]
+		ifFalse: [nil].
 	"Per-INSTANCE auto() resolution (mirrors ___grailBuildMembers, slice 5):
 	the same GrailEnumAuto marker passed under two names -- the _EnumTests
 	functional MainEnum does ``third = auto(); dupe = third'' then
@@ -991,7 +1079,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	stay distinct."
 	autoResolved := IdentityKeyValueDictionary @env0:new.
 	pairs @env0:do: [:pair |
-		| nameStr rawValue member |
+		| nameStr rawValue member effVal |
 		nameStr := pair @env0:at: 1.
 		rawValue := pair @env0:at: 2.
 		"auto() markers can arrive through the mapping/pairs forms
@@ -1013,6 +1101,13 @@ ___grailFunctional: cls positional: positional keywords: keywords
 		(rawValue isKindOf: Integer) ifTrue: [
 			lastInt := rawValue.
 			maxInt := maxInt @env0:max: rawValue].
+		"Construct the foreign-mixin value up front so alias detection, storage
+		and value-lookup all key off the SAME value (see the class-syntax
+		builder).  effVal == rawValue for every non-foreign case."
+		effVal := (foreignMixin @env0:notNil
+			and: [(rawValue isKindOf: foreignMixin) not])
+				ifTrue: [Enum ___grailConstructMemberValue: foreignMixin args: rawValue]
+				ifFalse: [rawValue].
 		((nameStr @env0:size @env0:> 0) and: [(nameStr @env0:at: 1) @env0:= $_])
 			ifTrue: [
 				"A callable under a DUNDER name is a user method, not a member
@@ -1028,18 +1123,18 @@ ___grailFunctional: cls positional: positional keywords: keywords
 						Enum ___grailStoreOverride: newCls name: nameStr callable: rawValue.
 						Enum ___grailCompileOverrideForwarder: newCls name: nameStr])]
 			ifFalse: [
-			(byValue @env0:includesKey: rawValue)
-				ifTrue: [member := byValue @env0:at: rawValue]
+			(byValue @env0:includesKey: effVal)
+				ifTrue: [member := byValue @env0:at: effVal]
 				ifFalse: [
 					member := newCls @env0:basicNew.
-					member @env0:dynamicInstVarAt: #value put: rawValue.
+					member @env0:dynamicInstVarAt: #value put: effVal.
 					member @env0:dynamicInstVarAt: #name put: nameStr.
-					byValue @env0:at: rawValue put: member.
+					byValue @env0:at: effVal put: member.
 					"Zero-valued Flag members are non-canonical -- excluded
 					from iteration/len/_member_names_ (same rule as the
 					class-syntax builder)."
-					((rawValue isKindOf: Integer)
-						and: [rawValue @env0:= 0 and: [isFlag]])
+					((effVal isKindOf: Integer)
+						and: [effVal @env0:= 0 and: [isFlag]])
 						ifFalse: [members @env0:add: member]].
 			byName @env0:at: nameStr put: member.
 			"Category MUST be Grail-Class Attrs: the class-receiver branch of
@@ -1616,7 +1711,17 @@ method: Enum
 __repr__
 	| nm val |
 	nm := self @env0:dynamicInstVarAt: #name.
-	val := (self @env0:dynamicInstVarAt: #value) @env0:printString.
+	"CPython Enum.__repr__ renders the value with repr(): <Color.RED: 'red'>,
+	<MainEnum.third: datetime.date(2009, 1, 1)>.  Use the value's Python repr,
+	not Smalltalk printString (which gives ``aPyDate'' / ``atuple( 1, 2)'').
+	A nil (Smalltalk UndefinedObject) value -- a partially reconstructed member
+	-- has no Python __repr__ that returns a sane string, so keep printString
+	(``nil'') there; fall back to printString on any __repr__ error too."
+	val := (self @env0:dynamicInstVarAt: #value).
+	val := val @env0:isNil
+		ifTrue: ['nil']
+		ifFalse: [[val @env1:__repr__ @env0:asString]
+			@env0:on: AbstractException do: [:e | val @env0:printString]].
 	"A member can reach here with no stored #name -- e.g. a malformed/partial
 	object produced by a reconstruction Grail could not complete (pickle-by-
 	name of a mixed-in data-subclass enum whose member_type() construction is
