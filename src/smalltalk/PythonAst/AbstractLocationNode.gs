@@ -69,6 +69,20 @@ line
 	^beginLine
 %
 
+category: 'Grail-accessors'
+method: AbstractLocationNode
+endLine
+
+	^endLine
+%
+
+category: 'Grail-accessors'
+method: AbstractLocationNode
+endColumn
+
+	^endColumn
+%
+
 category: 'Grail-other'
 method: AbstractLocationNode
 printOn: aStream
@@ -84,8 +98,12 @@ category: 'Grail-other'
 method: AbstractLocationNode
 sourceLine
 
-	| i j string |
-	string := self module source decodeToString.
+	| i j string src |
+	"``source'' may be raw Bytes (needs decoding) or already a
+	CharacterCollection (str/Unicode7, e.g. a module loaded from a decoded
+	string) -- decodeToString only exists on the former."
+	src := self module source.
+	string := (src isKindOf: CharacterCollection) ifTrue: [src] ifFalse: [src decodeToString].
 	i := 0.
 	beginLine - 1 timesRepeat: [
 		i := string indexOf: Character lf startingAt: i + 1.
