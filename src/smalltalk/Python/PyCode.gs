@@ -71,6 +71,17 @@ name: aName qualname: aQualname filename: aFilename firstlineno: aLine
 	^ inst
 %
 
+category: 'Instance Creation'
+classmethod: PyCode
+name: aName firstlineno: aLine
+	"Convenience for the def-time codegen stamp, which only has the def's
+	name + line cheaply to hand: co_qualname defaults to the name and
+	co_filename to a placeholder (neither is conformance-critical yet; a real
+	file path is a later refinement)."
+
+	^ self name: aName qualname: aName filename: '<grail>' firstlineno: aLine
+%
+
 set compile_env: 1
 
 category: 'Grail-String Representation'

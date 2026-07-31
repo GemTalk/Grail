@@ -558,6 +558,15 @@ printSmalltalkOn: aStream
 	self ___docString___ ifNotNil: [:doc |
 		aStream nextPutAll: ' doc: '.
 		self emitStringLiteral: doc on: aStream].
+		"Stamp func.__code__ (a PyCode) at def-time -- a CASCADE onto the same
+		block receiver as ___pyNamed___ (chaining another keyword send would
+		instead form one combined selector).  ___pyCode___: returns self, so the
+		cascade value stays the block.  Only co_firstlineno (the def line) is
+		conformance-critical; co_name follows the def name."
+		aStream
+			nextPutAll: '; @env0:___pyCode___: (PyCode @env0:name: '''; nextPutAll: name;
+			nextPutAll: ''' firstlineno: '; nextPutAll: self beginLine printString;
+			nextPutAll: ')'.
 	"Phase A: close the dynamicInstVarAt:put: paren opened above when
 	this is a module-scope nested def; otherwise just emit the
 	statement-terminating period."
