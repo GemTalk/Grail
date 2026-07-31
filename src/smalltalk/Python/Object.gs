@@ -128,6 +128,23 @@ ___requireHashableAsDictKey___
 
 category: 'Grail-Hashability'
 method: object
+___raiseUnhashableType___
+	"Raise CPython's ``TypeError: unhashable type: 'X''' for the RECEIVER's own
+	class.  The body a class-creation-time unhashable class gets for __hash__
+	(ClassDefAst >> ___unhashableByClassBody___).
+
+	A method rather than generated source for two reasons.  It keeps nested
+	quote-escaping out of the codegen -- the emitted body is just ``^ self
+	___raiseUnhashableType___'' -- and it reads the class at RUNTIME, so a
+	SUBCLASS that does not define its own __hash__ inherits this and reports
+	ITSELF, which is what CPython does."
+
+	^ TypeError ___signal___: 'unhashable type: ''' @env0:,
+		(self @env0:class @env0:name @env0:asString) @env0:, ''''
+%
+
+category: 'Grail-Hashability'
+method: object
 ___raiseUnhashableUse___: ex context: ctx
 	"Re-raise an ``unhashable type: 'X''' TypeError from __hash__ as CPython's
 	richer ``cannot use 'X' as <ctx> (unhashable type: 'X')''.  A __hash__ that
