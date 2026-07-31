@@ -78,7 +78,12 @@ printSmalltalkOn: aStream left: left rightList: right rhsTemp: rhsName lhsTemp: 
 	].
 
 	right size ~= 1 ifTrue: [
-		aStream nextPutAll: ') ___ignore: (' , rhsName , ' := ' , lhsName , ')'.
+		"Non-final ``not in'' in a chain (`a not in B < c`): copy the
+		staged container from lhsName into the shared chain temp rhsName
+		for the next comparison, discarding that assignment's value via
+		___ignore:.  The trailing `)` closes the extra `(` opened by the
+		`(((` container prefix above."
+		aStream nextPutAll: ') ___ignore: (' , rhsName , ' := ' , lhsName , '))'.
 	].
 
 	aStream nextPutAll: ') ___isTruthy___) @env0:not'.

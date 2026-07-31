@@ -593,6 +593,22 @@ ___isTruthy___
 	^ bool __new__: self
 %
 
+category: 'Grail-Convenience Methods - Unary'
+method: object
+___ignore: anObject
+	"Evaluate the receiver and the argument (for its side effect) and
+	return the receiver, discarding the argument.  Used by the chained
+	``in''/``not in'' codegen: the membership result is the receiver, and
+	the argument is an assignment expression (``rhsTemp := lhsTemp'') whose
+	only purpose is to copy the just-evaluated container operand into the
+	shared chain temp so the NEXT comparison in the chain can reuse it as
+	its left operand.  Smalltalk evaluates the argument before the send, so
+	the copy happens after the membership test has read the previous
+	operand -- keeping each Python operand evaluated exactly once."
+
+	^ self
+%
+
 category: 'Grail-Convenience Methods - Boolean'
 method: object
 ___pyOr___: alternativeBlock

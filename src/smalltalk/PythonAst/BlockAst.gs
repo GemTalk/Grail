@@ -91,10 +91,25 @@ printSmalltalkOn: aStream
 category: 'Grail-other'
 method: BlockAst
 printSmalltalkOn: aStream useTemps: aBoolean
+	"aBoolean gates whether the Python-level names bound in this scope are
+	declared as Smalltalk block temps.  At module top level it is false
+	because those names are module globals resolved through the symbol
+	list, not block locals (declaring them would shadow the globals).
 
-	(aBoolean and: [variables notEmpty]) ifTrue: [
+	Codegen HELPER temps (``___t_N'', allocated by allocateTemp to cache
+	the shared middle operand of a chained comparison, etc.) are a
+	different animal: they are genuine Smalltalk locals of THIS block and
+	are never Python names, so they must be declared regardless of
+	aBoolean.  Otherwise a chained comparison at module scope emits a
+	reference to an undeclared ``___t_1'' and fails to compile."
+
+	| toDeclare |
+	toDeclare := aBoolean
+		ifTrue: [variables]
+		ifFalse: [variables select: [:each | each beginsWith: '___t_']].
+	toDeclare notEmpty ifTrue: [
 		aStream nextPut: $|.
-		variables do: [:each | aStream space; nextPutAll: each].
+		toDeclare do: [:each | aStream space; nextPutAll: each].
 		aStream nextPutAll: ' |'; lf.
 	].
 	body do: [:each |
