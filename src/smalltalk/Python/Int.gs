@@ -421,9 +421,16 @@ from_bytes: bytes _: byteorder _: signed
 	Return the integer represented by the given array of bytes."
 
 	| bytesArray result isBigEndian isSigned |
-	"Extract bytes - assuming bytes is a Python bytes object or similar"
+	"Extract bytes - assuming bytes is a Python bytes object or similar.
+	Python's bytes IS Smalltalk's ByteArray with the Python protocol
+	layered on (see Bytes.gs); bytearray subclasses it (Bytearray.gs).
+	Check against ByteArray directly, not the class named `bytes' --
+	that identifier is shadowed by this method's own `bytes' parameter.
+	The old check (`isKindOf: tuple') could never match an actual
+	bytes/bytearray argument, since neither subclasses tuple
+	(array.fromfile, test_system_transitions)."
 	bytesArray := bytes.
-	(bytesArray isKindOf: tuple) ifFalse: [
+	(bytesArray isKindOf: ByteArray) ifFalse: [
 		TypeError ___signal___: 'from_bytes() argument must be bytes-like'
 	].
 
