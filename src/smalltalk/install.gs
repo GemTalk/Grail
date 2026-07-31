@@ -294,6 +294,9 @@ run
 	at: #'builtins' put: nil;
 	at: #'bytearray' put: nil;
 	at: #'PyMemoryView' put: nil;
+	at: #'PyCode' put: nil;
+	at: #'PyFrame' put: nil;
+	at: #'PyTraceback' put: nil;
 	at: #'cmath' put: nil;
 	at: #'complex' put: nil;
 	at: #'copyreg' put: nil;
@@ -679,6 +682,7 @@ run
 	at: #'InterruptedErrorTestCase' put: nil;
 	at: #'IsADirectoryErrorTestCase' put: nil;
 	at: #'IteratorTestCase' put: nil;
+	at: #'TracebackTestCase' put: nil;
 	at: #'KeyErrorTestCase' put: nil;
 	at: #'KeyboardInterruptTestCase' put: nil;
 	at: #'KeywordOnlyParamsTestCase' put: nil;
@@ -894,6 +898,9 @@ input src/smalltalk/Python/BaseException.gs
 input src/smalltalk/Python/Bytearray.gs
 input src/smalltalk/Python/complex.gs
 input src/smalltalk/Python/slice.gs
+input src/smalltalk/Python/PyCode.gs
+input src/smalltalk/Python/PyFrame.gs
+input src/smalltalk/Python/PyTraceback.gs
 input src/smalltalk/Python/iterator.gs
 input src/smalltalk/Python/module.gs
 input src/smalltalk/Python/PythonInstance.gs
@@ -1386,6 +1393,7 @@ input src/smalltalk/PythonTests/ImportlibTestCase.gs
 input src/smalltalk/PythonTests/PackageImportTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
+input src/smalltalk/PythonTests/TracebackTestCase.gs
 input src/smalltalk/PythonTests/ListSortKwargsTestCase.gs
 input src/smalltalk/PythonTests/ListTestCase.gs
 input src/smalltalk/PythonTests/MathTestCase.gs

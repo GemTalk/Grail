@@ -22,7 +22,7 @@ run
 expectvalue /Class
 doit
 (Globals at: #Exception) subclass: 'BaseException'
-  instVarNames: #( args )
+  instVarNames: #( args tracebackObj )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -348,9 +348,12 @@ __suppress_context__
 category: 'Grail-Exception Chaining'
 method: BaseException
 __traceback__
-	"Return the traceback object for this exception."
+	"Return the traceback object (a PyTraceback linked list) for this
+	exception, or None when none has been attached.  ``#'__traceback__''
+	is in ___pythonValueAttrs___ so ___pyAttrLoad___ returns THIS value
+	rather than BoundMethod-wrapping the selector."
 
-	^ nil  "TODO: implement traceback support"
+	^ tracebackObj ifNil: [ None ]
 %
 
 category: 'Grail-Exception Methods'
@@ -405,19 +408,23 @@ ___pythonValueAttrs___
 	``___pyAttrLoad___'' invokes the accessor and returns the tuple rather than
 	wrapping it as a BoundMethod (test_dict test_tuple_keyerror / test_missing
 	check ``exc.args == (key,)'').  ``e.__notes__'' (PEP 678) is likewise the
-	notes list, not a method."
+	notes list, not a method.  ``e.__traceback__'' is the PyTraceback object
+	(or None) -- a value, not a callable -- so a read returns it instead of a
+	BoundMethod-wrapped selector."
 
-	^ IdentitySet new add: #'args'; add: #'__notes__'; yourself
+	^ IdentitySet new add: #'args'; add: #'__notes__'; add: #'__traceback__'; yourself
 %
 set compile_env: 1
 
 category: 'Grail-Exception Methods'
 method: BaseException
 with_traceback: tb
-	"Set the traceback for this exception and return self.
-	This is used to set the traceback when re-raising an exception."
+	"Set the traceback for this exception and return self -- the CPython
+	idiom ``raise X().with_traceback(tb)''.  ``tb'' is a PyTraceback (or
+	None to clear).  Stores into the ``tracebackObj'' slot that
+	``__traceback__'' reads back."
 
-	"TODO: implement traceback setting"
+	tracebackObj := tb.
 	^ self
 %
 
