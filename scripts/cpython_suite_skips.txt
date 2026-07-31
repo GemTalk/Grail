@@ -185,3 +185,25 @@ test.test_functools|TestPartialPySubclass.test_recursive_pickle|needs RecursionE
 # raised (same class as the other @cpython_only / C-internal skips). N/A to
 # Grail rather than a bug.
 test.test_iter|TestCase.test_iter_overflow|@cpython_only: asserts OverflowError at PY_SSIZE_T_MAX; Grail's seq_iterator index is arbitrary-precision (never overflows) -- CPython C-internal, N/A
+
+# --- test_enum: _simple_enum / _test_simple_enum (CPython-internal helpers) ---
+# This test exercises two UNDERSCORE-prefixed, CPython-internal enum helpers:
+# _simple_enum(etype) -- a metaclass-free fast-path decorator that builds an
+# enum from a plain class -- and _test_simple_enum(checked, simple) -- a
+# DEVELOPMENT consistency checker that asserts a @_simple_enum class matches its
+# hand-written metaclass twin.  The failing line is `SimpleColor.MAGENTA._value_
+# = 9', a DELIBERATE member corruption the test uses only to verify the checker
+# detects drift; CPython ALLOWS that write (it is not a prohibition Grail is
+# correctly enforcing -- Grail's `_simple_enum' is a no-op stub, so the member
+# is still the raw immediate SmallInteger, which cannot hold the attribute).
+#
+# A faithful `_simple_enum' is a WON'T-IMPLEMENT (not can't): it would have to
+# replicate the metaclass's whole class-body classification (members vs sunders
+# like `_numeric_repr_' vs dunders like `__str__ = object.__str__' vs
+# descriptors vs aliases `ASCII = A = ...'), carry __module__/__qualname__ as
+# real accessors, and handle IntFlag composites + boundary=KEEP.  It is also
+# LOAD-BEARING FOR `re' (re/__init__.py: @global_enum @_simple_enum(IntFlag,
+# boundary=KEEP) class RegexFlag), so any imperfection breaks `import re' -- an
+# outsized regression risk for a test of a dev-only consistency checker.  re
+# already works with the stub (its flags stay plain ints, which is enough).
+test.test_enum|TestStdLib.test_test_simple_enum|_simple_enum/_test_simple_enum are CPython-internal helpers; faithful build is a load-bearing sub-project for re, and the failing line is an artificial member._value_ corruption CPython allows -- won't-implement, not a correctness gap
