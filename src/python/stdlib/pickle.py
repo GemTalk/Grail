@@ -41,6 +41,17 @@ _DICT_ITEMITER = type(iter({}.items()))
 # tag used for list iterators, so it unpickles as a plain list_iterator.
 _SET_ITER = type(iter(set()))
 
+# The seq_iterator type: iter(x) for an object with __getitem__ but no
+# __iter__ (CPython's legacy sequence iterator).  Pickled explicitly like the
+# others; state is (source, index) -- the source encoded through _encode
+# (memoized) and re-iterated from `index' on rebuild, matching CPython's
+# __reduce__ == (iter, (seq,), index).  The probe supplies an instance whose
+# iter() yields a seq_iterator so we can capture its type.
+class _SeqIterProbe:
+    def __getitem__(self, i):
+        raise IndexError
+_SEQ_ITER = type(iter(_SeqIterProbe()))
+
 _HIGHEST_PROTOCOL = 5
 HIGHEST_PROTOCOL = 5
 DEFAULT_PROTOCOL = 4
@@ -119,6 +130,14 @@ def _memoizable(obj):
     return (type(obj) is _LIST_ITER
             or type(obj) is bytearray
             or isinstance(obj, (list, dict, set, frozenset)))
+
+
+def newobj(cls):
+    # The default-object reconstructor: build a bare instance of cls WITHOUT
+    # running __init__, via Grail's object.__new__ allocator.  Called
+    # in-process by the "O" decode below (NOT pickled by reference), so a
+    # generic instance round-trips as class-reference + __getstate__.
+    return object.__new__(cls)
 
 
 def _encode(obj, out, memo):
@@ -222,6 +241,14 @@ def _encode_body(obj, out, memo):
         _emit_len(out, pos)
         out.append(b"F")   # not reversed
         out.append(b"F")   # not exhausted
+    elif type(obj) is _SEQ_ITER:
+        # A seq_iterator (iter() over a __getitem__ object): (source, index).
+        # The source is encoded through _encode so it is memoized and shared;
+        # rebuild re-iterates it from `index'.
+        source, index = obj._getstate()
+        out.append(b"Q")
+        _encode(source, out, memo)
+        _emit_len(out, index)
     elif isinstance(obj, tuple):
         out.append(b"t")
         _emit_len(out, len(obj))
@@ -276,6 +303,18 @@ def _encode_body(obj, out, memo):
         if reduce is None:
             raise PicklingError("Can't pickle %r" % (obj,))
         rv = reduce()
+        if rv is NotImplemented:
+            # No custom __reduce__ (object.__reduce__ signals the default):
+            # pickle a plain instance generically as class-reference + state
+            # (the "O" tag), rebuilt via object.__new__(cls).  The reconstructor
+            # runs in-process at decode time, so -- unlike CPython's
+            # copyreg.__newobj__ -- it need not pickle by reference (Grail
+            # module functions are BoundMethods with no __module__).
+            out.append(b"O")
+            _emit_global(out, type(obj))
+            state = obj.__getstate__() if hasattr(obj, "__getstate__") else None
+            _encode(state, out, memo)
+            return
         if isinstance(rv, str):
             _emit_global(out, obj)
             return
@@ -360,6 +399,23 @@ class _Unpickler:
             d = self.load()
             pos = int(self._line())
             return _DICT_ITEMITER._new_from(d, pos)
+        if t == b"Q":
+            source = self.load()
+            index = int(self._line())
+            return _SEQ_ITER._new_from(source, index)
+        if t == b"O":
+            # Generic default-object: object.__new__(cls) + restored state.
+            cls = self.load()
+            state = self.load()
+            obj = newobj(cls)
+            if state is not None:
+                setstate = getattr(obj, "__setstate__", None)
+                if setstate is not None:
+                    setstate(state)
+                elif isinstance(state, dict):
+                    for k, v in state.items():
+                        setattr(obj, k, v)
+            return obj
         if t == b"N":
             return None
         if t == b"T":

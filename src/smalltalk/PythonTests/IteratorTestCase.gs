@@ -103,6 +103,28 @@ testLazyGetitemSeqIterator
 		self assert: ((results @env1:__getitem__: key) = true) description: key]
 %
 
+category: 'Grail-Tests - Iterator Protocol'
+method: IteratorTestCase
+testSeqIteratorAndDefaultObjectPickle
+	"A seq_iterator pickles (pickle.py's ``Q'' tag + seq_iterator _getstate/
+	_new_from): a partially-consumed iterator resumes at the same index after
+	a round-trip, which also pickles its __getitem__ SOURCE object through the
+	DEFAULT object.__reduce__ path (pickle.newobj + __getstate__ -- previously
+	``Not yet implemented: __reduce__'').  A plain user object with instance
+	attributes round-trips too."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'lazy_seq_iterator' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/lazy_seq_iterator.py')
+		name: 'lazy_seq_iterator'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	self assert: ((results @env1:__getitem__: 'generic_object_pickle') = true)
+		description: 'a plain user object must pickle (default object.__reduce__)'.
+	self assert: ((results @env1:__getitem__: 'seq_iterator_pickle') = true)
+		description: 'a partially-consumed seq_iterator must pickle and resume'
+%
+
 category: 'Grail-Tests - Dict Key Iterator'
 method: IteratorTestCase
 testDictKeyIteratorBasicIteration

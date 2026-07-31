@@ -258,9 +258,24 @@ method: builtins
 bin: aNumber
 	"Python builtin bin(x) — fixed-arity fast path."
 
-	| result |
-	result := aNumber @env0:printStringRadix: 2.
-	^ '0b' @env0:, result
+	^ '0b' @env0:, ((self ___radixInteger___: aNumber) @env0:printStringRadix: 2)
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___radixInteger___: aNumber
+	"The kernel Integer bin/hex/oct render.  CPython's bin/hex/oct coerce the
+	argument with operator.index() -- i.e. x.__index__() -- so any object with
+	__index__ works.  A kernel Integer is the fast path (used as-is); anything
+	else (notably a mixed-in-int enum member -- class E(HexInt, Enum) -- which
+	is AbstractPyInt-rooted and does NOT understand the kernel
+	#printStringRadix:, yet answers __index__ with its int value) is routed
+	through __index__.  Objects without __index__ keep the prior behavior
+	(sent #printStringRadix: directly), so nothing that worked before changes."
+
+	(aNumber @env0:isKindOf: Integer) ifTrue: [^ aNumber].
+	(aNumber ___respondsTo___: #'__index__') ifTrue: [^ aNumber @env1:__index__].
+	^ aNumber
 %
 
 category: 'Grail-Built-in Functions'
@@ -397,9 +412,7 @@ method: builtins
 hex: aNumber
 	"Python builtin hex(x) — fixed-arity fast path."
 
-	| result |
-	result := aNumber @env0:printStringRadix: 16.
-	^ '0x' @env0:, (result @env0:asLowercase)
+	^ '0x' @env0:, ((self ___radixInteger___: aNumber) @env0:printStringRadix: 16) @env0:asLowercase
 %
 
 category: 'Grail-Built-in Functions'
@@ -642,9 +655,7 @@ method: builtins
 oct: aNumber
 	"Python builtin oct(x) — fixed-arity fast path."
 
-	| result |
-	result := aNumber @env0:printStringRadix: 8.
-	^ '0o' @env0:, result
+	^ '0o' @env0:, ((self ___radixInteger___: aNumber) @env0:printStringRadix: 8)
 %
 
 category: 'Grail-Built-in Functions'

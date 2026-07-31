@@ -1599,6 +1599,14 @@ __repr__
 	| nm val |
 	nm := self @env0:dynamicInstVarAt: #name.
 	val := (self @env0:dynamicInstVarAt: #value) @env0:printString.
+	"A member can reach here with no stored #name -- e.g. a malformed/partial
+	object produced by a reconstruction Grail could not complete (pickle-by-
+	name of a mixed-in data-subclass enum whose member_type() construction is
+	unimplemented).  repr must still return a Python string; a nil name would
+	make `, nm' fail inside Unicode concatenation (`nil doesNotUnderstand
+	#do:'), leaking a raw Smalltalk error out of a mere repr -- typically
+	while unittest formats an assertion failure.  Fall back to the value repr."
+	nm @env0:isNil ifTrue: [ nm := val ].
 	^ '<' @env0:, self @env0:class @env0:name @env0:asString @env0:, '.'
 		@env0:, nm @env0:, ': ' @env0:, val @env0:, '>'
 %
@@ -1683,7 +1691,29 @@ ___flagOperand___: other
 
 category: 'Grail-Flag Member'
 method: Flag
+___grailNoneCombineStr: other
+	"A Flag member written ``E = None'' is CPython's no-combine sentinel: it
+	has value None and any |/&/^ with it must raise TypeError, never do bit
+	arithmetic.  Answer the ``Cls.name'' of whichever of self/other is such a
+	member (self first), else nil (caller proceeds with the normal op).
+	Without this, the None value reached #bitOr:/#bitAnd:/#bitXor: as nil and
+	leaked a raw Smalltalk ``nil doesNotUnderstand'' error."
+
+	| sv ov |
+	sv := self @env0:dynamicInstVarAt: #value.
+	(sv @env0:isNil or: [sv == None]) ifTrue: [^ Enum ___grailMemberStr: self].
+	((other isKindOf: Flag) or: [other @env0:class == self @env0:class]) ifTrue: [
+		ov := other @env0:dynamicInstVarAt: #value.
+		(ov @env0:isNil or: [ov == None]) ifTrue: [^ Enum ___grailMemberStr: other]].
+	^ nil
+%
+
+category: 'Grail-Flag Member'
+method: Flag
 __or__: other
+	| none |
+	(none := self ___grailNoneCombineStr: other) @env0:isNil ifFalse: [
+		^ TypeError ___signal___: '''' @env0:, none @env0:, ''' cannot be combined with other flags with |'].
 	^ Enum ___grailLookupValue: self @env0:class
 		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitOr: (self ___flagOperand___: other))
 %
@@ -1691,6 +1721,9 @@ __or__: other
 category: 'Grail-Flag Member'
 method: Flag
 __and__: other
+	| none |
+	(none := self ___grailNoneCombineStr: other) @env0:isNil ifFalse: [
+		^ TypeError ___signal___: '''' @env0:, none @env0:, ''' cannot be combined with other flags with &'].
 	^ Enum ___grailLookupValue: self @env0:class
 		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitAnd: (self ___flagOperand___: other))
 %
@@ -1698,6 +1731,9 @@ __and__: other
 category: 'Grail-Flag Member'
 method: Flag
 __xor__: other
+	| none |
+	(none := self ___grailNoneCombineStr: other) @env0:isNil ifFalse: [
+		^ TypeError ___signal___: '''' @env0:, none @env0:, ''' cannot be combined with other flags with ^'].
 	^ Enum ___grailLookupValue: self @env0:class
 		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitXor: (self ___flagOperand___: other))
 %
@@ -1706,11 +1742,13 @@ category: 'Grail-Flag Member'
 method: Flag
 __invert__
 	"~A: the mask-complement within the class's named bits (CPython
-	3.11+ semantics)."
+	3.11+ semantics).  A None-valued member (``E = None'') cannot be inverted."
 
 	| mask v |
-	mask := Enum ___grailFlagMask: self @env0:class.
 	v := self @env0:dynamicInstVarAt: #value.
+	(v @env0:isNil or: [v == None]) ifTrue: [
+		^ TypeError ___signal___: '''' @env0:, (Enum ___grailMemberStr: self) @env0:, ''' cannot be inverted'].
+	mask := Enum ___grailFlagMask: self @env0:class.
 	^ Enum ___grailLookupValue: self @env0:class
 		value: (mask @env0:bitXor: (mask @env0:bitAnd: v))
 %

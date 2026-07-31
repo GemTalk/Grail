@@ -2599,9 +2599,19 @@ __ne__: other
 category: 'Grail-Serialization'
 method: object
 __reduce__
-	"Return state for pickling (protocol 2)"
+	"Default pickle reduce.  Answers the NotImplemented singleton to signal
+	pickle.py that this object has NO custom reduce, so it should be pickled
+	generically -- by class reference plus __getstate__ (pickle.py's ``O''
+	tag), rebuilt via object.__new__(cls).  Doing it this way (rather than
+	returning a (reconstructor, args, state) tuple like CPython) avoids having
+	to pickle a reconstructor function by reference: Grail module functions are
+	BoundMethods with no __module__, so they cannot round-trip as globals.
 
-	self @env0:error: 'Not yet implemented: __reduce__'
+	A class defining its OWN __reduce__ (e.g. functools.partial) overrides
+	this, returning a real tuple that pickle.py handles via the ``r'' tag.
+	Previously this raised ``Not yet implemented: __reduce__''."
+
+	^ NotImplemented
 %
 
 category: 'Grail-Serialization'
