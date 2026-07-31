@@ -211,6 +211,37 @@ testAugAddIntToFloatNoRegression
 	self assert: (testModule @env1:aug_int_to_float) equals: 1.5
 %
 
+category: 'Grail-Tests - Augmented Assignment'
+method: OperatorSemanticsTestCase
+testAugIaddNoneDisablesOperator
+	"``__iadd__ = None'' disables the in-place op AND blocks the __add__
+	fallback: ``x += 10'' raises TypeError (test_augassign testCustomMethods1
+	aug_test4).  The None class attribute is invisible to the inherited
+	compiled __iadd__, so the sentinel is read via ___classAttrDunder___."
+
+	self assert: (testModule @env1:aug_iadd_none_disabled) equals: 'TypeError'
+%
+
+category: 'Grail-Tests - Augmented Assignment'
+method: OperatorSemanticsTestCase
+testAugIaddNoneSentinelNoRegression
+	"The None sentinel check does not disturb ordinary dispatch: a sibling
+	with a real __iadd__ still mutates in place, and one with only __add__
+	still falls back."
+
+	self assert: (testModule @env1:aug_iadd_none_present_still_works) equals: true
+%
+
+category: 'Grail-Tests - Comparison'
+method: OperatorSemanticsTestCase
+testDequeEqualityIsNonreflexive
+	"deque == deque is element-wise with identity-before-equality, so a deque
+	holding a shared float('nan') equals a deque built from the same objects;
+	a non-deque operand is NotImplemented (test_contains test_nonreflexive)."
+
+	self assert: (testModule @env1:deque_nonreflexive_eq) equals: true
+%
+
 ! --- 4. operator module ---
 
 category: 'Grail-Tests - operator module'
