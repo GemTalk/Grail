@@ -200,6 +200,24 @@ class deque:
     def __contains__(self, item):
         return item in self._items
 
+    def __eq__(self, other):
+        # Element-wise equality between two deques (CPython compares deques
+        # like sequences).  Delegating to list == gives Python's identity-
+        # before-equality element comparison for free, so a deque containing
+        # a non-reflexive element (float('nan'), test.support.NEVER_EQ) still
+        # equals a deque built from the same objects (test_contains
+        # test_nonreflexive).  Any non-deque operand is NotImplemented so the
+        # reflected comparison / identity fallback runs.
+        if isinstance(other, deque):
+            return self._items == other._items
+        return NotImplemented
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
+
     def __bool__(self):
         return len(self._items) > 0
 
