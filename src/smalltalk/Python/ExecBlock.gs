@@ -137,6 +137,20 @@ __name__
 
 category: 'Grail-Attribute Access'
 method: ExecBlock
+__code__
+	"``func.__code__'' -- the PyCode stamped at def-time (FunctionDefAst cascades
+	``___pyCode___:'' onto the block), or AttributeError for a synthetic block
+	that never got one (CPython real functions always have a code object; a bare
+	block is not one).  #'__code__' is in ___pythonValueAttrs___ so a read
+	returns the PyCode value, not a BoundMethod-wrapped selector."
+
+	^ ((ExecBlock @env0:___pyAttrsClass___) @env0:slotAt: self attr: '__code__')
+		ifNil: [ AttributeError ___signal___:
+			'''function'' object has no attribute ''__code__''' ]
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
 __qualname__
 	"``func.__qualname__'' — a stamped value if one exists, else __name__.
 	Grail closures don't track lexical nesting, so the fallback is the bare
@@ -329,6 +343,7 @@ ___slotNames___
 		add: #'__doc__';
 		add: #'__annotations__';
 		add: #'__type_params__';
+		add: #'__code__';
 		yourself
 %
 
@@ -367,6 +382,7 @@ ___pythonValueAttrs___
 		add: #'__dict__';
 		add: #'__annotations__';
 		add: #'__type_params__';
+		add: #'__code__';
 		yourself
 %
 
@@ -429,5 +445,18 @@ ___pyNamed___: aString annotations: aDict doc: aDoc
 	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__name__' put: aString.
 	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__annotations__' put: aDict.
 	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__doc__' put: aDoc.
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
+___pyCode___: aCode
+	"Stamp this closure's ``__code__'' (a PyCode) at def-time.  FunctionDefAst's
+	nested-def emit cascades this onto the block expression so
+	``func.__code__.co_firstlineno'' answers the def's source line.  Writes the
+	SLOT namespace (like __name__), and returns self so it composes in the
+	``name := <block>'' assignment / decorator pipeline."
+
+	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__code__' put: aCode.
 	^ self
 %

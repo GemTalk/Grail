@@ -67,6 +67,27 @@ testTracebackDataModelFixture
 
 category: 'Grail-Tests - Traceback Data Model'
 method: TracebackTestCase
+testFuncCodeFirstlineno
+	"Phase 2: a nested def carries a real func.__code__ (a PyCode) stamped at
+	def-time; co_firstlineno is the 1-based line of the ``def'' keyword (what
+	test_dictcomps.test_exception_locations reads as co.co_firstlineno).  See
+	tests/python/func_code_firstlineno.py -- inner's def is on line 10."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'func_code_firstlineno' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/func_code_firstlineno.py')
+		name: 'func_code_firstlineno'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	self assert: ((results @env1:__getitem__: 'has_code') = true).
+	self assert: ((results @env1:__getitem__: 'co_firstlineno_is_int') = true).
+	self assert: ((results @env1:__getitem__: 'co_firstlineno') = 10)
+		description: 'func.__code__.co_firstlineno must be the def line (10)'.
+	self assert: ((results @env1:__getitem__: 'co_name') = 'inner').
+%
+
+category: 'Grail-Tests - Traceback Data Model'
+method: TracebackTestCase
 testExtractTbWalksPyTracebackChain
 	"Build a two-node PyTraceback chain (shallow frame -> deep frame, as an
 	exception unwinds) and walk it through traceback.extract_tb.  extract_tb
