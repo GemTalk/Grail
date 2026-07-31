@@ -36,16 +36,17 @@ def _unpack_exc_args(exc_type, value, tb):
     exception ``format_exception(exc)'' form.  Returns the triple
     with None-safe defaults.
 
-    Grail's exception objects don't carry a real ``__traceback__''
-    object — they expose the attribute as a BoundMethod accessor.
-    Skip the auto-pull of tb and leave it as the caller supplied
-    (most callers pass None anyway)."""
+    Grail exceptions now carry a real ``__traceback__'' (a PyTraceback
+    or None), so the single-arg form auto-pulls it when the caller did
+    not pass one — matching CPython's ``format_exception(exc)''."""
     # 3.10+ single-arg form: a BaseException instance in exc_type.
     if isinstance(exc_type, BaseException):
         exc = exc_type
         exc_type = type(exc)
         if value is None:
             value = exc
+        if tb is None:
+            tb = getattr(exc, '__traceback__', None)
     return exc_type, value, tb
 
 
@@ -60,13 +61,16 @@ def format_exception(exc_type, value=None, tb=None):
     exc_type, value, tb = _unpack_exc_args(exc_type, value, tb)
     lines = ['Traceback (most recent call last):\n']
     if tb is not None:
-        # If a list-like has been passed (some callers pass
-        # frame info via a list), render each entry.
         try:
-            for entry in tb:
-                lines.append('  ' + str(entry) + '\n')
+            # A real traceback object (PyTraceback linked list).
+            lines.extend(format_tb(tb))
         except Exception:
-            pass
+            # Legacy callers sometimes pass a plain list of frame entries.
+            try:
+                for entry in tb:
+                    lines.append('  ' + str(entry) + '\n')
+            except Exception:
+                pass
     lines.extend(format_exception_only(exc_type, value))
     return lines
 
@@ -107,18 +111,91 @@ def print_exc(file=None):
     file.write(format_exc())
 
 
+class FrameSummary:
+    """A single frame of an extracted traceback.
+
+    Carries the classic ``(filename, lineno, name, line)`` tuple shape plus
+    CPython 3.11+ PEP 657 fine-grained columns (``colno`` / ``end_colno`` /
+    ``end_lineno``).  ``line`` is the source text stripped of surrounding
+    whitespace, exactly as CPython stores it, so ``line[colno - indent :
+    end_colno - indent]`` recovers the sub-expression the location points at."""
+
+    def __init__(self, filename, lineno, name, line=None,
+                 end_lineno=None, colno=None, end_colno=None):
+        self.filename = filename
+        self.lineno = lineno
+        self.name = name
+        self.end_lineno = end_lineno if end_lineno is not None else lineno
+        self.colno = colno
+        self.end_colno = end_colno
+        self.line = line.strip() if isinstance(line, str) else line
+
+    def __len__(self):
+        return 4
+
+    def __getitem__(self, pos):
+        return (self.filename, self.lineno, self.name, self.line)[pos]
+
+    def __iter__(self):
+        return iter((self.filename, self.lineno, self.name, self.line))
+
+    def __eq__(self, other):
+        if isinstance(other, FrameSummary):
+            return (self.filename, self.lineno, self.name, self.line) == \
+                   (other.filename, other.lineno, other.name, other.line)
+        if isinstance(other, tuple):
+            return tuple(self) == other
+        return NotImplemented
+
+    def __repr__(self):
+        return '<FrameSummary file %s, line %r in %s>' % (
+            self.filename, self.lineno, self.name)
+
+    def __str__(self):
+        row = '  File "%s", line %s, in %s' % (self.filename, self.lineno, self.name)
+        if self.line:
+            row += '\n    ' + self.line
+        return row
+
+
+class StackSummary(list):
+    """A list of FrameSummary, as returned by ``extract_tb``."""
+
+    def format(self):
+        return format_list(self)
+
+
 def extract_tb(tb, limit=None):
-    # CPython returns a list of FrameSummary - without a real tb we
-    # return an empty list.
-    return []
+    """Walk a traceback into a StackSummary of FrameSummary, OUTERMOST frame
+    first — so ``extract_tb(exc.__traceback__)[0]`` is the frame that caught
+    the exception.  ``tb`` is a PyTraceback linked list (``tb_next`` chained,
+    terminated by None) or None."""
+    result = StackSummary()
+    cur = tb
+    count = 0
+    while cur is not None:
+        if limit is not None and count >= limit:
+            break
+        frame = cur.tb_frame
+        code = frame.f_code
+        result.append(FrameSummary(
+            code.co_filename, cur.tb_lineno, code.co_name,
+            line=cur.tb_line,
+            end_lineno=cur.tb_end_lineno,
+            colno=cur.tb_colno, end_colno=cur.tb_end_colno))
+        cur = cur.tb_next
+        count += 1
+    return result
 
 
 def extract_stack(f=None, limit=None):
-    return []
+    # No live-frame introspection yet; an empty StackSummary is the honest
+    # answer (a real stack walk is a separate future feature).
+    return StackSummary()
 
 
 def format_tb(tb, limit=None):
-    return []
+    return extract_tb(tb, limit).format()
 
 
 def format_stack(f=None, limit=None):
@@ -141,9 +218,12 @@ def print_list(extracted_list, file=None):
 
 
 def walk_tb(tb):
-    """Yield (frame, lineno) pairs walking the traceback.  Grail has
-    no real traceback objects so the generator is empty."""
-    return iter(())
+    """Yield (frame, lineno) pairs walking the traceback from the given
+    node toward its ``tb_next`` tail."""
+    cur = tb
+    while cur is not None:
+        yield cur.tb_frame, cur.tb_lineno
+        cur = cur.tb_next
 
 
 def walk_stack(f):
@@ -177,7 +257,11 @@ class TracebackException:
         self.__cause__ = None
         self.__context__ = None
         self.__suppress_context__ = False
-        self.stack = []  # FrameSummary list; empty without real tb
+        # FrameSummary list extracted from the traceback (empty if none).
+        try:
+            self.stack = extract_tb(exc_traceback)
+        except Exception:
+            self.stack = StackSummary()
 
     @classmethod
     def from_exception(cls, exc, **kwargs):
@@ -201,5 +285,5 @@ __all__ = [
     'print_exception', 'print_exc',
     'extract_tb', 'extract_stack', 'format_tb', 'format_stack',
     'format_list', 'print_list', 'walk_tb', 'walk_stack',
-    'TracebackException',
+    'TracebackException', 'FrameSummary', 'StackSummary',
 ]
