@@ -137,6 +137,26 @@ __ne__: other
 	^ (self __eq__: other) @env0:not
 %
 
+category: 'Grail-Hashing'
+method: mappingproxy
+__hash__
+	"CPython DELEGATES a proxy's hash to the mapping it wraps -- mappingproxy
+	does not set __hash__ = None, it forwards.  The observable tell is the
+	error message: ``hash(types.MappingProxyType({}))'' raises
+
+	    TypeError: unhashable type: 'dict'
+
+	naming the WRAPPED type, not 'mappingproxy'.  So a proxy over a dict is
+	unhashable because dicts are, and a proxy over a hashable mapping would
+	hash.  Forwarding reproduces both, and the message, for free.
+
+	Needed because __eq__ above is defined without a matching __hash__, so the
+	proxy inherited object's IDENTITY hash: it was silently hashable, and two
+	proxies over equal dicts compared equal while hashing differently."
+
+	^ mapping __hash__
+%
+
 ! ------------------- string representation
 category: 'Grail-String Representation'
 method: mappingproxy

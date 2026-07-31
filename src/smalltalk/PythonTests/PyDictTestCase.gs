@@ -157,3 +157,51 @@ testInstanceDictPreservesInsertionOrder
 	self assert: (m @env1:___pyAttrLoad___: #'AFTER') @env1:__repr__
 		equals: '[''zz'', ''mm'', ''qq'', ''aa'']'
 %
+
+category: 'Grail-Tests - View Hashing'
+method: PyDictTestCase
+testSetLikeViewsAreUnhashable
+	"CPython sets __hash__ = None on the SET-LIKE views: they define a
+	set-like __eq__ over contents that change with the dict, so no stable
+	hash exists.  Grail defined that __eq__ without a __hash__, leaving them
+	silently hashable on object's identity hash."
+
+	self should: [self eval: 'hash({"a": 1}.keys())'] raise: TypeError.
+	self should: [self eval: 'hash({"a": 1}.items())'] raise: TypeError
+%
+
+category: 'Grail-Tests - View Hashing'
+method: PyDictTestCase
+testValuesViewStaysHashable
+	"THE case that makes the rule above worth stating precisely: dict_values
+	is NOT set-like -- it has no set-like __eq__ -- so CPython leaves it with
+	object's identity hash and ``hash(d.values())'' SUCCEEDS.  Grail's
+	hierarchy draws the same line (dict_values descends from dict_view, not
+	dict_set_view), so blocking only the set-like views is both correct and
+	sufficient.  A blanket 'views are unhashable' rule would break this."
+
+	self assert: (self eval: 'isinstance(hash({"a": 1}.values()), int)')
+		equals: true
+%
+
+category: 'Grail-Tests - View Hashing'
+method: PyDictTestCase
+testMappingProxyDelegatesHashToTheWrappedMapping
+	"CPython does NOT set __hash__ = None on mappingproxy -- it FORWARDS to
+	the mapping it wraps.  The tell is the message: hashing a proxy over a
+	dict raises ``unhashable type: 'dict''', naming the WRAPPED type rather
+	than 'mappingproxy'.  Forwarding reproduces that exactly."
+
+	| raised |
+	raised := false.
+	[self eval: 'import types
+hash(types.MappingProxyType({"a": 1}))']
+		on: TypeError
+		do: [:ex |
+			raised := true.
+			self assert: ((ex messageText indexOfSubCollection: 'unhashable type') > 0).
+			"the WRAPPED type, not the proxy"
+			self assert: ((ex messageText indexOfSubCollection: '''dict''') > 0).
+			ex return: nil].
+	self assert: raised
+%

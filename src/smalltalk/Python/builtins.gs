@@ -194,15 +194,24 @@ category: 'Grail-Built-in Functions'
 method: builtins
 _compile: positional kw: kwargs
 	"Python builtin compile(source, filename, mode, ...).  Grail has
-	no real bytecode compiler, so return the source string unchanged
-	— exec() on a string already runs through the Python AST loader.
-	Jinja2's Environment._compile is the load-bearing caller here:
-	it compiles the generated template-render source to a code
-	object and exec's it into a fresh namespace.  Returning the
-	source string lets the namespace setup succeed; subsequent
-	exec(source, ns) is the actual work."
+	no real bytecode compiler, so the compiled result is the source
+	string unchanged — exec()/eval() on a string already run through
+	the Python AST loader.  Jinja2's Environment._compile is the
+	load-bearing caller: it compiles the generated template-render
+	source to a code object and exec's it into a fresh namespace;
+	returning the source string lets that succeed.
 
-	^ positional @env0:at: 1
+	CPython's compile() nonetheless PARSES the source and raises
+	SyntaxError on invalid syntax, so parse here (discarding the AST)
+	to surface it — e.g. ``compile('x, b += 3', ...)'' must raise
+	(test_augassign.test_with_unpacking).  Only strings are parsed; a
+	non-string source (already an AST/code object) is returned as-is."
+
+	| source |
+	source := positional @env0:at: 1.
+	(source isKindOf: CharacterCollection)
+		ifTrue: [ModuleAst @env0:parseSource: source].
+	^ source
 %
 
 category: 'Grail-Built-in Functions'

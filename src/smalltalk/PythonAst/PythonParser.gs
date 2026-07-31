@@ -1156,6 +1156,13 @@ parseExpressionOrAssignment
 		opStr := opTok value copyFrom: 1 to: opTok value size - 1. "Remove the '='"
 		opClass := self operatorClassFor: opStr.
 		value := self parseExpression.
+		"CPython: an augmented-assignment target must be a single Name,
+		Attribute, or Subscript.  A tuple/list/starred target (``x, b += 3'')
+		is a SyntaxError, not an unpacking assignment."
+		((expr isKindOf: NameAst)
+			or: [(expr isKindOf: AttributeAst)
+			or: [expr isKindOf: SubscriptAst]]) ifFalse: [
+				SyntaxError signal: 'illegal expression for augmented assignment'].
 		self setStoreCtx: expr.
 		^self buildNode: AugAssignAst fields: (IdentityKeyValueDictionary new
 			at: #target put: expr;

@@ -153,21 +153,55 @@ __eq__: other
 	"Two slices are equal iff their (start, stop, step) tuples are
 	equal under Python equality rules.
 
-	Compare each field with ___pyRichEqBool___ (identity-before-equality, then
-	rich ==), NOT a bare Smalltalk ``='': a bare ``self start = other start''
-	compiled to an env-1 ``='' send, which a SmallInteger field does not
-	understand -- an uncatchable escape that took down test_slice's test_cmp /
-	test_deepcopy / test_setslice_without_getslice.  ___pyRichEqBool___ also
-	gives CPython's tuple-comparison semantics for free: identity-first means
-	``s == s'' does not invoke a field's __eq__ (so a field whose __eq__ raises
-	is only reached when the fields differ by identity -- test_cmp's BadCmp),
-	and rich == compares mutable fields by value (test_deepcopy's list
-	start/stop/step)."
+	The components must be compared with ___pyRichEqBool___ -- CPython's
+	PyObject_RichCompareBool(x, y, Py_EQ), identity short-circuit included --
+	not with ``=''.  This method compiles in env 1, so a bare ``self start =
+	other start'' was an ENV-1 ``='' send to whatever the component is, and
+	SmallInteger has no env-1 ``='': every slice comparison died with the
+	UNCATCHABLE ``env-1 #'=' not understood by SmallInteger''.  It took out
+	test_slice's test_cmp, test_deepcopy and test_setslice_without_getslice
+	outright, and it is why slice equality could not be relied on at all.
+
+	Using the rich comparison also makes non-int components (slice('a','b','c'))
+	and custom __eq__ behave as Python requires, which a Smalltalk ``='' would
+	not have done even in env 0."
 
 	(other isKindOf: slice) ifFalse: [^ false].
 	^ ((self start ___pyRichEqBool___: other start)
 		and: [self stop ___pyRichEqBool___: other stop])
 		and: [self step ___pyRichEqBool___: other step]
+%
+
+category: 'Python-Comparison'
+method: slice
+__hash__
+	"CPython made slices hashable in 3.12 (gh-101264); before that slice set
+	__hash__ = None.  Grail defined __eq__ without __hash__, so slices kept
+	object's IDENTITY hash -- two equal slices hashed differently, and
+	test_slice's test_hash saw exactly that:
+
+	    self.assertEqual(hash(slice(5)), slice(5).__hash__())
+
+	compares two SEPARATE slice objects, so it read as ``8915172 != 8915169'',
+	a pair of consecutive identity hashes.
+
+	Combines the three components' own Python hashes.  Sending __hash__ to each
+	component is what propagates CPython's TypeError for an unhashable member
+	(``hash(slice(1, 2, []))'' -- list.__hash__ raises), rather than needing a
+	separate check; None and ints hash fine, so the common slices are cheap.
+
+	The VALUE is not CPython's.  CPython mixes with the xxHash-derived constants
+	it uses for tuples, and its slice hash is not even the hash of the
+	equivalent tuple.  Nothing depends on the exact number: unlike complex,
+	which must satisfy hash(complex(5)) == hash(5), a slice only ever compares
+	equal to another slice, so there is no cross-type hash agreement to
+	preserve -- only self-consistency with __eq__, which this has."
+
+	| h |
+	h := self start __hash__.
+	h := (h @env0:* 1000003) @env0:bitXor: (self stop __hash__).
+	h := (h @env0:* 1000003) @env0:bitXor: (self step __hash__).
+	^ h @env0:bitAnd: 16r3FFFFFFF
 %
 
 category: 'Python-Methods'
