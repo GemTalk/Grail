@@ -129,6 +129,17 @@ def deepcopy(obj, memo=None):
         result = bytearray(obj)
         memo[obj_id] = result
         return result
+    if t is slice:
+        # A slice is immutable, but its start/stop/step may be mutable
+        # (test_slice test_deepcopy's ``slice([1,2],[3,4],[5,6])'') -- rebuild
+        # a NEW slice over deep-copied fields so the copy is a distinct object
+        # with distinct fields.  Without this, the atom passthrough below
+        # returned the same slice (assertIsNot failed).
+        result = slice(deepcopy(obj.start, memo),
+                       deepcopy(obj.stop, memo),
+                       deepcopy(obj.step, memo))
+        memo[obj_id] = result
+        return result
     # A dict/list SUBCLASS without its own __deepcopy__ -- same rationale
     # as the isinstance fallback in copy() above.
     if isinstance(obj, dict):
