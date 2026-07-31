@@ -165,6 +165,71 @@ def aug_int_to_float():
     return x                            # 1.5
 
 
+def aug_iadd_none_disabled():
+    # An in-place dunder explicitly set to None DISABLES the operator and --
+    # unlike a merely-absent __iadd__ -- blocks the binary fallback, so
+    # ``x += 10'' raises TypeError even though __add__ is inherited
+    # (test_augassign testCustomMethods1's aug_test4).  Without honouring the
+    # None sentinel, the inherited compiled __iadd__ (or the __add__ fallback)
+    # ran and no error was raised.
+    class Base:
+        def __init__(self, v):
+            self.val = v
+
+        def __iadd__(self, o):
+            return Base(self.val + o)   # a real in-place op, to be blocked
+
+        def __add__(self, o):
+            return Base(self.val + o)   # a fallback, to be blocked too
+
+    class Blocked(Base):
+        __iadd__ = None
+
+    x = Blocked(4)
+    try:
+        x += 10
+    except TypeError:
+        return 'TypeError'
+    return 'no error'
+
+
+def aug_iadd_none_present_still_works():
+    # A sibling WITHOUT the None sentinel keeps dispatching normally -- proves
+    # the sentinel check does not disturb ordinary in-place / fallback dispatch.
+    class Base:
+        def __init__(self, v):
+            self.val = v
+
+        def __add__(self, o):
+            return Base(self.val + o)
+
+    class WithIadd(Base):
+        def __iadd__(self, o):
+            self.val += o
+            return self
+
+    a = WithIadd(1)
+    a += 10                             # __iadd__ -> mutate in place
+    b = Base(2)
+    b += 10                            # no __iadd__ -> __add__ fallback
+    return a.val == 11 and b.val == 12
+
+
+def deque_nonreflexive_eq():
+    # deque == deque compares element-wise with Python's identity-before-
+    # equality rule, so a deque holding a non-reflexive element (a single
+    # float('nan') object shared by both deques) still equals a deque built
+    # from the SAME objects (test_contains test_nonreflexive).  A non-deque
+    # operand is NotImplemented, so ``==`` falls back to identity.
+    from collections import deque
+    nan = float('nan')
+    values = (nan, 1, None, 'abc')
+    a = deque(values)
+    b = deque(values)
+    return (a == b) and (a == a) and (a != deque([1])) \
+        and (a.__eq__(5) is NotImplemented)
+
+
 # --------------------------------------------------------------------------
 # 4. operator module
 # --------------------------------------------------------------------------

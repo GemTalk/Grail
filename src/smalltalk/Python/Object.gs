@@ -2040,8 +2040,23 @@ ___augmentedOp___: other inplace: iSel binary: bSel
 	``a := a.__add__(b)'' and a class defining only ``__iadd__'' raised a
 	spurious ``unsupported operand'' TypeError (test_operator.test_inplace)."
 
-	| iVa result niSingleton |
+	| iVa result niSingleton baseSel |
 	niSingleton := Python @env0:at: #NotImplemented otherwise: nil.
+	"CPython: an in-place dunder explicitly set to None (``__iadd__ = None'')
+	DISABLES the operator -- and, unlike a missing __iadd__, blocks the binary
+	fallback too, so ``x += y'' raises TypeError instead of using __add__
+	(test_augassign testCustomMethods1's aug_test4).  A class-attribute None is
+	invisible to ___respondsTo___: iSel (which sees only the inherited compiled
+	__iadd__:), so probe ___classAttrDunder___ for the sentinel.  Gated on
+	PythonInstance: kernel-backed receivers (int, float, ...) never carry such a
+	class attribute, and this keeps the numeric ``n += 1'' fast path off the
+	class-attr lookup."
+	(self @env0:isKindOf: PythonInstance) ifTrue: [
+		baseSel := (iSel @env0:asString @env0:copyFrom: 1
+			to: iSel @env0:asString @env0:size @env0:- 1) @env0:asSymbol.
+		(self ___classAttrDunder___: baseSel) == None ifTrue: [
+			TypeError ___signal___: ('unsupported operand type(s) for augmented assignment: ''' @env0:,
+				(self @env0:class @env1:__name__) @env0:asString @env0:, '''')]].
 	(self ___respondsTo___: iSel)
 		ifTrue: [
 			result := self @env0:perform: iSel env: 1 withArguments: { other }.

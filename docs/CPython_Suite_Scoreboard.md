@@ -36,8 +36,8 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_unary | OK | 6 | 0 | 0 | 0 |  |
 | test.test_int_literal | OK | 6 | 0 | 0 | 0 |  |
 | test.test_unpack | OK | 1 | 0 | 0 | 0 |  |
-| test.test_augassign | FAIL | 7 | 2 | 0 | 0 |  |
-| test.test_contains | FAIL | 4 | 3 | 0 | 0 |  |
+| test.test_augassign | FAIL | 7 | 1 | 0 | 0 |  |
+| test.test_contains | FAIL | 4 | 2 | 0 | 0 |  |
 | test.test_dictcomps | ERROR | 10 | 1 | 1 | 0 |  |
 | test.test_setcomps | ERROR | 1 | 0 | 1 | 0 |  |
 | test.test_pow | ERROR | 7 | 0 | 2 | 0 |  |
