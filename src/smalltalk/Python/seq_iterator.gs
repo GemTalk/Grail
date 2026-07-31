@@ -103,4 +103,36 @@ __setstate__: aState
 	^ self
 %
 
+category: 'Grail-Instance Creation'
+classmethod: seq_iterator
+_new_from: aSource _: idx
+	"Reconstruct a seq_iterator with an explicit (source, index) state --
+	the pickle round-trip (pickle.py's ``Q'' tag).  exhausted is re-derived:
+	idx may point one past the end, and the next __next__ re-latches on the
+	IndexError, matching CPython's seqiterator __reduce__ (iter, (seq,), idx)."
+
+	| instance |
+	instance := self ___new___.
+	instance ___setState: aSource _: idx.
+	^ instance
+%
+
+category: 'Grail-Private'
+method: seq_iterator
+___setState: aSource _: idx
+	source := aSource.
+	index := idx.
+	exhausted := false
+%
+
+category: 'Grail-Pickle Protocol'
+method: seq_iterator
+_getstate
+	"Answer (source, index) for pickling -- see pickle.py's seq-iterator ``Q''
+	tag.  A plain Python-visible method (no ___ prefix) so pickle.py can call
+	it, the same convention as list_iterator/tuple_iterator _getstate."
+
+	^ tuple @env0:withAll: { source. index }
+%
+
 set compile_env: 0
