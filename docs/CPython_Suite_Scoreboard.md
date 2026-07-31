@@ -2,7 +2,7 @@
 
 Generated: 2026-07-31T03:35:39Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
 
-**Modules: 31** — OK 19 · FAIL 2 · ERROR 10 · SKIP 0 · IMPORTERROR 0 · STERROR 0 · CRASH 0 · TIMEOUT 0
+**Modules: 31** — OK 20 · FAIL 1 · ERROR 10 · SKIP 0 · IMPORTERROR 0 · STERROR 0 · CRASH 0 · TIMEOUT 0
 
 **Totals:** tests=4188 failures=405 errors=243 skipped=206
 
@@ -36,7 +36,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_unary | OK | 6 | 0 | 0 | 0 |  |
 | test.test_int_literal | OK | 6 | 0 | 0 | 0 |  |
 | test.test_unpack | OK | 1 | 0 | 0 | 0 |  |
-| test.test_augassign | FAIL | 7 | 1 | 0 | 0 |  |
+| test.test_augassign | OK | 7 | 0 | 0 | 0 |  |
 | test.test_contains | FAIL | 4 | 2 | 0 | 0 |  |
 | test.test_dictcomps | ERROR | 10 | 1 | 1 | 0 |  |
 | test.test_setcomps | ERROR | 1 | 0 | 1 | 0 |  |
