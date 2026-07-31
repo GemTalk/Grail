@@ -1033,6 +1033,35 @@ printSmalltalkRuntimeOn: aStream
 		].
 	].
 
+	"Unhashable-by-class-body.  CPython clears tp_hash when the class is
+	CREATED, so the cheapest faithful place to do it is here: a compiled
+	raising __hash__ costs nothing at runtime, and every hash entry point
+	(builtins hash:, PyDict >> hashFunction:, the set element gates) already
+	routes through __hash__, so one emitted method covers them all.  See
+	___unhashableByClassBody___ for exactly when it fires."
+	self ___unhashableByClassBody___ ifTrue: [
+		self
+			emitCompileMethodOn: name
+			source: ('__hash__' , (String with: Character lf)
+				, '	^ self ___raiseUnhashableType___')
+			category: 'Grail-Unhashable'
+			env: 1
+			classSide: false
+			onStream: aStream].
+	"NOT also bound as a class ATTRIBUTE (__hash__ = None), though that is what
+	CPython's class dict holds and what collections.abc.Hashable reads:
+	_check_methods walks the MRO and answers ``not hashable'' on a present-and-
+	None __hash__.  Binding it made isinstance(x, Hashable) correct for the
+	implicit case but WRONG for a subclass that restores a hash -- Grail's
+	class-attribute walk runs BEFORE the unbound-method wrap, so the subclass's
+	own __hash__ def lost to the ancestor's stored None, inverting CPython's MRO
+	order.  Getting that right means teaching ___classChainAttrLookup___ where a
+	method definition should cut the walk short, which is a wider change than
+	this one.  So isinstance(x, collections.abc.Hashable) still reports True for
+	an IMPLICITLY unhashable class (it is correctly False for an explicit
+	``__hash__ = None'', which the ordinary class-attribute machinery binds);
+	hash(), dict keys and set elements are all correct either way."
+
 	"Multiple inheritance: aClass inherits whichever base
 	printSuperclassOn: selected as the Smalltalk superclass (the
 	storage base, else the first base); merge in the env-1 methods of
@@ -1556,6 +1585,78 @@ printQuotedString: aString on: aStream
 %
 
 category: 'Grail-Class Compilation'
+method: ClassDefAst
+___unhashableByClassBody___
+	"True when CPython would give this class NO hash, which it decides at class
+	creation (type_new clears tp_hash) rather than at hash time.
+
+	Two cases, and CPython treats them identically:
+
+	  * EXPLICIT -- the body assigns ``__hash__ = None''.  This is how a class
+	    opts out, and how CPython's own list/dict/set do it.
+	  * IMPLICIT -- the body supplies __eq__ and no __hash__ at all.  Redefining
+	    equality without redefining hash would leave an inherited hash that no
+	    longer agrees with it, so CPython refuses to guess and makes the class
+	    unhashable.  This is the case that surprises people, and it is the one
+	    Grail was silently getting wrong: such a class kept object's IDENTITY
+	    hash, so two equal instances hashed differently and a dict happily held
+	    both.
+
+	Either way an explicit __hash__ -- def or a non-None assignment -- wins and
+	nothing is emitted, so a class that defines both keeps its own hash.
+
+	Applies only to classes compiled from a Python class BODY.  Grail's
+	hand-written Smalltalk classes are not affected: BaseException, for one,
+	defines __eq__ and must stay hashable (CPython exceptions are)."
+
+	| hashAttr namesAssigned |
+	(self ___classBodyDefines___: #'__hash__') ifTrue: [^ false].
+	"``__hash__ = some_sibling_method'' is a real hash function.  It does NOT
+	appear in classBodyAttributes -- that deliberately excludes sibling-method
+	aliases, which are compiled as delegating METHODS instead -- so without this
+	check the implicit rule below fired and the emitted raising __hash__
+	overwrote the alias."
+	((self ___classBodyMethodAliases___
+		detect: [:a | a key == #'__hash__']
+		ifNone: [nil]) notNil) ifTrue: [^ false].
+	namesAssigned := self classBodyAttributes.
+	hashAttr := namesAssigned
+		detect: [:p | p key == #'__hash__']
+		ifNone: [nil].
+	hashAttr notNil ifTrue: [
+		"``__hash__ = None'' opts out; ``__hash__ = anything_else'' is a real
+		hash function and must not be overwritten."
+		^ (hashAttr value isKindOf: ConstantAst) and: [hashAttr value value isNil]].
+	"No __hash__ in the body at all -- unhashable iff __eq__ is there, whether
+	as a def or as an assignment (CPython only asks whether the name is in the
+	class namespace)."
+	(self ___classBodyDefines___: #'__eq__') ifTrue: [^ true].
+	^ (namesAssigned detect: [:p | p key == #'__eq__'] ifNone: [nil]) notNil
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___classBodyDefines___: aSelector
+	"True when the class body has a ``def'' for aSelector.  Selects on
+	FunctionDefAst, so it covers the re-classed forms too -- a @staticmethod /
+	@classmethod / @property __hash__ or __eq__ is still that name in the class
+	namespace, which is all CPython's rule asks about.  (``methodDefs'' is a
+	temp of the emit method, not an instVar, so this cannot use it.)"
+
+	^ self ___allFunctionDefs___ anySatisfy: [:d | d name asSymbol == aSelector]
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___allFunctionDefs___
+	"Every function def in the class body, whichever subclass the parser
+	re-classed it into -- methodDefs holds only the plain instance methods, so
+	a @staticmethod/@classmethod/@property __hash__ or __eq__ would be missed."
+
+	^ body body select: [:stmt | stmt isKindOf: FunctionDefAst]
+%
+
+category: 'Grail-code generation'
 method: ClassDefAst
 classBodyAttributes
 	"Scan the class body for simple-assignment statements and return

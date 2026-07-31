@@ -235,23 +235,21 @@ __context__
 	^ None  "TODO: implement exception context"
 %
 
-category: 'Grail-Comparison'
-method: BaseException
-__eq__: other
-	"Compare exceptions for equality.
-	Two exceptions are equal if they are the same class and have the same args."
+! ------------------- equality: CPython uses IDENTITY for exceptions
+! BaseException defines no __eq__ in CPython -- ``ValueError('x') ==
+! ValueError('x')'' is FALSE -- so exceptions inherit object's identity
+! equality and identity hash, and the two agree.
+!
+! Grail used to define a value-based __eq__ here (same class + same args) with
+! no matching __hash__.  That was wrong twice over: it disagreed with CPython,
+! and it broke the equality/hash contract, so two exceptions could compare
+! equal while hashing differently -- a set could hold both, and a dict could
+! fail to find one it held.  Removed rather than papered over with a value
+! __hash__, because matching CPython is the point.
+!
+! __ne__ went with it: it only negated __eq__, which object's default already
+! does.
 
-	| myClass otherClass myArgs otherArgs |
-	myClass := self @env0:class.
-	otherClass := other @env0:class.
-
-	myClass == otherClass ifFalse: [ ^ false ].
-
-	myArgs := self args.
-	otherArgs := other args.
-
-	^ myArgs @env0:= otherArgs
-%
 
 category: 'Grail-Initialization'
 method: BaseException
@@ -274,15 +272,6 @@ __init__: a
 	^ None
 %
 
-category: 'Grail-Comparison'
-method: BaseException
-__ne__: other
-	"Compare exceptions for inequality."
-
-	| result |
-	result := self __eq__: other.
-	^ result @env0:not
-%
 
 category: 'Grail-String Representation'
 method: BaseException

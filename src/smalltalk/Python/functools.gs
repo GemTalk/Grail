@@ -255,6 +255,24 @@ __eq__: other
 		@env0:= 0
 %
 
+category: 'Grail-Hashing'
+method: functools_cmpkey
+__hash__
+	"CPython sets __hash__ = None on the cmp_to_key wrapper, so hash(K(x))
+	raises -- the object exists only to carry a comparison, and its equality is
+	whatever the user's cmp function says, which no hash could track.
+
+	Grail defined the comparison dunders (__eq__ included) with no __hash__, so
+	the wrapper kept object's identity hash and was silently hashable.
+	test_functools TestCmpToKeyC/Py.test_hash asserts the raise.
+
+	Written out here rather than picked up by ClassDefAst's
+	___unhashableByClassBody___ rule, which only sees classes compiled from a
+	Python class BODY; this one is hand-written Smalltalk."
+
+	^ self ___raiseUnhashableType___
+%
+
 category: 'Grail-Instantiation'
 classmethod: functools_partial
 value: positional value: keywords
@@ -712,6 +730,20 @@ __eq__: other
 		((mine @env0:at: i) __eq__: (theirs @env0:at: i)) == true
 			ifFalse: [^ false]].
 	^ true
+%
+
+category: 'Grail-Hashing'
+method: functools_CacheInfo
+__hash__
+	"CacheInfo is a namedtuple, so CPython hashes it as a TUPLE of its fields --
+	equal CacheInfos hash equal and one works as a dict key.  Grail defined
+	field-wise __eq__ with no __hash__, so it kept object's identity hash and
+	two equal CacheInfos hashed differently.
+
+	Delegating to a real tuple keeps this in step with tuple >> __hash__ for
+	free, including the TypeError an unhashable field would raise."
+
+	^ (tuple @env0:withAll: self ___asArray___) __hash__
 %
 
 category: 'Grail-Comparison'

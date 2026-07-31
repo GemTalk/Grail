@@ -549,6 +549,7 @@ run
 	at: #'CrossVersionSelectorTestCase' put: nil;
 	at: #'GrailTestResult' put: nil;
 	at: #'ClassBodyMethodDecoratorTestCase' put: nil;
+	at: #'UnhashableTestCase' put: nil;
 	at: #'FormatSpecTestCase' put: nil;
 	at: #'BuiltinsTestCase' put: nil;
 	at: #'BytearrayTestCase' put: nil;
@@ -1268,6 +1269,7 @@ input src/smalltalk/PythonTests/FunctionMetadataTestCase.gs
 input src/smalltalk/PythonTests/SingleDispatchRegisterTestCase.gs
 input src/smalltalk/PythonTests/CrossVersionSelectorTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyMethodDecoratorTestCase.gs
+input src/smalltalk/PythonTests/UnhashableTestCase.gs
 input src/smalltalk/PythonTests/BytearrayTestCase.gs
 input src/smalltalk/PythonTests/CachedPropertyTestCase.gs
 input src/smalltalk/PythonTests/DeployCheckTestCase.gs
