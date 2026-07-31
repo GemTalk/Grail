@@ -106,4 +106,32 @@ __next__
 	^ item
 %
 
+category: 'Grail-Pickle Protocol'
+method: range_iterator
+_getstate
+	"Answer (start, stop, step, position) for pickling -- see pickle.py's
+	range-iterator ``G'' tag.  CPython's range_iterator __reduce__ is
+	(iter, (range(start, stop, step),), index); the four Smalltalk Integers
+	let pickle.py rebuild range(start, stop, step) and resume at `position'.
+	A plain Python-visible method (no ___ prefix) so pickle.py can call it,
+	the same convention as list_iterator/seq_iterator _getstate."
+
+	^ tuple @env0:withAll: { collection start. collection stop. collection step. position }
+%
+
+category: 'Grail-Instance Creation'
+classmethod: range_iterator
+_new_from: aRange _: pos
+	"Reconstruct a range_iterator over aRange resuming at position `pos' --
+	the pickle round-trip (pickle.py's ``G'' tag).  `pos' may point at or past
+	the end, in which case the next __next__ stops immediately (position >=
+	size), matching CPython's spent-iterator __reduce__ == (iter, (range,), n)."
+
+	| instance |
+	instance := self ___new___.
+	instance ___collection: aRange.
+	instance ___position: pos.
+	^ instance
+%
+
 set compile_env: 0

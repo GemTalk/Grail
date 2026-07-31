@@ -52,6 +52,13 @@ class _SeqIterProbe:
         raise IndexError
 _SEQ_ITER = type(iter(_SeqIterProbe()))
 
+# The range_iterator type: iter() over a range.  Pickled explicitly like the
+# others (Grail's iter builtin is a BoundMethod, not picklable by reference);
+# state is (start, stop, step, position) -- the four ints that rebuild
+# range(start, stop, step) and resume at `position', matching CPython's
+# __reduce__ == (iter, (range(start, stop, step),), index).
+_RANGE_ITER = type(iter(range(0)))
+
 _HIGHEST_PROTOCOL = 5
 HIGHEST_PROTOCOL = 5
 DEFAULT_PROTOCOL = 4
@@ -249,6 +256,17 @@ def _encode_body(obj, out, memo):
         out.append(b"Q")
         _encode(source, out, memo)
         _emit_len(out, index)
+    elif type(obj) is _RANGE_ITER:
+        # A range_iterator (iter() over a range): (start, stop, step, position),
+        # four ints.  No object graph to memoize -- ranges are immutable and
+        # fully described by their bounds -- so the tag carries the scalars
+        # directly and rebuilds range(start, stop, step) resuming at `position'.
+        start, stop, step, pos = obj._getstate()
+        out.append(b"G")
+        _emit_len(out, start)
+        _emit_len(out, stop)
+        _emit_len(out, step)
+        _emit_len(out, pos)
     elif isinstance(obj, tuple):
         out.append(b"t")
         _emit_len(out, len(obj))
@@ -403,6 +421,12 @@ class _Unpickler:
             source = self.load()
             index = int(self._line())
             return _SEQ_ITER._new_from(source, index)
+        if t == b"G":
+            start = int(self._line())
+            stop = int(self._line())
+            step = int(self._line())
+            pos = int(self._line())
+            return _RANGE_ITER._new_from(range(start, stop, step), pos)
         if t == b"O":
             # Generic default-object: object.__new__(cls) + restored state.
             cls = self.load()

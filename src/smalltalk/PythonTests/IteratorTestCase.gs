@@ -125,6 +125,34 @@ testSeqIteratorAndDefaultObjectPickle
 		description: 'a partially-consumed seq_iterator must pickle and resume'
 %
 
+category: 'Grail-Tests - Iterator Protocol'
+method: IteratorTestCase
+testRangeIteratorPickle
+	"A range_iterator pickles (pickle.py's ``G'' tag + range_iterator
+	_getstate/_new_from): a fresh iterator round-trips to the whole range and a
+	partially-consumed one resumes at the saved position, including a negative
+	step, an exhausted iterator, and a large range (only the four bounds
+	travel, never the materialised sequence).  This is the range half of
+	test_iter's check_pickle (test_iter_basic / _range / _for_loop / _big_range)."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'range_iterator_pickle' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/range_iterator_pickle.py')
+		name: 'range_iterator_pickle'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	self assert: ((results @env1:__getitem__: 'fresh_roundtrips') = true)
+		description: 'a fresh range_iterator must pickle to the full range'.
+	self assert: ((results @env1:__getitem__: 'partial_resumes') = true)
+		description: 'a partially-consumed range_iterator must resume at position'.
+	self assert: ((results @env1:__getitem__: 'stepped_range') = true)
+		description: 'a negative-step range_iterator must round-trip'.
+	self assert: ((results @env1:__getitem__: 'exhausted_stays_exhausted') = true)
+		description: 'an exhausted range_iterator must pickle as spent'.
+	self assert: ((results @env1:__getitem__: 'big_range') = true)
+		description: 'a large range_iterator must pickle by bounds, not by materialising'
+%
+
 category: 'Grail-Tests - Dict Key Iterator'
 method: IteratorTestCase
 testDictKeyIteratorBasicIteration
