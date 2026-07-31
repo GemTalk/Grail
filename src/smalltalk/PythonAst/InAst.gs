@@ -64,7 +64,7 @@ printSmalltalkOn: aStream left: left rightList: right rhsTemp: rhsName lhsTemp: 
 		aStream nextPutAll: ')'.
 	].
 
-	aStream nextPutAll: ' __contains__: '.
+	aStream nextPutAll: ' ___pyContains___: '.
 
 	left ifNil: [
 		aStream nextPutAll: rhsName.

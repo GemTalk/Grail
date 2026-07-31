@@ -168,20 +168,43 @@ parser/codegen/exception-raise hot files, so it cannot collide with the parallel
 work flagged in [[project_scoreboard_small_modules_2026_07]]. Moves no scoreboard
 row yet — it is the de-risked foundation.
 
-**Phase 2 — populate tracebacks at runtime (invasive codegen).** Per-function
-`___curPos___` local + statement-level `setPos` (three loops); extend the
-existing `on: PythonReturn do:` body wrappers to prepend the function's frame on
-an escaping exception; prepend the catching frame at `TryAst` except-binding;
-`func.__code__` def-time stamp from `FunctionDefAst.beginLine`; back
-`sys.exc_info()` with the active exception. Greens *line-level* traceback
-behaviour broadly. **Touches the collision hotspot — gate on a fresh
-`origin/main` diff first, and land only after the Phase 1 design is reviewed.**
+**Phase 2 — populate tracebacks at runtime (DONE, as two sub-steps).**
 
-**Phase 3 — PEP 657 columns.** Add `endLine`/`endColumn` accessors on
-`AbstractLocationNode`; emit a sub-statement `setPos` before the comprehension
-iterable (`ComprehensionAst.gs:176`) and at call sites; expose
-`colno`/`end_colno`/`end_lineno`/`line` on `FrameSummary`. Greens
-`test_dictcomps` and `test_setcomps` `test_exception_locations`.
+*Phase 2a — code objects.* `func.__code__` def-time stamp from
+`FunctionDefAst.beginLine`: the nested-def emit cascades `___pyCode___:` onto the
+block, stamping a `PyCode` into the `ExecBlock` side-table; `ExecBlock>>__code__`
+(env-1, value-attr whitelisted) reads it. So `func.__code__.co_firstlineno`
+answers the `def` line. (Module/class-level defs → `BoundMethod` are a follow-up.)
+
+*Phase 2b — comprehension iterator-protocol frames (+ PEP 657 columns).* Rather
+than the fully general per-statement instrumentation first sketched here (a
+`___curPos___` local + `setPos` in all three statement loops + body-wrapper and
+except-binding frame prepends — a large, high-risk change to every function's
+codegen), Phase 2 greens the target tests with a **targeted, low-risk** mechanism
+that implements exactly the PEP 657 rule the tests exercise:
+
+- `ComprehensionAst` wraps the **outermost** generator (`anIndex = 1`) in one
+  `on: Exception do:` handler that prepends a single traceback frame — enclosing
+  function's `PyCode` (`CallAst functionBeingCompiled`) at the **iterable
+  expression's** position + source line — then re-raises. One handler per
+  comprehension (no per-iteration cost).
+- `BaseException>>___pushTracebackFrame___:…` builds the `PyFrame`/`PyTraceback`
+  and prepends (incremental-unwind order); it **no-ops for StopIteration and the
+  control-flow signals**, so normal loop termination and a pending
+  return/break/continue are untouched.
+- `AbstractLocationNode` gains `endLine`/`endColumn` accessors; its `sourceLine`
+  is made robust to a `CharacterCollection` (already-decoded) module source.
+
+Greens `test_dictcomps` and `test_setcomps` `test_exception_locations`
+(ERROR→OK). Grail's `beginColumn`/`endColumn` are already 0-based / end-exclusive
+(matching Python `col_offset`), so no column adjustment was needed.
+
+**Deferred (future) — general traceback population.** The broad per-statement
+`setPos` + body-wrapper/except-binding frame prepends (correct line-level
+tracebacks for *any* raise, multi-frame chains, `sys.exc_info()` backing) remain
+future work; the data model (Phase 1) and code objects (Phase 2a) already
+support them. Today a non-comprehension exception still has an empty
+`__traceback__`.
 
 ## 6. Risks & non-goals
 
@@ -204,6 +227,10 @@ iterable (`ComprehensionAst.gs:176`) and at call sites; expose
 - Phase 1: new `TracebackTestCase` (hand-built `tb` → `extract_tb` field checks;
   `exc.with_traceback(tb)` round-trip) + a `tests/python/` fixture; full SUnit
   green; cpython regression gate 0 regressions (no board row changes expected).
-- Phase 2/3: `test_dictcomps` 10/0/1/0 → 11/0/0/0 and `test_setcomps`
-  1/0/1/0 → 2/0/0/0, isolated first then via the parallel regen (restoring the
-  known flaky rows test_enum/test_richcmp/test_functools to baseline).
+- Phase 2: `TracebackTestCase>>testFuncCodeFirstlineno` (2a) +
+  `>>testComprehensionExceptionTraceback` (2b, end-to-end) +
+  `tests/python/{func_code_firstlineno,comprehension_traceback}.py`.
+  `test_dictcomps` 10/0/1/0 → **10/0/0/0 OK** and `test_setcomps`
+  1/0/1/0 → **1/0/0/0 OK** (isolated + via the parallel regen; the known flaky
+  test_enum row restored to baseline). Full SUnit 3325/3325, cpython gate 0
+  regressions / 2 improvements.

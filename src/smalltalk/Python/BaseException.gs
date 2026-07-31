@@ -418,3 +418,28 @@ with_traceback: tb
 %
 
 set compile_env: 0
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___pushTracebackFrame___: aCode lineno: ln colno: co endLineno: el endColno: ec line: src
+	"Prepend a PyTraceback node (one frame at one PEP 657 position) as this
+	exception unwinds -- CPython's incremental-unwind model, so the head is the
+	shallowest frame and extract_tb(tb)[0] is where the exception surfaced.
+	Called from generated code (env-0 send) at a raise-prone site (currently a
+	comprehension's iterator-protocol clause).
+
+	No-op for Grail's control-flow signals and StopIteration: those are not real
+	Python exceptions and must not grow a traceback -- the caller re-raises them
+	unchanged."
+
+	| frame tb |
+	((self isKindOf: PythonReturn)
+		or: [(self isKindOf: PythonBreak)
+		or: [(self isKindOf: PythonContinue)
+		or: [self isKindOf: StopIteration]]]) ifTrue: [^ self].
+	frame := PyFrame code: aCode lineno: ln back: None globals: None.
+	tb := PyTraceback frame: frame lineno: ln next: (tracebackObj ifNil: [None])
+		endLineno: el colno: co endColno: ec line: src.
+	tracebackObj := tb.
+	^ self
+%
