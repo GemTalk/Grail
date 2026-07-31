@@ -3085,11 +3085,39 @@ setDelCtx: anExpr
 
 category: 'Grail-node construction'
 method: PythonParser
+___illegalStoreTargetDesc___: anExpr
+	"Answer a CPython-style noun for anExpr when it can NEVER be an assignment
+	(store) target, else nil.  Deliberately PERMISSIVE -- it flags only the
+	comprehension / generator-expression forms (``{k: v for ...} = 5'' is
+	``cannot assign to dict comprehension'', test_dictcomps
+	test_illegal_assignment) and lets every other node through, so ordinary
+	Name / Attribute / Subscript / tuple / list / starred targets are
+	unaffected.  (The stricter augmented-assignment rule -- only a single
+	simple target -- is enforced separately at the ``+='' parse site.)"
+
+	(anExpr isKindOf: DictCompAst) ifTrue: [^ 'dict comprehension'].
+	(anExpr isKindOf: ListCompAst) ifTrue: [^ 'list comprehension'].
+	(anExpr isKindOf: SetCompAst) ifTrue: [^ 'set comprehension'].
+	(anExpr isKindOf: GeneratorExpAst) ifTrue: [^ 'generator expression'].
+	^ nil
+%
+
+category: 'Grail-node construction'
+method: PythonParser
 setStoreCtx: anExpr
 	"Change an expression's context to Store (for assignment targets).
 	Also registers variable names with the current scope."
 
-	| varNames index |
+	| varNames index illegal |
+	"Reject a target that can never be assigned to (a comprehension /
+	generator expression) with CPython's ``cannot assign'' SyntaxError.  Applies
+	to every store context -- assignment, for-target, with-as -- since none of
+	them permit a comprehension target.  The env-0 parser can set only
+	messageText; builtins>>_compile: re-raises with that text through the env-1
+	___signal___: so the Python str(e) carries it (test_illegal_assignment's
+	assertRaisesRegex)."
+	illegal := self ___illegalStoreTargetDesc___: anExpr.
+	illegal ifNotNil: [ SyntaxError signal: 'cannot assign to ' , illegal ].
 	varNames := anExpr class allInstVarNames.
 	index := varNames indexOf: #ctx.
 	index > 0 ifTrue: [anExpr instVarAt: index put: self storeCtx].
