@@ -67,7 +67,15 @@ test_creation_with_args
 category: 'Grail-Tests-BaseException'
 method: BaseExceptionTestCase
 test_equality
-	"Test exception equality comparison."
+	"CPython uses IDENTITY equality for exceptions.  BaseException defines no
+	__eq__, so ``ValueError('x') == ValueError('x')'' is FALSE -- two
+	exceptions built from the same arguments are still two objects.
+
+	This test used to assert the opposite, pinning a Grail deviation: a
+	value-based __eq__ (same class + same args) with no matching __hash__.
+	That was wrong twice -- it disagreed with CPython, and it broke the
+	equality/hash contract, so two exceptions could compare equal while
+	hashing differently (a set held both; a dict could miss one it held)."
 
 	| exc1 exc2 exc3 |
 	exc1 := BaseException @env1:__new__: 'msg'.
@@ -79,8 +87,14 @@ test_equality
 	exc3 := BaseException @env1:__new__: 'different'.
 	exc3 @env1:__init__: #('different').
 
-	self assert: (exc1 @env1:__eq__: exc2).
+	"Same args, distinct objects -- NOT equal."
+	self deny: (exc1 @env1:__eq__: exc2).
+	self assert: (exc1 @env1:__ne__: exc2).
+	"Different args -- also not equal."
 	self assert: (exc1 @env1:__ne__: exc3).
+	"Identity holds, and the hash agrees with it."
+	self assert: (exc1 @env1:__eq__: exc1).
+	self assert: (exc1 @env1:__hash__) equals: (exc1 @env1:__hash__)
 %
 
 category: 'Grail-Tests-BaseException'
