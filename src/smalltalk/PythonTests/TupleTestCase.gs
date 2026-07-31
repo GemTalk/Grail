@@ -352,3 +352,61 @@ e2 = pickle.loads(pickle.dumps(e))
 ok.append(list(e2) == [])
 all(ok)').
 %
+
+category: 'Grail-Tests - Hashing'
+method: TupleTestCase
+testHashUsesMemberPythonHashes
+	"__hash__ used to answer the Smalltalk ``Array hash'', which hashes members
+	with the SMALLTALK hash.  PyDict buckets every key by __hash__
+	(PyDict >> hashFunction:), so that reached real dict lookups."
+
+	self assert: (self eval: 'hash((1, 2, 3)) == hash((1, 2, 3))') equals: true.
+	self assert: (self eval: 'hash((1, 2)) == hash((2, 1))') equals: false.
+	self assert: (self eval: 'hash((1, 2)) == hash((1, 2, 0))') equals: false.
+	self assert: (self eval: 'hash(((1, 2), 3)) == hash(((1, 2), 3))') equals: true
+%
+
+category: 'Grail-Tests - Hashing'
+method: TupleTestCase
+testHashAgreesAcrossNumericMemberTypes
+	"Python's contract is that equal values hash equal, and (1,) == (1.0,) ==
+	(True,).  The bool case FAILED: Python says hash(True) == hash(1), but the
+	Smalltalk ``true hash'' is not ``1 hash'', so hashing members the Smalltalk
+	way broke agreement.  Taking the members' PYTHON hashes fixes it."
+
+	self assert: (self eval: 'hash((1,)) == hash((1.0,))') equals: true.
+	self assert: (self eval: 'hash((1,)) == hash((True,))') equals: true.
+	self assert: (self eval: 'hash((0j,)) == hash((0,))') equals: true.
+	"and the collection consequence"
+	self assert: (self eval: 'd = {}; d[(1, 2)] = "v"; d[(1.0, 2.0)]') equals: 'v'
+%
+
+category: 'Grail-Tests - Hashing'
+method: TupleTestCase
+testHashRaisesForUnhashableMember
+	"``hash((1, 2, []))'' answered 556 where CPython raises.  Sending __hash__
+	to each member propagates it -- list.__hash__ already raises -- so no
+	separate hashability check is needed."
+
+	self should: [self eval: 'hash((1, 2, []))'] raise: TypeError.
+	self should: [self eval: 'hash((4, {}))'] raise: TypeError.
+	self should: [self eval: 'hash(([1], ))'] raise: TypeError
+%
+
+category: 'Grail-Tests - Hashing'
+method: TupleTestCase
+testHashHonoursACustomMemberHash
+	"A member's custom __hash__ was ignored, because the Smalltalk hash of a
+	PythonInstance is its IDENTITY hash.  The tell was that the bare object
+	worked as a dict key while a one-tuple of it did not.
+
+	A module fixture rather than an eval: string -- it defines a class, and
+	eval-path class statements are a known Grail limitation."
+
+	| m |
+	m := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/tuple_member_hash.py')
+		name: 'tuple_member_hash'.
+	self assert: m @env1:custom_member_hash_is_honoured equals: true.
+	self assert: m @env1:custom_member_in_a_set equals: true
+%
