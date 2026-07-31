@@ -110,6 +110,41 @@ test_annotated_assignment
 	self assert: ((self fieldOf: stmt named: #annotation) isKindOf: NameAst).
 %
 
+category: 'Grail-tests - assignment'
+method: PythonParserTestCase
+test_comprehension_assignment_target_illegal
+	"A comprehension / generator expression can never be an assignment target,
+	so ``{k: v for ...} = 5'' is a SyntaxError (test_dictcomps
+	test_illegal_assignment's ``='' case).  An ordinary target still parses."
+
+	self assert: ((self firstStatement: 'x = 5') notNil).
+	self should: [self parse: '{x: y for y, x in ((1, 2),)} = 5'] raise: SyntaxError.
+	self should: [self parse: '[x for x in y] = 5'] raise: SyntaxError.
+	self should: [self parse: '(x for x in y) = 5'] raise: SyntaxError.
+%
+
+category: 'Grail-tests - assignment'
+method: PythonParserTestCase
+test_compile_illegal_assignment_messages
+	"compile() surfaces the SyntaxError message to Python str(e): ``{...} = 5''
+	says ``cannot assign'' and ``{...} += 5'' says ``illegal expression''
+	(test_dictcomps test_illegal_assignment's assertRaisesRegex), while a valid
+	program still compiles."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'compile_illegal_assignment' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/compile_illegal_assignment.py')
+		name: 'compile_illegal_assignment'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	self assert: ((results @env1:__getitem__: 'regular_comprehension_message') = true)
+		description: 'compile({...} = 5) str(e) must contain ''cannot assign'''.
+	self assert: ((results @env1:__getitem__: 'augmented_comprehension_message') = true)
+		description: 'compile({...} += 5) str(e) must contain ''illegal expression'''.
+	self assert: ((results @env1:__getitem__: 'valid_assignment_still_compiles') = true)
+		description: 'a valid program must still compile'
+%
+
 category: 'Grail-tests - simple statements'
 method: PythonParserTestCase
 test_assert

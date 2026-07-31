@@ -210,7 +210,17 @@ _compile: positional kw: kwargs
 	| source |
 	source := positional @env0:at: 1.
 	(source isKindOf: CharacterCollection)
-		ifTrue: [ModuleAst @env0:parseSource: source].
+		ifTrue: [
+			[ModuleAst @env0:parseSource: source]
+				@env0:on: SyntaxError
+				do: [:ex |
+					"Re-raise so the Python ``str(e)'' carries the parser's message.
+					The env-0 parser can set only GemStone's messageText, but
+					___signal___: (reachable here in env-1) populates the ``args''
+					tuple BaseException>>__str__ reads -- test_dictcomps
+					test_illegal_assignment asserts the message via assertRaisesRegex."
+					SyntaxError ___signal___: (ex @env0:messageText
+						ifNil: ['invalid syntax'])]].
 	^ source
 %
 
