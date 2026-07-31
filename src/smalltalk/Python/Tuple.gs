@@ -369,12 +369,46 @@ __getnewargs__
 category: 'Grail-Hashing'
 method: tuple
 __hash__
-	"Return a hash value for the tuple.
-	Tuples are hashable (unlike lists) because they are immutable."
+	"Combine the ELEMENTS' Python hashes.  Tuples are hashable (unlike lists)
+	because they are immutable, and CPython derives the value from the members.
 
-	| hash |
-	hash := self @env0:hash.
-	^ hash
+	This used to answer the Smalltalk ``Array hash'', which hashes members with
+	the Smalltalk ``hash''.  Three things were wrong with that, and PyDict
+	buckets every key by __hash__ (PyDict >> hashFunction:), so each one reached
+	real dict lookups:
+
+	  * An UNHASHABLE member did not raise.  ``hash((1, 2, []))'' answered 556
+	    where CPython raises ``TypeError: unhashable type: 'list'''.  Sending
+	    __hash__ to each member is what propagates it -- list.__hash__ already
+	    raises -- so no separate check is needed.
+	  * A member's custom __hash__ was IGNORED, because the Smalltalk hash of a
+	    PythonInstance is its identity hash.  Two equal one-tuples of a
+	    custom-__eq__/__hash__ object hashed differently, so
+	    ``{(Custom(1),): 'x'}[(Custom(1),)]'' raised KeyError even though the
+	    bare ``{Custom(1): 'x'}[Custom(1)]'' worked.
+	  * Cross-type numeric agreement broke for bool: Python says
+	    ``hash(True) == hash(1)'', but the Smalltalk ``true hash'' is not
+	    ``1 hash'', so ``hash((True,)) != hash((1,))''.  Taking the members'
+	    PYTHON hashes fixes this for free, and keeps hash((1,)) == hash((1.0,)).
+
+	The VALUE is not CPython's.  CPython mixes with 64-bit xxHash constants whose
+	results do not fit a GemStone SmallInteger, so matching it would put
+	LargeInteger arithmetic on the hot path of every tuple-keyed dict operation.
+	Nothing depends on the number -- Python documents hash values as
+	implementation-defined -- and the one property that IS contractual,
+	equal-values-hash-equal across numeric types, comes from the member hashes
+	rather than from the mixing.
+
+	Order-sensitive, so (1, 2) and (2, 1) do not collide, and the length is
+	folded in so (1, 2) and (1, 2, 0) do not either."
+
+	| acc |
+	acc := 3430008.
+	1 @env0:to: self @env0:size do: [:i |
+		| lane |
+		lane := (self @env0:at: i) __hash__.
+		acc := ((acc @env0:* 1000003) @env0:bitXor: lane) @env0:bitAnd: 16r3FFFFFFF].
+	^ (acc @env0:bitXor: self @env0:size) @env0:bitAnd: 16r3FFFFFFF
 %
 
 category: 'Grail-Sequence Protocol'
