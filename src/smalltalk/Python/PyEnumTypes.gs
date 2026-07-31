@@ -1245,8 +1245,26 @@ __new__: aValue
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
 value: positional value: keywords
-	"Generic class-call path: Color(v) value-lookup, or the functional
-	API -- Enum('Name', names, **kw) -- when extra arguments arrive."
+	"Generic class-call path: Color(v) value-lookup, or the functional API --
+	Enum('Name', names, **kw) -- when extra arguments arrive.
+
+	CPython also lets a CONCRETE enum be called with several positional VALUES,
+	which pack into a tuple: Cardinal(1, 0) looks up the member whose value is
+	(1, 0), like Cardinal((1, 0)).  This must NOT be confused with the
+	functional API, whose first argument is the new class NAME (a string) and
+	which is also used in a subclass form on a member-bearing class
+	(BaseEnum('MainEnum', {...})).  So take the value-packing path only when the
+	first positional is not a class-name string, the receiver already has
+	members, and no kwargs are present; every other call keeps its existing
+	route.  Without the packing path, Cardinal(1, 0) went to the functional API,
+	which tried to iterate the second positional (a plain int) and leaked a raw
+	Smalltalk error (``a SmallInteger does not understand #do:'')."
+	((positional @env0:size @env0:>= 2)
+		and: [((positional @env0:at: 1) isKindOf: CharacterCollection) not
+		and: [(keywords == nil or: [keywords @env0:isEmpty])
+		and: [(Enum ___grailMembers: self) @env0:notEmpty]]])
+		ifTrue: [^ Enum ___grailLookupValue: self
+			value: ((Python @env0:at: #tuple otherwise: Array) @env0:withAll: positional)].
 	((positional @env0:size @env0:>= 2)
 		or: [keywords ~~ nil and: [keywords @env0:size @env0:> 0]])
 		ifTrue: [^ Enum ___grailFunctional: self positional: positional keywords: keywords].
