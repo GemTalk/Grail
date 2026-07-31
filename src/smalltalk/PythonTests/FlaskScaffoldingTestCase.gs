@@ -4629,8 +4629,10 @@ testJinja2RenderFilterUpper
 	two fixes: (1) Filter class __name__ correctly resolves to 'Filter'
 	(not '_FilterTestCommon' inherited via kernel-metaclass-slot leak);
 	(2) jinja2.compiler's _filter_test_common @contextmanager method
-	split into explicit pre/post helpers (ClassDefAst doesn't honor
-	arbitrary class-method decorators yet)."
+	split into explicit pre/post helpers.  The fixture keeps that split:
+	ClassDefAst now DOES apply class-body method decorators, but
+	@contextmanager needs the generator protocol on top of that, which is a
+	separate gap."
 
 	| mod result |
 	mod := self loadFixture: 'use_jinja2_partial'.

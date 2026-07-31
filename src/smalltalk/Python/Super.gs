@@ -252,7 +252,35 @@ ___pyAttrLoad___: aSym
 	bound to obj.  We piggy-back on BoundMethod for arity dispatch
 	via a thin _Super-bound shim that exposes ``value:value:``."
 
-	| s sym1 sym2 sym3 symVA pickMethod |
+	| s sym1 sym2 sym3 symVA pickMethod walker holder v |
+	"A class-attribute store on a PARENT shadows that parent's compiled method,
+	the same way it does for a direct instance read (object >>
+	___classChainAttrLookup___: and its caller).  super() has to honour it too:
+	a class-body method decorator makes the parent's decorated method exactly
+	such a store, so without this ``super().m()'' silently ran the parent's
+	UNDECORATED compiled method -- ``D(derived+base-impl)'' where CPython gives
+	``D(derived+B(base-impl))''.
+
+	Walk from cls's PARENT: super() skips cls itself.  A hit binds obj, like any
+	other function found in a class dict.
+
+	The Smalltalk superclass chain, not the C3 MRO the compiled-method lookup
+	below uses -- a cooperative-mixin parent whose decorated method is reached
+	only through the receiver's MRO is still a gap.  Checks the committed store
+	only, not the session-local canonical overlay, so a runtime ``Parent.m = f''
+	seen through super() is likewise still a gap.  Both were gaps before too;
+	this closes the definitional case that method decorators need."
+	walker := cls @env0:superClass.
+	[walker == nil] whileFalse: [
+		(walker @env0:_respondsTo: #dynInstVars flags: 16r10001) ifTrue: [
+			holder := walker @env0:perform: #dynInstVars env: 1.
+			holder == nil ifFalse: [
+				v := holder @env0:dynamicInstVarAt: aSym.
+				v == nil ifFalse: [^ MethodBinding instance: obj callable: v]
+			]
+		].
+		walker := walker @env0:superClass
+	].
 	s := aSym @env0:asString.
 	sym1 := (s @env0:, ':') @env0:asSymbol.
 	sym2 := (s @env0:, ':_:') @env0:asSymbol.

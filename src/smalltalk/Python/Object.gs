@@ -768,6 +768,87 @@ ___classAttrOverlayLookup___: aClass name: aSym
 
 category: 'Grail-Class Attr Overlay'
 method: object
+___classHolderAttrStore___: aName put: aValue
+	"Write aName into the receiver's OWN per-class ``dynInstVars'' holder --
+	the committed class-attribute store that ___classChainAttrLookup___: reads.
+	The receiver is a class that declares ``dynInstVars'' (every generated
+	Python class does; ClassDefAst initialises the classInstVar at class-build
+	time).
+
+	Two callers, for two different reasons:
+
+	  * ___pyAttrStore___ reaches here as the last resort for ``Cls.x = v''
+	    when there is no paired setter -- but only after trying the
+	    session-local overlay first.
+	  * a class-body method decorator's rebinding calls it DIRECTLY, on
+	    purpose.  That store is DEFINITIONAL -- part of what the class means,
+	    like the class body itself -- so it must land on the committed class
+	    and never in the session overlay, which ___resetClassAttrOverlay___
+	    wipes on a re-import.  Routing it through ___pyAttrStore___ would put
+	    it in the overlay whenever the class was already canonically
+	    registered by an earlier session, and the decorator would then vanish
+	    on the second import.
+
+	Returns aValue, so it can be used as an expression."
+
+	| holder |
+	holder := self @env0:perform: #dynInstVars env: 1.
+	holder == nil ifTrue: [
+		holder := Object @env0:new.
+		self @env0:perform: #dynInstVars: env: 1 withArguments: { holder }
+	].
+	holder @env0:dynamicInstVarAt: aName @env0:asString @env0:asSymbol put: aValue.
+	^ aValue
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___classChainAttrLookup___: aSym
+	"Read aSym from the per-class ``dynInstVars'' store, walking the
+	receiver's class chain.  This is the COMMITTED class-attribute store --
+	the home of ``setattr(cls, ...)'', of class-attr values merged from
+	secondary bases (multiple inheritance; see importlib
+	___mergeSecondaryBases___), of ClassDefAst's closure cells, and of the
+	rebinding a class-body method decorator emits.  (Its session-local
+	counterpart for canonical classes is ___classAttrOverlayLookup___:name:.)
+
+	Walking stops at the first hit, so a subclass override (``B.x =
+	'from-B''') shadows the parent value (``A.x = 'from-A''').
+
+	Answers nil for absent, per the nil-as-absent convention -- values are
+	Python objects (None is the None singleton, never Smalltalk nil).
+
+	Receiver kind decides the descriptor treatment.  Read THROUGH AN INSTANCE,
+	a callable class attribute binds the instance as ``self'' (Python's
+	descriptor protocol) and comes back wrapped in a MethodBinding that
+	prepends self to the call args.  Read off the CLASS it comes back raw,
+	matching CPython's ``Cls.method'' yielding the plain function.
+	Non-callable attributes (ints, strings, classes) are raw on both paths."
+
+	| walker holder v |
+	walker := (self isKindOf: Behavior)
+		ifTrue: [self]
+		ifFalse: [self @env0:class].
+	[walker == nil] whileFalse: [
+		(walker ___respondsTo___: #dynInstVars) ifTrue: [
+			holder := walker @env0:perform: #dynInstVars env: 1.
+			holder == nil ifFalse: [
+				v := holder @env0:dynamicInstVarAt: aSym.
+				v == nil ifFalse: [
+					((self isKindOf: Behavior) not
+						and: [self ___isDescriptorCallable___: v])
+						ifTrue: [^ MethodBinding instance: self callable: v].
+					^ v
+				]
+			]
+		].
+		walker := walker @env0:superClass
+	].
+	^ nil
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
 ___classAttrOverlayStore___: aClass name: aSym value: aValue
 	"Route a runtime class-attribute STORE on a canonical class into the
 	session-local overlay instead of the committed class.  Returns true
@@ -1055,6 +1136,15 @@ ___isDescriptorCallable___: aValue
 	(aValue isKindOf: MethodBinding) ifTrue: [^ false].
 	(aValue isKindOf: BoundMethod) ifTrue: [^ true].
 	(aValue isKindOf: ExecBlock) ifTrue: [^ true].
+	"UnboundMethod -- what ``Cls.m'' answers, i.e. CPython's plain function
+	taking self first.  A decorator that returns its argument unchanged
+	(``@unittest.skipIf'' with a false condition, ``@unittest.skip'', any
+	register-and-return decorator) makes the class attribute exactly this, and
+	reading it back through an INSTANCE has to bind self like any other
+	function in a class dict.  Without it, unittest called the stored test
+	method with no instance: ``TypeError: unbound method 'test_x' must be
+	called with an instance as the first argument''."
+	(aValue isKindOf: UnboundMethod) ifTrue: [^ true].
 	^ false
 %
 
@@ -1382,22 +1472,12 @@ ___pyAttrLoad___: aSym
 			ifTrue: [^ self @env0:perform: aSym env: 1].
 		"Per-class dynamic attr store — the home of setattr(cls, ...)
 		fallbacks AND of class-attr values merged from SECONDARY bases
-		(multiple inheritance; see importlib
-		___mergeSecondaryBases___).  Walk the primary chain so
-		subclasses see values stored on an ancestor."
-		[ | walker holder v |
-		walker := self.
-		[walker ~~ nil and: [walker ~~ Object]] @env0:whileTrue: [
-			(walker ___respondsTo___: #dynInstVars) ifTrue: [
-				holder := walker @env0:perform: #dynInstVars env: 1.
-				holder == nil ifFalse: [
-					v := holder @env0:dynamicInstVarAt: aSym.
-					v == nil ifFalse: [^ v]
-				]
-			].
-			walker := walker @env0:superclass
-		].
-		nil ] value.
+		(multiple inheritance; see importlib ___mergeSecondaryBases___).
+		A Behavior receiver gets the raw value (CPython's ``Cls.method'' is
+		the plain function); the descriptor binding in the shared helper
+		applies only to instance receivers."
+		(self ___classChainAttrLookup___: aSym)
+			@env0:ifNotNil: [:___cv | ^ ___cv].
 		"Instance method accessed via the class object — an *unbound* method
 		(a plain function in Python 3).  ``ParentClass.__init__(self, **opts)''
 		(explicit super-init, e.g. flask's ``Environment'' subclass calling
@@ -1613,6 +1693,26 @@ ___pyAttrLoad___: aSym
 	For a class receiver this picks up @classmethod selectors on the
 	metaclass (``Cls.classmeth()'' returns a bound class method),
 	taking precedence over the unbound-instance-method branch below."
+	"A runtime class-attribute store must SHADOW a compiled method of the same
+	name.  In CPython a ``def m'' IS a class-dict entry, so ``A.m = f''
+	REPLACES it and both ``A.m'' and ``a.m'' see f; there is no second,
+	lower-priority place for the original to survive.
+
+	This probe has to precede the BoundMethod wrap below, which answers for
+	ANY selector the receiver responds to — including the compiled method —
+	and so used to win, leaving the store visible on the class but not through
+	an instance: ``A.m = deco(A.m)'' made ``A.m'' the wrapper (the Behavior
+	branch above walks the same store) while ``a.m()'' still ran the original.
+	That asymmetry is what made class-body method decorators unimplementable
+	as ``Cls.m = deco(Cls.m)'', and it was an ordinary monkey-patching bug in
+	its own right.
+
+	Instance receivers only.  A class receiver consulted this store in the
+	Behavior branch above, before ITS wrap, so it is already correct; probing
+	again here would be redundant."
+	(self isKindOf: Behavior) ifFalse: [
+		(self ___classChainAttrLookup___: aSym)
+			@env0:ifNotNil: [:___cv | ^ ___cv]].
 	((self ___respondsTo___: aSym)
 		or: [(self ___respondsTo___: sym1)
 			or: [(self ___respondsTo___: sym2)
@@ -1644,46 +1744,12 @@ ___pyAttrLoad___: aSym
 		ifTrue: [
 			^ self ___unboundMethodClosure___: aSym
 		].
-	"dynInstVars probe — walks the class chain to honor Python's
-	attribute inheritance.  Two receiver kinds:
-	  * Class receiver (B is a class) — walk B → B's superClass → ...
-	    probing each level's ``dynInstVars'' dict.  Stops on the first
-	    hit so a subclass override (``B.x = 'from-B''') shadows the
-	    parent value (``A.x = 'from-A''').
-	  * Instance receiver (b is an instance of B) — same walk
-	    starting at b's class.  Used after the instance dict miss
-	    and class-side accessor miss above to find values dynamically
-	    stored on the class chain (``A.x = 42; b = A(); b.x''
-	    must return 42 — see AttributeInheritanceTestCase)."
-	walker := (self isKindOf: Behavior)
-		ifTrue: [self]
-		ifFalse: [self @env0:class].
-	[walker == nil] whileFalse: [
-		(walker ___respondsTo___: #dynInstVars)
-			ifTrue: [
-				| holder dynValue |
-				holder := walker @env0:perform: #dynInstVars env: 1.
-				holder == nil ifFalse: [
-					dynValue := holder @env0:dynamicInstVarAt: aSym.
-					dynValue == nil ifFalse: [
-						"Python descriptor protocol: a callable stored as a
-						class attribute and accessed THROUGH AN INSTANCE
-						binds the instance as ``self''.  Wrap in a
-						MethodBinding that prepends self to the call args
-						and forwards.  Class-side access (self is a
-						Behavior) returns the raw callable — matches
-						CPython's ``Cls.method'' yielding the function
-						unchanged.  Non-callable class attributes (ints,
-						strings, classes) return raw on both paths."
-						((self isKindOf: Behavior) not
-							and: [self ___isDescriptorCallable___: dynValue])
-							ifTrue: [^ MethodBinding instance: self callable: dynValue].
-						^ dynValue
-					]
-				]
-			].
-		walker := walker @env0:superClass
-	].
+	"dynInstVars probe — see ___classChainAttrLookup___:.  An instance
+	receiver already probed it above (it has to precede the BoundMethod wrap
+	to shadow a compiled method); this remains for the receiver kinds that
+	reach here without having done so."
+	(self ___classChainAttrLookup___: aSym)
+		@env0:ifNotNil: [:___cv | ^ ___cv].
 	"No callable selector matched anywhere in the receiver's class
 	chain.  Before raising AttributeError, give a user-defined
 	``__getattr__'' a chance to handle the miss — matches CPython's
@@ -2824,16 +2890,7 @@ ___pyAttrStore___: aName put: aValue
 			ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { aValue }].
 		"Python user class — store in the per-class dynInstVars dict."
 		(self ___respondsTo___: #dynInstVars)
-			ifTrue: [
-				| holder |
-				holder := self @env0:perform: #dynInstVars env: 1.
-				holder == nil ifTrue: [
-					holder := Object @env0:new.
-					self @env0:perform: #dynInstVars: env: 1 withArguments: { holder }
-				].
-				holder @env0:dynamicInstVarAt: aName @env0:asSymbol put: aValue.
-				^ aValue
-			].
+			ifTrue: [^ self ___classHolderAttrStore___: aName put: aValue].
 		"Built-in / non-Python class with no setter — AttributeError."
 		^ AttributeError ___signal___:
 			'''' @env0:, self @env0:name @env0:asString @env0:,

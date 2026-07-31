@@ -135,7 +135,11 @@ for i in $SHARDS; do
   # shellcheck disable=SC2086
   set -- $nums
   S_RUN=$((S_RUN+$1)); S_PASS=$((S_PASS+$2)); S_FAIL=$((S_FAIL+$3)); S_ERR=$((S_ERR+$4))
-  grep -E "debug: #" "$f" | sed 's/^/  /'
+  # runTestsShard.gs tags EVERY line of its defect report (header, message,
+  # stack, repro) with this marker precisely so one line-oriented grep recovers
+  # the whole multi-line block -- a Python traceback or a stack report would
+  # otherwise be truncated to its first line.
+  grep -E "^GRAIL_DEFECT\|" "$f" | sed 's/^GRAIL_DEFECT|/  /'
 done
 echo "main suite (sharded: $N_SHARDS of x$WORKERS): $S_RUN run, $S_PASS passed, $S_FAIL failed, $S_ERR errors"
 printf 'TIMING | %-26s | %4ds\n' "sunit shards [$SHARDS]" "$((SECONDS - SHARD_T0))"

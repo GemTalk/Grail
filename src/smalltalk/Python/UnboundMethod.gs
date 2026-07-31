@@ -207,7 +207,93 @@ __hash__
 	^ (definingClass @env0:identityHash) @env0:bitXor: (selector @env0:hash)
 %
 
+category: 'Grail-Callable'
+method: UnboundMethod
+___pyCallValue___: positional kw: kwargs
+	"Forward the Python ``f(args, **kw)'' call to this handle's own
+	``value:value:'', which takes the receiver as the first positional.
+	Overrides Object >> ___pyCallValue___:kw:, whose default is to raise
+	``'UnboundMethod' object is not callable'' -- which is what an unbound
+	handle reached through any ___pyCallValue___ call site used to do,
+	despite implementing value:value: perfectly well.  Mirrors BoundMethod.
+
+	Reached whenever ``Cls.m'' is called other than as a direct attribute
+	call: ``f = Cls.m; f(inst, x)'', and -- the case that surfaced it -- a
+	MethodBinding forwarding an instance read of a class attribute that a
+	decorator had set to one of these."
+
+	^ self value: positional value: kwargs
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+__name__
+	"Python's ``func.__name__''.  ``selector'' holds the plain PYTHON
+	attribute name here (the Smalltalk selector with its arity colons is
+	rebuilt at call time by _resolveMethodNargs:kwOk:), so it is the name
+	CPython would report for ``Cls.m''.
+
+	Load-bearing for method decorators: functools.wraps copies __name__ /
+	__qualname__ / __doc__ / __module__ off the function it is given, which
+	for a class-body decorator IS one of these unbound handles.  Every one
+	of those reads used to raise AttributeError, and update_wrapper silently
+	skips a name it cannot read -- so the wrapper kept ITS own name and
+	``@functools.wraps(fn)'' looked like it had done nothing."
+
+	^ selector @env0:asString
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+__qualname__
+	"``Cls.m'' -- CPython's qualified name for a method reached off its class."
+
+	definingClass == nil ifTrue: [^ selector @env0:asString].
+	^ definingClass @env0:name @env0:asString @env0:, '.' @env0:, selector @env0:asString
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+__module__
+	"The defining class's module, when it knows one.
+
+	Only a real STRING counts.  A class that does not carry ``__module__''
+	does not necessarily raise for it -- the attribute lookup can fall through
+	to its method-wrap fallback and hand back a callable around an accessor --
+	and copying THAT into a wrapper is worse than not copying at all
+	(functools.wraps produced ``wrapper.__module__ == <UnboundMethod object>'').
+	Answer nil for anything else and let update_wrapper skip the name."
+
+	| v |
+	definingClass == nil ifTrue: [^ nil].
+	v := [definingClass @env1:___pyAttrLoad___: #'__module__']
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil].
+	(v @env0:isKindOf: CharacterCollection) ifTrue: [^ v].
+	^ nil
+%
+
 set compile_env: 0
+
+! ___pythonValueAttrs___ MUST be compiled in env 0: Object >>
+! ___pyAttrLoad___ consults it through an env-0 ``respondsTo:'', so an env-1
+! definition is invisible to the probe and the hook silently does nothing.
+
+category: 'Grail-Python Attribute Hook'
+classmethod: UnboundMethod
+___pythonValueAttrs___
+	"``__name__'' / ``__qualname__'' / ``__module__'' are identifying-metadata
+	VALUE attributes -- name strings, not callables.  Without this hook
+	___pyAttrLoad___ reaches its BoundMethod wrap and answers a callable
+	around the accessor, so functools.wraps would copy a BoundMethod as the
+	wrapper's __name__ instead of the string.  Mirrors BoundMethod's hook."
+
+	^ IdentitySet new
+		add: #'__name__';
+		add: #'__qualname__';
+		add: #'__module__';
+		yourself
+%
 
 category: 'Grail-Accessing'
 method: UnboundMethod

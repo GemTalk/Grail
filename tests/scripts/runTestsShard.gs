@@ -76,17 +76,29 @@ leaves do: [:t | | key h |
   h := 0.
   key do: [:ch | h := h + ch asInteger].
   ((h \\ n) = idx) ifTrue: [shard addTest: t]].
-result := shard run.
+"GrailTestResult, not the stock TestResult that TestSuite>>run would build, so
+that a defect reports its MESSAGE and (for errors) a stack.  Stock SUnit keeps
+only the TestCase, which is why a red CI shard used to say no more than
+``FooTestCase debug: #testBar'' and diagnosing it meant reproducing the whole
+run by hand.  See src/smalltalk/PythonTests/GrailTestResult.gs."
+result := GrailTestResult run: shard.
 out nextPutAll: 'GRAIL_SHARD_RESULT|idx='; nextPutAll: idx printString;
   nextPutAll: '|workers='; nextPutAll: n printString;
   nextPutAll: '|'; nextPutAll: result printString; cr.
 result hasPassed
   ifTrue: [ExitClientError signal: 'shard passed' status: 0]
   ifFalse: [
-    out nextPutAll: 'SHARD '; nextPutAll: idx printString; nextPutAll: ' failures:'; cr.
-    result failures do: [:each | out nextPutAll: '    '; nextPutAll: each printString; cr].
-    out nextPutAll: 'SHARD '; nextPutAll: idx printString; nextPutAll: ' errors:'; cr.
-    result errors do: [:each | out nextPutAll: '    '; nextPutAll: each printString; cr].
+    "EVERY line of the report is tagged, messages and stacks included, so
+    run_tests.sh recovers the whole thing with one line-oriented grep."
+    result reportOn: out prefix: 'GRAIL_DEFECT|'.
+    "Belt and braces: if a defect somehow reached the collections without being
+    recorded (an exception outside runCase:), still name it."
+    result details size < (result failureCount + result errorCount) ifTrue: [
+      out nextPutAll: 'GRAIL_DEFECT|[UNRECORDED] '; nextPutAll: result printString;
+        nextPutAll: ' -- '; nextPutAll: result details size printString;
+        nextPutAll: ' detail(s) captured'; cr.
+      (result failures asArray, result errors asArray) do: [:each |
+        out nextPutAll: 'GRAIL_DEFECT|    '; nextPutAll: each printString; cr]].
     ExitClientError signal: 'shard failed' status: 1].
 %
 logout

@@ -148,14 +148,25 @@ the same name):
 Not stdlib modules, but they bite when porting stdlib code:
 multiple-inheritance dispatch is a copy-down merge over a real C3
 `__mro__` (per-send MRO precedence is approximate — see TODO.md), no
-name mangling (`self.__x`), class-body method decorators dropped
-(module-level function decorators DO run since 2026-06), `kwargs`
+name mangling (`self.__x`), `kwargs`
 catch-all param name, del-sys.modules str-vs-Symbol bug, eval-path
 `class` statements broken (use importlib fixtures), `import x as y`
 aliases defeat the native-module call fast path.  Since resolved:
 descriptor protocol (`__get__`) on class attributes and user `__new__`
-(both 2026-07-10), and isinstance(x, type) / issubclass-on-non-class
-now raise catchable Python errors.
+(both 2026-07-10), isinstance(x, type) / issubclass-on-non-class
+now raise catchable Python errors, and class-body method decorators
+now run (2026-07-30; module-level function decorators since 2026-06).
+
+### `__doc__` on a compiled def (module function or method)
+
+Reads as `object`'s docstring rather than the def's own — and, worse than
+being absent, `functools.wraps` therefore *copies* that wrong value onto a
+wrapper.  Not decorator-specific: a plain `modfn.__doc__` shows it too.
+Docstrings ARE captured for nested defs and lambdas (`ExecBlock`, via the
+`___pyNamed___:doc:` stamp); a compiled def has nowhere to put one yet, so
+this needs a per-class/per-module docstring registry populated at compile
+time.  Visible as `TestCachedProperty.test_doc` and
+`TestUpdateWrapper.test_default_update_doc` in `test.test_functools`.
 
 ### Function metadata (2026-07-29)
 
