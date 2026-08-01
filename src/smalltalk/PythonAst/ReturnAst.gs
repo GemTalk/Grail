@@ -91,3 +91,11 @@ method: ReturnAst
 isUnconditionalReturn
 	^ true
 %
+method: ReturnAst
+value
+	^value
+%
+method: ReturnAst
+value: newValue
+	value := newValue
+%

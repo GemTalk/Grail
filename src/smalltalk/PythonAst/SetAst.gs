@@ -68,3 +68,11 @@ printSmalltalkOn: aStream
 	].
 	aStream nextPutAll: '___s] value: (set perform: #new env: 0))'.
 %
+method: SetAst
+elts
+	^elts
+%
+method: SetAst
+elts: newValue
+	elts := newValue
+%

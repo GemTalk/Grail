@@ -6,7 +6,7 @@ AbstractNode ifNil: [self error: 'AbstractNode is not defined. Check file orderi
 ! ------------------- Class definition for WithItemAst
 expectvalue /Class
 doit
-AbstractNode subclass: 'WithItemAst'
+AbstractLocationNode subclass: 'WithItemAst'
   instVarNames: #( context_expr optional_vars)
   classVars: #()
   classInstVars: #()
@@ -68,4 +68,12 @@ method: WithItemAst
 optional_vars
 
 	^optional_vars
+%
+method: WithItemAst
+context_expr: newValue
+	context_expr := newValue
+%
+method: WithItemAst
+optional_vars: newValue
+	optional_vars := newValue
 %

@@ -7,9 +7,8 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'PythonTokenizer'
-  instVarNames: #( source position line column
-                    tokens indentStack parenDepth atLineStart)
-  classVars: #( KeywordSet )
+  instVarNames: #( source position line tokens indentStack parenDepth atLineStart sourceSize )
+  classVars: #( Lf Tab NameToCodepointDict KeywordDict )
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: PythonAst
@@ -28,10 +27,6 @@ numbers, operators, keywords, and comments.
 
 Usage:
   PythonTokenizer tokenize: ''x = 1 + 2''
-
-Hierarchy:
-Object
-  PythonTokenizer(source position line column tokens indentStack parenDepth atLineStart)
 '
 %
 
@@ -39,12 +34,17 @@ expectvalue /Class
 doit
 PythonTokenizer category: 'Grail-Parser'
 %
+doit
+PythonTokenizer _addInvariantClassVar: #Lf value: Character lf ;
+                _addInvariantClassVar: #Tab value: Character tab .
+true
+%
 
 ! ===============================================================================
 ! PythonTokenizer - Lexer for Python source code
 ! ===============================================================================
-! Converts a Python source string into a sequence of PythonToken objects.
-! Handles indentation-based INDENT/DEDENT tokens, string literals
+! Converts a Python source string into a sequence of PythonToken objects.  
+! Handles indentation-based INDENT/DEDENT tokens, string literals 
 ! (including triple-quoted and f-strings), numbers, operators, and keywords.
 ! ===============================================================================
 
@@ -57,24 +57,25 @@ set compile_env: 0
 category: 'Grail-private'
 classmethod: PythonTokenizer
 keywords
-
-	^#('False' 'None' 'True' 'and' 'as' 'assert' 'async' 'await'
-	   'break' 'class' 'continue' 'def' 'del' 'elif' 'else' 'except'
-	   'finally' 'for' 'from' 'global' 'if' 'import' 'in' 'is'
-	   'lambda' 'nonlocal' 'not' 'or' 'pass' 'raise' 'return'
-	   'try' 'while' 'with' 'yield')
+^ #( 'and' 'as' 'assert' 'async' 'await' 'break' 'class' 'continue' 'def' 'del' 
+     'elif' 'else' 'except' 'False' 'finally' 'for' 'from' 'global' 'if' 'import'
+     'in' 'is' 'lambda' 'None' 'nonlocal' 'not' 'or' 'pass' 'raise' 'return' 'True'
+      'try' 'while' 'with' 'yield')
+%
+doit
+| dict |
+dict := StringKeyValueDictionary new .
+PythonTokenizer keywords do:[:aWord |
+  dict at: aWord put: 1 .
+].
+PythonTokenizer _addInvariantClassVar: #KeywordDict value: dict .
+true
 %
 
 category: 'Grail-tokenizing'
-classmethod: PythonTokenizer
-keywordSet
-	"Cached Set of the Python keywords for O(1) membership.  tokenizeIdentifier
-	tests every identifier token against this; the previous `keywords includes:`
-	linearly scanned a 35-element Array (up to 35 String= compares per token, the
-	full scan for the common case of a NON-keyword identifier).  Built once and
-	memoized in the KeywordSet class var."
-
-	^ KeywordSet ifNil: [ KeywordSet := Set withAll: self keywords ]
+method: PythonTokenizer
+isKeyword: aString
+  ^ (KeywordDict at: aString otherwise: nil) ~~ nil 
 %
 
 category: 'Grail-instance creation'
@@ -87,7 +88,7 @@ on: aString
 %
 
 category: 'Grail-tokenizing'
-classmethod: PythonTokenizer
+method: PythonTokenizer
 ___unicodeNameToCodePoint___: aName
 	"Code point for a \N{NAME} escape, or nil when unknown.  A curated
 	table of the names that appear in real code and in CPython's test
@@ -95,42 +96,45 @@ ___unicodeNameToCodePoint___: aName
 	SyntaxError on nil, so an unsupported name fails loudly instead of
 	silently corrupting the literal; extend the table as needed."
 
-	| t |
-	t := KeyValueDictionary new.
-	t at: 'NULL' put: 16r0.
-	t at: 'NO-BREAK SPACE' put: 16rA0.
-	t at: 'NARROW NO-BREAK SPACE' put: 16r202F.
-	t at: 'ZERO WIDTH SPACE' put: 16r200B.
-	t at: 'ZERO WIDTH NO-BREAK SPACE' put: 16rFEFF.
-	t at: 'EN SPACE' put: 16r2002.
-	t at: 'EM SPACE' put: 16r2003.
-	t at: 'THIN SPACE' put: 16r2009.
-	t at: 'HAIR SPACE' put: 16r200A.
-	t at: 'EN DASH' put: 16r2013.
-	t at: 'EM DASH' put: 16r2014.
-	t at: 'HORIZONTAL ELLIPSIS' put: 16r2026.
-	t at: 'BULLET' put: 16r2022.
-	t at: 'LINE SEPARATOR' put: 16r2028.
-	t at: 'PARAGRAPH SEPARATOR' put: 16r2029.
-	t at: 'LEFT SINGLE QUOTATION MARK' put: 16r2018.
-	t at: 'RIGHT SINGLE QUOTATION MARK' put: 16r2019.
-	t at: 'LEFT DOUBLE QUOTATION MARK' put: 16r201C.
-	t at: 'RIGHT DOUBLE QUOTATION MARK' put: 16r201D.
-	t at: 'DEGREE SIGN' put: 16rB0.
-	t at: 'MICRO SIGN' put: 16rB5.
-	t at: 'MULTIPLICATION SIGN' put: 16rD7.
-	t at: 'LATIN CAPITAL LETTER A WITH DIAERESIS' put: 16rC4.
-	t at: 'LATIN CAPITAL LETTER O WITH DIAERESIS' put: 16rD6.
-	t at: 'LATIN CAPITAL LETTER U WITH DIAERESIS' put: 16rDC.
-	t at: 'LATIN SMALL LETTER A WITH DIAERESIS' put: 16rE4.
-	t at: 'LATIN SMALL LETTER O WITH DIAERESIS' put: 16rF6.
-	t at: 'LATIN SMALL LETTER U WITH DIAERESIS' put: 16rFC.
-	t at: 'LATIN SMALL LETTER SHARP S' put: 16rDF.
-	t at: 'GREEK SMALL LETTER ALPHA' put: 16r3B1.
-	t at: 'GREEK SMALL LETTER PI' put: 16r3C0.
-	t at: 'REPLACEMENT CHARACTER' put: 16rFFFD.
-	t at: 'SNOWMAN' put: 16r2603.
-	^ t at: aName otherwise: nil
+	| dict |
+  dict := NameToCodepointDict ifNil:[ | t |
+	  t := StringKeyValueDictionary new.
+		t at: 'NULL' put: 16r0.
+		t at: 'NO-BREAK SPACE' put: 16rA0.
+		t at: 'NARROW NO-BREAK SPACE' put: 16r202F.
+		t at: 'ZERO WIDTH SPACE' put: 16r200B.
+		t at: 'ZERO WIDTH NO-BREAK SPACE' put: 16rFEFF.
+		t at: 'EN SPACE' put: 16r2002.
+		t at: 'EM SPACE' put: 16r2003.
+		t at: 'THIN SPACE' put: 16r2009.
+		t at: 'HAIR SPACE' put: 16r200A.
+		t at: 'EN DASH' put: 16r2013.
+		t at: 'EM DASH' put: 16r2014.
+		t at: 'HORIZONTAL ELLIPSIS' put: 16r2026.
+		t at: 'BULLET' put: 16r2022.
+		t at: 'LINE SEPARATOR' put: 16r2028.
+		t at: 'PARAGRAPH SEPARATOR' put: 16r2029.
+		t at: 'LEFT SINGLE QUOTATION MARK' put: 16r2018.
+		t at: 'RIGHT SINGLE QUOTATION MARK' put: 16r2019.
+		t at: 'LEFT DOUBLE QUOTATION MARK' put: 16r201C.
+		t at: 'RIGHT DOUBLE QUOTATION MARK' put: 16r201D.
+		t at: 'DEGREE SIGN' put: 16rB0.
+		t at: 'MICRO SIGN' put: 16rB5.
+		t at: 'MULTIPLICATION SIGN' put: 16rD7.
+		t at: 'LATIN CAPITAL LETTER A WITH DIAERESIS' put: 16rC4.
+		t at: 'LATIN CAPITAL LETTER O WITH DIAERESIS' put: 16rD6.
+		t at: 'LATIN CAPITAL LETTER U WITH DIAERESIS' put: 16rDC.
+		t at: 'LATIN SMALL LETTER A WITH DIAERESIS' put: 16rE4.
+		t at: 'LATIN SMALL LETTER O WITH DIAERESIS' put: 16rF6.
+		t at: 'LATIN SMALL LETTER U WITH DIAERESIS' put: 16rFC.
+		t at: 'LATIN SMALL LETTER SHARP S' put: 16rDF.
+		t at: 'GREEK SMALL LETTER ALPHA' put: 16r3B1.
+		t at: 'GREEK SMALL LETTER PI' put: 16r3C0.
+		t at: 'REPLACEMENT CHARACTER' put: 16rFFFD.
+		t at: 'SNOWMAN' put: 16r2603.
+    NameToCodepointDict := t .
+  ].
+	^ dict at: aName otherwise: nil
 %
 
 classmethod: PythonTokenizer
@@ -141,38 +145,33 @@ tokenize: aString
 
 category: 'Grail-private'
 method: PythonTokenizer
-addToken: aType value: aValue line: aLine column: aCol endLine: anEndLine endColumn: anEndCol
+addToken: aType value: aValue line: aLine position: aPos 
 
 	tokens add: (PythonToken
 		type: aType
 		value: aValue
 		line: aLine
-		column: aCol
-		endLine: anEndLine
-		endColumn: anEndCol).
+		position: aPos).
 %
 
 category: 'Grail-private'
 method: PythonTokenizer
 advance
-
-	| char |
-	char := source at: position.
-	position := position + 1.
-	char == Character lf ifTrue: [
-		line := line + 1.
-		column := 0.
-	] ifFalse: [
-		column := column + 1.
-	].
+	| char pos |
+	char := source atOrNil: (pos := position) .
+  char ifNotNil:[ 
+	  position := pos + 1.
+	  char == Lf ifTrue: [
+		  line := line + 1.
+    ].
+  ].
 	^char
 %
 
 category: 'Grail-private'
 method: PythonTokenizer
 atEnd
-
-	^position > source size
+	^ position > sourceSize 
 %
 
 category: 'Grail-private'
@@ -191,11 +190,11 @@ handleIndentation: indent
 	currentIndent := indentStack last.
 	indent > currentIndent ifTrue: [
 		indentStack add: indent.
-		self addToken: #INDENT value: '' line: line column: 0 endLine: line endColumn: indent.
+		self addToken: #INDENT value: '' line: line position: position .
 	] ifFalse: [
 		[indent < indentStack last] whileTrue: [
 			indentStack removeLast.
-			self addToken: #DEDENT value: '' line: line column: 0 endLine: line endColumn: indent.
+			self addToken: #DEDENT value: '' line: line position: position .
 		].
 		indent ~= indentStack last ifTrue: [
 			SyntaxError signal: 'unindent does not match any outer indentation level at line ' , line printString.
@@ -260,19 +259,13 @@ isStringStart
 category: 'Grail-private'
 method: PythonTokenizer
 peek
-
-	position > source size ifTrue: [^nil].
-	^source at: position
+	^ source atOrNil: position
 %
 
 category: 'Grail-private'
 method: PythonTokenizer
 peekAt: offset
-
-	| pos |
-	pos := position + offset.
-	(pos > source size or: [pos < 1]) ifTrue: [^nil].
-	^source at: pos
+  ^ source atOrNil: (position + offset) 
 %
 
 category: 'Grail-tokenizing'
@@ -280,10 +273,10 @@ method: PythonTokenizer
 readIndentation
 	"Read whitespace at the beginning of a line and return the indent level."
 
-	| indent |
+	| indent ch |
 	indent := 0.
-	[self atEnd not and: [(self peek == Character space) or: [self peek == Character tab]]] whileTrue: [
-		self peek == Character tab
+	[ ch := self peek . ch == $ or: [ ch == Tab ] ] whileTrue: [
+		ch == Tab
 			ifTrue: [indent := (indent // 8 + 1) * 8]
 			ifFalse: [indent := indent + 1].
 		self advance.
@@ -296,7 +289,7 @@ method: PythonTokenizer
 skipComment
 	"Skip a comment (from # to end of line)."
 
-	[self atEnd not and: [self peek ~~ Character lf]] whileTrue: [
+	[self atEnd not and: [self peek ~~ Lf ]] whileTrue: [
 		self advance.
 	].
 %
@@ -308,17 +301,17 @@ skipNewline
 
 	self atEnd ifTrue: [
 		parenDepth == 0 ifTrue: [
-			self addToken: #NEWLINE value: '' line: line column: column endLine: line endColumn: column.
+			self addToken: #NEWLINE value: '' line: line position: position .
 		].
 		^self
 	].
-	self peek == Character lf ifTrue: [
-		| startLine startCol |
+	self peek == Lf ifTrue: [
+		| startLine startPos |
 		startLine := line.
-		startCol := column.
+		startPos := position .
 		self advance.
 		parenDepth == 0 ifTrue: [
-			self addToken: #NEWLINE value: '' line: startLine column: startCol endLine: line endColumn: column.
+			self addToken: #NEWLINE value: '' line: startLine position: startPos .
 		].
 	].
 %
@@ -328,12 +321,11 @@ method: PythonTokenizer
 source: aString
 
 	source := aString.
+  sourceSize := aString size .
 	position := 1.
 	line := 1.
-	column := 0.
-	tokens := Array new.
-	indentStack := Array new.
-	indentStack add: 0.
+	tokens := { } .
+	indentStack := { 0 } .
 	parenDepth := 0.
 	atLineStart := true.
 %
@@ -342,7 +334,7 @@ category: 'Grail-private'
 method: PythonTokenizer
 sourceSize
 
-	^source size
+	^ sourceSize
 %
 
 category: 'Grail-tokenizing'
@@ -357,9 +349,9 @@ tokenize
 	"Emit DEDENT tokens for any remaining indentation"
 	[indentStack size > 1] whileTrue: [
 		indentStack removeLast.
-		self addToken: #DEDENT value: '' line: line column: column endLine: line endColumn: column.
+		self addToken: #DEDENT value: '' line: line position: position .
 	].
-	self addToken: #ENDMARKER value: '' line: line column: column endLine: line endColumn: column.
+	self addToken: #ENDMARKER value: '' line: line position: position .
 	^tokens
 %
 
@@ -368,17 +360,16 @@ method: PythonTokenizer
 tokenizeIdentifier
 	"Tokenize an identifier or keyword."
 
-	| startLine startCol writeStream name |
+	| startLine startPos name |
 	startLine := line.
-	startCol := column.
-	writeStream := WriteStream on: String new.
+	startPos := position .
+	name := Unicode7 new.
 	[self atEnd not and: [self isIdentifierPart: self peek]] whileTrue: [
-		writeStream nextPut: self advance.
+		name add: self advance.
 	].
-	name := writeStream contents.
-	(self class keywordSet includes: name)
-		ifTrue: [self addToken: #KEYWORD value: name line: startLine column: startCol endLine: line endColumn: column]
-		ifFalse: [self addToken: #NAME value: name line: startLine column: startCol endLine: line endColumn: column].
+	(self isKeyword: name)
+		ifTrue: [ self addToken: #KEYWORD value: name line: startLine position: startPos ]
+		ifFalse: [self addToken: #NAME value: name line: startLine position: startPos ].
 %
 
 category: 'Grail-tokenizing'
@@ -386,19 +377,18 @@ method: PythonTokenizer
 tokenizeLine
 	"Tokenize a single logical line."
 
-	| indent startLine |
+	| indent startLine ch |
 	startLine := line.
-
 	"Handle blank lines and comments at line start"
 	atLineStart ifTrue: [
 		indent := self readIndentation.
-		self peek ifNil: [^self].
-		(self peek == Character lf) ifTrue: [
+		(ch := self peek) ifNil: [^self].
+		ch == Lf ifTrue: [
 			self advance.
 			atLineStart := true.
 			^self
 		].
-		(self peek == $#) ifTrue: [
+		ch == $# ifTrue: [
 			self skipComment.
 			self skipNewline.
 			atLineStart := true.
@@ -412,7 +402,7 @@ tokenizeLine
 	].
 
 	"Tokenize tokens on this line"
-	[self atEnd not and: [self peek ~~ Character lf]] whileTrue: [
+	[ ch := self peek . ch notNil and: [ ch ~~ Lf] ] whileTrue: [
 		self tokenizeOne.
 	].
 
@@ -426,107 +416,111 @@ method: PythonTokenizer
 tokenizeNumber
 	"Tokenize a numeric literal (int, float, hex, oct, bin, complex)."
 
-	| startLine startCol start char writeStream isFloat |
+	| startLine startPos str isFloat ch next |
 	startLine := line.
-	startCol := column.
-	writeStream := WriteStream on: String new.
+	startPos := position .
+	str := Unicode7 new.
 	isFloat := false.
-	char := self peek.
+	ch := self peek.
 
 	"Hex, octal, binary"
-	(char == $0 and: [(self peekAt: 1) notNil]) ifTrue: [
-		| next |
-		next := self peekAt: 1.
+	(ch == $0 and: [(next := self peekAt: 1) notNil]) ifTrue: [
 		(next == $x or: [next == $X]) ifTrue: [
-			writeStream nextPut: self advance; nextPut: self advance.
-			[self atEnd not and: [self peek notNil and: ['0123456789abcdefABCDEF_' includes: self peek]]] whileTrue: [
-				self peek == $_ ifFalse: [writeStream nextPut: self peek].
+			str add: self advance; add: self advance.
+			[ ch := self peek.  ch notNil and: ['0123456789abcdefABCDEF_' includesValue: ch ]] whileTrue: [
+				ch == $_ ifFalse: [ str add: ch ].
 				self advance.
 			].
-			self addToken: #NUMBER value: writeStream contents line: startLine column: startCol endLine: line endColumn: column.
+			self addToken: #NUMBER value: str line: startLine position: startPos .
 			^self
 		].
 		(next == $o or: [next == $O]) ifTrue: [
-			writeStream nextPut: self advance; nextPut: self advance.
-			[self atEnd not and: [self peek notNil and: ['01234567_' includes: self peek]]] whileTrue: [
-				self peek == $_ ifFalse: [writeStream nextPut: self peek].
+			str add: self advance; add: self advance.
+			[ ch := self peek .  ch notNil and: ['01234567_' includesValue: ch ]] whileTrue: [
+				ch == $_ ifFalse: [ str add: ch ].
 				self advance.
 			].
-			self addToken: #NUMBER value: writeStream contents line: startLine column: startCol endLine: line endColumn: column.
+			self addToken: #NUMBER value: str line: startLine position: startPos .
 			^self
 		].
 		(next == $b or: [next == $B]) ifTrue: [
-			writeStream nextPut: self advance; nextPut: self advance.
-			[self atEnd not and: [self peek notNil and: ['01_' includes: self peek]]] whileTrue: [
-				self peek == $_ ifFalse: [writeStream nextPut: self peek].
+			str add: self advance; add: self advance.
+			[ ch := self peek .  ch notNil and: ['01_' includesValue: ch ]] whileTrue: [
+				ch == $_ ifFalse: [ str add: ch ].
 				self advance.
 			].
-			self addToken: #NUMBER value: writeStream contents line: startLine column: startCol endLine: line endColumn: column.
+			self addToken: #NUMBER value: str line: startLine position: startPos .
 			^self
 		].
 	].
 
 	"Decimal integer or float"
-	[self atEnd not and: [self peek notNil and: [(self isDigit: self peek) or: [self peek == $_]]]] whileTrue: [
-		self peek == $_ ifFalse: [writeStream nextPut: self peek].
+	[ ch := self peek .  ch notNil and: [(self isDigit: ch ) or: [ch == $_]]] whileTrue: [
+		ch == $_ ifFalse: [ str add: ch ].
 		self advance.
 	].
 
 	"Decimal point"
-	(self atEnd not and: [self peek == $.]) ifTrue: [
-		(self peekAt: 1) notNil ifTrue: [
-			(self isDigit: (self peekAt: 1)) ifTrue: [
+  ch := self peek  .
+  ch == $.  ifTrue: [ 
+		next := self peekAt: 1.
+		next ifNotNil: [
+			(self isDigit: next) ifTrue: [
 				isFloat := true.
-				writeStream nextPut: self advance.
-				[self atEnd not and: [self peek notNil and: [(self isDigit: self peek) or: [self peek == $_]]]] whileTrue: [
-					self peek == $_ ifFalse: [writeStream nextPut: self peek].
+				str add: self advance.
+				[ ch := self peek.  ch notNil and: [(self isDigit: ch ) or: [ch == $_]]] whileTrue: [
+					ch == $_ ifFalse: [ str  add: ch ].
 					self advance.
 				].
 			] ifFalse: [
 				"Standalone dot after digits - check if it's really a dot operator"
-				(self isIdentifierStart: (self peekAt: 1)) ifTrue: [
+				(self isIdentifierStart: next ) ifTrue: [
 					"This is attr access, e.g. 123 .method - stop here"
 				] ifFalse: [
 					"Trailing dot, e.g. 1."
 					isFloat := true.
-					writeStream nextPut: self advance.
+					str add: self advance.
 				].
 			].
-		] ifFalse: [
+		] ifNil: [
 			"Dot at end of source"
 			isFloat := true.
-			writeStream nextPut: self advance.
+			str add: self advance.
 		].
 	].
 	"Also handle case like .5 (dot first)"
-	(writeStream contents isEmpty and: [self atEnd not and: [self peek == $.]]) ifTrue: [
+	(str size == 0 and: [ self peek == $. ]) ifTrue: [
 		isFloat := true.
-		writeStream nextPut: self advance.
-		[self atEnd not and: [self peek notNil and: [(self isDigit: self peek) or: [self peek == $_]]]] whileTrue: [
-			self peek == $_ ifFalse: [writeStream nextPut: self peek].
+		str add: self advance.
+		[ ch := self peek .
+      ch notNil and: [(self isDigit: ch ) or: [ ch == $_]]] whileTrue: [
+			ch == $_ ifFalse: [ str add: ch ].
 			self advance.
 		].
 	].
 
 	"Exponent"
-	(self atEnd not and: [self peek == $e or: [self peek == $E]]) ifTrue: [
+  ch := self peek .
+	(ch == $e or: [ ch == $E ]) ifTrue: [
 		isFloat := true.
-		writeStream nextPut: self advance.
-		(self atEnd not and: [self peek == $+ or: [self peek == $-]]) ifTrue: [
-			writeStream nextPut: self advance.
+		str add: self advance.
+    ch := self peek .
+		(ch == $+ or: [ ch == $- ]) ifTrue: [
+			str add: self advance.
 		].
-		[self atEnd not and: [self peek notNil and: [(self isDigit: self peek) or: [self peek == $_]]]] whileTrue: [
-			self peek == $_ ifFalse: [writeStream nextPut: self peek].
+		[ ch := self peek .
+      ch notNil and: [(self isDigit: ch ) or: [ ch == $_]]] whileTrue: [
+			ch == $_ ifFalse: [ str add: ch ].
 			self advance.
 		].
 	].
 
 	"Complex suffix"
-	(self atEnd not and: [self peek == $j or: [self peek == $J]]) ifTrue: [
-		writeStream nextPut: self advance.
+  ch := self peek .
+	(ch == $j or: [ ch == $J ]) ifTrue: [
+		str add: self advance.
 	].
-
-	self addToken: #NUMBER value: writeStream contents line: startLine column: startCol endLine: line endColumn: column.
+	self addToken: #NUMBER value: str line: startLine position: startPos .
 %
 
 category: 'Grail-tokenizing'
@@ -536,16 +530,16 @@ tokenizeOne
 
 	| char |
 	"Skip whitespace (not newlines)"
-	[self atEnd not and: [(self peek == Character space) or: [self peek == Character tab]]] whileTrue: [
+	[self atEnd not and: [(self peek == Character space) or: [self peek == Tab]]] whileTrue: [
 		self advance.
 	].
 	self atEnd ifTrue: [^self].
 	char := self peek.
-	char == Character lf ifTrue: [^self].
+	char == Lf ifTrue: [^self].
 
 	"Line continuation"
 	char == $\ ifTrue: [
-		(self peekAt: 1) == Character lf ifTrue: [
+		(self peekAt: 1) == Lf ifTrue: [
 			self advance. "skip \"
 			self advance. "skip newline"
 			^self
@@ -590,54 +584,67 @@ method: PythonTokenizer
 tokenizeOperator
 	"Tokenize an operator or delimiter."
 
-	| startLine startCol char next third |
+	| startLine startPos char next third |
 	startLine := line.
-	startCol := column.
+	startPos := position .
 	char := self advance.
 	next := self peek.
 
-	"Three-character operators"
-	(next notNil and: [(self peekAt: 1) notNil]) ifTrue: [
-		| three |
-		three := char asString , next asString , (self peekAt: 1) asString.
-		(three = '**=' or: [three = '//=' or: [three = '<<=' or: [three = '>>=' or: [three = '...']]]]) ifTrue: [
-			self advance. self advance.
-			self addToken: #OP value: three line: startLine column: startCol endLine: line endColumn: column.
-			^self
-		].
-	].
-
+	"Three-character operators  **= //= <<= >>= ... "
+  ( '*/<>.' includesValue: char) ifTrue:[
+    next == char ifTrue:[
+      third := self peekAt: 1 .
+      (third == $=  or:[  third == $. and:[ char == $. ]]) ifTrue:[
+		    | three |
+		    (three := Unicode7 new) add: char; add: next; add: third .
+			  self advance ; advance.
+			  self addToken: #OP value: three line: startLine position: startPos .
+			  ^self
+		  ].
+	  ].
+  ].
 	"Two-character operators"
 	next notNil ifTrue: [
 		| two |
-		two := char asString , next asString.
 		"``..'' is intentionally NOT in the two-char OP set even though
-		earlier versions of this tokenizer treated it as one — Python
-		has no such operator, and merging the two dots blocks relative
-		imports like ``from .. import x'' (the parser counts single
-		dots to compute the import level)."
-		(two = '==' or: [two = '!=' or: [two = '<=' or: [two = '>=' or: [
-		 two = '+=' or: [two = '-=' or: [two = '*=' or: [two = '/=' or: [
-		 two = '%=' or: [two = '&=' or: [two = '|=' or: [two = '^=' or: [
-		 two = '@=' or: [two = '->' or: [two = '//' or: [two = '**' or: [
-		 two = '<<' or: [two = '>>' or: [two = ':=']]]]]]]]]]]]]]]]]]) ifTrue: [
-			self advance.
-			self addToken: #OP value: two line: startLine column: startCol endLine: line endColumn: column.
-			^self
-		].
+		  earlier versions of this tokenizer treated it as one — Python
+		  has no such operator, and merging the two dots blocks relative
+		  imports like ``from .. import x'' (the parser counts single
+		  dots to compute the import level)."
+    next == char ifTrue:[
+       ('=/*<>' includesValue: char) ifTrue:[  " == // **  << >> "
+         (two := Unicode7 new) add: char; add: next . 
+		     self advance.
+		     self addToken: #OP value: two line: startLine position: startPos .
+         ^ self
+    ]]. 
+    next == $= ifTrue:[
+      ( '!<>+-*/%&|^@:' includesValue: char) ifTrue:[
+            "== != <= >= += -= *= /= %= &= |= ^= @=  := "
+         (two := Unicode7 new) add: char; add: next . 
+		     self advance.
+		     self addToken: #OP value: two line: startLine position: startPos .
+         ^ self
+    ]] .
+    (char == $- and:[ next == $> ]) ifTrue:[ " -> "
+       (two := Unicode7 new) add: char; add: next . 
+		   self advance.
+		   self addToken: #OP value: two line: startLine position: startPos .
+       ^ self
+		 ].
 	].
 
 	"Update paren depth"
-	(char == $( or: [char == $[ or: [char == ${]]) ifTrue: [
+  (char == $( or: [char == $[ or: [char == ${ ]]) ifTrue: [
 		parenDepth := parenDepth + 1.
 	].
-	(char == $) or: [char == $] or: [char == $}]]) ifTrue: [
+	(char == $) or: [char == $] or: [char == $} ]]) ifTrue: [
 		parenDepth := parenDepth - 1.
 		parenDepth < 0 ifTrue: [parenDepth := 0].
 	].
 
 	"Single-character operator"
-	self addToken: #OP value: char asString line: startLine column: startCol endLine: line endColumn: column.
+	self addToken: #OP value: char asString line: startLine position: startPos 
 %
 
 category: 'Grail-tokenizing'
@@ -645,24 +652,23 @@ method: PythonTokenizer
 tokenizeString
 	"Tokenize a string literal (handles prefixes, single/double/triple quotes, escapes)."
 
-	| startLine startCol prefix quoteChar triple writeStream char isFString isRaw isBytes tokenType |
+	| startLine startPos prefix quoteChar triple str isFString isRaw isBytes tokenType char |
 	startLine := line.
-	startCol := column.
-	prefix := ''.
+	startPos := position.
+	prefix := Unicode7 new.
 	isFString := false.
 	isRaw := false.
 	isBytes := false.
 
 	"Read prefix"
-	[self peek notNil and: [(self peek == $' or: [self peek == $"]) not]] whileTrue: [
-		| ch |
-		ch := self advance.
-		prefix := prefix , ch asString.
+	[ char := self peek . (char notNil and:[ (char == $' or: [ char == $"]) not])] whileTrue: [
+		prefix add: self advance .
 	].
-	prefix asLowercase do: [:c |
-		c == $f ifTrue: [isFString := true].
-		c == $r ifTrue: [isRaw := true].
-		c == $b ifTrue: [isBytes := true].
+  1 to: prefix size do:[:n |
+    char := (prefix at: n) asLowercase .
+		char == $f ifTrue: [isFString := true].
+		char == $r ifTrue: [isRaw := true].
+		char == $b ifTrue: [isBytes := true].
 	].
 	tokenType := isBytes
 		ifTrue: [#BYTES]
@@ -680,24 +686,24 @@ tokenizeString
 	].
 
 	"Read string contents"
-	writeStream := WriteStream on: Unicode7 new.
+	str := Unicode7 new.
 	[
-		self atEnd ifTrue: [SyntaxError signal: 'unterminated string literal at line ' , startLine printString].
 		char := self peek.
+		char ifNil:[ SyntaxError signal: 'unterminated string literal at line ' , startLine printString ].
 		triple ifTrue: [
 			"Check for closing triple quote"
 			(char == quoteChar and: [(self peekAt: 1) == quoteChar and: [(self peekAt: 2) == quoteChar]]) ifTrue: [
 				self advance. self advance. self advance.
-				self addToken: tokenType value: writeStream contents line: startLine column: startCol endLine: line endColumn: column.
+				self addToken: tokenType value: str line: startLine position: startPos .
 				^self
 			].
 		] ifFalse: [
 			char == quoteChar ifTrue: [
 				self advance.
-				self addToken: tokenType value: writeStream contents line: startLine column: startCol endLine: line endColumn: column.
+				self addToken: tokenType value: str line: startLine position: startPos .
 				^self
 			].
-			char == Character lf ifTrue: [
+			char == Lf ifTrue: [
 				SyntaxError signal: 'EOL while scanning string literal at line ' , startLine printString.
 			].
 		].
@@ -707,28 +713,28 @@ tokenizeString
 		here as a parallel case to the non-raw escape branch below —
 		both consume their characters in a single block so the
 		default-fallthrough consumer at the bottom doesn't run."
-		(char == $\ and: [isRaw]) ifTrue: [
+		(char == $\ and:[ isRaw ]) ifTrue: [
 			| nextCh |
 			self advance.
-			self atEnd ifTrue: [SyntaxError signal: 'unterminated string literal'].
 			nextCh := self advance.
-			writeStream nextPut: $\; nextPut: nextCh
+			nextCh ifNil:[ SyntaxError signal: 'unterminated string literal'].
+			str add: $\; add: nextCh
 		] ifFalse: [
 		"Handle escape sequences"
 		(char == $\ and: [isRaw not]) ifTrue: [
 			| escaped |
 			self advance.
-			self atEnd ifTrue: [SyntaxError signal: 'unterminated string literal'].
 			escaped := self advance.
-			escaped == $n ifTrue: [writeStream nextPut: Character lf]
-			ifFalse: [escaped == $t ifTrue: [writeStream nextPut: Character tab]
-			ifFalse: [escaped == $r ifTrue: [writeStream nextPut: (Character codePoint: 13)]
-			ifFalse: [escaped == $\ ifTrue: [writeStream nextPut: $\]
-			ifFalse: [escaped == quoteChar ifTrue: [writeStream nextPut: quoteChar]
-			ifFalse: [escaped == $a ifTrue: [writeStream nextPut: (Character codePoint: 7)]
-			ifFalse: [escaped == $b ifTrue: [writeStream nextPut: (Character codePoint: 8)]
-			ifFalse: [escaped == $f ifTrue: [writeStream nextPut: (Character codePoint: 12)]
-			ifFalse: [escaped == $v ifTrue: [writeStream nextPut: (Character codePoint: 11)]
+      escaped ifNil:[ SyntaxError signal: 'unterminated string literal'].
+			escaped == $n ifTrue: [ str lf ]
+			ifFalse: [escaped == $t ifTrue: [ str add: Tab ]
+			ifFalse: [escaped == $r ifTrue: [ str addCodePoint: 13 ]
+			ifFalse: [escaped == $\ ifTrue: [ str add: $\ ]
+			ifFalse: [escaped == quoteChar ifTrue: [ str add: quoteChar]
+			ifFalse: [escaped == $a ifTrue: [ str addCodePoint: 7 ]
+			ifFalse: [escaped == $b ifTrue: [ str addCodePoint: 8 ]
+			ifFalse: [escaped == $f ifTrue: [ str addCodePoint: 12 ]
+			ifFalse: [escaped == $v ifTrue: [ str addCodePoint: 11 ]
 			ifFalse: [(escaped isDigit and: [escaped digitValue < 8]) ifTrue: [
 				"Octal escape \ooo: 1 to 3 octal digits (0-7).  \8 and \9
 				are NOT octal and fall through to the unknown-escape branch."
@@ -736,26 +742,26 @@ tokenizeString
 				octStr := escaped asString.
 				[octStr size < 3 and: [self atEnd not
 					and: [self peek isDigit and: [self peek digitValue < 8]]]]
-						whileTrue: [octStr := octStr , self advance asString].
-				writeStream nextPut: (Character codePoint: (PythonParser integerFrom: octStr radix: 8)).
+						whileTrue:[ octStr add: self advance ].
+				 str addCodePoint: (PythonParser integerFrom: octStr radix: 8).
 			]
 			ifFalse: [escaped == $x ifTrue: [
 				| hex |
-				hex := (self advance asString , self advance asString).
+				(hex := Unicode7 new) add: self advance ; add: self advance .
 				"integerFrom:radix: instead of ('16r',hex) asInteger — a host
 				 extent may override asInteger with Squeak semantics."
-				writeStream nextPut: (Character codePoint: (PythonParser integerFrom: hex radix: 16)).
+				 str addCodePoint: (PythonParser integerFrom: hex radix: 16).
 			]
 			ifFalse: [escaped == $u ifTrue: [
 				| hex |
-				hex := (self advance asString , self advance asString , self advance asString , self advance asString).
-				writeStream nextPut: (Character codePoint: (PythonParser integerFrom: hex radix: 16)).
+				(hex := Unicode7 new) add: self advance ; add: self advance ; add: self advance; add: self advance.
+				 str addCodePoint: (PythonParser integerFrom: hex radix: 16).
 			]
 			ifFalse: [escaped == $U ifTrue: [
 				| hex |
-				hex := String new.
+				hex := Unicode7 new.
 				8 timesRepeat: [hex := hex , self advance asString].
-				writeStream nextPut: (Character codePoint: (PythonParser integerFrom: hex radix: 16)).
+				 str addCodePoint: (PythonParser integerFrom: hex radix: 16).
 			]
 			ifFalse: [escaped == $N ifTrue: [
 				"\N{NAME} named-character escape.  Resolved against a
@@ -764,26 +770,25 @@ tokenizeString
 				SyntaxError, matching CPython -- silently keeping the raw
 				text (the old behavior for every \N) corrupted string
 				literals invisibly."
-				| nameStream cp |
+				| nameStr cp |
 				(self atEnd not and: [self peek == ${]) ifFalse: [
 					SyntaxError signal: '(unicode error) malformed \N character escape'].
 				self advance.
-				nameStream := WriteStream on: String new.
+				nameStr := Unicode7 new .
 				[self atEnd not and: [self peek ~~ $}]] whileTrue: [
-					nameStream nextPut: self advance].
+					nameStr add: self advance].
 				self atEnd ifTrue: [
 					SyntaxError signal: '(unicode error) malformed \N character escape'].
 				self advance.
-				cp := PythonTokenizer ___unicodeNameToCodePoint___: nameStream contents.
+				cp := self ___unicodeNameToCodePoint___: nameStr .
 				cp isNil ifTrue: [
-					SyntaxError signal: '(unicode error) unknown Unicode character name: '
-						, nameStream contents].
-				writeStream nextPut: (Character codePoint: cp).
+					SyntaxError signal: '(unicode error) unknown Unicode character name: ' , nameStr ].
+				str addCodePoint: cp .
 			]
-			ifFalse: [escaped == Character lf ifTrue: ["line continuation in string - skip"]
+			ifFalse: [escaped == Lf ifTrue: ["line continuation in string - skip"]
 			ifFalse: [
 				"Unknown escape - keep as-is"
-				writeStream nextPut: $\; nextPut: escaped.
+				str add: $\; add: escaped.
 			]]]]]]]]]]]]]]].
 		] ifFalse: [
 			"A bytes literal may only hold ASCII SOURCE characters -- CPython
@@ -793,7 +798,7 @@ tokenizeString
 				SyntaxError signal:
 					'bytes can only contain ASCII literal characters at line '
 						, startLine printString].
-			writeStream nextPut: self advance.
+			str add: self advance.
 		]].
 		true
 	] whileTrue.

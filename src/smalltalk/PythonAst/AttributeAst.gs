@@ -195,3 +195,19 @@ method: AttributeAst
 ___annotationSourceString___
 	^ (value ___annotationSourceString___) , '.' , attr asString
 %
+method: AttributeAst
+value: newValue
+	value := newValue
+%
+method: AttributeAst
+attr: newValue
+	attr := newValue
+%
+method: AttributeAst
+ctx
+	^ctx
+%
+method: AttributeAst
+ctx: newValue
+	ctx := newValue
+%

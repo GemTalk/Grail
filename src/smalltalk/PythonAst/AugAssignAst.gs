@@ -269,3 +269,15 @@ printSmalltalkSubscriptAugAssignOn: aStream
 	value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ').'.
 %
+method: AugAssignAst
+target: newValue
+	target := newValue
+%
+method: AugAssignAst
+op: newValue
+	op := newValue
+%
+method: AugAssignAst
+value: newValue
+	value := newValue
+%

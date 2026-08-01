@@ -1705,16 +1705,14 @@ classBodyAttributes
 					(stmt targets first class allInstVarNames indexOf: #elts).
 				1 to: elts size do: [:i |
 					| sub |
-					sub := SubscriptAst buildWithFields:
-						(IdentityKeyValueDictionary new
-							at: #value put: stmt value;
-							at: #slice put: (ConstantAst buildWithFields:
-								(IdentityKeyValueDictionary new
-									at: #value put: i - 1;
-									at: #kind put: nil;
-									yourself));
-							at: #ctx put: LoadAst basicNew;
-							yourself).
+					sub := SubscriptAst new
+							value: stmt value;
+							slice: (ConstantAst new
+									value: i - 1;
+									kind: nil;
+									yourself);
+							ctx: LoadAst basicNew;
+							yourself.
 					pairs add: (elts at: i) id asSymbol -> sub]
 			].
 		].
@@ -2441,4 +2439,40 @@ value: posArgs value: keywordArgs value: aScope
 	result == None ifFalse: [TypeError signal: '__init__() should return None, not ?'].
 	^obj
 	"
+%
+method: ClassDefAst
+name: newValue
+	name := newValue
+%
+method: ClassDefAst
+bases: newValue
+	bases := newValue
+%
+method: ClassDefAst
+keywords
+	^keywords
+%
+method: ClassDefAst
+keywords: newValue
+	keywords := newValue
+%
+method: ClassDefAst
+body: newValue
+	body := newValue
+%
+method: ClassDefAst
+decorator_list
+	^decorator_list
+%
+method: ClassDefAst
+decorator_list: newValue
+	decorator_list := newValue
+%
+method: ClassDefAst
+type_params
+	^type_params
+%
+method: ClassDefAst
+type_params: newValue
+	type_params := newValue
 %

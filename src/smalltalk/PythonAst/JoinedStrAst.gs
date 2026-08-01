@@ -55,3 +55,11 @@ removeallclassmethods JoinedStrAst
 set compile_env: 0
 ! ------------------- Class methods for JoinedStrAst
 ! ------------------- Instance methods for JoinedStrAst
+method: JoinedStrAst
+values
+	^values
+%
+method: JoinedStrAst
+values: newValue
+	values := newValue
+%

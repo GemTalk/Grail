@@ -87,3 +87,43 @@ setParent: aNode
 		].
 	].
 %
+method: CompareAst
+left
+	^left
+%
+method: CompareAst
+left: newValue
+	left := newValue
+%
+method: CompareAst
+cmpopList
+	^cmpopList
+%
+method: CompareAst
+cmpopList: newValue
+	cmpopList := newValue
+%
+method: CompareAst
+comparatorList
+	^comparatorList
+%
+method: CompareAst
+comparatorList: newValue
+	comparatorList := newValue
+%
+method: CompareAst
+rhsTemp
+	^rhsTemp
+%
+method: CompareAst
+rhsTemp: newValue
+	rhsTemp := newValue
+%
+method: CompareAst
+opTemps
+	^opTemps
+%
+method: CompareAst
+opTemps: newValue
+	opTemps := newValue
+%

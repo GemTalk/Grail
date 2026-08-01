@@ -111,3 +111,11 @@ printSmalltalkOn: aStream
 		index < names size ifTrue: [aStream lf].
 	].
 %
+method: ImportAst
+names
+	^names
+%
+method: ImportAst
+names: newValue
+	names := newValue
+%

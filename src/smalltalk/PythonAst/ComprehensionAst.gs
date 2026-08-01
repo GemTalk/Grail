@@ -43,7 +43,7 @@ Expression(
 Hierarchy:
 Object
   AbstractNode(parent)
-    AbstractLocationNode(beginLine beginColumn endLine endColumn)
+    AbstractLocationNode
       ComprehensionAst(target iter ifs is_async)
 '
 %
@@ -255,9 +255,29 @@ ___emitTracebackFrameCloseFor: iterNode on: aStream
 		nextPutAll: (self ___stLiteral: funcName);
 		nextPutAll: ' firstlineno: '; nextPutAll: funcLine printString;
 		nextPutAll: ') lineno: '; nextPutAll: iterNode beginLine printString;
-		nextPutAll: ' colno: '; nextPutAll: iterNode column printString;
-		nextPutAll: ' endLineno: '; nextPutAll: (iterNode endLine ifNil: [iterNode beginLine]) printString;
-		nextPutAll: ' endColno: '; nextPutAll: (iterNode endColumn ifNil: [iterNode column]) printString;
+                nextPutAll: ' colno: '; nextPutAll: iterNode column printString;
+                nextPutAll: ' endLineno: '; nextPutAll: (iterNode endLine ifNil: [iterNode beginLine]) printString;
+                nextPutAll: ' endColno: '; nextPutAll: (iterNode endColumn ifNil: [iterNode column]) printString;
 		nextPutAll: ' line: '; nextPutAll: (self ___stLiteral: (iterNode sourceLine ifNil: ['']));
 		nextPutAll: '. ___tex___ @env0:pass].'; lf
+%
+method: ComprehensionAst
+target: newValue
+	target := newValue
+%
+method: ComprehensionAst
+iter: newValue
+	iter := newValue
+%
+method: ComprehensionAst
+ifs: newValue
+	ifs := newValue
+%
+method: ComprehensionAst
+is_async
+	^is_async
+%
+method: ComprehensionAst
+is_async: newValue
+	is_async := newValue
 %

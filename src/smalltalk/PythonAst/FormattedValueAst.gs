@@ -51,3 +51,27 @@ removeallclassmethods FormattedValueAst
 set compile_env: 0
 ! ------------------- Class methods for FormattedValueAst
 ! ------------------- Instance methods for FormattedValueAst
+method: FormattedValueAst
+value
+	^value
+%
+method: FormattedValueAst
+value: newValue
+	value := newValue
+%
+method: FormattedValueAst
+conversion
+	^conversion
+%
+method: FormattedValueAst
+conversion: newValue
+	conversion := newValue
+%
+method: FormattedValueAst
+format_spec
+	^format_spec
+%
+method: FormattedValueAst
+format_spec: newValue
+	format_spec := newValue
+%

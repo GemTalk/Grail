@@ -108,3 +108,15 @@ ___annotationSourceString___
 	value isNil ifTrue: [^ 'None'].
 	^ value printString
 %
+method: ConstantAst
+value: newValue
+	value := newValue
+%
+method: ConstantAst
+kind
+	^kind
+%
+method: ConstantAst
+kind: newValue
+	kind := newValue
+%

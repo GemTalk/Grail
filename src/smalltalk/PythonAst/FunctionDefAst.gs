@@ -130,11 +130,10 @@ applyBigmemtestDefaultIfNeeded
 	(self isBigmemtestDecorated
 		and: [(args defaults isNil or: [args defaults isEmpty])
 		and: [(args posonlyargs size + args args size) > 1]]) ifTrue: [
-			args appendDefault: (ConstantAst buildWithFields:
-				(IdentityKeyValueDictionary new
-					at: #value put: 5147;
-					at: #kind put: nil;
-					yourself))].
+			args appendDefault: (ConstantAst new
+					value: 5147;
+					kind: nil;
+					yourself)].
 %
 
 category: 'Grail-other'
@@ -1229,7 +1228,7 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 		stream nextPut: $|; lf.
 	].
 	callParams doWithIndex: [:p :i |
-		| absoluteIdx def |
+		| absoluteIdx |
 		"absolute parameter index in the full (self-included) list, to
 		align with the fixed selector's positional order."
 		absoluteIdx := stripSelf ifTrue: [i + 1] ifFalse: [i].
@@ -2664,4 +2663,52 @@ ___reachableStatements___: stmts
 		out add: each.
 		each isUnconditionalReturn ifTrue: [^ out]].
 	^ out
+%
+method: FunctionDefAst
+name: newValue
+	name := newValue
+%
+method: FunctionDefAst
+args
+	^args
+%
+method: FunctionDefAst
+args: newValue
+	args := newValue
+%
+method: FunctionDefAst
+body: newValue
+	body := newValue
+%
+method: FunctionDefAst
+decorator_list
+	^decorator_list
+%
+method: FunctionDefAst
+decorator_list: newValue
+	decorator_list := newValue
+%
+method: FunctionDefAst
+returns
+	^returns
+%
+method: FunctionDefAst
+returns: newValue
+	returns := newValue
+%
+method: FunctionDefAst
+type_comment
+	^type_comment
+%
+method: FunctionDefAst
+type_comment: newValue
+	type_comment := newValue
+%
+method: FunctionDefAst
+type_params
+	^type_params
+%
+method: FunctionDefAst
+type_params: newValue
+	type_params := newValue
 %

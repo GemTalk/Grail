@@ -440,3 +440,19 @@ useTempsForBlock: aBoolean
 
 	useTempsForBlock := aBoolean.
 %
+method: ModuleAst
+body: newValue
+	body := newValue
+%
+method: ModuleAst
+type_ignore
+	^type_ignore
+%
+method: ModuleAst
+type_ignore: newValue
+	type_ignore := newValue
+%
+method: ModuleAst
+useTempsForBlock
+	^useTempsForBlock
+%

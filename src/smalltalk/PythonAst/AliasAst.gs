@@ -78,3 +78,11 @@ printOn: aStream
 	].
 	aStream nextPut: $).
 %
+method: AliasAst
+name: newValue
+	name := newValue
+%
+method: AliasAst
+asName: newValue
+	asName := newValue
+%

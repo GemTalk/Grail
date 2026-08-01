@@ -178,3 +178,19 @@ printSmalltalkOn: aStream
 
 	aStream nextPut: $].
 %
+method: LambdaAst
+args
+	^args
+%
+method: LambdaAst
+args: newValue
+	args := newValue
+%
+method: LambdaAst
+body
+	^body
+%
+method: LambdaAst
+body: newValue
+	body := newValue
+%

@@ -195,3 +195,19 @@ ___boundTargetNames___
 	(target isKindOf: NameAst) ifTrue: [^ OrderedCollection with: target id asSymbol].
 	^ OrderedCollection new
 %
+method: AnnAssignAst
+target: newValue
+	target := newValue
+%
+method: AnnAssignAst
+annotation: newValue
+	annotation := newValue
+%
+method: AnnAssignAst
+value: newValue
+	value := newValue
+%
+method: AnnAssignAst
+simple: newValue
+	simple := newValue
+%

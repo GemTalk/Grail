@@ -74,3 +74,11 @@ printSmalltalkOn: aStream
 		ifFalse: [value printSmalltalkWithParenthesisOn: aStream].
 	aStream nextPut: $)
 %
+method: YieldAst
+value
+	^value
+%
+method: YieldAst
+value: newValue
+	value := newValue
+%

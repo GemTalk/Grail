@@ -133,3 +133,27 @@ ___annotationSourceString___
 
 	^ (left ___annotationSourceString___) , ' | ' , (right ___annotationSourceString___)
 %
+method: BinOpAst
+left
+	^left
+%
+method: BinOpAst
+left: newValue
+	left := newValue
+%
+method: BinOpAst
+op
+	^op
+%
+method: BinOpAst
+op: newValue
+	op := newValue
+%
+method: BinOpAst
+right
+	^right
+%
+method: BinOpAst
+right: newValue
+	right := newValue
+%

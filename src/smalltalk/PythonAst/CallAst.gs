@@ -1868,3 +1868,15 @@ printModuleSelfSendVarargsOn: aStream selector: aSelector
 	aStream nextPutAll: funcName.
 	aStream nextPutAll: '))'
 %
+method: CallAst
+function: newValue
+	function := newValue
+%
+method: CallAst
+arguments: newValue
+	arguments := newValue
+%
+method: CallAst
+keywords: newValue
+	keywords := newValue
+%

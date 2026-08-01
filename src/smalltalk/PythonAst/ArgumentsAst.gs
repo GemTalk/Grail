@@ -99,3 +99,31 @@ vararg
 
 	^vararg
 %
+method: ArgumentsAst
+posonlyargs: newValue
+	posonlyargs := newValue
+%
+method: ArgumentsAst
+args: newValue
+	args := newValue
+%
+method: ArgumentsAst
+vararg: newValue
+	vararg := newValue
+%
+method: ArgumentsAst
+kwonlyargs: newValue
+	kwonlyargs := newValue
+%
+method: ArgumentsAst
+kw_defaults: newValue
+	kw_defaults := newValue
+%
+method: ArgumentsAst
+kwarg: newValue
+	kwarg := newValue
+%
+method: ArgumentsAst
+defaults: newValue
+	defaults := newValue
+%

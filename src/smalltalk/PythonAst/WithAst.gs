@@ -118,3 +118,27 @@ printItem: anIndex onStream: aStream
 	item context_expr printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPut: $)
 %
+method: WithAst
+items
+	^items
+%
+method: WithAst
+items: newValue
+	items := newValue
+%
+method: WithAst
+body
+	^body
+%
+method: WithAst
+body: newValue
+	body := newValue
+%
+method: WithAst
+type_comment
+	^type_comment
+%
+method: WithAst
+type_comment: newValue
+	type_comment := newValue
+%

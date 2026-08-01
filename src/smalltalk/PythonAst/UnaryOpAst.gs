@@ -66,3 +66,11 @@ printSmalltalkOn: aStream
 
 	self error: 'UnaryOpAst is abstract; subclasses must implement printSmalltalkOn:'.
 %
+method: UnaryOpAst
+operand
+	^operand
+%
+method: UnaryOpAst
+operand: newValue
+	operand := newValue
+%

@@ -122,3 +122,19 @@ ___enclosingExceptHandler___
 	].
 	^ nil
 %
+method: RaiseAst
+exc
+	^exc
+%
+method: RaiseAst
+exc: newValue
+	exc := newValue
+%
+method: RaiseAst
+cause
+	^cause
+%
+method: RaiseAst
+cause: newValue
+	cause := newValue
+%
