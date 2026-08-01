@@ -6,7 +6,7 @@ TestCase ifNil: [self error: 'TestCase is not defined. Check file ordering.'].
 ! ------------------- Class definition for PythonTestCase
 expectvalue /Class
 doit
-TestCase subclass: 'PythonTestCase'
+GsTestCase subclass: 'PythonTestCase'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

@@ -5,5 +5,5 @@ run
   System gemEnvironmentVariable: 'GRAIL_DIR' put: (dir := GsFile serverCurrentDirectory)
 ].
 importlib grailDir: dir .
-PythonTestCase suite debug
+PythonTestCase debugEx
 %
