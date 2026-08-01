@@ -1,4 +1,4 @@
-output pushnew install.out only
+output pushnew install.out 
 ! ===============================================================================
 ! Grail Installation Script
 !   file  src/smalltalk/install.gs
@@ -40,6 +40,10 @@ iferr 1 where
 iferr 2 output pop
 iferr 3 where
 iferr 4 exit 1
+
+! Uncomment for interactive filein  to fix compile warnings
+! display pauseonwarn
+! iferr_clear
 
 ! Unicode comparison mode is an extent-global SystemUser setting; it is applied
 ! once by ./install_base.sh (via scripts/setUnicodeMode.sh), not here -- an
@@ -120,7 +124,7 @@ GsPackage installIn: home.
 policy homeSymbolDict: home.
 policy externalSymbolList: { Globals }.
 policy enable.
-System commitTransaction.
+System commit.
 Transcript show: 'Session-method policy enabled (per-user home=GrailSessionMethods, external={Globals})'.
 %
 
