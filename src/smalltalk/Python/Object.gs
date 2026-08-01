@@ -8,6 +8,7 @@
 ! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
+set compile_env: 0
 
 ! ------------------- Remove existing Python methods from object
 expectvalue /Metaclass3
@@ -16,7 +17,6 @@ object removeAllMethods: 1.
 object class removeAllMethods: 1.
 %
 
-set compile_env: 0
 
 ! ------------------- Phase A: dynamicInstVarAt:ifAbsent: on Smalltalk Object
 ! GS Smalltalk ships ``dynamicInstVarAt:'' (returns nil when the slot
@@ -1383,7 +1383,7 @@ ___pyAttrLoad___: aSym
 	  - Otherwise dispatch the unary message anyway and let DNU
 	    produce the appropriate error or fallback."
 
-	| md sym1 sym2 sym3 sym4 sym5 sym6 symVA s isModule isGenerated dynValue walker owner |
+	| md sym1 sym2 sym3 sym4 sym5 sym6 symVA s isModule isGenerated dValue owner |
 	"An empty attribute name (``getattr(obj, '')'' -- e.g. attrgetter('child.')
 	whose dotted split has an empty part) must raise the catchable
 	AttributeError, not the uncatchable GemStone ``instVar names cannot be
@@ -1400,8 +1400,8 @@ ___pyAttrLoad___: aSym
 	resolution chain below for built-in receivers / method dispatch /
 	AttributeError.  Reading from special objects (SmallInteger etc.)
 	returns nil here, so the probe is safe for all receiver kinds."
-	dynValue := self @env0:dynamicInstVarAt: aSym.
-	dynValue == nil ifFalse: [^ dynValue].
+	dValue := self @env0:dynamicInstVarAt: aSym.
+	dValue == nil ifFalse: [^ dValue].
 	md := self @env0:class @env0:methodDictForEnv: 1.
 	s := aSym @env0:asString.
 	"Python __slots__ → GemStone named instance variables, name-mangled

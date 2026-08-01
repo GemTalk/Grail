@@ -806,7 +806,7 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 	support.  Returns a String when ``returnTuple`` is false, or a
 	(String, count) tuple when true (the subn return shape)."
 
-	| parser template parts pos m mEnd mStart expanded numSubs result tail emptySep mustAdvance |
+	| parser template parts pos m mEnd mStart expanded numSubs emptySep mustAdvance |
 	parser := importlib modules @env0:at: #'re._parser'.
 	"A bytes pattern substituting over a bytes subject must return
 	bytes (CPython semantics) — join with an empty ByteArray so the

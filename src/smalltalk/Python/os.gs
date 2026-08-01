@@ -355,7 +355,7 @@ _listdir: positional kw: kwargs
 	].
 	result := list ___new___.
 	dirContents @env0:do: [:each |
-		| decoded basename reversedPath index lastSlashIndex |
+		| decoded reversedPath index lastSlashIndex |
 		decoded := each.
 		(each isKindOf: Utf8) ifTrue: [decoded := each @env0:decodeToUnicode].
 		(each isKindOf: Utf16) ifTrue: [decoded := each @env0:decodeToUnicode].

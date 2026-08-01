@@ -24,7 +24,7 @@ __add__: other
 	Python only concatenates like kinds: list+tuple / list+int raise the
 	catchable TypeError (previously [1] + (1,) silently concatenated)."
 
-	| result x |
+	| result |
 	(self ___sameSequenceKindAs___: other) ifFalse: [
 		^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'].
 

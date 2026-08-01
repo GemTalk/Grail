@@ -9,6 +9,7 @@
 ! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
+set compile_env: 0
 
 ! ------------------- Remove existing Python methods from CharacterCollection
 expectvalue /Metaclass3
@@ -1104,7 +1105,7 @@ _format: positional kw: kwargs
 				i := i @env0:+ 2
 			] ifFalse: [
 		(ch == ${) ifTrue: [
-			| endIdx field convFlag spec value autoIdx |
+			| endIdx field convFlag spec value |
 			endIdx := self @env0:___findFormatBraceEnd___: i @env0:+ 1.
 			endIdx @env0:isNil ifTrue: [
 				ValueError ___signal___: 'unmatched ''{'' in format string'].

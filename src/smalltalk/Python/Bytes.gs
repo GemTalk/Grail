@@ -122,15 +122,15 @@ __new__: source
 
 	"If source is a range, convert to bytes"
 	(sourceClass == Interval) ifTrue: [
-		| ba size |
-		size := source @env0:size.
-		ba := self ___new___: size.
-		1 @env0:to: size do: [:i |
+		| aSize aBa |
+		aSize := source @env0:size.
+		aBa := self ___new___: aSize.
+		1 @env0:to: aSize do: [:i |
 			| val |
 			val := self ___coerceByteValue___: (source @env0:at: i).
-			ba @env0:at: i put: val
+			aBa @env0:at: i put: val
 		].
-		^ ba
+		^ aBa
 	].
 
 	"A non-integer source with __index__ (and not a sequence handled above)
@@ -2372,7 +2372,7 @@ category: 'Grail-String-like Methods'
 method: bytes
 replace: old _: new
 	"Replace all occurrences of old with new"
-	| oldClass newClass oldSize newSize mySize parts i |
+	| oldClass newClass oldSize newSize mySize parts |
 	oldClass := old @env0:class.
 	newClass := new @env0:class.
 

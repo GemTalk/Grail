@@ -365,7 +365,7 @@ ___parseHex___: hexString
 	final rounding is correct (round-half-even).  A magnitude beyond
 	the float range is an OverflowError, matching CPython."
 
-	| trimmed idx size sign lower mant intCount fracCount hasDot binExp expIdx expSign r1 r2 r3 m fracLen shift mag |
+	| trimmed idx size sign lower mant intCount fracCount hasDot binExp expIdx expSign r1 r2 r3 m shift mag |
 	trimmed := hexString @env0:trimBoth.
 	^ [ | v |
 		size := trimmed @env0:size.

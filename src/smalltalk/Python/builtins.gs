@@ -2254,7 +2254,7 @@ _pow: positional kw: kwargs
 	with two arguments); this method is the fallback for 3-arg and
 	BoundMethod indirect calls."
 
-	| nargs x y z result |
+	| nargs x y z |
 	nargs := positional @env0:size.
 	(nargs == 2) ifTrue: [
 		x := positional @env0:at: 1.

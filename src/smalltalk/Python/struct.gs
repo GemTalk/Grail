@@ -377,7 +377,7 @@ method: struct
 _readUnsigned: bytes offset: offset bytes: n order: order
 	"Read n bytes as an unsigned int, respecting byte order."
 
-	| value byte i |
+	| value byte |
 	value := 0.
 	(order @env0:= #little @env0:or: [order @env0:= #native]) ifTrue: [
 		1 @env0:to: n do: [:k |
@@ -415,7 +415,7 @@ method: struct
 _doubleToBits: aFloat
 	"Encode a Float as 64-bit IEEE 754 (raw integer)."
 
-	| sign exponent mantissa abs frac biased |
+	| sign mantissa abs biased |
 	aFloat @env0:= 0.0 ifTrue: [^ 0].
 	sign := aFloat @env0:< 0 ifTrue: [1] ifFalse: [0].
 	abs := aFloat @env0:abs.
@@ -461,7 +461,7 @@ _singleToBits: aFloat
 	"Encode a Float as 32-bit IEEE 754 (lossy from double).  Used by
 	format chars `f`."
 
-	| sign exponent mantissa abs biased |
+	| sign mantissa abs biased |
 	aFloat @env0:= 0.0 ifTrue: [^ 0].
 	sign := aFloat @env0:< 0 ifTrue: [1] ifFalse: [0].
 	abs := aFloat @env0:abs.

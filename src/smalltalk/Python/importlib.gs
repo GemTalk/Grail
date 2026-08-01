@@ -9,7 +9,7 @@ doit
 module subclass: 'importlib'
   instVarNames: #()
   classVars: #()
-  classInstVars: #('grailDir' 'miRegistry')
+  classInstVars: #( )
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -132,7 +132,7 @@ ___asSmalltalkClassName___: aPythonName
 		| reg |
 		reg := SessionTemps current at: #GrailPyClassNames otherwise: nil.
 		reg ifNil: [
-			reg := KeyValueDictionary new.
+			reg := SymbolKeyValueDictionary new.
 			SessionTemps current at: #GrailPyClassNames put: reg].
 		reg at: sym put: aPythonName asString].
 	^ sym
@@ -146,10 +146,11 @@ ___pyClassNameFor___: aSmalltalkName
 	kernel class, or a class whose module was not compiled this session.  Used
 	by object>>__name__ / __qualname__."
 
-	| reg |
+	| reg result |
 	reg := SessionTemps current at: #GrailPyClassNames otherwise: nil.
 	reg ifNil: [^ nil].
-	^ reg at: aSmalltalkName asSymbol otherwise: nil
+	result := reg at: aSmalltalkName asSymbol otherwise: nil .
+  ^ result
 %
 
 category: 'Grail-For Tests'
@@ -160,7 +161,7 @@ grailDir
 	and the old classInstVar write dirtied the committed importlib
 	class on every session's setup (multi-user commit conflicts).
 	The classInstVar declaration remains but is unused."
-	^ SessionTemps current at: #GrailDir otherwise: nil
+	^ SessionTemps current at: #GrailDir otherwise: '.'
 %
 
 category: 'Grail-Configuration'
@@ -257,10 +258,10 @@ expandStarImports: aModuleAst
 					expandedNames := subAst body variables asArray
 						select: [:n | (n size > 0) and: [(n at: 1) ~= $_]]].
 				newAliases := expandedNames collect: [:n |
-					AliasAst buildWithFields: (IdentityKeyValueDictionary new
-						at: #name put: n asSymbol;
-						at: #asName put: nil;
-						yourself)].
+					AliasAst new
+						name: n asSymbol;
+						asName: nil;
+						yourself ].
 				stmt names: newAliases.
 				expandedNames do: [:n | body declareVariable: n asSymbol].
 			] ifFalse: [
@@ -560,7 +561,7 @@ ___mintedThisLoad___: aModuleName
 	st := SessionTemps current.
 	map := st at: #'GrailMintedThisLoad' otherwise: nil.
 	map isNil ifTrue: [
-		map := KeyValueDictionary new.
+		map := SymbolKeyValueDictionary new.
 		st at: #'GrailMintedThisLoad' put: map].
 	set := map at: aModuleName asString asSymbol otherwise: nil.
 	set isNil ifTrue: [
@@ -733,7 +734,7 @@ ___deployRefsOf: obj do: aBlock
 	instVars, collection contents (dict keys+values), indexed slots of a
 	non-collection variable object, and dynamic instVars (module globals /
 	PythonInstance attrs).  Bytes objects hold no references."
-
+  | pairs |
 	obj class isBytes ifTrue: [^ self].
 	1 to: obj class instSize do: [:i |
 		aBlock value: (obj instVarAt: i)].
@@ -746,10 +747,9 @@ ___deployRefsOf: obj do: aBlock
 	ifFalse: [
 		(obj class isVariable) ifTrue: [
 			1 to: obj size do: [:i | aBlock value: (obj at: i)]]].
-	(obj respondsTo: #'dynamicInstVarPairs') ifTrue: [ | pairs |
-		pairs := [obj dynamicInstVarPairs] on: AbstractException do: [:e | e return: #()].
-		1 to: (pairs size - 1) by: 2 do: [:i |
-			aBlock value: (pairs at: i + 1)]]
+	pairs := obj dynamicInstVarPairs .
+	1 to: (pairs size - 1) by: 2 do: [:i |
+		aBlock value: (pairs at: i + 1)]
 %
 
 category: 'Grail-Deploy Audit'
@@ -1167,10 +1167,10 @@ ___canonicalInstanceForModuleClass___: aModuleClass
 	deployed with; staleness is the next explicit import's concern."
 
 	self ___canonicalClassesEnabled___ ifFalse: [^ nil].
-	self ___canonicalModules___ keysAndValuesDo: [:name :inst |
+	self ___canonicalModules___ keysAndValuesDo: [:aName :inst |
 		((inst class == aModuleClass) and: [inst isCommitted]) ifTrue: [
 			aModuleClass ___adoptInstance___: inst.
-			self registerModule: name asString with: inst.
+			self registerModule: aName asString with: inst.
 			self ___runSessionInit___: inst.
 			^ inst]].
 	^ nil
@@ -2767,7 +2767,7 @@ reload: aModule
 		srcHash := (importlib @env0:___sourceStringForPath___: path @env0:asString) @env0:sha1Sum.
 		stateMap := SessionTemps @env0:current @env0:at: #'GrailModuleHashState' otherwise: nil.
 		stateMap @env0:isNil ifTrue: [
-			stateMap := KeyValueDictionary @env0:new.
+			stateMap := SymbolKeyValueDictionary @env0:new.
 			SessionTemps @env0:current @env0:at: #'GrailModuleHashState' put: stateMap].
 		stateMap @env0:at: name @env0:asSymbol put: #'stale'].
 	moduleAst := importlib @env0:astForPath: path @env0:asString.
