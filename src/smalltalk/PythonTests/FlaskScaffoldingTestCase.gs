@@ -5048,7 +5048,7 @@ testWerkzeugDatastructuresImports
 	caching can leave the package in a partial state where the
 	re-exports never re-populate."
 
-	| mod mods keys |
+	| mod mods |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
 	mods removeKey: #'use_werkzeug_datastructures' ifAbsent: [].
@@ -5068,7 +5068,7 @@ testWerkzeugHttpImports
 	(quote_header_value and dump_header) that don't pull in the
 	deeper sansio / multipart paths."
 
-	| mod mods keys |
+	| mod mods |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
 	mods removeKey: #'use_werkzeug_http' ifAbsent: [].
@@ -5092,7 +5092,7 @@ testWerkzeugWsgiImports
 	upstream file with three Grail-side patches (lambda *args,
 	io.RawIOBase base, PEP 448 starred tuple-unpack)."
 
-	| mod mods keys |
+	| mod mods |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
 	mods removeKey: #'use_werkzeug_wsgi' ifAbsent: [].
@@ -5112,7 +5112,7 @@ testWerkzeugDatastructuresFullExports
 	probe pre-loads dependencies in order to work around Grail's
 	circular-import handling for parent-package __init__."
 
-	| mod mods keys |
+	| mod mods |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
 	mods removeKey: #'use_werkzeug_wrappers' ifAbsent: [].
@@ -5131,7 +5131,7 @@ testWerkzeugRoutingImports
 	separate ImmutableDict.__iter__ gap; the probe asserts only
 	the import + Rule construction."
 
-	| mod mods keys |
+	| mod mods |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
 	mods removeKey: #'use_werkzeug_routing' ifAbsent: [].
@@ -5151,7 +5151,7 @@ testWerkzeugLocalImports
 	on the new contextvars stub and the imatmul/ilshift/etc. additions
 	to the operator stdlib stub."
 
-	| mod mods keys |
+	| mod mods |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
 	mods removeKey: #'use_werkzeug_local' ifAbsent: [].
@@ -5171,7 +5171,7 @@ testWerkzeugUtilsImports
 	call-site unpacking + full descriptor protocol; saved as
 	``utils_upstream.py.bak'' beside the shim for the rewrite."
 
-	| mod mods keys |
+	| mod mods |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
 	mods removeKey: #'use_werkzeug_utils' ifAbsent: [].
@@ -5195,7 +5195,7 @@ testWerkzeugTestImports
 	directions are the Tier-2 manual acceptance probe in
 		use_werkzeug_roundtrip.py (see testWerkzeugWrappersConstructAndClient)."
 
-	| mod mods keys |
+	| mod mods |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
 	mods removeKey: #'use_werkzeug_test' ifAbsent: [].
@@ -5235,7 +5235,7 @@ testWerkzeugWrappersConstructAndClient
 	    functools.partial, and bytes.join over any iterable (commit
 	    5497c9c)."
 
-	| mod mods keys |
+	| mod mods |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
 	mods removeKey: #'use_werkzeug_roundtrip' ifAbsent: [].
@@ -5268,7 +5268,7 @@ testFlaskHelloWorldWsgiRoundTrip
 	dict subclass).  Flask and werkzeug are heavy imports; drop their cached
 	modules first so a re-run recompiles cleanly without OOMing the suite."
 
-	| mod mods keys result |
+	| mod mods result |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'flask'.
 	mods removeKey: #'use_flask_wsgi' ifAbsent: [].
@@ -5290,7 +5290,7 @@ testFlaskHelloWorldOverRealSocket
 	imports; drop cached flask/werkzeug modules first so a re-run recompiles
 	cleanly without OOMing the suite."
 
-	| mod mods keys result |
+	| mod mods result |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'flask'.
 	mods removeKey: #'use_flask_serving' ifAbsent: [].
@@ -5312,7 +5312,7 @@ testFlaskRoutingAndErrorPath
 	constructs ``NoMatch`` so its ``__init__`` runs).  Heavy imports; drop the
 	cached flask/werkzeug modules first so a re-run recompiles cleanly."
 
-	| mod mods keys r |
+	| mod mods r |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'flask'.
 	mods removeKey: #'use_flask_routing' ifAbsent: [].
@@ -5353,7 +5353,7 @@ testFlaskServeGetQueryPost
 	werkzeug's LimitedStream over wsgi.input (the socket.makefile()).  Drop the
 	cached flask/werkzeug modules first so a re-run recompiles cleanly."
 
-	| mod mods keys r |
+	| mod mods r |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'flask'.
 	mods removeKey: #'use_flask_serving' ifAbsent: [].
@@ -5370,7 +5370,7 @@ _dropServingModules
 	"Drop cached flask/werkzeug + the fixture so each serving test recompiles
 	cleanly from source."
 
-	| mods keys |
+	| mods |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'flask'.
 	mods removeKey: #'use_flask_serving' ifAbsent: [].

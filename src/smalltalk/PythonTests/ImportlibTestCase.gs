@@ -163,7 +163,7 @@ method: ImportlibTestCase
 testImportModuleNotFound
 	"Test that importing a non-existent module raises ModuleNotFoundError"
 
-	| imp importModuleBlock |
+	| imp |
 	imp := importlib @env1:instance.
 
 	self should: [imp @env1:import_module: 'nonexistent_module']
