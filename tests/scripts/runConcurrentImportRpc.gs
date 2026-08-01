@@ -104,7 +104,7 @@ check := [:label :bool | bool ifFalse: [failures add: label]].
   importlib ___canonicalRegistryRestore___:
     (UserGlobals at: #'Grail_ccrpc_snap' ifAbsent: [importlib ___canonicalRegistrySnapshot___]).
   UserGlobals removeKey: #'Grail_ccrpc_snap' ifAbsent: [].
-  System commitTransaction
+  System commit .
 ].
 failures isEmpty
   ifTrue: [
@@ -114,7 +114,7 @@ failures isEmpty
     out nextPutAll: 'Concurrent-import (RPC) regressions FAILED:'; cr.
     failures do: [:each | out nextPutAll: '  '; nextPutAll: each; cr].
     UserGlobals at: #'Grail_ccrpc_ok' put: false].
-System commitTransaction.
+System commit ..
 %
 
 ! ---- Report verdict across all sessions, exit -----------------------------
@@ -122,7 +122,7 @@ run
 | ok |
 ok := UserGlobals at: #'Grail_ccrpc_ok' ifAbsent: [false].
 UserGlobals removeKey: #'Grail_ccrpc_ok' ifAbsent: [].
-System commitTransaction.
+System commit .
 ok
   ifTrue: [ExitClientError signal: 'Concurrent-import RPC passed!' status: 0]
   ifFalse: [ExitClientError signal: 'Concurrent-import RPC failed!' status: 1].
