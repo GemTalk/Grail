@@ -1,6 +1,11 @@
 CC = cc
 CXX = c++
-CFLAGS = -Wall -Wconversion -Wno-sign-conversion -Wextra -fPIC -O2
+OPTFLAGS = -O2
+# uncomment for C debugging
+# OPTFLAGS = -O0 -fno-inline -ggdb
+
+CFLAGS = -Wall -Wconversion -Wno-sign-conversion -Wextra -fPIC $(OPTFLAGS)
+CXXFLAGS = -Wall -Wextra -Wno-unused-parameter -Wno-strict-aliasing -Wno-unused-function -fPIC $(OPTFLAGS)
 UNAME_S := $(shell uname -s)
 comma := ,
 
@@ -12,7 +17,7 @@ ifeq ($(UNAME_S),Darwin)
 else
   # Linux
   SHARED_EXT = so
-  SHARED_FLAGS = -shared
+  SHARED_FLAGS = -shared -ggdb
   RPATH_FLAGS =
   UNDEF_ARGS =
   CFLAGS += -I/usr/include/python3.14 -I/usr/include/python3.13
@@ -28,7 +33,7 @@ all: $(LIB)
 # cpython.cc implements the CPython C API + GCI User Actions (requires GEMSTONE)
 # -Wno-strict-aliasing / -Wno-unused-function suppress warnings from $(GEMSTONE)/include/gci*.h{f,t}
 cpython.o: cpython.cc cpython.h
-	$(CXX) -Wall -Wextra -Wno-unused-parameter -Wno-strict-aliasing -Wno-unused-function -fPIC -O2 -I$(GEMSTONE)/include -c cpython.cc -o cpython.o
+	$(CXX) $(CXXFLAGS) -I$(GEMSTONE)/include -c cpython.cc -o cpython.o
 
 # Extension modules get -Wno-unused-parameter since we don't control their source
 _statisticsmodule.o: _statisticsmodule.c cpython.h
