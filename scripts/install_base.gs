@@ -62,7 +62,7 @@ input src/smalltalk/Python/Object_perform_allocators.gs
 input src/smalltalk/Python/Object_perform_primitives.gs
 
 run
-System commitTransaction.
+System commit .
 GsFile stdout
 	nextPutAll: '==============================================='; lf;
 	nextPutAll: ' install_base: restricted-class methods filed'; lf;
