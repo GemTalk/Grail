@@ -48,6 +48,25 @@ Enum subclass: 'Flag'
   options: #()
 %
 
+! ------- ReprEnum: an Enum whose MEMBERS str/format as their VALUE (the
+! ------- mix-in data type's output), keeping only Enum's repr.  CPython's
+! ------- IntEnum/StrEnum/IntFlag are ReprEnum subclasses; in Grail those are
+! ------- storage-rooted (AbstractPyInt/AbstractPyStr) and already str as their
+! ------- value, so ReprEnum exists here mainly to make ``class E(date,
+! ------- ReprEnum)'' DISTINGUISHABLE from ``class E(date, Enum)'' -- the former
+! ------- must str(member) == str(value), the latter ``Cls.name''.  A distinct
+! ------- class is the only way to tell them apart (bases are otherwise equal).
+expectvalue /Class
+doit
+Enum subclass: 'ReprEnum'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
 expectvalue /Class
 doit
 Object subclass: 'GrailEnumAuto'
@@ -645,6 +664,24 @@ ___grailIsStrEnumClass: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailIsReprEnumClass: cls
+	"True when cls was declared with the ReprEnum base (``class E(date,
+	ReprEnum)''): chained under ReprEnum, or an MI class whose C3 __mro__
+	includes it.  ReprEnum members str/format as their VALUE, not ``Cls.name''
+	-- the distinction the plain-Enum vs ReprEnum output rule turns on.  Grail's
+	IntEnum/StrEnum are storage-rooted (not ReprEnum-chained) and get their
+	value-str output another way, so they are deliberately NOT matched here."
+
+	| re |
+	re := Python @env0:at: #'ReprEnum' otherwise: nil.
+	re == nil ifTrue: [^ false].
+	((cls == re) or: [cls @env0:inheritsFrom: re]) ifTrue: [^ true].
+	^ [ (cls __mro__) @env0:includesIdentical: re ]
+		@env0:on: Error do: [:e | e @env0:return: false]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailFlagComposite: cls value: intValue
 	"The composite pseudo-member for intValue, or nil when its bits
 	are not covered by the class's members (CPython STRICT-ish
@@ -926,6 +963,44 @@ ___grailInstallEnumOutput: cls
 		(strOverridden and: [(Enum ___grailUserProvides: cls selector: #'__format__:') @env0:not])
 			ifTrue: [cls ___compileMethod: '__format__: aSpec
 	^ (self __str__) __format__: aSpec' category: 'Grail-Enum Member'].
+		^ cls].
+	"ReprEnum (``class E(date, ReprEnum)''): members str/format as their VALUE,
+	keeping only Enum's <Cls.name: valuerepr> repr -- the whole point of
+	ReprEnum.  What has to be installed depends on the storage root, which
+	differs between a FOREIGN mixin and a data-type mixin:
+
+	 * Enum-rooted (foreign mixin, e.g. ``date''): the member inherits Enum's
+	   ``Cls.name'' __str__/__format__ -- WRONG for ReprEnum -- so replace them
+	   with value-delegating versions.  __repr__ is Enum's inherited one (already
+	   the Python-repr value), so leave it.  A user __str__ override is kept, and
+	   __format__ then follows str() (CPython's format-follows-str rule) unless
+	   the user also overrode __format__.
+
+	 * Data-rooted (int/str/FLOAT storage, ``class E(float, ReprEnum)''): the
+	   member IS the data type, so its inherited __str__/__format__ already ARE
+	   the value's (and handle every format code -- delegating to the raw #value
+	   would drop '{:f}'/'{:n}'); keep them.  Only __repr__ is wrong (the data
+	   type's bare-value repr) -- force Enum's.
+
+	StrEnum is handled above; Grail's IntEnum/StrEnum are storage-rooted and not
+	ReprEnum-chained, so they never reach here."
+	(Enum ___grailIsReprEnumClass: cls) ifTrue: [
+		(cls @env0:inheritsFrom: Enum)
+			ifTrue: [ | strOv |
+				strOv := Enum ___grailUserProvides: cls selector: #'__str__'.
+				strOv ifFalse: [
+					cls ___compileMethod: '__str__
+	^ (self @env0:dynamicInstVarAt: #value) @env1:__str__' category: 'Grail-Enum Member'].
+				(Enum ___grailUserProvides: cls selector: #'__format__:') ifFalse: [
+					strOv
+						ifTrue: [cls ___compileMethod: '__format__: aSpec
+	^ (self __str__) __format__: aSpec' category: 'Grail-Enum Member']
+						ifFalse: [cls ___compileMethod: '__format__: aSpec
+	^ (self @env0:dynamicInstVarAt: #value) @env1:__format__: aSpec' category: 'Grail-Enum Member']]]
+			ifFalse: [
+				(Enum ___grailShouldForceOutput: cls selector: #'__repr__') ifTrue: [
+					cls ___compileMethod: '__repr__
+	^ Enum ___grailMemberRepr: self' category: 'Grail-Enum Member']].
 		^ cls].
 	"Nested {selector. source} pairs (NOT Associations -- a bare ``->'' would
 	be an env-1 send and DNU here)."
