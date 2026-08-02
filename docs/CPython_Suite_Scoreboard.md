@@ -45,3 +45,4 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_slice | ERROR | 11 | 2 | 2 | 0 |  |
 | test.test_bool | ERROR | 31 | 8 | 6 | 0 |  |
 | test.test_iter | ERROR | 58 | 5 | 22 | 1 |  |
+| test.test_traceback | IMPORTERROR | 0 | 0 | 0 | 0 | BoundMethod object has no attribute '__code__' |

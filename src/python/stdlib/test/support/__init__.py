@@ -478,3 +478,61 @@ try:
     from test.support import testcase
 except Exception:
     testcase = None
+
+
+# --- added for test.test_traceback (vendored 2026-08-02) ---
+
+class Error(Exception):
+    """Base class for regression-test errors (CPython test.support.Error)."""
+
+
+# Grail has no subprocess / os.spawn support; tests that need one skip.
+has_subprocess_support = False
+
+
+def requires_subprocess():
+    """Skip when subprocess support is unavailable (always so in Grail)."""
+    return unittest.skipUnless(has_subprocess_support, "requires subprocess support")
+
+
+def has_no_debug_ranges():
+    # CPython gates this on _testcapi.config_get('code_debug_ranges').  Grail
+    # has no _testcapi, so the ImportError -> SkipTest path fires (matching
+    # CPython when _testcapi is absent).
+    try:
+        import _testcapi
+    except ImportError:
+        raise unittest.SkipTest("_testcapi required")
+    return not _testcapi.config_get('code_debug_ranges')
+
+
+def requires_debug_ranges(reason='requires co_positions / debug_ranges'):
+    try:
+        skip = has_no_debug_ranges()
+    except unittest.SkipTest as e:
+        skip = True
+        reason = e.args[0] if e.args else reason
+    return unittest.skipIf(skip, reason)
+
+
+# Colorization: Grail renders tracebacks as plain text, so forcing "not
+# colorized" is a no-op and forcing "colorized" is unsupported.  force_color is
+# a plain-class context manager (NO @contextlib.contextmanager -- see the module
+# header); the two decorators are identity passthroughs.
+class force_color:
+    def __init__(self, color):
+        self.color = color
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def force_not_colorized(func):
+    return func
+
+
+def force_not_colorized_test_class(cls):
+    return cls
