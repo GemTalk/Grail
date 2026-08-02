@@ -1392,7 +1392,15 @@ parseFunctionDefWithDecorators: decorators
 		yourself).
 	decoratorNames := decorators collect: [:each |
 		(each isKindOf: NameAst)
-			ifTrue: [each id]
+			ifTrue: ["A bare ``@DynamicClassAttribute (from ``from types import
+				DynamicClassAttribute'') is CPython's getset descriptor that enum
+				member properties are built on -- same role as ``@property'' /
+				``@enum.property'', so re-class the def declaratively as a property
+				(test_enum test_subclass_duplicate_name_dynamic).  Other bare names
+				pass through unchanged."
+				(each id asString = 'DynamicClassAttribute')
+					ifTrue: [#'property']
+					ifFalse: [each id]]
 			ifFalse: [self ___declarativeDecoratorSymbolFor: each]
 	].
 	funcNode := self buildNode: FunctionDefAst fields: (IdentityKeyValueDictionary new
