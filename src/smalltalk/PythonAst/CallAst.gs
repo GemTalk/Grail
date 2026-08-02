@@ -302,8 +302,12 @@ printSmalltalkOn: aStream
 		the class's varargs entry receives the call.  knownClassName
 		returns nil in this case (it defers to the legacy form
 		exactly when kwargs are present and a varargs entry exists);
-		check the class lookup directly."
-		(self ___hasVarargsClassConstructor___) ifFalse: [
+		check the class lookup directly.
+
+		A ``*args'' splat likewise defers to the generic form: the arity is
+		unknown at compile time, so the fixed-arity mismatch check would raise a
+		bogus TypeError (test_slice test_indices: ``range(*slice.indices(n))'')."
+		((self ___hasVarargsClassConstructor___) or: [self hasStarredArgument]) ifFalse: [
 			^ self printArityMismatchErrorOn: aStream forName: knownBuiltinName
 		].
 	].
@@ -395,8 +399,15 @@ printSmalltalkOn: aStream
 	or kwarg shape. Emit a clean Python TypeError instead of falling
 	through to the broken `cls value: { args } value: kw` form, which
 	signals MessageNotUnderstood on plain GemStone classes."
-	(self knownClassName) ifNotNil: [:knownCls |
-		^ self printArityMismatchErrorOn: aStream forName: knownCls
+	"A ``*args'' splat has no compile-time arity, so this fixed-arity mismatch
+	check must not fire -- defer to the generic ``value: {args} value: kw''
+	form, whose printArgumentsArrayOn: splices the splat and reaches the
+	class's __new__ with the real argument count (test_slice test_indices:
+	``range(*slice.indices(n))'')."
+	(self hasStarredArgument) ifFalse: [
+		(self knownClassName) ifNotNil: [:knownCls |
+			^ self printArityMismatchErrorOn: aStream forName: knownCls
+		].
 	].
 
 	"AttributeAst's printSmalltalkOn emits ``(value) @env1:___pyAttrLoad___:
@@ -1055,6 +1066,13 @@ bareCallClassNewSelector
 	| funcName cls candidate |
 	(function isKindOf: NameAst) ifFalse: [^nil].
 	keywords isEmpty ifFalse: [^nil].
+	"A ``*args'' splat makes the arity unknown at compile time, so a fixed-arity
+	``__new__:_:…'' selector cannot represent the call -- decline (like
+	bareCallFastPathSelector) so it falls through to the generic
+	``value: {args} value: kw'' form, whose printArgumentsArrayOn: splices the
+	splat.  Without this ``range(*slice.indices(n))'' emitted the StarredAst
+	stub's ``*-unpack not supported'' TypeError (test_slice test_indices)."
+	self hasStarredArgument ifTrue: [^nil].
 	funcName := function id.
 	"Precise LEGB shadow check (see NameAst>>___pythonBindingShadows___:)
 	 rather than the over-approximating isVariableIsDeclared: variables
