@@ -570,7 +570,7 @@ value: positional value: kwargs
 	  5. None of the above resolve → MessageNotUnderstood (mapped to
 	     Python TypeError at the env-1 DNU backstop)."
 
-	| nargs sel |
+	| nargs sel selSym |
 	(kwargs == nil or: [kwargs @env0:isEmpty]) ifFalse: [
 		^ self _new: positional kw: kwargs
 	].
@@ -580,7 +580,20 @@ value: positional value: kwargs
 	sel := WriteStream @env0:on: String @env0:new.
 	sel @env0:nextPutAll: '__new__:'.
 	2 @env0:to: nargs do: [:i | sel @env0:nextPutAll: '_:'].
-	^ self @env0:perform: sel @env0:contents @env0:asSymbol env: 1 withArguments: positional
+	selSym := sel @env0:contents @env0:asSymbol.
+	"No __new__ of this arity: raise the SAME catchable TypeError the direct
+	call-site fast path (CallAst) emits, rather than performing a missing
+	selector and letting the env-1 MessageNotUnderstood escape Python
+	try/except as an uncatchable Smalltalk error.  Reached when a built-in
+	class is invoked as a runtime callable (``assertRaises(TypeError, slice,
+	1, 2, 3, 4)'' -- test_slice test_constructor) with an unsupported arity."
+	"__new__:_:_:… are CLASSMETHODs, so probe the metaclass (self class), not
+	self's instance-side method dict."
+	(self @env0:class @env0:whichClassIncludesSelector: selSym environmentId: 1) == nil ifTrue: [
+		^ TypeError ___signal___: (self @env0:name @env0:asString
+			@env0:, '() takes wrong number of arguments (' @env0:, nargs @env0:printString
+			@env0:, ' positional, 0 keyword) - no matching method')].
+	^ self @env0:perform: selSym env: 1 withArguments: positional
 %
 
 category: 'Grail-Callable'
