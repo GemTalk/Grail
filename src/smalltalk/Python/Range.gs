@@ -122,9 +122,22 @@ __getitem__: index
 
 	| idx size |
 	(index isKindOf: slice) ifTrue: [
-		^ self ___getslice___: index start
-			_: index stop
-			_: index step
+		"CPython: ``range(...)[i:j:k]'' is a NEW range, not a list -- so it
+		compares equal only to another range (test_slice test_indices:
+		``range(len)[s] == range(*s.indices(len))'').  slice>>indices: gives the
+		normalized (start, stop, step) against this range's length; map them
+		through this range's own start/step to the sub-range's endpoints
+		(stop stays exclusive, matching range __new__:_:_:'s convention)."
+		| ind sStart sStop sStep rStart rStep |
+		ind := index indices: self @env0:size.
+		sStart := ind @env0:at: 1.
+		sStop := ind @env0:at: 2.
+		sStep := ind @env0:at: 3.
+		rStart := self start.
+		rStep := self step.
+		^ range @env1:__new__: (rStart @env0:+ (sStart @env0:* rStep))
+			_: (rStart @env0:+ (sStop @env0:* rStep))
+			_: (rStep @env0:* sStep)
 	].
 	"Non-integer, non-slice index: catchable TypeError instead of an
 	uncatchable env-0 comparison DNU on the index."
