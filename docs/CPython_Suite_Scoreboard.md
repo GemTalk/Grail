@@ -1,10 +1,10 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-08-02T11:57:34Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
+Generated: 2026-08-02T16:28:38Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
 
 **Modules: 31** — OK 25 · FAIL 0 · ERROR 6 · SKIP 0 · IMPORTERROR 0 · STERROR 0 · CRASH 0 · TIMEOUT 0
 
-**Totals:** tests=4188 failures=369 errors=216 skipped=207
+**Totals:** tests=4188 failures=357 errors=200 skipped=207
 
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
@@ -24,7 +24,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
 | test.test_datetime | ERROR | 525 | 75 | 39 | 2 |  |
 | test.test_re | OK | 165 | 0 | 0 | 28 |  |
-| test.test_functools | ERROR | 325 | 65 | 52 | 6 |  |
+| test.test_functools | ERROR | 325 | 64 | 40 | 6 |  |
 | test.test_list | OK | 68 | 0 | 0 | 3 |  |
 | test.test_tuple | OK | 38 | 0 | 0 | 6 |  |
 | test.test_dict | OK | 120 | 0 | 0 | 20 |  |
@@ -32,7 +32,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_bytes | OK | 316 | 0 | 0 | 22 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
-| test.test_enum | ERROR | 1077 | 211 | 94 | 1 |  |
+| test.test_enum | ERROR | 1077 | 205 | 92 | 1 |  |
 | test.test_unary | OK | 6 | 0 | 0 | 0 |  |
 | test.test_int_literal | OK | 6 | 0 | 0 | 0 |  |
 | test.test_unpack | OK | 1 | 0 | 0 | 0 |  |
@@ -42,6 +42,6 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_setcomps | OK | 1 | 0 | 0 | 0 |  |
 | test.test_pow | OK | 7 | 0 | 0 | 0 |  |
 | test.test_richcmp | OK | 11 | 0 | 0 | 0 |  |
-| test.test_slice | ERROR | 11 | 2 | 2 | 0 |  |
-| test.test_bool | ERROR | 31 | 8 | 6 | 0 |  |
-| test.test_iter | ERROR | 58 | 5 | 22 | 1 |  |
+| test.test_slice | ERROR | 11 | 1 | 1 | 0 |  |
+| test.test_bool | ERROR | 31 | 8 | 5 | 0 |  |
+| test.test_iter | ERROR | 58 | 4 | 23 | 1 |  |
