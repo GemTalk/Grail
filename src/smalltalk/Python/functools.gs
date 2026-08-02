@@ -1831,9 +1831,52 @@ ___pyBindsSelf___
 	"Marker read by object >> ___isDescriptorCallable___:.  CPython makes this
 	a descriptor whose __get__ returns a wrapper bound to the instance; Grail
 	reaches the same place through its own class-attribute binding, so
-	``a.t(0)'' arrives here as (a, 0)."
+	``a.t(0)'' arrives here as (a, 0).
 
-	^ true
+	NOT for a wrapped @classmethod / @staticmethod.  CPython's __get__
+	delegates to the wrapped descriptor's own __get__, and neither of those
+	binds the instance: ``a.static_func(0)'' and ``A.static_func(0)'' both call
+	the function with just (0), and a classmethod gets ``cls'' either way.
+	Refusing the binding here makes both access paths deliver the identical
+	argument array, which is what lets one call shape serve all three kinds."
+
+	^ self ___wrapsClassSideMethod___ @env0:not
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+___wrapsClassSideMethod___
+	"Is the decorated method a @classmethod / @staticmethod rather than a
+	plain instance method?
+
+	Grail compiles those onto the metaclass, and the class-body decorator
+	hands this class a BoundMethod on the CLASS for them (see FunctionDefAst >>
+	___decoratorBaseIsClassSide___) against an UnboundMethod for a plain
+	method.  That is the same distinction CPython draws -- there the wrapped
+	object is a classmethod/staticmethod descriptor instead of a plain
+	function -- so the handle's kind is the honest signal, not a flag threaded
+	down from the parser.
+
+	The receiver must be a CLASS: a BoundMethod on a MODULE is a plain
+	top-level function (``singledispatchmethod(some_function)''), which binds
+	an instance like any other function would."
+
+	| fn |
+	fn := self @env0:dynamicInstVarAt: #func.
+	^ (fn isKindOf: BoundMethod)
+		and: [fn @env0:receiver isKindOf: Behavior]
+%
+
+category: 'Grail-Callable'
+method: functools_singledispatchmethod
+value: positional value: kwargs
+	"Called DIRECTLY rather than through a binding -- ``A.t(0)'' reads the
+	descriptor off the class and calls it, which routes through
+	PythonInstance >> value:value: instead of ___pyCallValue___:kw:.  That is
+	the normal path for the @classmethod / @staticmethod forms, where nothing
+	binds an instance."
+
+	^ self ___pyCallValue___: positional kw: kwargs
 %
 
 category: 'Grail-Callable'
@@ -1849,10 +1892,16 @@ ___pyCallValue___: positional kw: kwargs
 	unbound function CPython hands back) the caller passes the receiver
 	explicitly in the same slot.  Either way the implementation is called with
 	the array unchanged -- registered implementations are ``def _(self, arg)''
-	and take the receiver first."
+	and take the receiver first.
 
-	| impl |
-	positional @env0:size @env0:< 2 ifTrue: [
+	A wrapped @classmethod / @staticmethod carries no receiver in the array at
+	all (___pyBindsSelf___ declines the binding, and the implementation is a
+	BoundMethod that supplies the class itself), so for those the dispatch
+	argument is the first element."
+
+	| impl at |
+	at := self ___wrapsClassSideMethod___ ifTrue: [1] ifFalse: [2].
+	positional @env0:size @env0:< at ifTrue: [
 		"CPython names the FUNCTION: ``t requires at least 1 positional
 		argument''.  The receiver does not count -- ``A().t()'' and
 		``A().t(a=1)'' both raise, though the first already has one element
@@ -1860,7 +1909,7 @@ ___pyCallValue___: positional kw: kwargs
 		TypeError ___signal___: (self ___dispatchName___)
 			@env0:, ' requires at least 1 positional argument'].
 	impl := (self @env0:dynamicInstVarAt: #dispatcher)
-		dispatch: (positional @env0:at: 2) @env0:class.
+		dispatch: (positional @env0:at: at) @env0:class.
 	^ impl ___pyCallValue___: positional kw: kwargs
 %
 
@@ -1902,7 +1951,17 @@ __doc__
 category: 'Grail-Attribute Access'
 method: functools_singledispatchmethod
 __qualname__
-	^ (self @env0:dynamicInstVarAt: #func) __qualname__
+	"``Cls.meth''.  An UnboundMethod already qualifies itself; a class-side
+	BoundMethod answers the bare selector (it does not track lexical nesting),
+	so qualify it here from the receiver it is bound to -- which for these IS
+	the defining class."
+
+	| fn |
+	fn := self @env0:dynamicInstVarAt: #func.
+	self ___wrapsClassSideMethod___ ifTrue: [
+		^ (fn @env0:receiver @env0:name @env0:asString @env0:, '.'
+			@env0:, fn @env0:selector @env0:asString) @env0:asUnicodeString].
+	^ fn __qualname__
 %
 
 category: 'Grail-Attribute Access'
@@ -1925,7 +1984,7 @@ __repr__
 	carries neither."
 
 	| label |
-	label := [(self @env0:dynamicInstVarAt: #func) __qualname__ @env0:asString]
+	label := [self __qualname__ @env0:asString]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: nil].
 	label @env0:isNil ifTrue: [

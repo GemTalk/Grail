@@ -1144,7 +1144,14 @@ printSmalltalkRuntimeOn: aStream
 	handed to each def; see CallAst >> classBodyDecoratorScope."
 	siblings := IdentitySet new.
 	self ___allFunctionDefs___ do: [:d | siblings add: d name asSymbol].
-	methodDefs do: [:def |
+	"EVERY def, not just the instance-side ones.  A @classmethod or
+	@staticmethod can carry a further decorator -- ``@singledispatchmethod
+	@staticmethod def t'' -- and iterating only instanceMethodDefs skipped it
+	silently, so the outer decorator never ran.  applicableMethodDecorators
+	already answers empty for the declarative decorators themselves, so a
+	plain @classmethod / @staticmethod / @property def emits nothing here
+	exactly as before."
+	self ___allFunctionDefs___ do: [:def |
 		| decos |
 		decos := def applicableMethodDecorators.
 		decos isEmpty ifFalse: [
@@ -2149,13 +2156,22 @@ category: 'Grail-code generation'
 method: ClassDefAst
 emitMethodAnnotationsTableOn: aStream className: aClassName
 	"Compile a class-side ``___methodAnnotationsTable___'' returning a dict
-	``method-name -> annotations dict'' for every annotated instance method.
+	``method-name -> annotations dict'' for every annotated method.
 	The method dict expressions are FunctionDefAst >> emitAnnotationsDictOn:
 	output (PEP 563 source strings).  No-op when no method is annotated, so
-	only classes that need it pay for the extra class-side method."
+	only classes that need it pay for the extra class-side method.
+
+	EVERY def, not just the instance-side ones: a @classmethod or @staticmethod
+	has annotations that Python reports the same way, and singledispatch's
+	annotation form (``@go.register'' with no argument) reads them to infer the
+	dispatch type.  Listing only instance methods made that form report ``no
+	type annotation found'' for a class-side implementation and drop the
+	registration.  Overload stubs stay out, as they do for instanceMethodDefs
+	-- the stub is not the implementation."
 
 	| annotated src |
-	annotated := self instanceMethodDefs select: [:def | def hasAnnotations].
+	annotated := self ___allFunctionDefs___ select: [:def |
+		def isOverloadStub not and: [def hasAnnotations]].
 	annotated isEmpty ifTrue: [^ self].
 	src := WriteStream on: String new.
 	src nextPutAll: '___methodAnnotationsTable___'; lf.
