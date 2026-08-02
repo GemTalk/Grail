@@ -65,7 +65,6 @@ initialize
 	self @env0:at: #property put: PropertyDescriptor.
 	self @env0:at: #member put: PropertyDescriptor.
 	self @env0:at: #nonmember put: PropertyDescriptor.
-	self @env0:at: #unique put: PropertyDescriptor.
 	self @env0:at: #auto put: PropertyDescriptor.
 	self @env0:at: #EnumMeta put: Enum @env0:class.
 	self @env0:at: #IntEnum put: IntEnum.
@@ -200,11 +199,51 @@ __simple_enum: positional kw: kwargs
 category: 'Grail-Built-in Functions'
 method: enum
 _verify: positional kw: kwargs
-	"@verify(UNIQUE, ...) -> decorator returning the class unchanged.
-	The checks it performs in CPython are advisory; skipping them only
-	means we never raise on a malformed enum definition."
+	"@verify(UNIQUE | CONTINUOUS | NAMED_FLAGS, ...) -> decorator.  UNIQUE is
+	enforced -- it delegates to the same alias check as @unique, raising
+	ValueError on a duplicate-valued enum (test_enum test_unique_dirty via
+	@verify).  CONTINUOUS / NAMED_FLAGS stay advisory (return the class
+	unchanged); skipping them only means we never raise on those."
 
-	^ [:positional2 :keywords2 | positional2 @env0:at: 1]
+	| checksUnique |
+	checksUnique := positional @env0:includes: (self @env0:at: #UNIQUE).
+	^ [:positional2 :keywords2 |
+		| cls |
+		cls := positional2 @env0:at: 1.
+		checksUnique ifTrue: [self unique: cls] ifFalse: [cls]]
+%
+
+category: 'Grail-Built-in Functions'
+method: enum
+unique: cls
+	"``@unique`` -- raise ValueError when the enum has any ALIAS (a name in
+	__members__ whose member's canonical name differs, i.e. a duplicate value),
+	listing each ``alias -> name`` in definition order; otherwise return cls
+	unchanged (CPython enum.unique).  Previously ``unique`` was bound to
+	PropertyDescriptor, so ``@unique`` silently accepted duplicate-valued enums
+	(test_enum test_unique_dirty).  __members__ preserves declaration order, so
+	the alias list matches CPython's message ordering."
+
+	| dups msg byName |
+	byName := cls @env1:_member_map_.
+	dups := OrderedCollection @env0:new.
+	"CPython lists aliases in DECLARATION order; _member_map_ is hash-ordered, so
+	walk the CANONICAL members in definition order and gather each one's aliases
+	(other __members__ names bound to the same member object).  Reproduces the
+	usual alias-follows-canonical layout the tests assert."
+	((Python @env0:at: #Enum) ___grailMembers: cls) @env0:do: [:member |
+		| canonical |
+		canonical := (member @env0:dynamicInstVarAt: #name) @env0:asString.
+		byName @env0:keysAndValuesDo: [:name :m |
+			(m == member and: [(name @env0:asString @env0:= canonical) @env0:not]) ifTrue: [
+				dups @env0:add: (name @env0:asString @env0:, ' -> ' @env0:, canonical)]]].
+	dups @env0:isEmpty ifTrue: [^ cls].
+	msg := WriteStream @env0:on: String @env0:new.
+	dups @env0:doWithIndex: [:d :i |
+		i @env0:> 1 ifTrue: [msg @env0:nextPutAll: ', '].
+		msg @env0:nextPutAll: d].
+	^ ValueError ___signal___: ('duplicate values found in <enum '''
+		@env0:, cls @env0:name @env0:asString @env0:, '''>: ' @env0:, msg @env0:contents)
 %
 
 category: 'Grail-Built-in Functions'
