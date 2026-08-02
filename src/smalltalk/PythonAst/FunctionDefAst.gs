@@ -836,6 +836,18 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName sibl
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___decoratorBaseIsClassSide___
+	"Does this def compile onto the metaclass rather than the instance side?
+	False here; ClassFunctionDefAst (@classmethod) and StaticFunctionDefAst
+	(@staticmethod) override.  Decides which callable a class-body decorator
+	receives as the base of its chain -- see
+	printMethodDecoratorChainOn:decorators:index:className:."
+
+	^ false
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aClassName
 	"Nested decorator application A(B(...(the method)...)).  At the base case
 	emit an UnboundMethod naming the COMPILED method -- what CPython hands a
@@ -850,12 +862,29 @@ printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aC
 	directly makes re-execution replace the wrapper instead of stacking on it."
 
 	i > decoList size ifTrue: [
-		aStream
-			nextPutAll: '(UnboundMethod definingClass: ';
-			nextPutAll: aClassName;
-			nextPutAll: ' selector: #''';
-			nextPutAll: name;
-			nextPutAll: ''')'.
+		"A @classmethod / @staticmethod def is compiled CLASS-side, so the
+		UnboundMethod form -- which resolves instance-side -- names nothing and
+		the decorator dies on the first call.  Hand those a BoundMethod on the
+		class instead: calling it dispatches the class-side selector with the
+		class as receiver, which is exactly ``cls'' for a classmethod and an
+		ignored receiver for a staticmethod.  It is also the right descriptor
+		distinction for a decorator to see -- CPython hands over a classmethod
+		or staticmethod OBJECT here, neither of which binds an instance."
+		self ___decoratorBaseIsClassSide___
+			ifTrue: [
+				aStream
+					nextPutAll: '(BoundMethod receiver: ';
+					nextPutAll: aClassName;
+					nextPutAll: ' selector: #''';
+					nextPutAll: name;
+					nextPutAll: ''')']
+			ifFalse: [
+				aStream
+					nextPutAll: '(UnboundMethod definingClass: ';
+					nextPutAll: aClassName;
+					nextPutAll: ' selector: #''';
+					nextPutAll: name;
+					nextPutAll: ''')'].
 		^ self].
 	aStream nextPutAll: '(('.
 	self printDecoratorReceiverOn: aStream deco: (decoList at: i).

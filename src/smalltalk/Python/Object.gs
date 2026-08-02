@@ -1282,8 +1282,28 @@ ___isDescriptorCallable___: aValue
 	primitives) return false — Python doesn't apply descriptor
 	binding to them either."
 
+	| rcvr |
 	(aValue isKindOf: MethodBinding) ifTrue: [^ false].
-	(aValue isKindOf: BoundMethod) ifTrue: [^ true].
+	(aValue isKindOf: BoundMethod) ifTrue: [
+		"...but NOT a BUILT-IN function.  CPython binds a plain Python function
+		stored in a class dict and does NOT bind a builtin one -- a C function
+		is not a descriptor -- which is why test_functools can write
+		``cmp_to_key = c_functools.cmp_to_key'' bare where the pure-Python
+		variant has to write ``staticmethod(py_functools.cmp_to_key)''.
+
+		Grail spells both as a BoundMethod on a module instance, and the module
+		itself is the discriminator: one implemented in Smalltalk and filed in
+		(functools, operator, ...) is the builtin, and has no ``__file__''; one
+		compiled from Python source does, and its top-level defs are plain
+		functions that bind like any other.
+
+		Without this, ``self.cmp_to_key(cmp1)'' passed the TEST CASE as the
+		comparison function -- the wrapper then tried to call it, and the whole
+		of TestCmpToKeyC died on the resulting arity error rather than on
+		anything to do with cmp_to_key."
+		rcvr := aValue @env0:receiver.
+		^ ((rcvr isKindOf: module)
+			and: [(rcvr @env0:dynamicInstVarAt: #'__file__') == nil]) not].
 	(aValue isKindOf: ExecBlock) ifTrue: [^ true].
 	"UnboundMethod -- what ``Cls.m'' answers, i.e. CPython's plain function
 	taking self first.  A decorator that returns its argument unchanged
@@ -1303,7 +1323,13 @@ ___isDescriptorCallable___: aValue
 	that mint them; the PythonInstance gate keeps the probe off the ordinary
 	non-callable class attribute, which is what usually reaches here."
 	((aValue isKindOf: PythonInstance)
-		and: [aValue ___respondsTo___: #'___pyBindsSelf___']) ifTrue: [^ true].
+		and: [aValue ___respondsTo___: #'___pyBindsSelf___'])
+		ifTrue: [
+			"The marker is ASKED, not merely detected: whether one of these
+			stands in for a function that binds self can depend on what it
+			wraps.  functools.singledispatchmethod answers false over a
+			@classmethod / @staticmethod, neither of which binds an instance."
+			^ aValue ___pyBindsSelf___ == true].
 	^ false
 %
 
@@ -1767,7 +1793,22 @@ ___pyAttrLoad___: aSym
 						or: [(metaOwns @env0:value: sym5)
 							or: [(metaOwns @env0:value: sym6)
 								or: [metaOwns @env0:value: symVA]]]]]])
-			ifTrue: [^ BoundMethod receiver: self @env0:class selector: aSym].
+			ifTrue: [
+				"...unless a class-attribute store has REPLACED it.  In CPython a
+				``@classmethod def m'' is a class-dict entry, so a later
+				``Cls.m = f'' -- or a class-body decorator rebinding, which is
+				the same store -- replaces it outright and an instance read sees
+				the replacement.  Grail keeps the compiled class-side method and
+				the store in different places, and this branch used to answer
+				the compiled one, so ``@singledispatchmethod @staticmethod def
+				t'' left ``a.t(...)'' running the UNDECORATED staticmethod while
+				``A.t(...)'' correctly ran the descriptor.  Same asymmetry the
+				instance-side probe below already fixes for plain methods; this
+				is its class-side twin, and it costs a store probe only for a
+				name that resolved to a class-side method in the first place."
+				(self ___classChainAttrLookup___: aSym)
+					@env0:ifNotNil: [:___cv | ^ ___cv].
+				^ BoundMethod receiver: self @env0:class selector: aSym].
 	].
 	"Shim wrapper classes (SrePattern, SreMatch, ...) advertise the
 	subset of their unary methods that should be treated as Python
