@@ -399,9 +399,25 @@ ___pythonValueAttrs___
 	check ``exc.args == (key,)'').  ``e.__notes__'' (PEP 678) is likewise the
 	notes list, not a method.  ``e.__traceback__'' is the PyTraceback object
 	(or None) -- a value, not a callable -- so a read returns it instead of a
-	BoundMethod-wrapped selector."
+	BoundMethod-wrapped selector.
 
-	^ IdentitySet new add: #'args'; add: #'__notes__'; add: #'__traceback__'; yourself
+	``e.__context__'' / ``e.__cause__'' / ``e.__suppress_context__'' are the
+	PEP 3134 exception-chaining attributes: getset descriptors in CPython
+	(None / None / False by default), so a read returns the VALUE.  Without
+	this a read wrapped the accessor as a BoundMethod, so ``exc.__context__
+	is None'' was false (test_enum test_default_missing_with_wrong_type_value
+	asserts the raised ValueError has no context).  The accessors return the
+	default today (chaining is not yet tracked); registering them here keeps
+	the Python-visible read a value, matching every other reader."
+
+	^ IdentitySet new
+		add: #'args';
+		add: #'__notes__';
+		add: #'__traceback__';
+		add: #'__context__';
+		add: #'__cause__';
+		add: #'__suppress_context__';
+		yourself
 %
 set compile_env: 1
 
