@@ -53,7 +53,7 @@ initialize
 	self @env0:at: #UNIQUE put: #UNIQUE.
 	self @env0:at: #CONTINUOUS put: #CONTINUOUS.
 	self @env0:at: #NAMED_FLAGS put: #NAMED_FLAGS.
-	self @env0:at: #ReprEnum put: Enum.
+	self @env0:at: #ReprEnum put: ReprEnum.
 	self @env0:at: #EnumDict put: dict.
 	"Enum / IntEnum / IntFlag / StrEnum / Flag are all real classes now
 	(see PyEnumTypes.gs): ``class X(IntEnum): A = 1`` builds real members
