@@ -514,18 +514,20 @@ __name__
 	its Smalltalk name — downstream inspect.ismethod / isfunction stubs are
 	written to match the Smalltalk names ('BoundMethod', 'ExecBlock').
 
-	User Python classes defined with a lower-case name (``class base_set:``)
-	are stored under a capitalized GemStone class name (``Base_set''); return
-	their ORIGINAL Python spelling, recorded mangled->original by
-	importlib>>___asSmalltalkClassName___: and looked up here.  CPython error
+	A user Python class keeps its exact Python name as the GemStone class name
+	(``class base_set:`` stays ``base_set''); cls.__name__ therefore returns
+	that name straight from the Smalltalk class -- no case change, no
+	mangled->original registry.  CPython error
 	messages interpolate this (test_contains: ``argument of type 'base_set'
 	...'')."
 
 	| bt |
 	bt := self ___pythonBuiltinTypeName___.
 	bt @env0:notNil ifTrue: [^ bt].
-	^ (importlib @env0:___pyClassNameFor___: self @env0:name @env0:asString)
-		@env0:ifNil: [self @env0:name @env0:asString]
+	"User classes now keep their exact Python name as the GemStone class name
+	(___asSmalltalkClassName___: no longer changes case), so the Smalltalk name
+	IS the Python name -- no mangled->original registry lookup needed."
+	^ self @env0:name @env0:asString
 %
 
 category: 'Grail-Introspection'
@@ -541,8 +543,10 @@ __qualname__
 	| bt |
 	bt := self ___pythonBuiltinTypeName___.
 	bt @env0:notNil ifTrue: [^ bt].
-	^ (importlib @env0:___pyClassNameFor___: self @env0:name @env0:asString)
-		@env0:ifNil: [self @env0:name @env0:asString]
+	"User classes now keep their exact Python name as the GemStone class name
+	(___asSmalltalkClassName___: no longer changes case), so the Smalltalk name
+	IS the Python name -- no mangled->original registry lookup needed."
+	^ self @env0:name @env0:asString
 %
 
 category: 'Grail-Callable'
