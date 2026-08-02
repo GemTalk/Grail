@@ -443,3 +443,28 @@ ___pushTracebackFrame___: aCode lineno: ln colno: co endLineno: el endColno: ec 
 	tracebackObj := tb.
 	^ self
 %
+
+category: 'Grail-Current Exception'
+classmethod: BaseException
+___currentException___
+	"The exception currently being HANDLED in this session -- what CPython
+	sys.exc_info() / sys.exception() report -- or nil outside any active except
+	block.  Session-local via SessionTemps (never committed).  TryAst codegen
+	sets it on except-handler entry and restores the prior value on exit, so
+	nested handlers stack correctly."
+
+	^ (SessionTemps current) at: #'GrailCurrentException' ifAbsent: [nil]
+%
+
+category: 'Grail-Current Exception'
+classmethod: BaseException
+___setCurrentException___: anExceptionOrNil
+	"Set (nil clears) the session's currently-handled exception.  Clearing
+	REMOVES the key rather than storing nil, so ___currentException___'s
+	ifAbsent: nil default is the single source of ``no active exception''."
+
+	anExceptionOrNil isNil
+		ifTrue: [ (SessionTemps current) removeKey: #'GrailCurrentException' ifAbsent: [] ]
+		ifFalse: [ (SessionTemps current) at: #'GrailCurrentException' put: anExceptionOrNil ].
+	^ anExceptionOrNil
+%
