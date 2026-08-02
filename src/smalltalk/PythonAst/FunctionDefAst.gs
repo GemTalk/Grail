@@ -435,6 +435,9 @@ printSmalltalkOn: aStream
 			or: [paramNames includes: (self transportParamName: n)])
 			ifFalse: [paramNames add: (self transportParamName: n)].
 	].
+	"Traceback: every function carries a ___curPos___ temp holding its current
+	execution position (set by ___emitCurPosBefore: before each statement)."
+	paramNames add: '___curPos___'.
 	paramNames isEmpty ifFalse: [
 		aStream nextPutAll: '| '.
 		paramNames do: [:n | aStream nextPutAll: n; space].
@@ -507,6 +510,7 @@ printSmalltalkOn: aStream
 		printBodyOn:, which this closure path bypasses)."
 		CallAst functionBeingCompiled: self.
 		(self ___reachableStatements___: body body) do: [:stmt |
+			self ___emitCurPosBefore: stmt on: aStream.
 			stmt printSmalltalkOn: aStream.
 			aStream lf].
 	] ensure: [
@@ -1658,6 +1662,7 @@ generateModuleMethodSourceOn: aStream
 		via NameAst's reserved-param rename (see NameAst >>
 		emitTransportNameForReservedParam:on:)."
 		allLocals := OrderedCollection new.
+		allLocals add: '___curPos___'.  "traceback: current-execution-position temp"
 		1 to: paramNames size do: [:i |
 			((needsTemp at: i)
 				and: [(self isSmalltalkReservedIdentifier: (paramNames at: i)) not])
@@ -1797,6 +1802,7 @@ generateModuleMethodSourceOn: aStream
 		String-to-String — Symbol entries would dodge it (Symbol
 		equality is identity) and re-declare the same temp."
 		allLocals := OrderedCollection new.
+		allLocals add: '___curPos___'.  "traceback: current-execution-position temp"
 		paramNames do: [:each | allLocals add: (self transportParamName: each)].
 		args vararg ifNotNil: [allLocals add: (self transportParamName: args vararg name)].
 		args kwonlyargs do: [:each |
@@ -2108,6 +2114,7 @@ printBodyOn: aStream
 	CallAst functionBeingCompiled: self.
 	[
 		(self ___reachableStatements___: body body) do: [:each |
+			self ___emitCurPosBefore: each on: aStream.
 			each printSmalltalkOn: aStream.
 			aStream lf].
 	] ensure: [CallAst functionBeingCompiled: savedFunction].
@@ -2418,6 +2425,7 @@ generateMethodSourceOn: aStream
 		AttributeAst's dynamicInstVarAt:put: emit and is a separate
 		write target from the bare-name local."
 		allLocals := OrderedCollection new.
+		allLocals add: '___curPos___'.  "traceback: current-execution-position temp"
 		paramNames do: [:each | allLocals add: each].
 		bodyVars do: [:each |
 			| declared |
@@ -2505,6 +2513,7 @@ generateMethodSourceOn: aStream
 		a binding emitted below.  Parameters always become block temps
 		(see the simple-positional branch for the rationale)."
 		allLocals := OrderedCollection new.
+		allLocals add: '___curPos___'.  "traceback: current-execution-position temp"
 		paramNames do: [:each | allLocals add: each].
 		args vararg ifNotNil: [allLocals add: args vararg name].
 		args kwonlyargs do: [:each |
