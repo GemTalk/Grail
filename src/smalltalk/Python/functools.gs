@@ -268,6 +268,12 @@ cmp_to_key: mycmp
 
 	^ [:___p___ :___k___ |
 		| w o |
+		"K wraps exactly one object.  Too MANY arguments was accepted silently,
+		quietly ignoring everything past the first (test_cmp_to_key_arguments
+		asserts both directions)."
+		(___p___ ~~ nil and: [___p___ @env0:size @env0:> 1]) ifTrue: [
+			TypeError ___signal___: 'K() takes exactly one argument ('
+				@env0:, ___p___ @env0:size @env0:printString @env0:, ' given)'].
 		o := (___p___ ~~ nil and: [___p___ @env0:size @env0:>= 1])
 			ifTrue: [___p___ @env0:at: 1]
 			ifFalse: [
@@ -287,6 +293,9 @@ _cmp_to_key: positional kw: kwargs
 	argument-count errors (test_cmp_to_key)."
 
 	| f |
+	positional @env0:size @env0:> 1 ifTrue: [
+		TypeError ___signal___: 'cmp_to_key expected 1 argument, got '
+			@env0:, positional @env0:size @env0:printString].
 	f := (positional @env0:size @env0:>= 1)
 		ifTrue: [positional @env0:at: 1]
 		ifFalse: [
@@ -1434,16 +1443,7 @@ reduce: function _: iterable
 	Apply function of two arguments cumulatively to the items of
 	iterable, from left to right."
 
-	| result iter item |
-	iter := iterable __iter__.
-	result := iter __next__.
-	[
-		[
-			item := iter __next__.
-			result := function value: { result. item } value: nil.
-		] repeat.
-	] @env0:on: StopIteration do: [:ex | "done" ].
-	^ result
+	^ self ___reduce___: function over: iterable initial: nil hasInitial: false
 %
 
 category: 'Grail-Built-in Functions'
@@ -1452,16 +1452,97 @@ reduce: function _: iterable _: initial
 	"reduce(function, iterable, initial) -> value.
 	Like reduce/2 but uses initial as the starting value."
 
-	| result iter item |
+	^ self ___reduce___: function over: iterable initial: initial hasInitial: true
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+___reduce___: function over: iterable initial: initial hasInitial: hasInitial
+	"CPython's Lib/functools.py reduce, including the part the arity-split
+	versions got wrong: an EMPTY iterable with no initial value is a
+	TypeError, not the StopIteration that escaped from the first __next__.
+
+	The single-item case never calls the function at all -- ``reduce(42,
+	'1')'' answers '1' -- which falls out of seeding from the first element
+	and only then looping."
+
+	| iter value |
 	iter := iterable __iter__.
-	result := initial.
-	[
-		[
-			item := iter __next__.
-			result := function value: { result. item } value: nil.
-		] repeat.
-	] @env0:on: StopIteration do: [:ex | "done" ].
-	^ result
+	hasInitial
+		ifTrue: [value := initial]
+		ifFalse: [
+			value := [iter __next__] @env0:on: StopIteration do: [:ex |
+				ex @env0:return: #'___GrailReduceEmpty___'].
+			value @env0:== #'___GrailReduceEmpty___' ifTrue: [
+				TypeError ___signal___:
+					'reduce() of empty iterable with no initial value']].
+	[[| item |
+		item := iter __next__.
+		value := function ___pyCallValue___: { value. item } kw: nil.
+		] repeat]
+		@env0:on: StopIteration do: [:ex | "exhausted"].
+	^ value
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+_reduce: positional kw: kwargs
+	"Varargs reduce: the keyword forms and the argument-count errors.
+
+	``initial'' may be passed as a KEYWORD (test_initial_keyword), and CPython
+	still accepts ``function'' / ``sequence'' by keyword while warning that it
+	is deprecated (test_reduce_with_kwargs).  Wrong counts are TypeErrors
+	rather than whatever the fixed-arity dispatch happened to raise."
+
+	| args fn iterable initial hasInitial haveFn haveSeq deprecated |
+	args := positional @env0:ifNil: [#()].
+	args @env0:size @env0:> 3 ifTrue: [
+		TypeError ___signal___: 'reduce() takes at most 3 arguments ('
+			@env0:, args @env0:size @env0:printString @env0:, ' given)'].
+	haveFn := args @env0:size @env0:>= 1.
+	haveSeq := args @env0:size @env0:>= 2.
+	fn := haveFn ifTrue: [args @env0:at: 1] ifFalse: [nil].
+	iterable := haveSeq ifTrue: [args @env0:at: 2] ifFalse: [nil].
+	hasInitial := args @env0:size @env0:>= 3.
+	initial := hasInitial ifTrue: [args @env0:at: 3] ifFalse: [nil].
+	deprecated := false.
+	(kwargs @env0:isNil or: [kwargs @env0:isEmpty]) ifFalse: [
+		kwargs @env0:keysAndValuesDo: [:k :v | | key |
+			key := k @env0:asString.
+			key @env0:= 'initial'
+				ifTrue: [
+					hasInitial ifTrue: [
+						TypeError ___signal___:
+							'reduce() got multiple values for argument ''initial'''].
+					initial := v.
+					hasInitial := true]
+				ifFalse: [key @env0:= 'function'
+				ifTrue: [
+					haveFn ifTrue: [
+						TypeError ___signal___:
+							'reduce() got multiple values for argument ''function'''].
+					fn := v. haveFn := true. deprecated := true]
+				ifFalse: [key @env0:= 'sequence'
+				ifTrue: [
+					haveSeq ifTrue: [
+						TypeError ___signal___:
+							'reduce() got multiple values for argument ''sequence'''].
+					iterable := v. haveSeq := true. deprecated := true]
+				ifFalse: [
+					TypeError ___signal___:
+						'reduce() got an unexpected keyword argument ''' @env0:, key @env0:, '''']]]]].
+	(haveFn and: [haveSeq]) ifFalse: [
+		TypeError ___signal___:
+			'reduce expected at least 2 arguments, got '
+				@env0:, args @env0:size @env0:printString].
+	deprecated ifTrue: [
+		"CPython 3.14 accepts the old keyword names and warns.  Routed through
+		the warnings module so unittest's assertWarns can record it."
+		(Python @env0:at: #warnings otherwise: nil) @env0:ifNotNil: [:w |
+			w @env0:___instance___
+				warn: 'Passing keyword arguments to reduce() is deprecated'
+				_: (Python @env0:at: #DeprecationWarning otherwise: nil)]].
+	^ self ___reduce___: fn over: iterable initial: initial hasInitial: hasInitial
 %
 
 category: 'Grail-Single Dispatch'

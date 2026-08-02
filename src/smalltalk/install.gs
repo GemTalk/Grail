@@ -721,6 +721,7 @@ run
 	at: #'RaiseTestCase' put: nil;
 	at: #'RandomTestCase' put: nil;
 	at: #'RangeTestCase' put: nil;
+	at: #'ReduceAndBuiltinBindingTestCase' put: nil;
 	at: #'ReturnTestCase' put: nil;
 	at: #'RecursionErrorTestCase' put: nil;
 	at: #'ReferenceErrorTestCase' put: nil;
@@ -1416,6 +1417,7 @@ input src/smalltalk/PythonTests/PythonTokenizerTestCase.gs
 input src/smalltalk/PythonTests/RaiseTestCase.gs
 input src/smalltalk/PythonTests/RandomTestCase.gs
 input src/smalltalk/PythonTests/RangeTestCase.gs
+input src/smalltalk/PythonTests/ReduceAndBuiltinBindingTestCase.gs
 input src/smalltalk/PythonTests/ReturnTestCase.gs
 input src/smalltalk/PythonTests/RuntimeClassCreationTestCase.gs
 input src/smalltalk/PythonTests/SecretsTestCase.gs

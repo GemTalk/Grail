@@ -1278,8 +1278,28 @@ ___isDescriptorCallable___: aValue
 	primitives) return false — Python doesn't apply descriptor
 	binding to them either."
 
+	| rcvr |
 	(aValue isKindOf: MethodBinding) ifTrue: [^ false].
-	(aValue isKindOf: BoundMethod) ifTrue: [^ true].
+	(aValue isKindOf: BoundMethod) ifTrue: [
+		"...but NOT a BUILT-IN function.  CPython binds a plain Python function
+		stored in a class dict and does NOT bind a builtin one -- a C function
+		is not a descriptor -- which is why test_functools can write
+		``cmp_to_key = c_functools.cmp_to_key'' bare where the pure-Python
+		variant has to write ``staticmethod(py_functools.cmp_to_key)''.
+
+		Grail spells both as a BoundMethod on a module instance, and the module
+		itself is the discriminator: one implemented in Smalltalk and filed in
+		(functools, operator, ...) is the builtin, and has no ``__file__''; one
+		compiled from Python source does, and its top-level defs are plain
+		functions that bind like any other.
+
+		Without this, ``self.cmp_to_key(cmp1)'' passed the TEST CASE as the
+		comparison function -- the wrapper then tried to call it, and the whole
+		of TestCmpToKeyC died on the resulting arity error rather than on
+		anything to do with cmp_to_key."
+		rcvr := aValue @env0:receiver.
+		^ ((rcvr isKindOf: module)
+			and: [(rcvr @env0:dynamicInstVarAt: #'__file__') == nil]) not].
 	(aValue isKindOf: ExecBlock) ifTrue: [^ true].
 	"UnboundMethod -- what ``Cls.m'' answers, i.e. CPython's plain function
 	taking self first.  A decorator that returns its argument unchanged
