@@ -111,10 +111,13 @@ category: 'Grail-Tests - Traceback Runtime'
 method: TracebackTestCase
 testCaughtExceptionHasFrame
 	"General traceback population: a caught exception now carries a traceback
-	whose frame is the CATCHING function (TryAst's except-binding fallback, at
-	statement granularity), so traceback.extract_tb / sys.exc_info() /
+	whose frame is the CATCHING function located at the EXACT line it propagated
+	from (TryAst's except-binding fallback + per-statement ___curPos___ tracking
+	through SuiteAst bodies), so traceback.extract_tb / sys.exc_info() /
 	traceback.format_exc are non-empty for ANY caught exception -- not just
-	comprehensions.  See tests/python/general_traceback.py."
+	comprehensions.  _catch_deep pins the raise line inside a for loop several
+	statements into the try body (would report the ``try'' header before the
+	SuiteAst setPos fix).  See tests/python/general_traceback.py."
 
 	| mod results |
 	importlib @env1:modules removeKey: #'general_traceback' ifAbsent: [].
@@ -122,8 +125,9 @@ testCaughtExceptionHasFrame
 		loadModuleFromPath: (importlib grailDir , '/tests/python/general_traceback.py')
 		name: 'general_traceback'.
 	results := mod @env1:___pyAttrLoad___: #RESULTS.
-	#( 'nonempty' 'name_is_func' 'lineno_in_try' 'exc_info_nonempty'
-	   'format_exc_has_valueerror' ) do: [:k |
+	#( 'nonempty' 'name_is_func' 'lineno_is_raise' 'exc_info_nonempty'
+	   'format_exc_has_valueerror'
+	   'deep_nonempty' 'deep_name' 'deep_lineno_is_raise' ) do: [:k |
 		self assert: ((results @env1:__getitem__: k) = true)
 			description: 'caught-exception-frame check failed: ' , k].
 %

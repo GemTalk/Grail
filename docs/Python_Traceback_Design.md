@@ -1,8 +1,9 @@
 # Python tracebacks & PEP 657 locations — design & plan
 
-Status: **design**, Phase 1 in progress. Author-driven from the
-`test.test_dictcomps` / `test.test_setcomps` `test_exception_locations`
-conformance gap (2026-07-31, gs40 / GemStone 4.0).
+Status: Phases 1, 2a, 2b, 3a, 3b, 3c **DONE / merged** (see §5); multi-frame deep
+frames deferred. Author-driven from the `test.test_dictcomps` /
+`test.test_setcomps` `test_exception_locations` conformance gap (2026-07-31,
+gs40 / GemStone 4.0).
 
 ## 1. What this unblocks
 
@@ -224,14 +225,43 @@ locating the catching function at statement granularity. `nil` position fields a
 stored as the `None` singleton (a nil dynamic instVar reads back as *absent* →
 `AttributeError`), and `StackSummary.format` no longer double-indents frame lines.
 
-**Deferred (future) — multi-frame deep frames.** Prepending a frame in each
-function's body wrapper (so the traceback spans catch-point *down to the raise*,
-not just the catching frame) was prototyped but backed out: broadening the body
-wrapper's `on: PythonReturn` catch re-raised inside generators ("exception already
-signalled") and named `AbstractException`, which isn't on the symbol list in every
-generated-code compile context. It needs a generator-aware, `Exception`-based
-two-handler shape. Also open: exact raise-line (vs try-statement) precision, and
-`finally`-during-propagation for `sys.exc_info()`.
+**Phase 3c — exact raise-line precision (DONE).** The Phase 3b catching frame
+was located at the `try`-statement header, not the line inside the try body that
+actually raised, because `SuiteAst>>printSmalltalkOn:` (every compound-statement
+body — `try`/`except`/`else`/`finally` and `while`/`for`/`if`, all built by the
+parser's `wrapSuite:`) iterated statements *without* the per-statement `setPos`
+that `BlockAst` and the `FunctionDefAst` body loops emit. So `___curPos___` froze
+at the enclosing compound-statement header and every nested block reported that
+line. Fix: `SuiteAst` now emits `___emitCurPosBefore:` before each statement, so
+`___curPos___` tracks into try/loop/if bodies and the catching frame points at
+the raising line (verified for a raise several statements deep inside a `for` in a
+`try`). To keep this affordable on hot loops — `setPos` now sits before *every*
+statement, loop bodies included — `___curPos___` is a bare SmallInteger beginLine
+at statement granularity (was a freshly-allocated 5-array), so the store costs no
+allocation / GC; `___pushFrameFromPos___` reconstructs a line-only frame from the
+integer (and still accepts the legacy 5-array defensively). Columns / source line
+stay unknown for the general path (CPython reports them for the raising
+instruction, which we don't track outside a comprehension).
+
+**Deferred (future) — multi-frame deep frames.** Today a traceback carries the
+*catching* frame (+ the exact-column comprehension frame where applicable), but
+not a frame for each function the exception unwound *through* between the raise
+and the catch. The natural seam — prepend a frame in each function's body wrapper
+— was prototyped and backed out (broadening the `on: PythonReturn` catch re-raised
+inside generators, "exception already signalled", and named `AbstractException`,
+absent from the symbol list in some generated-code compile contexts). The deeper
+obstacle, found since: **the body wrapper is not universal.** It is emitted only
+for generators and return-blocking functions (`FunctionDefAst`'s `#exception`
+return mode); simple functions use a direct `^`/`#directMethod` return with no
+`on:do:` at all. So deep frames would need a *new* universal handler wrapping
+every function body — adding an `on:do:` per call and knocking `#directMethod`
+functions off their method-temp fast path — the large, high-risk change Phase 2b
+deliberately avoided, and no vendored scoreboard module currently gates it
+(`test.test_traceback` is not vendored). It needs a generator-aware,
+`Exception`-based (runtime-resolved, never named literally) two-handler body
+wrapper, gated behind a codegen flag and measured. Also still open:
+`finally`-during-propagation for `sys.exc_info()` (a bare `try/finally` doesn't set
+the current-exception register).
 
 ## 6. Risks & non-goals
 

@@ -466,20 +466,28 @@ ___pushTracebackFrame___: aCode lineno: ln colno: co endLineno: el endColno: ec 
 
 category: 'Grail-Traceback Building'
 method: BaseException
-___pushFrameFromPos___: aCode pos: posArray
-	"Prepend a frame for aCode at posArray = { beginLine. beginColumn. endLine.
-	endColumn. sourceLine } -- the enclosing function's ___curPos___, snapshotted
-	as an exception unwinds THROUGH the function's body wrapper.  A nil posArray
-	(no statement ran yet) is a no-op, as are control-flow / StopIteration (via
-	___pushTracebackFrame___)."
+___pushFrameFromPos___: aCode pos: pos
+	"Prepend a frame for aCode at the enclosing function's ___curPos___,
+	snapshotted as an exception unwinds THROUGH the function.  ___curPos___ is a
+	bare SmallInteger beginLine at statement granularity (columns / source line
+	unknown -- CPython reports them for the raising instruction, which we don't
+	track outside a comprehension).  A nil pos (no statement ran yet) is a no-op,
+	as are control-flow / StopIteration (via ___pushTracebackFrame___).  The
+	Array branch is defensive legacy: an older 5-tuple
+	{ beginLine. beginColumn. endLine. endColumn. sourceLine } still works."
 
-	posArray isNil ifTrue: [^ self].
+	pos isNil ifTrue: [^ self].
+	"``isKindOf: Integer'' -- NOT ``isInteger'': 3.7.x SmallInteger does not
+	implement isInteger (DNU), though 4.0 does; isKindOf: is universal."
+	(pos isKindOf: Integer) ifTrue: [
+		^ self ___pushTracebackFrame___: aCode
+			lineno: pos colno: nil endLineno: pos endColno: nil line: nil ].
 	^ self ___pushTracebackFrame___: aCode
-		lineno: (posArray at: 1)
-		colno: (posArray at: 2)
-		endLineno: ((posArray at: 3) ifNil: [posArray at: 1])
-		endColno: (posArray at: 4)
-		line: (posArray at: 5)
+		lineno: (pos at: 1)
+		colno: (pos at: 2)
+		endLineno: ((pos at: 3) ifNil: [pos at: 1])
+		endColno: (pos at: 4)
+		line: (pos at: 5)
 %
 
 category: 'Grail-Traceback Building'
