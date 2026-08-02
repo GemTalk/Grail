@@ -81,7 +81,8 @@ printSmalltalkRuntimeOn: aStream
 	  savedSelfParam savedClassAttrNames settersByName
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames
 	  savedInBodyEmit savedBoundNames savedNestedNames
-	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars |
+	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars
+	  siblings |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -120,6 +121,28 @@ printSmalltalkRuntimeOn: aStream
 	class-side attribute (Smalltalk classInstVar + class-side getter/
 	setter)."
 	classAttrs := self classBodyAttributes.
+
+	"Stamp ``__doc__'': CPython lifts a class body's leading string literal
+	into ``Cls.__doc__'', and a class with NO docstring has ``__doc__ ==
+	None'' -- it does NOT inherit a base's (or object's) docstring.  Grail
+	classes otherwise fell through to Object>>__doc__ and reported object's
+	own docstring for every user class (test_enum test_doc_1..4 assert a
+	docstring-less enum's __doc__ is None).  Inject it as a class attribute
+	so it rides the existing getter+setter value-attr path -- and so a
+	subclass with no docstring stamps its OWN None slot (classInstVars are
+	per-class), shadowing a documented base exactly as CPython does.  Skipped
+	when the body already assigns __doc__ itself.  A ConstantAst holding nil
+	emits as the ``None'' singleton; a string ConstantAst emits an escaped
+	literal."
+	(classAttrs anySatisfy: [:p | p key == #'__doc__']) ifFalse: [
+		| docNode |
+		docNode := self ___docString___ ifNil: [
+			ConstantAst buildWithFields: (IdentityKeyValueDictionary new
+				at: #value put: nil;
+				at: #kind put: nil;
+				yourself)].
+		classAttrs := classAttrs copy.
+		classAttrs addFirst: (#'__doc__' -> docNode)].
 
 	"A Python class-body data attribute whose name is an inherited kernel
 	class-object instance variable (``name'', ``format'', ``timeStamp'', ...)
@@ -1116,6 +1139,11 @@ printSmalltalkRuntimeOn: aStream
 	and the class decorators, because that is CPython's order: the class body
 	is complete -- decorated methods included -- before either of them sees the
 	class."
+	"The names the class body binds as defs -- what a decorator may legally
+	name as a SIBLING (``@t.register(int)'').  Computed once for the loop and
+	handed to each def; see CallAst >> classBodyDecoratorScope."
+	siblings := IdentitySet new.
+	self ___allFunctionDefs___ do: [:d | siblings add: d name asSymbol].
 	methodDefs do: [:def |
 		| decos |
 		decos := def applicableMethodDecorators.
@@ -1123,7 +1151,8 @@ printSmalltalkRuntimeOn: aStream
 			def
 				printMethodDecoratorsOn: aStream
 				decorators: decos
-				className: name]].
+				className: name
+				siblingNames: siblings]].
 
 	"Metaclass post-population hook.  Send a class-side
 	``___pyClassDefined___:`` to the freshly-populated class with its
@@ -1731,6 +1760,30 @@ classBodyAttributes
 		].
 	].
 	^ pairs
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___docString___
+	"The class's docstring node -- the leading bare string-literal statement
+	of the class body, which CPython lifts into ``__doc__''.  Answer that
+	ConstantAst, or nil when the body doesn't open with one.  Mirrors
+	FunctionDefAst>>___docString___ (which returns the string value; here the
+	NODE is wanted so it rides the class-attribute value emit, escaping and
+	all).  Used to stamp ``__doc__'' so a class no longer inherits object's
+	docstring through Object>>__doc__."
+
+	| stmts first inner |
+	body isNil ifTrue: [^ nil].
+	stmts := body body.
+	(stmts isNil or: [stmts isEmpty]) ifTrue: [^ nil].
+	first := stmts at: 1.
+	(first isKindOf: ExprAst) ifFalse: [^ nil].
+	inner := first value.
+	(inner isKindOf: ConstantAst) ifFalse: [^ nil].
+	^ (inner value isKindOf: CharacterCollection)
+		ifTrue: [inner]
+		ifFalse: [nil]
 %
 
 category: 'Grail-Class Compilation'

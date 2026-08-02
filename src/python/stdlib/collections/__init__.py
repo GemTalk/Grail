@@ -921,6 +921,15 @@ class UserList:
     def __lt__(self, other):
         return self.data < self.__cast(other)
 
+    def __le__(self, other):
+        return self.data <= self.__cast(other)
+
+    def __gt__(self, other):
+        return self.data > self.__cast(other)
+
+    def __ge__(self, other):
+        return self.data >= self.__cast(other)
+
     def __cast(self, other):
         return other.data if isinstance(other, UserList) else other
 

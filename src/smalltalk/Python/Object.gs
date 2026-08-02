@@ -570,7 +570,7 @@ value: positional value: kwargs
 	  5. None of the above resolve → MessageNotUnderstood (mapped to
 	     Python TypeError at the env-1 DNU backstop)."
 
-	| nargs sel |
+	| nargs sel selSym |
 	(kwargs == nil or: [kwargs @env0:isEmpty]) ifFalse: [
 		^ self _new: positional kw: kwargs
 	].
@@ -580,7 +580,20 @@ value: positional value: kwargs
 	sel := WriteStream @env0:on: String @env0:new.
 	sel @env0:nextPutAll: '__new__:'.
 	2 @env0:to: nargs do: [:i | sel @env0:nextPutAll: '_:'].
-	^ self @env0:perform: sel @env0:contents @env0:asSymbol env: 1 withArguments: positional
+	selSym := sel @env0:contents @env0:asSymbol.
+	"No __new__ of this arity: raise the SAME catchable TypeError the direct
+	call-site fast path (CallAst) emits, rather than performing a missing
+	selector and letting the env-1 MessageNotUnderstood escape Python
+	try/except as an uncatchable Smalltalk error.  Reached when a built-in
+	class is invoked as a runtime callable (``assertRaises(TypeError, slice,
+	1, 2, 3, 4)'' -- test_slice test_constructor) with an unsupported arity."
+	"__new__:_:_:… are CLASSMETHODs, so probe the metaclass (self class), not
+	self's instance-side method dict."
+	(self @env0:class @env0:whichClassIncludesSelector: selSym environmentId: 1) == nil ifTrue: [
+		^ TypeError ___signal___: (self @env0:name @env0:asString
+			@env0:, '() takes wrong number of arguments (' @env0:, nargs @env0:printString
+			@env0:, ' positional, 0 keyword) - no matching method')].
+	^ self @env0:perform: selSym env: 1 withArguments: positional
 %
 
 category: 'Grail-Callable'
@@ -2622,7 +2635,7 @@ method: object
 ___cmpNe___: other
 	| r |
 	r := self __ne__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [^ (self ___eqValue___: other) @env0:not].
+	(r @env0:== #'___NotImplemented___') ifTrue: [^ self ___neValue___: other].
 	^ r
 %
 
@@ -2669,6 +2682,28 @@ ___eqValue___: other
 		rr := other @env0:perform: #'__eq__:' env: 1 withArguments: { self }.
 		(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]].
 	^ self @env0:== other
+%
+
+category: 'Grail-Comparison'
+method: object
+___neValue___: other
+	"The != result when the forward __ne__ returned NotImplemented.  Mirror
+	CPython's ``!='' operator: try the REFLECTED __ne__ on ``other'' when its
+	class defines its own, BEFORE deriving from ==.  test_richcmp's
+	Vector.__ne__ returns a rich (non-Boolean) Vector; the previous
+	``(self ___eqValue___: other) not'' path skipped the reflected __ne__ and
+	sent Smalltalk #not to that Vector (a MessageNotUnderstood that escaped
+	Python try/except).  When ``other'' has no __ne__ of its own, derive from
+	== exactly as the default object.__ne__ does -- ``not (self == other)'' --
+	with ___eqValue___ supplying the reflected/identity == value."
+
+	| refOwner rr |
+	refOwner := other @env0:class
+		@env0:whichClassIncludesSelector: #'__ne__:' environmentId: 1.
+	(refOwner @env0:~~ nil and: [refOwner @env0:~~ object]) ifTrue: [
+		rr := other @env0:perform: #'__ne__:' env: 1 withArguments: { self }.
+		(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]].
+	^ (self ___eqValue___: other) @env0:not
 %
 
 category: 'Grail-Comparison'
@@ -2775,8 +2810,8 @@ ___cmpFallback___: other op: opString reflected: refSelector
 			rr := fn ___pyCallValue___: { other. self } kw: nil.
 			(rr == (Python @env0:at: #NotImplemented otherwise: nil)) ifFalse: [^ rr]]].
 	TypeError ___signal___: ('''' @env0:, opString @env0:, ''' not supported between instances of '''
-		@env0:, self @env0:class @env0:name @env0:asString
-		@env0:, ''' and ''' @env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
+		@env0:, (self @env0:class @env1:__name__) @env0:asString
+		@env0:, ''' and ''' @env0:, (other @env0:class @env1:__name__) @env0:asString @env0:, '''')
 %
 
 category: 'Grail-Comparison'

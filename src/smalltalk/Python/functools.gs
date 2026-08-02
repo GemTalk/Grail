@@ -111,6 +111,41 @@ functools_singledispatch removeAllMethods: 1.
 functools_singledispatch class removeAllMethods: 1.
 %
 
+! ------- functools_singledispatchmethod: the descriptor singledispatchmethod()
+expectvalue /Class
+doit
+PythonInstance subclass: 'functools_singledispatchmethod'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+functools_singledispatchmethod comment:
+'``@functools.singledispatchmethod'' -- singledispatch for a METHOD,
+dispatching on the first argument AFTER the receiver.
+
+Holds a functools_singledispatch over the decorated method (all the
+registry, MRO walk and annotation inference live there) plus the method
+itself, and answers ``___pyBindsSelf___'' so that reading it off an
+instance binds the receiver the way CPython''s ``__get__'' does.
+
+Applies to a plain instance method.  The
+``@singledispatchmethod @classmethod'' / ``@singledispatchmethod
+@staticmethod'' stacks are NOT supported: Grail consumes those inner
+decorators at PARSE time by re-classing the def, so by the time this
+decorator runs there is no instance-side method for it to wrap.'
+%
+
+expectvalue /Class
+doit
+functools_singledispatchmethod category: 'Grail-Modules'
+%
+
 ! ------- functools_partial class (Python functools.partial)
 expectvalue /Class
 doit
@@ -184,6 +219,8 @@ functools_cmpkey removeAllMethods: 1.
 functools_cmpkey class removeAllMethods: 1.
 functools_ordering_op removeAllMethods: 1.
 functools_ordering_op class removeAllMethods: 1.
+functools_singledispatchmethod removeAllMethods: 1.
+functools_singledispatchmethod class removeAllMethods: 1.
 functools_CacheInfo removeAllMethods: 1.
 functools_CacheInfo class removeAllMethods: 1.
 functools_Placeholder removeAllMethods: 1.
@@ -1449,6 +1486,26 @@ singledispatch: aFunc
 		updated: self WRAPPER_UPDATES
 %
 
+category: 'Grail-Single Dispatch'
+method: functools
+singledispatchmethod: aFunc
+	"functools.singledispatchmethod(func) -- singledispatch for a METHOD.
+
+	Same generic-function machinery as singledispatch, dispatching on the
+	first argument AFTER the receiver rather than on the receiver itself.
+
+	Applies to a plain instance method.  ``@singledispatchmethod
+	@classmethod'' and ``@singledispatchmethod @staticmethod'' are not
+	supported: Grail consumes those inner decorators at PARSE time by
+	re-classing the def onto the metaclass, so no instance-side method
+	survives for this decorator to wrap.  Those stacks keep the behaviour
+	they had while this decorator did not exist at all -- the class-body
+	decorator handler drops the application and the undecorated method
+	stays in place."
+
+	^ functools_singledispatchmethod ___on: aFunc
+%
+
 category: 'Grail-Instance Creation'
 classmethod: functools_singledispatch
 ___on: aFunc
@@ -1723,5 +1780,185 @@ method: functools_singledispatch
 registry
 	^ self @env0:dynamicInstVarAt: #registry
 %
+
+! ------------------- singledispatchmethod
+
+category: 'Grail-Instance Creation'
+classmethod: functools_singledispatchmethod
+___on: aFunc
+
+	| inst |
+	inst := self ___new___.
+	inst @env0:dynamicInstVarAt: #func put: aFunc.
+	inst @env0:dynamicInstVarAt: #dispatcher
+		put: (functools_singledispatch ___on: aFunc).
+	^ inst
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod
+register: clsOrFunc
+	"``@t.register(int)'' and the annotation form ``@t.register'' -- both
+	delegate to the underlying generic function, which owns the registry."
+
+	^ (self @env0:dynamicInstVarAt: #dispatcher) register: clsOrFunc
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod
+register: cls _: aFunc
+	"``t.register(cls, impl)'' direct form."
+
+	^ (self @env0:dynamicInstVarAt: #dispatcher) register: cls _: aFunc
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod
+_register: positional kw: kwargs
+
+	^ (self @env0:dynamicInstVarAt: #dispatcher) _register: positional kw: kwargs
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod
+dispatcher
+	^ self @env0:dynamicInstVarAt: #dispatcher
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+___pyBindsSelf___
+	"Marker read by object >> ___isDescriptorCallable___:.  CPython makes this
+	a descriptor whose __get__ returns a wrapper bound to the instance; Grail
+	reaches the same place through its own class-attribute binding, so
+	``a.t(0)'' arrives here as (a, 0)."
+
+	^ true
+%
+
+category: 'Grail-Callable'
+method: functools_singledispatchmethod
+___pyCallValue___: positional kw: kwargs
+	"``a.t(arg, ...)'' -- dispatch on the type of the first argument AFTER the
+	receiver, then run the winning implementation with the receiver back in
+	front.
+
+	One rule covers both access paths.  Read through an INSTANCE the receiver
+	was prepended by the binding, so it is positional[1] and the dispatch
+	argument is positional[2]; read through the CLASS (``A.t(a, 0)'', the
+	unbound function CPython hands back) the caller passes the receiver
+	explicitly in the same slot.  Either way the implementation is called with
+	the array unchanged -- registered implementations are ``def _(self, arg)''
+	and take the receiver first."
+
+	| impl |
+	positional @env0:size @env0:< 2 ifTrue: [
+		"CPython names the FUNCTION: ``t requires at least 1 positional
+		argument''.  The receiver does not count -- ``A().t()'' and
+		``A().t(a=1)'' both raise, though the first already has one element
+		in the array here."
+		TypeError ___signal___: (self ___dispatchName___)
+			@env0:, ' requires at least 1 positional argument'].
+	impl := (self @env0:dynamicInstVarAt: #dispatcher)
+		dispatch: (positional @env0:at: 2) @env0:class.
+	^ impl ___pyCallValue___: positional kw: kwargs
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod
+___dispatchName___
+	"The decorated method's name, for the arity error."
+
+	^ [(self @env0:dynamicInstVarAt: #func) __name__ @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: 'singledispatchmethod method']
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+__isabstractmethod__
+	"CPython: ``getattr(self.func, '__isabstractmethod__', False)'' -- so an
+	abstract method stays abstract through the decorator and ABCMeta still
+	refuses to instantiate the class."
+
+	^ [((self @env0:dynamicInstVarAt: #func)
+		___pyAttrLoad___: #'__isabstractmethod__') == true]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+__name__
+	^ (self @env0:dynamicInstVarAt: #func) __name__
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+__doc__
+	^ (self @env0:dynamicInstVarAt: #func) __doc__
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+__qualname__
+	^ (self @env0:dynamicInstVarAt: #func) __qualname__
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+__module__
+	^ (self @env0:dynamicInstVarAt: #func) __module__
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+__annotations__
+	^ (self @env0:dynamicInstVarAt: #func) __annotations__
+%
+
+category: 'Grail-Representation'
+method: functools_singledispatchmethod
+__repr__
+	"CPython: ``<single dispatch method descriptor Cls.meth>'', naming the
+	wrapped callable by __qualname__, then __name__, then ``?'' when it
+	carries neither."
+
+	| label |
+	label := [(self @env0:dynamicInstVarAt: #func) __qualname__ @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil].
+	label @env0:isNil ifTrue: [
+		label := [(self @env0:dynamicInstVarAt: #func) __name__ @env0:asString]
+			@env0:on: AbstractException
+			do: [:ex | ex @env0:return: '?']].
+	^ ('<single dispatch method descriptor ' @env0:, label @env0:, '>')
+		@env0:asUnicodeString
+%
+
+! ___pythonValueAttrs___ MUST be compiled in env 0: Object >> ___pyAttrLoad___
+! consults it through an env-0 ``respondsTo:'', so an env-1 definition is
+! invisible to the probe and the hook silently does nothing.
+set compile_env: 0
+
+category: 'Grail-Python Attribute Hook'
+classmethod: functools_singledispatchmethod
+___pythonValueAttrs___
+	"Identifying metadata copied off the wrapped method: name strings and a
+	docstring, not callables.  ``__isabstractmethod__'' is a @property in
+	CPython, so it too must READ as a value -- abc consults it with getattr
+	and a callable would test truthy no matter what it wrapped."
+
+	^ IdentitySet new
+		add: #'__name__';
+		add: #'__doc__';
+		add: #'__qualname__';
+		add: #'__module__';
+		add: #'__annotations__';
+		add: #'__isabstractmethod__';
+		yourself
+%
+
+set compile_env: 1
 
 set compile_env: 0

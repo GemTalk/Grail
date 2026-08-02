@@ -78,6 +78,17 @@ set compile_env: 1
 
 category: 'Python-Initialization'
 classmethod: slice
+__new__
+	"slice() with no arguments is a TypeError -- CPython requires at least the
+	stop argument (slice expected at least 1 argument, got 0).  Without this
+	0-arg entry the generic instantiation path built a slice with nil
+	start/stop/step (test_slice test_constructor)."
+
+	^ TypeError ___signal___: 'slice expected at least 1 argument, got 0'
+%
+
+category: 'Python-Initialization'
+classmethod: slice
 __new__: stop
 	"slice(stop)  -> slice(None, stop, None)"
 
