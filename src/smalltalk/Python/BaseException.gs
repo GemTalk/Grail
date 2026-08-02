@@ -477,7 +477,9 @@ ___pushFrameFromPos___: aCode pos: pos
 	{ beginLine. beginColumn. endLine. endColumn. sourceLine } still works."
 
 	pos isNil ifTrue: [^ self].
-	pos isInteger ifTrue: [
+	"``isKindOf: Integer'' -- NOT ``isInteger'': 3.7.x SmallInteger does not
+	implement isInteger (DNU), though 4.0 does; isKindOf: is universal."
+	(pos isKindOf: Integer) ifTrue: [
 		^ self ___pushTracebackFrame___: aCode
 			lineno: pos colno: nil endLineno: pos endColno: nil line: nil ].
 	^ self ___pushTracebackFrame___: aCode
