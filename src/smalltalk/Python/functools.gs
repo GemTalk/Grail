@@ -48,6 +48,46 @@ doit
 functools_cmpkey category: 'Grail-Modules'
 %
 
+! ------- functools_ordering_op: one comparison synthesised by total_ordering
+expectvalue /Class
+doit
+PythonInstance subclass: 'functools_ordering_op'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+functools_ordering_op comment:
+'One rich comparison synthesised by ``@functools.total_ordering'' —
+the Grail stand-in for CPython''s twelve module-level ``_le_from_lt''
+/ ``_gt_from_ge'' / ... helper FUNCTIONS.
+
+CPython''s total_ordering does ``setattr(cls, opname, opfunc)'' with a
+plain function, which the descriptor protocol binds on instance access.
+Grail has no way to mint a Python function from Smalltalk, so each
+synthesised operator is an instance of this class instead, carrying the
+pair it was derived from:
+
+  * root    — the comparison the decorated class defines itself
+              (#''__lt__'' / #''__le__'' / #''__gt__'' / #''__ge__'')
+  * derived — the comparison this object implements
+
+It answers ``___pyBindsSelf___'', the marker that makes
+``object >> ___isDescriptorCallable___:'' treat it as a function for
+descriptor binding — so ``a <= b'' and an explicit ``a.__le__(b)'' both
+reach it with ``self'' prepended, exactly as a def would.'
+%
+
+expectvalue /Class
+doit
+functools_ordering_op category: 'Grail-Modules'
+%
+
 ! ------- functools_singledispatch: the wrapper returned by singledispatch()
 expectvalue /Class
 doit
@@ -142,6 +182,8 @@ functools_partial removeAllMethods: 1.
 functools_partial class removeAllMethods: 1.
 functools_cmpkey removeAllMethods: 1.
 functools_cmpkey class removeAllMethods: 1.
+functools_ordering_op removeAllMethods: 1.
+functools_ordering_op class removeAllMethods: 1.
 functools_CacheInfo removeAllMethods: 1.
 functools_CacheInfo class removeAllMethods: 1.
 functools_Placeholder removeAllMethods: 1.
@@ -1138,15 +1180,214 @@ _partialmethod: positional kw: kwargs
 		fn ___pyCallValue___: rest kw: allKw]
 %
 
-category: 'Grail-Built-in Functions'
+category: 'Grail-Total Ordering'
 method: functools
 total_ordering: cls
-	"functools.total_ordering(cls) — upstream synthesises the missing
-	rich comparisons from __eq__ + one ordering method.  Grail's
-	comparison dispatch already falls back pairwise (__lt__/__gt__
-	swap), so pass the class through unchanged."
+	"functools.total_ordering(cls) -- fill in the rich comparisons the class
+	does not define, deriving each from __eq__ plus the one ordering method
+	it does define.
 
+	This used to pass the class straight through, on the theory that Grail's
+	pairwise fallback (``a <= b'' reflects to ``b.__ge__(a)'') already covered
+	it.  It does not: a class defining only __lt__ has no __ge__ to reflect
+	INTO, so ``a <= b'' raised ``'<=' not supported between instances of 'A'
+	and 'A''' -- and the whole point of the decorator is that the other five
+	operators start working.  test_functools' four test_total_ordering_xx
+	cases each assert all six comparisons.
+
+	Follows CPython's algorithm exactly:
+	  * ``roots'' = the ordering operators the class defines ITSELF (CPython
+	    tests ``getattr(cls, op) is not getattr(object, op)'').
+	  * no roots at all is a ValueError, not a silent no-op.
+	  * the root is ``max(roots)'' -- lexicographically that prefers __lt__
+	    to __le__ to __gt__ to __ge__.
+	  * an operator already in roots is never overwritten
+	    (test_total_ordering_no_overwrite: ``class A(int)'' inherits all four
+	    from int, so nothing is synthesised)."
+
+	| roots root |
+	roots := self ___orderingRootsOf___: cls.
+	roots @env0:isEmpty ifTrue: [
+		ValueError ___signal___:
+			'must define at least one ordering operation: < > <= >='].
+	"``max(roots)'' over the four dunder names, spelled as the preference
+	order it produces rather than as a string sort."
+	root := (#( #'__lt__' #'__le__' #'__gt__' #'__ge__' )
+		@env0:detect: [:op | roots @env0:includes: op] ifNone: [nil]).
+	(self ___orderingDerivablesFrom___: root) @env0:do: [:op |
+		(roots @env0:includes: op) ifFalse: [
+			cls ___pyAttrStore___: op @env0:asString
+				put: (functools_ordering_op ___derived___: op from: root)]].
 	^ cls
+%
+
+category: 'Grail-Total Ordering'
+method: functools
+___orderingRootsOf___: cls
+	"The ordering dunders ``cls'' supplies itself -- CPython's
+	``{op for op in _convert if getattr(cls, op, None) is not getattr(object,
+	op, None)}''.  Grail spreads a class dict across three stores, so all
+	three have to be asked:
+
+	  * a compiled ``def __lt__'' is an env-1 method; ``object'' owning the
+	    selector means the class merely INHERITED the default, which is
+	    exactly the ``is getattr(object, op)'' case CPython excludes.
+	  * a class-body binding (``__lt__ = _cmp'') becomes a generated unary
+	    accessor on the metaclass.  Only the UNARY name is probed: every
+	    class answers the binary ``__lt__:'' through object, so testing that
+	    would report all four operators on every class.
+	  * a runtime ``Cls.__lt__ = f'' lands in the per-class dynInstVars store
+	    (or, for a canonical class, the session overlay) -- both of which
+	    ___dynamicClassAttr___ walks."
+
+	^ #( #'__lt__' #'__le__' #'__gt__' #'__ge__' ) @env0:select: [:op | | owner |
+		owner := cls @env0:whichClassIncludesSelector:
+			(op @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1.
+		(owner @env0:~~ nil and: [owner @env0:~~ object])
+			or: [(cls ___respondsTo___: op)
+				or: [(cls ___dynamicClassAttr___: op) @env0:~~ nil]]]
+%
+
+category: 'Grail-Total Ordering'
+method: functools
+___orderingDerivablesFrom___: root
+	"CPython's ``_convert'' table: the three operators each root can supply,
+	in upstream's order (which only matters for reading this alongside
+	Lib/functools.py -- installation order has no effect)."
+
+	root @env0:== #'__lt__' ifTrue: [^ #( #'__gt__' #'__le__' #'__ge__' )].
+	root @env0:== #'__le__' ifTrue: [^ #( #'__ge__' #'__lt__' #'__gt__' )].
+	root @env0:== #'__gt__' ifTrue: [^ #( #'__lt__' #'__ge__' #'__le__' )].
+	^ #( #'__le__' #'__gt__' #'__lt__' )
+%
+
+category: 'Grail-Instance Creation'
+classmethod: functools_ordering_op
+___derived___: derivedOp from: rootOp
+
+	| inst |
+	inst := self @env0:new.
+	inst @env0:dynamicInstVarAt: #derived put: derivedOp.
+	inst @env0:dynamicInstVarAt: #root put: rootOp.
+	^ inst
+%
+
+category: 'Grail-Attribute Access'
+method: functools_ordering_op
+___pyBindsSelf___
+	"Marker read by object >> ___isDescriptorCallable___:.  This object stands
+	in for a plain Python function in a class dict, so reading it through an
+	INSTANCE must bind self -- ``ImplementsLessThan(1).__le__(1)'' has to reach
+	the synthesised operator with the instance prepended, as a def would."
+
+	^ true
+%
+
+category: 'Grail-Attribute Access'
+method: functools_ordering_op
+__name__
+	"CPython sets ``opfunc.__name__ = opname'' before installing it."
+
+	^ (self @env0:dynamicInstVarAt: #derived) @env0:asString @env0:asUnicodeString
+%
+
+! ___pythonValueAttrs___ MUST be compiled in env 0: Object >> ___pyAttrLoad___
+! consults it through an env-0 ``respondsTo:'', so an env-1 definition is
+! invisible to the probe and the hook silently does nothing.
+set compile_env: 0
+
+category: 'Grail-Python Attribute Hook'
+classmethod: functools_ordering_op
+___pythonValueAttrs___
+	"``__name__'' is a name STRING, not a callable.  Without this hook
+	___pyAttrLoad___ reaches its BoundMethod wrap and ``A.__ge__.__name__''
+	answers a callable around the accessor instead of ``'__ge__'''."
+
+	^ IdentitySet new
+		add: #'__name__';
+		yourself
+%
+
+set compile_env: 1
+
+category: 'Grail-Callable'
+method: functools_ordering_op
+___pyCallValue___: positional kw: kwargs
+	"``derived(self, other)'', computed from the decorated class's own
+	``root'' comparison -- the body of CPython's _xx_from_yy helpers."
+
+	| slf other raw ni base sameDir derivedInclusive rootInclusive derived root |
+	(positional @env0:== nil or: [positional @env0:size @env0:< 2]) ifTrue: [
+		TypeError ___signal___:
+			self __name__ @env0:asString @env0:,
+				'() missing required argument: other'].
+	slf := positional @env0:at: 1.
+	other := positional @env0:at: 2.
+	derived := self @env0:dynamicInstVarAt: #derived.
+	root := self @env0:dynamicInstVarAt: #root.
+	ni := Python @env0:at: #NotImplemented otherwise: nil.
+	raw := self ___callRoot___: root on: slf with: other.
+	"``if op_result is NotImplemented: return op_result'' -- the derived
+	operator must punt whenever the root punts, or ``a < 1'' against a
+	foreign type would answer a bogus bool instead of letting the caller
+	reflect and then raise TypeError (test_notimplemented)."
+	(raw @env0:== ni or: [raw @env0:== #'___NotImplemented___'])
+		ifTrue: [^ ni].
+	"Direction: __lt__/__le__ both say ``less'', __gt__/__ge__ both say
+	``greater''.  Derived in the SAME direction as the root keeps its answer;
+	the opposite direction negates it."
+	sameDir := (root @env0:== #'__lt__' or: [root @env0:== #'__le__'])
+		@env0:== (derived @env0:== #'__lt__' or: [derived @env0:== #'__le__']).
+	base := sameDir
+		ifTrue: [raw ___isTruthy___]
+		ifFalse: [raw ___isTruthy___ @env0:not].
+	rootInclusive := root @env0:== #'__le__' or: [root @env0:== #'__ge__'].
+	derivedInclusive := derived @env0:== #'__le__' or: [derived @env0:== #'__ge__'].
+	"An equality test joins in only where the root's answer cannot settle the
+	boundary case:
+	    a <= b  from  a <  b   is  (a <  b) or  (a == b)
+	    a <  b  from  a <= b   is  (a <= b) and (a != b)
+	and is left out where the derived operator is the root's exact negation:
+	    a >= b  from  a <  b   is  not (a < b)
+	Reading the three combinations off the direction/strictness pair
+	reproduces all twelve of CPython's helpers without spelling each out."
+	derivedInclusive ifTrue: [
+		(sameDir or: [rootInclusive]) ifFalse: [^ base].
+		base ifTrue: [^ true].
+		^ slf ___cmpEq___: other].
+	(sameDir or: [rootInclusive @env0:not]) ifFalse: [^ base].
+	base ifFalse: [^ false].
+	^ slf ___cmpNe___: other
+%
+
+category: 'Grail-Callable'
+method: functools_ordering_op
+___callRoot___: root on: slf with: other
+	"``type(self).__lt__(self, other)'' -- the root comparison, called
+	DIRECTLY so a NotImplemented return comes back as itself instead of being
+	turned into a reflected call or a TypeError by the operator machinery.
+
+	A compiled ``def __lt__'' is reached by performing its env-1 selector; a
+	root supplied as a class ATTRIBUTE (a ``__lt__ = _cmp'' alias) is reached
+	through ___classAttrDunder___, the same lookup ___cmpFallback___ uses."
+
+	| rootSel owner fn |
+	rootSel := (root @env0:asString @env0:, ':') @env0:asSymbol.
+	owner := slf @env0:class
+		@env0:whichClassIncludesSelector: rootSel environmentId: 1.
+	(owner @env0:~~ nil and: [owner @env0:~~ object]) ifTrue: [
+		^ slf @env0:perform: rootSel env: 1 withArguments: { other }].
+	fn := slf ___classAttrDunder___: root.
+	fn @env0:== nil ifTrue: [^ Python @env0:at: #NotImplemented otherwise: nil].
+	^ fn ___pyCallValue___: { slf. other } kw: nil
+%
+
+category: 'Grail-Representation'
+method: functools_ordering_op
+__repr__
+
+	^ ('<function ' @env0:, self __name__ @env0:asString @env0:, '>')
+		@env0:asUnicodeString
 %
 
 category: 'Grail-Built-in Functions'
