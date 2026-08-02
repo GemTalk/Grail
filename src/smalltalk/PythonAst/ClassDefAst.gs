@@ -81,7 +81,8 @@ printSmalltalkRuntimeOn: aStream
 	  savedSelfParam savedClassAttrNames settersByName
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames
 	  savedInBodyEmit savedBoundNames savedNestedNames
-	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars |
+	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars
+	  siblings |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -1116,6 +1117,11 @@ printSmalltalkRuntimeOn: aStream
 	and the class decorators, because that is CPython's order: the class body
 	is complete -- decorated methods included -- before either of them sees the
 	class."
+	"The names the class body binds as defs -- what a decorator may legally
+	name as a SIBLING (``@t.register(int)'').  Computed once for the loop and
+	handed to each def; see CallAst >> classBodyDecoratorScope."
+	siblings := IdentitySet new.
+	self ___allFunctionDefs___ do: [:d | siblings add: d name asSymbol].
 	methodDefs do: [:def |
 		| decos |
 		decos := def applicableMethodDecorators.
@@ -1123,7 +1129,8 @@ printSmalltalkRuntimeOn: aStream
 			def
 				printMethodDecoratorsOn: aStream
 				decorators: decos
-				className: name]].
+				className: name
+				siblingNames: siblings]].
 
 	"Metaclass post-population hook.  Send a class-side
 	``___pyClassDefined___:`` to the freshly-populated class with its

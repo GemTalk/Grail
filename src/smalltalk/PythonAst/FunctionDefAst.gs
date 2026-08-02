@@ -779,7 +779,7 @@ isPropertyAccessorDecorator: deco
 
 category: 'Grail-code generation'
 method: FunctionDefAst
-printMethodDecoratorsOn: aStream decorators: decoList className: aClassName
+printMethodDecoratorsOn: aStream decorators: decoList className: aClassName siblingNames: siblingNames
 	"Rebind a decorated class-body method: ``Cls.m = A(B(Cls.m))''.
 
 	This is what CPython does, one step removed.  There, the decorator runs
@@ -816,11 +816,18 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName
 		nextPutAll: ' @env1:___classHolderAttrStore___: #''';
 		nextPutAll: name;
 		nextPutAll: ''' put: '.
-	self
+	"A decorator may name a SIBLING def -- ``@t.register(int)''.  Announce the
+	class-body namespace for the duration of the chain so NameAst resolves such
+	a name off the class rather than the module; see
+	CallAst >> classBodyDecoratorScope.  Cleared on the way out, including on
+	an emit error, so it can never leak into an unrelated compile."
+	CallAst classBodyDecoratorScope: aClassName -> siblingNames.
+	[self
 		printMethodDecoratorChainOn: aStream
 		decorators: decoList
 		index: 1
-		className: aClassName.
+		className: aClassName]
+			ensure: [CallAst classBodyDecoratorScope: nil].
 	aStream
 		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
 		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass]].';
