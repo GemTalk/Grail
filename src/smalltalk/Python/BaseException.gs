@@ -530,3 +530,39 @@ ___setCurrentException___: anExceptionOrNil
 		ifFalse: [ (SessionTemps current) at: #'GrailCurrentException' put: anExceptionOrNil ].
 	^ anExceptionOrNil
 %
+
+category: 'Grail-Current Exception'
+classmethod: BaseException
+___ensureFinally___: protectedBlock finally: finallyBlock
+	"Run protectedBlock, then finallyBlock unconditionally (Python try/finally
+	semantics == GemStone ensure:), BUT when a Python exception is PROPAGATING
+	out of protectedBlock, install it as this session's current exception for the
+	duration of finallyBlock -- so sys.exc_info() / sys.exception() inside a
+	``finally'' report the in-flight exception, matching CPython -- then restore
+	the prior value and let the exception keep propagating.
+
+	Only real Python exceptions (BaseException) are installed: Grail's
+	control-flow signals (PythonReturn/PythonBreak/PythonContinue) and
+	StopIteration subclass the kernel Exception directly, NOT this BaseException,
+	so a return / break / continue / normal exit through the finally leaves
+	exc_info untouched (correct -- CPython shows the ENCLOSING handled exception
+	there, not a fresh one).
+
+	TryAst emits this in place of a bare ``ensure:'' ONLY in non-generator
+	scopes: the ``ex pass'' re-raise below is unsafe inside a forked generator
+	process (``exception has already been signalled''), so a try/finally inside a
+	generator keeps the plain ensure: and this one exc_info gap."
+
+	| propExc |
+	propExc := nil.
+	^ [ [protectedBlock value]
+			on: BaseException do: [:ex | propExc := ex. ex pass] ]
+		ensure: [
+			propExc isNil
+				ifTrue: [finallyBlock value]
+				ifFalse: [ | sav |
+					sav := self ___currentException___.
+					self ___setCurrentException___: propExc.
+					[finallyBlock value]
+						ensure: [self ___setCurrentException___: sav] ] ]
+%
