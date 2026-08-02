@@ -1967,6 +1967,30 @@ __xor__: other
 
 category: 'Grail-Flag Member'
 method: Flag
+__iter__
+	"Iterate a Flag MEMBER: yield its canonical SINGLE-BIT component members in
+	definition order (CPython 3.11+: ``list(Color.PURPLE)'' -> [RED, BLUE];
+	``list(Color.BLACK)'' -> []; a multi-bit member is decomposed, never
+	yielded whole).  Mirrors ___grailMemberStr's decomposition and, like the
+	operator methods above, is COPIED onto MI flag classes (class E(int, Flag))
+	so IntFlag members iterate too."
+
+	| v parts |
+	v := self @env0:dynamicInstVarAt: #value.
+	parts := OrderedCollection @env0:new.
+	(v isKindOf: Integer) ifTrue: [
+		(Enum ___grailMembers: self @env0:class) @env0:do: [:mm | | mv |
+			mv := mm @env0:dynamicInstVarAt: #value.
+			((mv isKindOf: Integer)
+				and: [mv @env0:~= 0
+				and: [(mv @env0:bitAnd: (mv @env0:- 1)) @env0:= 0
+				and: [(v @env0:bitAnd: mv) @env0:= mv]]]) ifTrue: [
+				parts @env0:add: mm]]].
+	^ parts __iter__
+%
+
+category: 'Grail-Flag Member'
+method: Flag
 __invert__
 	"~A: the mask-complement within the class's named bits (CPython
 	3.11+ semantics).  A None-valued member (``E = None'') cannot be inverted."
@@ -2144,6 +2168,29 @@ method: IntFlag
 __xor__: other
 	^ Enum ___grailIntFlagValue: self @env0:class
 		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitXor: (self ___flagOperand___: other))
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
+__iter__
+	"Iterate an IntFlag MEMBER: yield its canonical SINGLE-BIT component members
+	in definition order (CPython 3.11+).  Mirrors Flag>>__iter__ -- the
+	decomposition is storage-agnostic (reads the #value dynInstVar), but IntFlag
+	is AbstractPyInt-rooted and does not inherit Flag, so it needs its own copy
+	(like the operator methods above)."
+
+	| v parts |
+	v := self @env0:dynamicInstVarAt: #value.
+	parts := OrderedCollection @env0:new.
+	(v isKindOf: Integer) ifTrue: [
+		(Enum ___grailMembers: self @env0:class) @env0:do: [:mm | | mv |
+			mv := mm @env0:dynamicInstVarAt: #value.
+			((mv isKindOf: Integer)
+				and: [mv @env0:~= 0
+				and: [(mv @env0:bitAnd: (mv @env0:- 1)) @env0:= 0
+				and: [(v @env0:bitAnd: mv) @env0:= mv]]]) ifTrue: [
+				parts @env0:add: mm]]].
+	^ parts __iter__
 %
 
 category: 'Grail-IntFlag Member'
