@@ -182,6 +182,30 @@ printSmalltalkOn: aStream
 	Direct call sites like `abs(5)` are special-cased in
 	`CallAst>>printSmalltalkOn:` and bypass this method entirely."
 
+	"Class-body name referenced from a class-body METHOD DECORATOR.
+	``@t.register(int)'' names ``t'', a sibling def -- a local of the class
+	body in CPython, which has no counterpart in Grail, so the name used to
+	fall through to the module and raise NameError.  Because the decorator
+	application is wrapped in a handler, that failure was silent: the
+	decorator never took effect and the undecorated method stayed in place.
+	Resolve it off the class, which is where the class body's bindings live
+	(the def's own decorator chain stored them there moments earlier).
+
+	Scoped to the names the class body actually binds as defs, so a decorator
+	naming a MODULE global -- ``@functools.singledispatchmethod'' -- is
+	untouched.  See CallAst >> classBodyDecoratorScope."
+	((ctx isKindOf: LoadAst)
+		and: [CallAst classBodyDecoratorScope notNil
+		and: [(CallAst classBodyDecoratorScope value includes: id asSymbol)]])
+		ifTrue: [
+			aStream
+				nextPutAll: '(';
+				nextPutAll: CallAst classBodyDecoratorScope key;
+				nextPutAll: ' @env1:___pyAttrLoad___: #''';
+				nextPutAll: id;
+				nextPutAll: ''')'.
+			^ self
+		].
 	"self parameter in class method → Smalltalk self.  NOT when a
 	nested function between here and the method binds the name itself
 	(``def view(request): self = cls(**kw)'' inside View.as_view) —

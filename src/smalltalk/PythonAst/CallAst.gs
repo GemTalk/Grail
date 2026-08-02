@@ -1302,6 +1302,36 @@ moduleVariableNames: aSetOrNil
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
+classBodyDecoratorScope
+	"Set only while a CLASS-BODY METHOD DECORATOR expression is being
+	emitted: an Association of the class's Smalltalk name -> the IdentitySet
+	of names its class body binds as defs.
+
+	A decorator can name a SIBLING of the def it decorates -- that is the
+	whole shape of ``@t.register(int)'' under functools.singledispatchmethod,
+	and of a hand-rolled registry decorator.  In CPython the class body is a
+	namespace and ``t'' is a local in it; Grail has no class-body namespace,
+	so a bare name there otherwise falls all the way through to the module
+	and raises NameError.  The decorator application is wrapped in a handler
+	(see FunctionDefAst >> printMethodDecoratorsOn:decorators:className:), so
+	the failure was silent: the decorator simply never took effect.
+
+	While this is set, NameAst resolves such a name off the CLASS instead,
+	which is where the class body's bindings actually live.  Names that are
+	not in the set are unaffected -- ``@functools.singledispatchmethod'' still
+	resolves ``functools'' as the module global it is."
+
+	^ self ___compileContext___ at: #'classBodyDecoratorScope' otherwise: nil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+classBodyDecoratorScope: anAssociationOrNil
+	self ___compileContext___ at: #'classBodyDecoratorScope' put: anAssociationOrNil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
 returnEmitMode
 	"How ReturnAst should emit Python ``return value'' statements:
 

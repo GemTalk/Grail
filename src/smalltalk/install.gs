@@ -733,6 +733,7 @@ run
 	at: #'SecretsTestCase' put: nil;
 	at: #'SetTestCase' put: nil;
 	at: #'SliceAndLoopsTestCase' put: nil;
+	at: #'SingleDispatchMethodTestCase' put: nil;
 	at: #'SreTestCase' put: nil;
 	at: #'StatisticsTestCase' put: nil;
 	at: #'StopAsyncIterationTestCase' put: nil;
@@ -1276,6 +1277,7 @@ input src/smalltalk/PythonTests/StrSubclassWideTestCase.gs
 input src/smalltalk/PythonTests/StrSubclassConstructionTestCase.gs
 input src/smalltalk/PythonTests/DatetimeLocalTimeTestCase.gs
 input src/smalltalk/PythonTests/FunctionMetadataTestCase.gs
+input src/smalltalk/PythonTests/SingleDispatchMethodTestCase.gs
 input src/smalltalk/PythonTests/SingleDispatchRegisterTestCase.gs
 input src/smalltalk/PythonTests/CrossVersionSelectorTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyMethodDecoratorTestCase.gs
