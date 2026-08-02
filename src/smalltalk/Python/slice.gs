@@ -224,31 +224,43 @@ indices: length
 	CPython's PySlice_GetIndicesEx semantics including negative-index
 	wrap and bounds clamping."
 
-	| st lo hi rawStart rawStop |
+	| st lo hi rawStart rawStop len |
 	"start / stop / step may be any __index__ object (gh-91153 uses one whose
 	__index__ mutates the sequence).  Coerce them here so the comparisons
 	below see integers instead of dying on an uncatchable env-0 ``#< not
 	understood'' DNU."
-	st := self step @env0:= None ifTrue: [1] ifFalse: [bytes ___coerceIndex___: self step].
+	"A subscript-created slice carries Smalltalk nil (not Python None) for an
+	omitted bound (range>>__getitem__: now routes such slices here); treat nil
+	as None so ``r[2:8]'' -- step omitted -- normalizes instead of trying to
+	coerce nil to an integer."
+	st := (self step @env0:isNil or: [self step @env0:= None]) ifTrue: [1] ifFalse: [bytes ___coerceIndex___: self step].
 	(st @env0:= 0) ifTrue: [
 		ValueError ___signal___: 'slice step cannot be zero'
 	].
-	rawStart := self start @env0:= None ifTrue: [None] ifFalse: [bytes ___coerceIndex___: self start].
-	rawStop := self stop @env0:= None ifTrue: [None] ifFalse: [bytes ___coerceIndex___: self stop].
+	"length is coerced through __index__ too (a float length is a TypeError, a
+	custom __index__ object is honored) and must be non-negative -- CPython's
+	PySlice_GetIndicesEx raises ValueError for a negative length (test_slice
+	test_indices)."
+	len := bytes ___coerceIndex___: length.
+	(len @env0:< 0) ifTrue: [
+		ValueError ___signal___: 'length should not be negative'
+	].
+	rawStart := (self start @env0:isNil or: [self start @env0:= None]) ifTrue: [None] ifFalse: [bytes ___coerceIndex___: self start].
+	rawStop := (self stop @env0:isNil or: [self stop @env0:= None]) ifTrue: [None] ifFalse: [bytes ___coerceIndex___: self stop].
 	lo := rawStart @env0:= None
-		ifTrue: [st @env0:> 0 ifTrue: [0] ifFalse: [length @env0:- 1]]
+		ifTrue: [st @env0:> 0 ifTrue: [0] ifFalse: [len @env0:- 1]]
 		ifFalse: [rawStart @env0:< 0
-			ifTrue: [(length @env0:+ rawStart) @env0:max:
+			ifTrue: [(len @env0:+ rawStart) @env0:max:
 				(st @env0:> 0 ifTrue: [0] ifFalse: [-1])]
 			ifFalse: [rawStart @env0:min:
-				(st @env0:> 0 ifTrue: [length] ifFalse: [length @env0:- 1])]].
+				(st @env0:> 0 ifTrue: [len] ifFalse: [len @env0:- 1])]].
 	hi := rawStop @env0:= None
-		ifTrue: [st @env0:> 0 ifTrue: [length] ifFalse: [-1]]
+		ifTrue: [st @env0:> 0 ifTrue: [len] ifFalse: [-1]]
 		ifFalse: [rawStop @env0:< 0
-			ifTrue: [(length @env0:+ rawStop) @env0:max:
+			ifTrue: [(len @env0:+ rawStop) @env0:max:
 				(st @env0:> 0 ifTrue: [0] ifFalse: [-1])]
 			ifFalse: [rawStop @env0:min:
-				(st @env0:> 0 ifTrue: [length] ifFalse: [length @env0:- 1])]].
+				(st @env0:> 0 ifTrue: [len] ifFalse: [len @env0:- 1])]].
 	^ tuple @env0:with: lo with: hi with: st
 %
 
