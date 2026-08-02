@@ -45,6 +45,27 @@ TracebackTestCase class removeAllMethods.
 
 set compile_env: 0
 
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testSysExcInfo
+	"sys.exc_info() / sys.exception() report the exception currently being
+	handled (set by TryAst around an except handler, restored on exit so nested
+	handlers stack), instead of the old (None, None, None) stub.  Also drives
+	traceback.format_exc().  See tests/python/sys_excinfo.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'sys_excinfo' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/sys_excinfo.py')
+		name: 'sys_excinfo'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'baseline_none' 'inside_type' 'inside_value' 'inside_message'
+	   'inside_exception_is_value' 'outside_is_none' 'nested'
+	   'format_exc_has_message' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'sys.exc_info check failed: ' , k].
+%
+
 category: 'Grail-Tests - Traceback Data Model'
 method: TracebackTestCase
 testTracebackDataModelFixture

@@ -169,3 +169,57 @@ testMissingOnInstanceRaises
 	self assert: (testModule @env1:___pyAttrLoad___: #inst_missing_in_chain)
 		equals: 'attribute_error'.
 %
+
+category: 'Grail-Tests - Class chain'
+method: AttributeInheritanceTestCase
+testNearerMethodBeatsAncestorAttribute
+	"CPython walks the MRO once and takes the first class whose __dict__ holds
+	the name -- attributes and functions live in the same dict, so the NEARER
+	class wins whichever kind it supplies.  Grail keeps them in separate stores
+	and consulted the attribute store for the WHOLE chain before falling back
+	to methods, so an ancestor's attribute beat a nearer class's compiled
+	method: MroMethodSub().m() answered 'attr-on-base'."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #nearer_method_beats_ancestor_attribute)
+		equals: 'method-on-sub'.
+	self assert: (testModule @env1:___pyAttrLoad___: #nearer_method_read_off_the_class)
+		equals: 'UnboundMethod'
+%
+
+category: 'Grail-Tests - Class chain'
+method: AttributeInheritanceTestCase
+testNonCallableAncestorAttributeDoesNotShadowAMethod
+	"The sharper symptom of the same bug: the ancestor's attribute was a plain
+	string, so it shadowed the subclass's method and the CALL died with
+	``'Unicode7' object is not callable''."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #non_callable_ancestor_attr_does_not_shadow)
+		equals: 'method-on-sub'.
+	self assert: (testModule @env1:___pyAttrLoad___: #non_callable_attr_still_reads_on_its_own_class)
+		equals: 'a-plain-string'
+%
+
+category: 'Grail-Tests - Class chain'
+method: AttributeInheritanceTestCase
+testAncestorAttributeStillInheritedWhenNoNearerMethod
+	"The guard on the fix: the walk must still find an ancestor's attribute
+	when nothing nearer supplies the name."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #ancestor_attribute_still_inherited)
+		equals: 'attr-on-base'.
+	self assert: (testModule @env1:___pyAttrLoad___: #base_attribute_unaffected)
+		equals: 'attr-on-base'
+%
+
+category: 'Grail-Tests - Class chain'
+method: AttributeInheritanceTestCase
+testSameClassAssignmentStillWins
+	"A class that has BOTH a stored attribute and a compiled method for the
+	name has had the attribute assigned OVER the method, and CPython's
+	last-write-wins makes the attribute the current class-dict entry.  That is
+	the ordinary monkey-patch, so the nearer-method check excludes the class
+	holding the attribute."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #same_class_assignment_still_wins)
+		equals: 'patched'
+%

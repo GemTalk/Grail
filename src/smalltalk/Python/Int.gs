@@ -421,9 +421,16 @@ from_bytes: bytes _: byteorder _: signed
 	Return the integer represented by the given array of bytes."
 
 	| bytesArray result isBigEndian isSigned |
-	"Extract bytes - assuming bytes is a Python bytes object or similar"
+	"Extract bytes - assuming bytes is a Python bytes object or similar.
+	Python's bytes IS Smalltalk's ByteArray with the Python protocol
+	layered on (see Bytes.gs); bytearray subclasses it (Bytearray.gs).
+	Check against ByteArray directly, not the class named `bytes' --
+	that identifier is shadowed by this method's own `bytes' parameter.
+	The old check (`isKindOf: tuple') could never match an actual
+	bytes/bytearray argument, since neither subclasses tuple
+	(array.fromfile, test_system_transitions)."
 	bytesArray := bytes.
-	(bytesArray isKindOf: tuple) ifFalse: [
+	(bytesArray isKindOf: ByteArray) ifFalse: [
 		TypeError ___signal___: 'from_bytes() argument must be bytes-like'
 	].
 
@@ -846,6 +853,12 @@ __pow__: other
 	deviation -- CPython ints are unbounded)."
 
 	(other isKindOf: Number) ifTrue: [
+		"CPython: 0 raised to a NEGATIVE power is a ZeroDivisionError (an int
+		exponent coerces to float, so it is 0.0 ** -n -> division by zero),
+		not Grail's capacity OverflowError or an IEEE infinity."
+		((self @env0:= 0) and: [other @env0:< 0]) ifTrue: [
+			^ ZeroDivisionError ___signal___:
+				'0.0 cannot be raised to a negative power'].
 		^ [ | r |
 			r := self @env0:raisedTo: other.
 			"Python: int ** a NEGATIVE int is a float (``4 ** -3`` == 0.015625),

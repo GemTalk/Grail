@@ -60,7 +60,13 @@ _STRUCTURAL = {
     'Awaitable': ('__await__',),
 }
 
-_UNHASHABLE_BUILTINS = (list, set, dict, bytearray)
+# CPython marks these unhashable with ``__hash__ = None`` in the type object,
+# which the general rule below reads via getattr.  Grail's hand-written classes
+# raise from a compiled __hash__ instead of exposing the attribute, so they have
+# to be named here.  dict_values is deliberately ABSENT: it has no set-like
+# __eq__, so CPython leaves it hashable on identity.
+_UNHASHABLE_BUILTINS = (list, set, dict, bytearray,
+                        type({}.keys()), type({}.items()))
 
 # Builtins CPython registers as virtual subclasses of the composite ABCs in
 # _collections_abc; these whitelists are the Grail equivalent.  Used for both

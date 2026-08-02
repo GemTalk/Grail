@@ -605,6 +605,22 @@ ___isTruthy___
 	^ bool __new__: self
 %
 
+category: 'Grail-Convenience Methods - Unary'
+method: object
+___ignore: anObject
+	"Evaluate the receiver and the argument (for its side effect) and
+	return the receiver, discarding the argument.  Used by the chained
+	``in''/``not in'' codegen: the membership result is the receiver, and
+	the argument is an assignment expression (``rhsTemp := lhsTemp'') whose
+	only purpose is to copy the just-evaluated container operand into the
+	shared chain temp so the NEXT comparison in the chain can reuse it as
+	its left operand.  Smalltalk evaluates the argument before the send, so
+	the copy happens after the membership test has read the previous
+	operand -- keeping each Python operand evaluated exactly once."
+
+	^ self
+%
+
 category: 'Grail-Convenience Methods - Boolean'
 method: object
 ___pyOr___: alternativeBlock
@@ -779,7 +795,19 @@ ___classAttrOverlayLookup___: aClass name: aSym
 	values when the canonical-classes flag is on AND the class was
 	registered canonically, so the common case is a single SessionTemps
 	probe that answers nil.  Values are Python objects (None is the None
-	singleton, never Smalltalk nil), so nil unambiguously means absent."
+	singleton, never Smalltalk nil), so nil unambiguously means absent.
+
+	MRO ORDER, exactly as in ___classChainAttrLookup___: a hit is only honoured
+	when no class NEARER aClass defines aSym as a compiled method, because
+	CPython takes the first class in the MRO whose dict has the name and does
+	not care whether that class supplies it as an attribute or as a function.
+
+	This walk needs the rule as much as the committed one does -- more subtly,
+	because WHICH store a runtime ``Cls.x = v'' lands in depends on the
+	canonical-classes flag.  With it on (the test suite turns it on) the write
+	goes to this overlay instead of the dynInstVars holder, so a fix applied
+	only to the holder walk looked right in a plain session and still let an
+	ancestor's attribute shadow a subclass's method under the suite."
 
 	| st ov walker inner v |
 	st := SessionTemps @env0:current.
@@ -790,7 +818,10 @@ ___classAttrOverlayLookup___: aClass name: aSym
 		inner := ov @env0:at: walker otherwise: nil.
 		inner == nil ifFalse: [
 			v := inner @env0:at: aSym otherwise: nil.
-			v == nil ifFalse: [^ v]].
+			v == nil ifFalse: [
+				(self ___methodDefinedFrom___: aClass upTo: walker name: aSym)
+					ifTrue: [^ nil].
+				^ v]].
 		walker := walker @env0:superClass].
 	^ nil
 %
@@ -844,6 +875,29 @@ ___classChainAttrLookup___: aSym
 	Walking stops at the first hit, so a subclass override (``B.x =
 	'from-B''') shadows the parent value (``A.x = 'from-A''').
 
+	MRO ORDER.  CPython walks the MRO ONCE and takes the first class whose
+	__dict__ holds the name -- and a class's __dict__ holds its attributes and
+	its functions together, so whichever class is NEARER wins regardless of
+	which kind it supplies.  Grail splits those into two stores, and the
+	callers run this whole walk BEFORE their method-wrap fallback, so without
+	care an ANCESTOR's attribute beats a NEARER class's compiled method:
+
+	    class A: pass
+	    A.m = lambda self: 'attr-on-A'
+	    class B(A):
+	        def m(self): return 'method-on-B'
+	    B().m()        # answered 'attr-on-A'
+
+	and worse when the ancestor's attribute is not callable at all --
+	a str shadowing a subclass method turned the call into
+	``'Unicode7' object is not callable''.
+
+	So a hit is only honoured when no class nearer the receiver defines aSym as
+	a method; otherwise answer nil and let the caller's method path win.  That
+	check runs ONLY on a hit, which keeps the common miss -- the hot path, one
+	probe per instance attribute read that reaches the method-wrap fallback --
+	exactly as cheap as before.
+
 	Answers nil for absent, per the nil-as-absent convention -- values are
 	Python objects (None is the None singleton, never Smalltalk nil).
 
@@ -854,16 +908,21 @@ ___classChainAttrLookup___: aSym
 	matching CPython's ``Cls.method'' yielding the plain function.
 	Non-callable attributes (ints, strings, classes) are raw on both paths."
 
-	| walker holder v |
-	walker := (self isKindOf: Behavior)
+	| start walker holder v |
+	start := (self isKindOf: Behavior)
 		ifTrue: [self]
 		ifFalse: [self @env0:class].
+	walker := start.
 	[walker == nil] whileFalse: [
 		(walker ___respondsTo___: #dynInstVars) ifTrue: [
 			holder := walker @env0:perform: #dynInstVars env: 1.
 			holder == nil ifFalse: [
 				v := holder @env0:dynamicInstVarAt: aSym.
 				v == nil ifFalse: [
+					"A nearer class defining aSym as a method outranks this
+					ancestor's stored attribute."
+					(self ___methodDefinedFrom___: start upTo: walker name: aSym)
+						ifTrue: [^ nil].
 					((self isKindOf: Behavior) not
 						and: [self ___isDescriptorCallable___: v])
 						ifTrue: [^ MethodBinding instance: self callable: v].
@@ -874,6 +933,50 @@ ___classChainAttrLookup___: aSym
 		walker := walker @env0:superClass
 	].
 	^ nil
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___methodDefinedFrom___: startClass upTo: attrClass name: aSym
+	"True when some class from startClass up to but EXCLUDING attrClass defines
+	aSym as a compiled env-1 method -- i.e. a class NEARER the receiver than
+	the one holding the attribute supplies the name as a method, so by MRO
+	order the method wins.
+
+	Excluding attrClass matters: a class that has BOTH a stored attribute and a
+	compiled method for the name has had the attribute assigned over the method
+	(``A.m = f'' on the class that defined m), and CPython's last-write-wins
+	says the attribute is the current class-dict entry.  That is the ordinary
+	monkey-patch, and it must keep working."
+
+	| walker |
+	walker := startClass.
+	[walker == nil or: [walker == attrClass]] whileFalse: [
+		(self ___definesPythonMethod___: walker name: aSym) ifTrue: [^ true].
+		walker := walker @env0:superClass].
+	^ false
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___definesPythonMethod___: aClass name: aSym
+	"True when aClass's OWN env-1 method dictionary defines aSym in any of the
+	shapes a Python ``def'' compiles to: the bare unary selector, the
+	fixed-arity keyword forms, or the varargs ``_name:kw:'' forwarder.  Own
+	dictionary only -- inheritance is the caller's walk."
+
+	| md s |
+	md := aClass @env0:methodDictForEnv: 1.
+	md == nil ifTrue: [^ false].
+	(md @env0:includesKey: aSym) ifTrue: [^ true].
+	s := aSym @env0:asString.
+	(md @env0:includesKey: (s @env0:, ':') @env0:asSymbol) ifTrue: [^ true].
+	(md @env0:includesKey: (s @env0:, ':_:') @env0:asSymbol) ifTrue: [^ true].
+	(md @env0:includesKey: (s @env0:, ':_:_:') @env0:asSymbol) ifTrue: [^ true].
+	(md @env0:includesKey: (s @env0:, ':_:_:_:') @env0:asSymbol) ifTrue: [^ true].
+	(md @env0:includesKey: ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol)
+		ifTrue: [^ true].
+	^ false
 %
 
 category: 'Grail-Class Attr Overlay'

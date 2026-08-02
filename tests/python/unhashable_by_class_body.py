@@ -127,3 +127,22 @@ def subclass_can_restore_a_hash():
 def a_class_without_eq_stays_hashable():
     return isinstance(hash(Plain()), int)
 
+
+
+def unhashable_classes_are_not_abc_Hashable():
+    """collections.abc.Hashable is _check_methods, which walks the MRO and
+    answers 'not hashable' when it finds __hash__ present and None.  So the
+    class dict must actually hold None, not merely a raising method.
+
+    Binding that attribute only became safe once
+    object >> ___classChainAttrLookup___ resolved in MRO order: before that,
+    SubRestoresHash lost its own __hash__ def to the ancestor's stored None.
+    """
+    import collections.abc
+    H = collections.abc.Hashable
+    return (not isinstance(Explicit(), H)
+            and not isinstance(EqOnly(1), H)
+            and not isinstance(SubOfEqOnly(1), H)
+            and isinstance(SubRestoresHash(1), H)
+            and isinstance(Plain(), H)
+            and isinstance(1, H))

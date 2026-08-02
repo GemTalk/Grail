@@ -483,8 +483,44 @@ _randrange: positional kw: kwargs
 		count := ((diff @env0:+ negStep) @env0:- 1) @env0:// negStep.
 	].
 	(count @env0:<= 0) ifTrue: [ValueError ___signal___: 'empty range for randrange()'].
-	r := self _generator @env0:integerBetween: 0 and: (count @env0:- 1).
+	r := self _randbelow: count.
 	^ start @env0:+ (r @env0:* step)
+%
+
+category: 'Grail-Built-in Functions'
+method: random
+_randbelow: n
+	"Uniform random int in [0, n) for n > 0.  Uses the kernel generator for
+	n < 2**32 (its integerBetween: range limit -- ``Intervals > 2**32 not yet
+	supported''); above that, rejection-samples (n-1).highBit random bits
+	(CPython's _randbelow_with_getrandbits) so randrange over a huge range
+	works -- test_pow test_big_exp does randrange(1<<49999, 1<<50000)."
+
+	| k r |
+	(n @env0:< 4294967296) ifTrue: [
+		^ self _generator @env0:integerBetween: 0 and: (n @env0:- 1)].
+	k := (n @env0:- 1) @env0:highBit.
+	[r := self _getrandbits: k. r @env0:>= n] @env0:whileTrue.
+	^ r
+%
+
+category: 'Grail-Built-in Functions'
+method: random
+_getrandbits: k
+	"A non-negative int with k random bits, assembled from 32-bit chunks
+	because the kernel integerBetween: caps at a 2**32 range."
+
+	| result bits |
+	result := 0.
+	bits := 0.
+	[bits @env0:< k] @env0:whileTrue: [
+		| take chunk |
+		take := (k @env0:- bits) @env0:min: 32.
+		chunk := self _generator @env0:integerBetween: 0
+			and: ((1 @env0:bitShift: take) @env0:- 1).
+		result := (result @env0:bitShift: take) @env0:bitOr: chunk.
+		bits := bits @env0:+ take].
+	^ result
 %
 
 category: 'Grail-Built-in Functions'

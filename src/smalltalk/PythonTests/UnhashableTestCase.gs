@@ -202,3 +202,46 @@ testExceptionsUseIdentityEqualityAndHash
 	self assert: (self eval: 'len({ValueError("x"), ValueError("x")})') equals: 2
 %
 
+
+category: 'Grail-Tests-Unhashable'
+method: UnhashableTestCase
+testUnhashableClassesAreNotAbcHashable
+	"collections.abc.Hashable is _check_methods, which walks the MRO and
+	answers ``not hashable'' when __hash__ is present and None -- so the class
+	dict must actually HOLD None, not merely have a raising method.
+
+	Binding that attribute alongside the raising method only became safe once
+	object >> ___classChainAttrLookup___ resolved in MRO order.  Before that it
+	fixed the implicit case and BROKE SubRestoresHash, whose own __hash__ def
+	lost to the ancestor's stored None -- which is exactly why that class is in
+	this assertion."
+
+	self assert: self loadFixture @env1:unhashable_classes_are_not_abc_Hashable
+		equals: true
+%
+
+category: 'Grail-Tests-Unhashable'
+method: UnhashableTestCase
+testHandWrittenUnhashablesAreNotAbcHashable
+	"Grail's Hashable check reads the ATTRIBUTE (``getattr(x, '__hash__') is
+	not None''), with a table naming the builtins whose unhashability CPython
+	expresses as ``__hash__ = None'' in the type object.  A hand-written class
+	that only RAISES from a compiled __hash__ is invisible to both, so it
+	reported as Hashable while hash() raised.
+
+	dict_values is the control: it has no set-like __eq__, so CPython leaves it
+	hashable on identity and it must stay out of that table."
+
+	| lf src |
+	lf := String with: Character lf.
+	src := 'import collections.abc as A' , lf
+		, 'import functools' , lf
+		, 'H = A.Hashable' , lf
+		, 'k = functools.cmp_to_key(lambda x, y: 0)(1)' , lf
+		, 'd = {"a": 1}' , lf
+		, '(isinstance(d.keys(), H), isinstance(d.items(), H),' , lf
+		, ' isinstance(k, H), isinstance(d.values(), H),' , lf
+		, ' isinstance((1, 2), H), isinstance(slice(1), H))' , lf.
+	self assert: (self eval: src) @env1:__repr__
+		equals: '(False, False, False, True, True, True)'
+%
