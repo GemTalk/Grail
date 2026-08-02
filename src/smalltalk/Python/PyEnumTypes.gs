@@ -2408,6 +2408,30 @@ _value_repr_
 	^ None
 %
 
+category: 'Grail-Class Attrs'
+classmethod: Flag
+_boundary_
+	"CPython FlagBoundary: how a Flag handles bits with no named member.  A
+	plain Flag defaults to STRICT (an out-of-range value raises).  Read by
+	test_open_invert_expectations / test_boundary; ``enum.STRICT'' is the
+	#STRICT symbol this returns, so ``_boundary_ in (EJECT, KEEP)'' is false and
+	the STRICT branch is taken.  Getter-only Grail-Class Attrs accessor (like
+	_member_type_), so ``OpenAB._boundary_'' reads the value."
+
+	^ #'STRICT'
+%
+
+category: 'Grail-Class Attrs'
+classmethod: IntFlag
+_boundary_
+	"IntFlag defaults to KEEP -- out-of-range bits are preserved -- so ``~x''
+	and ``IntFlag(n)'' keep every bit within the class mask.  Grail's IntFlag
+	invert already produces the KEEP result (e.g. ~A over MASK=255 is
+	OpenAB(254)), so returning #KEEP takes the matching test branch."
+
+	^ #'KEEP'
+%
+
 ! ------------------- StrEnum members (instance side)
 
 category: 'Grail-Enum Member'
