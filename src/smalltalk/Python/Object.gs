@@ -1319,7 +1319,13 @@ ___isDescriptorCallable___: aValue
 	that mint them; the PythonInstance gate keeps the probe off the ordinary
 	non-callable class attribute, which is what usually reaches here."
 	((aValue isKindOf: PythonInstance)
-		and: [aValue ___respondsTo___: #'___pyBindsSelf___']) ifTrue: [^ true].
+		and: [aValue ___respondsTo___: #'___pyBindsSelf___'])
+		ifTrue: [
+			"The marker is ASKED, not merely detected: whether one of these
+			stands in for a function that binds self can depend on what it
+			wraps.  functools.singledispatchmethod answers false over a
+			@classmethod / @staticmethod, neither of which binds an instance."
+			^ aValue ___pyBindsSelf___ == true].
 	^ false
 %
 
@@ -1783,7 +1789,22 @@ ___pyAttrLoad___: aSym
 						or: [(metaOwns @env0:value: sym5)
 							or: [(metaOwns @env0:value: sym6)
 								or: [metaOwns @env0:value: symVA]]]]]])
-			ifTrue: [^ BoundMethod receiver: self @env0:class selector: aSym].
+			ifTrue: [
+				"...unless a class-attribute store has REPLACED it.  In CPython a
+				``@classmethod def m'' is a class-dict entry, so a later
+				``Cls.m = f'' -- or a class-body decorator rebinding, which is
+				the same store -- replaces it outright and an instance read sees
+				the replacement.  Grail keeps the compiled class-side method and
+				the store in different places, and this branch used to answer
+				the compiled one, so ``@singledispatchmethod @staticmethod def
+				t'' left ``a.t(...)'' running the UNDECORATED staticmethod while
+				``A.t(...)'' correctly ran the descriptor.  Same asymmetry the
+				instance-side probe below already fixes for plain methods; this
+				is its class-side twin, and it costs a store probe only for a
+				name that resolved to a class-side method in the first place."
+				(self ___classChainAttrLookup___: aSym)
+					@env0:ifNotNil: [:___cv | ^ ___cv].
+				^ BoundMethod receiver: self @env0:class selector: aSym].
 	].
 	"Shim wrapper classes (SrePattern, SreMatch, ...) advertise the
 	subset of their unary methods that should be treated as Python

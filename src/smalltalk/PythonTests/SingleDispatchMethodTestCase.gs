@@ -115,6 +115,73 @@ testRegistrationInsideAMethod
 	self assertDispatches: #in_method.
 %
 
+! --- Over a @classmethod / @staticmethod ---
+! Grail consumes those inner decorators at PARSE time by re-classing the def
+! onto the metaclass, so the outer decorator's base has to be a class-side
+! handle; an instance-side one names nothing and the decorator dies on its
+! first call.  Neither kind binds an instance, so both access paths deliver the
+! identical argument array -- which is what lets one call shape serve all three
+! method kinds.
+
+category: 'Grail-Tests - Class-side methods'
+method: SingleDispatchMethodTestCase
+testStaticMethodDispatchViaTheClass
+
+	self assertDispatches: #static_via_class.
+%
+
+category: 'Grail-Tests - Class-side methods'
+method: SingleDispatchMethodTestCase
+testStaticMethodDispatchViaAnInstance
+	"Nothing is prepended for a staticmethod reached through an instance, so
+	it sees exactly the arguments the class-side call does."
+
+	self assertDispatches: #static_via_instance.
+%
+
+category: 'Grail-Tests - Class-side methods'
+method: SingleDispatchMethodTestCase
+testStaticMethodAnnotationRegistration
+	"``@t.register'' over a @staticmethod: the annotation lives on a
+	class-side def, which the class's annotation table used to omit."
+
+	self assertDispatches: #static_annotation_registration.
+%
+
+category: 'Grail-Tests - Class-side methods'
+method: SingleDispatchMethodTestCase
+testClassMethodDispatchViaTheClass
+
+	self assertDispatches: #classmethod_via_class.
+%
+
+category: 'Grail-Tests - Class-side methods'
+method: SingleDispatchMethodTestCase
+testClassMethodDispatchViaAnInstance
+	"``cls'' is supplied by the class-side handle either way, so the dispatch
+	argument is the first one the caller passes."
+
+	self assertDispatches: #classmethod_via_instance.
+%
+
+category: 'Grail-Tests - Class-side methods'
+method: SingleDispatchMethodTestCase
+testClassMethodOnASlottedClass
+	"CPython's test_classmethod_slotted_class shape: the annotation form over
+	a @classmethod, reached both ways, on a class with __slots__."
+
+	self assert: testModule @env1:classmethod_annotation_on_slots asArray
+		equals: #( 2 2 ).
+%
+
+category: 'Grail-Tests - Class-side methods'
+method: SingleDispatchMethodTestCase
+testClassSideDescriptorReprIsQualified
+
+	self assert: testModule @env1:classmethod_descriptor_repr
+		equals: '<single dispatch method descriptor ClassScope.t>'.
+%
+
 ! --- Metadata and errors ---
 
 category: 'Grail-Tests - Protocol'
