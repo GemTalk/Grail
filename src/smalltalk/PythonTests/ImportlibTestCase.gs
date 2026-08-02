@@ -601,22 +601,40 @@ testEncodeAlreadyValidUserClass
 
 category: 'Grail-Tests - Class Name Encoding'
 method: ImportlibTestCase
-testEncodeLowercaseModuleName
-	"A lowercase Python module name gets its first character capitalized
-	so it parses as a Smalltalk class name."
+testEncodeClassNameKeepsCase
+	"A lowercase Python CLASS name is kept exactly (GemStone accepts a
+	lowercase class name); the GemStone class name IS the Python name, so
+	cls.__name__ round-trips.  No capitalization -- that used to make
+	__name__ wrong and need a mangled->original registry."
 
 	self assert: (importlib ___asSmalltalkClassName___: 'hello')
-		equals: #'Hello'
+		equals: #'hello'
 %
 
 category: 'Grail-Tests - Class Name Encoding'
 method: ImportlibTestCase
-testEncodeDottedModuleName
-	"Dots in a Python package path become underscores; the first
-	character of the leading segment is capitalized."
+testEncodeDottedClassName
+	"Dots are illegal in a GemStone class name, so a dotted Python name
+	replaces each `.` with `_` -- the one transform GemStone forces on a
+	class name.  Case is preserved (no capitalization)."
 
 	self assert: (importlib ___asSmalltalkClassName___: 're._parser')
-		equals: #'Re__parser'
+		equals: #'re__parser'
+%
+
+category: 'Grail-Tests - Class Name Encoding'
+method: ImportlibTestCase
+testEncodeModuleNameCapitalizes
+	"A MODULE name is encoded differently (___asSmalltalkModuleName___:): its
+	backing class lives in the PythonModules SymbolDictionary in the compile
+	symbol list, so a leading lower-case letter is capitalized to avoid
+	shadowing a kernel class of the same spelling.  Dots still become
+	underscores.  (This name is never a module's __name__, so the
+	capitalization is invisible to Python.)"
+
+	self assert: (importlib ___asSmalltalkModuleName___: 'hello') equals: #'Hello'.
+	self assert: (importlib ___asSmalltalkModuleName___: 're._parser') equals: #'Re__parser'.
+	self assert: (importlib ___asSmalltalkModuleName___: 'MyMod') equals: #'MyMod'
 %
 
 category: 'Grail-Tests - Class Name Encoding'
@@ -647,8 +665,10 @@ category: 'Grail-Tests - Generated Class Location'
 method: ImportlibTestCase
 testGeneratedModuleClassInPythonModules
 	"loadModuleFromPath: registers the generated module class in the
-	PythonModules SymbolDictionary, keyed by the encoded class name —
-	not in UserGlobals."
+	PythonModules SymbolDictionary, keyed by the encoded MODULE class name —
+	not in UserGlobals.  A module name is encoded by ___asSmalltalkModuleName___:
+	(dots -> underscores, leading letter capitalized to avoid shadowing a
+	kernel class in the compile symbol list): 'python.hello' -> 'Python_hello'."
 
 	| mods |
 	mods := importlib @env1:modules.

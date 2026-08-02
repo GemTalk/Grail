@@ -97,59 +97,58 @@ astForSource: aString
 category: 'Grail-Naming'
 classmethod: importlib
 ___asSmalltalkClassName___: aPythonName
-	"Encode a Python module or class name into a GemStone class name.
-	GemStone class names must start with a letter (any case is accepted
-	in practice, but uppercase is conventional) and contain only letters,
-	digits, and underscores.  Dots are not legal.
+	"Encode a Python CLASS name as its GemStone class name (ClassDefAst, the
+	type() builtin).  The GemStone class name IS the class's identity, and
+	cls.__name__ / cls.__qualname__ read it straight back -- so it must be the
+	Python name unchanged.  Grail does NOT change case: GemStone accepts
+	lower-case (and even reserved-word) class names, and a Python class is
+	anonymous (in no SymbolDictionary) and never referenced by its bare
+	Smalltalk name, so a lower-case name collides with nothing.  Capitalizing
+	was pure Smalltalk convention; it made cls.__name__ wrong ('Base_set' for
+	``base_set'') and forced a session-local mangled->original registry to
+	patch it back -- both now gone.
 
-	Rules:
-	  * Replace every `.` with `_`  (e.g. ``re._parser`` → ``re__parser``).
-	  * Capitalize the first character if it is a lowercase ASCII letter
-	    (e.g. ``hello`` → ``Hello``).  Other first characters (uppercase,
-	    underscore, digit) pass through unchanged; GemStone accepts an
-	    underscore as the first character of a class name.
+	MODULE names take ___asSmalltalkModuleName___: instead -- a module's
+	backing class DOES live in a SymbolDictionary (PythonModules) that is in
+	the compile symbol list, so it still needs the capitalize-and-guard dance
+	to avoid shadowing a kernel class of the same name (``operator'' the
+	module vs the ``operator'' reference).  Removing that is the separate
+	symbol-list rework, not this change.
+
+	The one transform GemStone forces on a class name: `.` is illegal, so a
+	dotted Python name replaces each `.` with `_`.
 
 	Examples:
-	  ``hello``         → ``Hello``
-	  ``re._parser``    → ``Re__parser``
-	  ``MyClass``       → ``MyClass``  (already valid)
+	  ``hello``         → ``hello``
+	  ``base_set``      → ``base_set``
+	  ``re._parser``    → ``re__parser``
+	  ``MyClass``       → ``MyClass``
 	  ``_constants``    → ``_constants``"
 
-	| s first sym |
-	s := aPythonName asString copyReplaceAll: '.' with: '_'.
-	s isEmpty ifTrue: [^ s asSymbol].
-	first := s at: 1.
-	(first isLetter and: [first isLowercase]) ifTrue: [
-		s := first asUppercase asString ,
-			(s copyFrom: 2 to: s size).
-	].
-	sym := s asSymbol.
-	"Record mangled -> original Python name so cls.__name__ / __qualname__ can
-	report the real Python spelling ('base_set') rather than this capitalized
-	GemStone class name ('Base_set').  Only when mangling actually changed the
-	name; session-local (repopulated whenever a module is (re)compiled)."
-	(sym asString = aPythonName asString) ifFalse: [
-		| reg |
-		reg := SessionTemps current at: #GrailPyClassNames otherwise: nil.
-		reg ifNil: [
-			reg := KeyValueDictionary new.
-			SessionTemps current at: #GrailPyClassNames put: reg].
-		reg at: sym put: aPythonName asString].
-	^ sym
+	^ (aPythonName asString copyReplaceAll: '.' with: '_') asSymbol
 %
 
 category: 'Grail-Naming'
 classmethod: importlib
-___pyClassNameFor___: aSmalltalkName
-	"The original Python name for a mangled GemStone class name (recorded by
-	___asSmalltalkClassName___:), or nil if none -- e.g. an unmangled name, a
-	kernel class, or a class whose module was not compiled this session.  Used
-	by object>>__name__ / __qualname__."
+___asSmalltalkModuleName___: aPythonName
+	"Encode a Python MODULE name as its backing GemStone class name.  Unlike a
+	user class, a module class is registered in the PythonModules
+	SymbolDictionary, which precedes Globals in the compile symbol list -- so
+	a lower-case module name (``operator'') left as-is would shadow the
+	kernel / module reference of the same spelling in generated code.  Until
+	the compile symbol list is reworked to isolate Python names from Globals,
+	keep the historical guard: replace `.` with `_` and capitalize a leading
+	lower-case letter (``re._parser`` -> ``Re__parser``).  This name is never
+	read back as a module's __name__ (a module keeps its own name), so the
+	capitalization is invisible to Python."
 
-	| reg |
-	reg := SessionTemps current at: #GrailPyClassNames otherwise: nil.
-	reg ifNil: [^ nil].
-	^ reg at: aSmalltalkName asSymbol otherwise: nil
+	| s first |
+	s := aPythonName asString copyReplaceAll: '.' with: '_'.
+	s isEmpty ifTrue: [^ s asSymbol].
+	first := s at: 1.
+	(first isLetter and: [first isLowercase]) ifTrue: [
+		s := first asUppercase asString , (s copyFrom: 2 to: s size)].
+	^ s asSymbol
 %
 
 category: 'Grail-For Tests'
@@ -297,7 +296,7 @@ ___buildModuleClass: moduleAst name: moduleName
 	User classes (ClassDefAst) go in no dictionary and never shadow --
 	and MUST keep their Python-visible name (kernel Fraction exists,
 	but Python Fraction's repr must still say 'Fraction')."
-	moduleClassName := self ___asSmalltalkClassName___: moduleName.
+	moduleClassName := self ___asSmalltalkModuleName___: moduleName.
 	(Globals includesKey: moduleClassName) ifTrue: [
 		moduleClassName := ('Py' , moduleClassName asString) asSymbol].
 
