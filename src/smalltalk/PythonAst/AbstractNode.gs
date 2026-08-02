@@ -246,6 +246,32 @@ printSmalltalkWithParenthesisOn: aStream
 
 %
 
+category: 'Grail-traceback'
+method: AbstractNode
+___emitCurPosBefore: aStmt on: aStream
+	"Emit a runtime update of the enclosing function's ``___curPos___'' (its
+	current execution position) BEFORE aStmt is emitted, so a traceback frame
+	built while aStmt is executing points at the right line.  ___curPos___ is a
+	5-element array { beginLine. beginColumn. endLine. endColumn. sourceLine };
+	statement granularity records only the line (columns nil), which is enough
+	for line-level tracebacks -- sub-statement precision (e.g. a comprehension
+	iterable) is recorded separately where it matters.
+
+	No-op when NOT inside a function (module-level code has no ___curPos___
+	temp; CallAst functionBeingCompiled is nil there) or when aStmt carries no
+	position."
+
+	(CallAst functionBeingCompiled isNil or: [aStmt beginLine isNil])
+		ifTrue: [^ self].
+	aStream
+		nextPutAll: '___curPos___ := { ';
+		print: aStmt beginLine;
+		nextPutAll: '. nil. ';
+		print: (aStmt endLine ifNil: [aStmt beginLine]);
+		nextPutAll: '. nil. nil }.';
+		lf
+%
+
 category: 'Grail-other'
 method: AbstractNode
 setBlock: aBlock

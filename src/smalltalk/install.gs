@@ -580,6 +580,7 @@ run
 	at: #'GrailSTestTarget' put: nil;
 	at: #'ClassTestCase' put: nil;
 	at: #'ClosureAttributeTestCase' put: nil;
+	at: #'ChainedComparisonTestCase' put: nil;
 	at: #'ComplexTestCase' put: nil;
 	at: #'ComparisonProtocolTestCase' put: nil;
 	at: #'ComprehensionTestCase' put: nil;
@@ -760,6 +761,7 @@ run
 	at: #'SystemExitTestCase' put: nil;
 	at: #'TabErrorTestCase' put: nil;
 	at: #'TimeoutErrorTestCase' put: nil;
+	at: #'TotalOrderingTestCase' put: nil;
 	at: #'TryTestCase' put: nil;
 	at: #'TupleTestCase' put: nil;
 	at: #'TwilioClientTestCase' put: nil;
@@ -1264,6 +1266,7 @@ set compile_env: 0
 
 input src/smalltalk/PythonTests/GrailTestResult.gs
 input src/smalltalk/PythonTests/PythonTestCase.gs
+input src/smalltalk/PythonTests/ChainedComparisonTestCase.gs
 input src/smalltalk/PythonTests/BooleanTestCase.gs
 input src/smalltalk/PythonTests/BoundMethodNameTestCase.gs
 input src/smalltalk/PythonTests/BuiltinsTestCase.gs
@@ -1439,6 +1442,7 @@ input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs
 input src/smalltalk/PythonTests/StringModuleTestCase.gs
 input src/smalltalk/PythonTests/SubmoduleAutoBindTestCase.gs
 input src/smalltalk/PythonTests/SysTestCase.gs
+input src/smalltalk/PythonTests/TotalOrderingTestCase.gs
 input src/smalltalk/PythonTests/TryTestCase.gs
 input src/smalltalk/PythonTests/TupleTestCase.gs
 input src/smalltalk/PythonTests/BaseExceptionTestCase.gs

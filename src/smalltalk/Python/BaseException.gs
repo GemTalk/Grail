@@ -399,9 +399,25 @@ ___pythonValueAttrs___
 	check ``exc.args == (key,)'').  ``e.__notes__'' (PEP 678) is likewise the
 	notes list, not a method.  ``e.__traceback__'' is the PyTraceback object
 	(or None) -- a value, not a callable -- so a read returns it instead of a
-	BoundMethod-wrapped selector."
+	BoundMethod-wrapped selector.
 
-	^ IdentitySet new add: #'args'; add: #'__notes__'; add: #'__traceback__'; yourself
+	``e.__context__'' / ``e.__cause__'' / ``e.__suppress_context__'' are the
+	PEP 3134 exception-chaining attributes: getset descriptors in CPython
+	(None / None / False by default), so a read returns the VALUE.  Without
+	this a read wrapped the accessor as a BoundMethod, so ``exc.__context__
+	is None'' was false (test_enum test_default_missing_with_wrong_type_value
+	asserts the raised ValueError has no context).  The accessors return the
+	default today (chaining is not yet tracked); registering them here keeps
+	the Python-visible read a value, matching every other reader."
+
+	^ IdentitySet new
+		add: #'args';
+		add: #'__notes__';
+		add: #'__traceback__';
+		add: #'__context__';
+		add: #'__cause__';
+		add: #'__suppress_context__';
+		yourself
 %
 set compile_env: 1
 
@@ -438,9 +454,47 @@ ___pushTracebackFrame___: aCode lineno: ln colno: co endLineno: el endColno: ec 
 		or: [(self isKindOf: PythonContinue)
 		or: [self isKindOf: StopIteration]]]) ifTrue: [^ self].
 	frame := PyFrame code: aCode lineno: ln back: None globals: None.
+	"Store the None singleton for any absent field: a nil dynamic instVar reads
+	back as ABSENT (AttributeError on tb_line/tb_colno/...), so line-level frames
+	(no columns / source line) must carry None, not nil."
 	tb := PyTraceback frame: frame lineno: ln next: (tracebackObj ifNil: [None])
-		endLineno: el colno: co endColno: ec line: src.
+		endLineno: (el ifNil: [None]) colno: (co ifNil: [None])
+		endColno: (ec ifNil: [None]) line: (src ifNil: [None]).
 	tracebackObj := tb.
+	^ self
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___pushFrameFromPos___: aCode pos: posArray
+	"Prepend a frame for aCode at posArray = { beginLine. beginColumn. endLine.
+	endColumn. sourceLine } -- the enclosing function's ___curPos___, snapshotted
+	as an exception unwinds THROUGH the function's body wrapper.  A nil posArray
+	(no statement ran yet) is a no-op, as are control-flow / StopIteration (via
+	___pushTracebackFrame___)."
+
+	posArray isNil ifTrue: [^ self].
+	^ self ___pushTracebackFrame___: aCode
+		lineno: (posArray at: 1)
+		colno: (posArray at: 2)
+		endLineno: ((posArray at: 3) ifNil: [posArray at: 1])
+		endColno: (posArray at: 4)
+		line: (posArray at: 5)
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___pushCatchingFrame___: aCode pos: posArray
+	"Add a frame for the function CATCHING this exception (TryAst emits this at
+	the except handler), but ONLY when no traceback exists yet.  A body wrapper
+	(nested/complex functions) or the comprehension iterator wrapper already
+	locates the exception more precisely; adding the catch-site frame on top
+	would duplicate it (and, for the comprehension, replace the exact-column
+	frame the test checks).  So this is the universal FALLBACK -- it fires for
+	an exception raised in a wrapper-less function (a plain module-level def or
+	method) and caught here, which would otherwise carry no traceback at all."
+
+	tracebackObj isNil ifTrue: [^ self ___pushFrameFromPos___: aCode pos: posArray].
 	^ self
 %
 

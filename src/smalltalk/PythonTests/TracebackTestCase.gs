@@ -109,6 +109,27 @@ testFuncCodeFirstlineno
 
 category: 'Grail-Tests - Traceback Runtime'
 method: TracebackTestCase
+testCaughtExceptionHasFrame
+	"General traceback population: a caught exception now carries a traceback
+	whose frame is the CATCHING function (TryAst's except-binding fallback, at
+	statement granularity), so traceback.extract_tb / sys.exc_info() /
+	traceback.format_exc are non-empty for ANY caught exception -- not just
+	comprehensions.  See tests/python/general_traceback.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'general_traceback' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/general_traceback.py')
+		name: 'general_traceback'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'nonempty' 'name_is_func' 'lineno_in_try' 'exc_info_nonempty'
+	   'format_exc_has_valueerror' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'caught-exception-frame check failed: ' , k].
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
 testComprehensionExceptionTraceback
 	"Phase 2 runtime population: an exception from a comprehension's iterator
 	protocol carries a real traceback whose frame [0] is located at the iterable

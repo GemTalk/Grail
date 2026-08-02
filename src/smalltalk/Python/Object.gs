@@ -1277,6 +1277,16 @@ ___isDescriptorCallable___: aValue
 	method with no instance: ``TypeError: unbound method 'test_x' must be
 	called with an instance as the first argument''."
 	(aValue isKindOf: UnboundMethod) ifTrue: [^ true].
+	"A Grail module's stand-in for a plain Python FUNCTION stored in a class
+	dict -- functools.total_ordering's synthesised comparisons are instances,
+	not defs, because Smalltalk cannot mint a Python function.  Like a def they
+	must bind self when read through an INSTANCE, or ``a.__le__(b)'' calls the
+	synthesised operator with no receiver.  Recognised by a marker they answer
+	rather than by class, so this predicate need not know the module classes
+	that mint them; the PythonInstance gate keeps the probe off the ordinary
+	non-callable class attribute, which is what usually reaches here."
+	((aValue isKindOf: PythonInstance)
+		and: [aValue ___respondsTo___: #'___pyBindsSelf___']) ifTrue: [^ true].
 	^ false
 %
 
@@ -2239,6 +2249,9 @@ method: object
 __ge__: other
 	"Return self >= other"
 
+	| r |
+	r := self ___classAttrCmp___: #'__ge__' with: other.
+	r == nil ifFalse: [^ r].
 	"Python protocol: no default ordering -- try the reflected
 	operation, else raise the catchable TypeError."
 	^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'
@@ -2276,6 +2289,9 @@ method: object
 __gt__: other
 	"Return self > other"
 
+	| r |
+	r := self ___classAttrCmp___: #'__gt__' with: other.
+	r == nil ifFalse: [^ r].
 	"Python protocol: no default ordering -- try the reflected
 	operation, else raise the catchable TypeError."
 	^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'
@@ -2317,6 +2333,9 @@ method: object
 __le__: other
 	"Return self <= other"
 
+	| r |
+	r := self ___classAttrCmp___: #'__le__' with: other.
+	r == nil ifFalse: [^ r].
 	"Python protocol: no default ordering -- try the reflected
 	operation, else raise the catchable TypeError."
 	^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'
@@ -2676,6 +2695,36 @@ ___neValue___: other
 
 category: 'Grail-Comparison'
 method: object
+___classAttrCmp___: baseSym with: other
+	"An ordering dunder supplied as a CLASS ATTRIBUTE rather than a compiled
+	``def'' -- functools.total_ordering's synthesised operators, a class-body
+	alias (``__le__ = __lt__''), a runtime ``Cls.__le__ = f''.  In Python a
+	def IS a class-dict entry, so all of these are the class's method and must
+	answer the operator.
+
+	Called only from object's own __lt__: / __le__: / __gt__: / __ge__:, i.e.
+	only once no class in the chain compiled the selector -- so this can never
+	shadow a real method, and the cost lands on comparisons that were about to
+	reflect or raise anyway.  ___cmpFallback___ already consults the same store
+	for the REFLECTED operator on ``other''; without this the forward direction
+	was only reachable when ``other'' happened to be a PythonInstance carrying
+	the mirror operator, so ``a <= 5'' raised TypeError while ``a <= b'' worked.
+
+	Answers nil (never a Python value) when there is no such attribute, and
+	likewise when it returns NotImplemented -- either way the caller falls
+	through to the reflected operation and then the catchable TypeError."
+
+	| fn r |
+	fn := self ___classAttrDunder___: baseSym.
+	fn == nil ifTrue: [^ nil].
+	r := fn ___pyCallValue___: { self. other } kw: nil.
+	(r == (Python @env0:at: #NotImplemented otherwise: nil)
+		or: [r @env0:== #'___NotImplemented___']) ifTrue: [^ nil].
+	^ r
+%
+
+category: 'Grail-Comparison'
+method: object
 ___cmpFallback___: other op: opString reflected: refSelector
 	"Python rich-comparison fallback for an unsupported operand pair: the
 	forward dunder returned NotImplemented / punted, so try the REFLECTED
@@ -2757,6 +2806,9 @@ method: object
 __lt__: other
 	"Return self < other"
 
+	| r |
+	r := self ___classAttrCmp___: #'__lt__' with: other.
+	r == nil ifFalse: [^ r].
 	"Python protocol: no default ordering -- try the reflected
 	operation, else raise the catchable TypeError."
 	^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'

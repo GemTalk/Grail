@@ -125,6 +125,20 @@ printSmalltalkOn: aStream
 		aStream
 			nextPutAll: '((___ex isKindOf: PythonReturn) or: [(___ex isKindOf: PythonBreak) or: [___ex isKindOf: PythonContinue]]) ifTrue: [___ex @env0:pass].';
 			lf.
+		"Traceback: give the exception a frame for the function catching it, at
+		___curPos___ (the try-body statement it propagated from) -- but only as a
+		FALLBACK (___pushCatchingFrame___ no-ops if a deeper frame already
+		exists), so a plain wrapper-less module-level def/method still yields a
+		non-empty traceback.  Only inside a function (module-level try has no
+		___curPos___)."
+		CallAst functionBeingCompiled ifNotNil: [:___func |
+			aStream
+				nextPutAll: '___ex @env0:___pushCatchingFrame___: (PyCode @env0:name: ''';
+				nextPutAll: ___func name asString;
+				nextPutAll: ''' firstlineno: ';
+				print: ___func beginLine;
+				nextPutAll: ') pos: ___curPos___.';
+				lf].
 		"Record ___ex as this session's currently-handled exception (CPython
 		sys.exc_info()), restoring the prior value when the handler exits --
 		via ensure: so a return/break/continue or a re-raise still restores.
