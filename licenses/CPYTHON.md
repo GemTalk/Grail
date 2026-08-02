@@ -40,6 +40,7 @@ redistributed under the same Python Software Foundation License Version 2.
 | `src/python/stdlib/test/support/numbers.py` | `Lib/test/support/numbers.py` | Verbatim (pure data) |
 | `src/python/stdlib/test/support/testcase.py` | `Lib/test/support/testcase.py` | Verbatim |
 | `src/python/stdlib/test/support/__init__.py` | `Lib/test/support/__init__.py` | **Trimmed**: only the names the starter set imports; CPython's ~3200-line original pulls in subprocess/socket/faulthandler which Grail lacks |
+| `src/python/stdlib/linecache.py` | `Lib/linecache.py` | Vendored verbatim (needed by `traceback` / `test_traceback`). `_colorize.py` alongside it is an ORIGINAL Grail stub, not derived from CPython, so it carries no PSF attribution. |
 | `src/python/stdlib/test/support/import_helper.py` | `Lib/test/support/import_helper.py` | **Trimmed** to the helpers used by the starter set (no fresh-import isolation in Grail) |
 | `src/python/stdlib/test/support/threading_helper.py` | `Lib/test/support/threading_helper.py` | **Trimmed** (Grail threading is cooperative) |
 | `src/python/stdlib/test/support/warnings_helper.py` | `Lib/test/support/warnings_helper.py` | **Trimmed** to class-based context managers over the `warnings` shim |
