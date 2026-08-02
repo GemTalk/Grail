@@ -180,28 +180,28 @@ __lt__: other
 	MNU killed test_tuple's whole run."
 
 	TypeError ___signal___: ('''<'' not supported between instances of ''NoneType'' and '''
-		@env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
+		@env0:, (other @env0:class @env1:__name__) @env0:asString @env0:, '''')
 %
 
 category: 'Grail-Python protocol'
 method: NoneType
 __le__: other
 	TypeError ___signal___: ('''<='' not supported between instances of ''NoneType'' and '''
-		@env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
+		@env0:, (other @env0:class @env1:__name__) @env0:asString @env0:, '''')
 %
 
 category: 'Grail-Python protocol'
 method: NoneType
 __gt__: other
 	TypeError ___signal___: ('''>'' not supported between instances of ''NoneType'' and '''
-		@env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
+		@env0:, (other @env0:class @env1:__name__) @env0:asString @env0:, '''')
 %
 
 category: 'Grail-Python protocol'
 method: NoneType
 __ge__: other
 	TypeError ___signal___: ('''>='' not supported between instances of ''NoneType'' and '''
-		@env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
+		@env0:, (other @env0:class @env1:__name__) @env0:asString @env0:, '''')
 %
 
 category: 'Grail-Python protocol'
