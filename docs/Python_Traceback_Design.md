@@ -256,10 +256,36 @@ return mode); simple functions use a direct `^`/`#directMethod` return with no
 `on:do:` at all. So deep frames would need a *new* universal handler wrapping
 every function body — adding an `on:do:` per call and knocking `#directMethod`
 functions off their method-temp fast path — the large, high-risk change Phase 2b
-deliberately avoided, and no vendored scoreboard module currently gates it
-(`test.test_traceback` is not vendored). It needs a generator-aware,
-`Exception`-based (runtime-resolved, never named literally) two-handler body
-wrapper, gated behind a codegen flag and measured.
+deliberately avoided. It needs a generator-aware, `Exception`-based
+(runtime-resolved, never named literally) two-handler body wrapper, gated behind
+a codegen flag and measured. **And — see §8 — the vendored `test.test_traceback`
+shows deep frames is *not* the next gap: code objects on class/module-level defs
+come first.**
+
+## 8. Gate: `test.test_traceback` vendored (2026-08-02)
+
+To gate the remaining work with CPython's own suite rather than hand-written
+fixtures, `test.test_traceback` (3.14.4, 4972 lines) is vendored under
+`src/python/stdlib/test/` and added to `scripts/cpython_suite_manifest.txt` as a
+tracked **baseline**. Getting it to load pulled in reusable stdlib support (all
+additive, 0 regressions across the existing scoreboard):
+
+- `linecache.py` (vendored verbatim) and a minimal `_colorize.py` stub (Grail
+  renders tracebacks as plain text — `COLORIZE = False`, `can_colorize()` False);
+- `test.support` fills: `Error`, `requires_subprocess`/`has_subprocess_support`,
+  `requires_debug_ranges`/`has_no_debug_ranges`, and the colourization
+  decorators `force_color`/`force_not_colorized`/`force_not_colorized_test_class`
+  (plain-class CM + identity passthroughs, per the module's Grail constraints);
+- `os_helper.temp_dir`, `import_helper.forget`.
+
+**Current status: `IMPORTERROR`**, blocked at import on `__code__` of a
+class/module-level def (a `BoundMethod`) — hit by a *class-body* line
+`callable_line = get_exception.__code__.co_firstlineno + 2`. This is the Phase 2a
+follow-up (only nested-def `ExecBlock`s carry `__code__` today; module/class-level
+defs → `BoundMethod` were explicitly deferred). **So the gate's verdict: the next
+traceback gap is `BoundMethod.__code__` (code objects on class/module-level defs),
+a prerequisite that ranks ahead of multi-frame deep frames.** The scoreboard's
+`detail` column tracks the live blocker; grow from there.
 
 **Phase 3d — `finally`-during-propagation for `sys.exc_info()` (DONE).** Phase 3a
 set the current-exception register only at except-handler entry, so a `finally`

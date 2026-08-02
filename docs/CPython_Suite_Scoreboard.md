@@ -42,6 +42,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_setcomps | OK | 1 | 0 | 0 | 0 |  |
 | test.test_pow | OK | 7 | 0 | 0 | 0 |  |
 | test.test_richcmp | OK | 11 | 0 | 0 | 0 |  |
-| test.test_slice | ERROR | 11 | 1 | 2 | 0 |  |
-| test.test_bool | ERROR | 31 | 8 | 5 | 0 |  |
-| test.test_iter | ERROR | 58 | 4 | 23 | 1 |  |
+| test.test_slice | ERROR | 11 | 2 | 2 | 0 |  |
+| test.test_bool | ERROR | 31 | 8 | 6 | 0 |  |
+| test.test_iter | ERROR | 58 | 5 | 22 | 1 |  |
+| test.test_traceback | IMPORTERROR | 0 | 0 | 0 | 0 | BoundMethod object has no attribute '__code__' |

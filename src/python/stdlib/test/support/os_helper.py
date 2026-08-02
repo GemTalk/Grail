@@ -29,3 +29,28 @@ def unlink(filename):
         _unlink(filename)
     except (FileNotFoundError, NotADirectoryError):
         pass
+
+
+class temp_dir:
+    """Context manager yielding a temporary directory path (CPython
+    os_helper.temp_dir), written as a plain class -- Grail forbids
+    @contextlib.contextmanager.  Creates the dir when ``path'' is None and
+    removes it on exit."""
+
+    def __init__(self, path=None, quiet=False):
+        self.path = path
+        self.quiet = quiet
+        self._created = False
+
+    def __enter__(self):
+        import tempfile
+        if self.path is None:
+            self.path = tempfile.mkdtemp()
+            self._created = True
+        return self.path
+
+    def __exit__(self, *exc):
+        if self._created:
+            import shutil
+            shutil.rmtree(self.path, ignore_errors=True)
+        return False

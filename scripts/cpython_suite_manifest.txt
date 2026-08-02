@@ -60,5 +60,14 @@ test.test_bool
 # (scripts/cpython_suite_skips.txt) pending a lazy __getitem__ seqiterator.
 test.test_iter
 #
+# test_traceback: the traceback / PEP 657 conformance module
+# (docs/Python_Traceback_Design.md).  Added as a tracked BASELINE -- it does not
+# import yet.  Vendoring it pulled in linecache.py + a _colorize.py stub + several
+# test.support / os_helper / import_helper symbols; the remaining import blocker is
+# ``__code__'' on a class/module-level def (a BoundMethod), which Phase 2a
+# explicitly deferred (only nested-def ExecBlocks carry __code__ today).  The
+# scoreboard's detail column names the current blocker; grow from there.
+test.test_traceback
+#
 # NOTE: test_json and test_string are PACKAGES (directories) in 3.14, not
 # single modules -- out of scope for the V1 single-module harness.
