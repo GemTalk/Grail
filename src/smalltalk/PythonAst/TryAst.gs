@@ -63,8 +63,21 @@ category: 'Grail-other'
 method: TryAst
 printSmalltalkOn: aStream
 
+	| useEnsureFinally |
+	"finally-during-propagation: route the finally through
+	BaseException>>___ensureFinally___:finally: (instead of a bare ensure:) so
+	sys.exc_info() inside the finally sees a propagating exception -- but ONLY in
+	a non-generator scope (the helper's ``ex pass'' re-raise is generator-unsafe;
+	a generator try/finally keeps the plain ensure:).  Module-level try/finally
+	(functionBeingCompiled nil) is never a generator, so it uses the helper too."
+	useEnsureFinally := finalbody size > 0 and: [
+		CallAst functionBeingCompiled isNil
+			or: [CallAst functionBeingCompiled isGenerator not]].
+
 	"Open ensure wrapper for finally"
 	finalbody size > 0 ifTrue: [
+		useEnsureFinally ifTrue: [
+			aStream nextPutAll: 'BaseException @env0:___ensureFinally___: '].
 		aStream nextPut: $[.
 	].
 
@@ -161,18 +174,22 @@ printSmalltalkOn: aStream
 			lf.
 	].
 
-	"Close final blocks"
+	"Close final blocks.  With the helper the finally is the second keyword
+	argument (``finally:''); without it, a bare ``@env0:ensure:''."
 	handlers notEmpty ifTrue: [
 		aStream decreaseIndent.
 		finalbody size > 0
 			ifTrue: [
-				aStream nextPutAll: ']] @env0:ensure: ['; increaseIndent; lf.
+				aStream nextPutAll: (useEnsureFinally ifTrue: [']] finally: ['] ifFalse: [']] @env0:ensure: [']);
+					increaseIndent; lf.
 				finalbody printSmalltalkOn: aStream.
 				aStream decreaseIndent; nextPutAll: '].']
 			ifFalse: [aStream nextPutAll: '].'].
 	] ifFalse: [
 		finalbody size > 0 ifTrue: [
-			aStream decreaseIndent; nextPutAll: '] @env0:ensure: ['; increaseIndent; lf.
+			aStream decreaseIndent;
+				nextPutAll: (useEnsureFinally ifTrue: ['] finally: ['] ifFalse: ['] @env0:ensure: [']);
+				increaseIndent; lf.
 			finalbody printSmalltalkOn: aStream.
 			aStream decreaseIndent; nextPutAll: '].'.
 		].

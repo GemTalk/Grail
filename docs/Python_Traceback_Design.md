@@ -1,9 +1,9 @@
 # Python tracebacks & PEP 657 locations — design & plan
 
-Status: Phases 1, 2a, 2b, 3a, 3b, 3c **DONE / merged** (see §5); multi-frame deep
-frames deferred. Author-driven from the `test.test_dictcomps` /
-`test.test_setcomps` `test_exception_locations` conformance gap (2026-07-31,
-gs40 / GemStone 4.0).
+Status: Phases 1, 2a, 2b, 3a, 3b, 3c **merged**; 3d (`finally`-during-propagation)
+**done** (see §5); multi-frame deep frames deferred. Author-driven from the
+`test.test_dictcomps` / `test.test_setcomps` `test_exception_locations`
+conformance gap (2026-07-31, gs40 / GemStone 4.0).
 
 ## 1. What this unblocks
 
@@ -259,9 +259,33 @@ functions off their method-temp fast path — the large, high-risk change Phase 
 deliberately avoided, and no vendored scoreboard module currently gates it
 (`test.test_traceback` is not vendored). It needs a generator-aware,
 `Exception`-based (runtime-resolved, never named literally) two-handler body
-wrapper, gated behind a codegen flag and measured. Also still open:
-`finally`-during-propagation for `sys.exc_info()` (a bare `try/finally` doesn't set
-the current-exception register).
+wrapper, gated behind a codegen flag and measured.
+
+**Phase 3d — `finally`-during-propagation for `sys.exc_info()` (DONE).** Phase 3a
+set the current-exception register only at except-handler entry, so a `finally`
+that ran while an exception propagated saw `(None, None, None)`. Now `TryAst`
+emits the finally through `BaseException class>>___ensureFinally___:finally:`
+(in place of a bare `ensure:`): it runs the protected block under an
+`on: BaseException do: [:ex | propExc := ex. ex pass]` catch, and its `ensure:`
+installs `propExc` as the current exception for the duration of the finally
+(save/restore), so `sys.exc_info()` / `sys.exception()` inside the finally report
+the in-flight exception — for a bare `try/finally`, and for a `try/except/finally`
+whose `except` doesn't match. Control-flow signals and `StopIteration` subclass
+the kernel `Exception` directly (not `BaseException`), so a return/break/continue
+/normal exit through the finally leaves `exc_info` untouched — no guard needed.
+**Gated to non-generator scopes**: the `ex pass` re-raise is unsafe inside a
+forked generator process, so a `try/finally` inside a generator keeps the plain
+`ensure:` and this one `exc_info` gap (documented limitation).
+
+Note found while testing (pre-existing, NOT changed here, out of scope): GemStone
+runs an *outer* `except` handler body on the signal stack **before** an inner
+`finally` (`ensure:`) unwinds — the reverse of CPython's finally-before-outer-
+except ordering. It affects only code whose outer `except` body observes a
+side effect the inner `finally` performs; `___ensureFinally___:finally:` is
+ordering-neutral (same as the bare `ensure:` it replaces).
+
+Still open: multi-frame deep frames (above), and the outer-except/inner-finally
+ordering just noted.
 
 ## 6. Risks & non-goals
 

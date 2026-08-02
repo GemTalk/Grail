@@ -66,6 +66,29 @@ testSysExcInfo
 			description: 'sys.exc_info check failed: ' , k].
 %
 
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testFinallyDuringPropagation
+	"sys.exc_info() / sys.exception() inside a ``finally'' that runs because an
+	exception is propagating report that in-flight exception (CPython), via
+	BaseException>>___ensureFinally___:finally: emitted by TryAst in non-generator
+	scopes.  Phase 3a covered except bodies; this covers finally bodies -- for a
+	bare try/finally, a try/except/finally whose except does NOT match, and the
+	save/restore interaction with an enclosing handler.  Also asserts the finally
+	does not swallow the exception.  See tests/python/finally_propagation.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'finally_propagation' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/finally_propagation.py')
+		name: 'finally_propagation'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'bare_sees_valueerror' 'normal_finally_none' 'finally_doesnt_swallow'
+	   'except_finally_uncaught' 'nested_restore' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'finally-during-propagation check failed: ' , k].
+%
+
 category: 'Grail-Tests - Traceback Data Model'
 method: TracebackTestCase
 testTracebackDataModelFixture
