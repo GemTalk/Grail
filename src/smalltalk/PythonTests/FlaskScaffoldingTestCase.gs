@@ -2022,14 +2022,19 @@ testTracebackFormatExceptionSingleArg
 	type from the instance and produces the same output as the
 	legacy 3-arg form."
 
-	| mod result |
+	| mod result last |
 	mod := self loadFixture: 'use_traceback'.
 	result := mod @env1:format_exception_single_arg.
 	self assert: (result @env1:__getitem__: 0)
 		equals: 'Traceback (most recent call last):
 '.
-	self assert: (result @env1:__getitem__: 1)
-		equals: 'ValueError: modern
+	"The caught exception now carries a traceback (a frame for the function
+	catching it), so a ``File ... in format_exception_single_arg'' frame line
+	sits between the header and the exception line -- exactly as CPython."
+	self assert: ((result @env1:__getitem__: 1)
+		@env0:includesString: 'in format_exception_single_arg').
+	last := (result @env1:__getitem__: ((result @env1:__len__) - 1)).
+	self assert: last equals: 'ValueError: modern
 '
 %
 

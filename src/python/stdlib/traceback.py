@@ -162,7 +162,11 @@ class StackSummary(list):
     """A list of FrameSummary, as returned by ``extract_tb``."""
 
     def format(self):
-        return format_list(self)
+        # A FrameSummary's __str__ already carries CPython's 2-space "  File"
+        # indent (and a 4-space source line); emit it directly.  format_list
+        # adds a 2-space prefix for RAW (non-FrameSummary) entries, so routing
+        # through it here would double-indent a real frame.
+        return [str(fs) + '\n' for fs in self]
 
 
 def extract_tb(tb, limit=None):

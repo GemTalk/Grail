@@ -210,13 +210,28 @@ also gives `traceback.format_exc()` a real exception to render. No per-statement
 instrumentation, so no happy-path cost; the only added work is per except
 handler. (`finally`-during-propagation isn't tracked yet — a minor gap.)
 
-**Deferred (future) — general frame population.** The broad per-statement
-`setPos` + body-wrapper/except-binding frame prepends (correct line-level
-tracebacks + multi-frame chains for *any* raise, not just comprehensions) remain
-future work — that is the part with per-statement happy-path overhead. Today a
-non-comprehension exception still has an empty `__traceback__` (so
-`sys.exc_info()`'s traceback element is `None` for those), but its type/value are
-now correct.
+**Phase 3b — general caught-exception frames (DONE).** Every function now carries
+a `___curPos___` temp (a 5-array `{line. col. endLine. endCol. sourceLine}`)
+updated by a per-statement `setPos` (emitted by `AbstractNode>>___emitCurPosBefore:on:`
+in all three statement loops — the two `FunctionDefAst` body loops and
+`BlockAst`; declared in `paramNames` / `allLocals`). At an except handler, `TryAst`
+prepends a frame for the CATCHING function at `___curPos___`
+(`BaseException>>___pushCatchingFrame___:pos:`), but **only as a fallback** — it
+no-ops if a traceback already exists (so a comprehension's exact-column frame, or
+a future deeper frame, wins and there is no double-count). So `extract_tb` /
+`sys.exc_info()[2]` / `format_exc` are now non-empty for **any** caught exception,
+locating the catching function at statement granularity. `nil` position fields are
+stored as the `None` singleton (a nil dynamic instVar reads back as *absent* →
+`AttributeError`), and `StackSummary.format` no longer double-indents frame lines.
+
+**Deferred (future) — multi-frame deep frames.** Prepending a frame in each
+function's body wrapper (so the traceback spans catch-point *down to the raise*,
+not just the catching frame) was prototyped but backed out: broadening the body
+wrapper's `on: PythonReturn` catch re-raised inside generators ("exception already
+signalled") and named `AbstractException`, which isn't on the symbol list in every
+generated-code compile context. It needs a generator-aware, `Exception`-based
+two-handler shape. Also open: exact raise-line (vs try-statement) precision, and
+`finally`-during-propagation for `sys.exc_info()`.
 
 ## 6. Risks & non-goals
 
