@@ -1015,6 +1015,14 @@ input src/smalltalk/Python/LookupError.gs
 input src/smalltalk/Python/MemoryError.gs
 input src/smalltalk/Python/NameError.gs
 input src/smalltalk/Python/OSError.gs
+run
+"Python 3: IOError is an alias of OSError.  Register it in the Python dict so
+Python code that references IOError (jinja2/requests/django exceptions.py)
+resolves to the PYTHON OSError -- not the unrelated GemStone kernel IOError in
+Globals, which the Grail compile symbol list no longer includes."
+Python at: #'IOError' put: (Python at: #'OSError').
+true
+%
 input src/smalltalk/Python/ReferenceError.gs
 input src/smalltalk/Python/RuntimeError.gs
 input src/smalltalk/Python/StopAsyncIteration.gs

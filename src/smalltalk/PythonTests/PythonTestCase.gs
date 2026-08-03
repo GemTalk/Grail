@@ -103,7 +103,7 @@ eval: pythonSource
 
 	| moduleScope scope module |
 	moduleScope := SymbolDictionary new.
-	scope := System myUserProfile symbolList copy.
+	scope := importlib ___grailCompileSymbolList___.
 	scope insertObject: moduleScope at: 1.
 	module := ModuleAst parseSource: pythonSource.
 	module useTempsForBlock: false.

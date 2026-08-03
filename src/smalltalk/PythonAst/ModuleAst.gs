@@ -163,18 +163,16 @@ parseSource: sourceString
 category: 'Grail-evaluation'
 classmethod: ModuleAst
 symbolListForModuleScope: aSymbolDictionary
-	"Return a SymbolList with module scope at the front, followed by the
-	full system symbol list (Python dict, Globals, etc.) so that exception
-	classes, PythonReturn, None, etc. are all resolvable.
-
-	Every builtin call is emitted as `((builtins instance) name: …)` or
-	via BoundMethod, so the symbol-list resolution path is not used for
-	builtins. The only symbol-list users are the module scope (for
-	user-defined globals) and the system Python dict (for class lookups
-	like Exception, None, etc.)."
+	"Return a SymbolList with the module scope at the front, followed by the
+	Grail compile symbol list (importlib>>___grailCompileSymbolList___: the
+	Python dict + PythonModules, NOT Globals).  Every symbol generated code
+	resolves by name -- exception classes, None, PythonReturn, PyCode,
+	PythonClass, imported modules -- lives in those two dictionaries; kernel
+	Globals is deliberately excluded so Python code sees only Python builtins
+	and what it imported (builtin CALLS still go via ((builtins instance) …))."
 
 	| symbolList |
-	symbolList := System myUserProfile symbolList copy.
+	symbolList := importlib ___grailCompileSymbolList___.
 	symbolList insertObject: aSymbolDictionary at: 1.
 	^symbolList
 %
