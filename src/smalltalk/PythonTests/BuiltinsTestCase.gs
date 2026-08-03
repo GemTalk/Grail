@@ -1219,3 +1219,41 @@ testEnumerateStart
 	self assert: (self eval: 'list(enumerate(["a","b"], start=10))') @env1:__repr__
 		equals: '[(10, ''a''), (11, ''b'')]'
 %
+
+category: 'Grail-Tests - Namespace'
+method: BuiltinsTestCase
+testBuiltinTypesInBuiltinsNamespace
+	"CPython's builtins module contains every builtin TYPE, so ``builtins.int``
+	/ ``builtins.slice`` resolve to the type (identical to the bare name), show
+	up in vars()/dir(builtins) rather than only lazily on getattr, and stay
+	callable with constructor semantics.  Grail eagerly populates the builtins
+	namespace with these type classes in builtins>>initialize.  (Builtin
+	FUNCTIONS -- len, abs -- already answer via the builtins method path and are
+	not part of this population; the type classes were the gap.)"
+
+	"getattr resolves to the type.  For the types Grail resolves as a class both
+	ways, builtins.T is the bare name T.  (str/bytes are NOT asserted with `is`:
+	the bare name routes through a constructor fast-path -- a BoundMethod -- so
+	`builtins.str is str` is False in Grail even though both denote the str type.
+	isinstance below pins builtins.str to the real type instead.)"
+	self assert: (self eval: '__import__("builtins").int is int') equals: true.
+	self assert: (self eval: '__import__("builtins").list is list') equals: true.
+	self assert: (self eval: '__import__("builtins").dict is dict') equals: true.
+	self assert: (self eval: '__import__("builtins").slice is type(slice(1, 2, 3))')
+		equals: true.
+	self assert: (self eval: 'isinstance("hi", __import__("builtins").str)') equals: true.
+	self assert: (self eval: 'isinstance(1, __import__("builtins").int)') equals: true.
+
+	"Present in the module namespace, not just lazily materialized on access."
+	self assert: (self eval: '"int" in vars(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"slice" in dir(__import__("builtins"))') equals: true.
+
+	"Callable through the builtins attribute, with Python constructor semantics."
+	self assert: (self eval: '__import__("builtins").int("42")') equals: 42.
+	self assert: (self eval: '__import__("builtins").str(5) == "5"') equals: true.
+
+	"A name Grail implements as a builtin FUNCTION (not a class) is absent from
+	the type population but still answers via the function path."
+	self assert: (self eval: 'list(__import__("builtins").map(abs, [-1, -2]))') @env1:__repr__
+		equals: '[1, 2]'
+%
