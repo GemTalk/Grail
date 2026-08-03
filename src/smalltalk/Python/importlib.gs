@@ -108,12 +108,12 @@ ___asSmalltalkClassName___: aPythonName
 	``base_set'') and forced a session-local mangled->original registry to
 	patch it back -- both now gone.
 
-	MODULE names take ___asSmalltalkModuleName___: instead -- a module's
-	backing class DOES live in a SymbolDictionary (PythonModules) that is in
-	the compile symbol list, so it still needs the capitalize-and-guard dance
-	to avoid shadowing a kernel class of the same name (``operator'' the
-	module vs the ``operator'' reference).  Removing that is the separate
-	symbol-list rework, not this change.
+	MODULE names take ___asSmalltalkModuleName___: instead.  A module's backing
+	class is registered in the PythonModules SymbolDictionary and (unlike a
+	user class) is committed as a canonical module under that name, so
+	de-mangling it would strand the committed copy -- keep the historical
+	capitalize-and-guard there.  Dropping it needs a canonical-module
+	migration, separate from this symbol-list rework.
 
 	The one transform GemStone forces on a class name: `.` is illegal, so a
 	dotted Python name replaces each `.` with `_`.
@@ -131,15 +131,12 @@ ___asSmalltalkClassName___: aPythonName
 category: 'Grail-Naming'
 classmethod: importlib
 ___asSmalltalkModuleName___: aPythonName
-	"Encode a Python MODULE name as its backing GemStone class name.  Unlike a
-	user class, a module class is registered in the PythonModules
-	SymbolDictionary, which precedes Globals in the compile symbol list -- so
-	a lower-case module name (``operator'') left as-is would shadow the
-	kernel / module reference of the same spelling in generated code.  Until
-	the compile symbol list is reworked to isolate Python names from Globals,
-	keep the historical guard: replace `.` with `_` and capitalize a leading
-	lower-case letter (``re._parser`` -> ``Re__parser``).  This name is never
-	read back as a module's __name__ (a module keeps its own name), so the
+	"Encode a Python MODULE name as its backing GemStone class name in
+	PythonModules.  A module class is committed as a canonical module under
+	this name, so it keeps the historical transform (dots -> underscores, and
+	capitalize a leading lower-case letter: ``re._parser`` -> ``Re__parser``)
+	-- de-mangling it is a canonical-module migration for later.  The name is
+	never a module's __name__ (a module keeps its own name), so the
 	capitalization is invisible to Python."
 
 	| s first |
@@ -325,7 +322,7 @@ ___buildModuleClass: moduleAst name: moduleName
 	module class. Scan for FunctionDefAst nodes, pre-register stubs so
 	inter-function calls resolve, then compile real methods."
 	lf := Character lf asString.
-	sl := System myUserProfile symbolList copy.
+	sl := self ___grailCompileSymbolList___.
 	topLevelDefs := moduleAst body body select: [:stmt |
 		stmt isKindOf: FunctionDefAst].
 	functionNames := IdentitySet new.
@@ -1773,7 +1770,61 @@ ___compilationSymbolList___
 	"Symbol list used as the `dictionaries:` argument for compileMethod
 	calls emitted by ClassDefAst codegen."
 
-	^ System myUserProfile symbolList copy
+	^ self ___grailCompileSymbolList___
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___grailCompileSymbolList___
+	"The Grail-owned SymbolList that generated Python code is COMPILED
+	against.  It is composed of exactly three dictionaries:
+
+	  * Python        -- every Python builtin, exception class, None, and
+	                     Grail runtime class (PythonReturn, PythonBreak,
+	                     PythonContinue, PyCode, PyDict, PythonClass, ...) that
+	                     generated Smalltalk references by bare name.
+	  * PythonModules -- the backing classes of imported modules, which
+	                     generated code DOES reference by their (encoded) name
+	                     (e.g. ``Re'', ``Jinja2_environment'').
+	  * a curated kernel dict (below).
+
+	It DELIBERATELY excludes Globals AND everything else in the GemStone user
+	profile -- UserGlobals, PythonAst, GsCompilerClasses, ...  Python code must
+	see only Python builtins and things it imported, as in CPython where a
+	program cannot reach GemStone's kernel Globals; so no kernel name
+	(WriteStream, Association, ...) bleeds into Python name resolution.  Because
+	a module's backing class IS resolvable here, its name still takes the
+	capitalize-and-guard of ___asSmalltalkModuleName___: (it is committed as a
+	canonical module under that name); dropping that is a canonical-module
+	migration, separate from this change.  Callers needing a module scope
+	insert it at position 1.  Composed fresh each call (the profile is
+	authoritative for the current dictionary object)."
+
+	| prof sl kernel |
+	prof := System myUserProfile symbolList.
+	sl := SymbolList new.
+	sl add: (prof objectNamed: #Python).
+	sl add: (prof objectNamed: #PythonModules).
+	"A CURATED set of kernel classes that GENERATED Smalltalk references by
+	bare name purely as an implementation detail (backing storage + base
+	classes) -- e.g. ClassDefAst emits ``(Object @env0:new)'' for a dynamic-
+	attribute holder.  These are NOT Python-visible names (a Python program
+	uses lower-case ``object'' / ``list'' via the Python dict), so putting the
+	six of them here does not let kernel Globals bleed into Python name
+	resolution -- it just satisfies Grail's own codegen.  This is the COMPLETE
+	set per an empirical audit (compile every SUnit + CPython-suite module
+	against Python + PythonModules and collect the undefined symbols): Object,
+	OrderedCollection (list), Array (tuple), KeyValueDictionary (dict),
+	Unicode32 (str backing), AbstractException (exception base)."
+	kernel := SymbolDictionary new.
+	kernel at: #Object put: Object.
+	kernel at: #OrderedCollection put: OrderedCollection.
+	kernel at: #Array put: Array.
+	kernel at: #KeyValueDictionary put: KeyValueDictionary.
+	kernel at: #Unicode32 put: Unicode32.
+	kernel at: #AbstractException put: AbstractException.
+	sl add: kernel.
+	^ sl
 %
 
 category: 'Grail-Class Compilation'

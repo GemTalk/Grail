@@ -625,12 +625,11 @@ testEncodeDottedClassName
 category: 'Grail-Tests - Class Name Encoding'
 method: ImportlibTestCase
 testEncodeModuleNameCapitalizes
-	"A MODULE name is encoded differently (___asSmalltalkModuleName___:): its
-	backing class lives in the PythonModules SymbolDictionary in the compile
-	symbol list, so a leading lower-case letter is capitalized to avoid
-	shadowing a kernel class of the same spelling.  Dots still become
-	underscores.  (This name is never a module's __name__, so the
-	capitalization is invisible to Python.)"
+	"MODULE names keep the historical encoder (___asSmalltalkModuleName___:):
+	their backing class is committed as a canonical module, so it stays
+	capitalized (dots -> underscores, leading letter upper-cased) until a
+	canonical-module migration.  This name is never a module's __name__, so
+	the capitalization is invisible to Python."
 
 	self assert: (importlib ___asSmalltalkModuleName___: 'hello') equals: #'Hello'.
 	self assert: (importlib ___asSmalltalkModuleName___: 're._parser') equals: #'Re__parser'.
@@ -667,8 +666,8 @@ testGeneratedModuleClassInPythonModules
 	"loadModuleFromPath: registers the generated module class in the
 	PythonModules SymbolDictionary, keyed by the encoded MODULE class name —
 	not in UserGlobals.  A module name is encoded by ___asSmalltalkModuleName___:
-	(dots -> underscores, leading letter capitalized to avoid shadowing a
-	kernel class in the compile symbol list): 'python.hello' -> 'Python_hello'."
+	(dots -> underscores, leading letter capitalized): 'python.hello' ->
+	'Python_hello'."
 
 	| mods |
 	mods := importlib @env1:modules.
@@ -677,8 +676,7 @@ testGeneratedModuleClassInPythonModules
 		name: 'python.hello'.
 
 	self assert: (PythonModules at: #'Python_hello' ifAbsent: [nil]) notNil.
-	self assert: (UserGlobals at: #'Python_hello' ifAbsent: [nil]) isNil.
-	self assert: (UserGlobals at: #'py_python_hello' ifAbsent: [nil]) isNil
+	self assert: (UserGlobals at: #'Python_hello' ifAbsent: [nil]) isNil
 %
 
 ! ===============================================================================
