@@ -131,6 +131,38 @@ initialize
 		(v @env0:notNil) @env0:ifTrue: [self @env0:dynamicInstVarAt: n put: v]]
 %
 
+category: 'Grail-Attribute Access'
+method: builtins
+__dir__
+	"dir(builtins) must list every builtin FUNCTION under its Python name.  The
+	generic module>>__dir__ enumerates this class's env-1 selectors, but the
+	VARARGS builtins are filed as ``_name:kw:`` (a leading-underscore dispatch
+	convention -- see the class comment), so super answers the mangled ``_print``
+	/ ``_zip`` forms and drops ``___import__:kw:`` entirely (its ``___`` prefix is
+	filtered as internal).  Rewrite them: ``_name:kw: -> name`` and, as a special
+	case, ``___import__:kw: -> __import__`` (the one dunder builtin among these);
+	other ``___…:kw:`` selectors (e.g. ___reload__) are genuine internals and stay
+	out.  Fixed-arity builtins (``abs:`` / ``len:``) already arrive correctly
+	through super, as do the eagerly-populated types / exceptions / constants
+	(dynamic-instVars)."
+
+	| names |
+	names := super __dir__ @env0:asSet.
+	((self @env0:class) @env0:selectorsForEnvironment: 1) @env0:do: [:sel | | s base |
+		s := sel @env0:asString.
+		(s @env0:endsWith: ':kw:') @env0:ifTrue: [
+			base := s @env0:copyFrom: 1 to: (s @env0:size @env0:- 4).
+			(base @env0:= '___import__')
+				@env0:ifTrue: [names @env0:add: '__import__']
+				@env0:ifFalse: [
+					(((base @env0:at: 1) @env0:= $_)
+						@env0:and: [(base @env0:at: 2) @env0:~= $_])
+						@env0:ifTrue: [
+							names @env0:remove: base @env0:ifAbsent: [nil].
+							names @env0:add: (base @env0:copyFrom: 2 to: (base @env0:size))]]]].
+	^ (names @env0:asSortedCollection: [:a :b | a @env0:<= b]) @env0:asArray
+%
+
 ! ===============================================================================
 ! Fixed-arity fast-path methods (1 positional argument)
 ! ===============================================================================
