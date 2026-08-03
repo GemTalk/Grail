@@ -287,6 +287,7 @@ run
 	at: #'LruCacheWrapper' put: nil;
 	at: #'functools_CacheInfo' put: nil;
 	at: #'functools_Placeholder' put: nil;
+	at: #'functools_cached_property' put: nil;
 	at: #'Super' put: nil;
 	at: #'SuperBoundMethod' put: nil;
 	at: #'UnboundMethod' put: nil;
@@ -331,6 +332,7 @@ run
 	at: #'PySocketIO' put: nil;
 	at: #'_thread' put: nil;
 	at: #'PyThreadLock' put: nil;
+	at: #'PyThreadRLock' put: nil;
 	at: #'Hash' put: nil;
 	at: #'time' put: nil;
 	at: #'secrets' put: nil;
@@ -690,6 +692,7 @@ run
 	at: #'KeyboardInterruptTestCase' put: nil;
 	at: #'KeywordOnlyParamsTestCase' put: nil;
 	at: #'ListSortKwargsTestCase' put: nil;
+	at: #'CachedPropertyDescriptorTestCase' put: nil;
 	at: #'LruHashabilityAndUnionsTestCase' put: nil;
 	at: #'ListTestCase' put: nil;
 	at: #'LocalsTestCase' put: nil;
@@ -1416,6 +1419,7 @@ input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
 input src/smalltalk/PythonTests/TracebackTestCase.gs
 input src/smalltalk/PythonTests/ListSortKwargsTestCase.gs
+input src/smalltalk/PythonTests/CachedPropertyDescriptorTestCase.gs
 input src/smalltalk/PythonTests/LruHashabilityAndUnionsTestCase.gs
 input src/smalltalk/PythonTests/ListTestCase.gs
 input src/smalltalk/PythonTests/MathTestCase.gs
