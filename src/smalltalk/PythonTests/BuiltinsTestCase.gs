@@ -1289,3 +1289,73 @@ testBuiltinTypeModuleIsBuiltins
 		'getattr(__import__("enum").Enum("E", ["A"]), "__module__", "x") != "builtins"')
 		equals: true
 %
+
+category: 'Grail-Tests - Namespace'
+method: BuiltinsTestCase
+testBuiltinExceptionsInBuiltinsNamespace
+	"CPython's builtins module contains the whole builtin exception hierarchy, so
+	``builtins.ValueError`` resolves to the exception class (identical to the bare
+	name), shows up in vars()/dir(builtins), preserves the subclass hierarchy, and
+	reports __module__ == 'builtins'.  builtins>>initialize populates them from the
+	curated object>>___pythonBuiltinExceptionNames___ list; non-builtin exceptions
+	that share the Python compile dict (StatisticsError->statistics etc.) are
+	excluded."
+	self assert: (self eval: '__import__("builtins").ValueError is ValueError')
+		equals: true.
+	self assert: (self eval: '__import__("builtins").BaseException is BaseException')
+		equals: true.
+	self assert: (self eval: '__import__("builtins").OSError is OSError') equals: true.
+
+	"Subclass hierarchy is preserved through the namespace."
+	self assert: (self eval: 'issubclass(__import__("builtins").KeyError, LookupError)')
+		equals: true.
+	self assert: (self eval: 'issubclass(__import__("builtins").ValueError, Exception)')
+		equals: true.
+
+	"Present in the module namespace, not just lazily materialized on access."
+	self assert: (self eval: '"ValueError" in vars(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"OSError" in dir(__import__("builtins"))') equals: true.
+
+	"Builtin exceptions report __module__ == 'builtins' (matching CPython)."
+	self assert: (self eval: 'ValueError.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'BaseException.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'OSError.__module__ == "builtins"') equals: true.
+
+	"A non-builtin exception that lives in the Python dict is NOT exposed in
+	builtins and is NOT tagged 'builtins'."
+	self assert: (self eval: '"StatisticsError" in dir(__import__("builtins"))')
+		equals: false.
+
+	"A user exception subclass keeps its own module, never 'builtins'."
+	self assert: (self eval:
+		'getattr(type("MyErr", (ValueError,), {}), "__module__", "x") != "builtins"')
+		equals: true
+%
+
+category: 'Grail-Tests - Namespace'
+method: BuiltinsTestCase
+testBuiltinConstantsInBuiltinsNamespace
+	"CPython's builtins module contains the constants None / True / False /
+	NotImplemented / Ellipsis / __debug__.  builtins>>initialize populates them
+	so getattr resolves each to the same singleton as the bare name and they
+	appear in vars()/dir(builtins).  (None / True / False are keywords, so the
+	`.attr` form is a syntax error -- getattr is the only way to read them.)"
+	self assert: (self eval: 'getattr(__import__("builtins"), "None") is None')
+		equals: true.
+	self assert: (self eval: 'getattr(__import__("builtins"), "True") is True')
+		equals: true.
+	self assert: (self eval: 'getattr(__import__("builtins"), "False") is False')
+		equals: true.
+	self assert: (self eval:
+		'getattr(__import__("builtins"), "NotImplemented") is NotImplemented')
+		equals: true.
+	self assert: (self eval: 'getattr(__import__("builtins"), "Ellipsis") is Ellipsis')
+		equals: true.
+	self assert: (self eval: 'getattr(__import__("builtins"), "__debug__") == True')
+		equals: true.
+
+	"Present in the module namespace, not just lazily materialized on access."
+	self assert: (self eval: '"None" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"NotImplemented" in vars(__import__("builtins"))')
+		equals: true
+%
