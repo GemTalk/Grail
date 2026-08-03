@@ -1,0 +1,38 @@
+# Explicit shard placement for the SUnit gate's heaviest test classes.
+# ONE LINE PER CLASS: '<ClassName> <shardIndex>'.  Everything not listed keeps
+# the default char-sum placement in tests/scripts/runTestsShard.gs.
+#
+# WHY OVERRIDES AND NOT A COST-BALANCED PARTITION.  Balancing the whole suite
+# by measured per-class cost was tried and made the gate SLOWER (max shard 38s
+# -> 38s, having predicted 19s).  Per-class costs are not additive: classes
+# share framework imports, so a bin-packer that treats them independently
+# scatters co-located ones and every shard re-pays the import.  It put twilio
+# on three shards out of four.
+#
+# So the default stays the char-sum hash -- which preserves whatever
+# co-location the suite already has -- and only a few SELF-CONTAINED heavy
+# classes are placed by hand.  Each listed class is the sole expensive user of
+# its imports, so moving it moves its whole cost and splits nothing.
+#
+# Measured effect (four shards, concurrent, canonical classes on):
+#     before   0.2s  33.3s   2.9s  38.2s     gate waits 38.2s
+#     after   17.0s  20.4s  19.8s  17.4s     gate waits 20.4s
+#
+# Correctness does not depend on any of this: every class lands on exactly one
+# shard whatever the file says.  An index outside 0..N-1 is ignored (the gate
+# can run with fewer workers than the file assumes).  Delete the file and the
+# suite still runs, just less evenly.
+#
+# Revisit when the gate visibly skews again -- the per-class timings come from
+# tests/scripts/runTestsShard.gs run under GRAIL_TEST_TIME_CLASSES=1.
+
+# was shard 3 (13.3s -- the django import, 4 tests)
+DjangoTestCase 0
+# was shard 1 (9.5s)
+ReModuleTestCase 2
+# was shard 3 (7.5s)
+BytesSubclassTestCase 2
+# was shard 1 (1.9s)
+SlotsTestCase 0
+# was shard 1 (1.5s)
+HttpCookiesTestCase 0
