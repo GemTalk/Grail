@@ -1257,8 +1257,13 @@ ___grailFunctional: cls positional: positional keywords: keywords
 
 	| className names start pairs newCls byValue byName members |
 	className := (positional @env0:at: 1) @env0:asSymbol.
+	"``names'' may be positional[2] or the ``names='' keyword (Enum('bad',
+	names=0)); read both so a non-iterable value under either form reaches the
+	guard below rather than being silently dropped (test_empty_names)."
 	names := (positional @env0:size @env0:>= 2)
-		ifTrue: [positional @env0:at: 2] ifFalse: [nil].
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [(keywords ~~ nil and: [keywords @env0:includesKey: 'names'])
+			ifTrue: [keywords @env0:at: 'names'] ifFalse: [nil]].
 	start := (keywords ~~ nil and: [keywords @env0:includesKey: 'start'])
 		ifTrue: [keywords @env0:at: 'start'] ifFalse: [1].
 	pairs := OrderedCollection @env0:new.
@@ -1292,6 +1297,14 @@ ___grailFunctional: cls positional: positional keywords: keywords
 						pairs @env0:add: (Array @env0:with: k @env0:asString with: v)]]
 				ifFalse: [
 					| idx |
+					"A non-iterable ``names'' (Enum('bad', names=0) / Enum('bad', 0,
+					type=int)) must raise CPython's TypeError, not leak a raw
+					``SmallInteger does not understand #do:'' from the sweep below
+					(test_empty_names).  A valid ``names'' sequence answers #do:."
+					(names @env0:respondsTo: #'do:') ifFalse: [
+						^ TypeError ___signal___: ''''
+							@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: names)
+							@env0:, ''' object is not iterable'].
 					idx := 0.
 					names @env0:do: [:item |
 						idx := idx @env0:+ 1.
