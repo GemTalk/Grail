@@ -31,6 +31,15 @@ def unlink(filename):
         pass
 
 
+def create_empty_file(filename):
+    """Create (or truncate) an empty file -- CPython os_helper.create_empty_file.
+
+    CPython opens with the raw os.open(O_WRONLY|O_CREAT|O_TRUNC) flag triple;
+    Grail's os module has no open()/close() fd layer, so go through the builtin
+    open(), which has the same create-or-truncate effect."""
+    open(filename, "w").close()
+
+
 class temp_dir:
     """Context manager yielding a temporary directory path (CPython
     os_helper.temp_dir), written as a plain class -- Grail forbids
