@@ -21,20 +21,28 @@ import pickle
 # strictly MORE permissive (pickle serializes arbitrary objects through
 # __reduce__), and code that probes marshal to decide whether a value is a
 # simple constant would then get the wrong answer.
-_MARSHALLABLE = (
-    type(None), bool, int, float, complex,
-    str, bytes, bytearray,
-    tuple, list, dict, set, frozenset,
-)
+# Exact types, used with ``type(x) in`` -- see _check.  Grail backs str with
+# several GemStone classes, so the concrete ones are listed via samples.
+_MARSHALLABLE = set()
+for _sample in (None, True, 0, 0.0, 0j, '', b'', bytearray(), (), [], {},
+                set(), frozenset()):
+    _MARSHALLABLE.add(type(_sample))
 
 
 def _check(value, _seen=None):
-    """Recursively reject anything marshal does not support."""
-    if not isinstance(value, _MARSHALLABLE):
+    """Recursively reject anything marshal does not support.
+
+    EXACT types only, not isinstance: CPython's marshal handles the builtin
+    types themselves and refuses subclasses, because it stores no class
+    reference and so could not reconstruct one.  An isinstance test quietly
+    accepted ``class MySet(set)`` and round-tripped it as a plain set --
+    losing the class and any instance attributes.
+    """
+    if type(value) not in _MARSHALLABLE:
         raise ValueError("unmarshallable object")
     # Guard against self-referential containers: marshal has no memo, so a
     # cycle would recurse until the stack gives out.
-    if isinstance(value, (tuple, list, set, frozenset, dict)):
+    if type(value) in (tuple, list, set, frozenset, dict):
         if _seen is None:
             _seen = set()
         if id(value) in _seen:

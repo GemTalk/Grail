@@ -718,6 +718,7 @@ run
 	at: #'OsTestCase' put: nil;
 	at: #'OverflowErrorTestCase' put: nil;
 	at: #'PartialCallableAndCopyTestCase' put: nil;
+	at: #'PickleProtocolTestCase' put: nil;
 	at: #'PartialMethodDescriptorTestCase' put: nil;
 	at: #'PassTestCase' put: nil;
 	at: #'PendingDeprecationWarningTestCase' put: nil;
@@ -1288,6 +1289,7 @@ input src/smalltalk/PythonTests/PythonTestCase.gs
 input src/smalltalk/PythonTests/ChainedComparisonTestCase.gs
 input src/smalltalk/PythonTests/BooleanTestCase.gs
 input src/smalltalk/PythonTests/BoolConformanceTestCase.gs
+input src/smalltalk/PythonTests/PickleProtocolTestCase.gs
 input src/smalltalk/PythonTests/BoundMethodNameTestCase.gs
 input src/smalltalk/PythonTests/BuiltinsTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassOverrideTestCase.gs
