@@ -40,7 +40,7 @@ hatch and for isolating any warm-vs-cold discrepancy."
 %
 level 1
 run
-| out n idx full shard result leaves flatten |
+| out n idx full shard result leaves flatten overrides oFile |
 out := GsFile stdout.
 n := (System gemEnvironmentVariable: 'GRAIL_TEST_WORKERS') ifNil: ['1'].
 n := (n isEmpty ifTrue: [1] ifFalse: [n asNumber]).
@@ -69,13 +69,42 @@ werkzeug / flask / django compile ONCE (on their owner shard) rather than
 once per shard -- the import-compile is the dominant cost, so avoiding its
 duplication is what makes parallelism pay (class-level ~2.6x vs test-level
 ~1.35x measured).  Stable char-sum hash so every worker agrees on the
-partition."
+partition.
+
+The hash balances test COUNTS, which is not even loosely a proxy for cost --
+one shard held 934 tests and finished in 3s while another held 775 and took
+35s -- so tests/scripts/shard_overrides.txt places the few heaviest classes
+explicitly on top of it.  See that file for why the whole suite is NOT
+cost-balanced instead (it was tried; per-class costs are not additive, because
+classes share framework imports).  Every worker reads the same file and applies
+it the same way, so they still agree without communicating; a missing file just
+leaves the hash in charge."
+overrides := Dictionary new.
+oFile := GsFile openReadOnServer:
+  (System gemEnvironmentVariable: 'GRAIL_DIR'), '/tests/scripts/shard_overrides.txt'.
+oFile ifNotNil: [
+  | line |
+  [(line := oFile nextLine) isNil] whileFalse: [
+    | parts want |
+    line := line trimSeparators.
+    (line isEmpty or: [(line at: 1) == $#]) ifFalse: [
+      parts := line subStrings: ' '.
+      parts size >= 2 ifTrue: [
+        want := (parts at: 2) asNumber.
+        "Ignore an index this run has no worker for, so the gate can be run
+        with fewer workers than the file was written for."
+        (want notNil and: [want >= 0 and: [want < n]])
+          ifTrue: [overrides at: (parts at: 1) asString put: want]]]].
+  oFile close].
 shard := TestSuite new.
 leaves do: [:t | | key h |
   key := t class name asString.
-  h := 0.
-  key do: [:ch | h := h + ch asInteger].
-  ((h \\ n) = idx) ifTrue: [shard addTest: t]].
+  h := overrides at: key ifAbsent: [
+    | sum |
+    sum := 0.
+    key do: [:ch | sum := sum + ch asInteger].
+    sum \\ n].
+  (h = idx) ifTrue: [shard addTest: t]].
 "GrailTestResult, not the stock TestResult that TestSuite>>run would build, so
 that a defect reports its MESSAGE and (for errors) a stack.  Stock SUnit keeps
 only the TestCase, which is why a red CI shard used to say no more than
