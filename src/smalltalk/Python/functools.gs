@@ -500,6 +500,18 @@ ___countPlaceholders___: anArray
 
 category: 'Grail-Calling'
 method: functools_partial
+___pyCallValue___: positional kw: kwargs
+	"The INDIRECT call protocol.  A partial reached through a variable, or
+	handed to something that invokes its argument generically, arrives here
+	rather than at value:value: -- and object's implementation raises
+	``'functools_partial' object is not callable'', which is how a
+	partialmethod wrapping a partial failed (test_over_partial)."
+
+	^ self value: positional value: kwargs
+%
+
+category: 'Grail-Calling'
+method: functools_partial
 value: morePositional value: moreKw
 	"Invoke: fn(*bound, *more, **{**boundKw, **moreKw}) -- later
 	keywords override the bound ones (CPython semantics)."

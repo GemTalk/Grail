@@ -321,7 +321,48 @@ callable: anObject
 	dropped from discovery entirely -- not failed, not skipped, just never
 	found."
 	(anObject isKindOf: UnboundMethod) ifTrue: [^ true].
-	^ anObject ___respondsTo___: #'__call__:'
+	"``def __call__'' compiles to a selector whose shape depends on its
+	ARITY, and only the one-argument form was probed.  So an instance of a
+	class defining the ordinary no-argument ``__call__(self)'' -- or the
+	varargs ``__call__(self, *args)'' -- reported False while calling it
+	worked.  Neither object nor PythonInstance defines any of these, so
+	responding to one means the class really did declare it."
+	((anObject ___respondsTo___: #'__call__')
+		or: [(anObject ___respondsTo___: #'__call__:')
+		or: [(anObject ___respondsTo___: #'__call__:_:')
+		or: [(anObject ___respondsTo___: #'__call__:_:_:')
+		or: [anObject ___respondsTo___: #'___call__:kw:']]]])
+		ifTrue: [^ true].
+	"Same problem once more, for the OTHER shapes of Grail's call protocol.
+	functools.partial implements ``value:value:'' rather than ``__call__:'',
+	so ``callable(partial(f))'' answered False -- which CPython documents as
+	True, and which test_functools asserts on the line before it calls the
+	object successfully.
+
+	Asks WHO owns the selector, not merely whether the receiver responds:
+	both of these have a base implementation that every object inherits
+	(PythonInstance's forwarder, and object's ``not callable'' raiser), so a
+	bare respondsTo: would report every object in the image as callable."
+	^ self ___definesOwnCallProtocol___: anObject
+%
+
+category: 'Grail-Private'
+method: builtins
+___definesOwnCallProtocol___: anObject
+	"True when anObject's class supplies one of Grail's call entry points
+	ITSELF, rather than inheriting the base implementation: PythonInstance's
+	``value:value:'' forwards to __call__, and object's
+	``___pyCallValue___:kw:'' exists only to raise ``not callable''."
+
+	| cls owner |
+	cls := anObject @env0:class.
+	owner := cls @env0:whichClassIncludesSelector: #'value:value:' environmentId: 1.
+	(owner @env0:~~ nil
+		and: [owner @env0:~~ PythonInstance and: [owner @env0:~~ object]])
+		ifTrue: [^ true].
+	owner := cls
+		@env0:whichClassIncludesSelector: #'___pyCallValue___:kw:' environmentId: 1.
+	^ owner @env0:~~ nil and: [owner @env0:~~ object]
 %
 
 category: 'Grail-Built-in Functions'

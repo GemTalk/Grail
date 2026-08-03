@@ -713,6 +713,7 @@ run
 	at: #'ObjectTestCase' put: nil;
 	at: #'OsTestCase' put: nil;
 	at: #'OverflowErrorTestCase' put: nil;
+	at: #'PartialCallableAndCopyTestCase' put: nil;
 	at: #'PassTestCase' put: nil;
 	at: #'PendingDeprecationWarningTestCase' put: nil;
 	at: #'PermissionErrorTestCase' put: nil;
@@ -1424,6 +1425,7 @@ input src/smalltalk/PythonTests/NoneTypeTestCase.gs
 input src/smalltalk/PythonTests/NumbersTestCase.gs
 input src/smalltalk/PythonTests/ObjectTestCase.gs
 input src/smalltalk/PythonTests/OsTestCase.gs
+input src/smalltalk/PythonTests/PartialCallableAndCopyTestCase.gs
 input src/smalltalk/PythonTests/PassTestCase.gs
 input src/smalltalk/PythonTests/PythonParserTestCase.gs
 input src/smalltalk/PythonTests/PythonTokenizerTestCase.gs
