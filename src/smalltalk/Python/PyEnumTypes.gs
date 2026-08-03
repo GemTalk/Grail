@@ -1223,7 +1223,7 @@ ___grailInstallClassProtocol: cls
 	mc := cls @env0:class.
 	#(#'__reversed__' #'mro' #'__repr__' #'__str__' #'__format__:'
 		#'_member_names_' #'_member_map_' #'_value2member_map_' #'_value_repr_'
-		#'_new_member_' #'__dir__')
+		#'_new_member_' #'__dir__' #'__bool__')
 		@env0:do: [:sel |
 			| prov provCat |
 			prov := mc @env0:whichClassIncludesSelector: sel environmentId: 1.
