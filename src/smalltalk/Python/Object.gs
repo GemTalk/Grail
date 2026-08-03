@@ -598,6 +598,38 @@ ___pythonBuiltinTypeName___
 
 category: 'Grail-Introspection'
 classmethod: object
+___pythonBuiltinTypeModule___
+	"Answer 'builtins' when self is one of Python's built-in TYPE objects —
+	the classes exposed in the builtins module by builtins>>initialize — else
+	nil, so ``int.__module__`` / ``tuple.__module__`` report 'builtins' as in
+	CPython.  Two signals cover the two kinds of built-in type:
+
+	  * kernel-backed types (int/list/dict/str/bytes/bool/float/range/object)
+	    reuse a GemStone kernel class and answer a ___pythonBuiltinTypeName___;
+	    this also covers concrete subclasses (SmallInteger, Unicode16, ...).
+	  * Grail-defined types (tuple/set/frozenset/complex/bytearray/type/slice/
+	    property/memoryview) are class-named with their Python name and bound
+	    under that name in the Python compile dictionary; an IDENTITY match
+	    there confirms self is THE built-in type, not a same-named user class.
+
+	Everything else answers nil and MUST keep its own __module__ (user classes,
+	class-enums) or fall through (dynamically created classes such as
+	functional-API enums — reporting 'builtins' for those broke enum pickling)."
+
+	| pd nm |
+	self ___pythonBuiltinTypeName___ @env0:notNil ifTrue: [^ 'builtins'].
+	nm := self @env0:name @env0:asString @env0:asSymbol.
+	(#( #bool #bytearray #bytes #complex #dict #float #frozenset #int #list
+		#memoryview #object #property #range #set #slice #str #tuple #type )
+		@env0:includes: nm) @env0:ifFalse: [^ nil].
+	pd := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'Python'.
+	pd @env0:isNil ifTrue: [^ nil].
+	((pd @env0:at: nm otherwise: nil) == self) ifTrue: [^ 'builtins'].
+	^ nil
+%
+
+category: 'Grail-Introspection'
+classmethod: object
 __name__
 	"Python ``cls.__name__`` returns the class's short name as a string.
 	Inherited through the metaclass chain to every class.  For the reused
@@ -1763,6 +1795,18 @@ ___pyAttrLoad___: aSym
 		((s @env0:= '__name__' or: [s @env0:= '__module__' or: [s @env0:= '__qualname__' or: [s @env0:= '__mro__' or: [s @env0:= '__base__' or: [s @env0:= '__bases__']]]]])
 			and: [self ___respondsTo___: aSym])
 				ifTrue: [^ self @env0:perform: aSym env: 1].
+		"Python ``cls.__module__`` for the built-in TYPE objects (int, list,
+		tuple, set, ...): CPython reports 'builtins'.  Only fires when the
+		class has no own __module__ accessor (the branch above), so user
+		classes and class-enums keep their real module ('__main__', ...).
+		___pythonBuiltinTypeModule___ answers nil for everything that is not
+		a genuine built-in type — critically for dynamically created classes
+		(functional-API enums), which MUST fall through: reporting 'builtins'
+		for them broke enum pickling (the class is not found in builtins)."
+		(s @env0:= '__module__')
+			ifTrue: [
+				(self ___pythonBuiltinTypeModule___)
+					@env0:ifNotNil: [:___m | ^ ___m]].
 		"Python ``cls.__dict__``: the class's OWN attribute dict.  MUST
 		precede the unbound-method wrap below -- PythonInstance defines an
 		instance-side __dict__ (the live per-instance view), so a CLASS
