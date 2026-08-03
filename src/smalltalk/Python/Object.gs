@@ -598,6 +598,46 @@ ___pythonBuiltinTypeName___
 
 category: 'Grail-Introspection'
 classmethod: object
+___pythonBuiltinExceptionNames___
+	"The CPython builtin EXCEPTION hierarchy — the exception classes that live
+	in CPython's builtins module (``ValueError.__module__ == 'builtins'``).  The
+	authoritative inclusion list, matching CPython 3.14's builtins exactly, so
+	the Python compile dictionary's OTHER exception subclasses are excluded:
+	module exceptions (StatisticsError->statistics, UnsupportedOperation->io,
+	ZlibError->zlib) and Grail control-flow internals (PythonBreak / PythonContinue
+	/ PythonReturn) must NOT be tagged 'builtins' nor exposed in builtins.
+
+	Shared by builtins>>initialize (which of these names resolve to a class in
+	the Python dict get exposed in the builtins namespace) and
+	___pythonBuiltinTypeModule___ (identity-confirmed, they report 'builtins').
+	Names Grail does not define (e.g. EnvironmentError) are simply absent from
+	the dict and skipped by both callers."
+
+	^ #( #BaseException #BaseExceptionGroup #Exception #ExceptionGroup
+	   #GeneratorExit #KeyboardInterrupt #SystemExit
+	   #ArithmeticError #FloatingPointError #OverflowError #ZeroDivisionError
+	   #AssertionError #AttributeError #BufferError #EOFError
+	   #ImportError #ModuleNotFoundError
+	   #LookupError #IndexError #KeyError
+	   #MemoryError #NameError #UnboundLocalError
+	   #OSError #BlockingIOError #ChildProcessError #ConnectionError
+	   #BrokenPipeError #ConnectionAbortedError #ConnectionRefusedError
+	   #ConnectionResetError #FileExistsError #FileNotFoundError #InterruptedError
+	   #IsADirectoryError #NotADirectoryError #PermissionError #ProcessLookupError
+	   #TimeoutError #IOError #EnvironmentError
+	   #ReferenceError #RuntimeError #NotImplementedError #RecursionError
+	   #StopAsyncIteration #StopIteration
+	   #SyntaxError #IndentationError #TabError
+	   #SystemError #TypeError
+	   #ValueError #UnicodeError #UnicodeDecodeError #UnicodeEncodeError
+	   #UnicodeTranslateError
+	   #Warning #DeprecationWarning #PendingDeprecationWarning #UserWarning
+	   #SyntaxWarning #RuntimeWarning #FutureWarning #ImportWarning
+	   #UnicodeWarning #BytesWarning #EncodingWarning #ResourceWarning )
+%
+
+category: 'Grail-Introspection'
+classmethod: object
 ___pythonBuiltinTypeModule___
 	"Answer 'builtins' when self is one of Python's built-in TYPE objects —
 	the classes exposed in the builtins module by builtins>>initialize — else
@@ -611,6 +651,12 @@ ___pythonBuiltinTypeModule___
 	    property/memoryview) are class-named with their Python name and bound
 	    under that name in the Python compile dictionary; an IDENTITY match
 	    there confirms self is THE built-in type, not a same-named user class.
+	  * builtin EXCEPTION classes (___pythonBuiltinExceptionNames___) are the
+	    same shape as the Grail-defined types — class-named and bound in the
+	    Python dict — and are matched the same identity-confirmed way, so
+	    ``ValueError.__module__`` / ``OSError.__module__`` report 'builtins'
+	    while a module exception (StatisticsError) or a user ``class E(ValueError)``
+	    (name not in the list) is not.
 
 	Everything else answers nil and MUST keep its own __module__ (user classes,
 	class-enums) or fall through (dynamically created classes such as
@@ -619,9 +665,11 @@ ___pythonBuiltinTypeModule___
 	| pd nm |
 	self ___pythonBuiltinTypeName___ @env0:notNil ifTrue: [^ 'builtins'].
 	nm := self @env0:name @env0:asString @env0:asSymbol.
-	(#( #bool #bytearray #bytes #complex #dict #float #frozenset #int #list
+	((#( #bool #bytearray #bytes #complex #dict #float #frozenset #int #list
 		#memoryview #object #property #range #set #slice #str #tuple #type )
-		@env0:includes: nm) @env0:ifFalse: [^ nil].
+		@env0:includes: nm)
+		@env0:or: [(self ___pythonBuiltinExceptionNames___) @env0:includes: nm])
+		@env0:ifFalse: [^ nil].
 	pd := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'Python'.
 	pd @env0:isNil ifTrue: [^ nil].
 	((pd @env0:at: nm otherwise: nil) == self) ifTrue: [^ 'builtins'].
