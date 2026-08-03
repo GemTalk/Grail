@@ -772,3 +772,23 @@ testToBytesTwoArgForm
 	self assert: (r2 at: 1) equals: 1.
 	self assert: (r2 at: 2) equals: 0
 %
+
+category: 'Grail-Tests'
+method: IntegerTestCase
+testFromBytesTwoArgForm
+	"``int.from_bytes(bytes, byteorder)'' 2-arg form — the exact sibling
+	of the to_bytes bug above, and it survived that fix: the delegation
+	named ``from_bytes:byteorder:signed:'', a selector that does not
+	exist, so EVERY 2-arg call died in an uncatchable env-1 DNU on
+	Integer class (the kernel Integer metaclass chain has no env-1 DNU
+	backstop, so it could not even be caught by Python code).  Now
+	delegates to the 3-arg form with signed=False."
+
+	self assert: (int @env1:from_bytes: #[1 0] _: 'big') equals: 256.
+	self assert: (int @env1:from_bytes: #[1 0] _: 'little') equals: 1.
+	self assert: (int @env1:from_bytes: #[0 0 0 0] _: 'big') equals: 0.
+	"The 3-arg form kept working throughout -- pin both so a future
+	refactor cannot silently drop one again."
+	self assert: (int @env1:from_bytes: #[1 0] _: 'big' _: false) equals: 256.
+	self assert: (int @env1:from_bytes: #[255] _: 'big' _: true) equals: -1
+%

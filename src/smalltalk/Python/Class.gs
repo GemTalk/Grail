@@ -88,6 +88,14 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	TestTimeZone.test_cannot_subclass expects a catchable TypeError."
 	(self == (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #PyTimezone)) ifTrue: [
 		^ TypeError ___signal___: 'type ''timezone'' is not an acceptable base type'].
+	"``class C(bool)'': CPython's bool is documented as final -- it has
+	exactly two instances, so it does not set Py_TPFLAGS_BASETYPE.  Grail
+	maps bool onto the kernel Boolean, whose metaclass ALSO refuses
+	instantiation, but via ``Boolean class>>new''`s shouldNotImplement --
+	an uncatchable Smalltalk Error rather than the TypeError Python code
+	expects (test_bool.py test_subclass)."
+	(self == Boolean) ifTrue: [
+		^ TypeError ___signal___: 'type ''bool'' is not an acceptable base type'].
 	((self == Integer)
 		or: [self == SmallInteger or: [self == LargeInteger]]) ifTrue: [
 		^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #AbstractPyInt)
