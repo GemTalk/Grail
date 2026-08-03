@@ -102,6 +102,19 @@ the same name):
   Mock (no dunder magic); patch is context-manager-only; call sites
   Grail compiled as direct module sends bypass patched module
   attributes (read via getattr, or patch object attributes).
+- **pickle** — a bounded encoder over Grail's OWN self-describing
+  tagged byte format, NOT the CPython wire protocol: it round-trips the
+  object graph within a Grail session, but `dumps` output is not
+  readable by CPython (nor vice versa) and the `protocol=` argument is
+  accepted and ignored.  `test.test_bool`'s `test_picklevalues` — the
+  one remaining failure in that module — asserts the exact CPython
+  opcode bytes (`pickle.dumps(True, 0) == b"I01\n."`) and so fails by
+  construction; `test_pickle`, which only round-trips, passes.  Closing
+  it means implementing the real stack-VM protocol, not patching bool.
+- **marshal** — same encoder as pickle (marshal's wire format is
+  explicitly an implementation detail in CPython, so this is legal),
+  restricted to the value types marshal documents; code objects are
+  unsupported, since Grail has no bytecode.
 - **wsgiref** — headers + util only; simple_server intentionally
   absent (werkzeug is the serving path).
 - **email** (`EmailMessageTestCase`) — no output line folding (the

@@ -1082,6 +1082,18 @@ bareCallClassNewSelector
 	(function ___pythonBindingShadows___: funcName) ifTrue: [^nil].
 	cls := self class resolveClassForName: funcName.
 	cls ifNil: [^nil].
+	"``bool(x)'' is TRUTH TESTING, and stays so even when x is a class
+	object -- ``bool(dict)'' is True (test_bool.py test_types).  But
+	Grail names constructor selectors by arity, so the emitted
+	``__new__:'' would be the very selector CPython's allocation form
+	``bool.__new__(bool)'' uses, where a leading ``bool'' IS the target
+	class and the result is False (test_bool.py test_bool_new).  The two
+	readings are indistinguishable once both are one-argument sends, so
+	split them here: a literal call site emits the unambiguous
+	``___truthOf___:'', leaving ``__new__:'' to mean allocation.
+	Boolean class>>value:value: makes the same split for the indirect
+	``f = bool; f(x)'' form."
+	(cls == Boolean and: [arguments size = 1]) ifTrue: [^ #'___truthOf___:'].
 	candidate := self class classNewSelectorForArity: arguments size.
 	"Walk the metaclass chain so inherited __new__ methods are found
 	(e.g. `set` inherits __new__ from frozenset). Direct method-dict
@@ -1209,11 +1221,11 @@ printBareCallClassNewOn: aStream selector: aSelector
 	funcName := function id asString.
 	nargs := arguments size.
 	"Emit the selector bareCallClassNewSelector actually chose instead of
-	hard-coding ``__new__''.  Ignoring the argument was a SILENT contract
-	violation: the chooser could return any selector and codegen would emit
-	__new__ regardless, with no error anywhere -- the only symptom being
-	subtly wrong generated source.  Only the base name is taken here; the
-	``: arg _: arg'' tail below already encodes the arity."
+	hard-coding ``__new__''.  It is ``__new__'' for every class but bool,
+	which is routed to ``___truthOf___:'' so that a one-argument call site
+	cannot be mistaken for CPython's ``bool.__new__(bool)'' allocation
+	form (see bareCallClassNewSelector).  Only the base name is taken
+	here; the ``: arg _: arg'' tail below already encodes the arity."
 	base := aSelector asString.
 	colonIdx := base indexOf: $:.
 	colonIdx > 0 ifTrue: [base := base copyFrom: 1 to: colonIdx - 1].

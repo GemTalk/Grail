@@ -252,6 +252,15 @@ __new__: obj _: base
 	unambiguously the allocation form: build a cls instance carrying int(value)."
 	(obj isKindOf: Behavior) ifTrue: [
 		| inst |
+		"CPython refuses ``int.__new__(bool, 0)'': bool overrides __new__ to
+		return one of its two singletons, so allocating one through int's
+		__new__ is unsafe.  Grail's Boolean cannot be allocated at all --
+		``Boolean class>>new'' is shouldNotImplement, an UNCATCHABLE
+		Smalltalk Error where Python code expects a TypeError
+		(test_bool.py test_subclass)."
+		obj == Boolean ifTrue: [
+			TypeError ___signal___:
+				'int.__new__(bool) is not safe, use bool.__new__()'].
 		inst := obj @env0:new.
 		inst @env0:dynamicInstVarAt: #value put: (self __new__: base).
 		^ inst].

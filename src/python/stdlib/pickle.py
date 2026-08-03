@@ -13,6 +13,15 @@
 # The previous stub returned ``b"__grail_pickle__:" + repr(obj)`` for
 # Jinja2's bccache magic-bytes key; the real encoder below is still fully
 # deterministic for the ints Jinja2 pickles, so that path is unaffected.
+#
+# Consequence worth knowing before "fixing" a wire-format test: the
+# ``protocol=`` argument is accepted and IGNORED, and the bytes are not
+# CPython's.  test.test_bool's test_picklevalues asserts the exact CPython
+# opcodes (``dumps(True, 0) == b"I01\n."``) and therefore fails by
+# construction -- it is the one remaining failure in that module.  Special-
+# casing bool to emit those bytes would not fix it honestly; the real fix is
+# implementing CPython's stack-VM protocol.  test_pickle, which only checks
+# the round trip, passes.  `marshal` deliberately reuses this encoder.
 
 import sys
 
