@@ -132,15 +132,19 @@ testSubscriptedAnnotationRaises
 
 category: 'Grail-Tests-SingleDispatchRegister'
 method: SingleDispatchRegisterTestCase
-testUnionOfPlainClassesDoesNotRaise
+testUnionOfPlainClassesDispatches
 	"THE guard that makes the rejection above safe.  A union of plain classes
 	is valid CPython; a bare ``contains a bracket'' rejection would break it,
-	since typing.Union[int, str] has brackets too.  Grail cannot dispatch on a
-	union yet, so it falls through to the default -- soft, not a hard error on
-	working code."
+	since typing.Union[int, str] has brackets too.
 
-	self assert: self loadFixture @env1:union_of_plain_classes_does_not_raise
-		equals: true
+	This used to assert only that registering did not RAISE: the union was
+	left unregistered and every call fell through to the default, the softer
+	of two wrong answers while dispatch was missing.  CPython registers the
+	implementation once per member, and so does Grail, so a member now
+	dispatches and a non-member still does not."
+
+	self assert: self loadFixture @env1:union_of_plain_classes_dispatches
+		asArray equals: #( 'union' 'union' 'default' )
 %
 
 category: 'Grail-Tests-SingleDispatchRegister'
