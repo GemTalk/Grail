@@ -59,16 +59,27 @@ generatedSourceFor: pythonExpression
 	`printSmalltalkOn:` emits for it. Used by codegen tests so they can
 	assert against the exact emitted form."
 
-	| modAst stmts callAst sb |
+	| sb |
+	sb := WriteStream on: String new.
+	(self callAstFor: pythonExpression) printSmalltalkOn: sb.
+	^ sb contents
+%
+
+category: 'Grail-Helpers'
+method: ClassCallFastPathTestCase
+callAstFor: pythonExpression
+	"Parse `pythonExpression` (a single Python expression statement) and
+	return its CallAst.  Split out of generatedSourceFor: so a test can
+	drive one emitter method directly instead of going through
+	printSmalltalkOn:'s whole dispatch chain."
+
+	| modAst stmts |
 	modAst := ModuleAst parseSource: pythonExpression , (String with: Character lf).
 	"BlockAst's `body` instVar is the statement list (no public getter)."
 	stmts := modAst body instVarAt:
 		(modAst body class allInstVarNames indexOf: #'body').
 	"First statement is an ExprAst-like wrapper; its `value` is the call."
-	callAst := stmts first value.
-	sb := WriteStream on: String new.
-	callAst printSmalltalkOn: sb.
-	^ sb contents
+	^ stmts first value
 %
 
 ! ===============================================================================
@@ -129,12 +140,18 @@ testClassNewSelectorForArity
 category: 'Grail-Tests - Codegen'
 method: ClassCallFastPathTestCase
 testCodegenBoolOneArg
-	"`bool(1)` emits `(bool @env1:__new__: arg)` because Boolean has a
-	class-side `__new__: obj` in env 1."
+	"`bool(1)` emits `(bool @env1:___truthOf___: arg)`, NOT the `__new__:`
+	every other class gets.  A one-argument `__new__:` on Boolean is
+	ambiguous: CPython's `bool.__new__(bool)` allocation form passes the
+	target class as its first positional, so `bool(bool)` (True -- types
+	are always truthy) and `bool.__new__(bool)` (False) would compile to
+	the identical send.  Routing the CALL SITE to ___truthOf___: leaves
+	`__new__:` to mean allocation."
 
 	| src |
 	src := self generatedSourceFor: 'bool(1)'.
-	self assert: (src includesString: 'bool @env1:__new__: ').
+	self assert: (src includesString: 'bool @env1:___truthOf___: ').
+	self deny: (src includesString: '__new__').
 	self deny: (src includesString: 'value: { ').
 	self deny: (src includesString: 'value: nil')
 %
@@ -178,13 +195,47 @@ testCodegenStrStillUsesBuiltinsFastPath
 
 category: 'Grail-Tests - Codegen'
 method: ClassCallFastPathTestCase
+testEmitterHonorsChosenSelector
+	"printBareCallClassNewOn:selector: must EMIT the selector it is handed.
+
+	It used to ignore the argument entirely and hard-code ``__new__'',
+	which is a silent contract violation: bareCallClassNewSelector could
+	return any selector it liked and codegen would emit __new__ anyway,
+	with no error anywhere -- the only symptom was the generated source
+	being subtly wrong.  That is how the bool routing below first failed.
+
+	Drive the emitter directly with a selector no class-call would
+	otherwise produce, so this pins the contract independently of which
+	selectors bareCallClassNewSelector currently chooses."
+
+	| ast stream |
+	ast := self callAstFor: 'object(1, 2)'.
+	stream := WriteStream on: String new.
+	ast printBareCallClassNewOn: stream selector: #'___probeSelector___:_:'.
+	self assert: (stream contents includesString: '@env1:___probeSelector___:')
+		description: 'emitter ignored its selector argument: ' , stream contents.
+	self deny: (stream contents includesString: '__new__')
+		description: 'emitter still hard-codes __new__: ' , stream contents.
+	"The arity tail is built from the argument list, not from the
+	selector, so only the BASE name comes from the selector."
+	self assert: (stream contents includesString: ' _: ')
+%
+
+category: 'Grail-Tests - Codegen'
+method: ClassCallFastPathTestCase
 testCodegenArityMismatchEmitsTypeError
-	"`bool(1, 2)` has no matching `__new__:_:` on Boolean, so the codegen
-	emits a TypeError-raising expression instead of falling through to
-	the broken legacy `bool value: { ... } value: nil` form."
+	"`bool(1, 2, 3, 4)` has no matching `__new__:_:_:_:` on Boolean, so the
+	codegen emits a TypeError-raising expression instead of falling through
+	to the broken legacy `bool value: { ... } value: nil` form.
+
+	Uses 4 arguments rather than 2: Boolean now carries `__new__:_:` and
+	`__new__:_:_:` so that `bool(42, 42)` raises the CATCHABLE TypeError
+	CPython does, at runtime, instead of an uncatchable MNU on the kernel
+	Boolean metaclass.  Those arities therefore resolve here, and only a
+	genuinely unmatched one still exercises this codegen path."
 
 	| src |
-	src := self generatedSourceFor: 'bool(1, 2)'.
+	src := self generatedSourceFor: 'bool(1, 2, 3, 4)'.
 	self assert: (src includesString: 'TypeError ___signal___:').
 	self assert: (src includesString: 'bool()').
 	self deny: (src includesString: 'value: { ')

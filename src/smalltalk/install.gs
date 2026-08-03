@@ -538,6 +538,7 @@ run
 	at: #'BaseExceptionTestCase' put: nil;
 	at: #'BlockingIOErrorTestCase' put: nil;
 	at: #'BooleanTestCase' put: nil;
+	at: #'BoolConformanceTestCase' put: nil;
 	at: #'BoundMethodNameTestCase' put: nil;
 	at: #'BrokenPipeErrorTestCase' put: nil;
 	at: #'BufferErrorTestCase' put: nil;
@@ -1271,6 +1272,7 @@ input src/smalltalk/PythonTests/GrailTestResult.gs
 input src/smalltalk/PythonTests/PythonTestCase.gs
 input src/smalltalk/PythonTests/ChainedComparisonTestCase.gs
 input src/smalltalk/PythonTests/BooleanTestCase.gs
+input src/smalltalk/PythonTests/BoolConformanceTestCase.gs
 input src/smalltalk/PythonTests/BoundMethodNameTestCase.gs
 input src/smalltalk/PythonTests/BuiltinsTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassOverrideTestCase.gs

@@ -1482,11 +1482,35 @@ isspace
 
 	allSpace := true.
 	self @env0:do: [:char |
-		| isSpace |
-		isSpace := char @env0:isSeparator.
-		isSpace ifFalse: [ allSpace := false ].
+		(self ___isPySpaceCodePoint___: char @env0:codePoint)
+			ifFalse: [ allSpace := false ].
 	].
 	^ allSpace
+%
+
+category: 'Grail-String Test Methods'
+method: CharacterCollection
+___isPySpaceCodePoint___: cp
+	"CPython's str.isspace() is true for a codepoint in Unicode category
+	Zs or with bidirectional class WS, B or S -- a wider set than
+	GemStone's ``Character>>isSeparator'', which stops at the ASCII
+	separators plus NBSP.  ``'　'.isspace()'' (IDEOGRAPHIC SPACE)
+	was False without this (test_bool.py test_string).  Enumerated
+	rather than table-driven: the whole set is 29 codepoints and does
+	not move between Unicode releases."
+
+	"ASCII: TAB LF VT FF CR, the FS/GS/RS/US information separators, SPACE."
+	(cp @env0:between: 9 and: 13) ifTrue: [^ true].
+	(cp @env0:between: 28 and: 32) ifTrue: [^ true].
+	cp @env0:< 127 ifTrue: [^ false].
+	"NEXT LINE, NO-BREAK SPACE, OGHAM SPACE MARK."
+	((cp @env0:= 133) or: [(cp @env0:= 160) or: [cp @env0:= 5760]]) ifTrue: [^ true].
+	"EN QUAD .. HAIR SPACE (U+2000..U+200A)."
+	(cp @env0:between: 8192 and: 8202) ifTrue: [^ true].
+	"LINE/PARAGRAPH SEPARATOR, NARROW NO-BREAK SPACE, MEDIUM MATHEMATICAL
+	SPACE, IDEOGRAPHIC SPACE."
+	^ (cp @env0:= 8232) or: [(cp @env0:= 8233)
+		or: [(cp @env0:= 8239) or: [(cp @env0:= 8287) or: [cp @env0:= 12288]]]]
 %
 
 category: 'Grail-String Test Methods'
