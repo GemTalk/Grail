@@ -492,10 +492,8 @@ ___grailBuildMembers: cls names: attrNames
 							ifFalse: [(Enum ___grailIsStrEnumClass: cls)
 								ifTrue: [nameStr @env0:asLowercase]
 								ifFalse: [(Enum ___grailIsFlagClass: cls)
-									ifTrue: [maxInt @env0:<= 0
-										ifTrue: [1]
-										ifFalse: [1 @env0:bitShift: maxInt @env0:highBit]]
-									ifFalse: [lastInt @env0:+ 1]]].
+									ifTrue: [Enum ___grailFlagAutoNext: genValues]
+									ifFalse: [Enum ___grailPlainAutoNext: genValues]]].
 						autoResolved @env0:at: rawValue put: resolved.
 						rawValue := resolved]].
 			genValues @env0:add: rawValue.
@@ -882,6 +880,49 @@ ___grailMembers: cls
 	rec := self ___grailRecordFor: cls.
 	rec @env0:isNil ifTrue: [^ OrderedCollection @env0:new].
 	^ rec @env0:at: 3
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailPlainAutoNext: lastValues
+	"CPython's DEFAULT Enum._generate_next_value_ for a plain (non-flag)
+	class: sorted(last_values).pop() + 1.  A last-values set that cannot be
+	sorted (mixed non-comparable types, e.g. a str and an int) raises
+	``unable to sort non-numeric values''; a non-numeric maximum (a bare str)
+	raises ``unable to increment <repr>'' (test_auto_garbage_fail /
+	_corrected_fail).  Empty -> start (1)."
+
+	| maxVal |
+	lastValues @env0:isEmpty ifTrue: [^ 1].
+	maxVal := [(lastValues @env0:asSortedCollection) @env0:last]
+		@env0:on: Error do: [:ex |
+			^ TypeError ___signal___: 'unable to sort non-numeric values'].
+	^ (maxVal isKindOf: Number)
+		ifTrue: [maxVal @env0:+ 1]
+		ifFalse: [TypeError ___signal___:
+			'unable to increment ' @env0:, maxVal @env0:printString]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailFlagAutoNext: lastValues
+	"CPython's DEFAULT Flag._generate_next_value_: 2 ** (_high_bit(max(
+	last_values)) + 1) -- i.e. the next power of two above the highest bit
+	seen.  A non-integer maximum has no bit length and raises ``invalid flag
+	value <repr>'' (OldTestFlag test_auto_number_garbage).  Empty, or a
+	max <= 0, -> 1."
+
+	| maxVal |
+	lastValues @env0:isEmpty ifTrue: [^ 1].
+	maxVal := [(lastValues @env0:asSortedCollection) @env0:last]
+		@env0:on: Error do: [:ex |
+			^ TypeError ___signal___: 'invalid flag value '
+				@env0:, (lastValues @env0:detect: [:v | (v isKindOf: Integer) @env0:not])
+					@env0:printString].
+	(maxVal isKindOf: Integer) ifFalse: [
+		^ TypeError ___signal___: 'invalid flag value ' @env0:, maxVal @env0:printString].
+	maxVal @env0:<= 0 ifTrue: [^ 1].
+	^ 1 @env0:bitShift: maxVal @env0:highBit
 %
 
 category: 'Grail-Enum Metaclass'
