@@ -765,6 +765,7 @@ run
 	at: #'TabErrorTestCase' put: nil;
 	at: #'TimeoutErrorTestCase' put: nil;
 	at: #'TotalOrderingTestCase' put: nil;
+	at: #'TzsetPinningTestCase' put: nil;
 	at: #'TryTestCase' put: nil;
 	at: #'TupleTestCase' put: nil;
 	at: #'TwilioClientTestCase' put: nil;
@@ -1449,6 +1450,7 @@ input src/smalltalk/PythonTests/StringModuleTestCase.gs
 input src/smalltalk/PythonTests/SubmoduleAutoBindTestCase.gs
 input src/smalltalk/PythonTests/SysTestCase.gs
 input src/smalltalk/PythonTests/TotalOrderingTestCase.gs
+input src/smalltalk/PythonTests/TzsetPinningTestCase.gs
 input src/smalltalk/PythonTests/TryTestCase.gs
 input src/smalltalk/PythonTests/TupleTestCase.gs
 input src/smalltalk/PythonTests/BaseExceptionTestCase.gs

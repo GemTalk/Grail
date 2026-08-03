@@ -71,7 +71,6 @@ requires_docstrings = _PassthroughDecorator()
 requires_resource = _PassthroughDecorator()
 requires_mac_ver = _PassthroughDecorator()
 run_with_locale = _PassthroughDecorator()
-run_with_tz = _PassthroughDecorator()
 bigmemtest = _PassthroughDecorator()
 bigaddrspacetest = _PassthroughDecorator()
 thread_unsafe = _PassthroughDecorator()
@@ -80,6 +79,57 @@ skip_if_unlimited_stack_size = _PassthroughDecorator()
 skip_on_s390x = _PassthroughDecorator()
 skip_emscripten_stack_overflow = _PassthroughDecorator()
 skip_wasi_stack_overflow = _PassthroughDecorator()
+
+
+def run_with_tz(tz):
+    """CPython's run_with_tz: pin the timezone for the duration of the test.
+
+    NOT a passthrough, unlike its neighbours above.  A passthrough here does
+    not merely skip a check -- it silently changes what the test measures.
+    These tests assert values that are only true in the zone they name
+    (test_timestamp_naive asserts 18000.0 for the epoch, true in US/Eastern
+    and nowhere else), so run unpinned they pass or fail according to where
+    the machine is, and the scoreboard moves when a laptop changes zones.
+
+    Same shape as CPython's: set os.environ['TZ'], call time.tzset(), restore
+    both in a finally.  Grail's tzset raises ValueError for a zone it cannot
+    resolve -- turned into a skip here, which is what CPython does on a
+    platform without tzset at all.
+    """
+    def decorator(func):
+        def inner(*args, **kwds):
+            import os
+            import time
+            # CPython's own spelling.  NOT getattr(time, 'tzset', None):
+            # Grail answers None for that even where the attribute exists
+            # (a defaulted getattr misses a native module's methods), so the
+            # probe skipped every one of these tests.
+            try:
+                tzset = time.tzset
+            except AttributeError:
+                raise unittest.SkipTest('tzset required')
+            had_tz = 'TZ' in os.environ
+            orig_tz = os.environ.get('TZ')
+            os.environ['TZ'] = tz
+            try:
+                try:
+                    tzset()
+                except ValueError as e:
+                    raise unittest.SkipTest(str(e))
+                return func(*args, **kwds)
+            finally:
+                # Restoring matters more here than in CPython: the zone is
+                # session state in the gem, so leaking it would silently
+                # re-time every later test in the same run.
+                if had_tz:
+                    os.environ['TZ'] = orig_tz
+                else:
+                    os.environ['TZ'] = ''
+                tzset()
+        inner.__name__ = func.__name__
+        inner.__doc__ = func.__doc__
+        return inner
+    return decorator
 
 
 def check_sizeof(test, o, size):
