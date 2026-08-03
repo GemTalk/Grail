@@ -388,17 +388,25 @@ ___grailBuildMembers: cls names: attrNames
 	rather than a bare allocation; a __new__ that delegates to
 	``super().__new__'' trips the guard in Enum>>___new__:kw:.
 
-	Only a __new__ defined ON cls is honored here.  An INHERITED user __new__
-	(``class LabelledList(LabelledIntEnum)'' reusing LabelledIntEnum's __new__,
-	test_conflicting_types_resolved_in_new) would also need running, but a bare
-	``notNil'' over-fires: it runs a base __new__ on member-less subclasses and
-	on mixin chains it should not (regressing test_multiple_mixin_inherited/_mro
-	and several dir/repr fixtures).  Matching CPython's _find_new_ (which weighs
-	member_type, object.__new__/Enum.__new__ identity, and _new_member_) is a
-	separate refinement; keep the cls-only test for now."
+	An INHERITED user __new__ (``class SubEnum(SuperEnum)'' reusing SuperEnum's
+	__new__, test_dir_on_sub..._instance_dict_on_super) must ALSO run so its
+	member-instance side effects (``obj.description = ...'') persist.  But
+	broadening the test on a DATA-MIXED chain regresses several fixtures
+	(test_bad_new_super's super().__new__ guard; test_multiple_mixin_inherited),
+	because CPython's _find_new_ weighs member_type.__new__ / Enum.__new__
+	identity there -- a refinement not yet mirrored.  So keep the exact cls-only
+	rule for every data-mixed enum, and honor an inherited enum __new__ ONLY for
+	a PLAIN (member_type is object) enum, where there is no storage constructor
+	to disambiguate.  ``inheritsFrom: Enum'' selects an enum-class defining class
+	(the built-in storage/data constructors -- AbstractPyInt/Float, PyDate/Time,
+	functools_* -- are not enum classes); object member_type is only ever
+	Enum-rooted, so the single base check suffices."
 	newDefClass := cls @env0:whichClassIncludesSelector: #'___new__:kw:'
 		environmentId: 1.
-	hasUserNew := newDefClass == cls.
+	hasUserNew := (newDefClass == cls) or: [
+		newDefClass @env0:notNil
+			and: [(newDefClass @env0:inheritsFrom: Enum)
+			and: [(Enum ___grailMemberTypeFor: cls) == object]]].
 	tupleClass := Python @env0:at: #tuple otherwise: Array.
 	"An MI enum whose storage base is Enum (``cls inheritsFrom: Enum'') but
 	which mixes in a FOREIGN data type -- ``class E(date, Enum)'', where date is
