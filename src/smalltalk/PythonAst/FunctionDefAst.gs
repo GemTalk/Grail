@@ -8,7 +8,8 @@ expectvalue /Class
 doit
 StatementAst subclass: 'FunctionDefAst'
   instVarNames: #( name args body
-                    decorator_list returns type_comment type_params)
+                    decorator_list returns type_comment type_params
+                    isGeneratorCache)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2002,9 +2003,23 @@ method: FunctionDefAst
 isGenerator
 	"True if this function''s body contains a ``yield`` (or
 	``yield from``) expression — not counting yields inside
-	*nested* defs, which belong to their own generator scope."
+	*nested* defs, which belong to their own generator scope.
 
-	^ self bodyContainsYieldExceptNestedDefs: body body
+	MEMOISED, because the answer costs a full walk of the body subtree and
+	is asked for repeatedly: nine call sites in this class's own codegen,
+	plus TryAst consulting ``functionBeingCompiled isGenerator'' once per
+	TRY STATEMENT.  A def was re-walked ten-odd times, and each visit built
+	a fresh ``node class allInstVarNames'' Array to find its children --
+	which put this walk on the stack for about half of all profiler samples
+	taken over the SUnit suite.
+
+	Safe to cache: the body is fully parsed before any of these callers run,
+	and none of them rewrites it.  nil means not yet computed (the answer
+	itself is a Boolean, so it is never ambiguous)."
+
+	isGeneratorCache isNil ifTrue: [
+		isGeneratorCache := self bodyContainsYieldExceptNestedDefs: body body].
+	^ isGeneratorCache
 %
 
 category: 'Grail-Module Method Compilation'
