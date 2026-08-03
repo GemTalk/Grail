@@ -175,6 +175,48 @@ doit
 functools_partial category: 'Grail-Modules'
 %
 
+! ------- functools_partialmethod class (Python functools.partialmethod)
+expectvalue /Class
+doit
+PythonInstance subclass: 'functools_partialmethod'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+functools_partialmethod comment:
+'``functools.partialmethod'' as a REAL class.
+
+It used to be a module function returning a bare closure, which meant the
+receiver was never bound: reading the attribute off an instance answered
+the closure itself, so ``a.m()'' called the wrapped function with the
+BOUND args only and CPython''s leading ``self'' was simply missing --
+``((), {})'' where the test wanted ``((a,), {})''.  A closure also cannot
+be subclassed, carry a repr, or report __isabstractmethod__.
+
+Answers ``___pyBindsSelf___'', so reading it through an INSTANCE binds
+the receiver the way CPython''s __get__ does.  One call shape then serves
+both paths: read through the CLASS, the caller passes the receiver
+explicitly in the same leading slot (``A.m(a, 5)'').
+
+NOT supported: ``partialmethod(staticmethod(f))'' and
+``partialmethod(classmethod(f))''.  Grail''s staticmethod/classmethod are
+identity stubs, so those are indistinguishable here from a plain
+function, and both must bind the receiver differently (not at all, and to
+the class).  test_descriptors and test_bound_method_introspection cover
+exactly that and still fail.'
+%
+
+expectvalue /Class
+doit
+functools_partialmethod category: 'Grail-Modules'
+%
+
 ! ------- functools_CacheInfo: the named 4-tuple lru_cache.cache_info() returns
 expectvalue /Class
 doit
@@ -257,6 +299,8 @@ functools removeAllMethods: 1.
 functools class removeAllMethods: 1.
 functools_partial removeAllMethods: 1.
 functools_partial class removeAllMethods: 1.
+functools_partialmethod removeAllMethods: 1.
+functools_partialmethod class removeAllMethods: 1.
 functools_cmpkey removeAllMethods: 1.
 functools_cmpkey class removeAllMethods: 1.
 functools_ordering_op removeAllMethods: 1.
@@ -284,6 +328,11 @@ initialize
 	self @env0:at: #partial put: functools_partial.
 	"_CacheInfo: the named 4-tuple class lru_cache.cache_info() returns
 	and test code constructs directly."
+	"partialmethod: the CLASS, published the same way partial is.  It has to
+	be the SymbolDictionary entry rather than a module method, because a
+	method of that name SHADOWS the entry -- and a method cannot be
+	subclassed or instantiated through Grail's __new__ protocol."
+	self @env0:at: #partialmethod put: functools_partialmethod.
 	self @env0:at: #'_CacheInfo' put: functools_CacheInfo.
 	"Placeholder: the singleton sentinel for reserved positional slots
 	in partial (Python 3.14).  Its type is functools_Placeholder;
@@ -1223,60 +1272,233 @@ ___updateWrapper___: wrapper wrapped: wrapped assigned: assigned updated: update
 	^ wrapper
 %
 
-category: 'Grail-Built-in Functions'
-method: functools
-partialmethod: aFunction
-	"partialmethod(fn) with nothing bound — the descriptor behaves
-	like the function itself."
+category: 'Grail-Instantiation'
+classmethod: functools_partialmethod
+value: positional value: keywords
+	"partialmethod(fn, *args, **kw) -- the class-call entry.  Routes through
+	the __new__ protocol so a subclass (whose ClassDefAst-emitted
+	value:value: uses ___allocateInstance___) and a direct call share one
+	constructor.  Without this the class-call handler looks for an __init__
+	of matching arity and reports ``no matching method''."
 
-	^ aFunction
+	^ self ___allocateInstance___: positional kw: keywords
 %
 
-category: 'Grail-Built-in Functions'
-method: functools
-_partialmethod: positional kw: kwargs
-	"functools.partialmethod(fn, *bound, **boundKw).  CPython returns
-	a descriptor that, accessed through an instance, prepends self
-	before the bound args.  Grail class attrs holding closures are
-	invoked unbound, so the closure takes the receiver explicitly as
-	its first call argument: ``inst.m(*more)`` arrives here as
-	``(inst, *more)`` and is forwarded as ``fn(inst, *bound, *more)''.
-	Django's ORM (_get_FIELD_display, model deferred loading) only
-	CONSTRUCTS these at class-definition time on the hello-world
-	path."
+category: 'Grail-Reflection'
+classmethod: functools_partialmethod
+__module__
+	^ 'functools'
+%
 
-	| fn boundArgs boundKw |
-	(positional @env0:isNil or: [positional @env0:isEmpty]) ifTrue: [
-		TypeError ___signal___: 'partialmethod expected at least 1 argument, got 0'
-	].
+category: 'Grail-Reflection'
+classmethod: functools_partialmethod
+__qualname__
+	^ 'partialmethod'
+%
+
+category: 'Grail-Instantiation'
+method: functools_partialmethod
+___new__: positional kw: keywords
+	"Constructor body.  self is the CLASS -- ___allocateInstance___ runs a
+	class-body __new__ non-virtually with the class as receiver, which is
+	also what makes ``class Sub(partialmethod): pass'' construct Sub
+	instances (test_subclass_optimization; the old module function returned
+	a closure, which cannot be subclassed at all)."
+
+	| inst fn rest kw |
+	(positional == nil or: [positional @env0:isEmpty]) ifTrue: [
+		"``partialmethod()'' and ``partialmethod(func=f, a=1)'' both land here:
+		CPython takes func POSITIONALLY, so a keyword of that name is just
+		another keyword and there is no function (test_invalid_args)."
+		TypeError ___signal___:
+			'partialmethod expected at least 1 argument, got 0'].
 	fn := positional @env0:at: 1.
-	boundArgs := positional @env0:size @env0:> 1
+	"``partialmethod(None, 1)'' is a TypeError: the target has to be callable
+	or a descriptor.  Checked at CONSTRUCTION, as CPython does, so the class
+	body raises rather than something failing much later at call time."
+	(((builtins @env0:___instance___) callable: fn)
+		or: [(fn ___respondsTo___: #'__get__:_:')
+			or: [fn ___respondsTo___: #'___get__:kw:']]) ifFalse: [
+		TypeError ___signal___: (fn __repr__) @env0:asString
+			@env0:, ' is not callable or a descriptor'].
+	rest := positional @env0:size @env0:> 1
 		ifTrue: [positional @env0:copyFrom: 2 to: positional @env0:size]
 		ifFalse: [#()].
-	boundKw := kwargs.
-	^ [:morePositional :moreKwargs |
-		| callArgs rest allKw |
-		callArgs := morePositional @env0:ifNil: [#()].
-		callArgs @env0:isEmpty
-			ifTrue: [rest := boundArgs]
-			ifFalse: [
-				"receiver first, then the partialmethod-bound args, then
-				the remaining call args."
-				rest := (Array @env0:with: (callArgs @env0:at: 1)) @env0:, boundArgs.
-				callArgs @env0:size @env0:> 1 ifTrue: [
-					rest := rest @env0:, (callArgs @env0:copyFrom: 2 to: callArgs @env0:size)]].
-		allKw := (boundKw @env0:isNil or: [boundKw @env0:isEmpty])
-			ifTrue: [moreKwargs]
-			ifFalse: [
-				(moreKwargs @env0:isNil or: [moreKwargs @env0:isEmpty])
-					ifTrue: [boundKw]
-					ifFalse: [
-						| merged |
-						merged := boundKw @env0:copy.
-						moreKwargs @env0:keysAndValuesDo: [:k :v | merged @env0:at: k put: v].
-						merged]].
-		fn ___pyCallValue___: rest kw: allKw]
+	kw := keywords == nil
+		ifTrue: [KeyValueDictionary @env0:new]
+		ifFalse: [keywords @env0:copy].
+	"CPython flattens partialmethod-of-partialmethod: adopt the inner target,
+	the INNER bound args come first, and the outer keywords override.  Grail's
+	class body reads the sibling attribute for ``nested = partialmethod(
+	positional, 5)'', so the inner really is one of these by then."
+	(fn isKindOf: functools_partialmethod) ifTrue: [
+		| merged |
+		rest := (fn @env0:dynamicInstVarAt: #args) @env0:asArray @env0:, rest.
+		merged := (fn @env0:dynamicInstVarAt: #keywords) @env0:copy.
+		kw @env0:keysAndValuesDo: [:k :v | merged @env0:at: k put: v].
+		kw := merged.
+		fn := fn @env0:dynamicInstVarAt: #func].
+	inst := self @env0:new.
+	inst @env0:dynamicInstVarAt: #func put: fn.
+	inst @env0:dynamicInstVarAt: #args put: (tuple @env0:withAll: rest).
+	inst @env0:dynamicInstVarAt: #keywords put: kw.
+	^ inst
 %
+
+category: 'Grail-Attribute Access'
+method: functools_partialmethod
+___pyBindsSelf___
+	"Marker read by object >> ___isDescriptorCallable___:.  CPython makes
+	this a descriptor whose __get__ binds the receiver; Grail reaches the
+	same place through its own class-attribute binding, so ``a.m(5)'' arrives
+	at the call below as (a, 5)."
+
+	^ true
+%
+
+category: 'Grail-Calling'
+method: functools_partialmethod
+___pyCallValue___: positional kw: kwargs
+	"``a.m(*more, **moreKw)'' -> ``func(a, *bound, *more, **{**boundKw,
+	**moreKw})''.
+
+	One shape serves both access paths.  Read through an INSTANCE the
+	receiver was prepended by the binding; read through the CLASS the caller
+	passes it explicitly in the same leading slot (``A.m(a, 5)'').  Later
+	keywords override the bound ones, as in CPython."
+
+	| callArgs recv rest allKw fn |
+	callArgs := positional @env0:ifNil: [#()].
+	callArgs @env0:isEmpty ifTrue: [
+		TypeError ___signal___: (self ___targetName___)
+			@env0:, ' requires a receiver as its first argument'].
+	recv := callArgs @env0:at: 1.
+	rest := (Array @env0:with: recv)
+		@env0:, (self @env0:dynamicInstVarAt: #args) @env0:asArray.
+	callArgs @env0:size @env0:> 1 ifTrue: [
+		rest := rest @env0:, (callArgs @env0:copyFrom: 2 to: callArgs @env0:size)].
+	allKw := (self @env0:dynamicInstVarAt: #keywords) @env0:copy.
+	(kwargs == nil or: [kwargs @env0:isEmpty]) ifFalse: [
+		kwargs @env0:keysAndValuesDo: [:k :v | allKw @env0:at: k put: v]].
+	fn := self @env0:dynamicInstVarAt: #func.
+	^ fn ___pyCallValue___: rest kw: allKw
+%
+
+category: 'Grail-Calling'
+method: functools_partialmethod
+value: positional value: kwargs
+	"Called directly rather than through a binding."
+
+	^ self ___pyCallValue___: positional kw: kwargs
+%
+
+category: 'Grail-Calling'
+method: functools_partialmethod
+__get__: obj _: objtype
+	"The descriptor protocol, for a caller that invokes it explicitly
+	(``p.__get__(0)()'' in test_subclass_optimization).  MethodBinding is
+	what Grail's implicit attribute read produces, so both routes agree."
+
+	^ MethodBinding instance: obj callable: self
+%
+
+category: 'Grail-Calling'
+method: functools_partialmethod
+__get__: obj
+
+	^ self __get__: obj _: None
+%
+
+category: 'Grail-Accessing'
+method: functools_partialmethod
+func
+	^ self @env0:dynamicInstVarAt: #func
+%
+
+category: 'Grail-Accessing'
+method: functools_partialmethod
+args
+	^ self @env0:dynamicInstVarAt: #args
+%
+
+category: 'Grail-Accessing'
+method: functools_partialmethod
+keywords
+	^ self @env0:dynamicInstVarAt: #keywords
+%
+
+category: 'Grail-Attribute Access'
+method: functools_partialmethod
+__isabstractmethod__
+	"CPython: ``getattr(self.func, '__isabstractmethod__', False)'' -- so a
+	partialmethod over an abstract method stays abstract, and one over an
+	ordinary function reports False rather than raising."
+
+	^ [((self @env0:dynamicInstVarAt: #func)
+		___pyAttrLoad___: #'__isabstractmethod__') == true]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_partialmethod
+___targetName___
+	"The wrapped target's name, for the arity error."
+
+	^ [(self @env0:dynamicInstVarAt: #func) __name__ @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: 'partialmethod']
+%
+
+category: 'Grail-Representation'
+method: functools_partialmethod
+__repr__
+	"CPython: ``functools.partialmethod(<func>, 3, b=4)'' -- the target's
+	repr, then the bound positionals, then the bound keywords in insertion
+	order."
+
+	| ws args kw first |
+	ws := WriteStream @env0:on: Unicode7 @env0:new.
+	ws @env0:nextPutAll: 'functools.partialmethod('.
+	ws @env0:nextPutAll: ((self @env0:dynamicInstVarAt: #func) __repr__)
+		@env0:asString.
+	args := (self @env0:dynamicInstVarAt: #args) @env0:asArray.
+	args @env0:do: [:a |
+		ws @env0:nextPutAll: ', '.
+		ws @env0:nextPutAll: (a __repr__) @env0:asString].
+	kw := self @env0:dynamicInstVarAt: #keywords.
+	first := true.
+	kw @env0:keysAndValuesDo: [:k :v |
+		ws @env0:nextPutAll: ', '.
+		ws @env0:nextPutAll: k @env0:asString.
+		ws @env0:nextPut: $=.
+		ws @env0:nextPutAll: (v __repr__) @env0:asString.
+		first := false].
+	ws @env0:nextPut: $).
+	^ ws @env0:contents
+%
+
+! ___pythonValueAttrs___ MUST be compiled in env 0: Object >> ___pyAttrLoad___
+! consults it through an env-0 ``respondsTo:'', so an env-1 definition is
+! invisible to the probe and the hook silently does nothing.
+set compile_env: 0
+
+category: 'Grail-Python Attribute Hook'
+classmethod: functools_partialmethod
+___pythonValueAttrs___
+	"func / args / keywords are the documented DATA attributes, and
+	__isabstractmethod__ is a @property in CPython -- abc consults it with
+	getattr, where a callable would test truthy whatever it wrapped."
+
+	^ IdentitySet new
+		add: #func;
+		add: #args;
+		add: #keywords;
+		add: #'__isabstractmethod__';
+		yourself
+%
+
+set compile_env: 1
 
 category: 'Grail-Total Ordering'
 method: functools

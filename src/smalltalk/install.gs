@@ -306,6 +306,7 @@ run
 	at: #'frozenset' put: nil;
 	at: #'functools' put: nil;
 	at: #'functools_partial' put: nil;
+	at: #'functools_partialmethod' put: nil;
 	at: #'dict_itemiterator' put: nil;
 	at: #'dict_keyiterator' put: nil;
 	at: #'dict_valueiterator' put: nil;
@@ -717,6 +718,7 @@ run
 	at: #'OsTestCase' put: nil;
 	at: #'OverflowErrorTestCase' put: nil;
 	at: #'PartialCallableAndCopyTestCase' put: nil;
+	at: #'PartialMethodDescriptorTestCase' put: nil;
 	at: #'PassTestCase' put: nil;
 	at: #'PendingDeprecationWarningTestCase' put: nil;
 	at: #'PermissionErrorTestCase' put: nil;
@@ -1430,6 +1432,7 @@ input src/smalltalk/PythonTests/NumbersTestCase.gs
 input src/smalltalk/PythonTests/ObjectTestCase.gs
 input src/smalltalk/PythonTests/OsTestCase.gs
 input src/smalltalk/PythonTests/PartialCallableAndCopyTestCase.gs
+input src/smalltalk/PythonTests/PartialMethodDescriptorTestCase.gs
 input src/smalltalk/PythonTests/PassTestCase.gs
 input src/smalltalk/PythonTests/PythonParserTestCase.gs
 input src/smalltalk/PythonTests/PythonTokenizerTestCase.gs
