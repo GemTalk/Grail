@@ -2482,6 +2482,25 @@ value: positional value: keywords
 	^ self ___allocateInstance___: positional kw: keywords
 %
 
+category: 'Grail-Instantiation'
+classmethod: functools_cached_property
+___pyCallValue___: positional kw: kwargs
+	"The INDIRECT call protocol, which is how a class-body DECORATOR reaches
+	the class: ``@functools.cached_property'' emits
+	``cached_property ___pyCallValue___: { <the def> } kw: nil''.  Without
+	this it reached object's ``not callable'' raiser -- and since a class-body
+	decorator's rebinding store is wrapped in an error-swallowing guard, the
+	decoration silently did not happen and every read re-invoked the method.
+
+	Opt-in per class rather than answered for all of them on ``object'',
+	because making every class callable through this path also makes
+	``@enum.property'' / ``@member'' apply for the first time, and Grail's
+	enum member builder counts the resulting descriptor as a MEMBER."
+
+	^ self value: (positional == nil ifTrue: [#()] ifFalse: [positional])
+		value: kwargs
+%
+
 category: 'Grail-Reflection'
 classmethod: functools_cached_property
 __module__
