@@ -9,7 +9,7 @@ doit
 PythonTestCase subclass: 'DunderNewTestCase'
   instVarNames: #()
   classVars: #()
-  classInstVars: #()
+  classInstVars: #( sharedFixture )
   poolDictionaries: #()
   inDictionary: PythonTests
   options: #()
@@ -33,9 +33,58 @@ set compile_env: 0
 category: 'Grail-Helpers'
 method: DunderNewTestCase
 fixture
-	"Load (fresh each test) the descriptor-round fixture module: real
-	class definitions cannot instantiate inside eval:."
+	"The descriptor-round fixture module: real class definitions cannot
+	instantiate inside eval:, so the cases live in a module the tests read
+	precomputed results out of.
 
+	Imported ONCE PER SESSION and shared.  It is a 1592-line module whose
+	import re-runs every class body in it, which under canonical classes
+	costs the better part of a second; this class has 83 tests and 60 of
+	them want it, so a fresh import each was ~60s -- the single largest cost
+	in the whole SUnit gate, and enough on its own to make this class's
+	shard the one every CI run waits for.
+
+	Sharing is sound because every test here READS a module-level constant
+	that the module computed at import time; none writes.  The one exception
+	asks for ``freshFixture'' instead -- see there.  A test added later that
+	mutates the module MUST do the same, or it will leak into whatever runs
+	after it."
+
+	self class sharedFixture ifNotNil: [:m | ^ m].
+	^ self class sharedFixture: self freshFixture
+%
+
+category: 'Grail-Helpers'
+classmethod: DunderNewTestCase
+sharedFixture
+	"The session's shared fixture module, or nil before the first import.
+	Class-side because that is where the cache has to live: SUnit builds a
+	NEW test-case instance per test method, so an instance variable would
+	cache nothing."
+
+	^ sharedFixture
+%
+
+category: 'Grail-Helpers'
+classmethod: DunderNewTestCase
+sharedFixture: aModule
+	sharedFixture := aModule.
+	^ aModule
+%
+
+category: 'Grail-Helpers'
+method: DunderNewTestCase
+freshFixture
+	"A private, newly-imported copy of the fixture module, for a test that
+	MUTATES it and so must not use the shared one (testEnumConvert: enum's
+	_convert_ binds the generated enums onto the module and removes the
+	converted globals from it).
+
+	Also drops the shared copy, because a mutating test can only be sure of
+	its own module if nothing else is holding the old one -- and the next
+	reader then gets a clean import rather than this test's leftovers."
+
+	self class sharedFixture: nil.
 	(importlib @env1:modules) removeKey: #'test.grail_dunder_check' ifAbsent: [].
 	^ importlib
 		loadModuleFromPath: (importlib @env1:___moduleNameToPath___: 'test.grail_dunder_check')
@@ -1408,7 +1457,11 @@ testEnumConvert
 	"Load the function object explicitly, then call it -- a bare
 	``fixture run_enum_convert'' would invoke the 0-arg function via the
 	attribute-expr path and return the tuple, which is not itself callable."
-	r := (self fixture @env1:___pyAttrLoad___: #run_enum_convert) @env1:value: { } value: nil.
+	"freshFixture, not fixture: _convert_ MUTATES the module (it binds the
+	generated enums onto it and removes the converted globals), so this test
+	must not run against -- or leave its changes in -- the copy the other
+	tests share."
+	r := (self freshFixture @env1:___pyAttrLoad___: #run_enum_convert) @env1:value: { } value: nil.
 	self assert: r @env1:__repr__
 		equals: '(''GRAILCONV_A'', True, True, [''GRAILUNCMP_A'', ''GRAILUNCMP_B'', ''GRAILUNCMP_C''])'
 %
