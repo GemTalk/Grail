@@ -128,6 +128,23 @@ ___requireHashableAsDictKey___
 
 category: 'Grail-Hashability'
 method: object
+___pyHashCheck___
+	"Raise the TypeError CPython raises for an unhashable value; answer the
+	receiver otherwise.
+
+	For a place that is about to use a Python value as a key in a SMALLTALK
+	collection.  Smalltalk hashes a list or a dict perfectly well, so such a
+	key is accepted and stored where Python says it cannot exist -- the
+	collection is fine, the semantics are not.  Sending ``__hash__'' is the
+	whole check: every unhashable built-in raises from there, and so does a
+	class made unhashable at creation time (see ___raiseUnhashableType___)."
+
+	self __hash__.
+	^ self
+%
+
+category: 'Grail-Hashability'
+method: object
 ___raiseUnhashableType___
 	"Raise CPython's ``TypeError: unhashable type: 'X''' for the RECEIVER's own
 	class.  The body a class-creation-time unhashable class gets for __hash__

@@ -174,10 +174,19 @@ ___cacheKeyFor___: positional kw: kwargs
 
 	| key pairs |
 	key := (positional == nil ifTrue: [#()] ifFalse: [positional]) @env0:asArray.
+	"Every argument must be HASHABLE, as it is in CPython -- lru_cache hashes
+	the key it builds, so ``cached([])'' is a TypeError there.  Grail keys a
+	Smalltalk dictionary by an Array of the arguments, and a Smalltalk
+	collection hashes perfectly well, so an unhashable Python value was
+	cached under a key that Python semantics say cannot exist (issue #28653,
+	test_lru_type_error).  Ask each argument for its Python hash and let the
+	TypeError out; the key itself is unchanged."
+	key @env0:do: [:each | each ___pyHashCheck___].
 	(kwargs ~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
 		pairs := OrderedCollection @env0:new.
 		pairs @env0:add: #'___kwMark___'.
 		kwargs @env0:keysAndValuesDo: [:k :v |
+			v ___pyHashCheck___.
 			pairs @env0:add: k.
 			pairs @env0:add: v].
 		key := key @env0:, pairs @env0:asArray].
