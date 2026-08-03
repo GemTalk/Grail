@@ -1359,3 +1359,34 @@ testBuiltinConstantsInBuiltinsNamespace
 	self assert: (self eval: '"NotImplemented" in vars(__import__("builtins"))')
 		equals: true
 %
+
+category: 'Grail-Tests - Namespace'
+method: BuiltinsTestCase
+testBuiltinFunctionsInDir
+	"dir(builtins) lists every builtin FUNCTION under its Python name.  The
+	varargs builtins are filed as ``_name:kw:`` selectors; builtins>>__dir__
+	rewrites those (``_print`` -> ``print``, ``___import__`` -> ``__import__``)
+	so the clean names appear and the mangled underscore forms do not.  Fixed-arity
+	builtins (abs / len) already listed correctly are unaffected, and getattr keeps
+	resolving every name."
+
+	"Varargs builtins now appear under their Python name (were mangled/absent)."
+	self assert: (self eval: '"print" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"eval" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"exec" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"compile" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"zip" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"input" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"__import__" in dir(__import__("builtins"))') equals: true.
+
+	"The internal underscore-dispatch forms are NOT surfaced."
+	self assert: (self eval: '"_print" in dir(__import__("builtins"))') equals: false.
+	self assert: (self eval: '"_zip" in dir(__import__("builtins"))') equals: false.
+	self assert: (self eval: '"__reload__" in dir(__import__("builtins"))') equals: false.
+
+	"Fixed-arity builtins still listed; getattr still resolves the clean names."
+	self assert: (self eval: '"abs" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"len" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: 'hasattr(__import__("builtins"), "print")') equals: true.
+	self assert: (self eval: 'hasattr(__import__("builtins"), "zip")') equals: true
+%
