@@ -164,9 +164,23 @@ def impl_detail(msg=None, **guards):
 
 
 def gc_collect():
+    # CPython's test hook to force a full garbage collection so weak
+    # references to now-unreachable objects (including reference cycles) read
+    # as dead immediately.  In Grail, gc.collect() is a documented no-op stub
+    # (GemStone manages its own memory); the real in-memory collection --
+    # generation scavenge + VM mark-sweep, which reclaims cycles and fires the
+    # weakref ephemerons -- is driven by weakref._collect().  Route this hook
+    # there so tests that assert post-collection weak behavior (e.g.
+    # test_slice.test_cycle: an isolated o <-> slice(o) cycle) actually see the
+    # collection they ask for.
     try:
         import gc
         gc.collect()
+    except Exception:
+        pass
+    try:
+        import weakref
+        weakref._collect()
     except Exception:
         pass
 
