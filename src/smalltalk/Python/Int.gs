@@ -397,9 +397,15 @@ ___parseInt: aString radix: baseInt
 category: 'Grail-Class Methods'
 classmethod: int
 from_bytes: bytes _: byteorder
-	"int.from_bytes(bytes, byteorder='big', *, signed=False)"
+	"int.from_bytes(bytes, byteorder='big', *, signed=False) —
+	2-arg form, delegates to the 3-arg form with signed=false.
+	The delegation used to name ``from_bytes:byteorder:signed:'', a
+	selector that does not exist (Python-keyword style accidentally
+	used instead of Grail's ``_:'' convention), so EVERY 2-arg
+	``int.from_bytes(b, 'big')'' died in an uncatchable env-1 DNU on
+	Integer class -- the identical slip already fixed in to_bytes:_:."
 
-	^ self from_bytes: bytes byteorder: byteorder signed: false
+	^ self from_bytes: bytes _: byteorder _: false
 %
 
 category: 'Grail-Class Methods'
