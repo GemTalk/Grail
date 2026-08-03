@@ -59,16 +59,27 @@ generatedSourceFor: pythonExpression
 	`printSmalltalkOn:` emits for it. Used by codegen tests so they can
 	assert against the exact emitted form."
 
-	| modAst stmts callAst sb |
+	| sb |
+	sb := WriteStream on: String new.
+	(self callAstFor: pythonExpression) printSmalltalkOn: sb.
+	^ sb contents
+%
+
+category: 'Grail-Helpers'
+method: ClassCallFastPathTestCase
+callAstFor: pythonExpression
+	"Parse `pythonExpression` (a single Python expression statement) and
+	return its CallAst.  Split out of generatedSourceFor: so a test can
+	drive ONE emitter method directly instead of going through
+	printSmalltalkOn:'s whole dispatch chain."
+
+	| modAst stmts |
 	modAst := ModuleAst parseSource: pythonExpression , (String with: Character lf).
 	"BlockAst's `body` instVar is the statement list (no public getter)."
 	stmts := modAst body instVarAt:
 		(modAst body class allInstVarNames indexOf: #'body').
 	"First statement is an ExprAst-like wrapper; its `value` is the call."
-	callAst := stmts first value.
-	sb := WriteStream on: String new.
-	callAst printSmalltalkOn: sb.
-	^ sb contents
+	^ stmts first value
 %
 
 ! ===============================================================================
@@ -174,6 +185,33 @@ testCodegenStrStillUsesBuiltinsFastPath
 	self assert: (src includesString: '#builtins) instance').
 	self assert: (src includesString: 'str: ').
 	self deny: (src includesString: '@env1:__new__')
+%
+
+category: 'Grail-Tests - Codegen'
+method: ClassCallFastPathTestCase
+testEmitterHonorsChosenSelector
+	"printBareCallClassNewOn:selector: must EMIT the selector it is handed.
+
+	It used to ignore the argument entirely and hard-code ``__new__'', which
+	is a SILENT contract violation: bareCallClassNewSelector could return any
+	selector it liked and codegen would emit __new__ anyway, with no error
+	anywhere -- the only symptom being generated source that is subtly wrong.
+
+	Drive the emitter directly with a selector no class call would otherwise
+	produce, so this pins the contract independently of which selectors
+	bareCallClassNewSelector currently chooses."
+
+	| ast stream |
+	ast := self callAstFor: 'object(1, 2)'.
+	stream := WriteStream on: String new.
+	ast printBareCallClassNewOn: stream selector: #'___probeSelector___:_:'.
+	self assert: (stream contents includesString: '@env1:___probeSelector___:')
+		description: 'emitter ignored its selector argument: ' , stream contents.
+	self deny: (stream contents includesString: '__new__')
+		description: 'emitter still hard-codes __new__: ' , stream contents.
+	"The arity tail is built from the argument list, not from the selector,
+	so only the BASE name comes from the selector."
+	self assert: (stream contents includesString: ' _: ')
 %
 
 category: 'Grail-Tests - Codegen'

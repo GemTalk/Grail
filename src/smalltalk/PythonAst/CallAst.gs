@@ -1205,12 +1205,21 @@ printBareCallClassNewOn: aStream selector: aSelector
 	Receiver is the bare class name (`function id`); the symbol-list lookup
 	at compile time resolves it to the appropriate GemStone class."
 
-	| funcName nargs |
+	| funcName nargs base colonIdx |
 	funcName := function id asString.
 	nargs := arguments size.
+	"Emit the selector bareCallClassNewSelector actually chose instead of
+	hard-coding ``__new__''.  Ignoring the argument was a SILENT contract
+	violation: the chooser could return any selector and codegen would emit
+	__new__ regardless, with no error anywhere -- the only symptom being
+	subtly wrong generated source.  Only the base name is taken here; the
+	``: arg _: arg'' tail below already encodes the arity."
+	base := aSelector asString.
+	colonIdx := base indexOf: $:.
+	colonIdx > 0 ifTrue: [base := base copyFrom: 1 to: colonIdx - 1].
 	aStream nextPut: $(.
 	aStream nextPutAll: funcName.
-	aStream nextPutAll: ' @env1:__new__'.
+	aStream nextPutAll: ' @env1:'; nextPutAll: base.
 	nargs = 0 ifTrue: [
 		aStream nextPut: $).
 		^ self
