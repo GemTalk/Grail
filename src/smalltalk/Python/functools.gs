@@ -268,6 +268,12 @@ cmp_to_key: mycmp
 
 	^ [:___p___ :___k___ |
 		| w o |
+		"K wraps exactly one object.  Too MANY arguments was accepted silently,
+		quietly ignoring everything past the first (test_cmp_to_key_arguments
+		asserts both directions)."
+		(___p___ ~~ nil and: [___p___ @env0:size @env0:> 1]) ifTrue: [
+			TypeError ___signal___: 'K() takes exactly one argument ('
+				@env0:, ___p___ @env0:size @env0:printString @env0:, ' given)'].
 		o := (___p___ ~~ nil and: [___p___ @env0:size @env0:>= 1])
 			ifTrue: [___p___ @env0:at: 1]
 			ifFalse: [
@@ -287,6 +293,9 @@ _cmp_to_key: positional kw: kwargs
 	argument-count errors (test_cmp_to_key)."
 
 	| f |
+	positional @env0:size @env0:> 1 ifTrue: [
+		TypeError ___signal___: 'cmp_to_key expected 1 argument, got '
+			@env0:, positional @env0:size @env0:printString].
 	f := (positional @env0:size @env0:>= 1)
 		ifTrue: [positional @env0:at: 1]
 		ifFalse: [
@@ -1434,16 +1443,7 @@ reduce: function _: iterable
 	Apply function of two arguments cumulatively to the items of
 	iterable, from left to right."
 
-	| result iter item |
-	iter := iterable __iter__.
-	result := iter __next__.
-	[
-		[
-			item := iter __next__.
-			result := function value: { result. item } value: nil.
-		] repeat.
-	] @env0:on: StopIteration do: [:ex | "done" ].
-	^ result
+	^ self ___reduce___: function over: iterable initial: nil hasInitial: false
 %
 
 category: 'Grail-Built-in Functions'
@@ -1452,16 +1452,97 @@ reduce: function _: iterable _: initial
 	"reduce(function, iterable, initial) -> value.
 	Like reduce/2 but uses initial as the starting value."
 
-	| result iter item |
+	^ self ___reduce___: function over: iterable initial: initial hasInitial: true
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+___reduce___: function over: iterable initial: initial hasInitial: hasInitial
+	"CPython's Lib/functools.py reduce, including the part the arity-split
+	versions got wrong: an EMPTY iterable with no initial value is a
+	TypeError, not the StopIteration that escaped from the first __next__.
+
+	The single-item case never calls the function at all -- ``reduce(42,
+	'1')'' answers '1' -- which falls out of seeding from the first element
+	and only then looping."
+
+	| iter value |
 	iter := iterable __iter__.
-	result := initial.
-	[
-		[
-			item := iter __next__.
-			result := function value: { result. item } value: nil.
-		] repeat.
-	] @env0:on: StopIteration do: [:ex | "done" ].
-	^ result
+	hasInitial
+		ifTrue: [value := initial]
+		ifFalse: [
+			value := [iter __next__] @env0:on: StopIteration do: [:ex |
+				ex @env0:return: #'___GrailReduceEmpty___'].
+			value @env0:== #'___GrailReduceEmpty___' ifTrue: [
+				TypeError ___signal___:
+					'reduce() of empty iterable with no initial value']].
+	[[| item |
+		item := iter __next__.
+		value := function ___pyCallValue___: { value. item } kw: nil.
+		] repeat]
+		@env0:on: StopIteration do: [:ex | "exhausted"].
+	^ value
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+_reduce: positional kw: kwargs
+	"Varargs reduce: the keyword forms and the argument-count errors.
+
+	``initial'' may be passed as a KEYWORD (test_initial_keyword), and CPython
+	still accepts ``function'' / ``sequence'' by keyword while warning that it
+	is deprecated (test_reduce_with_kwargs).  Wrong counts are TypeErrors
+	rather than whatever the fixed-arity dispatch happened to raise."
+
+	| args fn iterable initial hasInitial haveFn haveSeq deprecated |
+	args := positional @env0:ifNil: [#()].
+	args @env0:size @env0:> 3 ifTrue: [
+		TypeError ___signal___: 'reduce() takes at most 3 arguments ('
+			@env0:, args @env0:size @env0:printString @env0:, ' given)'].
+	haveFn := args @env0:size @env0:>= 1.
+	haveSeq := args @env0:size @env0:>= 2.
+	fn := haveFn ifTrue: [args @env0:at: 1] ifFalse: [nil].
+	iterable := haveSeq ifTrue: [args @env0:at: 2] ifFalse: [nil].
+	hasInitial := args @env0:size @env0:>= 3.
+	initial := hasInitial ifTrue: [args @env0:at: 3] ifFalse: [nil].
+	deprecated := false.
+	(kwargs @env0:isNil or: [kwargs @env0:isEmpty]) ifFalse: [
+		kwargs @env0:keysAndValuesDo: [:k :v | | key |
+			key := k @env0:asString.
+			key @env0:= 'initial'
+				ifTrue: [
+					hasInitial ifTrue: [
+						TypeError ___signal___:
+							'reduce() got multiple values for argument ''initial'''].
+					initial := v.
+					hasInitial := true]
+				ifFalse: [key @env0:= 'function'
+				ifTrue: [
+					haveFn ifTrue: [
+						TypeError ___signal___:
+							'reduce() got multiple values for argument ''function'''].
+					fn := v. haveFn := true. deprecated := true]
+				ifFalse: [key @env0:= 'sequence'
+				ifTrue: [
+					haveSeq ifTrue: [
+						TypeError ___signal___:
+							'reduce() got multiple values for argument ''sequence'''].
+					iterable := v. haveSeq := true. deprecated := true]
+				ifFalse: [
+					TypeError ___signal___:
+						'reduce() got an unexpected keyword argument ''' @env0:, key @env0:, '''']]]]].
+	(haveFn and: [haveSeq]) ifFalse: [
+		TypeError ___signal___:
+			'reduce expected at least 2 arguments, got '
+				@env0:, args @env0:size @env0:printString].
+	deprecated ifTrue: [
+		"CPython 3.14 accepts the old keyword names and warns.  Routed through
+		the warnings module so unittest's assertWarns can record it."
+		(Python @env0:at: #warnings otherwise: nil) @env0:ifNotNil: [:w |
+			w @env0:___instance___
+				warn: 'Passing keyword arguments to reduce() is deprecated'
+				_: (Python @env0:at: #DeprecationWarning otherwise: nil)]].
+	^ self ___reduce___: fn over: iterable initial: initial hasInitial: hasInitial
 %
 
 category: 'Grail-Single Dispatch'
@@ -1620,6 +1701,14 @@ register: clsOrFunc
 		"Not a class -> the annotation form: clsOrFunc is the function."
 		| inferred |
 		inferred := self ___inferRegisterType___: clsOrFunc.
+		"A UNION annotation (``str | bytes'', ``typing.Optional[int]'')
+		registers the implementation once per member, which is how CPython
+		dispatches it -- there is no union object in the registry, just each
+		class pointing at the same function."
+		(inferred isKindOf: Array) ifTrue: [
+			inferred @env0:do: [:each |
+				(self @env0:dynamicInstVarAt: #registry) @env0:at: each put: clsOrFunc].
+			^ clsOrFunc].
 		(self @env0:dynamicInstVarAt: #registry) @env0:at: inferred put: clsOrFunc.
 		^ clsOrFunc].
 	^ [:positional2 :keywords2 |
@@ -1692,10 +1781,18 @@ ___inferRegisterType___: aFunc
 			resolved := cabc @env0:dynamicInstVarAt: candidate @env0:asString @env0:asSymbol.
 			(resolved ~~ nil and: [resolved isKindOf: Behavior])
 				ifTrue: [candidate := resolved]]].
+	"A UNION of plain classes registers once per member -- that is how CPython
+	dispatches ``str | bytes'': no union object goes into the registry, each
+	class does, all pointing at the same implementation.  Grail used to leave
+	these UNREGISTERED (valid CPython, so raising was worse) and every call
+	quietly fell through to the default."
+	(candidate isKindOf: CharacterCollection) ifTrue: [
+		(self ___annotationUnionMembers___: text)
+			@env0:ifNotNil: [:members | ^ members]].
 	"Unresolvable: raise rather than register an unusable string key -- EXCEPT
-	for a union of plain classes, which is valid CPython that Grail cannot
-	dispatch on yet.  Raising there would turn working user code into a hard
-	error; leaving it unregistered keeps the previous (soft) behaviour of
+	for a union whose members are classes Grail could not resolve, which is
+	still valid CPython.  Raising there would turn working user code into a
+	hard error; leaving it unregistered keeps the previous (soft) behaviour of
 	falling through to the default implementation.  See
 	___annotationUnionOfClasses___: for why this needs its own test."
 	(candidate isKindOf: CharacterCollection) ifTrue: [
@@ -1707,6 +1804,77 @@ ___inferRegisterType___: aFunc
 				@env0:, '''. ' @env0:, text
 				@env0:, ' is an unresolved forward reference.']].
 	^ (self ___registryKey___: candidate) @env0:ifNil: [candidate]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___annotationUnionMembers___: aText
+	"The member CLASSES of a union annotation -- ``str | bytes'',
+	``typing.Union[str, None]'', ``typing.Optional[int]'' -- as an Array, or
+	nil when aText is not a union or a member will not resolve.
+
+	CPython registers a union by registering each member separately, so this
+	is all singledispatch needs; there is no union object in the registry."
+
+	| members resolved |
+	(self ___annotationUnionOfClasses___: aText) ifFalse: [^ nil].
+	members := self ___annotationUnionMemberNames___: aText.
+	members @env0:isNil ifTrue: [^ nil].
+	resolved := OrderedCollection @env0:new.
+	members @env0:do: [:name | | cls |
+		cls := self ___resolveAnnotationClass___: name.
+		cls @env0:isNil ifTrue: [^ nil].
+		resolved @env0:add: cls].
+	resolved @env0:isEmpty ifTrue: [^ nil].
+	^ resolved @env0:asArray
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___annotationUnionMemberNames___: aText
+	"The member NAMES of a union annotation, or nil when aText is not one.
+	Shares its parse with ___annotationUnionOfClasses___:, which decides
+	whether the union is admissible at all."
+
+	| inner bar bracket |
+	bar := '|' @env0:at: 1.
+	bracket := '[' @env0:at: 1.
+	inner := nil.
+	(aText @env0:includes: bar) ifTrue: [inner := aText].
+	inner == nil ifTrue: [
+		(((aText @env0:indexOfSubCollection: 'typing.Union[') == 1)
+			or: [(aText @env0:indexOfSubCollection: 'typing.Optional[') == 1])
+			ifFalse: [^ nil].
+		inner := aText
+			@env0:copyFrom: ((aText @env0:indexOf: bracket) @env0:+ 1)
+			to: (aText @env0:size @env0:- 1)].
+	^ (inner @env0:subStrings: '|,') @env0:collect: [:m | m @env0:trimSeparators]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___resolveAnnotationClass___: aName
+	"Resolve one annotation NAME to a class, or nil.  The same three places
+	___inferRegisterType___ looks: ``None'' names NoneType (CPython treats
+	``X | None'' as a union with type(None)), then the Python symbol list,
+	then collections.abc for the ABC names that live only on that module."
+
+	| text resolved cabc |
+	text := aName @env0:asString.
+	(text @env0:= 'None' or: [text @env0:= 'NoneType']) ifTrue: [
+		^ Python @env0:at: #NoneType otherwise: nil].
+	resolved := (System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: text @env0:asSymbol).
+	(resolved @env0:notNil and: [resolved isKindOf: Behavior]) ifTrue: [
+		^ resolved].
+	cabc := (System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: #importlib) modules
+		@env0:at: #'collections.abc' otherwise: nil.
+	cabc == nil ifFalse: [
+		resolved := cabc @env0:dynamicInstVarAt: text @env0:asSymbol.
+		(resolved ~~ nil and: [resolved isKindOf: Behavior]) ifTrue: [
+			^ resolved]].
+	^ nil
 %
 
 category: 'Grail-Single Dispatch'
@@ -1831,9 +1999,52 @@ ___pyBindsSelf___
 	"Marker read by object >> ___isDescriptorCallable___:.  CPython makes this
 	a descriptor whose __get__ returns a wrapper bound to the instance; Grail
 	reaches the same place through its own class-attribute binding, so
-	``a.t(0)'' arrives here as (a, 0)."
+	``a.t(0)'' arrives here as (a, 0).
 
-	^ true
+	NOT for a wrapped @classmethod / @staticmethod.  CPython's __get__
+	delegates to the wrapped descriptor's own __get__, and neither of those
+	binds the instance: ``a.static_func(0)'' and ``A.static_func(0)'' both call
+	the function with just (0), and a classmethod gets ``cls'' either way.
+	Refusing the binding here makes both access paths deliver the identical
+	argument array, which is what lets one call shape serve all three kinds."
+
+	^ self ___wrapsClassSideMethod___ @env0:not
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+___wrapsClassSideMethod___
+	"Is the decorated method a @classmethod / @staticmethod rather than a
+	plain instance method?
+
+	Grail compiles those onto the metaclass, and the class-body decorator
+	hands this class a BoundMethod on the CLASS for them (see FunctionDefAst >>
+	___decoratorBaseIsClassSide___) against an UnboundMethod for a plain
+	method.  That is the same distinction CPython draws -- there the wrapped
+	object is a classmethod/staticmethod descriptor instead of a plain
+	function -- so the handle's kind is the honest signal, not a flag threaded
+	down from the parser.
+
+	The receiver must be a CLASS: a BoundMethod on a MODULE is a plain
+	top-level function (``singledispatchmethod(some_function)''), which binds
+	an instance like any other function would."
+
+	| fn |
+	fn := self @env0:dynamicInstVarAt: #func.
+	^ (fn isKindOf: BoundMethod)
+		and: [fn @env0:receiver isKindOf: Behavior]
+%
+
+category: 'Grail-Callable'
+method: functools_singledispatchmethod
+value: positional value: kwargs
+	"Called DIRECTLY rather than through a binding -- ``A.t(0)'' reads the
+	descriptor off the class and calls it, which routes through
+	PythonInstance >> value:value: instead of ___pyCallValue___:kw:.  That is
+	the normal path for the @classmethod / @staticmethod forms, where nothing
+	binds an instance."
+
+	^ self ___pyCallValue___: positional kw: kwargs
 %
 
 category: 'Grail-Callable'
@@ -1849,10 +2060,16 @@ ___pyCallValue___: positional kw: kwargs
 	unbound function CPython hands back) the caller passes the receiver
 	explicitly in the same slot.  Either way the implementation is called with
 	the array unchanged -- registered implementations are ``def _(self, arg)''
-	and take the receiver first."
+	and take the receiver first.
 
-	| impl |
-	positional @env0:size @env0:< 2 ifTrue: [
+	A wrapped @classmethod / @staticmethod carries no receiver in the array at
+	all (___pyBindsSelf___ declines the binding, and the implementation is a
+	BoundMethod that supplies the class itself), so for those the dispatch
+	argument is the first element."
+
+	| impl at |
+	at := self ___wrapsClassSideMethod___ ifTrue: [1] ifFalse: [2].
+	positional @env0:size @env0:< at ifTrue: [
 		"CPython names the FUNCTION: ``t requires at least 1 positional
 		argument''.  The receiver does not count -- ``A().t()'' and
 		``A().t(a=1)'' both raise, though the first already has one element
@@ -1860,7 +2077,7 @@ ___pyCallValue___: positional kw: kwargs
 		TypeError ___signal___: (self ___dispatchName___)
 			@env0:, ' requires at least 1 positional argument'].
 	impl := (self @env0:dynamicInstVarAt: #dispatcher)
-		dispatch: (positional @env0:at: 2) @env0:class.
+		dispatch: (positional @env0:at: at) @env0:class.
 	^ impl ___pyCallValue___: positional kw: kwargs
 %
 
@@ -1902,7 +2119,17 @@ __doc__
 category: 'Grail-Attribute Access'
 method: functools_singledispatchmethod
 __qualname__
-	^ (self @env0:dynamicInstVarAt: #func) __qualname__
+	"``Cls.meth''.  An UnboundMethod already qualifies itself; a class-side
+	BoundMethod answers the bare selector (it does not track lexical nesting),
+	so qualify it here from the receiver it is bound to -- which for these IS
+	the defining class."
+
+	| fn |
+	fn := self @env0:dynamicInstVarAt: #func.
+	self ___wrapsClassSideMethod___ ifTrue: [
+		^ (fn @env0:receiver @env0:name @env0:asString @env0:, '.'
+			@env0:, fn @env0:selector @env0:asString) @env0:asUnicodeString].
+	^ fn __qualname__
 %
 
 category: 'Grail-Attribute Access'
@@ -1925,7 +2152,7 @@ __repr__
 	carries neither."
 
 	| label |
-	label := [(self @env0:dynamicInstVarAt: #func) __qualname__ @env0:asString]
+	label := [self __qualname__ @env0:asString]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: nil].
 	label @env0:isNil ifTrue: [

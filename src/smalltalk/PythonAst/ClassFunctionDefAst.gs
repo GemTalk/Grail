@@ -51,3 +51,13 @@ removeallclassmethods ClassFunctionDefAst
 set compile_env: 0
 ! ------------------- Class methods for ClassFunctionDefAst
 ! ------------------- Instance methods for ClassFunctionDefAst
+
+category: 'Grail-code generation'
+method: ClassFunctionDefAst
+___decoratorBaseIsClassSide___
+	"A @classmethod compiles onto the metaclass, with ``cls'' as the Smalltalk
+	receiver -- so a class-body decorator's base must be a BoundMethod on the
+	class, not an instance-side UnboundMethod."
+
+	^ true
+%

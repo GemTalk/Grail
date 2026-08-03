@@ -116,15 +116,18 @@ def subscripted_annotation_raises():
     return results or 'ok'
 
 
-def union_of_plain_classes_does_not_raise():
-    """A union of plain classes is VALID CPython that Grail cannot dispatch on
-    yet, so it must not raise.
+def union_of_plain_classes_dispatches():
+    """A union of plain classes is VALID CPython, and now dispatches.
 
     This is the discrimination that makes subscripted_annotation_raises safe: a
     bare "contains a bracket" test would reject unions too, because
-    ``typing.Union[int, str]`` has brackets as well.  Rejecting them would turn
-    working user code into a hard TypeError; falling through to the default is
-    the softer, correct-for-now failure.
+    ``typing.Union[int, str]`` has brackets as well.
+
+    It used to assert only that registering did not RAISE -- the union was left
+    unregistered and every call fell through to the default, which was the
+    softer of two wrong answers while dispatch was missing.  CPython registers
+    the implementation once per member, and so does Grail, so the assertion is
+    now the real one.
     """
     @functools.singledispatch
     def f(arg):
@@ -134,8 +137,7 @@ def union_of_plain_classes_does_not_raise():
     def _(arg: typing.Union[int, str]):
         return "union"
 
-    # Not dispatched (the gap), but crucially it did not raise.
-    return f(1) == "default"
+    return [f(1), f(""), f(1.5)]
 
 
 def plain_class_annotation_still_registers():

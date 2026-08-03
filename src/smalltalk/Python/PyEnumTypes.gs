@@ -761,6 +761,30 @@ ___grailFlagMask: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailFlagSingleBitMask: cls
+	"OR of only the SINGLE-BIT named members (CPython's _flag_mask_).  A
+	STRICT/CONFORM Flag inverts within this, NOT the full mask that also
+	covers a multi-bit member (``MASK = 255'' with only A=1/B=2): ~A is B, not
+	254.  When every member is single-bit this equals ___grailFlagMask:, so a
+	closed flag (MASK = A|B, itself a composite excluded from canonical
+	members) is unaffected."
+
+	| rec mask |
+	rec := self ___grailRecordFor: cls.
+	rec @env0:isNil ifTrue: [^ 0].
+	mask := 0.
+	(rec @env0:at: 3) @env0:do: [:m |
+		| mv |
+		mv := m @env0:dynamicInstVarAt: #value.
+		((mv isKindOf: Integer)
+			and: [mv @env0:> 0
+			and: [(mv @env0:bitAnd: (mv @env0:- 1)) @env0:= 0]])
+				ifTrue: [mask := mask @env0:bitOr: mv]].
+	^ mask
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailLookupName: cls name: aName
 	"Color['NAME'] -> the member with that name."
 
@@ -1992,14 +2016,18 @@ __iter__
 category: 'Grail-Flag Member'
 method: Flag
 __invert__
-	"~A: the mask-complement within the class's named bits (CPython
-	3.11+ semantics).  A None-valued member (``E = None'') cannot be inverted."
+	"~A: the mask-complement within the class's SINGLE-BIT named flags (CPython
+	3.11+ STRICT/CONFORM semantics -- a plain Flag's default boundary).  Uses
+	the single-bit mask, not the full one: for ``OpenAB(A=1, B=2, MASK=255)''
+	``~A'' is B, not OpenAB(254).  (IntFlag, boundary KEEP, keeps its own
+	___grailFlagMask:-based invert below.)  A None-valued member (``E = None'')
+	cannot be inverted."
 
 	| mask v |
 	v := self @env0:dynamicInstVarAt: #value.
 	(v @env0:isNil or: [v == None]) ifTrue: [
 		^ TypeError ___signal___: '''' @env0:, (Enum ___grailMemberStr: self) @env0:, ''' cannot be inverted'].
-	mask := Enum ___grailFlagMask: self @env0:class.
+	mask := Enum ___grailFlagSingleBitMask: self @env0:class.
 	^ Enum ___grailLookupValue: self @env0:class
 		value: (mask @env0:bitXor: (mask @env0:bitAnd: v))
 %
@@ -2406,6 +2434,30 @@ category: 'Grail-Class Attrs'
 classmethod: StrEnum
 _value_repr_
 	^ None
+%
+
+category: 'Grail-Class Attrs'
+classmethod: Flag
+_boundary_
+	"CPython FlagBoundary: how a Flag handles bits with no named member.  A
+	plain Flag defaults to STRICT (an out-of-range value raises).  Read by
+	test_open_invert_expectations / test_boundary; ``enum.STRICT'' is the
+	#STRICT symbol this returns, so ``_boundary_ in (EJECT, KEEP)'' is false and
+	the STRICT branch is taken.  Getter-only Grail-Class Attrs accessor (like
+	_member_type_), so ``OpenAB._boundary_'' reads the value."
+
+	^ #'STRICT'
+%
+
+category: 'Grail-Class Attrs'
+classmethod: IntFlag
+_boundary_
+	"IntFlag defaults to KEEP -- out-of-range bits are preserved -- so ``~x''
+	and ``IntFlag(n)'' keep every bit within the class mask.  Grail's IntFlag
+	invert already produces the KEEP result (e.g. ~A over MASK=255 is
+	OpenAB(254)), so returning #KEEP takes the matching test branch."
+
+	^ #'KEEP'
 %
 
 ! ------------------- StrEnum members (instance side)
