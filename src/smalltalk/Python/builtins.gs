@@ -81,34 +81,54 @@ set compile_env: 1
 category: 'Grail-Initialization'
 method: builtins
 initialize
-	"Eagerly populate this module's namespace with the CPython builtin TYPES so
-	``builtins.int`` / ``builtins.slice`` resolve via getattr AND appear in
-	vars(builtins) / dir(builtins) -- matching CPython, whose builtins module
-	contains every builtin type.  Builtin FUNCTIONS (len, abs, ...) already
-	answer through the builtins method path and are untouched here.
+	"Eagerly populate this module's namespace with the CPython builtin TYPES,
+	EXCEPTIONS and CONSTANTS so ``builtins.int`` / ``builtins.ValueError`` /
+	``builtins.None`` resolve via getattr AND appear in vars(builtins) /
+	dir(builtins) -- matching CPython, whose builtins module contains every
+	builtin type, the whole exception hierarchy, and the constants.  Builtin
+	FUNCTIONS (len, abs, ...) already answer through the builtins method path and
+	are untouched here.
 
-	The type classes live in the Python dict (install.gs Step 3 maps int->Integer
-	etc.; the object-subclass builtins like slice/tuple/set live there too).  A
-	CPython builtin that Grail implements as a FUNCTION rather than a class
-	(enumerate/filter/map/reversed/zip/type/super/staticmethod/classmethod) is
-	simply absent from the dict and skipped -- the method path answers getattr for
-	those.  Only this CURATED name list is consulted, never the whole Python dict:
-	the dict is Grail's global namespace (241 classes -- vendored modules,
-	iterators, PyCode and other internals) and is NOT builtins.  Stored as
-	dynamic-instVars, the same store module globals use, so getattr and vars()
-	both see them.  Session-local (the builtins singleton is per session)."
+	Types and exceptions live in the Python dict (install.gs Step 3 maps
+	int->Integer etc.; the object-subclass builtins like slice/tuple/set and every
+	exception class live there too).  A CPython builtin Grail implements as a
+	FUNCTION rather than a class (enumerate/filter/map/reversed/zip/type/super/
+	staticmethod/classmethod) is simply absent from the dict and skipped -- the
+	method path answers getattr for those.  Only CURATED name lists are consulted,
+	never the whole Python dict: the dict is Grail's global namespace (vendored
+	modules, iterators, PyCode, and non-builtin exceptions like StatisticsError)
+	and is NOT builtins.  The exception list is shared with
+	object>>___pythonBuiltinExceptionNames___ so getattr and __module__ agree.
 
-	| pd names |
+	Constants: None resolves to its NoneType singleton and NotImplemented /
+	Ellipsis to their Python-dict values; True / False / __debug__ are the
+	Smalltalk booleans (Python __debug__ is True).  Stored as dynamic-instVars,
+	the same store module globals use, so getattr and vars() both see them.
+	Session-local (the builtins singleton is per session)."
+
+	| pd typeNames excNames constNames |
 	pd := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'Python'.
 	(pd @env0:isNil) @env0:ifTrue: [^ self].
-	names := #( #bool #bytearray #bytes #complex #dict #enumerate #filter #float
+	typeNames := #( #bool #bytearray #bytes #complex #dict #enumerate #filter #float
 	   #frozenset #int #list #map #memoryview #object #property #range
 	   #reversed #set #slice #staticmethod #classmethod #str #super #tuple
 	   #type #zip ).
-	names @env0:do: [:n | | v |
+	excNames := Object ___pythonBuiltinExceptionNames___.
+	"Types and exceptions: bind only names that resolve to a CLASS in the dict."
+	(typeNames @env0:, excNames) @env0:do: [:n | | v |
 		v := pd @env0:at: n otherwise: nil.
 		((v @env0:notNil) @env0:and: [v @env0:isKindOf: Behavior]) @env0:ifTrue: [
-			self @env0:dynamicInstVarAt: n put: v]]
+			self @env0:dynamicInstVarAt: n put: v]].
+	"Constants that are Smalltalk booleans."
+	self @env0:dynamicInstVarAt: #'True' put: true.
+	self @env0:dynamicInstVarAt: #'False' put: false.
+	self @env0:dynamicInstVarAt: #'__debug__' put: true.
+	"Singleton constants resolved from the Python dict (None / NotImplemented /
+	Ellipsis)."
+	constNames := #( #'None' #'NotImplemented' #'Ellipsis' ).
+	constNames @env0:do: [:n | | v |
+		v := pd @env0:at: n otherwise: nil.
+		(v @env0:notNil) @env0:ifTrue: [self @env0:dynamicInstVarAt: n put: v]]
 %
 
 ! ===============================================================================
