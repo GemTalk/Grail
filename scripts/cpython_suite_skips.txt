@@ -207,3 +207,16 @@ test.test_iter|TestCase.test_iter_overflow|@cpython_only: asserts OverflowError 
 # outsized regression risk for a test of a dev-only consistency checker.  re
 # already works with the stub (its flags stay plain ints, which is enough).
 test.test_enum|TestStdLib.test_test_simple_enum|_simple_enum/_test_simple_enum are CPython-internal helpers; faithful build is a load-bearing sub-project for re, and the failing line is an artificial member._value_ corruption CPython allows -- won't-implement, not a correctness gap
+# --- Phase 4 (2026-08-03): two tests that HANG the scoring session ---
+# Both are single-line hangs inside an otherwise-scorable module, so they are
+# skip-listed (never counted as passes) to let the rest of the module score;
+# the underlying O(n)/self-mutation bugs are the queued fixes, and removing the
+# skip is the regression test for each.
+# d.extend(d): CPython special-cases self-extension by snapshotting the source;
+# Grail's deque.extend consumes the live deque it is appending to, so the
+# iterator never reaches the end and the deque grows until the watchdog fires.
+test.test_deque|TestBasic.test_extend|deque.extend(self) consumes the live deque it appends to -- unbounded growth, session hang (uncatchable)
+# '%.*d' % (sys.maxsize, 1): CPython validates the precision and raises
+# OverflowError; Grail tries to build the sys.maxsize-digit result (same shape as
+# the bytes-repetition OOM fixed by capping at 2**31-1 and raising OverflowError).
+test.test_format|FormatTest.test_common_format|'%.*d' % (sys.maxsize, 1) is not precision-validated -- Grail attempts a sys.maxsize-digit result (session hang/OOM, uncatchable)
