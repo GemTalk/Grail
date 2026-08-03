@@ -1875,6 +1875,15 @@ ___isInstanceSingle___: anObject of: aClass
 	(aClass isKindOf: Behavior) ifFalse: [
 		TypeError ___signal___: 'isinstance() arg 2 must be a type, a tuple of types, or a union'].
 	result := anObject isKindOf: aClass.
+	(result not and: [aClass == Integer]) ifTrue: [
+		"CPython's bool IS an int subclass, so isinstance(True, int) is
+		True (PEP 285; test_bool.py test_isinstance).  Grail maps bool to
+		the kernel Boolean, which is NOT under Integer on the Smalltalk
+		chain, so widen here -- the same shape as the AbstractPyInt
+		widening in ___isSubclassSingle___:of:.  Only the int direction
+		widens: isinstance(1, bool) stays False, since Integer is not
+		under Boolean either."
+		result := anObject isKindOf: Boolean].
 	(result not and: [aClass == Unicode7]) ifTrue: [
 		"str maps to Unicode7 for construction, but CPython counts EVERY
 		text string as str: Grail literals may come back Unicode16 /
@@ -2109,9 +2118,14 @@ ___isSubclassSingle___: sub of: target
 		or: [(sub @env0:inheritsFrom: CharacterCollection)
 		or: [(sub == AbstractPyStr) or: [sub @env0:inheritsFrom: AbstractPyStr]]]]) ifTrue: [^ true].
 	"int-subclass widening: a class routed onto AbstractPyInt by
-	___subclass___'s sealed-Integer substitution IS a subclass of int."
-	(target == Integer and: [(sub == AbstractPyInt)
-		or: [sub @env0:inheritsFrom: AbstractPyInt]]) ifTrue: [^ true].
+	___subclass___'s sealed-Integer substitution IS a subclass of int.
+	bool is one too -- CPython's bool subclasses int (PEP 285;
+	test_bool.py test_issubclass), but Grail's Boolean sits outside the
+	Integer chain.  Only this direction widens: issubclass(int, bool)
+	stays False."
+	(target == Integer and: [(sub == Boolean)
+		or: [(sub == AbstractPyInt)
+		or: [sub @env0:inheritsFrom: AbstractPyInt]]]) ifTrue: [^ true].
 	"float-subclass widening -- same substitution story."
 	(target == Float and: [(sub == AbstractPyFloat)
 		or: [sub @env0:inheritsFrom: AbstractPyFloat]]) ifTrue: [^ true].

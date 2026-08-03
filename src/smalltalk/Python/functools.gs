@@ -1701,6 +1701,14 @@ register: clsOrFunc
 		"Not a class -> the annotation form: clsOrFunc is the function."
 		| inferred |
 		inferred := self ___inferRegisterType___: clsOrFunc.
+		"A UNION annotation (``str | bytes'', ``typing.Optional[int]'')
+		registers the implementation once per member, which is how CPython
+		dispatches it -- there is no union object in the registry, just each
+		class pointing at the same function."
+		(inferred isKindOf: Array) ifTrue: [
+			inferred @env0:do: [:each |
+				(self @env0:dynamicInstVarAt: #registry) @env0:at: each put: clsOrFunc].
+			^ clsOrFunc].
 		(self @env0:dynamicInstVarAt: #registry) @env0:at: inferred put: clsOrFunc.
 		^ clsOrFunc].
 	^ [:positional2 :keywords2 |
@@ -1773,10 +1781,18 @@ ___inferRegisterType___: aFunc
 			resolved := cabc @env0:dynamicInstVarAt: candidate @env0:asString @env0:asSymbol.
 			(resolved ~~ nil and: [resolved isKindOf: Behavior])
 				ifTrue: [candidate := resolved]]].
+	"A UNION of plain classes registers once per member -- that is how CPython
+	dispatches ``str | bytes'': no union object goes into the registry, each
+	class does, all pointing at the same implementation.  Grail used to leave
+	these UNREGISTERED (valid CPython, so raising was worse) and every call
+	quietly fell through to the default."
+	(candidate isKindOf: CharacterCollection) ifTrue: [
+		(self ___annotationUnionMembers___: text)
+			@env0:ifNotNil: [:members | ^ members]].
 	"Unresolvable: raise rather than register an unusable string key -- EXCEPT
-	for a union of plain classes, which is valid CPython that Grail cannot
-	dispatch on yet.  Raising there would turn working user code into a hard
-	error; leaving it unregistered keeps the previous (soft) behaviour of
+	for a union whose members are classes Grail could not resolve, which is
+	still valid CPython.  Raising there would turn working user code into a
+	hard error; leaving it unregistered keeps the previous (soft) behaviour of
 	falling through to the default implementation.  See
 	___annotationUnionOfClasses___: for why this needs its own test."
 	(candidate isKindOf: CharacterCollection) ifTrue: [
@@ -1788,6 +1804,77 @@ ___inferRegisterType___: aFunc
 				@env0:, '''. ' @env0:, text
 				@env0:, ' is an unresolved forward reference.']].
 	^ (self ___registryKey___: candidate) @env0:ifNil: [candidate]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___annotationUnionMembers___: aText
+	"The member CLASSES of a union annotation -- ``str | bytes'',
+	``typing.Union[str, None]'', ``typing.Optional[int]'' -- as an Array, or
+	nil when aText is not a union or a member will not resolve.
+
+	CPython registers a union by registering each member separately, so this
+	is all singledispatch needs; there is no union object in the registry."
+
+	| members resolved |
+	(self ___annotationUnionOfClasses___: aText) ifFalse: [^ nil].
+	members := self ___annotationUnionMemberNames___: aText.
+	members @env0:isNil ifTrue: [^ nil].
+	resolved := OrderedCollection @env0:new.
+	members @env0:do: [:name | | cls |
+		cls := self ___resolveAnnotationClass___: name.
+		cls @env0:isNil ifTrue: [^ nil].
+		resolved @env0:add: cls].
+	resolved @env0:isEmpty ifTrue: [^ nil].
+	^ resolved @env0:asArray
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___annotationUnionMemberNames___: aText
+	"The member NAMES of a union annotation, or nil when aText is not one.
+	Shares its parse with ___annotationUnionOfClasses___:, which decides
+	whether the union is admissible at all."
+
+	| inner bar bracket |
+	bar := '|' @env0:at: 1.
+	bracket := '[' @env0:at: 1.
+	inner := nil.
+	(aText @env0:includes: bar) ifTrue: [inner := aText].
+	inner == nil ifTrue: [
+		(((aText @env0:indexOfSubCollection: 'typing.Union[') == 1)
+			or: [(aText @env0:indexOfSubCollection: 'typing.Optional[') == 1])
+			ifFalse: [^ nil].
+		inner := aText
+			@env0:copyFrom: ((aText @env0:indexOf: bracket) @env0:+ 1)
+			to: (aText @env0:size @env0:- 1)].
+	^ (inner @env0:subStrings: '|,') @env0:collect: [:m | m @env0:trimSeparators]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___resolveAnnotationClass___: aName
+	"Resolve one annotation NAME to a class, or nil.  The same three places
+	___inferRegisterType___ looks: ``None'' names NoneType (CPython treats
+	``X | None'' as a union with type(None)), then the Python symbol list,
+	then collections.abc for the ABC names that live only on that module."
+
+	| text resolved cabc |
+	text := aName @env0:asString.
+	(text @env0:= 'None' or: [text @env0:= 'NoneType']) ifTrue: [
+		^ Python @env0:at: #NoneType otherwise: nil].
+	resolved := (System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: text @env0:asSymbol).
+	(resolved @env0:notNil and: [resolved isKindOf: Behavior]) ifTrue: [
+		^ resolved].
+	cabc := (System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: #importlib) modules
+		@env0:at: #'collections.abc' otherwise: nil.
+	cabc == nil ifFalse: [
+		resolved := cabc @env0:dynamicInstVarAt: text @env0:asSymbol.
+		(resolved ~~ nil and: [resolved isKindOf: Behavior]) ifTrue: [
+			^ resolved]].
+	^ nil
 %
 
 category: 'Grail-Single Dispatch'

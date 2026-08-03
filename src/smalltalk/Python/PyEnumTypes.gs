@@ -85,6 +85,48 @@ GrailEnumAuto comment: 'Marker returned by enum.auto(); ___grailBuildMembers: re
 
 expectvalue /Class
 doit
+Object subclass: 'GrailEnumNonmember'
+  instVarNames: #( value )
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+GrailEnumNonmember comment: 'Marker returned by enum.nonmember(x) (and the @nonmember decorator): wraps x so ___grailBuildMembers: stores x as a PLAIN class attribute and drops the name from _member_names_ / iteration (CPython nonmember -- Outer.Inner is Inner, MyTypes.f is float, Example.ALL == 3).'
+%
+
+set compile_env: 0
+
+category: 'Grail-Nonmember'
+classmethod: GrailEnumNonmember
+on: aValue
+	"Wrap aValue as a nonmember marker."
+
+	^ self new setValue: aValue; yourself
+%
+
+category: 'Grail-Nonmember'
+method: GrailEnumNonmember
+setValue: aValue
+	value := aValue
+%
+
+category: 'Grail-Nonmember'
+method: GrailEnumNonmember
+value
+	"The wrapped value the enum stores as a plain class attribute."
+
+	^ value
+%
+
+set compile_env: 0
+
+expectvalue /Class
+doit
 AbstractPyInt subclass: 'IntEnum'
   instVarNames: #()
   classVars: #()
@@ -122,7 +164,7 @@ AbstractPyStr subclass: 'StrEnum'
 
 run
 Enum comment: 'Python enum base — see category comment in PyEnumTypes.gs.'.
-#( #Enum #Flag #IntEnum #IntFlag #StrEnum #GrailEnumAuto ) do: [:nm | (Python at: nm) category: 'Grail-Modules'].
+#( #Enum #Flag #IntEnum #IntFlag #StrEnum #GrailEnumAuto #GrailEnumNonmember ) do: [:nm | (Python at: nm) category: 'Grail-Modules'].
 %
 
 ! ------------------- Remove existing behavior (env 0 + env 1)
@@ -233,6 +275,15 @@ ___grailBuildMembers: cls names: attrNames
 	recorded in EnumRegistry."
 
 	| byValue byName members lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass genValues foreignMixin |
+	"CPython _check_for_existing_members_: adding members to -- or otherwise
+	subclassing -- an enum that already HAS members is illegal (that enum is
+	final).  Raise before building anything (test_extending / test_extending2);
+	a member-less method/mixin base is allowed (test_extending3)."
+	[ | offending |
+	offending := Enum ___grailExtendedMemberBase: cls.
+	offending @env0:notNil ifTrue: [
+		TypeError ___signal___: (Enum ___grailEnumTagFor: cls)
+			@env0:, ' cannot extend ' @env0:, (Enum ___grailEnumTagFor: offending)] ] @env0:value.
 	"Names assigned under a class-body ``if`` (the shared test fixture's
 	``if issubclass(...): dupe = 3'') never reach classBodyAttributes --
 	their stores go through ___pyAttrStore___ into the per-class
@@ -260,6 +311,33 @@ ___grailBuildMembers: cls names: attrNames
 				and: [(allNames @env0:includes: dynSym) not]])
 					ifTrue: [allNames @env0:add: dynSym].
 			i := i @env0:+ 2]].
+	"enum.nonmember(x): x is deliberately NOT a member.  Unwrap it, store the
+	raw value as a plain class attribute (Outer.Inner is Inner; MyTypes.f is
+	float; Example.ALL == 3, type int), and DROP the name from member building
+	so it is excluded from _member_names_ / iteration.  Both the call form
+	(f = nonmember(float)) and the decorator form (@nonmember class Inner) land
+	here as a NAME bound to a GrailEnumNonmember marker.  Done before the
+	reserved-name / member passes so the name is invisible to them."
+	[ | dropped |
+	dropped := OrderedCollection @env0:new.
+	allNames @env0:do: [:nameSym | | raw hasAcc |
+		hasAcc := (cls @env0:class @env0:whichClassIncludesSelector:
+			(nameSym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1) notNil.
+		raw := hasAcc
+			ifTrue: [cls @env0:perform: nameSym env: 1]
+			ifFalse: [dynHolder @env0:isNil
+				ifTrue: [nil]
+				ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym]].
+		(raw isKindOf: GrailEnumNonmember) ifTrue: [ | nmVal |
+			nmVal := raw @env0:value.
+			hasAcc
+				ifTrue: [cls @env0:perform: (nameSym @env0:asString @env0:, ':') @env0:asSymbol
+					env: 1 withArguments: (Array @env0:with: nmVal)]
+				ifFalse: [dynHolder @env0:isNil
+					ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym put: nmVal]].
+			dropped @env0:add: nameSym]].
+	dropped @env0:isEmpty ifFalse: [
+		allNames := allNames @env0:reject: [:n | dropped @env0:includes: n]] ] @env0:value.
 	"Reserved-name validation (CPython EnumType.__new__): a class-body
 	ASSIGNMENT may not rebind ``mro`` (it would shadow type.mro) nor use a
 	_sunder_ name outside the supported set -- ValueError at definition
@@ -761,6 +839,30 @@ ___grailFlagMask: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailFlagSingleBitMask: cls
+	"OR of only the SINGLE-BIT named members (CPython's _flag_mask_).  A
+	STRICT/CONFORM Flag inverts within this, NOT the full mask that also
+	covers a multi-bit member (``MASK = 255'' with only A=1/B=2): ~A is B, not
+	254.  When every member is single-bit this equals ___grailFlagMask:, so a
+	closed flag (MASK = A|B, itself a composite excluded from canonical
+	members) is unaffected."
+
+	| rec mask |
+	rec := self ___grailRecordFor: cls.
+	rec @env0:isNil ifTrue: [^ 0].
+	mask := 0.
+	(rec @env0:at: 3) @env0:do: [:m |
+		| mv |
+		mv := m @env0:dynamicInstVarAt: #value.
+		((mv isKindOf: Integer)
+			and: [mv @env0:> 0
+			and: [(mv @env0:bitAnd: (mv @env0:- 1)) @env0:= 0]])
+				ifTrue: [mask := mask @env0:bitOr: mv]].
+	^ mask
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailLookupName: cls name: aName
 	"Color['NAME'] -> the member with that name."
 
@@ -780,6 +882,47 @@ ___grailMembers: cls
 	rec := self ___grailRecordFor: cls.
 	rec @env0:isNil ifTrue: [^ OrderedCollection @env0:new].
 	^ rec @env0:at: 3
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailEnumTagFor: cls
+	"CPython's class-repr tag -- ``<flag 'X'>'' for a Flag subclass,
+	``<enum 'X'>'' otherwise.  Phrases the ``cannot extend'' TypeError."
+
+	^ ((Enum ___grailIsFlagClass: cls)
+		ifTrue: ['<flag ''']
+		ifFalse: ['<enum '''])
+			@env0:, cls @env0:name @env0:asString @env0:, '''>'
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailExtendedMemberBase: cls
+	"CPython _check_for_existing_members_: an enum that already defines
+	members is FINAL -- any subclass, whether or not it adds members, is
+	illegal.  Answer the first enum ancestor of cls carrying canonical
+	members, or nil when cls extends only member-less enums (a method-only
+	or mixin base is fine -- test_extending3).  Checks the registered MI
+	bases first (a member-bearing secondary base is merged out of the
+	primary Smalltalk chain -- ``EvenMoreColor(Color, IntEnum)''), then the
+	primary superclass chain (single inheritance -- ``MoreColor(Color)'')."
+
+	| bases |
+	bases := [(Python @env0:at: #importlib) @env0:___pythonBasesOf___: cls]
+		@env0:on: AbstractException do: [:e | nil].
+	(bases @env0:isNil or: [bases @env0:isEmpty]) ifTrue: [
+		bases := cls @env0:superclass @env0:isNil
+			ifTrue: [#()]
+			ifFalse: [Array @env0:with: cls @env0:superclass]].
+	bases @env0:do: [:b | | walker |
+		walker := b.
+		[(walker ~~ nil)
+			and: [(walker ~~ Enum) and: [walker ~~ Object]]] @env0:whileTrue: [
+			(walker ~~ cls and: [(Enum ___grailMembers: walker) @env0:notEmpty])
+				ifTrue: [^ walker].
+			walker := walker @env0:superclass]].
+	^ nil
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1992,14 +2135,18 @@ __iter__
 category: 'Grail-Flag Member'
 method: Flag
 __invert__
-	"~A: the mask-complement within the class's named bits (CPython
-	3.11+ semantics).  A None-valued member (``E = None'') cannot be inverted."
+	"~A: the mask-complement within the class's SINGLE-BIT named flags (CPython
+	3.11+ STRICT/CONFORM semantics -- a plain Flag's default boundary).  Uses
+	the single-bit mask, not the full one: for ``OpenAB(A=1, B=2, MASK=255)''
+	``~A'' is B, not OpenAB(254).  (IntFlag, boundary KEEP, keeps its own
+	___grailFlagMask:-based invert below.)  A None-valued member (``E = None'')
+	cannot be inverted."
 
 	| mask v |
 	v := self @env0:dynamicInstVarAt: #value.
 	(v @env0:isNil or: [v == None]) ifTrue: [
 		^ TypeError ___signal___: '''' @env0:, (Enum ___grailMemberStr: self) @env0:, ''' cannot be inverted'].
-	mask := Enum ___grailFlagMask: self @env0:class.
+	mask := Enum ___grailFlagSingleBitMask: self @env0:class.
 	^ Enum ___grailLookupValue: self @env0:class
 		value: (mask @env0:bitXor: (mask @env0:bitAnd: v))
 %
@@ -2406,6 +2553,30 @@ category: 'Grail-Class Attrs'
 classmethod: StrEnum
 _value_repr_
 	^ None
+%
+
+category: 'Grail-Class Attrs'
+classmethod: Flag
+_boundary_
+	"CPython FlagBoundary: how a Flag handles bits with no named member.  A
+	plain Flag defaults to STRICT (an out-of-range value raises).  Read by
+	test_open_invert_expectations / test_boundary; ``enum.STRICT'' is the
+	#STRICT symbol this returns, so ``_boundary_ in (EJECT, KEEP)'' is false and
+	the STRICT branch is taken.  Getter-only Grail-Class Attrs accessor (like
+	_member_type_), so ``OpenAB._boundary_'' reads the value."
+
+	^ #'STRICT'
+%
+
+category: 'Grail-Class Attrs'
+classmethod: IntFlag
+_boundary_
+	"IntFlag defaults to KEEP -- out-of-range bits are preserved -- so ``~x''
+	and ``IntFlag(n)'' keep every bit within the class mask.  Grail's IntFlag
+	invert already produces the KEEP result (e.g. ~A over MASK=255 is
+	OpenAB(254)), so returning #KEEP takes the matching test branch."
+
+	^ #'KEEP'
 %
 
 ! ------------------- StrEnum members (instance side)

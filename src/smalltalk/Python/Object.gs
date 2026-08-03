@@ -128,6 +128,23 @@ ___requireHashableAsDictKey___
 
 category: 'Grail-Hashability'
 method: object
+___pyHashCheck___
+	"Raise the TypeError CPython raises for an unhashable value; answer the
+	receiver otherwise.
+
+	For a place that is about to use a Python value as a key in a SMALLTALK
+	collection.  Smalltalk hashes a list or a dict perfectly well, so such a
+	key is accepted and stored where Python says it cannot exist -- the
+	collection is fine, the semantics are not.  Sending ``__hash__'' is the
+	whole check: every unhashable built-in raises from there, and so does a
+	class made unhashable at creation time (see ___raiseUnhashableType___)."
+
+	self __hash__.
+	^ self
+%
+
+category: 'Grail-Hashability'
+method: object
 ___raiseUnhashableType___
 	"Raise CPython's ``TypeError: unhashable type: 'X''' for the RECEIVER's own
 	class.  The body a class-creation-time unhashable class gets for __hash__
@@ -617,9 +634,16 @@ category: 'Grail-Convenience Methods - Unary'
 method: object
 ___isTruthy___
 	"Convert any Python object to a Smalltalk Boolean for use in if/while conditions.
-	Follows Python truth value testing: https://docs.python.org/3/library/stdtypes.html#truth-value-testing"
+	Follows Python truth value testing: https://docs.python.org/3/library/stdtypes.html#truth-value-testing
 
-	^ bool __new__: self
+	Sends ___truthOf___: rather than __new__: so a CLASS receiver is
+	tested for truthiness like any other object: bool class>>__new__:
+	reads a leading ``bool'' as CPython's ``bool.__new__(cls)''
+	allocation form (Grail's class-call dispatch names selectors by
+	arity, so the two spellings are otherwise indistinguishable), which
+	would make the condition in ``if bool:'' answer False."
+
+	^ bool ___truthOf___: self
 %
 
 category: 'Grail-Convenience Methods - Unary'

@@ -538,6 +538,7 @@ run
 	at: #'BaseExceptionTestCase' put: nil;
 	at: #'BlockingIOErrorTestCase' put: nil;
 	at: #'BooleanTestCase' put: nil;
+	at: #'BoolConformanceTestCase' put: nil;
 	at: #'BoundMethodNameTestCase' put: nil;
 	at: #'BrokenPipeErrorTestCase' put: nil;
 	at: #'BufferErrorTestCase' put: nil;
@@ -689,6 +690,7 @@ run
 	at: #'KeyboardInterruptTestCase' put: nil;
 	at: #'KeywordOnlyParamsTestCase' put: nil;
 	at: #'ListSortKwargsTestCase' put: nil;
+	at: #'LruHashabilityAndUnionsTestCase' put: nil;
 	at: #'ListTestCase' put: nil;
 	at: #'LocalsTestCase' put: nil;
 	at: #'LookupErrorTestCase' put: nil;
@@ -1278,6 +1280,7 @@ input src/smalltalk/PythonTests/GrailTestResult.gs
 input src/smalltalk/PythonTests/PythonTestCase.gs
 input src/smalltalk/PythonTests/ChainedComparisonTestCase.gs
 input src/smalltalk/PythonTests/BooleanTestCase.gs
+input src/smalltalk/PythonTests/BoolConformanceTestCase.gs
 input src/smalltalk/PythonTests/BoundMethodNameTestCase.gs
 input src/smalltalk/PythonTests/BuiltinsTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassOverrideTestCase.gs
@@ -1411,6 +1414,7 @@ input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
 input src/smalltalk/PythonTests/TracebackTestCase.gs
 input src/smalltalk/PythonTests/ListSortKwargsTestCase.gs
+input src/smalltalk/PythonTests/LruHashabilityAndUnionsTestCase.gs
 input src/smalltalk/PythonTests/ListTestCase.gs
 input src/smalltalk/PythonTests/MathTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionTestCase.gs
