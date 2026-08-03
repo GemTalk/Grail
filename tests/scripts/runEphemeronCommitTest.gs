@@ -143,14 +143,14 @@ unwinds — leaving the repository pristine in every case."
   classInstVar was removed from the module class, so a module-level
   global has nowhere to persist to."
   [ | wbCls |
-  wbCls := PythonModules at: #Weakref_basic ifAbsent: [nil].
+  wbCls := PythonModules at: #weakref_basic ifAbsent: [nil].
   check value: 'weakref_basic class was committed (module code persists)'
     value: wbCls notNil.
   check value: 'module class has no committed singleton slot (instance classInstVar removed)'
     value: (wbCls isNil or: [(wbCls class allInstVarNames includes: #instance) not]) ] value.
 ] ensure: [
   UserGlobals removeKey: #'Grail_commit_test_weakref' ifAbsent: [].
-  PythonModules removeKey: #Weakref_basic ifAbsent: [].
+  PythonModules removeKey: #weakref_basic ifAbsent: [].
   System commit
 ].
 

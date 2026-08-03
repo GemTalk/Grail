@@ -624,15 +624,15 @@ testEncodeDottedClassName
 
 category: 'Grail-Tests - Class Name Encoding'
 method: ImportlibTestCase
-testEncodeModuleNameCapitalizes
-	"MODULE names keep the historical encoder (___asSmalltalkModuleName___:):
-	their backing class is committed as a canonical module, so it stays
-	capitalized (dots -> underscores, leading letter upper-cased) until a
-	canonical-module migration.  This name is never a module's __name__, so
-	the capitalization is invisible to Python."
+testEncodeModuleNameKeepsCase
+	"MODULE names now use the SAME encoder as class names
+	(___asSmalltalkModuleName___: delegates to ___asSmalltalkClassName___:): the
+	only transform is `.` -> `_`, and case is PRESERVED so the backing-class name
+	matches the Python module name.  Capitalization is gone -- Globals is no
+	longer in the compile symbol list, so there is nothing to dodge."
 
-	self assert: (importlib ___asSmalltalkModuleName___: 'hello') equals: #'Hello'.
-	self assert: (importlib ___asSmalltalkModuleName___: 're._parser') equals: #'Re__parser'.
+	self assert: (importlib ___asSmalltalkModuleName___: 'hello') equals: #'hello'.
+	self assert: (importlib ___asSmalltalkModuleName___: 're._parser') equals: #'re__parser'.
 	self assert: (importlib ___asSmalltalkModuleName___: 'MyMod') equals: #'MyMod'
 %
 
@@ -666,8 +666,7 @@ testGeneratedModuleClassInPythonModules
 	"loadModuleFromPath: registers the generated module class in the
 	PythonModules SymbolDictionary, keyed by the encoded MODULE class name —
 	not in UserGlobals.  A module name is encoded by ___asSmalltalkModuleName___:
-	(dots -> underscores, leading letter capitalized): 'python.hello' ->
-	'Python_hello'."
+	(dots -> underscores, case preserved): 'python.hello' -> 'python_hello'."
 
 	| mods |
 	mods := importlib @env1:modules.
@@ -675,8 +674,8 @@ testGeneratedModuleClassInPythonModules
 	importlib loadModuleFromPath: (importlib grailDir , '/src/python/hello.py')
 		name: 'python.hello'.
 
-	self assert: (PythonModules at: #'Python_hello' ifAbsent: [nil]) notNil.
-	self assert: (UserGlobals at: #'Python_hello' ifAbsent: [nil]) isNil
+	self assert: (PythonModules at: #'python_hello' ifAbsent: [nil]) notNil.
+	self assert: (UserGlobals at: #'python_hello' ifAbsent: [nil]) isNil
 %
 
 ! ===============================================================================

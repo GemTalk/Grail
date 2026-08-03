@@ -716,9 +716,10 @@ phase2b
 category: 'Grail-Tests - phase2 conformance'
 method: DunderNewTestCase
 testArrayModuleNoKernelCollision
-	"import array must not shadow kernel Array: the module class is
-	mangled to PyArray (importlib ___asSmalltalkClassName___ probes
-	Globals), and array.array works via the _array alias."
+	"import array must not shadow kernel Array.  The module backing class is
+	now named 'array' (case preserved, no mangling) -- a different symbol from
+	kernel 'Array', so the tuple instantiator's Array reference is untouched.
+	array.array works via the _array alias."
 
 	self assert: (self phase2b @env1:__getitem__: 'array') equals: true.
 	self assert: (self phase2b @env1:__getitem__: 'kernel_intact') equals: true
