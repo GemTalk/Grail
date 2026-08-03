@@ -87,6 +87,106 @@ def in_method():
     return _dispatch_three(Host().build())
 
 
+class StaticScope:
+    """@singledispatchmethod over a @staticmethod.  Grail consumes the inner
+    decorator at parse time and compiles the def onto the METACLASS, so the
+    outer decorator's base has to be a class-side handle -- an instance-side
+    one names nothing.  Neither access path binds an instance, exactly as
+    CPython's staticmethod descriptor does not."""
+    @functools.singledispatchmethod
+    @staticmethod
+    def t(arg):
+        return "base"
+    @t.register(int)
+    @staticmethod
+    def _(arg):
+        return "int"
+    @t.register(str)
+    @staticmethod
+    def _(arg):
+        return "str"
+
+
+class ClassScope:
+    """@singledispatchmethod over a @classmethod.  ``cls'' is the Smalltalk
+    receiver of the class-side method, so the class-side handle supplies it
+    implicitly and the dispatch argument is the first one passed."""
+    @functools.singledispatchmethod
+    @classmethod
+    def t(cls, arg):
+        return "base"
+    @t.register(int)
+    @classmethod
+    def _(cls, arg):
+        return "int"
+    @t.register(str)
+    @classmethod
+    def _(cls, arg):
+        return "str"
+
+
+def static_via_class():
+    return [StaticScope.t(0), StaticScope.t(''), StaticScope.t(0.0)]
+
+
+def static_via_instance():
+    """A staticmethod reached through an INSTANCE takes the same arguments as
+    through the class -- nothing is prepended."""
+    s = StaticScope()
+    return [s.t(0), s.t(''), s.t(0.0)]
+
+
+def classmethod_via_class():
+    return [ClassScope.t(0), ClassScope.t(''), ClassScope.t(0.0)]
+
+
+def classmethod_via_instance():
+    c = ClassScope()
+    return [c.t(0), c.t(''), c.t(0.0)]
+
+
+def classmethod_annotation_on_slots():
+    """The annotation form over a @classmethod, on a __slots__ class -- the
+    shape CPython's test_classmethod_slotted_class uses.  Reading the
+    annotation off a class-side method needs it in the class's annotation
+    table, which used to list instance methods only."""
+    class Slot:
+        __slots__ = ('a', 'b')
+        @functools.singledispatchmethod
+        @classmethod
+        def go(cls, item, arg):
+            return None
+        @go.register
+        @classmethod
+        def _(cls, item: int, arg):
+            return item + arg
+    return [Slot().go(1, 1), Slot.go(1, 1)]
+
+
+def static_annotation_registration():
+    class A:
+        @functools.singledispatchmethod
+        @staticmethod
+        def t(arg):
+            return "base"
+        @t.register
+        @staticmethod
+        def _(arg: int):
+            return "int"
+        @t.register
+        @staticmethod
+        def _(arg: str):
+            return "str"
+    return [A.t(0), A.t(''), A.t(0.0)]
+
+
+def classmethod_descriptor_repr():
+    """The descriptor names itself Cls.meth.  A class-side handle answers only
+    the bare selector, so the qualification has to come from the class it is
+    bound to."""
+    return repr(ClassScope.t)
+
+
 def arity_error():
     """CPython names the FUNCTION, and the receiver does not count towards the
     one required positional argument."""

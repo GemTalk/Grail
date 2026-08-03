@@ -531,18 +531,20 @@ __name__
 	its Smalltalk name — downstream inspect.ismethod / isfunction stubs are
 	written to match the Smalltalk names ('BoundMethod', 'ExecBlock').
 
-	User Python classes defined with a lower-case name (``class base_set:``)
-	are stored under a capitalized GemStone class name (``Base_set''); return
-	their ORIGINAL Python spelling, recorded mangled->original by
-	importlib>>___asSmalltalkClassName___: and looked up here.  CPython error
+	A user Python class keeps its exact Python name as the GemStone class name
+	(``class base_set:`` stays ``base_set''); cls.__name__ therefore returns
+	that name straight from the Smalltalk class -- no case change, no
+	mangled->original registry.  CPython error
 	messages interpolate this (test_contains: ``argument of type 'base_set'
 	...'')."
 
 	| bt |
 	bt := self ___pythonBuiltinTypeName___.
 	bt @env0:notNil ifTrue: [^ bt].
-	^ (importlib @env0:___pyClassNameFor___: self @env0:name @env0:asString)
-		@env0:ifNil: [self @env0:name @env0:asString]
+	"User classes now keep their exact Python name as the GemStone class name
+	(___asSmalltalkClassName___: no longer changes case), so the Smalltalk name
+	IS the Python name -- no mangled->original registry lookup needed."
+	^ self @env0:name @env0:asString
 %
 
 category: 'Grail-Introspection'
@@ -558,8 +560,10 @@ __qualname__
 	| bt |
 	bt := self ___pythonBuiltinTypeName___.
 	bt @env0:notNil ifTrue: [^ bt].
-	^ (importlib @env0:___pyClassNameFor___: self @env0:name @env0:asString)
-		@env0:ifNil: [self @env0:name @env0:asString]
+	"User classes now keep their exact Python name as the GemStone class name
+	(___asSmalltalkClassName___: no longer changes case), so the Smalltalk name
+	IS the Python name -- no mangled->original registry lookup needed."
+	^ self @env0:name @env0:asString
 %
 
 category: 'Grail-Callable'
@@ -1295,8 +1299,28 @@ ___isDescriptorCallable___: aValue
 	primitives) return false — Python doesn't apply descriptor
 	binding to them either."
 
+	| rcvr |
 	(aValue isKindOf: MethodBinding) ifTrue: [^ false].
-	(aValue isKindOf: BoundMethod) ifTrue: [^ true].
+	(aValue isKindOf: BoundMethod) ifTrue: [
+		"...but NOT a BUILT-IN function.  CPython binds a plain Python function
+		stored in a class dict and does NOT bind a builtin one -- a C function
+		is not a descriptor -- which is why test_functools can write
+		``cmp_to_key = c_functools.cmp_to_key'' bare where the pure-Python
+		variant has to write ``staticmethod(py_functools.cmp_to_key)''.
+
+		Grail spells both as a BoundMethod on a module instance, and the module
+		itself is the discriminator: one implemented in Smalltalk and filed in
+		(functools, operator, ...) is the builtin, and has no ``__file__''; one
+		compiled from Python source does, and its top-level defs are plain
+		functions that bind like any other.
+
+		Without this, ``self.cmp_to_key(cmp1)'' passed the TEST CASE as the
+		comparison function -- the wrapper then tried to call it, and the whole
+		of TestCmpToKeyC died on the resulting arity error rather than on
+		anything to do with cmp_to_key."
+		rcvr := aValue @env0:receiver.
+		^ ((rcvr isKindOf: module)
+			and: [(rcvr @env0:dynamicInstVarAt: #'__file__') == nil]) not].
 	(aValue isKindOf: ExecBlock) ifTrue: [^ true].
 	"UnboundMethod -- what ``Cls.m'' answers, i.e. CPython's plain function
 	taking self first.  A decorator that returns its argument unchanged
@@ -1316,7 +1340,13 @@ ___isDescriptorCallable___: aValue
 	that mint them; the PythonInstance gate keeps the probe off the ordinary
 	non-callable class attribute, which is what usually reaches here."
 	((aValue isKindOf: PythonInstance)
-		and: [aValue ___respondsTo___: #'___pyBindsSelf___']) ifTrue: [^ true].
+		and: [aValue ___respondsTo___: #'___pyBindsSelf___'])
+		ifTrue: [
+			"The marker is ASKED, not merely detected: whether one of these
+			stands in for a function that binds self can depend on what it
+			wraps.  functools.singledispatchmethod answers false over a
+			@classmethod / @staticmethod, neither of which binds an instance."
+			^ aValue ___pyBindsSelf___ == true].
 	^ false
 %
 
@@ -1780,7 +1810,22 @@ ___pyAttrLoad___: aSym
 						or: [(metaOwns @env0:value: sym5)
 							or: [(metaOwns @env0:value: sym6)
 								or: [metaOwns @env0:value: symVA]]]]]])
-			ifTrue: [^ BoundMethod receiver: self @env0:class selector: aSym].
+			ifTrue: [
+				"...unless a class-attribute store has REPLACED it.  In CPython a
+				``@classmethod def m'' is a class-dict entry, so a later
+				``Cls.m = f'' -- or a class-body decorator rebinding, which is
+				the same store -- replaces it outright and an instance read sees
+				the replacement.  Grail keeps the compiled class-side method and
+				the store in different places, and this branch used to answer
+				the compiled one, so ``@singledispatchmethod @staticmethod def
+				t'' left ``a.t(...)'' running the UNDECORATED staticmethod while
+				``A.t(...)'' correctly ran the descriptor.  Same asymmetry the
+				instance-side probe below already fixes for plain methods; this
+				is its class-side twin, and it costs a store probe only for a
+				name that resolved to a class-side method in the first place."
+				(self ___classChainAttrLookup___: aSym)
+					@env0:ifNotNil: [:___cv | ^ ___cv].
+				^ BoundMethod receiver: self @env0:class selector: aSym].
 	].
 	"Shim wrapper classes (SrePattern, SreMatch, ...) advertise the
 	subset of their unary methods that should be treated as Python
