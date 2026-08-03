@@ -1143,6 +1143,13 @@ ___grailInstallEnumOutput: cls
 	per-selector guard below already keeps them."
 
 	| strOverridden |
+	"dir(member) -- install the enum member __dir__ on EVERY enum class (before
+	the StrEnum/ReprEnum early returns below), so IntEnum/StrEnum/data-mixed
+	members -- which do not inherit Enum's instance side -- resolve it too.
+	A user-defined __dir__ is left alone."
+	(Enum ___grailUserProvides: cls selector: #'__dir__') ifFalse: [
+		cls ___compileMethod: '__dir__
+	^ Enum ___grailMemberDir: self' category: 'Grail-Enum Member'].
 	"A user __str__ override (a class-body def, one inherited from a user base,
 	or a functional-API forwarder) with NO matching __format__ override makes
 	format() follow str(): CPython's EnumType replaces __format__ with the
@@ -2089,6 +2096,71 @@ method: Enum
 __str__
 	^ self @env0:class @env0:name @env0:asString @env0:, '.' @env0:,
 		(self @env0:dynamicInstVarAt: #name)
+%
+
+category: 'Grail-Enum Member'
+method: Enum
+__dir__
+	"dir(member) -- delegate to the shared member-dir builder.  Installed on
+	every enum class instance-side by ___grailInstallEnumOutput: so IntEnum /
+	StrEnum / data-mixed members (which do not inherit Enum's instance side) get
+	it too."
+
+	^ Enum ___grailMemberDir: self
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailMemberDir: aMember
+	"dir(aMember) -- CPython Enum member __dir__, built to mirror test_enum's
+	``member_dir'' helper so ``dir(m) == member_dir(m)'' holds by construction.
+	Base: the fixed enum-instance names, plus dir(member_type) for a data-mixed
+	member (member_dir's mixed branch bases off dir(m) itself, so the walk below
+	is idempotent and any reasonable base matches).  Then, for each class in the
+	member's mro, add every non-underscore name in that class's __dict__ that is
+	not a member; an enum.property that IS a member with no getter is removed
+	instead.  Grail compiles @enum.property to a value-attr method, not a stored
+	PropertyDescriptor, so that branch is effectively the non-member ADD path --
+	same as member_dir sees.  Non-underscore instance attributes carried by this
+	member (obj.description set in a custom __new__) are included
+	(test_dir_on_sub_..._instance_dict_on_super)."
+
+	| cls memberType memberMap allowed propClass |
+	cls := aMember @env0:class.
+	memberType := cls _member_type_.
+	memberMap := cls _member_map_.
+	propClass := Python @env0:at: #PropertyDescriptor.
+	allowed := Set @env0:new.
+	#('__class__' '__doc__' '__eq__' '__hash__' '__module__' 'name' 'value')
+		@env0:do: [:n | allowed @env0:add: n].
+	memberType == object ifFalse: [
+		[(memberType @env1:__dir__) @env0:do: [:n | allowed @env0:add: n @env0:asString]]
+			@env0:on: AbstractException do: [:ex | nil]].
+	"Non-underscore instance attributes carried by this member."
+	[ | pairs i |
+	pairs := aMember @env0:dynamicInstVarPairs.
+	i := 1.
+	[i @env0:< pairs @env0:size] @env0:whileTrue: [ | ds |
+		ds := (pairs @env0:at: i) @env0:asString.
+		((ds @env0:size @env0:> 0) and: [(ds @env0:at: 1) @env0:~= $_])
+			ifTrue: [allowed @env0:add: ds].
+		i := i @env0:+ 2] ] @env0:on: AbstractException do: [:ex | nil].
+	"mro walk -- member.__class__.mro(), each class's __dict__."
+	((Python @env0:at: #importlib) @env0:___mroOf___: cls) @env0:do: [:c | | dict |
+		dict := [c ___classDict___] @env0:on: AbstractException do: [:ex | nil].
+		dict @env0:isNil ifFalse: [
+			dict @env0:keysAndValuesDo: [:name :obj | | ns |
+				ns := name @env0:asString.
+				((ns @env0:size @env0:> 0) and: [(ns @env0:at: 1) @env0:~= $_]) ifTrue: [
+					(obj isKindOf: propClass)
+						ifTrue: [
+							((obj @env0:fget @env0:notNil)
+								or: [(memberMap @env0:includesKey: ns) @env0:not])
+								ifTrue: [allowed @env0:add: ns]
+								ifFalse: [allowed @env0:remove: ns @env0:ifAbsent: []]]
+						ifFalse: [
+							(memberMap @env0:includesKey: ns) ifFalse: [allowed @env0:add: ns]]]]]].
+	^ list @env0:withAll: allowed @env0:asSortedCollection
 %
 
 category: 'Grail-Enum Member'
