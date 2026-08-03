@@ -479,8 +479,18 @@ ___grailBuildMembers: cls names: attrNames
 			(rawValue isKindOf: GrailEnumAuto) ifTrue: [
 				(autoResolved @env0:includesKey: rawValue)
 					ifTrue: [rawValue := autoResolved @env0:at: rawValue]
-					ifFalse: [ | resolved |
-						resolved := gnvClass @env0:notNil
+					ifFalse: [ | resolved hasExplicit explicitVal |
+						"CPython: auto() carries a `value` slot defaulting to a sentinel;
+						if the code set it explicitly (weird_auto.value = 'x'), that value
+						is used verbatim and _generate_next_value_ is NOT called
+						(test_auto_order_wierd).  A plain auto() has no `value` attribute
+						-> AttributeError -> fall through to the generator/default."
+						hasExplicit := true.
+						explicitVal := [rawValue ___pyAttrLoad___: #'value']
+							@env0:on: AbstractException do: [:ex | hasExplicit := false. nil].
+						resolved := hasExplicit
+							ifTrue: [explicitVal]
+							ifFalse: [gnvClass @env0:notNil
 							ifTrue: [
 								"User _generate_next_value_(name, start=1, count, last_values).
 								count = members built so far; invoke via UnboundMethod (the
@@ -493,7 +503,7 @@ ___grailBuildMembers: cls names: attrNames
 								ifTrue: [nameStr @env0:asLowercase]
 								ifFalse: [(Enum ___grailIsFlagClass: cls)
 									ifTrue: [Enum ___grailFlagAutoNext: genValues]
-									ifFalse: [Enum ___grailPlainAutoNext: genValues]]].
+									ifFalse: [Enum ___grailPlainAutoNext: genValues]]]].
 						autoResolved @env0:at: rawValue put: resolved.
 						rawValue := resolved]].
 			genValues @env0:add: rawValue.
