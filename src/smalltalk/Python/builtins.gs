@@ -81,9 +81,34 @@ set compile_env: 1
 category: 'Grail-Initialization'
 method: builtins
 initialize
-	"No-op. The `module>>instance` class method still calls `initialize`
-	on the newly-created instance, so this no-op stub keeps that contract.
-	Subclasses with real per-instance state should override this method."
+	"Eagerly populate this module's namespace with the CPython builtin TYPES so
+	``builtins.int`` / ``builtins.slice`` resolve via getattr AND appear in
+	vars(builtins) / dir(builtins) -- matching CPython, whose builtins module
+	contains every builtin type.  Builtin FUNCTIONS (len, abs, ...) already
+	answer through the builtins method path and are untouched here.
+
+	The type classes live in the Python dict (install.gs Step 3 maps int->Integer
+	etc.; the object-subclass builtins like slice/tuple/set live there too).  A
+	CPython builtin that Grail implements as a FUNCTION rather than a class
+	(enumerate/filter/map/reversed/zip/type/super/staticmethod/classmethod) is
+	simply absent from the dict and skipped -- the method path answers getattr for
+	those.  Only this CURATED name list is consulted, never the whole Python dict:
+	the dict is Grail's global namespace (241 classes -- vendored modules,
+	iterators, PyCode and other internals) and is NOT builtins.  Stored as
+	dynamic-instVars, the same store module globals use, so getattr and vars()
+	both see them.  Session-local (the builtins singleton is per session)."
+
+	| pd names |
+	pd := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'Python'.
+	(pd @env0:isNil) @env0:ifTrue: [^ self].
+	names := #( #bool #bytearray #bytes #complex #dict #enumerate #filter #float
+	   #frozenset #int #list #map #memoryview #object #property #range
+	   #reversed #set #slice #staticmethod #classmethod #str #super #tuple
+	   #type #zip ).
+	names @env0:do: [:n | | v |
+		v := pd @env0:at: n otherwise: nil.
+		((v @env0:notNil) @env0:and: [v @env0:isKindOf: Behavior]) @env0:ifTrue: [
+			self @env0:dynamicInstVarAt: n put: v]]
 %
 
 ! ===============================================================================
