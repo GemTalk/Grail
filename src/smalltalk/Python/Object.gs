@@ -1478,6 +1478,111 @@ ___isDescriptorCallable___: aValue
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___chainOwnsAnyOf___: family orUnary: aSym from: aClass
+	"True when any class in aClass's chain defines the unary aSym or any
+	selector in family, in env 1.
+
+	Same answer as asking whichClassIncludesSelector: for each in turn, but in
+	one pass: the per-selector form re-walks the whole chain each time, and
+	every step of every walk re-fetches that class's env-1 method dictionary
+	-- which on this build is a merge of the persistent and the transient
+	(session method) dicts, i.e. the expensive part, done eightfold."
+
+	| walker dict |
+	walker := aClass.
+	[walker == nil] whileFalse: [
+		dict := walker @env0:methodDictForEnv: 1.
+		dict == nil ifFalse: [
+			(dict @env0:includesKey: aSym) ifTrue: [^ true].
+			1 to: 7 do: [:i |
+				(dict @env0:includesKey: (family @env0:at: i)) ifTrue: [^ true]]].
+		walker := walker @env0:superClass].
+	^ false
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___metaChainOwnsAnyOf___: family from: metaclass
+	"True when some TRUE METACLASS in metaclass's chain defines any selector
+	in family -- the @classmethod / @staticmethod probe in ___pyAttrLoad___.
+
+	Equivalent to asking whichClassIncludesSelector: for each selector in turn
+	and testing whether the owner isMeta, but in one pass: the metaclass chain
+	runs meta-first and ends in the kernel tail (Class, Behavior, Object),
+	which is not meta, so a selector whose nearest owner is non-meta is one
+	this walk skips and the per-selector form would have rejected.
+
+	The point is fetching each class's method dictionary ONCE per walk instead
+	of once per selector per walk."
+
+	| walker dict |
+	walker := metaclass.
+	[walker == nil] whileFalse: [
+		walker @env0:isMeta ifTrue: [
+			dict := walker @env0:methodDictForEnv: 1.
+			dict == nil ifFalse: [
+				1 to: 7 do: [:i |
+					(dict @env0:includesKey: (family @env0:at: i)) ifTrue: [^ true]]]].
+		walker := walker @env0:superClass].
+	^ false
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___selectorFamilyFor___: aSym string: aString
+	"The seven Smalltalk selectors the attribute name aSym can have compiled
+	to -- ``n:'', ``n:_:'' .. ``n:_:_:_:_:_:'', and the varargs ``_n:kw:'' --
+	in that order.
+
+	Memoised per name because ___pyAttrLoad___ built all seven on EVERY
+	attribute load that got past the instance-slot probe: seven string
+	concatenations and seven asSymbol interns, each a symbol-table hash and
+	probe, and most of them discarded unused by whichever branch ran.  The
+	answer depends only on the NAME, never on the receiver or on what is
+	currently compiled, so it can be cached without any invalidation.
+
+	SessionTemps, not a class variable: the registry is pure session-local
+	scratch, and a committed one would be a multi-user write conflict on a
+	shared stone for no benefit.
+
+	Only SYMBOLS are cached.  A String reaches here from getattr() with a
+	computed name; interning those as cache keys would let an unbounded
+	number of one-shot names accumulate for the rest of the session, so they
+	are built fresh instead -- the same work as before this memo existed."
+
+	| reg family |
+	aSym @env0:isSymbol ifFalse: [^ self ___buildSelectorFamily___: aString].
+	reg := SessionTemps @env0:current @env0:at: #GrailSelectorFamilies otherwise: nil.
+	reg == nil ifTrue: [
+		reg := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailSelectorFamilies put: reg].
+	family := reg @env0:at: aSym otherwise: nil.
+	family == nil ifTrue: [
+		family := self ___buildSelectorFamily___: aString.
+		reg @env0:at: aSym put: family].
+	^ family
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___buildSelectorFamily___: aString
+	"Build the seven selectors for one attribute name.  ``Array with:'' tops
+	out at six arguments, so the slots are filled by index."
+
+	| family |
+	family := Array @env0:new: 7.
+	family @env0:at: 1 put: (aString @env0:, ':') @env0:asSymbol.
+	family @env0:at: 2 put: (aString @env0:, ':_:') @env0:asSymbol.
+	family @env0:at: 3 put: (aString @env0:, ':_:_:') @env0:asSymbol.
+	family @env0:at: 4 put: (aString @env0:, ':_:_:_:') @env0:asSymbol.
+	family @env0:at: 5 put: (aString @env0:, ':_:_:_:_:') @env0:asSymbol.
+	family @env0:at: 6 put: (aString @env0:, ':_:_:_:_:_:') @env0:asSymbol.
+	family @env0:at: 7 put: ('_' @env0:, aString @env0:, ':kw:') @env0:asSymbol.
+	^ family
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___isValueDescriptor___: aValue
 	"True if aValue is a real DESCRIPTOR OBJECT: a Python object whose own
 	class implements ``__get__'', so a read through an instance must ask it
@@ -1610,7 +1715,7 @@ ___pyAttrLoad___: aSym
 	  - Otherwise dispatch the unary message anyway and let DNU
 	    produce the appropriate error or fallback."
 
-	| md sym1 sym2 sym3 sym4 sym5 sym6 symVA s isModule isGenerated dynValue walker owner |
+	| sym1 sym2 sym3 sym4 sym5 sym6 symVA s isModule isGenerated dynValue walker owner family |
 	"An empty attribute name (``getattr(obj, '')'' -- e.g. attrgetter('child.')
 	whose dotted split has an empty part) must raise the catchable
 	AttributeError, not the uncatchable GemStone ``instVar names cannot be
@@ -1629,7 +1734,6 @@ ___pyAttrLoad___: aSym
 	returns nil here, so the probe is safe for all receiver kinds."
 	dynValue := self @env0:dynamicInstVarAt: aSym.
 	dynValue == nil ifFalse: [^ dynValue].
-	md := self @env0:class @env0:methodDictForEnv: 1.
 	s := aSym @env0:asString.
 	"Python __slots__ → GemStone named instance variables, name-mangled
 	(``x'' → ``___slot_x___'').  A slotted class carries an instance-side
@@ -1652,19 +1756,26 @@ ___pyAttrLoad___: aSym
 			slotVal == nil ifFalse: [^ slotVal]
 		]
 	].
-	sym1 := (s @env0:, ':') @env0:asSymbol.
-	sym2 := (s @env0:, ':_:') @env0:asSymbol.
-	sym3 := (s @env0:, ':_:_:') @env0:asSymbol.
-	sym4 := (s @env0:, ':_:_:_:') @env0:asSymbol.
-	"5- and 6-arg fixed selectors: generated/library code does declare
-	methods this wide with no defaults (twilio's
-	``Session.merge_environment_settings(self, url, proxies, stream,
-	verify, cert)``), and without the probe the attribute load
-	AttributeErrors even though the method exists.  BoundMethod's
-	_selectorForArgCount: already builds any arity at call time."
-	sym5 := (s @env0:, ':_:_:_:_:') @env0:asSymbol.
-	sym6 := (s @env0:, ':_:_:_:_:_:') @env0:asSymbol.
-	symVA := ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol.
+	"The eight selectors one attribute name can compile to.  Building them is
+	seven concatenations and seven SYMBOL INTERNINGS -- a symbol-table hash
+	and probe each -- on every attribute load that gets past the instance
+	slot, whether or not the branch taken ever looks at them.  Memoised per
+	name; see ___selectorFamilyFor___:.
+
+	5- and 6-arg fixed selectors are in the family because generated/library
+	code does declare methods this wide with no defaults (twilio's
+	``Session.merge_environment_settings(self, url, proxies, stream, verify,
+	cert)``), and without the probe the attribute load AttributeErrors even
+	though the method exists.  BoundMethod's _selectorForArgCount: already
+	builds any arity at call time."
+	family := self ___selectorFamilyFor___: aSym string: s.
+	sym1 := family @env0:at: 1.
+	sym2 := family @env0:at: 2.
+	sym3 := family @env0:at: 3.
+	sym4 := family @env0:at: 4.
+	sym5 := family @env0:at: 5.
+	sym6 := family @env0:at: 6.
+	symVA := family @env0:at: 7.
 	"Module instances (pre-installed Python modules like html/math, plus
 	loaded module classes derived from `module`) always treat unary
 	attribute reads as value reads (an attribute holds a function,
@@ -1862,14 +1973,12 @@ ___pyAttrLoad___: aSym
 		existing BoundMethod handling.  The UnboundMethod binds the receiver
 		from the first call argument and runs the named class's own method
 		non-virtually (via ``performMethod:'')."
-		((self @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
-			@env0:or: [(self @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
-			@env0:or: [(self @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
-			@env0:or: [(self @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
-			@env0:or: [(self @env0:whichClassIncludesSelector: sym4 environmentId: 1) notNil
-			@env0:or: [(self @env0:whichClassIncludesSelector: sym5 environmentId: 1) notNil
-			@env0:or: [(self @env0:whichClassIncludesSelector: sym6 environmentId: 1) notNil
-			@env0:or: [(self @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]]]]])
+		"ONE walk of the chain probing all eight selectors at each class, not
+		eight walks of one selector each -- and each walk re-fetches every
+		class's env-1 method dictionary, which on this build is a MERGE of the
+		persistent and the transient (session method) dicts.  This was the
+		single hottest lookup site in the suite."
+		(self ___chainOwnsAnyOf___: family orUnary: aSym from: self)
 			ifTrue: [^ UnboundMethod definingClass: self selector: aSym].
 	].
 	"Python user classes (PythonInstance subclasses) have synthesized
@@ -1974,16 +2083,14 @@ ___pyAttrLoad___: aSym
 		CLASS instead of the instance -- breaking every context manager
 		whose ``__exit__'' is reached through a normal call
 		(test.support.swap_item) and any ``inst.__eq__''-style dunder call."
-		metaOwns := [:sel | | o |
-			o := metaclass @env0:whichClassIncludesSelector: sel environmentId: 1.
-			o notNil and: [o @env0:isMeta]].
-		((metaOwns @env0:value: sym1)
-			or: [(metaOwns @env0:value: sym2)
-				or: [(metaOwns @env0:value: sym3)
-					or: [(metaOwns @env0:value: sym4)
-						or: [(metaOwns @env0:value: sym5)
-							or: [(metaOwns @env0:value: sym6)
-								or: [metaOwns @env0:value: symVA]]]]]])
+		"ONE walk of the metaclass chain probing all seven selectors at each
+		class, rather than seven walks probing one selector each.  Each walk
+		re-fetched every class's env-1 method dictionary, and on this build
+		that dictionary is a MERGE of the persistent and transient (session
+		method) dicts -- so the seven walks did sevenfold the expensive part.
+		whichClassIncludesSelector: was 26% of the profiled suite's total time,
+		two thirds of it from right here."
+		(self ___metaChainOwnsAnyOf___: family from: metaclass)
 			ifTrue: [
 				"...unless a class-attribute store has REPLACED it.  In CPython a
 				``@classmethod def m'' is a class-dict entry, so a later
