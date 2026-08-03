@@ -218,15 +218,20 @@ _verify: positional kw: kwargs
 	"@verify(UNIQUE | CONTINUOUS | NAMED_FLAGS, ...) -> decorator.  UNIQUE is
 	enforced -- it delegates to the same alias check as @unique, raising
 	ValueError on a duplicate-valued enum (test_enum test_unique_dirty via
-	@verify).  CONTINUOUS / NAMED_FLAGS stay advisory (return the class
-	unchanged); skipping them only means we never raise on those."
+	@verify).  CONTINUOUS is enforced too (test_continuous): the member values
+	must form a gap-free run -- consecutive integers for an enum, consecutive
+	powers of two for a flag.  NAMED_FLAGS stays advisory (returns the class
+	unchanged); skipping it only means we never raise on it."
 
-	| checksUnique |
+	| checksUnique checksContinuous |
 	checksUnique := positional @env0:includes: (self @env0:at: #UNIQUE).
+	checksContinuous := positional @env0:includes: (self @env0:at: #CONTINUOUS).
 	^ [:positional2 :keywords2 |
 		| cls |
 		cls := positional2 @env0:at: 1.
-		checksUnique ifTrue: [self unique: cls] ifFalse: [cls]]
+		checksUnique ifTrue: [self unique: cls].
+		checksContinuous ifTrue: [self continuous: cls].
+		cls]
 %
 
 category: 'Grail-Built-in Functions'
@@ -260,6 +265,49 @@ unique: cls
 		msg @env0:nextPutAll: d].
 	^ ValueError ___signal___: ('duplicate values found in <enum '''
 		@env0:, cls @env0:name @env0:asString @env0:, '''>: ' @env0:, msg @env0:contents)
+%
+
+category: 'Grail-Built-in Functions'
+method: enum
+continuous: cls
+	"``@verify(CONTINUOUS)`` -- raise ValueError when the member values leave a
+	gap (CPython enum.verify CONTINUOUS).  For a plain enum the values must be
+	consecutive integers between the min and max; for a flag they must be the
+	consecutive powers of two between the lowest and highest set bit.  Fewer
+	than two values, or any non-integer value, is nothing to check -- return
+	cls unchanged (test_continuous)."
+
+	| enumClass isFlag values sorted low high missing enumType msg |
+	enumClass := Python @env0:at: #Enum.
+	isFlag := enumClass ___grailIsFlagClass: cls.
+	values := Set @env0:new.
+	(enumClass ___grailMembers: cls) @env0:do: [:m |
+		values @env0:add: (m @env0:dynamicInstVarAt: #value)].
+	(values @env0:size @env0:< 2) ifTrue: [^ cls].
+	(values @env0:anySatisfy: [:v | (v isKindOf: Integer) @env0:not]) ifTrue: [^ cls].
+	sorted := values @env0:asSortedCollection.
+	low := sorted @env0:first.
+	high := sorted @env0:last.
+	missing := OrderedCollection @env0:new.
+	isFlag
+		ifTrue: [
+			"range(_high_bit(low)+1, _high_bit(high)); _high_bit(v) == v highBit - 1,
+			so i runs low highBit .. high highBit - 2 and the value checked is 2**i."
+			(low @env0:highBit) to: (high @env0:highBit @env0:- 2) do: [:i | | p |
+				p := 1 @env0:bitShift: i.
+				(values @env0:includes: p) ifFalse: [missing @env0:add: p]]]
+		ifFalse: [
+			(low @env0:+ 1) to: (high @env0:- 1) do: [:i |
+				(values @env0:includes: i) ifFalse: [missing @env0:add: i]]].
+	missing @env0:isEmpty ifTrue: [^ cls].
+	enumType := isFlag ifTrue: ['flag'] ifFalse: ['enum'].
+	msg := WriteStream @env0:on: String @env0:new.
+	missing @env0:doWithIndex: [:m :i |
+		i @env0:> 1 ifTrue: [msg @env0:nextPutAll: ', '].
+		msg @env0:nextPutAll: m @env0:printString].
+	^ ValueError ___signal___: ('invalid ' @env0:, enumType @env0:, ' '''
+		@env0:, cls @env0:name @env0:asString @env0:, ''': missing values '
+		@env0:, msg @env0:contents)
 %
 
 category: 'Grail-Built-in Functions'
