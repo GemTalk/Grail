@@ -445,18 +445,25 @@ testInstanceMethodUnderscoreParamNames
 category: 'Grail-Tests - Module Loading'
 method: ImportlibTestCase
 testInstanceMethodNoOuterBlock
-	"Regression: FunctionDefAst >> generateMethodSourceOn: omits the
-	outer ``[ | locals | ... ] value'' wrapper when the method body
-	has no locals.  Without the optimisation, every instance method
-	paid for an outer block invocation even when there were no temps
-	to declare; with it, the method body is the method body.
+	"Shape of the source generated for a class instance method by
+	FunctionDefAst >> generateMethodSourceOn:.
 
-	The Point class's ``sum`` method body is a single ``return
-	self.x + self.y'' with no locals — its compiled source must
-	start with ``^'' (a direct return), not ``^ [...] value'' (the
-	old block-wrapped shape)."
+	The optimisation this test was written for -- drop the outer
+	``[ | locals | ... ] value'' wrapper when the method body has no locals,
+	so a one-line ``return self.x + self.y'' costs no block invocation -- is
+	currently INERT: the traceback work (Phase 3c) declares a
+	``___curPos___'' temp in every method, so ``allLocals'' is never empty and
+	``useMethodTemps'' is never true.  The assertion below never caught that,
+	because ``^ ['' also starts with ``^ '' -- so despite this method's name
+	the wrapper IS emitted today.  Reviving the optimisation means making the
+	position temp conditional, which is a traceback question, not a codegen
+	one; left alone deliberately.
 
-	| testFilePath tpzPath tpzContents sumStart |
+	What this test does still pin: the message pattern, the def-line pragma
+	that follows it, and that the body opens with a return."
+
+	| testFilePath tpzPath tpzContents sumStart expected lf |
+	lf := Character lf asString.
 	testFilePath := importlib grailDir , '/tests/python/module_with_classes.py'.
 	tpzPath := '/tmp/grail/__main__.tpz'.
 
@@ -467,24 +474,27 @@ testInstanceMethodNoOuterBlock
 	tpzContents := (GsFile open: tpzPath mode: 'rb' onClient: false)
 		contentsAsUtf8 decodeToUnicode.
 
-	"Slice out the ``sum'' method source as embedded in the helper
-	call: ``Point ___compileMethod: 'sum<lf>...''.  Verify the body
-	immediately after the selector and tab/newline is a direct ``^''
-	return (the optimised shape), not a ``^ [...] value'' wrap."
+	"Slice out the ``sum'' method source as embedded in the helper call:
+	``Point ___compileMethod: 'sum<lf>...''.
+
+	Between the pattern and the body sits the def-line pragma (Phase 2a of the
+	traceback design: the Python source line of the ``def'' rides on the
+	compiled method so ``f.__code__.co_firstlineno'' can read it back).  The
+	fixture's def lines are fixed -- ``sum'' on line 8, ``get'' on line 22 --
+	so the expected pragma is exact, which also means this test fails loudly if
+	the pragma ever stops being emitted or moves."
 	sumStart := tpzContents indexOfSubCollection: 'Point ___compileMethod: ''sum'.
 	self assert: sumStart > 0.
-	"Body shape after the optimisation: ``sum<lf>\t^ ...'' — assert the
-	tab+caret pattern, and assert the old ``^ [|...| ... ] value'' wrap
-	is NOT present anywhere in this method's source."
+	expected := 'Point ___compileMethod: ''sum' , lf ,
+		'	<___pyFirstLine___: 8>' , lf , '	^ '.
 	self assert: (tpzContents
 		copyFrom: sumStart
-		to: sumStart + 31) equals: 'Point ___compileMethod: ''sum
-	^ '.
+		to: sumStart + expected size - 1) equals: expected.
 
 	"The Counter class's ``get'' method has the same shape — single
 	return, no locals — and must also skip the wrapper."
-	self assert: (tpzContents includesString: 'Counter ___compileMethod: ''get
-	^ ')
+	self assert: (tpzContents includesString: 'Counter ___compileMethod: ''get' , lf ,
+		'	<___pyFirstLine___: 22>' , lf , '	^ ')
 %
 
 category: 'Grail-Tests - Module Loading'

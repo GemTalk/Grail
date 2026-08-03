@@ -294,6 +294,33 @@ __annotations__
 
 category: 'Grail-Python Metadata'
 method: UnboundMethod
+__code__
+	"``Cls.m.__code__'' -- the code object for a method reached off its class.
+	The def's Python line rides on the compiled method as a pragma, read back
+	through PyCode (which walks the superclass chain, so an inherited method
+	reports the line where it was DEFINED, as CPython does).
+
+	co_qualname is the real ``Cls.m'' here, since this handle knows its
+	defining class; the BoundMethod path has only the bare name.
+
+	A handle on a class whose method carries no pragma raises AttributeError,
+	matching CPython's AttributeError for a method_descriptor
+	(``str.upper.__code__'')."
+
+	| line |
+	line := PyCode @env0:firstLineOfPyName: selector inChainFrom: definingClass.
+	line == nil ifTrue: [
+		^ AttributeError ___signal___:
+			'UnboundMethod object has no attribute ''__code__'''].
+	^ PyCode
+		@env0:name: selector @env0:asString
+		qualname: self __qualname__
+		filename: '<grail>'
+		firstlineno: line
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
 ___annotationsForClass___: aClass
 	"Superclass walk for the first ___methodAnnotationsTable___ entry named by
 	this handle's selector.  The table is compiled in ENVIRONMENT 1, so probe
@@ -330,6 +357,7 @@ ___pythonValueAttrs___
 		add: #'__qualname__';
 		add: #'__module__';
 		add: #'__annotations__';
+		add: #'__code__';
 		yourself
 %
 

@@ -283,9 +283,17 @@ printSmalltalkOn: aStream
 				and: [CallAst classBodyBoundNames isNil
 					or: [CallAst classBodyBoundNames includes: id asSymbol]]]])
 				ifTrue: [
+					"``definedIn:'' records the class under construction, which is
+					in scope here as the class temp.  The handle stays receiver-LESS
+					(the call protocol still pops positional[1] as the receiver);
+					this only lets metadata reads find the def -- notably
+					``f.__code__.co_firstlineno'' evaluated in the class body, where
+					there is no receiver to derive the defining class from."
 					aStream
 						nextPutAll: '(BoundMethod receiver: nil selector: #';
 						nextPutAll: id;
+						nextPutAll: ' definedIn: ';
+						nextPutAll: CallAst classBeingCompiled asString;
 						nextPutAll: ')'.
 					^self
 				].

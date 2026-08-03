@@ -175,7 +175,35 @@ row yet — it is the de-risked foundation.
 `FunctionDefAst.beginLine`: the nested-def emit cascades `___pyCode___:` onto the
 block, stamping a `PyCode` into the `ExecBlock` side-table; `ExecBlock>>__code__`
 (env-1, value-attr whitelisted) reads it. So `func.__code__.co_firstlineno`
-answers the `def` line. (Module/class-level defs → `BoundMethod` are a follow-up.)
+answers the `def` line.
+
+*Phase 2a follow-up — code objects on defs that became real methods (DONE).* A
+module-level, class-body, `@classmethod` or `@staticmethod` def is not a closure:
+it compiles to a real Smalltalk method, and the handles that stand for it
+(`BoundMethod`, `UnboundMethod`) are minted fresh on every attribute read — so
+there is no per-def object to hang a side table off. The def's line is therefore
+recorded **on the compiled method**, as a `<___pyFirstLine___: N>` pragma emitted
+by `FunctionDefAst>>emitPyFirstLinePragmaOn:` right after the message pattern (all
+four real-method source generators: module/class × fixed-arity/varargs).
+`PyCode class>>firstLineOfPyName:inChainFrom:` reads it back, trying each
+arity-named selector form and walking the superclass chain so an inherited method
+reports where it was *defined*; `BoundMethod>>__code__` and
+`UnboundMethod>>__code__` build a `PyCode` from it.
+
+A pragma is the right carrier here: it is recompiled and reclaimed *with* the
+method (nothing to invalidate, nothing to leak) and it survives commit, which a
+`SessionTemps` registry would not. Custom keyword pragmas on env-1 methods are
+recorded and readable on both 3.7.5 (the CI version) and 4.0 — verified before
+building on it.
+
+One shape needed more than a lookup: a class body referring to a **sibling** def
+(`callable_line = get_exception.__code__.co_firstlineno + 2`) mints a
+*receiver-less* `BoundMethod` — its call protocol pops the receiver from
+`positional[1]` — so `(receiver, selector)` cannot name the defining class.
+`NameAst` now emits `BoundMethod receiver: nil selector: #f definedIn: <class>`,
+recording the class for metadata reads only; the call protocol is unchanged.
+A handle on a kernel/builtin method still raises `AttributeError`, which is
+CPython parity (`str.upper.__code__` raises there too).
 
 *Phase 2b — comprehension iterator-protocol frames (+ PEP 657 columns).* Rather
 than the fully general per-statement instrumentation first sketched here (a
@@ -278,14 +306,27 @@ additive, 0 regressions across the existing scoreboard):
   (plain-class CM + identity passthroughs, per the module's Grail constraints);
 - `os_helper.temp_dir`, `import_helper.forget`.
 
-**Current status: `IMPORTERROR`**, blocked at import on `__code__` of a
-class/module-level def (a `BoundMethod`) — hit by a *class-body* line
-`callable_line = get_exception.__code__.co_firstlineno + 2`. This is the Phase 2a
-follow-up (only nested-def `ExecBlock`s carry `__code__` today; module/class-level
-defs → `BoundMethod` were explicitly deferred). **So the gate's verdict: the next
-traceback gap is `BoundMethod.__code__` (code objects on class/module-level defs),
-a prerequisite that ranks ahead of multi-frame deep frames.** The scoreboard's
-`detail` column tracks the live blocker; grow from there.
+**Current status: `ERROR`, 370 tests running (94 F / 249 E / 6 S).** The import
+blocker — `__code__` of a class/module-level def — is fixed by the Phase 2a
+follow-up above, so the module now loads and its tests actually run. The
+scoreboard's `detail` column tracks the live blocker; grow from there.
+
+Note for whoever picks this up: unblocking an `IMPORTERROR` looks like a massive
+*regression* to a naive count comparison (0 fail+err → 343), because a module that
+cannot import runs no tests. `check_cpython_regressions.sh` now recognises that
+transition explicitly and reports it as `unblocked`; the refreshed baseline then
+carries the real counts, so ordinary count-gating resumes at the tighter number.
+`tests/scripts/test_regression_gate.sh` pins that rule (and the others).
+
+Next gap, from the failure distribution rather than guesswork: **37 of the 94
+failures (≈40%) are one cause — `co_filename` is the placeholder `'<grail>'`**, so
+every rendered frame reads `File "<grail>", line 609, in get_exception` where
+upstream expects `File "{__file__}"`. Both `PyCode` stamps (the `ExecBlock`
+def-time cascade and the pragma path added above) hardcode `'<grail>'`; the real
+module path is reachable — the defining class knows its `__module__`, and
+`importlib` knows each module's `__file__`. That is the largest single lever here,
+ahead of multi-frame deep frames (a traceback still carries only the innermost
+frame).
 
 **Phase 3d — `finally`-during-propagation for `sys.exc_info()` (DONE).** Phase 3a
 set the current-exception register only at except-handler entry, so a `finally`

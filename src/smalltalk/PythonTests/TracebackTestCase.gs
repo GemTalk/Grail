@@ -130,6 +130,119 @@ testFuncCodeFirstlineno
 	self assert: ((results @env1:__getitem__: 'co_name') = 'inner').
 %
 
+category: 'Grail-Tests - Traceback Data Model'
+method: TracebackTestCase
+___methodCodeResults___
+	"Load tests/python/method_code_firstlineno.py and answer its RESULTS dict.
+	Shared by the Phase-2a __code__ tests below; each asserts ONE property of
+	the feature, so a break names itself."
+
+	| mod |
+	importlib @env1:modules removeKey: #'method_code_firstlineno' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/method_code_firstlineno.py')
+		name: 'method_code_firstlineno'.
+	^ mod @env1:___pyAttrLoad___: #RESULTS
+%
+
+category: 'Grail-Tests - Traceback Data Model'
+method: TracebackTestCase
+testClassBodySiblingDefHasCode
+	"Phase 2a, and the specific shape that blocked test.test_traceback at IMPORT:
+	a class body reading a SIBLING def's ``__code__.co_firstlineno'' (upstream
+	computes ``callable_line = get_exception.__code__.co_firstlineno + 2'').
+
+	That reference mints a RECEIVER-LESS handle -- its call protocol pops the
+	receiver from positional[1] -- so (receiver, selector) cannot name the class
+	holding the def, and the handle has to carry its defining class explicitly.
+	Covers the fixed-arity, defaulted-arity, varargs and @staticmethod forms,
+	since each compiles to a differently-named selector.  Def lines in the
+	fixture: meth 13, meth3 16, varargs 19, sm 27."
+
+	| results |
+	results := self ___methodCodeResults___.
+	self assert: ((results @env1:__getitem__: 'sibling_meth_line') = 13)
+		description: 'class-body sibling def: co_firstlineno must be 13'.
+	self assert: ((results @env1:__getitem__: 'sibling_meth3_line') = 16)
+		description: 'defaulted-arity sibling def: co_firstlineno must be 16'.
+	self assert: ((results @env1:__getitem__: 'sibling_varargs_line') = 19)
+		description: 'varargs sibling def: co_firstlineno must be 19'.
+	self assert: ((results @env1:__getitem__: 'sibling_sm_line') = 27)
+		description: '@staticmethod sibling def: co_firstlineno must be 27'.
+%
+
+category: 'Grail-Tests - Traceback Data Model'
+method: TracebackTestCase
+testModuleLevelDefHasCode
+	"A module-level def compiles to a real method on the module class (not a
+	closure), so it took the same Phase-2a gap as a class-body def.  Its def is
+	on line 8 of the fixture."
+
+	self assert: ((self ___methodCodeResults___ @env1:__getitem__: 'module_level_line') = 8)
+		description: 'module-level def: co_firstlineno must be 8'
+%
+
+category: 'Grail-Tests - Traceback Data Model'
+method: TracebackTestCase
+testMethodCodeReadOffClassAndInstance
+	"The same def reached three ways answers the same def line: off the class
+	(an UnboundMethod), off an instance (a BoundMethod), and -- for
+	@classmethod / @staticmethod, which compile CLASS-side -- off the class
+	again.  Fixture: meth 13, cm 23, sm 27."
+
+	| results |
+	results := self ___methodCodeResults___.
+	self assert: ((results @env1:__getitem__: 'class_meth_line') = 13)
+		description: 'Cls.meth.__code__.co_firstlineno must be 13'.
+	self assert: ((results @env1:__getitem__: 'inst_meth_line') = 13)
+		description: 'instance.meth.__code__.co_firstlineno must be 13'.
+	self assert: ((results @env1:__getitem__: 'cm_line') = 23)
+		description: '@classmethod co_firstlineno must be 23'.
+	self assert: ((results @env1:__getitem__: 'sm_line') = 27)
+		description: '@staticmethod co_firstlineno must be 27'.
+%
+
+category: 'Grail-Tests - Traceback Data Model'
+method: TracebackTestCase
+testInheritedMethodCodeReportsDefiningLine
+	"An INHERITED method reports the line where it was defined, not anything
+	about the subclass -- CPython hands back the base class's code object.  The
+	pragma lookup therefore walks the superclass chain: Derived does not
+	redefine meth, so Derived.meth reports Sample's line 13."
+
+	self assert: ((self ___methodCodeResults___ @env1:__getitem__: 'inherited_line') = 13)
+		description: 'inherited method: co_firstlineno must be the DEFINING line (13)'
+%
+
+category: 'Grail-Tests - Traceback Data Model'
+method: TracebackTestCase
+testMethodCodeMetadata
+	"co_name is the bare Python name; co_qualname is the real ``Cls.m'' when the
+	handle knows its defining class; the line is a true Integer (conformance
+	code does arithmetic on it)."
+
+	| results |
+	results := self ___methodCodeResults___.
+	self assert: ((results @env1:__getitem__: 'co_name') = 'meth')
+		description: 'co_name must be the bare method name'.
+	self assert: ((results @env1:__getitem__: 'co_qualname') = 'Sample.meth')
+		description: 'co_qualname must be Cls.m for a method read off its class'.
+	self assert: ((results @env1:__getitem__: 'line_is_int') = true)
+		description: 'co_firstlineno must be an int'.
+%
+
+category: 'Grail-Tests - Traceback Data Model'
+method: TracebackTestCase
+testBuiltinMethodHasNoCode
+	"A handle on a kernel/builtin method must keep raising AttributeError for
+	__code__ -- that is CPython parity, not a gap (``str.upper.__code__'' raises
+	there too, since a method_descriptor has no code object).  Guards against
+	the pragma lookup inventing a code object for any method it happens to find."
+
+	self assert: ((self ___methodCodeResults___ @env1:__getitem__: 'builtin_has_no_code') = true)
+		description: '''abc''.upper.__code__ must raise AttributeError'
+%
+
 category: 'Grail-Tests - Traceback Runtime'
 method: TracebackTestCase
 testCaughtExceptionHasFrame

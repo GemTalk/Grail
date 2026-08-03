@@ -46,4 +46,4 @@ different rows and merges cleanly.
 | test.test_slice | ERROR | 11 | 1 | 1 | 0 |  |
 | test.test_bool | FAIL | 31 | 1 | 0 | 0 |  |
 | test.test_iter | ERROR | 58 | 4 | 23 | 1 |  |
-| test.test_traceback | IMPORTERROR | 0 | 0 | 0 | 0 | BoundMethod object has no attribute '__code__' |
+| test.test_traceback | ERROR | 370 | 94 | 249 | 6 | co_filename is '<grail>', not the module path |

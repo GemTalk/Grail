@@ -82,6 +82,90 @@ name: aName firstlineno: aLine
 	^ self name: aName qualname: aName filename: '<grail>' firstlineno: aLine
 %
 
+! ===============================================================================
+! Def-line lookup for defs that compiled to REAL methods (env 0)
+!
+! A nested def is a closure and carries its PyCode in the ExecBlock side table.
+! A module-level / class-body / @classmethod / @staticmethod def becomes a real
+! Smalltalk method instead, and there is no per-def object to hang a side table
+! off -- the handles that stand for it (BoundMethod, UnboundMethod) are minted
+! fresh on every attribute read.  So codegen records the def's Python line ON the
+! compiled method, as a ``<___pyFirstLine___: N>'' pragma
+! (FunctionDefAst>>emitPyFirstLinePragmaOn:), and these helpers read it back.
+!
+! A pragma is the right carrier: it is recompiled and reclaimed WITH the method,
+! so there is nothing to invalidate and nothing to leak, and it survives commit
+! (a SessionTemps registry would not).  Verified on 3.7.5 and 4.0.
+! ===============================================================================
+
+category: 'Grail-Def Line'
+classmethod: PyCode
+firstLineOfMethod: aMethod
+	"The Python source line recorded on a compiled method, or nil when it
+	carries no such pragma -- a kernel/builtin method, or a synthesized def
+	with no source position.  Answers nil rather than raising so callers can
+	report AttributeError the way CPython does for a method_descriptor."
+
+	aMethod == nil ifTrue: [^ nil].
+	aMethod pragmas do: [:p |
+		(p keyword == #'___pyFirstLine___:' and: [p arguments size >= 1])
+			ifTrue: [^ p arguments at: 1]].
+	^ nil
+%
+
+category: 'Grail-Def Line'
+classmethod: PyCode
+firstLineOfPyName: aName in: aBehavior
+	"The def line for the Python method named aName on aBehavior itself (no
+	superclass walk -- see firstLineOfPyName:inChainFrom:).
+
+	One Python def compiles to an ARITY-NAMED selector, so every form is
+	tried: the unary name, the varargs ``_name:kw:'', then ``name:'',
+	``name:_:'', ...  All forms are examined rather than stopping at the first
+	that EXISTS, because the unary form can collide with an unrelated
+	same-named accessor (a class attribute's reader, a kernel method) that
+	carries no pragma and would otherwise shadow the real def."
+
+	| md base line |
+	aBehavior == nil ifTrue: [^ nil].
+	md := aBehavior methodDictForEnv: 1.
+	md == nil ifTrue: [^ nil].
+	base := aName asString.
+	line := self firstLineOfMethod: (md at: base asSymbol otherwise: nil).
+	line == nil ifFalse: [^ line].
+	line := self firstLineOfMethod:
+		(md at: ('_' , base , ':kw:') asSymbol otherwise: nil).
+	line == nil ifFalse: [^ line].
+	"Fixed arities.  16 matches the ceiling BoundMethod>>_selectorForArgCount:
+	builds for; a def with more positional parameters than that simply reports
+	no line."
+	1 to: 16 do: [:n |
+		| sel |
+		sel := WriteStream on: String new.
+		sel nextPutAll: base; nextPut: $:.
+		2 to: n do: [:i | sel nextPutAll: '_:'].
+		line := self firstLineOfMethod: (md at: sel contents asSymbol otherwise: nil).
+		line == nil ifFalse: [^ line]].
+	^ nil
+%
+
+category: 'Grail-Def Line'
+classmethod: PyCode
+firstLineOfPyName: aName inChainFrom: aBehavior
+	"As firstLineOfPyName:in:, walking the superclass chain so an INHERITED
+	method reports the line where it was defined (which is what CPython's
+	``Sub.inherited.__code__.co_firstlineno'' answers -- the code object is
+	the base class's)."
+
+	| walker line |
+	walker := aBehavior.
+	[walker == nil] whileFalse: [
+		line := self firstLineOfPyName: aName in: walker.
+		line == nil ifFalse: [^ line].
+		walker := walker superclass].
+	^ nil
+%
+
 set compile_env: 1
 
 category: 'Grail-String Representation'

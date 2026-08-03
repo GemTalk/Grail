@@ -1567,6 +1567,41 @@ paramNeedsTemp: aName assigned: assignedNames instVars: instVarNames
 
 category: 'Module Method Compilation'
 method: FunctionDefAst
+emitPyFirstLinePragmaOn: aStream
+	"Record this def's Python source line ON the compiled method, as a
+	``<___pyFirstLine___: N>'' pragma, so ``f.__code__.co_firstlineno''
+	can answer it later (BoundMethod>>__code__ reads the pragma back).
+
+	Only defs that become REAL methods come through here — module-level,
+	class-body, @classmethod and @staticmethod.  A nested def is a closure
+	instead, and carries its PyCode in the ExecBlock side table (stamped by
+	___pyCode___: in the block-form emitter below).
+
+	Why a pragma rather than a side table: it lives on the GsNMethod, so it
+	is recompiled and reclaimed WITH the method — nothing to invalidate and
+	nothing to leak — and it survives commit, which a SessionTemps registry
+	would not.  Verified on 3.7.5 (the CI version) and 4.0: a custom keyword
+	pragma on an env-1 method is recorded and readable via GsNMethod>>pragmas.
+
+	Emitted immediately after the message pattern, before the temporaries
+	declaration.  Callers must have just written the pattern's newline; the
+	stream supplies the body indent itself, so no tab is written here."
+
+	| line |
+	line := self beginLine.
+	"A synthesized def (no source position) simply carries no pragma —
+	__code__ then answers AttributeError, the pre-existing behavior."
+	(line isKindOf: Integer) ifFalse: [^ self].
+	line > 0 ifFalse: [^ self].
+	aStream
+		nextPutAll: '<___pyFirstLine___: ';
+		nextPutAll: line printString;
+		nextPutAll: '>';
+		lf.
+%
+
+category: 'Module Method Compilation'
+method: FunctionDefAst
 generateModuleMethodSourceOn: aStream
 	"Generate the full method source for compiling this def as a real env-1
 	method on a module class.
@@ -1685,6 +1720,7 @@ generateModuleMethodSourceOn: aStream
 			].
 		].
 		aStream lf.
+		self emitPyFirstLinePragmaOn: aStream.
 
 		"Build outer-block locals: reassigned/reserved params (need a
 		writable temp) followed by body-only locals (excluding ones that
@@ -1827,6 +1863,7 @@ generateModuleMethodSourceOn: aStream
 		aStream nextPut: $_; nextPutAll: name;
 			nextPutAll: ': '; nextPutAll: posMethodParam;
 			nextPutAll: ' kw: '; nextPutAll: kwMethodParam; lf.
+		self emitPyFirstLinePragmaOn: aStream.
 
 		"Wrap in block for same instVar-shadowing reason"
 		aStream nextPutAll: '^ ['.
@@ -2451,6 +2488,7 @@ generateMethodSourceOn: aStream
 			].
 		].
 		aStream lf.
+		self emitPyFirstLinePragmaOn: aStream.
 
 		"Build the locals set — paramNames (always declared as block
 		temps for the no-shadow rule) + body locals.  Phase B: no
@@ -2540,6 +2578,7 @@ generateMethodSourceOn: aStream
 		aStream nextPut: $_; nextPutAll: name;
 			nextPutAll: ': '; nextPutAll: posMethodParam;
 			nextPutAll: ' kw: '; nextPutAll: kwMethodParam; lf.
+		self emitPyFirstLinePragmaOn: aStream.
 
 		aStream nextPutAll: '^ ['.
 

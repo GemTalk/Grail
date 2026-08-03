@@ -8,7 +8,8 @@ expectvalue /Class
 doit
 Object subclass: 'BoundMethod'
   instVarNames: #( receiver selector
-                    sel0 sel1 sel2 sel3 selVarargs )
+                    sel0 sel1 sel2 sel3 selVarargs
+                    definedIn )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -75,10 +76,30 @@ _setReceiver: aReceiver selector: aSymbol
 	selVarargs := ('_' , s , ':kw:') asSymbol.
 %
 
+category: 'Grail-Private'
+method: BoundMethod
+_setDefinedIn: aBehavior
+	"Record the class whose method dictionary holds this handle's def, for
+	handles that have no receiver to derive it from.  A class-body reference
+	to a sibling method (``def f(): ...`` then ``g = f``) mints a
+	RECEIVER-LESS BoundMethod -- its call protocol pops the receiver from
+	positional[1] at invocation time -- so (receiver, selector) cannot name
+	the defining class.  Metadata reads (__code__) use this; the call
+	protocol ignores it."
+
+	definedIn := aBehavior
+%
+
 category: 'Grail-Accessing'
 method: BoundMethod
 receiver
 	^ receiver
+%
+
+category: 'Grail-Accessing'
+method: BoundMethod
+definedIn
+	^ definedIn
 %
 
 category: 'Grail-Accessing'
@@ -131,6 +152,35 @@ _selectorForArgCount: nargs
 
 category: 'Grail-Private'
 method: BoundMethod
+___pyFirstLine___
+	"The Python source line of the ``def'' behind this handle, or nil.  The
+	line rides on the compiled method as a pragma; PyCode does the reading
+	(see PyCode class>>firstLineOfPyName:inChainFrom:).  What is specific here
+	is WHICH behaviors could hold the def:
+
+	  receiver class — what a send to the receiver resolves against (the
+	    ordinary ``instance.m'' handle);
+	  receiver itself, when it is a class — a @classmethod / @staticmethod
+	    compiles onto the metaclass, so a handle on the class finds its def by
+	    searching the class as well;
+	  definedIn — a class-body reference to a sibling def, which is
+	    receiver-LESS and has nothing else to name its class."
+
+	| line |
+	receiver == nil ifFalse: [
+		line := PyCode firstLineOfPyName: selector inChainFrom: receiver class.
+		line == nil ifFalse: [^ line].
+		(receiver isKindOf: Behavior) ifTrue: [
+			line := PyCode firstLineOfPyName: selector inChainFrom: receiver.
+			line == nil ifFalse: [^ line]]].
+	definedIn == nil ifFalse: [
+		line := PyCode firstLineOfPyName: selector inChainFrom: definedIn.
+		line == nil ifFalse: [^ line]].
+	^ nil
+%
+
+category: 'Grail-Private'
+method: BoundMethod
 _receiverHasSelector: aSymbol
 	"True if the receiver's class chain implements `aSymbol` in env 1.
 	Walks ``whichClassIncludesSelector:environmentId:`` so inherited
@@ -165,6 +215,24 @@ receiver: aReceiver selector: aSymbol
 			ifTrue: [^ self ___internTypeSingleton: aReceiver]].
 	inst := self @env0:new.
 	inst @env0:_setReceiver: aReceiver selector: aSymbol.
+	^ inst
+%
+
+category: 'Grail-Instance Creation'
+classmethod: BoundMethod
+receiver: aReceiver selector: aSymbol definedIn: aBehavior
+	"As ``receiver:selector:'', plus the class whose method dictionary holds
+	the def.  Used for a class-body reference to a sibling method, which is
+	receiver-LESS (the call protocol pops the receiver from positional[1]), so
+	nothing else would name the defining class -- and without it
+	``f.__code__'' inside a class body could not find the def's source line."
+
+	| inst |
+	"``receiver:selector:'' is itself an env-1 class method, so this is a plain
+	send (an env-1 method's plain sends already dispatch in env 1); only the
+	env-0 private setter below needs the explicit prefix."
+	inst := self receiver: aReceiver selector: aSymbol.
+	inst @env0:_setDefinedIn: aBehavior.
 	^ inst
 %
 
@@ -207,6 +275,7 @@ ___pythonValueAttrs___
 		add: #'__self__';
 		add: #'__annotations__';
 		add: #'__dict__';
+		add: #'__code__';
 		yourself
 %
 
@@ -354,6 +423,31 @@ __name__
 
 	selector == nil ifTrue: [^ receiver @env0:class @env0:name @env0:asString].
 	^ selector @env0:asString
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__code__
+	"``f.__code__'' for a def that compiled to a REAL method — module-level,
+	class-body, @classmethod or @staticmethod.  (A nested def is a closure and
+	answers ExecBlock>>__code__ from the side table instead.)  The def's Python
+	line rides on the compiled method as a ``<___pyFirstLine___: N>'' pragma;
+	rebuild a PyCode from it so ``f.__code__.co_firstlineno'' answers the def
+	line — what traceback conformance code reads (a class body computing
+	``callable_line = get_exception.__code__.co_firstlineno + 2'' is what this
+	was added for).
+
+	A handle on a kernel/builtin method carries no pragma and raises
+	AttributeError.  That is CORRECT rather than a gap: CPython also raises
+	AttributeError for ``str.upper.__code__'' — a method_descriptor has no
+	code object."
+
+	| line |
+	line := self @env0:___pyFirstLine___.
+	line == nil ifTrue: [
+		^ AttributeError ___signal___:
+			'BoundMethod object has no attribute ''__code__'''].
+	^ PyCode @env0:name: self __name__ firstlineno: line
 %
 
 category: 'Grail-Attribute Access'
