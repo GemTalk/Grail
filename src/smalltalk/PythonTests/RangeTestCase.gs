@@ -349,3 +349,30 @@ test_startStopStep
 	self assert: (r @env1:stop) equals: 10.
 	self assert: (r @env1:step) equals: 2.
 %
+
+category: 'Grail-Tests - Attributes'
+method: RangeTestCase
+testStartStopStepAreValuesNotBoundMethods
+	"CPython's range exposes start/stop/step as read-only ATTRIBUTES:
+	``range(10).start'' is 0, not a bound method.  Grail answered a BoundMethod,
+	so any arithmetic or comparison on ``r.start'' silently operated on the
+	method object rather than the integer.
+
+	Asserted through PYTHON attribute access (``self eval:''), not an
+	``@env1:start'' send.  The other tests in this class use the Smalltalk send,
+	which resolves to the same value either way -- which is exactly why this bug
+	survived: only the Python attribute path distinguishes a value from a
+	BoundMethod, and that path needs the class-side ___pythonValueAttrs___
+	whitelist (compiled in env 0, since ___pyAttrLoad___ consults it through an
+	env-0 respondsTo:)."
+
+	self assert: (self eval: 'range(2, 20, 3).start') equals: 2.
+	self assert: (self eval: 'range(2, 20, 3).stop') equals: 20.
+	self assert: (self eval: 'range(2, 20, 3).step') equals: 3.
+	self assert: (self eval: 'range(10).start') equals: 0.
+	self assert: (self eval: 'range(10).step') equals: 1.
+	"The point of them being values: arithmetic must work."
+	self assert: (self eval: 'range(2, 20, 3).start + 1') equals: 3.
+	self assert: (self eval: 'range(2, 20, 3).stop - range(2, 20, 3).start') equals: 18.
+	self assert: (self eval: 'range(0, 10, 2).step * 5') equals: 10
+%
