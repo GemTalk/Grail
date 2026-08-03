@@ -8,7 +8,7 @@ expectvalue /Class
 doit
 Object subclass: 'PythonTokenizer'
   instVarNames: #( source position line column
-                    tokens indentStack parenDepth atLineStart)
+                    tokens indentStack parenDepth atLineStart lfChar)
   classVars: #( KeywordSet )
   classInstVars: #()
   poolDictionaries: #()
@@ -155,11 +155,12 @@ addToken: aType value: aValue line: aLine column: aCol endLine: anEndLine endCol
 category: 'Grail-private'
 method: PythonTokenizer
 advance
+	"lfChar, not ``Character lf'' -- see source:."
 
 	| char |
 	char := source at: position.
 	position := position + 1.
-	char == Character lf ifTrue: [
+	char == lfChar ifTrue: [
 		line := line + 1.
 		column := 0.
 	] ifFalse: [
@@ -328,6 +329,12 @@ method: PythonTokenizer
 source: aString
 
 	source := aString.
+	"``Character lf'' is a real message send, not a literal, and ``advance''
+	tests it once per SOURCE CHARACTER of every module Grail compiles -- it
+	came to ~2-4% of the whole SUnit suite's samples, together with the same
+	constant in PrettyWriteStream>>___atLineStart.  Cached per tokenizer, set
+	here because every tokenize goes through this setter."
+	lfChar := Character lf.
 	position := 1.
 	line := 1.
 	column := 0.

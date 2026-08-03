@@ -7,7 +7,7 @@ WriteStream ifNil: [self error: 'WriteStream is not defined. Check file ordering
 expectvalue /Class
 doit
 WriteStream subclass: 'PrettyWriteStream'
-  instVarNames: #( indentCount)
+  instVarNames: #( indentCount lfChar)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -78,7 +78,15 @@ ___atLineStart
 	equivalent: contents notEmpty == position > 0, and contents last ==
 	collection at: position."
 
-	^ self position > 0 and: [(collection at: self position) == Character lf]
+	"lfChar, not ``Character lf'': this is consulted on EVERY
+	nextPut:/nextPutAll: of every method Grail emits, and ``Character lf'' is a
+	real message send, not a literal.  With the same constant in
+	PythonTokenizer>>advance it came to ~2-4% of the whole SUnit suite's
+	samples.  Cached lazily rather than in a constructor because this class
+	inherits WriteStream's several instance-creation paths."
+
+	lfChar isNil ifTrue: [lfChar := Character lf].
+	^ self position > 0 and: [(collection at: self position) == lfChar]
 %
 
 category: 'Grail-other'
