@@ -934,3 +934,58 @@ testSystem
 	"Result should not be nil (exit code or output)"
 	self assert: result notNil
 %
+
+category: 'Grail-Tests - Process Management'
+method: OsTestCase
+testGetpid
+	"os.getpid() - this gem's OS process id.
+
+	test.support.os_helper appends it to its scratch filename so concurrent
+	sessions do not collide.  Its absence mattered: run_cpython_suite.sh runs
+	four modules CONCURRENTLY in one directory, and without a pid the fallback
+	name was shared by all of them."
+
+	| pid |
+	pid := os @env1:instance @env1:getpid.
+	self assert: (pid isKindOf: Integer).
+	self assert: pid > 0
+%
+
+category: 'Grail-Tests - File Operations'
+method: OsTestCase
+testUnlink
+	"os.unlink() - semantically identical to os.remove() in CPython, and the
+	spelling test.support.os_helper uses to clean up.
+
+	Grail had only remove(), so every vendored test touching os_helper.TESTFN
+	raised AttributeError INSTEAD of cleaning up (7 such errors in
+	test.test_iter alone) and left its scratch file behind -- the origin of the
+	stray ``@test'' that kept appearing in the working tree."
+
+	| o testFile f |
+	o := os @env1:instance.
+	testFile := 'grail_unlink_test.txt'.
+	f := GsFile openWriteOnServer: testFile.
+	f notNil ifTrue: [f nextPutAll: 'x'; close].
+	self assert: (o @env1:exists: testFile).
+	o @env1:unlink: testFile.
+	self deny: (o @env1:exists: testFile)
+%
+
+category: 'Grail-Tests - File Operations'
+method: OsTestCase
+testRemoveMissingRaisesFileNotFoundError
+	"CPython raises FileNotFoundError, not a bare OSError, for a missing file.
+	os_helper.unlink() swallows exactly FileNotFoundError/NotADirectoryError,
+	so a bare OSError propagated out of every cleanup.  FileNotFoundError is an
+	OSError subclass, so existing ``except OSError'' handlers still match."
+
+	| o raised |
+	o := os @env1:instance.
+	raised := nil.
+	[o @env1:unlink: 'grail_definitely_absent_file.txt']
+		on: (Python at: #FileNotFoundError)
+		do: [:ex | raised := ex].
+	self assert: raised notNil
+		description: 'unlink of a missing file did not raise FileNotFoundError'
+%
