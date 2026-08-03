@@ -217,17 +217,18 @@ SUMMARY="OK $n_OK · FAIL $n_FAIL · ERROR $n_ERROR · SKIP $n_SKIP · IMPORTERR
 {
     echo "# CPython 3.14.4 Regression Suite Scoreboard — Grail"
     echo
-    echo "Generated: ${GENERATED}  ·  GemStone: ${GEMSTONE##*/}"
-    echo
-    echo "**Modules: ${n_modules}** — ${SUMMARY}"
-    echo
-    echo "**Totals:** tests=${tot_tests} failures=${tot_failures} errors=${tot_errors} skipped=${tot_skipped}"
-    echo
     echo "Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT."
     echo
     echo "This is a measurement harness over a curated starter set, not the full"
     echo "~480-module suite. See scripts/cpython_suite_manifest.txt and"
     echo "scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out."
+    echo
+    echo "Run timestamp and aggregate totals are intentionally NOT committed here:"
+    echo "they change on every run and would collide across concurrent sessions"
+    echo "even when the sessions edit different modules.  Find them in"
+    echo "out/cpython/scoreboard.json (gitignored) or this script's stdout summary."
+    echo "Only the per-test rows below are committed, so unrelated work touches"
+    echo "different rows and merges cleanly."
     echo
     echo "| Module | Status | tests | fail | err | skip | detail |"
     echo "|--------|--------|------:|-----:|----:|-----:|--------|"
