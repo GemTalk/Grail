@@ -274,7 +274,7 @@ ___grailBuildMembers: cls names: attrNames
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass genValues foreignMixin |
+	| byValue byName members lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass gnvStaticClass genValues foreignMixin |
 	"CPython _check_for_existing_members_: adding members to -- or otherwise
 	subclassing -- an enum that already HAS members is illegal (that enum is
 	final).  Raise before building anything (test_extending / test_extending2);
@@ -423,12 +423,19 @@ ___grailBuildMembers: cls names: attrNames
 			put: cls].
 	"A class-body ``def _generate_next_value_(name, start, count, last_values)''
 	overrides how auto() numbers members (CPython): the mixed date/float enum
-	fixtures return values[count].  It compiles to a 4-param env-1 method
-	``_generate_next_value_:_:_:'' whose self-param is ``name'' (EnumType adds
-	the staticmethod wrapper).  gnvClass is the class in cls's chain that
-	provides it, or nil (use the built-in per-base rule).  genValues collects
-	the resolved values in order to pass as ``last_values''."
+	fixtures return values[count].  A PLAIN def compiles to a 4-param env-1
+	INSTANCE method ``_generate_next_value_:_:_:'' whose self-param is ``name''
+	(gnvClass).  An EXPLICIT ``@staticmethod'' (CPython adds one implicitly, so
+	both source forms mean the same thing) instead compiles to a 5-slot env-1
+	CLASS-side method ``_generate_next_value_:_:_:_:'' -- receiver is the class,
+	the four declared params are all keyword args (gnvStaticClass).  Detect
+	both; either is nil when absent (use the built-in per-base rule).  No base
+	Enum/Flag/Str/ReprEnum class defines either selector, so a non-nil result is
+	always a user gnv.  genValues collects the resolved values in order to pass
+	as ``last_values''."
 	gnvClass := cls @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:'
+		environmentId: 1.
+	gnvStaticClass := cls @env0:class @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:_:'
 		environmentId: 1.
 	genValues := OrderedCollection @env0:new.
 	"Members build while cls is in the building set: a member __new__
@@ -492,18 +499,28 @@ ___grailBuildMembers: cls names: attrNames
 							ifTrue: [explicitVal]
 							ifFalse: [gnvClass @env0:notNil
 							ifTrue: [
-								"User _generate_next_value_(name, start=1, count, last_values).
-								count = members built so far; invoke via UnboundMethod (the
-								method's self-param is the NAME, not an instance of cls)."
+								"Plain-def gnv: _generate_next_value_(name, start=1, count,
+								last_values).  count = members built so far; invoke via
+								UnboundMethod (the method's self-param is the NAME, not an
+								instance of cls)."
 								(UnboundMethod definingClass: gnvClass selector: #'_generate_next_value_')
 									value: { nameStr. 1. members @env0:size.
 										(list @env0:withAll: genValues) }
 									value: KeyValueDictionary @env0:new]
+							ifFalse: [gnvStaticClass @env0:notNil
+							ifTrue: [
+								"@staticmethod gnv: same four args, but the method lives
+								class-side (receiver is the class, all four params are
+								positional).  Send it to cls so metaclass inheritance
+								resolves an ancestor's definition."
+								cls @env0:perform: #'_generate_next_value_:_:_:_:' env: 1
+									withArguments: { nameStr. 1. members @env0:size.
+										(list @env0:withAll: genValues) }]
 							ifFalse: [(Enum ___grailIsStrEnumClass: cls)
 								ifTrue: [nameStr @env0:asLowercase]
 								ifFalse: [(Enum ___grailIsFlagClass: cls)
 									ifTrue: [Enum ___grailFlagAutoNext: genValues]
-									ifFalse: [Enum ___grailPlainAutoNext: genValues]]]].
+									ifFalse: [Enum ___grailPlainAutoNext: genValues]]]]].
 						autoResolved @env0:at: rawValue put: resolved.
 						rawValue := resolved]].
 			genValues @env0:add: rawValue.
