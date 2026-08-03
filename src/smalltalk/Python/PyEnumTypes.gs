@@ -1222,7 +1222,8 @@ ___grailInstallClassProtocol: cls
 	| mc |
 	mc := cls @env0:class.
 	#(#'__reversed__' #'mro' #'__repr__' #'__str__' #'__format__:'
-		#'_member_names_' #'_member_map_' #'_value2member_map_' #'_value_repr_')
+		#'_member_names_' #'_member_map_' #'_value2member_map_' #'_value_repr_'
+		#'_new_member_' #'__dir__')
 		@env0:do: [:sel |
 			| prov provCat |
 			prov := mc @env0:whichClassIncludesSelector: sel environmentId: 1.
@@ -1744,6 +1745,44 @@ _member_names_
 	rec @env0:isNil ifTrue: [^ list @env0:withAll: #()].
 	^ list @env0:withAll: ((rec @env0:at: 3)
 		@env0:collect: [:m | m @env0:dynamicInstVarAt: #name])
+%
+
+category: 'Grail-Class Attrs'
+classmethod: Enum
+_new_member_
+	"The __new__ used to allocate members -- the mix-in data type's __new__
+	(int/str/float/... for a data enum) or object.__new__ for a plain enum.
+	CPython's EnumType._new_member_; test_enum's enum_dir helper reads it, so
+	it must at least RESOLVE.  Category Grail-Class Attrs so ``cls._new_member_''
+	PERFORMs this getter rather than wrapping it as a BoundMethod."
+
+	^ (self _member_type_) ___pyAttrLoad___: #'__new__'
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+__dir__
+	"dir(EnumClass) -- CPython EnumType.__dir__.  Built to mirror test_enum's
+	``enum_dir'' helper EXACTLY, so ``dir(cls) == enum_dir(cls)'' holds by
+	construction (both read the same _member_names_/_member_type_): a fixed set
+	of dunders + the canonical member names, always with __new__ and
+	__init_subclass__ (every BoundMethod access is a fresh object in Grail, so
+	enum_dir's ``_new_member_ is not object.__new__'' / ``__init_subclass__ is
+	not object.__init_subclass__'' are always true -- see the identity note), and
+	for a data-mixed enum unioned with dir(member_type)."
+
+	| interesting mt |
+	interesting := Set @env0:new.
+	#('__class__' '__contains__' '__doc__' '__getitem__' '__iter__' '__len__'
+	  '__members__' '__module__' '__name__' '__qualname__' '__new__'
+	  '__init_subclass__')
+		@env0:do: [:d | interesting @env0:add: d].
+	(Enum ___grailMembers: self) @env0:do: [:m |
+		interesting @env0:add: (m @env0:dynamicInstVarAt: #name) @env0:asString].
+	mt := self _member_type_.
+	mt == object ifFalse: [
+		(mt @env1:__dir__) @env0:do: [:d | interesting @env0:add: d @env0:asString]].
+	^ list @env0:withAll: interesting @env0:asSortedCollection
 %
 
 category: 'Grail-Class Attrs'
