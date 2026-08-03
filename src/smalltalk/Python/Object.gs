@@ -461,8 +461,84 @@ ___pyClassDefined___: attrNames
 	named class attributes).  The default returns the class unchanged.
 
 	Timing mirrors Python's metaclass ``__init__`` / ``__init_subclass__``
-	(after the namespace is populated), not ``__new__``."
+	(after the namespace is populated), not ``__new__``.
 
+	The default now also runs Python's ``__set_name__`` protocol over the
+	body, which CPython fires from ``type.__new__`` -- the same moment.
+	A metaclass that overrides this hook (Enum class) takes on that job
+	itself; none of the in-tree ones has an entry that wants __set_name__."
+
+	^ self ___invokeSetNameHooks___: attrNames
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___invokeSetNameHooks___: attrNames
+	"Python's ``__set_name__(owner, name)'' protocol: as a class is created,
+	each value in its body that implements __set_name__ is told which class
+	and which NAME it was bound to.  functools.cached_property needs it to
+	know the slot it caches under -- CPython raises rather than guess, and
+	so does Grail's.
+
+	Two stores to walk, because Grail splits what CPython keeps in one class
+	__dict__: a class-body ASSIGNMENT reaches a ClassDefAst-synthesised
+	``Grail-Class Attrs'' accessor and is named in attrNames, while a class-
+	body method DECORATOR's rebinding goes to the per-class dynInstVars
+	holder (___classHolderAttrStore___).  Names in attrNames come in
+	declaration order; the holder's do not, so a class that binds the same
+	descriptor to a decorated def AND an assignment may report the two names
+	in either order.
+
+	Cost on the ordinary class -- whose body holds ints, strings and
+	functions -- is one ``isKindOf: PythonInstance'' per name, since only a
+	Python OBJECT can implement the hook.
+
+	Answers self: ___pyClassDefined___:'s contract is to return the class the
+	def statement binds."
+
+	| holder |
+	attrNames == nil ifFalse: [
+		attrNames @env0:do: [:nm |
+			| sym |
+			sym := nm @env0:asString @env0:asSymbol.
+			self ___setNameOn___: (self ___classBodyValueAt___: sym) named: sym]].
+	holder := (self ___respondsTo___: #dynInstVars)
+		ifTrue: [self @env0:perform: #dynInstVars env: 1]
+		ifFalse: [nil].
+	holder == nil ifFalse: [
+		(holder @env0:dynamicInstanceVariables) @env0:do: [:sym |
+			(attrNames == nil or: [(attrNames @env0:includes: sym) not]) ifTrue: [
+				self ___setNameOn___: (holder @env0:dynamicInstVarAt: sym) named: sym]]].
+	^ self
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___classBodyValueAt___: aSym
+	"The raw value of this class's own class-body attribute aSym, or nil when
+	there is no such accessor.  Guarded: attrNames may name an entry a
+	metaclass has since transformed away."
+
+	^ [(self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) == nil
+		ifTrue: [nil]
+		ifFalse: [self @env0:perform: aSym env: 1]]
+			@env0:on: AbstractException
+			do: [:ex | ex @env0:return: nil]
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___setNameOn___: aValue named: aSym
+	"Send ``__set_name__(cls, name)'' when aValue really implements it.
+
+	Only a PythonInstance is asked.  Grail's function stand-ins and the
+	built-in types never implement the hook, and probing every class
+	attribute of every class at every class definition would be a real cost
+	on import."
+
+	(aValue isKindOf: PythonInstance) ifFalse: [^ self].
+	(aValue ___respondsTo___: #'__set_name__:_:') ifFalse: [^ self].
+	aValue __set_name__: self _: aSym @env0:asString @env0:asUnicodeString.
 	^ self
 %
 
@@ -947,7 +1023,15 @@ ___classChainAttrLookup___: aSym
 	descriptor protocol) and comes back wrapped in a MethodBinding that
 	prepends self to the call args.  Read off the CLASS it comes back raw,
 	matching CPython's ``Cls.method'' yielding the plain function.
-	Non-callable attributes (ints, strings, classes) are raw on both paths."
+	Non-callable attributes (ints, strings, classes) are raw on both paths.
+
+	A real DESCRIPTOR OBJECT -- one whose own class implements ``__get__'' --
+	is neither of those: Python asks it for the value instead of handing it
+	over.  ___descriptorGet___: already honoured that on the accessor-pair
+	read paths; this store was the one that did not, so a class-body
+	``x = SomeDescriptor()'' (or a ``@functools.cached_property'', whose
+	rebinding lands right here) came back as the descriptor wrapped in a
+	MethodBinding rather than the value it computes."
 
 	| start walker holder v |
 	start := (self isKindOf: Behavior)
@@ -964,6 +1048,9 @@ ___classChainAttrLookup___: aSym
 					ancestor's stored attribute."
 					(self ___methodDefinedFrom___: start upTo: walker name: aSym)
 						ifTrue: [^ nil].
+					((self isKindOf: Behavior) not
+						and: [self ___isValueDescriptor___: v])
+						ifTrue: [^ self ___descriptorGet___: v].
 					((self isKindOf: Behavior) not
 						and: [self ___isDescriptorCallable___: v])
 						ifTrue: [^ MethodBinding instance: self callable: v].
@@ -1355,6 +1442,37 @@ ___isDescriptorCallable___: aValue
 			@classmethod / @staticmethod, neither of which binds an instance."
 			^ aValue ___pyBindsSelf___ == true].
 	^ false
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___isValueDescriptor___: aValue
+	"True if aValue is a real DESCRIPTOR OBJECT: a Python object whose own
+	class implements ``__get__'', so a read through an instance must ask it
+	for the value rather than hand the object back (bound or raw).
+	functools.cached_property is the in-tree one; a user's ``class
+	LocaleRegexDescriptor'' is the same shape.
+
+	Deliberately narrow:
+
+	  * PythonInstance only.  Grail's own function stand-ins (BoundMethod,
+	    UnboundMethod, ExecBlock) also answer ``__get__'' -- BoundMethod for
+	    explicit callers like weakref.WeakMethod -- but Grail performs method
+	    binding elsewhere, and routing them here would rebind every function
+	    stored as a class attribute (___descriptorGet___: excludes BoundMethod
+	    for exactly that reason).
+
+	  * Anything answering ___pyBindsSelf___ is left to
+	    ___isDescriptorCallable___:.  Those (singledispatchmethod,
+	    partialmethod, total_ordering's operators) are function stand-ins that
+	    bind self through a MethodBinding; several also define ``__get__'' for
+	    explicit callers, and the MethodBinding is the path their call
+	    protocol expects."
+
+	(aValue isKindOf: PythonInstance) ifFalse: [^ false].
+	(aValue ___respondsTo___: #'___pyBindsSelf___') ifTrue: [^ false].
+	^ (aValue ___respondsTo___: #'___get__:kw:')
+		or: [aValue ___respondsTo___: #'__get__:_:']
 %
 
 category: 'Grail-Convenience Methods - Attribute'
@@ -1779,9 +1897,14 @@ ___pyAttrLoad___: aSym
 		as a class attribute and read through an INSTANCE binds self via a
 		MethodBinding (``Box.greet = fn; b.greet(x)'' -> fn(b, x)).
 		___descriptorGet___ is wrong here -- it excludes BoundMethod and would
-		return the function unbound, dropping self."
+		return the function unbound, dropping self.  A real descriptor OBJECT
+		(one whose own class implements __get__ -- a cached_property assigned
+		with ``Foo.cp = cached_property(f)'') is the exception: Python asks it
+		for the value, exactly as on the committed path."
 		(self ___classAttrOverlayLookup___: self @env0:class name: aSym)
 			@env0:ifNotNil: [:___ovv |
+				(self ___isValueDescriptor___: ___ovv)
+					ifTrue: [^ self ___descriptorGet___: ___ovv].
 				(self ___isDescriptorCallable___: ___ovv)
 					ifTrue: [^ MethodBinding instance: self callable: ___ovv].
 				^ ___ovv].
@@ -3062,6 +3185,21 @@ ___pyCallValue___: positional kw: kwargs
 	when a top-level def name has been rebound to a non-callable
 	value (e.g. ``def foo(): ...; foo = 21; foo(5)'' must TypeError)."
 
+	"A CLASS reached through the INDIRECT protocol lands here and reports
+	``not callable'', even though calling a class CONSTRUCTS in Python.  A
+	direct ``Cls(...)'' compiles to value:value: and never comes here, so
+	what this affects is a class used as a decorator through the attribute
+	form (``@functools.cached_property'') or reached through a variable --
+	and because a class-body decorator's rebinding store is wrapped in an
+	error-swallowing guard, such a decoration silently does not happen at
+	all.  Answering value:value: for every class here is the general fix,
+	but it also makes ``@enum.property'' / ``@member'' apply for the first
+	time, and Grail's enum member builder then counts the resulting
+	descriptor as a MEMBER (Django's Choices grows a spurious ``label''
+	member, and IntegerChoices can no longer extend it).  So the classes
+	that want it opt in with a class-side ___pyCallValue___:kw: of their own
+	-- see functools_cached_property -- until the enum builder learns
+	CPython's rule that a descriptor is never a member."
 	TypeError ___signal___:
 		'''' @env0:, self @env0:class @env0:name @env0:asString
 			@env0:, ''' object is not callable'
