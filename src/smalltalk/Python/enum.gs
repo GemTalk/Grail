@@ -75,7 +75,12 @@ initialize
 	binds to the callable rather than invoking the unary method
 	immediately and binding its result (an integer).  Werkzeug's
 	sansio.multipart hits this via ``State(Enum): PREAMBLE = auto()''."
-	self @env0:dynamicInstVarAt: #auto put: (BoundMethod receiver: self selector: #auto)
+	self @env0:dynamicInstVarAt: #auto put: (BoundMethod receiver: self selector: #auto).
+	"``nonmember(x)'' / ``@nonmember'' must be a real 1-arg callable that wraps
+	x in a marker the enum metaclass unwraps to a plain (non-member) class
+	attribute -- NOT PropertyDescriptor, which the builder counted as a member
+	(Django's Choices.do_not_call_in_templates, test_*_with_nonmember)."
+	self @env0:dynamicInstVarAt: #nonmember put: (BoundMethod receiver: self selector: #nonmember:)
 %
 
 ! ===============================================================================
@@ -127,6 +132,17 @@ auto
 	values -- 112 test_enum errors expected first/second/third = 1/2/3)."
 
 	^ GrailEnumAuto @env0:new
+%
+
+category: 'Grail-Built-in Functions'
+method: enum
+nonmember: aValue
+	"``enum.nonmember(x)`` / ``@nonmember`` — wrap x in a marker that
+	___grailBuildMembers: unwraps to a PLAIN class attribute, excluded from
+	the enum's members (CPython nonmember: Outer.Inner is Inner, MyTypes.f is
+	float, Example.ALL == 3)."
+
+	^ (Python @env0:at: #GrailEnumNonmember) @env0:on: aValue
 %
 
 ! ===============================================================================

@@ -1,10 +1,10 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-08-03T01:38:25Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
+Generated: 2026-08-03T01:20:12Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
 
-**Modules: 32** — OK 25 · FAIL 0 · ERROR 6 · SKIP 0 · IMPORTERROR 1 · STERROR 0 · CRASH 0 · TIMEOUT 0
+**Modules: 32** — OK 25 · FAIL 1 · ERROR 5 · SKIP 0 · IMPORTERROR 1 · STERROR 0 · CRASH 0 · TIMEOUT 0
 
-**Totals:** tests=4188 failures=349 errors=191 skipped=207
+**Totals:** tests=4188 failures=342 errors=186 skipped=207
 
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
@@ -43,6 +43,6 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_pow | OK | 7 | 0 | 0 | 0 |  |
 | test.test_richcmp | OK | 11 | 0 | 0 | 0 |  |
 | test.test_slice | ERROR | 11 | 1 | 1 | 0 |  |
-| test.test_bool | ERROR | 31 | 8 | 5 | 0 |  |
+| test.test_bool | FAIL | 31 | 1 | 0 | 0 |  |
 | test.test_iter | ERROR | 58 | 4 | 23 | 1 |  |
 | test.test_traceback | IMPORTERROR | 0 | 0 | 0 | 0 | BoundMethod object has no attribute '__code__' |
