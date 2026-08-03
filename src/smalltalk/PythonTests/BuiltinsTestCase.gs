@@ -1257,3 +1257,35 @@ testBuiltinTypesInBuiltinsNamespace
 	self assert: (self eval: 'list(__import__("builtins").map(abs, [-1, -2]))') @env1:__repr__
 		equals: '[1, 2]'
 %
+
+category: 'Grail-Tests - Namespace'
+method: BuiltinsTestCase
+testBuiltinTypeModuleIsBuiltins
+	"CPython reports ``int.__module__ == 'builtins''' for every builtin TYPE.
+	Grail answers 'builtins' for both kinds of builtin type: kernel-backed
+	(int/list/dict/str/object, via ___pythonBuiltinTypeName___) and Grail-defined
+	(tuple/set/frozenset/complex/type/slice/..., matched by identity in the
+	Python compile dictionary).  builtins.int.__module__ agrees."
+	self assert: (self eval: 'int.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'list.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'dict.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'str.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'object.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'tuple.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'set.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'type.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'slice.__module__ == "builtins"') equals: true.
+	self assert: (self eval: '__import__("builtins").int.__module__ == "builtins"')
+		equals: true.
+
+	"Regression guard: a dynamically created class MUST NOT be tagged 'builtins'
+	-- an unconditional object class>>__module__ = 'builtins' broke functional-API
+	enum pickling (the class could not be located in the builtins module).  The
+	guard answers nil for these, so they fall through and keep their own module."
+	self assert: (self eval:
+		'getattr(type("X", (object,), {}), "__module__", "x") != "builtins"')
+		equals: true.
+	self assert: (self eval:
+		'getattr(__import__("enum").Enum("E", ["A"]), "__module__", "x") != "builtins"')
+		equals: true
+%
