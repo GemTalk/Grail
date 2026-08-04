@@ -2492,8 +2492,18 @@ __format__: aSpec
 	-- with the spec applied to that string (CPython Enum.__format__ for a
 	non-mixed enum: str.__format__(str(self), spec)).  Mixed enums
 	(IntEnum, AbstractPyInt-rooted) do NOT inherit this -- they keep the
-	data type's numeric formatting, which is correct."
+	data type's numeric formatting, which is correct.
 
+	A data-rooted ReprEnum member (``class E(float, ReprEnum)'') formats its
+	VALUE for a NON-EMPTY spec (numeric right-align) -- the point of ReprEnum
+	(_MinimalOutputTests.test_format_specs).  Decided at CALL time: this method
+	is MERGED onto the member class at install, when the MI/mro (hence
+	___grailIsReprEnumClass:) is not yet reliable, so it cannot be baked in."
+
+	((aSpec @env0:notNil and: [(aSpec @env0:isEmpty) @env0:not])
+		and: [(Enum ___grailIsReprEnumClass: self @env0:class)
+		and: [(self @env0:class @env0:inheritsFrom: Enum) @env0:not]])
+		ifTrue: [^ (self @env0:dynamicInstVarAt: #value) @env1:__format__: aSpec].
 	^ (self __str__) __format__: aSpec
 %
 
