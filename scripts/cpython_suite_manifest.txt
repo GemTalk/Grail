@@ -68,6 +68,65 @@ test.test_iter
 # explicitly deferred (only nested-def ExecBlocks carry __code__ today).  The
 # scoreboard's detail column names the current blocker; grow from there.
 test.test_traceback
+
+# --- Phase 4 (added 2026-08-03) ---
+#
+# Selected the same way as Phase 3, but from a WIDER trial: all 55 remaining
+# P1/P2 candidates in docs/Grail_CPython_Scope.md were vendored and scored once
+# (446s at 5 workers), then kept or dropped on the evidence.  Kept here are the
+# modules that RUN today and whose residual is either small (an easy win) or
+# traces to ONE root that also blocks other modules; every module that was
+# trialed and dropped is listed -- with the blocker its log named -- in
+# docs/Grail_CPython_Scope.md ("Trialed and deferred"), so nobody has to
+# re-trial to find out why it is absent.
+#
+# Easy wins -- small residual, no new runtime plumbing:
+test.test_compare
+test.test_iterlen
+test.test_keywordonlyarg
+test.test_dictviews
+test.test_sort
+test.test_generator_stop
+test.test_userdict
+test.test_userlist
+test.test_isinstance
+#
+# Single-root modules: most of the failures in each collapse to one gap, and
+# that gap leaks into modules already on the board (an uncatchable Smalltalk
+# DNU reaching Python code, or a codegen nil receiver):
+#   test_index         32/34 errors are `a newstyle does not understand #'<'/#'<='''
+#   test_baseexception all 7 errors are #signal / #handles: sent to a non-exception
+#   test_listcomps     29/52 errors are `UndefinedObject does not understand #new''
+#   test_property      12/23 failures are property.__doc__ falling back to object's
+#   test_copy          copy.Error is missing; deepcopy returns identical objects
+test.test_index
+test.test_baseexception
+test.test_listcomps
+test.test_property
+test.test_copy
+#
+# Core language / container surface, moderate residual but high leverage
+# (function attributes + LEGB, generator delegation, deque, %-format):
+test.test_scope
+test.test_yield_from
+test.test_deque
+test.test_format
+#
+# Two of the new modules each contain ONE test that HANGS the scoring session
+# (unbounded work, uncatchable): test_deque.test_extend and
+# test_format.test_common_format are skip-listed in
+# scripts/cpython_suite_skips.txt, which names the bug in each case -- removing
+# the skip is the regression test for the fix.
+#
+# test_range is NOT here yet, and is the one deliberate omission from the trial
+# set that scored: range's count/index/__contains__/len walk the range instead of
+# computing arithmetically (CPython's are O(1) for int arguments), so EVERY
+# 10**20-scale test in the module hangs the session -- test_count,
+# test_iterator_unpickle_compat (range_iterator has no __setstate__, so the saved
+# index is dropped and the iterator restarts at -2**65) and test_large_range, at
+# least, found one after the other by skip-and-rerun.  Chasing them with skips
+# costs a 600s watchdog cycle each and would leave the module mostly skipped;
+# land the arithmetic-range fix first, then add the module in one step.
 #
 # NOTE: test_json and test_string are PACKAGES (directories) in 3.14, not
 # single modules -- out of scope for the V1 single-module harness.

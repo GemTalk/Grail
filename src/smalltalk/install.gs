@@ -284,6 +284,8 @@ run
 	at: #'ExecBlockAttrs' put: nil;
 	at: #'MethodBinding' put: nil;
 	at: #'PropertyDescriptor' put: nil;
+	at: #'PyStaticMethod' put: nil;
+	at: #'PyClassMethod' put: nil;
 	at: #'LruCacheWrapper' put: nil;
 	at: #'functools_CacheInfo' put: nil;
 	at: #'functools_Placeholder' put: nil;
@@ -928,6 +930,7 @@ input src/smalltalk/Python/NamedIntConstant.gs
 input src/smalltalk/Python/BoundMethod.gs
 input src/smalltalk/Python/MethodBinding.gs
 input src/smalltalk/Python/PropertyDescriptor.gs
+input src/smalltalk/Python/MethodWrappers.gs
 
 ! Register ``property'' → PropertyDescriptor AFTER the class file is
 ! loaded — the Step 3 type-mapping block runs before the class

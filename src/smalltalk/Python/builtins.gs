@@ -2024,6 +2024,20 @@ ___isInstanceSingle___: anObject of: aClass
 		mapping-duck-typed code checks isinstance(g, dict)."
 		result := (anObject isKindOf: KeyValueDictionary)
 			or: [anObject isKindOf: PyInstanceDict]].
+	(result not and: [aClass == (Python @env0:at: #Enum otherwise: nil)]) ifTrue: [
+		"Enum-family widening (mirror of ___isSubclassSingle___of:): an
+		IntEnum/IntFlag/StrEnum member is stored on the int/str root, so
+		isKindOf: does not reach Enum, but CPython counts it an Enum instance."
+		| ie se |
+		ie := Python @env0:at: #IntEnum otherwise: nil.
+		se := Python @env0:at: #StrEnum otherwise: nil.
+		result := (ie @env0:notNil and: [anObject isKindOf: ie])
+			or: [se @env0:notNil and: [anObject isKindOf: se]]].
+	(result not and: [aClass == (Python @env0:at: #Flag otherwise: nil)]) ifTrue: [
+		"IntFlag member is int-rooted; CPython counts it a Flag instance."
+		| iff |
+		iff := Python @env0:at: #IntFlag otherwise: nil.
+		result := iff @env0:notNil and: [anObject isKindOf: iff]].
 	result ifFalse: [
 		"Secondary (multiple-inheritance) bases are not on the Smalltalk
 		chain isKindOf: walks -- consult the instance class's registered
@@ -2070,23 +2084,28 @@ pow: x _: y
 category: 'Grail-Built-in Functions'
 method: builtins
 staticmethod: fn
-	"Python @staticmethod / staticmethod(fn) - Grail doesn't honor
-	decorators at codegen, so this is the identity: return the
-	function unchanged.  Calling sites that do `Cls(args)` on a
-	'static method'-named attribute work because Grail's attribute
-	access already returns the function/value."
+	"``staticmethod(fn)'' -- a real descriptor that answers fn UNBOUND
+	however it is reached (see MethodWrappers.gs).
 
-	^ fn
+	The old identity stub left binding to be guessed from what was wrapped:
+	___isDescriptorCallable___: binds a function that came from a
+	Python-source module, so ``digest_method = staticmethod(_lazy_sha1)''
+	read through an instance passed the receiver as _lazy_sha1's first
+	argument.  The DECORATOR form never depended on this -- ClassDefAst
+	recognises ``@staticmethod'' at parse time -- only the value form."
+
+	^ PyStaticMethod value: { fn } value: nil
 %
 
 category: 'Grail-Built-in Functions'
 method: builtins
 classmethod: fn
-	"Python @classmethod / classmethod(fn) - same identity treatment
-	as staticmethod.  Grail doesn't yet thread cls through method
-	dispatch, but the stored attribute is still callable."
+	"``classmethod(fn)'' -- a real descriptor that binds the CLASS as fn's
+	first argument, read through the class or through an instance (see
+	MethodWrappers.gs).  The old identity stub bound nothing, so
+	``A.cm(x)'' called ``fn(x)'' with the class simply missing."
 
-	^ fn
+	^ PyClassMethod value: { fn } value: nil
 %
 
 category: 'Grail-Built-in Functions'
@@ -2247,6 +2266,27 @@ ___isSubclassSingle___: sub of: target
 	"float-subclass widening -- same substitution story."
 	(target == Float and: [(sub == AbstractPyFloat)
 		or: [sub @env0:inheritsFrom: AbstractPyFloat]]) ifTrue: [^ true].
+	"Enum-family widening: IntEnum/IntFlag/StrEnum store members on the
+	int/str storage root, so their Smalltalk chain is IntFlag<IntEnum<
+	AbstractPyInt (StrEnum<AbstractPyStr) and bypasses Enum -- and IntFlag
+	bypasses Flag -- even though CPython makes them Enum (and IntFlag a Flag)
+	subclasses.  Widen issubclass to report the CPython hierarchy the same way
+	the int/str/float widenings above do, WITHOUT registering an MI MRO (which
+	would reorder the super/method-resolution chain).  Classes resolved late
+	(builtins.gs compiles before PyEnumTypes.gs)."
+	(sub isKindOf: Behavior) ifTrue: [ | enumCls flagCls |
+		enumCls := Python @env0:at: #Enum otherwise: nil.
+		(enumCls @env0:notNil and: [target == enumCls]) ifTrue: [ | ie se |
+			ie := Python @env0:at: #IntEnum otherwise: nil.
+			se := Python @env0:at: #StrEnum otherwise: nil.
+			((ie @env0:notNil and: [(sub == ie) or: [sub @env0:inheritsFrom: ie]])
+				or: [se @env0:notNil and: [(sub == se) or: [sub @env0:inheritsFrom: se]]])
+				ifTrue: [^ true]].
+		flagCls := Python @env0:at: #Flag otherwise: nil.
+		(flagCls @env0:notNil and: [target == flagCls]) ifTrue: [ | iff |
+			iff := Python @env0:at: #IntFlag otherwise: nil.
+			(iff @env0:notNil and: [(sub == iff) or: [sub @env0:inheritsFrom: iff]])
+				ifTrue: [^ true]]].
 	il := Python @env0:at: #importlib otherwise: nil.
 	il == nil ifFalse: [
 		((il @env0:___mroOf___: sub) @env0:includes: target) ifTrue: [^ true]].
