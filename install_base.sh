@@ -108,9 +108,7 @@ case "$GS_VERSION" in
         echo "  2/3/4-arg with:...performMethod:            : kernel-native"
         echo "  kernel-class extensions                     : filed PER-USER by ./install.sh"
 
-        #   additions to GsTestCase, etc 
-        LC_ALL=C topaz -lq -S scripts/install_base40.gs || {
-            echo "Error: install_base40.gs failed."; exit 1; }
+        # additions to base image not using session methods would go here
 
         echo "Setting Unicode comparison mode..."
         ./scripts/setUnicodeMode.sh || { echo "Error: setUnicodeMode.sh failed."; exit 1; }
