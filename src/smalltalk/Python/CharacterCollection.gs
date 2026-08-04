@@ -1,5 +1,5 @@
 ! ===============================================================================
-!  CharacterCollection methods for 3.7.5 , that already in server 4.0.0 base image 
+!  CharacterCollection methods for 3.7.5 , that are already in server 4.0.0 base image 
 
 category: 'Case-Sensitive Searching'
 method: CharacterCollection
