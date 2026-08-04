@@ -284,6 +284,9 @@ ___grailBuildMembers: cls names: attrNames
 	offending @env0:notNil ifTrue: [
 		TypeError ___signal___: (Enum ___grailEnumTagFor: cls)
 			@env0:, ' cannot extend ' @env0:, (Enum ___grailEnumTagFor: offending)] ] @env0:value.
+	"CPython _get_mixins_ base-combination rules: at most one data type mixed
+	in, and any data type must precede the Enum base."
+	Enum ___grailValidateBases: cls.
 	"Names assigned under a class-body ``if`` (the shared test fixture's
 	``if issubclass(...): dupe = 3'') never reach classBodyAttributes --
 	their stores go through ___pyAttrStore___ into the per-class
@@ -1035,6 +1038,76 @@ ___grailExtendedMemberBase: cls
 				ifTrue: [^ walker].
 			walker := walker @env0:superclass]].
 	^ nil
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailIsEnumBase: b
+	"True when base b is an ENUM class.  Enum's own subclasses answer
+	inheritsFrom: Enum, but IntEnum/IntFlag/StrEnum are rooted on their DATA
+	storage (AbstractPyInt/Str) and do NOT inherit Enum on the Smalltalk chain,
+	so probe those leaf roots too -- the same shape as the issubclass/isinstance
+	enum-family widening.  Distinguishes an enum base (IntEnum) from a plain data
+	type (int) even though both inherit Integer."
+
+	^ (b == Enum) or: [(b @env0:inheritsFrom: Enum)
+		or: [(b == IntEnum) or: [(b @env0:inheritsFrom: IntEnum)
+		or: [(b == IntFlag) or: [(b @env0:inheritsFrom: IntFlag)
+		or: [(b == StrEnum) or: [b @env0:inheritsFrom: StrEnum]]]]]]]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailIsDataTypeBase: b
+	"True when base b contributes instance STORAGE to an enum -- a data type in
+	CPython's _find_data_type_ sense: rooted at int/float/str storage, or
+	carrying its own constructor (date/time via ___new__:kw:).  The universal
+	roots (object/PythonInstance/Object), ENUM classes (IntEnum inherits Integer
+	but is an enum, not a data-type mixin), and pure behaviour mixins (methods
+	only, no storage) are NOT data types."
+
+	(b @env0:isKindOf: Behavior) ifFalse: [^ false].
+	(self ___grailIsEnumBase: b) ifTrue: [^ false].
+	((b == PythonInstance) or: [(b == Object)
+		or: [b == (Python @env0:at: #object otherwise: nil)]]) ifTrue: [^ false].
+	^ (b == Integer) or: [(b @env0:inheritsFrom: Integer)
+		or: [(b == Float) or: [(b @env0:inheritsFrom: Float)
+		or: [(b == CharacterCollection) or: [(b @env0:inheritsFrom: CharacterCollection)
+		or: [(b @env0:whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) @env0:notNil]]]]]]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailValidateBases: cls
+	"CPython _get_mixins_ / _find_data_type_ ordering rules, enforced at class
+	creation: (1) at most ONE data type may be mixed in -- ``class E(str, int,
+	Enum)'' raises ``too many data types'' (test_too_many_data_types); (2) a
+	data type base must come BEFORE the Enum base -- ``class E(Enum, str)''
+	raises (test_wrong_inheritance_order).  Uses the registered MI bases IN
+	ORDER; single-inheritance enums (``class E(Enum)'' / ``class E(IntEnum)''),
+	which have no MI record or one base, can violate neither rule -> no-op."
+
+	| bases dataTypes enumSeen |
+	bases := [(Python @env0:at: #importlib) @env0:___pythonBasesOf___: cls]
+		@env0:on: AbstractException do: [:e | nil].
+	(bases @env0:isNil or: [bases @env0:size @env0:< 2]) ifTrue: [^ self].
+	dataTypes := OrderedCollection @env0:new.
+	enumSeen := false.
+	bases @env0:do: [:b |
+		(self ___grailIsEnumBase: b)
+			ifTrue: [enumSeen := true]
+			ifFalse: [
+				(self ___grailIsDataTypeBase: b) ifTrue: [
+					"A data type mixed in AFTER the Enum base is the wrong order."
+					enumSeen ifTrue: [
+						^ TypeError ___signal___: (Enum ___grailEnumTagFor: cls)
+							@env0:, ' cannot extend ' @env0:, b @env0:name @env0:asString].
+					dataTypes @env0:add: b]]].
+	dataTypes @env0:size @env0:> 1 ifTrue: [
+		^ TypeError ___signal___: 'too many data types for '''
+			@env0:, cls @env0:name @env0:asString @env0:, ''': '
+			@env0:, (dataTypes @env0:collect: [:d | d @env0:name @env0:asString]) @env0:printString].
+	^ self
 %
 
 category: 'Grail-Enum Metaclass'
