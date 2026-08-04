@@ -2816,6 +2816,29 @@ __xor__: other
 
 category: 'Grail-IntFlag Member'
 method: IntFlag
+__ror__: other
+	"``int | flag`` (int on the left): kernel Integer's __or__ delegates to
+	the right operand's __ror__ via ___binOpFallback___.  |/&/^ are
+	commutative, so the reflected form mirrors the forward one -- without
+	these ``3 | Perm.R`` raised ``unsupported operand'' (OldTestIntFlag
+	test_or/test_and/test_xor exercise both operand orders)."
+	^ self __or__: other
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
+__rand__: other
+	^ self __and__: other
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
+__rxor__: other
+	^ self __xor__: other
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
 __iter__
 	"Iterate an IntFlag MEMBER: yield its canonical SINGLE-BIT component members
 	in definition order (CPython 3.11+).  Mirrors Flag>>__iter__ -- the
