@@ -617,6 +617,16 @@ ___grailBuildMembers: cls names: attrNames
 							member @env0:dynamicInstVarAt: #'_value_' put: memberValue.
 							member @env0:dynamicInstVarAt: #'_name_' put: nameStr.
 							byValue @env0:at: memberValue put: member.
+							"Drain any value-aliases a user __new__ registered on this
+							member via _add_value_alias_ while the class was still
+							building (test_add_value_alias_during_creation): the record
+							was not yet live, so they were parked on the member -- fold
+							them into the now-live value map."
+							[(member @env0:dynamicInstVarAt: #'___grailPendingValueAliases')
+								@env0:ifNotNil: [:pend |
+									pend @env0:do: [:av | byValue @env0:at: av put: member].
+									member @env0:dynamicInstVarAt: #'___grailPendingValueAliases' put: nil]]
+								@env0:on: AbstractException do: [:e | nil].
 							"A ZERO-valued Flag member (``BLACK = 0``) is reachable by
 							name, by value -- Color(0) -- and as a class attribute, but is
 							NOT canonical: CPython excludes it from iteration, len,
@@ -2221,6 +2231,68 @@ category: 'Grail-Enum Member'
 method: Enum
 _value_
 	^ self @env0:dynamicInstVarAt: #value
+%
+
+category: 'Grail-Enum Member'
+method: Enum
+_add_alias_: name
+	"CPython Enum._add_alias_ (via EnumType._add_member_): register an
+	additional NAME for this member so ``Cls['NAME']'' and ``Cls.NAME''
+	both resolve to self.  A name already bound to a DIFFERENT member
+	raises NameError; re-binding to the same member is a no-op."
+
+	| cls rec byName nm existing |
+	cls := self @env0:class.
+	nm := name @env0:asString.
+	rec := Enum ___grailRecordFor: cls.
+	rec @env0:isNil ifTrue: [^ self].
+	byName := rec @env0:at: 2.
+	(byName @env0:includesKey: nm) ifTrue: [
+		existing := byName @env0:at: nm.
+		existing == self ifTrue: [^ self].
+		^ NameError ___signal___: nm @env0:printString @env0:, ' is already bound: '
+			@env0:, ([existing @env1:__repr__ @env0:asString]
+				@env0:on: AbstractException do: [:e | existing @env0:printString])].
+	byName @env0:at: nm put: self.
+	"Attribute access (``Cls.NAME'') -- store on the class exactly like
+	setattr(cls, name, member) (lands in the per-class dynInstVars holder;
+	NAME has no compiled accessor, so this is the only reader path)."
+	cls @env0:perform: #'___pyAttrStore___:put:' env: 1 withArguments: { nm. self }.
+	^ self
+%
+
+category: 'Grail-Enum Member'
+method: Enum
+_add_value_alias_: value
+	"CPython Enum._add_value_alias_: register an additional VALUE that
+	resolves to this member -- ``Cls(value)'' -> self.  A value already
+	bound to a DIFFERENT member raises ValueError; the same member is a
+	no-op.  May be called AFTER creation (the registry record is live) OR
+	from inside a member ``__new__'' DURING class build (the record is not
+	registered until the whole build loop finishes) -- in the latter case
+	the alias is parked on the member and ___grailBuildMembers: drains it
+	into the value map once that map is live."
+
+	| cls rec byValue existing |
+	cls := self @env0:class.
+	rec := Enum ___grailRecordFor: cls.
+	rec @env0:isNil ifTrue: [ | pend |
+		pend := [self @env0:dynamicInstVarAt: #'___grailPendingValueAliases']
+			@env0:on: AbstractException do: [:e | nil].
+		pend @env0:isNil ifTrue: [
+			pend := OrderedCollection @env0:new.
+			self @env0:dynamicInstVarAt: #'___grailPendingValueAliases' put: pend].
+		pend @env0:add: value.
+		^ self].
+	byValue := rec @env0:at: 1.
+	(byValue @env0:includesKey: value) ifTrue: [
+		existing := byValue @env0:at: value.
+		existing == self ifTrue: [^ self].
+		^ ValueError ___signal___: value @env0:printString @env0:, ' is already bound: '
+			@env0:, ([existing @env1:__repr__ @env0:asString]
+				@env0:on: AbstractException do: [:e | existing @env0:printString])].
+	byValue @env0:at: value put: self.
+	^ self
 %
 
 category: 'Grail-Enum Member'
