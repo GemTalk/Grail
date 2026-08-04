@@ -139,6 +139,27 @@ import builtins
 abs(-5)') equals: 5
 %
 
+category: 'Grail-Tests - Backlog Fixes'
+method: BuiltinsTestCase
+testDictContainsHeterogeneousKeys
+	"``key in d'' must not crash when d mixes hashable key types whose
+	pairwise == is NotImplemented (a complex key beside str keys).  The
+	linear NaN-identity fallback in dict>>__contains__ now iterates keysDo:
+	instead of building a Set of the keys, whose = based dedup leaked the
+	``___NotImplemented___'' sentinel into a Boolean context -- an
+	uncatchable error 2085 (test_iter test_in_and_not_in: ``1 in {'one': 1,
+	1j: 2j}'')."
+
+	self deny: (self eval: '1 in {"one": 1, "two": 2, "three": 3, 1j: 2j}').
+	self assert: (self eval: '1 not in {"one": 1, "two": 2, "three": 3, 1j: 2j}').
+	self assert: (self eval: '1j in {"one": 1, 1j: 2j}').
+	self assert: (self eval: '"one" in {"one": 1, 1j: 2j}').
+	self deny: (self eval: '2 in {"a": 1, 3j: 4}').
+	"the NaN-identity fallback (the reason the linear scan exists) still holds"
+	self assert: (self eval: 'nan = float("nan")
+nan in {nan: None}')
+%
+
 category: 'Grail-Tests - Phase 4b Varargs'
 method: BuiltinsTestCase
 testEvalPow3Arg
