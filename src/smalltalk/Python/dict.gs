@@ -458,7 +458,10 @@ __eq__: other
 			other @env0:keysAndValuesDo: [:k2 :v2 |
 				(found @env0:not and: [k2 @env0:== key]) ifTrue: [otherValue := v2. found := true]]].
 		found ifFalse: [^ false].
-		(value __eq__: otherValue) ifFalse: [
+		"___pyRichEqBool___, not the raw dunder: a value's __eq__ may answer
+		NotImplemented for a foreign operand, and a Symbol in a Boolean
+		position is an uncatchable ImproperOperation."
+		(value ___pyRichEqBool___: otherValue) ifFalse: [
 			^ false
 		]
 	].

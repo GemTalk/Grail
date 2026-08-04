@@ -282,7 +282,12 @@ __eq__: other
 				ifTrue: [other ifTrue: [1] ifFalse: [0]]
 				ifFalse: [other].
 			^ ((self imag) @env0:= 0) and: [(self real) @env0:= o]].
-		^ false].
+		"A non-numeric operand is NOT unequal: CPython's complex.__eq__
+		answers NotImplemented so the REFLECTED __eq__ runs -- test_compare's
+		``(2+0j) == Cmp(2.0)'' is True because Cmp.__eq__ compares 2.0 to it.
+		___cmpEq___ -> ___eqValue___ still ends at identity/False when that
+		operand has no __eq__ of its own."
+		^ #'___NotImplemented___'].
 	otherReal := other real.
 	otherImag := other imag.
 	^ ((self real) @env0:= otherReal) 
@@ -335,9 +340,9 @@ __format__: formatSpec
 category: 'Grail-Comparison'
 method: complex
 __ge__: other
-	"Complex numbers cannot be ordered - raise TypeError."
+	"Complex numbers cannot be ordered."
 
-	TypeError @env0:signal: '''>='' not supported between instances of ''complex'' and ''complex'''
+	^ self ___unorderable___: other op: '>=' reflected: #'__le__:'
 %
 
 category: 'Grail-Serialization'
@@ -360,9 +365,9 @@ __getstate__
 category: 'Grail-Comparison'
 method: complex
 __gt__: other
-	"Complex numbers cannot be ordered - raise TypeError."
+	"Complex numbers cannot be ordered."
 
-	TypeError @env0:signal: '''>'' not supported between instances of ''complex'' and ''complex'''
+	^ self ___unorderable___: other op: '>' reflected: #'__lt__:'
 %
 
 category: 'Grail-Initialization'
@@ -382,17 +387,39 @@ __init__: r _: i
 category: 'Grail-Comparison'
 method: complex
 __le__: other
-	"Complex numbers cannot be ordered - raise TypeError."
+	"Complex numbers cannot be ordered."
 
-	TypeError @env0:signal: '''<='' not supported between instances of ''complex'' and ''complex'''
+	^ self ___unorderable___: other op: '<=' reflected: #'__ge__:'
 %
 
 category: 'Grail-Comparison'
 method: complex
 __lt__: other
-	"Complex numbers cannot be ordered - raise TypeError."
+	"Complex numbers cannot be ordered."
 
-	TypeError @env0:signal: '''<'' not supported between instances of ''complex'' and ''complex'''
+	^ self ___unorderable___: other op: '<' reflected: #'__gt__:'
+%
+
+category: 'Grail-Comparison'
+method: complex
+___unorderable___: other op: opString reflected: refSelector
+	"complex has no ordering: CPython's complex.__lt__ & co. answer
+	NotImplemented, the operator layer then tries the reflected dunder and
+	finally raises TypeError naming BOTH operand types.
+
+	Two reasons this is not a bare raise.  (1) The old env-0
+	``TypeError signal: ...'' produced a Python TypeError whose str() was
+	EMPTY, so ``assertRaisesRegex(TypeError, 'not supported')'' failed even
+	though the type was right (test_compare.test_numbers); ___signal___: is
+	the raise that carries the message into Python.  (2) A non-complex operand
+	deserves its reflected dunder -- ___cmpFallback___ runs it and builds the
+	both-types message.  A COMPLEX operand cannot go there: both sides define
+	the dunder and both escalate, so forward<->reflected would ping-pong."
+
+	(other isKindOf: complex) ifFalse: [
+		^ self ___cmpFallback___: other op: opString reflected: refSelector].
+	TypeError ___signal___: ('''' @env0:, opString @env0:,
+		''' not supported between instances of ''complex'' and ''complex''')
 %
 
 category: 'Grail-Arithmetic'
@@ -426,9 +453,17 @@ __mul__: other
 category: 'Grail-Comparison'
 method: complex
 __ne__: other
-	"Test inequality with another complex number."
+	"Test inequality with another complex number.
 
-	^ (self __eq__: other) @env0:not
+	__eq__: answers the ___NotImplemented___ sentinel for a non-numeric
+	operand (so the reflected __eq__ gets its turn); negating THAT is a
+	Symbol DNU that escapes Python try/except, so pass it through and let
+	___cmpNe___ -> ___neValue___ run the reflected/identity fallback."
+
+	| r |
+	r := self __eq__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [^ r].
+	^ r @env0:not
 %
 
 category: 'Grail-Arithmetic'

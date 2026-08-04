@@ -83,6 +83,18 @@ def replace(obj, /, **changes):
     return meth(**changes)
 
 
+def _keep_alive(obj, memo):
+    """Keep *obj* alive until this deepcopy finishes (CPython copy._keep_alive).
+
+    Stored under id(memo) -- an int key, so it cannot collide with a caller's
+    key, and the memo itself is alive throughout, so ITS id is never recycled.
+    """
+    try:
+        memo[id(memo)].append(obj)
+    except KeyError:
+        memo[id(memo)] = [obj]
+
+
 def deepcopy(obj, memo=None):
     """Recursive copy.  Honors ``__deepcopy__'' dunder for opt-in
     custom semantics; otherwise walks lists / tuples / dicts / sets
@@ -94,6 +106,17 @@ def deepcopy(obj, memo=None):
     obj_id = id(obj)
     if obj_id in memo:
         return memo[obj_id]
+    # Hold a reference to obj for the rest of this copy.  The memo is keyed by
+    # id(), and Grail hands out id slots from a table that is RECYCLED once an
+    # object is collected -- so a temporary that dies mid-copy (the
+    # ``list(args)'' in the pickle-protocol branch below is exactly one) can
+    # pass its id on to a later object, whose lookup then hits the dead entry
+    # and returns an unrelated copy.  That is how deepcopy of
+    # ``partial(f, ['asdf'])'' could answer [[<BoundMethod>]] for ['asdf']
+    # (test_functools.TestPartialC.test_deepcopy) -- rarely, and only with the
+    # right allocation pattern ahead of it.  CPython's copy.py keeps the same
+    # list, for the same reason.
+    _keep_alive(obj, memo)
     if hasattr(obj, '__deepcopy__'):
         result = obj.__deepcopy__(memo)
         memo[obj_id] = result

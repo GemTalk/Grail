@@ -2443,6 +2443,28 @@ __dir__
 	^ ((result @env0:asSet) @env0:asSortedCollection) @env0:asArray
 %
 
+category: 'Grail-Comparison'
+method: object
+___varargsDunder___: kwSelector with: other
+	"Dispatch a comparison dunder that was declared WITHOUT a named receiver
+	parameter -- ``def __eq__(*args)'' compiles to ___eq__:kw: and gets NO
+	__eq__: alias, so a plain ``self __eq__: other'' send silently lands on
+	object's default and the user's method never runs (CPython's
+	test_compare.test_ne_high_priority / test_ne_low_priority record the call
+	list and saw it empty).  Answer nil when this class has no such method, so
+	callers can fall through to their next probe.
+
+	The positional array excludes the receiver: Grail binds self as the
+	Smalltalk receiver and passes only the remaining arguments, the same
+	convention as ___round__:kw: / ___float__:kw:."
+
+	| owner |
+	owner := self @env0:class
+		@env0:whichClassIncludesSelector: kwSelector environmentId: 1.
+	(owner @env0:isNil or: [owner @env0:== object]) ifTrue: [^ nil].
+	^ self @env0:perform: kwSelector env: 1 withArguments: { { other } . nil }
+%
+
 category: 'Grail-Other'
 method: object
 __doc__
@@ -2465,14 +2487,33 @@ __eq__: other
 	store — the dataclass decorator does this).  When present, bind
 	self + other and forward, mirroring the instantiation path that
 	consults a dynamic ``__init__''.  When absent (the common case),
-	fall through to identity.  Only generic PythonInstances reach
-	here — Int / Float / str / etc. carry their own ``__eq__:''
-	override, so the class-chain walk is not on those hot paths."
+	fall through to the CPython default.  Only generic PythonInstances
+	reach here — Int / Float / str / etc. carry their own ``__eq__:''
+	override, so the class-chain walk is not on those hot paths.
 
-	| fn |
+	The default answers NotImplemented, not identity-as-a-Boolean, exactly
+	as CPython's object.__eq__ does (True only for the identical object).
+	That is what lets the operator layer (___cmpEq___ -> ___eqValue___) try
+	the REFLECTED __eq__ on the right-hand side: ``CompNone() == CompEq()'',
+	``(2+0j) == Cmp(2.0)'' and every ``x == ALWAYS_EQ'' in CPython's suite
+	need it, and answering false here skipped that step silently
+	(test_compare.test_comparisons / test_issue_1393 /
+	test_comp_classes_different)."
+
+	| fn r |
 	fn := self ___dynamicClassAttr___: #'__eq__'.
 	fn == nil ifFalse: [^ fn ___pyCallValue___: { self. other } kw: nil].
-	^ self @env0:= other
+	r := self ___varargsDunder___: #'___eq__:kw:' with: other.
+	r == nil ifFalse: [^ r].
+	"Answer a MATCH outright, punt otherwise.  ``='' rather than ``=='': for a
+	generic PythonInstance the two agree (kernel = is identity there), but a
+	KERNEL-backed receiver that reaches this default -- a Fraction built as a
+	SmallFraction, a ScaledDecimal, a Date -- carries real VALUE equality, and
+	Fraction(-1, 2) == Fraction(1, -2) must stay True.  Only the no-match case
+	becomes NotImplemented, which is the whole point: it hands the comparison
+	to the reflected __eq__ instead of settling it as False."
+	(self @env0:= other) ifTrue: [^ true].
+	^ #'___NotImplemented___'
 %
 
 category: 'Grail-String Representation'
@@ -3014,19 +3055,67 @@ ___cmpGe___: other
 
 category: 'Grail-Comparison'
 method: object
+___reflectedFirst___: other selector: refSelector kwSelector: kwSelector
+	"CPython's subclass-priority rule: when type(other) is a PROPER SUBCLASS
+	of type(self) and OVERRIDES the reflected method, the reflected call is
+	tried BEFORE the forward one -- ``Base() != Derived()'' calls
+	Derived.__ne__ first (test_compare.test_ne_low_priority asserts the exact
+	call order).
+
+	Answer nil when the rule does not apply, so the caller runs its ordinary
+	forward path; otherwise answer the reflected result, which may be the
+	NotImplemented sentinel and means ``tried, declined'' -- the caller must
+	then NOT try that same reflected method again."
+
+	| myClass otherClass owner mine |
+	myClass := self @env0:class.
+	otherClass := other @env0:class.
+	(otherClass @env0:== myClass) ifTrue: [^ nil].
+	(otherClass @env0:inheritsFrom: myClass) ifFalse: [^ nil].
+	owner := otherClass
+		@env0:whichClassIncludesSelector: refSelector environmentId: 1.
+	"object implements every comparison dunder, so an owner of ``object'' means
+	the subclass does NOT override it -- fall through to the varargs form
+	(``def __ne__(*args)'' has only ___ne__:kw:), rather than reading it as an
+	override and stopping here."
+	(owner @env0:notNil and: [owner @env0:~~ object]) ifTrue: [
+		mine := myClass
+			@env0:whichClassIncludesSelector: refSelector environmentId: 1.
+		"Same owner means the subclass inherited it -- no override, no priority."
+		(owner @env0:== mine) ifTrue: [^ nil].
+		^ other @env0:perform: refSelector env: 1 withArguments: { self }].
+	^ other ___varargsDunder___: kwSelector with: self
+%
+
+category: 'Grail-Comparison'
+method: object
 ___cmpEq___: other
-	| r |
+	| pri r |
+	pri := self ___reflectedFirst___: other
+		selector: #'__eq__:' kwSelector: #'___eq__:kw:'.
+	(pri @env0:~~ nil and: [pri @env0:~~ #'___NotImplemented___']) ifTrue: [^ pri].
 	r := self __eq__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [^ self ___eqValue___: other].
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		"pri notNil: the reflected __eq__ already ran and declined, so identity
+		decides -- calling it again through ___eqValue___ would double it."
+		pri @env0:== nil ifTrue: [^ self ___eqValue___: other].
+		^ self @env0:== other].
 	^ r
 %
 
 category: 'Grail-Comparison'
 method: object
 ___cmpNe___: other
-	| r |
+	| pri r |
+	pri := self ___reflectedFirst___: other
+		selector: #'__ne__:' kwSelector: #'___ne__:kw:'.
+	(pri @env0:~~ nil and: [pri @env0:~~ #'___NotImplemented___']) ifTrue: [^ pri].
 	r := self __ne__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [^ self ___neValue___: other].
+	(r @env0:== #'___NotImplemented___') ifTrue: [
+		"See ___cmpEq___: a reflected __ne__ that already declined is not
+		retried -- CPython goes straight to identity."
+		pri @env0:== nil ifTrue: [^ self ___neValue___: other].
+		^ (self @env0:== other) @env0:not].
 	^ r
 %
 
@@ -3072,6 +3161,9 @@ ___eqValue___: other
 	(refOwner @env0:~~ nil and: [refOwner @env0:~~ object]) ifTrue: [
 		rr := other @env0:perform: #'__eq__:' env: 1 withArguments: { self }.
 		(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]].
+	"A reflected ``def __eq__(*args)'' has only the varargs selector."
+	rr := other ___varargsDunder___: #'___eq__:kw:' with: self.
+	(rr @env0:~~ nil and: [rr @env0:~~ #'___NotImplemented___']) ifTrue: [^ rr].
 	^ self @env0:== other
 %
 
@@ -3088,12 +3180,28 @@ ___neValue___: other
 	== exactly as the default object.__ne__ does -- ``not (self == other)'' --
 	with ___eqValue___ supplying the reflected/identity == value."
 
-	| refOwner rr |
+	| refOwner rr tried |
+	tried := false.
 	refOwner := other @env0:class
 		@env0:whichClassIncludesSelector: #'__ne__:' environmentId: 1.
 	(refOwner @env0:~~ nil and: [refOwner @env0:~~ object]) ifTrue: [
+		tried := true.
 		rr := other @env0:perform: #'__ne__:' env: 1 withArguments: { self }.
 		(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]].
+	tried ifFalse: [
+		"A reflected ``def __ne__(*args)'' has only the varargs selector."
+		rr := other ___varargsDunder___: #'___ne__:kw:' with: self.
+		rr @env0:~~ nil ifTrue: [
+			tried := true.
+			(rr @env0:~~ #'___NotImplemented___') ifTrue: [^ rr]]].
+	"CPython stops once the reflected __ne__ has punted: ``a != b'' then
+	answers ``a is not b'' WITHOUT consulting that operand's __eq__.  Running
+	___eqValue___ here made one extra reflected __eq__ call, which
+	test_compare.test_ne_high_priority sees in its recorded call list.  Only
+	when the operand has no __ne__ of its own does the default apply -- and
+	object.__ne__ derives that from ITS __eq__, which is what ___eqValue___
+	(reflected __eq__, else identity) computes."
+	tried ifTrue: [^ (self @env0:== other) @env0:not].
 	^ (self ___eqValue___: other) @env0:not
 %
 
@@ -3235,22 +3343,36 @@ __ne__: other
 	| fn eqOwner eqr |
 	fn := self ___dynamicClassAttr___: #'__ne__'.
 	fn == nil ifFalse: [^ fn ___pyCallValue___: { self. other } kw: nil].
+	"``def __ne__(*args)'' compiles to ___ne__:kw: with no __ne__: alias."
+	eqr := self ___varargsDunder___: #'___ne__:kw:' with: other.
+	eqr == nil ifFalse: [^ eqr].
 	fn := self ___dynamicClassAttr___: #'__eq__'.
 	fn == nil ifFalse: [
-		eqr := fn ___pyCallValue___: { self. other } kw: nil.
 		"A NotImplemented __eq__ must NOT be negated (``NI not'' is an
 		uncatchable Symbol DNU); return it so ___cmpNe___ / the caller runs
 		the reflected-op / identity fallback."
+		eqr := fn ___pyCallValue___: { self. other } kw: nil.
 		(eqr @env0:== #'___NotImplemented___') ifTrue: [^ eqr].
 		^ eqr @env0:not].
 	eqOwner := self @env0:class @env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
-	eqOwner @env0:isNil ifTrue: [
+	"object itself implements __eq__:, so the owner is never nil for a
+	PythonInstance -- test ``is object's own'', not ``is missing'', or the
+	varargs probe below is dead code and a ``def __eq__(*args)'' class looks
+	like it has no __eq__ at all."
+	(eqOwner @env0:isNil or: [eqOwner @env0:== object]) ifTrue: [
 		eqOwner := self @env0:class @env0:whichClassIncludesSelector: #'___eq__:kw:' environmentId: 1].
 	(eqOwner @env0:notNil and: [eqOwner ~~ object]) ifTrue: [
 		eqr := self __eq__: other.
 		(eqr @env0:== #'___NotImplemented___') ifTrue: [^ eqr].
 		^ eqr @env0:not].
-	^ (self @env0:= other) @env0:not
+	"No __eq__ / __ne__ of our own: answer a kernel VALUE match outright (see
+	__eq__:'s comment -- Fraction(-1, 2) != Fraction(1, -2) must stay False),
+	and otherwise punt.  CPython's object.__ne__ answers NotImplemented too
+	(its __eq__ did), leaving the reflected operand and then identity to
+	___cmpNe___ -> ___neValue___; answering identity here pre-empted the
+	reflected __ne__ / __eq__ entirely."
+	(self @env0:= other) ifTrue: [^ false].
+	^ #'___NotImplemented___'
 %
 
 category: 'Grail-Serialization'

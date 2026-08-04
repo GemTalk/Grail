@@ -87,13 +87,17 @@ test_equality
 	exc3 := BaseException @env1:__new__: 'different'.
 	exc3 @env1:__init__: #('different').
 
-	"Same args, distinct objects -- NOT equal."
-	self deny: (exc1 @env1:__eq__: exc2).
-	self assert: (exc1 @env1:__ne__: exc2).
+	"Same args, distinct objects -- NOT equal.  Sent through the OPERATOR
+	(___cmpEq___:/___cmpNe___:, what compiled Python sends): BaseException
+	defines no __eq__, and object's default now PUNTS with NotImplemented
+	rather than deciding, so the reflected operand gets its turn -- the
+	operator is what turns the punt into False."
+	self deny: (exc1 @env1:___cmpEq___: exc2).
+	self assert: (exc1 @env1:___cmpNe___: exc2).
 	"Different args -- also not equal."
-	self assert: (exc1 @env1:__ne__: exc3).
+	self assert: (exc1 @env1:___cmpNe___: exc3).
 	"Identity holds, and the hash agrees with it."
-	self assert: (exc1 @env1:__eq__: exc1).
+	self assert: (exc1 @env1:___cmpEq___: exc1).
 	self assert: (exc1 @env1:__hash__) equals: (exc1 @env1:__hash__)
 %
 
