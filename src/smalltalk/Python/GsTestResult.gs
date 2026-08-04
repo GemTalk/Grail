@@ -1,4 +1,5 @@
-! installed as SystemUser   by the install scripts
+set compile_env: 0
+
 category: 'Running'
 method: GsTestResult
 runCase: aTestCase
@@ -8,7 +9,7 @@ runCase: aTestCase
   aTestCase runCase.
   aPass := true.
   self passed add: aTestCase ]
-    on: Exception
+    on: (Globals at: #Exception)
     do: [ :ex | 
       aPass ifNotNil: [ System waitForDebug ].
       ex class defaultHandlers size > 0
