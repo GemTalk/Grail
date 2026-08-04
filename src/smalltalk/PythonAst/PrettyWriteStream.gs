@@ -1,12 +1,12 @@
 ! ------------------- Superclass check
 run
-WriteStream ifNil: [self error: 'WriteStream is not defined. Check file ordering.'].
+AppendStream ifNil: [self error: 'AppendStream is not defined. Check file ordering.'].
 %
 
 ! ------------------- Class definition for PrettyWriteStream
 expectvalue /Class
 doit
-WriteStream subclass: 'PrettyWriteStream'
+AppendStream subclass: 'PrettyWriteStream'
   instVarNames: #( indentCount)
   classVars: #()
   classInstVars: #()
@@ -93,6 +93,7 @@ on: aCollection
 category: 'Grail-other'
 method: PrettyWriteStream
 removeTrailingNone
+  "Aug 01 , 2026  , no senders found"
 	"Remove trailing 'None.' followed by newline from the stream.
 	This is called before printing a new statement to clean up the
 	None that AssignAst adds (which is only needed for the last statement)."
