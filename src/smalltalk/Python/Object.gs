@@ -2278,7 +2278,30 @@ ___pyAttrLoad___: aSym
 		| attrOwner metaOwns |
 		attrOwner := self @env0:class @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
 		(attrOwner notNil and: [(attrOwner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs'])
-			ifTrue: [^ self ___descriptorGet___: (self @env0:class @env0:perform: aSym env: 1)].
+			ifTrue: [
+				"Enum member DynamicClassAttribute (test_shadowed_attr): a data-type
+				attribute (int.numerator / str.title) shadowed by a same-named sibling
+				member wins on INSTANCE access -- Number.divisor.numerator is 1, not the
+				member; Book.author.title is str.title.  Delegate to the member's
+				underlying value when IT provides aSym; a value lacking it (int has no
+				``divisor'') raises AttributeError -> fall through to the sibling-member
+				accessor.  Gated on self being an enum member so non-enum built-in-
+				subclass instances are untouched."
+				(((Python @env0:at: #Enum otherwise: nil) @env0:notNil)
+					and: [(Enum ___grailRecordFor: self @env0:class) @env0:notNil]) ifTrue: [
+					| mv |
+					mv := self @env0:dynamicInstVarAt: #value ifAbsent: [nil].
+					"Delegate ONLY when the value's data type has aSym as a real compiled
+					method (int>>numerator, str>>title) -- a non-throwing check.  An
+					earlier try/``mv ___pyAttrLoad___`` version RAISED+caught an
+					AttributeError for every ``member.sibling'' whose value lacks the
+					attr (member.divisor on an int), and the per-access exception cost
+					crashed co-scheduled suite modules under concurrency."
+					(mv @env0:notNil
+						and: [(mv @env0:class @env0:whichClassIncludesSelector: aSym
+							environmentId: 1) @env0:notNil])
+							ifTrue: [^ mv ___pyAttrLoad___: aSym]].
+				^ self ___descriptorGet___: (self @env0:class @env0:perform: aSym env: 1)].
 		"@classmethod (and @staticmethod) reached through an INSTANCE of a
 		built-in-subclass — ``d.fromkeys(...)'' where d is a dict-subclass
 		instance.  Python makes a classmethod reachable from an instance,
