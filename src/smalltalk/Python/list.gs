@@ -141,8 +141,11 @@ __delitem__: index
 			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
 		TypeError ___signal___: ('list indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
+	"Fetch the index via __index__ (see SequenceableCollection>>__getitem__:):
+	probing only proved it is index-like, and __index__ may resize self, so
+	read the size afterward."
+	idx := index ___asIndex___.
 	size := self @env0:size.
-	idx := index.
 
 	"Handle negative indices"
 	(idx @env0:< 0) ifTrue: [
@@ -229,19 +232,24 @@ method: list
 __imul__: n
 	"In-place repetition: self *= n. Returns self."
 
-	| original |
-	(n @env0:<= 0) ifTrue: [
+	| original count |
+	"Fetch + range-check the count through __index__ (an argument cannot be
+	assigned in Smalltalk, hence the temp): ``lst *= o'' with an __index__
+	object used to send env-0 #<= to the object and die on an uncatchable DNU
+	(test_index.ListTestCase.test_inplace_repeat)."
+	count := n ___asRepeatCount___.
+	(count @env0:<= 0) ifTrue: [
 		self @env0:size: 0.
 		^ self
 	].
 	"lst *= sys.maxsize must raise, not exhaust the gem's temporary
 	object memory (test_list_resize_overflow kills the whole session
 	otherwise)."
-	(self @env0:size @env0:* n) @env0:> 50000000 ifTrue: [
+	(self @env0:size @env0:* count) @env0:> 50000000 ifTrue: [
 		MemoryError ___signal___: 'repeated list would exhaust memory'].
 
 	original := self @env0:copy.
-	(n @env0:- 1) @env0:timesRepeat: [
+	(count @env0:- 1) @env0:timesRepeat: [
 		self @env0:addAll: original.
 	].
 	^ self
@@ -343,9 +351,11 @@ __setitem__: index _: value
 			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
 		TypeError ___signal___: ('list indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
-
+	"Fetch the index via __index__ (see SequenceableCollection>>__getitem__:):
+	probing only proved it is index-like, and __index__ may resize self, so
+	read the size afterward."
+	idx := index ___asIndex___.
 	size := self @env0:size.
-	idx := index.
 
 	"Handle negative indices"
 	(idx @env0:< 0) ifTrue: [

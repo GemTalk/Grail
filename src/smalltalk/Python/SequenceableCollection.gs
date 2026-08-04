@@ -336,8 +336,12 @@ __getitem__: index
 				ifFalse: [self @env0:class @env0:name @env0:asString]].
 		TypeError ___signal___: (seqName @env0:, ' indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
+	"FETCH the index (PEP 357) -- probing for __index__ above only established
+	that the object is index-LIKE; the arithmetic below needs its value, and
+	sending env-0 #< to the object itself is an uncatchable DNU.  __index__ may
+	run Python code that resizes self, so read the size afterward."
+	idx := index ___asIndex___.
 	size := self @env0:size.
-	idx := index.
 
 	"Handle negative indices"
 	(idx @env0:< 0) ifTrue: [
@@ -372,9 +376,17 @@ ___getslice___: lower _: upper _: step
 	for an unset bound/step; normalise so the ifNil: defaults fire instead of
 	comparing None with an integer (a[2:4] has step None -- test_list's
 	test_getslice / test_subscript)."
-	lwr := (lower @env0:== None) ifTrue: [nil] ifFalse: [lower].
-	upr := (upper @env0:== None) ifTrue: [nil] ifFalse: [upper].
-	st := ((step @env0:== None) or: [step @env0:isNil]) ifTrue: [1] ifFalse: [step].
+	lwr := lower ___asIndexOrNil___.
+	upr := upper ___asIndexOrNil___.
+	st := ((step @env0:== None) or: [step @env0:isNil]) ifTrue: [1] ifFalse: [step ___asIndex___].
+	lwr := (lwr @env0:== None) ifTrue: [nil] ifFalse: [lwr].
+	upr := (upr @env0:== None) ifTrue: [nil] ifFalse: [upr].
+	"Each bound is FETCHED through __index__ (PEP 357): a slice literal keeps
+	whatever objects the source wrote, so ``seq[o:o2]'' with __index__ objects
+	used to reach the env-0 arithmetic below and die on an uncatchable
+	``does not understand #<'' (test_index's test_slice / test_slice_bug7532
+	across every sequence type).  A non-index bound raises the catchable
+	TypeError from ___asIndex___, which is what test_error asserts."
 	st @env0:= 0 ifTrue: [ValueError ___signal___: 'slice step cannot be zero'].
 
 	"Normalize lower"
@@ -435,22 +447,27 @@ method: SequenceableCollection
 __mul__: n
 	"Repeat the sequence n times. Returns a new sequence."
 
-	| result |
+	| result count |
 	((n isKindOf: Integer)
 		or: [(n @env0:class
 			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
+	"Fetch the count via __index__ (see __getitem__:) -- the probe above only
+	proved n is index-LIKE, and the arithmetic below cannot run on the object
+	itself (uncatchable ``does not understand'' DNU).  A method argument cannot
+	be assigned in Smalltalk, hence the temp."
+	count := n ___asRepeatCount___.
 	result := (self @env0:species) ___new___.
-	(n @env0:<= 0) ifTrue: [
+	(count @env0:<= 0) ifTrue: [
 		^ result
 	].
 	"seq * sys.maxsize must raise, not exhaust the gem's temporary
 	object memory (test_list_resize_overflow kills the session
 	otherwise)."
-	(self @env0:size @env0:* n) @env0:> 50000000 ifTrue: [
+	(self @env0:size @env0:* count) @env0:> 50000000 ifTrue: [
 		MemoryError ___signal___: 'repeated sequence would exhaust memory'].
 
-	n @env0:timesRepeat: [result @env0:addAll: self].
+	count @env0:timesRepeat: [result @env0:addAll: self].
 	^ result
 %
 
