@@ -50,18 +50,35 @@ category: 'Grail-code generation'
 method: ClassDefAst
 printSmalltalkOn: aStream
 	"A Python `class X:` statement is an executable statement that
-	creates a fresh class object on every execution.  Inside a module-
-	or function-body compilation we emit the GemStone equivalent
-	inline: an ``importlib ___subclassOf:`` call that produces a
-	gensym'd subclass, followed by a sequence of compileMethod: calls
-	for each instance method, accessor, and the class-side value:value:
-	instantiation method.  Outside that context (e.g. plain eval) we
-	fall back to the legacy dict-based representation."
+	creates a fresh class object on every execution.  We emit the GemStone
+	equivalent inline: an ``importlib ___subclassOf:`` call that produces a
+	gensym'd subclass, followed by a sequence of compileMethod: calls for each
+	instance method, accessor, and the class-side value:value: instantiation
+	method.
 
-	(CallAst moduleClassBeingCompiled notNil) ifTrue: [
-		^self printSmalltalkRuntimeOn: aStream
-	].
-	self printSmalltalkLegacyOn: aStream.
+	This used to be gated on ``CallAst moduleClassBeingCompiled notNil'', with
+	an eval/exec context falling back to a ``legacy dict-based
+	representation'' that built a PythonClass (a SymbolDictionary of class
+	attributes).  That fallback could never run: PythonClass.gs is not in
+	install.gs's input list, so the class was never created -- the name is
+	pre-declared as nil in the Python dictionary and stays nil.  The emitted
+	``PythonClass perform: #new env: 0'' therefore raised
+	``a UndefinedObject does not understand #new'', a SMALLTALK error, so
+	every ``exec(''class C: ...'')'' aborted uncatchably.  That was 30 of
+	test_listcomps' 52 errors, whose harness execs each snippet in module,
+	class AND function scope.
+
+	The runtime path needs nothing the module compilation provides:
+	``importlib ___subclassOf:'' and compileMethod: are runtime sends, and
+	isModuleScopeClassDef already answers false without a module class, which
+	selects exactly the bare-assignment emit an exec doit wants (the
+	assignment lands in the doit's symbol-list scope, which builtins>>_exec:
+	then reflects back into the caller's globals).  So a class defined by
+	exec/eval is now the SAME kind of object as one defined in a module --
+	real Smalltalk class, MRO, descriptors, isinstance -- rather than a
+	second, shallower class model."
+
+	^self printSmalltalkRuntimeOn: aStream
 %
 
 category: 'Grail-code generation'
@@ -1999,43 +2016,6 @@ slotsDeclaredStrict
 			ifTrue: [elt value = '__dict__' ifTrue: [hasDict := true]]
 			ifFalse: [^ false]].
 	^ hasDict not
-%
-
-category: 'Grail-code generation'
-method: ClassDefAst
-printSmalltalkLegacyOn: aStream
-	"Legacy dict-based class creation (for eval: context or when not in
-	module compilation). Kept as fallback."
-
-	aStream nextPutAll: name.
-	aStream nextPutAll: ' := [:___cls___ |'; lf; increaseIndent.
-
-	body variables notEmpty ifTrue: [
-		aStream nextPut: $|.
-		body variables do: [:each | aStream space; nextPutAll: each].
-		aStream nextPutAll: ' |'; lf.
-	].
-
-	body body do: [:each |
-		each printSmalltalkOn: aStream.
-		aStream lf.
-	].
-
-	body variables do: [:each |
-		aStream nextPutAll: '___cls___ @env0:at: #'''.
-		aStream nextPutAll: each.
-		aStream nextPutAll: ''' put: '.
-		aStream nextPutAll: each.
-		aStream nextPut: $.; lf.
-	].
-
-	aStream nextPutAll: '___cls___ @env0:at: #''__name__'' put: #'''.
-	aStream nextPutAll: name.
-	aStream nextPutAll: '''.'; lf.
-
-	aStream nextPutAll: '___cls___'; lf.
-
-	aStream decreaseIndent; nextPutAll: '] value: (PythonClass perform: #new env: 0).'.
 %
 
 category: 'Grail-Class Compilation'
