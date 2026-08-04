@@ -90,6 +90,7 @@ category: 'Grail-accessors'
 method: AbstractLocationNode
 column
   "used by ___emitTracebackFrame...  in ComprehensionAst"
+  "result is zero based"
   | src prevEolPos lf col |
   (self dynamicInstVarAt: #column) ifNotNil:[:v | ^ v ].
   src := self sourceString .
@@ -103,6 +104,7 @@ category: 'Grail-accessors'
 method: AbstractLocationNode
 endColumn
   "used by ___emitTracebackFrame...  in ComprehensionAst"
+  "result is zero based plus 1 "
   | src prevEolPos lf col |
   endPosition ifNil:[ ^  self column ].
   (self dynamicInstVarAt: #endColumn) ifNotNil:[:v | ^ v ].
