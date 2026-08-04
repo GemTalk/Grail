@@ -232,11 +232,17 @@ write: data
 category: 'Grail-Writing'
 method: StringIO
 writelines: lines
-	"Write each element of lines (an iterable of str) in order."
+	"Write each element of lines in order.  Iterate LAZILY via the Python
+	protocol (__iter__/__next__), NOT a Smalltalk #do:: a non-iterable
+	argument (None/int) then raises a catchable TypeError instead of a #do:
+	MessageNotUnderstood, and a dict yields its KEYS -- matching CPython."
 
+	| it |
 	self _checkOpen.
-	lines @env0:do: [:line | self write: line].
-	^ None
+	it := lines __iter__.
+	[true] @env0:whileTrue: [ | line |
+		line := [it __next__] @env0:on: StopIteration do: [:ex | ^ None].
+		self write: line]
 %
 
 category: 'Grail-Position'
@@ -497,9 +503,17 @@ write: data
 category: 'Grail-Writing'
 method: BytesIO
 writelines: lines
+	"Write each element of lines in order.  Iterate LAZILY via the Python
+	protocol (__iter__/__next__), NOT a Smalltalk #do:: a non-iterable
+	argument (None/int) then raises a catchable TypeError instead of a #do:
+	MessageNotUnderstood, and a dict yields its KEYS -- matching CPython."
+
+	| it |
 	self _checkOpen.
-	lines @env0:do: [:line | self write: line].
-	^ None
+	it := lines __iter__.
+	[true] @env0:whileTrue: [ | line |
+		line := [it __next__] @env0:on: StopIteration do: [:ex | ^ None].
+		self write: line]
 %
 
 category: 'Grail-Position'
@@ -977,9 +991,19 @@ write: data
 category: 'Grail-Writing'
 method: FileIO
 writelines: lines
+	"Write each element of lines in order.  Iterate LAZILY via the Python
+	protocol (__iter__/__next__), NOT a Smalltalk #do:: a non-iterable
+	argument (None/int) then raises a catchable TypeError instead of a #do:
+	MessageNotUnderstood, and a dict yields its KEYS -- matching CPython
+	(test_iter test_writelines).  A text file is a TextIOWrapper < FileIO, so
+	it inherits this."
+
+	| it |
 	self _checkWritable.
-	lines @env0:do: [:line | self write: line].
-	^ None
+	it := lines __iter__.
+	[true] @env0:whileTrue: [ | line |
+		line := [it __next__] @env0:on: StopIteration do: [:ex | ^ None].
+		self write: line]
 %
 
 category: 'Grail-Position'

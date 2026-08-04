@@ -1661,15 +1661,29 @@ category: 'Grail-code generation'
 method: ClassDefAst
 printQuotedString: aString on: aStream
 	"Emit aString as a Smalltalk string literal, escaping embedded
-	single quotes by doubling them."
+	single quotes by doubling them.
 
-	aStream nextPut: $'.
+	Build the whole literal in a LOCAL buffer and write it with a single
+	nextPutAll:, NOT character-by-character onto aStream: aStream is a
+	PrettyWriteStream whose nextPut: inserts indentCount tabs after every
+	linefeed.  Writing char-by-char splices that indentation into any newline
+	EMBEDDED in the literal -- e.g. a compiled method's source carrying a Python
+	string constant like ``''a\nb''`` verbatim -- corrupting the value by one tab
+	per nesting level when the class is defined inside try/for/if/... (test_iter
+	test_writelines: a class whose __next__ returns ``str(i) + '\n''' inside a
+	try block wrote ``\n\t'' instead of ``\n'').  nextPutAll: applies the
+	line-start indent once, up front, then copies the content verbatim."
+
+	| buf |
+	buf := WriteStream on: (Unicode7 new: aString size + 2).
+	buf nextPut: $'.
 	aString do: [:c |
 		c = $'
-			ifTrue: [aStream nextPut: $'; nextPut: $']
-			ifFalse: [aStream nextPut: c].
+			ifTrue: [buf nextPut: $'; nextPut: $']
+			ifFalse: [buf nextPut: c].
 	].
-	aStream nextPut: $'.
+	buf nextPut: $'.
+	aStream nextPutAll: buf contents.
 %
 
 category: 'Grail-Class Compilation'
