@@ -161,3 +161,32 @@ testDeepcopyMemoKeepsOriginalsAlive
 	self assert: testModule @env1:deepcopy_memo_keeps_originals_alive asArray
 		equals: #( true true true ).
 %
+
+category: 'Grail-Tests - keywords'
+method: PartialCallableAndCopyTestCase
+testANonStringKeywordRepersThenRaisesOnCall
+	"``keywords'' is an ordinary mutable dict, so 1234 can be put in it.
+	CPython tolerates that until the CALL -- where it is a TypeError -- and
+	renders the key with str().  Grail used to pass the key straight down and
+	let the callee make of it what it would."
+
+	| got |
+	got := testModule @env1:non_string_keyword_repr_and_call asArray.
+	self assert: (got at: 1) equals: true.
+	self assert: (got at: 2) equals: true.
+	self assert: (got at: 3) @env0:asString
+		equals: 'TypeError: keywords must be strings'.
+%
+
+category: 'Grail-Tests - keywords'
+method: PartialCallableAndCopyTestCase
+testAKeyWhoseStrMutatesTheKeywordsDict
+	"The repr renders each pair as f'{k}={v!r}', so formatting the KEY runs
+	arbitrary Python -- and here that Python inserts into the very dict being
+	formatted.  The pairs are snapshotted before any formatting runs, which
+	both avoids mutation mid-iteration and keeps the ORIGINAL value as the one
+	printed (CPython's GH-144475 fix)."
+
+	self assert: testModule @env1:keystr_mutating_the_keywords_dict asArray
+		equals: #( true true ).
+%

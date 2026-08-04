@@ -688,10 +688,27 @@ value: morePositional value: moreKw
 					merged := bk @env0:copy.
 					moreKw @env0:keysAndValuesDo: [:k :v | merged @env0:at: k put: v].
 					merged]].
+	"``keywords'' is an ordinary mutable dict, so anything can be put in it
+	(test_manually_adding_non_string_keyword puts 1234 there).  CPython
+	tolerates that until the CALL, where a non-string key is a TypeError --
+	Grail would instead have passed it down and produced whatever the callee
+	made of it.  Costs one isEmpty test on the common keyword-free call."
+	functools_partial ___checkKeywordStrings___: allKw.
 	"value:value: is the universal call protocol -- BoundMethod, class
 	objects (partial(int, base=2)), blocks, and nested partials all
 	dispatch through it; ___pyCallValue___ rejects classes."
 	^ fn value: allArgs value: allKw
+%
+
+category: 'Grail-Calling'
+classmethod: functools_partial
+___checkKeywordStrings___: kw
+	"Raise CPython's TypeError when a keywords dict holds a non-string key."
+
+	(kw == nil or: [kw @env0:isEmpty]) ifTrue: [^ self].
+	kw @env0:keysDo: [:k |
+		(k isKindOf: CharacterCollection) ifFalse: [
+			TypeError ___signal___: 'keywords must be strings']]
 %
 
 category: 'Grail-String Representation'
@@ -744,11 +761,18 @@ __repr__
 	args @env0:do: [:a |
 		stream @env0:nextPutAll: ', '.
 		stream @env0:nextPutAll: (a __repr__) @env0:asString].
-	kw @env0:keysAndValuesDo: [:k :v |
+	"SNAPSHOT the keyword pairs before formatting any of them.  CPython
+	renders each as f''{k}={v!r}'', so the KEY goes through str() -- and a
+	key whose __str__ mutates the keywords dict (test_keystr_replaces_value)
+	would otherwise be mutating the collection mid-iteration.  Capturing
+	pairs up front also keeps the ORIGINAL value alive, which is precisely
+	what that test checks: the value replaced during key formatting must not
+	be the one that gets printed."
+	(functools_partial ___keywordPairs___: kw) @env0:do: [:pair |
 		stream @env0:nextPutAll: ', '.
-		stream @env0:nextPutAll: k @env0:asString.
+		stream @env0:nextPutAll: (self ___keyString___: (pair @env0:at: 1)).
 		stream @env0:nextPutAll: '='.
-		stream @env0:nextPutAll: (v __repr__) @env0:asString].
+		stream @env0:nextPutAll: ((pair @env0:at: 2) __repr__) @env0:asString].
 	stream @env0:nextPut: $).
 	stream @env0:contents]
 		@env0:on: AlmostOutOfStack do: [:ex |
@@ -759,6 +783,37 @@ __repr__
 			RecursionError ___signal___:
 				'maximum recursion depth exceeded while getting the repr of an object']]
 		@env0:ensure: [seen @env0:remove: self otherwise: nil]
+%
+
+category: 'Grail-String Representation'
+classmethod: functools_partial
+___keywordPairs___: kw
+	"kw's (key, value) pairs as a plain Array of 2-element Arrays, detached
+	from the dict.  Formatting a key can run arbitrary Python (__str__), and
+	that Python can mutate the very dict being formatted, so nothing may
+	iterate it live."
+
+	| out |
+	(kw == nil or: [kw @env0:isEmpty]) ifTrue: [^ #()].
+	out := OrderedCollection @env0:new.
+	kw @env0:keysAndValuesDo: [:k :v |
+		out @env0:add: (Array @env0:with: k with: v)].
+	^ out @env0:asArray
+%
+
+category: 'Grail-String Representation'
+method: functools_partial
+___keyString___: aKey
+	"str(key) for the repr.  A keywords dict normally holds only strings, so
+	the common case must not pay for a dispatch; a non-string key is legal
+	because ``keywords'' is an ordinary mutable dict
+	(test_manually_adding_non_string_keyword puts 1234 in one), and CPython
+	formats it with str() rather than repr()."
+
+	(aKey isKindOf: CharacterCollection) ifTrue: [^ aKey @env0:asString].
+	^ [(aKey __str__) @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: aKey @env0:printString]
 %
 
 category: 'Grail-Pickle Protocol'

@@ -150,3 +150,43 @@ def deepcopy_memo_keeps_originals_alive():
     retained = memo.get(id(memo), [])
     # the partial, its args tuple, the ['asdf'] list, the keywords dict, ...
     return [faithful, len(retained) >= 4, src in retained]
+
+
+def non_string_keyword_repr_and_call():
+    """``keywords'' is an ordinary mutable dict, so anything can be put in it.
+
+    CPython tolerates a non-string key until the CALL, where it is a TypeError,
+    and renders it in the repr with str() rather than repr().  Grail passed it
+    straight down to the callee instead.
+
+    Returns [key in repr, value in repr, what calling raises]."""
+    p = functools.partial(capture)
+    p.keywords[1234] = 'value'
+    r = repr(p)
+    try:
+        p()
+        raised = 'no error'
+    except TypeError as e:
+        raised = 'TypeError: ' + str(e)
+    return ['1234' in r, "'value'" in r, raised]
+
+
+def keystr_mutating_the_keywords_dict():
+    """A key whose __str__ mutates the very dict being formatted.
+
+    The repr renders each pair as f'{k}={v!r}', so formatting the KEY runs
+    arbitrary Python -- which here inserts a new entry and replaces the value.
+    Iterating the dict live would be mutation mid-iteration; the ORIGINAL value
+    is what must be printed (CPython's GH-144475 fix).
+
+    Returns [str(key) used, original value printed]."""
+    p = functools.partial(capture)
+
+    class MutatesYourDict(object):
+        def __str__(self):
+            p.keywords[self] = ['sth2']
+            return 'astr'
+
+    p.keywords[MutatesYourDict()] = ['sth']
+    r = repr(p)
+    return ['astr' in r, "['sth']" in r]
