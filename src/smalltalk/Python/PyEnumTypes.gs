@@ -383,8 +383,20 @@ ___grailBuildMembers: cls names: attrNames
 	args (a scalar value -> a 1-tuple); exceptions propagate out of the
 	class definition (test_init_exception).  Value-carrying enums such as
 	the classic Planet(mass, radius) rely on this."
-	hasUserInit := (cls @env0:whichClassIncludesSelector: #'___init__:kw:'
-		environmentId: 1) == cls.
+	"A class-body ``def __init__'' on cls, OR one INHERITED from a non-enum
+	mixin (``class Entries(Foo, Enum)'' where Foo.__init__ sets member
+	slots -- CPython runs the mix-in type's __init__ on each member with its
+	value args).  Exclude the enum base classes and the universal roots so a
+	plain enum (whose only __init__ is Enum's / object's) still skips it."
+	[ | initProvider |
+	initProvider := cls @env0:whichClassIncludesSelector: #'___init__:kw:'
+		environmentId: 1.
+	hasUserInit := (initProvider == cls)
+		or: [(initProvider @env0:notNil)
+			and: [((Enum ___grailIsEnumBase: initProvider) @env0:not)
+			and: [(initProvider == (Python @env0:at: #object otherwise: nil)) @env0:not
+			and: [(initProvider == PythonInstance) @env0:not
+			and: [(initProvider == Object) @env0:not]]]]] ] @env0:value.
 	"A class-body ``def __new__(cls, ...)'' likewise compiles to an env-1
 	INSTANCE method ON cls (self-param bound to cls).  When present, CPython
 	builds each member by running it (member_type construction + user slots)
