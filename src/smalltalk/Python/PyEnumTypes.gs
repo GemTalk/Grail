@@ -1475,8 +1475,8 @@ ___grailInstallClassProtocol: cls
 	| mc |
 	mc := cls @env0:class.
 	#(#'__reversed__' #'mro' #'__repr__' #'__str__' #'__format__:'
-		#'_member_names_' #'_member_map_' #'_value2member_map_' #'_value_repr_'
-		#'_new_member_' #'__dir__' #'__bool__')
+		#'_member_names_' #'_member_map_' #'__members__' #'_value2member_map_'
+		#'_value_repr_' #'_new_member_' #'__dir__' #'__bool__')
 		@env0:do: [:sel |
 			| prov provCat |
 			prov := mc @env0:whichClassIncludesSelector: sel environmentId: 1.
@@ -2090,6 +2090,18 @@ _member_map_
 	rec := Enum ___grailRecordFor: self.
 	rec @env0:isNil ifTrue: [^ KeyValueDictionary @env0:new].
 	^ rec @env0:at: 2
+%
+
+category: 'Grail-Class Attrs'
+classmethod: Enum
+__members__
+	"CPython EnumType.__members__: a read-only (MappingProxyType) view of
+	the name -> member map -- ``cls.__members__''.  Grail returns a SNAPSHOT
+	copy of _member_map_: the tests only READ it (inspect.getmembers,
+	dict(cls.__members__), iteration), and copying keeps a caller from
+	mutating the live registry map through what CPython makes read-only."
+
+	^ self _member_map_ @env0:copy
 %
 
 category: 'Grail-Class Attrs'
