@@ -2104,7 +2104,12 @@ ___pyAttrLoad___: aSym
 	pairs as PythonInstance ones -- the @property pair-read applies
 	equally (CustomInt's ``numerator`` property in test_fractions)."
 	isGenerated := (self isKindOf: PythonInstance)
-		or: [self isKindOf: AbstractPyInt].
+		or: [(self isKindOf: AbstractPyInt)
+		or: [(((self isKindOf: CharacterCollection)
+				or: [(self isKindOf: AbstractPyFloat)
+				or: [self isKindOf: AbstractPyStr]])
+			and: [((Python @env0:at: #Enum otherwise: nil) @env0:notNil)
+				and: [(Enum ___grailRecordFor: self @env0:class) @env0:notNil]])]].
 	"Walk the full class chain for both the unary getter and the
 	1-arg setter — TestResponse(Response) inherits ``status'' /
 	``status:'' through two parent classes; checking only the
