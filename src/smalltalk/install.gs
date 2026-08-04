@@ -516,6 +516,7 @@ run
 	at: #'StaticFunctionDefAst' put: nil;
 	at: #'StoreAst' put: nil;
 	at: #'SubAst' put: nil;
+	at: #'PyGenericAlias' put: nil;
 	at: #'SubscriptAst' put: nil;
 	at: #'SuiteAst' put: nil;
 	at: #'TryAst' put: nil;
@@ -610,6 +611,7 @@ run
 	at: #'DunderClassTestCase' put: nil;
 	at: #'ClassFunctionBindingTestCase' put: nil;
 	at: #'GenericClassSubscriptTestCase' put: nil;
+	at: #'GenericAliasTestCase' put: nil;
 	at: #'GlobalStatementCodegenTestCase' put: nil;
 	at: #'EmailMessageTestCase' put: nil;
 	at: #'EnumAutoImportTestCase' put: nil;
@@ -961,6 +963,7 @@ input src/smalltalk/Python/range_iterator.gs
 input src/smalltalk/Python/set_iterator.gs
 input src/smalltalk/Python/str_iterator.gs
 input src/smalltalk/Python/Tuple.gs
+input src/smalltalk/Python/GenericAlias.gs
 input src/smalltalk/Python/tuple_iterator.gs
 input src/smalltalk/Python/filter_iterator.gs
 input src/smalltalk/Python/map_iterator.gs
@@ -1347,6 +1350,7 @@ input src/smalltalk/PythonTests/DictKwargsTestCase.gs
 input src/smalltalk/PythonTests/DunderClassTestCase.gs
 input src/smalltalk/PythonTests/ClassFunctionBindingTestCase.gs
 input src/smalltalk/PythonTests/GenericClassSubscriptTestCase.gs
+input src/smalltalk/PythonTests/GenericAliasTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementCodegenTestCase.gs
 input src/smalltalk/PythonTests/EnumAutoImportTestCase.gs
 input src/smalltalk/PythonTests/Pep448StarredLiteralsTestCase.gs

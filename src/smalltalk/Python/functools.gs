@@ -518,6 +518,26 @@ __qualname__
 	^ 'partial'
 %
 
+category: 'Grail-Reflection'
+classmethod: functools_partial
+__getitem__: item
+	"``partial[int]'' -- a REAL types.GenericAlias, not Grail's usual
+	collapse to the class itself.
+
+	CPython opts into parameterised generics one class at a time
+	(``partial.__class_getitem__ = classmethod(GenericAlias)''); a class
+	that does not say so has no __class_getitem__ at all.  Grail inverts the
+	default -- Metaclass3 answers the class, because forty-five sites in the
+	vendored frameworks subscript a class only to use it as a BASE and want
+	the subscript discarded -- so opting in means overriding here.
+
+	Inherited by Python subclasses of partial through the metaclass chain,
+	which is what makes ``CPartialSubclass[int].__origin__'' answer the
+	SUBCLASS: self is the receiver, not functools_partial."
+
+	^ PyGenericAlias ___fromSubscript___: item origin: self
+%
+
 category: 'Grail-Instantiation'
 method: functools_partial
 ___new__: positional kw: keywords
