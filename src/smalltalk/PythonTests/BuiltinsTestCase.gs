@@ -926,6 +926,28 @@ testIterCallableSentinel
 	self should: [b @env1:iter: 42 _: 3] raise: TypeError
 %
 
+category: 'Grail-Tests - Sequence Functions'
+method: BuiltinsTestCase
+testIterReturnedNonIterator
+	"iter(x) where x.__iter__() returns a non-iterator (an object with no
+	real __next__) raises TypeError, matching CPython's PyObject_GetIter
+	(test_iter's test_new_style_iter_class).  PythonInstance carries a
+	catchable-TypeError __next__ FALLBACK on every instance, so a plain
+	responds-to check would wrongly accept ``IterClass`` as an iterator;
+	the fix asks ___hasProtocol___: whether __next__ is defined BELOW that
+	fallback level.  A class that DOES define __next__ iterates normally.
+	Uses a loaded module (not inline eval:) because the fixture defines
+	classes."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_noniterator' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_noniterator.py')
+		name: 'grail_noniterator'.
+	self assert: (mod @env1:check)
+%
+
 category: 'Tests - Sequence Functions'
 method: BuiltinsTestCase
 testMemoryviewStub
