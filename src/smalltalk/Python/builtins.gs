@@ -1240,7 +1240,12 @@ ___formatFloatValue___: value parsed: p
 	fill := p @env0:at: 1. align := p @env0:at: 2. sign := p @env0:at: 3.
 	alt := p @env0:at: 4. width := p @env0:at: 5. grouping := p @env0:at: 6.
 	precision := p @env0:at: 7. type := p @env0:at: 8. fracGrouping := p @env0:at: 9.
-	(#($b $o $x $X $c $d $n $s) @env0:includes: type) ifTrue: [
+	"'n' (locale-aware number format) is valid for a float and behaves like
+	'g' -- Grail does not insert locale grouping separators, but the general
+	digit format is the same (test_enum _MinimalOutputTests.test_format_specs
+	formats a float ReprEnum member with '{:n}')."
+	type @env0:= $n ifTrue: [type := $g].
+	(#($b $o $x $X $c $d $s) @env0:includes: type) ifTrue: [
 		ValueError ___signal___: ('Unknown format code for object of type ''float''')].
 	"Non-finite values format as their str with sign/width only."
 	(value @env0:= value) ifFalse: [
