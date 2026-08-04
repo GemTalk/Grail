@@ -948,6 +948,28 @@ testIterReturnedNonIterator
 	self assert: (mod @env1:check)
 %
 
+category: 'Grail-Tests - Sequence Functions'
+method: BuiltinsTestCase
+testIterTypeObjectNotIterable
+	"iter(x) on a TYPE object (iter(list), iter(int)) raises
+	``TypeError: 'type' object is not iterable'', matching CPython.  The
+	type's class is a metaclass, so the ``not iterable'' fallback must
+	report 'type' rather than crash sending env-1 __name__ to a kernel
+	metaclass (test_iter's test_builtin_list/tuple/filter do
+	assertRaises(TypeError, list, list))."
+
+	| msg |
+	self should: [self eval: 'iter(list)'] raise: TypeError.
+	self should: [self eval: 'iter(int)'] raise: TypeError.
+	self should: [self eval: 'list(list)'] raise: TypeError.
+	self should: [self eval: 'tuple(str)'] raise: TypeError.
+	"The message names the metaclass as 'type', as CPython does."
+	msg := [self eval: 'iter(list)'. nil]
+		on: TypeError
+		do: [:ex | ex return: ex messageText].
+	self assert: (msg includesString: '''type'' object is not iterable')
+%
+
 category: 'Tests - Sequence Functions'
 method: BuiltinsTestCase
 testMemoryviewStub
