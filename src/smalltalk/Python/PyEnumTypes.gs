@@ -364,6 +364,15 @@ ___grailBuildMembers: cls names: attrNames
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
+	"Register the (still-empty) record BEFORE the member loop so a member's
+	__new__ can observe the members built so far -- an auto-numbering __new__
+	that reads ``len(cls.__members__)'' (test_inherited_new_from_enhanced_enum /
+	_from_mixed_enum) must count them, and byValue/byName/members are the SAME
+	objects filled in progressively below (a member is added to byName only
+	AFTER its __new__ runs, so member N+1 sees exactly the N prior members).
+	The post-loop registration overwrites this with identical content plus any
+	composite/order handling."
+	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members).
 	lastInt := 0.
 	"maxInt: the running MAXIMUM member value -- Flag auto() numbers from the
 	highest bit seen so far, NOT the last value, so a manual value LOWER
