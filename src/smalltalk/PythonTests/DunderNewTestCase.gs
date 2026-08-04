@@ -1098,12 +1098,12 @@ testMethodLocalSuper
 category: 'Grail-Tests - annotations'
 method: DunderNewTestCase
 testFunctionAnnotations
-	"Local-def __annotations__ (stamped on the closure via ExecBlockAttrs
-	at def-time): parameter + *args/**kw + return annotations as PEP-563
-	SOURCE STRINGS (never evaluated -- forward refs mustn't break module
-	load; 55+ werkzeug/flask modules use ``from __future__ import
-	annotations''), an empty dict for an unannotated def, and forward-
-	reference strings kept verbatim.  Plus
+	"Local-def __annotations__: parameter + *args/**kw + return
+	annotations as PEP 649 VALUES, derived by calling the closure's
+	``__annotate__'' (stamped at def-time) on first read -- so nothing is
+	evaluated during module load, which is what lets 55+ werkzeug/flask
+	modules annotate with forward references.  Plus an empty dict for an
+	unannotated def, a string-LITERAL annotation kept as that string, and
 	functools.singledispatch's annotation-based register (@s.register on
 	an annotated def infers the dispatch type from the first parameter's
 	annotation; forward-ref strings resolve to the class).  ABC-typed
@@ -1122,11 +1122,13 @@ testFunctionAnnotations
 category: 'Grail-Tests - annotations'
 method: DunderNewTestCase
 testPhase2Annotations
-	"Module-level function, instance-method, and class __annotations__
-	(PEP-563 SOURCE STRINGS).  Module functions store theirs on the module
-	instance keyed by name; methods on a class-side ___methodAnnotationsTable___
-	that BoundMethod >> __annotations__ walks up the superclass chain; classes
-	expose their own class-body annotations via a class-side accessor.
+	"Module-level function, instance-method, and class __annotations__.
+	Module functions store their ``__annotate__'' on the module instance
+	keyed by name; methods on a class-side ___methodAnnotationsTable___
+	that BoundMethod >> __annotations__ walks up the superclass chain --
+	both PEP 649 VALUES.  CLASS-BODY annotations are the exception: they
+	still answer source strings, from a class-side accessor built by
+	AnnAssignAst that the __annotate__ conversion has not reached.
 	Verifies: module params/return + empty; class own-only annotations (a
 	subclass reports only ITS annotations, not the parent's; unannotated names
 	excluded); method params/return with ``self'' excluded + empty; an

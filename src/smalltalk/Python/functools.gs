@@ -1138,19 +1138,19 @@ WRAPPER_ASSIGNMENTS
 	wrapped to wrapper.  Also read directly by callers that splice it into
 	a decorator's own signature (jinja2.compiler).
 
-	ONE deviation from CPython 3.14, whose list is
+	CPython 3.14's list exactly.  ``__annotate__'' rather than
+	``__annotations__'' is the whole point of PEP 649 here: copying the
+	annotate FUNCTION hands the wrapper the wrapped function's deferred
+	computation, so an annotation naming something not yet bound is still
+	unresolved on the wrapper and resolves later for both.  Copying the
+	computed dict instead would have forced evaluation at wrap time.
 
-	    ('__module__', '__name__', '__qualname__', '__doc__',
-	     '__annotate__', '__type_params__')
+	check_wrapper asserts identity for every name in this list, so the
+	wrapper and the wrapped must end up sharing the very same annotate
+	function -- which is why it is stamped once at def-time rather than
+	rebuilt per read."
 
-	Grail has no ``__annotate__'' (PEP 649 lazily-evaluated annotations),
-	so ``__annotations__'' -- which Grail computes eagerly at def time --
-	stands in for it.  Naming ``__annotate__'' here would be worse than
-	the deviation: update_wrapper skips a name the WRAPPED object lacks, so
-	nothing would be copied, and the wrapper would then answer
-	AttributeError for a name its own WRAPPER_ASSIGNMENTS advertises."
-
-	^ tuple @env0:withAll: #('__module__' '__name__' '__qualname__' '__doc__' '__annotations__' '__type_params__')
+	^ tuple @env0:withAll: #('__module__' '__name__' '__qualname__' '__doc__' '__annotate__' '__type_params__')
 %
 
 category: 'Grail-Constants'
@@ -2176,13 +2176,18 @@ ___inferRegisterType___: aFunc
 	    (test_register_genericalias_annotation);
 	  * a bare unresolved name -- an unresolved forward reference
 	    (test_unresolved_forward_reference).
-	Grail keeps annotations as PEP 563 SOURCE STRINGS, which is what makes
-	the first case detectable at all: ``arg: list[int]'' arrives as the
-	string ``list[int]''.  The runtime value would not help -- Grail's
-	__class_getitem__ is an identity stub, so ``list[int] is list''."
+	This reads the annotations in PEP 649's ``Format.STRING'' -- the source
+	text -- rather than ``__annotations__'', which since PEP 649 answers
+	VALUES.  The source text is what makes the first case detectable at
+	all: ``arg: list[int]'' arrives as the string ``list[int]'', whereas
+	its VALUE is just ``list'' -- Grail's __class_getitem__ is an identity
+	stub, so ``list[int] is list'' and a subscripted annotation would
+	silently register the unsubscripted class instead of raising.  When
+	__class_getitem__ answers real PyGenericAlias objects for these
+	classes, this can read values and test them directly."
 
 	| ann candidate paramName text |
-	ann := [aFunc __annotations__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	ann := self ___annotationSourceStrings___: aFunc.
 	(ann @env0:isNil or: [ann @env0:isEmpty]) ifTrue: [
 		TypeError ___signal___:
 			'Invalid first argument to `register()`: no type annotation found'].
@@ -2234,6 +2239,32 @@ ___inferRegisterType___: aFunc
 				@env0:, '''. ' @env0:, text
 				@env0:, ' is an unresolved forward reference.']].
 	^ (self ___registryKey___: candidate) @env0:ifNil: [candidate]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___annotationSourceStrings___: aFunc
+	"aFunc's annotations as SOURCE TEXT -- PEP 649's ``Format.STRING'' --
+	or nil when aFunc has none or they cannot be obtained.
+
+	Asking the annotate function for STRING rather than reading
+	``__annotations__'' matters because STRING never evaluates anything:
+	an annotation naming something not yet bound is exactly the forward
+	reference this method has to diagnose, and evaluating it would raise
+	NameError here instead.
+
+	Falls back to ``__annotations__'' for a callable with no annotate
+	function -- a method reached through a BoundMethod keeps its
+	annotations on the defining class rather than carrying one."
+
+	| annotate |
+	annotate := [aFunc @env1:__annotate__]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(annotate isKindOf: ExecBlock) ifFalse: [
+		^ [aFunc __annotations__]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	^ [annotate @env0:value: { 4 } value: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
 %
 
 category: 'Grail-Single Dispatch'

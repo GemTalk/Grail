@@ -266,10 +266,10 @@ category: 'Grail-Tests-FunctionMetadata'
 method: FunctionMetadataTestCase
 testWrapperAssignmentsMatchesCPythonShape
 	"Third-party code reads the constant directly (jinja2.compiler splices
-	it into a decorator's signature).  Grail names __annotations__ where
-	CPython 3.14 names __annotate__: annotations are computed eagerly and
-	there is no PEP 649 __annotate__, and naming a missing attribute would
-	make update_wrapper advertise a name its wrappers can't answer."
+	it into a decorator's signature).  CPython 3.14's list exactly,
+	including PEP 649's ``__annotate__'' -- copying the annotate FUNCTION
+	is what lets a wrapper share the wrapped function's deferred
+	annotations instead of forcing them at wrap time."
 
 	self assert: self loadFixture @env1:wrapper_assignments_matches_cpython_shape
 		equals: true

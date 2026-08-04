@@ -1020,12 +1020,15 @@ def _annotations_results():
 
     fa = f.__annotations__
     out = {}
-    # PEP 563: annotations are stored as source strings (never
-    # evaluated -- forward refs to not-yet-defined names must not
-    # break module load).
-    out['params'] = (fa["x"] == "int" and fa["args"] == "float"
-                     and fa["kw"] == "bool" and fa["return"] == "bool")
+    # PEP 649: __annotations__ holds the evaluated VALUES.  The
+    # expressions are not evaluated at def-time -- reading the attribute
+    # is what runs them, so a forward reference to a name bound later in
+    # the module still works.
+    out['params'] = (fa["x"] is int and fa["args"] is float
+                     and fa["kw"] is bool and fa["return"] is bool)
     out['empty'] = (len(g.__annotations__) == 0)
+    # A STRING-literal annotation evaluates to that string, in CPython as
+    # here: only annotationlib resolves it further.
     out['forwardref'] = (h.__annotations__["arg"] == "int")
 
     @functools.singledispatch
@@ -1082,11 +1085,21 @@ def _phase2_annotations_results():
     out = {}
     # Module-level function annotations (BoundMethod resolves via the module).
     ma = mod_annotated.__annotations__
-    out['mod_params'] = (ma["a"] == "int" and ma["b"] == "Later"
-                         and ma["rest"] == "float" and ma["return"] == "str")
+    # PEP 649 values, except "Later" -- a string LITERAL annotation, which
+    # evaluates to that string.
+    # ``== str``, not ``is str``: referencing a builtin whose Grail
+    # representation is a method handle mints a FRESH one each time, so
+    # identity does not hold where equality does (BoundMethod compares on
+    # receiver + selector).  int/float/bool are real classes and compare
+    # by identity.
+    out['mod_params'] = (ma["a"] is int and ma["b"] == "Later"
+                         and ma["rest"] is float and ma["return"] == str)
     out['mod_empty'] = (len(mod_plain.__annotations__) == 0)
 
-    # Class annotations (own-only; PEP 563 strings; unannotated names excluded).
+    # Class-body annotations (own-only; unannotated names excluded).  These
+    # are still SOURCE STRINGS: class-body ``x: int'' is stored by a
+    # different path (a class-side accessor built from AnnAssignAst) that
+    # PEP 649's __annotate__ conversion has not reached yet.
     ca = _AnnHolder.__annotations__
     out['class_ann'] = (ca["x"] == "int" and ca["y"] == "Later"
                         and "z" not in ca)
@@ -1097,14 +1110,14 @@ def _phase2_annotations_results():
     # Method annotations via an instance's bound method (self excluded).
     inst = _AnnHolder()
     mm = inst.m.__annotations__
-    out['method_ann'] = (mm["p"] == "int" and mm["q"] == "str"
-                         and mm["return"] == "bool" and "self" not in mm)
+    out['method_ann'] = (mm["p"] is int and mm["q"] == str
+                         and mm["return"] is bool and "self" not in mm)
     out['method_empty'] = (len(inst.plain.__annotations__) == 0)
     # Inherited method resolves to where it was defined; child's own too.
     child = _AnnChild()
-    out['inherited_method'] = (child.m.__annotations__["p"] == "int")
+    out['inherited_method'] = (child.m.__annotations__["p"] is int)
     out['child_method'] = (child.child_m.__annotations__["r"] == "int"
-                           and child.child_m.__annotations__["return"] == "None")
+                           and child.child_m.__annotations__["return"] is None)
     return out
 
 

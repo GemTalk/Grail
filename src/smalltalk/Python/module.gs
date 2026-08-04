@@ -683,12 +683,15 @@ ___functionAnnotationsTable___
 
 category: 'Grail-Annotations'
 method: module
-___setFunctionAnnotations___: aName dict: aDict
-	"Record a module-level function's __annotations__ (PEP 563 source
-	strings).  FunctionDefAst emits a call to this at module-body eval
-	time for every annotated top-level def.  Keyed by the plain Python
-	name -- exactly the selector a lazily-wrapped module-function
-	BoundMethod carries -- so BoundMethod >> __annotations__ can find it."
+___setFunctionAnnotations___: aName annotate: aBlock
+	"Record a module-level function's PEP 649 ``__annotate__''.
+	FunctionDefAst emits a call to this at module-body eval time for every
+	annotated top-level def.  Keyed by the plain Python name -- exactly
+	the selector a lazily-wrapped module-function BoundMethod carries --
+	so BoundMethod >> __annotations__ can find it.
+
+	The BLOCK is stored, not the dict it computes: at module-body eval
+	time the annotation expressions may well name things not yet bound."
 
 	| tbl inner |
 	tbl := module ___functionAnnotationsTable___.
@@ -696,21 +699,34 @@ ___setFunctionAnnotations___: aName dict: aDict
 	inner isNil ifTrue: [
 		inner := KeyValueDictionary new.
 		tbl at: self put: inner].
-	inner at: aName asString put: aDict.
+	inner at: aName asString put: aBlock.
 	^ self
 %
 
 category: 'Grail-Annotations'
 method: module
-___functionAnnotationsFor___: aName
-	"The stored __annotations__ dict for a module-level function, or an
-	empty dict when the function carried no annotations."
+___functionAnnotateFor___: aName
+	"The stored ``__annotate__'' block for a module-level function, or nil
+	when the function carried no annotations."
 
 	| tbl inner |
 	tbl := module ___functionAnnotationsTable___.
 	inner := tbl at: self otherwise: nil.
-	inner isNil ifTrue: [^ KeyValueDictionary new].
-	^ inner at: aName asString otherwise: KeyValueDictionary new
+	inner isNil ifTrue: [^ nil].
+	^ inner at: aName asString otherwise: nil
+%
+
+category: 'Grail-Annotations'
+method: module
+___functionAnnotationsFor___: aName
+	"The __annotations__ dict for a module-level function -- its
+	``__annotate__'' called with Format.VALUE -- or an empty dict when the
+	function carried no annotations."
+
+	| annotate |
+	annotate := self ___functionAnnotateFor___: aName.
+	annotate isNil ifTrue: [^ KeyValueDictionary new].
+	^ annotate value: { 1 } value: nil
 %
 
 category: 'Grail-Module Defaults'
