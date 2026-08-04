@@ -146,8 +146,9 @@ __getitem__: index
 			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
 		TypeError ___signal___: ('range indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
+	"Fetch the index via __index__ (see SequenceableCollection>>__getitem__:)."
+	idx := index ___asIndex___.
 	size := self @env0:size.
-	idx := index.
 
 	"Handle negative indices"
 	(idx @env0:< 0) ifTrue: [

@@ -2503,6 +2503,69 @@ __dir__
 	^ ((result @env0:asSet) @env0:asSortedCollection) @env0:asArray
 %
 
+category: 'Grail-Numeric Protocol'
+method: object
+___asIndex___
+	"This object as an integer index, honoring __index__ (PEP 357) -- CPython's
+	PyNumber_AsSsize_t / operator.index().
+
+	Callers used to only PROBE for __index__ (``does this class define it?'')
+	and then hand the object itself to env-0 arithmetic, so every sequence
+	operation on an __index__ object died on an uncatchable DNU: ``a newstyle
+	does not understand #'<''' (32 of test_index's 34 errors), or #asInteger in
+	str.__mul__.  Probing is not enough -- the value has to be FETCHED.
+
+	__index__ runs Python code, which may mutate the receiving sequence, so a
+	caller must re-read its size AFTER coercing (see bytearray.__setitem__).
+	A non-integer result is CPython's TypeError, named with the type, and an
+	object with no __index__ at all gets the ``cannot be interpreted as an
+	integer'' TypeError -- callers wanting the sequence-specific wording
+	(``list indices must be integers or slices, not str'') raise it themselves
+	BEFORE calling here, which is what the existing guards do."
+
+	(self isKindOf: Integer) ifTrue: [^ self].
+	(self ___respondsTo___: #'__index__') ifTrue: [
+		| v |
+		v := self __index__.
+		(v isKindOf: Integer) ifTrue: [^ v].
+		TypeError ___signal___: ('__index__ returned non-int (type '
+			@env0:, (v @env0:class @env1:__name__) @env0:asString @env0:, ')')].
+	TypeError ___signal___: ('''' @env0:, (self @env0:class @env1:__name__) @env0:asString
+		@env0:, ''' object cannot be interpreted as an integer')
+%
+
+category: 'Grail-Numeric Protocol'
+method: object
+___asRepeatCount___
+	"This object as a sequence-repetition count: ___asIndex___ plus CPython's
+	index-sized range check.  ``'a' * 2**100'' is an OverflowError in CPython
+	because the count cannot fit a Py_ssize_t; Grail used to attempt the build
+	and take the whole session down with AlmostOutOfMemory
+	(test_index.OverflowTestCase.test_sequence_repeat).  The NEGATIVE side
+	raises too -- -2**100 does not fit either, and CPython checks the fit
+	BEFORE it checks the sign, so it never reaches the ``count <= 0 means
+	empty'' rule."
+
+	| v |
+	v := self ___asIndex___.
+	((v @env0:> 9223372036854775807)
+		or: [v @env0:< -9223372036854775808]) ifTrue: [
+		OverflowError ___signal___:
+			'cannot fit ''int'' into an index-sized integer'].
+	^ v
+%
+
+category: 'Grail-Numeric Protocol'
+method: object
+___asIndexOrNil___
+	"___asIndex___ for an OPTIONAL bound: nil and the Python None singleton
+	pass through untouched (an unset slice bound), everything else coerces."
+
+	self @env0:isNil ifTrue: [^ nil].
+	(self @env0:== None) ifTrue: [^ self].
+	^ self ___asIndex___
+%
+
 category: 'Grail-Comparison'
 method: object
 ___varargsDunder___: kwSelector with: other

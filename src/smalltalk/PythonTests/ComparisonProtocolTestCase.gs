@@ -272,3 +272,75 @@ testDecimalComparesAcrossTheNumericTower
 	self assert: (d @env1:__getitem__: 'dec_lt_fraction') equals: true.
 	self assert: (d @env1:__getitem__: 'dec_lt_complex') equals: 'type-error'
 %
+
+category: 'Grail-Tests - Index protocol'
+method: ComparisonProtocolTestCase
+testIndexObjectsDriveEverySequenceOperation
+	"PEP 357: an object with __index__ is usable wherever an integer index is.
+	Every sequence op used to only PROBE for __index__ and then hand the
+	OBJECT to env-0 arithmetic, so it died on an uncatchable ``a newstyle does
+	not understand #<'' -- 32 of test_index's 34 errors.  The value has to be
+	FETCHED (object>>___asIndex___)."
+
+	| d |
+	d := self resultAt: 'index_ops'.
+	#('list' 'tuple' 'str' 'bytes' 'bytearray' 'range') do: [:kind |
+		#('_getitem' '_getitem_neg' '_slice' '_slice_open' '_slice_step')
+			do: [:op |
+				self assert: ((d @env1:__getitem__: kind , op) = true)
+					description: kind , op]].
+	#('list_mul' 'list_rmul' 'tuple_mul' 'str_mul' 'str_rmul' 'list_imul'
+	  'list_setitem' 'list_delitem' 'opindex_plain' 'opindex_obj')
+		do: [:key |
+			self assert: ((d @env1:__getitem__: key) = true) description: key]
+%
+
+category: 'Grail-Tests - Index protocol'
+method: ComparisonProtocolTestCase
+testOperatorIndexUsesAnIntSubclassValueNotItsDunder
+	"CPython's PyNumber_Index answers an int's own value even for a SUBCLASS,
+	without consulting __index__: MyInt(7).__index__() is 8, but
+	operator.index(MyInt(7)) is 7 (test_index.test_int_subclass_with_index).
+	operator.py was a bare ``return a.__index__()''."
+
+	| d |
+	d := self resultAt: 'index_ops'.
+	self assert: (d @env1:__getitem__: 'opindex_int_subclass_uses_value')
+		equals: true.
+	self assert: (d @env1:__getitem__: 'int_subclass_dunder_still_8')
+		equals: true
+%
+
+category: 'Grail-Tests - Index protocol'
+method: ComparisonProtocolTestCase
+testIndexErrorsAreCatchable
+	"A non-int __index__ result, a missing __index__, a float subscript: all
+	catchable TypeError with CPython's wording.  ``'a' * 2**100'' is an
+	OverflowError -- Grail used to attempt the allocation and bring the
+	session down with AlmostOutOfMemory (test_index.OverflowTestCase)."
+
+	| d |
+	d := self resultAt: 'index_errors'.
+	#('nonint_index_result' 'nonint_slice_bound' 'opindex_nonint_result'
+	  'opindex_no_index' 'float_index') do: [:key |
+		self assert: ((d @env1:__getitem__: key) = 'type-error')
+			description: key].
+	#('repeat_huge' 'repeat_huge_negative' 'repeat_huge_list') do: [:key |
+		self assert: ((d @env1:__getitem__: key) = 'overflow')
+			description: key].
+	self assert: (d @env1:__getitem__: 'str_index_msg')
+		equals: 'string indices must be integers, not NoneType'.
+	self assert: (d @env1:__getitem__: 'list_index_msg')
+		equals: 'list indices must be integers or slices, not NoneType'
+%
+
+category: 'Grail-Tests - Index protocol'
+method: ComparisonProtocolTestCase
+testIndexReturningAnIntSubclassWarns
+	"CPython deprecates __index__ answering a strict int subclass (True, say):
+	DeprecationWarning, and the result is normalized to an exact int
+	(test_index.test_index_returns_int_subclass)."
+
+	self assert: (self resultAt: 'index_deprecation') asArray
+		equals: #( true true true )
+%
