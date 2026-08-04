@@ -82,7 +82,7 @@ printSmalltalkRuntimeOn: aStream
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames
 	  savedInBodyEmit savedBoundNames savedNestedNames
 	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars
-	  siblings |
+	  siblings savedConditionalNames |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -667,6 +667,8 @@ printSmalltalkRuntimeOn: aStream
 	CallAst classNestedClassNames: (IdentitySet withAll:
 		((body body select: [:stmt | stmt isKindOf: ClassDefAst])
 			collect: [:c | c name asSymbol])).
+	savedConditionalNames := CallAst classBodyConditionalNames.
+	CallAst classBodyConditionalNames: self ___classBodyConditionalNames___.
 	CallAst inClassBodyValueEmit: true.
 	"NESTED CLASSES (``class Outer: class A: ...``) -- previously
 	dropped entirely.  Emit each nested classdef inside a bracketed
@@ -794,6 +796,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst inClassBodyValueEmit: (savedInBodyEmit == true).
 		CallAst classBodyBoundNames: savedBoundNames.
 		CallAst classNestedClassNames: savedNestedNames.
+		CallAst classBodyConditionalNames: savedConditionalNames.
 	].
 	"NamedTuple-style classes get a ``_fields'' accessor/setter pair
 	on the metaclass, initialised to a tuple of declaration-order
@@ -2027,13 +2030,15 @@ category: 'Grail-Class Compilation'
 method: ClassDefAst
 emitClassBodyIfBranch: aSuite on: aStream
 	"One branch of a class-body ``if'': simple NAME = value assignments
-	become per-class dynamic-attr stores on the class temp; nested ifs
-	recurse.  Anything else is dropped (same as before this feature)."
+	and ``def''s become per-class dynamic-attr stores on the class temp;
+	nested ifs recurse.  Anything else is dropped (same as before)."
 
 	(aSuite isNil or: [aSuite body isNil]) ifTrue: [^ self].
 	aSuite body do: [:stmt |
 		(stmt isKindOf: IfAst) ifTrue: [
 			self emitClassBodyIf: stmt on: aStream].
+		(stmt isKindOf: FunctionDefAst) ifTrue: [
+			self emitClassBodyIfDef: stmt on: aStream].
 		((stmt isKindOf: AssignAst)
 			and: [stmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
 			stmt targets do: [:t |
@@ -2051,6 +2056,84 @@ emitClassBodyIfBranch: aSuite on: aStream
 				nextPutAll: ''' put: '.
 			stmt value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPutAll: '.'; lf]]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+emitClassBodyIfDef: aDef on: aStream
+	"A ``def'' inside a class-body ``if'' branch.  It cannot be compiled as
+	a Smalltalk METHOD the way an unconditional class-body def is: whether
+	it exists at all is a runtime fact, and both branches of the same if
+	would otherwise install the same selector with the last emit winning.
+
+	So emit it as a VALUE -- the nested-def block form -- into a bracketed
+	scope whose block temp gives FunctionDefAst >> printSmalltalkOn: the
+	``<name> := ...'' target it expects (and gives its decorator chain the
+	same target to rebind), then store the result in the per-class dynamic
+	attr store.  A plain function stored there binds the receiver on an
+	instance read and comes back raw on a class read, which is exactly what
+	CPython does with a function in a class namespace.
+
+	@staticmethod / @classmethod reach here re-classed by the parser rather
+	than carrying a runtime decorator, so the wrapper that would otherwise
+	have been applied structurally is applied here instead -- PyStaticMethod
+	suppresses the receiver bind, PyClassMethod redirects it to the owner."
+
+	| fname wrapper savedValueDefNode |
+	fname := aDef name asString.
+	wrapper := (aDef isKindOf: StaticFunctionDefAst)
+		ifTrue: ['PyStaticMethod']
+		ifFalse: [(aDef isKindOf: ClassFunctionDefAst)
+			ifTrue: ['PyClassMethod']
+			ifFalse: [nil]].
+	aStream nextPutAll: '[ | '; nextPutAll: fname; nextPutAll: ' |'; lf.
+	savedValueDefNode := CallAst classBodyValueDefNode.
+	CallAst classBodyValueDefNode: aDef.
+	[aDef printSmalltalkOn: aStream]
+		ensure: [CallAst classBodyValueDefNode: savedValueDefNode].
+	aStream lf;
+		nextPutAll: name;
+		nextPutAll: ' @env1:___pyAttrStore___: #''';
+		nextPutAll: fname;
+		nextPutAll: ''' put: '.
+	wrapper
+		ifNil: [aStream nextPutAll: fname]
+		ifNotNil: [aStream nextPutAll: '('; nextPutAll: wrapper;
+			nextPutAll: ' value: { '; nextPutAll: fname; nextPutAll: ' } value: nil)'].
+	aStream nextPutAll: '. ] value.'; lf
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyConditionalNames___
+	"Every name bound inside a top-level class-body ``if'' (either branch,
+	recursively).  These have no accessor pair -- emitClassBodyIfBranch:on:
+	stores them in the per-class dynamic attr store -- so NameAst needs the
+	set to know to read them from there rather than fall straight through to
+	module scope."
+
+	| names collect |
+	names := IdentitySet new.
+	collect := nil.
+	collect := [:suite |
+		(suite notNil and: [suite body notNil]) ifTrue: [
+			suite body do: [:stmt |
+				(stmt isKindOf: IfAst) ifTrue: [
+					collect value: stmt body.
+					collect value: stmt orelse].
+				(stmt isKindOf: FunctionDefAst) ifTrue: [
+					names add: stmt name asSymbol].
+				((stmt isKindOf: AssignAst)
+					and: [stmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
+					stmt targets do: [:t | names add: t id asSymbol]].
+				((stmt isKindOf: AnnAssignAst)
+					and: [(stmt target isKindOf: NameAst) and: [stmt value notNil]]) ifTrue: [
+					names add: stmt target id asSymbol]]]].
+	body body do: [:stmt |
+		(stmt isKindOf: IfAst) ifTrue: [
+			collect value: stmt body.
+			collect value: stmt orelse]].
+	^ names
 %
 
 category: 'Grail-accessing'
