@@ -141,6 +141,46 @@ abs(-5)') equals: 5
 
 category: 'Grail-Tests - Backlog Fixes'
 method: BuiltinsTestCase
+testNestedClassStringLiteralNewline
+	"A string literal containing a newline, in a method of a class defined
+	INSIDE a nested block (try/for/if), keeps its exact value.  ClassDefAst
+	embeds each compiled method's source as a Smalltalk string literal, and
+	writing it char-by-char through the pretty-printer spliced indentCount
+	tabs after every newline -- so a newline embedded in the method's own
+	string constants gained one stray tab per nesting level (test_iter
+	test_writelines).  Uses a loaded module because the fixture defines
+	classes."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_nested_class_strlit' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_nested_class_strlit.py')
+		name: 'grail_nested_class_strlit'.
+	self assert: (mod @env1:check)
+%
+
+category: 'Grail-Tests - Backlog Fixes'
+method: BuiltinsTestCase
+testWritelinesIterableProtocol
+	"file.writelines(x) iterates x via the Python protocol: a non-iterable
+	(None/int) raises a catchable TypeError instead of a Smalltalk #do:
+	MNU, a dict yields its KEYS, and a large custom iterator defined inside a
+	try block writes every element in order (test_iter test_writelines).
+	Uses a loaded module because the fixture defines classes and does file
+	I/O."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_writelines' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_writelines.py')
+		name: 'grail_writelines'.
+	self assert: (mod @env1:check)
+%
+
+category: 'Grail-Tests - Backlog Fixes'
+method: BuiltinsTestCase
 testDictContainsHeterogeneousKeys
 	"``key in d'' must not crash when d mixes hashable key types whose
 	pairwise == is NotImplemented (a complex key beside str keys).  The
