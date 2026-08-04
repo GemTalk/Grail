@@ -122,7 +122,36 @@ def contains(a, b):
 
 
 def index(a):
-    return a.__index__()
+    "Same as a.__index__()."
+    # CPython's PyNumber_Index, not a bare a.__index__() call.  Three things
+    # that distinction decides, all pinned by test_index:
+    #   * an int -- INCLUDING a subclass -- answers its own value and its
+    #     __index__ is NOT consulted (test_int_subclass_with_index: MyInt(7)
+    #     .__index__() is 8 but operator.index(MyInt(7)) is 7);
+    #   * a missing __index__ is a TypeError, not an AttributeError (test_error);
+    #   * a non-int result is a TypeError, and an int-SUBCLASS result (True,
+    #     say) is a DeprecationWarning plus normalization to an exact int
+    #     (test_index_returns_int_subclass).
+    if isinstance(a, int):
+        return int(a)
+    try:
+        meth = a.__index__
+    except AttributeError:
+        raise TypeError("'%s' object cannot be interpreted as an integer"
+                        % type(a).__name__)
+    r = meth()
+    if not isinstance(r, int):
+        raise TypeError('__index__ returned non-int (type %s)'
+                        % type(r).__name__)
+    if type(r) is not int:
+        import warnings
+        warnings.warn('__index__ returned non-int (type %s).  '
+                      'The ability to return an instance of a strict subclass '
+                      'of int is deprecated, and may be removed in a future '
+                      'version of Python.' % type(r).__name__,
+                      DeprecationWarning, stacklevel=2)
+        return int(r)
+    return r
 
 
 def length_hint(obj, default=0):

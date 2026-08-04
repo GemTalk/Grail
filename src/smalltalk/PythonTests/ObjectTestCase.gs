@@ -83,7 +83,13 @@ test__doc__
 category: 'Grail-Comparison'
 method: ObjectTestCase
 test__eq__
-	"Test that __eq__ works correctly"
+	"Test that __eq__ works correctly.
+
+	object.__eq__ answers True for the same object and NotImplemented for
+	anything else -- CPython's contract, and what lets ``x == ALWAYS_EQ'' run
+	the reflected __eq__ instead of settling for False.  The FALSE comes from
+	the operator ___cmpEq___:, which is what compiled Python sends, so assert
+	both: the dunder punts, the operator decides."
 
 	| obj1 obj2 |
 	obj1 := object @env1:__new__.
@@ -91,10 +97,12 @@ test__eq__
 
 	"Same object should be equal to itself"
 	self assert: (obj1 @env1:__eq__: obj2).
+	self assert: (obj1 @env1:___cmpEq___: obj2).
 
 	"Different objects should not be equal"
 	obj2 := object @env1:__new__.
-	self deny: (obj1 @env1:__eq__: obj2)
+	self assert: (obj1 @env1:__eq__: obj2) == #'___NotImplemented___'.
+	self deny: (obj1 @env1:___cmpEq___: obj2)
 %
 
 category: 'Grail-Hashing & Identity'
@@ -139,7 +147,8 @@ test__init_subclass__
 category: 'Grail-Comparison'
 method: ObjectTestCase
 test__ne__
-	"Test that __ne__ works correctly"
+	"Test that __ne__ works correctly.  See test__eq__: the dunder punts with
+	NotImplemented for a non-matching operand, the operator answers."
 
 	| obj1 obj2 |
 	obj1 := object @env1:__new__.
@@ -147,10 +156,12 @@ test__ne__
 
 	"Same object should not be not-equal to itself"
 	self deny: (obj1 @env1:__ne__: obj2).
+	self deny: (obj1 @env1:___cmpNe___: obj2).
 
 	"Different objects should be not-equal"
 	obj2 := object @env1:__new__.
-	self assert: (obj1 @env1:__ne__: obj2)
+	self assert: (obj1 @env1:__ne__: obj2) == #'___NotImplemented___'.
+	self assert: (obj1 @env1:___cmpNe___: obj2)
 %
 
 category: 'Grail-Initialization'

@@ -245,7 +245,11 @@ discard: item
 	probe := (item isKindOf: set) ifTrue: [frozenset @env1:__new__: item] ifFalse: [item].
 	probe ___requireHashableAsSetElement___.
 	self @env0:do: [:each |
-		(each __eq__: probe) ifTrue: [
+		"___pyRichEqBool___, not the raw dunder: __eq__ legitimately answers
+		NotImplemented (a str element against a frozenset probe, say), and a
+		Symbol in a Boolean position is an uncatchable ImproperOperation.  The
+		helper does identity-first, then the full rich ==, then coerces."
+		(each ___pyRichEqBool___: probe) ifTrue: [
 			self @env0:remove: each.
 			^ nil
 		]
@@ -311,7 +315,8 @@ remove: item
 	probe ___requireHashableAsSetElement___.
 	removed := false.
 	self @env0:do: [:each |
-		(each __eq__: probe) ifTrue: [
+		"See discard: -- the raw dunder can answer NotImplemented."
+		(each ___pyRichEqBool___: probe) ifTrue: [
 			self @env0:remove: each.
 			removed := true.
 			^ nil

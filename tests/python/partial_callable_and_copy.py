@@ -127,3 +127,26 @@ def partial_over_partial_no_longer_raises():
     except TypeError as e:
         return 'TypeError: ' + str(e)
     return 'called, keywords=' + repr(result[1])
+
+def deepcopy_memo_keeps_originals_alive():
+    """The deepcopy memo is keyed by id(), and Grail RECYCLES id slots once an
+    object is collected -- so a temporary that dies mid-copy can hand its id to
+    a later object, whose memo lookup then returns that dead entry's copy.  It
+    surfaced as deepcopy(partial(f, ['asdf'])) answering [[<BoundMethod>]] for
+    ['asdf'] (test_functools.TestPartialC.test_deepcopy), and only for certain
+    allocation patterns -- so assert the MECHANISM, not a timing-dependent
+    symptom: after a copy through the pickle-protocol branch (which builds a
+    ``list(args)'' temporary), the memo must still hold references to the
+    originals it memoized.
+
+    Returns [copy is faithful, originals were retained]."""
+    src = functools.partial(capture, ['asdf'], bar=[True])
+    src.attr = []
+    memo = {}
+    dst = copy.deepcopy(src, memo)
+    faithful = (dst.args == src.args
+                and dst.args[0] == ['asdf']
+                and dst.keywords == src.keywords)
+    retained = memo.get(id(memo), [])
+    # the partial, its args tuple, the ['asdf'] list, the keywords dict, ...
+    return [faithful, len(retained) >= 4, src in retained]

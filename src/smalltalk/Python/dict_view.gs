@@ -323,7 +323,9 @@ __iter__
 category: 'Grail-Collection Protocol'
 method: dict_values
 __contains__: v
-	mapping @env0:valuesDo: [:each | (each __eq__: v) @env0:ifTrue: [^ true]].
+	"___pyRichEqBool___, not the raw dunder: __eq__ may answer NotImplemented
+	for a foreign operand, which is not a Boolean."
+	mapping @env0:valuesDo: [:each | (each ___pyRichEqBool___: v) @env0:ifTrue: [^ true]].
 	^ false
 %
 
