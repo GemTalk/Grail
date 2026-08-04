@@ -1,16 +1,17 @@
 # CPython 3.14.4 Regression Suite Scoreboard — Grail
 
-Generated: 2026-07-31T16:03:49Z  ·  GemStone: GemStone64Bit4.0.0-arm64.Darwin
-
-**Modules: 31** — OK 24 · FAIL 0 · ERROR 7 · SKIP 0 · IMPORTERROR 0 · STERROR 0 · CRASH 0 · TIMEOUT 0
-
-**Totals:** tests=4188 failures=388 errors=224 skipped=207
-
 Status legend: OK (all pass) · FAIL (assertion failures) · ERROR (exceptions in tests) · SKIP (all skipped / none discovered) · IMPORTERROR (module/support import failed) · STERROR (uncatchable Smalltalk error escaped) · CRASH (topaz died, e.g. SIGSEGV) · TIMEOUT.
 
 This is a measurement harness over a curated starter set, not the full
 ~480-module suite. See scripts/cpython_suite_manifest.txt and
 scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
+
+Run timestamp and aggregate totals are intentionally NOT committed here:
+they change on every run and would collide across concurrent sessions
+even when the sessions edit different modules.  Find them in
+out/cpython/scoreboard.json (gitignored) or this script's stdout summary.
+Only the per-test rows below are committed, so unrelated work touches
+different rows and merges cleanly.
 
 | Module | Status | tests | fail | err | skip | detail |
 |--------|--------|------:|-----:|----:|-----:|--------|
@@ -22,9 +23,9 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_bisect | OK | 46 | 0 | 0 | 0 |  |
 | test.test_operator | OK | 110 | 0 | 0 | 0 |  |
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
-| test.test_datetime | ERROR | 525 | 75 | 39 | 2 |  |
+| test.test_datetime | ERROR | 525 | 77 | 37 | 2 |  |
 | test.test_re | OK | 165 | 0 | 0 | 28 |  |
-| test.test_functools | ERROR | 325 | 71 | 58 | 6 |  |
+| test.test_functools | ERROR | 325 | 26 | 25 | 6 |  |
 | test.test_list | OK | 68 | 0 | 0 | 3 |  |
 | test.test_tuple | OK | 38 | 0 | 0 | 6 |  |
 | test.test_dict | OK | 120 | 0 | 0 | 20 |  |
@@ -32,7 +33,7 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_bytes | OK | 316 | 0 | 0 | 22 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
-| test.test_enum | ERROR | 1077 | 227 | 94 | 1 |  |
+| test.test_enum | ERROR | 1077 | 99 | 47 | 1 |  |
 | test.test_unary | OK | 6 | 0 | 0 | 0 |  |
 | test.test_int_literal | OK | 6 | 0 | 0 | 0 |  |
 | test.test_unpack | OK | 1 | 0 | 0 | 0 |  |
@@ -41,7 +42,26 @@ scripts/run_cpython_suite.sh. Per-module logs: out/cpython/<module>.out.
 | test.test_dictcomps | OK | 10 | 0 | 0 | 0 |  |
 | test.test_setcomps | OK | 1 | 0 | 0 | 0 |  |
 | test.test_pow | OK | 7 | 0 | 0 | 0 |  |
-| test.test_richcmp | ERROR | 11 | 1 | 2 | 0 |  |
-| test.test_slice | ERROR | 11 | 2 | 2 | 0 |  |
-| test.test_bool | ERROR | 31 | 8 | 6 | 0 |  |
-| test.test_iter | ERROR | 58 | 4 | 23 | 1 |  |
+| test.test_richcmp | OK | 11 | 0 | 0 | 0 |  |
+| test.test_slice | OK | 11 | 0 | 0 | 0 |  |
+| test.test_bool | OK | 31 | 0 | 0 | 0 |  |
+| test.test_iter | ERROR | 57 | 2 | 7 | 1 |  |
+| test.test_traceback | IMPORTERROR | 0 | 0 | 0 | 0 | BoundMethod object has no attribute '__code__' |
+| test.test_compare | OK | 16 | 0 | 0 | 0 |  |
+| test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
+| test.test_keywordonlyarg | ERROR | 11 | 3 | 1 | 0 |  |
+| test.test_dictviews | ERROR | 16 | 2 | 3 | 0 |  |
+| test.test_sort | FAIL | 21 | 4 | 0 | 0 |  |
+| test.test_generator_stop | ERROR | 2 | 0 | 2 | 0 |  |
+| test.test_userdict | ERROR | 28 | 3 | 3 | 0 |  |
+| test.test_userlist | ERROR | 54 | 4 | 4 | 1 |  |
+| test.test_isinstance | ERROR | 23 | 1 | 19 | 0 |  |
+| test.test_index | OK | 55 | 0 | 0 | 0 |  |
+| test.test_baseexception | ERROR | 11 | 1 | 7 | 0 |  |
+| test.test_listcomps | ERROR | 60 | 9 | 25 | 0 |  |
+| test.test_property | ERROR | 31 | 23 | 8 | 0 |  |
+| test.test_copy | ERROR | 81 | 28 | 15 | 0 |  |
+| test.test_scope | ERROR | 41 | 6 | 10 | 0 |  |
+| test.test_yield_from | ERROR | 43 | 18 | 12 | 0 |  |
+| test.test_deque | ERROR | 80 | 10 | 23 | 4 |  |
+| test.test_format | ERROR | 18 | 10 | 3 | 3 |  |

@@ -90,6 +90,27 @@ __next__
 	^ v
 %
 
+category: 'Grail-Iterator Protocol'
+method: seq_iterator
+__length_hint__
+	"Items not yet produced -- CPython's iter_len (iterobject.c).  The source
+	is only known to answer __getitem__; when it has no __len__ there is no
+	count to report and CPython answers the NotImplemented singleton, which
+	operator.length_hint turns into the caller's default.  (The singleton is
+	looked up rather than named directly, the same defensive pattern the
+	binary-op protocol in Object.gs uses.)"
+
+	| ni n |
+	exhausted @env0:ifTrue: [^ 0].
+	((source @env0:class @env0:whichClassIncludesSelector: #'__len__' environmentId: 1)
+		@env0:isNil) ifFalse: [
+		n := source __len__.
+		^ (n @env0:- index) @env0:max: 0].
+	ni := Python @env0:at: #NotImplemented otherwise: nil.
+	ni @env0:isNil ifTrue: [^ 0].
+	^ ni
+%
+
 category: 'Grail-Pickle Protocol'
 method: seq_iterator
 __setstate__: aState

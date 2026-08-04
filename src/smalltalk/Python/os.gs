@@ -215,6 +215,20 @@ cpu_count
 	^ 4
 %
 
+category: 'Grail-Process'
+method: os
+getpid
+	"os.getpid() — the current process id, i.e. this gem's OS process.
+
+	test.support.os_helper appends it to its scratch filename precisely so
+	that concurrent sessions do not collide.  Without getpid it fell back to
+	the bare name ``@test'', which matters here: run_cpython_suite.sh runs
+	four modules CONCURRENTLY in one directory, so they were all sharing a
+	single scratch file."
+
+	^ System @env0:gemProcessId
+%
+
 category: 'Grail-File and Directory Operations'
 method: os
 getcwd
@@ -309,14 +323,40 @@ rmdir: path
 category: 'Grail-File and Directory Operations'
 method: os
 remove: path
-	"os.remove(path) — remove a file."
+	"os.remove(path) — remove a file.
+
+	Raises FileNotFoundError (an OSError subclass, so existing ``except
+	OSError'' handlers are unaffected) when the file is absent, which is what
+	CPython raises and what callers actually test for -- test.support's
+	os_helper.unlink() swallows exactly FileNotFoundError/NotADirectoryError
+	and would otherwise propagate a bare OSError out of every cleanup."
 
 	| result |
+	(self exists: path) ifFalse: [
+		FileNotFoundError ___signal___:
+			('No such file or directory: ' @env0:, (path @env0:printString))
+	].
 	result := GsFile @env0:removeServerFile: path.
 	result == nil ifTrue: [
 		OSError ___signal___: ('Cannot remove file: ' @env0:, (path @env0:printString))
 	].
 	^ None
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+unlink: path
+	"os.unlink(path) — remove a file.  Semantically identical to remove() in
+	CPython, and the spelling test.support.os_helper uses to clean up after
+	itself.
+
+	Its absence had two visible consequences.  Every vendored test that
+	touched os_helper.TESTFN raised ``AttributeError: module has no attribute
+	'unlink''' instead of cleaning up (7 such errors in test.test_iter alone),
+	AND it left the scratch file behind -- that is the origin of the stray
+	``@test'' that kept appearing in the working tree."
+
+	^ self remove: path
 %
 
 category: 'Grail-File and Directory Operations'

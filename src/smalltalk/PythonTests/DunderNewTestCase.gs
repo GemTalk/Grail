@@ -9,7 +9,7 @@ doit
 PythonTestCase subclass: 'DunderNewTestCase'
   instVarNames: #()
   classVars: #()
-  classInstVars: #()
+  classInstVars: #( sharedFixture )
   poolDictionaries: #()
   inDictionary: PythonTests
   options: #()
@@ -33,9 +33,58 @@ set compile_env: 0
 category: 'Grail-Helpers'
 method: DunderNewTestCase
 fixture
-	"Load (fresh each test) the descriptor-round fixture module: real
-	class definitions cannot instantiate inside eval:."
+	"The descriptor-round fixture module: real class definitions cannot
+	instantiate inside eval:, so the cases live in a module the tests read
+	precomputed results out of.
 
+	Imported ONCE PER SESSION and shared.  It is a 1592-line module whose
+	import re-runs every class body in it, which under canonical classes
+	costs the better part of a second; this class has 83 tests and 60 of
+	them want it, so a fresh import each was ~60s -- the single largest cost
+	in the whole SUnit gate, and enough on its own to make this class's
+	shard the one every CI run waits for.
+
+	Sharing is sound because every test here READS a module-level constant
+	that the module computed at import time; none writes.  The one exception
+	asks for ``freshFixture'' instead -- see there.  A test added later that
+	mutates the module MUST do the same, or it will leak into whatever runs
+	after it."
+
+	self class sharedFixture ifNotNil: [:m | ^ m].
+	^ self class sharedFixture: self freshFixture
+%
+
+category: 'Grail-Helpers'
+classmethod: DunderNewTestCase
+sharedFixture
+	"The session's shared fixture module, or nil before the first import.
+	Class-side because that is where the cache has to live: SUnit builds a
+	NEW test-case instance per test method, so an instance variable would
+	cache nothing."
+
+	^ sharedFixture
+%
+
+category: 'Grail-Helpers'
+classmethod: DunderNewTestCase
+sharedFixture: aModule
+	sharedFixture := aModule.
+	^ aModule
+%
+
+category: 'Grail-Helpers'
+method: DunderNewTestCase
+freshFixture
+	"A private, newly-imported copy of the fixture module, for a test that
+	MUTATES it and so must not use the shared one (testEnumConvert: enum's
+	_convert_ binds the generated enums onto the module and removes the
+	converted globals from it).
+
+	Also drops the shared copy, because a mutating test can only be sure of
+	its own module if nothing else is holding the old one -- and the next
+	reader then gets a clean import rather than this test's leftovers."
+
+	self class sharedFixture: nil.
 	(importlib @env1:modules) removeKey: #'test.grail_dunder_check' ifAbsent: [].
 	^ importlib
 		loadModuleFromPath: (importlib @env1:___moduleNameToPath___: 'test.grail_dunder_check')
@@ -716,9 +765,10 @@ phase2b
 category: 'Grail-Tests - phase2 conformance'
 method: DunderNewTestCase
 testArrayModuleNoKernelCollision
-	"import array must not shadow kernel Array: the module class is
-	mangled to PyArray (importlib ___asSmalltalkClassName___ probes
-	Globals), and array.array works via the _array alias."
+	"import array must not shadow kernel Array.  The module backing class is
+	now named 'array' (case preserved, no mangling) -- a different symbol from
+	kernel 'Array', so the tuple instantiator's Array reference is untouched.
+	array.array works via the _array alias."
 
 	self assert: (self phase2b @env1:__getitem__: 'array') equals: true.
 	self assert: (self phase2b @env1:__getitem__: 'kernel_intact') equals: true
@@ -1048,12 +1098,12 @@ testMethodLocalSuper
 category: 'Grail-Tests - annotations'
 method: DunderNewTestCase
 testFunctionAnnotations
-	"Local-def __annotations__ (stamped on the closure via ExecBlockAttrs
-	at def-time): parameter + *args/**kw + return annotations as PEP-563
-	SOURCE STRINGS (never evaluated -- forward refs mustn't break module
-	load; 55+ werkzeug/flask modules use ``from __future__ import
-	annotations''), an empty dict for an unannotated def, and forward-
-	reference strings kept verbatim.  Plus
+	"Local-def __annotations__: parameter + *args/**kw + return
+	annotations as PEP 649 VALUES, derived by calling the closure's
+	``__annotate__'' (stamped at def-time) on first read -- so nothing is
+	evaluated during module load, which is what lets 55+ werkzeug/flask
+	modules annotate with forward references.  Plus an empty dict for an
+	unannotated def, a string-LITERAL annotation kept as that string, and
 	functools.singledispatch's annotation-based register (@s.register on
 	an annotated def infers the dispatch type from the first parameter's
 	annotation; forward-ref strings resolve to the class).  ABC-typed
@@ -1072,11 +1122,13 @@ testFunctionAnnotations
 category: 'Grail-Tests - annotations'
 method: DunderNewTestCase
 testPhase2Annotations
-	"Module-level function, instance-method, and class __annotations__
-	(PEP-563 SOURCE STRINGS).  Module functions store theirs on the module
-	instance keyed by name; methods on a class-side ___methodAnnotationsTable___
-	that BoundMethod >> __annotations__ walks up the superclass chain; classes
-	expose their own class-body annotations via a class-side accessor.
+	"Module-level function, instance-method, and class __annotations__.
+	Module functions store their ``__annotate__'' on the module instance
+	keyed by name; methods on a class-side ___methodAnnotationsTable___
+	that BoundMethod >> __annotations__ walks up the superclass chain --
+	both PEP 649 VALUES.  CLASS-BODY annotations are the exception: they
+	still answer source strings, from a class-side accessor built by
+	AnnAssignAst that the __annotate__ conversion has not reached.
 	Verifies: module params/return + empty; class own-only annotations (a
 	subclass reports only ITS annotations, not the parent's; unannotated names
 	excluded); method params/return with ``self'' excluded + empty; an
@@ -1407,7 +1459,11 @@ testEnumConvert
 	"Load the function object explicitly, then call it -- a bare
 	``fixture run_enum_convert'' would invoke the 0-arg function via the
 	attribute-expr path and return the tuple, which is not itself callable."
-	r := (self fixture @env1:___pyAttrLoad___: #run_enum_convert) @env1:value: { } value: nil.
+	"freshFixture, not fixture: _convert_ MUTATES the module (it binds the
+	generated enums onto it and removes the converted globals), so this test
+	must not run against -- or leave its changes in -- the copy the other
+	tests share."
+	r := (self freshFixture @env1:___pyAttrLoad___: #run_enum_convert) @env1:value: { } value: nil.
 	self assert: r @env1:__repr__
 		equals: '(''GRAILCONV_A'', True, True, [''GRAILUNCMP_A'', ''GRAILUNCMP_B'', ''GRAILUNCMP_C''])'
 %

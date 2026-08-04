@@ -683,12 +683,15 @@ ___functionAnnotationsTable___
 
 category: 'Grail-Annotations'
 method: module
-___setFunctionAnnotations___: aName dict: aDict
-	"Record a module-level function's __annotations__ (PEP 563 source
-	strings).  FunctionDefAst emits a call to this at module-body eval
-	time for every annotated top-level def.  Keyed by the plain Python
-	name -- exactly the selector a lazily-wrapped module-function
-	BoundMethod carries -- so BoundMethod >> __annotations__ can find it."
+___setFunctionAnnotations___: aName annotate: aBlock
+	"Record a module-level function's PEP 649 ``__annotate__''.
+	FunctionDefAst emits a call to this at module-body eval time for every
+	annotated top-level def.  Keyed by the plain Python name -- exactly
+	the selector a lazily-wrapped module-function BoundMethod carries --
+	so BoundMethod >> __annotations__ can find it.
+
+	The BLOCK is stored, not the dict it computes: at module-body eval
+	time the annotation expressions may well name things not yet bound."
 
 	| tbl inner |
 	tbl := module ___functionAnnotationsTable___.
@@ -696,21 +699,80 @@ ___setFunctionAnnotations___: aName dict: aDict
 	inner isNil ifTrue: [
 		inner := KeyValueDictionary new.
 		tbl at: self put: inner].
-	inner at: aName asString put: aDict.
+	inner at: aName asString put: aBlock.
 	^ self
 %
 
 category: 'Grail-Annotations'
 method: module
-___functionAnnotationsFor___: aName
-	"The stored __annotations__ dict for a module-level function, or an
-	empty dict when the function carried no annotations."
+___functionAnnotateFor___: aName
+	"The stored ``__annotate__'' block for a module-level function, or nil
+	when the function carried no annotations."
 
 	| tbl inner |
 	tbl := module ___functionAnnotationsTable___.
 	inner := tbl at: self otherwise: nil.
-	inner isNil ifTrue: [^ KeyValueDictionary new].
-	^ inner at: aName asString otherwise: KeyValueDictionary new
+	inner isNil ifTrue: [^ nil].
+	^ inner at: aName asString otherwise: nil
+%
+
+category: 'Grail-Annotations'
+method: module
+___functionAnnotationsFor___: aName
+	"The __annotations__ dict for a module-level function -- its
+	``__annotate__'' called with Format.VALUE -- or an empty dict when the
+	function carried no annotations."
+
+	| annotate |
+	annotate := self ___functionAnnotateFor___: aName.
+	annotate isNil ifTrue: [^ KeyValueDictionary new].
+	^ annotate value: { 1 } value: nil
+%
+
+category: 'Grail-Module Defaults'
+classmethod: module
+___moduleDefaultsTable___
+	"Session-local map  module-instance -> (default-id-symbol -> cached value).
+	Same rationale as ___functionAnnotationsTable___: held in SessionTemps so it
+	is never committed (module instances are already session-local) and keyed by
+	identity, so -- unlike a dynamic instVar on the module -- it contributes
+	NOTHING to the module's globals() / vars() / dir() enumeration."
+
+	| st tbl |
+	st := SessionTemps current.
+	tbl := st at: #GrailModuleFunctionDefaults otherwise: nil.
+	tbl isNil ifTrue: [
+		tbl := IdentityKeyValueDictionary new.
+		st at: #GrailModuleFunctionDefaults put: tbl].
+	^ tbl
+%
+
+category: 'Grail-Module Defaults'
+method: module
+___moduleDefaultAt: aSymbol compute: aBlock
+	"Evaluate a module-level function's default argument ONCE and cache it in a
+	session-local side table (keyed by this module instance + aSymbol), so a
+	MUTABLE default (``def f(x=[])``) is SHARED across calls -- CPython evaluates
+	defaults at def-time, but a Grail module function compiles to a method whose
+	body would otherwise re-run the default expression on every call (test_iter's
+	``def spam(state=[0])`` counter idiom).  aSymbol is a compile-time-unique
+	``___default_<fn>__<param>___'' name, so distinct functions/params never
+	collide.  Stored OFF the module (see ___moduleDefaultsTable___) so it never
+	leaks into globals()/vars()/dir().  Filed at env-0 (like the other
+	dynamic-instVar helpers) and reached from the generated env-1 method body via
+	``@env0:___moduleDefaultAt:compute:''."
+
+	| tbl inner |
+	tbl := module ___moduleDefaultsTable___.
+	inner := tbl at: self otherwise: nil.
+	inner isNil ifTrue: [
+		inner := IdentityKeyValueDictionary new.
+		tbl at: self put: inner].
+	^ inner at: aSymbol ifAbsent: [
+		| v |
+		v := aBlock value.
+		inner at: aSymbol put: v.
+		v]
 %
 
 set compile_env: 0

@@ -47,9 +47,21 @@ isAbstract
 category: 'Grail-Testing'
 classmethod: PythonTestCase
 suite
-	"Return a test suite for all PythonTestCase subclasses.
-	Initialize modules before creating the suite."
-	
+	"Return a test suite for all PythonTestCase subclasses."
+  self initGrail .
+	^ super suite
+%
+
+category: 'Grail-Testing'
+classmethod: PythonTestCase
+initGrail
+  "ensure initialization if executing directly from topaz"
+  | dir |
+  (dir := System gemEnvironmentVariable: 'GRAIL_DIR') ifNil:[
+    System gemEnvironmentVariable: 'GRAIL_DIR' put: (dir := GsFile serverCurrentDirectory)
+  ].
+  importlib grailDir: dir .
+
 	"Initialize sys.modules to ensure all built-in modules are registered.
 	We need to do this carefully to avoid circular dependencies.
 	Call the class method directly in Python environment."
@@ -57,8 +69,27 @@ suite
 		"If initialization fails, continue anyway - individual tests will handle it"
 		Transcript show: 'Warning: Could not initialize sys.modules: ', ex messageText; cr
 	].
-	
-	^ super suite
+%
+
+category: 'Grail-Testing'
+classmethod: PythonTestCase
+debugEx
+  "execute all of the test cases."
+  self initGrail .  
+  ^ super debugEx
+%
+
+category: 'Grail-Testing'
+classmethod: PythonTestCase
+debug: aSelector
+  self initGrailDir .  
+  ^ super debug: aSelector
+%
+
+category: 'Grail-Testing'
+classmethod: PythonTestCase
+runEx
+  ^ self suite run printString
 %
 
 category: 'Grail-helpers'
@@ -103,7 +134,7 @@ eval: pythonSource
 
 	| moduleScope scope module |
 	moduleScope := SymbolDictionary new.
-	scope := System myUserProfile symbolList copy.
+	scope := importlib ___grailCompileSymbolList___.
 	scope insertObject: moduleScope at: 1.
 	module := ModuleAst parseSource: pythonSource.
 	module useTempsForBlock: false.

@@ -106,6 +106,15 @@ __next__
 	^ item
 %
 
+category: 'Grail-Iterator Protocol'
+method: tuple_iterator
+__length_hint__
+	"Items not yet produced -- CPython's tupleiter_len.  A tuple is immutable,
+	so the count is exact (test_iterlen TestTuple test_invariant)."
+
+	^ (collection @env0:size @env0:- position) @env0:max: 0
+%
+
 category: 'Grail-Instance Creation'
 classmethod: tuple_iterator
 _new_from: aCollection _: pos

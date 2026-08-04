@@ -135,6 +135,24 @@ __next__
 	^ nextKey
 %
 
+category: 'Grail-Iterator Protocol'
+method: dict_keyiterator
+__length_hint__
+	"Keys not yet produced -- CPython's dictiter_len.  ZERO once the dict's
+	SIZE has changed, permanently: __next__ raises RuntimeError from then on,
+	so the iteration can never be completed and reporting a remaining count
+	would break the len(it) == len(list(it)) invariant (test_iterlen
+	TestDictKeys test_immutable_during_iteration).
+
+	CPython compares SIZES only (di_used vs ma_used), so the same-size version
+	guard __next__ also applies is deliberately NOT consulted here: a
+	``del d[k]; d[k] = v'' still raises from __next__ but keeps reporting a
+	count, and matching CPython is the point."
+
+	((dict @env0:size) @env0:= (keys @env0:size)) ifFalse: [^ 0].
+	^ ((keys @env0:size) @env0:- position) @env0:max: 0
+%
+
 category: 'Grail-Instance Creation'
 classmethod: dict_keyiterator
 _new_from: aDict _: pos

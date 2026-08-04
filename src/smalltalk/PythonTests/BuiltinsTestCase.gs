@@ -139,6 +139,27 @@ import builtins
 abs(-5)') equals: 5
 %
 
+category: 'Grail-Tests - Backlog Fixes'
+method: BuiltinsTestCase
+testDictContainsHeterogeneousKeys
+	"``key in d'' must not crash when d mixes hashable key types whose
+	pairwise == is NotImplemented (a complex key beside str keys).  The
+	linear NaN-identity fallback in dict>>__contains__ now iterates keysDo:
+	instead of building a Set of the keys, whose = based dedup leaked the
+	``___NotImplemented___'' sentinel into a Boolean context -- an
+	uncatchable error 2085 (test_iter test_in_and_not_in: ``1 in {'one': 1,
+	1j: 2j}'')."
+
+	self deny: (self eval: '1 in {"one": 1, "two": 2, "three": 3, 1j: 2j}').
+	self assert: (self eval: '1 not in {"one": 1, "two": 2, "three": 3, 1j: 2j}').
+	self assert: (self eval: '1j in {"one": 1, 1j: 2j}').
+	self assert: (self eval: '"one" in {"one": 1, 1j: 2j}').
+	self deny: (self eval: '2 in {"a": 1, 3j: 4}').
+	"the NaN-identity fallback (the reason the linear scan exists) still holds"
+	self assert: (self eval: 'nan = float("nan")
+nan in {nan: None}')
+%
+
 category: 'Grail-Tests - Phase 4b Varargs'
 method: BuiltinsTestCase
 testEvalPow3Arg
@@ -195,6 +216,26 @@ a == (1, 3) and b == (2, 4)').
 	"indexable sequences still unpack unchanged"
 	self assert: (self eval: 'a, b = [10, 20]
 a == 10 and b == 20')
+%
+
+category: 'Grail-Tests - Sequence Functions'
+method: BuiltinsTestCase
+testContainsComparesElementFirst
+	"``x in obj'' compares each ELEMENT against x element-first
+	(CPython PySequence_Contains: RichCompareBool(element, x, EQ)), so an
+	asymmetric __eq__ on the element decides the match: ALWAYS_EQ is NOT
+	found in an iterable yielding NEVER_EQ (test_iter test_in_and_not_in).
+	The generic object>>__contains__ fallback previously compared
+	x.__eq__(element) -- the wrong order -- and reported a spurious match.
+	Uses a loaded module because the fixture defines classes."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_contains_eq_order' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_contains_eq_order.py')
+		name: 'grail_contains_eq_order'.
+	self assert: (mod @env1:check)
 %
 
 category: 'Grail-Tests - Phase 4b Varargs'
@@ -897,6 +938,79 @@ testMap
 	self assert: materialized asArray equals: #(2 4 6)
 %
 
+category: 'Grail-Tests - Sequence Functions'
+method: BuiltinsTestCase
+testIterCallableSentinel
+	"iter(callable, sentinel) — the two-argument form — returns a
+	callable_iterator that calls callable() on each next() and stops
+	(StopIteration) once a returned value equals (Python ==) the sentinel.
+	The callable here is a Smalltalk block (an ExecBlock is callable and
+	answers value:value:) closing over a counter; sentinel 3 stops after
+	0, 1, 2.  Exhaustion is latched — a spent iterator keeps raising
+	StopIteration without calling the callable again."
+
+	| b counter it materialized done |
+	b := builtins ___instance___.
+	counter := 0.
+	it := b @env1:iter: [:positional :_kw | | v | v := counter. counter := counter @env0:+ 1. v]
+		_: 3.
+	materialized := OrderedCollection new.
+	done := false.
+	[done] whileFalse: [
+		[materialized add: (it @env1:__next__)]
+			on: StopIteration do: [:ex | done := true]].
+	self assert: materialized asArray equals: #(0 1 2).
+	"Latched: still StopIteration, callable NOT called again (counter frozen)."
+	self should: [it @env1:__next__] raise: StopIteration.
+	self assert: counter equals: 4.
+	"A non-callable first argument raises TypeError (like CPython)."
+	self should: [b @env1:iter: 42 _: 3] raise: TypeError
+%
+
+category: 'Grail-Tests - Sequence Functions'
+method: BuiltinsTestCase
+testIterReturnedNonIterator
+	"iter(x) where x.__iter__() returns a non-iterator (an object with no
+	real __next__) raises TypeError, matching CPython's PyObject_GetIter
+	(test_iter's test_new_style_iter_class).  PythonInstance carries a
+	catchable-TypeError __next__ FALLBACK on every instance, so a plain
+	responds-to check would wrongly accept ``IterClass`` as an iterator;
+	the fix asks ___hasProtocol___: whether __next__ is defined BELOW that
+	fallback level.  A class that DOES define __next__ iterates normally.
+	Uses a loaded module (not inline eval:) because the fixture defines
+	classes."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_noniterator' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_noniterator.py')
+		name: 'grail_noniterator'.
+	self assert: (mod @env1:check)
+%
+
+category: 'Grail-Tests - Sequence Functions'
+method: BuiltinsTestCase
+testIterTypeObjectNotIterable
+	"iter(x) on a TYPE object (iter(list), iter(int)) raises
+	``TypeError: 'type' object is not iterable'', matching CPython.  The
+	type's class is a metaclass, so the ``not iterable'' fallback must
+	report 'type' rather than crash sending env-1 __name__ to a kernel
+	metaclass (test_iter's test_builtin_list/tuple/filter do
+	assertRaises(TypeError, list, list))."
+
+	| msg |
+	self should: [self eval: 'iter(list)'] raise: TypeError.
+	self should: [self eval: 'iter(int)'] raise: TypeError.
+	self should: [self eval: 'list(list)'] raise: TypeError.
+	self should: [self eval: 'tuple(str)'] raise: TypeError.
+	"The message names the metaclass as 'type', as CPython does."
+	msg := [self eval: 'iter(list)'. nil]
+		on: TypeError
+		do: [:ex | ex return: ex messageText].
+	self assert: (msg includesString: '''type'' object is not iterable')
+%
+
 category: 'Tests - Sequence Functions'
 method: BuiltinsTestCase
 testMemoryviewStub
@@ -1218,4 +1332,175 @@ testEnumerateStart
 		equals: '[(5, ''a''), (6, ''b''), (7, ''c'')]'.
 	self assert: (self eval: 'list(enumerate(["a","b"], start=10))') @env1:__repr__
 		equals: '[(10, ''a''), (11, ''b'')]'
+%
+
+category: 'Grail-Tests - Namespace'
+method: BuiltinsTestCase
+testBuiltinTypesInBuiltinsNamespace
+	"CPython's builtins module contains every builtin TYPE, so ``builtins.int``
+	/ ``builtins.slice`` resolve to the type (identical to the bare name), show
+	up in vars()/dir(builtins) rather than only lazily on getattr, and stay
+	callable with constructor semantics.  Grail eagerly populates the builtins
+	namespace with these type classes in builtins>>initialize.  (Builtin
+	FUNCTIONS -- len, abs -- already answer via the builtins method path and are
+	not part of this population; the type classes were the gap.)"
+
+	"getattr resolves to the type.  For the types Grail resolves as a class both
+	ways, builtins.T is the bare name T.  (str/bytes are NOT asserted with `is`:
+	the bare name routes through a constructor fast-path -- a BoundMethod -- so
+	`builtins.str is str` is False in Grail even though both denote the str type.
+	isinstance below pins builtins.str to the real type instead.)"
+	self assert: (self eval: '__import__("builtins").int is int') equals: true.
+	self assert: (self eval: '__import__("builtins").list is list') equals: true.
+	self assert: (self eval: '__import__("builtins").dict is dict') equals: true.
+	self assert: (self eval: '__import__("builtins").slice is type(slice(1, 2, 3))')
+		equals: true.
+	self assert: (self eval: 'isinstance("hi", __import__("builtins").str)') equals: true.
+	self assert: (self eval: 'isinstance(1, __import__("builtins").int)') equals: true.
+
+	"Present in the module namespace, not just lazily materialized on access."
+	self assert: (self eval: '"int" in vars(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"slice" in dir(__import__("builtins"))') equals: true.
+
+	"Callable through the builtins attribute, with Python constructor semantics."
+	self assert: (self eval: '__import__("builtins").int("42")') equals: 42.
+	self assert: (self eval: '__import__("builtins").str(5) == "5"') equals: true.
+
+	"A name Grail implements as a builtin FUNCTION (not a class) is absent from
+	the type population but still answers via the function path."
+	self assert: (self eval: 'list(__import__("builtins").map(abs, [-1, -2]))') @env1:__repr__
+		equals: '[1, 2]'
+%
+
+category: 'Grail-Tests - Namespace'
+method: BuiltinsTestCase
+testBuiltinTypeModuleIsBuiltins
+	"CPython reports ``int.__module__ == 'builtins''' for every builtin TYPE.
+	Grail answers 'builtins' for both kinds of builtin type: kernel-backed
+	(int/list/dict/str/object, via ___pythonBuiltinTypeName___) and Grail-defined
+	(tuple/set/frozenset/complex/type/slice/..., matched by identity in the
+	Python compile dictionary).  builtins.int.__module__ agrees."
+	self assert: (self eval: 'int.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'list.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'dict.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'str.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'object.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'tuple.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'set.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'type.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'slice.__module__ == "builtins"') equals: true.
+	self assert: (self eval: '__import__("builtins").int.__module__ == "builtins"')
+		equals: true.
+
+	"Regression guard: a dynamically created class MUST NOT be tagged 'builtins'
+	-- an unconditional object class>>__module__ = 'builtins' broke functional-API
+	enum pickling (the class could not be located in the builtins module).  The
+	guard answers nil for these, so they fall through and keep their own module."
+	self assert: (self eval:
+		'getattr(type("X", (object,), {}), "__module__", "x") != "builtins"')
+		equals: true.
+	self assert: (self eval:
+		'getattr(__import__("enum").Enum("E", ["A"]), "__module__", "x") != "builtins"')
+		equals: true
+%
+
+category: 'Grail-Tests - Namespace'
+method: BuiltinsTestCase
+testBuiltinExceptionsInBuiltinsNamespace
+	"CPython's builtins module contains the whole builtin exception hierarchy, so
+	``builtins.ValueError`` resolves to the exception class (identical to the bare
+	name), shows up in vars()/dir(builtins), preserves the subclass hierarchy, and
+	reports __module__ == 'builtins'.  builtins>>initialize populates them from the
+	curated object>>___pythonBuiltinExceptionNames___ list; non-builtin exceptions
+	that share the Python compile dict (StatisticsError->statistics etc.) are
+	excluded."
+	self assert: (self eval: '__import__("builtins").ValueError is ValueError')
+		equals: true.
+	self assert: (self eval: '__import__("builtins").BaseException is BaseException')
+		equals: true.
+	self assert: (self eval: '__import__("builtins").OSError is OSError') equals: true.
+
+	"Subclass hierarchy is preserved through the namespace."
+	self assert: (self eval: 'issubclass(__import__("builtins").KeyError, LookupError)')
+		equals: true.
+	self assert: (self eval: 'issubclass(__import__("builtins").ValueError, Exception)')
+		equals: true.
+
+	"Present in the module namespace, not just lazily materialized on access."
+	self assert: (self eval: '"ValueError" in vars(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"OSError" in dir(__import__("builtins"))') equals: true.
+
+	"Builtin exceptions report __module__ == 'builtins' (matching CPython)."
+	self assert: (self eval: 'ValueError.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'BaseException.__module__ == "builtins"') equals: true.
+	self assert: (self eval: 'OSError.__module__ == "builtins"') equals: true.
+
+	"A non-builtin exception that lives in the Python dict is NOT exposed in
+	builtins and is NOT tagged 'builtins'."
+	self assert: (self eval: '"StatisticsError" in dir(__import__("builtins"))')
+		equals: false.
+
+	"A user exception subclass keeps its own module, never 'builtins'."
+	self assert: (self eval:
+		'getattr(type("MyErr", (ValueError,), {}), "__module__", "x") != "builtins"')
+		equals: true
+%
+
+category: 'Grail-Tests - Namespace'
+method: BuiltinsTestCase
+testBuiltinConstantsInBuiltinsNamespace
+	"CPython's builtins module contains the constants None / True / False /
+	NotImplemented / Ellipsis / __debug__.  builtins>>initialize populates them
+	so getattr resolves each to the same singleton as the bare name and they
+	appear in vars()/dir(builtins).  (None / True / False are keywords, so the
+	`.attr` form is a syntax error -- getattr is the only way to read them.)"
+	self assert: (self eval: 'getattr(__import__("builtins"), "None") is None')
+		equals: true.
+	self assert: (self eval: 'getattr(__import__("builtins"), "True") is True')
+		equals: true.
+	self assert: (self eval: 'getattr(__import__("builtins"), "False") is False')
+		equals: true.
+	self assert: (self eval:
+		'getattr(__import__("builtins"), "NotImplemented") is NotImplemented')
+		equals: true.
+	self assert: (self eval: 'getattr(__import__("builtins"), "Ellipsis") is Ellipsis')
+		equals: true.
+	self assert: (self eval: 'getattr(__import__("builtins"), "__debug__") == True')
+		equals: true.
+
+	"Present in the module namespace, not just lazily materialized on access."
+	self assert: (self eval: '"None" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"NotImplemented" in vars(__import__("builtins"))')
+		equals: true
+%
+
+category: 'Grail-Tests - Namespace'
+method: BuiltinsTestCase
+testBuiltinFunctionsInDir
+	"dir(builtins) lists every builtin FUNCTION under its Python name.  The
+	varargs builtins are filed as ``_name:kw:`` selectors; builtins>>__dir__
+	rewrites those (``_print`` -> ``print``, ``___import__`` -> ``__import__``)
+	so the clean names appear and the mangled underscore forms do not.  Fixed-arity
+	builtins (abs / len) already listed correctly are unaffected, and getattr keeps
+	resolving every name."
+
+	"Varargs builtins now appear under their Python name (were mangled/absent)."
+	self assert: (self eval: '"print" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"eval" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"exec" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"compile" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"zip" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"input" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"__import__" in dir(__import__("builtins"))') equals: true.
+
+	"The internal underscore-dispatch forms are NOT surfaced."
+	self assert: (self eval: '"_print" in dir(__import__("builtins"))') equals: false.
+	self assert: (self eval: '"_zip" in dir(__import__("builtins"))') equals: false.
+	self assert: (self eval: '"__reload__" in dir(__import__("builtins"))') equals: false.
+
+	"Fixed-arity builtins still listed; getattr still resolves the clean names."
+	self assert: (self eval: '"abs" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: '"len" in dir(__import__("builtins"))') equals: true.
+	self assert: (self eval: 'hasattr(__import__("builtins"), "print")') equals: true.
+	self assert: (self eval: 'hasattr(__import__("builtins"), "zip")') equals: true
 %

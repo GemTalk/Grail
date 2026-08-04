@@ -65,6 +65,10 @@ __eq__: other
 	"Return True if sequences are equal (same type, same length, same elements)."
 
 	| myClass otherClass |
+	"Cyclic-container guard: the same-class ``@env0:='' fast path below (and
+	the element-wise recursion) overflow the Smalltalk stack on
+	mutually-recursive lists; convert that to RecursionError (test_richcmp)."
+	^ self ___cmpRecursionGuard___: [
 	myClass := self @env0:class.
 	otherClass := other @env0:class.
 
@@ -105,7 +109,7 @@ __eq__: other
 	list, an int, a str) has no reflected __eq__ that applies, so ___eqValue___
 	falls back to identity and the result stays False -- ``[1] == (1,)'' etc.
 	are unchanged."
-	^ #'___NotImplemented___'
+	^ #'___NotImplemented___' ]
 %
 
 category: 'Grail-Other'
@@ -121,6 +125,15 @@ ___pyEqElementsCurrentSizes___: other
 	EQUAL, exactly as CPython does."
 
 	| i |
+	"CPython list_richcompare fast path: for ==, sequences of different length
+	are unequal -- decide by length up front, before comparing any element.
+	Besides matching CPython, this stops == of mutually-recursive containers
+	whose lengths already differ from recursing into the cyclic elements
+	(test_richcmp test_recursion: `[b] == [a, 17]`, lengths 1 vs 2, must be
+	False -- not a RecursionError).  Sizes are equal here iff no element
+	__eq__ has run yet, so this cannot mask the bpo-38588 mid-compare
+	resize case (which starts from equal lengths)."
+	(self @env0:size @env0:~= other @env0:size) ifTrue: [^ false].
 	i := 0.
 	[(i @env0:< self @env0:size) and: [i @env0:< other @env0:size]] @env0:whileTrue: [
 		"Full rich equality (identity, element.__eq__, then reflected) -- like
@@ -180,6 +193,7 @@ __ge__: other
 	tuple-vs-list and range (Interval), which CPython leaves
 	unorderable -- takes the reflected-op / TypeError fallback instead
 	of silently comparing sizes."
+	^ self ___cmpRecursionGuard___: [
 	(self ___sameSequenceKindAs___: other)
 		ifFalse: [^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'].
 	size := self @env0:size.
@@ -192,7 +206,7 @@ __ge__: other
 		(a @env0:= b) ifFalse: [^ a __ge__: b].
 		i := i @env0:+ 1
 	].
-	^ size @env0:>= otherSize
+	^ size @env0:>= otherSize ]
 %
 
 category: 'Grail-Comparison'
@@ -205,6 +219,7 @@ __gt__: other
 	tuple-vs-list and range (Interval), which CPython leaves
 	unorderable -- takes the reflected-op / TypeError fallback instead
 	of silently comparing sizes."
+	^ self ___cmpRecursionGuard___: [
 	(self ___sameSequenceKindAs___: other)
 		ifFalse: [^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'].
 	size := self @env0:size.
@@ -217,7 +232,7 @@ __gt__: other
 		(a @env0:= b) ifFalse: [^ a __gt__: b].
 		i := i @env0:+ 1
 	].
-	^ size @env0:> otherSize
+	^ size @env0:> otherSize ]
 %
 
 category: 'Grail-Comparison'
@@ -230,6 +245,7 @@ __le__: other
 	tuple-vs-list and range (Interval), which CPython leaves
 	unorderable -- takes the reflected-op / TypeError fallback instead
 	of silently comparing sizes."
+	^ self ___cmpRecursionGuard___: [
 	(self ___sameSequenceKindAs___: other)
 		ifFalse: [^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'].
 	size := self @env0:size.
@@ -242,7 +258,7 @@ __le__: other
 		(a @env0:= b) ifFalse: [^ a __le__: b].
 		i := i @env0:+ 1
 	].
-	^ size @env0:<= otherSize
+	^ size @env0:<= otherSize ]
 %
 
 category: 'Grail-Comparison'
@@ -255,6 +271,7 @@ __lt__: other
 	tuple-vs-list and range (Interval), which CPython leaves
 	unorderable -- takes the reflected-op / TypeError fallback instead
 	of silently comparing sizes."
+	^ self ___cmpRecursionGuard___: [
 	(self ___sameSequenceKindAs___: other)
 		ifFalse: [^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'].
 	size := self @env0:size.
@@ -267,7 +284,26 @@ __lt__: other
 		(a @env0:= b) ifFalse: [^ a __lt__: b].
 		i := i @env0:+ 1
 	].
-	^ size @env0:< otherSize
+	^ size @env0:< otherSize ]
+%
+
+category: 'Grail-Comparison'
+method: SequenceableCollection
+___cmpRecursionGuard___: aBlock
+	"Evaluate aBlock -- a sequence-comparison body that may recurse into
+	nested or mutually-recursive elements -- converting a GemStone
+	AlmostOutOfStack notification into CPython's catchable RecursionError.
+	Comparing cyclic containers (test_richcmp test_recursion: two lists that
+	contain each other) otherwise overflows the Smalltalk stack with an
+	uncatchable notification that escapes Python try/except.  Every recursive
+	level installs a guard; the innermost fires and signals RecursionError,
+	which then unwinds past the outer guards (they trap only AlmostOutOfStack)
+	to the comparison's caller.  Scoped to sequence comparison -- scalar
+	comparisons (int/float/str) never reach here, so the hot path is
+	untouched."
+
+	^ aBlock @env0:on: AlmostOutOfStack do: [:ex |
+		RecursionError ___signal___: 'maximum recursion depth exceeded in comparison']
 %
 
 category: 'Grail-Sequence Protocol'
@@ -300,8 +336,12 @@ __getitem__: index
 				ifFalse: [self @env0:class @env0:name @env0:asString]].
 		TypeError ___signal___: (seqName @env0:, ' indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
+	"FETCH the index (PEP 357) -- probing for __index__ above only established
+	that the object is index-LIKE; the arithmetic below needs its value, and
+	sending env-0 #< to the object itself is an uncatchable DNU.  __index__ may
+	run Python code that resizes self, so read the size afterward."
+	idx := index ___asIndex___.
 	size := self @env0:size.
-	idx := index.
 
 	"Handle negative indices"
 	(idx @env0:< 0) ifTrue: [
@@ -336,9 +376,17 @@ ___getslice___: lower _: upper _: step
 	for an unset bound/step; normalise so the ifNil: defaults fire instead of
 	comparing None with an integer (a[2:4] has step None -- test_list's
 	test_getslice / test_subscript)."
-	lwr := (lower @env0:== None) ifTrue: [nil] ifFalse: [lower].
-	upr := (upper @env0:== None) ifTrue: [nil] ifFalse: [upper].
-	st := ((step @env0:== None) or: [step @env0:isNil]) ifTrue: [1] ifFalse: [step].
+	lwr := lower ___asIndexOrNil___.
+	upr := upper ___asIndexOrNil___.
+	st := ((step @env0:== None) or: [step @env0:isNil]) ifTrue: [1] ifFalse: [step ___asIndex___].
+	lwr := (lwr @env0:== None) ifTrue: [nil] ifFalse: [lwr].
+	upr := (upr @env0:== None) ifTrue: [nil] ifFalse: [upr].
+	"Each bound is FETCHED through __index__ (PEP 357): a slice literal keeps
+	whatever objects the source wrote, so ``seq[o:o2]'' with __index__ objects
+	used to reach the env-0 arithmetic below and die on an uncatchable
+	``does not understand #<'' (test_index's test_slice / test_slice_bug7532
+	across every sequence type).  A non-index bound raises the catchable
+	TypeError from ___asIndex___, which is what test_error asserts."
 	st @env0:= 0 ifTrue: [ValueError ___signal___: 'slice step cannot be zero'].
 
 	"Normalize lower"
@@ -399,22 +447,27 @@ method: SequenceableCollection
 __mul__: n
 	"Repeat the sequence n times. Returns a new sequence."
 
-	| result |
+	| result count |
 	((n isKindOf: Integer)
 		or: [(n @env0:class
 			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
+	"Fetch the count via __index__ (see __getitem__:) -- the probe above only
+	proved n is index-LIKE, and the arithmetic below cannot run on the object
+	itself (uncatchable ``does not understand'' DNU).  A method argument cannot
+	be assigned in Smalltalk, hence the temp."
+	count := n ___asRepeatCount___.
 	result := (self @env0:species) ___new___.
-	(n @env0:<= 0) ifTrue: [
+	(count @env0:<= 0) ifTrue: [
 		^ result
 	].
 	"seq * sys.maxsize must raise, not exhaust the gem's temporary
 	object memory (test_list_resize_overflow kills the session
 	otherwise)."
-	(self @env0:size @env0:* n) @env0:> 50000000 ifTrue: [
+	(self @env0:size @env0:* count) @env0:> 50000000 ifTrue: [
 		MemoryError ___signal___: 'repeated sequence would exhaust memory'].
 
-	n @env0:timesRepeat: [result @env0:addAll: self].
+	count @env0:timesRepeat: [result @env0:addAll: self].
 	^ result
 %
 

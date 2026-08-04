@@ -252,6 +252,30 @@ printSmalltalkOn: aStream
 						and: [CallAst classBeingCompiled notNil
 							and: [CallAst moduleClassBeingCompiled notNil]]]]]])
 		ifTrue: [
+			"A METHOD-LOCAL class is not a module attribute, so the
+			module-instance accessor below answers NIL for it -- and every
+			Super consumer walks ``cls superClass'', which nil does not
+			understand.  The zero-arg form already resolves this through the
+			class's closure cell; the two-arg form did not, so
+			``super(Sub, self)'' inside a function-local Sub raised an
+			uncatchable env-0 MessageNotUnderstood that took down the whole
+			module run (test_functools' test_cache_invalidation, plus
+			test_enum and django's related_descriptors).
+			Only when the named class IS the one being compiled: that is the
+			shape the cell key ``___cell_<ClassName>___'' is stored under,
+			and it covers every corpus occurrence (each names its own class).
+			Naming a DIFFERENT method-local class keeps the old path."
+			((CallAst classDefIsModuleScope == false)
+				and: [(arguments at: 1) id asSymbol == CallAst classBeingCompiled asSymbol])
+				ifTrue: [
+					CallAst addCapturedClassName: CallAst classBeingCompiled.
+					aStream
+						nextPutAll: '(Super @env1:cls: (self @env1:___classCell___: #''___cell_';
+						nextPutAll: CallAst classBeingCompiled asString;
+						nextPutAll: '___'') obj: '.
+					(arguments at: 2) printSmalltalkWithParenthesisOn: aStream.
+					aStream nextPutAll: ')'.
+					^self].
 			aStream
 				nextPutAll: '(Super @env1:cls: ((';
 				nextPutAll: CallAst moduleClassBeingCompiled name;
@@ -302,8 +326,12 @@ printSmalltalkOn: aStream
 		the class's varargs entry receives the call.  knownClassName
 		returns nil in this case (it defers to the legacy form
 		exactly when kwargs are present and a varargs entry exists);
-		check the class lookup directly."
-		(self ___hasVarargsClassConstructor___) ifFalse: [
+		check the class lookup directly.
+
+		A ``*args'' splat likewise defers to the generic form: the arity is
+		unknown at compile time, so the fixed-arity mismatch check would raise a
+		bogus TypeError (test_slice test_indices: ``range(*slice.indices(n))'')."
+		((self ___hasVarargsClassConstructor___) or: [self hasStarredArgument]) ifFalse: [
 			^ self printArityMismatchErrorOn: aStream forName: knownBuiltinName
 		].
 	].
@@ -395,8 +423,15 @@ printSmalltalkOn: aStream
 	or kwarg shape. Emit a clean Python TypeError instead of falling
 	through to the broken `cls value: { args } value: kw` form, which
 	signals MessageNotUnderstood on plain GemStone classes."
-	(self knownClassName) ifNotNil: [:knownCls |
-		^ self printArityMismatchErrorOn: aStream forName: knownCls
+	"A ``*args'' splat has no compile-time arity, so this fixed-arity mismatch
+	check must not fire -- defer to the generic ``value: {args} value: kw''
+	form, whose printArgumentsArrayOn: splices the splat and reaches the
+	class's __new__ with the real argument count (test_slice test_indices:
+	``range(*slice.indices(n))'')."
+	(self hasStarredArgument) ifFalse: [
+		(self knownClassName) ifNotNil: [:knownCls |
+			^ self printArityMismatchErrorOn: aStream forName: knownCls
+		].
 	].
 
 	"AttributeAst's printSmalltalkOn emits ``(value) @env1:___pyAttrLoad___:
@@ -1055,6 +1090,13 @@ bareCallClassNewSelector
 	| funcName cls candidate |
 	(function isKindOf: NameAst) ifFalse: [^nil].
 	keywords isEmpty ifFalse: [^nil].
+	"A ``*args'' splat makes the arity unknown at compile time, so a fixed-arity
+	``__new__:_:…'' selector cannot represent the call -- decline (like
+	bareCallFastPathSelector) so it falls through to the generic
+	``value: {args} value: kw'' form, whose printArgumentsArrayOn: splices the
+	splat.  Without this ``range(*slice.indices(n))'' emitted the StarredAst
+	stub's ``*-unpack not supported'' TypeError (test_slice test_indices)."
+	self hasStarredArgument ifTrue: [^nil].
 	funcName := function id.
 	"Precise LEGB shadow check (see NameAst>>___pythonBindingShadows___:)
 	 rather than the over-approximating isVariableIsDeclared: variables
@@ -1064,6 +1106,18 @@ bareCallClassNewSelector
 	(function ___pythonBindingShadows___: funcName) ifTrue: [^nil].
 	cls := self class resolveClassForName: funcName.
 	cls ifNil: [^nil].
+	"``bool(x)'' is TRUTH TESTING, and stays so even when x is a class
+	object -- ``bool(dict)'' is True (test_bool.py test_types).  But
+	Grail names constructor selectors by arity, so the emitted
+	``__new__:'' would be the very selector CPython's allocation form
+	``bool.__new__(bool)'' uses, where a leading ``bool'' IS the target
+	class and the result is False (test_bool.py test_bool_new).  The two
+	readings are indistinguishable once both are one-argument sends, so
+	split them here: a literal call site emits the unambiguous
+	``___truthOf___:'', leaving ``__new__:'' to mean allocation.
+	Boolean class>>value:value: makes the same split for the indirect
+	``f = bool; f(x)'' form."
+	(cls == Boolean and: [arguments size = 1]) ifTrue: [^ #'___truthOf___:'].
 	candidate := self class classNewSelectorForArity: arguments size.
 	"Walk the metaclass chain so inherited __new__ methods are found
 	(e.g. `set` inherits __new__ from frozenset). Direct method-dict
@@ -1187,12 +1241,21 @@ printBareCallClassNewOn: aStream selector: aSelector
 	Receiver is the bare class name (`function id`); the symbol-list lookup
 	at compile time resolves it to the appropriate GemStone class."
 
-	| funcName nargs |
+	| funcName nargs base colonIdx |
 	funcName := function id asString.
 	nargs := arguments size.
+	"Emit the selector bareCallClassNewSelector actually chose instead of
+	hard-coding ``__new__''.  It is ``__new__'' for every class but bool,
+	which is routed to ``___truthOf___:'' so that a one-argument call site
+	cannot be mistaken for CPython's ``bool.__new__(bool)'' allocation
+	form (see bareCallClassNewSelector).  Only the base name is taken
+	here; the ``: arg _: arg'' tail below already encodes the arity."
+	base := aSelector asString.
+	colonIdx := base indexOf: $:.
+	colonIdx > 0 ifTrue: [base := base copyFrom: 1 to: colonIdx - 1].
 	aStream nextPut: $(.
 	aStream nextPutAll: funcName.
-	aStream nextPutAll: ' @env1:__new__'.
+	aStream nextPutAll: ' @env1:'; nextPutAll: base.
 	nargs = 0 ifTrue: [
 		aStream nextPut: $).
 		^ self
@@ -1298,6 +1361,36 @@ category: 'Grail-Module Compile Context'
 classmethod: CallAst
 moduleVariableNames: aSetOrNil
 	self ___compileContext___ at: #'moduleVariableNames' put: aSetOrNil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+classBodyDecoratorScope
+	"Set only while a CLASS-BODY METHOD DECORATOR expression is being
+	emitted: an Association of the class's Smalltalk name -> the IdentitySet
+	of names its class body binds as defs.
+
+	A decorator can name a SIBLING of the def it decorates -- that is the
+	whole shape of ``@t.register(int)'' under functools.singledispatchmethod,
+	and of a hand-rolled registry decorator.  In CPython the class body is a
+	namespace and ``t'' is a local in it; Grail has no class-body namespace,
+	so a bare name there otherwise falls all the way through to the module
+	and raises NameError.  The decorator application is wrapped in a handler
+	(see FunctionDefAst >> printMethodDecoratorsOn:decorators:className:), so
+	the failure was silent: the decorator simply never took effect.
+
+	While this is set, NameAst resolves such a name off the CLASS instead,
+	which is where the class body's bindings actually live.  Names that are
+	not in the set are unaffected -- ``@functools.singledispatchmethod'' still
+	resolves ``functools'' as the module global it is."
+
+	^ self ___compileContext___ at: #'classBodyDecoratorScope' otherwise: nil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+classBodyDecoratorScope: anAssociationOrNil
+	self ___compileContext___ at: #'classBodyDecoratorScope' put: anAssociationOrNil
 %
 
 category: 'Grail-Module Compile Context'
@@ -1494,6 +1587,79 @@ classNestedClassNames: aSetOrNil
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classBodyValueDefNode
+	"The FunctionDefAst currently being emitted in VALUE (block) form by
+	ClassDefAst >> emitClassBodyIfDef:on:, or nil.
+
+	A class-body def normally compiles to a real Smalltalk method, so its
+	``self'' parameter IS the receiver and NameAst must emit the plain
+	pseudo-variable.  A conditional def compiles to a block instead, where
+	``self'' is the transported ``_self'' temp -- so that early-out has to
+	be suppressed for this node (and for anything nested inside it, which
+	closes over the same temp)."
+
+	^ self ___compileContext___ at: #'classBodyValueDefNode' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classBodyValueDefNode: aNodeOrNil
+	self ___compileContext___ at: #'classBodyValueDefNode' put: aNodeOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+annotationOwnerDefNode
+	"The FunctionDefAst whose ANNOTATIONS are currently being emitted by
+	FunctionDefAst >> emitAnnotateBlockOn:, or nil.
+
+	Python evaluates parameter and return annotations in the scope that
+	ENCLOSES the def, not inside it -- so the def's own parameters must
+	not shadow anything while they are emitted.  werkzeug's
+	``def cache_control_property(key, empty, type, ...)'' annotates that
+	very ``type'' parameter with the BUILTIN ``type'', and without this
+	the annotation compiled as a read of the parameter: a temp that does
+	not exist in the enclosing scope where the annotate function is
+	built, i.e. CompileError 1001 ``undefined symbol type''.
+
+	___pythonLocalInEnclosingFunctions___: skips this one node (and only
+	this one -- a def nested INSIDE an annotation, or any enclosing def,
+	still binds normally)."
+
+	^ self ___compileContext___ at: #'annotationOwnerDefNode' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+annotationOwnerDefNode: aNodeOrNil
+	self ___compileContext___ at: #'annotationOwnerDefNode' put: aNodeOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classBodyConditionalNames
+	"Names bound inside a class-body ``if'' branch (see ClassDefAst >>
+	emitClassBodyIfBranch:on:).  Like nested-class names they live in the
+	per-class DYNAMIC attr store rather than in an accessor pair, so
+	NameAst reads them through ___dynamicClassAttr___.
+
+	Unlike classAttrNames these are NOT position-gated by
+	classBodyBoundNames: whether the binding ran is a RUNTIME fact (the
+	branch may not have been taken), which is exactly why the read falls
+	back to the module global when the slot is nil -- the same fallback
+	Python's class-body name lookup performs."
+
+	^ self ___compileContext___ at: #'classBodyConditionalNames' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classBodyConditionalNames: aSetOrNil
+	self ___compileContext___ at: #'classBodyConditionalNames' put: aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 inClassBodyValueEmit
 	"Boolean — true while ClassDefAst is emitting the class
 	attribute value expressions, false otherwise (including while
@@ -1620,6 +1786,15 @@ selfParameterRebound: aBooleanOrNil
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 isSelfReference: aSymbol
+	"The self/cls parameter of a class-body def IS the Smalltalk receiver --
+	but only because such a def compiles to a real method.  A CONDITIONAL
+	def compiles to a block (ClassDefAst >> emitClassBodyIfDef:on:), where
+	the parameter is the transported ``_self'' temp and Smalltalk ``self''
+	is the enclosing module instance.  Nothing but that def's own body emits
+	while classBodyValueDefNode is set, so denying every receiver fast path
+	for the whole window is exactly the right scope."
+
+	self classBodyValueDefNode ifNotNil: [^ false].
 	^ self classBeingCompiled notNil
 		and: [aSymbol == self selfParameterName
 		and: [self selfParameterRebound ~~ true]]

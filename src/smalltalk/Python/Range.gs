@@ -122,9 +122,22 @@ __getitem__: index
 
 	| idx size |
 	(index isKindOf: slice) ifTrue: [
-		^ self ___getslice___: index start
-			_: index stop
-			_: index step
+		"CPython: ``range(...)[i:j:k]'' is a NEW range, not a list -- so it
+		compares equal only to another range (test_slice test_indices:
+		``range(len)[s] == range(*s.indices(len))'').  slice>>indices: gives the
+		normalized (start, stop, step) against this range's length; map them
+		through this range's own start/step to the sub-range's endpoints
+		(stop stays exclusive, matching range __new__:_:_:'s convention)."
+		| ind sStart sStop sStep rStart rStep |
+		ind := index indices: self @env0:size.
+		sStart := ind @env0:at: 1.
+		sStop := ind @env0:at: 2.
+		sStep := ind @env0:at: 3.
+		rStart := self start.
+		rStep := self step.
+		^ range @env1:__new__: (rStart @env0:+ (sStart @env0:* rStep))
+			_: (rStart @env0:+ (sStop @env0:* rStep))
+			_: (rStep @env0:* sStep)
 	].
 	"Non-integer, non-slice index: catchable TypeError instead of an
 	uncatchable env-0 comparison DNU on the index."
@@ -133,8 +146,9 @@ __getitem__: index
 			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
 		TypeError ___signal___: ('range indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
+	"Fetch the index via __index__ (see SequenceableCollection>>__getitem__:)."
+	idx := index ___asIndex___.
 	size := self @env0:size.
-	idx := index.
 
 	"Handle negative indices"
 	(idx @env0:< 0) ifTrue: [
@@ -220,14 +234,24 @@ __repr__
 category: 'Grail-Iteration'
 method: range
 __reversed__
-	"Return a reversed range"
+	"reversed(range(...)) -- an ITERATOR walking the range backwards, which is
+	what CPython answers (a range_iterator over the reversed range).  This used
+	to answer the reversed RANGE itself; the difference is observable, because a
+	range reports a STATIC len() and so a static operator.length_hint, while an
+	iterator's hint decreases with every __next__.  That broke the
+	len(it) == len(list(it)) invariant: ``it = reversed(range(10))'' reported 10
+	after nine of its ten items had been consumed (test_iterlen
+	TestXrangeCustomReversed/TestListReversed test_invariant).
+
+	The reversed range is still computed the same way -- only the iterator
+	wrapper is new."
 
 	| size startVal stepVal newStart newStop newStep |
 	size := self @env0:size.
 
-	"Empty range returns empty range"
+	"Empty range returns an exhausted iterator"
 	(size == 0) ifTrue: [
-		^ range __new__: 0 _: 0 _: 1
+		^ (range __new__: 0 _: 0 _: 1) __iter__
 	].
 
 	startVal := self start.
@@ -242,7 +266,7 @@ __reversed__
 	"New stop is original start + newStep (exclusive)"
 	newStop := startVal @env0:+ newStep.
 
-	^ range __new__: newStart _: newStop _: newStep
+	^ (range __new__: newStart _: newStop _: newStep) __iter__
 %
 
 category: 'Grail-Sequence Methods'
@@ -304,4 +328,24 @@ stop
 		ifFalse: [toVal @env0:- (1)]
 %
 
+! ___pythonValueAttrs___ MUST be compiled in env 0: object>>___pyAttrLoad___
+! consults it through an ENV-0 ``respondsTo:'' (same requirement as Int.gs,
+! Bytes.gs, LruCacheWrapper.gs).
 set compile_env: 0
+
+category: 'Grail-Python Attribute Hook'
+classmethod: range
+___pythonValueAttrs___
+	"CPython's range carries start/stop/step as read-only ATTRIBUTES, not
+	methods: ``range(10).start'' is 0, not a bound method.  Without this
+	whitelist ``r.start'' answered a BoundMethod, so any arithmetic or
+	comparison on it silently operated on the method object -- and pickling a
+	range (whose reduction is ``(range, (start, stop, step))'') tried to
+	serialize three BoundMethods instead of three ints."
+
+	^ IdentitySet new
+		add: #start;
+		add: #stop;
+		add: #step;
+		yourself
+%

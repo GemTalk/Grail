@@ -87,7 +87,7 @@ printSmalltalkOn: aStream
 	| opStream sel helper |
 	opStream := AppendStream on: String new.
 	op printSmalltalkOn: opStream.
-	sel := opStream contents trimSeparators.
+	sel := opStream _contents trimSeparators.
 	helper := self ___pyBinOpHelperFor___: sel.
 	helper isNil ifTrue: [
 		left printSmalltalkWithParenthesisOn: aStream.

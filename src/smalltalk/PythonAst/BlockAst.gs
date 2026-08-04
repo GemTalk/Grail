@@ -113,6 +113,7 @@ printSmalltalkOn: aStream useTemps: aBoolean
 		aStream nextPutAll: ' |'; lf.
 	].
 	body do: [:each |
+		self ___emitCurPosBefore: each on: aStream.
 		each printSmalltalkOn: aStream.
 		aStream lf.
 		"Unreachable Python code after a top-level `return` must be

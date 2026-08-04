@@ -230,9 +230,15 @@ category: 'Grail-Exception Chaining'
 method: BaseException
 __context__
 	"Return the exception context (the exception that was being handled
-	when this exception was raised)."
+	when this exception was raised).  Full implicit chaining (auto-setting
+	the context from the currently-handled exception on every raise) is
+	still unimplemented, but an EXPLICITLY chained context -- stored in the
+	___context___ dynamic instVar by code that constructs a derived
+	exception (e.g. Enum value-lookup when a _missing_ hook returns a bad
+	value or raises) -- is honored here.  Unset -> None (CPython default)."
 
-	^ None  "TODO: implement exception context"
+	^ ([self @env0:dynamicInstVarAt: #'___context___']
+		@env0:on: AbstractException do: [:e | nil]) ifNil: [None]
 %
 
 ! ------------------- equality: CPython uses IDENTITY for exceptions
@@ -399,9 +405,25 @@ ___pythonValueAttrs___
 	check ``exc.args == (key,)'').  ``e.__notes__'' (PEP 678) is likewise the
 	notes list, not a method.  ``e.__traceback__'' is the PyTraceback object
 	(or None) -- a value, not a callable -- so a read returns it instead of a
-	BoundMethod-wrapped selector."
+	BoundMethod-wrapped selector.
 
-	^ IdentitySet new add: #'args'; add: #'__notes__'; add: #'__traceback__'; yourself
+	``e.__context__'' / ``e.__cause__'' / ``e.__suppress_context__'' are the
+	PEP 3134 exception-chaining attributes: getset descriptors in CPython
+	(None / None / False by default), so a read returns the VALUE.  Without
+	this a read wrapped the accessor as a BoundMethod, so ``exc.__context__
+	is None'' was false (test_enum test_default_missing_with_wrong_type_value
+	asserts the raised ValueError has no context).  The accessors return the
+	default today (chaining is not yet tracked); registering them here keeps
+	the Python-visible read a value, matching every other reader."
+
+	^ IdentitySet new
+		add: #'args';
+		add: #'__notes__';
+		add: #'__traceback__';
+		add: #'__context__';
+		add: #'__cause__';
+		add: #'__suppress_context__';
+		yourself
 %
 set compile_env: 1
 
@@ -438,8 +460,115 @@ ___pushTracebackFrame___: aCode lineno: ln colno: co endLineno: el endColno: ec 
 		or: [(self isKindOf: PythonContinue)
 		or: [self isKindOf: StopIteration]]]) ifTrue: [^ self].
 	frame := PyFrame code: aCode lineno: ln back: None globals: None.
+	"Store the None singleton for any absent field: a nil dynamic instVar reads
+	back as ABSENT (AttributeError on tb_line/tb_colno/...), so line-level frames
+	(no columns / source line) must carry None, not nil."
 	tb := PyTraceback frame: frame lineno: ln next: (tracebackObj ifNil: [None])
-		endLineno: el colno: co endColno: ec line: src.
+		endLineno: (el ifNil: [None]) colno: (co ifNil: [None])
+		endColno: (ec ifNil: [None]) line: (src ifNil: [None]).
 	tracebackObj := tb.
 	^ self
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___pushFrameFromPos___: aCode pos: pos
+	"Prepend a frame for aCode at the enclosing function's ___curPos___,
+	snapshotted as an exception unwinds THROUGH the function.  ___curPos___ is a
+	bare SmallInteger beginLine at statement granularity (columns / source line
+	unknown -- CPython reports them for the raising instruction, which we don't
+	track outside a comprehension).  A nil pos (no statement ran yet) is a no-op,
+	as are control-flow / StopIteration (via ___pushTracebackFrame___).  The
+	Array branch is defensive legacy: an older 5-tuple
+	{ beginLine. beginColumn. endLine. endColumn. sourceLine } still works."
+
+	pos isNil ifTrue: [^ self].
+	"``isKindOf: Integer'' -- NOT ``isInteger'': 3.7.x SmallInteger does not
+	implement isInteger (DNU), though 4.0 does; isKindOf: is universal."
+	(pos isKindOf: Integer) ifTrue: [
+		^ self ___pushTracebackFrame___: aCode
+			lineno: pos colno: nil endLineno: pos endColno: nil line: nil ].
+	^ self ___pushTracebackFrame___: aCode
+		lineno: (pos at: 1)
+		colno: (pos at: 2)
+		endLineno: ((pos at: 3) ifNil: [pos at: 1])
+		endColno: (pos at: 4)
+		line: (pos at: 5)
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___pushCatchingFrame___: aCode pos: posArray
+	"Add a frame for the function CATCHING this exception (TryAst emits this at
+	the except handler), but ONLY when no traceback exists yet.  A body wrapper
+	(nested/complex functions) or the comprehension iterator wrapper already
+	locates the exception more precisely; adding the catch-site frame on top
+	would duplicate it (and, for the comprehension, replace the exact-column
+	frame the test checks).  So this is the universal FALLBACK -- it fires for
+	an exception raised in a wrapper-less function (a plain module-level def or
+	method) and caught here, which would otherwise carry no traceback at all."
+
+	tracebackObj isNil ifTrue: [^ self ___pushFrameFromPos___: aCode pos: posArray].
+	^ self
+%
+
+category: 'Grail-Current Exception'
+classmethod: BaseException
+___currentException___
+	"The exception currently being HANDLED in this session -- what CPython
+	sys.exc_info() / sys.exception() report -- or nil outside any active except
+	block.  Session-local via SessionTemps (never committed).  TryAst codegen
+	sets it on except-handler entry and restores the prior value on exit, so
+	nested handlers stack correctly."
+
+	^ (SessionTemps current) at: #'GrailCurrentException' ifAbsent: [nil]
+%
+
+category: 'Grail-Current Exception'
+classmethod: BaseException
+___setCurrentException___: anExceptionOrNil
+	"Set (nil clears) the session's currently-handled exception.  Clearing
+	REMOVES the key rather than storing nil, so ___currentException___'s
+	ifAbsent: nil default is the single source of ``no active exception''."
+
+	anExceptionOrNil isNil
+		ifTrue: [ (SessionTemps current) removeKey: #'GrailCurrentException' ifAbsent: [] ]
+		ifFalse: [ (SessionTemps current) at: #'GrailCurrentException' put: anExceptionOrNil ].
+	^ anExceptionOrNil
+%
+
+category: 'Grail-Current Exception'
+classmethod: BaseException
+___ensureFinally___: protectedBlock finally: finallyBlock
+	"Run protectedBlock, then finallyBlock unconditionally (Python try/finally
+	semantics == GemStone ensure:), BUT when a Python exception is PROPAGATING
+	out of protectedBlock, install it as this session's current exception for the
+	duration of finallyBlock -- so sys.exc_info() / sys.exception() inside a
+	``finally'' report the in-flight exception, matching CPython -- then restore
+	the prior value and let the exception keep propagating.
+
+	Only real Python exceptions (BaseException) are installed: Grail's
+	control-flow signals (PythonReturn/PythonBreak/PythonContinue) and
+	StopIteration subclass the kernel Exception directly, NOT this BaseException,
+	so a return / break / continue / normal exit through the finally leaves
+	exc_info untouched (correct -- CPython shows the ENCLOSING handled exception
+	there, not a fresh one).
+
+	TryAst emits this in place of a bare ``ensure:'' ONLY in non-generator
+	scopes: the ``ex pass'' re-raise below is unsafe inside a forked generator
+	process (``exception has already been signalled''), so a try/finally inside a
+	generator keeps the plain ensure: and this one exc_info gap."
+
+	| propExc |
+	propExc := nil.
+	^ [ [protectedBlock value]
+			on: BaseException do: [:ex | propExc := ex. ex pass] ]
+		ensure: [
+			propExc isNil
+				ifTrue: [finallyBlock value]
+				ifFalse: [ | sav |
+					sav := self ___currentException___.
+					self ___setCurrentException___: propExc.
+					[finallyBlock value]
+						ensure: [self ___setCurrentException___: sav] ] ]
 %

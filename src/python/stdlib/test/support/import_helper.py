@@ -60,3 +60,13 @@ class DirsOnSysPath:
 
     def __exit__(self, *exc):
         return False
+
+
+def forget(modname):
+    """Remove a module (and its dotted submodules) from sys.modules -- CPython
+    import_helper.forget minus the .pyc cleanup Grail does not need."""
+    unload(modname)
+    import sys
+    for name in list(sys.modules):
+        if name.startswith(modname + '.'):
+            del sys.modules[name]

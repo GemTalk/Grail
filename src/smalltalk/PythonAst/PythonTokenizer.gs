@@ -8,7 +8,7 @@ expectvalue /Class
 doit
 Object subclass: 'PythonTokenizer'
   instVarNames: #( source position line tokens indentStack parenDepth atLineStart sourceSize )
-  classVars: #( Lf Tab NameToCodepointDict KeywordDict )
+  classVars: #( Lf Tab NameToCodepointDict KeywordDict KeywordSet )
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: PythonAst
@@ -322,6 +322,10 @@ source: aString
 
 	source := aString.
   sourceSize := aString size .
+	"``Character lf'' is a real message send, not a literal, and ``advance''
+	  tests it once per SOURCE CHARACTER of every module Grail compiles -- it
+	  came to ~2-4% of the whole SUnit suite's samples, together with the same
+	  constant in PrettyWriteStream>>___atLineStart.  Using class variable Lf ."
 	position := 1.
 	line := 1.
 	tokens := { } .

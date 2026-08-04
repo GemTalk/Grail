@@ -34,16 +34,17 @@ redistributed under the same Python Software Foundation License Version 2.
 
 | Path | CPython Source | Notes |
 |------|---------------|-------|
-| `src/python/stdlib/test/test_*.py` | `Lib/test/test_*.py` | Curated starter + phase-2 modules, vendored verbatim |
+| `src/python/stdlib/test/test_*.py` | `Lib/test/test_*.py` | The curated set wired into `scripts/cpython_suite_manifest.txt` (phases 1–4), vendored verbatim |
 | `src/python/stdlib/test/list_tests.py`, `seq_tests.py`, `mapping_tests.py`, `string_tests.py` | `Lib/test/*.py` | Sibling test mixins, vendored verbatim |
 | `src/python/stdlib/test/support/script_helper.py` | `Lib/test/support/script_helper.py` | **Rewritten**: every helper spawns a subprocess in CPython; Grail's raise `unittest.SkipTest` instead |
 | `src/python/stdlib/test/support/numbers.py` | `Lib/test/support/numbers.py` | Verbatim (pure data) |
 | `src/python/stdlib/test/support/testcase.py` | `Lib/test/support/testcase.py` | Verbatim |
 | `src/python/stdlib/test/support/__init__.py` | `Lib/test/support/__init__.py` | **Trimmed**: only the names the starter set imports; CPython's ~3200-line original pulls in subprocess/socket/faulthandler which Grail lacks |
+| `src/python/stdlib/linecache.py` | `Lib/linecache.py` | Vendored verbatim (needed by `traceback` / `test_traceback`). `_colorize.py` alongside it is an ORIGINAL Grail stub, not derived from CPython, so it carries no PSF attribution. |
 | `src/python/stdlib/test/support/import_helper.py` | `Lib/test/support/import_helper.py` | **Trimmed** to the helpers used by the starter set (no fresh-import isolation in Grail) |
 | `src/python/stdlib/test/support/threading_helper.py` | `Lib/test/support/threading_helper.py` | **Trimmed** (Grail threading is cooperative) |
 | `src/python/stdlib/test/support/warnings_helper.py` | `Lib/test/support/warnings_helper.py` | **Trimmed** to class-based context managers over the `warnings` shim |
-| `src/python/stdlib/test/support/os_helper.py` | `Lib/test/support/os_helper.py` | **Trimmed** to `TESTFN` + `unlink` (the only names the starter set imports); CPython's original adds unicode/undecodable TESTFN variants and Windows retry loops |
+| `src/python/stdlib/test/support/os_helper.py` | `Lib/test/support/os_helper.py` | **Trimmed** to the names the curated set imports (`TESTFN`, `unlink`, `temp_dir`, `create_empty_file`); CPython's original adds unicode/undecodable TESTFN variants and Windows retry loops |
 | `src/python/stdlib/test/mathdata/math_testcases.txt`, `cmath_testcases.txt` | `Lib/test/mathdata/*.txt` | Verbatim (pure test-vector data for `test_math`) |
 | `src/python/stdlib/textwrap.py` | `Lib/textwrap.py` | Verbatim (replaces Grail's earlier reduced port; enabled by the LEGB scope fix and while-else semantics) |
 

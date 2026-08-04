@@ -288,9 +288,12 @@ run
 	at: #'ExecBlockAttrs' put: nil;
 	at: #'MethodBinding' put: nil;
 	at: #'PropertyDescriptor' put: nil;
+	at: #'PyStaticMethod' put: nil;
+	at: #'PyClassMethod' put: nil;
 	at: #'LruCacheWrapper' put: nil;
 	at: #'functools_CacheInfo' put: nil;
 	at: #'functools_Placeholder' put: nil;
+	at: #'functools_cached_property' put: nil;
 	at: #'Super' put: nil;
 	at: #'SuperBoundMethod' put: nil;
 	at: #'UnboundMethod' put: nil;
@@ -299,6 +302,7 @@ run
 	at: #'bytearray' put: nil;
 	at: #'PyMemoryView' put: nil;
 	at: #'PyCode' put: nil;
+	at: #'PyAnnotate' put: nil;
 	at: #'PyFrame' put: nil;
 	at: #'PyTraceback' put: nil;
 	at: #'cmath' put: nil;
@@ -309,6 +313,7 @@ run
 	at: #'frozenset' put: nil;
 	at: #'functools' put: nil;
 	at: #'functools_partial' put: nil;
+	at: #'functools_partialmethod' put: nil;
 	at: #'dict_itemiterator' put: nil;
 	at: #'dict_keyiterator' put: nil;
 	at: #'dict_valueiterator' put: nil;
@@ -326,6 +331,7 @@ run
 	at: #'iterator' put: nil;
 	at: #'list_iterator' put: nil;
 	at: #'seq_iterator' put: nil;
+	at: #'callable_iterator' put: nil;
 	at: #'filter_iterator' put: nil;
 	at: #'map_iterator' put: nil;
 	at: #'zip_iterator' put: nil;
@@ -335,6 +341,7 @@ run
 	at: #'PySocketIO' put: nil;
 	at: #'_thread' put: nil;
 	at: #'PyThreadLock' put: nil;
+	at: #'PyThreadRLock' put: nil;
 	at: #'Hash' put: nil;
 	at: #'time' put: nil;
 	at: #'secrets' put: nil;
@@ -514,6 +521,7 @@ run
 	at: #'StaticFunctionDefAst' put: nil;
 	at: #'StoreAst' put: nil;
 	at: #'SubAst' put: nil;
+	at: #'PyGenericAlias' put: nil;
 	at: #'SubscriptAst' put: nil;
 	at: #'SuiteAst' put: nil;
 	at: #'TryAst' put: nil;
@@ -542,6 +550,7 @@ run
 	at: #'BaseExceptionTestCase' put: nil;
 	at: #'BlockingIOErrorTestCase' put: nil;
 	at: #'BooleanTestCase' put: nil;
+	at: #'BoolConformanceTestCase' put: nil;
 	at: #'BoundMethodNameTestCase' put: nil;
 	at: #'BrokenPipeErrorTestCase' put: nil;
 	at: #'BufferErrorTestCase' put: nil;
@@ -584,6 +593,7 @@ run
 	at: #'GrailSTestTarget' put: nil;
 	at: #'ClassTestCase' put: nil;
 	at: #'ClosureAttributeTestCase' put: nil;
+	at: #'ChainedComparisonTestCase' put: nil;
 	at: #'ComplexTestCase' put: nil;
 	at: #'ComparisonProtocolTestCase' put: nil;
 	at: #'ComprehensionTestCase' put: nil;
@@ -592,6 +602,10 @@ run
 	at: #'ModuleScopeBindingsTestCase' put: nil;
 	at: #'ModuleFunctionDecoratorsTestCase' put: nil;
 	at: #'ImportTypeIntrospectionTestCase' put: nil;
+	at: #'ExecClassBodyNamesTestCase' put: nil;
+	at: #'ExecClassDefinitionTestCase' put: nil;
+	at: #'IteratorLengthHintTestCase' put: nil;
+	at: #'LambdaDefaultsTestCase' put: nil;
 	at: #'ContextVarsTestCase' put: nil;
 	at: #'ShimForeignObjectTestCase' put: nil;
 	at: #'DynamicInstanceAttrsTestCase' put: nil;
@@ -602,10 +616,13 @@ run
 	at: #'AttributeProtocolTestCase' put: nil;
 	at: #'AttributeStoreTestCase' put: nil;
 	at: #'SlotsTestCase' put: nil;
+	at: #'SuperTwoArgLocalTestCase' put: nil;
 	at: #'DictKwargsTestCase' put: nil;
 	at: #'DunderClassTestCase' put: nil;
 	at: #'ClassFunctionBindingTestCase' put: nil;
 	at: #'GenericClassSubscriptTestCase' put: nil;
+	at: #'GenericAliasTestCase' put: nil;
+	at: #'Pep649AnnotationsTestCase' put: nil;
 	at: #'GlobalStatementCodegenTestCase' put: nil;
 	at: #'EmailMessageTestCase' put: nil;
 	at: #'EnumAutoImportTestCase' put: nil;
@@ -692,6 +709,9 @@ run
 	at: #'KeyboardInterruptTestCase' put: nil;
 	at: #'KeywordOnlyParamsTestCase' put: nil;
 	at: #'ListSortKwargsTestCase' put: nil;
+	at: #'ClassBodyConditionalTestCase' put: nil;
+	at: #'CachedPropertyDescriptorTestCase' put: nil;
+	at: #'LruHashabilityAndUnionsTestCase' put: nil;
 	at: #'ListTestCase' put: nil;
 	at: #'LocalsTestCase' put: nil;
 	at: #'LookupErrorTestCase' put: nil;
@@ -714,6 +734,9 @@ run
 	at: #'ObjectTestCase' put: nil;
 	at: #'OsTestCase' put: nil;
 	at: #'OverflowErrorTestCase' put: nil;
+	at: #'PartialCallableAndCopyTestCase' put: nil;
+	at: #'PickleProtocolTestCase' put: nil;
+	at: #'PartialMethodDescriptorTestCase' put: nil;
 	at: #'PassTestCase' put: nil;
 	at: #'PendingDeprecationWarningTestCase' put: nil;
 	at: #'PermissionErrorTestCase' put: nil;
@@ -724,6 +747,7 @@ run
 	at: #'RaiseTestCase' put: nil;
 	at: #'RandomTestCase' put: nil;
 	at: #'RangeTestCase' put: nil;
+	at: #'ReduceAndBuiltinBindingTestCase' put: nil;
 	at: #'ReturnTestCase' put: nil;
 	at: #'RecursionErrorTestCase' put: nil;
 	at: #'ReferenceErrorTestCase' put: nil;
@@ -736,6 +760,7 @@ run
 	at: #'SecretsTestCase' put: nil;
 	at: #'SetTestCase' put: nil;
 	at: #'SliceAndLoopsTestCase' put: nil;
+	at: #'SingleDispatchMethodTestCase' put: nil;
 	at: #'SreTestCase' put: nil;
 	at: #'StatisticsTestCase' put: nil;
 	at: #'StopAsyncIterationTestCase' put: nil;
@@ -764,6 +789,8 @@ run
 	at: #'SystemExitTestCase' put: nil;
 	at: #'TabErrorTestCase' put: nil;
 	at: #'TimeoutErrorTestCase' put: nil;
+	at: #'TotalOrderingTestCase' put: nil;
+	at: #'TzsetPinningTestCase' put: nil;
 	at: #'TryTestCase' put: nil;
 	at: #'TupleTestCase' put: nil;
 	at: #'TwilioClientTestCase' put: nil;
@@ -904,6 +931,7 @@ input src/smalltalk/Python/Bytearray.gs
 input src/smalltalk/Python/complex.gs
 input src/smalltalk/Python/slice.gs
 input src/smalltalk/Python/PyCode.gs
+input src/smalltalk/Python/PyAnnotate.gs
 input src/smalltalk/Python/PyFrame.gs
 input src/smalltalk/Python/PyTraceback.gs
 input src/smalltalk/Python/iterator.gs
@@ -918,6 +946,7 @@ input src/smalltalk/Python/NamedIntConstant.gs
 input src/smalltalk/Python/BoundMethod.gs
 input src/smalltalk/Python/MethodBinding.gs
 input src/smalltalk/Python/PropertyDescriptor.gs
+input src/smalltalk/Python/MethodWrappers.gs
 
 ! Register ``property'' → PropertyDescriptor AFTER the class file is
 ! loaded — the Step 3 type-mapping block runs before the class
@@ -941,10 +970,12 @@ input src/smalltalk/Python/dict_keyiterator.gs
 input src/smalltalk/Python/dict_valueiterator.gs
 input src/smalltalk/Python/list_iterator.gs
 input src/smalltalk/Python/seq_iterator.gs
+input src/smalltalk/Python/callable_iterator.gs
 input src/smalltalk/Python/range_iterator.gs
 input src/smalltalk/Python/set_iterator.gs
 input src/smalltalk/Python/str_iterator.gs
 input src/smalltalk/Python/Tuple.gs
+input src/smalltalk/Python/GenericAlias.gs
 input src/smalltalk/Python/tuple_iterator.gs
 input src/smalltalk/Python/filter_iterator.gs
 input src/smalltalk/Python/map_iterator.gs
@@ -1013,6 +1044,14 @@ input src/smalltalk/Python/LookupError.gs
 input src/smalltalk/Python/MemoryError.gs
 input src/smalltalk/Python/NameError.gs
 input src/smalltalk/Python/OSError.gs
+run
+"Python 3: IOError is an alias of OSError.  Register it in the Python dict so
+Python code that references IOError (jinja2/requests/django exceptions.py)
+resolves to the PYTHON OSError -- not the unrelated GemStone kernel IOError in
+Globals, which the Grail compile symbol list no longer includes."
+Python at: #'IOError' put: (Python at: #'OSError').
+true
+%
 input src/smalltalk/Python/ReferenceError.gs
 input src/smalltalk/Python/RuntimeError.gs
 input src/smalltalk/Python/StopAsyncIteration.gs
@@ -1268,7 +1307,10 @@ set compile_env: 0
 
 input src/smalltalk/PythonTests/GrailTestResult.gs
 input src/smalltalk/PythonTests/PythonTestCase.gs
+input src/smalltalk/PythonTests/ChainedComparisonTestCase.gs
 input src/smalltalk/PythonTests/BooleanTestCase.gs
+input src/smalltalk/PythonTests/BoolConformanceTestCase.gs
+input src/smalltalk/PythonTests/PickleProtocolTestCase.gs
 input src/smalltalk/PythonTests/BoundMethodNameTestCase.gs
 input src/smalltalk/PythonTests/BuiltinsTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassOverrideTestCase.gs
@@ -1277,6 +1319,7 @@ input src/smalltalk/PythonTests/StrSubclassWideTestCase.gs
 input src/smalltalk/PythonTests/StrSubclassConstructionTestCase.gs
 input src/smalltalk/PythonTests/DatetimeLocalTimeTestCase.gs
 input src/smalltalk/PythonTests/FunctionMetadataTestCase.gs
+input src/smalltalk/PythonTests/SingleDispatchMethodTestCase.gs
 input src/smalltalk/PythonTests/SingleDispatchRegisterTestCase.gs
 input src/smalltalk/PythonTests/CrossVersionSelectorTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyMethodDecoratorTestCase.gs
@@ -1305,6 +1348,10 @@ input src/smalltalk/PythonTests/DynamicGlobalsTestCase.gs
 input src/smalltalk/PythonTests/ModuleScopeBindingsTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionDecoratorsTestCase.gs
 input src/smalltalk/PythonTests/ImportTypeIntrospectionTestCase.gs
+input src/smalltalk/PythonTests/ExecClassBodyNamesTestCase.gs
+input src/smalltalk/PythonTests/ExecClassDefinitionTestCase.gs
+input src/smalltalk/PythonTests/IteratorLengthHintTestCase.gs
+input src/smalltalk/PythonTests/LambdaDefaultsTestCase.gs
 input src/smalltalk/PythonTests/ContextVarsTestCase.gs
 input src/smalltalk/PythonTests/ShimForeignObjectTestCase.gs
 input src/smalltalk/PythonTests/DynamicInstanceAttrsTestCase.gs
@@ -1315,10 +1362,13 @@ input src/smalltalk/PythonTests/ClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/AttributeProtocolTestCase.gs
 input src/smalltalk/PythonTests/AttributeStoreTestCase.gs
 input src/smalltalk/PythonTests/SlotsTestCase.gs
+input src/smalltalk/PythonTests/SuperTwoArgLocalTestCase.gs
 input src/smalltalk/PythonTests/DictKwargsTestCase.gs
 input src/smalltalk/PythonTests/DunderClassTestCase.gs
 input src/smalltalk/PythonTests/ClassFunctionBindingTestCase.gs
 input src/smalltalk/PythonTests/GenericClassSubscriptTestCase.gs
+input src/smalltalk/PythonTests/GenericAliasTestCase.gs
+input src/smalltalk/PythonTests/Pep649AnnotationsTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementCodegenTestCase.gs
 input src/smalltalk/PythonTests/EnumAutoImportTestCase.gs
 input src/smalltalk/PythonTests/Pep448StarredLiteralsTestCase.gs
@@ -1401,6 +1451,9 @@ input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
 input src/smalltalk/PythonTests/TracebackTestCase.gs
 input src/smalltalk/PythonTests/ListSortKwargsTestCase.gs
+input src/smalltalk/PythonTests/CachedPropertyDescriptorTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
+input src/smalltalk/PythonTests/LruHashabilityAndUnionsTestCase.gs
 input src/smalltalk/PythonTests/ListTestCase.gs
 input src/smalltalk/PythonTests/MathTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionTestCase.gs
@@ -1409,12 +1462,15 @@ input src/smalltalk/PythonTests/NoneTypeTestCase.gs
 input src/smalltalk/PythonTests/NumbersTestCase.gs
 input src/smalltalk/PythonTests/ObjectTestCase.gs
 input src/smalltalk/PythonTests/OsTestCase.gs
+input src/smalltalk/PythonTests/PartialCallableAndCopyTestCase.gs
+input src/smalltalk/PythonTests/PartialMethodDescriptorTestCase.gs
 input src/smalltalk/PythonTests/PassTestCase.gs
 input src/smalltalk/PythonTests/PythonParserTestCase.gs
 input src/smalltalk/PythonTests/PythonTokenizerTestCase.gs
 input src/smalltalk/PythonTests/RaiseTestCase.gs
 input src/smalltalk/PythonTests/RandomTestCase.gs
 input src/smalltalk/PythonTests/RangeTestCase.gs
+input src/smalltalk/PythonTests/ReduceAndBuiltinBindingTestCase.gs
 input src/smalltalk/PythonTests/ReturnTestCase.gs
 input src/smalltalk/PythonTests/RuntimeClassCreationTestCase.gs
 input src/smalltalk/PythonTests/SecretsTestCase.gs
@@ -1443,6 +1499,8 @@ input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs
 input src/smalltalk/PythonTests/StringModuleTestCase.gs
 input src/smalltalk/PythonTests/SubmoduleAutoBindTestCase.gs
 input src/smalltalk/PythonTests/SysTestCase.gs
+input src/smalltalk/PythonTests/TotalOrderingTestCase.gs
+input src/smalltalk/PythonTests/TzsetPinningTestCase.gs
 input src/smalltalk/PythonTests/TryTestCase.gs
 input src/smalltalk/PythonTests/TupleTestCase.gs
 input src/smalltalk/PythonTests/BaseExceptionTestCase.gs

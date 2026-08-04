@@ -87,9 +87,47 @@ __new__: obj _: encoding
 	under an encoding is meaningless, so a str-subclass class here can only be
 	the explicit-cls form.  (The 1-arg ``__new__: obj'' deliberately does NOT
 	get this treatment -- ``str(SomeClass)'' must still stringify the class.)"
+	"A StrEnum member class is AbstractPyStr-rooted, NOT CharacterCollection --
+	it stores its string in the #value slot (basicNew + #value), not indexed
+	chars, so the CharacterCollection raw-alloc below fails ('no varying
+	instVars').  ``str.__new__(cls, value)'' for such an enum basicNews a cls
+	instance carrying value in #value, else the member came back a bare
+	Unicode7 (custom-__new__ instance attrs / __class__ lost -- StrEnum
+	test_dir_on_sub)."
+	[ | aps enumCls2 |
+	aps := Python @env0:at: #AbstractPyStr otherwise: nil.
+	enumCls2 := Python @env0:at: #Enum otherwise: nil.
+	((obj @env0:isKindOf: Behavior)
+		and: [(aps @env0:notNil) and: [(obj @env0:inheritsFrom: aps)
+		and: [(obj @env0:inheritsFrom: CharacterCollection) @env0:not
+		and: [(enumCls2 @env0:notNil)
+			and: [(obj @env0:inheritsFrom: enumCls2)
+				or: [(enumCls2 @env0:perform: #'___grailRecordFor:' env: 1
+					withArguments: { obj }) @env0:notNil]]]]]])
+		ifTrue: [ | src2 res2 |
+			src2 := (encoding isKindOf: CharacterCollection)
+				ifTrue: [encoding]
+				ifFalse: [encoding @env0:ifNil: [''] ifNotNil: [encoding __str__]].
+			res2 := obj @env0:new.
+			res2 @env0:dynamicInstVarAt: #value put: src2.
+			^ res2] ] @env0:value.
 	((obj @env0:isKindOf: Behavior)
 		@env0:and: [obj @env0:inheritsFrom: CharacterCollection])
-			ifTrue: [^ obj __new__: encoding].
+			ifTrue: [
+				| enumCls src res |
+				enumCls := Python @env0:at: #Enum otherwise: nil.
+				((enumCls @env0:notNil)
+					and: [(obj @env0:inheritsFrom: enumCls)
+						or: [(enumCls @env0:perform: #'___grailRecordFor:' env: 1
+							withArguments: { obj }) @env0:notNil]])
+					ifFalse: [^ obj __new__: encoding].
+				src := (encoding isKindOf: CharacterCollection)
+					ifTrue: [encoding]
+					ifFalse: [encoding @env0:ifNil: [''] ifNotNil: [encoding __str__]].
+				res := obj @env0:new: src @env0:size.
+				src @env0:size @env0:> 0 ifTrue: [
+					res @env0:replaceFrom: 1 to: src @env0:size with: src startingAt: 1].
+				^ res].
 
 	(obj isKindOf: ByteArray) ifTrue: [
 		"Re-wrap through the 1-arg SELF-TYPED allocator.  ``decode:''
@@ -194,9 +232,17 @@ __contains__: item
 category: 'Grail-Comparison'
 method: CharacterCollection
 __eq__: other
-	"Return self == other"
+	"Return self == other.
 
-	^ self @env0:= other
+	A NON-string operand is not simply unequal: CPython's str.__eq__ answers
+	NotImplemented so the REFLECTED __eq__ on the other side gets its turn
+	(``'a' == ALWAYS_EQ'' is True throughout CPython's suite, and
+	``'a' == UserString('a')'' relies on the same hand-off).  ___cmpEq___ ->
+	___eqValue___ still ends at identity/False when that operand has no
+	__eq__ of its own, so plain ``'a' == 1'' is unchanged."
+
+	(other isKindOf: CharacterCollection) ifTrue: [^ self @env0:= other].
+	^ #'___NotImplemented___'
 %
 
 category: 'Grail-String Representation'
@@ -264,8 +310,10 @@ __getitem__: index
 		or: [index ___respondsTo___: #'__index__']) ifFalse: [
 		TypeError ___signal___: ('string indices must be integers, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
+	"Fetch the index via __index__ -- probing only proved it is index-like
+	(test_index.StringTestCase; env-0 #< on the object is an uncatchable DNU)."
+	idx := index ___asIndex___.
 	size := self @env0:size.
-	idx := index.
 
 	"Handle negative indices"
 	(idx @env0:< 0) ifTrue: [
@@ -531,7 +579,10 @@ __mul__: n
 	((n isKindOf: Integer)
 		or: [n ___respondsTo___: #'__index__']) ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
-	count := n @env0:asInteger.
+	"__index__ objects answer neither #asInteger (uncatchable DNU) nor
+	arithmetic -- fetch the count first, range-checked: 'a' * 2**100 is an
+	OverflowError, not an attempt to build it."
+	count := n ___asRepeatCount___.
 	(count @env0:<= 0) ifTrue: [ ^ '' @env0:copy ].
 
 	stream := AppendStream @env0:on: (Unicode7 ___new___).
@@ -545,9 +596,14 @@ __mul__: n
 category: 'Grail-Comparison'
 method: CharacterCollection
 __ne__: other
-	"Return self != other"
+	"Return self != other.
 
-	^ self @env0:~= other
+	Mirror __eq__:'s NotImplemented punt for a non-string operand -- deciding
+	it here by Smalltalk ~= would skip the reflected __ne__/__eq__ that
+	___cmpNe___ -> ___neValue___ is there to try."
+
+	(other isKindOf: CharacterCollection) ifTrue: [^ self @env0:~= other].
+	^ #'___NotImplemented___'
 %
 
 category: 'Grail-String Representation'
@@ -1483,11 +1539,35 @@ isspace
 
 	allSpace := true.
 	self @env0:do: [:char |
-		| isSpace |
-		isSpace := char @env0:isSeparator.
-		isSpace ifFalse: [ allSpace := false ].
+		(self ___isPySpaceCodePoint___: char @env0:codePoint)
+			ifFalse: [ allSpace := false ].
 	].
 	^ allSpace
+%
+
+category: 'Grail-String Test Methods'
+method: CharacterCollection
+___isPySpaceCodePoint___: cp
+	"CPython's str.isspace() is true for a codepoint in Unicode category
+	Zs or with bidirectional class WS, B or S -- a wider set than
+	GemStone's ``Character>>isSeparator'', which stops at the ASCII
+	separators plus NBSP.  ``'　'.isspace()'' (IDEOGRAPHIC SPACE)
+	was False without this (test_bool.py test_string).  Enumerated
+	rather than table-driven: the whole set is 29 codepoints and does
+	not move between Unicode releases."
+
+	"ASCII: TAB LF VT FF CR, the FS/GS/RS/US information separators, SPACE."
+	(cp @env0:between: 9 and: 13) ifTrue: [^ true].
+	(cp @env0:between: 28 and: 32) ifTrue: [^ true].
+	cp @env0:< 127 ifTrue: [^ false].
+	"NEXT LINE, NO-BREAK SPACE, OGHAM SPACE MARK."
+	((cp @env0:= 133) or: [(cp @env0:= 160) or: [cp @env0:= 5760]]) ifTrue: [^ true].
+	"EN QUAD .. HAIR SPACE (U+2000..U+200A)."
+	(cp @env0:between: 8192 and: 8202) ifTrue: [^ true].
+	"LINE/PARAGRAPH SEPARATOR, NARROW NO-BREAK SPACE, MEDIUM MATHEMATICAL
+	SPACE, IDEOGRAPHIC SPACE."
+	^ (cp @env0:= 8232) or: [(cp @env0:= 8233)
+		or: [(cp @env0:= 8239) or: [(cp @env0:= 8287) or: [cp @env0:= 12288]]]]
 %
 
 category: 'Grail-String Test Methods'

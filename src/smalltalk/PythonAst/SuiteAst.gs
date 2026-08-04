@@ -52,6 +52,12 @@ method: SuiteAst
 printSmalltalkOn: aStream
 
 	body do: [:stmt |
+		"Track the current execution position before each statement so a
+		traceback frame built while this statement runs (e.g. a raise inside a
+		try / loop / if body -- all of which are SuiteAsts) points at the raising
+		line, not the enclosing compound-statement header.  Mirrors
+		BlockAst>>printSmalltalkOn:useTemps:; no-ops outside a function."
+		self ___emitCurPosBefore: stmt on: aStream.
 		stmt printSmalltalkOn: aStream.
 		aStream lf.
 		"See BlockAst>>printSmalltalkOn:useTemps: -- dead code after a

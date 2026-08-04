@@ -601,22 +601,39 @@ testEncodeAlreadyValidUserClass
 
 category: 'Grail-Tests - Class Name Encoding'
 method: ImportlibTestCase
-testEncodeLowercaseModuleName
-	"A lowercase Python module name gets its first character capitalized
-	so it parses as a Smalltalk class name."
+testEncodeClassNameKeepsCase
+	"A lowercase Python CLASS name is kept exactly (GemStone accepts a
+	lowercase class name); the GemStone class name IS the Python name, so
+	cls.__name__ round-trips.  No capitalization -- that used to make
+	__name__ wrong and need a mangled->original registry."
 
 	self assert: (importlib ___asSmalltalkClassName___: 'hello')
-		equals: #'Hello'
+		equals: #'hello'
 %
 
 category: 'Grail-Tests - Class Name Encoding'
 method: ImportlibTestCase
-testEncodeDottedModuleName
-	"Dots in a Python package path become underscores; the first
-	character of the leading segment is capitalized."
+testEncodeDottedClassName
+	"Dots are illegal in a GemStone class name, so a dotted Python name
+	replaces each `.` with `_` -- the one transform GemStone forces on a
+	class name.  Case is preserved (no capitalization)."
 
 	self assert: (importlib ___asSmalltalkClassName___: 're._parser')
-		equals: #'Re__parser'
+		equals: #'re__parser'
+%
+
+category: 'Grail-Tests - Class Name Encoding'
+method: ImportlibTestCase
+testEncodeModuleNameKeepsCase
+	"MODULE names now use the SAME encoder as class names
+	(___asSmalltalkModuleName___: delegates to ___asSmalltalkClassName___:): the
+	only transform is `.` -> `_`, and case is PRESERVED so the backing-class name
+	matches the Python module name.  Capitalization is gone -- Globals is no
+	longer in the compile symbol list, so there is nothing to dodge."
+
+	self assert: (importlib ___asSmalltalkModuleName___: 'hello') equals: #'hello'.
+	self assert: (importlib ___asSmalltalkModuleName___: 're._parser') equals: #'re__parser'.
+	self assert: (importlib ___asSmalltalkModuleName___: 'MyMod') equals: #'MyMod'
 %
 
 category: 'Grail-Tests - Class Name Encoding'
@@ -647,8 +664,9 @@ category: 'Grail-Tests - Generated Class Location'
 method: ImportlibTestCase
 testGeneratedModuleClassInPythonModules
 	"loadModuleFromPath: registers the generated module class in the
-	PythonModules SymbolDictionary, keyed by the encoded class name —
-	not in UserGlobals."
+	PythonModules SymbolDictionary, keyed by the encoded MODULE class name —
+	not in UserGlobals.  A module name is encoded by ___asSmalltalkModuleName___:
+	(dots -> underscores, case preserved): 'python.hello' -> 'python_hello'."
 
 	| mods |
 	mods := importlib @env1:modules.
@@ -656,9 +674,8 @@ testGeneratedModuleClassInPythonModules
 	importlib loadModuleFromPath: (importlib grailDir , '/src/python/hello.py')
 		name: 'python.hello'.
 
-	self assert: (PythonModules at: #'Python_hello' ifAbsent: [nil]) notNil.
-	self assert: (UserGlobals at: #'Python_hello' ifAbsent: [nil]) isNil.
-	self assert: (UserGlobals at: #'py_python_hello' ifAbsent: [nil]) isNil
+	self assert: (PythonModules at: #'python_hello' ifAbsent: [nil]) notNil.
+	self assert: (UserGlobals at: #'python_hello' ifAbsent: [nil]) isNil
 %
 
 ! ===============================================================================

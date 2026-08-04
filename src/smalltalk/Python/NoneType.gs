@@ -130,13 +130,24 @@ __bool__
 category: 'Grail-Special Methods'
 method: NoneType
 __eq__: other
-	^ other == self
+	"None equals only itself.  Anything else answers NotImplemented rather
+	than false, so the operator layer can still try the REFLECTED __eq__ --
+	CPython's ``None == ALWAYS_EQ'' is True (test_compare.test_issue_1393's
+	sibling case).  ___cmpEq___ -> ___eqValue___ falls back to identity when
+	the operand has no __eq__ of its own, so ``None == 1'' stays False."
+
+	(other == self) ifTrue: [^ true].
+	^ #'___NotImplemented___'
 %
 
 category: 'Grail-Special Methods'
 method: NoneType
 __ne__: other
-	^ other ~~ self
+	"Mirror __eq__: punt to the reflected side instead of deciding by
+	identity (see the comment there)."
+
+	(other == self) ifTrue: [^ false].
+	^ #'___NotImplemented___'
 %
 
 category: 'Grail-Special Methods'
@@ -180,28 +191,28 @@ __lt__: other
 	MNU killed test_tuple's whole run."
 
 	TypeError ___signal___: ('''<'' not supported between instances of ''NoneType'' and '''
-		@env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
+		@env0:, (other @env0:class @env1:__name__) @env0:asString @env0:, '''')
 %
 
 category: 'Grail-Python protocol'
 method: NoneType
 __le__: other
 	TypeError ___signal___: ('''<='' not supported between instances of ''NoneType'' and '''
-		@env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
+		@env0:, (other @env0:class @env1:__name__) @env0:asString @env0:, '''')
 %
 
 category: 'Grail-Python protocol'
 method: NoneType
 __gt__: other
 	TypeError ___signal___: ('''>'' not supported between instances of ''NoneType'' and '''
-		@env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
+		@env0:, (other @env0:class @env1:__name__) @env0:asString @env0:, '''')
 %
 
 category: 'Grail-Python protocol'
 method: NoneType
 __ge__: other
 	TypeError ___signal___: ('''>='' not supported between instances of ''NoneType'' and '''
-		@env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
+		@env0:, (other @env0:class @env1:__name__) @env0:asString @env0:, '''')
 %
 
 category: 'Grail-Python protocol'

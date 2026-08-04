@@ -8,7 +8,8 @@ expectvalue /Class
 doit
 Object subclass: 'PythonParser'
   instVarNames: #( source tokens position variableStack classNesting writeStack
-                    blockingStack nonlocalStack globalStack inCompTarget)
+                    blockingStack nonlocalStack globalStack inCompTarget
+                    underscoreDefCount underscoreCurrentName)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -165,6 +166,11 @@ declareWrite: aSymbol
 	comprehension codegen additionally declares each target as a
 	block-local temp of its own emitted block."
 
+	"Any NON-def binding of ``_'' (assignment, for-target, ``with ... as _'',
+	import alias) reaches here already renamed to the base ``___unused___''.
+	It rebinds the name, so a later read of ``_'' must see it rather than a
+	numbered def -- see underscoreDefName."
+	aSymbol == #'___unused___' ifTrue: [underscoreCurrentName := #'___unused___'].
 	variableStack last add: aSymbol.
 	inCompTarget == true ifTrue: [^ self].
 	writeStack last add: aSymbol.
@@ -420,7 +426,7 @@ parseAtom
 		| nameSym |
 		self advance.
 		nameSym := tok value asSymbol.
-		nameSym = #'_' ifTrue: [nameSym := #'___unused___'].
+		nameSym = #'_' ifTrue: [nameSym := self underscoreReadName].
 		^NameAst new
 			id: nameSym;
 			ctx: self loadCtx;
@@ -660,7 +666,7 @@ parseClassDefWithDecorators: decorators
 	tok := self advance. "consume 'class'"
 	nameTok := self expectType: #NAME.
 	"``class _:`` -- same parse-time rename as def _ / NameAst reads."
-	nameTok value = '_' ifTrue: [nameTok value: '___unused___'].
+	nameTok value = '_' ifTrue: [nameTok value: self underscoreDefName asString].
 	self declareWrite: nameTok value asSymbol.
 	self skipTypeParams.
 	bases := Array new.
@@ -1298,7 +1304,7 @@ parseFunctionDefWithDecorators: decorators
 	"``def _(...)`` -- apply the same parse-time rename NameAst reads
 	get (see the identifier atom): `_` is GemStone's legacy assignment
 	token, not an identifier."
-	nameTok value = '_' ifTrue: [nameTok value: '___unused___'].
+	nameTok value = '_' ifTrue: [nameTok value: self underscoreDefName asString].
 	self declareWrite: nameTok value asSymbol.
 	self skipTypeParams.
 	self expect: #OP value: '('.
@@ -1345,7 +1351,15 @@ parseFunctionDefWithDecorators: decorators
 		yourself.
 	decoratorNames := decorators collect: [:each |
 		(each isKindOf: NameAst)
-			ifTrue: [each id]
+			ifTrue: ["A bare ``@DynamicClassAttribute (from ``from types import
+				DynamicClassAttribute'') is CPython's getset descriptor that enum
+				member properties are built on -- same role as ``@property'' /
+				``@enum.property'', so re-class the def declaratively as a property
+				(test_enum test_subclass_duplicate_name_dynamic).  Other bare names
+				pass through unchanged."
+				(each id asString = 'DynamicClassAttribute')
+					ifTrue: [#'property']
+					ifFalse: [each id]]
 			ifFalse: [self ___declarativeDecoratorSymbolFor: each]
 	].
 	funcNode := FunctionDefAst new
@@ -2959,6 +2973,51 @@ peekValue
 	tok := self peek.
 	tok ifNil: [^nil].
 	^tok value
+%
+
+category: 'Grail-parsing - names'
+method: PythonParser
+underscoreDefName
+	"The name to compile a ``def _'' / ``class _'' under.
+
+	``_'' is not a valid Smalltalk identifier (it is GemStone's legacy
+	assignment token), so every ``_'' is renamed at parse time.  Renaming them
+	all to one name silently DISCARDED every ``def _'' but the last: they
+	compile to a single selector, so the second definition overwrote the
+	first.  Nothing complained, and the lost method simply never ran.
+
+	That is the shape of the standard singledispatch idiom, where each
+	registered implementation is spelled ``_'':
+
+	    @t.register(int)
+	    def _(self, arg): ...
+	    @t.register(str)
+	    def _(self, arg): ...
+
+	-- two distinct functions, and with the class-body decorator now applying,
+	collapsing them would register BOTH types against whichever body survived.
+	So each definition gets its own name.  The first keeps the historical
+	``___unused___'' so the common single-def case compiles exactly as before.
+
+	The counter runs over the whole parse rather than per scope: names only
+	need to be unique where they collide, and a single counter cannot produce
+	a collision anywhere."
+
+	underscoreDefCount := (underscoreDefCount ifNil: [0]) + 1.
+	underscoreCurrentName := underscoreDefCount = 1
+		ifTrue: [#'___unused___']
+		ifFalse: [('___unused' , underscoreDefCount printString , '___') asSymbol].
+	^ underscoreCurrentName
+%
+
+category: 'Grail-parsing - names'
+method: PythonParser
+underscoreReadName
+	"What a READ of ``_'' resolves to: the most recent binding of the name,
+	which is a numbered def when the last thing to bind ``_'' was a def and
+	the base name otherwise (declareWrite: resets it)."
+
+	^ underscoreCurrentName ifNil: [#'___unused___']
 %
 
 category: 'Grail-node construction'

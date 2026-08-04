@@ -87,14 +87,41 @@ class Decimal:
         self._num = n
         self._den = d
 
-    def _ratio(self, other):
-        """(num, den) of another operand, or None if not coercible."""
+    def _ratio(self, other, comparison=False, equality_op=False):
+        """(num, den) of another operand, or None if not coercible.
+
+        Two widenings apply to COMPARISONS only, mirroring CPython's split
+        between _convert_other (arithmetic) and _convert_for_comparison:
+          * ``comparison'' admits any Rational (fractions.Fraction).  Mixed
+            ARITHMETIC must keep raising TypeError -- ``Decimal + Fraction'' is
+            a TypeError in CPython and test_fractions.testMixingWithDecimal
+            asserts it in both directions.
+          * ``equality_op'' additionally admits complex, which is legal for
+            == / != only: no complex is ever ordered, so ``Decimal(1) < 1j''
+            still raises TypeError (test_compare's assert_equality_only)."""
         if isinstance(other, type(self)):
             return other._num, other._den
         if isinstance(other, int):
             return other, 1
         if isinstance(other, float):
             return other.as_integer_ratio()
+        # Any Rational (fractions.Fraction) is exact as numerator/denominator.
+        # CPython's decimal reaches these through _convert_for_comparison;
+        # without them Decimal('1001.0') == Fraction(2002, 2) was False, since
+        # Fraction.__eq__ punts on a Decimal and the reflected side gave up too
+        # (test_compare.test_numbers).  Comparisons only -- see the docstring.
+        if comparison:
+            num = getattr(other, "numerator", None)
+            den = getattr(other, "denominator", None)
+            if isinstance(num, int) and isinstance(den, int) and den != 0:
+                return num, den
+        # A complex with no imaginary part is EQUAL to its real part, as
+        # everywhere else in the numeric tower (1001 == 1001+0j) -- but it is
+        # never ORDERED, hence the equality_op gate.
+        if equality_op and isinstance(other, complex):
+            if other.imag == 0:
+                return self._ratio(other.real)
+            return None
         return None
 
     def _new(self, n, d):
@@ -245,42 +272,42 @@ class Decimal:
     # --- comparisons (exact rational cross-multiply; den > 0) ---
 
     def __eq__(self, other):
-        r = self._ratio(other)
+        r = self._ratio(other, comparison=True, equality_op=True)
         if r is None:
             return NotImplemented
         on, od = r
         return self._num * od == on * self._den
 
     def __ne__(self, other):
-        r = self._ratio(other)
+        r = self._ratio(other, comparison=True, equality_op=True)
         if r is None:
             return NotImplemented
         on, od = r
         return self._num * od != on * self._den
 
     def __lt__(self, other):
-        r = self._ratio(other)
+        r = self._ratio(other, comparison=True)
         if r is None:
             return NotImplemented
         on, od = r
         return self._num * od < on * self._den
 
     def __le__(self, other):
-        r = self._ratio(other)
+        r = self._ratio(other, comparison=True)
         if r is None:
             return NotImplemented
         on, od = r
         return self._num * od <= on * self._den
 
     def __gt__(self, other):
-        r = self._ratio(other)
+        r = self._ratio(other, comparison=True)
         if r is None:
             return NotImplemented
         on, od = r
         return self._num * od > on * self._den
 
     def __ge__(self, other):
-        r = self._ratio(other)
+        r = self._ratio(other, comparison=True)
         if r is None:
             return NotImplemented
         on, od = r

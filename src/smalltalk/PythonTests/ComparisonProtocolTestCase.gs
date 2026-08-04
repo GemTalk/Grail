@@ -161,3 +161,186 @@ testValidIndexingStillWorks
 	self assert: (self resultAt: 'str_index_neg') equals: 'c'.
 	self assert: (self resultAt: 'range_index_ok') equals: 2
 %
+
+category: 'Grail-Tests - Reflected equality'
+method: ComparisonProtocolTestCase
+testReflectedEqualityWhenLeftOperandHasNone
+	"``==''/``!='' must hand the comparison to the RIGHT operand's dunder when
+	the left one has none of its own: object's default __eq__ answers
+	NotImplemented on a mismatch instead of settling it as False
+	(CPython's object.__eq__).  Without this, ``NoCmp(1) == EqOnX(1)'' was
+	False even though EqOnX.__eq__ says they match -- the shape behind
+	test_compare.test_comp_classes_different."
+
+	self assert: (self resultAt: 'nocmp_eq_eqonx') equals: true.
+	self assert: (self resultAt: 'eqonx_eq_nocmp') equals: true.
+	self assert: (self resultAt: 'nocmp_eq_eqonx_diff') equals: false.
+	"__ne__ punts the same way -- to the reflected __ne__, else the
+	reflected __eq__ (that is what object.__ne__ derives from)."
+	self assert: (self resultAt: 'nocmp_ne_neonx') equals: false.
+	self assert: (self resultAt: 'nocmp_ne_eqonx') equals: false
+%
+
+category: 'Grail-Tests - Reflected equality'
+method: ComparisonProtocolTestCase
+testBuiltinsPuntToReflectedEquality
+	"Each of these built-ins carries its own __eq__: override that used to
+	answer a flat False for a foreign operand, silently skipping the
+	reflected __eq__ -- so ``x == ALWAYS_EQ'' (used throughout CPython's
+	suite) was False for every one of them.  test_compare.test_issue_1393 /
+	test_comparisons."
+
+	#('str_eq_alwayseq' 'none_eq_alwayseq' 'object_eq_alwayseq'
+	  'function_eq_alwayseq' 'complex_eq_eqonx') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key].
+	self assert: (self resultAt: 'str_ne_alwayseq') equals: false
+%
+
+category: 'Grail-Tests - Reflected equality'
+method: ComparisonProtocolTestCase
+testOrdinaryEqualityUnchanged
+	"The punt must not turn genuinely-unequal operands equal: with no
+	reflected __eq__ to consult, the fallback still ends at identity/value."
+
+	self assert: (self resultAt: 'str_eq_int') equals: false.
+	self assert: (self resultAt: 'none_eq_int') equals: false.
+	self assert: (self resultAt: 'str_eq_str') equals: true.
+	self assert: (self resultAt: 'str_ne_str') equals: true.
+	self assert: (self resultAt: 'none_eq_none') equals: true.
+	self assert: (self resultAt: 'complex_eq_int') equals: true.
+	self assert: (self resultAt: 'complex_ne_int') equals: true
+%
+
+category: 'Grail-Tests - Reflected equality'
+method: ComparisonProtocolTestCase
+testVarargsDunderIsDispatchedInCPythonOrder
+	"``def __eq__(*args)'' -- no named receiver -- compiles to ___eq__:kw:
+	with NO __eq__: alias, so a plain dunder send missed it entirely and the
+	user's method never ran.  The recorded order also pins that a reflected
+	__ne__ which declines is NOT followed by that operand's __eq__
+	(test_compare.test_ne_high_priority)."
+
+	self assert: (self resultAt: 'ne_call_order')
+		equals: 'VarargsLeft.__eq__,VarargsRight.__ne__'
+%
+
+category: 'Grail-Tests - Reflected equality'
+method: ComparisonProtocolTestCase
+testSubclassOperandGetsFirstTurn
+	"CPython's subclass-priority rule: when the RIGHT operand's type is a
+	proper subclass of the left's and overrides the reflected method, the
+	reflected call goes FIRST (test_compare.test_ne_low_priority asserts the
+	exact call list)."
+
+	self assert: (self resultAt: 'subclass_priority_order')
+		equals: 'PrioDerived.__ne__,PrioBase.__eq__'
+%
+
+category: 'Grail-Tests - Orderings'
+method: ComparisonProtocolTestCase
+testComplexIsUnorderableWithACatchableMessage
+	"complex has no ordering.  The raise used env-0 ``TypeError signal:'',
+	which reaches Python with an EMPTY message -- catchable, but no
+	assertRaisesRegex(TypeError, 'not supported') could match it
+	(test_compare.test_numbers).  ___signal___: carries the text, and a
+	non-complex operand goes through ___cmpFallback___ so the message names
+	BOTH types."
+
+	#('complex_lt_complex' 'complex_lt_int' 'int_lt_complex') do: [:key |
+		self assert: ((self resultAt: key) = 'type-error') description: key].
+	self assert: (self resultAt: 'complex_lt_msg')
+		equals: '''<'' not supported between instances of ''complex'' and ''complex'''.
+	self assert: (self resultAt: 'complex_gt_int_msg')
+		equals: '''>'' not supported between instances of ''complex'' and ''int'''
+%
+
+category: 'Grail-Tests - Orderings'
+method: ComparisonProtocolTestCase
+testDecimalComparesAcrossTheNumericTower
+	"decimal._ratio coerced only Decimal/int/float, so Decimal lost to a
+	Fraction (equal values compared unequal) and to a complex with no
+	imaginary part.  Ordering against a complex must still raise TypeError --
+	CPython widens to complex for == / != ONLY."
+
+	| d |
+	d := (self resultAt: 'decimal').
+	self assert: (d @env1:__getitem__: 'dec_eq_fraction') equals: true.
+	self assert: (d @env1:__getitem__: 'fraction_eq_dec') equals: true.
+	self assert: (d @env1:__getitem__: 'dec_eq_complex') equals: true.
+	self assert: (d @env1:__getitem__: 'complex_eq_dec') equals: true.
+	self assert: (d @env1:__getitem__: 'dec_ne_complex') equals: false.
+	self assert: (d @env1:__getitem__: 'dec_lt_fraction') equals: true.
+	self assert: (d @env1:__getitem__: 'dec_lt_complex') equals: 'type-error'
+%
+
+category: 'Grail-Tests - Index protocol'
+method: ComparisonProtocolTestCase
+testIndexObjectsDriveEverySequenceOperation
+	"PEP 357: an object with __index__ is usable wherever an integer index is.
+	Every sequence op used to only PROBE for __index__ and then hand the
+	OBJECT to env-0 arithmetic, so it died on an uncatchable ``a newstyle does
+	not understand #<'' -- 32 of test_index's 34 errors.  The value has to be
+	FETCHED (object>>___asIndex___)."
+
+	| d |
+	d := self resultAt: 'index_ops'.
+	#('list' 'tuple' 'str' 'bytes' 'bytearray' 'range') do: [:kind |
+		#('_getitem' '_getitem_neg' '_slice' '_slice_open' '_slice_step')
+			do: [:op |
+				self assert: ((d @env1:__getitem__: kind , op) = true)
+					description: kind , op]].
+	#('list_mul' 'list_rmul' 'tuple_mul' 'str_mul' 'str_rmul' 'list_imul'
+	  'list_setitem' 'list_delitem' 'opindex_plain' 'opindex_obj')
+		do: [:key |
+			self assert: ((d @env1:__getitem__: key) = true) description: key]
+%
+
+category: 'Grail-Tests - Index protocol'
+method: ComparisonProtocolTestCase
+testOperatorIndexUsesAnIntSubclassValueNotItsDunder
+	"CPython's PyNumber_Index answers an int's own value even for a SUBCLASS,
+	without consulting __index__: MyInt(7).__index__() is 8, but
+	operator.index(MyInt(7)) is 7 (test_index.test_int_subclass_with_index).
+	operator.py was a bare ``return a.__index__()''."
+
+	| d |
+	d := self resultAt: 'index_ops'.
+	self assert: (d @env1:__getitem__: 'opindex_int_subclass_uses_value')
+		equals: true.
+	self assert: (d @env1:__getitem__: 'int_subclass_dunder_still_8')
+		equals: true
+%
+
+category: 'Grail-Tests - Index protocol'
+method: ComparisonProtocolTestCase
+testIndexErrorsAreCatchable
+	"A non-int __index__ result, a missing __index__, a float subscript: all
+	catchable TypeError with CPython's wording.  ``'a' * 2**100'' is an
+	OverflowError -- Grail used to attempt the allocation and bring the
+	session down with AlmostOutOfMemory (test_index.OverflowTestCase)."
+
+	| d |
+	d := self resultAt: 'index_errors'.
+	#('nonint_index_result' 'nonint_slice_bound' 'opindex_nonint_result'
+	  'opindex_no_index' 'float_index') do: [:key |
+		self assert: ((d @env1:__getitem__: key) = 'type-error')
+			description: key].
+	#('repeat_huge' 'repeat_huge_negative' 'repeat_huge_list') do: [:key |
+		self assert: ((d @env1:__getitem__: key) = 'overflow')
+			description: key].
+	self assert: (d @env1:__getitem__: 'str_index_msg')
+		equals: 'string indices must be integers, not NoneType'.
+	self assert: (d @env1:__getitem__: 'list_index_msg')
+		equals: 'list indices must be integers or slices, not NoneType'
+%
+
+category: 'Grail-Tests - Index protocol'
+method: ComparisonProtocolTestCase
+testIndexReturningAnIntSubclassWarns
+	"CPython deprecates __index__ answering a strict int subclass (True, say):
+	DeprecationWarning, and the result is normalized to an exact int
+	(test_index.test_index_returns_int_subclass)."
+
+	self assert: (self resultAt: 'index_deprecation') asArray
+		equals: #( true true true )
+%

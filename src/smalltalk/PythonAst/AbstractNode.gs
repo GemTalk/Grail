@@ -199,6 +199,33 @@ printSmalltalkWithParenthesisOn: aStream
 
 %
 
+category: 'Grail-traceback'
+method: AbstractNode
+___emitCurPosBefore: aStmt on: aStream
+	"Emit a runtime update of the enclosing function's ``___curPos___'' (its
+	current execution position) BEFORE aStmt is emitted, so a traceback frame
+	built while aStmt is executing points at the right line.  At statement
+	granularity ___curPos___ holds just the beginLine as a bare SmallInteger --
+	no array is allocated, so this store is free enough to sit before EVERY
+	statement (including inside hot loop / if / try bodies via SuiteAst) without
+	adding per-iteration GC pressure.  ___pushFrameFromPos___ reconstructs a
+	line-only frame from the integer (columns / source line nil); sub-statement
+	precision (e.g. a comprehension iterable) is recorded separately, at the
+	sites where it matters, via ___pushTracebackFrame___ directly.
+
+	No-op when NOT inside a function (module-level code has no ___curPos___
+	temp; CallAst functionBeingCompiled is nil there) or when aStmt carries no
+	position."
+
+	(CallAst functionBeingCompiled isNil or: [aStmt beginLine isNil])
+		ifTrue: [^ self].
+	aStream
+		nextPutAll: '___curPos___ := ';
+		print: aStmt beginLine;
+		nextPutAll: '.';
+		lf
+%
+
 category: 'Grail-other'
 method: AbstractNode
 setBlock: aBlock
@@ -293,17 +320,48 @@ ___pythonLocalInEnclosingFunctions___: aSymbol
 	reads inside the comprehension itself), and global- / nonlocal-
 	declared names were stripped from ``writes'' by the parser."
 
-	| node |
+	| node prev |
 	"``global aSymbol'' in the nearest enclosing function makes the name
 	a MODULE binding for that whole scope -- never a local, and never
 	resolved to an outer function's same-named local."
 	(self ___nearestEnclosingFunctionDeclaresGlobal___: aSymbol) ifTrue: [^ false].
+	prev := self.
 	node := parent.
 	[node notNil] whileTrue: [
 		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
 			ifTrue: [
-				(self ___functionBindsPythonLocal___: node named: aSymbol)
-					ifTrue: [^ true]].
+				"A LAMBDA reached through its ArgumentsAst -- i.e. this node is
+				in the PARAMETER LIST (a default expression), not in the body --
+				does NOT bind the name.  Python evaluates a default in the
+				ENCLOSING scope at definition time, so
+				``missing = 1; lambda missing=missing: missing'' must read the
+				enclosing ``missing'' for the default and the parameter inside
+				the body.  Without this, the default resolved as a read of the
+				lambda's own parameter and was emitted into the def-time outer
+				block where no such temp exists: CompileError 1001, ``undefined
+				symbol missing''.
+
+				Restricted to LambdaAst deliberately.  A def's defaults already
+				resolve through FunctionDefAst's own default-capture path
+				(``def root(context, missing=missing)'' is the jinja2 case its
+				printSmalltalkOn: comment describes), and widening the rule to
+				FunctionDefAst is a separate change with its own blast radius.
+
+				A lambda nested in a def still sees the DEF's locals: the walk
+				only skips the lambda it climbed out of, then carries on --
+				``def f(): x = 1; return lambda x=x: x'' reads f's x."
+				"An ANNOTATION of this very def: Python evaluates parameter and
+				return annotations in the ENCLOSING scope, so the def's own
+				parameters do not shadow.  Same rule as the lambda-default case
+				above, and needed for the same reason -- the annotate function is
+				built outside the def, where a parameter temp does not exist.  See
+				CallAst >> annotationOwnerDefNode."
+				(node == CallAst annotationOwnerDefNode
+					or: [(node isKindOf: LambdaAst) and: [prev isKindOf: ArgumentsAst]])
+					ifFalse: [
+						(self ___functionBindsPythonLocal___: node named: aSymbol)
+							ifTrue: [^ true]]].
+		prev := node.
 		node := node parent.
 	].
 	^ false

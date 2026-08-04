@@ -131,4 +131,44 @@ ___pyCallValue___: positional kw: kwargs
 	^ self value: positional value: kwargs
 %
 
+category: 'Grail-Reflection'
+method: MethodBinding
+__self__
+	"Python's bound-method ``m.__self__'' -- the receiver this binding
+	prepends.  A MethodBinding exists only where something WAS bound, so
+	answering it is unconditional; the unbound cases never produce one.
+	functools.partialmethod is the discriminator that makes that true: over a
+	@staticmethod its __get__ answers the partialmethod itself rather than a
+	binding, so ``A.static'' and ``a.static'' still have no __self__, and a
+	plain partialmethod read off the CLASS is likewise handed back raw."
+
+	^ instance
+%
+
+category: 'Grail-Reflection'
+method: MethodBinding
+__func__
+	"The underlying callable, the companion of __self__ on a bound method."
+
+	^ callable
+%
+
+! ___pythonValueAttrs___ MUST be compiled in env 0: Object >> ___pyAttrLoad___
+! consults it through an env-0 ``respondsTo:'', so an env-1 definition is
+! invisible to the probe and the hook silently does nothing.
+set compile_env: 0
+
+category: 'Grail-Python Attribute Hook'
+classmethod: MethodBinding
+___pythonValueAttrs___
+	"``__self__'' / ``__func__'' are the bound receiver and function, values
+	rather than callables; without this the attribute read wraps the accessor
+	in a BoundMethod and ``m.__self__ is obj'' compares the wrapper."
+
+	^ IdentitySet new
+		add: #'__self__';
+		add: #'__func__';
+		yourself
+%
+
 set compile_env: 0

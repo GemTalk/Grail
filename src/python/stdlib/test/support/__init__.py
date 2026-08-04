@@ -71,7 +71,6 @@ requires_docstrings = _PassthroughDecorator()
 requires_resource = _PassthroughDecorator()
 requires_mac_ver = _PassthroughDecorator()
 run_with_locale = _PassthroughDecorator()
-run_with_tz = _PassthroughDecorator()
 bigmemtest = _PassthroughDecorator()
 bigaddrspacetest = _PassthroughDecorator()
 thread_unsafe = _PassthroughDecorator()
@@ -80,6 +79,57 @@ skip_if_unlimited_stack_size = _PassthroughDecorator()
 skip_on_s390x = _PassthroughDecorator()
 skip_emscripten_stack_overflow = _PassthroughDecorator()
 skip_wasi_stack_overflow = _PassthroughDecorator()
+
+
+def run_with_tz(tz):
+    """CPython's run_with_tz: pin the timezone for the duration of the test.
+
+    NOT a passthrough, unlike its neighbours above.  A passthrough here does
+    not merely skip a check -- it silently changes what the test measures.
+    These tests assert values that are only true in the zone they name
+    (test_timestamp_naive asserts 18000.0 for the epoch, true in US/Eastern
+    and nowhere else), so run unpinned they pass or fail according to where
+    the machine is, and the scoreboard moves when a laptop changes zones.
+
+    Same shape as CPython's: set os.environ['TZ'], call time.tzset(), restore
+    both in a finally.  Grail's tzset raises ValueError for a zone it cannot
+    resolve -- turned into a skip here, which is what CPython does on a
+    platform without tzset at all.
+    """
+    def decorator(func):
+        def inner(*args, **kwds):
+            import os
+            import time
+            # CPython's own spelling.  NOT getattr(time, 'tzset', None):
+            # Grail answers None for that even where the attribute exists
+            # (a defaulted getattr misses a native module's methods), so the
+            # probe skipped every one of these tests.
+            try:
+                tzset = time.tzset
+            except AttributeError:
+                raise unittest.SkipTest('tzset required')
+            had_tz = 'TZ' in os.environ
+            orig_tz = os.environ.get('TZ')
+            os.environ['TZ'] = tz
+            try:
+                try:
+                    tzset()
+                except ValueError as e:
+                    raise unittest.SkipTest(str(e))
+                return func(*args, **kwds)
+            finally:
+                # Restoring matters more here than in CPython: the zone is
+                # session state in the gem, so leaking it would silently
+                # re-time every later test in the same run.
+                if had_tz:
+                    os.environ['TZ'] = orig_tz
+                else:
+                    os.environ['TZ'] = ''
+                tzset()
+        inner.__name__ = func.__name__
+        inner.__doc__ = func.__doc__
+        return inner
+    return decorator
 
 
 def check_sizeof(test, o, size):
@@ -114,9 +164,23 @@ def impl_detail(msg=None, **guards):
 
 
 def gc_collect():
+    # CPython's test hook to force a full garbage collection so weak
+    # references to now-unreachable objects (including reference cycles) read
+    # as dead immediately.  In Grail, gc.collect() is a documented no-op stub
+    # (GemStone manages its own memory); the real in-memory collection --
+    # generation scavenge + VM mark-sweep, which reclaims cycles and fires the
+    # weakref ephemerons -- is driven by weakref._collect().  Route this hook
+    # there so tests that assert post-collection weak behavior (e.g.
+    # test_slice.test_cycle: an isolated o <-> slice(o) cycle) actually see the
+    # collection they ask for.
     try:
         import gc
         gc.collect()
+    except Exception:
+        pass
+    try:
+        import weakref
+        weakref._collect()
     except Exception:
         pass
 
@@ -478,3 +542,102 @@ try:
     from test.support import testcase
 except Exception:
     testcase = None
+
+
+# --- added for test.test_traceback (vendored 2026-08-02) ---
+
+class Error(Exception):
+    """Base class for regression-test errors (CPython test.support.Error)."""
+
+
+# --- added for test.test_format (vendored 2026-08-03) ---
+
+class TestFailed(Error):
+    """Test failed (CPython test.support.TestFailed)."""
+
+    def __init__(self, msg, *args, stats=None):
+        self.msg = msg
+        self.stats = stats
+        super().__init__(msg, *args)
+
+    def __str__(self):
+        return self.msg
+
+
+# --- added for test.test_yield_from (vendored 2026-08-03) ---
+
+class disable_gc:
+    """Turn the collector off for the block (CPython test.support.disable_gc),
+    written as a plain class -- NO @contextlib.contextmanager, see the module
+    header.  Grail's gc is a stub, so isenabled/disable/enable may be absent;
+    the guarded calls make this a no-op there rather than an ImportError."""
+
+    def __enter__(self):
+        import gc
+        self._gc = gc
+        try:
+            self._had_gc = gc.isenabled()
+            gc.disable()
+        except Exception:
+            self._had_gc = False
+        return self
+
+    def __exit__(self, *exc):
+        if self._had_gc:
+            try:
+                self._gc.enable()
+            except Exception:
+                pass
+        return False
+
+
+# Grail has no subprocess / os.spawn support; tests that need one skip.
+has_subprocess_support = False
+
+
+def requires_subprocess():
+    """Skip when subprocess support is unavailable (always so in Grail)."""
+    return unittest.skipUnless(has_subprocess_support, "requires subprocess support")
+
+
+def has_no_debug_ranges():
+    # CPython gates this on _testcapi.config_get('code_debug_ranges').  Grail
+    # has no _testcapi, so the ImportError -> SkipTest path fires (matching
+    # CPython when _testcapi is absent).
+    try:
+        import _testcapi
+    except ImportError:
+        raise unittest.SkipTest("_testcapi required")
+    return not _testcapi.config_get('code_debug_ranges')
+
+
+def requires_debug_ranges(reason='requires co_positions / debug_ranges'):
+    try:
+        skip = has_no_debug_ranges()
+    except unittest.SkipTest as e:
+        skip = True
+        reason = e.args[0] if e.args else reason
+    return unittest.skipIf(skip, reason)
+
+
+# Colorization: Grail renders tracebacks as plain text, so forcing "not
+# colorized" is a no-op and forcing "colorized" is unsupported.  force_color is
+# a plain-class context manager (NO @contextlib.contextmanager -- see the module
+# header); the two decorators are identity passthroughs.
+class force_color:
+    def __init__(self, color):
+        self.color = color
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def force_not_colorized(func):
+    return func
+
+
+def force_not_colorized_test_class(cls):
+    return cls

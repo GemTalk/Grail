@@ -45,6 +45,50 @@ TracebackTestCase class removeAllMethods.
 
 set compile_env: 0
 
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testSysExcInfo
+	"sys.exc_info() / sys.exception() report the exception currently being
+	handled (set by TryAst around an except handler, restored on exit so nested
+	handlers stack), instead of the old (None, None, None) stub.  Also drives
+	traceback.format_exc().  See tests/python/sys_excinfo.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'sys_excinfo' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/sys_excinfo.py')
+		name: 'sys_excinfo'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'baseline_none' 'inside_type' 'inside_value' 'inside_message'
+	   'inside_exception_is_value' 'outside_is_none' 'nested'
+	   'format_exc_has_message' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'sys.exc_info check failed: ' , k].
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testFinallyDuringPropagation
+	"sys.exc_info() / sys.exception() inside a ``finally'' that runs because an
+	exception is propagating report that in-flight exception (CPython), via
+	BaseException>>___ensureFinally___:finally: emitted by TryAst in non-generator
+	scopes.  Phase 3a covered except bodies; this covers finally bodies -- for a
+	bare try/finally, a try/except/finally whose except does NOT match, and the
+	save/restore interaction with an enclosing handler.  Also asserts the finally
+	does not swallow the exception.  See tests/python/finally_propagation.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'finally_propagation' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/finally_propagation.py')
+		name: 'finally_propagation'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'bare_sees_valueerror' 'normal_finally_none' 'finally_doesnt_swallow'
+	   'except_finally_uncaught' 'nested_restore' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'finally-during-propagation check failed: ' , k].
+%
+
 category: 'Grail-Tests - Traceback Data Model'
 method: TracebackTestCase
 testTracebackDataModelFixture
@@ -84,6 +128,31 @@ testFuncCodeFirstlineno
 	self assert: ((results @env1:__getitem__: 'co_firstlineno') = 10)
 		description: 'func.__code__.co_firstlineno must be the def line (10)'.
 	self assert: ((results @env1:__getitem__: 'co_name') = 'inner').
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testCaughtExceptionHasFrame
+	"General traceback population: a caught exception now carries a traceback
+	whose frame is the CATCHING function located at the EXACT line it propagated
+	from (TryAst's except-binding fallback + per-statement ___curPos___ tracking
+	through SuiteAst bodies), so traceback.extract_tb / sys.exc_info() /
+	traceback.format_exc are non-empty for ANY caught exception -- not just
+	comprehensions.  _catch_deep pins the raise line inside a for loop several
+	statements into the try body (would report the ``try'' header before the
+	SuiteAst setPos fix).  See tests/python/general_traceback.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'general_traceback' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/general_traceback.py')
+		name: 'general_traceback'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'nonempty' 'name_is_func' 'lineno_is_raise' 'exc_info_nonempty'
+	   'format_exc_has_valueerror'
+	   'deep_nonempty' 'deep_name' 'deep_lineno_is_raise' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'caught-exception-frame check failed: ' , k].
 %
 
 category: 'Grail-Tests - Traceback Runtime'

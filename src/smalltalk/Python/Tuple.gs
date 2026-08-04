@@ -280,9 +280,17 @@ ___getslice___: lower _: upper _: step
 	for an unset bound/step; normalise so the ifNil: defaults fire instead of
 	comparing None with an integer (test_operator's test_itemgetter slices a
 	tuple with ``slice(2, 4)'' -- step None)."
-	lwr := (lower @env0:== None) ifTrue: [nil] ifFalse: [lower].
-	upr := (upper @env0:== None) ifTrue: [nil] ifFalse: [upper].
-	st := ((step @env0:== None) or: [step @env0:isNil]) ifTrue: [1] ifFalse: [step].
+	"Each bound is FETCHED through __index__, exactly as the inherited
+	implementation does: a slice keeps whatever objects the source wrote, so
+	``t[o:o2]'' with __index__ objects otherwise reaches the env-0 arithmetic
+	below and dies on an uncatchable ``does not understand #<''
+	(test_index.TupleTestCase.test_slice / test_slice_bug7532 / test_error).
+	___asIndexOrNil___ leaves an unset bound alone."
+	lwr := lower ___asIndexOrNil___.
+	upr := upper ___asIndexOrNil___.
+	st := ((step @env0:== None) or: [step @env0:isNil]) ifTrue: [1] ifFalse: [step ___asIndex___].
+	lwr := (lwr @env0:== None) ifTrue: [nil] ifFalse: [lwr].
+	upr := (upr @env0:== None) ifTrue: [nil] ifFalse: [upr].
 	st @env0:= 0 ifTrue: [ValueError ___signal___: 'slice step cannot be zero'].
 
 	lo := lwr
@@ -321,18 +329,21 @@ __mul__: n
 	result via species ___new___ + addAll: -- that path doesn't work for
 	tuples because the empty instance is already frozen."
 
-	| accumulator |
+	| accumulator count |
 	((n isKindOf: Integer)
 		or: [(n @env0:class
 			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
-	(n @env0:<= 0) ifTrue: [^ tuple @env0:new].
+	"Fetch the count via __index__ -- the probe only proved n is index-LIKE
+	(a method argument cannot be assigned in Smalltalk, hence the temp)."
+	count := n ___asRepeatCount___.
+	(count @env0:<= 0) ifTrue: [^ tuple @env0:new].
 	"CPython: t * 1 returns t ITSELF when t's type is exactly tuple (an
 	identity optimization -- seq_tests test_repeat: id(s) == id(s*1)); a
 	tuple subclass still gets a fresh plain tuple."
-	((n @env0:= 1) and: [self @env0:class == tuple]) ifTrue: [^ self].
+	((count @env0:= 1) and: [self @env0:class == tuple]) ifTrue: [^ self].
 	accumulator := OrderedCollection @env0:new.
-	n @env0:timesRepeat: [accumulator @env0:addAll: self].
+	count @env0:timesRepeat: [accumulator @env0:addAll: self].
 	^ tuple @env0:withAll: accumulator
 %
 

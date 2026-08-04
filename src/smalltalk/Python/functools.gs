@@ -48,6 +48,46 @@ doit
 functools_cmpkey category: 'Grail-Modules'
 %
 
+! ------- functools_ordering_op: one comparison synthesised by total_ordering
+expectvalue /Class
+doit
+PythonInstance subclass: 'functools_ordering_op'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+functools_ordering_op comment:
+'One rich comparison synthesised by ``@functools.total_ordering'' —
+the Grail stand-in for CPython''s twelve module-level ``_le_from_lt''
+/ ``_gt_from_ge'' / ... helper FUNCTIONS.
+
+CPython''s total_ordering does ``setattr(cls, opname, opfunc)'' with a
+plain function, which the descriptor protocol binds on instance access.
+Grail has no way to mint a Python function from Smalltalk, so each
+synthesised operator is an instance of this class instead, carrying the
+pair it was derived from:
+
+  * root    — the comparison the decorated class defines itself
+              (#''__lt__'' / #''__le__'' / #''__gt__'' / #''__ge__'')
+  * derived — the comparison this object implements
+
+It answers ``___pyBindsSelf___'', the marker that makes
+``object >> ___isDescriptorCallable___:'' treat it as a function for
+descriptor binding — so ``a <= b'' and an explicit ``a.__le__(b)'' both
+reach it with ``self'' prepended, exactly as a def would.'
+%
+
+expectvalue /Class
+doit
+functools_ordering_op category: 'Grail-Modules'
+%
+
 ! ------- functools_singledispatch: the wrapper returned by singledispatch()
 expectvalue /Class
 doit
@@ -69,6 +109,41 @@ expectvalue /Metaclass3
 doit
 functools_singledispatch removeAllMethods: 1.
 functools_singledispatch class removeAllMethods: 1.
+%
+
+! ------- functools_singledispatchmethod: the descriptor singledispatchmethod()
+expectvalue /Class
+doit
+PythonInstance subclass: 'functools_singledispatchmethod'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+functools_singledispatchmethod comment:
+'``@functools.singledispatchmethod'' -- singledispatch for a METHOD,
+dispatching on the first argument AFTER the receiver.
+
+Holds a functools_singledispatch over the decorated method (all the
+registry, MRO walk and annotation inference live there) plus the method
+itself, and answers ``___pyBindsSelf___'' so that reading it off an
+instance binds the receiver the way CPython''s ``__get__'' does.
+
+Applies to a plain instance method.  The
+``@singledispatchmethod @classmethod'' / ``@singledispatchmethod
+@staticmethod'' stacks are NOT supported: Grail consumes those inner
+decorators at PARSE time by re-classing the def, so by the time this
+decorator runs there is no instance-side method for it to wrap.'
+%
+
+expectvalue /Class
+doit
+functools_singledispatchmethod category: 'Grail-Modules'
 %
 
 ! ------- functools_partial class (Python functools.partial)
@@ -98,6 +173,48 @@ subclass instantiation and direct partial(...) calls share it.'
 expectvalue /Class
 doit
 functools_partial category: 'Grail-Modules'
+%
+
+! ------- functools_partialmethod class (Python functools.partialmethod)
+expectvalue /Class
+doit
+PythonInstance subclass: 'functools_partialmethod'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+functools_partialmethod comment:
+'``functools.partialmethod'' as a REAL class.
+
+It used to be a module function returning a bare closure, which meant the
+receiver was never bound: reading the attribute off an instance answered
+the closure itself, so ``a.m()'' called the wrapped function with the
+BOUND args only and CPython''s leading ``self'' was simply missing --
+``((), {})'' where the test wanted ``((a,), {})''.  A closure also cannot
+be subclassed, carry a repr, or report __isabstractmethod__.
+
+Answers ``___pyBindsSelf___'', so reading it through an INSTANCE binds
+the receiver the way CPython''s __get__ does.  One call shape then serves
+both paths: read through the CLASS, the caller passes the receiver
+explicitly in the same leading slot (``A.m(a, 5)'').
+
+NOT supported: ``partialmethod(staticmethod(f))'' and
+``partialmethod(classmethod(f))''.  Grail''s staticmethod/classmethod are
+identity stubs, so those are indistinguishable here from a plain
+function, and both must bind the receiver differently (not at all, and to
+the class).  test_descriptors and test_bound_method_introspection cover
+exactly that and still fail.'
+%
+
+expectvalue /Class
+doit
+functools_partialmethod category: 'Grail-Modules'
 %
 
 ! ------- functools_CacheInfo: the named 4-tuple lru_cache.cache_info() returns
@@ -134,18 +251,68 @@ doit
 functools_Placeholder category: 'Grail-Modules'
 %
 
+! ------- functools_cached_property: a real non-data descriptor ---------------
+expectvalue /Class
+doit
+PythonInstance subclass: 'functools_cached_property'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+functools_cached_property comment:
+'Python functools.cached_property as a REAL descriptor class: the first
+read through an instance computes ``func(instance)'' and stores the
+result in the instance''s own attribute store, so every later read is
+the cached value with no call at all.
+
+It used to be a pass-through stub (``^ aFunction''), which made every
+read RE-INVOKE the function -- the exact opposite of what the decorator
+promises -- and made ``Cls.attr'' answer the function rather than the
+descriptor.
+
+State lives in dynamic instVars func / attrname / __doc__, so attribute
+reads resolve through the standard PythonInstance probe.  ``attrname''
+is filled in by __set_name__, which Object >> ___pyClassDefined___:
+sends for every class-body entry at class-definition time.
+
+Distinct from the PARSE-TIME realisation of a bare ``@cached_property''
+(ClassDefAst emitGeneratedAccessors), which flask / werkzeug / django
+depend on and which is untouched.  This class serves the ATTRIBUTE-ACCESS
+decorator form (``@functools.cached_property''), the value form
+(``x = cached_property(f)''), and direct construction.'
+%
+
+expectvalue /Class
+doit
+functools_cached_property category: 'Grail-Modules'
+%
+
 expectvalue /Metaclass3
 doit
 functools removeAllMethods: 1.
 functools class removeAllMethods: 1.
 functools_partial removeAllMethods: 1.
 functools_partial class removeAllMethods: 1.
+functools_partialmethod removeAllMethods: 1.
+functools_partialmethod class removeAllMethods: 1.
 functools_cmpkey removeAllMethods: 1.
 functools_cmpkey class removeAllMethods: 1.
+functools_ordering_op removeAllMethods: 1.
+functools_ordering_op class removeAllMethods: 1.
+functools_singledispatchmethod removeAllMethods: 1.
+functools_singledispatchmethod class removeAllMethods: 1.
 functools_CacheInfo removeAllMethods: 1.
 functools_CacheInfo class removeAllMethods: 1.
 functools_Placeholder removeAllMethods: 1.
 functools_Placeholder class removeAllMethods: 1.
+functools_cached_property removeAllMethods: 1.
+functools_cached_property class removeAllMethods: 1.
 %
 
 set compile_env: 1
@@ -161,11 +328,25 @@ initialize
 	self @env0:at: #partial put: functools_partial.
 	"_CacheInfo: the named 4-tuple class lru_cache.cache_info() returns
 	and test code constructs directly."
+	"partialmethod: the CLASS, published the same way partial is.  It has to
+	be the SymbolDictionary entry rather than a module method, because a
+	method of that name SHADOWS the entry -- and a method cannot be
+	subclassed or instantiated through Grail's __new__ protocol."
+	self @env0:at: #partialmethod put: functools_partialmethod.
 	self @env0:at: #'_CacheInfo' put: functools_CacheInfo.
 	"Placeholder: the singleton sentinel for reserved positional slots
 	in partial (Python 3.14).  Its type is functools_Placeholder;
 	``Placeholder'' is that type's sole instance."
 	self @env0:at: #Placeholder put: functools_Placeholder ___singleton___.
+	"cached_property: the CLASS, published the same way partial is.  It has
+	to be the SymbolDictionary entry rather than a module method, because a
+	method of that name SHADOWS the entry -- and a method cannot be
+	subclassed or instantiated through Grail's __new__ protocol."
+	self @env0:at: #cached_property put: functools_cached_property.
+	"RLock: CPython's functools does ``from _thread import RLock'' and
+	test_functools constructs one (``self.lock = py_functools.RLock()''),
+	so the name is part of the module's surface."
+	self @env0:at: #RLock put: PyThreadRLock.
 	"``__hash__ = None'' as a class ATTRIBUTE, matching CPython's class dict for
 	the cmp_to_key wrapper.  The raising __hash__ method above is what a hash
 	SEND finds; this is what READS of the attribute see, and reads are what
@@ -189,6 +370,12 @@ cmp_to_key: mycmp
 
 	^ [:___p___ :___k___ |
 		| w o |
+		"K wraps exactly one object.  Too MANY arguments was accepted silently,
+		quietly ignoring everything past the first (test_cmp_to_key_arguments
+		asserts both directions)."
+		(___p___ ~~ nil and: [___p___ @env0:size @env0:> 1]) ifTrue: [
+			TypeError ___signal___: 'K() takes exactly one argument ('
+				@env0:, ___p___ @env0:size @env0:printString @env0:, ' given)'].
 		o := (___p___ ~~ nil and: [___p___ @env0:size @env0:>= 1])
 			ifTrue: [___p___ @env0:at: 1]
 			ifFalse: [
@@ -208,6 +395,9 @@ _cmp_to_key: positional kw: kwargs
 	argument-count errors (test_cmp_to_key)."
 
 	| f |
+	positional @env0:size @env0:> 1 ifTrue: [
+		TypeError ___signal___: 'cmp_to_key expected 1 argument, got '
+			@env0:, positional @env0:size @env0:printString].
 	f := (positional @env0:size @env0:>= 1)
 		ifTrue: [positional @env0:at: 1]
 		ifFalse: [
@@ -328,6 +518,26 @@ __qualname__
 	^ 'partial'
 %
 
+category: 'Grail-Reflection'
+classmethod: functools_partial
+__getitem__: item
+	"``partial[int]'' -- a REAL types.GenericAlias, not Grail's usual
+	collapse to the class itself.
+
+	CPython opts into parameterised generics one class at a time
+	(``partial.__class_getitem__ = classmethod(GenericAlias)''); a class
+	that does not say so has no __class_getitem__ at all.  Grail inverts the
+	default -- Metaclass3 answers the class, because forty-five sites in the
+	vendored frameworks subscript a class only to use it as a BASE and want
+	the subscript discarded -- so opting in means overriding here.
+
+	Inherited by Python subclasses of partial through the metaclass chain,
+	which is what makes ``CPartialSubclass[int].__origin__'' answer the
+	SUBCLASS: self is the receiver, not functools_partial."
+
+	^ PyGenericAlias ___fromSubscript___: item origin: self
+%
+
 category: 'Grail-Instantiation'
 method: functools_partial
 ___new__: positional kw: keywords
@@ -410,6 +620,42 @@ ___countPlaceholders___: anArray
 	^ n
 %
 
+category: 'Grail-Descriptor'
+method: functools_partial
+__get__: obj _: cls
+	"CPython 3.14 made partial a DESCRIPTOR, so a partial stored as a class
+	attribute works as a method: read off an instance it binds that instance
+	as the first argument after the bound ones, and read off the class it
+	answers itself unbound.
+
+	This is a 3.14 behaviour CHANGE -- through 3.13 a partial was not a
+	descriptor and an instance read handed back the partial itself.  Grail
+	targets 3.14 (the vendored corpus is 3.14.4), so 3.14 is what this
+	implements; the vendored frameworks predate it, which is why the full
+	SUnit suite is the check that matters here."
+
+	(obj == nil or: [obj == None]) ifTrue: [^ self].
+	^ MethodBinding instance: obj callable: self
+%
+
+category: 'Grail-Descriptor'
+method: functools_partial
+__get__: obj
+	^ self __get__: obj _: None
+%
+
+category: 'Grail-Calling'
+method: functools_partial
+___pyCallValue___: positional kw: kwargs
+	"The INDIRECT call protocol.  A partial reached through a variable, or
+	handed to something that invokes its argument generically, arrives here
+	rather than at value:value: -- and object's implementation raises
+	``'functools_partial' object is not callable'', which is how a
+	partialmethod wrapping a partial failed (test_over_partial)."
+
+	^ self value: positional value: kwargs
+%
+
 category: 'Grail-Calling'
 method: functools_partial
 value: morePositional value: moreKw
@@ -442,10 +688,27 @@ value: morePositional value: moreKw
 					merged := bk @env0:copy.
 					moreKw @env0:keysAndValuesDo: [:k :v | merged @env0:at: k put: v].
 					merged]].
+	"``keywords'' is an ordinary mutable dict, so anything can be put in it
+	(test_manually_adding_non_string_keyword puts 1234 there).  CPython
+	tolerates that until the CALL, where a non-string key is a TypeError --
+	Grail would instead have passed it down and produced whatever the callee
+	made of it.  Costs one isEmpty test on the common keyword-free call."
+	functools_partial ___checkKeywordStrings___: allKw.
 	"value:value: is the universal call protocol -- BoundMethod, class
 	objects (partial(int, base=2)), blocks, and nested partials all
 	dispatch through it; ___pyCallValue___ rejects classes."
 	^ fn value: allArgs value: allKw
+%
+
+category: 'Grail-Calling'
+classmethod: functools_partial
+___checkKeywordStrings___: kw
+	"Raise CPython's TypeError when a keywords dict holds a non-string key."
+
+	(kw == nil or: [kw @env0:isEmpty]) ifTrue: [^ self].
+	kw @env0:keysDo: [:k |
+		(k isKindOf: CharacterCollection) ifFalse: [
+			TypeError ___signal___: 'keywords must be strings']]
 %
 
 category: 'Grail-String Representation'
@@ -498,11 +761,18 @@ __repr__
 	args @env0:do: [:a |
 		stream @env0:nextPutAll: ', '.
 		stream @env0:nextPutAll: (a __repr__) @env0:asString].
-	kw @env0:keysAndValuesDo: [:k :v |
+	"SNAPSHOT the keyword pairs before formatting any of them.  CPython
+	renders each as f''{k}={v!r}'', so the KEY goes through str() -- and a
+	key whose __str__ mutates the keywords dict (test_keystr_replaces_value)
+	would otherwise be mutating the collection mid-iteration.  Capturing
+	pairs up front also keeps the ORIGINAL value alive, which is precisely
+	what that test checks: the value replaced during key formatting must not
+	be the one that gets printed."
+	(functools_partial ___keywordPairs___: kw) @env0:do: [:pair |
 		stream @env0:nextPutAll: ', '.
-		stream @env0:nextPutAll: k @env0:asString.
+		stream @env0:nextPutAll: (self ___keyString___: (pair @env0:at: 1)).
 		stream @env0:nextPutAll: '='.
-		stream @env0:nextPutAll: (v __repr__) @env0:asString].
+		stream @env0:nextPutAll: ((pair @env0:at: 2) __repr__) @env0:asString].
 	stream @env0:nextPut: $).
 	stream @env0:contents]
 		@env0:on: AlmostOutOfStack do: [:ex |
@@ -513,6 +783,37 @@ __repr__
 			RecursionError ___signal___:
 				'maximum recursion depth exceeded while getting the repr of an object']]
 		@env0:ensure: [seen @env0:remove: self otherwise: nil]
+%
+
+category: 'Grail-String Representation'
+classmethod: functools_partial
+___keywordPairs___: kw
+	"kw's (key, value) pairs as a plain Array of 2-element Arrays, detached
+	from the dict.  Formatting a key can run arbitrary Python (__str__), and
+	that Python can mutate the very dict being formatted, so nothing may
+	iterate it live."
+
+	| out |
+	(kw == nil or: [kw @env0:isEmpty]) ifTrue: [^ #()].
+	out := OrderedCollection @env0:new.
+	kw @env0:keysAndValuesDo: [:k :v |
+		out @env0:add: (Array @env0:with: k with: v)].
+	^ out @env0:asArray
+%
+
+category: 'Grail-String Representation'
+method: functools_partial
+___keyString___: aKey
+	"str(key) for the repr.  A keywords dict normally holds only strings, so
+	the common case must not pay for a dispatch; a non-string key is legal
+	because ``keywords'' is an ordinary mutable dict
+	(test_manually_adding_non_string_keyword puts 1234 in one), and CPython
+	formats it with str() rather than repr()."
+
+	(aKey isKindOf: CharacterCollection) ifTrue: [^ aKey @env0:asString].
+	^ [(aKey __str__) @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: aKey @env0:printString]
 %
 
 category: 'Grail-Pickle Protocol'
@@ -837,19 +1138,19 @@ WRAPPER_ASSIGNMENTS
 	wrapped to wrapper.  Also read directly by callers that splice it into
 	a decorator's own signature (jinja2.compiler).
 
-	ONE deviation from CPython 3.14, whose list is
+	CPython 3.14's list exactly.  ``__annotate__'' rather than
+	``__annotations__'' is the whole point of PEP 649 here: copying the
+	annotate FUNCTION hands the wrapper the wrapped function's deferred
+	computation, so an annotation naming something not yet bound is still
+	unresolved on the wrapper and resolves later for both.  Copying the
+	computed dict instead would have forced evaluation at wrap time.
 
-	    ('__module__', '__name__', '__qualname__', '__doc__',
-	     '__annotate__', '__type_params__')
+	check_wrapper asserts identity for every name in this list, so the
+	wrapper and the wrapped must end up sharing the very same annotate
+	function -- which is why it is stamped once at def-time rather than
+	rebuilt per read."
 
-	Grail has no ``__annotate__'' (PEP 649 lazily-evaluated annotations),
-	so ``__annotations__'' -- which Grail computes eagerly at def time --
-	stands in for it.  Naming ``__annotate__'' here would be worse than
-	the deviation: update_wrapper skips a name the WRAPPED object lacks, so
-	nothing would be copied, and the wrapper would then answer
-	AttributeError for a name its own WRAPPER_ASSIGNMENTS advertises."
-
-	^ tuple @env0:withAll: #('__module__' '__name__' '__qualname__' '__doc__' '__annotations__' '__type_params__')
+	^ tuple @env0:withAll: #('__module__' '__name__' '__qualname__' '__doc__' '__annotate__' '__type_params__')
 %
 
 category: 'Grail-Constants'
@@ -938,19 +1239,6 @@ cache: aFunction
 	with an unbounded cache."
 
 	^ self ___lruWrap___: aFunction maxsize: None typed: false
-%
-
-category: 'Grail-Built-in Functions'
-method: functools
-cached_property: aFunction
-	"cached_property(fn) — CPython decorator that turns a unary
-	method into a lazily-computed, per-instance cached attribute.
-	Grail stub: pass the function through as-is.  Callers that
-	read `obj.attr` get a BoundMethod they can call; nothing
-	gets cached.  Replace with real semantics if we start
-	hitting hot-path attribute reads."
-
-	^ aFunction
 %
 
 category: 'Grail-Built-in Functions'
@@ -1083,70 +1371,499 @@ ___updateWrapper___: wrapper wrapped: wrapped assigned: assigned updated: update
 	^ wrapper
 %
 
-category: 'Grail-Built-in Functions'
-method: functools
-partialmethod: aFunction
-	"partialmethod(fn) with nothing bound — the descriptor behaves
-	like the function itself."
+category: 'Grail-Instantiation'
+classmethod: functools_partialmethod
+value: positional value: keywords
+	"partialmethod(fn, *args, **kw) -- the class-call entry.  Routes through
+	the __new__ protocol so a subclass (whose ClassDefAst-emitted
+	value:value: uses ___allocateInstance___) and a direct call share one
+	constructor.  Without this the class-call handler looks for an __init__
+	of matching arity and reports ``no matching method''."
 
-	^ aFunction
+	^ self ___allocateInstance___: positional kw: keywords
 %
 
-category: 'Grail-Built-in Functions'
-method: functools
-_partialmethod: positional kw: kwargs
-	"functools.partialmethod(fn, *bound, **boundKw).  CPython returns
-	a descriptor that, accessed through an instance, prepends self
-	before the bound args.  Grail class attrs holding closures are
-	invoked unbound, so the closure takes the receiver explicitly as
-	its first call argument: ``inst.m(*more)`` arrives here as
-	``(inst, *more)`` and is forwarded as ``fn(inst, *bound, *more)''.
-	Django's ORM (_get_FIELD_display, model deferred loading) only
-	CONSTRUCTS these at class-definition time on the hello-world
-	path."
+category: 'Grail-Reflection'
+classmethod: functools_partialmethod
+__module__
+	^ 'functools'
+%
 
-	| fn boundArgs boundKw |
-	(positional @env0:isNil or: [positional @env0:isEmpty]) ifTrue: [
-		TypeError ___signal___: 'partialmethod expected at least 1 argument, got 0'
-	].
+category: 'Grail-Reflection'
+classmethod: functools_partialmethod
+__qualname__
+	^ 'partialmethod'
+%
+
+category: 'Grail-Instantiation'
+method: functools_partialmethod
+___new__: positional kw: keywords
+	"Constructor body.  self is the CLASS -- ___allocateInstance___ runs a
+	class-body __new__ non-virtually with the class as receiver, which is
+	also what makes ``class Sub(partialmethod): pass'' construct Sub
+	instances (test_subclass_optimization; the old module function returned
+	a closure, which cannot be subclassed at all)."
+
+	| inst fn rest kw |
+	(positional == nil or: [positional @env0:isEmpty]) ifTrue: [
+		"``partialmethod()'' and ``partialmethod(func=f, a=1)'' both land here:
+		CPython takes func POSITIONALLY, so a keyword of that name is just
+		another keyword and there is no function (test_invalid_args)."
+		TypeError ___signal___:
+			'partialmethod expected at least 1 argument, got 0'].
 	fn := positional @env0:at: 1.
-	boundArgs := positional @env0:size @env0:> 1
+	"``partialmethod(None, 1)'' is a TypeError: the target has to be callable
+	or a descriptor.  Checked at CONSTRUCTION, as CPython does, so the class
+	body raises rather than something failing much later at call time."
+	(((builtins @env0:___instance___) callable: fn)
+		or: [(fn ___respondsTo___: #'__get__:_:')
+			or: [fn ___respondsTo___: #'___get__:kw:']]) ifFalse: [
+		TypeError ___signal___: (fn __repr__) @env0:asString
+			@env0:, ' is not callable or a descriptor'].
+	rest := positional @env0:size @env0:> 1
 		ifTrue: [positional @env0:copyFrom: 2 to: positional @env0:size]
 		ifFalse: [#()].
-	boundKw := kwargs.
-	^ [:morePositional :moreKwargs |
-		| callArgs rest allKw |
-		callArgs := morePositional @env0:ifNil: [#()].
-		callArgs @env0:isEmpty
-			ifTrue: [rest := boundArgs]
-			ifFalse: [
-				"receiver first, then the partialmethod-bound args, then
-				the remaining call args."
-				rest := (Array @env0:with: (callArgs @env0:at: 1)) @env0:, boundArgs.
-				callArgs @env0:size @env0:> 1 ifTrue: [
-					rest := rest @env0:, (callArgs @env0:copyFrom: 2 to: callArgs @env0:size)]].
-		allKw := (boundKw @env0:isNil or: [boundKw @env0:isEmpty])
-			ifTrue: [moreKwargs]
-			ifFalse: [
-				(moreKwargs @env0:isNil or: [moreKwargs @env0:isEmpty])
-					ifTrue: [boundKw]
-					ifFalse: [
-						| merged |
-						merged := boundKw @env0:copy.
-						moreKwargs @env0:keysAndValuesDo: [:k :v | merged @env0:at: k put: v].
-						merged]].
-		fn ___pyCallValue___: rest kw: allKw]
+	kw := keywords == nil
+		ifTrue: [KeyValueDictionary @env0:new]
+		ifFalse: [keywords @env0:copy].
+	"CPython flattens partialmethod-of-partialmethod: adopt the inner target,
+	the INNER bound args come first, and the outer keywords override.  Grail's
+	class body reads the sibling attribute for ``nested = partialmethod(
+	positional, 5)'', so the inner really is one of these by then."
+	(fn isKindOf: functools_partialmethod) ifTrue: [
+		| merged |
+		rest := (fn @env0:dynamicInstVarAt: #args) @env0:asArray @env0:, rest.
+		merged := (fn @env0:dynamicInstVarAt: #keywords) @env0:copy.
+		kw @env0:keysAndValuesDo: [:k :v | merged @env0:at: k put: v].
+		kw := merged.
+		fn := fn @env0:dynamicInstVarAt: #func].
+	inst := self @env0:new.
+	inst @env0:dynamicInstVarAt: #func put: fn.
+	inst @env0:dynamicInstVarAt: #args put: (tuple @env0:withAll: rest).
+	inst @env0:dynamicInstVarAt: #keywords put: kw.
+	^ inst
 %
 
-category: 'Grail-Built-in Functions'
+category: 'Grail-Attribute Access'
+method: functools_partialmethod
+___pyBindsSelf___
+	"Marker read by object >> ___isDescriptorCallable___:.  CPython makes
+	this a descriptor whose __get__ binds the receiver; Grail reaches the
+	same place through its own class-attribute binding, so ``a.m(5)'' arrives
+	at the call below as (a, 5).
+
+	NOT over a @staticmethod or @classmethod.  CPython's __get__ delegates to
+	the wrapped descriptor's own, and neither binds the instance: a static one
+	binds nothing at all, and a class one binds the CLASS.  Answering false
+	sends those two down the __get__ route instead (see object >>
+	___isValueDescriptor___:), which is the only way the CLASS-side read can
+	work -- ``A.cls()'' passes no receiver, so there would be nothing for the
+	call to recover the owner from."
+
+	^ self ___wrappedKind___ == #plain
+%
+
+category: 'Grail-Private'
+method: functools_partialmethod
+___wrappedKind___
+	"#static, #class or #plain -- what this partialmethod wraps, which decides
+	what (if anything) gets bound as the target's first argument.
+
+	Only answerable now that staticmethod and classmethod are real wrapper
+	objects; while both were identity stubs a partialmethod over either was
+	indistinguishable from one over a plain function."
+
+	| fn |
+	fn := self @env0:dynamicInstVarAt: #func.
+	(fn isKindOf: PyStaticMethod) ifTrue: [^ #static].
+	(fn isKindOf: PyClassMethod) ifTrue: [^ #class].
+	^ #plain
+%
+
+category: 'Grail-Calling'
+method: functools_partialmethod
+___pyCallValue___: positional kw: kwargs
+	"``a.m(*more, **moreKw)'' -> ``func(a, *bound, *more, **{**boundKw,
+	**moreKw})''.
+
+	One shape serves both access paths.  Read through an INSTANCE the
+	receiver was prepended by the binding; read through the CLASS the caller
+	passes it explicitly in the same leading slot (``A.m(a, 5)'').  Later
+	keywords override the bound ones, as in CPython."
+
+	| callArgs recv rest allKw fn kind bound |
+	callArgs := positional @env0:ifNil: [#()].
+	kind := self ___wrappedKind___.
+	fn := self @env0:dynamicInstVarAt: #func.
+	bound := (self @env0:dynamicInstVarAt: #args) @env0:asArray.
+	allKw := (self @env0:dynamicInstVarAt: #keywords) @env0:copy.
+	(kwargs == nil or: [kwargs @env0:isEmpty]) ifFalse: [
+		kwargs @env0:keysAndValuesDo: [:k :v | allKw @env0:at: k put: v]].
+	"Over a @staticmethod there is no receiver in play at all, from either
+	access path: ``A.static(5)'' and ``a.static(5)'' both call the wrapped
+	function with just the bound args and the caller's own."
+	kind == #static ifTrue: [
+		^ (fn @env0:dynamicInstVarAt: #'__func__')
+			___pyCallValue___: bound @env0:, callArgs kw: allKw].
+	callArgs @env0:isEmpty ifTrue: [
+		TypeError ___signal___: (self ___targetName___)
+			@env0:, ' requires a receiver as its first argument'].
+	recv := callArgs @env0:at: 1.
+	rest := callArgs @env0:size @env0:> 1
+		ifTrue: [callArgs @env0:copyFrom: 2 to: callArgs @env0:size]
+		ifFalse: [#()].
+	"Over a @classmethod the leading slot holds the CLASS, not the instance --
+	__get__ put it there.  A caller reaching an instance in explicitly still
+	gets the class, as CPython does."
+	kind == #class ifTrue: [
+		| owner |
+		owner := (recv isKindOf: Behavior) ifTrue: [recv] ifFalse: [recv @env0:class].
+		^ (fn @env0:dynamicInstVarAt: #'__func__')
+			___pyCallValue___: ((Array @env0:with: owner) @env0:, bound @env0:, rest)
+			kw: allKw].
+	^ fn ___pyCallValue___: ((Array @env0:with: recv) @env0:, bound @env0:, rest)
+		kw: allKw
+%
+
+category: 'Grail-Calling'
+method: functools_partialmethod
+value: positional value: kwargs
+	"Called directly rather than through a binding."
+
+	^ self ___pyCallValue___: positional kw: kwargs
+%
+
+category: 'Grail-Calling'
+method: functools_partialmethod
+__get__: obj _: objtype
+	"The descriptor protocol.  Reached explicitly (``p.__get__(0)()'' in
+	test_subclass_optimization), and -- for the @staticmethod and @classmethod
+	kinds, which refuse the MethodBinding route -- by the ordinary attribute
+	read as well, from BOTH the instance and the class side."
+
+	| kind owner |
+	kind := self ___wrappedKind___.
+	"Nothing to bind: the call supplies everything."
+	kind == #static ifTrue: [^ self].
+	kind == #class ifTrue: [
+		owner := (objtype == nil or: [objtype == None])
+			ifTrue: [(obj == nil or: [obj == None])
+				ifTrue: [nil]
+				ifFalse: [obj @env0:class]]
+			ifFalse: [objtype].
+		owner == nil ifTrue: [
+			TypeError ___signal___: (self ___targetName___)
+				@env0:, ' over a classmethod needs an owner class to bind'].
+		^ MethodBinding instance: owner callable: self].
+	^ MethodBinding instance: obj callable: self
+%
+
+category: 'Grail-Calling'
+method: functools_partialmethod
+__get__: obj
+
+	^ self __get__: obj _: None
+%
+
+category: 'Grail-Accessing'
+method: functools_partialmethod
+func
+	^ self @env0:dynamicInstVarAt: #func
+%
+
+category: 'Grail-Accessing'
+method: functools_partialmethod
+args
+	^ self @env0:dynamicInstVarAt: #args
+%
+
+category: 'Grail-Accessing'
+method: functools_partialmethod
+keywords
+	^ self @env0:dynamicInstVarAt: #keywords
+%
+
+category: 'Grail-Attribute Access'
+method: functools_partialmethod
+__isabstractmethod__
+	"CPython: ``getattr(self.func, '__isabstractmethod__', False)'' -- so a
+	partialmethod over an abstract method stays abstract, and one over an
+	ordinary function reports False rather than raising."
+
+	^ [((self @env0:dynamicInstVarAt: #func)
+		___pyAttrLoad___: #'__isabstractmethod__') == true]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_partialmethod
+___targetName___
+	"The wrapped target's name, for the arity error."
+
+	^ [(self @env0:dynamicInstVarAt: #func) __name__ @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: 'partialmethod']
+%
+
+category: 'Grail-Representation'
+method: functools_partialmethod
+__repr__
+	"CPython: ``functools.partialmethod(<func>, 3, b=4)'' -- the target's
+	repr, then the bound positionals, then the bound keywords in insertion
+	order."
+
+	| ws args kw first |
+	ws := WriteStream @env0:on: Unicode7 @env0:new.
+	ws @env0:nextPutAll: 'functools.partialmethod('.
+	ws @env0:nextPutAll: ((self @env0:dynamicInstVarAt: #func) __repr__)
+		@env0:asString.
+	args := (self @env0:dynamicInstVarAt: #args) @env0:asArray.
+	args @env0:do: [:a |
+		ws @env0:nextPutAll: ', '.
+		ws @env0:nextPutAll: (a __repr__) @env0:asString].
+	kw := self @env0:dynamicInstVarAt: #keywords.
+	first := true.
+	kw @env0:keysAndValuesDo: [:k :v |
+		ws @env0:nextPutAll: ', '.
+		ws @env0:nextPutAll: k @env0:asString.
+		ws @env0:nextPut: $=.
+		ws @env0:nextPutAll: (v __repr__) @env0:asString.
+		first := false].
+	ws @env0:nextPut: $).
+	^ ws @env0:contents
+%
+
+! ___pythonValueAttrs___ MUST be compiled in env 0: Object >> ___pyAttrLoad___
+! consults it through an env-0 ``respondsTo:'', so an env-1 definition is
+! invisible to the probe and the hook silently does nothing.
+set compile_env: 0
+
+category: 'Grail-Python Attribute Hook'
+classmethod: functools_partialmethod
+___pythonValueAttrs___
+	"func / args / keywords are the documented DATA attributes, and
+	__isabstractmethod__ is a @property in CPython -- abc consults it with
+	getattr, where a callable would test truthy whatever it wrapped."
+
+	^ IdentitySet new
+		add: #func;
+		add: #args;
+		add: #keywords;
+		add: #'__isabstractmethod__';
+		yourself
+%
+
+set compile_env: 1
+
+category: 'Grail-Total Ordering'
 method: functools
 total_ordering: cls
-	"functools.total_ordering(cls) — upstream synthesises the missing
-	rich comparisons from __eq__ + one ordering method.  Grail's
-	comparison dispatch already falls back pairwise (__lt__/__gt__
-	swap), so pass the class through unchanged."
+	"functools.total_ordering(cls) -- fill in the rich comparisons the class
+	does not define, deriving each from __eq__ plus the one ordering method
+	it does define.
 
+	This used to pass the class straight through, on the theory that Grail's
+	pairwise fallback (``a <= b'' reflects to ``b.__ge__(a)'') already covered
+	it.  It does not: a class defining only __lt__ has no __ge__ to reflect
+	INTO, so ``a <= b'' raised ``'<=' not supported between instances of 'A'
+	and 'A''' -- and the whole point of the decorator is that the other five
+	operators start working.  test_functools' four test_total_ordering_xx
+	cases each assert all six comparisons.
+
+	Follows CPython's algorithm exactly:
+	  * ``roots'' = the ordering operators the class defines ITSELF (CPython
+	    tests ``getattr(cls, op) is not getattr(object, op)'').
+	  * no roots at all is a ValueError, not a silent no-op.
+	  * the root is ``max(roots)'' -- lexicographically that prefers __lt__
+	    to __le__ to __gt__ to __ge__.
+	  * an operator already in roots is never overwritten
+	    (test_total_ordering_no_overwrite: ``class A(int)'' inherits all four
+	    from int, so nothing is synthesised)."
+
+	| roots root |
+	roots := self ___orderingRootsOf___: cls.
+	roots @env0:isEmpty ifTrue: [
+		ValueError ___signal___:
+			'must define at least one ordering operation: < > <= >='].
+	"``max(roots)'' over the four dunder names, spelled as the preference
+	order it produces rather than as a string sort."
+	root := (#( #'__lt__' #'__le__' #'__gt__' #'__ge__' )
+		@env0:detect: [:op | roots @env0:includes: op] ifNone: [nil]).
+	(self ___orderingDerivablesFrom___: root) @env0:do: [:op |
+		(roots @env0:includes: op) ifFalse: [
+			cls ___pyAttrStore___: op @env0:asString
+				put: (functools_ordering_op ___derived___: op from: root)]].
 	^ cls
+%
+
+category: 'Grail-Total Ordering'
+method: functools
+___orderingRootsOf___: cls
+	"The ordering dunders ``cls'' supplies itself -- CPython's
+	``{op for op in _convert if getattr(cls, op, None) is not getattr(object,
+	op, None)}''.  Grail spreads a class dict across three stores, so all
+	three have to be asked:
+
+	  * a compiled ``def __lt__'' is an env-1 method; ``object'' owning the
+	    selector means the class merely INHERITED the default, which is
+	    exactly the ``is getattr(object, op)'' case CPython excludes.
+	  * a class-body binding (``__lt__ = _cmp'') becomes a generated unary
+	    accessor on the metaclass.  Only the UNARY name is probed: every
+	    class answers the binary ``__lt__:'' through object, so testing that
+	    would report all four operators on every class.
+	  * a runtime ``Cls.__lt__ = f'' lands in the per-class dynInstVars store
+	    (or, for a canonical class, the session overlay) -- both of which
+	    ___dynamicClassAttr___ walks."
+
+	^ #( #'__lt__' #'__le__' #'__gt__' #'__ge__' ) @env0:select: [:op | | owner |
+		owner := cls @env0:whichClassIncludesSelector:
+			(op @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1.
+		(owner @env0:~~ nil and: [owner @env0:~~ object])
+			or: [(cls ___respondsTo___: op)
+				or: [(cls ___dynamicClassAttr___: op) @env0:~~ nil]]]
+%
+
+category: 'Grail-Total Ordering'
+method: functools
+___orderingDerivablesFrom___: root
+	"CPython's ``_convert'' table: the three operators each root can supply,
+	in upstream's order (which only matters for reading this alongside
+	Lib/functools.py -- installation order has no effect)."
+
+	root @env0:== #'__lt__' ifTrue: [^ #( #'__gt__' #'__le__' #'__ge__' )].
+	root @env0:== #'__le__' ifTrue: [^ #( #'__ge__' #'__lt__' #'__gt__' )].
+	root @env0:== #'__gt__' ifTrue: [^ #( #'__lt__' #'__ge__' #'__le__' )].
+	^ #( #'__le__' #'__gt__' #'__lt__' )
+%
+
+category: 'Grail-Instance Creation'
+classmethod: functools_ordering_op
+___derived___: derivedOp from: rootOp
+
+	| inst |
+	inst := self @env0:new.
+	inst @env0:dynamicInstVarAt: #derived put: derivedOp.
+	inst @env0:dynamicInstVarAt: #root put: rootOp.
+	^ inst
+%
+
+category: 'Grail-Attribute Access'
+method: functools_ordering_op
+___pyBindsSelf___
+	"Marker read by object >> ___isDescriptorCallable___:.  This object stands
+	in for a plain Python function in a class dict, so reading it through an
+	INSTANCE must bind self -- ``ImplementsLessThan(1).__le__(1)'' has to reach
+	the synthesised operator with the instance prepended, as a def would."
+
+	^ true
+%
+
+category: 'Grail-Attribute Access'
+method: functools_ordering_op
+__name__
+	"CPython sets ``opfunc.__name__ = opname'' before installing it."
+
+	^ (self @env0:dynamicInstVarAt: #derived) @env0:asString @env0:asUnicodeString
+%
+
+! ___pythonValueAttrs___ MUST be compiled in env 0: Object >> ___pyAttrLoad___
+! consults it through an env-0 ``respondsTo:'', so an env-1 definition is
+! invisible to the probe and the hook silently does nothing.
+set compile_env: 0
+
+category: 'Grail-Python Attribute Hook'
+classmethod: functools_ordering_op
+___pythonValueAttrs___
+	"``__name__'' is a name STRING, not a callable.  Without this hook
+	___pyAttrLoad___ reaches its BoundMethod wrap and ``A.__ge__.__name__''
+	answers a callable around the accessor instead of ``'__ge__'''."
+
+	^ IdentitySet new
+		add: #'__name__';
+		yourself
+%
+
+set compile_env: 1
+
+category: 'Grail-Callable'
+method: functools_ordering_op
+___pyCallValue___: positional kw: kwargs
+	"``derived(self, other)'', computed from the decorated class's own
+	``root'' comparison -- the body of CPython's _xx_from_yy helpers."
+
+	| slf other raw ni base sameDir derivedInclusive rootInclusive derived root |
+	(positional @env0:== nil or: [positional @env0:size @env0:< 2]) ifTrue: [
+		TypeError ___signal___:
+			self __name__ @env0:asString @env0:,
+				'() missing required argument: other'].
+	slf := positional @env0:at: 1.
+	other := positional @env0:at: 2.
+	derived := self @env0:dynamicInstVarAt: #derived.
+	root := self @env0:dynamicInstVarAt: #root.
+	ni := Python @env0:at: #NotImplemented otherwise: nil.
+	raw := self ___callRoot___: root on: slf with: other.
+	"``if op_result is NotImplemented: return op_result'' -- the derived
+	operator must punt whenever the root punts, or ``a < 1'' against a
+	foreign type would answer a bogus bool instead of letting the caller
+	reflect and then raise TypeError (test_notimplemented)."
+	(raw @env0:== ni or: [raw @env0:== #'___NotImplemented___'])
+		ifTrue: [^ ni].
+	"Direction: __lt__/__le__ both say ``less'', __gt__/__ge__ both say
+	``greater''.  Derived in the SAME direction as the root keeps its answer;
+	the opposite direction negates it."
+	sameDir := (root @env0:== #'__lt__' or: [root @env0:== #'__le__'])
+		@env0:== (derived @env0:== #'__lt__' or: [derived @env0:== #'__le__']).
+	base := sameDir
+		ifTrue: [raw ___isTruthy___]
+		ifFalse: [raw ___isTruthy___ @env0:not].
+	rootInclusive := root @env0:== #'__le__' or: [root @env0:== #'__ge__'].
+	derivedInclusive := derived @env0:== #'__le__' or: [derived @env0:== #'__ge__'].
+	"An equality test joins in only where the root's answer cannot settle the
+	boundary case:
+	    a <= b  from  a <  b   is  (a <  b) or  (a == b)
+	    a <  b  from  a <= b   is  (a <= b) and (a != b)
+	and is left out where the derived operator is the root's exact negation:
+	    a >= b  from  a <  b   is  not (a < b)
+	Reading the three combinations off the direction/strictness pair
+	reproduces all twelve of CPython's helpers without spelling each out."
+	derivedInclusive ifTrue: [
+		(sameDir or: [rootInclusive]) ifFalse: [^ base].
+		base ifTrue: [^ true].
+		^ slf ___cmpEq___: other].
+	(sameDir or: [rootInclusive @env0:not]) ifFalse: [^ base].
+	base ifFalse: [^ false].
+	^ slf ___cmpNe___: other
+%
+
+category: 'Grail-Callable'
+method: functools_ordering_op
+___callRoot___: root on: slf with: other
+	"``type(self).__lt__(self, other)'' -- the root comparison, called
+	DIRECTLY so a NotImplemented return comes back as itself instead of being
+	turned into a reflected call or a TypeError by the operator machinery.
+
+	A compiled ``def __lt__'' is reached by performing its env-1 selector; a
+	root supplied as a class ATTRIBUTE (a ``__lt__ = _cmp'' alias) is reached
+	through ___classAttrDunder___, the same lookup ___cmpFallback___ uses."
+
+	| rootSel owner fn |
+	rootSel := (root @env0:asString @env0:, ':') @env0:asSymbol.
+	owner := slf @env0:class
+		@env0:whichClassIncludesSelector: rootSel environmentId: 1.
+	(owner @env0:~~ nil and: [owner @env0:~~ object]) ifTrue: [
+		^ slf @env0:perform: rootSel env: 1 withArguments: { other }].
+	fn := slf ___classAttrDunder___: root.
+	fn @env0:== nil ifTrue: [^ Python @env0:at: #NotImplemented otherwise: nil].
+	^ fn ___pyCallValue___: { slf. other } kw: nil
+%
+
+category: 'Grail-Representation'
+method: functools_ordering_op
+__repr__
+
+	^ ('<function ' @env0:, self __name__ @env0:asString @env0:, '>')
+		@env0:asUnicodeString
 %
 
 category: 'Grail-Built-in Functions'
@@ -1156,16 +1873,7 @@ reduce: function _: iterable
 	Apply function of two arguments cumulatively to the items of
 	iterable, from left to right."
 
-	| result iter item |
-	iter := iterable __iter__.
-	result := iter __next__.
-	[
-		[
-			item := iter __next__.
-			result := function value: { result. item } value: nil.
-		] repeat.
-	] @env0:on: StopIteration do: [:ex | "done" ].
-	^ result
+	^ self ___reduce___: function over: iterable initial: nil hasInitial: false
 %
 
 category: 'Grail-Built-in Functions'
@@ -1174,16 +1882,97 @@ reduce: function _: iterable _: initial
 	"reduce(function, iterable, initial) -> value.
 	Like reduce/2 but uses initial as the starting value."
 
-	| result iter item |
+	^ self ___reduce___: function over: iterable initial: initial hasInitial: true
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+___reduce___: function over: iterable initial: initial hasInitial: hasInitial
+	"CPython's Lib/functools.py reduce, including the part the arity-split
+	versions got wrong: an EMPTY iterable with no initial value is a
+	TypeError, not the StopIteration that escaped from the first __next__.
+
+	The single-item case never calls the function at all -- ``reduce(42,
+	'1')'' answers '1' -- which falls out of seeding from the first element
+	and only then looping."
+
+	| iter value |
 	iter := iterable __iter__.
-	result := initial.
-	[
-		[
-			item := iter __next__.
-			result := function value: { result. item } value: nil.
-		] repeat.
-	] @env0:on: StopIteration do: [:ex | "done" ].
-	^ result
+	hasInitial
+		ifTrue: [value := initial]
+		ifFalse: [
+			value := [iter __next__] @env0:on: StopIteration do: [:ex |
+				ex @env0:return: #'___GrailReduceEmpty___'].
+			value @env0:== #'___GrailReduceEmpty___' ifTrue: [
+				TypeError ___signal___:
+					'reduce() of empty iterable with no initial value']].
+	[[| item |
+		item := iter __next__.
+		value := function ___pyCallValue___: { value. item } kw: nil.
+		] repeat]
+		@env0:on: StopIteration do: [:ex | "exhausted"].
+	^ value
+%
+
+category: 'Grail-Built-in Functions'
+method: functools
+_reduce: positional kw: kwargs
+	"Varargs reduce: the keyword forms and the argument-count errors.
+
+	``initial'' may be passed as a KEYWORD (test_initial_keyword), and CPython
+	still accepts ``function'' / ``sequence'' by keyword while warning that it
+	is deprecated (test_reduce_with_kwargs).  Wrong counts are TypeErrors
+	rather than whatever the fixed-arity dispatch happened to raise."
+
+	| args fn iterable initial hasInitial haveFn haveSeq deprecated |
+	args := positional @env0:ifNil: [#()].
+	args @env0:size @env0:> 3 ifTrue: [
+		TypeError ___signal___: 'reduce() takes at most 3 arguments ('
+			@env0:, args @env0:size @env0:printString @env0:, ' given)'].
+	haveFn := args @env0:size @env0:>= 1.
+	haveSeq := args @env0:size @env0:>= 2.
+	fn := haveFn ifTrue: [args @env0:at: 1] ifFalse: [nil].
+	iterable := haveSeq ifTrue: [args @env0:at: 2] ifFalse: [nil].
+	hasInitial := args @env0:size @env0:>= 3.
+	initial := hasInitial ifTrue: [args @env0:at: 3] ifFalse: [nil].
+	deprecated := false.
+	(kwargs @env0:isNil or: [kwargs @env0:isEmpty]) ifFalse: [
+		kwargs @env0:keysAndValuesDo: [:k :v | | key |
+			key := k @env0:asString.
+			key @env0:= 'initial'
+				ifTrue: [
+					hasInitial ifTrue: [
+						TypeError ___signal___:
+							'reduce() got multiple values for argument ''initial'''].
+					initial := v.
+					hasInitial := true]
+				ifFalse: [key @env0:= 'function'
+				ifTrue: [
+					haveFn ifTrue: [
+						TypeError ___signal___:
+							'reduce() got multiple values for argument ''function'''].
+					fn := v. haveFn := true. deprecated := true]
+				ifFalse: [key @env0:= 'sequence'
+				ifTrue: [
+					haveSeq ifTrue: [
+						TypeError ___signal___:
+							'reduce() got multiple values for argument ''sequence'''].
+					iterable := v. haveSeq := true. deprecated := true]
+				ifFalse: [
+					TypeError ___signal___:
+						'reduce() got an unexpected keyword argument ''' @env0:, key @env0:, '''']]]]].
+	(haveFn and: [haveSeq]) ifFalse: [
+		TypeError ___signal___:
+			'reduce expected at least 2 arguments, got '
+				@env0:, args @env0:size @env0:printString].
+	deprecated ifTrue: [
+		"CPython 3.14 accepts the old keyword names and warns.  Routed through
+		the warnings module so unittest's assertWarns can record it."
+		(Python @env0:at: #warnings otherwise: nil) @env0:ifNotNil: [:w |
+			w @env0:___instance___
+				warn: 'Passing keyword arguments to reduce() is deprecated'
+				_: (Python @env0:at: #DeprecationWarning otherwise: nil)]].
+	^ self ___reduce___: fn over: iterable initial: initial hasInitial: hasInitial
 %
 
 category: 'Grail-Single Dispatch'
@@ -1206,6 +1995,26 @@ singledispatch: aFunc
 		wrapped: aFunc
 		assigned: self WRAPPER_ASSIGNMENTS
 		updated: self WRAPPER_UPDATES
+%
+
+category: 'Grail-Single Dispatch'
+method: functools
+singledispatchmethod: aFunc
+	"functools.singledispatchmethod(func) -- singledispatch for a METHOD.
+
+	Same generic-function machinery as singledispatch, dispatching on the
+	first argument AFTER the receiver rather than on the receiver itself.
+
+	Applies to a plain instance method.  ``@singledispatchmethod
+	@classmethod'' and ``@singledispatchmethod @staticmethod'' are not
+	supported: Grail consumes those inner decorators at PARSE time by
+	re-classing the def onto the metaclass, so no instance-side method
+	survives for this decorator to wrap.  Those stacks keep the behaviour
+	they had while this decorator did not exist at all -- the class-body
+	decorator handler drops the application and the undecorated method
+	stays in place."
+
+	^ functools_singledispatchmethod ___on: aFunc
 %
 
 category: 'Grail-Instance Creation'
@@ -1322,6 +2131,14 @@ register: clsOrFunc
 		"Not a class -> the annotation form: clsOrFunc is the function."
 		| inferred |
 		inferred := self ___inferRegisterType___: clsOrFunc.
+		"A UNION annotation (``str | bytes'', ``typing.Optional[int]'')
+		registers the implementation once per member, which is how CPython
+		dispatches it -- there is no union object in the registry, just each
+		class pointing at the same function."
+		(inferred isKindOf: Array) ifTrue: [
+			inferred @env0:do: [:each |
+				(self @env0:dynamicInstVarAt: #registry) @env0:at: each put: clsOrFunc].
+			^ clsOrFunc].
 		(self @env0:dynamicInstVarAt: #registry) @env0:at: inferred put: clsOrFunc.
 		^ clsOrFunc].
 	^ [:positional2 :keywords2 |
@@ -1359,13 +2176,18 @@ ___inferRegisterType___: aFunc
 	    (test_register_genericalias_annotation);
 	  * a bare unresolved name -- an unresolved forward reference
 	    (test_unresolved_forward_reference).
-	Grail keeps annotations as PEP 563 SOURCE STRINGS, which is what makes
-	the first case detectable at all: ``arg: list[int]'' arrives as the
-	string ``list[int]''.  The runtime value would not help -- Grail's
-	__class_getitem__ is an identity stub, so ``list[int] is list''."
+	This reads the annotations in PEP 649's ``Format.STRING'' -- the source
+	text -- rather than ``__annotations__'', which since PEP 649 answers
+	VALUES.  The source text is what makes the first case detectable at
+	all: ``arg: list[int]'' arrives as the string ``list[int]'', whereas
+	its VALUE is just ``list'' -- Grail's __class_getitem__ is an identity
+	stub, so ``list[int] is list'' and a subscripted annotation would
+	silently register the unsubscripted class instead of raising.  When
+	__class_getitem__ answers real PyGenericAlias objects for these
+	classes, this can read values and test them directly."
 
 	| ann candidate paramName text |
-	ann := [aFunc __annotations__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	ann := self ___annotationSourceStrings___: aFunc.
 	(ann @env0:isNil or: [ann @env0:isEmpty]) ifTrue: [
 		TypeError ___signal___:
 			'Invalid first argument to `register()`: no type annotation found'].
@@ -1394,10 +2216,18 @@ ___inferRegisterType___: aFunc
 			resolved := cabc @env0:dynamicInstVarAt: candidate @env0:asString @env0:asSymbol.
 			(resolved ~~ nil and: [resolved isKindOf: Behavior])
 				ifTrue: [candidate := resolved]]].
+	"A UNION of plain classes registers once per member -- that is how CPython
+	dispatches ``str | bytes'': no union object goes into the registry, each
+	class does, all pointing at the same implementation.  Grail used to leave
+	these UNREGISTERED (valid CPython, so raising was worse) and every call
+	quietly fell through to the default."
+	(candidate isKindOf: CharacterCollection) ifTrue: [
+		(self ___annotationUnionMembers___: text)
+			@env0:ifNotNil: [:members | ^ members]].
 	"Unresolvable: raise rather than register an unusable string key -- EXCEPT
-	for a union of plain classes, which is valid CPython that Grail cannot
-	dispatch on yet.  Raising there would turn working user code into a hard
-	error; leaving it unregistered keeps the previous (soft) behaviour of
+	for a union whose members are classes Grail could not resolve, which is
+	still valid CPython.  Raising there would turn working user code into a
+	hard error; leaving it unregistered keeps the previous (soft) behaviour of
 	falling through to the default implementation.  See
 	___annotationUnionOfClasses___: for why this needs its own test."
 	(candidate isKindOf: CharacterCollection) ifTrue: [
@@ -1409,6 +2239,103 @@ ___inferRegisterType___: aFunc
 				@env0:, '''. ' @env0:, text
 				@env0:, ' is an unresolved forward reference.']].
 	^ (self ___registryKey___: candidate) @env0:ifNil: [candidate]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___annotationSourceStrings___: aFunc
+	"aFunc's annotations as SOURCE TEXT -- PEP 649's ``Format.STRING'' --
+	or nil when aFunc has none or they cannot be obtained.
+
+	Asking the annotate function for STRING rather than reading
+	``__annotations__'' matters because STRING never evaluates anything:
+	an annotation naming something not yet bound is exactly the forward
+	reference this method has to diagnose, and evaluating it would raise
+	NameError here instead.
+
+	Falls back to ``__annotations__'' for a callable with no annotate
+	function -- a method reached through a BoundMethod keeps its
+	annotations on the defining class rather than carrying one."
+
+	| annotate |
+	annotate := [aFunc @env1:__annotate__]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(annotate isKindOf: ExecBlock) ifFalse: [
+		^ [aFunc __annotations__]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	^ [annotate @env0:value: { 4 } value: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___annotationUnionMembers___: aText
+	"The member CLASSES of a union annotation -- ``str | bytes'',
+	``typing.Union[str, None]'', ``typing.Optional[int]'' -- as an Array, or
+	nil when aText is not a union or a member will not resolve.
+
+	CPython registers a union by registering each member separately, so this
+	is all singledispatch needs; there is no union object in the registry."
+
+	| members resolved |
+	(self ___annotationUnionOfClasses___: aText) ifFalse: [^ nil].
+	members := self ___annotationUnionMemberNames___: aText.
+	members @env0:isNil ifTrue: [^ nil].
+	resolved := OrderedCollection @env0:new.
+	members @env0:do: [:name | | cls |
+		cls := self ___resolveAnnotationClass___: name.
+		cls @env0:isNil ifTrue: [^ nil].
+		resolved @env0:add: cls].
+	resolved @env0:isEmpty ifTrue: [^ nil].
+	^ resolved @env0:asArray
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___annotationUnionMemberNames___: aText
+	"The member NAMES of a union annotation, or nil when aText is not one.
+	Shares its parse with ___annotationUnionOfClasses___:, which decides
+	whether the union is admissible at all."
+
+	| inner bar bracket |
+	bar := '|' @env0:at: 1.
+	bracket := '[' @env0:at: 1.
+	inner := nil.
+	(aText @env0:includes: bar) ifTrue: [inner := aText].
+	inner == nil ifTrue: [
+		(((aText @env0:indexOfSubCollection: 'typing.Union[') == 1)
+			or: [(aText @env0:indexOfSubCollection: 'typing.Optional[') == 1])
+			ifFalse: [^ nil].
+		inner := aText
+			@env0:copyFrom: ((aText @env0:indexOf: bracket) @env0:+ 1)
+			to: (aText @env0:size @env0:- 1)].
+	^ (inner @env0:subStrings: '|,') @env0:collect: [:m | m @env0:trimSeparators]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___resolveAnnotationClass___: aName
+	"Resolve one annotation NAME to a class, or nil.  The same three places
+	___inferRegisterType___ looks: ``None'' names NoneType (CPython treats
+	``X | None'' as a union with type(None)), then the Python symbol list,
+	then collections.abc for the ABC names that live only on that module."
+
+	| text resolved cabc |
+	text := aName @env0:asString.
+	(text @env0:= 'None' or: [text @env0:= 'NoneType']) ifTrue: [
+		^ Python @env0:at: #NoneType otherwise: nil].
+	resolved := (System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: text @env0:asSymbol).
+	(resolved @env0:notNil and: [resolved isKindOf: Behavior]) ifTrue: [
+		^ resolved].
+	cabc := (System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: #importlib) modules
+		@env0:at: #'collections.abc' otherwise: nil.
+	cabc == nil ifFalse: [
+		resolved := cabc @env0:dynamicInstVarAt: text @env0:asSymbol.
+		(resolved ~~ nil and: [resolved isKindOf: Behavior]) ifTrue: [
+			^ resolved]].
+	^ nil
 %
 
 category: 'Grail-Single Dispatch'
@@ -1481,6 +2408,418 @@ category: 'Grail-Single Dispatch'
 method: functools_singledispatch
 registry
 	^ self @env0:dynamicInstVarAt: #registry
+%
+
+! ------------------- singledispatchmethod
+
+category: 'Grail-Instance Creation'
+classmethod: functools_singledispatchmethod
+___on: aFunc
+
+	| inst |
+	inst := self ___new___.
+	inst @env0:dynamicInstVarAt: #func put: aFunc.
+	inst @env0:dynamicInstVarAt: #dispatcher
+		put: (functools_singledispatch ___on: aFunc).
+	^ inst
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod
+register: clsOrFunc
+	"``@t.register(int)'' and the annotation form ``@t.register'' -- both
+	delegate to the underlying generic function, which owns the registry."
+
+	^ (self @env0:dynamicInstVarAt: #dispatcher) register: clsOrFunc
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod
+register: cls _: aFunc
+	"``t.register(cls, impl)'' direct form."
+
+	^ (self @env0:dynamicInstVarAt: #dispatcher) register: cls _: aFunc
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod
+_register: positional kw: kwargs
+
+	^ (self @env0:dynamicInstVarAt: #dispatcher) _register: positional kw: kwargs
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod
+dispatcher
+	^ self @env0:dynamicInstVarAt: #dispatcher
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+___pyBindsSelf___
+	"Marker read by object >> ___isDescriptorCallable___:.  CPython makes this
+	a descriptor whose __get__ returns a wrapper bound to the instance; Grail
+	reaches the same place through its own class-attribute binding, so
+	``a.t(0)'' arrives here as (a, 0).
+
+	NOT for a wrapped @classmethod / @staticmethod.  CPython's __get__
+	delegates to the wrapped descriptor's own __get__, and neither of those
+	binds the instance: ``a.static_func(0)'' and ``A.static_func(0)'' both call
+	the function with just (0), and a classmethod gets ``cls'' either way.
+	Refusing the binding here makes both access paths deliver the identical
+	argument array, which is what lets one call shape serve all three kinds."
+
+	^ self ___wrapsClassSideMethod___ @env0:not
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+___wrapsClassSideMethod___
+	"Is the decorated method a @classmethod / @staticmethod rather than a
+	plain instance method?
+
+	Grail compiles those onto the metaclass, and the class-body decorator
+	hands this class a BoundMethod on the CLASS for them (see FunctionDefAst >>
+	___decoratorBaseIsClassSide___) against an UnboundMethod for a plain
+	method.  That is the same distinction CPython draws -- there the wrapped
+	object is a classmethod/staticmethod descriptor instead of a plain
+	function -- so the handle's kind is the honest signal, not a flag threaded
+	down from the parser.
+
+	The receiver must be a CLASS: a BoundMethod on a MODULE is a plain
+	top-level function (``singledispatchmethod(some_function)''), which binds
+	an instance like any other function would."
+
+	| fn |
+	fn := self @env0:dynamicInstVarAt: #func.
+	^ (fn isKindOf: BoundMethod)
+		and: [fn @env0:receiver isKindOf: Behavior]
+%
+
+category: 'Grail-Callable'
+method: functools_singledispatchmethod
+value: positional value: kwargs
+	"Called DIRECTLY rather than through a binding -- ``A.t(0)'' reads the
+	descriptor off the class and calls it, which routes through
+	PythonInstance >> value:value: instead of ___pyCallValue___:kw:.  That is
+	the normal path for the @classmethod / @staticmethod forms, where nothing
+	binds an instance."
+
+	^ self ___pyCallValue___: positional kw: kwargs
+%
+
+category: 'Grail-Callable'
+method: functools_singledispatchmethod
+___pyCallValue___: positional kw: kwargs
+	"``a.t(arg, ...)'' -- dispatch on the type of the first argument AFTER the
+	receiver, then run the winning implementation with the receiver back in
+	front.
+
+	One rule covers both access paths.  Read through an INSTANCE the receiver
+	was prepended by the binding, so it is positional[1] and the dispatch
+	argument is positional[2]; read through the CLASS (``A.t(a, 0)'', the
+	unbound function CPython hands back) the caller passes the receiver
+	explicitly in the same slot.  Either way the implementation is called with
+	the array unchanged -- registered implementations are ``def _(self, arg)''
+	and take the receiver first.
+
+	A wrapped @classmethod / @staticmethod carries no receiver in the array at
+	all (___pyBindsSelf___ declines the binding, and the implementation is a
+	BoundMethod that supplies the class itself), so for those the dispatch
+	argument is the first element."
+
+	| impl at |
+	at := self ___wrapsClassSideMethod___ ifTrue: [1] ifFalse: [2].
+	positional @env0:size @env0:< at ifTrue: [
+		"CPython names the FUNCTION: ``t requires at least 1 positional
+		argument''.  The receiver does not count -- ``A().t()'' and
+		``A().t(a=1)'' both raise, though the first already has one element
+		in the array here."
+		TypeError ___signal___: (self ___dispatchName___)
+			@env0:, ' requires at least 1 positional argument'].
+	impl := (self @env0:dynamicInstVarAt: #dispatcher)
+		dispatch: (positional @env0:at: at) @env0:class.
+	^ impl ___pyCallValue___: positional kw: kwargs
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod
+___dispatchName___
+	"The decorated method's name, for the arity error."
+
+	^ [(self @env0:dynamicInstVarAt: #func) __name__ @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: 'singledispatchmethod method']
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+__isabstractmethod__
+	"CPython: ``getattr(self.func, '__isabstractmethod__', False)'' -- so an
+	abstract method stays abstract through the decorator and ABCMeta still
+	refuses to instantiate the class."
+
+	^ [((self @env0:dynamicInstVarAt: #func)
+		___pyAttrLoad___: #'__isabstractmethod__') == true]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+__name__
+	^ (self @env0:dynamicInstVarAt: #func) __name__
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+__doc__
+	^ (self @env0:dynamicInstVarAt: #func) __doc__
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+__qualname__
+	"``Cls.meth''.  An UnboundMethod already qualifies itself; a class-side
+	BoundMethod answers the bare selector (it does not track lexical nesting),
+	so qualify it here from the receiver it is bound to -- which for these IS
+	the defining class."
+
+	| fn |
+	fn := self @env0:dynamicInstVarAt: #func.
+	self ___wrapsClassSideMethod___ ifTrue: [
+		^ (fn @env0:receiver @env0:name @env0:asString @env0:, '.'
+			@env0:, fn @env0:selector @env0:asString) @env0:asUnicodeString].
+	^ fn __qualname__
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+__module__
+	^ (self @env0:dynamicInstVarAt: #func) __module__
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+__annotations__
+	^ (self @env0:dynamicInstVarAt: #func) __annotations__
+%
+
+category: 'Grail-Representation'
+method: functools_singledispatchmethod
+__repr__
+	"CPython: ``<single dispatch method descriptor Cls.meth>'', naming the
+	wrapped callable by __qualname__, then __name__, then ``?'' when it
+	carries neither."
+
+	| label |
+	label := [self __qualname__ @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil].
+	label @env0:isNil ifTrue: [
+		label := [(self @env0:dynamicInstVarAt: #func) __name__ @env0:asString]
+			@env0:on: AbstractException
+			do: [:ex | ex @env0:return: '?']].
+	^ ('<single dispatch method descriptor ' @env0:, label @env0:, '>')
+		@env0:asUnicodeString
+%
+
+! ___pythonValueAttrs___ MUST be compiled in env 0: Object >> ___pyAttrLoad___
+! consults it through an env-0 ``respondsTo:'', so an env-1 definition is
+! invisible to the probe and the hook silently does nothing.
+set compile_env: 0
+
+category: 'Grail-Python Attribute Hook'
+classmethod: functools_singledispatchmethod
+___pythonValueAttrs___
+	"Identifying metadata copied off the wrapped method: name strings and a
+	docstring, not callables.  ``__isabstractmethod__'' is a @property in
+	CPython, so it too must READ as a value -- abc consults it with getattr
+	and a callable would test truthy no matter what it wrapped."
+
+	^ IdentitySet new
+		add: #'__name__';
+		add: #'__doc__';
+		add: #'__qualname__';
+		add: #'__module__';
+		add: #'__annotations__';
+		add: #'__isabstractmethod__';
+		yourself
+%
+
+set compile_env: 1
+
+! ===============================================================================
+! functools_cached_property -- ``@cached_property'' as a real descriptor
+!
+! The first read through an instance computes ``func(instance)'' and stores the
+! answer in the instance's OWN attribute slot; because ___pyAttrLoad___ probes
+! that slot first, every later read is the cached value and never reaches the
+! descriptor again.  That is exactly CPython's non-data-descriptor arrangement.
+! ===============================================================================
+
+category: 'Grail-Instantiation'
+classmethod: functools_cached_property
+value: positional value: keywords
+	"cached_property(fn) -- the class-call entry.  Route through the
+	__new__ protocol so subclass instantiation (ClassDefAst emits
+	value:value: -> ___allocateInstance___) and a direct call share one
+	constructor."
+
+	^ self ___allocateInstance___: positional kw: keywords
+%
+
+category: 'Grail-Instantiation'
+classmethod: functools_cached_property
+___pyCallValue___: positional kw: kwargs
+	"The INDIRECT call protocol, which is how a class-body DECORATOR reaches
+	the class: ``@functools.cached_property'' emits
+	``cached_property ___pyCallValue___: { <the def> } kw: nil''.  Without
+	this it reached object's ``not callable'' raiser -- and since a class-body
+	decorator's rebinding store is wrapped in an error-swallowing guard, the
+	decoration silently did not happen and every read re-invoked the method.
+
+	Opt-in per class rather than answered for all of them on ``object'',
+	because making every class callable through this path also makes
+	``@enum.property'' / ``@member'' apply for the first time, and Grail's
+	enum member builder counts the resulting descriptor as a MEMBER."
+
+	^ self value: (positional == nil ifTrue: [#()] ifFalse: [positional])
+		value: kwargs
+%
+
+category: 'Grail-Reflection'
+classmethod: functools_cached_property
+__module__
+	^ 'functools'
+%
+
+category: 'Grail-Reflection'
+classmethod: functools_cached_property
+__qualname__
+	^ 'cached_property'
+%
+
+category: 'Grail-Instantiation'
+method: functools_cached_property
+___new__: positional kw: keywords
+	"Constructor body.  self is the CLASS -- ___allocateInstance___ runs a
+	__new__ non-virtually with the class as receiver, which is what makes
+	``class Sub(cached_property): pass'' construct Sub instances."
+
+	| inst fn |
+	(positional == nil or: [positional @env0:isEmpty]) ifTrue: [
+		TypeError ___signal___:
+			'cached_property expected 1 argument, got 0'].
+	positional @env0:size @env0:> 1 ifTrue: [
+		TypeError ___signal___: ('cached_property expected 1 argument, got '
+			@env0:, positional @env0:size @env0:printString)].
+	(keywords == nil or: [keywords @env0:isEmpty]) ifFalse: [
+		TypeError ___signal___:
+			'cached_property() takes no keyword arguments'].
+	fn := positional @env0:at: 1.
+	inst := self @env0:new.
+	inst @env0:dynamicInstVarAt: #func put: fn.
+	"attrname is None -- not Smalltalk nil -- until __set_name__ fills it
+	in: the dynamic-instVar probe at the top of ___pyAttrLoad___ reads nil
+	as ABSENT, so a nil slot would send ``cp.attrname'' on to the
+	method-wrap fallback instead of answering CPython's None."
+	inst @env0:dynamicInstVarAt: #attrname put: None.
+	inst @env0:dynamicInstVarAt: #'__doc__' put: (self ___metaOf___: fn named: #'__doc__').
+	"``self.__module__ = func.__module__'': the descriptor reports the module
+	that DEFINED the wrapped function, not functools.  Without it a read
+	falls back to the type's own __module__ and ``Cls.attr.__module__''
+	answers 'functools' -- CPython copies it for exactly this reason."
+	inst @env0:dynamicInstVarAt: #'__module__' put: (self ___metaOf___: fn named: #'__module__').
+	^ inst
+%
+
+category: 'Grail-Private'
+classmethod: functools_cached_property
+___metaOf___: fn named: aSym
+	"One of the identifying attributes CPython's __init__ copies off the
+	wrapped function (``self.__doc__ = func.__doc__'').  Guarded, because
+	not every callable answers them."
+
+	^ [fn @env1:___pyAttrLoad___: aSym]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: None]
+%
+
+category: 'Grail-Descriptor'
+method: functools_cached_property
+__set_name__: owner _: name
+	"``__set_name__(owner, name)'', sent by Object >> ___pyClassDefined___:
+	for every class-body entry as the class is defined.
+
+	The name is the slot the computed value is cached UNDER, so binding one
+	descriptor to two names is a TypeError in CPython: reads of the second
+	name would keep recomputing, silently defeating the decorator.  Binding
+	the same name on a DIFFERENT class is fine (and common)."
+
+	| current new |
+	new := name @env0:asString.
+	current := self @env0:dynamicInstVarAt: #attrname.
+	(current == nil or: [current == None]) ifTrue: [
+		self @env0:dynamicInstVarAt: #attrname put: new @env0:asUnicodeString.
+		^ None].
+	(current @env0:asString @env0:= new) ifFalse: [
+		TypeError ___signal___:
+			('Cannot assign the same cached_property to two different names ('''
+				@env0:, current @env0:asString @env0:, ''' and ''' @env0:, new
+				@env0:, ''').')].
+	^ None
+%
+
+category: 'Grail-Descriptor'
+method: functools_cached_property
+__get__: instance _: owner
+	"The descriptor read.  Reached from object >> ___descriptorGet___: on an
+	INSTANCE read; a read off the class answers the descriptor itself (both
+	because CPython's __get__ does that for a None instance, and because
+	Grail's class-attribute paths hand back the stored value raw)."
+
+	| name sym cached value |
+	(instance == nil or: [instance == None]) ifTrue: [^ self].
+	name := self @env0:dynamicInstVarAt: #attrname.
+	(name == nil or: [name == None]) ifTrue: [
+		TypeError ___signal___:
+			'Cannot use cached_property instance without calling __set_name__ on it.'].
+	"A class declaring __slots__ has no instance __dict__ to cache in.
+	Grail marks such a class with an instance-side ___pyHasSlots___ (emitted
+	by ClassDefAst), which is the marker CPython's ``getattr(instance,
+	'__dict__', None) is None'' stands in for here."
+	(instance ___respondsTo___: #'___pyHasSlots___') ifTrue: [
+		TypeError ___signal___: ('No ''__dict__'' attribute on '''
+			@env0:, instance @env0:class @env0:name @env0:asString
+			@env0:, ''' instance to cache ''' @env0:, name @env0:asString
+			@env0:, ''' property.')].
+	sym := name @env0:asString @env0:asSymbol.
+	"Consult the cache here too, not only through ___pyAttrLoad___'s slot
+	probe: an EXPLICIT ``cp.__get__(obj)'' must answer the cached value, and
+	so must a subclass that defines __set__ (which makes it a data
+	descriptor, so the slot probe no longer wins)."
+	cached := instance @env0:dynamicInstVarAt: sym.
+	cached == nil ifFalse: [^ cached].
+	value := (self @env0:dynamicInstVarAt: #func)
+		___pyCallValue___: { instance } kw: nil.
+	[instance @env0:dynamicInstVarAt: sym put: value]
+		@env0:on: AbstractException
+		do: [:ex |
+			ex @env0:return: (TypeError ___signal___:
+				('The ''__dict__'' attribute on '''
+					@env0:, instance @env0:class @env0:name @env0:asString
+					@env0:, ''' instance does not support item assignment for caching '''
+					@env0:, name @env0:asString @env0:, ''' property.'))].
+	^ value
+%
+
+category: 'Grail-Descriptor'
+method: functools_cached_property
+__get__: instance
+	"``cp.__get__(obj)'' -- CPython's owner argument defaults to None."
+
+	^ self __get__: instance _: None
 %
 
 set compile_env: 0

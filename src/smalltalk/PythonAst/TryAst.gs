@@ -63,8 +63,21 @@ category: 'Grail-other'
 method: TryAst
 printSmalltalkOn: aStream
 
+	| useEnsureFinally |
+	"finally-during-propagation: route the finally through
+	BaseException>>___ensureFinally___:finally: (instead of a bare ensure:) so
+	sys.exc_info() inside the finally sees a propagating exception -- but ONLY in
+	a non-generator scope (the helper's ``ex pass'' re-raise is generator-unsafe;
+	a generator try/finally keeps the plain ensure:).  Module-level try/finally
+	(functionBeingCompiled nil) is never a generator, so it uses the helper too."
+	useEnsureFinally := finalbody size > 0 and: [
+		CallAst functionBeingCompiled isNil
+			or: [CallAst functionBeingCompiled isGenerator not]].
+
 	"Open ensure wrapper for finally"
 	finalbody size > 0 ifTrue: [
+		useEnsureFinally ifTrue: [
+			aStream nextPutAll: 'BaseException @env0:___ensureFinally___: '].
 		aStream nextPut: $[.
 	].
 
@@ -115,7 +128,7 @@ printSmalltalkOn: aStream
 						it merges with the surrounding ``on:...do:`` into one
 						mashed selector."
 						handler type printSmalltalkWithParenthesisOn: aStream]].
-		aStream nextPutAll: ' do: [:___ex |'; increaseIndent; lf.
+		aStream nextPutAll: ' do: [:___ex | | ___savedExc |'; increaseIndent; lf.
 		"Always re-raise Grail's control-flow signals so a Python
 		``except Exception`` doesn't swallow a pending ``return`` /
 		``break`` / ``continue``.  Without this guard, jinja2's
@@ -125,6 +138,28 @@ printSmalltalkOn: aStream
 		aStream
 			nextPutAll: '((___ex isKindOf: PythonReturn) or: [(___ex isKindOf: PythonBreak) or: [___ex isKindOf: PythonContinue]]) ifTrue: [___ex @env0:pass].';
 			lf.
+		"Traceback: give the exception a frame for the function catching it, at
+		___curPos___ (the try-body statement it propagated from) -- but only as a
+		FALLBACK (___pushCatchingFrame___ no-ops if a deeper frame already
+		exists), so a plain wrapper-less module-level def/method still yields a
+		non-empty traceback.  Only inside a function (module-level try has no
+		___curPos___)."
+		CallAst functionBeingCompiled ifNotNil: [:___func |
+			aStream
+				nextPutAll: '___ex @env0:___pushCatchingFrame___: (PyCode @env0:name: ''';
+				nextPutAll: ___func name asString;
+				nextPutAll: ''' firstlineno: ';
+				print: ___func beginLine;
+				nextPutAll: ') pos: ___curPos___.';
+				lf].
+		"Record ___ex as this session's currently-handled exception (CPython
+		sys.exc_info()), restoring the prior value when the handler exits --
+		via ensure: so a return/break/continue or a re-raise still restores.
+		Runs AFTER the control-flow guard so a pending signal never becomes
+		'the current exception'."
+		aStream
+			nextPutAll: '___savedExc := BaseException @env0:___currentException___. BaseException @env0:___setCurrentException___: ___ex. [';
+			lf.
 		handler name ifNotNil: [
 			"Route ``except X as e'' through the module-scope-aware store so
 			a module-level e binds the module variable rather than an
@@ -133,20 +168,28 @@ printSmalltalkOn: aStream
 			aStream lf.
 		].
 		handler body printSmalltalkOn: aStream.
+		aStream
+			lf;
+			nextPutAll: '] @env0:ensure: [BaseException @env0:___setCurrentException___: ___savedExc]';
+			lf.
 	].
 
-	"Close final blocks"
+	"Close final blocks.  With the helper the finally is the second keyword
+	argument (``finally:''); without it, a bare ``@env0:ensure:''."
 	handlers notEmpty ifTrue: [
 		aStream decreaseIndent.
 		finalbody size > 0
 			ifTrue: [
-				aStream nextPutAll: ']] @env0:ensure: ['; increaseIndent; lf.
+				aStream nextPutAll: (useEnsureFinally ifTrue: [']] finally: ['] ifFalse: [']] @env0:ensure: [']);
+					increaseIndent; lf.
 				finalbody printSmalltalkOn: aStream.
 				aStream decreaseIndent; nextPutAll: '].']
 			ifFalse: [aStream nextPutAll: '].'].
 	] ifFalse: [
 		finalbody size > 0 ifTrue: [
-			aStream decreaseIndent; nextPutAll: '] @env0:ensure: ['; increaseIndent; lf.
+			aStream decreaseIndent;
+				nextPutAll: (useEnsureFinally ifTrue: ['] finally: ['] ifFalse: ['] @env0:ensure: [']);
+				increaseIndent; lf.
 			finalbody printSmalltalkOn: aStream.
 			aStream decreaseIndent; nextPutAll: '].'.
 		].

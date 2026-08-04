@@ -1,6 +1,7 @@
 # Python tracebacks & PEP 657 locations — design & plan
 
-Status: **design**, Phase 1 in progress. Author-driven from the
+Status: Phases 1, 2a, 2b, 3a, 3b, 3c **merged**; 3d (`finally`-during-propagation)
+**done** (see §5); multi-frame deep frames deferred. Author-driven from the
 `test.test_dictcomps` / `test.test_setcomps` `test_exception_locations`
 conformance gap (2026-07-31, gs40 / GemStone 4.0).
 
@@ -199,12 +200,118 @@ Greens `test_dictcomps` and `test_setcomps` `test_exception_locations`
 (ERROR→OK). Grail's `beginColumn`/`endColumn` are already 0-based / end-exclusive
 (matching Python `col_offset`), so no column adjustment was needed.
 
-**Deferred (future) — general traceback population.** The broad per-statement
-`setPos` + body-wrapper/except-binding frame prepends (correct line-level
-tracebacks for *any* raise, multi-frame chains, `sys.exc_info()` backing) remain
-future work; the data model (Phase 1) and code objects (Phase 2a) already
-support them. Today a non-comprehension exception still has an empty
-`__traceback__`.
+**Phase 3a — `sys.exc_info()` backing (DONE).** The zero-happy-path-overhead
+slice of the general-population phase. A session-local "currently-handled
+exception" register (`BaseException class>>___currentException___` /
+`___setCurrentException___:`, in `SessionTemps`) is set by `TryAst` codegen at
+each except-handler entry (after the control-flow guard) and restored on exit via
+`ensure:`, so nested handlers stack correctly. `sys.exc_info()` /
+`sys.exception()` return it (were hardcoded `(None,None,None)` / `None`), which
+also gives `traceback.format_exc()` a real exception to render. No per-statement
+instrumentation, so no happy-path cost; the only added work is per except
+handler. (`finally`-during-propagation isn't tracked yet — a minor gap.)
+
+**Phase 3b — general caught-exception frames (DONE).** Every function now carries
+a `___curPos___` temp (a 5-array `{line. col. endLine. endCol. sourceLine}`)
+updated by a per-statement `setPos` (emitted by `AbstractNode>>___emitCurPosBefore:on:`
+in all three statement loops — the two `FunctionDefAst` body loops and
+`BlockAst`; declared in `paramNames` / `allLocals`). At an except handler, `TryAst`
+prepends a frame for the CATCHING function at `___curPos___`
+(`BaseException>>___pushCatchingFrame___:pos:`), but **only as a fallback** — it
+no-ops if a traceback already exists (so a comprehension's exact-column frame, or
+a future deeper frame, wins and there is no double-count). So `extract_tb` /
+`sys.exc_info()[2]` / `format_exc` are now non-empty for **any** caught exception,
+locating the catching function at statement granularity. `nil` position fields are
+stored as the `None` singleton (a nil dynamic instVar reads back as *absent* →
+`AttributeError`), and `StackSummary.format` no longer double-indents frame lines.
+
+**Phase 3c — exact raise-line precision (DONE).** The Phase 3b catching frame
+was located at the `try`-statement header, not the line inside the try body that
+actually raised, because `SuiteAst>>printSmalltalkOn:` (every compound-statement
+body — `try`/`except`/`else`/`finally` and `while`/`for`/`if`, all built by the
+parser's `wrapSuite:`) iterated statements *without* the per-statement `setPos`
+that `BlockAst` and the `FunctionDefAst` body loops emit. So `___curPos___` froze
+at the enclosing compound-statement header and every nested block reported that
+line. Fix: `SuiteAst` now emits `___emitCurPosBefore:` before each statement, so
+`___curPos___` tracks into try/loop/if bodies and the catching frame points at
+the raising line (verified for a raise several statements deep inside a `for` in a
+`try`). To keep this affordable on hot loops — `setPos` now sits before *every*
+statement, loop bodies included — `___curPos___` is a bare SmallInteger beginLine
+at statement granularity (was a freshly-allocated 5-array), so the store costs no
+allocation / GC; `___pushFrameFromPos___` reconstructs a line-only frame from the
+integer (and still accepts the legacy 5-array defensively). Columns / source line
+stay unknown for the general path (CPython reports them for the raising
+instruction, which we don't track outside a comprehension).
+
+**Deferred (future) — multi-frame deep frames.** Today a traceback carries the
+*catching* frame (+ the exact-column comprehension frame where applicable), but
+not a frame for each function the exception unwound *through* between the raise
+and the catch. The natural seam — prepend a frame in each function's body wrapper
+— was prototyped and backed out (broadening the `on: PythonReturn` catch re-raised
+inside generators, "exception already signalled", and named `AbstractException`,
+absent from the symbol list in some generated-code compile contexts). The deeper
+obstacle, found since: **the body wrapper is not universal.** It is emitted only
+for generators and return-blocking functions (`FunctionDefAst`'s `#exception`
+return mode); simple functions use a direct `^`/`#directMethod` return with no
+`on:do:` at all. So deep frames would need a *new* universal handler wrapping
+every function body — adding an `on:do:` per call and knocking `#directMethod`
+functions off their method-temp fast path — the large, high-risk change Phase 2b
+deliberately avoided. It needs a generator-aware, `Exception`-based
+(runtime-resolved, never named literally) two-handler body wrapper, gated behind
+a codegen flag and measured. **And — see §8 — the vendored `test.test_traceback`
+shows deep frames is *not* the next gap: code objects on class/module-level defs
+come first.**
+
+## 8. Gate: `test.test_traceback` vendored (2026-08-02)
+
+To gate the remaining work with CPython's own suite rather than hand-written
+fixtures, `test.test_traceback` (3.14.4, 4972 lines) is vendored under
+`src/python/stdlib/test/` and added to `scripts/cpython_suite_manifest.txt` as a
+tracked **baseline**. Getting it to load pulled in reusable stdlib support (all
+additive, 0 regressions across the existing scoreboard):
+
+- `linecache.py` (vendored verbatim) and a minimal `_colorize.py` stub (Grail
+  renders tracebacks as plain text — `COLORIZE = False`, `can_colorize()` False);
+- `test.support` fills: `Error`, `requires_subprocess`/`has_subprocess_support`,
+  `requires_debug_ranges`/`has_no_debug_ranges`, and the colourization
+  decorators `force_color`/`force_not_colorized`/`force_not_colorized_test_class`
+  (plain-class CM + identity passthroughs, per the module's Grail constraints);
+- `os_helper.temp_dir`, `import_helper.forget`.
+
+**Current status: `IMPORTERROR`**, blocked at import on `__code__` of a
+class/module-level def (a `BoundMethod`) — hit by a *class-body* line
+`callable_line = get_exception.__code__.co_firstlineno + 2`. This is the Phase 2a
+follow-up (only nested-def `ExecBlock`s carry `__code__` today; module/class-level
+defs → `BoundMethod` were explicitly deferred). **So the gate's verdict: the next
+traceback gap is `BoundMethod.__code__` (code objects on class/module-level defs),
+a prerequisite that ranks ahead of multi-frame deep frames.** The scoreboard's
+`detail` column tracks the live blocker; grow from there.
+
+**Phase 3d — `finally`-during-propagation for `sys.exc_info()` (DONE).** Phase 3a
+set the current-exception register only at except-handler entry, so a `finally`
+that ran while an exception propagated saw `(None, None, None)`. Now `TryAst`
+emits the finally through `BaseException class>>___ensureFinally___:finally:`
+(in place of a bare `ensure:`): it runs the protected block under an
+`on: BaseException do: [:ex | propExc := ex. ex pass]` catch, and its `ensure:`
+installs `propExc` as the current exception for the duration of the finally
+(save/restore), so `sys.exc_info()` / `sys.exception()` inside the finally report
+the in-flight exception — for a bare `try/finally`, and for a `try/except/finally`
+whose `except` doesn't match. Control-flow signals and `StopIteration` subclass
+the kernel `Exception` directly (not `BaseException`), so a return/break/continue
+/normal exit through the finally leaves `exc_info` untouched — no guard needed.
+**Gated to non-generator scopes**: the `ex pass` re-raise is unsafe inside a
+forked generator process, so a `try/finally` inside a generator keeps the plain
+`ensure:` and this one `exc_info` gap (documented limitation).
+
+Note found while testing (pre-existing, NOT changed here, out of scope): GemStone
+runs an *outer* `except` handler body on the signal stack **before** an inner
+`finally` (`ensure:`) unwinds — the reverse of CPython's finally-before-outer-
+except ordering. It affects only code whose outer `except` body observes a
+side effect the inner `finally` performs; `___ensureFinally___:finally:` is
+ordering-neutral (same as the bare `ensure:` it replaces).
+
+Still open: multi-frame deep frames (above), and the outer-except/inner-finally
+ordering just noted.
 
 ## 6. Risks & non-goals
 

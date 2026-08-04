@@ -499,11 +499,12 @@ __annotations__
 category: 'Grail-Attribute Access'
 method: BoundMethod
 ___methodAnnotationsForClass___: aClass name: aName
-	"Walk aClass and its superclasses for the first ``__annotations__''
-	entry named aName in a ``___methodAnnotationsTable___'' (compiled
-	class-side by ClassDefAst for classes that declare annotated
-	methods).  Empty dict when none is found.  The table is compiled in
-	ENVIRONMENT 1 (like every Grail method), so probe for it with
+	"Walk aClass and its superclasses for the first entry named aName in a
+	``___methodAnnotationsTable___'' (compiled class-side by ClassDefAst
+	for classes that declare annotated methods).  The entry is a PEP 649
+	annotate FUNCTION, so call it with Format.VALUE to get the dict.
+	Empty dict when none is found.  The table is compiled in ENVIRONMENT 1
+	(like every Grail method), so probe for it with
 	``whichClassIncludesSelector:environmentId: 1'' on the metaclass and
 	invoke it with an env-1 send — an env-0 ``canUnderstand:'' would never
 	see it."
@@ -513,7 +514,7 @@ ___methodAnnotationsForClass___: aClass name: aName
 	((aClass @env0:class @env0:whichClassIncludesSelector: #'___methodAnnotationsTable___' environmentId: 1) ~~ nil) ifTrue: [
 		tbl := aClass ___methodAnnotationsTable___.
 		v := tbl @env0:at: aName otherwise: nil.
-		v == nil ifFalse: [^ v]].
+		v == nil ifFalse: [^ v @env0:value: { 1 } value: nil]].
 	^ self ___methodAnnotationsForClass___: (aClass @env0:superclass) name: aName
 %
 

@@ -8,7 +8,8 @@ expectvalue /Class
 doit
 StatementAst subclass: 'FunctionDefAst'
   instVarNames: #( name args body
-                    decorator_list returns type_comment type_params)
+                    decorator_list returns type_comment type_params
+                    isGeneratorCache)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -323,19 +324,19 @@ printSmalltalkOn: aStream
 		parse-time class-declarative decorators (staticmethod /
 		classmethod / property) are excluded — the parser already handled
 		them by re-classing this node."
-		"Record this top-level function's __annotations__ (PEP 563 source
-		strings) on the module instance, keyed by the plain Python name.
-		``self'' here is the module instance (the module body compiles to a
-		method on the module class); BoundMethod >> __annotations__ reads it
-		back.  Emitted before any decorator application so the annotations
-		are available regardless of decoration."
+		"Record this top-level function's PEP 649 ``__annotate__'' on the
+		module instance, keyed by the plain Python name.  ``self'' here is
+		the module instance (the module body compiles to a method on the
+		module class); BoundMethod >> __annotations__ calls it back.
+		Emitted before any decorator application so the annotations are
+		available regardless of decoration."
 		self hasAnnotations ifTrue: [
 			aStream
 				lf;
 				nextPutAll: 'self @env0:___setFunctionAnnotations___: ''';
 				nextPutAll: name;
-				nextPutAll: ''' dict: '.
-			self emitAnnotationsDictOn: aStream.
+				nextPutAll: ''' annotate: '.
+			self emitAnnotateBlockOn: aStream.
 			aStream nextPutAll: '.'].
 		moduleDecorators := self applicableModuleDecorators.
 		moduleDecorators isEmpty ifTrue: [^self].
@@ -434,6 +435,9 @@ printSmalltalkOn: aStream
 			or: [paramNames includes: (self transportParamName: n)])
 			ifFalse: [paramNames add: (self transportParamName: n)].
 	].
+	"Traceback: every function carries a ___curPos___ temp holding its current
+	execution position (set by ___emitCurPosBefore: before each statement)."
+	paramNames add: '___curPos___'.
 	paramNames isEmpty ifFalse: [
 		aStream nextPutAll: '| '.
 		paramNames do: [:n | aStream nextPutAll: n; space].
@@ -506,6 +510,7 @@ printSmalltalkOn: aStream
 		printBodyOn:, which this closure path bypasses)."
 		CallAst functionBeingCompiled: self.
 		(self ___reachableStatements___: body body) do: [:stmt |
+			self ___emitCurPosBefore: stmt on: aStream.
 			stmt printSmalltalkOn: aStream.
 			aStream lf].
 	] ensure: [
@@ -548,12 +553,13 @@ printSmalltalkOn: aStream
 	``___pyNamed___:''/``:annotations:''/``:doc:''/``:annotations:doc:'',
 	each defined on ExecBlock.  All stamps return self, so this composes
 	transparently in the ``name := <block>'' assignment / decorator
-	pipeline.  The annotation dict is built HERE, in the enclosing scope,
-	so its expressions resolve at def-time."
+	pipeline.  The annotate FUNCTION is built HERE, in the enclosing
+	scope, so it captures that scope -- but it is not called until
+	``__annotations__'' is read (PEP 649)."
 	aStream nextPutAll: ' @env0:___pyNamed___: '''; nextPutAll: name; nextPutAll: ''''.
 	self hasAnnotations ifTrue: [
-		aStream nextPutAll: ' annotations: '.
-		self emitAnnotationsDictOn: aStream].
+		aStream nextPutAll: ' annotate: '.
+		self emitAnnotateBlockOn: aStream].
 	self ___docString___ ifNotNil: [:doc |
 		aStream nextPutAll: ' doc: '.
 		self emitStringLiteral: doc on: aStream].
@@ -774,7 +780,7 @@ isPropertyAccessorDecorator: deco
 
 category: 'Grail-code generation'
 method: FunctionDefAst
-printMethodDecoratorsOn: aStream decorators: decoList className: aClassName
+printMethodDecoratorsOn: aStream decorators: decoList className: aClassName siblingNames: siblingNames
 	"Rebind a decorated class-body method: ``Cls.m = A(B(Cls.m))''.
 
 	This is what CPython does, one step removed.  There, the decorator runs
@@ -811,15 +817,34 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName
 		nextPutAll: ' @env1:___classHolderAttrStore___: #''';
 		nextPutAll: name;
 		nextPutAll: ''' put: '.
-	self
+	"A decorator may name a SIBLING def -- ``@t.register(int)''.  Announce the
+	class-body namespace for the duration of the chain so NameAst resolves such
+	a name off the class rather than the module; see
+	CallAst >> classBodyDecoratorScope.  Cleared on the way out, including on
+	an emit error, so it can never leak into an unrelated compile."
+	CallAst classBodyDecoratorScope: aClassName -> siblingNames.
+	[self
 		printMethodDecoratorChainOn: aStream
 		decorators: decoList
 		index: 1
-		className: aClassName.
+		className: aClassName]
+			ensure: [CallAst classBodyDecoratorScope: nil].
 	aStream
 		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
 		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass]].';
 		lf
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___decoratorBaseIsClassSide___
+	"Does this def compile onto the metaclass rather than the instance side?
+	False here; ClassFunctionDefAst (@classmethod) and StaticFunctionDefAst
+	(@staticmethod) override.  Decides which callable a class-body decorator
+	receives as the base of its chain -- see
+	printMethodDecoratorChainOn:decorators:index:className:."
+
+	^ false
 %
 
 category: 'Grail-code generation'
@@ -838,12 +863,29 @@ printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aC
 	directly makes re-execution replace the wrapper instead of stacking on it."
 
 	i > decoList size ifTrue: [
-		aStream
-			nextPutAll: '(UnboundMethod definingClass: ';
-			nextPutAll: aClassName;
-			nextPutAll: ' selector: #''';
-			nextPutAll: name;
-			nextPutAll: ''')'.
+		"A @classmethod / @staticmethod def is compiled CLASS-side, so the
+		UnboundMethod form -- which resolves instance-side -- names nothing and
+		the decorator dies on the first call.  Hand those a BoundMethod on the
+		class instead: calling it dispatches the class-side selector with the
+		class as receiver, which is exactly ``cls'' for a classmethod and an
+		ignored receiver for a staticmethod.  It is also the right descriptor
+		distinction for a decorator to see -- CPython hands over a classmethod
+		or staticmethod OBJECT here, neither of which binds an instance."
+		self ___decoratorBaseIsClassSide___
+			ifTrue: [
+				aStream
+					nextPutAll: '(BoundMethod receiver: ';
+					nextPutAll: aClassName;
+					nextPutAll: ' selector: #''';
+					nextPutAll: name;
+					nextPutAll: ''')']
+			ifFalse: [
+				aStream
+					nextPutAll: '(UnboundMethod definingClass: ';
+					nextPutAll: aClassName;
+					nextPutAll: ' selector: #''';
+					nextPutAll: name;
+					nextPutAll: ''')'].
 		^ self].
 	aStream nextPutAll: '(('.
 	self printDecoratorReceiverOn: aStream deco: (decoList at: i).
@@ -1016,27 +1058,69 @@ hasAnnotations
 
 category: 'Grail-code generation'
 method: FunctionDefAst
-emitAnnotationsDictOn: aStream
-	"Emit a Python dict expression { param-name -> annotation-SOURCE-
-	STRING, ..., 'return' -> ... }.  Annotations are stored as their
-	source strings (PEP 563 semantics) and NEVER evaluated: 55+
-	werkzeug/flask modules use ``from __future__ import annotations''
-	and annotate parameters with forward references to names not yet
-	bound at def-time, so evaluating would raise NameError and abort
-	the module load.  The strings are computed at codegen via
-	___annotationSourceString___; a consumer that needs the type
-	(functools.singledispatch.register) resolves the string itself."
+emitAnnotateBlockOn: aStream
+	"Emit this def's PEP 649 ``__annotate__'' -- a ONE-ARGUMENT block
+	taking a Format and answering { param-name -> annotation, ...,
+	'return' -> ... }.
 
-	aStream nextPutAll: '((PyDict @env0:new)'.
-	self ___annotatedArgs___ do: [:a |
+	The block is CREATED here, in the enclosing scope, so it captures the
+	def's own scope; it is not CALLED until ``__annotations__'' is read.
+	That deferral is the whole point.  Grail used to store annotations as
+	PEP 563 source strings precisely because evaluating at def-time
+	breaks module load -- 55+ werkzeug/flask modules annotate parameters
+	with forward references to names not yet bound -- but that made
+	``f.__annotations__'' answer strings where CPython 3.14 answers the
+	types, and left ``__annotate__'' with nothing to be.  Deferring gets
+	both: nothing evaluates during load, and the read sees real values by
+	which time the forward-referenced names are bound.
+
+	Each annotation is rendered by ___annotationValue___:source:format:,
+	which is handed BOTH the expression (as a block, to evaluate) and its
+	source text (for Format.STRING, and to name a ForwardRef).  Per
+	annotation rather than per dict, so Format.FORWARDREF can resolve the
+	keys it can and leave only the others unresolved."
+
+	"TWO parameters, (positional-array, kwargs-dict): that is Grail's
+	shape for a block used as a Python callable, the one
+	___pyCallValue___:kw: recognises by numArgs == 2.  A one-parameter
+	block is NOT callable from Python -- an env-1 ``value:value:'' send
+	finds Object's not-callable raiser before reaching block invocation --
+	and annotationlib.get_annotations does call this from Python."
+	| savedOwner |
+	aStream nextPutAll: '[:___annArgs___ :___annKw___ | ((PyDict @env0:new)'.
+	"Mark this def as the annotation owner for the duration, so NameAst
+	resolves the annotation expressions in the ENCLOSING scope -- the def's
+	own parameters must not shadow (CPython evaluates annotations there)."
+	savedOwner := CallAst annotationOwnerDefNode.
+	CallAst annotationOwnerDefNode: self.
+	[self ___annotatedArgs___ do: [:a |
 		aStream nextPutAll: ' @env0:at: '''; nextPutAll: a name asString; nextPutAll: ''' put: '.
-		self emitStringLiteral: a annotation ___annotationSourceString___ on: aStream.
+		self emitOneAnnotation: a annotation on: aStream.
 		aStream nextPut: $;].
 	returns ifNotNil: [
 		aStream nextPutAll: ' @env0:at: ''return'' put: '.
-		self emitStringLiteral: returns ___annotationSourceString___ on: aStream.
-		aStream nextPut: $;].
-	aStream nextPutAll: ' @env0:yourself)'
+		self emitOneAnnotation: returns on: aStream.
+		aStream nextPut: $;]]
+		ensure: [CallAst annotationOwnerDefNode: savedOwner].
+	aStream nextPutAll: ' @env0:yourself)]'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitOneAnnotation: aNode on: aStream
+	"One ``___annotationValue___:source:format:'' send: the annotation
+	expression wrapped in a block so it is evaluated only when the
+	annotate function runs, plus its codegen-time source text.
+
+	PyAnnotate, not ExecBlock: generated module code compiles against a
+	dictionary list without the kernel ``Globals'', so ``ExecBlock'' --
+	where this method otherwise belongs -- is an undefined symbol there."
+
+	aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
+	aNode printSmalltalkOn: aStream.
+	aStream nextPutAll: '] source: '.
+	self emitStringLiteral: aNode ___annotationSourceString___ on: aStream.
+	aStream nextPutAll: ' format: (___annArgs___ @env0:at: 1))'
 %
 
 category: 'Grail-code generation'
@@ -1391,8 +1475,27 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 				ifTrue: [
 					aStream nextPutAll: '___default_'; nextPutAll: pname; nextPutAll: '___'
 				] ifFalse: [
-					(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream
-				]
+					"Module-level function: no def-time outer block exists (the def
+					compiles to a METHOD), so evaluate the default ONCE and cache it
+					on the module instance -- a MUTABLE default (``def f(x=[])``) must
+					be SHARED across calls, not re-created every call (test_iter's
+					``def spam(state=[0])`` counter).  A class-body method keeps the
+					inline default: its self is an instance/class with no reliable
+					dynamic-instVar store (class-level sharing is a follow-up)."
+					self isModuleLevelDef
+						ifTrue: [
+							aStream
+								nextPutAll: '(self @env0:___moduleDefaultAt: #''___default_';
+								nextPutAll: self name asString;
+								nextPutAll: '__';
+								nextPutAll: pname;
+								nextPutAll: '___'' compute: ['.
+							(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream.
+							aStream nextPutAll: '])'
+						] ifFalse: [
+							(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream
+						]
+					]
 		] ifFalse: [
 			aStream
 				nextPutAll: 'TypeError ___signal___: ''missing required argument: ';
@@ -1657,6 +1760,7 @@ generateModuleMethodSourceOn: aStream
 		via NameAst's reserved-param rename (see NameAst >>
 		emitTransportNameForReservedParam:on:)."
 		allLocals := OrderedCollection new.
+		allLocals add: '___curPos___'.  "traceback: current-execution-position temp"
 		1 to: paramNames size do: [:i |
 			((needsTemp at: i)
 				and: [(self isSmalltalkReservedIdentifier: (paramNames at: i)) not])
@@ -1796,6 +1900,7 @@ generateModuleMethodSourceOn: aStream
 		String-to-String — Symbol entries would dodge it (Symbol
 		equality is identity) and re-declare the same temp."
 		allLocals := OrderedCollection new.
+		allLocals add: '___curPos___'.  "traceback: current-execution-position temp"
 		paramNames do: [:each | allLocals add: (self transportParamName: each)].
 		args vararg ifNotNil: [allLocals add: (self transportParamName: args vararg name)].
 		args kwonlyargs do: [:each |
@@ -1959,9 +2064,23 @@ method: FunctionDefAst
 isGenerator
 	"True if this function''s body contains a ``yield`` (or
 	``yield from``) expression — not counting yields inside
-	*nested* defs, which belong to their own generator scope."
+	*nested* defs, which belong to their own generator scope.
 
-	^ self bodyContainsYieldExceptNestedDefs: body body
+	MEMOISED, because the answer costs a full walk of the body subtree and
+	is asked for repeatedly: nine call sites in this class's own codegen,
+	plus TryAst consulting ``functionBeingCompiled isGenerator'' once per
+	TRY STATEMENT.  A def was re-walked ten-odd times, and each visit built
+	a fresh ``node class allInstVarNames'' Array to find its children --
+	which put this walk on the stack for about half of all profiler samples
+	taken over the SUnit suite.
+
+	Safe to cache: the body is fully parsed before any of these callers run,
+	and none of them rewrites it.  nil means not yet computed (the answer
+	itself is a Boolean, so it is never ambiguous)."
+
+	isGeneratorCache isNil ifTrue: [
+		isGeneratorCache := self bodyContainsYieldExceptNestedDefs: body body].
+	^ isGeneratorCache
 %
 
 category: 'Grail-Module Method Compilation'
@@ -2107,6 +2226,7 @@ printBodyOn: aStream
 	CallAst functionBeingCompiled: self.
 	[
 		(self ___reachableStatements___: body body) do: [:each |
+			self ___emitCurPosBefore: each on: aStream.
 			each printSmalltalkOn: aStream.
 			aStream lf].
 	] ensure: [CallAst functionBeingCompiled: savedFunction].
@@ -2417,6 +2537,7 @@ generateMethodSourceOn: aStream
 		AttributeAst's dynamicInstVarAt:put: emit and is a separate
 		write target from the bare-name local."
 		allLocals := OrderedCollection new.
+		allLocals add: '___curPos___'.  "traceback: current-execution-position temp"
 		paramNames do: [:each | allLocals add: each].
 		bodyVars do: [:each |
 			| declared |
@@ -2504,6 +2625,7 @@ generateMethodSourceOn: aStream
 		a binding emitted below.  Parameters always become block temps
 		(see the simple-positional branch for the rationale)."
 		allLocals := OrderedCollection new.
+		allLocals add: '___curPos___'.  "traceback: current-execution-position temp"
 		paramNames do: [:each | allLocals add: each].
 		args vararg ifNotNil: [allLocals add: args vararg name].
 		args kwonlyargs do: [:each |

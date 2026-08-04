@@ -585,11 +585,15 @@ testNegativeFractionEquality
 	f2 := fracClass ___new___: fracClass _: 1 _: -2.
 	f3 := fracClass ___new___: fracClass _: -1 _: -2.
 
-	"f1 and f2 should be equal (-1/2 == 1/-2)"
-	self assert: (f1 @env1:__eq__: f2).
+	"f1 and f2 should be equal (-1/2 == 1/-2).  Through the OPERATOR: these
+	are kernel SmallFractions with no __eq__ of their own, and object's
+	default now answers a value MATCH outright but PUNTS on a mismatch (so a
+	reflected __eq__ can still run) -- ___cmpEq___: is what resolves the punt
+	to False, and is what compiled Python sends."
+	self assert: (f1 @env1:___cmpEq___: f2).
 
 	"f3 should NOT equal f1 (1/2 != -1/2)"
-	self deny: (f3 @env1:__eq__: f1).
+	self deny: (f3 @env1:___cmpEq___: f1).
 %
 
 category: 'Grail-Tests - Zero and One Argument Forms'

@@ -10,6 +10,7 @@
 ! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
+set compile_env: 0
 
 ! ------------------- Remove existing Python methods from dict
 expectvalue /Metaclass3
@@ -393,9 +394,18 @@ __contains__: key
 	object' IS considered present (test_float.py's
 	test_float_containment: nan in {nan: None}).  Only a linear
 	fallback, so only pay for it once the fast path has already
-	missed."
+	missed.
+
+	Iterate with keysDo: (a raw walk of the stored keys), NOT
+	``self keys anySatisfy:'': AbstractDictionary>>keys builds a Set, and
+	adding HETEROGENEOUS Python keys to it compares them with =, which for
+	an incomparable pair (e.g. a complex key vs a str key) answers the
+	``___NotImplemented___'' sentinel where the Set primitive needs a
+	Boolean -- an uncatchable error 2085.  ``1 in {'one': 1, 1j: 2j}''
+	(test_iter test_in_and_not_in) hit exactly that.  keysDo: only does the
+	identity == below, never a cross-key =."
 	(self @env0:includesKey: key) ifTrue: [^ true].
-	(self @env0:keys @env0:anySatisfy: [:k | k @env0:== key]) ifTrue: [^ true].
+	self @env0:keysDo: [:k | (k @env0:== key) ifTrue: [^ true]].
 	key ___requireHashableAsDictKey___.
 	^ false
 %
@@ -458,7 +468,10 @@ __eq__: other
 			other @env0:keysAndValuesDo: [:k2 :v2 |
 				(found @env0:not and: [k2 @env0:== key]) ifTrue: [otherValue := v2. found := true]]].
 		found ifFalse: [^ false].
-		(value __eq__: otherValue) ifFalse: [
+		"___pyRichEqBool___, not the raw dunder: a value's __eq__ may answer
+		NotImplemented for a foreign operand, and a Symbol in a Boolean
+		position is an uncatchable ImproperOperation."
+		(value ___pyRichEqBool___: otherValue) ifFalse: [
 			^ false
 		]
 	].
@@ -569,25 +582,26 @@ __repr__
 		RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object'].
 	seen @env0:add: self.
 
-	^ [[stream := AppendStream @env0:on: (Unicode7 ___new___).
-	stream @env0:nextPutAll: '{'.
+	^ [[ "cannot use AppendStream here  because of the use of skip:"
+      stream := WriteStream @env0:on: (Unicode7 ___new___).
+	    stream @env0:nextPutAll: '{'.
 
-	self @env0:keysAndValuesDo: [:key :value |
-		| keyRepr valueRepr |
-		keyRepr := key __repr__.
-		valueRepr := value __repr__.
-		stream @env0:nextPutAll: keyRepr.
-		stream @env0:nextPutAll: ': '.
-		stream @env0:nextPutAll: valueRepr.
-		stream @env0:nextPutAll: ', '
-	].
-
-	"Remove the trailing ', '"
-	stream @env0:skip: -2.
-	stream @env0:nextPutAll: '}'.
-
-	stream @env0:contents]
-		@env0:on: AlmostOutOfStack do: [:ex |
+	    self @env0:keysAndValuesDo: [:key :value |
+		    | keyRepr valueRepr |
+		    keyRepr := key __repr__.
+		    valueRepr := value __repr__.
+		    stream @env0:nextPutAll: keyRepr.
+		    stream @env0:nextPutAll: ': '.
+		    stream @env0:nextPutAll: valueRepr.
+		    stream @env0:nextPutAll: ', '
+	    ].
+    
+	    "Remove the trailing ', '"
+	    stream @env0:skip: -2.
+	    stream @env0:nextPutAll: '}'.
+    
+	    stream @env0:contents
+   ] @env0:on: AlmostOutOfStack do: [:ex |
 			"A default gem's stack (GEM_MAX_SMALLTALK_STACK_DEPTH 1000)
 			overflows before the seen-size guard fires -- convert the
 			resumable notification into CPython's RecursionError."

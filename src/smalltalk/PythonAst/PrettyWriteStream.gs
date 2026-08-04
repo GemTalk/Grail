@@ -7,8 +7,8 @@ AppendStream ifNil: [self error: 'AppendStream is not defined. Check file orderi
 expectvalue /Class
 doit
 AppendStream subclass: 'PrettyWriteStream'
-  instVarNames: #( indentCount)
-  classVars: #()
+  instVarNames: #( indentCount )
+  classVars: #( )   "class far Lf inherited from Stream"
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: PythonAst
@@ -78,7 +78,14 @@ ___atLineStart
 	equivalent: contents notEmpty == position > 0, and contents last ==
 	collection at: position."
 
-	^ self position > 0 and: [(collection at: self position) == Character lf]
+	"Lf class variable, not ``Character lf'': this is consulted on EVERY
+	nextPut:/nextPutAll: of every method Grail emits, and ``Character lf'' is a
+	real message send, not a literal.  With the same constant in
+	PythonTokenizer>>advance it came to ~2-4% of the whole SUnit suite's
+	samples.  Cached lazily rather than in a constructor because this class
+	inherits WriteStream's several instance-creation paths."
+
+	^ self position > 0 and: [(collection at: self position) == Lf ]
 %
 
 category: 'Grail-other'

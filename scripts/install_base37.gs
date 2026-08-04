@@ -1,5 +1,6 @@
 ! ===============================================================================
 ! Grail base setup: shared restricted-class methods (run ONCE per extent)
+! Used with version 3.7.5 server
 ! ===============================================================================
 ! Run ONCE per extent, as SystemUser, before any user runs ./install.sh -- most
 ! easily via the wrapper (which also does the 3.7.x GsPackagePolicy patch and
@@ -60,6 +61,7 @@ input src/smalltalk/Python/SymbolDictionary.gs
 input src/smalltalk/Python/ExecBlock.gs
 input src/smalltalk/Python/Object_perform_allocators.gs
 input src/smalltalk/Python/Object_perform_primitives.gs
+input src/smalltalk/Python/AppendStream.gs
 
 run
 System commit .

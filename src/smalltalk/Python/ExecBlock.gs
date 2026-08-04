@@ -208,25 +208,54 @@ category: 'Grail-Attribute Access'
 method: ExecBlock
 __annotations__
 	"``func.__annotations__'' — the parameter/return annotation dict.
-	Stamped at def-time by ___pyAnnotated___: (chained onto the block
-	expression when the def carries any annotation); an un-annotated
-	closure gets a fresh empty dict, matching CPython where every function
-	has an ``__annotations__'' mapping.  A value attribute (see
-	___pythonValueAttrs___) so the read returns the dict rather than a
-	BoundMethod wrap.
 
-	The empty dict is MEMOIZED into the slot on first read, as CPython
-	does.  Returning a new one per call would make ``f.__annotations__ is
+	PEP 649: this is DERIVED, by calling the def's ``__annotate__'' with
+	Format.VALUE.  The annotation expressions are therefore evaluated
+	HERE, on first read, not at def-time -- which is what makes a forward
+	reference to a name bound later in the module work, and what a
+	NameError from an annotation naming nothing at all reports (CPython
+	raises it from the read, not from the module load).
+
+	An un-annotated closure has no ``__annotate__'' and gets a fresh empty
+	dict, matching CPython where every function has the mapping.  A value
+	attribute (see ___pythonValueAttrs___) so the read returns the dict
+	rather than a BoundMethod wrap.
+
+	The result is MEMOIZED into the slot on first read, as CPython does.
+	Returning a new one per call would make ``f.__annotations__ is
 	f.__annotations__'' false, and functools.update_wrapper's contract is
 	identity-based: check_wrapper asserts ``wrapper.__annotations__ is
-	wrapped.__annotations__'' after the copy."
+	wrapped.__annotations__'' after the copy.  Memoizing also means a
+	NameError is raised on EVERY read rather than once, since a failed
+	call stores nothing."
 
-	| attrs cur |
+	| attrs cur annotate |
 	attrs := ExecBlock @env0:___pyAttrsClass___.
 	cur := attrs @env0:slotAt: self attr: '__annotations__'.
 	cur == nil ifFalse: [^ cur].
+	annotate := attrs @env0:slotAt: self attr: '__annotate__'.
+	annotate == nil ifTrue: [
+		^ attrs @env0:slotAt: self attr: '__annotations__'
+			put: (KeyValueDictionary @env0:new)].
 	^ attrs @env0:slotAt: self attr: '__annotations__'
-		put: (KeyValueDictionary @env0:new)
+		put: (annotate @env0:value: { 1 } value: nil)
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
+__annotate__
+	"``func.__annotate__'' — PEP 649's annotation-computing function, a
+	one-argument callable taking a Format and answering the annotation
+	dict.  FunctionDefAst stamps it at def-time for any def that carries
+	an annotation; None when the def carries none, as in CPython.
+
+	It is the SHARED, identity-bearing object the annotation protocol is
+	built on: functools.update_wrapper copies this attribute rather than
+	the computed dict, and test_update_wrapper_annotations asserts
+	``wrapper.__annotate__ is inner.__annotate__''."
+
+	^ ((ExecBlock @env0:___pyAttrsClass___) @env0:slotAt: self attr: '__annotate__')
+		ifNil: [ExecBlock @env0:___pyNone___]
 %
 
 category: 'Grail-Attribute Access'
@@ -349,6 +378,7 @@ ___slotNames___
 		add: #'__module__';
 		add: #'__doc__';
 		add: #'__annotations__';
+		add: #'__annotate__';
 		add: #'__type_params__';
 		add: #'__code__';
 		yourself
@@ -388,6 +418,7 @@ ___pythonValueAttrs___
 		add: #'__doc__';
 		add: #'__dict__';
 		add: #'__annotations__';
+		add: #'__annotate__';
 		add: #'__type_params__';
 		add: #'__code__';
 		yourself
@@ -414,19 +445,22 @@ ___pyNamed___: aString
 
 category: 'Grail-Attribute Access'
 method: ExecBlock
-___pyNamed___: aString annotations: aDict
-	"Stamp both ``__name__'' and ``__annotations__'' in one send.
+___pyNamed___: aString annotate: aBlock
+	"Stamp both ``__name__'' and ``__annotate__'' in one send.
 	FunctionDefAst emits this (rather than two chained keyword sends,
-	which Smalltalk would parse as a single ``___pyNamed___:annotations:''
+	which Smalltalk would parse as a single ``___pyNamed___:annotate:''
 	... which is in fact exactly this selector) for an annotated
-	nested def.  The annotations dict is built at def-time in the
-	enclosing scope.  Returns self so it composes transparently in the
-	``name := <block>'' assignment / decorator pipeline
-	(``functools.singledispatch.register'' reads the first parameter's
-	annotation off a decorated local def this way)."
+	nested def.
+
+	aBlock is the PEP 649 annotate FUNCTION, built at def-time in the
+	enclosing scope so that its captured scope is the def's own -- but
+	NOT called until ``__annotations__'' is read.  Returns self so it
+	composes transparently in the ``name := <block>'' assignment /
+	decorator pipeline (``functools.singledispatch.register'' reads the
+	first parameter's annotation off a decorated local def this way)."
 
 	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__name__' put: aString.
-	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__annotations__' put: aDict.
+	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__annotate__' put: aBlock.
 	^ self
 %
 
@@ -445,12 +479,12 @@ ___pyNamed___: aString doc: aDoc
 
 category: 'Grail-Attribute Access'
 method: ExecBlock
-___pyNamed___: aString annotations: aDict doc: aDoc
-	"Stamp all three of ``__name__'' / ``__annotations__'' / ``__doc__''
+___pyNamed___: aString annotate: aBlock doc: aDoc
+	"Stamp all three of ``__name__'' / ``__annotate__'' / ``__doc__''
 	for an annotated def that also has a docstring."
 
 	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__name__' put: aString.
-	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__annotations__' put: aDict.
+	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__annotate__' put: aBlock.
 	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__doc__' put: aDoc.
 	^ self
 %

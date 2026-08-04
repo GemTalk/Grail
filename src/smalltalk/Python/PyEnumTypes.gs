@@ -48,6 +48,25 @@ Enum subclass: 'Flag'
   options: #()
 %
 
+! ------- ReprEnum: an Enum whose MEMBERS str/format as their VALUE (the
+! ------- mix-in data type's output), keeping only Enum's repr.  CPython's
+! ------- IntEnum/StrEnum/IntFlag are ReprEnum subclasses; in Grail those are
+! ------- storage-rooted (AbstractPyInt/AbstractPyStr) and already str as their
+! ------- value, so ReprEnum exists here mainly to make ``class E(date,
+! ------- ReprEnum)'' DISTINGUISHABLE from ``class E(date, Enum)'' -- the former
+! ------- must str(member) == str(value), the latter ``Cls.name''.  A distinct
+! ------- class is the only way to tell them apart (bases are otherwise equal).
+expectvalue /Class
+doit
+Enum subclass: 'ReprEnum'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
 expectvalue /Class
 doit
 Object subclass: 'GrailEnumAuto'
@@ -63,6 +82,48 @@ expectvalue /Class
 doit
 GrailEnumAuto comment: 'Marker returned by enum.auto(); ___grailBuildMembers: replaces each marker with last-int-value + 1 in declaration order (CPython auto() semantics), so values are per-CLASS 1..n, not a process-global counter.'
 %
+
+expectvalue /Class
+doit
+Object subclass: 'GrailEnumNonmember'
+  instVarNames: #( value )
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+GrailEnumNonmember comment: 'Marker returned by enum.nonmember(x) (and the @nonmember decorator): wraps x so ___grailBuildMembers: stores x as a PLAIN class attribute and drops the name from _member_names_ / iteration (CPython nonmember -- Outer.Inner is Inner, MyTypes.f is float, Example.ALL == 3).'
+%
+
+set compile_env: 0
+
+category: 'Grail-Nonmember'
+classmethod: GrailEnumNonmember
+on: aValue
+	"Wrap aValue as a nonmember marker."
+
+	^ self new setValue: aValue; yourself
+%
+
+category: 'Grail-Nonmember'
+method: GrailEnumNonmember
+setValue: aValue
+	value := aValue
+%
+
+category: 'Grail-Nonmember'
+method: GrailEnumNonmember
+value
+	"The wrapped value the enum stores as a plain class attribute."
+
+	^ value
+%
+
+set compile_env: 0
 
 expectvalue /Class
 doit
@@ -103,7 +164,7 @@ AbstractPyStr subclass: 'StrEnum'
 
 run
 Enum comment: 'Python enum base — see category comment in PyEnumTypes.gs.'.
-#( #Enum #Flag #IntEnum #IntFlag #StrEnum #GrailEnumAuto ) do: [:nm | (Python at: nm) category: 'Grail-Modules'].
+#( #Enum #Flag #IntEnum #IntFlag #StrEnum #GrailEnumAuto #GrailEnumNonmember ) do: [:nm | (Python at: nm) category: 'Grail-Modules'].
 %
 
 ! ------------------- Remove existing behavior (env 0 + env 1)
@@ -145,6 +206,32 @@ ___grailRecordFor: cls
 	"The {byValue. byName. members} record for an enum class, or nil."
 
 	^ self ___grailRegistry___ @env0:at: cls otherwise: nil
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailGnvStaticStore
+	"Per-SESSION map: enum class -> the PyStaticMethod wrapping its
+	_generate_next_value_.  Used ONLY for FUNCTIONAL enums, which (unlike
+	class-syntax enums) have no dynInstVars holder to hold the staticmethod, so
+	object>>___classDict___ reads this to surface it in cls.__dict__
+	(test_gnv_is_static Function variants).  SessionTemps-backed like
+	___grailRegistry___ so it never dirties committed state."
+
+	| s |
+	s := SessionTemps @env0:current @env0:at: #GrailEnumGnvStatic otherwise: nil.
+	s @env0:isNil ifTrue: [
+		s := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailEnumGnvStatic put: s].
+	^ s
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailGnvStaticFor: cls
+	"The PyStaticMethod for a functional enum's _generate_next_value_, or nil."
+
+	^ self ___grailGnvStaticStore @env0:at: cls otherwise: nil
 %
 
 category: 'Grail-Enum Metaclass'
@@ -213,7 +300,19 @@ ___grailBuildMembers: cls names: attrNames
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass genValues foreignMixin |
+	| byValue byName members lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass gnvStaticClass genValues foreignMixin |
+	"CPython _check_for_existing_members_: adding members to -- or otherwise
+	subclassing -- an enum that already HAS members is illegal (that enum is
+	final).  Raise before building anything (test_extending / test_extending2);
+	a member-less method/mixin base is allowed (test_extending3)."
+	[ | offending |
+	offending := Enum ___grailExtendedMemberBase: cls.
+	offending @env0:notNil ifTrue: [
+		TypeError ___signal___: (Enum ___grailEnumTagFor: cls)
+			@env0:, ' cannot extend ' @env0:, (Enum ___grailEnumTagFor: offending)] ] @env0:value.
+	"CPython _get_mixins_ base-combination rules: at most one data type mixed
+	in, and any data type must precede the Enum base."
+	Enum ___grailValidateBases: cls.
 	"Names assigned under a class-body ``if`` (the shared test fixture's
 	``if issubclass(...): dupe = 3'') never reach classBodyAttributes --
 	their stores go through ___pyAttrStore___ into the per-class
@@ -241,6 +340,33 @@ ___grailBuildMembers: cls names: attrNames
 				and: [(allNames @env0:includes: dynSym) not]])
 					ifTrue: [allNames @env0:add: dynSym].
 			i := i @env0:+ 2]].
+	"enum.nonmember(x): x is deliberately NOT a member.  Unwrap it, store the
+	raw value as a plain class attribute (Outer.Inner is Inner; MyTypes.f is
+	float; Example.ALL == 3, type int), and DROP the name from member building
+	so it is excluded from _member_names_ / iteration.  Both the call form
+	(f = nonmember(float)) and the decorator form (@nonmember class Inner) land
+	here as a NAME bound to a GrailEnumNonmember marker.  Done before the
+	reserved-name / member passes so the name is invisible to them."
+	[ | dropped |
+	dropped := OrderedCollection @env0:new.
+	allNames @env0:do: [:nameSym | | raw hasAcc |
+		hasAcc := (cls @env0:class @env0:whichClassIncludesSelector:
+			(nameSym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1) notNil.
+		raw := hasAcc
+			ifTrue: [cls @env0:perform: nameSym env: 1]
+			ifFalse: [dynHolder @env0:isNil
+				ifTrue: [nil]
+				ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym]].
+		(raw isKindOf: GrailEnumNonmember) ifTrue: [ | nmVal |
+			nmVal := raw @env0:value.
+			hasAcc
+				ifTrue: [cls @env0:perform: (nameSym @env0:asString @env0:, ':') @env0:asSymbol
+					env: 1 withArguments: (Array @env0:with: nmVal)]
+				ifFalse: [dynHolder @env0:isNil
+					ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym put: nmVal]].
+			dropped @env0:add: nameSym]].
+	dropped @env0:isEmpty ifFalse: [
+		allNames := allNames @env0:reject: [:n | dropped @env0:includes: n]] ] @env0:value.
 	"Reserved-name validation (CPython EnumType.__new__): a class-body
 	ASSIGNMENT may not rebind ``mro`` (it would shadow type.mro) nor use a
 	_sunder_ name outside the supported set -- ValueError at definition
@@ -264,6 +390,15 @@ ___grailBuildMembers: cls names: attrNames
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
+	"Register the (still-empty) record BEFORE the member loop so a member's
+	__new__ can observe the members built so far -- an auto-numbering __new__
+	that reads ``len(cls.__members__)'' (test_inherited_new_from_enhanced_enum /
+	_from_mixed_enum) must count them, and byValue/byName/members are the SAME
+	objects filled in progressively below (a member is added to byName only
+	AFTER its __new__ runs, so member N+1 sees exactly the N prior members).
+	The post-loop registration overwrites this with identical content plus any
+	composite/order handling."
+	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members).
 	lastInt := 0.
 	"maxInt: the running MAXIMUM member value -- Flag auto() numbers from the
 	highest bit seen so far, NOT the last value, so a manual value LOWER
@@ -283,25 +418,46 @@ ___grailBuildMembers: cls names: attrNames
 	args (a scalar value -> a 1-tuple); exceptions propagate out of the
 	class definition (test_init_exception).  Value-carrying enums such as
 	the classic Planet(mass, radius) rely on this."
-	hasUserInit := (cls @env0:whichClassIncludesSelector: #'___init__:kw:'
-		environmentId: 1) == cls.
+	"A class-body ``def __init__'' on cls, OR one INHERITED from a non-enum
+	mixin (``class Entries(Foo, Enum)'' where Foo.__init__ sets member
+	slots -- CPython runs the mix-in type's __init__ on each member with its
+	value args).  Exclude the enum base classes and the universal roots so a
+	plain enum (whose only __init__ is Enum's / object's) still skips it."
+	[ | initProvider |
+	initProvider := cls @env0:whichClassIncludesSelector: #'___init__:kw:'
+		environmentId: 1.
+	hasUserInit := (initProvider == cls)
+		or: [(initProvider @env0:notNil)
+			and: [((Enum ___grailIsEnumBase: initProvider) @env0:not)
+			and: [(initProvider == (Python @env0:at: #object otherwise: nil)) @env0:not
+			and: [(initProvider == PythonInstance) @env0:not
+			and: [(initProvider == Object) @env0:not]]]]] ] @env0:value.
 	"A class-body ``def __new__(cls, ...)'' likewise compiles to an env-1
 	INSTANCE method ON cls (self-param bound to cls).  When present, CPython
 	builds each member by running it (member_type construction + user slots)
 	rather than a bare allocation; a __new__ that delegates to
 	``super().__new__'' trips the guard in Enum>>___new__:kw:.
 
-	Only a __new__ defined ON cls is honored here.  An INHERITED user __new__
-	(``class LabelledList(LabelledIntEnum)'' reusing LabelledIntEnum's __new__,
-	test_conflicting_types_resolved_in_new) would also need running, but a bare
-	``notNil'' over-fires: it runs a base __new__ on member-less subclasses and
-	on mixin chains it should not (regressing test_multiple_mixin_inherited/_mro
-	and several dir/repr fixtures).  Matching CPython's _find_new_ (which weighs
-	member_type, object.__new__/Enum.__new__ identity, and _new_member_) is a
-	separate refinement; keep the cls-only test for now."
+	An INHERITED user __new__ (``class SubEnum(SuperEnum)'' reusing SuperEnum's
+	__new__, test_dir_on_sub..._instance_dict_on_super) must ALSO run so its
+	member-instance side effects (``obj.description = ...'') persist.  But
+	broadening the test on a DATA-MIXED chain regresses several fixtures
+	(test_bad_new_super's super().__new__ guard; test_multiple_mixin_inherited),
+	because CPython's _find_new_ weighs member_type.__new__ / Enum.__new__
+	identity there -- a refinement not yet mirrored.  So keep the exact cls-only
+	rule for every data-mixed enum, and honor an inherited enum __new__ ONLY for
+	a PLAIN (member_type is object) enum, where there is no storage constructor
+	to disambiguate.  ``inheritsFrom: Enum'' selects an enum-class defining class
+	(the built-in storage/data constructors -- AbstractPyInt/Float, PyDate/Time,
+	functools_* -- are not enum classes); object member_type is only ever
+	Enum-rooted, so the single base check suffices."
 	newDefClass := cls @env0:whichClassIncludesSelector: #'___new__:kw:'
 		environmentId: 1.
-	hasUserNew := newDefClass == cls.
+	hasUserNew := (newDefClass == cls) or: [
+		newDefClass @env0:notNil
+			and: [((newDefClass @env0:inheritsFrom: Enum)
+				and: [(Enum ___grailMemberTypeFor: cls) == object])
+			or: [(Enum ___grailRecordFor: newDefClass) @env0:notNil]]].
 	tupleClass := Python @env0:at: #tuple otherwise: Array.
 	"An MI enum whose storage base is Enum (``cls inheritsFrom: Enum'') but
 	which mixes in a FOREIGN data type -- ``class E(date, Enum)'', where date is
@@ -326,12 +482,19 @@ ___grailBuildMembers: cls names: attrNames
 			put: cls].
 	"A class-body ``def _generate_next_value_(name, start, count, last_values)''
 	overrides how auto() numbers members (CPython): the mixed date/float enum
-	fixtures return values[count].  It compiles to a 4-param env-1 method
-	``_generate_next_value_:_:_:'' whose self-param is ``name'' (EnumType adds
-	the staticmethod wrapper).  gnvClass is the class in cls's chain that
-	provides it, or nil (use the built-in per-base rule).  genValues collects
-	the resolved values in order to pass as ``last_values''."
+	fixtures return values[count].  A PLAIN def compiles to a 4-param env-1
+	INSTANCE method ``_generate_next_value_:_:_:'' whose self-param is ``name''
+	(gnvClass).  An EXPLICIT ``@staticmethod'' (CPython adds one implicitly, so
+	both source forms mean the same thing) instead compiles to a 5-slot env-1
+	CLASS-side method ``_generate_next_value_:_:_:_:'' -- receiver is the class,
+	the four declared params are all keyword args (gnvStaticClass).  Detect
+	both; either is nil when absent (use the built-in per-base rule).  No base
+	Enum/Flag/Str/ReprEnum class defines either selector, so a non-nil result is
+	always a user gnv.  genValues collects the resolved values in order to pass
+	as ``last_values''."
 	gnvClass := cls @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:'
+		environmentId: 1.
+	gnvStaticClass := cls @env0:class @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:_:'
 		environmentId: 1.
 	genValues := OrderedCollection @env0:new.
 	"Members build while cls is in the building set: a member __new__
@@ -382,23 +545,41 @@ ___grailBuildMembers: cls names: attrNames
 			(rawValue isKindOf: GrailEnumAuto) ifTrue: [
 				(autoResolved @env0:includesKey: rawValue)
 					ifTrue: [rawValue := autoResolved @env0:at: rawValue]
-					ifFalse: [ | resolved |
-						resolved := gnvClass @env0:notNil
+					ifFalse: [ | resolved hasExplicit explicitVal |
+						"CPython: auto() carries a `value` slot defaulting to a sentinel;
+						if the code set it explicitly (weird_auto.value = 'x'), that value
+						is used verbatim and _generate_next_value_ is NOT called
+						(test_auto_order_wierd).  A plain auto() has no `value` attribute
+						-> AttributeError -> fall through to the generator/default."
+						hasExplicit := true.
+						explicitVal := [rawValue ___pyAttrLoad___: #'value']
+							@env0:on: AbstractException do: [:ex | hasExplicit := false. nil].
+						resolved := hasExplicit
+							ifTrue: [explicitVal]
+							ifFalse: [gnvClass @env0:notNil
 							ifTrue: [
-								"User _generate_next_value_(name, start=1, count, last_values).
-								count = members built so far; invoke via UnboundMethod (the
-								method's self-param is the NAME, not an instance of cls)."
+								"Plain-def gnv: _generate_next_value_(name, start=1, count,
+								last_values).  count = members built so far; invoke via
+								UnboundMethod (the method's self-param is the NAME, not an
+								instance of cls)."
 								(UnboundMethod definingClass: gnvClass selector: #'_generate_next_value_')
 									value: { nameStr. 1. members @env0:size.
 										(list @env0:withAll: genValues) }
 									value: KeyValueDictionary @env0:new]
+							ifFalse: [gnvStaticClass @env0:notNil
+							ifTrue: [
+								"@staticmethod gnv: same four args, but the method lives
+								class-side (receiver is the class, all four params are
+								positional).  Send it to cls so metaclass inheritance
+								resolves an ancestor's definition."
+								cls @env0:perform: #'_generate_next_value_:_:_:_:' env: 1
+									withArguments: { nameStr. 1. members @env0:size.
+										(list @env0:withAll: genValues) }]
 							ifFalse: [(Enum ___grailIsStrEnumClass: cls)
 								ifTrue: [nameStr @env0:asLowercase]
 								ifFalse: [(Enum ___grailIsFlagClass: cls)
-									ifTrue: [maxInt @env0:<= 0
-										ifTrue: [1]
-										ifFalse: [1 @env0:bitShift: maxInt @env0:highBit]]
-									ifFalse: [lastInt @env0:+ 1]]].
+									ifTrue: [Enum ___grailFlagAutoNext: genValues]
+									ifFalse: [Enum ___grailPlainAutoNext: genValues]]]]].
 						autoResolved @env0:at: rawValue put: resolved.
 						rawValue := resolved]].
 			genValues @env0:add: rawValue.
@@ -471,7 +652,28 @@ ___grailBuildMembers: cls names: attrNames
 								@env0:on: AbstractException do: [:e | nil].
 									memberValue := v @env0:isNil ifTrue: [rawValue] ifFalse: [v]]
 								ifFalse: [
-									member := cls @env0:basicNew.
+									"For a str-storage-rooted enum (``class C(str, Enum)'')
+									the member IS a string: give it CONTENT str(value) so
+									hash / bool / == behave like a plain str.  basicNew leaves
+									the indexed char content empty (member was len 0 -> every
+									member hashed/compared equal: ``C.A == 'aval''' compared ''
+									to 'aval', and a dict keyed by members collided).  A str
+									value keeps its own chars; an int auto value gets content
+									'1' even though its .value stays the int (CPython
+									_member_type_ is str -> str content, but _value_ is the raw/
+									auto value).  int/float storage keeps the value in a named
+									slot, so basicNew is right there."
+									(cls @env0:inheritsFrom: CharacterCollection)
+										ifTrue: [ | s |
+											s := (effVal isKindOf: CharacterCollection)
+												ifTrue: [effVal]
+												ifFalse: [[effVal __str__]
+													@env0:on: AbstractException do: [:e | '']].
+											member := cls @env0:new: s @env0:size.
+											s @env0:size @env0:> 0 ifTrue: [
+												member @env0:replaceFrom: 1 to: s @env0:size
+													with: s startingAt: 1]]
+										ifFalse: [member := cls @env0:basicNew].
 									"effVal already carries member_type(*args) for a
 									foreign-mixin enum (else the raw value)."
 									memberValue := effVal].
@@ -484,6 +686,16 @@ ___grailBuildMembers: cls names: attrNames
 							member @env0:dynamicInstVarAt: #'_value_' put: memberValue.
 							member @env0:dynamicInstVarAt: #'_name_' put: nameStr.
 							byValue @env0:at: memberValue put: member.
+							"Drain any value-aliases a user __new__ registered on this
+							member via _add_value_alias_ while the class was still
+							building (test_add_value_alias_during_creation): the record
+							was not yet live, so they were parked on the member -- fold
+							them into the now-live value map."
+							[(member @env0:dynamicInstVarAt: #'___grailPendingValueAliases')
+								@env0:ifNotNil: [:pend |
+									pend @env0:do: [:av | byValue @env0:at: av put: member].
+									member @env0:dynamicInstVarAt: #'___grailPendingValueAliases' put: nil]]
+								@env0:on: AbstractException do: [:e | nil].
 							"A ZERO-valued Flag member (``BLACK = 0``) is reachable by
 							name, by value -- Color(0) -- and as a class attribute, but is
 							NOT canonical: CPython excludes it from iteration, len,
@@ -511,6 +723,21 @@ ___grailBuildMembers: cls names: attrNames
 					withArguments: { initArgs. KeyValueDictionary @env0:new }]]]]
 		@env0:ensure: [Enum ___grailBuildingSet @env0:remove: cls @env0:ifAbsent: []].
 	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members).
+	"CPython EnumType wraps a user _generate_next_value_ as a staticmethod in the
+	class __dict__ (test_gnv_is_static: type(cls.__dict__['_generate_next_value_'])
+	is staticmethod).  Grail compiles gnv as a plain method; store a PyStaticMethod
+	wrapper in the per-class dynamic-attr holder so BOTH cls._generate_next_value_
+	and cls.__dict__['_generate_next_value_'] (which reads that holder) answer a
+	staticmethod.  Only when the class actually defines a gnv (gnvClass instance-
+	side / gnvStaticClass @staticmethod class-side) -- a plain enum has none."
+	(gnvClass @env0:notNil or: [gnvStaticClass @env0:notNil]) ifTrue: [ | sm gnvFn |
+		gnvFn := gnvClass @env0:notNil
+			ifTrue: [UnboundMethod definingClass: gnvClass selector: #'_generate_next_value_:_:_:']
+			ifFalse: [UnboundMethod definingClass: gnvStaticClass selector: #'_generate_next_value_:_:_:_:'].
+		sm := PyStaticMethod @env0:new.
+		sm @env0:dynamicInstVarAt: #'__func__' put: gnvFn.
+		cls @env0:perform: #'___pyAttrStore___:put:' env: 1
+			withArguments: { '_generate_next_value_'. sm }].
 	"_order_ validation (CPython EnumType): when the class declares an
 	``_order_'' string, the canonical member names in DEFINITION order must
 	match it exactly -- a wrong order, or extra names on either side, raises
@@ -611,7 +838,69 @@ ___grailLookupValue: cls value: aValue
 			ifTrue: ['<flag ''']
 			ifFalse: ['<enum '''])
 				@env0:, cls @env0:name @env0:asString @env0:, '''> has no members'].
+	"CPython Enum.__new__: an unknown value gets one last chance through a
+	user-defined _missing_ classmethod (compiled class-side as _missing_:)
+	before ValueError.  Only a USER _missing_ triggers this -- no base enum
+	class defines the selector, so whichClassIncludesSelector finds only an
+	override."
+	(cls @env0:class @env0:whichClassIncludesSelector: #'_missing_:' environmentId: 1) @env0:notNil
+		ifTrue: [^ self ___grailMissing: cls value: aValue].
 	^ ValueError ___signal___: aValue @env0:printString @env0:, ' is not a valid ' @env0:, cls @env0:name @env0:asString
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailMissing: cls value: aValue
+	"Run cls._missing_(aValue) (a user classmethod) and mirror CPython
+	Enum.__new__'s handling of its result:
+	  * a member of cls (or a resolvable Flag composite int) -> return it;
+	  * None with no error -> raise the plain ``not a valid'' ValueError
+	    (its __context__ stays None);
+	  * a non-member, non-None value -> TypeError ``error in
+	    <cls>._missing_: returned <r> instead of None or a valid member'',
+	    with the ValueError chained as __context__;
+	  * _missing_ itself raised -> re-raise it, chaining the ValueError as
+	    __context__ unless it already IS a ValueError.
+	The ``not a valid'' ValueError is built (not signaled) up front so it
+	can serve as the chained context."
+
+	| veExc result |
+	veExc := ValueError @env0:new.
+	veExc @env0:perform: #'__init__:' env: 1 withArguments: {
+		aValue @env0:printString @env0:, ' is not a valid ' @env0:, cls @env0:name @env0:asString }.
+	result := [cls @env0:perform: #'_missing_:' env: 1 withArguments: { aValue }]
+		@env0:on: AbstractException do: [:e |
+			(e isKindOf: ValueError) @env0:ifFalse: [
+				e @env0:dynamicInstVarAt: #'___context___' put: veExc].
+			e @env0:pass].
+	(result isKindOf: cls) ifTrue: [^ result].
+	((result isKindOf: Integer) and: [self ___grailIsFlagClass: cls]) ifTrue: [
+		| comp |
+		comp := self ___grailFlagComposite: cls value: result.
+		comp @env0:isNil ifFalse: [^ comp]].
+	"CPython ``result is None'' -> the plain ValueError.  A Python _missing_
+	returns the None SINGLETON (not Smalltalk nil), so test both."
+	(result @env0:isNil or: [result == None]) ifTrue: [^ veExc @env0:signal].
+	[ | tyExc |
+	tyExc := TypeError @env0:new.
+	tyExc @env0:perform: #'__init__:' env: 1 withArguments: {
+		'error in ' @env0:, cls @env0:name @env0:asString @env0:, '._missing_: returned '
+			@env0:, ([result @env1:__repr__ @env0:asString]
+				@env0:on: AbstractException do: [:e | result @env0:printString])
+			@env0:, ' instead of None or a valid member' }.
+	tyExc @env0:dynamicInstVarAt: #'___context___' put: veExc.
+	^ tyExc @env0:signal ] @env0:value
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+_missing_: value
+	"CPython Enum._missing_ default: no match -> None.  A cooperative user
+	override ending with ``return super()._missing_(value)'' resolves here
+	instead of AttributeError ``super(): no parent method _missing_''
+	(test_multiple_mixin_with_common_data_type / test_missing_exceptions_reset)."
+
+	^ None
 %
 
 category: 'Grail-Enum Metaclass'
@@ -640,6 +929,24 @@ ___grailIsStrEnumClass: cls
 	se == nil ifTrue: [^ false].
 	((cls == se) or: [cls @env0:inheritsFrom: se]) ifTrue: [^ true].
 	^ [ (cls __mro__) @env0:includesIdentical: se ]
+		@env0:on: Error do: [:e | e @env0:return: false]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailIsReprEnumClass: cls
+	"True when cls was declared with the ReprEnum base (``class E(date,
+	ReprEnum)''): chained under ReprEnum, or an MI class whose C3 __mro__
+	includes it.  ReprEnum members str/format as their VALUE, not ``Cls.name''
+	-- the distinction the plain-Enum vs ReprEnum output rule turns on.  Grail's
+	IntEnum/StrEnum are storage-rooted (not ReprEnum-chained) and get their
+	value-str output another way, so they are deliberately NOT matched here."
+
+	| re |
+	re := Python @env0:at: #'ReprEnum' otherwise: nil.
+	re == nil ifTrue: [^ false].
+	((cls == re) or: [cls @env0:inheritsFrom: re]) ifTrue: [^ true].
+	^ [ (cls __mro__) @env0:includesIdentical: re ]
 		@env0:on: Error do: [:e | e @env0:return: false]
 %
 
@@ -724,6 +1031,30 @@ ___grailFlagMask: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailFlagSingleBitMask: cls
+	"OR of only the SINGLE-BIT named members (CPython's _flag_mask_).  A
+	STRICT/CONFORM Flag inverts within this, NOT the full mask that also
+	covers a multi-bit member (``MASK = 255'' with only A=1/B=2): ~A is B, not
+	254.  When every member is single-bit this equals ___grailFlagMask:, so a
+	closed flag (MASK = A|B, itself a composite excluded from canonical
+	members) is unaffected."
+
+	| rec mask |
+	rec := self ___grailRecordFor: cls.
+	rec @env0:isNil ifTrue: [^ 0].
+	mask := 0.
+	(rec @env0:at: 3) @env0:do: [:m |
+		| mv |
+		mv := m @env0:dynamicInstVarAt: #value.
+		((mv isKindOf: Integer)
+			and: [mv @env0:> 0
+			and: [(mv @env0:bitAnd: (mv @env0:- 1)) @env0:= 0]])
+				ifTrue: [mask := mask @env0:bitOr: mv]].
+	^ mask
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailLookupName: cls name: aName
 	"Color['NAME'] -> the member with that name."
 
@@ -743,6 +1074,197 @@ ___grailMembers: cls
 	rec := self ___grailRecordFor: cls.
 	rec @env0:isNil ifTrue: [^ OrderedCollection @env0:new].
 	^ rec @env0:at: 3
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailPlainAutoNext: lastValues
+	"CPython's DEFAULT Enum._generate_next_value_ for a plain (non-flag)
+	class: sorted(last_values).pop() + 1.  A last-values set that cannot be
+	sorted (mixed non-comparable types, e.g. a str and an int) raises
+	``unable to sort non-numeric values''; a non-numeric maximum (a bare str)
+	raises ``unable to increment <repr>'' (test_auto_garbage_fail /
+	_corrected_fail).  Empty -> start (1)."
+
+	| maxVal |
+	lastValues @env0:isEmpty ifTrue: [^ 1].
+	maxVal := [(lastValues @env0:asSortedCollection) @env0:last]
+		@env0:on: Error do: [:ex |
+			^ TypeError ___signal___: 'unable to sort non-numeric values'].
+	^ (maxVal isKindOf: Number)
+		ifTrue: [maxVal @env0:+ 1]
+		ifFalse: [TypeError ___signal___:
+			'unable to increment ' @env0:, maxVal @env0:printString]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailFlagAutoNext: lastValues
+	"CPython's DEFAULT Flag._generate_next_value_: 2 ** (_high_bit(max(
+	last_values)) + 1) -- i.e. the next power of two above the highest bit
+	seen.  A non-integer maximum has no bit length and raises ``invalid flag
+	value <repr>'' (OldTestFlag test_auto_number_garbage).  Empty, or a
+	max <= 0, -> 1."
+
+	| maxVal |
+	lastValues @env0:isEmpty ifTrue: [^ 1].
+	maxVal := [(lastValues @env0:asSortedCollection) @env0:last]
+		@env0:on: Error do: [:ex |
+			^ TypeError ___signal___: 'invalid flag value '
+				@env0:, (lastValues @env0:detect: [:v | (v isKindOf: Integer) @env0:not])
+					@env0:printString].
+	(maxVal isKindOf: Integer) ifFalse: [
+		^ TypeError ___signal___: 'invalid flag value ' @env0:, maxVal @env0:printString].
+	maxVal @env0:<= 0 ifTrue: [^ 1].
+	^ 1 @env0:bitShift: maxVal @env0:highBit
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailClassHasGnv: cls
+	"True when cls (or an ancestor) provides a USER _generate_next_value_ --
+	either a plain-def instance method (selector _generate_next_value_:_:_:,
+	self-param is the NAME) or an @staticmethod class-side method (selector
+	_generate_next_value_:_:_:_:, receiver is the class).  No base Enum/Flag/
+	Str/ReprEnum class defines either, so a hit is always a user gnv.  Lets the
+	functional builder invoke the same gnv the class-syntax builder does."
+
+	^ (cls @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:'
+			environmentId: 1) @env0:notNil
+		or: [(cls @env0:class @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:_:'
+			environmentId: 1) @env0:notNil]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailGnvValueFor: cls name: nameStr count: count lastValues: lv
+	"Invoke cls's user _generate_next_value_(name, start=1, count, last_values)
+	and answer its result.  Prefer the plain-def instance form; fall back to
+	the @staticmethod class-side form.  Caller guards with ___grailClassHasGnv:,
+	so one of the two selectors always resolves.  Mirrors the class-syntax
+	builder's invocation in ___grailBuildMembers:."
+
+	| gnvClass |
+	gnvClass := cls @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:'
+		environmentId: 1.
+	gnvClass @env0:notNil ifTrue: [
+		^ (UnboundMethod definingClass: gnvClass selector: #'_generate_next_value_')
+			value: { nameStr. 1. count. lv }
+			value: KeyValueDictionary @env0:new].
+	^ cls @env0:perform: #'_generate_next_value_:_:_:_:' env: 1
+		withArguments: { nameStr. 1. count. lv }
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailEnumTagFor: cls
+	"CPython's class-repr tag -- ``<flag 'X'>'' for a Flag subclass,
+	``<enum 'X'>'' otherwise.  Phrases the ``cannot extend'' TypeError."
+
+	^ ((Enum ___grailIsFlagClass: cls)
+		ifTrue: ['<flag ''']
+		ifFalse: ['<enum '''])
+			@env0:, cls @env0:name @env0:asString @env0:, '''>'
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailExtendedMemberBase: cls
+	"CPython _check_for_existing_members_: an enum that already defines
+	members is FINAL -- any subclass, whether or not it adds members, is
+	illegal.  Answer the first enum ancestor of cls carrying canonical
+	members, or nil when cls extends only member-less enums (a method-only
+	or mixin base is fine -- test_extending3).  Checks the registered MI
+	bases first (a member-bearing secondary base is merged out of the
+	primary Smalltalk chain -- ``EvenMoreColor(Color, IntEnum)''), then the
+	primary superclass chain (single inheritance -- ``MoreColor(Color)'')."
+
+	| bases |
+	bases := [(Python @env0:at: #importlib) @env0:___pythonBasesOf___: cls]
+		@env0:on: AbstractException do: [:e | nil].
+	(bases @env0:isNil or: [bases @env0:isEmpty]) ifTrue: [
+		bases := cls @env0:superclass @env0:isNil
+			ifTrue: [#()]
+			ifFalse: [Array @env0:with: cls @env0:superclass]].
+	bases @env0:do: [:b | | walker |
+		walker := b.
+		[(walker ~~ nil)
+			and: [(walker ~~ Enum) and: [walker ~~ Object]]] @env0:whileTrue: [
+			(walker ~~ cls and: [(Enum ___grailMembers: walker) @env0:notEmpty])
+				ifTrue: [^ walker].
+			walker := walker @env0:superclass]].
+	^ nil
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailIsEnumBase: b
+	"True when base b is an ENUM class.  Enum's own subclasses answer
+	inheritsFrom: Enum, but IntEnum/IntFlag/StrEnum are rooted on their DATA
+	storage (AbstractPyInt/Str) and do NOT inherit Enum on the Smalltalk chain,
+	so probe those leaf roots too -- the same shape as the issubclass/isinstance
+	enum-family widening.  Distinguishes an enum base (IntEnum) from a plain data
+	type (int) even though both inherit Integer."
+
+	^ (b == Enum) or: [(b @env0:inheritsFrom: Enum)
+		or: [(b == IntEnum) or: [(b @env0:inheritsFrom: IntEnum)
+		or: [(b == IntFlag) or: [(b @env0:inheritsFrom: IntFlag)
+		or: [(b == StrEnum) or: [(b @env0:inheritsFrom: StrEnum)
+		or: [(Enum ___grailRecordFor: b) @env0:notNil]]]]]]]]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailIsDataTypeBase: b
+	"True when base b contributes instance STORAGE to an enum -- a data type in
+	CPython's _find_data_type_ sense: rooted at int/float/str storage, or
+	carrying its own constructor (date/time via ___new__:kw:).  The universal
+	roots (object/PythonInstance/Object), ENUM classes (IntEnum inherits Integer
+	but is an enum, not a data-type mixin), and pure behaviour mixins (methods
+	only, no storage) are NOT data types."
+
+	(b @env0:isKindOf: Behavior) ifFalse: [^ false].
+	(self ___grailIsEnumBase: b) ifTrue: [^ false].
+	((b == PythonInstance) or: [(b == Object)
+		or: [b == (Python @env0:at: #object otherwise: nil)]]) ifTrue: [^ false].
+	^ (b == Integer) or: [(b @env0:inheritsFrom: Integer)
+		or: [(b == Float) or: [(b @env0:inheritsFrom: Float)
+		or: [(b == CharacterCollection) or: [(b @env0:inheritsFrom: CharacterCollection)
+		or: [(b @env0:whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) @env0:notNil]]]]]]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailValidateBases: cls
+	"CPython _get_mixins_ / _find_data_type_ ordering rules, enforced at class
+	creation: (1) at most ONE data type may be mixed in -- ``class E(str, int,
+	Enum)'' raises ``too many data types'' (test_too_many_data_types); (2) a
+	data type base must come BEFORE the Enum base -- ``class E(Enum, str)''
+	raises (test_wrong_inheritance_order).  Uses the registered MI bases IN
+	ORDER; single-inheritance enums (``class E(Enum)'' / ``class E(IntEnum)''),
+	which have no MI record or one base, can violate neither rule -> no-op."
+
+	| bases dataTypes enumSeen |
+	bases := [(Python @env0:at: #importlib) @env0:___pythonBasesOf___: cls]
+		@env0:on: AbstractException do: [:e | nil].
+	(bases @env0:isNil or: [bases @env0:size @env0:< 2]) ifTrue: [^ self].
+	dataTypes := OrderedCollection @env0:new.
+	enumSeen := false.
+	bases @env0:do: [:b |
+		(self ___grailIsEnumBase: b)
+			ifTrue: [enumSeen := true]
+			ifFalse: [
+				(self ___grailIsDataTypeBase: b) ifTrue: [
+					"A data type mixed in AFTER the Enum base is the wrong order."
+					enumSeen ifTrue: [
+						^ TypeError ___signal___: (Enum ___grailEnumTagFor: cls)
+							@env0:, ' cannot extend ' @env0:, b @env0:name @env0:asString].
+					dataTypes @env0:add: b]]].
+	dataTypes @env0:size @env0:> 1 ifTrue: [
+		^ TypeError ___signal___: 'too many data types for '''
+			@env0:, cls @env0:name @env0:asString @env0:, ''': '
+			@env0:, (dataTypes @env0:collect: [:d | d @env0:name @env0:asString]) @env0:printString].
+	^ self
 %
 
 category: 'Grail-Enum Metaclass'
@@ -912,6 +1434,13 @@ ___grailInstallEnumOutput: cls
 	per-selector guard below already keeps them."
 
 	| strOverridden |
+	"dir(member) -- install the enum member __dir__ on EVERY enum class (before
+	the StrEnum/ReprEnum early returns below), so IntEnum/StrEnum/data-mixed
+	members -- which do not inherit Enum's instance side -- resolve it too.
+	A user-defined __dir__ is left alone."
+	(Enum ___grailUserProvides: cls selector: #'__dir__') ifFalse: [
+		cls ___compileMethod: '__dir__
+	^ Enum ___grailMemberDir: self' category: 'Grail-Enum Member'].
 	"A user __str__ override (a class-body def, one inherited from a user base,
 	or a functional-API forwarder) with NO matching __format__ override makes
 	format() follow str(): CPython's EnumType replaces __format__ with the
@@ -926,6 +1455,44 @@ ___grailInstallEnumOutput: cls
 		(strOverridden and: [(Enum ___grailUserProvides: cls selector: #'__format__:') @env0:not])
 			ifTrue: [cls ___compileMethod: '__format__: aSpec
 	^ (self __str__) __format__: aSpec' category: 'Grail-Enum Member'].
+		^ cls].
+	"ReprEnum (``class E(date, ReprEnum)''): members str/format as their VALUE,
+	keeping only Enum's <Cls.name: valuerepr> repr -- the whole point of
+	ReprEnum.  What has to be installed depends on the storage root, which
+	differs between a FOREIGN mixin and a data-type mixin:
+
+	 * Enum-rooted (foreign mixin, e.g. ``date''): the member inherits Enum's
+	   ``Cls.name'' __str__/__format__ -- WRONG for ReprEnum -- so replace them
+	   with value-delegating versions.  __repr__ is Enum's inherited one (already
+	   the Python-repr value), so leave it.  A user __str__ override is kept, and
+	   __format__ then follows str() (CPython's format-follows-str rule) unless
+	   the user also overrode __format__.
+
+	 * Data-rooted (int/str/FLOAT storage, ``class E(float, ReprEnum)''): the
+	   member IS the data type, so its inherited __str__/__format__ already ARE
+	   the value's (and handle every format code -- delegating to the raw #value
+	   would drop '{:f}'/'{:n}'); keep them.  Only __repr__ is wrong (the data
+	   type's bare-value repr) -- force Enum's.
+
+	StrEnum is handled above; Grail's IntEnum/StrEnum are storage-rooted and not
+	ReprEnum-chained, so they never reach here."
+	(Enum ___grailIsReprEnumClass: cls) ifTrue: [
+		(cls @env0:inheritsFrom: Enum)
+			ifTrue: [ | strOv |
+				strOv := Enum ___grailUserProvides: cls selector: #'__str__'.
+				strOv ifFalse: [
+					cls ___compileMethod: '__str__
+	^ (self @env0:dynamicInstVarAt: #value) @env1:__str__' category: 'Grail-Enum Member'].
+				(Enum ___grailUserProvides: cls selector: #'__format__:') ifFalse: [
+					strOv
+						ifTrue: [cls ___compileMethod: '__format__: aSpec
+	^ (self __str__) __format__: aSpec' category: 'Grail-Enum Member']
+						ifFalse: [cls ___compileMethod: '__format__: aSpec
+	^ (self @env0:dynamicInstVarAt: #value) @env1:__format__: aSpec' category: 'Grail-Enum Member']]]
+			ifFalse: [
+				(Enum ___grailShouldForceOutput: cls selector: #'__repr__') ifTrue: [
+					cls ___compileMethod: '__repr__
+	^ Enum ___grailMemberRepr: self' category: 'Grail-Enum Member']].
 		^ cls].
 	"Nested {selector. source} pairs (NOT Associations -- a bare ``->'' would
 	be an env-1 send and DNU here)."
@@ -1004,7 +1571,8 @@ ___grailInstallClassProtocol: cls
 	| mc |
 	mc := cls @env0:class.
 	#(#'__reversed__' #'mro' #'__repr__' #'__str__' #'__format__:'
-		#'_member_names_' #'_member_map_' #'_value2member_map_' #'_value_repr_')
+		#'_member_names_' #'_member_map_' #'__members__' #'_value2member_map_'
+		#'_value_repr_' #'_new_member_' #'__dir__' #'__bool__')
 		@env0:do: [:sel |
 			| prov provCat |
 			prov := mc @env0:whichClassIncludesSelector: sel environmentId: 1.
@@ -1020,6 +1588,22 @@ ___grailInstallClassProtocol: cls
 				src @env0:isNil ifFalse: [
 					mc ___compileMethod: src category: cat @env0:asString]]
 					@env0:on: Error do: [:e | "best effort"]]].
+	"int.from_bytes: an int-mixed enum (``class E(int, Enum)'') roots at
+	AbstractPyInt, whose metaclass lacks kernel Integer's from_bytes
+	classmethod -- so ``E.from_bytes(...)'' was an AttributeError.  IntEnum
+	carries from_bytes (Grail-Enum Metaclass); copy its version onto any
+	other AbstractPyInt-rooted enum metaclass that lacks it so from_bytes
+	decodes the bytes then constructs the MEMBER (CPython int.from_bytes
+	calls cls(result) for a subclass)."
+	(cls @env0:inheritsFrom: AbstractPyInt) ifTrue: [
+		#(#'from_bytes:_:' #'from_bytes:_:_:') @env0:do: [:sel |
+			(mc @env0:whichClassIncludesSelector: sel environmentId: 1) @env0:isNil ifTrue: [
+				[ | src cat |
+				src := IntEnum @env0:class @env0:sourceCodeAt: sel environmentId: 1.
+				cat := IntEnum @env0:class @env0:categoryOfSelector: sel environmentId: 1.
+				src @env0:isNil ifFalse: [
+					mc ___compileMethod: src category: cat @env0:asString]]
+					@env0:on: Error do: [:e | "best effort"]]]].
 	^ cls
 %
 
@@ -1037,27 +1621,44 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	delegates to the metaclass __getitem__, which both the Enum and
 	IntEnum metaclass chains implement."
 
-	| className names start pairs newCls byValue byName members |
+	| className names start pairs newCls byValue byName members gnvFnValue |
 	className := (positional @env0:at: 1) @env0:asSymbol.
+	"``names'' may be positional[2] or the ``names='' keyword (Enum('bad',
+	names=0)); read both so a non-iterable value under either form reaches the
+	guard below rather than being silently dropped (test_empty_names)."
 	names := (positional @env0:size @env0:>= 2)
-		ifTrue: [positional @env0:at: 2] ifFalse: [nil].
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [(keywords ~~ nil and: [keywords @env0:includesKey: 'names'])
+			ifTrue: [keywords @env0:at: 'names'] ifFalse: [nil]].
 	start := (keywords ~~ nil and: [keywords @env0:includesKey: 'start'])
 		ifTrue: [keywords @env0:at: 'start'] ifFalse: [1].
 	pairs := OrderedCollection @env0:new.
 	names @env0:isNil ifFalse: [
-		| isFlag autoVal nextAuto |
-		"Flag-natured classes number auto members by DOUBLING (1,2,4...
-		or start,2*start,... when start= is given) -- CPython Flag
-		semantics; plain enums count sequentially from start."
+		| isFlag autoVal nextAuto hasGnv genValues |
+		"Auto member values in declaration order, mirroring the class-syntax
+		builder's resolution: a user _generate_next_value_ (Date/Float mixin
+		fixtures return values[count]) wins; else a StrEnum yields the
+		lowercased name; else Flag-natured classes DOUBLE (1,2,4... or
+		start,2*start when start= is given) and plain enums count sequentially
+		from start.  genValues threads the resolved values as gnv's
+		last_values."
 		isFlag := self ___grailIsFlagClass: cls.
+		hasGnv := Enum ___grailClassHasGnv: cls.
+		genValues := OrderedCollection @env0:new.
 		autoVal := nil.
-		nextAuto := [:idx |
-			isFlag
-				ifTrue: [autoVal := autoVal @env0:isNil
-					ifTrue: [start @env0:max: 1]
-					ifFalse: [autoVal @env0:* 2]]
-				ifFalse: [autoVal := start @env0:+ idx @env0:- 1].
-			autoVal].
+		nextAuto := [:idx :nameStr | | v |
+			v := hasGnv
+				ifTrue: [Enum ___grailGnvValueFor: cls name: nameStr
+					count: genValues @env0:size lastValues: (list @env0:withAll: genValues)]
+				ifFalse: [(self ___grailIsStrEnumClass: cls)
+					ifTrue: [nameStr @env0:asLowercase]
+					ifFalse: [isFlag
+						ifTrue: [autoVal := autoVal @env0:isNil
+							ifTrue: [start @env0:max: 1]
+							ifFalse: [autoVal @env0:* 2]]
+						ifFalse: [autoVal := start @env0:+ idx @env0:- 1]]].
+			genValues @env0:add: v.
+			v].
 		(names isKindOf: CharacterCollection)
 			ifTrue: [
 				| cleaned tokens idx |
@@ -1067,21 +1668,37 @@ ___grailFunctional: cls positional: positional keywords: keywords
 				tokens @env0:do: [:tok |
 					idx := idx @env0:+ 1.
 					pairs @env0:add: (Array @env0:with: tok @env0:asString
-						with: (nextAuto @env0:value: idx))]]
+						with: (nextAuto @env0:value: idx value: tok @env0:asString))]]
 			ifFalse: [(names isKindOf: KeyValueDictionary)
 				ifTrue: [
 					names @env0:keysAndValuesDo: [:k :v |
 						pairs @env0:add: (Array @env0:with: k @env0:asString with: v)]]
 				ifFalse: [
 					| idx |
+					"A non-iterable ``names'' (Enum('bad', names=0) / Enum('bad', 0,
+					type=int)) must raise CPython's TypeError, not leak a raw
+					``SmallInteger does not understand #do:'' from the sweep below
+					(test_empty_names).  A valid ``names'' sequence answers #do:."
+					(names @env0:respondsTo: #'do:') ifFalse: [
+						^ TypeError ___signal___: ''''
+							@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: names)
+							@env0:, ''' object is not iterable'].
 					idx := 0.
 					names @env0:do: [:item |
 						idx := idx @env0:+ 1.
 						(item isKindOf: CharacterCollection)
 							ifTrue: [pairs @env0:add: (Array @env0:with: item @env0:asString
-								with: (nextAuto @env0:value: idx))]
+								with: (nextAuto @env0:value: idx value: item @env0:asString))]
 							ifFalse: [pairs @env0:add: (Array @env0:with: (item @env0:at: 1) @env0:asString
 								with: (item @env0:at: 2))]]]]].
+	"Remember a ``_generate_next_value_'' entry from the functional members dict
+	(the gnv) -- surfaced below as a staticmethod in cls.__dict__ via the session
+	gnv-static store (test_gnv_is_static Function variants)."
+	gnvFnValue := nil.
+	[ | gnvPair |
+	gnvPair := pairs @env0:detect: [:p | (p @env0:at: 1) @env0:asString @env0:= '_generate_next_value_']
+		ifNone: [nil].
+	gnvPair @env0:notNil ifTrue: [gnvFnValue := gnvPair @env0:at: 2] ] @env0:value.
 	newCls := cls ___subclass___: className instVarNames: #() classInstVarNames: #().
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
@@ -1154,17 +1771,31 @@ ___grailFunctional: cls positional: positional keywords: keywords
 			ifFalse: [
 			(byValue @env0:includesKey: effVal)
 				ifTrue: [member := byValue @env0:at: effVal]
-				ifFalse: [
+				ifFalse: [ | canonical |
 					member := newCls @env0:basicNew.
 					member @env0:dynamicInstVarAt: #value put: effVal.
 					member @env0:dynamicInstVarAt: #name put: nameStr.
 					byValue @env0:at: effVal put: member.
-					"Zero-valued Flag members are non-canonical -- excluded
-					from iteration/len/_member_names_ (same rule as the
-					class-syntax builder)."
-					((effVal isKindOf: Integer)
-						and: [effVal @env0:= 0 and: [isFlag]])
-						ifFalse: [members @env0:add: member]].
+					"A Flag member is non-canonical -- reachable by name and value
+					but excluded from iteration/len/reversed/_member_names_ -- when
+					its value is 0, OR when it is a composite ALIAS whose bits are all
+					covered by the already-defined members (``dupe = 3`` after
+					first=1/second=2).  Same rule as the class-syntax builder; the
+					functional builder previously dropped only the zero case, so a
+					composite alias leaked into ``members'' (the Flag Function variants
+					of test_basics + test_reversed_iteration_order)."
+					canonical := true.
+					(isFlag and: [effVal isKindOf: Integer]) ifTrue: [
+						effVal @env0:= 0
+							ifTrue: [canonical := false]
+							ifFalse: [ | mask |
+								mask := 0.
+								members @env0:do: [:m | | mv |
+									mv := m @env0:dynamicInstVarAt: #value.
+									(mv isKindOf: Integer) ifTrue: [mask := mask @env0:bitOr: mv]].
+								((effVal @env0:> 0) and: [(effVal @env0:bitAnd: mask) @env0:= effVal])
+									ifTrue: [canonical := false]]].
+					canonical ifTrue: [members @env0:add: member]].
 			byName @env0:at: nameStr put: member.
 			"Category MUST be Grail-Class Attrs: the class-receiver branch of
 		Object's attribute load performs only setter-paired accessors or
@@ -1175,6 +1806,17 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	^ self __getitem__: ''' @env0:, nameStr @env0:, '''')
 				category: 'Grail-Class Attrs']]] value.
 	self ___grailRegistry___ @env0:at: newCls put: (Array @env0:with: byValue with: byName with: members).
+	"Record the functional gnv as a staticmethod in the session gnv-static store;
+	___classDict___ surfaces it in newCls.__dict__ (functional enums have no
+	dynInstVars holder, so the class-syntax holder path can't be used).  A value
+	already a staticmethod (BusyGNV passes ``staticmethod(fn)'') is kept; a bare
+	function is wrapped."
+	gnvFnValue @env0:notNil ifTrue: [ | sm |
+		sm := (gnvFnValue isKindOf: PyStaticMethod)
+			ifTrue: [gnvFnValue]
+			ifFalse: [ | s | s := PyStaticMethod @env0:new.
+				s @env0:dynamicInstVarAt: #'__func__' put: gnvFnValue. s ].
+		self ___grailGnvStaticStore @env0:at: newCls put: sm].
 	"Same class-protocol + repr/str/format installs as the class-syntax builder
 	(harmless no-op for the Enum-rooted classes the functional API produces
 	today, but correct if a data-mixed functional enum lands here later)."
@@ -1517,6 +2159,44 @@ _member_names_
 
 category: 'Grail-Class Attrs'
 classmethod: Enum
+_new_member_
+	"The __new__ used to allocate members -- the mix-in data type's __new__
+	(int/str/float/... for a data enum) or object.__new__ for a plain enum.
+	CPython's EnumType._new_member_; test_enum's enum_dir helper reads it, so
+	it must at least RESOLVE.  Category Grail-Class Attrs so ``cls._new_member_''
+	PERFORMs this getter rather than wrapping it as a BoundMethod."
+
+	^ (self _member_type_) ___pyAttrLoad___: #'__new__'
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+__dir__
+	"dir(EnumClass) -- CPython EnumType.__dir__.  Built to mirror test_enum's
+	``enum_dir'' helper EXACTLY, so ``dir(cls) == enum_dir(cls)'' holds by
+	construction (both read the same _member_names_/_member_type_): a fixed set
+	of dunders + the canonical member names, always with __new__ and
+	__init_subclass__ (every BoundMethod access is a fresh object in Grail, so
+	enum_dir's ``_new_member_ is not object.__new__'' / ``__init_subclass__ is
+	not object.__init_subclass__'' are always true -- see the identity note), and
+	for a data-mixed enum unioned with dir(member_type)."
+
+	| interesting mt |
+	interesting := Set @env0:new.
+	#('__class__' '__contains__' '__doc__' '__getitem__' '__iter__' '__len__'
+	  '__members__' '__module__' '__name__' '__qualname__' '__new__'
+	  '__init_subclass__')
+		@env0:do: [:d | interesting @env0:add: d].
+	(Enum ___grailMembers: self) @env0:do: [:m |
+		interesting @env0:add: (m @env0:dynamicInstVarAt: #name) @env0:asString].
+	mt := self _member_type_.
+	mt == object ifFalse: [
+		(mt @env1:__dir__) @env0:do: [:d | interesting @env0:add: d @env0:asString]].
+	^ list @env0:withAll: interesting @env0:asSortedCollection
+%
+
+category: 'Grail-Class Attrs'
+classmethod: Enum
 _member_map_
 	"name -> member mapping, aliases included (CPython's __members__
 	backing store)."
@@ -1525,6 +2205,18 @@ _member_map_
 	rec := Enum ___grailRecordFor: self.
 	rec @env0:isNil ifTrue: [^ KeyValueDictionary @env0:new].
 	^ rec @env0:at: 2
+%
+
+category: 'Grail-Class Attrs'
+classmethod: Enum
+__members__
+	"CPython EnumType.__members__: a read-only (MappingProxyType) view of
+	the name -> member map -- ``cls.__members__''.  Grail returns a SNAPSHOT
+	copy of _member_map_: the tests only READ it (inspect.getmembers,
+	dict(cls.__members__), iteration), and copying keeps a caller from
+	mutating the live registry map through what CPython makes read-only."
+
+	^ self _member_map_ @env0:copy
 %
 
 category: 'Grail-Class Attrs'
@@ -1568,6 +2260,29 @@ category: 'Grail-Enum Metaclass'
 classmethod: IntEnum
 __new__: aValue
 	^ Enum ___grailLookupValue: self value: aValue
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: IntEnum
+from_bytes: bytesArg _: byteorder
+	"int.from_bytes, inherited by IntEnum.  Grail's ``int'' is kernel
+	Integer (which owns from_bytes), but IntEnum roots at AbstractPyInt, a
+	separate class -- so IntEnum does not inherit it and ``IntStooges.
+	from_bytes'' was an AttributeError.  Delegate the byte decoding to
+	Integer, then -- as CPython int.from_bytes does for a subclass (calls
+	cls(result)) -- resolve the int through this enum, yielding the MEMBER
+	(or ValueError for an unknown value)."
+
+	^ self from_bytes: bytesArg _: byteorder _: false
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: IntEnum
+from_bytes: bytesArg _: byteorder _: signed
+	| raw |
+	raw := Integer @env0:perform: #'from_bytes:_:_:' env: 1
+		withArguments: { bytesArg. byteorder. signed }.
+	^ Enum ___grailLookupValue: self value: raw
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1737,6 +2452,68 @@ _value_
 
 category: 'Grail-Enum Member'
 method: Enum
+_add_alias_: name
+	"CPython Enum._add_alias_ (via EnumType._add_member_): register an
+	additional NAME for this member so ``Cls['NAME']'' and ``Cls.NAME''
+	both resolve to self.  A name already bound to a DIFFERENT member
+	raises NameError; re-binding to the same member is a no-op."
+
+	| cls rec byName nm existing |
+	cls := self @env0:class.
+	nm := name @env0:asString.
+	rec := Enum ___grailRecordFor: cls.
+	rec @env0:isNil ifTrue: [^ self].
+	byName := rec @env0:at: 2.
+	(byName @env0:includesKey: nm) ifTrue: [
+		existing := byName @env0:at: nm.
+		existing == self ifTrue: [^ self].
+		^ NameError ___signal___: nm @env0:printString @env0:, ' is already bound: '
+			@env0:, ([existing @env1:__repr__ @env0:asString]
+				@env0:on: AbstractException do: [:e | existing @env0:printString])].
+	byName @env0:at: nm put: self.
+	"Attribute access (``Cls.NAME'') -- store on the class exactly like
+	setattr(cls, name, member) (lands in the per-class dynInstVars holder;
+	NAME has no compiled accessor, so this is the only reader path)."
+	cls @env0:perform: #'___pyAttrStore___:put:' env: 1 withArguments: { nm. self }.
+	^ self
+%
+
+category: 'Grail-Enum Member'
+method: Enum
+_add_value_alias_: value
+	"CPython Enum._add_value_alias_: register an additional VALUE that
+	resolves to this member -- ``Cls(value)'' -> self.  A value already
+	bound to a DIFFERENT member raises ValueError; the same member is a
+	no-op.  May be called AFTER creation (the registry record is live) OR
+	from inside a member ``__new__'' DURING class build (the record is not
+	registered until the whole build loop finishes) -- in the latter case
+	the alias is parked on the member and ___grailBuildMembers: drains it
+	into the value map once that map is live."
+
+	| cls rec byValue existing |
+	cls := self @env0:class.
+	rec := Enum ___grailRecordFor: cls.
+	rec @env0:isNil ifTrue: [ | pend |
+		pend := [self @env0:dynamicInstVarAt: #'___grailPendingValueAliases']
+			@env0:on: AbstractException do: [:e | nil].
+		pend @env0:isNil ifTrue: [
+			pend := OrderedCollection @env0:new.
+			self @env0:dynamicInstVarAt: #'___grailPendingValueAliases' put: pend].
+		pend @env0:add: value.
+		^ self].
+	byValue := rec @env0:at: 1.
+	(byValue @env0:includesKey: value) ifTrue: [
+		existing := byValue @env0:at: value.
+		existing == self ifTrue: [^ self].
+		^ ValueError ___signal___: value @env0:printString @env0:, ' is already bound: '
+			@env0:, ([existing @env1:__repr__ @env0:asString]
+				@env0:on: AbstractException do: [:e | existing @env0:printString])].
+	byValue @env0:at: value put: self.
+	^ self
+%
+
+category: 'Grail-Enum Member'
+method: Enum
 __repr__
 	| nm val |
 	nm := self @env0:dynamicInstVarAt: #name.
@@ -1772,26 +2549,114 @@ __str__
 
 category: 'Grail-Enum Member'
 method: Enum
+__dir__
+	"dir(member) -- delegate to the shared member-dir builder.  Installed on
+	every enum class instance-side by ___grailInstallEnumOutput: so IntEnum /
+	StrEnum / data-mixed members (which do not inherit Enum's instance side) get
+	it too."
+
+	^ Enum ___grailMemberDir: self
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailMemberDir: aMember
+	"dir(aMember) -- CPython Enum member __dir__, built to mirror test_enum's
+	``member_dir'' helper so ``dir(m) == member_dir(m)'' holds by construction.
+	Base: the fixed enum-instance names, plus dir(member_type) for a data-mixed
+	member (member_dir's mixed branch bases off dir(m) itself, so the walk below
+	is idempotent and any reasonable base matches).  Then, for each class in the
+	member's mro, add every non-underscore name in that class's __dict__ that is
+	not a member; an enum.property that IS a member with no getter is removed
+	instead.  Grail compiles @enum.property to a value-attr method, not a stored
+	PropertyDescriptor, so that branch is effectively the non-member ADD path --
+	same as member_dir sees.  Non-underscore instance attributes carried by this
+	member (obj.description set in a custom __new__) are included
+	(test_dir_on_sub_..._instance_dict_on_super)."
+
+	| cls memberType memberMap allowed propClass |
+	cls := aMember @env0:class.
+	memberType := cls _member_type_.
+	memberMap := cls _member_map_.
+	propClass := Python @env0:at: #PropertyDescriptor.
+	allowed := Set @env0:new.
+	#('__class__' '__doc__' '__eq__' '__hash__' '__module__' 'name' 'value')
+		@env0:do: [:n | allowed @env0:add: n].
+	memberType == object ifFalse: [
+		[(memberType @env1:__dir__) @env0:do: [:n | allowed @env0:add: n @env0:asString]]
+			@env0:on: AbstractException do: [:ex | nil]].
+	"Non-underscore instance attributes carried by this member."
+	[ | pairs i |
+	pairs := aMember @env0:dynamicInstVarPairs.
+	i := 1.
+	[i @env0:< pairs @env0:size] @env0:whileTrue: [ | ds |
+		ds := (pairs @env0:at: i) @env0:asString.
+		((ds @env0:size @env0:> 0) and: [(ds @env0:at: 1) @env0:~= $_])
+			ifTrue: [allowed @env0:add: ds].
+		i := i @env0:+ 2] ] @env0:on: AbstractException do: [:ex | nil].
+	"mro walk -- member.__class__.mro(), each class's __dict__."
+	((Python @env0:at: #importlib) @env0:___mroOf___: cls) @env0:do: [:c | | dict |
+		dict := [c ___classDict___] @env0:on: AbstractException do: [:ex | nil].
+		dict @env0:isNil ifFalse: [
+			dict @env0:keysAndValuesDo: [:name :obj | | ns |
+				ns := name @env0:asString.
+				((ns @env0:size @env0:> 0) and: [(ns @env0:at: 1) @env0:~= $_]) ifTrue: [
+					(obj isKindOf: propClass)
+						ifTrue: [
+							((obj @env0:fget @env0:notNil)
+								or: [(memberMap @env0:includesKey: ns) @env0:not])
+								ifTrue: [allowed @env0:add: ns]
+								ifFalse: [allowed @env0:remove: ns @env0:ifAbsent: []]]
+						ifFalse: [
+							(memberMap @env0:includesKey: ns) ifFalse: [allowed @env0:add: ns]]]]]].
+	^ list @env0:withAll: allowed @env0:asSortedCollection
+%
+
+category: 'Grail-Enum Member'
+method: Enum
 __format__: aSpec
 	"A pure-Enum (or Flag) member formats as its str -- ``ClassName.name''
 	-- with the spec applied to that string (CPython Enum.__format__ for a
 	non-mixed enum: str.__format__(str(self), spec)).  Mixed enums
 	(IntEnum, AbstractPyInt-rooted) do NOT inherit this -- they keep the
-	data type's numeric formatting, which is correct."
+	data type's numeric formatting, which is correct.
 
+	A data-rooted ReprEnum member (``class E(float, ReprEnum)'') formats its
+	VALUE for a NON-EMPTY spec (numeric right-align) -- the point of ReprEnum
+	(_MinimalOutputTests.test_format_specs).  Decided at CALL time: this method
+	is MERGED onto the member class at install, when the MI/mro (hence
+	___grailIsReprEnumClass:) is not yet reliable, so it cannot be baked in."
+
+	((aSpec @env0:notNil and: [(aSpec @env0:isEmpty) @env0:not])
+		and: [(Enum ___grailIsReprEnumClass: self @env0:class)
+		and: [(self @env0:class @env0:inheritsFrom: Enum) @env0:not]])
+		ifTrue: [^ (self @env0:dynamicInstVarAt: #value) @env1:__format__: aSpec].
 	^ (self __str__) __format__: aSpec
 %
 
 category: 'Grail-Enum Member'
 method: Enum
 __eq__: other
-	^ self == other
+	"Enum members compare by IDENTITY, but a NON-match must answer
+	NotImplemented (not False) so the operator layer tries the REFLECTED
+	__eq__ on the right-hand side -- e.g. ``member == ALWAYS_EQ'' where
+	ALWAYS_EQ.__eq__ returns True (test_equality).  Mirrors object.__eq__;
+	two distinct members still end up != (both sides punt -> identity)."
+
+	(self @env0:== other) ifTrue: [^ true].
+	^ #'___NotImplemented___'
 %
 
 category: 'Grail-Enum Member'
 method: Enum
 __ne__: other
-	^ (self == other) @env0:not
+	"Identity inequality; a non-identical operand punts to the reflected
+	__ne__ (NotImplemented) instead of answering True outright, so
+	``member != ALWAYS_EQ'' honors ALWAYS_EQ's override.  Mirrors the
+	NotImplemented-punting shape of __eq__."
+
+	(self @env0:== other) ifTrue: [^ false].
+	^ #'___NotImplemented___'
 %
 
 category: 'Grail-Enum Member'
@@ -1892,15 +2757,43 @@ __xor__: other
 
 category: 'Grail-Flag Member'
 method: Flag
+__iter__
+	"Iterate a Flag MEMBER: yield its canonical SINGLE-BIT component members in
+	definition order (CPython 3.11+: ``list(Color.PURPLE)'' -> [RED, BLUE];
+	``list(Color.BLACK)'' -> []; a multi-bit member is decomposed, never
+	yielded whole).  Mirrors ___grailMemberStr's decomposition and, like the
+	operator methods above, is COPIED onto MI flag classes (class E(int, Flag))
+	so IntFlag members iterate too."
+
+	| v parts |
+	v := self @env0:dynamicInstVarAt: #value.
+	parts := OrderedCollection @env0:new.
+	(v isKindOf: Integer) ifTrue: [
+		(Enum ___grailMembers: self @env0:class) @env0:do: [:mm | | mv |
+			mv := mm @env0:dynamicInstVarAt: #value.
+			((mv isKindOf: Integer)
+				and: [mv @env0:~= 0
+				and: [(mv @env0:bitAnd: (mv @env0:- 1)) @env0:= 0
+				and: [(v @env0:bitAnd: mv) @env0:= mv]]]) ifTrue: [
+				parts @env0:add: mm]]].
+	^ parts __iter__
+%
+
+category: 'Grail-Flag Member'
+method: Flag
 __invert__
-	"~A: the mask-complement within the class's named bits (CPython
-	3.11+ semantics).  A None-valued member (``E = None'') cannot be inverted."
+	"~A: the mask-complement within the class's SINGLE-BIT named flags (CPython
+	3.11+ STRICT/CONFORM semantics -- a plain Flag's default boundary).  Uses
+	the single-bit mask, not the full one: for ``OpenAB(A=1, B=2, MASK=255)''
+	``~A'' is B, not OpenAB(254).  (IntFlag, boundary KEEP, keeps its own
+	___grailFlagMask:-based invert below.)  A None-valued member (``E = None'')
+	cannot be inverted."
 
 	| mask v |
 	v := self @env0:dynamicInstVarAt: #value.
 	(v @env0:isNil or: [v == None]) ifTrue: [
 		^ TypeError ___signal___: '''' @env0:, (Enum ___grailMemberStr: self) @env0:, ''' cannot be inverted'].
-	mask := Enum ___grailFlagMask: self @env0:class.
+	mask := Enum ___grailFlagSingleBitMask: self @env0:class.
 	^ Enum ___grailLookupValue: self @env0:class
 		value: (mask @env0:bitXor: (mask @env0:bitAnd: v))
 %
@@ -2069,6 +2962,52 @@ method: IntFlag
 __xor__: other
 	^ Enum ___grailIntFlagValue: self @env0:class
 		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitXor: (self ___flagOperand___: other))
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
+__ror__: other
+	"``int | flag`` (int on the left): kernel Integer's __or__ delegates to
+	the right operand's __ror__ via ___binOpFallback___.  |/&/^ are
+	commutative, so the reflected form mirrors the forward one -- without
+	these ``3 | Perm.R`` raised ``unsupported operand'' (OldTestIntFlag
+	test_or/test_and/test_xor exercise both operand orders)."
+	^ self __or__: other
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
+__rand__: other
+	^ self __and__: other
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
+__rxor__: other
+	^ self __xor__: other
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
+__iter__
+	"Iterate an IntFlag MEMBER: yield its canonical SINGLE-BIT component members
+	in definition order (CPython 3.11+).  Mirrors Flag>>__iter__ -- the
+	decomposition is storage-agnostic (reads the #value dynInstVar), but IntFlag
+	is AbstractPyInt-rooted and does not inherit Flag, so it needs its own copy
+	(like the operator methods above)."
+
+	| v parts |
+	v := self @env0:dynamicInstVarAt: #value.
+	parts := OrderedCollection @env0:new.
+	(v isKindOf: Integer) ifTrue: [
+		(Enum ___grailMembers: self @env0:class) @env0:do: [:mm | | mv |
+			mv := mm @env0:dynamicInstVarAt: #value.
+			((mv isKindOf: Integer)
+				and: [mv @env0:~= 0
+				and: [(mv @env0:bitAnd: (mv @env0:- 1)) @env0:= 0
+				and: [(v @env0:bitAnd: mv) @env0:= mv]]]) ifTrue: [
+				parts @env0:add: mm]]].
+	^ parts __iter__
 %
 
 category: 'Grail-IntFlag Member'
@@ -2284,6 +3223,30 @@ category: 'Grail-Class Attrs'
 classmethod: StrEnum
 _value_repr_
 	^ None
+%
+
+category: 'Grail-Class Attrs'
+classmethod: Flag
+_boundary_
+	"CPython FlagBoundary: how a Flag handles bits with no named member.  A
+	plain Flag defaults to STRICT (an out-of-range value raises).  Read by
+	test_open_invert_expectations / test_boundary; ``enum.STRICT'' is the
+	#STRICT symbol this returns, so ``_boundary_ in (EJECT, KEEP)'' is false and
+	the STRICT branch is taken.  Getter-only Grail-Class Attrs accessor (like
+	_member_type_), so ``OpenAB._boundary_'' reads the value."
+
+	^ #'STRICT'
+%
+
+category: 'Grail-Class Attrs'
+classmethod: IntFlag
+_boundary_
+	"IntFlag defaults to KEEP -- out-of-range bits are preserved -- so ``~x''
+	and ``IntFlag(n)'' keep every bit within the class mask.  Grail's IntFlag
+	invert already produces the KEEP result (e.g. ~A over MASK=255 is
+	OpenAB(254)), so returning #KEEP takes the matching test branch."
+
+	^ #'KEEP'
 %
 
 ! ------------------- StrEnum members (instance side)

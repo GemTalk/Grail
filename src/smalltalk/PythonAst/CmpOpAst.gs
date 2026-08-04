@@ -74,7 +74,7 @@ printSmalltalkOn: aStream left: left rightList: right rhsTemp: rhsName lhsTemp: 
 
 	opStream := AppendStream on: Unicode7 new.
 	self printSmalltalkOn: opStream.
-	sel := opStream contents trimSeparators.
+	sel := opStream _contents trimSeparators.
 	helper := self ___cmpHelperFor___: sel.
 	helper isNil
 		ifTrue: [aStream nextPutAll: opStream contents]

@@ -252,6 +252,15 @@ __new__: obj _: base
 	unambiguously the allocation form: build a cls instance carrying int(value)."
 	(obj isKindOf: Behavior) ifTrue: [
 		| inst |
+		"CPython refuses ``int.__new__(bool, 0)'': bool overrides __new__ to
+		return one of its two singletons, so allocating one through int's
+		__new__ is unsafe.  Grail's Boolean cannot be allocated at all --
+		``Boolean class>>new'' is shouldNotImplement, an UNCATCHABLE
+		Smalltalk Error where Python code expects a TypeError
+		(test_bool.py test_subclass)."
+		obj == Boolean ifTrue: [
+			TypeError ___signal___:
+				'int.__new__(bool) is not safe, use bool.__new__()'].
 		inst := obj @env0:new.
 		inst @env0:dynamicInstVarAt: #value put: (self __new__: base).
 		^ inst].
@@ -397,9 +406,15 @@ ___parseInt: aString radix: baseInt
 category: 'Grail-Class Methods'
 classmethod: int
 from_bytes: bytes _: byteorder
-	"int.from_bytes(bytes, byteorder='big', *, signed=False)"
+	"int.from_bytes(bytes, byteorder='big', *, signed=False) —
+	2-arg form, delegates to the 3-arg form with signed=false.
+	The delegation used to name ``from_bytes:byteorder:signed:'', a
+	selector that does not exist (Python-keyword style accidentally
+	used instead of Grail's ``_:'' convention), so EVERY 2-arg
+	``int.from_bytes(b, 'big')'' died in an uncatchable env-1 DNU on
+	Integer class -- the identical slip already fixed in to_bytes:_:."
 
-	^ self from_bytes: bytes byteorder: byteorder signed: false
+	^ self from_bytes: bytes _: byteorder _: false
 %
 
 category: 'Grail-Class Methods'

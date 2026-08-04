@@ -83,6 +83,18 @@ def replace(obj, /, **changes):
     return meth(**changes)
 
 
+def _keep_alive(obj, memo):
+    """Keep *obj* alive until this deepcopy finishes (CPython copy._keep_alive).
+
+    Stored under id(memo) -- an int key, so it cannot collide with a caller's
+    key, and the memo itself is alive throughout, so ITS id is never recycled.
+    """
+    try:
+        memo[id(memo)].append(obj)
+    except KeyError:
+        memo[id(memo)] = [obj]
+
+
 def deepcopy(obj, memo=None):
     """Recursive copy.  Honors ``__deepcopy__'' dunder for opt-in
     custom semantics; otherwise walks lists / tuples / dicts / sets
@@ -94,6 +106,17 @@ def deepcopy(obj, memo=None):
     obj_id = id(obj)
     if obj_id in memo:
         return memo[obj_id]
+    # Hold a reference to obj for the rest of this copy.  The memo is keyed by
+    # id(), and Grail hands out id slots from a table that is RECYCLED once an
+    # object is collected -- so a temporary that dies mid-copy (the
+    # ``list(args)'' in the pickle-protocol branch below is exactly one) can
+    # pass its id on to a later object, whose lookup then hits the dead entry
+    # and returns an unrelated copy.  That is how deepcopy of
+    # ``partial(f, ['asdf'])'' could answer [[<BoundMethod>]] for ['asdf']
+    # (test_functools.TestPartialC.test_deepcopy) -- rarely, and only with the
+    # right allocation pattern ahead of it.  CPython's copy.py keeps the same
+    # list, for the same reason.
+    _keep_alive(obj, memo)
     if hasattr(obj, '__deepcopy__'):
         result = obj.__deepcopy__(memo)
         memo[obj_id] = result
@@ -106,7 +129,16 @@ def deepcopy(obj, memo=None):
             result.append(deepcopy(item, memo))
         return result
     if t is tuple:
-        result = tuple(deepcopy(item, memo) for item in obj)
+        items = [deepcopy(item, memo) for item in obj]
+        # CPython answers the ORIGINAL tuple when no element needed copying:
+        # a tuple is immutable, so a fresh one would differ only in identity,
+        # and code that checks ``is`` sees a spurious change.  Building
+        # unconditionally also copied ``(1, 2)``.
+        result = obj
+        for i in range(len(items)):
+            if items[i] is not obj[i]:
+                result = tuple(items)
+                break
         memo[obj_id] = result
         return result
     if t is dict:
@@ -175,6 +207,58 @@ def deepcopy(obj, memo=None):
         memo[obj_id] = result
         _copy_attrs(obj, result, memo)
         return result
+    # An object that implements the PICKLE protocol.  CPython reaches every
+    # unrecognised object this way; Grail only takes the branch for one that
+    # answers a usable __reduce__, because reconstructing an object whose
+    # state is NOT its __dict__ from its __dict__ would mangle it -- worse
+    # than the aliasing below.  functools.partial is exactly that shape: it
+    # keeps func/args/keywords out of __dict__ on purpose, and says so
+    # through __reduce__.
+    #
+    # object's default __reduce__ answers a NotImplemented sentinel rather
+    # than a tuple, so a plain instance falls through unchanged.  Its state
+    # is deep-copied BEFORE __setstate__ sees it -- that is the whole point:
+    # deepcopy(f).attr must not be f.attr.
+    reduced = _reduced(obj)
+    if reduced is not None:
+        factory, args, state = reduced
+        result = factory(*deepcopy(list(args), memo))
+        memo[obj_id] = result
+        if state is not None:
+            setter = getattr(result, '__setstate__', None)
+            if setter is not None:
+                setter(deepcopy(state, memo))
+            else:
+                _copy_attrs(obj, result, memo)
+        return result
     # Atoms — deepcopy returns the same object.
+    #
+    # NOTE a known gap, not a decision: an ordinary instance with no
+    # __reduce__ also lands here, so copy.deepcopy(obj) hands back obj
+    # itself.  CPython would build a new instance and deep-copy its
+    # __dict__.  Fixing that needs a reliable "this object's state IS its
+    # __dict__" predicate, which Grail does not have -- __dict__ alone is
+    # answered by classes, modules and several native wrappers whose state
+    # lives elsewhere.
     memo[obj_id] = obj
     return obj
+
+
+def _reduced(obj):
+    """``(factory, args, state)`` from *obj*'s own pickle protocol, or None.
+
+    None for anything that does not implement it: object's default
+    __reduce__ answers a sentinel rather than a tuple, so the shape check
+    below is what distinguishes an opt-in from a plain instance.
+    """
+    try:
+        rv = obj.__reduce__()
+    except Exception:
+        return None
+    if not isinstance(rv, tuple) or len(rv) < 2:
+        return None
+    factory, args = rv[0], rv[1]
+    if not callable(factory) or not isinstance(args, tuple):
+        return None
+    state = rv[2] if len(rv) > 2 else None
+    return factory, args, state

@@ -81,9 +81,86 @@ set compile_env: 1
 category: 'Grail-Initialization'
 method: builtins
 initialize
-	"No-op. The `module>>instance` class method still calls `initialize`
-	on the newly-created instance, so this no-op stub keeps that contract.
-	Subclasses with real per-instance state should override this method."
+	"Eagerly populate this module's namespace with the CPython builtin TYPES,
+	EXCEPTIONS and CONSTANTS so ``builtins.int`` / ``builtins.ValueError`` /
+	``builtins.None`` resolve via getattr AND appear in vars(builtins) /
+	dir(builtins) -- matching CPython, whose builtins module contains every
+	builtin type, the whole exception hierarchy, and the constants.  Builtin
+	FUNCTIONS (len, abs, ...) already answer through the builtins method path and
+	are untouched here.
+
+	Types and exceptions live in the Python dict (install.gs Step 3 maps
+	int->Integer etc.; the object-subclass builtins like slice/tuple/set and every
+	exception class live there too).  A CPython builtin Grail implements as a
+	FUNCTION rather than a class (enumerate/filter/map/reversed/zip/type/super/
+	staticmethod/classmethod) is simply absent from the dict and skipped -- the
+	method path answers getattr for those.  Only CURATED name lists are consulted,
+	never the whole Python dict: the dict is Grail's global namespace (vendored
+	modules, iterators, PyCode, and non-builtin exceptions like StatisticsError)
+	and is NOT builtins.  The exception list is shared with
+	object>>___pythonBuiltinExceptionNames___ so getattr and __module__ agree.
+
+	Constants: None resolves to its NoneType singleton and NotImplemented /
+	Ellipsis to their Python-dict values; True / False / __debug__ are the
+	Smalltalk booleans (Python __debug__ is True).  Stored as dynamic-instVars,
+	the same store module globals use, so getattr and vars() both see them.
+	Session-local (the builtins singleton is per session)."
+
+	| pd typeNames excNames constNames |
+	pd := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'Python'.
+	(pd @env0:isNil) @env0:ifTrue: [^ self].
+	typeNames := #( #bool #bytearray #bytes #complex #dict #enumerate #filter #float
+	   #frozenset #int #list #map #memoryview #object #property #range
+	   #reversed #set #slice #staticmethod #classmethod #str #super #tuple
+	   #type #zip ).
+	excNames := Object ___pythonBuiltinExceptionNames___.
+	"Types and exceptions: bind only names that resolve to a CLASS in the dict."
+	(typeNames @env0:, excNames) @env0:do: [:n | | v |
+		v := pd @env0:at: n otherwise: nil.
+		((v @env0:notNil) @env0:and: [v @env0:isKindOf: Behavior]) @env0:ifTrue: [
+			self @env0:dynamicInstVarAt: n put: v]].
+	"Constants that are Smalltalk booleans."
+	self @env0:dynamicInstVarAt: #'True' put: true.
+	self @env0:dynamicInstVarAt: #'False' put: false.
+	self @env0:dynamicInstVarAt: #'__debug__' put: true.
+	"Singleton constants resolved from the Python dict (None / NotImplemented /
+	Ellipsis)."
+	constNames := #( #'None' #'NotImplemented' #'Ellipsis' ).
+	constNames @env0:do: [:n | | v |
+		v := pd @env0:at: n otherwise: nil.
+		(v @env0:notNil) @env0:ifTrue: [self @env0:dynamicInstVarAt: n put: v]]
+%
+
+category: 'Grail-Attribute Access'
+method: builtins
+__dir__
+	"dir(builtins) must list every builtin FUNCTION under its Python name.  The
+	generic module>>__dir__ enumerates this class's env-1 selectors, but the
+	VARARGS builtins are filed as ``_name:kw:`` (a leading-underscore dispatch
+	convention -- see the class comment), so super answers the mangled ``_print``
+	/ ``_zip`` forms and drops ``___import__:kw:`` entirely (its ``___`` prefix is
+	filtered as internal).  Rewrite them: ``_name:kw: -> name`` and, as a special
+	case, ``___import__:kw: -> __import__`` (the one dunder builtin among these);
+	other ``___…:kw:`` selectors (e.g. ___reload__) are genuine internals and stay
+	out.  Fixed-arity builtins (``abs:`` / ``len:``) already arrive correctly
+	through super, as do the eagerly-populated types / exceptions / constants
+	(dynamic-instVars)."
+
+	| names |
+	names := super __dir__ @env0:asSet.
+	((self @env0:class) @env0:selectorsForEnvironment: 1) @env0:do: [:sel | | s base |
+		s := sel @env0:asString.
+		(s @env0:endsWith: ':kw:') @env0:ifTrue: [
+			base := s @env0:copyFrom: 1 to: (s @env0:size @env0:- 4).
+			(base @env0:= '___import__')
+				@env0:ifTrue: [names @env0:add: '__import__']
+				@env0:ifFalse: [
+					(((base @env0:at: 1) @env0:= $_)
+						@env0:and: [(base @env0:at: 2) @env0:~= $_])
+						@env0:ifTrue: [
+							names @env0:remove: base @env0:ifAbsent: [nil].
+							names @env0:add: (base @env0:copyFrom: 2 to: (base @env0:size))]]]].
+	^ (names @env0:asSortedCollection: [:a :b | a @env0:<= b]) @env0:asArray
 %
 
 ! ===============================================================================
@@ -321,7 +398,48 @@ callable: anObject
 	dropped from discovery entirely -- not failed, not skipped, just never
 	found."
 	(anObject isKindOf: UnboundMethod) ifTrue: [^ true].
-	^ anObject ___respondsTo___: #'__call__:'
+	"``def __call__'' compiles to a selector whose shape depends on its
+	ARITY, and only the one-argument form was probed.  So an instance of a
+	class defining the ordinary no-argument ``__call__(self)'' -- or the
+	varargs ``__call__(self, *args)'' -- reported False while calling it
+	worked.  Neither object nor PythonInstance defines any of these, so
+	responding to one means the class really did declare it."
+	((anObject ___respondsTo___: #'__call__')
+		or: [(anObject ___respondsTo___: #'__call__:')
+		or: [(anObject ___respondsTo___: #'__call__:_:')
+		or: [(anObject ___respondsTo___: #'__call__:_:_:')
+		or: [anObject ___respondsTo___: #'___call__:kw:']]]])
+		ifTrue: [^ true].
+	"Same problem once more, for the OTHER shapes of Grail's call protocol.
+	functools.partial implements ``value:value:'' rather than ``__call__:'',
+	so ``callable(partial(f))'' answered False -- which CPython documents as
+	True, and which test_functools asserts on the line before it calls the
+	object successfully.
+
+	Asks WHO owns the selector, not merely whether the receiver responds:
+	both of these have a base implementation that every object inherits
+	(PythonInstance's forwarder, and object's ``not callable'' raiser), so a
+	bare respondsTo: would report every object in the image as callable."
+	^ self ___definesOwnCallProtocol___: anObject
+%
+
+category: 'Grail-Private'
+method: builtins
+___definesOwnCallProtocol___: anObject
+	"True when anObject's class supplies one of Grail's call entry points
+	ITSELF, rather than inheriting the base implementation: PythonInstance's
+	``value:value:'' forwards to __call__, and object's
+	``___pyCallValue___:kw:'' exists only to raise ``not callable''."
+
+	| cls owner |
+	cls := anObject @env0:class.
+	owner := cls @env0:whichClassIncludesSelector: #'value:value:' environmentId: 1.
+	(owner @env0:~~ nil
+		and: [owner @env0:~~ PythonInstance and: [owner @env0:~~ object]])
+		ifTrue: [^ true].
+	owner := cls
+		@env0:whichClassIncludesSelector: #'___pyCallValue___:kw:' environmentId: 1.
+	^ owner @env0:~~ nil and: [owner @env0:~~ object]
 %
 
 category: 'Grail-Built-in Functions'
@@ -448,10 +566,10 @@ iter: anObject
 	"Python builtin iter(x) — return an iterator over x by calling
 	x.__iter__().  Raises TypeError if x has no __iter__ method.
 
-	The two-arg sentinel form ``iter(callable, sentinel)`` is not
-	implemented yet (see TODO.md) — none of the current Flask-path
-	modules use it."
+	The two-arg sentinel form ``iter(callable, sentinel)`` is the
+	``iter:_:`` method below."
 
+	| result |
 	"CPython sentinel: a class that explicitly sets ``__iter__ = None''
 	is NOT iterable, and iter(x) raises TypeError even when x defines
 	__getitem__.  Without this, Grail falls through (below) to
@@ -478,7 +596,41 @@ iter: anObject
 				(anObject @env0:class @env0:name) @env0:,
 				''' object is not iterable')
 		].
-	^ anObject __iter__
+
+	"CPython's PyObject_GetIter verifies that the object returned by
+	__iter__ is itself an iterator (defines __next__) and raises
+	``iter() returned non-iterator of type '...''' otherwise
+	(test_iter's test_new_style_iter_class: __iter__ returns self, but
+	the class has no __next__).  ``___respondsTo___:'' cannot see this:
+	PythonInstance carries a catchable-TypeError __next__ FALLBACK on
+	every instance, so it always answers true.  ``___hasProtocol___:''
+	asks the real question -- is __next__ defined BELOW that fallback
+	level -- so a genuine iterator (seq_iterator/str_iterator/... define a
+	real __next__) is unaffected."
+	result := anObject __iter__.
+	(result ___hasProtocol___: '__next__')
+		ifFalse: [
+			TypeError ___signal___: ('iter() returned non-iterator of type ''' @env0:,
+				(result @env0:class @env0:name @env0:asString) @env0:,
+				'''')
+		].
+	^ result
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+iter: aCallable _: aSentinel
+	"Python builtin iter(callable, sentinel) — the two-argument form.
+	Returns a callable_iterator that calls ``aCallable()'' with no arguments
+	on each next() and raises StopIteration once a returned value equals
+	(Python ==) aSentinel.  aCallable must be callable (a function or an
+	instance whose class defines __call__); CPython raises TypeError for a
+	non-callable first argument."
+
+	(self callable: aCallable)
+		@env0:ifFalse: [
+			TypeError @env0:signal: 'iter(v, w): v must be callable'].
+	^ callable_iterator ___on: aCallable sentinel: aSentinel
 %
 
 category: 'Grail-Built-in Functions'
@@ -1088,7 +1240,12 @@ ___formatFloatValue___: value parsed: p
 	fill := p @env0:at: 1. align := p @env0:at: 2. sign := p @env0:at: 3.
 	alt := p @env0:at: 4. width := p @env0:at: 5. grouping := p @env0:at: 6.
 	precision := p @env0:at: 7. type := p @env0:at: 8. fracGrouping := p @env0:at: 9.
-	(#($b $o $x $X $c $d $n $s) @env0:includes: type) ifTrue: [
+	"'n' (locale-aware number format) is valid for a float and behaves like
+	'g' -- Grail does not insert locale grouping separators, but the general
+	digit format is the same (test_enum _MinimalOutputTests.test_format_specs
+	formats a float ReprEnum member with '{:n}')."
+	type @env0:= $n ifTrue: [type := $g].
+	(#($b $o $x $X $c $d $s) @env0:includes: type) ifTrue: [
 		ValueError ___signal___: ('Unknown format code for object of type ''float''')].
 	"Non-finite values format as their str with sign/width only."
 	(value @env0:= value) ifFalse: [
@@ -1875,6 +2032,15 @@ ___isInstanceSingle___: anObject of: aClass
 	(aClass isKindOf: Behavior) ifFalse: [
 		TypeError ___signal___: 'isinstance() arg 2 must be a type, a tuple of types, or a union'].
 	result := anObject isKindOf: aClass.
+	(result not and: [aClass == Integer]) ifTrue: [
+		"CPython's bool IS an int subclass, so isinstance(True, int) is
+		True (PEP 285; test_bool.py test_isinstance).  Grail maps bool to
+		the kernel Boolean, which is NOT under Integer on the Smalltalk
+		chain, so widen here -- the same shape as the AbstractPyInt
+		widening in ___isSubclassSingle___:of:.  Only the int direction
+		widens: isinstance(1, bool) stays False, since Integer is not
+		under Boolean either."
+		result := anObject isKindOf: Boolean].
 	(result not and: [aClass == Unicode7]) ifTrue: [
 		"str maps to Unicode7 for construction, but CPython counts EVERY
 		text string as str: Grail literals may come back Unicode16 /
@@ -1897,6 +2063,20 @@ ___isInstanceSingle___: anObject of: aClass
 		mapping-duck-typed code checks isinstance(g, dict)."
 		result := (anObject isKindOf: KeyValueDictionary)
 			or: [anObject isKindOf: PyInstanceDict]].
+	(result not and: [aClass == (Python @env0:at: #Enum otherwise: nil)]) ifTrue: [
+		"Enum-family widening (mirror of ___isSubclassSingle___of:): an
+		IntEnum/IntFlag/StrEnum member is stored on the int/str root, so
+		isKindOf: does not reach Enum, but CPython counts it an Enum instance."
+		| ie se |
+		ie := Python @env0:at: #IntEnum otherwise: nil.
+		se := Python @env0:at: #StrEnum otherwise: nil.
+		result := (ie @env0:notNil and: [anObject isKindOf: ie])
+			or: [se @env0:notNil and: [anObject isKindOf: se]]].
+	(result not and: [aClass == (Python @env0:at: #Flag otherwise: nil)]) ifTrue: [
+		"IntFlag member is int-rooted; CPython counts it a Flag instance."
+		| iff |
+		iff := Python @env0:at: #IntFlag otherwise: nil.
+		result := iff @env0:notNil and: [anObject isKindOf: iff]].
 	result ifFalse: [
 		"Secondary (multiple-inheritance) bases are not on the Smalltalk
 		chain isKindOf: walks -- consult the instance class's registered
@@ -1940,27 +2120,13 @@ pow: x _: y
 	^ x __pow__: y
 %
 
-category: 'Grail-Built-in Functions'
-method: builtins
-staticmethod: fn
-	"Python @staticmethod / staticmethod(fn) - Grail doesn't honor
-	decorators at codegen, so this is the identity: return the
-	function unchanged.  Calling sites that do `Cls(args)` on a
-	'static method'-named attribute work because Grail's attribute
-	access already returns the function/value."
-
-	^ fn
-%
-
-category: 'Grail-Built-in Functions'
-method: builtins
-classmethod: fn
-	"Python @classmethod / classmethod(fn) - same identity treatment
-	as staticmethod.  Grail doesn't yet thread cls through method
-	dispatch, but the stored attribute is still callable."
-
-	^ fn
-%
+! ``staticmethod'' / ``classmethod'' are NOT builtins methods: they are bound as
+! TYPES in the Python dict (PyStaticMethod / PyClassMethod, registered under those
+! names in MethodWrappers.gs) so the bare name resolves to the class and
+! ``type(staticmethod(f)) is staticmethod'' holds.  A ``staticmethod:'' method here
+! would be found by ___pyAttrLoad___ (colon stripped) and SHADOW the type binding.
+! The value form ``staticmethod(f)'' now calls the class (value:value:/__new__:),
+! building the same wrapper; the @staticmethod decorator is parse-time in ClassDefAst.
 
 category: 'Grail-Built-in Functions'
 method: builtins
@@ -2109,12 +2275,38 @@ ___isSubclassSingle___: sub of: target
 		or: [(sub @env0:inheritsFrom: CharacterCollection)
 		or: [(sub == AbstractPyStr) or: [sub @env0:inheritsFrom: AbstractPyStr]]]]) ifTrue: [^ true].
 	"int-subclass widening: a class routed onto AbstractPyInt by
-	___subclass___'s sealed-Integer substitution IS a subclass of int."
-	(target == Integer and: [(sub == AbstractPyInt)
-		or: [sub @env0:inheritsFrom: AbstractPyInt]]) ifTrue: [^ true].
+	___subclass___'s sealed-Integer substitution IS a subclass of int.
+	bool is one too -- CPython's bool subclasses int (PEP 285;
+	test_bool.py test_issubclass), but Grail's Boolean sits outside the
+	Integer chain.  Only this direction widens: issubclass(int, bool)
+	stays False."
+	(target == Integer and: [(sub == Boolean)
+		or: [(sub == AbstractPyInt)
+		or: [sub @env0:inheritsFrom: AbstractPyInt]]]) ifTrue: [^ true].
 	"float-subclass widening -- same substitution story."
 	(target == Float and: [(sub == AbstractPyFloat)
 		or: [sub @env0:inheritsFrom: AbstractPyFloat]]) ifTrue: [^ true].
+	"Enum-family widening: IntEnum/IntFlag/StrEnum store members on the
+	int/str storage root, so their Smalltalk chain is IntFlag<IntEnum<
+	AbstractPyInt (StrEnum<AbstractPyStr) and bypasses Enum -- and IntFlag
+	bypasses Flag -- even though CPython makes them Enum (and IntFlag a Flag)
+	subclasses.  Widen issubclass to report the CPython hierarchy the same way
+	the int/str/float widenings above do, WITHOUT registering an MI MRO (which
+	would reorder the super/method-resolution chain).  Classes resolved late
+	(builtins.gs compiles before PyEnumTypes.gs)."
+	(sub isKindOf: Behavior) ifTrue: [ | enumCls flagCls |
+		enumCls := Python @env0:at: #Enum otherwise: nil.
+		(enumCls @env0:notNil and: [target == enumCls]) ifTrue: [ | ie se |
+			ie := Python @env0:at: #IntEnum otherwise: nil.
+			se := Python @env0:at: #StrEnum otherwise: nil.
+			((ie @env0:notNil and: [(sub == ie) or: [sub @env0:inheritsFrom: ie]])
+				or: [se @env0:notNil and: [(sub == se) or: [sub @env0:inheritsFrom: se]]])
+				ifTrue: [^ true]].
+		flagCls := Python @env0:at: #Flag otherwise: nil.
+		(flagCls @env0:notNil and: [target == flagCls]) ifTrue: [ | iff |
+			iff := Python @env0:at: #IntFlag otherwise: nil.
+			(iff @env0:notNil and: [(sub == iff) or: [sub @env0:inheritsFrom: iff]])
+				ifTrue: [^ true]]].
 	il := Python @env0:at: #importlib otherwise: nil.
 	il == nil ifFalse: [
 		((il @env0:___mroOf___: sub) @env0:includes: target) ifTrue: [^ true]].

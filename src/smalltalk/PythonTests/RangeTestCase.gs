@@ -277,29 +277,38 @@ test__repr__
 category: 'Grail-Tests - Iteration'
 method: RangeTestCase
 test__reversed__
-	"Test reversed(range(...))"
+	"Test reversed(range(...)).  CPython answers an ITERATOR, not the reversed
+	range -- a range's len() (and so its length_hint) is static, an iterator's
+	hint decreases as it is consumed.  This test used to assert start/stop/step
+	on a returned range; it now asserts the iterator shape."
 
-	| r rev |
+	| r rev collected |
 	r := Interval @env1:__new__: 0 _: 5.
 	rev := r @env1:__reversed__.
 
-	"reversed(range(0, 5)) -> range(4, -1, -1)"
-	self assert: (rev @env1:start) equals: 4.
-	self assert: (rev @env1:stop) equals: -1.
-	self assert: (rev @env1:step) equals: -1.
-	self assert: rev size equals: 5.
+	self assert: (rev @env1:__class__) equals: (Python at: #range_iterator).
+	self assert: (rev @env1:__length_hint__) equals: 5.
+	self assert: (rev @env1:__next__) equals: 4.
+	self assert: (rev @env1:__length_hint__) equals: 4.
+
+	collected := OrderedCollection new.
+	[[true] whileTrue: [collected add: rev @env1:__next__]]
+		on: (Python at: #StopIteration) do: [:ex | ex return: nil].
+	self assert: collected asArray equals: #(3 2 1 0).
+	self assert: (rev @env1:__length_hint__) equals: 0.
 %
 
 category: 'Grail-Tests - Iteration'
 method: RangeTestCase
 test__reversed__empty
-	"Test reversed() on empty range"
+	"Test reversed() on empty range -- an already-exhausted iterator."
 
 	| r rev |
 	r := Interval @env1:__new__: 0 _: 0.
 	rev := r @env1:__reversed__.
 
-	self assert: rev size equals: 0.
+	self assert: (rev @env1:__length_hint__) equals: 0.
+	self should: [rev @env1:__next__] raise: (Python at: #StopIteration).
 %
 
 category: 'Grail-Tests - Sequence Methods'
@@ -348,4 +357,31 @@ test_startStopStep
 	self assert: (r @env1:start) equals: 1.
 	self assert: (r @env1:stop) equals: 10.
 	self assert: (r @env1:step) equals: 2.
+%
+
+category: 'Grail-Tests - Attributes'
+method: RangeTestCase
+testStartStopStepAreValuesNotBoundMethods
+	"CPython's range exposes start/stop/step as read-only ATTRIBUTES:
+	``range(10).start'' is 0, not a bound method.  Grail answered a BoundMethod,
+	so any arithmetic or comparison on ``r.start'' silently operated on the
+	method object rather than the integer.
+
+	Asserted through PYTHON attribute access (``self eval:''), not an
+	``@env1:start'' send.  The other tests in this class use the Smalltalk send,
+	which resolves to the same value either way -- which is exactly why this bug
+	survived: only the Python attribute path distinguishes a value from a
+	BoundMethod, and that path needs the class-side ___pythonValueAttrs___
+	whitelist (compiled in env 0, since ___pyAttrLoad___ consults it through an
+	env-0 respondsTo:)."
+
+	self assert: (self eval: 'range(2, 20, 3).start') equals: 2.
+	self assert: (self eval: 'range(2, 20, 3).stop') equals: 20.
+	self assert: (self eval: 'range(2, 20, 3).step') equals: 3.
+	self assert: (self eval: 'range(10).start') equals: 0.
+	self assert: (self eval: 'range(10).step') equals: 1.
+	"The point of them being values: arithmetic must work."
+	self assert: (self eval: 'range(2, 20, 3).start + 1') equals: 3.
+	self assert: (self eval: 'range(2, 20, 3).stop - range(2, 20, 3).start') equals: 18.
+	self assert: (self eval: 'range(0, 10, 2).step * 5') equals: 10
 %

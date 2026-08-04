@@ -132,11 +132,21 @@ testEqSelf
 category: 'Grail-Tests - Special Methods'
 method: NoneTypeTestCase
 testEqOther
-	"None does not equal any non-None value."
+	"None does not equal any non-None value.
 
-	self assert: (None @env1:__eq__: 0) == false.
-	self assert: (None @env1:__eq__: '') == false.
-	self assert: (None @env1:__eq__: false) == false.
+	Assert through the OPERATOR (___cmpEq___:, what compiled Python sends),
+	not the bare dunder: NoneType.__eq__ now answers NotImplemented for a
+	non-None operand -- CPython's contract -- so that a right-hand operand
+	carrying its own __eq__ still gets its turn (``None == ALWAYS_EQ'' is
+	True).  The operator supplies the False."
+
+	self assert: (None @env1:___cmpEq___: 0) == false.
+	self assert: (None @env1:___cmpEq___: '') == false.
+	self assert: (None @env1:___cmpEq___: false) == false.
+	self assert: (None @env1:___cmpEq___: None) == true.
+	"The punt itself is the contract worth pinning."
+	self assert: (None @env1:__eq__: 0) == #'___NotImplemented___'.
+	self assert: (None @env1:__eq__: None) == true
 %
 
 category: 'Grail-Tests - Special Methods'
@@ -148,7 +158,11 @@ testNeSelf
 category: 'Grail-Tests - Special Methods'
 method: NoneTypeTestCase
 testNeOther
-	self assert: (None @env1:__ne__: 0) == true.
+	"See testEqOther: the operator answers, the dunder punts."
+
+	self assert: (None @env1:___cmpNe___: 0) == true.
+	self assert: (None @env1:___cmpNe___: None) == false.
+	self assert: (None @env1:__ne__: 0) == #'___NotImplemented___'
 %
 
 ! ===============================================================================

@@ -273,6 +273,44 @@ __module__
 	^ nil
 %
 
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+__annotations__
+	"``Cls.m.__annotations__'' -- the parameter/return annotation dict (PEP 563
+	source strings), read from the class-side table ClassDefAst compiles for a
+	class with annotated methods.  Walks the superclass chain, so an inherited
+	method reports the annotations from where it was defined.  Empty dict when
+	there are none, matching CPython's ``a function always has one''.
+
+	Needed by singledispatch's annotation form: ``@t.register'' with no
+	argument infers the dispatch type from the first parameter's annotation,
+	and for a class-body method the implementation reaches it as exactly one
+	of these unbound handles.  Without this the read raised AttributeError,
+	the inference reported ``no type annotation found'', and the registration
+	was lost."
+
+	^ self ___annotationsForClass___: definingClass
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___annotationsForClass___: aClass
+	"Superclass walk for the first ___methodAnnotationsTable___ entry named by
+	this handle's selector.  The entry is a PEP 649 annotate FUNCTION, called
+	here with Format.VALUE.  The table is compiled in ENVIRONMENT 1, so probe
+	the metaclass with environmentId: 1 -- an env-0 ``canUnderstand:'' would
+	never see it.  Mirrors BoundMethod >> ___methodAnnotationsForClass___:name:."
+
+	| tbl v |
+	aClass == nil ifTrue: [^ KeyValueDictionary @env0:new].
+	((aClass @env0:class @env0:whichClassIncludesSelector:
+		#'___methodAnnotationsTable___' environmentId: 1) ~~ nil) ifTrue: [
+			tbl := aClass ___methodAnnotationsTable___.
+			v := tbl @env0:at: selector @env0:asString otherwise: nil.
+			v == nil ifFalse: [^ v @env0:value: { 1 } value: nil]].
+	^ self ___annotationsForClass___: (aClass @env0:superclass)
+%
+
 set compile_env: 0
 
 ! ___pythonValueAttrs___ MUST be compiled in env 0: Object >>
@@ -292,6 +330,7 @@ ___pythonValueAttrs___
 		add: #'__name__';
 		add: #'__qualname__';
 		add: #'__module__';
+		add: #'__annotations__';
 		yourself
 %
 

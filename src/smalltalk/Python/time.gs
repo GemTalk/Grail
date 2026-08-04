@@ -267,17 +267,187 @@ initialize
 	``from time import struct_time'' -- which werkzeug.http and _strptime
 	both do -- and ``isinstance(t, struct_time)'' behave as in CPython."
 
-	| tz stdName dstName |
 	self @env0:dynamicInstVarAt: #struct_time put: struct_time.
-	"Timezone globals, read from the SESSION zone (aligned with the host OS
-	by PyDateTime class >> ___ensureSessionTimeZone___).  These used to
-	report a fixed non-DST UTC, because Grail had no trustworthy local zone
-	and documented its wall clocks as UTC throughout.
+	"``time.tzset'' has to READ as a callable.  A UNARY method on a module is
+	treated as a value attribute, so the attribute load invoked it and
+	answered its return -- ``time.tzset'' was None and ``time.tzset()'' then
+	failed with ``'NoneType' object is not callable''.  Pre-storing a
+	BoundMethod is the shape os.gs already uses for fsdecode/fsencode/fspath.
+	(hasattr said True throughout, because the probing call succeeded.)"
+	self @env0:dynamicInstVarAt: #tzset
+		put: (BoundMethod receiver: self selector: #tzset).
+	PyDateTime ___ensureSessionTimeZone___.
+	self ___refreshTimezoneGlobals___
+%
+
+category: 'Grail-Initialization'
+method: time
+tzset
+	"CPython's ``time.tzset()'': re-read the timezone from the TZ environment
+	variable and re-publish the module's timezone globals.
+
+	The reason Grail needs it is test.support.run_with_tz, which pins the zone
+	around a test by setting ``os.environ['TZ']'' and calling this.  With
+	tzset missing, run_with_tz was a no-op and those tests ran in whatever zone
+	the machine happened to be in -- test_timestamp_naive asserts 18000.0 for
+	the epoch, true only in US/Eastern, so the same build ``passed'' or
+	``failed'' depending on where it ran, and the scoreboard moved when the
+	laptop changed zones.
+
+	TZ is read from ``os.environ'' (Grail's own dict), not from the gem
+	environment: that is where Python code writes it, and a gem cannot change
+	its own OS environment anyway.  An unset TZ restores the host zone.
+
+	Diverges from CPython in ONE way, on purpose: an unresolvable TZ raises
+	ValueError instead of being silently ignored.  Silently keeping the old
+	zone is how this problem stayed invisible; a caller that cannot get the
+	zone it asked for should hear about it (run_with_tz turns it into a skip)."
+
+	| spec zone |
+	spec := self ___tzEnvironmentSpec___.
+	zone := spec == nil
+		ifTrue: [[TimeZone @env0:fromOS] @env0:on: Error do: [:ex | ex @env0:return: nil]]
+		ifFalse: [self ___timeZoneForSpec___: spec].
+	zone == nil ifTrue: [
+		spec == nil ifFalse: [
+			ValueError ___signal___: 'unsupported TZ specification: ''' @env0:,
+				spec @env0:asString @env0:, '''']]
+		ifFalse: [zone @env0:installAsCurrentTimeZone].
+	"___ensureSessionTimeZone___ installs the host zone once per session and
+	memoises that it has.  Set the memo here too, so a later first call to
+	now() cannot silently undo the zone just installed."
+	SessionTemps @env0:current @env0:at: #'GrailSessionTimeZoneSet' put: true.
+	self ___refreshTimezoneGlobals___.
+	^ None
+%
+
+category: 'Grail-Initialization'
+method: time
+___tzEnvironmentSpec___
+	"The current ``os.environ['TZ']'' as a Smalltalk String, or nil when it is
+	unset or empty.  Reads the os module's own dict rather than the gem
+	environment -- that is where Python code writes it."
+
+	| osMod env v |
+	osMod := (Python @env0:at: #os otherwise: nil).
+	osMod == nil ifTrue: [^ nil].
+	env := [osMod @env0:___instance___ environ]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	env == nil ifTrue: [^ nil].
+	v := [env @env0:at: 'TZ' otherwise: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	v == nil ifTrue: [^ nil].
+	v := v @env0:asString.
+	^ v @env0:isEmpty ifTrue: [nil] ifFalse: [v]
+%
+
+category: 'Grail-Initialization'
+method: time
+___timeZoneForSpec___: aSpec
+	"Resolve a TZ specification to a GemStone TimeZone, or nil.
+
+	Two forms reach here.  An Olson name (``UTC'',
+	``Australia/Lord_Howe'') the zone database answers directly.  A POSIX
+	spec -- ``STD offset [DST [offset] [,rule]]'' -- has to be translated:
+
+	  * with a DST name (``EST+05EDT,M3.2.0,M11.1.0''), the concatenation
+	    ``EST5EDT'' is itself a zone the database knows, and it carries the
+	    real DST rule -- which matters, since the tests using this form are
+	    precisely the ones about fold and the DST transitions.
+	  * without one (``EDT4'', ``MSK-03''), the zone is a fixed offset, and
+	    ``Etc/GMT+N'' has POSIX's own sign convention (positive = WEST), so
+	    the offset transfers unchanged.
+
+	Anything else answers nil, and tzset raises rather than pretend."
+
+	| name |
+	aSpec @env0:isEmpty ifTrue: [^ nil].
+	(self ___namedTimeZone___: aSpec) @env0:ifNotNil: [:z | ^ z].
+	name := self ___posixSpecAsZoneName___: aSpec.
+	name == nil ifTrue: [^ nil].
+	^ self ___namedTimeZone___: name
+%
+
+category: 'Grail-Initialization'
+method: time
+___namedTimeZone___: aName
+	"``TimeZone named:'' guarded -- an unknown name raises rather than
+	answering nil, and a name that resolves to something without a real
+	offset is no use either."
+
+	^ [TimeZone @env0:named: aName @env0:asString]
+		@env0:on: Error
+		do: [:ex | ex @env0:return: nil]
+%
+
+category: 'Grail-Initialization'
+method: time
+___posixSpecAsZoneName___: aSpec
+	"Translate a POSIX TZ spec to a zone-database name; nil when it is not
+	one.  See ___timeZoneForSpec___: for the two shapes and why."
+
+	| src i n stdName sign digits dstName ch |
+	src := aSpec @env0:asString.
+	n := src @env0:size.
+	i := 1.
+	"Standard-zone abbreviation: letters (a bracketed <+03> form is not
+	produced by anything in the vendored tests, so it is left unhandled
+	rather than half-handled)."
+	[i @env0:<= n and: [(src @env0:at: i) @env0:isLetter]] @env0:whileTrue: [
+		i := i @env0:+ 1].
+	stdName := src @env0:copyFrom: 1 to: i @env0:- 1.
+	stdName @env0:isEmpty ifTrue: [^ nil].
+	"Offset: an optional sign then digits.  POSIX counts WEST as positive,
+	the same way ``Etc/GMT+N'' does, so the sign passes straight through."
+	sign := ''.
+	(i @env0:<= n and: [
+		ch := src @env0:at: i.
+		ch @env0:== ('+' @env0:at: 1) or: [ch @env0:== ('-' @env0:at: 1)]])
+		ifTrue: [
+			sign := src @env0:copyFrom: i to: i.
+			i := i @env0:+ 1].
+	digits := WriteStream @env0:on: String @env0:new.
+	[i @env0:<= n and: [(src @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
+		digits @env0:nextPut: (src @env0:at: i).
+		i := i @env0:+ 1].
+	digits := digits @env0:contents.
+	digits @env0:isEmpty ifTrue: [^ nil].
+	"A sub-hour offset cannot be expressed as Etc/GMT+N, and no DST-bearing
+	name is built from one either."
+	(i @env0:<= n and: [(src @env0:at: i) @env0:== (':' @env0:at: 1)])
+		ifTrue: [^ nil].
+	"Daylight abbreviation, when present, up to the rule separator."
+	dstName := WriteStream @env0:on: String @env0:new.
+	[i @env0:<= n and: [(src @env0:at: i) @env0:isLetter]] @env0:whileTrue: [
+		dstName @env0:nextPut: (src @env0:at: i).
+		i := i @env0:+ 1].
+	dstName := dstName @env0:contents.
+	"Strip a leading zero so ``EST+05EDT'' becomes the zone name ``EST5EDT''."
+	[digits @env0:size @env0:> 1 and: [(digits @env0:at: 1) @env0:== ('0' @env0:at: 1)]]
+		@env0:whileTrue: [digits := digits @env0:copyFrom: 2 to: digits @env0:size].
+	dstName @env0:isEmpty ifFalse: [
+		"Only a WEST (unsigned or +) offset forms a database name this way."
+		sign @env0:= '-' ifTrue: [^ nil].
+		^ stdName @env0:, digits @env0:, dstName].
+	^ 'Etc/GMT' @env0:, (sign @env0:isEmpty ifTrue: ['+'] ifFalse: [sign]) @env0:, digits
+%
+
+category: 'Grail-Initialization'
+method: time
+___refreshTimezoneGlobals___
+	"Recompute ``timezone'' / ``altzone'' / ``daylight'' / ``tzname'' from the
+	SESSION zone.  These used to report a fixed non-DST UTC, because Grail had
+	no trustworthy local zone and documented its wall clocks as UTC throughout.
 
 	CPython's sign convention is seconds WEST of UTC, the opposite of
 	GemStone's secondsFromGmt (seconds EAST), hence the negation:
-	US/Eastern is secondsFromGmt = -18000 and time.timezone = 18000."
-	PyDateTime ___ensureSessionTimeZone___.
+	US/Eastern is secondsFromGmt = -18000 and time.timezone = 18000.
+
+	Split out of initialize so tzset can re-publish them after the session
+	zone changes; they are cached values, not live reads, so a zone change
+	that did not refresh them left time.timezone describing the old zone."
+
+	| tz stdName dstName |
 	tz := TimeZone @env0:current.
 	"A zone with no DST rule answers an EMPTY dstPrintString -- the UTC zone
 	reports std='UTC' dst=''.  CPython repeats the standard name instead
