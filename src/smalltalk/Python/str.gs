@@ -86,6 +86,30 @@ __new__: obj _: encoding
 	under an encoding is meaningless, so a str-subclass class here can only be
 	the explicit-cls form.  (The 1-arg ``__new__: obj'' deliberately does NOT
 	get this treatment -- ``str(SomeClass)'' must still stringify the class.)"
+	"A StrEnum member class is AbstractPyStr-rooted, NOT CharacterCollection --
+	it stores its string in the #value slot (basicNew + #value), not indexed
+	chars, so the CharacterCollection raw-alloc below fails ('no varying
+	instVars').  ``str.__new__(cls, value)'' for such an enum basicNews a cls
+	instance carrying value in #value, else the member came back a bare
+	Unicode7 (custom-__new__ instance attrs / __class__ lost -- StrEnum
+	test_dir_on_sub)."
+	[ | aps enumCls2 |
+	aps := Python @env0:at: #AbstractPyStr otherwise: nil.
+	enumCls2 := Python @env0:at: #Enum otherwise: nil.
+	((obj @env0:isKindOf: Behavior)
+		and: [(aps @env0:notNil) and: [(obj @env0:inheritsFrom: aps)
+		and: [(obj @env0:inheritsFrom: CharacterCollection) @env0:not
+		and: [(enumCls2 @env0:notNil)
+			and: [(obj @env0:inheritsFrom: enumCls2)
+				or: [(enumCls2 @env0:perform: #'___grailRecordFor:' env: 1
+					withArguments: { obj }) @env0:notNil]]]]]])
+		ifTrue: [ | src2 res2 |
+			src2 := (encoding isKindOf: CharacterCollection)
+				ifTrue: [encoding]
+				ifFalse: [encoding @env0:ifNil: [''] ifNotNil: [encoding __str__]].
+			res2 := obj @env0:new.
+			res2 @env0:dynamicInstVarAt: #value put: src2.
+			^ res2] ] @env0:value.
 	((obj @env0:isKindOf: Behavior)
 		@env0:and: [obj @env0:inheritsFrom: CharacterCollection])
 			ifTrue: [^ obj __new__: encoding].
