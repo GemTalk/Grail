@@ -1676,7 +1676,13 @@ ___isValueDescriptor___: aValue
 	    protocol expects."
 
 	(aValue isKindOf: PythonInstance) ifFalse: [^ false].
-	(aValue ___respondsTo___: #'___pyBindsSelf___') ifTrue: [^ false].
+	"ASK the marker, do not merely detect it.  Whether one of these binds self
+	can depend on what it wraps: functools.partialmethod answers false over a
+	@staticmethod (nothing to bind) or a @classmethod (the CLASS binds, not the
+	instance), and those cases want the __get__ route below rather than a
+	MethodBinding on the receiver."
+	(aValue ___respondsTo___: #'___pyBindsSelf___')
+		ifTrue: [(aValue ___pyBindsSelf___ == true) ifTrue: [^ false]].
 	^ (aValue ___respondsTo___: #'___get__:kw:')
 		or: [aValue ___respondsTo___: #'__get__:_:']
 %
