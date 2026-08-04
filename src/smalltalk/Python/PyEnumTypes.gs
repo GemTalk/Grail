@@ -408,8 +408,9 @@ ___grailBuildMembers: cls names: attrNames
 		environmentId: 1.
 	hasUserNew := (newDefClass == cls) or: [
 		newDefClass @env0:notNil
-			and: [(newDefClass @env0:inheritsFrom: Enum)
-			and: [(Enum ___grailMemberTypeFor: cls) == object]]].
+			and: [((newDefClass @env0:inheritsFrom: Enum)
+				and: [(Enum ___grailMemberTypeFor: cls) == object])
+			or: [(Enum ___grailRecordFor: newDefClass) @env0:notNil]]].
 	tupleClass := Python @env0:at: #tuple otherwise: Array.
 	"An MI enum whose storage base is Enum (``cls inheritsFrom: Enum'') but
 	which mixes in a FOREIGN data type -- ``class E(date, Enum)'', where date is
