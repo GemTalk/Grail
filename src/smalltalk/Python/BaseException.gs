@@ -230,9 +230,15 @@ category: 'Grail-Exception Chaining'
 method: BaseException
 __context__
 	"Return the exception context (the exception that was being handled
-	when this exception was raised)."
+	when this exception was raised).  Full implicit chaining (auto-setting
+	the context from the currently-handled exception on every raise) is
+	still unimplemented, but an EXPLICITLY chained context -- stored in the
+	___context___ dynamic instVar by code that constructs a derived
+	exception (e.g. Enum value-lookup when a _missing_ hook returns a bad
+	value or raises) -- is honored here.  Unset -> None (CPython default)."
 
-	^ None  "TODO: implement exception context"
+	^ ([self @env0:dynamicInstVarAt: #'___context___']
+		@env0:on: AbstractException do: [:e | nil]) ifNil: [None]
 %
 
 ! ------------------- equality: CPython uses IDENTITY for exceptions
