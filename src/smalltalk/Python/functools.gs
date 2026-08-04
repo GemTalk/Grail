@@ -600,6 +600,30 @@ ___countPlaceholders___: anArray
 	^ n
 %
 
+category: 'Grail-Descriptor'
+method: functools_partial
+__get__: obj _: cls
+	"CPython 3.14 made partial a DESCRIPTOR, so a partial stored as a class
+	attribute works as a method: read off an instance it binds that instance
+	as the first argument after the bound ones, and read off the class it
+	answers itself unbound.
+
+	This is a 3.14 behaviour CHANGE -- through 3.13 a partial was not a
+	descriptor and an instance read handed back the partial itself.  Grail
+	targets 3.14 (the vendored corpus is 3.14.4), so 3.14 is what this
+	implements; the vendored frameworks predate it, which is why the full
+	SUnit suite is the check that matters here."
+
+	(obj == nil or: [obj == None]) ifTrue: [^ self].
+	^ MethodBinding instance: obj callable: self
+%
+
+category: 'Grail-Descriptor'
+method: functools_partial
+__get__: obj
+	^ self __get__: obj _: None
+%
+
 category: 'Grail-Calling'
 method: functools_partial
 ___pyCallValue___: positional kw: kwargs

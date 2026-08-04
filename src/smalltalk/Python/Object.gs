@@ -1128,6 +1128,9 @@ ___classChainAttrLookup___: aSym
 					ancestor's stored attribute."
 					(self ___methodDefinedFrom___: start upTo: walker name: aSym)
 						ifTrue: [^ nil].
+					((self isKindOf: Behavior)
+						and: [self ___isValueDescriptor___: v])
+						ifTrue: [^ self ___classDescriptorGet___: v].
 					((self isKindOf: Behavior) not
 						and: [self ___isValueDescriptor___: v])
 						ifTrue: [^ self ___descriptorGet___: v].
@@ -1631,6 +1634,24 @@ ___buildSelectorFamily___: aString
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___classDescriptorGet___: aValue
+	"Python's descriptor read off the CLASS: ``__get__(None, cls)''.  The
+	instance form lives in ___descriptorGet___:.
+
+	Mostly a no-op -- a descriptor with nothing to bind absent an instance
+	answers itself, which is what functools.cached_property does and what
+	makes ``Cls.attr'' the descriptor rather than its value.  classmethod is
+	the one that does bind here: ``A.cm'' is bound to A, no instance in
+	sight."
+
+	(self ___isValueDescriptor___: aValue) ifFalse: [^ aValue].
+	(aValue ___respondsTo___: #'___get__:kw:')
+		ifTrue: [^ aValue ___get__: { None. self } kw: nil].
+	^ aValue __get__: None _: self
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___isValueDescriptor___: aValue
 	"True if aValue is a real DESCRIPTOR OBJECT: a Python object whose own
 	class implements ``__get__'', so a read through an instance must ask it
@@ -1987,7 +2008,7 @@ ___pyAttrLoad___: aSym
 			and: [(self ___respondsTo___: aSym)
 				and: [(self ___respondsTo___: sym1)]])
 			ifTrue: [
-				^ self @env0:perform: aSym env: 1
+				^ self ___classDescriptorGet___: (self @env0:perform: aSym env: 1)
 		].
 		"Class-body data attribute on a Grail class that subclasses a
 		built-in (e.g. a ``dict'' subclass) — not a PythonInstance, so
@@ -1999,7 +2020,7 @@ ___pyAttrLoad___: aSym
 		flask's ``SecureCookieSession(CallbackDict, SessionMixin)''."
 		owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
 		(owner notNil and: [(owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs'])
-			ifTrue: [^ self @env0:perform: aSym env: 1].
+			ifTrue: [^ self ___classDescriptorGet___: (self @env0:perform: aSym env: 1)].
 		"Per-class dynamic attr store — the home of setattr(cls, ...)
 		fallbacks AND of class-attr values merged from SECONDARY bases
 		(multiple inheritance; see importlib ___mergeSecondaryBases___).
@@ -2202,7 +2223,7 @@ ___pyAttrLoad___: aSym
 		| attrOwner metaOwns |
 		attrOwner := self @env0:class @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
 		(attrOwner notNil and: [(attrOwner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs'])
-			ifTrue: [^ self @env0:class @env0:perform: aSym env: 1].
+			ifTrue: [^ self ___descriptorGet___: (self @env0:class @env0:perform: aSym env: 1)].
 		"@classmethod (and @staticmethod) reached through an INSTANCE of a
 		built-in-subclass — ``d.fromkeys(...)'' where d is a dict-subclass
 		instance.  Python makes a classmethod reachable from an instance,
