@@ -125,30 +125,152 @@ class Parameter:
         self.annotation = annotation if annotation is not None else Parameter.empty
 
 
+_KINDS = (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD,
+          Parameter.VAR_POSITIONAL, Parameter.KEYWORD_ONLY,
+          Parameter.VAR_KEYWORD)
+
+
+def formatannotation(annotation, base_module=None):
+    """Render an annotation as CPython does in a signature string.
+
+    A class prints as its NAME (``int``, not ``<class 'int'>``); anything else
+    prints as its repr -- so a string annotation prints WITH quotes, which is
+    also what CPython does for one.
+
+    Grail maps some builtins to a method handle rather than a class, so the
+    test is "does it have a __name__" rather than isinstance(x, type): ``str``
+    is a BoundMethod here and would otherwise have printed as its repr.
+    """
+    name = getattr(annotation, '__name__', None)
+    if isinstance(name, str):
+        return name
+    return repr(annotation)
+
+
+def _annotations_for_render(func):
+    """The annotations to print in a signature, never raising.
+
+    VALUE first, since that is what CPython renders.  An annotation naming
+    something unbound raises NameError there -- but a signature is usually
+    being printed to DIAGNOSE such code, so fall back to the source text
+    rather than making the repr itself fail.
+    """
+    try:
+        import annotationlib
+        return annotationlib.get_annotations(func)
+    except NameError:
+        try:
+            import annotationlib
+            return annotationlib.get_annotations(
+                func, format=annotationlib.Format.STRING)
+        except BaseException:
+            return {}
+    except BaseException:
+        return {}
+
+
+def _unwrap(obj):
+    """Follow the __wrapped__ chain, as signature(follow_wrapped=True) does.
+
+    functools.wraps sets it, so ``signature(lru_cache(f))`` reports f's
+    parameters rather than the wrapper's ``(*args, **kwargs)``.  Bounded in
+    case a wrapper ever points at itself.
+    """
+    seen = 0
+    while seen < 32:
+        nxt = getattr(obj, '__wrapped__', None)
+        if nxt is None or nxt is obj:
+            return obj
+        obj = nxt
+        seen += 1
+    return obj
+
+
+def _signature_from_spec(func):
+    """Build a Signature from the def-time parameter spec, or None.
+
+    FunctionDefAst stamps ``__signature_spec__`` -- a tuple of
+    ``(name, kind-index, default-source-text-or-None)`` in declaration order --
+    on every def.  Grail has no code object to introspect, and the corpus never
+    reads ``co_varnames``/``co_argcount`` anyway, so the compiler records what
+    it already knows instead.
+    """
+    spec = getattr(func, '__signature_spec__', None)
+    if not spec:
+        return None
+    ann = _annotations_for_render(func)
+    params = []
+    for entry in spec:
+        name = entry[0]
+        kind = _KINDS[entry[1]]
+        # Two elements means "no default" -- see emitSignatureEntryFor:.
+        default = entry[2] if len(entry) > 2 else None
+        params.append(Parameter(
+            name, kind,
+            default=_DefaultText(default) if default is not None else None,
+            annotation=ann.get(name, None)))
+    return Signature(parameters=params,
+                     return_annotation=ann.get('return', None))
+
+
+class _DefaultText:
+    """A default rendered from its SOURCE TEXT rather than its value.
+
+    CPython prints ``repr(default)``.  Grail prints the text the def wrote,
+    because the default is evaluated exactly once -- at def-time, into the
+    wrapper block FunctionDefAst already emits -- and re-emitting the
+    expression here to get a value would evaluate it a SECOND time, which is
+    observable for a mutable or side-effecting default.  The two agree for the
+    literals that make up almost every real signature (``c=True``, ``n=0``,
+    ``s=''``) and differ only where the text is not already its own repr
+    (``x=1+1`` prints ``1+1`` where CPython prints ``2``).
+    """
+
+    def __init__(self, text):
+        self._text = text
+
+    def __repr__(self):
+        return self._text
+
+    def __eq__(self, other):
+        return isinstance(other, _DefaultText) and other._text == self._text
+
+
 def _signature_from_callable(obj, *, follow_wrapped=True, globals=None,
                              locals=None, eval_str=False,
                              annotation_format=None, sigcls=None):
     """CPython-private constructor behind signature()."""
-    return signature(obj)
+    return signature(obj, follow_wrapped=follow_wrapped)
 
 
 def signature(obj, *args, **kwargs):
     """Return a Signature for ``obj``.
 
-    Grail doesn't retain per-function parameter metadata, so a full
-    introspective signature isn't available; instead this honours the
-    CPython ``__text_signature__`` convention when a callable advertises one
-    (e.g. operator.attrgetter/itemgetter/methodcaller), and otherwise returns
-    an empty stub Signature -- which the django.utils.inspect / functools call
-    sites only use via ``.parameters`` / ``.bind``.
+    Resolution order, most specific first:
 
-    An explicit ``__signature__`` (already a _Signature) wins.  For a class the
-    call signature comes from ``__text_signature__``; for any other callable it
-    comes from its ``__call_signature__`` (the signature of invoking the
-    instance), falling back to its type's ``__text_signature__``."""
+      1. an explicit ``__signature__``;
+      2. the def-time parameter SPEC the compiler stamped on the function --
+         real parameter names, kinds and defaults (see _signature_from_spec),
+         reached through the ``__wrapped__`` chain so a decorated function
+         reports the signature of what it wraps rather than
+         ``(*args, **kwargs)``;
+      3. the CPython ``__text_signature__`` convention, for callables that
+         advertise one (operator.attrgetter/itemgetter/methodcaller, and the
+         C-implemented functools helpers);
+      4. an empty Signature.
+
+    Step 2 is what makes ``.parameters`` non-empty and ``str(sig)`` real;
+    before it, every Python-defined callable landed on step 4.
+    """
     sig = getattr(obj, '__signature__', None)
-    if isinstance(sig, _Signature):
+    if isinstance(sig, Signature):
         return sig
+
+    target = _unwrap(obj) if kwargs.get('follow_wrapped', True) else obj
+    from_spec = _signature_from_spec(target)
+    if from_spec is not None:
+        return from_spec
+
     if isinstance(obj, type):
         text = getattr(obj, '__text_signature__', None)
     else:
@@ -157,20 +279,78 @@ def signature(obj, *args, **kwargs):
             call = getattr(type(obj), '__call__', None)
             text = getattr(call, '__text_signature__', None) if call is not None else None
     if isinstance(text, str):
-        return _Signature(text)
-    return _Signature()
+        return Signature(text)
+    return Signature()
 
 
-class _Signature:
-    def __init__(self, text=None):
+class Signature:
+    empty = Parameter.empty
+
+    def __init__(self, text=None, parameters=None, return_annotation=None):
         self._text = text
+        self._params = list(parameters) if parameters else []
+        self.return_annotation = (return_annotation
+                                  if return_annotation is not None
+                                  else Parameter.empty)
+
+    @classmethod
+    def from_callable(cls, obj, **kwargs):
+        """CPython's ``Signature.from_callable(obj)`` -- the constructor
+        test_functools uses throughout, and the reason this classmethod has to
+        exist rather than callers going through ``signature()``."""
+        return signature(obj, **kwargs)
 
     @property
     def parameters(self):
-        return {}
+        """Ordered mapping name -> Parameter, as CPython's is.  A plain dict:
+        Grail dicts preserve insertion order, which is all the ordering
+        guarantee callers rely on."""
+        out = {}
+        for p in self._params:
+            out[p.name] = p
+        return out
 
     def __str__(self):
-        return self._text if self._text is not None else '()'
+        """Render as CPython does: ``(a, /, b, c=True)``, with ``/`` closing
+        the positional-only group, a bare ``*`` opening keyword-only
+        parameters when there is no ``*args``, ``x: int = 5`` (spaces) when a
+        parameter is annotated but ``x=5`` when it is not, and a trailing
+        ``-> ann``."""
+        if self._text is not None:
+            return self._text
+
+        rendered = []
+        prev_kind = None
+        for p in self._params:
+            if (prev_kind is Parameter.POSITIONAL_ONLY
+                    and p.kind is not Parameter.POSITIONAL_ONLY):
+                rendered.append('/')
+            if (p.kind is Parameter.KEYWORD_ONLY
+                    and prev_kind is not Parameter.KEYWORD_ONLY
+                    and prev_kind is not Parameter.VAR_POSITIONAL):
+                rendered.append('*')
+
+            text = p.name
+            if p.kind is Parameter.VAR_POSITIONAL:
+                text = '*' + text
+            elif p.kind is Parameter.VAR_KEYWORD:
+                text = '**' + text
+
+            annotated = p.annotation is not Parameter.empty
+            if annotated:
+                text = text + ': ' + formatannotation(p.annotation)
+            if p.default is not Parameter.empty:
+                text = text + (' = ' if annotated else '=') + repr(p.default)
+            rendered.append(text)
+            prev_kind = p.kind
+
+        if prev_kind is Parameter.POSITIONAL_ONLY:
+            rendered.append('/')
+
+        out = '(' + ', '.join(rendered) + ')'
+        if self.return_annotation is not Parameter.empty:
+            out = out + ' -> ' + formatannotation(self.return_annotation)
+        return out
 
     def __repr__(self):
         return '<Signature ' + self.__str__() + '>'
@@ -180,6 +360,11 @@ class _Signature:
 
     def bind_partial(self, *args, **kwargs):
         return _BoundArguments()
+
+
+# The old private name, kept because Grail code and third-party call sites
+# both reference it.
+_Signature = Signature
 
 
 class _BoundArguments:

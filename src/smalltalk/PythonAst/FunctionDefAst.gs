@@ -573,6 +573,15 @@ printSmalltalkOn: aStream
 			nextPutAll: '; @env0:___pyCode___: (PyCode @env0:name: '''; nextPutAll: name;
 			nextPutAll: ''' firstlineno: '; nextPutAll: self beginLine printString;
 			nextPutAll: ')'.
+		"Stamp the def-time PARAMETER SPEC, another cascade onto the same
+		receiver.  This is what makes inspect.signature real: Grail has no code
+		object to introspect, so the compiler records the parameter names, kinds
+		and default SOURCE TEXT it already has.  Only emitted for a def that has
+		parameters -- a niladic def needs no spec, and signature() renders ``()''
+		for one either way."
+		self hasSignatureSpec ifTrue: [
+			aStream nextPutAll: '; @env0:___pySig___: '.
+			self emitSignatureSpecOn: aStream].
 	"Phase A: close the dynamicInstVarAt:put: paren opened above when
 	this is a module-scope nested def; otherwise just emit the
 	statement-terminating period."
@@ -1055,6 +1064,104 @@ hasAnnotations
 	gates emission of the __annotations__ stamp."
 
 	^ returns notNil or: [self ___annotatedArgs___ notEmpty]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+hasSignatureSpec
+	"True when this def declares any parameter at all -- gates emission of
+	the inspect.signature spec.  A niladic def renders as ``()'' with or
+	without a spec, so it does not pay for one."
+
+	args ifNil: [^ false].
+	^ args posonlyargs notEmpty
+		or: [args args notEmpty
+		or: [args kwonlyargs notEmpty
+		or: [args vararg notNil
+		or: [args kwarg notNil]]]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitSignatureSpecOn: aStream
+	"Emit the parameter spec inspect.signature reads: an Array of
+	``{ name . kind-index . default-source-text-or-nil }'' in DECLARATION
+	order.  Kind indices match inspect._KINDS -- 0 POSITIONAL_ONLY,
+	1 POSITIONAL_OR_KEYWORD, 2 VAR_POSITIONAL, 3 KEYWORD_ONLY,
+	4 VAR_KEYWORD.
+
+	Defaults are recorded as SOURCE TEXT, not values.  A default is
+	evaluated exactly once, at def-time, into the wrapper block this class
+	already emits; re-emitting the expression here to capture a value would
+	evaluate it a SECOND time, which is observable for a mutable or
+	side-effecting default.  inspect._DefaultText documents where text and
+	repr can disagree.
+
+	CPython pairs defaults with the LAST parameters of the
+	posonly+regular list, and kwonly defaults positionally with
+	kwonlyargs."
+
+	| posonly regular allPositional defaults firstDefaulted anyYet sep |
+	posonly := args posonlyargs ifNil: [#()].
+	regular := args args ifNil: [#()].
+	allPositional := posonly , regular.
+	defaults := args defaults ifNil: [#()].
+	"``def f(a, b=1, c=2)'' has 3 positional params and 2 defaults, so the
+	defaults attach to params 2..3 -- the trailing ones."
+	firstDefaulted := allPositional size - defaults size + 1.
+	"Separator state, NOT a per-group index: a def whose only parameter is
+	``**kwargs'' (or a keyword-only one) has an empty positional list, and
+	emitting the separator unconditionally in those branches produced
+	``{ . {'kwargs'. 4} }'' -- CompileError 1001, which failed every module
+	defining such a def."
+	anyYet := false.
+	sep := [anyYet ifTrue: [aStream nextPutAll: '. ']. anyYet := true].
+	aStream nextPutAll: '{ '.
+	1 to: allPositional size do: [:i |
+		sep value.
+		self
+			emitSignatureEntryFor: (allPositional at: i)
+			kind: (i <= posonly size ifTrue: [0] ifFalse: [1])
+			default: (i >= firstDefaulted
+				ifTrue: [defaults at: i - firstDefaulted + 1]
+				ifFalse: [nil])
+			on: aStream].
+	args vararg ifNotNil: [:v |
+		sep value.
+		self emitSignatureEntryFor: v kind: 2 default: nil on: aStream].
+	(args kwonlyargs ifNil: [#()]) doWithIndex: [:k :i |
+		sep value.
+		self
+			emitSignatureEntryFor: k
+			kind: 3
+			default: ((args kw_defaults ifNil: [#()]) at: i ifAbsent: [nil])
+			on: aStream].
+	args kwarg ifNotNil: [:k |
+		sep value.
+		self emitSignatureEntryFor: k kind: 4 default: nil on: aStream].
+	aStream nextPutAll: ' }'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitSignatureEntryFor: anArg kind: kindIndex default: aDefaultNodeOrNil on: aStream
+	"One ``{ name . kind . default-text }'' triple.  The default's source
+	text comes from ___annotationSourceString___, the same unparser the
+	annotations use -- it covers the literal shapes real defaults take and
+	falls back to a placeholder rather than failing to compile.
+
+	A parameter with no default emits a TWO-element entry rather than a
+	third slot holding Smalltalk nil: nil reaching a Python local is
+	indistinguishable from an unassigned one, so ``default = entry[2]''
+	raised UnboundLocalError on the very next read."
+
+	aStream nextPutAll: '{ '''; nextPutAll: anArg name asString; nextPutAll: '''. '.
+	aStream nextPutAll: kindIndex printString.
+	(aDefaultNodeOrNil isNil or: [aDefaultNodeOrNil isNone]) ifFalse: [
+		aStream nextPutAll: '. '.
+		self emitStringLiteral: aDefaultNodeOrNil ___annotationSourceString___
+			on: aStream].
+	aStream nextPutAll: ' }'
 %
 
 category: 'Grail-code generation'
