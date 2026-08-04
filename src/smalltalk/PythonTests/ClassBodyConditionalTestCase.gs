@@ -204,4 +204,48 @@ testAnUnguardedDefStillCompilesAsAMethod
 	self assert: (self at: 'unconditional') @env0:asString equals: 'unconditional'.
 %
 
+! --- re-import under canonical classes ---
+
+category: 'Grail-Tests - Reimport'
+method: ClassBodyConditionalTestCase
+testEveryBindingSurvivesReimport
+	"REGRESSION.  Every class-body ``if'' binding used to survive the first
+	import of a module and vanish from every one after it, whenever
+	canonical classes were on -- which is how the SUnit gate runs.  Not the
+	def work: plain guarded ASSIGNMENTS, shipped long before, were lost the
+	same way; this is simply the first test to re-import such a class.
+
+	The stores went through ___pyAttrStore___, which diverts to the
+	session-local overlay once the class is in the canonical set.  On the
+	first import it is not yet (registration is the last step of the build),
+	so the store landed on the class.  On a REBUILD it already is, so the
+	store went to the overlay -- and ___resetClassAttrOverlay___, emitted
+	right after the class-build guard, wiped it.  Meanwhile the rebuild's
+	own ``dynInstVars: (Object new)'' had cleared the committed value.  The
+	binding ended up in neither place.
+
+	setUp re-imports on every test, so the whole suite exercises the warm
+	path; this test pins the cold-then-warm transition explicitly."
+
+	| first |
+	first := (self at: 'inst') @env0:asString.
+	self setUp.
+	self assert: (self at: 'inst') @env0:asString equals: first.
+	self assert: (self at: 'marker' ) @env0:asString equals: 'yes'.
+	self assert: (self at: 'echo') @env0:asString equals: 'yes'.
+	self assert: (self at: 'static_via_class') @env0:asString equals: 'static:2'.
+	self assert: (self at: 'cls_via_subclass') @env0:asString equals: 'cls:Sub:3'.
+%
+
+category: 'Grail-Tests - Reimport'
+method: ClassBodyConditionalTestCase
+testANestedClassSurvivesReimport
+	"A nested class is stored by the same emit and was losable the same way.
+	Kept honest here because the fix changed that store too."
+
+	self assert: (self at: 'nested_tag') @env0:asString equals: 'nested'.
+	self setUp.
+	self assert: (self at: 'nested_tag') @env0:asString equals: 'nested'.
+%
+
 set compile_env: 0

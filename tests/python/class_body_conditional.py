@@ -58,6 +58,9 @@ class Conditional:
     def unconditional(self):
         return 'unconditional'
 
+    class Nested:
+        tag = 'nested'
+
 
 class Sub(Conditional):
     pass
@@ -68,6 +71,7 @@ def probe():
     c = Conditional()
     s = Sub()
     return {
+        'marker': Conditional.marker,
         'inst': c.inst_meth(1),
         'static_via_instance': c.static_meth(2),
         'static_via_class': Conditional.static_meth(2),
@@ -82,4 +86,5 @@ def probe():
         'inherited': s.inst_meth(4),
         'has_not_taken': hasattr(Conditional, 'not_taken'),
         'has_inst_meth': hasattr(Conditional, 'inst_meth'),
+        'nested_tag': Conditional.Nested.tag,
     }

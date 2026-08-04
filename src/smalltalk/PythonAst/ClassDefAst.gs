@@ -705,13 +705,20 @@ printSmalltalkRuntimeOn: aStream
 			onStream: aStream.
 		aStream nextPutAll: name;
 			nextPutAll: ' dynInstVars: (Object @env0:new).'; lf].
+	"___classHolderAttrStore___, not ___pyAttrStore___: this store is
+	DEFINITIONAL and must land on the committed class.  ___pyAttrStore___
+	diverts to the session overlay once the class is in the canonical set,
+	which it already is on any REBUILD (the previous load registered it) --
+	and ___resetClassAttrOverlay___, emitted just after the class-build
+	guard, then wipes the overlay.  See object >> ___classHolderAttrStore___,
+	whose method-decorator caller was bitten by exactly this."
 	(body body select: [:stmt | stmt isKindOf: ClassDefAst]) do: [:nested |
 		aStream nextPutAll: '[ | '; nextPutAll: nested name asString;
 			nextPutAll: ' |'; lf.
 		nested printSmalltalkOn: aStream.
 		aStream lf;
 			nextPutAll: name;
-			nextPutAll: ' @env1:___pyAttrStore___: #''';
+			nextPutAll: ' @env1:___classHolderAttrStore___: #''';
 			nextPutAll: nested name asString;
 			nextPutAll: ''' put: ';
 			nextPutAll: nested name asString;
@@ -977,9 +984,9 @@ printSmalltalkRuntimeOn: aStream
 		env: 1
 		classSide: true
 		onStream: aStream.
-	"Conditional: a NESTED class stored via ___pyAttrStore___ during the
-	attr-value section already forced the holder into existence --
-	an unconditional overwrite here wiped it (Outer.A vanished)."
+	"Conditional: a NESTED class (or a class-body ``if'' binding) stored
+	during the attr-value section already forced the holder into existence
+	-- an unconditional overwrite here wiped it (Outer.A vanished)."
 	aStream nextPutAll: name;
 		nextPutAll: ' dynInstVars == nil ifTrue: [';
 		nextPutAll: name;
@@ -2031,7 +2038,14 @@ method: ClassDefAst
 emitClassBodyIfBranch: aSuite on: aStream
 	"One branch of a class-body ``if'': simple NAME = value assignments
 	and ``def''s become per-class dynamic-attr stores on the class temp;
-	nested ifs recurse.  Anything else is dropped (same as before)."
+	nested ifs recurse.  Anything else is dropped (same as before).
+
+	The stores go through ___classHolderAttrStore___ rather than
+	___pyAttrStore___ because they are DEFINITIONAL -- see the nested-class
+	emit in printSmalltalkRuntimeOn: for why the difference is not cosmetic.
+	It was ___pyAttrStore___ until the def work above, and the consequence
+	was that a class-body ``if'' binding survived the first import of a
+	module and vanished from every later one under canonical classes."
 
 	(aSuite isNil or: [aSuite body isNil]) ifTrue: [^ self].
 	aSuite body do: [:stmt |
@@ -2043,7 +2057,7 @@ emitClassBodyIfBranch: aSuite on: aStream
 			and: [stmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
 			stmt targets do: [:t |
 				aStream nextPutAll: name;
-					nextPutAll: ' @env1:___pyAttrStore___: #''';
+					nextPutAll: ' @env1:___classHolderAttrStore___: #''';
 					nextPutAll: t id asString;
 					nextPutAll: ''' put: '.
 				stmt value printSmalltalkWithParenthesisOn: aStream.
@@ -2051,7 +2065,7 @@ emitClassBodyIfBranch: aSuite on: aStream
 		((stmt isKindOf: AnnAssignAst)
 			and: [(stmt target isKindOf: NameAst) and: [stmt value notNil]]) ifTrue: [
 			aStream nextPutAll: name;
-				nextPutAll: ' @env1:___pyAttrStore___: #''';
+				nextPutAll: ' @env1:___classHolderAttrStore___: #''';
 				nextPutAll: stmt target id asString;
 				nextPutAll: ''' put: '.
 			stmt value printSmalltalkWithParenthesisOn: aStream.
@@ -2093,7 +2107,7 @@ emitClassBodyIfDef: aDef on: aStream
 		ensure: [CallAst classBodyValueDefNode: savedValueDefNode].
 	aStream lf;
 		nextPutAll: name;
-		nextPutAll: ' @env1:___pyAttrStore___: #''';
+		nextPutAll: ' @env1:___classHolderAttrStore___: #''';
 		nextPutAll: fname;
 		nextPutAll: ''' put: '.
 	wrapper
