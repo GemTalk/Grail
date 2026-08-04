@@ -1358,6 +1358,17 @@ ___classDict___
 			inner @env0:keysAndValuesDo: [:k :v |
 				v == nil ifFalse: [d @env0:at: k @env0:asString put: v]]]] ]
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	"A FUNCTIONAL enum's _generate_next_value_ is a staticmethod in the session
+	gnv-static store (functional enums have no dynInstVars holder to carry it; a
+	CLASS-syntax enum already surfaces it via branch (a)).  Surface it so
+	``type(cls.__dict__['_generate_next_value_']) is staticmethod'' holds
+	(test_gnv_is_static Function variants).  Gated on this being an enum class so no
+	non-enum __dict__ is touched."
+	[((Python @env0:at: #Enum otherwise: nil) @env0:notNil)
+		and: [(Enum ___grailRecordFor: self) @env0:notNil]] @env0:value ifTrue: [
+		| gnvSm |
+		gnvSm := Enum ___grailGnvStaticFor: self.
+		gnvSm @env0:isNil ifFalse: [d @env0:at: '_generate_next_value_' put: gnvSm]].
 	^ d
 %
 
