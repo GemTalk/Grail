@@ -569,6 +569,7 @@ iter: anObject
 	The two-arg sentinel form ``iter(callable, sentinel)`` is the
 	``iter:_:`` method below."
 
+	| result |
 	"CPython sentinel: a class that explicitly sets ``__iter__ = None''
 	is NOT iterable, and iter(x) raises TypeError even when x defines
 	__getitem__.  Without this, Grail falls through (below) to
@@ -595,7 +596,25 @@ iter: anObject
 				(anObject @env0:class @env0:name) @env0:,
 				''' object is not iterable')
 		].
-	^ anObject __iter__
+
+	"CPython's PyObject_GetIter verifies that the object returned by
+	__iter__ is itself an iterator (defines __next__) and raises
+	``iter() returned non-iterator of type '...''' otherwise
+	(test_iter's test_new_style_iter_class: __iter__ returns self, but
+	the class has no __next__).  ``___respondsTo___:'' cannot see this:
+	PythonInstance carries a catchable-TypeError __next__ FALLBACK on
+	every instance, so it always answers true.  ``___hasProtocol___:''
+	asks the real question -- is __next__ defined BELOW that fallback
+	level -- so a genuine iterator (seq_iterator/str_iterator/... define a
+	real __next__) is unaffected."
+	result := anObject __iter__.
+	(result ___hasProtocol___: '__next__')
+		ifFalse: [
+			TypeError ___signal___: ('iter() returned non-iterator of type ''' @env0:,
+				(result @env0:class @env0:name @env0:asString) @env0:,
+				'''')
+		].
+	^ result
 %
 
 category: 'Grail-Built-in Functions'
