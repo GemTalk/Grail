@@ -2533,13 +2533,26 @@ __format__: aSpec
 category: 'Grail-Enum Member'
 method: Enum
 __eq__: other
-	^ self == other
+	"Enum members compare by IDENTITY, but a NON-match must answer
+	NotImplemented (not False) so the operator layer tries the REFLECTED
+	__eq__ on the right-hand side -- e.g. ``member == ALWAYS_EQ'' where
+	ALWAYS_EQ.__eq__ returns True (test_equality).  Mirrors object.__eq__;
+	two distinct members still end up != (both sides punt -> identity)."
+
+	(self @env0:== other) ifTrue: [^ true].
+	^ #'___NotImplemented___'
 %
 
 category: 'Grail-Enum Member'
 method: Enum
 __ne__: other
-	^ (self == other) @env0:not
+	"Identity inequality; a non-identical operand punts to the reflected
+	__ne__ (NotImplemented) instead of answering True outright, so
+	``member != ALWAYS_EQ'' honors ALWAYS_EQ's override.  Mirrors the
+	NotImplemented-punting shape of __eq__."
+
+	(self @env0:== other) ifTrue: [^ false].
+	^ #'___NotImplemented___'
 %
 
 category: 'Grail-Enum Member'
