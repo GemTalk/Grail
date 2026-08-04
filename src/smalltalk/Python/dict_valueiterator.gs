@@ -130,6 +130,17 @@ __next__
 	^ nextValue
 %
 
+category: 'Grail-Iterator Protocol'
+method: dict_valueiterator
+__length_hint__
+	"Values not yet produced -- CPython's dictiter_len; see
+	dict_keyiterator>>__length_hint__ for why a size change zeroes it
+	permanently and why the same-size version guard is not consulted."
+
+	((dict @env0:size) @env0:= (values @env0:size)) ifFalse: [^ 0].
+	^ ((values @env0:size) @env0:- position) @env0:max: 0
+%
+
 category: 'Grail-Instance Creation'
 classmethod: dict_valueiterator
 _new_from: aDict _: pos

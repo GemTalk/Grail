@@ -2503,6 +2503,36 @@ __dir__
 	^ ((result @env0:asSet) @env0:asSortedCollection) @env0:asArray
 %
 
+category: 'Grail-Iteration Protocol'
+method: object
+___presizeLengthHint___
+	"CPython's PyObject_LengthHint(o, default) -- the estimate list(),
+	list.extend() and bytearray.extend() ask an iterable for before consuming
+	it, so they can preallocate.  Answers nil when no estimate is available.
+
+	Grail's collections grow dynamically and have nothing to preallocate, so
+	the ANSWER is unused -- but the CALL is observable, and that is the point:
+	an exception raised by the iterable's __len__ or __length_hint__ must reach
+	the caller rather than being silently skipped.  ``list(x)'' where x.__len__
+	raises RuntimeError raised nothing at all before (test_iterlen
+	TestLengthHintExceptions test_issue1242657, whose name in CPython is
+	literally ``exceptions are not suppressed by __length_hint__()'').
+
+	CPython's two special cases are kept: a TypeError from __len__ is CLEARED
+	(an object may legitimately have no length, and PyObject_Length reports
+	that as TypeError), and a __length_hint__ answering the NotImplemented
+	singleton means ``no estimate''."
+
+	| v ni |
+	(self ___respondsTo___: #'__len__') ifTrue: [
+		^ [self __len__] @env0:on: TypeError do: [:ex | ex @env0:return: nil]].
+	(self ___respondsTo___: #'__length_hint__') ifFalse: [^ nil].
+	v := self __length_hint__.
+	ni := Python @env0:at: #NotImplemented otherwise: nil.
+	(ni @env0:notNil @env0:and: [v @env0:== ni]) ifTrue: [^ nil].
+	^ v
+%
+
 category: 'Grail-Numeric Protocol'
 method: object
 ___asIndex___

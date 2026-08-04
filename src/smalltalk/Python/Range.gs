@@ -234,14 +234,24 @@ __repr__
 category: 'Grail-Iteration'
 method: range
 __reversed__
-	"Return a reversed range"
+	"reversed(range(...)) -- an ITERATOR walking the range backwards, which is
+	what CPython answers (a range_iterator over the reversed range).  This used
+	to answer the reversed RANGE itself; the difference is observable, because a
+	range reports a STATIC len() and so a static operator.length_hint, while an
+	iterator's hint decreases with every __next__.  That broke the
+	len(it) == len(list(it)) invariant: ``it = reversed(range(10))'' reported 10
+	after nine of its ten items had been consumed (test_iterlen
+	TestXrangeCustomReversed/TestListReversed test_invariant).
+
+	The reversed range is still computed the same way -- only the iterator
+	wrapper is new."
 
 	| size startVal stepVal newStart newStop newStep |
 	size := self @env0:size.
 
-	"Empty range returns empty range"
+	"Empty range returns an exhausted iterator"
 	(size == 0) ifTrue: [
-		^ range __new__: 0 _: 0 _: 1
+		^ (range __new__: 0 _: 0 _: 1) __iter__
 	].
 
 	startVal := self start.
@@ -256,7 +266,7 @@ __reversed__
 	"New stop is original start + newStep (exclusive)"
 	newStop := startVal @env0:+ newStep.
 
-	^ range __new__: newStart _: newStop _: newStep
+	^ (range __new__: newStart _: newStop _: newStep) __iter__
 %
 
 category: 'Grail-Sequence Methods'

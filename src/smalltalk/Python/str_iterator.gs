@@ -111,4 +111,13 @@ __next__
 	^ charString
 %
 
+category: 'Grail-Iterator Protocol'
+method: str_iterator
+__length_hint__
+	"Characters not yet produced -- CPython's unicodeiter_len.  A str is
+	immutable, so the count is exact."
+
+	^ (collection @env0:size @env0:- position) @env0:max: 0
+%
+
 set compile_env: 0
