@@ -597,6 +597,7 @@ run
 	at: #'ModuleScopeBindingsTestCase' put: nil;
 	at: #'ModuleFunctionDecoratorsTestCase' put: nil;
 	at: #'ImportTypeIntrospectionTestCase' put: nil;
+	at: #'ExecClassDefinitionTestCase' put: nil;
 	at: #'IteratorLengthHintTestCase' put: nil;
 	at: #'LambdaDefaultsTestCase' put: nil;
 	at: #'ContextVarsTestCase' put: nil;
@@ -1339,6 +1340,7 @@ input src/smalltalk/PythonTests/DynamicGlobalsTestCase.gs
 input src/smalltalk/PythonTests/ModuleScopeBindingsTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionDecoratorsTestCase.gs
 input src/smalltalk/PythonTests/ImportTypeIntrospectionTestCase.gs
+input src/smalltalk/PythonTests/ExecClassDefinitionTestCase.gs
 input src/smalltalk/PythonTests/IteratorLengthHintTestCase.gs
 input src/smalltalk/PythonTests/LambdaDefaultsTestCase.gs
 input src/smalltalk/PythonTests/ContextVarsTestCase.gs
