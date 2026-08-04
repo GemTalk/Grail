@@ -296,17 +296,13 @@ category: 'Grail-Constructors'
 classmethod: bytes
 ___coerceIndex___: obj
 	"Coerce obj to an integer index, honoring __index__ (which may run Python
-	code that mutates the receiver -- callers must re-read the size after)."
+	code that mutates the receiver -- callers must re-read the size after).
 
-	(obj isKindOf: Integer) ifTrue: [^ obj].
-	(obj ___respondsTo___: #'__index__') ifTrue: [
-		| v |
-		v := obj __index__.
-		(v isKindOf: Integer) ifTrue: [^ v].
-		TypeError ___signal___: '__index__ returned non-int'].
-	TypeError ___signal___:
-		('''' @env0:, obj @env0:class @env0:name @env0:,
-		''' object cannot be interpreted as an integer')
+	Delegates to object>>___asIndex___, the single implementation shared with
+	every sequence type; kept as an alias because bytes / bytearray / slice
+	call it by this name in a dozen places."
+
+	^ obj ___asIndex___
 %
 
 category: 'Grail-Constructors'

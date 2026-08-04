@@ -15,6 +15,16 @@ def _t(f):
         return "type-error"
 
 
+def _ovf(f):
+    try:
+        f()
+        return "no-error"
+    except OverflowError:
+        return "overflow"
+    except BaseException as e:
+        return "other:" + type(e).__name__
+
+
 def _msg(f):
     "The str() of the TypeError a call raises -- an env-0 ``signal:'' raise"
     " reaches Python with an EMPTY message, which no assertRaisesRegex can"
@@ -178,7 +188,126 @@ def _decimal_cases():
     return out
 
 
+
+# --- __index__ (PEP 357) fixtures ------------------------------------------
+#
+# Every sequence op used to PROBE for __index__ ("is this object index-like?")
+# and then hand the object itself to env-0 arithmetic, so the value was never
+# fetched and the op died on an uncatchable `does not understand #<'.
+
+
+class Ind:
+    "Carries its index in .ind, like CPython's test_index.newstyle."
+    def __init__(self, ind):
+        self.ind = ind
+
+    def __index__(self):
+        return self.ind
+
+
+class MyIntSub(int):
+    "An int SUBCLASS whose __index__ disagrees with its value."
+    def __index__(self):
+        return int(str(self)) + 1
+
+
+class BoolIndex:
+    "__index__ answering an int SUBCLASS (bool) -- a DeprecationWarning."
+    def __index__(self):
+        return True
+
+
+def _index_ops():
+    "Sequence ops driven by __index__ objects, across every sequence type."
+    import operator
+    out = {}
+    two, three = Ind(2), Ind(3)
+    neg = Ind(-2)
+    for name, seq in (("list", [0, 1, 2, 3, 4, 5]),
+                      ("tuple", (0, 1, 2, 3, 4, 5)),
+                      ("str", "abcdef"),
+                      ("bytes", b"abcdef"),
+                      ("bytearray", bytearray(b"abcdef")),
+                      ("range", range(6))):
+        out[name + "_getitem"] = seq[two] == seq[2]
+        out[name + "_getitem_neg"] = seq[neg] == seq[-2]
+        out[name + "_slice"] = seq[two:Ind(4)] == seq[2:4]
+        # an OPEN-ended slice: the other bound is unset, not an index object
+        out[name + "_slice_open"] = (seq[two:] == seq[2:]
+                                    and seq[:two] == seq[:2])
+        out[name + "_slice_step"] = seq[::Ind(2)] == seq[::2]
+    # repetition, both directions, plus the in-place form
+    out["list_mul"] = [7] * three == [7, 7, 7]
+    out["list_rmul"] = three * [7] == [7, 7, 7]
+    out["tuple_mul"] = (7,) * three == (7, 7, 7)
+    out["str_mul"] = "ab" * three == "ababab"
+    out["str_rmul"] = three * "ab" == "ababab"
+    lst = [7]
+    lst *= three
+    out["list_imul"] = lst == [7, 7, 7]
+    # mutation through an index object
+    lst = [0, 1, 2]
+    lst[two] = 9
+    out["list_setitem"] = lst == [0, 1, 9]
+    del lst[two]
+    out["list_delitem"] = lst == [0, 1]
+    # operator.index
+    out["opindex_plain"] = operator.index(7) == 7
+    out["opindex_obj"] = operator.index(Ind(4)) == 4
+    out["opindex_int_subclass_uses_value"] = operator.index(MyIntSub(7)) == 7
+    out["int_subclass_dunder_still_8"] = MyIntSub(7).__index__() == 8
+    return out
+
+
+def _index_errors():
+    "The error shapes: all catchable TypeError / OverflowError."
+    import operator
+    out = {}
+    out["nonint_index_result"] = _t(lambda: [1, 2][Ind('dumb')])
+    out["nonint_slice_bound"] = _t(lambda: [1, 2][Ind('dumb'):])
+    out["opindex_nonint_result"] = _t(lambda: operator.index(Ind('dumb')))
+    out["opindex_no_index"] = _t(lambda: operator.index(Plain()))
+    out["float_index"] = _t(lambda: [1, 2][1.0])
+    out["str_index_msg"] = _msg(lambda: "ab"[None])
+    out["list_index_msg"] = _msg(lambda: [1, 2][None])
+    # 'a' * 2**100 is an OverflowError in CPython -- Grail used to attempt the
+    # build and take the session down with AlmostOutOfMemory.
+    out["repeat_huge"] = _ovf(lambda: "a" * (2 ** 100))
+    out["repeat_huge_negative"] = _ovf(lambda: "a" * -(2 ** 100))
+    out["repeat_huge_list"] = _ovf(lambda: [1] * (2 ** 100))
+    return out
+
+
+def _index_deprecation():
+    """__index__ answering an int subclass warns and normalizes to exact int.
+
+    Observed through simplefilter("error"), not by spying on warnings.warn:
+    assigning warnings.warn DOES stick as an attribute, but a compiled
+    ``warnings.warn(...)'' call site still reaches the real implementation, so
+    the spy never fires.  (catch_warnings(record=True) is no good either --
+    Grail's CatchWarnings is not iterable, and that TypeError escapes module
+    import and takes the whole SUnit shard down.)"""
+    import operator
+    import warnings
+    try:
+        warnings.simplefilter("error", DeprecationWarning)
+        try:
+            operator.index(BoolIndex())
+            warned = False
+        except DeprecationWarning:
+            warned = True
+        warnings.simplefilter("ignore", DeprecationWarning)
+        n = operator.index(BoolIndex())
+    finally:
+        warnings.resetwarnings()
+    return [n == 1, type(n) is int, warned]
+
+
 RESULTS = {
+    # --- __index__ protocol ---
+    "index_ops": _index_ops(),
+    "index_errors": _index_errors(),
+    "index_deprecation": _index_deprecation(),
     # --- reflected equality: the left operand has no __eq__ of its own ------
     "nocmp_eq_eqonx": NoCmp(1) == EqOnX(1),
     "eqonx_eq_nocmp": EqOnX(1) == NoCmp(1),
