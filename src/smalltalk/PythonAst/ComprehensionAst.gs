@@ -227,7 +227,7 @@ ___stLiteral: aString
 	name into the traceback-frame handler."
 
 	| ws |
-	ws := WriteStream on: String new.
+	ws := AppendStream on: Unicode7 new.
 	ws nextPut: $'.
 	aString do: [:c | c == $' ifTrue: [ws nextPut: $']. ws nextPut: c].
 	ws nextPut: $'.

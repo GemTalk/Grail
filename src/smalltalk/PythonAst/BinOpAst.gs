@@ -85,7 +85,7 @@ printSmalltalkOn: aStream
 	Non-arithmetic operators keep the bare dunder send."
 
 	| opStream sel helper |
-	opStream := WriteStream on: String new.
+	opStream := AppendStream on: String new.
 	op printSmalltalkOn: opStream.
 	sel := opStream contents trimSeparators.
 	helper := self ___pyBinOpHelperFor___: sel.

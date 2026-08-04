@@ -1400,7 +1400,7 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 
 	| src lf |
 	lf := Character lf asString.
-	src := WriteStream on: Unicode7 new.
+	src := AppendStream on: Unicode7 new.
 	src nextPutAll: 'value: ___pos___ value: ___kw___'; nextPutAll: lf.
 	src nextPutAll: '| instance dynInit |'; nextPutAll: lf.
 	((self firstBaseIsStr or: [self firstBaseIsBytesLike])
@@ -1778,7 +1778,7 @@ ___methodAliasSourceFor___: aliasName def: origDef
 	``__lt__: ___1'' / ``^ self __eq__: ___1''."
 
 	| stream arity emitSel |
-	stream := WriteStream on: Unicode7 new.
+	stream := AppendStream on: Unicode7 new.
 	arity := origDef instanceMethodArity.
 	emitSel := [:sel |
 		stream nextPutAll: sel asString.
@@ -2102,7 +2102,7 @@ emitMethodAnnotationsTableOn: aStream className: aClassName
 	| annotated src |
 	annotated := self instanceMethodDefs select: [:def | def hasAnnotations].
 	annotated isEmpty ifTrue: [^ self].
-	src := WriteStream on: String new.
+	src := AppendStream on: String new.
 	src nextPutAll: '___methodAnnotationsTable___'; lf.
 	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
 	annotated do: [:def |

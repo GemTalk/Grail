@@ -72,7 +72,7 @@ printSmalltalkOn: aStream left: left rightList: right rhsTemp: rhsName lhsTemp: 
 		 left printSmalltalkWithParenthesisOn: aStream.
 	].
 
-	opStream := WriteStream on: String new.
+	opStream := AppendStream on: Unicode7 new.
 	self printSmalltalkOn: opStream.
 	sel := opStream contents trimSeparators.
 	helper := self ___cmpHelperFor___: sel.

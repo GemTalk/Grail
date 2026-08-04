@@ -277,7 +277,7 @@ executeWithScope: aSymbolList as: aKind
 		list passed to _compileInContext: isn't reproduced here, so
 		free-name resolution may differ in a true topaz run; the file
 		is for inspection rather than literal replay."
-		tpzSource := (WriteStream on: Unicode7 new)
+		tpzSource := (AppendStream on: Unicode7 new)
 			nextPutAll: '! '; nextPutAll: tpzPath;
 			nextPutAll: '   (Module: '; nextPutAll: name;
 			nextPut: $); lf; lf;

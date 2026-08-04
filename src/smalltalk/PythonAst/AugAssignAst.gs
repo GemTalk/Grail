@@ -114,7 +114,7 @@ printSmalltalkOn: aStream
 		].
 	"Derive the in-place / binary dunder selectors (shared by the
 	closure-cell and simple-local paths below)."
-	opStream := WriteStream on: String new.
+	opStream := AppendStream on: Unicode7 new.
 	op printSmalltalkOn: opStream.
 	binSel := opStream contents trimSeparators.
 	iSel := '__i' , (binSel copyFrom: 3 to: binSel size).
