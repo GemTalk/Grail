@@ -1822,6 +1822,17 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	today, but correct if a data-mixed functional enum lands here later)."
 	[Enum ___grailInstallClassProtocol: newCls] @env0:on: Error do: [:ex | "best effort"].
 	[Enum ___grailInstallEnumOutput: newCls] @env0:on: Error do: [:ex | "best effort"].
+	"Honor the ``qualname='' kwarg (Enum('Theory', names, qualname='x')):
+	object>>__qualname__ otherwise answers the class NAME (positional[1]).  Compile
+	a metaclass __qualname__ override returning the given qualname
+	(test_enum_function_with_qualname)."
+	(keywords ~~ nil and: [keywords @env0:includesKey: 'qualname']) ifTrue: [ | qn src |
+		qn := (keywords @env0:at: 'qualname') @env0:asString.
+		src := '__qualname__' @env0:, (String @env0:with: Character @env0:lf)
+			@env0:, '	^ ''' @env0:, (qn @env0:copyReplaceAll: '''' with: '''''')
+			@env0:, ''''.
+		[(newCls @env0:class) ___compileMethod: src category: 'Grail-Enum Metaclass']
+			@env0:on: Error do: [:ex | "best effort"]].
 	^ newCls
 %
 
