@@ -210,6 +210,32 @@ ___grailRecordFor: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailGnvStaticStore
+	"Per-SESSION map: enum class -> the PyStaticMethod wrapping its
+	_generate_next_value_.  Used ONLY for FUNCTIONAL enums, which (unlike
+	class-syntax enums) have no dynInstVars holder to hold the staticmethod, so
+	object>>___classDict___ reads this to surface it in cls.__dict__
+	(test_gnv_is_static Function variants).  SessionTemps-backed like
+	___grailRegistry___ so it never dirties committed state."
+
+	| s |
+	s := SessionTemps @env0:current @env0:at: #GrailEnumGnvStatic otherwise: nil.
+	s @env0:isNil ifTrue: [
+		s := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailEnumGnvStatic put: s].
+	^ s
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailGnvStaticFor: cls
+	"The PyStaticMethod for a functional enum's _generate_next_value_, or nil."
+
+	^ self ___grailGnvStaticStore @env0:at: cls otherwise: nil
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailBuildingSet
 	"Per-SESSION set of enum classes whose members are mid-construction.
 	A class-body ``def __new__`` runs while the class is in this set; if
@@ -697,6 +723,21 @@ ___grailBuildMembers: cls names: attrNames
 					withArguments: { initArgs. KeyValueDictionary @env0:new }]]]]
 		@env0:ensure: [Enum ___grailBuildingSet @env0:remove: cls @env0:ifAbsent: []].
 	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members).
+	"CPython EnumType wraps a user _generate_next_value_ as a staticmethod in the
+	class __dict__ (test_gnv_is_static: type(cls.__dict__['_generate_next_value_'])
+	is staticmethod).  Grail compiles gnv as a plain method; store a PyStaticMethod
+	wrapper in the per-class dynamic-attr holder so BOTH cls._generate_next_value_
+	and cls.__dict__['_generate_next_value_'] (which reads that holder) answer a
+	staticmethod.  Only when the class actually defines a gnv (gnvClass instance-
+	side / gnvStaticClass @staticmethod class-side) -- a plain enum has none."
+	(gnvClass @env0:notNil or: [gnvStaticClass @env0:notNil]) ifTrue: [ | sm gnvFn |
+		gnvFn := gnvClass @env0:notNil
+			ifTrue: [UnboundMethod definingClass: gnvClass selector: #'_generate_next_value_:_:_:']
+			ifFalse: [UnboundMethod definingClass: gnvStaticClass selector: #'_generate_next_value_:_:_:_:'].
+		sm := PyStaticMethod @env0:new.
+		sm @env0:dynamicInstVarAt: #'__func__' put: gnvFn.
+		cls @env0:perform: #'___pyAttrStore___:put:' env: 1
+			withArguments: { '_generate_next_value_'. sm }].
 	"_order_ validation (CPython EnumType): when the class declares an
 	``_order_'' string, the canonical member names in DEFINITION order must
 	match it exactly -- a wrong order, or extra names on either side, raises
@@ -1580,7 +1621,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	delegates to the metaclass __getitem__, which both the Enum and
 	IntEnum metaclass chains implement."
 
-	| className names start pairs newCls byValue byName members |
+	| className names start pairs newCls byValue byName members gnvFnValue |
 	className := (positional @env0:at: 1) @env0:asSymbol.
 	"``names'' may be positional[2] or the ``names='' keyword (Enum('bad',
 	names=0)); read both so a non-iterable value under either form reaches the
@@ -1650,6 +1691,14 @@ ___grailFunctional: cls positional: positional keywords: keywords
 								with: (nextAuto @env0:value: idx value: item @env0:asString))]
 							ifFalse: [pairs @env0:add: (Array @env0:with: (item @env0:at: 1) @env0:asString
 								with: (item @env0:at: 2))]]]]].
+	"Remember a ``_generate_next_value_'' entry from the functional members dict
+	(the gnv) -- surfaced below as a staticmethod in cls.__dict__ via the session
+	gnv-static store (test_gnv_is_static Function variants)."
+	gnvFnValue := nil.
+	[ | gnvPair |
+	gnvPair := pairs @env0:detect: [:p | (p @env0:at: 1) @env0:asString @env0:= '_generate_next_value_']
+		ifNone: [nil].
+	gnvPair @env0:notNil ifTrue: [gnvFnValue := gnvPair @env0:at: 2] ] @env0:value.
 	newCls := cls ___subclass___: className instVarNames: #() classInstVarNames: #().
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
@@ -1757,6 +1806,17 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	^ self __getitem__: ''' @env0:, nameStr @env0:, '''')
 				category: 'Grail-Class Attrs']]] value.
 	self ___grailRegistry___ @env0:at: newCls put: (Array @env0:with: byValue with: byName with: members).
+	"Record the functional gnv as a staticmethod in the session gnv-static store;
+	___classDict___ surfaces it in newCls.__dict__ (functional enums have no
+	dynInstVars holder, so the class-syntax holder path can't be used).  A value
+	already a staticmethod (BusyGNV passes ``staticmethod(fn)'') is kept; a bare
+	function is wrapped."
+	gnvFnValue @env0:notNil ifTrue: [ | sm |
+		sm := (gnvFnValue isKindOf: PyStaticMethod)
+			ifTrue: [gnvFnValue]
+			ifFalse: [ | s | s := PyStaticMethod @env0:new.
+				s @env0:dynamicInstVarAt: #'__func__' put: gnvFnValue. s ].
+		self ___grailGnvStaticStore @env0:at: newCls put: sm].
 	"Same class-protocol + repr/str/format installs as the class-syntax builder
 	(harmless no-op for the Enum-rooted classes the functional API produces
 	today, but correct if a data-mixed functional enum lands here later)."

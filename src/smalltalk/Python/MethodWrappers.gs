@@ -98,6 +98,19 @@ value: positional value: keywords
 	^ self ___allocateInstance___: positional kw: keywords
 %
 
+category: 'Grail-Class-Call Fast Path'
+classmethod: PyStaticMethod
+__new__: fn
+	"``staticmethod(fn)'' fixed-arity class-new fast path -- CallAst emits
+	``(staticmethod @env1:__new__: f)'' now that the bare name resolves to this
+	CLASS (so ``type(staticmethod(f)) is staticmethod'').  Mirrors ___new__:kw:."
+
+	| inst |
+	inst := self @env0:new.
+	inst @env0:dynamicInstVarAt: #'__func__' put: fn.
+	^ inst
+%
+
 category: 'Grail-Instantiation'
 classmethod: PyStaticMethod
 ___pyCallValue___: positional kw: kwargs
@@ -188,6 +201,17 @@ value: positional value: keywords
 	"classmethod(f) -- the class-call entry."
 
 	^ self ___allocateInstance___: positional kw: keywords
+%
+
+category: 'Grail-Class-Call Fast Path'
+classmethod: PyClassMethod
+__new__: fn
+	"``classmethod(fn)'' fixed-arity class-new fast path (see PyStaticMethod)."
+
+	| inst |
+	inst := self @env0:new.
+	inst @env0:dynamicInstVarAt: #'__func__' put: fn.
+	^ inst
 %
 
 category: 'Grail-Instantiation'
@@ -303,3 +327,16 @@ ___pythonValueAttrs___
 %
 
 set compile_env: 0
+
+! Expose PyStaticMethod / PyClassMethod under their PYTHON names in the Python
+! dict so ___initBuiltinNamespace___ (builtins.gs, which already lists
+! #staticmethod/#classmethod and binds each name that resolves to a class) makes
+! the bare name resolve to the TYPE -- ``type(staticmethod(f)) is staticmethod''.
+! ``staticmethod(f)'' behaviour is unchanged (the class-call builds the same
+! wrapper the removed builtins method did); the @staticmethod decorator is
+! parse-time in ClassDefAst and never used the name.
+doit
+Python at: #'staticmethod' put: PyStaticMethod.
+Python at: #'classmethod' put: PyClassMethod.
+true
+%
