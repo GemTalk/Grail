@@ -697,6 +697,21 @@ ___grailBuildMembers: cls names: attrNames
 					withArguments: { initArgs. KeyValueDictionary @env0:new }]]]]
 		@env0:ensure: [Enum ___grailBuildingSet @env0:remove: cls @env0:ifAbsent: []].
 	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members).
+	"CPython EnumType wraps a user _generate_next_value_ as a staticmethod in the
+	class __dict__ (test_gnv_is_static: type(cls.__dict__['_generate_next_value_'])
+	is staticmethod).  Grail compiles gnv as a plain method; store a PyStaticMethod
+	wrapper in the per-class dynamic-attr holder so BOTH cls._generate_next_value_
+	and cls.__dict__['_generate_next_value_'] (which reads that holder) answer a
+	staticmethod.  Only when the class actually defines a gnv (gnvClass instance-
+	side / gnvStaticClass @staticmethod class-side) -- a plain enum has none."
+	(gnvClass @env0:notNil or: [gnvStaticClass @env0:notNil]) ifTrue: [ | sm gnvFn |
+		gnvFn := gnvClass @env0:notNil
+			ifTrue: [UnboundMethod definingClass: gnvClass selector: #'_generate_next_value_:_:_:']
+			ifFalse: [UnboundMethod definingClass: gnvStaticClass selector: #'_generate_next_value_:_:_:_:'].
+		sm := PyStaticMethod @env0:new.
+		sm @env0:dynamicInstVarAt: #'__func__' put: gnvFn.
+		cls @env0:perform: #'___pyAttrStore___:put:' env: 1
+			withArguments: { '_generate_next_value_'. sm }].
 	"_order_ validation (CPython EnumType): when the class declares an
 	``_order_'' string, the canonical member names in DEFINITION order must
 	match it exactly -- a wrong order, or extra names on either side, raises
