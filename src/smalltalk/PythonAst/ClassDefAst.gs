@@ -752,24 +752,44 @@ printSmalltalkRuntimeOn: aStream
 					must see the def as already bound)."
 					attrAssignPos at: nm put: pos]].
 		].
+		"emittedChainValues: value-AST object -> the FIRST target key that
+		emitted it.  A class-body chained assignment ``a = b = expr'' makes
+		classBodyAttributes yield several pairs that all point at ONE value AST;
+		emitting it once per target re-evaluates the RHS per name, which is wrong
+		for an RHS with identity/side effects.  Block-wrapped only to add the
+		temp without touching the method-level declaration."
+		[:emittedChainValues |
 		classAttrs do: [:pair |
 			"pair value is nil for bare annotations (``x: int'' with no
 			assignment) — skip the init emit; the slot stays nil until
 			some later assignment fills it."
 			pair value ifNotNil: [
-				| myPos bound |
-				myPos := attrAssignPos at: pair key asSymbol
-					ifAbsent: [firstBinding at: pair key asSymbol ifAbsent: [nil]].
-				bound := IdentitySet new.
-				myPos ifNotNil: [
-					firstBinding keysAndValuesDo: [:nm :pos |
-						pos < myPos ifTrue: [bound add: nm]]].
-				CallAst classBodyBoundNames: (myPos isNil ifTrue: [nil] ifFalse: [bound]).
-				aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key; nextPutAll: ': '.
-				pair value printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPutAll: '.'; lf
+				(emittedChainValues includesKey: pair value)
+					ifTrue: [
+						"A later target of a class-body chained assignment
+						(``first = primero = auto()'').  Read the FIRST target's
+						already-stored class attribute rather than re-emitting the
+						RHS, so every name shares the single evaluation -- one
+						GrailEnumAuto marker, which the enum builder then aliases."
+						aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key;
+							nextPutAll: ': ('; nextPutAll: name; nextPutAll: ' ';
+							nextPutAll: (emittedChainValues at: pair value);
+							nextPutAll: ').'; lf]
+					ifFalse: [
+						| myPos bound |
+						emittedChainValues at: pair value put: pair key.
+						myPos := attrAssignPos at: pair key asSymbol
+							ifAbsent: [firstBinding at: pair key asSymbol ifAbsent: [nil]].
+						bound := IdentitySet new.
+						myPos ifNotNil: [
+							firstBinding keysAndValuesDo: [:nm :pos |
+								pos < myPos ifTrue: [bound add: nm]]].
+						CallAst classBodyBoundNames: (myPos isNil ifTrue: [nil] ifFalse: [bound]).
+						aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key; nextPutAll: ': '.
+						pair value printSmalltalkWithParenthesisOn: aStream.
+						aStream nextPutAll: '.'; lf]
 			].
-		].
+		]] value: IdentityKeyValueDictionary new.
 		"Top-level ``if'' statements in the class body: CPython runs
 		them at class-DEFINITION time — the C-vs-Python dual-module
 		pattern (``if c_functools: partial = c_functools.partial''
