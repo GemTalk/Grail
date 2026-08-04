@@ -1492,6 +1492,22 @@ ___grailInstallClassProtocol: cls
 				src @env0:isNil ifFalse: [
 					mc ___compileMethod: src category: cat @env0:asString]]
 					@env0:on: Error do: [:e | "best effort"]]].
+	"int.from_bytes: an int-mixed enum (``class E(int, Enum)'') roots at
+	AbstractPyInt, whose metaclass lacks kernel Integer's from_bytes
+	classmethod -- so ``E.from_bytes(...)'' was an AttributeError.  IntEnum
+	carries from_bytes (Grail-Enum Metaclass); copy its version onto any
+	other AbstractPyInt-rooted enum metaclass that lacks it so from_bytes
+	decodes the bytes then constructs the MEMBER (CPython int.from_bytes
+	calls cls(result) for a subclass)."
+	(cls @env0:inheritsFrom: AbstractPyInt) ifTrue: [
+		#(#'from_bytes:_:' #'from_bytes:_:_:') @env0:do: [:sel |
+			(mc @env0:whichClassIncludesSelector: sel environmentId: 1) @env0:isNil ifTrue: [
+				[ | src cat |
+				src := IntEnum @env0:class @env0:sourceCodeAt: sel environmentId: 1.
+				cat := IntEnum @env0:class @env0:categoryOfSelector: sel environmentId: 1.
+				src @env0:isNil ifFalse: [
+					mc ___compileMethod: src category: cat @env0:asString]]
+					@env0:on: Error do: [:e | "best effort"]]]].
 	^ cls
 %
 
@@ -2117,6 +2133,29 @@ category: 'Grail-Enum Metaclass'
 classmethod: IntEnum
 __new__: aValue
 	^ Enum ___grailLookupValue: self value: aValue
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: IntEnum
+from_bytes: bytesArg _: byteorder
+	"int.from_bytes, inherited by IntEnum.  Grail's ``int'' is kernel
+	Integer (which owns from_bytes), but IntEnum roots at AbstractPyInt, a
+	separate class -- so IntEnum does not inherit it and ``IntStooges.
+	from_bytes'' was an AttributeError.  Delegate the byte decoding to
+	Integer, then -- as CPython int.from_bytes does for a subclass (calls
+	cls(result)) -- resolve the int through this enum, yielding the MEMBER
+	(or ValueError for an unknown value)."
+
+	^ self from_bytes: bytesArg _: byteorder _: false
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: IntEnum
+from_bytes: bytesArg _: byteorder _: signed
+	| raw |
+	raw := Integer @env0:perform: #'from_bytes:_:_:' env: 1
+		withArguments: { bytesArg. byteorder. signed }.
+	^ Enum ___grailLookupValue: self value: raw
 %
 
 category: 'Grail-Enum Metaclass'
