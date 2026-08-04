@@ -2200,6 +2200,19 @@ __dir__
 		@env0:do: [:d | interesting @env0:add: d].
 	(Enum ___grailMembers: self) @env0:do: [:m |
 		interesting @env0:add: (m @env0:dynamicInstVarAt: #name) @env0:asString].
+	"CPython EnumType.__dir__ ALSO surfaces __init__/__format__/__repr__/__str__
+	when the class OVERRIDES them (getattr(cls, m) is not getattr(Enum, m)).  The
+	test's ``enum_dir'' helper omits this loop -- it only matters for a class that
+	actually defines its own, which the dir_on_class/dir_on_sub fixtures do not, so
+	adding it keeps ``dir == enum_dir'' there while fixing test_dir_with_custom_
+	dunders.  (__new__ is handled by the always-added set above.)"
+	#('__init__' '__format__' '__repr__' '__str__') @env0:do: [:d |
+		| sel |
+		"A user __init__ compiles to the Grail init selector ___init__:kw:, not
+		#__init__ (the others keep their Python dunder selector)."
+		sel := (d @env0:= '__init__') ifTrue: [#'___init__:kw:'] ifFalse: [d @env0:asSymbol].
+		(Enum ___grailUserProvides: self selector: sel)
+			ifTrue: [interesting @env0:add: d]].
 	mt := self _member_type_.
 	mt == object ifFalse: [
 		(mt @env1:__dir__) @env0:do: [:d | interesting @env0:add: d @env0:asString]].
