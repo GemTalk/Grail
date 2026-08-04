@@ -296,7 +296,8 @@ category: 'Grail-Python Metadata'
 method: UnboundMethod
 ___annotationsForClass___: aClass
 	"Superclass walk for the first ___methodAnnotationsTable___ entry named by
-	this handle's selector.  The table is compiled in ENVIRONMENT 1, so probe
+	this handle's selector.  The entry is a PEP 649 annotate FUNCTION, called
+	here with Format.VALUE.  The table is compiled in ENVIRONMENT 1, so probe
 	the metaclass with environmentId: 1 -- an env-0 ``canUnderstand:'' would
 	never see it.  Mirrors BoundMethod >> ___methodAnnotationsForClass___:name:."
 
@@ -306,7 +307,7 @@ ___annotationsForClass___: aClass
 		#'___methodAnnotationsTable___' environmentId: 1) ~~ nil) ifTrue: [
 			tbl := aClass ___methodAnnotationsTable___.
 			v := tbl @env0:at: selector @env0:asString otherwise: nil.
-			v == nil ifFalse: [^ v]].
+			v == nil ifFalse: [^ v @env0:value: { 1 } value: nil]].
 	^ self ___annotationsForClass___: (aClass @env0:superclass)
 %
 

@@ -325,19 +325,19 @@ printSmalltalkOn: aStream
 		parse-time class-declarative decorators (staticmethod /
 		classmethod / property) are excluded — the parser already handled
 		them by re-classing this node."
-		"Record this top-level function's __annotations__ (PEP 563 source
-		strings) on the module instance, keyed by the plain Python name.
-		``self'' here is the module instance (the module body compiles to a
-		method on the module class); BoundMethod >> __annotations__ reads it
-		back.  Emitted before any decorator application so the annotations
-		are available regardless of decoration."
+		"Record this top-level function's PEP 649 ``__annotate__'' on the
+		module instance, keyed by the plain Python name.  ``self'' here is
+		the module instance (the module body compiles to a method on the
+		module class); BoundMethod >> __annotations__ calls it back.
+		Emitted before any decorator application so the annotations are
+		available regardless of decoration."
 		self hasAnnotations ifTrue: [
 			aStream
 				lf;
 				nextPutAll: 'self @env0:___setFunctionAnnotations___: ''';
 				nextPutAll: name;
-				nextPutAll: ''' dict: '.
-			self emitAnnotationsDictOn: aStream.
+				nextPutAll: ''' annotate: '.
+			self emitAnnotateBlockOn: aStream.
 			aStream nextPutAll: '.'].
 		moduleDecorators := self applicableModuleDecorators.
 		moduleDecorators isEmpty ifTrue: [^self].
@@ -554,12 +554,13 @@ printSmalltalkOn: aStream
 	``___pyNamed___:''/``:annotations:''/``:doc:''/``:annotations:doc:'',
 	each defined on ExecBlock.  All stamps return self, so this composes
 	transparently in the ``name := <block>'' assignment / decorator
-	pipeline.  The annotation dict is built HERE, in the enclosing scope,
-	so its expressions resolve at def-time."
+	pipeline.  The annotate FUNCTION is built HERE, in the enclosing
+	scope, so it captures that scope -- but it is not called until
+	``__annotations__'' is read (PEP 649)."
 	aStream nextPutAll: ' @env0:___pyNamed___: '''; nextPutAll: name; nextPutAll: ''''.
 	self hasAnnotations ifTrue: [
-		aStream nextPutAll: ' annotations: '.
-		self emitAnnotationsDictOn: aStream].
+		aStream nextPutAll: ' annotate: '.
+		self emitAnnotateBlockOn: aStream].
 	self ___docString___ ifNotNil: [:doc |
 		aStream nextPutAll: ' doc: '.
 		self emitStringLiteral: doc on: aStream].
@@ -1058,27 +1059,69 @@ hasAnnotations
 
 category: 'Grail-code generation'
 method: FunctionDefAst
-emitAnnotationsDictOn: aStream
-	"Emit a Python dict expression { param-name -> annotation-SOURCE-
-	STRING, ..., 'return' -> ... }.  Annotations are stored as their
-	source strings (PEP 563 semantics) and NEVER evaluated: 55+
-	werkzeug/flask modules use ``from __future__ import annotations''
-	and annotate parameters with forward references to names not yet
-	bound at def-time, so evaluating would raise NameError and abort
-	the module load.  The strings are computed at codegen via
-	___annotationSourceString___; a consumer that needs the type
-	(functools.singledispatch.register) resolves the string itself."
+emitAnnotateBlockOn: aStream
+	"Emit this def's PEP 649 ``__annotate__'' -- a ONE-ARGUMENT block
+	taking a Format and answering { param-name -> annotation, ...,
+	'return' -> ... }.
 
-	aStream nextPutAll: '((PyDict @env0:new)'.
-	self ___annotatedArgs___ do: [:a |
+	The block is CREATED here, in the enclosing scope, so it captures the
+	def's own scope; it is not CALLED until ``__annotations__'' is read.
+	That deferral is the whole point.  Grail used to store annotations as
+	PEP 563 source strings precisely because evaluating at def-time
+	breaks module load -- 55+ werkzeug/flask modules annotate parameters
+	with forward references to names not yet bound -- but that made
+	``f.__annotations__'' answer strings where CPython 3.14 answers the
+	types, and left ``__annotate__'' with nothing to be.  Deferring gets
+	both: nothing evaluates during load, and the read sees real values by
+	which time the forward-referenced names are bound.
+
+	Each annotation is rendered by ___annotationValue___:source:format:,
+	which is handed BOTH the expression (as a block, to evaluate) and its
+	source text (for Format.STRING, and to name a ForwardRef).  Per
+	annotation rather than per dict, so Format.FORWARDREF can resolve the
+	keys it can and leave only the others unresolved."
+
+	"TWO parameters, (positional-array, kwargs-dict): that is Grail's
+	shape for a block used as a Python callable, the one
+	___pyCallValue___:kw: recognises by numArgs == 2.  A one-parameter
+	block is NOT callable from Python -- an env-1 ``value:value:'' send
+	finds Object's not-callable raiser before reaching block invocation --
+	and annotationlib.get_annotations does call this from Python."
+	| savedOwner |
+	aStream nextPutAll: '[:___annArgs___ :___annKw___ | ((PyDict @env0:new)'.
+	"Mark this def as the annotation owner for the duration, so NameAst
+	resolves the annotation expressions in the ENCLOSING scope -- the def's
+	own parameters must not shadow (CPython evaluates annotations there)."
+	savedOwner := CallAst annotationOwnerDefNode.
+	CallAst annotationOwnerDefNode: self.
+	[self ___annotatedArgs___ do: [:a |
 		aStream nextPutAll: ' @env0:at: '''; nextPutAll: a name asString; nextPutAll: ''' put: '.
-		self emitStringLiteral: a annotation ___annotationSourceString___ on: aStream.
+		self emitOneAnnotation: a annotation on: aStream.
 		aStream nextPut: $;].
 	returns ifNotNil: [
 		aStream nextPutAll: ' @env0:at: ''return'' put: '.
-		self emitStringLiteral: returns ___annotationSourceString___ on: aStream.
-		aStream nextPut: $;].
-	aStream nextPutAll: ' @env0:yourself)'
+		self emitOneAnnotation: returns on: aStream.
+		aStream nextPut: $;]]
+		ensure: [CallAst annotationOwnerDefNode: savedOwner].
+	aStream nextPutAll: ' @env0:yourself)]'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitOneAnnotation: aNode on: aStream
+	"One ``___annotationValue___:source:format:'' send: the annotation
+	expression wrapped in a block so it is evaluated only when the
+	annotate function runs, plus its codegen-time source text.
+
+	PyAnnotate, not ExecBlock: generated module code compiles against a
+	dictionary list without the kernel ``Globals'', so ``ExecBlock'' --
+	where this method otherwise belongs -- is an undefined symbol there."
+
+	aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
+	aNode printSmalltalkOn: aStream.
+	aStream nextPutAll: '] source: '.
+	self emitStringLiteral: aNode ___annotationSourceString___ on: aStream.
+	aStream nextPutAll: ' format: (___annArgs___ @env0:at: 1))'
 %
 
 category: 'Grail-code generation'

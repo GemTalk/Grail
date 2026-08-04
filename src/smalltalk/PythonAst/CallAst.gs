@@ -1609,6 +1609,34 @@ classBodyValueDefNode: aNodeOrNil
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+annotationOwnerDefNode
+	"The FunctionDefAst whose ANNOTATIONS are currently being emitted by
+	FunctionDefAst >> emitAnnotateBlockOn:, or nil.
+
+	Python evaluates parameter and return annotations in the scope that
+	ENCLOSES the def, not inside it -- so the def's own parameters must
+	not shadow anything while they are emitted.  werkzeug's
+	``def cache_control_property(key, empty, type, ...)'' annotates that
+	very ``type'' parameter with the BUILTIN ``type'', and without this
+	the annotation compiled as a read of the parameter: a temp that does
+	not exist in the enclosing scope where the annotate function is
+	built, i.e. CompileError 1001 ``undefined symbol type''.
+
+	___pythonLocalInEnclosingFunctions___: skips this one node (and only
+	this one -- a def nested INSIDE an annotation, or any enclosing def,
+	still binds normally)."
+
+	^ self ___compileContext___ at: #'annotationOwnerDefNode' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+annotationOwnerDefNode: aNodeOrNil
+	self ___compileContext___ at: #'annotationOwnerDefNode' put: aNodeOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 classBodyConditionalNames
 	"Names bound inside a class-body ``if'' branch (see ClassDefAst >>
 	emitClassBodyIfBranch:on:).  Like nested-class names they live in the

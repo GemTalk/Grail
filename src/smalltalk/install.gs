@@ -298,6 +298,7 @@ run
 	at: #'bytearray' put: nil;
 	at: #'PyMemoryView' put: nil;
 	at: #'PyCode' put: nil;
+	at: #'PyAnnotate' put: nil;
 	at: #'PyFrame' put: nil;
 	at: #'PyTraceback' put: nil;
 	at: #'cmath' put: nil;
@@ -617,6 +618,7 @@ run
 	at: #'ClassFunctionBindingTestCase' put: nil;
 	at: #'GenericClassSubscriptTestCase' put: nil;
 	at: #'GenericAliasTestCase' put: nil;
+	at: #'Pep649AnnotationsTestCase' put: nil;
 	at: #'GlobalStatementCodegenTestCase' put: nil;
 	at: #'EmailMessageTestCase' put: nil;
 	at: #'EnumAutoImportTestCase' put: nil;
@@ -925,6 +927,7 @@ input src/smalltalk/Python/Bytearray.gs
 input src/smalltalk/Python/complex.gs
 input src/smalltalk/Python/slice.gs
 input src/smalltalk/Python/PyCode.gs
+input src/smalltalk/Python/PyAnnotate.gs
 input src/smalltalk/Python/PyFrame.gs
 input src/smalltalk/Python/PyTraceback.gs
 input src/smalltalk/Python/iterator.gs
@@ -1361,6 +1364,7 @@ input src/smalltalk/PythonTests/DunderClassTestCase.gs
 input src/smalltalk/PythonTests/ClassFunctionBindingTestCase.gs
 input src/smalltalk/PythonTests/GenericClassSubscriptTestCase.gs
 input src/smalltalk/PythonTests/GenericAliasTestCase.gs
+input src/smalltalk/PythonTests/Pep649AnnotationsTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementCodegenTestCase.gs
 input src/smalltalk/PythonTests/EnumAutoImportTestCase.gs
 input src/smalltalk/PythonTests/Pep448StarredLiteralsTestCase.gs

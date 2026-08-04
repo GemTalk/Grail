@@ -279,12 +279,13 @@ def wrapper_assignments_matches_cpython_shape():
     """The constant is read directly by third-party code (jinja2.compiler
     splices it into a decorator's signature), so pin its content.
 
-    Grail names __annotations__ where CPython 3.14 names __annotate__ --
-    Grail computes annotations eagerly and has no PEP 649 __annotate__.
+    CPython 3.14's list exactly, __annotate__ included: copying the PEP 649
+    annotate FUNCTION is what hands a wrapper the wrapped function's
+    deferred annotations, rather than forcing them at wrap time.
     """
     return (functools.WRAPPER_ASSIGNMENTS
             == ('__module__', '__name__', '__qualname__', '__doc__',
-                '__annotations__', '__type_params__')
+                '__annotate__', '__type_params__')
             and functools.WRAPPER_UPDATES == ('__dict__',))
 
 

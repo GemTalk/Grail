@@ -397,7 +397,14 @@ ___pythonLocalInEnclosingFunctions___: aSymbol
 				A lambda nested in a def still sees the DEF's locals: the walk
 				only skips the lambda it climbed out of, then carries on --
 				``def f(): x = 1; return lambda x=x: x'' reads f's x."
-				((node isKindOf: LambdaAst) and: [prev isKindOf: ArgumentsAst])
+				"An ANNOTATION of this very def: Python evaluates parameter and
+				return annotations in the ENCLOSING scope, so the def's own
+				parameters do not shadow.  Same rule as the lambda-default case
+				above, and needed for the same reason -- the annotate function is
+				built outside the def, where a parameter temp does not exist.  See
+				CallAst >> annotationOwnerDefNode."
+				(node == CallAst annotationOwnerDefNode
+					or: [(node isKindOf: LambdaAst) and: [prev isKindOf: ArgumentsAst]])
 					ifFalse: [
 						(self ___functionBindsPythonLocal___: node named: aSymbol)
 							ifTrue: [^ true]]].

@@ -2258,10 +2258,16 @@ category: 'Grail-code generation'
 method: ClassDefAst
 emitMethodAnnotationsTableOn: aStream className: aClassName
 	"Compile a class-side ``___methodAnnotationsTable___'' returning a dict
-	``method-name -> annotations dict'' for every annotated method.
-	The method dict expressions are FunctionDefAst >> emitAnnotationsDictOn:
-	output (PEP 563 source strings).  No-op when no method is annotated, so
+	``method-name -> annotate function'' for every annotated method.  The
+	values are FunctionDefAst >> emitAnnotateBlockOn: output (PEP 649);
+	the CALLER supplies the Format.  No-op when no method is annotated, so
 	only classes that need it pay for the extra class-side method.
+
+	The blocks are built when the table method RUNS, so -- unlike a nested
+	def, whose annotate function is stamped once at def-time -- a method's
+	``__annotate__'' is not identity-stable across reads.  Nothing asserts
+	that for methods, and the dict it computes was already rebuilt per
+	read before this.
 
 	EVERY def, not just the instance-side ones: a @classmethod or @staticmethod
 	has annotations that Python reports the same way, and singledispatch's
@@ -2280,7 +2286,7 @@ emitMethodAnnotationsTableOn: aStream className: aClassName
 	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
 	annotated do: [:def |
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
-		def emitAnnotationsDictOn: src.
+		def emitAnnotateBlockOn: src.
 		src nextPut: $;].
 	src nextPutAll: ' @env0:yourself)'.
 	self
