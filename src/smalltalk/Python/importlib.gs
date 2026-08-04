@@ -1,4 +1,5 @@
 ! ------------------- Superclass check
+set compile_env: 0
 run
 module ifNil: [self error: 'module is not defined. Check file ordering.'].
 %
@@ -60,7 +61,6 @@ importlib removeAllMethods.
 importlib class removeAllMethods.
 %
 
-set compile_env: 0
 
 category: 'Grail-For Tests'
 classmethod: importlib
@@ -1205,6 +1205,23 @@ ___runSessionInit___: moduleInstance
 	^ moduleInstance
 %
 
+category: 'Private'
+classmethod: importlib
+_stateMap
+  | map tmps key |
+	map := (tmps := SessionTemps current) at: (key := #'GrailModuleHashState') otherwise: nil.
+	map ifNil:[
+		map := SymbolKeyValueDictionary new.
+	  tmps at: key put: map .
+  ].
+  ^ map
+%
+category: 'Private'
+method: importlib
+_stateMap
+  ^ self class _stateMap
+%
+
 category: 'Grail-Module Loading'
 classmethod: importlib
 loadModuleFromPath: pathString name: moduleName
@@ -1243,10 +1260,7 @@ loadModuleFromPath: pathString name: moduleName
 		hashes := self ___canonicalModuleHashes___.
 		hashState := ((hashes at: moduleName otherwise: nil) = srcHash)
 			ifTrue: [#'match'] ifFalse: [#'stale'].
-		stateMap := SessionTemps current at: #'GrailModuleHashState' otherwise: nil.
-		stateMap isNil ifTrue: [
-			stateMap := KeyValueDictionary new.
-			SessionTemps current at: #'GrailModuleHashState' put: stateMap].
+    stateMap := self _stateMap .
 		"Phase-5 warm BIND (doc par.10.2): a committed module INSTANCE with
 		matching source binds -- register in sys.modules, adopt as the class's
 		session singleton, return.  The module body does NOT re-run: the
@@ -2765,10 +2779,7 @@ reload: aModule
 	canonical := importlib @env0:___canonicalClassesEnabled___.
 	canonical ifTrue: [
 		srcHash := (importlib @env0:___sourceStringForPath___: path @env0:asString) @env0:sha1Sum.
-		stateMap := SessionTemps @env0:current @env0:at: #'GrailModuleHashState' otherwise: nil.
-		stateMap @env0:isNil ifTrue: [
-			stateMap := SymbolKeyValueDictionary @env0:new.
-			SessionTemps @env0:current @env0:at: #'GrailModuleHashState' put: stateMap].
+		stateMap := self @env0:_stateMap .
 		stateMap @env0:at: name @env0:asSymbol put: #'stale'].
 	moduleAst := importlib @env0:astForPath: path @env0:asString.
 	moduleAst @env0:name: name.
