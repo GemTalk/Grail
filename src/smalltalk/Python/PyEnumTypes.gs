@@ -853,6 +853,17 @@ ___grailMissing: cls value: aValue
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+_missing_: value
+	"CPython Enum._missing_ default: no match -> None.  A cooperative user
+	override ending with ``return super()._missing_(value)'' resolves here
+	instead of AttributeError ``super(): no parent method _missing_''
+	(test_multiple_mixin_with_common_data_type / test_missing_exceptions_reset)."
+
+	^ None
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailIsFlagClass: cls
 	"True when cls is Flag-natured: chained under Flag/IntFlag, or an
 	MI class whose C3 __mro__ includes Flag (``class E(int, Flag)``
@@ -1157,7 +1168,8 @@ ___grailIsEnumBase: b
 	^ (b == Enum) or: [(b @env0:inheritsFrom: Enum)
 		or: [(b == IntEnum) or: [(b @env0:inheritsFrom: IntEnum)
 		or: [(b == IntFlag) or: [(b @env0:inheritsFrom: IntFlag)
-		or: [(b == StrEnum) or: [b @env0:inheritsFrom: StrEnum]]]]]]]
+		or: [(b == StrEnum) or: [(b @env0:inheritsFrom: StrEnum)
+		or: [(Enum ___grailRecordFor: b) @env0:notNil]]]]]]]]
 %
 
 category: 'Grail-Enum Metaclass'
