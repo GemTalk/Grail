@@ -106,6 +106,20 @@ __next__
 	^ item
 %
 
+category: 'Grail-Iterator Protocol'
+method: range_iterator
+__length_hint__
+	"Items not yet produced -- CPython's rangeiter_len.  operator.length_hint
+	presizes with it, and the invariant it must satisfy is
+	len(it) == len(list(it)), so the hint has to DECREASE with every __next__.
+	len() on the underlying range is NOT the same thing: it stays at the
+	original size forever (test_iterlen TestXrange/TestList test_invariant
+	reported 0 here, because with no __length_hint__ at all
+	operator.length_hint fell through to its default)."
+
+	^ (collection @env0:size @env0:- position) @env0:max: 0
+%
+
 category: 'Grail-Pickle Protocol'
 method: range_iterator
 _getstate

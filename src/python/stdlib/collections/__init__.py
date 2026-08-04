@@ -103,24 +103,77 @@ class OrderedDict(dict):
         return (key, value)
 
 
+class _deque_iterator:
+    """Iterator over a deque.
+
+    A deque is TEMPORARILY IMMUTABLE while it is being iterated: CPython's
+    dequeiter compares the deque's mutation counter against the one it
+    snapshotted, raises RuntimeError('deque mutated during iteration') on the
+    next __next__ after any structural change, and latches its remaining count
+    to zero at that moment (dequeiter_next / dequeiter_len in _collectionsmodule.c).
+
+    Grail's deque used to hand out ``iter(self._items)`` -- a plain
+    list_iterator, which happily kept going after a mutation and kept reporting
+    a remaining count, so test_iterlen's TestDeque/TestDequeReversed
+    test_immutable_during_iteration saw no RuntimeError at all.
+
+    The counter (rather than a simple length comparison) is what catches a
+    same-size mutation such as ``d.pop(); d.append(x)`` or ``d.rotate()``.
+    """
+
+    def __init__(self, dq, reverse=False):
+        self._deque = dq
+        self._state = dq._state
+        self._reverse = reverse
+        self._counter = len(dq)
+        self._index = self._counter - 1 if reverse else 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._deque._state != self._state:
+            # Latched: the iteration can never be completed, so the length hint
+            # must read 0 from here on (the len(it) == len(list(it)) invariant).
+            self._counter = 0
+            raise RuntimeError("deque mutated during iteration")
+        if self._counter <= 0:
+            raise StopIteration
+        item = self._deque._items[self._index]
+        self._index = self._index - 1 if self._reverse else self._index + 1
+        self._counter -= 1
+        return item
+
+    def __length_hint__(self):
+        return self._counter
+
+
 class deque:
     """Double-ended queue backed by a list.  O(n) for arbitrary
     indexing, O(1) amortized for append/appendleft/pop/popleft."""
 
+    # Bumped by every structural mutation so a live _deque_iterator can detect
+    # one (CPython's deque->state).  Also a class-level default, so an instance
+    # that somehow skipped __init__ still reads a value rather than raising.
+    _state = 0
+
     def __init__(self, iterable=None, maxlen=None):
         self._items = []
         self.maxlen = maxlen
+        self._state = 0
         if iterable is not None:
             for item in iterable:
                 self.append(item)
 
     def append(self, item):
+        self._state += 1
         self._items.append(item)
         if self.maxlen is not None:
             while len(self._items) > self.maxlen:
                 self._items.pop(0)
 
     def appendleft(self, item):
+        self._state += 1
         self._items.insert(0, item)
         if self.maxlen is not None:
             while len(self._items) > self.maxlen:
@@ -129,22 +182,33 @@ class deque:
     def pop(self):
         if not self._items:
             raise IndexError("pop from an empty deque")
+        self._state += 1
         return self._items.pop()
 
     def popleft(self):
         if not self._items:
             raise IndexError("pop from an empty deque")
+        self._state += 1
         return self._items.pop(0)
 
     def extend(self, iterable):
+        # ``d.extend(d)`` snapshots first, exactly as CPython's deque_extend
+        # does (``if (deque == iterable) ... PySequence_List``).  Without the
+        # snapshot the append would trip the mutation guard the iterator now
+        # enforces and raise RuntimeError; CPython doubles the deque instead.
+        if iterable is self:
+            iterable = list(self._items)
         for item in iterable:
             self.append(item)
 
     def extendleft(self, iterable):
+        if iterable is self:
+            iterable = list(self._items)
         for item in iterable:
             self.appendleft(item)
 
     def clear(self):
+        self._state += 1
         self._items = []
 
     def remove(self, value):
@@ -152,6 +216,7 @@ class deque:
         if absent — matches CPython's list / deque ``remove`` semantics."""
         for i, x in enumerate(self._items):
             if x == value:
+                self._state += 1
                 del self._items[i]
                 return
         raise ValueError("deque.remove(x): x not in deque")
@@ -168,6 +233,7 @@ class deque:
         raise ValueError("deque.index(x): x not in deque")
 
     def insert(self, i, value):
+        self._state += 1
         self._items.insert(i, value)
         if self.maxlen is not None and len(self._items) > self.maxlen:
             raise IndexError("deque already at its maximum size")
@@ -183,16 +249,17 @@ class deque:
         size = len(k)
         n = n % size
         if n != 0:
+            self._state += 1
             self._items = k[-n:] + k[:-n]
 
     def __len__(self):
         return len(self._items)
 
     def __iter__(self):
-        return iter(self._items)
+        return _deque_iterator(self)
 
     def __reversed__(self):
-        return iter(list(reversed(self._items)))
+        return _deque_iterator(self, True)
 
     def __getitem__(self, i):
         return self._items[i]

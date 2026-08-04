@@ -130,11 +130,17 @@ __next__
 category: 'Grail-Iterator Protocol'
 method: set_iterator
 __length_hint__
-	"Number of items not yet produced (CPython's set_iterator exposes this;
-	test_set's test_iterator_pickling asserts iter(s).__length_hint__() ==
-	len(s)).  Iteration is over a snapshot (elements), so the hint is exact."
+	"Number of items not yet produced (CPython's setiter_len; test_set's
+	test_iterator_pickling asserts iter(s).__length_hint__() == len(s)).
+	Iteration is over a snapshot (elements), so the hint is exact -- EXCEPT
+	once the underlying set's size has changed, when it is permanently zero:
+	__next__ raises RuntimeError from then on, so the iteration can never be
+	completed and a remaining count would break the len(it) == len(list(it))
+	invariant (test_iterlen TestSet test_immutable_during_iteration).  CPython
+	compares sizes for exactly this (si_used vs set->used)."
 
 	| remaining |
+	((collection @env0:size) @env0:= (elements @env0:size)) ifFalse: [^ 0].
 	remaining := elements @env0:size @env0:- position.
 	^ remaining @env0:< 0 ifTrue: [0] ifFalse: [remaining]
 %

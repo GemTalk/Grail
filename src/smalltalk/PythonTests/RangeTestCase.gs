@@ -277,29 +277,38 @@ test__repr__
 category: 'Grail-Tests - Iteration'
 method: RangeTestCase
 test__reversed__
-	"Test reversed(range(...))"
+	"Test reversed(range(...)).  CPython answers an ITERATOR, not the reversed
+	range -- a range's len() (and so its length_hint) is static, an iterator's
+	hint decreases as it is consumed.  This test used to assert start/stop/step
+	on a returned range; it now asserts the iterator shape."
 
-	| r rev |
+	| r rev collected |
 	r := Interval @env1:__new__: 0 _: 5.
 	rev := r @env1:__reversed__.
 
-	"reversed(range(0, 5)) -> range(4, -1, -1)"
-	self assert: (rev @env1:start) equals: 4.
-	self assert: (rev @env1:stop) equals: -1.
-	self assert: (rev @env1:step) equals: -1.
-	self assert: rev size equals: 5.
+	self assert: (rev @env1:__class__) equals: (Python at: #range_iterator).
+	self assert: (rev @env1:__length_hint__) equals: 5.
+	self assert: (rev @env1:__next__) equals: 4.
+	self assert: (rev @env1:__length_hint__) equals: 4.
+
+	collected := OrderedCollection new.
+	[[true] whileTrue: [collected add: rev @env1:__next__]]
+		on: (Python at: #StopIteration) do: [:ex | ex return: nil].
+	self assert: collected asArray equals: #(3 2 1 0).
+	self assert: (rev @env1:__length_hint__) equals: 0.
 %
 
 category: 'Grail-Tests - Iteration'
 method: RangeTestCase
 test__reversed__empty
-	"Test reversed() on empty range"
+	"Test reversed() on empty range -- an already-exhausted iterator."
 
 	| r rev |
 	r := Interval @env1:__new__: 0 _: 0.
 	rev := r @env1:__reversed__.
 
-	self assert: rev size equals: 0.
+	self assert: (rev @env1:__length_hint__) equals: 0.
+	self should: [rev @env1:__next__] raise: (Python at: #StopIteration).
 %
 
 category: 'Grail-Tests - Sequence Methods'

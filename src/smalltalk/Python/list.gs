@@ -74,6 +74,13 @@ __new__: iterable
 		].
 		^ result
 	].
+	"CPython presizes the result by asking the iterable for a length hint
+	BEFORE consuming it, so an exception raised by its __len__ /
+	__length_hint__ escapes list() (test_iterlen test_issue1242657).  Grail has
+	nothing to presize -- the answer is discarded -- but the call is observable;
+	see object>>___presizeLengthHint___.  Deliberately AFTER the exact-built-in
+	fast path above, which cannot raise."
+	iterable ___presizeLengthHint___.
 	cls := iterable @env0:class.
 	hasIter := (cls @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) notNil.
 	hasIter ifTrue: [
@@ -487,6 +494,10 @@ extend: iterable
 	((iterable @env0:class
 		@env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) ~~ nil) ifTrue: [
 		| iter done |
+		"CPython's list_extend presizes from a length hint first, so a raising
+		__len__ / __length_hint__ escapes extend() -- see
+		object>>___presizeLengthHint___ and list class>>__new__:."
+		iterable ___presizeLengthHint___.
 		iter := iterable __iter__.
 		done := false.
 		[done] @env0:whileFalse: [

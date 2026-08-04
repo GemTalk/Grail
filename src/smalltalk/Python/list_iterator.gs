@@ -107,12 +107,22 @@ _getstate
 category: 'Grail-Iterator Protocol'
 method: list_iterator
 __length_hint__
-	"Count of items not yet produced (operator.length_hint presizes with
-	it).  Forward: collection size - position; reverse: position + 1.
-	Zero for a spent iterator."
+	"Count of items not yet produced (operator.length_hint presizes with it).
+	Zero for a spent iterator.
+
+	Forward (CPython listiter_len): collection size - position.
+
+	Reverse (CPython listreviter_len): position + 1, but ONLY while position is
+	still WITHIN the shared -- and possibly shrunken -- collection; once the
+	list has been truncated past the current position there is nothing left to
+	produce.  ``d = list(range(10)); it = reversed(d); next(it); next(it);
+	d[1:] = []'' must report 0, not 8 (test_iterlen TestListReversed
+	test_mutation), and that is also what keeps len(it) == len(list(it))."
 
 	exhausted ifTrue: [^ 0].
-	reverse ifTrue: [^ (position @env0:+ 1) @env0:max: 0].
+	reverse ifTrue: [
+		(position @env0:< (collection @env0:size)) ifFalse: [^ 0].
+		^ (position @env0:+ 1) @env0:max: 0].
 	^ (collection @env0:size @env0:- position) @env0:max: 0
 %
 
@@ -130,7 +140,18 @@ __next__
 	exhausted ifTrue: [StopIteration @env0:signal].
 	reverse
 		ifTrue: [
-			(position @env0:< 0) ifTrue: [exhausted := true. StopIteration @env0:signal].
+			"CPython's listreviter_next yields only while the index is BOTH
+			non-negative AND still inside the shared list.  The upper bound is
+			not redundant: the list can SHRINK under a reverse iterator, and
+			then indexing it is an OffsetError (error 2003) escaping as a
+			Smalltalk error rather than a StopIteration -- ``it = reversed(d);
+			next(it); next(it); d[1:] = []; list(it)'' (test_iterlen
+			TestListReversed test_mutation).  It is the same predicate
+			__length_hint__ uses, so a hint of 0 and an immediate stop always
+			agree."
+			((position @env0:< 0)
+				or: [position @env0:>= (collection @env0:size)]) ifTrue: [
+				exhausted := true. StopIteration @env0:signal].
 			item := collection @env0:at: (position @env0:+ 1).
 			position := position @env0:- 1.
 			^ item]
