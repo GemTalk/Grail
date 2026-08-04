@@ -252,6 +252,30 @@ printSmalltalkOn: aStream
 						and: [CallAst classBeingCompiled notNil
 							and: [CallAst moduleClassBeingCompiled notNil]]]]]])
 		ifTrue: [
+			"A METHOD-LOCAL class is not a module attribute, so the
+			module-instance accessor below answers NIL for it -- and every
+			Super consumer walks ``cls superClass'', which nil does not
+			understand.  The zero-arg form already resolves this through the
+			class's closure cell; the two-arg form did not, so
+			``super(Sub, self)'' inside a function-local Sub raised an
+			uncatchable env-0 MessageNotUnderstood that took down the whole
+			module run (test_functools' test_cache_invalidation, plus
+			test_enum and django's related_descriptors).
+			Only when the named class IS the one being compiled: that is the
+			shape the cell key ``___cell_<ClassName>___'' is stored under,
+			and it covers every corpus occurrence (each names its own class).
+			Naming a DIFFERENT method-local class keeps the old path."
+			((CallAst classDefIsModuleScope == false)
+				and: [(arguments at: 1) id asSymbol == CallAst classBeingCompiled asSymbol])
+				ifTrue: [
+					CallAst addCapturedClassName: CallAst classBeingCompiled.
+					aStream
+						nextPutAll: '(Super @env1:cls: (self @env1:___classCell___: #''___cell_';
+						nextPutAll: CallAst classBeingCompiled asString;
+						nextPutAll: '___'') obj: '.
+					(arguments at: 2) printSmalltalkWithParenthesisOn: aStream.
+					aStream nextPutAll: ')'.
+					^self].
 			aStream
 				nextPutAll: '(Super @env1:cls: ((';
 				nextPutAll: CallAst moduleClassBeingCompiled name;
