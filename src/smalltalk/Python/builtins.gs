@@ -2070,23 +2070,28 @@ pow: x _: y
 category: 'Grail-Built-in Functions'
 method: builtins
 staticmethod: fn
-	"Python @staticmethod / staticmethod(fn) - Grail doesn't honor
-	decorators at codegen, so this is the identity: return the
-	function unchanged.  Calling sites that do `Cls(args)` on a
-	'static method'-named attribute work because Grail's attribute
-	access already returns the function/value."
+	"``staticmethod(fn)'' -- a real descriptor that answers fn UNBOUND
+	however it is reached (see MethodWrappers.gs).
 
-	^ fn
+	The old identity stub left binding to be guessed from what was wrapped:
+	___isDescriptorCallable___: binds a function that came from a
+	Python-source module, so ``digest_method = staticmethod(_lazy_sha1)''
+	read through an instance passed the receiver as _lazy_sha1's first
+	argument.  The DECORATOR form never depended on this -- ClassDefAst
+	recognises ``@staticmethod'' at parse time -- only the value form."
+
+	^ PyStaticMethod value: { fn } value: nil
 %
 
 category: 'Grail-Built-in Functions'
 method: builtins
 classmethod: fn
-	"Python @classmethod / classmethod(fn) - same identity treatment
-	as staticmethod.  Grail doesn't yet thread cls through method
-	dispatch, but the stored attribute is still callable."
+	"``classmethod(fn)'' -- a real descriptor that binds the CLASS as fn's
+	first argument, read through the class or through an instance (see
+	MethodWrappers.gs).  The old identity stub bound nothing, so
+	``A.cm(x)'' called ``fn(x)'' with the class simply missing."
 
-	^ fn
+	^ PyClassMethod value: { fn } value: nil
 %
 
 category: 'Grail-Built-in Functions'
