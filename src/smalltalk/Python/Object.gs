@@ -2614,6 +2614,23 @@ __exit__: excType _: excValue _: excTb
 		@env0:, ''' object does not support the context manager protocol')
 %
 
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___pyTypeNameForError___
+	"The Python type name of the receiver for ``'X' object is ...'' error
+	messages -- normally ``type(self).__name__''.  When the receiver is
+	itself a class/type object (``iter(list)'', ``list in x'', ``list + 1'',
+	...), ``self class'' is a metaclass; CPython reports the metaclass name,
+	which for an ordinary class is 'type' (``iter(list)'' ->
+	``'type' object is not iterable'').  Guarding on Behavior also avoids the
+	env-1 __name__ MessageNotUnderstood a kernel metaclass (Metaclass) would
+	raise -- ``self class @env1:__name__'' works for an INSTANCE's class but
+	not for a metaclass, which carries no env-1 __name__."
+
+	(self @env0:isKindOf: Behavior) @env0:ifTrue: [^ 'type'].
+	^ (self @env0:class @env1:__name__) @env0:asString
+%
+
 category: 'Grail-Iterator Protocol'
 method: object
 __iter__
@@ -2626,7 +2643,7 @@ __iter__
 	(test_collections.TestNamedTuple.test_defaults: ``tuple(False)'' must
 	raise TypeError to be caught by ``assertRaises'', not crash)."
 
-	TypeError ___signal___: ('''' @env0:, (self @env0:class @env1:__name__) @env0:asString
+	TypeError ___signal___: ('''' @env0:, (self ___pyTypeNameForError___)
 		@env0:, ''' object is not iterable')
 %
 
@@ -2665,7 +2682,7 @@ __contains__: item
 	((self ___hasProtocolForCall___: '__iter__')
 		or: [self ___hasProtocolForCall___: '__getitem__']) ifFalse: [
 			^ TypeError ___signal___: ('argument of type ''' @env0:,
-				(self @env0:class @env1:__name__) @env0:asString @env0:,
+				(self ___pyTypeNameForError___) @env0:,
 				''' is not a container or iterable')].
 	ni := Python @env0:at: #NotImplemented otherwise: nil.
 	it := self __iter__.
@@ -2700,7 +2717,7 @@ ___pyContains___: item
 	(self @env0:isKindOf: PythonInstance) ifTrue: [
 		(self ___classAttrDunder___: #'__contains__') == None ifTrue: [
 			^ TypeError ___signal___: ('argument of type ''' @env0:,
-				(self @env0:class @env1:__name__) @env0:asString @env0:,
+				(self ___pyTypeNameForError___) @env0:,
 				''' is not a container or iterable')]].
 	^ self __contains__: item
 %
@@ -2735,7 +2752,7 @@ ___augmentedOp___: other inplace: iSel binary: bSel
 			to: iSel @env0:asString @env0:size @env0:- 1) @env0:asSymbol.
 		(self ___classAttrDunder___: baseSel) == None ifTrue: [
 			TypeError ___signal___: ('unsupported operand type(s) for augmented assignment: ''' @env0:,
-				(self @env0:class @env1:__name__) @env0:asString @env0:, '''')]].
+				(self ___pyTypeNameForError___) @env0:, '''')]].
 	(self ___respondsTo___: iSel)
 		ifTrue: [
 			result := self @env0:perform: iSel env: 1 withArguments: { other }.
@@ -3369,8 +3386,8 @@ ___cmpFallback___: other op: opString reflected: refSelector
 			rr := fn ___pyCallValue___: { other. self } kw: nil.
 			(rr == (Python @env0:at: #NotImplemented otherwise: nil)) ifFalse: [^ rr]]].
 	TypeError ___signal___: ('''' @env0:, opString @env0:, ''' not supported between instances of '''
-		@env0:, (self @env0:class @env1:__name__) @env0:asString
-		@env0:, ''' and ''' @env0:, (other @env0:class @env1:__name__) @env0:asString @env0:, '''')
+		@env0:, (self ___pyTypeNameForError___)
+		@env0:, ''' and ''' @env0:, (other ___pyTypeNameForError___) @env0:, '''')
 %
 
 category: 'Grail-Comparison'
