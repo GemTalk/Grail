@@ -326,6 +326,7 @@ run
 	at: #'iterator' put: nil;
 	at: #'list_iterator' put: nil;
 	at: #'seq_iterator' put: nil;
+	at: #'callable_iterator' put: nil;
 	at: #'filter_iterator' put: nil;
 	at: #'map_iterator' put: nil;
 	at: #'zip_iterator' put: nil;
@@ -954,6 +955,7 @@ input src/smalltalk/Python/dict_keyiterator.gs
 input src/smalltalk/Python/dict_valueiterator.gs
 input src/smalltalk/Python/list_iterator.gs
 input src/smalltalk/Python/seq_iterator.gs
+input src/smalltalk/Python/callable_iterator.gs
 input src/smalltalk/Python/range_iterator.gs
 input src/smalltalk/Python/set_iterator.gs
 input src/smalltalk/Python/str_iterator.gs

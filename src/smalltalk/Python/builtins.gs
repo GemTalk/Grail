@@ -566,9 +566,8 @@ iter: anObject
 	"Python builtin iter(x) — return an iterator over x by calling
 	x.__iter__().  Raises TypeError if x has no __iter__ method.
 
-	The two-arg sentinel form ``iter(callable, sentinel)`` is not
-	implemented yet (see TODO.md) — none of the current Flask-path
-	modules use it."
+	The two-arg sentinel form ``iter(callable, sentinel)`` is the
+	``iter:_:`` method below."
 
 	"CPython sentinel: a class that explicitly sets ``__iter__ = None''
 	is NOT iterable, and iter(x) raises TypeError even when x defines
@@ -597,6 +596,22 @@ iter: anObject
 				''' object is not iterable')
 		].
 	^ anObject __iter__
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+iter: aCallable _: aSentinel
+	"Python builtin iter(callable, sentinel) — the two-argument form.
+	Returns a callable_iterator that calls ``aCallable()'' with no arguments
+	on each next() and raises StopIteration once a returned value equals
+	(Python ==) aSentinel.  aCallable must be callable (a function or an
+	instance whose class defines __call__); CPython raises TypeError for a
+	non-callable first argument."
+
+	(self callable: aCallable)
+		@env0:ifFalse: [
+			TypeError @env0:signal: 'iter(v, w): v must be callable'].
+	^ callable_iterator ___on: aCallable sentinel: aSentinel
 %
 
 category: 'Grail-Built-in Functions'
