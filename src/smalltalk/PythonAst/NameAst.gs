@@ -283,8 +283,9 @@ printSmalltalkOn: aStream
 		and: [CallAst classBeingCompiled notNil
 			and: [CallAst moduleClassBeingCompiled isNil
 			and: [CallAst inClassBodyValueEmit
+			and: [self ___inNestedScopeWithinClassBody___ not
 			and: [CallAst classBodyBoundNames isNil
-				or: [CallAst classBodyBoundNames includes: id asSymbol]]]]])
+				or: [CallAst classBodyBoundNames includes: id asSymbol]]]]]])
 		ifTrue: [
 			"Sibling method -> receiver-less BoundMethod (call protocol pops
 			positional[1] as the receiver); sibling @staticmethod -> BoundMethod
@@ -374,10 +375,11 @@ printSmalltalkOn: aStream
 			LEGB rule (skipping the class scope) — falling through to
 			the existing module-scope / declared-local branches below."
 			(CallAst inClassBodyValueEmit
+				and: [self ___inNestedScopeWithinClassBody___ not
 				and: [CallAst classFunctionNames notNil
 				and: [(CallAst classFunctionNames includes: id asSymbol)
 				and: [CallAst classBodyBoundNames isNil
-					or: [CallAst classBodyBoundNames includes: id asSymbol]]]])
+					or: [CallAst classBodyBoundNames includes: id asSymbol]]]]])
 				ifTrue: [
 					aStream
 						nextPutAll: '(BoundMethod receiver: nil selector: #';
@@ -393,10 +395,11 @@ printSmalltalkOn: aStream
 			calling it dispatches the metaclass method with the caller's
 			full argument list (no receiver popping)."
 			(CallAst inClassBodyValueEmit
+				and: [self ___inNestedScopeWithinClassBody___ not
 				and: [CallAst classStaticFunctionNames notNil
 				and: [(CallAst classStaticFunctionNames includes: id asSymbol)
 				and: [CallAst classBodyBoundNames isNil
-					or: [CallAst classBodyBoundNames includes: id asSymbol]]]])
+					or: [CallAst classBodyBoundNames includes: id asSymbol]]]]])
 				ifTrue: [
 					aStream
 						nextPutAll: '(BoundMethod receiver: ';
@@ -417,10 +420,11 @@ printSmalltalkOn: aStream
 			per-class DYNAMIC store -- read it there (the accessor
 			send below would DNU)."
 			(CallAst inClassBodyValueEmit
+				and: [self ___inNestedScopeWithinClassBody___ not
 				and: [CallAst classNestedClassNames notNil
 				and: [(CallAst classNestedClassNames includes: id asSymbol)
 				and: [CallAst classBodyBoundNames isNil
-					or: [CallAst classBodyBoundNames includes: id asSymbol]]]])
+					or: [CallAst classBodyBoundNames includes: id asSymbol]]]]])
 				ifTrue: [
 					aStream
 						nextPutAll: '(';
@@ -444,8 +448,9 @@ printSmalltalkOn: aStream
 			Both fallbacks are what Python's class-body lookup does -- consult
 			the class namespace, then the enclosing scope."
 			(CallAst inClassBodyValueEmit
+				and: [self ___inNestedScopeWithinClassBody___ not
 				and: [CallAst classBodyConditionalNames notNil
-				and: [CallAst classBodyConditionalNames includes: id asSymbol]])
+				and: [CallAst classBodyConditionalNames includes: id asSymbol]]])
 				ifTrue: [
 					| alsoStatic |
 					alsoStatic := CallAst classAttrNames notNil
@@ -471,10 +476,11 @@ printSmalltalkOn: aStream
 					^self
 				].
 			(CallAst inClassBodyValueEmit
+				and: [self ___inNestedScopeWithinClassBody___ not
 				and: [CallAst classAttrNames notNil
 				and: [(CallAst classAttrNames includes: id asSymbol)
 				and: [CallAst classBodyBoundNames isNil
-					or: [CallAst classBodyBoundNames includes: id asSymbol]]]])
+					or: [CallAst classBodyBoundNames includes: id asSymbol]]]]])
 				ifTrue: [
 					"The attr accessor pair is compiled just before each
 					``<Class> <attr>: value'' store, so a later value
@@ -1098,6 +1104,99 @@ ___isEnclosingComprehensionTarget___: aSymbol
 		node := node parent.
 	].
 	^ false
+%
+
+category: 'other'
+method: NameAst
+___inNestedScopeWithinClassBody___
+	"True when this NameAst sits inside a nested SCOPE -- a comprehension or a
+	lambda -- that lies between it and the enclosing class body.
+
+	Python's rule: a comprehension (like a lambda) is its own function scope,
+	and a CLASS scope is NOT part of the enclosing-scope chain of a nested
+	function.  So a free name read inside one skips the class namespace and
+	resolves in the module/global scope:
+
+	    y = 1
+	    class C:
+	        y = 2
+	        vals = [(x, y) for x in range(2)]
+
+	is [(0, 1), (1, 1)] in CPython -- the module's y, NOT the class's.  Grail
+	read the class attribute and answered [(0, 2), (1, 2)] (test_listcomps
+	test_in_class_scope_inside_function_1/_2).  It applies to every class-level
+	name, methods included: ``class C: def f(self): pass;
+	lst = [f for _ in range(1)]'' is a NameError in CPython.
+
+	The ONE exception is the OUTERMOST ITERABLE of the outermost comprehension
+	(``range(2)'' above, ``items'' in ``[x for x in items]''): CPython
+	evaluates it in the ENCLOSING scope, which is precisely why it CAN see a
+	class attribute.  A name reached through the first clause's ``iter'' is
+	therefore not behind a scope boundary and the walk continues outward -- so
+	an INNER comprehension's iterable is still inside the outer
+	comprehension's scope and correctly answers true.
+
+	Consulted ONLY by the class-SIBLING branches of printSmalltalkOn:, never by
+	the whole class-body block: that block also holds the module-global,
+	module-function and fast-path-builtin branches, and suppressing THOSE for a
+	comprehension left every module global and builtin inside a class-body
+	comprehension emitting a bare identifier -- which broke Django's import
+	outright (4 DjangoTestCase failures) even though no Django class body
+	matches the pattern this rule is about."
+
+	| node child gens inClauseIter |
+	child := self.
+	node := parent.
+	inClauseIter := false.
+	[node notNil] whileTrue: [
+		(node isKindOf: LambdaAst) ifTrue: [^ true].
+		((node isKindOf: ClassDefAst) or: [node isKindOf: FunctionDefAst])
+			ifTrue: [^ false].
+		"``iter'' hangs off the ComprehensionAst CLAUSE, one level below the
+		comprehension node itself, so the ``did we come up through the
+		iterable?'' test has to be made here and carried one step."
+		(node isKindOf: ComprehensionAst) ifTrue: [
+			inClauseIter := (self ___generatorIterOf___: node) == child].
+		((node isKindOf: ListCompAst)
+			or: [(node isKindOf: DictCompAst)
+			or: [(node isKindOf: SetCompAst)
+			or: [node isKindOf: GeneratorExpAst]]]) ifTrue: [
+			gens := self ___compGeneratorsOf___: node.
+			"Only the FIRST clause's iterable is evaluated in the enclosing
+			scope; a second ``for'' clause's iterable already runs inside the
+			comprehension."
+			(inClauseIter
+				and: [gens notNil
+				and: [gens notEmpty and: [gens first == child]]])
+				ifFalse: [^ true].
+			inClauseIter := false].
+		child := node.
+		node := node parent].
+	^ false
+%
+
+category: 'other'
+method: NameAst
+___compGeneratorsOf___: compNode
+	"The `generators' sequence of a comprehension node, by instVar index --
+	AST nodes have no public getters."
+
+	| idx |
+	idx := compNode class allInstVarNames indexOf: #generators.
+	idx = 0 ifTrue: [^ nil].
+	^ compNode instVarAt: idx
+%
+
+category: 'other'
+method: NameAst
+___generatorIterOf___: aComprehensionAst
+	"The `iter' expression of one ComprehensionAst clause (the ``in xs'' part),
+	by instVar index."
+
+	| idx |
+	idx := aComprehensionAst class allInstVarNames indexOf: #iter.
+	idx = 0 ifTrue: [^ nil].
+	^ aComprehensionAst instVarAt: idx
 %
 
 category: 'other'
