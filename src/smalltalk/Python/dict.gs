@@ -393,9 +393,18 @@ __contains__: key
 	object' IS considered present (test_float.py's
 	test_float_containment: nan in {nan: None}).  Only a linear
 	fallback, so only pay for it once the fast path has already
-	missed."
+	missed.
+
+	Iterate with keysDo: (a raw walk of the stored keys), NOT
+	``self keys anySatisfy:'': AbstractDictionary>>keys builds a Set, and
+	adding HETEROGENEOUS Python keys to it compares them with =, which for
+	an incomparable pair (e.g. a complex key vs a str key) answers the
+	``___NotImplemented___'' sentinel where the Set primitive needs a
+	Boolean -- an uncatchable error 2085.  ``1 in {'one': 1, 1j: 2j}''
+	(test_iter test_in_and_not_in) hit exactly that.  keysDo: only does the
+	identity == below, never a cross-key =."
 	(self @env0:includesKey: key) ifTrue: [^ true].
-	(self @env0:keys @env0:anySatisfy: [:k | k @env0:== key]) ifTrue: [^ true].
+	self @env0:keysDo: [:k | (k @env0:== key) ifTrue: [^ true]].
 	key ___requireHashableAsDictKey___.
 	^ false
 %
