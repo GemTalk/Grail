@@ -38,13 +38,22 @@ Two callable shapes are supported on the proxy:
     emits an attribute load followed by a CallAst; both steps
     funnel through ``___pyAttrLoad___:`` → ``value:value:``.
 
+Both the zero-arg ``super()`` and the explicit ``super(C, obj)`` forms are
+rewritten by codegen (CallAst), for a class defined at module scope and for
+one defined inside a function.  The latter is not a module attribute, so its
+class object is reached through the closure cell ``___cell_<ClassName>___``
+rather than the module instance''s class accessor.
+
 Limitations:
   * Walks the GemStone class hierarchy (``superClass``), not a
-    Python C3 MRO.  Single-inheritance Python idioms (e.g.
-    blinker.NamedSignal, collections.defaultdict) work; diamond
-    hierarchies need a real MRO.
-  * Only the zero-arg ``super()`` form is supported (rewritten by
-    codegen in CallAst).  Explicit ``super(C, obj)`` is not yet.
+    Python C3 MRO, when the receiver''s class has no registered MRO.
+    Single-inheritance Python idioms (e.g. blinker.NamedSignal,
+    collections.defaultdict) work; see _lookupMethodFirstOf: for the
+    MRO-positional path that cooperative mixins take.
+  * ``super(C, obj)`` naming a method-local class OTHER than the one
+    being compiled still takes the module-accessor path, and so still
+    resolves to nil for it.  Every occurrence in the vendored corpus
+    names its own class, so nothing exercises that yet.
 '
 %
 
@@ -232,9 +241,23 @@ category: 'Grail-Instance Creation'
 classmethod: Super
 cls: aClass obj: anObject
 	"Construct a Super proxy bound to the lexical class and the
-	current method's first argument."
+	current method's first argument.
+
+	A nil class is REJECTED here, where it is still catchable.  Every
+	consumer walks ``cls superClass'', and nil does not understand that --
+	an env-0 MessageNotUnderstood, which Python cannot catch and which
+	therefore takes down the whole module run rather than failing one
+	call.  That is how a method-local class naming itself in the two-arg
+	form (``super(TracingDict, self)'') presented: not as a super() bug
+	but as an uncatchable Smalltalk error in the middle of an unrelated
+	test.  CPython's own message for the same mistake."
 
 	| inst |
+	(aClass isKindOf: Behavior) ifFalse: [
+		TypeError ___signal___: 'super() argument 1 must be a type, not '
+			@env0:, (aClass == nil
+				ifTrue: ['NoneType']
+				ifFalse: [aClass @env0:class @env0:name @env0:asString])].
 	inst := self @env0:new.
 	inst @env0:_setCls: aClass obj: anObject.
 	^ inst
