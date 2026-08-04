@@ -82,7 +82,7 @@ debugEx
 category: 'Grail-Testing'
 classmethod: PythonTestCase
 debug: aSelector
-  self initGrailDir .  
+  self initGrail.  
   ^ super debug: aSelector
 %
 
