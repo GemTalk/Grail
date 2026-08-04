@@ -604,7 +604,28 @@ ___grailBuildMembers: cls names: attrNames
 								@env0:on: AbstractException do: [:e | nil].
 									memberValue := v @env0:isNil ifTrue: [rawValue] ifFalse: [v]]
 								ifFalse: [
-									member := cls @env0:basicNew.
+									"For a str-storage-rooted enum (``class C(str, Enum)'')
+									the member IS a string: give it CONTENT str(value) so
+									hash / bool / == behave like a plain str.  basicNew leaves
+									the indexed char content empty (member was len 0 -> every
+									member hashed/compared equal: ``C.A == 'aval''' compared ''
+									to 'aval', and a dict keyed by members collided).  A str
+									value keeps its own chars; an int auto value gets content
+									'1' even though its .value stays the int (CPython
+									_member_type_ is str -> str content, but _value_ is the raw/
+									auto value).  int/float storage keeps the value in a named
+									slot, so basicNew is right there."
+									(cls @env0:inheritsFrom: CharacterCollection)
+										ifTrue: [ | s |
+											s := (effVal isKindOf: CharacterCollection)
+												ifTrue: [effVal]
+												ifFalse: [[effVal __str__]
+													@env0:on: AbstractException do: [:e | '']].
+											member := cls @env0:new: s @env0:size.
+											s @env0:size @env0:> 0 ifTrue: [
+												member @env0:replaceFrom: 1 to: s @env0:size
+													with: s startingAt: 1]]
+										ifFalse: [member := cls @env0:basicNew].
 									"effVal already carries member_type(*args) for a
 									foreign-mixin enum (else the raw value)."
 									memberValue := effVal].
