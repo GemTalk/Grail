@@ -681,6 +681,55 @@ ___functionAnnotationsTable___
 	^ tbl
 %
 
+category: 'Grail-Signatures'
+method: module
+___setFunctionSignature___: aName spec: aSpec
+	"Record a module-level function's inspect.signature parameter spec.
+	Keyed by the plain Python name -- the selector a lazily-wrapped
+	module-function BoundMethod carries -- so BoundMethod >>
+	__signature_spec__ can find it.  Same table shape as the annotations
+	one; a module-level def compiles to a METHOD on the module class, so it
+	cannot carry the def-time cascade a nested def does."
+
+	| tbl inner |
+	tbl := module ___functionSignatureTable___.
+	inner := tbl at: self otherwise: nil.
+	inner isNil ifTrue: [
+		inner := KeyValueDictionary new.
+		tbl at: self put: inner].
+	inner at: aName asString put: aSpec.
+	^ self
+%
+
+category: 'Grail-Signatures'
+method: module
+___functionSignatureFor___: aName
+	"The stored parameter spec for a module-level function, or nil."
+
+	| tbl inner |
+	tbl := module ___functionSignatureTable___.
+	inner := tbl at: self otherwise: nil.
+	inner isNil ifTrue: [^ nil].
+	^ inner at: aName asString otherwise: nil
+%
+
+category: 'Grail-Signatures'
+classmethod: module
+___functionSignatureTable___
+	"Session-local  module-instance -> (function-name -> spec).  Held in
+	SessionTemps and keyed by identity, for the same reasons as
+	___functionAnnotationsTable___: module instances are session-local, so this
+	must never be committed."
+
+	| st tbl |
+	st := SessionTemps current.
+	tbl := st at: #GrailModuleFunctionSignatures otherwise: nil.
+	tbl isNil ifTrue: [
+		tbl := IdentityKeyValueDictionary new.
+		st at: #GrailModuleFunctionSignatures put: tbl].
+	^ tbl
+%
+
 category: 'Grail-Annotations'
 method: module
 ___setFunctionAnnotations___: aName annotate: aBlock

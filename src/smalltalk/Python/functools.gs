@@ -386,6 +386,10 @@ cmp_to_key: mycmp
 		w @env0:dynamicInstVarAt: #obj put: o.
 		w @env0:dynamicInstVarAt: #cmp put: mycmp.
 		w]
+		"CPython's cmp_to_key returns a CLASS K whose __init__ takes ``obj'',
+		so inspect.signature reports ``(obj)''.  Grail returns a block, which
+		carries the same def-time spec a nested def would."
+		@env0:___pySig___: { { 'obj' . 1 } }
 %
 
 category: 'Grail-Built-in Functions'
@@ -1129,6 +1133,23 @@ category: 'Grail-String Representation'
 method: functools_Placeholder
 __repr__
 	^ 'Placeholder'
+%
+
+category: 'Grail-Signatures'
+classmethod: functools
+___methodSignatureTable___
+	"Parameter specs for functools functions implemented in SMALLTALK rather
+	than as Python defs -- there is no FunctionDefAst to stamp one, so the
+	signature is declared here in the same triple form
+	``(name, kind-index, default-source-text)''.
+
+	Read through the same class-side walk BoundMethod >> __signature_spec__
+	uses for a method, so ``inspect.signature(functools.cmp_to_key)'' answers
+	``(mycmp)'' as CPython's does."
+
+	^ (KeyValueDictionary @env0:new)
+		@env0:at: 'cmp_to_key' put: { { 'mycmp' . 1 } };
+		@env0:yourself
 %
 
 category: 'Grail-Constants'

@@ -339,6 +339,16 @@ printSmalltalkOn: aStream
 				nextPutAll: ''' annotate: '.
 			self emitAnnotateBlockOn: aStream.
 			aStream nextPutAll: '.'].
+		"Same for the inspect.signature parameter spec -- a module-level def
+		compiles to a method, so it cannot carry the def-time cascade."
+		self hasSignatureSpec ifTrue: [
+			aStream
+				lf;
+				nextPutAll: 'self @env0:___setFunctionSignature___: ''';
+				nextPutAll: name;
+				nextPutAll: ''' spec: '.
+			self emitSignatureSpecOn: aStream.
+			aStream nextPutAll: '.'].
 		moduleDecorators := self applicableModuleDecorators.
 		moduleDecorators isEmpty ifTrue: [^self].
 		self printModuleDecoratorsOn: aStream decorators: moduleDecorators.
@@ -1084,6 +1094,12 @@ hasSignatureSpec
 category: 'Grail-code generation'
 method: FunctionDefAst
 emitSignatureSpecOn: aStream
+	^ self emitSignatureSpecOn: aStream skipReceiver: false
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitSignatureSpecOn: aStream skipReceiver: skipReceiver
 	"Emit the parameter spec inspect.signature reads: an Array of
 	``{ name . kind-index . default-source-text-or-nil }'' in DECLARATION
 	order.  Kind indices match inspect._KINDS -- 0 POSITIONAL_ONLY,
@@ -1118,6 +1134,9 @@ emitSignatureSpecOn: aStream
 	sep := [anyYet ifTrue: [aStream nextPutAll: '. ']. anyYet := true].
 	aStream nextPutAll: '{ '.
 	1 to: allPositional size do: [:i |
+		"skipReceiver drops ``self''/``cls'' -- see
+		ClassDefAst >> emitMethodSignatureTableOn:className:."
+		(skipReceiver and: [i = 1]) ifFalse: [
 		sep value.
 		self
 			emitSignatureEntryFor: (allPositional at: i)
@@ -1125,7 +1144,7 @@ emitSignatureSpecOn: aStream
 			default: (i >= firstDefaulted
 				ifTrue: [defaults at: i - firstDefaulted + 1]
 				ifFalse: [nil])
-			on: aStream].
+			on: aStream]].
 	args vararg ifNotNil: [:v |
 		sep value.
 		self emitSignatureEntryFor: v kind: 2 default: nil on: aStream].

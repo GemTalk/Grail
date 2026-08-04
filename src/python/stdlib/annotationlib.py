@@ -41,7 +41,14 @@ class ForwardRef:
         self.__owner__ = owner
 
     def __eq__(self, other):
-        return getattr(other, '__forward_arg__', None) == self.__forward_arg__
+        """NotImplemented for a foreign operand, so Python tries the REFLECTED
+        __eq__ -- which is the whole mechanism test.support's
+        EqualToForwardRef relies on to compare equal to a real ForwardRef.
+        Answering False here instead suppressed the reflection and made every
+        such comparison unequal."""
+        if not isinstance(other, ForwardRef):
+            return NotImplemented
+        return other.__forward_arg__ == self.__forward_arg__
 
     def __hash__(self):
         return hash(self.__forward_arg__)

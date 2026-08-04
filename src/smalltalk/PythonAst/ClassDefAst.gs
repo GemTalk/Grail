@@ -943,6 +943,11 @@ printSmalltalkRuntimeOn: aStream
 	annotations dict) for every annotated instance method; BoundMethod >>
 	__annotations__ walks the superclass chain consulting it."
 	self emitMethodAnnotationsTableOn: aStream className: name.
+	"Same shape for inspect.signature: a class-side ``___methodSignatureTable___''
+	(method-name -> parameter spec) that BoundMethod >> __signature_spec__ walks
+	the superclass chain consulting.  A method compiles to a Smalltalk METHOD, not
+	a block, so it cannot carry the def-time cascade a nested def does."
+	self emitMethodSignatureTableOn: aStream className: name.
 	"Inherit parent class-attr values into our slot.  Smalltalk
 	class-side instVars are per-class storage; without this the
 	subclass's inherited slot stays nil."
@@ -2266,6 +2271,54 @@ emitClassAnnotationsDictOn: aStream
 		self printQuotedString: assoc value on: aStream.
 		aStream nextPut: $;].
 	aStream nextPutAll: ' @env0:yourself)'
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitMethodSignatureTableOn: aStream className: aClassName
+	"Compile a class-side ``___methodSignatureTable___'' returning a dict
+	``method-name -> parameter spec'' for every method that declares a
+	parameter.  The values are FunctionDefAst >> emitSignatureSpecOn: output --
+	the same triples a nested def carries in ``__signature_spec__''.
+
+	EVERY def, as with the annotations table: a @classmethod or @staticmethod
+	has a signature Python reports the same way, and singledispatchmethod
+	reads one off a class-side implementation.  Overload stubs stay out -- the
+	stub is not the implementation.
+
+	No-op when no method declares a parameter, so only classes that need it
+	pay for the extra class-side method."
+
+	| withParams src |
+	withParams := self ___allFunctionDefs___ select: [:def |
+		def isOverloadStub not and: [def hasSignatureSpec]].
+	withParams isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___methodSignatureTable___'; lf.
+	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+	withParams do: [:def |
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
+		"Skip ``self''/``cls'' for an instance method or classmethod: what this
+		table feeds is a BOUND access (``instance.method'', or a classmethod
+		reached through its class), where the receiver is already supplied and
+		CPython omits it.  A @staticmethod has no receiver parameter to omit.
+
+		Known divergence: ``signature(Cls.instance_method)'' -- UNBOUND, where
+		CPython DOES show ``self'' -- reports without it, because one table
+		serves both accesses.  Nothing in the corpus reads that form; a method
+		wrapped by a descriptor (singledispatchmethod) reports through
+		``__wrapped__'' and the raw def's own spec, which keeps ``self''."
+		def emitSignatureSpecOn: src
+			skipReceiver: (def isKindOf: StaticFunctionDefAst) not.
+		src nextPut: $;].
+	src nextPutAll: ' @env0:yourself)'.
+	self
+		emitCompileMethodOn: aClassName
+		source: src contents
+		category: 'Grail-Signatures'
+		env: 1
+		classSide: true
+		onStream: aStream
 %
 
 category: 'Grail-code generation'
