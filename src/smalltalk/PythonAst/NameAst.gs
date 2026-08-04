@@ -338,22 +338,39 @@ printSmalltalkOn: aStream
 			``if'' branch (``if c_functools: module = c_functools'' then
 			``@module.lru_cache()'' on the next def, test_functools' TestLRUC).
 			Same per-class dynamic store as a nested class, but the binding is
-			conditional, so a nil slot means the branch did not run: fall back
-			to the module global, which is what Python's class-body lookup
-			does once the class namespace comes up empty."
+			conditional, so a nil slot means the branch did not run.
+
+			What to fall back TO depends on whether the name is bound
+			unconditionally as well (``x = 1'' and then ``if flag: x = 2''):
+			if it is, it has an accessor pair holding that value and the
+			accessor is the next place to look; only then, or straight away
+			when there is no such pair, does the read reach the module global.
+			Both fallbacks are what Python's class-body lookup does -- consult
+			the class namespace, then the enclosing scope."
 			(CallAst inClassBodyValueEmit
 				and: [CallAst classBodyConditionalNames notNil
 				and: [CallAst classBodyConditionalNames includes: id asSymbol]])
 				ifTrue: [
+					| alsoStatic |
+					alsoStatic := CallAst classAttrNames notNil
+						and: [CallAst classAttrNames includes: id asSymbol].
 					aStream
 						nextPutAll: '((';
 						nextPutAll: CallAst classBeingCompiled asString;
 						nextPutAll: ' @env1:___dynamicClassAttr___: #''';
 						nextPutAll: id;
 						nextPutAll: ''') @env0:ifNil: ['.
+					alsoStatic ifTrue: [
+						aStream
+							nextPutAll: '(';
+							nextPutAll: CallAst classBeingCompiled asString;
+							nextPutAll: ' ';
+							nextPutAll: id;
+							nextPutAll: ') @env0:ifNil: ['].
 					self emitModuleAttrLoad: id
 						receiverExpr: CallAst moduleClassBeingCompiled name , ' @env0:___instance___'
 						on: aStream.
+					alsoStatic ifTrue: [aStream nextPutAll: ']'].
 					aStream nextPutAll: '])'.
 					^self
 				].

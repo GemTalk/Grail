@@ -1025,6 +1025,39 @@ ___classAttrOverlayLookup___: aClass name: aSym
 
 category: 'Grail-Class Attr Overlay'
 method: object
+___classBodyDefinitionalStore___: aName put: aValue
+	"Bind aName on the receiver CLASS from a class-body statement whose
+	binding is conditional -- the branches of a class-body ``if''
+	(ClassDefAst >> emitClassBodyIfBranch:on:).
+
+	A class attribute has two possible homes, and which one it has is fixed
+	when the class is built: a name assigned UNCONDITIONALLY somewhere in the
+	body gets an accessor/setter pair (a real classInstVar slot), and
+	everything else gets a dynInstVars entry.  A conditional binding cannot
+	know at emit time which it is dealing with -- ``x = 1'' followed by ``if
+	flag: x = 2'' has an accessor, a name bound only inside the branch does
+	not -- so it has to ask.
+
+	Writing to the wrong home is not a near-miss.  ___pyAttrLoad___ consults
+	the accessor BEFORE the dynInstVars store, so a branch that wrote to the
+	holder while an accessor existed would be shadowed by the unconditional
+	value it was supposed to replace: ``x = 1; if flag: x = 2'' answered 1.
+
+	Deliberately NOT ___pyAttrStore___, which would be the obvious way to get
+	this dispatch: that one diverts to the session-local overlay for a
+	canonically-registered class, and a class-body binding is DEFINITIONAL --
+	see ___classHolderAttrStore___ for what that costs."
+
+	| setterSym getterSym |
+	setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
+	getterSym := aName @env0:asString @env0:asSymbol.
+	((self ___respondsTo___: setterSym) and: [self ___respondsTo___: getterSym])
+		ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { aValue }].
+	^ self ___classHolderAttrStore___: aName put: aValue
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
 ___classHolderAttrStore___: aName put: aValue
 	"Write aName into the receiver's OWN per-class ``dynInstVars'' holder --
 	the committed class-attribute store that ___classChainAttrLookup___: reads.

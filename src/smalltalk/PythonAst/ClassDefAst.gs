@@ -2036,16 +2036,19 @@ emitClassBodyIf: ifStmt on: aStream
 category: 'Grail-Class Compilation'
 method: ClassDefAst
 emitClassBodyIfBranch: aSuite on: aStream
-	"One branch of a class-body ``if'': simple NAME = value assignments
-	and ``def''s become per-class dynamic-attr stores on the class temp;
-	nested ifs recurse.  Anything else is dropped (same as before).
+	"One branch of a class-body ``if'': simple NAME = value assignments and
+	``def''s become class-attribute stores on the class temp; nested ifs
+	recurse.  Anything else is dropped (same as before).
 
-	The stores go through ___classHolderAttrStore___ rather than
-	___pyAttrStore___ because they are DEFINITIONAL -- see the nested-class
-	emit in printSmalltalkRuntimeOn: for why the difference is not cosmetic.
-	It was ___pyAttrStore___ until the def work above, and the consequence
-	was that a class-body ``if'' binding survived the first import of a
-	module and vanished from every later one under canonical classes."
+	The stores go through ___classBodyDefinitionalStore___, which picks
+	between the accessor pair and the dynInstVars holder at runtime -- a
+	conditional binding cannot know at emit time which home the name has.
+	NOT ___pyAttrStore___, which would dispatch the same way but divert to
+	the session overlay for a canonically-registered class; see the
+	nested-class emit in printSmalltalkRuntimeOn: for why that is not
+	cosmetic.  ___pyAttrStore___ is what these used to be, and the
+	consequence was that a class-body ``if'' binding survived the first
+	import of a module and vanished from every later one."
 
 	(aSuite isNil or: [aSuite body isNil]) ifTrue: [^ self].
 	aSuite body do: [:stmt |
@@ -2057,7 +2060,7 @@ emitClassBodyIfBranch: aSuite on: aStream
 			and: [stmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
 			stmt targets do: [:t |
 				aStream nextPutAll: name;
-					nextPutAll: ' @env1:___classHolderAttrStore___: #''';
+					nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
 					nextPutAll: t id asString;
 					nextPutAll: ''' put: '.
 				stmt value printSmalltalkWithParenthesisOn: aStream.
@@ -2065,7 +2068,7 @@ emitClassBodyIfBranch: aSuite on: aStream
 		((stmt isKindOf: AnnAssignAst)
 			and: [(stmt target isKindOf: NameAst) and: [stmt value notNil]]) ifTrue: [
 			aStream nextPutAll: name;
-				nextPutAll: ' @env1:___classHolderAttrStore___: #''';
+				nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
 				nextPutAll: stmt target id asString;
 				nextPutAll: ''' put: '.
 			stmt value printSmalltalkWithParenthesisOn: aStream.
@@ -2083,10 +2086,10 @@ emitClassBodyIfDef: aDef on: aStream
 	So emit it as a VALUE -- the nested-def block form -- into a bracketed
 	scope whose block temp gives FunctionDefAst >> printSmalltalkOn: the
 	``<name> := ...'' target it expects (and gives its decorator chain the
-	same target to rebind), then store the result in the per-class dynamic
-	attr store.  A plain function stored there binds the receiver on an
-	instance read and comes back raw on a class read, which is exactly what
-	CPython does with a function in a class namespace.
+	same target to rebind), then store the result as a class attribute.  A
+	plain function stored there binds the receiver on an instance read and
+	comes back raw on a class read, which is exactly what CPython does with
+	a function in a class namespace.
 
 	@staticmethod / @classmethod reach here re-classed by the parser rather
 	than carrying a runtime decorator, so the wrapper that would otherwise
@@ -2107,7 +2110,7 @@ emitClassBodyIfDef: aDef on: aStream
 		ensure: [CallAst classBodyValueDefNode: savedValueDefNode].
 	aStream lf;
 		nextPutAll: name;
-		nextPutAll: ' @env1:___classHolderAttrStore___: #''';
+		nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
 		nextPutAll: fname;
 		nextPutAll: ''' put: '.
 	wrapper
@@ -2121,10 +2124,12 @@ category: 'Grail-Class Compilation'
 method: ClassDefAst
 ___classBodyConditionalNames___
 	"Every name bound inside a top-level class-body ``if'' (either branch,
-	recursively).  These have no accessor pair -- emitClassBodyIfBranch:on:
-	stores them in the per-class dynamic attr store -- so NameAst needs the
-	set to know to read them from there rather than fall straight through to
-	module scope."
+	recursively).  NameAst needs the set because such a name is usually in
+	the per-class dynamic attr store rather than behind an accessor, and
+	without it the read falls straight through to module scope.  A name that
+	is ALSO bound unconditionally does have an accessor, which is why the
+	read there tries both before giving up -- see NameAst's conditional
+	sibling branch."
 
 	| names collect |
 	names := IdentitySet new.

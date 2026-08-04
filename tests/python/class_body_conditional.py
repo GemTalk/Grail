@@ -66,6 +66,25 @@ class Sub(Conditional):
     pass
 
 
+class BoundBothWays:
+    """A name bound unconditionally AND in a branch.
+
+    The conditional read has to fall back to the accessor pair holding the
+    unconditional value before it reaches the module global, or ``taken''
+    below reads `helper` instead of a number.
+    """
+
+    both = 1
+    if flag:
+        both = 2
+    taken = both
+
+    not_overridden = 10
+    if other:
+        not_overridden = 20
+    kept = not_overridden
+
+
 def probe():
     """Return a dict of observations for the SUnit case to assert against."""
     c = Conditional()
@@ -87,4 +106,8 @@ def probe():
         'has_not_taken': hasattr(Conditional, 'not_taken'),
         'has_inst_meth': hasattr(Conditional, 'inst_meth'),
         'nested_tag': Conditional.Nested.tag,
+        'both': BoundBothWays.both,
+        'taken': BoundBothWays.taken,
+        'not_overridden': BoundBothWays.not_overridden,
+        'kept': BoundBothWays.kept,
     }
