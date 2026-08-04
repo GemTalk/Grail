@@ -88,7 +88,21 @@ __new__: obj _: encoding
 	get this treatment -- ``str(SomeClass)'' must still stringify the class.)"
 	((obj @env0:isKindOf: Behavior)
 		@env0:and: [obj @env0:inheritsFrom: CharacterCollection])
-			ifTrue: [^ obj __new__: encoding].
+			ifTrue: [
+				| enumCls src res |
+				enumCls := Python @env0:at: #Enum otherwise: nil.
+				((enumCls @env0:notNil)
+					and: [(obj @env0:inheritsFrom: enumCls)
+						or: [(enumCls @env0:perform: #'___grailRecordFor:' env: 1
+							withArguments: { obj }) @env0:notNil]])
+					ifFalse: [^ obj __new__: encoding].
+				src := (encoding isKindOf: CharacterCollection)
+					ifTrue: [encoding]
+					ifFalse: [encoding @env0:ifNil: [''] ifNotNil: [encoding __str__]].
+				res := obj @env0:new: src @env0:size.
+				src @env0:size @env0:> 0 ifTrue: [
+					res @env0:replaceFrom: 1 to: src @env0:size with: src startingAt: 1].
+				^ res].
 
 	(obj isKindOf: ByteArray) ifTrue: [
 		"Re-wrap through the 1-arg SELF-TYPED allocator.  ``decode:''
