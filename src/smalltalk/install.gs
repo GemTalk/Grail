@@ -284,6 +284,8 @@ run
 	at: #'ExecBlockAttrs' put: nil;
 	at: #'MethodBinding' put: nil;
 	at: #'PropertyDescriptor' put: nil;
+	at: #'PyStaticMethod' put: nil;
+	at: #'PyClassMethod' put: nil;
 	at: #'LruCacheWrapper' put: nil;
 	at: #'functools_CacheInfo' put: nil;
 	at: #'functools_Placeholder' put: nil;
@@ -324,6 +326,7 @@ run
 	at: #'iterator' put: nil;
 	at: #'list_iterator' put: nil;
 	at: #'seq_iterator' put: nil;
+	at: #'callable_iterator' put: nil;
 	at: #'filter_iterator' put: nil;
 	at: #'map_iterator' put: nil;
 	at: #'zip_iterator' put: nil;
@@ -693,6 +696,7 @@ run
 	at: #'KeyboardInterruptTestCase' put: nil;
 	at: #'KeywordOnlyParamsTestCase' put: nil;
 	at: #'ListSortKwargsTestCase' put: nil;
+	at: #'ClassBodyConditionalTestCase' put: nil;
 	at: #'CachedPropertyDescriptorTestCase' put: nil;
 	at: #'LruHashabilityAndUnionsTestCase' put: nil;
 	at: #'ListTestCase' put: nil;
@@ -928,6 +932,7 @@ input src/smalltalk/Python/NamedIntConstant.gs
 input src/smalltalk/Python/BoundMethod.gs
 input src/smalltalk/Python/MethodBinding.gs
 input src/smalltalk/Python/PropertyDescriptor.gs
+input src/smalltalk/Python/MethodWrappers.gs
 
 ! Register ``property'' → PropertyDescriptor AFTER the class file is
 ! loaded — the Step 3 type-mapping block runs before the class
@@ -951,6 +956,7 @@ input src/smalltalk/Python/dict_keyiterator.gs
 input src/smalltalk/Python/dict_valueiterator.gs
 input src/smalltalk/Python/list_iterator.gs
 input src/smalltalk/Python/seq_iterator.gs
+input src/smalltalk/Python/callable_iterator.gs
 input src/smalltalk/Python/range_iterator.gs
 input src/smalltalk/Python/set_iterator.gs
 input src/smalltalk/Python/str_iterator.gs
@@ -1424,6 +1430,7 @@ input src/smalltalk/PythonTests/IteratorTestCase.gs
 input src/smalltalk/PythonTests/TracebackTestCase.gs
 input src/smalltalk/PythonTests/ListSortKwargsTestCase.gs
 input src/smalltalk/PythonTests/CachedPropertyDescriptorTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
 input src/smalltalk/PythonTests/LruHashabilityAndUnionsTestCase.gs
 input src/smalltalk/PythonTests/ListTestCase.gs
 input src/smalltalk/PythonTests/MathTestCase.gs

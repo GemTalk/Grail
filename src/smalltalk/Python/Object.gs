@@ -1025,6 +1025,39 @@ ___classAttrOverlayLookup___: aClass name: aSym
 
 category: 'Grail-Class Attr Overlay'
 method: object
+___classBodyDefinitionalStore___: aName put: aValue
+	"Bind aName on the receiver CLASS from a class-body statement whose
+	binding is conditional -- the branches of a class-body ``if''
+	(ClassDefAst >> emitClassBodyIfBranch:on:).
+
+	A class attribute has two possible homes, and which one it has is fixed
+	when the class is built: a name assigned UNCONDITIONALLY somewhere in the
+	body gets an accessor/setter pair (a real classInstVar slot), and
+	everything else gets a dynInstVars entry.  A conditional binding cannot
+	know at emit time which it is dealing with -- ``x = 1'' followed by ``if
+	flag: x = 2'' has an accessor, a name bound only inside the branch does
+	not -- so it has to ask.
+
+	Writing to the wrong home is not a near-miss.  ___pyAttrLoad___ consults
+	the accessor BEFORE the dynInstVars store, so a branch that wrote to the
+	holder while an accessor existed would be shadowed by the unconditional
+	value it was supposed to replace: ``x = 1; if flag: x = 2'' answered 1.
+
+	Deliberately NOT ___pyAttrStore___, which would be the obvious way to get
+	this dispatch: that one diverts to the session-local overlay for a
+	canonically-registered class, and a class-body binding is DEFINITIONAL --
+	see ___classHolderAttrStore___ for what that costs."
+
+	| setterSym getterSym |
+	setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
+	getterSym := aName @env0:asString @env0:asSymbol.
+	((self ___respondsTo___: setterSym) and: [self ___respondsTo___: getterSym])
+		ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { aValue }].
+	^ self ___classHolderAttrStore___: aName put: aValue
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
 ___classHolderAttrStore___: aName put: aValue
 	"Write aName into the receiver's OWN per-class ``dynInstVars'' holder --
 	the committed class-attribute store that ___classChainAttrLookup___: reads.
@@ -1128,6 +1161,9 @@ ___classChainAttrLookup___: aSym
 					ancestor's stored attribute."
 					(self ___methodDefinedFrom___: start upTo: walker name: aSym)
 						ifTrue: [^ nil].
+					((self isKindOf: Behavior)
+						and: [self ___isValueDescriptor___: v])
+						ifTrue: [^ self ___classDescriptorGet___: v].
 					((self isKindOf: Behavior) not
 						and: [self ___isValueDescriptor___: v])
 						ifTrue: [^ self ___descriptorGet___: v].
@@ -1631,6 +1667,24 @@ ___buildSelectorFamily___: aString
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___classDescriptorGet___: aValue
+	"Python's descriptor read off the CLASS: ``__get__(None, cls)''.  The
+	instance form lives in ___descriptorGet___:.
+
+	Mostly a no-op -- a descriptor with nothing to bind absent an instance
+	answers itself, which is what functools.cached_property does and what
+	makes ``Cls.attr'' the descriptor rather than its value.  classmethod is
+	the one that does bind here: ``A.cm'' is bound to A, no instance in
+	sight."
+
+	(self ___isValueDescriptor___: aValue) ifFalse: [^ aValue].
+	(aValue ___respondsTo___: #'___get__:kw:')
+		ifTrue: [^ aValue ___get__: { None. self } kw: nil].
+	^ aValue __get__: None _: self
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___isValueDescriptor___: aValue
 	"True if aValue is a real DESCRIPTOR OBJECT: a Python object whose own
 	class implements ``__get__'', so a read through an instance must ask it
@@ -1655,7 +1709,13 @@ ___isValueDescriptor___: aValue
 	    protocol expects."
 
 	(aValue isKindOf: PythonInstance) ifFalse: [^ false].
-	(aValue ___respondsTo___: #'___pyBindsSelf___') ifTrue: [^ false].
+	"ASK the marker, do not merely detect it.  Whether one of these binds self
+	can depend on what it wraps: functools.partialmethod answers false over a
+	@staticmethod (nothing to bind) or a @classmethod (the CLASS binds, not the
+	instance), and those cases want the __get__ route below rather than a
+	MethodBinding on the receiver."
+	(aValue ___respondsTo___: #'___pyBindsSelf___')
+		ifTrue: [(aValue ___pyBindsSelf___ == true) ifTrue: [^ false]].
 	^ (aValue ___respondsTo___: #'___get__:kw:')
 		or: [aValue ___respondsTo___: #'__get__:_:']
 %
@@ -1987,7 +2047,7 @@ ___pyAttrLoad___: aSym
 			and: [(self ___respondsTo___: aSym)
 				and: [(self ___respondsTo___: sym1)]])
 			ifTrue: [
-				^ self @env0:perform: aSym env: 1
+				^ self ___classDescriptorGet___: (self @env0:perform: aSym env: 1)
 		].
 		"Class-body data attribute on a Grail class that subclasses a
 		built-in (e.g. a ``dict'' subclass) — not a PythonInstance, so
@@ -1999,7 +2059,7 @@ ___pyAttrLoad___: aSym
 		flask's ``SecureCookieSession(CallbackDict, SessionMixin)''."
 		owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
 		(owner notNil and: [(owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs'])
-			ifTrue: [^ self @env0:perform: aSym env: 1].
+			ifTrue: [^ self ___classDescriptorGet___: (self @env0:perform: aSym env: 1)].
 		"Per-class dynamic attr store — the home of setattr(cls, ...)
 		fallbacks AND of class-attr values merged from SECONDARY bases
 		(multiple inheritance; see importlib ___mergeSecondaryBases___).
@@ -2202,7 +2262,7 @@ ___pyAttrLoad___: aSym
 		| attrOwner metaOwns |
 		attrOwner := self @env0:class @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
 		(attrOwner notNil and: [(attrOwner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs'])
-			ifTrue: [^ self @env0:class @env0:perform: aSym env: 1].
+			ifTrue: [^ self ___descriptorGet___: (self @env0:class @env0:perform: aSym env: 1)].
 		"@classmethod (and @staticmethod) reached through an INSTANCE of a
 		built-in-subclass — ``d.fromkeys(...)'' where d is a dict-subclass
 		instance.  Python makes a classmethod reachable from an instance,

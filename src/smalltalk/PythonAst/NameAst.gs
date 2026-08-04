@@ -334,6 +334,46 @@ printSmalltalkOn: aStream
 						nextPutAll: ''')'.
 					^self
 				].
+			"CONDITIONAL sibling reference — a name bound inside a class-body
+			``if'' branch (``if c_functools: module = c_functools'' then
+			``@module.lru_cache()'' on the next def, test_functools' TestLRUC).
+			Same per-class dynamic store as a nested class, but the binding is
+			conditional, so a nil slot means the branch did not run.
+
+			What to fall back TO depends on whether the name is bound
+			unconditionally as well (``x = 1'' and then ``if flag: x = 2''):
+			if it is, it has an accessor pair holding that value and the
+			accessor is the next place to look; only then, or straight away
+			when there is no such pair, does the read reach the module global.
+			Both fallbacks are what Python's class-body lookup does -- consult
+			the class namespace, then the enclosing scope."
+			(CallAst inClassBodyValueEmit
+				and: [CallAst classBodyConditionalNames notNil
+				and: [CallAst classBodyConditionalNames includes: id asSymbol]])
+				ifTrue: [
+					| alsoStatic |
+					alsoStatic := CallAst classAttrNames notNil
+						and: [CallAst classAttrNames includes: id asSymbol].
+					aStream
+						nextPutAll: '((';
+						nextPutAll: CallAst classBeingCompiled asString;
+						nextPutAll: ' @env1:___dynamicClassAttr___: #''';
+						nextPutAll: id;
+						nextPutAll: ''') @env0:ifNil: ['.
+					alsoStatic ifTrue: [
+						aStream
+							nextPutAll: '(';
+							nextPutAll: CallAst classBeingCompiled asString;
+							nextPutAll: ' ';
+							nextPutAll: id;
+							nextPutAll: ') @env0:ifNil: ['].
+					self emitModuleAttrLoad: id
+						receiverExpr: CallAst moduleClassBeingCompiled name , ' @env0:___instance___'
+						on: aStream.
+					alsoStatic ifTrue: [aStream nextPutAll: ']'].
+					aStream nextPutAll: '])'.
+					^self
+				].
 			(CallAst inClassBodyValueEmit
 				and: [CallAst classAttrNames notNil
 				and: [(CallAst classAttrNames includes: id asSymbol)
@@ -710,10 +750,16 @@ ___enclosingFuncDeclaresReservedParam___: aSymbol
 		a method-local class closing over the outer method's ``self'' --
 		test_functools' lru_cache_weakrefable -- emitted an undeclared
 		``_self'' before this check.)"
+		"...UNLESS this is the class-body def currently being emitted in
+		VALUE (block) form -- a conditional def, whose ``self'' is the
+		transported temp rather than the receiver.  Anything nested inside
+		it closes over that same temp, so the walk continues past this node
+		and finds the parameter below."
 		((node isKindOf: InstanceFunctionDefAst)
+			and: [node ~~ CallAst classBodyValueDefNode
 			and: [node allParameterNames notEmpty
 			and: [node allParameterNames first asSymbol == aSymbol
-			and: [(node assignedNamesInBody includes: aSymbol) not]]])
+			and: [(node assignedNamesInBody includes: aSymbol) not]]]])
 			ifTrue: [^ false].
 		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
 			ifTrue: [

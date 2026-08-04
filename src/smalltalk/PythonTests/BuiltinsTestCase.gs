@@ -897,6 +897,35 @@ testMap
 	self assert: materialized asArray equals: #(2 4 6)
 %
 
+category: 'Grail-Tests - Sequence Functions'
+method: BuiltinsTestCase
+testIterCallableSentinel
+	"iter(callable, sentinel) — the two-argument form — returns a
+	callable_iterator that calls callable() on each next() and stops
+	(StopIteration) once a returned value equals (Python ==) the sentinel.
+	The callable here is a Smalltalk block (an ExecBlock is callable and
+	answers value:value:) closing over a counter; sentinel 3 stops after
+	0, 1, 2.  Exhaustion is latched — a spent iterator keeps raising
+	StopIteration without calling the callable again."
+
+	| b counter it materialized done |
+	b := builtins ___instance___.
+	counter := 0.
+	it := b @env1:iter: [:positional :_kw | | v | v := counter. counter := counter @env0:+ 1. v]
+		_: 3.
+	materialized := OrderedCollection new.
+	done := false.
+	[done] whileFalse: [
+		[materialized add: (it @env1:__next__)]
+			on: StopIteration do: [:ex | done := true]].
+	self assert: materialized asArray equals: #(0 1 2).
+	"Latched: still StopIteration, callable NOT called again (counter frozen)."
+	self should: [it @env1:__next__] raise: StopIteration.
+	self assert: counter equals: 4.
+	"A non-callable first argument raises TypeError (like CPython)."
+	self should: [b @env1:iter: 42 _: 3] raise: TypeError
+%
+
 category: 'Tests - Sequence Functions'
 method: BuiltinsTestCase
 testMemoryviewStub

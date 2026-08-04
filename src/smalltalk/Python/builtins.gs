@@ -566,9 +566,8 @@ iter: anObject
 	"Python builtin iter(x) — return an iterator over x by calling
 	x.__iter__().  Raises TypeError if x has no __iter__ method.
 
-	The two-arg sentinel form ``iter(callable, sentinel)`` is not
-	implemented yet (see TODO.md) — none of the current Flask-path
-	modules use it."
+	The two-arg sentinel form ``iter(callable, sentinel)`` is the
+	``iter:_:`` method below."
 
 	"CPython sentinel: a class that explicitly sets ``__iter__ = None''
 	is NOT iterable, and iter(x) raises TypeError even when x defines
@@ -597,6 +596,22 @@ iter: anObject
 				''' object is not iterable')
 		].
 	^ anObject __iter__
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+iter: aCallable _: aSentinel
+	"Python builtin iter(callable, sentinel) — the two-argument form.
+	Returns a callable_iterator that calls ``aCallable()'' with no arguments
+	on each next() and raises StopIteration once a returned value equals
+	(Python ==) aSentinel.  aCallable must be callable (a function or an
+	instance whose class defines __call__); CPython raises TypeError for a
+	non-callable first argument."
+
+	(self callable: aCallable)
+		@env0:ifFalse: [
+			TypeError @env0:signal: 'iter(v, w): v must be callable'].
+	^ callable_iterator ___on: aCallable sentinel: aSentinel
 %
 
 category: 'Grail-Built-in Functions'
@@ -2084,23 +2099,28 @@ pow: x _: y
 category: 'Grail-Built-in Functions'
 method: builtins
 staticmethod: fn
-	"Python @staticmethod / staticmethod(fn) - Grail doesn't honor
-	decorators at codegen, so this is the identity: return the
-	function unchanged.  Calling sites that do `Cls(args)` on a
-	'static method'-named attribute work because Grail's attribute
-	access already returns the function/value."
+	"``staticmethod(fn)'' -- a real descriptor that answers fn UNBOUND
+	however it is reached (see MethodWrappers.gs).
 
-	^ fn
+	The old identity stub left binding to be guessed from what was wrapped:
+	___isDescriptorCallable___: binds a function that came from a
+	Python-source module, so ``digest_method = staticmethod(_lazy_sha1)''
+	read through an instance passed the receiver as _lazy_sha1's first
+	argument.  The DECORATOR form never depended on this -- ClassDefAst
+	recognises ``@staticmethod'' at parse time -- only the value form."
+
+	^ PyStaticMethod value: { fn } value: nil
 %
 
 category: 'Grail-Built-in Functions'
 method: builtins
 classmethod: fn
-	"Python @classmethod / classmethod(fn) - same identity treatment
-	as staticmethod.  Grail doesn't yet thread cls through method
-	dispatch, but the stored attribute is still callable."
+	"``classmethod(fn)'' -- a real descriptor that binds the CLASS as fn's
+	first argument, read through the class or through an instance (see
+	MethodWrappers.gs).  The old identity stub bound nothing, so
+	``A.cm(x)'' called ``fn(x)'' with the class simply missing."
 
-	^ fn
+	^ PyClassMethod value: { fn } value: nil
 %
 
 category: 'Grail-Built-in Functions'
