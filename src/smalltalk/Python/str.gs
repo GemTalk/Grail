@@ -193,9 +193,17 @@ __contains__: item
 category: 'Grail-Comparison'
 method: CharacterCollection
 __eq__: other
-	"Return self == other"
+	"Return self == other.
 
-	^ self @env0:= other
+	A NON-string operand is not simply unequal: CPython's str.__eq__ answers
+	NotImplemented so the REFLECTED __eq__ on the other side gets its turn
+	(``'a' == ALWAYS_EQ'' is True throughout CPython's suite, and
+	``'a' == UserString('a')'' relies on the same hand-off).  ___cmpEq___ ->
+	___eqValue___ still ends at identity/False when that operand has no
+	__eq__ of its own, so plain ``'a' == 1'' is unchanged."
+
+	(other isKindOf: CharacterCollection) ifTrue: [^ self @env0:= other].
+	^ #'___NotImplemented___'
 %
 
 category: 'Grail-String Representation'
@@ -544,9 +552,14 @@ __mul__: n
 category: 'Grail-Comparison'
 method: CharacterCollection
 __ne__: other
-	"Return self != other"
+	"Return self != other.
 
-	^ self @env0:~= other
+	Mirror __eq__:'s NotImplemented punt for a non-string operand -- deciding
+	it here by Smalltalk ~= would skip the reflected __ne__/__eq__ that
+	___cmpNe___ -> ___neValue___ is there to try."
+
+	(other isKindOf: CharacterCollection) ifTrue: [^ self @env0:~= other].
+	^ #'___NotImplemented___'
 %
 
 category: 'Grail-String Representation'

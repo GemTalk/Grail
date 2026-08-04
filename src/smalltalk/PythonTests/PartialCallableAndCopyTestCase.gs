@@ -148,3 +148,16 @@ testPartialIsCallableThroughTheIndirectProtocol
 	self assert: testModule @env1:partial_over_partial_no_longer_raises
 		equals: 'called, keywords={''c'': 6}'.
 %
+
+category: 'Grail-Tests - deepcopy'
+method: PartialCallableAndCopyTestCase
+testDeepcopyMemoKeepsOriginalsAlive
+	"The memo is keyed by id() and Grail recycles id slots on collection, so a
+	temporary dying mid-copy could pass its id to a later object and make that
+	object's lookup answer an unrelated copy (deepcopy of
+	``partial(f, ['asdf'])'' answered [[<BoundMethod>]] for ['asdf']).
+	copy.py now holds the originals for the duration, as CPython's does."
+
+	self assert: testModule @env1:deepcopy_memo_keeps_originals_alive asArray
+		equals: #( true true true ).
+%

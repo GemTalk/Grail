@@ -15,6 +15,17 @@ def _t(f):
         return "type-error"
 
 
+def _msg(f):
+    "The str() of the TypeError a call raises -- an env-0 ``signal:'' raise"
+    " reaches Python with an EMPTY message, which no assertRaisesRegex can"
+    " match, so the text itself is the assertion."
+    try:
+        f()
+        return "no-error"
+    except TypeError as e:
+        return str(e)
+
+
 def _zde(f):
     try:
         f()
@@ -54,7 +65,154 @@ class Radd:
         return "RADD:" + str(other)
 
 
+
+# --- reflected EQUALITY (==/!=) fixtures -----------------------------------
+#
+# CPython's == / != punt to the RIGHT operand's __eq__/__ne__ whenever the left
+# one has none of its own (or returns NotImplemented).  Grail's builtins used
+# to answer a flat False instead, which silently skipped that hand-off.
+
+
+class AlwaysEq:
+    "Its __eq__ says True to anything (CPython test.support.ALWAYS_EQ)."
+    def __eq__(self, other):
+        return True
+
+    def __ne__(self, other):
+        return False
+
+
+class EqOnX:
+    "Value equality on .x -- the REFLECTED operand in the pairs below."
+    def __init__(self, x):
+        self.x = x
+
+    def __eq__(self, other):
+        return self.x == getattr(other, "x", other)
+
+
+class NoCmp:
+    "No comparison methods at all."
+    def __init__(self, x):
+        self.x = x
+
+
+class NeOnX:
+    "Defines only __ne__."
+    def __init__(self, x):
+        self.x = x
+
+    def __ne__(self, other):
+        return self.x != getattr(other, "x", other)
+
+
+_EQ_CALLS = []
+
+
+class VarargsLeft:
+    "Dunder declared WITHOUT a named receiver: compiles to ___eq__:kw: only."
+    def __eq__(*args):
+        _EQ_CALLS.append("VarargsLeft.__eq__")
+        return NotImplemented
+
+
+class VarargsRight:
+    def __eq__(*args):
+        _EQ_CALLS.append("VarargsRight.__eq__")
+        return NotImplemented
+
+    def __ne__(*args):
+        _EQ_CALLS.append("VarargsRight.__ne__")
+        return NotImplemented
+
+
+def _ne_call_order():
+    "``Left() != Right()'': forward __eq__, then the reflected __ne__ -- and"
+    " NOT the reflected __eq__ afterwards."
+    del _EQ_CALLS[:]
+    VarargsLeft() != VarargsRight()
+    return ",".join(_EQ_CALLS)
+
+
+_PRIO_CALLS = []
+
+
+class PrioBase:
+    def __eq__(self, other):
+        _PRIO_CALLS.append("PrioBase.__eq__")
+        return NotImplemented
+
+
+class PrioDerived(PrioBase):
+    "A SUBCLASS that overrides __ne__ gets the first turn (CPython's"
+    " subclass-priority rule)."
+    def __eq__(self, other):
+        _PRIO_CALLS.append("PrioDerived.__eq__")
+        return NotImplemented
+
+    def __ne__(self, other):
+        _PRIO_CALLS.append("PrioDerived.__ne__")
+        return NotImplemented
+
+
+def _subclass_priority_order():
+    del _PRIO_CALLS[:]
+    PrioBase() != PrioDerived()
+    return ",".join(_PRIO_CALLS)
+
+
+def _decimal_cases():
+    "Decimal against the rest of the numeric tower (import is local: a"
+    " module-level one would run at fixture-import time on every load)."
+    from decimal import Decimal
+    from fractions import Fraction
+    out = {}
+    d = Decimal('1001.0')
+    out["dec_eq_fraction"] = d == Fraction(2002, 2)
+    out["fraction_eq_dec"] = Fraction(2002, 2) == d
+    out["dec_eq_complex"] = d == (1001 + 0j)
+    out["complex_eq_dec"] = (1001 + 0j) == d
+    out["dec_ne_complex"] = d != (1001 + 0j)
+    out["dec_lt_complex"] = _t(lambda: d < (1001 + 0j))
+    out["dec_lt_fraction"] = d < Fraction(2003, 2)
+    return out
+
+
 RESULTS = {
+    # --- reflected equality: the left operand has no __eq__ of its own ------
+    "nocmp_eq_eqonx": NoCmp(1) == EqOnX(1),
+    "eqonx_eq_nocmp": EqOnX(1) == NoCmp(1),
+    "nocmp_eq_eqonx_diff": NoCmp(1) == EqOnX(2),
+    "nocmp_ne_neonx": NoCmp(1) != NeOnX(1),
+    "nocmp_ne_eqonx": NoCmp(1) != EqOnX(1),
+    # ... and when the left operand is a BUILT-IN (each has its own __eq__:
+    # override that used to answer a flat False for a foreign operand)
+    "str_eq_alwayseq": "a" == AlwaysEq(),
+    "none_eq_alwayseq": None == AlwaysEq(),
+    "object_eq_alwayseq": object() == AlwaysEq(),
+    "function_eq_alwayseq": (lambda: None) == AlwaysEq(),
+    "complex_eq_eqonx": (2 + 0j) == EqOnX(2.0),
+    "str_ne_alwayseq": "a" != AlwaysEq(),
+    # unequal pairs must STAY unequal (the fallback still ends at identity)
+    "str_eq_int": "a" == 1,
+    "none_eq_int": None == 1,
+    "str_eq_str": "a" == "a",
+    "str_ne_str": "a" != "b",
+    "none_eq_none": None == None,
+    "complex_eq_int": (2 + 0j) == 2,
+    "complex_ne_int": (2 + 0j) != 3,
+    # a dunder declared as ``def __eq__(*args)'' still dispatches, and the
+    # call ORDER matches CPython (no extra reflected __eq__ at the end)
+    "ne_call_order": _ne_call_order(),
+    "subclass_priority_order": _subclass_priority_order(),
+    # complex is unorderable: catchable TypeError, message names both types
+    "complex_lt_complex": _t(lambda: (1 + 0j) < (2 + 0j)),
+    "complex_lt_int": _t(lambda: (1 + 0j) < 2),
+    "int_lt_complex": _t(lambda: 1 < (2 + 0j)),
+    "complex_lt_msg": _msg(lambda: (1 + 0j) < (2 + 0j)),
+    "complex_gt_int_msg": _msg(lambda: (1 + 0j) > 2),
+    # Decimal across the numeric tower
+    "decimal": _decimal_cases(),
     "int_lt_str": _t(lambda: 1 < "a"),
     "str_lt_int": _t(lambda: "a" < 1),
     "int_lt_none": _t(lambda: 1 < None),

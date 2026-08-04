@@ -33,7 +33,7 @@ different rows and merges cleanly.
 | test.test_bytes | OK | 316 | 0 | 0 | 22 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
-| test.test_enum | ERROR | 1077 | 150 | 62 | 1 |  |
+| test.test_enum | ERROR | 1077 | 137 | 62 | 1 |  |
 | test.test_unary | OK | 6 | 0 | 0 | 0 |  |
 | test.test_int_literal | OK | 6 | 0 | 0 | 0 |  |
 | test.test_unpack | OK | 1 | 0 | 0 | 0 |  |
@@ -47,7 +47,7 @@ different rows and merges cleanly.
 | test.test_bool | OK | 31 | 0 | 0 | 0 |  |
 | test.test_iter | ERROR | 57 | 4 | 16 | 1 |  |
 | test.test_traceback | IMPORTERROR | 0 | 0 | 0 | 0 | BoundMethod object has no attribute '__code__' |
-| test.test_compare | FAIL | 16 | 6 | 0 | 0 |  |
+| test.test_compare | OK | 16 | 0 | 0 | 0 |  |
 | test.test_iterlen | FAIL | 22 | 16 | 0 | 0 |  |
 | test.test_keywordonlyarg | ERROR | 11 | 4 | 1 | 0 |  |
 | test.test_dictviews | ERROR | 16 | 2 | 3 | 0 |  |
@@ -60,7 +60,7 @@ different rows and merges cleanly.
 | test.test_baseexception | ERROR | 11 | 1 | 7 | 0 |  |
 | test.test_listcomps | ERROR | 60 | 2 | 52 | 0 |  |
 | test.test_property | ERROR | 31 | 23 | 8 | 0 |  |
-| test.test_copy | ERROR | 81 | 28 | 16 | 0 |  |
+| test.test_copy | ERROR | 81 | 28 | 15 | 0 |  |
 | test.test_scope | ERROR | 41 | 6 | 10 | 0 |  |
 | test.test_yield_from | ERROR | 43 | 18 | 12 | 0 |  |
 | test.test_deque | ERROR | 80 | 11 | 24 | 4 |  |

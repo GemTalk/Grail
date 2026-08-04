@@ -161,3 +161,114 @@ testValidIndexingStillWorks
 	self assert: (self resultAt: 'str_index_neg') equals: 'c'.
 	self assert: (self resultAt: 'range_index_ok') equals: 2
 %
+
+category: 'Grail-Tests - Reflected equality'
+method: ComparisonProtocolTestCase
+testReflectedEqualityWhenLeftOperandHasNone
+	"``==''/``!='' must hand the comparison to the RIGHT operand's dunder when
+	the left one has none of its own: object's default __eq__ answers
+	NotImplemented on a mismatch instead of settling it as False
+	(CPython's object.__eq__).  Without this, ``NoCmp(1) == EqOnX(1)'' was
+	False even though EqOnX.__eq__ says they match -- the shape behind
+	test_compare.test_comp_classes_different."
+
+	self assert: (self resultAt: 'nocmp_eq_eqonx') equals: true.
+	self assert: (self resultAt: 'eqonx_eq_nocmp') equals: true.
+	self assert: (self resultAt: 'nocmp_eq_eqonx_diff') equals: false.
+	"__ne__ punts the same way -- to the reflected __ne__, else the
+	reflected __eq__ (that is what object.__ne__ derives from)."
+	self assert: (self resultAt: 'nocmp_ne_neonx') equals: false.
+	self assert: (self resultAt: 'nocmp_ne_eqonx') equals: false
+%
+
+category: 'Grail-Tests - Reflected equality'
+method: ComparisonProtocolTestCase
+testBuiltinsPuntToReflectedEquality
+	"Each of these built-ins carries its own __eq__: override that used to
+	answer a flat False for a foreign operand, silently skipping the
+	reflected __eq__ -- so ``x == ALWAYS_EQ'' (used throughout CPython's
+	suite) was False for every one of them.  test_compare.test_issue_1393 /
+	test_comparisons."
+
+	#('str_eq_alwayseq' 'none_eq_alwayseq' 'object_eq_alwayseq'
+	  'function_eq_alwayseq' 'complex_eq_eqonx') do: [:key |
+		self assert: ((self resultAt: key) = true) description: key].
+	self assert: (self resultAt: 'str_ne_alwayseq') equals: false
+%
+
+category: 'Grail-Tests - Reflected equality'
+method: ComparisonProtocolTestCase
+testOrdinaryEqualityUnchanged
+	"The punt must not turn genuinely-unequal operands equal: with no
+	reflected __eq__ to consult, the fallback still ends at identity/value."
+
+	self assert: (self resultAt: 'str_eq_int') equals: false.
+	self assert: (self resultAt: 'none_eq_int') equals: false.
+	self assert: (self resultAt: 'str_eq_str') equals: true.
+	self assert: (self resultAt: 'str_ne_str') equals: true.
+	self assert: (self resultAt: 'none_eq_none') equals: true.
+	self assert: (self resultAt: 'complex_eq_int') equals: true.
+	self assert: (self resultAt: 'complex_ne_int') equals: true
+%
+
+category: 'Grail-Tests - Reflected equality'
+method: ComparisonProtocolTestCase
+testVarargsDunderIsDispatchedInCPythonOrder
+	"``def __eq__(*args)'' -- no named receiver -- compiles to ___eq__:kw:
+	with NO __eq__: alias, so a plain dunder send missed it entirely and the
+	user's method never ran.  The recorded order also pins that a reflected
+	__ne__ which declines is NOT followed by that operand's __eq__
+	(test_compare.test_ne_high_priority)."
+
+	self assert: (self resultAt: 'ne_call_order')
+		equals: 'VarargsLeft.__eq__,VarargsRight.__ne__'
+%
+
+category: 'Grail-Tests - Reflected equality'
+method: ComparisonProtocolTestCase
+testSubclassOperandGetsFirstTurn
+	"CPython's subclass-priority rule: when the RIGHT operand's type is a
+	proper subclass of the left's and overrides the reflected method, the
+	reflected call goes FIRST (test_compare.test_ne_low_priority asserts the
+	exact call list)."
+
+	self assert: (self resultAt: 'subclass_priority_order')
+		equals: 'PrioDerived.__ne__,PrioBase.__eq__'
+%
+
+category: 'Grail-Tests - Orderings'
+method: ComparisonProtocolTestCase
+testComplexIsUnorderableWithACatchableMessage
+	"complex has no ordering.  The raise used env-0 ``TypeError signal:'',
+	which reaches Python with an EMPTY message -- catchable, but no
+	assertRaisesRegex(TypeError, 'not supported') could match it
+	(test_compare.test_numbers).  ___signal___: carries the text, and a
+	non-complex operand goes through ___cmpFallback___ so the message names
+	BOTH types."
+
+	#('complex_lt_complex' 'complex_lt_int' 'int_lt_complex') do: [:key |
+		self assert: ((self resultAt: key) = 'type-error') description: key].
+	self assert: (self resultAt: 'complex_lt_msg')
+		equals: '''<'' not supported between instances of ''complex'' and ''complex'''.
+	self assert: (self resultAt: 'complex_gt_int_msg')
+		equals: '''>'' not supported between instances of ''complex'' and ''int'''
+%
+
+category: 'Grail-Tests - Orderings'
+method: ComparisonProtocolTestCase
+testDecimalComparesAcrossTheNumericTower
+	"decimal._ratio coerced only Decimal/int/float, so Decimal lost to a
+	Fraction (equal values compared unequal) and to a complex with no
+	imaginary part.  Ordering against a complex must still raise TypeError --
+	CPython widens to complex for == / != ONLY."
+
+	| d |
+	d := (self resultAt: 'decimal').
+	self assert: (d @env1:__getitem__: 'dec_eq_fraction') equals: true.
+	self assert: (d @env1:__getitem__: 'fraction_eq_dec') equals: true.
+	self assert: (d @env1:__getitem__: 'dec_eq_complex') equals: true.
+	self assert: (d @env1:__getitem__: 'complex_eq_dec') equals: true.
+	self assert: (d @env1:__getitem__: 'dec_ne_complex') equals: false.
+	self assert: (d @env1:__getitem__: 'dec_lt_fraction') equals: true.
+	self assert: (d @env1:__getitem__: 'dec_lt_complex') equals: 'type-error'
+%
