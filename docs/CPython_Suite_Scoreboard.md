@@ -25,7 +25,7 @@ different rows and merges cleanly.
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
 | test.test_datetime | ERROR | 525 | 77 | 37 | 2 |  |
 | test.test_re | OK | 165 | 0 | 0 | 28 |  |
-| test.test_functools | ERROR | 325 | 23 | 25 | 6 |  |
+| test.test_functools | ERROR | 325 | 26 | 19 | 6 |  |
 | test.test_list | OK | 68 | 0 | 0 | 3 |  |
 | test.test_tuple | OK | 38 | 0 | 0 | 6 |  |
 | test.test_dict | OK | 120 | 0 | 0 | 20 |  |
@@ -55,7 +55,7 @@ different rows and merges cleanly.
 | test.test_generator_stop | ERROR | 2 | 0 | 2 | 0 |  |
 | test.test_userdict | ERROR | 28 | 3 | 3 | 0 |  |
 | test.test_userlist | ERROR | 54 | 4 | 4 | 1 |  |
-| test.test_isinstance | ERROR | 23 | 1 | 19 | 0 |  |
+| test.test_isinstance | ERROR | 23 | 1 | 13 | 2 |  |
 | test.test_index | OK | 55 | 0 | 0 | 0 |  |
 | test.test_baseexception | ERROR | 11 | 1 | 7 | 0 |  |
 | test.test_listcomps | ERROR | 60 | 6 | 27 | 0 |  |

@@ -2030,7 +2030,16 @@ ___isInstanceSingle___: anObject of: aClass
 	catchable TypeError -- isKindOf: on a non-Behavior dies with an
 	UNCATCHABLE ArgumentTypeError (killed test_functools)."
 	(aClass isKindOf: Behavior) ifFalse: [
-		TypeError ___signal___: 'isinstance() arg 2 must be a type, a tuple of types, or a union'].
+		"OLD-STYLE PROTOCOL (CPython recursive_isinstance): a non-type
+		classinfo that exposes a tuple __bases__ is not an error -- compare
+		the INSTANCE's __class__ against it through the __bases__ graph.
+		___abstractClassCheck___ raises the TypeError when it does not
+		qualify, so reaching the next line means it does."
+		self ___abstractClassCheck___: aClass
+			argMessage: 'isinstance() arg 2 must be a type, a tuple of types, or a union'.
+		^ self ___abstractIsSubclass___:
+				(anObject @env1:___pyAttrLoad___: #'__class__')
+			of: aClass depth: 0].
 	result := anObject isKindOf: aClass.
 	(result not and: [aClass == Integer]) ifTrue: [
 		"CPython's bool IS an int subclass, so isinstance(True, int) is
@@ -2218,13 +2227,126 @@ issubclass: aClass _: aClassOrTuple
 	| sub target |
 	sub := self ___resolveClassRef___: aClass.
 	target := self ___resolveClassRef___: aClassOrTuple.
+	"RECURSE per element rather than calling ___isSubclassSingle___ directly,
+	mirroring isinstance:_:.  Two things the direct call got wrong: a builtin
+	class name inside the tuple is still a BoundMethod (___resolveClassRef___
+	was applied to the TUPLE, not its elements), so ``issubclass(B, (str, A))''
+	died on ``str'' before ever reaching A; and CPython allows NESTED tuples,
+	``issubclass(Super, (Child, (Super,)))'' (test_isinstance
+	test_subclass_tuple), which only recursion handles."
 	(target isKindOf: tuple) ifTrue: [
 		target @env0:do: [:eachCls |
-			(self ___isSubclassSingle___: sub of: eachCls) ifTrue: [^ true]
+			(self issubclass: sub _: eachCls) ifTrue: [^ true]
 		].
 		^ false
 	].
 	^ self ___isSubclassSingle___: sub of: target
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___abstractBases___: anObject
+	"CPython's abstract_get_bases: the object's ``__bases__'' when it is a
+	TUPLE, else nil.  This is what makes something a ``class'' for the
+	old-style protocol isinstance()/issubclass() still honour -- a plain
+	object that exposes __bases__ (typically as a property) participates in
+	subclass checks without being a type at all.
+
+	A missing __bases__, or one that is not a tuple, answers nil (CPython
+	swallows the AttributeError); so does any exception from reading it,
+	because CPython's abstract_get_bases clears the error and treats the
+	object as a non-class."
+
+	| bases |
+	"Catch AttributeError SPECIFICALLY, and nothing wider.
+
+	It cannot be ``on: Error'': Grail's Python exceptions hang off Exception,
+	so an Error handler misses the AttributeError a missing __bases__ raises,
+	and it escaped issubclass(1, 2) as an AttributeError where CPython reports
+	a TypeError.
+
+	But it must not be ``on: Exception'' either.  The VM's AlmostOutOfStack is
+	a NOTIFICATION under Exception, so a broad handler catches it mid-recursion
+	and the ``ex return: nil'' then tries to unwind across a C primitive frame:
+	UncontinuableError, ``return from on:do: block would cross frame of C
+	primitive'', which killed the whole module (test_isinstance went to CRASH
+	with t=0).  test_infinitely_many_bases reaches that depth on purpose -- its
+	__getattr__ manufactures two fresh classes per level."
+	bases := [anObject @env1:___pyAttrLoad___: #'__bases__']
+		@env0:on: AttributeError do: [:ex | ex @env0:return: nil].
+	^ (bases isKindOf: tuple) ifTrue: [bases] ifFalse: [nil]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___abstractIsSubclass___: derived of: cls depth: aDepth
+	"CPython's abstract_issubclass: walk ``derived''s __bases__ graph looking
+	for ``cls'', by IDENTITY.  Used for the old-style protocol where either
+	argument is not a real type but exposes a tuple __bases__.
+
+	CPython recurses in C and lets the interpreter's own stack guard turn a
+	cyclic or unbounded __bases__ chain into RecursionError.  Grail has no
+	such guard on this path -- an unbounded chain raised the UNCATCHABLE
+	Smalltalk AlmostOutOfStack -- so the depth is carried explicitly and
+	raises Python's RecursionError at the limit.  test_isinstance's
+	test_infinite_cycle_in_bases, test_infinite_recursion_in_bases,
+	test_infinite_recursion_via_bases_tuple and test_infinitely_many_bases
+	each build one of those chains deliberately.
+
+	The limit is DELIBERATELY LOW (20).  CPython's default recursion limit is
+	1000, but its own tests for these shapes wrap them in
+	``support.infinite_recursion(25)'' -- and Grail cannot afford even that
+	many: test_infinitely_many_bases' __getattr__ manufactures two classes per
+	level, so at a limit of 100 the Smalltalk stack overflowed BEFORE the
+	counter fired, and the AlmostOutOfStack notification took the module down.
+	Real old-style __bases__ graphs are shallow, so a low ceiling costs
+	nothing in practice and is what keeps the failure a catchable Python
+	RecursionError.
+
+	The single-base case iterates rather than recursing, matching CPython's
+	tail-call, so a long linear chain costs no depth."
+
+	| node bases steps |
+	node := derived.
+	steps := aDepth.
+	[true] @env0:whileTrue: [
+		"The guard counts ITERATIONS of the single-base walk as well as
+		recursive descents.  Counting only the descents was not enough: a
+		self-referential single base (``__bases__'' answering ``(self,)'')
+		never recurses at all, so the loop spun forever and took the whole
+		module down -- test_isinstance went from 20 errors to a CRASH.
+		CPython gets its RecursionError from the C stack the repeated
+		property-getter calls consume; this loop consumes none, so the limit
+		has to be explicit."
+		steps @env0:> 20 ifTrue: [
+			RecursionError ___signal___:
+				'maximum recursion depth exceeded while calling a Python object'].
+		steps := steps @env0:+ 1.
+		(node @env0:== cls) ifTrue: [^ true].
+		bases := self ___abstractBases___: node.
+		bases @env0:isNil ifTrue: [^ false].
+		(bases @env0:size @env0:= 0) ifTrue: [^ false].
+		(bases @env0:size @env0:= 1)
+			ifTrue: [node := bases @env0:at: 1]
+			ifFalse: [
+				bases @env0:do: [:each |
+					(self ___abstractIsSubclass___: each of: cls depth: steps)
+						ifTrue: [^ true]].
+				^ false]]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___abstractClassCheck___: anObject argMessage: aMessage
+	"CPython's check_class: ``anObject'' must be a real type OR expose a tuple
+	__bases__; otherwise raise the caller's TypeError.  Answers true when the
+	object is a non-type that nonetheless qualifies through __bases__, so the
+	caller knows to take the abstract path."
+
+	(anObject isKindOf: Behavior) ifTrue: [^ false].
+	(self ___abstractBases___: anObject) @env0:isNil ifTrue: [
+		TypeError ___signal___: aMessage].
+	^ true
 %
 
 category: 'Grail-Built-in Functions'
@@ -2259,8 +2381,20 @@ ___isSubclassSingle___: sub of: target
 	bases are visible only through its registered C3 MRO."
 
 	| il baCls |
+	"OLD-STYLE PROTOCOL.  When either argument is not a real type, CPython
+	does not reject: recursive_issubclass falls back to abstract_issubclass,
+	which walks ``sub''s __bases__ graph looking for ``target''.  An object
+	exposing a tuple __bases__ -- typically ``__bases__ = property(getbases)''
+	-- therefore participates in subclass checks without being a type at all.
+	Grail raised a flat ``issubclass() arg must be a type'', which was 11 of
+	test_isinstance's 20 failures.  Argument 1 is checked before argument 2,
+	matching CPython, so the message names the same argument it does."
 	((sub isKindOf: Behavior) and: [target isKindOf: Behavior]) ifFalse: [
-		TypeError ___signal___: 'issubclass() arg must be a type'].
+		self ___abstractClassCheck___: sub
+			argMessage: 'issubclass() arg 1 must be a class'.
+		self ___abstractClassCheck___: target
+			argMessage: 'issubclass() arg 2 must be a class, a tuple of classes, or a union'.
+		^ self ___abstractIsSubclass___: sub of: target depth: 0].
 	(sub == target) ifTrue: [^ true].
 	"CPython: bytearray is NOT a subclass of bytes (distinct types), though
 	Grail stores bytearray as a ByteArray(=bytes) subclass.  Exclude the
