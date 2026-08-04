@@ -183,19 +183,58 @@ ___unpackSequence___
 	"Tuple-unpack coercion (``a, b, c = expr'').  AssignAst's unpack
 	codegen indexes the RHS with __getitem__: -- correct for sequences,
 	wrong for iterables WITHOUT positional indexing.  CPython unpacks any
-	iterable via __iter__.  An INDEXABLE receiver (list/tuple/str/range/...)
-	answers itself so the fast index path runs unchanged; a receiver that is
-	iterable but NOT indexable (map/zip/filter/generator/enumerate/... ) is
-	materialized into a list in iteration order so the index-based unpack
-	works (``lhs, rhs = map(str.strip, line.split('->'))'' in test_fractions
-	test_float_format_testfile).  Enum classes keep their own override; a
-	non-iterable answers itself and the __getitem__: index then raises."
+	iterable via __iter__.  A REAL indexable receiver (list/tuple/str/range/...:
+	genuine __getitem__ OWNERSHIP, not the PythonInstance fallback) answers
+	itself so the fast index path runs unchanged; anything else is materialized
+	into a list in iteration order so the index-based unpack works
+	(``lhs, rhs = map(str.strip, line.split('->'))'' in test_fractions
+	test_float_format_testfile; ``a, b, c = IteratingSequenceClass(3)'' in
+	test_iter test_unpack_iter, which has __iter__ but no __getitem__).  Enum
+	classes keep their own override.  A NON-iterable materializes via __iter__
+	here, which raises the catchable TypeError (``a, b = len''), matching
+	CPython -- rather than the old ``^ self'' that let a later __getitem__:
+	misbehave.  ``___respondsTo___'' saw the PythonInstance fallback __getitem__:
+	on EVERY instance and wrongly fast-pathed a non-indexable class into a
+	``not subscriptable'' error; ``___hasProtocol___'' probes real ownership.
+	A BoundMethod carries a PEP-585 generic-alias __getitem__ (``list[int]'',
+	``Callable[..., T]'') that is NOT the sequence protocol, so it is excluded
+	from the fast path -- ``a, b = len'' then materializes via __iter__ and
+	raises TypeError (not iterable), like CPython's iter(len)."
 
-	(self ___respondsTo___: #'__getitem__:')
+	((self ___hasProtocol___: '__getitem__')
+		@env0:and: [(self @env0:isKindOf: BoundMethod) @env0:not])
 		ifTrue: [^ self].
-	((self ___respondsTo___: #'__iter__')
-		@env0:or: [self ___respondsTo___: #'__next__'])
-		ifTrue: [^ list @env1:__new__: self].
+	^ list @env1:__new__: self
+%
+
+category: 'Grail-Convenience Methods'
+method: object
+___unpackCheck___: nBefore star: hasStar after: nAfter
+	"CPython requires a tuple-unpacking assignment to receive the right number
+	of values -- exactly nBefore for ``a, ..., z = expr'', or at least
+	nBefore + nAfter around a star target -- raising ValueError otherwise
+	(test_iter test_unpack_iter).  Only a receiver with a dependable length (the
+	materialized iterator list, or a kernel sequence -- both SequenceableCollection)
+	is checked; a bare custom-__getitem__ receiver has no reliable size and keeps
+	the lenient index path.  Answers self so it chains after ___unpackSequence___."
+
+	| sz needed |
+	(self @env0:isKindOf: SequenceableCollection) @env0:ifFalse: [^ self].
+	sz := self @env0:size.
+	hasStar @env0:ifTrue: [
+		needed := nBefore @env0:+ nAfter.
+		(sz @env0:< needed) @env0:ifTrue: [
+			ValueError ___signal___: ('not enough values to unpack (expected at least '
+				@env0:, needed @env0:printString @env0:, ', got '
+				@env0:, sz @env0:printString @env0:, ')')].
+		^ self].
+	(sz @env0:< nBefore) @env0:ifTrue: [
+		ValueError ___signal___: ('not enough values to unpack (expected '
+			@env0:, nBefore @env0:printString @env0:, ', got '
+			@env0:, sz @env0:printString @env0:, ')')].
+	(sz @env0:> nBefore) @env0:ifTrue: [
+		ValueError ___signal___: ('too many values to unpack (expected '
+			@env0:, nBefore @env0:printString @env0:, ')')].
 	^ self
 %
 

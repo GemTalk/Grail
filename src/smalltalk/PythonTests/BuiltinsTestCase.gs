@@ -141,6 +141,24 @@ abs(-5)') equals: 5
 
 category: 'Grail-Tests - Backlog Fixes'
 method: BuiltinsTestCase
+testUnpackCountValidation
+	"Tuple-unpacking assigns via the iterator protocol and enforces the value
+	count like CPython (test_iter test_unpack_iter): an iterable-but-not-
+	subscriptable class unpacks by __iter__, too many / too few values raise
+	ValueError, a non-iterable raises TypeError, and a dict-values view unpacks
+	by iteration.  Uses a loaded module because the fixture defines classes."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_unpack' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_unpack.py')
+		name: 'grail_unpack'.
+	self assert: (mod @env1:check)
+%
+
+category: 'Grail-Tests - Backlog Fixes'
+method: BuiltinsTestCase
 testNestedClassStringLiteralNewline
 	"A string literal containing a newline, in a method of a class defined
 	INSIDE a nested block (try/for/if), keeps its exact value.  ClassDefAst
