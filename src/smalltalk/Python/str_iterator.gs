@@ -120,4 +120,17 @@ __length_hint__
 	^ (collection @env0:size @env0:- position) @env0:max: 0
 %
 
+category: 'Grail-Pickle Protocol'
+method: str_iterator
+_getstate
+	"Answer this iterator's state as a tuple (collection, position) for
+	pickling -- the same (source, index) shape as tuple_iterator/seq_iterator,
+	consumed by pickle.py's positional iterator path (save_iterator ->
+	(iter, (collection,), position), with the index re-applied by BUILD).
+	A str is immutable, so there is no reverse/exhausted flag.  A plain
+	Python-visible method (no ``___'' prefix) so pickle.py can call it."
+
+	^ tuple @env0:withAll: { collection. position }
+%
+
 set compile_env: 0
