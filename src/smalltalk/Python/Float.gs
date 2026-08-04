@@ -113,6 +113,26 @@ __new__: obj
 
 category: 'Grail-Initialization'
 classmethod: float
+__new__: obj _: value
+	"CPython ``float.__new__(cls, value)'': Python's __new__ always takes the
+	target CLASS as its first positional, so a hand-written float-subclass /
+	data-mixed-enum __new__ forwarding to its base -- ``obj = float.__new__(
+	cls, v)'' in an enum member's __new__ (test_dir_on_sub for float variants)
+	-- lands here with obj = the class and value = the float value, NOT two
+	numeric args.  float() never takes 2 positionals, so a leading Behavior is
+	unambiguously the allocation form: build a cls instance carrying
+	float(value).  Mirrors int.__new__: obj _: base."
+
+	(obj isKindOf: Behavior) ifTrue: [
+		| inst |
+		inst := obj @env0:new.
+		inst @env0:dynamicInstVarAt: #value put: (self __new__: value).
+		^ inst].
+	^ TypeError ___signal___: 'float expected at most 1 argument, got 2'
+%
+
+category: 'Grail-Initialization'
+classmethod: float
 ___intToFloatChecked___: anInteger
 	"Integer -> Float, but raise (matching CPython) rather than silently
 	overflow to Infinity when the integer is too large to represent."
