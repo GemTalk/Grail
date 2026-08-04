@@ -111,7 +111,7 @@ __new__: source
 		]
 	]) ifTrue: [
 		| collected i |
-		collected := WriteStream @env0:on: ByteArray @env0:new.
+		collected := AppendStream @env0:on: ByteArray @env0:new.
 		i := 1.
 		[i @env0:<= source @env0:size] @env0:whileTrue: [
 			collected @env0:nextPut: (self ___coerceByteValue___: (source @env0:at: i)).
@@ -375,7 +375,7 @@ fromhex: source
 	| src size out i contents |
 	src := self ___hexSourceCodes___: source.
 	size := src @env0:size.
-	out := WriteStream @env0:on: (ByteArray @env0:new).
+	out := AppendStream @env0:on: (ByteArray @env0:new).
 	i := 1.
 	[i @env0:<= size] @env0:whileTrue: [
 		| c hi |
@@ -535,7 +535,7 @@ __mod__: args
 		self @env0:size @env0:= n ifFalse: [
 			BufferError ___signal___:
 				'Existing exports of data: object cannot be re-sized']].
-	out := WriteStream @env0:on: ByteArray @env0:new.
+	out := AppendStream @env0:on: ByteArray @env0:new.
 	isMap := args isKindOf: KeyValueDictionary.
 	(isMap @env0:not @env0:and: [
 		(args isKindOf: Array) @env0:or: [
@@ -1044,7 +1044,7 @@ ___reprBody___: alwaysEscapeSingle
 		(b @env0:= 34) ifTrue: [hasDouble := true]].
 	quote := (hasSingle @env0:and: [hasDouble @env0:not]) ifTrue: [34] ifFalse: [39].
 	bs := Character @env0:codePoint: 92.
-	out := WriteStream @env0:on: Unicode7 @env0:new.
+	out := AppendStream @env0:on: Unicode7 @env0:new.
 	out @env0:nextPut: $b; @env0:nextPut: (Character @env0:codePoint: quote).
 	1 @env0:to: size do: [:i | | b |
 		b := self @env0:at: i.
@@ -1462,7 +1462,7 @@ ___pyDecodeUTF16___: enc
 						ifTrue: [bigEndian := true. start := 3]
 						ifFalse: [((self @env0:at: 1) @env0:= 16rFF and: [(self @env0:at: 2) @env0:= 16rFE])
 							ifTrue: [bigEndian := false. start := 3]]]]].
-	ws := WriteStream @env0:on: Unicode16 @env0:new.
+	ws := AppendStream @env0:on: Unicode16 @env0:new.
 	i := start.
 	[i @env0:+ 1 @env0:<= n] @env0:whileTrue: [ | b0 b1 unit cp |
 		b0 := self @env0:at: i. b1 := self @env0:at: i @env0:+ 1.
@@ -1485,7 +1485,7 @@ ___pyDecodeUTF8Ignore___
 	invalid bytes.  (Strict decoding uses GemStone's decodeFromUTF8.)"
 	| n i ws |
 	n := self @env0:size. i := 1.
-	ws := WriteStream @env0:on: Unicode16 @env0:new.
+	ws := AppendStream @env0:on: Unicode16 @env0:new.
 	[i @env0:<= n] @env0:whileTrue: [ | b0 cp nbytes ok |
 		b0 := self @env0:at: i.
 		b0 @env0:< 16r80 ifTrue: [cp := b0. nbytes := 1] ifFalse: [
@@ -1515,7 +1515,7 @@ ___decodeUnicodeEscape___
 
 	| size out i byte |
 	size := self size.
-	out := WriteStream on: (Unicode32 new: size).
+	out := AppendStream on: (Unicode32 new: size).
 	i := 1.
 	[i <= size] whileTrue: [
 		byte := self at: i.
@@ -1865,7 +1865,7 @@ ___hexWithSep___: sep bytesPerSep: nArg
 	size := self @env0:size.
 	sepCode := self ___hexSepCode___: sep.
 	n := nArg.
-	ws := WriteStream @env0:on: String @env0:new.
+	ws := AppendStream @env0:on: String @env0:new.
 	1 @env0:to: size do: [:i |
 		| idx0 needSep byte hexStr |
 		idx0 := i @env0:- 1.

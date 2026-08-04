@@ -357,7 +357,7 @@ __repr__
 	"Match Python's dict.__repr__ shape — sufficient for debugging."
 
 	| stream first |
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream := AppendStream @env0:on: Unicode7 @env0:new.
 	stream @env0:nextPutAll: '{'.
 	first := true.
 	self @env0:keysAndValuesDo: [:k :v |

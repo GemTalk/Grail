@@ -1023,7 +1023,7 @@ __repr__
 	srcRepr := src __repr__.
 	srcRepr @env0:size @env0:> 200 ifTrue: [
 		srcRepr := srcRepr @env0:copyFrom: 1 to: 200].
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream := AppendStream @env0:on: Unicode7 @env0:new.
 	stream @env0:nextPutAll: 're.compile('.
 	stream @env0:nextPutAll: srcRepr.
 	names @env0:notEmpty ifTrue: [
@@ -1200,7 +1200,7 @@ __repr__
 		groupRepr := (whole @env0:copyFrom: 1 to: 25) __repr__
 			@env0:, '...'
 			@env0:, (whole @env0:copyFrom: whole @env0:size @env0:- 24 to: whole @env0:size) __repr__].
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream := AppendStream @env0:on: Unicode7 @env0:new.
 	stream @env0:nextPutAll: '<re.Match object; span=('.
 	stream @env0:print: (sp @env0:at: 1).
 	stream @env0:nextPutAll: ', '.

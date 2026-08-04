@@ -491,7 +491,7 @@ __repr__
 	kw := self @env0:dynamicInstVarAt: #keywords.
 	name := (self @env0:class __module__) @env0:asString @env0:, '.'
 		@env0:, (self @env0:class __qualname__) @env0:asString.
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream := AppendStream @env0:on: Unicode7 @env0:new.
 	stream @env0:nextPutAll: name.
 	stream @env0:nextPut: $(.
 	stream @env0:nextPutAll: (func __repr__) @env0:asString.

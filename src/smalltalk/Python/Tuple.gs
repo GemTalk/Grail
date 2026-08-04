@@ -439,7 +439,7 @@ __repr__
 		RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object'].
 	seen @env0:add: self.
 	^ [[size := self @env0:size.
-	stream := WriteStream @env0:on: (String ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	stream @env0:nextPut: $(.
 
 	size == 1 ifTrue: [

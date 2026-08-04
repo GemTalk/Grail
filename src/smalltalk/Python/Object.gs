@@ -274,7 +274,7 @@ ___new__: positional kw: kwargs
 		| cls rest sel owner |
 		cls := positional @env0:at: 1.
 		rest := positional @env0:copyFrom: 2 to: positional @env0:size.
-		sel := WriteStream @env0:on: String @env0:new.
+		sel := AppendStream @env0:on: String @env0:new.
 		sel @env0:nextPutAll: '__new__:'.
 		2 @env0:to: rest @env0:size do: [:i | sel @env0:nextPutAll: '_:'].
 		sel := sel @env0:contents @env0:asSymbol.
@@ -350,7 +350,7 @@ ___allocateInstance___: positional kw: keywords
 	found := (self @env0:whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) ~~ nil.
 	found ifFalse: [
 		n := positional @env0:size.
-		stream := WriteStream @env0:on: String @env0:new.
+		stream := AppendStream @env0:on: String @env0:new.
 		stream @env0:nextPutAll: '__new__:'.
 		2 @env0:to: n do: [:i | stream @env0:nextPutAll: '_:'].
 		sel := stream @env0:contents @env0:asSymbol.
@@ -577,7 +577,7 @@ value: positional value: kwargs
 	nargs := positional @env0:size.
 	nargs @env0:= 0 ifTrue: [^ self __new__].
 	nargs @env0:= 1 ifTrue: [^ self __new__: (positional @env0:at: 1)].
-	sel := WriteStream @env0:on: String @env0:new.
+	sel := AppendStream @env0:on: String @env0:new.
 	sel @env0:nextPutAll: '__new__:'.
 	2 @env0:to: nargs do: [:i | sel @env0:nextPutAll: '_:'].
 	^ self @env0:perform: sel @env0:contents @env0:asSymbol env: 1 withArguments: positional
@@ -1312,7 +1312,7 @@ ___unboundMethodClosure___: aSym
 			@env0:ifTrue: [aSym]
 			@env0:ifFalse: [
 				| stream i |
-				stream := WriteStream @env0:on: String @env0:new.
+				stream := AppendStream @env0:on: String @env0:new.
 				stream @env0:nextPutAll: s.
 				stream @env0:nextPut: $:.
 				i := 1.
@@ -2833,7 +2833,7 @@ __repr__
 		^ self @env0:class @env0:perform: #'__repr__' env: 1].
 	myClass := self @env0:class.
 	className := myClass @env0:name.
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	stream @env0:nextPut: $<.
 	stream @env0:nextPutAll: className.
 	stream @env0:nextPutAll: ' object>'.

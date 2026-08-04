@@ -256,7 +256,7 @@ ___parseFloatBody___: trimmed original: original
 		(lower @env0:= 'nan') ifTrue: [
 			^ sign @env0:> 0 ifTrue: [PlusQuietNaN] ifFalse: [MinusQuietNaN]].
 
-		ws := WriteStream @env0:on: String @env0:new.
+		ws := AppendStream @env0:on: String @env0:new.
 		r1 := self ___consumeDigitRun___: trimmed from: idx into: ws.
 		intCount := r1 @env0:at: 1. idx := r1 @env0:at: 2.
 		(intCount @env0:== 0) ifTrue: [ws @env0:nextPut: $0].
@@ -387,7 +387,7 @@ ___parseHex___: hexString
 			and: [((trimmed @env0:at: idx @env0:+ 1) @env0:asLowercase) @env0:== $x]])
 			ifTrue: [idx := idx @env0:+ 2].
 
-		mant := WriteStream @env0:on: String @env0:new.
+		mant := AppendStream @env0:on: String @env0:new.
 		r1 := self ___consumeAsciiDigitRun___: trimmed from: idx into: mant radix: 16.
 		intCount := r1 @env0:at: 1. idx := r1 @env0:at: 2.
 		hasDot := false. fracCount := 0.
@@ -406,7 +406,7 @@ ___parseHex___: hexString
 				ifTrue: [expSign := -1. idx := idx @env0:+ 1]
 				ifFalse: [((idx @env0:<= size) and: [(trimmed @env0:at: idx) @env0:== $+]) ifTrue: [idx := idx @env0:+ 1]].
 			expIdx := idx.
-			r3 := self ___consumeAsciiDigitRun___: trimmed from: idx into: (WriteStream @env0:on: String @env0:new) radix: 10.
+			r3 := self ___consumeAsciiDigitRun___: trimmed from: idx into: (AppendStream @env0:on: String @env0:new) radix: 10.
 			((r3 @env0:at: 1) @env0:== 0) ifTrue: [self @env0:error: 'invalid hexadecimal floating-point string'].
 			idx := r3 @env0:at: 2.
 			binExp := expSign @env0:* ((trimmed @env0:copyFrom: expIdx to: idx @env0:- 1) @env0:asInteger)].

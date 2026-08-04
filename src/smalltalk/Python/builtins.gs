@@ -1567,7 +1567,7 @@ ascii: anObject
 
 	| r ws cp hex |
 	r := anObject __repr__.
-	ws := WriteStream @env0:on: String @env0:new.
+	ws := AppendStream @env0:on: Unicode7 @env0:new.
 	r @env0:do: [:ch |
 		cp := ch @env0:codePoint.
 		cp @env0:<= 126

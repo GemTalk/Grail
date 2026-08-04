@@ -191,7 +191,7 @@ __repr__
 	"Return string representation of the range"
 
 	| stream |
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 
 	stream @env0:nextPutAll: 'range('.
 

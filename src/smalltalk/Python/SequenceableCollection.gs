@@ -439,7 +439,7 @@ __repr__
 	Subclasses override to provide list vs tuple formatting."
 
 	| stream |
-	stream := WriteStream @env0:on: (String ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	stream @env0:nextPut: $[.
 
 	self @env0:do: [:each |
