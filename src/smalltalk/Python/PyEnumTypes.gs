@@ -1469,17 +1469,31 @@ ___grailFunctional: cls positional: positional keywords: keywords
 			ifFalse: [
 			(byValue @env0:includesKey: effVal)
 				ifTrue: [member := byValue @env0:at: effVal]
-				ifFalse: [
+				ifFalse: [ | canonical |
 					member := newCls @env0:basicNew.
 					member @env0:dynamicInstVarAt: #value put: effVal.
 					member @env0:dynamicInstVarAt: #name put: nameStr.
 					byValue @env0:at: effVal put: member.
-					"Zero-valued Flag members are non-canonical -- excluded
-					from iteration/len/_member_names_ (same rule as the
-					class-syntax builder)."
-					((effVal isKindOf: Integer)
-						and: [effVal @env0:= 0 and: [isFlag]])
-						ifFalse: [members @env0:add: member]].
+					"A Flag member is non-canonical -- reachable by name and value
+					but excluded from iteration/len/reversed/_member_names_ -- when
+					its value is 0, OR when it is a composite ALIAS whose bits are all
+					covered by the already-defined members (``dupe = 3`` after
+					first=1/second=2).  Same rule as the class-syntax builder; the
+					functional builder previously dropped only the zero case, so a
+					composite alias leaked into ``members'' (the Flag Function variants
+					of test_basics + test_reversed_iteration_order)."
+					canonical := true.
+					(isFlag and: [effVal isKindOf: Integer]) ifTrue: [
+						effVal @env0:= 0
+							ifTrue: [canonical := false]
+							ifFalse: [ | mask |
+								mask := 0.
+								members @env0:do: [:m | | mv |
+									mv := m @env0:dynamicInstVarAt: #value.
+									(mv isKindOf: Integer) ifTrue: [mask := mask @env0:bitOr: mv]].
+								((effVal @env0:> 0) and: [(effVal @env0:bitAnd: mask) @env0:= effVal])
+									ifTrue: [canonical := false]]].
+					canonical ifTrue: [members @env0:add: member]].
 			byName @env0:at: nameStr put: member.
 			"Category MUST be Grail-Class Attrs: the class-receiver branch of
 		Object's attribute load performs only setter-paired accessors or

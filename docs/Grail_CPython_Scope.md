@@ -12,8 +12,9 @@ interpreter internals, refcount/GC-timing & real/free-threading, and
 hardware/OS-platform specifics.
 
 Every module is tagged **in-scope** (priority tier P1–P4) or **out-of-scope** (with a
-bucket + reason). ✅ marks the 19 already wired into
-`scripts/cpython_suite_manifest.txt`.
+bucket + reason). ✅ marks the 50 already wired into
+`scripts/cpython_suite_manifest.txt` (33 P1 · 16 P2 · 1 P3); their current
+per-module standing is in [CPython_Suite_Scoreboard.md](CPython_Suite_Scoreboard.md).
 
 ## Summary
 
@@ -32,7 +33,9 @@ bucket + reason). ✅ marks the 19 already wired into
 | &nbsp;&nbsp;Hardware / OS-platform specific | 18 |
 | **Total** | **434** |
 
-Of the 255 in-scope modules, **19 already run** in the harness. **66** modules are genuinely arguable — see [Judgment calls](#judgment-calls).
+Of the 255 in-scope modules, **50 are wired into the harness** (was 19 when this
+document was written). **66** modules are genuinely arguable — see
+[Judgment calls](#judgment-calls).
 
 ---
 
@@ -45,24 +48,24 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | Module | Rationale |
 |--------|-----------|
 | `test_asyncgen` | Async generators — a core language feature. |
-| `test_augassign` | Augmented-assignment semantics (language). |
-| `test_baseexception` | BaseException hierarchy (language). |
+| `test_augassign` ✅ | Augmented-assignment semantics (language). |
+| `test_baseexception` ✅ | BaseException hierarchy (language). |
 | `test_binop` | Binary-operator dispatch (language). |
-| `test_bool` | bool type (language). |
+| `test_bool` ✅ | bool type (language). |
 | `test_builtin` | Built-in functions (language). |
 | `test_bytes` ✅ | bytes / bytearray (language/core type). |
 | `test_call` | Call protocol (language). |
 | `test_class` | Class definition/semantics (language). |
-| `test_compare` | Object comparison protocol (language). |
+| `test_compare` ✅ | Object comparison protocol (language). |
 | `test_complex` | complex type (language). |
-| `test_contains` | Membership (`in`) protocol (language). |
+| `test_contains` ✅ | Membership (`in`) protocol (language). |
 | `test_coroutines` | Coroutines / async-await (language). |
 | `test_decorators` | Decorators (language). |
 | `test_descr` | Descriptors / new-style class machinery (language). |
 | `test_descrtut` | Descriptor tutorial doctests (language). |
 | `test_dict` ✅ | dict — core type (in harness). |
-| `test_dictcomps` | Dict comprehensions (language). |
-| `test_dictviews` | dict keys/values/items views (language). |
+| `test_dictcomps` ✅ | Dict comprehensions (language). |
+| `test_dictviews` ✅ | dict keys/values/items views (language). |
 | `test_dynamic` | Dynamic name binding / exec (language). |
 | `test_enumerate` | enumerate builtin (language). |
 | `test_eof` | Parser EOF handling (language). |
@@ -74,26 +77,26 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | `test_extcall` | Extended call syntax */** (language). |
 | `test_float` ✅ | float — core type (in harness). |
 | `test_flufl` | barry_as_FLUFL __future__ (language). |
-| `test_format` | str formatting / format() (language). |
+| `test_format` ✅ | str formatting / format() (language). |
 | `test_fstring` | f-strings (language). |
 | `test_funcattrs` | Function/method attributes (language). |
 | `test_future_stmt` | __future__ statements (language). |
-| `test_generator_stop` | PEP 479 StopIteration handling (language). |
+| `test_generator_stop` ✅ | PEP 479 StopIteration handling (language). |
 | `test_generators` | Generators (language). |
 | `test_genericclass` | __class_getitem__ / generic classes (language). |
 | `test_genexps` | Generator expressions (language). |
 | `test_global` | global statement (language). |
 | `test_grammar` | Grammar (language). |
 | `test_hash` | hash() protocol (language). |
-| `test_index` | __index__ protocol (language). |
+| `test_index` ✅ | __index__ protocol (language). |
 | `test_int` ✅ | int — core type (in harness). |
-| `test_int_literal` | Integer literal parsing (language). |
-| `test_isinstance` | isinstance/issubclass (language). |
-| `test_iter` | Iterator protocol (language). |
-| `test_iterlen` | __length_hint__ (language). |
-| `test_keywordonlyarg` | Keyword-only arguments (language). |
+| `test_int_literal` ✅ | Integer literal parsing (language). |
+| `test_isinstance` ✅ | isinstance/issubclass (language). |
+| `test_iter` ✅ | Iterator protocol (language). |
+| `test_iterlen` ✅ | __length_hint__ (language). |
+| `test_keywordonlyarg` ✅ | Keyword-only arguments (language). |
 | `test_list` ✅ | list — core type (in harness). |
-| `test_listcomps` | List comprehensions (language). |
+| `test_listcomps` ✅ | List comprehensions (language). |
 | `test_long` | Arbitrary-precision int (language). |
 | `test_longexp` | Very long expressions (parser stress). |
 | `test_metaclass` | Metaclasses (language). |
@@ -102,17 +105,17 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | `test_patma` | Structural pattern matching (language). |
 | `test_pep646_syntax` | Variadic generics syntax / PEP 646 (language). |
 | `test_positional_only_arg` | Positional-only args / (language). |
-| `test_pow` | pow() / ** (language). |
+| `test_pow` ✅ | pow() / ** (language). |
 | `test_print` | print() (language/builtin). |
-| `test_property` | property descriptor (language). |
+| `test_property` ✅ | property descriptor (language). |
 | `test_raise` | raise statement (language). |
 | `test_range` | range (language/builtin). |
-| `test_richcmp` | Rich comparison operators (language). |
-| `test_scope` | Lexical scoping / closures (language). |
+| `test_richcmp` ✅ | Rich comparison operators (language). |
+| `test_scope` ✅ | Lexical scoping / closures (language). |
 | `test_set` ✅ | set/frozenset — core type (in harness). |
-| `test_setcomps` | Set comprehensions (language). |
-| `test_slice` | slice objects (language). |
-| `test_sort` | list.sort / sorted (language/builtin). |
+| `test_setcomps` ✅ | Set comprehensions (language). |
+| `test_slice` ✅ | slice objects (language). |
+| `test_sort` ✅ | list.sort / sorted (language/builtin). |
 | `test_source_encoding` | Source-file encoding declarations (parser). |
 | `test_str` | str — core type (language). |
 | `test_string_literals` | String-literal syntax (language). |
@@ -127,13 +130,13 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | `test_type_params` | PEP 695 type parameters (language). |
 | `test_typechecks` | type()/isinstance checks (language). |
 | `test_types` | types module — built-in type objects (language). |
-| `test_unary` | Unary operators (language). |
+| `test_unary` ✅ | Unary operators (language). |
 | `test_unicode_identifiers` | Unicode identifier support (language). |
-| `test_unpack` | Sequence unpacking (language). |
+| `test_unpack` ✅ | Sequence unpacking (language). |
 | `test_unpack_ex` | Extended (starred) unpacking (language). |
 | `test_utf8source` | UTF-8 source files (parser). |
 | `test_with` | with statement / context managers (language). |
-| `test_yield_from` | yield from (language). |
+| `test_yield_from` ✅ | yield from (language). |
 
 ### P2 — Core stdlib (data structures · numbers · algorithms · text)  ·  34 modules
 
@@ -146,11 +149,11 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 | `test_bisect` ✅ | bisect — pure-Python algorithm. |
 | `test_cmath` | cmath — complex math. |
 | `test_collections` ✅ | collections — core containers. |
-| `test_copy` | copy — shallow/deep copy protocol. |
+| `test_copy` ✅ | copy — shallow/deep copy protocol. |
 | `test_datetime` ✅ | datetime — core data type (in harness). |
 | `test_decimal` | decimal — arbitrary-precision arithmetic. |
 | `test_defaultdict` | collections.defaultdict. |
-| `test_deque` | collections.deque. |
+| `test_deque` ✅ | collections.deque. |
 | `test_dynamicclassattribute` | types.DynamicClassAttribute (used by enum). |
 | `test_enum` ✅ | enum — core (in harness). |
 | `test_fractions` ✅ | fractions — core numeric (in harness). |
@@ -172,8 +175,8 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 | `test_strtod` | String→double conversion (float parsing). |
 | `test_textwrap` ✅ | textwrap — core (in harness). |
 | `test_unittest` | unittest (vendored) — the test framework itself. |
-| `test_userdict` | collections.UserDict (vendored). |
-| `test_userlist` | collections.UserList (vendored). |
+| `test_userdict` ✅ | collections.UserDict (vendored). |
+| `test_userlist` ✅ | collections.UserList (vendored). |
 | `test_userstring` | collections.UserString (vendored). |
 
 ### P3 — Broader stdlib (serialization · io · dates · typing · introspection)  ·  56 modules
@@ -230,7 +233,7 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 | `test_timeit` | timeit — pure timing harness. |
 | `test_tokenize` | tokenize — pure Python tokenizer. |
 | `test_tomllib` | tomllib — pure-Python TOML parser. |
-| `test_traceback` | traceback — needs frame/tb introspection. *(edge — see below)* |
+| `test_traceback` ✅ | traceback — needs frame/tb introspection. *(edge — see below)* |
 | `test_typing` | typing — pure-Python type hints. |
 | `test_ucn` | \N{...} unicode-name escapes — needs the UCD name table. |
 | `test_unicodedata` | unicodedata — large UCD tables (C-backed). *(edge — see below)* |
@@ -619,17 +622,142 @@ re-tier. Grouped by the call to make:
 
 ---
 
-## Suggested next tranche for the harness
+## Where the harness stands
 
-The harness runs 19 modules today. The cheapest high-confidence additions — pure
-language/stdlib with no new runtime plumbing — make a natural Phase 3:
+The harness grew 19 → 32 → 50 modules (phases 1–4 in
+`scripts/cpython_suite_manifest.txt`). Live per-module rows —
+status/tests/fail/err/skip — are in
+[CPython_Suite_Scoreboard.md](CPython_Suite_Scoreboard.md); this section records
+only what does not change every run: which modules are *done*, and what each
+not-yet-passing one is waiting on.
 
-**Language core already implemented, just not scored yet:** `test_grammar`, `test_syntax`, `test_exceptions`, `test_builtin`, `test_scope`, `test_class`, `test_descr`, `test_generators`, `test_iter`, `test_call`, `test_unpack`, `test_with`, `test_richcmp`, `test_format`, `test_bool`, `test_complex`, `test_str`, `test_range`, `test_slice`, `test_enumerate`.
+**Fully green (27 of the 50, 2026-08-03 board):** `test_textwrap`,
+`test_math`, `test_int`, `test_float`, `test_heapq`, `test_bisect`,
+`test_operator`, `test_fractions`, `test_re`, `test_list`, `test_tuple`,
+`test_dict`, `test_set`, `test_bytes`, `test_collections`, `test_itertools`,
+plus the eleven small language modules added in phase 3 (`test_unary`,
+`test_int_literal`, `test_unpack`, `test_augassign`, `test_contains`,
+`test_dictcomps`, `test_setcomps`, `test_pow`, `test_richcmp`, `test_slice`,
+`test_bool`).
 
-**Pure stdlib, high value:** `test_abc`, `test_copy`, `test_decimal`, `test_random`, `test_statistics`, `test_deque`, `test_defaultdict`, `test_ordered_dict`, `test_userdict`, `test_userlist`, `test_userstring`, `test_string`, `test_json`, `test_unittest`.
+**Not yet green, in descending size of the remaining gap:** `test_enum`
+(metaclass depth — `object.__str__`, `__dir__`-on-class, `_boundary_` Flag),
+`test_datetime`, `test_functools`, `test_iter`, and `test_traceback` (the only
+IMPORTERROR — `__code__` on a def that compiled to a real method; PR #129 is
+open against it).
 
-Each new module may surface fresh gaps; the scoreboard's `detail` column names the
-first missing symbol, exactly as for the current set.
+## Next tranche (phase 4, wired 2026-08-03)
+
+Every remaining P1 module plus the pure-stdlib P2s — 55 in all — were vendored
+and scored once (446s at 5 workers) instead of being guessed at. 18 were kept.
+The selection rule was *easy win or shared blocker*: either the residual is
+small, or most of it collapses to one root that also holds back modules already
+on the board.
+
+Two of the eighteen only needed a vendoring gap closed, not a Grail fix:
+`test.support.TestFailed` (for `test_format`) and `test.support.disable_gc`
+(for `test_yield_from`) were added to the trimmed support package, plus
+`os_helper.create_empty_file`.
+
+**Easy wins — small residual, no new runtime plumbing (9):**
+
+| Module | Trial score | What is left |
+|--------|-------------|--------------|
+| `test_generator_stop` | 2t, 2E | PEP 479: a `StopIteration` crossing a generator boundary must become `RuntimeError`. |
+| `test_keywordonlyarg` | 11t, 4F 1E | `co_kwonlyargcount`; "takes from 1 to 2 positional arguments" wording; two SyntaxError cases. |
+| `test_compare` | 16t, 6F | Reflected `__eq__`/`__ne__` ordering; `complex` vs a custom comparable. |
+| `test_dictviews` | 16t, 2F 3E | `dict_keys` must register as `KeysView`; a self-referential view `repr` recurses; one `PyDict does not understand #new` leak. |
+| `test_sort` | 21t, 4F 1E | Mutation-during-sort must raise `ValueError` (4 tests) + one `OffsetError` escaping codegen. |
+| `test_iterlen` | 22t, 16F | `__length_hint__` returns 0 for most iterators (9 tests) and does not shrink as they advance. |
+| `test_userdict` | 28t, 3F 3E | `UserDict \| UserDict` (PEP 584), `UserDict(self=42)`, `repr` of a self-referential dict. |
+| `test_userlist` | 54t, 4F 4E | `OrderedCollection + UserList`, slice-assignment identity, `UserList does not understand #reverseDo:`. |
+| `test_isinstance` | 23t, 1F 19E | 16 of the 19 errors are Grail raising "arg must be a type" where CPython accepts the argument. |
+
+**Single-root modules — one fix moves most of the module, and the same root
+leaks into modules already on the board (5):**
+
+| Module | Trial score | The one root |
+|--------|-------------|--------------|
+| `test_index` | 55t, 3F 34E | 32 of 34 errors are `a newstyle does not understand #'<'` (28) or `#'<='` (4) — an ordering comparison on a plain Python object escapes as an **uncatchable Smalltalk DNU** instead of a `TypeError`. Same class of leak as the `___cmpFallback___`/`___binOpFallback___` work. |
+| `test_baseexception` | 11t, 1F 7E | All 7 are `#signal` / `#handles:` sent to a non-exception (`raise 'str'`, `except <not-a-class>`): must be a catchable `TypeError`. Hardens the exception model that `test_exceptions`/`test_raise`/`test_traceback` sit on. |
+| `test_listcomps` | 60t, 2F 52E | 29 errors are `UndefinedObject does not understand #new` — a nil receiver in comprehension codegen (also 2× `SubscriptAst does not understand #id`, which is what blocks `test_generators` from importing at all). |
+| `test_property` | 31t, 23F 8E | 12 failures are one bug: `property.__doc__` falls back to `object`'s docstring instead of the getter's / the `doc=` argument. |
+| `test_copy` | 81t, 28F 16E | `copy.Error` is missing (3 errors), and `deepcopy` returns identical objects for 6 cases. `copy`/`deepcopy` is exercised by `test_datetime`, `test_enum`, `test_functools` and the pickle path. |
+
+**Core surface, moderate residual but high leverage (4):**
+
+| Module | Trial score | What is left |
+|--------|-------------|--------------|
+| `test_scope` | 41t, 6F 10E | `ExecBlock.__closure__`, `sys.settrace` arity, one `CompileError: undefined symbol x`. LEGB is load-bearing for everything. |
+| `test_yield_from` | 43t, 18F 12E | Generator delegation (`yield from` throw/close/return-value propagation). |
+| `test_deque` | 80t, 11F 24E 4S | `deque` item assignment/deletion, `RuntimeError` on mutation-during-scan, `copy`/`deepcopy` identity. |
+| `test_format` | 18t, 10F 4E 3S | `%`-format: `%r` on bytes, `ValueError` on bad specs, and the format-spec error wording. |
+
+Two of the eighteen carry a per-test entry in `scripts/cpython_suite_skips.txt`
+because one test **hangs the scoring session** (unbounded work, uncatchable, so
+it takes the whole module's row with it): `test_deque.test_extend`
+(`d.extend(d)` consumes the live deque it appends to) and
+`test_format.test_common_format` (`'%.*d' % (sys.maxsize, 1)` is not
+precision-validated). Both are real bugs with known-shaped fixes; deleting the
+skip is the regression test.
+
+### Trialed and deferred — with the blocker each log named
+
+Recorded so the next pass does not re-trial them. All scored on 2026-08-03;
+the trial ran against `main` post-#128 and the kept modules' committed rows
+were rebuilt against `main` post-#135 (the only row that moved in between was
+`test_enum`, 226 → 212 fail+err, from the enum fixes in #133/#135).
+
+**One named symbol away** — cheap, and each unblocks a whole module:
+
+| Module | Blocker |
+|--------|---------|
+| `test_hash` | `iter(callable, sentinel)` — the 2-argument form of `iter()` is missing. |
+| `test_exception_hierarchy` | `errno.EALREADY` — the `errno` shim is missing the constants the module maps to exception classes. (Its earlier blocker, `BlockingIOError` not being in builtins, was closed by #134.) |
+| `test_exceptions` | `from codecs import BOM_UTF8`. |
+| `test_enumerate` | `enum = enumerate` in a **class body** → "name 'enumerate' is not defined": builtins are not visible from class-body scope. |
+| `test_reprlib` | Imports past the support gap now, then fails on `name 'wrapped' is not defined` (a `functools.wraps` codegen gap). |
+| `test_copyreg` | Needs `test/pickletester.py` vendored (~4k lines, pure). |
+
+**One shared feature or fix away:**
+
+| Modules | Blocker |
+|---------|---------|
+| `test_typechecks`, `test_binop`, `test_abc` | Real metaclasses: `class ABC(type)` fails with "name 'type' is not defined", and Grail's `abc.py` is a stub whose `ABCMeta` has no `register`. `_py_abc` (which `test_abc` imports) needs the same. Also the ceiling on `test_enum`. |
+| `test_str`, `test_userstring` | Lone-surrogate literals (`'\ud800'`) — "codePoint 16rd800 is illegal for Unicode". Needs a surrogate representation strategy; blocks the single most valuable P1 module. |
+| `test_unpack_ex`, `test_genexps`, `test_metaclass` | Doctest-only modules: the harness discovers 0 tests (SKIP). Needs `doctest` wired into the driver. |
+| `test_range` | `count`/`index`/`__contains__` walk the range instead of computing arithmetically (CPython is O(1) for int args), so every 10\*\*20-scale test hangs: `test_count`, `test_iterator_unpickle_compat` (`range_iterator` has no `__setstate__`, so the saved index is dropped), `test_large_range`, found one after another by skip-and-rerun. Land the arithmetic fix, then add the module. |
+| `test_string_literals` | 20 of 20 errors are `tempfile.mkdtemp is not supported under Grail` — the module writes source files and compiles them. |
+
+**Parser / codegen gaps** (the module does not import):
+
+| Module | Blocker |
+|--------|---------|
+| `test_global` | `match`/`case` (PEP 634) — "Unexpected token: NEWLINE at line 165". |
+| `test_types` | An inline suite followed by `else:` on the next line (`if 1 and 1: pass` / `else: ...`) — "Unexpected token: KEYWORD 'else'". |
+| `test_grammar` | Multi-line f-string replacement field (PEP 701) — "EOL while scanning string literal". |
+| `test_generators` | `a SubscriptAst does not understand #'id'` (same root as 2 of `test_listcomps`' errors). |
+| `test_with` | "Expression Context should be `<Load>` but is `<StoreAst>`". |
+| `test_call`, `test_positional_only_arg` | `OffsetError (2003) objErrBadOffsetIncomplete` from codegen. |
+| `test_class` | Imports `_testinternalcapi` unguarded. |
+
+**Runs today, kept out of this tranche only to keep it focused** (add whenever
+someone picks the area up): `test_super` 40t 13F/24E · `test_funcattrs` 35t
+15F/15E · `test_complex` 37t 15F/11E · `test_ordered_dict` 280t 70F/96E ·
+`test_raise` 37t 17F/14E · `test_long` 47t 9F/7E · `test_named_expressions` 74t
+17F/22E · `test_subclassinit` 17t 8F/5E · `test_genericclass` 22t 12F/7E ·
+`test_decorators` 16t 1F/10E · `test_defaultdict` 13t 8F/1E · `test_dynamic` 11t
+5F/2E · `test_print` 9t 6F/2E.
+
+**How to re-run this trial.** Copy candidates out of a local CPython 3.14.4
+`Lib/test/` into `src/python/stdlib/test/`, then
+`./scripts/run_cpython_suite.sh test.test_foo test.test_bar` — explicit
+arguments override the manifest, but they also **rewrite**
+`docs/CPython_Suite_Scoreboard.md` with only the modules you ran, so restore it
+from git afterwards and finish with a full manifest run. When a module
+IMPORTERRORs on a `test.support` name, add it to
+`src/python/stdlib/test/support/` — that package is explicitly the growth
+surface, and its header says so.
 
 ---
 

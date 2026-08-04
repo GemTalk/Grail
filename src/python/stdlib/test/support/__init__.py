@@ -550,6 +550,47 @@ class Error(Exception):
     """Base class for regression-test errors (CPython test.support.Error)."""
 
 
+# --- added for test.test_format (vendored 2026-08-03) ---
+
+class TestFailed(Error):
+    """Test failed (CPython test.support.TestFailed)."""
+
+    def __init__(self, msg, *args, stats=None):
+        self.msg = msg
+        self.stats = stats
+        super().__init__(msg, *args)
+
+    def __str__(self):
+        return self.msg
+
+
+# --- added for test.test_yield_from (vendored 2026-08-03) ---
+
+class disable_gc:
+    """Turn the collector off for the block (CPython test.support.disable_gc),
+    written as a plain class -- NO @contextlib.contextmanager, see the module
+    header.  Grail's gc is a stub, so isenabled/disable/enable may be absent;
+    the guarded calls make this a no-op there rather than an ImportError."""
+
+    def __enter__(self):
+        import gc
+        self._gc = gc
+        try:
+            self._had_gc = gc.isenabled()
+            gc.disable()
+        except Exception:
+            self._had_gc = False
+        return self
+
+    def __exit__(self, *exc):
+        if self._had_gc:
+            try:
+                self._gc.enable()
+            except Exception:
+                pass
+        return False
+
+
 # Grail has no subprocess / os.spawn support; tests that need one skip.
 has_subprocess_support = False
 
