@@ -367,17 +367,41 @@ ___pythonLocalInEnclosingFunctions___: aSymbol
 	reads inside the comprehension itself), and global- / nonlocal-
 	declared names were stripped from ``writes'' by the parser."
 
-	| node |
+	| node prev |
 	"``global aSymbol'' in the nearest enclosing function makes the name
 	a MODULE binding for that whole scope -- never a local, and never
 	resolved to an outer function's same-named local."
 	(self ___nearestEnclosingFunctionDeclaresGlobal___: aSymbol) ifTrue: [^ false].
+	prev := self.
 	node := parent.
 	[node notNil] whileTrue: [
 		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
 			ifTrue: [
-				(self ___functionBindsPythonLocal___: node named: aSymbol)
-					ifTrue: [^ true]].
+				"A LAMBDA reached through its ArgumentsAst -- i.e. this node is
+				in the PARAMETER LIST (a default expression), not in the body --
+				does NOT bind the name.  Python evaluates a default in the
+				ENCLOSING scope at definition time, so
+				``missing = 1; lambda missing=missing: missing'' must read the
+				enclosing ``missing'' for the default and the parameter inside
+				the body.  Without this, the default resolved as a read of the
+				lambda's own parameter and was emitted into the def-time outer
+				block where no such temp exists: CompileError 1001, ``undefined
+				symbol missing''.
+
+				Restricted to LambdaAst deliberately.  A def's defaults already
+				resolve through FunctionDefAst's own default-capture path
+				(``def root(context, missing=missing)'' is the jinja2 case its
+				printSmalltalkOn: comment describes), and widening the rule to
+				FunctionDefAst is a separate change with its own blast radius.
+
+				A lambda nested in a def still sees the DEF's locals: the walk
+				only skips the lambda it climbed out of, then carries on --
+				``def f(): x = 1; return lambda x=x: x'' reads f's x."
+				((node isKindOf: LambdaAst) and: [prev isKindOf: ArgumentsAst])
+					ifFalse: [
+						(self ___functionBindsPythonLocal___: node named: aSymbol)
+							ifTrue: [^ true]]].
+		prev := node.
 		node := node parent.
 	].
 	^ false
