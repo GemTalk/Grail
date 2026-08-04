@@ -1433,8 +1433,27 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 				ifTrue: [
 					aStream nextPutAll: '___default_'; nextPutAll: pname; nextPutAll: '___'
 				] ifFalse: [
-					(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream
-				]
+					"Module-level function: no def-time outer block exists (the def
+					compiles to a METHOD), so evaluate the default ONCE and cache it
+					on the module instance -- a MUTABLE default (``def f(x=[])``) must
+					be SHARED across calls, not re-created every call (test_iter's
+					``def spam(state=[0])`` counter).  A class-body method keeps the
+					inline default: its self is an instance/class with no reliable
+					dynamic-instVar store (class-level sharing is a follow-up)."
+					self isModuleLevelDef
+						ifTrue: [
+							aStream
+								nextPutAll: '(self @env0:___moduleDefaultAt: #''___default_';
+								nextPutAll: self name asString;
+								nextPutAll: '__';
+								nextPutAll: pname;
+								nextPutAll: '___'' compute: ['.
+							(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream.
+							aStream nextPutAll: '])'
+						] ifFalse: [
+							(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream
+						]
+					]
 		] ifFalse: [
 			aStream
 				nextPutAll: 'TypeError ___signal___: ''missing required argument: ';
