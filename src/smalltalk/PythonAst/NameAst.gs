@@ -261,6 +261,102 @@ printSmalltalkOn: aStream
 	that reads the name as a Smalltalk local (which fails at
 	compile time because class methods don't have module inst vars
 	in scope)."
+	"EXEC/EVAL class body: same sibling-name reads as the block below, but
+	there is no module class, so every one of that block's fallbacks --
+	``<ModuleClass> @env0:___instance___ ...'' -- is unavailable.  Handled
+	first, and separately, so the module path below stays untouched.
+
+	Without this, a class-body value expression reading a name bound earlier
+	in the SAME class body fell through to the generic emits and came out as a
+	bare Smalltalk identifier.  The class attribute lives on the class, not as
+	a doit temp, so the doit failed to compile: ``CompileError 1001, undefined
+	symbol items'' for ``exec(''class C: items = [1,2]; y = [x for x in
+	items]'')''.  That is 10 of test_listcomps' remaining 42 failures, whose
+	_check_in_scopes harness execs every snippet in a class body.
+
+	Python evaluates a comprehension's OUTERMOST ITERABLE in the enclosing
+	scope -- the class body -- which is why it may see a class attribute at
+	all; the element expression and inner clauses run in the comprehension's
+	own scope and correctly do NOT (test_free_inner_cell_outer asserts
+	NameError for that half)."
+	((ctx isKindOf: LoadAst)
+		and: [CallAst classBeingCompiled notNil
+			and: [CallAst moduleClassBeingCompiled isNil
+			and: [CallAst inClassBodyValueEmit
+			and: [CallAst classBodyBoundNames isNil
+				or: [CallAst classBodyBoundNames includes: id asSymbol]]]]])
+		ifTrue: [
+			"Sibling method -> receiver-less BoundMethod (call protocol pops
+			positional[1] as the receiver); sibling @staticmethod -> BoundMethod
+			on the class; nested class -> the per-class dynamic store.  None of
+			these needs a module instance, so they mirror the module block
+			exactly."
+			(CallAst classFunctionNames notNil
+				and: [CallAst classFunctionNames includes: id asSymbol]) ifTrue: [
+				aStream
+					nextPutAll: '(BoundMethod receiver: nil selector: #';
+					nextPutAll: id;
+					nextPutAll: ')'.
+				^self].
+			(CallAst classStaticFunctionNames notNil
+				and: [CallAst classStaticFunctionNames includes: id asSymbol]) ifTrue: [
+				aStream
+					nextPutAll: '(BoundMethod receiver: ';
+					nextPutAll: CallAst classBeingCompiled asString;
+					nextPutAll: ' selector: #';
+					nextPutAll: id;
+					nextPutAll: ')'.
+				^self].
+			(CallAst classNestedClassNames notNil
+				and: [CallAst classNestedClassNames includes: id asSymbol]) ifTrue: [
+				aStream
+					nextPutAll: '(';
+					nextPutAll: CallAst classBeingCompiled asString;
+					nextPutAll: ' @env1:___dynamicClassAttr___: #''';
+					nextPutAll: id;
+					nextPutAll: ''')'.
+				^self].
+			"Conditionally-bound sibling: the per-class dynamic store, then the
+			accessor pair if the name is ALSO bound unconditionally, then the
+			enclosing scope."
+			(CallAst classBodyConditionalNames notNil
+				and: [CallAst classBodyConditionalNames includes: id asSymbol]) ifTrue: [
+				| alsoStatic |
+				alsoStatic := CallAst classAttrNames notNil
+					and: [CallAst classAttrNames includes: id asSymbol].
+				aStream
+					nextPutAll: '((';
+					nextPutAll: CallAst classBeingCompiled asString;
+					nextPutAll: ' @env1:___dynamicClassAttr___: #''';
+					nextPutAll: id;
+					nextPutAll: ''') @env0:ifNil: ['.
+				alsoStatic ifTrue: [
+					aStream
+						nextPutAll: '(';
+						nextPutAll: CallAst classBeingCompiled asString;
+						nextPutAll: ' ';
+						nextPutAll: id;
+						nextPutAll: ') @env0:ifNil: ['].
+				self emitDoitEnclosingScopeLoad: id on: aStream.
+				alsoStatic ifTrue: [aStream nextPutAll: ']'].
+				aStream nextPutAll: '])'.
+				^self].
+			"Prior class attribute: the accessor pair is compiled just before
+			each ``<Class> <attr>: value'' store, so a later value expression
+			reads the earlier attr with a plain getter send.  nil means ``not
+			bound yet'' (Grail's nil-as-absent rule) -> enclosing scope."
+			(CallAst classAttrNames notNil
+				and: [CallAst classAttrNames includes: id asSymbol]) ifTrue: [
+				aStream
+					nextPutAll: '((';
+					nextPutAll: CallAst classBeingCompiled asString;
+					nextPutAll: ' ';
+					nextPutAll: id;
+					nextPutAll: ') @env0:ifNil: ['.
+				self emitDoitEnclosingScopeLoad: id on: aStream.
+				aStream nextPutAll: '])'.
+				^self].
+		].
 	((ctx isKindOf: LoadAst)
 		and: [CallAst classBeingCompiled notNil
 			and: [CallAst moduleClassBeingCompiled notNil]])
@@ -608,6 +704,42 @@ printSmalltalkOn: aStream
 			^ self
 		].
 	aStream nextPutAll: id.
+%
+
+category: 'Grail-codegen helpers'
+method: NameAst
+emitDoitEnclosingScopeLoad: aSymbol on: aStream
+	"The ``fall back to the enclosing scope'' half of a class-body sibling read
+	when the class body is compiled in a DOIT (exec/eval) rather than into a
+	module class.  The module form -- ``<ModuleClass> @env0:___instance___
+	@env1:___moduleAttrLoad___:'' -- has no receiver here: there is no module
+	instance.
+
+	What the enclosing scope IS, in a doit, is the SymbolDictionary
+	ModuleAst>>evaluateSource:usingModuleScope:as: puts in the compiler's
+	symbol list.  ensureModuleScope: pre-creates a slot for every module-body
+	variable of the source being compiled, so a bare identifier for one of
+	those names always resolves -- that is the same mechanism that lets
+	``_C := ...'' compile at all.
+
+	For any OTHER name a bare identifier would be a Smalltalk CompileError, so
+	emit Python's NameError instead.  That is also the right answer: the name
+	is bound neither on the class under construction nor in the enclosing
+	scope of the compiled source."
+
+	((self isModuleVariableName: aSymbol)
+		or: [CallAst moduleFunctionNames notNil
+			and: [CallAst moduleFunctionNames includes: aSymbol asSymbol]])
+		ifTrue: [
+			aStream nextPutAll: aSymbol.
+			^ self].
+	"Quotes emitted as characters rather than doubled inside a literal: the
+	target text itself contains a quoted name (``name 'items' is not
+	defined''), so a nested literal would need six consecutive quotes here."
+	aStream nextPutAll: 'NameError ___signal___: '; nextPut: $'.
+	aStream nextPutAll: 'name '; nextPut: $'; nextPut: $'.
+	aStream nextPutAll: aSymbol; nextPut: $'; nextPut: $'.
+	aStream nextPutAll: ' is not defined'; nextPut: $'
 %
 
 category: 'Grail-codegen helpers'
