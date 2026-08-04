@@ -754,7 +754,58 @@ ___grailLookupValue: cls value: aValue
 			ifTrue: ['<flag ''']
 			ifFalse: ['<enum '''])
 				@env0:, cls @env0:name @env0:asString @env0:, '''> has no members'].
+	"CPython Enum.__new__: an unknown value gets one last chance through a
+	user-defined _missing_ classmethod (compiled class-side as _missing_:)
+	before ValueError.  Only a USER _missing_ triggers this -- no base enum
+	class defines the selector, so whichClassIncludesSelector finds only an
+	override."
+	(cls @env0:class @env0:whichClassIncludesSelector: #'_missing_:' environmentId: 1) @env0:notNil
+		ifTrue: [^ self ___grailMissing: cls value: aValue].
 	^ ValueError ___signal___: aValue @env0:printString @env0:, ' is not a valid ' @env0:, cls @env0:name @env0:asString
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailMissing: cls value: aValue
+	"Run cls._missing_(aValue) (a user classmethod) and mirror CPython
+	Enum.__new__'s handling of its result:
+	  * a member of cls (or a resolvable Flag composite int) -> return it;
+	  * None with no error -> raise the plain ``not a valid'' ValueError
+	    (its __context__ stays None);
+	  * a non-member, non-None value -> TypeError ``error in
+	    <cls>._missing_: returned <r> instead of None or a valid member'',
+	    with the ValueError chained as __context__;
+	  * _missing_ itself raised -> re-raise it, chaining the ValueError as
+	    __context__ unless it already IS a ValueError.
+	The ``not a valid'' ValueError is built (not signaled) up front so it
+	can serve as the chained context."
+
+	| veExc result |
+	veExc := ValueError @env0:new.
+	veExc @env0:perform: #'__init__:' env: 1 withArguments: {
+		aValue @env0:printString @env0:, ' is not a valid ' @env0:, cls @env0:name @env0:asString }.
+	result := [cls @env0:perform: #'_missing_:' env: 1 withArguments: { aValue }]
+		@env0:on: AbstractException do: [:e |
+			(e isKindOf: ValueError) @env0:ifFalse: [
+				e @env0:dynamicInstVarAt: #'___context___' put: veExc].
+			e @env0:pass].
+	(result isKindOf: cls) ifTrue: [^ result].
+	((result isKindOf: Integer) and: [self ___grailIsFlagClass: cls]) ifTrue: [
+		| comp |
+		comp := self ___grailFlagComposite: cls value: result.
+		comp @env0:isNil ifFalse: [^ comp]].
+	"CPython ``result is None'' -> the plain ValueError.  A Python _missing_
+	returns the None SINGLETON (not Smalltalk nil), so test both."
+	(result @env0:isNil or: [result == None]) ifTrue: [^ veExc @env0:signal].
+	[ | tyExc |
+	tyExc := TypeError @env0:new.
+	tyExc @env0:perform: #'__init__:' env: 1 withArguments: {
+		'error in ' @env0:, cls @env0:name @env0:asString @env0:, '._missing_: returned '
+			@env0:, ([result @env1:__repr__ @env0:asString]
+				@env0:on: AbstractException do: [:e | result @env0:printString])
+			@env0:, ' instead of None or a valid member' }.
+	tyExc @env0:dynamicInstVarAt: #'___context___' put: veExc.
+	^ tyExc @env0:signal ] @env0:value
 %
 
 category: 'Grail-Enum Metaclass'
