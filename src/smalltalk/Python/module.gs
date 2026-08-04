@@ -713,4 +713,50 @@ ___functionAnnotationsFor___: aName
 	^ inner at: aName asString otherwise: KeyValueDictionary new
 %
 
+category: 'Grail-Module Defaults'
+classmethod: module
+___moduleDefaultsTable___
+	"Session-local map  module-instance -> (default-id-symbol -> cached value).
+	Same rationale as ___functionAnnotationsTable___: held in SessionTemps so it
+	is never committed (module instances are already session-local) and keyed by
+	identity, so -- unlike a dynamic instVar on the module -- it contributes
+	NOTHING to the module's globals() / vars() / dir() enumeration."
+
+	| st tbl |
+	st := SessionTemps current.
+	tbl := st at: #GrailModuleFunctionDefaults otherwise: nil.
+	tbl isNil ifTrue: [
+		tbl := IdentityKeyValueDictionary new.
+		st at: #GrailModuleFunctionDefaults put: tbl].
+	^ tbl
+%
+
+category: 'Grail-Module Defaults'
+method: module
+___moduleDefaultAt: aSymbol compute: aBlock
+	"Evaluate a module-level function's default argument ONCE and cache it in a
+	session-local side table (keyed by this module instance + aSymbol), so a
+	MUTABLE default (``def f(x=[])``) is SHARED across calls -- CPython evaluates
+	defaults at def-time, but a Grail module function compiles to a method whose
+	body would otherwise re-run the default expression on every call (test_iter's
+	``def spam(state=[0])`` counter idiom).  aSymbol is a compile-time-unique
+	``___default_<fn>__<param>___'' name, so distinct functions/params never
+	collide.  Stored OFF the module (see ___moduleDefaultsTable___) so it never
+	leaks into globals()/vars()/dir().  Filed at env-0 (like the other
+	dynamic-instVar helpers) and reached from the generated env-1 method body via
+	``@env0:___moduleDefaultAt:compute:''."
+
+	| tbl inner |
+	tbl := module ___moduleDefaultsTable___.
+	inner := tbl at: self otherwise: nil.
+	inner isNil ifTrue: [
+		inner := IdentityKeyValueDictionary new.
+		tbl at: self put: inner].
+	^ inner at: aSymbol ifAbsent: [
+		| v |
+		v := aBlock value.
+		inner at: aSymbol put: v.
+		v]
+%
+
 set compile_env: 0
