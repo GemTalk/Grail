@@ -243,6 +243,24 @@ __annotations__
 
 category: 'Grail-Attribute Access'
 method: ExecBlock
+__signature_spec__
+	"The def-time parameter spec inspect.signature reads -- an Array of
+	``(name, kind-index, default-source-text-or-nil)'' triples in declaration
+	order, stamped by FunctionDefAst.  None for a def with no parameters,
+	which renders as ``()'' regardless.
+
+	Grail has no code object to introspect, so the compiler records what it
+	already knows instead of synthesising ``co_varnames''/``co_argcount''.
+	Nothing observable needs the code-object form: across the whole CPython
+	corpus the only ``co_*'' fields read are co_firstlineno and co_name,
+	both of which PyCode already carries."
+
+	^ ((ExecBlock @env0:___pyAttrsClass___) @env0:slotAt: self attr: '__signature_spec__')
+		ifNil: [ExecBlock @env0:___pyNone___]
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
 __annotate__
 	"``func.__annotate__'' — PEP 649's annotation-computing function, a
 	one-argument callable taking a Format and answering the annotation
@@ -381,6 +399,7 @@ ___slotNames___
 		add: #'__annotate__';
 		add: #'__type_params__';
 		add: #'__code__';
+		add: #'__signature_spec__';
 		yourself
 %
 
@@ -421,6 +440,7 @@ ___pythonValueAttrs___
 		add: #'__annotate__';
 		add: #'__type_params__';
 		add: #'__code__';
+		add: #'__signature_spec__';
 		yourself
 %
 
@@ -486,6 +506,16 @@ ___pyNamed___: aString annotate: aBlock doc: aDoc
 	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__name__' put: aString.
 	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__annotate__' put: aBlock.
 	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__doc__' put: aDoc.
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
+___pySig___: aSpec
+	"Stamp the def-time parameter spec.  Returns self so it composes in the
+	def-time cascade alongside ___pyCode___:."
+
+	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__signature_spec__' put: aSpec.
 	^ self
 %
 
