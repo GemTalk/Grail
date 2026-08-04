@@ -1834,7 +1834,7 @@ ___pyAttrLoad___: aSym
 	  - Otherwise dispatch the unary message anyway and let DNU
 	    produce the appropriate error or fallback."
 
-	| sym1 sym2 sym3 sym4 sym5 sym6 symVA s isModule isGenerated dynValue walker owner family |
+	| sym1 sym2 sym3 sym4 sym5 sym6 symVA s isModule isGenerated dynValue owner family |
 	"An empty attribute name (``getattr(obj, '')'' -- e.g. attrgetter('child.')
 	whose dotted split has an empty part) must raise the catchable
 	AttributeError, not the uncatchable GemStone ``instVar names cannot be
@@ -1920,7 +1920,7 @@ ___pyAttrLoad___: aSym
 		      slot via the SymbolDictionary at:put: path).
 		  (6) AttributeError."
 
-		| dynValue |
+		| dValue |
 		"Phase A: dynamic-instVar storage is the canonical home for
 		module globals -- checked BEFORE the varargs-selector probe so a
 		module-level decorator's rebinding wins over the original
@@ -1928,16 +1928,16 @@ ___pyAttrLoad___: aSym
 		wrapper in g's slot while ``_g:kw:'' still exists; the bare-call
 		dispatcher and module.gs's resolution already use this order).
 		Per the nil-as-absent convention, a nil read means unset."
-		dynValue := self @env0:dynamicInstVarAt: aSym.
-		dynValue == nil ifFalse: [^ dynValue].
+		dValue := self @env0:dynamicInstVarAt: aSym.
+		dValue == nil ifFalse: [^ dValue].
 		"Cache the wrapper in the slot so repeated reads of the same
 		module function return the SAME object -- CPython functions are
 		first-class module attributes with stable identity
 		(g.dispatch(int) is g_int)."
 		(self ___respondsTo___: symVA) ifTrue: [
-			dynValue := BoundMethod receiver: self selector: aSym.
-			self @env0:dynamicInstVarAt: aSym put: dynValue.
-			^ dynValue
+			dValue := BoundMethod receiver: self selector: aSym.
+			self @env0:dynamicInstVarAt: aSym put: dValue.
+			^ dValue
 		].
 		"Unary selector resolution.  Sub-cases:
 		  * Defined on ``module'' itself, or a hand-written getter/
@@ -1971,9 +1971,9 @@ ___pyAttrLoad___: aSym
 			(#('Grail-Methods' 'Grail-Built-in Functions' 'Grail-Wall clock'
 			   'Grail-Monotonic' 'Grail-Formatting' 'Grail-Calendar') @env0:includes: cat)
 				ifTrue: [
-					dynValue := BoundMethod receiver: self selector: aSym.
-					self @env0:dynamicInstVarAt: aSym put: dynValue.
-					^ dynValue]
+					dValue := BoundMethod receiver: self selector: aSym.
+					self @env0:dynamicInstVarAt: aSym put: dValue.
+					^ dValue]
 				ifFalse: [^ self @env0:perform: aSym env: 1]
 		].
 		((self ___respondsTo___: sym1)
@@ -1982,9 +1982,9 @@ ___pyAttrLoad___: aSym
 			or: [(self ___respondsTo___: sym4)
 			or: [(self ___respondsTo___: sym5)
 			or: [self ___respondsTo___: sym6]]]]]) ifTrue: [
-			dynValue := BoundMethod receiver: self selector: aSym.
-			self @env0:dynamicInstVarAt: aSym put: dynValue.
-			^ dynValue
+			dValue := BoundMethod receiver: self selector: aSym.
+			self @env0:dynamicInstVarAt: aSym put: dValue.
+			^ dValue
 		].
 		^ self @env0:at: aSym ifAbsent: [
 			AttributeError ___signal___: 'module has no attribute ''' @env0:, s @env0:, ''''
@@ -2166,7 +2166,7 @@ ___pyAttrLoad___: aSym
 	has already missed — fall through to the class-side metaclass
 	lookup directly."
 	(self isKindOf: PythonInstance) ifTrue: [
-		| metaclass metaOwns |
+		| metaclass |
 		"Canonical-class overlay first: an ``self.x'' read falling back to
 		the class must see a runtime ``Cls.x = v'' overlay store before the
 		committed class-body accessor -- with the SAME descriptor binding the
