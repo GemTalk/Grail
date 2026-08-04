@@ -159,6 +159,25 @@ testUnpackCountValidation
 
 category: 'Grail-Tests - Backlog Fixes'
 method: BuiltinsTestCase
+testStrIteratorPickle
+	"iter(str) round-trips through pickle at every protocol, resuming at the
+	right character (test_iter test_iter_string).  str_iterator now answers
+	_getstate (collection, position) like tuple_iterator/seq_iterator, so
+	pickle.py's positional path reduces it to (iter, (str,), position) and
+	BUILD re-applies the index.  Uses a loaded module to run the round-trip in
+	a context where the stdlib pickle module is importable."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_str_iter_pickle' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_str_iter_pickle.py')
+		name: 'grail_str_iter_pickle'.
+	self assert: (mod @env1:check)
+%
+
+category: 'Grail-Tests - Backlog Fixes'
+method: BuiltinsTestCase
 testNestedClassStringLiteralNewline
 	"A string literal containing a newline, in a method of a class defined
 	INSIDE a nested block (try/for/if), keeps its exact value.  ClassDefAst
