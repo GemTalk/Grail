@@ -82,7 +82,7 @@ printSmalltalkRuntimeOn: aStream
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames
 	  savedInBodyEmit savedBoundNames savedNestedNames
 	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars
-	  siblings |
+	  siblings savedConditionalNames |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -667,6 +667,8 @@ printSmalltalkRuntimeOn: aStream
 	CallAst classNestedClassNames: (IdentitySet withAll:
 		((body body select: [:stmt | stmt isKindOf: ClassDefAst])
 			collect: [:c | c name asSymbol])).
+	savedConditionalNames := CallAst classBodyConditionalNames.
+	CallAst classBodyConditionalNames: self ___classBodyConditionalNames___.
 	CallAst inClassBodyValueEmit: true.
 	"NESTED CLASSES (``class Outer: class A: ...``) -- previously
 	dropped entirely.  Emit each nested classdef inside a bracketed
@@ -703,13 +705,20 @@ printSmalltalkRuntimeOn: aStream
 			onStream: aStream.
 		aStream nextPutAll: name;
 			nextPutAll: ' dynInstVars: (Object @env0:new).'; lf].
+	"___classHolderAttrStore___, not ___pyAttrStore___: this store is
+	DEFINITIONAL and must land on the committed class.  ___pyAttrStore___
+	diverts to the session overlay once the class is in the canonical set,
+	which it already is on any REBUILD (the previous load registered it) --
+	and ___resetClassAttrOverlay___, emitted just after the class-build
+	guard, then wipes the overlay.  See object >> ___classHolderAttrStore___,
+	whose method-decorator caller was bitten by exactly this."
 	(body body select: [:stmt | stmt isKindOf: ClassDefAst]) do: [:nested |
 		aStream nextPutAll: '[ | '; nextPutAll: nested name asString;
 			nextPutAll: ' |'; lf.
 		nested printSmalltalkOn: aStream.
 		aStream lf;
 			nextPutAll: name;
-			nextPutAll: ' @env1:___pyAttrStore___: #''';
+			nextPutAll: ' @env1:___classHolderAttrStore___: #''';
 			nextPutAll: nested name asString;
 			nextPutAll: ''' put: ';
 			nextPutAll: nested name asString;
@@ -794,6 +803,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst inClassBodyValueEmit: (savedInBodyEmit == true).
 		CallAst classBodyBoundNames: savedBoundNames.
 		CallAst classNestedClassNames: savedNestedNames.
+		CallAst classBodyConditionalNames: savedConditionalNames.
 	].
 	"NamedTuple-style classes get a ``_fields'' accessor/setter pair
 	on the metaclass, initialised to a tuple of declaration-order
@@ -974,9 +984,9 @@ printSmalltalkRuntimeOn: aStream
 		env: 1
 		classSide: true
 		onStream: aStream.
-	"Conditional: a NESTED class stored via ___pyAttrStore___ during the
-	attr-value section already forced the holder into existence --
-	an unconditional overwrite here wiped it (Outer.A vanished)."
+	"Conditional: a NESTED class (or a class-body ``if'' binding) stored
+	during the attr-value section already forced the holder into existence
+	-- an unconditional overwrite here wiped it (Outer.A vanished)."
 	aStream nextPutAll: name;
 		nextPutAll: ' dynInstVars == nil ifTrue: [';
 		nextPutAll: name;
@@ -2026,19 +2036,31 @@ emitClassBodyIf: ifStmt on: aStream
 category: 'Grail-Class Compilation'
 method: ClassDefAst
 emitClassBodyIfBranch: aSuite on: aStream
-	"One branch of a class-body ``if'': simple NAME = value assignments
-	become per-class dynamic-attr stores on the class temp; nested ifs
-	recurse.  Anything else is dropped (same as before this feature)."
+	"One branch of a class-body ``if'': simple NAME = value assignments and
+	``def''s become class-attribute stores on the class temp; nested ifs
+	recurse.  Anything else is dropped (same as before).
+
+	The stores go through ___classBodyDefinitionalStore___, which picks
+	between the accessor pair and the dynInstVars holder at runtime -- a
+	conditional binding cannot know at emit time which home the name has.
+	NOT ___pyAttrStore___, which would dispatch the same way but divert to
+	the session overlay for a canonically-registered class; see the
+	nested-class emit in printSmalltalkRuntimeOn: for why that is not
+	cosmetic.  ___pyAttrStore___ is what these used to be, and the
+	consequence was that a class-body ``if'' binding survived the first
+	import of a module and vanished from every later one."
 
 	(aSuite isNil or: [aSuite body isNil]) ifTrue: [^ self].
 	aSuite body do: [:stmt |
 		(stmt isKindOf: IfAst) ifTrue: [
 			self emitClassBodyIf: stmt on: aStream].
+		(stmt isKindOf: FunctionDefAst) ifTrue: [
+			self emitClassBodyIfDef: stmt on: aStream].
 		((stmt isKindOf: AssignAst)
 			and: [stmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
 			stmt targets do: [:t |
 				aStream nextPutAll: name;
-					nextPutAll: ' @env1:___pyAttrStore___: #''';
+					nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
 					nextPutAll: t id asString;
 					nextPutAll: ''' put: '.
 				stmt value printSmalltalkWithParenthesisOn: aStream.
@@ -2046,11 +2068,91 @@ emitClassBodyIfBranch: aSuite on: aStream
 		((stmt isKindOf: AnnAssignAst)
 			and: [(stmt target isKindOf: NameAst) and: [stmt value notNil]]) ifTrue: [
 			aStream nextPutAll: name;
-				nextPutAll: ' @env1:___pyAttrStore___: #''';
+				nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
 				nextPutAll: stmt target id asString;
 				nextPutAll: ''' put: '.
 			stmt value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPutAll: '.'; lf]]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+emitClassBodyIfDef: aDef on: aStream
+	"A ``def'' inside a class-body ``if'' branch.  It cannot be compiled as
+	a Smalltalk METHOD the way an unconditional class-body def is: whether
+	it exists at all is a runtime fact, and both branches of the same if
+	would otherwise install the same selector with the last emit winning.
+
+	So emit it as a VALUE -- the nested-def block form -- into a bracketed
+	scope whose block temp gives FunctionDefAst >> printSmalltalkOn: the
+	``<name> := ...'' target it expects (and gives its decorator chain the
+	same target to rebind), then store the result as a class attribute.  A
+	plain function stored there binds the receiver on an instance read and
+	comes back raw on a class read, which is exactly what CPython does with
+	a function in a class namespace.
+
+	@staticmethod / @classmethod reach here re-classed by the parser rather
+	than carrying a runtime decorator, so the wrapper that would otherwise
+	have been applied structurally is applied here instead -- PyStaticMethod
+	suppresses the receiver bind, PyClassMethod redirects it to the owner."
+
+	| fname wrapper savedValueDefNode |
+	fname := aDef name asString.
+	wrapper := (aDef isKindOf: StaticFunctionDefAst)
+		ifTrue: ['PyStaticMethod']
+		ifFalse: [(aDef isKindOf: ClassFunctionDefAst)
+			ifTrue: ['PyClassMethod']
+			ifFalse: [nil]].
+	aStream nextPutAll: '[ | '; nextPutAll: fname; nextPutAll: ' |'; lf.
+	savedValueDefNode := CallAst classBodyValueDefNode.
+	CallAst classBodyValueDefNode: aDef.
+	[aDef printSmalltalkOn: aStream]
+		ensure: [CallAst classBodyValueDefNode: savedValueDefNode].
+	aStream lf;
+		nextPutAll: name;
+		nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+		nextPutAll: fname;
+		nextPutAll: ''' put: '.
+	wrapper
+		ifNil: [aStream nextPutAll: fname]
+		ifNotNil: [aStream nextPutAll: '('; nextPutAll: wrapper;
+			nextPutAll: ' value: { '; nextPutAll: fname; nextPutAll: ' } value: nil)'].
+	aStream nextPutAll: '. ] value.'; lf
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyConditionalNames___
+	"Every name bound inside a top-level class-body ``if'' (either branch,
+	recursively).  NameAst needs the set because such a name is usually in
+	the per-class dynamic attr store rather than behind an accessor, and
+	without it the read falls straight through to module scope.  A name that
+	is ALSO bound unconditionally does have an accessor, which is why the
+	read there tries both before giving up -- see NameAst's conditional
+	sibling branch."
+
+	| names collect |
+	names := IdentitySet new.
+	collect := nil.
+	collect := [:suite |
+		(suite notNil and: [suite body notNil]) ifTrue: [
+			suite body do: [:stmt |
+				(stmt isKindOf: IfAst) ifTrue: [
+					collect value: stmt body.
+					collect value: stmt orelse].
+				(stmt isKindOf: FunctionDefAst) ifTrue: [
+					names add: stmt name asSymbol].
+				((stmt isKindOf: AssignAst)
+					and: [stmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
+					stmt targets do: [:t | names add: t id asSymbol]].
+				((stmt isKindOf: AnnAssignAst)
+					and: [(stmt target isKindOf: NameAst) and: [stmt value notNil]]) ifTrue: [
+					names add: stmt target id asSymbol]]]].
+	body body do: [:stmt |
+		(stmt isKindOf: IfAst) ifTrue: [
+			collect value: stmt body.
+			collect value: stmt orelse]].
+	^ names
 %
 
 category: 'Grail-accessing'

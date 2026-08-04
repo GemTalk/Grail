@@ -696,6 +696,7 @@ run
 	at: #'KeyboardInterruptTestCase' put: nil;
 	at: #'KeywordOnlyParamsTestCase' put: nil;
 	at: #'ListSortKwargsTestCase' put: nil;
+	at: #'ClassBodyConditionalTestCase' put: nil;
 	at: #'CachedPropertyDescriptorTestCase' put: nil;
 	at: #'LruHashabilityAndUnionsTestCase' put: nil;
 	at: #'ListTestCase' put: nil;
@@ -1429,6 +1430,7 @@ input src/smalltalk/PythonTests/IteratorTestCase.gs
 input src/smalltalk/PythonTests/TracebackTestCase.gs
 input src/smalltalk/PythonTests/ListSortKwargsTestCase.gs
 input src/smalltalk/PythonTests/CachedPropertyDescriptorTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
 input src/smalltalk/PythonTests/LruHashabilityAndUnionsTestCase.gs
 input src/smalltalk/PythonTests/ListTestCase.gs
 input src/smalltalk/PythonTests/MathTestCase.gs

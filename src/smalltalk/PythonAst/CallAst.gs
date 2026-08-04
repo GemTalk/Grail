@@ -1563,6 +1563,51 @@ classNestedClassNames: aSetOrNil
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classBodyValueDefNode
+	"The FunctionDefAst currently being emitted in VALUE (block) form by
+	ClassDefAst >> emitClassBodyIfDef:on:, or nil.
+
+	A class-body def normally compiles to a real Smalltalk method, so its
+	``self'' parameter IS the receiver and NameAst must emit the plain
+	pseudo-variable.  A conditional def compiles to a block instead, where
+	``self'' is the transported ``_self'' temp -- so that early-out has to
+	be suppressed for this node (and for anything nested inside it, which
+	closes over the same temp)."
+
+	^ self ___compileContext___ at: #'classBodyValueDefNode' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classBodyValueDefNode: aNodeOrNil
+	self ___compileContext___ at: #'classBodyValueDefNode' put: aNodeOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classBodyConditionalNames
+	"Names bound inside a class-body ``if'' branch (see ClassDefAst >>
+	emitClassBodyIfBranch:on:).  Like nested-class names they live in the
+	per-class DYNAMIC attr store rather than in an accessor pair, so
+	NameAst reads them through ___dynamicClassAttr___.
+
+	Unlike classAttrNames these are NOT position-gated by
+	classBodyBoundNames: whether the binding ran is a RUNTIME fact (the
+	branch may not have been taken), which is exactly why the read falls
+	back to the module global when the slot is nil -- the same fallback
+	Python's class-body name lookup performs."
+
+	^ self ___compileContext___ at: #'classBodyConditionalNames' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classBodyConditionalNames: aSetOrNil
+	self ___compileContext___ at: #'classBodyConditionalNames' put: aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 inClassBodyValueEmit
 	"Boolean — true while ClassDefAst is emitting the class
 	attribute value expressions, false otherwise (including while
@@ -1689,6 +1734,15 @@ selfParameterRebound: aBooleanOrNil
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 isSelfReference: aSymbol
+	"The self/cls parameter of a class-body def IS the Smalltalk receiver --
+	but only because such a def compiles to a real method.  A CONDITIONAL
+	def compiles to a block (ClassDefAst >> emitClassBodyIfDef:on:), where
+	the parameter is the transported ``_self'' temp and Smalltalk ``self''
+	is the enclosing module instance.  Nothing but that def's own body emits
+	while classBodyValueDefNode is set, so denying every receiver fast path
+	for the whole window is exactly the right scope."
+
+	self classBodyValueDefNode ifNotNil: [^ false].
 	^ self classBeingCompiled notNil
 		and: [aSymbol == self selfParameterName
 		and: [self selfParameterRebound ~~ true]]
