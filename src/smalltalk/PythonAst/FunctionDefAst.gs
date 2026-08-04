@@ -592,6 +592,37 @@ printSmalltalkOn: aStream
 		self hasSignatureSpec ifTrue: [
 			aStream nextPutAll: '; @env0:___pySig___: '.
 			self emitSignatureSpecOn: aStream].
+	"Every execution of a ``def'' must yield a DISTINCT function object -- that
+	is what CPython does, and Python code depends on it.  GemStone reuses a
+	CLEAN block (one referencing no self, instance variable, enclosing temp or
+	thisContext) as a compile-time literal, so without this a nested def whose
+	body captures nothing answers the SAME ExecBlock on every execution, and
+	everything keyed on that object -- user attributes, a __doc__ or __name__
+	written by functools.update_wrapper, the memoized __annotations__ -- is
+	shared across invocations:
+
+		def run_once(tag):
+			def inner(x): pass
+			seen = getattr(inner, 'stamp', 'ABSENT')
+			inner.stamp = tag
+			return seen
+		# CPython: ('ABSENT', 'ABSENT').  Shared block: ('ABSENT', 'first').
+
+	``shallowCopy'' as the LAST cascade message makes the copy the value of the
+	whole expression, so the assignment / decorator pipeline below binds the
+	fresh object while the stamps above still address the original -- harmless,
+	because every stamp writes the DEF-SITE slot table keyed by ``method'',
+	which a copy preserves (so both see one shared entry, which is correct: the
+	values are identical for every execution of the def).  The copy also keeps
+	the captured home context, so closures and shared mutable enclosing temps
+	behave unchanged.
+
+	Why a copy rather than forcing the block to be non-clean: both defeat the
+	sharing, but a marker that makes the block non-clean must be a USED
+	reference (the compiler eliminates a discarded one) and therefore executes
+	on every invocation, measured at +2ns per CALL.  The copy costs ~10ns once
+	per def execution and nothing per call."
+	aStream nextPutAll: '; @env0:shallowCopy'.
 	"Phase A: close the dynamicInstVarAt:put: paren opened above when
 	this is a module-scope nested def; otherwise just emit the
 	statement-terminating period."
