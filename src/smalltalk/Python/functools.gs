@@ -1375,9 +1375,34 @@ ___pyBindsSelf___
 	"Marker read by object >> ___isDescriptorCallable___:.  CPython makes
 	this a descriptor whose __get__ binds the receiver; Grail reaches the
 	same place through its own class-attribute binding, so ``a.m(5)'' arrives
-	at the call below as (a, 5)."
+	at the call below as (a, 5).
 
-	^ true
+	NOT over a @staticmethod or @classmethod.  CPython's __get__ delegates to
+	the wrapped descriptor's own, and neither binds the instance: a static one
+	binds nothing at all, and a class one binds the CLASS.  Answering false
+	sends those two down the __get__ route instead (see object >>
+	___isValueDescriptor___:), which is the only way the CLASS-side read can
+	work -- ``A.cls()'' passes no receiver, so there would be nothing for the
+	call to recover the owner from."
+
+	^ self ___wrappedKind___ == #plain
+%
+
+category: 'Grail-Private'
+method: functools_partialmethod
+___wrappedKind___
+	"#static, #class or #plain -- what this partialmethod wraps, which decides
+	what (if anything) gets bound as the target's first argument.
+
+	Only answerable now that staticmethod and classmethod are real wrapper
+	objects; while both were identity stubs a partialmethod over either was
+	indistinguishable from one over a plain function."
+
+	| fn |
+	fn := self @env0:dynamicInstVarAt: #func.
+	(fn isKindOf: PyStaticMethod) ifTrue: [^ #static].
+	(fn isKindOf: PyClassMethod) ifTrue: [^ #class].
+	^ #plain
 %
 
 category: 'Grail-Calling'
@@ -1391,21 +1416,38 @@ ___pyCallValue___: positional kw: kwargs
 	passes it explicitly in the same leading slot (``A.m(a, 5)'').  Later
 	keywords override the bound ones, as in CPython."
 
-	| callArgs recv rest allKw fn |
+	| callArgs recv rest allKw fn kind bound |
 	callArgs := positional @env0:ifNil: [#()].
+	kind := self ___wrappedKind___.
+	fn := self @env0:dynamicInstVarAt: #func.
+	bound := (self @env0:dynamicInstVarAt: #args) @env0:asArray.
+	allKw := (self @env0:dynamicInstVarAt: #keywords) @env0:copy.
+	(kwargs == nil or: [kwargs @env0:isEmpty]) ifFalse: [
+		kwargs @env0:keysAndValuesDo: [:k :v | allKw @env0:at: k put: v]].
+	"Over a @staticmethod there is no receiver in play at all, from either
+	access path: ``A.static(5)'' and ``a.static(5)'' both call the wrapped
+	function with just the bound args and the caller's own."
+	kind == #static ifTrue: [
+		^ (fn @env0:dynamicInstVarAt: #'__func__')
+			___pyCallValue___: bound @env0:, callArgs kw: allKw].
 	callArgs @env0:isEmpty ifTrue: [
 		TypeError ___signal___: (self ___targetName___)
 			@env0:, ' requires a receiver as its first argument'].
 	recv := callArgs @env0:at: 1.
-	rest := (Array @env0:with: recv)
-		@env0:, (self @env0:dynamicInstVarAt: #args) @env0:asArray.
-	callArgs @env0:size @env0:> 1 ifTrue: [
-		rest := rest @env0:, (callArgs @env0:copyFrom: 2 to: callArgs @env0:size)].
-	allKw := (self @env0:dynamicInstVarAt: #keywords) @env0:copy.
-	(kwargs == nil or: [kwargs @env0:isEmpty]) ifFalse: [
-		kwargs @env0:keysAndValuesDo: [:k :v | allKw @env0:at: k put: v]].
-	fn := self @env0:dynamicInstVarAt: #func.
-	^ fn ___pyCallValue___: rest kw: allKw
+	rest := callArgs @env0:size @env0:> 1
+		ifTrue: [callArgs @env0:copyFrom: 2 to: callArgs @env0:size]
+		ifFalse: [#()].
+	"Over a @classmethod the leading slot holds the CLASS, not the instance --
+	__get__ put it there.  A caller reaching an instance in explicitly still
+	gets the class, as CPython does."
+	kind == #class ifTrue: [
+		| owner |
+		owner := (recv isKindOf: Behavior) ifTrue: [recv] ifFalse: [recv @env0:class].
+		^ (fn @env0:dynamicInstVarAt: #'__func__')
+			___pyCallValue___: ((Array @env0:with: owner) @env0:, bound @env0:, rest)
+			kw: allKw].
+	^ fn ___pyCallValue___: ((Array @env0:with: recv) @env0:, bound @env0:, rest)
+		kw: allKw
 %
 
 category: 'Grail-Calling'
@@ -1419,10 +1461,25 @@ value: positional value: kwargs
 category: 'Grail-Calling'
 method: functools_partialmethod
 __get__: obj _: objtype
-	"The descriptor protocol, for a caller that invokes it explicitly
-	(``p.__get__(0)()'' in test_subclass_optimization).  MethodBinding is
-	what Grail's implicit attribute read produces, so both routes agree."
+	"The descriptor protocol.  Reached explicitly (``p.__get__(0)()'' in
+	test_subclass_optimization), and -- for the @staticmethod and @classmethod
+	kinds, which refuse the MethodBinding route -- by the ordinary attribute
+	read as well, from BOTH the instance and the class side."
 
+	| kind owner |
+	kind := self ___wrappedKind___.
+	"Nothing to bind: the call supplies everything."
+	kind == #static ifTrue: [^ self].
+	kind == #class ifTrue: [
+		owner := (objtype == nil or: [objtype == None])
+			ifTrue: [(obj == nil or: [obj == None])
+				ifTrue: [nil]
+				ifFalse: [obj @env0:class]]
+			ifFalse: [objtype].
+		owner == nil ifTrue: [
+			TypeError ___signal___: (self ___targetName___)
+				@env0:, ' over a classmethod needs an owner class to bind'].
+		^ MethodBinding instance: owner callable: self].
 	^ MethodBinding instance: obj callable: self
 %
 
