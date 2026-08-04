@@ -962,6 +962,42 @@ ___grailFlagAutoNext: lastValues
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailClassHasGnv: cls
+	"True when cls (or an ancestor) provides a USER _generate_next_value_ --
+	either a plain-def instance method (selector _generate_next_value_:_:_:,
+	self-param is the NAME) or an @staticmethod class-side method (selector
+	_generate_next_value_:_:_:_:, receiver is the class).  No base Enum/Flag/
+	Str/ReprEnum class defines either, so a hit is always a user gnv.  Lets the
+	functional builder invoke the same gnv the class-syntax builder does."
+
+	^ (cls @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:'
+			environmentId: 1) @env0:notNil
+		or: [(cls @env0:class @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:_:'
+			environmentId: 1) @env0:notNil]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailGnvValueFor: cls name: nameStr count: count lastValues: lv
+	"Invoke cls's user _generate_next_value_(name, start=1, count, last_values)
+	and answer its result.  Prefer the plain-def instance form; fall back to
+	the @staticmethod class-side form.  Caller guards with ___grailClassHasGnv:,
+	so one of the two selectors always resolves.  Mirrors the class-syntax
+	builder's invocation in ___grailBuildMembers:."
+
+	| gnvClass |
+	gnvClass := cls @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:'
+		environmentId: 1.
+	gnvClass @env0:notNil ifTrue: [
+		^ (UnboundMethod definingClass: gnvClass selector: #'_generate_next_value_')
+			value: { nameStr. 1. count. lv }
+			value: KeyValueDictionary @env0:new].
+	^ cls @env0:perform: #'_generate_next_value_:_:_:_:' env: 1
+		withArguments: { nameStr. 1. count. lv }
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailEnumTagFor: cls
 	"CPython's class-repr tag -- ``<flag 'X'>'' for a Flag subclass,
 	``<enum 'X'>'' otherwise.  Phrases the ``cannot extend'' TypeError."
@@ -1352,19 +1388,31 @@ ___grailFunctional: cls positional: positional keywords: keywords
 		ifTrue: [keywords @env0:at: 'start'] ifFalse: [1].
 	pairs := OrderedCollection @env0:new.
 	names @env0:isNil ifFalse: [
-		| isFlag autoVal nextAuto |
-		"Flag-natured classes number auto members by DOUBLING (1,2,4...
-		or start,2*start,... when start= is given) -- CPython Flag
-		semantics; plain enums count sequentially from start."
+		| isFlag autoVal nextAuto hasGnv genValues |
+		"Auto member values in declaration order, mirroring the class-syntax
+		builder's resolution: a user _generate_next_value_ (Date/Float mixin
+		fixtures return values[count]) wins; else a StrEnum yields the
+		lowercased name; else Flag-natured classes DOUBLE (1,2,4... or
+		start,2*start when start= is given) and plain enums count sequentially
+		from start.  genValues threads the resolved values as gnv's
+		last_values."
 		isFlag := self ___grailIsFlagClass: cls.
+		hasGnv := Enum ___grailClassHasGnv: cls.
+		genValues := OrderedCollection @env0:new.
 		autoVal := nil.
-		nextAuto := [:idx |
-			isFlag
-				ifTrue: [autoVal := autoVal @env0:isNil
-					ifTrue: [start @env0:max: 1]
-					ifFalse: [autoVal @env0:* 2]]
-				ifFalse: [autoVal := start @env0:+ idx @env0:- 1].
-			autoVal].
+		nextAuto := [:idx :nameStr | | v |
+			v := hasGnv
+				ifTrue: [Enum ___grailGnvValueFor: cls name: nameStr
+					count: genValues @env0:size lastValues: (list @env0:withAll: genValues)]
+				ifFalse: [(self ___grailIsStrEnumClass: cls)
+					ifTrue: [nameStr @env0:asLowercase]
+					ifFalse: [isFlag
+						ifTrue: [autoVal := autoVal @env0:isNil
+							ifTrue: [start @env0:max: 1]
+							ifFalse: [autoVal @env0:* 2]]
+						ifFalse: [autoVal := start @env0:+ idx @env0:- 1]]].
+			genValues @env0:add: v.
+			v].
 		(names isKindOf: CharacterCollection)
 			ifTrue: [
 				| cleaned tokens idx |
@@ -1374,7 +1422,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 				tokens @env0:do: [:tok |
 					idx := idx @env0:+ 1.
 					pairs @env0:add: (Array @env0:with: tok @env0:asString
-						with: (nextAuto @env0:value: idx))]]
+						with: (nextAuto @env0:value: idx value: tok @env0:asString))]]
 			ifFalse: [(names isKindOf: KeyValueDictionary)
 				ifTrue: [
 					names @env0:keysAndValuesDo: [:k :v |
@@ -1394,7 +1442,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 						idx := idx @env0:+ 1.
 						(item isKindOf: CharacterCollection)
 							ifTrue: [pairs @env0:add: (Array @env0:with: item @env0:asString
-								with: (nextAuto @env0:value: idx))]
+								with: (nextAuto @env0:value: idx value: item @env0:asString))]
 							ifFalse: [pairs @env0:add: (Array @env0:with: (item @env0:at: 1) @env0:asString
 								with: (item @env0:at: 2))]]]]].
 	newCls := cls ___subclass___: className instVarNames: #() classInstVarNames: #().
