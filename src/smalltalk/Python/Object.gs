@@ -2671,11 +2671,19 @@ __contains__: item
 	it := self __iter__.
 	[true] @env0:whileTrue: [ | elem eq |
 		elem := [ it __next__ ] @env0:on: StopIteration do: [:ex | ^ false].
+		"CPython's ``item in self'' is PySequence_Contains: for each ELEMENT,
+		RichCompareBool(element, item, EQ) -- identity first, then the element
+		is the LEFT operand so ITS __eq__ runs first (reflected to item.__eq__
+		only on NotImplemented).  ``elem ___cmpEq___: item'' is that element-
+		first rich ==; the earlier ``item __eq__: elem'' compared in the WRONG
+		order and reported a spurious match for an asymmetric __eq__ (test_iter
+		test_in_and_not_in: ALWAYS_EQ must NOT be found in iter([NEVER_EQ]) --
+		NEVER_EQ, the element, wins the comparison)."
 		(item @env0:== elem) ifTrue: [^ true].
-		eq := item __eq__: elem.
+		eq := elem ___cmpEq___: item.
 		"``eq'' may be the Python NotImplemented singleton (``ni'') OR the
 		internal ``#'___NotImplemented___''' sentinel that built-in dunders
-		(e.g. sequence __eq__: vs a non-sequence) return -- neither counts as a
+		(e.g. int __eq__: vs a tuple/complex) return -- neither counts as a
 		match here."
 		((eq @env0:~~ ni and: [eq @env0:~~ #'___NotImplemented___'])
 			and: [eq @env1:___isTruthy___]) ifTrue: [^ true]]

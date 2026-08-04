@@ -197,6 +197,26 @@ a == (1, 3) and b == (2, 4)').
 a == 10 and b == 20')
 %
 
+category: 'Grail-Tests - Sequence Functions'
+method: BuiltinsTestCase
+testContainsComparesElementFirst
+	"``x in obj'' compares each ELEMENT against x element-first
+	(CPython PySequence_Contains: RichCompareBool(element, x, EQ)), so an
+	asymmetric __eq__ on the element decides the match: ALWAYS_EQ is NOT
+	found in an iterable yielding NEVER_EQ (test_iter test_in_and_not_in).
+	The generic object>>__contains__ fallback previously compared
+	x.__eq__(element) -- the wrong order -- and reported a spurious match.
+	Uses a loaded module because the fixture defines classes."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_contains_eq_order' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_contains_eq_order.py')
+		name: 'grail_contains_eq_order'.
+	self assert: (mod @env1:check)
+%
+
 category: 'Grail-Tests - Phase 4b Varargs'
 method: BuiltinsTestCase
 testEvalRound2Arg
