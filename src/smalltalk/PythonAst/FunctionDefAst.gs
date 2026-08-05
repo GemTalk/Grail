@@ -389,6 +389,9 @@ printSmalltalkOn: aStream
 			nextPutAll: name;
 			nextPutAll: ' := '
 	].
+	"Open the paren that ``) @env0:shallowCopy'' closes once the block is
+	built -- see the comment there for why the def's value must be a copy."
+	aStream nextPut: $(.
 	"Emit a def-time default-capture outer block when there are
 	defaults.  The outer block runs immediately (``] value``) and
 	returns the inner function block; defaults that reference the
@@ -551,6 +554,42 @@ printSmalltalkOn: aStream
 	(args defaults notNil and: [args defaults notEmpty]) ifTrue: [
 		aStream nextPutAll: '] value'.
 	].
+	"Every execution of a ``def'' must yield a DISTINCT function object -- that
+	is what CPython does, and Python code depends on it.  GemStone reuses a
+	CLEAN block (one referencing no self, instance variable, enclosing temp or
+	thisContext) as a compile-time literal, so a nested def whose body captures
+	nothing answers the SAME ExecBlock on every execution, and everything keyed
+	on that object -- user attributes, a __doc__ or __name__ written by
+	functools.update_wrapper, the memoized __annotations__ -- is shared across
+	invocations:
+
+		def run_once(tag):
+			def inner(x): pass
+			seen = getattr(inner, 'stamp', 'ABSENT')
+			inner.stamp = tag
+			return seen
+		# CPython: ('ABSENT', 'ABSENT').  Shared block: ('ABSENT', 'first').
+
+	The copy is taken HERE, before the stamps below, so the stamps address the
+	object the def's name will actually be bound to.  Taking it afterwards (as
+	the last cascade message) also defeats the sharing, but then every stamp
+	writes against the original -- which works only for the DEF-SITE stamps,
+	keyed by ``method'', and silently loses any PER-OBJECT one.  ``__annotate__''
+	is per-object (it closes over the enclosing scope, so it is NOT the same
+	function for every execution of the def), and stamping it on the original
+	left every annotated def reporting ``{}''.
+
+	shallowCopy preserves ``method'' -- so the def-site slots still resolve to
+	one shared entry, which is correct because those values are identical for
+	every execution -- and preserves the captured home context, so closures and
+	shared mutable enclosing temps behave unchanged.
+
+	Why a copy rather than forcing the block to be non-clean: both defeat the
+	sharing, but a marker that makes the block non-clean must be a USED
+	reference (the compiler eliminates a discarded one) and therefore executes
+	on every invocation, measured at +2ns per CALL.  The copy costs ~10ns once
+	per def execution and nothing per call."
+	aStream nextPutAll: ') @env0:shallowCopy'.
 	"Stamp the closure's ``__name__'' from the def's lexical name so
 	``func.__name__'' answers 'name', not the ``<closure>'' placeholder.
 	``___pyNamed___:'' returns self, so it sits transparently in front of
