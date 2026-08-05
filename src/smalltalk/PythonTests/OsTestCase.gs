@@ -79,7 +79,7 @@ testExists
 	self assert: (o @env1:exists: '/tmp').
 
 	"Test with non-existing path"
-	self deny: (o @env1:exists: '/tmp/grail_os_test_nonexistent_xyz123')
+	self deny: (o @env1:exists: (self tmp: 'os_test_nonexistent_xyz123'))
 %
 
 category: 'Grail-Tests - Integration'
@@ -89,7 +89,7 @@ testFileOperationsSequence
 
 	| o testDir testFile file listResult |
 	o := os @env1:instance.
-	testDir := '/tmp/grail_os_test_sequence'.
+	testDir := (self tmp: 'os_test_sequence').
 	testFile := testDir , '/test_file.txt'.
 
 	"Clean up if it exists"
@@ -183,7 +183,7 @@ testIsdir
 
 	| o testDir |
 	o := os @env1:instance.
-	testDir := '/tmp/grail_os_test_isdir'.
+	testDir := (self tmp: 'os_test_isdir').
 
 	"Clean up if it exists"
 		(o @env1:exists: testDir) ifTrue: [
@@ -195,7 +195,7 @@ testIsdir
 
 	"Test isdir"
 	self assert: (o @env1:isdir: testDir).
-	self deny: (o @env1:isdir: '/tmp/grail_os_test_isdir_nonexistent').
+	self deny: (o @env1:isdir: (self tmp: 'os_test_isdir_nonexistent')).
 
 	"Clean up"
 	o @env1:rmdir: testDir
@@ -208,7 +208,7 @@ testIsfile
 
 	| o testFile file |
 	o := os @env1:instance.
-	testFile := '/tmp/grail_os_test_isfile'.
+	testFile := (self tmp: 'os_test_isfile').
 
 	"Clean up if it exists"
 	(o @env1:exists: testFile) ifTrue: [
@@ -222,7 +222,7 @@ testIsfile
 
 	"Test isfile"
 	self assert: (o @env1:isfile: testFile).
-	self deny: (o @env1:isfile: '/tmp/grail_os_test_isfile_nonexistent').
+	self deny: (o @env1:isfile: (self tmp: 'os_test_isfile_nonexistent')).
 
 	"Test that directory is not a file"
 	self deny: (o @env1:isfile: '/tmp').
@@ -275,7 +275,7 @@ testLstat
 
 	| o testFile file statResult |
 	o := os @env1:instance.
-	testFile := '/tmp/grail_os_test_lstat'.
+	testFile := (self tmp: 'os_test_lstat').
 
 	"Clean up if it exists"
 	(o @env1:exists: testFile) ifTrue: [
@@ -304,27 +304,27 @@ testMakedirs
 
 	| o testDir |
 	o := os @env1:instance.
-	testDir := '/tmp/grail_os_test_makedirs/level1/level2'.
+	testDir := (self tmp: 'os_test_makedirs/level1/level2').
 
 	"Clean up if it exists"
-	(o @env1:exists: '/tmp/grail_os_test_makedirs') ifTrue: [
-		o @env1:rmdir: '/tmp/grail_os_test_makedirs/level1/level2'.
-		o @env1:rmdir: '/tmp/grail_os_test_makedirs/level1'.
-		o @env1:rmdir: '/tmp/grail_os_test_makedirs'
+	(o @env1:exists: (self tmp: 'os_test_makedirs')) ifTrue: [
+		o @env1:rmdir: (self tmp: 'os_test_makedirs/level1/level2').
+		o @env1:rmdir: (self tmp: 'os_test_makedirs/level1').
+		o @env1:rmdir: (self tmp: 'os_test_makedirs')
 	].
 
 	"Create nested directories"
 	o @env1:makedirs: testDir.
 
 	"Verify all levels exist"
-	self assert: (o @env1:exists: '/tmp/grail_os_test_makedirs').
-	self assert: (o @env1:exists: '/tmp/grail_os_test_makedirs/level1').
+	self assert: (o @env1:exists: (self tmp: 'os_test_makedirs')).
+	self assert: (o @env1:exists: (self tmp: 'os_test_makedirs/level1')).
 	self assert: (o @env1:exists: testDir).
 
 	"Clean up"
-	o @env1:rmdir: '/tmp/grail_os_test_makedirs/level1/level2'.
-	o @env1:rmdir: '/tmp/grail_os_test_makedirs/level1'.
-	o @env1:rmdir: '/tmp/grail_os_test_makedirs'
+	o @env1:rmdir: (self tmp: 'os_test_makedirs/level1/level2').
+	o @env1:rmdir: (self tmp: 'os_test_makedirs/level1').
+	o @env1:rmdir: (self tmp: 'os_test_makedirs')
 %
 
 category: 'Grail-Tests - File and Directory Operations'
@@ -334,7 +334,7 @@ testMkdir
 
 	| o testDir |
 	o := os @env1:instance.
-	testDir := '/tmp/grail_os_test_mkdir'.
+	testDir := (self tmp: 'os_test_mkdir').
 
 	"Clean up if it exists"
 		(o @env1:exists: testDir) ifTrue: [
@@ -359,7 +359,7 @@ testMkdirWithMode
 
 	| o testDir |
 	o := os @env1:instance.
-	testDir := '/tmp/grail_os_test_mkdir_mode'.
+	testDir := (self tmp: 'os_test_mkdir_mode').
 
 	"Clean up if it exists"
 		(o @env1:exists: testDir) ifTrue: [
@@ -493,7 +493,7 @@ testPathExists
 	self assert: (o @env1:exists: '/tmp').
 
 	"Test with non-existing path"
-	self deny: (o @env1:exists: '/tmp/grail_os_path_test_nonexistent_xyz123')
+	self deny: (o @env1:exists: (self tmp: 'os_path_test_nonexistent_xyz123'))
 %
 
 category: 'Grail-Tests - Path Manipulation'
@@ -547,7 +547,7 @@ testPathIsdir
 	| o path testDir |
 	o := os @env1:instance.
 	path := o @env1:path.
-	testDir := '/tmp/grail_os_path_test_isdir'.
+	testDir := (self tmp: 'os_path_test_isdir').
 
 	"Clean up if it exists"
 		(o @env1:exists: testDir) ifTrue: [
@@ -559,7 +559,7 @@ testPathIsdir
 
 	"Test isdir"
 	self assert: (o @env1:isdir: testDir).
-	self deny: (o @env1:isdir: '/tmp/grail_os_path_test_isdir_nonexistent').
+	self deny: (o @env1:isdir: (self tmp: 'os_path_test_isdir_nonexistent')).
 
 	"Clean up"
 	o @env1:rmdir: testDir
@@ -573,7 +573,7 @@ testPathIsfile
 	| o path testFile file |
 	o := os @env1:instance.
 	path := o @env1:path.
-	testFile := '/tmp/grail_os_path_test_isfile'.
+	testFile := (self tmp: 'os_path_test_isfile').
 
 	"Clean up if it exists"
 	(o @env1:exists: testFile) ifTrue: [
@@ -587,7 +587,7 @@ testPathIsfile
 
 	"Test isfile"
 	self assert: (o @env1:isfile: testFile).
-	self deny: (o @env1:isfile: '/tmp/grail_os_path_test_isfile_nonexistent').
+	self deny: (o @env1:isfile: (self tmp: 'os_path_test_isfile_nonexistent')).
 
 	"Test that directory is not a file"
 	self deny: (o @env1:isfile: '/tmp').
@@ -798,7 +798,7 @@ testRemove
 
 	| o testFile file |
 	o := os @env1:instance.
-	testFile := '/tmp/grail_os_test_remove'.
+	testFile := (self tmp: 'os_test_remove').
 
 	"Create a test file"
 	file := GsFile open: testFile mode: 'w' onClient: false.
@@ -822,8 +822,8 @@ testRename
 
 	| o oldPath newPath file |
 	o := os @env1:instance.
-	oldPath := '/tmp/grail_os_test_rename_old'.
-	newPath := '/tmp/grail_os_test_rename_new'.
+	oldPath := (self tmp: 'os_test_rename_old').
+	newPath := (self tmp: 'os_test_rename_new').
 
 	"Clean up if they exist"
 	(o @env1:exists: oldPath) ifTrue: [
@@ -859,7 +859,7 @@ testRmdir
 
 	| o testDir |
 	o := os @env1:instance.
-	testDir := '/tmp/grail_os_test_rmdir'.
+	testDir := (self tmp: 'os_test_rmdir').
 
 	"Clean up if it exists"
 		(o @env1:exists: testDir) ifTrue: [
@@ -898,7 +898,7 @@ testStat
 
 	| o testFile file statResult |
 	o := os @env1:instance.
-	testFile := '/tmp/grail_os_test_stat'.
+	testFile := (self tmp: 'os_test_stat').
 
 	"Clean up if it exists"
 	(o @env1:exists: testFile) ifTrue: [

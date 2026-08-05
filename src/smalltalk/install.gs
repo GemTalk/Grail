@@ -602,6 +602,8 @@ run
 	at: #'ModuleScopeBindingsTestCase' put: nil;
 	at: #'ModuleFunctionDecoratorsTestCase' put: nil;
 	at: #'ImportTypeIntrospectionTestCase' put: nil;
+	at: #'AbstractBasesProtocolTestCase' put: nil;
+	at: #'ClassScopeComprehensionTestCase' put: nil;
 	at: #'ExecClassBodyNamesTestCase' put: nil;
 	at: #'ExecClassDefinitionTestCase' put: nil;
 	at: #'IteratorLengthHintTestCase' put: nil;
@@ -623,6 +625,8 @@ run
 	at: #'GenericClassSubscriptTestCase' put: nil;
 	at: #'GenericAliasTestCase' put: nil;
 	at: #'Pep649AnnotationsTestCase' put: nil;
+	at: #'NestedDefIdentityTestCase' put: nil;
+	at: #'MethodDocstringTestCase' put: nil;
 	at: #'GlobalStatementCodegenTestCase' put: nil;
 	at: #'EmailMessageTestCase' put: nil;
 	at: #'EnumAutoImportTestCase' put: nil;
@@ -683,6 +687,10 @@ run
 	at: #'ReprlibTestCase' put: nil;
 	at: #'ShlexTestCase' put: nil;
 	at: #'ShutilTestCase' put: nil;
+	at: #'GrailDirFallbackTestCase' put: nil;
+	at: #'GrailTmpDirTestCase' put: nil;
+	at: #'SetUpBridgeFixture' put: nil;
+	at: #'SetUpBridgeTestCase' put: nil;
 	at: #'TomllibTestCase' put: nil;
 	at: #'UnittestTestCase' put: nil;
 	at: #'ZlibTestCase' put: nil;
@@ -1348,6 +1356,8 @@ input src/smalltalk/PythonTests/DynamicGlobalsTestCase.gs
 input src/smalltalk/PythonTests/ModuleScopeBindingsTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionDecoratorsTestCase.gs
 input src/smalltalk/PythonTests/ImportTypeIntrospectionTestCase.gs
+input src/smalltalk/PythonTests/AbstractBasesProtocolTestCase.gs
+input src/smalltalk/PythonTests/ClassScopeComprehensionTestCase.gs
 input src/smalltalk/PythonTests/ExecClassBodyNamesTestCase.gs
 input src/smalltalk/PythonTests/ExecClassDefinitionTestCase.gs
 input src/smalltalk/PythonTests/IteratorLengthHintTestCase.gs
@@ -1369,6 +1379,8 @@ input src/smalltalk/PythonTests/ClassFunctionBindingTestCase.gs
 input src/smalltalk/PythonTests/GenericClassSubscriptTestCase.gs
 input src/smalltalk/PythonTests/GenericAliasTestCase.gs
 input src/smalltalk/PythonTests/Pep649AnnotationsTestCase.gs
+input src/smalltalk/PythonTests/NestedDefIdentityTestCase.gs
+input src/smalltalk/PythonTests/MethodDocstringTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementCodegenTestCase.gs
 input src/smalltalk/PythonTests/EnumAutoImportTestCase.gs
 input src/smalltalk/PythonTests/Pep448StarredLiteralsTestCase.gs
@@ -1422,6 +1434,9 @@ input src/smalltalk/PythonTests/ShlexTestCase.gs
 input src/smalltalk/PythonTests/TextwrapTestCase.gs
 input src/smalltalk/PythonTests/GlobTestCase.gs
 input src/smalltalk/PythonTests/ShutilTestCase.gs
+input src/smalltalk/PythonTests/GrailDirFallbackTestCase.gs
+input src/smalltalk/PythonTests/GrailTmpDirTestCase.gs
+input src/smalltalk/PythonTests/SetUpBridgeTestCase.gs
 input src/smalltalk/PythonTests/TomllibTestCase.gs
 input src/smalltalk/PythonTests/UnittestTestCase.gs
 input src/smalltalk/PythonTests/ZlibTestCase.gs

@@ -294,6 +294,64 @@ __annotations__
 
 category: 'Grail-Python Metadata'
 method: UnboundMethod
+__signature_spec__
+	"``Cls.method'' -- UNBOUND, so every parameter including ``self'' is still
+	to be supplied and the spec is reported whole.  The bound counterpart
+	(BoundMethod) drops the first one.
+
+	The table walk mirrors ___annotationsForClass___:, including the env-1
+	probe: ___methodSignatureTable___ is compiled in environment 1."
+
+	^ (self ___signatureSpecForClass___: definingClass)
+		ifNil: [ExecBlock @env0:___pyNone___]
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+__doc__
+	"``Cls.method.__doc__''.  Same story as the bound handle: the docstring
+	lives in the defining class's class-side ___methodDocTable___, because a
+	class-body def compiles to a Smalltalk method and cannot carry the
+	def-time stamp a nested def does.  None when there is none, rather than
+	Object's own __doc__."
+
+	^ (self ___docForClass___: definingClass)
+		ifNil: [ExecBlock @env0:___pyNone___]
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___docForClass___: aClass
+	"Superclass walk for this handle's selector in ___methodDocTable___.
+	Mirrors ___signatureSpecForClass___:, including the env-1 probe."
+
+	| tbl v |
+	aClass == nil ifTrue: [^ nil].
+	((aClass @env0:class @env0:whichClassIncludesSelector:
+		#'___methodDocTable___' environmentId: 1) ~~ nil) ifTrue: [
+			tbl := aClass ___methodDocTable___.
+			v := tbl @env0:at: selector @env0:asString otherwise: nil.
+			v == nil ifFalse: [^ v]].
+	^ self ___docForClass___: (aClass @env0:superclass)
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___signatureSpecForClass___: aClass
+	"Superclass walk for this handle's selector in ___methodSignatureTable___."
+
+	| tbl v |
+	aClass == nil ifTrue: [^ nil].
+	((aClass @env0:class @env0:whichClassIncludesSelector:
+		#'___methodSignatureTable___' environmentId: 1) ~~ nil) ifTrue: [
+			tbl := aClass ___methodSignatureTable___.
+			v := tbl @env0:at: selector @env0:asString otherwise: nil.
+			v == nil ifFalse: [^ v]].
+	^ self ___signatureSpecForClass___: (aClass @env0:superclass)
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
 ___annotationsForClass___: aClass
 	"Superclass walk for the first ___methodAnnotationsTable___ entry named by
 	this handle's selector.  The entry is a PEP 649 annotate FUNCTION, called
@@ -331,6 +389,8 @@ ___pythonValueAttrs___
 		add: #'__qualname__';
 		add: #'__module__';
 		add: #'__annotations__';
+		add: #'__signature_spec__';
+		add: #'__doc__';
 		yourself
 %
 

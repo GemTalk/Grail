@@ -40,7 +40,7 @@ setUp
 	"Initialize the builtin modules + enable codegen tracing.
 
 	Several ImportlibTestCase tests assert on the contents of
-	``/tmp/grail/<module>.tpz'' (the Topaz-style codegen capture);
+	``$TMP/codegen/<module>.tpz'' (the Topaz-style codegen capture);
 	the capture is OPT-IN as of the ``GRAIL_CODEGEN_TRACE_DIR'' env
 	var.  Save the var's incoming value (restored in tearDown so a test
 	run that started with it unset doesn't leave it pinned), then set it
@@ -49,7 +49,7 @@ setUp
 
 	importlib @env1:modules.
 	savedCodegenTraceDir := System gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR'.
-	System gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: '/tmp/grail'.
+	System gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: (self tmp: 'codegen').
 	importlib ___codegenTraceDirInvalidate___
 %
 
@@ -58,7 +58,7 @@ method: ImportlibTestCase
 tearDown
 	"Restore GRAIL_CODEGEN_TRACE_DIR to whatever it was before this test
 	(often unset), so the suite doesn't leave the session env var pinned
-	to ``/tmp/grail''.  An unset incoming value (nil) restores to the empty
+	to ``$TMP/codegen''.  An unset incoming value (nil) restores to the empty
 	string — Grail treats that as ``tracing off'', and there is no gem API
 	to truly unset a session env var.  Invalidate the cached value so the
 	next reader re-reads the env var."
@@ -383,7 +383,7 @@ testClassMethodCompileForm
 
 	| testFilePath tpzPath tpzContents |
 	testFilePath := importlib grailDir , '/tests/python/module_with_classes.py'.
-	tpzPath := '/tmp/grail/__main__.tpz'.
+	tpzPath := (self tmp: 'codegen/__main__.tpz').
 
 	importlib @env1:modules removeKey: #'__main__' ifAbsent: [].
 	(GsFile existsOnServer: tpzPath) ifTrue: [GsFile removeServerFile: tpzPath].
@@ -424,7 +424,7 @@ testInstanceMethodUnderscoreParamNames
 
 	| testFilePath tpzPath tpzContents |
 	testFilePath := importlib grailDir , '/tests/python/module_with_classes.py'.
-	tpzPath := '/tmp/grail/__main__.tpz'.
+	tpzPath := (self tmp: 'codegen/__main__.tpz').
 
 	importlib @env1:modules removeKey: #'__main__' ifAbsent: [].
 	(GsFile existsOnServer: tpzPath) ifTrue: [GsFile removeServerFile: tpzPath].
@@ -458,7 +458,7 @@ testInstanceMethodNoOuterBlock
 
 	| testFilePath tpzPath tpzContents sumStart |
 	testFilePath := importlib grailDir , '/tests/python/module_with_classes.py'.
-	tpzPath := '/tmp/grail/__main__.tpz'.
+	tpzPath := (self tmp: 'codegen/__main__.tpz').
 
 	importlib @env1:modules removeKey: #'__main__' ifAbsent: [].
 	(GsFile existsOnServer: tpzPath) ifTrue: [GsFile removeServerFile: tpzPath].
@@ -491,15 +491,15 @@ category: 'Grail-Tests - Module Loading'
 method: ImportlibTestCase
 testRunPathWritesDebugFiles
 	"runPath: captures every compiled method source in
-	/tmp/grail/<module>.tpz (Topaz-style framing) and the last IR
-	tree in /tmp/grail/<module>.ir for post-mortem inspection.
+	$TMP/codegen/<module>.tpz (Topaz-style framing) and the last IR
+	tree in $TMP/codegen/<module>.ir for post-mortem inspection.
 	Drive runPath: on hello.py and verify both files were written
 	with content that reflects the Python source."
 
 	| testFilePath tpzPath irPath tpzFile tpzContents irFile irContents |
 	testFilePath := importlib grailDir , '/src/python/hello.py'.
-	tpzPath := '/tmp/grail/__main__.tpz'.
-	irPath := '/tmp/grail/__main__.ir'.
+	tpzPath := (self tmp: 'codegen/__main__.tpz').
+	irPath := (self tmp: 'codegen/__main__.ir').
 
 	"Clear any leftover files so we know runPath: actually wrote them."
 	(GsFile existsOnServer: tpzPath) ifTrue: [GsFile removeServerFile: tpzPath].
@@ -536,15 +536,15 @@ testRunPathWritesDebugFiles
 category: 'Grail-Tests - Module Loading'
 method: ImportlibTestCase
 testLoadModuleWritesPerModuleDebugFiles
-	"loadModuleFromPath: writes /tmp/grail/<module>.tpz and .ir for
+	"loadModuleFromPath: writes $TMP/codegen/<module>.tpz and .ir for
 	EVERY Python module it compiles, not just __main__.  Drive a
 	fresh import of itertools (a stdlib module that compiles from
 	src/python/stdlib/itertools.py) and verify its per-module debug
 	files appear with the expected Topaz framing."
 
 	| tpzPath irPath tpzContents |
-	tpzPath := '/tmp/grail/itertools.tpz'.
-	irPath := '/tmp/grail/itertools.ir'.
+	tpzPath := (self tmp: 'codegen/itertools.tpz').
+	irPath := (self tmp: 'codegen/itertools.ir').
 	(GsFile existsOnServer: tpzPath) ifTrue: [GsFile removeServerFile: tpzPath].
 	(GsFile existsOnServer: irPath) ifTrue: [GsFile removeServerFile: irPath].
 
@@ -717,17 +717,17 @@ category: 'Grail-Tests - Codegen Capture'
 method: ImportlibTestCase
 testExecuteWithScopeCaptureIsOptIn
 	"ModuleAst >> executeWithScope:as: used to write a
-	___<kind>_<N>___.tpz/.ir pair to a hardcoded /tmp/grail on EVERY
+	___<kind>_<N>___.tpz/.ir pair to a hardcoded $TMP/codegen on EVERY
 	exec/eval/doit, ignoring GRAIL_CODEGEN_TRACE_DIR — which flooded
-	/tmp/grail during run_tests.sh.  Capture must now be gated by the
+	$TMP/codegen during run_tests.sh.  Capture must now be gated by the
 	same env var as importlib's module-load capture and must honor the
 	configured directory rather than a hardcoded path."
 
 	| dir before after |
-	dir := '/tmp/grail_optin_test'.
+	dir := (self tmp: 'optin_test').
 
 	"--- Tracing ON: a doit writes capture files into the CONFIGURED
-	dir (proving the path is not hardcoded to /tmp/grail).  Empty the
+	dir (proving the path is not hardcoded to $TMP/codegen).  Empty the
 	dir first: sequence counters reset on install, so capture filenames
 	are reused and a leftover ___doit_1___ would be overwritten rather
 	than added, hiding the write. ---"
@@ -744,17 +744,17 @@ testExecuteWithScopeCaptureIsOptIn
 	self assert: after > before.
 
 	"--- Tracing OFF: a doit writes NOTHING.  Only this synchronous
-	doit runs between the two counts, so the /tmp/grail delta is 0
+	doit runs between the two counts, so the $TMP/codegen delta is 0
 	with the fix and would be +2 (.tpz + .ir) with the old bug. ---"
 	System gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR' put: ''.
 	importlib ___codegenTraceDirInvalidate___.
 	self assert: importlib ___codegenTraceDir___ isNil.
-	before := self ___captureCountIn: '/tmp/grail'.
+	before := self ___captureCountIn: (self tmp: 'codegen').
 	ModuleAst
 		evaluateSource: 'y = 1 + 2'
 		usingModuleScope: SymbolDictionary new
 		as: #doit.
-	after := self ___captureCountIn: '/tmp/grail'.
+	after := self ___captureCountIn: (self tmp: 'codegen').
 	self assert: after equals: before.
 	"GRAIL_CODEGEN_TRACE_DIR is restored to its incoming value in tearDown."
 %

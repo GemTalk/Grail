@@ -243,6 +243,24 @@ __annotations__
 
 category: 'Grail-Attribute Access'
 method: ExecBlock
+__signature_spec__
+	"The def-time parameter spec inspect.signature reads -- an Array of
+	``(name, kind-index, default-source-text-or-nil)'' triples in declaration
+	order, stamped by FunctionDefAst.  None for a def with no parameters,
+	which renders as ``()'' regardless.
+
+	Grail has no code object to introspect, so the compiler records what it
+	already knows instead of synthesising ``co_varnames''/``co_argcount''.
+	Nothing observable needs the code-object form: across the whole CPython
+	corpus the only ``co_*'' fields read are co_firstlineno and co_name,
+	both of which PyCode already carries."
+
+	^ ((ExecBlock @env0:___pyAttrsClass___) @env0:slotAt: self attr: '__signature_spec__')
+		ifNil: [ExecBlock @env0:___pyNone___]
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
 __annotate__
 	"``func.__annotate__'' — PEP 649's annotation-computing function, a
 	one-argument callable taking a Format and answering the annotation
@@ -381,6 +399,7 @@ ___slotNames___
 		add: #'__annotate__';
 		add: #'__type_params__';
 		add: #'__code__';
+		add: #'__signature_spec__';
 		yourself
 %
 
@@ -421,6 +440,7 @@ ___pythonValueAttrs___
 		add: #'__annotate__';
 		add: #'__type_params__';
 		add: #'__code__';
+		add: #'__signature_spec__';
 		yourself
 %
 
@@ -439,7 +459,7 @@ ___pyNamed___: aString
 	would be copied onto every wrapper by functools.update_wrapper's
 	__dict__ merge."
 
-	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__name__' put: aString.
+	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__name__' put: aString.
 	^ self
 %
 
@@ -459,8 +479,8 @@ ___pyNamed___: aString annotate: aBlock
 	decorator pipeline (``functools.singledispatch.register'' reads the
 	first parameter's annotation off a decorated local def this way)."
 
-	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__name__' put: aString.
-	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__annotate__' put: aBlock.
+	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__name__' put: aString.
+	(ExecBlock ___pyAttrsClass___) annotateSlotAt: self attr: '__annotate__' put: aBlock.
 	^ self
 %
 
@@ -472,8 +492,8 @@ ___pyNamed___: aString doc: aDoc
 	One combined keyword send, since two chained ones would parse as a
 	single selector."
 
-	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__name__' put: aString.
-	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__doc__' put: aDoc.
+	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__name__' put: aString.
+	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__doc__' put: aDoc.
 	^ self
 %
 
@@ -483,9 +503,19 @@ ___pyNamed___: aString annotate: aBlock doc: aDoc
 	"Stamp all three of ``__name__'' / ``__annotate__'' / ``__doc__''
 	for an annotated def that also has a docstring."
 
-	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__name__' put: aString.
-	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__annotate__' put: aBlock.
-	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__doc__' put: aDoc.
+	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__name__' put: aString.
+	(ExecBlock ___pyAttrsClass___) annotateSlotAt: self attr: '__annotate__' put: aBlock.
+	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__doc__' put: aDoc.
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
+___pySig___: aSpec
+	"Stamp the def-time parameter spec.  Returns self so it composes in the
+	def-time cascade alongside ___pyCode___:."
+
+	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__signature_spec__' put: aSpec.
 	^ self
 %
 
@@ -498,6 +528,6 @@ ___pyCode___: aCode
 	SLOT namespace (like __name__), and returns self so it composes in the
 	``name := <block>'' assignment / decorator pipeline."
 
-	(ExecBlock ___pyAttrsClass___) slotAt: self attr: '__code__' put: aCode.
+	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__code__' put: aCode.
 	^ self
 %

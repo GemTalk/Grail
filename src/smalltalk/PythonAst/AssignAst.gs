@@ -241,17 +241,24 @@ printSmalltalkTupleStoreOn: aStream target: tgt
 	target binds to a slice covering the middle, and items after the
 	star bind to negative indices counting from the end."
 
-	| holder elts starIdx |
+	| holder elts starIdx nBefore hasStar nAfter |
 	holder := '___unpack___'.
 	elts := tgt elts.
 	starIdx := elts findFirst: [:e | e isKindOf: StarredAst].
+	hasStar := starIdx ~= 0.
+	nBefore := hasStar ifTrue: [starIdx - 1] ifFalse: [elts size].
+	nAfter := hasStar ifTrue: [elts size - starIdx] ifFalse: [0].
 	aStream nextPutAll: '[| '; nextPutAll: holder; nextPutAll: ' | '; nextPutAll: holder; nextPutAll: ' := '.
 	value printSmalltalkWithParenthesisOn: aStream.
 	"___unpackSequence___: sequences answer themselves (Object default);
 	iterables WITHOUT positional __getitem__ (enum classes: `R, W, X =
 	Perm`) materialize their iteration order as an indexable list --
-	CPython unpacks via __iter__, this codegen indexes."
-	aStream nextPutAll: ' ___unpackSequence___. '.
+	CPython unpacks via __iter__, this codegen indexes.  ___unpackCheck___
+	then enforces CPython's value count (ValueError on too few / too many)."
+	aStream nextPutAll: ' ___unpackSequence___ ___unpackCheck___: ';
+		nextPutAll: nBefore printString;
+		nextPutAll: ' star: '; nextPutAll: (hasStar ifTrue: ['true'] ifFalse: ['false']);
+		nextPutAll: ' after: '; nextPutAll: nAfter printString; nextPutAll: '. '.
 	starIdx = 0 ifTrue: [
 		elts doWithIndex: [:elt :i |
 			self

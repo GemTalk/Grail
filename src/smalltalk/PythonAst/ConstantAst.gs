@@ -102,10 +102,17 @@ ___annotationSourceString___
 	"A string-literal annotation (a forward reference like def
 	f(x: Foo) written with Foo quoted) carries its content verbatim --
 	CPython stores the forward-reference string.  None/other literals
-	stringify."
+	stringify.
+
+	Booleans render PYTHON-side: Smalltalk printString gives ``true''
+	where Python source says ``True'', and this text is read back as
+	Python source -- inspect.signature prints it for a default, so
+	``def f(c=True)'' must render ``c=True''."
 
 	(value isKindOf: CharacterCollection) ifTrue: [^ value asString].
 	value isNil ifTrue: [^ 'None'].
+	value == true ifTrue: [^ 'True'].
+	value == false ifTrue: [^ 'False'].
 	^ value printString
 %
 method: ConstantAst

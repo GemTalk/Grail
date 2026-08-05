@@ -242,3 +242,26 @@ testUnderscoreAssignmentRebindsTheName
 	self assert: testModule @env1:underscore_assignment_rebinds_the_name
 		equals: 'assigned'.
 %
+
+category: 'Grail-Tests - Repr'
+method: SingleDispatchMethodTestCase
+testDescriptorReprNamesTheWrappedCallable
+	"CPython names the wrapped callable by __qualname__, then __name__, then
+	``?''.  The __name__ fallback has to go through the Python ATTRIBUTE
+	PROTOCOL, not a message send: a send only finds a compiled method, which
+	is what an ExecBlock has, so an ordinary def worked while every other
+	callable fell through to ``?'' -- including the one the fallback exists
+	for, an instance whose class assigns __name__ in its body.
+
+	The @classmethod / @staticmethod cases come from singledispatchmethod's
+	own __qualname__, which qualifies a class-side BoundMethod from the
+	receiver it is bound to; reading the wrapped callable's __qualname__
+	directly instead would answer the bare selector."
+
+	self assert: testModule @env1:descriptor_reprs asArray equals: #(
+		'<single dispatch method descriptor _ReprHost.func>'
+		'<single dispatch method descriptor _ReprHost.cls_func>'
+		'<single dispatch method descriptor _ReprHost.static_func>'
+		'<single dispatch method descriptor NOQUALNAME>'
+		'<single dispatch method descriptor ?>' ).
+%

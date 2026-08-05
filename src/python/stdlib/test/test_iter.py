@@ -990,6 +990,9 @@ class TestCase(unittest.TestCase):
 
     @cpython_only
     def test_ref_counting_behavior(self):
+        self.skipTest("Grail: asserts synchronous refcount-driven destruction "
+                      "(del x -> C.count == 0 via __del__); GemStone mark-sweep "
+                      "provides no deterministic reclamation.")
         class C(object):
             count = 0
             def __new__(cls):
@@ -1138,6 +1141,9 @@ class TestCase(unittest.TestCase):
         self.assertEqual(next(it), 1)
 
     def test_free_after_iterating(self):
+        self.skipTest("Grail: relies on __del__ finalizers firing during "
+                      "collection; Grail does not wire Python __del__ to "
+                      "GemStone object finalization.")
         check_free_after_iterating(self, iter, SequenceClass, (0,))
 
     def test_error_iter(self):

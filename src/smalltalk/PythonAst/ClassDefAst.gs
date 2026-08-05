@@ -943,6 +943,17 @@ printSmalltalkRuntimeOn: aStream
 	annotations dict) for every annotated instance method; BoundMethod >>
 	__annotations__ walks the superclass chain consulting it."
 	self emitMethodAnnotationsTableOn: aStream className: name.
+	"Same shape for inspect.signature: a class-side ``___methodSignatureTable___''
+	(method-name -> parameter spec) that BoundMethod >> __signature_spec__ walks
+	the superclass chain consulting.  A method compiles to a Smalltalk METHOD, not
+	a block, so it cannot carry the def-time cascade a nested def does."
+	self emitMethodSignatureTableOn: aStream className: name.
+	"And the same for docstrings.  A class-body def compiles to a Smalltalk
+	METHOD, so it cannot carry the def-time ``___pyNamed___:doc:'' stamp a
+	nested def does -- which left every method inheriting Object's own
+	__doc__ and claiming to be documented as ``The base class of the class
+	hierarchy...''."
+	self emitMethodDocTableOn: aStream className: name.
 	"Inherit parent class-attr values into our slot.  Smalltalk
 	class-side instVars are per-class storage; without this the
 	subclass's inherited slot stays nil."
@@ -1223,6 +1234,23 @@ printSmalltalkRuntimeOn: aStream
 			aStream nextPutAll: '#'''; nextPutAll: pair key asString; nextPut: $']
 		separatedBy: [aStream nextPutAll: '. '].
 	aStream nextPutAll: ' }.'; lf.
+
+	"CLASS KEYWORD ``boundary='': a Flag/IntFlag may override its family-default
+	FlagBoundary (STRICT for Flag, KEEP for IntFlag) with
+	``class E(Flag, boundary=CONFORM)''.  Emit a store onto the freshly-built
+	class -- AFTER the metaclass hook (members exist) but BEFORE decorators, the
+	same order CPython's EnumType.__new__ sets _boundary_ in.  The value
+	expression (``enum.KEEP'' / ``CONFORM'') is evaluated in THIS enclosing scope,
+	where those names resolve, exactly like a decorator.  Only enum metaclasses
+	answer ___grailSetClassBoundary___:, so this is emitted solely for a
+	``boundary'' keyword (never metaclass= et al.)."
+	keywords notNil ifTrue: [
+		keywords do: [:kw |
+			(kw name notNil and: [kw name asString = 'boundary']) ifTrue: [
+				aStream nextPutAll: name;
+					nextPutAll: ' @env1:___grailSetClassBoundary___: ('.
+				kw value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: ').'; lf]]].
 
 	"Apply class decorators bottom-up.  Python's ``@A @B class C:``
 	rebinds C to ``A(B(C))`` — the decorator closest to the class
@@ -1661,15 +1689,29 @@ category: 'Grail-code generation'
 method: ClassDefAst
 printQuotedString: aString on: aStream
 	"Emit aString as a Smalltalk string literal, escaping embedded
-	single quotes by doubling them."
+	single quotes by doubling them.
 
-	aStream nextPut: $'.
+	Build the whole literal in a LOCAL buffer and write it with a single
+	nextPutAll:, NOT character-by-character onto aStream: aStream is a
+	PrettyWriteStream whose nextPut: inserts indentCount tabs after every
+	linefeed.  Writing char-by-char splices that indentation into any newline
+	EMBEDDED in the literal -- e.g. a compiled method's source carrying a Python
+	string constant like ``''a\nb''`` verbatim -- corrupting the value by one tab
+	per nesting level when the class is defined inside try/for/if/... (test_iter
+	test_writelines: a class whose __next__ returns ``str(i) + '\n''' inside a
+	try block wrote ``\n\t'' instead of ``\n'').  nextPutAll: applies the
+	line-start indent once, up front, then copies the content verbatim."
+
+	| buf |
+	buf := WriteStream on: (Unicode7 new: aString size + 2).
+	buf nextPut: $'.
 	aString do: [:c |
 		c = $'
-			ifTrue: [aStream nextPut: $'; nextPut: $']
-			ifFalse: [aStream nextPut: c].
+			ifTrue: [buf nextPut: $'; nextPut: $']
+			ifFalse: [buf nextPut: c].
 	].
-	aStream nextPut: $'.
+	buf nextPut: $'.
+	aStream nextPutAll: buf contents.
 %
 
 category: 'Grail-Class Compilation'
@@ -2250,6 +2292,94 @@ emitClassAnnotationsDictOn: aStream
 		self printQuotedString: assoc value on: aStream.
 		aStream nextPut: $;].
 	aStream nextPutAll: ' @env0:yourself)'
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitMethodDocTableOn: aStream className: aClassName
+	"Compile a class-side ``___methodDocTable___'' returning a dict
+	``method-name -> docstring'' for every method that opens with one.
+
+	A class-body def compiles to a Smalltalk METHOD rather than a block, so
+	it cannot carry the def-time ``___pyNamed___:doc:'' stamp that gives a
+	nested def its ``__doc__''.  Without this table the read fell all the way
+	through to Object's own __doc__, and EVERY method -- plain, @property,
+	@staticmethod, @classmethod -- reported ``The base class of the class
+	hierarchy...''.
+
+	Same shape as the annotations and signature tables, and for the same
+	reason.  Overload stubs stay out: the stub is not the implementation.
+
+	No-op when no method has a docstring, so only classes that need it pay
+	for the extra class-side method."
+
+	| documented src |
+	documented := self ___allFunctionDefs___ select: [:def |
+		def isOverloadStub not and: [def ___docString___ notNil]].
+	documented isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___methodDocTable___'; lf.
+	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+	documented do: [:def |
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
+		def emitStringLiteral: def ___docString___ on: src.
+		src nextPut: $;].
+	src nextPutAll: ' @env0:yourself)'.
+	self
+		emitCompileMethodOn: aClassName
+		source: src contents
+		category: 'Grail-Docstrings'
+		env: 1
+		classSide: true
+		onStream: aStream
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitMethodSignatureTableOn: aStream className: aClassName
+	"Compile a class-side ``___methodSignatureTable___'' returning a dict
+	``method-name -> parameter spec'' for every method that declares a
+	parameter.  The values are FunctionDefAst >> emitSignatureSpecOn: output --
+	the same triples a nested def carries in ``__signature_spec__''.
+
+	EVERY def, as with the annotations table: a @classmethod or @staticmethod
+	has a signature Python reports the same way, and singledispatchmethod
+	reads one off a class-side implementation.  Overload stubs stay out -- the
+	stub is not the implementation.
+
+	No-op when no method declares a parameter, so only classes that need it
+	pay for the extra class-side method."
+
+	| withParams src |
+	withParams := self ___allFunctionDefs___ select: [:def |
+		def isOverloadStub not and: [def hasSignatureSpec]].
+	withParams isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___methodSignatureTable___'; lf.
+	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+	withParams do: [:def |
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
+		"Skip ``self''/``cls'' for an instance method or classmethod: what this
+		table feeds is a BOUND access (``instance.method'', or a classmethod
+		reached through its class), where the receiver is already supplied and
+		CPython omits it.  A @staticmethod has no receiver parameter to omit.
+
+		Known divergence: ``signature(Cls.instance_method)'' -- UNBOUND, where
+		CPython DOES show ``self'' -- reports without it, because one table
+		serves both accesses.  Nothing in the corpus reads that form; a method
+		wrapped by a descriptor (singledispatchmethod) reports through
+		``__wrapped__'' and the raw def's own spec, which keeps ``self''."
+		def emitSignatureSpecOn: src
+			skipReceiver: (def isKindOf: StaticFunctionDefAst) not.
+		src nextPut: $;].
+	src nextPutAll: ' @env0:yourself)'.
+	self
+		emitCompileMethodOn: aClassName
+		source: src contents
+		category: 'Grail-Signatures'
+		env: 1
+		classSide: true
+		onStream: aStream
 %
 
 category: 'Grail-code generation'

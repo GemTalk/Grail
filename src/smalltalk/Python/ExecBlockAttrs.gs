@@ -203,19 +203,134 @@ slotsFor: aBlock
 
 category: 'Grail-Access'
 classmethod: ExecBlockAttrs
-slotAt: aBlock attr: aName
-	"Read ``aBlock'''s slot ``aName'', nil when unset.  Direct lookup that
-	skips the auto-create branch so a pure read doesn't pin the block."
+staticSlotTable
+	"Slot values that belong to the DEF SITE rather than to one function
+	object: ``__name__'', ``__code__'', ``__signature_spec__'' and
+	``__annotate__'' as the compiler stamps them.  Every evaluation of the
+	same ``def'' produces the same values, so they are keyed by the def site
+	instead of by the function object.
+
+	Keyed by ``aBlock method''.  Each block literal gets its OWN GsNMethod,
+	so that method is a stable per-def-site identity: two evaluations of one
+	def share it, two different defs never do (verified).
+
+	Why this split exists.  The per-object slotTable holds its keys STRONGLY
+	and there is no weak-keyed collection available in this GemStone (Globals
+	offers only FsFileDescriptorEphemeron and GcWeakReferences; Array has no
+	makeWeak).  As long as def-time stamping writes one entry per function
+	OBJECT, giving each ``def'' evaluation a fresh object -- which CPython
+	semantics require -- makes every function ever created immortal for the
+	session; the measured result was ``VM temporary object memory is full''
+	at ~100k def evaluations.  Keyed by def site, the same data is bounded by
+	the number of defs in the image.
+
+	Same session-local storage rationale as ``table''."
+
+	^ SessionTemps current
+		at: #'___ExecBlockStaticSlotsTable___'
+		ifAbsentPut: [IdentityKeyValueDictionary new]
+%
+
+category: 'Grail-Access'
+classmethod: ExecBlockAttrs
+staticSlotsFor: aBlock
+	"The def-site slot dictionary for aBlock, creating it on first access."
+
+	^ self staticSlotTable at: aBlock method ifAbsentPut: [KeyValueDictionary new]
+%
+
+category: 'Grail-Access'
+classmethod: ExecBlockAttrs
+staticSlotAt: aBlock attr: aName put: aValue
+	"Write a DEF-SITE slot -- what the def-time stamps use.
+
+	Idempotent by construction: every evaluation of the def writes the same
+	value under the same key, so a repeat write is skipped rather than
+	re-storing it."
+
+	| holder key |
+	holder := self staticSlotsFor: aBlock.
+	key := aName asString.
+	(holder includesKey: key) ifTrue: [^ aValue].
+	holder at: key put: aValue.
+	^ aValue
+%
+
+category: 'Grail-Access'
+classmethod: ExecBlockAttrs
+staticSlotAt: aBlock attr: aName
+	"Read a DEF-SITE slot directly, nil when unset."
 
 	| holder |
-	holder := self slotTable at: aBlock ifAbsent: [^ nil].
+	holder := self staticSlotTable at: aBlock method ifAbsent: [^ nil].
 	^ holder at: aName asString ifAbsent: [nil]
 %
 
 category: 'Grail-Access'
 classmethod: ExecBlockAttrs
+annotateSlotAt: aBlock attr: aName put: aValue
+	"Store ``__annotate__'', which is neither purely def-site nor purely
+	per-object, and picks its table by OBSERVING which it is.
+
+	An annotate function is a CLOSURE over the scope enclosing the def, so
+	unlike __name__ / __code__ / __signature_spec__ it is not guaranteed to be
+	the same value for every execution.  When the annotations name only globals
+	(``def f(x: int)'' -- the common case) the emitted block captures nothing,
+	so GemStone answers the same clean-block literal every time and the value
+	IS def-site data.  When they name an enclosing local (``def make(t): def
+	f(x: t)'') a fresh block arrives per execution and storing it per DEF SITE
+	would report the first execution's captures for every function built there.
+
+	The two are told apart by comparing against what the def site already
+	holds -- no VM introspection required, and exact:
+
+	  * nothing stored yet -> store at the def site.  Costs one entry per def
+	    and is correct for the first execution either way, since that entry IS
+	    that execution's own block.
+	  * the same object arrives again -> a clean block, shared by construction.
+	    Nothing to do, and nothing per-object ever accumulates.
+	  * a DIFFERENT object arrives -> the block captures, so this execution
+	    needs its own.  Write per-object, where it shadows the def-site entry
+	    on read.
+
+	So the unbounded per-object growth is confined to defs whose annotations
+	actually close over enclosing state, which genuinely cannot share.  Writing
+	every annotate per-object instead was measured at one table entry per
+	annotated def execution -- 200k entries for 200k executions."
+
+	| existing |
+	existing := self staticSlotAt: aBlock attr: aName.
+	existing == nil ifTrue: [^ self staticSlotAt: aBlock attr: aName put: aValue].
+	existing == aValue ifTrue: [^ aValue].
+	^ self slotAt: aBlock attr: aName put: aValue
+%
+
+category: 'Grail-Access'
+classmethod: ExecBlockAttrs
+slotAt: aBlock attr: aName
+	"Read ``aBlock'''s slot ``aName'', nil when unset.  Direct lookup that
+	skips the auto-create branch so a pure read doesn't pin the block.
+
+	PER-OBJECT first, then the DEF SITE.  A runtime write (``setattr'', and
+	functools.update_wrapper, which assigns __name__/__doc__/__annotate__ onto
+	a wrapper) lands in the per-object table and so shadows what the compiler
+	stamped for that def -- which is the ordering CPython has, where the
+	stamp is just the function's initial value."
+
+	| holder v |
+	holder := self slotTable at: aBlock ifAbsent: [nil].
+	holder ifNotNil: [
+		v := holder at: aName asString ifAbsent: [nil].
+		v ifNotNil: [^ v]].
+	^ self staticSlotAt: aBlock attr: aName
+%
+
+category: 'Grail-Access'
+classmethod: ExecBlockAttrs
 slotAt: aBlock attr: aName put: aValue
-	"Write ``aBlock'''s slot ``aName''."
+	"Write ``aBlock'''s slot ``aName'' PER OBJECT -- the runtime path.  The
+	def-time stamps use staticSlotAt:attr:put: instead, so they do not create
+	a per-object entry for every function ever evaluated."
 
 	(self slotsFor: aBlock) at: aName asString put: aValue.
 	^ aValue

@@ -33,12 +33,12 @@ category: 'Grail-helpers'
 method: ShutilTestCase
 setUp
 	"Fresh fixture tree per test:
-		/tmp/grail_shutil_test/src/a.txt  src/sub/b.txt"
+		$TMP/shutil_test/src/a.txt  src/sub/b.txt"
 
 	super setUp.
 	self eval: 'import os
 import shutil
-base = "/tmp/grail_shutil_test"
+base = "$TMP/shutil_test"
 if os.path.exists(base):
     shutil.rmtree(base)
 os.makedirs(base + "/src/sub")
@@ -55,7 +55,7 @@ method: ShutilTestCase
 testCopyfile
 	| result |
 	result := self eval: 'import shutil
-base = "/tmp/grail_shutil_test"
+base = "$TMP/shutil_test"
 shutil.copyfile(base + "/src/a.txt", base + "/a_copy.txt")
 open(base + "/a_copy.txt").read() == "alpha"'.
 	self assert: result
@@ -66,7 +66,7 @@ method: ShutilTestCase
 testCopyfileSameFileRaises
 	self
 		should: [self eval: 'import shutil
-shutil.copyfile("/tmp/grail_shutil_test/src/a.txt", "/tmp/grail_shutil_test/src/a.txt")']
+shutil.copyfile("$TMP/shutil_test/src/a.txt", "$TMP/shutil_test/src/a.txt")']
 		raise: OSError
 %
 
@@ -76,7 +76,7 @@ testCopyIntoDirectory
 	| result |
 	result := self eval: 'import os
 import shutil
-base = "/tmp/grail_shutil_test"
+base = "$TMP/shutil_test"
 os.mkdir(base + "/dest")
 shutil.copy(base + "/src/a.txt", base + "/dest")
 open(base + "/dest/a.txt").read() == "alpha"'.
@@ -89,7 +89,7 @@ testCopytree
 	| result |
 	result := self eval: 'import os
 import shutil
-base = "/tmp/grail_shutil_test"
+base = "$TMP/shutil_test"
 shutil.copytree(base + "/src", base + "/tree")
 (open(base + "/tree/a.txt").read() == "alpha"
  and open(base + "/tree/sub/b.txt").read() == "beta")'.
@@ -102,7 +102,7 @@ testMove
 	| result |
 	result := self eval: 'import os
 import shutil
-base = "/tmp/grail_shutil_test"
+base = "$TMP/shutil_test"
 shutil.move(base + "/src/a.txt", base + "/moved.txt")
 (not os.path.exists(base + "/src/a.txt")
  and open(base + "/moved.txt").read() == "alpha")'.
@@ -115,7 +115,7 @@ testRmtree
 	| result |
 	result := self eval: 'import os
 import shutil
-base = "/tmp/grail_shutil_test"
+base = "$TMP/shutil_test"
 shutil.rmtree(base + "/src")
 not os.path.exists(base + "/src")'.
 	self assert: result
@@ -129,10 +129,10 @@ testRmtreeIgnoreErrors
 	| result |
 	self
 		should: [self eval: 'import shutil
-shutil.rmtree("/tmp/grail_shutil_test_missing")']
+shutil.rmtree("$TMP/shutil_test_missing")']
 		raise: OSError.
 	result := self eval: 'import shutil
-shutil.rmtree("/tmp/grail_shutil_test_missing", True)
+shutil.rmtree("$TMP/shutil_test_missing", True)
 True'.
 	self assert: result
 %

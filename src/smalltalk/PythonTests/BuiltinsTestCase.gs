@@ -141,6 +141,125 @@ abs(-5)') equals: 5
 
 category: 'Grail-Tests - Backlog Fixes'
 method: BuiltinsTestCase
+testUnpackCountValidation
+	"Tuple-unpacking assigns via the iterator protocol and enforces the value
+	count like CPython (test_iter test_unpack_iter): an iterable-but-not-
+	subscriptable class unpacks by __iter__, too many / too few values raise
+	ValueError, a non-iterable raises TypeError, and a dict-values view unpacks
+	by iteration.  Uses a loaded module because the fixture defines classes."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_unpack' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_unpack.py')
+		name: 'grail_unpack'.
+	self assert: (mod @env1:check)
+%
+
+category: 'Grail-Tests - Backlog Fixes'
+method: BuiltinsTestCase
+testStrIteratorPickle
+	"iter(str) round-trips through pickle at every protocol, resuming at the
+	right character (test_iter test_iter_string).  str_iterator now answers
+	_getstate (collection, position) like tuple_iterator/seq_iterator, so
+	pickle.py's positional path reduces it to (iter, (str,), position) and
+	BUILD re-applies the index.  Uses a loaded module to run the round-trip in
+	a context where the stdlib pickle module is importable."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_str_iter_pickle' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_str_iter_pickle.py')
+		name: 'grail_str_iter_pickle'.
+	self assert: (mod @env1:check)
+%
+
+category: 'Grail-Tests - Backlog Fixes'
+method: BuiltinsTestCase
+testCallableIteratorPickle
+	"iter(callable, sentinel) -- a callable_iterator -- round-trips through
+	pickle at every protocol, resuming mid-stream (test_iter test_iter_callable).
+	callable_iterator now answers _getstate (callable, sentinel), which pickle.py
+	reduces to (iter, (callable, sentinel)); the callable pickles generically and
+	carries its own resume state.  Uses a loaded module because the fixture
+	defines a class and the stdlib pickle module must be importable."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_callable_iter_pickle' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_callable_iter_pickle.py')
+		name: 'grail_callable_iter_pickle'.
+	self assert: (mod @env1:check)
+%
+
+category: 'Grail-Tests - Backlog Fixes'
+method: BuiltinsTestCase
+testMutatingSeqClassIterPickle
+	"Pickling (seq_iterator, sequence) as a tuple keeps them aliased, so the
+	reloaded iterator's source IS the reloaded sequence -- growing seq.n extends
+	a LIVE iterator, but an EXHAUSTED one stays spent because seq_iterator now
+	reduces a spent iterator to iter(()) rather than (iter, (source,), index)
+	(test_iter test_mutating_seq_class_iter_pickle).  Uses a loaded module
+	because the fixture defines a class and the stdlib pickle module must be
+	importable."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_seqmut_iter_pickle' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_seqmut_iter_pickle.py')
+		name: 'grail_seqmut_iter_pickle'.
+	self assert: (mod @env1:check)
+%
+
+category: 'Grail-Tests - Backlog Fixes'
+method: BuiltinsTestCase
+testNestedClassStringLiteralNewline
+	"A string literal containing a newline, in a method of a class defined
+	INSIDE a nested block (try/for/if), keeps its exact value.  ClassDefAst
+	embeds each compiled method's source as a Smalltalk string literal, and
+	writing it char-by-char through the pretty-printer spliced indentCount
+	tabs after every newline -- so a newline embedded in the method's own
+	string constants gained one stray tab per nesting level (test_iter
+	test_writelines).  Uses a loaded module because the fixture defines
+	classes."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_nested_class_strlit' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_nested_class_strlit.py')
+		name: 'grail_nested_class_strlit'.
+	self assert: (mod @env1:check)
+%
+
+category: 'Grail-Tests - Backlog Fixes'
+method: BuiltinsTestCase
+testWritelinesIterableProtocol
+	"file.writelines(x) iterates x via the Python protocol: a non-iterable
+	(None/int) raises a catchable TypeError instead of a Smalltalk #do:
+	MNU, a dict yields its KEYS, and a large custom iterator defined inside a
+	try block writes every element in order (test_iter test_writelines).
+	Uses a loaded module because the fixture defines classes and does file
+	I/O."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_writelines' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_writelines.py')
+		name: 'grail_writelines'.
+	"The path is PASSED IN rather than hardcoded in the fixture: this module
+	is loaded with loadModuleFromPath:, not eval:, so the $TMP token the
+	inline fixtures use would never be expanded here."
+	self assert: (mod @env1:check: (self tmp: 'writelines_fixture.txt'))
+%
+
+category: 'Grail-Tests - Backlog Fixes'
+method: BuiltinsTestCase
 testDictContainsHeterogeneousKeys
 	"``key in d'' must not crash when d mixes hashable key types whose
 	pairwise == is NotImplemented (a complex key beside str keys).  The

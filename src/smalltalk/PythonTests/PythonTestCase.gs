@@ -122,6 +122,47 @@ ___resetImportedFramework___: aPrefix
 
 category: 'Grail-helpers'
 method: PythonTestCase
+tmpRoot
+	"This checkout's private fixture directory, ``/tmp/Grail<N>'', created on
+	demand.  Four checkouts share one stone on the dev host as four users, so
+	an absolute fixture path shared between them is a real collision -- see
+	importlib class>>grailTmpDir for what it cost."
+
+	^ importlib grailTmpDir
+%
+
+category: 'Grail-helpers'
+method: PythonTestCase
+tmp: aName
+	"A path for a fixture named aName inside this checkout's tmpRoot.  Use
+	this from SMALLTALK code; Python source passed to eval: should say
+	``$TMP/<name>'' instead, which eval: expands."
+
+	^ (self tmpRoot , '/') , aName
+%
+
+category: 'Grail-helpers'
+method: PythonTestCase
+expandTmpTokensIn: aString
+	"Replace the ``$TMP'' token with this checkout's tmpRoot.
+
+	Fixture Python source says $TMP/thing rather than a hardcoded
+	/tmp/grail_thing, so that concurrent checkouts do not write to, and
+	rmtree, one another's fixtures.  A token rather than Smalltalk string
+	concatenation keeps multi-line embedded Python readable and cannot break
+	the surrounding Smalltalk literal.  ``$'' is not otherwise special in
+	Python or in a Smalltalk string.
+
+	Guarded on includesString: so the common no-token case does not copy the
+	source at all."
+
+	^ (aString includesString: '$TMP')
+		ifTrue: [aString copyReplaceAll: '$TMP' with: self tmpRoot]
+		ifFalse: [aString]
+%
+
+category: 'Grail-helpers'
+method: PythonTestCase
 eval: pythonSource
 	"Parse and evaluate a Python source string, returning the result.
 
@@ -136,7 +177,7 @@ eval: pythonSource
 	moduleScope := SymbolDictionary new.
 	scope := importlib ___grailCompileSymbolList___.
 	scope insertObject: moduleScope at: 1.
-	module := ModuleAst parseSource: pythonSource.
+	module := ModuleAst parseSource: (self expandTmpTokensIn: pythonSource).
 	module useTempsForBlock: false.
 	module ensureModuleScope: moduleScope.
 	^module evaluateWithScope: scope
@@ -151,3 +192,43 @@ performTest
 	] on: BaseException do: [:ex |
 		Error signal: ex description.
 	].
+%
+
+category: 'Grail-testing'
+method: PythonTestCase
+runCase
+	"As TestCase>>runCase, but with setUp and tearDown covered by the same
+	BaseException -> Error bridge that performTest gives the test method.
+
+	Grail's Python exceptions are NOT kinds of Error:
+
+	    ModuleNotFoundError -> ImportError -> Exception -> BaseException
+	                        -> Exception -> AbstractException -> Object
+
+	and SUnit's TestResult>>runCase: handler is
+	``self class failure , self class error'' = ``TestFailure , Error''.
+	Stock TestCase>>runCase is
+
+	    [self setUp. self performTest] ensure: [self tearDown]
+
+	so setUp and tearDown sit OUTSIDE the performTest bridge.  A Python
+	exception raised in either matched neither arm of that handler, escaped
+	to the top level, and took the WHOLE run down -- a CI shard, or an
+	interactive ``PythonTestCase suite run'' -- instead of being recorded as
+	one test error.  ShutilTestCase>>setUp did exactly that in a session
+	whose grailDir was never set: `import shutil' raised
+	ModuleNotFoundError, and 4000-odd unrelated tests never ran.
+
+	Wrapping super is not double-wrapping: an exception out of the test
+	METHOD has already been converted to an Error by performTest, so it is
+	no longer a BaseException when it reaches this handler.  A TestFailure
+	from ``self assert:'' is a sibling of Error under Exception, not a Python
+	exception, so it passes through untouched and still reports as a FAILURE
+	rather than an error.
+
+	super's own ensure: still runs tearDown before the exception gets here."
+
+	[ super runCase ]
+		on: BaseException
+		do: [:ex | Error signal: ex description]
+%

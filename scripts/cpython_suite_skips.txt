@@ -220,3 +220,15 @@ test.test_deque|TestBasic.test_extend|deque.extend(self) consumes the live deque
 # OverflowError; Grail tries to build the sys.maxsize-digit result (same shape as
 # the bytes-repetition OOM fixed by capping at 2**31-1 and raising OverflowError).
 test.test_format|FormatTest.test_common_format|'%.*d' % (sys.maxsize, 1) is not precision-validated -- Grail attempts a sys.maxsize-digit result (session hang/OOM, uncatchable)
+# Old-style __bases__ protocol: these build UNBOUNDED PYTHON recursion inside the
+# attribute read itself -- a self-referential ``@property def __bases__: return
+# self.__bases__'', and a __getattr__ that manufactures two fresh classes per
+# level.  Grail has no Python-level recursion limit (no sys.setrecursionlimit
+# equivalent guarding Python calls), so the Smalltalk stack overflows with an
+# uncatchable AlmostOutOfStack (notification 2059) INSIDE the getter -- before
+# builtins>>___abstractIsSubclass___'s own depth guard is ever consulted -- and
+# the session dies (the module scored CRASH t=0, losing every other result).
+# The cyclic-but-non-recursive shapes (test_infinite_cycle_in_bases) DO pass:
+# there the guard is reached and raises Python's RecursionError.
+test.test_isinstance|TestIsInstanceIsSubclass.test_infinite_recursion_in_bases|self-recursive __bases__ property: unbounded PYTHON recursion, uncatchable AlmostOutOfStack kills the session
+test.test_isinstance|TestIsInstanceIsSubclass.test_infinitely_many_bases|__getattr__ manufactures 2 classes per level: unbounded PYTHON recursion, uncatchable AlmostOutOfStack kills the session

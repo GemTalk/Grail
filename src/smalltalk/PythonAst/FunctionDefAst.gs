@@ -338,6 +338,16 @@ printSmalltalkOn: aStream
 				nextPutAll: ''' annotate: '.
 			self emitAnnotateBlockOn: aStream.
 			aStream nextPutAll: '.'].
+		"Same for the inspect.signature parameter spec -- a module-level def
+		compiles to a method, so it cannot carry the def-time cascade."
+		self hasSignatureSpec ifTrue: [
+			aStream
+				lf;
+				nextPutAll: 'self @env0:___setFunctionSignature___: ''';
+				nextPutAll: name;
+				nextPutAll: ''' spec: '.
+			self emitSignatureSpecOn: aStream.
+			aStream nextPutAll: '.'].
 		moduleDecorators := self applicableModuleDecorators.
 		moduleDecorators isEmpty ifTrue: [^self].
 		self printModuleDecoratorsOn: aStream decorators: moduleDecorators.
@@ -378,6 +388,9 @@ printSmalltalkOn: aStream
 			nextPutAll: name;
 			nextPutAll: ' := '
 	].
+	"Open the paren that ``) @env0:shallowCopy'' closes once the block is
+	built -- see the comment there for why the def's value must be a copy."
+	aStream nextPut: $(.
 	"Emit a def-time default-capture outer block when there are
 	defaults.  The outer block runs immediately (``] value``) and
 	returns the inner function block; defaults that reference the
@@ -540,6 +553,42 @@ printSmalltalkOn: aStream
 	(args defaults notNil and: [args defaults notEmpty]) ifTrue: [
 		aStream nextPutAll: '] value'.
 	].
+	"Every execution of a ``def'' must yield a DISTINCT function object -- that
+	is what CPython does, and Python code depends on it.  GemStone reuses a
+	CLEAN block (one referencing no self, instance variable, enclosing temp or
+	thisContext) as a compile-time literal, so a nested def whose body captures
+	nothing answers the SAME ExecBlock on every execution, and everything keyed
+	on that object -- user attributes, a __doc__ or __name__ written by
+	functools.update_wrapper, the memoized __annotations__ -- is shared across
+	invocations:
+
+		def run_once(tag):
+			def inner(x): pass
+			seen = getattr(inner, 'stamp', 'ABSENT')
+			inner.stamp = tag
+			return seen
+		# CPython: ('ABSENT', 'ABSENT').  Shared block: ('ABSENT', 'first').
+
+	The copy is taken HERE, before the stamps below, so the stamps address the
+	object the def's name will actually be bound to.  Taking it afterwards (as
+	the last cascade message) also defeats the sharing, but then every stamp
+	writes against the original -- which works only for the DEF-SITE stamps,
+	keyed by ``method'', and silently loses any PER-OBJECT one.  ``__annotate__''
+	is per-object (it closes over the enclosing scope, so it is NOT the same
+	function for every execution of the def), and stamping it on the original
+	left every annotated def reporting ``{}''.
+
+	shallowCopy preserves ``method'' -- so the def-site slots still resolve to
+	one shared entry, which is correct because those values are identical for
+	every execution -- and preserves the captured home context, so closures and
+	shared mutable enclosing temps behave unchanged.
+
+	Why a copy rather than forcing the block to be non-clean: both defeat the
+	sharing, but a marker that makes the block non-clean must be a USED
+	reference (the compiler eliminates a discarded one) and therefore executes
+	on every invocation, measured at +2ns per CALL.  The copy costs ~10ns once
+	per def execution and nothing per call."
+	aStream nextPutAll: ') @env0:shallowCopy'.
 	"Stamp the closure's ``__name__'' from the def's lexical name so
 	``func.__name__'' answers 'name', not the ``<closure>'' placeholder.
 	``___pyNamed___:'' returns self, so it sits transparently in front of
@@ -572,6 +621,15 @@ printSmalltalkOn: aStream
 			nextPutAll: '; @env0:___pyCode___: (PyCode @env0:name: '''; nextPutAll: name;
 			nextPutAll: ''' firstlineno: '; nextPutAll: self beginLine printString;
 			nextPutAll: ')'.
+		"Stamp the def-time PARAMETER SPEC, another cascade onto the same
+		receiver.  This is what makes inspect.signature real: Grail has no code
+		object to introspect, so the compiler records the parameter names, kinds
+		and default SOURCE TEXT it already has.  Only emitted for a def that has
+		parameters -- a niladic def needs no spec, and signature() renders ``()''
+		for one either way."
+		self hasSignatureSpec ifTrue: [
+			aStream nextPutAll: '; @env0:___pySig___: '.
+			self emitSignatureSpecOn: aStream].
 	"Phase A: close the dynamicInstVarAt:put: paren opened above when
 	this is a module-scope nested def; otherwise just emit the
 	statement-terminating period."
@@ -1054,6 +1112,113 @@ hasAnnotations
 	gates emission of the __annotations__ stamp."
 
 	^ returns notNil or: [self ___annotatedArgs___ notEmpty]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+hasSignatureSpec
+	"True when this def declares any parameter at all -- gates emission of
+	the inspect.signature spec.  A niladic def renders as ``()'' with or
+	without a spec, so it does not pay for one."
+
+	args ifNil: [^ false].
+	^ args posonlyargs notEmpty
+		or: [args args notEmpty
+		or: [args kwonlyargs notEmpty
+		or: [args vararg notNil
+		or: [args kwarg notNil]]]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitSignatureSpecOn: aStream
+	^ self emitSignatureSpecOn: aStream skipReceiver: false
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitSignatureSpecOn: aStream skipReceiver: skipReceiver
+	"Emit the parameter spec inspect.signature reads: an Array of
+	``{ name . kind-index . default-source-text-or-nil }'' in DECLARATION
+	order.  Kind indices match inspect._KINDS -- 0 POSITIONAL_ONLY,
+	1 POSITIONAL_OR_KEYWORD, 2 VAR_POSITIONAL, 3 KEYWORD_ONLY,
+	4 VAR_KEYWORD.
+
+	Defaults are recorded as SOURCE TEXT, not values.  A default is
+	evaluated exactly once, at def-time, into the wrapper block this class
+	already emits; re-emitting the expression here to capture a value would
+	evaluate it a SECOND time, which is observable for a mutable or
+	side-effecting default.  inspect._DefaultText documents where text and
+	repr can disagree.
+
+	CPython pairs defaults with the LAST parameters of the
+	posonly+regular list, and kwonly defaults positionally with
+	kwonlyargs."
+
+	| posonly regular allPositional defaults firstDefaulted anyYet sep |
+	posonly := args posonlyargs ifNil: [#()].
+	regular := args args ifNil: [#()].
+	allPositional := posonly , regular.
+	defaults := args defaults ifNil: [#()].
+	"``def f(a, b=1, c=2)'' has 3 positional params and 2 defaults, so the
+	defaults attach to params 2..3 -- the trailing ones."
+	firstDefaulted := allPositional size - defaults size + 1.
+	"Separator state, NOT a per-group index: a def whose only parameter is
+	``**kwargs'' (or a keyword-only one) has an empty positional list, and
+	emitting the separator unconditionally in those branches produced
+	``{ . {'kwargs'. 4} }'' -- CompileError 1001, which failed every module
+	defining such a def."
+	anyYet := false.
+	sep := [anyYet ifTrue: [aStream nextPutAll: '. ']. anyYet := true].
+	aStream nextPutAll: '{ '.
+	1 to: allPositional size do: [:i |
+		"skipReceiver drops ``self''/``cls'' -- see
+		ClassDefAst >> emitMethodSignatureTableOn:className:."
+		(skipReceiver and: [i = 1]) ifFalse: [
+		sep value.
+		self
+			emitSignatureEntryFor: (allPositional at: i)
+			kind: (i <= posonly size ifTrue: [0] ifFalse: [1])
+			default: (i >= firstDefaulted
+				ifTrue: [defaults at: i - firstDefaulted + 1]
+				ifFalse: [nil])
+			on: aStream]].
+	args vararg ifNotNil: [:v |
+		sep value.
+		self emitSignatureEntryFor: v kind: 2 default: nil on: aStream].
+	(args kwonlyargs ifNil: [#()]) doWithIndex: [:k :i |
+		sep value.
+		self
+			emitSignatureEntryFor: k
+			kind: 3
+			default: ((args kw_defaults ifNil: [#()]) at: i ifAbsent: [nil])
+			on: aStream].
+	args kwarg ifNotNil: [:k |
+		sep value.
+		self emitSignatureEntryFor: k kind: 4 default: nil on: aStream].
+	aStream nextPutAll: ' }'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitSignatureEntryFor: anArg kind: kindIndex default: aDefaultNodeOrNil on: aStream
+	"One ``{ name . kind . default-text }'' triple.  The default's source
+	text comes from ___annotationSourceString___, the same unparser the
+	annotations use -- it covers the literal shapes real defaults take and
+	falls back to a placeholder rather than failing to compile.
+
+	A parameter with no default emits a TWO-element entry rather than a
+	third slot holding Smalltalk nil: nil reaching a Python local is
+	indistinguishable from an unassigned one, so ``default = entry[2]''
+	raised UnboundLocalError on the very next read."
+
+	aStream nextPutAll: '{ '''; nextPutAll: anArg name asString; nextPutAll: '''. '.
+	aStream nextPutAll: kindIndex printString.
+	(aDefaultNodeOrNil isNil or: [aDefaultNodeOrNil isNone]) ifFalse: [
+		aStream nextPutAll: '. '.
+		self emitStringLiteral: aDefaultNodeOrNil ___annotationSourceString___
+			on: aStream].
+	aStream nextPutAll: ' }'
 %
 
 category: 'Grail-code generation'
