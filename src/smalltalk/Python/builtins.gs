@@ -945,7 +945,80 @@ repr: anObject
 
 category: 'Grail-Format Spec Engine'
 method: builtins
-___parseFormatSpec___: spec
+___digitsAreAllZero___: digits
+	"True when a formatted numeric body carries no significant digit -- ``0'',
+	``0.00'', ``0.0e+00'' -- which is how PEP 682's ``z'' decides that a negative
+	value has ROUNDED to zero and should shed its sign.  Only the MANTISSA is
+	examined: the exponent of ``0.0e+00'' is irrelevant, and ``-1.00e-03'' must
+	keep its sign even though the exponent is negative."
+
+	| mantissa ePos |
+	digits @env0:isNil ifTrue: [^ false].
+	ePos := 0.
+	1 @env0:to: digits @env0:size do: [:k |
+		(ePos @env0:= 0 and: [#($e $E) @env0:includes: (digits @env0:at: k)])
+			ifTrue: [ePos := k]].
+	mantissa := ePos @env0:= 0
+		ifTrue: [digits]
+		ifFalse: [digits @env0:copyFrom: 1 to: ePos @env0:- 1].
+	mantissa @env0:do: [:c |
+		(c @env0:isDigit and: [c @env0:~= $0]) ifTrue: [^ false]].
+	^ true
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___checkDuplicateGrouping___: spec at: i first: firstChar
+	"A SECOND grouping char right after the first is its own diagnosis, not
+	trailing junk, and CPython's two messages are exact.  The same char twice
+	reads as ``grouping + presentation type'' -> ``Cannot specify ',' with ','.''
+	(invalid_thousands_separator_type); a MIXED pair is caught by the
+	underscore/comma parse itself -> ``Cannot specify both ',' and '_'.''  Grail
+	let both fall through to the type check, whose generic ``Invalid format
+	specifier'' matched neither.  Applies at BOTH grouping positions -- before
+	the dot and after the precision -- so ``{:,_}'' and ``{:.,_f}'' agree."
+
+	(i @env0:> spec @env0:size) ifTrue: [^ self].
+	(#($, $_) @env0:includes: (spec @env0:at: i)) ifFalse: [^ self].
+	(spec @env0:at: i) @env0:= firstChar
+		ifTrue: [
+			^ ValueError ___signal___: ('Cannot specify ''' @env0:,
+				(String @env0:with: firstChar) @env0:, ''' with ''' @env0:,
+				(String @env0:with: firstChar) @env0:, '''.')].
+	^ ValueError ___signal___: 'Cannot specify both '','' and ''_''.'
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___badFormatSpec___: spec typeName: typeName
+	"CPython 3.14 names the VALUE's type in this message -- ``Invalid format
+	specifier '%M' for object of type 'complex''' -- and test_format matches it
+	exactly (test_unicode_in_error_message, test_better_error_message_format).
+	A missing type name still produces the shorter form rather than ''nil''."
+
+	typeName == nil ifTrue: [
+		^ ValueError ___signal___: ('Invalid format specifier '''
+			@env0:, spec @env0:asString @env0:, '''')].
+	^ ValueError ___signal___: ('Invalid format specifier '''
+		@env0:, spec @env0:asString @env0:, ''' for object of type '''
+		@env0:, typeName @env0:asString @env0:, '''')
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___pyTypeNameOf___: value
+	"The PYTHON type name for an error message -- ``str'', not ``Unicode7''.
+	Falls back to the Smalltalk class name if the Python route fails, so a
+	diagnostic can never itself raise."
+
+	^ [(value @env1:__class__) @env1:__name__ @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: value @env0:class @env0:name @env0:asString]
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___parseFormatSpec___: spec typeName: typeName
 	"Parse Python's format-spec mini-language
 	    [[fill]align][sign][#][0][width][,|_][.precision[,|_]][type]
 	into a 9-slot Array: {fill. align. sign. alt. width. grouping.
@@ -960,10 +1033,10 @@ ___parseFormatSpec___: spec
 	neither digits nor a grouping char after it), or 'n' combined
 	with either grouping (CPython: ``Cannot specify ',' with 'n'.'')."
 
-	| fill align sign alt width grouping precision type i n c fracGrouping |
+	| fill align sign alt width grouping precision type i n c fracGrouping noNegZero |
 	fill := $ . align := nil. sign := $-. alt := false.
 	width := 0. grouping := nil. precision := nil. type := nil.
-	fracGrouping := nil.
+	fracGrouping := nil. noNegZero := false.
 	i := 1. n := spec @env0:size.
 	(n @env0:>= 2 and: [#($< $> $^ $=) @env0:includes: (spec @env0:at: 2)])
 		ifTrue: [
@@ -977,6 +1050,12 @@ ___parseFormatSpec___: spec
 					i := 2]].
 	(i @env0:<= n and: [#($+ $- $ ) @env0:includes: (spec @env0:at: i)]) ifTrue: [
 		sign := spec @env0:at: i. i := i @env0:+ 1].
+	"PEP 682's ``z'' -- negative-zero coercion -- sits between the sign and the
+	``#'' flag.  ONLY there: ``z+f'' and ``fz'' are invalid specs, and they stay
+	invalid because a ``z'' anywhere else is simply not consumed and falls through
+	to the type check (test_format test_specifier_z_error)."
+	(i @env0:<= n and: [(spec @env0:at: i) @env0:= $z]) ifTrue: [
+		noNegZero := true. i := i @env0:+ 1].
 	(i @env0:<= n and: [(spec @env0:at: i) @env0:= $#]) ifTrue: [
 		alt := true. i := i @env0:+ 1].
 	(i @env0:<= n and: [(spec @env0:at: i) @env0:= $0]) ifTrue: [
@@ -991,7 +1070,8 @@ ___parseFormatSpec___: spec
 		width := (width @env0:* 10) @env0:+ (spec @env0:at: i) @env0:digitValue.
 		i := i @env0:+ 1].
 	(i @env0:<= n and: [#($, $_) @env0:includes: (spec @env0:at: i)]) ifTrue: [
-		grouping := spec @env0:at: i. i := i @env0:+ 1].
+		grouping := spec @env0:at: i. i := i @env0:+ 1.
+		self ___checkDuplicateGrouping___: spec at: i first: grouping].
 	(i @env0:<= n and: [(spec @env0:at: i) @env0:= $.]) ifTrue: [
 		i := i @env0:+ 1.
 		"A dot needs SOMETHING after it -- either precision digits or
@@ -1004,26 +1084,43 @@ ___parseFormatSpec___: spec
 			precision := 0.
 			[i @env0:<= n and: [(spec @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
 				precision := (precision @env0:* 10) @env0:+ (spec @env0:at: i) @env0:digitValue.
-				i := i @env0:+ 1]].
+				i := i @env0:+ 1].
+			"CPython stores the precision in a C int and rejects anything wider;
+			Grail's is an arbitrary-precision Integer, so ``format(1.2, '.%df' %
+			(sys.maxsize + 1))'' went on to ask for that many fraction digits and
+			died on an UNCATCHABLE NumericError (``an Integer would exceed 130144
+			bits'').  Cap it here so the failure is the ValueError CPython raises
+			(test_format test_precision)."
+			precision @env0:> 2147483647 ifTrue: [
+				ValueError ___signal___: 'precision too big']].
 		"Optional fraction-part grouping char, right after the precision
 		digits (if any) -- e.g. '.10_f' or the digit-less '._f'.  A
 		SECOND such char (or leftover digits after it) isn't consumed
 		here and falls through to the type check below, which rejects
 		it as an invalid format specifier (test_format: '.6_,f' etc.)."
 		(i @env0:<= n and: [#($, $_) @env0:includes: (spec @env0:at: i)]) ifTrue: [
-			fracGrouping := spec @env0:at: i. i := i @env0:+ 1]].
+			fracGrouping := spec @env0:at: i. i := i @env0:+ 1.
+			"The fraction-grouping position needs the SAME diagnosis as the
+			integer one: ``{:.,_f}'' is a mixed pair, not trailing junk."
+			self ___checkDuplicateGrouping___: spec at: i first: fracGrouping]].
 	i @env0:<= n ifTrue: [
 		c := spec @env0:at: i.
 		(#($b $c $d $e $E $f $F $g $G $n $o $s $x $X $%) @env0:includes: c) ifFalse: [
-			ValueError ___signal___: ('Invalid format specifier ''' @env0:, spec @env0:asString @env0:, '''')].
+			^ self ___badFormatSpec___: spec typeName: typeName].
 		type := c.
 		i := i @env0:+ 1].
 	i @env0:<= n ifTrue: [
-		ValueError ___signal___: ('Invalid format specifier ''' @env0:, spec @env0:asString @env0:, '''')].
+		^ self ___badFormatSpec___: spec typeName: typeName].
 	(type @env0:= $n and: [grouping @env0:notNil or: [fracGrouping @env0:notNil]]) ifTrue: [
 		ValueError ___signal___: ('Cannot specify ''' @env0:,
 			(String @env0:with: (grouping @env0:ifNil: [fracGrouping])) @env0:, ''' with ''n''.')].
-	^ { fill. align. sign. alt. width. grouping. precision. type. fracGrouping }
+	"``z'' is meaningless for an INTEGER presentation type -- there is no negative
+	zero to coerce -- and CPython rejects it by name.  Note this is about the
+	TYPE, not the value: ``f'{-0:z.1f}''' passes an int and is fine."
+	(noNegZero and: [#($b $c $d $o $x $X $n $s) @env0:includes: type]) ifTrue: [
+		ValueError ___signal___: 'Negative zero coercion (z) not allowed'].
+	^ { fill. align. sign. alt. width. grouping. precision. type. fracGrouping.
+		noNegZero }
 %
 
 category: 'Grail-Format Spec Engine'
@@ -1258,6 +1355,17 @@ ___formatFloatValue___: value parsed: p
 			a @env0:* 0 @env0:= 0 ifFalse: [digits := 'inf']]].
 	(digits @env0:notNil and: [#($F $E $G) @env0:includes: type]) ifTrue: [
 		digits := digits @env0:asUppercase].
+	"A float's digits are generated by exact integer scaling (value * 10^precision),
+	and GemStone's LargeInteger tops out near 130144 bits -- about 39000 decimal
+	digits -- so ``'%12.*f' % (123456, 1.0)'' blew up with an UNCATCHABLE
+	NumericError (``an Integer would exceed 130144 bits'').  CPython does produce
+	that 123456-digit string; Grail cannot, so raise the OverflowError CPython
+	uses for over-long float conversions instead of dying.  The bound is far above
+	any real format and far below the VM's ceiling, leaving room for the value's
+	own magnitude (1e100 adds only ~100 digits).  test_format's test_common_format
+	passes overflowok=True precisely to allow this."
+	(precision @env0:notNil and: [precision @env0:> 30000]) ifTrue: [
+		OverflowError ___signal___: 'formatted float is too long (precision too large)'].
 	digits == nil ifTrue: [
 		suffix := ''.
 		type @env0:= $% ifTrue: [
@@ -1308,6 +1416,14 @@ ___formatFloatValue___: value parsed: p
 				ifTrue: [digits @env0:, '.']
 				ifFalse: [(digits @env0:copyFrom: 1 to: ePos2 @env0:- 1) @env0:, '.'
 					@env0:, (digits @env0:copyFrom: ePos2 to: digits @env0:size)]]].
+	"PEP 682: with ``z'', a value that ROUNDS to zero loses its minus sign, so
+	``f'{-0.001:z.2f}''' is ``0.00'' while ``f'{-0.001:z.2e}''' keeps ``-1.00e-03''
+	because that one does NOT round to zero.  Testing the produced DIGITS rather
+	than the input is what gets both right -- the rounding has already happened
+	by here."
+	(neg and: [(p @env0:size @env0:>= 10) and: [(p @env0:at: 10) @env0:= true]])
+		ifTrue: [
+			(self ___digitsAreAllZero___: digits) ifTrue: [neg := false]].
 	signStr := self ___signString___: neg sign: sign.
 	(grouping @env0:notNil or: [fracGrouping @env0:notNil]) ifTrue: [
 		| ePos dotPos mainPart expSuffix ip fp dotStr zeroFillWithGrouping |
@@ -1482,7 +1598,12 @@ ___printfConvert___: value conv: conv flags: flags width: width precision: preci
 		digits := (absval @env0:printStringRadix: 16) @env0:asUppercase.
 		altForm ifTrue: [prefix := '0X']].
 	digits == nil ifTrue: [
-		ValueError ___signal___: 'unsupported format character in %-format'].
+		"Name the offending character, as CPython does -- ``unsupported format
+		character 'z''' -- so a caller can tell WHICH conversion it got wrong.
+		test_format's test_specifier_z_error checks exactly this for ``%z.1f'',
+		since ``z'' is a format-SPEC option and has no %-conversion meaning."
+		ValueError ___signal___: ('unsupported format character '''
+			@env0:, (String @env0:with: conv) @env0:, '''')].
 	"integer precision = minimum digit count; the 0 flag is ignored when given."
 	precision ~~ nil ifTrue: [
 		((precision @env0:= 0) @env0:and: [absval @env0:= 0])
@@ -1502,13 +1623,39 @@ ___printfConvert___: value conv: conv flags: flags width: width precision: preci
 
 category: 'Grail-Format Spec Engine'
 method: builtins
+___formatComplexParts___: aComplex parsed: p
+	"``real'' + signed ``imag'' + 'j' for a complex whose spec names a
+	presentation type, per CPython's format_complex_internal.  Each part is
+	formatted with the TYPE / PRECISION / #-alt only: fill, align and width
+	describe the whole result and are applied once by the caller, and applying
+	them per part would pad each half separately.
+
+	The imaginary part always shows its sign ('+' forced), which is why it is
+	formatted with sign $+ regardless of what the spec asked for; the real part
+	keeps the spec's own sign option."
+
+	| rePart imPart reSpec imSpec |
+	reSpec := { Character @env0:space. nil. (p @env0:at: 3). (p @env0:at: 4).
+		0. (p @env0:at: 6). (p @env0:at: 7). (p @env0:at: 8). (p @env0:at: 9).
+		(p @env0:size @env0:>= 10 ifTrue: [p @env0:at: 10] ifFalse: [false]) }.
+	imSpec := { Character @env0:space. nil. $+. (p @env0:at: 4).
+		0. (p @env0:at: 6). (p @env0:at: 7). (p @env0:at: 8). (p @env0:at: 9).
+		(p @env0:size @env0:>= 10 ifTrue: [p @env0:at: 10] ifFalse: [false]) }.
+	rePart := self ___formatFloatValue___: aComplex real @env0:asFloat parsed: reSpec.
+	imPart := self ___formatFloatValue___: aComplex imag @env0:asFloat parsed: imSpec.
+	^ rePart @env0:asString @env0:, imPart @env0:asString @env0:, 'j'
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
 ___formatValue___: value spec: spec
 	"Shared entry point behind int/float/str __format__.  Empty spec
 	is str(value); otherwise parse once and dispatch by type."
 
 	| p |
 	(spec == nil or: [spec @env0:isEmpty]) ifTrue: [^ value __str__].
-	p := self ___parseFormatSpec___: spec.
+	p := self ___parseFormatSpec___: spec
+		typeName: (self ___pyTypeNameOf___: value).
 	(value isKindOf: Float) ifTrue: [
 		^ self ___formatFloatValue___: value parsed: p].
 	(value isKindOf: Integer) ifTrue: [

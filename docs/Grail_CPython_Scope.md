@@ -734,7 +734,7 @@ leaks into modules already on the board (4 left of 5):**
 | `test_scope` | 41t, 6F 10E | `ExecBlock.__closure__`, `sys.settrace` arity, one `CompileError: undefined symbol x`. LEGB is load-bearing for everything. |
 | `test_yield_from` | 43t, 18F 12E | Generator delegation (`yield from` throw/close/return-value propagation). |
 | `test_deque` | 80t, 11F 24E 4S | `deque` item assignment/deletion, `RuntimeError` on mutation-during-scan, `copy`/`deepcopy` identity. |
-| `test_format` | 18t, 10F 4E 3S | `%`-format: `%r` on bytes, `ValueError` on bad specs, and the format-spec error wording. |
+| `test_format` | 18t, 10F 4E 3S | Down to **2F 1E** (2026-08-05). Closed: the four exact grouping-conflict messages and CPython 3.14's type suffix; precision bounds in all three %-engines plus float digit generation (each was an uncatchable NumericError or a hang); `complex.__format__`, which ignored the spec entirely; PEP 682 `z`; and two float literals the lexer mis-read (`0.j`, `1.e+300`). The three left are each a separate project — `%g` rounds the DECIMAL half-up where CPython rounds the exact binary value (needs the exact-rational digit technique), bytes `%`-format lacks `%b`/`%c`, and `repr()` does not escape unassigned code points (needs Unicode category data). |
 
 Two of the eighteen carry a per-test entry in `scripts/cpython_suite_skips.txt`
 because one test **hangs the scoring session** (unbounded work, uncatchable, so
