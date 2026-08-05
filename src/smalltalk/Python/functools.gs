@@ -2022,7 +2022,17 @@ ___callRoot___: root on: slf with: other
 	(owner @env0:~~ nil and: [owner @env0:~~ object]) ifTrue: [
 		^ slf @env0:perform: rootSel env: 1 withArguments: { other }].
 	fn := slf ___classAttrDunder___: root.
-	fn @env0:== nil ifTrue: [^ Python @env0:at: #NotImplemented otherwise: nil].
+	fn @env0:== nil ifTrue: [
+		"A CLASS operand whose root lives on its recorded ``metaclass=''.  The
+		probe above asks slf's own class chain, which for a class is its
+		SMALLTALK metaclass -- the Python metaclass is not in that chain, because
+		Grail records it rather than building the class through it.  Without this
+		the root punted and every DERIVED operator punted with it: ``A < B''
+		worked while ``A > B'' raised, which is total_ordering's metaclass case."
+		| viaMeta |
+		viaMeta := slf ___grailMetaclassCmp___: root with: other.
+		viaMeta @env0:== nil ifFalse: [^ viaMeta].
+		^ Python @env0:at: #NotImplemented otherwise: nil].
 	^ fn ___pyCallValue___: { slf. other } kw: nil
 %
 
@@ -4021,6 +4031,24 @@ __set_name__: owner _: name
 
 category: 'Grail-Descriptor'
 method: functools_cached_property
+___pyOwnerNameFor___: instance
+	"The name CPython puts in the caching errors: the TYPE of the object being
+	cached on.  For an ordinary object that is its class; for a CLASS -- a
+	metaclass-level cached_property read as ``C.prop'' -- it is the recorded
+	``metaclass='', because that is what type(C) means in Python.  The Smalltalk
+	class of a class is its metaclass, whose name is ``C class'', which is not a
+	name CPython would ever print."
+
+	| meta |
+	(instance isKindOf: Behavior) ifTrue: [
+		meta := instance ___grailMetaclass___.
+		(meta @env0:notNil and: [meta isKindOf: Behavior])
+			ifTrue: [^ meta @env0:name @env0:asString]].
+	^ instance @env0:class @env0:name @env0:asString
+%
+
+category: 'Grail-Descriptor'
+method: functools_cached_property
 __get__: instance _: owner
 	"The descriptor read.  Reached from object >> ___descriptorGet___: on an
 	INSTANCE read; a read off the class answers the descriptor itself (both
@@ -4056,7 +4084,7 @@ __get__: instance _: owner
 		do: [:ex |
 			ex @env0:return: (TypeError ___signal___:
 				('The ''__dict__'' attribute on '''
-					@env0:, instance @env0:class @env0:name @env0:asString
+					@env0:, (self ___pyOwnerNameFor___: instance)
 					@env0:, ''' instance does not support item assignment for caching '''
 					@env0:, name @env0:asString @env0:, ''' property.'))].
 	^ value

@@ -161,3 +161,38 @@ def attr_dunder_against_foreign():
     """``a < 5'' -- there is no PythonInstance on the right to reflect onto,
     so the forward attribute is the only way to answer it."""
     return Meters(1) < 5
+
+
+def metaclass_ordering():
+    """@total_ordering on a METACLASS, then comparing two classes that name it.
+
+    Python looks an operator up on the operand's TYPE, and for
+    ``class A(metaclass=M)'' that is M -- so ``A < B'' runs M.__lt__(A, B).
+    Grail has no metaclass object (builtins >> type: answers the single
+    canonical ``type'' for every class), so it RECORDS the keyword and consults
+    the record where a comparison would otherwise give up.
+
+    Three things had to line up: ``class M(type)'' has to compile at all, the
+    forward comparison has to reach M.__lt__, and total_ordering's SYNTHESISED
+    __gt__ has to reach the same root -- it is stored as an attribute on M,
+    which the ordering op's own root probe could not see for a class operand.
+    """
+    @functools.total_ordering
+    class SortableMeta(type):
+        def __lt__(self, other):
+            if not isinstance(other, SortableMeta):
+                pass
+            return self.__name__ < other.__name__
+
+        def __eq__(self, other):
+            if not isinstance(other, SortableMeta):
+                pass
+            return self.__name__ == other.__name__
+
+    class B(metaclass=SortableMeta):
+        pass
+
+    class A(metaclass=SortableMeta):
+        pass
+
+    return [A < B, A > B, B < A, A == A]

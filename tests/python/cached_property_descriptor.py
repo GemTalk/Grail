@@ -241,3 +241,28 @@ def alias_to_plain_def_still_delegates():
 
     c = Cmp()
     return [c == object(), c != object()]
+
+
+def metaclass_level_cached_property():
+    """A cached_property on a METACLASS, read through the class.
+
+    Python reads an attribute off a class by consulting its TYPE, so
+    ``MyClass.prop'' finds MyMeta's descriptor and calls __get__(MyClass,
+    MyMeta).  Caching then FAILS, because a class's __dict__ does not support
+    item assignment -- CPython raises TypeError naming the metaclass, and so
+    does Grail: a Class cannot hold dynamic instVars, which the caching write
+    turns into the same error.
+    """
+    class MyMeta(type):
+        @functools.cached_property
+        def prop(self):
+            return True
+
+    class MyClass(metaclass=MyMeta):
+        pass
+
+    try:
+        MyClass.prop
+        return 'NO ERROR'
+    except TypeError as e:
+        return str(e)

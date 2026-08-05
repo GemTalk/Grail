@@ -152,3 +152,24 @@ testRealTypesAreUnaffected
 
 	self assert: (self resultAt: 'real_types') equals: true
 %
+
+category: 'Grail-Tests - ABC'
+method: AbstractBasesProtocolTestCase
+testAbstractInstantiation
+	"CPython refuses to instantiate a class that still has abstract methods.
+
+	Honoured only for a class that EXPLICITLY declared ``metaclass=abc.ABCMeta''.
+	A plain class using @abc.abstractmethod is deliberately left alone -- abc.py
+	records why: twilio's AuthStrategy / CredentialProvider are plain classes
+	whose abstract methods raise NotImplementedError from their bodies, and
+	blocking them would break working code.  All three directions are asserted
+	here, because the exclusion is as much the behaviour as the enforcement.
+
+	Overriding clears it, which is how email's Compat32 instantiates while the
+	Policy it derives from does not."
+
+	self assert: testModule @env1:abstract_instantiation asArray equals: #(
+		'abstract: TypeError'
+		'concrete: 3'
+		'plain: PlainWithAbstract' ).
+%

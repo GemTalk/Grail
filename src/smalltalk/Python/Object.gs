@@ -396,6 +396,94 @@ ___hasUserInit___
 %
 
 classmethod: object
+___grailAbcMetaclassInChain___
+	"True when this class, or one it inherits from, explicitly declared
+	``metaclass=abc.ABCMeta''.
+
+	EXPLICIT is the whole point.  Grail deliberately does not block instantiating
+	a class that merely uses @abc.abstractmethod -- abc.py records why: twilio's
+	AuthStrategy / CredentialProvider are PLAIN classes whose abstract methods
+	raise NotImplementedError from their bodies, and blocking them would break
+	working code.  Neither declares a metaclass, so keying on the declaration
+	leaves them untouched while still honouring a class that asked for ABCMeta."
+
+	| c meta |
+	(self isKindOf: Behavior) ifFalse: [^ false].
+	c := self.
+	[c == nil] @env0:whileFalse: [
+		meta := c ___grailMetaclass___.
+		(meta @env0:notNil
+			and: [(meta ___pyNameOrEmpty___) @env0:= 'ABCMeta']) ifTrue: [^ true].
+		c := c @env0:superclass].
+	^ false
+%
+
+category: 'Grail-Metaclass'
+method: object
+___pyNameOrEmpty___
+	"This class's Python __name__, or '' -- a non-raising probe for the
+	abstractness and metaclass checks."
+
+	^ [(self ___pyAttrLoad___: #'__name__') @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: '']
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailUnimplementedAbstract___
+	"The name of an abstract method this class has NOT implemented, or nil.
+
+	A name is still abstract for C when the FIRST class in C's chain that
+	defines it is the one that marked it abstract -- which is how a concrete
+	subclass clears it by overriding, and why email's Compat32 instantiates
+	while the Policy it derives from does not.
+
+	Abstractness lives on the INTERNED UnboundMethod for (class, selector),
+	because that is the handle @abc.abstractmethod receives and stamps."
+
+	| c seen |
+	c := self.
+	seen := IdentitySet @env0:new.
+	[c == nil] @env0:whileFalse: [
+		(c @env0:methodDictForEnv: 1) @env0:keysDo: [:sel |
+			| str bare owner |
+			"The BARE Python name: ``def add(self, x, y)'' compiles to #'add:_:',
+			and a varargs companion to #'_add:kw:', while the abstractness stamp
+			is keyed by the plain name on the interned UnboundMethod."
+			str := sel @env0:asString.
+			bare := (str @env0:includes: $:)
+				ifTrue: [str @env0:copyFrom: 1 to: (str @env0:indexOf: $:) @env0:- 1]
+				ifFalse: [str].
+			(bare @env0:isEmpty @env0:not
+				and: [(bare @env0:at: 1) @env0:= $_
+					ifTrue: [(bare @env0:size @env0:> 1)
+						and: [(bare @env0:at: 2) @env0:= $_]]
+					ifFalse: [true]]) ifTrue: [
+				(seen @env0:includes: bare @env0:asSymbol) ifFalse: [
+					seen @env0:add: bare @env0:asSymbol.
+					owner := self @env0:whichClassIncludesSelector: sel environmentId: 1.
+					(owner @env0:notNil
+						and: [self ___grailSelectorIsAbstract___: bare @env0:asSymbol on: owner])
+							ifTrue: [^ bare]]]].
+		c := c @env0:superclass].
+	^ nil
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailSelectorIsAbstract___: sel on: owner
+	"Did ``owner'' mark this selector abstract?  Read off the interned
+	UnboundMethod, guarded: most selectors carry no such stamp."
+
+	^ [((UnboundMethod definingClass: owner selector: sel)
+		___pyAttrLoad___: #'__isabstractmethod__') == true]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-Instantiation'
+method: object
 ___allocateInstance___: positional kw: keywords
 	"Allocate an instance of self (a class) for ``Cls(*args, **kw)``.
 	A class-body ``def __new__(cls, ...)`` compiles as an INSTANCE-side
@@ -412,7 +500,18 @@ ___allocateInstance___: positional kw: keywords
 	performMethod: family); its convention takes the receiver as the
 	first positional, which here is the class itself."
 
-	| n sel stream found |
+	| n sel stream found abstractName |
+	"CPython refuses to instantiate a class that still has abstract methods.
+	Gated on an EXPLICIT ``metaclass=abc.ABCMeta'' so a plain class using
+	@abc.abstractmethod is untouched -- see ___grailAbcMetaclassInChain___ for
+	why that distinction is the one that matters here."
+	self ___grailAbcMetaclassInChain___ ifTrue: [
+		abstractName := self ___grailUnimplementedAbstract___.
+		abstractName @env0:notNil ifTrue: [
+			TypeError ___signal___: ('Can''t instantiate abstract class '
+				@env0:, (self ___pyNameOrEmpty___)
+				@env0:, ' without an implementation for abstract method '''
+				@env0:, abstractName @env0:, '''')]].
 	found := (self @env0:whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) ~~ nil.
 	found ifFalse: [
 		n := positional @env0:size.
@@ -1515,8 +1614,16 @@ ___classCell___: aSym
 	inherit the cells.  An absent cell, or a cell whose local is still
 	unbound (Smalltalk nil), is a NameError."
 
-	| blk v |
+	| blk v meta |
 	blk := self ___dynamicClassAttr___: aSym.
+	"A metaclass method invoked with the USING class as self: ``isinstance(other,
+	M)'' inside M's own method reads a cell stored on M, but self is the class
+	that named M as its metaclass and M is not in its chain -- Grail records a
+	metaclass rather than making the class an instance of it.  Fall back to the
+	recorded metaclass's chain, which is where that cell lives."
+	blk @env0:isNil ifTrue: [
+		meta := self ___grailMetaclass___.
+		meta == nil ifFalse: [blk := meta ___dynamicClassAttr___: aSym]].
 	v := blk @env0:isNil ifTrue: [nil] ifFalse: [blk @env0:value].
 	v == nil ifTrue: [
 		NameError ___signal___: ('free variable '''
@@ -2234,6 +2341,17 @@ ___pyAttrLoad___: aSym
 		applies only to instance receivers."
 		(self ___classChainAttrLookup___: aSym)
 			@env0:ifNotNil: [:___cv | ^ ___cv].
+		"...then the recorded ``metaclass='', which is where Python looks after
+		the class's own dict: reading an attribute off a CLASS consults its TYPE,
+		and for ``class C(metaclass=M)'' that is M.  A DESCRIPTOR found there is
+		asked for its value with the class as the instance -- CPython's
+		``type(cls).__mro__'' lookup followed by ``__get__(cls, type(cls))'' --
+		which is what makes a metaclass-level cached_property reachable as
+		``C.prop''.  Grail records the metaclass rather than building the class
+		through it, so the consult happens here."
+		(self ___grailMetaclass___) @env0:ifNotNil: [:___meta |
+			(___meta ___classChainAttrLookup___: aSym)
+				@env0:ifNotNil: [:___mv | ^ self ___descriptorGet___: ___mv]].
 		"Instance method accessed via the class object — an *unbound* method
 		(a plain function in Python 3).  ``ParentClass.__init__(self, **opts)''
 		(explicit super-init, e.g. flask's ``Environment'' subclass calling
@@ -3095,6 +3213,10 @@ __ge__: other
 	| r |
 	r := self ___classAttrCmp___: #'__ge__' with: other.
 	r == nil ifFalse: [^ r].
+	"...then this class's recorded metaclass: Python looks an operator up on the
+	operand's TYPE, and for a class that is its metaclass."
+	r := self ___grailMetaclassCmp___: #'__ge__' with: other.
+	r == nil ifFalse: [^ r].
 	"Python protocol: no default ordering -- try the reflected
 	operation, else raise the catchable TypeError."
 	^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'
@@ -3134,6 +3256,10 @@ __gt__: other
 
 	| r |
 	r := self ___classAttrCmp___: #'__gt__' with: other.
+	r == nil ifFalse: [^ r].
+	"...then this class's recorded metaclass: Python looks an operator up on the
+	operand's TYPE, and for a class that is its metaclass."
+	r := self ___grailMetaclassCmp___: #'__gt__' with: other.
 	r == nil ifFalse: [^ r].
 	"Python protocol: no default ordering -- try the reflected
 	operation, else raise the catchable TypeError."
@@ -3206,6 +3332,10 @@ __le__: other
 
 	| r |
 	r := self ___classAttrCmp___: #'__le__' with: other.
+	r == nil ifFalse: [^ r].
+	"...then this class's recorded metaclass: Python looks an operator up on the
+	operand's TYPE, and for a class that is its metaclass."
+	r := self ___grailMetaclassCmp___: #'__le__' with: other.
 	r == nil ifFalse: [^ r].
 	"Python protocol: no default ordering -- try the reflected
 	operation, else raise the catchable TypeError."
@@ -3661,6 +3791,72 @@ ___classAttrCmp___: baseSym with: other
 	^ r
 %
 
+category: 'Grail-Metaclass'
+method: object
+___grailMetaclass___
+	"The ``metaclass='' recorded for this class, or nil.  SESSION-LOCAL and keyed
+	by class: a Class cannot hold dynamic instVars (ImproperOperation 2484)."
+
+	| tbl |
+	(self isKindOf: Behavior) ifFalse: [^ nil].
+	tbl := SessionTemps @env0:current @env0:at: #'GrailClassMetaclass' otherwise: nil.
+	tbl == nil ifTrue: [^ nil].
+	^ tbl @env0:at: self otherwise: nil
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailSetMetaclass___: aMetaclass
+	"Record a ``class C(metaclass=M)'' keyword.  A RECORD, not a construction:
+	builtins >> type: answers the single canonical ``type'' BoundMethod as any
+	class's metaclass, so there is no metaclass object and class creation has
+	nowhere to route.  What it buys is that a metaclass-defined comparison can be
+	found for ``A < B'' -- functools.total_ordering's metaclass case."
+
+	| tbl |
+	((aMetaclass isKindOf: Behavior) and: [self isKindOf: Behavior]) ifFalse: [^ self].
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailClassMetaclass'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	tbl @env0:at: self put: aMetaclass.
+	^ self
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailMetaclassCmp___: baseSym with: other
+	"An ordering dunder defined by this class's recorded METACLASS.  Python looks
+	an operator up on the operand's type, and for ``class A(metaclass=M)'' that is
+	M, so ``A < B'' runs M.__lt__(A, B).
+
+	Mirrors ___classAttrCmp___ deliberately, INCLUDING the invocation:
+	``___pyCallValue___'' on the handle, not UnboundMethod >> value:value:.  The
+	latter goes through performMethod: primitives and raised UncontinuableError
+	2758 (``return ... would cross frame of C primitive'') from inside a
+	comparison, where this path's own Python call is already safe.
+
+	Two shapes to find: a compiled ``def __lt__'' on the metaclass, and an
+	attribute one -- total_ordering SYNTHESISES the derived operators as
+	attributes, which is exactly the case this exists for.  The attribute lives
+	ON the metaclass, so the lookup is ___classChainAttrLookup___ rather than
+	___classAttrDunder___, which would ask the metaclass's own metaclass."
+
+	| meta fn r |
+	meta := self ___grailMetaclass___.
+	meta == nil ifTrue: [^ nil].
+	fn := meta ___classChainAttrLookup___: baseSym.
+	fn == nil ifTrue: [fn := meta ___classAttrDunder___: baseSym].
+	fn == nil ifTrue: [
+		(meta @env0:whichClassIncludesSelector:
+			(baseSym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1)
+				== nil ifTrue: [^ nil].
+		fn := UnboundMethod definingClass: meta selector: baseSym].
+	r := fn ___pyCallValue___: { self. other } kw: nil.
+	(r == (Python @env0:at: #NotImplemented otherwise: nil)
+		or: [r @env0:== #'___NotImplemented___']) ifTrue: [^ nil].
+	^ r
+%
+
 category: 'Grail-Comparison'
 method: object
 ___cmpFallback___: other op: opString reflected: refSelector
@@ -3746,6 +3942,10 @@ __lt__: other
 
 	| r |
 	r := self ___classAttrCmp___: #'__lt__' with: other.
+	r == nil ifFalse: [^ r].
+	"...then this class's recorded metaclass: Python looks an operator up on the
+	operand's TYPE, and for a class that is its metaclass."
+	r := self ___grailMetaclassCmp___: #'__lt__' with: other.
 	r == nil ifFalse: [^ r].
 	"Python protocol: no default ordering -- try the reflected
 	operation, else raise the catchable TypeError."
