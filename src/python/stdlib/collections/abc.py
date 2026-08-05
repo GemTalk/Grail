@@ -65,8 +65,13 @@ _STRUCTURAL = {
 # raise from a compiled __hash__ instead of exposing the attribute, so they have
 # to be named here.  dict_values is deliberately ABSENT: it has no set-like
 # __eq__, so CPython leaves it hashable on identity.
+# The concrete dict-view types (CPython's dict_keys / dict_values / dict_items).
+_DICT_KEYS = type({}.keys())
+_DICT_VALUES = type({}.values())
+_DICT_ITEMS = type({}.items())
+
 _UNHASHABLE_BUILTINS = (list, set, dict, bytearray,
-                        type({}.keys()), type({}.items()))
+                        _DICT_KEYS, _DICT_ITEMS)
 
 # Builtins CPython registers as virtual subclasses of the composite ABCs in
 # _collections_abc; these whitelists are the Grail equivalent.  Used for both
@@ -78,11 +83,20 @@ _BUILTIN_WHITELIST = {
     'MutableMapping': (dict,),
     'Sequence': (list, tuple, str, bytes, bytearray),
     'MutableSequence': (list, bytearray),
-    'Set': (set, frozenset),
+    # dict_keys / dict_items are set-like (CPython registers them on Set).
+    'Set': (set, frozenset, _DICT_KEYS, _DICT_ITEMS),
     'MutableSet': (set,),
     'ByteString': (bytes, bytearray),
     'Buffer': (bytes, bytearray),
     'Reversible': (list, tuple, str, bytes, bytearray, dict),
+    # dict views: CPython registers each concrete view on its view ABC, all of
+    # which descend from MappingView (test_dictviews test_abc_registry).  The
+    # one-trick ABCs (Sized / Iterable / Container / Collection) match these
+    # structurally via __len__ / __iter__ / __contains__.
+    'KeysView': (_DICT_KEYS,),
+    'ItemsView': (_DICT_ITEMS,),
+    'ValuesView': (_DICT_VALUES,),
+    'MappingView': (_DICT_KEYS, _DICT_VALUES, _DICT_ITEMS),
 }
 
 # Concrete iterator/generator classes, captured at import so the structural
