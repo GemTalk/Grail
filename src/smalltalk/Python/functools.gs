@@ -2233,6 +2233,39 @@ register: clsOrFunc
 %
 
 category: 'Grail-Single Dispatch'
+classmethod: functools_singledispatch
+___resolveDottedName___: aString
+	"Resolve a DOTTED name like ``collections.abc.Mapping'' to the class it names,
+	or nil.  Class-side so it can be exercised directly."
+
+	| parts mods |
+	parts := aString @env0:asString @env0:subStrings: '.'.
+	parts @env0:size @env0:< 2 ifTrue: [^ nil].
+	mods := (System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: #importlib) @env1:modules.
+	mods == nil ifTrue: [^ nil].
+	(parts @env0:size @env0:- 1) @env0:to: 1 @env0:by: -1 @env0:do: [:split |
+		| modName mod obj ok |
+		modName := ''.
+		1 @env0:to: split @env0:do: [:i |
+			modName := modName @env0:isEmpty
+				ifTrue: [(parts @env0:at: i) @env0:asString]
+				ifFalse: [modName @env0:, '.' @env0:, (parts @env0:at: i) @env0:asString]].
+		mod := mods @env0:at: modName @env0:asString otherwise: nil.
+		mod == nil ifFalse: [
+			obj := mod.
+			ok := true.
+			(split @env0:+ 1) @env0:to: parts @env0:size @env0:do: [:i |
+				ok ifTrue: [
+					obj := [obj @env1:___pyAttrLoad___: (parts @env0:at: i) @env0:asString @env0:asSymbol]
+						@env0:on: AbstractException
+						do: [:ex | ex @env0:return: nil].
+					obj == nil ifTrue: [ok := false]]].
+			(ok and: [obj @env0:isKindOf: Behavior]) ifTrue: [^ obj]]].
+	^ nil
+%
+
+category: 'Grail-Single Dispatch'
 method: functools_singledispatch
 ___inferRegisterType___: aFunc
 	"Infer the dispatch type for the annotation form of register from
@@ -2288,6 +2321,15 @@ ___inferRegisterType___: aFunc
 		text := candidate @env0:asString.
 		candidate := (System @env0:myUserProfile @env0:symbolList
 			@env0:objectNamed: candidate @env0:asSymbol) @env0:ifNil: [candidate]].
+	"Still a string, and DOTTED?  ``collections.abc.Mapping'' -- written either as
+	an expression or as a quoted forward reference -- arrives whole, and neither
+	the symbol list above nor the bare-name probe below can resolve it: one holds
+	no dotted keys, the other would look for an attribute literally named
+	``collections.abc.Mapping''.  Walk it instead."
+	(candidate isKindOf: CharacterCollection) ifTrue: [
+		| walked |
+		walked := (self @env0:class) ___resolveDottedName___: candidate @env0:asString.
+		walked == nil ifFalse: [candidate := walked]].
 	"Still a string?  ABC names ('Mapping', 'Sequence', ...) live as
 	classes on the collections.abc module, not in the symbol list --
 	resolve through sys.modules when that module has been imported."

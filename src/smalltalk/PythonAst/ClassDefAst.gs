@@ -1244,6 +1244,18 @@ printSmalltalkRuntimeOn: aStream
 	where those names resolve, exactly like a decorator.  Only enum metaclasses
 	answer ___grailSetClassBoundary___:, so this is emitted solely for a
 	``boundary'' keyword (never metaclass= et al.)."
+	"The boundary value and the decorators below both evaluate in the scope
+	ENCLOSING the class statement, so they are emitted under inDecoratorEmit --
+	which suppresses NameAst's class-method closure-cell branch exactly as
+	inBasesEmit does for base names.  Without it, ``@mark class C: ...'' inside a
+	METHOD compiled ``mark'' as a ___classCell___ read nothing had stored and
+	raised NameError for a temp the method could see perfectly well: the classdef
+	is emitted inline there, and only method BODIES string-compile away from the
+	enclosing temps."
+	[ | savedDecoFlag |
+	savedDecoFlag := CallAst inDecoratorEmit.
+	CallAst inDecoratorEmit: true.
+	[
 	keywords notNil ifTrue: [
 		keywords do: [:kw |
 			(kw name notNil and: [kw name asString = 'boundary']) ifTrue: [
@@ -1262,7 +1274,8 @@ printSmalltalkRuntimeOn: aStream
 		aStream nextPutAll: name; nextPutAll: ' := '.
 		deco printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: ' value: { '; nextPutAll: name; nextPutAll: ' } value: nil.'; lf.
-	].
+	]
+	] ensure: [CallAst inDecoratorEmit: (savedDecoFlag == true)]] value.
 	"CLOSURE CELLS: store every enclosing-function local the class's
 	method bodies referenced (NameAst emitted ___classCell___ reads for
 	them) onto the class's per-class dynamic attrs.  Emitted AFTER the
