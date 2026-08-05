@@ -1269,7 +1269,17 @@ ___qualifiedNameFor___: aName
 	enclosingCls := CallAst classBeingCompiled.
 	(enclosingFn == nil
 		or: [enclosingFn == self or: [enclosingFn name == nil]])
-			ifTrue: [^ aName asString].
+			ifTrue: [
+				"No enclosing FUNCTION, but there may be an enclosing CLASS: a def
+				written inside an ``if'' in a class body compiles to a closure
+				rather than a method, and answered the bare name where CPython says
+				``Cls.name''.  No ``<locals>'' -- a class body is not a function
+				scope, which is exactly why CPython omits it here.  Pickling a
+				class-body def by reference depends on this: test_functools'
+				TestLRUC defines its members under ``if c_functools:''."
+				^ enclosingCls == nil
+					ifTrue: [aName asString]
+					ifFalse: [enclosingCls asString , '.' , aName asString]].
 	^ (enclosingCls == nil
 		ifTrue: [enclosingFn name asString]
 		ifFalse: [enclosingCls asString , '.' , enclosingFn name asString])
