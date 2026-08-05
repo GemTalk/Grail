@@ -396,6 +396,94 @@ ___hasUserInit___
 %
 
 classmethod: object
+___grailAbcMetaclassInChain___
+	"True when this class, or one it inherits from, explicitly declared
+	``metaclass=abc.ABCMeta''.
+
+	EXPLICIT is the whole point.  Grail deliberately does not block instantiating
+	a class that merely uses @abc.abstractmethod -- abc.py records why: twilio's
+	AuthStrategy / CredentialProvider are PLAIN classes whose abstract methods
+	raise NotImplementedError from their bodies, and blocking them would break
+	working code.  Neither declares a metaclass, so keying on the declaration
+	leaves them untouched while still honouring a class that asked for ABCMeta."
+
+	| c meta |
+	(self isKindOf: Behavior) ifFalse: [^ false].
+	c := self.
+	[c == nil] @env0:whileFalse: [
+		meta := c ___grailMetaclass___.
+		(meta @env0:notNil
+			and: [(meta ___pyNameOrEmpty___) @env0:= 'ABCMeta']) ifTrue: [^ true].
+		c := c @env0:superclass].
+	^ false
+%
+
+category: 'Grail-Metaclass'
+method: object
+___pyNameOrEmpty___
+	"This class's Python __name__, or '' -- a non-raising probe for the
+	abstractness and metaclass checks."
+
+	^ [(self ___pyAttrLoad___: #'__name__') @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: '']
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailUnimplementedAbstract___
+	"The name of an abstract method this class has NOT implemented, or nil.
+
+	A name is still abstract for C when the FIRST class in C's chain that
+	defines it is the one that marked it abstract -- which is how a concrete
+	subclass clears it by overriding, and why email's Compat32 instantiates
+	while the Policy it derives from does not.
+
+	Abstractness lives on the INTERNED UnboundMethod for (class, selector),
+	because that is the handle @abc.abstractmethod receives and stamps."
+
+	| c seen |
+	c := self.
+	seen := IdentitySet @env0:new.
+	[c == nil] @env0:whileFalse: [
+		(c @env0:methodDictForEnv: 1) @env0:keysDo: [:sel |
+			| str bare owner |
+			"The BARE Python name: ``def add(self, x, y)'' compiles to #'add:_:',
+			and a varargs companion to #'_add:kw:', while the abstractness stamp
+			is keyed by the plain name on the interned UnboundMethod."
+			str := sel @env0:asString.
+			bare := (str @env0:includes: $:)
+				ifTrue: [str @env0:copyFrom: 1 to: (str @env0:indexOf: $:) @env0:- 1]
+				ifFalse: [str].
+			(bare @env0:isEmpty @env0:not
+				and: [(bare @env0:at: 1) @env0:= $_
+					ifTrue: [(bare @env0:size @env0:> 1)
+						and: [(bare @env0:at: 2) @env0:= $_]]
+					ifFalse: [true]]) ifTrue: [
+				(seen @env0:includes: bare @env0:asSymbol) ifFalse: [
+					seen @env0:add: bare @env0:asSymbol.
+					owner := self @env0:whichClassIncludesSelector: sel environmentId: 1.
+					(owner @env0:notNil
+						and: [self ___grailSelectorIsAbstract___: bare @env0:asSymbol on: owner])
+							ifTrue: [^ bare]]]].
+		c := c @env0:superclass].
+	^ nil
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailSelectorIsAbstract___: sel on: owner
+	"Did ``owner'' mark this selector abstract?  Read off the interned
+	UnboundMethod, guarded: most selectors carry no such stamp."
+
+	^ [((UnboundMethod definingClass: owner selector: sel)
+		___pyAttrLoad___: #'__isabstractmethod__') == true]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-Instantiation'
+method: object
 ___allocateInstance___: positional kw: keywords
 	"Allocate an instance of self (a class) for ``Cls(*args, **kw)``.
 	A class-body ``def __new__(cls, ...)`` compiles as an INSTANCE-side
@@ -412,7 +500,18 @@ ___allocateInstance___: positional kw: keywords
 	performMethod: family); its convention takes the receiver as the
 	first positional, which here is the class itself."
 
-	| n sel stream found |
+	| n sel stream found abstractName |
+	"CPython refuses to instantiate a class that still has abstract methods.
+	Gated on an EXPLICIT ``metaclass=abc.ABCMeta'' so a plain class using
+	@abc.abstractmethod is untouched -- see ___grailAbcMetaclassInChain___ for
+	why that distinction is the one that matters here."
+	self ___grailAbcMetaclassInChain___ ifTrue: [
+		abstractName := self ___grailUnimplementedAbstract___.
+		abstractName @env0:notNil ifTrue: [
+			TypeError ___signal___: ('Can''t instantiate abstract class '
+				@env0:, (self ___pyNameOrEmpty___)
+				@env0:, ' without an implementation for abstract method '''
+				@env0:, abstractName @env0:, '''')]].
 	found := (self @env0:whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) ~~ nil.
 	found ifFalse: [
 		n := positional @env0:size.
