@@ -785,13 +785,19 @@ ___grailBuildMembers: cls names: attrNames
 									pend @env0:do: [:av | byValue @env0:at: av put: member].
 									member @env0:dynamicInstVarAt: #'___grailPendingValueAliases' put: nil]]
 								@env0:on: AbstractException do: [:e | nil].
-							"A ZERO-valued Flag member (``BLACK = 0``) is reachable by
-							name, by value -- Color(0) -- and as a class attribute, but is
-							NOT canonical: CPython excludes it from iteration, len,
-							reversed and _member_names_.  Plain Enum keeps zero canonical."
+							"A Flag member is canonical (iteration / len / reversed /
+							_member_names_) ONLY when its value is a SINGLE bit.  A
+							zero-valued member (``BLACK = 0``) and any MULTI-bit member
+							-- an explicit mask (``MASK = 255``, whose bits are NOT all
+							covered by prior members, so it misses the composite-alias
+							branch above) or a composite -- are reachable by name and by
+							value but are NOT canonical (CPython excludes them from
+							iteration; ``A, B = OpenAB`` unpacks exactly the single-bit
+							members).  Plain Enum keeps every member canonical."
 							((memberValue isKindOf: Integer)
-								and: [memberValue @env0:= 0
-								and: [Enum ___grailIsFlagClass: cls]])
+								and: [(Enum ___grailIsFlagClass: cls)
+								and: [(memberValue @env0:<= 0)
+									or: [(memberValue @env0:bitAnd: memberValue @env0:- 1) @env0:~= 0]]])
 								ifFalse: [members @env0:add: member]]].
 			byName @env0:at: nameStr put: member.
 			hasAccessor
@@ -1884,25 +1890,19 @@ ___grailFunctional: cls positional: positional keywords: keywords
 					member @env0:dynamicInstVarAt: #value put: effVal.
 					member @env0:dynamicInstVarAt: #name put: nameStr.
 					byValue @env0:at: effVal put: member.
-					"A Flag member is non-canonical -- reachable by name and value
-					but excluded from iteration/len/reversed/_member_names_ -- when
-					its value is 0, OR when it is a composite ALIAS whose bits are all
-					covered by the already-defined members (``dupe = 3`` after
-					first=1/second=2).  Same rule as the class-syntax builder; the
-					functional builder previously dropped only the zero case, so a
-					composite alias leaked into ``members'' (the Flag Function variants
-					of test_basics + test_reversed_iteration_order)."
+					"A Flag member is canonical (iteration/len/reversed/_member_names_)
+					ONLY when its value is a SINGLE bit.  A zero-valued member and any
+					MULTI-bit member -- a composite ALIAS whose bits are all covered
+					(``dupe = 3'' after first=1/second=2) OR an explicit mask whose bits
+					are NOT all covered (``MASK = 255'') -- are reachable by name and
+					value but excluded from canonical (CPython: ``A, B = OpenAB'' unpacks
+					exactly the single-bit members).  Same rule as the class-syntax
+					builder."
 					canonical := true.
 					(isFlag and: [effVal isKindOf: Integer]) ifTrue: [
-						effVal @env0:= 0
-							ifTrue: [canonical := false]
-							ifFalse: [ | mask |
-								mask := 0.
-								members @env0:do: [:m | | mv |
-									mv := m @env0:dynamicInstVarAt: #value.
-									(mv isKindOf: Integer) ifTrue: [mask := mask @env0:bitOr: mv]].
-								((effVal @env0:> 0) and: [(effVal @env0:bitAnd: mask) @env0:= effVal])
-									ifTrue: [canonical := false]]].
+						((effVal @env0:<= 0)
+							or: [(effVal @env0:bitAnd: effVal @env0:- 1) @env0:~= 0])
+							ifTrue: [canonical := false]].
 					canonical ifTrue: [members @env0:add: member]].
 			byName @env0:at: nameStr put: member.
 			"Category MUST be Grail-Class Attrs: the class-receiver branch of
