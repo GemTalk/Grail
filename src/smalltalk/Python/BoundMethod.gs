@@ -158,13 +158,60 @@ receiver: aReceiver selector: aSymbol
 	BoundMethod in SessionTemps.  The guard is a single identity compare on the
 	hot path; the lookup + intern only run for the #type selector."
 
-	| inst bcls |
-	(aSymbol @env0:== #'type') ifTrue: [
-		bcls := Python @env0:at: #builtins otherwise: nil.
-		(bcls @env0:notNil and: [aReceiver @env0:isKindOf: bcls])
-			ifTrue: [^ self ___internTypeSingleton: aReceiver]].
+	| inst |
+	"A MODULE or CLASS receiver is interned per (receiver, selector), so
+	``min is min'' and ``builtins.len is builtins.len'' hold.  CPython's
+	builtins are single objects living in the builtins module, and callers
+	compare them with ``is'': functools' test_subclass_optimization asserts
+	``partial(partial(min, 2), 1).func is min'', and pickle can only save a
+	callable by reference if the name resolves back to the same object.
+
+	An INSTANCE receiver is deliberately NOT interned.  CPython creates a fresh
+	bound method per attribute read, so ``obj.meth is obj.meth'' is False there
+	too -- caching would be the wrong answer as well as unbounded, since the key
+	would retain every receiver ever asked for a method.  Modules and classes
+	are finite and long-lived, so interning those is bounded.
+
+	This generalises what used to be a special case for ``type'' alone (needed
+	so ``type is type'' held); the singleton helper now routes through here."
+
+	(self ___internsReceiver___: aReceiver) ifTrue: [
+		^ self ___internedFor___: aReceiver selector: aSymbol].
 	inst := self @env0:new.
 	inst @env0:_setReceiver: aReceiver selector: aSymbol.
+	^ inst
+%
+
+category: 'Grail-Instance creation'
+classmethod: BoundMethod
+___internsReceiver___: aReceiver
+	"Is aReceiver one of the identity-stable kinds -- a module instance or a
+	class?  Those are the receivers whose attribute reads CPython answers with
+	one object per name."
+
+	| mcls |
+	(aReceiver @env0:isKindOf: Behavior) ifTrue: [^ true].
+	mcls := Python @env0:at: #module otherwise: nil.
+	^ mcls @env0:notNil and: [aReceiver @env0:isKindOf: mcls]
+%
+
+category: 'Grail-Instance creation'
+classmethod: BoundMethod
+___internedFor___: aReceiver selector: aSymbol
+	"The session-cached handle for (aReceiver, aSymbol), minting it on first
+	ask.  Keyed by receiver IDENTITY: module instances are session-local, so a
+	fresh session re-mints rather than reviving a stale receiver."
+
+	| tbl per inst |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailBoundMethodCache'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	per := tbl @env0:at: aReceiver ifAbsentPut: [KeyValueDictionary @env0:new].
+	inst := per @env0:at: aSymbol otherwise: nil.
+	inst == nil ifFalse: [^ inst].
+	inst := self @env0:new.
+	inst @env0:_setReceiver: aReceiver selector: aSymbol.
+	per @env0:at: aSymbol put: inst.
 	^ inst
 %
 

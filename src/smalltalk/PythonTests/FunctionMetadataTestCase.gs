@@ -288,17 +288,22 @@ testWrapsOnABuiltinDoesNotRaise
 
 category: 'Grail-Tests-FunctionMetadata'
 method: FunctionMetadataTestCase
-testBuiltinReferencesAreNotIdentityStable
-	"Guard for the assumption the test above leans on: a reference to a
-	builtin mints a FRESH BoundMethod handle per attribute load, so
-	``max is max'' is False in Grail while ``max == max'' is True.  A
-	pre-existing deviation from CPython, pinned so it stays visible -- it
-	is what makes ``wrapper.__wrapped__ is max'' the WRONG assertion to
-	write about a builtin, independently of update_wrapper."
+testBuiltinReferencesAreIdentityStable
+	"``max is max'', and a builtin reached two ways is one object.  This test
+	used to assert the OPPOSITE, pinning a deviation: a reference to a builtin
+	minted a fresh BoundMethod handle per attribute load, which is why the
+	test above had to compare ``__wrapped__'' with ``=='' rather than ``is''.
+	BoundMethod now interns module- and class-receiver handles.
 
-	self assert: self loadFixture
-		@env1:builtin_references_are_not_identity_stable
-		equals: true
+	The fourth value is the counterpart and must stay FALSE.  CPython creates a
+	fresh bound method per attribute read, so ``obj.meth is obj.meth'' is False
+	there too; interning instance receivers would be the wrong answer as well
+	as unbounded, since the key would retain every receiver ever asked for a
+	method."
+
+	self assert: (self loadFixture
+		@env1:builtin_references_are_identity_stable) asArray
+		equals: #( true true true false )
 %
 
 category: 'Grail-Tests-FunctionMetadata'

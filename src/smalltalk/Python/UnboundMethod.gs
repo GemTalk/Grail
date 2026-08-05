@@ -99,10 +99,35 @@ set compile_env: 1
 category: 'Grail-Instance Creation'
 classmethod: UnboundMethod
 definingClass: aClass selector: aSym
+	"``Cls.method'' -- INTERNED per (class, selector), so repeated reads answer
+	the same object.
 
-	| inst |
+	CPython stores a plain function in the class dictionary and hands back that
+	very object, so ``Cls.meth is Cls.meth'' holds and code may compare methods
+	with ``is'': functools.total_ordering's test pickles ``Cls.__lt__'' and
+	asserts the round-trip is identical, and pickle can only save a callable by
+	reference if the name resolves back to the same object.  Minting a fresh
+	handle per read broke both.
+
+	Bounded by construction: the key is a CLASS, and there are finitely many,
+	all long-lived.  Contrast BoundMethod, which only interns module and class
+	receivers -- an instance-bound method must NOT be cached, both because
+	CPython's ``obj.meth is obj.meth'' is False and because keying on instances
+	would retain every receiver ever asked for a method.
+
+	Session-local (SessionTemps), like every other Grail handle cache: these
+	are transient objects and the store must not be committed."
+
+	| tbl per inst |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailUnboundMethodCache'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	per := tbl @env0:at: aClass ifAbsentPut: [KeyValueDictionary @env0:new].
+	inst := per @env0:at: aSym otherwise: nil.
+	inst == nil ifFalse: [^ inst].
 	inst := self @env0:new.
 	inst @env0:_setClass: aClass selector: aSym.
+	per @env0:at: aSym put: inst.
 	^ inst
 %
 
