@@ -639,6 +639,15 @@ __annotate__
 	nothing reads."
 
 	| cls fn |
+	"A class-body sibling reference is emitted receiver-less but WITH its
+	definingClass (NameAst: ``BoundMethod receiver: nil selector: #m
+	definingClass: C''), and that is the handle a class-body decorator chain
+	captures.  Resolving through it is what lets ``@functools.wraps(func.__func__)''
+	inside such a decorator copy the annotations -- value:value: already takes
+	the same fallback for calls."
+	(receiver == nil and: [definingClass @env0:notNil]) ifTrue: [
+		^ self ___internedAnnotateForClass___: definingClass
+			name: selector @env0:asString].
 	receiver == nil ifTrue: [
 		AttributeError ___signal___: 'method has no attribute ''__annotate__'''].
 	(receiver isKindOf: module) ifTrue: [
@@ -753,10 +762,19 @@ __doc__
 	__signature_spec__ do."
 
 	| cls doc |
-	receiver == nil ifTrue: [^ ExecBlock @env0:___pyNone___].
-	cls := (receiver isKindOf: Class)
-		ifTrue: [receiver]
-		ifFalse: [receiver @env0:class].
+	"Receiver-less but with a definingClass: a class-body sibling reference (see
+	__annotate__ and value:value: for the same fallback).  Without this, a
+	decorator chain that captures such a handle and copies from it -- ``@wraps
+	(func.__func__)'' -- produced a wrapper whose __doc__ was None."
+	cls := (receiver == nil and: [definingClass @env0:notNil])
+		ifTrue: [definingClass]
+		ifFalse: [
+			receiver == nil
+				ifTrue: [nil]
+				ifFalse: [(receiver isKindOf: Class)
+					ifTrue: [receiver]
+					ifFalse: [receiver @env0:class]]].
+	cls == nil ifTrue: [^ ExecBlock @env0:___pyNone___].
 	doc := self ___methodDocForClass___: cls name: selector @env0:asString.
 	^ doc ifNil: [ExecBlock @env0:___pyNone___]
 %
