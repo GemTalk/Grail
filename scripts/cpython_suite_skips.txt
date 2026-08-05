@@ -185,6 +185,28 @@ test.test_functools|TestPartialPySubclass.test_recursive_pickle|needs RecursionE
 # raised (same class as the other @cpython_only / C-internal skips). N/A to
 # Grail rather than a bug.
 test.test_iter|TestCase.test_iter_overflow|@cpython_only: asserts OverflowError at PY_SSIZE_T_MAX; Grail's seq_iterator index is arbitrary-precision (never overflows) -- CPython C-internal, N/A
+# test_reduce_mutating_builtins_iter reproduces a CPython C-level crash
+# (gh-101765): an iterator's __reduce__ calls _PyEval_GetBuiltin, which LOOKS
+# UP 'iter' in builtins.__dict__, and the test plants a key there whose __eq__
+# exhausts the iterator DURING that lookup -- proving the C code re-reads its
+# it_seq pointer afterwards instead of trusting a stale one.  Grail cannot
+# stage either half of it:
+#   * builtin NAMES are resolved by codegen dispatch, never by a dict lookup.
+#     MEASURED: ``iter is builtins.iter'' is False, and rebinding
+#     builtins.iter does not change what ``iter(x)'' calls.  So nothing inside
+#     __reduce__ can run the planted __eq__, and every assertion here requires
+#     the iterator to have been exhausted BY that lookup ((iter, ("",)) rather
+#     than (iter, ("xyz",))).  No amount of __reduce__ support changes this.
+#   * a module __dict__ is a VIEW over dynamic instance variables, which are
+#     keyed by Symbol, so the planted non-string key cannot be stored at all.
+# The two REAL gaps this test also needs are recorded here so the skip hides
+# neither.  (1) PyModuleDict had no __delitem__, so ``del builtins_dict[name]''
+# -- the test's first statement -- raised "does not support item deletion";
+# fixed, with PythonTests ModuleDictItemTestCase.  (2) Grail's iterators still
+# have no __reduce__ (they answer the '___NotImplemented___' marker), the same
+# unimplemented iterator-pickling feature noted for set/frozenset above.
+# Landing __reduce__ does NOT unskip this test: the first bullet still holds.
+test.test_iter|TestCase.test_reduce_mutating_builtins_iter|CPython C-internal (gh-101765): needs a builtins.__dict__ lookup INSIDE __reduce__ to fire a planted non-string key's __eq__; Grail resolves builtins by dispatch (measured: iter is not builtins.iter) and cannot key a namespace dict by a non-string
 
 # --- test_enum: _simple_enum / _test_simple_enum (CPython-internal helpers) ---
 # This test exercises two UNDERSCORE-prefixed, CPython-internal enum helpers:

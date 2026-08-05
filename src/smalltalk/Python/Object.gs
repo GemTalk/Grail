@@ -199,10 +199,20 @@ ___unpackSequence___
 	A BoundMethod carries a PEP-585 generic-alias __getitem__ (``list[int]'',
 	``Callable[..., T]'') that is NOT the sequence protocol, so it is excluded
 	from the fast path -- ``a, b = len'' then materializes via __iter__ and
-	raises TypeError (not iterable), like CPython's iter(len)."
+	raises TypeError (not iterable), like CPython's iter(len).
+
+	A MAPPING is excluded for the same reason, and it is not a corner case:
+	``a, b = {1: 'x', 2: 'y'}'' raised ``KeyError: 0''.  A dict owns a REAL
+	__getitem__, so it took the fast path, but that __getitem__ is keyed, not
+	positional -- the unpack then asked for key 0.  CPython unpacks a mapping
+	through __iter__ like everything else, yielding its KEYS.  ``keys'' is the
+	discriminator because it is the same duck-type marker Python itself uses
+	for mapping-ness (``dict(obj)'', ``**obj''), so UserDict and any custom
+	Mapping are covered, while no sequence owns it."
 
 	((self ___hasProtocol___: '__getitem__')
-		@env0:and: [(self @env0:isKindOf: BoundMethod) @env0:not])
+		@env0:and: [((self @env0:isKindOf: BoundMethod) @env0:not)
+			@env0:and: [(self ___hasProtocol___: 'keys') @env0:not]])
 		ifTrue: [^ self].
 	^ list @env1:__new__: self
 %

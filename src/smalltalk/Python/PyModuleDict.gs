@@ -217,6 +217,25 @@ items
 
 category: 'Grail-Python-Protocol'
 method: PyModuleDict
+__delitem__: key
+	"``del mod.__dict__[name]''.  A module __dict__ is an ordinary mutable
+	dict in CPython, so deletion is part of its contract; without this
+	method the generic fallback in Object>>_doesNotUnderstand:... raised
+	``'PyModuleDict' object does not support item deletion'' for every
+	module, ``del builtins.__dict__['iter']'' included (test_iter
+	test_reduce_mutating_builtins_iter).  pop: already removes from
+	whichever store holds the binding -- dynamic instVar first, then dict
+	slot -- and raises KeyError when absent, which is exactly CPython's
+	behaviour, so this is only the dunder spelling of it.  The key is
+	validated first so a non-string raises the same catchable TypeError the
+	write path does, instead of MNUing on ``asSymbol'' inside pop:."
+
+	self ___keySymbolFor___: key.
+	self pop: key
+%
+
+category: 'Grail-Python-Protocol'
+method: PyModuleDict
 pop: key
 	"Remove and return; KeyError when absent.  Removes from whichever
 	store holds the binding (dynamic instVar first, then dict slot)."

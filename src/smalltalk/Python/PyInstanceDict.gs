@@ -174,8 +174,29 @@ __getitem__: key
 
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
+___keySymbolFor___: key
+	"A namespace dict is backed by DYNAMIC INSTANCE VARIABLES, which are
+	keyed by Symbol, so every key has to be a string.  CPython's instance
+	and module dicts are ordinary dicts and accept any hashable key, so this
+	is a representation limit of Grail's namespaces rather than a Python
+	rule -- but it has to surface as a CATCHABLE TypeError.  Sending
+	``asSymbol'' to a non-string raised ``a CustomStr does not understand
+	#asSymbol'', a Smalltalk MNU that Python's ``except'' cannot catch and
+	that can take the whole session down from inside a builtin callback
+	(test_iter's test_reduce_mutating_builtins_iter reaches it with
+	``builtins.__dict__[CustomStr('iter')] = ...'').  The message is
+	CPython's own wording for a non-string name in a namespace."
+
+	(key @env0:isKindOf: CharacterCollection) @env0:ifFalse: [
+		TypeError ___signal___: ('attribute name must be string, not '''
+			@env0:, key @env0:class @env0:name @env0:asString @env0:, '''')].
+	^ key @env0:asSymbol
+%
+
+category: 'Grail-Python-Protocol'
+method: PyInstanceDict
 __setitem__: key _: value
-	source @env0:dynamicInstVarAt: key @env0:asSymbol put: value.
+	source @env0:dynamicInstVarAt: (self ___keySymbolFor___: key) put: value.
 	^ value
 %
 
