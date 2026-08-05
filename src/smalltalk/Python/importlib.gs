@@ -153,8 +153,30 @@ grailDir
 	SESSION-LOCAL (SessionTemps): the path differs per host/checkout,
 	and the old classInstVar write dirtied the committed importlib
 	class on every session's setup (multi-user commit conflicts).
-	The classInstVar declaration remains but is unused."
-	^ SessionTemps current at: #GrailDir otherwise: nil
+	The classInstVar declaration remains but is unused.
+
+	RESOLVED LAZILY (___resolveGrailDir___) when no session has set it, so
+	a session that never sends ``grailDir:'' can still import.  This used to
+	answer nil, and ___moduleNameToPath___: bails on nil BEFORE touching the
+	filesystem -- so every .py-backed module raised ``No module named X''
+	while the Smalltalk-implemented ones (os, sys, ...) kept working, which
+	reads as a missing stdlib module rather than an unconfigured session.
+	``PythonTestCase suite run'' in a bare topaz login hit exactly that, on
+	the `import shutil` in ShutilTestCase>>setUp -- one line after an
+	`import os` that succeeded.
+
+	The runner scripts (tests/scripts/*.gs, scripts/debugTests.gs,
+	scripts/deployFrameworks.gs, ...) all still set this explicitly and
+	their write always wins; the fallback is only for a session that did
+	not.  Memoised, so the probing happens at most once per session."
+
+	| temps d |
+	temps := SessionTemps current.
+	d := temps at: #GrailDir otherwise: nil.
+	d ifNotNil: [^ d].
+	d := self ___resolveGrailDir___.
+	d ifNotNil: [temps at: #GrailDir put: d].
+	^ d
 %
 
 category: 'Grail-Configuration'
@@ -162,6 +184,89 @@ classmethod: importlib
 grailDir: aString
 	"Set the absolute path to the Grail project directory (session-local)."
 	SessionTemps current at: #GrailDir put: aString
+%
+
+category: 'Grail-Configuration'
+classmethod: importlib
+___resolveGrailDir___
+	"Best guess at the checkout root for a session that never sent
+	grailDir:.  Two candidates, in preference order:
+
+	  1. GRAIL_DIR from the GEM's environment.  install.sh exports it
+	     (derived from its own location), and a LINKED gem IS the topaz
+	     process, so it sees the value exported by the shell.  An RPC gem
+	     inherits the NetLDI's environment instead -- which is why
+	     tests/scripts/runConcurrentImportRpc.gs templates the path into
+	     its script text rather than reading the variable.
+	  2. The directory topaz was launched from.
+
+	A candidate that actually holds src/python/stdlib beats one that does
+	not, so a stale GRAIL_DIR naming another checkout (this host has more
+	than one) or a directory that has since moved cannot outrank a correct
+	CWD.  If neither validates, the first non-nil candidate is answered
+	anyway -- never worse than the nil this used to return, and
+	___moduleNotFoundMessage___: then turns the resulting import failure
+	into a configuration message instead of a bogus missing-module one.
+
+	No ``^'' out of the do: block: this is reachable from the CPython
+	shim's PyInit user-action callback by way of ___moduleNameToPath___:,
+	where a non-local return from a real block raises RT_ERR_CANT_RETURN
+	(2079).  Same constraint, and same workaround, as that method."
+
+	| candidates result |
+	candidates := OrderedCollection new.
+	(System gemEnvironmentVariable: 'GRAIL_DIR') ifNotNil: [:e |
+		e isEmpty ifFalse: [candidates add: e]].
+	GsFile serverCurrentDirectory ifNotNil: [:c |
+		c isEmpty ifFalse: [candidates add: c]].
+	result := nil.
+	candidates do: [:each |
+		(result isNil and: [self ___looksLikeGrailDir___: each])
+			ifTrue: [result := each]].
+	(result isNil and: [candidates isEmpty not])
+		ifTrue: [result := candidates first].
+	^ result
+%
+
+category: 'Grail-Configuration'
+classmethod: importlib
+___looksLikeGrailDir___: aPath
+	"Could aPath serve as grailDir -- does it hold the bundled stdlib that
+	___moduleNameToPath___: searches?  Used both to choose between
+	candidates and to tell a MISCONFIGURED session from a genuinely missing
+	module.
+
+	existsOnServer: answers nil (not false) when the probe itself errors, so
+	compare == true and let nil route to false -- the same guard
+	___moduleNameToPath___: applies to its own probes."
+
+	| probe |
+	aPath isNil ifTrue: [^ false].
+	probe := GsFile existsOnServer: aPath , '/src/python/stdlib'.
+	^ probe == true
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___moduleNotFoundMessage___: aName
+	"CPython's ``No module named 'x''' wording, plus a configuration hint
+	when this session's Grail directory cannot satisfy ANY filesystem
+	import.
+
+	The hint is appended only when grailDir holds no src/python/stdlib -- in
+	which case no .py-backed module can possibly be found and the bare
+	CPython wording actively misleads, naming whichever module happened to
+	be imported first.  A correctly configured session gets the CPython text
+	unchanged, so conformance tests that match on it are unaffected."
+
+	| msg gd |
+	msg := 'No module named ''' , aName , ''''.
+	gd := self grailDir.
+	(self ___looksLikeGrailDir___: gd) ifTrue: [^ msg].
+	^ msg , ' -- and this session''s Grail directory (' , gd printString ,
+		') holds no src/python/stdlib, so NO .py-backed module can be found.' ,
+		'  Send `importlib grailDir: ''<checkout>''` first (every runner script' ,
+		' does), or export GRAIL_DIR, or launch topaz from the checkout root.'
 %
 
 category: 'Grail-Demo'
@@ -2673,8 +2778,13 @@ ___import__: positional kw: kwargs
 				self @env0:class @env0:registerModule: absoluteName with: result.
 			].
 			result ifNil: [
-				"Module not found in filesystem either"
-				ModuleNotFoundError ___signal___: (('No module named ''' @env0:, absoluteName) @env0:, '''')
+				"Module not found in filesystem either.  The message is built
+				class-side so it can append a configuration hint when this
+				session's grailDir could not satisfy ANY .py import -- the
+				bare CPython wording blames whichever module was imported
+				first (typically the first non-Smalltalk one)."
+				ModuleNotFoundError ___signal___:
+					(self @env0:class @env0:___moduleNotFoundMessage___: absoluteName)
 			]
 		]
 	].
