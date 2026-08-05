@@ -99,24 +99,6 @@ on: aCollection
 
 category: 'Grail-other'
 method: PrettyWriteStream
-removeTrailingNone
-  "Aug 01 , 2026  , no senders found"
-	"Remove trailing 'None.' followed by newline from the stream.
-	This is called before printing a new statement to clean up the
-	None that AssignAst adds (which is only needed for the last statement)."
-
-	| contents suffix newSize |
-	contents := self contents.
-	suffix := 'None.' , (Unicode7 with: Character lf).
-	(contents endsWith: suffix) ifTrue: [
-		newSize := contents size - suffix size.
-		self position: newSize.
-		collection := contents copyFrom: 1 to: newSize.
-	].
-%
-
-category: 'Grail-other'
-method: PrettyWriteStream
 tab
 	"Adds a tab to the output stream, but avoids our #'nextPut:' method which calls this method (and would otherwise create an infinite recursion)."
 
