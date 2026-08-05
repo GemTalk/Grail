@@ -59,7 +59,7 @@ different rows and merges cleanly.
 | test.test_index | OK | 55 | 0 | 0 | 0 |  |
 | test.test_baseexception | OK | 11 | 0 | 0 | 1 |  |
 | test.test_listcomps | ERROR | 60 | 8 | 23 | 0 |  |
-| test.test_property | ERROR | 31 | 13 | 8 | 0 |  |
+| test.test_property | OK | 31 | 0 | 0 | 5 |  |
 | test.test_copy | ERROR | 81 | 28 | 15 | 0 |  |
 | test.test_scope | ERROR | 41 | 6 | 9 | 0 |  |
 | test.test_yield_from | ERROR | 43 | 18 | 12 | 0 |  |

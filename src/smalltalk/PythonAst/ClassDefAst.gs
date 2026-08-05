@@ -265,7 +265,18 @@ printSmalltalkRuntimeOn: aStream
 					ifFalse: [
 						s := PrettyWriteStream on: Unicode7 new.
 						def generateMethodSourceOn: s.
-						methodSources add: def name asString -> s contents.
+						def isDeleterDecorated
+							ifTrue: [
+								"A property DELETER (``@x.deleter def x(self)'') is unary
+								like the getter; emitting it as ``x'' would clobber the
+								getter.  Redirect to ``___propDeleter_x'', invoked by
+								object>>___pyAttrDelete___ for ``del obj.x''."
+								methodSources add: ('___propDeleter_' , def name asString)
+									-> (self ___redirectUnarySelectorIn: s contents
+										from: def name asString
+										to: ('___propDeleter_' , def name asString))]
+							ifFalse: [
+								methodSources add: def name asString -> s contents].
 						"Keyword-call companion for a simple-positional instance
 						method: a varargs ``_name:kw:'' forwarder so ``obj.m(a,
 						kw=v)'' binds by name rather than DNU-ing (django calls
@@ -739,7 +750,18 @@ printSmalltalkRuntimeOn: aStream
 			nextPutAll: nested name asString;
 			nextPutAll: ''' put: ';
 			nextPutAll: nested name asString;
-			nextPutAll: ' ] value.'; lf.
+			nextPutAll: '.'; lf.
+			"Record the nested class's DOTTED __qualname__ (``Outer.Inner'') from
+			the enclosing class's own qualname, so CPython-style messages (``property
+			of 'Outer.cls' object ...'') report the lexical nesting Grail does not
+			otherwise track."
+			aStream nextPutAll: nested name asString;
+				nextPutAll: ' @env1:___classHolderAttrStore___: #''___qualname___'' put: (';
+				nextPutAll: name;
+				nextPutAll: ' @env1:__qualname__ @env0:, ''.';
+				nextPutAll: nested name asString;
+				nextPutAll: ''').'; lf.
+			aStream nextPutAll: ' ] value.'; lf.
 	].
 	[
 		"Python executes a class body top-to-bottom: a name is class-
@@ -825,6 +847,22 @@ printSmalltalkRuntimeOn: aStream
 					p < pos ifTrue: [bound add: nm]].
 				CallAst classBodyBoundNames: bound.
 				self emitClassBodyIf: stmt on: aStream]].
+		"A class-body statement whose target is an ATTRIBUTE or SUBSCRIPT
+		(``cls.foo = property()'', ``Inner.x = 1'') -- not a bare NAME, so it is
+		not a class attribute and was previously DROPPED.  CPython runs it at
+		class-definition time, mutating a nested class or other object; emit it as
+		a runtime statement here (after nested classes are built, so the target
+		name resolves).  test_propertys PropertyUnreachableAttributeNoName does
+		``cls.foo = property()`` at class-body level."
+		body body doWithIndex: [:stmt :pos |
+			(self ___isClassBodyAttributeAssign___: stmt) ifTrue: [
+				| bound |
+				bound := IdentitySet new.
+				firstBinding keysAndValuesDo: [:nm :p |
+					p < pos ifTrue: [bound add: nm]].
+				CallAst classBodyBoundNames: bound.
+				stmt printSmalltalkOn: aStream.
+				aStream lf]].
 	] ensure: [
 		"RESTORE (not hardcode-off) the body-emit flags: a NESTED class
 		emits inside the OUTER class's attr-value section, and clearing
@@ -1566,6 +1604,24 @@ printSymbolArray: names on: aStream
 
 category: 'Grail-code generation'
 method: ClassDefAst
+___redirectUnarySelectorIn: sourceString from: oldName to: newName
+	"Rewrite the leading (unary) selector of a generated method source from
+	oldName to newName, keeping the body verbatim.  Used to move a property
+	deleter def off the plain name (which the getter owns) onto a private
+	``___propDeleter_x'' selector.  A method compiled from ``def x(self)'' has
+	no parameters after the stripped self, so its source begins with the bare
+	selector token followed by whitespace/newline -- only that leading token is
+	replaced."
+
+	((sourceString size >= oldName size)
+		and: [(sourceString copyFrom: 1 to: oldName size) = oldName])
+		ifTrue: [
+			^ newName , (sourceString copyFrom: oldName size + 1 to: sourceString size)].
+	^ sourceString
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
 emitCompileMethodOn: classVarName source: sourceString category: categoryString env: envId classSide: classSideBool onStream: aStream
 	"Emit a `<class> [class] ___compileMethod: '...' category: '...'.`
 	statement that calls the Class >> ___compileMethod:category:
@@ -2168,6 +2224,30 @@ slotsDeclaredStrict
 			ifTrue: [elt value = '__dict__' ifTrue: [hasDict := true]]
 			ifFalse: [^ false]].
 	^ hasDict not
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___isClassBodyAttributeAssign___: stmt
+	"True for a class-body assignment ``<NestedClass>.attr = value'' -- a runtime
+	mutation of a NESTED CLASS that CPython performs at class-definition time and
+	Grail otherwise drops (test_property's PropertyUnreachableAttributeNoName does
+	``cls.foo = property()'').
+
+	Deliberately NARROW: only when the mutated object is a class defined in THIS
+	class body.  A method-name target (``acreate_user.alters_data = True'',
+	Django) is NOT a class-body value -- emitting it would resolve the method name
+	to nothing and NameError -- so it stays dropped, as before.  Restricted to a
+	single attribute target for the same reason (a plain, resolvable statement)."
+
+	| tgt |
+	(stmt isKindOf: AssignAst) ifFalse: [^ false].
+	stmt targets size = 1 ifFalse: [^ false].
+	tgt := stmt targets first.
+	(tgt isKindOf: AttributeAst) ifFalse: [^ false].
+	(tgt value isKindOf: NameAst) ifFalse: [^ false].
+	^ self body body anySatisfy: [:s |
+		(s isKindOf: ClassDefAst) and: [s name asString = tgt value id asString]]
 %
 
 category: 'Grail-Class Compilation'

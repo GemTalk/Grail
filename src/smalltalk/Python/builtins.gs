@@ -2520,6 +2520,43 @@ property: fn
 
 category: 'Grail-Built-in Functions'
 method: builtins
+property
+	"``property()'' called through the builtins BoundMethod value (``p =
+	property; p()'').  The bare NAME ``property'' resolves to this builtins
+	method, not the class, so a call THROUGH A VARIABLE lands here rather than
+	on the class constructor -- and every arity must therefore be served here,
+	not just the 1-arg form above (test_property test_issue41287 iterates ``for
+	ps in property, PropertySub, ...: ps(getter, None, None, doc)'')."
+
+	^ PropertyDescriptor @env1:__new__
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+property: fg _: fs
+	"``property(fget, fset)'' through the builtins BoundMethod value."
+
+	^ PropertyDescriptor @env1:__new__: fg _: fs
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+property: fg _: fs _: fd
+	"``property(fget, fset, fdel)'' through the builtins BoundMethod value."
+
+	^ PropertyDescriptor @env1:__new__: fg _: fs _: fd
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+property: fg _: fs _: fd _: dc
+	"``property(fget, fset, fdel, doc)'' through the builtins BoundMethod value."
+
+	^ PropertyDescriptor @env1:__new__: fg _: fs _: fd _: dc
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 delattr: anObject _: aName
 	"Python builtin delattr(obj, name).  Dispatches through the
 	``__delattr__'' protocol so user overrides intercept.  Default
