@@ -1279,27 +1279,101 @@ ___fixedDigits___: absValue precision: precision
 
 category: 'Grail-Format Spec Engine'
 method: builtins
+___decExp10Of___: absValue
+	"The EXACT decimal exponent of a non-negative Float: the integer e with
+	10^e <= absValue < 10^(e+1) (0 for zero).  Derived from digit COUNTS of the
+	exact rational value, so unlike a loop of float divisions it cannot drift."
+
+	| fr num den k |
+	absValue @env0:= 0 ifTrue: [^ 0].
+	fr := absValue @env0:asFraction.
+	num := fr @env0:numerator.
+	den := fr @env0:denominator.
+	"value >= 1: floor(value) has d digits exactly when 10^(d-1) <= value < 10^d."
+	num @env0:>= den ifTrue: [
+		^ (num @env0:// den) @env0:printString @env0:size @env0:- 1].
+	"value < 1: floor(1/value) having k digits narrows the exponent to -k or
+	1-k (10^-k < value <= 10^(1-k)); one exact comparison picks between them."
+	k := (den @env0:// num) @env0:printString @env0:size.
+	^ ((num @env0:* (10 @env0:raisedTo: k @env0:- 1)) @env0:>= den)
+		ifTrue: [1 @env0:- k]
+		ifFalse: [0 @env0:- k]
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___sciParts___: absValue precision: precision
+	"Round a non-negative Float to `precision` + 1 significant decimal digits
+	EXACTLY, answering { mantissaString. exponent } -- 'M.MMM' (bare 'M' when
+	precision is 0) and the power of ten it multiplies.  Round-half-to-even on
+	the exact binary value, matching CPython's correctly-rounded dtoa.
+
+	Also used by %g/%G, which must decide fixed-vs-scientific on the exponent
+	AFTER rounding.
+
+	This replaces normalising the mantissa into [1, 10) by repeated float
+	division/multiplication, which was lossy in BOTH directions and corrupted
+	the digits before rounding ever ran:
+	  * 1505.0 / 10 / 10 / 10 lands just ABOVE the exact 1.505, so '%.2e'
+	    rounded up to '1.51e+03' where CPython -- rounding an exact tie to
+	    even -- gives '1.50e+03'.
+	  * 0.1 * 10 is exactly 1.0, so '%.17e' of 0.1 printed
+	    '1.00000000000000000e-01' instead of '1.00000000000000006e-01'.  Every
+	    digit of information was gone before rounding began."
+
+	| exp fr num den shift sn sd q r qs mstr |
+	exp := self ___decExp10Of___: absValue.
+	fr := absValue @env0:asFraction.
+	num := fr @env0:numerator.
+	den := fr @env0:denominator.
+	"Scale so the digits to keep become an integer: value * 10^(precision - exp)."
+	shift := precision @env0:- exp.
+	shift @env0:>= 0
+		ifTrue: [sn := num @env0:* (10 @env0:raisedTo: shift). sd := den]
+		ifFalse: [sn := num. sd := den @env0:* (10 @env0:raisedTo: 0 @env0:- shift)].
+	q := sn @env0:// sd.
+	r := sn @env0:- (q @env0:* sd).
+	((r @env0:* 2) @env0:> sd) ifTrue: [q := q @env0:+ 1]
+		ifFalse: [((r @env0:* 2) @env0:= sd) ifTrue: [(q @env0:even) ifFalse: [q := q @env0:+ 1]]].
+	qs := q @env0:printString.
+	"Rounding can carry into an extra digit (9.99 -> 10.0); renormalize.  The
+	carried value is exactly 10^(precision+1), so truncating is exact."
+	qs @env0:size @env0:> (precision @env0:+ 1) ifTrue: [
+		exp := exp @env0:+ 1.
+		qs := qs @env0:copyFrom: 1 to: precision @env0:+ 1].
+	"Only a zero value can come out SHORT (every other q spans exactly
+	precision+1 digits by construction)."
+	[qs @env0:size @env0:< (precision @env0:+ 1)] @env0:whileTrue: [qs := '0' @env0:, qs].
+	mstr := precision @env0:= 0
+		ifTrue: [qs]
+		ifFalse: [(qs @env0:copyFrom: 1 to: 1) @env0:, '.'
+			@env0:, (qs @env0:copyFrom: 2 to: qs @env0:size)].
+	^ { mstr. exp }
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___sciDigitsFromParts___: parts upper: upper
+	"Assemble 'M.MMMe+EE' from a ___sciParts___ pair.  The exponent always
+	carries a sign and at least two digits, as in CPython."
+
+	| mstr exp estr |
+	mstr := parts @env0:at: 1.
+	exp := parts @env0:at: 2.
+	estr := exp @env0:abs @env0:printString.
+	estr @env0:size @env0:< 2 ifTrue: [estr := '0' @env0:, estr].
+	estr := (exp @env0:< 0 ifTrue: ['-'] ifFalse: ['+']) @env0:, estr.
+	^ mstr @env0:, (upper ifTrue: ['E'] ifFalse: ['e']) @env0:, estr
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
 ___sciDigits___: absValue precision: precision upper: upper
 	"Scientific-notation digit string for a non-negative Float:
 	'M.MMMe+EE'."
 
-	| m exp mstr estr marker |
-	m := absValue.
-	exp := 0.
-	m @env0:= 0 ifFalse: [
-		[m @env0:>= 10] @env0:whileTrue: [m := m @env0:/ 10. exp := exp @env0:+ 1].
-		[m @env0:< 1] @env0:whileTrue: [m := m @env0:* 10. exp := exp @env0:- 1]].
-	mstr := self ___fixedDigits___: m precision: precision.
-	"Rounding can push the mantissa to 10.000...; renormalize."
-	(mstr @env0:size @env0:>= 2 and: [(mstr @env0:at: 1) @env0:= $1 and: [(mstr @env0:at: 2) @env0:= $0]]) ifTrue: [
-		(mstr @env0:copyFrom: 1 to: 2) @env0:= '10' ifTrue: [
-			m := m @env0:/ 10. exp := exp @env0:+ 1.
-			mstr := self ___fixedDigits___: m precision: precision]].
-	estr := exp @env0:abs @env0:printString.
-	estr @env0:size @env0:< 2 ifTrue: [estr := '0' @env0:, estr].
-	estr := (exp @env0:< 0 ifTrue: ['-'] ifFalse: ['+']) @env0:, estr.
-	marker := upper ifTrue: ['E'] ifFalse: ['e'].
-	^ mstr @env0:, marker @env0:, estr
+	^ self ___sciDigitsFromParts___: (self ___sciParts___: absValue precision: precision)
+		upper: upper
 %
 
 category: 'Grail-Format Spec Engine'
@@ -1333,7 +1407,7 @@ ___formatFloatValue___: value parsed: p
 	"Format a Float per a parsed spec (types f F e E g G % and the
 	bare-precision form)."
 
-	| fill align sign alt width grouping precision type neg a digits signStr body suffix exp10 probe fracGrouping |
+	| fill align sign alt width grouping precision type neg a digits signStr body suffix exp10 sciParts fracGrouping |
 	fill := p @env0:at: 1. align := p @env0:at: 2. sign := p @env0:at: 3.
 	alt := p @env0:at: 4. width := p @env0:at: 5. grouping := p @env0:at: 6.
 	precision := p @env0:at: 7. type := p @env0:at: 8. fracGrouping := p @env0:at: 9.
@@ -1387,11 +1461,14 @@ ___formatFloatValue___: value parsed: p
 			ifFalse: [
 				precision == nil ifTrue: [precision := 6].
 				precision @env0:= 0 ifTrue: [precision := 1].
-				exp10 := 0.
-				probe := a.
-				probe @env0:= 0 ifFalse: [
-					[probe @env0:>= 10] @env0:whileTrue: [probe := probe @env0:/ 10. exp10 := exp10 @env0:+ 1].
-					[probe @env0:< 1] @env0:whileTrue: [probe := probe @env0:* 10. exp10 := exp10 @env0:- 1]].
+				"CPython's %g renders with '%.<p-1>e' FIRST and then picks
+				notation from the exponent it got, so the decision must use the
+				exponent AFTER rounding.  Deciding on the pre-rounding one made
+				'%.3g' of 999.9 print '1000': the exponent 2 chose fixed
+				notation, while rounding to three significant digits actually
+				yields 1.00e+03 -- exponent 3 -- and CPython prints '1e+03'."
+				sciParts := self ___sciParts___: a precision: precision @env0:- 1.
+				exp10 := sciParts @env0:at: 2.
 				((exp10 @env0:>= -4) @env0:and: [exp10 @env0:< (type == nil ifTrue: [precision @env0:- 1] ifFalse: [precision])])
 					ifTrue: [
 						digits := self ___fixedDigits___: a precision: (precision @env0:- 1 @env0:- exp10 @env0:max: 0).
@@ -1400,7 +1477,7 @@ ___formatFloatValue___: value parsed: p
 						-> '0.2000', not '0.2')."
 						alt ifFalse: [digits := self ___stripTrailingZeros___: digits]]
 					ifFalse: [
-						digits := self ___sciDigits___: a precision: precision @env0:- 1 upper: type @env0:= $G.
+						digits := self ___sciDigitsFromParts___: sciParts upper: type @env0:= $G.
 						alt ifFalse: [digits := self ___stripTrailingZeros___: digits]]]]].
 		digits := digits @env0:, suffix.
 		"'#' also forces a decimal point even with zero fraction digits
@@ -1500,6 +1577,88 @@ ___formatStrValue___: value parsed: p
 
 category: 'Grail-Format Spec Engine'
 method: builtins
+___isPrintfConversion___: conv
+	"Is ``conv'' a conversion character printf-style %-formatting accepts?
+	``%'' is not listed: the caller consumes a literal ``%%'' before asking."
+
+	^ #($s $r $a $c $d $i $u $o $x $X $e $E $f $F $g $G) @env0:includes: conv
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___printfCharBody___: value
+	"``%c'' operand for str %-formatting: an int code point, or a ONE-character
+	string.  The range check is not cosmetic -- an out-of-range code point used
+	to reach Character class>>codePoint:, whose OutOfRange is a SMALLTALK error
+	that Python ``except'' cannot catch, so ``'%c' % -1'' aborted the whole
+	module instead of raising OverflowError (test_format test_str_format).
+	The other shapes fell through to ``value asString'', which turned
+	``'%c' % 3.14'' into ``3.14'' -- four characters from a %c."
+
+	| iv |
+	(value isKindOf: CharacterCollection) ifTrue: [
+		value @env0:size @env0:= 1 ifTrue: [^ value @env0:asString].
+		TypeError ___signal___:
+			('%c requires an int or a unicode character, not a string of length '
+				@env0:, value @env0:size @env0:printString)].
+	iv := nil.
+	(value isKindOf: Integer) ifTrue: [iv := value]
+	ifFalse: [
+		(value isKindOf: Boolean) ifTrue: [iv := value ifTrue: [1] ifFalse: [0]]
+		ifFalse: [
+			"An int SUBCLASS (or any __index__ provider) is accepted, as in
+			CPython; a float is not, since it has no __index__."
+			(value ___respondsTo___: #'__index__') ifTrue: [iv := value __index__]]].
+	iv @env0:isNil ifTrue: [
+		TypeError ___signal___: ('%c requires an int or a unicode character, not '
+			@env0:, (self ___pyTypeNameOf___: value))].
+	((iv @env0:>= 0) @env0:and: [iv @env0:<= 16r10FFFF]) ifFalse: [
+		OverflowError ___signal___: '%c arg not in range(0x110000)'].
+	^ String @env0:with: (Character @env0:codePoint: iv @env0:asInteger)
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___printfAsFloat___: value
+	"``%e/%E/%f/%F/%g/%G'' operand for str %-formatting.  A bare
+	``value asFloat'' silently accepted a STRING, because GemStone's
+	String>>asFloat PARSES one -- so ``'%g' % '1''' produced ``1'' where
+	CPython raises TypeError (test_format test_str_format)."
+
+	(value isKindOf: Float) ifTrue: [^ value].
+	(value isKindOf: Integer) ifTrue: [^ value @env0:asFloat].
+	(value isKindOf: Boolean) ifTrue: [^ value ifTrue: [1.0] ifFalse: [0.0]].
+	(value ___respondsTo___: #'__float__') ifTrue: [^ (value __float__) @env0:asFloat].
+	(value ___respondsTo___: #'__index__') ifTrue: [^ (value __index__) @env0:asFloat].
+	TypeError ___signal___: ('must be real number, not '
+		@env0:, (self ___pyTypeNameOf___: value))
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___printfAsInteger___: value conv: conv
+	"``%d/%i/%u/%o/%x/%X'' operand for str %-formatting.  As with
+	___printfAsFloat___, the bare ``value asInteger'' it replaces PARSED a
+	string, so ``'%d' % '1''' answered ``1''.  d/i/u take any real number
+	(``'%d' % 3.7'' truncates, as in CPython); o/x/X require an integer."
+
+	(value isKindOf: Integer) ifTrue: [^ value].
+	(value isKindOf: Boolean) ifTrue: [^ value ifTrue: [1] ifFalse: [0]].
+	((conv @env0:= $d) @env0:or: [(conv @env0:= $i) @env0:or: [conv @env0:= $u]]) ifTrue: [
+		(value isKindOf: Float) ifTrue: [^ value @env0:truncated].
+		(value ___respondsTo___: #'__index__') ifTrue: [^ value __index__].
+		(value ___respondsTo___: #'__int__') ifTrue: [^ value __int__].
+		TypeError ___signal___: ('%' @env0:, (String @env0:with: conv)
+			@env0:, ' format: a real number is required, not '
+			@env0:, (self ___pyTypeNameOf___: value))].
+	(value ___respondsTo___: #'__index__') ifTrue: [^ value __index__].
+	TypeError ___signal___: ('%' @env0:, (String @env0:with: conv)
+		@env0:, ' format: an integer is required, not '
+		@env0:, (self ___pyTypeNameOf___: value))
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
 ___printfConvert___: value conv: conv flags: flags width: width precision: precision
 	"Render one printf %-field for str.__mod__: apply flags (- + space # 0),
 	width and precision per the conversion char, reusing the str.format()
@@ -1552,10 +1711,7 @@ ___printfConvert___: value conv: conv flags: flags width: width precision: preci
 		conv @env0:= $s ifTrue: [body := (self str: value) @env0:asString].
 		conv @env0:= $r ifTrue: [body := (self repr: value) @env0:asString].
 		conv @env0:= $a ifTrue: [body := (self ascii: value) @env0:asString].
-		conv @env0:= $c ifTrue: [
-			(value isKindOf: Integer)
-				ifTrue: [body := String @env0:with: (Character @env0:codePoint: value @env0:asInteger)]
-				ifFalse: [body := value @env0:asString]].
+		conv @env0:= $c ifTrue: [body := self ___printfCharBody___: value].
 		"precision truncates s/r/a (not c)."
 		(conv @env0:~= $c @env0:and: [
 			precision ~~ nil @env0:and: [body @env0:size @env0:> precision]]) ifTrue: [
@@ -1579,10 +1735,10 @@ ___printfConvert___: value conv: conv flags: flags width: width precision: preci
 			precision.
 			conv.
 			nil "fracGrouping: printf-style '%' formatting has no grouping syntax" }.
-		^ self ___formatFloatValue___: value @env0:asFloat parsed: p].
+		^ self ___formatFloatValue___: (self ___printfAsFloat___: value) parsed: p].
 
 	"--- integer conversions: d i u o x X ---"
-	iv := value @env0:asInteger.
+	iv := self ___printfAsInteger___: value conv: conv.
 	neg := iv @env0:< 0.
 	absval := iv @env0:abs.
 	prefix := ''.
