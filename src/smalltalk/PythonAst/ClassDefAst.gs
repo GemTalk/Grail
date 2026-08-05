@@ -948,6 +948,9 @@ printSmalltalkRuntimeOn: aStream
 	the superclass chain consulting.  A method compiles to a Smalltalk METHOD, not
 	a block, so it cannot carry the def-time cascade a nested def does."
 	self emitMethodSignatureTableOn: aStream className: name.
+	"And the receiver name that table drops, so the UNBOUND read can put it
+	back -- CPython's signature(Cls.method) shows ``self''."
+	self emitMethodReceiverTableOn: aStream className: name.
 	"And the same for docstrings.  A class-body def compiles to a Smalltalk
 	METHOD, so it cannot carry the def-time ``___pyNamed___:doc:'' stamp a
 	nested def does -- which left every method inheriting Object's own
@@ -2387,6 +2390,47 @@ emitMethodSignatureTableOn: aStream className: aClassName
 		def emitSignatureSpecOn: src
 			skipReceiver: (def isKindOf: StaticFunctionDefAst) not.
 		src nextPut: $;].
+	src nextPutAll: ' @env0:yourself)'.
+	self
+		emitCompileMethodOn: aClassName
+		source: src contents
+		category: 'Grail-Signatures'
+		env: 1
+		classSide: true
+		onStream: aStream
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitMethodReceiverTableOn: aStream className: aClassName
+	"Compile a class-side ``___methodReceiverTable___'' -- method-name -> the
+	name of the receiver parameter the SIGNATURE table drops (``self'',
+	``cls'', or whatever the def wrote).
+
+	ADDITIVE on purpose: ___methodSignatureTable___ stays byte-identical and
+	bound-shaped, which is what a bound access reports, and the unbound read
+	reconstructs CPython's form by prepending this.  Emitting the receiver into
+	the spec itself and stripping it at every bound read would have needed a
+	staticness marker in that table as well, and would have changed what every
+	existing reader sees.
+
+	A @staticmethod has no receiver to record, so it is skipped and its unbound
+	read stays exactly as it is."
+
+	| withReceiver src |
+	withReceiver := self ___allFunctionDefs___ select: [:def |
+		def isOverloadStub not
+			and: [def hasSignatureSpec
+			and: [(def isKindOf: StaticFunctionDefAst) not
+			and: [def ___receiverParamName___ notNil]]]].
+	withReceiver isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___methodReceiverTable___'; lf.
+	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+	withReceiver do: [:def |
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString;
+			nextPutAll: ''' put: '''; nextPutAll: def ___receiverParamName___;
+			nextPutAll: ''''; nextPut: $;].
 	src nextPutAll: ' @env0:yourself)'.
 	self
 		emitCompileMethodOn: aClassName

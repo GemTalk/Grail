@@ -1362,6 +1362,28 @@ hasAnnotations
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___receiverParamName___
+	"The name of the parameter that ClassDefAst's signature table DROPS --
+	``self'' for an instance method, ``cls'' for a classmethod, whatever the
+	def actually wrote.  nil when the def declares no positional parameter.
+
+	The table is bound-shaped on purpose (a bound access supplies the
+	receiver, and CPython omits it there), but the UNBOUND read must show it:
+	CPython's ``signature(Cls.method)'' includes ``self''.  Recording the name
+	separately keeps the existing table byte-identical while making the
+	unbound form reconstructible -- the alternative, emitting the receiver
+	into the spec and stripping it at every bound read, would have needed a
+	staticness marker in the table too."
+
+	| allPositional |
+	args ifNil: [^ nil].
+	allPositional := (args posonlyargs ifNil: [#()]) , (args args ifNil: [#()]).
+	allPositional isEmpty ifTrue: [^ nil].
+	^ (allPositional at: 1) name asString
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 hasSignatureSpec
 	"True when this def declares any parameter at all -- gates emission of
 	the inspect.signature spec.  A niladic def renders as ``()'' with or

@@ -363,3 +363,61 @@ def cache_decorator_gets_metadata():
     cached = functools.cache(orig)
     return cached() == 1 and cached.__name__ == 'orig' \
         and cached.__doc__ == 'documented'
+
+
+def unbound_signature_keeps_receiver():
+    """CPython's ``signature(Cls.method)'' -- UNBOUND -- shows ``self''; the bound
+    ``signature(instance.method)'' does not, because the receiver is supplied.
+
+    ClassDefAst's signature table is bound-shaped (it drops the receiver), so
+    the unbound read used to be missing it too.  The receiver name is now
+    recorded alongside and put back only for the unbound form.
+
+    A @staticmethod has no receiver to restore, and a @classmethod restores
+    ``cls'' rather than ``self'' -- the name the def actually wrote."""
+    from inspect import Signature
+
+    class Host:
+        def meth(self, item, arg: int) -> str:
+            return str(item)
+
+        @classmethod
+        def cmeth(cls, item, arg: int) -> str:
+            return str(item)
+
+        @staticmethod
+        def smeth(item, arg: int) -> str:
+            return str(item)
+
+    return [str(Signature.from_callable(Host.meth)),
+            str(Signature.from_callable(Host().meth)),
+            str(Signature.from_callable(Host.cmeth)),
+            str(Signature.from_callable(Host.smeth))]
+
+
+def singledispatchmethod_signature():
+    """A singledispatchmethod read reports the WRAPPED function's signature, so
+    both the class and the instance read show ``self'' -- CPython's
+    __wrapped__ is the plain function, and Grail's analogue is the unbound
+    handle rather than the bound one the class-body decorator captured."""
+    from inspect import Signature
+
+    class A:
+        @functools.singledispatchmethod
+        def func(self, item, arg: int) -> str:
+            return str(item)
+
+        @functools.singledispatchmethod
+        @classmethod
+        def cls_func(cls, item, arg: int) -> str:
+            return str(arg)
+
+        @functools.singledispatchmethod
+        @staticmethod
+        def static_func(item, arg: int) -> str:
+            return str(arg)
+
+    return [str(Signature.from_callable(A.func)),
+            str(Signature.from_callable(A().func)),
+            str(Signature.from_callable(A.cls_func)),
+            str(Signature.from_callable(A.static_func))]

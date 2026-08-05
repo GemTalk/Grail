@@ -423,10 +423,38 @@ __signature_spec__
 	(BoundMethod) drops the first one.
 
 	The table walk mirrors ___annotationsForClass___:, including the env-1
-	probe: ___methodSignatureTable___ is compiled in environment 1."
+	probe: ___methodSignatureTable___ is compiled in environment 1.
 
-	^ (self ___signatureSpecForClass___: self ___metadataClass___)
-		ifNil: [ExecBlock @env0:___pyNone___]
+	___methodSignatureTable___ is BOUND-shaped -- ClassDefAst drops the receiver,
+	because that is what a bound access reports -- so the receiver is put back
+	here from the companion ___methodReceiverTable___.  Its kind is 1
+	(POSITIONAL_OR_KEYWORD) and it never carries a default, which is a
+	two-element entry.  A @staticmethod has no entry and is unchanged."
+
+	| spec cls receiver |
+	cls := self ___metadataClass___.
+	spec := self ___signatureSpecForClass___: cls.
+	spec == nil ifTrue: [^ ExecBlock @env0:___pyNone___].
+	receiver := self ___receiverNameForClass___: cls.
+	receiver == nil ifTrue: [^ spec].
+	^ (Array @env0:with: (Array @env0:with: receiver with: 1)) @env0:, spec
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___receiverNameForClass___: aClass
+	"Superclass walk for this handle's entry in ___methodReceiverTable___ -- the
+	receiver parameter name ClassDefAst dropped from the signature spec, or nil
+	for a @staticmethod (and for any class compiled before the table existed)."
+
+	| tbl v |
+	aClass == nil ifTrue: [^ nil].
+	((aClass @env0:class @env0:whichClassIncludesSelector:
+		#'___methodReceiverTable___' environmentId: 1) ~~ nil) ifTrue: [
+			tbl := aClass ___methodReceiverTable___.
+			v := tbl @env0:at: selector @env0:asString otherwise: nil.
+			v == nil ifFalse: [^ v]].
+	^ self ___receiverNameForClass___: (aClass @env0:superclass)
 %
 
 category: 'Grail-Python Metadata'

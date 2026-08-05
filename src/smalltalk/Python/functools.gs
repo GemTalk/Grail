@@ -3645,6 +3645,10 @@ ___on: aDescriptor obj: anObj cls: aCls
 			| v |
 			v := inst ___forwardAttr___: each.
 			v == nil ifFalse: [inst @env0:dynamicInstVarAt: each put: v]].
+	"__wrapped__ is stored, not served by a method, for the same reason: an
+	instance-side dunder method comes back BoundMethod-wrapped."
+	inst @env0:dynamicInstVarAt: #'__wrapped__'
+		put: inst ___wrappedCallable___.
 	^ inst
 %
 
@@ -3707,11 +3711,30 @@ ___forwardAttr___: aSym
 
 category: 'Grail-Attribute Access'
 method: functools_singledispatchmethod_get
-__wrapped__
-	"CPython exposes the wrapped callable here, which is what
-	inspect.signature follows to report the real parameter list."
+___wrappedCallable___
+	"What CPython exposes as __wrapped__, and what inspect.signature follows to
+	report the real parameter list.
 
-	^ self ___unbound___ @env0:dynamicInstVarAt: #func
+	There it is the plain FUNCTION -- so the signature includes ``self'', and
+	test_method_signatures asserts exactly that for both the class and the
+	instance read.  Grail's closest analogue is the UNBOUND handle: the
+	class-body decorator hands the descriptor a BoundMethod, whose spec is
+	bound-shaped and therefore missing the receiver.  Answer the interned
+	UnboundMethod for the same method instead, which reports the whole
+	parameter list.
+
+	Stored into a dynamic instVar by the constructor rather than served from
+	here: an instance-side dunder METHOD comes back BoundMethod-wrapped from the
+	attribute protocol -- the same trap __module__ and friends hit."
+
+	| fn cls |
+	fn := self ___unbound___ @env0:dynamicInstVarAt: #func.
+	(fn @env0:isKindOf: BoundMethod) ifTrue: [
+		cls := fn @env0:receiver.
+		(cls @env0:isKindOf: Behavior) ifFalse: [cls := fn @env0:definingClass].
+		(cls @env0:isKindOf: Behavior) ifTrue: [
+			^ UnboundMethod definingClass: cls selector: fn @env0:selector]].
+	^ fn
 %
 
 category: 'Grail-Single Dispatch'
