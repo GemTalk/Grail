@@ -149,10 +149,24 @@ ___setState: aSource _: idx
 category: 'Grail-Pickle Protocol'
 method: seq_iterator
 _getstate
-	"Answer (source, index) for pickling -- see pickle.py's seq-iterator ``Q''
-	tag.  A plain Python-visible method (no ___ prefix) so pickle.py can call
-	it, the same convention as list_iterator/tuple_iterator _getstate."
+	"Answer (source, index) for pickling, so pickle.py reduces a LIVE iterator
+	to (iter, (source,), index) -- it keeps a reference to source, so extending
+	source later extends the iteration (test_mutating_seq_class_iter_pickle's
+	initial/running/empty cases).
 
+	A SPENT iterator is different: CPython clears it_seq on exhaustion and its
+	__reduce__ becomes (iter, ((),)) -- an empty tuple, NOT source -- so a
+	reloaded spent iterator yields nothing and mutating the original sequence
+	cannot revive it (the same test's exhausted case; without this it resumed at
+	its old index and, once source had grown, wrongly produced more values).
+	Answering ((), 0) makes pickle.py emit iter(()), reloading as a spent
+	iterator over an empty tuple -- the test checks only isinstance(Iterator)
+	there, not the exact type, matching CPython (which also reloads as iter(())).
+
+	A plain Python-visible method (no ___ prefix) so pickle.py can call it, the
+	same convention as list_iterator/tuple_iterator _getstate."
+
+	exhausted @env0:ifTrue: [^ tuple @env0:withAll: { (tuple @env0:withAll: { }). 0 }].
 	^ tuple @env0:withAll: { source. index }
 %
 
