@@ -622,6 +622,7 @@ run
 	at: #'GenericAliasTestCase' put: nil;
 	at: #'Pep649AnnotationsTestCase' put: nil;
 	at: #'NestedDefIdentityTestCase' put: nil;
+	at: #'MethodDocstringTestCase' put: nil;
 	at: #'GlobalStatementCodegenTestCase' put: nil;
 	at: #'EmailMessageTestCase' put: nil;
 	at: #'EnumAutoImportTestCase' put: nil;
@@ -1375,6 +1376,7 @@ input src/smalltalk/PythonTests/GenericClassSubscriptTestCase.gs
 input src/smalltalk/PythonTests/GenericAliasTestCase.gs
 input src/smalltalk/PythonTests/Pep649AnnotationsTestCase.gs
 input src/smalltalk/PythonTests/NestedDefIdentityTestCase.gs
+input src/smalltalk/PythonTests/MethodDocstringTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementCodegenTestCase.gs
 input src/smalltalk/PythonTests/EnumAutoImportTestCase.gs
 input src/smalltalk/PythonTests/Pep448StarredLiteralsTestCase.gs

@@ -948,6 +948,12 @@ printSmalltalkRuntimeOn: aStream
 	the superclass chain consulting.  A method compiles to a Smalltalk METHOD, not
 	a block, so it cannot carry the def-time cascade a nested def does."
 	self emitMethodSignatureTableOn: aStream className: name.
+	"And the same for docstrings.  A class-body def compiles to a Smalltalk
+	METHOD, so it cannot carry the def-time ``___pyNamed___:doc:'' stamp a
+	nested def does -- which left every method inheriting Object's own
+	__doc__ and claiming to be documented as ``The base class of the class
+	hierarchy...''."
+	self emitMethodDocTableOn: aStream className: name.
 	"Inherit parent class-attr values into our slot.  Smalltalk
 	class-side instVars are per-class storage; without this the
 	subclass's inherited slot stays nil."
@@ -2271,6 +2277,46 @@ emitClassAnnotationsDictOn: aStream
 		self printQuotedString: assoc value on: aStream.
 		aStream nextPut: $;].
 	aStream nextPutAll: ' @env0:yourself)'
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitMethodDocTableOn: aStream className: aClassName
+	"Compile a class-side ``___methodDocTable___'' returning a dict
+	``method-name -> docstring'' for every method that opens with one.
+
+	A class-body def compiles to a Smalltalk METHOD rather than a block, so
+	it cannot carry the def-time ``___pyNamed___:doc:'' stamp that gives a
+	nested def its ``__doc__''.  Without this table the read fell all the way
+	through to Object's own __doc__, and EVERY method -- plain, @property,
+	@staticmethod, @classmethod -- reported ``The base class of the class
+	hierarchy...''.
+
+	Same shape as the annotations and signature tables, and for the same
+	reason.  Overload stubs stay out: the stub is not the implementation.
+
+	No-op when no method has a docstring, so only classes that need it pay
+	for the extra class-side method."
+
+	| documented src |
+	documented := self ___allFunctionDefs___ select: [:def |
+		def isOverloadStub not and: [def ___docString___ notNil]].
+	documented isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___methodDocTable___'; lf.
+	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+	documented do: [:def |
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
+		def emitStringLiteral: def ___docString___ on: src.
+		src nextPut: $;].
+	src nextPutAll: ' @env0:yourself)'.
+	self
+		emitCompileMethodOn: aClassName
+		source: src contents
+		category: 'Grail-Docstrings'
+		env: 1
+		classSide: true
+		onStream: aStream
 %
 
 category: 'Grail-code generation'

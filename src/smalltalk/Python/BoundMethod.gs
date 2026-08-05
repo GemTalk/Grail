@@ -207,6 +207,7 @@ ___pythonValueAttrs___
 		add: #'__self__';
 		add: #'__annotations__';
 		add: #'__signature_spec__';
+		add: #'__doc__';
 		add: #'__dict__';
 		yourself
 %
@@ -530,6 +531,48 @@ __signature_spec__
 	singledispatchmethod reports through ``__wrapped__'' and the raw def's own
 	spec instead, which is why test_method_signatures still sees ``self''."
 	^ spec ifNil: [ExecBlock @env0:___pyNone___]
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__doc__
+	"``method.__doc__''.  A method's docstring lives on its DEFINING class, in
+	the class-side ___methodDocTable___ ClassDefAst compiles, because a
+	class-body def becomes a Smalltalk method and cannot carry the def-time
+	``___pyNamed___:doc:'' stamp a nested def does.
+
+	None when there is none -- NOT Object's own __doc__, which is what an
+	undocumented method used to report (``The base class of the class
+	hierarchy...''), because the read fell through to the inherited default.
+
+	Walks the superclass chain, so an inherited method reports the docstring
+	from where it was defined, exactly as __annotations__ and
+	__signature_spec__ do."
+
+	| cls doc |
+	receiver == nil ifTrue: [^ ExecBlock @env0:___pyNone___].
+	cls := (receiver isKindOf: Class)
+		ifTrue: [receiver]
+		ifFalse: [receiver @env0:class].
+	doc := self ___methodDocForClass___: cls name: selector @env0:asString.
+	^ doc ifNil: [ExecBlock @env0:___pyNone___]
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___methodDocForClass___: aClass name: aName
+	"Superclass walk for the first ___methodDocTable___ entry named aName, or
+	nil.  Mirrors ___methodSignatureForClass___:name:, including the env-1
+	probe -- the table is compiled in environment 1, so an env-0
+	``canUnderstand:'' would never see it."
+
+	| tbl v |
+	aClass == nil ifTrue: [^ nil].
+	((aClass @env0:class @env0:whichClassIncludesSelector: #'___methodDocTable___' environmentId: 1) ~~ nil) ifTrue: [
+		tbl := aClass ___methodDocTable___.
+		v := tbl @env0:at: aName otherwise: nil.
+		v == nil ifFalse: [^ v]].
+	^ self ___methodDocForClass___: (aClass @env0:superclass) name: aName
 %
 
 category: 'Grail-Attribute Access'
