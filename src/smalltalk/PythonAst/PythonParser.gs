@@ -548,9 +548,9 @@ parseBlock
 	Single-line: simple_stmts (on same line as colon)
 	Returns an array of statements."
 
-	| stmts |
+	| stmts type aTok |
 	"Check for single-line body (no NEWLINE/INDENT)"
-	(self peek notNil and: [self peekType ~~ #NEWLINE and: [self peekType ~~ #NL and: [self peekType ~~ #INDENT]]]) ifTrue: [
+	((aTok := self peek) notNil and: [ (type := aTok type)  ~~ #NEWLINE and: [ type ~~ #NL and: [ type ~~ #INDENT]]]) ifTrue: [
 		^self parseSimpleStatements
 	].
 	self skipNewlines.
@@ -574,10 +574,10 @@ method: PythonParser
 parseBytesLiteral
 	"Parse one or more adjacent bytes tokens (implicit concatenation)."
 
-	| startTok writeStream str ba |
+	| startTok writeStream str ba tok |
 	startTok := self peek.
-	writeStream := WriteStream on: Unicode7 new.
-	[self peek notNil and: [self peek isBytes]] whileTrue: [
+	writeStream := AppendStream on: Unicode7 new.
+	[ (tok := self peek) notNil and: [ tok isBytes]] whileTrue: [
 		writeStream nextPutAll: self advance value.
 	].
 	str := writeStream contents.
@@ -594,10 +594,10 @@ method: PythonParser
 parseCallArgList
 	"Parse function call arguments. Returns an Array of {positional. keywords}."
 
-	| args kwargs |
+	| args kwargs tok |
 	args := Array new.
 	kwargs := Array new.
-	(self peek notNil and: [(self peek isOp: ')') not]) ifTrue: [
+	((tok := self peek) notNil and: [(tok isOp: ')') not]) ifTrue: [
 		[
 			(self peek isOp: ')') ifTrue: [false] ifFalse: [
 				"**kwargs"
@@ -898,8 +898,8 @@ parseDelete
 	tok := self advance. "consume 'del'"
 	targets := Array new.
 	targets add: (self setDelCtx: self parsePrimary).
-	[self matchOp: ','] whileTrue: [
-		(self peek notNil and: [self peek isNewline not]) ifTrue: [
+	[self matchOp: ','] whileTrue: [ | aTok |
+		((aTok := self peek) notNil and: [ aTok isNewline not]) ifTrue: [
 			targets add: (self setDelCtx: self parsePrimary).
 		].
 	].
@@ -1138,10 +1138,10 @@ parseExpressionOrAssignment
 
 	"Annotated assignment: x: int = value"
 	(tok notNil and: [tok isOp: ':']) ifTrue: [
-		| colonTok annotation value simple |
+		| colonTok annotation value simple aTok |
 		colonTok := self advance.
 		"Check this isn't a walrus operator :="
-		(self peek notNil and: [self peek isOp: '=']) ifFalse: [
+		((aTok := self peek) notNil and: [ aTok isOp: '=']) ifFalse: [
 			annotation := self parseExpression.
 			value := nil.
 			(self matchOp: '=') ifTrue: [
@@ -1165,10 +1165,10 @@ parseExpressionOrAssignment
 		self setStoreCtx: expr.
 		targets add: expr.
 		[self matchOp: '='] whileTrue: [
-			| nextExpr |
+			| nextExpr aTok |
 			nextExpr := self parseStarExpressions.
 			"Check if followed by another '=' - if so, this is another target"
-			(self peek notNil and: [self peek isOp: '=']) ifTrue: [
+			((aTok := self peek) notNil and: [ aTok isOp: '=']) ifTrue: [
 				self setStoreCtx: nextExpr.
 				targets add: nextExpr.
 			] ifFalse: [
@@ -1389,7 +1389,7 @@ parseFunctionParametersUntil: endOp
 	Returns an ArgumentsAst."
 
 	| posonlyargs args vararg kwonlyargs kw_defaults kwarg defaults
-	  sawSlash sawStar allowAnnotations |
+	  sawSlash sawStar allowAnnotations aTok |
 	posonlyargs := Array new.
 	args := Array new.
 	vararg := nil.
@@ -1401,7 +1401,7 @@ parseFunctionParametersUntil: endOp
 	sawStar := false.
 	allowAnnotations := endOp ~= ':'.
 
-	(self peek notNil and: [(self peek isOp: endOp) not]) ifTrue: [
+	((aTok := self peek) notNil and: [(aTok isOp: endOp) not]) ifTrue: [
 		[
 			| tok |
 			tok := self peek.
@@ -1585,12 +1585,12 @@ parseImportFrom
 			asName: nil;
 			token: self lastToken ; yourself).
 	] ifFalse: [
-		| hasParen |
+		| hasParen aTok |
 		hasParen := self matchOp: '('.
 		names := Array new.
 		names add: self parseFromImportName.
 		[self matchOp: ','] whileTrue: [
-			(self peek notNil and: [self peek isOp: ')']) ifFalse: [
+			((aTok := self peek) notNil and: [ aTok isOp: ')']) ifFalse: [
 				names add: self parseFromImportName.
 			].
 		].
@@ -1733,7 +1733,6 @@ parseListDisplay
 		ctx: self loadCtx;
 		from: startTok to: self lastToken ; yourself
 %
-
 category: 'Grail-parsing - module'
 method: PythonParser
 parseModule
@@ -1925,11 +1924,11 @@ method: PythonParser
 parsePrimary
 	"Parse: atom trailer* where trailer is .name, [subscript], or (args)"
 
-	| expr startTok |
+	| expr startTok aTok |
 	startTok := self peek.
 	expr := self parseAtom.
 	"Parse trailers"
-	[self peek notNil and: [(self atOp: '.') or: [(self atOp: '[') or: [self atOp: '(']]]] whileTrue: [
+	[(aTok := self peek) notNil and: [(aTok isOp: '.') or: [(aTok isOp: '[') or: [aTok isOp: '(']]]] whileTrue: [
 		(self atOp: '.') ifTrue: [
 			| nameTok |
 			self advance.
@@ -1973,11 +1972,11 @@ method: PythonParser
 parseRaise
 	"Parse: raise [expr ['from' expr]]"
 
-	| tok exc cause |
+	| tok exc cause aTok |
 	tok := self advance. "consume 'raise'"
 	exc := nil.
 	cause := nil.
-	(self peek notNil and: [self peek isNewline not and: [self peek isEndMarker not]]) ifTrue: [
+	((aTok:= self peek) notNil and: [ aTok isNewline not and: [ aTok isEndMarker not]]) ifTrue: [
 		exc := self parseExpression.
 		(self matchKeyword: 'from') ifTrue: [
 			cause := self parseExpression.
@@ -1994,10 +1993,10 @@ method: PythonParser
 parseReturn
 	"Parse: return [expr]"
 
-	| tok value |
+	| tok value aTok |
 	tok := self advance. "consume 'return'"
 	value := nil.
-	(self peek notNil and: [self peek isNewline not and: [self peek isEndMarker not and: [(self peek isOp: ';') not]]]) ifTrue: [
+	((aTok := self peek) notNil and: [ aTok isNewline not and: [ aTok isEndMarker not and: [(aTok isOp: ';') not]]]) ifTrue: [
 		value := self parseStarExpressions.
 	].
 	^ReturnAst new
@@ -2010,10 +2009,10 @@ method: PythonParser
 parseShift
 	"Parse: sum (('<<' | '>>') sum)*"
 
-	| left startTok |
+	| left startTok aTok |
 	startTok := self peek.
 	left := self parseSum.
-	[self peek notNil and: [(self atOp: '<<') or: [self atOp: '>>']]] whileTrue: [
+	[(aTok := self peek) notNil and: [(aTok isOp: '<<') or: [ aTok isOp: '>>']]] whileTrue: [
 		| opTok opClass right |
 		opTok := self advance.
 		opClass := opTok value = '<<' ifTrue: [LShiftAst] ifFalse: [RShiftAst].
@@ -2061,8 +2060,8 @@ parseSimpleStatements
 	stmts := Array new.
 	stmt := self parseSimpleStatement.
 	stmts add: stmt.
-	[self matchOp: ';'] whileTrue: [
-		(self peek notNil and: [self peek isNewline or: [self peek isEndMarker]]) ifTrue: [
+	[self matchOp: ';'] whileTrue: [ | aTok |
+		((aTok := self peek) notNil and: [ aTok isNewline or: [ aTok isEndMarker]]) ifTrue: [
 			"Trailing semicolon"
 		] ifFalse: [
 			stmts add: self parseSimpleStatement.
@@ -2172,15 +2171,17 @@ parseStarExpressions
 	"Parse comma-separated expressions, possibly starred.
 	Returns a single expression or a tuple if there's a comma."
 
-	| first exprs startTok |
+	| first exprs startTok aTok |
 	startTok := self peek.
 	first := self parseStarExpression.
-	(self peek notNil and: [self peek isOp: ',']) ifFalse: [^first].
+	((aTok := self peek) notNil and: [ aTok isOp: ',']) ifFalse: [^first].
 
 	exprs := Array new.
 	exprs add: first.
-	[self matchOp: ','] whileTrue: [
-		(self peek notNil and: [self peek isNewline not and: [self peek isEndMarker not and: [(self peek isOp: ')') not and: [(self peek isOp: ']') not and: [(self peek isOp: '}') not and: [(self peek isOp: ':') not and: [(self peek isOp: ';') not and: [(self peek isOp: '=') not]]]]]]]]) ifTrue: [
+	[self matchOp: ','] whileTrue: [ 
+		((aTok := self peek) notNil and: [ aTok isNewline not and: [ aTok isEndMarker not 
+      and:[( aTok isOp: ')') not and: [( aTok isOp: ']') not and: [( aTok isOp: '}') not 
+      and: [( aTok isOp: ':') not and: [( aTok isOp: ';') not and: [( aTok isOp: '=') not]]]]]]]]) ifTrue: [
 			exprs add: self parseStarExpression.
 		].
 	].
@@ -2221,15 +2222,16 @@ method: PythonParser
 parseStarTargets
 	"Parse assignment targets, possibly starred, possibly as tuple."
 
-	| first targets startTok |
+	| first targets startTok aTok |
 	startTok := self peek.
 	first := self parseStarTarget.
-	(self peek notNil and: [self peek isOp: ',']) ifFalse: [^first].
+	((aTok := self peek) notNil and: [ aTok isOp: ',']) ifFalse: [^first].
 
 	targets := Array new.
 	targets add: first.
 	[self matchOp: ','] whileTrue: [
-		(self peek notNil and: [(self peek isKeyword: 'in') not and: [self peek isNewline not and: [(self peek isOp: ':') not and: [(self peek isOp: ')') not]]]]) ifTrue: [
+		((aTok := self peek) notNil and: [( aTok isKeyword: 'in') not and: [ aTok isNewline not 
+     and: [( aTok isOp: ':') not and: [( aTok isOp: ')') not]]]]) ifTrue: [
 			targets add: self parseStarTarget.
 		].
 	].
@@ -2269,10 +2271,10 @@ method: PythonParser
 parseStatements
 	"Parse a sequence of statements until ENDMARKER or DEDENT."
 
-	| stmts |
+	| stmts aTok|
 	stmts := Array new.
 	self skipNewlines.
-	[self peek notNil and: [self peek isEndMarker not and: [self peekType ~~ #DEDENT]]] whileTrue: [
+	[(aTok := self peek) notNil and: [aTok isEndMarker not and: [aTok type ~~ #DEDENT ]]] whileTrue: [
 		stmts addAll: self parseStatement.
 		self skipNewlines.
 	].
@@ -2284,10 +2286,10 @@ method: PythonParser
 parseStringLiteral
 	"Parse one or more adjacent string tokens (implicit concatenation)."
 
-	| startTok writeStream |
+	| startTok writeStream aTok |
 	startTok := self peek.
-	writeStream := WriteStream on: Unicode7 new.
-	[self peek notNil and: [self peek isString]] whileTrue: [
+	writeStream := AppendStream on: Unicode7 new.
+	[(aTok := self peek) notNil and: [ aTok isString]] whileTrue: [
 		writeStream nextPutAll: self advance value.
 	].
 	^ConstantAst new
@@ -2321,10 +2323,10 @@ parseFStringLiteral
 
 	| startTok tok value parts pos len ch result piece converted
 	  innerParser exprAst exprText conversion formatSpec exprStart
-	  specBuf inSpec |
+	  specBuf inSpec aTok |
 	startTok := self peek.
 	parts := OrderedCollection new.
-	[self peek notNil and: [self peek isString or: [self peek isFString]]] whileTrue: [
+	[(aTok := self peek) notNil and: [aTok isString or: [aTok isFString]]] whileTrue: [
 		tok := self advance.
 		value := tok value.
 		len := value size.
@@ -2648,10 +2650,10 @@ method: PythonParser
 parseSum
 	"Parse: term (('+' | '-') term)*"
 
-	| left startTok |
+	| left startTok aTok |
 	startTok := self peek.
 	left := self parseTerm.
-	[self peek notNil and: [(self atOp: '+') or: [self atOp: '-']]] whileTrue: [
+	[(aTok := self peek) notNil and: [(aTok isOp: '+') or: [aTok isOp: '-']]] whileTrue: [
 		| opTok opClass right |
 		opTok := self advance.
 		opClass := opTok value = '+' ifTrue: [AddAst] ifFalse: [SubAst].
@@ -2670,10 +2672,11 @@ method: PythonParser
 parseTerm
 	"Parse: factor (('*' | '/' | '//' | '%' | '@') factor)*"
 
-	| left startTok |
+	| left startTok aTok |
 	startTok := self peek.
 	left := self parseFactor.
-	[self peek notNil and: [(self atOp: '*') or: [(self atOp: '/') or: [(self atOp: '//') or: [(self atOp: '%') or: [self atOp: '@']]]]]] whileTrue: [
+	[(aTok := self peek) notNil and: [(aTok isOp: '*') or: [(aTok isOp: '/') or: [(aTok isOp: '//') 
+     or: [(aTok isOp: '%') or: [aTok isOp: '@']]]]]] whileTrue: [
 		| opTok opClass right |
 		opTok := self advance.
 		opClass := self operatorClassFor: opTok value.
@@ -2725,11 +2728,11 @@ parseTry
 
 	"Parse except clauses"
 	[self atKeywordSkippingNewlines: 'except'] whileTrue: [
-		| exceptTok excType excName exceptBody |
+		| exceptTok excType excName exceptBody aTok |
 		exceptTok := self advance. "consume 'except'"
 		excType := nil.
 		excName := nil.
-		(self peek notNil and: [(self peek isOp: ':') not]) ifTrue: [
+		((aTok := self peek) notNil and: [(aTok isOp: ':') not]) ifTrue: [
 			excType := self parseExpression.
 			(self matchKeyword: 'as') ifTrue: [
 				excName := self advance value asSymbol.
@@ -2882,7 +2885,7 @@ method: PythonParser
 parseYieldExpression
 	"Parse: yield [from expr] | yield [expr_list]"
 
-	| tok value |
+	| tok value aTok |
 	tok := self advance. "consume 'yield'"
 	(self matchKeyword: 'from') ifTrue: [
 		value := self parseExpression.
@@ -2891,7 +2894,8 @@ parseYieldExpression
 			from: tok to: self lastToken ; yourself
 	].
 	value := nil.
-	(self peek notNil and: [self peek isNewline not and: [self peek isEndMarker not and: [(self peek isOp: ')') not and: [(self peek isOp: ']') not]]]]) ifTrue: [
+	((aTok := self peek) notNil and: [aTok isNewline not and: [aTok isEndMarker not and: [(aTok isOp:')') not 
+        and: [(aTok isOp: ']') not]]]]) ifTrue: [
 		value := self parseStarExpressions.
 	].
 	^YieldAst new
@@ -3167,8 +3171,8 @@ category: 'Grail-token access'
 method: PythonParser
 skipNewlines
 	"Skip any NEWLINE and NL tokens."
-
-	[self peek notNil and: [self peek isNewline]] whileTrue: [
+  | aTok |
+	[(aTok := self peek) notNil and: [ aTok isNewline]] whileTrue: [
 		self advance.
 	].
 %
