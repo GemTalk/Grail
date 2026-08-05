@@ -135,3 +135,48 @@ testNestedDefStillCarriesItsOwnStamp
 	self assert: (r at: 1) equals: 'inner docstring'.
 	self assert: (r at: 2) equals: true.
 %
+
+! --- builtins: the table is hand-declared, not compiled from Python source ---
+
+category: 'Grail-Tests - builtins'
+method: MethodDocstringTestCase
+testBuiltinsReportCPythonsDocstrings
+	"A Grail builtin is a Smalltalk method, so no FunctionDefAst ran for it
+	and ClassDefAst's ___methodDocTable___ has nothing to capture.
+	builtins_docstrings.gs declares the table for the builtins module by hand
+	-- the same way functools.gs hand-declares ___methodSignatureTable___ for
+	cmp_to_key -- and BoundMethod >> __doc__ finds it through the ordinary
+	superclass walk.
+
+	The text is CPython's own, transcribed from the interpreter rather than
+	written by us: it is observable behaviour, so a paraphrase would be a
+	different answer that merely looks similar."
+
+	self assert: testModule @env1:builtin_docstrings asArray
+		equals: #( true true true ).
+%
+
+category: 'Grail-Tests - builtins'
+method: MethodDocstringTestCase
+testBuiltinWithoutADocstringIsNone
+	"CPython gives exit/quit no docstring either.  The answer must be None
+	rather than Object's docstring -- the defect the whole table exists to
+	close."
+
+	self assert: testModule @env1:builtin_without_docstring_is_none
+		equals: true.
+%
+
+category: 'Grail-Tests - builtins'
+method: MethodDocstringTestCase
+testUpdateWrapperCopiesABuiltinsDocstring
+	"Why it matters beyond introspection: functools.update_wrapper copies
+	__doc__, so an absent builtin docstring propagated onto every wrapper
+	built around a builtin.  This is test_functools
+	TestUpdateWrapper/TestWraps.test_builtin_update."
+
+	| r |
+	r := testModule @env1:update_wrapper_copies_builtin_doc asArray.
+	self assert: (r at: 1) equals: 'max'.
+	self assert: (r at: 2) equals: true.
+%

@@ -985,6 +985,7 @@ input src/smalltalk/Python/filter_iterator.gs
 input src/smalltalk/Python/map_iterator.gs
 input src/smalltalk/Python/zip_iterator.gs
 input src/smalltalk/Python/builtins.gs
+input src/smalltalk/Python/builtins_docstrings.gs
 input src/smalltalk/Python/copyreg.gs
 input src/smalltalk/Python/cmath.gs
 input src/smalltalk/Python/PyEnumTypes.gs
