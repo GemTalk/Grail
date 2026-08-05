@@ -75,6 +75,8 @@ static int is_shim_type(PyTypeObject *t);          /* type the shim created */
 static int is_foreign(PyObject *obj);              /* not a Grail wrapper */
 static OopType foreign_number_oop(PyObject *obj, int want_float); /* nb_* slot */
 static OopType foreign_proxy_oop(PyObject *obj);   /* reverse proxy bridge */
+static inline int plausible_pyobj(const void *p);  /* could this be a PyObject*? */
+static void report_bad_pyobj(const char *where, const void *p);
 extern "C" int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b);
 
 static inline OopType pyobj_oop(PyObject *obj) {
@@ -82,6 +84,14 @@ static inline OopType pyobj_oop(PyObject *obj) {
     if (obj == Py_None)  return none_oop;
     if (obj == Py_True)  return true_oop;
     if (obj == Py_False) return false_oop;
+    /* Every line below this dereferences obj.  Report and bail instead of
+       taking the gem down when what arrived cannot be a PyObject* at all --
+       see plausible_pyobj().  Deliberately does NOT raise: this helper runs
+       inside user actions, where an unwind is its own failure mode
+       (RT_ERR_CANT_RETURN), and every caller can cope with a nil.  The
+       stderr line is the attribution; CHECK_pyObj raises at the API
+       boundary, where there is a return path. */
+    if (!plausible_pyobj(obj)) { report_bad_pyobj("pyobj_oop", obj); return none_oop; }
     if (is_real_layout(obj)) return real_obj_to_oop(obj);
     if (is_foreign(obj)) return foreign_proxy_oop(obj);
     return *(OopType *)((char *)obj + 16);
@@ -1021,6 +1031,37 @@ static int is_shim_type(PyTypeObject *t) {
    Smalltalk int64At:put: (which requires a signed value). */
 #define GRAIL_WRAP_MAGIC 0x475241494C575031ULL
 
+/* Could p be a PyObject* at all?  Every PyObject the shim can see is either
+   malloc/calloc'd by _PyObject_New, gcMalloc'd by CPythonShim>>wrap:, or a
+   static singleton -- all of them 8-byte aligned and far above the unmapped
+   low pages.
+
+   A GemStone OOP fails both tests: SmallInteger OOPs are odd (tagged) and
+   object OOPs are small dense integers.  That is exactly what this catches.
+   A whole-suite-in-one-session run reached is_foreign() with obj = 0xeb321 --
+   OOP-shaped, and `Object _objectForOop:' answers nil for it, i.e. a STALE
+   OOP -- and the unguarded offset-24 read below took the gem down with
+   SIGSEGV at 0xeb339 (= 0xeb321 + 24).  The stack was
+   shimCallTyped -> match_group -> match_getindex -> PyDict_GetItem, which is
+   also where the softer "a ShimForeignObject does not understand
+   #includesKey:" report comes from: when the bad address happens to be
+   readable, the sentinel simply mismatches and the value is misclassified as
+   foreign instead of crashing.  See docs/Shim_Foreign_Proxy_Misattribution.md. */
+static inline int plausible_pyobj(const void *p) {
+    uintptr_t v = (uintptr_t)p;
+    return v >= 0x10000u && (v & 7u) == 0u;
+}
+
+/* Report a value that reached a PyObject* parameter without being one.  Always
+   printed, not gated by GRAIL_SHIM_DIAG: it means something has already gone
+   wrong, and the alternative is a SIGSEGV with no attribution at all. */
+static void report_bad_pyobj(const char *where, const void *p) {
+    fprintf(stderr, "SHIM-BADPTR %s: %p is not a PyObject* "
+                    "(unaligned or too low -- an OOP or corrupted slot)\n",
+            where ? where : "(unknown)", p);
+    fflush(stderr);
+}
+
 /* A foreign object: a non-NULL pointer that is neither a shim singleton,
    nor a real-layout object, nor a Grail-backed wrapper (no sentinel at
    offset 24).  Reading offset 24 of a real PyObject is safe (they are well
@@ -1028,6 +1069,10 @@ static int is_shim_type(PyTypeObject *t) {
 static int is_foreign(PyObject *obj) {
     if (obj == NULL) return 0;
     if (obj == Py_None || obj == Py_True || obj == Py_False) return 0;
+    /* Never dereference an implausible pointer.  Answering "not foreign" keeps
+       this predicate total; pyobj_oop raises on the same condition, so the
+       caller gets a reportable error rather than a proxy for garbage. */
+    if (!plausible_pyobj(obj)) { report_bad_pyobj("is_foreign", obj); return 0; }
     if (is_real_layout(obj)) return 0;
     return *(uint64_t *)((char *)obj + 24) != GRAIL_WRAP_MAGIC;
 }
@@ -1056,6 +1101,16 @@ static OopType foreign_proxy_oop(PyObject *obj) {
     if (g_diag_on == 1) diag_foreign(obj);
     PyTypeObject *t = (obj->ob_type == &PyType_Type)
                         ? (PyTypeObject *)obj : obj->ob_type;
+    /* THE CRASH SITE.  A wrapper whose gcMalloc block has been freed and reused
+       fails the offset-24 sentinel check, so it arrives here as "foreign" -- but
+       its ob_type is now whatever reused the block, and reading t->tp_name (at
+       offset 24 of a PyTypeObject) SIGSEGVs.  Observed: si_addr 0xe832a with
+       ob_type 0xe8312.  Report and refuse instead of dereferencing; the caller
+       gets nil, which surfaces as an ordinary Python-level error. */
+    if (t != NULL && !plausible_pyobj(t)) {
+        report_bad_pyobj("foreign_proxy_oop ob_type", t);
+        return OOP_NIL;
+    }
     const char *nm = (t && t->tp_name) ? t->tp_name : "";
     OopType args[2] = { GciI64ToOop((int64)(intptr_t)obj), GciNewString(nm) };
     return GciPerform(server, "foreignProxyForPointer:typeName:", args, 2);
@@ -1145,9 +1200,18 @@ extern "C" PyObject *PyList_New(Py_ssize_t len) {
 
 static void raise_error(const char *message);
 
+/* Validate a PyObject* parameter at the API boundary.  NULL has always been
+   rejected; an implausible pointer (an OOP, or a corrupted slot) now is too,
+   and the `msg' label names the call site -- so a bad value is reported as
+   e.g. "PyDict_GetItem dict" instead of segfaulting inside is_foreign(). */
 #define CHECK_pyObj(anObj, msg ) \
     if (anObj == NULL) { \
       raise_error( msg " arg is NULL"); \
+      return 0; \
+    } \
+    if (!plausible_pyobj(anObj)) { \
+      report_bad_pyobj( msg, anObj); \
+      raise_error( msg " arg is not a PyObject* (an OOP or a corrupted slot)"); \
       return 0; \
     }
 

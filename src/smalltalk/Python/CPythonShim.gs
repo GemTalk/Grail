@@ -29,8 +29,10 @@ and converts the return type.
 Instance methods are named after CPython C API functions and compiled in
 env:0 so GciPerform can find them.
 
-Wrapping state (valueToPyObject, noneWrapper, typeAddresses) lives on
-the instance since this is a singleton.
+Wrapping state (noneWrapper, typeAddresses) lives on the instance since
+this is a singleton.  The wrapper MAP does not: see >>valueToPyObject,
+which keeps it in SessionTemps so that replacing the singleton cannot
+orphan the wrappers that live C structures still point at.
 
 Usage:
 	| result |
@@ -113,6 +115,11 @@ libraryPath: aString
 
 	libraryPath := aString.
 	SessionTemps current removeKey: #CPythonShim ifAbsent: [].
+	"Unlike >>reset, a library CHANGE must also discard the wrapper map: each
+	wrapper caches a tp_* address from the old library at offset 8, and those
+	do not survive a reload.  Any C structure still holding a wrapper pointer
+	belongs to the old library and is unreachable anyway."
+	SessionTemps current removeKey: #GrailShimWrapperMap ifAbsent: [].
 %
 
 category: 'Grail-Testing'
@@ -216,6 +223,45 @@ storeOop: anOop in: aCByteArray at: offset
 
 category: 'Grail-Wrapping'
 method: CPythonShim
+valueToPyObject
+	"The value -> CByteArray wrapper map, held in SESSION temps rather than
+	only on the instance.
+
+	It is the ONLY strong reference to every wrapper, and a wrapper's
+	gcMalloc'd C memory is freed when GemStone reclaims its CByteArray.  Long-
+	lived C structures hold raw pointers into that memory for the life of the
+	process -- _PyObject_New calloc's a PatternObject and _Py_Dealloc is a
+	no-op, so a compiled regex NEVER goes away and keeps pointing at the
+	wrapper for its groupindex dict.
+
+	Replacing the singleton (CPythonShim reset, or libraryPath:, both of which
+	drop the SessionTemps entry) therefore used to orphan the whole map:
+	measured 108 wrappers before a reset, 2 after.  Every C structure holding
+	one of those 106 was left dangling.  Once the freed block is REUSED the
+	sentinel at offset 24 no longer reads GRAILWP1, so is_foreign() calls it
+	foreign and either mints a ShimForeignObject for it -- ``a
+	ShimForeignObject does not understand #includesKey:'' -- or, when the
+	stale ob_type is unreadable, SIGSEGVs in foreign_proxy_oop reading
+	tp_name.  Both symptoms observed; see
+	docs/Shim_Foreign_Proxy_Misattribution.md.
+
+	Keying on the SESSION means a new singleton finds the same map, so the
+	wrappers outlive it.  The instVar stays as a per-instance memo so the hot
+	path in wrap: still costs one instVar read."
+
+	valueToPyObject ifNil: [
+		valueToPyObject := SessionTemps current
+			at: #GrailShimWrapperMap
+			ifAbsent: [
+				| d |
+				d := IdentityKeyValueDictionary new.
+				SessionTemps current at: #GrailShimWrapperMap put: d.
+				d]].
+	^ valueToPyObject
+%
+
+category: 'Grail-Wrapping'
+method: CPythonShim
 wrap: aValue
 	"Look up or create a CByteArray wrapper for aValue.
 	Returns the CByteArray instance.
@@ -243,7 +289,6 @@ wrap: aValue
 		].
 		^ noneWrapper
 	].
-	valueToPyObject ifNil: [ valueToPyObject := IdentityKeyValueDictionary new ].
 	wrapsSinceSweep := (wrapsSinceSweep ifNil: [0]) + 1.
 	"Sweep only between shim calls (callDepth = 0).  Server callbacks
 	(PyList_New, PyUnicode_* creation, ...) re-enter wrap: THOUSANDS of
@@ -256,7 +301,7 @@ wrap: aValue
 	GEM_TEMPOBJ_CACHE_SIZE)."
 	((wrapsSinceSweep \\ 1000) = 0 and: [(callDepth ifNil: [0]) = 0])
 		ifTrue: [ self sweep ].
-	pyObj := valueToPyObject at: aValue otherwise: nil.
+	pyObj := self valueToPyObject at: aValue otherwise: nil.
 	pyObj notNil ifTrue: [
 		"Resurrect: C may have decref'd this cached wrapper to zero after
 		a previous call.  Handing it out at refcnt <= 0 would make it
@@ -269,7 +314,7 @@ wrap: aValue
 	pyObj int64At: 8 put: (self typeAddrFor: aValue).
 	self storeOop: aValue asOop in: pyObj at: 16.
 	pyObj int64At: 24 put: 16r475241494C575031.
-	valueToPyObject at: aValue put: pyObj.
+	self valueToPyObject at: aValue put: pyObj.
 	^ pyObj
 %
 
@@ -364,8 +409,8 @@ initTypeAddresses
 	Array allSubclasses do: [:each | typeAddresses at: each put: addr].
 	"Patch singletons (created before types were known)"
 	noneWrapper int64At: 8 put: (typeAddresses at: UndefinedObject).
-	(valueToPyObject at: true) int64At: 8 put: (typeAddresses at: Boolean).
-	(valueToPyObject at: false) int64At: 8 put: (typeAddresses at: Boolean).
+	(self valueToPyObject at: true) int64At: 8 put: (typeAddresses at: Boolean).
+	(self valueToPyObject at: false) int64At: 8 put: (typeAddresses at: Boolean).
 %
 
 ! ===============================================================================
@@ -387,15 +432,18 @@ method: CPythonShim
 sweep
 	"Remove PyObject wrappers whose refcount has reached zero."
 
-	| toRemove |
-	valueToPyObject ifNil: [^ self].
+	| map toRemove |
+	"Read the session's map directly so a sweep before anything has been
+	wrapped does not create one."
+	map := SessionTemps current at: #GrailShimWrapperMap otherwise: nil.
+	map ifNil: [^ self].
 	toRemove := OrderedCollection new.
-	valueToPyObject keysAndValuesDo: [:key :pyObj |
+	map keysAndValuesDo: [:key :pyObj |
 		(pyObj int64At: 0) <= 0 ifTrue: [
 			toRemove add: key.
 		].
 	].
-	toRemove do: [:key | valueToPyObject removeKey: key].
+	toRemove do: [:key | map removeKey: key].
 %
 
 ! ===============================================================================
