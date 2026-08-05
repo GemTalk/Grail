@@ -110,6 +110,14 @@ printSmalltalkOn: aStream
 		handler type
 			ifNil: [aStream nextPutAll: 'BaseException']
 			ifNotNil: [
+				"Validate the handler through BaseException ___pyExceptType___:
+				before ``on:do:'' sends it #handles:.  Catching a non-exception
+				(a str, an instance, a class not derived from BaseException) must
+				raise ``TypeError: catching classes that do not inherit from
+				BaseException is not allowed'', not MNU on #handles:
+				(test_baseexception test_catch_*).  The handler is passed as an
+				ARGUMENT so it cannot MNU during the check."
+				aStream nextPutAll: '(BaseException @env1:___pyExceptType___: '.
 				(handler type isKindOf: TupleAst)
 					ifTrue: [
 						"``except (A, B):`` — emit a GemStone ExceptionSet
@@ -127,7 +135,8 @@ printSmalltalkOn: aStream
 						keyword send (``x ___pyAttrLoad___: #...``); unparenthesized
 						it merges with the surrounding ``on:...do:`` into one
 						mashed selector."
-						handler type printSmalltalkWithParenthesisOn: aStream]].
+						handler type printSmalltalkWithParenthesisOn: aStream].
+				aStream nextPut: $)].
 		aStream nextPutAll: ' do: [:___ex | | ___savedExc |'; increaseIndent; lf.
 		"Always re-raise Grail's control-flow signals so a Python
 		``except Exception`` doesn't swallow a pending ``return`` /

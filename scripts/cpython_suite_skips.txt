@@ -264,3 +264,11 @@ test.test_format|FormatTest.test_common_format|'%.*d' % (sys.maxsize, 1) is not 
 # there the guard is reached and raises Python's RecursionError.
 test.test_isinstance|TestIsInstanceIsSubclass.test_infinite_recursion_in_bases|self-recursive __bases__ property: unbounded PYTHON recursion, uncatchable AlmostOutOfStack kills the session
 test.test_isinstance|TestIsInstanceIsSubclass.test_infinitely_many_bases|__getattr__ manufactures 2 classes per level: unbounded PYTHON recursion, uncatchable AlmostOutOfStack kills the session
+# gh-97591 refcount-crash regression: the test acquires a strong reference before
+# the tp_hash slot in PyObject_SetAttr so a Value()'s refcount can't drop below
+# zero and crash GC.  Grail is not refcounted, so that crash cannot arise -- and
+# the test has no observable assertions.  Its only mechanism is a dict whose sole
+# key hashes to the empty string, so __setstate__ ends up doing setattr(exc, '',
+# value); Grail cannot represent an empty-named attribute (a dynamic instVar name
+# cannot be the empty symbol), and the resulting LookupError escapes uncatchably.
+test.test_baseexception|ExceptionClassTests.test_setstate_refcount_no_crash|refcount-crash regression (N/A without refcounting); needs an empty-string attribute name Grail can't represent -- uncatchable LookupError, no assertions
