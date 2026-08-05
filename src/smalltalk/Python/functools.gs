@@ -2731,6 +2731,27 @@ __annotations__
 	^ (self @env0:dynamicInstVarAt: #func) __annotations__
 %
 
+category: 'Grail-Reflection'
+classmethod: functools_singledispatchmethod
+__module__
+	"``type(meth).__module__'' -- the module the DESCRIPTOR CLASS lives in, which
+	is functools, not the module that defined the decorated method.  Same
+	class-side pattern functools_partial uses.
+
+	Needed because the instance-side __module__ below delegates to the wrapped
+	function: reading __module__ on the CLASS found that instance method and
+	wrapped it as an UnboundMethod, so ``type(meth).__module__'' answered a
+	callable instead of 'functools'."
+
+	^ 'functools'
+%
+
+category: 'Grail-Reflection'
+classmethod: functools_singledispatchmethod
+__qualname__
+	^ 'singledispatchmethod'
+%
+
 category: 'Grail-Representation'
 method: functools_singledispatchmethod
 __repr__

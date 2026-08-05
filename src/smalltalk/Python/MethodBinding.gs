@@ -168,7 +168,92 @@ ___pythonValueAttrs___
 	^ IdentitySet new
 		add: #'__self__';
 		add: #'__func__';
+		add: #'__name__';
+		add: #'__qualname__';
+		add: #'__module__';
+		add: #'__doc__';
+		add: #'__annotations__';
 		yourself
+%
+
+set compile_env: 1
+
+! ------------------- Function metadata, forwarded to the bound callable
+! A bound method exposes the underlying function's identifying metadata --
+! ``a.meth.__name__'' is the function's name, not the binding's.  Without these
+! every one of them raised AttributeError on a bound access while the same read
+! through the CLASS answered correctly, which is what test_functools
+! TestSingleDispatch.test_method_wrapping_attributes checks for both.
+
+category: 'Grail-Reflection'
+classmethod: MethodBinding
+__module__
+	"``type(a.meth).__module__''.  CPython's bound-method type is
+	``builtins.method'', so 'builtins' is the honest answer for Grail's generic
+	binding.
+
+	Class-side because the instance-side __module__ below forwards to the wrapped
+	callable: reading __module__ on the CLASS found that instance method and
+	wrapped it as an UnboundMethod, so ``type(a.meth).__module__'' answered a
+	callable rather than any module name.
+
+	Known divergence: for a bound singledispatchmethod CPython answers
+	'functools', because its __get__ returns a functools-specific wrapper rather
+	than a generic bound method.  Grail returns a MethodBinding for every bound
+	access, so test_method_wrapping_attributes still fails on that one assertion
+	-- claiming 'functools' here would be wrong for every other bound method."
+
+	^ 'builtins'
+%
+
+category: 'Grail-Reflection'
+classmethod: MethodBinding
+__qualname__
+	^ 'method'
+%
+
+category: 'Grail-Attribute Access'
+method: MethodBinding
+___boundMeta___: aName
+	"Read aName off the bound callable through the Python attribute protocol,
+	raising AttributeError when it has none -- the same answer an unbound read
+	would give, so both access paths agree."
+
+	^ (self @env0:callable) @env1:___pyAttrLoad___: aName
+%
+
+category: 'Grail-Attribute Access'
+method: MethodBinding
+__name__
+	^ self ___boundMeta___: #'__name__'
+%
+
+category: 'Grail-Attribute Access'
+method: MethodBinding
+__qualname__
+	^ self ___boundMeta___: #'__qualname__'
+%
+
+category: 'Grail-Attribute Access'
+method: MethodBinding
+__module__
+	^ self ___boundMeta___: #'__module__'
+%
+
+category: 'Grail-Attribute Access'
+method: MethodBinding
+__doc__
+	"The wrapped callable's docstring.  Without this the read fell through to
+	Object's own __doc__ and a bound method claimed to be documented as ``The
+	base class of the class hierarchy...''."
+
+	^ self ___boundMeta___: #'__doc__'
+%
+
+category: 'Grail-Attribute Access'
+method: MethodBinding
+__annotations__
+	^ self ___boundMeta___: #'__annotations__'
 %
 
 set compile_env: 0
