@@ -229,8 +229,26 @@ The argument must be an iterable if specified.'
 category: 'Grail-Sequence Operations'
 method: list
 __iadd__: other
-	"In-place concatenation: self += other. Returns self."
+	"In-place concatenation: self += other. Returns self.
 
+	CPython subtlety: ``list'' has no nb_inplace_add slot, so ``lst += x'' first
+	attempts the ordinary binary add.  When type(x) defines a REFLECTED add
+	(__radd__) that returns a value -- e.g. a collections.UserList on the right --
+	that result (x's type, NOT a list) is what ``lst'' is rebound to; only when the
+	reflected add is absent or punts (NotImplemented) does CPython fall back to
+	extending in place.  Mirror that: if other's class defines its OWN __radd__:,
+	try other.__radd__(self) and honour a non-NotImplemented result; otherwise
+	extend in place.  ``lst += 5'' still reaches the ``not iterable'' TypeError via
+	extend (int.__radd__ punts on a list); ``lst += [..]/(..)/'..''' stay in-place
+	(list/tuple/str define no __radd__).  test_userlist test_mixed_iadd asserts
+	``list += UserList'' yields a UserList."
+
+	| owner ni result |
+	owner := other @env0:class @env0:whichClassIncludesSelector: #'__radd__:' environmentId: 1.
+	owner ~~ nil ifTrue: [
+		ni := Python @env0:at: #NotImplemented otherwise: nil.
+		result := other @env0:perform: #'__radd__:' env: 1 withArguments: { self }.
+		result ~~ ni ifTrue: [^ result]].
 	self extend: other.
 	^ self
 %
