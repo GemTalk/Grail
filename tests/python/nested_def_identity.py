@@ -176,3 +176,58 @@ def default_capture_still_per_execution():
         return inner
     f1, f2 = make(1), make(2)
     return [f1(), f2(), f1 is not f2]
+
+
+# --- __annotate__ is a closure, so it is per-object, not per def site -----
+
+
+def annotate_captures_are_per_execution():
+    """Two live functions from ONE def site with DIFFERENT annotation
+    captures.  CPython: [{'x': int}, {'x': str}].  Storing __annotate__ per
+    DEF SITE reported the first execution's capture for both."""
+    def make(t):
+        def f(x: t):
+            pass
+        return f
+    a, b = make(int), make(str)
+    return [a.__annotations__ == {'x': int}, b.__annotations__ == {'x': str}]
+
+
+def capturing_annotate_is_per_object():
+    """...and the annotate functions themselves are distinct."""
+    def make(t):
+        def f(x: t):
+            pass
+        return f
+    a, b = make(int), make(str)
+    return a.__annotate__ is b.__annotate__
+
+
+def clean_annotate_is_shared():
+    """An annotation naming only globals captures nothing, so every execution
+    of the def gets the same block and it stays DEF-SITE data -- which is what
+    keeps a hot annotated def from accumulating a side-table entry per call."""
+    def make():
+        def f(x: int):
+            pass
+        return f
+    a, b = make(), make()
+    return [a.__annotate__ is b.__annotate__, a is not b]
+
+
+def forward_ref_raises_on_every_execution():
+    """The shape of test_functools TestWraps.test_update_wrapper_annotations:
+    an annotation naming a local bound only LATER.  Every execution must raise
+    NameError before the binding and succeed after -- the second execution was
+    silently served the first's already-resolved annotate function."""
+    def run_once():
+        def with_forward_ref(x: undefined):
+            pass
+        try:
+            with_forward_ref.__annotations__
+            raised = 'NO NameError'
+        except NameError:
+            raised = 'NameError'
+        undefined = str
+        return [raised, with_forward_ref.__annotations__ == {'x': str}]
+    return [run_once(), run_once()]

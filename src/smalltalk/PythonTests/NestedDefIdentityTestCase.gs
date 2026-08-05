@@ -232,3 +232,60 @@ testGeneratorNestedDefWorks
 	self assert: testModule @env1:generator_nested_def_works asArray
 		equals: #( 0 1 2 ).
 %
+
+! --- __annotate__ is a closure, so per-object rather than per def site ---
+
+category: 'Grail-Tests - annotate'
+method: NestedDefIdentityTestCase
+testAnnotateCapturesArePerExecution
+	"``def make(t): def f(x: t)'' built with int and with str must report
+	int and str.  __annotate__ is a CLOSURE over the enclosing scope, so
+	unlike __name__ / __code__ / __signature_spec__ it is not the same value
+	for every execution of the def -- keying it by def site answered the
+	FIRST execution's capture for every function built there."
+
+	self assert: testModule @env1:annotate_captures_are_per_execution asArray
+		equals: #( true true ).
+%
+
+category: 'Grail-Tests - annotate'
+method: NestedDefIdentityTestCase
+testCapturingAnnotateIsPerObject
+	"The annotate functions themselves are distinct, not merely their
+	results -- ``a.__annotate__ is b.__annotate__'' must be false."
+
+	self assert: testModule @env1:capturing_annotate_is_per_object
+		equals: false.
+%
+
+category: 'Grail-Tests - annotate'
+method: NestedDefIdentityTestCase
+testCleanAnnotateStaysSharedAndBounded
+	"The complement, and the reason ExecBlockAttrs decides per def rather
+	than always going per-object: an annotation naming only globals captures
+	nothing, so GemStone answers the same clean-block literal every time and
+	the value really IS def-site data.  Keeping it there is what stops a hot
+	annotated def from accumulating one side-table entry per execution --
+	measured at 200k entries for 200k executions when every annotate was
+	stored per-object.  The function objects are still distinct."
+
+	self assert: testModule @env1:clean_annotate_is_shared asArray
+		equals: #( true true ).
+%
+
+category: 'Grail-Tests - annotate'
+method: NestedDefIdentityTestCase
+testForwardRefRaisesOnEveryExecution
+	"An annotation naming a local bound only LATER must raise NameError on
+	EVERY execution, then resolve once the name is bound.  The second
+	execution used to be handed the first's already-resolved annotate
+	function and so raised nothing -- which is what test_functools
+	TestWraps.test_update_wrapper_annotations reports as 'NameError not
+	raised', passing in the base class and failing in the subclass that
+	inherits the same method body."
+
+	| both |
+	both := testModule @env1:forward_ref_raises_on_every_execution asArray.
+	self assert: (both at: 1) asArray equals: #( 'NameError' true ).
+	self assert: (both at: 2) asArray equals: #( 'NameError' true ).
+%

@@ -268,6 +268,45 @@ staticSlotAt: aBlock attr: aName
 
 category: 'Grail-Access'
 classmethod: ExecBlockAttrs
+annotateSlotAt: aBlock attr: aName put: aValue
+	"Store ``__annotate__'', which is neither purely def-site nor purely
+	per-object, and picks its table by OBSERVING which it is.
+
+	An annotate function is a CLOSURE over the scope enclosing the def, so
+	unlike __name__ / __code__ / __signature_spec__ it is not guaranteed to be
+	the same value for every execution.  When the annotations name only globals
+	(``def f(x: int)'' -- the common case) the emitted block captures nothing,
+	so GemStone answers the same clean-block literal every time and the value
+	IS def-site data.  When they name an enclosing local (``def make(t): def
+	f(x: t)'') a fresh block arrives per execution and storing it per DEF SITE
+	would report the first execution's captures for every function built there.
+
+	The two are told apart by comparing against what the def site already
+	holds -- no VM introspection required, and exact:
+
+	  * nothing stored yet -> store at the def site.  Costs one entry per def
+	    and is correct for the first execution either way, since that entry IS
+	    that execution's own block.
+	  * the same object arrives again -> a clean block, shared by construction.
+	    Nothing to do, and nothing per-object ever accumulates.
+	  * a DIFFERENT object arrives -> the block captures, so this execution
+	    needs its own.  Write per-object, where it shadows the def-site entry
+	    on read.
+
+	So the unbounded per-object growth is confined to defs whose annotations
+	actually close over enclosing state, which genuinely cannot share.  Writing
+	every annotate per-object instead was measured at one table entry per
+	annotated def execution -- 200k entries for 200k executions."
+
+	| existing |
+	existing := self staticSlotAt: aBlock attr: aName.
+	existing == nil ifTrue: [^ self staticSlotAt: aBlock attr: aName put: aValue].
+	existing == aValue ifTrue: [^ aValue].
+	^ self slotAt: aBlock attr: aName put: aValue
+%
+
+category: 'Grail-Access'
+classmethod: ExecBlockAttrs
 slotAt: aBlock attr: aName
 	"Read ``aBlock'''s slot ``aName'', nil when unset.  Direct lookup that
 	skips the auto-create branch so a pure read doesn't pin the block.

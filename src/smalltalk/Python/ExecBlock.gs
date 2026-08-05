@@ -480,7 +480,7 @@ ___pyNamed___: aString annotate: aBlock
 	first parameter's annotation off a decorated local def this way)."
 
 	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__name__' put: aString.
-	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__annotate__' put: aBlock.
+	(ExecBlock ___pyAttrsClass___) annotateSlotAt: self attr: '__annotate__' put: aBlock.
 	^ self
 %
 
@@ -504,7 +504,7 @@ ___pyNamed___: aString annotate: aBlock doc: aDoc
 	for an annotated def that also has a docstring."
 
 	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__name__' put: aString.
-	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__annotate__' put: aBlock.
+	(ExecBlock ___pyAttrsClass___) annotateSlotAt: self attr: '__annotate__' put: aBlock.
 	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__doc__' put: aDoc.
 	^ self
 %
