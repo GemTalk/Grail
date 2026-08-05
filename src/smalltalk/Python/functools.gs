@@ -2108,6 +2108,8 @@ ___on: aFunc
 	inst := self ___new___.
 	inst @env0:dynamicInstVarAt: #default put: aFunc.
 	inst @env0:dynamicInstVarAt: #registry put: IdentityKeyValueDictionary @env0:new.
+	inst @env0:dynamicInstVarAt: #dispatchCache put: IdentityKeyValueDictionary @env0:new.
+	inst @env0:dynamicInstVarAt: #abcCacheToken put: nil.
 	^ inst
 %
 
@@ -2143,41 +2145,103 @@ ___dispatchName___
 category: 'Grail-Single Dispatch'
 method: functools_singledispatch
 dispatch: cls
-	"First registered implementation along cls's __mro__, else the
-	default.  Behavior>>__mro__ covers kernel classes (superclass
-	chain) and MI user classes (C3 linearization) alike."
+	"The most specific registered implementation for cls, else the default.
 
-	| reg mro key |
+	Resolved by _find_impl over the COMPOSED mro, as CPython does: an ABC
+	registration is ordered by SPECIFICITY rather than by whichever matching
+	key a hash walk happened to reach first, and two equally specific
+	unrelated ABCs raise RuntimeError instead of one of them silently
+	winning.
+
+	There is deliberately NO exact-__mro__ fast path in front of this.  It
+	would be wrong, not just redundant: a class on cls's own __mro__ can lose
+	to a more specific registered ABC.  test_mro_conflicts pins it -- Sized
+	is an explicit base of O, yet once Set (a subclass of both Sized and
+	Container) is registered on O, Set wins.  The cache below is what pays
+	for composing an mro instead of walking one."
+
+	| reg key cache impl |
 	reg := self @env0:dynamicInstVarAt: #registry.
 	"g.dispatch(int): bare builtin-type names arrive as BoundMethod
 	wrappers here too -- normalize, tolerating non-classes."
 	key := (self ___registryKey___: cls) @env0:ifNil: [cls].
-	mro := key __mro__.
-	mro @env0:do: [:c |
-		(reg @env0:includesKey: c) ifTrue: [^ reg @env0:at: c]].
-	"Python-semantics widenings the Smalltalk chain can't see:
-	isinstance(x, str) is true for EVERY CharacterCollection (str maps
-	to Unicode7 but a plain String's chain never passes it), and int
-	subclasses are AbstractPyInt siblings of Integer."
-	((key == CharacterCollection)
-		or: [key @env0:inheritsFrom: CharacterCollection]) ifTrue: [
-		(reg @env0:includesKey: Unicode7) ifTrue: [^ reg @env0:at: Unicode7]].
-	((key == AbstractPyInt)
-		or: [key @env0:inheritsFrom: AbstractPyInt]) ifTrue: [
-		(reg @env0:includesKey: Integer) ifTrue: [^ reg @env0:at: Integer]].
-	"ABC fallback: a registered key that is neither on the chain nor a
-	widening may still match VIRTUALLY -- a collections.abc / numbers ABC
-	recognizes cls through its ``__subclasscheck__'' hook (registration,
-	whitelist, or structural protocol).  Scoped to hook-bearing keys so
-	ordinary class keys cost nothing extra.  Note: no CPython-style
-	ambiguity resolution between multiple matching ABCs -- Grail dicts are
-	hash-ordered, so the first matching ABC wins."
-	reg @env0:keysAndValuesDo: [:k :impl |
-		((k isKindOf: Behavior)
-			and: [(k ___respondsTo___: #'__subclasscheck__:')
-			and: [(k __subclasscheck__: key) == true]])
-				ifTrue: [^ impl]].
-	^ self @env0:dynamicInstVarAt: #default
+	"An ABC registration can invalidate a cached decision without touching
+	this dispatcher -- ``c.Set.register(O)'' makes Set outrank the Sized entry
+	already cached for O.  CPython re-checks abc.get_cache_token() on every
+	dispatch for exactly that reason, and so does this."
+	self ___checkAbcCacheToken___.
+	cache := self @env0:dynamicInstVarAt: #dispatchCache.
+	(cache @env0:includesKey: key) ifTrue: [^ cache @env0:at: key].
+	impl := (functools @env0:___instance___) ___findImplFor___: key registry: reg.
+	(impl == nil and: [key isKindOf: Behavior]) ifTrue: [
+		"Nothing CPython would consider matched.  Fall back to the RAW
+		Smalltalk chain, which holds classes CPython has no separate name for
+		and _find_impl therefore cannot see: ``int'' normalizes to Integer as
+		a registry key, but Integer reports the Python name ``int'' -- the
+		same as its SmallInteger subclass -- so the composed mro collapses the
+		two and a registration against Integer becomes unreachable.
+
+		Ranked BELOW everything in the composed mro on purpose: these are
+		Grail's own links, so they must not outrank a class CPython would
+		have ordered.  This generalizes two widenings that used to be
+		hand-coded here for str and int."
+		(key __mro__) @env0:do: [:c |
+			(impl == nil and: [reg @env0:includesKey: c])
+				ifTrue: [impl := reg @env0:at: c]].
+		"Two widenings the chain still cannot reach: isinstance(x, str) is
+		true for EVERY CharacterCollection (str maps to Unicode7, but a plain
+		String's chain never passes it), and int subclasses are AbstractPyInt
+		siblings of Integer rather than descendants."
+		((key == CharacterCollection)
+			or: [key @env0:inheritsFrom: CharacterCollection]) ifTrue: [
+			(reg @env0:includesKey: Unicode7)
+				ifTrue: [impl := reg @env0:at: Unicode7]].
+		(impl == nil
+			and: [(key == AbstractPyInt)
+				or: [key @env0:inheritsFrom: AbstractPyInt]]) ifTrue: [
+			(reg @env0:includesKey: Integer)
+				ifTrue: [impl := reg @env0:at: Integer]]].
+	impl == nil ifTrue: [impl := self @env0:dynamicInstVarAt: #default].
+	cache @env0:at: key put: impl.
+	^ impl
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___clearDispatchCache___
+	"Every register() invalidates every cached decision: a newly registered
+	class can be more specific than one already resolved and cached."
+
+	self @env0:dynamicInstVarAt: #dispatchCache
+		put: IdentityKeyValueDictionary @env0:new
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___checkAbcCacheToken___
+	"Drop the cache when abc.get_cache_token() has moved, i.e. when SOMETHING
+	has been registered on an ABC since the last dispatch.  Such a
+	registration never reaches this object, yet it can change what a cached
+	class should dispatch to.
+
+	Read straight off the already-imported abc module: dispatching must not
+	trigger an import, and a session that has never imported abc cannot have
+	registered anything on an ABC either, so a missing module means the token
+	cannot have moved."
+
+	| abcModule token seen |
+	abcModule := ((System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: #importlib) @env1:modules)
+			@env0:at: 'abc' otherwise: nil.
+	abcModule == nil ifTrue: [^ self].
+	token := [abcModule ___pyAttrLoad___: #'_abc_invalidation_counter']
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil].
+	token == nil ifTrue: [^ self].
+	seen := self @env0:dynamicInstVarAt: #abcCacheToken.
+	(seen @env0:= token) ifTrue: [^ self].
+	self @env0:dynamicInstVarAt: #abcCacheToken put: token.
+	self ___clearDispatchCache___
 %
 
 category: 'Grail-Single Dispatch'
@@ -2640,6 +2704,95 @@ __compose_mro: positional kw: kwargs
 	^ self ___composeMroOf___: (positional @env0:at: 1) types: (positional @env0:at: 2)
 %
 
+category: 'Grail-ABC MRO'
+method: functools
+___cpythonClassRepr___: aClass
+	"A class rendered the way CPython's type.__repr__ does --
+	<class 'collections.abc.Container'>, with ``builtins'' omitted -- because
+	the ambiguity message below is asserted VERBATIM by test_mro_conflicts.
+
+	Rendered here rather than by fixing Grail's global class repr, which
+	answers <Container class object>.  Changing that would alter what every
+	corpus test sees whenever it prints a class; it is a real difference and
+	worth its own change, measured on its own.  This one is scoped to the
+	message."
+
+	| m n |
+	n := self ___pyNameOf___: aClass.
+	m := self ___pyModuleOf___: aClass.
+	^ (m == nil or: [m @env0:asString @env0:= 'builtins'])
+		ifTrue: ['<class ''' @env0:, n @env0:, '''>']
+		ifFalse: ['<class ''' @env0:, m @env0:asString @env0:, '.'
+			@env0:, n @env0:, '''>']
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___findImplFor___: aClass registry: reg
+	"CPython's functools._find_impl: the most specific registered
+	implementation for aClass, chosen over the mro _compose_mro builds -- so
+	ABC registrations are ordered by specificity rather than by hash order.
+
+	Answers nil when nothing matches.  CPython answers None there, but only
+	reaches it when its registry lacks an ``object'' entry; its registry
+	always has one, because singledispatch seeds the registry with the
+	default.  Grail keeps the default in its own slot, so nil is the normal
+	``fall through to the default'' answer and the caller supplies it.
+
+	Raises RuntimeError for an ambiguous dispatch exactly where CPython does:
+	once a match is found, the NEXT registered class in the linearization
+	makes it ambiguous -- unless one of the two is on aClass's own __mro__
+	(an explicit base wins outright), or the match is a subclass of it (more
+	specific, so it legitimately wins)."
+
+	| mro ownMro match |
+	mro := self ___composeMroOf___: aClass
+		types: (self ___sortByPyName___: reg @env0:keys).
+	ownMro := [aClass __mro__]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: #()].
+	match := nil.
+	mro @env0:do: [:t |
+		match == nil
+			ifTrue: [(reg @env0:includesKey: t) ifTrue: [match := t]]
+			ifFalse: [
+				((reg @env0:includesKey: t)
+					and: [(ownMro @env0:includesIdentical: t) @env0:not
+					and: [(ownMro @env0:includesIdentical: match) @env0:not
+					and: [(self ___issubclassOf___: match of: t) @env0:not]]])
+						ifTrue: [
+							RuntimeError ___signal___: 'Ambiguous dispatch: '
+								@env0:, (self ___cpythonClassRepr___: match)
+								@env0:, ' or '
+								@env0:, (self ___cpythonClassRepr___: t)].
+				^ reg @env0:at: match otherwise: nil]].
+	^ match == nil ifTrue: [nil] ifFalse: [reg @env0:at: match otherwise: nil]
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+_find_impl: aClass _: reg
+	"functools._find_impl(cls, registry) -- the fixed-arity form.  Private in
+	CPython, but test_functools calls it directly (test_cache_invalidation
+	compares the dispatcher's cached entry against it)."
+
+	^ self ___findImplFor___: aClass registry: reg
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+__find_impl: positional kw: kwargs
+	"Varargs form of _find_impl.  CPython's signature is positional-only."
+
+	kwargs == nil ifFalse: [
+		kwargs @env0:keysAndValuesDo: [:k :v |
+			TypeError ___signal___: '_find_impl() takes no keyword arguments']].
+	(positional == nil or: [positional @env0:size @env0:< 2]) ifTrue: [
+		TypeError ___signal___: '_find_impl() takes 2 positional arguments'].
+	^ self ___findImplFor___: (positional @env0:at: 1)
+		registry: (positional @env0:at: 2)
+%
+
 category: 'Grail-Single Dispatch'
 method: functools_singledispatch
 register: clsOrFunc
@@ -2663,13 +2816,16 @@ register: clsOrFunc
 		(inferred isKindOf: Array) ifTrue: [
 			inferred @env0:do: [:each |
 				(self @env0:dynamicInstVarAt: #registry) @env0:at: each put: clsOrFunc].
+			self ___clearDispatchCache___.
 			^ clsOrFunc].
 		(self @env0:dynamicInstVarAt: #registry) @env0:at: inferred put: clsOrFunc.
+		self ___clearDispatchCache___.
 		^ clsOrFunc].
 	^ [:positional2 :keywords2 |
 		| fn |
 		fn := positional2 @env0:at: 1.
 		(self @env0:dynamicInstVarAt: #registry) @env0:at: key put: fn.
+		self ___clearDispatchCache___.
 		fn]
 %
 
@@ -3017,6 +3173,7 @@ register: cls _: aFunc
 	key @env0:isNil ifTrue: [
 		TypeError ___signal___: (self ___invalidRegisterMessage___: cls)].
 	(self @env0:dynamicInstVarAt: #registry) @env0:at: key put: aFunc.
+	self ___clearDispatchCache___.
 	^ aFunc
 %
 
