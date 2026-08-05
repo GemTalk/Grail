@@ -622,8 +622,9 @@ ___grailBuildMembers: cls names: attrNames
 							Enum ___grailStoreOverride: cls name: nameStr callable: dunVal.
 							Enum ___grailCompileOverrideForwarder: cls name: nameStr]]]
 			ifFalse: [
-			| rawValue member built effVal |
+			| rawValue member built effVal tupleAutoDone |
 			built := false.
+			tupleAutoDone := false.
 			"Declared names read through their compiled accessor pair;
 			dyn-swept names (class-body ``if`` stores) read from the holder."
 			hasAccessor := (cls @env0:class
@@ -632,6 +633,47 @@ ___grailBuildMembers: cls names: attrNames
 			rawValue := hasAccessor
 				ifTrue: [cls @env0:perform: nameSym env: 1]
 				ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym].
+			"``TWO = auto(), auto()'': a tuple value carrying auto() markers.  Resolve
+			each marker left-to-right with the SAME generator the scalar path uses,
+			appending its value to genValues (the gnv's last_values) BETWEEN markers so
+			the DEFAULT numeric generator advances: ``auto(), auto()'' is (2, 3).  But
+			``count'' is the number of MEMBERS so far (members size), CONSTANT within a
+			member -- so a ``return count+1'' gnv yields (2, 2)/(3, 3, 3), matching
+			CPython (test_multiple_auto_on_line's two Huh classes differ ONLY in this).
+			Non-marker elements pass through (WEDNESDAY = auto(), 'WED').  Only the
+			INDIVIDUAL generated values, not the whole tuple, belong in last_values, so
+			genValues is updated here and the per-member add below is skipped
+			(tupleAutoDone)."
+			((rawValue isKindOf: tupleClass)
+				and: [rawValue @env0:anySatisfy: [:el | el isKindOf: GrailEnumAuto]]) ifTrue: [
+				| resolvedEls |
+				resolvedEls := OrderedCollection @env0:new.
+				rawValue @env0:do: [:el |
+					(el isKindOf: GrailEnumAuto)
+						ifTrue: [ | r hasExplicit explicitVal |
+							hasExplicit := true.
+							explicitVal := [el ___pyAttrLoad___: #'value']
+								@env0:on: AbstractException do: [:ex | hasExplicit := false. nil].
+							r := hasExplicit
+								ifTrue: [explicitVal]
+								ifFalse: [gnvClass @env0:notNil
+									ifTrue: [(UnboundMethod definingClass: gnvClass selector: #'_generate_next_value_')
+										value: { nameStr. 1. members @env0:size. (list @env0:withAll: genValues) }
+										value: KeyValueDictionary @env0:new]
+									ifFalse: [gnvStaticClass @env0:notNil
+									ifTrue: [cls @env0:perform: #'_generate_next_value_:_:_:_:' env: 1
+										withArguments: { nameStr. 1. members @env0:size. (list @env0:withAll: genValues) }]
+									ifFalse: [(Enum ___grailIsStrEnumClass: cls)
+										ifTrue: [nameStr @env0:asLowercase]
+										ifFalse: [(Enum ___grailIsFlagClass: cls)
+											ifTrue: [Enum ___grailFlagAutoNext: genValues]
+											ifFalse: [Enum ___grailPlainAutoNext: genValues]]]]].
+							genValues @env0:add: r.
+							(r isKindOf: Integer) ifTrue: [lastInt := r. maxInt := maxInt @env0:max: r].
+							resolvedEls @env0:add: r]
+						ifFalse: [resolvedEls @env0:add: el]].
+				rawValue := tupleClass @env0:withAll: resolvedEls.
+				tupleAutoDone := true].
 			"auto() markers resolve to last-integer-value + 1 in
 			declaration order -- except Flag-natured classes, where the
 			next auto value is the next power of two ABOVE the last
@@ -676,10 +718,15 @@ ___grailBuildMembers: cls names: attrNames
 									ifFalse: [Enum ___grailPlainAutoNext: genValues]]]]].
 						autoResolved @env0:at: rawValue put: resolved.
 						rawValue := resolved]].
-			genValues @env0:add: rawValue.
-			(rawValue isKindOf: Integer) ifTrue: [
-				lastInt := rawValue.
-				maxInt := maxInt @env0:max: rawValue].
+			"A tuple-auto member already appended its individual generated values to
+			genValues (and updated lastInt/maxInt) during resolution above; re-adding
+			the whole tuple here would poison last_values for the default numeric
+			generator (sorted([1, (2,3)]) raises)."
+			tupleAutoDone ifFalse: [
+				genValues @env0:add: rawValue.
+				(rawValue isKindOf: Integer) ifTrue: [
+					lastInt := rawValue.
+					maxInt := maxInt @env0:max: rawValue]].
 			"A foreign-mixin enum (``class E(date, Enum)'') carries
 			member_type(*args) -- date(2023, 12, 1) -- as its canonical value.
 			Construct it up front so alias detection, value-lookup and storage
