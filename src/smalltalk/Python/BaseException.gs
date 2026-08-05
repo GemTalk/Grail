@@ -220,10 +220,17 @@ ___args___: anArray
 category: 'Grail-Exception Chaining'
 method: BaseException
 __cause__
-	"Return the exception that was the direct cause of this exception.
-	Set via 'raise ... from ...' syntax."
+	"The exception that DIRECTLY caused this one -- CPython's ``raise X from Y''.
+	Stored in the ___cause___ dynamic instVar, read with the same absent-tolerant
+	probe __context__ uses (an unset dynamic instVar reads back as ABSENT, which
+	raises rather than answering nil).  Unset -> None, CPython's default.
 
-	^ None  "TODO: implement exception chaining"
+	Written by ___setCause___:context___:.  NOTE: the ``raise X from Y'' SYNTAX
+	does not set this yet -- RaiseAst parses a ``cause'' but drops it -- so today
+	the only writer is PEP 479 generator wrapping."
+
+	^ ([self @env0:dynamicInstVarAt: #'___cause___']
+		@env0:on: AbstractException do: [:e | nil]) ifNil: [None]
 %
 
 category: 'Grail-Exception Chaining'
@@ -335,9 +342,37 @@ __str__
 category: 'Grail-Exception Chaining'
 method: BaseException
 __suppress_context__
-	"Return whether to suppress the exception context in tracebacks."
+	"Whether a traceback should suppress the implicit context.  CPython sets this
+	as a SIDE EFFECT of assigning __cause__ (``raise X from Y''), which is what
+	makes the traceback read ``The above exception was the direct cause of...''
+	rather than ``During handling of the above exception...''.  Stored separately
+	from ___cause___ so ``raise X from None'' -- suppress with NO cause -- is
+	representable.  Unset -> false."
 
-	^ false  "TODO: implement context suppression"
+	^ ([self @env0:dynamicInstVarAt: #'___suppressContext___']
+		@env0:on: AbstractException do: [:e | nil]) == true
+%
+
+category: 'Grail-Exception Chaining'
+method: BaseException
+___setCause___: aCause context: aContext
+	"Chain this exception the way ``raise <self> from aCause'' does: set
+	__cause__, set __context__, and set __suppress_context__ -- CPython sets the
+	flag as a side effect of setting the cause, so all three move together on
+	this path.
+
+	A nil argument is skipped rather than stored: a nil dynamic instVar reads
+	back as ABSENT, so storing nil would be indistinguishable from unset and the
+	accessors' None/false defaults cover it.  The flag is stored
+	unconditionally, because ``raise X from None'' means suppress WITHOUT a
+	cause."
+
+	aCause == nil ifFalse: [
+		self @env0:dynamicInstVarAt: #'___cause___' put: aCause].
+	aContext == nil ifFalse: [
+		self @env0:dynamicInstVarAt: #'___context___' put: aContext].
+	self @env0:dynamicInstVarAt: #'___suppressContext___' put: true.
+	^ self
 %
 
 category: 'Grail-Exception Chaining'

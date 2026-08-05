@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 23 | 10 | 57 | 90 |
+| P1 | 25 | 8 | 57 | 90 |
 | P2 | 9 | 7 | 18 | 34 |
 | P3 | 0 | 1 | 55 | 56 |
 | P4 | 0 | 0 | 75 | 75 |
-| **In-scope** | **32** | **18** | **205** | **255** |
+| **In-scope** | **34** | **16** | **205** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -65,7 +65,7 @@ python3 scripts/sync_scope_status.py --check    # exit 1 if it is stale
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **32 of those score OK**.
+Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **34 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -99,7 +99,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_descrtut` | Descriptor tutorial doctests (language). |
 | ✅ | `test_dict` | dict — core type (in harness). |
 | ✅ | `test_dictcomps` | Dict comprehensions (language). |
-| ❗ | `test_dictviews` | dict keys/values/items views (language). |
+| ✅ | `test_dictviews` | dict keys/values/items views (language). |
 |  | `test_dynamic` | Dynamic name binding / exec (language). |
 |  | `test_enumerate` | enumerate builtin (language). |
 |  | `test_eof` | Parser EOF handling (language). |
@@ -115,7 +115,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_fstring` | f-strings (language). |
 |  | `test_funcattrs` | Function/method attributes (language). |
 |  | `test_future_stmt` | __future__ statements (language). |
-| ❗ | `test_generator_stop` | PEP 479 StopIteration handling (language). |
+| ✅ | `test_generator_stop` | PEP 479 StopIteration handling (language). |
 |  | `test_generators` | Generators (language). |
 |  | `test_genericclass` | __class_getitem__ / generic classes (language). |
 |  | `test_genexps` | Generator expressions (language). |
@@ -665,11 +665,11 @@ status/tests/fail/err/skip — are in
 only what does not change every run: which modules are *done*, and what each
 not-yet-passing one is waiting on.
 
-**Fully green: 32 of the 50** — the ✅ rows in the tier tables above. That list
+**Fully green: 34 of the 50** — the ✅ rows in the tier tables above. That list
 used to be spelled out here and is not any more: it duplicated something the
 Status column now derives, and had drifted to 27.
 
-**Not yet green (the 18 ❗ rows), in descending size of the remaining gap:**
+**Not yet green (the 16 ❗ rows), in descending size of the remaining gap:**
 `test_enum` (metaclass depth — `object.__str__`, `__dir__`-on-class, `_boundary_`
 Flag), `test_datetime`, `test_functools`, and `test_traceback` (the
 only IMPORTERROR — `__code__` on a def that compiled to a real method; PR #129
@@ -708,18 +708,16 @@ Two of the eighteen only needed a vendoring gap closed, not a Grail fix:
 (for `test_yield_from`) were added to the trimmed support package, plus
 `os_helper.create_empty_file`.
 
-Four of the eighteen have since gone green — `test_compare`, `test_iterlen`,
-`test_index` and `test_keywordonlyarg` — and their rows are gone from the tables
-below, including the `#'<'`/`#'<='` uncatchable-DNU root that `test_index`
-named. The tier tables' ✅
+Six of the eighteen have since gone green — `test_compare`, `test_iterlen`,
+`test_index`, `test_keywordonlyarg`, `test_dictviews` and `test_generator_stop`
+— and their rows are gone from the tables below, including the `#'<'`/`#'<='`
+uncatchable-DNU root that `test_index` named. The tier tables' ✅
 is the live signal; anything still listed here is still open.
 
-**Easy wins — small residual, no new runtime plumbing (6 left of 9):**
+**Easy wins — small residual, no new runtime plumbing (4 left of 9):**
 
 | Module | Trial score | What is left |
 |--------|-------------|--------------|
-| `test_generator_stop` | 2t, 2E | PEP 479: a `StopIteration` crossing a generator boundary must become `RuntimeError`. |
-| `test_dictviews` | 16t, 2F 3E | `dict_keys` must register as `KeysView`; a self-referential view `repr` recurses; one `PyDict does not understand #new` leak. |
 | `test_sort` | 21t, 4F 1E | Mutation-during-sort must raise `ValueError` (4 tests) + one `OffsetError` escaping codegen. |
 | `test_userdict` | 28t, 3F 3E | `UserDict \| UserDict` (PEP 584), `UserDict(self=42)`, `repr` of a self-referential dict. |
 | `test_userlist` | 54t, 4F 4E | `OrderedCollection + UserList`, slice-assignment identity, `UserList does not understand #reverseDo:`. |

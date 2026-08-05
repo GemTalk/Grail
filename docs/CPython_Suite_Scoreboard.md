@@ -50,9 +50,9 @@ different rows and merges cleanly.
 | test.test_compare | OK | 16 | 0 | 0 | 0 |  |
 | test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
 | test.test_keywordonlyarg | OK | 11 | 0 | 0 | 0 |  |
-| test.test_dictviews | ERROR | 16 | 2 | 3 | 0 |  |
+| test.test_dictviews | OK | 16 | 0 | 0 | 0 |  |
 | test.test_sort | FAIL | 21 | 4 | 0 | 0 |  |
-| test.test_generator_stop | ERROR | 2 | 0 | 2 | 0 |  |
+| test.test_generator_stop | OK | 2 | 0 | 0 | 0 |  |
 | test.test_userdict | ERROR | 28 | 3 | 3 | 0 |  |
 | test.test_userlist | ERROR | 54 | 4 | 4 | 1 |  |
 | test.test_isinstance | ERROR | 23 | 1 | 13 | 2 |  |
