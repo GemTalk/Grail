@@ -334,12 +334,18 @@ __type_params__
 	Memoized on first read for the same identity reason as
 	__annotations__."
 
-	| attrs cur |
+	| attrs cur names built |
 	attrs := ExecBlock @env0:___pyAttrsClass___.
 	cur := attrs @env0:slotAt: self attr: '__type_params__'.
 	cur == nil ifFalse: [^ cur].
+	"The def site stamps the NAMES (``def f[T]'' -> #('T')); the placeholders are
+	built on first read, so nothing has to reach typing at def time."
+	names := attrs @env0:staticSlotAt: self attr: '___typeParamNames___'.
+	built := (names == nil or: [names @env0:isEmpty])
+		ifTrue: [#()]
+		ifFalse: [names @env0:collect: [:n | ExecBlock @env0:___pyTypeVarNamed___: n]].
 	^ attrs @env0:slotAt: self attr: '__type_params__'
-		put: ((ExecBlock @env0:___pyTupleClass___) @env0:withAll: #())
+		put: ((ExecBlock @env0:___pyTupleClass___) @env0:withAll: built)
 %
 
 category: 'Grail-Callable'
@@ -407,6 +413,32 @@ __repr__
 set compile_env: 0
 
 category: 'Grail-Python Attribute Hook'
+classmethod: ExecBlock
+___pyTypeVarNamed___: aName
+	"An opaque placeholder for a PEP 695 type parameter, minted through
+	``typing.TypeVar'' so it is the same kind of object user code gets from the
+	explicit spelling.  Falls back to the name STRING when typing is not loaded --
+	__type_params__ must answer something rather than fail, since
+	functools.update_wrapper copies it."
+
+	| mods typing |
+	"@env1: on both sends: this helper is compiled in the file's env-0 region, and
+	``modules'' / ``TypeVar:'' are env-1 methods.  Sent unprefixed they are simply
+	not found, the guard swallows it, and the fallback quietly answers a STRING
+	where a TypeVar belongs -- silent, because the fallback exists for the
+	typing-not-loaded case and cannot tell the two apart."
+	mods := [(System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: #importlib) @env1:modules]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	mods == nil ifTrue: [^ aName].
+	typing := (mods @env0:at: 'typing' otherwise: nil)
+		@env0:ifNil: [mods @env0:at: #'typing' otherwise: nil].
+	typing == nil ifTrue: [^ aName].
+	^ [typing @env1:TypeVar: aName]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: aName]
+%
+
 classmethod: ExecBlock
 ___pyAttrsClass___
 	"Resolve the ExecBlockAttrs side-table class from the CALLING session's
@@ -568,6 +600,18 @@ ___pyNamed___: aString annotate: aBlock doc: aDoc
 	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__name__' put: aString.
 	(ExecBlock ___pyAttrsClass___) annotateSlotAt: self attr: '__annotate__' put: aBlock.
 	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__doc__' put: aDoc.
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
+___pyTypeParams___: names
+	"Stamp the def's PEP 695 type-parameter NAMES.  DEF-SITE storage: they are a
+	property of where the def is written.  The placeholder objects themselves are
+	built on first read of __type_params__, so def time never touches typing."
+
+	(ExecBlock ___pyAttrsClass___)
+		staticSlotAt: self attr: '___typeParamNames___' put: names.
 	^ self
 %
 

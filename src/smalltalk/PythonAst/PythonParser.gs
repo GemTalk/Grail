@@ -283,22 +283,43 @@ category: 'Grail-token access'
 method: PythonParser
 skipTypeParams
 	"PEP 695 type-parameter list after a def/class name --
-	``def f[T](...)`` / ``class C[T: bound]:`` / ``def g[*Ts, **P]()``.
-	Parse and DISCARD the balanced bracket group: Grail erases generics
-	(as it does Generic[...]), and the parameter names only appear in
-	annotations, which Grail never evaluates.  test_functools could not
-	even import before this."
+	``def f[T](...)'' / ``class C[T: bound]:'' / ``def g[*Ts, **P]()''.
+	Consumes the balanced bracket group and ANSWERS the parameter names.
 
-	| depth tok |
+	It used to discard them, reasoning that ``the parameter names only appear in
+	annotations, which Grail never evaluates''.  Annotations are evaluated now
+	(PEP 649), and the names are observable in their own right:
+	``f.__type_params__'' is one of functools.WRAPPER_ASSIGNMENTS, and
+	test_functools unpacks it (``T, = f.__type_params__'').
+
+	Only the NAME of each parameter is kept.  A bound or constraint
+	(``[T: int]'', ``[T: (int, str)]'') is consumed and dropped, as are the
+	``*''/``**'' markers of a TypeVarTuple or ParamSpec -- Grail models a type
+	parameter as an opaque placeholder, so its constraints have nothing to act
+	on."
+
+	| depth tok names expectName |
+	names := OrderedCollection new.
 	tok := self peek.
-	(tok notNil and: [tok isOp: '[']) ifFalse: [^ self].
+	(tok notNil and: [tok isOp: '[']) ifFalse: [^ names asArray].
 	depth := 0.
+	expectName := false.
 	[
 		tok := self advance.
-		(tok isOp: '[') ifTrue: [depth := depth + 1].
+		(tok isOp: '[') ifTrue: [
+			depth := depth + 1.
+			depth = 1 ifTrue: [expectName := true]].
 		(tok isOp: ']') ifTrue: [depth := depth - 1].
+		"At depth 1 a comma starts the next parameter; the first identifier after
+		that (or after the opening bracket) is its name.  Anything else at that
+		depth -- a colon and its bound, a star -- is skipped."
+		(depth = 1 and: [tok isOp: ',']) ifTrue: [expectName := true].
+		(depth = 1 and: [expectName and: [tok type == #NAME]]) ifTrue: [
+			names add: tok value asString.
+			expectName := false].
 		depth = 0
-	] whileFalse
+	] whileFalse.
+	^ names asArray
 %
 
 category: 'Grail-parsing - helpers'
@@ -1362,7 +1383,7 @@ parseFunctionDefWithDecorators: decorators
 	"Parse a function definition with already-parsed decorators."
 
 	| tok nameTok args returns body block funcNode decoratorNames variables writes blocking scope
-	  savedNesting |
+	  savedNesting typeParamNames |
 	tok := self advance. "consume 'def'"
 	nameTok := self expectType: #NAME.
 	"``def _(...)`` -- apply the same parse-time rename NameAst reads
@@ -1370,7 +1391,7 @@ parseFunctionDefWithDecorators: decorators
 	token, not an identifier."
 	nameTok value = '_' ifTrue: [nameTok value: self underscoreDefName asString].
 	self declareWrite: nameTok value asSymbol.
-	self skipTypeParams.
+	typeParamNames := self skipTypeParams.
 	self expect: #OP value: '('.
 	args := self parseFunctionParametersUntil: ')'.
 	self expect: #OP value: ')'.
@@ -1433,7 +1454,7 @@ parseFunctionDefWithDecorators: decorators
 		at: #decorator_list put: decoratorNames;
 		at: #returns put: returns;
 		at: #type_comment put: nil;
-		at: #type_params put: Array new;
+		at: #type_params put: typeParamNames;
 		yourself) from: tok to: self lastToken.
 	"Convert to appropriate subclass when inside a class"
 	classNesting > 0 ifTrue: [

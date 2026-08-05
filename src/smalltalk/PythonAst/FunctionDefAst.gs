@@ -675,6 +675,13 @@ printSmalltalkOn: aStream
 		``doc:'' into one combined selector that does not exist -- which turned 22
 		tests into uncatchable Smalltalk errors when tried that way."
 		self ___emitQualnameOn___: aStream name: name.
+		"PEP 695 type parameters, when the def declares any.  A CASCADE, for the
+		same reason as the qualname beside it."
+		(type_params notNil and: [type_params notEmpty]) ifTrue: [
+			aStream nextPutAll: '; @env0:___pyTypeParams___: #('.
+			type_params do: [:n |
+				aStream nextPutAll: ''''; nextPutAll: n asString; nextPutAll: ''' '].
+			aStream nextPutAll: ')'].
 		aStream
 			nextPutAll: '; @env0:___pyCode___: (PyCode @env0:name: '''; nextPutAll: name;
 			nextPutAll: ''' firstlineno: '; nextPutAll: self beginLine printString;
