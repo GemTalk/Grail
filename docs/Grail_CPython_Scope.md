@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 25 | 8 | 57 | 90 |
-| P2 | 9 | 7 | 18 | 34 |
+| P1 | 26 | 7 | 57 | 90 |
+| P2 | 10 | 6 | 18 | 34 |
 | P3 | 0 | 1 | 55 | 56 |
 | P4 | 0 | 0 | 75 | 75 |
-| **In-scope** | **34** | **16** | **205** | **255** |
+| **In-scope** | **36** | **14** | **205** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -65,7 +65,7 @@ python3 scripts/sync_scope_status.py --check    # exit 1 if it is stale
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **34 of those score OK**.
+Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **36 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -149,7 +149,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_set` | set/frozenset — core type (in harness). |
 | ✅ | `test_setcomps` | Set comprehensions (language). |
 | ✅ | `test_slice` | slice objects (language). |
-| ❗ | `test_sort` | list.sort / sorted (language/builtin). |
+| ✅ | `test_sort` | list.sort / sorted (language/builtin). |
 |  | `test_source_encoding` | Source-file encoding declarations (parser). |
 |  | `test_str` | str — core type (language). |
 |  | `test_string_literals` | String-literal syntax (language). |
@@ -209,7 +209,7 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 |  | `test_strtod` | String→double conversion (float parsing). |
 | ✅ | `test_textwrap` | textwrap — core (in harness). |
 |  | `test_unittest` | unittest (vendored) — the test framework itself. |
-| ❗ | `test_userdict` | collections.UserDict (vendored). |
+| ✅ | `test_userdict` | collections.UserDict (vendored). |
 | ❗ | `test_userlist` | collections.UserList (vendored). |
 |  | `test_userstring` | collections.UserString (vendored). |
 
@@ -665,11 +665,11 @@ status/tests/fail/err/skip — are in
 only what does not change every run: which modules are *done*, and what each
 not-yet-passing one is waiting on.
 
-**Fully green: 34 of the 50** — the ✅ rows in the tier tables above. That list
+**Fully green: 36 of the 50** — the ✅ rows in the tier tables above. That list
 used to be spelled out here and is not any more: it duplicated something the
 Status column now derives, and had drifted to 27.
 
-**Not yet green (the 16 ❗ rows), in descending size of the remaining gap:**
+**Not yet green (the 14 ❗ rows), in descending size of the remaining gap:**
 `test_enum` (metaclass depth — `object.__str__`, `__dir__`-on-class, `_boundary_`
 Flag), `test_datetime`, `test_functools`, and `test_traceback` (the
 only IMPORTERROR — `__code__` on a def that compiled to a real method; PR #129
@@ -708,18 +708,16 @@ Two of the eighteen only needed a vendoring gap closed, not a Grail fix:
 (for `test_yield_from`) were added to the trimmed support package, plus
 `os_helper.create_empty_file`.
 
-Six of the eighteen have since gone green — `test_compare`, `test_iterlen`,
-`test_index`, `test_keywordonlyarg`, `test_dictviews` and `test_generator_stop`
-— and their rows are gone from the tables below, including the `#'<'`/`#'<='`
-uncatchable-DNU root that `test_index` named. The tier tables' ✅
+Eight of the eighteen have since gone green — `test_compare`, `test_iterlen`,
+`test_index`, `test_keywordonlyarg`, `test_dictviews`, `test_generator_stop`,
+`test_sort` and `test_userdict` — and their rows are gone from the tables below,
+including the `#'<'`/`#'<='` uncatchable-DNU root that `test_index` named. The tier tables' ✅
 is the live signal; anything still listed here is still open.
 
-**Easy wins — small residual, no new runtime plumbing (4 left of 9):**
+**Easy wins — small residual, no new runtime plumbing (2 left of 9):**
 
 | Module | Trial score | What is left |
 |--------|-------------|--------------|
-| `test_sort` | 21t, 4F 1E | Mutation-during-sort must raise `ValueError` (4 tests) + one `OffsetError` escaping codegen. |
-| `test_userdict` | 28t, 3F 3E | `UserDict \| UserDict` (PEP 584), `UserDict(self=42)`, `repr` of a self-referential dict. |
 | `test_userlist` | 54t, 4F 4E | `OrderedCollection + UserList`, slice-assignment identity, `UserList does not understand #reverseDo:`. |
 | `test_isinstance` | 23t, 1F 19E | 16 of the 19 errors are Grail raising "arg must be a type" where CPython accepts the argument. |
 

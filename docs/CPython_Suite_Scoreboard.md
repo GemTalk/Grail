@@ -51,10 +51,10 @@ different rows and merges cleanly.
 | test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
 | test.test_keywordonlyarg | OK | 11 | 0 | 0 | 0 |  |
 | test.test_dictviews | OK | 16 | 0 | 0 | 0 |  |
-| test.test_sort | FAIL | 21 | 4 | 0 | 0 |  |
+| test.test_sort | OK | 21 | 0 | 0 | 2 |  |
 | test.test_generator_stop | OK | 2 | 0 | 0 | 0 |  |
-| test.test_userdict | ERROR | 28 | 3 | 3 | 0 |  |
-| test.test_userlist | ERROR | 54 | 4 | 4 | 1 |  |
+| test.test_userdict | OK | 28 | 0 | 0 | 0 |  |
+| test.test_userlist | ERROR | 54 | 4 | 3 | 1 |  |
 | test.test_isinstance | ERROR | 23 | 1 | 13 | 2 |  |
 | test.test_index | OK | 55 | 0 | 0 | 0 |  |
 | test.test_baseexception | ERROR | 11 | 1 | 7 | 0 |  |

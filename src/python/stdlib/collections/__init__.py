@@ -1077,7 +1077,14 @@ class UserList:
 class UserDict:
     """Dict wrapper with .data."""
 
-    def __init__(self, dict=None, **kwargs):
+    def __init__(self, dict=None, /, **kwargs):
+        # ``/`` makes self and dict POSITIONAL-ONLY, as upstream.  Without it,
+        # UserDict(dict=42) and UserDict(self=42) bound the parameters instead
+        # of becoming data keys -- so ``UserDict(dict=[('one', 1)])`` built
+        # {'one': 1} rather than {'dict': [('one', 1)]}, and UserDict(self=42)
+        # silently produced an empty mapping (test_userdict test_init /
+        # test_update / test_all).  Any name is a legal dict key, which is
+        # exactly why upstream fences the parameters off.
         self.data = {}
         if dict is not None:
             self.update(dict)
@@ -1141,7 +1148,10 @@ class UserDict:
     def items(self):
         return self.data.items()
 
-    def update(self, other=None, **kwargs):
+    def update(self, other=None, /, **kwargs):
+        # ``/`` for the same reason as __init__: upstream's MutableMapping.update
+        # is ``update(self, other=(), /, **kwds)'', so d.update(self=42) and
+        # d.update(other=42) set DATA keys (test_userdict test_update).
         if other is not None:
             if hasattr(other, "keys"):
                 for k in other.keys():
@@ -1157,6 +1167,33 @@ class UserDict:
             return self.data[key]
         self.data[key] = default
         return default
+
+    # PEP 584 dict union.  ``|`` builds a NEW mapping of the LEFT operand's
+    # class (so UserDict | UserDictSubclass is a UserDict), while ``|=`` updates
+    # in place and returns self.  NotImplemented for anything that is neither a
+    # UserDict nor a dict, which is what lets the reflected __ror__ run and keeps
+    # ``dict | UserDict`` answering a UserDict (test_userdict test_mixed_or /
+    # test_mixed_ior).
+    def __or__(self, other):
+        if isinstance(other, UserDict):
+            return self.__class__(self.data | other.data)
+        if isinstance(other, dict):
+            return self.__class__(self.data | other)
+        return NotImplemented
+
+    def __ror__(self, other):
+        if isinstance(other, UserDict):
+            return self.__class__(other.data | self.data)
+        if isinstance(other, dict):
+            return self.__class__(other | self.data)
+        return NotImplemented
+
+    def __ior__(self, other):
+        if isinstance(other, UserDict):
+            self.data |= other.data
+        else:
+            self.data |= other
+        return self
 
     def pop(self, key, *args):
         return self.data.pop(key, *args)
