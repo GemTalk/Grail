@@ -120,3 +120,43 @@ performTest
 	] on: BaseException do: [:ex |
 		Error signal: ex description.
 	].
+%
+
+category: 'Grail-testing'
+method: PythonTestCase
+runCase
+	"As TestCase>>runCase, but with setUp and tearDown covered by the same
+	BaseException -> Error bridge that performTest gives the test method.
+
+	Grail's Python exceptions are NOT kinds of Error:
+
+	    ModuleNotFoundError -> ImportError -> Exception -> BaseException
+	                        -> Exception -> AbstractException -> Object
+
+	and SUnit's TestResult>>runCase: handler is
+	``self class failure , self class error'' = ``TestFailure , Error''.
+	Stock TestCase>>runCase is
+
+	    [self setUp. self performTest] ensure: [self tearDown]
+
+	so setUp and tearDown sit OUTSIDE the performTest bridge.  A Python
+	exception raised in either matched neither arm of that handler, escaped
+	to the top level, and took the WHOLE run down -- a CI shard, or an
+	interactive ``PythonTestCase suite run'' -- instead of being recorded as
+	one test error.  ShutilTestCase>>setUp did exactly that in a session
+	whose grailDir was never set: `import shutil' raised
+	ModuleNotFoundError, and 4000-odd unrelated tests never ran.
+
+	Wrapping super is not double-wrapping: an exception out of the test
+	METHOD has already been converted to an Error by performTest, so it is
+	no longer a BaseException when it reaches this handler.  A TestFailure
+	from ``self assert:'' is a sibling of Error under Exception, not a Python
+	exception, so it passes through untouched and still reports as a FAILURE
+	rather than an error.
+
+	super's own ensure: still runs tearDown before the exception gets here."
+
+	[ super runCase ]
+		on: BaseException
+		do: [:ex | Error signal: ex description]
+%
