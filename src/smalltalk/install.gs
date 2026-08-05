@@ -822,6 +822,8 @@ run
 	at: #'PosonlyAndReflectedEqTestCase' put: nil;
 	at: #'PropertyAndIsinstanceTestCase' put: nil;
 	at: #'FormatSpecAndComplexTestCase' put: nil;
+	at: #'PrintableReprAndPrintfTestCase' put: nil;
+	at: #'DequeIdentitySearchTestCase' put: nil;
 	yourself.
 Transcript show: 'Forward references created for PythonTests dictionary'.
 %
@@ -1607,6 +1609,8 @@ input src/smalltalk/PythonTests/GeneratorStopTestCase.gs
 input src/smalltalk/PythonTests/PosonlyAndReflectedEqTestCase.gs
 input src/smalltalk/PythonTests/PropertyAndIsinstanceTestCase.gs
 input src/smalltalk/PythonTests/FormatSpecAndComplexTestCase.gs
+input src/smalltalk/PythonTests/PrintableReprAndPrintfTestCase.gs
+input src/smalltalk/PythonTests/DequeIdentitySearchTestCase.gs
 
 run
 Transcript show: 'Step 6 complete: Test classes loaded'.

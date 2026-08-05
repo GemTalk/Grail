@@ -287,12 +287,15 @@ category: 'Grail-Tests-FormatSpec'
 method: FormatSpecAndComplexTestCase
 testUnsupportedPercentCharacterIsNamed
 	"``z'' is a format-SPEC option with no %-conversion meaning, and CPython's
-	message says which character it choked on."
+	message says which character it choked on -- plus that character's hex code
+	and its 0-based index in the format string, which were added once
+	test_str_format (which pins the full wording) became reachable.  Both
+	%-engines answer identically."
 
 	self assertResult: 'percent_z_message'
-		equals: 'ValueError: unsupported format character ''z'''.
+		equals: 'ValueError: unsupported format character ''z'' (0x7a) at index 1'.
 	self assertResult: 'percent_bytes_z_message'
-		equals: 'ValueError: unsupported format character ''z'''.
+		equals: 'ValueError: unsupported format character ''z'' (0x7a) at index 1'.
 	self assertResult: 'percent_unknown_char'
-		equals: 'ValueError: unsupported format character ''q'''
+		equals: 'ValueError: unsupported format character ''q'' (0x71) at index 1'
 %
