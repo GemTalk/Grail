@@ -8,7 +8,8 @@ expectvalue /Class
 doit
 Object subclass: 'BoundMethod'
   instVarNames: #( receiver selector
-                    sel0 sel1 sel2 sel3 selVarargs )
+                    sel0 sel1 sel2 sel3 selVarargs
+                    definingClass )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -75,6 +76,15 @@ _setReceiver: aReceiver selector: aSymbol
 	selVarargs := ('_' , s , ':kw:') asSymbol.
 %
 
+category: 'Grail-Private'
+method: BoundMethod
+_setDefiningClass: aClass
+	"Record the class an unbound (receiver-less) reference's selector is defined
+	on -- the staticmethod-style invocation fallback in value:value:."
+
+	definingClass := aClass
+%
+
 category: 'Grail-Accessing'
 method: BoundMethod
 receiver
@@ -85,6 +95,20 @@ category: 'Grail-Accessing'
 method: BoundMethod
 selector
 	^ selector
+%
+
+category: 'Grail-Accessing'
+method: BoundMethod
+definingClass
+	"The class whose method dictionary a receiver-LESS (unbound) BoundMethod's
+	selector is defined on, or nil.  Set only for a class-body plain-def sibling
+	referenced as a value (NameAst emits ``receiver: nil ... definingClass:
+	<class>''); it lets value:value: invoke the method staticmethod-style when
+	the popped receiver's class does not implement the selector (a gnv called as
+	_generate_next_value_(name, ...), where name is a plain string).  nil for
+	every ordinary BoundMethod -> no behaviour change for them."
+
+	^ definingClass
 %
 
 category: 'Grail-Comparison'
@@ -179,6 +203,22 @@ receiver: aReceiver selector: aSymbol
 		^ self ___internedFor___: aReceiver selector: aSymbol].
 	inst := self @env0:new.
 	inst @env0:_setReceiver: aReceiver selector: aSymbol.
+	^ inst
+%
+
+category: 'Grail-Instance Creation'
+classmethod: BoundMethod
+receiver: aReceiver selector: aSymbol definingClass: aClass
+	"As receiver:selector:, but also record the defining class so a
+	receiver-LESS (unbound) reference can still invoke its method
+	staticmethod-style when the popped receiver does not implement the
+	selector.  Emitted by NameAst for a class-body plain-def sibling referenced
+	as a value; see BoundMethod>>definingClass and value:value:."
+
+	| inst |
+	inst := self @env0:new.
+	inst @env0:_setReceiver: aReceiver selector: aSymbol.
+	inst @env0:_setDefiningClass: aClass.
 	^ inst
 %
 
@@ -350,6 +390,15 @@ value: positional value: kwargs
 	blind varargs perform was an uncatchable MNU)."
 	((actualReceiver @env0:class @env0:whichClassIncludesSelector: selVarargs environmentId: 1) == nil)
 		ifTrue: [
+			"Unbound reference whose selector is NOT on the popped receiver's
+			class, but IS on a recorded definingClass: invoke it staticmethod-
+			style (positional[1] bound to the method's first param, not popped as
+			a receiver) -- CPython's `Cls.__dict__['gnv'](name, ...)` semantics.
+			Only a class-body plain-def-sibling reference carries definingClass,
+			so ordinary BoundMethods (definingClass nil) still raise below."
+			(receiver @env0:isNil and: [definingClass @env0:notNil]) ifTrue: [
+				^ (UnboundMethod definingClass: definingClass selector: selector)
+					value: positional value: kwargs].
 			TypeError ___signal___: (selector @env0:asString
 				@env0:, '() takes a different number of arguments ('
 				@env0:, actualArgs @env0:size @env0:printString

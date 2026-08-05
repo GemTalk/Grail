@@ -297,6 +297,8 @@ printSmalltalkOn: aStream
 				aStream
 					nextPutAll: '(BoundMethod receiver: nil selector: #';
 					nextPutAll: id;
+					nextPutAll: ' definingClass: ';
+					nextPutAll: CallAst classBeingCompiled asString;
 					nextPutAll: ')'.
 				^self].
 			(CallAst classStaticFunctionNames notNil
@@ -381,9 +383,16 @@ printSmalltalkOn: aStream
 				and: [CallAst classBodyBoundNames isNil
 					or: [CallAst classBodyBoundNames includes: id asSymbol]]]]])
 				ifTrue: [
+					"Record the defining class so a staticmethod-style call
+					(a gnv: _generate_next_value_(name, ...), where name is a
+					plain value, not a receiver) can still reach the method when
+					the popped receiver's class does not implement it.  The pop
+					protocol is otherwise unchanged (BoundMethod>>value:value:)."
 					aStream
 						nextPutAll: '(BoundMethod receiver: nil selector: #';
 						nextPutAll: id;
+						nextPutAll: ' definingClass: ';
+						nextPutAll: CallAst classBeingCompiled asString;
 						nextPutAll: ')'.
 					^self
 				].
