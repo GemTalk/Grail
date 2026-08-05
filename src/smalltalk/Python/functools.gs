@@ -1653,12 +1653,52 @@ method: functools_partialmethod
 __isabstractmethod__
 	"CPython: ``getattr(self.func, '__isabstractmethod__', False)'' -- so a
 	partialmethod over an abstract method stays abstract, and one over an
-	ordinary function reports False rather than raising."
+	ordinary function reports False rather than raising.
 
-	^ [((self @env0:dynamicInstVarAt: #func)
+	Asking the captured handle is not enough, and the reason is a handle
+	asymmetry worth stating.  ``add5 = partialmethod(add, 5)'' in a class body
+	captures a FORWARD REFERENCE: a BoundMethod whose receiver is nil, because
+	the class does not exist yet.  ``@abc.abstractmethod'' on the def, by
+	contrast, received the INTERNED UnboundMethod and stamped
+	__isabstractmethod__ there -- which is why ``Cls.add'' reports true while the
+	captured handle reports nothing.  Neither BoundMethod nor UnboundMethod
+	defines __isabstractmethod__; it is purely a stored attribute, so the two
+	handles simply disagree.
+
+	So fall back to resolving the METHOD rather than the handle: the owner
+	recorded by __set_name__ plus the handle's selector name the interned
+	UnboundMethod the stamp actually landed on."
+
+	| direct fn owner |
+	direct := [((self @env0:dynamicInstVarAt: #func)
+		___pyAttrLoad___: #'__isabstractmethod__') == true]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: false].
+	direct ifTrue: [^ true].
+	fn := self @env0:dynamicInstVarAt: #func.
+	((fn @env0:isKindOf: BoundMethod) and: [fn @env0:receiver == nil])
+		ifFalse: [^ false].
+	owner := self @env0:dynamicInstVarAt: #'___owner___'.
+	(owner @env0:notNil and: [owner @env0:isKindOf: Behavior]) ifFalse: [^ false].
+	"definingClass:selector: is an env-1 constructor, so NO @env0: prefix here --
+	an env-0 send DNUs.  It interns per (class, selector), which is the whole
+	point: the interned instance is the one the decorator stamped."
+	^ [((UnboundMethod definingClass: owner selector: fn @env0:selector)
 		___pyAttrLoad___: #'__isabstractmethod__') == true]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-Descriptor'
+method: functools_partialmethod
+__set_name__: owner _: aName
+	"Python's __set_name__, sent for every class-body entry as the class is
+	built.  Recording the owner is what lets __isabstractmethod__ above resolve
+	the method the forward-reference handle could not name."
+
+	(owner @env0:isKindOf: Behavior) ifTrue: [
+		self @env0:dynamicInstVarAt: #'___owner___' put: owner].
+	^ ExecBlock @env0:___pyNone___
 %
 
 category: 'Grail-Single Dispatch'

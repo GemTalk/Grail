@@ -224,3 +224,20 @@ testSubclassable
 	self assert: (got at: 3) asArray equals: #( 2 1 ).
 	self assert: (got at: 4) asArray first asArray equals: #( 'a' 2 1 ).
 %
+
+category: 'Grail-Tests - Protocol'
+method: PartialMethodDescriptorTestCase
+testAbstractPartialMethodStaysAbstract
+	"A partialmethod over an @abc.abstractmethod must report abstract, so abc
+	still sees the class as abstract through the wrapper.
+
+	Not obvious, and the reason is a handle asymmetry: the class-body reference
+	``partialmethod(add, 5)'' captures a FORWARD REFERENCE (a BoundMethod with a
+	nil receiver, the class not existing yet), while @abc.abstractmethod stamped
+	the INTERNED UnboundMethod the decorator received.  Neither handle class
+	defines __isabstractmethod__ -- it is purely a stored attribute -- so the two
+	disagree unless abstractness is resolved through the method itself."
+
+	self assert: testModule @env1:abstract_partialmethod_stays_abstract asArray
+		equals: #( true false ).
+%
