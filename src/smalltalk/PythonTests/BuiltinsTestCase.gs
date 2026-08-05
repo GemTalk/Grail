@@ -197,6 +197,26 @@ testCallableIteratorPickle
 
 category: 'Grail-Tests - Backlog Fixes'
 method: BuiltinsTestCase
+testMutatingSeqClassIterPickle
+	"Pickling (seq_iterator, sequence) as a tuple keeps them aliased, so the
+	reloaded iterator's source IS the reloaded sequence -- growing seq.n extends
+	a LIVE iterator, but an EXHAUSTED one stays spent because seq_iterator now
+	reduces a spent iterator to iter(()) rather than (iter, (source,), index)
+	(test_iter test_mutating_seq_class_iter_pickle).  Uses a loaded module
+	because the fixture defines a class and the stdlib pickle module must be
+	importable."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_seqmut_iter_pickle' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_seqmut_iter_pickle.py')
+		name: 'grail_seqmut_iter_pickle'.
+	self assert: (mod @env1:check)
+%
+
+category: 'Grail-Tests - Backlog Fixes'
+method: BuiltinsTestCase
 testNestedClassStringLiteralNewline
 	"A string literal containing a newline, in a method of a class defined
 	INSIDE a nested block (try/for/if), keeps its exact value.  ClassDefAst
