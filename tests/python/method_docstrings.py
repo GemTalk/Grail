@@ -88,3 +88,34 @@ def nested_def_unaffected():
     def bare():
         pass
     return [inner.__doc__, bare.__doc__ is None]
+
+
+# --- builtins, whose docstrings come from a hand-declared table -------------
+
+
+def builtin_docstrings():
+    """CPython's own text, not a paraphrase.  A Grail builtin is a Smalltalk
+    method, so no FunctionDefAst ran for it and there is nothing for
+    ClassDefAst's table to capture; builtins_docstrings.gs declares the table
+    for the builtins module by hand."""
+    return [max.__doc__.startswith('max('),
+            len.__doc__ == 'Return the number of items in a container.',
+            abs.__doc__ == 'Return the absolute value of the argument.']
+
+
+def builtin_without_docstring_is_none():
+    """CPython gives exit/quit no docstring either, so the answer is None --
+    the point being that it is not Object's docstring."""
+    return exit.__doc__ is None
+
+
+def update_wrapper_copies_builtin_doc():
+    """The reason this matters: functools.update_wrapper copies __doc__, so a
+    missing builtin docstring propagated onto every wrapper around a builtin.
+    This is test_functools TestUpdateWrapper/TestWraps.test_builtin_update."""
+    import functools
+
+    def wrapper():
+        pass
+    functools.update_wrapper(wrapper, max)
+    return [wrapper.__name__, wrapper.__doc__.startswith('max(')]
