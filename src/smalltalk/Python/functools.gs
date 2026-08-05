@@ -2233,6 +2233,35 @@ register: clsOrFunc
 %
 
 category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___invalidRegisterMessage___: anOffender
+	"CPython names the OFFENDING argument and says what to do instead:
+
+	    Invalid first argument to `register()`: 42. Use either
+	    `@register(some_class)` or plain `@register` on an annotated function.
+
+	Grail described the diagnosis instead (``no type annotation found''), which
+	reads fine but is not what callers match on."
+
+	^ ('Invalid first argument to `register()`: '
+		@env0:, (self ___safeRepr___: anOffender)
+		@env0:, '. Use either `@register(some_class)` or plain `@register` on an '
+		@env0:, 'annotated function.') @env0:asString
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___safeRepr___: anObject
+	"repr(anObject) as a plain String, falling back to the class name when repr
+	raises or answers something unusable -- an error message must not fail while
+	being built, and the result is concatenated with String literals."
+
+	^ [(anObject @env1:__repr__) @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: anObject @env0:class @env0:name @env0:asString]
+%
+
+category: 'Grail-Single Dispatch'
 classmethod: functools_singledispatch
 ___resolveDottedName___: aString
 	"Resolve a DOTTED name like ``collections.abc.Mapping'' to the class it names,
@@ -2307,7 +2336,7 @@ ___inferRegisterType___: aFunc
 	ann := self ___annotationSourceStrings___: aFunc.
 	(ann @env0:isNil or: [ann @env0:isEmpty]) ifTrue: [
 		TypeError ___signal___:
-			'Invalid first argument to `register()`: no type annotation found'].
+			(self ___invalidRegisterMessage___: aFunc)].
 	candidate := nil.
 	paramName := nil.
 	ann @env0:keysAndValuesDo: [:k :v |
@@ -2315,7 +2344,7 @@ ___inferRegisterType___: aFunc
 			ifTrue: [paramName := k @env0:asString. candidate := v]].
 	candidate @env0:isNil ifTrue: [
 		TypeError ___signal___:
-			'Invalid first argument to `register()`: no parameter annotation found'].
+			(self ___invalidRegisterMessage___: aFunc)].
 	"Resolve a forward-reference string against the Python globals."
 	(candidate isKindOf: CharacterCollection) ifTrue: [
 		text := candidate @env0:asString.
@@ -2358,6 +2387,20 @@ ___inferRegisterType___: aFunc
 	___annotationUnionOfClasses___: for why this needs its own test."
 	(candidate isKindOf: CharacterCollection) ifTrue: [
 		(self ___annotationUnionOfClasses___: text) ifFalse: [
+			"A UNION whose members are not all classes has its own CPython wording,
+			naming the members joined by ``|'' rather than echoing the annotation:
+
+			    Invalid annotation for 'arg'. int | typing.Iterable[str] not all
+			    arguments are classes.
+
+			Checked BEFORE the subscript test below, because a union spelled
+			``typing.Union[...]'' contains brackets and would otherwise be reported
+			as a single non-class."
+			(self ___annotationUnionMemberNames___: text)
+				@env0:ifNotNil: [:names |
+					TypeError ___signal___: 'Invalid annotation for ''' @env0:, paramName
+						@env0:, '''. ' @env0:, (self ___joinWithBars___: names)
+						@env0:, ' not all arguments are classes.'].
 			(text @env0:includes: $[) ifTrue: [
 				TypeError ___signal___: 'Invalid annotation for ''' @env0:, paramName
 					@env0:, '''. ' @env0:, text @env0:, ' is not a class.'].
@@ -2414,6 +2457,20 @@ ___annotationUnionMembers___: aText
 		resolved @env0:add: cls].
 	resolved @env0:isEmpty ifTrue: [^ nil].
 	^ resolved @env0:asArray
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___joinWithBars___: names
+	"``int | typing.Iterable[str]'' -- union members as CPython prints them in
+	the invalid-annotation message."
+
+	| out |
+	out := WriteStream @env0:on: String @env0:new.
+	names @env0:doWithIndex: [:n :i |
+		i @env0:> 1 ifTrue: [out @env0:nextPutAll: ' | '].
+		out @env0:nextPutAll: n @env0:asString].
+	^ out @env0:contents
 %
 
 category: 'Grail-Single Dispatch'
@@ -2517,7 +2574,7 @@ register: cls _: aFunc
 	| key |
 	key := self ___registryKey___: cls.
 	key @env0:isNil ifTrue: [
-		TypeError ___signal___: 'Invalid first argument to `register()`: not a class'].
+		TypeError ___signal___: (self ___invalidRegisterMessage___: cls)].
 	(self @env0:dynamicInstVarAt: #registry) @env0:at: key put: aFunc.
 	^ aFunc
 %
@@ -2618,8 +2675,39 @@ ___wrapsClassSideMethod___
 
 	| fn |
 	fn := self @env0:dynamicInstVarAt: #func.
-	^ (fn isKindOf: BoundMethod)
-		and: [fn @env0:receiver isKindOf: Behavior]
+	^ self ___isClassSideHandle___: fn depth: 0
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+___isClassSideHandle___: fn depth: aDepth
+	"Is fn a class-side handle, possibly behind wrappers?
+
+	``@singledispatchmethod @classmethod @contextmanager def m(cls, arg)'' hands
+	this class the contextmanager's factory, not the class-side handle -- so the
+	direct test called it a plain method, expected an instance in front of the
+	dispatch argument, and raised ``helper requires at least 1 positional
+	argument'' for a call that had supplied everything.
+
+	Follow ``__wrapped__'', which is what functools.wraps sets and what CPython's
+	own contextmanager leaves behind.  Bounded depth, so a wrapper that somehow
+	points at itself cannot spin."
+
+	| wrapped |
+	fn == nil ifTrue: [^ false].
+	aDepth @env0:> 4 ifTrue: [^ false].
+	((fn isKindOf: BoundMethod) and: [fn @env0:receiver isKindOf: Behavior])
+		ifTrue: [^ true].
+	"A @classmethod / @staticmethod DESCRIPTOR is class-side by definition, and a
+	decorator that returns one puts it here directly rather than behind a
+	__wrapped__ hop (``@singledispatchmethod @classmethod_friendly_decorator
+	@classmethod def m'')."
+	(self ___isClassSideDescriptor___: fn) ifTrue: [^ true].
+	wrapped := [fn @env1:___pyAttrLoad___: #'__wrapped__']
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil].
+	(wrapped == nil or: [wrapped == fn]) ifTrue: [^ false].
+	^ self ___isClassSideHandle___: wrapped depth: aDepth @env0:+ 1
 %
 
 category: 'Grail-Callable'
@@ -2665,7 +2753,75 @@ ___pyCallValue___: positional kw: kwargs
 			@env0:, ' requires at least 1 positional argument'].
 	impl := (self @env0:dynamicInstVarAt: #dispatcher)
 		dispatch: (positional @env0:at: at) @env0:class.
+	"A registered implementation that is itself a @classmethod / @staticmethod
+	arrives as the bare descriptor: ``@A.t.register(int)'' over ``@classmethod
+	def _(cls, arg)'' registers a PyClassMethod, which no class owns because the
+	registration happens after the class is built.  Calling it directly passed
+	the dispatch argument as ``cls'' and left ``arg'' unfilled -- ``TypeError:
+	missing required argument: arg''.
+
+	The BASE implementation never showed this: the class-body decorator hands
+	singledispatchmethod a BoundMethod that already supplies the class, which is
+	what ___wrapsClassSideMethod___ reads.  Bind the registered one the same way,
+	through its own __get__, against that same owning class.  A PyStaticMethod's
+	__get__ answers the function unbound, which is equally correct for it."
+	(self ___wrapsClassSideMethod___
+		and: [self ___isClassSideDescriptor___: impl]) ifTrue: [
+			| owner |
+			owner := self ___classSideOwner___.
+			owner == nil ifFalse: [
+				^ (impl __get__: (ExecBlock @env0:___pyNone___) _: owner)
+					___pyCallValue___: positional kw: kwargs]].
 	^ impl ___pyCallValue___: positional kw: kwargs
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod
+___isClassSideDescriptor___: anImpl
+	"Is anImpl a @classmethod / @staticmethod descriptor that still needs its
+	owner bound?  Deliberately narrow: a plain function or method handle also
+	answers __get__:_:, and those already receive the argument array unchanged."
+
+	| syms cm sm |
+	syms := System @env0:myUserProfile @env0:symbolList.
+	cm := syms @env0:objectNamed: #'PyClassMethod'.
+	(cm @env0:notNil and: [anImpl @env0:isKindOf: cm]) ifTrue: [^ true].
+	sm := syms @env0:objectNamed: #'PyStaticMethod'.
+	^ sm @env0:notNil and: [anImpl @env0:isKindOf: sm]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod
+___classSideOwner___
+	"The class this class-side method was defined on -- the receiver of the
+	BoundMethod the class-body decorator handed us -- or nil."
+
+	| fn recv recorded |
+	"Recorded by __set_name__ when the class was built.  Needed because the
+	wrapped callable does not always know its class: a decorator that returns a
+	@classmethod hands this object a PyClassMethod, which carries no owner, and
+	then the class-side call had nothing to bind against (``'PyClassMethod' object
+	is not callable'')."
+	recorded := self @env0:dynamicInstVarAt: #'___owner___'.
+	(recorded @env0:notNil and: [recorded @env0:isKindOf: Behavior])
+		ifTrue: [^ recorded].
+	fn := self @env0:dynamicInstVarAt: #func.
+	(fn @env0:isKindOf: BoundMethod) ifFalse: [^ nil].
+	recv := fn @env0:receiver.
+	^ (recv @env0:isKindOf: Behavior) ifTrue: [recv] ifFalse: [nil]
+%
+
+category: 'Grail-Descriptor'
+method: functools_singledispatchmethod
+__set_name__: owner _: aName
+	"Python's __set_name__, sent for every class-body entry as the class is
+	built.  Recording the owner is what lets a class-side dispatch bind against
+	the defining class when the wrapped callable cannot name it -- see
+	___classSideOwner___."
+
+	(owner @env0:isKindOf: Behavior) ifTrue: [
+		self @env0:dynamicInstVarAt: #'___owner___' put: owner].
+	^ ExecBlock @env0:___pyNone___
 %
 
 category: 'Grail-Single Dispatch'

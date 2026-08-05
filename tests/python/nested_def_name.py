@@ -5,7 +5,9 @@
 # onto the block via ``___pyNamed___:`` and ExecBlock exposes ``__name__`` /
 # ``__qualname__`` as *value* attributes (___pythonValueAttrs___), so
 # ``func.__name__`` returns the real name rather than a ``<closure>``
-# placeholder or a BoundMethod.  flask's ``@app.route`` reads
+# placeholder or a BoundMethod.  ``__qualname__`` is the QUALIFIED path --
+# ``make_nested.<locals>.hello`` -- which is what CPython answers and what a
+# function's repr prints.  flask's ``@app.route`` reads
 # ``view_func.__name__`` to key ``view_functions`` (the endpoint), so the
 # hello-world view must report ``'hello'``.
 

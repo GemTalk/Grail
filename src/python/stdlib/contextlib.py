@@ -66,6 +66,13 @@ def contextmanager(func):
             raise TypeError("@contextmanager wrapper supports up to 3 positional args")
         return _GeneratorCM(g)
 
+    # CPython's contextmanager wraps with functools.wraps, so the factory carries
+    # the decorated function's identity -- name, doc, and __wrapped__.  Grail's
+    # did not, which left callers unable to see what it wraps: singledispatchmethod
+    # decides whether it is over a class-side method by inspecting its target, and
+    # an opaque ``helper`` made a @classmethod look like a plain function.
+    import functools
+    functools.update_wrapper(helper, func)
     return helper
 
 

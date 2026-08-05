@@ -669,6 +669,19 @@ printSmalltalkOn: aStream
 		poCount := args isNil ifTrue: [0] ifFalse: [(args posonlyargs ifNil: [#()]) size].
 		regCount := args isNil ifTrue: [0] ifFalse: [(args args ifNil: [#()]) size].
 		kwoCount := args isNil ifTrue: [0] ifFalse: [(args kwonlyargs ifNil: [#()]) size].
+		"__qualname__ when this def is nested inside something.  A CASCADE, like
+		___pyCode___: below and for the same reason: emitted as another keyword
+		part of ``___pyNamed___:'' it would swallow the following ``annotate:'' /
+		``doc:'' into one combined selector that does not exist -- which turned 22
+		tests into uncatchable Smalltalk errors when tried that way."
+		self ___emitQualnameOn___: aStream name: name.
+		"PEP 695 type parameters, when the def declares any.  A CASCADE, for the
+		same reason as the qualname beside it."
+		(type_params notNil and: [type_params notEmpty]) ifTrue: [
+			aStream nextPutAll: '; @env0:___pyTypeParams___: #('.
+			type_params do: [:n |
+				aStream nextPutAll: ''''; nextPutAll: n asString; nextPutAll: ''' '].
+			aStream nextPutAll: ')'].
 		aStream
 			nextPutAll: '; @env0:___pyCode___: (PyCode @env0:name: '''; nextPutAll: name;
 			nextPutAll: ''' firstlineno: '; nextPutAll: self beginLine printString;
@@ -694,12 +707,25 @@ printSmalltalkOn: aStream
 	"Apply decorators bottom-up.  ``@A @B def f: ...`` rebinds f to
 	``A(B(f))`` — the decorator nearest the def (B) runs first, so
 	iterate in reverse.  Skip Symbol entries that are class-body
-	special markers (``staticmethod`` / ``classmethod`` / ``property``);
-	those mutate the function's *class* via changeClassTo: at parse
-	time and must NOT be re-applied as runtime calls."
+	special markers -- but ONLY when the parser actually re-classed this node,
+	which is what handles them.
+
+	It re-classes under ``classNesting > 0'', and it zeroes classNesting while
+	parsing a body, so a def nested inside a FUNCTION is left a plain
+	FunctionDefAst and nothing has handled its ``@classmethod'' at all.  Skipping
+	it there silently DROPPED the decorator and left a plain function: that is why
+	functools' test_callable_register -- whose class and registrations live inside
+	the test METHOD -- registered a plain function with singledispatch, which was
+	then called without its class.
+
+	A def inside an ``if'' in a class BODY is the other case: classNesting is
+	still positive there, so it WAS re-classed, and applying the decorator again
+	double-wraps it (six ClassBodyConditionalTestCase errors when this
+	distinction was missing).  ___parserReclassedThisDef___ tells the two apart."
 	decorator_list isNil ifFalse: [
 		decorator_list reverseDo: [:deco |
-			(self isClassDeclarativeDecorator: deco) ifFalse: [
+			((self isClassDeclarativeDecorator: deco) not
+				or: [self ___parserReclassedThisDef___ not]) ifTrue: [
 				"Phase A: decorator re-bind uses dynamicInstVarAt:put: when
 				the target name is module-scope (parser-declared in module
 				body and not shadowed by an enclosing function)."
@@ -892,15 +918,28 @@ ___enclosingDefDeclares___: funcAst named: aSymbol
 category: 'Grail-code generation'
 method: FunctionDefAst
 applicableModuleDecorators
-	"Decorators to apply at module-body time for a top-level def:
-	everything in decorator_list EXCEPT the class-declarative ones
-	(staticmethod / classmethod / property), which the parser already
-	handled by re-classing this node into a Static/Class/PropertyFunction
-	def.  Source order preserved (outermost first), so ``@A @B def f''
-	yields { A. B } and is applied as A(B(f))."
+	"Decorators to apply at module-body time for a top-level def: ALL of
+	decorator_list.  Source order preserved (outermost first), so ``@A @B def f''
+	yields { A. B } and is applied as A(B(f)).
+
+	This used to reject the class-declarative ones (staticmethod / classmethod /
+	property) on the grounds that the parser had already handled them by
+	re-classing the node.  It only does that INSIDE a class -- PythonParser
+	re-classes under ``classNesting > 0'' -- so at module scope nothing had
+	handled them and rejecting them silently DROPPED the decorator:
+
+	    @classmethod
+	    def f(cls, arg): ...
+	    type(f)        # CPython: classmethod.  Was: the plain function.
+
+	``classmethod(f)'' spelled as a call already answered a real classmethod, so
+	the two spellings disagreed.  It matters beyond introspection because the
+	descriptor kind is what a later consumer dispatches on: functools'
+	test_callable_register registers ``@classmethod def _(cls, arg)'' with
+	singledispatch, and a plain function there is called without its class."
 
 	decorator_list isNil ifTrue: [^ #()].
-	^ decorator_list reject: [:deco | self isClassDeclarativeDecorator: deco]
+	^ decorator_list
 %
 
 category: 'Grail-code generation'
@@ -1167,6 +1206,74 @@ printDecoratorReceiverOn: aStream deco: deco
 		^ self
 	].
 	deco printSmalltalkWithParenthesisOn: aStream
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___parserReclassedThisDef___
+	"Did PythonParser convert this node into one of its class-body subclasses?
+	That conversion IS how a @staticmethod / @classmethod / @property is handled,
+	so it is also the signal that the decorator must not be applied again.
+
+	Answered by class rather than by a flag, because the conversion is a
+	changeClassTo: -- the node's class is the record of it."
+
+	^ (self isKindOf: StaticFunctionDefAst)
+		or: [(self isKindOf: ClassFunctionDefAst)
+			or: [self isKindOf: InstanceFunctionDefAst]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___emitQualnameOn___: aStream name: aName
+	"Emit ``; ___pyQualname___: '<dotted path>''' when this def is nested.
+
+	The prefix comes from the emission context: CallAst functionBeingCompiled is
+	the ENCLOSING def while a nested one is emitted, and classBeingCompiled names
+	the class around it, so a def in a method of class A reads
+	``A.meth.<locals>.inner''.  CPython puts ``<locals>'' between an enclosing
+	FUNCTION and the names inside it.
+
+	Nothing is emitted when there is no enclosing def: a bare name is already the
+	right answer at module and class level, and ExecBlock >> __qualname__ falls
+	back to __name__.  Deeper nesting reports from the nearest enclosing def --
+	still closer than the bare name, and one level is what the corpus asks for."
+
+	| qualified |
+	qualified := self ___qualifiedNameFor___: aName.
+	qualified = aName asString ifTrue: [^ self].
+	aStream
+		nextPutAll: '; @env0:___pyQualname___: ''';
+		nextPutAll: qualified;
+		nextPutAll: ''''
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___qualifiedNameFor___: aName
+	"``Cls.meth.<locals>.aName'' when this def is nested inside a function, else
+	aName unchanged.  CPython puts ``<locals>'' between an enclosing FUNCTION and
+	the names inside it.
+
+	The context comes from the emission state: CallAst functionBeingCompiled is
+	the ENCLOSING def while a nested one is emitted, and classBeingCompiled names
+	the class around it.
+
+	Shared by the __qualname__ stamp and by the arity-error message, which CPython
+	also phrases with the qualified name -- test_keywordonlyarg builds its
+	expected text from ``f.__qualname__'', so the two have to agree by
+	construction rather than by coincidence."
+
+	| enclosingFn enclosingCls |
+	enclosingFn := CallAst functionBeingCompiled.
+	enclosingCls := CallAst classBeingCompiled.
+	(enclosingFn == nil
+		or: [enclosingFn == self or: [enclosingFn name == nil]])
+			ifTrue: [^ aName asString].
+	^ (enclosingCls == nil
+		ifTrue: [enclosingFn name asString]
+		ifFalse: [enclosingCls asString , '.' , enclosingFn name asString])
+		, '.<locals>.' , aName asString
 %
 
 category: 'Grail-code generation'
@@ -1896,7 +2003,7 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 			nextPutAll: '(('; nextPutAll: posName;
 			nextPutAll: ' @env0:size) @env0:> '; print: nPos;
 			nextPutAll: ') ifTrue: [TypeError ___signal___: (''';
-			nextPutAll: name;
+			nextPutAll: (self ___qualifiedNameFor___: name);
 			nextPutAll: '() takes '; nextPutAll: sig;
 			nextPutAll: ' positional argument'; nextPutAll: plural;
 			nextPutAll: ' but '' @env0:, ('; nextPutAll: posName;

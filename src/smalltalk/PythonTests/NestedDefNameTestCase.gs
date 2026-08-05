@@ -60,9 +60,16 @@ testNestedName
 category: 'Grail-Tests-NestedDefName'
 method: NestedDefNameTestCase
 testNestedQualname
-	"``__qualname__`` mirrors ``__name__`` for a Grail closure."
+	"``__qualname__'' is the QUALIFIED path, as CPython has it: a def inside a
+	function reads ``make_nested.<locals>.hello''.
 
-	self assert: (self loadFixture @env1:nested_qualname) equals: 'hello'
+	This used to assert the bare ``hello'' -- __qualname__ merely mirrored
+	__name__, which is only right for a def at module or class level.  The
+	qualified form is observable because a function's repr prints it, so it
+	lands in error messages callers match on."
+
+	self assert: (self loadFixture @env1:nested_qualname)
+		equals: 'make_nested.<locals>.hello'
 %
 
 category: 'Grail-Tests-NestedDefName'
