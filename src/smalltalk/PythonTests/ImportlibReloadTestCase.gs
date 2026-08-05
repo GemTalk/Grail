@@ -41,7 +41,7 @@ set compile_env: 0
 category: 'Grail-Tests-Reload'
 method: ImportlibReloadTestCase
 probePath
-	^ '/tmp/grail_reload_regression.py'
+	^ (self tmp: 'reload_regression.py')
 %
 
 category: 'Grail-Tests-Reload'
@@ -96,7 +96,7 @@ testModuleHasFile
 	| probe |
 	probe := self loadProbe: 'X = 0
 '.
-	self assert: ((probe dynamicInstVarAt: #'__file__') endsWith: 'grail_reload_regression.py')
+	self assert: ((probe dynamicInstVarAt: #'__file__') endsWith: 'reload_regression.py')
 %
 
 category: 'Grail-Tests-Reload'
@@ -186,8 +186,8 @@ testRunWithReloaderRebuildsApp
 
 	| lf appPath v2Path fixture result src1 src2 |
 	lf := String with: Character lf.
-	appPath := '/tmp/grail_rl_app.py'.
-	v2Path := '/tmp/grail_rl_app_v2.py'.
+	appPath := (self tmp: 'rl_app.py').
+	v2Path := (self tmp: 'rl_app_v2.py').
 	src1 := 'MARKER = "R1"', lf,
 		'def create_app():', lf,
 		'    def app(environ, start_response):', lf,

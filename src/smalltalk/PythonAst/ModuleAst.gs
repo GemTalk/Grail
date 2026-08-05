@@ -89,7 +89,7 @@ category: 'Grail-evaluation'
 classmethod: ModuleAst
 evaluateSource: sourceString usingModuleScope: aSymbolDictionary as: aKind
 	"Three-arg variant used by entry points that want their doit
-	tagged in the /tmp/grail/ debug capture — aKind is a Symbol
+	tagged in the $TMP/codegen/ debug capture — aKind is a Symbol
 	(#exec / #eval / #doit) that determines the filename prefix.
 	Python's ``exec()'' passes #exec; Python's ``eval()'' passes
 	#eval; everything else (the REPL, test helpers) defaults to
@@ -260,7 +260,7 @@ executeWithScope: aSymbolList as: aKind
 	gets its own sequence number so successive exec/eval/doit calls
 	accumulate instead of overwriting.  When tracing is off (default),
 	no sequence number is consumed and no file I/O happens — this is
-	what keeps ``run_tests.sh'' from flooding /tmp/grail with a
+	what keeps ``run_tests.sh'' from flooding $TMP/codegen with a
 	___doit_<N>___ pair per executed statement."
 
 	| code traceDir seq tpzPath irPath compiledMethod result tpzSource |

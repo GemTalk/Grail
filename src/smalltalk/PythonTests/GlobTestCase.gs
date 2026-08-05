@@ -33,11 +33,11 @@ category: 'Grail-helpers'
 method: GlobTestCase
 setUp
 	"Build a small fixture tree:
-		/tmp/grail_glob_test/a.txt  b.txt  c.py  .hidden  sub/d.txt"
+		$TMP/glob_test/a.txt  b.txt  c.py  .hidden  sub/d.txt"
 
 	super setUp.
 	self eval: 'import os
-base = "/tmp/grail_glob_test"
+base = "$TMP/glob_test"
 if not os.path.exists(base):
     os.mkdir(base)
 if not os.path.exists(base + "/sub"):
@@ -53,7 +53,7 @@ method: GlobTestCase
 testStarPattern
 	| result |
 	result := self eval: 'import glob
-glob.glob("/tmp/grail_glob_test/*.txt") == ["/tmp/grail_glob_test/a.txt", "/tmp/grail_glob_test/b.txt"]'.
+glob.glob("$TMP/glob_test/*.txt") == ["$TMP/glob_test/a.txt", "$TMP/glob_test/b.txt"]'.
 	self assert: result
 %
 
@@ -62,9 +62,9 @@ method: GlobTestCase
 testQuestionMarkAndCharClass
 	| result |
 	result := self eval: 'import glob
-q = glob.glob("/tmp/grail_glob_test/?.py")
-c = glob.glob("/tmp/grail_glob_test/[ab].txt")
-q == ["/tmp/grail_glob_test/c.py"] and c == ["/tmp/grail_glob_test/a.txt", "/tmp/grail_glob_test/b.txt"]'.
+q = glob.glob("$TMP/glob_test/?.py")
+c = glob.glob("$TMP/glob_test/[ab].txt")
+q == ["$TMP/glob_test/c.py"] and c == ["$TMP/glob_test/a.txt", "$TMP/glob_test/b.txt"]'.
 	self assert: result
 %
 
@@ -75,7 +75,7 @@ testMultiComponentPattern
 
 	| result |
 	result := self eval: 'import glob
-glob.glob("/tmp/grail_glob_test/s*/d.txt") == ["/tmp/grail_glob_test/sub/d.txt"]'.
+glob.glob("$TMP/glob_test/s*/d.txt") == ["$TMP/glob_test/sub/d.txt"]'.
 	self assert: result
 %
 
@@ -84,10 +84,10 @@ method: GlobTestCase
 testLiteralAndNoMatch
 	| result |
 	result := self eval: 'import glob
-lit = glob.glob("/tmp/grail_glob_test/a.txt")
-none = glob.glob("/tmp/grail_glob_test/*.json")
-missing = glob.glob("/tmp/grail_glob_test_nope/x.txt")
-lit == ["/tmp/grail_glob_test/a.txt"] and none == [] and missing == []'.
+lit = glob.glob("$TMP/glob_test/a.txt")
+none = glob.glob("$TMP/glob_test/*.json")
+missing = glob.glob("$TMP/glob_test_nope/x.txt")
+lit == ["$TMP/glob_test/a.txt"] and none == [] and missing == []'.
 	self assert: result
 %
 
@@ -96,9 +96,9 @@ method: GlobTestCase
 testHiddenFilesNeedDotPattern
 	| result |
 	result := self eval: 'import glob
-star = glob.glob("/tmp/grail_glob_test/*")
-dot = glob.glob("/tmp/grail_glob_test/.h*")
-(".hidden" not in [p.split("/")[-1] for p in star]) and dot == ["/tmp/grail_glob_test/.hidden"]'.
+star = glob.glob("$TMP/glob_test/*")
+dot = glob.glob("$TMP/glob_test/.h*")
+(".hidden" not in [p.split("/")[-1] for p in star]) and dot == ["$TMP/glob_test/.hidden"]'.
 	self assert: result
 %
 
@@ -107,8 +107,8 @@ method: GlobTestCase
 testIglobReturnsIterator
 	| result |
 	result := self eval: 'import glob
-it = glob.iglob("/tmp/grail_glob_test/*.py")
-next(it) == "/tmp/grail_glob_test/c.py"'.
+it = glob.iglob("$TMP/glob_test/*.py")
+next(it) == "$TMP/glob_test/c.py"'.
 	self assert: result
 %
 
@@ -117,7 +117,7 @@ method: GlobTestCase
 testDoubleStarRaises
 	self
 		should: [self eval: 'import glob
-glob.glob("/tmp/grail_glob_test/**/*.txt")']
+glob.glob("$TMP/glob_test/**/*.txt")']
 		raise: ValueError
 %
 

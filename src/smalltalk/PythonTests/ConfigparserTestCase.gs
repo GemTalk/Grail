@@ -133,7 +133,7 @@ testFileRoundTrip
 
 	| result |
 	result := self eval: 'import configparser
-path = "/tmp/grail_configparser_test.ini"
+path = "$TMP/configparser_test.ini"
 cp = configparser.ConfigParser()
 cp.add_section("db")
 cp.set("db", "host", "localhost")

@@ -252,7 +252,10 @@ testWritelinesIterableProtocol
 	mod := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_writelines.py')
 		name: 'grail_writelines'.
-	self assert: (mod @env1:check)
+	"The path is PASSED IN rather than hardcoded in the fixture: this module
+	is loaded with loadModuleFromPath:, not eval:, so the $TMP token the
+	inline fixtures use would never be expanded here."
+	self assert: (mod @env1:check: (self tmp: 'writelines_fixture.txt'))
 %
 
 category: 'Grail-Tests - Backlog Fixes'

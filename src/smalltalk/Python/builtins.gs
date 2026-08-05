@@ -214,7 +214,7 @@ _exec: positional kw: kwargs
 			scope @env0:at: sym put: value]
 	].
 	"Run the source as a module body in the seeded scope.  Tag the
-	debug capture as #exec so the .tpz / .ir files under /tmp/grail/
+	debug capture as #exec so the .tpz / .ir files under $TMP/codegen/
 	carry the ___exec_N___ prefix."
 	ModuleAst @env0:evaluateSource: source usingModuleScope: scope as: #exec.
 	"Reflect every binding back into the original globals dict using

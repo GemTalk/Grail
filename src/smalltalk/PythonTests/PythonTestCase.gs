@@ -91,6 +91,47 @@ ___resetImportedFramework___: aPrefix
 
 category: 'Grail-helpers'
 method: PythonTestCase
+tmpRoot
+	"This checkout's private fixture directory, ``/tmp/Grail<N>'', created on
+	demand.  Four checkouts share one stone on the dev host as four users, so
+	an absolute fixture path shared between them is a real collision -- see
+	importlib class>>grailTmpDir for what it cost."
+
+	^ importlib grailTmpDir
+%
+
+category: 'Grail-helpers'
+method: PythonTestCase
+tmp: aName
+	"A path for a fixture named aName inside this checkout's tmpRoot.  Use
+	this from SMALLTALK code; Python source passed to eval: should say
+	``$TMP/<name>'' instead, which eval: expands."
+
+	^ (self tmpRoot , '/') , aName
+%
+
+category: 'Grail-helpers'
+method: PythonTestCase
+expandTmpTokensIn: aString
+	"Replace the ``$TMP'' token with this checkout's tmpRoot.
+
+	Fixture Python source says $TMP/thing rather than a hardcoded
+	/tmp/grail_thing, so that concurrent checkouts do not write to, and
+	rmtree, one another's fixtures.  A token rather than Smalltalk string
+	concatenation keeps multi-line embedded Python readable and cannot break
+	the surrounding Smalltalk literal.  ``$'' is not otherwise special in
+	Python or in a Smalltalk string.
+
+	Guarded on includesString: so the common no-token case does not copy the
+	source at all."
+
+	^ (aString includesString: '$TMP')
+		ifTrue: [aString copyReplaceAll: '$TMP' with: self tmpRoot]
+		ifFalse: [aString]
+%
+
+category: 'Grail-helpers'
+method: PythonTestCase
 eval: pythonSource
 	"Parse and evaluate a Python source string, returning the result.
 
@@ -105,7 +146,7 @@ eval: pythonSource
 	moduleScope := SymbolDictionary new.
 	scope := importlib ___grailCompileSymbolList___.
 	scope insertObject: moduleScope at: 1.
-	module := ModuleAst parseSource: pythonSource.
+	module := ModuleAst parseSource: (self expandTmpTokensIn: pythonSource).
 	module useTempsForBlock: false.
 	module ensureModuleScope: moduleScope.
 	^module evaluateWithScope: scope

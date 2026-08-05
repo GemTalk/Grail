@@ -82,7 +82,7 @@ testWriterRoundTripThroughFile
 
 	| result |
 	result := self eval: 'import csv
-path = "/tmp/grail_csv_test.csv"
+path = "$TMP/csv_test.csv"
 f = open(path, "w")
 w = csv.writer(f, lineterminator="\n")
 w.writerow(["name", "qty"])
