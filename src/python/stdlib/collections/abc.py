@@ -153,6 +153,14 @@ class _ABCRoot:
         if name not in _registry:
             _registry[name] = []
         _registry[name].append(sub_cls)
+        # Anything caching an issubclass()-dependent answer has just been
+        # invalidated -- functools.singledispatch caches class -> impl and this
+        # call can change what it should be, without touching the dispatcher.
+        # CPython invalidates through abc.get_cache_token(); the counter behind
+        # it lives in abc because that is where CPython keeps it.
+        import abc as _abc
+
+        _abc._bump_invalidation_counter()
         return sub_cls
 
     def __subclasshook__(self, cls):

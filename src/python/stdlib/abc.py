@@ -31,5 +31,25 @@ class ABCMeta:
     pass
 
 
+_abc_invalidation_counter = 0
+
+
 def get_cache_token():
-    return 0
+    """CPython returns an opaque token that CHANGES whenever any ABC
+    registration happens.  Anything caching a decision that depends on
+    issubclass() must re-check it: functools.singledispatch caches a class ->
+    implementation mapping, and registering a class on an ABC can make a
+    previously-cached answer wrong without touching the dispatcher at all.
+
+    Grail's ABC machinery lives in collections.abc rather than here (there is
+    no real ABCMeta), so that module bumps the counter through
+    _bump_invalidation_counter() below.  Returning a constant -- which this
+    did -- makes every such cache silently stale."""
+    return _abc_invalidation_counter
+
+
+def _bump_invalidation_counter():
+    """Called by collections.abc._ABCRoot.register() on every registration."""
+    global _abc_invalidation_counter
+    _abc_invalidation_counter += 1
+    return _abc_invalidation_counter
