@@ -163,16 +163,6 @@ __dir__
 	^ (names @env0:asSortedCollection: [:a :b | a @env0:<= b]) @env0:asArray
 %
 
-category: 'Grail-Attribute Access'
-method: builtins
-breakpoint
-   "Signal a Smalltalk Halt that will be signalled with _signalToDebugger, to be handled by the
-    controlling GCI debugger.  Exception handlers on the stack will not be executed.
-    May need more complete implementation per Python specs , but for some use cases, 
-    we will still want this simple implementation. "
-   self @env0:pause
-%
-
 ! ===============================================================================
 ! Fixed-arity fast-path methods (1 positional argument)
 ! ===============================================================================
