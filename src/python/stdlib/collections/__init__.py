@@ -148,6 +148,15 @@ class _deque_iterator:
         return self._counter
 
 
+class _deque_reverse_iterator(_deque_iterator):
+    """The type of ``reversed(deque)`` -- a distinct class from the forward
+    iterator so ``type(reversed(d))(d)`` reconstructs a REVERSE iterator, as
+    CPython's _deque_reverse_iterator does (test_deque test_reversed_new)."""
+
+    def __init__(self, dq, reverse=True):
+        super().__init__(dq, reverse)
+
+
 class deque:
     """Double-ended queue backed by a list.  O(n) for arbitrary
     indexing, O(1) amortized for append/appendleft/pop/popleft."""
@@ -157,13 +166,34 @@ class deque:
     # that somehow skipped __init__ still reads a value rather than raising.
     _state = 0
 
+    # ids of deques whose __repr__ is currently on the stack, so a
+    # self-referential deque (``d.append(d)``) renders the recursive slot as
+    # ``[...]`` instead of recursing forever (CPython's Py_ReprEnter).
+    _repr_running = set()
+
+    # deque is unhashable (it is mutable): defining __eq__ below without a
+    # __hash__ already makes instances unhashable (Grail applies Python's
+    # __eq__-without-__hash__ rule), so an explicit ``__hash__ = None`` is both
+    # redundant AND harmful -- it makes hash(deque) (the CLASS) return None,
+    # which breaks pickle's ``type(obj) in _ITER_TYPES`` lookup.
+
     def __init__(self, iterable=None, maxlen=None):
+        if maxlen is not None:
+            maxlen = maxlen.__index__() if hasattr(maxlen, '__index__') else maxlen
+            if maxlen < 0:
+                raise ValueError("maxlen must be non-negative")
         self._items = []
-        self.maxlen = maxlen
+        self._maxlen = maxlen
         self._state = 0
         if iterable is not None:
             for item in iterable:
                 self.append(item)
+
+    @property
+    def maxlen(self):
+        """Maximum size of the deque, or None if unbounded.  Read-only, as in
+        CPython (``d.maxlen = ...`` raises AttributeError)."""
+        return self._maxlen
 
     def append(self, item):
         self._state += 1
@@ -222,15 +252,50 @@ class deque:
         raise ValueError("deque.remove(x): x not in deque")
 
     def count(self, value):
-        return sum(1 for x in self._items if x == value)
+        # Comparison may mutate the deque (an element's __eq__ that clears it),
+        # which CPython reports as ``RuntimeError: deque mutated during
+        # iteration`` -- so re-check the mutation counter each step (a
+        # comparison that itself raises, e.g. BadCompare, just propagates).
+        state = self._state
+        n = len(self._items)
+        c = 0
+        i = 0
+        while i < n:
+            if self._state != state:
+                raise RuntimeError("deque mutated during iteration")
+            if self._items[i] == value:
+                c += 1
+            i += 1
+        if self._state != state:
+            raise RuntimeError("deque mutated during iteration")
+        return c
 
     def index(self, value, start=0, stop=None):
+        # Normalise start/stop like list.index: negatives count from the end and
+        # both clamp into [0, len] (so ``d.index(x, 0, 4)`` on a length-3 deque
+        # searches 0..2 and raises ValueError, not IndexError -- bug 24913).
+        n = len(self._items)
         if stop is None:
-            stop = len(self._items)
-        for i in range(start, stop):
+            stop = n
+        if start < 0:
+            start = max(n + start, 0)
+        elif start > n:
+            start = n
+        if stop < 0:
+            stop = max(n + stop, 0)
+        elif stop > n:
+            stop = n
+        state = self._state
+        i = start
+        while i < stop:
+            if self._state != state:
+                raise RuntimeError("deque mutated during iteration")
             if self._items[i] == value:
                 return i
-        raise ValueError("deque.index(x): x not in deque")
+            i += 1
+        if self._state != state:
+            raise RuntimeError("deque mutated during iteration")
+        raise ValueError("%r is not in deque" % (value,))
 
     def insert(self, i, value):
         self._state += 1
@@ -238,9 +303,74 @@ class deque:
         if self.maxlen is not None and len(self._items) > self.maxlen:
             raise IndexError("deque already at its maximum size")
 
+    # Deque internals kept out of the copy/pickle state (they are reconstructed
+    # from the elements + maxlen, not restored as attributes).
+    _INTERNAL_ATTRS = ('_items', '_maxlen', '_state')
+
+    def __getstate__(self):
+        # Subclass instance attributes to carry through copy/pickle: __dict__
+        # entries plus any set __slots__ values (test_deque
+        # TestSubclass.test_copy_pickle sets d.x -- a slot -- and d.z -- a
+        # __dict__ entry).  None when there is nothing extra.
+        state = {}
+        d = getattr(self, '__dict__', None)
+        if d:
+            for k, v in d.items():
+                if k not in deque._INTERNAL_ATTRS:
+                    state[k] = v
+        for klass in type(self).__mro__:
+            for name in getattr(klass, '__slots__', ()):
+                if name in ('__dict__', '__weakref__') or name in deque._INTERNAL_ATTRS:
+                    continue
+                try:
+                    state[name] = getattr(self, name)
+                except AttributeError:
+                    pass
+        return state or None
+
+    def __setstate__(self, state):
+        # setattr (not __dict__.update) so a value belonging to a __slots__
+        # descriptor lands in the slot, not a shadowed __dict__ entry.
+        if state:
+            for k, v in state.items():
+                setattr(self, k, v)
+
     def copy(self):
-        new = deque(self._items, self.maxlen)
+        return self.__copy__()
+
+    def __copy__(self):
+        new = self.__class__(self._items, self._maxlen)
+        new.__setstate__(self.__getstate__())
         return new
+
+    def __deepcopy__(self, memo):
+        import copy as _copy
+        new = self.__class__(maxlen=self._maxlen)
+        memo[id(self)] = new
+        for item in self._items:
+            new.append(_copy.deepcopy(item, memo))
+        st = self.__getstate__()
+        if st:
+            new.__setstate__({k: _copy.deepcopy(v, memo) for k, v in st.items()})
+        return new
+
+    def __reduce__(self):
+        # Pickle support (CPython deque_reduce): reconstruct an EMPTY deque of
+        # the right maxlen, then supply the elements as the reduce tuple's
+        # ``listitems`` iterator (4th slot) so pickle memoizes the deque BEFORE
+        # appending -- a self-referential deque (``d.append(d)``) then resolves
+        # its own element through the memo instead of recursing forever
+        # (test_pickle_recursive).  Subclass instance attributes ride along as
+        # BUILD state.
+        state = self.__getstate__()
+        # Iterate via the deque's own __iter__ (as CPython's deque_reduce does),
+        # so a subclass with a broken __iter__ raises during pickling
+        # (test_pickle_recursive's DequeWithBadIter) rather than silently
+        # pickling the raw items.
+        items = iter(self)
+        if self._maxlen is None:
+            return (self.__class__, (), state, items)
+        return (self.__class__, ((), self._maxlen), state, items)
 
     def rotate(self, n=1):
         if not self._items:
@@ -259,13 +389,88 @@ class deque:
         return _deque_iterator(self)
 
     def __reversed__(self):
-        return _deque_iterator(self, True)
+        return _deque_reverse_iterator(self)
+
+    def reverse(self):
+        """Reverse the elements in place.  Returns None (like list.reverse)."""
+        self._items.reverse()
 
     def __getitem__(self, i):
         return self._items[i]
 
+    def __setitem__(self, i, value):
+        # Item assignment does not invalidate iterators in CPython, so no
+        # _state bump.  Negative / out-of-range handled by the backing list.
+        self._items[i] = value
+
+    def __delitem__(self, i):
+        del self._items[i]
+        self._state += 1
+
     def __contains__(self, item):
-        return item in self._items
+        # Membership compares each element, and a comparison may mutate the
+        # deque (MutateCmp), which CPython reports as RuntimeError.
+        state = self._state
+        n = len(self._items)
+        i = 0
+        while i < n:
+            if self._state != state:
+                raise RuntimeError("deque mutated during iteration")
+            if self._items[i] == item:
+                return True
+            i += 1
+        if self._state != state:
+            raise RuntimeError("deque mutated during iteration")
+        return False
+
+    def __add__(self, other):
+        # CPython deque supports ``deque + deque`` only (result carries self's
+        # maxlen); other operand types are a TypeError via NotImplemented.
+        if isinstance(other, deque):
+            return deque(self._items + other._items, self._maxlen)
+        return NotImplemented
+
+    def __iadd__(self, other):
+        self.extend(other)
+        return self
+
+    def __mul__(self, n):
+        if not isinstance(n, int):
+            return NotImplemented
+        return deque(self._items * n, self._maxlen)
+
+    def __rmul__(self, n):
+        return self.__mul__(n)
+
+    def __imul__(self, n):
+        if not isinstance(n, int):
+            return NotImplemented
+        self._state += 1
+        newitems = self._items * n
+        if self._maxlen is not None and len(newitems) > self._maxlen:
+            newitems = newitems[len(newitems) - self._maxlen:]
+        self._items = newitems
+        return self
+
+    def __lt__(self, other):
+        if isinstance(other, deque):
+            return self._items < other._items
+        return NotImplemented
+
+    def __le__(self, other):
+        if isinstance(other, deque):
+            return self._items <= other._items
+        return NotImplemented
+
+    def __gt__(self, other):
+        if isinstance(other, deque):
+            return self._items > other._items
+        return NotImplemented
+
+    def __ge__(self, other):
+        if isinstance(other, deque):
+            return self._items >= other._items
+        return NotImplemented
 
     def __eq__(self, other):
         # Element-wise equality between two deques (CPython compares deques
@@ -289,7 +494,18 @@ class deque:
         return len(self._items) > 0
 
     def __repr__(self):
-        return "deque(" + repr(self._items) + ")"
+        # Self-referential deque (``d.append(d)``) renders the recursive slot as
+        # ``[...]`` (CPython Py_ReprEnter), and the maxlen is shown when bounded.
+        if id(self) in deque._repr_running:
+            return '[...]'
+        deque._repr_running.add(id(self))
+        try:
+            name = type(self).__name__
+            if self._maxlen is not None:
+                return "%s(%r, maxlen=%d)" % (name, self._items, self._maxlen)
+            return "%s(%r)" % (name, self._items)
+        finally:
+            deque._repr_running.discard(id(self))
 
 
 import keyword as _keyword
