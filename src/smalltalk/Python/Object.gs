@@ -4137,8 +4137,10 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	All other unknown sends fall through to super."
 
 	| s md cls binOp clsMeth |
-	envId = 1 ifFalse: [^ MessageNotUnderstood signal:
-	'env-1 ', aSelector printString, ' not understood by ', self class name asString].
+	envId = 1 ifFalse: [
+     ^ MessageNotUnderstood new
+         receiver: self selector: aSelector args: anArray envId: envId ; 
+         signal ].
 	s := aSelector asString.
 	cls := self class.
 	md := cls methodDictForEnv: 1.
@@ -4204,13 +4206,16 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 		"@classmethod through an instance -- see ___tryClassMethodDNU___:."
 		clsMeth := self ___tryClassMethodDNU___: aSelector args: anArray.
 		clsMeth == #'___noClassMethod___' ifFalse: [^ clsMeth].
-		^ MessageNotUnderstood signal:
-			'env-1 ', aSelector printString, ' not understood by ', cls name asString
+		^ MessageNotUnderstood new
+        receiver: cls selector: aSelector args: anArray envId: envId ; 
+        signal
 	].
 	"Unary selector with 0 args — return BoundMethod if class has any
 	same-named callable form (for `f = obj.method` patterns)."
-	anArray size = 0 ifFalse: [^ MessageNotUnderstood signal:
-		'env-1 ', aSelector printString, ' not understood by ', cls name asString].
+	anArray size = 0 ifFalse: [
+     ^ MessageNotUnderstood new
+        receiver: cls selector: aSelector args: anArray envId: envId ; 
+        signal ].
 	((md includesKey: (s , ':') asSymbol)
 		or: [(md includesKey: (s , ':_:') asSymbol)
 			or: [(md includesKey: (s , ':_:_:') asSymbol)
@@ -4221,8 +4226,9 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	CALLING for 0-arg instance methods, so do the same here."
 	clsMeth := self ___tryClassMethodDNU___: aSelector args: anArray.
 	clsMeth == #'___noClassMethod___' ifFalse: [^ clsMeth].
-	^ MessageNotUnderstood signal:
-		'env-1 ', aSelector printString, ' not understood by ', cls name asString
+  ^ MessageNotUnderstood new
+      receiver: cls selector: aSelector args: anArray envId: envId ; 
+      signal
 %
 
 set compile_env: 0
