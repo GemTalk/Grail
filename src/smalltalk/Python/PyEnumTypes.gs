@@ -2017,6 +2017,11 @@ ___grailFunctional: cls positional: positional keywords: keywords
 		| nameStr rawValue member effVal |
 		nameStr := pair @env0:at: 1.
 		rawValue := pair @env0:at: 2.
+		"An EMPTY member name is invalid (CPython raises ValueError before building
+		anything -- test_empty_string).  Grail would otherwise try to compile an
+		accessor with an empty selector and leak a CompileError."
+		nameStr @env0:isEmpty ifTrue: [
+			^ ValueError ___signal___: 'invalid enum member name: '''''].
 		"auto() markers can arrive through the mapping/pairs forms
 		(BaseEnum('MainEnum', dict(first=auto(), ...))) -- resolve with
 		the same per-class rule as class-body members."
@@ -2084,10 +2089,17 @@ ___grailFunctional: cls positional: positional keywords: keywords
 		Object's attribute load performs only setter-paired accessors or
 		that category, and wraps everything else as a BoundMethod -- any
 		other category makes Question.who a callable, not the member."
-		(newCls @env0:class) ___compileMethod:
+		"Best-effort: a member NAME that is not a valid Smalltalk selector (a
+		digit-leading string like ``2'', ...) cannot be compiled as an accessor and
+		used to leak a CompileError that aborted the WHOLE build -- so a valid
+		sibling name (the Hebrew alef in ``('א','2','3')'') became unreachable
+		(test_non_latin_number_string).  Skip only the un-compilable accessor; the
+		member is still registered in byName, so cls['2'] resolves via __getitem__."
+		[(newCls @env0:class) ___compileMethod:
 				(nameStr @env0:, '
 	^ self __getitem__: ''' @env0:, nameStr @env0:, '''')
-				category: 'Grail-Class Attrs']]] value.
+				category: 'Grail-Class Attrs']
+			@env0:on: AbstractException do: [:e | nil]]]] value.
 	self ___grailRegistry___ @env0:at: newCls put: (Array @env0:with: byValue with: byName with: members).
 	"Record the functional gnv as a staticmethod in the session gnv-static store;
 	___classDict___ surfaces it in newCls.__dict__ (functional enums have no
