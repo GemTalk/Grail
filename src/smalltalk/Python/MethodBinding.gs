@@ -214,6 +214,22 @@ __qualname__
 
 category: 'Grail-Attribute Access'
 method: MethodBinding
+__getattr__: aName
+	"Forward any attribute the binding itself does not define to the wrapped
+	callable.  A bound method in CPython exposes the underlying function's
+	attributes, and code relies on it: an lru_cache-wrapped METHOD reached
+	through an instance answers ``a.f.cache_info()'' / ``cache_clear()'' --
+	django.utils.functional does the latter -- and those live on the wrapper,
+	not on the binding.
+
+	Raises AttributeError when the callable has none either, so a genuine typo
+	still reports as one."
+
+	^ (self @env0:callable) @env1:___pyAttrLoad___: aName @env0:asString @env0:asSymbol
+%
+
+category: 'Grail-Attribute Access'
+method: MethodBinding
 ___boundMeta___: aName
 	"Read aName off the bound callable through the Python attribute protocol,
 	raising AttributeError when it has none -- the same answer an unbound read

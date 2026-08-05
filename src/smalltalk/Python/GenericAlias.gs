@@ -323,6 +323,38 @@ ___of___: left with: right
 
 category: 'Grail-Instance Creation'
 classmethod: PyUnionType
+___isTypeOperand___: anOperand
+	"Is anOperand something ``|'' may union -- a class, a builtin type reached as
+	a value, a parameterised generic, an existing union, or None?
+
+	This gate is why ``|'' does not hijack unrelated code.  CPython's type.__or__
+	answers NotImplemented for a non-type, so ``some_set | operator.add'' still
+	raises TypeError; without the gate, Grail built a union out of a set and a
+	FUNCTION and test_set's TestOnlySetsOperator stopped seeing its expected
+	TypeError.  A builtin referenced as a value is a BoundMethod either way, so
+	the discriminator is whether its selector names a class."
+
+	| resolved |
+	anOperand == nil ifTrue: [^ false].
+	(anOperand @env0:isKindOf: Behavior) ifTrue: [^ true].
+	(anOperand @env0:isKindOf: PyGenericAlias) ifTrue: [^ true].
+	(anOperand @env0:isKindOf: PyUnionType) ifTrue: [^ true].
+	anOperand == (ExecBlock @env0:___pyNone___) ifTrue: [^ true].
+	(anOperand @env0:isKindOf: BoundMethod) ifTrue: [
+		resolved := (System @env0:myUserProfile @env0:symbolList
+			@env0:objectNamed: #Python)
+			@env0:at: anOperand @env0:selector @env0:asSymbol otherwise: nil.
+		^ resolved @env0:notNil and: [resolved @env0:isKindOf: Behavior]].
+	"typing's stand-ins -- ``typing.List[float]'', ``Optional'', ``Union'' -- are
+	_StubGeneric instances with no __origin__ to recognise them by.  They exist
+	precisely to occupy type-expression positions, so ``typing.List[float] |
+	bytes'' is a union; matched by class name because that is the only marker a
+	stub carries."
+	^ anOperand @env0:class @env0:name @env0:asString @env0:= '_StubGeneric'
+%
+
+category: 'Grail-Instance Creation'
+classmethod: PyUnionType
 ___membersOf___: anOperand
 	"anOperand''s contribution to a union: its own members when it is already a
 	union, otherwise itself."
@@ -365,12 +397,14 @@ ___nameOf___: anOperand
 category: 'Grail-Operators'
 method: PyUnionType
 __or__: other
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
 	^ PyUnionType ___of___: self with: other
 %
 
 category: 'Grail-Operators'
 method: PyUnionType
 __ror__: other
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
 	^ PyUnionType ___of___: other with: self
 %
 
@@ -381,12 +415,14 @@ method: PyGenericAlias
 __or__: other
 	"``list[int] | str''.  A parameterised generic is a valid union member."
 
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
 	^ PyUnionType ___of___: self with: other
 %
 
 category: 'Grail-Operators'
 method: PyGenericAlias
 __ror__: other
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
 	^ PyUnionType ___of___: other with: self
 %
 
@@ -395,12 +431,14 @@ method: Metaclass3
 __or__: other
 	"``SomeClass | OtherClass'' -- PEP 604 on a plain class."
 
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
 	^ PyUnionType ___of___: self with: other
 %
 
 category: 'Grail-Operators'
 method: Metaclass3
 __ror__: other
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
 	^ PyUnionType ___of___: other with: self
 %
 
@@ -411,12 +449,14 @@ __or__: other
 	so the union operator has to live here too or the commonest spelling of a
 	union -- builtins on both sides -- would still raise."
 
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
 	^ PyUnionType ___of___: self with: other
 %
 
 category: 'Grail-Operators'
 method: BoundMethod
 __ror__: other
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
 	^ PyUnionType ___of___: other with: self
 %
 

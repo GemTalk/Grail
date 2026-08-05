@@ -1617,6 +1617,18 @@ ___isDescriptorCallable___: aValue
 			wraps.  functools.singledispatchmethod answers false over a
 			@classmethod / @staticmethod, neither of which binds an instance."
 			^ aValue ___pyBindsSelf___ == true].
+	"Same marker, asked of anything else that reached here.  Not every
+	function stand-in is a PythonInstance: LruCacheWrapper is a plain Object
+	subclass, so an lru_cache-wrapped METHOD read off an instance was not
+	bound and the wrapper received the first ARGUMENT as its receiver --
+	``a.f(1)'' invoked the wrapped method with 1 as self.
+
+	Reached only after the BoundMethod / ExecBlock / UnboundMethod /
+	PythonInstance branches above, so the extra probe falls on plain data
+	class attributes; measured at no change on a class-attribute read
+	benchmark."
+	(aValue ___respondsTo___: #'___pyBindsSelf___')
+		ifTrue: [^ aValue ___pyBindsSelf___ == true].
 	^ false
 %
 
