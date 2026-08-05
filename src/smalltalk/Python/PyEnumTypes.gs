@@ -275,7 +275,7 @@ ___grailStoredGnvInvocable: sm
 	[f isKindOf: PyStaticMethod] @env0:whileTrue: [
 		f := f @env0:dynamicInstVarAt: #'__func__'].
 	^ (f isKindOf: BoundMethod)
-		ifTrue: [f @env0:receiver @env0:notNil]
+		ifTrue: [f @env0:receiver @env0:notNil or: [f @env0:definingClass @env0:notNil]]
 		ifFalse: [true]
 %
 
