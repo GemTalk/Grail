@@ -146,6 +146,50 @@ doit
 functools_singledispatchmethod category: 'Grail-Modules'
 %
 
+! ------- functools_singledispatchmethod_get: what reading the descriptor answers
+expectvalue /Class
+doit
+PythonInstance subclass: 'functools_singledispatchmethod_get'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+functools_singledispatchmethod_get comment:
+'CPython''s ``functools._singledispatchmethod_get'' -- the object a
+singledispatchmethod descriptor''s ``__get__'' answers, holding the
+descriptor plus the instance and class it was read through.
+
+Exists because the three access paths are three DIFFERENT objects in
+CPython, distinguishable by repr: the descriptor itself
+(``A.__dict__["m"]''), the unbound read (``A.m''), and the bound read
+(``a.m'').  Grail used to answer the descriptor for both reads and a
+generic MethodBinding for a bound plain method -- so ``repr(A.m)'' named
+a descriptor and ``type(a.m).__module__'' was ''builtins'' rather than
+''functools''.
+
+Metadata is FORWARDED to the descriptor rather than copied: the
+descriptor already resolves __name__ / __qualname__ / __module__ /
+__doc__ / __annotations__ off whatever it wraps, through the attribute
+protocol, and duplicating that here would be a second thing to keep
+correct.
+
+Calling delegates to the descriptor too, prepending the instance exactly
+when the descriptor says it binds one.  That keeps ONE call shape serving
+plain methods, @classmethod and @staticmethod -- the property the old
+___pyBindsSelf___ arrangement provided and which several tests rely on.'
+%
+
+expectvalue /Class
+doit
+functools_singledispatchmethod_get category: 'Grail-Modules'
+%
+
 ! ------- functools_partial class (Python functools.partial)
 expectvalue /Class
 doit
@@ -3250,7 +3294,18 @@ ___pyBindsSelf___
 	Refusing the binding here makes both access paths deliver the identical
 	argument array, which is what lets one call shape serve all three kinds."
 
-	^ self ___wrapsClassSideMethod___ @env0:not
+	"Now ALWAYS false.  Binding moved to the descriptor protocol: object >>
+	___isValueDescriptor___: asks this marker precisely so a wrapper that
+	declines can fall through to __get__, and __get__ answers a
+	functools_singledispatchmethod_get, which is what gives ``A.m'' and
+	``a.m'' CPython's distinct reprs and puts type(a.m) in functools instead
+	of a generic MethodBinding in builtins.
+
+	The argument-shape property described above did not go away -- it moved:
+	singledispatchmethod_get >> ___pyCallValue___ prepends the instance
+	exactly when ___wrapsClassSideMethod___ says the descriptor binds one, so
+	one call shape still serves all three kinds."
+	^ false
 %
 
 category: 'Grail-Attribute Access'
@@ -3504,6 +3559,208 @@ category: 'Grail-Reflection'
 classmethod: functools_singledispatchmethod
 __qualname__
 	^ 'singledispatchmethod'
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+__get__: obj _: cls
+	"Python's descriptor read.  Both of Grail's hooks land here now:
+	object >> ___classDescriptorGet___: passes (None, cls) for ``A.m'' and
+	___descriptorGet___: passes (instance, class) for ``a.m''.  Answering a
+	distinct object for each is what makes the three CPython access paths
+	three different things -- the descriptor, the unbound read and the bound
+	read -- which is the whole subject of test_method_repr."
+
+	^ functools_singledispatchmethod_get ___on: self obj: obj cls: cls
+%
+
+category: 'Grail-Instance Creation'
+classmethod: functools_singledispatchmethod_get
+___on: aDescriptor obj: anObj cls: aCls
+	"Metadata is copied into DYNAMIC INSTVARS here, not served by instance-side
+	__name__ / __module__ / ... methods.
+
+	___pyAttrLoad___: probes the dynamic-instVar store first and answers what it
+	finds as a VALUE, but an instance-side dunder METHOD reaches the generic
+	branch and comes back wrapped as a BoundMethod -- only a CLASS receiver gets
+	these read as values.  Defining them as methods therefore made
+	``meth.__module__'' answer <BoundMethod object>; __doc__ alone worked,
+	because object >> ___pyAttrLoad___: special-cases it.  The descriptor itself
+	carries its metadata the same way, which is why reading it off the
+	descriptor already worked.
+
+	CPython stamps __module__ and __doc__ in __init__ for the same class of
+	reason (they ``conflict with type descriptors'') and resolves the rest in
+	__getattr__.  Grail copies all of them: the wrapper is built fresh on every
+	attribute read, so a snapshot cannot go stale."
+
+	| inst |
+	inst := self ___new___.
+	inst @env0:dynamicInstVarAt: #unbound put: aDescriptor.
+	inst @env0:dynamicInstVarAt: #obj put: anObj.
+	inst @env0:dynamicInstVarAt: #cls put: aCls.
+	#( #'__name__' #'__qualname__' #'__module__' #'__doc__'
+	   #'__annotations__' #'__isabstractmethod__' #'__type_params__' )
+		@env0:do: [:each |
+			| v |
+			v := inst ___forwardAttr___: each.
+			v == nil ifFalse: [inst @env0:dynamicInstVarAt: each put: v]].
+	^ inst
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod_get
+___unbound___
+	"The singledispatchmethod descriptor this was read from."
+
+	^ self @env0:dynamicInstVarAt: #unbound
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod_get
+___boundInstance___
+	"The instance this was read through, or nil/None for a class read."
+
+	| obj |
+	obj := self @env0:dynamicInstVarAt: #obj.
+	^ (obj == nil or: [obj == None]) ifTrue: [nil] ifFalse: [obj]
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod_get
+___forwardAttr___: aSym
+	"Metadata is FORWARDED to the descriptor, not copied.  The descriptor
+	already resolves each of these off whatever it wraps -- a plain def, a
+	@classmethod, a callable object -- so copying them here would be a second
+	place to keep correct.
+
+	Read off the WRAPPED CALLABLE through the attribute protocol -- CPython's
+	``getattr(self._unbound.func, name)'' -- rather than by sending the
+	descriptor's own __name__ / __qualname__ accessors.
+
+	Those accessors send __name__ DIRECTLY to what they wrap, which is an
+	uncatchable env-1 MessageNotUnderstood for a callable that has none.
+	``singledispatchmethod(SomeCallable())'' is exactly that case and
+	test_method_repr covers it, expecting the label to degrade to __name__ and
+	then to ``?''.  ___pyAttrLoad___: raises a catchable AttributeError
+	instead, so a missing name answers nil here and the repr falls back.
+
+	__annotations__ is the exception: the descriptor's own accessor is the one
+	that answers the right dict (it sends __annotations__ to the wrapped
+	callable, which resolves through the wrapper chain), where the attribute
+	protocol answers a dict missing the parameters -- a KeyError on the
+	subscript the test does.  Tried under a broad guard, since it too is a
+	direct send and the callable may have nothing to answer."
+
+	| f viaDescriptor |
+	f := self ___unbound___ @env0:dynamicInstVarAt: #func.
+	f == nil ifTrue: [^ nil].
+	aSym == #'__annotations__' ifTrue: [
+		viaDescriptor := [self ___unbound___ __annotations__]
+			@env0:on: AbstractException
+			do: [:ex | ex @env0:return: nil].
+		viaDescriptor == nil ifFalse: [^ viaDescriptor]].
+	^ [f ___pyAttrLoad___: aSym]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil]
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod_get
+__wrapped__
+	"CPython exposes the wrapped callable here, which is what
+	inspect.signature follows to report the real parameter list."
+
+	^ self ___unbound___ @env0:dynamicInstVarAt: #func
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod_get
+register: clsOrFunc
+	"CPython exposes ``register'' on the read object too, so
+	``A.m.register(int)'' works and not only the same call reached through the
+	class dict entry."
+
+	^ self ___unbound___ register: clsOrFunc
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod_get
+_register: positional kw: kwargs
+	"Varargs companion of register, for the two-argument and keyword forms."
+
+	^ self ___unbound___ _register: positional kw: kwargs
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod_get
+___pyCallValue___: positional kw: kwargs
+	"Delegate the call to the descriptor, prepending the instance exactly
+	when the descriptor says it binds one.
+
+	A @classmethod or @staticmethod takes the SAME argument array through
+	either access path -- ``a.static_func(0)'' and ``A.static_func(0)'' both
+	reach the function as (0) -- so the prepend is conditional on
+	___wrapsClassSideMethod___ rather than merely on an instance being
+	present.  That is the property the old ___pyBindsSelf___ arrangement
+	provided, and several passing tests depend on it."
+
+	| obj args |
+	obj := self ___boundInstance___.
+	args := (obj == nil or: [self ___unbound___ ___wrapsClassSideMethod___])
+		ifTrue: [positional]
+		ifFalse: [(Array @env0:with: obj) @env0:, positional].
+	^ self ___unbound___ ___pyCallValue___: args kw: kwargs
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod_get
+value: positional value: kwargs
+	"Two-argument block protocol, as the descriptor also answers."
+
+	^ self ___pyCallValue___: positional kw: kwargs
+%
+
+category: 'Grail-Representation'
+method: functools_singledispatchmethod_get
+__repr__
+	"Two of CPython's three forms live here, and test_method_repr asserts
+	each verbatim: an unbound read is ``<single dispatch method NAME>'' and a
+	bound read ``<bound single dispatch method NAME of OBJ>''.  The third,
+	``<single dispatch method descriptor NAME>'', belongs to the descriptor
+	itself (below)."
+
+	| obj label |
+	label := self ___unbound___ ___reprLabel___.
+	obj := self ___boundInstance___.
+	^ (obj == nil
+		ifTrue: ['<single dispatch method ' @env0:, label @env0:, '>']
+		ifFalse: ['<bound single dispatch method ' @env0:, label
+			@env0:, ' of ' @env0:, (obj __repr__) @env0:asString @env0:, '>'])
+				@env0:asUnicodeString
+%
+
+category: 'Grail-Reflection'
+classmethod: functools_singledispatchmethod_get
+__module__
+	"``type(a.m).__module__'' must be 'functools' -- asserted by
+	test_method_wrapping_attributes for all six access paths.  A generic
+	MethodBinding used to serve the bound plain-method case and reported
+	'builtins'."
+
+	^ 'functools'
+%
+
+category: 'Grail-Reflection'
+classmethod: functools_singledispatchmethod_get
+__name__
+	^ '_singledispatchmethod_get'
+%
+
+category: 'Grail-Reflection'
+classmethod: functools_singledispatchmethod_get
+__qualname__
+	^ '_singledispatchmethod_get'
 %
 
 category: 'Grail-Representation'
