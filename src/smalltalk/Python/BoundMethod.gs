@@ -664,13 +664,36 @@ ___methodAnnotationsForClass___: aClass name: aName
 category: 'Grail-Attribute Access'
 method: BoundMethod
 __qualname__
-	"Python's ``func.__qualname__'' — return the same string as
-	__name__ for now.  Real qualname encodes lexical nesting
-	(``OuterClass.method'') which Grail doesn't track on
-	BoundMethods, so the simpler name suffices for inspection
-	consumers that just want a printable identifier."
+	"Python's ``func.__qualname__''.
 
+	A CLASS receiver is a class-side method -- a @staticmethod or @classmethod --
+	and CPython qualifies it as ``Cls.name''.  Answering the bare name left it
+	unresolvable: pickle saves a callable by reference by walking its qualname
+	from the module, and ``cached_staticmeth'' is not a module attribute while
+	``Host.cached_staticmeth'' is.
+
+	Other receivers keep the bare name.  Grail does not track lexical nesting on
+	a BoundMethod, so a module-level function answers its own name (which is
+	what CPython gives it too) and a bound instance method answers the name
+	rather than ``Cls.meth''."
+
+	| n |
+	n := self __name__ @env0:asString.
+	(receiver @env0:isKindOf: Behavior) ifTrue: [
+		^ ((self ___receiverQualname___) @env0:, '.' @env0:, n) @env0:asUnicodeString].
 	^ self __name__
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___receiverQualname___
+	"The class receiver's own __qualname__, for prefixing a class-side method.
+	Falls back to the Smalltalk class name when the class carries no Python
+	qualname."
+
+	^ [(receiver __qualname__) @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: receiver @env0:name @env0:asString]
 %
 
 category: 'Grail-Attribute Access'
@@ -686,7 +709,25 @@ __module__
 
 	(receiver isKindOf: module) ifTrue: [
 		^ receiver @env1:___pyAttrLoad___: #'__name__'].
-	^ receiver @env0:class @env0:name @env0:asString
+	"A CLASS receiver is a class-side method (@staticmethod / @classmethod).
+	``receiver class name'' answered the METACLASS -- ``Host class'' -- which is
+	not a module at all, so pickle looked for a module by that name, failed, and
+	fell back to '__main__'.  The defining class knows its module; ask it."
+	(receiver @env0:isKindOf: Behavior) ifTrue: [
+		^ self ___moduleOfClass___: receiver].
+	"An instance receiver: the module that defined its class."
+	^ self ___moduleOfClass___: receiver @env0:class
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___moduleOfClass___: aClass
+	"aClass's Python __module__, falling back to the Smalltalk class name when
+	it has none (a kernel class reached as a receiver)."
+
+	^ [(aClass __module__) @env0:asString @env0:asUnicodeString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: aClass @env0:name @env0:asString]
 %
 
 set compile_env: 0
