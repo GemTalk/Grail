@@ -258,3 +258,48 @@ def underscore_assignment_rebinds_the_name():
         return "def"
     _ = "assigned"
     return _
+
+
+# --- repr of the descriptor, for callables that are not plain functions ---
+
+
+class _CallableWithName:
+    """Carries __name__ as a CLASS-BODY assignment rather than as a compiled
+    method -- the case that distinguishes a direct ``__name__'' send from the
+    Python attribute protocol."""
+
+    __name__ = 'NOQUALNAME'
+
+    def __call__(self, *args):
+        pass
+
+
+class _CallableWithoutName:
+    def __call__(self, *args):
+        pass
+
+
+class _ReprHost:
+    @functools.singledispatchmethod
+    def func(self, arg):
+        pass
+
+    @functools.singledispatchmethod
+    @classmethod
+    def cls_func(cls, arg):
+        pass
+
+    @functools.singledispatchmethod
+    @staticmethod
+    def static_func(arg):
+        pass
+
+    no_qualname = functools.singledispatchmethod(_CallableWithName())
+    no_name = functools.singledispatchmethod(_CallableWithoutName())
+
+
+def descriptor_reprs():
+    """repr() of each singledispatchmethod descriptor, in CPython's order of
+    preference: __qualname__, then __name__, then '?'."""
+    return [repr(_ReprHost.__dict__[k])
+            for k in ('func', 'cls_func', 'static_func', 'no_qualname', 'no_name')]
