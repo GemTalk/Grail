@@ -1984,11 +1984,45 @@ isinstance: anObject _: aClassOrTuple
 	``Python at: selector``.  Tuples are handled by recursing on each
 	element until a match is found."
 
+	^ self ___isInstance___: anObject of: aClassOrTuple depth: 0
+%
+
+category: 'Python-Built-in Functions'
+method: builtins
+___isInstance___: anObject of: aClassOrTuple depth: aDepth
+	"isinstance's recursive core.  ``aDepth'' bounds the NESTED-TUPLE recursion:
+	a classinfo tuple may contain tuples, and CPython's own recursion limit is
+	what turns an absurdly nested one into RecursionError
+	(test_isinstance's blowstack nests 100 deeper on every pass until it gets
+	one).  Grail recursed in Smalltalk with no guard, so it died on the
+	UNCATCHABLE AlmostOutOfStack instead.  The cap is far above any real
+	classinfo -- nesting beyond one level is already pathological -- and well
+	under the Smalltalk stack, which is what keeps the failure a catchable
+	Python RecursionError."
+
 	| cls |
+	aDepth @env0:> 50 ifTrue: [
+		RecursionError ___signal___:
+			'maximum recursion depth exceeded in __instancecheck__'].
 	cls := self ___resolveClassRef___: aClassOrTuple.
 	"Tuple-of-classes form: recurse, OR together."
 	(cls isKindOf: tuple) ifTrue: [
-		cls @env0:do: [:eachCls | (self isinstance: anObject _: eachCls) ifTrue: [^ true]].
+		cls @env0:do: [:eachCls |
+			(self ___isInstance___: anObject of: eachCls depth: aDepth @env0:+ 1)
+				ifTrue: [^ true]].
+		^ false
+	].
+	"PEP 604 union (``int | str''): CPython's isinstance accepts types.UnionType
+	and tests each member, so it behaves exactly like the tuple form.  A member
+	is normalised first because ``int | None'' keeps the None SINGLETON in its
+	__args__ while CPython stores NoneType there -- unnormalised,
+	isinstance(None, int | None) raised instead of answering True."
+	(cls isKindOf: PyUnionType) ifTrue: [
+		(cls @env0:dynamicInstVarAt: #'__args__') @env0:do: [:eachCls |
+			(self ___isInstance___: anObject
+				of: (self ___normalizeUnionMember___: eachCls)
+				depth: aDepth @env0:+ 1)
+					ifTrue: [^ true]].
 		^ false
 	].
 	^ self ___isInstanceSingle___: anObject of: cls
@@ -2041,6 +2075,22 @@ ___isInstanceSingle___: anObject of: aClass
 				(anObject @env1:___pyAttrLoad___: #'__class__')
 			of: aClass depth: 0].
 	result := anObject isKindOf: aClass.
+	"CPython's object_isinstance: when the real type check FAILS it still reads
+	``inst.__class__'' and re-tests, so an object that declares its own
+	__class__ is judged by what it CLAIMS to be.  Two consequences the tests
+	pin: a lying __class__ makes isinstance answer True, and a __class__ getter
+	that raises propagates instead of being masked (test_isinstance's
+	test_isinstance_dont_mask_non_attribute_error -- ``isinstance(c, bool)''
+	with a RuntimeError-raising getter, which never touched __class__ here
+	because bool is a real type and the fast path had already decided).
+	Gated on the class body actually DECLARING __class__, so the ordinary case
+	pays one metaclass-chain probe and no attribute read."
+	(result not and: [anObject ___declaresOwnClassAttr___: #'__class__']) ifTrue: [
+		| claimed |
+		claimed := anObject @env1:___pyAttrLoad___: #'__class__'.
+		(claimed @env0:notNil and: [claimed @env0:isKindOf: Behavior])
+			ifTrue: [result := claimed @env0:inheritsFrom: aClass.
+				result @env0:ifFalse: [result := claimed @env0:== aClass]]].
 	(result not and: [aClass == Integer]) ifTrue: [
 		"CPython's bool IS an int subclass, so isinstance(True, int) is
 		True (PEP 285; test_bool.py test_isinstance).  Grail maps bool to
@@ -2140,12 +2190,22 @@ pow: x _: y
 category: 'Grail-Built-in Functions'
 method: builtins
 property: fn
-	"Python @property / property(fn) - identity stub.  Grail can't
-	transparently call the getter on attribute reads (no descriptor
-	protocol yet), but callers can still invoke the function
-	explicitly via `obj.prop()`."
+	"``property(fget)'' — build a real read-only descriptor.
 
-	^ fn
+	This used to be an identity stub returning fn (the comment said ``no
+	descriptor protocol yet''), which made the ONE-argument call form behave
+	unlike every other arity: property(), property(g, s), property(g, s, d) and
+	the doc= keyword all already reached PropertyDescriptor's constructors, so
+	only property(g) answered a bare function.  Reading such an attribute gave
+	back the function rather than calling it, which is why
+	``__bases__ = property(getbases)'' -- the legacy abstract-class protocol
+	CPython's test_isinstance exercises throughout -- looked like a
+	non-conforming classinfo and raised TypeError.
+
+	Kept as a builtins method rather than deleted so the 1-argument call site
+	resolves exactly as before; only the value it answers changes."
+
+	^ PropertyDescriptor @env1:__new__: fn
 %
 
 category: 'Grail-Built-in Functions'
@@ -2224,7 +2284,19 @@ issubclass: aClass _: aClassOrTuple
 	emits ``str`` / ``int`` as such), unwrap to the underlying class
 	before walking the hierarchy."
 
+	^ self ___isSubclass___: aClass of: aClassOrTuple depth: 0
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___isSubclass___: aClass of: aClassOrTuple depth: aDepth
+	"issubclass's recursive core.  ``aDepth'' bounds the nested-tuple recursion
+	for the same reason isinstance's does -- see ___isInstance___:of:depth:."
+
 	| sub target |
+	aDepth @env0:> 50 ifTrue: [
+		RecursionError ___signal___:
+			'maximum recursion depth exceeded in __subclasscheck__'].
 	sub := self ___resolveClassRef___: aClass.
 	target := self ___resolveClassRef___: aClassOrTuple.
 	"RECURSE per element rather than calling ___isSubclassSingle___ directly,
@@ -2236,11 +2308,35 @@ issubclass: aClass _: aClassOrTuple
 	test_subclass_tuple), which only recursion handles."
 	(target isKindOf: tuple) ifTrue: [
 		target @env0:do: [:eachCls |
-			(self issubclass: sub _: eachCls) ifTrue: [^ true]
+			(self ___isSubclass___: sub of: eachCls depth: aDepth @env0:+ 1)
+				ifTrue: [^ true]
+		].
+		^ false
+	].
+	"PEP 604 union: same treatment as a tuple, per CPython's issubclass, with the
+	same None -> NoneType normalisation."
+	(target isKindOf: PyUnionType) ifTrue: [
+		(target @env0:dynamicInstVarAt: #'__args__') @env0:do: [:eachCls |
+			(self ___isSubclass___: sub
+				of: (self ___normalizeUnionMember___: eachCls)
+				depth: aDepth @env0:+ 1)
+					ifTrue: [^ true]
 		].
 		^ false
 	].
 	^ self ___isSubclassSingle___: sub of: target
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___normalizeUnionMember___: aMember
+	"``X | None'' is spelled with the None SINGLETON but means NoneType, which is
+	what CPython puts in __args__ -- so isinstance(None, int | None) is True.
+	Grail's union keeps the singleton, so translate it at the point of use.
+	Everything else passes through untouched."
+
+	aMember == None ifTrue: [^ NoneType].
+	^ aMember
 %
 
 category: 'Grail-Built-in Functions'

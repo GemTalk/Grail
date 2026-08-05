@@ -51,12 +51,25 @@ Self = _StubGeneric('Self')
 
 # Generic containers ---------------------------------------------------------
 
-List = _StubGeneric('List')
-Dict = _StubGeneric('Dict')
-Tuple = _StubGeneric('Tuple')
-Set = _StubGeneric('Set')
-FrozenSet = _StubGeneric('FrozenSet')
-Type = _StubGeneric('Type')
+# The ones with a builtin equivalent are the BUILTIN ITSELF, which is what they
+# are upstream too -- typing.List has been a deprecated alias of list since 3.9.
+# As bare _StubGeneric instances they carried only a name, so they were not
+# types: ``isinstance([], typing.List)`` was False, ``typing.List |
+# typing.Tuple`` raised "unsupported operand type(s) for |: '_StubGeneric' and
+# '_StubGeneric'", and test_isinstance's test_subclass_normal /
+# test_isinstance_with_or_union could not pass.  Aliasing also makes
+# ``typing.List[int]`` produce a real ``list[int]`` generic alias rather than
+# the stub swallowing the subscript.
+#
+# The stubs BELOW this block stay stubs on purpose: Callable / Optional / Union
+# / IO and the ABC names have no builtin to alias, and Grail's abc module is
+# itself a stub, so a name is all they can be.
+List = list
+Dict = dict
+Tuple = tuple
+Set = set
+FrozenSet = frozenset
+Type = type
 Iterable = _StubGeneric('Iterable')
 Iterator = _StubGeneric('Iterator')
 Generator = _StubGeneric('Generator')

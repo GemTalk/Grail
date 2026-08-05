@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 26 | 7 | 57 | 90 |
+| P1 | 27 | 6 | 57 | 90 |
 | P2 | 10 | 6 | 18 | 34 |
 | P3 | 0 | 1 | 55 | 56 |
 | P4 | 0 | 0 | 75 | 75 |
-| **In-scope** | **36** | **14** | **205** | **255** |
+| **In-scope** | **37** | **13** | **205** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -65,7 +65,7 @@ python3 scripts/sync_scope_status.py --check    # exit 1 if it is stale
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **36 of those score OK**.
+Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **37 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -125,7 +125,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_index` | __index__ protocol (language). |
 | ✅ | `test_int` | int — core type (in harness). |
 | ✅ | `test_int_literal` | Integer literal parsing (language). |
-| ❗ | `test_isinstance` | isinstance/issubclass (language). |
+| ✅ | `test_isinstance` | isinstance/issubclass (language). |
 | ✅ | `test_iter` | Iterator protocol (language). |
 | ✅ | `test_iterlen` | __length_hint__ (language). |
 | ✅ | `test_keywordonlyarg` | Keyword-only arguments (language). |
@@ -665,11 +665,11 @@ status/tests/fail/err/skip — are in
 only what does not change every run: which modules are *done*, and what each
 not-yet-passing one is waiting on.
 
-**Fully green: 36 of the 50** — the ✅ rows in the tier tables above. That list
+**Fully green: 37 of the 50** — the ✅ rows in the tier tables above. That list
 used to be spelled out here and is not any more: it duplicated something the
 Status column now derives, and had drifted to 27.
 
-**Not yet green (the 14 ❗ rows), in descending size of the remaining gap:**
+**Not yet green (the 13 ❗ rows), in descending size of the remaining gap:**
 `test_enum` (metaclass depth — `object.__str__`, `__dir__`-on-class, `_boundary_`
 Flag), `test_datetime`, `test_functools`, and `test_traceback` (the
 only IMPORTERROR — `__code__` on a def that compiled to a real method; PR #129
@@ -708,18 +708,18 @@ Two of the eighteen only needed a vendoring gap closed, not a Grail fix:
 (for `test_yield_from`) were added to the trimmed support package, plus
 `os_helper.create_empty_file`.
 
-Eight of the eighteen have since gone green — `test_compare`, `test_iterlen`,
+Nine of the eighteen have since gone green — `test_compare`, `test_iterlen`,
 `test_index`, `test_keywordonlyarg`, `test_dictviews`, `test_generator_stop`,
-`test_sort` and `test_userdict` — and their rows are gone from the tables below,
-including the `#'<'`/`#'<='` uncatchable-DNU root that `test_index` named. The tier tables' ✅
+`test_sort`, `test_userdict` and `test_isinstance` — and their rows are gone from
+the tables below, including the `#'<'`/`#'<='` uncatchable-DNU root that
+`test_index` named. The tier tables' ✅
 is the live signal; anything still listed here is still open.
 
-**Easy wins — small residual, no new runtime plumbing (2 left of 9):**
+**Easy wins — small residual, no new runtime plumbing (1 left of 9):**
 
 | Module | Trial score | What is left |
 |--------|-------------|--------------|
 | `test_userlist` | 54t, 4F 4E | `OrderedCollection + UserList`, slice-assignment identity, `UserList does not understand #reverseDo:`. |
-| `test_isinstance` | 23t, 1F 19E | 16 of the 19 errors are Grail raising "arg must be a type" where CPython accepts the argument. |
 
 **Single-root modules — one fix moves most of the module, and the same root
 leaks into modules already on the board (4 left of 5):**

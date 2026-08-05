@@ -9,13 +9,18 @@
 ! the rest of the upstream stdlib call ``property(fget, fset, fdel,
 ! doc)'' from helper factories to build derived properties.
 !
-! This stub fills the gap: ``property(fget, fset, fdel, doc)''
-! returns a PropertyDescriptor instance that just remembers the
-! four pieces.  It DOES NOT participate in attribute access
-! dispatch (Grail's __pyAttrLoad doesn't honor the descriptor
-! protocol on stored instances yet — that's a separate, deeper
-! change).  Sufficient for module-import-time evaluation; runtime
-! invocation of the wrapped getter is whatever the caller arranges.
+! ``property(fget, fset, fdel, doc)'' returns a PropertyDescriptor holding the
+! four pieces, and it DOES now participate in attribute reads: ``__get__'' runs
+! the getter, applied by object>>___descriptorGet___:.  So the CALL form of
+! property behaves like the ``@property'' decorator on reads, where previously
+! only the decorator worked and a stored ``property(fget)'' read back as the
+! function itself.
+!
+! STILL a gap: __set__ / __delete__ are not wired, because Grail's attribute
+! STORE path does not consult descriptors.  ``obj.prop = v'' writes a dynamic
+! instVar that then SHADOWS the getter, and assigning to a read-only property
+! does not raise.  The decorator route emits an explicit setter method to cover
+! that; the call form has no equivalent.
 ! ===============================================================================
 
 ! ------- PropertyDescriptor class definition
@@ -88,6 +93,36 @@ __new__
 	inst := self @env0:new.
 	inst @env0:_setFget: nil fset: nil fdel: nil doc: nil.
 	^ inst
+%
+
+category: 'Grail-Descriptor Protocol'
+method: PropertyDescriptor
+__get__: instance _: owner
+	"Run the getter, which is the whole point of a property.  Without this an
+	attribute holding a ``property(...)'' read back as the DESCRIPTOR OBJECT
+	instead of the getter's value, so the CALL form of property did nothing --
+	only the ``@property'' DECORATOR worked, and that works by a different
+	route entirely (ClassDefAst compiles the decorated def into a real getter
+	METHOD, so no descriptor is involved).
+
+	CPython's ``property.__get__(None, owner)'' answers the property itself, so
+	CLASS access is left alone -- ``C.prop'' must stay the descriptor for
+	``C.prop.fget'' and for ``x = C.prop'' re-assignment to work.
+
+	A property with no fget raises AttributeError, as CPython does.  Applied by
+	object>>___descriptorGet___:, which already honours __get__ on a
+	class-attribute read.
+
+	NOT wired: __set__ / __delete__.  Grail's attribute STORE path does not
+	consult descriptors, so ``obj.prop = v'' still writes a dynamic instVar
+	that then shadows this getter, and a read-only property does not raise on
+	assignment.  The decorator route emits an explicit setter method for that
+	case; the call form has no equivalent yet."
+
+	(instance == nil or: [instance == None]) ifTrue: [^ self].
+	fget == nil ifTrue: [
+		^ AttributeError ___signal___: 'unreadable attribute'].
+	^ fget ___pyCallValue___: { instance } kw: nil
 %
 
 category: 'Grail-Class-Call Fast Path'
@@ -178,3 +213,55 @@ _new: positional kw: kwargs
 %
 
 set compile_env: 0
+
+! ------------------- Python-visible introspection
+! ``fget'' / ``fset'' / ``fdel'' / ``__doc__'' are DATA attributes in CPython, so
+! ``C.prop.fget'' must answer the getter, not a bound method.  The accessors above
+! are env 0 and therefore invisible to a Python attribute read, hence env-1
+! readers plus the whitelist.  ___pythonValueAttrs___ MUST be env 0: the
+! ___pyAttrLoad___ probe consults it through an env-0 ``respondsTo:''.
+
+set compile_env: 1
+
+category: 'Grail-Reflection'
+method: PropertyDescriptor
+fget
+	^ fget == nil ifTrue: [None] ifFalse: [fget]
+%
+
+category: 'Grail-Reflection'
+method: PropertyDescriptor
+fset
+	^ fset == nil ifTrue: [None] ifFalse: [fset]
+%
+
+category: 'Grail-Reflection'
+method: PropertyDescriptor
+fdel
+	^ fdel == nil ifTrue: [None] ifFalse: [fdel]
+%
+
+category: 'Grail-Reflection'
+method: PropertyDescriptor
+__doc__
+	"CPython carries the ``doc'' argument, falling back to the getter's own
+	docstring when none was passed."
+
+	doc == nil ifFalse: [^ doc].
+	fget == nil ifTrue: [^ None].
+	^ [fget ___pyAttrLoad___: #'__doc__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: None]
+%
+
+set compile_env: 0
+
+category: 'Grail-Python Attribute Hook'
+classmethod: PropertyDescriptor
+___pythonValueAttrs___
+	^ IdentitySet new
+		add: #'fget';
+		add: #'fset';
+		add: #'fdel';
+		add: #'__doc__';
+		yourself
+%

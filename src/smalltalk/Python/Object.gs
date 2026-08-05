@@ -889,6 +889,32 @@ ___pyAnd___: alternativeBlock
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___declaresOwnClassAttr___: aSym
+	"True when the receiver's Python CLASS BODY declared a class attribute named
+	aSym, as opposed to inheriting Grail's built-in default.
+
+	ClassDefAst compiles a class-body assignment into an accessor on the
+	class's METACLASS, so that is where the lookup goes.  The discriminator is
+	the owner: for a plain instance the env-1 selector resolves through the
+	metaclass chain all the way to ``Object'' (Grail's own
+	``object>>__class__''), while a declared attribute resolves to the class's
+	OWN metaclass.
+
+	A kernel instance-side implementation (dict, bytes, int, ... all define
+	their own env-1 __class__) is NOT caught, because those classes are not in
+	the metaclass chain -- the lookup still lands on Object and the caller keeps
+	its fast path.  A class receiver answers false: ``SomeClass.__class__'' is
+	its metaclass, not a class-body attribute."
+
+	| owner |
+	(self @env0:isKindOf: Behavior) ifTrue: [^ false].
+	owner := self @env0:class @env0:class
+		@env0:whichClassIncludesSelector: aSym environmentId: 1.
+	^ owner @env0:notNil @env0:and: [owner @env0:~~ Object]
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___descriptorGet___: aValue
 	"Python descriptor protocol on attribute read.  When a class
 	attribute resolves to an object whose class defines ``__get__''
@@ -2107,8 +2133,20 @@ ___pyAttrLoad___: aSym
 	Surfaced as the jinja2 ``{% if %}'' compile blocker —
 	idtracking.Symbols.copy() does ``object.__new__(self.__class__)''
 	and trips the BoundMethod-wrap fallback."
+	"``__class__'' is skipped here when the Python class body DECLARED one:
+	CPython lets a user ``__class__'' property override the default, and the
+	legacy abstract-class protocol depends on it -- test_isinstance's
+	AbstractInstance is recognised only through
+	``__class__ = property(getclass)''.  Taking the shortcut answered the real
+	Smalltalk class instead, so isinstance(AbstractSuper(), AbstractSuper) was
+	False and a getter that raises was never called (two ``RuntimeError not
+	raised'' failures).  ``__doc__'' is NOT gated: ClassDefAst gives EVERY class
+	a __doc__ accessor, so the same test would skip the shortcut for every
+	object."
 	((s @env0:= '__class__' or: [s @env0:= '__doc__'])
-		and: [self ___respondsTo___: aSym])
+		and: [(self ___respondsTo___: aSym)
+			and: [(s @env0:= '__class__') @env0:not
+				or: [(self ___declaresOwnClassAttr___: aSym) @env0:not]]])
 			ifTrue: [^ self @env0:perform: aSym env: 1].
 	(self isKindOf: Behavior) ifTrue: [
 		"Class-level dunders that should always read as values, never
