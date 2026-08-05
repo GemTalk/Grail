@@ -101,4 +101,18 @@ __next__
 	^ result
 %
 
+category: 'Grail-Pickle Protocol'
+method: callable_iterator
+_getstate
+	"Answer (callable, sentinel) for pickling.  CPython's calliter_reduce is
+	(iter, (callable, sentinel)) with no resume index -- the callable carries
+	its own state, and `exhausted' is a runtime latch that re-derives from the
+	callable on reload, so it is deliberately NOT part of the reduction.
+	pickle.py's save_iterator turns this into save_reduce(iter, (callable,
+	sentinel)).  A plain Python-visible method (no ___ prefix) so pickle.py can
+	call it, the same convention as tuple_iterator/seq_iterator _getstate."
+
+	^ tuple @env0:withAll: { callable. sentinel }
+%
+
 set compile_env: 0
