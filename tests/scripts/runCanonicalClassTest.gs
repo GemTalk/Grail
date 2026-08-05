@@ -120,7 +120,7 @@ the repository is left clean even when a check fails."
   that keeps the class IDENTITY (canonical reuse) while refreshing the
   methods -- so the change reaches the ALREADY-PERSISTED instance."
   [ | tmpPath f modA gadget modB |
-  tmpPath := '/tmp/grail_canon_edit_test.py'.
+  tmpPath := (importlib grailTmpDir , '/canon_edit_test.py').
   f := GsFile openWriteOnServer: tmpPath.
   f nextPutAll: 'class Gadget:
     def spin(self):

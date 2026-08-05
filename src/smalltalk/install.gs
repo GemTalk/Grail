@@ -683,6 +683,7 @@ run
 	at: #'ShlexTestCase' put: nil;
 	at: #'ShutilTestCase' put: nil;
 	at: #'GrailDirFallbackTestCase' put: nil;
+	at: #'GrailTmpDirTestCase' put: nil;
 	at: #'SetUpBridgeFixture' put: nil;
 	at: #'SetUpBridgeTestCase' put: nil;
 	at: #'TomllibTestCase' put: nil;
@@ -1428,6 +1429,7 @@ input src/smalltalk/PythonTests/TextwrapTestCase.gs
 input src/smalltalk/PythonTests/GlobTestCase.gs
 input src/smalltalk/PythonTests/ShutilTestCase.gs
 input src/smalltalk/PythonTests/GrailDirFallbackTestCase.gs
+input src/smalltalk/PythonTests/GrailTmpDirTestCase.gs
 input src/smalltalk/PythonTests/SetUpBridgeTestCase.gs
 input src/smalltalk/PythonTests/TomllibTestCase.gs
 input src/smalltalk/PythonTests/UnittestTestCase.gs

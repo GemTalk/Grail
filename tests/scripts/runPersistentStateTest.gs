@@ -42,7 +42,7 @@ level 0
 run
 | out f mod registry ok |
 out := GsFile stdout.
-f := GsFile openWriteOnServer: '/tmp/grail_persist_state_test.py'.
+f := GsFile openWriteOnServer: (importlib grailTmpDir , '/persist_state_test.py').
 f nextPutAll: 'counter = 0
 registry = {}
 scratch = "fresh"
@@ -50,7 +50,7 @@ __persistent__ = ["counter", "registry"]
 '.
 f close.
 mod := importlib
-  loadModuleFromPath: '/tmp/grail_persist_state_test.py'
+  loadModuleFromPath: (importlib grailTmpDir , '/persist_state_test.py')
   name: 'grail_persist_state_test'.
 ((mod @env1:counter) = 0)
   ifFalse: [^ self error: 'setup: counter should start 0'].
@@ -90,7 +90,7 @@ check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures ad
 
 [
   mod := importlib
-    loadModuleFromPath: '/tmp/grail_persist_state_test.py'
+    loadModuleFromPath: (importlib grailTmpDir , '/persist_state_test.py')
     name: 'grail_persist_state_test'.
   check value: 'rebound scalar survives (counter = 5, not the initializer 0)'
     value: ((mod @env1:counter) = 5).
@@ -107,7 +107,7 @@ check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures ad
   "Session 1's commit swept the module class into the committed
   PythonModules dictionary -- remove it so the repository is left clean."
   PythonModules removeKey: #'Grail_persist_state_test' ifAbsent: [].
-  GsFile removeServerFile: '/tmp/grail_persist_state_test.py'.
+  GsFile removeServerFile: (importlib grailTmpDir , '/persist_state_test.py').
   System commit
 ].
 

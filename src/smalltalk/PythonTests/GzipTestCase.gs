@@ -37,7 +37,7 @@ testFileRoundTripBinary
 
 	| result |
 	result := self eval: 'import gzip
-path = "/tmp/grail_gzip_t1.gz"
+path = "$TMP/gzip_t1.gz"
 f = gzip.open(path, "wb")
 f.write(b"binary payload " * 10)
 f.close()
@@ -54,7 +54,7 @@ method: GzipTestCase
 testFileRoundTripText
 	| result |
 	result := self eval: 'import gzip
-path = "/tmp/grail_gzip_t2.gz"
+path = "$TMP/gzip_t2.gz"
 with gzip.open(path, "wt") as f:
     f.write("line one\nline two\n")
 with gzip.open(path, "rt") as g:
@@ -68,7 +68,7 @@ method: GzipTestCase
 testIterationYieldsLines
 	| result |
 	result := self eval: 'import gzip
-path = "/tmp/grail_gzip_t3.gz"
+path = "$TMP/gzip_t3.gz"
 with gzip.open(path, "wt") as f:
     f.write("a\nb\nc\n")
 out = []
@@ -100,7 +100,7 @@ testCompressInteropWithFiles
 
 	| result |
 	result := self eval: 'import gzip
-path = "/tmp/grail_gzip_t4.gz"
+path = "$TMP/gzip_t4.gz"
 data = gzip.compress(b"interop")
 f = open(path, "wb")
 f.write(data)
@@ -141,7 +141,7 @@ method: GzipTestCase
 testGzipFileFactory
 	| result |
 	result := self eval: 'import gzip
-path = "/tmp/grail_gzip_t5.gz"
+path = "$TMP/gzip_t5.gz"
 f = gzip.GzipFile(path, "wb")
 f.write(b"via GzipFile")
 f.close()

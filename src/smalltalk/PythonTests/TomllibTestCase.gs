@@ -184,7 +184,7 @@ method: TomllibTestCase
 testLoadBinaryFile
 	| result |
 	result := self eval: 'import tomllib
-path = "/tmp/grail_tomllib_test.toml"
+path = "$TMP/tomllib_test.toml"
 f = open(path, "w")
 f.write("[pkg]\nname = \"grail\"\nversion = \"1.0\"\n")
 f.close()
@@ -200,7 +200,7 @@ method: TomllibTestCase
 testLoadTextModeRaisesTypeError
 	self
 		should: [self eval: 'import tomllib
-tomllib.load(open("/tmp/grail_tomllib_test.toml", "r"))']
+tomllib.load(open("$TMP/tomllib_test.toml", "r"))']
 		raise: TypeError
 %
 

@@ -6,11 +6,12 @@
 # block) writes every element in order.  The custom-iterator-in-try case also
 # guards the ClassDefAst string-literal codegen fix -- str(i) + "\n" in a
 # try-nested class must not gain a stray tab.
-_PATH = "/tmp/grail_writelines_fixture.txt"
-
-
-def check():
-    f = open(_PATH, "w", encoding="utf-8")
+def check(path):
+    # The caller supplies the path (BuiltinsTestCase>>testWritelinesIterableProtocol
+    # passes `self tmp:`): this module is loaded with loadModuleFromPath:, so it
+    # cannot use the $TMP token that eval:'d fixtures do, and a hardcoded
+    # /tmp path would collide with the other checkouts sharing this host.
+    f = open(path, "w", encoding="utf-8")
     try:
         try:
             f.writelines(None)
@@ -56,7 +57,7 @@ def check():
     finally:
         f.close()
 
-    g = open(_PATH, encoding="utf-8")
+    g = open(path, encoding="utf-8")
     try:
         lines = list(g)
     finally:

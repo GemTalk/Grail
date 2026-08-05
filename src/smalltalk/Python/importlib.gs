@@ -246,6 +246,88 @@ ___looksLikeGrailDir___: aPath
 	^ probe == true
 %
 
+category: 'Grail-Configuration'
+classmethod: importlib
+grailTmpDir
+	"The scratch directory this checkout's fixtures may write to:
+	``/tmp/Grail<N>'', created on demand.
+
+	Fixture paths used to be absolute and shared -- /tmp/grail_glob_test,
+	/tmp/grail_shutil_test, /tmp/grail_fileio_*.txt, /tmp/grail (the codegen
+	capture).  Several checkouts run against one stone on this host as
+	separate users (Claude0..Claude3), so concurrent runs collided in the
+	filesystem even though their Smalltalk was fully isolated: ShutilTestCase
+	and GlobTestCase both `rmtree' their fixture root in setUp, deleting
+	another checkout's fixture mid-test, and ImportlibTestCase COUNTS files
+	under the codegen-capture directory and asserts deltas.  Nothing about
+	that shows up when a suite is run alone.
+
+	The path is memoised, but existence is re-probed on every call: a
+	fixture that rmtree's its way up to the root must not leave every later
+	test writing into a directory that is no longer there."
+
+	| temps dir |
+	temps := SessionTemps current.
+	dir := temps at: #GrailTmpDir otherwise: nil.
+	dir == nil ifTrue: [
+		dir := '/tmp/Grail' , self ___grailTmpIndex___.
+		temps at: #GrailTmpDir put: dir].
+	(GsFile existsOnServer: dir) == true
+		ifFalse: [GsFile createServerDirectory: dir].
+	^ dir
+%
+
+category: 'Grail-Configuration'
+classmethod: importlib
+___grailTmpIndex___
+	"The N in /tmp/Grail<N>.  Taken from the trailing digits of the GemStone
+	USER (Claude0..Claude3), because the concurrently-running gems are what
+	must not collide and they differ by user -- one stone, one netldi, four
+	users.  Falls back to the trailing digits of the checkout directory
+	(Grail-1 -> 1), then to 0.
+
+	CI logs in as DataCurator from a single checkout, so it lands on 0 and
+	has nothing to collide with."
+
+	| n |
+	n := self ___trailingDigitsOf___:
+		([System myUserProfile userId asString]
+			on: Error do: [:ex | ex return: '']).
+	n isEmpty ifFalse: [^ n].
+	n := self ___trailingDigitsOf___: (self ___lastPathComponentOf___: self grailDir).
+	n isEmpty ifFalse: [^ n].
+	^ '0'
+%
+
+category: 'Grail-Configuration'
+classmethod: importlib
+___trailingDigitsOf___: aString
+	"The run of digits at the end of aString, or '' if it ends in a
+	non-digit.  'Claude12' -> '12', 'DataCurator' -> ''."
+
+	| i |
+	aString isNil ifTrue: [^ ''].
+	i := aString size.
+	[i > 0 and: [(aString at: i) isDigit]] whileTrue: [i := i - 1].
+	^ aString copyFrom: i + 1 to: aString size
+%
+
+category: 'Grail-Configuration'
+classmethod: importlib
+___lastPathComponentOf___: aPath
+	"'/a/b/Grail-1' -> 'Grail-1'.  Trailing slashes are ignored so
+	'/a/b/Grail-1/' answers the same."
+
+	| p i |
+	aPath isNil ifTrue: [^ ''].
+	p := aPath.
+	[p isEmpty not and: [(p at: p size) = $/]]
+		whileTrue: [p := p copyFrom: 1 to: p size - 1].
+	i := p size.
+	[i > 0 and: [(p at: i) ~= $/]] whileTrue: [i := i - 1].
+	^ p copyFrom: i + 1 to: p size
+%
+
 category: 'Grail-Module Loading'
 classmethod: importlib
 ___moduleNotFoundMessage___: aName
@@ -1401,7 +1483,7 @@ loadModuleFromPath: pathString name: moduleName
 		A cold load is FULLY cold: the phase-1b module-CLASS reuse (skip
 		parse+codegen on a same-session hash match) is gone too -- it made
 		re-execution skip the codegen step, whose observable artifacts
-		(the /tmp/grail debug dumps, freshly compiled module-level defs)
+		(the codegen-trace debug dumps, freshly compiled module-level defs)
 		re-import is entitled to.  The compile savings live in the
 		warm-bind path, where NOTHING re-runs."
 		stateMap at: moduleName asSymbol put: #'stale'].
@@ -1677,7 +1759,13 @@ runPath: pathString
 	O(generated-source-size) per module load.
 
 	Example:
-	    GRAIL_CODEGEN_TRACE_DIR=/tmp/grail topaz -l < session.tpz
+	    GRAIL_CODEGEN_TRACE_DIR=/tmp/Grail0/codegen topaz -l < session.tpz
+
+	(Give each checkout its own directory -- several checkouts share one
+	stone on the dev host, and the capture is written by file name, so a
+	shared trace directory means they overwrite each other's dumps.
+	ImportlibTestCase uses ``importlib grailTmpDir , '/codegen''' for
+	exactly that reason.)
 
 	importlib runPath: '/path/to/script.py'.
 	"
