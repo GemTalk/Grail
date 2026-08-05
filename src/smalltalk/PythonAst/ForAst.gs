@@ -88,7 +88,10 @@ printSmalltalkOn: aStream
 	isTupleTarget ifTrue: [aStream space; nextPutAll: itemTemp].
 	aStream nextPutAll: ' |'; lf; increaseIndent.
 
-	"iter := iterable __iter__."
+	"iter := iterable __iter__.  Preceded by a PEP 657 position store so an
+	exception from EVALUATING the iterable (``for x in BrokenIter(init_raises=
+	True)'') or from its __iter__ is reported at the iterable expression."
+	self ___emitIterPosOn: aStream.
 	aStream nextPutAll: iterTemp; nextPutAll: ' := '.
 	iter printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' __iter__.'; lf.
@@ -99,6 +102,12 @@ printSmalltalkOn: aStream
 	"Per-iteration block: wrap in a PythonContinue handler so `continue`
 	cleanly skips to the next iteration."
 	aStream nextPutAll: '['; lf; increaseIndent.
+
+	"Re-point ___curPos___ at the iterable before EVERY __next__: the body's own
+	statements overwrite it as they run, so without this an exception from
+	__next__ on the second or later iteration would be reported at whatever body
+	statement ran last.  Costs one pointer store per iteration (literal array)."
+	self ___emitIterPosOn: aStream.
 
 	"Assign next item to target"
 	isTupleTarget ifTrue: [
@@ -143,6 +152,40 @@ printSmalltalkOn: aStream
 
 	"Close outer block with PythonBreak handler."
 	aStream decreaseIndent; nextPutAll: '] @env0:on: PythonBreak do: [:___ex___ | nil].'.
+%
+
+category: 'Grail-traceback'
+method: ForAst
+___emitIterPosOn: aStream
+	"Store this loop's ITERABLE position into ___curPos___, so a traceback frame
+	built while the iterator protocol runs carries PEP 657 columns and the source
+	line rather than just the statement's line.
+
+	CPython attributes an exception raised from a for loop's __init__ / __iter__ /
+	__next__ to the ITERATOR EXPRESSION, not to the whole statement -- which is
+	what test_iter's test_exception_locations checks:
+
+	    f.line[f.colno - indent : f.end_colno - indent] == 'BrokenIter(...)'
+
+	This is the for-statement twin of the wrapper ComprehensionAst already emits
+	for a comprehension's iterable clause, but it needs no handler and no
+	re-raise: TryAst's ___pushCatchingFrame___ already builds the frame from
+	___curPos___, and ___pushFrameFromPos___ already understands the 5-element
+	position array.  So the whole fix is pointing that existing read at a richer
+	value -- no ``on: Exception'' around every loop, which would both cost a
+	per-iteration handler and catch AlmostOutOfStack.
+
+	No-op outside a function (module-level code has no ___curPos___ temp) or when
+	the iterable carries no position -- the same guard ___emitCurPosBefore:on:
+	uses."
+
+	(CallAst functionBeingCompiled isNil or: [iter beginLine isNil])
+		ifTrue: [^ self].
+	aStream
+		nextPutAll: '___curPos___ := ';
+		nextPutAll: iter ___pyPositionLiteralArray;
+		nextPutAll: '.';
+		lf
 %
 
 category: 'Grail-accessing'

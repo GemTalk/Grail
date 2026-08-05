@@ -177,6 +177,35 @@ testComprehensionExceptionTraceback
 			description: 'comprehension-traceback check failed: ' , k].
 %
 
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testForLoopExceptionPositions
+	"PEP 657 for a FOR statement: an exception from evaluating the iterable, from
+	__iter__, or from __next__ is attributed to the ITERATOR EXPRESSION's column
+	span -- the for-statement twin of testComprehensionExceptionTraceback, and
+	what greens test_iter's test_exception_locations (which died on ``None - int''
+	because colno/end_colno/line were all None).
+
+	Also asserts the two boundaries that make the mechanism trustworthy rather
+	than merely passing: the position is re-pointed before EVERY __next__ (so an
+	exception arriving after the body has run is still located at the iterable,
+	not at the last body statement), and a BODY exception is NOT attributed to the
+	iterable.  See tests/python/for_traceback_positions.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'for_traceback_positions' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/for_traceback_positions.py')
+		name: 'for_traceback_positions'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'init_span' 'next_span' 'iter_span'
+	   'late_next_span' 'late_next_lineno_is_for'
+	   'body_has_no_colno' 'body_lineno_is_body'
+	   'tuple_target_span' 'tuple_target_has_colno' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'for-loop traceback position check failed: ' , k].
+%
+
 category: 'Grail-Tests - Traceback Data Model'
 method: TracebackTestCase
 testExtractTbWalksPyTracebackChain
