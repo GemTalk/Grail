@@ -297,29 +297,38 @@ category: 'Grail-Enum Metaclass'
 classmethod: Enum
 ___grailGlobalMemberRepr: m
 	"CPython global_enum_repr / global_flag_repr: ``<short_module>.<NAME>'' for a
-	named member; ``<short_module>.<ClassName>(<value>)'' for a nameless flag
-	member (value 0, or an unnamed composite).  A composite name joins its parts
-	with ``|'', each non-digit part module-prefixed."
+	named member; ``<short_module>.<ClassName>(<value>)'' for a nameless flag value
+	(0, or a composite that NO named member covers -- HeadlightsK(8)).  A covered
+	composite joins its decomposition pieces with ``|'', each named (identifier)
+	piece module-prefixed and any leftover KEEP bits left as a bare int
+	(HeadlightsK(13) -> module.LOW_BEAM_K|module.FOG_K|8)."
 
 	| cls modName nm |
 	cls := m @env0:class.
 	modName := self ___grailGlobalEnumMap @env0:at: cls otherwise: cls @env0:name @env0:asString.
 	nm := m @env0:dynamicInstVarAt: #name.
 	(Enum ___grailIsFlagClass: cls) ifTrue: [
-		| val compName parts out |
+		| val pieces named out |
 		val := m @env0:dynamicInstVarAt: #value.
+		"A plain named member (nm set) formats directly; a composite (nm nil)
+		decomposes.  Decide ``nameless'' by whether the decomposition yields any
+		NAMED piece -- a composite that only leftover-covers bits (HeadlightsK(8))
+		has none and formats as Cls(value), NOT as the bare leftover int."
 		(nm @env0:isNil or: [nm == None]) ifTrue: [
-			^ modName @env0:, '.' @env0:, cls @env0:name @env0:asString
-				@env0:, '(' @env0:, val @env0:printString @env0:, ')'].
-		compName := (Enum ___grailCompositeNameFor: m) @env0:asString.
-		parts := compName @env0:subStrings: '|'.
-		out := WriteStream @env0:on: String @env0:new.
-		parts @env0:doWithIndex: [:p :i |
-			i @env0:> 1 ifTrue: [out @env0:nextPut: $|].
-			((p @env0:size @env0:> 0) and: [(p @env0:at: 1) @env0:isDigit])
-				ifTrue: [out @env0:nextPutAll: p]
-				ifFalse: [out @env0:nextPutAll: modName @env0:, '.' @env0:, p]].
-		^ out @env0:contents].
+			pieces := Enum ___grailFlagDecomposePieces: m.
+			named := pieces @env0:reject: [:p |
+				(p @env0:size @env0:> 0) and: [(p @env0:at: 1) @env0:isDigit]].
+			named @env0:isEmpty ifTrue: [
+				^ modName @env0:, '.' @env0:, cls @env0:name @env0:asString
+					@env0:, '(' @env0:, val @env0:printString @env0:, ')'].
+			out := WriteStream @env0:on: String @env0:new.
+			pieces @env0:doWithIndex: [:p :i |
+				i @env0:> 1 ifTrue: [out @env0:nextPut: $|].
+				((p @env0:size @env0:> 0) and: [(p @env0:at: 1) @env0:isDigit])
+					ifTrue: [out @env0:nextPutAll: p]
+					ifFalse: [out @env0:nextPutAll: modName @env0:, '.' @env0:, p]].
+			^ out @env0:contents].
+		^ modName @env0:, '.' @env0:, nm @env0:asString].
 	^ modName @env0:, '.' @env0:, nm @env0:asString
 %
 
@@ -1628,6 +1637,37 @@ ___grailCompositeNameFor: m
 	parts @env0:isEmpty ifTrue: [^ v @env0:printString].
 	^ parts @env0:inject: nil into: [:acc :p |
 		acc @env0:isNil ifTrue: [p] ifFalse: [acc @env0:, '|' @env0:, p]]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailFlagDecomposePieces: m
+	"The pieces a flag member's INT value decomposes into, in definition order:
+	the NAME (a String) of every named member it subsumes, then -- for a KEEP
+	composite -- the leftover uncovered bits as ONE bare-int String (so
+	HeadlightsK(13) -> {'LOW_BEAM_K'. 'FOG_K'. '8'}).  A named member is included
+	when its value is a non-zero subset; ``leftover'' is v with every included
+	member's bits cleared.  Empty when v is 0 / not an Integer.  Drives the global
+	flag repr; the leftover bare-int piece is what distinguishes an uncovered KEEP
+	value from a fully-named one."
+
+	| v parts covered |
+	parts := OrderedCollection @env0:new.
+	v := m @env0:dynamicInstVarAt: #value.
+	(v isKindOf: Integer) ifFalse: [^ parts].
+	covered := 0.
+	(Enum ___grailAllNamedMembers: m @env0:class) @env0:do: [:mm | | mv |
+		mv := mm @env0:dynamicInstVarAt: #value.
+		((mv isKindOf: Integer)
+			and: [mv @env0:~= 0
+			and: [(v @env0:bitAnd: mv) @env0:= mv]]) ifTrue: [
+			parts @env0:add: (mm @env0:dynamicInstVarAt: #name) @env0:asString.
+			covered := covered @env0:bitOr: mv]].
+	"Leftover = v with all covered bits removed (covered is a subset of v, so
+	v bitXor: covered clears exactly those)."
+	(v @env0:bitXor: covered) @env0:~= 0
+		ifTrue: [parts @env0:add: (v @env0:bitXor: covered) @env0:printString].
+	^ parts
 %
 
 category: 'Grail-Enum Metaclass'
@@ -3402,6 +3442,11 @@ __repr__
 	concatenate the composite's None name); named members unchanged."
 
 	| v nm0 |
+	"A @global_enum IntFlag reprs its members ``module.NAME'' (global_flag_repr),
+	like Flag/IntEnum/StrEnum -- IntFlag is AbstractPyInt-rooted and inherits
+	NONE of their __repr__, so it needs its own guard (HeadlightsK
+	test_global_repr_keep / _conform1)."
+	(Enum ___grailIsGlobalEnum: self @env0:class) ifTrue: [^ Enum ___grailGlobalMemberRepr: self].
 	v := self @env0:dynamicInstVarAt: #value.
 	nm0 := self @env0:dynamicInstVarAt: #name.
 	((nm0 @env0:isNil or: [nm0 == None])
