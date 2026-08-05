@@ -2387,6 +2387,20 @@ ___inferRegisterType___: aFunc
 	___annotationUnionOfClasses___: for why this needs its own test."
 	(candidate isKindOf: CharacterCollection) ifTrue: [
 		(self ___annotationUnionOfClasses___: text) ifFalse: [
+			"A UNION whose members are not all classes has its own CPython wording,
+			naming the members joined by ``|'' rather than echoing the annotation:
+
+			    Invalid annotation for 'arg'. int | typing.Iterable[str] not all
+			    arguments are classes.
+
+			Checked BEFORE the subscript test below, because a union spelled
+			``typing.Union[...]'' contains brackets and would otherwise be reported
+			as a single non-class."
+			(self ___annotationUnionMemberNames___: text)
+				@env0:ifNotNil: [:names |
+					TypeError ___signal___: 'Invalid annotation for ''' @env0:, paramName
+						@env0:, '''. ' @env0:, (self ___joinWithBars___: names)
+						@env0:, ' not all arguments are classes.'].
 			(text @env0:includes: $[) ifTrue: [
 				TypeError ___signal___: 'Invalid annotation for ''' @env0:, paramName
 					@env0:, '''. ' @env0:, text @env0:, ' is not a class.'].
@@ -2443,6 +2457,20 @@ ___annotationUnionMembers___: aText
 		resolved @env0:add: cls].
 	resolved @env0:isEmpty ifTrue: [^ nil].
 	^ resolved @env0:asArray
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___joinWithBars___: names
+	"``int | typing.Iterable[str]'' -- union members as CPython prints them in
+	the invalid-annotation message."
+
+	| out |
+	out := WriteStream @env0:on: String @env0:new.
+	names @env0:doWithIndex: [:n :i |
+		i @env0:> 1 ifTrue: [out @env0:nextPutAll: ' | '].
+		out @env0:nextPutAll: n @env0:asString].
+	^ out @env0:contents
 %
 
 category: 'Grail-Single Dispatch'
