@@ -1699,7 +1699,26 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	gnvPair := pairs @env0:detect: [:p | (p @env0:at: 1) @env0:asString @env0:= '_generate_next_value_']
 		ifNone: [nil].
 	gnvPair @env0:notNil ifTrue: [gnvFnValue := gnvPair @env0:at: 2] ] @env0:value.
-	newCls := cls ___subclass___: className instVarNames: #() classInstVarNames: #().
+	"Honor a ``type='' kwarg (Enum('enum_type', {...}, type=date/int/str/float)):
+	root the new class in that data type's storage exactly as the class-syntax
+	builder does for ``class enum_type(date, ReprEnum)'' -- select the storage
+	base from {typeBase. cls}, subclass it (___subclass___ substitutes the sealed
+	AbstractPyInt/Str/Float storage for int/str/float), then merge cls as a
+	secondary base so Enum's protocol + the MI record (which ___grailMemberTypeFor:
+	reads to recover the mix-in) are installed.  A non-class type= value (or none)
+	keeps the plain ``cls ___subclass___:'' path unchanged."
+	newCls := (keywords ~~ nil
+		and: [(keywords @env0:includesKey: 'type')
+		and: [(keywords @env0:at: 'type') isKindOf: Behavior]])
+		ifTrue: [ | typeBase il baseArray sb nc |
+			typeBase := keywords @env0:at: 'type'.
+			il := Python @env0:at: #importlib.
+			baseArray := Array @env0:with: typeBase with: cls.
+			sb := il @env0:___selectStorageBase___: baseArray.
+			nc := sb ___subclass___: className instVarNames: #() classInstVarNames: #().
+			il @env0:___mergeSecondaryBases___: nc bases: baseArray.
+			nc]
+		ifFalse: [cls ___subclass___: className instVarNames: #() classInstVarNames: #()].
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
