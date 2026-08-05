@@ -922,9 +922,18 @@ ___grailLookupValue: cls value: aValue
 	(aValue isKindOf: cls) ifTrue: [^ aValue].
 	((aValue isKindOf: Integer)
 		and: [self ___grailIsFlagClass: cls]) ifTrue: [
-		| comp |
-		comp := self ___grailFlagComposite: cls value: aValue.
-		comp @env0:isNil ifFalse: [^ comp]].
+		"Boundary-aware construction of an unknown int value.  KEEP (IntFlag's
+		default): retain uncovered bits -- OpenAB(254) is a live composite, never
+		a ValueError.  STRICT (plain Flag's default): only a value whose bits are
+		all covered by members resolves; anything else falls through to raise.
+		Both require the class to HAVE members -- an empty flag class call still
+		raises ``has no members'' below (test_empty_enum_has_no_values)."
+		(rec @env0:notNil and: [(rec @env0:at: 3) @env0:notEmpty]) ifTrue: [
+			((self ___grailFlagBoundaryOf: cls) @env0:= #'KEEP')
+				ifTrue: [^ self ___grailIntFlagValue: cls value: aValue]
+				ifFalse: [ | comp |
+					comp := self ___grailFlagComposite: cls value: aValue.
+					comp @env0:isNil ifFalse: [^ comp]]]].
 	"A member-less enum class cannot be CALLED at all -- CPython raises
 	TypeError ``<enum 'X'> has no members'' (a ValueError here would let
 	assertRaises(TypeError) tests fail; test_empty_enum_has_no_values)."
@@ -1009,6 +1018,29 @@ ___grailIsFlagClass: cls
 	((cls == IntFlag) or: [cls @env0:inheritsFrom: IntFlag]) ifTrue: [^ true].
 	^ [ (cls __mro__) @env0:includesIdentical: Flag ]
 		@env0:on: Error do: [:e | e @env0:return: false]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailIsIntFlagClass: cls
+	"True when cls is IntFlag-natured: chained under IntFlag, or an MI class
+	whose C3 __mro__ includes IntFlag (``class E(int, IntFlag)'' is
+	AbstractPyInt-chained in Smalltalk, so inheritsFrom: IntFlag is false)."
+
+	((cls == IntFlag) or: [cls @env0:inheritsFrom: IntFlag]) ifTrue: [^ true].
+	^ [ (cls __mro__) @env0:includesIdentical: IntFlag ]
+		@env0:on: Error do: [:e | e @env0:return: false]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailFlagBoundaryOf: cls
+	"The effective _boundary_ of a flag class: the family DEFAULT -- KEEP for an
+	IntFlag-natured class (out-of-range bits retained), STRICT for a plain Flag
+	(out-of-range value raises).  (An explicit ``boundary='' class keyword is not
+	yet threaded through class creation; when it is, an override goes here.)"
+
+	^ (self ___grailIsIntFlagClass: cls) ifTrue: [#'KEEP'] ifFalse: [#'STRICT']
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1111,13 +1143,34 @@ ___grailIntFlagValue: cls value: intValue
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
 ___grailFlagMask: cls
-	"OR of every named member's int value."
+	"OR of every CANONICAL (single-bit) member's int value."
 
 	| rec mask |
 	rec := self ___grailRecordFor: cls.
 	rec @env0:isNil ifTrue: [^ 0].
 	mask := 0.
 	(rec @env0:at: 3) @env0:do: [:m |
+		| mv |
+		mv := m @env0:dynamicInstVarAt: #value.
+		(mv isKindOf: Integer) ifTrue: [mask := mask @env0:bitOr: mv]].
+	^ mask
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailFlagNamedMask: cls
+	"OR of every NAMED member's int value -- canonical single-bit members PLUS
+	explicit multi-bit ones (a mask member like ``MASK = 255'', which #199 makes
+	non-canonical so ___grailFlagMask: no longer covers it).  This is the bit
+	space an IntFlag KEEP invert complements within: ``~OpenAB.A'' is
+	OpenAB(254) = 255 ^ 1, not B = 3 ^ 1.  byName (rec at: 2) also holds aliases,
+	but ORing them is idempotent."
+
+	| rec mask |
+	rec := self ___grailRecordFor: cls.
+	rec @env0:isNil ifTrue: [^ 0].
+	mask := 0.
+	(rec @env0:at: 2) @env0:do: [:m |
 		| mv |
 		mv := m @env0:dynamicInstVarAt: #value.
 		(mv isKindOf: Integer) ifTrue: [mask := mask @env0:bitOr: mv]].
@@ -1699,6 +1752,17 @@ ___grailInstallClassProtocol: cls
 				src @env0:isNil ifFalse: [
 					mc ___compileMethod: src category: cat @env0:asString]]
 					@env0:on: Error do: [:e | "best effort"]]]].
+	"A data-mixed FLAG (``class E(int, IntFlag)'') roots at its data type, so its
+	metaclass inherits neither Flag class>>_boundary_ (#STRICT) nor IntFlag
+	class>>_boundary_ (#KEEP) -- ``E._boundary_'' was an AttributeError
+	(test_open_invert_expectations reads it).  Install a _boundary_ that answers
+	the shared family default (KEEP for IntFlag-natured, STRICT for plain Flag)."
+	((self ___grailIsFlagClass: cls)
+		and: [(mc @env0:whichClassIncludesSelector: #'_boundary_' environmentId: 1) @env0:isNil])
+		ifTrue: [
+			[mc ___compileMethod: '_boundary_
+	^ Enum ___grailFlagBoundaryOf: self' category: 'Grail-Class Attrs']
+				@env0:on: Error do: [:e | "best effort"]].
 	^ cls
 %
 
@@ -3157,10 +3221,12 @@ category: 'Grail-IntFlag Member'
 method: IntFlag
 __invert__
 	"~A: the mask-complement within the class's named bits (CPython 3.11+
-	gives IntFlag the same positive-complement invert as Flag)."
+	gives IntFlag the same positive-complement invert as Flag).  KEEP boundary
+	complements within the FULL named-member mask (including an explicit
+	multi-bit ``MASK = 255''), so ``~OpenAB.A'' is OpenAB(254), not B."
 
 	| mask v |
-	mask := Enum ___grailFlagMask: self @env0:class.
+	mask := Enum ___grailFlagNamedMask: self @env0:class.
 	v := self @env0:dynamicInstVarAt: #value.
 	^ Enum ___grailIntFlagValue: self @env0:class
 		value: (mask @env0:bitXor: (mask @env0:bitAnd: v))
