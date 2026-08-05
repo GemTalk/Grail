@@ -635,9 +635,16 @@ method: PythonParser
 parseCallArgList
 	"Parse function call arguments. Returns an Array of {positional. keywords}."
 
-	| args kwargs |
+	| args kwargs sawKeyword sawKwargsUnpack kwNames |
 	args := Array new.
 	kwargs := Array new.
+	"Argument-ordering guards, matching CPython (test_keywordonlyarg
+	testSyntaxErrorForFunctionCall).  ``sawKeyword'' tracks a ``name=value''
+	keyword, ``sawKwargsUnpack'' a ``**'' splat; ``kwNames'' collects keyword
+	names for the repeat check."
+	sawKeyword := false.
+	sawKwargsUnpack := false.
+	kwNames := IdentitySet new.
 	(self peek notNil and: [(self peek isOp: ')') not]) ifTrue: [
 		[
 			(self peek isOp: ')') ifTrue: [false] ifFalse: [
@@ -648,9 +655,14 @@ parseCallArgList
 						at: #arg put: nil;
 						at: #value put: self parseExpression;
 						yourself) from: self lastToken to: self lastToken).
+					sawKwargsUnpack := true.
 				] ifFalse: [
 				"*args"
 				(self atOp: '*') ifTrue: [
+					"``*x'' fills positional slots, so it may follow a keyword
+					(``f(a=1, *b)'' is legal) but NOT ``**'' unpacking."
+					sawKwargsUnpack ifTrue: [
+						SyntaxError signal: 'iterable argument unpacking follows keyword argument unpacking'].
 					self advance.
 					args add: (self buildNode: StarredAst fields: (IdentityKeyValueDictionary new
 						at: #value put: self parseExpression;
@@ -663,12 +675,23 @@ parseCallArgList
 					(self matchOp: '=') ifTrue: [
 						| name value |
 						name := (expr isKindOf: NameAst) ifTrue: [expr id asString] ifFalse: [nil].
+						name ifNotNil: [
+							(kwNames includes: name asSymbol) ifTrue: [
+								SyntaxError signal: 'keyword argument repeated: ' , name].
+							kwNames add: name asSymbol].
+						sawKeyword := true.
 						value := self parseExpression.
 						kwargs add: (self buildNode: KeywordAst fields: (IdentityKeyValueDictionary new
 							at: #arg put: name;
 							at: #value put: value;
 							yourself) from: self lastToken to: self lastToken).
 					] ifFalse: [
+						"A bare positional argument may not follow a keyword or
+						``**'' unpacking."
+						sawKwargsUnpack ifTrue: [
+							SyntaxError signal: 'positional argument follows keyword argument unpacking'].
+						sawKeyword ifTrue: [
+							SyntaxError signal: 'positional argument follows keyword argument'].
 						"Check for comprehension in generator expression — either ``for`` or ``async for``"
 						((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
 							| generators |
@@ -1430,7 +1453,7 @@ parseFunctionParametersUntil: endOp
 	Returns an ArgumentsAst."
 
 	| posonlyargs args vararg kwonlyargs kw_defaults kwarg defaults
-	  sawSlash sawStar allowAnnotations |
+	  sawSlash sawStar allowAnnotations seenNames |
 	posonlyargs := Array new.
 	args := Array new.
 	vararg := nil.
@@ -1494,6 +1517,28 @@ parseFunctionParametersUntil: endOp
 			]
 		] whileTrue.
 	].
+
+	"A bare ``*'' must be followed by at least one keyword-only parameter.
+	``*args'' fills vararg and ``*, k'' fills kwonlyargs, so an empty
+	keyword-only section after a star is CPython's ``named arguments must
+	follow bare *'' (test_keywordonlyarg testSyntaxErrorForFunctionDefinition:
+	``def f(p, *)'', ``def f(p1, *, **k1)'')."
+	(sawStar and: [vararg isNil and: [kwonlyargs isEmpty]]) ifTrue: [
+		SyntaxError signal: 'named arguments must follow bare *'].
+	"A parameter name may appear only once across the whole signature -- the
+	posonly / regular / *vararg / keyword-only / **kwarg sections share one
+	namespace.  CPython: ``duplicate argument 'X' in function definition''
+	(same test: ``def f(p1, *, p1=100)'', ``def f(p1, *k1, k1=100)'',
+	``def f(p1, *, k1, k1=100)'', ``def f(p1, *, k1, **k1)'')."
+	seenNames := IdentitySet new.
+	(posonlyargs, args, kwonlyargs,
+		(vararg isNil ifTrue: [#()] ifFalse: [{vararg}]),
+		(kwarg isNil ifTrue: [#()] ifFalse: [{kwarg}]))
+		do: [:p |
+			(seenNames includes: p name asSymbol) ifTrue: [
+				SyntaxError signal:
+					'duplicate argument ''' , p name asString , ''' in function definition'].
+			seenNames add: p name asSymbol].
 
 	^ArgumentsAst buildWithFields: (IdentityKeyValueDictionary new
 		at: #posonlyargs put: posonlyargs;

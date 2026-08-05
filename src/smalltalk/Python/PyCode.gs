@@ -82,6 +82,26 @@ name: aName firstlineno: aLine
 	^ self name: aName qualname: aName filename: '<grail>' firstlineno: aLine
 %
 
+category: 'Instance Creation'
+classmethod: PyCode
+name: aName firstlineno: aLine argcount: argc posonlyargcount: poargc kwonlyargcount: kwargc
+	"Def-time stamp variant that also records the three parameter counts a
+	code object exposes: ``co_argcount'' (positional params -- posonly +
+	regular, INCLUDING an implicit self/cls, matching CPython),
+	``co_posonlyargcount'' and ``co_kwonlyargcount''.  test_keywordonlyarg's
+	testKwDefaults reads ``co_kwonlyargcount''; the two siblings are the same
+	cheap codegen input and are commonly read alongside it (inspect,
+	functools).  Stored as dynamic instVars so ``co.co_kwonlyargcount'' reads
+	straight through the ___pyAttrLoad___ dynamic-instVar probe."
+
+	| inst |
+	inst := self name: aName firstlineno: aLine.
+	inst dynamicInstVarAt: #'co_argcount' put: argc.
+	inst dynamicInstVarAt: #'co_posonlyargcount' put: poargc.
+	inst dynamicInstVarAt: #'co_kwonlyargcount' put: kwargc.
+	^ inst
+%
+
 set compile_env: 1
 
 category: 'Grail-String Representation'
