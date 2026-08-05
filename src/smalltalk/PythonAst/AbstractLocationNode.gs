@@ -94,6 +94,46 @@ printOn: aStream
 		yourself.
 %
 
+category: 'Grail-traceback'
+method: AbstractLocationNode
+___pyPositionLiteralArray
+	"Smalltalk source for a LITERAL 5-element PEP 657 position array covering
+	THIS node -- { beginLine. colno. endLine. endColno. sourceLine } -- which is
+	the shape BaseException>>___pushFrameFromPos___ already accepts alongside a
+	bare beginLine Integer.  Storing one of these into ___curPos___ upgrades a
+	line-only traceback frame to full column precision at the sites that care.
+
+	A LITERAL (``#(...)'') rather than a brace array on purpose: every element
+	is a compile-time constant, so the emitted store is a pointer assignment
+	that allocates nothing.  That is what lets it sit inside a loop, exactly
+	like the bare ``___curPos___ := <line>'' store it replaces (see
+	AbstractNode>>___emitCurPosBefore:on:).
+
+	``sourceLine'' is the RAW line including its indentation, because colno is
+	ABSOLUTE and traceback.FrameSummary strips the text itself -- so the
+	consumer's ``line[colno - indent : end_colno - indent]'' lines up.  It is
+	guarded because it reads ``self module source'', and a node parsed outside
+	a module (PythonParser parse: leaves every parent nil) has no module to
+	ask; a nil source line degrades the frame, it must not break codegen."
+
+	| ws src |
+	ws := WriteStream on: String new.
+	ws nextPutAll: '#('; print: beginLine; space.
+	beginColumn isNil ifTrue: [ws nextPutAll: 'nil'] ifFalse: [ws print: beginColumn].
+	ws space; print: (endLine ifNil: [beginLine]); space.
+	endColumn isNil ifTrue: [ws nextPutAll: 'nil'] ifFalse: [ws print: endColumn].
+	ws space.
+	src := [self sourceLine] on: Error do: [:ex | nil].
+	src isNil
+		ifTrue: [ws nextPutAll: 'nil']
+		ifFalse: [
+			ws nextPut: $'.
+			src do: [:c | c == $' ifTrue: [ws nextPut: $']. ws nextPut: c].
+			ws nextPut: $'].
+	ws nextPut: $).
+	^ ws contents
+%
+
 category: 'Grail-other'
 method: AbstractLocationNode
 sourceLine

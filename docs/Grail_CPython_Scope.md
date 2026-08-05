@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 22 | 11 | 57 | 90 |
+| P1 | 23 | 10 | 57 | 90 |
 | P2 | 9 | 7 | 18 | 34 |
 | P3 | 0 | 1 | 55 | 56 |
 | P4 | 0 | 0 | 75 | 75 |
-| **In-scope** | **31** | **19** | **205** | **255** |
+| **In-scope** | **32** | **18** | **205** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -65,7 +65,7 @@ python3 scripts/sync_scope_status.py --check    # exit 1 if it is stale
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **31 of those score OK**.
+Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **32 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -126,7 +126,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_int` | int — core type (in harness). |
 | ✅ | `test_int_literal` | Integer literal parsing (language). |
 | ❗ | `test_isinstance` | isinstance/issubclass (language). |
-| ❗ | `test_iter` | Iterator protocol (language). |
+| ✅ | `test_iter` | Iterator protocol (language). |
 | ✅ | `test_iterlen` | __length_hint__ (language). |
 | ✅ | `test_keywordonlyarg` | Keyword-only arguments (language). |
 | ✅ | `test_list` | list — core type (in harness). |
@@ -665,27 +665,35 @@ status/tests/fail/err/skip — are in
 only what does not change every run: which modules are *done*, and what each
 not-yet-passing one is waiting on.
 
-**Fully green: 31 of the 50** — the ✅ rows in the tier tables above. That list
+**Fully green: 32 of the 50** — the ✅ rows in the tier tables above. That list
 used to be spelled out here and is not any more: it duplicated something the
 Status column now derives, and had drifted to 27.
 
-**Not yet green (the 19 ❗ rows), in descending size of the remaining gap:**
+**Not yet green (the 18 ❗ rows), in descending size of the remaining gap:**
 `test_enum` (metaclass depth — `object.__str__`, `__dir__`-on-class, `_boundary_`
-Flag), `test_datetime`, `test_functools`, `test_iter`, and `test_traceback` (the
+Flag), `test_datetime`, `test_functools`, and `test_traceback` (the
 only IMPORTERROR — `__code__` on a def that compiled to a real method; PR #129
 attempted it and was closed unmerged).
 
-`test_iter` is now **one test** from green, and that test belongs to
-`test_traceback`'s root rather than to iteration: `test_exception_locations`
-asserts PEP 657 column spans, checking that an exception raised from
+`test_iter` closed, and its last test is worth recording because it did **not**
+need the deferred traceback project it looked like it needed.
+`test_exception_locations` asserts PEP 657 column spans — that an exception from
 `__init__`/`__iter__`/`__next__` is attributed to the *iterator expression* of
-the `for` statement — `f.line[f.colno - indent : f.end_colno - indent] ==
-"BrokenIter(init_raises=True)"`. Grail's `FrameSummary` answers `colno`,
-`end_colno` **and** `line` as `None` (`co_filename` is `'<grail>'`, so
-linecache has no source to read), and `lineno`/`end_lineno` are per-statement.
-Closing it means source-resolvable filenames plus per-expression position
-records — the deferred traceback work, not an iteration fix. So two of the 19
-❗ rows now collapse to that one project.
+the `for` statement, `f.line[f.colno - indent : f.end_colno - indent] ==
+"BrokenIter(init_raises=True)"` — and `FrameSummary` was answering `colno`,
+`end_colno` and `line` as `None`. The apparent fix was source-resolvable
+`co_filename` plus per-expression position records. The actual fix was three
+lines of codegen: `TryAst` already builds its frame from `___curPos___`, and
+`___pushFrameFromPos___` already accepted a 5-element
+`{line. colno. endLine. endColno. sourceLine}` array, so `ForAst` just had to
+store the iterable's position there instead of a bare line number — as a
+*literal* array, which allocates nothing and can therefore be repeated before
+every `__next__`. Emitted per-expression positions are cheap where a raise site
+is known statically; what remains genuinely blocked on `co_filename` is the
+general case, where the position must be recovered for *any* instruction.
+
+`test_traceback` (the IMPORTERROR) is unaffected by this: it needs `__code__` on
+a def that compiled to a real method, which is a different root.
 
 ## Next tranche (phase 4, wired 2026-08-03)
 
