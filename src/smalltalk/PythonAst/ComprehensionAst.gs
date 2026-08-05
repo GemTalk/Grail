@@ -143,7 +143,7 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 	[true] whileTrue: loop, target binding (with tuple unpacking when
 	needed), and chained `ifTrue:` blocks for the if-clauses."
 
-	| gen iterTemp itemTemp isTupleTarget hasIfs |
+	| gen iterTemp itemTemp isTupleTarget hasIfs srcTemp |
 	anIndex > aCollection size ifTrue: [
 		aBlock value.
 		^self
@@ -151,13 +151,28 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 	gen := aCollection at: anIndex.
 	iterTemp := '___iter' , anIndex printString , '___'.
 	itemTemp := '___item' , anIndex printString , '___'.
+	srcTemp := '___src' , anIndex printString , '___'.
 	isTupleTarget := gen target isKindOf: TupleAst.
 	hasIfs := gen ifs notNil and: [gen ifs size > 0].
 
 	"Outermost generator: open a traceback-frame wrapper block (closed by
 	___emitTracebackFrameCloseFor:on:) so an iterator-protocol error surfaces
-	with a PEP 657 location."
-	anIndex = 1 ifTrue: [aStream nextPutAll: '['; lf].
+	with a PEP 657 location.
+
+	Then evaluate its iterable in the ENCLOSING scope, hoisted into a source
+	block declared BEFORE the target temp: CPython evaluates a comprehension's
+	OUTERMOST iterable in the surrounding scope, and only the target temps live
+	in the comprehension's own scope.  Without the hoist, a nested comprehension's
+	outer iterable (``range(x)'' in ``[[.. for x in range(x)] for x in l]'') would
+	bind against the not-yet-assigned inner target temp that shadows it, instead
+	of the enclosing x (test_listcomps test_nested).  Subsequent generators
+	(anIndex > 1) are evaluated INSIDE the comprehension scope, as CPython does."
+	anIndex = 1 ifTrue: [
+		aStream nextPutAll: '['; lf.
+		aStream nextPutAll: '[| ', srcTemp, ' |'; lf; increaseIndent.
+		aStream nextPutAll: srcTemp, ' := '.
+		gen iter printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: '.'; lf].
 
 	"Open block + StopIteration handler"
 	aStream nextPutAll: '[| ', iterTemp.
@@ -176,9 +191,12 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 	].
 	aStream nextPutAll: ' |'; lf; increaseIndent.
 
-	"___iterN___ := iter __iter__."
+	"___iterN___ := iter __iter__.  The outermost iterable was already evaluated
+	into srcTemp in the enclosing scope above; inner generators evaluate here."
 	aStream nextPutAll: iterTemp; nextPutAll: ' := '.
-	gen iter printSmalltalkWithParenthesisOn: aStream.
+	anIndex = 1
+		ifTrue: [aStream nextPutAll: srcTemp]
+		ifFalse: [gen iter printSmalltalkWithParenthesisOn: aStream].
 	aStream nextPutAll: ' __iter__.'; lf.
 
 	"[true] whileTrue: ["
@@ -213,7 +231,11 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 	aStream decreaseIndent; nextPutAll: '].'; lf.
 	anIndex = 1
 		ifTrue: [
-			aStream decreaseIndent; nextPutAll: '] @env0:on: StopIteration do: [:___ex___ | nil]'; lf.
+			"Close the target-temp block + StopIteration handler (a statement inside
+			the source block), then close the source block; its value is the
+			traceback wrapper's single expression, so no trailing period."
+			aStream decreaseIndent; nextPutAll: '] @env0:on: StopIteration do: [:___ex___ | nil].'; lf.
+			aStream decreaseIndent; nextPutAll: '] value'; lf.
 			self ___emitTracebackFrameCloseFor: gen iter on: aStream]
 		ifFalse: [
 			aStream decreaseIndent; nextPutAll: '] @env0:on: StopIteration do: [:___ex___ | nil].'; lf]
