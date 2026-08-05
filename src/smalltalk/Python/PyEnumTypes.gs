@@ -1076,6 +1076,18 @@ ___grailLookupValue: cls value: aValue
 			ifTrue: ['<flag ''']
 			ifFalse: ['<enum '''])
 				@env0:, cls @env0:name @env0:asString @env0:, '''> has no members'].
+	"CPython Enum.__new__: an UNHASHABLE lookup value misses the hash-based value
+	map with a TypeError, then a linear scan compares member values by == --
+	``Directions({'sc'})'' finds the ``frozenset({'sc'})'' member (issue 125710).
+	For a HASHABLE value == implies hash-equality, so the exact lookup at the top
+	already found it and this scan matches nothing new; it only rescues the
+	unhashable case (a set matching a frozenset member) and never shadows the
+	Flag-composite / _missing_ / ValueError paths, all of which come after it for
+	their own value shapes.  ___pyRichEqBool___ is identity-first, so a member
+	whose value IS aValue short-circuits without invoking a custom __eq__."
+	(rec @env0:at: 3) @env0:do: [:m |
+		((m @env0:dynamicInstVarAt: #value) ___pyRichEqBool___: aValue)
+			ifTrue: [^ m]].
 	"CPython Enum.__new__: an unknown value gets one last chance through a
 	user-defined _missing_ classmethod (compiled class-side as _missing_:)
 	before ValueError.  Only a USER _missing_ triggers this -- no base enum
