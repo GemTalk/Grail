@@ -28,12 +28,22 @@ test.test_itertools|TestBasicOps.test_product_overflow|AlmostOutOfStack (session
 # --- CPython implementation-detail tests: not applicable to Grail (GemStone) ---
 # gc: Grail has no refcounting / cycle collector, so refcycle-collection and
 # __del__-after-iterate timing tests cannot pass on any non-refcounted VM.
+test.test_sort|TestDecorateSortUndecorate.test_key_with_mutating_del|needs a sort-key object's __del__ to fire DURING the sort (refcount timing) so its list mutation is caught — Grail GC is not refcounted, so __del__ never runs mid-sort
 test.test_dict|DictTest.test_container_iterator|refcycle collection (gc.collect of a cycle) — Grail has no cycle collector
 test.test_dict|DictTest.test_free_after_iterating|CPython refcount/__del__-timing — Grail GC is not refcounted (test_list's twin is skipped too)
 # free-threading build atomicity (concurrent readers/writers): Grail is single cooperative-threaded
 test.test_dict|DictTest.test_setdefault_atomic|free-threading-build atomicity — N/A to Grail's cooperative threads
 test.test_dict|DictTest.test_setitem_atomic_at_resize|free-threading-build atomicity — N/A to Grail
 test.test_dict|DictTest.test_clear_at_lookup|free-threading-build atomicity — N/A to Grail
+# CPython sort C-optimization safety: unsafe_object_compare caches the per-type
+# richcompare and this test swaps an element's __class__ mid-sort to prove the
+# cache is re-validated.  Grail has no such cache, and the assertion (the swapped
+# element's new __lt__ raising) requires the underlying sort to re-compare that
+# element AS RECEIVER after the swap — a CPython-timsort comparison-order detail
+# GemStone's sort: does not reproduce (verified: __class__ swap happens, but the
+# element is never compared as receiver again). __class__ reassignment itself now
+# works; only the timsort-order-dependent re-comparison does not.
+test.test_sort|TestOptimizedCompares.test_unsafe_object_compare|CPython unsafe_object_compare C-optimization + timsort comparison-order detail — element is swapped mid-sort but Grail's sort never re-compares it as receiver
 # CPython split-table / managed-__dict__ C-level layout optimization
 test.test_dict|DictTest.test_object_set_item_single_instance_non_str_key|CPython split-table dict C internal
 test.test_dict|DictTest.test_split_table_insert_with_str_subclass|CPython split-table dict C internal
