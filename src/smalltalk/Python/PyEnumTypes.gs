@@ -389,7 +389,7 @@ ___grailBuildMembers: cls names: attrNames
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass gnvStaticClass genValues foreignMixin |
+	| byValue byName members allOrdered lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass gnvStaticClass genValues foreignMixin |
 	"CPython _check_for_existing_members_: adding members to -- or otherwise
 	subclassing -- an enum that already HAS members is illegal (that enum is
 	final).  Raise before building anything (test_extending / test_extending2);
@@ -479,6 +479,11 @@ ___grailBuildMembers: cls names: attrNames
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
+	"allOrdered: EVERY freshly-built (non-alias) member in definition order --
+	canonical single-bit members PLUS the multi-bit/zero ones ``members'' drops.
+	Record slot 4; the flag str/repr decomposition walks it so a mask member
+	(``OnlyMask = 0x0f'') appears in the composite name (OldTestFlag.test_boundary)."
+	allOrdered := OrderedCollection @env0:new.
 	"Register the (still-empty) record BEFORE the member loop so a member's
 	__new__ can observe the members built so far -- an auto-numbering __new__
 	that reads ``len(cls.__members__)'' (test_inherited_new_from_enhanced_enum /
@@ -487,7 +492,7 @@ ___grailBuildMembers: cls names: attrNames
 	AFTER its __new__ runs, so member N+1 sees exactly the N prior members).
 	The post-loop registration overwrites this with identical content plus any
 	composite/order handling."
-	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members).
+	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members with: allOrdered).
 	lastInt := 0.
 	"maxInt: the running MAXIMUM member value -- Flag auto() numbers from the
 	highest bit seen so far, NOT the last value, so a manual value LOWER
@@ -775,6 +780,10 @@ ___grailBuildMembers: cls names: attrNames
 							member @env0:dynamicInstVarAt: #'_value_' put: memberValue.
 							member @env0:dynamicInstVarAt: #'_name_' put: nameStr.
 							byValue @env0:at: memberValue put: member.
+							"Definition-order roll of every non-alias member (see slot-4
+							note above) -- added for ALL built members, unlike the
+							single-bit-only canonical ``members'' filter below."
+							allOrdered @env0:add: member.
 							"Drain any value-aliases a user __new__ registered on this
 							member via _add_value_alias_ while the class was still
 							building (test_add_value_alias_during_creation): the record
@@ -817,7 +826,7 @@ ___grailBuildMembers: cls names: attrNames
 				member @env0:perform: #'___init__:kw:' env: 1
 					withArguments: { initArgs. KeyValueDictionary @env0:new }]]]]
 		@env0:ensure: [Enum ___grailBuildingSet @env0:remove: cls @env0:ifAbsent: []].
-	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members).
+	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members with: allOrdered).
 	"CPython EnumType wraps a user _generate_next_value_ as a staticmethod in the
 	class __dict__ (test_gnv_is_static: type(cls.__dict__['_generate_next_value_'])
 	is staticmethod).  Grail compiles gnv as a plain method; store a PyStaticMethod
@@ -922,18 +931,42 @@ ___grailLookupValue: cls value: aValue
 	(aValue isKindOf: cls) ifTrue: [^ aValue].
 	((aValue isKindOf: Integer)
 		and: [self ___grailIsFlagClass: cls]) ifTrue: [
-		"Boundary-aware construction of an unknown int value.  KEEP (IntFlag's
-		default): retain uncovered bits -- OpenAB(254) is a live composite, never
-		a ValueError.  STRICT (plain Flag's default): only a value whose bits are
-		all covered by members resolves; anything else falls through to raise.
-		Both require the class to HAVE members -- an empty flag class call still
+		"Boundary-aware construction of an unknown int value, routed by the class's
+		effective FlagBoundary (family default, or a ``boundary='' override).  All
+		branches require the class to HAVE members -- an empty flag class call still
 		raises ``has no members'' below (test_empty_enum_has_no_values)."
 		(rec @env0:notNil and: [(rec @env0:at: 3) @env0:notEmpty]) ifTrue: [
-			((self ___grailFlagBoundaryOf: cls) @env0:= #'KEEP')
-				ifTrue: [^ self ___grailIntFlagValue: cls value: aValue]
-				ifFalse: [ | comp |
-					comp := self ___grailFlagComposite: cls value: aValue.
-					comp @env0:isNil ifFalse: [^ comp]]]].
+			| boundary mask inRange |
+			boundary := self ___grailFlagBoundaryOf: cls.
+			"KEEP (IntFlag's default): retain uncovered bits -- OpenAB(254) is a live
+			composite, never a ValueError."
+			boundary @env0:= #'KEEP'
+				ifTrue: [^ self ___grailIntFlagValue: cls value: aValue].
+			"``in range'' == every set bit lies within the class's FULL named mask --
+			its single-bit members AND any multi-bit ones (a ``MASK = 0x0f'' member).
+			Member|member ORs land here (both operands' bits are named), so a STRICT
+			flag never rejects them; only a genuinely foreign bit is out of range."
+			mask := self ___grailFlagNamedMask: cls.
+			inRange := (aValue @env0:bitAnd: mask) @env0:= aValue.
+			"CONFORM: mask the value into the class's bit space, then build the
+			surviving composite (Iron(7) is ONE|TWO; HeadlightsC(13) is
+			LOW_BEAM_C|FOG_C; HeadlightsC(8) masks to 0 -> OFF_C)."
+			boundary @env0:= #'CONFORM'
+				ifTrue: [^ self ___grailIntFlagValue: cls value: (aValue @env0:bitAnd: mask)].
+			"EJECT: an in-range value resolves to its composite; anything with a
+			foreign bit is ejected as a plain int (Space(7) is the int 7)."
+			boundary @env0:= #'EJECT'
+				ifTrue: [^ inRange
+					ifTrue: [self ___grailIntFlagValue: cls value: aValue]
+					ifFalse: [aValue]].
+			"STRICT (plain Flag's default): an in-range value builds its composite; an
+			out-of-range value raises ``<flag 'X'> invalid value N'' -- UNLESS the class
+			defines a USER _missing_, which (CPython) replaces the boundary handler, so
+			fall through to the _missing_ dispatch below."
+			inRange ifTrue: [^ self ___grailIntFlagValue: cls value: aValue].
+			(self ___grailHasUserMissing: cls)
+				ifFalse: [^ ValueError ___signal___: (Enum ___grailEnumTagFor: cls)
+					@env0:, ' invalid value ' @env0:, aValue @env0:printString]]].
 	"A member-less enum class cannot be CALLED at all -- CPython raises
 	TypeError ``<enum 'X'> has no members'' (a ValueError here would let
 	assertRaises(TypeError) tests fail; test_empty_enum_has_no_values)."
@@ -1034,13 +1067,74 @@ ___grailIsIntFlagClass: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
-___grailFlagBoundaryOf: cls
-	"The effective _boundary_ of a flag class: the family DEFAULT -- KEEP for an
-	IntFlag-natured class (out-of-range bits retained), STRICT for a plain Flag
-	(out-of-range value raises).  (An explicit ``boundary='' class keyword is not
-	yet threaded through class creation; when it is, an override goes here.)"
+___grailBoundaryMap
+	"Per-SESSION map: flag class -> its explicit FlagBoundary override symbol,
+	recorded when the class was defined with a ``boundary='' keyword
+	(___grailSetClassBoundary:to:).  Absent -> the family default stands.
+	SessionTemps-backed, like ___grailGlobalEnumMap."
 
+	| s |
+	s := SessionTemps @env0:current @env0:at: #GrailFlagBoundaries otherwise: nil.
+	s @env0:isNil ifTrue: [
+		s := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailFlagBoundaries put: s].
+	^ s
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailSetClassBoundary: cls to: aBoundary
+	"Record an explicit FlagBoundary override for cls (the ``boundary='' class
+	keyword; ClassDefAst emits ``E ___grailSetClassBoundary___: enum.KEEP'').  The
+	enum module's STRICT/CONFORM/EJECT/KEEP constants ARE the like-named symbols,
+	so normalize to one of those and ignore anything else (family default stands)."
+
+	| sym |
+	aBoundary @env0:isNil ifTrue: [^ cls].
+	sym := (aBoundary isKindOf: Symbol)
+		ifTrue: [aBoundary]
+		ifFalse: [aBoundary @env0:asString @env0:asSymbol].
+	(#(#'STRICT' #'CONFORM' #'EJECT' #'KEEP') @env0:includes: sym)
+		ifTrue: [self ___grailBoundaryMap @env0:at: cls put: sym].
+	^ cls
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailBoundaryOverrideFor: cls
+	"The explicit FlagBoundary override recorded for cls, or nil for none."
+
+	^ self ___grailBoundaryMap @env0:at: cls otherwise: nil
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailFlagBoundaryOf: cls
+	"The effective _boundary_ of a flag class: an explicit ``boundary='' class-
+	keyword override if one was recorded, else the family DEFAULT -- KEEP for an
+	IntFlag-natured class (out-of-range bits retained), STRICT for a plain Flag
+	(out-of-range value raises)."
+
+	| override |
+	override := self ___grailBoundaryOverrideFor: cls.
+	override @env0:notNil ifTrue: [^ override].
 	^ (self ___grailIsIntFlagClass: cls) ifTrue: [#'KEEP'] ifFalse: [#'STRICT']
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailHasUserMissing: cls
+	"True only when cls (or an ancestor) defines a USER _missing_ classmethod --
+	i.e. one NOT inherited from the base ``Enum class>>_missing_:'' default (which
+	answers None).  A plain Flag's metaclass chains through Enum class and so
+	INHERITS that default; an IntFlag's (AbstractPyInt-rooted) does not -- this
+	test treats both the same, so a STRICT flag with no user override raises the
+	``invalid value'' boundary error rather than falling through to _missing_."
+
+	| dc |
+	dc := cls @env0:class @env0:whichClassIncludesSelector: #'_missing_:'
+		environmentId: 1.
+	^ dc @env0:notNil and: [dc @env0:~~ Enum @env0:class]
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1216,12 +1310,29 @@ ___grailLookupName: cls name: aName
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
 ___grailMembers: cls
-	"Ordered members (for iteration / len)."
+	"Ordered CANONICAL members (for iteration / len / reversed): single-bit only
+	for a flag."
 
 	| rec |
 	rec := self ___grailRecordFor: cls.
 	rec @env0:isNil ifTrue: [^ OrderedCollection @env0:new].
 	^ rec @env0:at: 3
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailAllNamedMembers: cls
+	"EVERY non-alias member in definition order -- canonical single-bit members
+	PLUS multi-bit ``mask'' members and a zero member -- for the flag str/repr
+	decomposition (a value's name lists every named member it subsumes, so
+	``OnlyMask = 0x0f'' shows up; OldTestFlag.test_boundary).  Record slot 4; an
+	older 3-slot record (functional builder, whose flags carry no multi-bit named
+	members) falls back to the canonical list."
+
+	| rec |
+	rec := self ___grailRecordFor: cls.
+	rec @env0:isNil ifTrue: [^ OrderedCollection @env0:new].
+	^ rec @env0:size @env0:>= 4 ifTrue: [rec @env0:at: 4] ifFalse: [rec @env0:at: 3]
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1508,7 +1619,7 @@ ___grailCompositeNameFor: m
 	(nm @env0:isNil or: [nm == None]) ifFalse: [^ nm @env0:asString].
 	v := m @env0:dynamicInstVarAt: #value.
 	parts := OrderedCollection @env0:new.
-	(Enum ___grailMembers: cls) @env0:do: [:mm | | mv |
+	(Enum ___grailAllNamedMembers: cls) @env0:do: [:mm | | mv |
 		mv := mm @env0:dynamicInstVarAt: #value.
 		((mv isKindOf: Integer)
 			and: [mv @env0:~= 0
@@ -2195,6 +2306,15 @@ ___pyClassDefined___: attrNames
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailSetClassBoundary___: aBoundary
+	"Metaclass-dispatched from ClassDefAst's ``boundary='' emission; record the
+	override.  Also on IntEnum/StrEnum class so an IntFlag/data-mixed flag (whose
+	metaclass is NOT Enum class) resolves the same setter."
+	^ Enum ___grailSetClassBoundary: self to: aBoundary
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 __new__: aValue
 	^ Enum ___grailLookupValue: self value: aValue
 %
@@ -2458,6 +2578,14 @@ category: 'Grail-Enum Metaclass'
 classmethod: IntEnum
 ___pyClassDefined___: attrNames
 	^ Enum ___grailBuildMembers: self names: attrNames
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: IntEnum
+___grailSetClassBoundary___: aBoundary
+	"IntFlag's metaclass chains here (IntEnum class), not Enum class -- so an
+	``class E(IntFlag, boundary=STRICT)'' resolves the boundary setter."
+	^ Enum ___grailSetClassBoundary: self to: aBoundary
 %
 
 category: 'Grail-Enum Metaclass'
@@ -3036,7 +3164,7 @@ ___compositeName___
 	(nm @env0:isNil or: [nm == None]) ifFalse: [^ nm].
 	v := self @env0:dynamicInstVarAt: #value.
 	parts := OrderedCollection @env0:new.
-	(Enum ___grailMembers: self @env0:class) @env0:do: [:m |
+	(Enum ___grailAllNamedMembers: self @env0:class) @env0:do: [:m |
 		| mv |
 		mv := m @env0:dynamicInstVarAt: #value.
 		((mv isKindOf: Integer)
@@ -3255,7 +3383,7 @@ ___compositeName___
 	(nm @env0:isNil or: [nm == None]) ifFalse: [^ nm].
 	v := self @env0:dynamicInstVarAt: #value.
 	parts := OrderedCollection @env0:new.
-	(Enum ___grailMembers: self @env0:class) @env0:do: [:m |
+	(Enum ___grailAllNamedMembers: self @env0:class) @env0:do: [:m |
 		| mv |
 		mv := m @env0:dynamicInstVarAt: #value.
 		((mv isKindOf: Integer)
@@ -3311,6 +3439,14 @@ category: 'Grail-Enum Metaclass'
 classmethod: StrEnum
 ___pyClassDefined___: attrNames
 	^ Enum ___grailBuildMembers: self names: attrNames
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+___grailSetClassBoundary___: aBoundary
+	"For symmetry with Enum/IntEnum class -- a data-mixed flag whose metaclass
+	chains through StrEnum class still resolves the boundary setter."
+	^ Enum ___grailSetClassBoundary: self to: aBoundary
 %
 
 category: 'Grail-Enum Metaclass'
@@ -3437,25 +3573,26 @@ _value_repr_
 category: 'Grail-Class Attrs'
 classmethod: Flag
 _boundary_
-	"CPython FlagBoundary: how a Flag handles bits with no named member.  A
-	plain Flag defaults to STRICT (an out-of-range value raises).  Read by
-	test_open_invert_expectations / test_boundary; ``enum.STRICT'' is the
-	#STRICT symbol this returns, so ``_boundary_ in (EJECT, KEEP)'' is false and
-	the STRICT branch is taken.  Getter-only Grail-Class Attrs accessor (like
-	_member_type_), so ``OpenAB._boundary_'' reads the value."
+	"CPython FlagBoundary: how a Flag handles bits with no named member.  Delegate
+	to ___grailFlagBoundaryOf: self so a ``boundary='' class-keyword override on a
+	normally-chained Flag subclass (Iron(Flag, boundary=CONFORM)) is honoured;
+	with no override this answers the plain-Flag default #STRICT, so
+	``enum.Flag._boundary_ is STRICT'' still holds (self is the RECEIVER, so a
+	subclass reads its OWN effective boundary).  Read by
+	test_open_invert_expectations / test_boundary."
 
-	^ #'STRICT'
+	^ Enum ___grailFlagBoundaryOf: self
 %
 
 category: 'Grail-Class Attrs'
 classmethod: IntFlag
 _boundary_
-	"IntFlag defaults to KEEP -- out-of-range bits are preserved -- so ``~x''
-	and ``IntFlag(n)'' keep every bit within the class mask.  Grail's IntFlag
-	invert already produces the KEEP result (e.g. ~A over MASK=255 is
-	OpenAB(254)), so returning #KEEP takes the matching test branch."
+	"IntFlag defaults to KEEP -- out-of-range bits are preserved.  Delegate to
+	___grailFlagBoundaryOf: self so a ``boundary='' override
+	(Iron(IntFlag, boundary=STRICT)) wins, while a plain IntFlag / override-free
+	subclass answers the #KEEP default -- ``enum.IntFlag._boundary_ is KEEP''."
 
-	^ #'KEEP'
+	^ Enum ___grailFlagBoundaryOf: self
 %
 
 ! ------------------- StrEnum members (instance side)
