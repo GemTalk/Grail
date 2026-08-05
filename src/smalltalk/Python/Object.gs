@@ -924,6 +924,39 @@ ___descriptorGet___: aValue
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___instanceClassAttrGet___: aValue
+	"Resolve a CLASS-level attribute read THROUGH AN INSTANCE (self), applying
+	Python's descriptor protocol the same way the ___classAttrOverlayLookup___
+	and ___classChainAttrLookup___ paths already do:
+
+	  * a real __get__ descriptor is asked for its value;
+	  * a plain callable stored as a class attribute (a function/UnboundMethod/
+	    lambda that takes self first) binds self via a MethodBinding, so
+	    ``class C: m = Base.method`` then ``c.m(x)`` runs ``Base.method(c, x)``
+	    (test_userlist's ``test_repr_deep = list_tests.CommonTest.test_repr_deep``,
+	    and the general ``greet2 = Base.greet`` idiom);
+	  * anything else comes back raw.
+
+	The bare ___descriptorGet___: used by the class-body accessor-pair read path
+	handled only the __get__ case and returned a callable UNBOUND, so an instance
+	call reached the function with no receiver (``unbound method ... must be
+	called with an instance as the first argument'').
+
+	Narrowed to UnboundMethod ON PURPOSE.  ___descriptorGet___: (below) already
+	returns a BoundMethod RAW -- deliberately, so a class attribute that is a
+	plain module function (``digest_method = staticmethod(...)'', werkzeug Map's
+	converter-table functions) is NOT redirected at the holder instance -- and
+	binding those the way the runtime-overlay path does regresses that.  An
+	UnboundMethod, by contrast, is what ``OtherClass.method'' answers and has no
+	other meaning than a function awaiting self, so binding it is unambiguous."
+
+	(aValue isKindOf: UnboundMethod)
+		ifTrue: [^ MethodBinding instance: self callable: aValue].
+	^ self ___descriptorGet___: aValue
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___dynamicClassAttr___: aSym
 	"Walk self's class chain looking for aSym in the per-class
 	``dynInstVars'' store.  Returns the raw value if found, nil
@@ -2249,7 +2282,13 @@ ___pyAttrLoad___: aSym
 		metaclass := self @env0:class @env0:class.
 		((metaclass @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
 			and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil]) ifTrue: [
-			^ self ___descriptorGet___: (self @env0:class @env0:perform: aSym env: 1)
+			"Same descriptor treatment as the overlay path just above: a callable
+			class attribute (function/UnboundMethod/lambda) read through an
+			instance binds self via a MethodBinding, so a class-body ``m =
+			OtherClass.method'' runs ``method(self, ...)'' rather than handing
+			back the raw handle to be called with no receiver (test_userlist
+			test_repr_deep; the general ``greet2 = Base.greet'' idiom)."
+			^ self ___instanceClassAttrGet___: (self @env0:class @env0:perform: aSym env: 1)
 		].
 		"@classmethod / @staticmethod live on the metaclass with
 		``name:`` or ``_name:kw:`` selectors but NO paired unary
@@ -2937,7 +2976,7 @@ ___augmentedOp___: other inplace: iSel binary: bSel
 	``a := a.__add__(b)'' and a class defining only ``__iadd__'' raised a
 	spurious ``unsupported operand'' TypeError (test_operator.test_inplace)."
 
-	| iVa result niSingleton baseSel |
+	| iVa result niSingleton baseSel refSel |
 	niSingleton := Python @env0:at: #NotImplemented otherwise: nil.
 	"CPython: an in-place dunder explicitly set to None (``__iadd__ = None'')
 	DISABLES the operator -- and, unlike a missing __iadd__, blocks the binary
@@ -2964,6 +3003,26 @@ ___augmentedOp___: other inplace: iSel binary: bSel
 			(self ___respondsTo___: iVa) ifTrue: [
 				result := self @env0:perform: iVa env: 1 withArguments: { { other }. nil }.
 				result == niSingleton ifFalse: [^ result]]].
+	"self may define no forward binary dunder at all -- a bare iterator (str_iterator,
+	list_iterator, ...) is not rooted at Grail's ``object'' and so lacks even the
+	__add__: NotImplemented fallback.  Before performing bSel (which would MNU),
+	match the binary + operator and try the RIGHT operand's reflected dunder, so
+	``it = iter(x); it += UserList'' reaches UserList.__radd__(it) rather than
+	dying on a missing __add__: (test_userlist test_mixed_iadd).  Only entered when
+	self genuinely does not answer bSel, so every object-rooted receiver keeps the
+	exact existing path.
+
+	self == nil is EXCLUDED: nil is Grail's unbound-local sentinel (``x += 1''
+	before x is assigned reads nil), and it must reach the ``perform: bSel'' send
+	below so UndefinedObject's env-1 DNU backstop raises UnboundLocalError -- the
+	reflected branch would instead run other.__radd__(nil) and mis-report a
+	TypeError (UnboundLocalErrorTestCase test_python_aug_assign_unbound_raises)."
+	((self ~~ nil) and: [(self ___respondsTo___: bSel) not]) ifTrue: [
+		refSel := ('__r' @env0:, (bSel @env0:asString @env0:copyFrom: 3
+			to: bSel @env0:asString @env0:size)) @env0:asSymbol.
+		(other ___respondsTo___: refSel) ifTrue: [
+			result := other @env0:perform: refSel env: 1 withArguments: { self }.
+			result == niSingleton ifFalse: [^ result]]].
 	^ self @env0:perform: bSel env: 1 withArguments: { other }
 %
 

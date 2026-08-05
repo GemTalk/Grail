@@ -33,7 +33,7 @@ different rows and merges cleanly.
 | test.test_bytes | OK | 316 | 0 | 0 | 22 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
-| test.test_enum | ERROR | 1077 | 71 | 27 | 1 |  |
+| test.test_enum | ERROR | 1077 | 64 | 27 | 1 |  |
 | test.test_unary | OK | 6 | 0 | 0 | 0 |  |
 | test.test_int_literal | OK | 6 | 0 | 0 | 0 |  |
 | test.test_unpack | OK | 1 | 0 | 0 | 0 |  |
@@ -54,10 +54,10 @@ different rows and merges cleanly.
 | test.test_sort | OK | 21 | 0 | 0 | 2 |  |
 | test.test_generator_stop | OK | 2 | 0 | 0 | 0 |  |
 | test.test_userdict | OK | 28 | 0 | 0 | 0 |  |
-| test.test_userlist | ERROR | 54 | 4 | 3 | 1 |  |
+| test.test_userlist | OK | 54 | 0 | 0 | 1 |  |
 | test.test_isinstance | ERROR | 23 | 1 | 13 | 2 |  |
 | test.test_index | OK | 55 | 0 | 0 | 0 |  |
-| test.test_baseexception | ERROR | 11 | 1 | 7 | 0 |  |
+| test.test_baseexception | OK | 11 | 0 | 0 | 1 |  |
 | test.test_listcomps | ERROR | 60 | 6 | 27 | 0 |  |
 | test.test_property | ERROR | 31 | 18 | 8 | 0 |  |
 | test.test_copy | ERROR | 81 | 28 | 15 | 0 |  |

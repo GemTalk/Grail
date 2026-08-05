@@ -980,7 +980,23 @@ class UserList:
         del self.data[i]
 
     def __iter__(self):
-        return iter(self.data)
+        # Iterate THROUGH __getitem__ (like CPython's Sequence mixin, which
+        # UserList inherits) rather than over self.data directly, so a
+        # subclass overriding __getitem__ is honoured by iteration
+        # (test_userlist test_getitemoverwriteiter).
+        i = 0
+        try:
+            while True:
+                v = self[i]
+                yield v
+                i += 1
+        except IndexError:
+            return
+
+    def __reversed__(self):
+        # Grail's reversed() builtin prefers __reversed__ and otherwise falls
+        # back to the env-0 #reverseDo:, which a UserList does not understand.
+        return reversed(self.data)
 
     def __eq__(self, other):
         return self.data == self.__cast(other)
@@ -1007,6 +1023,26 @@ class UserList:
         else:
             result.data = self.data + list(other)
         return result
+
+    def __radd__(self, other):
+        # Reached when ``other + self`` and other (list/str/tuple/an iterator)
+        # does not know how to add a UserList, so Python tries the reflected
+        # form here (test_userlist test_mixed_add).
+        result = self.__class__()
+        if isinstance(other, UserList):
+            result.data = other.data + self.data
+        else:
+            result.data = list(other) + self.data
+        return result
+
+    def __iadd__(self, other):
+        # In place: keep object identity (``u += x; u is u2``) — test_iadd /
+        # test_mixed_iadd assert the augmented target is the same object.
+        if isinstance(other, UserList):
+            self.data += other.data
+        else:
+            self.data += list(other)
+        return self
 
     def __mul__(self, n):
         result = self.__class__()

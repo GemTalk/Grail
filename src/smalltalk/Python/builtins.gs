@@ -2441,6 +2441,15 @@ ___isSubclassSingle___: sub of: target
 			iff := Python @env0:at: #IntFlag otherwise: nil.
 			(iff @env0:notNil and: [(sub == iff) or: [sub @env0:inheritsFrom: iff]])
 				ifTrue: [^ true]]].
+	"ExceptionGroup widening: CPython's ExceptionGroup derives from BOTH
+	BaseExceptionGroup and Exception (PEP 654), but Grail's single-inheritance
+	Smalltalk chain puts it under BaseExceptionGroup only.  Report the CPython
+	relationship so issubclass(ExceptionGroup, Exception) holds -- the documented
+	hierarchy test_baseexception test_inheritance checks against."
+	(target == (Python @env0:at: #Exception otherwise: nil)) ifTrue: [ | egCls |
+		egCls := Python @env0:at: #ExceptionGroup otherwise: nil.
+		(egCls @env0:notNil and: [(sub == egCls) or: [sub @env0:inheritsFrom: egCls]])
+			ifTrue: [^ true]].
 	il := Python @env0:at: #importlib otherwise: nil.
 	il == nil ifFalse: [
 		((il @env0:___mroOf___: sub) @env0:includes: target) ifTrue: [^ true]].
