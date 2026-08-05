@@ -59,6 +59,14 @@ test.test_set|TestSet.test_container_iterator|gc cycle collection — Grail has 
 test.test_set|TestSetSubclass.test_container_iterator|gc cycle collection — N/A to Grail
 test.test_set|TestFrozenSet.test_container_iterator|gc cycle collection — N/A to Grail
 test.test_set|TestFrozenSetSubclass.test_container_iterator|gc cycle collection — N/A to Grail
+test.test_deque|TestBasic.test_container_iterator|gc cycle collection (a deque-iterator reference cycle, deleted then gc.collect()) — Grail has no cycle collector
+# eval()/exec() of a module-global free name: Grail's dynamic-compile path emits
+# an unresolved name as a bare Smalltalk symbol, so ``eval(repr(d))'' -- where
+# repr(d) is ``deque([...])'' -- fails to COMPILE (uncatchable CompileError 1001
+# 'undefined symbol deque') instead of resolving deque at run time.  This is the
+# same deep NameAst/exec-eval free-name limitation that blocks test_listcomps;
+# it is orthogonal to deque (deque's repr is correct), so scored as a skip.
+test.test_deque|TestBasic.test_repr|eval(repr(d)) needs eval to resolve the module-global `deque` — Grail's eval/exec free-name resolution emits a bare symbol -> uncatchable CompileError (same NameAst limitation as test_listcomps); not a deque issue
 test.test_set|TestSet.test_weakref|weakref reclaimed only under refcount/gc — N/A to Grail
 test.test_set|TestSetSubclass.test_weakref|weakref reclaimed only under refcount/gc — N/A to Grail
 test.test_set|TestSet.test_cyclical_repr|self-referential repr relies on CPython recursion depth/guard
