@@ -2242,6 +2242,17 @@ ___pyAttrLoad___: aSym
 		applies only to instance receivers."
 		(self ___classChainAttrLookup___: aSym)
 			@env0:ifNotNil: [:___cv | ^ ___cv].
+		"...then the recorded ``metaclass='', which is where Python looks after
+		the class's own dict: reading an attribute off a CLASS consults its TYPE,
+		and for ``class C(metaclass=M)'' that is M.  A DESCRIPTOR found there is
+		asked for its value with the class as the instance -- CPython's
+		``type(cls).__mro__'' lookup followed by ``__get__(cls, type(cls))'' --
+		which is what makes a metaclass-level cached_property reachable as
+		``C.prop''.  Grail records the metaclass rather than building the class
+		through it, so the consult happens here."
+		(self ___grailMetaclass___) @env0:ifNotNil: [:___meta |
+			(___meta ___classChainAttrLookup___: aSym)
+				@env0:ifNotNil: [:___mv | ^ self ___descriptorGet___: ___mv]].
 		"Instance method accessed via the class object — an *unbound* method
 		(a plain function in Python 3).  ``ParentClass.__init__(self, **opts)''
 		(explicit super-init, e.g. flask's ``Environment'' subclass calling

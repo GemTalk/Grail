@@ -4031,6 +4031,24 @@ __set_name__: owner _: name
 
 category: 'Grail-Descriptor'
 method: functools_cached_property
+___pyOwnerNameFor___: instance
+	"The name CPython puts in the caching errors: the TYPE of the object being
+	cached on.  For an ordinary object that is its class; for a CLASS -- a
+	metaclass-level cached_property read as ``C.prop'' -- it is the recorded
+	``metaclass='', because that is what type(C) means in Python.  The Smalltalk
+	class of a class is its metaclass, whose name is ``C class'', which is not a
+	name CPython would ever print."
+
+	| meta |
+	(instance isKindOf: Behavior) ifTrue: [
+		meta := instance ___grailMetaclass___.
+		(meta @env0:notNil and: [meta isKindOf: Behavior])
+			ifTrue: [^ meta @env0:name @env0:asString]].
+	^ instance @env0:class @env0:name @env0:asString
+%
+
+category: 'Grail-Descriptor'
+method: functools_cached_property
 __get__: instance _: owner
 	"The descriptor read.  Reached from object >> ___descriptorGet___: on an
 	INSTANCE read; a read off the class answers the descriptor itself (both
@@ -4066,7 +4084,7 @@ __get__: instance _: owner
 		do: [:ex |
 			ex @env0:return: (TypeError ___signal___:
 				('The ''__dict__'' attribute on '''
-					@env0:, instance @env0:class @env0:name @env0:asString
+					@env0:, (self ___pyOwnerNameFor___: instance)
 					@env0:, ''' instance does not support item assignment for caching '''
 					@env0:, name @env0:asString @env0:, ''' property.'))].
 	^ value

@@ -250,3 +250,21 @@ testAliasToPlainDefStillDelegates
 	self assert: testModule @env1:alias_to_plain_def_still_delegates asArray
 		equals: #( true true ).
 %
+
+category: 'Grail-Tests - Descriptor'
+method: CachedPropertyDescriptorTestCase
+testMetaclassLevelCachedProperty
+	"A cached_property on a METACLASS, read through the class.  Python reads an
+	attribute off a class by consulting its TYPE, so ``MyClass.prop'' finds
+	MyMeta's descriptor -- which Grail reaches through the recorded
+	``metaclass=''.
+
+	Caching then fails, exactly as in CPython: a class's __dict__ does not
+	support item assignment.  Grail gets there by a different route (a Class
+	cannot hold dynamic instVars) and reports the same message, naming the
+	METACLASS -- the Smalltalk class of a class is ``MyClass class'', which is
+	not a name CPython would print."
+
+	self assert: testModule @env1:metaclass_level_cached_property
+		equals: 'The ''__dict__'' attribute on ''MyMeta'' instance does not support item assignment for caching ''prop'' property.'
+%
