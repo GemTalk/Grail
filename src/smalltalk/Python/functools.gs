@@ -2633,16 +2633,43 @@ __repr__
 	wrapped callable by __qualname__, then __name__, then ``?'' when it
 	carries neither."
 
-	| label |
+	^ ('<single dispatch method descriptor ' @env0:, self ___reprLabel___ @env0:, '>')
+		@env0:asUnicodeString
+%
+
+category: 'Grail-Representation'
+method: functools_singledispatchmethod
+___reprLabel___
+	"``__qualname__'', else ``__name__'', else ``?'' -- the name CPython's
+	singledispatchmethod repr uses for the wrapped callable.
+
+	Both names are read through the Python ATTRIBUTE PROTOCOL rather than
+	sent as messages.  A direct send only finds a compiled method, which is
+	what an ExecBlock has, so it worked for an ordinary def and silently
+	fell through to ``?'' for any other callable -- including the one the
+	fallback exists for, an instance of a class that assigns ``__name__''
+	in its body:
+
+		class CallableWithName:
+			__name__ = 'NOQUALNAME'
+			def __call__(self, *args): pass
+
+	That name lives in the class dictionary, reachable via ___pyAttrLoad___:
+	and not by ``aReceiver __name__''."
+
+	| func label |
+	func := self @env0:dynamicInstVarAt: #func.
+	"``self __qualname__'', not the wrapped callable's: it qualifies a
+	class-side BoundMethod as ``Cls.meth'' from the receiver it is bound to,
+	which is what the @classmethod / @staticmethod cases depend on."
 	label := [self __qualname__ @env0:asString]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: nil].
 	label @env0:isNil ifTrue: [
-		label := [(self @env0:dynamicInstVarAt: #func) __name__ @env0:asString]
+		label := [(func @env1:___pyAttrLoad___: #'__name__') @env0:asString]
 			@env0:on: AbstractException
 			do: [:ex | ex @env0:return: '?']].
-	^ ('<single dispatch method descriptor ' @env0:, label @env0:, '>')
-		@env0:asUnicodeString
+	^ label
 %
 
 ! ___pythonValueAttrs___ MUST be compiled in env 0: Object >> ___pyAttrLoad___
