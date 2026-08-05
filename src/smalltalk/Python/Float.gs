@@ -8,6 +8,7 @@
 ! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
+set compile_env: 0
 
 ! ------------------- Remove existing Python methods from float
 expectvalue /Metaclass3
@@ -276,7 +277,7 @@ ___parseFloatBody___: trimmed original: original
 		(lower @env0:= 'nan') ifTrue: [
 			^ sign @env0:> 0 ifTrue: [PlusQuietNaN] ifFalse: [MinusQuietNaN]].
 
-		ws := AppendStream @env0:on: String @env0:new.
+		ws := WriteStream @env0:on: String @env0:new.
 		r1 := self ___consumeDigitRun___: trimmed from: idx into: ws.
 		intCount := r1 @env0:at: 1. idx := r1 @env0:at: 2.
 		(intCount @env0:== 0) ifTrue: [ws @env0:nextPut: $0].
@@ -407,7 +408,7 @@ ___parseHex___: hexString
 			and: [((trimmed @env0:at: idx @env0:+ 1) @env0:asLowercase) @env0:== $x]])
 			ifTrue: [idx := idx @env0:+ 2].
 
-		mant := AppendStream @env0:on: String @env0:new.
+		mant := WriteStream @env0:on: String @env0:new.
 		r1 := self ___consumeAsciiDigitRun___: trimmed from: idx into: mant radix: 16.
 		intCount := r1 @env0:at: 1. idx := r1 @env0:at: 2.
 		hasDot := false. fracCount := 0.
