@@ -2199,6 +2199,447 @@ ___registryKey___: aKey
 	^ nil
 %
 
+category: 'Grail-ABC MRO'
+method: functools
+___pyModuleOf___: aClass
+	"The Python ``__module__'' of a class, or nil when it reports none.
+
+	Grail presents only SOME of a class's Smalltalk ancestors to Python and
+	hides the rest: dict's chain is PyDict -> KeyValueDictionary ->
+	AbstractDictionary -> Collection -> Object, and only the two ends of that
+	report a module.  Reporting one is therefore the test for ``CPython has a
+	class here'', which is what the C3 walk below needs.
+
+	Read through the attribute protocol rather than as a direct send: a class
+	with no __module__ accessor gets one from ___pythonBuiltinTypeModule___
+	inside ___pyAttrLoad___:, and a class with neither raises Python
+	AttributeError -- where a direct Smalltalk send would be an uncatchable
+	MessageNotUnderstood."
+
+	^ [aClass ___pyAttrLoad___: #'__module__']
+		@env0:on: AttributeError
+		do: [:ex | ex @env0:return: nil]
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___pyNameOf___: aClass
+	"The Python ``__name__'' of a class -- NOT its Smalltalk name.  The two
+	differ exactly where Grail maps one Python class onto a kernel class:
+	KeyValueDictionary answers 'dict'.  Answers '' when there is no name at
+	all, so callers can compare without a nil check."
+
+	| n |
+	n := [aClass ___pyAttrLoad___: #'__name__']
+		@env0:on: AttributeError
+		do: [:ex | ex @env0:return: nil].
+	^ n == nil ifTrue: [''] ifFalse: [n @env0:asString]
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___isHiddenBase___: aBase of: aClass
+	"True when aBase is a Smalltalk ancestor CPython has no class for, so the
+	C3 walk must look THROUGH it at its own bases.  Three kinds:
+
+	  * no __module__ at all -- AbstractDictionary, Collection,
+	    SequenceableCollection, PythonInstance;
+	  * _ABCRoot, Grail's internal root for the collections.abc ABCs; CPython
+	    derives those from object with an ABCMeta metaclass, so the root has
+	    no CPython counterpart and must not appear in a linearization;
+	  * the builtin TWIN -- one Python class over two Smalltalk classes, the
+	    inner one reporting the SAME __name__ and __module__ as the outer
+	    (dict is PyDict over KeyValueDictionary).  Collapsing it is what keeps
+	    a single ``dict'' in the composed MRO; left alone, dict's own
+	    linearization would begin (dict, dict)."
+
+	| baseModule ownModule |
+	(aBase isKindOf: Behavior) ifFalse: [^ true].
+	baseModule := self ___pyModuleOf___: aBase.
+	baseModule == nil ifTrue: [^ true].
+	((self ___pyNameOf___: aBase) @env0:= '_ABCRoot') ifTrue: [^ true].
+	ownModule := self ___pyModuleOf___: aClass.
+	^ (ownModule @env0:notNil
+		and: [ownModule @env0:asString @env0:= baseModule @env0:asString])
+			and: [(self ___pyNameOf___: aBase) @env0:= (self ___pyNameOf___: aClass)]
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___pyVisibleBases___: aClass
+	"aClass's direct bases AS CPYTHON WOULD REPORT THEM: every hidden
+	Smalltalk ancestor replaced, in place, by its own visible bases, with
+	duplicates dropped.  dict answers (object), list answers (object) and
+	defaultdict answers (dict) -- matching CPython's __bases__ -- where the
+	raw Smalltalk chain answers (dict), (SequenceableCollection) and (dict).
+
+	Splicing rather than filtering is what keeps ``object'' reachable: it sits
+	BELOW the hidden ancestors, so dropping them without descending would
+	strand every builtin's linearization short of its root."
+
+	| out |
+	out := OrderedCollection @env0:new.
+	self ___collectVisibleBasesOf___: aClass root: aClass into: out depth: 0.
+	^ out
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___collectVisibleBasesOf___: aClass root: aRoot into: out depth: aDepth
+	"Recursive worker for ___pyVisibleBases___.  Depth-capped: the hidden
+	chains are shallow (four links at worst), and a bound keeps a cycle in a
+	hand-built hierarchy from hanging the dispatcher instead of raising."
+
+	aDepth @env0:> 32 ifTrue: [^ self].
+	(aClass __bases__) @env0:do: [:b |
+		(self ___isHiddenBase___: b of: aRoot)
+			ifTrue: [
+				self ___collectVisibleBasesOf___: b root: aRoot into: out
+					depth: aDepth @env0:+ 1]
+			ifFalse: [
+				(out @env0:includesIdentical: b) ifFalse: [out @env0:add: b]]]
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___isAbcClass___: aClass
+	"CPython's _c3_mro asks ``hasattr(base, '__abstractmethods__')'' to find
+	where a class's explicit ABC bases stop.  Grail's abc is a
+	no-enforcement stub and defines __abstractmethods__ on nothing, so the
+	stand-in is membership of _ABCRoot in the mro -- the root every
+	collections.abc ABC derives from, and which a user class inheriting one
+	keeps.
+
+	LIMIT: a user ABC built on abc.ABC is NOT recognized (abc.ABC is an
+	ordinary class here, deriving from PythonInstance), and neither are the
+	numbers ABCs (numbers.Number derives from PythonInstance too).  Both
+	would need Grail's abc to be real; until then the boundary is computed
+	over collections.abc, which is what singledispatch's ABC handling is
+	about in practice."
+
+	| mro |
+	mro := [aClass __mro__]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil].
+	mro == nil ifTrue: [^ false].
+	mro @env0:do: [:c |
+		((self ___pyNameOf___: c) @env0:= '_ABCRoot') ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___issubclassOf___: aSub of: aSuper
+	"issubclass(aSub, aSuper), tolerating a non-class on either side: the
+	haystack _compose_mro is handed comes from a registry whose keys can be
+	bare builtin-type names (BoundMethods, not classes), and CPython's
+	is_related drops whatever has no __mro__ rather than raising."
+
+	(aSub == aSuper) ifTrue: [^ true].
+	^ [((builtins @env0:___instance___) issubclass: aSub _: aSuper) == true]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___c3TailIncludes___: aSequence of: anObject
+	"anObject appears in aSequence AFTER its head.  Spelled out rather than
+	``allButFirst includes:'' to avoid a copy per probe, and to compare by
+	IDENTITY: C3 orders classes, and Grail has distinct classes that answer
+	equal Python names."
+
+	2 @env0:to: aSequence @env0:size do: [:i |
+		(aSequence @env0:at: i) == anObject ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___c3Merge___: sequences
+	"CPython's functools._c3_merge: repeatedly take the first sequence head
+	that appears in no other sequence's TAIL, and strike it from every head.
+	``sequences'' is CONSUMED -- callers pass throw-away OrderedCollections.
+
+	Raises Python RuntimeError('Inconsistent hierarchy') exactly where
+	CPython's does, so an impossible hierarchy reports the CPython error
+	instead of quietly answering a short MRO.
+
+	Bounded by the total element count rather than written as a whileTrue:
+	loop -- the merge emits at most one class per element, so the bound
+	cannot cut a valid linearization short, and a bug in the candidate scan
+	terminates instead of hanging the dispatcher."
+
+	| result live winner candidate budget |
+	result := OrderedCollection @env0:new.
+	budget := 0.
+	sequences @env0:do: [:s | budget := budget @env0:+ s @env0:size].
+	1 @env0:to: budget @env0:+ 1 do: [:ignored |
+		live := sequences @env0:reject: [:s | s @env0:isEmpty].
+		live @env0:isEmpty ifTrue: [^ Array @env0:withAll: result].
+		winner := live
+			@env0:detect: [:s1 |
+				(live
+					@env0:detect: [:s2 | self ___c3TailIncludes___: s2 of: s1 @env0:first]
+					ifNone: [nil]) == nil]
+			ifNone: [nil].
+		winner == nil ifTrue: [
+			RuntimeError ___signal___: 'Inconsistent hierarchy'].
+		candidate := winner @env0:first.
+		result @env0:add: candidate.
+		sequences @env0:do: [:s |
+			(s @env0:isEmpty @env0:not and: [s @env0:first == candidate])
+				ifTrue: [s @env0:removeFirst]]].
+	^ Array @env0:withAll: result
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___c3MroOf___: aClass abcs: abcs
+	"CPython's functools._c3_mro: the C3 linearization of aClass with the
+	relevant ABCs from ``abcs'' spliced in where each one's behaviour is
+	INTRODUCED -- issubclass(aClass, abc) holds, but no direct base is
+	already a subclass of it.  Unrelated ABCs drop out.
+
+	Two substitutions carry Grail's class graph, each argued at its helper:
+	___pyVisibleBases___ stands in for cls.__bases__, because the raw
+	Smalltalk chain exposes ancestors CPython has no class for; and
+	___isAbcClass___ stands in for hasattr(base, '__abstractmethods__'),
+	because Grail's abc defines no such attribute."
+
+	| bases boundary explicitBases abstractBases otherBases remaining seqs |
+	bases := self ___pyVisibleBases___: aClass.
+	"Bases up to and including the LAST explicit ABC are considered first."
+	boundary := 0.
+	bases @env0:size @env0:to: 1 by: -1 do: [:i |
+		(boundary @env0:= 0 and: [self ___isAbcClass___: (bases @env0:at: i)])
+			ifTrue: [boundary := i]].
+	explicitBases := boundary @env0:= 0
+		ifTrue: [OrderedCollection @env0:new]
+		ifFalse: [bases @env0:copyFrom: 1 to: boundary].
+	otherBases := boundary @env0:= (bases @env0:size)
+		ifTrue: [OrderedCollection @env0:new]
+		ifFalse: [bases @env0:copyFrom: boundary @env0:+ 1 to: bases @env0:size].
+	"``abcs'' is consumed as the walk descends: an ABC spliced in HERE must
+	not be spliced again inside a base's linearization.  Copied per level,
+	as CPython's ``abcs = list(abcs)'' does, so a sibling branch still sees
+	it."
+	remaining := OrderedCollection @env0:new.
+	abcs == nil ifFalse: [abcs @env0:do: [:a | remaining @env0:add: a]].
+	abstractBases := OrderedCollection @env0:new.
+	remaining @env0:do: [:abc |
+		((self ___issubclassOf___: aClass of: abc)
+			and: [(bases
+				@env0:detect: [:b | self ___issubclassOf___: b of: abc]
+				ifNone: [nil]) == nil])
+					ifTrue: [abstractBases @env0:add: abc]].
+	abstractBases @env0:do: [:abc | remaining @env0:remove: abc ifAbsent: []].
+	seqs := OrderedCollection @env0:new.
+	seqs @env0:add: (OrderedCollection @env0:with: aClass).
+	explicitBases @env0:do: [:b |
+		seqs @env0:add: (OrderedCollection @env0:withAll:
+			(self ___c3MroOf___: b abcs: remaining))].
+	abstractBases @env0:do: [:b |
+		seqs @env0:add: (OrderedCollection @env0:withAll:
+			(self ___c3MroOf___: b abcs: remaining))].
+	otherBases @env0:do: [:b |
+		seqs @env0:add: (OrderedCollection @env0:withAll:
+			(self ___c3MroOf___: b abcs: remaining))].
+	seqs @env0:add: (OrderedCollection @env0:withAll: explicitBases).
+	seqs @env0:add: (OrderedCollection @env0:withAll: abstractBases).
+	seqs @env0:add: (OrderedCollection @env0:withAll: otherBases).
+	^ self ___c3Merge___: seqs
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+_c3_mro: aClass
+	"functools._c3_mro(cls) -- the fixed-arity form, for a call with no
+	``abcs''.  The varargs companion is __c3_mro:kw: (CallAst builds a
+	varargs selector as '_' , name , ':kw:', and the Python name already
+	begins with an underscore)."
+
+	^ self ___c3MroOf___: aClass abcs: nil
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+__c3_mro: positional kw: kwargs
+	"functools._c3_mro(cls, abcs=None).  CPython keeps this private but
+	test_functools calls it directly (test_c3_abc), so it is a real module
+	function, not just an internal helper.
+
+	Answers a Smalltalk Array; a Python list literal compares equal to one,
+	which is what the test's assertEqual asks."
+
+	| cls abcs |
+	(positional == nil or: [positional @env0:size @env0:< 1]) ifTrue: [
+		TypeError ___signal___:
+			'_c3_mro() missing 1 required positional argument: ''cls'''].
+	cls := positional @env0:at: 1.
+	abcs := positional @env0:size @env0:> 1
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [nil].
+	kwargs == nil ifFalse: [
+		kwargs @env0:keysAndValuesDo: [:k :v |
+			(k @env0:asString @env0:= 'abcs')
+				ifTrue: [abcs := v]
+				ifFalse: [
+					TypeError ___signal___:
+						'_c3_mro() got an unexpected keyword argument '''
+							@env0:, k @env0:asString @env0:, '''']]].
+	^ self ___c3MroOf___: cls abcs: abcs
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___pyDirectSubclassesOf___: aClass
+	"aClass's direct subclasses, Python-visible ones only -- Grail's stand-in
+	for CPython's cls.__subclasses__(), which does not exist here.
+
+	Two sources, and BOTH are needed.  A single-inheritance Python class is
+	chained under its base in Smalltalk, so ``subclasses'' finds it.  A
+	multiple-inheritance class is chained under its PRIMARY base only, with
+	the full list recorded in importlib's MI registry -- so a SECONDARY base
+	would never see it.  collections.abc.Collection is exactly that case: it
+	declares (Sized, Iterable, Container) and is chained under Sized alone,
+	and _compose_mro's whole purpose here is finding it from Container.
+
+	Ordered by Python name.  CPython's __subclasses__ answers definition
+	order; GemStone's ``subclasses'' and the identity-keyed MI registry are
+	both unordered, so name order is substituted to make the result
+	REPRODUCIBLE.  It is only ever a tie-break: the caller sorts by useful-base
+	count, and this decides equal counts."
+
+	| out reg |
+	out := OrderedCollection @env0:new.
+	(aClass @env0:subclasses) @env0:do: [:s |
+		(self ___pyModuleOf___: s) @env0:notNil ifTrue: [out @env0:add: s]].
+	reg := (System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: #importlib) @env0:___miRegistry___.
+	reg @env0:keysAndValuesDo: [:sub :entry |
+		(((entry @env0:at: 1) @env0:includesIdentical: aClass)
+			and: [(out @env0:includesIdentical: sub) @env0:not
+			and: [(self ___pyModuleOf___: sub) @env0:notNil]])
+				ifTrue: [out @env0:add: sub]].
+	^ self ___sortByPyName___: out
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___sortByPyName___: aCollection
+	"Ascending by Python __name__.  Sorted on the NAME rather than on the
+	classes themselves: ``<'' is not defined between two classes."
+
+	^ (aCollection @env0:asSortedCollection: [:a :b |
+		(self ___pyNameOf___: a) @env0:<= (self ___pyNameOf___: b)])
+			@env0:asOrderedCollection
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___sortByLengthDescending___: aCollection
+	"Stable descending sort by size -- CPython does ``found.sort(key=len,
+	reverse=True)'' and Python's sort is STABLE, so equal-length candidates
+	keep their incoming order and that order decides ABC ties.  Written as a
+	counting pass rather than a comparison sort because GemStone's sorts are
+	not stable."
+
+	| out longest |
+	out := OrderedCollection @env0:new.
+	longest := 0.
+	aCollection @env0:do: [:e |
+		e @env0:size @env0:> longest ifTrue: [longest := e @env0:size]].
+	longest @env0:to: 0 by: -1 do: [:n |
+		aCollection @env0:do: [:e |
+			e @env0:size @env0:= n ifTrue: [out @env0:add: e]]].
+	^ out
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___composeMroOf___: aClass types: types
+	"CPython's functools._compose_mro: aClass's linearization with the
+	RELEVANT entries of ``types'' (a dispatch registry's keys) spliced in.
+
+	Three filters, then the C3 walk:
+	  * drop anything already in aClass's own mro, anything that is not a
+	    class, and anything aClass is not a subclass of.  Requiring a class
+	    is what drops a bare builtin-type name -- ``str'' reaches a registry
+	    as a BoundMethod, not a class -- and stands in for CPython's
+	    hasattr(typ, '__mro__') and its GenericAlias check;
+	  * drop entries that are strict bases of other entries: they arrive in
+	    the linearization anyway, via the entry that supersedes them;
+	  * stabilize the ORDER of the survivors.  Two ABCs that are unrelated to
+	    each other have no intrinsic order, so a subclass of both that aClass
+	    also implements is used to impose one: Collection orders (Sized,
+	    Container) for a dict, which is what makes defaultdict's composed mro
+	    (defaultdict, dict, Sized, Container, object) rather than the reverse."
+
+	| bases related pruned mro |
+	bases := aClass __mro__.
+	related := OrderedCollection @env0:new.
+	types == nil ifFalse: [
+		types @env0:do: [:t |
+			((t isKindOf: Behavior)
+				and: [(bases @env0:includesIdentical: t) @env0:not
+				and: [(related @env0:includesIdentical: t) @env0:not
+				and: [self ___issubclassOf___: aClass of: t]]])
+					ifTrue: [related @env0:add: t]]].
+	pruned := related @env0:reject: [:t |
+		(related
+			@env0:detect: [:other |
+				(other ~~ t) and: [(other __mro__) @env0:includesIdentical: t]]
+			ifNone: [nil]) @env0:notNil].
+	mro := OrderedCollection @env0:new.
+	pruned @env0:do: [:t |
+		| found |
+		found := OrderedCollection @env0:new.
+		(self ___pyDirectSubclassesOf___: t) @env0:do: [:sub |
+			((bases @env0:includesIdentical: sub) @env0:not
+				and: [self ___issubclassOf___: aClass of: sub]) ifTrue: [
+					| useful |
+					useful := OrderedCollection @env0:new.
+					(sub __mro__) @env0:do: [:s |
+						(pruned @env0:includesIdentical: s)
+							ifTrue: [useful @env0:add: s]].
+					found @env0:add: useful]].
+		found @env0:isEmpty
+			ifTrue: [
+				(mro @env0:includesIdentical: t) ifFalse: [mro @env0:add: t]]
+			ifFalse: [
+				(self ___sortByLengthDescending___: found) @env0:do: [:each |
+					each @env0:do: [:subcls |
+						(mro @env0:includesIdentical: subcls)
+							ifFalse: [mro @env0:add: subcls]]]]].
+	^ self ___c3MroOf___: aClass abcs: mro
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+_compose_mro: aClass _: types
+	"functools._compose_mro(cls, types) -- the fixed-arity form.  Called
+	directly by test_functools (test_compose_mro) and by _find_impl."
+
+	^ self ___composeMroOf___: aClass types: types
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+__compose_mro: positional kw: kwargs
+	"Varargs form of _compose_mro.  CPython's signature is positional-only,
+	so a keyword call is a TypeError rather than a silent miss."
+
+	kwargs == nil ifFalse: [
+		kwargs @env0:keysAndValuesDo: [:k :v |
+			TypeError ___signal___:
+				'_compose_mro() takes no keyword arguments']].
+	(positional == nil or: [positional @env0:size @env0:< 2]) ifTrue: [
+		TypeError ___signal___:
+			'_compose_mro() takes 2 positional arguments'].
+	^ self ___composeMroOf___: (positional @env0:at: 1) types: (positional @env0:at: 2)
+%
+
 category: 'Grail-Single Dispatch'
 method: functools_singledispatch
 register: clsOrFunc
