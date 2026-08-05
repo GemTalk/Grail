@@ -388,6 +388,22 @@ valueWithArguments: anArray
 	^ self @env0:valueWithArguments: anArray
 %
 
+category: 'Grail-Representation'
+method: ExecBlock
+__repr__
+	"``<function NAME at 0xADDR>'', CPython's shape.  Grail answered
+	``<ExecBlock object>'', which shows up wherever a function is printed --
+	including inside error messages callers match on (functools' register()
+	names the offending function in the TypeError it raises).
+
+	Must live in the env-1 region: compiled into env 0 it is invisible to
+	Python attribute dispatch, so ``repr(f)'' kept reaching Object's default."
+
+	^ ('<function ' @env0:, self __qualname__ @env0:asString
+		@env0:, ' at 0x' @env0:, (self @env0:identityHash @env0:printStringRadix: 16)
+		@env0:asLowercase @env0:, '>') @env0:asUnicodeString
+%
+
 set compile_env: 0
 
 category: 'Grail-Python Attribute Hook'
@@ -552,6 +568,22 @@ ___pyNamed___: aString annotate: aBlock doc: aDoc
 	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__name__' put: aString.
 	(ExecBlock ___pyAttrsClass___) annotateSlotAt: self attr: '__annotate__' put: aBlock.
 	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__doc__' put: aDoc.
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
+___pyQualname___: aString
+	"Stamp ``__qualname__'' -- the dotted path including CPython's ``<locals>''
+	marker for a def inside a function, e.g. ``Cls.meth.<locals>.inner''.
+
+	Grail answered the bare name, which is right only at module or class level.
+	The qualified form is observable because a function's repr prints it, so it
+	lands in error messages callers match on.  DEF-SITE storage: the value is a
+	property of where the def is written.  Returns self, to compose in the
+	def-time cascade."
+
+	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__qualname__' put: aString.
 	^ self
 %
 

@@ -2233,6 +2233,35 @@ register: clsOrFunc
 %
 
 category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___invalidRegisterMessage___: anOffender
+	"CPython names the OFFENDING argument and says what to do instead:
+
+	    Invalid first argument to `register()`: 42. Use either
+	    `@register(some_class)` or plain `@register` on an annotated function.
+
+	Grail described the diagnosis instead (``no type annotation found''), which
+	reads fine but is not what callers match on."
+
+	^ ('Invalid first argument to `register()`: '
+		@env0:, (self ___safeRepr___: anOffender)
+		@env0:, '. Use either `@register(some_class)` or plain `@register` on an '
+		@env0:, 'annotated function.') @env0:asString
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___safeRepr___: anObject
+	"repr(anObject) as a plain String, falling back to the class name when repr
+	raises or answers something unusable -- an error message must not fail while
+	being built, and the result is concatenated with String literals."
+
+	^ [(anObject @env1:__repr__) @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: anObject @env0:class @env0:name @env0:asString]
+%
+
+category: 'Grail-Single Dispatch'
 classmethod: functools_singledispatch
 ___resolveDottedName___: aString
 	"Resolve a DOTTED name like ``collections.abc.Mapping'' to the class it names,
@@ -2307,7 +2336,7 @@ ___inferRegisterType___: aFunc
 	ann := self ___annotationSourceStrings___: aFunc.
 	(ann @env0:isNil or: [ann @env0:isEmpty]) ifTrue: [
 		TypeError ___signal___:
-			'Invalid first argument to `register()`: no type annotation found'].
+			(self ___invalidRegisterMessage___: aFunc)].
 	candidate := nil.
 	paramName := nil.
 	ann @env0:keysAndValuesDo: [:k :v |
@@ -2315,7 +2344,7 @@ ___inferRegisterType___: aFunc
 			ifTrue: [paramName := k @env0:asString. candidate := v]].
 	candidate @env0:isNil ifTrue: [
 		TypeError ___signal___:
-			'Invalid first argument to `register()`: no parameter annotation found'].
+			(self ___invalidRegisterMessage___: aFunc)].
 	"Resolve a forward-reference string against the Python globals."
 	(candidate isKindOf: CharacterCollection) ifTrue: [
 		text := candidate @env0:asString.
@@ -2517,7 +2546,7 @@ register: cls _: aFunc
 	| key |
 	key := self ___registryKey___: cls.
 	key @env0:isNil ifTrue: [
-		TypeError ___signal___: 'Invalid first argument to `register()`: not a class'].
+		TypeError ___signal___: (self ___invalidRegisterMessage___: cls)].
 	(self @env0:dynamicInstVarAt: #registry) @env0:at: key put: aFunc.
 	^ aFunc
 %

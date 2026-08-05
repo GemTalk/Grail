@@ -669,6 +669,12 @@ printSmalltalkOn: aStream
 		poCount := args isNil ifTrue: [0] ifFalse: [(args posonlyargs ifNil: [#()]) size].
 		regCount := args isNil ifTrue: [0] ifFalse: [(args args ifNil: [#()]) size].
 		kwoCount := args isNil ifTrue: [0] ifFalse: [(args kwonlyargs ifNil: [#()]) size].
+		"__qualname__ when this def is nested inside something.  A CASCADE, like
+		___pyCode___: below and for the same reason: emitted as another keyword
+		part of ``___pyNamed___:'' it would swallow the following ``annotate:'' /
+		``doc:'' into one combined selector that does not exist -- which turned 22
+		tests into uncatchable Smalltalk errors when tried that way."
+		self ___emitQualnameOn___: aStream name: name.
 		aStream
 			nextPutAll: '; @env0:___pyCode___: (PyCode @env0:name: '''; nextPutAll: name;
 			nextPutAll: ''' firstlineno: '; nextPutAll: self beginLine printString;
@@ -1208,6 +1214,38 @@ ___parserReclassedThisDef___
 	^ (self isKindOf: StaticFunctionDefAst)
 		or: [(self isKindOf: ClassFunctionDefAst)
 			or: [self isKindOf: InstanceFunctionDefAst]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___emitQualnameOn___: aStream name: aName
+	"Emit ``; ___pyQualname___: '<dotted path>''' when this def is nested.
+
+	The prefix comes from the emission context: CallAst functionBeingCompiled is
+	the ENCLOSING def while a nested one is emitted, and classBeingCompiled names
+	the class around it, so a def in a method of class A reads
+	``A.meth.<locals>.inner''.  CPython puts ``<locals>'' between an enclosing
+	FUNCTION and the names inside it.
+
+	Nothing is emitted when there is no enclosing def: a bare name is already the
+	right answer at module and class level, and ExecBlock >> __qualname__ falls
+	back to __name__.  Deeper nesting reports from the nearest enclosing def --
+	still closer than the bare name, and one level is what the corpus asks for."
+
+	| enclosingFn enclosingCls prefix |
+	enclosingFn := CallAst functionBeingCompiled.
+	enclosingCls := CallAst classBeingCompiled.
+	(enclosingFn == nil or: [enclosingFn == self]) ifTrue: [^ self].
+	(enclosingFn name == nil) ifTrue: [^ self].
+	prefix := enclosingCls == nil
+		ifTrue: [enclosingFn name asString]
+		ifFalse: [enclosingCls asString , '.' , enclosingFn name asString].
+	aStream
+		nextPutAll: '; @env0:___pyQualname___: ''';
+		nextPutAll: prefix;
+		nextPutAll: '.<locals>.';
+		nextPutAll: aName asString;
+		nextPutAll: ''''
 %
 
 category: 'Grail-code generation'
