@@ -287,14 +287,13 @@ executeWithScope: aSymbolList as: aKind
 			nextPutAll: tpzSource contents encodeAsUTF8;
 			close.
 	].
-	[compiledMethod := code
+	compiledMethod := code
 		_compileInContext: nil
 		symbolList: aSymbolList
 		oldLitVars: nil
 		environmentId: 1
-		flags: 0
-	] on: AbstractException do: [:ex |
-		ex pass. "Code is here to allow a breakpoint"].
+		flags: 0 .
+  " Add   on: AbstractException do:[:ex| self pause ]  here if you want to debug compile errors here "
 	"Snapshot IR for the freshly-compiled doit before any later
 	compile overwrites __sessionStateAt: 19."
 	traceDir ifNotNil: [
@@ -302,9 +301,8 @@ executeWithScope: aSymbolList as: aKind
 			nextPutAll: (System __sessionStateAt: 19) printString;
 			close.
 	].
-	[result := compiledMethod _executeInContext: nil
-	] on: AbstractException do: [:ex |
-		ex pass. "Code is here to allow a breakpoint"].
+	result := compiledMethod _executeInContext: nil .
+  " Add   on: AbstractException do:[:ex| self pause ]  here if you want to debug execute errors here "
 	^ result
 %
 
