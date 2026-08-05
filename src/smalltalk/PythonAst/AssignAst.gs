@@ -454,6 +454,25 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 	to the store path (it remains relevant to call sites that send
 	``obj attr: x'' directly via Smalltalk-style keyword)."
 
+	"``obj.__class__ = NewClass'' reassigns the object's Python type.  Route
+	through ``object ___pyChangeClassOf: <target> to: <value>'' -- which holds
+	the target only as an ARGUMENT -- instead of ``<target> __setattr__:''; the
+	latter would pin the target on the stack as ``self'', and GemStone's
+	changeClassTo: refuses an object that is self on the stack
+	(rtErrCantBecomeSelfOnStack; test_sort test_unsafe_object_compare's mid-sort
+	``elem.__class__ = ...'').  A self-reference target (``self.__class__ = ...'')
+	keeps the default path -- it is self on the stack no matter how it is
+	spelled, so the rename cannot help it."
+	(tgt attr asString = '__class__'
+		and: [((tgt value isKindOf: NameAst)
+			and: [CallAst isSelfReference: tgt value id]) not]) ifTrue: [
+		aStream nextPutAll: 'object @env1:___pyChangeClassOf: ('.
+		tgt value printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ') to: ('.
+		value printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: '). '.
+		^ self
+	].
 	((tgt value isKindOf: NameAst)
 		and: [(CallAst isSelfReference: tgt value id)
 		and: [(tgt value ___boundInNestedFunction___: tgt value id) not]]) ifTrue: [

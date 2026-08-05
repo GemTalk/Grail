@@ -3752,6 +3752,33 @@ __setattr__: name _: value
 	^ self ___pyAttrStore___: name put: value
 %
 
+category: 'Grail-Attribute Access'
+classmethod: object
+___pyChangeClassOf: anObject to: newClass
+	"Back ``anObject.__class__ = newClass''.  Compiled by AssignAst as
+	``object ___pyChangeClassOf: <target> to: <value>'' rather than through
+	__setattr__, which would pin the target on the stack as ``self'' and make
+	changeClassTo: raise rtErrCantBecomeSelfOnStack -- here the target is only
+	an ARGUMENT.  changeClassTo: reassigns the class in place when newClass has
+	a compatible instance layout (same format + named-instVar shape) and raises
+	otherwise, which surfaces as CPython's ``__class__ assignment ... layout''
+	TypeError.  Returns None (test_sort test_unsafe_object_compare)."
+
+	(newClass isKindOf: Behavior) ifFalse: [
+		^ TypeError ___signal___:
+			'__class__ must be set to a class, not ''' @env0:,
+			(newClass @env0:class @env0:name @env0:asString) @env0:, ''' object'].
+	[anObject @env0:changeClassTo: newClass]
+		@env0:on: Error
+		do: [:ex |
+			^ TypeError ___signal___:
+				'__class__ assignment: ''' @env0:,
+				(newClass @env0:name @env0:asString) @env0:,
+				''' object layout differs from ''' @env0:,
+				(anObject @env0:class @env0:name @env0:asString) @env0:, ''''].
+	^ None
+%
+
 category: 'Grail-Other'
 method: object
 __sizeof__
