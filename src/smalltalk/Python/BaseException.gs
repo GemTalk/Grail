@@ -203,6 +203,78 @@ ___signalNew___: positional kw: kwargs
 		((positional @env0:isEmpty) ifTrue: [''] ifFalse: [positional @env0:at: 1])
 %
 
+category: 'Grail-Raise Validation'
+classmethod: BaseException
+___pyRaise___: excValue
+	"``raise excValue`` (the expression form).  CPython: a BaseException subCLASS
+	is signalled (``raise ValueError'' behaves like ``raise ValueError()''); a
+	BaseException INSTANCE signals itself; anything else -- a plain class, a str,
+	a number -- raises ``TypeError: exceptions must derive from BaseException''.
+	excValue is an ARGUMENT (not the receiver) so a non-exception can't die on a
+	MessageNotUnderstood for #signal (test_baseexception test_raise_string /
+	test_raise_new_style_non_exception)."
+
+	(excValue @env0:isKindOf: Behavior) ifTrue: [
+		((excValue == BaseException) or: [excValue @env0:inheritsFrom: BaseException])
+			ifTrue: [^ excValue @env0:signal].
+		^ TypeError ___signal___: 'exceptions must derive from BaseException'].
+	(excValue @env0:isKindOf: BaseException) ifTrue: [^ excValue @env0:signal].
+	^ TypeError ___signal___: 'exceptions must derive from BaseException'
+%
+
+category: 'Grail-Raise Validation'
+classmethod: BaseException
+___pyRaiseNew___: cls args: positional kw: kwargs
+	"``raise cls(*positional, **kwargs)`` for a bare-name callee.  Validate that
+	cls is a BaseException subclass -- else ``TypeError: exceptions must derive
+	from BaseException'' (``raise NewStyleClass()'') -- then construct and signal
+	via ___signalNew___ (running any user __init__), exactly as the unguarded
+	path did for a real exception class."
+
+	((cls @env0:isKindOf: Behavior)
+		and: [(cls == BaseException) or: [cls @env0:inheritsFrom: BaseException]])
+			ifFalse: [^ TypeError ___signal___: 'exceptions must derive from BaseException'].
+	^ cls ___signalNew___: positional kw: kwargs
+%
+
+category: 'Grail-Raise Validation'
+classmethod: BaseException
+___pyExceptType___: handler
+	"Validate an ``except <handler>:'' target before GemStone's ``on:do:'' sends
+	it #handles:.  CPython requires a BaseException subclass (or a tuple thereof);
+	catching an instance, a str, or a non-exception class raises ``TypeError:
+	catching classes that do not inherit from BaseException is not allowed''.
+
+	The operational test is exactly what ``on:do:'' needs: a valid handler (an
+	exception class, or a GemStone ExceptionSet from ``except (A, B):'') answers
+	#handles:; a non-exception does not.  handler is an ARGUMENT so it can't MNU
+	on #handles: inside on:do: (test_baseexception test_catch_*).  Returns the
+	handler unchanged when valid."
+
+	(handler @env0:respondsTo: #'handles:') ifTrue: [^ handler].
+	^ TypeError ___signal___: 'catching classes that do not inherit from BaseException is not allowed'
+%
+
+category: 'Grail-Serialization'
+method: BaseException
+__setstate__: state
+	"CPython BaseException.__setstate__(state): when state is not None it must be
+	a mapping, and each (key, value) pair is assigned as an instance attribute
+	(setattr).  Returns None.  A snapshot of the items is taken first so a key
+	whose __hash__ mutates the dict mid-restore (test_setstate_refcount_no_crash's
+	HashThisKeyWillClearTheDict) can't tear the iteration -- and the gh-97591
+	refcount crash it guards against cannot arise in Grail (no refcounting)."
+
+	| pairs |
+	(state == None or: [state == nil]) ifTrue: [^ None].
+	pairs := OrderedCollection @env0:new.
+	state @env0:keysAndValuesDo: [:k :v |
+		pairs @env0:add: (Array @env0:with: k with: v)].
+	pairs @env0:do: [:pair |
+		self ___pyAttrStore___: (pair @env0:at: 1) put: (pair @env0:at: 2)].
+	^ None
+%
+
 category: 'Grail-Private'
 method: BaseException
 ___args___: anArray
@@ -336,7 +408,11 @@ __str__
 	size == 1 ifTrue: [
 		^ ((argsArray @env0:at: 1) @env0:asString) @env0:asUnicodeString
 	].
-	^ (argsArray @env0:asString) @env0:asUnicodeString
+	"Multiple args: CPython's ``str(exc)'' is ``str(self.args)'', and a tuple has
+	no __str__ so str() falls back to its __repr__ -- ``Exception(0,1,2)''
+	stringifies to ``(0, 1, 2)''.  The old ``argsArray asString'' sent Smalltalk
+	#asString to the tuple and produced garbage (``atuple'')."
+	^ argsArray __repr__
 %
 
 category: 'Grail-Exception Chaining'
