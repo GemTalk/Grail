@@ -1232,20 +1232,41 @@ ___emitQualnameOn___: aStream name: aName
 	back to __name__.  Deeper nesting reports from the nearest enclosing def --
 	still closer than the bare name, and one level is what the corpus asks for."
 
-	| enclosingFn enclosingCls prefix |
-	enclosingFn := CallAst functionBeingCompiled.
-	enclosingCls := CallAst classBeingCompiled.
-	(enclosingFn == nil or: [enclosingFn == self]) ifTrue: [^ self].
-	(enclosingFn name == nil) ifTrue: [^ self].
-	prefix := enclosingCls == nil
-		ifTrue: [enclosingFn name asString]
-		ifFalse: [enclosingCls asString , '.' , enclosingFn name asString].
+	| qualified |
+	qualified := self ___qualifiedNameFor___: aName.
+	qualified = aName asString ifTrue: [^ self].
 	aStream
 		nextPutAll: '; @env0:___pyQualname___: ''';
-		nextPutAll: prefix;
-		nextPutAll: '.<locals>.';
-		nextPutAll: aName asString;
+		nextPutAll: qualified;
 		nextPutAll: ''''
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___qualifiedNameFor___: aName
+	"``Cls.meth.<locals>.aName'' when this def is nested inside a function, else
+	aName unchanged.  CPython puts ``<locals>'' between an enclosing FUNCTION and
+	the names inside it.
+
+	The context comes from the emission state: CallAst functionBeingCompiled is
+	the ENCLOSING def while a nested one is emitted, and classBeingCompiled names
+	the class around it.
+
+	Shared by the __qualname__ stamp and by the arity-error message, which CPython
+	also phrases with the qualified name -- test_keywordonlyarg builds its
+	expected text from ``f.__qualname__'', so the two have to agree by
+	construction rather than by coincidence."
+
+	| enclosingFn enclosingCls |
+	enclosingFn := CallAst functionBeingCompiled.
+	enclosingCls := CallAst classBeingCompiled.
+	(enclosingFn == nil
+		or: [enclosingFn == self or: [enclosingFn name == nil]])
+			ifTrue: [^ aName asString].
+	^ (enclosingCls == nil
+		ifTrue: [enclosingFn name asString]
+		ifFalse: [enclosingCls asString , '.' , enclosingFn name asString])
+		, '.<locals>.' , aName asString
 %
 
 category: 'Grail-code generation'
@@ -1975,7 +1996,7 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 			nextPutAll: '(('; nextPutAll: posName;
 			nextPutAll: ' @env0:size) @env0:> '; print: nPos;
 			nextPutAll: ') ifTrue: [TypeError ___signal___: (''';
-			nextPutAll: name;
+			nextPutAll: (self ___qualifiedNameFor___: name);
 			nextPutAll: '() takes '; nextPutAll: sig;
 			nextPutAll: ' positional argument'; nextPutAll: plural;
 			nextPutAll: ' but '' @env0:, ('; nextPutAll: posName;
