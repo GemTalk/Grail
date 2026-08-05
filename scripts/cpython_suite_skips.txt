@@ -239,6 +239,21 @@ test.test_iter|TestCase.test_reduce_mutating_builtins_iter|CPython C-internal (g
 # outsized regression risk for a test of a dev-only consistency checker.  re
 # already works with the stub (its flags stay plain ints, which is enough).
 test.test_enum|TestStdLib.test_test_simple_enum|_simple_enum/_test_simple_enum are CPython-internal helpers; faithful build is a load-bearing sub-project for re, and the failing line is an artificial member._value_ corruption CPython allows -- won't-implement, not a correctness gap
+# test.test_format's test_common_format: RE-EXAMINED 2026-08-05.  The old reason
+# ("'%.*d' % (sys.maxsize, 1) is not precision-validated -- session hang/OOM") is
+# FIXED: that expression, and its bytes/bytearray twins, now raise a catchable
+# OverflowError, and the format-spec spelling raises ValueError.  Un-skipping then
+# exposed two MORE hazards, both also fixed: ``1.e+300'' did not lex (a trailing
+# dot followed by an exponent was read as attribute access), and a large float
+# precision died on an UNCATCHABLE NumericError, now a catchable OverflowError.
+#
+# What remains is a genuine VM ceiling, not a bug.  ``testcommon('%12.*f',
+# (123456, 1.0))'' passes NO overflowok, so CPython really does build a
+# 123456-fraction-digit string; Grail generates float digits by exact integer
+# scaling (value * 10^precision) and GemStone's LargeInteger stops near 130144
+# bits (~39000 digits).  So this one test cannot pass without a different
+# digit-generation strategy.  Everything it was previously masking is now fixed.
+test.test_format|FormatTest.test_common_format|CPython builds a 123456-fraction-digit float string (no overflowok); Grail scales by 10^precision and GemStone's LargeInteger ceiling is ~39000 digits -- a VM limit, now raised catchably as OverflowError instead of an uncatchable NumericError
 # --- Phase 4 (2026-08-03): two tests that HANG the scoring session ---
 # Both are single-line hangs inside an otherwise-scorable module, so they are
 # skip-listed (never counted as passes) to let the rest of the module score;
@@ -251,7 +266,6 @@ test.test_deque|TestBasic.test_extend|deque.extend(self) consumes the live deque
 # '%.*d' % (sys.maxsize, 1): CPython validates the precision and raises
 # OverflowError; Grail tries to build the sys.maxsize-digit result (same shape as
 # the bytes-repetition OOM fixed by capping at 2**31-1 and raising OverflowError).
-test.test_format|FormatTest.test_common_format|'%.*d' % (sys.maxsize, 1) is not precision-validated -- Grail attempts a sys.maxsize-digit result (session hang/OOM, uncatchable)
 # Old-style __bases__ protocol: these build UNBOUNDED PYTHON recursion inside the
 # attribute read itself -- a self-referential ``@property def __bases__: return
 # self.__bases__'', and a __getattr__ that manufactures two fresh classes per

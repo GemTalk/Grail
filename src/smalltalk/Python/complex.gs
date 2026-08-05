@@ -331,10 +331,39 @@ __hash__
 category: 'Grail-String Representation'
 method: complex
 __format__: formatSpec
-	"Format the complex number according to format specification.
-	For now, just return __repr__ - full format spec support is complex."
+	"CPython's format_complex_internal.  Three cases, and the distinction the
+	old stub (``^ self __repr__'') lost is the presentation TYPE:
 
-	^ self __repr__
+	  * empty spec        -> str(self), parens and all;
+	  * spec with NO type -> str(self) is the BODY, then fill/align/width apply,
+	    so ``format(1+2j, '_>8')'' is ``__(1+2j)'' and ``format(0j, '_<4')'' is
+	    ``0j__'' (str already drops the +0.0 real part);
+	  * spec WITH a type  -> real and imaginary parts are formatted SEPARATELY
+	    with that type and NO parens, the imaginary part always carrying a sign,
+	    then ``j'' -- ``format(complex(1.2), '.3f')'' is ``1.200+0.000j''.
+
+	The width applies to the WHOLE result, never to the parts, which is why the
+	parts are formatted with the type/precision only and padding is applied once
+	at the end."
+
+	| b p type parts fill align width body |
+	(formatSpec @env0:isNil or: [formatSpec @env0:isEmpty]) ifTrue: [^ self __str__].
+	b := builtins instance.
+	p := b ___parseFormatSpec___: formatSpec typeName: 'complex'.
+	fill := p @env0:at: 1.
+	align := p @env0:at: 2.
+	width := p @env0:at: 5.
+	type := p @env0:at: 8.
+	type @env0:isNil
+		ifTrue: [body := self __str__ @env0:asString]
+		ifFalse: [
+			"Strip fill/align/width for the PART specs -- keep sign/#/grouping/
+			precision/type.  The imaginary part is forced to carry its sign."
+			parts := b ___formatComplexParts___: self parsed: p.
+			body := parts].
+	align @env0:isNil ifTrue: [align := $<].
+	^ (b ___formatPadBody___: body fill: fill align: align width: width signLength: 0)
+		@env0:asUnicodeString
 %
 
 category: 'Grail-Comparison'

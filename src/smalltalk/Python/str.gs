@@ -496,7 +496,19 @@ __mod__: args
 					[i @env0:<= n @env0:and: [(src @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
 						precision := (precision @env0:* 10) @env0:+ (src @env0:at: i) @env0:digitValue.
 						i := i @env0:+ 1 ]
-				]
+				].
+				"CPython keeps the precision in a C int and validates it; Grail's is
+				an arbitrary-precision Integer, so ``'%.*d' % (sys.maxsize, 1)''
+				went on to build a sys.maxsize-digit result and hung or died on an
+				UNCATCHABLE NumericError -- which is why that test was skip-listed.
+
+				OverflowError, NOT ValueError: the %-format path and the
+				format-spec path disagree in CPython, and test_format pins both.
+				test_common_format passes ``overflowok=True'' and its helper catches
+				only OverflowError, while test_precision's format(f, '.<huge>f')
+				wants ValueError (raised by the format-spec engine)."
+				(precision @env0:notNil @env0:and: [precision @env0:> 2147483647])
+					ifTrue: [OverflowError ___signal___: 'precision too large']
 			].
 			"Skip C length modifiers (h l L) -- Python ignores them."
 			[i @env0:<= n @env0:and: [ | c |

@@ -601,7 +601,14 @@ __mod__: args
 					precision := 0.
 					[i @env0:<= n @env0:and: [ | c | c := fmt @env0:at: i. (c @env0:>= 48) @env0:and: [c @env0:<= 57]]]
 						@env0:whileTrue: [
-							precision := (precision @env0:* 10) @env0:+ ((fmt @env0:at: i) @env0:- 48). i := i @env0:+ 1 ]]].
+							precision := (precision @env0:* 10) @env0:+ ((fmt @env0:at: i) @env0:- 48). i := i @env0:+ 1 ]].
+				"Same cap as str's %-format: an arbitrary-precision Integer here made
+				``b'%.*d' % (sys.maxsize, 1)'' try to build a sys.maxsize-digit result
+				and HANG the session.  bytes has its own %-engine, so capping str's
+				alone just moved the hang -- test_format's testcommon exercises str,
+				bytes AND bytearray with the same format string."
+				(precision @env0:notNil @env0:and: [precision @env0:> 2147483647])
+					ifTrue: [OverflowError ___signal___: 'precision too large']].
 			"skip C length modifiers h l L (104 108 76)"
 			[i @env0:<= n @env0:and: [ | c | c := fmt @env0:at: i.
 				(c @env0:= 104) @env0:or: [(c @env0:= 108) @env0:or: [c @env0:= 76]] ]]
