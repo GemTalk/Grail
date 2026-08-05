@@ -58,7 +58,7 @@ different rows and merges cleanly.
 | test.test_isinstance | ERROR | 23 | 1 | 13 | 2 |  |
 | test.test_index | OK | 55 | 0 | 0 | 0 |  |
 | test.test_baseexception | ERROR | 11 | 1 | 7 | 0 |  |
-| test.test_listcomps | ERROR | 60 | 6 | 27 | 0 |  |
+| test.test_listcomps | ERROR | 60 | 8 | 23 | 0 | outermost-iterable scope fixed; remainder = NameAst/exec name-res, cells/super/__class__, frames, code objects |
 | test.test_property | ERROR | 31 | 18 | 8 | 0 |  |
 | test.test_copy | ERROR | 81 | 28 | 15 | 0 |  |
 | test.test_scope | ERROR | 41 | 6 | 9 | 0 |  |
