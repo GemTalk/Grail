@@ -1240,6 +1240,15 @@ ___emitQualnameOn___: aStream name: aName
 	still closer than the bare name, and one level is what the corpus asks for."
 
 	| qualified |
+	"__module__ first, and unconditionally: a closure otherwise answers the
+	``<closure>'' placeholder, because a module-level def gets its module by
+	forwarding to the receiving module and a block has no receiver to forward
+	to.  Pickling a callable by reference needs it alongside the qualname."
+	CallAst moduleNameBeingCompiled ifNotNil: [:modName |
+		aStream
+			nextPutAll: '; @env0:___pyModuleNamed___: ''';
+			nextPutAll: modName asString;
+			nextPutAll: ''''].
 	qualified := self ___qualifiedNameFor___: aName.
 	qualified = aName asString ifTrue: [^ self].
 	aStream

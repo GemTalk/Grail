@@ -362,3 +362,25 @@ testSingleDispatchMethodSignature
 		'(cls, item, arg: int) -> str'
 		'(item, arg: int) -> str' ).
 %
+
+category: 'Grail-Tests - Metadata'
+method: FunctionMetadataTestCase
+testConditionalClassBodyDefMetadata
+	"A def written under an ``if'' in a class body compiles to a CLOSURE rather
+	than a method, and must still report the module and qualified name an
+	unconditional one does -- and so pickle by reference to the same object.
+
+	A closure has no receiver to forward __module__ to (a module-level def is a
+	BoundMethod and gets its module that way), so without a def-site stamp it
+	answered the placeholder ``<closure>'' and pickle could not resolve it.
+	test_functools' TestLRUC defines its members under ``if c_functools:'',
+	which is why only that variant of test_pickle failed while TestLRUPy's
+	passed."
+
+	self assert: self loadFixture @env1:conditional_classbody_def_metadata asArray
+		equals: #(
+			'True'
+			'ConditionalBody.cached_meth'
+			'PlainBody.cached_meth'
+			'True' ).
+%

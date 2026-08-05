@@ -538,6 +538,10 @@ ___buildModuleClass: moduleAst name: moduleName
 	`add(...)` are intercepted by CallAst's bare-call dispatcher
 	separately and rewritten to ``self add:'' self-sends."
 	CallAst moduleClassBeingCompiled: moduleClass.
+	"The Python module NAME as well: FunctionDefAst stamps it onto a closure's
+	__module__, which a closure cannot otherwise know.  The class's Smalltalk
+	name is mangled from the dotted Python one, so the class alone will not do."
+	CallAst moduleNameBeingCompiled: moduleName.
 	CallAst moduleFunctionNames: functionNames.
 	CallAst moduleVariableNames: variables.
 	[
@@ -677,6 +681,7 @@ ___buildModuleClass: moduleAst name: moduleName
 		].
 	] ensure: [
 		CallAst moduleClassBeingCompiled: nil.
+		CallAst moduleNameBeingCompiled: nil.
 		CallAst moduleFunctionNames: nil.
 		CallAst moduleVariableNames: nil.
 	].
