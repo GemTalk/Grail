@@ -236,6 +236,51 @@ ___grailGnvStaticFor: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailStoredGnvFor: cls
+	"The PyStaticMethod for cls's functional _generate_next_value_, found by
+	walking the superclass chain.  A functional enum stores its gnv keyed by the
+	class that DEFINED it (``ReprEnum('enum_type', {'_generate_next_value_':fn},
+	type=date)''), but a SUBCLASS built off it (``enum_type('MainEnum', dict(
+	first=auto(), ...))'') inherits the gnv and must resolve it for auto()
+	numbering.  nil when neither cls nor any ancestor carries a stored gnv."
+
+	| walker sm |
+	walker := cls.
+	[walker ~~ nil] @env0:whileTrue: [
+		sm := self ___grailGnvStaticFor: walker.
+		sm @env0:notNil ifTrue: [^ sm].
+		walker := walker @env0:superclass].
+	^ nil
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailStoredGnvInvocable: sm
+	"True when a stored functional gnv (a PyStaticMethod) can actually be
+	invoked staticmethod-style -- name as the FIRST positional arg, no self.
+	CPython treats every _generate_next_value_ as a staticmethod, but Grail's
+	class-body codegen represents a plain-def sibling referenced as a value as
+	a receiver-LESS BoundMethod whose call protocol POPS positional[1] (the
+	name) as the receiver -- so ``fn(name, start, count, last_values)'' loses
+	an argument and dispatches the wrong class (the name string).  A
+	@staticmethod def instead compiles class-side and is referenced as a
+	BoundMethod BOUND to the class (receiver ~~ nil), which invokes correctly;
+	a method-local / module-level def is an ExecBlock, which also invokes
+	directly.  Only the receiver-less BoundMethod is unusable -- treat those as
+	``no gnv'' so the enum falls back to default auto numbering (its prior
+	behaviour) rather than crashing the build."
+
+	| f |
+	f := sm @env0:dynamicInstVarAt: #'__func__'.
+	[f isKindOf: PyStaticMethod] @env0:whileTrue: [
+		f := f @env0:dynamicInstVarAt: #'__func__'].
+	^ (f isKindOf: BoundMethod)
+		ifTrue: [f @env0:receiver @env0:notNil]
+		ifFalse: [true]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailGlobalEnumMap
 	"Per-SESSION map: enum class -> its SHORT module name, for classes decorated
 	``@enum.global_enum'' (or built via ``_convert_(..., as_global=True)'').  CPython
@@ -1444,10 +1489,18 @@ ___grailClassHasGnv: cls
 	Str/ReprEnum class defines either, so a hit is always a user gnv.  Lets the
 	functional builder invoke the same gnv the class-syntax builder does."
 
-	^ (cls @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:'
-			environmentId: 1) @env0:notNil
-		or: [(cls @env0:class @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:_:'
-			environmentId: 1) @env0:notNil]
+	| sm |
+	(cls @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:'
+			environmentId: 1) @env0:notNil ifTrue: [^ true].
+	(cls @env0:class @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:_:'
+			environmentId: 1) @env0:notNil ifTrue: [^ true].
+	"A FUNCTIONAL gnv (Enum('et', {'_generate_next_value_':fn}, ...)) has no
+	compiled selector; it lives in the session gnv-static store, inherited by
+	subclasses.  Honour it only when the stored callable is actually invocable
+	staticmethod-style (see ___grailStoredGnvInvocable:) -- a receiver-less
+	plain-def BoundMethod is not, so those enums keep their default numbering."
+	sm := self ___grailStoredGnvFor: cls.
+	^ sm @env0:notNil and: [self ___grailStoredGnvInvocable: sm]
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1459,15 +1512,25 @@ ___grailGnvValueFor: cls name: nameStr count: count lastValues: lv
 	so one of the two selectors always resolves.  Mirrors the class-syntax
 	builder's invocation in ___grailBuildMembers:."
 
-	| gnvClass |
+	| gnvClass sm |
 	gnvClass := cls @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:'
 		environmentId: 1.
 	gnvClass @env0:notNil ifTrue: [
 		^ (UnboundMethod definingClass: gnvClass selector: #'_generate_next_value_')
 			value: { nameStr. 1. count. lv }
 			value: KeyValueDictionary @env0:new].
-	^ cls @env0:perform: #'_generate_next_value_:_:_:_:' env: 1
-		withArguments: { nameStr. 1. count. lv }
+	(cls @env0:class @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:_:'
+		environmentId: 1) @env0:notNil ifTrue: [
+		^ cls @env0:perform: #'_generate_next_value_:_:_:_:' env: 1
+			withArguments: { nameStr. 1. count. lv }].
+	"Functional gnv: invoke the stored staticmethod with the four positional
+	args (name, start=1, count, last_values) -- name is the FIRST arg, not a
+	receiver (PyStaticMethod>>value:value: does not bind).  ___grailClassHasGnv:
+	guarantees the stored callable is invocable before we get here."
+	sm := self ___grailStoredGnvFor: cls.
+	sm @env0:notNil ifTrue: [
+		^ sm value: { nameStr. 1. count. lv } value: nil].
+	^ nil
 %
 
 category: 'Grail-Enum Metaclass'
@@ -2079,10 +2142,19 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
-	[ | lastInt maxInt isFlag autoResolved foreignMixin |
+	[ | lastInt maxInt isFlag autoResolved foreignMixin hasGnv genVals |
 	lastInt := 0.
 	maxInt := 0.
 	isFlag := self ___grailIsFlagClass: newCls.
+	"An inherited user _generate_next_value_ (a functional gnv stored in the
+	session gnv-static store, as in ``ReprEnum('enum_type', {'_generate_next_
+	value_':fn}, type=date)'' subclassed by ``enum_type('MainEnum', dict(first=
+	auto(), ...))'') drives auto() numbering for the DICT/pairs member forms
+	below.  ___grailClassHasGnv: is false for a non-invocable (receiver-less
+	plain-def) gnv, so those keep default numbering.  genVals threads the
+	resolved member values as the gnv's last_values; count is members-so-far."
+	hasGnv := Enum ___grailClassHasGnv: newCls.
+	genVals := OrderedCollection @env0:new.
 	"A functional enum built on a foreign-mixin base (``class enum_type(date,
 	Enum)'' then enum_type('MinorEnum', (('june', (2021,12,25)), ...))) carries
 	member_type(*args) as each value, like the class-syntax builder.  nil for a
@@ -2116,13 +2188,16 @@ ___grailFunctional: cls positional: positional keywords: keywords
 			(autoResolved @env0:includesKey: rawValue)
 				ifTrue: [rawValue := autoResolved @env0:at: rawValue]
 				ifFalse: [ | resolved |
-					resolved := (Enum ___grailIsStrEnumClass: newCls)
-						ifTrue: [nameStr @env0:asLowercase]
-						ifFalse: [isFlag
-							ifTrue: [maxInt @env0:<= 0
-								ifTrue: [1]
-								ifFalse: [1 @env0:bitShift: maxInt @env0:highBit]]
-							ifFalse: [lastInt @env0:+ 1]].
+					resolved := hasGnv
+						ifTrue: [Enum ___grailGnvValueFor: newCls name: nameStr
+							count: members @env0:size lastValues: (list @env0:withAll: genVals)]
+						ifFalse: [(Enum ___grailIsStrEnumClass: newCls)
+							ifTrue: [nameStr @env0:asLowercase]
+							ifFalse: [isFlag
+								ifTrue: [maxInt @env0:<= 0
+									ifTrue: [1]
+									ifFalse: [1 @env0:bitShift: maxInt @env0:highBit]]
+								ifFalse: [lastInt @env0:+ 1]]].
 					autoResolved @env0:at: rawValue put: resolved.
 					rawValue := resolved]].
 		(rawValue isKindOf: Integer) ifTrue: [
@@ -2150,6 +2225,10 @@ ___grailFunctional: cls positional: positional keywords: keywords
 						Enum ___grailStoreOverride: newCls name: nameStr callable: rawValue.
 						Enum ___grailCompileOverrideForwarder: newCls name: nameStr])]
 			ifFalse: [
+			"Thread this member's value as a prior last_value for the next auto()'s
+			gnv (the class-syntax builder does the same); a gnv that ignores
+			last_values (the date/float fixtures return values[count]) is unaffected."
+			genVals @env0:add: rawValue.
 			(byValue @env0:includesKey: effVal)
 				ifTrue: [member := byValue @env0:at: effVal]
 				ifFalse: [ | canonical |
