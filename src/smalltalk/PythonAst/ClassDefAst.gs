@@ -1229,6 +1229,23 @@ printSmalltalkRuntimeOn: aStream
 		separatedBy: [aStream nextPutAll: '. '].
 	aStream nextPutAll: ' }.'; lf.
 
+	"CLASS KEYWORD ``boundary='': a Flag/IntFlag may override its family-default
+	FlagBoundary (STRICT for Flag, KEEP for IntFlag) with
+	``class E(Flag, boundary=CONFORM)''.  Emit a store onto the freshly-built
+	class -- AFTER the metaclass hook (members exist) but BEFORE decorators, the
+	same order CPython's EnumType.__new__ sets _boundary_ in.  The value
+	expression (``enum.KEEP'' / ``CONFORM'') is evaluated in THIS enclosing scope,
+	where those names resolve, exactly like a decorator.  Only enum metaclasses
+	answer ___grailSetClassBoundary___:, so this is emitted solely for a
+	``boundary'' keyword (never metaclass= et al.)."
+	keywords notNil ifTrue: [
+		keywords do: [:kw |
+			(kw name notNil and: [kw name asString = 'boundary']) ifTrue: [
+				aStream nextPutAll: name;
+					nextPutAll: ' @env1:___grailSetClassBoundary___: ('.
+				kw value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: ').'; lf]]].
+
 	"Apply class decorators bottom-up.  Python's ``@A @B class C:``
 	rebinds C to ``A(B(C))`` — the decorator closest to the class
 	(B, last in source order) runs first, then its result is passed
