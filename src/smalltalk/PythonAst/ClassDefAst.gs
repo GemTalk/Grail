@@ -1222,6 +1222,74 @@ printSmalltalkRuntimeOn: aStream
 				className: name
 				siblingNames: siblings]].
 
+	"``b = a'' where ``a'' is a sibling DEF must see the DECORATED def.  CPython
+	guarantees it by applying a decorator at the def statement, so by the time
+	the assignment runs ``a'' is already the decorated object.  Grail emits
+	attribute VALUES in an earlier phase than method decorators, so such an
+	alias captured the undecorated method -- ``b'' answered an UnboundMethod
+	where ``a'' answered a functools.cached_property.
+
+	Re-point the alias now that the decorators have run, and BEFORE the
+	__set_name__ hook below, because being bound to two names is something the
+	descriptor is entitled to object to: cached_property raises
+	``Cannot assign the same cached_property to two different names'', which it
+	can only do if both names actually hold it.
+
+	Scoped to a BARE sibling-def name.  Any other RHS -- a call, a subscript, a
+	module-level name -- keeps its original single evaluation, so this cannot
+	re-run an expression with side effects.
+
+	Read through ___pyAttrLoad___ rather than as a bare send: the decorator
+	stores its result over the compiled method in the per-class attribute
+	store, and a plain ``Cls name'' send looks for a compiled metaclass method
+	that is not there."
+	classAttrs do: [:pair |
+		(pair value notNil
+			and: [(pair value isKindOf: NameAst)
+			and: [siblings includes: pair value id asSymbol]]) ifTrue: [
+				aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key;
+					nextPutAll: ': ('; nextPutAll: name;
+					nextPutAll: ' @env1:___pyAttrLoad___: #''';
+					nextPutAll: pair value id asString; nextPutAll: ''').'; lf]].
+
+	"Declaration order of EVERY class-body binding -- defs and assignments
+	alike -- for the __set_name__ walk.
+
+	The hook below is passed the class ATTRIBUTE names only, and that is
+	deliberate: a metaclass such as ``Enum class'' turns exactly those into
+	members, so adding def names there would make members of methods.  But
+	__set_name__ must visit in true declaration order, and a decorated def is a
+	binding too: with attribute names first and the unordered holder second, a
+	descriptor bound to a decorated def AND a later alias reported its two names
+	backwards -- ``('b' and 'a')'' where CPython says ``('a' and 'b')''.
+
+	Emitted as a separate class-side method so the hook's own argument, and
+	therefore Enum, is untouched.  Object >> ___invokeSetNameHooks___: consults
+	it when present and falls back to the old two-store walk when it is not."
+	[:orderNames |
+	body body do: [:stmt |
+		(stmt isKindOf: FunctionDefAst) ifTrue: [
+			(orderNames includes: stmt name asSymbol)
+				ifFalse: [orderNames add: stmt name asSymbol]].
+		((stmt isKindOf: AssignAst) or: [stmt isKindOf: AnnAssignAst]) ifTrue: [
+			(stmt ___boundTargetNames___) do: [:nm |
+				(orderNames includes: nm) ifFalse: [orderNames add: nm]]]].
+	orderNames isEmpty ifFalse: [
+		| src |
+		src := WriteStream on: String new.
+		src nextPutAll: '___classBodyOrder___'; lf.
+		src nextPutAll: '	^ #('.
+		orderNames do: [:nm |
+			src nextPutAll: ' #'''; nextPutAll: nm asString; nextPut: $'].
+		src nextPutAll: ' )'.
+		self
+			emitCompileMethodOn: name
+			source: src contents
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream]] value: OrderedCollection new.
+
 	"Metaclass post-population hook.  Send a class-side
 	``___pyClassDefined___:`` to the freshly-populated class with its
 	class-body attribute names (declaration order).  Dispatched through
@@ -1918,7 +1986,15 @@ ___classBodyMethodAliases___
 	| defsByName aliases |
 	defsByName := IdentityDictionary new.
 	self instanceMethodDefs do: [:d |
-		d compilesAsVarargs ifFalse: [defsByName at: d name asSymbol put: d]].
+		"A DECORATED def is not a plain method at runtime -- the decorator
+		replaces it with an object, and ``b = a'' must bind THAT object, which is
+		what CPython does because the decorator has already run by then.  A
+		delegating method would call the undecorated compiled method instead, so
+		``b'' answered an UnboundMethod where ``a'' answered a
+		functools.cached_property.  Left on the class-attribute path, where the
+		alias is re-pointed after the decorators run."
+		(d compilesAsVarargs not and: [d applicableMethodDecorators isEmpty])
+			ifTrue: [defsByName at: d name asSymbol put: d]].
 	aliases := OrderedCollection new.
 	body body do: [:stmt |
 		((stmt isKindOf: AssignAst)

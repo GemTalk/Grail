@@ -545,7 +545,30 @@ ___invokeSetNameHooks___: attrNames
 	Answers self: ___pyClassDefined___:'s contract is to return the class the
 	def statement binds."
 
-	| holder |
+	| holder ordered |
+	"True DECLARATION order when ClassDefAst recorded it: defs and assignments
+	interleaved as written.  The two-store walk below cannot reconstruct that --
+	attrNames holds only the assignments, and the holder is unordered -- so a
+	descriptor bound to a decorated def AND a later alias reported its two names
+	backwards.  cached_property names both in its error, and CPython's order is
+	the source order."
+	ordered := ((self @env0:class @env0:whichClassIncludesSelector:
+		#'___classBodyOrder___' environmentId: 1) ~~ nil)
+			ifTrue: [self ___classBodyOrder___]
+			ifFalse: [nil].
+	ordered == nil ifFalse: [
+		holder := (self ___respondsTo___: #dynInstVars)
+			ifTrue: [self @env0:perform: #dynInstVars env: 1]
+			ifFalse: [nil].
+		ordered @env0:do: [:sym |
+			| v |
+			v := self ___classBodyValueAt___: sym.
+			(v == nil
+				and: [holder @env0:notNil
+				and: [(holder @env0:dynamicInstanceVariables) @env0:includes: sym]])
+					ifTrue: [v := holder @env0:dynamicInstVarAt: sym].
+			self ___setNameOn___: v named: sym].
+		^ self].
 	attrNames == nil ifFalse: [
 		attrNames @env0:do: [:nm |
 			| sym |
