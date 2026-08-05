@@ -174,7 +174,7 @@ hello
 		hello := function value: { 'python.hello' } value: nil.
 		^hello
 	] on: AbstractException do: [:ex |
-		ex halt.
+		self pause "signal Halt to the GCI debugger"
 	].
 %
 
