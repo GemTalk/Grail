@@ -1515,8 +1515,16 @@ ___classCell___: aSym
 	inherit the cells.  An absent cell, or a cell whose local is still
 	unbound (Smalltalk nil), is a NameError."
 
-	| blk v |
+	| blk v meta |
 	blk := self ___dynamicClassAttr___: aSym.
+	"A metaclass method invoked with the USING class as self: ``isinstance(other,
+	M)'' inside M's own method reads a cell stored on M, but self is the class
+	that named M as its metaclass and M is not in its chain -- Grail records a
+	metaclass rather than making the class an instance of it.  Fall back to the
+	recorded metaclass's chain, which is where that cell lives."
+	blk @env0:isNil ifTrue: [
+		meta := self ___grailMetaclass___.
+		meta == nil ifFalse: [blk := meta ___dynamicClassAttr___: aSym]].
 	v := blk @env0:isNil ifTrue: [nil] ifFalse: [blk @env0:value].
 	v == nil ifTrue: [
 		NameError ___signal___: ('free variable '''
@@ -3095,6 +3103,10 @@ __ge__: other
 	| r |
 	r := self ___classAttrCmp___: #'__ge__' with: other.
 	r == nil ifFalse: [^ r].
+	"...then this class's recorded metaclass: Python looks an operator up on the
+	operand's TYPE, and for a class that is its metaclass."
+	r := self ___grailMetaclassCmp___: #'__ge__' with: other.
+	r == nil ifFalse: [^ r].
 	"Python protocol: no default ordering -- try the reflected
 	operation, else raise the catchable TypeError."
 	^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'
@@ -3134,6 +3146,10 @@ __gt__: other
 
 	| r |
 	r := self ___classAttrCmp___: #'__gt__' with: other.
+	r == nil ifFalse: [^ r].
+	"...then this class's recorded metaclass: Python looks an operator up on the
+	operand's TYPE, and for a class that is its metaclass."
+	r := self ___grailMetaclassCmp___: #'__gt__' with: other.
 	r == nil ifFalse: [^ r].
 	"Python protocol: no default ordering -- try the reflected
 	operation, else raise the catchable TypeError."
@@ -3206,6 +3222,10 @@ __le__: other
 
 	| r |
 	r := self ___classAttrCmp___: #'__le__' with: other.
+	r == nil ifFalse: [^ r].
+	"...then this class's recorded metaclass: Python looks an operator up on the
+	operand's TYPE, and for a class that is its metaclass."
+	r := self ___grailMetaclassCmp___: #'__le__' with: other.
 	r == nil ifFalse: [^ r].
 	"Python protocol: no default ordering -- try the reflected
 	operation, else raise the catchable TypeError."
@@ -3661,6 +3681,72 @@ ___classAttrCmp___: baseSym with: other
 	^ r
 %
 
+category: 'Grail-Metaclass'
+method: object
+___grailMetaclass___
+	"The ``metaclass='' recorded for this class, or nil.  SESSION-LOCAL and keyed
+	by class: a Class cannot hold dynamic instVars (ImproperOperation 2484)."
+
+	| tbl |
+	(self isKindOf: Behavior) ifFalse: [^ nil].
+	tbl := SessionTemps @env0:current @env0:at: #'GrailClassMetaclass' otherwise: nil.
+	tbl == nil ifTrue: [^ nil].
+	^ tbl @env0:at: self otherwise: nil
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailSetMetaclass___: aMetaclass
+	"Record a ``class C(metaclass=M)'' keyword.  A RECORD, not a construction:
+	builtins >> type: answers the single canonical ``type'' BoundMethod as any
+	class's metaclass, so there is no metaclass object and class creation has
+	nowhere to route.  What it buys is that a metaclass-defined comparison can be
+	found for ``A < B'' -- functools.total_ordering's metaclass case."
+
+	| tbl |
+	((aMetaclass isKindOf: Behavior) and: [self isKindOf: Behavior]) ifFalse: [^ self].
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailClassMetaclass'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	tbl @env0:at: self put: aMetaclass.
+	^ self
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailMetaclassCmp___: baseSym with: other
+	"An ordering dunder defined by this class's recorded METACLASS.  Python looks
+	an operator up on the operand's type, and for ``class A(metaclass=M)'' that is
+	M, so ``A < B'' runs M.__lt__(A, B).
+
+	Mirrors ___classAttrCmp___ deliberately, INCLUDING the invocation:
+	``___pyCallValue___'' on the handle, not UnboundMethod >> value:value:.  The
+	latter goes through performMethod: primitives and raised UncontinuableError
+	2758 (``return ... would cross frame of C primitive'') from inside a
+	comparison, where this path's own Python call is already safe.
+
+	Two shapes to find: a compiled ``def __lt__'' on the metaclass, and an
+	attribute one -- total_ordering SYNTHESISES the derived operators as
+	attributes, which is exactly the case this exists for.  The attribute lives
+	ON the metaclass, so the lookup is ___classChainAttrLookup___ rather than
+	___classAttrDunder___, which would ask the metaclass's own metaclass."
+
+	| meta fn r |
+	meta := self ___grailMetaclass___.
+	meta == nil ifTrue: [^ nil].
+	fn := meta ___classChainAttrLookup___: baseSym.
+	fn == nil ifTrue: [fn := meta ___classAttrDunder___: baseSym].
+	fn == nil ifTrue: [
+		(meta @env0:whichClassIncludesSelector:
+			(baseSym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1)
+				== nil ifTrue: [^ nil].
+		fn := UnboundMethod definingClass: meta selector: baseSym].
+	r := fn ___pyCallValue___: { self. other } kw: nil.
+	(r == (Python @env0:at: #NotImplemented otherwise: nil)
+		or: [r @env0:== #'___NotImplemented___']) ifTrue: [^ nil].
+	^ r
+%
+
 category: 'Grail-Comparison'
 method: object
 ___cmpFallback___: other op: opString reflected: refSelector
@@ -3746,6 +3832,10 @@ __lt__: other
 
 	| r |
 	r := self ___classAttrCmp___: #'__lt__' with: other.
+	r == nil ifFalse: [^ r].
+	"...then this class's recorded metaclass: Python looks an operator up on the
+	operand's TYPE, and for a class that is its metaclass."
+	r := self ___grailMetaclassCmp___: #'__lt__' with: other.
 	r == nil ifFalse: [^ r].
 	"Python protocol: no default ordering -- try the reflected
 	operation, else raise the catchable TypeError."

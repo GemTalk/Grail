@@ -2022,7 +2022,17 @@ ___callRoot___: root on: slf with: other
 	(owner @env0:~~ nil and: [owner @env0:~~ object]) ifTrue: [
 		^ slf @env0:perform: rootSel env: 1 withArguments: { other }].
 	fn := slf ___classAttrDunder___: root.
-	fn @env0:== nil ifTrue: [^ Python @env0:at: #NotImplemented otherwise: nil].
+	fn @env0:== nil ifTrue: [
+		"A CLASS operand whose root lives on its recorded ``metaclass=''.  The
+		probe above asks slf's own class chain, which for a class is its
+		SMALLTALK metaclass -- the Python metaclass is not in that chain, because
+		Grail records it rather than building the class through it.  Without this
+		the root punted and every DERIVED operator punted with it: ``A < B''
+		worked while ``A > B'' raised, which is total_ordering's metaclass case."
+		| viaMeta |
+		viaMeta := slf ___grailMetaclassCmp___: root with: other.
+		viaMeta @env0:== nil ifFalse: [^ viaMeta].
+		^ Python @env0:at: #NotImplemented otherwise: nil].
 	^ fn ___pyCallValue___: { slf. other } kw: nil
 %
 

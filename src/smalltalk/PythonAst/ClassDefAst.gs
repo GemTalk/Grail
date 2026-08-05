@@ -1333,6 +1333,14 @@ printSmalltalkRuntimeOn: aStream
 				aStream nextPutAll: name;
 					nextPutAll: ' @env1:___grailSetClassBoundary___: ('.
 				kw value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: ').'; lf].
+			"CLASS KEYWORD ``metaclass='': record it, so a metaclass-defined
+			comparison can be found for ``A < B''.  See object >>
+			___grailSetMetaclass___ for why it is a record, not a construction."
+			(kw name notNil and: [kw name asString = 'metaclass']) ifTrue: [
+				aStream nextPutAll: name;
+					nextPutAll: ' @env1:___grailSetMetaclass___: ('.
+				kw value printSmalltalkWithParenthesisOn: aStream.
 				aStream nextPutAll: ').'; lf]]].
 
 	"Apply class decorators bottom-up.  Python's ``@A @B class C:``
@@ -1517,6 +1525,16 @@ printSuperclassOn: aStream
 		``ClientBase(object)`` wrapped its @property getters as
 		BoundMethods instead of invoking them)."
 		((only isKindOf: NameAst) and: [only id asString = 'object'])
+			ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
+		"``class M(type):'' -- a metaclass.  Grail has no metaclass OBJECT to
+		subclass: builtins >> type: answers the single canonical ``type''
+		BoundMethod for any class, and no class is bound to the NAME, so the bare
+		name raised NameError and the definition never ran at all.  Root it at
+		PythonInstance, exactly as ``object'' is rooted.  That does not make it a
+		working metaclass -- Grail RECORDS a metaclass rather than routing class
+		creation through one -- but it makes the class exist with its methods,
+		which is what a metaclass-defined comparison needs."
+		((only isKindOf: NameAst) and: [only id asString = 'type'])
 			ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
 		"``class X(str):`` subclasses Unicode32, not the Unicode7 that the
 		name ``str'' resolves to.  GemStone migrates a Unicode string to
