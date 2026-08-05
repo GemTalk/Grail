@@ -2585,18 +2585,37 @@ __dir__
 	"dir(EnumClass) -- CPython EnumType.__dir__.  Built to mirror test_enum's
 	``enum_dir'' helper EXACTLY, so ``dir(cls) == enum_dir(cls)'' holds by
 	construction (both read the same _member_names_/_member_type_): a fixed set
-	of dunders + the canonical member names, always with __new__ and
-	__init_subclass__ (every BoundMethod access is a fresh object in Grail, so
-	enum_dir's ``_new_member_ is not object.__new__'' / ``__init_subclass__ is
-	not object.__init_subclass__'' are always true -- see the identity note), and
-	for a data-mixed enum unioned with dir(member_type)."
+	of dunders + the canonical member names, __init_subclass__ always, __new__
+	only when this enum does not construct members with object's, and for a
+	data-mixed enum unioned with dir(member_type).
+
+	__new__ used to be added unconditionally, reasoning that enum_dir's
+	``cls._new_member_ is not object.__new__'' was always true because every
+	method access minted a fresh handle.  Handles are now interned per (class,
+	selector), so that test answers honestly: a PLAIN enum's _new_member_ IS
+	object.__new__, enum_dir omits __new__, and adding it here made dir(cls) a
+	strict superset.
+
+	The condition is spelled with _member_type_ rather than by comparing
+	_new_member_ to object.__new__ directly.  It is the same question -- an enum
+	constructs with something other than object.__new__ exactly when a data type
+	is mixed in -- and _member_type_ is the probe this method already relies on
+	just below, whereas reading _new_member_ from here raises.  A class that
+	defines its own __new__ without mixing in a type is covered by the second
+	clause.
+
+	__init_subclass__ stays unconditional because it genuinely differs for every
+	enum: Enum supplies its own, so enum_dir's identity test against object's is
+	false for plain and mixed alike (verified, not assumed)."
 
 	| interesting mt |
 	interesting := Set @env0:new.
 	#('__class__' '__contains__' '__doc__' '__getitem__' '__iter__' '__len__'
-	  '__members__' '__module__' '__name__' '__qualname__' '__new__'
-	  '__init_subclass__')
+	  '__members__' '__module__' '__name__' '__qualname__' '__init_subclass__')
 		@env0:do: [:d | interesting @env0:add: d].
+	((self _member_type_) ~~ object
+		or: [Enum ___grailUserProvides: self selector: #'__new__'])
+			ifTrue: [interesting @env0:add: '__new__'].
 	(Enum ___grailMembers: self) @env0:do: [:m |
 		interesting @env0:add: (m @env0:dynamicInstVarAt: #name) @env0:asString].
 	"CPython EnumType.__dir__ ALSO surfaces __init__/__format__/__repr__/__str__

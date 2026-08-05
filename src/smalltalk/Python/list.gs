@@ -768,4 +768,25 @@ ___consumeSortMutation
 	^ true
 %
 
+category: 'Grail-Generics'
+classmethod: list
+__getitem__: item
+	"``list[int]'' -- a REAL types.GenericAlias, not Grail's usual collapse to
+	the class itself.
+
+	Grail inverts CPython's default and answers the class from Metaclass3,
+	because dozens of sites in the vendored frameworks subscript a class only to
+	use it as a BASE and want the subscript discarded.  Opting in means
+	overriding here, exactly as functools_partial does -- and it is safe to opt
+	in now that PEP 560's __mro_entries__ is applied where Grail resolves bases,
+	so ``class Foo(list[V]):'' still inherits from list.
+
+	The collapse was observable: ``list[int] is list'' was true, so
+	singledispatch's register() accepted a subscripted generic as a dispatch
+	class and silently registered the UNSUBSCRIPTED one -- CPython rejects it
+	(test_register_genericalias)."
+
+	^ PyGenericAlias ___fromSubscript___: item origin: self
+%
+
 set compile_env: 0

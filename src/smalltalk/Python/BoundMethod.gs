@@ -158,13 +158,60 @@ receiver: aReceiver selector: aSymbol
 	BoundMethod in SessionTemps.  The guard is a single identity compare on the
 	hot path; the lookup + intern only run for the #type selector."
 
-	| inst bcls |
-	(aSymbol @env0:== #'type') ifTrue: [
-		bcls := Python @env0:at: #builtins otherwise: nil.
-		(bcls @env0:notNil and: [aReceiver @env0:isKindOf: bcls])
-			ifTrue: [^ self ___internTypeSingleton: aReceiver]].
+	| inst |
+	"A MODULE or CLASS receiver is interned per (receiver, selector), so
+	``min is min'' and ``builtins.len is builtins.len'' hold.  CPython's
+	builtins are single objects living in the builtins module, and callers
+	compare them with ``is'': functools' test_subclass_optimization asserts
+	``partial(partial(min, 2), 1).func is min'', and pickle can only save a
+	callable by reference if the name resolves back to the same object.
+
+	An INSTANCE receiver is deliberately NOT interned.  CPython creates a fresh
+	bound method per attribute read, so ``obj.meth is obj.meth'' is False there
+	too -- caching would be the wrong answer as well as unbounded, since the key
+	would retain every receiver ever asked for a method.  Modules and classes
+	are finite and long-lived, so interning those is bounded.
+
+	This generalises what used to be a special case for ``type'' alone (needed
+	so ``type is type'' held); the singleton helper now routes through here."
+
+	(self ___internsReceiver___: aReceiver) ifTrue: [
+		^ self ___internedFor___: aReceiver selector: aSymbol].
 	inst := self @env0:new.
 	inst @env0:_setReceiver: aReceiver selector: aSymbol.
+	^ inst
+%
+
+category: 'Grail-Instance creation'
+classmethod: BoundMethod
+___internsReceiver___: aReceiver
+	"Is aReceiver one of the identity-stable kinds -- a module instance or a
+	class?  Those are the receivers whose attribute reads CPython answers with
+	one object per name."
+
+	| mcls |
+	(aReceiver @env0:isKindOf: Behavior) ifTrue: [^ true].
+	mcls := Python @env0:at: #module otherwise: nil.
+	^ mcls @env0:notNil and: [aReceiver @env0:isKindOf: mcls]
+%
+
+category: 'Grail-Instance creation'
+classmethod: BoundMethod
+___internedFor___: aReceiver selector: aSymbol
+	"The session-cached handle for (aReceiver, aSymbol), minting it on first
+	ask.  Keyed by receiver IDENTITY: module instances are session-local, so a
+	fresh session re-mints rather than reviving a stale receiver."
+
+	| tbl per inst |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailBoundMethodCache'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	per := tbl @env0:at: aReceiver ifAbsentPut: [KeyValueDictionary @env0:new].
+	inst := per @env0:at: aSymbol otherwise: nil.
+	inst == nil ifFalse: [^ inst].
+	inst := self @env0:new.
+	inst @env0:_setReceiver: aReceiver selector: aSymbol.
+	per @env0:at: aSymbol put: inst.
 	^ inst
 %
 
@@ -617,13 +664,36 @@ ___methodAnnotationsForClass___: aClass name: aName
 category: 'Grail-Attribute Access'
 method: BoundMethod
 __qualname__
-	"Python's ``func.__qualname__'' — return the same string as
-	__name__ for now.  Real qualname encodes lexical nesting
-	(``OuterClass.method'') which Grail doesn't track on
-	BoundMethods, so the simpler name suffices for inspection
-	consumers that just want a printable identifier."
+	"Python's ``func.__qualname__''.
 
+	A CLASS receiver is a class-side method -- a @staticmethod or @classmethod --
+	and CPython qualifies it as ``Cls.name''.  Answering the bare name left it
+	unresolvable: pickle saves a callable by reference by walking its qualname
+	from the module, and ``cached_staticmeth'' is not a module attribute while
+	``Host.cached_staticmeth'' is.
+
+	Other receivers keep the bare name.  Grail does not track lexical nesting on
+	a BoundMethod, so a module-level function answers its own name (which is
+	what CPython gives it too) and a bound instance method answers the name
+	rather than ``Cls.meth''."
+
+	| n |
+	n := self __name__ @env0:asString.
+	(receiver @env0:isKindOf: Behavior) ifTrue: [
+		^ ((self ___receiverQualname___) @env0:, '.' @env0:, n) @env0:asUnicodeString].
 	^ self __name__
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___receiverQualname___
+	"The class receiver's own __qualname__, for prefixing a class-side method.
+	Falls back to the Smalltalk class name when the class carries no Python
+	qualname."
+
+	^ [(receiver __qualname__) @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: receiver @env0:name @env0:asString]
 %
 
 category: 'Grail-Attribute Access'
@@ -639,7 +709,25 @@ __module__
 
 	(receiver isKindOf: module) ifTrue: [
 		^ receiver @env1:___pyAttrLoad___: #'__name__'].
-	^ receiver @env0:class @env0:name @env0:asString
+	"A CLASS receiver is a class-side method (@staticmethod / @classmethod).
+	``receiver class name'' answered the METACLASS -- ``Host class'' -- which is
+	not a module at all, so pickle looked for a module by that name, failed, and
+	fell back to '__main__'.  The defining class knows its module; ask it."
+	(receiver @env0:isKindOf: Behavior) ifTrue: [
+		^ self ___moduleOfClass___: receiver].
+	"An instance receiver: the module that defined its class."
+	^ self ___moduleOfClass___: receiver @env0:class
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___moduleOfClass___: aClass
+	"aClass's Python __module__, falling back to the Smalltalk class name when
+	it has none (a kernel class reached as a receiver)."
+
+	^ [(aClass __module__) @env0:asString @env0:asUnicodeString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: aClass @env0:name @env0:asString]
 %
 
 set compile_env: 0

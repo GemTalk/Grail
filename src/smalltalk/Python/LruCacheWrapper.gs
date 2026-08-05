@@ -327,3 +327,31 @@ ___pythonValueAttrs___
 		add: #'__dict__';
 		yourself
 %
+
+set compile_env: 1
+
+category: 'Grail-Attribute Access'
+method: LruCacheWrapper
+___pyBindsSelf___
+	"Marker read by object >> ___isDescriptorCallable___:.  An lru_cache-wrapped
+	METHOD is a class attribute, and reading it off an instance has to bind that
+	instance -- CPython gets there because the wrapper is a plain function and so
+	a descriptor.
+
+	Without this, ``a.f(1)'' called the wrapper with just (1): the first argument
+	became the receiver, so the wrapped UnboundMethod was invoked with 1 as self
+	and raised ``descriptor 'f' for 'Plain' objects does not apply to a 'int'
+	object'' -- an error naming int for a class that has nothing to do with
+	integers.  ``Plain.f(a, 1)'' worked all along, which is what made it look
+	like an int-subclass problem rather than a missing binding.
+
+	Safe for the non-method uses.  A module-level ``@lru_cache def f()'' is not
+	a class attribute, so nothing consults this.  An lru-wrapped @staticmethod is
+	wrapped AGAIN by the staticmethod descriptor (decorators apply innermost
+	first), and that outer wrapper decides the binding, so a static one still
+	receives no receiver."
+
+	^ true
+%
+
+set compile_env: 0

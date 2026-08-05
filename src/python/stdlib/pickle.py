@@ -343,6 +343,24 @@ def whichmodule(obj, name):
     return '__main__'
 
 
+def _getattribute_dotted(obj, name):
+    """Resolve a possibly DOTTED qualname, walking one attribute per segment.
+
+    A method's __qualname__ is ``Cls.meth'', which no single getattr can
+    resolve, so a plain lookup failed and save_global gave up -- whereupon
+    save() fell back to __reduce__ and tried to pickle type(obj), a Grail
+    internal (UnboundMethod) that belongs to no Python module.  That is why the
+    reported error named ``<UnboundMethod class object>'' and a module
+    ``__main__'' nobody had asked for.
+
+    The unpickler already walks dotted names (see _resolve_global); this is the
+    matching half.
+    """
+    for part in name.split('.'):
+        obj = getattr(obj, part)
+    return obj
+
+
 def _find_global(obj):
     """Return (module_name, qualname) for a class / function / builtin."""
     known = _BUILTIN_BY_ID.get(id(obj))
@@ -369,7 +387,7 @@ def _find_global(obj):
         raise PicklingError("Can't pickle %r: module %r not found" % (obj, modname))
 
     try:
-        found = getattr(mod, name)
+        found = _getattribute_dotted(mod, name)
     except BaseException:
         # Grail stores a lower-case Python class under a capitalised Smalltalk
         # name in some cases; recover the real attribute by identity scan.

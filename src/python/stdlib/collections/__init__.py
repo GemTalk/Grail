@@ -1013,6 +1013,18 @@ class UserList:
         result.data = self.data * n
         return result
 
+    def __rmul__(self, n):
+        return self.__mul__(n)
+
+    def __imul__(self, n):
+        """``ul *= n`` mutates IN PLACE and answers self, as CPython's UserList
+        does.  Without it, ``*=`` fell back to __mul__ and rebound the name to a
+        new object, so ``id(ul)`` changed -- which list_tests' test_imul asserts
+        it must not.  That test passed only by luck, when the discarded object's
+        recycled identityHash happened to match the new one."""
+        self.data *= n
+        return self
+
     def append(self, item):
         self.data.append(item)
 

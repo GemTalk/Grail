@@ -1455,6 +1455,18 @@ inBasesEmit
 	^ self ___compileContext___ at: #'inBasesEmit' otherwise: nil
 %
 
+category: 'Grail-Compile Context'
+classmethod: CallAst
+inDecoratorEmit
+	"True while ClassDefAst emits a class DECORATOR expression (or the
+	``boundary'' keyword value).  Like inBasesEmit: those expressions are
+	emitted INLINE in the scope enclosing the class statement, where enclosing
+	temps are reachable, so NameAst's class-method closure-cell branch must not
+	hijack a bare name into a ___classCell___ read that was never stored."
+
+	^ self ___compileContext___ at: #'inDecoratorEmit' otherwise: nil
+%
+
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classDefIsModuleScope
@@ -1479,6 +1491,12 @@ category: 'Grail-Class Compile Context'
 classmethod: CallAst
 inBasesEmit: aBooleanOrNil
 	self ___compileContext___ at: #'inBasesEmit' put: aBooleanOrNil
+%
+
+category: 'Grail-Compile Context'
+classmethod: CallAst
+inDecoratorEmit: aBooleanOrNil
+	self ___compileContext___ at: #'inDecoratorEmit' put: aBooleanOrNil
 %
 
 category: 'Grail-Class Compile Context'

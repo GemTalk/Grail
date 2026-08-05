@@ -5,8 +5,10 @@
 # Registered under "unittest.mock" too, so both `import mock` and
 # `import unittest.mock` work.  Deviations from CPython, kept
 # deliberately small for V1:
-#   * MagicMock is an alias of Mock - no dunder magic (Grail dispatches
-#     dunders through the class, not instance attributes);
+#   * MagicMock is an alias of Mock, but a magic method CAN be configured
+#     (``m.__mul__ = Mock(return_value=15)``): Grail resolves dunders through
+#     the CLASS - as CPython does - so the assignment installs a forwarder on
+#     a class private to that one mock.  See _install_magic;
 #   * patch works as a context manager only (method @-decorators are
 #     dropped by Grail), and there is no spec/autospec/wraps;
 #   * call sites that Grail compiled as DIRECT module sends
@@ -84,7 +86,64 @@ def call(*args, **kw):
     return _Call(args, kw)
 
 
+# --- configurable magic methods ---------------------------------------------
+#
+# CPython lets a magic method be configured on a mock (``m.__mul__ =
+# Mock(return_value=15)``) and dispatch honours it.  Grail resolves dunders
+# through the CLASS, exactly as CPython does -- an instance attribute named
+# ``__mul__`` is ignored by ``*`` in both -- so the assignment has to reach a
+# class.
+#
+# CPython gives every mock its own subclass and installs the magic there; so does
+# this.  Isolation is the whole point: installing on the shared Mock class would
+# make one test's ``__mul__`` visible to every mock in the image.
+#
+# The class is built in __new__ rather than lazily on first magic assignment,
+# because ``__class__`` assignment cannot retrofit one -- Grail requires identical
+# object layout and refuses a freshly built subclass ("object layout differs from
+# 'Mock'").
+#
+# The installed method is a FORWARDER, not the configured value: it looks the
+# value up on the instance at call time, so re-assigning takes effect and the
+# configured mock records its own calls -- which is what ``m.__hash__.call_count``
+# asserts.
+
+_MAGIC_NAMES = frozenset([
+    "__add__", "__radd__", "__sub__", "__rsub__", "__mul__", "__rmul__",
+    "__truediv__", "__rtruediv__", "__floordiv__", "__rfloordiv__",
+    "__mod__", "__rmod__", "__divmod__", "__rdivmod__",
+    "__pow__", "__rpow__", "__matmul__", "__rmatmul__",
+    "__lshift__", "__rlshift__", "__rshift__", "__rrshift__",
+    "__and__", "__rand__", "__or__", "__ror__", "__xor__", "__rxor__",
+    "__neg__", "__pos__", "__abs__", "__invert__",
+    "__int__", "__float__", "__index__", "__round__", "__trunc__",
+    "__lt__", "__le__", "__gt__", "__ge__",
+    "__len__", "__contains__", "__getitem__", "__setitem__", "__delitem__",
+    "__iter__", "__next__", "__hash__", "__bool__", "__str__",
+    "__enter__", "__exit__",
+])
+
+
+def _make_magic_forwarder(name):
+    """A class-level method deferring to whatever the instance configured under
+    ``name``.  Raises TypeError when nothing is, which is what an unsupported
+    operand reports anyway."""
+
+    def magic(self, *args):
+        impl = self.__dict__.get(name)
+        if impl is None:
+            raise TypeError("%s has no %s configured"
+                            % (type(self).__name__, name))
+        return impl(*args)
+    return magic
+
+
 class Mock:
+    def __new__(cls, *args, **kw):
+        """Give every mock its own class, so a configured magic method reaches
+        only that mock.  See the note above for why this cannot be lazy."""
+        return object.__new__(type(cls.__name__, (cls,), {}))
+
     def __init__(self, return_value=DEFAULT, side_effect=None, name=None):
         self._mock_name = name
         self.side_effect = side_effect
@@ -95,6 +154,13 @@ class Mock:
         self.call_args = None
         if return_value is not DEFAULT:
             self.return_value = return_value
+
+    def __setattr__(self, name, value):
+        """Assigning a magic method installs a forwarder on this mock's own
+        class; every other name is an ordinary attribute."""
+        if name in _MAGIC_NAMES:
+            setattr(type(self), name, _make_magic_forwarder(name))
+        object.__setattr__(self, name, value)
 
     def __getattr__(self, name):
         if name.startswith("_") or name == "side_effect":

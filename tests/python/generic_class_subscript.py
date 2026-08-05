@@ -38,7 +38,10 @@ class GenericList(list[T]):
 
     @staticmethod
     def origin_is_list():
-        return list[T] is list
+        """``list`` now answers a REAL GenericAlias from a subscript, so the
+        thing to check is that the alias still resolves to list as a BASE --
+        PEP 560's __mro_entries__ -- not that the subscript collapsed."""
+        return list[T].__origin__ is list
 
 
 class GenericMap(dict[K, V]):
@@ -61,6 +64,12 @@ def map_subclass_works():
 
 
 def subscription_returns_self_for_use_as_alias():
-    """Bare subscription (not as a base) — used by typing /
-    type-annotation positions.  Grail collapses to the origin."""
-    return list[int] is list, dict[str, int] is dict
+    """Bare subscription, per-class.
+
+    ``list`` has opted IN to real parameterised generics, so ``list[int]`` is a
+    GenericAlias whose __origin__ is list -- CPython's answer, and what lets
+    singledispatch reject a subscripted generic instead of silently registering
+    the unsubscripted class.  ``dict`` has not opted in and still collapses,
+    which is the per-class model CPython itself uses.
+    """
+    return list[int].__origin__ is list, dict[str, int] is dict
