@@ -2344,6 +2344,20 @@ match_getindex(MatchObject* self, PyObject* index)
         i = -1;
 
         if (self->pattern->groupindex) {
+            /* GRAIL: named-group lookup is the one path that dereferences
+               groupindex, and it is where a whole-suite-in-one-session run
+               SIGSEGVed (see docs/Shim_Foreign_Proxy_Misattribution.md).
+               Reporting the three pointers BEFORE the call is what identified
+               the bad one -- the register dump alone was misleading.  Gated by
+               GRAIL_SHIM_DIAG; when it is the last line in a crash log, the
+               very next dereference is the fault. */
+            if (getenv("GRAIL_SHIM_DIAG")) {
+                fprintf(stderr, "SHIM-SRE match=%p pattern=%p groupindex=%p"
+                                " groups=%d\n",
+                        (void *)self, (void *)self->pattern,
+                        (void *)self->pattern->groupindex, (int)self->groups);
+                fflush(stderr);
+            }
             index = PyDict_GetItemWithError(self->pattern->groupindex, index);
             if (index && PyLong_Check(index)) {
                 i = PyLong_AsSsize_t(index);
