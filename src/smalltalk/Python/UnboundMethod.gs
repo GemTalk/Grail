@@ -106,6 +106,39 @@ definingClass: aClass selector: aSym
 	^ inst
 %
 
+category: 'Grail-Descriptor Protocol'
+method: UnboundMethod
+__get__: instance _: owner
+	"Function-descriptor binding.  In Python a plain function is a descriptor,
+	so lifting one off a class and storing it in ANOTHER class body produces an
+	ordinary method there:
+
+	    test_repr_deep = mapping_tests.TestHashMappingProtocol.test_repr_deep
+
+	is verbatim upstream in test_userdict, and CPython binds it on instance
+	access.  Grail read back the stored UnboundMethod itself, so unittest called
+	it with no arguments and got ``unbound method 'test_repr_deep' must be
+	called with an instance as the first argument''.
+
+	Binding is skipped for CLASS access, matching CPython's
+	``function.__get__(None, owner) is function'': that is what keeps the
+	right-hand side of the assignment above unbound in the first place, and a
+	BoundMethod on the class would send the selector to the class object.
+
+	The resulting BoundMethod dispatches ``selector'' to the instance, so the
+	method must be reachable from the instance's own class -- true for the
+	inheritance case above.  A function grafted onto an UNRELATED class is not
+	covered; that needs the whole function object to travel, not a
+	(class, selector) handle."
+
+	(instance == nil or: [instance == None]) ifTrue: [^ self].
+	(instance @env0:isKindOf: Behavior) ifTrue: [^ self].
+	"``receiver:selector:'' is an env-1 classmethod, so NO @env0: prefix -- with
+	one it MNUs, and inside an attribute read that escapes as an uncatchable
+	Smalltalk error (the module scored STERROR, 0 tests, not a failure)."
+	^ BoundMethod receiver: instance selector: selector
+%
+
 category: 'Grail-Calling'
 method: UnboundMethod
 value: positional value: kwargs

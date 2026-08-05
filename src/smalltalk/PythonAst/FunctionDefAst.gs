@@ -1588,12 +1588,19 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 	  ^ self name: p1 _: p2 ...       (module: bare selector)
 	  ^ self <sel>                    (instance: env-1 fixed selector)"
 
-	| stream callParams allParams defaults firstDefault |
+	| stream callParams allParams defaults firstDefault posonlyNames |
 	stream := WriteStream on: Unicode7 new.
 	allParams := self allParameterNames.
 	callParams := stripSelf
 		ifTrue: [allParams copyFrom: 2 to: allParams size]
 		ifFalse: [allParams].
+	"Positional-only parameters are not keyword-bindable, so their keyword must
+	be left for **kwargs instead of ALSO binding the parameter -- the same fix as
+	in printPositionalUnpackingOn:..., which this forwarder duplicates for the
+	class-body method form.  Fixing only that one left ``C(dict=42)'' still
+	double-applying while the equivalent module-level function was correct."
+	posonlyNames := (args posonlyargs ifNil: [#()])
+		collect: [:a | a name asString].
 	"Defaults align to the TAIL of args (posonly+args)."
 	defaults := args defaults.
 	firstDefault := (args posonlyargs size + args args size)
@@ -1606,16 +1613,21 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 		stream nextPut: $|; lf.
 	].
 	callParams doWithIndex: [:p :i |
-		| absoluteIdx def |
+		| absoluteIdx def isPosOnly |
 		"absolute parameter index in the full (self-included) list, to
 		align with the fixed selector's positional order."
 		absoluteIdx := stripSelf ifTrue: [i + 1] ifFalse: [i].
+		isPosOnly := posonlyNames includes: p asString.
 		stream nextPutAll: (self transportParamName: p);
 			nextPutAll: ' := (___pos___ @env0:size @env0:>= '; print: i;
 			nextPutAll: ') ifTrue: [___pos___ @env0:at: '; print: i;
-			nextPutAll: '] ifFalse: [(___kw___ @env0:isNil @env0:not and: [___kw___ @env0:includesKey: ''';
-			nextPutAll: p asString;
-			nextPutAll: ''']) ifTrue: [___kw___ @env0:at: '''; nextPutAll: p asString; nextPutAll: '''] ifFalse: ['.
+			nextPutAll: '] ifFalse: ['.
+		isPosOnly ifFalse: [
+			stream
+				nextPutAll: '(___kw___ @env0:isNil @env0:not and: [___kw___ @env0:includesKey: ''';
+				nextPutAll: p asString;
+				nextPutAll: ''']) ifTrue: [___kw___ @env0:at: '''; nextPutAll: p asString;
+				nextPutAll: '''] ifFalse: ['].
 		"Default expression when this param has one; else TypeError."
 		(defaults notNil and: [absoluteIdx >= (firstDefault + 1)
 			and: [absoluteIdx <= (args posonlyargs size + args args size)]])
@@ -1626,7 +1638,9 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 			ifFalse: [
 				stream nextPutAll: 'TypeError ___signal___: ''missing required argument: ';
 					nextPutAll: p asString; nextPutAll: '''' ].
-		stream nextPutAll: ']].'; lf.
+		"One close per gate opened — the kwargs gate is absent for a
+		positional-only parameter."
+		stream nextPutAll: (isPosOnly ifTrue: ['].'] ifFalse: [']].']); lf.
 	].
 	"Reject extra positional / unexpected keyword args (the fixed selector
 	we forward to would otherwise silently drop them)."
@@ -1721,14 +1735,38 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 	``___kwargs___``) so a user parameter named ``positional`` or ``kwargs``
 	doesn't collide with the dispatch temps."
 
-	| numParams numDefaults firstWithDefault |
+	| numParams numDefaults firstWithDefault posonlyNames |
 	numParams := paramNames size.
 	numDefaults := args defaults size.
 	firstWithDefault := numParams - numDefaults + 1.
+	"A POSITIONAL-ONLY parameter (declared before ``/'') can never be bound by
+	keyword: CPython routes such a keyword to **kwargs and leaves the parameter
+	on its default.  Grail fell through to the kwargs lookup for EVERY parameter,
+	so the keyword did both -- bound the parameter AND stayed in **kwargs, hence
+	got applied twice.  ``collections.UserDict(dict=[('one', 1)])'' built
+	{'one': 1, 'dict': [('one', 1)]} instead of {'dict': [('one', 1)]}
+	(test_userdict test_init / test_update / test_all); that is exactly why
+	upstream fences these parameters off -- any name is a legal dict key.
+
+	Matched by NAME, not by index: the three callers build ``paramNames''
+	differently (the module / class-method forms may drop the receiver and may
+	pass names already transported), so a posonly PREFIX LENGTH would be wrong
+	for some of them.  Both spellings are collected for the same reason.
+
+	``asString'' on BOTH sides, as elsewhere in this class: paramNames carries
+	SYMBOLS, and a Symbol/String comparison does not answer true in the
+	direction ``includes:'' happens to test -- which silently made every
+	parameter look keyword-bindable and left the class-body method form still
+	double-applying after the module-level one was fixed."
+	posonlyNames := OrderedCollection new.
+	(args posonlyargs ifNil: [#()]) do: [:a |
+		posonlyNames add: a name asString.
+		posonlyNames add: (self transportParamName: a name) asString].
 	1 to: numParams do: [:i |
-		| pname hasDefault |
+		| pname hasDefault isPosOnly |
 		pname := paramNames at: i.
 		hasDefault := i >= firstWithDefault.
+		isPosOnly := posonlyNames includes: pname asString.
 		"Open the positional gate."
 		aStream
 			nextPutAll: pname;
@@ -1744,19 +1782,25 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 		"Kwargs fallback — only if kwargs may be non-nil at the call
 		site (varargs methods accept both).  Lookup keys are Python
 		``str''s (per CPython spec); CallAst's printKeywordsDictOn:
-		builds the kwargs dict with String keys to match."
-		aStream
-			nextPutAll: '(';
-			nextPutAll: kwName;
-			nextPutAll: ' @env0:isNil @env0:not and: [';
-			nextPutAll: kwName;
-			nextPutAll: ' @env0:includesKey: ''';
-			nextPutAll: pname;
-			nextPutAll: ''']) ifTrue: [';
-			nextPutAll: kwName;
-			nextPutAll: ' @env0:at: ''';
-			nextPutAll: pname;
-			nextPutAll: '''] ifFalse: ['.
+		builds the kwargs dict with String keys to match.
+
+		SKIPPED entirely for a positional-only parameter, which is not
+		keyword-bindable — see the posonlyNames comment above.  The gate is
+		what opens the second bracket, so the close below matches on the same
+		condition."
+		isPosOnly ifFalse: [
+			aStream
+				nextPutAll: '(';
+				nextPutAll: kwName;
+				nextPutAll: ' @env0:isNil @env0:not and: [';
+				nextPutAll: kwName;
+				nextPutAll: ' @env0:includesKey: ''';
+				nextPutAll: pname;
+				nextPutAll: ''']) ifTrue: [';
+				nextPutAll: kwName;
+				nextPutAll: ' @env0:at: ''';
+				nextPutAll: pname;
+				nextPutAll: '''] ifFalse: ['].
 		hasDefault ifTrue: [
 			"Reference the pre-evaluated default temp captured by the
 			enclosing block (closure form only — the closure path wraps
@@ -1796,7 +1840,9 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 				nextPutAll: pname;
 				nextPutAll: ''''
 		].
-		aStream nextPutAll: ']].'; lf
+		"One closing bracket per gate opened: the positional gate always, the
+		kwargs gate only for a keyword-bindable parameter."
+		aStream nextPutAll: (isPosOnly ifTrue: ['].'] ifFalse: [']].']); lf
 	].
 	self printArgCountChecksOn: aStream
 		positionalName: posName kwargsName: kwName nPositional: numParams
