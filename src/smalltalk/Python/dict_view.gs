@@ -91,6 +91,19 @@ ___on: aDict
 	^ v
 %
 
+category: 'Grail-Callable'
+classmethod: dict_view
+value: positional value: kwargs
+	"dict views are NOT constructible from Python: CPython's tp_new is NULL, so
+	``type({}.keys())(...)'' (and the 0-arg form) raises TypeError.  This is the
+	class-call entry for both direct ``Cls(...)'' and the indirect
+	value:value: path; the internal ``___on:'' constructor bypasses it
+	(test_dictviews test_constructors_not_callable)."
+
+	^ TypeError ___signal___:
+		'cannot create ''' @env0:, self @env0:name @env0:asString @env0:, ''' instances'
+%
+
 category: 'Grail-Private'
 method: dict_view
 ___setMapping: aDict
@@ -107,6 +120,27 @@ mapping
 %
 
 ! ------------------- Python protocol (env-1)
+category: 'Grail-Copy Protocol'
+method: dict_view
+__copy__
+	"dict views are not copyable -- CPython's copy.copy(d.keys()) raises
+	TypeError (its default __reduce_ex__ refuses to pickle the view).  Grail's
+	copy stub honors __copy__ first, so raising here is what makes copy.copy
+	(and deepcopy, below) reject a view (test_dictviews test_copy)."
+
+	^ TypeError ___signal___:
+		'cannot copy ''' @env0:, self @env0:class @env0:name @env0:asString @env0:, ''' object'
+%
+
+category: 'Grail-Copy Protocol'
+method: dict_view
+__deepcopy__: memo
+	"See __copy__: a view is not deep-copyable either."
+
+	^ TypeError ___signal___:
+		'cannot copy ''' @env0:, self @env0:class @env0:name @env0:asString @env0:, ''' object'
+%
+
 category: 'Grail-Collection Protocol'
 method: dict_view
 __len__
@@ -274,6 +308,34 @@ isdisjoint: other
 %
 
 ! ------------------- per-view Python membership + repr (env-1)
+
+category: 'Grail-String Representation'
+method: dict_view
+___reprElementsPrefixed: aPrefix
+	"``<prefix>[elem, ...])'' with CPython's reentrant-repr guard: a view held
+	(directly or transitively) inside its own backing dict -- ``d[42] =
+	d.values()'' -- would otherwise recurse forever.  On re-entry for the SAME
+	view, answer ``...'' (CPython's dictview_repr uses Py_ReprEnter, so the
+	enclosing list repr renders ``[...]''); a genuinely deep, non-cyclic nest
+	still raises the catchable RecursionError.  Shares the session-local
+	#GrailReprSeen set with list/dict/tuple repr (test_dictviews
+	test_recursive_repr / test_deeply_nested_repr)."
+
+	| seen |
+	seen := SessionTemps @env0:current @env0:at: #GrailReprSeen otherwise: nil.
+	seen @env0:isNil ifTrue: [
+		seen := IdentitySet @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailReprSeen put: seen].
+	(seen @env0:includes: self) ifTrue: [^ '...'].
+	seen @env0:size @env0:> 200 ifTrue: [
+		RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object'].
+	seen @env0:add: self.
+	^ [[ aPrefix @env0:, (self @env0:___elements) __repr__ @env0:, ')' ]
+		@env0:on: AlmostOutOfStack do: [:ex |
+			RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object']]
+		@env0:ensure: [seen @env0:remove: self otherwise: nil]
+%
+
 category: 'Grail-Collection Protocol'
 method: dict_keys
 __contains__: k
@@ -283,7 +345,7 @@ __contains__: k
 category: 'Grail-String Representation'
 method: dict_keys
 __repr__
-	^ 'dict_keys(' @env0:, (self @env0:___elements) __repr__ @env0:, ')'
+	^ self ___reprElementsPrefixed: 'dict_keys('
 %
 
 category: 'Grail-Iterator Protocol'
@@ -304,13 +366,17 @@ __contains__: pair
 	k := pair @env0:at: 1.
 	v := pair @env0:at: 2.
 	(mapping @env0:includesKey: k) ifFalse: [^ false].
-	^ (mapping @env0:at: k) __eq__: v
+	"Identity-first value comparison (CPython PyObject_RichCompareBool): a
+	pair whose value IS the stored value tests ``in'' without calling __eq__,
+	so a raising/side-effecting __eq__ is skipped when they are identical
+	(test_dictviews test_compare_error)."
+	^ (mapping @env0:at: k) ___pyRichEqBool___: v
 %
 
 category: 'Grail-String Representation'
 method: dict_items
 __repr__
-	^ 'dict_items(' @env0:, (self @env0:___elements) __repr__ @env0:, ')'
+	^ self ___reprElementsPrefixed: 'dict_items('
 %
 
 category: 'Grail-Iterator Protocol'
@@ -332,7 +398,7 @@ __contains__: v
 category: 'Grail-String Representation'
 method: dict_values
 __repr__
-	^ 'dict_values(' @env0:, (self @env0:___elements) __repr__ @env0:, ')'
+	^ self ___reprElementsPrefixed: 'dict_values('
 %
 
 category: 'Grail-Iterator Protocol'
