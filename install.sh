@@ -118,12 +118,24 @@ if [ -n "$GEMSTONE" ]; then
     esac
     if [ -f "$SHIM_LIB_PATH" ]; then
         echo "Warning: CPython shim library already exists"
-        #export SHIM_LIB_PATH=""
+        # export SHIM_LIB_PATH=""
     else
         echo "Building shim and dynamic extension modules..."
         make -C "$GRAIL_DIR/src/c/shim" clean all GEMSTONE="$GEMSTONE"
+        if [ $? -ne 0 ]; then
+          echo "ERROR:  make shim failed"
+          exit 1
+        fi
         mkdir -p "$GRAIL_DIR/lib"
+        if [ $? -ne 0 ]; then
+          echo "ERROR:  mkdir failed"
+          exit 1
+        fi
         make -C "$GRAIL_DIR/src/c/shim" dynmods
+        if [ $? -ne 0 ]; then
+          echo "ERROR:  make shim dynmods failed"
+          exit 1
+        fi
     fi
 else
     echo "Warning: GEMSTONE not set. Skipping shim library build."
