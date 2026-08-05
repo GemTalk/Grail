@@ -50,6 +50,11 @@ __setattr__: name _: value
 	The six identifying-metadata dunders go to the SLOT table, every
 	other name to the ``__dict__'' table — see ___isSlotName___:."
 
+	"``func.__kwdefaults__ = X'' must change what the NEXT call binds, so it is
+	routed to the shared kwdefaults cell (a def-time holder the function body
+	captures) rather than overwriting the slot -- see ___setKwDefaults___:."
+	(name @env0:asSymbol == #'__kwdefaults__') ifTrue: [
+		^ self @env1:___setKwDefaults___: value].
 	^ (ExecBlock @env0:___isSlotName___: name)
 		@env0:ifTrue: [
 			(ExecBlock @env0:___pyAttrsClass___) @env0:slotAt: self attr: name put: value]
@@ -154,6 +159,45 @@ __code__
 	___pyNone___ uses."
 	^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'AttributeError')
 		___signal___: '''function'' object has no attribute ''__code__'''
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
+__kwdefaults__
+	"``func.__kwdefaults__'' -- a dict mapping each keyword-only parameter that
+	has a default to that default's VALUE, or None when the function declares no
+	keyword-only defaults.  FunctionDefAst stamps a def-time CELL (a one-slot
+	holder) via ___pyKwDefaults___:; the value read here is the cell's current
+	contents, so a later ``func.__kwdefaults__ = X'' (which mutates the same
+	cell) is reflected both here and in what the next call binds.  #'__kwdefaults__'
+	is in ___pythonValueAttrs___ so this returns the dict/None value, not a
+	BoundMethod-wrapped selector.  A block that never got a cell (no keyword-only
+	params, or a synthetic block) reads None, matching CPython."
+
+	| cell |
+	cell := (ExecBlock @env0:___pyAttrsClass___) @env0:slotAt: self attr: '__kwdefaults__'.
+	cell @env0:isNil ifTrue: [^ ExecBlock @env0:___pyNone___].
+	^ (cell @env0:at: 1) ifNil: [ExecBlock @env0:___pyNone___]
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
+___setKwDefaults___: value
+	"Backing for ``func.__kwdefaults__ = value''.  Mutates the shared def-time
+	cell in place rather than replacing the slot, so the function body -- which
+	captured that same cell object at def-time -- consults the new value on the
+	next call.  Python None clears the defaults (stored as nil, so every
+	keyword-only parameter becomes required again).  A block with no cell yet
+	(had no keyword-only params) gets one created, so the attribute round-trips."
+
+	| cell stored |
+	stored := (value == (ExecBlock @env0:___pyNone___)) ifTrue: [nil] ifFalse: [value].
+	cell := (ExecBlock @env0:___pyAttrsClass___) @env0:slotAt: self attr: '__kwdefaults__'.
+	cell @env0:isNil ifTrue: [
+		cell := Array @env0:new: 1.
+		(ExecBlock @env0:___pyAttrsClass___) @env0:staticSlotAt: self attr: '__kwdefaults__' put: cell].
+	cell @env0:at: 1 put: stored.
+	^ ExecBlock @env0:___pyNone___
 %
 
 category: 'Grail-Attribute Access'
@@ -399,6 +443,7 @@ ___slotNames___
 		add: #'__annotate__';
 		add: #'__type_params__';
 		add: #'__code__';
+		add: #'__kwdefaults__';
 		add: #'__signature_spec__';
 		yourself
 %
@@ -440,6 +485,7 @@ ___pythonValueAttrs___
 		add: #'__annotate__';
 		add: #'__type_params__';
 		add: #'__code__';
+		add: #'__kwdefaults__';
 		add: #'__signature_spec__';
 		yourself
 %
@@ -529,5 +575,19 @@ ___pyCode___: aCode
 	``name := <block>'' assignment / decorator pipeline."
 
 	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__code__' put: aCode.
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
+___pyKwDefaults___: aCell
+	"Stamp this closure's keyword-only-defaults CELL at def-time.  FunctionDefAst
+	builds a one-slot holder (``{ <dict-or-nil> }'') in the def's outer wrapper,
+	the function body captures it for its per-call keyword-only binding, and this
+	cascade records the SAME object in the SLOT namespace so ``func.__kwdefaults__''
+	reads it and ``func.__kwdefaults__ = X'' mutates it.  Returns self so it
+	composes in the def-time cascade alongside ___pyCode___:."
+
+	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__kwdefaults__' put: aCell.
 	^ self
 %
