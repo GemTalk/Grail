@@ -617,6 +617,26 @@ ___pyTypeParams___: names
 
 category: 'Grail-Attribute Access'
 method: ExecBlock
+___pyModuleNamed___: aString
+	"Stamp ``__module__'' at the def site.
+
+	A closure otherwise answers the ``<closure>'' placeholder: a module-level def
+	is a BoundMethod and gets its module by forwarding to the receiving module,
+	but a block has no receiver to forward to.  That left every def compiled as a
+	closure -- notably one written under an ``if'' in a class body -- unable to
+	be pickled by reference, because pickle resolves a callable through its
+	__module__ and __qualname__.
+
+	DEF-SITE storage, like the qualname beside it: the module a def is written in
+	is a property of where it is written.  Returns self, to compose in the
+	def-time cascade."
+
+	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__module__' put: aString.
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
 ___pyQualname___: aString
 	"Stamp ``__qualname__'' -- the dotted path including CPython's ``<locals>''
 	marker for a def inside a function, e.g. ``Cls.meth.<locals>.inner''.

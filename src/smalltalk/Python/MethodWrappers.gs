@@ -336,6 +336,46 @@ __doc__
 	^ self ___wrappedMeta___: #'__doc__'
 %
 
+category: 'Grail-Reflection'
+method: PyStaticMethod
+__annotations__
+	"Forwarded like __name__ / __doc__: a decorator that inspects the wrapped
+	callable's annotations must see them through the wrapper, and
+	singledispatchmethod's annotation form infers its dispatch type from them."
+
+	^ self ___wrappedMeta___: #'__annotations__'
+%
+
+category: 'Grail-Reflection'
+method: PyStaticMethod
+__annotate__
+	"PEP 649, forwarded for the same reason: functools.update_wrapper copies
+	__annotate__ (not __annotations__), so a wrapper built around a
+	@classmethod / @staticmethod only inherits annotations if this answers."
+
+	^ self ___wrappedMeta___: #'__annotate__'
+%
+
+category: 'Grail-Reflection'
+method: PyClassMethod
+__annotations__
+	"Forwarded like __name__ / __doc__: a decorator that inspects the wrapped
+	callable's annotations must see them through the wrapper, and
+	singledispatchmethod's annotation form infers its dispatch type from them."
+
+	^ self ___wrappedMeta___: #'__annotations__'
+%
+
+category: 'Grail-Reflection'
+method: PyClassMethod
+__annotate__
+	"PEP 649, forwarded for the same reason: functools.update_wrapper copies
+	__annotate__ (not __annotations__), so a wrapper built around a
+	@classmethod / @staticmethod only inherits annotations if this answers."
+
+	^ self ___wrappedMeta___: #'__annotate__'
+%
+
 category: 'Grail-Attribute Access'
 method: PyStaticMethod
 __name__

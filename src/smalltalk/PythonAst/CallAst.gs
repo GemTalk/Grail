@@ -1319,6 +1319,27 @@ moduleClassBeingCompiled: aClassOrNil
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
+moduleNameBeingCompiled
+	"The Python name of the module being compiled ('collections.abc'), or nil
+	outside a module compilation.
+
+	The module CLASS alone does not answer this: its Smalltalk name is mangled
+	from the dotted Python one.  FunctionDefAst stamps it onto a closure's
+	__module__, which a closure otherwise cannot know -- a module-level def is a
+	BoundMethod and gets its module by forwarding to the receiving module, and
+	that route does not exist for a block."
+
+	^ self ___compileContext___ at: #'moduleNameBeingCompiled' otherwise: nil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+moduleNameBeingCompiled: aStringOrNil
+	self ___compileContext___ at: #'moduleNameBeingCompiled' put: aStringOrNil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
 functionBeingCompiled
 	"The FunctionDefAst whose body is currently being emitted (nil at
 	module body scope).  Set/restored by FunctionDefAst >> printBodyOn:

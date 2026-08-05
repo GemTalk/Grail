@@ -180,3 +180,25 @@ testUpdateWrapperCopiesABuiltinsDocstring
 	self assert: (r at: 1) equals: 'max'.
 	self assert: (r at: 2) equals: true.
 %
+
+category: 'Grail-Tests - Docstrings'
+method: MethodDocstringTestCase
+testClassSideHandleReportsDocAndAnnotations
+	"A @classmethod's unbound handle must report the docstring AND annotations of
+	the method it names, and a wrapper built from it with functools.wraps must
+	inherit both.
+
+	Grail compiles a class-side method onto the METACLASS, so the handle's
+	definingClass is ``Cls class'' while the doc and annotation tables are
+	compiled onto ``Cls''.  Walking up from the metaclass found nothing, so a
+	class-side handle answered None and {} where the identical instance-side
+	handle answered both -- and any decorator doing
+	``functools.wraps(func.__func__)'' inherited neither."
+
+	self assert: testModule @env1:class_side_handle_metadata asArray equals: #(
+		'the docstring'
+		'True'
+		'True'
+		'the docstring'
+		'True' ).
+%
