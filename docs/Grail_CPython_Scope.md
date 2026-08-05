@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 21 | 12 | 57 | 90 |
+| P1 | 22 | 11 | 57 | 90 |
 | P2 | 9 | 7 | 18 | 34 |
 | P3 | 0 | 1 | 55 | 56 |
 | P4 | 0 | 0 | 75 | 75 |
-| **In-scope** | **30** | **20** | **205** | **255** |
+| **In-scope** | **31** | **19** | **205** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -65,7 +65,7 @@ python3 scripts/sync_scope_status.py --check    # exit 1 if it is stale
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **30 of those score OK**.
+Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **31 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -128,7 +128,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ❗ | `test_isinstance` | isinstance/issubclass (language). |
 | ❗ | `test_iter` | Iterator protocol (language). |
 | ✅ | `test_iterlen` | __length_hint__ (language). |
-| ❗ | `test_keywordonlyarg` | Keyword-only arguments (language). |
+| ✅ | `test_keywordonlyarg` | Keyword-only arguments (language). |
 | ✅ | `test_list` | list — core type (in harness). |
 | ❗ | `test_listcomps` | List comprehensions (language). |
 |  | `test_long` | Arbitrary-precision int (language). |
@@ -665,11 +665,11 @@ status/tests/fail/err/skip — are in
 only what does not change every run: which modules are *done*, and what each
 not-yet-passing one is waiting on.
 
-**Fully green: 30 of the 50** — the ✅ rows in the tier tables above. That list
+**Fully green: 31 of the 50** — the ✅ rows in the tier tables above. That list
 used to be spelled out here and is not any more: it duplicated something the
 Status column now derives, and had drifted to 27.
 
-**Not yet green (the 20 ❗ rows), in descending size of the remaining gap:**
+**Not yet green (the 19 ❗ rows), in descending size of the remaining gap:**
 `test_enum` (metaclass depth — `object.__str__`, `__dir__`-on-class, `_boundary_`
 Flag), `test_datetime`, `test_functools`, `test_iter`, and `test_traceback` (the
 only IMPORTERROR — `__code__` on a def that compiled to a real method; PR #129
@@ -684,7 +684,7 @@ the `for` statement — `f.line[f.colno - indent : f.end_colno - indent] ==
 `end_colno` **and** `line` as `None` (`co_filename` is `'<grail>'`, so
 linecache has no source to read), and `lineno`/`end_lineno` are per-statement.
 Closing it means source-resolvable filenames plus per-expression position
-records — the deferred traceback work, not an iteration fix. So two of the 20
+records — the deferred traceback work, not an iteration fix. So two of the 19
 ❗ rows now collapse to that one project.
 
 ## Next tranche (phase 4, wired 2026-08-03)
@@ -700,17 +700,17 @@ Two of the eighteen only needed a vendoring gap closed, not a Grail fix:
 (for `test_yield_from`) were added to the trimmed support package, plus
 `os_helper.create_empty_file`.
 
-Three of the eighteen have since gone green — `test_compare`, `test_iterlen` and
-`test_index` — and their rows are gone from the tables below, including the
-`#'<'`/`#'<='` uncatchable-DNU root that `test_index` named. The tier tables' ✅
+Four of the eighteen have since gone green — `test_compare`, `test_iterlen`,
+`test_index` and `test_keywordonlyarg` — and their rows are gone from the tables
+below, including the `#'<'`/`#'<='` uncatchable-DNU root that `test_index`
+named. The tier tables' ✅
 is the live signal; anything still listed here is still open.
 
-**Easy wins — small residual, no new runtime plumbing (7 left of 9):**
+**Easy wins — small residual, no new runtime plumbing (6 left of 9):**
 
 | Module | Trial score | What is left |
 |--------|-------------|--------------|
 | `test_generator_stop` | 2t, 2E | PEP 479: a `StopIteration` crossing a generator boundary must become `RuntimeError`. |
-| `test_keywordonlyarg` | 11t, 4F 1E | `co_kwonlyargcount`; "takes from 1 to 2 positional arguments" wording; two SyntaxError cases. |
 | `test_dictviews` | 16t, 2F 3E | `dict_keys` must register as `KeysView`; a self-referential view `repr` recurses; one `PyDict does not understand #new` leak. |
 | `test_sort` | 21t, 4F 1E | Mutation-during-sort must raise `ValueError` (4 tests) + one `OffsetError` escaping codegen. |
 | `test_userdict` | 28t, 3F 3E | `UserDict \| UserDict` (PEP 584), `UserDict(self=42)`, `repr` of a self-referential dict. |
