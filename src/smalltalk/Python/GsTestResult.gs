@@ -14,6 +14,7 @@ runCase: aTestCase
       aPass ifNotNil: [ System waitForDebug ].
       ex class defaultHandlers size > 0
         ifTrue: [ ex pass ].
+      (ex isKindOf: Break) ifTrue:[ ex pass ]. "let GCI or topaz handle ctl-c"
       (ex isKindOf: TestFailure)
         ifTrue: [ self addFailure: aTestCase ]
         ifFalse: [ self addError: aTestCase ].
