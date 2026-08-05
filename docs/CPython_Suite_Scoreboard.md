@@ -63,5 +63,5 @@ different rows and merges cleanly.
 | test.test_copy | ERROR | 81 | 28 | 15 | 0 |  |
 | test.test_scope | ERROR | 41 | 6 | 9 | 0 |  |
 | test.test_yield_from | ERROR | 43 | 18 | 12 | 0 |  |
-| test.test_deque | ERROR | 80 | 10 | 23 | 4 |  |
+| test.test_deque | OK | 80 | 0 | 0 | 6 |  |
 | test.test_format | ERROR | 18 | 2 | 1 | 3 |  |

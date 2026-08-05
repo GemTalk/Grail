@@ -1696,6 +1696,13 @@ reversed: aSequence
 	| lst |
 	(aSequence ___respondsTo___: #'__reversed__')
 		ifTrue: [^ aSequence __reversed__].
+	"A string reversed must yield 1-char STRINGS, matching forward str
+	iteration -- the ``reverseDo:'' fallback yields Characters, so
+	``list(reversed('abcd'))'' came back as [$d $c $b $a] not ['d','c','b','a']
+	(test_deque test_reversed / test_extendleft).  bytes/bytearray are not
+	CharacterCollections, so they keep the reverseDo: path (ints)."
+	(aSequence @env0:isKindOf: CharacterCollection)
+		ifTrue: [^ (aSequence @env0:reverse) __iter__].
 	lst := list ___new___.
 	aSequence @env0:reverseDo: [:item | lst append: item].
 	^ lst __iter__
