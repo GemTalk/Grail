@@ -54,7 +54,7 @@ different rows and merges cleanly.
 | test.test_sort | OK | 21 | 0 | 0 | 2 |  |
 | test.test_generator_stop | OK | 2 | 0 | 0 | 0 |  |
 | test.test_userdict | OK | 28 | 0 | 0 | 0 |  |
-| test.test_userlist | ERROR | 54 | 4 | 3 | 1 |  |
+| test.test_userlist | OK | 54 | 0 | 0 | 1 |  |
 | test.test_isinstance | ERROR | 23 | 1 | 13 | 2 |  |
 | test.test_index | OK | 55 | 0 | 0 | 0 |  |
 | test.test_baseexception | ERROR | 11 | 1 | 7 | 0 |  |
