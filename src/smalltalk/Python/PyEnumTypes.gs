@@ -236,6 +236,95 @@ ___grailGnvStaticFor: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailGlobalEnumMap
+	"Per-SESSION map: enum class -> its SHORT module name, for classes decorated
+	``@enum.global_enum'' (or built via ``_convert_(..., as_global=True)'').  CPython
+	rewrites such a class's member __repr__ to ``module.NAME'' (global_enum_repr /
+	global_flag_repr) instead of ``<Cls.NAME: value>''.  The short module is captured
+	at mark time (reliable for a class-syntax @global_enum class; supplied explicitly
+	for a functionally-built _convert_ class).  SessionTemps-backed."
+
+	| s |
+	s := SessionTemps @env0:current @env0:at: #GrailGlobalEnums otherwise: nil.
+	s @env0:isNil ifTrue: [
+		s := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailGlobalEnums put: s].
+	^ s
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailShortModuleName: dotted
+	"Last dotted component of a module name (CPython: module.split('.')[-1])."
+
+	| s idx |
+	s := dotted @env0:asString.
+	idx := 0.
+	1 @env0:to: s @env0:size do: [:i | (s @env0:at: i) @env0:= $. ifTrue: [idx := i]].
+	^ idx @env0:= 0 ifTrue: [s] ifFalse: [s @env0:copyFrom: idx @env0:+ 1 to: s @env0:size]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailMarkGlobalEnum: cls
+	"Mark a class-syntax @global_enum class; read its short module from __module__
+	(the dotted NAME string ClassDefAst stamps, same accessor global_enum: uses)."
+
+	| mod |
+	mod := [(cls @env0:perform: #'__module__' env: 1) @env0:asString]
+		@env0:on: AbstractException do: [:e | cls @env0:name @env0:asString].
+	^ self ___grailMarkGlobalEnum: cls moduleName: mod
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailMarkGlobalEnum: cls moduleName: modName
+	"Mark cls as a global enum whose members repr with the given short module."
+
+	self ___grailGlobalEnumMap @env0:at: cls put: (Enum ___grailShortModuleName: modName).
+	^ cls
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailIsGlobalEnum: cls
+	"True when cls's members should repr as ``module.NAME''."
+
+	^ self ___grailGlobalEnumMap @env0:includesKey: cls
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailGlobalMemberRepr: m
+	"CPython global_enum_repr / global_flag_repr: ``<short_module>.<NAME>'' for a
+	named member; ``<short_module>.<ClassName>(<value>)'' for a nameless flag
+	member (value 0, or an unnamed composite).  A composite name joins its parts
+	with ``|'', each non-digit part module-prefixed."
+
+	| cls modName nm |
+	cls := m @env0:class.
+	modName := self ___grailGlobalEnumMap @env0:at: cls otherwise: cls @env0:name @env0:asString.
+	nm := m @env0:dynamicInstVarAt: #name.
+	(Enum ___grailIsFlagClass: cls) ifTrue: [
+		| val compName parts out |
+		val := m @env0:dynamicInstVarAt: #value.
+		(nm @env0:isNil or: [nm == None]) ifTrue: [
+			^ modName @env0:, '.' @env0:, cls @env0:name @env0:asString
+				@env0:, '(' @env0:, val @env0:printString @env0:, ')'].
+		compName := (Enum ___grailCompositeNameFor: m) @env0:asString.
+		parts := compName @env0:subStrings: '|'.
+		out := WriteStream @env0:on: String @env0:new.
+		parts @env0:doWithIndex: [:p :i |
+			i @env0:> 1 ifTrue: [out @env0:nextPut: $|].
+			((p @env0:size @env0:> 0) and: [(p @env0:at: 1) @env0:isDigit])
+				ifTrue: [out @env0:nextPutAll: p]
+				ifFalse: [out @env0:nextPutAll: modName @env0:, '.' @env0:, p]].
+		^ out @env0:contents].
+	^ modName @env0:, '.' @env0:, nm @env0:asString
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailBuildingSet
 	"Per-SESSION set of enum classes whose members are mid-construction.
 	A class-body ``def __new__`` runs while the class is in this set; if
@@ -1876,7 +1965,7 @@ ___grailConvert: positional kw: kwargs forType: etype
 
 	"Temps avoid the Grail globals ``module'' (the module class), ``filter''
 	and ``sorted'' (builtins)."
-	| enumName modName filterFn srcMod srcNs memberPairs sortedPairs |
+	| enumName modName filterFn srcMod srcNs memberPairs sortedPairs newEnum |
 	enumName := positional @env0:at: 1.
 	modName := positional @env0:at: 2.
 	filterFn := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'filter'])
@@ -1906,9 +1995,17 @@ ___grailConvert: positional kw: kwargs forType: etype
 		do: [:ex |
 			(memberPairs @env0:asSortedCollection: [:a :b | (a @env0:at: 1) @env0:<= (b @env0:at: 1)]) @env0:asArray].
 	"Build the enum of this type (etype) from the sorted (name, value) pairs."
-	^ Enum ___grailFunctional: etype
+	newEnum := Enum ___grailFunctional: etype
 		positional: (Array @env0:with: enumName @env0:asString with: sortedPairs)
-		keywords: nil
+		keywords: nil.
+	"as_global=True: CPython injects the members into the source module's globals
+	and rewrites member __repr__ to ``module.NAME'' (test_convert_str /
+	test_convert_repr_and_str).  The class is built functionally (no __module__
+	accessor), so record the source module name explicitly for the repr rewrite."
+	((kwargs ~~ nil and: [kwargs @env0:includesKey: 'as_global'])
+		and: [(kwargs @env0:at: 'as_global') ___isTruthy___]) ifTrue: [
+		Enum ___grailMarkGlobalEnum: newEnum moduleName: modName @env0:asString].
+	^ newEnum
 %
 
 category: 'Grail-Enum Metaclass'
@@ -2559,6 +2656,7 @@ category: 'Grail-Enum Member'
 method: Enum
 __repr__
 	| nm val |
+	(Enum ___grailIsGlobalEnum: self @env0:class) ifTrue: [^ Enum ___grailGlobalMemberRepr: self].
 	nm := self @env0:dynamicInstVarAt: #name.
 	"CPython Enum.__repr__ renders the value with repr(): <Color.RED: 'red'>,
 	<MainEnum.third: datetime.date(2009, 1, 1)>.  Use the value's Python repr,
@@ -2893,6 +2991,7 @@ __repr__
 	no covering members) is <Perm: 0> (CPython 3.11+)."
 
 	| v nm0 |
+	(Enum ___grailIsGlobalEnum: self @env0:class) ifTrue: [^ Enum ___grailGlobalMemberRepr: self].
 	v := self @env0:dynamicInstVarAt: #value.
 	nm0 := self @env0:dynamicInstVarAt: #name.
 	((nm0 @env0:isNil or: [nm0 == None])
@@ -2931,6 +3030,7 @@ category: 'Grail-Enum Member'
 method: IntEnum
 __repr__
 	| nm val |
+	(Enum ___grailIsGlobalEnum: self @env0:class) ifTrue: [^ Enum ___grailGlobalMemberRepr: self].
 	nm := self @env0:dynamicInstVarAt: #name.
 	val := self @env0:value @env0:printString.
 	^ '<' @env0:, self @env0:class @env0:name @env0:asString @env0:, '.'
@@ -3309,6 +3409,7 @@ __repr__
 	AbstractPyStr>>__str__."
 
 	| nm val |
+	(Enum ___grailIsGlobalEnum: self @env0:class) ifTrue: [^ Enum ___grailGlobalMemberRepr: self].
 	nm := self @env0:dynamicInstVarAt: #name.
 	val := (self @env0:dynamicInstVarAt: #value) __repr__.
 	^ '<' @env0:, self @env0:class @env0:name @env0:asString @env0:, '.'
