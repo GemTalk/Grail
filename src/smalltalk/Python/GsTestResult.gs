@@ -30,3 +30,18 @@ runCase: aTestCase
       self ]
 %
 
+category: 'Debugging'
+classmethod: GsTestResult
+defectLogFile
+  "changed to allow multiple topaz -l /gem  to write to same directory."
+  ^ SessionTemps current at: #GsTestResultDefectsLog
+    ifAbsentPut: [ 
+      | f path separator |
+      path := self defectLogFilePath ifNil: [ GsFile serverCurrentDirectory ].
+      separator := (path endsWith: '/') ifTrue: [ '' ] ifFalse: [ '/' ].
+      path := path , separator , 'SUnitDefects', System gemProcessId asString,'.log' .
+      f := GsFile openAppendOnServer: path .
+      f ifNil: [ Error signal: 'open failed' , GsFile serverErrorString ].
+      f ]
+%
+

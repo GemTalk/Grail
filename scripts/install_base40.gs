@@ -8,5 +8,6 @@ input src/smalltalk/Python/SymbolDictionary.gs
 input src/smalltalk/Python/ExecBlock.gs
 input src/smalltalk/Python/Object_perform_allocators.gs
 input src/smalltalk/Python/GsTestResult.gs
+input src/smalltalk/Python/GsTestSuite.gs
 input src/smalltalk/Python/AppendStream.gs
 
