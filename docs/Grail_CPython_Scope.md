@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 29 | 4 | 57 | 90 |
+| P1 | 30 | 3 | 57 | 90 |
 | P2 | 12 | 4 | 18 | 34 |
 | P3 | 0 | 1 | 55 | 56 |
 | P4 | 0 | 0 | 75 | 75 |
-| **In-scope** | **41** | **9** | **205** | **255** |
+| **In-scope** | **42** | **8** | **205** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -65,7 +65,7 @@ python3 scripts/sync_scope_status.py --check    # exit 1 if it is stale
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **41 of those score OK**.
+Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **42 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -141,7 +141,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_positional_only_arg` | Positional-only args / (language). |
 | ✅ | `test_pow` | pow() / ** (language). |
 |  | `test_print` | print() (language/builtin). |
-| ❗ | `test_property` | property descriptor (language). |
+| ✅ | `test_property` | property descriptor (language). |
 |  | `test_raise` | raise statement (language). |
 |  | `test_range` | range (language/builtin). |
 | ✅ | `test_richcmp` | Rich comparison operators (language). |
