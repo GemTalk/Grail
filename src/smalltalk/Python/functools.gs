@@ -1761,12 +1761,55 @@ ___orderingDerivablesFrom___: root
 category: 'Grail-Instance Creation'
 classmethod: functools_ordering_op
 ___derived___: derivedOp from: rootOp
+	"The synthesised comparison for ``derivedOp'', computed from ``rootOp''.
 
-	| inst |
+	INTERNED per (derived, root) pair and published on the functools module
+	under CPython's own name for it -- ``_gt_from_lt'', ``_le_from_ge'', and so
+	on.  CPython's total_ordering installs module-level functions
+	(``setattr(cls, opname, functools._gt_from_lt)''), so the object in the
+	class dictionary IS functools._gt_from_lt.  Two consequences the corpus
+	depends on, neither of which holds for a per-class instance:
+
+	  * pickling ``Cls.__gt__'' saves it BY REFERENCE as
+	    (functools, _gt_from_lt), and the round-trip is the identical object --
+	    test_total_ordering's test_pickle asserts exactly that.
+	  * two classes deriving the same operator from the same root share one
+	    object, as they do in CPython.
+
+	There are only twelve pairs (three derivables for each of four roots), so
+	interning is bounded by construction.  Session-local, because the module
+	instance it is published on is."
+
+	| qual st tbl inst modInst |
+	qual := '_' @env0:, (self ___bareOpName___: derivedOp)
+		@env0:, '_from_' @env0:, (self ___bareOpName___: rootOp).
+	st := SessionTemps @env0:current.
+	tbl := st @env0:at: #'GrailOrderingOps' ifAbsentPut: [KeyValueDictionary @env0:new].
+	inst := tbl @env0:at: qual otherwise: nil.
+	inst == nil ifFalse: [^ inst].
 	inst := self @env0:new.
 	inst @env0:dynamicInstVarAt: #derived put: derivedOp.
 	inst @env0:dynamicInstVarAt: #root put: rootOp.
+	inst @env0:dynamicInstVarAt: #'__qualname__' put: qual @env0:asUnicodeString.
+	tbl @env0:at: qual put: inst.
+	"Publish on the module instance so ``getattr(functools, '_gt_from_lt')''
+	resolves -- which is what lets pickle save the operator by reference.  The
+	dynamic-instVar slot is the first thing module attribute resolution probes."
+	modInst := functools @env0:___instance___.
+	modInst == nil ifFalse: [
+		modInst @env0:dynamicInstVarAt: qual @env0:asSymbol put: inst].
 	^ inst
+%
+
+category: 'Grail-Instance Creation'
+classmethod: functools_ordering_op
+___bareOpName___: anOpSymbol
+	"``__gt__'' -> ``gt'': the dunder stripped, for building CPython's
+	``_gt_from_lt'' style name."
+
+	| s |
+	s := anOpSymbol @env0:asString.
+	^ s @env0:copyFrom: 3 to: s @env0:size @env0:- 2
 %
 
 category: 'Grail-Attribute Access'
@@ -1778,6 +1821,26 @@ ___pyBindsSelf___
 	the synthesised operator with the instance prepended, as a def would."
 
 	^ true
+%
+
+category: 'Grail-Attribute Access'
+method: functools_ordering_op
+__module__
+	"``functools'': CPython's total_ordering installs functions defined IN
+	functools, so that is the module the operator belongs to.  pickle reads this
+	to save the operator by reference."
+
+	^ 'functools' @env0:asUnicodeString
+%
+
+category: 'Grail-Attribute Access'
+method: functools_ordering_op
+__qualname__
+	"CPython's name for this derivation -- ``_gt_from_lt'' and friends -- stamped
+	when the singleton was interned.  Together with __module__ it is what pickle
+	resolves the operator back through."
+
+	^ self @env0:dynamicInstVarAt: #'__qualname__'
 %
 
 category: 'Grail-Attribute Access'
@@ -2170,6 +2233,39 @@ register: clsOrFunc
 %
 
 category: 'Grail-Single Dispatch'
+classmethod: functools_singledispatch
+___resolveDottedName___: aString
+	"Resolve a DOTTED name like ``collections.abc.Mapping'' to the class it names,
+	or nil.  Class-side so it can be exercised directly."
+
+	| parts mods |
+	parts := aString @env0:asString @env0:subStrings: '.'.
+	parts @env0:size @env0:< 2 ifTrue: [^ nil].
+	mods := (System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: #importlib) @env1:modules.
+	mods == nil ifTrue: [^ nil].
+	(parts @env0:size @env0:- 1) @env0:to: 1 @env0:by: -1 @env0:do: [:split |
+		| modName mod obj ok |
+		modName := ''.
+		1 @env0:to: split @env0:do: [:i |
+			modName := modName @env0:isEmpty
+				ifTrue: [(parts @env0:at: i) @env0:asString]
+				ifFalse: [modName @env0:, '.' @env0:, (parts @env0:at: i) @env0:asString]].
+		mod := mods @env0:at: modName @env0:asString otherwise: nil.
+		mod == nil ifFalse: [
+			obj := mod.
+			ok := true.
+			(split @env0:+ 1) @env0:to: parts @env0:size @env0:do: [:i |
+				ok ifTrue: [
+					obj := [obj @env1:___pyAttrLoad___: (parts @env0:at: i) @env0:asString @env0:asSymbol]
+						@env0:on: AbstractException
+						do: [:ex | ex @env0:return: nil].
+					obj == nil ifTrue: [ok := false]]].
+			(ok and: [obj @env0:isKindOf: Behavior]) ifTrue: [^ obj]]].
+	^ nil
+%
+
+category: 'Grail-Single Dispatch'
 method: functools_singledispatch
 ___inferRegisterType___: aFunc
 	"Infer the dispatch type for the annotation form of register from
@@ -2225,6 +2321,15 @@ ___inferRegisterType___: aFunc
 		text := candidate @env0:asString.
 		candidate := (System @env0:myUserProfile @env0:symbolList
 			@env0:objectNamed: candidate @env0:asSymbol) @env0:ifNil: [candidate]].
+	"Still a string, and DOTTED?  ``collections.abc.Mapping'' -- written either as
+	an expression or as a quoted forward reference -- arrives whole, and neither
+	the symbol list above nor the bare-name probe below can resolve it: one holds
+	no dotted keys, the other would look for an attribute literally named
+	``collections.abc.Mapping''.  Walk it instead."
+	(candidate isKindOf: CharacterCollection) ifTrue: [
+		| walked |
+		walked := (self @env0:class) ___resolveDottedName___: candidate @env0:asString.
+		walked == nil ifFalse: [candidate := walked]].
 	"Still a string?  ABC names ('Mapping', 'Sequence', ...) live as
 	classes on the collections.abc module, not in the symbol list --
 	resolve through sys.modules when that module has been imported."
@@ -2624,6 +2729,27 @@ category: 'Grail-Attribute Access'
 method: functools_singledispatchmethod
 __annotations__
 	^ (self @env0:dynamicInstVarAt: #func) __annotations__
+%
+
+category: 'Grail-Reflection'
+classmethod: functools_singledispatchmethod
+__module__
+	"``type(meth).__module__'' -- the module the DESCRIPTOR CLASS lives in, which
+	is functools, not the module that defined the decorated method.  Same
+	class-side pattern functools_partial uses.
+
+	Needed because the instance-side __module__ below delegates to the wrapped
+	function: reading __module__ on the CLASS found that instance method and
+	wrapped it as an UnboundMethod, so ``type(meth).__module__'' answered a
+	callable instead of 'functools'."
+
+	^ 'functools'
+%
+
+category: 'Grail-Reflection'
+classmethod: functools_singledispatchmethod
+__qualname__
+	^ 'singledispatchmethod'
 %
 
 category: 'Grail-Representation'

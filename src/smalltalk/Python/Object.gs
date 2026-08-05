@@ -1650,6 +1650,18 @@ ___isDescriptorCallable___: aValue
 			wraps.  functools.singledispatchmethod answers false over a
 			@classmethod / @staticmethod, neither of which binds an instance."
 			^ aValue ___pyBindsSelf___ == true].
+	"Same marker, asked of anything else that reached here.  Not every
+	function stand-in is a PythonInstance: LruCacheWrapper is a plain Object
+	subclass, so an lru_cache-wrapped METHOD read off an instance was not
+	bound and the wrapper received the first ARGUMENT as its receiver --
+	``a.f(1)'' invoked the wrapped method with 1 as self.
+
+	Reached only after the BoundMethod / ExecBlock / UnboundMethod /
+	PythonInstance branches above, so the extra probe falls on plain data
+	class attributes; measured at no change on a class-attribute read
+	benchmark."
+	(aValue ___respondsTo___: #'___pyBindsSelf___')
+		ifTrue: [^ aValue ___pyBindsSelf___ == true].
 	^ false
 %
 
@@ -3070,8 +3082,36 @@ __gt__: other
 category: 'Grail-Hashing & Identity'
 method: object
 __hash__
-	"Return hash value for this object"
+	"Default hash: the Smalltalk identity hash.
 
+	Before falling back, honour a __hash__ installed on the class at RUNTIME
+	(``Cls.__hash__ = fn'').  A class that DECLARES __hash__ is found by the
+	message send that reached here, so arriving at this method means there is no
+	compiled one -- but a dynamic class attribute is invisible to a send and has
+	to be probed explicitly.  Without it, ``hash(x)'' answered the identity hash
+	while ``x.__hash__()'' answered the installed function: the same object
+	hashing two different ways depending on how you asked.
+
+	unittest.mock needs this -- configuring ``m.__hash__`` has to change what
+	hash(m) answers -- and it is what makes runtime-installed dunders consistent
+	with the operators, which already honour a class attribute set after
+	definition.
+
+	Cost is confined to objects whose class declares no __hash__, which are
+	exactly the ones that used to take the identity-hash branch unconditionally."
+
+	| dyn |
+	"Gated on a session flag set by the class-attribute store, because the probe
+	is a superclass-chain walk and this is the dict/set hot path for every object
+	whose class declares no __hash__.  Measured: unguarded, a plain-object hash
+	went 300ns -> 700ns and dict insertion +53%.  With the flag, a program that
+	never installs a dynamic __hash__ pays one dictionary read, and only a program
+	that does pays for the walk."
+	(SessionTemps @env0:current @env0:at: #'GrailDynamicHashSeen' otherwise: false)
+		ifTrue: [
+			dyn := self ___dynamicClassAttr___: #'__hash__'.
+			dyn == nil ifFalse: [
+				^ dyn @env1:___pyCallValue___: { self } kw: nil]].
 	^ self @env0:hash
 %
 
@@ -4011,6 +4051,13 @@ ___pyAttrStore___: aName put: aValue
 
 	(self isKindOf: Behavior) ifTrue: [
 		| setterSym getterSym |
+		"Installing __hash__ on a class at runtime has to become visible to
+		hash(), which reaches Object >> __hash__ by an ordinary message send and
+		so cannot see a dynamic class attribute.  Record that one exists; that
+		method probes only when this flag is set, keeping the hash hot path free
+		for every program that never does this."
+		(aName @env0:asString @env0:= '__hash__') ifTrue: [
+			SessionTemps @env0:current @env0:at: #'GrailDynamicHashSeen' put: true].
 		"(Enum member-reassignment is guarded in __setattr__:_:, the single
 		store entry point, BEFORE the accessor-setter dispatch.)"
 		"Canonical-class overlay: runtime stores on a shared canonical

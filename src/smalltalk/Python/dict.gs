@@ -438,10 +438,18 @@ __eq__: other
 	__dict__, C-shim results, dicts committed before the PyDict flip).  A
 	Python dict must compare equal to any of them by contents -- exactly
 	what this guard meant when ``dict'' was itself KeyValueDictionary."
+	"PUNT, do not settle it as false: the dunder declines and the OPERATOR layer
+	(___cmpEq___) decides, which is what lets the REFLECTED __eq__ on the right
+	run.  Answering false here made ``{} == UserDict()'' False while
+	``UserDict() == {}'' was True -- CPython has dict.__eq__ return
+	NotImplemented for a non-dict, then calls UserDict.__eq__.  It broke any
+	mapping that compares equal to a dict from the left (test_userdict test_all's
+	rich-comparison matrix), and equally a plain class with an __eq__.  list, int
+	and str already punt here; dict was the odd one out."
 	(other isKindOf: KeyValueDictionary) ifFalse: [
-		^ false
+		^ #'___NotImplemented___'
 	].
-	
+
 	mySize := self @env0:size.
 	otherSize := other @env0:size.
 	(mySize @env0:= otherSize) ifFalse: [
@@ -514,8 +522,16 @@ __len__
 category: 'Grail-Comparison'
 method: dict
 __ne__: other
-	"Return True if dictionaries do not have the same (key, value) pairs"
-	^ (self __eq__: other) @env0:not
+	"Return True if dictionaries do not have the same (key, value) pairs.
+	Forwards the PUNT rather than negating it: __eq__ now answers
+	#'___NotImplemented___' for a non-mapping, and sending ``not'' to that
+	symbol is a doesNotUnderstand.  Same shape as AbstractPyStr>>__ne__."
+
+	| r |
+	r := self __eq__: other.
+	r == true ifTrue: [^ false].
+	r == false ifTrue: [^ true].
+	^ r
 %
 
 category: 'Grail-Merge Operators'

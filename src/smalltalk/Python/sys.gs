@@ -899,6 +899,42 @@ setrecursionlimit: limit
 
 category: 'Grail-Built-in Functions'
 method: sys
+getswitchinterval
+	"getswitchinterval() -> float.  The thread switch interval in seconds,
+	CPython's 0.005 default unless setswitchinterval changed it.
+
+	Grail's threads are cooperative GsProcess green threads, so the value does
+	not drive a preemption timer the way CPython's does -- but it has to
+	round-trip, because test code saves it, lowers it to shake out races, and
+	restores it (test.support.setswitchinterval).  Answering nothing at all
+	made that an AttributeError before the test under it ever ran.
+
+	Session-local, matching set_int_max_str_digits: the setting belongs to the
+	running session, not the committed image."
+
+	^ (SessionTemps @env0:current) @env0:at: #GrailSwitchInterval ifAbsent: [0.005]
+%
+
+category: 'Grail-Built-in Functions'
+method: sys
+setswitchinterval: interval
+	"setswitchinterval(n).  Stores the value for getswitchinterval to answer;
+	see there for why a cooperative scheduler still keeps it.  CPython rejects
+	a non-positive interval, so this does too rather than accept a value it
+	would then report back as legitimate."
+
+	| v |
+	(interval @env0:isKindOf: Number) ifFalse: [
+		TypeError ___signal___: 'a float is required'].
+	v := interval @env0:asFloat.
+	v @env0:<= 0.0 ifTrue: [
+		ValueError ___signal___: 'switch interval must be strictly positive'].
+	(SessionTemps @env0:current) @env0:at: #GrailSwitchInterval put: v.
+	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: sys
 unraisablehook: unraisable
 	"unraisablehook(unraisable) - stub."
 	^ None

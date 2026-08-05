@@ -99,11 +99,69 @@ set compile_env: 1
 category: 'Grail-Instance Creation'
 classmethod: UnboundMethod
 definingClass: aClass selector: aSym
+	"``Cls.method'' -- INTERNED per (class, selector), so repeated reads answer
+	the same object.
 
-	| inst |
+	CPython stores a plain function in the class dictionary and hands back that
+	very object, so ``Cls.meth is Cls.meth'' holds and code may compare methods
+	with ``is'': functools.total_ordering's test pickles ``Cls.__lt__'' and
+	asserts the round-trip is identical, and pickle can only save a callable by
+	reference if the name resolves back to the same object.  Minting a fresh
+	handle per read broke both.
+
+	Bounded by construction: the key is a CLASS, and there are finitely many,
+	all long-lived.  Contrast BoundMethod, which only interns module and class
+	receivers -- an instance-bound method must NOT be cached, both because
+	CPython's ``obj.meth is obj.meth'' is False and because keying on instances
+	would retain every receiver ever asked for a method.
+
+	Session-local (SessionTemps), like every other Grail handle cache: these
+	are transient objects and the store must not be committed."
+
+	| tbl per inst |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailUnboundMethodCache'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	per := tbl @env0:at: aClass ifAbsentPut: [KeyValueDictionary @env0:new].
+	inst := per @env0:at: aSym otherwise: nil.
+	inst == nil ifFalse: [^ inst].
 	inst := self @env0:new.
 	inst @env0:_setClass: aClass selector: aSym.
+	per @env0:at: aSym put: inst.
 	^ inst
+%
+
+category: 'Grail-Descriptor Protocol'
+method: UnboundMethod
+__get__: instance _: owner
+	"Function-descriptor binding.  In Python a plain function is a descriptor,
+	so lifting one off a class and storing it in ANOTHER class body produces an
+	ordinary method there:
+
+	    test_repr_deep = mapping_tests.TestHashMappingProtocol.test_repr_deep
+
+	is verbatim upstream in test_userdict, and CPython binds it on instance
+	access.  Grail read back the stored UnboundMethod itself, so unittest called
+	it with no arguments and got ``unbound method 'test_repr_deep' must be
+	called with an instance as the first argument''.
+
+	Binding is skipped for CLASS access, matching CPython's
+	``function.__get__(None, owner) is function'': that is what keeps the
+	right-hand side of the assignment above unbound in the first place, and a
+	BoundMethod on the class would send the selector to the class object.
+
+	The resulting BoundMethod dispatches ``selector'' to the instance, so the
+	method must be reachable from the instance's own class -- true for the
+	inheritance case above.  A function grafted onto an UNRELATED class is not
+	covered; that needs the whole function object to travel, not a
+	(class, selector) handle."
+
+	(instance == nil or: [instance == None]) ifTrue: [^ self].
+	(instance @env0:isKindOf: Behavior) ifTrue: [^ self].
+	"``receiver:selector:'' is an env-1 classmethod, so NO @env0: prefix -- with
+	one it MNUs, and inside an attribute read that escapes as an uncatchable
+	Smalltalk error (the module scored STERROR, 0 tests, not a failure)."
+	^ BoundMethod receiver: instance selector: selector
 %
 
 category: 'Grail-Calling'

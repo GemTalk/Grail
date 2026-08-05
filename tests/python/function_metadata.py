@@ -294,22 +294,42 @@ def wraps_on_a_builtin_does_not_raise():
     for every name the builtin lacks (__dict__, __type_params__) AND the
     __module__ read that used to raise a raw Smalltalk error.
 
-    ``==``, not ``is``: a reference to a builtin mints a FRESH BoundMethod
-    handle per attribute load, so ``max is max`` is False in Grail even
-    though ``max == max`` is True (BoundMethod.__eq__ compares receiver +
-    selector).  That is a pre-existing deviation from CPython, unrelated to
-    update_wrapper -- pinned here so the distinction stays visible.
+    ``is``, as CPython has it.  This used to have to be written with ``==``,
+    because a reference to a builtin minted a fresh BoundMethod handle per
+    attribute load and ``max is max`` was False; BoundMethod now interns
+    module- and class-receiver handles, so the identity assertion CPython
+    licenses is the one to make.
     """
     def wrapper():
         pass
 
     functools.update_wrapper(wrapper, max)
-    return wrapper.__name__ == 'max' and wrapper.__wrapped__ == max
+    return wrapper.__name__ == 'max' and wrapper.__wrapped__ is max
 
 
-def builtin_references_are_not_identity_stable():
-    """Guard for the assumption the test above leans on."""
-    return max is not max and max == max
+def builtin_references_are_identity_stable():
+    """``max is max``, and a builtin reached two ways is one object.
+
+    CPython's builtins are single objects living in the builtins module and
+    callers compare them with ``is'' -- functools' test_subclass_optimization
+    asserts ``partial(partial(min, 2), 1).func is min''.
+
+    The instance case is the counterpart and must stay FALSE: CPython creates a
+    fresh bound method per attribute read, so ``obj.meth is obj.meth`` is False
+    there too, and interning those would be both the wrong answer and unbounded
+    (the key would retain every receiver ever asked for a method).
+    """
+    import builtins
+
+    class C:
+        def meth(self):
+            pass
+
+    c = C()
+    return [max is max,
+            max is builtins.max,
+            C.meth is C.meth,
+            c.meth is c.meth]
 
 
 def lru_cache_wrapper_gets_metadata():

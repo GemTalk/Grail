@@ -819,6 +819,7 @@ run
 	at: #'NestedUnpackTestCase' put: nil;
 	at: #'ModuleDictItemTestCase' put: nil;
 	at: #'GeneratorStopTestCase' put: nil;
+	at: #'PosonlyAndReflectedEqTestCase' put: nil;
 	yourself.
 Transcript show: 'Forward references created for PythonTests dictionary'.
 %
@@ -1601,6 +1602,7 @@ input src/smalltalk/PythonTests/ZeroDivisionErrorTestCase.gs
 input src/smalltalk/PythonTests/NestedUnpackTestCase.gs
 input src/smalltalk/PythonTests/ModuleDictItemTestCase.gs
 input src/smalltalk/PythonTests/GeneratorStopTestCase.gs
+input src/smalltalk/PythonTests/PosonlyAndReflectedEqTestCase.gs
 
 run
 Transcript show: 'Step 6 complete: Test classes loaded'.

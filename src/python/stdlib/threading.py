@@ -254,3 +254,93 @@ class Condition:
 
     def notify_all(self):
         pass
+
+
+class BrokenBarrierError(RuntimeError):
+    """Raised by Barrier when the barrier is reset or aborted while a thread is
+    waiting on it."""
+
+
+class Barrier:
+    """A rendezvous for a fixed number of threads: every ``wait`` blocks until
+    ``parties`` of them have arrived, then all are released together.
+
+    Built on the real (Semaphore-backed) locks rather than on Event, which does
+    not block -- a barrier that returned immediately would defeat the point.
+    The waiting is genuine: each waiter parks on its own pre-acquired lock and
+    the last party to arrive releases them all.  Grail's threads are
+    cooperative green threads, so a parked waiter yields and the others run,
+    which is exactly the interleaving a barrier needs.
+
+    Consequence worth stating: if fewer than ``parties`` threads ever arrive,
+    the waiters park forever.  The ``timeout`` argument is accepted for API
+    compatibility and NOT honoured -- the underlying lock acquire has no
+    deadline -- so a miscounted barrier hangs rather than raising
+    BrokenBarrierError.  CPython would time out.  Callers in the test suite
+    always supply the full party count.
+    """
+
+    def __init__(self, parties, action=None, timeout=None):
+        self.parties = parties
+        self._action = action
+        self._default_timeout = timeout
+        self._mutex = _new_lock()
+        self._count = 0
+        self._waiters = []
+        self.broken = False
+
+    @property
+    def n_waiting(self):
+        return self._count
+
+    def wait(self, timeout=None):
+        """Block until ``parties`` threads have called wait.  Answers this
+        thread's arrival index (0 .. parties-1), as CPython does, so exactly
+        one waiter can be singled out to do follow-up work."""
+        self._mutex.acquire()
+        index = self._count
+        self._count += 1
+        if self._count >= self.parties:
+            # Last to arrive: release the whole cohort and reopen the barrier.
+            self._count = 0
+            waiters = self._waiters
+            self._waiters = []
+            self._mutex.release()
+            if self._action is not None:
+                self._action()
+            for w in waiters:
+                w.release()
+            return index
+        own = _new_lock()
+        own.acquire()               # pre-acquired, so the next acquire parks
+        self._waiters.append(own)
+        self._mutex.release()
+        own.acquire()               # parks here until the last party arrives
+        if self.broken:
+            raise BrokenBarrierError()
+        return index
+
+    def reset(self):
+        """Return the barrier to the empty state.  Any thread still parked is
+        released with BrokenBarrierError, matching CPython -- a reset while
+        someone waits is a programming error, not a quiet no-op."""
+        self._mutex.acquire()
+        waiters = self._waiters
+        self._waiters = []
+        self._count = 0
+        if waiters:
+            self.broken = True
+        self._mutex.release()
+        for w in waiters:
+            w.release()
+
+    def abort(self):
+        """Put the barrier into the broken state and release every waiter."""
+        self._mutex.acquire()
+        self.broken = True
+        waiters = self._waiters
+        self._waiters = []
+        self._count = 0
+        self._mutex.release()
+        for w in waiters:
+            w.release()

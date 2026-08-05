@@ -33,7 +33,7 @@ different rows and merges cleanly.
 | test.test_bytes | OK | 316 | 0 | 0 | 22 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
-| test.test_enum | ERROR | 1077 | 72 | 27 | 1 |  |
+| test.test_enum | ERROR | 1077 | 71 | 27 | 1 |  |
 | test.test_unary | OK | 6 | 0 | 0 | 0 |  |
 | test.test_int_literal | OK | 6 | 0 | 0 | 0 |  |
 | test.test_unpack | OK | 1 | 0 | 0 | 0 |  |
@@ -51,9 +51,9 @@ different rows and merges cleanly.
 | test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
 | test.test_keywordonlyarg | OK | 11 | 0 | 0 | 0 |  |
 | test.test_dictviews | OK | 16 | 0 | 0 | 0 |  |
-| test.test_sort | FAIL | 21 | 4 | 0 | 0 |  |
+| test.test_sort | OK | 21 | 0 | 0 | 2 |  |
 | test.test_generator_stop | OK | 2 | 0 | 0 | 0 |  |
-| test.test_userdict | ERROR | 28 | 3 | 2 | 0 |  |
+| test.test_userdict | OK | 28 | 0 | 0 | 0 |  |
 | test.test_userlist | OK | 54 | 0 | 0 | 1 |  |
 | test.test_isinstance | ERROR | 23 | 1 | 13 | 2 |  |
 | test.test_index | OK | 55 | 0 | 0 | 0 |  |
