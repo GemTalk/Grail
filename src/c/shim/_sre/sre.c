@@ -51,6 +51,8 @@ static const char copyright[] =
 #include "sre.h"                     // SRE_CODE
 
 #include <ctype.h>                   // tolower(), toupper(), isalnum()
+#include <stdio.h>                   // GRAIL: fprintf/stderr for SHIM-SRE diag
+#include <stdlib.h>                  // GRAIL: getenv() to gate it
 #include <wchar.h>                   // btowc()
 #include <wctype.h>                  // iswalnum, towlower, towupper
 
