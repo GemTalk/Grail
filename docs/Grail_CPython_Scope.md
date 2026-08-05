@@ -675,6 +675,18 @@ Flag), `test_datetime`, `test_functools`, `test_iter`, and `test_traceback` (the
 only IMPORTERROR — `__code__` on a def that compiled to a real method; PR #129
 attempted it and was closed unmerged).
 
+`test_iter` is now **one test** from green, and that test belongs to
+`test_traceback`'s root rather than to iteration: `test_exception_locations`
+asserts PEP 657 column spans, checking that an exception raised from
+`__init__`/`__iter__`/`__next__` is attributed to the *iterator expression* of
+the `for` statement — `f.line[f.colno - indent : f.end_colno - indent] ==
+"BrokenIter(init_raises=True)"`. Grail's `FrameSummary` answers `colno`,
+`end_colno` **and** `line` as `None` (`co_filename` is `'<grail>'`, so
+linecache has no source to read), and `lineno`/`end_lineno` are per-statement.
+Closing it means source-resolvable filenames plus per-expression position
+records — the deferred traceback work, not an iteration fix. So two of the 20
+❗ rows now collapse to that one project.
+
 ## Next tranche (phase 4, wired 2026-08-03)
 
 Every remaining P1 module plus the pure-stdlib P2s — 55 in all — were vendored
