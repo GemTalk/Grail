@@ -816,6 +816,8 @@ run
 	at: #'WeakReferenceTestSubject' put: nil;
 	at: #'WeakrefModuleTestCase' put: nil;
 	at: #'ZeroDivisionErrorTestCase' put: nil;
+	at: #'NestedUnpackTestCase' put: nil;
+	at: #'ModuleDictItemTestCase' put: nil;
 	yourself.
 Transcript show: 'Forward references created for PythonTests dictionary'.
 %
@@ -985,6 +987,7 @@ input src/smalltalk/Python/filter_iterator.gs
 input src/smalltalk/Python/map_iterator.gs
 input src/smalltalk/Python/zip_iterator.gs
 input src/smalltalk/Python/builtins.gs
+input src/smalltalk/Python/builtins_docstrings.gs
 input src/smalltalk/Python/copyreg.gs
 input src/smalltalk/Python/cmath.gs
 input src/smalltalk/Python/PyEnumTypes.gs
@@ -1594,6 +1597,8 @@ input src/smalltalk/PythonTests/WarningTestCase.gs
 input src/weakref/WeakReferenceTestCase.gs
 input src/smalltalk/PythonTests/WeakrefModuleTestCase.gs
 input src/smalltalk/PythonTests/ZeroDivisionErrorTestCase.gs
+input src/smalltalk/PythonTests/NestedUnpackTestCase.gs
+input src/smalltalk/PythonTests/ModuleDictItemTestCase.gs
 
 run
 Transcript show: 'Step 6 complete: Test classes loaded'.

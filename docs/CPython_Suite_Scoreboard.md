@@ -25,7 +25,7 @@ different rows and merges cleanly.
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
 | test.test_datetime | ERROR | 525 | 77 | 37 | 2 |  |
 | test.test_re | OK | 165 | 0 | 0 | 28 |  |
-| test.test_functools | ERROR | 325 | 21 | 19 | 6 |  |
+| test.test_functools | ERROR | 325 | 18 | 21 | 6 |  |
 | test.test_list | OK | 68 | 0 | 0 | 3 |  |
 | test.test_tuple | OK | 38 | 0 | 0 | 6 |  |
 | test.test_dict | OK | 120 | 0 | 0 | 20 |  |
@@ -33,7 +33,7 @@ different rows and merges cleanly.
 | test.test_bytes | OK | 316 | 0 | 0 | 22 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
-| test.test_enum | ERROR | 1077 | 74 | 29 | 1 |  |
+| test.test_enum | ERROR | 1077 | 73 | 29 | 1 |  |
 | test.test_unary | OK | 6 | 0 | 0 | 0 |  |
 | test.test_int_literal | OK | 6 | 0 | 0 | 0 |  |
 | test.test_unpack | OK | 1 | 0 | 0 | 0 |  |
@@ -45,11 +45,11 @@ different rows and merges cleanly.
 | test.test_richcmp | OK | 11 | 0 | 0 | 0 |  |
 | test.test_slice | OK | 11 | 0 | 0 | 0 |  |
 | test.test_bool | OK | 31 | 0 | 0 | 0 |  |
-| test.test_iter | ERROR | 57 | 0 | 3 | 3 |  |
+| test.test_iter | ERROR | 57 | 0 | 1 | 4 |  |
 | test.test_traceback | IMPORTERROR | 0 | 0 | 0 | 0 | BoundMethod object has no attribute '__code__' |
 | test.test_compare | OK | 16 | 0 | 0 | 0 |  |
 | test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
-| test.test_keywordonlyarg | ERROR | 11 | 3 | 1 | 0 |  |
+| test.test_keywordonlyarg | OK | 11 | 0 | 0 | 0 |  |
 | test.test_dictviews | ERROR | 16 | 2 | 3 | 0 |  |
 | test.test_sort | FAIL | 21 | 4 | 0 | 0 |  |
 | test.test_generator_stop | ERROR | 2 | 0 | 2 | 0 |  |
@@ -59,9 +59,9 @@ different rows and merges cleanly.
 | test.test_index | OK | 55 | 0 | 0 | 0 |  |
 | test.test_baseexception | ERROR | 11 | 1 | 7 | 0 |  |
 | test.test_listcomps | ERROR | 60 | 6 | 27 | 0 |  |
-| test.test_property | ERROR | 31 | 23 | 8 | 0 |  |
+| test.test_property | ERROR | 31 | 18 | 8 | 0 |  |
 | test.test_copy | ERROR | 81 | 28 | 15 | 0 |  |
-| test.test_scope | ERROR | 41 | 6 | 10 | 0 |  |
+| test.test_scope | ERROR | 41 | 6 | 9 | 0 |  |
 | test.test_yield_from | ERROR | 43 | 18 | 12 | 0 |  |
 | test.test_deque | ERROR | 80 | 10 | 23 | 4 |  |
 | test.test_format | ERROR | 18 | 10 | 3 | 3 |  |
