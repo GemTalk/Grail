@@ -178,6 +178,25 @@ testStrIteratorPickle
 
 category: 'Grail-Tests - Backlog Fixes'
 method: BuiltinsTestCase
+testCallableIteratorPickle
+	"iter(callable, sentinel) -- a callable_iterator -- round-trips through
+	pickle at every protocol, resuming mid-stream (test_iter test_iter_callable).
+	callable_iterator now answers _getstate (callable, sentinel), which pickle.py
+	reduces to (iter, (callable, sentinel)); the callable pickles generically and
+	carries its own resume state.  Uses a loaded module because the fixture
+	defines a class and the stdlib pickle module must be importable."
+
+	| mods mod |
+	mods := importlib @env1:modules.
+	mods @env0:removeKey: #'grail_callable_iter_pickle' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_callable_iter_pickle.py')
+		name: 'grail_callable_iter_pickle'.
+	self assert: (mod @env1:check)
+%
+
+category: 'Grail-Tests - Backlog Fixes'
+method: BuiltinsTestCase
 testNestedClassStringLiteralNewline
 	"A string literal containing a newline, in a method of a class defined
 	INSIDE a nested block (try/for/if), keeps its exact value.  ClassDefAst

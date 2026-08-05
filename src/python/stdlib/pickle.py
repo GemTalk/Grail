@@ -428,6 +428,9 @@ class _SeqIterProbe:
 
 
 _SEQ_ITER = type(iter(_SeqIterProbe()))
+# iter(callable, sentinel): int() -> 0 is never == 1, so this constructs a
+# callable_iterator purely to capture its type (it is never iterated).
+_CALLABLE_ITER = type(iter(int, 1))
 
 # type -> ('remaining' | 'positional'), i.e. whether CPython pickles the
 # iterator as a snapshot LIST of what is left (dict/set views, whose order is
@@ -436,6 +439,8 @@ _SEQ_ITER = type(iter(_SeqIterProbe()))
 # index; the snapshot kinds = a LIST of what is still to come, because a dict or
 # set view has no stable index to resume from.  The snapshot kind also says
 # WHICH view to snapshot: a value iterator must not be rebuilt from the keys.
+# 'callable' = iter(callable, sentinel): the callable carries its own state, so
+# there is no index -- it reduces to (iter, (callable, sentinel)).
 _ITER_TYPES = {}
 for _t in (_LIST_ITER, _TUPLE_ITER, _RANGE_ITER, _SEQ_ITER, _STR_ITER, _BYTES_ITER):
     _ITER_TYPES[_t] = 'positional'
@@ -443,6 +448,7 @@ _ITER_TYPES[_DICT_KEYITER] = 'keys'
 _ITER_TYPES[_DICT_VALUEITER] = 'values'
 _ITER_TYPES[_DICT_ITEMITER] = 'items'
 _ITER_TYPES[_SET_ITER] = 'elements'
+_ITER_TYPES[_CALLABLE_ITER] = 'callable'
 
 
 def newobj(cls):
@@ -875,6 +881,12 @@ class _Pickler:
         if t is _RANGE_ITER:
             start, stop, step, pos = state
             self.save_reduce(iter, (range(start, stop, step),), state=pos, obj=obj)
+            return
+        if kind == 'callable':
+            # iter(callable, sentinel): no resume index -- the callable holds
+            # its own state -- so this is a plain two-arg reduction with no
+            # BUILD.  Wire-compatible with CPython's (iter, (callable, sentinel)).
+            self.save_reduce(iter, (state[0], state[1]), obj=obj)
             return
         # tuple_iterator, seq_iterator: (collection/source, index)
         self.save_reduce(iter, (state[0],), state=state[1], obj=obj)
