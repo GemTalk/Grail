@@ -450,11 +450,28 @@ cache_info
 category: 'Grail-Attribute Access'
 method: BoundMethod
 __func__
-	"Python's bound-method ``m.__func__'' — the underlying function.
-	Grail has no separate function object, so return self (the handle
-	is both); callers (django.utils.inspect._get_callable_parameters)
-	only re-inspect it, and inspect.signature is arity-agnostic here."
+	"Python's bound-method ``m.__func__'' -- the underlying function.
 
+	A CLASS receiver is a class-side method, which is what @classmethod /
+	@staticmethod produce in Grail, and CPython's ``classmethod.__func__'' is the
+	PLAIN function: it takes cls as its FIRST argument.  Answering the bound
+	handle made a caller that re-invokes it supply the class twice --
+	``wrapped(cls, arg)'' arrived as two arguments at a method wanting one, and
+	raised ``takes a different number of arguments''.  An UnboundMethod is Grail's
+	stand-in for a function that takes its receiver first, so that is the honest
+	answer here.
+
+	Any other receiver still answers self.  Grail has no separate function object
+	for an instance method, and callers there (django.utils.inspect's
+	_get_callable_parameters) only re-inspect it rather than re-invoke it."
+
+	(receiver isKindOf: Behavior) ifTrue: [
+		"definingClass is the METACLASS, not the class: Grail compiles a
+		@classmethod / @staticmethod onto the metaclass, so an UnboundMethod on
+		the class itself cannot resolve the selector (``type object 'X' has no
+		method ...'').  The receiver supplied at call time is the class, which is
+		an instance of that metaclass."
+		^ UnboundMethod definingClass: receiver @env0:class selector: selector].
 	^ self
 %
 

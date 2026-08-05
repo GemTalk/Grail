@@ -2675,8 +2675,39 @@ ___wrapsClassSideMethod___
 
 	| fn |
 	fn := self @env0:dynamicInstVarAt: #func.
-	^ (fn isKindOf: BoundMethod)
-		and: [fn @env0:receiver isKindOf: Behavior]
+	^ self ___isClassSideHandle___: fn depth: 0
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+___isClassSideHandle___: fn depth: aDepth
+	"Is fn a class-side handle, possibly behind wrappers?
+
+	``@singledispatchmethod @classmethod @contextmanager def m(cls, arg)'' hands
+	this class the contextmanager's factory, not the class-side handle -- so the
+	direct test called it a plain method, expected an instance in front of the
+	dispatch argument, and raised ``helper requires at least 1 positional
+	argument'' for a call that had supplied everything.
+
+	Follow ``__wrapped__'', which is what functools.wraps sets and what CPython's
+	own contextmanager leaves behind.  Bounded depth, so a wrapper that somehow
+	points at itself cannot spin."
+
+	| wrapped |
+	fn == nil ifTrue: [^ false].
+	aDepth @env0:> 4 ifTrue: [^ false].
+	((fn isKindOf: BoundMethod) and: [fn @env0:receiver isKindOf: Behavior])
+		ifTrue: [^ true].
+	"A @classmethod / @staticmethod DESCRIPTOR is class-side by definition, and a
+	decorator that returns one puts it here directly rather than behind a
+	__wrapped__ hop (``@singledispatchmethod @classmethod_friendly_decorator
+	@classmethod def m'')."
+	(self ___isClassSideDescriptor___: fn) ifTrue: [^ true].
+	wrapped := [fn @env1:___pyAttrLoad___: #'__wrapped__']
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil].
+	(wrapped == nil or: [wrapped == fn]) ifTrue: [^ false].
+	^ self ___isClassSideHandle___: wrapped depth: aDepth @env0:+ 1
 %
 
 category: 'Grail-Callable'
@@ -2765,11 +2796,32 @@ ___classSideOwner___
 	"The class this class-side method was defined on -- the receiver of the
 	BoundMethod the class-body decorator handed us -- or nil."
 
-	| fn recv |
+	| fn recv recorded |
+	"Recorded by __set_name__ when the class was built.  Needed because the
+	wrapped callable does not always know its class: a decorator that returns a
+	@classmethod hands this object a PyClassMethod, which carries no owner, and
+	then the class-side call had nothing to bind against (``'PyClassMethod' object
+	is not callable'')."
+	recorded := self @env0:dynamicInstVarAt: #'___owner___'.
+	(recorded @env0:notNil and: [recorded @env0:isKindOf: Behavior])
+		ifTrue: [^ recorded].
 	fn := self @env0:dynamicInstVarAt: #func.
 	(fn @env0:isKindOf: BoundMethod) ifFalse: [^ nil].
 	recv := fn @env0:receiver.
 	^ (recv @env0:isKindOf: Behavior) ifTrue: [recv] ifFalse: [nil]
+%
+
+category: 'Grail-Descriptor'
+method: functools_singledispatchmethod
+__set_name__: owner _: aName
+	"Python's __set_name__, sent for every class-body entry as the class is
+	built.  Recording the owner is what lets a class-side dispatch bind against
+	the defining class when the wrapped callable cannot name it -- see
+	___classSideOwner___."
+
+	(owner @env0:isKindOf: Behavior) ifTrue: [
+		self @env0:dynamicInstVarAt: #'___owner___' put: owner].
+	^ ExecBlock @env0:___pyNone___
 %
 
 category: 'Grail-Single Dispatch'
