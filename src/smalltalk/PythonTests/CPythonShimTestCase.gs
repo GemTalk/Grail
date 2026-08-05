@@ -1898,6 +1898,62 @@ testShimSingletonLivesInSessionTempsNotCommitted
 	CPythonShim current.
 %
 
+category: 'Grail-Tests - Session-Local State'
+method: CPythonShimTestCase
+testWrapperMapSurvivesSingletonReplacement
+	"Replacing the singleton must NOT orphan the wrappers.
+
+	The map is the only strong reference to each wrapper, and a wrapper's
+	gcMalloc'd memory dies with its CByteArray -- while long-lived C
+	structures hold raw pointers into it for the life of the process
+	(_PyObject_New calloc's a PatternObject and _Py_Dealloc is a no-op, so a
+	compiled regex never goes away).  When the map lived only on the instance,
+	the reset in the test above dropped 106 of 108 wrappers; once a freed block
+	was reused, the offset-24 sentinel stopped reading GRAILWP1 and
+	is_foreign() called it foreign -- surfacing either as ``a
+	ShimForeignObject does not understand #includesKey:'' or, reading tp_name
+	off the stale ob_type, as a SIGSEGV in the whole-suite-in-one-session run
+	(docs/Shim_Foreign_Proxy_Misattribution.md)."
+
+	| shim1 value wrapper shim2 |
+	shim1 := CPythonShim current.
+	value := Array with: 17 with: 18.
+	wrapper := shim1 wrap: value.
+	self assert: (shim1 valueToPyObject at: value otherwise: nil) == wrapper.
+
+	CPythonShim reset.
+	shim2 := CPythonShim current.
+	self deny: shim1 == shim2
+		description: 'reset must actually replace the singleton'.
+	self assert: (shim2 valueToPyObject at: value otherwise: nil) == wrapper
+		description: 'a new singleton must inherit the session wrapper map'.
+	self assert: (shim2 wrap: value) == wrapper
+		description: 'wrap: must answer the SAME wrapper, not a fresh one whose '
+			, 'predecessor C still points at'
+%
+
+category: 'Grail-Tests - Session-Local State'
+method: CPythonShimTestCase
+testLibraryPathChangeDoesDiscardTheWrapperMap
+	"The one case where dropping the wrappers is correct: a library CHANGE.
+	Each wrapper caches a tp_* address from the old library at offset 8, and
+	those do not survive a reload, so they must not be reused."
+
+	| shim value saved |
+	shim := CPythonShim current.
+	value := Array with: 19 with: 20.
+	shim wrap: value.
+	self assert: (SessionTemps current at: #GrailShimWrapperMap otherwise: nil) notNil.
+
+	saved := CPythonShim libraryPath.
+	[CPythonShim libraryPath: saved.
+	 self assert: (SessionTemps current at: #GrailShimWrapperMap otherwise: nil) isNil
+		description: 'libraryPath: must discard wrappers holding old tp_* addresses']
+		ensure: [
+			CPythonShim libraryPath: saved.
+			CPythonShim current]
+%
+
 
 ! ===============================================================================
 ! Tests - Server selectors that were missing (P1 in docs/Shim_API_Gaps.md)

@@ -688,26 +688,28 @@ Two of the eighteen only needed a vendoring gap closed, not a Grail fix:
 (for `test_yield_from`) were added to the trimmed support package, plus
 `os_helper.create_empty_file`.
 
-**Easy wins — small residual, no new runtime plumbing (9):**
+Three of the eighteen have since gone green — `test_compare`, `test_iterlen` and
+`test_index` — and their rows are gone from the tables below, including the
+`#'<'`/`#'<='` uncatchable-DNU root that `test_index` named. The tier tables' ✅
+is the live signal; anything still listed here is still open.
+
+**Easy wins — small residual, no new runtime plumbing (7 left of 9):**
 
 | Module | Trial score | What is left |
 |--------|-------------|--------------|
 | `test_generator_stop` | 2t, 2E | PEP 479: a `StopIteration` crossing a generator boundary must become `RuntimeError`. |
 | `test_keywordonlyarg` | 11t, 4F 1E | `co_kwonlyargcount`; "takes from 1 to 2 positional arguments" wording; two SyntaxError cases. |
-| `test_compare` | 16t, 6F | Reflected `__eq__`/`__ne__` ordering; `complex` vs a custom comparable. |
 | `test_dictviews` | 16t, 2F 3E | `dict_keys` must register as `KeysView`; a self-referential view `repr` recurses; one `PyDict does not understand #new` leak. |
 | `test_sort` | 21t, 4F 1E | Mutation-during-sort must raise `ValueError` (4 tests) + one `OffsetError` escaping codegen. |
-| `test_iterlen` | 22t, 16F | `__length_hint__` returns 0 for most iterators (9 tests) and does not shrink as they advance. |
 | `test_userdict` | 28t, 3F 3E | `UserDict \| UserDict` (PEP 584), `UserDict(self=42)`, `repr` of a self-referential dict. |
 | `test_userlist` | 54t, 4F 4E | `OrderedCollection + UserList`, slice-assignment identity, `UserList does not understand #reverseDo:`. |
 | `test_isinstance` | 23t, 1F 19E | 16 of the 19 errors are Grail raising "arg must be a type" where CPython accepts the argument. |
 
 **Single-root modules — one fix moves most of the module, and the same root
-leaks into modules already on the board (5):**
+leaks into modules already on the board (4 left of 5):**
 
 | Module | Trial score | The one root |
 |--------|-------------|--------------|
-| `test_index` | 55t, 3F 34E | 32 of 34 errors are `a newstyle does not understand #'<'` (28) or `#'<='` (4) — an ordering comparison on a plain Python object escapes as an **uncatchable Smalltalk DNU** instead of a `TypeError`. Same class of leak as the `___cmpFallback___`/`___binOpFallback___` work. |
 | `test_baseexception` | 11t, 1F 7E | All 7 are `#signal` / `#handles:` sent to a non-exception (`raise 'str'`, `except <not-a-class>`): must be a catchable `TypeError`. Hardens the exception model that `test_exceptions`/`test_raise`/`test_traceback` sit on. |
 | `test_listcomps` | 60t, 2F 52E | 29 errors are `UndefinedObject does not understand #new` — a nil receiver in comprehension codegen (also 2× `SubscriptAst does not understand #id`, which is what blocks `test_generators` from importing at all). |
 | `test_property` | 31t, 23F 8E | 12 failures are one bug: `property.__doc__` falls back to `object`'s docstring instead of the getter's / the `doc=` argument. |
@@ -736,6 +738,11 @@ Recorded so the next pass does not re-trial them. All scored on 2026-08-03;
 the trial ran against `main` post-#128 and the kept modules' committed rows
 were rebuilt against `main` post-#135 (the only row that moved in between was
 `test_enum`, 226 → 212 fail+err, from the enum fixes in #133/#135).
+
+Rebuilt again on 2026-08-04 against `main` post-#201/#202/#203 (whole manifest,
+50 modules, 4 workers, 293s, no CRASH/TIMEOUT). Two rows moved, both
+improvements: `test_enum` 117 → 105 and `test_functools` 41 → 40 fail+err. No
+module changed status bucket, so the Status column above is unchanged.
 
 **One named symbol away** — cheap, and each unblocks a whole module:
 

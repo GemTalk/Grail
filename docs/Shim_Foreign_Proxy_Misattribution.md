@@ -1,5 +1,24 @@
 # A dead Grail wrapper reads as "foreign", and `_sre` reports it as `IndexError: no such group`
 
+> **RESOLVED 2026-08-04 — read this box before the rest.**
+>
+> The headline is right: a *dead Grail wrapper* is misread as foreign. The
+> mechanism given below for *how* it dies is **wrong**, and is corrected in
+> [How the wrapper actually dies](#how-the-wrapper-actually-dies-corrected).
+> In short: `sweep` is not involved and cannot be — it only removes wrappers at
+> refcount ≤ 0, and `groupindex` is held at ≥ 2. The wrappers were orphaned by
+> **replacing the `CPythonShim` singleton**, which dropped the instance-held
+> map that was their only strong reference (measured: 108 wrappers before a
+> `CPythonShim reset`, 2 after).
+>
+> The open question the doc ends on — dead wrapper vs genuinely foreign object —
+> is settled: **dead wrapper**. No `GRAIL_SHIM_DIAG` run by the reporter is
+> needed.
+>
+> Fixed by making the wrapper map session-scoped, so a new singleton inherits
+> it. The whole-suite-in-one-session reproducer went from a SIGSEGV at test
+> 1241 to no crash at all.
+
 *Investigated 2026-08-04 against `main` @ 96f59625 (GemStone 4.0.0, arm64 Darwin).
 Written up for the core-team developer who reported the stack. The reported failure
 is **not** a `Fraction` bug, a regex bug, or a bad group index.*
@@ -144,6 +163,12 @@ That also explains the reproducibility: it depends on allocation pattern,
 
 ### Why a full SUnit run can miss it — and it is *not* the warm/cold distinction
 
+> **Superseded in part.** The conclusion stands — this is per-session state, not
+> warm/cold — but the reasoning below attributes it to `sweep` phase, which is
+> wrong. What actually varies per session is whether a *reset* happened and
+> whether the freed block was later *reused*. See
+> [How the wrapper actually dies](#how-the-wrapper-actually-dies-corrected).
+
 The state that governs the trigger is **per-session shim state, not module state**.
 `CPythonShim current` keeps its singleton in `SessionTemps` ("each gem process holds
 its own"), and the two fields that matter are instance variables on it:
@@ -177,27 +202,117 @@ before reaching any given test — which shifts the wrap count and therefore the
 phase. It can flip the symptom without being the cause. Chasing it as a warm/cold
 problem would lead away from the wrapper lifetime, which is where the fix is.
 
-**Still open — the one question the fix depends on:** *which* pointer arrived at
-`PyDict_GetItem:key:`. Two possibilities, with different fixes:
+**Settled: it is a dead/reclaimed Grail wrapper**, so the fix is wrapper
+lifetime, not proxy routing. Nobody needs to run `GRAIL_SHIM_DIAG` to find out.
 
-| if… | then the fix is… |
-| --- | --- |
-| a **dead/reclaimed Grail wrapper** whose sentinel no longer reads | wrapper lifetime: keep `groupindex`'s wrapper alive for the Pattern's lifetime; the type guard is only a diagnostic |
-| a **genuinely foreign** dict (real CPython object) | route the dict APIs through the proxy instead of assuming a Smalltalk dictionary |
+## How the wrapper actually dies (corrected)
 
-The shim already ships the diagnostic that settles it. `diag_foreign`
-(`src/c/shim/cpython.cc:1037`) prints every foreign crossing when `GRAIL_SHIM_DIAG` is
-set:
+### A reliable reproducer
+
+Run the whole SUnit suite in **one session** — the sharded runner never hits
+this, because sharding puts the tests in different sessions:
 
 ```
-GRAIL_SHIM_DIAG=1 ./scripts/run_tests.sh 2>&1 | grep SHIM-DIAG
-SHIM-DIAG FOREIGN obj=0x... ob_type=0x... tp_name='...'
+PythonTestCase suite run     "in a bare topaz login"
 ```
 
-A `tp_name` of `dict` (or garbage) at the moment of failure says "dead Grail wrapper".
-A real foreign type name says "genuine foreign object". **Please run that in the
-session that reproduces it** — it is the difference between a lifetime fix and a
-proxy-routing fix.
+It always died on `DunderNewTestCase>>testVendoredFractionEndToEnd`, test
+**1241 of 3653** — the test in the original report. (Established with a progress
+log whose file is closed after every write, so the last line survives a
+SIGSEGV; buffered stdout loses it.)
+
+### `sweep` is not the mechanism — it cannot be
+
+The section above blames sweep timing. That is wrong:
+
+* `sweep` removes only entries whose refcount is **≤ 0**.
+* `groupindex` is held at **≥ 2**: 1 from `wrap:`, plus 1 from
+  `Py_NewRef(groupindex)` at `sre.c:1696`.
+* Measured: forcing 5000 `wrap:` calls reclaimed **nothing** — 5108 wrappers
+  still held afterwards.
+
+So the wrap-count/`wrapsSinceSweep` phase story, including the claim that
+`GRAIL_TEST_WORKERS` matters because it changes sweep phase, does not hold.
+Worker count matters only because it changes *which tests share a session*.
+
+Also ruled out by reading the code: refcount imbalance in `PyDict_GetItem` or
+`PyDictProxy_New` (both correct), a missing incref of `match->pattern` (it is
+there, `sre.c:2750`), and `Match_Type`'s `tp_itemsize` failing to propagate
+(`cpython.cc` does propagate it).
+
+### What actually orphans the wrappers
+
+`valueToPyObject` was an **instance** variable of the `CPythonShim` singleton,
+and it is the only strong reference to every wrapper. Three places replace that
+singleton — `reset`, `libraryPath:`, and `current` when the user action library
+is not loaded — and replacing it dropped the whole map:
+
+```
+wrappers held before CPythonShim reset : 108
+wrappers held after                    : 2
+```
+
+`CPythonShimTestCase>>testShimSingletonLivesInSessionTempsNotCommitted` does
+exactly that reset, in the same session as everything after it.
+
+Meanwhile the C side never lets go: `_PyObject_New` `calloc`s a `PatternObject`
+and `_Py_Dealloc` is a **no-op**, so a compiled regex lives for the life of the
+process and keeps its raw `groupindex` pointer. A module-level pattern —
+`fractions.py`'s `_RATIONAL_FORMAT`, reached through session-local
+`sys.modules` — is precisely such a survivor.
+
+### Why it is geometry-sensitive
+
+Freeing the block is not enough: freed-but-unreused memory still reads back its
+old contents, so the sentinel still matches and everything works. Verified —
+after a reset plus 20 rounds of GC pressure, `groupindex` was byte-identical and
+the fraction test passed. It breaks only once the block is **reused**, which is
+why thousands of intervening tests are needed and why warm-vs-cold and worker
+count appear to matter. That is the real answer to "why didn't I see this in a
+sharded run?"
+
+### The crash site
+
+Once the block is reused, offset 24 no longer spells `GRAILWP1`, so
+`is_foreign()` says foreign and `foreign_proxy_oop()` reads `tp_name` off an
+`ob_type` that is now whatever overwrote the block:
+
+```
+SHIM-SRE match=0xa9914c600 pattern=0x102d1a390 groupindex=0xa98d2af10 groups=10
+    info->si_addr = 0xe832a          <- ob_type 0xe8312 + 24, where tp_name lives
+frame #6: libcpython_ua.dylib`pyobj_oop(_object*) + 196
+frame #7: libcpython_ua.dylib`PyDict_GetItem + 80
+frame #8: libcpython_ua.dylib`match_getindex + 104
+frame #9: libcpython_ua.dylib`match_group + 88
+```
+
+Note `groupindex` itself looks perfectly healthy — large, aligned, in the
+gcMalloc range. Only its *contents* are stale. A register dump alone is
+misleading here; the `SHIM-SRE` line (now gated by `GRAIL_SHIM_DIAG`) is what
+identified the right pointer.
+
+Whether you get the SIGSEGV or the reported
+`ShimForeignObject does not understand #includesKey:` is just whether the stale
+`ob_type` happens to be readable.
+
+### The fix
+
+`CPythonShim>>valueToPyObject` keeps the map in `SessionTemps`, so replacing the
+singleton no longer orphans it; the instVar remains as a per-instance memo, so
+`wrap:` still costs one instVar read. `libraryPath:` *does* still discard the
+map — a library reload invalidates the `tp_*` addresses cached at offset 8 of
+every wrapper.
+
+Two guards were added so this class of bug reports itself instead of
+segfaulting: `plausible_pyobj()` rejects a value that cannot be a `PyObject*`
+(`CHECK_pyObj` names the call site, `pyobj_oop` bails to nil), and
+`foreign_proxy_oop` refuses to dereference an implausible `ob_type`. Neither
+fires in a healthy run.
+
+**Result:** the one-session reproducer no longer crashes. It now runs to test
+3134 and stops on `VM temporary object memory is full` — the ordinary
+temp-cache limit of running 3653 tests in one session, which is why the suite is
+sharded.
 
 ## Two defects worth fixing regardless of which it is
 
