@@ -694,12 +694,25 @@ printSmalltalkOn: aStream
 	"Apply decorators bottom-up.  ``@A @B def f: ...`` rebinds f to
 	``A(B(f))`` — the decorator nearest the def (B) runs first, so
 	iterate in reverse.  Skip Symbol entries that are class-body
-	special markers (``staticmethod`` / ``classmethod`` / ``property``);
-	those mutate the function's *class* via changeClassTo: at parse
-	time and must NOT be re-applied as runtime calls."
+	special markers -- but ONLY when the parser actually re-classed this node,
+	which is what handles them.
+
+	It re-classes under ``classNesting > 0'', and it zeroes classNesting while
+	parsing a body, so a def nested inside a FUNCTION is left a plain
+	FunctionDefAst and nothing has handled its ``@classmethod'' at all.  Skipping
+	it there silently DROPPED the decorator and left a plain function: that is why
+	functools' test_callable_register -- whose class and registrations live inside
+	the test METHOD -- registered a plain function with singledispatch, which was
+	then called without its class.
+
+	A def inside an ``if'' in a class BODY is the other case: classNesting is
+	still positive there, so it WAS re-classed, and applying the decorator again
+	double-wraps it (six ClassBodyConditionalTestCase errors when this
+	distinction was missing).  ___parserReclassedThisDef___ tells the two apart."
 	decorator_list isNil ifFalse: [
 		decorator_list reverseDo: [:deco |
-			(self isClassDeclarativeDecorator: deco) ifFalse: [
+			((self isClassDeclarativeDecorator: deco) not
+				or: [self ___parserReclassedThisDef___ not]) ifTrue: [
 				"Phase A: decorator re-bind uses dynamicInstVarAt:put: when
 				the target name is module-scope (parser-declared in module
 				body and not shadowed by an enclosing function)."
@@ -892,15 +905,28 @@ ___enclosingDefDeclares___: funcAst named: aSymbol
 category: 'Grail-code generation'
 method: FunctionDefAst
 applicableModuleDecorators
-	"Decorators to apply at module-body time for a top-level def:
-	everything in decorator_list EXCEPT the class-declarative ones
-	(staticmethod / classmethod / property), which the parser already
-	handled by re-classing this node into a Static/Class/PropertyFunction
-	def.  Source order preserved (outermost first), so ``@A @B def f''
-	yields { A. B } and is applied as A(B(f))."
+	"Decorators to apply at module-body time for a top-level def: ALL of
+	decorator_list.  Source order preserved (outermost first), so ``@A @B def f''
+	yields { A. B } and is applied as A(B(f)).
+
+	This used to reject the class-declarative ones (staticmethod / classmethod /
+	property) on the grounds that the parser had already handled them by
+	re-classing the node.  It only does that INSIDE a class -- PythonParser
+	re-classes under ``classNesting > 0'' -- so at module scope nothing had
+	handled them and rejecting them silently DROPPED the decorator:
+
+	    @classmethod
+	    def f(cls, arg): ...
+	    type(f)        # CPython: classmethod.  Was: the plain function.
+
+	``classmethod(f)'' spelled as a call already answered a real classmethod, so
+	the two spellings disagreed.  It matters beyond introspection because the
+	descriptor kind is what a later consumer dispatches on: functools'
+	test_callable_register registers ``@classmethod def _(cls, arg)'' with
+	singledispatch, and a plain function there is called without its class."
 
 	decorator_list isNil ifTrue: [^ #()].
-	^ decorator_list reject: [:deco | self isClassDeclarativeDecorator: deco]
+	^ decorator_list
 %
 
 category: 'Grail-code generation'
@@ -1167,6 +1193,21 @@ printDecoratorReceiverOn: aStream deco: deco
 		^ self
 	].
 	deco printSmalltalkWithParenthesisOn: aStream
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___parserReclassedThisDef___
+	"Did PythonParser convert this node into one of its class-body subclasses?
+	That conversion IS how a @staticmethod / @classmethod / @property is handled,
+	so it is also the signal that the decorator must not be applied again.
+
+	Answered by class rather than by a flag, because the conversion is a
+	changeClassTo: -- the node's class is the record of it."
+
+	^ (self isKindOf: StaticFunctionDefAst)
+		or: [(self isKindOf: ClassFunctionDefAst)
+			or: [self isKindOf: InstanceFunctionDefAst]]
 %
 
 category: 'Grail-code generation'

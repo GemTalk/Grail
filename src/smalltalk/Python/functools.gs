@@ -2665,7 +2665,54 @@ ___pyCallValue___: positional kw: kwargs
 			@env0:, ' requires at least 1 positional argument'].
 	impl := (self @env0:dynamicInstVarAt: #dispatcher)
 		dispatch: (positional @env0:at: at) @env0:class.
+	"A registered implementation that is itself a @classmethod / @staticmethod
+	arrives as the bare descriptor: ``@A.t.register(int)'' over ``@classmethod
+	def _(cls, arg)'' registers a PyClassMethod, which no class owns because the
+	registration happens after the class is built.  Calling it directly passed
+	the dispatch argument as ``cls'' and left ``arg'' unfilled -- ``TypeError:
+	missing required argument: arg''.
+
+	The BASE implementation never showed this: the class-body decorator hands
+	singledispatchmethod a BoundMethod that already supplies the class, which is
+	what ___wrapsClassSideMethod___ reads.  Bind the registered one the same way,
+	through its own __get__, against that same owning class.  A PyStaticMethod's
+	__get__ answers the function unbound, which is equally correct for it."
+	(self ___wrapsClassSideMethod___
+		and: [self ___isClassSideDescriptor___: impl]) ifTrue: [
+			| owner |
+			owner := self ___classSideOwner___.
+			owner == nil ifFalse: [
+				^ (impl __get__: (ExecBlock @env0:___pyNone___) _: owner)
+					___pyCallValue___: positional kw: kwargs]].
 	^ impl ___pyCallValue___: positional kw: kwargs
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod
+___isClassSideDescriptor___: anImpl
+	"Is anImpl a @classmethod / @staticmethod descriptor that still needs its
+	owner bound?  Deliberately narrow: a plain function or method handle also
+	answers __get__:_:, and those already receive the argument array unchanged."
+
+	| syms cm sm |
+	syms := System @env0:myUserProfile @env0:symbolList.
+	cm := syms @env0:objectNamed: #'PyClassMethod'.
+	(cm @env0:notNil and: [anImpl @env0:isKindOf: cm]) ifTrue: [^ true].
+	sm := syms @env0:objectNamed: #'PyStaticMethod'.
+	^ sm @env0:notNil and: [anImpl @env0:isKindOf: sm]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod
+___classSideOwner___
+	"The class this class-side method was defined on -- the receiver of the
+	BoundMethod the class-body decorator handed us -- or nil."
+
+	| fn recv |
+	fn := self @env0:dynamicInstVarAt: #func.
+	(fn @env0:isKindOf: BoundMethod) ifFalse: [^ nil].
+	recv := fn @env0:receiver.
+	^ (recv @env0:isKindOf: Behavior) ifTrue: [recv] ifFalse: [nil]
 %
 
 category: 'Grail-Single Dispatch'
