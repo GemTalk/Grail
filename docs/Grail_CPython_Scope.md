@@ -665,15 +665,17 @@ status/tests/fail/err/skip — are in
 only what does not change every run: which modules are *done*, and what each
 not-yet-passing one is waiting on.
 
-**Fully green: 39 of the 50** — the ✅ rows in the tier tables above. That list
+**Fully green: 41 of the 50** — the ✅ rows in the tier tables above. That list
 used to be spelled out here and is not any more: it duplicated something the
 Status column now derives, and had drifted to 27.
 
-**Not yet green (the 11 ❗ rows), in descending size of the remaining gap:**
-`test_enum` (metaclass depth — `object.__str__`, `__dir__`-on-class, `_boundary_`
-Flag), `test_datetime`, `test_functools`, and `test_traceback` (the
-only IMPORTERROR — `__code__` on a def that compiled to a real method; PR #129
-attempted it and was closed unmerged).
+**Not yet green (the 9 ❗ rows), in descending size of the remaining gap:**
+`test_datetime` (114), `test_enum` (76 — metaclass depth: `object.__str__`,
+`__dir__`-on-class, `_boundary_` Flag), `test_copy` (43), `test_listcomps` (31),
+`test_yield_from` (30), `test_property` (21), `test_scope` (15),
+`test_functools` (12), and `test_traceback` (the only IMPORTERROR — `__code__`
+on a def that compiled to a real method; PR #129 attempted it and was closed
+unmerged).
 
 `test_iter` closed, and its last test is worth recording because it did **not**
 need the deferred traceback project it looked like it needed.
@@ -757,6 +759,13 @@ Rebuilt again on 2026-08-04 against `main` post-#201/#202/#203 (whole manifest,
 50 modules, 4 workers, 293s, no CRASH/TIMEOUT). Two rows moved, both
 improvements: `test_enum` 117 → 105 and `test_functools` 41 → 40 fail+err. No
 module changed status bucket, so the Status column above is unchanged.
+
+Rebuilt again on 2026-08-05 against `main` post-#229/#230/#231 (whole manifest,
+50 modules, 4 workers, 656s, no FAIL/CRASH/TIMEOUT/STERROR). One row moved:
+`test_functools` 19 → 12 fail+err, from the `_c3_mro`/`_find_impl` and
+descriptor-binding work in #229/#231. It stays ❗, so the Status column is
+unchanged — the ✅ count of 41 reflects #230 closing `test_format`, which was
+already committed.
 
 **One named symbol away** — cheap, and each unblocks a whole module:
 
