@@ -1240,6 +1240,15 @@ ___emitQualnameOn___: aStream name: aName
 	still closer than the bare name, and one level is what the corpus asks for."
 
 	| qualified |
+	"__module__ first, and unconditionally: a closure otherwise answers the
+	``<closure>'' placeholder, because a module-level def gets its module by
+	forwarding to the receiving module and a block has no receiver to forward
+	to.  Pickling a callable by reference needs it alongside the qualname."
+	CallAst moduleNameBeingCompiled ifNotNil: [:modName |
+		aStream
+			nextPutAll: '; @env0:___pyModuleNamed___: ''';
+			nextPutAll: modName asString;
+			nextPutAll: ''''].
 	qualified := self ___qualifiedNameFor___: aName.
 	qualified = aName asString ifTrue: [^ self].
 	aStream
@@ -1269,7 +1278,17 @@ ___qualifiedNameFor___: aName
 	enclosingCls := CallAst classBeingCompiled.
 	(enclosingFn == nil
 		or: [enclosingFn == self or: [enclosingFn name == nil]])
-			ifTrue: [^ aName asString].
+			ifTrue: [
+				"No enclosing FUNCTION, but there may be an enclosing CLASS: a def
+				written inside an ``if'' in a class body compiles to a closure
+				rather than a method, and answered the bare name where CPython says
+				``Cls.name''.  No ``<locals>'' -- a class body is not a function
+				scope, which is exactly why CPython omits it here.  Pickling a
+				class-body def by reference depends on this: test_functools'
+				TestLRUC defines its members under ``if c_functools:''."
+				^ enclosingCls == nil
+					ifTrue: [aName asString]
+					ifFalse: [enclosingCls asString , '.' , aName asString]].
 	^ (enclosingCls == nil
 		ifTrue: [enclosingFn name asString]
 		ifFalse: [enclosingCls asString , '.' , enclosingFn name asString])
@@ -1348,6 +1367,28 @@ hasAnnotations
 	gates emission of the __annotations__ stamp."
 
 	^ returns notNil or: [self ___annotatedArgs___ notEmpty]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___receiverParamName___
+	"The name of the parameter that ClassDefAst's signature table DROPS --
+	``self'' for an instance method, ``cls'' for a classmethod, whatever the
+	def actually wrote.  nil when the def declares no positional parameter.
+
+	The table is bound-shaped on purpose (a bound access supplies the
+	receiver, and CPython omits it there), but the UNBOUND read must show it:
+	CPython's ``signature(Cls.method)'' includes ``self''.  Recording the name
+	separately keeps the existing table byte-identical while making the
+	unbound form reconstructible -- the alternative, emitting the receiver
+	into the spec and stripping it at every bound read, would have needed a
+	staticness marker in the table too."
+
+	| allPositional |
+	args ifNil: [^ nil].
+	allPositional := (args posonlyargs ifNil: [#()]) , (args args ifNil: [#()]).
+	allPositional isEmpty ifTrue: [^ nil].
+	^ (allPositional at: 1) name asString
 %
 
 category: 'Grail-code generation'
