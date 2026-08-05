@@ -196,6 +196,10 @@ global_enum: cls
 			].
 		].
 	].
+	"CPython @global_enum also rewrites member __repr__ to ``module.NAME''
+	(global_enum_repr / global_flag_repr).  Mark the class so its member
+	__repr__ methods produce that form (test_global_enum_str)."
+	Enum ___grailMarkGlobalEnum: cls.
 	^ cls
 %
 
