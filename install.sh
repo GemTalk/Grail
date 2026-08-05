@@ -116,10 +116,11 @@ if [ -n "$GEMSTONE" ]; then
       linux*)  export SHIM_LIB_PATH="$GRAIL_DIR/src/c/shim/libcpython_ua.so" ;;
       *)       export SHIM_LIB_PATH="$GRAIL_DIR/src/c/shim/libcpython_ua.dylib" ;;  # assume Darwin
     esac
-    if [ -f "$SHIM_LIB_PATH" ]; then
-        echo "Warning: CPython shim library already exists"
-        # export SHIM_LIB_PATH=""
-    else
+    # uncomment to avoid rebuild of libraries if they already exist
+    # if [ -f "$SHIM_LIB_PATH" ]; then
+    #     echo "Warning: CPython shim library already exists"
+    #     # export SHIM_LIB_PATH=""
+    # else
         echo "Building shim and dynamic extension modules..."
         make -C "$GRAIL_DIR/src/c/shim" clean all GEMSTONE="$GEMSTONE"
         if [ $? -ne 0 ]; then
@@ -136,7 +137,7 @@ if [ -n "$GEMSTONE" ]; then
           echo "ERROR:  make shim dynmods failed"
           exit 1
         fi
-    fi
+    # fi
 else
     echo "Warning: GEMSTONE not set. Skipping shim library build."
 fi
