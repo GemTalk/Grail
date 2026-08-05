@@ -606,9 +606,15 @@ ___setNameOn___: aValue named: aSym
 	Only a PythonInstance is asked.  Grail's function stand-ins and the
 	built-in types never implement the hook, and probing every class
 	attribute of every class at every class definition would be a real cost
-	on import."
+	on import.  PropertyDescriptor (the ``property'' builtin and its
+	subclasses) is a statically-defined Smalltalk class, NOT a PythonInstance,
+	yet it DOES implement __set_name__ (test_property_name: ``bar =
+	property(fget)'' must learn its own name 'bar'), so it is admitted too --
+	an extra isKindOf only on the miss, never on the ints/strings/functions
+	that dominate a class body."
 
-	(aValue isKindOf: PythonInstance) ifFalse: [^ self].
+	((aValue isKindOf: PythonInstance)
+		or: [aValue isKindOf: PropertyDescriptor]) ifFalse: [^ self].
 	(aValue ___respondsTo___: #'__set_name__:_:') ifFalse: [^ self].
 	aValue __set_name__: self _: aSym @env0:asString @env0:asUnicodeString.
 	^ self
@@ -785,7 +791,15 @@ __qualname__
 	CPython error messages interpolate it (e.g. textwrap.dedent's
 	``expected str object, not {type(text).__qualname__!r}'')."
 
-	| bt |
+	| bt holder qn |
+	"A NESTED class carries a dotted qualified name (``Outer.Inner'') recorded
+	in its own dynInstVars holder at build time (ClassDefAst nested-class emit);
+	top-level classes have none and fall back to the simple name below."
+	(self ___respondsTo___: #dynInstVars) ifTrue: [
+		holder := self @env0:perform: #dynInstVars env: 1.
+		holder @env0:notNil ifTrue: [
+			qn := holder @env0:dynamicInstVarAt: #'___qualname___'.
+			qn @env0:notNil ifTrue: [^ qn @env0:asString]]].
 	bt := self ___pythonBuiltinTypeName___.
 	bt @env0:notNil ifTrue: [^ bt].
 	"User classes now keep their exact Python name as the GemStone class name
@@ -1862,6 +1876,13 @@ ___isValueDescriptor___: aValue
 	    explicit callers, and the MethodBinding is the path their call
 	    protocol expects."
 
+	"PropertyDescriptor (the ``property'' builtin and subclasses) is a
+	statically-defined Smalltalk class, NOT a PythonInstance, yet it is a genuine
+	DATA descriptor: an instance read of ``x = property(...)'' bound via
+	setattr (dynInstVars, not the class-body accessor pair) must ask it for the
+	value rather than hand it back.  Answered here so the shared descriptor-get
+	paths (___classChainAttrLookup___, the overlay lookups) treat it uniformly."
+	(aValue @env0:isKindOf: PropertyDescriptor) ifTrue: [^ true].
 	(aValue isKindOf: PythonInstance) ifFalse: [^ false].
 	"ASK the marker, do not merely detect it.  Whether one of these binds self
 	can depend on what it wraps: functools.partialmethod answers false over a
@@ -2207,6 +2228,20 @@ ___pyAttrLoad___: aSym
 		last-setattr-wins.  nil means no overlay applies (the default)."
 		(self ___classAttrOverlayLookup___: self name: aSym)
 			@env0:ifNotNil: [:___ovv | ^ ___ovv].
+		"MRO precedence: a DEFINITIONAL per-class store (a nested class def
+		``class Sub: class cls: ...'', an if-branch binding) lands in THIS class's
+		OWN dynInstVars and must beat a same-named accessor INHERITED from a base --
+		``class Sub(Base): class cls: ...'' where Base declares ``cls = None'' must
+		answer Sub's nested class, not Base's None (test_property's
+		PropertyUnreachable mixins).  The setter-paired accessor branch below walks
+		the whole metaclass chain and would find the inherited accessor first, so
+		this own-store check runs ahead of it.  Gated on the name being in the
+		class's OWN holder, so accessor-backed and inherited-only reads are
+		untouched."
+		(self ___ownDynInstVarHas___: aSym)
+			ifTrue: [
+				(self ___classChainAttrLookup___: aSym)
+					@env0:ifNotNil: [:___dv | ^ ___dv]].
 		"Setter-paired class-level accessor on a Python user class —
 		value attribute (``class C: X = 1``)."
 		((self @env0:inheritsFrom: PythonInstance)
@@ -4077,11 +4112,113 @@ ___pyAttrDelete___: aName
 			^ self @env0:instVarAt: slotIdx put: nil
 		]
 	].
+	"Data-descriptor priority: ``del obj.prop'' on a @property runs its deleter
+	(or raises ``has no deleter'') rather than removing an instance attribute.
+	Covers the decorator form (a ``___propDeleter_x'' selector, with a
+	paired getter+setter marking it a property) and the call form (a
+	PropertyDescriptor class attribute)."
+	(self ___pyInstanceDescriptorDelete___: aName) ifTrue: [^ self].
 	(self @env0:dynamicInstVarAt: sym) == nil ifTrue: [
 		AttributeError ___signal___:
 			'''' @env0:, aName @env0:asString @env0:, ''''
 	].
 	self @env0:removeDynamicInstVar: sym
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___pyInstanceDescriptorStore___: aName put: aValue
+	"True when a @property claims ``obj.<aName> = value'' -- see ___pyAttrStore___.
+
+	(1) The @property DECORATOR compiles a paired unary getter + 1-arg setter as
+	    INSTANCE methods.  Their presence together is the property marker -- the
+	    SAME test the read path uses (a plain 1-arg method has no unary partner,
+	    AttributeStoreTestCase) -- so dispatch the store to the setter, which
+	    writes the backing or raises for a read-only property.
+	(2) The CALL form ``x = property(...)'' binds a PropertyDescriptor as a class
+	    attribute; ask it to __set__ (raising ``has no setter'' when read-only)."
+
+	| getterSym setterSym descr |
+	getterSym := aName @env0:asString @env0:asSymbol.
+	setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
+	((self @env0:isKindOf: PythonInstance)
+		and: [(self ___respondsTo___: getterSym)
+			and: [self ___respondsTo___: setterSym]])
+		ifTrue: [
+			self @env0:perform: setterSym env: 1 withArguments: { aValue }.
+			^ true].
+	descr := self ___instancePropertyDescriptorFor___: aName.
+	descr ~~ nil ifTrue: [
+		descr __set__: self _: aValue.
+		^ true].
+	^ false
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___pyInstanceDescriptorDelete___: aName
+	"True when a @property claims ``del obj.<aName>''.
+
+	The DECORATOR deleter lives under a private ``___propDeleter_x'' selector
+	(ClassDefAst redirects it there so it does not clobber the unary getter);
+	its presence alone means ``run the deleter''.  Deliberately NOT gated on the
+	getter+setter pairing: a read-only @property or a @cached_property has that
+	pairing but no deleter, and CPython's cached_property is a NON-data
+	descriptor whose ``del'' drops the cached instance value -- so those fall
+	through to the ordinary instance-attribute delete rather than raising here.
+	The CALL form asks its PropertyDescriptor to __delete__ (which raises ``has
+	no deleter'' when fdel is absent)."
+
+	| delSym descr |
+	delSym := ('___propDeleter_' @env0:, aName @env0:asString) @env0:asSymbol.
+	((self @env0:isKindOf: PythonInstance)
+		and: [self ___respondsTo___: delSym])
+		ifTrue: [self @env0:perform: delSym env: 1. ^ true].
+	descr := self ___instancePropertyDescriptorFor___: aName.
+	descr ~~ nil ifTrue: [descr __delete__: self. ^ true].
+	^ false
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___instancePropertyDescriptorFor___: aName
+	"The PropertyDescriptor bound to aName as a CLASS attribute of this
+	instance's class (or an ancestor), read RAW without firing __get__ -- or nil.
+	Covers a class-body ``x = property(...)'' (via the class-side accessor) and a
+	runtime ``setattr(cls, 'x', property(...))'' (the per-class dynInstVars
+	holder).  Used by the store/delete descriptor hooks for the call form."
+
+	| aSym raw walker holder |
+	aSym := aName @env0:asString @env0:asSymbol.
+	(self @env0:class @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) ~~ nil
+		ifTrue: [
+			raw := [self @env0:class @env0:perform: aSym env: 1]
+				@env0:on: AbstractException do: [:e | nil].
+			(raw @env0:isKindOf: PropertyDescriptor) ifTrue: [^ raw]].
+	walker := self @env0:class.
+	[walker == nil] @env0:whileFalse: [
+		(walker ___respondsTo___: #dynInstVars) ifTrue: [
+			holder := walker @env0:perform: #dynInstVars env: 1.
+			holder == nil ifFalse: [
+				raw := holder @env0:dynamicInstVarAt: aSym.
+				(raw @env0:isKindOf: PropertyDescriptor) ifTrue: [^ raw]]].
+		walker := walker @env0:superClass].
+	^ nil
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___ownDynInstVarHas___: aSym
+	"True when this class's OWN per-class dynInstVars holder binds aSym (a
+	definitional store: a nested class def, an if-branch class-body binding, a
+	setattr on THIS class).  Own-only -- does not walk the superclass chain --
+	so the class-read precedence check stays scoped to genuine MRO conflicts."
+
+	| holder |
+	(self ___respondsTo___: #dynInstVars) ifFalse: [^ false].
+	holder := self @env0:perform: #dynInstVars env: 1.
+	holder == nil ifTrue: [^ false].
+	^ (holder @env0:dynamicInstVarAt: aSym) ~~ nil
 %
 
 category: 'Grail-Attribute Access'
@@ -4150,6 +4287,14 @@ ___pyAttrStore___: aName put: aValue
 			'''' @env0:, self @env0:name @env0:asString @env0:,
 				''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
 	].
+	"Data-descriptor priority (CPython): a @property intercepts the instance
+	store -- dispatch to its setter, which writes the backing (or raises for a
+	read-only property), instead of writing an instance attribute that would
+	shadow the getter.  Covers both the decorator form (paired unary getter +
+	1-arg setter METHODS) and the call form (a PropertyDescriptor bound as a
+	class attribute).  Returns false when no property claims aName, leaving the
+	ordinary instance-dict store below untouched (AttributeStoreTestCase)."
+	(self ___pyInstanceDescriptorStore___: aName put: aValue) ifTrue: [^ aValue].
 	"Python __slots__ → GemStone named instance variables.  For a
 	PythonInstance receiver: a name declared in __slots__ (i.e. a named
 	instVar) is written directly; otherwise, a strict slotted class

@@ -1006,6 +1006,23 @@ isPropertyAccessorDecorator: deco
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+isDeleterDecorated
+	"True when this def is a property DELETER (``@x.deleter def x(self)'').
+	Such a def has the SAME unary signature as the property getter, so
+	compiling it under the plain name ``x'' would OVERWRITE the getter; the
+	ClassDefAst emit redirects it to a distinct ``___propDeleter_x'' selector
+	that the delete path (object>>___pyAttrDelete___) invokes for ``del
+	obj.x''."
+
+	decorator_list isNil ifTrue: [^ false].
+	^ (decorator_list detect: [:deco |
+		(deco isKindOf: AttributeAst)
+			and: [(deco value isKindOf: NameAst)
+			and: [deco attr asString = 'deleter']]] ifNone: [nil]) notNil
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 printMethodDecoratorsOn: aStream decorators: decoList className: aClassName siblingNames: siblingNames
 	"Rebind a decorated class-body method: ``Cls.m = A(B(Cls.m))''.
 

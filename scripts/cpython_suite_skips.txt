@@ -301,3 +301,24 @@ test.test_isinstance|TestIsInstanceIsSubclass.test_infinitely_many_bases|__getat
 # value); Grail cannot represent an empty-named attribute (a dynamic instVar name
 # cannot be the empty symbol), and the resulting LookupError escapes uncatchably.
 test.test_baseexception|ExceptionClassTests.test_setstate_refcount_no_crash|refcount-crash regression (N/A without refcounting); needs an empty-string attribute name Grail can't represent -- uncatchable LookupError, no assertions
+# ---- test.test_property ----
+# Refcount probes: @support.refcount_test measures sys.gettotalrefcount() deltas.
+# Grail has no refcounting VM, and support.get_attribute (used only by these) is
+# unimplemented -- the standard refcount/GC skip category.
+test.test_property|PropertyTests.test_gh_115618|refcount test (@support.refcount_test): reads sys.gettotalrefcount deltas -- N/A without a refcounting VM; also needs unimplemented support.get_attribute
+test.test_property|PropertyTests.test_refleaks_in___init__|refcount test (@support.refcount_test): reads sys.gettotalrefcount deltas -- N/A without a refcounting VM; also needs unimplemented support.get_attribute
+# A property SUBCLASS used as a bare class-body decorator (@PropertySub /
+# @PropertySubSlots).  Grail compiles @property at parse time BY NAME and cannot
+# tell that an arbitrary decorator name is a property subclass (a runtime class
+# relationship), so a property-subclass decorator does not compose like @property:
+# it resolves to a plain method, so the getter-docstring copy and the
+# __slots__-without-__doc__ AttributeError those tests assert never run.  Deep
+# parse-time/runtime limitation, orthogonal to the property object machinery.
+test.test_property|PropertySubclassTests.test_property_setter_copies_getter_docstring|@PropertySub (a property subclass) as a class-body decorator + @spam.setter -- Grail can't detect a property-subclass decorator at parse time, so it compiles to a method and the getter-docstring-copy semantics don't apply
+test.test_property|PropertySubclassTests.test_slots_docstring_copy_exception|@PropertySubSlots (a __slots__=() property subclass) as a class-body decorator -- compiled to a method (not a runtime PropertySubSlots(...) call), so the getter-doc-into-a-slotless-subclass AttributeError never fires
+# Class-body ``def foo`` compiles to a Smalltalk METHOD, not a mutable function
+# object, so ``foo.__isabstractmethod__ = val`` in the class body sets the attr on
+# a transient method wrapper that is discarded before ``foo = property(foo)`` reads
+# foo again.  property.__isabstractmethod__ itself works (verified at module scope);
+# only this class-body-def-as-mutable-function pattern is unsupported.
+test.test_property|PropertyTests.test_property___isabstractmethod__descriptor|class-body ``def`` is a method, not a mutable function object, so ``foo.__isabstractmethod__ = val`` set in the class body is lost before ``foo = property(foo)`` -- property.__isabstractmethod__ works at module scope
