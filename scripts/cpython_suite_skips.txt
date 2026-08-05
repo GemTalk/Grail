@@ -262,6 +262,13 @@ test.test_format|FormatTest.test_common_format|'%.*d' % (sys.maxsize, 1) is not 
 # the session dies (the module scored CRASH t=0, losing every other result).
 # The cyclic-but-non-recursive shapes (test_infinite_cycle_in_bases) DO pass:
 # there the guard is reached and raises Python's RecursionError.
+# RE-VERIFIED 2026-08-05, after property(fget) became a real descriptor and the
+# rest of the module reached OK: removing these two still scores the module
+# CRASH at t=0, losing all 23 results.  The recursion happens INSIDE the
+# property getter, so the explicit depth guards elsewhere (___abstractIsSubclass___,
+# and the nested-tuple guard in ___isInstance___:of:depth:) are never reached --
+# only a Python-level recursion limit on ordinary calls would help, and Grail
+# has none.  Do not drop these without re-running the module in isolation.
 test.test_isinstance|TestIsInstanceIsSubclass.test_infinite_recursion_in_bases|self-recursive __bases__ property: unbounded PYTHON recursion, uncatchable AlmostOutOfStack kills the session
 test.test_isinstance|TestIsInstanceIsSubclass.test_infinitely_many_bases|__getattr__ manufactures 2 classes per level: unbounded PYTHON recursion, uncatchable AlmostOutOfStack kills the session
 # gh-97591 refcount-crash regression: the test acquires a strong reference before

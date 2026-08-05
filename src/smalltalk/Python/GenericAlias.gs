@@ -231,10 +231,18 @@ category: 'Grail-Reflection'
 method: PyGenericAlias
 __getattr__: aName
 	"Unknown attributes read through to the origin -- CPython proxies
-	everything but its own handful, so ``list[int].append'' works."
+	everything but its own handful, so ``list[int].append'' works.
+
+	``asSymbol'' because __getattr__ receives a Python STRING by contract while
+	___pyAttrLoad___ reaches primitives (dynamicInstVarAt:) that require a
+	Symbol: forwarding the string raw died with an uncatchable Smalltalk
+	ArgumentTypeError (``for __bases__ expected a Symbol'') the moment anything
+	asked a parameterised generic for an attribute the origin keeps in dynamic
+	storage -- reachable as soon as issubclass started testing union members
+	individually (``issubclass(int, list[int] | Child)'')."
 
 	^ (self @env0:dynamicInstVarAt: #'__origin__')
-		@env1:___pyAttrLoad___: aName
+		@env1:___pyAttrLoad___: aName @env0:asSymbol
 %
 
 ! ___pythonValueAttrs___ MUST be compiled in env 0: Object >> ___pyAttrLoad___
