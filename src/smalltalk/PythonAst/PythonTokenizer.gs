@@ -523,7 +523,7 @@ tokenizeNumber
 					] ifFalse: [
 						"Trailing dot, e.g. 1. -- or the dot of 0.j / 1.e+300"
 						isFloat := true.
-						writeStream nextPut: self advance.
+						str add: self advance.
 					].
 			].
 		] ifNil: [
