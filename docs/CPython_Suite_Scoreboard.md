@@ -25,15 +25,15 @@ different rows and merges cleanly.
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
 | test.test_datetime | ERROR | 525 | 77 | 37 | 2 |  |
 | test.test_re | OK | 165 | 0 | 0 | 28 |  |
-| test.test_functools | ERROR | 325 | 8 | 4 | 6 |  |
+| test.test_functools | FAIL | 325 | 5 | 0 | 6 |  |
 | test.test_list | OK | 68 | 0 | 0 | 3 |  |
 | test.test_tuple | OK | 38 | 0 | 0 | 6 |  |
 | test.test_dict | OK | 120 | 0 | 0 | 20 |  |
-| test.test_set | OK | 628 | 0 | 0 | 21 |  |
+| test.test_set | TIMEOUT | 0 | 0 | 0 | 0 | killed after 600s |
 | test.test_bytes | OK | 316 | 0 | 0 | 22 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
-| test.test_enum | ERROR | 1077 | 51 | 22 | 1 |  |
+| test.test_enum | ERROR | 1077 | 51 | 23 | 1 |  |
 | test.test_unary | OK | 6 | 0 | 0 | 0 |  |
 | test.test_int_literal | OK | 6 | 0 | 0 | 0 |  |
 | test.test_unpack | OK | 1 | 0 | 0 | 0 |  |
