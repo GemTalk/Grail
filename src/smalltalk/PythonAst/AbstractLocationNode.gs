@@ -152,9 +152,9 @@ ___pyPositionLiteralArray
 	| ws src |
 	ws := WriteStream on: String new.
 	ws nextPutAll: '#('; print: beginLine; space.
-	beginColumn isNil ifTrue: [ws nextPutAll: 'nil'] ifFalse: [ws print: beginColumn].
-	ws space; print: (endLine ifNil: [beginLine]); space.
-	endColumn isNil ifTrue: [ws nextPutAll: 'nil'] ifFalse: [ws print: endColumn].
+	ws print: self column .
+	ws space; print: self endLine ; space.
+	ws print: self endColumn . 
 	ws space.
 	src := [self sourceLine] on: Error do: [:ex | nil].
 	src isNil
