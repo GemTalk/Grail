@@ -1,6 +1,13 @@
 ! ===============================================================================
 !  CharacterCollection methods for 3.7.5 , that are already in server 4.0.0 base image 
 
+
+category: '4.0 compatability'
+method: CharacterCollection
+_isString
+	^true
+%
+
 category: 'Case-Sensitive Searching'
 method: CharacterCollection
 indexOfLast: aCharacter startingAt: startIndex

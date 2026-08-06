@@ -29,7 +29,7 @@ different rows and merges cleanly.
 | test.test_list | OK | 68 | 0 | 0 | 3 |  |
 | test.test_tuple | OK | 38 | 0 | 0 | 6 |  |
 | test.test_dict | OK | 120 | 0 | 0 | 20 |  |
-| test.test_set | TIMEOUT | 0 | 0 | 0 | 0 | killed after 600s |
+| test.test_set | OK | 628 | 0 | 0 | 21 |  |
 | test.test_bytes | OK | 316 | 0 | 0 | 22 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
@@ -62,6 +62,6 @@ different rows and merges cleanly.
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
 | test.test_copy | ERROR | 81 | 28 | 15 | 0 |  |
 | test.test_scope | ERROR | 41 | 6 | 9 | 0 |  |
-| test.test_yield_from | ERROR | 43 | 18 | 12 | 0 |  |
+| test.test_yield_from | ERROR | 43 | 18 | 11 | 0 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
 | test.test_format | OK | 18 | 0 | 0 | 3 |  |

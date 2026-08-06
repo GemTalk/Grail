@@ -937,7 +937,7 @@ input src/smalltalk/Python/NoneType.gs
 ! own), with NO SystemUser step.  install.sh regenerates
 ! out/gen/kernel_class_extensions.gs from the GemStone version just before running
 ! this script: on 4.0+ it lists those files; on 3.7.x it is empty (a no-op
-! comment) because install_base.gs already filed them as shared SystemUser
+! comment) because install_base37.gs already filed them as shared SystemUser
 ! methods.  Filed right after NoneType so `None` is bound, and before the rest of
 ! Step 4 + module init that dispatch to them.
 input out/gen/kernel_class_extensions.gs
@@ -1165,7 +1165,7 @@ commit
 ! System, SymbolDictionary, ExecBlock's value-family, and Object's <primitive:>
 ! methods + env-0 ___new___ allocators) are NOT filed here -- they are shared,
 ! user-independent infrastructure installed once as SystemUser by
-! ./install_base.sh (scripts/install_base.gs).  This per-user script assumes they
+! ./install_base37.sh (scripts/install_base37.gs).  This per-user script assumes they
 ! are already committed; the env-1 module-instantiation blocks below dispatch to
 ! them.
 

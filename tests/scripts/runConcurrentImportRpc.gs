@@ -114,7 +114,7 @@ failures isEmpty
     out nextPutAll: 'Concurrent-import (RPC) regressions FAILED:'; cr.
     failures do: [:each | out nextPutAll: '  '; nextPutAll: each; cr].
     UserGlobals at: #'Grail_ccrpc_ok' put: false].
-System commit ..
+System commit.
 %
 
 ! ---- Report verdict across all sessions, exit -----------------------------

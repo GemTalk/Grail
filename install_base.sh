@@ -99,8 +99,8 @@ case "$GS_VERSION" in
         ./scripts/setUnicodeMode.sh || { echo "Error: setUnicodeMode.sh failed."; exit 1; }
 
         echo "Filing the shared kernel-class extensions (SystemUser)..."
-        LC_ALL=C topaz -lq -S scripts/install_base.gs || {
-            echo "Error: install_base.gs failed."; exit 1; }
+        LC_ALL=C topaz -lq -S scripts/install_base37.gs || {
+            echo "Error: install_base37.gs failed."; exit 1; }
         ;;
     *)
         echo "GemStone ${GS_VERSION:-unknown} (4.0+) -- no Grail code goes in the shared base."

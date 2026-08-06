@@ -192,7 +192,7 @@ echo "GemStone version: ${GS_VERSION:-unknown} (from $GEMSTONE/version.txt)"
     case "$GS_VERSION" in
         3.7.*)
             echo "! 3.7.x: all six kernel-extension files were filed as SystemUser by"
-            echo "! install_base.gs; nothing to file per-user here."
+            echo "! install_base37.gs; nothing to file per-user here."
             ;;
         *)
             echo "! 4.0+: kernel-class extensions are per-user session methods."

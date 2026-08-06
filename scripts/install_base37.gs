@@ -10,7 +10,7 @@
 !
 ! or directly:
 !
-!     topaz -lq -S scripts/install_base.gs
+!     topaz -lq -S scripts/install_base37.gs
 !
 ! On a LEGACY kernel a few of Grail's kernel extensions cannot be per-user
 ! GsPackagePolicy session methods, so they are filed once here -- persistent and
@@ -55,13 +55,14 @@ login
 
 fileformat utf8
 
+input src/smalltalk/Python/AppendStream.gs
 input src/smalltalk/Python/builtin_function_or_method.gs
-input src/smalltalk/Python/System.gs
-input src/smalltalk/Python/SymbolDictionary.gs
+input src/smalltalk/Python/CharacterCollection.gs
 input src/smalltalk/Python/ExecBlock.gs
 input src/smalltalk/Python/Object_perform_allocators.gs
 input src/smalltalk/Python/Object_perform_primitives.gs
-input src/smalltalk/Python/AppendStream.gs
+input src/smalltalk/Python/System.gs
+input src/smalltalk/Python/SymbolDictionary.gs
 
 run
 System commit .
