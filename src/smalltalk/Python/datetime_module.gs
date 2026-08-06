@@ -820,6 +820,23 @@ max
 		((999999999 @env0:* 86400 @env0:+ 86399) @env0:* 1000000 @env0:+ 999999)
 %
 
+category: 'Grail-Attribute Access'
+method: PyTimedelta
+__setattr__: name _: value
+	"CPython's datetime types are C types with no instance __dict__, so
+	``x.abc = 1'' on an EXACT instance is an AttributeError
+	(test_extra_attributes).  Python-level subclasses do get attribute
+	storage in CPython too, so they fall through to the default.  Grail's
+	own field writes never come here -- they use dynamicInstVarAt:put:
+	directly."
+
+	(self @env0:class @env0:== PyTimedelta) ifTrue: [
+		^ AttributeError ___signal___:
+			'''datetime.timedelta'' object has no attribute ''' @env0:,
+			name @env0:asString @env0:, ''''].
+	^ super __setattr__: name _: value
+%
+
 ! ===============================================================================
 ! PyTimezone - Python `datetime.timezone`.  Stored as a PyTimedelta offset
 ! plus optional name.  `timezone.utc` is the canonical UTC singleton.
@@ -1028,6 +1045,11 @@ fromutc: dt
 
 	| dtoff dtdst delta d |
 	d := dt.
+	"CPython checks the argument type FIRST -- without this, Eastern.fromutc(
+	date.today()) died on a raw `#tzinfo not understood by PyDate' Smalltalk
+	error instead of a catchable TypeError (test_fromutc)."
+	(d @env0:isKindOf: PyDateTime) ifFalse: [
+		^ TypeError ___signal___: 'fromutc() requires a datetime argument'].
 	(d tzinfo @env0:== self) ifFalse: [^ ValueError ___signal___: 'dt.tzinfo is not self'].
 	dtoff := d utcoffset.
 	dtdst := d dst.
@@ -1040,6 +1062,21 @@ fromutc: dt
 		dtdst @env0:== None ifTrue: [
 			^ ValueError ___signal___: 'fromutc(): dt.dst gave inconsistent results; cannot convert']].
 	^ d __add__: dtdst
+%
+
+category: 'Grail-Attribute Access'
+method: PyTzinfo
+__setattr__: name _: value
+	"Exact tzinfo/timezone instances have no attribute storage in CPython
+	(test_extra_attributes); user subclasses -- which is the whole point of
+	tzinfo -- fall through and keep theirs."
+
+	((self @env0:class @env0:== PyTzinfo) @env0:or: [self @env0:class @env0:== PyTimezone]) ifTrue: [
+		^ AttributeError ___signal___:
+			'''datetime.' @env0:, (self @env0:class @env0:== PyTimezone
+				ifTrue: ['timezone'] ifFalse: ['tzinfo'])
+			@env0:, ''' object has no attribute ''' @env0:, name @env0:asString @env0:, ''''].
+	^ super __setattr__: name _: value
 %
 
 category: 'Grail-Pickle'
@@ -1409,11 +1446,63 @@ _datetime: positional kw: kwargs
 		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz].
 		fold := kwargs @env0:at: 'fold' ifAbsent: [0]
 	].
+	"Pickle backdoor -- datetime(10_byte_state[, tzinfo]).  CPython accepts
+	it whenever the first argument looks like a state string, with the
+	SECOND argument doubling as the tzinfo (test_compat_unpickle,
+	test_backdoor_resistance)."
+	(PyDate ___isPickleState___: year width: 10 monthAt: 3 mask: true) ifTrue: [
+		| stateTz |
+		stateTz := ((month @env0:isNil) @env0:or: [month @env0:== None])
+			ifTrue: [nil] ifFalse: [month].
+		^ self ___fromDateTimeState___: year tz: stateTz].
+	"CPython rejects a non-integer field with TypeError BEFORE any range
+	check.  Without this a float year reached the kernel's Date
+	newDay:monthNumber:year: and died with an uncatchable ArgumentTypeError
+	(test_check_arg_types), and a byte string died on `#< not understood'
+	(test_backdoor_resistance)."
+	PyDate ___requireIntegers___: { year. month. day. hour. minute. second. micro }.
 	tz == None ifTrue: [tz := nil].
 	(tz @env0:isNil or: [tz @env0:isKindOf: PyTzinfo]) ifFalse: [
 		^ TypeError ___signal___: 'tzinfo argument must be None or of a tzinfo subclass'].
+	(fold @env0:= 0 or: [fold @env0:= 1]) ifFalse: [
+		^ ValueError ___signal___:
+			'fold must be either 0 or 1, not ' @env0:, fold @env0:printString].
 	inst := self @env0:___fromFields___: year _: month _: day _: hour _: minute _: second _: micro _: tz.
 	fold @env0:= 0 ifFalse: [inst @env0:dynamicInstVarAt: #_fold put: fold].
+	^ inst
+%
+
+category: 'Grail-Pickle'
+classmethod: PyDateTime
+___fromDateTimeState___: s tz: tzArg
+	"Rebuild from the 10-byte pickle state (yhi, ylo, month, day, hour,
+	minute, second, us-hi, us-mid, us-lo), with `fold' stolen from the
+	month byte's high bit.  Stores fields DIRECTLY, skipping
+	_year:_month:... -- the point of the backdoor is to bypass
+	revalidation, exactly as CPython's __setstate does (the byte pair can
+	encode a year outside 1..9999 and CPython still accepts it)."
+
+	| inst m fold |
+	(tzArg @env0:isNil or: [tzArg @env0:isKindOf: PyTzinfo]) ifFalse: [
+		^ TypeError ___signal___: 'bad tzinfo state arg'].
+	inst := self @env0:new.
+	inst @env0:dynamicInstVarAt: #_year
+		put: ((PyDate ___byteValueOf___: s at: 1) @env0:* 256)
+			@env0:+ (PyDate ___byteValueOf___: s at: 2).
+	m := PyDate ___byteValueOf___: s at: 3.
+	fold := 0.
+	m @env0:> 127 ifTrue: [fold := 1. m := m @env0:- 128].
+	inst @env0:dynamicInstVarAt: #_month put: m.
+	inst @env0:dynamicInstVarAt: #_day put: (PyDate ___byteValueOf___: s at: 4).
+	inst @env0:dynamicInstVarAt: #_hour put: (PyDate ___byteValueOf___: s at: 5).
+	inst @env0:dynamicInstVarAt: #_minute put: (PyDate ___byteValueOf___: s at: 6).
+	inst @env0:dynamicInstVarAt: #_second put: (PyDate ___byteValueOf___: s at: 7).
+	inst @env0:dynamicInstVarAt: #_microsecond put:
+		((((PyDate ___byteValueOf___: s at: 8) @env0:* 256)
+			@env0:+ (PyDate ___byteValueOf___: s at: 9)) @env0:* 256)
+			@env0:+ (PyDate ___byteValueOf___: s at: 10).
+	inst @env0:dynamicInstVarAt: #_tzinfo put: tzArg.
+	fold @env0:= 1 ifTrue: [inst @env0:dynamicInstVarAt: #_fold put: 1].
 	^ inst
 %
 
@@ -1631,15 +1720,36 @@ _fromtimestamp: positional kw: kwargs
 	``fromtimestamp(timestamp=...)'' must bind
 	(test_fromtimestamp_keyword_arg)."
 
-	| ts tz |
+	| ts tz seen |
 	ts := nil.
 	tz := nil.
+	seen := false.
 	positional @env0:isNil ifFalse: [
-		positional @env0:size @env0:>= 1 ifTrue: [ts := positional @env0:at: 1].
+		positional @env0:size @env0:> 2 ifTrue: [
+			^ TypeError ___signal___:
+				'fromtimestamp() takes at most 2 arguments (' @env0:,
+				positional @env0:size @env0:printString @env0:, ' given)'].
+		positional @env0:size @env0:>= 1 ifTrue: [ts := positional @env0:at: 1. seen := true].
 		positional @env0:size @env0:>= 2 ifTrue: [tz := positional @env0:at: 2]].
 	kwargs @env0:isNil ifFalse: [
+		"An unrecognized keyword is a TypeError, not silently ignored
+		(test_tzinfo_fromtimestamp passes tinfo=)."
+		kwargs @env0:keysDo: [:k |
+			| key |
+			key := k @env0:asString.
+			((key @env0:= 'timestamp') @env0:or: [key @env0:= 'tz']) ifFalse: [
+				^ TypeError ___signal___:
+					'fromtimestamp() got an unexpected keyword argument ''' @env0:,
+					key @env0:, '''']].
+		(kwargs @env0:includesKey: 'timestamp') ifTrue: [seen := true].
 		ts := kwargs @env0:at: 'timestamp' ifAbsent: [ts].
 		tz := kwargs @env0:at: 'tz' ifAbsent: [tz]].
+	seen ifFalse: [
+		^ TypeError ___signal___:
+			'fromtimestamp() missing required argument ''timestamp'' (pos 1)'].
+	"A non-tzinfo tz must raise TypeError before any conversion runs."
+	(tz @env0:isNil @env0:or: [tz @env0:== None @env0:or: [tz @env0:isKindOf: PyTzinfo]]) ifFalse: [
+		^ TypeError ___signal___: 'tzinfo argument must be None or of a tzinfo subclass'].
 	^ self fromtimestamp: ts _: tz
 %
 
@@ -1689,7 +1799,11 @@ ___fromTimestamp___: ts tz: tz2 gmt: useGmt
 	truncated agree there (test_negative_float_fromtimestamp,
 	test_negative_float_utcfromtimestamp, test_microsecond_rounding)."
 	secs := ts @env0:floor.
-	micros := ((ts @env0:- secs) @env0:* 1000000) @env0:rounded.
+	"Banker's rounding, like CPython's round() -- GemStone's Float>>rounded
+	rounds half AWAY from zero, which put fromtimestamp(-1/2**7) (exactly
+	7812.5 microseconds) one microsecond off (test_microsecond_rounding).
+	Reuses timedelta's own helper, which exists for the same reason."
+	micros := PyTimedelta @env0:___roundHalfEven___: ((ts @env0:- secs) @env0:* 1000000).
 	micros @env0:>= 1000000 ifTrue: [secs := secs @env0:+ 1. micros := micros @env0:- 1000000].
 	epoch := DateTime
 		@env0:newGmtWithYear: 1970
@@ -1740,119 +1854,65 @@ fromisoformat: s
 	___findIsoDatetimeSeparator___:, which ports CPython's own 'best
 	effort' digit-run disambiguation for that spec extension."
 
-	| str year month day hour min sec micro tz idx pivot field dateLen dateFields |
+	| str year month day hour min sec micro tz dateLen dateFields parsed
+	  becameNextDay errorFlag |
+	(s @env0:isKindOf: CharacterCollection) ifFalse: [
+		^ TypeError ___signal___: 'fromisoformat: argument must be str'].
 	str := s @env0:asString.
 	str @env0:size @env0:< 7 ifTrue: [
-		ValueError ___signal___: 'invalid isoformat: ' @env0:, str
+		^ ValueError ___signal___: 'Invalid isoformat string: ''' @env0:, str @env0:, ''''
 	].
-	dateLen := PyDate @env1:___findIsoDatetimeSeparator___: str.
-	dateFields := PyDate @env1:___parseIsoDateFields___: (str @env0:copyFrom: 1 to: dateLen).
+	"Date half.  Any failure inside becomes CPython's single blanket
+	ValueError naming the input (test_fromisoformat_fails_surrogate wants
+	the repr of the ORIGINAL string in the message)."
+	dateFields := [
+		dateLen := PyDate @env1:___findIsoDatetimeSeparator___: str.
+		PyDate @env1:___parseIsoDateFields___: (str @env0:copyFrom: 1 to: dateLen)]
+		@env0:on: ValueError
+		do: [:ex | ^ ValueError ___signal___:
+			'Invalid isoformat string: ''' @env0:, str @env0:, ''''].
 	year := dateFields @env0:at: 1.
 	month := dateFields @env0:at: 2.
 	day := dateFields @env0:at: 3.
 	hour := 0. min := 0. sec := 0. micro := 0. tz := nil.
-	"Two ASCII digits at pos..pos+1 as an Integer.  Raises a Python ValueError
-	 (not a low-level Smalltalk OffsetError) when the position runs past the end
-	 of the string or the characters are not both digits -- fromisoformat must
-	 reject malformed input with ValueError."
-	field := [:pos |
-		| a b |
-		(pos @env0:< 1 @env0:or: [pos @env0:+ 1 @env0:> str @env0:size]) ifTrue: [
-			ValueError ___signal___: 'invalid isoformat: ' @env0:, str].
-		a := str @env0:at: pos.
-		b := str @env0:at: pos @env0:+ 1.
-		((a @env0:isDigit) @env0:and: [b @env0:isDigit]) ifFalse: [
-			ValueError ___signal___: 'invalid isoformat: ' @env0:, str].
-		((a @env0:asInteger @env0:- 48) @env0:* 10) @env0:+ (b @env0:asInteger @env0:- 48)].
+	becameNextDay := false.
+	errorFlag := false.
+	"Time half -- delegated to the shared, CPython-faithful
+	_parse_isoformat_time port on PyTime, which consumes the WHOLE
+	remainder or raises.  The old inline parser silently ignored trailing
+	garbage ('2009-04-19T03;15:45' parsed as 03:00 and succeeded) and
+	understood only '+HH:MM' offsets."
 	str @env0:size @env0:> dateLen ifTrue: [
-		| hasColonSep nextChar |
-		"char dateLen+1 is the date/time separator (T or space, or -- in
-		 the rare week-date 'digit-eating' cases described on
-		 ___findIsoDatetimeSeparator___: -- a phantom position); the time
-		 begins at dateLen+2.  Mirrors CPython's _parse_hh_mm_ss_ff: HH is
-		 mandatory; MM and SS are each read only while input remains, and
-		 once a ':' is seen after HH every subsequent component must also
-		 be colon-separated -- otherwise it's the compact 'HHMMSS' form,
-		 with no separator to consume between components
-		 (test_fromisoformat_datetime_examples)."
-		hour := field @env0:value: dateLen @env0:+ 2.
-		idx := dateLen @env0:+ 4.
-		nextChar := (idx @env0:<= str @env0:size) ifTrue: [str @env0:at: idx] ifFalse: [nil].
-		hasColonSep := nextChar @env0:= $:.
-		"Continue to the next component only when colon-mode sees an
-		 ACTUAL colon here (not just 'some character') -- otherwise a
-		 trailing timezone offset's leading digits get misread as
-		 seconds once hasColonSep was set true by HH:MM
-		 (test_fromisoformat_timespecs)."
-		(hasColonSep ifTrue: [nextChar @env0:= $:] ifFalse: [nextChar @env0:notNil @env0:and: [nextChar @env0:isDigit]])
-			ifTrue: [
-				hasColonSep ifTrue: [idx := idx @env0:+ 1].
-				min := field @env0:value: idx.
-				idx := idx @env0:+ 2.
-				nextChar := (idx @env0:<= str @env0:size) ifTrue: [str @env0:at: idx] ifFalse: [nil].
-				(hasColonSep ifTrue: [nextChar @env0:= $:] ifFalse: [nextChar @env0:notNil @env0:and: [nextChar @env0:isDigit]])
-					ifTrue: [
-						hasColonSep ifTrue: [idx := idx @env0:+ 1].
-						sec := field @env0:value: idx.
-						idx := idx @env0:+ 2.
-					]
-			].
-		pivot := idx.
-		"Optional .ffffff -- ISO 8601 also permits ',' as the decimal
-		 separator (test_fromisoformat_datetime_examples)."
-		(pivot @env0:<= str @env0:size
-			@env0:and: [(str @env0:at: pivot) @env0:= $. @env0:or: [(str @env0:at: pivot) @env0:= $,]])
-			ifTrue: [
-			| fracEnd fracStr |
-			fracEnd := pivot @env0:+ 1.
-			[fracEnd @env0:<= str @env0:size
-				@env0:and: [
-					| c |
-					c := (str @env0:at: fracEnd) @env0:asInteger.
-					(c @env0:>= $0 @env0:asInteger) @env0:and: [c @env0:<= $9 @env0:asInteger]
-				]
-			] @env0:whileTrue: [fracEnd := fracEnd @env0:+ 1].
-			fracStr := str @env0:copyFrom: pivot @env0:+ 1 to: fracEnd @env0:- 1.
-			[fracStr @env0:size @env0:< 6] @env0:whileTrue: [fracStr := fracStr @env0:, '0'].
-			fracStr @env0:size @env0:> 6 ifTrue: [fracStr := fracStr @env0:copyFrom: 1 to: 6].
-			micro := fracStr @env0:asNumber.
-			pivot := fracEnd
-		].
-		"Optional timezone."
-		pivot @env0:<= str @env0:size ifTrue: [
-			| tzChar tzMicros |
-			tzChar := str @env0:at: pivot.
-			(tzChar @env0:= $Z @env0:or: [tzChar @env0:= $z]) ifTrue: [
-				tz := PyTimezone utc
-			] ifFalse: [
-				(tzChar @env0:= $+ @env0:or: [tzChar @env0:= $-]) ifTrue: [
-					| h m sign |
-					sign := tzChar @env0:= $- ifTrue: [-1] ifFalse: [1].
-					h := field @env0:value: pivot @env0:+ 1.
-					m := (pivot @env0:+ 5 @env0:<= str @env0:size)
-						ifTrue: [field @env0:value: pivot @env0:+ 4]
-						ifFalse: [0].
-					tzMicros := sign @env0:* ((h @env0:* 3600 @env0:+ (m @env0:* 60)) @env0:* 1000000).
-					tz := PyTimezone __new__: (PyTimedelta @env0:___fromTotalMicros___: tzMicros)
-				]
-			]
-		]
+		| tstr |
+		tstr := str @env0:copyFrom: dateLen @env0:+ 2 to: str @env0:size.
+		parsed := [PyTime @env1:___parseIsoformatTime___: tstr]
+			@env0:on: ValueError
+			do: [:ex | ^ ValueError ___signal___:
+				'Invalid isoformat string: ''' @env0:, str @env0:, ''''].
+		hour := parsed @env0:at: 1.
+		min := parsed @env0:at: 2.
+		sec := parsed @env0:at: 3.
+		micro := parsed @env0:at: 4.
+		tz := parsed @env0:at: 5.
+		becameNextDay := parsed @env0:at: 6.
+		errorFlag := parsed @env0:at: 7
 	].
-	"ISO 8601 permits the midnight-of-next-day spelling '24:00:00' --
-	valid only with minute/second/microsecond all 0.  Validate the
-	ORIGINAL date first (a day/month that's out of range must still
-	raise, even though its fields are about to be replaced by the
-	wrapped date's), then advance one day via ordinal arithmetic
-	(test_fromisoformat_fails_datetime_valueerror,
-	test_fromisoformat_datetime_examples)."
-	hour @env0:= 24 ifTrue: [
+	"Raised OUTSIDE the blanket handler above, because CPython reports this
+	one with its own dedicated message rather than the generic
+	'Invalid isoformat string'."
+	errorFlag ifTrue: [
+		^ ValueError ___signal___:
+			'minute, second, and microsecond must be 0 when hour is 24'].
+	"ISO 8601's midnight-of-next-day spelling '24:00:00'.  Validate the
+	ORIGINAL date first (an out-of-range day/month must still raise its own
+	message, even though its fields are about to be replaced by the wrapped
+	date's), then advance one day via ordinal arithmetic
+	(test_fromisoformat_fails_datetime_valueerror)."
+	becameNextDay ifTrue: [
 		| nd |
-		(min @env0:= 0 @env0:and: [sec @env0:= 0 @env0:and: [micro @env0:= 0]]) ifFalse: [
-			ValueError ___signal___: 'minute, second, and microsecond must be 0 when hour is 24'].
 		nd := PyDate @env1:___allocateInstance___: { year. month. day } kw: nil.
 		nd := PyDate @env1:fromordinal: nd @env1:toordinal @env0:+ 1.
-		year := nd @env1:year. month := nd @env1:month. day := nd @env1:day.
-		hour := 0.
+		year := nd @env1:year. month := nd @env1:month. day := nd @env1:day
 	].
 	"___allocateInstance___:kw: (not ___fromFields___:) so a subclass's
 	overridden __new__ runs (test_subclass_alternate_constructors)."
@@ -2280,7 +2340,7 @@ __repr__
 	zero elision: second/microsecond are omitted when both are 0.  Same
 	rules as PyDate>>__repr__ and PyTime>>__repr__ (test_repr_subclass)."
 
-	| prefix s us body |
+	| prefix s us body tz |
 	prefix := (self @env0:class __module__) @env0:= 'datetime'
 		ifTrue: ['datetime.']
 		ifFalse: [''].
@@ -2294,6 +2354,13 @@ __repr__
 	(s @env0:~= 0 or: [us @env0:~= 0]) ifTrue: [
 		body := body @env0:, ', ' @env0:, s @env0:printString.
 		us @env0:~= 0 ifTrue: [body := body @env0:, ', ' @env0:, us @env0:printString]].
+	"CPython appends ', tzinfo=<repr>' then ', fold=1' (each only when
+	applicable) -- test_zones asserts the exact string
+	'datetime.datetime(2002, 3, 19, 7, 47, tzinfo=est)'."
+	tz := self @env0:dynamicInstVarAt: #_tzinfo.
+	tz @env0:isNil ifFalse: [
+		body := body @env0:, ', tzinfo=' @env0:, tz @env1:__repr__].
+	(self @env1:fold) @env0:= 1 ifTrue: [body := body @env0:, ', fold=1'].
 	^ prefix @env0:, (self @env0:class __qualname__) @env0:, '(' @env0:, body @env0:, ')'
 %
 
@@ -2319,15 +2386,102 @@ strftime: format
 	expand it here (test_more_strftime)."
 	fmt := time @env0:___substituteMicroseconds___: format
 		_: (self @env0:dynamicInstVarAt: #_microsecond).
-	"A NAIVE datetime renders %z / %:z / %Z as empty strings, as CPython
-	does before the generic formatter runs -- the `time' module's
-	formatter has no tzinfo concept and would otherwise emit a guessed
-	'UTC' (test_strftime).  An AWARE one keeps them for the formatter."
-	(self @env0:dynamicInstVarAt: #_tzinfo) @env0:isNil ifTrue: [
-		fmt := fmt @env0:copyReplaceAll: '%:z' with: ''.
-		fmt := fmt @env0:copyReplaceAll: '%z' with: ''.
-		fmt := fmt @env0:copyReplaceAll: '%Z' with: ''].
+	"%z / %:z / %Z are expanded HERE, before the generic formatter runs --
+	the `time' module's formatter has no tzinfo concept (it would emit a
+	guessed 'UTC' for %Z and drop %z entirely)."
+	fmt := PyDateTime ___expandTzDirectives___: fmt
+		offset: self utcoffset
+		tzname: self tzname.
 	^ time instance strftime: fmt _: structTime
+%
+
+category: 'Grail-Private'
+classmethod: PyDateTime
+___formatOffsetDirective___: offset sep: sep
+	"CPython's _format_offset: '' for a None offset, else
+	(+|-)HH<sep>MM[<sep>SS[.ffffff]].  Shared by %z (sep '') and %:z
+	(sep ':')."
+
+	| micros sign stream pad hh mm ss us |
+	offset @env0:== None ifTrue: [^ ''].
+	micros := (offset days @env0:* 86400000000)
+		@env0:+ (offset seconds @env0:* 1000000)
+		@env0:+ offset microseconds.
+	sign := micros @env0:< 0 ifTrue: ['-'] ifFalse: ['+'].
+	micros := micros @env0:abs.
+	pad := [:n | | t | t := n @env0:printString. t @env0:size @env0:< 2 ifTrue: ['0' @env0:, t] ifFalse: [t]].
+	hh := micros @env0:// 3600000000.
+	mm := (micros @env0:\\ 3600000000) @env0:// 60000000.
+	ss := (micros @env0:\\ 60000000) @env0:// 1000000.
+	us := micros @env0:\\ 1000000.
+	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream @env0:nextPutAll: sign.
+	stream @env0:nextPutAll: (pad @env0:value: hh).
+	stream @env0:nextPutAll: sep.
+	stream @env0:nextPutAll: (pad @env0:value: mm).
+	(ss @env0:~= 0 or: [us @env0:~= 0]) ifTrue: [
+		stream @env0:nextPutAll: sep.
+		stream @env0:nextPutAll: (pad @env0:value: ss).
+		us @env0:~= 0 ifTrue: [
+			| usStr |
+			usStr := us @env0:printString.
+			[usStr @env0:size @env0:< 6] @env0:whileTrue: [usStr := '0' @env0:, usStr].
+			stream @env0:nextPutAll: '.' @env0:, usStr]].
+	^ stream @env0:contents
+%
+
+category: 'Grail-Private'
+classmethod: PyDateTime
+___expandTzDirectives___: fmt offset: offset tzname: tzName
+	"Port of the %z / %:z / %Z half of CPython's _wrap_strftime, run before
+	the `time'-module formatter sees the string.
+
+	A left-to-right SCANNER, not copyReplaceAll:, for two reasons CPython
+	shares: '%%z' must stay a literal percent followed by 'z' rather than
+	having its tail rewritten (test_zones formats '%%z=%z'), and a tzname
+	is arbitrary user text whose own '%' characters must be DOUBLED so the
+	downstream formatter emits them literally.
+
+	An empty expansion is correct for a naive value: CPython renders %z and
+	%Z as '' when utcoffset()/tzname() answer None."
+
+	| out i n ch |
+	out := WriteStream @env0:on: Unicode7 @env0:new.
+	i := 1.
+	n := fmt @env0:size.
+	[i @env0:<= n] @env0:whileTrue: [
+		ch := fmt @env0:at: i.
+		i := i @env0:+ 1.
+		ch @env0:= $%
+			ifTrue: [
+				i @env0:> n
+					ifTrue: [out @env0:nextPut: $%]
+					ifFalse: [
+						| c2 |
+						c2 := fmt @env0:at: i.
+						i := i @env0:+ 1.
+						c2 @env0:= $z ifTrue: [
+							out @env0:nextPutAll:
+								(PyDateTime ___formatOffsetDirective___: offset sep: '')
+						] ifFalse: [
+						c2 @env0:= $Z ifTrue: [
+							tzName @env0:== None ifFalse: [
+								out @env0:nextPutAll:
+									(tzName @env0:asString @env0:copyReplaceAll: '%' with: '%%')]
+						] ifFalse: [
+						c2 @env0:= $: ifTrue: [
+							"%:z -- anything else after the colon is passed through
+							untouched, exactly as CPython does."
+							(i @env0:<= n @env0:and: [(fmt @env0:at: i) @env0:= $z])
+								ifTrue: [
+									i := i @env0:+ 1.
+									out @env0:nextPutAll:
+										(PyDateTime ___formatOffsetDirective___: offset sep: ':')]
+								ifFalse: [out @env0:nextPut: $%. out @env0:nextPut: c2]
+						] ifFalse: [
+							out @env0:nextPut: $%. out @env0:nextPut: c2]]]]]
+			ifFalse: [out @env0:nextPut: ch]].
+	^ out @env0:contents
 %
 
 category: 'Grail-Conversion'
@@ -2690,7 +2844,10 @@ __add__: other
 	mi := (timeMicros @env0:// 60000000) @env0:\\ 60.
 	h := timeMicros @env0:// 3600000000.
 	tz := self @env0:dynamicInstVarAt: #_tzinfo.
-	^ PyDateTime @env0:___fromFields___:
+	"self class, not PyDateTime: CPython builds the result with
+	type(self).combine, so DateTimeSubclass + timedelta stays a
+	DateTimeSubclass (test_subclass_datetime)."
+	^ self @env0:class @env0:___fromFields___:
 		(newDate year) _: (newDate month) _: (newDate day)
 		_: h _: mi _: s _: us _: tz
 %
@@ -2709,30 +2866,32 @@ __sub__: other
 	"datetime - datetime -> timedelta; datetime - timedelta -> datetime."
 
 	(other isKindOf: PyDateTime) ifTrue: [
-		| bothNaive |
-		"BOTH NAIVE: CPython subtracts the wall-clock fields with no timezone
-		involved, so a span straddling a DST change is the exact civil
-		difference -- 30 days, not 30 days less an hour.  ``timestamp'' now
-		applies the host offset at each end, which loses that hour
-		(datetime(2024,3,31) - datetime(2024,3,1) answered 2588400 instead of
-		2592000).  Read the naive fields directly instead -- via the EXACT
-		integer-microsecond variant, not ___naiveEpochSeconds___'s float:
-		a float loses precision for large spans (the huge-span comparisons
-		in test_aware_compare/test_aware_subtract/test_tz_independent_comparing
-		came out one microsecond off).
+		| baseMicros mytz ottz myoff otoff |
+		"CPython's datetime.__sub__, in EXACT integer microseconds (never a
+		float: a float loses precision over large spans, and the huge-span
+		comparisons in test_aware_compare / test_aware_subtract /
+		test_tz_independent_comparing came out a microsecond off).
 
-		Otherwise at least one side is AWARE, where the difference IS between
-		true instants and ``timestamp'' (necessarily float, like CPython's own)
-		is the right basis (test_issue23600).  CPython raises TypeError for a
-		naive/aware mix; that check is not added here, leaving the previous
-		behaviour for that case."
-		bothNaive := (self utcoffset) @env0:== None
-			@env0:and: [(other utcoffset) @env0:== None].
-		bothNaive ifTrue: [
-			^ PyTimedelta @env0:___fromTotalMicros___:
-				(self ___naiveEpochMicros___) @env0:- (other ___naiveEpochMicros___)].
+		The naive wall-clock difference is the base in every case, so a span
+		straddling a DST change is the exact civil difference -- 30 days, not
+		30 days less an hour.  It is also the FINAL answer whenever both
+		operands share one tzinfo member, even if that tzinfo reports
+		different offsets for the two instants (OperandDependentOffset);
+		only genuinely different offsets are applied on top."
+		baseMicros := (self ___naiveEpochMicros___) @env0:- (other ___naiveEpochMicros___).
+		mytz := self @env0:dynamicInstVarAt: #_tzinfo.
+		ottz := other @env0:dynamicInstVarAt: #_tzinfo.
+		mytz @env0:== ottz ifTrue: [
+			^ PyTimedelta @env0:___fromTotalMicros___: baseMicros].
+		myoff := self utcoffset.
+		otoff := other utcoffset.
+		(myoff @env0:== None @env0:and: [otoff @env0:== None]) ifTrue: [
+			^ PyTimedelta @env0:___fromTotalMicros___: baseMicros].
+		(myoff @env0:== None @env0:or: [otoff @env0:== None]) ifTrue: [
+			^ TypeError ___signal___:
+				'can''t subtract offset-naive and offset-aware datetimes'].
 		^ PyTimedelta @env0:___fromTotalMicros___:
-			((self timestamp @env0:- other timestamp) @env0:* 1000000) @env0:truncated
+			baseMicros @env0:+ (otoff ___totalMicros___) @env0:- (myoff ___totalMicros___)
 	].
 	(other isKindOf: PyTimedelta) ifTrue: [
 		^ self __add__: (other __neg__)
@@ -2749,30 +2908,105 @@ __eq__: other
 	reflected comparison work; foreign operands never crash."
 
 	(other isKindOf: PyDateTime) ifFalse: [^ #'___NotImplemented___'].
-	^ self ___compareKey___ @env0:= other ___compareKey___
+	^ (self ___awareCmp___: other allowMixed: true) @env0:= 0
 %
 
 category: 'Grail-Equality'
 method: PyDateTime
 __lt__: other
 	(other isKindOf: PyDateTime) ifFalse: [^ #'___NotImplemented___'].
-	^ self ___compareKey___ @env0:< other ___compareKey___
+	^ (self ___awareCmp___: other allowMixed: false) @env0:< 0
 %
 
 category: 'Grail-Equality'
 method: PyDateTime
 __hash__
-	^ self ___compareKey___ @env0:hash
+	"Aware values hash by their true INSTANT, so two datetimes naming the
+	same moment in different zones land in the same bucket as they compare
+	equal (test_zones, test_even_more_compare).  An ambiguous (fold=1)
+	value hashes as its fold=0 reading, exactly as CPython does, because
+	the two readings must stay interchangeable as dict keys
+	(test_hash_aware)."
+
+	| off |
+	off := (self @env1:fold) @env0:= 1
+		ifTrue: [self ___utcoffsetFoldFlipped___]
+		ifFalse: [self utcoffset].
+	off @env0:== None ifTrue: [^ self ___compareKey___ @env0:hash].
+	^ ((self ___naiveEpochMicros___) @env0:- (off ___totalMicros___)) @env0:hash
+%
+
+category: 'Grail-Private'
+method: PyDateTime
+___awareCmp___: other allowMixed: allowMixed
+	"CPython's datetime._cmp, the single ordering/equality primitive.
+	Answers a negative/zero/positive Integer, or 2 for the `unequal but
+	unordered' naive-vs-aware case that == must report as False while the
+	ordering operators must reject with TypeError.
+
+	Order matters and mirrors CPython exactly: identical tzinfo MEMBERS
+	compare naively without ever calling utcoffset() (so a tzinfo whose
+	offset varies with the instant -- OperandDependentOffset in the tester
+	-- still gives the plain civil difference); otherwise both offsets are
+	consulted, equal offsets again reduce to a naive compare, and only
+	genuinely different offsets compare true instants."
+
+	| mytz ottz myoff otoff |
+	mytz := self @env0:dynamicInstVarAt: #_tzinfo.
+	ottz := other @env0:dynamicInstVarAt: #_tzinfo.
+	mytz @env0:== ottz ifTrue: [
+		^ (self ___compareKey___) @env0:- (other ___compareKey___)].
+	myoff := self utcoffset.
+	otoff := other utcoffset.
+	"PEP 495 ambiguity probe, for == only (CPython's allow_mixed): when an
+	operand's offset DEPENDS on its fold, the two are neither equal nor
+	orderable, so == must answer False rather than silently pick one of the
+	two readings (test_mixed_compare_fold, test_mixed_compare_gap)."
+	allowMixed ifTrue: [
+		((self ___utcoffsetFoldFlipped___) @env0:= myoff) ifFalse: [^ 2].
+		((other ___utcoffsetFoldFlipped___) @env0:= otoff) ifFalse: [^ 2]].
+	(myoff @env0:== None @env0:and: [otoff @env0:== None]) ifTrue: [
+		^ (self ___compareKey___) @env0:- (other ___compareKey___)].
+	(myoff @env0:== None @env0:or: [otoff @env0:== None]) ifTrue: [
+		allowMixed ifTrue: [^ 2].
+		^ TypeError ___signal___: 'can''t compare offset-naive and offset-aware datetimes'].
+	^ ((self ___naiveEpochMicros___) @env0:- (myoff ___totalMicros___))
+		@env0:- ((other ___naiveEpochMicros___) @env0:- (otoff ___totalMicros___))
+%
+
+category: 'Grail-Private'
+method: PyDateTime
+___utcoffsetFoldFlipped___
+	"self.replace(fold=not self.fold).utcoffset() -- how CPython detects
+	that an aware value sits in a DST fold or gap, where the offset is
+	ambiguous.  Builds the flipped copy by direct field assignment rather
+	than replace(), so no validation or subclass __new__ runs for what is
+	purely an internal probe."
+
+	| tz copy |
+	tz := self @env0:dynamicInstVarAt: #_tzinfo.
+	tz @env0:isNil ifTrue: [^ None].
+	copy := PyDateTime @env0:___fromFields___:
+		(self @env0:dynamicInstVarAt: #_year)
+		_: (self @env0:dynamicInstVarAt: #_month)
+		_: (self @env0:dynamicInstVarAt: #_day)
+		_: (self @env0:dynamicInstVarAt: #_hour)
+		_: (self @env0:dynamicInstVarAt: #_minute)
+		_: (self @env0:dynamicInstVarAt: #_second)
+		_: (self @env0:dynamicInstVarAt: #_microsecond)
+		_: tz.
+	copy @env0:dynamicInstVarAt: #_fold put: 1 @env0:- (self @env1:fold).
+	^ copy utcoffset
 %
 
 category: 'Grail-Private'
 method: PyDateTime
 ___compareKey___
 	"Single integer preserving (year, month, day, hour, minute, second,
-	microsecond) tuple order — used by every comparison and __hash__.
-	(Naive; tzinfo-aware comparison is deferred to a later tier.)  Built
-	as an integer rather than an Array because GemStone's `Array with:`
-	tops out at 6 arguments and there are 7 fields."
+	microsecond) tuple order — the NAIVE half of every comparison and of
+	__hash__ (tzinfo is layered on top by ___awareCmp___:allowMixed:).
+	Built as an integer rather than an Array because GemStone's `Array
+	with:` tops out at 6 arguments and there are 7 fields."
 
 	^ ((((((self @env0:dynamicInstVarAt: #_year) @env0:* 12
 		@env0:+ ((self @env0:dynamicInstVarAt: #_month) @env0:- 1)) @env0:* 31
@@ -2787,21 +3021,21 @@ category: 'Grail-Equality'
 method: PyDateTime
 __le__: other
 	(other isKindOf: PyDateTime) ifFalse: [^ #'___NotImplemented___'].
-	^ self ___compareKey___ @env0:<= other ___compareKey___
+	^ (self ___awareCmp___: other allowMixed: false) @env0:<= 0
 %
 
 category: 'Grail-Equality'
 method: PyDateTime
 __gt__: other
 	(other isKindOf: PyDateTime) ifFalse: [^ #'___NotImplemented___'].
-	^ self ___compareKey___ @env0:> other ___compareKey___
+	^ (self ___awareCmp___: other allowMixed: false) @env0:> 0
 %
 
 category: 'Grail-Equality'
 method: PyDateTime
 __ge__: other
 	(other isKindOf: PyDateTime) ifFalse: [^ #'___NotImplemented___'].
-	^ self ___compareKey___ @env0:>= other ___compareKey___
+	^ (self ___awareCmp___: other allowMixed: false) @env0:>= 0
 %
 
 category: 'Grail-Equality'
@@ -2811,6 +3045,19 @@ __ne__: other
 	eq := self __eq__: other.
 	(eq @env0:== #'___NotImplemented___') ifTrue: [^ eq].
 	^ eq @env0:not
+%
+
+category: 'Grail-Attribute Access'
+method: PyDateTime
+__setattr__: name _: value
+	"Exact datetime instances have no attribute storage in CPython
+	(test_extra_attributes); Python-level subclasses keep theirs."
+
+	(self @env0:class @env0:== PyDateTime) ifTrue: [
+		^ AttributeError ___signal___:
+			'''datetime.datetime'' object has no attribute ''' @env0:,
+			name @env0:asString @env0:, ''''].
+	^ super __setattr__: name _: value
 %
 
 category: 'Grail-Pickle'
@@ -3238,9 +3485,14 @@ fromisoformat: s
 	(test_fromisoformat_subclass)."
 
 	| str fields |
+	"A non-str argument is a TypeError, not a ValueError -- previously
+	bytes/None went through asString and died on a raw kernel error
+	(test_fromisoformat_fails_typeerror)."
+	(s @env0:isKindOf: CharacterCollection) ifFalse: [
+		^ TypeError ___signal___: 'fromisoformat: argument must be str'].
 	str := s @env0:asString.
 	((str @env0:size @env0:= 7) @env0:or: [(str @env0:size @env0:= 8) @env0:or: [str @env0:size @env0:= 10]])
-		ifFalse: [ValueError ___signal___: 'Invalid isoformat string: ''' @env0:, str @env0:, ''''].
+		ifFalse: [^ ValueError ___signal___: 'Invalid isoformat string: ''' @env0:, str @env0:, ''''].
 	fields := self @env1:___parseIsoDateFields___: str.
 	^ self @env1:___allocateInstance___:
 		{ fields @env0:at: 1. fields @env0:at: 2. fields @env0:at: 3 } kw: nil
@@ -3472,30 +3724,47 @@ ___parseIsoDateFields___: dateStr
 	which already ports _isoweek_to_gregorian's validation, so both stay
 	in sync (test_fromisoformat_date_examples)."
 
-	| year hasSep pos month day weekno dayno wd |
-	year := (dateStr @env0:copyFrom: 1 to: 4) @env0:asNumber.
+	| year hasSep pos month day weekno dayno wd digits |
+	"Strict ASCII-digit reader.  Every field used to go through asNumber,
+	a lenient PREFIX parser: '200a' answered 200, so fromisoformat happily
+	accepted '200a-12-04' (test_fromisoformat_fails), while pure garbage
+	raised an UNCATCHABLE kernel rtErrBadFormat instead of a Python
+	ValueError.  Comparing code points 48..57 (not Character>>isDigit) also
+	rejects non-ASCII digits, as CPython does for '٢025-03-09'."
+	digits := [:from :count |
+		| v c |
+		(from @env0:< 1 @env0:or: [from @env0:+ count @env0:- 1 @env0:> dateStr @env0:size]) ifTrue: [
+			ValueError ___signal___: 'Invalid isoformat string: ''' @env0:, dateStr @env0:, ''''].
+		v := 0.
+		from @env0:to: from @env0:+ count @env0:- 1 do: [:i |
+			c := (dateStr @env0:at: i) @env0:asInteger.
+			(c @env0:>= 48 @env0:and: [c @env0:<= 57]) ifFalse: [
+				ValueError ___signal___: 'Invalid isoformat string: ''' @env0:, dateStr @env0:, ''''].
+			v := (v @env0:* 10) @env0:+ (c @env0:- 48)].
+		v].
+	year := digits @env0:value: 1 value: 4.
 	hasSep := (dateStr @env0:at: 5) @env0:= $-.
 	pos := 5 @env0:+ (hasSep ifTrue: [1] ifFalse: [0]).
 	((dateStr @env0:at: pos) @env0:= $W) ifTrue: [
 		pos := pos @env0:+ 1.
-		weekno := (dateStr @env0:copyFrom: pos to: pos @env0:+ 1) @env0:asNumber.
+		weekno := digits @env0:value: pos value: 2.
 		pos := pos @env0:+ 2.
 		dayno := 1.
 		(dateStr @env0:size @env0:>= pos) ifTrue: [
 			(((dateStr @env0:at: pos) @env0:= $-) @env0:~= hasSep) ifTrue: [
 				ValueError ___signal___: 'Inconsistent use of dash separator'].
 			hasSep ifTrue: [pos := pos @env0:+ 1].
-			dayno := (dateStr @env0:copyFrom: pos to: pos) @env0:asNumber.
+			dayno := digits @env0:value: pos value: 1.
 		].
 		wd := PyDate @env1:fromisocalendar: year _: weekno _: dayno.
 		^ { wd @env1:year. wd @env1:month. wd @env1:day }
 	].
-	month := (dateStr @env0:copyFrom: pos to: pos @env0:+ 1) @env0:asNumber.
+	month := digits @env0:value: pos value: 2.
 	pos := pos @env0:+ 2.
 	(((dateStr @env0:at: pos) @env0:= $-) @env0:~= hasSep) ifTrue: [
 		ValueError ___signal___: 'Inconsistent use of dash separator'].
 	hasSep ifTrue: [pos := pos @env0:+ 1].
-	day := (dateStr @env0:copyFrom: pos to: pos @env0:+ 1) @env0:asNumber.
+	day := digits @env0:value: pos value: 2.
 	^ { year. month. day }
 %
 
@@ -3669,7 +3938,10 @@ __add__: other
 		TypeError ___signal___: 'unsupported operand type(s) for +: ''date'' and non-timedelta'].
 	days := other days.
 	newOrdinal := (self toordinal) @env0:+ days.
-	^ [PyDate fromordinal: newOrdinal]
+	"self class, not PyDate: CPython builds the result with
+	type(self).fromordinal, so DateSubclass + timedelta stays a
+	DateSubclass (test_subclass_date)."
+	^ [self @env0:class @env1:fromordinal: newOrdinal]
 		@env0:on: ValueError
 		do: [:ex | OverflowError @env1:___signal___: 'date value out of range']
 %
@@ -3688,9 +3960,13 @@ __sub__: other
 	"date - timedelta → date; date - date → timedelta."
 
 	(other isKindOf: PyTimedelta) ifTrue: [
-		| neg |
-		neg := other __neg__.
-		^ self __add__: neg].
+		"CPython is `self + timedelta(-other.days)': it negates the DAYS
+		FIELD, not the whole timedelta.  Negating the timedelta first is
+		different whenever it has a sub-day part -- -timedelta(days=1,
+		hours=2) normalises to days=-2, so date(2000,1,2) - that answered
+		1999-12-31 instead of 2000-01-01 (test_delta_non_days_ignored)."
+		^ self __add__: (PyTimedelta @env0:___fromTotalMicros___:
+			(other days) @env0:negated @env0:* 86400 @env0:* 1000000)].
 	(other isKindOf: PyDate) ifTrue: [
 		| diff |
 		diff := (self toordinal) @env0:- (other toordinal).
@@ -3752,6 +4028,19 @@ category: 'Grail-Equality'
 method: PyDate
 __hash__
 	^ self toordinal
+%
+
+category: 'Grail-Attribute Access'
+method: PyDate
+__setattr__: name _: value
+	"Exact date instances have no attribute storage in CPython
+	(test_extra_attributes); Python-level subclasses keep theirs."
+
+	(self @env0:class @env0:== PyDate) ifTrue: [
+		^ AttributeError ___signal___:
+			'''datetime.date'' object has no attribute ''' @env0:,
+			name @env0:asString @env0:, ''''].
+	^ super __setattr__: name _: value
 %
 
 category: 'Grail-Pickle'
@@ -3896,6 +4185,27 @@ hash
 category: 'Grail-Private'
 method: PyTime
 _hour: h _minute: mi _second: s _microsecond: us _tzinfo: tz
+	"Shared by every construction path (direct call, subclass __new__,
+	replace, fromisoformat, strptime) -- field validation ported from
+	CPython's _check_time_fields, mirroring PyDateTime>>_year:_month:...'s
+	time-part validation, which is why only the `time' variants of
+	test_bad_constructor_arguments / test_replace / test_valuerror_messages
+	were failing.  The pickle byte-state backdoor deliberately bypasses
+	this method (it writes the dynamic instVars directly, as CPython's
+	__setstate does) so a round-tripped state is never revalidated."
+
+	(h @env0:< 0 or: [h @env0:> 23]) ifTrue: [
+		^ ValueError @env1:___signal___:
+			'hour must be in 0..23, not ' @env0:, h @env0:printString].
+	(mi @env0:< 0 or: [mi @env0:> 59]) ifTrue: [
+		^ ValueError @env1:___signal___:
+			'minute must be in 0..59, not ' @env0:, mi @env0:printString].
+	(s @env0:< 0 or: [s @env0:> 59]) ifTrue: [
+		^ ValueError @env1:___signal___:
+			'second must be in 0..59, not ' @env0:, s @env0:printString].
+	(us @env0:< 0 or: [us @env0:> 999999]) ifTrue: [
+		^ ValueError @env1:___signal___:
+			'microsecond must be in 0..999999, not ' @env0:, us @env0:printString].
 	self dynamicInstVarAt: #_hour put: h.
 	self dynamicInstVarAt: #_minute put: mi.
 	self dynamicInstVarAt: #_second put: s.
@@ -3908,12 +4218,65 @@ set compile_env: 1
 
 ! ------- Constructors
 
+category: 'Grail-Pickle'
+classmethod: PyTime
+___isTimePickleState___: obj
+	"CPython's test for time()'s constructor pickle backdoor: a bytes/str
+	of exactly 6 items whose hour byte, with the `fold' high bit masked
+	off, is a plausible 0..23.  Deliberately narrow -- test_backdoor_
+	resistance feeds 6-char strings whose first byte fails this (' ', '9',
+	chr(24), '\\xff') and expects them to fall through to the ordinary
+	integer type check's TypeError, not to be decoded as state."
+
+	| b |
+	((obj @env0:isKindOf: ByteArray)
+		@env0:or: [obj @env0:isKindOf: CharacterCollection]) ifFalse: [^ false].
+	obj @env0:size @env0:= 6 ifFalse: [^ false].
+	b := (PyDate ___byteValueOf___: obj at: 1) @env0:bitAnd: 127.
+	^ b @env0:< 24
+%
+
+category: 'Grail-Pickle'
+classmethod: PyTime
+___fromTimeState___: s tz: tzArg
+	"Rebuild from the 6-byte pickle state (hour, minute, second, us-hi,
+	us-mid, us-lo), with `fold' stolen from the hour byte's high bit.
+	Stores fields DIRECTLY, skipping _hour:_minute:... -- the point of the
+	backdoor is to bypass revalidation, exactly as CPython's __setstate
+	does (and as PyDate>>___fromDateState___: already does for date)."
+
+	| inst h fold |
+	(tzArg @env0:isNil or: [tzArg @env0:isKindOf: PyTzinfo]) ifFalse: [
+		^ TypeError @env1:___signal___: 'bad tzinfo state arg'].
+	inst := self @env0:new.
+	h := PyDate ___byteValueOf___: s at: 1.
+	fold := 0.
+	h @env0:> 127 ifTrue: [fold := 1. h := h @env0:- 128].
+	inst @env0:dynamicInstVarAt: #_hour put: h.
+	inst @env0:dynamicInstVarAt: #_minute put: (PyDate ___byteValueOf___: s at: 2).
+	inst @env0:dynamicInstVarAt: #_second put: (PyDate ___byteValueOf___: s at: 3).
+	inst @env0:dynamicInstVarAt: #_microsecond put:
+		((((PyDate ___byteValueOf___: s at: 4) @env0:* 256)
+			@env0:+ (PyDate ___byteValueOf___: s at: 5)) @env0:* 256)
+			@env0:+ (PyDate ___byteValueOf___: s at: 6).
+	inst @env0:dynamicInstVarAt: #_tzinfo put: tzArg.
+	fold @env0:= 1 ifTrue: [inst @env0:dynamicInstVarAt: #_fold put: 1].
+	^ inst
+%
+
 category: 'Grail-Callable'
 classmethod: PyTime
-value: positional value: kwargs
-	"time(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)."
+___buildTime___: positional kw: kwargs for: cls
+	"The ONE time() assembler, shared by the class-side value:value: and
+	the subclass-side ___new__:kw: (which previously carried duplicate,
+	separately-drifting copies).  `cls' is the class to instantiate, so a
+	Python subclass of time keeps its own class."
 
 	| h mi s us tz fold inst |
+	positional @env0:size @env0:> 6 ifTrue: [
+		^ TypeError @env1:___signal___:
+			'function takes at most 6 arguments (' @env0:,
+			positional @env0:size @env0:printString @env0:, ' given)'].
 	h := positional @env0:size @env0:>= 1 ifTrue: [positional @env0:at: 1] ifFalse: [0].
 	mi := positional @env0:size @env0:>= 2 ifTrue: [positional @env0:at: 2] ifFalse: [0].
 	s := positional @env0:size @env0:>= 3 ifTrue: [positional @env0:at: 3] ifFalse: [0].
@@ -3927,12 +4290,33 @@ value: positional value: kwargs
 		us := kwargs @env0:at: 'microsecond' ifAbsent: [us].
 		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz].
 		fold := kwargs @env0:at: 'fold' ifAbsent: [0]].
+	"Pickle backdoor -- time(6_byte_state[, tzinfo]).  CPython passes
+	`minute or None' as the tzinfo state arg (test_compat_unpickle)."
+	(PyTime ___isTimePickleState___: h) ifTrue: [
+		| stateTz |
+		stateTz := ((mi @env0:isNil) @env0:or: [(mi @env0:== None) @env0:or: [mi @env0:= 0]])
+			ifTrue: [nil] ifFalse: [mi].
+		^ cls ___fromTimeState___: h tz: stateTz].
+	"CPython rejects a non-integer field with TypeError before any range
+	check (test_backdoor_resistance's leftover bad strings land here)."
+	PyDate ___requireIntegers___: { h. mi. s. us }.
 	tz == None ifTrue: [tz := nil].
 	(tz @env0:isNil or: [tz @env0:isKindOf: PyTzinfo]) ifFalse: [
 		^ TypeError @env1:___signal___: 'tzinfo argument must be None or of a tzinfo subclass'].
-	inst := self @env0:___fromFields___: h _: mi _: s _: us _: tz.
+	(fold @env0:= 0 or: [fold @env0:= 1]) ifFalse: [
+		^ ValueError @env1:___signal___:
+			'fold must be either 0 or 1, not ' @env0:, fold @env0:printString].
+	inst := cls @env0:___fromFields___: h _: mi _: s _: us _: tz.
 	fold @env0:= 0 ifFalse: [inst @env0:dynamicInstVarAt: #_fold put: fold].
 	^ inst
+%
+
+category: 'Grail-Callable'
+classmethod: PyTime
+value: positional value: kwargs
+	"time(hour=0, minute=0, second=0, microsecond=0, tzinfo=None, *, fold=0)."
+
+	^ PyTime ___buildTime___: positional kw: kwargs for: self
 %
 
 category: 'Grail-Instantiation'
@@ -3947,29 +4331,10 @@ ___new__: positional kw: kwargs
 	allocates through `self ___fromFields___:' so the subclass is kept.
 	See PyDate>>___new__:kw: for the Enum-mixin rationale."
 
-	| h mi s us tz fold inst |
 	(Enum ___grailBuildingSet @env0:includes: self) ifTrue: [
 		^ TypeError @env1:___signal___:
 			'do not use `super().__new__; call the appropriate __new__ directly'].
-	h := positional @env0:size @env0:>= 1 ifTrue: [positional @env0:at: 1] ifFalse: [0].
-	mi := positional @env0:size @env0:>= 2 ifTrue: [positional @env0:at: 2] ifFalse: [0].
-	s := positional @env0:size @env0:>= 3 ifTrue: [positional @env0:at: 3] ifFalse: [0].
-	us := positional @env0:size @env0:>= 4 ifTrue: [positional @env0:at: 4] ifFalse: [0].
-	tz := positional @env0:size @env0:>= 5 ifTrue: [positional @env0:at: 5] ifFalse: [nil].
-	fold := 0.
-	kwargs @env0:isNil ifFalse: [
-		h := kwargs @env0:at: 'hour' ifAbsent: [h].
-		mi := kwargs @env0:at: 'minute' ifAbsent: [mi].
-		s := kwargs @env0:at: 'second' ifAbsent: [s].
-		us := kwargs @env0:at: 'microsecond' ifAbsent: [us].
-		tz := kwargs @env0:at: 'tzinfo' ifAbsent: [tz].
-		fold := kwargs @env0:at: 'fold' ifAbsent: [0]].
-	tz == None ifTrue: [tz := nil].
-	(tz @env0:isNil or: [tz @env0:isKindOf: PyTzinfo]) ifFalse: [
-		^ TypeError @env1:___signal___: 'tzinfo argument must be None or of a tzinfo subclass'].
-	inst := self @env0:___fromFields___: h _: mi _: s _: us _: tz.
-	fold @env0:= 0 ifFalse: [inst @env0:dynamicInstVarAt: #_fold put: fold].
-	^ inst
+	^ PyTime ___buildTime___: positional kw: kwargs for: self
 %
 
 category: 'Grail-Initialization'
@@ -3985,34 +4350,181 @@ strptime: dateStr _: fmt
 	^ strptimeMod _strptime_datetime_time: self _: dateStr _: fmt
 %
 
+category: 'Grail-Private'
+classmethod: PyTime
+___twoDigitsIn___: str at: pos
+	"Two STRICT ASCII digits at pos..pos+1 as an Integer.  Deliberately not
+	Character>>isDigit (CPython's parser rejects non-ASCII digits, e.g. the
+	'٢025-03-09' case) and never asNumber -- that reader is a lenient
+	PREFIX parser ('200a' -> 200) whose leniency is exactly why
+	fromisoformat used to accept malformed input, and which raises an
+	UNCATCHABLE kernel error on pure garbage instead of a Python
+	ValueError.  Works for both String (Characters) and bytes
+	(SmallIntegers) elements."
+
+	| a b |
+	(pos @env0:< 1 @env0:or: [pos @env0:+ 1 @env0:> str @env0:size]) ifTrue: [
+		^ ValueError ___signal___: 'Invalid time component'].
+	a := (str @env0:at: pos) @env0:asInteger.
+	b := (str @env0:at: pos @env0:+ 1) @env0:asInteger.
+	((a @env0:>= 48 @env0:and: [a @env0:<= 57])
+		@env0:and: [b @env0:>= 48 @env0:and: [b @env0:<= 57]]) ifFalse: [
+		^ ValueError ___signal___: 'Invalid time component'].
+	^ ((a @env0:- 48) @env0:* 10) @env0:+ (b @env0:- 48)
+%
+
+category: 'Grail-Private'
+classmethod: PyTime
+___parseHhMmSsFf___: tstr
+	"Port of CPython's _parse_hh_mm_ss_ff: parses
+	HH[:?MM[:?SS[{.,}fff[fff]]]] and answers { h. mi. s. us }.  Whether a
+	':' follows the HOUR decides the mode for the whole string: once seen,
+	every later component must also be colon-separated; otherwise the
+	compact HHMMSS form is in force and no separator may appear at all."
+
+	| lenStr comps pos hasSep nextChar done comp |
+	lenStr := tstr @env0:size.
+	comps := Array @env0:new: 4.
+	comps @env0:at: 1 put: 0.
+	comps @env0:at: 2 put: 0.
+	comps @env0:at: 3 put: 0.
+	comps @env0:at: 4 put: 0.
+	pos := 1.
+	hasSep := false.
+	done := false.
+	comp := 0.
+	[comp @env0:< 3 @env0:and: [done @env0:not]] @env0:whileTrue: [
+		(lenStr @env0:- pos @env0:+ 1) @env0:< 2 ifTrue: [
+			^ ValueError ___signal___: 'Incomplete time component'].
+		comps @env0:at: comp @env0:+ 1 put: (PyTime ___twoDigitsIn___: tstr at: pos).
+		pos := pos @env0:+ 2.
+		nextChar := pos @env0:<= lenStr ifTrue: [tstr @env0:at: pos] ifFalse: [nil].
+		comp @env0:= 0 ifTrue: [hasSep := nextChar @env0:= $:].
+		(nextChar @env0:isNil @env0:or: [comp @env0:>= 2])
+			ifTrue: [done := true]
+			ifFalse: [
+				(hasSep @env0:and: [nextChar @env0:~= $:]) ifTrue: [
+					^ ValueError ___signal___: 'Invalid time separator'].
+				hasSep ifTrue: [pos := pos @env0:+ 1]].
+		comp := comp @env0:+ 1].
+	pos @env0:<= lenStr ifTrue: [
+		| c fracStr toParse val |
+		c := tstr @env0:at: pos.
+		(c @env0:= $. @env0:or: [c @env0:= $,]) ifFalse: [
+			^ ValueError ___signal___: 'Invalid microsecond separator'].
+		pos := pos @env0:+ 1.
+		fracStr := tstr @env0:copyFrom: pos to: lenStr.
+		"An EMPTY fraction is an error too -- CPython gets that for free
+		from int('') raising (test_fromisoformat_fails_datetime's
+		'...12:30:45.')."
+		fracStr @env0:isEmpty ifTrue: [
+			^ ValueError ___signal___: 'Non-digit values in fraction'].
+		fracStr @env0:do: [:ch |
+			| cv |
+			cv := ch @env0:asInteger.
+			(cv @env0:>= 48 @env0:and: [cv @env0:<= 57]) ifFalse: [
+				^ ValueError ___signal___: 'Non-digit values in fraction']].
+		toParse := fracStr @env0:size @env0:min: 6.
+		val := 0.
+		1 @env0:to: toParse do: [:i |
+			val := (val @env0:* 10) @env0:+ ((fracStr @env0:at: i) @env0:asInteger @env0:- 48)].
+		"Fewer than 6 digits means the fraction was truncated, not scaled:
+		'.6' is 600000 microseconds, not 6."
+		1 @env0:to: 6 @env0:- toParse do: [:i | val := val @env0:* 10].
+		comps @env0:at: 4 put: val].
+	^ comps
+%
+
+category: 'Grail-Private'
+classmethod: PyTime
+___parseIsoformatTime___: tstr
+	"Port of CPython's _parse_isoformat_time -- the time half of both
+	time.fromisoformat and datetime.fromisoformat, including the full
+	timezone grammar (Z, +HH, +HHMM, +HH:MM, +HHMMSS, +HH:MM:SS.ffffff).
+	Answers { h. mi. s. us. tzOrNil. becameNextDay. errorFromComponents },
+	where becameNextDay flags the '24:00:00' midnight-rollover spelling and
+	errorFromComponents flags a 24:00 with nonzero minute/second/micro."
+
+	| lenStr tzPos timestr comps h tz becameNextDay errorFlag |
+	lenStr := tstr @env0:size.
+	lenStr @env0:< 2 ifTrue: [^ ValueError ___signal___: 'Isoformat time too short'].
+	"First of '-', '+', 'Z' starts the timezone (CPython's find-chain)."
+	tzPos := tstr @env0:indexOf: $-.
+	tzPos @env0:= 0 ifTrue: [tzPos := tstr @env0:indexOf: $+].
+	tzPos @env0:= 0 ifTrue: [tzPos := tstr @env0:indexOf: $Z].
+	timestr := tzPos @env0:> 0
+		ifTrue: [tstr @env0:copyFrom: 1 to: tzPos @env0:- 1]
+		ifFalse: [tstr].
+	comps := PyTime ___parseHhMmSsFf___: timestr.
+	h := comps @env0:at: 1.
+	becameNextDay := false.
+	errorFlag := false.
+	h @env0:= 24 ifTrue: [
+		(((comps @env0:at: 2) @env0:= 0) @env0:and: [
+			((comps @env0:at: 3) @env0:= 0) @env0:and: [(comps @env0:at: 4) @env0:= 0]])
+			ifTrue: [comps @env0:at: 1 put: 0. becameNextDay := true]
+			ifFalse: [errorFlag := true]].
+	tz := nil.
+	((tzPos @env0:= lenStr) @env0:and: [(tstr @env0:at: lenStr) @env0:= $Z])
+		ifTrue: [tz := PyTimezone utc]
+		ifFalse: [
+			tzPos @env0:> 0 ifTrue: [
+				| tzstr tzComps sign micros |
+				tzstr := tstr @env0:copyFrom: tzPos @env0:+ 1 to: lenStr.
+				"Valid offset lengths are 2, 4, 5, 6, 8, 10+ -- 0/1/3 are
+				malformed, as is anything trailing a 'Z'."
+				(((tzstr @env0:size @env0:= 0)
+					@env0:or: [(tzstr @env0:size @env0:= 1) @env0:or: [tzstr @env0:size @env0:= 3]])
+					@env0:or: [(tstr @env0:at: tzPos) @env0:= $Z]) ifTrue: [
+					^ ValueError ___signal___: 'Malformed time zone string'].
+				tzComps := PyTime ___parseHhMmSsFf___: tzstr.
+				(((tzComps @env0:at: 1) @env0:= 0) @env0:and: [
+					((tzComps @env0:at: 2) @env0:= 0) @env0:and: [
+					((tzComps @env0:at: 3) @env0:= 0) @env0:and: [(tzComps @env0:at: 4) @env0:= 0]]])
+					ifTrue: [tz := PyTimezone utc]
+					ifFalse: [
+						sign := (tstr @env0:at: tzPos) @env0:= $- ifTrue: [-1] ifFalse: [1].
+						micros := ((((tzComps @env0:at: 1) @env0:* 3600)
+							@env0:+ ((tzComps @env0:at: 2) @env0:* 60)
+							@env0:+ (tzComps @env0:at: 3)) @env0:* 1000000)
+							@env0:+ (tzComps @env0:at: 4).
+						"PyTimezone __new__: already rejects |offset| >= 24h,
+						covering the '+24:30' cases."
+						tz := PyTimezone __new__:
+							(PyTimedelta @env0:___fromTotalMicros___: sign @env0:* micros)]]].
+	^ { comps @env0:at: 1. comps @env0:at: 2. comps @env0:at: 3. comps @env0:at: 4.
+		tz. becameNextDay. errorFlag }
+%
+
 category: 'Grail-Initialization'
 classmethod: PyTime
 fromisoformat: s
-	"time.fromisoformat('HH:MM[:SS[.ffffff]][+HH:MM]') — simple subset.
-	Accepts 'HH:MM', 'HH:MM:SS', 'HH:MM:SS.ffffff'.  Timezone suffix
-	not yet parsed."
+	"time.fromisoformat -- the full CPython grammar, not the old
+	'HH:MM[:SS[.ffffff]]'-at-fixed-offsets subset: compact HHMMSS forms,
+	',' as the fraction separator, an optional leading 'T', and a real
+	timezone suffix (which the old parser dropped entirely, silently
+	answering a NAIVE time for an aware string).  Like CPython, ANY parse
+	or construction failure surfaces as a single ValueError naming the
+	input (test_fromisoformat_time_examples, test_fromisoformat_fails,
+	test_fromisoformat_timespecs)."
 
-	| size h mi sec us frac padded endIdx |
-	size := s @env0:size.
-	(size @env0:>= 5) @env0:ifFalse: [
-		ValueError ___signal___: 'Invalid isoformat string: ''' @env0:, s @env0:, ''''].
-	h := (s @env0:copyFrom: 1 to: 2) @env0:asNumber.
-	mi := (s @env0:copyFrom: 4 to: 5) @env0:asNumber.
-	sec := 0.
-	us := 0.
-	size @env0:>= 8 @env0:ifTrue: [
-		sec := (s @env0:copyFrom: 7 to: 8) @env0:asNumber.
-		size @env0:>= 10 @env0:ifTrue: [
-			"Microseconds: 1-6 fractional digits after the dot.  Truncate at 6."
-			endIdx := size @env0:min: 15.
-			frac := s @env0:copyFrom: 10 to: endIdx.
-			padded := frac.
-			[padded @env0:size @env0:< 6] @env0:whileTrue: [
-				padded := padded @env0:, '0'].
-			us := padded @env0:asNumber]].
-	"___allocateInstance___:kw: (not ___fromFields___:) so a subclass's
-	overridden __new__ runs (test_subclass_alternate_constructors)."
-	^ self @env1:___allocateInstance___: { h. mi. sec. us. nil } kw: nil
+	| str |
+	(s @env0:isKindOf: CharacterCollection) ifFalse: [
+		^ TypeError ___signal___: 'fromisoformat: argument must be str'].
+	str := s @env0:asString.
+	(str @env0:isEmpty @env0:not @env0:and: [(str @env0:at: 1) @env0:= $T]) ifTrue: [
+		str := str @env0:copyFrom: 2 to: str @env0:size].
+	^ [| parsed |
+		parsed := PyTime ___parseIsoformatTime___: str.
+		"___allocateInstance___:kw: (not ___fromFields___:) so a subclass's
+		overridden __new__ runs (test_fromisoformat_subclass)."
+		self @env1:___allocateInstance___:
+			{ parsed @env0:at: 1. parsed @env0:at: 2. parsed @env0:at: 3.
+			  parsed @env0:at: 4. parsed @env0:at: 5 } kw: nil]
+		@env0:on: ValueError
+		do: [:ex |
+			ValueError ___signal___:
+				'Invalid isoformat string: ''' @env0:, str @env0:, '''']
 %
 
 ! ------- Accessors
@@ -4064,20 +4576,53 @@ fold
 
 ! ------- ISO / string
 
+category: 'Grail-Private'
+method: PyTime
+___isoTzSuffix___
+	"'+HH:MM[:SS[.ffffff]]'-style UTC-offset suffix, or '' when naive --
+	the time-side twin of PyDateTime>>___isoTzSuffix___ (see there for why
+	it must be derived from utcoffset() rather than tzname()).  Without
+	it, an AWARE time's isoformat() dropped its offset entirely
+	(test_isoformat_timezone)."
+
+	| offset micros pad stream sign hh mm ss us |
+	offset := self utcoffset.
+	offset @env0:== None ifTrue: [^ ''].
+	micros := (offset days @env0:* 86400000000)
+		@env0:+ (offset seconds @env0:* 1000000)
+		@env0:+ offset microseconds.
+	pad := [:n | | t | t := n @env0:printString. t @env0:size @env0:< 2 ifTrue: ['0' @env0:, t] ifFalse: [t]].
+	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	sign := micros @env0:< 0 ifTrue: [$-] ifFalse: [$+].
+	stream @env0:nextPut: sign.
+	micros := micros @env0:abs.
+	hh := micros @env0:// 3600000000.
+	mm := (micros @env0:\\ 3600000000) @env0:// 60000000.
+	ss := (micros @env0:\\ 60000000) @env0:// 1000000.
+	us := micros @env0:\\ 1000000.
+	stream @env0:nextPutAll: (pad @env0:value: hh).
+	stream @env0:nextPut: $:.
+	stream @env0:nextPutAll: (pad @env0:value: mm).
+	(ss @env0:~= 0 or: [us @env0:~= 0]) ifTrue: [
+		stream @env0:nextPut: $:.
+		stream @env0:nextPutAll: (pad @env0:value: ss).
+		us @env0:~= 0 ifTrue: [
+			| usStr |
+			stream @env0:nextPut: $..
+			usStr := us @env0:printString.
+			[usStr @env0:size @env0:< 6] @env0:whileTrue: [usStr := '0' @env0:, usStr].
+			stream @env0:nextPutAll: usStr]].
+	^ stream @env0:contents
+%
+
 category: 'Grail-Conversion'
 method: PyTime
 isoformat
-	"'HH:MM:SS' or 'HH:MM:SS.ffffff' when microseconds are non-zero."
+	"'HH:MM:SS[.ffffff][+HH:MM]'.  Routed through the timespec form so the
+	no-arg spelling (and __str__ through it) also carries the UTC-offset
+	suffix for aware times."
 
-	| us body |
-	us := self @env0:dynamicInstVarAt: #_microsecond.
-	body := (self @env0:___pad___: (self @env0:dynamicInstVarAt: #_hour) width: 2) @env0:,
-		':' @env0:,
-		(self @env0:___pad___: (self @env0:dynamicInstVarAt: #_minute) width: 2) @env0:,
-		':' @env0:,
-		(self @env0:___pad___: (self @env0:dynamicInstVarAt: #_second) width: 2).
-	us @env0:= 0 ifTrue: [^ body].
-	^ body @env0:, '.' @env0:, (self @env0:___pad___: us width: 6)
+	^ self _isoformat: nil kw: nil
 %
 
 category: 'Grail-Conversion'
@@ -4086,7 +4631,18 @@ _isoformat: positional kw: kwargs
 	"isoformat(timespec='auto'|'hours'|'minutes'|'seconds'|'milliseconds'
 	|'microseconds') — the keyword/positional timespec form."
 
-	| timespec h mi s us body |
+	| timespec h mi s us body suffix |
+	"CPython's signature accepts exactly one argument named `timespec';
+	anything else is a TypeError rather than being silently ignored
+	(test_1653736)."
+	(positional @env0:notNil @env0:and: [positional @env0:size @env0:> 1]) ifTrue: [
+		^ TypeError ___signal___: 'isoformat() takes at most 1 argument'].
+	kwargs @env0:isNil ifFalse: [
+		kwargs @env0:keysDo: [:k |
+			k @env0:asString @env0:= 'timespec' ifFalse: [
+				^ TypeError ___signal___:
+					'isoformat() got an unexpected keyword argument ''' @env0:,
+					k @env0:asString @env0:, '''']]].
 	timespec := 'auto'.
 	(positional @env0:notNil and: [positional @env0:isEmpty @env0:not])
 		ifTrue: [timespec := positional @env0:at: 1].
@@ -4095,18 +4651,23 @@ _isoformat: positional kw: kwargs
 	mi := self @env0:dynamicInstVarAt: #_minute.
 	s := self @env0:dynamicInstVarAt: #_second.
 	us := self @env0:dynamicInstVarAt: #_microsecond.
-	timespec @env0:= 'hours' ifTrue: [^ self @env0:___pad___: h width: 2].
+	suffix := self ___isoTzSuffix___.
+	timespec @env0:= 'hours' ifTrue: [^ (self @env0:___pad___: h width: 2) @env0:, suffix].
 	body := (self @env0:___pad___: h width: 2) @env0:, ':' @env0:, (self @env0:___pad___: mi width: 2).
-	timespec @env0:= 'minutes' ifTrue: [^ body].
+	timespec @env0:= 'minutes' ifTrue: [^ body @env0:, suffix].
 	body := body @env0:, ':' @env0:, (self @env0:___pad___: s width: 2).
-	timespec @env0:= 'seconds' ifTrue: [^ body].
+	timespec @env0:= 'seconds' ifTrue: [^ body @env0:, suffix].
 	timespec @env0:= 'milliseconds' ifTrue: [
-		^ body @env0:, '.' @env0:, (self @env0:___pad___: (us @env0:// 1000) width: 3)].
+		^ body @env0:, '.' @env0:, (self @env0:___pad___: (us @env0:// 1000) width: 3) @env0:, suffix].
 	timespec @env0:= 'microseconds' ifTrue: [
-		^ body @env0:, '.' @env0:, (self @env0:___pad___: us width: 6)].
-	"auto"
-	us @env0:= 0 ifTrue: [^ body].
-	^ body @env0:, '.' @env0:, (self @env0:___pad___: us width: 6)
+		^ body @env0:, '.' @env0:, (self @env0:___pad___: us width: 6) @env0:, suffix].
+	"Anything else is an error -- 'auto' is the only remaining valid value.
+	PyDateTime's counterpart already checked this; PyTime silently treated
+	every unknown spec as 'auto' (test_isoformat's timespec='monkey')."
+	timespec @env0:= 'auto' ifFalse: [
+		^ ValueError ___signal___: 'Unknown timespec value'].
+	us @env0:= 0 ifTrue: [^ body @env0:, suffix].
+	^ body @env0:, '.' @env0:, (self @env0:___pad___: us width: 6) @env0:, suffix
 %
 
 category: 'Grail-Conversion'
@@ -4121,7 +4682,7 @@ __repr__
 	"Bare subclass names in the repr (gh-107773) -- see PyDate>>__repr__
 	(test_repr_subclass)."
 
-	| h mi s us body prefix |
+	| h mi s us body prefix tz |
 	h := self @env0:dynamicInstVarAt: #_hour.
 	mi := self @env0:dynamicInstVarAt: #_minute.
 	s := self @env0:dynamicInstVarAt: #_second.
@@ -4130,6 +4691,12 @@ __repr__
 	(s @env0:~= 0 or: [us @env0:~= 0]) ifTrue: [
 		body := body @env0:, ', ' @env0:, s @env0:printString.
 		us @env0:~= 0 ifTrue: [body := body @env0:, ', ' @env0:, us @env0:printString]].
+	"CPython appends ', tzinfo=<repr>' then ', fold=1', each only when
+	applicable (test_zones, test_repr_subclass, test_repr)."
+	tz := self @env0:dynamicInstVarAt: #_tzinfo.
+	tz @env0:isNil ifFalse: [
+		body := body @env0:, ', tzinfo=' @env0:, tz @env1:__repr__].
+	(self @env1:fold) @env0:= 1 ifTrue: [body := body @env0:, ', fold=1'].
 	prefix := (self @env0:class __module__) @env0:= 'datetime'
 		ifTrue: ['datetime.']
 		ifFalse: [''].
@@ -4189,12 +4756,11 @@ strftime: format
 	(test_strftime)."
 	fmt := time @env0:___substituteMicroseconds___: format
 		_: (self @env0:dynamicInstVarAt: #_microsecond).
-	"A NAIVE time renders %z / %:z / %Z as empty -- see
-	PyDateTime>>strftime: (test_strftime)."
-	(self @env0:dynamicInstVarAt: #_tzinfo) @env0:isNil ifTrue: [
-		fmt := fmt @env0:copyReplaceAll: '%:z' with: ''.
-		fmt := fmt @env0:copyReplaceAll: '%z' with: ''.
-		fmt := fmt @env0:copyReplaceAll: '%Z' with: ''].
+	"%z / %:z / %Z -- see PyDateTime>>strftime: and
+	___expandTzDirectives___:offset:tzname: (test_strftime, test_zones)."
+	fmt := PyDateTime ___expandTzDirectives___: fmt
+		offset: self utcoffset
+		tzname: self tzname.
 	^ time instance strftime: fmt _: structTime
 %
 
@@ -4241,12 +4807,14 @@ __format__: spec
 category: 'Grail-Accessors'
 method: PyTime
 utcoffset
-	"tzinfo.utcoffset(None), or None when naive."
+	"tzinfo.utcoffset(None), or None when naive.  Validated like
+	PyDateTime>>utcoffset -- a custom tzinfo is arbitrary user code
+	(test_tzinfo_classes)."
 
 	| tz |
 	tz := self @env0:dynamicInstVarAt: #_tzinfo.
 	tz @env0:isNil ifTrue: [^ None].
-	^ tz utcoffset: None
+	^ self ___checkUtcOffsetResult___: (tz utcoffset: None) for: 'utcoffset'
 %
 
 category: 'Grail-Accessors'
@@ -4255,16 +4823,46 @@ dst
 	| tz |
 	tz := self @env0:dynamicInstVarAt: #_tzinfo.
 	tz @env0:isNil ifTrue: [^ None].
-	^ tz dst: None
+	^ self ___checkUtcOffsetResult___: (tz dst: None) for: 'dst'
+%
+
+category: 'Grail-Private'
+method: PyTime
+___checkUtcOffsetResult___: result for: methodName
+	"Shared validation for utcoffset()/dst(): must be None or a timedelta
+	strictly within (-24h, 24h).  Mirrors PyDateTime's method of the same
+	name (test_tzinfo_classes' C4 wrong-types and C6 out-of-range cases)."
+
+	| totalMicros |
+	result @env0:== None ifTrue: [^ result].
+	(result @env0:isKindOf: PyTimedelta) ifFalse: [
+		^ TypeError ___signal___: ('tzinfo.' @env0:, methodName
+			@env0:, '() must return None or a timedelta, not ' @env0:, result @env0:class __name__)].
+	totalMicros := (result days @env0:* 86400000000)
+		@env0:+ (result seconds @env0:* 1000000)
+		@env0:+ result microseconds.
+	(totalMicros @env0:> -86400000000 @env0:and: [totalMicros @env0:< 86400000000]) ifFalse: [
+		^ ValueError ___signal___: ('tzinfo.' @env0:, methodName
+			@env0:, '() must return a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24)')].
+	^ result
 %
 
 category: 'Grail-Accessors'
 method: PyTime
 tzname
-	| tz |
+	"Validates the tzinfo subclass's return value the way CPython does --
+	None or a str -- since a custom tzinfo is arbitrary user code.  Mirrors
+	PyDateTime>>tzname (test_zones' Badtzname, whose tzname() answers a
+	non-str and must make strftime('%Z') raise TypeError)."
+
+	| tz result |
 	tz := self @env0:dynamicInstVarAt: #_tzinfo.
 	tz @env0:isNil ifTrue: [^ None].
-	^ tz tzname: None
+	result := tz tzname: None.
+	(result @env0:== None or: [result @env0:isKindOf: CharacterCollection]) ifFalse: [
+		^ TypeError ___signal___: 'tzinfo.tzname() must return None or a string, not '
+			@env0:, result @env0:class __name__].
+	^ result
 %
 
 set compile_env: 0
@@ -4289,25 +4887,53 @@ __eq__: other
 	reflected comparison work; foreign operands never crash."
 
 	(other isKindOf: PyTime) ifFalse: [^ #'___NotImplemented___'].
-	^ (self @env0:dynamicInstVarAt: #_hour) @env0:= (other @env0:dynamicInstVarAt: #_hour)
-		and: [(self @env0:dynamicInstVarAt: #_minute) @env0:= (other @env0:dynamicInstVarAt: #_minute)
-		and: [(self @env0:dynamicInstVarAt: #_second) @env0:= (other @env0:dynamicInstVarAt: #_second)
-		and: [(self @env0:dynamicInstVarAt: #_microsecond) @env0:= (other @env0:dynamicInstVarAt: #_microsecond)]]]
+	^ (self ___awareCmp___: other allowMixed: true) @env0:= 0
 %
 
 category: 'Grail-Equality'
 method: PyTime
 __hash__
-	^ ((self @env0:dynamicInstVarAt: #_hour) @env0:* 3600
-		@env0:+ ((self @env0:dynamicInstVarAt: #_minute) @env0:* 60)
-		@env0:+ (self @env0:dynamicInstVarAt: #_second)) @env0:hash
+	"Aware times hash by their UTC-adjusted value, so two times naming the
+	same moment-of-day in different zones share a bucket exactly as they
+	compare equal (test_zones, test_hash_edge_cases)."
+
+	| off |
+	off := self utcoffset.
+	off @env0:== None ifTrue: [
+		^ ((self @env0:dynamicInstVarAt: #_hour) @env0:* 3600
+			@env0:+ ((self @env0:dynamicInstVarAt: #_minute) @env0:* 60)
+			@env0:+ (self @env0:dynamicInstVarAt: #_second)) @env0:hash].
+	^ ((self ___cmpKey___) @env0:- (off ___totalMicros___)) @env0:hash
+%
+
+category: 'Grail-Private'
+method: PyTime
+___awareCmp___: other allowMixed: allowMixed
+	"CPython's time._cmp -- see PyDateTime>>___awareCmp___:allowMixed: for
+	the full rationale; the only difference is that time passes None to
+	utcoffset() (there is no instant to disambiguate with)."
+
+	| mytz ottz myoff otoff |
+	mytz := self @env0:dynamicInstVarAt: #_tzinfo.
+	ottz := other @env0:dynamicInstVarAt: #_tzinfo.
+	mytz @env0:== ottz ifTrue: [
+		^ (self ___cmpKey___) @env0:- (other ___cmpKey___)].
+	myoff := self utcoffset.
+	otoff := other utcoffset.
+	(myoff @env0:== None @env0:and: [otoff @env0:== None]) ifTrue: [
+		^ (self ___cmpKey___) @env0:- (other ___cmpKey___)].
+	(myoff @env0:== None @env0:or: [otoff @env0:== None]) ifTrue: [
+		allowMixed ifTrue: [^ 2].
+		^ TypeError ___signal___: 'can''t compare offset-naive and offset-aware times'].
+	^ ((self ___cmpKey___) @env0:- (myoff ___totalMicros___))
+		@env0:- ((other ___cmpKey___) @env0:- (otoff ___totalMicros___))
 %
 
 category: 'Grail-Private'
 method: PyTime
 ___cmpKey___
-	"Microseconds since midnight — a total order for naive times.
-	(tzinfo-aware comparison is deferred; CPython converts to UTC.)"
+	"Microseconds since midnight — the NAIVE half of every comparison
+	(tzinfo is layered on top by ___awareCmp___:allowMixed:)."
 
 	^ (((self @env0:dynamicInstVarAt: #_hour) @env0:* 60
 		@env0:+ (self @env0:dynamicInstVarAt: #_minute)) @env0:* 60
@@ -4319,28 +4945,28 @@ category: 'Grail-Equality'
 method: PyTime
 __lt__: other
 	(other isKindOf: PyTime) ifFalse: [^ #'___NotImplemented___'].
-	^ self ___cmpKey___ @env0:< other ___cmpKey___
+	^ (self ___awareCmp___: other allowMixed: false) @env0:< 0
 %
 
 category: 'Grail-Equality'
 method: PyTime
 __le__: other
 	(other isKindOf: PyTime) ifFalse: [^ #'___NotImplemented___'].
-	^ self ___cmpKey___ @env0:<= other ___cmpKey___
+	^ (self ___awareCmp___: other allowMixed: false) @env0:<= 0
 %
 
 category: 'Grail-Equality'
 method: PyTime
 __gt__: other
 	(other isKindOf: PyTime) ifFalse: [^ #'___NotImplemented___'].
-	^ self ___cmpKey___ @env0:> other ___cmpKey___
+	^ (self ___awareCmp___: other allowMixed: false) @env0:> 0
 %
 
 category: 'Grail-Equality'
 method: PyTime
 __ge__: other
 	(other isKindOf: PyTime) ifFalse: [^ #'___NotImplemented___'].
-	^ self ___cmpKey___ @env0:>= other ___cmpKey___
+	^ (self ___awareCmp___: other allowMixed: false) @env0:>= 0
 %
 
 category: 'Grail-Equality'
@@ -4350,6 +4976,19 @@ __ne__: other
 	eq := self __eq__: other.
 	(eq @env0:== #'___NotImplemented___') ifTrue: [^ eq].
 	^ eq @env0:not
+%
+
+category: 'Grail-Attribute Access'
+method: PyTime
+__setattr__: name _: value
+	"Exact time instances have no attribute storage in CPython
+	(test_extra_attributes); Python-level subclasses keep theirs."
+
+	(self @env0:class @env0:== PyTime) ifTrue: [
+		^ AttributeError ___signal___:
+			'''datetime.time'' object has no attribute ''' @env0:,
+			name @env0:asString @env0:, ''''].
+	^ super __setattr__: name _: value
 %
 
 category: 'Grail-Pickle'
