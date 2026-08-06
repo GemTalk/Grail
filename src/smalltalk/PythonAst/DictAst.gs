@@ -91,3 +91,19 @@ printSmalltalkOn: aStream
 	].
 	aStream nextPutAll: '___d] value: (PyDict perform: #new env: 0))'.
 %
+method: DictAst
+keys
+	^keys
+%
+method: DictAst
+keys: newValue
+	keys := newValue
+%
+method: DictAst
+values
+	^values
+%
+method: DictAst
+values: newValue
+	values := newValue
+%

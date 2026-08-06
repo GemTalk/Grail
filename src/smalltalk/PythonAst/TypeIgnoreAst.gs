@@ -27,3 +27,19 @@ removeallclassmethods TypeIgnoreAst
 set compile_env: 0
 ! ------------------- Class methods for TypeIgnoreAst
 ! ------------------- Instance methods for TypeIgnoreAst
+method: TypeIgnoreAst
+lineno
+	^lineno
+%
+method: TypeIgnoreAst
+lineno: newValue
+	lineno := newValue
+%
+method: TypeIgnoreAst
+tag
+	^tag
+%
+method: TypeIgnoreAst
+tag: newValue
+	tag := newValue
+%

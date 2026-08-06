@@ -70,3 +70,11 @@ printSmalltalkOn: aStream
 
 	"Emit nothing — declaration-only."
 %
+method: NonlocalAst
+names
+	^names
+%
+method: NonlocalAst
+names: newValue
+	names := newValue
+%

@@ -8,6 +8,7 @@
 ! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
+set compile_env: 0
 
 ! ------------------- Remove existing Python methods from float
 expectvalue /Metaclass3
@@ -385,7 +386,7 @@ ___parseHex___: hexString
 	final rounding is correct (round-half-even).  A magnitude beyond
 	the float range is an OverflowError, matching CPython."
 
-	| trimmed idx size sign lower mant intCount fracCount hasDot binExp expIdx expSign r1 r2 r3 m fracLen shift mag |
+	| trimmed idx size sign lower mant intCount fracCount hasDot binExp expIdx expSign r1 r2 r3 m shift mag |
 	trimmed := hexString @env0:trimBoth.
 	^ [ | v |
 		size := trimmed @env0:size.
@@ -426,7 +427,7 @@ ___parseHex___: hexString
 				ifTrue: [expSign := -1. idx := idx @env0:+ 1]
 				ifFalse: [((idx @env0:<= size) and: [(trimmed @env0:at: idx) @env0:== $+]) ifTrue: [idx := idx @env0:+ 1]].
 			expIdx := idx.
-			r3 := self ___consumeAsciiDigitRun___: trimmed from: idx into: (WriteStream @env0:on: String @env0:new) radix: 10.
+			r3 := self ___consumeAsciiDigitRun___: trimmed from: idx into: (AppendStream @env0:on: String @env0:new) radix: 10.
 			((r3 @env0:at: 1) @env0:== 0) ifTrue: [self @env0:error: 'invalid hexadecimal floating-point string'].
 			idx := r3 @env0:at: 2.
 			binExp := expSign @env0:* ((trimmed @env0:copyFrom: expIdx to: idx @env0:- 1) @env0:asInteger)].

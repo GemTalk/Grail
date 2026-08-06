@@ -68,3 +68,11 @@ printSmalltalkOn: aStream
 
 	"Emit nothing — the statement is a parse-time declaration only."
 %
+method: GlobalAst
+names
+	^names
+%
+method: GlobalAst
+names: newValue
+	names := newValue
+%

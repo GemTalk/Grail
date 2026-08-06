@@ -208,12 +208,52 @@ _signalEscapedException
 	| ex err msg |
 	ex := escapedException.
 	escapedException := nil.
-	(ex @env0:isKindOf: StopIteration) ifFalse: [^ ex @env0:signal].
+	(ex @env0:isKindOf: StopIteration) ifFalse: [^ (self _resignalable: ex) @env0:signal].
 	msg := 'generator raised StopIteration'.
 	err := RuntimeError ___new___.
 	err ___args___: { msg }.
 	err ___setCause___: ex context: ex.
 	^ err ___signal___: msg
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+_resignalable: ex
+	"``ex'' if it can be signaled again, else a clean copy of it.
+
+	An exception instance carries its live handler frames in INDEXED slots
+	appended to its named ones, and the VM refuses -- uncontinuably, error
+	6011 ``Exception has already been signaled'' -- to signal one that still
+	has them.  Catching an exception and returning normally pops them, so the
+	usual stow-then-re-signal works on the same object.  But an exception that
+	was PASSED on its way out (``[...] on: X do: [:e | e pass]'') keeps one
+	frame's worth, and Grail emits exactly that: RaiseAst compiles a bare
+	Python ``raise'' inside an ``except'' to ``___ex pass'', and
+	ComprehensionAst re-passes anything that is not StopIteration.  So
+
+	    def g():
+	        try:    raise ValueError('boom')
+	        except ValueError:  raise
+	        yield 1
+
+	stowed a passed ValueError, and re-signaling it on the consumer replaced
+	the user's catchable ValueError with an UncontinuableError that no Python
+	``except'' -- and no SUnit test -- could handle.
+
+	``copy'' answers an instance of the same class with the named AND dynamic
+	instance variables (messageText, args, __cause__, __context__, ...) but
+	none of the stale frames, so it signals cleanly and still matches the same
+	``except'' clauses.  It is a last resort, not the default: Python
+	propagates the identical object, and every path that can keep it does.
+
+	The isKindOf: guard keeps this to exception INSTANCES: throw: also accepts
+	an exception CLASS (Python's ``gen.throw(ValueError)''), and a class must
+	never be copied."
+
+	^ ((ex @env0:isKindOf: AbstractException)
+		@env0:and: [ex @env0:_basicSize @env0:> 0])
+			ifTrue: [ex @env0:copy]
+			ifFalse: [ex]
 %
 
 category: 'Grail-Generator Protocol'
@@ -228,9 +268,9 @@ throw: anException
 		"Throwing on a not-yet-started generator just raises in the
 		caller — the body hasn''t reached a yield point to inject at."
 		done := true.
-		^ anException @env0:signal
+		^ (self _resignalable: anException) @env0:signal
 	].
-	done ifTrue: [^ anException @env0:signal].
+	done ifTrue: [^ (self _resignalable: anException) @env0:signal].
 	injectedException := anException.
 	sentValue := nil.
 	producerSem @env0:signal.
@@ -290,7 +330,7 @@ ___yield___: aValue
 		ex := injectedException.
 		injectedException := nil.
 		sentValue := nil.
-		^ ex @env0:signal
+		^ (self _resignalable: ex) @env0:signal
 	].
 	sent := sentValue ifNil: [None].
 	sentValue := nil.

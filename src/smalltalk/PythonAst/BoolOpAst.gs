@@ -64,3 +64,11 @@ isAbstract
 
 	^self == BoolOpAst
 %
+method: BoolOpAst
+values
+	^values
+%
+method: BoolOpAst
+values: newValue
+	values := newValue
+%

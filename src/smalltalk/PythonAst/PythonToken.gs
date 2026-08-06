@@ -7,8 +7,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'PythonToken'
-  instVarNames: #( type value line column
-                    endLine endColumn)
+  instVarNames: #( type value line position) 
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -25,11 +24,7 @@ PythonToken comment:
 type is a symbol: #NAME, #NUMBER, #STRING, #OP, #KEYWORD,
   #NEWLINE, #NL, #INDENT, #DEDENT, #ENDMARKER.
 value is the string content of the token.
-line, column, endLine, endColumn track source location.
-
-Hierarchy:
-Object
-  PythonToken(type value line column endLine endColumn)
+position tracks source location.
 '
 %
 
@@ -52,65 +47,13 @@ set compile_env: 0
 
 category: 'Grail-instance creation'
 classmethod: PythonToken
-type: aSymbol value: aString line: aLine column: aColumn
-
-	^self type: aSymbol value: aString line: aLine column: aColumn endLine: aLine endColumn: aColumn + aString size
-%
-
-category: 'Grail-instance creation'
-classmethod: PythonToken
-type: aSymbol value: aString line: aLine column: aColumn endLine: anEndLine endColumn: anEndColumn
+type: aSymbol value: aString line: aLine position: aPosition
 
 	^self basicNew
-		type: aSymbol;
-		value: aString;
-		line: aLine;
-		column: aColumn;
-		endLine: anEndLine;
-		endColumn: anEndColumn;
-		yourself
-%
-
-category: 'Grail-accessors'
-method: PythonToken
-column
-
-	^column
-%
-
-category: 'Grail-accessors'
-method: PythonToken
-column: anInteger
-
-	column := anInteger
-%
-
-category: 'Grail-accessors'
-method: PythonToken
-endColumn
-
-	^endColumn
-%
-
-category: 'Grail-accessors'
-method: PythonToken
-endColumn: anInteger
-
-	endColumn := anInteger
-%
-
-category: 'Grail-accessors'
-method: PythonToken
-endLine
-
-	^endLine
-%
-
-category: 'Grail-accessors'
-method: PythonToken
-endLine: anInteger
-
-	endLine := anInteger
+		type: aSymbol  
+                line: aLine
+		value: aString 
+		position: aPosition 
 %
 
 category: 'Grail-testing'
@@ -176,20 +119,6 @@ isFString
 	^type == #FSTRING
 %
 
-category: 'Grail-accessors'
-method: PythonToken
-line
-
-	^line
-%
-
-category: 'Grail-accessors'
-method: PythonToken
-line: anInteger
-
-	line := anInteger
-%
-
 category: 'Grail-printing'
 method: PythonToken
 printOn: aStream
@@ -205,6 +134,15 @@ printOn: aStream
 
 category: 'Grail-accessors'
 method: PythonToken
+type: aSymbol line: aLine value: aString position: aPosition
+  type := aSymbol  .
+  value := aString .
+  line := aLine .
+  position := aPosition .
+%
+
+category: 'Grail-accessors'
+method: PythonToken
 type
 
 	^type
@@ -212,9 +150,12 @@ type
 
 category: 'Grail-accessors'
 method: PythonToken
-type: aSymbol
-
-	type := aSymbol
+position
+	^ position
+%
+method: PythonToken
+line
+	^ line
 %
 
 category: 'Grail-accessors'
@@ -223,10 +164,9 @@ value
 
 	^value
 %
-
 category: 'Grail-accessors'
 method: PythonToken
 value: anObject
 
-	value := anObject
+       value := anObject
 %

@@ -76,7 +76,7 @@ method: PackageImportTestCase
 testImportPackage
 	"Importing a package loads its __init__.py and registers it"
 
-	| imp importFunc |
+	| imp |
 	imp := importlib @env1:instance.
 	imp @env1:___import__: { 'src.python.mypkg' } kw: nil.
 
@@ -121,7 +121,7 @@ method: PackageImportTestCase
 testImportSubmodule
 	"import mypkg.sub should register both mypkg and mypkg.sub"
 
-	| imp importFunc |
+	| imp |
 	imp := importlib @env1:instance.
 	imp @env1:___import__: { 'src.python.mypkg.sub' } kw: nil.
 
@@ -134,7 +134,7 @@ method: PackageImportTestCase
 testParentAutoLoaded
 	"Importing a submodule auto-loads parent packages"
 
-	| parentBefore imp importFunc |
+	| parentBefore imp |
 	parentBefore := importlib ___lookupModule___: 'src.python.mypkg'.
 	self assert: parentBefore equals: nil.
 
@@ -164,7 +164,7 @@ method: PackageImportTestCase
 testImportNestedPackage
 	"import mypkg.nested.deep should register all three levels"
 
-	| imp importFunc |
+	| imp |
 	imp := importlib @env1:instance.
 	imp @env1:___import__: { 'src.python.mypkg.nested.deep' } kw: nil.
 

@@ -23,7 +23,7 @@ login
 
 run
 Globals at: #GrailBaseInstalled put: 1.
-System commitTransaction.
+System commit .
 GsFile stdout nextPutAll: 'GrailBaseInstalled marker set (version 1).'; lf; flush.
 true
 %

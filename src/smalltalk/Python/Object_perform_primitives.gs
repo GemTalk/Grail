@@ -9,7 +9,7 @@
 !
 ! They carry a <primitive:>, so compiling them requires the CompilePrimitives
 ! privilege, which an ordinary install user lacks -- hence they are filed once by
-! SystemUser via install_base.gs (persistent + shared; env-0 dispatch
+! SystemUser via install_base37.gs (persistent + shared; env-0 dispatch
 ! infrastructure, identical for every user).
 !
 ! On a MODERN kernel these 2/3/4-arg forms are provided NATIVELY by the base

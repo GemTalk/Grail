@@ -22,3 +22,4 @@ gemstone
 Google_Drive
 scheduled_tasks.lock
 twilio_response.json
+SUnit*.log

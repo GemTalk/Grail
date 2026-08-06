@@ -179,6 +179,56 @@ def throw_stopiteration_caught():
     return it.throw(StopIteration())
 
 
+# --- an exception that was PASSED must still reach the consumer -------------
+#
+# A generator body runs on a forked producer process; an exception raised there
+# is stowed and re-signalled on the consumer.  The VM refuses to signal an
+# exception instance that still carries handler frames, and an exception that
+# was PASSED on its way out keeps a frame's worth -- so these three shapes used
+# to surface as an uncontinuable "Exception has already been signaled" (error
+# 6011) that no `except` could catch, instead of the user's own exception.
+#
+# All three are ordinary Python: RaiseAst compiles a bare `raise` inside an
+# `except` to `___ex pass`, and every comprehension re-passes what escapes it
+# (that is where the traceback frame is pushed).
+
+
+def bare_reraise_in_body():
+    def g():
+        try:
+            raise ValueError("boom")
+        except ValueError:
+            raise
+        yield 1
+
+    return next(g())
+
+
+def reraise_through_comprehension_in_body():
+    def g():
+        yield [1 // 0 for _ in range(3)]
+
+    return next(g())
+
+
+def throw_an_exception_being_handled():
+    """gen.throw(e) from inside `except ... as e` -- e is mid-signal."""
+
+    def g():
+        yield 1
+
+    it = g()
+    next(it)
+    try:
+        raise ValueError("thrown")
+    except ValueError as exc:
+        try:
+            it.throw(exc)
+        except ValueError as again:
+            return "rethrown: %s" % again
+    return "throw did not raise"
+
+
 _run("convert_body_raises", body_raises)
 _run("convert_chaining", body_raises_chaining)
 _run("convert_inner_next", inner_next_exhausted)
@@ -193,5 +243,8 @@ _run("keep_next_default", next_with_default)
 _run("keep_exhausted_reraise", exhausted_generator_reraises)
 _run("keep_other_exception", other_exception_unchanged)
 _run("keep_throw_caught", throw_stopiteration_caught)
+_run("passed_bare_reraise", bare_reraise_in_body)
+_run("passed_comprehension", reraise_through_comprehension_in_body)
+_run("passed_throw_handled", throw_an_exception_being_handled)
 
 RESULTS = out

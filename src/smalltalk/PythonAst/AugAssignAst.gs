@@ -114,9 +114,9 @@ printSmalltalkOn: aStream
 		].
 	"Derive the in-place / binary dunder selectors (shared by the
 	closure-cell and simple-local paths below)."
-	opStream := WriteStream on: String new.
+	opStream := AppendStream on: Unicode7 new.
 	op printSmalltalkOn: opStream.
-	binSel := opStream contents trimSeparators.
+	binSel := opStream _contents trimSeparators.
 	iSel := '__i' , (binSel copyFrom: 3 to: binSel size).
 	"``nonlocal x; x op= v'' inside a class METHOD: x is an enclosing-function
 	local reached past the class, so the method has no lexical link to the
@@ -268,4 +268,16 @@ printSmalltalkSubscriptAugAssignOn: aStream
 	op printSmalltalkOn: aStream.
 	value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ').'.
+%
+method: AugAssignAst
+target: newValue
+	target := newValue
+%
+method: AugAssignAst
+op: newValue
+	op := newValue
+%
+method: AugAssignAst
+value: newValue
+	value := newValue
 %

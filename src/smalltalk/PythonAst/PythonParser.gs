@@ -126,47 +126,6 @@ atOp: aString
 
 category: 'Grail-node construction'
 method: PythonParser
-buildNode: aClass fields: aDictionary
-	"Build an AST node of the given class with the given field values."
-
-	^aClass buildWithFields: aDictionary
-%
-
-category: 'Grail-node construction'
-method: PythonParser
-buildNode: aClass fields: aDictionary from: startToken to: endToken
-	"Build an AST node with location info spanning two tokens.
-
-	Every call site passes a freshly-constructed, single-use
-	IdentityKeyValueDictionary, so add the location keys to it directly
-	rather than copying first -- the old ``aDictionary copy'' allocated and
-	populated a throwaway dictionary for every located node built."
-
-	aDictionary at: #beginLine put: startToken line.
-	aDictionary at: #beginColumn put: startToken column.
-	aDictionary at: #endLine put: endToken endLine.
-	aDictionary at: #endColumn put: endToken endColumn.
-	^aClass buildWithFields: aDictionary
-%
-
-category: 'Grail-node construction'
-method: PythonParser
-buildNode: aClass fields: aDictionary token: aToken
-	"Build an AST node with location info from a token.
-
-	As with the from:to: variant, the fields dictionary is always a
-	freshly-constructed single-use IdentityKeyValueDictionary, so add the
-	location keys directly instead of copying."
-
-	aDictionary at: #beginLine put: aToken line.
-	aDictionary at: #beginColumn put: aToken column.
-	aDictionary at: #endLine put: aToken endLine.
-	aDictionary at: #endColumn put: aToken endColumn.
-	^aClass buildWithFields: aDictionary
-%
-
-category: 'Grail-node construction'
-method: PythonParser
 declareVariable: aSymbol
 	"Register a name as ``in scope'' here — used for name resolution.
 	Adds to the current scope's variable set only.  Use this for
@@ -369,10 +328,10 @@ parseAssert
 	(self matchOp: ',') ifTrue: [
 		msg := self parseExpression.
 	].
-	^self buildNode: AssertAst fields: (IdentityKeyValueDictionary new
-		at: #test put: test;
-		at: #msg put: msg;
-		yourself) from: tok to: self lastToken
+	^ AssertAst new 
+		test: test;
+		msg: msg;
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - compound statements'
@@ -416,33 +375,33 @@ parseAtom
 	"None, True, False"
 	(tok isKeyword: 'None') ifTrue: [
 		self advance.
-		^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
-			at: #value put: nil;
-			at: #kind put: nil;
-			yourself) token: tok
+		^ ConstantAst new
+			value: nil;
+			kind: nil;
+			token: tok ; yourself 
 	].
 	(tok isKeyword: 'True') ifTrue: [
 		self advance.
-		^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
-			at: #value put: true;
-			at: #kind put: nil;
-			yourself) token: tok
+		^ConstantAst new
+			value: true;
+			kind: nil;
+			token: tok ; yourself
 	].
 	(tok isKeyword: 'False') ifTrue: [
 		self advance.
-		^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
-			at: #value put: false;
-			at: #kind put: nil;
-			yourself) token: tok
+		^ConstantAst new
+			value: false;
+			kind: nil;
+			token: tok ; yourself
 	].
 
 	"Numeric literals"
 	tok isNumber ifTrue: [
 		self advance.
-		^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
-			at: #value put: (self parseNumberValue: tok value);
-			at: #kind put: nil;
-			yourself) token: tok
+		^ConstantAst new
+			value: (self parseNumberValue: tok value);
+			kind: nil;
+			token: tok ; yourself
 	].
 
 	"String literals (may be multiple concatenated).  When any
@@ -474,10 +433,10 @@ parseAtom
 	"Ellipsis"
 	(tok isOp: '...') ifTrue: [
 		self advance.
-		^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
-			at: #value put: #'...';
-			at: #kind put: nil;
-			yourself) token: tok
+		^ConstantAst new
+			value: #'...';
+			kind: nil;
+			token: tok ; yourself
 	].
 
 	"Identifiers.  Python `_` (the conventional 'unused' name) isn't a
@@ -489,10 +448,10 @@ parseAtom
 		self advance.
 		nameSym := tok value asSymbol.
 		nameSym = #'_' ifTrue: [nameSym := self underscoreReadName].
-		^self buildNode: NameAst fields: (IdentityKeyValueDictionary new
-			at: #id put: nameSym;
-			at: #ctx put: self loadCtx;
-			yourself) token: tok
+		^NameAst new
+			id: nameSym;
+			ctx: self loadCtx;
+			token: tok ; yourself
 	].
 
 	"Parenthesized expression, tuple, or generator"
@@ -515,10 +474,10 @@ parseAtom
 		| value |
 		self advance.
 		value := self parsePrimary.
-		^self buildNode: StarredAst fields: (IdentityKeyValueDictionary new
-			at: #value put: value;
-			at: #ctx put: self loadCtx;
-			yourself) from: tok to: self lastToken
+		^StarredAst new
+			value: value;
+			ctx: self loadCtx;
+			from: tok to: self lastToken ; yourself
 	].
 
 	"Yield expression"
@@ -531,9 +490,9 @@ parseAtom
 		| value |
 		self advance.
 		value := self parsePrimary.
-		^self buildNode: AwaitAst fields: (IdentityKeyValueDictionary new
-			at: #value put: value;
-			yourself) from: tok to: self lastToken
+		^AwaitAst new
+			value: value;
+			from: tok to: self lastToken ; yourself
 	].
 
 	SyntaxError signal: 'Unexpected token: ' , tok type , ' ''' , tok value , ''' at line ' , tok line printString.
@@ -551,11 +510,11 @@ parseBitwiseAnd
 		| right |
 		self advance.
 		right := self parseShift.
-		left := self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
-			at: #left put: left;
-			at: #op put: BitAndAst basicNew;
-			at: #right put: right;
-			yourself) from: startTok to: self lastToken.
+		left := BinOpAst new
+			left: left;
+			op: BitAndAst basicNew;
+			right: right;
+			from: startTok to: self lastToken ; yourself.
 	].
 	^left
 %
@@ -572,11 +531,11 @@ parseBitwiseOr
 		| right |
 		self advance.
 		right := self parseBitwiseXor.
-		left := self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
-			at: #left put: left;
-			at: #op put: BitOrAst basicNew;
-			at: #right put: right;
-			yourself) from: startTok to: self lastToken.
+		left := BinOpAst new
+			left: left;
+			op: BitOrAst basicNew;
+			right: right;
+			from: startTok to: self lastToken ; yourself.
 	].
 	^left
 %
@@ -593,11 +552,11 @@ parseBitwiseXor
 		| right |
 		self advance.
 		right := self parseBitwiseAnd.
-		left := self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
-			at: #left put: left;
-			at: #op put: BitXorAst basicNew;
-			at: #right put: right;
-			yourself) from: startTok to: self lastToken.
+		left := BinOpAst new
+			left: left;
+			op: BitXorAst basicNew;
+			right: right;
+			from: startTok to: self lastToken ; yourself.
 	].
 	^left
 %
@@ -610,9 +569,9 @@ parseBlock
 	Single-line: simple_stmts (on same line as colon)
 	Returns an array of statements."
 
-	| stmts |
+	| stmts type aTok |
 	"Check for single-line body (no NEWLINE/INDENT)"
-	(self peek notNil and: [self peekType ~~ #NEWLINE and: [self peekType ~~ #NL and: [self peekType ~~ #INDENT]]]) ifTrue: [
+	((aTok := self peek) notNil and: [ (type := aTok type)  ~~ #NEWLINE and: [ type ~~ #NL and: [ type ~~ #INDENT]]]) ifTrue: [
 		^self parseSimpleStatements
 	].
 	self skipNewlines.
@@ -628,7 +587,7 @@ parseBreak
 
 	| tok |
 	tok := self advance. "consume 'break'"
-	^self buildNode: BreakAst fields: IdentityKeyValueDictionary new token: tok
+	^BreakAst new token: tok ; yourself
 %
 
 category: 'Grail-parsing - atoms'
@@ -636,19 +595,19 @@ method: PythonParser
 parseBytesLiteral
 	"Parse one or more adjacent bytes tokens (implicit concatenation)."
 
-	| startTok writeStream str ba |
+	| startTok writeStream str ba tok |
 	startTok := self peek.
-	writeStream := WriteStream on: Unicode7 new.
-	[self peek notNil and: [self peek isBytes]] whileTrue: [
+	writeStream := AppendStream on: Unicode7 new.
+	[ (tok := self peek) notNil and: [ tok isBytes]] whileTrue: [
 		writeStream nextPutAll: self advance value.
 	].
 	str := writeStream contents.
 	ba := ByteArray new: str size.
 	1 to: str size do: [:i | ba at: i put: (str at: i) codePoint].
-	^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
-		at: #value put: ba;
-		at: #kind put: nil;
-		yourself) from: startTok to: self lastToken
+	^ConstantAst new
+		value: ba;
+		kind: nil;
+		from: startTok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - arguments'
@@ -656,7 +615,7 @@ method: PythonParser
 parseCallArgList
 	"Parse function call arguments. Returns an Array of {positional. keywords}."
 
-	| args kwargs sawKeyword sawKwargsUnpack kwNames |
+	| args kwargs sawKeyword sawKwargsUnpack kwNames tok |
 	args := Array new.
 	kwargs := Array new.
 	"Argument-ordering guards, matching CPython (test_keywordonlyarg
@@ -666,16 +625,16 @@ parseCallArgList
 	sawKeyword := false.
 	sawKwargsUnpack := false.
 	kwNames := IdentitySet new.
-	(self peek notNil and: [(self peek isOp: ')') not]) ifTrue: [
+	((tok := self peek) notNil and: [(tok isOp: ')') not]) ifTrue: [
 		[
 			(self peek isOp: ')') ifTrue: [false] ifFalse: [
 				"**kwargs"
 				(self atOp: '**') ifTrue: [
 					self advance.
-					kwargs add: (self buildNode: KeywordAst fields: (IdentityKeyValueDictionary new
-						at: #arg put: nil;
-						at: #value put: self parseExpression;
-						yourself) from: self lastToken to: self lastToken).
+					kwargs add: (KeywordAst new
+						arg: nil;
+						value: self parseExpression;
+						from: self lastToken to: self lastToken ; yourself).
 					sawKwargsUnpack := true.
 				] ifFalse: [
 				"*args"
@@ -685,10 +644,10 @@ parseCallArgList
 					sawKwargsUnpack ifTrue: [
 						SyntaxError signal: 'iterable argument unpacking follows keyword argument unpacking'].
 					self advance.
-					args add: (self buildNode: StarredAst fields: (IdentityKeyValueDictionary new
-						at: #value put: self parseExpression;
-						at: #ctx put: self loadCtx;
-						yourself) from: self lastToken to: self lastToken).
+					args add: (StarredAst new
+						value: self parseExpression;
+						ctx: self loadCtx;
+						from: self lastToken to: self lastToken ; yourself).
 				] ifFalse: [
 					| expr |
 					expr := self parseExpression.
@@ -702,10 +661,10 @@ parseCallArgList
 							kwNames add: name asSymbol].
 						sawKeyword := true.
 						value := self parseExpression.
-						kwargs add: (self buildNode: KeywordAst fields: (IdentityKeyValueDictionary new
-							at: #arg put: name;
-							at: #value put: value;
-							yourself) from: self lastToken to: self lastToken).
+						kwargs add: (KeywordAst new
+							arg: name;
+							value: value;
+							from: self lastToken to: self lastToken ; yourself).
 					] ifFalse: [
 						"A bare positional argument may not follow a keyword or
 						``**'' unpacking."
@@ -717,10 +676,10 @@ parseCallArgList
 						((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
 							| generators |
 							generators := self parseComprehensions.
-							args add: (self buildNode: GeneratorExpAst fields: (IdentityKeyValueDictionary new
-								at: #elt put: expr;
-								at: #generators put: generators;
-								yourself) from: self lastToken to: self lastToken).
+							args add: (GeneratorExpAst new
+								elt: expr;
+								generators: generators;
+								from: self lastToken to: self lastToken ; yourself).
 						] ifFalse: [
 							args add: expr.
 						].
@@ -772,21 +731,21 @@ parseClassDefWithDecorators: decorators
 	variables := scope at: 1.
 	writes := scope at: 2.
 	blocking := scope at: 3.
-	block := BlockAst buildWithFields: (IdentityKeyValueDictionary new
-		at: #body put: body;
-		at: #variables put: variables;
-		at: #writes put: writes;
-		at: #hasReturnBlocking put: blocking;
-		at: #globalNames put: (scope at: 4);
-		yourself).
-	^self buildNode: ClassDefAst fields: (IdentityKeyValueDictionary new
-		at: #name put: nameTok value asSymbol;
-		at: #bases put: bases;
-		at: #keywords put: keywords;
-		at: #body put: block;
-		at: #decorator_list put: decorators;
-		at: #type_params put: Array new;
-		yourself) from: tok to: self lastToken
+	block := BlockAst new
+		body: body;
+		variables: variables;
+		writes: writes;
+		hasReturnBlocking: blocking;
+		globalNames: (scope at: 4);
+		yourself.
+	^ClassDefAst new
+		name: nameTok value asSymbol;
+		bases: bases;
+		keywords: keywords;
+		body: block;
+		decorator_list: decorators;
+		type_params: Array new;
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - expressions'
@@ -807,11 +766,11 @@ parseComparison
 		comparators add: right.
 	].
 	ops isEmpty ifTrue: [^left].
-	^self buildNode: CompareAst fields: (IdentityKeyValueDictionary new
-		at: #left put: left;
-		at: #cmpopList put: ops;
-		at: #comparatorList put: comparators;
-		yourself) from: startTok to: self lastToken
+	^CompareAst new
+		left: left;
+		cmpopList: ops;
+		comparatorList: comparators;
+		from: startTok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - expressions'
@@ -875,12 +834,12 @@ parseComprehensions
 			self advance.
 			ifs add: self parseDisjunction.
 		].
-		generators add: (ComprehensionAst buildWithFields: (IdentityKeyValueDictionary new
-			at: #target put: target;
-			at: #iter put: iter;
-			at: #ifs put: ifs;
-			at: #is_async put: isAsync;
-			yourself)).
+		generators add: (ComprehensionAst new
+			target: target;
+			iter: iter;
+			ifs: ifs;
+			is_async: isAsync;
+			yourself).
 	].
 	^generators
 %
@@ -899,9 +858,9 @@ parseConjunction
 	[self matchKeyword: 'and'] whileTrue: [
 		values add: self parseInversion.
 	].
-	^self buildNode: AndAst fields: (IdentityKeyValueDictionary new
-		at: #values put: values;
-		yourself) from: startTok to: self lastToken
+	^AndAst new
+		values: values;
+		from: startTok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - simple statements'
@@ -910,7 +869,7 @@ parseContinue
 
 	| tok |
 	tok := self advance. "consume 'continue'"
-	^self buildNode: ContinueAst fields: IdentityKeyValueDictionary new token: tok
+	^ContinueAst new token: tok ; yourself
 %
 
 category: 'Grail-parsing - compound statements'
@@ -983,14 +942,14 @@ parseDelete
 	tok := self advance. "consume 'del'"
 	targets := Array new.
 	targets add: (self setDelCtx: self parsePrimary).
-	[self matchOp: ','] whileTrue: [
-		(self peek notNil and: [self peek isNewline not]) ifTrue: [
+	[self matchOp: ','] whileTrue: [ | aTok |
+		((aTok := self peek) notNil and: [ aTok isNewline not]) ifTrue: [
 			targets add: (self setDelCtx: self parsePrimary).
 		].
 	].
-	^self buildNode: DeleteAst fields: (IdentityKeyValueDictionary new
-		at: #targets put: targets;
-		yourself) from: tok to: self lastToken
+	^DeleteAst new
+		targets: targets;
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - atoms'
@@ -1018,10 +977,10 @@ parseDictDisplayFromStar: startTok
 		].
 	].
 	self expect: #OP value: '}'.
-	^self buildNode: DictAst fields: (IdentityKeyValueDictionary new
-		at: #keys put: keys;
-		at: #values put: values;
-		yourself) from: startTok to: self lastToken
+	^DictAst new
+		keys: keys;
+		values: values;
+		from: startTok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - atoms'
@@ -1035,10 +994,10 @@ parseDictOrSetDisplay
 	"Empty dict"
 	(self atOp: '}') ifTrue: [
 		self advance.
-		^self buildNode: DictAst fields: (IdentityKeyValueDictionary new
-			at: #keys put: Array new;
-			at: #values put: Array new;
-			yourself) from: startTok to: self lastToken
+		^DictAst new
+			keys: Array new;
+			values: Array new;
+			from: startTok to: self lastToken ; yourself
 	].
 
 	"Check for **unpack in dict"
@@ -1059,11 +1018,11 @@ parseDictOrSetDisplay
 			| generators |
 			generators := self parseComprehensions.
 			self expect: #OP value: '}'.
-			^self buildNode: DictCompAst fields: (IdentityKeyValueDictionary new
-				at: #key put: first;
-				at: #value put: value;
-				at: #generators put: generators;
-				yourself) from: startTok to: self lastToken
+			^DictCompAst new
+				key: first;
+				value: value;
+				generators: generators;
+				from: startTok to: self lastToken ; yourself
 		].
 
 		"Regular dict"
@@ -1085,10 +1044,10 @@ parseDictOrSetDisplay
 			].
 		].
 		self expect: #OP value: '}'.
-		^self buildNode: DictAst fields: (IdentityKeyValueDictionary new
-			at: #keys put: keys;
-			at: #values put: values;
-			yourself) from: startTok to: self lastToken
+		^DictAst new
+			keys: keys;
+			values: values;
+			from: startTok to: self lastToken ; yourself
 	].
 
 	"Set comprehension — ``for`` or ``async for`` opens the clause"
@@ -1096,10 +1055,10 @@ parseDictOrSetDisplay
 		| generators |
 		generators := self parseComprehensions.
 		self expect: #OP value: '}'.
-		^self buildNode: SetCompAst fields: (IdentityKeyValueDictionary new
-			at: #elt put: first;
-			at: #generators put: generators;
-			yourself) from: startTok to: self lastToken
+		^SetCompAst new
+			elt: first;
+			generators: generators;
+			from: startTok to: self lastToken ; yourself
 	].
 
 	"Regular set"
@@ -1111,9 +1070,9 @@ parseDictOrSetDisplay
 		].
 	].
 	self expect: #OP value: '}'.
-	^self buildNode: SetAst fields: (IdentityKeyValueDictionary new
-		at: #elts put: elts;
-		yourself) from: startTok to: self lastToken
+	^SetAst new
+		elts: elts;
+		from: startTok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - expressions'
@@ -1130,9 +1089,9 @@ parseDisjunction
 	[self matchKeyword: 'or'] whileTrue: [
 		values add: self parseConjunction.
 	].
-	^self buildNode: OrAst fields: (IdentityKeyValueDictionary new
-		at: #values put: values;
-		yourself) from: startTok to: self lastToken
+	^OrAst new
+		values: values;
+		from: startTok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - compound statements'
@@ -1154,11 +1113,11 @@ parseElif
 			orelse := self parseBlock.
 		].
 	].
-	^self buildNode: IfAst fields: (IdentityKeyValueDictionary new
-		at: #test put: test;
-		at: #body put: (self wrapSuite: body);
-		at: #orelse put: (self wrapSuite: orelse);
-		yourself) from: tok to: self lastToken
+	^IfAst new
+		test: test;
+		body: (self wrapSuite: body);
+		orelse: (self wrapSuite: orelse);
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - expressions'
@@ -1179,10 +1138,10 @@ parseExpression
 		self advance.
 		value := self parseExpression.
 		self setStoreCtx: expr.
-		^self buildNode: NamedExprAst fields: (IdentityKeyValueDictionary new
-			at: #target put: expr;
-			at: #value put: value;
-			yourself) from: startTok to: self lastToken
+		^NamedExprAst new
+			target: expr;
+			value: value;
+			from: startTok to: self lastToken ; yourself
 	].
 	^expr
 %
@@ -1214,19 +1173,19 @@ parseExpressionOrAssignment
 			or: [expr isKindOf: SubscriptAst]]) ifFalse: [
 				SyntaxError signal: 'illegal expression for augmented assignment'].
 		self setStoreCtx: expr.
-		^self buildNode: AugAssignAst fields: (IdentityKeyValueDictionary new
-			at: #target put: expr;
-			at: #op put: opClass basicNew;
-			at: #value put: value;
-			yourself) from: startTok to: self lastToken
+		^AugAssignAst new
+			target: expr;
+			op: opClass basicNew;
+			value: value;
+			from: startTok to: self lastToken ; yourself
 	].
 
 	"Annotated assignment: x: int = value"
 	(tok notNil and: [tok isOp: ':']) ifTrue: [
-		| colonTok annotation value simple |
+		| colonTok annotation value simple aTok |
 		colonTok := self advance.
 		"Check this isn't a walrus operator :="
-		(self peek notNil and: [self peek isOp: '=']) ifFalse: [
+		((aTok := self peek) notNil and: [ aTok isOp: '=']) ifFalse: [
 			annotation := self parseExpression.
 			value := nil.
 			(self matchOp: '=') ifTrue: [
@@ -1234,12 +1193,12 @@ parseExpressionOrAssignment
 			].
 			self setStoreCtx: expr.
 			simple := (expr isKindOf: NameAst) ifTrue: [1] ifFalse: [0].
-			^self buildNode: AnnAssignAst fields: (IdentityKeyValueDictionary new
-				at: #target put: expr;
-				at: #annotation put: annotation;
-				at: #value put: value;
-				at: #simple put: simple;
-				yourself) from: startTok to: self lastToken
+			^AnnAssignAst new
+				target: expr;
+				annotation: annotation;
+				value: value;
+				simple: simple;
+				from: startTok to: self lastToken ; yourself
 		].
 	].
 
@@ -1250,10 +1209,10 @@ parseExpressionOrAssignment
 		self setStoreCtx: expr.
 		targets add: expr.
 		[self matchOp: '='] whileTrue: [
-			| nextExpr |
+			| nextExpr aTok |
 			nextExpr := self parseStarExpressions.
 			"Check if followed by another '=' - if so, this is another target"
-			(self peek notNil and: [self peek isOp: '=']) ifTrue: [
+			((aTok := self peek) notNil and: [ aTok isOp: '=']) ifTrue: [
 				self setStoreCtx: nextExpr.
 				targets add: nextExpr.
 			] ifFalse: [
@@ -1261,11 +1220,11 @@ parseExpressionOrAssignment
 			].
 		].
 		value ifNil: [value := targets removeLast].
-		^self buildNode: AssignAst fields: (IdentityKeyValueDictionary new
-			at: #targets put: targets;
-			at: #value put: value;
-			at: #type_comment put: nil;
-			yourself) from: startTok to: self lastToken
+		^AssignAst new
+			targets: targets;
+			value: value;
+			type_comment: nil;
+			from: startTok to: self lastToken ; yourself
 	].
 
 	"Walrus operator: name := value"
@@ -1274,16 +1233,16 @@ parseExpressionOrAssignment
 		self advance.
 		value := self parseExpression.
 		self setStoreCtx: expr.
-		^self buildNode: NamedExprAst fields: (IdentityKeyValueDictionary new
-			at: #target put: expr;
-			at: #value put: value;
-			yourself) from: startTok to: self lastToken
+		^NamedExprAst new
+			target: expr;
+			value: value;
+			from: startTok to: self lastToken ; yourself
 	].
 
 	"Expression statement"
-	^self buildNode: ExprAst fields: (IdentityKeyValueDictionary new
-		at: #value put: expr;
-		yourself) from: startTok to: self lastToken
+	^ExprAst new
+		value: expr;
+		from: startTok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - expressions'
@@ -1297,25 +1256,25 @@ parseFactor
 		| operand |
 		self advance.
 		operand := self parseFactor.
-		^self buildNode: UAddAst fields: (IdentityKeyValueDictionary new
-			at: #operand put: operand;
-			yourself) from: tok to: self lastToken
+		^UAddAst new
+			operand: operand;
+			from: tok to: self lastToken ; yourself
 	].
 	(tok notNil and: [tok isOp: '-']) ifTrue: [
 		| operand |
 		self advance.
 		operand := self parseFactor.
-		^self buildNode: USubAst fields: (IdentityKeyValueDictionary new
-			at: #operand put: operand;
-			yourself) from: tok to: self lastToken
+		^USubAst new
+			operand: operand;
+			from: tok to: self lastToken ; yourself
 	].
 	(tok notNil and: [tok isOp: '~']) ifTrue: [
 		| operand |
 		self advance.
 		operand := self parseFactor.
-		^self buildNode: InvertAst fields: (IdentityKeyValueDictionary new
-			at: #operand put: operand;
-			yourself) from: tok to: self lastToken
+		^InvertAst new
+			operand: operand;
+			from: tok to: self lastToken ; yourself
 	].
 	^self parsePower
 %
@@ -1338,13 +1297,13 @@ parseFor
 		self expect: #OP value: ':'.
 		orelse := self parseBlock.
 	].
-	^self buildNode: ForAst fields: (IdentityKeyValueDictionary new
-		at: #target put: target;
-		at: #iter put: iter;
-		at: #body put: (self wrapSuite: body);
-		at: #orelse put: (self wrapSuite: orelse);
-		at: #type_comment put: nil;
-		yourself) from: tok to: self lastToken
+	^ForAst new
+		target: target;
+		iter: iter;
+		body: (self wrapSuite: body);
+		orelse: (self wrapSuite: orelse);
+		type_comment: nil;
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - simple statements'
@@ -1363,10 +1322,10 @@ parseFromImportName
 		gettext_lazy as _'')."
 		asName == #'_' ifTrue: [asName := #'___unused___'].
 	].
-	^self buildNode: AliasAst fields: (IdentityKeyValueDictionary new
-		at: #name put: nameTok value asSymbol;
-		at: #asName put: asName;
-		yourself) from: nameTok to: self lastToken
+	^AliasAst new
+		name: nameTok value asSymbol;
+		asName: asName;
+		from: nameTok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - compound statements'
@@ -1427,13 +1386,13 @@ parseFunctionDefWithDecorators: decorators
 	variables := scope at: 1.
 	writes := scope at: 2.
 	blocking := scope at: 3.
-	block := BlockAst buildWithFields: (IdentityKeyValueDictionary new
-		at: #body put: body;
-		at: #variables put: variables;
-		at: #writes put: writes;
-		at: #hasReturnBlocking put: blocking;
-		at: #globalNames put: (scope at: 4);
-		yourself).
+	block := BlockAst new
+		body: body;
+		variables: variables;
+		writes: writes;
+		hasReturnBlocking: blocking;
+		globalNames: (scope at: 4);
+		yourself.
 	decoratorNames := decorators collect: [:each |
 		(each isKindOf: NameAst)
 			ifTrue: ["A bare ``@DynamicClassAttribute (from ``from types import
@@ -1447,15 +1406,15 @@ parseFunctionDefWithDecorators: decorators
 					ifFalse: [each id]]
 			ifFalse: [self ___declarativeDecoratorSymbolFor: each]
 	].
-	funcNode := self buildNode: FunctionDefAst fields: (IdentityKeyValueDictionary new
-		at: #name put: nameTok value asSymbol;
-		at: #args put: args;
-		at: #body put: block;
-		at: #decorator_list put: decoratorNames;
-		at: #returns put: returns;
-		at: #type_comment put: nil;
-		at: #type_params put: typeParamNames;
-		yourself) from: tok to: self lastToken.
+	funcNode := FunctionDefAst new 
+		name: nameTok value asSymbol;
+		args: args;
+		body: block;
+		decorator_list: decoratorNames;
+		returns: returns;
+		type_comment: nil;
+		type_params: typeParamNames;
+		from: tok to: self lastToken.
 	"Convert to appropriate subclass when inside a class"
 	classNesting > 0 ifTrue: [
 		(decoratorNames includes: #'staticmethod')
@@ -1474,7 +1433,7 @@ parseFunctionParametersUntil: endOp
 	Returns an ArgumentsAst."
 
 	| posonlyargs args vararg kwonlyargs kw_defaults kwarg defaults
-	  sawSlash sawStar allowAnnotations seenNames |
+	  sawSlash sawStar allowAnnotations seenNames aTok |
 	posonlyargs := Array new.
 	args := Array new.
 	vararg := nil.
@@ -1486,7 +1445,7 @@ parseFunctionParametersUntil: endOp
 	sawStar := false.
 	allowAnnotations := endOp ~= ':'.
 
-	(self peek notNil and: [(self peek isOp: endOp) not]) ifTrue: [
+	((aTok := self peek) notNil and: [(aTok isOp: endOp) not]) ifTrue: [
 		[
 			| tok |
 			tok := self peek.
@@ -1561,15 +1520,15 @@ parseFunctionParametersUntil: endOp
 					'duplicate argument ''' , p name asString , ''' in function definition'].
 			seenNames add: p name asSymbol].
 
-	^ArgumentsAst buildWithFields: (IdentityKeyValueDictionary new
-		at: #posonlyargs put: posonlyargs;
-		at: #args put: args;
-		at: #vararg put: vararg;
-		at: #kwonlyargs put: kwonlyargs;
-		at: #kw_defaults put: kw_defaults;
-		at: #kwarg put: kwarg;
-		at: #defaults put: defaults;
-		yourself)
+	^ArgumentsAst new
+		posonlyargs: posonlyargs;
+		args: args;
+		vararg: vararg;
+		kwonlyargs: kwonlyargs;
+		kw_defaults: kw_defaults;
+		kwarg: kwarg;
+		defaults: defaults;
+		yourself
 %
 
 category: 'Grail-parsing - simple statements'
@@ -1597,9 +1556,9 @@ parseGlobal
 		globalStack last add: n.
 		variableStack first add: n.
 	].
-	^self buildNode: GlobalAst fields: (IdentityKeyValueDictionary new
-		at: #names put: names;
-		yourself) from: tok to: self lastToken
+	^GlobalAst new
+		names: names;
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - compound statements'
@@ -1621,11 +1580,11 @@ parseIf
 			orelse := self parseBlock.
 		].
 	].
-	^self buildNode: IfAst fields: (IdentityKeyValueDictionary new
-		at: #test put: test;
-		at: #body put: (self wrapSuite: body);
-		at: #orelse put: (self wrapSuite: orelse);
-		yourself) from: tok to: self lastToken
+	^IfAst new
+		test: test;
+		body: (self wrapSuite: body);
+		orelse: (self wrapSuite: orelse);
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - simple statements'
@@ -1656,9 +1615,9 @@ parseImport
 		].
 		self declareWrite: bound
 	].
-	^self buildNode: ImportAst fields: (IdentityKeyValueDictionary new
-		at: #names put: names;
-		yourself) from: tok to: self lastToken
+	^ImportAst new
+		names: names;
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - simple statements'
@@ -1687,17 +1646,17 @@ parseImportFrom
 	self expect: #KEYWORD value: 'import'.
 	"Parse names"
 	(self matchOp: '*') ifTrue: [
-		names := Array with: (self buildNode: AliasAst fields: (IdentityKeyValueDictionary new
-			at: #name put: #'*';
-			at: #asName put: nil;
-			yourself) token: self lastToken).
+		names := Array with: (AliasAst new
+			name: #'*';
+			asName: nil;
+			token: self lastToken ; yourself).
 	] ifFalse: [
-		| hasParen |
+		| hasParen aTok |
 		hasParen := self matchOp: '('.
 		names := Array new.
 		names add: self parseFromImportName.
 		[self matchOp: ','] whileTrue: [
-			(self peek notNil and: [self peek isOp: ')']) ifFalse: [
+			((aTok := self peek) notNil and: [ aTok isOp: ')']) ifFalse: [
 				names add: self parseFromImportName.
 			].
 		].
@@ -1708,11 +1667,11 @@ parseImportFrom
 			self declareWrite: (alias asName ifNil: [alias name]).
 		].
 	].
-	^self buildNode: ImportFromAst fields: (IdentityKeyValueDictionary new
-		at: #module put: moduleStr;
-		at: #names put: names;
-		at: #level put: level;
-		yourself) from: tok to: self lastToken
+	^ImportFromAst new
+		module: moduleStr;
+		names: names;
+		level: level;
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - simple statements'
@@ -1731,10 +1690,10 @@ parseImportName
 		asName := self advance value asSymbol.
 		asName == #'_' ifTrue: [asName := #'___unused___'].
 	].
-	^self buildNode: AliasAst fields: (IdentityKeyValueDictionary new
-		at: #name put: nameStr asSymbol;
-		at: #asName put: asName;
-		yourself) from: nameTok to: self lastToken
+	^AliasAst new
+		name: nameStr asSymbol;
+		asName: asName;
+		from: nameTok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - expressions'
@@ -1748,9 +1707,9 @@ parseInversion
 		| operand |
 		self advance.
 		operand := self parseInversion.
-		^self buildNode: NotAst fields: (IdentityKeyValueDictionary new
-			at: #operand put: operand;
-			yourself) from: tok to: self lastToken
+		^NotAst new
+			operand: operand;
+			from: tok to: self lastToken ; yourself
 	].
 	^self parseComparison
 %
@@ -1769,15 +1728,15 @@ parseLambda
 	| tok args body |
 	tok := self advance. "consume 'lambda'"
 	(self atOp: ':') ifTrue: [
-		args := ArgumentsAst buildWithFields: (IdentityKeyValueDictionary new
-			at: #posonlyargs put: Array new;
-			at: #args put: Array new;
-			at: #vararg put: nil;
-			at: #kwonlyargs put: Array new;
-			at: #kw_defaults put: Array new;
-			at: #kwarg put: nil;
-			at: #defaults put: Array new;
-			yourself).
+		args := ArgumentsAst new
+			posonlyargs: { } ;
+			args: { } ;
+			vararg: nil;
+			kwonlyargs: { } ;
+			kw_defaults: { } ;
+			kwarg: nil;
+			defaults: { } ;
+			yourself.
 	] ifFalse: [
 		args := self parseFunctionParametersUntil: ':'.
 	].
@@ -1790,10 +1749,10 @@ parseLambda
 	args kwarg ifNotNil: [self declareVariable: args kwarg name asSymbol].
 	body := self parseExpression.
 	self popScope.
-	^self buildNode: LambdaAst fields: (IdentityKeyValueDictionary new
-		at: #args put: args;
-		at: #body put: body;
-		yourself) from: tok to: self lastToken
+	^LambdaAst new
+		args: args;
+		body: body;
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - atoms'
@@ -1807,10 +1766,10 @@ parseListDisplay
 	"Empty list"
 	(self atOp: ']') ifTrue: [
 		self advance.
-		^self buildNode: ListAst fields: (IdentityKeyValueDictionary new
-			at: #elts put: Array new;
-			at: #ctx put: self loadCtx;
-			yourself) from: startTok to: self lastToken
+		^ListAst new
+			elts: Array new;
+			ctx: self loadCtx;
+			from: startTok to: self lastToken ; yourself
 	].
 
 	expr := self parseStarExpression.
@@ -1820,10 +1779,10 @@ parseListDisplay
 		| generators |
 		generators := self parseComprehensions.
 		self expect: #OP value: ']'.
-		^self buildNode: ListCompAst fields: (IdentityKeyValueDictionary new
-			at: #elt put: expr;
-			at: #generators put: generators;
-			yourself) from: startTok to: self lastToken
+		^ListCompAst new
+			elt: expr;
+			generators: generators;
+			from: startTok to: self lastToken ; yourself
 	].
 
 	"Regular list"
@@ -1835,12 +1794,11 @@ parseListDisplay
 		].
 	].
 	self expect: #OP value: ']'.
-	^self buildNode: ListAst fields: (IdentityKeyValueDictionary new
-		at: #elts put: elts;
-		at: #ctx put: self loadCtx;
-		yourself) from: startTok to: self lastToken
+	^ListAst new
+		elts: elts;
+		ctx: self loadCtx;
+		from: startTok to: self lastToken ; yourself
 %
-
 category: 'Grail-parsing - module'
 method: PythonParser
 parseModule
@@ -1853,13 +1811,13 @@ parseModule
 	variables := scope at: 1.
 	writes := scope at: 2.
 	blocking := scope at: 3.
-	block := BlockAst buildWithFields: (IdentityKeyValueDictionary new
-		at: #body put: body;
-		at: #variables put: variables;
-		at: #writes put: writes;
-		at: #hasReturnBlocking put: blocking;
-		at: #globalNames put: (scope at: 4);
-		yourself).
+	block := BlockAst new
+		body: body;
+		variables: variables;
+		writes: writes;
+		hasReturnBlocking: blocking;
+		globalNames: (scope at: 4);
+		yourself.
 	module := ModuleAst basicNew.
 	module
 		name: '__main__';
@@ -1891,9 +1849,9 @@ parseNonlocal
 		names add: self advance value asSymbol.
 	].
 	names do: [:n | nonlocalStack last add: n].
-	^self buildNode: NonlocalAst fields: (IdentityKeyValueDictionary new
-		at: #names put: names;
-		yourself) from: tok to: self lastToken
+	^NonlocalAst new
+		names: names;
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - atoms'
@@ -1953,10 +1911,10 @@ parseParenExpr
 	"Empty tuple"
 	(self atOp: ')') ifTrue: [
 		self advance.
-		^self buildNode: TupleAst fields: (IdentityKeyValueDictionary new
-			at: #elts put: Array new;
-			at: #ctx put: self loadCtx;
-			yourself) from: startTok to: self lastToken
+		^TupleAst new
+			elts: Array new;
+			ctx: self loadCtx;
+			from: startTok to: self lastToken ; yourself
 	].
 
 	expr := self parseStarExpression.
@@ -1966,10 +1924,10 @@ parseParenExpr
 		| generators |
 		generators := self parseComprehensions.
 		self expect: #OP value: ')'.
-		^self buildNode: GeneratorExpAst fields: (IdentityKeyValueDictionary new
-			at: #elt put: expr;
-			at: #generators put: generators;
-			yourself) from: startTok to: self lastToken
+		^GeneratorExpAst new
+			elt: expr;
+			generators: generators;
+			from: startTok to: self lastToken ; yourself
 	].
 
 	"Tuple or single expression"
@@ -1986,10 +1944,10 @@ parseParenExpr
 			].
 		].
 		self expect: #OP value: ')'.
-		^self buildNode: TupleAst fields: (IdentityKeyValueDictionary new
-			at: #elts put: exprs;
-			at: #ctx put: self loadCtx;
-			yourself) from: startTok to: self lastToken
+		^TupleAst new
+			elts: exprs;
+			ctx: self loadCtx;
+			from: startTok to: self lastToken ; yourself
 	] ifFalse: [
 		"Parenthesized single expression"
 		self expect: #OP value: ')'.
@@ -2003,7 +1961,7 @@ parsePass
 
 	| tok |
 	tok := self advance. "consume 'pass'"
-	^self buildNode: PassAst fields: IdentityKeyValueDictionary new token: tok
+	^PassAst new token: tok ; yourself
 %
 
 category: 'Grail-parsing - expressions'
@@ -2018,11 +1976,11 @@ parsePower
 		| right |
 		self advance.
 		right := self parseFactor.
-		^self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
-			at: #left put: left;
-			at: #op put: PowAst basicNew;
-			at: #right put: right;
-			yourself) from: startTok to: self lastToken
+		^BinOpAst new
+			left: left;
+			op: PowAst basicNew;
+			right: right;
+			from: startTok to: self lastToken ; yourself
 	].
 	^left
 %
@@ -2032,31 +1990,31 @@ method: PythonParser
 parsePrimary
 	"Parse: atom trailer* where trailer is .name, [subscript], or (args)"
 
-	| expr startTok |
+	| expr startTok aTok |
 	startTok := self peek.
 	expr := self parseAtom.
 	"Parse trailers"
-	[self peek notNil and: [(self atOp: '.') or: [(self atOp: '[') or: [self atOp: '(']]]] whileTrue: [
+	[(aTok := self peek) notNil and: [(aTok isOp: '.') or: [(aTok isOp: '[') or: [aTok isOp: '(']]]] whileTrue: [
 		(self atOp: '.') ifTrue: [
 			| nameTok |
 			self advance.
 			nameTok := self expectType: #NAME.
-			expr := self buildNode: AttributeAst fields: (IdentityKeyValueDictionary new
-				at: #value put: expr;
-				at: #attr put: nameTok value asSymbol;
-				at: #ctx put: self loadCtx;
-				yourself) from: startTok to: self lastToken.
+			expr := AttributeAst new
+				value: expr;
+				attr: nameTok value asSymbol;
+				ctx: self loadCtx;
+				from: startTok to: self lastToken ; yourself.
 		] ifFalse: [
 		(self atOp: '[') ifTrue: [
 			| slice |
 			self advance.
 			slice := self parseSubscript.
 			self expect: #OP value: ']'.
-			expr := self buildNode: SubscriptAst fields: (IdentityKeyValueDictionary new
-				at: #value put: expr;
-				at: #slice put: slice;
-				at: #ctx put: self loadCtx;
-				yourself) from: startTok to: self lastToken.
+			expr := SubscriptAst new
+				value: expr;
+				slice: slice;
+				ctx: self loadCtx;
+				from: startTok to: self lastToken ; yourself.
 		] ifFalse: [
 		(self atOp: '(') ifTrue: [
 			| result callArgs callKwargs |
@@ -2065,11 +2023,11 @@ parsePrimary
 			callArgs := result first.
 			callKwargs := result last.
 			self expect: #OP value: ')'.
-			expr := self buildNode: CallAst fields: (IdentityKeyValueDictionary new
-				at: #function put: expr;
-				at: #arguments put: callArgs;
-				at: #keywords put: callKwargs;
-				yourself) from: startTok to: self lastToken.
+			expr := CallAst new
+				function: expr;
+				arguments: callArgs;
+				keywords: callKwargs;
+				from: startTok to: self lastToken ; yourself.
 		]]].
 	].
 	^expr
@@ -2080,20 +2038,20 @@ method: PythonParser
 parseRaise
 	"Parse: raise [expr ['from' expr]]"
 
-	| tok exc cause |
+	| tok exc cause aTok |
 	tok := self advance. "consume 'raise'"
 	exc := nil.
 	cause := nil.
-	(self peek notNil and: [self peek isNewline not and: [self peek isEndMarker not]]) ifTrue: [
+	((aTok:= self peek) notNil and: [ aTok isNewline not and: [ aTok isEndMarker not]]) ifTrue: [
 		exc := self parseExpression.
 		(self matchKeyword: 'from') ifTrue: [
 			cause := self parseExpression.
 		].
 	].
-	^self buildNode: RaiseAst fields: (IdentityKeyValueDictionary new
-		at: #exc put: exc;
-		at: #cause put: cause;
-		yourself) from: tok to: self lastToken
+	^RaiseAst new
+		exc: exc;
+		cause: cause;
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - simple statements'
@@ -2101,15 +2059,15 @@ method: PythonParser
 parseReturn
 	"Parse: return [expr]"
 
-	| tok value |
+	| tok value aTok |
 	tok := self advance. "consume 'return'"
 	value := nil.
-	(self peek notNil and: [self peek isNewline not and: [self peek isEndMarker not and: [(self peek isOp: ';') not]]]) ifTrue: [
+	((aTok := self peek) notNil and: [ aTok isNewline not and: [ aTok isEndMarker not and: [(aTok isOp: ';') not]]]) ifTrue: [
 		value := self parseStarExpressions.
 	].
-	^self buildNode: ReturnAst fields: (IdentityKeyValueDictionary new
-		at: #value put: value;
-		yourself) from: tok to: self lastToken
+	^ReturnAst new
+		value: value;
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - expressions'
@@ -2117,19 +2075,19 @@ method: PythonParser
 parseShift
 	"Parse: sum (('<<' | '>>') sum)*"
 
-	| left startTok |
+	| left startTok aTok |
 	startTok := self peek.
 	left := self parseSum.
-	[self peek notNil and: [(self atOp: '<<') or: [self atOp: '>>']]] whileTrue: [
+	[(aTok := self peek) notNil and: [(aTok isOp: '<<') or: [ aTok isOp: '>>']]] whileTrue: [
 		| opTok opClass right |
 		opTok := self advance.
 		opClass := opTok value = '<<' ifTrue: [LShiftAst] ifFalse: [RShiftAst].
 		right := self parseSum.
-		left := self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
-			at: #left put: left;
-			at: #op put: opClass basicNew;
-			at: #right put: right;
-			yourself) from: startTok to: self lastToken.
+		left := BinOpAst new
+			left: left;
+			op: opClass basicNew;
+			right: right;
+			from: startTok to: self lastToken ; yourself.
 	].
 	^left
 %
@@ -2168,8 +2126,8 @@ parseSimpleStatements
 	stmts := Array new.
 	stmt := self parseSimpleStatement.
 	stmts add: stmt.
-	[self matchOp: ';'] whileTrue: [
-		(self peek notNil and: [self peek isNewline or: [self peek isEndMarker]]) ifTrue: [
+	[self matchOp: ';'] whileTrue: [ | aTok |
+		((aTok := self peek) notNil and: [ aTok isNewline or: [ aTok isEndMarker]]) ifTrue: [
 			"Trailing semicolon"
 		] ifFalse: [
 			stmts add: self parseSimpleStatement.
@@ -2202,11 +2160,11 @@ parseSingleParamWithAnnotations: allowAnnotations
 	].
 	argName := nameTok value asSymbol.
 	argName = #'_' ifTrue: [argName := #'___unused___'].
-	^self buildNode: ArgAst fields: (IdentityKeyValueDictionary new
-		at: #arg put: argName;
-		at: #annotation put: annotation;
-		at: #type_comment put: nil;
-		yourself) from: nameTok to: self lastToken
+	^ArgAst new
+		arg: argName;
+		annotation: annotation;
+		type_comment: nil;
+		from: nameTok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - subscript'
@@ -2247,11 +2205,11 @@ parseSliceOrExpr
 		].
 	].
 
-	^self buildNode: SliceAst fields: (IdentityKeyValueDictionary new
-		at: #lower put: lower;
-		at: #upper put: upper;
-		at: #step put: step;
-		yourself) from: startTok to: self lastToken
+	^SliceAst new
+		lower: lower;
+		upper: upper;
+		step: step;
+		from: startTok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - star expressions'
@@ -2265,10 +2223,10 @@ parseStarExpression
 		| value |
 		self advance.
 		value := self parseBitwiseOr.
-		^self buildNode: StarredAst fields: (IdentityKeyValueDictionary new
-			at: #value put: value;
-			at: #ctx put: self loadCtx;
-			yourself) from: tok to: self lastToken
+		^StarredAst new
+			value: value;
+			ctx: self loadCtx;
+			from: tok to: self lastToken ; yourself
 	].
 	^self parseExpression
 %
@@ -2279,15 +2237,17 @@ parseStarExpressions
 	"Parse comma-separated expressions, possibly starred.
 	Returns a single expression or a tuple if there's a comma."
 
-	| first exprs startTok |
+	| first exprs startTok aTok |
 	startTok := self peek.
 	first := self parseStarExpression.
-	(self peek notNil and: [self peek isOp: ',']) ifFalse: [^first].
+	((aTok := self peek) notNil and: [ aTok isOp: ',']) ifFalse: [^first].
 
 	exprs := Array new.
 	exprs add: first.
-	[self matchOp: ','] whileTrue: [
-		(self peek notNil and: [self peek isNewline not and: [self peek isEndMarker not and: [(self peek isOp: ')') not and: [(self peek isOp: ']') not and: [(self peek isOp: '}') not and: [(self peek isOp: ':') not and: [(self peek isOp: ';') not and: [(self peek isOp: '=') not]]]]]]]]) ifTrue: [
+	[self matchOp: ','] whileTrue: [ 
+		((aTok := self peek) notNil and: [ aTok isNewline not and: [ aTok isEndMarker not 
+      and:[( aTok isOp: ')') not and: [( aTok isOp: ']') not and: [( aTok isOp: '}') not 
+      and: [( aTok isOp: ':') not and: [( aTok isOp: ';') not and: [( aTok isOp: '=') not]]]]]]]]) ifTrue: [
 			exprs add: self parseStarExpression.
 		].
 	].
@@ -2298,10 +2258,10 @@ parseStarExpressions
 	``arr, = f()'' into ``arr = f()'' (binding the whole result).  The
 	``=''-stop in the guard above keeps ``x, = ...'' from trying to parse
 	the ``='' as another tuple element."
-	^self buildNode: TupleAst fields: (IdentityKeyValueDictionary new
-		at: #elts put: exprs;
-		at: #ctx put: self loadCtx;
-		yourself) from: startTok to: self lastToken
+	^TupleAst new
+		elts: exprs;
+		ctx: self loadCtx;
+		from: startTok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - star expressions'
@@ -2315,10 +2275,10 @@ parseStarTarget
 		| value |
 		self advance.
 		value := self parsePrimary.
-		^self buildNode: StarredAst fields: (IdentityKeyValueDictionary new
-			at: #value put: value;
-			at: #ctx put: self loadCtx;
-			yourself) from: tok to: self lastToken
+		^StarredAst new
+			value: value;
+			ctx: self loadCtx;
+			from: tok to: self lastToken ; yourself
 	].
 	^self parsePrimary
 %
@@ -2328,22 +2288,23 @@ method: PythonParser
 parseStarTargets
 	"Parse assignment targets, possibly starred, possibly as tuple."
 
-	| first targets startTok |
+	| first targets startTok aTok |
 	startTok := self peek.
 	first := self parseStarTarget.
-	(self peek notNil and: [self peek isOp: ',']) ifFalse: [^first].
+	((aTok := self peek) notNil and: [ aTok isOp: ',']) ifFalse: [^first].
 
 	targets := Array new.
 	targets add: first.
 	[self matchOp: ','] whileTrue: [
-		(self peek notNil and: [(self peek isKeyword: 'in') not and: [self peek isNewline not and: [(self peek isOp: ':') not and: [(self peek isOp: ')') not]]]]) ifTrue: [
+		((aTok := self peek) notNil and: [( aTok isKeyword: 'in') not and: [ aTok isNewline not 
+     and: [( aTok isOp: ':') not and: [( aTok isOp: ')') not]]]]) ifTrue: [
 			targets add: self parseStarTarget.
 		].
 	].
-	^self buildNode: TupleAst fields: (IdentityKeyValueDictionary new
-		at: #elts put: targets;
-		at: #ctx put: self loadCtx;
-		yourself) from: startTok to: self lastToken
+	^TupleAst new
+		elts: targets;
+		ctx: self loadCtx;
+		from: startTok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - statements'
@@ -2376,10 +2337,10 @@ method: PythonParser
 parseStatements
 	"Parse a sequence of statements until ENDMARKER or DEDENT."
 
-	| stmts |
+	| stmts aTok|
 	stmts := Array new.
 	self skipNewlines.
-	[self peek notNil and: [self peek isEndMarker not and: [self peekType ~~ #DEDENT]]] whileTrue: [
+	[(aTok := self peek) notNil and: [aTok isEndMarker not and: [aTok type ~~ #DEDENT ]]] whileTrue: [
 		stmts addAll: self parseStatement.
 		self skipNewlines.
 	].
@@ -2391,16 +2352,16 @@ method: PythonParser
 parseStringLiteral
 	"Parse one or more adjacent string tokens (implicit concatenation)."
 
-	| startTok writeStream |
+	| startTok writeStream aTok |
 	startTok := self peek.
-	writeStream := WriteStream on: Unicode7 new.
-	[self peek notNil and: [self peek isString]] whileTrue: [
+	writeStream := AppendStream on: Unicode7 new.
+	[(aTok := self peek) notNil and: [ aTok isString]] whileTrue: [
 		writeStream nextPutAll: self advance value.
 	].
-	^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
-		at: #value put: writeStream contents;
-		at: #kind put: nil;
-		yourself) from: startTok to: self lastToken
+	^ConstantAst new
+		value: writeStream contents;
+		kind: nil;
+		from: startTok to: self lastToken ; yourself
 %
 
 category: 'Grail-token access'
@@ -2428,10 +2389,10 @@ parseFStringLiteral
 
 	| startTok tok value parts pos len ch result piece converted
 	  innerParser exprAst exprText conversion formatSpec exprStart
-	  specBuf inSpec bracketDepth strQuote exprEnd c2 backCount |
+	  specBuf inSpec aTok |
 	startTok := self peek.
 	parts := OrderedCollection new.
-	[self peek notNil and: [self peek isString or: [self peek isFString]]] whileTrue: [
+	[(aTok := self peek) notNil and: [aTok isString or: [aTok isFString]]] whileTrue: [
 		tok := self advance.
 		value := tok value.
 		len := value size.
@@ -2584,20 +2545,20 @@ parseFStringLiteral
 	].
 	"Empty f-string → empty literal."
 	parts isEmpty ifTrue: [
-		^self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
-			at: #value put: '';
-			at: #kind put: nil;
-			yourself) from: startTok to: self lastToken
+		^ConstantAst new
+			value: '';
+			kind: nil;
+			from: startTok to: self lastToken ; yourself
 	].
 	"Build a left-folded chain of BinOp(+) over each piece."
 	result := self ___fstringPartToAst: parts first from: startTok.
 	2 to: parts size do: [:i |
 		piece := self ___fstringPartToAst: (parts at: i) from: startTok.
-		result := self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
-			at: #left put: result;
-			at: #op put: (self buildNode: AddAst fields: IdentityKeyValueDictionary new from: startTok to: startTok);
-			at: #right put: piece;
-			yourself) from: startTok to: self lastToken.
+		result := BinOpAst new
+			left: result;
+			op: (AddAst new from: startTok to: startTok ; yourself);
+			right: piece;
+			from: startTok to: self lastToken ; yourself.
 	].
 	^ result
 %
@@ -2610,10 +2571,10 @@ ___fstringPartToAst: assoc from: startTok
 	already AST nodes ready for the BinOp chain."
 
 	assoc key == #literal ifTrue: [
-		^ self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
-			at: #value put: assoc value;
-			at: #kind put: nil;
-			yourself) from: startTok to: startTok
+		^ ConstantAst new
+			value: assoc value;
+			kind: nil;
+			from: startTok to: startTok ; yourself
 	].
 	^ assoc value
 %
@@ -2637,34 +2598,34 @@ ___wrapFStringExpr: exprAst conversion: conversionChar formatSpec: formatSpec at
 				ifFalse: ['str']]].
 	"NameAst for the chosen builtin — looked up at runtime via the
 	Python dict / module-scope fallback."
-	inner := self buildNode: CallAst fields: (IdentityKeyValueDictionary new
-		at: #function put: (self buildNode: NameAst fields: (IdentityKeyValueDictionary new
-			at: #id put: builtinName asSymbol;
-			at: #ctx put: self loadCtx;
-			yourself) from: locTok to: locTok);
-		at: #arguments put: { exprAst };
-		at: #keywords put: Array new;
-		yourself) from: locTok to: locTok.
+	inner := CallAst new
+		function: (NameAst new
+			id: builtinName asSymbol;
+			ctx: self loadCtx;
+			from: locTok to: locTok ; yourself);
+		arguments: { exprAst };
+		keywords: Array new;
+		from: locTok to: locTok ; yourself.
 	formatSpec ifNil: [^ inner].
 	"format(value, spec) wrap.  A spec containing {expr} placeholders
 	(``f'{x:0{w}d}''' -- PEP 498 one-level nesting) becomes a runtime
 	concatenation instead of a literal (___fstringSpecExprFor:at:);
 	vendored fractions.py's __format__ tests build specs this way."
-	callNode := self buildNode: CallAst fields: (IdentityKeyValueDictionary new
-		at: #function put: (self buildNode: NameAst fields: (IdentityKeyValueDictionary new
-			at: #id put: #format;
-			at: #ctx put: self loadCtx;
-			yourself) from: locTok to: locTok);
-		at: #arguments put: { exprAst.
+	callNode := CallAst new
+		function: (NameAst new
+			id: #format;
+			ctx: self loadCtx;
+			from: locTok to: locTok ; yourself);
+		arguments: { exprAst.
 			((formatSpec includes: ${)
 				ifTrue: [self ___fstringSpecExprFor: formatSpec at: locTok]
 				ifFalse: [
-					self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
-						at: #value put: formatSpec;
-						at: #kind put: nil;
-						yourself) from: locTok to: locTok]) };
-		at: #keywords put: Array new;
-		yourself) from: locTok to: locTok.
+					ConstantAst new
+						value: formatSpec;
+						kind: nil;
+						from: locTok to: locTok ; yourself])};
+		keywords: Array new;
+		from: locTok to: locTok ; yourself.
 	^ callNode
 %
 
@@ -2705,18 +2666,18 @@ ___fstringSpecExprFor: spec at: locTok
 				[pos <= len and: [(spec at: pos) ~= ${]] whileTrue: [pos := pos + 1].
 				parts add: #literal -> (spec copyFrom: runStart to: pos - 1)]].
 	parts isEmpty ifTrue: [
-		^ self buildNode: ConstantAst fields: (IdentityKeyValueDictionary new
-			at: #value put: '';
-			at: #kind put: nil;
-			yourself) from: locTok to: locTok].
+		^ ConstantAst new
+			value: '';
+			kind: nil;
+			from: locTok to: locTok ; yourself].
 	result := self ___fstringPartToAst: parts first from: locTok.
 	2 to: parts size do: [:i |
 		piece := self ___fstringPartToAst: (parts at: i) from: locTok.
-		result := self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
-			at: #left put: result;
-			at: #op put: (self buildNode: AddAst fields: IdentityKeyValueDictionary new from: locTok to: locTok);
-			at: #right put: piece;
-			yourself) from: locTok to: locTok].
+		result := BinOpAst new
+			left: result;
+			op: (AddAst new from: locTok to: locTok ; yourself);
+			right: piece;
+			from: locTok to: locTok ; yourself].
 	^ result
 %
 
@@ -2741,10 +2702,10 @@ parseSubscript
 				].
 			].
 		].
-		^self buildNode: TupleAst fields: (IdentityKeyValueDictionary new
-			at: #elts put: items;
-			at: #ctx put: self loadCtx;
-			yourself) from: (tokens at: position - 1) to: self lastToken
+		^TupleAst new
+			elts: items;
+			ctx: self loadCtx;
+			from: (tokens at: position - 1) to: self lastToken ; yourself
 	].
 
 	^first
@@ -2755,19 +2716,19 @@ method: PythonParser
 parseSum
 	"Parse: term (('+' | '-') term)*"
 
-	| left startTok |
+	| left startTok aTok |
 	startTok := self peek.
 	left := self parseTerm.
-	[self peek notNil and: [(self atOp: '+') or: [self atOp: '-']]] whileTrue: [
+	[(aTok := self peek) notNil and: [(aTok isOp: '+') or: [aTok isOp: '-']]] whileTrue: [
 		| opTok opClass right |
 		opTok := self advance.
 		opClass := opTok value = '+' ifTrue: [AddAst] ifFalse: [SubAst].
 		right := self parseTerm.
-		left := self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
-			at: #left put: left;
-			at: #op put: opClass basicNew;
-			at: #right put: right;
-			yourself) from: startTok to: self lastToken.
+		left := BinOpAst new
+			left: left;
+			op: opClass basicNew;
+			right: right;
+			from: startTok to: self lastToken ; yourself.
 	].
 	^left
 %
@@ -2777,19 +2738,20 @@ method: PythonParser
 parseTerm
 	"Parse: factor (('*' | '/' | '//' | '%' | '@') factor)*"
 
-	| left startTok |
+	| left startTok aTok |
 	startTok := self peek.
 	left := self parseFactor.
-	[self peek notNil and: [(self atOp: '*') or: [(self atOp: '/') or: [(self atOp: '//') or: [(self atOp: '%') or: [self atOp: '@']]]]]] whileTrue: [
+	[(aTok := self peek) notNil and: [(aTok isOp: '*') or: [(aTok isOp: '/') or: [(aTok isOp: '//') 
+     or: [(aTok isOp: '%') or: [aTok isOp: '@']]]]]] whileTrue: [
 		| opTok opClass right |
 		opTok := self advance.
 		opClass := self operatorClassFor: opTok value.
 		right := self parseFactor.
-		left := self buildNode: BinOpAst fields: (IdentityKeyValueDictionary new
-			at: #left put: left;
-			at: #op put: opClass basicNew;
-			at: #right put: right;
-			yourself) from: startTok to: self lastToken.
+		left := BinOpAst new
+			left: left;
+			op: opClass basicNew;
+			right: right;
+			from: startTok to: self lastToken ; yourself.
 	].
 	^left
 %
@@ -2808,11 +2770,11 @@ parseTernary
 		test := self parseDisjunction.
 		self expect: #KEYWORD value: 'else'.
 		orelse := self parseExpression.
-		^self buildNode: IfExpAst fields: (IdentityKeyValueDictionary new
-			at: #test put: test;
-			at: #body put: expr;
-			at: #orelse put: orelse;
-			yourself) from: startTok to: self lastToken
+		^IfExpAst new
+			test: test;
+			body: expr;
+			orelse: orelse;
+			from: startTok to: self lastToken ; yourself
 	].
 	^expr
 %
@@ -2832,11 +2794,11 @@ parseTry
 
 	"Parse except clauses"
 	[self atKeywordSkippingNewlines: 'except'] whileTrue: [
-		| exceptTok excType excName exceptBody |
+		| exceptTok excType excName exceptBody aTok |
 		exceptTok := self advance. "consume 'except'"
 		excType := nil.
 		excName := nil.
-		(self peek notNil and: [(self peek isOp: ':') not]) ifTrue: [
+		((aTok := self peek) notNil and: [(aTok isOp: ':') not]) ifTrue: [
 			excType := self parseExpression.
 			(self matchKeyword: 'as') ifTrue: [
 				excName := self advance value asSymbol.
@@ -2848,11 +2810,11 @@ parseTry
 		].
 		self expect: #OP value: ':'.
 		exceptBody := self parseBlock.
-		handlers add: (self buildNode: ExceptHandlerAst fields: (IdentityKeyValueDictionary new
-			at: #type put: excType;
-			at: #name put: excName;
-			at: #body put: (self wrapSuite: exceptBody);
-			yourself) from: exceptTok to: self lastToken).
+		handlers add: (ExceptHandlerAst new
+			type: excType;
+			name: excName;
+			body: (self wrapSuite: exceptBody);
+			from: exceptTok to: self lastToken ; yourself).
 	].
 
 	"Parse else clause"
@@ -2871,12 +2833,12 @@ parseTry
 		self markScopeReturnBlocking.
 	].
 
-	^self buildNode: TryAst fields: (IdentityKeyValueDictionary new
-		at: #body put: (self wrapSuite: body);
-		at: #handlers put: handlers;
-		at: #orelse put: (self wrapSuite: orelse);
-		at: #finalbody put: (self wrapSuite: finalbody);
-		yourself) from: tok to: self lastToken
+	^TryAst new
+		body: (self wrapSuite: body);
+		handlers: handlers;
+		orelse: (self wrapSuite: orelse);
+		finalbody: (self wrapSuite: finalbody);
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - compound statements'
@@ -2894,11 +2856,11 @@ parseWhile
 		self expect: #OP value: ':'.
 		orelse := self parseBlock.
 	].
-	^self buildNode: WhileAst fields: (IdentityKeyValueDictionary new
-		at: #test put: test;
-		at: #body put: (self wrapSuite: body);
-		at: #orelse put: (self wrapSuite: orelse);
-		yourself) from: tok to: self lastToken
+	^WhileAst new
+		test: test;
+		body: (self wrapSuite: body);
+		orelse: (self wrapSuite: orelse);
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - compound statements'
@@ -2925,11 +2887,11 @@ parseWith
 	].
 	self expect: #OP value: ':'.
 	body := self parseBlock.
-	^self buildNode: WithAst fields: (IdentityKeyValueDictionary new
-		at: #items put: items;
-		at: #body put: (self wrapSuite: body);
-		at: #type_comment put: nil;
-		yourself) from: tok to: self lastToken
+	^WithAst new
+		items: items;
+		body: (self wrapSuite: body);
+		type_comment: nil;
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - compound statements'
@@ -2950,7 +2912,7 @@ tryParseParenthesizedWithItems
 
 	| saved items ok |
 	saved := position.
-	items := OrderedCollection new.
+	items := Array new.
 	ok := true.
 	[
 		self advance. "consume '('"
@@ -2962,7 +2924,7 @@ tryParseParenthesizedWithItems
 		self expect: #OP value: ')'.
 	] on: SyntaxError do: [:e | ok := false].
 	(ok and: [self atOp: ':']) ifFalse: [position := saved. ^ nil].
-	^ items asArray
+	^ items 
 %
 
 category: 'Grail-parsing - compound statements'
@@ -2978,10 +2940,10 @@ parseWithItem
 		optVars := self parsePrimary.
 		self setStoreCtx: optVars.
 	].
-	^self buildNode: WithItemAst fields: (IdentityKeyValueDictionary new
-		at: #context_expr put: expr;
-		at: #optional_vars put: optVars;
-		yourself) from: startTok to: self lastToken
+	^WithItemAst new
+		context_expr: expr;
+		optional_vars: optVars;
+		from: startTok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - yield'
@@ -2989,21 +2951,22 @@ method: PythonParser
 parseYieldExpression
 	"Parse: yield [from expr] | yield [expr_list]"
 
-	| tok value |
+	| tok value aTok |
 	tok := self advance. "consume 'yield'"
 	(self matchKeyword: 'from') ifTrue: [
 		value := self parseExpression.
-		^self buildNode: YieldFromAst fields: (IdentityKeyValueDictionary new
-			at: #value put: value;
-			yourself) from: tok to: self lastToken
+		^YieldFromAst new
+			value: value;
+			from: tok to: self lastToken ; yourself
 	].
 	value := nil.
-	(self peek notNil and: [self peek isNewline not and: [self peek isEndMarker not and: [(self peek isOp: ')') not and: [(self peek isOp: ']') not]]]]) ifTrue: [
+	((aTok := self peek) notNil and: [aTok isNewline not and: [aTok isEndMarker not and: [(aTok isOp:')') not 
+        and: [(aTok isOp: ']') not]]]]) ifTrue: [
 		value := self parseStarExpressions.
 	].
-	^self buildNode: YieldAst fields: (IdentityKeyValueDictionary new
-		at: #value put: value;
-		yourself) from: tok to: self lastToken
+	^YieldAst new
+		value: value;
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-parsing - simple statements'
@@ -3014,9 +2977,9 @@ parseYieldStatement
 	| tok expr |
 	tok := self peek.
 	expr := self parseYieldExpression.
-	^self buildNode: ExprAst fields: (IdentityKeyValueDictionary new
-		at: #value put: expr;
-		yourself) from: tok to: self lastToken
+	^ExprAst new
+		value: expr;
+		from: tok to: self lastToken ; yourself
 %
 
 category: 'Grail-token access'
@@ -3274,8 +3237,8 @@ category: 'Grail-token access'
 method: PythonParser
 skipNewlines
 	"Skip any NEWLINE and NL tokens."
-
-	[self peek notNil and: [self peek isNewline]] whileTrue: [
+  | aTok |
+	[(aTok := self peek) notNil and: [ aTok isNewline]] whileTrue: [
 		self advance.
 	].
 %
@@ -3332,7 +3295,7 @@ method: PythonParser
 wrapSuite: statementsArray
 	"Wrap an array of statements into a SuiteAst."
 
-	^SuiteAst buildWithFields: (IdentityKeyValueDictionary new
-		at: #body put: statementsArray;
-		yourself)
+	^SuiteAst new
+		body: statementsArray;
+		yourself .
 %

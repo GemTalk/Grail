@@ -8,6 +8,7 @@
 ! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
+set compile_env: 0
 
 ! ------------------- Remove existing Python methods from object
 expectvalue /Metaclass3
@@ -16,7 +17,6 @@ object removeAllMethods: 1.
 object class removeAllMethods: 1.
 %
 
-set compile_env: 0
 
 ! ------------------- Phase A: dynamicInstVarAt:ifAbsent: on Smalltalk Object
 ! GS Smalltalk ships ``dynamicInstVarAt:'' (returns nil when the slot
@@ -340,7 +340,7 @@ ___new__: positional kw: kwargs
 		| cls rest sel owner |
 		cls := positional @env0:at: 1.
 		rest := positional @env0:copyFrom: 2 to: positional @env0:size.
-		sel := WriteStream @env0:on: String @env0:new.
+		sel := AppendStream @env0:on: String @env0:new.
 		sel @env0:nextPutAll: '__new__:'.
 		2 @env0:to: rest @env0:size do: [:i | sel @env0:nextPutAll: '_:'].
 		sel := sel @env0:contents @env0:asSymbol.
@@ -515,7 +515,7 @@ ___allocateInstance___: positional kw: keywords
 	found := (self @env0:whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) ~~ nil.
 	found ifFalse: [
 		n := positional @env0:size.
-		stream := WriteStream @env0:on: String @env0:new.
+		stream := AppendStream @env0:on: String @env0:new.
 		stream @env0:nextPutAll: '__new__:'.
 		2 @env0:to: n do: [:i | stream @env0:nextPutAll: '_:'].
 		sel := stream @env0:contents @env0:asSymbol.
@@ -939,7 +939,7 @@ value: positional value: kwargs
 	nargs := positional @env0:size.
 	nargs @env0:= 0 ifTrue: [^ self __new__].
 	nargs @env0:= 1 ifTrue: [^ self __new__: (positional @env0:at: 1)].
-	sel := WriteStream @env0:on: String @env0:new.
+	sel := AppendStream @env0:on: String @env0:new.
 	sel @env0:nextPutAll: '__new__:'.
 	2 @env0:to: nargs do: [:i | sel @env0:nextPutAll: '_:'].
 	selSym := sel @env0:contents @env0:asSymbol.
@@ -2034,7 +2034,7 @@ ___unboundMethodClosure___: aSym
 			@env0:ifTrue: [aSym]
 			@env0:ifFalse: [
 				| stream i |
-				stream := WriteStream @env0:on: String @env0:new.
+				stream := AppendStream @env0:on: String @env0:new.
 				stream @env0:nextPutAll: s.
 				stream @env0:nextPut: $:.
 				i := 1.
@@ -2105,7 +2105,7 @@ ___pyAttrLoad___: aSym
 	  - Otherwise dispatch the unary message anyway and let DNU
 	    produce the appropriate error or fallback."
 
-	| sym1 sym2 sym3 sym4 sym5 sym6 symVA s isModule isGenerated dynValue walker owner family |
+	| sym1 sym2 sym3 sym4 sym5 sym6 symVA s isModule isGenerated dynValue owner family |
 	"An empty attribute name (``getattr(obj, '')'' -- e.g. attrgetter('child.')
 	whose dotted split has an empty part) must raise the catchable
 	AttributeError, not the uncatchable GemStone ``instVar names cannot be
@@ -2191,7 +2191,7 @@ ___pyAttrLoad___: aSym
 		      slot via the SymbolDictionary at:put: path).
 		  (6) AttributeError."
 
-		| dynValue |
+		| dValue |
 		"Phase A: dynamic-instVar storage is the canonical home for
 		module globals -- checked BEFORE the varargs-selector probe so a
 		module-level decorator's rebinding wins over the original
@@ -2199,16 +2199,16 @@ ___pyAttrLoad___: aSym
 		wrapper in g's slot while ``_g:kw:'' still exists; the bare-call
 		dispatcher and module.gs's resolution already use this order).
 		Per the nil-as-absent convention, a nil read means unset."
-		dynValue := self @env0:dynamicInstVarAt: aSym.
-		dynValue == nil ifFalse: [^ dynValue].
+		dValue := self @env0:dynamicInstVarAt: aSym.
+		dValue == nil ifFalse: [^ dValue].
 		"Cache the wrapper in the slot so repeated reads of the same
 		module function return the SAME object -- CPython functions are
 		first-class module attributes with stable identity
 		(g.dispatch(int) is g_int)."
 		(self ___respondsTo___: symVA) ifTrue: [
-			dynValue := BoundMethod receiver: self selector: aSym.
-			self @env0:dynamicInstVarAt: aSym put: dynValue.
-			^ dynValue
+			dValue := BoundMethod receiver: self selector: aSym.
+			self @env0:dynamicInstVarAt: aSym put: dValue.
+			^ dValue
 		].
 		"Unary selector resolution.  Sub-cases:
 		  * Defined on ``module'' itself, or a hand-written getter/
@@ -2242,9 +2242,9 @@ ___pyAttrLoad___: aSym
 			(#('Grail-Methods' 'Grail-Built-in Functions' 'Grail-Wall clock'
 			   'Grail-Monotonic' 'Grail-Formatting' 'Grail-Calendar') @env0:includes: cat)
 				ifTrue: [
-					dynValue := BoundMethod receiver: self selector: aSym.
-					self @env0:dynamicInstVarAt: aSym put: dynValue.
-					^ dynValue]
+					dValue := BoundMethod receiver: self selector: aSym.
+					self @env0:dynamicInstVarAt: aSym put: dValue.
+					^ dValue]
 				ifFalse: [^ self @env0:perform: aSym env: 1]
 		].
 		((self ___respondsTo___: sym1)
@@ -2253,9 +2253,9 @@ ___pyAttrLoad___: aSym
 			or: [(self ___respondsTo___: sym4)
 			or: [(self ___respondsTo___: sym5)
 			or: [self ___respondsTo___: sym6]]]]]) ifTrue: [
-			dynValue := BoundMethod receiver: self selector: aSym.
-			self @env0:dynamicInstVarAt: aSym put: dynValue.
-			^ dynValue
+			dValue := BoundMethod receiver: self selector: aSym.
+			self @env0:dynamicInstVarAt: aSym put: dValue.
+			^ dValue
 		].
 		^ self @env0:at: aSym ifAbsent: [
 			AttributeError ___signal___: 'module has no attribute ''' @env0:, s @env0:, ''''
@@ -2474,7 +2474,7 @@ ___pyAttrLoad___: aSym
 	has already missed — fall through to the class-side metaclass
 	lookup directly."
 	(self isKindOf: PythonInstance) ifTrue: [
-		| metaclass metaOwns |
+		| metaclass |
 		"Canonical-class overlay first: an ``self.x'' read falling back to
 		the class must see a runtime ``Cls.x = v'' overlay store before the
 		committed class-body accessor -- with the SAME descriptor binding the
@@ -4094,7 +4094,7 @@ __repr__
 		^ self @env0:class @env0:perform: #'__repr__' env: 1].
 	myClass := self @env0:class.
 	className := myClass @env0:name.
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	stream @env0:nextPut: $<.
 	stream @env0:nextPutAll: className.
 	stream @env0:nextPutAll: ' object>'.
@@ -4748,8 +4748,10 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	All other unknown sends fall through to super."
 
 	| s md cls binOp clsMeth |
-	envId = 1 ifFalse: [^ MessageNotUnderstood signal:
-	'env-1 ', aSelector printString, ' not understood by ', self class name asString].
+	envId = 1 ifFalse: [
+     ^ MessageNotUnderstood new
+         receiver: self selector: aSelector args: anArray envId: envId ; 
+         signal ].
 	s := aSelector asString.
 	cls := self class.
 	md := cls methodDictForEnv: 1.
@@ -4815,13 +4817,16 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 		"@classmethod through an instance -- see ___tryClassMethodDNU___:."
 		clsMeth := self ___tryClassMethodDNU___: aSelector args: anArray.
 		clsMeth == #'___noClassMethod___' ifFalse: [^ clsMeth].
-		^ MessageNotUnderstood signal:
-			'env-1 ', aSelector printString, ' not understood by ', cls name asString
+		^ MessageNotUnderstood new
+        receiver: cls selector: aSelector args: anArray envId: envId ; 
+        signal
 	].
 	"Unary selector with 0 args — return BoundMethod if class has any
 	same-named callable form (for `f = obj.method` patterns)."
-	anArray size = 0 ifFalse: [^ MessageNotUnderstood signal:
-		'env-1 ', aSelector printString, ' not understood by ', cls name asString].
+	anArray size = 0 ifFalse: [
+     ^ MessageNotUnderstood new
+        receiver: cls selector: aSelector args: anArray envId: envId ; 
+        signal ].
 	((md includesKey: (s , ':') asSymbol)
 		or: [(md includesKey: (s , ':_:') asSymbol)
 			or: [(md includesKey: (s , ':_:_:') asSymbol)
@@ -4832,8 +4837,9 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	CALLING for 0-arg instance methods, so do the same here."
 	clsMeth := self ___tryClassMethodDNU___: aSelector args: anArray.
 	clsMeth == #'___noClassMethod___' ifFalse: [^ clsMeth].
-	^ MessageNotUnderstood signal:
-		'env-1 ', aSelector printString, ' not understood by ', cls name asString
+  ^ MessageNotUnderstood new
+      receiver: cls selector: aSelector args: anArray envId: envId ; 
+      signal
 %
 
 set compile_env: 0

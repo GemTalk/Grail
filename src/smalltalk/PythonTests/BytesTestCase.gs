@@ -450,6 +450,41 @@ test_decode_unicode_escape
 
 category: 'Grail-Tests - Bytes Methods'
 method: BytesTestCase
+test_decode_unicode_escape_no_padding
+	"The decoded result must contain EXACTLY the decoded characters --
+	no leading NULs from the pre-sized output buffer.
+
+	This needs its own test because ``assert:equals:'' cannot see the bug:
+	in Unicode comparison mode NUL is collation-ignorable, so a result of
+	NUL,NUL,NUL,'age' still compares = to 'age'.  Its HASH differs, though,
+	so a decoded string used as a dict key silently misses -- which is how a
+	pre-sized AppendStream in ___decodeUnicodeEscape___ broke jinja2 (its
+	lexer round-trips every string token through this decoder, so every
+	template string literal became an unusable dict key)."
+
+	| b decoded d |
+	b := bytes @env1:__new__: 'age' _: 'ascii'.
+	decoded := b @env1:decode: 'unicode-escape'.
+	self assert: decoded @env0:size equals: 3.
+	self assert: (decoded @env0:at: 1) equals: $a.
+
+	"Same check through a Python dict, the way jinja2 uses it."
+	d := PyDict new.
+	d at: 'age' put: 30.
+	self assert: (d @env1:__contains__: decoded).
+	self assert: (d @env1:__getitem__: decoded) equals: 30.
+
+	"Escapes shrink the result: '\\n' is 2 source bytes, 1 character."
+	b := bytes @env1:__new__: 'a\nb' _: 'ascii'.
+	self assert: (b @env1:decode: 'unicode-escape') @env0:size equals: 3.
+
+	"Empty input decodes to an empty string, not a padded one."
+	b := bytes @env1:__new__: '' _: 'ascii'.
+	self assert: (b @env1:decode: 'unicode-escape') @env0:size equals: 0
+%
+
+category: 'Grail-Tests - Bytes Methods'
+method: BytesTestCase
 test_endswith
 	"Test bytes.endswith(suffix)"
 

@@ -806,7 +806,7 @@ ___subWithExpansion___: repl in: aString count: count subn: returnTuple
 	support.  Returns a String when ``returnTuple`` is false, or a
 	(String, count) tuple when true (the subn return shape)."
 
-	| parser template parts pos m mEnd mStart expanded numSubs result tail emptySep mustAdvance |
+	| parser template parts pos m mEnd mStart expanded numSubs emptySep mustAdvance |
 	parser := importlib modules @env0:at: #'re._parser'.
 	"A bytes pattern substituting over a bytes subject must return
 	bytes (CPython semantics) — join with an empty ByteArray so the
@@ -1023,7 +1023,7 @@ __repr__
 	srcRepr := src __repr__.
 	srcRepr @env0:size @env0:> 200 ifTrue: [
 		srcRepr := srcRepr @env0:copyFrom: 1 to: 200].
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream := AppendStream @env0:on: Unicode7 @env0:new.
 	stream @env0:nextPutAll: 're.compile('.
 	stream @env0:nextPutAll: srcRepr.
 	names @env0:notEmpty ifTrue: [
@@ -1200,7 +1200,7 @@ __repr__
 		groupRepr := (whole @env0:copyFrom: 1 to: 25) __repr__
 			@env0:, '...'
 			@env0:, (whole @env0:copyFrom: whole @env0:size @env0:- 24 to: whole @env0:size) __repr__].
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream := AppendStream @env0:on: Unicode7 @env0:new.
 	stream @env0:nextPutAll: '<re.Match object; span=('.
 	stream @env0:print: (sp @env0:at: 1).
 	stream @env0:nextPutAll: ', '.

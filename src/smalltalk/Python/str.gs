@@ -9,6 +9,7 @@
 ! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
+set compile_env: 0
 
 ! ------------------- Remove existing Python methods from CharacterCollection
 expectvalue /Metaclass3
@@ -416,7 +417,7 @@ __mod__: args
 	| stream src n i ch isMap argSeq argIdx bi nextArg |
 	src := self @env0:asString.
 	n := src @env0:size.
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream := AppendStream @env0:on: Unicode7 @env0:new.
 	bi := builtins instance.
 	isMap := args isKindOf: KeyValueDictionary.
 	"Python treats a string on the RHS as a single positional, not a
@@ -619,7 +620,7 @@ __mul__: n
 	count := n ___asRepeatCount___.
 	(count @env0:<= 0) ifTrue: [ ^ '' @env0:copy ].
 
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	count @env0:timesRepeat: [
 		stream @env0:nextPutAll: self
 	].
@@ -657,7 +658,7 @@ __repr__
 		cp == 34 ifTrue: [ hasDouble := true ]].
 	quote := (hasSingle and: [hasDouble @env0:not]) ifTrue: [$"] ifFalse: [$'].
 	quoteCp := quote @env0:codePoint.
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	stream @env0:nextPut: quote.
 	self @env0:do: [:char |
 		| cp |
@@ -738,7 +739,7 @@ capitalize
 	| stream first rest |
 	(self @env0:isEmpty) ifTrue: [ ^ self ].
 
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	first := self @env0:first.
 	rest := self @env0:allButFirst.
 
@@ -769,7 +770,7 @@ center: width
 	leftPad := totalPad @env0:// 2.
 	rightPad := (totalPad @env0:- (leftPad)).
 
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	leftPad @env0:timesRepeat: [
 		stream @env0:nextPut: $ 
 	].
@@ -849,7 +850,7 @@ ___pyEncodeUTF16___: withBOM be: bigEndian
 	supplementary -> a surrogate pair.  ``withBOM'' prepends U+FEFF; ``bigEndian''
 	selects byte order (little-endian otherwise)."
 	| ws emit |
-	ws := WriteStream @env0:on: ByteArray @env0:new.
+	ws := AppendStream @env0:on: ByteArray @env0:new.
 	emit := [:u | | hi lo |
 		hi := (u @env0:bitShift: -8) @env0:bitAnd: 16rFF.
 		lo := u @env0:bitAnd: 16rFF.
@@ -895,7 +896,7 @@ encode: encoding _: errors
 			h := (cp @env0:printStringRadix: 16 showRadix: false) @env0:asLowercase.
 			[h @env0:size @env0:< width] @env0:whileTrue: [h := '0' @env0:, h].
 			h].
-		ws := WriteStream @env0:on: String @env0:new.
+		ws := AppendStream @env0:on: String @env0:new.
 		1 @env0:to: size do: [:i | | ch cp |
 			ch := self @env0:at: i.
 			cp := ch @env0:codePoint.
@@ -929,7 +930,7 @@ encode: encoding _: errors
 		| max ws |
 		max := ((enc @env0:= 'ascii') or: [(enc @env0:= 'us-ascii') or: [enc @env0:= 'idna']])
 			ifTrue: [127] ifFalse: [255].
-		ws := WriteStream @env0:on: ByteArray @env0:new.
+		ws := AppendStream @env0:on: ByteArray @env0:new.
 		1 @env0:to: size do: [:i | | cv |
 			cv := (self @env0:at: i) @env0:codePoint.
 			cv @env0:> max
@@ -1209,7 +1210,7 @@ _format: positional kw: kwargs
 				i := i @env0:+ 2
 			] ifFalse: [
 		(ch == ${) ifTrue: [
-			| endIdx field convFlag spec value autoIdx |
+			| endIdx field convFlag spec value |
 			endIdx := self @env0:___findFormatBraceEnd___: i @env0:+ 1.
 			endIdx @env0:isNil ifTrue: [
 				ValueError ___signal___: 'unmatched ''{'' in format string'].

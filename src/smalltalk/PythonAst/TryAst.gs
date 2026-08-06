@@ -204,3 +204,35 @@ printSmalltalkOn: aStream
 		].
 	].
 %
+method: TryAst
+body
+	^body
+%
+method: TryAst
+body: newValue
+	body := newValue
+%
+method: TryAst
+handlers
+	^handlers
+%
+method: TryAst
+handlers: newValue
+	handlers := newValue
+%
+method: TryAst
+orelse
+	^orelse
+%
+method: TryAst
+orelse: newValue
+	orelse := newValue
+%
+method: TryAst
+finalbody
+	^finalbody
+%
+method: TryAst
+finalbody: newValue
+	finalbody := newValue
+%

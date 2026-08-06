@@ -665,7 +665,7 @@ fastPathSelectorForAttr: anAttrName arity: nargs
 
 	| sb |
 	nargs = 0 ifTrue: [^ anAttrName asSymbol].
-	sb := WriteStream on: String new.
+	sb := AppendStream on: String new.
 	sb nextPutAll: anAttrName asString; nextPut: $:.
 	2 to: nargs do: [:i | sb nextPutAll: '_:'].
 	^ sb contents asSymbol
@@ -750,7 +750,7 @@ fastPathSelectorForName: aName arity: nargs
 	(0 args is not handled by the fast path — see bareCallFastPathSelector.)"
 
 	| sb |
-	sb := WriteStream on: String new.
+	sb := AppendStream on: String new.
 	sb nextPutAll: aName asString; nextPut: $:.
 	2 to: nargs do: [:i | sb nextPutAll: '_:'].
 	^ sb contents asSymbol
@@ -1224,7 +1224,7 @@ classNewSelectorForArity: nargs
 
 	| sb |
 	nargs = 0 ifTrue: [^ #__new__].
-	sb := WriteStream on: String new.
+	sb := AppendStream on: String new.
 	sb nextPutAll: '__new__:'.
 	2 to: nargs do: [:i | sb nextPutAll: '_:'].
 	^ sb contents asSymbol
@@ -2081,4 +2081,16 @@ printModuleSelfSendVarargsOn: aStream selector: aSelector
 	aStream nextPutAll: ']] value: (self @env0:dynamicInstVarAt: #'.
 	aStream nextPutAll: funcName.
 	aStream nextPutAll: '))'
+%
+method: CallAst
+function: newValue
+	function := newValue
+%
+method: CallAst
+arguments: newValue
+	arguments := newValue
+%
+method: CallAst
+keywords: newValue
+	keywords := newValue
 %
