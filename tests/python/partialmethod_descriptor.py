@@ -132,3 +132,30 @@ def subclassable():
             p2.func is capture,
             list(p2.args),
             _shape(p2.__get__(a)())]
+
+
+def abstract_partialmethod_stays_abstract():
+    """A partialmethod over an @abc.abstractmethod reports abstract; one over an
+    ordinary method does not.
+
+    The abstract case is not obvious.  ``add5 = functools.partialmethod(add, 5)''
+    in a class body captures a FORWARD REFERENCE -- a BoundMethod whose receiver
+    is nil, because the class does not exist yet -- while @abc.abstractmethod
+    stamped the INTERNED UnboundMethod that the decorator received.  The two
+    handles disagree, so abstractness has to be resolved through the METHOD
+    (owner + selector), not through whichever handle was captured.
+    """
+    import abc
+
+    class Host:
+        @abc.abstractmethod
+        def add(self, x, y):
+            pass
+
+        def plain(self, x, y):
+            pass
+
+        add5 = functools.partialmethod(add, 5)
+        plain5 = functools.partialmethod(plain, 5)
+
+    return [Host.add5.__isabstractmethod__, Host.plain5.__isabstractmethod__]

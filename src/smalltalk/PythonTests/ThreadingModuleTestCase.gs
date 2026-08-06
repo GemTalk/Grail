@@ -117,3 +117,57 @@ testThreadedCounter
 	self assert: (r at: 1) equals: 5.
 	self assert: (r at: 2) asArray equals: #(0 1 2 3 4)
 %
+
+! --- Barrier + the switch-interval accessors ---
+
+category: 'Grail-Tests - Barrier'
+method: ThreadingModuleTestCase
+testBarrierReleasesAllPartiesTogether
+	"A Barrier has to BLOCK, so it is built on the real Semaphore-backed locks
+	rather than on Event -- Event >> wait answers the flag without blocking,
+	and a barrier that returned immediately would defeat its own purpose.
+
+	The second assertion is the one that matters: no party may record passing
+	the barrier before the last one has arrived.  A non-blocking stub satisfies
+	the first check and fails this."
+
+	self assert: self loadFixture @env1:barrier_releases_all_parties asArray
+		equals: #( true true ).
+%
+
+category: 'Grail-Tests - Barrier'
+method: ThreadingModuleTestCase
+testBarrierWaitAnswersArrivalIndex
+	"CPython answers the arrival index so exactly one waiter can be singled out
+	for follow-up work; across the cohort those indices are a permutation of
+	range(parties)."
+
+	self assert: self loadFixture @env1:barrier_wait_returns_arrival_index asArray
+		equals: #( 0 1 2 ).
+%
+
+category: 'Grail-Tests - Barrier'
+method: ThreadingModuleTestCase
+testBarrierResetClearsTheCount
+	"reset() on an idle barrier returns it to the empty state so it can be
+	reused -- test_functools drives one barrier through m rounds that way."
+
+	| r |
+	r := self loadFixture @env1:barrier_reset_clears_the_count asArray.
+	self assert: (r at: 1) equals: 0.
+	self assert: (r at: 2) equals: 2.
+	self assert: (r at: 3) asArray equals: #( 'through' ).
+%
+
+category: 'Grail-Tests - Barrier'
+method: ThreadingModuleTestCase
+testSwitchIntervalRoundTrips
+	"sys.getswitchinterval / setswitchinterval.  Grail's cooperative scheduler
+	does not use the value as a preemption deadline, but it must round-trip:
+	test.support saves it, lowers it to shake out races, and restores it.  A
+	non-positive interval is rejected, as CPython does, rather than accepted
+	and then reported back as legitimate."
+
+	self assert: self loadFixture @env1:switch_interval_round_trips asArray
+		equals: #( true true true true ).
+%

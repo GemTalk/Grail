@@ -88,3 +88,74 @@ def nested_def_unaffected():
     def bare():
         pass
     return [inner.__doc__, bare.__doc__ is None]
+
+
+# --- builtins, whose docstrings come from a hand-declared table -------------
+
+
+def builtin_docstrings():
+    """CPython's own text, not a paraphrase.  A Grail builtin is a Smalltalk
+    method, so no FunctionDefAst ran for it and there is nothing for
+    ClassDefAst's table to capture; builtins_docstrings.gs declares the table
+    for the builtins module by hand."""
+    return [max.__doc__.startswith('max('),
+            len.__doc__ == 'Return the number of items in a container.',
+            abs.__doc__ == 'Return the absolute value of the argument.']
+
+
+def builtin_without_docstring_is_none():
+    """CPython gives exit/quit no docstring either, so the answer is None --
+    the point being that it is not Object's docstring."""
+    return exit.__doc__ is None
+
+
+def update_wrapper_copies_builtin_doc():
+    """The reason this matters: functools.update_wrapper copies __doc__, so a
+    missing builtin docstring propagated onto every wrapper around a builtin.
+    This is test_functools TestUpdateWrapper/TestWraps.test_builtin_update."""
+    import functools
+
+    def wrapper():
+        pass
+    functools.update_wrapper(wrapper, max)
+    return [wrapper.__name__, wrapper.__doc__.startswith('max(')]
+
+
+def class_side_handle_metadata():
+    """A @classmethod's UNBOUND handle must report the docstring and annotations
+    of the method it names.
+
+    Grail compiles a class-side method onto the METACLASS, so the handle's
+    definingClass is ``Cls class'' -- while ClassDefAst compiles the doc and
+    annotation tables onto ``Cls''.  Walking up from the metaclass found
+    nothing, so a class-side handle reported None/{} where the identical
+    instance-side handle reported both.
+
+    This is what a decorator sees when it does ``functools.wraps(func.__func__)''
+    over a @classmethod, which is why the wrapper inherited neither.
+    """
+    captured = {}
+
+    def snoop(func):
+        handle = func.__func__
+        captured['doc'] = handle.__doc__
+        captured['arg'] = handle.__annotations__.get('arg', 'NOKEY')
+        captured['has_annotate'] = hasattr(handle, '__annotate__')
+
+        @classmethod
+        @functools.wraps(handle)
+        def wrapper(*args, **kwargs):
+            return handle(*args, **kwargs)
+
+        return wrapper
+
+    class Host:
+        @snoop
+        @classmethod
+        def go(cls, arg: int) -> str:
+            """the docstring"""
+            return str(arg)
+
+    return [captured['doc'], str(captured['arg'] is int),
+            str(captured['has_annotate']),
+            Host.go.__doc__, str(Host.go.__annotations__.get('arg') is int)]

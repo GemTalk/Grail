@@ -200,3 +200,69 @@ def explicit_get():
     cp.__set_name__(Holder, 'answer')
     h = Holder()
     return [cp.__get__(h), cp.__get__(h), h.answer, cp.__get__(None) is cp]
+
+
+def alias_to_decorated_def_binds_the_descriptor():
+    """``b = a'' where ``a'' is a DECORATED sibling def must bind the decorated
+    object, and __set_name__ must see both names in SOURCE order.
+
+    CPython applies a decorator at the def statement, so ``a'' is already the
+    cached_property when the alias runs.  Grail emits attribute values in an
+    earlier phase than method decorators, and additionally compiled such an
+    alias as a delegating METHOD -- so ``b'' answered an UnboundMethod where
+    ``a'' answered the descriptor, and cached_property never learned it was
+    bound twice.
+
+    The name ORDER matters too: cached_property names both in its error, and
+    ``('a' and 'b')'' is the source order.  With class-attribute names walked
+    before the unordered decorator store, it came out backwards.
+    """
+    try:
+        class Reused:
+            @functools.cached_property
+            def a(self):
+                return 1
+
+            b = a
+        return 'NO ERROR'
+    except TypeError as e:
+        return str(e)
+
+
+def alias_to_plain_def_still_delegates():
+    """An alias of an UNdecorated sibling method stays a real delegating method
+    -- that path exists because operator dispatch resolves compiled methods, not
+    attributes, so ``__ne__ = __eq__'' must remain callable as an operator."""
+    class Cmp:
+        def __eq__(self, other):
+            return True
+
+        __ne__ = __eq__
+
+    c = Cmp()
+    return [c == object(), c != object()]
+
+
+def metaclass_level_cached_property():
+    """A cached_property on a METACLASS, read through the class.
+
+    Python reads an attribute off a class by consulting its TYPE, so
+    ``MyClass.prop'' finds MyMeta's descriptor and calls __get__(MyClass,
+    MyMeta).  Caching then FAILS, because a class's __dict__ does not support
+    item assignment -- CPython raises TypeError naming the metaclass, and so
+    does Grail: a Class cannot hold dynamic instVars, which the caching write
+    turns into the same error.
+    """
+    class MyMeta(type):
+        @functools.cached_property
+        def prop(self):
+            return True
+
+    class MyClass(metaclass=MyMeta):
+        pass
+
+    try:
+        MyClass.prop
+        return 'NO ERROR'
+    except TypeError as e:
+        return str(e)

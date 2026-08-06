@@ -91,16 +91,27 @@ printSmalltalkOn: aStream
 			path below, which evaluates the CALL (running the class's
 			synthesized value:value: + __init__, or the method body)
 			and signals the resulting exception instance."
+			"Route through BaseException ___pyRaiseNew___:args:kw:, which validates
+			the (bare-name) callee is a BaseException subclass before constructing
+			+ signalling -- ``raise NewStyleClass()'' must be a TypeError, not an
+			MNU on ___signalNew___ (test_baseexception
+			test_raise_new_style_non_exception)."
+			aStream nextPutAll: 'BaseException @env1:___pyRaiseNew___: '.
 			exc function printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPutAll: ' ___signalNew___: '.
+			aStream nextPutAll: ' args: '.
 			exc printArgumentsArrayOn: aStream.
 			aStream nextPutAll: ' kw: '.
 			exc printKeywordsDictOn: aStream.
 			aStream nextPut: $..
 		] ifFalse: [
-			"raise expr → expr @env0:signal"
+			"raise expr → BaseException ___pyRaise___: expr, which validates expr is
+			a BaseException instance/subclass (signalling it) and otherwise raises
+			``TypeError: exceptions must derive from BaseException'' -- a bare class
+			or a str can no longer MNU on #signal (test_baseexception
+			test_raise_string / test_raise_new_style_non_exception)."
+			aStream nextPutAll: 'BaseException @env1:___pyRaise___: '.
 			exc printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPutAll: ' @env0:signal.'.
+			aStream nextPut: $..
 		].
 	].
 %

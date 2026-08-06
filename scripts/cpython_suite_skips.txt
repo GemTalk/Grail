@@ -28,12 +28,22 @@ test.test_itertools|TestBasicOps.test_product_overflow|AlmostOutOfStack (session
 # --- CPython implementation-detail tests: not applicable to Grail (GemStone) ---
 # gc: Grail has no refcounting / cycle collector, so refcycle-collection and
 # __del__-after-iterate timing tests cannot pass on any non-refcounted VM.
+test.test_sort|TestDecorateSortUndecorate.test_key_with_mutating_del|needs a sort-key object's __del__ to fire DURING the sort (refcount timing) so its list mutation is caught — Grail GC is not refcounted, so __del__ never runs mid-sort
 test.test_dict|DictTest.test_container_iterator|refcycle collection (gc.collect of a cycle) — Grail has no cycle collector
 test.test_dict|DictTest.test_free_after_iterating|CPython refcount/__del__-timing — Grail GC is not refcounted (test_list's twin is skipped too)
 # free-threading build atomicity (concurrent readers/writers): Grail is single cooperative-threaded
 test.test_dict|DictTest.test_setdefault_atomic|free-threading-build atomicity — N/A to Grail's cooperative threads
 test.test_dict|DictTest.test_setitem_atomic_at_resize|free-threading-build atomicity — N/A to Grail
 test.test_dict|DictTest.test_clear_at_lookup|free-threading-build atomicity — N/A to Grail
+# CPython sort C-optimization safety: unsafe_object_compare caches the per-type
+# richcompare and this test swaps an element's __class__ mid-sort to prove the
+# cache is re-validated.  Grail has no such cache, and the assertion (the swapped
+# element's new __lt__ raising) requires the underlying sort to re-compare that
+# element AS RECEIVER after the swap — a CPython-timsort comparison-order detail
+# GemStone's sort: does not reproduce (verified: __class__ swap happens, but the
+# element is never compared as receiver again). __class__ reassignment itself now
+# works; only the timsort-order-dependent re-comparison does not.
+test.test_sort|TestOptimizedCompares.test_unsafe_object_compare|CPython unsafe_object_compare C-optimization + timsort comparison-order detail — element is swapped mid-sort but Grail's sort never re-compares it as receiver
 # CPython split-table / managed-__dict__ C-level layout optimization
 test.test_dict|DictTest.test_object_set_item_single_instance_non_str_key|CPython split-table dict C internal
 test.test_dict|DictTest.test_split_table_insert_with_str_subclass|CPython split-table dict C internal
@@ -49,6 +59,14 @@ test.test_set|TestSet.test_container_iterator|gc cycle collection — Grail has 
 test.test_set|TestSetSubclass.test_container_iterator|gc cycle collection — N/A to Grail
 test.test_set|TestFrozenSet.test_container_iterator|gc cycle collection — N/A to Grail
 test.test_set|TestFrozenSetSubclass.test_container_iterator|gc cycle collection — N/A to Grail
+test.test_deque|TestBasic.test_container_iterator|gc cycle collection (a deque-iterator reference cycle, deleted then gc.collect()) — Grail has no cycle collector
+# eval()/exec() of a module-global free name: Grail's dynamic-compile path emits
+# an unresolved name as a bare Smalltalk symbol, so ``eval(repr(d))'' -- where
+# repr(d) is ``deque([...])'' -- fails to COMPILE (uncatchable CompileError 1001
+# 'undefined symbol deque') instead of resolving deque at run time.  This is the
+# same deep NameAst/exec-eval free-name limitation that blocks test_listcomps;
+# it is orthogonal to deque (deque's repr is correct), so scored as a skip.
+test.test_deque|TestBasic.test_repr|eval(repr(d)) needs eval to resolve the module-global `deque` — Grail's eval/exec free-name resolution emits a bare symbol -> uncatchable CompileError (same NameAst limitation as test_listcomps); not a deque issue
 test.test_set|TestSet.test_weakref|weakref reclaimed only under refcount/gc — N/A to Grail
 test.test_set|TestSetSubclass.test_weakref|weakref reclaimed only under refcount/gc — N/A to Grail
 test.test_set|TestSet.test_cyclical_repr|self-referential repr relies on CPython recursion depth/guard
@@ -185,6 +203,28 @@ test.test_functools|TestPartialPySubclass.test_recursive_pickle|needs RecursionE
 # raised (same class as the other @cpython_only / C-internal skips). N/A to
 # Grail rather than a bug.
 test.test_iter|TestCase.test_iter_overflow|@cpython_only: asserts OverflowError at PY_SSIZE_T_MAX; Grail's seq_iterator index is arbitrary-precision (never overflows) -- CPython C-internal, N/A
+# test_reduce_mutating_builtins_iter reproduces a CPython C-level crash
+# (gh-101765): an iterator's __reduce__ calls _PyEval_GetBuiltin, which LOOKS
+# UP 'iter' in builtins.__dict__, and the test plants a key there whose __eq__
+# exhausts the iterator DURING that lookup -- proving the C code re-reads its
+# it_seq pointer afterwards instead of trusting a stale one.  Grail cannot
+# stage either half of it:
+#   * builtin NAMES are resolved by codegen dispatch, never by a dict lookup.
+#     MEASURED: ``iter is builtins.iter'' is False, and rebinding
+#     builtins.iter does not change what ``iter(x)'' calls.  So nothing inside
+#     __reduce__ can run the planted __eq__, and every assertion here requires
+#     the iterator to have been exhausted BY that lookup ((iter, ("",)) rather
+#     than (iter, ("xyz",))).  No amount of __reduce__ support changes this.
+#   * a module __dict__ is a VIEW over dynamic instance variables, which are
+#     keyed by Symbol, so the planted non-string key cannot be stored at all.
+# The two REAL gaps this test also needs are recorded here so the skip hides
+# neither.  (1) PyModuleDict had no __delitem__, so ``del builtins_dict[name]''
+# -- the test's first statement -- raised "does not support item deletion";
+# fixed, with PythonTests ModuleDictItemTestCase.  (2) Grail's iterators still
+# have no __reduce__ (they answer the '___NotImplemented___' marker), the same
+# unimplemented iterator-pickling feature noted for set/frozenset above.
+# Landing __reduce__ does NOT unskip this test: the first bullet still holds.
+test.test_iter|TestCase.test_reduce_mutating_builtins_iter|CPython C-internal (gh-101765): needs a builtins.__dict__ lookup INSIDE __reduce__ to fire a planted non-string key's __eq__; Grail resolves builtins by dispatch (measured: iter is not builtins.iter) and cannot key a namespace dict by a non-string
 
 # --- test_enum: _simple_enum / _test_simple_enum (CPython-internal helpers) ---
 # This test exercises two UNDERSCORE-prefixed, CPython-internal enum helpers:
@@ -207,6 +247,21 @@ test.test_iter|TestCase.test_iter_overflow|@cpython_only: asserts OverflowError 
 # outsized regression risk for a test of a dev-only consistency checker.  re
 # already works with the stub (its flags stay plain ints, which is enough).
 test.test_enum|TestStdLib.test_test_simple_enum|_simple_enum/_test_simple_enum are CPython-internal helpers; faithful build is a load-bearing sub-project for re, and the failing line is an artificial member._value_ corruption CPython allows -- won't-implement, not a correctness gap
+# test.test_format's test_common_format: RE-EXAMINED 2026-08-05.  The old reason
+# ("'%.*d' % (sys.maxsize, 1) is not precision-validated -- session hang/OOM") is
+# FIXED: that expression, and its bytes/bytearray twins, now raise a catchable
+# OverflowError, and the format-spec spelling raises ValueError.  Un-skipping then
+# exposed two MORE hazards, both also fixed: ``1.e+300'' did not lex (a trailing
+# dot followed by an exponent was read as attribute access), and a large float
+# precision died on an UNCATCHABLE NumericError, now a catchable OverflowError.
+#
+# What remains is a genuine VM ceiling, not a bug.  ``testcommon('%12.*f',
+# (123456, 1.0))'' passes NO overflowok, so CPython really does build a
+# 123456-fraction-digit string; Grail generates float digits by exact integer
+# scaling (value * 10^precision) and GemStone's LargeInteger stops near 130144
+# bits (~39000 digits).  So this one test cannot pass without a different
+# digit-generation strategy.  Everything it was previously masking is now fixed.
+test.test_format|FormatTest.test_common_format|CPython builds a 123456-fraction-digit float string (no overflowok); Grail scales by 10^precision and GemStone's LargeInteger ceiling is ~39000 digits -- a VM limit, now raised catchably as OverflowError instead of an uncatchable NumericError
 # --- Phase 4 (2026-08-03): two tests that HANG the scoring session ---
 # Both are single-line hangs inside an otherwise-scorable module, so they are
 # skip-listed (never counted as passes) to let the rest of the module score;
@@ -219,7 +274,6 @@ test.test_deque|TestBasic.test_extend|deque.extend(self) consumes the live deque
 # '%.*d' % (sys.maxsize, 1): CPython validates the precision and raises
 # OverflowError; Grail tries to build the sys.maxsize-digit result (same shape as
 # the bytes-repetition OOM fixed by capping at 2**31-1 and raising OverflowError).
-test.test_format|FormatTest.test_common_format|'%.*d' % (sys.maxsize, 1) is not precision-validated -- Grail attempts a sys.maxsize-digit result (session hang/OOM, uncatchable)
 # Old-style __bases__ protocol: these build UNBOUNDED PYTHON recursion inside the
 # attribute read itself -- a self-referential ``@property def __bases__: return
 # self.__bases__'', and a __getattr__ that manufactures two fresh classes per
@@ -230,5 +284,41 @@ test.test_format|FormatTest.test_common_format|'%.*d' % (sys.maxsize, 1) is not 
 # the session dies (the module scored CRASH t=0, losing every other result).
 # The cyclic-but-non-recursive shapes (test_infinite_cycle_in_bases) DO pass:
 # there the guard is reached and raises Python's RecursionError.
+# RE-VERIFIED 2026-08-05, after property(fget) became a real descriptor and the
+# rest of the module reached OK: removing these two still scores the module
+# CRASH at t=0, losing all 23 results.  The recursion happens INSIDE the
+# property getter, so the explicit depth guards elsewhere (___abstractIsSubclass___,
+# and the nested-tuple guard in ___isInstance___:of:depth:) are never reached --
+# only a Python-level recursion limit on ordinary calls would help, and Grail
+# has none.  Do not drop these without re-running the module in isolation.
 test.test_isinstance|TestIsInstanceIsSubclass.test_infinite_recursion_in_bases|self-recursive __bases__ property: unbounded PYTHON recursion, uncatchable AlmostOutOfStack kills the session
 test.test_isinstance|TestIsInstanceIsSubclass.test_infinitely_many_bases|__getattr__ manufactures 2 classes per level: unbounded PYTHON recursion, uncatchable AlmostOutOfStack kills the session
+# gh-97591 refcount-crash regression: the test acquires a strong reference before
+# the tp_hash slot in PyObject_SetAttr so a Value()'s refcount can't drop below
+# zero and crash GC.  Grail is not refcounted, so that crash cannot arise -- and
+# the test has no observable assertions.  Its only mechanism is a dict whose sole
+# key hashes to the empty string, so __setstate__ ends up doing setattr(exc, '',
+# value); Grail cannot represent an empty-named attribute (a dynamic instVar name
+# cannot be the empty symbol), and the resulting LookupError escapes uncatchably.
+test.test_baseexception|ExceptionClassTests.test_setstate_refcount_no_crash|refcount-crash regression (N/A without refcounting); needs an empty-string attribute name Grail can't represent -- uncatchable LookupError, no assertions
+# ---- test.test_property ----
+# Refcount probes: @support.refcount_test measures sys.gettotalrefcount() deltas.
+# Grail has no refcounting VM, and support.get_attribute (used only by these) is
+# unimplemented -- the standard refcount/GC skip category.
+test.test_property|PropertyTests.test_gh_115618|refcount test (@support.refcount_test): reads sys.gettotalrefcount deltas -- N/A without a refcounting VM; also needs unimplemented support.get_attribute
+test.test_property|PropertyTests.test_refleaks_in___init__|refcount test (@support.refcount_test): reads sys.gettotalrefcount deltas -- N/A without a refcounting VM; also needs unimplemented support.get_attribute
+# A property SUBCLASS used as a bare class-body decorator (@PropertySub /
+# @PropertySubSlots).  Grail compiles @property at parse time BY NAME and cannot
+# tell that an arbitrary decorator name is a property subclass (a runtime class
+# relationship), so a property-subclass decorator does not compose like @property:
+# it resolves to a plain method, so the getter-docstring copy and the
+# __slots__-without-__doc__ AttributeError those tests assert never run.  Deep
+# parse-time/runtime limitation, orthogonal to the property object machinery.
+test.test_property|PropertySubclassTests.test_property_setter_copies_getter_docstring|@PropertySub (a property subclass) as a class-body decorator + @spam.setter -- Grail can't detect a property-subclass decorator at parse time, so it compiles to a method and the getter-docstring-copy semantics don't apply
+test.test_property|PropertySubclassTests.test_slots_docstring_copy_exception|@PropertySubSlots (a __slots__=() property subclass) as a class-body decorator -- compiled to a method (not a runtime PropertySubSlots(...) call), so the getter-doc-into-a-slotless-subclass AttributeError never fires
+# Class-body ``def foo`` compiles to a Smalltalk METHOD, not a mutable function
+# object, so ``foo.__isabstractmethod__ = val`` in the class body sets the attr on
+# a transient method wrapper that is discarded before ``foo = property(foo)`` reads
+# foo again.  property.__isabstractmethod__ itself works (verified at module scope);
+# only this class-body-def-as-mutable-function pattern is unsupported.
+test.test_property|PropertyTests.test_property___isabstractmethod__descriptor|class-body ``def`` is a method, not a mutable function object, so ``foo.__isabstractmethod__ = val`` set in the class body is lost before ``foo = property(foo)`` -- property.__isabstractmethod__ works at module scope

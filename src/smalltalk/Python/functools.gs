@@ -146,6 +146,50 @@ doit
 functools_singledispatchmethod category: 'Grail-Modules'
 %
 
+! ------- functools_singledispatchmethod_get: what reading the descriptor answers
+expectvalue /Class
+doit
+PythonInstance subclass: 'functools_singledispatchmethod_get'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+functools_singledispatchmethod_get comment:
+'CPython''s ``functools._singledispatchmethod_get'' -- the object a
+singledispatchmethod descriptor''s ``__get__'' answers, holding the
+descriptor plus the instance and class it was read through.
+
+Exists because the three access paths are three DIFFERENT objects in
+CPython, distinguishable by repr: the descriptor itself
+(``A.__dict__["m"]''), the unbound read (``A.m''), and the bound read
+(``a.m'').  Grail used to answer the descriptor for both reads and a
+generic MethodBinding for a bound plain method -- so ``repr(A.m)'' named
+a descriptor and ``type(a.m).__module__'' was ''builtins'' rather than
+''functools''.
+
+Metadata is FORWARDED to the descriptor rather than copied: the
+descriptor already resolves __name__ / __qualname__ / __module__ /
+__doc__ / __annotations__ off whatever it wraps, through the attribute
+protocol, and duplicating that here would be a second thing to keep
+correct.
+
+Calling delegates to the descriptor too, prepending the instance exactly
+when the descriptor says it binds one.  That keeps ONE call shape serving
+plain methods, @classmethod and @staticmethod -- the property the old
+___pyBindsSelf___ arrangement provided and which several tests rely on.'
+%
+
+expectvalue /Class
+doit
+functools_singledispatchmethod_get category: 'Grail-Modules'
+%
+
 ! ------- functools_partial class (Python functools.partial)
 expectvalue /Class
 doit
@@ -1609,12 +1653,52 @@ method: functools_partialmethod
 __isabstractmethod__
 	"CPython: ``getattr(self.func, '__isabstractmethod__', False)'' -- so a
 	partialmethod over an abstract method stays abstract, and one over an
-	ordinary function reports False rather than raising."
+	ordinary function reports False rather than raising.
 
-	^ [((self @env0:dynamicInstVarAt: #func)
+	Asking the captured handle is not enough, and the reason is a handle
+	asymmetry worth stating.  ``add5 = partialmethod(add, 5)'' in a class body
+	captures a FORWARD REFERENCE: a BoundMethod whose receiver is nil, because
+	the class does not exist yet.  ``@abc.abstractmethod'' on the def, by
+	contrast, received the INTERNED UnboundMethod and stamped
+	__isabstractmethod__ there -- which is why ``Cls.add'' reports true while the
+	captured handle reports nothing.  Neither BoundMethod nor UnboundMethod
+	defines __isabstractmethod__; it is purely a stored attribute, so the two
+	handles simply disagree.
+
+	So fall back to resolving the METHOD rather than the handle: the owner
+	recorded by __set_name__ plus the handle's selector name the interned
+	UnboundMethod the stamp actually landed on."
+
+	| direct fn owner |
+	direct := [((self @env0:dynamicInstVarAt: #func)
+		___pyAttrLoad___: #'__isabstractmethod__') == true]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: false].
+	direct ifTrue: [^ true].
+	fn := self @env0:dynamicInstVarAt: #func.
+	((fn @env0:isKindOf: BoundMethod) and: [fn @env0:receiver == nil])
+		ifFalse: [^ false].
+	owner := self @env0:dynamicInstVarAt: #'___owner___'.
+	(owner @env0:notNil and: [owner @env0:isKindOf: Behavior]) ifFalse: [^ false].
+	"definingClass:selector: is an env-1 constructor, so NO @env0: prefix here --
+	an env-0 send DNUs.  It interns per (class, selector), which is the whole
+	point: the interned instance is the one the decorator stamped."
+	^ [((UnboundMethod definingClass: owner selector: fn @env0:selector)
 		___pyAttrLoad___: #'__isabstractmethod__') == true]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-Descriptor'
+method: functools_partialmethod
+__set_name__: owner _: aName
+	"Python's __set_name__, sent for every class-body entry as the class is
+	built.  Recording the owner is what lets __isabstractmethod__ above resolve
+	the method the forward-reference handle could not name."
+
+	(owner @env0:isKindOf: Behavior) ifTrue: [
+		self @env0:dynamicInstVarAt: #'___owner___' put: owner].
+	^ ExecBlock @env0:___pyNone___
 %
 
 category: 'Grail-Single Dispatch'
@@ -1761,12 +1845,55 @@ ___orderingDerivablesFrom___: root
 category: 'Grail-Instance Creation'
 classmethod: functools_ordering_op
 ___derived___: derivedOp from: rootOp
+	"The synthesised comparison for ``derivedOp'', computed from ``rootOp''.
 
-	| inst |
+	INTERNED per (derived, root) pair and published on the functools module
+	under CPython's own name for it -- ``_gt_from_lt'', ``_le_from_ge'', and so
+	on.  CPython's total_ordering installs module-level functions
+	(``setattr(cls, opname, functools._gt_from_lt)''), so the object in the
+	class dictionary IS functools._gt_from_lt.  Two consequences the corpus
+	depends on, neither of which holds for a per-class instance:
+
+	  * pickling ``Cls.__gt__'' saves it BY REFERENCE as
+	    (functools, _gt_from_lt), and the round-trip is the identical object --
+	    test_total_ordering's test_pickle asserts exactly that.
+	  * two classes deriving the same operator from the same root share one
+	    object, as they do in CPython.
+
+	There are only twelve pairs (three derivables for each of four roots), so
+	interning is bounded by construction.  Session-local, because the module
+	instance it is published on is."
+
+	| qual st tbl inst modInst |
+	qual := '_' @env0:, (self ___bareOpName___: derivedOp)
+		@env0:, '_from_' @env0:, (self ___bareOpName___: rootOp).
+	st := SessionTemps @env0:current.
+	tbl := st @env0:at: #'GrailOrderingOps' ifAbsentPut: [KeyValueDictionary @env0:new].
+	inst := tbl @env0:at: qual otherwise: nil.
+	inst == nil ifFalse: [^ inst].
 	inst := self @env0:new.
 	inst @env0:dynamicInstVarAt: #derived put: derivedOp.
 	inst @env0:dynamicInstVarAt: #root put: rootOp.
+	inst @env0:dynamicInstVarAt: #'__qualname__' put: qual @env0:asUnicodeString.
+	tbl @env0:at: qual put: inst.
+	"Publish on the module instance so ``getattr(functools, '_gt_from_lt')''
+	resolves -- which is what lets pickle save the operator by reference.  The
+	dynamic-instVar slot is the first thing module attribute resolution probes."
+	modInst := functools @env0:___instance___.
+	modInst == nil ifFalse: [
+		modInst @env0:dynamicInstVarAt: qual @env0:asSymbol put: inst].
 	^ inst
+%
+
+category: 'Grail-Instance Creation'
+classmethod: functools_ordering_op
+___bareOpName___: anOpSymbol
+	"``__gt__'' -> ``gt'': the dunder stripped, for building CPython's
+	``_gt_from_lt'' style name."
+
+	| s |
+	s := anOpSymbol @env0:asString.
+	^ s @env0:copyFrom: 3 to: s @env0:size @env0:- 2
 %
 
 category: 'Grail-Attribute Access'
@@ -1778,6 +1905,26 @@ ___pyBindsSelf___
 	the synthesised operator with the instance prepended, as a def would."
 
 	^ true
+%
+
+category: 'Grail-Attribute Access'
+method: functools_ordering_op
+__module__
+	"``functools'': CPython's total_ordering installs functions defined IN
+	functools, so that is the module the operator belongs to.  pickle reads this
+	to save the operator by reference."
+
+	^ 'functools' @env0:asUnicodeString
+%
+
+category: 'Grail-Attribute Access'
+method: functools_ordering_op
+__qualname__
+	"CPython's name for this derivation -- ``_gt_from_lt'' and friends -- stamped
+	when the singleton was interned.  Together with __module__ it is what pickle
+	resolves the operator back through."
+
+	^ self @env0:dynamicInstVarAt: #'__qualname__'
 %
 
 category: 'Grail-Attribute Access'
@@ -1875,7 +2022,17 @@ ___callRoot___: root on: slf with: other
 	(owner @env0:~~ nil and: [owner @env0:~~ object]) ifTrue: [
 		^ slf @env0:perform: rootSel env: 1 withArguments: { other }].
 	fn := slf ___classAttrDunder___: root.
-	fn @env0:== nil ifTrue: [^ Python @env0:at: #NotImplemented otherwise: nil].
+	fn @env0:== nil ifTrue: [
+		"A CLASS operand whose root lives on its recorded ``metaclass=''.  The
+		probe above asks slf's own class chain, which for a class is its
+		SMALLTALK metaclass -- the Python metaclass is not in that chain, because
+		Grail records it rather than building the class through it.  Without this
+		the root punted and every DERIVED operator punted with it: ``A < B''
+		worked while ``A > B'' raised, which is total_ordering's metaclass case."
+		| viaMeta |
+		viaMeta := slf ___grailMetaclassCmp___: root with: other.
+		viaMeta @env0:== nil ifFalse: [^ viaMeta].
+		^ Python @env0:at: #NotImplemented otherwise: nil].
 	^ fn ___pyCallValue___: { slf. other } kw: nil
 %
 
@@ -2045,6 +2202,8 @@ ___on: aFunc
 	inst := self ___new___.
 	inst @env0:dynamicInstVarAt: #default put: aFunc.
 	inst @env0:dynamicInstVarAt: #registry put: IdentityKeyValueDictionary @env0:new.
+	inst @env0:dynamicInstVarAt: #dispatchCache put: IdentityKeyValueDictionary @env0:new.
+	inst @env0:dynamicInstVarAt: #abcCacheToken put: nil.
 	^ inst
 %
 
@@ -2080,41 +2239,103 @@ ___dispatchName___
 category: 'Grail-Single Dispatch'
 method: functools_singledispatch
 dispatch: cls
-	"First registered implementation along cls's __mro__, else the
-	default.  Behavior>>__mro__ covers kernel classes (superclass
-	chain) and MI user classes (C3 linearization) alike."
+	"The most specific registered implementation for cls, else the default.
 
-	| reg mro key |
+	Resolved by _find_impl over the COMPOSED mro, as CPython does: an ABC
+	registration is ordered by SPECIFICITY rather than by whichever matching
+	key a hash walk happened to reach first, and two equally specific
+	unrelated ABCs raise RuntimeError instead of one of them silently
+	winning.
+
+	There is deliberately NO exact-__mro__ fast path in front of this.  It
+	would be wrong, not just redundant: a class on cls's own __mro__ can lose
+	to a more specific registered ABC.  test_mro_conflicts pins it -- Sized
+	is an explicit base of O, yet once Set (a subclass of both Sized and
+	Container) is registered on O, Set wins.  The cache below is what pays
+	for composing an mro instead of walking one."
+
+	| reg key cache impl |
 	reg := self @env0:dynamicInstVarAt: #registry.
 	"g.dispatch(int): bare builtin-type names arrive as BoundMethod
 	wrappers here too -- normalize, tolerating non-classes."
 	key := (self ___registryKey___: cls) @env0:ifNil: [cls].
-	mro := key __mro__.
-	mro @env0:do: [:c |
-		(reg @env0:includesKey: c) ifTrue: [^ reg @env0:at: c]].
-	"Python-semantics widenings the Smalltalk chain can't see:
-	isinstance(x, str) is true for EVERY CharacterCollection (str maps
-	to Unicode7 but a plain String's chain never passes it), and int
-	subclasses are AbstractPyInt siblings of Integer."
-	((key == CharacterCollection)
-		or: [key @env0:inheritsFrom: CharacterCollection]) ifTrue: [
-		(reg @env0:includesKey: Unicode7) ifTrue: [^ reg @env0:at: Unicode7]].
-	((key == AbstractPyInt)
-		or: [key @env0:inheritsFrom: AbstractPyInt]) ifTrue: [
-		(reg @env0:includesKey: Integer) ifTrue: [^ reg @env0:at: Integer]].
-	"ABC fallback: a registered key that is neither on the chain nor a
-	widening may still match VIRTUALLY -- a collections.abc / numbers ABC
-	recognizes cls through its ``__subclasscheck__'' hook (registration,
-	whitelist, or structural protocol).  Scoped to hook-bearing keys so
-	ordinary class keys cost nothing extra.  Note: no CPython-style
-	ambiguity resolution between multiple matching ABCs -- Grail dicts are
-	hash-ordered, so the first matching ABC wins."
-	reg @env0:keysAndValuesDo: [:k :impl |
-		((k isKindOf: Behavior)
-			and: [(k ___respondsTo___: #'__subclasscheck__:')
-			and: [(k __subclasscheck__: key) == true]])
-				ifTrue: [^ impl]].
-	^ self @env0:dynamicInstVarAt: #default
+	"An ABC registration can invalidate a cached decision without touching
+	this dispatcher -- ``c.Set.register(O)'' makes Set outrank the Sized entry
+	already cached for O.  CPython re-checks abc.get_cache_token() on every
+	dispatch for exactly that reason, and so does this."
+	self ___checkAbcCacheToken___.
+	cache := self @env0:dynamicInstVarAt: #dispatchCache.
+	(cache @env0:includesKey: key) ifTrue: [^ cache @env0:at: key].
+	impl := (functools @env0:___instance___) ___findImplFor___: key registry: reg.
+	(impl == nil and: [key isKindOf: Behavior]) ifTrue: [
+		"Nothing CPython would consider matched.  Fall back to the RAW
+		Smalltalk chain, which holds classes CPython has no separate name for
+		and _find_impl therefore cannot see: ``int'' normalizes to Integer as
+		a registry key, but Integer reports the Python name ``int'' -- the
+		same as its SmallInteger subclass -- so the composed mro collapses the
+		two and a registration against Integer becomes unreachable.
+
+		Ranked BELOW everything in the composed mro on purpose: these are
+		Grail's own links, so they must not outrank a class CPython would
+		have ordered.  This generalizes two widenings that used to be
+		hand-coded here for str and int."
+		(key __mro__) @env0:do: [:c |
+			(impl == nil and: [reg @env0:includesKey: c])
+				ifTrue: [impl := reg @env0:at: c]].
+		"Two widenings the chain still cannot reach: isinstance(x, str) is
+		true for EVERY CharacterCollection (str maps to Unicode7, but a plain
+		String's chain never passes it), and int subclasses are AbstractPyInt
+		siblings of Integer rather than descendants."
+		((key == CharacterCollection)
+			or: [key @env0:inheritsFrom: CharacterCollection]) ifTrue: [
+			(reg @env0:includesKey: Unicode7)
+				ifTrue: [impl := reg @env0:at: Unicode7]].
+		(impl == nil
+			and: [(key == AbstractPyInt)
+				or: [key @env0:inheritsFrom: AbstractPyInt]]) ifTrue: [
+			(reg @env0:includesKey: Integer)
+				ifTrue: [impl := reg @env0:at: Integer]]].
+	impl == nil ifTrue: [impl := self @env0:dynamicInstVarAt: #default].
+	cache @env0:at: key put: impl.
+	^ impl
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___clearDispatchCache___
+	"Every register() invalidates every cached decision: a newly registered
+	class can be more specific than one already resolved and cached."
+
+	self @env0:dynamicInstVarAt: #dispatchCache
+		put: IdentityKeyValueDictionary @env0:new
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___checkAbcCacheToken___
+	"Drop the cache when abc.get_cache_token() has moved, i.e. when SOMETHING
+	has been registered on an ABC since the last dispatch.  Such a
+	registration never reaches this object, yet it can change what a cached
+	class should dispatch to.
+
+	Read straight off the already-imported abc module: dispatching must not
+	trigger an import, and a session that has never imported abc cannot have
+	registered anything on an ABC either, so a missing module means the token
+	cannot have moved."
+
+	| abcModule token seen |
+	abcModule := ((System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: #importlib) @env1:modules)
+			@env0:at: 'abc' otherwise: nil.
+	abcModule == nil ifTrue: [^ self].
+	token := [abcModule ___pyAttrLoad___: #'_abc_invalidation_counter']
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil].
+	token == nil ifTrue: [^ self].
+	seen := self @env0:dynamicInstVarAt: #abcCacheToken.
+	(seen @env0:= token) ifTrue: [^ self].
+	self @env0:dynamicInstVarAt: #abcCacheToken put: token.
+	self ___clearDispatchCache___
 %
 
 category: 'Grail-Single Dispatch'
@@ -2134,6 +2355,536 @@ ___registryKey___: aKey
 		(resolved @env0:notNil and: [resolved isKindOf: Behavior]) ifTrue: [
 			^ resolved]].
 	^ nil
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___pyModuleOf___: aClass
+	"The Python ``__module__'' of a class, or nil when it reports none.
+
+	Grail presents only SOME of a class's Smalltalk ancestors to Python and
+	hides the rest: dict's chain is PyDict -> KeyValueDictionary ->
+	AbstractDictionary -> Collection -> Object, and only the two ends of that
+	report a module.  Reporting one is therefore the test for ``CPython has a
+	class here'', which is what the C3 walk below needs.
+
+	Read through the attribute protocol rather than as a direct send: a class
+	with no __module__ accessor gets one from ___pythonBuiltinTypeModule___
+	inside ___pyAttrLoad___:, and a class with neither raises Python
+	AttributeError -- where a direct Smalltalk send would be an uncatchable
+	MessageNotUnderstood."
+
+	^ [aClass ___pyAttrLoad___: #'__module__']
+		@env0:on: AttributeError
+		do: [:ex | ex @env0:return: nil]
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___pyNameOf___: aClass
+	"The Python ``__name__'' of a class -- NOT its Smalltalk name.  The two
+	differ exactly where Grail maps one Python class onto a kernel class:
+	KeyValueDictionary answers 'dict'.  Answers '' when there is no name at
+	all, so callers can compare without a nil check."
+
+	| n |
+	n := [aClass ___pyAttrLoad___: #'__name__']
+		@env0:on: AttributeError
+		do: [:ex | ex @env0:return: nil].
+	^ n == nil ifTrue: [''] ifFalse: [n @env0:asString]
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___isHiddenBase___: aBase of: aClass
+	"True when aBase is a Smalltalk ancestor CPython has no class for, so the
+	C3 walk must look THROUGH it at its own bases.  Three kinds:
+
+	  * no __module__ at all -- AbstractDictionary, Collection,
+	    SequenceableCollection, PythonInstance;
+	  * _ABCRoot, Grail's internal root for the collections.abc ABCs; CPython
+	    derives those from object with an ABCMeta metaclass, so the root has
+	    no CPython counterpart and must not appear in a linearization;
+	  * the builtin TWIN -- one Python class over two Smalltalk classes, the
+	    inner one reporting the SAME __name__ and __module__ as the outer
+	    (dict is PyDict over KeyValueDictionary).  Collapsing it is what keeps
+	    a single ``dict'' in the composed MRO; left alone, dict's own
+	    linearization would begin (dict, dict)."
+
+	| baseModule ownModule |
+	(aBase isKindOf: Behavior) ifFalse: [^ true].
+	baseModule := self ___pyModuleOf___: aBase.
+	baseModule == nil ifTrue: [^ true].
+	((self ___pyNameOf___: aBase) @env0:= '_ABCRoot') ifTrue: [^ true].
+	ownModule := self ___pyModuleOf___: aClass.
+	^ (ownModule @env0:notNil
+		and: [ownModule @env0:asString @env0:= baseModule @env0:asString])
+			and: [(self ___pyNameOf___: aBase) @env0:= (self ___pyNameOf___: aClass)]
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___pyVisibleBases___: aClass
+	"aClass's direct bases AS CPYTHON WOULD REPORT THEM: every hidden
+	Smalltalk ancestor replaced, in place, by its own visible bases, with
+	duplicates dropped.  dict answers (object), list answers (object) and
+	defaultdict answers (dict) -- matching CPython's __bases__ -- where the
+	raw Smalltalk chain answers (dict), (SequenceableCollection) and (dict).
+
+	Splicing rather than filtering is what keeps ``object'' reachable: it sits
+	BELOW the hidden ancestors, so dropping them without descending would
+	strand every builtin's linearization short of its root."
+
+	| out |
+	out := OrderedCollection @env0:new.
+	self ___collectVisibleBasesOf___: aClass root: aClass into: out depth: 0.
+	^ out
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___collectVisibleBasesOf___: aClass root: aRoot into: out depth: aDepth
+	"Recursive worker for ___pyVisibleBases___.  Depth-capped: the hidden
+	chains are shallow (four links at worst), and a bound keeps a cycle in a
+	hand-built hierarchy from hanging the dispatcher instead of raising."
+
+	aDepth @env0:> 32 ifTrue: [^ self].
+	(aClass __bases__) @env0:do: [:b |
+		(self ___isHiddenBase___: b of: aRoot)
+			ifTrue: [
+				self ___collectVisibleBasesOf___: b root: aRoot into: out
+					depth: aDepth @env0:+ 1]
+			ifFalse: [
+				(out @env0:includesIdentical: b) ifFalse: [out @env0:add: b]]]
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___isAbcClass___: aClass
+	"CPython's _c3_mro asks ``hasattr(base, '__abstractmethods__')'' to find
+	where a class's explicit ABC bases stop.  Grail's abc is a
+	no-enforcement stub and defines __abstractmethods__ on nothing, so the
+	stand-in is membership of _ABCRoot in the mro -- the root every
+	collections.abc ABC derives from, and which a user class inheriting one
+	keeps.
+
+	LIMIT: a user ABC built on abc.ABC is NOT recognized (abc.ABC is an
+	ordinary class here, deriving from PythonInstance), and neither are the
+	numbers ABCs (numbers.Number derives from PythonInstance too).  Both
+	would need Grail's abc to be real; until then the boundary is computed
+	over collections.abc, which is what singledispatch's ABC handling is
+	about in practice."
+
+	| mro |
+	mro := [aClass __mro__]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil].
+	mro == nil ifTrue: [^ false].
+	mro @env0:do: [:c |
+		((self ___pyNameOf___: c) @env0:= '_ABCRoot') ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___issubclassOf___: aSub of: aSuper
+	"issubclass(aSub, aSuper), tolerating a non-class on either side: the
+	haystack _compose_mro is handed comes from a registry whose keys can be
+	bare builtin-type names (BoundMethods, not classes), and CPython's
+	is_related drops whatever has no __mro__ rather than raising."
+
+	(aSub == aSuper) ifTrue: [^ true].
+	^ [((builtins @env0:___instance___) issubclass: aSub _: aSuper) == true]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___c3TailIncludes___: aSequence of: anObject
+	"anObject appears in aSequence AFTER its head.  Spelled out rather than
+	``allButFirst includes:'' to avoid a copy per probe, and to compare by
+	IDENTITY: C3 orders classes, and Grail has distinct classes that answer
+	equal Python names."
+
+	2 @env0:to: aSequence @env0:size do: [:i |
+		(aSequence @env0:at: i) == anObject ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___c3Merge___: sequences
+	"CPython's functools._c3_merge: repeatedly take the first sequence head
+	that appears in no other sequence's TAIL, and strike it from every head.
+	``sequences'' is CONSUMED -- callers pass throw-away OrderedCollections.
+
+	Raises Python RuntimeError('Inconsistent hierarchy') exactly where
+	CPython's does, so an impossible hierarchy reports the CPython error
+	instead of quietly answering a short MRO.
+
+	Bounded by the total element count rather than written as a whileTrue:
+	loop -- the merge emits at most one class per element, so the bound
+	cannot cut a valid linearization short, and a bug in the candidate scan
+	terminates instead of hanging the dispatcher."
+
+	| result live winner candidate budget |
+	result := OrderedCollection @env0:new.
+	budget := 0.
+	sequences @env0:do: [:s | budget := budget @env0:+ s @env0:size].
+	1 @env0:to: budget @env0:+ 1 do: [:ignored |
+		live := sequences @env0:reject: [:s | s @env0:isEmpty].
+		live @env0:isEmpty ifTrue: [^ Array @env0:withAll: result].
+		winner := live
+			@env0:detect: [:s1 |
+				(live
+					@env0:detect: [:s2 | self ___c3TailIncludes___: s2 of: s1 @env0:first]
+					ifNone: [nil]) == nil]
+			ifNone: [nil].
+		winner == nil ifTrue: [
+			RuntimeError ___signal___: 'Inconsistent hierarchy'].
+		candidate := winner @env0:first.
+		result @env0:add: candidate.
+		sequences @env0:do: [:s |
+			(s @env0:isEmpty @env0:not and: [s @env0:first == candidate])
+				ifTrue: [s @env0:removeFirst]]].
+	^ Array @env0:withAll: result
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___c3MroOf___: aClass abcs: abcs
+	"CPython's functools._c3_mro: the C3 linearization of aClass with the
+	relevant ABCs from ``abcs'' spliced in where each one's behaviour is
+	INTRODUCED -- issubclass(aClass, abc) holds, but no direct base is
+	already a subclass of it.  Unrelated ABCs drop out.
+
+	Two substitutions carry Grail's class graph, each argued at its helper:
+	___pyVisibleBases___ stands in for cls.__bases__, because the raw
+	Smalltalk chain exposes ancestors CPython has no class for; and
+	___isAbcClass___ stands in for hasattr(base, '__abstractmethods__'),
+	because Grail's abc defines no such attribute."
+
+	| bases boundary explicitBases abstractBases otherBases remaining seqs |
+	bases := self ___pyVisibleBases___: aClass.
+	"Bases up to and including the LAST explicit ABC are considered first."
+	boundary := 0.
+	bases @env0:size @env0:to: 1 by: -1 do: [:i |
+		(boundary @env0:= 0 and: [self ___isAbcClass___: (bases @env0:at: i)])
+			ifTrue: [boundary := i]].
+	explicitBases := boundary @env0:= 0
+		ifTrue: [OrderedCollection @env0:new]
+		ifFalse: [bases @env0:copyFrom: 1 to: boundary].
+	otherBases := boundary @env0:= (bases @env0:size)
+		ifTrue: [OrderedCollection @env0:new]
+		ifFalse: [bases @env0:copyFrom: boundary @env0:+ 1 to: bases @env0:size].
+	"``abcs'' is consumed as the walk descends: an ABC spliced in HERE must
+	not be spliced again inside a base's linearization.  Copied per level,
+	as CPython's ``abcs = list(abcs)'' does, so a sibling branch still sees
+	it."
+	remaining := OrderedCollection @env0:new.
+	abcs == nil ifFalse: [abcs @env0:do: [:a | remaining @env0:add: a]].
+	abstractBases := OrderedCollection @env0:new.
+	remaining @env0:do: [:abc |
+		((self ___issubclassOf___: aClass of: abc)
+			and: [(bases
+				@env0:detect: [:b | self ___issubclassOf___: b of: abc]
+				ifNone: [nil]) == nil])
+					ifTrue: [abstractBases @env0:add: abc]].
+	abstractBases @env0:do: [:abc | remaining @env0:remove: abc ifAbsent: []].
+	seqs := OrderedCollection @env0:new.
+	seqs @env0:add: (OrderedCollection @env0:with: aClass).
+	explicitBases @env0:do: [:b |
+		seqs @env0:add: (OrderedCollection @env0:withAll:
+			(self ___c3MroOf___: b abcs: remaining))].
+	abstractBases @env0:do: [:b |
+		seqs @env0:add: (OrderedCollection @env0:withAll:
+			(self ___c3MroOf___: b abcs: remaining))].
+	otherBases @env0:do: [:b |
+		seqs @env0:add: (OrderedCollection @env0:withAll:
+			(self ___c3MroOf___: b abcs: remaining))].
+	seqs @env0:add: (OrderedCollection @env0:withAll: explicitBases).
+	seqs @env0:add: (OrderedCollection @env0:withAll: abstractBases).
+	seqs @env0:add: (OrderedCollection @env0:withAll: otherBases).
+	^ self ___c3Merge___: seqs
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+_c3_mro: aClass
+	"functools._c3_mro(cls) -- the fixed-arity form, for a call with no
+	``abcs''.  The varargs companion is __c3_mro:kw: (CallAst builds a
+	varargs selector as '_' , name , ':kw:', and the Python name already
+	begins with an underscore)."
+
+	^ self ___c3MroOf___: aClass abcs: nil
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+__c3_mro: positional kw: kwargs
+	"functools._c3_mro(cls, abcs=None).  CPython keeps this private but
+	test_functools calls it directly (test_c3_abc), so it is a real module
+	function, not just an internal helper.
+
+	Answers a Smalltalk Array; a Python list literal compares equal to one,
+	which is what the test's assertEqual asks."
+
+	| cls abcs |
+	(positional == nil or: [positional @env0:size @env0:< 1]) ifTrue: [
+		TypeError ___signal___:
+			'_c3_mro() missing 1 required positional argument: ''cls'''].
+	cls := positional @env0:at: 1.
+	abcs := positional @env0:size @env0:> 1
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [nil].
+	kwargs == nil ifFalse: [
+		kwargs @env0:keysAndValuesDo: [:k :v |
+			(k @env0:asString @env0:= 'abcs')
+				ifTrue: [abcs := v]
+				ifFalse: [
+					TypeError ___signal___:
+						'_c3_mro() got an unexpected keyword argument '''
+							@env0:, k @env0:asString @env0:, '''']]].
+	^ self ___c3MroOf___: cls abcs: abcs
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___pyDirectSubclassesOf___: aClass
+	"aClass's direct subclasses, Python-visible ones only -- Grail's stand-in
+	for CPython's cls.__subclasses__(), which does not exist here.
+
+	Two sources, and BOTH are needed.  A single-inheritance Python class is
+	chained under its base in Smalltalk, so ``subclasses'' finds it.  A
+	multiple-inheritance class is chained under its PRIMARY base only, with
+	the full list recorded in importlib's MI registry -- so a SECONDARY base
+	would never see it.  collections.abc.Collection is exactly that case: it
+	declares (Sized, Iterable, Container) and is chained under Sized alone,
+	and _compose_mro's whole purpose here is finding it from Container.
+
+	Ordered by Python name.  CPython's __subclasses__ answers definition
+	order; GemStone's ``subclasses'' and the identity-keyed MI registry are
+	both unordered, so name order is substituted to make the result
+	REPRODUCIBLE.  It is only ever a tie-break: the caller sorts by useful-base
+	count, and this decides equal counts."
+
+	| out reg |
+	out := OrderedCollection @env0:new.
+	(aClass @env0:subclasses) @env0:do: [:s |
+		(self ___pyModuleOf___: s) @env0:notNil ifTrue: [out @env0:add: s]].
+	reg := (System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: #importlib) @env0:___miRegistry___.
+	reg @env0:keysAndValuesDo: [:sub :entry |
+		(((entry @env0:at: 1) @env0:includesIdentical: aClass)
+			and: [(out @env0:includesIdentical: sub) @env0:not
+			and: [(self ___pyModuleOf___: sub) @env0:notNil]])
+				ifTrue: [out @env0:add: sub]].
+	^ self ___sortByPyName___: out
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___sortByPyName___: aCollection
+	"Ascending by Python __name__.  Sorted on the NAME rather than on the
+	classes themselves: ``<'' is not defined between two classes."
+
+	^ (aCollection @env0:asSortedCollection: [:a :b |
+		(self ___pyNameOf___: a) @env0:<= (self ___pyNameOf___: b)])
+			@env0:asOrderedCollection
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___sortByLengthDescending___: aCollection
+	"Stable descending sort by size -- CPython does ``found.sort(key=len,
+	reverse=True)'' and Python's sort is STABLE, so equal-length candidates
+	keep their incoming order and that order decides ABC ties.  Written as a
+	counting pass rather than a comparison sort because GemStone's sorts are
+	not stable."
+
+	| out longest |
+	out := OrderedCollection @env0:new.
+	longest := 0.
+	aCollection @env0:do: [:e |
+		e @env0:size @env0:> longest ifTrue: [longest := e @env0:size]].
+	longest @env0:to: 0 by: -1 do: [:n |
+		aCollection @env0:do: [:e |
+			e @env0:size @env0:= n ifTrue: [out @env0:add: e]]].
+	^ out
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___composeMroOf___: aClass types: types
+	"CPython's functools._compose_mro: aClass's linearization with the
+	RELEVANT entries of ``types'' (a dispatch registry's keys) spliced in.
+
+	Three filters, then the C3 walk:
+	  * drop anything already in aClass's own mro, anything that is not a
+	    class, and anything aClass is not a subclass of.  Requiring a class
+	    is what drops a bare builtin-type name -- ``str'' reaches a registry
+	    as a BoundMethod, not a class -- and stands in for CPython's
+	    hasattr(typ, '__mro__') and its GenericAlias check;
+	  * drop entries that are strict bases of other entries: they arrive in
+	    the linearization anyway, via the entry that supersedes them;
+	  * stabilize the ORDER of the survivors.  Two ABCs that are unrelated to
+	    each other have no intrinsic order, so a subclass of both that aClass
+	    also implements is used to impose one: Collection orders (Sized,
+	    Container) for a dict, which is what makes defaultdict's composed mro
+	    (defaultdict, dict, Sized, Container, object) rather than the reverse."
+
+	| bases related pruned mro |
+	bases := aClass __mro__.
+	related := OrderedCollection @env0:new.
+	types == nil ifFalse: [
+		types @env0:do: [:t |
+			((t isKindOf: Behavior)
+				and: [(bases @env0:includesIdentical: t) @env0:not
+				and: [(related @env0:includesIdentical: t) @env0:not
+				and: [self ___issubclassOf___: aClass of: t]]])
+					ifTrue: [related @env0:add: t]]].
+	pruned := related @env0:reject: [:t |
+		(related
+			@env0:detect: [:other |
+				(other ~~ t) and: [(other __mro__) @env0:includesIdentical: t]]
+			ifNone: [nil]) @env0:notNil].
+	mro := OrderedCollection @env0:new.
+	pruned @env0:do: [:t |
+		| found |
+		found := OrderedCollection @env0:new.
+		(self ___pyDirectSubclassesOf___: t) @env0:do: [:sub |
+			((bases @env0:includesIdentical: sub) @env0:not
+				and: [self ___issubclassOf___: aClass of: sub]) ifTrue: [
+					| useful |
+					useful := OrderedCollection @env0:new.
+					(sub __mro__) @env0:do: [:s |
+						(pruned @env0:includesIdentical: s)
+							ifTrue: [useful @env0:add: s]].
+					found @env0:add: useful]].
+		found @env0:isEmpty
+			ifTrue: [
+				(mro @env0:includesIdentical: t) ifFalse: [mro @env0:add: t]]
+			ifFalse: [
+				(self ___sortByLengthDescending___: found) @env0:do: [:each |
+					each @env0:do: [:subcls |
+						(mro @env0:includesIdentical: subcls)
+							ifFalse: [mro @env0:add: subcls]]]]].
+	^ self ___c3MroOf___: aClass abcs: mro
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+_compose_mro: aClass _: types
+	"functools._compose_mro(cls, types) -- the fixed-arity form.  Called
+	directly by test_functools (test_compose_mro) and by _find_impl."
+
+	^ self ___composeMroOf___: aClass types: types
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+__compose_mro: positional kw: kwargs
+	"Varargs form of _compose_mro.  CPython's signature is positional-only,
+	so a keyword call is a TypeError rather than a silent miss."
+
+	kwargs == nil ifFalse: [
+		kwargs @env0:keysAndValuesDo: [:k :v |
+			TypeError ___signal___:
+				'_compose_mro() takes no keyword arguments']].
+	(positional == nil or: [positional @env0:size @env0:< 2]) ifTrue: [
+		TypeError ___signal___:
+			'_compose_mro() takes 2 positional arguments'].
+	^ self ___composeMroOf___: (positional @env0:at: 1) types: (positional @env0:at: 2)
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___cpythonClassRepr___: aClass
+	"A class rendered the way CPython's type.__repr__ does --
+	<class 'collections.abc.Container'>, with ``builtins'' omitted -- because
+	the ambiguity message below is asserted VERBATIM by test_mro_conflicts.
+
+	Rendered here rather than by fixing Grail's global class repr, which
+	answers <Container class object>.  Changing that would alter what every
+	corpus test sees whenever it prints a class; it is a real difference and
+	worth its own change, measured on its own.  This one is scoped to the
+	message."
+
+	| m n |
+	n := self ___pyNameOf___: aClass.
+	m := self ___pyModuleOf___: aClass.
+	^ (m == nil or: [m @env0:asString @env0:= 'builtins'])
+		ifTrue: ['<class ''' @env0:, n @env0:, '''>']
+		ifFalse: ['<class ''' @env0:, m @env0:asString @env0:, '.'
+			@env0:, n @env0:, '''>']
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+___findImplFor___: aClass registry: reg
+	"CPython's functools._find_impl: the most specific registered
+	implementation for aClass, chosen over the mro _compose_mro builds -- so
+	ABC registrations are ordered by specificity rather than by hash order.
+
+	Answers nil when nothing matches.  CPython answers None there, but only
+	reaches it when its registry lacks an ``object'' entry; its registry
+	always has one, because singledispatch seeds the registry with the
+	default.  Grail keeps the default in its own slot, so nil is the normal
+	``fall through to the default'' answer and the caller supplies it.
+
+	Raises RuntimeError for an ambiguous dispatch exactly where CPython does:
+	once a match is found, the NEXT registered class in the linearization
+	makes it ambiguous -- unless one of the two is on aClass's own __mro__
+	(an explicit base wins outright), or the match is a subclass of it (more
+	specific, so it legitimately wins)."
+
+	| mro ownMro match |
+	mro := self ___composeMroOf___: aClass
+		types: (self ___sortByPyName___: reg @env0:keys).
+	ownMro := [aClass __mro__]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: #()].
+	match := nil.
+	mro @env0:do: [:t |
+		match == nil
+			ifTrue: [(reg @env0:includesKey: t) ifTrue: [match := t]]
+			ifFalse: [
+				((reg @env0:includesKey: t)
+					and: [(ownMro @env0:includesIdentical: t) @env0:not
+					and: [(ownMro @env0:includesIdentical: match) @env0:not
+					and: [(self ___issubclassOf___: match of: t) @env0:not]]])
+						ifTrue: [
+							RuntimeError ___signal___: 'Ambiguous dispatch: '
+								@env0:, (self ___cpythonClassRepr___: match)
+								@env0:, ' or '
+								@env0:, (self ___cpythonClassRepr___: t)].
+				^ reg @env0:at: match otherwise: nil]].
+	^ match == nil ifTrue: [nil] ifFalse: [reg @env0:at: match otherwise: nil]
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+_find_impl: aClass _: reg
+	"functools._find_impl(cls, registry) -- the fixed-arity form.  Private in
+	CPython, but test_functools calls it directly (test_cache_invalidation
+	compares the dispatcher's cached entry against it)."
+
+	^ self ___findImplFor___: aClass registry: reg
+%
+
+category: 'Grail-ABC MRO'
+method: functools
+__find_impl: positional kw: kwargs
+	"Varargs form of _find_impl.  CPython's signature is positional-only."
+
+	kwargs == nil ifFalse: [
+		kwargs @env0:keysAndValuesDo: [:k :v |
+			TypeError ___signal___: '_find_impl() takes no keyword arguments']].
+	(positional == nil or: [positional @env0:size @env0:< 2]) ifTrue: [
+		TypeError ___signal___: '_find_impl() takes 2 positional arguments'].
+	^ self ___findImplFor___: (positional @env0:at: 1)
+		registry: (positional @env0:at: 2)
 %
 
 category: 'Grail-Single Dispatch'
@@ -2159,14 +2910,79 @@ register: clsOrFunc
 		(inferred isKindOf: Array) ifTrue: [
 			inferred @env0:do: [:each |
 				(self @env0:dynamicInstVarAt: #registry) @env0:at: each put: clsOrFunc].
+			self ___clearDispatchCache___.
 			^ clsOrFunc].
 		(self @env0:dynamicInstVarAt: #registry) @env0:at: inferred put: clsOrFunc.
+		self ___clearDispatchCache___.
 		^ clsOrFunc].
 	^ [:positional2 :keywords2 |
 		| fn |
 		fn := positional2 @env0:at: 1.
 		(self @env0:dynamicInstVarAt: #registry) @env0:at: key put: fn.
+		self ___clearDispatchCache___.
 		fn]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___invalidRegisterMessage___: anOffender
+	"CPython names the OFFENDING argument and says what to do instead:
+
+	    Invalid first argument to `register()`: 42. Use either
+	    `@register(some_class)` or plain `@register` on an annotated function.
+
+	Grail described the diagnosis instead (``no type annotation found''), which
+	reads fine but is not what callers match on."
+
+	^ ('Invalid first argument to `register()`: '
+		@env0:, (self ___safeRepr___: anOffender)
+		@env0:, '. Use either `@register(some_class)` or plain `@register` on an '
+		@env0:, 'annotated function.') @env0:asString
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___safeRepr___: anObject
+	"repr(anObject) as a plain String, falling back to the class name when repr
+	raises or answers something unusable -- an error message must not fail while
+	being built, and the result is concatenated with String literals."
+
+	^ [(anObject @env1:__repr__) @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: anObject @env0:class @env0:name @env0:asString]
+%
+
+category: 'Grail-Single Dispatch'
+classmethod: functools_singledispatch
+___resolveDottedName___: aString
+	"Resolve a DOTTED name like ``collections.abc.Mapping'' to the class it names,
+	or nil.  Class-side so it can be exercised directly."
+
+	| parts mods |
+	parts := aString @env0:asString @env0:subStrings: '.'.
+	parts @env0:size @env0:< 2 ifTrue: [^ nil].
+	mods := (System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: #importlib) @env1:modules.
+	mods == nil ifTrue: [^ nil].
+	(parts @env0:size @env0:- 1) @env0:to: 1 @env0:by: -1 @env0:do: [:split |
+		| modName mod obj ok |
+		modName := ''.
+		1 @env0:to: split @env0:do: [:i |
+			modName := modName @env0:isEmpty
+				ifTrue: [(parts @env0:at: i) @env0:asString]
+				ifFalse: [modName @env0:, '.' @env0:, (parts @env0:at: i) @env0:asString]].
+		mod := mods @env0:at: modName @env0:asString otherwise: nil.
+		mod == nil ifFalse: [
+			obj := mod.
+			ok := true.
+			(split @env0:+ 1) @env0:to: parts @env0:size @env0:do: [:i |
+				ok ifTrue: [
+					obj := [obj @env1:___pyAttrLoad___: (parts @env0:at: i) @env0:asString @env0:asSymbol]
+						@env0:on: AbstractException
+						do: [:ex | ex @env0:return: nil].
+					obj == nil ifTrue: [ok := false]]].
+			(ok and: [obj @env0:isKindOf: Behavior]) ifTrue: [^ obj]]].
+	^ nil
 %
 
 category: 'Grail-Single Dispatch'
@@ -2211,7 +3027,7 @@ ___inferRegisterType___: aFunc
 	ann := self ___annotationSourceStrings___: aFunc.
 	(ann @env0:isNil or: [ann @env0:isEmpty]) ifTrue: [
 		TypeError ___signal___:
-			'Invalid first argument to `register()`: no type annotation found'].
+			(self ___invalidRegisterMessage___: aFunc)].
 	candidate := nil.
 	paramName := nil.
 	ann @env0:keysAndValuesDo: [:k :v |
@@ -2219,12 +3035,21 @@ ___inferRegisterType___: aFunc
 			ifTrue: [paramName := k @env0:asString. candidate := v]].
 	candidate @env0:isNil ifTrue: [
 		TypeError ___signal___:
-			'Invalid first argument to `register()`: no parameter annotation found'].
+			(self ___invalidRegisterMessage___: aFunc)].
 	"Resolve a forward-reference string against the Python globals."
 	(candidate isKindOf: CharacterCollection) ifTrue: [
 		text := candidate @env0:asString.
 		candidate := (System @env0:myUserProfile @env0:symbolList
 			@env0:objectNamed: candidate @env0:asSymbol) @env0:ifNil: [candidate]].
+	"Still a string, and DOTTED?  ``collections.abc.Mapping'' -- written either as
+	an expression or as a quoted forward reference -- arrives whole, and neither
+	the symbol list above nor the bare-name probe below can resolve it: one holds
+	no dotted keys, the other would look for an attribute literally named
+	``collections.abc.Mapping''.  Walk it instead."
+	(candidate isKindOf: CharacterCollection) ifTrue: [
+		| walked |
+		walked := (self @env0:class) ___resolveDottedName___: candidate @env0:asString.
+		walked == nil ifFalse: [candidate := walked]].
 	"Still a string?  ABC names ('Mapping', 'Sequence', ...) live as
 	classes on the collections.abc module, not in the symbol list --
 	resolve through sys.modules when that module has been imported."
@@ -2253,6 +3078,20 @@ ___inferRegisterType___: aFunc
 	___annotationUnionOfClasses___: for why this needs its own test."
 	(candidate isKindOf: CharacterCollection) ifTrue: [
 		(self ___annotationUnionOfClasses___: text) ifFalse: [
+			"A UNION whose members are not all classes has its own CPython wording,
+			naming the members joined by ``|'' rather than echoing the annotation:
+
+			    Invalid annotation for 'arg'. int | typing.Iterable[str] not all
+			    arguments are classes.
+
+			Checked BEFORE the subscript test below, because a union spelled
+			``typing.Union[...]'' contains brackets and would otherwise be reported
+			as a single non-class."
+			(self ___annotationUnionMemberNames___: text)
+				@env0:ifNotNil: [:names |
+					TypeError ___signal___: 'Invalid annotation for ''' @env0:, paramName
+						@env0:, '''. ' @env0:, (self ___joinWithBars___: names)
+						@env0:, ' not all arguments are classes.'].
 			(text @env0:includes: $[) ifTrue: [
 				TypeError ___signal___: 'Invalid annotation for ''' @env0:, paramName
 					@env0:, '''. ' @env0:, text @env0:, ' is not a class.'].
@@ -2309,6 +3148,20 @@ ___annotationUnionMembers___: aText
 		resolved @env0:add: cls].
 	resolved @env0:isEmpty ifTrue: [^ nil].
 	^ resolved @env0:asArray
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatch
+___joinWithBars___: names
+	"``int | typing.Iterable[str]'' -- union members as CPython prints them in
+	the invalid-annotation message."
+
+	| out |
+	out := WriteStream @env0:on: String @env0:new.
+	names @env0:doWithIndex: [:n :i |
+		i @env0:> 1 ifTrue: [out @env0:nextPutAll: ' | '].
+		out @env0:nextPutAll: n @env0:asString].
+	^ out @env0:contents
 %
 
 category: 'Grail-Single Dispatch'
@@ -2412,8 +3265,9 @@ register: cls _: aFunc
 	| key |
 	key := self ___registryKey___: cls.
 	key @env0:isNil ifTrue: [
-		TypeError ___signal___: 'Invalid first argument to `register()`: not a class'].
+		TypeError ___signal___: (self ___invalidRegisterMessage___: cls)].
 	(self @env0:dynamicInstVarAt: #registry) @env0:at: key put: aFunc.
+	self ___clearDispatchCache___.
 	^ aFunc
 %
 
@@ -2490,7 +3344,18 @@ ___pyBindsSelf___
 	Refusing the binding here makes both access paths deliver the identical
 	argument array, which is what lets one call shape serve all three kinds."
 
-	^ self ___wrapsClassSideMethod___ @env0:not
+	"Now ALWAYS false.  Binding moved to the descriptor protocol: object >>
+	___isValueDescriptor___: asks this marker precisely so a wrapper that
+	declines can fall through to __get__, and __get__ answers a
+	functools_singledispatchmethod_get, which is what gives ``A.m'' and
+	``a.m'' CPython's distinct reprs and puts type(a.m) in functools instead
+	of a generic MethodBinding in builtins.
+
+	The argument-shape property described above did not go away -- it moved:
+	singledispatchmethod_get >> ___pyCallValue___ prepends the instance
+	exactly when ___wrapsClassSideMethod___ says the descriptor binds one, so
+	one call shape still serves all three kinds."
+	^ false
 %
 
 category: 'Grail-Attribute Access'
@@ -2513,8 +3378,39 @@ ___wrapsClassSideMethod___
 
 	| fn |
 	fn := self @env0:dynamicInstVarAt: #func.
-	^ (fn isKindOf: BoundMethod)
-		and: [fn @env0:receiver isKindOf: Behavior]
+	^ self ___isClassSideHandle___: fn depth: 0
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+___isClassSideHandle___: fn depth: aDepth
+	"Is fn a class-side handle, possibly behind wrappers?
+
+	``@singledispatchmethod @classmethod @contextmanager def m(cls, arg)'' hands
+	this class the contextmanager's factory, not the class-side handle -- so the
+	direct test called it a plain method, expected an instance in front of the
+	dispatch argument, and raised ``helper requires at least 1 positional
+	argument'' for a call that had supplied everything.
+
+	Follow ``__wrapped__'', which is what functools.wraps sets and what CPython's
+	own contextmanager leaves behind.  Bounded depth, so a wrapper that somehow
+	points at itself cannot spin."
+
+	| wrapped |
+	fn == nil ifTrue: [^ false].
+	aDepth @env0:> 4 ifTrue: [^ false].
+	((fn isKindOf: BoundMethod) and: [fn @env0:receiver isKindOf: Behavior])
+		ifTrue: [^ true].
+	"A @classmethod / @staticmethod DESCRIPTOR is class-side by definition, and a
+	decorator that returns one puts it here directly rather than behind a
+	__wrapped__ hop (``@singledispatchmethod @classmethod_friendly_decorator
+	@classmethod def m'')."
+	(self ___isClassSideDescriptor___: fn) ifTrue: [^ true].
+	wrapped := [fn @env1:___pyAttrLoad___: #'__wrapped__']
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil].
+	(wrapped == nil or: [wrapped == fn]) ifTrue: [^ false].
+	^ self ___isClassSideHandle___: wrapped depth: aDepth @env0:+ 1
 %
 
 category: 'Grail-Callable'
@@ -2560,7 +3456,75 @@ ___pyCallValue___: positional kw: kwargs
 			@env0:, ' requires at least 1 positional argument'].
 	impl := (self @env0:dynamicInstVarAt: #dispatcher)
 		dispatch: (positional @env0:at: at) @env0:class.
+	"A registered implementation that is itself a @classmethod / @staticmethod
+	arrives as the bare descriptor: ``@A.t.register(int)'' over ``@classmethod
+	def _(cls, arg)'' registers a PyClassMethod, which no class owns because the
+	registration happens after the class is built.  Calling it directly passed
+	the dispatch argument as ``cls'' and left ``arg'' unfilled -- ``TypeError:
+	missing required argument: arg''.
+
+	The BASE implementation never showed this: the class-body decorator hands
+	singledispatchmethod a BoundMethod that already supplies the class, which is
+	what ___wrapsClassSideMethod___ reads.  Bind the registered one the same way,
+	through its own __get__, against that same owning class.  A PyStaticMethod's
+	__get__ answers the function unbound, which is equally correct for it."
+	(self ___wrapsClassSideMethod___
+		and: [self ___isClassSideDescriptor___: impl]) ifTrue: [
+			| owner |
+			owner := self ___classSideOwner___.
+			owner == nil ifFalse: [
+				^ (impl __get__: (ExecBlock @env0:___pyNone___) _: owner)
+					___pyCallValue___: positional kw: kwargs]].
 	^ impl ___pyCallValue___: positional kw: kwargs
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod
+___isClassSideDescriptor___: anImpl
+	"Is anImpl a @classmethod / @staticmethod descriptor that still needs its
+	owner bound?  Deliberately narrow: a plain function or method handle also
+	answers __get__:_:, and those already receive the argument array unchanged."
+
+	| syms cm sm |
+	syms := System @env0:myUserProfile @env0:symbolList.
+	cm := syms @env0:objectNamed: #'PyClassMethod'.
+	(cm @env0:notNil and: [anImpl @env0:isKindOf: cm]) ifTrue: [^ true].
+	sm := syms @env0:objectNamed: #'PyStaticMethod'.
+	^ sm @env0:notNil and: [anImpl @env0:isKindOf: sm]
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod
+___classSideOwner___
+	"The class this class-side method was defined on -- the receiver of the
+	BoundMethod the class-body decorator handed us -- or nil."
+
+	| fn recv recorded |
+	"Recorded by __set_name__ when the class was built.  Needed because the
+	wrapped callable does not always know its class: a decorator that returns a
+	@classmethod hands this object a PyClassMethod, which carries no owner, and
+	then the class-side call had nothing to bind against (``'PyClassMethod' object
+	is not callable'')."
+	recorded := self @env0:dynamicInstVarAt: #'___owner___'.
+	(recorded @env0:notNil and: [recorded @env0:isKindOf: Behavior])
+		ifTrue: [^ recorded].
+	fn := self @env0:dynamicInstVarAt: #func.
+	(fn @env0:isKindOf: BoundMethod) ifFalse: [^ nil].
+	recv := fn @env0:receiver.
+	^ (recv @env0:isKindOf: Behavior) ifTrue: [recv] ifFalse: [nil]
+%
+
+category: 'Grail-Descriptor'
+method: functools_singledispatchmethod
+__set_name__: owner _: aName
+	"Python's __set_name__, sent for every class-body entry as the class is
+	built.  Recording the owner is what lets a class-side dispatch bind against
+	the defining class when the wrapped callable cannot name it -- see
+	___classSideOwner___."
+
+	(owner @env0:isKindOf: Behavior) ifTrue: [
+		self @env0:dynamicInstVarAt: #'___owner___' put: owner].
+	^ ExecBlock @env0:___pyNone___
 %
 
 category: 'Grail-Single Dispatch'
@@ -2624,6 +3588,252 @@ category: 'Grail-Attribute Access'
 method: functools_singledispatchmethod
 __annotations__
 	^ (self @env0:dynamicInstVarAt: #func) __annotations__
+%
+
+category: 'Grail-Reflection'
+classmethod: functools_singledispatchmethod
+__module__
+	"``type(meth).__module__'' -- the module the DESCRIPTOR CLASS lives in, which
+	is functools, not the module that defined the decorated method.  Same
+	class-side pattern functools_partial uses.
+
+	Needed because the instance-side __module__ below delegates to the wrapped
+	function: reading __module__ on the CLASS found that instance method and
+	wrapped it as an UnboundMethod, so ``type(meth).__module__'' answered a
+	callable instead of 'functools'."
+
+	^ 'functools'
+%
+
+category: 'Grail-Reflection'
+classmethod: functools_singledispatchmethod
+__qualname__
+	^ 'singledispatchmethod'
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod
+__get__: obj _: cls
+	"Python's descriptor read.  Both of Grail's hooks land here now:
+	object >> ___classDescriptorGet___: passes (None, cls) for ``A.m'' and
+	___descriptorGet___: passes (instance, class) for ``a.m''.  Answering a
+	distinct object for each is what makes the three CPython access paths
+	three different things -- the descriptor, the unbound read and the bound
+	read -- which is the whole subject of test_method_repr."
+
+	^ functools_singledispatchmethod_get ___on: self obj: obj cls: cls
+%
+
+category: 'Grail-Instance Creation'
+classmethod: functools_singledispatchmethod_get
+___on: aDescriptor obj: anObj cls: aCls
+	"Metadata is copied into DYNAMIC INSTVARS here, not served by instance-side
+	__name__ / __module__ / ... methods.
+
+	___pyAttrLoad___: probes the dynamic-instVar store first and answers what it
+	finds as a VALUE, but an instance-side dunder METHOD reaches the generic
+	branch and comes back wrapped as a BoundMethod -- only a CLASS receiver gets
+	these read as values.  Defining them as methods therefore made
+	``meth.__module__'' answer <BoundMethod object>; __doc__ alone worked,
+	because object >> ___pyAttrLoad___: special-cases it.  The descriptor itself
+	carries its metadata the same way, which is why reading it off the
+	descriptor already worked.
+
+	CPython stamps __module__ and __doc__ in __init__ for the same class of
+	reason (they ``conflict with type descriptors'') and resolves the rest in
+	__getattr__.  Grail copies all of them: the wrapper is built fresh on every
+	attribute read, so a snapshot cannot go stale."
+
+	| inst |
+	inst := self ___new___.
+	inst @env0:dynamicInstVarAt: #unbound put: aDescriptor.
+	inst @env0:dynamicInstVarAt: #obj put: anObj.
+	inst @env0:dynamicInstVarAt: #cls put: aCls.
+	#( #'__name__' #'__qualname__' #'__module__' #'__doc__'
+	   #'__annotations__' #'__isabstractmethod__' #'__type_params__' )
+		@env0:do: [:each |
+			| v |
+			v := inst ___forwardAttr___: each.
+			v == nil ifFalse: [inst @env0:dynamicInstVarAt: each put: v]].
+	"__wrapped__ is stored, not served by a method, for the same reason: an
+	instance-side dunder method comes back BoundMethod-wrapped."
+	inst @env0:dynamicInstVarAt: #'__wrapped__'
+		put: inst ___wrappedCallable___.
+	^ inst
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod_get
+___unbound___
+	"The singledispatchmethod descriptor this was read from."
+
+	^ self @env0:dynamicInstVarAt: #unbound
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod_get
+___boundInstance___
+	"The instance this was read through, or nil/None for a class read."
+
+	| obj |
+	obj := self @env0:dynamicInstVarAt: #obj.
+	^ (obj == nil or: [obj == None]) ifTrue: [nil] ifFalse: [obj]
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod_get
+___forwardAttr___: aSym
+	"Metadata is FORWARDED to the descriptor, not copied.  The descriptor
+	already resolves each of these off whatever it wraps -- a plain def, a
+	@classmethod, a callable object -- so copying them here would be a second
+	place to keep correct.
+
+	Read off the WRAPPED CALLABLE through the attribute protocol -- CPython's
+	``getattr(self._unbound.func, name)'' -- rather than by sending the
+	descriptor's own __name__ / __qualname__ accessors.
+
+	Those accessors send __name__ DIRECTLY to what they wrap, which is an
+	uncatchable env-1 MessageNotUnderstood for a callable that has none.
+	``singledispatchmethod(SomeCallable())'' is exactly that case and
+	test_method_repr covers it, expecting the label to degrade to __name__ and
+	then to ``?''.  ___pyAttrLoad___: raises a catchable AttributeError
+	instead, so a missing name answers nil here and the repr falls back.
+
+	__annotations__ is the exception: the descriptor's own accessor is the one
+	that answers the right dict (it sends __annotations__ to the wrapped
+	callable, which resolves through the wrapper chain), where the attribute
+	protocol answers a dict missing the parameters -- a KeyError on the
+	subscript the test does.  Tried under a broad guard, since it too is a
+	direct send and the callable may have nothing to answer."
+
+	| f viaDescriptor |
+	f := self ___unbound___ @env0:dynamicInstVarAt: #func.
+	f == nil ifTrue: [^ nil].
+	aSym == #'__annotations__' ifTrue: [
+		viaDescriptor := [self ___unbound___ __annotations__]
+			@env0:on: AbstractException
+			do: [:ex | ex @env0:return: nil].
+		viaDescriptor == nil ifFalse: [^ viaDescriptor]].
+	^ [f ___pyAttrLoad___: aSym]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil]
+%
+
+category: 'Grail-Attribute Access'
+method: functools_singledispatchmethod_get
+___wrappedCallable___
+	"What CPython exposes as __wrapped__, and what inspect.signature follows to
+	report the real parameter list.
+
+	There it is the plain FUNCTION -- so the signature includes ``self'', and
+	test_method_signatures asserts exactly that for both the class and the
+	instance read.  Grail's closest analogue is the UNBOUND handle: the
+	class-body decorator hands the descriptor a BoundMethod, whose spec is
+	bound-shaped and therefore missing the receiver.  Answer the interned
+	UnboundMethod for the same method instead, which reports the whole
+	parameter list.
+
+	Stored into a dynamic instVar by the constructor rather than served from
+	here: an instance-side dunder METHOD comes back BoundMethod-wrapped from the
+	attribute protocol -- the same trap __module__ and friends hit."
+
+	| fn cls |
+	fn := self ___unbound___ @env0:dynamicInstVarAt: #func.
+	(fn @env0:isKindOf: BoundMethod) ifTrue: [
+		cls := fn @env0:receiver.
+		(cls @env0:isKindOf: Behavior) ifFalse: [cls := fn @env0:definingClass].
+		(cls @env0:isKindOf: Behavior) ifTrue: [
+			^ UnboundMethod definingClass: cls selector: fn @env0:selector]].
+	^ fn
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod_get
+register: clsOrFunc
+	"CPython exposes ``register'' on the read object too, so
+	``A.m.register(int)'' works and not only the same call reached through the
+	class dict entry."
+
+	^ self ___unbound___ register: clsOrFunc
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod_get
+_register: positional kw: kwargs
+	"Varargs companion of register, for the two-argument and keyword forms."
+
+	^ self ___unbound___ _register: positional kw: kwargs
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod_get
+___pyCallValue___: positional kw: kwargs
+	"Delegate the call to the descriptor, prepending the instance exactly
+	when the descriptor says it binds one.
+
+	A @classmethod or @staticmethod takes the SAME argument array through
+	either access path -- ``a.static_func(0)'' and ``A.static_func(0)'' both
+	reach the function as (0) -- so the prepend is conditional on
+	___wrapsClassSideMethod___ rather than merely on an instance being
+	present.  That is the property the old ___pyBindsSelf___ arrangement
+	provided, and several passing tests depend on it."
+
+	| obj args |
+	obj := self ___boundInstance___.
+	args := (obj == nil or: [self ___unbound___ ___wrapsClassSideMethod___])
+		ifTrue: [positional]
+		ifFalse: [(Array @env0:with: obj) @env0:, positional].
+	^ self ___unbound___ ___pyCallValue___: args kw: kwargs
+%
+
+category: 'Grail-Single Dispatch'
+method: functools_singledispatchmethod_get
+value: positional value: kwargs
+	"Two-argument block protocol, as the descriptor also answers."
+
+	^ self ___pyCallValue___: positional kw: kwargs
+%
+
+category: 'Grail-Representation'
+method: functools_singledispatchmethod_get
+__repr__
+	"Two of CPython's three forms live here, and test_method_repr asserts
+	each verbatim: an unbound read is ``<single dispatch method NAME>'' and a
+	bound read ``<bound single dispatch method NAME of OBJ>''.  The third,
+	``<single dispatch method descriptor NAME>'', belongs to the descriptor
+	itself (below)."
+
+	| obj label |
+	label := self ___unbound___ ___reprLabel___.
+	obj := self ___boundInstance___.
+	^ (obj == nil
+		ifTrue: ['<single dispatch method ' @env0:, label @env0:, '>']
+		ifFalse: ['<bound single dispatch method ' @env0:, label
+			@env0:, ' of ' @env0:, (obj __repr__) @env0:asString @env0:, '>'])
+				@env0:asUnicodeString
+%
+
+category: 'Grail-Reflection'
+classmethod: functools_singledispatchmethod_get
+__module__
+	"``type(a.m).__module__'' must be 'functools' -- asserted by
+	test_method_wrapping_attributes for all six access paths.  A generic
+	MethodBinding used to serve the bound plain-method case and reported
+	'builtins'."
+
+	^ 'functools'
+%
+
+category: 'Grail-Reflection'
+classmethod: functools_singledispatchmethod_get
+__name__
+	^ '_singledispatchmethod_get'
+%
+
+category: 'Grail-Reflection'
+classmethod: functools_singledispatchmethod_get
+__qualname__
+	^ '_singledispatchmethod_get'
 %
 
 category: 'Grail-Representation'
@@ -2821,6 +4031,24 @@ __set_name__: owner _: name
 
 category: 'Grail-Descriptor'
 method: functools_cached_property
+___pyOwnerNameFor___: instance
+	"The name CPython puts in the caching errors: the TYPE of the object being
+	cached on.  For an ordinary object that is its class; for a CLASS -- a
+	metaclass-level cached_property read as ``C.prop'' -- it is the recorded
+	``metaclass='', because that is what type(C) means in Python.  The Smalltalk
+	class of a class is its metaclass, whose name is ``C class'', which is not a
+	name CPython would ever print."
+
+	| meta |
+	(instance isKindOf: Behavior) ifTrue: [
+		meta := instance ___grailMetaclass___.
+		(meta @env0:notNil and: [meta isKindOf: Behavior])
+			ifTrue: [^ meta @env0:name @env0:asString]].
+	^ instance @env0:class @env0:name @env0:asString
+%
+
+category: 'Grail-Descriptor'
+method: functools_cached_property
 __get__: instance _: owner
 	"The descriptor read.  Reached from object >> ___descriptorGet___: on an
 	INSTANCE read; a read off the class answers the descriptor itself (both
@@ -2856,7 +4084,7 @@ __get__: instance _: owner
 		do: [:ex |
 			ex @env0:return: (TypeError ___signal___:
 				('The ''__dict__'' attribute on '''
-					@env0:, instance @env0:class @env0:name @env0:asString
+					@env0:, (self ___pyOwnerNameFor___: instance)
 					@env0:, ''' instance does not support item assignment for caching '''
 					@env0:, name @env0:asString @env0:, ''' property.'))].
 	^ value

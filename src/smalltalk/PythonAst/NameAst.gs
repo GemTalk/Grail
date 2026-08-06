@@ -297,6 +297,8 @@ printSmalltalkOn: aStream
 				aStream
 					nextPutAll: '(BoundMethod receiver: nil selector: #';
 					nextPutAll: id;
+					nextPutAll: ' definingClass: ';
+					nextPutAll: CallAst classBeingCompiled asString;
 					nextPutAll: ')'.
 				^self].
 			(CallAst classStaticFunctionNames notNil
@@ -381,9 +383,16 @@ printSmalltalkOn: aStream
 				and: [CallAst classBodyBoundNames isNil
 					or: [CallAst classBodyBoundNames includes: id asSymbol]]]]])
 				ifTrue: [
+					"Record the defining class so a staticmethod-style call
+					(a gnv: _generate_next_value_(name, ...), where name is a
+					plain value, not a receiver) can still reach the method when
+					the popped receiver's class does not implement it.  The pop
+					protocol is otherwise unchanged (BoundMethod>>value:value:)."
 					aStream
 						nextPutAll: '(BoundMethod receiver: nil selector: #';
 						nextPutAll: id;
+						nextPutAll: ' definingClass: ';
+						nextPutAll: CallAst classBeingCompiled asString;
 						nextPutAll: ')'.
 					^self
 				].
@@ -605,13 +614,19 @@ printSmalltalkOn: aStream
 	emission stores each captured VALUE on the class's per-class
 	dynamic attrs at DEFINITION time; read it back through the
 	receiver's class chain.  Attr-VALUE expressions
-	(inClassBodyValueEmit) emit inline in the enclosing method where
-	the temps ARE reachable -- excluded."
+	(inClassBodyValueEmit), BASE expressions (inBasesEmit) and
+	DECORATOR expressions (inDecoratorEmit) all emit inline in the
+	enclosing method where the temps ARE reachable -- excluded.  A class
+	decorator is the same kind of expression as a base: ``@mark class C:
+	...'' inside a method evaluates ``mark'' in that method, so hijacking
+	it into a cell read raised NameError for a name the method could see
+	perfectly well."
 	((ctx isKindOf: LoadAst)
 		and: [CallAst classBeingCompiled notNil
 		and: [CallAst inClassBodyValueEmit ~~ true
 		and: [CallAst inBasesEmit ~~ true
-		and: [self ___enclosingFunctionLocalBeyondClass___: id]]]]) ifTrue: [
+		and: [CallAst inDecoratorEmit ~~ true
+		and: [self ___enclosingFunctionLocalBeyondClass___: id]]]]]) ifTrue: [
 		CallAst addCapturedClassName: id.
 		aStream
 			nextPutAll: '(self @env1:___classCell___: #''___cell_';

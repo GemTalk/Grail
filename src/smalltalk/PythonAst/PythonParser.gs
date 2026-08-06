@@ -242,22 +242,43 @@ category: 'Grail-token access'
 method: PythonParser
 skipTypeParams
 	"PEP 695 type-parameter list after a def/class name --
-	``def f[T](...)`` / ``class C[T: bound]:`` / ``def g[*Ts, **P]()``.
-	Parse and DISCARD the balanced bracket group: Grail erases generics
-	(as it does Generic[...]), and the parameter names only appear in
-	annotations, which Grail never evaluates.  test_functools could not
-	even import before this."
+	``def f[T](...)'' / ``class C[T: bound]:'' / ``def g[*Ts, **P]()''.
+	Consumes the balanced bracket group and ANSWERS the parameter names.
 
-	| depth tok |
+	It used to discard them, reasoning that ``the parameter names only appear in
+	annotations, which Grail never evaluates''.  Annotations are evaluated now
+	(PEP 649), and the names are observable in their own right:
+	``f.__type_params__'' is one of functools.WRAPPER_ASSIGNMENTS, and
+	test_functools unpacks it (``T, = f.__type_params__'').
+
+	Only the NAME of each parameter is kept.  A bound or constraint
+	(``[T: int]'', ``[T: (int, str)]'') is consumed and dropped, as are the
+	``*''/``**'' markers of a TypeVarTuple or ParamSpec -- Grail models a type
+	parameter as an opaque placeholder, so its constraints have nothing to act
+	on."
+
+	| depth tok names expectName |
+	names := OrderedCollection new.
 	tok := self peek.
-	(tok notNil and: [tok isOp: '[']) ifFalse: [^ self].
+	(tok notNil and: [tok isOp: '[']) ifFalse: [^ names asArray].
 	depth := 0.
+	expectName := false.
 	[
 		tok := self advance.
-		(tok isOp: '[') ifTrue: [depth := depth + 1].
+		(tok isOp: '[') ifTrue: [
+			depth := depth + 1.
+			depth = 1 ifTrue: [expectName := true]].
 		(tok isOp: ']') ifTrue: [depth := depth - 1].
+		"At depth 1 a comma starts the next parameter; the first identifier after
+		that (or after the opening bracket) is its name.  Anything else at that
+		depth -- a colon and its bound, a star -- is skipped."
+		(depth = 1 and: [tok isOp: ',']) ifTrue: [expectName := true].
+		(depth = 1 and: [expectName and: [tok type == #NAME]]) ifTrue: [
+			names add: tok value asString.
+			expectName := false].
 		depth = 0
-	] whileFalse
+	] whileFalse.
+	^ names asArray
 %
 
 category: 'Grail-parsing - helpers'
@@ -594,10 +615,17 @@ method: PythonParser
 parseCallArgList
 	"Parse function call arguments. Returns an Array of {positional. keywords}."
 
-	| args kwargs tok |
+	| args kwargs sawKeyword sawKwargsUnpack kwNames tok |
 	args := Array new.
 	kwargs := Array new.
-	((tok := self peek) notNil and: [(tok isOp: ')') not]) ifTrue: [
+	"Argument-ordering guards, matching CPython (test_keywordonlyarg
+	testSyntaxErrorForFunctionCall).  ``sawKeyword'' tracks a ``name=value''
+	keyword, ``sawKwargsUnpack'' a ``**'' splat; ``kwNames'' collects keyword
+	names for the repeat check."
+	sawKeyword := false.
+	sawKwargsUnpack := false.
+	kwNames := IdentitySet new.
+	((tok := self peek0 notNil and: [(tok isOp: ')') not]) ifTrue: [
 		[
 			(self peek isOp: ')') ifTrue: [false] ifFalse: [
 				"**kwargs"
@@ -607,9 +635,14 @@ parseCallArgList
 						arg: nil;
 						value: self parseExpression;
 						from: self lastToken to: self lastToken ; yourself).
+					sawKwargsUnpack := true.
 				] ifFalse: [
 				"*args"
 				(self atOp: '*') ifTrue: [
+					"``*x'' fills positional slots, so it may follow a keyword
+					(``f(a=1, *b)'' is legal) but NOT ``**'' unpacking."
+					sawKwargsUnpack ifTrue: [
+						SyntaxError signal: 'iterable argument unpacking follows keyword argument unpacking'].
 					self advance.
 					args add: (StarredAst new
 						value: self parseExpression;
@@ -622,12 +655,23 @@ parseCallArgList
 					(self matchOp: '=') ifTrue: [
 						| name value |
 						name := (expr isKindOf: NameAst) ifTrue: [expr id asString] ifFalse: [nil].
+						name ifNotNil: [
+							(kwNames includes: name asSymbol) ifTrue: [
+								SyntaxError signal: 'keyword argument repeated: ' , name].
+							kwNames add: name asSymbol].
+						sawKeyword := true.
 						value := self parseExpression.
 						kwargs add: (KeywordAst new
 							arg: name;
 							value: value;
 							from: self lastToken to: self lastToken ; yourself).
 					] ifFalse: [
+						"A bare positional argument may not follow a keyword or
+						``**'' unpacking."
+						sawKwargsUnpack ifTrue: [
+							SyntaxError signal: 'positional argument follows keyword argument unpacking'].
+						sawKeyword ifTrue: [
+							SyntaxError signal: 'positional argument follows keyword argument'].
 						"Check for comprehension in generator expression — either ``for`` or ``async for``"
 						((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
 							| generators |
@@ -1298,7 +1342,7 @@ parseFunctionDefWithDecorators: decorators
 	"Parse a function definition with already-parsed decorators."
 
 	| tok nameTok args returns body block funcNode decoratorNames variables writes blocking scope
-	  savedNesting |
+	  savedNesting typeParamNames |
 	tok := self advance. "consume 'def'"
 	nameTok := self expectType: #NAME.
 	"``def _(...)`` -- apply the same parse-time rename NameAst reads
@@ -1306,7 +1350,7 @@ parseFunctionDefWithDecorators: decorators
 	token, not an identifier."
 	nameTok value = '_' ifTrue: [nameTok value: self underscoreDefName asString].
 	self declareWrite: nameTok value asSymbol.
-	self skipTypeParams.
+	typeParamNames := self skipTypeParams.
 	self expect: #OP value: '('.
 	args := self parseFunctionParametersUntil: ')'.
 	self expect: #OP value: ')'.
@@ -1362,15 +1406,15 @@ parseFunctionDefWithDecorators: decorators
 					ifFalse: [each id]]
 			ifFalse: [self ___declarativeDecoratorSymbolFor: each]
 	].
-	funcNode := FunctionDefAst new
+	funcNode := FunctionDefAst new 
 		name: nameTok value asSymbol;
 		args: args;
 		body: block;
 		decorator_list: decoratorNames;
 		returns: returns;
 		type_comment: nil;
-		type_params: Array new;
-		from: tok to: self lastToken ; yourself.
+		type_params: typeParamNames;
+		from: tok to: self lastToken.
 	"Convert to appropriate subclass when inside a class"
 	classNesting > 0 ifTrue: [
 		(decoratorNames includes: #'staticmethod')
@@ -1389,7 +1433,7 @@ parseFunctionParametersUntil: endOp
 	Returns an ArgumentsAst."
 
 	| posonlyargs args vararg kwonlyargs kw_defaults kwarg defaults
-	  sawSlash sawStar allowAnnotations aTok |
+	  sawSlash sawStar allowAnnotations seenNames aTok |
 	posonlyargs := Array new.
 	args := Array new.
 	vararg := nil.
@@ -1454,6 +1498,28 @@ parseFunctionParametersUntil: endOp
 		] whileTrue.
 	].
 
+	"A bare ``*'' must be followed by at least one keyword-only parameter.
+	``*args'' fills vararg and ``*, k'' fills kwonlyargs, so an empty
+	keyword-only section after a star is CPython's ``named arguments must
+	follow bare *'' (test_keywordonlyarg testSyntaxErrorForFunctionDefinition:
+	``def f(p, *)'', ``def f(p1, *, **k1)'')."
+	(sawStar and: [vararg isNil and: [kwonlyargs isEmpty]]) ifTrue: [
+		SyntaxError signal: 'named arguments must follow bare *'].
+	"A parameter name may appear only once across the whole signature -- the
+	posonly / regular / *vararg / keyword-only / **kwarg sections share one
+	namespace.  CPython: ``duplicate argument 'X' in function definition''
+	(same test: ``def f(p1, *, p1=100)'', ``def f(p1, *k1, k1=100)'',
+	``def f(p1, *, k1, k1=100)'', ``def f(p1, *, k1, **k1)'')."
+	seenNames := IdentitySet new.
+	(posonlyargs, args, kwonlyargs,
+		(vararg isNil ifTrue: [#()] ifFalse: [{vararg}]),
+		(kwarg isNil ifTrue: [#()] ifFalse: [{kwarg}]))
+		do: [:p |
+			(seenNames includes: p name asSymbol) ifTrue: [
+				SyntaxError signal:
+					'duplicate argument ''' , p name asString , ''' in function definition'].
+			seenNames add: p name asSymbol].
+
 	^ArgumentsAst new
 		posonlyargs: posonlyargs;
 		args: args;
@@ -1462,7 +1528,7 @@ parseFunctionParametersUntil: endOp
 		kw_defaults: kw_defaults;
 		kwarg: kwarg;
 		defaults: defaults;
-		yourself.
+		yourself
 %
 
 category: 'Grail-parsing - simple statements'

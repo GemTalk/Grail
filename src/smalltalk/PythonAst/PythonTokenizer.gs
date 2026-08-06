@@ -204,6 +204,37 @@ handleIndentation: indent
 
 category: 'Grail-private'
 method: PythonTokenizer
+___dotStartsNumberTail___
+	"After digits and a dot, decide whether the identifier-looking char that
+	follows the dot actually CONTINUES the number literal rather than starting an
+	attribute name.  Two cases, both valid Python:
+
+	  * ``j''/``J''      -- the imaginary suffix: ``0.j'' is the complex 0j;
+	  * ``e''/``E'' + digits (optionally signed) -- an exponent: ``1.e+300''.
+
+	Without this, ``0.j'' parsed as ``0 . j'' (``SmallInteger object has no
+	attribute 'j''') and ``1.e+300'' as ``0 . e'' -- while ``1.5j'', ``.01j'' and
+	``1e3j'' all worked, because only the TRAILING-DOT form reaches here.
+
+	The exponent case REQUIRES the digits, so an attribute read is never stolen:
+	``0.encode'' keeps its old (syntax-error) tokenisation, and the common
+	``0 .bit_length()'' spelling never reaches this branch at all -- whitespace
+	ends the number before the dot is examined."
+
+	| c1 c2 |
+	c1 := self peekAt: 1.
+	c1 ifNil: [^false].
+	(c1 == $j or: [c1 == $J]) ifTrue: [^true].
+	(c1 == $e or: [c1 == $E]) ifFalse: [^false].
+	c2 := self peekAt: 2.
+	c2 ifNil: [^false].
+	(self isDigit: c2) ifTrue: [^true].
+	(c2 == $+ or: [c2 == $-]) ifFalse: [^false].
+	^(self peekAt: 3) notNil and: [self isDigit: (self peekAt: 3)]
+%
+
+category: 'Grail-private'
+method: PythonTokenizer
 isDigit: aChar
 
 	aChar ifNil: [^false].
@@ -477,14 +508,23 @@ tokenizeNumber
 					self advance.
 				].
 			] ifFalse: [
-				"Standalone dot after digits - check if it's really a dot operator"
-				(self isIdentifierStart: next ) ifTrue: [
-					"This is attr access, e.g. 123 .method - stop here"
-				] ifFalse: [
-					"Trailing dot, e.g. 1."
-					isFloat := true.
-					str add: self advance.
-				].
+				"Standalone dot after digits - check if it's really a dot operator.
+				``j''/``J'' is the exception: it is the IMAGINARY suffix, not an
+				attribute, so ``0.j'' is the complex literal 0j (CPython reads the
+				fraction, then an optional exponent, then an optional j).  Treating
+				it as attribute access made ``0.j'' parse as ``0 . j'' and raise
+				``SmallInteger object has no attribute 'j''' -- while ``1.5j'',
+				``.01j'' and ``1e3j'' all worked, because only the trailing-dot form
+				reaches this branch (test_format test_negative_zero uses 0.j/-0.j)."
+				((self isIdentifierStart: next )
+					and: [(self ___dotStartsNumberTail___) not])
+					ifTrue: [
+						"This is attr access, e.g. 123 .method - stop here"
+					] ifFalse: [
+						"Trailing dot, e.g. 1. -- or the dot of 0.j / 1.e+300"
+						isFloat := true.
+						writeStream nextPut: self advance.
+					].
 			].
 		] ifNil: [
 			"Dot at end of source"

@@ -231,10 +231,18 @@ category: 'Grail-Reflection'
 method: PyGenericAlias
 __getattr__: aName
 	"Unknown attributes read through to the origin -- CPython proxies
-	everything but its own handful, so ``list[int].append'' works."
+	everything but its own handful, so ``list[int].append'' works.
+
+	``asSymbol'' because __getattr__ receives a Python STRING by contract while
+	___pyAttrLoad___ reaches primitives (dynamicInstVarAt:) that require a
+	Symbol: forwarding the string raw died with an uncatchable Smalltalk
+	ArgumentTypeError (``for __bases__ expected a Symbol'') the moment anything
+	asked a parameterised generic for an attribute the origin keeps in dynamic
+	storage -- reachable as soon as issubclass started testing union members
+	individually (``issubclass(int, list[int] | Child)'')."
 
 	^ (self @env0:dynamicInstVarAt: #'__origin__')
-		@env1:___pyAttrLoad___: aName
+		@env1:___pyAttrLoad___: aName @env0:asSymbol
 %
 
 ! ___pythonValueAttrs___ MUST be compiled in env 0: Object >> ___pyAttrLoad___
@@ -253,6 +261,211 @@ ___pythonValueAttrs___
 		add: #'__args__';
 		add: #'__parameters__';
 		yourself
+%
+
+! ===============================================================================
+! PyUnionType -- PEP 604's ``X | Y'' at RUNTIME.
+!
+! Grail understood a union only in an ANNOTATION, where the source text is parsed
+! (functools' ___annotationUnionMembers___).  Evaluated as an expression, ``str |
+! bytes'' raised "unsupported operand type(s) for |", so any code that builds a
+! union at runtime -- or merely checks that a library rejects one -- hit an error
+! about the wrong thing entirely.
+!
+! Three receivers can appear on the left of a type union, and all three get the
+! operator: a plain class (Metaclass3), a builtin referenced as a value (which is
+! a BoundMethod in Grail), and a parameterised generic (PyGenericAlias).  Getting
+! only some of them would leave ``list[int] | str'' working and ``str | bytes''
+! not.
+! ===============================================================================
+
+expectvalue /Class
+doit
+PythonInstance subclass: 'PyUnionType'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+PyUnionType comment:
+'PEP 604 union of types -- what ``int | str'' evaluates to, CPython''s
+types.UnionType.  Carries __args__; flattens nested unions, as CPython does, so
+``a | b | c'' has three args rather than a union holding a union.'
+%
+
+expectvalue /Class
+doit
+PyUnionType category: 'Grail-Modules'
+%
+
+set compile_env: 0
+
+expectvalue /Metaclass3
+doit
+PyUnionType removeAllMethods: 1.
+PyUnionType class removeAllMethods: 1.
+%
+
+set compile_env: 1
+
+category: 'Grail-Instance Creation'
+classmethod: PyUnionType
+___of___: left with: right
+	"The union of two type operands, flattening either side that is already a
+	union -- CPython''s ``int | str | bytes'' has three args, not two with one
+	nested."
+
+	| args inst |
+	args := OrderedCollection @env0:new.
+	(self ___membersOf___: left) @env0:do: [:m | args @env0:add: m].
+	(self ___membersOf___: right) @env0:do: [:m | args @env0:add: m].
+	inst := self @env0:new.
+	inst @env0:dynamicInstVarAt: #'__args__' put: (tuple @env0:withAll: args @env0:asArray).
+	^ inst
+%
+
+category: 'Grail-Instance Creation'
+classmethod: PyUnionType
+___isTypeOperand___: anOperand
+	"Is anOperand something ``|'' may union -- a class, a builtin type reached as
+	a value, a parameterised generic, an existing union, or None?
+
+	This gate is why ``|'' does not hijack unrelated code.  CPython's type.__or__
+	answers NotImplemented for a non-type, so ``some_set | operator.add'' still
+	raises TypeError; without the gate, Grail built a union out of a set and a
+	FUNCTION and test_set's TestOnlySetsOperator stopped seeing its expected
+	TypeError.  A builtin referenced as a value is a BoundMethod either way, so
+	the discriminator is whether its selector names a class."
+
+	| resolved |
+	anOperand == nil ifTrue: [^ false].
+	(anOperand @env0:isKindOf: Behavior) ifTrue: [^ true].
+	(anOperand @env0:isKindOf: PyGenericAlias) ifTrue: [^ true].
+	(anOperand @env0:isKindOf: PyUnionType) ifTrue: [^ true].
+	anOperand == (ExecBlock @env0:___pyNone___) ifTrue: [^ true].
+	(anOperand @env0:isKindOf: BoundMethod) ifTrue: [
+		resolved := (System @env0:myUserProfile @env0:symbolList
+			@env0:objectNamed: #Python)
+			@env0:at: anOperand @env0:selector @env0:asSymbol otherwise: nil.
+		^ resolved @env0:notNil and: [resolved @env0:isKindOf: Behavior]].
+	"typing's stand-ins -- ``typing.List[float]'', ``Optional'', ``Union'' -- are
+	_StubGeneric instances with no __origin__ to recognise them by.  They exist
+	precisely to occupy type-expression positions, so ``typing.List[float] |
+	bytes'' is a union; matched by class name because that is the only marker a
+	stub carries."
+	^ anOperand @env0:class @env0:name @env0:asString @env0:= '_StubGeneric'
+%
+
+category: 'Grail-Instance Creation'
+classmethod: PyUnionType
+___membersOf___: anOperand
+	"anOperand''s contribution to a union: its own members when it is already a
+	union, otherwise itself."
+
+	(anOperand @env0:isKindOf: self) ifTrue: [
+		^ (anOperand @env0:dynamicInstVarAt: #'__args__') @env0:asArray].
+	^ Array @env0:with: anOperand
+%
+
+category: 'Grail-Attribute Access'
+method: PyUnionType
+__args__
+	^ self @env0:dynamicInstVarAt: #'__args__'
+%
+
+category: 'Grail-Representation'
+method: PyUnionType
+__repr__
+	"``int | str'', as CPython prints it."
+
+	| parts |
+	parts := WriteStream @env0:on: String @env0:new.
+	self __args__ @env0:doWithIndex: [:a :i |
+		i @env0:> 1 ifTrue: [parts @env0:nextPutAll: ' | '].
+		parts @env0:nextPutAll: (self ___nameOf___: a)].
+	^ parts @env0:contents @env0:asUnicodeString
+%
+
+category: 'Grail-Representation'
+method: PyUnionType
+___nameOf___: anOperand
+	"An operand''s printable name -- its __name__ when it has one (a class, or a
+	builtin reached as a BoundMethod), else its repr."
+
+	^ [(anOperand @env1:___pyAttrLoad___: #'__name__') @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: (anOperand @env1:__repr__) @env0:asString]
+%
+
+category: 'Grail-Operators'
+method: PyUnionType
+__or__: other
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
+	^ PyUnionType ___of___: self with: other
+%
+
+category: 'Grail-Operators'
+method: PyUnionType
+__ror__: other
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
+	^ PyUnionType ___of___: other with: self
+%
+
+! ------------------- the operator on the three type-shaped receivers
+
+category: 'Grail-Operators'
+method: PyGenericAlias
+__or__: other
+	"``list[int] | str''.  A parameterised generic is a valid union member."
+
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
+	^ PyUnionType ___of___: self with: other
+%
+
+category: 'Grail-Operators'
+method: PyGenericAlias
+__ror__: other
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
+	^ PyUnionType ___of___: other with: self
+%
+
+category: 'Grail-Operators'
+method: Metaclass3
+__or__: other
+	"``SomeClass | OtherClass'' -- PEP 604 on a plain class."
+
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
+	^ PyUnionType ___of___: self with: other
+%
+
+category: 'Grail-Operators'
+method: Metaclass3
+__ror__: other
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
+	^ PyUnionType ___of___: other with: self
+%
+
+category: 'Grail-Operators'
+method: BoundMethod
+__or__: other
+	"``str | bytes''.  A builtin referenced as a value is a BoundMethod in Grail,
+	so the union operator has to live here too or the commonest spelling of a
+	union -- builtins on both sides -- would still raise."
+
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
+	^ PyUnionType ___of___: self with: other
+%
+
+category: 'Grail-Operators'
+method: BoundMethod
+__ror__: other
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
+	^ PyUnionType ___of___: other with: self
 %
 
 set compile_env: 0

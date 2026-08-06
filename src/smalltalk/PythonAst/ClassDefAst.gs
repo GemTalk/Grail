@@ -265,7 +265,18 @@ printSmalltalkRuntimeOn: aStream
 					ifFalse: [
 						s := PrettyWriteStream on: Unicode7 new.
 						def generateMethodSourceOn: s.
-						methodSources add: def name asString -> s contents.
+						def isDeleterDecorated
+							ifTrue: [
+								"A property DELETER (``@x.deleter def x(self)'') is unary
+								like the getter; emitting it as ``x'' would clobber the
+								getter.  Redirect to ``___propDeleter_x'', invoked by
+								object>>___pyAttrDelete___ for ``del obj.x''."
+								methodSources add: ('___propDeleter_' , def name asString)
+									-> (self ___redirectUnarySelectorIn: s contents
+										from: def name asString
+										to: ('___propDeleter_' , def name asString))]
+							ifFalse: [
+								methodSources add: def name asString -> s contents].
 						"Keyword-call companion for a simple-positional instance
 						method: a varargs ``_name:kw:'' forwarder so ``obj.m(a,
 						kw=v)'' binds by name rather than DNU-ing (django calls
@@ -739,7 +750,18 @@ printSmalltalkRuntimeOn: aStream
 			nextPutAll: nested name asString;
 			nextPutAll: ''' put: ';
 			nextPutAll: nested name asString;
-			nextPutAll: ' ] value.'; lf.
+			nextPutAll: '.'; lf.
+			"Record the nested class's DOTTED __qualname__ (``Outer.Inner'') from
+			the enclosing class's own qualname, so CPython-style messages (``property
+			of 'Outer.cls' object ...'') report the lexical nesting Grail does not
+			otherwise track."
+			aStream nextPutAll: nested name asString;
+				nextPutAll: ' @env1:___classHolderAttrStore___: #''___qualname___'' put: (';
+				nextPutAll: name;
+				nextPutAll: ' @env1:__qualname__ @env0:, ''.';
+				nextPutAll: nested name asString;
+				nextPutAll: ''').'; lf.
+			aStream nextPutAll: ' ] value.'; lf.
 	].
 	[
 		"Python executes a class body top-to-bottom: a name is class-
@@ -825,6 +847,22 @@ printSmalltalkRuntimeOn: aStream
 					p < pos ifTrue: [bound add: nm]].
 				CallAst classBodyBoundNames: bound.
 				self emitClassBodyIf: stmt on: aStream]].
+		"A class-body statement whose target is an ATTRIBUTE or SUBSCRIPT
+		(``cls.foo = property()'', ``Inner.x = 1'') -- not a bare NAME, so it is
+		not a class attribute and was previously DROPPED.  CPython runs it at
+		class-definition time, mutating a nested class or other object; emit it as
+		a runtime statement here (after nested classes are built, so the target
+		name resolves).  test_propertys PropertyUnreachableAttributeNoName does
+		``cls.foo = property()`` at class-body level."
+		body body doWithIndex: [:stmt :pos |
+			(self ___isClassBodyAttributeAssign___: stmt) ifTrue: [
+				| bound |
+				bound := IdentitySet new.
+				firstBinding keysAndValuesDo: [:nm :p |
+					p < pos ifTrue: [bound add: nm]].
+				CallAst classBodyBoundNames: bound.
+				stmt printSmalltalkOn: aStream.
+				aStream lf]].
 	] ensure: [
 		"RESTORE (not hardcode-off) the body-emit flags: a NESTED class
 		emits inside the OUTER class's attr-value section, and clearing
@@ -948,6 +986,9 @@ printSmalltalkRuntimeOn: aStream
 	the superclass chain consulting.  A method compiles to a Smalltalk METHOD, not
 	a block, so it cannot carry the def-time cascade a nested def does."
 	self emitMethodSignatureTableOn: aStream className: name.
+	"And the receiver name that table drops, so the UNBOUND read can put it
+	back -- CPython's signature(Cls.method) shows ``self''."
+	self emitMethodReceiverTableOn: aStream className: name.
 	"And the same for docstrings.  A class-body def compiles to a Smalltalk
 	METHOD, so it cannot carry the def-time ``___pyNamed___:doc:'' stamp a
 	nested def does -- which left every method inheriting Object's own
@@ -1219,6 +1260,74 @@ printSmalltalkRuntimeOn: aStream
 				className: name
 				siblingNames: siblings]].
 
+	"``b = a'' where ``a'' is a sibling DEF must see the DECORATED def.  CPython
+	guarantees it by applying a decorator at the def statement, so by the time
+	the assignment runs ``a'' is already the decorated object.  Grail emits
+	attribute VALUES in an earlier phase than method decorators, so such an
+	alias captured the undecorated method -- ``b'' answered an UnboundMethod
+	where ``a'' answered a functools.cached_property.
+
+	Re-point the alias now that the decorators have run, and BEFORE the
+	__set_name__ hook below, because being bound to two names is something the
+	descriptor is entitled to object to: cached_property raises
+	``Cannot assign the same cached_property to two different names'', which it
+	can only do if both names actually hold it.
+
+	Scoped to a BARE sibling-def name.  Any other RHS -- a call, a subscript, a
+	module-level name -- keeps its original single evaluation, so this cannot
+	re-run an expression with side effects.
+
+	Read through ___pyAttrLoad___ rather than as a bare send: the decorator
+	stores its result over the compiled method in the per-class attribute
+	store, and a plain ``Cls name'' send looks for a compiled metaclass method
+	that is not there."
+	classAttrs do: [:pair |
+		(pair value notNil
+			and: [(pair value isKindOf: NameAst)
+			and: [siblings includes: pair value id asSymbol]]) ifTrue: [
+				aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key;
+					nextPutAll: ': ('; nextPutAll: name;
+					nextPutAll: ' @env1:___pyAttrLoad___: #''';
+					nextPutAll: pair value id asString; nextPutAll: ''').'; lf]].
+
+	"Declaration order of EVERY class-body binding -- defs and assignments
+	alike -- for the __set_name__ walk.
+
+	The hook below is passed the class ATTRIBUTE names only, and that is
+	deliberate: a metaclass such as ``Enum class'' turns exactly those into
+	members, so adding def names there would make members of methods.  But
+	__set_name__ must visit in true declaration order, and a decorated def is a
+	binding too: with attribute names first and the unordered holder second, a
+	descriptor bound to a decorated def AND a later alias reported its two names
+	backwards -- ``('b' and 'a')'' where CPython says ``('a' and 'b')''.
+
+	Emitted as a separate class-side method so the hook's own argument, and
+	therefore Enum, is untouched.  Object >> ___invokeSetNameHooks___: consults
+	it when present and falls back to the old two-store walk when it is not."
+	[:orderNames |
+	body body do: [:stmt |
+		(stmt isKindOf: FunctionDefAst) ifTrue: [
+			(orderNames includes: stmt name asSymbol)
+				ifFalse: [orderNames add: stmt name asSymbol]].
+		((stmt isKindOf: AssignAst) or: [stmt isKindOf: AnnAssignAst]) ifTrue: [
+			(stmt ___boundTargetNames___) do: [:nm |
+				(orderNames includes: nm) ifFalse: [orderNames add: nm]]]].
+	orderNames isEmpty ifFalse: [
+		| src |
+		src := WriteStream on: String new.
+		src nextPutAll: '___classBodyOrder___'; lf.
+		src nextPutAll: '	^ #('.
+		orderNames do: [:nm |
+			src nextPutAll: ' #'''; nextPutAll: nm asString; nextPut: $'].
+		src nextPutAll: ' )'.
+		self
+			emitCompileMethodOn: name
+			source: src contents
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream]] value: OrderedCollection new.
+
 	"Metaclass post-population hook.  Send a class-side
 	``___pyClassDefined___:`` to the freshly-populated class with its
 	class-body attribute names (declaration order).  Dispatched through
@@ -1244,11 +1353,31 @@ printSmalltalkRuntimeOn: aStream
 	where those names resolve, exactly like a decorator.  Only enum metaclasses
 	answer ___grailSetClassBoundary___:, so this is emitted solely for a
 	``boundary'' keyword (never metaclass= et al.)."
+	"The boundary value and the decorators below both evaluate in the scope
+	ENCLOSING the class statement, so they are emitted under inDecoratorEmit --
+	which suppresses NameAst's class-method closure-cell branch exactly as
+	inBasesEmit does for base names.  Without it, ``@mark class C: ...'' inside a
+	METHOD compiled ``mark'' as a ___classCell___ read nothing had stored and
+	raised NameError for a temp the method could see perfectly well: the classdef
+	is emitted inline there, and only method BODIES string-compile away from the
+	enclosing temps."
+	[ | savedDecoFlag |
+	savedDecoFlag := CallAst inDecoratorEmit.
+	CallAst inDecoratorEmit: true.
+	[
 	keywords notNil ifTrue: [
 		keywords do: [:kw |
 			(kw name notNil and: [kw name asString = 'boundary']) ifTrue: [
 				aStream nextPutAll: name;
 					nextPutAll: ' @env1:___grailSetClassBoundary___: ('.
+				kw value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: ').'; lf].
+			"CLASS KEYWORD ``metaclass='': record it, so a metaclass-defined
+			comparison can be found for ``A < B''.  See object >>
+			___grailSetMetaclass___ for why it is a record, not a construction."
+			(kw name notNil and: [kw name asString = 'metaclass']) ifTrue: [
+				aStream nextPutAll: name;
+					nextPutAll: ' @env1:___grailSetMetaclass___: ('.
 				kw value printSmalltalkWithParenthesisOn: aStream.
 				aStream nextPutAll: ').'; lf]]].
 
@@ -1262,7 +1391,8 @@ printSmalltalkRuntimeOn: aStream
 		aStream nextPutAll: name; nextPutAll: ' := '.
 		deco printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPutAll: ' value: { '; nextPutAll: name; nextPutAll: ' } value: nil.'; lf.
-	].
+	]
+	] ensure: [CallAst inDecoratorEmit: (savedDecoFlag == true)]] value.
 	"CLOSURE CELLS: store every enclosing-function local the class's
 	method bodies referenced (NameAst emitted ___classCell___ reads for
 	them) onto the class's per-class dynamic attrs.  Emitted AFTER the
@@ -1434,6 +1564,16 @@ printSuperclassOn: aStream
 		BoundMethods instead of invoking them)."
 		((only isKindOf: NameAst) and: [only id asString = 'object'])
 			ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
+		"``class M(type):'' -- a metaclass.  Grail has no metaclass OBJECT to
+		subclass: builtins >> type: answers the single canonical ``type''
+		BoundMethod for any class, and no class is bound to the NAME, so the bare
+		name raised NameError and the definition never ran at all.  Root it at
+		PythonInstance, exactly as ``object'' is rooted.  That does not make it a
+		working metaclass -- Grail RECORDS a metaclass rather than routing class
+		creation through one -- but it makes the class exist with its methods,
+		which is what a metaclass-defined comparison needs."
+		((only isKindOf: NameAst) and: [only id asString = 'type'])
+			ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
 		"``class X(str):`` subclasses Unicode32, not the Unicode7 that the
 		name ``str'' resolves to.  GemStone migrates a Unicode string to
 		the canonical wider class IN PLACE when it is handed a character
@@ -1460,6 +1600,24 @@ printSymbolArray: names on: aStream
 	aStream nextPutAll: '#('.
 	names do: [:n | aStream space; nextPutAll: n asString].
 	aStream nextPutAll: ' )'.
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___redirectUnarySelectorIn: sourceString from: oldName to: newName
+	"Rewrite the leading (unary) selector of a generated method source from
+	oldName to newName, keeping the body verbatim.  Used to move a property
+	deleter def off the plain name (which the getter owns) onto a private
+	``___propDeleter_x'' selector.  A method compiled from ``def x(self)'' has
+	no parameters after the stripped self, so its source begins with the bare
+	selector token followed by whitespace/newline -- only that leading token is
+	replaced."
+
+	((sourceString size >= oldName size)
+		and: [(sourceString copyFrom: 1 to: oldName size) = oldName])
+		ifTrue: [
+			^ newName , (sourceString copyFrom: oldName size + 1 to: sourceString size)].
+	^ sourceString
 %
 
 category: 'Grail-code generation'
@@ -1900,7 +2058,15 @@ ___classBodyMethodAliases___
 	| defsByName aliases |
 	defsByName := IdentityDictionary new.
 	self instanceMethodDefs do: [:d |
-		d compilesAsVarargs ifFalse: [defsByName at: d name asSymbol put: d]].
+		"A DECORATED def is not a plain method at runtime -- the decorator
+		replaces it with an object, and ``b = a'' must bind THAT object, which is
+		what CPython does because the decorator has already run by then.  A
+		delegating method would call the undecorated compiled method instead, so
+		``b'' answered an UnboundMethod where ``a'' answered a
+		functools.cached_property.  Left on the class-attribute path, where the
+		alias is re-pointed after the decorators run."
+		(d compilesAsVarargs not and: [d applicableMethodDecorators isEmpty])
+			ifTrue: [defsByName at: d name asSymbol put: d]].
 	aliases := OrderedCollection new.
 	body body do: [:stmt |
 		((stmt isKindOf: AssignAst)
@@ -2056,6 +2222,30 @@ slotsDeclaredStrict
 			ifTrue: [elt value = '__dict__' ifTrue: [hasDict := true]]
 			ifFalse: [^ false]].
 	^ hasDict not
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___isClassBodyAttributeAssign___: stmt
+	"True for a class-body assignment ``<NestedClass>.attr = value'' -- a runtime
+	mutation of a NESTED CLASS that CPython performs at class-definition time and
+	Grail otherwise drops (test_property's PropertyUnreachableAttributeNoName does
+	``cls.foo = property()'').
+
+	Deliberately NARROW: only when the mutated object is a class defined in THIS
+	class body.  A method-name target (``acreate_user.alters_data = True'',
+	Django) is NOT a class-body value -- emitting it would resolve the method name
+	to nothing and NameError -- so it stays dropped, as before.  Restricted to a
+	single attribute target for the same reason (a plain, resolvable statement)."
+
+	| tgt |
+	(stmt isKindOf: AssignAst) ifFalse: [^ false].
+	stmt targets size = 1 ifFalse: [^ false].
+	tgt := stmt targets first.
+	(tgt isKindOf: AttributeAst) ifFalse: [^ false].
+	(tgt value isKindOf: NameAst) ifFalse: [^ false].
+	^ self body body anySatisfy: [:s |
+		(s isKindOf: ClassDefAst) and: [s name asString = tgt value id asString]]
 %
 
 category: 'Grail-Class Compilation'
@@ -2372,6 +2562,47 @@ emitMethodSignatureTableOn: aStream className: aClassName
 		def emitSignatureSpecOn: src
 			skipReceiver: (def isKindOf: StaticFunctionDefAst) not.
 		src nextPut: $;].
+	src nextPutAll: ' @env0:yourself)'.
+	self
+		emitCompileMethodOn: aClassName
+		source: src contents
+		category: 'Grail-Signatures'
+		env: 1
+		classSide: true
+		onStream: aStream
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitMethodReceiverTableOn: aStream className: aClassName
+	"Compile a class-side ``___methodReceiverTable___'' -- method-name -> the
+	name of the receiver parameter the SIGNATURE table drops (``self'',
+	``cls'', or whatever the def wrote).
+
+	ADDITIVE on purpose: ___methodSignatureTable___ stays byte-identical and
+	bound-shaped, which is what a bound access reports, and the unbound read
+	reconstructs CPython's form by prepending this.  Emitting the receiver into
+	the spec itself and stripping it at every bound read would have needed a
+	staticness marker in that table as well, and would have changed what every
+	existing reader sees.
+
+	A @staticmethod has no receiver to record, so it is skipped and its unbound
+	read stays exactly as it is."
+
+	| withReceiver src |
+	withReceiver := self ___allFunctionDefs___ select: [:def |
+		def isOverloadStub not
+			and: [def hasSignatureSpec
+			and: [(def isKindOf: StaticFunctionDefAst) not
+			and: [def ___receiverParamName___ notNil]]]].
+	withReceiver isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___methodReceiverTable___'; lf.
+	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+	withReceiver do: [:def |
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString;
+			nextPutAll: ''' put: '''; nextPutAll: def ___receiverParamName___;
+			nextPutAll: ''''; nextPut: $;].
 	src nextPutAll: ' @env0:yourself)'.
 	self
 		emitCompileMethodOn: aClassName

@@ -76,7 +76,34 @@ def run_one(tc):
     # the shell-side scoreboard buckets these to find shared root
     # causes across a module's tail.
     result = unittest.TestResult()
-    tc.run(result)
+    # Fire class fixtures around the single test.  The per-test bisection
+    # loop (topaz-side) hands us individual TestCase instances, and a bare
+    # ``tc.run()`` does NOT invoke setUpClass/tearDownClass -- those are the
+    # TestSuite's job -- so a test relying on class-level setup (e.g.
+    # ``cls.obj = cls.cls()`` in a shared mixin) saw an unset attribute.
+    # Resilient by design: if setUpClass raises (a fixture that Grail can't
+    # satisfy), fall back to the bare run so one broken class fixture does
+    # not tank the tests that pass without it -- preserving the prior
+    # per-test behaviour exactly where setUpClass was absent or trivial.
+    cls = type(tc)
+    did_setup = False
+    setup = getattr(cls, 'setUpClass', None)
+    if setup is not None:
+        try:
+            setup()
+            did_setup = True
+        except Exception:
+            did_setup = False
+    try:
+        tc.run(result)
+    finally:
+        if did_setup:
+            teardown = getattr(cls, 'tearDownClass', None)
+            if teardown is not None:
+                try:
+                    teardown()
+                except Exception:
+                    pass
     detail = ''
     if result.errors:
         detail = 'E: ' + _first_line(result.errors[0][1])

@@ -302,6 +302,98 @@ ___wrappedIsAbstract___
 			do: [:ex | ex @env0:return: false]
 %
 
+! ------------------- Identity metadata, forwarded to the wrapped function
+! CPython's classmethod / staticmethod expose the wrapped function's identity:
+! ``SomeClass.__dict__['m'].__name__'' is the function's name.  Grail's answered
+! nothing at all, so a caller that inspected one -- functools.wraps copying
+! metadata, or singledispatchmethod naming the method in an arity error -- died
+! with an uncatchable ``env-1 #'__name__' not understood by PyClassMethod''.
+
+category: 'Grail-Attribute Access'
+method: PythonInstance
+___wrappedMeta___: aName
+	"Read aName off the wrapped ``__func__'' through the Python attribute
+	protocol.  Shared by both wrappers."
+
+	^ (self @env0:dynamicInstVarAt: #'__func__') @env1:___pyAttrLoad___: aName
+%
+
+category: 'Grail-Attribute Access'
+method: PyClassMethod
+__name__
+	^ self ___wrappedMeta___: #'__name__'
+%
+
+category: 'Grail-Attribute Access'
+method: PyClassMethod
+__qualname__
+	^ self ___wrappedMeta___: #'__qualname__'
+%
+
+category: 'Grail-Attribute Access'
+method: PyClassMethod
+__doc__
+	^ self ___wrappedMeta___: #'__doc__'
+%
+
+category: 'Grail-Reflection'
+method: PyStaticMethod
+__annotations__
+	"Forwarded like __name__ / __doc__: a decorator that inspects the wrapped
+	callable's annotations must see them through the wrapper, and
+	singledispatchmethod's annotation form infers its dispatch type from them."
+
+	^ self ___wrappedMeta___: #'__annotations__'
+%
+
+category: 'Grail-Reflection'
+method: PyStaticMethod
+__annotate__
+	"PEP 649, forwarded for the same reason: functools.update_wrapper copies
+	__annotate__ (not __annotations__), so a wrapper built around a
+	@classmethod / @staticmethod only inherits annotations if this answers."
+
+	^ self ___wrappedMeta___: #'__annotate__'
+%
+
+category: 'Grail-Reflection'
+method: PyClassMethod
+__annotations__
+	"Forwarded like __name__ / __doc__: a decorator that inspects the wrapped
+	callable's annotations must see them through the wrapper, and
+	singledispatchmethod's annotation form infers its dispatch type from them."
+
+	^ self ___wrappedMeta___: #'__annotations__'
+%
+
+category: 'Grail-Reflection'
+method: PyClassMethod
+__annotate__
+	"PEP 649, forwarded for the same reason: functools.update_wrapper copies
+	__annotate__ (not __annotations__), so a wrapper built around a
+	@classmethod / @staticmethod only inherits annotations if this answers."
+
+	^ self ___wrappedMeta___: #'__annotate__'
+%
+
+category: 'Grail-Attribute Access'
+method: PyStaticMethod
+__name__
+	^ self ___wrappedMeta___: #'__name__'
+%
+
+category: 'Grail-Attribute Access'
+method: PyStaticMethod
+__qualname__
+	^ self ___wrappedMeta___: #'__qualname__'
+%
+
+category: 'Grail-Attribute Access'
+method: PyStaticMethod
+__doc__
+	^ self ___wrappedMeta___: #'__doc__'
+%
+
 ! ___pythonValueAttrs___ MUST be compiled in env 0: Object >> ___pyAttrLoad___
 ! consults it through an env-0 ``respondsTo:'', so an env-1 definition is
 ! invisible to the probe and the hook silently does nothing.
@@ -311,10 +403,14 @@ category: 'Grail-Python Attribute Hook'
 classmethod: PyStaticMethod
 ___pythonValueAttrs___
 	"``__isabstractmethod__'' is a value in CPython, and abc consults it with
-	getattr -- a callable wrapper would test truthy whatever it wrapped."
+	getattr -- a callable wrapper would test truthy whatever it wrapped.  The
+	identity trio is forwarded from the wrapped function and is likewise a value."
 
 	^ IdentitySet new
 		add: #'__isabstractmethod__';
+		add: #'__name__';
+		add: #'__qualname__';
+		add: #'__doc__';
 		yourself
 %
 
@@ -323,6 +419,9 @@ classmethod: PyClassMethod
 ___pythonValueAttrs___
 	^ IdentitySet new
 		add: #'__isabstractmethod__';
+		add: #'__name__';
+		add: #'__qualname__';
+		add: #'__doc__';
 		yourself
 %
 

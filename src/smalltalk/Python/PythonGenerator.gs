@@ -180,13 +180,40 @@ send: aValue
 	].
 	consumerSem @env0:wait.
 	done ifTrue: [
-		escapedException == nil ifFalse: [
-			| ex |
-			ex := escapedException.
-			escapedException := nil.
-			^ ex @env0:signal].
+		escapedException == nil ifFalse: [^ self _signalEscapedException].
 		StopIteration ___signal___: returnValue].
 	^ value
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+_signalEscapedException
+	"Re-signal, on the CONSUMER process, the exception that escaped the generator
+	body (stowed by _forkBody, which runs on the forked producer) -- applying
+	PEP 479.
+
+	A StopIteration that escapes a generator BODY is a bug: it is
+	indistinguishable from the generator's own ``I am exhausted'' signal, so it
+	would silently truncate the consumer's loop instead of surfacing.  PEP 479
+	replaces it with RuntimeError('generator raised StopIteration'), chained onto
+	the StopIteration as both __cause__ and __context__ with
+	__suppress_context__ set -- exactly ``raise RuntimeError(...) from ex''
+	(test_generator_stop TestPEP479).
+
+	The generator's NORMAL termination does NOT come through here: send: / throw:
+	signal that themselves with ``StopIteration ___signal___: returnValue'' when
+	no exception escaped.  Nor does a StopIteration that the body CATCHES, or the
+	one ``yield from'' consumes to end a delegation -- neither escapes the body."
+
+	| ex err msg |
+	ex := escapedException.
+	escapedException := nil.
+	(ex @env0:isKindOf: StopIteration) ifFalse: [^ ex @env0:signal].
+	msg := 'generator raised StopIteration'.
+	err := RuntimeError ___new___.
+	err ___args___: { msg }.
+	err ___setCause___: ex context: ex.
+	^ err ___signal___: msg
 %
 
 category: 'Grail-Generator Protocol'
@@ -211,12 +238,8 @@ throw: anException
 	done ifTrue: [
 		"Body finished — normal completion raises StopIteration; an
 		exception that bubbled out of the body (stowed by _forkBody)
-		re-signals on THIS (consumer) process."
-		escapedException == nil ifFalse: [
-			| ex |
-			ex := escapedException.
-			escapedException := nil.
-			^ ex @env0:signal].
+		re-signals on THIS (consumer) process, PEP 479 applied."
+		escapedException == nil ifFalse: [^ self _signalEscapedException].
 		StopIteration ___signal___: returnValue
 	].
 	^ value

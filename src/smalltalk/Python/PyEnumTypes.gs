@@ -236,6 +236,51 @@ ___grailGnvStaticFor: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailStoredGnvFor: cls
+	"The PyStaticMethod for cls's functional _generate_next_value_, found by
+	walking the superclass chain.  A functional enum stores its gnv keyed by the
+	class that DEFINED it (``ReprEnum('enum_type', {'_generate_next_value_':fn},
+	type=date)''), but a SUBCLASS built off it (``enum_type('MainEnum', dict(
+	first=auto(), ...))'') inherits the gnv and must resolve it for auto()
+	numbering.  nil when neither cls nor any ancestor carries a stored gnv."
+
+	| walker sm |
+	walker := cls.
+	[walker ~~ nil] @env0:whileTrue: [
+		sm := self ___grailGnvStaticFor: walker.
+		sm @env0:notNil ifTrue: [^ sm].
+		walker := walker @env0:superclass].
+	^ nil
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailStoredGnvInvocable: sm
+	"True when a stored functional gnv (a PyStaticMethod) can actually be
+	invoked staticmethod-style -- name as the FIRST positional arg, no self.
+	CPython treats every _generate_next_value_ as a staticmethod, but Grail's
+	class-body codegen represents a plain-def sibling referenced as a value as
+	a receiver-LESS BoundMethod whose call protocol POPS positional[1] (the
+	name) as the receiver -- so ``fn(name, start, count, last_values)'' loses
+	an argument and dispatches the wrong class (the name string).  A
+	@staticmethod def instead compiles class-side and is referenced as a
+	BoundMethod BOUND to the class (receiver ~~ nil), which invokes correctly;
+	a method-local / module-level def is an ExecBlock, which also invokes
+	directly.  Only the receiver-less BoundMethod is unusable -- treat those as
+	``no gnv'' so the enum falls back to default auto numbering (its prior
+	behaviour) rather than crashing the build."
+
+	| f |
+	f := sm @env0:dynamicInstVarAt: #'__func__'.
+	[f isKindOf: PyStaticMethod] @env0:whileTrue: [
+		f := f @env0:dynamicInstVarAt: #'__func__'].
+	^ (f isKindOf: BoundMethod)
+		ifTrue: [f @env0:receiver @env0:notNil or: [f @env0:definingClass @env0:notNil]]
+		ifFalse: [true]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailGlobalEnumMap
 	"Per-SESSION map: enum class -> its SHORT module name, for classes decorated
 	``@enum.global_enum'' (or built via ``_convert_(..., as_global=True)'').  CPython
@@ -297,29 +342,38 @@ category: 'Grail-Enum Metaclass'
 classmethod: Enum
 ___grailGlobalMemberRepr: m
 	"CPython global_enum_repr / global_flag_repr: ``<short_module>.<NAME>'' for a
-	named member; ``<short_module>.<ClassName>(<value>)'' for a nameless flag
-	member (value 0, or an unnamed composite).  A composite name joins its parts
-	with ``|'', each non-digit part module-prefixed."
+	named member; ``<short_module>.<ClassName>(<value>)'' for a nameless flag value
+	(0, or a composite that NO named member covers -- HeadlightsK(8)).  A covered
+	composite joins its decomposition pieces with ``|'', each named (identifier)
+	piece module-prefixed and any leftover KEEP bits left as a bare int
+	(HeadlightsK(13) -> module.LOW_BEAM_K|module.FOG_K|8)."
 
 	| cls modName nm |
 	cls := m @env0:class.
 	modName := self ___grailGlobalEnumMap @env0:at: cls otherwise: cls @env0:name @env0:asString.
 	nm := m @env0:dynamicInstVarAt: #name.
 	(Enum ___grailIsFlagClass: cls) ifTrue: [
-		| val compName parts out |
+		| val pieces named out |
 		val := m @env0:dynamicInstVarAt: #value.
+		"A plain named member (nm set) formats directly; a composite (nm nil)
+		decomposes.  Decide ``nameless'' by whether the decomposition yields any
+		NAMED piece -- a composite that only leftover-covers bits (HeadlightsK(8))
+		has none and formats as Cls(value), NOT as the bare leftover int."
 		(nm @env0:isNil or: [nm == None]) ifTrue: [
-			^ modName @env0:, '.' @env0:, cls @env0:name @env0:asString
-				@env0:, '(' @env0:, val @env0:printString @env0:, ')'].
-		compName := (Enum ___grailCompositeNameFor: m) @env0:asString.
-		parts := compName @env0:subStrings: '|'.
-		out := WriteStream @env0:on: String @env0:new.
-		parts @env0:doWithIndex: [:p :i |
-			i @env0:> 1 ifTrue: [out @env0:nextPut: $|].
-			((p @env0:size @env0:> 0) and: [(p @env0:at: 1) @env0:isDigit])
-				ifTrue: [out @env0:nextPutAll: p]
-				ifFalse: [out @env0:nextPutAll: modName @env0:, '.' @env0:, p]].
-		^ out @env0:contents].
+			pieces := Enum ___grailFlagDecomposePieces: m.
+			named := pieces @env0:reject: [:p |
+				(p @env0:size @env0:> 0) and: [(p @env0:at: 1) @env0:isDigit]].
+			named @env0:isEmpty ifTrue: [
+				^ modName @env0:, '.' @env0:, cls @env0:name @env0:asString
+					@env0:, '(' @env0:, val @env0:printString @env0:, ')'].
+			out := WriteStream @env0:on: String @env0:new.
+			pieces @env0:doWithIndex: [:p :i |
+				i @env0:> 1 ifTrue: [out @env0:nextPut: $|].
+				((p @env0:size @env0:> 0) and: [(p @env0:at: 1) @env0:isDigit])
+					ifTrue: [out @env0:nextPutAll: p]
+					ifFalse: [out @env0:nextPutAll: modName @env0:, '.' @env0:, p]].
+			^ out @env0:contents].
+		^ modName @env0:, '.' @env0:, nm @env0:asString].
 	^ modName @env0:, '.' @env0:, nm @env0:asString
 %
 
@@ -622,8 +676,9 @@ ___grailBuildMembers: cls names: attrNames
 							Enum ___grailStoreOverride: cls name: nameStr callable: dunVal.
 							Enum ___grailCompileOverrideForwarder: cls name: nameStr]]]
 			ifFalse: [
-			| rawValue member built effVal |
+			| rawValue member built effVal tupleAutoDone |
 			built := false.
+			tupleAutoDone := false.
 			"Declared names read through their compiled accessor pair;
 			dyn-swept names (class-body ``if`` stores) read from the holder."
 			hasAccessor := (cls @env0:class
@@ -632,6 +687,47 @@ ___grailBuildMembers: cls names: attrNames
 			rawValue := hasAccessor
 				ifTrue: [cls @env0:perform: nameSym env: 1]
 				ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym].
+			"``TWO = auto(), auto()'': a tuple value carrying auto() markers.  Resolve
+			each marker left-to-right with the SAME generator the scalar path uses,
+			appending its value to genValues (the gnv's last_values) BETWEEN markers so
+			the DEFAULT numeric generator advances: ``auto(), auto()'' is (2, 3).  But
+			``count'' is the number of MEMBERS so far (members size), CONSTANT within a
+			member -- so a ``return count+1'' gnv yields (2, 2)/(3, 3, 3), matching
+			CPython (test_multiple_auto_on_line's two Huh classes differ ONLY in this).
+			Non-marker elements pass through (WEDNESDAY = auto(), 'WED').  Only the
+			INDIVIDUAL generated values, not the whole tuple, belong in last_values, so
+			genValues is updated here and the per-member add below is skipped
+			(tupleAutoDone)."
+			((rawValue isKindOf: tupleClass)
+				and: [rawValue @env0:anySatisfy: [:el | el isKindOf: GrailEnumAuto]]) ifTrue: [
+				| resolvedEls |
+				resolvedEls := OrderedCollection @env0:new.
+				rawValue @env0:do: [:el |
+					(el isKindOf: GrailEnumAuto)
+						ifTrue: [ | r hasExplicit explicitVal |
+							hasExplicit := true.
+							explicitVal := [el ___pyAttrLoad___: #'value']
+								@env0:on: AbstractException do: [:ex | hasExplicit := false. nil].
+							r := hasExplicit
+								ifTrue: [explicitVal]
+								ifFalse: [gnvClass @env0:notNil
+									ifTrue: [(UnboundMethod definingClass: gnvClass selector: #'_generate_next_value_')
+										value: { nameStr. 1. members @env0:size. (list @env0:withAll: genValues) }
+										value: KeyValueDictionary @env0:new]
+									ifFalse: [gnvStaticClass @env0:notNil
+									ifTrue: [cls @env0:perform: #'_generate_next_value_:_:_:_:' env: 1
+										withArguments: { nameStr. 1. members @env0:size. (list @env0:withAll: genValues) }]
+									ifFalse: [(Enum ___grailIsStrEnumClass: cls)
+										ifTrue: [nameStr @env0:asLowercase]
+										ifFalse: [(Enum ___grailIsFlagClass: cls)
+											ifTrue: [Enum ___grailFlagAutoNext: genValues]
+											ifFalse: [Enum ___grailPlainAutoNext: genValues]]]]].
+							genValues @env0:add: r.
+							(r isKindOf: Integer) ifTrue: [lastInt := r. maxInt := maxInt @env0:max: r].
+							resolvedEls @env0:add: r]
+						ifFalse: [resolvedEls @env0:add: el]].
+				rawValue := tupleClass @env0:withAll: resolvedEls.
+				tupleAutoDone := true].
 			"auto() markers resolve to last-integer-value + 1 in
 			declaration order -- except Flag-natured classes, where the
 			next auto value is the next power of two ABOVE the last
@@ -676,10 +772,15 @@ ___grailBuildMembers: cls names: attrNames
 									ifFalse: [Enum ___grailPlainAutoNext: genValues]]]]].
 						autoResolved @env0:at: rawValue put: resolved.
 						rawValue := resolved]].
-			genValues @env0:add: rawValue.
-			(rawValue isKindOf: Integer) ifTrue: [
-				lastInt := rawValue.
-				maxInt := maxInt @env0:max: rawValue].
+			"A tuple-auto member already appended its individual generated values to
+			genValues (and updated lastInt/maxInt) during resolution above; re-adding
+			the whole tuple here would poison last_values for the default numeric
+			generator (sorted([1, (2,3)]) raises)."
+			tupleAutoDone ifFalse: [
+				genValues @env0:add: rawValue.
+				(rawValue isKindOf: Integer) ifTrue: [
+					lastInt := rawValue.
+					maxInt := maxInt @env0:max: rawValue]].
 			"A foreign-mixin enum (``class E(date, Enum)'') carries
 			member_type(*args) -- date(2023, 12, 1) -- as its canonical value.
 			Construct it up front so alias detection, value-lookup and storage
@@ -975,6 +1076,18 @@ ___grailLookupValue: cls value: aValue
 			ifTrue: ['<flag ''']
 			ifFalse: ['<enum '''])
 				@env0:, cls @env0:name @env0:asString @env0:, '''> has no members'].
+	"CPython Enum.__new__: an UNHASHABLE lookup value misses the hash-based value
+	map with a TypeError, then a linear scan compares member values by == --
+	``Directions({'sc'})'' finds the ``frozenset({'sc'})'' member (issue 125710).
+	For a HASHABLE value == implies hash-equality, so the exact lookup at the top
+	already found it and this scan matches nothing new; it only rescues the
+	unhashable case (a set matching a frozenset member) and never shadows the
+	Flag-composite / _missing_ / ValueError paths, all of which come after it for
+	their own value shapes.  ___pyRichEqBool___ is identity-first, so a member
+	whose value IS aValue short-circuits without invoking a custom __eq__."
+	(rec @env0:at: 3) @env0:do: [:m |
+		((m @env0:dynamicInstVarAt: #value) ___pyRichEqBool___: aValue)
+			ifTrue: [^ m]].
 	"CPython Enum.__new__: an unknown value gets one last chance through a
 	user-defined _missing_ classmethod (compiled class-side as _missing_:)
 	before ValueError.  Only a USER _missing_ triggers this -- no base enum
@@ -1388,10 +1501,18 @@ ___grailClassHasGnv: cls
 	Str/ReprEnum class defines either, so a hit is always a user gnv.  Lets the
 	functional builder invoke the same gnv the class-syntax builder does."
 
-	^ (cls @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:'
-			environmentId: 1) @env0:notNil
-		or: [(cls @env0:class @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:_:'
-			environmentId: 1) @env0:notNil]
+	| sm |
+	(cls @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:'
+			environmentId: 1) @env0:notNil ifTrue: [^ true].
+	(cls @env0:class @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:_:'
+			environmentId: 1) @env0:notNil ifTrue: [^ true].
+	"A FUNCTIONAL gnv (Enum('et', {'_generate_next_value_':fn}, ...)) has no
+	compiled selector; it lives in the session gnv-static store, inherited by
+	subclasses.  Honour it only when the stored callable is actually invocable
+	staticmethod-style (see ___grailStoredGnvInvocable:) -- a receiver-less
+	plain-def BoundMethod is not, so those enums keep their default numbering."
+	sm := self ___grailStoredGnvFor: cls.
+	^ sm @env0:notNil and: [self ___grailStoredGnvInvocable: sm]
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1403,15 +1524,25 @@ ___grailGnvValueFor: cls name: nameStr count: count lastValues: lv
 	so one of the two selectors always resolves.  Mirrors the class-syntax
 	builder's invocation in ___grailBuildMembers:."
 
-	| gnvClass |
+	| gnvClass sm |
 	gnvClass := cls @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:'
 		environmentId: 1.
 	gnvClass @env0:notNil ifTrue: [
 		^ (UnboundMethod definingClass: gnvClass selector: #'_generate_next_value_')
 			value: { nameStr. 1. count. lv }
 			value: KeyValueDictionary @env0:new].
-	^ cls @env0:perform: #'_generate_next_value_:_:_:_:' env: 1
-		withArguments: { nameStr. 1. count. lv }
+	(cls @env0:class @env0:whichClassIncludesSelector: #'_generate_next_value_:_:_:_:'
+		environmentId: 1) @env0:notNil ifTrue: [
+		^ cls @env0:perform: #'_generate_next_value_:_:_:_:' env: 1
+			withArguments: { nameStr. 1. count. lv }].
+	"Functional gnv: invoke the stored staticmethod with the four positional
+	args (name, start=1, count, last_values) -- name is the FIRST arg, not a
+	receiver (PyStaticMethod>>value:value: does not bind).  ___grailClassHasGnv:
+	guarantees the stored callable is invocable before we get here."
+	sm := self ___grailStoredGnvFor: cls.
+	sm @env0:notNil ifTrue: [
+		^ sm value: { nameStr. 1. count. lv } value: nil].
+	^ nil
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1628,6 +1759,37 @@ ___grailCompositeNameFor: m
 	parts @env0:isEmpty ifTrue: [^ v @env0:printString].
 	^ parts @env0:inject: nil into: [:acc :p |
 		acc @env0:isNil ifTrue: [p] ifFalse: [acc @env0:, '|' @env0:, p]]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailFlagDecomposePieces: m
+	"The pieces a flag member's INT value decomposes into, in definition order:
+	the NAME (a String) of every named member it subsumes, then -- for a KEEP
+	composite -- the leftover uncovered bits as ONE bare-int String (so
+	HeadlightsK(13) -> {'LOW_BEAM_K'. 'FOG_K'. '8'}).  A named member is included
+	when its value is a non-zero subset; ``leftover'' is v with every included
+	member's bits cleared.  Empty when v is 0 / not an Integer.  Drives the global
+	flag repr; the leftover bare-int piece is what distinguishes an uncovered KEEP
+	value from a fully-named one."
+
+	| v parts covered |
+	parts := OrderedCollection @env0:new.
+	v := m @env0:dynamicInstVarAt: #value.
+	(v isKindOf: Integer) ifFalse: [^ parts].
+	covered := 0.
+	(Enum ___grailAllNamedMembers: m @env0:class) @env0:do: [:mm | | mv |
+		mv := mm @env0:dynamicInstVarAt: #value.
+		((mv isKindOf: Integer)
+			and: [mv @env0:~= 0
+			and: [(v @env0:bitAnd: mv) @env0:= mv]]) ifTrue: [
+			parts @env0:add: (mm @env0:dynamicInstVarAt: #name) @env0:asString.
+			covered := covered @env0:bitOr: mv]].
+	"Leftover = v with all covered bits removed (covered is a subset of v, so
+	v bitXor: covered clears exactly those)."
+	(v @env0:bitXor: covered) @env0:~= 0
+		ifTrue: [parts @env0:add: (v @env0:bitXor: covered) @env0:printString].
+	^ parts
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1992,10 +2154,19 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
-	[ | lastInt maxInt isFlag autoResolved foreignMixin |
+	[ | lastInt maxInt isFlag autoResolved foreignMixin hasGnv genVals |
 	lastInt := 0.
 	maxInt := 0.
 	isFlag := self ___grailIsFlagClass: newCls.
+	"An inherited user _generate_next_value_ (a functional gnv stored in the
+	session gnv-static store, as in ``ReprEnum('enum_type', {'_generate_next_
+	value_':fn}, type=date)'' subclassed by ``enum_type('MainEnum', dict(first=
+	auto(), ...))'') drives auto() numbering for the DICT/pairs member forms
+	below.  ___grailClassHasGnv: is false for a non-invocable (receiver-less
+	plain-def) gnv, so those keep default numbering.  genVals threads the
+	resolved member values as the gnv's last_values; count is members-so-far."
+	hasGnv := Enum ___grailClassHasGnv: newCls.
+	genVals := OrderedCollection @env0:new.
 	"A functional enum built on a foreign-mixin base (``class enum_type(date,
 	Enum)'' then enum_type('MinorEnum', (('june', (2021,12,25)), ...))) carries
 	member_type(*args) as each value, like the class-syntax builder.  nil for a
@@ -2017,6 +2188,11 @@ ___grailFunctional: cls positional: positional keywords: keywords
 		| nameStr rawValue member effVal |
 		nameStr := pair @env0:at: 1.
 		rawValue := pair @env0:at: 2.
+		"An EMPTY member name is invalid (CPython raises ValueError before building
+		anything -- test_empty_string).  Grail would otherwise try to compile an
+		accessor with an empty selector and leak a CompileError."
+		nameStr @env0:isEmpty ifTrue: [
+			^ ValueError ___signal___: 'invalid enum member name: '''''].
 		"auto() markers can arrive through the mapping/pairs forms
 		(BaseEnum('MainEnum', dict(first=auto(), ...))) -- resolve with
 		the same per-class rule as class-body members."
@@ -2024,13 +2200,16 @@ ___grailFunctional: cls positional: positional keywords: keywords
 			(autoResolved @env0:includesKey: rawValue)
 				ifTrue: [rawValue := autoResolved @env0:at: rawValue]
 				ifFalse: [ | resolved |
-					resolved := (Enum ___grailIsStrEnumClass: newCls)
-						ifTrue: [nameStr @env0:asLowercase]
-						ifFalse: [isFlag
-							ifTrue: [maxInt @env0:<= 0
-								ifTrue: [1]
-								ifFalse: [1 @env0:bitShift: maxInt @env0:highBit]]
-							ifFalse: [lastInt @env0:+ 1]].
+					resolved := hasGnv
+						ifTrue: [Enum ___grailGnvValueFor: newCls name: nameStr
+							count: members @env0:size lastValues: (list @env0:withAll: genVals)]
+						ifFalse: [(Enum ___grailIsStrEnumClass: newCls)
+							ifTrue: [nameStr @env0:asLowercase]
+							ifFalse: [isFlag
+								ifTrue: [maxInt @env0:<= 0
+									ifTrue: [1]
+									ifFalse: [1 @env0:bitShift: maxInt @env0:highBit]]
+								ifFalse: [lastInt @env0:+ 1]]].
 					autoResolved @env0:at: rawValue put: resolved.
 					rawValue := resolved]].
 		(rawValue isKindOf: Integer) ifTrue: [
@@ -2058,6 +2237,10 @@ ___grailFunctional: cls positional: positional keywords: keywords
 						Enum ___grailStoreOverride: newCls name: nameStr callable: rawValue.
 						Enum ___grailCompileOverrideForwarder: newCls name: nameStr])]
 			ifFalse: [
+			"Thread this member's value as a prior last_value for the next auto()'s
+			gnv (the class-syntax builder does the same); a gnv that ignores
+			last_values (the date/float fixtures return values[count]) is unaffected."
+			genVals @env0:add: rawValue.
 			(byValue @env0:includesKey: effVal)
 				ifTrue: [member := byValue @env0:at: effVal]
 				ifFalse: [ | canonical |
@@ -2084,10 +2267,17 @@ ___grailFunctional: cls positional: positional keywords: keywords
 		Object's attribute load performs only setter-paired accessors or
 		that category, and wraps everything else as a BoundMethod -- any
 		other category makes Question.who a callable, not the member."
-		(newCls @env0:class) ___compileMethod:
+		"Best-effort: a member NAME that is not a valid Smalltalk selector (a
+		digit-leading string like ``2'', ...) cannot be compiled as an accessor and
+		used to leak a CompileError that aborted the WHOLE build -- so a valid
+		sibling name (the Hebrew alef in ``('א','2','3')'') became unreachable
+		(test_non_latin_number_string).  Skip only the un-compilable accessor; the
+		member is still registered in byName, so cls['2'] resolves via __getitem__."
+		[(newCls @env0:class) ___compileMethod:
 				(nameStr @env0:, '
 	^ self __getitem__: ''' @env0:, nameStr @env0:, '''')
-				category: 'Grail-Class Attrs']]] value.
+				category: 'Grail-Class Attrs']
+			@env0:on: AbstractException do: [:e | nil]]]] value.
 	self ___grailRegistry___ @env0:at: newCls put: (Array @env0:with: byValue with: byName with: members).
 	"Record the functional gnv as a staticmethod in the session gnv-static store;
 	___classDict___ surfaces it in newCls.__dict__ (functional enums have no
@@ -2486,18 +2676,37 @@ __dir__
 	"dir(EnumClass) -- CPython EnumType.__dir__.  Built to mirror test_enum's
 	``enum_dir'' helper EXACTLY, so ``dir(cls) == enum_dir(cls)'' holds by
 	construction (both read the same _member_names_/_member_type_): a fixed set
-	of dunders + the canonical member names, always with __new__ and
-	__init_subclass__ (every BoundMethod access is a fresh object in Grail, so
-	enum_dir's ``_new_member_ is not object.__new__'' / ``__init_subclass__ is
-	not object.__init_subclass__'' are always true -- see the identity note), and
-	for a data-mixed enum unioned with dir(member_type)."
+	of dunders + the canonical member names, __init_subclass__ always, __new__
+	only when this enum does not construct members with object's, and for a
+	data-mixed enum unioned with dir(member_type).
+
+	__new__ used to be added unconditionally, reasoning that enum_dir's
+	``cls._new_member_ is not object.__new__'' was always true because every
+	method access minted a fresh handle.  Handles are now interned per (class,
+	selector), so that test answers honestly: a PLAIN enum's _new_member_ IS
+	object.__new__, enum_dir omits __new__, and adding it here made dir(cls) a
+	strict superset.
+
+	The condition is spelled with _member_type_ rather than by comparing
+	_new_member_ to object.__new__ directly.  It is the same question -- an enum
+	constructs with something other than object.__new__ exactly when a data type
+	is mixed in -- and _member_type_ is the probe this method already relies on
+	just below, whereas reading _new_member_ from here raises.  A class that
+	defines its own __new__ without mixing in a type is covered by the second
+	clause.
+
+	__init_subclass__ stays unconditional because it genuinely differs for every
+	enum: Enum supplies its own, so enum_dir's identity test against object's is
+	false for plain and mixed alike (verified, not assumed)."
 
 	| interesting mt |
 	interesting := Set @env0:new.
 	#('__class__' '__contains__' '__doc__' '__getitem__' '__iter__' '__len__'
-	  '__members__' '__module__' '__name__' '__qualname__' '__new__'
-	  '__init_subclass__')
+	  '__members__' '__module__' '__name__' '__qualname__' '__init_subclass__')
 		@env0:do: [:d | interesting @env0:add: d].
+	((self _member_type_) ~~ object
+		or: [Enum ___grailUserProvides: self selector: #'__new__'])
+			ifTrue: [interesting @env0:add: '__new__'].
 	(Enum ___grailMembers: self) @env0:do: [:m |
 		interesting @env0:add: (m @env0:dynamicInstVarAt: #name) @env0:asString].
 	"CPython EnumType.__dir__ ALSO surfaces __init__/__format__/__repr__/__str__
@@ -3402,6 +3611,11 @@ __repr__
 	concatenate the composite's None name); named members unchanged."
 
 	| v nm0 |
+	"A @global_enum IntFlag reprs its members ``module.NAME'' (global_flag_repr),
+	like Flag/IntEnum/StrEnum -- IntFlag is AbstractPyInt-rooted and inherits
+	NONE of their __repr__, so it needs its own guard (HeadlightsK
+	test_global_repr_keep / _conform1)."
+	(Enum ___grailIsGlobalEnum: self @env0:class) ifTrue: [^ Enum ___grailGlobalMemberRepr: self].
 	v := self @env0:dynamicInstVarAt: #value.
 	nm0 := self @env0:dynamicInstVarAt: #name.
 	((nm0 @env0:isNil or: [nm0 == None])

@@ -327,18 +327,25 @@ __test_simple_enum: positional kw: kwargs
 category: 'Grail-Built-in Functions'
 method: enum
 _iter_bits_lsb: num
-	"_iter_bits_lsb(n) — yield each set bit, least-significant first.
-	Return the materialized list; callers only iterate it."
+	"_iter_bits_lsb(n) — yield each set bit, least-significant first, as a
+	LAZY generator (CPython enum._iter_bits_lsb is a generator function).  A
+	negative argument raises ValueError (``-8 is not a positive integer'')
+	when the generator is CONSUMED, not when it is created: the test passes
+	``list(_iter_bits_lsb(-8))'' to assertRaisesRegex, so the raise must
+	surface inside list() -- an eager materialized list would raise during
+	argument evaluation, outside the assertRaises context (test_enum
+	TestHelpers.test_iter_bits_lsb).  No Grail caller consumes this other
+	than by iteration, so a generator is a safe drop-in for the old list."
 
-	| result n |
-	result := OrderedCollection @env0:new.
-	n := num.
-	[n @env0:> 0] @env0:whileTrue: [
-		| bit |
-		bit := n @env0:bitAnd: (n @env0:negated).
-		result @env0:add: bit.
-		n := n @env0:- bit].
-	^ result
+	^ PythonGenerator withBlock: [:gen | | n |
+		(num @env0:< 0) ifTrue: [
+			ValueError ___signal___: (num @env0:printString
+				@env0:, ' is not a positive integer')].
+		n := num.
+		[n @env0:> 0] @env0:whileTrue: [ | bit |
+			bit := n @env0:bitAnd: (n @env0:negated).
+			gen ___yield___: bit.
+			n := n @env0:- bit]]
 %
 
 category: 'Grail-Built-in Functions'

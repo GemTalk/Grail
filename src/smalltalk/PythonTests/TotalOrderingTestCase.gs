@@ -169,3 +169,22 @@ testClassAttributeDunderAnswersAgainstAForeignOperand
 
 	self assert: testModule @env1:attr_dunder_against_foreign equals: true.
 %
+
+category: 'Grail-Tests - Total Ordering'
+method: TotalOrderingTestCase
+testMetaclassOrdering
+	"@total_ordering on a METACLASS, comparing two classes that name it.
+
+	Python looks an operator up on the operand's TYPE, and for
+	``class A(metaclass=M)'' that is M, so ``A < B'' runs M.__lt__(A, B).  Grail
+	has no metaclass object -- builtins >> type: answers the single canonical
+	``type'' for every class -- so it records the keyword and consults the record
+	where the comparison would otherwise give up.
+
+	Both directions matter: the forward one reaches M.__lt__, and the reverse
+	goes through total_ordering's SYNTHESISED __gt__, whose root probe could not
+	see a metaclass attribute for a class operand."
+
+	self assert: testModule @env1:metaclass_ordering asArray
+		equals: #( true false false true ).
+%

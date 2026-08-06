@@ -199,10 +199,20 @@ ___unpackSequence___
 	A BoundMethod carries a PEP-585 generic-alias __getitem__ (``list[int]'',
 	``Callable[..., T]'') that is NOT the sequence protocol, so it is excluded
 	from the fast path -- ``a, b = len'' then materializes via __iter__ and
-	raises TypeError (not iterable), like CPython's iter(len)."
+	raises TypeError (not iterable), like CPython's iter(len).
+
+	A MAPPING is excluded for the same reason, and it is not a corner case:
+	``a, b = {1: 'x', 2: 'y'}'' raised ``KeyError: 0''.  A dict owns a REAL
+	__getitem__, so it took the fast path, but that __getitem__ is keyed, not
+	positional -- the unpack then asked for key 0.  CPython unpacks a mapping
+	through __iter__ like everything else, yielding its KEYS.  ``keys'' is the
+	discriminator because it is the same duck-type marker Python itself uses
+	for mapping-ness (``dict(obj)'', ``**obj''), so UserDict and any custom
+	Mapping are covered, while no sequence owns it."
 
 	((self ___hasProtocol___: '__getitem__')
-		@env0:and: [(self @env0:isKindOf: BoundMethod) @env0:not])
+		@env0:and: [((self @env0:isKindOf: BoundMethod) @env0:not)
+			@env0:and: [(self ___hasProtocol___: 'keys') @env0:not]])
 		ifTrue: [^ self].
 	^ list @env1:__new__: self
 %
@@ -386,6 +396,94 @@ ___hasUserInit___
 %
 
 classmethod: object
+___grailAbcMetaclassInChain___
+	"True when this class, or one it inherits from, explicitly declared
+	``metaclass=abc.ABCMeta''.
+
+	EXPLICIT is the whole point.  Grail deliberately does not block instantiating
+	a class that merely uses @abc.abstractmethod -- abc.py records why: twilio's
+	AuthStrategy / CredentialProvider are PLAIN classes whose abstract methods
+	raise NotImplementedError from their bodies, and blocking them would break
+	working code.  Neither declares a metaclass, so keying on the declaration
+	leaves them untouched while still honouring a class that asked for ABCMeta."
+
+	| c meta |
+	(self isKindOf: Behavior) ifFalse: [^ false].
+	c := self.
+	[c == nil] @env0:whileFalse: [
+		meta := c ___grailMetaclass___.
+		(meta @env0:notNil
+			and: [(meta ___pyNameOrEmpty___) @env0:= 'ABCMeta']) ifTrue: [^ true].
+		c := c @env0:superclass].
+	^ false
+%
+
+category: 'Grail-Metaclass'
+method: object
+___pyNameOrEmpty___
+	"This class's Python __name__, or '' -- a non-raising probe for the
+	abstractness and metaclass checks."
+
+	^ [(self ___pyAttrLoad___: #'__name__') @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: '']
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailUnimplementedAbstract___
+	"The name of an abstract method this class has NOT implemented, or nil.
+
+	A name is still abstract for C when the FIRST class in C's chain that
+	defines it is the one that marked it abstract -- which is how a concrete
+	subclass clears it by overriding, and why email's Compat32 instantiates
+	while the Policy it derives from does not.
+
+	Abstractness lives on the INTERNED UnboundMethod for (class, selector),
+	because that is the handle @abc.abstractmethod receives and stamps."
+
+	| c seen |
+	c := self.
+	seen := IdentitySet @env0:new.
+	[c == nil] @env0:whileFalse: [
+		(c @env0:methodDictForEnv: 1) @env0:keysDo: [:sel |
+			| str bare owner |
+			"The BARE Python name: ``def add(self, x, y)'' compiles to #'add:_:',
+			and a varargs companion to #'_add:kw:', while the abstractness stamp
+			is keyed by the plain name on the interned UnboundMethod."
+			str := sel @env0:asString.
+			bare := (str @env0:includes: $:)
+				ifTrue: [str @env0:copyFrom: 1 to: (str @env0:indexOf: $:) @env0:- 1]
+				ifFalse: [str].
+			(bare @env0:isEmpty @env0:not
+				and: [(bare @env0:at: 1) @env0:= $_
+					ifTrue: [(bare @env0:size @env0:> 1)
+						and: [(bare @env0:at: 2) @env0:= $_]]
+					ifFalse: [true]]) ifTrue: [
+				(seen @env0:includes: bare @env0:asSymbol) ifFalse: [
+					seen @env0:add: bare @env0:asSymbol.
+					owner := self @env0:whichClassIncludesSelector: sel environmentId: 1.
+					(owner @env0:notNil
+						and: [self ___grailSelectorIsAbstract___: bare @env0:asSymbol on: owner])
+							ifTrue: [^ bare]]]].
+		c := c @env0:superclass].
+	^ nil
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailSelectorIsAbstract___: sel on: owner
+	"Did ``owner'' mark this selector abstract?  Read off the interned
+	UnboundMethod, guarded: most selectors carry no such stamp."
+
+	^ [((UnboundMethod definingClass: owner selector: sel)
+		___pyAttrLoad___: #'__isabstractmethod__') == true]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: false]
+%
+
+category: 'Grail-Instantiation'
+method: object
 ___allocateInstance___: positional kw: keywords
 	"Allocate an instance of self (a class) for ``Cls(*args, **kw)``.
 	A class-body ``def __new__(cls, ...)`` compiles as an INSTANCE-side
@@ -402,7 +500,18 @@ ___allocateInstance___: positional kw: keywords
 	performMethod: family); its convention takes the receiver as the
 	first positional, which here is the class itself."
 
-	| n sel stream found |
+	| n sel stream found abstractName |
+	"CPython refuses to instantiate a class that still has abstract methods.
+	Gated on an EXPLICIT ``metaclass=abc.ABCMeta'' so a plain class using
+	@abc.abstractmethod is untouched -- see ___grailAbcMetaclassInChain___ for
+	why that distinction is the one that matters here."
+	self ___grailAbcMetaclassInChain___ ifTrue: [
+		abstractName := self ___grailUnimplementedAbstract___.
+		abstractName @env0:notNil ifTrue: [
+			TypeError ___signal___: ('Can''t instantiate abstract class '
+				@env0:, (self ___pyNameOrEmpty___)
+				@env0:, ' without an implementation for abstract method '''
+				@env0:, abstractName @env0:, '''')]].
 	found := (self @env0:whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) ~~ nil.
 	found ifFalse: [
 		n := positional @env0:size.
@@ -535,7 +644,30 @@ ___invokeSetNameHooks___: attrNames
 	Answers self: ___pyClassDefined___:'s contract is to return the class the
 	def statement binds."
 
-	| holder |
+	| holder ordered |
+	"True DECLARATION order when ClassDefAst recorded it: defs and assignments
+	interleaved as written.  The two-store walk below cannot reconstruct that --
+	attrNames holds only the assignments, and the holder is unordered -- so a
+	descriptor bound to a decorated def AND a later alias reported its two names
+	backwards.  cached_property names both in its error, and CPython's order is
+	the source order."
+	ordered := ((self @env0:class @env0:whichClassIncludesSelector:
+		#'___classBodyOrder___' environmentId: 1) ~~ nil)
+			ifTrue: [self ___classBodyOrder___]
+			ifFalse: [nil].
+	ordered == nil ifFalse: [
+		holder := (self ___respondsTo___: #dynInstVars)
+			ifTrue: [self @env0:perform: #dynInstVars env: 1]
+			ifFalse: [nil].
+		ordered @env0:do: [:sym |
+			| v |
+			v := self ___classBodyValueAt___: sym.
+			(v == nil
+				and: [holder @env0:notNil
+				and: [(holder @env0:dynamicInstanceVariables) @env0:includes: sym]])
+					ifTrue: [v := holder @env0:dynamicInstVarAt: sym].
+			self ___setNameOn___: v named: sym].
+		^ self].
 	attrNames == nil ifFalse: [
 		attrNames @env0:do: [:nm |
 			| sym |
@@ -573,9 +705,15 @@ ___setNameOn___: aValue named: aSym
 	Only a PythonInstance is asked.  Grail's function stand-ins and the
 	built-in types never implement the hook, and probing every class
 	attribute of every class at every class definition would be a real cost
-	on import."
+	on import.  PropertyDescriptor (the ``property'' builtin and its
+	subclasses) is a statically-defined Smalltalk class, NOT a PythonInstance,
+	yet it DOES implement __set_name__ (test_property_name: ``bar =
+	property(fget)'' must learn its own name 'bar'), so it is admitted too --
+	an extra isKindOf only on the miss, never on the ints/strings/functions
+	that dominate a class body."
 
-	(aValue isKindOf: PythonInstance) ifFalse: [^ self].
+	((aValue isKindOf: PythonInstance)
+		or: [aValue isKindOf: PropertyDescriptor]) ifFalse: [^ self].
 	(aValue ___respondsTo___: #'__set_name__:_:') ifFalse: [^ self].
 	aValue __set_name__: self _: aSym @env0:asString @env0:asUnicodeString.
 	^ self
@@ -752,7 +890,15 @@ __qualname__
 	CPython error messages interpolate it (e.g. textwrap.dedent's
 	``expected str object, not {type(text).__qualname__!r}'')."
 
-	| bt |
+	| bt holder qn |
+	"A NESTED class carries a dotted qualified name (``Outer.Inner'') recorded
+	in its own dynInstVars holder at build time (ClassDefAst nested-class emit);
+	top-level classes have none and fall back to the simple name below."
+	(self ___respondsTo___: #dynInstVars) ifTrue: [
+		holder := self @env0:perform: #dynInstVars env: 1.
+		holder @env0:notNil ifTrue: [
+			qn := holder @env0:dynamicInstVarAt: #'___qualname___'.
+			qn @env0:notNil ifTrue: [^ qn @env0:asString]]].
 	bt := self ___pythonBuiltinTypeName___.
 	bt @env0:notNil ifTrue: [^ bt].
 	"User classes now keep their exact Python name as the GemStone class name
@@ -879,6 +1025,32 @@ ___pyAnd___: alternativeBlock
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___declaresOwnClassAttr___: aSym
+	"True when the receiver's Python CLASS BODY declared a class attribute named
+	aSym, as opposed to inheriting Grail's built-in default.
+
+	ClassDefAst compiles a class-body assignment into an accessor on the
+	class's METACLASS, so that is where the lookup goes.  The discriminator is
+	the owner: for a plain instance the env-1 selector resolves through the
+	metaclass chain all the way to ``Object'' (Grail's own
+	``object>>__class__''), while a declared attribute resolves to the class's
+	OWN metaclass.
+
+	A kernel instance-side implementation (dict, bytes, int, ... all define
+	their own env-1 __class__) is NOT caught, because those classes are not in
+	the metaclass chain -- the lookup still lands on Object and the caller keeps
+	its fast path.  A class receiver answers false: ``SomeClass.__class__'' is
+	its metaclass, not a class-body attribute."
+
+	| owner |
+	(self @env0:isKindOf: Behavior) ifTrue: [^ false].
+	owner := self @env0:class @env0:class
+		@env0:whichClassIncludesSelector: aSym environmentId: 1.
+	^ owner @env0:notNil @env0:and: [owner @env0:~~ Object]
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___descriptorGet___: aValue
 	"Python descriptor protocol on attribute read.  When a class
 	attribute resolves to an object whose class defines ``__get__''
@@ -910,6 +1082,39 @@ ___descriptorGet___: aValue
 	(aValue ___respondsTo___: #'__get__:_:')
 		ifTrue: [^ aValue __get__: self _: self @env0:class].
 	^ aValue
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___instanceClassAttrGet___: aValue
+	"Resolve a CLASS-level attribute read THROUGH AN INSTANCE (self), applying
+	Python's descriptor protocol the same way the ___classAttrOverlayLookup___
+	and ___classChainAttrLookup___ paths already do:
+
+	  * a real __get__ descriptor is asked for its value;
+	  * a plain callable stored as a class attribute (a function/UnboundMethod/
+	    lambda that takes self first) binds self via a MethodBinding, so
+	    ``class C: m = Base.method`` then ``c.m(x)`` runs ``Base.method(c, x)``
+	    (test_userlist's ``test_repr_deep = list_tests.CommonTest.test_repr_deep``,
+	    and the general ``greet2 = Base.greet`` idiom);
+	  * anything else comes back raw.
+
+	The bare ___descriptorGet___: used by the class-body accessor-pair read path
+	handled only the __get__ case and returned a callable UNBOUND, so an instance
+	call reached the function with no receiver (``unbound method ... must be
+	called with an instance as the first argument'').
+
+	Narrowed to UnboundMethod ON PURPOSE.  ___descriptorGet___: (below) already
+	returns a BoundMethod RAW -- deliberately, so a class attribute that is a
+	plain module function (``digest_method = staticmethod(...)'', werkzeug Map's
+	converter-table functions) is NOT redirected at the holder instance -- and
+	binding those the way the runtime-overlay path does regresses that.  An
+	UnboundMethod, by contrast, is what ``OtherClass.method'' answers and has no
+	other meaning than a function awaiting self, so binding it is unambiguous."
+
+	(aValue isKindOf: UnboundMethod)
+		ifTrue: [^ MethodBinding instance: self callable: aValue].
+	^ self ___descriptorGet___: aValue
 %
 
 category: 'Grail-Convenience Methods - Attribute'
@@ -1423,8 +1628,16 @@ ___classCell___: aSym
 	inherit the cells.  An absent cell, or a cell whose local is still
 	unbound (Smalltalk nil), is a NameError."
 
-	| blk v |
+	| blk v meta |
 	blk := self ___dynamicClassAttr___: aSym.
+	"A metaclass method invoked with the USING class as self: ``isinstance(other,
+	M)'' inside M's own method reads a cell stored on M, but self is the class
+	that named M as its metaclass and M is not in its chain -- Grail records a
+	metaclass rather than making the class an instance of it.  Fall back to the
+	recorded metaclass's chain, which is where that cell lives."
+	blk @env0:isNil ifTrue: [
+		meta := self ___grailMetaclass___.
+		meta == nil ifFalse: [blk := meta ___dynamicClassAttr___: aSym]].
 	v := blk @env0:isNil ifTrue: [nil] ifFalse: [blk @env0:value].
 	v == nil ifTrue: [
 		NameError ___signal___: ('free variable '''
@@ -1607,6 +1820,18 @@ ___isDescriptorCallable___: aValue
 			wraps.  functools.singledispatchmethod answers false over a
 			@classmethod / @staticmethod, neither of which binds an instance."
 			^ aValue ___pyBindsSelf___ == true].
+	"Same marker, asked of anything else that reached here.  Not every
+	function stand-in is a PythonInstance: LruCacheWrapper is a plain Object
+	subclass, so an lru_cache-wrapped METHOD read off an instance was not
+	bound and the wrapper received the first ARGUMENT as its receiver --
+	``a.f(1)'' invoked the wrapped method with 1 as self.
+
+	Reached only after the BoundMethod / ExecBlock / UnboundMethod /
+	PythonInstance branches above, so the extra probe falls on plain data
+	class attributes; measured at no change on a class-attribute read
+	benchmark."
+	(aValue ___respondsTo___: #'___pyBindsSelf___')
+		ifTrue: [^ aValue ___pyBindsSelf___ == true].
 	^ false
 %
 
@@ -1758,6 +1983,13 @@ ___isValueDescriptor___: aValue
 	    explicit callers, and the MethodBinding is the path their call
 	    protocol expects."
 
+	"PropertyDescriptor (the ``property'' builtin and subclasses) is a
+	statically-defined Smalltalk class, NOT a PythonInstance, yet it is a genuine
+	DATA descriptor: an instance read of ``x = property(...)'' bound via
+	setattr (dynInstVars, not the class-body accessor pair) must ask it for the
+	value rather than hand it back.  Answered here so the shared descriptor-get
+	paths (___classChainAttrLookup___, the overlay lookups) treat it uniformly."
+	(aValue @env0:isKindOf: PropertyDescriptor) ifTrue: [^ true].
 	(aValue isKindOf: PythonInstance) ifFalse: [^ false].
 	"ASK the marker, do not merely detect it.  Whether one of these binds self
 	can depend on what it wraps: functools.partialmethod answers false over a
@@ -2052,8 +2284,20 @@ ___pyAttrLoad___: aSym
 	Surfaced as the jinja2 ``{% if %}'' compile blocker —
 	idtracking.Symbols.copy() does ``object.__new__(self.__class__)''
 	and trips the BoundMethod-wrap fallback."
+	"``__class__'' is skipped here when the Python class body DECLARED one:
+	CPython lets a user ``__class__'' property override the default, and the
+	legacy abstract-class protocol depends on it -- test_isinstance's
+	AbstractInstance is recognised only through
+	``__class__ = property(getclass)''.  Taking the shortcut answered the real
+	Smalltalk class instead, so isinstance(AbstractSuper(), AbstractSuper) was
+	False and a getter that raises was never called (two ``RuntimeError not
+	raised'' failures).  ``__doc__'' is NOT gated: ClassDefAst gives EVERY class
+	a __doc__ accessor, so the same test would skip the shortcut for every
+	object."
 	((s @env0:= '__class__' or: [s @env0:= '__doc__'])
-		and: [self ___respondsTo___: aSym])
+		and: [(self ___respondsTo___: aSym)
+			and: [(s @env0:= '__class__') @env0:not
+				or: [(self ___declaresOwnClassAttr___: aSym) @env0:not]]])
 			ifTrue: [^ self @env0:perform: aSym env: 1].
 	(self isKindOf: Behavior) ifTrue: [
 		"Class-level dunders that should always read as values, never
@@ -2091,6 +2335,20 @@ ___pyAttrLoad___: aSym
 		last-setattr-wins.  nil means no overlay applies (the default)."
 		(self ___classAttrOverlayLookup___: self name: aSym)
 			@env0:ifNotNil: [:___ovv | ^ ___ovv].
+		"MRO precedence: a DEFINITIONAL per-class store (a nested class def
+		``class Sub: class cls: ...'', an if-branch binding) lands in THIS class's
+		OWN dynInstVars and must beat a same-named accessor INHERITED from a base --
+		``class Sub(Base): class cls: ...'' where Base declares ``cls = None'' must
+		answer Sub's nested class, not Base's None (test_property's
+		PropertyUnreachable mixins).  The setter-paired accessor branch below walks
+		the whole metaclass chain and would find the inherited accessor first, so
+		this own-store check runs ahead of it.  Gated on the name being in the
+		class's OWN holder, so accessor-backed and inherited-only reads are
+		untouched."
+		(self ___ownDynInstVarHas___: aSym)
+			ifTrue: [
+				(self ___classChainAttrLookup___: aSym)
+					@env0:ifNotNil: [:___dv | ^ ___dv]].
 		"Setter-paired class-level accessor on a Python user class —
 		value attribute (``class C: X = 1``)."
 		((self @env0:inheritsFrom: PythonInstance)
@@ -2118,6 +2376,17 @@ ___pyAttrLoad___: aSym
 		applies only to instance receivers."
 		(self ___classChainAttrLookup___: aSym)
 			@env0:ifNotNil: [:___cv | ^ ___cv].
+		"...then the recorded ``metaclass='', which is where Python looks after
+		the class's own dict: reading an attribute off a CLASS consults its TYPE,
+		and for ``class C(metaclass=M)'' that is M.  A DESCRIPTOR found there is
+		asked for its value with the class as the instance -- CPython's
+		``type(cls).__mro__'' lookup followed by ``__get__(cls, type(cls))'' --
+		which is what makes a metaclass-level cached_property reachable as
+		``C.prop''.  Grail records the metaclass rather than building the class
+		through it, so the consult happens here."
+		(self ___grailMetaclass___) @env0:ifNotNil: [:___meta |
+			(___meta ___classChainAttrLookup___: aSym)
+				@env0:ifNotNil: [:___mv | ^ self ___descriptorGet___: ___mv]].
 		"Instance method accessed via the class object — an *unbound* method
 		(a plain function in Python 3).  ``ParentClass.__init__(self, **opts)''
 		(explicit super-init, e.g. flask's ``Environment'' subclass calling
@@ -2227,7 +2496,13 @@ ___pyAttrLoad___: aSym
 		metaclass := self @env0:class @env0:class.
 		((metaclass @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
 			and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil]) ifTrue: [
-			^ self ___descriptorGet___: (self @env0:class @env0:perform: aSym env: 1)
+			"Same descriptor treatment as the overlay path just above: a callable
+			class attribute (function/UnboundMethod/lambda) read through an
+			instance binds self via a MethodBinding, so a class-body ``m =
+			OtherClass.method'' runs ``method(self, ...)'' rather than handing
+			back the raw handle to be called with no receiver (test_userlist
+			test_repr_deep; the general ``greet2 = Base.greet'' idiom)."
+			^ self ___instanceClassAttrGet___: (self @env0:class @env0:perform: aSym env: 1)
 		].
 		"@classmethod / @staticmethod live on the metaclass with
 		``name:`` or ``_name:kw:`` selectors but NO paired unary
@@ -2915,7 +3190,7 @@ ___augmentedOp___: other inplace: iSel binary: bSel
 	``a := a.__add__(b)'' and a class defining only ``__iadd__'' raised a
 	spurious ``unsupported operand'' TypeError (test_operator.test_inplace)."
 
-	| iVa result niSingleton baseSel |
+	| iVa result niSingleton baseSel refSel |
 	niSingleton := Python @env0:at: #NotImplemented otherwise: nil.
 	"CPython: an in-place dunder explicitly set to None (``__iadd__ = None'')
 	DISABLES the operator -- and, unlike a missing __iadd__, blocks the binary
@@ -2942,6 +3217,26 @@ ___augmentedOp___: other inplace: iSel binary: bSel
 			(self ___respondsTo___: iVa) ifTrue: [
 				result := self @env0:perform: iVa env: 1 withArguments: { { other }. nil }.
 				result == niSingleton ifFalse: [^ result]]].
+	"self may define no forward binary dunder at all -- a bare iterator (str_iterator,
+	list_iterator, ...) is not rooted at Grail's ``object'' and so lacks even the
+	__add__: NotImplemented fallback.  Before performing bSel (which would MNU),
+	match the binary + operator and try the RIGHT operand's reflected dunder, so
+	``it = iter(x); it += UserList'' reaches UserList.__radd__(it) rather than
+	dying on a missing __add__: (test_userlist test_mixed_iadd).  Only entered when
+	self genuinely does not answer bSel, so every object-rooted receiver keeps the
+	exact existing path.
+
+	self == nil is EXCLUDED: nil is Grail's unbound-local sentinel (``x += 1''
+	before x is assigned reads nil), and it must reach the ``perform: bSel'' send
+	below so UndefinedObject's env-1 DNU backstop raises UnboundLocalError -- the
+	reflected branch would instead run other.__radd__(nil) and mis-report a
+	TypeError (UnboundLocalErrorTestCase test_python_aug_assign_unbound_raises)."
+	((self ~~ nil) and: [(self ___respondsTo___: bSel) not]) ifTrue: [
+		refSel := ('__r' @env0:, (bSel @env0:asString @env0:copyFrom: 3
+			to: bSel @env0:asString @env0:size)) @env0:asSymbol.
+		(other ___respondsTo___: refSel) ifTrue: [
+			result := other @env0:perform: refSel env: 1 withArguments: { self }.
+			result == niSingleton ifFalse: [^ result]]].
 	^ self @env0:perform: bSel env: 1 withArguments: { other }
 %
 
@@ -2952,6 +3247,10 @@ __ge__: other
 
 	| r |
 	r := self ___classAttrCmp___: #'__ge__' with: other.
+	r == nil ifFalse: [^ r].
+	"...then this class's recorded metaclass: Python looks an operator up on the
+	operand's TYPE, and for a class that is its metaclass."
+	r := self ___grailMetaclassCmp___: #'__ge__' with: other.
 	r == nil ifFalse: [^ r].
 	"Python protocol: no default ordering -- try the reflected
 	operation, else raise the catchable TypeError."
@@ -2993,6 +3292,10 @@ __gt__: other
 	| r |
 	r := self ___classAttrCmp___: #'__gt__' with: other.
 	r == nil ifFalse: [^ r].
+	"...then this class's recorded metaclass: Python looks an operator up on the
+	operand's TYPE, and for a class that is its metaclass."
+	r := self ___grailMetaclassCmp___: #'__gt__' with: other.
+	r == nil ifFalse: [^ r].
 	"Python protocol: no default ordering -- try the reflected
 	operation, else raise the catchable TypeError."
 	^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'
@@ -3001,8 +3304,36 @@ __gt__: other
 category: 'Grail-Hashing & Identity'
 method: object
 __hash__
-	"Return hash value for this object"
+	"Default hash: the Smalltalk identity hash.
 
+	Before falling back, honour a __hash__ installed on the class at RUNTIME
+	(``Cls.__hash__ = fn'').  A class that DECLARES __hash__ is found by the
+	message send that reached here, so arriving at this method means there is no
+	compiled one -- but a dynamic class attribute is invisible to a send and has
+	to be probed explicitly.  Without it, ``hash(x)'' answered the identity hash
+	while ``x.__hash__()'' answered the installed function: the same object
+	hashing two different ways depending on how you asked.
+
+	unittest.mock needs this -- configuring ``m.__hash__`` has to change what
+	hash(m) answers -- and it is what makes runtime-installed dunders consistent
+	with the operators, which already honour a class attribute set after
+	definition.
+
+	Cost is confined to objects whose class declares no __hash__, which are
+	exactly the ones that used to take the identity-hash branch unconditionally."
+
+	| dyn |
+	"Gated on a session flag set by the class-attribute store, because the probe
+	is a superclass-chain walk and this is the dict/set hot path for every object
+	whose class declares no __hash__.  Measured: unguarded, a plain-object hash
+	went 300ns -> 700ns and dict insertion +53%.  With the flag, a program that
+	never installs a dynamic __hash__ pays one dictionary read, and only a program
+	that does pays for the walk."
+	(SessionTemps @env0:current @env0:at: #'GrailDynamicHashSeen' otherwise: false)
+		ifTrue: [
+			dyn := self ___dynamicClassAttr___: #'__hash__'.
+			dyn == nil ifFalse: [
+				^ dyn @env1:___pyCallValue___: { self } kw: nil]].
 	^ self @env0:hash
 %
 
@@ -3036,6 +3367,10 @@ __le__: other
 
 	| r |
 	r := self ___classAttrCmp___: #'__le__' with: other.
+	r == nil ifFalse: [^ r].
+	"...then this class's recorded metaclass: Python looks an operator up on the
+	operand's TYPE, and for a class that is its metaclass."
+	r := self ___grailMetaclassCmp___: #'__le__' with: other.
 	r == nil ifFalse: [^ r].
 	"Python protocol: no default ordering -- try the reflected
 	operation, else raise the catchable TypeError."
@@ -3491,6 +3826,72 @@ ___classAttrCmp___: baseSym with: other
 	^ r
 %
 
+category: 'Grail-Metaclass'
+method: object
+___grailMetaclass___
+	"The ``metaclass='' recorded for this class, or nil.  SESSION-LOCAL and keyed
+	by class: a Class cannot hold dynamic instVars (ImproperOperation 2484)."
+
+	| tbl |
+	(self isKindOf: Behavior) ifFalse: [^ nil].
+	tbl := SessionTemps @env0:current @env0:at: #'GrailClassMetaclass' otherwise: nil.
+	tbl == nil ifTrue: [^ nil].
+	^ tbl @env0:at: self otherwise: nil
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailSetMetaclass___: aMetaclass
+	"Record a ``class C(metaclass=M)'' keyword.  A RECORD, not a construction:
+	builtins >> type: answers the single canonical ``type'' BoundMethod as any
+	class's metaclass, so there is no metaclass object and class creation has
+	nowhere to route.  What it buys is that a metaclass-defined comparison can be
+	found for ``A < B'' -- functools.total_ordering's metaclass case."
+
+	| tbl |
+	((aMetaclass isKindOf: Behavior) and: [self isKindOf: Behavior]) ifFalse: [^ self].
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailClassMetaclass'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	tbl @env0:at: self put: aMetaclass.
+	^ self
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailMetaclassCmp___: baseSym with: other
+	"An ordering dunder defined by this class's recorded METACLASS.  Python looks
+	an operator up on the operand's type, and for ``class A(metaclass=M)'' that is
+	M, so ``A < B'' runs M.__lt__(A, B).
+
+	Mirrors ___classAttrCmp___ deliberately, INCLUDING the invocation:
+	``___pyCallValue___'' on the handle, not UnboundMethod >> value:value:.  The
+	latter goes through performMethod: primitives and raised UncontinuableError
+	2758 (``return ... would cross frame of C primitive'') from inside a
+	comparison, where this path's own Python call is already safe.
+
+	Two shapes to find: a compiled ``def __lt__'' on the metaclass, and an
+	attribute one -- total_ordering SYNTHESISES the derived operators as
+	attributes, which is exactly the case this exists for.  The attribute lives
+	ON the metaclass, so the lookup is ___classChainAttrLookup___ rather than
+	___classAttrDunder___, which would ask the metaclass's own metaclass."
+
+	| meta fn r |
+	meta := self ___grailMetaclass___.
+	meta == nil ifTrue: [^ nil].
+	fn := meta ___classChainAttrLookup___: baseSym.
+	fn == nil ifTrue: [fn := meta ___classAttrDunder___: baseSym].
+	fn == nil ifTrue: [
+		(meta @env0:whichClassIncludesSelector:
+			(baseSym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1)
+				== nil ifTrue: [^ nil].
+		fn := UnboundMethod definingClass: meta selector: baseSym].
+	r := fn ___pyCallValue___: { self. other } kw: nil.
+	(r == (Python @env0:at: #NotImplemented otherwise: nil)
+		or: [r @env0:== #'___NotImplemented___']) ifTrue: [^ nil].
+	^ r
+%
+
 category: 'Grail-Comparison'
 method: object
 ___cmpFallback___: other op: opString reflected: refSelector
@@ -3576,6 +3977,10 @@ __lt__: other
 
 	| r |
 	r := self ___classAttrCmp___: #'__lt__' with: other.
+	r == nil ifFalse: [^ r].
+	"...then this class's recorded metaclass: Python looks an operator up on the
+	operand's TYPE, and for a class that is its metaclass."
+	r := self ___grailMetaclassCmp___: #'__lt__' with: other.
 	r == nil ifFalse: [^ r].
 	"Python protocol: no default ordering -- try the reflected
 	operation, else raise the catchable TypeError."
@@ -3742,6 +4147,33 @@ __setattr__: name _: value
 	^ self ___pyAttrStore___: name put: value
 %
 
+category: 'Grail-Attribute Access'
+classmethod: object
+___pyChangeClassOf: anObject to: newClass
+	"Back ``anObject.__class__ = newClass''.  Compiled by AssignAst as
+	``object ___pyChangeClassOf: <target> to: <value>'' rather than through
+	__setattr__, which would pin the target on the stack as ``self'' and make
+	changeClassTo: raise rtErrCantBecomeSelfOnStack -- here the target is only
+	an ARGUMENT.  changeClassTo: reassigns the class in place when newClass has
+	a compatible instance layout (same format + named-instVar shape) and raises
+	otherwise, which surfaces as CPython's ``__class__ assignment ... layout''
+	TypeError.  Returns None (test_sort test_unsafe_object_compare)."
+
+	(newClass isKindOf: Behavior) ifFalse: [
+		^ TypeError ___signal___:
+			'__class__ must be set to a class, not ''' @env0:,
+			(newClass @env0:class @env0:name @env0:asString) @env0:, ''' object'].
+	[anObject @env0:changeClassTo: newClass]
+		@env0:on: Error
+		do: [:ex |
+			^ TypeError ___signal___:
+				'__class__ assignment: ''' @env0:,
+				(newClass @env0:name @env0:asString) @env0:,
+				''' object layout differs from ''' @env0:,
+				(anObject @env0:class @env0:name @env0:asString) @env0:, ''''].
+	^ None
+%
+
 category: 'Grail-Other'
 method: object
 __sizeof__
@@ -3880,11 +4312,113 @@ ___pyAttrDelete___: aName
 			^ self @env0:instVarAt: slotIdx put: nil
 		]
 	].
+	"Data-descriptor priority: ``del obj.prop'' on a @property runs its deleter
+	(or raises ``has no deleter'') rather than removing an instance attribute.
+	Covers the decorator form (a ``___propDeleter_x'' selector, with a
+	paired getter+setter marking it a property) and the call form (a
+	PropertyDescriptor class attribute)."
+	(self ___pyInstanceDescriptorDelete___: aName) ifTrue: [^ self].
 	(self @env0:dynamicInstVarAt: sym) == nil ifTrue: [
 		AttributeError ___signal___:
 			'''' @env0:, aName @env0:asString @env0:, ''''
 	].
 	self @env0:removeDynamicInstVar: sym
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___pyInstanceDescriptorStore___: aName put: aValue
+	"True when a @property claims ``obj.<aName> = value'' -- see ___pyAttrStore___.
+
+	(1) The @property DECORATOR compiles a paired unary getter + 1-arg setter as
+	    INSTANCE methods.  Their presence together is the property marker -- the
+	    SAME test the read path uses (a plain 1-arg method has no unary partner,
+	    AttributeStoreTestCase) -- so dispatch the store to the setter, which
+	    writes the backing or raises for a read-only property.
+	(2) The CALL form ``x = property(...)'' binds a PropertyDescriptor as a class
+	    attribute; ask it to __set__ (raising ``has no setter'' when read-only)."
+
+	| getterSym setterSym descr |
+	getterSym := aName @env0:asString @env0:asSymbol.
+	setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
+	((self @env0:isKindOf: PythonInstance)
+		and: [(self ___respondsTo___: getterSym)
+			and: [self ___respondsTo___: setterSym]])
+		ifTrue: [
+			self @env0:perform: setterSym env: 1 withArguments: { aValue }.
+			^ true].
+	descr := self ___instancePropertyDescriptorFor___: aName.
+	descr ~~ nil ifTrue: [
+		descr __set__: self _: aValue.
+		^ true].
+	^ false
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___pyInstanceDescriptorDelete___: aName
+	"True when a @property claims ``del obj.<aName>''.
+
+	The DECORATOR deleter lives under a private ``___propDeleter_x'' selector
+	(ClassDefAst redirects it there so it does not clobber the unary getter);
+	its presence alone means ``run the deleter''.  Deliberately NOT gated on the
+	getter+setter pairing: a read-only @property or a @cached_property has that
+	pairing but no deleter, and CPython's cached_property is a NON-data
+	descriptor whose ``del'' drops the cached instance value -- so those fall
+	through to the ordinary instance-attribute delete rather than raising here.
+	The CALL form asks its PropertyDescriptor to __delete__ (which raises ``has
+	no deleter'' when fdel is absent)."
+
+	| delSym descr |
+	delSym := ('___propDeleter_' @env0:, aName @env0:asString) @env0:asSymbol.
+	((self @env0:isKindOf: PythonInstance)
+		and: [self ___respondsTo___: delSym])
+		ifTrue: [self @env0:perform: delSym env: 1. ^ true].
+	descr := self ___instancePropertyDescriptorFor___: aName.
+	descr ~~ nil ifTrue: [descr __delete__: self. ^ true].
+	^ false
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___instancePropertyDescriptorFor___: aName
+	"The PropertyDescriptor bound to aName as a CLASS attribute of this
+	instance's class (or an ancestor), read RAW without firing __get__ -- or nil.
+	Covers a class-body ``x = property(...)'' (via the class-side accessor) and a
+	runtime ``setattr(cls, 'x', property(...))'' (the per-class dynInstVars
+	holder).  Used by the store/delete descriptor hooks for the call form."
+
+	| aSym raw walker holder |
+	aSym := aName @env0:asString @env0:asSymbol.
+	(self @env0:class @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) ~~ nil
+		ifTrue: [
+			raw := [self @env0:class @env0:perform: aSym env: 1]
+				@env0:on: AbstractException do: [:e | nil].
+			(raw @env0:isKindOf: PropertyDescriptor) ifTrue: [^ raw]].
+	walker := self @env0:class.
+	[walker == nil] @env0:whileFalse: [
+		(walker ___respondsTo___: #dynInstVars) ifTrue: [
+			holder := walker @env0:perform: #dynInstVars env: 1.
+			holder == nil ifFalse: [
+				raw := holder @env0:dynamicInstVarAt: aSym.
+				(raw @env0:isKindOf: PropertyDescriptor) ifTrue: [^ raw]]].
+		walker := walker @env0:superClass].
+	^ nil
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___ownDynInstVarHas___: aSym
+	"True when this class's OWN per-class dynInstVars holder binds aSym (a
+	definitional store: a nested class def, an if-branch class-body binding, a
+	setattr on THIS class).  Own-only -- does not walk the superclass chain --
+	so the class-read precedence check stays scoped to genuine MRO conflicts."
+
+	| holder |
+	(self ___respondsTo___: #dynInstVars) ifFalse: [^ false].
+	holder := self @env0:perform: #dynInstVars env: 1.
+	holder == nil ifTrue: [^ false].
+	^ (holder @env0:dynamicInstVarAt: aSym) ~~ nil
 %
 
 category: 'Grail-Attribute Access'
@@ -3915,6 +4449,13 @@ ___pyAttrStore___: aName put: aValue
 
 	(self isKindOf: Behavior) ifTrue: [
 		| setterSym getterSym |
+		"Installing __hash__ on a class at runtime has to become visible to
+		hash(), which reaches Object >> __hash__ by an ordinary message send and
+		so cannot see a dynamic class attribute.  Record that one exists; that
+		method probes only when this flag is set, keeping the hash hot path free
+		for every program that never does this."
+		(aName @env0:asString @env0:= '__hash__') ifTrue: [
+			SessionTemps @env0:current @env0:at: #'GrailDynamicHashSeen' put: true].
 		"(Enum member-reassignment is guarded in __setattr__:_:, the single
 		store entry point, BEFORE the accessor-setter dispatch.)"
 		"Canonical-class overlay: runtime stores on a shared canonical
@@ -3946,6 +4487,14 @@ ___pyAttrStore___: aName put: aValue
 			'''' @env0:, self @env0:name @env0:asString @env0:,
 				''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
 	].
+	"Data-descriptor priority (CPython): a @property intercepts the instance
+	store -- dispatch to its setter, which writes the backing (or raises for a
+	read-only property), instead of writing an instance attribute that would
+	shadow the getter.  Covers both the decorator form (paired unary getter +
+	1-arg setter METHODS) and the call form (a PropertyDescriptor bound as a
+	class attribute).  Returns false when no property claims aName, leaving the
+	ordinary instance-dict store below untouched (AttributeStoreTestCase)."
+	(self ___pyInstanceDescriptorStore___: aName put: aValue) ifTrue: [^ aValue].
 	"Python __slots__ → GemStone named instance variables.  For a
 	PythonInstance receiver: a name declared in __slots__ (i.e. a named
 	instVar) is written directly; otherwise, a strict slotted class

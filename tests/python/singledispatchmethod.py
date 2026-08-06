@@ -183,8 +183,12 @@ def static_annotation_registration():
 def classmethod_descriptor_repr():
     """The descriptor names itself Cls.meth.  A class-side handle answers only
     the bare selector, so the qualification has to come from the class it is
-    bound to."""
-    return repr(ClassScope.t)
+    bound to.
+
+    Reached through __dict__ deliberately: reading the attribute off the class
+    invokes __get__ and answers the UNBOUND wrapper, whose repr omits
+    'descriptor' (see unbound_repr below)."""
+    return repr(ClassScope.__dict__['t'])
 
 
 def arity_error():
@@ -205,7 +209,33 @@ def arity_error():
 
 
 def descriptor_repr():
+    """Through __dict__: the descriptor itself, not what reading the attribute
+    answers."""
+    return repr(ModuleScope.__dict__['t'])
+
+
+def unbound_repr():
+    """Reading the attribute off the CLASS runs __get__ and answers an unbound
+    wrapper -- a different object from the descriptor, and CPython gives it a
+    repr without the word 'descriptor'."""
     return repr(ModuleScope.t)
+
+
+def bound_repr_head():
+    """Reading it off an INSTANCE answers a bound wrapper.  The instance's own
+    repr is embedded, so cut it and assert the stable head."""
+    r = repr(ModuleScope().t)
+    head, sep, _ = r.partition(' of ')
+    return head + ('>' if sep else ' -- NO ``of'' CLAUSE')
+
+
+def read_identities():
+    """The three access paths are three different objects, and the two reads
+    are freshly built rather than cached."""
+    d = ModuleScope.__dict__['t']
+    return ['read is descriptor: %s' % (ModuleScope.t is d),
+            'read is cached: %s' % (ModuleScope.t is ModuleScope.t),
+            type(ModuleScope.t).__module__]
 
 
 def descriptor_name():

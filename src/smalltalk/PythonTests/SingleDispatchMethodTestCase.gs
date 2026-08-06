@@ -198,9 +198,46 @@ testCallWithNoDispatchArgumentRaisesTypeError
 category: 'Grail-Tests - Protocol'
 method: SingleDispatchMethodTestCase
 testDescriptorRepr
+	"The DESCRIPTOR, reached through __dict__."
 
 	self assert: testModule @env1:descriptor_repr
 		equals: '<single dispatch method descriptor ModuleScope.t>'.
+%
+
+category: 'Grail-Tests - Protocol'
+method: SingleDispatchMethodTestCase
+testUnboundReadRepr
+	"Reading the attribute off the class answers a DIFFERENT object from the
+	descriptor -- CPython's unbound wrapper, whose repr drops ``descriptor''.
+	Grail used to answer the descriptor itself for this read."
+
+	self assert: testModule @env1:unbound_repr
+		equals: '<single dispatch method ModuleScope.t>'.
+%
+
+category: 'Grail-Tests - Protocol'
+method: SingleDispatchMethodTestCase
+testBoundReadRepr
+	"Reading it off an instance answers a BOUND wrapper, naming the method and
+	the receiver.  The receiver's own repr is cut in the fixture, so this
+	asserts the stable head."
+
+	self assert: testModule @env1:bound_repr_head
+		equals: '<bound single dispatch method ModuleScope.t>'.
+%
+
+category: 'Grail-Tests - Protocol'
+method: SingleDispatchMethodTestCase
+testReadsAreDistinctObjectsInFunctools
+	"Three access paths, three objects -- and the read is built fresh each
+	time rather than cached, which is what lets the metadata snapshot it takes
+	stay correct.  type(read).__module__ must be functools: a generic
+	MethodBinding used to serve a bound plain method and reported builtins."
+
+	self assert: testModule @env1:read_identities asArray equals: #(
+		'read is descriptor: False'
+		'read is cached: False'
+		'functools' ).
 %
 
 category: 'Grail-Tests - Protocol'

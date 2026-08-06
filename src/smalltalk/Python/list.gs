@@ -140,6 +140,7 @@ __delitem__: index
 	literal-buffer reset) and friends compile to."
 
 	| size idx |
+	self ___noteSortMutation.
 	(index isKindOf: slice) ifTrue: [
 		^ self ___delSlice___: index
 	].
@@ -228,8 +229,26 @@ The argument must be an iterable if specified.'
 category: 'Grail-Sequence Operations'
 method: list
 __iadd__: other
-	"In-place concatenation: self += other. Returns self."
+	"In-place concatenation: self += other. Returns self.
 
+	CPython subtlety: ``list'' has no nb_inplace_add slot, so ``lst += x'' first
+	attempts the ordinary binary add.  When type(x) defines a REFLECTED add
+	(__radd__) that returns a value -- e.g. a collections.UserList on the right --
+	that result (x's type, NOT a list) is what ``lst'' is rebound to; only when the
+	reflected add is absent or punts (NotImplemented) does CPython fall back to
+	extending in place.  Mirror that: if other's class defines its OWN __radd__:,
+	try other.__radd__(self) and honour a non-NotImplemented result; otherwise
+	extend in place.  ``lst += 5'' still reaches the ``not iterable'' TypeError via
+	extend (int.__radd__ punts on a list); ``lst += [..]/(..)/'..''' stay in-place
+	(list/tuple/str define no __radd__).  test_userlist test_mixed_iadd asserts
+	``list += UserList'' yields a UserList."
+
+	| owner ni result |
+	owner := other @env0:class @env0:whichClassIncludesSelector: #'__radd__:' environmentId: 1.
+	owner ~~ nil ifTrue: [
+		ni := Python @env0:at: #NotImplemented otherwise: nil.
+		result := other @env0:perform: #'__radd__:' env: 1 withArguments: { self }.
+		result ~~ ni ifTrue: [^ result]].
 	self extend: other.
 	^ self
 %
@@ -244,6 +263,7 @@ __imul__: n
 	assigned in Smalltalk, hence the temp): ``lst *= o'' with an __index__
 	object used to send env-0 #<= to the object and die on an uncatchable DNU
 	(test_index.ListTestCase.test_inplace_repeat)."
+	self ___noteSortMutation.
 	count := n ___asRepeatCount___.
 	(count @env0:<= 0) ifTrue: [
 		self @env0:size: 0.
@@ -350,6 +370,7 @@ __setitem__: index _: value
 	via ``subpattern[i:i+1] = p``."
 
 	| size idx |
+	self ___noteSortMutation.
 	(index isKindOf: slice) ifTrue: [
 		^ self ___setSlice___: index _: value
 	].
@@ -453,6 +474,7 @@ method: list
 append: item
 	"Add item to the end of the list."
 
+	self ___noteSortMutation.
 	self @env0:add: item.
 	^ None
 %
@@ -462,6 +484,7 @@ method: list
 clear
 	"Remove all items from the list."
 
+	self ___noteSortMutation.
 	self @env0:size: 0.
 	^ None
 %
@@ -487,6 +510,7 @@ extend: iterable
 	``list.extend(str)'' appends -- route CharacterCollections through the
 	__iter__ path below so ``a.extend('eggs')'' matches ``a += list('eggs')''
 	(test_list's test_extend / test_iadd)."
+	self ___noteSortMutation.
 	((iterable isKindOf: Collection)
 		and: [(iterable isKindOf: CharacterCollection) not]) ifTrue: [
 		self @env0:addAll: iterable.
@@ -514,6 +538,7 @@ insert: index _: item
 	"Insert item before the given index."
 
 	| size idx temp |
+	self ___noteSortMutation.
 	size := self @env0:size.
 	idx := index.
 
@@ -540,6 +565,7 @@ pop
 	"Remove and return the last item. Raises IndexError if list is empty."
 
 	| size |
+	self ___noteSortMutation.
 	size := self @env0:size.
 	(size == 0) ifTrue: [
 		IndexError ___signal___: 'pop from empty list'
@@ -554,6 +580,7 @@ pop: index
 	"Remove and return the item at index. Raises IndexError if index is out of range."
 
 	| size idx item stIdx |
+	self ___noteSortMutation.
 	size := self @env0:size.
 	idx := index.
 
@@ -586,6 +613,7 @@ remove: value
 	re-read each step so a mutating/raising __eq__ is safe."
 
 	| i |
+	self ___noteSortMutation.
 	i := 1.
 	[i @env0:<= self @env0:size] @env0:whileTrue: [
 		((self @env0:at: i) ___pyRichEqBool___: value) ifTrue: [
@@ -601,6 +629,7 @@ reverse
 	"Reverse the list in place."
 
 	| reversed |
+	self ___noteSortMutation.
 	reversed := self @env0:reversed.
 	self @env0:size: 0.
 	self @env0:addAll: reversed.
@@ -630,20 +659,27 @@ ___stableSortedArray: keyFn reverse: rev
 			ifTrue: [elem]
 			ifFalse: [keyFn value: { elem } value: nil].
 		dec @env0:at: i put: { sortVal. i. elem }].
+	"Compare via the full rich ``<'' (___cmpLt___): a key whose __lt__ returns
+	NotImplemented falls back to the reflected __gt__ and, if that also punts,
+	raises CPython's ``'<' not supported'' TypeError -- rather than feeding the
+	___NotImplemented___ sentinel to the sort primitive as a non-Boolean
+	(test_sort test_unsafe_object_compare's PointlessComparator).  ___isTruthy___
+	coerces the Python result to a Smalltalk Boolean, as PyObject_RichCompareBool
+	does."
 	sortedArr := dec @env0:sort: [:pa :pb | | sa sb |
 		sa := pa @env0:at: 1.
 		sb := pb @env0:at: 1.
 		rev
 			ifTrue: [
-				(sb __lt__: sa)
+				(sb ___cmpLt___: sa) ___isTruthy___
 					ifTrue: [true]
-					ifFalse: [(sa __lt__: sb)
+					ifFalse: [(sa ___cmpLt___: sb) ___isTruthy___
 						ifTrue: [false]
 						ifFalse: [(pa @env0:at: 2) @env0:< (pb @env0:at: 2)]]]
 			ifFalse: [
-				(sa __lt__: sb)
+				(sa ___cmpLt___: sb) ___isTruthy___
 					ifTrue: [true]
-					ifFalse: [(sb __lt__: sa)
+					ifFalse: [(sb ___cmpLt___: sa) ___isTruthy___
 						ifTrue: [false]
 						ifFalse: [(pa @env0:at: 2) @env0:< (pb @env0:at: 2)]]]].
 	^ sortedArr @env0:collect: [:p | p @env0:at: 3]
@@ -652,15 +688,9 @@ ___stableSortedArray: keyFn reverse: rev
 category: 'Grail-List Methods'
 method: list
 sort
-	"Sort the list IN PLACE using Python's __lt__ for comparison (stable).
-	GemStone's ``sort:'' returns a fresh sorted Array rather than
-	reordering the receiver, so copy the result back over the
-	receiver's slots to get true in-place semantics."
+	"Sort the list IN PLACE using Python's __lt__ for comparison (stable)."
 
-	| sorted |
-	sorted := self ___stableSortedArray: nil reverse: false.
-	self @env0:replaceFrom: 1 to: self @env0:size with: sorted startingAt: 1.
-	^ None
+	^ self ___sortInPlaceKey: nil reverse: false
 %
 
 category: 'Grail-List Methods'
@@ -672,7 +702,7 @@ _sort: positional kw: kwargs
 	place (and returns None).  flask's routing sorts the rule list with
 	a key at request time."
 
-	| keyFn reverse sorted n0 |
+	| keyFn reverse |
 	"key and reverse are keyword-ONLY (Python ``sort(*, key=None,
 	reverse=False)``); any positional argument is a TypeError (list_tests
 	test_sort: u.sort(42, 42))."
@@ -687,19 +717,94 @@ _sort: positional kw: kwargs
 	reverse := kwargs @env0:isNil
 		ifTrue: [false]
 		ifFalse: [kwargs @env0:at: 'reverse' ifAbsent: [false]].
-	"Sort a SNAPSHOT rather than self, so a comparison callback that mutates
-	self during the sort cannot corrupt the sort (___stableSortedArray:
-	reads its own asArray snapshot up front).  CPython forbids mutating a
-	list while it is being sorted and raises ``ValueError: list modified
-	during sort'' (list_tests test_sort's selfmodifyingComparison); detect
-	the size change and do the same before copying the sorted snapshot back
-	over the (unchanged-length) receiver."
+	^ self ___sortInPlaceKey: keyFn reverse: (reverse ___isTruthy___)
+%
+
+category: 'Grail-List Methods'
+method: list
+___sortInPlaceKey: keyFn reverse: rev
+	"Shared in-place sort for sort() and sort(key=,reverse=).  Sorts a SNAPSHOT
+	(via ___stableSortedArray:reverse:, which reads self asArray up front) so a
+	mutating/raising comparator cannot corrupt the sort primitive, and detects
+	mutation of the receiver DURING the sort -- CPython forbids it and raises
+	``ValueError: list modified during sort'' (test_sort test_bug453523 /
+	test_undetected_mutation).  Detection mirrors CPython's allocated=-1
+	sentinel: while this list is registered in the session-local guard, every
+	Python-level mutator marks it (___noteSortMutation), so even a net-zero
+	append+pop is caught -- a size-delta check alone would miss it.  A raising
+	comparator propagates its OWN exception (the guard is cleared in ensure:),
+	matching CPython's ``don't already have another error to report''."
+
+	| guarded n0 sorted wasMutated |
+	guarded := SessionTemps @env0:current @env0:at: #GrailSortGuarded @env0:otherwise: nil.
+	guarded @env0:isNil ifTrue: [
+		guarded := IdentitySet @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailSortGuarded @env0:put: guarded].
+	guarded @env0:add: self.
 	n0 := self @env0:size.
-	sorted := self ___stableSortedArray: keyFn reverse: (reverse ___isTruthy___).
-	(self @env0:size @env0:~= n0) ifTrue: [
+	wasMutated := false.
+	sorted := [self ___stableSortedArray: keyFn reverse: rev]
+		@env0:ensure: [
+			guarded @env0:remove: self @env0:ifAbsent: [].
+			wasMutated := self ___consumeSortMutation].
+	(wasMutated or: [self @env0:size @env0:~= n0]) ifTrue: [
 		ValueError ___signal___: 'list modified during sort'].
 	self @env0:replaceFrom: 1 to: n0 with: sorted startingAt: 1.
 	^ None
+%
+
+category: 'Grail-List Methods'
+method: list
+___noteSortMutation
+	"Record that the receiver was mutated while a list.sort() is in progress on
+	it, so that sort() raises ``list modified during sort'' afterwards.  Called
+	at the top of every Python-level list mutator; a cheap session-local probe
+	that no-ops in the common case (no sort active)."
+
+	| guarded mutated |
+	guarded := SessionTemps @env0:current @env0:at: #GrailSortGuarded @env0:otherwise: nil.
+	guarded @env0:isNil ifTrue: [^ self].
+	(guarded @env0:includes: self) ifFalse: [^ self].
+	mutated := SessionTemps @env0:current @env0:at: #GrailSortMutated @env0:otherwise: nil.
+	mutated @env0:isNil ifTrue: [
+		mutated := IdentitySet @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailSortMutated @env0:put: mutated].
+	mutated @env0:add: self.
+	^ self
+%
+
+category: 'Grail-List Methods'
+method: list
+___consumeSortMutation
+	"Remove and answer whether the receiver was marked mutated during its sort."
+
+	| mutated |
+	mutated := SessionTemps @env0:current @env0:at: #GrailSortMutated @env0:otherwise: nil.
+	mutated @env0:isNil ifTrue: [^ false].
+	(mutated @env0:includes: self) ifFalse: [^ false].
+	mutated @env0:remove: self @env0:ifAbsent: [].
+	^ true
+%
+
+category: 'Grail-Generics'
+classmethod: list
+__getitem__: item
+	"``list[int]'' -- a REAL types.GenericAlias, not Grail's usual collapse to
+	the class itself.
+
+	Grail inverts CPython's default and answers the class from Metaclass3,
+	because dozens of sites in the vendored frameworks subscript a class only to
+	use it as a BASE and want the subscript discarded.  Opting in means
+	overriding here, exactly as functools_partial does -- and it is safe to opt
+	in now that PEP 560's __mro_entries__ is applied where Grail resolves bases,
+	so ``class Foo(list[V]):'' still inherits from list.
+
+	The collapse was observable: ``list[int] is list'' was true, so
+	singledispatch's register() accepted a subscripted generic as a dispatch
+	class and silently registered the UNSUBSCRIPTED one -- CPython rejects it
+	(test_register_genericalias)."
+
+	^ PyGenericAlias ___fromSubscript___: item origin: self
 %
 
 set compile_env: 0

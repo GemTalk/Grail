@@ -8,7 +8,8 @@ expectvalue /Class
 doit
 Object subclass: 'BoundMethod'
   instVarNames: #( receiver selector
-                    sel0 sel1 sel2 sel3 selVarargs )
+                    sel0 sel1 sel2 sel3 selVarargs
+                    definingClass )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -75,6 +76,15 @@ _setReceiver: aReceiver selector: aSymbol
 	selVarargs := ('_' , s , ':kw:') asSymbol.
 %
 
+category: 'Grail-Private'
+method: BoundMethod
+_setDefiningClass: aClass
+	"Record the class an unbound (receiver-less) reference's selector is defined
+	on -- the staticmethod-style invocation fallback in value:value:."
+
+	definingClass := aClass
+%
+
 category: 'Grail-Accessing'
 method: BoundMethod
 receiver
@@ -85,6 +95,20 @@ category: 'Grail-Accessing'
 method: BoundMethod
 selector
 	^ selector
+%
+
+category: 'Grail-Accessing'
+method: BoundMethod
+definingClass
+	"The class whose method dictionary a receiver-LESS (unbound) BoundMethod's
+	selector is defined on, or nil.  Set only for a class-body plain-def sibling
+	referenced as a value (NameAst emits ``receiver: nil ... definingClass:
+	<class>''); it lets value:value: invoke the method staticmethod-style when
+	the popped receiver's class does not implement the selector (a gnv called as
+	_generate_next_value_(name, ...), where name is a plain string).  nil for
+	every ordinary BoundMethod -> no behaviour change for them."
+
+	^ definingClass
 %
 
 category: 'Grail-Comparison'
@@ -158,13 +182,76 @@ receiver: aReceiver selector: aSymbol
 	BoundMethod in SessionTemps.  The guard is a single identity compare on the
 	hot path; the lookup + intern only run for the #type selector."
 
-	| inst bcls |
-	(aSymbol @env0:== #'type') ifTrue: [
-		bcls := Python @env0:at: #builtins otherwise: nil.
-		(bcls @env0:notNil and: [aReceiver @env0:isKindOf: bcls])
-			ifTrue: [^ self ___internTypeSingleton: aReceiver]].
+	| inst |
+	"A MODULE or CLASS receiver is interned per (receiver, selector), so
+	``min is min'' and ``builtins.len is builtins.len'' hold.  CPython's
+	builtins are single objects living in the builtins module, and callers
+	compare them with ``is'': functools' test_subclass_optimization asserts
+	``partial(partial(min, 2), 1).func is min'', and pickle can only save a
+	callable by reference if the name resolves back to the same object.
+
+	An INSTANCE receiver is deliberately NOT interned.  CPython creates a fresh
+	bound method per attribute read, so ``obj.meth is obj.meth'' is False there
+	too -- caching would be the wrong answer as well as unbounded, since the key
+	would retain every receiver ever asked for a method.  Modules and classes
+	are finite and long-lived, so interning those is bounded.
+
+	This generalises what used to be a special case for ``type'' alone (needed
+	so ``type is type'' held); the singleton helper now routes through here."
+
+	(self ___internsReceiver___: aReceiver) ifTrue: [
+		^ self ___internedFor___: aReceiver selector: aSymbol].
 	inst := self @env0:new.
 	inst @env0:_setReceiver: aReceiver selector: aSymbol.
+	^ inst
+%
+
+category: 'Grail-Instance Creation'
+classmethod: BoundMethod
+receiver: aReceiver selector: aSymbol definingClass: aClass
+	"As receiver:selector:, but also record the defining class so a
+	receiver-LESS (unbound) reference can still invoke its method
+	staticmethod-style when the popped receiver does not implement the
+	selector.  Emitted by NameAst for a class-body plain-def sibling referenced
+	as a value; see BoundMethod>>definingClass and value:value:."
+
+	| inst |
+	inst := self @env0:new.
+	inst @env0:_setReceiver: aReceiver selector: aSymbol.
+	inst @env0:_setDefiningClass: aClass.
+	^ inst
+%
+
+category: 'Grail-Instance creation'
+classmethod: BoundMethod
+___internsReceiver___: aReceiver
+	"Is aReceiver one of the identity-stable kinds -- a module instance or a
+	class?  Those are the receivers whose attribute reads CPython answers with
+	one object per name."
+
+	| mcls |
+	(aReceiver @env0:isKindOf: Behavior) ifTrue: [^ true].
+	mcls := Python @env0:at: #module otherwise: nil.
+	^ mcls @env0:notNil and: [aReceiver @env0:isKindOf: mcls]
+%
+
+category: 'Grail-Instance creation'
+classmethod: BoundMethod
+___internedFor___: aReceiver selector: aSymbol
+	"The session-cached handle for (aReceiver, aSymbol), minting it on first
+	ask.  Keyed by receiver IDENTITY: module instances are session-local, so a
+	fresh session re-mints rather than reviving a stale receiver."
+
+	| tbl per inst |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailBoundMethodCache'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	per := tbl @env0:at: aReceiver ifAbsentPut: [KeyValueDictionary @env0:new].
+	inst := per @env0:at: aSymbol otherwise: nil.
+	inst == nil ifFalse: [^ inst].
+	inst := self @env0:new.
+	inst @env0:_setReceiver: aReceiver selector: aSymbol.
+	per @env0:at: aSymbol put: inst.
 	^ inst
 %
 
@@ -206,6 +293,7 @@ ___pythonValueAttrs___
 		add: #'__func__';
 		add: #'__self__';
 		add: #'__annotations__';
+		add: #'__annotate__';
 		add: #'__signature_spec__';
 		add: #'__doc__';
 		add: #'__dict__';
@@ -303,6 +391,15 @@ value: positional value: kwargs
 	blind varargs perform was an uncatchable MNU)."
 	((actualReceiver @env0:class @env0:whichClassIncludesSelector: selVarargs environmentId: 1) == nil)
 		ifTrue: [
+			"Unbound reference whose selector is NOT on the popped receiver's
+			class, but IS on a recorded definingClass: invoke it staticmethod-
+			style (positional[1] bound to the method's first param, not popped as
+			a receiver) -- CPython's `Cls.__dict__['gnv'](name, ...)` semantics.
+			Only a class-body plain-def-sibling reference carries definingClass,
+			so ordinary BoundMethods (definingClass nil) still raise below."
+			(receiver @env0:isNil and: [definingClass @env0:notNil]) ifTrue: [
+				^ (UnboundMethod definingClass: definingClass selector: selector)
+					value: positional value: kwargs].
 			TypeError ___signal___: (selector @env0:asString
 				@env0:, '() takes a different number of arguments ('
 				@env0:, actualArgs @env0:size @env0:printString
@@ -403,11 +500,28 @@ cache_info
 category: 'Grail-Attribute Access'
 method: BoundMethod
 __func__
-	"Python's bound-method ``m.__func__'' — the underlying function.
-	Grail has no separate function object, so return self (the handle
-	is both); callers (django.utils.inspect._get_callable_parameters)
-	only re-inspect it, and inspect.signature is arity-agnostic here."
+	"Python's bound-method ``m.__func__'' -- the underlying function.
 
+	A CLASS receiver is a class-side method, which is what @classmethod /
+	@staticmethod produce in Grail, and CPython's ``classmethod.__func__'' is the
+	PLAIN function: it takes cls as its FIRST argument.  Answering the bound
+	handle made a caller that re-invokes it supply the class twice --
+	``wrapped(cls, arg)'' arrived as two arguments at a method wanting one, and
+	raised ``takes a different number of arguments''.  An UnboundMethod is Grail's
+	stand-in for a function that takes its receiver first, so that is the honest
+	answer here.
+
+	Any other receiver still answers self.  Grail has no separate function object
+	for an instance method, and callers there (django.utils.inspect's
+	_get_callable_parameters) only re-inspect it rather than re-invoke it."
+
+	(receiver isKindOf: Behavior) ifTrue: [
+		"definingClass is the METACLASS, not the class: Grail compiles a
+		@classmethod / @staticmethod onto the metaclass, so an UnboundMethod on
+		the class itself cannot resolve the selector (``type object 'X' has no
+		method ...'').  The receiver supplied at call time is the class, which is
+		an instance of that metaclass."
+		^ UnboundMethod definingClass: receiver @env0:class selector: selector].
 	^ self
 %
 
@@ -500,6 +614,104 @@ __annotations__
 
 category: 'Grail-Attribute Access'
 method: BoundMethod
+__annotate__
+	"PEP 649: the DEFERRED annotations computation.  functools.update_wrapper
+	copies this -- ``__annotate__'' is in WRAPPER_ASSIGNMENTS and
+	``__annotations__'' is not, in CPython 3.14 and here -- so a wrapper only
+	inherits annotations if the wrapped object can produce one.
+
+	Without it, a method or module-level function had __annotations__ but no
+	__annotate__, so update_wrapper (correctly) found nothing to copy and the
+	wrapper kept its own empty one: ``@contextlib.contextmanager'' over an
+	annotated function reported {} where CPython reports the wrapped
+	function's annotations.  In CPython every annotated function has
+	__annotate__, which is why copying just that name suffices there.
+
+	ABSENT -- an AttributeError -- when nothing is annotated, rather than Python
+	None.  CPython's unannotated function does carry __annotate__ = None, but
+	answering None here means update_wrapper copies that None onto the wrapper as
+	a VALUE, and the wrapper's __annotations__ reader then tries to CALL it:
+	``a NoneType does not understand #value:value:'', four uncatchable errors
+	across TestWraps and TestUpdateWrapper.  Raising instead makes
+	update_wrapper skip the name, which is what it already does for every other
+	absent attribute, and the wrapper keeps its own empty annotate.  The only
+	divergence is hasattr(f, '__annotate__') for an unannotated function, which
+	nothing reads."
+
+	| cls fn |
+	"A class-body sibling reference is emitted receiver-less but WITH its
+	definingClass (NameAst: ``BoundMethod receiver: nil selector: #m
+	definingClass: C''), and that is the handle a class-body decorator chain
+	captures.  Resolving through it is what lets ``@functools.wraps(func.__func__)''
+	inside such a decorator copy the annotations -- value:value: already takes
+	the same fallback for calls."
+	(receiver == nil and: [definingClass @env0:notNil]) ifTrue: [
+		^ self ___internedAnnotateForClass___: definingClass
+			name: selector @env0:asString].
+	receiver == nil ifTrue: [
+		AttributeError ___signal___: 'method has no attribute ''__annotate__'''].
+	(receiver isKindOf: module) ifTrue: [
+		fn := receiver @env0:___functionAnnotateFor___: selector @env0:asString.
+		fn == nil ifTrue: [
+			AttributeError ___signal___:
+				'function has no attribute ''__annotate__'''].
+		^ fn].
+	cls := (receiver isKindOf: Class)
+		ifTrue: [receiver]
+		ifFalse: [receiver @env0:class].
+	^ self ___internedAnnotateForClass___: cls name: selector @env0:asString
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___internedAnnotateForClass___: aClass name: aName
+	"The class's annotate function for aName, MEMOIZED per (class, name).
+
+	ClassDefAst builds the ___methodAnnotationsTable___ blocks when the table
+	method RUNS, so an un-memoized read answers a different object every time --
+	and functools' check_wrapper asserts the wrapper and the wrapped share the
+	VERY SAME object for every name in WRAPPER_ASSIGNMENTS.  Memoizing gives a
+	method's __annotate__ the identity stability a nested def gets from its
+	def-time stamp.
+
+	Session-local, like every other Grail handle cache: these are transient and
+	must not be committed."
+
+	| store perClass fn |
+	store := SessionTemps @env0:current
+		@env0:at: #'GrailMethodAnnotateCache'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	perClass := store @env0:at: aClass ifAbsentPut: [KeyValueDictionary @env0:new].
+	fn := perClass @env0:at: aName otherwise: nil.
+	fn == nil ifFalse: [^ fn].
+	fn := self ___rawAnnotateForClass___: aClass name: aName.
+	fn == nil ifTrue: [
+		"Absent, not None -- see __annotate__ for why answering None breaks
+		update_wrapper."
+		AttributeError ___signal___: 'method has no attribute ''__annotate__'''].
+	perClass @env0:at: aName put: fn.
+	^ fn
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___rawAnnotateForClass___: aClass name: aName
+	"Superclass walk for the annotate FUNCTION itself, where
+	___methodAnnotationsForClass___:name: walks for the dict it computes.  Same
+	env-1 probe, for the same reason: the table is compiled in environment 1, so
+	an env-0 canUnderstand: would never see it."
+
+	| tbl v |
+	aClass == nil ifTrue: [^ nil].
+	((aClass @env0:class @env0:whichClassIncludesSelector: #'___methodAnnotationsTable___' environmentId: 1) ~~ nil) ifTrue: [
+		tbl := aClass ___methodAnnotationsTable___.
+		v := tbl @env0:at: aName otherwise: nil.
+		v == nil ifFalse: [^ v]].
+	^ self ___rawAnnotateForClass___: (aClass @env0:superclass) name: aName
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
 __signature_spec__
 	"The def-time parameter spec inspect.signature reads.  A method's lives on
 	its DEFINING class (a class-side ___methodSignatureTable___ compiled by
@@ -550,10 +762,19 @@ __doc__
 	__signature_spec__ do."
 
 	| cls doc |
-	receiver == nil ifTrue: [^ ExecBlock @env0:___pyNone___].
-	cls := (receiver isKindOf: Class)
-		ifTrue: [receiver]
-		ifFalse: [receiver @env0:class].
+	"Receiver-less but with a definingClass: a class-body sibling reference (see
+	__annotate__ and value:value: for the same fallback).  Without this, a
+	decorator chain that captures such a handle and copies from it -- ``@wraps
+	(func.__func__)'' -- produced a wrapper whose __doc__ was None."
+	cls := (receiver == nil and: [definingClass @env0:notNil])
+		ifTrue: [definingClass]
+		ifFalse: [
+			receiver == nil
+				ifTrue: [nil]
+				ifFalse: [(receiver isKindOf: Class)
+					ifTrue: [receiver]
+					ifFalse: [receiver @env0:class]]].
+	cls == nil ifTrue: [^ ExecBlock @env0:___pyNone___].
 	doc := self ___methodDocForClass___: cls name: selector @env0:asString.
 	^ doc ifNil: [ExecBlock @env0:___pyNone___]
 %
@@ -617,13 +838,36 @@ ___methodAnnotationsForClass___: aClass name: aName
 category: 'Grail-Attribute Access'
 method: BoundMethod
 __qualname__
-	"Python's ``func.__qualname__'' — return the same string as
-	__name__ for now.  Real qualname encodes lexical nesting
-	(``OuterClass.method'') which Grail doesn't track on
-	BoundMethods, so the simpler name suffices for inspection
-	consumers that just want a printable identifier."
+	"Python's ``func.__qualname__''.
 
+	A CLASS receiver is a class-side method -- a @staticmethod or @classmethod --
+	and CPython qualifies it as ``Cls.name''.  Answering the bare name left it
+	unresolvable: pickle saves a callable by reference by walking its qualname
+	from the module, and ``cached_staticmeth'' is not a module attribute while
+	``Host.cached_staticmeth'' is.
+
+	Other receivers keep the bare name.  Grail does not track lexical nesting on
+	a BoundMethod, so a module-level function answers its own name (which is
+	what CPython gives it too) and a bound instance method answers the name
+	rather than ``Cls.meth''."
+
+	| n |
+	n := self __name__ @env0:asString.
+	(receiver @env0:isKindOf: Behavior) ifTrue: [
+		^ ((self ___receiverQualname___) @env0:, '.' @env0:, n) @env0:asUnicodeString].
 	^ self __name__
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___receiverQualname___
+	"The class receiver's own __qualname__, for prefixing a class-side method.
+	Falls back to the Smalltalk class name when the class carries no Python
+	qualname."
+
+	^ [(receiver __qualname__) @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: receiver @env0:name @env0:asString]
 %
 
 category: 'Grail-Attribute Access'
@@ -639,7 +883,25 @@ __module__
 
 	(receiver isKindOf: module) ifTrue: [
 		^ receiver @env1:___pyAttrLoad___: #'__name__'].
-	^ receiver @env0:class @env0:name @env0:asString
+	"A CLASS receiver is a class-side method (@staticmethod / @classmethod).
+	``receiver class name'' answered the METACLASS -- ``Host class'' -- which is
+	not a module at all, so pickle looked for a module by that name, failed, and
+	fell back to '__main__'.  The defining class knows its module; ask it."
+	(receiver @env0:isKindOf: Behavior) ifTrue: [
+		^ self ___moduleOfClass___: receiver].
+	"An instance receiver: the module that defined its class."
+	^ self ___moduleOfClass___: receiver @env0:class
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___moduleOfClass___: aClass
+	"aClass's Python __module__, falling back to the Smalltalk class name when
+	it has none (a kernel class reached as a receiver)."
+
+	^ [(aClass __module__) @env0:asString @env0:asUnicodeString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: aClass @env0:name @env0:asString]
 %
 
 set compile_env: 0

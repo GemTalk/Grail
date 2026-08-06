@@ -1319,6 +1319,27 @@ moduleClassBeingCompiled: aClassOrNil
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
+moduleNameBeingCompiled
+	"The Python name of the module being compiled ('collections.abc'), or nil
+	outside a module compilation.
+
+	The module CLASS alone does not answer this: its Smalltalk name is mangled
+	from the dotted Python one.  FunctionDefAst stamps it onto a closure's
+	__module__, which a closure otherwise cannot know -- a module-level def is a
+	BoundMethod and gets its module by forwarding to the receiving module, and
+	that route does not exist for a block."
+
+	^ self ___compileContext___ at: #'moduleNameBeingCompiled' otherwise: nil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+moduleNameBeingCompiled: aStringOrNil
+	self ___compileContext___ at: #'moduleNameBeingCompiled' put: aStringOrNil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
 functionBeingCompiled
 	"The FunctionDefAst whose body is currently being emitted (nil at
 	module body scope).  Set/restored by FunctionDefAst >> printBodyOn:
@@ -1455,6 +1476,18 @@ inBasesEmit
 	^ self ___compileContext___ at: #'inBasesEmit' otherwise: nil
 %
 
+category: 'Grail-Compile Context'
+classmethod: CallAst
+inDecoratorEmit
+	"True while ClassDefAst emits a class DECORATOR expression (or the
+	``boundary'' keyword value).  Like inBasesEmit: those expressions are
+	emitted INLINE in the scope enclosing the class statement, where enclosing
+	temps are reachable, so NameAst's class-method closure-cell branch must not
+	hijack a bare name into a ___classCell___ read that was never stored."
+
+	^ self ___compileContext___ at: #'inDecoratorEmit' otherwise: nil
+%
+
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classDefIsModuleScope
@@ -1479,6 +1512,12 @@ category: 'Grail-Class Compile Context'
 classmethod: CallAst
 inBasesEmit: aBooleanOrNil
 	self ___compileContext___ at: #'inBasesEmit' put: aBooleanOrNil
+%
+
+category: 'Grail-Compile Context'
+classmethod: CallAst
+inDecoratorEmit: aBooleanOrNil
+	self ___compileContext___ at: #'inDecoratorEmit' put: aBooleanOrNil
 %
 
 category: 'Grail-Class Compile Context'

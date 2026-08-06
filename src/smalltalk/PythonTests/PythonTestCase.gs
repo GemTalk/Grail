@@ -228,6 +228,18 @@ runCase
 
 	super's own ensure: still runs tearDown before the exception gets here."
 
+	"Start every test with no exception BEING HANDLED.  sys.exc_info() reads a
+	session-global (SessionTemps #GrailCurrentException) that TryAst sets on
+	except-handler entry and restores on exit with an ensure: block.  That
+	restore is skipped when the unwind would cross a C primitive, user action
+	or FFI frame -- GemStone refuses to run ensure: blocks across one
+	(UncontinuableError) -- so an error escaping the CPython shim leaves the
+	slot set for the REST OF THE SESSION.  Every later test that asserts
+	sys.exc_info() is empty then fails for a reason that has nothing to do with
+	it: one shim fault in DunderNewTestCase produced two failures over in
+	TracebackTestCase, which is most of why that run was hard to read.
+	Clearing here keeps a leak contained to the test that caused it."
+	BaseException ___setCurrentException___: nil.
 	[ super runCase ]
 		on: BaseException
 		do: [:ex | Error signal: ex description]

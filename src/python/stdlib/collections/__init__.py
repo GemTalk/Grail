@@ -148,6 +148,15 @@ class _deque_iterator:
         return self._counter
 
 
+class _deque_reverse_iterator(_deque_iterator):
+    """The type of ``reversed(deque)`` -- a distinct class from the forward
+    iterator so ``type(reversed(d))(d)`` reconstructs a REVERSE iterator, as
+    CPython's _deque_reverse_iterator does (test_deque test_reversed_new)."""
+
+    def __init__(self, dq, reverse=True):
+        super().__init__(dq, reverse)
+
+
 class deque:
     """Double-ended queue backed by a list.  O(n) for arbitrary
     indexing, O(1) amortized for append/appendleft/pop/popleft."""
@@ -157,13 +166,34 @@ class deque:
     # that somehow skipped __init__ still reads a value rather than raising.
     _state = 0
 
+    # ids of deques whose __repr__ is currently on the stack, so a
+    # self-referential deque (``d.append(d)``) renders the recursive slot as
+    # ``[...]`` instead of recursing forever (CPython's Py_ReprEnter).
+    _repr_running = set()
+
+    # deque is unhashable (it is mutable): defining __eq__ below without a
+    # __hash__ already makes instances unhashable (Grail applies Python's
+    # __eq__-without-__hash__ rule), so an explicit ``__hash__ = None`` is both
+    # redundant AND harmful -- it makes hash(deque) (the CLASS) return None,
+    # which breaks pickle's ``type(obj) in _ITER_TYPES`` lookup.
+
     def __init__(self, iterable=None, maxlen=None):
+        if maxlen is not None:
+            maxlen = maxlen.__index__() if hasattr(maxlen, '__index__') else maxlen
+            if maxlen < 0:
+                raise ValueError("maxlen must be non-negative")
         self._items = []
-        self.maxlen = maxlen
+        self._maxlen = maxlen
         self._state = 0
         if iterable is not None:
             for item in iterable:
                 self.append(item)
+
+    @property
+    def maxlen(self):
+        """Maximum size of the deque, or None if unbounded.  Read-only, as in
+        CPython (``d.maxlen = ...`` raises AttributeError)."""
+        return self._maxlen
 
     def append(self, item):
         self._state += 1
@@ -214,22 +244,66 @@ class deque:
     def remove(self, value):
         """Remove the first occurrence of value.  Raises ValueError
         if absent — matches CPython's list / deque ``remove`` semantics."""
+        # ``x is value or x == value'': every element search in CPython goes
+        # through PyObject_RichCompareBool, which short-circuits on IDENTITY
+        # before calling __eq__.  Without it a value that is not equal to
+        # itself is unfindable in a container that holds it -- nan being the
+        # standard case (test_contains: nan must be found in deque([nan])).
         for i, x in enumerate(self._items):
-            if x == value:
+            if x is value or x == value:
                 self._state += 1
                 del self._items[i]
                 return
         raise ValueError("deque.remove(x): x not in deque")
 
     def count(self, value):
-        return sum(1 for x in self._items if x == value)
+        # Comparison may mutate the deque (an element's __eq__ that clears it),
+        # which CPython reports as ``RuntimeError: deque mutated during
+        # iteration`` -- so re-check the mutation counter each step (a
+        # comparison that itself raises, e.g. BadCompare, just propagates).
+        state = self._state
+        n = len(self._items)
+        c = 0
+        i = 0
+        while i < n:
+            if self._state != state:
+                raise RuntimeError("deque mutated during iteration")
+            # identity before __eq__ -- see the note in remove()
+            if self._items[i] is value or self._items[i] == value:
+                c += 1
+            i += 1
+        if self._state != state:
+            raise RuntimeError("deque mutated during iteration")
+        return c
 
     def index(self, value, start=0, stop=None):
+        # Normalise start/stop like list.index: negatives count from the end and
+        # both clamp into [0, len] (so ``d.index(x, 0, 4)`` on a length-3 deque
+        # searches 0..2 and raises ValueError, not IndexError -- bug 24913).
+        n = len(self._items)
         if stop is None:
-            stop = len(self._items)
-        for i in range(start, stop):
-            if self._items[i] == value:
+            stop = n
+        if start < 0:
+            start = max(n + start, 0)
+        elif start > n:
+            start = n
+        if stop < 0:
+            stop = max(n + stop, 0)
+        elif stop > n:
+            stop = n
+        state = self._state
+        i = start
+        while i < stop:
+            if self._state != state:
+                raise RuntimeError("deque mutated during iteration")
+            # identity before __eq__ -- see the note in remove()
+            if self._items[i] is value or self._items[i] == value:
                 return i
+            i += 1
+        if self._state != state:
+            raise RuntimeError("deque mutated during iteration")
+        # CPython's wording, which names the method (deque_index in
+        # _collectionsmodule.c) rather than repr'ing the value.
         raise ValueError("deque.index(x): x not in deque")
 
     def insert(self, i, value):
@@ -238,9 +312,74 @@ class deque:
         if self.maxlen is not None and len(self._items) > self.maxlen:
             raise IndexError("deque already at its maximum size")
 
+    # Deque internals kept out of the copy/pickle state (they are reconstructed
+    # from the elements + maxlen, not restored as attributes).
+    _INTERNAL_ATTRS = ('_items', '_maxlen', '_state')
+
+    def __getstate__(self):
+        # Subclass instance attributes to carry through copy/pickle: __dict__
+        # entries plus any set __slots__ values (test_deque
+        # TestSubclass.test_copy_pickle sets d.x -- a slot -- and d.z -- a
+        # __dict__ entry).  None when there is nothing extra.
+        state = {}
+        d = getattr(self, '__dict__', None)
+        if d:
+            for k, v in d.items():
+                if k not in deque._INTERNAL_ATTRS:
+                    state[k] = v
+        for klass in type(self).__mro__:
+            for name in getattr(klass, '__slots__', ()):
+                if name in ('__dict__', '__weakref__') or name in deque._INTERNAL_ATTRS:
+                    continue
+                try:
+                    state[name] = getattr(self, name)
+                except AttributeError:
+                    pass
+        return state or None
+
+    def __setstate__(self, state):
+        # setattr (not __dict__.update) so a value belonging to a __slots__
+        # descriptor lands in the slot, not a shadowed __dict__ entry.
+        if state:
+            for k, v in state.items():
+                setattr(self, k, v)
+
     def copy(self):
-        new = deque(self._items, self.maxlen)
+        return self.__copy__()
+
+    def __copy__(self):
+        new = self.__class__(self._items, self._maxlen)
+        new.__setstate__(self.__getstate__())
         return new
+
+    def __deepcopy__(self, memo):
+        import copy as _copy
+        new = self.__class__(maxlen=self._maxlen)
+        memo[id(self)] = new
+        for item in self._items:
+            new.append(_copy.deepcopy(item, memo))
+        st = self.__getstate__()
+        if st:
+            new.__setstate__({k: _copy.deepcopy(v, memo) for k, v in st.items()})
+        return new
+
+    def __reduce__(self):
+        # Pickle support (CPython deque_reduce): reconstruct an EMPTY deque of
+        # the right maxlen, then supply the elements as the reduce tuple's
+        # ``listitems`` iterator (4th slot) so pickle memoizes the deque BEFORE
+        # appending -- a self-referential deque (``d.append(d)``) then resolves
+        # its own element through the memo instead of recursing forever
+        # (test_pickle_recursive).  Subclass instance attributes ride along as
+        # BUILD state.
+        state = self.__getstate__()
+        # Iterate via the deque's own __iter__ (as CPython's deque_reduce does),
+        # so a subclass with a broken __iter__ raises during pickling
+        # (test_pickle_recursive's DequeWithBadIter) rather than silently
+        # pickling the raw items.
+        items = iter(self)
+        if self._maxlen is None:
+            return (self.__class__, (), state, items)
+        return (self.__class__, ((), self._maxlen), state, items)
 
     def rotate(self, n=1):
         if not self._items:
@@ -259,13 +398,89 @@ class deque:
         return _deque_iterator(self)
 
     def __reversed__(self):
-        return _deque_iterator(self, True)
+        return _deque_reverse_iterator(self)
+
+    def reverse(self):
+        """Reverse the elements in place.  Returns None (like list.reverse)."""
+        self._items.reverse()
 
     def __getitem__(self, i):
         return self._items[i]
 
+    def __setitem__(self, i, value):
+        # Item assignment does not invalidate iterators in CPython, so no
+        # _state bump.  Negative / out-of-range handled by the backing list.
+        self._items[i] = value
+
+    def __delitem__(self, i):
+        del self._items[i]
+        self._state += 1
+
     def __contains__(self, item):
-        return item in self._items
+        # Membership compares each element, and a comparison may mutate the
+        # deque (MutateCmp), which CPython reports as RuntimeError.
+        state = self._state
+        n = len(self._items)
+        i = 0
+        while i < n:
+            if self._state != state:
+                raise RuntimeError("deque mutated during iteration")
+            # identity before __eq__ -- see the note in remove()
+            if self._items[i] is item or self._items[i] == item:
+                return True
+            i += 1
+        if self._state != state:
+            raise RuntimeError("deque mutated during iteration")
+        return False
+
+    def __add__(self, other):
+        # CPython deque supports ``deque + deque`` only (result carries self's
+        # maxlen); other operand types are a TypeError via NotImplemented.
+        if isinstance(other, deque):
+            return deque(self._items + other._items, self._maxlen)
+        return NotImplemented
+
+    def __iadd__(self, other):
+        self.extend(other)
+        return self
+
+    def __mul__(self, n):
+        if not isinstance(n, int):
+            return NotImplemented
+        return deque(self._items * n, self._maxlen)
+
+    def __rmul__(self, n):
+        return self.__mul__(n)
+
+    def __imul__(self, n):
+        if not isinstance(n, int):
+            return NotImplemented
+        self._state += 1
+        newitems = self._items * n
+        if self._maxlen is not None and len(newitems) > self._maxlen:
+            newitems = newitems[len(newitems) - self._maxlen:]
+        self._items = newitems
+        return self
+
+    def __lt__(self, other):
+        if isinstance(other, deque):
+            return self._items < other._items
+        return NotImplemented
+
+    def __le__(self, other):
+        if isinstance(other, deque):
+            return self._items <= other._items
+        return NotImplemented
+
+    def __gt__(self, other):
+        if isinstance(other, deque):
+            return self._items > other._items
+        return NotImplemented
+
+    def __ge__(self, other):
+        if isinstance(other, deque):
+            return self._items >= other._items
+        return NotImplemented
 
     def __eq__(self, other):
         # Element-wise equality between two deques (CPython compares deques
@@ -289,7 +504,18 @@ class deque:
         return len(self._items) > 0
 
     def __repr__(self):
-        return "deque(" + repr(self._items) + ")"
+        # Self-referential deque (``d.append(d)``) renders the recursive slot as
+        # ``[...]`` (CPython Py_ReprEnter), and the maxlen is shown when bounded.
+        if id(self) in deque._repr_running:
+            return '[...]'
+        deque._repr_running.add(id(self))
+        try:
+            name = type(self).__name__
+            if self._maxlen is not None:
+                return "%s(%r, maxlen=%d)" % (name, self._items, self._maxlen)
+            return "%s(%r)" % (name, self._items)
+        finally:
+            deque._repr_running.discard(id(self))
 
 
 import keyword as _keyword
@@ -980,7 +1206,23 @@ class UserList:
         del self.data[i]
 
     def __iter__(self):
-        return iter(self.data)
+        # Iterate THROUGH __getitem__ (like CPython's Sequence mixin, which
+        # UserList inherits) rather than over self.data directly, so a
+        # subclass overriding __getitem__ is honoured by iteration
+        # (test_userlist test_getitemoverwriteiter).
+        i = 0
+        try:
+            while True:
+                v = self[i]
+                yield v
+                i += 1
+        except IndexError:
+            return
+
+    def __reversed__(self):
+        # Grail's reversed() builtin prefers __reversed__ and otherwise falls
+        # back to the env-0 #reverseDo:, which a UserList does not understand.
+        return reversed(self.data)
 
     def __eq__(self, other):
         return self.data == self.__cast(other)
@@ -1008,10 +1250,42 @@ class UserList:
             result.data = self.data + list(other)
         return result
 
+    def __radd__(self, other):
+        # Reached when ``other + self`` and other (list/str/tuple/an iterator)
+        # does not know how to add a UserList, so Python tries the reflected
+        # form here (test_userlist test_mixed_add).
+        result = self.__class__()
+        if isinstance(other, UserList):
+            result.data = other.data + self.data
+        else:
+            result.data = list(other) + self.data
+        return result
+
+    def __iadd__(self, other):
+        # In place: keep object identity (``u += x; u is u2``) — test_iadd /
+        # test_mixed_iadd assert the augmented target is the same object.
+        if isinstance(other, UserList):
+            self.data += other.data
+        else:
+            self.data += list(other)
+        return self
+
     def __mul__(self, n):
         result = self.__class__()
         result.data = self.data * n
         return result
+
+    def __rmul__(self, n):
+        return self.__mul__(n)
+
+    def __imul__(self, n):
+        """``ul *= n`` mutates IN PLACE and answers self, as CPython's UserList
+        does.  Without it, ``*=`` fell back to __mul__ and rebound the name to a
+        new object, so ``id(ul)`` changed -- which list_tests' test_imul asserts
+        it must not.  That test passed only by luck, when the discarded object's
+        recycled identityHash happened to match the new one."""
+        self.data *= n
+        return self
 
     def append(self, item):
         self.data.append(item)
@@ -1065,7 +1339,14 @@ class UserList:
 class UserDict:
     """Dict wrapper with .data."""
 
-    def __init__(self, dict=None, **kwargs):
+    def __init__(self, dict=None, /, **kwargs):
+        # ``/`` makes self and dict POSITIONAL-ONLY, as upstream.  Without it,
+        # UserDict(dict=42) and UserDict(self=42) bound the parameters instead
+        # of becoming data keys -- so ``UserDict(dict=[('one', 1)])`` built
+        # {'one': 1} rather than {'dict': [('one', 1)]}, and UserDict(self=42)
+        # silently produced an empty mapping (test_userdict test_init /
+        # test_update / test_all).  Any name is a legal dict key, which is
+        # exactly why upstream fences the parameters off.
         self.data = {}
         if dict is not None:
             self.update(dict)
@@ -1129,7 +1410,10 @@ class UserDict:
     def items(self):
         return self.data.items()
 
-    def update(self, other=None, **kwargs):
+    def update(self, other=None, /, **kwargs):
+        # ``/`` for the same reason as __init__: upstream's MutableMapping.update
+        # is ``update(self, other=(), /, **kwds)'', so d.update(self=42) and
+        # d.update(other=42) set DATA keys (test_userdict test_update).
         if other is not None:
             if hasattr(other, "keys"):
                 for k in other.keys():
@@ -1145,6 +1429,33 @@ class UserDict:
             return self.data[key]
         self.data[key] = default
         return default
+
+    # PEP 584 dict union.  ``|`` builds a NEW mapping of the LEFT operand's
+    # class (so UserDict | UserDictSubclass is a UserDict), while ``|=`` updates
+    # in place and returns self.  NotImplemented for anything that is neither a
+    # UserDict nor a dict, which is what lets the reflected __ror__ run and keeps
+    # ``dict | UserDict`` answering a UserDict (test_userdict test_mixed_or /
+    # test_mixed_ior).
+    def __or__(self, other):
+        if isinstance(other, UserDict):
+            return self.__class__(self.data | other.data)
+        if isinstance(other, dict):
+            return self.__class__(self.data | other)
+        return NotImplemented
+
+    def __ror__(self, other):
+        if isinstance(other, UserDict):
+            return self.__class__(other.data | self.data)
+        if isinstance(other, dict):
+            return self.__class__(other | self.data)
+        return NotImplemented
+
+    def __ior__(self, other):
+        if isinstance(other, UserDict):
+            self.data |= other.data
+        else:
+            self.data |= other
+        return self
 
     def pop(self, key, *args):
         return self.data.pop(key, *args)

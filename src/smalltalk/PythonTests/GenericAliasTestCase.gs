@@ -172,10 +172,17 @@ method: GenericAliasTestCase
 testClassesThatDidNotOptInStillCollapse
 	"The other half of the contract, and the one with 45 sites riding on it:
 	a class with no __getitem__: override still answers ITSELF, so
-	``class Foo(MultiDict[K, V])'' keeps compiling to ``class Foo(MultiDict)''."
+	``class Foo(MultiDict[K, V])'' keeps compiling to ``class Foo(MultiDict)''.
 
-	self assert: (self at: 'list_collapses') equals: true.
+	``list'' used to be the example here and has since opted IN -- while
+	``list[int] is list'' held, singledispatch's register() accepted a
+	subscripted generic and silently registered the unsubscripted class,
+	where CPython raises.  dict and tuple still carry the collapse, so the
+	per-class model is what this now pins, together with list's opt-in."
+
+	self assert: (self at: 'list_opted_in') equals: true.
 	self assert: (self at: 'dict_collapses') equals: true.
+	self assert: (self at: 'tuple_collapses') equals: true.
 %
 
 set compile_env: 0

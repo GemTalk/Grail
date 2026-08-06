@@ -203,6 +203,78 @@ ___signalNew___: positional kw: kwargs
 		((positional @env0:isEmpty) ifTrue: [''] ifFalse: [positional @env0:at: 1])
 %
 
+category: 'Grail-Raise Validation'
+classmethod: BaseException
+___pyRaise___: excValue
+	"``raise excValue`` (the expression form).  CPython: a BaseException subCLASS
+	is signalled (``raise ValueError'' behaves like ``raise ValueError()''); a
+	BaseException INSTANCE signals itself; anything else -- a plain class, a str,
+	a number -- raises ``TypeError: exceptions must derive from BaseException''.
+	excValue is an ARGUMENT (not the receiver) so a non-exception can't die on a
+	MessageNotUnderstood for #signal (test_baseexception test_raise_string /
+	test_raise_new_style_non_exception)."
+
+	(excValue @env0:isKindOf: Behavior) ifTrue: [
+		((excValue == BaseException) or: [excValue @env0:inheritsFrom: BaseException])
+			ifTrue: [^ excValue @env0:signal].
+		^ TypeError ___signal___: 'exceptions must derive from BaseException'].
+	(excValue @env0:isKindOf: BaseException) ifTrue: [^ excValue @env0:signal].
+	^ TypeError ___signal___: 'exceptions must derive from BaseException'
+%
+
+category: 'Grail-Raise Validation'
+classmethod: BaseException
+___pyRaiseNew___: cls args: positional kw: kwargs
+	"``raise cls(*positional, **kwargs)`` for a bare-name callee.  Validate that
+	cls is a BaseException subclass -- else ``TypeError: exceptions must derive
+	from BaseException'' (``raise NewStyleClass()'') -- then construct and signal
+	via ___signalNew___ (running any user __init__), exactly as the unguarded
+	path did for a real exception class."
+
+	((cls @env0:isKindOf: Behavior)
+		and: [(cls == BaseException) or: [cls @env0:inheritsFrom: BaseException]])
+			ifFalse: [^ TypeError ___signal___: 'exceptions must derive from BaseException'].
+	^ cls ___signalNew___: positional kw: kwargs
+%
+
+category: 'Grail-Raise Validation'
+classmethod: BaseException
+___pyExceptType___: handler
+	"Validate an ``except <handler>:'' target before GemStone's ``on:do:'' sends
+	it #handles:.  CPython requires a BaseException subclass (or a tuple thereof);
+	catching an instance, a str, or a non-exception class raises ``TypeError:
+	catching classes that do not inherit from BaseException is not allowed''.
+
+	The operational test is exactly what ``on:do:'' needs: a valid handler (an
+	exception class, or a GemStone ExceptionSet from ``except (A, B):'') answers
+	#handles:; a non-exception does not.  handler is an ARGUMENT so it can't MNU
+	on #handles: inside on:do: (test_baseexception test_catch_*).  Returns the
+	handler unchanged when valid."
+
+	(handler @env0:respondsTo: #'handles:') ifTrue: [^ handler].
+	^ TypeError ___signal___: 'catching classes that do not inherit from BaseException is not allowed'
+%
+
+category: 'Grail-Serialization'
+method: BaseException
+__setstate__: state
+	"CPython BaseException.__setstate__(state): when state is not None it must be
+	a mapping, and each (key, value) pair is assigned as an instance attribute
+	(setattr).  Returns None.  A snapshot of the items is taken first so a key
+	whose __hash__ mutates the dict mid-restore (test_setstate_refcount_no_crash's
+	HashThisKeyWillClearTheDict) can't tear the iteration -- and the gh-97591
+	refcount crash it guards against cannot arise in Grail (no refcounting)."
+
+	| pairs |
+	(state == None or: [state == nil]) ifTrue: [^ None].
+	pairs := OrderedCollection @env0:new.
+	state @env0:keysAndValuesDo: [:k :v |
+		pairs @env0:add: (Array @env0:with: k with: v)].
+	pairs @env0:do: [:pair |
+		self ___pyAttrStore___: (pair @env0:at: 1) put: (pair @env0:at: 2)].
+	^ None
+%
+
 category: 'Grail-Private'
 method: BaseException
 ___args___: anArray
@@ -220,10 +292,17 @@ ___args___: anArray
 category: 'Grail-Exception Chaining'
 method: BaseException
 __cause__
-	"Return the exception that was the direct cause of this exception.
-	Set via 'raise ... from ...' syntax."
+	"The exception that DIRECTLY caused this one -- CPython's ``raise X from Y''.
+	Stored in the ___cause___ dynamic instVar, read with the same absent-tolerant
+	probe __context__ uses (an unset dynamic instVar reads back as ABSENT, which
+	raises rather than answering nil).  Unset -> None, CPython's default.
 
-	^ None  "TODO: implement exception chaining"
+	Written by ___setCause___:context___:.  NOTE: the ``raise X from Y'' SYNTAX
+	does not set this yet -- RaiseAst parses a ``cause'' but drops it -- so today
+	the only writer is PEP 479 generator wrapping."
+
+	^ ([self @env0:dynamicInstVarAt: #'___cause___']
+		@env0:on: AbstractException do: [:e | nil]) ifNil: [None]
 %
 
 category: 'Grail-Exception Chaining'
@@ -329,15 +408,47 @@ __str__
 	size == 1 ifTrue: [
 		^ ((argsArray @env0:at: 1) @env0:asString) @env0:asUnicodeString
 	].
-	^ (argsArray @env0:asString) @env0:asUnicodeString
+	"Multiple args: CPython's ``str(exc)'' is ``str(self.args)'', and a tuple has
+	no __str__ so str() falls back to its __repr__ -- ``Exception(0,1,2)''
+	stringifies to ``(0, 1, 2)''.  The old ``argsArray asString'' sent Smalltalk
+	#asString to the tuple and produced garbage (``atuple'')."
+	^ argsArray __repr__
 %
 
 category: 'Grail-Exception Chaining'
 method: BaseException
 __suppress_context__
-	"Return whether to suppress the exception context in tracebacks."
+	"Whether a traceback should suppress the implicit context.  CPython sets this
+	as a SIDE EFFECT of assigning __cause__ (``raise X from Y''), which is what
+	makes the traceback read ``The above exception was the direct cause of...''
+	rather than ``During handling of the above exception...''.  Stored separately
+	from ___cause___ so ``raise X from None'' -- suppress with NO cause -- is
+	representable.  Unset -> false."
 
-	^ false  "TODO: implement context suppression"
+	^ ([self @env0:dynamicInstVarAt: #'___suppressContext___']
+		@env0:on: AbstractException do: [:e | nil]) == true
+%
+
+category: 'Grail-Exception Chaining'
+method: BaseException
+___setCause___: aCause context: aContext
+	"Chain this exception the way ``raise <self> from aCause'' does: set
+	__cause__, set __context__, and set __suppress_context__ -- CPython sets the
+	flag as a side effect of setting the cause, so all three move together on
+	this path.
+
+	A nil argument is skipped rather than stored: a nil dynamic instVar reads
+	back as ABSENT, so storing nil would be indistinguishable from unset and the
+	accessors' None/false defaults cover it.  The flag is stored
+	unconditionally, because ``raise X from None'' means suppress WITHOUT a
+	cause."
+
+	aCause == nil ifFalse: [
+		self @env0:dynamicInstVarAt: #'___cause___' put: aCause].
+	aContext == nil ifFalse: [
+		self @env0:dynamicInstVarAt: #'___context___' put: aContext].
+	self @env0:dynamicInstVarAt: #'___suppressContext___' put: true.
+	^ self
 %
 
 category: 'Grail-Exception Chaining'

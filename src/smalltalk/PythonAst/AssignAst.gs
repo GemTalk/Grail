@@ -163,8 +163,12 @@ printSmalltalkOn: aStream
 					"Chained tuple-unpack target (``ka, va = ta = expr'',
 					test_dict's test_popitem): unpack from the chain temp via
 					the nested-target branch of the shared per-element
-					emitter.  (A starred element inside a CHAINED tuple
-					target is not supported -- plain doWithIndex there.)"
+					emitter -- which now routes through
+					emitUnpackCoercionAndStoresOn:, so a chained target gets
+					the same iterable coercion, value-count check and STAR
+					support as any other (``a, *b = c = [1, 2, 3]'' used to
+					emit a *-unpack TypeError signal into the left-hand
+					side)."
 					self emitTupleElementStoreOn: aStream target: eachTgt
 						holder: '___chain___' indexExpr: nil directRhs: '___chain___'
 				] ifFalse: [
@@ -241,15 +245,39 @@ printSmalltalkTupleStoreOn: aStream target: tgt
 	target binds to a slice covering the middle, and items after the
 	star bind to negative indices counting from the end."
 
-	| holder elts starIdx nBefore hasStar nAfter |
+	| holder |
 	holder := '___unpack___'.
-	elts := tgt elts.
+	aStream nextPutAll: '[| '; nextPutAll: holder; nextPutAll: ' | '; nextPutAll: holder; nextPutAll: ' := '.
+	value printSmalltalkWithParenthesisOn: aStream.
+	self emitUnpackCoercionAndStoresOn: aStream elts: tgt elts holder: holder.
+	aStream nextPutAll: '] value.'
+%
+
+category: 'other'
+method: AssignAst
+emitUnpackCoercionAndStoresOn: aStream elts: elts holder: holder
+	"Shared tail of EVERY tuple/list unpack -- the top-level target and each
+	nested one.  The caller has just written ``holder := <rhs>'' and left the
+	statement open; append the iterable coercion + value-count check that
+	closes it, then one store per target element.
+
+	Factored out because the nested path used to do neither: it bound the
+	inner holder straight to ``outer __getitem__: i'' and indexed that, so
+	``(a, b), (c,) = IteratingSequenceClass(2), {42: 24}'' (test_iter
+	test_unpack_iter) raised ``not subscriptable'' on an iterable that has
+	__iter__ but no __getitem__, a nested target could not raise ValueError
+	for the wrong number of values, and a nested STAR target did not compile
+	at all -- StarredAst fell through to the plain-expression printer, which
+	emits a ``*-unpack in call sites is not yet supported'' TypeError signal
+	into the left-hand side of an assignment, a CompileError that took the
+	whole enclosing module down with it.  A nested target is entitled to
+	exactly the semantics of an outer one, so it now runs the same code."
+
+	| starIdx nBefore hasStar nAfter |
 	starIdx := elts findFirst: [:e | e isKindOf: StarredAst].
 	hasStar := starIdx ~= 0.
 	nBefore := hasStar ifTrue: [starIdx - 1] ifFalse: [elts size].
 	nAfter := hasStar ifTrue: [elts size - starIdx] ifFalse: [0].
-	aStream nextPutAll: '[| '; nextPutAll: holder; nextPutAll: ' | '; nextPutAll: holder; nextPutAll: ' := '.
-	value printSmalltalkWithParenthesisOn: aStream.
 	"___unpackSequence___: sequences answer themselves (Object default);
 	iterables WITHOUT positional __getitem__ (enum classes: `R, W, X =
 	Perm`) materialize their iteration order as an indexable list --
@@ -302,8 +330,7 @@ printSmalltalkTupleStoreOn: aStream target: tgt
 				]
 			].
 		].
-	].
-	aStream nextPutAll: '] value.'
+	]
 %
 
 category: 'other'
@@ -380,17 +407,15 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 		^ self
 	].
 	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
-		"Nested unpacking: recurse using a fresh holder."
+		"Nested unpacking: recurse using a fresh holder, through the SAME
+		coercion + value-count + star emitter the top-level target uses.
+		The RHS is parenthesized because it is a keyword message
+		(``holder __getitem__: 0''), and ___unpackSequence___ is unary."
 		| nestedHolder |
 		nestedHolder := holder , '_n'.
-		aStream nextPutAll: '[| '; nextPutAll: nestedHolder; nextPutAll: ' | '; nextPutAll: nestedHolder; nextPutAll: ' := '; nextPutAll: rhs; nextPutAll: '. '.
-		aTarget elts doWithIndex: [:innerElt :j |
-			self
-				emitTupleElementStoreOn: aStream
-				target: innerElt
-				holder: nestedHolder
-				indexExpr: (j - 1) printString
-		].
+		aStream nextPutAll: '[| '; nextPutAll: nestedHolder; nextPutAll: ' | ';
+			nextPutAll: nestedHolder; nextPutAll: ' := ('; nextPutAll: rhs; nextPutAll: ')'.
+		self emitUnpackCoercionAndStoresOn: aStream elts: aTarget elts holder: nestedHolder.
 		aStream nextPutAll: '] value. '.
 		^ self
 	].
@@ -429,6 +454,25 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 	to the store path (it remains relevant to call sites that send
 	``obj attr: x'' directly via Smalltalk-style keyword)."
 
+	"``obj.__class__ = NewClass'' reassigns the object's Python type.  Route
+	through ``object ___pyChangeClassOf: <target> to: <value>'' -- which holds
+	the target only as an ARGUMENT -- instead of ``<target> __setattr__:''; the
+	latter would pin the target on the stack as ``self'', and GemStone's
+	changeClassTo: refuses an object that is self on the stack
+	(rtErrCantBecomeSelfOnStack; test_sort test_unsafe_object_compare's mid-sort
+	``elem.__class__ = ...'').  A self-reference target (``self.__class__ = ...'')
+	keeps the default path -- it is self on the stack no matter how it is
+	spelled, so the rename cannot help it."
+	(tgt attr asString = '__class__'
+		and: [((tgt value isKindOf: NameAst)
+			and: [CallAst isSelfReference: tgt value id]) not]) ifTrue: [
+		aStream nextPutAll: 'object @env1:___pyChangeClassOf: ('.
+		tgt value printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ') to: ('.
+		value printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: '). '.
+		^ self
+	].
 	((tgt value isKindOf: NameAst)
 		and: [(CallAst isSelfReference: tgt value id)
 		and: [(tgt value ___boundInNestedFunction___: tgt value id) not]]) ifTrue: [

@@ -303,7 +303,8 @@ printSmalltalkOn: aStream
 	assignment so the instVar holds a callable reference for first-class use
 	(e.g. `f = add; f(1, 2)`). Nested defs still use the block form."
 
-	| fixedCount paramNames savedReturnMode savedFunction moduleDecorators |
+	| fixedCount paramNames savedReturnMode savedFunction moduleDecorators
+	  poCount regCount kwoCount hasKwonly hasPosDefaults needsOuterBlock |
 	(CallAst moduleClassBeingCompiled notNil and: [self isModuleLevelDef]) ifTrue: [
 		"Top-level def: the real env-1 method has already been
 		compiled on the module class (by importlib's topLevelDefs
@@ -388,22 +389,30 @@ printSmalltalkOn: aStream
 			nextPutAll: name;
 			nextPutAll: ' := '
 	].
-	"Open the paren that ``) @env0:shallowCopy'' closes once the block is
-	built -- see the comment there for why the def's value must be a copy."
+	"A def-time outer wrapper block (run immediately via ``] value'') is needed
+	when there are positional defaults (evaluated once, in the enclosing scope)
+	OR keyword-only parameters (whose mutable ___kwdefaults___ cell must also be
+	built once at def-time and captured by the inner block)."
+	hasPosDefaults := args notNil and: [args defaults notNil and: [args defaults notEmpty]].
+	hasKwonly := args notNil and: [args kwonlyargs notNil and: [args kwonlyargs notEmpty]].
+	needsOuterBlock := hasPosDefaults or: [hasKwonly].
+	"Open the paren that ``) @env0:shallowCopy'' (or, for a keyword-only def, the
+	wrapper's own ``] value)'') closes once the block is built -- see the comment
+	there for why the def's value must be a copy."
 	aStream nextPut: $(.
-	"Emit a def-time default-capture outer block when there are
-	defaults.  The outer block runs immediately (``] value``) and
-	returns the inner function block; defaults that reference the
-	enclosing scope (jinja2's ``missing=missing``) resolve there
-	at def-time instead of failing in the inner block where the
-	same name is the local being bound."
-	(args defaults notNil and: [args defaults notEmpty]) ifTrue: [
+	"Emit a def-time default-capture outer block when there are defaults or
+	keyword-only params.  The outer block runs immediately (``] value``) and
+	returns the inner function block; defaults that reference the enclosing
+	scope (jinja2's ``missing=missing``) resolve there at def-time instead of
+	failing in the inner block where the same name is the local being bound."
+	needsOuterBlock ifTrue: [
 		| numDefaults firstWithDefault |
-		numDefaults := args defaults size.
+		numDefaults := hasPosDefaults ifTrue: [args defaults size] ifFalse: [0].
 		firstWithDefault := args args size - numDefaults + 1.
 		aStream nextPut: $[; lf; nextPutAll: '| '.
 		1 to: numDefaults do: [:i |
 			aStream nextPutAll: '___default_'; nextPutAll: (args args at: firstWithDefault + i - 1) name; nextPutAll: '___ '].
+		hasKwonly ifTrue: [aStream nextPutAll: '___kwdefaults___ '].
 		aStream nextPutAll: '|'; lf.
 		1 to: numDefaults do: [:i |
 			| pname |
@@ -411,7 +420,12 @@ printSmalltalkOn: aStream
 			aStream nextPutAll: '___default_'; nextPutAll: pname; nextPutAll: '___ := '.
 			(args defaults at: i) printSmalltalkOn: aStream.
 			aStream nextPut: $.; lf].
+		hasKwonly ifTrue: [self emitKwDefaultsCellInitOn: aStream].
 	].
+	"For a keyword-only def, the inner block gets its OWN paren so shallowCopy +
+	the ___kwdefaults___ stamp apply to it INSIDE the wrapper (where the cell is
+	in scope); other defs let the outer paren above serve."
+	hasKwonly ifTrue: [aStream nextPut: $(].
 	aStream
 		nextPutAll: '[:___positional___ :___kwargs___ |';
 		lf;
@@ -476,13 +490,32 @@ printSmalltalkOn: aStream
 			nextPutAll: ' to: ___positional___ @env0:size }.';
 			lf.
 	].
-	"Bind **kwarg to the keyword dict (or an empty dict if nil was passed)."
+	"Bind **kwarg to the keyword dict (or an empty dict if nil was passed).
+	When the def also has keyword-only params, COPY first and drop those names
+	so they bind to their own parameters, not into **kwargs (mirrors the
+	module-method path); without keyword-only params the plain alias is kept
+	unchanged."
 	args kwarg ifNotNil: [
-		aStream
-			nextPutAll: (self transportParamName: args kwarg name);
-			nextPutAll: ' := ___kwargs___ ifNil: [(PyDict perform: #new env: 0)].';
-			lf.
+		hasKwonly
+			ifTrue: [
+				aStream
+					nextPutAll: (self transportParamName: args kwarg name);
+					nextPutAll: ' := (___kwargs___ ifNil: [(PyDict perform: #new env: 0)]) @env0:copy.';
+					lf.
+				args kwonlyargs do: [:each |
+					aStream
+						nextPutAll: (self transportParamName: args kwarg name);
+						nextPutAll: ' @env0:removeKey: '''; nextPutAll: each name;
+						nextPutAll: ''' ifAbsent: []. '; lf]]
+			ifFalse: [
+				aStream
+					nextPutAll: (self transportParamName: args kwarg name);
+					nextPutAll: ' := ___kwargs___ ifNil: [(PyDict perform: #new env: 0)].';
+					lf].
 	].
+	"Bind keyword-only params (previously left UNBOUND in the closure form --
+	a nested ``def f(*, k): ...'' raised UnboundLocalError on any use of k)."
+	hasKwonly ifTrue: [self emitKeywordOnlyBindingOn: aStream].
 	"Generator functions wrap the entire body in ``PythonGenerator
 	@env1:withBlock: [:___gen___ | ... ]`` so a call returns a lazy
 	generator instead of running the body to completion.  Matches
@@ -545,13 +578,22 @@ printSmalltalkOn: aStream
 	].
 	aStream nextPutAll: '.'; lf.
 	aStream decreaseIndent; nextPutAll: ']'.
-	"Close the default-pre-eval outer block if any.  When defaults
-	exist, ``name := [ ___default_X___ := X. [inner] ] value`` —
-	the outer block evaluates immediately to capture defaults at
-	def-time, returning the inner block as the actual callable.
-	With no defaults the outer wrapper is the inner block directly."
-	(args defaults notNil and: [args defaults notEmpty]) ifTrue: [
-		aStream nextPutAll: '] value'.
+	"Close the default-pre-eval outer block if any.  When defaults exist,
+	``name := [ ___default_X___ := X. [inner] ] value`` — the outer block
+	evaluates immediately to capture defaults at def-time, returning the inner
+	block as the actual callable.  With no defaults (and no keyword-only params)
+	the outer wrapper is the inner block directly.
+
+	A keyword-only def closes DIFFERENTLY: its inner block got its own paren, so
+	close it here, shallowCopy it, and stamp the ___kwdefaults___ cell -- all
+	still INSIDE the wrapper, the only place the cell temp is in scope -- then
+	close+eval the wrapper and the outer value paren.  The def-site stamps below
+	then cascade onto the block the wrapper returns."
+	hasKwonly ifTrue: [
+		aStream nextPutAll: ') @env0:shallowCopy @env0:___pyKwDefaults___: ___kwdefaults___'; lf.
+		aStream nextPutAll: '] value)'.
+	] ifFalse: [
+		hasPosDefaults ifTrue: [aStream nextPutAll: '] value'].
 	].
 	"Every execution of a ``def'' must yield a DISTINCT function object -- that
 	is what CPython does, and Python code depends on it.  GemStone reuses a
@@ -588,7 +630,10 @@ printSmalltalkOn: aStream
 	reference (the compiler eliminates a discarded one) and therefore executes
 	on every invocation, measured at +2ns per CALL.  The copy costs ~10ns once
 	per def execution and nothing per call."
-	aStream nextPutAll: ') @env0:shallowCopy'.
+	"For a keyword-only def the ``) shallowCopy'' already happened INSIDE the
+	wrapper (with the ___kwdefaults___ stamp); here we only close the plain
+	cases."
+	hasKwonly ifFalse: [aStream nextPutAll: ') @env0:shallowCopy'].
 	"Stamp the closure's ``__name__'' from the def's lexical name so
 	``func.__name__'' answers 'name', not the ``<closure>'' placeholder.
 	``___pyNamed___:'' returns self, so it sits transparently in front of
@@ -615,11 +660,33 @@ printSmalltalkOn: aStream
 		"Stamp func.__code__ (a PyCode) at def-time -- a CASCADE onto the same
 		block receiver as ___pyNamed___ (chaining another keyword send would
 		instead form one combined selector).  ___pyCode___: returns self, so the
-		cascade value stays the block.  Only co_firstlineno (the def line) is
-		conformance-critical; co_name follows the def name."
+		cascade value stays the block.  co_firstlineno (the def line) drives
+		tracebacks; the three parameter counts (co_argcount / co_posonlyargcount
+		/ co_kwonlyargcount) are what introspection reads -- co_argcount counts
+		posonly+regular positional params (self/cls included, as in CPython),
+		co_kwonlyargcount the keyword-only ones."
+		poCount := args isNil ifTrue: [0] ifFalse: [(args posonlyargs ifNil: [#()]) size].
+		regCount := args isNil ifTrue: [0] ifFalse: [(args args ifNil: [#()]) size].
+		kwoCount := args isNil ifTrue: [0] ifFalse: [(args kwonlyargs ifNil: [#()]) size].
+		"__qualname__ when this def is nested inside something.  A CASCADE, like
+		___pyCode___: below and for the same reason: emitted as another keyword
+		part of ``___pyNamed___:'' it would swallow the following ``annotate:'' /
+		``doc:'' into one combined selector that does not exist -- which turned 22
+		tests into uncatchable Smalltalk errors when tried that way."
+		self ___emitQualnameOn___: aStream name: name.
+		"PEP 695 type parameters, when the def declares any.  A CASCADE, for the
+		same reason as the qualname beside it."
+		(type_params notNil and: [type_params notEmpty]) ifTrue: [
+			aStream nextPutAll: '; @env0:___pyTypeParams___: #('.
+			type_params do: [:n |
+				aStream nextPutAll: ''''; nextPutAll: n asString; nextPutAll: ''' '].
+			aStream nextPutAll: ')'].
 		aStream
 			nextPutAll: '; @env0:___pyCode___: (PyCode @env0:name: '''; nextPutAll: name;
 			nextPutAll: ''' firstlineno: '; nextPutAll: self beginLine printString;
+			nextPutAll: ' argcount: '; nextPutAll: (poCount + regCount) printString;
+			nextPutAll: ' posonlyargcount: '; nextPutAll: poCount printString;
+			nextPutAll: ' kwonlyargcount: '; nextPutAll: kwoCount printString;
 			nextPutAll: ')'.
 		"Stamp the def-time PARAMETER SPEC, another cascade onto the same
 		receiver.  This is what makes inspect.signature real: Grail has no code
@@ -639,12 +706,25 @@ printSmalltalkOn: aStream
 	"Apply decorators bottom-up.  ``@A @B def f: ...`` rebinds f to
 	``A(B(f))`` — the decorator nearest the def (B) runs first, so
 	iterate in reverse.  Skip Symbol entries that are class-body
-	special markers (``staticmethod`` / ``classmethod`` / ``property``);
-	those mutate the function's *class* via changeClassTo: at parse
-	time and must NOT be re-applied as runtime calls."
+	special markers -- but ONLY when the parser actually re-classed this node,
+	which is what handles them.
+
+	It re-classes under ``classNesting > 0'', and it zeroes classNesting while
+	parsing a body, so a def nested inside a FUNCTION is left a plain
+	FunctionDefAst and nothing has handled its ``@classmethod'' at all.  Skipping
+	it there silently DROPPED the decorator and left a plain function: that is why
+	functools' test_callable_register -- whose class and registrations live inside
+	the test METHOD -- registered a plain function with singledispatch, which was
+	then called without its class.
+
+	A def inside an ``if'' in a class BODY is the other case: classNesting is
+	still positive there, so it WAS re-classed, and applying the decorator again
+	double-wraps it (six ClassBodyConditionalTestCase errors when this
+	distinction was missing).  ___parserReclassedThisDef___ tells the two apart."
 	decorator_list isNil ifFalse: [
 		decorator_list reverseDo: [:deco |
-			(self isClassDeclarativeDecorator: deco) ifFalse: [
+			((self isClassDeclarativeDecorator: deco) not
+				or: [self ___parserReclassedThisDef___ not]) ifTrue: [
 				"Phase A: decorator re-bind uses dynamicInstVarAt:put: when
 				the target name is module-scope (parser-declared in module
 				body and not shadowed by an enclosing function)."
@@ -706,6 +786,80 @@ printSmalltalkOn: aStream
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+emitKwDefaultsCellInitOn: aStream
+	"Emit the def-time keyword-only-defaults CELL inside the def's outer wrapper:
+	``___kwdefaults___ := { <dict-or-nil> }''.  The cell is a one-slot Array the
+	inner block captures for its per-call keyword-only binding AND that
+	``___pyKwDefaults___:'' records on the block, so ``func.__kwdefaults__'' and
+	its assignment both see it.  The slot holds a dict of {name -> evaluated
+	default} for the keyword-only params that HAVE a default, or nil when none do
+	(CPython's ``__kwdefaults__'' is None then).  Each default is evaluated ONCE
+	here, at def-time in the enclosing scope -- the correct point, so a mutable
+	keyword-only default is shared across calls."
+
+	| anyDefault |
+	anyDefault := ((args kw_defaults ifNil: [#()])
+		detect: [:d | d notNil] ifNone: [nil]) notNil.
+	anyDefault ifFalse: [
+		aStream nextPutAll: '___kwdefaults___ := { nil }.'; lf.
+		^ self].
+	aStream nextPutAll: '___kwdefaults___ := { (PyDict perform: #new env: 0) }.'; lf.
+	args kwonlyargs doWithIndex: [:each :i |
+		| def |
+		def := (args kw_defaults ifNil: [#()]) at: i ifAbsent: [nil].
+		def ifNotNil: [
+			aStream
+				nextPutAll: '(___kwdefaults___ @env0:at: 1) @env0:at: ''';
+				nextPutAll: each name;
+				nextPutAll: ''' put: '.
+			def printSmalltalkOn: aStream.
+			aStream nextPutAll: '.'; lf]].
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitKeywordOnlyBindingOn: aStream
+	"Bind each keyword-only parameter in the closure (block) form.  The block
+	form historically left these UNBOUND, so a nested ``def f(*, k): ...''
+	declared k as a temp but never assigned it and any use raised
+	UnboundLocalError.  Each param resolves in priority order: the passed keyword
+	(``___kwargs___''), else the CURRENT ``___kwdefaults___'' cell contents, else
+	TypeError.  Consulting the cell (rather than an inlined default) is what lets
+	``func.__kwdefaults__ = {...}'' change what the next call binds."
+
+	(args kwonlyargs ifNil: [#()]) do: [:each |
+		| nm pn |
+		nm := each name.
+		pn := self transportParamName: each name.
+		aStream nextPutAll: pn; nextPutAll: ' := ___kwargs___ ifNil: ['.
+		self emitKwDefaultLookupFor: nm on: aStream.
+		aStream
+			nextPutAll: '] ifNotNil: [___kwargs___ @env0:at: ''';
+			nextPutAll: nm;
+			nextPutAll: ''' ifAbsent: ['.
+		self emitKwDefaultLookupFor: nm on: aStream.
+		aStream nextPutAll: ']].'; lf].
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitKwDefaultLookupFor: nm on: aStream
+	"Emit the ``consult the ___kwdefaults___ cell, else TypeError'' fallback for
+	one keyword-only parameter -- used in both arms of its ``___kwargs___'' probe
+	(the param may be absent from the kwargs dict, or the dict may be nil)."
+
+	aStream
+		nextPutAll: '(___kwdefaults___ @env0:at: 1) ifNil: [TypeError ___signal___: ''missing keyword-only argument: ';
+		nextPutAll: nm;
+		nextPutAll: '''] ifNotNil: [:___d___ | ___d___ @env0:at: ''';
+		nextPutAll: nm;
+		nextPutAll: ''' ifAbsent: [TypeError ___signal___: ''missing keyword-only argument: ';
+		nextPutAll: nm;
+		nextPutAll: ''']]'.
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 isModuleScopeNestedDefTarget
 	"Phase A: true if this nested (non-isModuleLevelDef) def lands at
 	module scope — the parser declared its name in module body
@@ -763,15 +917,28 @@ ___enclosingDefDeclares___: funcAst named: aSymbol
 category: 'Grail-code generation'
 method: FunctionDefAst
 applicableModuleDecorators
-	"Decorators to apply at module-body time for a top-level def:
-	everything in decorator_list EXCEPT the class-declarative ones
-	(staticmethod / classmethod / property), which the parser already
-	handled by re-classing this node into a Static/Class/PropertyFunction
-	def.  Source order preserved (outermost first), so ``@A @B def f''
-	yields { A. B } and is applied as A(B(f))."
+	"Decorators to apply at module-body time for a top-level def: ALL of
+	decorator_list.  Source order preserved (outermost first), so ``@A @B def f''
+	yields { A. B } and is applied as A(B(f)).
+
+	This used to reject the class-declarative ones (staticmethod / classmethod /
+	property) on the grounds that the parser had already handled them by
+	re-classing the node.  It only does that INSIDE a class -- PythonParser
+	re-classes under ``classNesting > 0'' -- so at module scope nothing had
+	handled them and rejecting them silently DROPPED the decorator:
+
+	    @classmethod
+	    def f(cls, arg): ...
+	    type(f)        # CPython: classmethod.  Was: the plain function.
+
+	``classmethod(f)'' spelled as a call already answered a real classmethod, so
+	the two spellings disagreed.  It matters beyond introspection because the
+	descriptor kind is what a later consumer dispatches on: functools'
+	test_callable_register registers ``@classmethod def _(cls, arg)'' with
+	singledispatch, and a plain function there is called without its class."
 
 	decorator_list isNil ifTrue: [^ #()].
-	^ decorator_list reject: [:deco | self isClassDeclarativeDecorator: deco]
+	^ decorator_list
 %
 
 category: 'Grail-code generation'
@@ -834,6 +1001,23 @@ isPropertyAccessorDecorator: deco
 	(deco value isKindOf: NameAst) ifFalse: [^ false].
 	a := deco attr asString.
 	^ a = 'setter' or: [a = 'getter' or: [a = 'deleter']]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+isDeleterDecorated
+	"True when this def is a property DELETER (``@x.deleter def x(self)'').
+	Such a def has the SAME unary signature as the property getter, so
+	compiling it under the plain name ``x'' would OVERWRITE the getter; the
+	ClassDefAst emit redirects it to a distinct ``___propDeleter_x'' selector
+	that the delete path (object>>___pyAttrDelete___) invokes for ``del
+	obj.x''."
+
+	decorator_list isNil ifTrue: [^ false].
+	^ (decorator_list detect: [:deco |
+		(deco isKindOf: AttributeAst)
+			and: [(deco value isKindOf: NameAst)
+			and: [deco attr asString = 'deleter']]] ifNone: [nil]) notNil
 %
 
 category: 'Grail-code generation'
@@ -1042,6 +1226,93 @@ printDecoratorReceiverOn: aStream deco: deco
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___parserReclassedThisDef___
+	"Did PythonParser convert this node into one of its class-body subclasses?
+	That conversion IS how a @staticmethod / @classmethod / @property is handled,
+	so it is also the signal that the decorator must not be applied again.
+
+	Answered by class rather than by a flag, because the conversion is a
+	changeClassTo: -- the node's class is the record of it."
+
+	^ (self isKindOf: StaticFunctionDefAst)
+		or: [(self isKindOf: ClassFunctionDefAst)
+			or: [self isKindOf: InstanceFunctionDefAst]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___emitQualnameOn___: aStream name: aName
+	"Emit ``; ___pyQualname___: '<dotted path>''' when this def is nested.
+
+	The prefix comes from the emission context: CallAst functionBeingCompiled is
+	the ENCLOSING def while a nested one is emitted, and classBeingCompiled names
+	the class around it, so a def in a method of class A reads
+	``A.meth.<locals>.inner''.  CPython puts ``<locals>'' between an enclosing
+	FUNCTION and the names inside it.
+
+	Nothing is emitted when there is no enclosing def: a bare name is already the
+	right answer at module and class level, and ExecBlock >> __qualname__ falls
+	back to __name__.  Deeper nesting reports from the nearest enclosing def --
+	still closer than the bare name, and one level is what the corpus asks for."
+
+	| qualified |
+	"__module__ first, and unconditionally: a closure otherwise answers the
+	``<closure>'' placeholder, because a module-level def gets its module by
+	forwarding to the receiving module and a block has no receiver to forward
+	to.  Pickling a callable by reference needs it alongside the qualname."
+	CallAst moduleNameBeingCompiled ifNotNil: [:modName |
+		aStream
+			nextPutAll: '; @env0:___pyModuleNamed___: ''';
+			nextPutAll: modName asString;
+			nextPutAll: ''''].
+	qualified := self ___qualifiedNameFor___: aName.
+	qualified = aName asString ifTrue: [^ self].
+	aStream
+		nextPutAll: '; @env0:___pyQualname___: ''';
+		nextPutAll: qualified;
+		nextPutAll: ''''
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___qualifiedNameFor___: aName
+	"``Cls.meth.<locals>.aName'' when this def is nested inside a function, else
+	aName unchanged.  CPython puts ``<locals>'' between an enclosing FUNCTION and
+	the names inside it.
+
+	The context comes from the emission state: CallAst functionBeingCompiled is
+	the ENCLOSING def while a nested one is emitted, and classBeingCompiled names
+	the class around it.
+
+	Shared by the __qualname__ stamp and by the arity-error message, which CPython
+	also phrases with the qualified name -- test_keywordonlyarg builds its
+	expected text from ``f.__qualname__'', so the two have to agree by
+	construction rather than by coincidence."
+
+	| enclosingFn enclosingCls |
+	enclosingFn := CallAst functionBeingCompiled.
+	enclosingCls := CallAst classBeingCompiled.
+	(enclosingFn == nil
+		or: [enclosingFn == self or: [enclosingFn name == nil]])
+			ifTrue: [
+				"No enclosing FUNCTION, but there may be an enclosing CLASS: a def
+				written inside an ``if'' in a class body compiles to a closure
+				rather than a method, and answered the bare name where CPython says
+				``Cls.name''.  No ``<locals>'' -- a class body is not a function
+				scope, which is exactly why CPython omits it here.  Pickling a
+				class-body def by reference depends on this: test_functools'
+				TestLRUC defines its members under ``if c_functools:''."
+				^ enclosingCls == nil
+					ifTrue: [aName asString]
+					ifFalse: [enclosingCls asString , '.' , aName asString]].
+	^ (enclosingCls == nil
+		ifTrue: [enclosingFn name asString]
+		ifFalse: [enclosingCls asString , '.' , enclosingFn name asString])
+		, '.<locals>.' , aName asString
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 isClassDeclarativeDecorator: deco
 	"True if ``deco`` is a bare-name decorator that Grail handles at
 	parse time by re-classing the FunctionDefAst (staticmethod /
@@ -1112,6 +1383,28 @@ hasAnnotations
 	gates emission of the __annotations__ stamp."
 
 	^ returns notNil or: [self ___annotatedArgs___ notEmpty]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___receiverParamName___
+	"The name of the parameter that ClassDefAst's signature table DROPS --
+	``self'' for an instance method, ``cls'' for a classmethod, whatever the
+	def actually wrote.  nil when the def declares no positional parameter.
+
+	The table is bound-shaped on purpose (a bound access supplies the
+	receiver, and CPython omits it there), but the UNBOUND read must show it:
+	CPython's ``signature(Cls.method)'' includes ``self''.  Recording the name
+	separately keeps the existing table byte-identical while making the
+	unbound form reconstructible -- the alternative, emitting the receiver
+	into the spec and stripping it at every bound read, would have needed a
+	staticness marker in the table too."
+
+	| allPositional |
+	args ifNil: [^ nil].
+	allPositional := (args posonlyargs ifNil: [#()]) , (args args ifNil: [#()]).
+	allPositional isEmpty ifTrue: [^ nil].
+	^ (allPositional at: 1) name asString
 %
 
 category: 'Grail-code generation'
@@ -1459,12 +1752,19 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 	  ^ self name: p1 _: p2 ...       (module: bare selector)
 	  ^ self <sel>                    (instance: env-1 fixed selector)"
 
-	| stream callParams allParams defaults firstDefault |
+	| stream callParams allParams defaults firstDefault posonlyNames |
 	stream := AppendStream on: Unicode7 new.
 	allParams := self allParameterNames.
 	callParams := stripSelf
 		ifTrue: [allParams copyFrom: 2 to: allParams size]
 		ifFalse: [allParams].
+	"Positional-only parameters are not keyword-bindable, so their keyword must
+	be left for **kwargs instead of ALSO binding the parameter -- the same fix as
+	in printPositionalUnpackingOn:..., which this forwarder duplicates for the
+	class-body method form.  Fixing only that one left ``C(dict=42)'' still
+	double-applying while the equivalent module-level function was correct."
+	posonlyNames := (args posonlyargs ifNil: [#()])
+		collect: [:a | a name asString].
 	"Defaults align to the TAIL of args (posonly+args)."
 	defaults := args defaults.
 	firstDefault := (args posonlyargs size + args args size)
@@ -1477,16 +1777,21 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 		stream nextPut: $|; lf.
 	].
 	callParams doWithIndex: [:p :i |
-		| absoluteIdx |
+		| absoluteIdx def isPosOnly |
 		"absolute parameter index in the full (self-included) list, to
 		align with the fixed selector's positional order."
 		absoluteIdx := stripSelf ifTrue: [i + 1] ifFalse: [i].
+		isPosOnly := posonlyNames includes: p asString.
 		stream nextPutAll: (self transportParamName: p);
 			nextPutAll: ' := (___pos___ @env0:size @env0:>= '; print: i;
 			nextPutAll: ') ifTrue: [___pos___ @env0:at: '; print: i;
-			nextPutAll: '] ifFalse: [(___kw___ @env0:isNil @env0:not and: [___kw___ @env0:includesKey: ''';
-			nextPutAll: p asString;
-			nextPutAll: ''']) ifTrue: [___kw___ @env0:at: '''; nextPutAll: p asString; nextPutAll: '''] ifFalse: ['.
+			nextPutAll: '] ifFalse: ['.
+		isPosOnly ifFalse: [
+			stream
+				nextPutAll: '(___kw___ @env0:isNil @env0:not and: [___kw___ @env0:includesKey: ''';
+				nextPutAll: p asString;
+				nextPutAll: ''']) ifTrue: [___kw___ @env0:at: '''; nextPutAll: p asString;
+				nextPutAll: '''] ifFalse: ['].
 		"Default expression when this param has one; else TypeError."
 		(defaults notNil and: [absoluteIdx >= (firstDefault + 1)
 			and: [absoluteIdx <= (args posonlyargs size + args args size)]])
@@ -1497,7 +1802,9 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 			ifFalse: [
 				stream nextPutAll: 'TypeError ___signal___: ''missing required argument: ';
 					nextPutAll: p asString; nextPutAll: '''' ].
-		stream nextPutAll: ']].'; lf.
+		"One close per gate opened — the kwargs gate is absent for a
+		positional-only parameter."
+		stream nextPutAll: (isPosOnly ifTrue: ['].'] ifFalse: [']].']); lf.
 	].
 	"Reject extra positional / unexpected keyword args (the fixed selector
 	we forward to would otherwise silently drop them)."
@@ -1592,14 +1899,38 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 	``___kwargs___``) so a user parameter named ``positional`` or ``kwargs``
 	doesn't collide with the dispatch temps."
 
-	| numParams numDefaults firstWithDefault |
+	| numParams numDefaults firstWithDefault posonlyNames |
 	numParams := paramNames size.
 	numDefaults := args defaults size.
 	firstWithDefault := numParams - numDefaults + 1.
+	"A POSITIONAL-ONLY parameter (declared before ``/'') can never be bound by
+	keyword: CPython routes such a keyword to **kwargs and leaves the parameter
+	on its default.  Grail fell through to the kwargs lookup for EVERY parameter,
+	so the keyword did both -- bound the parameter AND stayed in **kwargs, hence
+	got applied twice.  ``collections.UserDict(dict=[('one', 1)])'' built
+	{'one': 1, 'dict': [('one', 1)]} instead of {'dict': [('one', 1)]}
+	(test_userdict test_init / test_update / test_all); that is exactly why
+	upstream fences these parameters off -- any name is a legal dict key.
+
+	Matched by NAME, not by index: the three callers build ``paramNames''
+	differently (the module / class-method forms may drop the receiver and may
+	pass names already transported), so a posonly PREFIX LENGTH would be wrong
+	for some of them.  Both spellings are collected for the same reason.
+
+	``asString'' on BOTH sides, as elsewhere in this class: paramNames carries
+	SYMBOLS, and a Symbol/String comparison does not answer true in the
+	direction ``includes:'' happens to test -- which silently made every
+	parameter look keyword-bindable and left the class-body method form still
+	double-applying after the module-level one was fixed."
+	posonlyNames := OrderedCollection new.
+	(args posonlyargs ifNil: [#()]) do: [:a |
+		posonlyNames add: a name asString.
+		posonlyNames add: (self transportParamName: a name) asString].
 	1 to: numParams do: [:i |
-		| pname hasDefault |
+		| pname hasDefault isPosOnly |
 		pname := paramNames at: i.
 		hasDefault := i >= firstWithDefault.
+		isPosOnly := posonlyNames includes: pname asString.
 		"Open the positional gate."
 		aStream
 			nextPutAll: pname;
@@ -1615,19 +1946,25 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 		"Kwargs fallback — only if kwargs may be non-nil at the call
 		site (varargs methods accept both).  Lookup keys are Python
 		``str''s (per CPython spec); CallAst's printKeywordsDictOn:
-		builds the kwargs dict with String keys to match."
-		aStream
-			nextPutAll: '(';
-			nextPutAll: kwName;
-			nextPutAll: ' @env0:isNil @env0:not and: [';
-			nextPutAll: kwName;
-			nextPutAll: ' @env0:includesKey: ''';
-			nextPutAll: pname;
-			nextPutAll: ''']) ifTrue: [';
-			nextPutAll: kwName;
-			nextPutAll: ' @env0:at: ''';
-			nextPutAll: pname;
-			nextPutAll: '''] ifFalse: ['.
+		builds the kwargs dict with String keys to match.
+
+		SKIPPED entirely for a positional-only parameter, which is not
+		keyword-bindable — see the posonlyNames comment above.  The gate is
+		what opens the second bracket, so the close below matches on the same
+		condition."
+		isPosOnly ifFalse: [
+			aStream
+				nextPutAll: '(';
+				nextPutAll: kwName;
+				nextPutAll: ' @env0:isNil @env0:not and: [';
+				nextPutAll: kwName;
+				nextPutAll: ' @env0:includesKey: ''';
+				nextPutAll: pname;
+				nextPutAll: ''']) ifTrue: [';
+				nextPutAll: kwName;
+				nextPutAll: ' @env0:at: ''';
+				nextPutAll: pname;
+				nextPutAll: '''] ifFalse: ['].
 		hasDefault ifTrue: [
 			"Reference the pre-evaluated default temp captured by the
 			enclosing block (closure form only — the closure path wraps
@@ -1667,7 +2004,9 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 				nextPutAll: pname;
 				nextPutAll: ''''
 		].
-		aStream nextPutAll: ']].'; lf
+		"One closing bracket per gate opened: the positional gate always, the
+		kwargs gate only for a keyword-bindable parameter."
+		aStream nextPutAll: (isPosOnly ifTrue: ['].'] ifFalse: [']].']); lf
 	].
 	self printArgCountChecksOn: aStream
 		positionalName: posName kwargsName: kwName nPositional: numParams
@@ -1700,16 +2039,33 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 	(WeakMethod.__call__ now derefs + forwards), after which the guard is
 	regression-clean."
 
-	"1. Too many positional args -- skipped when *args absorbs the tail."
-	args vararg isNil ifTrue: [
+	"1. Too many positional args -- skipped when *args absorbs the tail.
+	Match CPython's too_many_positional() wording exactly (a plain function
+	is scored on it -- test_keywordonlyarg testTooManyPositionalErrorMessage):
+	  * with positional defaults the accepted count is a RANGE,
+	    ``from <required> to <nPos>'' (plural always);
+	  * with none it is the single ``<nPos>'' (singular only when nPos = 1).
+	``given'' and the was/were suffix are runtime (given = posName size); the
+	suffix is ``was'' only for a lone extra arg (given = 1, i.e. nPos = 0)."
+	args vararg isNil ifTrue: [ | defcount sig plural |
+		defcount := (args defaults ifNil: [#()]) size.
+		defcount > 0
+			ifTrue: [
+				sig := 'from ' , ((nPos - defcount) max: 0) printString , ' to ' , nPos printString.
+				plural := 's']
+			ifFalse: [
+				sig := nPos printString.
+				plural := nPos = 1 ifTrue: [''] ifFalse: ['s']].
 		aStream
 			nextPutAll: '(('; nextPutAll: posName;
 			nextPutAll: ' @env0:size) @env0:> '; print: nPos;
 			nextPutAll: ') ifTrue: [TypeError ___signal___: (''';
-			nextPutAll: name;
-			nextPutAll: '() takes '; print: nPos;
-			nextPutAll: ' positional arguments but '' @env0:, ('; nextPutAll: posName;
-			nextPutAll: ' @env0:size) @env0:printString @env0:, '' were given'')].'; lf ].
+			nextPutAll: (self ___qualifiedNameFor___: name);
+			nextPutAll: '() takes '; nextPutAll: sig;
+			nextPutAll: ' positional argument'; nextPutAll: plural;
+			nextPutAll: ' but '' @env0:, ('; nextPutAll: posName;
+			nextPutAll: ' @env0:size) @env0:printString @env0:, ('; nextPutAll: posName;
+			nextPutAll: ' @env0:size @env0:> 1 ifTrue: ['' were given''] ifFalse: ['' was given'']))].'; lf ].
 	"2. Unexpected keyword -- skipped when **kwargs collects the extras."
 	args kwarg isNil ifTrue: [ | kwNames |
 		kwNames := OrderedCollection new.

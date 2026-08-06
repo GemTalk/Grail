@@ -61,7 +61,9 @@ category: 'Grail-Tests'
 method: GenericClassSubscriptTestCase
 testListSubclassCompiles
 	"``class GenericList(list[T]):'' — the subscripted base must
-	resolve at class-creation time.  Populating the list from an
+	resolve at class-creation time.  ``list'' now answers a real
+	GenericAlias, so this exercises PEP 560's __mro_entries__ rather
+	than the old collapse.  Populating the list from an
 	iterable arg is a separate gap (Grail's class instantiation
 	does ``self new'' without forwarding the iterable to list's
 	constructor); this regression covers only the subscription.
@@ -90,9 +92,15 @@ testMapSubclassWorks
 category: 'Grail-Tests'
 method: GenericClassSubscriptTestCase
 testSubscriptionReturnsSelfForAlias
-	"``list[int] is list'' and ``dict[str, int] is dict'' — Grail
-	collapses subscription to the origin class.  CPython would return
-	a GenericAlias here; Grail simplifies."
+	"Bare subscription, per class.  ``list'' has opted IN to real
+	parameterised generics, so ``list[int]'' is a GenericAlias whose
+	__origin__ is list -- CPython's answer.  ``dict'' has not, and still
+	collapses to itself.
+
+	This test used to assert that BOTH collapsed.  list had to change:
+	while ``list[int] is list'' held, singledispatch's register() accepted
+	a subscripted generic as a dispatch class and silently registered the
+	unsubscripted one, where CPython raises."
 
 	| result |
 	result := (testModule @env1:___pyAttrLoad___: #subscription_returns_self_for_use_as_alias)

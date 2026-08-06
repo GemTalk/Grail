@@ -945,7 +945,80 @@ repr: anObject
 
 category: 'Grail-Format Spec Engine'
 method: builtins
-___parseFormatSpec___: spec
+___digitsAreAllZero___: digits
+	"True when a formatted numeric body carries no significant digit -- ``0'',
+	``0.00'', ``0.0e+00'' -- which is how PEP 682's ``z'' decides that a negative
+	value has ROUNDED to zero and should shed its sign.  Only the MANTISSA is
+	examined: the exponent of ``0.0e+00'' is irrelevant, and ``-1.00e-03'' must
+	keep its sign even though the exponent is negative."
+
+	| mantissa ePos |
+	digits @env0:isNil ifTrue: [^ false].
+	ePos := 0.
+	1 @env0:to: digits @env0:size do: [:k |
+		(ePos @env0:= 0 and: [#($e $E) @env0:includes: (digits @env0:at: k)])
+			ifTrue: [ePos := k]].
+	mantissa := ePos @env0:= 0
+		ifTrue: [digits]
+		ifFalse: [digits @env0:copyFrom: 1 to: ePos @env0:- 1].
+	mantissa @env0:do: [:c |
+		(c @env0:isDigit and: [c @env0:~= $0]) ifTrue: [^ false]].
+	^ true
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___checkDuplicateGrouping___: spec at: i first: firstChar
+	"A SECOND grouping char right after the first is its own diagnosis, not
+	trailing junk, and CPython's two messages are exact.  The same char twice
+	reads as ``grouping + presentation type'' -> ``Cannot specify ',' with ','.''
+	(invalid_thousands_separator_type); a MIXED pair is caught by the
+	underscore/comma parse itself -> ``Cannot specify both ',' and '_'.''  Grail
+	let both fall through to the type check, whose generic ``Invalid format
+	specifier'' matched neither.  Applies at BOTH grouping positions -- before
+	the dot and after the precision -- so ``{:,_}'' and ``{:.,_f}'' agree."
+
+	(i @env0:> spec @env0:size) ifTrue: [^ self].
+	(#($, $_) @env0:includes: (spec @env0:at: i)) ifFalse: [^ self].
+	(spec @env0:at: i) @env0:= firstChar
+		ifTrue: [
+			^ ValueError ___signal___: ('Cannot specify ''' @env0:,
+				(String @env0:with: firstChar) @env0:, ''' with ''' @env0:,
+				(String @env0:with: firstChar) @env0:, '''.')].
+	^ ValueError ___signal___: 'Cannot specify both '','' and ''_''.'
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___badFormatSpec___: spec typeName: typeName
+	"CPython 3.14 names the VALUE's type in this message -- ``Invalid format
+	specifier '%M' for object of type 'complex''' -- and test_format matches it
+	exactly (test_unicode_in_error_message, test_better_error_message_format).
+	A missing type name still produces the shorter form rather than ''nil''."
+
+	typeName == nil ifTrue: [
+		^ ValueError ___signal___: ('Invalid format specifier '''
+			@env0:, spec @env0:asString @env0:, '''')].
+	^ ValueError ___signal___: ('Invalid format specifier '''
+		@env0:, spec @env0:asString @env0:, ''' for object of type '''
+		@env0:, typeName @env0:asString @env0:, '''')
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___pyTypeNameOf___: value
+	"The PYTHON type name for an error message -- ``str'', not ``Unicode7''.
+	Falls back to the Smalltalk class name if the Python route fails, so a
+	diagnostic can never itself raise."
+
+	^ [(value @env1:__class__) @env1:__name__ @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: value @env0:class @env0:name @env0:asString]
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___parseFormatSpec___: spec typeName: typeName
 	"Parse Python's format-spec mini-language
 	    [[fill]align][sign][#][0][width][,|_][.precision[,|_]][type]
 	into a 9-slot Array: {fill. align. sign. alt. width. grouping.
@@ -960,10 +1033,10 @@ ___parseFormatSpec___: spec
 	neither digits nor a grouping char after it), or 'n' combined
 	with either grouping (CPython: ``Cannot specify ',' with 'n'.'')."
 
-	| fill align sign alt width grouping precision type i n c fracGrouping |
+	| fill align sign alt width grouping precision type i n c fracGrouping noNegZero |
 	fill := $ . align := nil. sign := $-. alt := false.
 	width := 0. grouping := nil. precision := nil. type := nil.
-	fracGrouping := nil.
+	fracGrouping := nil. noNegZero := false.
 	i := 1. n := spec @env0:size.
 	(n @env0:>= 2 and: [#($< $> $^ $=) @env0:includes: (spec @env0:at: 2)])
 		ifTrue: [
@@ -977,6 +1050,12 @@ ___parseFormatSpec___: spec
 					i := 2]].
 	(i @env0:<= n and: [#($+ $- $ ) @env0:includes: (spec @env0:at: i)]) ifTrue: [
 		sign := spec @env0:at: i. i := i @env0:+ 1].
+	"PEP 682's ``z'' -- negative-zero coercion -- sits between the sign and the
+	``#'' flag.  ONLY there: ``z+f'' and ``fz'' are invalid specs, and they stay
+	invalid because a ``z'' anywhere else is simply not consumed and falls through
+	to the type check (test_format test_specifier_z_error)."
+	(i @env0:<= n and: [(spec @env0:at: i) @env0:= $z]) ifTrue: [
+		noNegZero := true. i := i @env0:+ 1].
 	(i @env0:<= n and: [(spec @env0:at: i) @env0:= $#]) ifTrue: [
 		alt := true. i := i @env0:+ 1].
 	(i @env0:<= n and: [(spec @env0:at: i) @env0:= $0]) ifTrue: [
@@ -991,7 +1070,8 @@ ___parseFormatSpec___: spec
 		width := (width @env0:* 10) @env0:+ (spec @env0:at: i) @env0:digitValue.
 		i := i @env0:+ 1].
 	(i @env0:<= n and: [#($, $_) @env0:includes: (spec @env0:at: i)]) ifTrue: [
-		grouping := spec @env0:at: i. i := i @env0:+ 1].
+		grouping := spec @env0:at: i. i := i @env0:+ 1.
+		self ___checkDuplicateGrouping___: spec at: i first: grouping].
 	(i @env0:<= n and: [(spec @env0:at: i) @env0:= $.]) ifTrue: [
 		i := i @env0:+ 1.
 		"A dot needs SOMETHING after it -- either precision digits or
@@ -1004,26 +1084,43 @@ ___parseFormatSpec___: spec
 			precision := 0.
 			[i @env0:<= n and: [(spec @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
 				precision := (precision @env0:* 10) @env0:+ (spec @env0:at: i) @env0:digitValue.
-				i := i @env0:+ 1]].
+				i := i @env0:+ 1].
+			"CPython stores the precision in a C int and rejects anything wider;
+			Grail's is an arbitrary-precision Integer, so ``format(1.2, '.%df' %
+			(sys.maxsize + 1))'' went on to ask for that many fraction digits and
+			died on an UNCATCHABLE NumericError (``an Integer would exceed 130144
+			bits'').  Cap it here so the failure is the ValueError CPython raises
+			(test_format test_precision)."
+			precision @env0:> 2147483647 ifTrue: [
+				ValueError ___signal___: 'precision too big']].
 		"Optional fraction-part grouping char, right after the precision
 		digits (if any) -- e.g. '.10_f' or the digit-less '._f'.  A
 		SECOND such char (or leftover digits after it) isn't consumed
 		here and falls through to the type check below, which rejects
 		it as an invalid format specifier (test_format: '.6_,f' etc.)."
 		(i @env0:<= n and: [#($, $_) @env0:includes: (spec @env0:at: i)]) ifTrue: [
-			fracGrouping := spec @env0:at: i. i := i @env0:+ 1]].
+			fracGrouping := spec @env0:at: i. i := i @env0:+ 1.
+			"The fraction-grouping position needs the SAME diagnosis as the
+			integer one: ``{:.,_f}'' is a mixed pair, not trailing junk."
+			self ___checkDuplicateGrouping___: spec at: i first: fracGrouping]].
 	i @env0:<= n ifTrue: [
 		c := spec @env0:at: i.
 		(#($b $c $d $e $E $f $F $g $G $n $o $s $x $X $%) @env0:includes: c) ifFalse: [
-			ValueError ___signal___: ('Invalid format specifier ''' @env0:, spec @env0:asString @env0:, '''')].
+			^ self ___badFormatSpec___: spec typeName: typeName].
 		type := c.
 		i := i @env0:+ 1].
 	i @env0:<= n ifTrue: [
-		ValueError ___signal___: ('Invalid format specifier ''' @env0:, spec @env0:asString @env0:, '''')].
+		^ self ___badFormatSpec___: spec typeName: typeName].
 	(type @env0:= $n and: [grouping @env0:notNil or: [fracGrouping @env0:notNil]]) ifTrue: [
 		ValueError ___signal___: ('Cannot specify ''' @env0:,
 			(String @env0:with: (grouping @env0:ifNil: [fracGrouping])) @env0:, ''' with ''n''.')].
-	^ { fill. align. sign. alt. width. grouping. precision. type. fracGrouping }
+	"``z'' is meaningless for an INTEGER presentation type -- there is no negative
+	zero to coerce -- and CPython rejects it by name.  Note this is about the
+	TYPE, not the value: ``f'{-0:z.1f}''' passes an int and is fine."
+	(noNegZero and: [#($b $c $d $o $x $X $n $s) @env0:includes: type]) ifTrue: [
+		ValueError ___signal___: 'Negative zero coercion (z) not allowed'].
+	^ { fill. align. sign. alt. width. grouping. precision. type. fracGrouping.
+		noNegZero }
 %
 
 category: 'Grail-Format Spec Engine'
@@ -1182,27 +1279,101 @@ ___fixedDigits___: absValue precision: precision
 
 category: 'Grail-Format Spec Engine'
 method: builtins
+___decExp10Of___: absValue
+	"The EXACT decimal exponent of a non-negative Float: the integer e with
+	10^e <= absValue < 10^(e+1) (0 for zero).  Derived from digit COUNTS of the
+	exact rational value, so unlike a loop of float divisions it cannot drift."
+
+	| fr num den k |
+	absValue @env0:= 0 ifTrue: [^ 0].
+	fr := absValue @env0:asFraction.
+	num := fr @env0:numerator.
+	den := fr @env0:denominator.
+	"value >= 1: floor(value) has d digits exactly when 10^(d-1) <= value < 10^d."
+	num @env0:>= den ifTrue: [
+		^ (num @env0:// den) @env0:printString @env0:size @env0:- 1].
+	"value < 1: floor(1/value) having k digits narrows the exponent to -k or
+	1-k (10^-k < value <= 10^(1-k)); one exact comparison picks between them."
+	k := (den @env0:// num) @env0:printString @env0:size.
+	^ ((num @env0:* (10 @env0:raisedTo: k @env0:- 1)) @env0:>= den)
+		ifTrue: [1 @env0:- k]
+		ifFalse: [0 @env0:- k]
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___sciParts___: absValue precision: precision
+	"Round a non-negative Float to `precision` + 1 significant decimal digits
+	EXACTLY, answering { mantissaString. exponent } -- 'M.MMM' (bare 'M' when
+	precision is 0) and the power of ten it multiplies.  Round-half-to-even on
+	the exact binary value, matching CPython's correctly-rounded dtoa.
+
+	Also used by %g/%G, which must decide fixed-vs-scientific on the exponent
+	AFTER rounding.
+
+	This replaces normalising the mantissa into [1, 10) by repeated float
+	division/multiplication, which was lossy in BOTH directions and corrupted
+	the digits before rounding ever ran:
+	  * 1505.0 / 10 / 10 / 10 lands just ABOVE the exact 1.505, so '%.2e'
+	    rounded up to '1.51e+03' where CPython -- rounding an exact tie to
+	    even -- gives '1.50e+03'.
+	  * 0.1 * 10 is exactly 1.0, so '%.17e' of 0.1 printed
+	    '1.00000000000000000e-01' instead of '1.00000000000000006e-01'.  Every
+	    digit of information was gone before rounding began."
+
+	| exp fr num den shift sn sd q r qs mstr |
+	exp := self ___decExp10Of___: absValue.
+	fr := absValue @env0:asFraction.
+	num := fr @env0:numerator.
+	den := fr @env0:denominator.
+	"Scale so the digits to keep become an integer: value * 10^(precision - exp)."
+	shift := precision @env0:- exp.
+	shift @env0:>= 0
+		ifTrue: [sn := num @env0:* (10 @env0:raisedTo: shift). sd := den]
+		ifFalse: [sn := num. sd := den @env0:* (10 @env0:raisedTo: 0 @env0:- shift)].
+	q := sn @env0:// sd.
+	r := sn @env0:- (q @env0:* sd).
+	((r @env0:* 2) @env0:> sd) ifTrue: [q := q @env0:+ 1]
+		ifFalse: [((r @env0:* 2) @env0:= sd) ifTrue: [(q @env0:even) ifFalse: [q := q @env0:+ 1]]].
+	qs := q @env0:printString.
+	"Rounding can carry into an extra digit (9.99 -> 10.0); renormalize.  The
+	carried value is exactly 10^(precision+1), so truncating is exact."
+	qs @env0:size @env0:> (precision @env0:+ 1) ifTrue: [
+		exp := exp @env0:+ 1.
+		qs := qs @env0:copyFrom: 1 to: precision @env0:+ 1].
+	"Only a zero value can come out SHORT (every other q spans exactly
+	precision+1 digits by construction)."
+	[qs @env0:size @env0:< (precision @env0:+ 1)] @env0:whileTrue: [qs := '0' @env0:, qs].
+	mstr := precision @env0:= 0
+		ifTrue: [qs]
+		ifFalse: [(qs @env0:copyFrom: 1 to: 1) @env0:, '.'
+			@env0:, (qs @env0:copyFrom: 2 to: qs @env0:size)].
+	^ { mstr. exp }
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___sciDigitsFromParts___: parts upper: upper
+	"Assemble 'M.MMMe+EE' from a ___sciParts___ pair.  The exponent always
+	carries a sign and at least two digits, as in CPython."
+
+	| mstr exp estr |
+	mstr := parts @env0:at: 1.
+	exp := parts @env0:at: 2.
+	estr := exp @env0:abs @env0:printString.
+	estr @env0:size @env0:< 2 ifTrue: [estr := '0' @env0:, estr].
+	estr := (exp @env0:< 0 ifTrue: ['-'] ifFalse: ['+']) @env0:, estr.
+	^ mstr @env0:, (upper ifTrue: ['E'] ifFalse: ['e']) @env0:, estr
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
 ___sciDigits___: absValue precision: precision upper: upper
 	"Scientific-notation digit string for a non-negative Float:
 	'M.MMMe+EE'."
 
-	| m exp mstr estr marker |
-	m := absValue.
-	exp := 0.
-	m @env0:= 0 ifFalse: [
-		[m @env0:>= 10] @env0:whileTrue: [m := m @env0:/ 10. exp := exp @env0:+ 1].
-		[m @env0:< 1] @env0:whileTrue: [m := m @env0:* 10. exp := exp @env0:- 1]].
-	mstr := self ___fixedDigits___: m precision: precision.
-	"Rounding can push the mantissa to 10.000...; renormalize."
-	(mstr @env0:size @env0:>= 2 and: [(mstr @env0:at: 1) @env0:= $1 and: [(mstr @env0:at: 2) @env0:= $0]]) ifTrue: [
-		(mstr @env0:copyFrom: 1 to: 2) @env0:= '10' ifTrue: [
-			m := m @env0:/ 10. exp := exp @env0:+ 1.
-			mstr := self ___fixedDigits___: m precision: precision]].
-	estr := exp @env0:abs @env0:printString.
-	estr @env0:size @env0:< 2 ifTrue: [estr := '0' @env0:, estr].
-	estr := (exp @env0:< 0 ifTrue: ['-'] ifFalse: ['+']) @env0:, estr.
-	marker := upper ifTrue: ['E'] ifFalse: ['e'].
-	^ mstr @env0:, marker @env0:, estr
+	^ self ___sciDigitsFromParts___: (self ___sciParts___: absValue precision: precision)
+		upper: upper
 %
 
 category: 'Grail-Format Spec Engine'
@@ -1236,7 +1407,7 @@ ___formatFloatValue___: value parsed: p
 	"Format a Float per a parsed spec (types f F e E g G % and the
 	bare-precision form)."
 
-	| fill align sign alt width grouping precision type neg a digits signStr body suffix exp10 probe fracGrouping |
+	| fill align sign alt width grouping precision type neg a digits signStr body suffix exp10 sciParts fracGrouping |
 	fill := p @env0:at: 1. align := p @env0:at: 2. sign := p @env0:at: 3.
 	alt := p @env0:at: 4. width := p @env0:at: 5. grouping := p @env0:at: 6.
 	precision := p @env0:at: 7. type := p @env0:at: 8. fracGrouping := p @env0:at: 9.
@@ -1258,6 +1429,17 @@ ___formatFloatValue___: value parsed: p
 			a @env0:* 0 @env0:= 0 ifFalse: [digits := 'inf']]].
 	(digits @env0:notNil and: [#($F $E $G) @env0:includes: type]) ifTrue: [
 		digits := digits @env0:asUppercase].
+	"A float's digits are generated by exact integer scaling (value * 10^precision),
+	and GemStone's LargeInteger tops out near 130144 bits -- about 39000 decimal
+	digits -- so ``'%12.*f' % (123456, 1.0)'' blew up with an UNCATCHABLE
+	NumericError (``an Integer would exceed 130144 bits'').  CPython does produce
+	that 123456-digit string; Grail cannot, so raise the OverflowError CPython
+	uses for over-long float conversions instead of dying.  The bound is far above
+	any real format and far below the VM's ceiling, leaving room for the value's
+	own magnitude (1e100 adds only ~100 digits).  test_format's test_common_format
+	passes overflowok=True precisely to allow this."
+	(precision @env0:notNil and: [precision @env0:> 30000]) ifTrue: [
+		OverflowError ___signal___: 'formatted float is too long (precision too large)'].
 	digits == nil ifTrue: [
 		suffix := ''.
 		type @env0:= $% ifTrue: [
@@ -1279,11 +1461,14 @@ ___formatFloatValue___: value parsed: p
 			ifFalse: [
 				precision == nil ifTrue: [precision := 6].
 				precision @env0:= 0 ifTrue: [precision := 1].
-				exp10 := 0.
-				probe := a.
-				probe @env0:= 0 ifFalse: [
-					[probe @env0:>= 10] @env0:whileTrue: [probe := probe @env0:/ 10. exp10 := exp10 @env0:+ 1].
-					[probe @env0:< 1] @env0:whileTrue: [probe := probe @env0:* 10. exp10 := exp10 @env0:- 1]].
+				"CPython's %g renders with '%.<p-1>e' FIRST and then picks
+				notation from the exponent it got, so the decision must use the
+				exponent AFTER rounding.  Deciding on the pre-rounding one made
+				'%.3g' of 999.9 print '1000': the exponent 2 chose fixed
+				notation, while rounding to three significant digits actually
+				yields 1.00e+03 -- exponent 3 -- and CPython prints '1e+03'."
+				sciParts := self ___sciParts___: a precision: precision @env0:- 1.
+				exp10 := sciParts @env0:at: 2.
 				((exp10 @env0:>= -4) @env0:and: [exp10 @env0:< (type == nil ifTrue: [precision @env0:- 1] ifFalse: [precision])])
 					ifTrue: [
 						digits := self ___fixedDigits___: a precision: (precision @env0:- 1 @env0:- exp10 @env0:max: 0).
@@ -1292,7 +1477,7 @@ ___formatFloatValue___: value parsed: p
 						-> '0.2000', not '0.2')."
 						alt ifFalse: [digits := self ___stripTrailingZeros___: digits]]
 					ifFalse: [
-						digits := self ___sciDigits___: a precision: precision @env0:- 1 upper: type @env0:= $G.
+						digits := self ___sciDigitsFromParts___: sciParts upper: type @env0:= $G.
 						alt ifFalse: [digits := self ___stripTrailingZeros___: digits]]]]].
 		digits := digits @env0:, suffix.
 		"'#' also forces a decimal point even with zero fraction digits
@@ -1308,6 +1493,14 @@ ___formatFloatValue___: value parsed: p
 				ifTrue: [digits @env0:, '.']
 				ifFalse: [(digits @env0:copyFrom: 1 to: ePos2 @env0:- 1) @env0:, '.'
 					@env0:, (digits @env0:copyFrom: ePos2 to: digits @env0:size)]]].
+	"PEP 682: with ``z'', a value that ROUNDS to zero loses its minus sign, so
+	``f'{-0.001:z.2f}''' is ``0.00'' while ``f'{-0.001:z.2e}''' keeps ``-1.00e-03''
+	because that one does NOT round to zero.  Testing the produced DIGITS rather
+	than the input is what gets both right -- the rounding has already happened
+	by here."
+	(neg and: [(p @env0:size @env0:>= 10) and: [(p @env0:at: 10) @env0:= true]])
+		ifTrue: [
+			(self ___digitsAreAllZero___: digits) ifTrue: [neg := false]].
 	signStr := self ___signString___: neg sign: sign.
 	(grouping @env0:notNil or: [fracGrouping @env0:notNil]) ifTrue: [
 		| ePos dotPos mainPart expSuffix ip fp dotStr zeroFillWithGrouping |
@@ -1384,6 +1577,88 @@ ___formatStrValue___: value parsed: p
 
 category: 'Grail-Format Spec Engine'
 method: builtins
+___isPrintfConversion___: conv
+	"Is ``conv'' a conversion character printf-style %-formatting accepts?
+	``%'' is not listed: the caller consumes a literal ``%%'' before asking."
+
+	^ #($s $r $a $c $d $i $u $o $x $X $e $E $f $F $g $G) @env0:includes: conv
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___printfCharBody___: value
+	"``%c'' operand for str %-formatting: an int code point, or a ONE-character
+	string.  The range check is not cosmetic -- an out-of-range code point used
+	to reach Character class>>codePoint:, whose OutOfRange is a SMALLTALK error
+	that Python ``except'' cannot catch, so ``'%c' % -1'' aborted the whole
+	module instead of raising OverflowError (test_format test_str_format).
+	The other shapes fell through to ``value asString'', which turned
+	``'%c' % 3.14'' into ``3.14'' -- four characters from a %c."
+
+	| iv |
+	(value isKindOf: CharacterCollection) ifTrue: [
+		value @env0:size @env0:= 1 ifTrue: [^ value @env0:asString].
+		TypeError ___signal___:
+			('%c requires an int or a unicode character, not a string of length '
+				@env0:, value @env0:size @env0:printString)].
+	iv := nil.
+	(value isKindOf: Integer) ifTrue: [iv := value]
+	ifFalse: [
+		(value isKindOf: Boolean) ifTrue: [iv := value ifTrue: [1] ifFalse: [0]]
+		ifFalse: [
+			"An int SUBCLASS (or any __index__ provider) is accepted, as in
+			CPython; a float is not, since it has no __index__."
+			(value ___respondsTo___: #'__index__') ifTrue: [iv := value __index__]]].
+	iv @env0:isNil ifTrue: [
+		TypeError ___signal___: ('%c requires an int or a unicode character, not '
+			@env0:, (self ___pyTypeNameOf___: value))].
+	((iv @env0:>= 0) @env0:and: [iv @env0:<= 16r10FFFF]) ifFalse: [
+		OverflowError ___signal___: '%c arg not in range(0x110000)'].
+	^ String @env0:with: (Character @env0:codePoint: iv @env0:asInteger)
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___printfAsFloat___: value
+	"``%e/%E/%f/%F/%g/%G'' operand for str %-formatting.  A bare
+	``value asFloat'' silently accepted a STRING, because GemStone's
+	String>>asFloat PARSES one -- so ``'%g' % '1''' produced ``1'' where
+	CPython raises TypeError (test_format test_str_format)."
+
+	(value isKindOf: Float) ifTrue: [^ value].
+	(value isKindOf: Integer) ifTrue: [^ value @env0:asFloat].
+	(value isKindOf: Boolean) ifTrue: [^ value ifTrue: [1.0] ifFalse: [0.0]].
+	(value ___respondsTo___: #'__float__') ifTrue: [^ (value __float__) @env0:asFloat].
+	(value ___respondsTo___: #'__index__') ifTrue: [^ (value __index__) @env0:asFloat].
+	TypeError ___signal___: ('must be real number, not '
+		@env0:, (self ___pyTypeNameOf___: value))
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
+___printfAsInteger___: value conv: conv
+	"``%d/%i/%u/%o/%x/%X'' operand for str %-formatting.  As with
+	___printfAsFloat___, the bare ``value asInteger'' it replaces PARSED a
+	string, so ``'%d' % '1''' answered ``1''.  d/i/u take any real number
+	(``'%d' % 3.7'' truncates, as in CPython); o/x/X require an integer."
+
+	(value isKindOf: Integer) ifTrue: [^ value].
+	(value isKindOf: Boolean) ifTrue: [^ value ifTrue: [1] ifFalse: [0]].
+	((conv @env0:= $d) @env0:or: [(conv @env0:= $i) @env0:or: [conv @env0:= $u]]) ifTrue: [
+		(value isKindOf: Float) ifTrue: [^ value @env0:truncated].
+		(value ___respondsTo___: #'__index__') ifTrue: [^ value __index__].
+		(value ___respondsTo___: #'__int__') ifTrue: [^ value __int__].
+		TypeError ___signal___: ('%' @env0:, (String @env0:with: conv)
+			@env0:, ' format: a real number is required, not '
+			@env0:, (self ___pyTypeNameOf___: value))].
+	(value ___respondsTo___: #'__index__') ifTrue: [^ value __index__].
+	TypeError ___signal___: ('%' @env0:, (String @env0:with: conv)
+		@env0:, ' format: an integer is required, not '
+		@env0:, (self ___pyTypeNameOf___: value))
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
 ___printfConvert___: value conv: conv flags: flags width: width precision: precision
 	"Render one printf %-field for str.__mod__: apply flags (- + space # 0),
 	width and precision per the conversion char, reusing the str.format()
@@ -1436,10 +1711,7 @@ ___printfConvert___: value conv: conv flags: flags width: width precision: preci
 		conv @env0:= $s ifTrue: [body := (self str: value) @env0:asString].
 		conv @env0:= $r ifTrue: [body := (self repr: value) @env0:asString].
 		conv @env0:= $a ifTrue: [body := (self ascii: value) @env0:asString].
-		conv @env0:= $c ifTrue: [
-			(value isKindOf: Integer)
-				ifTrue: [body := String @env0:with: (Character @env0:codePoint: value @env0:asInteger)]
-				ifFalse: [body := value @env0:asString]].
+		conv @env0:= $c ifTrue: [body := self ___printfCharBody___: value].
 		"precision truncates s/r/a (not c)."
 		(conv @env0:~= $c @env0:and: [
 			precision ~~ nil @env0:and: [body @env0:size @env0:> precision]]) ifTrue: [
@@ -1463,10 +1735,10 @@ ___printfConvert___: value conv: conv flags: flags width: width precision: preci
 			precision.
 			conv.
 			nil "fracGrouping: printf-style '%' formatting has no grouping syntax" }.
-		^ self ___formatFloatValue___: value @env0:asFloat parsed: p].
+		^ self ___formatFloatValue___: (self ___printfAsFloat___: value) parsed: p].
 
 	"--- integer conversions: d i u o x X ---"
-	iv := value @env0:asInteger.
+	iv := self ___printfAsInteger___: value conv: conv.
 	neg := iv @env0:< 0.
 	absval := iv @env0:abs.
 	prefix := ''.
@@ -1482,7 +1754,12 @@ ___printfConvert___: value conv: conv flags: flags width: width precision: preci
 		digits := (absval @env0:printStringRadix: 16) @env0:asUppercase.
 		altForm ifTrue: [prefix := '0X']].
 	digits == nil ifTrue: [
-		ValueError ___signal___: 'unsupported format character in %-format'].
+		"Name the offending character, as CPython does -- ``unsupported format
+		character 'z''' -- so a caller can tell WHICH conversion it got wrong.
+		test_format's test_specifier_z_error checks exactly this for ``%z.1f'',
+		since ``z'' is a format-SPEC option and has no %-conversion meaning."
+		ValueError ___signal___: ('unsupported format character '''
+			@env0:, (String @env0:with: conv) @env0:, '''')].
 	"integer precision = minimum digit count; the 0 flag is ignored when given."
 	precision ~~ nil ifTrue: [
 		((precision @env0:= 0) @env0:and: [absval @env0:= 0])
@@ -1502,13 +1779,39 @@ ___printfConvert___: value conv: conv flags: flags width: width precision: preci
 
 category: 'Grail-Format Spec Engine'
 method: builtins
+___formatComplexParts___: aComplex parsed: p
+	"``real'' + signed ``imag'' + 'j' for a complex whose spec names a
+	presentation type, per CPython's format_complex_internal.  Each part is
+	formatted with the TYPE / PRECISION / #-alt only: fill, align and width
+	describe the whole result and are applied once by the caller, and applying
+	them per part would pad each half separately.
+
+	The imaginary part always shows its sign ('+' forced), which is why it is
+	formatted with sign $+ regardless of what the spec asked for; the real part
+	keeps the spec's own sign option."
+
+	| rePart imPart reSpec imSpec |
+	reSpec := { Character @env0:space. nil. (p @env0:at: 3). (p @env0:at: 4).
+		0. (p @env0:at: 6). (p @env0:at: 7). (p @env0:at: 8). (p @env0:at: 9).
+		(p @env0:size @env0:>= 10 ifTrue: [p @env0:at: 10] ifFalse: [false]) }.
+	imSpec := { Character @env0:space. nil. $+. (p @env0:at: 4).
+		0. (p @env0:at: 6). (p @env0:at: 7). (p @env0:at: 8). (p @env0:at: 9).
+		(p @env0:size @env0:>= 10 ifTrue: [p @env0:at: 10] ifFalse: [false]) }.
+	rePart := self ___formatFloatValue___: aComplex real @env0:asFloat parsed: reSpec.
+	imPart := self ___formatFloatValue___: aComplex imag @env0:asFloat parsed: imSpec.
+	^ rePart @env0:asString @env0:, imPart @env0:asString @env0:, 'j'
+%
+
+category: 'Grail-Format Spec Engine'
+method: builtins
 ___formatValue___: value spec: spec
 	"Shared entry point behind int/float/str __format__.  Empty spec
 	is str(value); otherwise parse once and dispatch by type."
 
 	| p |
 	(spec == nil or: [spec @env0:isEmpty]) ifTrue: [^ value __str__].
-	p := self ___parseFormatSpec___: spec.
+	p := self ___parseFormatSpec___: spec
+		typeName: (self ___pyTypeNameOf___: value).
 	(value isKindOf: Float) ifTrue: [
 		^ self ___formatFloatValue___: value parsed: p].
 	(value isKindOf: Integer) ifTrue: [
@@ -1549,6 +1852,13 @@ reversed: aSequence
 	| lst |
 	(aSequence ___respondsTo___: #'__reversed__')
 		ifTrue: [^ aSequence __reversed__].
+	"A string reversed must yield 1-char STRINGS, matching forward str
+	iteration -- the ``reverseDo:'' fallback yields Characters, so
+	``list(reversed('abcd'))'' came back as [$d $c $b $a] not ['d','c','b','a']
+	(test_deque test_reversed / test_extendleft).  bytes/bytearray are not
+	CharacterCollections, so they keep the reverseDo: path (ints)."
+	(aSequence @env0:isKindOf: CharacterCollection)
+		ifTrue: [^ (aSequence @env0:reverse) __iter__].
 	lst := list ___new___.
 	aSequence @env0:reverseDo: [:item | lst append: item].
 	^ lst __iter__
@@ -1984,11 +2294,45 @@ isinstance: anObject _: aClassOrTuple
 	``Python at: selector``.  Tuples are handled by recursing on each
 	element until a match is found."
 
+	^ self ___isInstance___: anObject of: aClassOrTuple depth: 0
+%
+
+category: 'Python-Built-in Functions'
+method: builtins
+___isInstance___: anObject of: aClassOrTuple depth: aDepth
+	"isinstance's recursive core.  ``aDepth'' bounds the NESTED-TUPLE recursion:
+	a classinfo tuple may contain tuples, and CPython's own recursion limit is
+	what turns an absurdly nested one into RecursionError
+	(test_isinstance's blowstack nests 100 deeper on every pass until it gets
+	one).  Grail recursed in Smalltalk with no guard, so it died on the
+	UNCATCHABLE AlmostOutOfStack instead.  The cap is far above any real
+	classinfo -- nesting beyond one level is already pathological -- and well
+	under the Smalltalk stack, which is what keeps the failure a catchable
+	Python RecursionError."
+
 	| cls |
+	aDepth @env0:> 50 ifTrue: [
+		RecursionError ___signal___:
+			'maximum recursion depth exceeded in __instancecheck__'].
 	cls := self ___resolveClassRef___: aClassOrTuple.
 	"Tuple-of-classes form: recurse, OR together."
 	(cls isKindOf: tuple) ifTrue: [
-		cls @env0:do: [:eachCls | (self isinstance: anObject _: eachCls) ifTrue: [^ true]].
+		cls @env0:do: [:eachCls |
+			(self ___isInstance___: anObject of: eachCls depth: aDepth @env0:+ 1)
+				ifTrue: [^ true]].
+		^ false
+	].
+	"PEP 604 union (``int | str''): CPython's isinstance accepts types.UnionType
+	and tests each member, so it behaves exactly like the tuple form.  A member
+	is normalised first because ``int | None'' keeps the None SINGLETON in its
+	__args__ while CPython stores NoneType there -- unnormalised,
+	isinstance(None, int | None) raised instead of answering True."
+	(cls isKindOf: PyUnionType) ifTrue: [
+		(cls @env0:dynamicInstVarAt: #'__args__') @env0:do: [:eachCls |
+			(self ___isInstance___: anObject
+				of: (self ___normalizeUnionMember___: eachCls)
+				depth: aDepth @env0:+ 1)
+					ifTrue: [^ true]].
 		^ false
 	].
 	^ self ___isInstanceSingle___: anObject of: cls
@@ -2041,6 +2385,22 @@ ___isInstanceSingle___: anObject of: aClass
 				(anObject @env1:___pyAttrLoad___: #'__class__')
 			of: aClass depth: 0].
 	result := anObject isKindOf: aClass.
+	"CPython's object_isinstance: when the real type check FAILS it still reads
+	``inst.__class__'' and re-tests, so an object that declares its own
+	__class__ is judged by what it CLAIMS to be.  Two consequences the tests
+	pin: a lying __class__ makes isinstance answer True, and a __class__ getter
+	that raises propagates instead of being masked (test_isinstance's
+	test_isinstance_dont_mask_non_attribute_error -- ``isinstance(c, bool)''
+	with a RuntimeError-raising getter, which never touched __class__ here
+	because bool is a real type and the fast path had already decided).
+	Gated on the class body actually DECLARING __class__, so the ordinary case
+	pays one metaclass-chain probe and no attribute read."
+	(result not and: [anObject ___declaresOwnClassAttr___: #'__class__']) ifTrue: [
+		| claimed |
+		claimed := anObject @env1:___pyAttrLoad___: #'__class__'.
+		(claimed @env0:notNil and: [claimed @env0:isKindOf: Behavior])
+			ifTrue: [result := claimed @env0:inheritsFrom: aClass.
+				result @env0:ifFalse: [result := claimed @env0:== aClass]]].
 	(result not and: [aClass == Integer]) ifTrue: [
 		"CPython's bool IS an int subclass, so isinstance(True, int) is
 		True (PEP 285; test_bool.py test_isinstance).  Grail maps bool to
@@ -2140,12 +2500,59 @@ pow: x _: y
 category: 'Grail-Built-in Functions'
 method: builtins
 property: fn
-	"Python @property / property(fn) - identity stub.  Grail can't
-	transparently call the getter on attribute reads (no descriptor
-	protocol yet), but callers can still invoke the function
-	explicitly via `obj.prop()`."
+	"``property(fget)'' — build a real read-only descriptor.
 
-	^ fn
+	This used to be an identity stub returning fn (the comment said ``no
+	descriptor protocol yet''), which made the ONE-argument call form behave
+	unlike every other arity: property(), property(g, s), property(g, s, d) and
+	the doc= keyword all already reached PropertyDescriptor's constructors, so
+	only property(g) answered a bare function.  Reading such an attribute gave
+	back the function rather than calling it, which is why
+	``__bases__ = property(getbases)'' -- the legacy abstract-class protocol
+	CPython's test_isinstance exercises throughout -- looked like a
+	non-conforming classinfo and raised TypeError.
+
+	Kept as a builtins method rather than deleted so the 1-argument call site
+	resolves exactly as before; only the value it answers changes."
+
+	^ PropertyDescriptor @env1:__new__: fn
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+property
+	"``property()'' called through the builtins BoundMethod value (``p =
+	property; p()'').  The bare NAME ``property'' resolves to this builtins
+	method, not the class, so a call THROUGH A VARIABLE lands here rather than
+	on the class constructor -- and every arity must therefore be served here,
+	not just the 1-arg form above (test_property test_issue41287 iterates ``for
+	ps in property, PropertySub, ...: ps(getter, None, None, doc)'')."
+
+	^ PropertyDescriptor @env1:__new__
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+property: fg _: fs
+	"``property(fget, fset)'' through the builtins BoundMethod value."
+
+	^ PropertyDescriptor @env1:__new__: fg _: fs
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+property: fg _: fs _: fd
+	"``property(fget, fset, fdel)'' through the builtins BoundMethod value."
+
+	^ PropertyDescriptor @env1:__new__: fg _: fs _: fd
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+property: fg _: fs _: fd _: dc
+	"``property(fget, fset, fdel, doc)'' through the builtins BoundMethod value."
+
+	^ PropertyDescriptor @env1:__new__: fg _: fs _: fd _: dc
 %
 
 category: 'Grail-Built-in Functions'
@@ -2224,7 +2631,19 @@ issubclass: aClass _: aClassOrTuple
 	emits ``str`` / ``int`` as such), unwrap to the underlying class
 	before walking the hierarchy."
 
+	^ self ___isSubclass___: aClass of: aClassOrTuple depth: 0
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___isSubclass___: aClass of: aClassOrTuple depth: aDepth
+	"issubclass's recursive core.  ``aDepth'' bounds the nested-tuple recursion
+	for the same reason isinstance's does -- see ___isInstance___:of:depth:."
+
 	| sub target |
+	aDepth @env0:> 50 ifTrue: [
+		RecursionError ___signal___:
+			'maximum recursion depth exceeded in __subclasscheck__'].
 	sub := self ___resolveClassRef___: aClass.
 	target := self ___resolveClassRef___: aClassOrTuple.
 	"RECURSE per element rather than calling ___isSubclassSingle___ directly,
@@ -2236,11 +2655,35 @@ issubclass: aClass _: aClassOrTuple
 	test_subclass_tuple), which only recursion handles."
 	(target isKindOf: tuple) ifTrue: [
 		target @env0:do: [:eachCls |
-			(self issubclass: sub _: eachCls) ifTrue: [^ true]
+			(self ___isSubclass___: sub of: eachCls depth: aDepth @env0:+ 1)
+				ifTrue: [^ true]
+		].
+		^ false
+	].
+	"PEP 604 union: same treatment as a tuple, per CPython's issubclass, with the
+	same None -> NoneType normalisation."
+	(target isKindOf: PyUnionType) ifTrue: [
+		(target @env0:dynamicInstVarAt: #'__args__') @env0:do: [:eachCls |
+			(self ___isSubclass___: sub
+				of: (self ___normalizeUnionMember___: eachCls)
+				depth: aDepth @env0:+ 1)
+					ifTrue: [^ true]
 		].
 		^ false
 	].
 	^ self ___isSubclassSingle___: sub of: target
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___normalizeUnionMember___: aMember
+	"``X | None'' is spelled with the None SINGLETON but means NoneType, which is
+	what CPython puts in __args__ -- so isinstance(None, int | None) is True.
+	Grail's union keeps the singleton, so translate it at the point of use.
+	Everything else passes through untouched."
+
+	aMember == None ifTrue: [^ NoneType].
+	^ aMember
 %
 
 category: 'Grail-Built-in Functions'
@@ -2441,6 +2884,15 @@ ___isSubclassSingle___: sub of: target
 			iff := Python @env0:at: #IntFlag otherwise: nil.
 			(iff @env0:notNil and: [(sub == iff) or: [sub @env0:inheritsFrom: iff]])
 				ifTrue: [^ true]]].
+	"ExceptionGroup widening: CPython's ExceptionGroup derives from BOTH
+	BaseExceptionGroup and Exception (PEP 654), but Grail's single-inheritance
+	Smalltalk chain puts it under BaseExceptionGroup only.  Report the CPython
+	relationship so issubclass(ExceptionGroup, Exception) holds -- the documented
+	hierarchy test_baseexception test_inheritance checks against."
+	(target == (Python @env0:at: #Exception otherwise: nil)) ifTrue: [ | egCls |
+		egCls := Python @env0:at: #ExceptionGroup otherwise: nil.
+		(egCls @env0:notNil and: [(sub == egCls) or: [sub @env0:inheritsFrom: egCls]])
+			ifTrue: [^ true]].
 	il := Python @env0:at: #importlib otherwise: nil.
 	il == nil ifFalse: [
 		((il @env0:___mroOf___: sub) @env0:includes: target) ifTrue: [^ true]].

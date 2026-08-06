@@ -294,22 +294,42 @@ def wraps_on_a_builtin_does_not_raise():
     for every name the builtin lacks (__dict__, __type_params__) AND the
     __module__ read that used to raise a raw Smalltalk error.
 
-    ``==``, not ``is``: a reference to a builtin mints a FRESH BoundMethod
-    handle per attribute load, so ``max is max`` is False in Grail even
-    though ``max == max`` is True (BoundMethod.__eq__ compares receiver +
-    selector).  That is a pre-existing deviation from CPython, unrelated to
-    update_wrapper -- pinned here so the distinction stays visible.
+    ``is``, as CPython has it.  This used to have to be written with ``==``,
+    because a reference to a builtin minted a fresh BoundMethod handle per
+    attribute load and ``max is max`` was False; BoundMethod now interns
+    module- and class-receiver handles, so the identity assertion CPython
+    licenses is the one to make.
     """
     def wrapper():
         pass
 
     functools.update_wrapper(wrapper, max)
-    return wrapper.__name__ == 'max' and wrapper.__wrapped__ == max
+    return wrapper.__name__ == 'max' and wrapper.__wrapped__ is max
 
 
-def builtin_references_are_not_identity_stable():
-    """Guard for the assumption the test above leans on."""
-    return max is not max and max == max
+def builtin_references_are_identity_stable():
+    """``max is max``, and a builtin reached two ways is one object.
+
+    CPython's builtins are single objects living in the builtins module and
+    callers compare them with ``is'' -- functools' test_subclass_optimization
+    asserts ``partial(partial(min, 2), 1).func is min''.
+
+    The instance case is the counterpart and must stay FALSE: CPython creates a
+    fresh bound method per attribute read, so ``obj.meth is obj.meth`` is False
+    there too, and interning those would be both the wrong answer and unbounded
+    (the key would retain every receiver ever asked for a method).
+    """
+    import builtins
+
+    class C:
+        def meth(self):
+            pass
+
+    c = C()
+    return [max is max,
+            max is builtins.max,
+            C.meth is C.meth,
+            c.meth is c.meth]
 
 
 def lru_cache_wrapper_gets_metadata():
@@ -343,3 +363,102 @@ def cache_decorator_gets_metadata():
     cached = functools.cache(orig)
     return cached() == 1 and cached.__name__ == 'orig' \
         and cached.__doc__ == 'documented'
+
+
+def unbound_signature_keeps_receiver():
+    """CPython's ``signature(Cls.method)'' -- UNBOUND -- shows ``self''; the bound
+    ``signature(instance.method)'' does not, because the receiver is supplied.
+
+    ClassDefAst's signature table is bound-shaped (it drops the receiver), so
+    the unbound read used to be missing it too.  The receiver name is now
+    recorded alongside and put back only for the unbound form.
+
+    A @staticmethod has no receiver to restore, and a @classmethod restores
+    ``cls'' rather than ``self'' -- the name the def actually wrote."""
+    from inspect import Signature
+
+    class Host:
+        def meth(self, item, arg: int) -> str:
+            return str(item)
+
+        @classmethod
+        def cmeth(cls, item, arg: int) -> str:
+            return str(item)
+
+        @staticmethod
+        def smeth(item, arg: int) -> str:
+            return str(item)
+
+    return [str(Signature.from_callable(Host.meth)),
+            str(Signature.from_callable(Host().meth)),
+            str(Signature.from_callable(Host.cmeth)),
+            str(Signature.from_callable(Host.smeth))]
+
+
+def singledispatchmethod_signature():
+    """A singledispatchmethod read reports the WRAPPED function's signature, so
+    both the class and the instance read show ``self'' -- CPython's
+    __wrapped__ is the plain function, and Grail's analogue is the unbound
+    handle rather than the bound one the class-body decorator captured."""
+    from inspect import Signature
+
+    class A:
+        @functools.singledispatchmethod
+        def func(self, item, arg: int) -> str:
+            return str(item)
+
+        @functools.singledispatchmethod
+        @classmethod
+        def cls_func(cls, item, arg: int) -> str:
+            return str(arg)
+
+        @functools.singledispatchmethod
+        @staticmethod
+        def static_func(item, arg: int) -> str:
+            return str(arg)
+
+    return [str(Signature.from_callable(A.func)),
+            str(Signature.from_callable(A().func)),
+            str(Signature.from_callable(A.cls_func)),
+            str(Signature.from_callable(A.static_func))]
+
+
+_COND = True
+
+
+class ConditionalBody:
+    """A class whose members are defined under an ``if``.  CPython compiles them
+    exactly like unconditional ones; Grail compiles them to CLOSURES, which is
+    why they need the def-site __module__ and __qualname__ stamps."""
+
+    if _COND:
+        @functools.lru_cache()
+        def cached_meth(self, x, y):
+            return 3 * x + y
+
+
+class PlainBody:
+    @functools.lru_cache()
+    def cached_meth(self, x, y):
+        return 3 * x + y
+
+
+def conditional_classbody_def_metadata():
+    """A def written under an ``if'' in a class body must report the same
+    __module__ and a properly qualified __qualname__ as an unconditional one,
+    and must pickle BY REFERENCE to the identical object.
+
+    A closure has no receiver to forward __module__ to -- a module-level def is
+    a BoundMethod and gets its module that way -- so without a def-site stamp it
+    answered the placeholder '<closure>' and pickle could not resolve it.
+    test_functools' TestLRUC defines its members under ``if c_functools:''.
+    """
+    import pickle
+
+    same_module = (ConditionalBody.cached_meth.__module__
+                   == PlainBody.cached_meth.__module__)
+    roundtrip = pickle.loads(pickle.dumps(ConditionalBody.cached_meth))
+    return [str(same_module),
+            ConditionalBody.cached_meth.__qualname__,
+            PlainBody.cached_meth.__qualname__,
+            str(roundtrip is ConditionalBody.cached_meth)]

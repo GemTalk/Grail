@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 21 | 12 | 57 | 90 |
-| P2 | 9 | 7 | 18 | 34 |
+| P1 | 29 | 4 | 57 | 90 |
+| P2 | 12 | 4 | 18 | 34 |
 | P3 | 0 | 1 | 55 | 56 |
 | P4 | 0 | 0 | 75 | 75 |
-| **In-scope** | **30** | **20** | **205** | **255** |
+| **In-scope** | **41** | **9** | **205** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -65,7 +65,7 @@ python3 scripts/sync_scope_status.py --check    # exit 1 if it is stale
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **30 of those score OK**.
+Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **41 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -83,7 +83,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |:------:|--------|-----------|
 |  | `test_asyncgen` | Async generators — a core language feature. |
 | ✅ | `test_augassign` | Augmented-assignment semantics (language). |
-| ❗ | `test_baseexception` | BaseException hierarchy (language). |
+| ✅ | `test_baseexception` | BaseException hierarchy (language). |
 |  | `test_binop` | Binary-operator dispatch (language). |
 | ✅ | `test_bool` | bool type (language). |
 |  | `test_builtin` | Built-in functions (language). |
@@ -99,7 +99,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_descrtut` | Descriptor tutorial doctests (language). |
 | ✅ | `test_dict` | dict — core type (in harness). |
 | ✅ | `test_dictcomps` | Dict comprehensions (language). |
-| ❗ | `test_dictviews` | dict keys/values/items views (language). |
+| ✅ | `test_dictviews` | dict keys/values/items views (language). |
 |  | `test_dynamic` | Dynamic name binding / exec (language). |
 |  | `test_enumerate` | enumerate builtin (language). |
 |  | `test_eof` | Parser EOF handling (language). |
@@ -111,11 +111,11 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_extcall` | Extended call syntax */** (language). |
 | ✅ | `test_float` | float — core type (in harness). |
 |  | `test_flufl` | barry_as_FLUFL __future__ (language). |
-| ❗ | `test_format` | str formatting / format() (language). |
+| ✅ | `test_format` | str formatting / format() (language). |
 |  | `test_fstring` | f-strings (language). |
 |  | `test_funcattrs` | Function/method attributes (language). |
 |  | `test_future_stmt` | __future__ statements (language). |
-| ❗ | `test_generator_stop` | PEP 479 StopIteration handling (language). |
+| ✅ | `test_generator_stop` | PEP 479 StopIteration handling (language). |
 |  | `test_generators` | Generators (language). |
 |  | `test_genericclass` | __class_getitem__ / generic classes (language). |
 |  | `test_genexps` | Generator expressions (language). |
@@ -125,10 +125,10 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_index` | __index__ protocol (language). |
 | ✅ | `test_int` | int — core type (in harness). |
 | ✅ | `test_int_literal` | Integer literal parsing (language). |
-| ❗ | `test_isinstance` | isinstance/issubclass (language). |
-| ❗ | `test_iter` | Iterator protocol (language). |
+| ✅ | `test_isinstance` | isinstance/issubclass (language). |
+| ✅ | `test_iter` | Iterator protocol (language). |
 | ✅ | `test_iterlen` | __length_hint__ (language). |
-| ❗ | `test_keywordonlyarg` | Keyword-only arguments (language). |
+| ✅ | `test_keywordonlyarg` | Keyword-only arguments (language). |
 | ✅ | `test_list` | list — core type (in harness). |
 | ❗ | `test_listcomps` | List comprehensions (language). |
 |  | `test_long` | Arbitrary-precision int (language). |
@@ -149,7 +149,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_set` | set/frozenset — core type (in harness). |
 | ✅ | `test_setcomps` | Set comprehensions (language). |
 | ✅ | `test_slice` | slice objects (language). |
-| ❗ | `test_sort` | list.sort / sorted (language/builtin). |
+| ✅ | `test_sort` | list.sort / sorted (language/builtin). |
 |  | `test_source_encoding` | Source-file encoding declarations (parser). |
 |  | `test_str` | str — core type (language). |
 |  | `test_string_literals` | String-literal syntax (language). |
@@ -187,7 +187,7 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 | ❗ | `test_datetime` | datetime — core data type (in harness). |
 |  | `test_decimal` | decimal — arbitrary-precision arithmetic. |
 |  | `test_defaultdict` | collections.defaultdict. |
-| ❗ | `test_deque` | collections.deque. |
+| ✅ | `test_deque` | collections.deque. |
 |  | `test_dynamicclassattribute` | types.DynamicClassAttribute (used by enum). |
 | ❗ | `test_enum` | enum — core (in harness). |
 | ✅ | `test_fractions` | fractions — core numeric (in harness). |
@@ -209,8 +209,8 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 |  | `test_strtod` | String→double conversion (float parsing). |
 | ✅ | `test_textwrap` | textwrap — core (in harness). |
 |  | `test_unittest` | unittest (vendored) — the test framework itself. |
-| ❗ | `test_userdict` | collections.UserDict (vendored). |
-| ❗ | `test_userlist` | collections.UserList (vendored). |
+| ✅ | `test_userdict` | collections.UserDict (vendored). |
+| ✅ | `test_userlist` | collections.UserList (vendored). |
 |  | `test_userstring` | collections.UserString (vendored). |
 
 ### P3 — Broader stdlib (serialization · io · dates · typing · introspection)  ·  56 modules
@@ -665,15 +665,37 @@ status/tests/fail/err/skip — are in
 only what does not change every run: which modules are *done*, and what each
 not-yet-passing one is waiting on.
 
-**Fully green: 30 of the 50** — the ✅ rows in the tier tables above. That list
+**Fully green: 41 of the 50** — the ✅ rows in the tier tables above. That list
 used to be spelled out here and is not any more: it duplicated something the
 Status column now derives, and had drifted to 27.
 
-**Not yet green (the 20 ❗ rows), in descending size of the remaining gap:**
-`test_enum` (metaclass depth — `object.__str__`, `__dir__`-on-class, `_boundary_`
-Flag), `test_datetime`, `test_functools`, `test_iter`, and `test_traceback` (the
-only IMPORTERROR — `__code__` on a def that compiled to a real method; PR #129
-attempted it and was closed unmerged).
+**Not yet green (the 9 ❗ rows), in descending size of the remaining gap:**
+`test_datetime` (114), `test_enum` (76 — metaclass depth: `object.__str__`,
+`__dir__`-on-class, `_boundary_` Flag), `test_copy` (43), `test_listcomps` (31),
+`test_yield_from` (30), `test_property` (21), `test_scope` (15),
+`test_functools` (12), and `test_traceback` (the only IMPORTERROR — `__code__`
+on a def that compiled to a real method; PR #129 attempted it and was closed
+unmerged).
+
+`test_iter` closed, and its last test is worth recording because it did **not**
+need the deferred traceback project it looked like it needed.
+`test_exception_locations` asserts PEP 657 column spans — that an exception from
+`__init__`/`__iter__`/`__next__` is attributed to the *iterator expression* of
+the `for` statement, `f.line[f.colno - indent : f.end_colno - indent] ==
+"BrokenIter(init_raises=True)"` — and `FrameSummary` was answering `colno`,
+`end_colno` and `line` as `None`. The apparent fix was source-resolvable
+`co_filename` plus per-expression position records. The actual fix was three
+lines of codegen: `TryAst` already builds its frame from `___curPos___`, and
+`___pushFrameFromPos___` already accepted a 5-element
+`{line. colno. endLine. endColno. sourceLine}` array, so `ForAst` just had to
+store the iterable's position there instead of a bare line number — as a
+*literal* array, which allocates nothing and can therefore be repeated before
+every `__next__`. Emitted per-expression positions are cheap where a raise site
+is known statically; what remains genuinely blocked on `co_filename` is the
+general case, where the position must be recovered for *any* instruction.
+
+`test_traceback` (the IMPORTERROR) is unaffected by this: it needs `__code__` on
+a def that compiled to a real method, which is a different root.
 
 ## Next tranche (phase 4, wired 2026-08-03)
 
@@ -688,31 +710,23 @@ Two of the eighteen only needed a vendoring gap closed, not a Grail fix:
 (for `test_yield_from`) were added to the trimmed support package, plus
 `os_helper.create_empty_file`.
 
-Three of the eighteen have since gone green — `test_compare`, `test_iterlen` and
-`test_index` — and their rows are gone from the tables below, including the
-`#'<'`/`#'<='` uncatchable-DNU root that `test_index` named. The tier tables' ✅
+Eleven of the eighteen have since gone green — `test_compare`, `test_iterlen`,
+`test_index`, `test_keywordonlyarg`, `test_dictviews`, `test_generator_stop`,
+`test_sort`, `test_userdict`, `test_isinstance`, `test_userlist` and
+`test_baseexception` — and their rows are gone from the tables below, including
+the `#'<'`/`#'<='` uncatchable-DNU root that `test_index` named. The tier tables' ✅
 is the live signal; anything still listed here is still open.
 
-**Easy wins — small residual, no new runtime plumbing (7 left of 9):**
-
-| Module | Trial score | What is left |
-|--------|-------------|--------------|
-| `test_generator_stop` | 2t, 2E | PEP 479: a `StopIteration` crossing a generator boundary must become `RuntimeError`. |
-| `test_keywordonlyarg` | 11t, 4F 1E | `co_kwonlyargcount`; "takes from 1 to 2 positional arguments" wording; two SyntaxError cases. |
-| `test_dictviews` | 16t, 2F 3E | `dict_keys` must register as `KeysView`; a self-referential view `repr` recurses; one `PyDict does not understand #new` leak. |
-| `test_sort` | 21t, 4F 1E | Mutation-during-sort must raise `ValueError` (4 tests) + one `OffsetError` escaping codegen. |
-| `test_userdict` | 28t, 3F 3E | `UserDict \| UserDict` (PEP 584), `UserDict(self=42)`, `repr` of a self-referential dict. |
-| `test_userlist` | 54t, 4F 4E | `OrderedCollection + UserList`, slice-assignment identity, `UserList does not understand #reverseDo:`. |
-| `test_isinstance` | 23t, 1F 19E | 16 of the 19 errors are Grail raising "arg must be a type" where CPython accepts the argument. |
+**Easy wins — all 9 are closed**, so that table is gone entirely: the tranche's
+selection rule (small residual, no new runtime plumbing) held up.
 
 **Single-root modules — one fix moves most of the module, and the same root
 leaks into modules already on the board (4 left of 5):**
 
 | Module | Trial score | The one root |
 |--------|-------------|--------------|
-| `test_baseexception` | 11t, 1F 7E | All 7 are `#signal` / `#handles:` sent to a non-exception (`raise 'str'`, `except <not-a-class>`): must be a catchable `TypeError`. Hardens the exception model that `test_exceptions`/`test_raise`/`test_traceback` sit on. |
 | `test_listcomps` | 60t, 2F 52E | 29 errors are `UndefinedObject does not understand #new` — a nil receiver in comprehension codegen (also 2× `SubscriptAst does not understand #id`, which is what blocks `test_generators` from importing at all). |
-| `test_property` | 31t, 23F 8E | 12 failures are one bug: `property.__doc__` falls back to `object`'s docstring instead of the getter's / the `doc=` argument. |
+| `test_property` | 31t, 23F 8E | Was `property.__doc__` falling back to `object`'s docstring. Since `property(fget)` became a real descriptor with Python-visible `fget`/`fset`/`fdel`/`__doc__` the residual is down to 21 fail+err, and what is left is the STORE half of the descriptor protocol — Grail's attribute-store path does not consult descriptors, so `obj.prop = v` writes a shadowing instVar and a read-only property does not raise. |
 | `test_copy` | 81t, 28F 16E | `copy.Error` is missing (3 errors), and `deepcopy` returns identical objects for 6 cases. `copy`/`deepcopy` is exercised by `test_datetime`, `test_enum`, `test_functools` and the pickle path. |
 
 **Core surface, moderate residual but high leverage (4):**
@@ -722,15 +736,17 @@ leaks into modules already on the board (4 left of 5):**
 | `test_scope` | 41t, 6F 10E | `ExecBlock.__closure__`, `sys.settrace` arity, one `CompileError: undefined symbol x`. LEGB is load-bearing for everything. |
 | `test_yield_from` | 43t, 18F 12E | Generator delegation (`yield from` throw/close/return-value propagation). |
 | `test_deque` | 80t, 11F 24E 4S | `deque` item assignment/deletion, `RuntimeError` on mutation-during-scan, `copy`/`deepcopy` identity. |
-| `test_format` | 18t, 10F 4E 3S | `%`-format: `%r` on bytes, `ValueError` on bad specs, and the format-spec error wording. |
+| `test_format` | 18t, 10F 4E 3S | **OK, 0F 0E 3S** (2026-08-05). Closed in two rounds. First: the four exact grouping-conflict messages and CPython 3.14's type suffix; precision bounds in all three %-engines plus float digit generation (each an uncatchable NumericError or a hang); `complex.__format__`, which ignored the spec entirely; PEP 682 `z`; two float literals the lexer mis-read (`0.j`, `1.e+300`). Then: `repr()`/`isprintable()` keyed on the Unicode general category (via `Character>>unicodeCategory`) instead of escaping ASCII controls only; scientific digits generated by EXACT integer scaling rather than normalising the mantissa with float division (which rounded a tie the wrong way and, at high precision, discarded the value entirely), with `%g` choosing notation on the post-rounding exponent; bytes `%r` as an alias for `%a`, its own bad-float wording, unconsumed-argument rejection and the `%c` length message. Reaching `test_str_format`'s second half also exposed missing str %-format diagnostics — notably `'%c' % -1`, which reached `Character class>>codePoint:` and died with an uncatchable Smalltalk `OutOfRange`, and `%d`/`%g` silently PARSING a string operand — plus that only a tuple may unpack into arguments (a list was being unpacked, formatting just its first element). |
 
-Two of the eighteen carry a per-test entry in `scripts/cpython_suite_skips.txt`
-because one test **hangs the scoring session** (unbounded work, uncatchable, so
-it takes the whole module's row with it): `test_deque.test_extend`
-(`d.extend(d)` consumes the live deque it appends to) and
-`test_format.test_common_format` (`'%.*d' % (sys.maxsize, 1)` is not
-precision-validated). Both are real bugs with known-shaped fixes; deleting the
-skip is the regression test.
+Two of the eighteen carry a per-test entry in `scripts/cpython_suite_skips.txt`.
+`test_deque.test_extend` still **hangs the scoring session** (`d.extend(d)`
+consumes the live deque it appends to — unbounded and uncatchable, so it takes
+the whole module's row with it); deleting that skip is its regression test.
+`test_format.test_common_format` no longer hangs — its precision is validated
+now — but it cannot pass: it asks for a 123456-fraction-digit float string,
+which exceeds GemStone's LargeInteger ceiling (~39000 decimal digits), so Grail
+raises `OverflowError` where CPython genuinely builds the string. That skip
+records a VM limit, not a missing fix.
 
 ### Trialed and deferred — with the blocker each log named
 
@@ -743,6 +759,13 @@ Rebuilt again on 2026-08-04 against `main` post-#201/#202/#203 (whole manifest,
 50 modules, 4 workers, 293s, no CRASH/TIMEOUT). Two rows moved, both
 improvements: `test_enum` 117 → 105 and `test_functools` 41 → 40 fail+err. No
 module changed status bucket, so the Status column above is unchanged.
+
+Rebuilt again on 2026-08-05 against `main` post-#229/#230/#231 (whole manifest,
+50 modules, 4 workers, 656s, no FAIL/CRASH/TIMEOUT/STERROR). One row moved:
+`test_functools` 19 → 12 fail+err, from the `_c3_mro`/`_find_impl` and
+descriptor-binding work in #229/#231. It stays ❗, so the Status column is
+unchanged — the ✅ count of 41 reflects #230 closing `test_format`, which was
+already committed.
 
 **One named symbol away** — cheap, and each unblocks a whole module:
 

@@ -21,6 +21,19 @@
 
 import sys
 
+# An enum MEMBER that also subclasses int/str/float (IntEnum, IntFlag, a
+# data-mixed ``class C(int, Enum)``) satisfies the isinstance(obj, int/str/
+# float) primitive dispatch in save() and would pickle as its RAW value,
+# dropping the member.  CPython dispatches by EXACT type, so a member (a
+# subclass instance) falls through to __reduce_ex__ instead.  Detect members
+# with isinstance(obj, Enum) and route them the same way.  Guarded so a very
+# early import of pickle (before enum is built) degrades to "no enums", never
+# an ImportError.
+try:
+    from enum import Enum as _Enum
+except Exception:                       # pragma: no cover - bootstrap only
+    _Enum = ()
+
 HIGHEST_PROTOCOL = 5
 DEFAULT_PROTOCOL = 5          # CPython 3.14's default
 
@@ -343,6 +356,24 @@ def whichmodule(obj, name):
     return '__main__'
 
 
+def _getattribute_dotted(obj, name):
+    """Resolve a possibly DOTTED qualname, walking one attribute per segment.
+
+    A method's __qualname__ is ``Cls.meth'', which no single getattr can
+    resolve, so a plain lookup failed and save_global gave up -- whereupon
+    save() fell back to __reduce__ and tried to pickle type(obj), a Grail
+    internal (UnboundMethod) that belongs to no Python module.  That is why the
+    reported error named ``<UnboundMethod class object>'' and a module
+    ``__main__'' nobody had asked for.
+
+    The unpickler already walks dotted names (see _resolve_global); this is the
+    matching half.
+    """
+    for part in name.split('.'):
+        obj = getattr(obj, part)
+    return obj
+
+
 def _find_global(obj):
     """Return (module_name, qualname) for a class / function / builtin."""
     known = _BUILTIN_BY_ID.get(id(obj))
@@ -369,7 +400,7 @@ def _find_global(obj):
         raise PicklingError("Can't pickle %r: module %r not found" % (obj, modname))
 
     try:
-        found = getattr(mod, name)
+        found = _getattribute_dotted(mod, name)
     except BaseException:
         # Grail stores a lower-case Python class under a capitalised Smalltalk
         # name in some cases; recover the real attribute by identity scan.
@@ -538,6 +569,19 @@ class _Pickler:
             return
         if obj is True or obj is False or isinstance(obj, bool):
             self.save_bool(obj)
+            return
+        if isinstance(obj, _Enum):
+            # A member of any enum -- including an int/str/float-mixed one that
+            # would otherwise be caught by the primitive dispatch below.  Pickle
+            # it by reference if it is itself a module global, else through its
+            # __reduce_ex__ ((cls, (value,))), exactly as a plain Enum member
+            # already reaches the tail of this method.
+            try:
+                self.save_global(obj)
+                return
+            except PicklingError:
+                pass
+            self.save_reduce_of(obj)
             return
         if isinstance(obj, int):
             self.save_int(obj)

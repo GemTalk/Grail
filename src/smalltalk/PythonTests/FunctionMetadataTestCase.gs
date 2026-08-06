@@ -288,17 +288,22 @@ testWrapsOnABuiltinDoesNotRaise
 
 category: 'Grail-Tests-FunctionMetadata'
 method: FunctionMetadataTestCase
-testBuiltinReferencesAreNotIdentityStable
-	"Guard for the assumption the test above leans on: a reference to a
-	builtin mints a FRESH BoundMethod handle per attribute load, so
-	``max is max'' is False in Grail while ``max == max'' is True.  A
-	pre-existing deviation from CPython, pinned so it stays visible -- it
-	is what makes ``wrapper.__wrapped__ is max'' the WRONG assertion to
-	write about a builtin, independently of update_wrapper."
+testBuiltinReferencesAreIdentityStable
+	"``max is max'', and a builtin reached two ways is one object.  This test
+	used to assert the OPPOSITE, pinning a deviation: a reference to a builtin
+	minted a fresh BoundMethod handle per attribute load, which is why the
+	test above had to compare ``__wrapped__'' with ``=='' rather than ``is''.
+	BoundMethod now interns module- and class-receiver handles.
 
-	self assert: self loadFixture
-		@env1:builtin_references_are_not_identity_stable
-		equals: true
+	The fourth value is the counterpart and must stay FALSE.  CPython creates a
+	fresh bound method per attribute read, so ``obj.meth is obj.meth'' is False
+	there too; interning instance receivers would be the wrong answer as well
+	as unbounded, since the key would retain every receiver ever asked for a
+	method."
+
+	self assert: (self loadFixture
+		@env1:builtin_references_are_identity_stable) asArray
+		equals: #( true true true false )
 %
 
 category: 'Grail-Tests-FunctionMetadata'
@@ -320,4 +325,62 @@ testCacheDecoratorGetsMetadata
 
 	self assert: self loadFixture @env1:cache_decorator_gets_metadata
 		equals: true
+%
+
+category: 'Grail-Tests - Metadata'
+method: FunctionMetadataTestCase
+testUnboundSignatureKeepsReceiver
+	"CPython's signature(Cls.method) -- UNBOUND -- shows ``self''; the bound read
+	does not, because the receiver is already supplied.  ClassDefAst's signature
+	table is bound-shaped, so the unbound read was missing it; the receiver name
+	is now recorded alongside and restored only for the unbound form.
+
+	A plain @classmethod read off the CLASS is already bound to cls, so CPython
+	omits it there too -- verified against CPython 3.14 rather than assumed; the
+	first expectation written here guessed ``cls'' and was wrong.  Only the
+	singledispatchmethod case below shows it, because its __wrapped__ is the
+	unbound function."
+
+	self assert: self loadFixture @env1:unbound_signature_keeps_receiver asArray equals: #(
+		'(self, item, arg: int) -> str'
+		'(item, arg: int) -> str'
+		'(item, arg: int) -> str'
+		'(item, arg: int) -> str' ).
+%
+
+category: 'Grail-Tests - Metadata'
+method: FunctionMetadataTestCase
+testSingleDispatchMethodSignature
+	"A singledispatchmethod read reports the WRAPPED function's signature, so
+	BOTH the class and the instance read show ``self'' -- CPython's __wrapped__
+	is the plain function, and Grail's analogue is the unbound handle rather than
+	the bound one the class-body decorator captured."
+
+	self assert: self loadFixture @env1:singledispatchmethod_signature asArray equals: #(
+		'(self, item, arg: int) -> str'
+		'(self, item, arg: int) -> str'
+		'(cls, item, arg: int) -> str'
+		'(item, arg: int) -> str' ).
+%
+
+category: 'Grail-Tests - Metadata'
+method: FunctionMetadataTestCase
+testConditionalClassBodyDefMetadata
+	"A def written under an ``if'' in a class body compiles to a CLOSURE rather
+	than a method, and must still report the module and qualified name an
+	unconditional one does -- and so pickle by reference to the same object.
+
+	A closure has no receiver to forward __module__ to (a module-level def is a
+	BoundMethod and gets its module that way), so without a def-site stamp it
+	answered the placeholder ``<closure>'' and pickle could not resolve it.
+	test_functools' TestLRUC defines its members under ``if c_functools:'',
+	which is why only that variant of test_pickle failed while TestLRUPy's
+	passed."
+
+	self assert: self loadFixture @env1:conditional_classbody_def_metadata asArray
+		equals: #(
+			'True'
+			'ConditionalBody.cached_meth'
+			'PlainBody.cached_meth'
+			'True' ).
 %

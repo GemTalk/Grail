@@ -533,10 +533,11 @@ __mod__: args
 				'Existing exports of data: object cannot be re-sized']].
 	out := AppendStream @env0:on: ByteArray @env0:new.
 	isMap := args isKindOf: KeyValueDictionary.
-	(isMap @env0:not @env0:and: [
-		(args isKindOf: Array) @env0:or: [
-			(args isKindOf: OrderedCollection) @env0:or: [args isKindOf: tuple]]])
-		ifTrue: [argSeq := args]
+	"Only a TUPLE unpacks into positional arguments; a list is a single value
+	(tuple is an Array subclass, so one test covers both).  See the fuller note
+	in CharacterCollection>>__mod__: -- unpacking OrderedCollection too meant a
+	list operand formatted only its first element."
+	(isMap @env0:not @env0:and: [args isKindOf: Array]) ifTrue: [argSeq := args]
 		ifFalse: [isMap ifTrue: [argSeq := nil] ifFalse: [argSeq := Array @env0:with: args]].
 	argIdx := 1.
 	nextArg := [ | v |
@@ -601,7 +602,14 @@ __mod__: args
 					precision := 0.
 					[i @env0:<= n @env0:and: [ | c | c := fmt @env0:at: i. (c @env0:>= 48) @env0:and: [c @env0:<= 57]]]
 						@env0:whileTrue: [
-							precision := (precision @env0:* 10) @env0:+ ((fmt @env0:at: i) @env0:- 48). i := i @env0:+ 1 ]]].
+							precision := (precision @env0:* 10) @env0:+ ((fmt @env0:at: i) @env0:- 48). i := i @env0:+ 1 ]].
+				"Same cap as str's %-format: an arbitrary-precision Integer here made
+				``b'%.*d' % (sys.maxsize, 1)'' try to build a sys.maxsize-digit result
+				and HANG the session.  bytes has its own %-engine, so capping str's
+				alone just moved the hang -- test_format's testcommon exercises str,
+				bytes AND bytearray with the same format string."
+				(precision @env0:notNil @env0:and: [precision @env0:> 2147483647])
+					ifTrue: [OverflowError ___signal___: 'precision too large']].
 			"skip C length modifiers h l L (104 108 76)"
 			[i @env0:<= n @env0:and: [ | c | c := fmt @env0:at: i.
 				(c @env0:= 104) @env0:or: [(c @env0:= 108) @env0:or: [c @env0:= 76]] ]]
@@ -610,6 +618,15 @@ __mod__: args
 			conv := fmt @env0:at: i. i := i @env0:+ 1.
 			conv @env0:= 37 ifTrue: [ out @env0:nextPut: 37 ]
 			ifFalse: [
+				"Unknown conversion: CPython names the character, its hex code and
+				its 0-based index in the format string, and only this loop knows
+				the index.  conv is at ``i - 1'' now that i has advanced."
+				(bytes ___isBytesConversion___: conv) ifFalse: [
+					ValueError ___signal___: ('unsupported format character '''
+						@env0:, (String @env0:with: (Character @env0:codePoint: conv))
+						@env0:, ''' (0x' @env0:, (conv @env0:printStringRadix: 16
+							showRadix: false) @env0:asLowercase
+						@env0:, ') at index ' @env0:, (i @env0:- 2) @env0:printString)].
 				key @env0:notNil
 					ifTrue: [value := args @env1:__getitem__: key]
 					ifFalse: [value := nextArg @env0:value].
@@ -618,6 +635,13 @@ __mod__: args
 				checkStable @env0:value ]
 		]
 	].
+	"Every positional argument must be consumed: ``b'no format' % 7'' is a
+	TypeError, where Grail silently returned the format string.  Note the
+	wording -- ``bytes formatting'', not str's ``string formatting'' -- and that
+	a MAPPING right-hand side (argSeq nil) may leave keys unreferenced."
+	(argSeq @env0:notNil @env0:and: [argIdx @env0:<= argSeq @env0:size]) ifTrue: [
+		TypeError ___signal___:
+			'not all arguments converted during bytes formatting'].
 	content := out @env0:contents.
 	result := (self @env0:class) ___new___: content @env0:size.
 	1 @env0:to: content @env0:size do: [:k | result @env0:at: k put: (content @env0:at: k)].
@@ -634,9 +658,13 @@ ___modEmit___: value conv: conv flags: flags width: width precision: precision i
 
 	| content leftAlign num res |
 	leftAlign := flags @env0:includes: $-.
-	"b (98) / s (115) / a (97): byte-sequence conversions."
-	((conv @env0:= 98) @env0:or: [(conv @env0:= 115) @env0:or: [conv @env0:= 97]]) ifTrue: [
-		conv @env0:= 97
+	"b (98) / s (115) / a (97) / r (114): byte-sequence conversions.  %r is an
+	ALIAS for %a here (PEP 461) and was missing, so b'%r' % b'ghi' fell through
+	to the NUMERIC branch and raised ``%r format: a real number is required,
+	not bytes'' (test_format test_bytes_and_bytearray_format)."
+	((conv @env0:= 98) @env0:or: [(conv @env0:= 115) @env0:or: [
+		(conv @env0:= 97) @env0:or: [conv @env0:= 114]]]) ifTrue: [
+		((conv @env0:= 97) @env0:or: [conv @env0:= 114])
 			ifTrue: [ | s |
 				s := (builtins instance ascii: value) @env0:asString.
 				content := ByteArray @env0:new: s @env0:size.
@@ -654,6 +682,17 @@ ___modEmit___: value conv: conv flags: flags width: width precision: precision i
 	res := builtins instance ___printfConvert___: num conv: (Character @env0:codePoint: conv)
 		flags: flags width: width precision: precision.
 	1 @env0:to: res @env0:size do: [:k | out @env0:nextPut: (res @env0:at: k) @env0:codePoint]
+%
+
+category: 'Grail-Type'
+classmethod: bytes
+___isBytesConversion___: convByte
+	"Is ``convByte'' a conversion character bytes %-formatting accepts?  b and
+	r are bytes-only (str has no %b; %r here is an alias for %a), and ``%'' is
+	excluded because the caller consumes a literal ``%%'' before asking."
+
+	^ #(98 115 97 114 99 100 105 117 111 120 88 101 69 102 70 103 71)
+		@env0:includes: convByte
 %
 
 category: 'Grail-String Operations'
@@ -742,6 +781,15 @@ ___modCharByte___: value
 		((value @env0:>= 0) @env0:and: [value @env0:<= 255]) ifTrue: [^ value].
 		OverflowError ___signal___: '%c arg not in range(256)'].
 	((value isKindOf: ByteArray) @env0:and: [value @env0:size @env0:= 1]) ifTrue: [^ value @env0:at: 1].
+	"A bytes-like of the WRONG LENGTH reports that length rather than just its
+	type -- ``not a bytes object of length 2'' (test_format
+	test_bytes_and_bytearray_format), which the generic message below cannot
+	say."
+	(value isKindOf: ByteArray) ifTrue: [
+		TypeError ___signal___:
+			('%c requires an integer in range(256) or a single byte, not a '
+				@env0:, (bytes ___pyTypeNameOf___: value)
+				@env0:, ' object of length ' @env0:, value @env0:size @env0:printString)].
 	"CPython's byte_converter formats the type with %T, i.e. the FULLY
 	QUALIFIED module.qualname -- unlike the %x/%o/%d converters next door,
 	which print the bare tp_name.  test_mod pins both spellings."
@@ -792,8 +840,10 @@ ___modNumeric___: value conv: conv
 		(value isKindOf: Integer) ifTrue: [^ value @env0:asFloat].
 		(value isKindOf: Float) ifTrue: [^ value].
 		(value ___respondsTo___: #'__float__') ifTrue: [^ value __float__].
-		TypeError ___signal___: ('%' @env0:, (String @env0:with: conv)
-			@env0:, ' format: a real number is required, not ' @env0:, tn)].
+		"bytes formatting has its OWN wording for a bad float operand -- plain
+		``float argument required, not str'', where the d/i/u converters below
+		use the ``%i format: ...'' shape.  test_format pins both spellings."
+		TypeError ___signal___: ('float argument required, not ' @env0:, tn)].
 	"d i u: a real number (int or float or __index__/__int__)."
 	(value isKindOf: Integer) ifTrue: [^ value].
 	(value isKindOf: Float) ifTrue: [^ value].
