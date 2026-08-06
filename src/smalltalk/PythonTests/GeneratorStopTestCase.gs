@@ -205,3 +205,48 @@ testThrownStopIterationCaughtByBodyIsUnaffected
 
 	self assertResult: 'keep_throw_caught' equals: '''swallowed'''
 %
+
+! --- an exception that was PASSED must still reach the consumer --------------
+!
+! The generator body runs on a forked producer process, so an exception raised
+! there is stowed and re-signalled on the consumer.  The VM refuses -- with an
+! UNCATCHABLE UncontinuableError 6011, 'Exception has already been signaled' --
+! to signal an instance that still carries handler frames, and an exception
+! that was PASSED on its way out keeps a frame's worth.  Grail passes routinely
+! (a bare ``raise'' in an ``except'', and every comprehension, which pushes its
+! traceback frame in a handler and re-passes), so these shapes replaced the
+! user's own exception with an error no Python ``except'' could catch.
+! PythonGenerator>>_resignalable: re-signals a clean copy in that case.
+
+category: 'Grail-Tests-PEP479'
+method: GeneratorStopTestCase
+testBareReraiseInBodyReachesConsumer
+	"``try: raise ValueError ... except ValueError: raise'' inside a generator
+	body.  RaiseAst compiles the bare re-raise to ``___ex pass''."
+
+	self assertResult: 'passed_bare_reraise' equals: 'ValueError: boom'
+%
+
+category: 'Grail-Tests-PEP479'
+method: GeneratorStopTestCase
+testExceptionThroughComprehensionInBodyReachesConsumer
+	"A comprehension in the body wraps its element expression in a handler that
+	pushes the traceback frame and passes.  This is the shape that made a
+	jinja2 UndefinedError surface as error 6011 during template rendering --
+	``{{ people|groupby('age') }}'', whose filter sorts inside a comprehension,
+	consumed by str.join over the render generator."
+
+	self
+		assertResult: 'passed_comprehension'
+		equals: 'ZeroDivisionError: integer division or modulo by zero'
+%
+
+category: 'Grail-Tests-PEP479'
+method: GeneratorStopTestCase
+testThrowOfAnExceptionBeingHandledReachesBody
+	"``gen.throw(exc)'' from inside ``except ... as exc'' -- the injected
+	exception is mid-signal on the consumer, so throw:/___yield___: need the
+	same treatment as the escaped-exception path."
+
+	self assertResult: 'passed_throw_handled' equals: '''rethrown: thrown'''
+%
