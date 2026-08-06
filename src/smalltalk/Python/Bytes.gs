@@ -1561,7 +1561,15 @@ ___decodeUnicodeEscape___
 
 	| size out i byte |
 	size := self size.
-	out := AppendStream on: (Unicode32 new: size).
+	"WriteStream, NOT AppendStream: the backing collection is pre-SIZED
+	(``new: size'' is capacity, not emptiness).  WriteStream on: starts at
+	position 0 and overwrites; AppendStream on: starts at the END, so every
+	decoded string would carry ``size'' leading NULs.  In Unicode comparison
+	mode that corruption is nearly invisible -- NUL is collation-ignorable, so
+	the result still compares = to the clean string -- but its hash differs,
+	which silently breaks dict lookups keyed by a decoded string (jinja2's
+	lexer round-trips every string token through this decoder)."
+	out := WriteStream on: (Unicode32 new: size).
 	i := 1.
 	[i <= size] whileTrue: [
 		byte := self at: i.
