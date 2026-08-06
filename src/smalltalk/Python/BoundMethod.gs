@@ -293,6 +293,7 @@ ___pythonValueAttrs___
 		add: #'__func__';
 		add: #'__self__';
 		add: #'__annotations__';
+		add: #'__annotate__';
 		add: #'__signature_spec__';
 		add: #'__doc__';
 		add: #'__dict__';
@@ -613,6 +614,104 @@ __annotations__
 
 category: 'Grail-Attribute Access'
 method: BoundMethod
+__annotate__
+	"PEP 649: the DEFERRED annotations computation.  functools.update_wrapper
+	copies this -- ``__annotate__'' is in WRAPPER_ASSIGNMENTS and
+	``__annotations__'' is not, in CPython 3.14 and here -- so a wrapper only
+	inherits annotations if the wrapped object can produce one.
+
+	Without it, a method or module-level function had __annotations__ but no
+	__annotate__, so update_wrapper (correctly) found nothing to copy and the
+	wrapper kept its own empty one: ``@contextlib.contextmanager'' over an
+	annotated function reported {} where CPython reports the wrapped
+	function's annotations.  In CPython every annotated function has
+	__annotate__, which is why copying just that name suffices there.
+
+	ABSENT -- an AttributeError -- when nothing is annotated, rather than Python
+	None.  CPython's unannotated function does carry __annotate__ = None, but
+	answering None here means update_wrapper copies that None onto the wrapper as
+	a VALUE, and the wrapper's __annotations__ reader then tries to CALL it:
+	``a NoneType does not understand #value:value:'', four uncatchable errors
+	across TestWraps and TestUpdateWrapper.  Raising instead makes
+	update_wrapper skip the name, which is what it already does for every other
+	absent attribute, and the wrapper keeps its own empty annotate.  The only
+	divergence is hasattr(f, '__annotate__') for an unannotated function, which
+	nothing reads."
+
+	| cls fn |
+	"A class-body sibling reference is emitted receiver-less but WITH its
+	definingClass (NameAst: ``BoundMethod receiver: nil selector: #m
+	definingClass: C''), and that is the handle a class-body decorator chain
+	captures.  Resolving through it is what lets ``@functools.wraps(func.__func__)''
+	inside such a decorator copy the annotations -- value:value: already takes
+	the same fallback for calls."
+	(receiver == nil and: [definingClass @env0:notNil]) ifTrue: [
+		^ self ___internedAnnotateForClass___: definingClass
+			name: selector @env0:asString].
+	receiver == nil ifTrue: [
+		AttributeError ___signal___: 'method has no attribute ''__annotate__'''].
+	(receiver isKindOf: module) ifTrue: [
+		fn := receiver @env0:___functionAnnotateFor___: selector @env0:asString.
+		fn == nil ifTrue: [
+			AttributeError ___signal___:
+				'function has no attribute ''__annotate__'''].
+		^ fn].
+	cls := (receiver isKindOf: Class)
+		ifTrue: [receiver]
+		ifFalse: [receiver @env0:class].
+	^ self ___internedAnnotateForClass___: cls name: selector @env0:asString
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___internedAnnotateForClass___: aClass name: aName
+	"The class's annotate function for aName, MEMOIZED per (class, name).
+
+	ClassDefAst builds the ___methodAnnotationsTable___ blocks when the table
+	method RUNS, so an un-memoized read answers a different object every time --
+	and functools' check_wrapper asserts the wrapper and the wrapped share the
+	VERY SAME object for every name in WRAPPER_ASSIGNMENTS.  Memoizing gives a
+	method's __annotate__ the identity stability a nested def gets from its
+	def-time stamp.
+
+	Session-local, like every other Grail handle cache: these are transient and
+	must not be committed."
+
+	| store perClass fn |
+	store := SessionTemps @env0:current
+		@env0:at: #'GrailMethodAnnotateCache'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	perClass := store @env0:at: aClass ifAbsentPut: [KeyValueDictionary @env0:new].
+	fn := perClass @env0:at: aName otherwise: nil.
+	fn == nil ifFalse: [^ fn].
+	fn := self ___rawAnnotateForClass___: aClass name: aName.
+	fn == nil ifTrue: [
+		"Absent, not None -- see __annotate__ for why answering None breaks
+		update_wrapper."
+		AttributeError ___signal___: 'method has no attribute ''__annotate__'''].
+	perClass @env0:at: aName put: fn.
+	^ fn
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___rawAnnotateForClass___: aClass name: aName
+	"Superclass walk for the annotate FUNCTION itself, where
+	___methodAnnotationsForClass___:name: walks for the dict it computes.  Same
+	env-1 probe, for the same reason: the table is compiled in environment 1, so
+	an env-0 canUnderstand: would never see it."
+
+	| tbl v |
+	aClass == nil ifTrue: [^ nil].
+	((aClass @env0:class @env0:whichClassIncludesSelector: #'___methodAnnotationsTable___' environmentId: 1) ~~ nil) ifTrue: [
+		tbl := aClass ___methodAnnotationsTable___.
+		v := tbl @env0:at: aName otherwise: nil.
+		v == nil ifFalse: [^ v]].
+	^ self ___rawAnnotateForClass___: (aClass @env0:superclass) name: aName
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
 __signature_spec__
 	"The def-time parameter spec inspect.signature reads.  A method's lives on
 	its DEFINING class (a class-side ___methodSignatureTable___ compiled by
@@ -663,10 +762,19 @@ __doc__
 	__signature_spec__ do."
 
 	| cls doc |
-	receiver == nil ifTrue: [^ ExecBlock @env0:___pyNone___].
-	cls := (receiver isKindOf: Class)
-		ifTrue: [receiver]
-		ifFalse: [receiver @env0:class].
+	"Receiver-less but with a definingClass: a class-body sibling reference (see
+	__annotate__ and value:value: for the same fallback).  Without this, a
+	decorator chain that captures such a handle and copies from it -- ``@wraps
+	(func.__func__)'' -- produced a wrapper whose __doc__ was None."
+	cls := (receiver == nil and: [definingClass @env0:notNil])
+		ifTrue: [definingClass]
+		ifFalse: [
+			receiver == nil
+				ifTrue: [nil]
+				ifFalse: [(receiver isKindOf: Class)
+					ifTrue: [receiver]
+					ifFalse: [receiver @env0:class]]].
+	cls == nil ifTrue: [^ ExecBlock @env0:___pyNone___].
 	doc := self ___methodDocForClass___: cls name: selector @env0:asString.
 	^ doc ifNil: [ExecBlock @env0:___pyNone___]
 %

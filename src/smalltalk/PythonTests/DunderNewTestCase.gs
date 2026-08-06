@@ -1264,7 +1264,19 @@ testCanonicalClassAttrOverlay
 	| mod holder inst |
 	[
 	SessionTemps current at: #'GrailCanonicalClassesEnabled' put: true.
-	mod := self fixture.
+	"freshFixture, NOT fixture: this test MUTATES the module (it stores z and
+	``fresh'' on _AnnHolder), and >>fixture's copy is shared by ~60 tests for
+	the whole session -- its comment requires a mutating test to take its own.
+
+	It also has to be imported AFTER the flag above is set, which the shared
+	copy cannot guarantee: whichever test runs first decides whether the
+	fixture's classes were built canonical.  Imported non-canonically, the
+	store lands directly on the class instead of in the session overlay and
+	``del Cls.z'' does not put it back, so the final assertion read 99 rather
+	than 10 -- and left z = 99 in the shared module for every later reader.
+	Running the class alone hid it, because then THIS test imported the
+	fixture first and got a canonical one."
+	mod := self freshFixture.
 	holder := mod @env1:_AnnHolder.
 	self assert: (holder @env1:___pyAttrLoad___: #'z') equals: 10.
 	holder @env1:___pyAttrStore___: 'z' put: 99.

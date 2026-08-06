@@ -9,6 +9,7 @@
 ! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
+set compile_env: 0
 
 ! ------------------- Remove existing Python methods from CharacterCollection
 expectvalue /Metaclass3
@@ -416,17 +417,20 @@ __mod__: args
 	| stream src n i ch isMap argSeq argIdx bi nextArg |
 	src := self @env0:asString.
 	n := src @env0:size.
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream := AppendStream @env0:on: Unicode7 @env0:new.
 	bi := builtins instance.
 	isMap := args isKindOf: KeyValueDictionary.
 	"Python treats a string on the RHS as a single positional, not a
-	sequence of characters; same for ByteArray."
-	(isMap not @env0:and: [
-		(args isKindOf: Array) @env0:or: [
-			(args isKindOf: OrderedCollection)
-				@env0:or: [args isKindOf: tuple]
-		]
-	]) ifTrue: [argSeq := args]
+	sequence of characters; same for ByteArray.
+
+	Only a TUPLE is unpacked into positional arguments.  A LIST is a single
+	value -- ``'%s' % [1, 2]'' is the string '[1, 2]' -- but Grail also
+	unpacked OrderedCollection (which is how it represents a Python list), so
+	that formatted just the FIRST element and silently dropped the rest.  The
+	newly-added ``not all arguments converted'' check is what surfaced it.
+	tuple is an Array subclass, so the Array test covers tuples and the plain
+	Arrays Grail's own call sites build."
+	(isMap not @env0:and: [args isKindOf: Array]) ifTrue: [argSeq := args]
 	ifFalse: [
 		isMap ifTrue: [argSeq := nil]
 		ifFalse: [argSeq := Array @env0:with: args]
@@ -522,6 +526,18 @@ __mod__: args
 			i := i @env0:+ 1.
 			conv @env0:= $% ifTrue: [stream @env0:nextPut: $%]
 			ifFalse: [
+				"Reject an unknown conversion HERE, not deep inside the
+				converter: CPython's message carries the character, its hex
+				code AND its 0-based index in the format string
+				(``unsupported format character 'b' (0x62) at index 5''), and
+				only this loop knows the index.  conv sits at ``i - 1'' now
+				that i has advanced, so its 0-based index is ``i - 2''."
+				(bi ___isPrintfConversion___: conv) ifFalse: [
+					ValueError ___signal___: ('unsupported format character '''
+						@env0:, (String @env0:with: conv) @env0:, ''' (0x'
+						@env0:, ((conv @env0:codePoint) @env0:printStringRadix: 16
+							showRadix: false) @env0:asLowercase
+						@env0:, ') at index ' @env0:, (i @env0:- 2) @env0:printString)].
 				key @env0:notNil
 					ifTrue: [value := args @env0:at: key @env0:asSymbol ifAbsent: [args @env0:at: key]]
 					ifFalse: [value := nextArg @env0:value].
@@ -530,6 +546,14 @@ __mod__: args
 			]
 		]
 	].
+	"Every positional argument must be consumed -- ``'no format' % '1''' is a
+	TypeError in CPython, where Grail silently returned the format string and
+	dropped the argument.  Only the SEQUENCE form is checked: with a mapping
+	on the right, unreferenced keys are fine (``'%(a)s' % {'a': 1, 'b': 2}''),
+	which is exactly the case argSeq is nil for."
+	(argSeq @env0:notNil @env0:and: [argIdx @env0:<= argSeq @env0:size]) ifTrue: [
+		TypeError ___signal___:
+			'not all arguments converted during string formatting'].
 	^ stream @env0:contents
 %
 
@@ -596,7 +620,7 @@ __mul__: n
 	count := n ___asRepeatCount___.
 	(count @env0:<= 0) ifTrue: [ ^ '' @env0:copy ].
 
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	count @env0:timesRepeat: [
 		stream @env0:nextPutAll: self
 	].
@@ -634,7 +658,7 @@ __repr__
 		cp == 34 ifTrue: [ hasDouble := true ]].
 	quote := (hasSingle and: [hasDouble @env0:not]) ifTrue: [$"] ifFalse: [$'].
 	quoteCp := quote @env0:codePoint.
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	stream @env0:nextPut: quote.
 	self @env0:do: [:char |
 		| cp |
@@ -650,16 +674,30 @@ __repr__
 			stream @env0:nextPutAll: '\r'.
 		] ifFalse: [ (cp == 9) ifTrue: [  "tab -> \t"
 			stream @env0:nextPutAll: '\t'.
-		] ifFalse: [ ((cp @env0:< 32) or: [cp == 127]) ifTrue: [
-			"other non-printable control char -> \xNN (CPython does the
-			same).  Load-bearing: jinja2's compiler embeds template
-			literals via repr(); without escaping the embedded newlines a
-			multi-line template compiles to ``yield 'line1<NL>line2''' --
-			an unterminated string literal that the tokenizer rejects."
-			| hex |
+		] ifFalse: [ ((self ___pyIsPrintableCodePoint___: cp) @env0:not) ifTrue: [
+			"Any NON-PRINTABLE code point -> \xNN / \uNNNN / \UNNNNNNNN, the
+			same three widths CPython's unicode_repr picks by magnitude.
+			This used to test ``cp < 32 or cp = 127'', i.e. ASCII control
+			characters only, so repr() emitted every other non-printable
+			VERBATIM -- unassigned code points, private-use, format
+			characters and the non-ASCII separators
+			(test_format test_str_format: repr('͸') must be the seven
+			characters ''͸'', not a lone undisplayable character).
+
+			Load-bearing beyond conformance: jinja2's compiler embeds
+			template literals via repr(); without escaping the embedded
+			newlines a multi-line template compiles to
+			``yield 'line1<NL>line2''' -- an unterminated string literal
+			that the tokenizer rejects."
+			| hex marker digits |
 			hex := (cp @env0:printStringRadix: 16 showRadix: false) @env0:asLowercase.
-			stream @env0:nextPutAll: '\x'.
-			((hex @env0:size) @env0:< 2) ifTrue: [ stream @env0:nextPut: $0 ].
+			cp @env0:<= 16rFF
+				ifTrue: [marker := '\x'. digits := 2]
+				ifFalse: [cp @env0:<= 16rFFFF
+					ifTrue: [marker := '\u'. digits := 4]
+					ifFalse: [marker := '\U'. digits := 8]].
+			stream @env0:nextPutAll: marker.
+			[hex @env0:size @env0:< digits] @env0:whileTrue: [hex := '0' @env0:, hex].
 			stream @env0:nextPutAll: hex.
 		] ifFalse: [
 			stream @env0:nextPut: char.
@@ -701,7 +739,7 @@ capitalize
 	| stream first rest |
 	(self @env0:isEmpty) ifTrue: [ ^ self ].
 
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	first := self @env0:first.
 	rest := self @env0:allButFirst.
 
@@ -732,7 +770,7 @@ center: width
 	leftPad := totalPad @env0:// 2.
 	rightPad := (totalPad @env0:- (leftPad)).
 
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	leftPad @env0:timesRepeat: [
 		stream @env0:nextPut: $ 
 	].
@@ -812,7 +850,7 @@ ___pyEncodeUTF16___: withBOM be: bigEndian
 	supplementary -> a surrogate pair.  ``withBOM'' prepends U+FEFF; ``bigEndian''
 	selects byte order (little-endian otherwise)."
 	| ws emit |
-	ws := WriteStream @env0:on: ByteArray @env0:new.
+	ws := AppendStream @env0:on: ByteArray @env0:new.
 	emit := [:u | | hi lo |
 		hi := (u @env0:bitShift: -8) @env0:bitAnd: 16rFF.
 		lo := u @env0:bitAnd: 16rFF.
@@ -858,7 +896,7 @@ encode: encoding _: errors
 			h := (cp @env0:printStringRadix: 16 showRadix: false) @env0:asLowercase.
 			[h @env0:size @env0:< width] @env0:whileTrue: [h := '0' @env0:, h].
 			h].
-		ws := WriteStream @env0:on: String @env0:new.
+		ws := AppendStream @env0:on: String @env0:new.
 		1 @env0:to: size do: [:i | | ch cp |
 			ch := self @env0:at: i.
 			cp := ch @env0:codePoint.
@@ -892,7 +930,7 @@ encode: encoding _: errors
 		| max ws |
 		max := ((enc @env0:= 'ascii') or: [(enc @env0:= 'us-ascii') or: [enc @env0:= 'idna']])
 			ifTrue: [127] ifFalse: [255].
-		ws := WriteStream @env0:on: ByteArray @env0:new.
+		ws := AppendStream @env0:on: ByteArray @env0:new.
 		1 @env0:to: size do: [:i | | cv |
 			cv := (self @env0:at: i) @env0:codePoint.
 			cv @env0:> max
@@ -1172,7 +1210,7 @@ _format: positional kw: kwargs
 				i := i @env0:+ 2
 			] ifFalse: [
 		(ch == ${) ifTrue: [
-			| endIdx field convFlag spec value autoIdx |
+			| endIdx field convFlag spec value |
 			endIdx := self @env0:___findFormatBraceEnd___: i @env0:+ 1.
 			endIdx @env0:isNil ifTrue: [
 				ValueError ___signal___: 'unmatched ''{'' in format string'].
@@ -1525,18 +1563,44 @@ isnumeric
 
 category: 'Grail-String Test Methods'
 method: CharacterCollection
-isprintable
-	"Return True if all characters are printable."
+___pyIsPrintableCodePoint___: cp
+	"Python's printability rule, which both str.isprintable() and repr()
+	are defined in terms of: a code point is NON-printable when its Unicode
+	general category is one of Cc Cf Cs Co Cn (``other'') or Zl Zp Zs
+	(``separator''), with ASCII space U+0020 the single exception -- it is a
+	Zs yet counts as printable.
 
-	| allPrintable |
-	allPrintable := true.
+	The category comes from GemStone's Character>>unicodeCategory, which is
+	libicu's u_charType and so tracks the real UCD.  That matters because the
+	rule cannot be approximated by ranges: the old test here (cp < 32, or
+	127 <= cp < 160) called U+00A0 NO-BREAK SPACE, U+200D ZERO WIDTH JOINER,
+	U+2028 LINE SEPARATOR, U+3000 IDEOGRAPHIC SPACE, every private-use code
+	point and every UNASSIGNED one printable.  Do NOT substitute
+	Character>>isPrintable, which is a different predicate -- it reports the
+	four separator/space cases above as printable.
+
+	The ASCII fast path is not just an optimization: it keeps ordinary repr()
+	off the libicu call entirely, so the common case costs a comparison."
+
+	| cat |
+	cp @env0:< 128 ifTrue: [^ (cp @env0:>= 32) @env0:and: [cp @env0:< 127]].
+	cat := (Character @env0:codePoint: cp) @env0:unicodeCategory.
+	((cat @env0:= #'Zs') @env0:or: [(cat @env0:= #'Zl') @env0:or: [cat @env0:= #'Zp']])
+		ifTrue: [^ false].
+	"Cc Cf Cs Co Cn -- the whole ``C'' (other) group is non-printable."
+	^ (cat @env0:at: 1) @env0:~= $C
+%
+
+category: 'Grail-String Test Methods'
+method: CharacterCollection
+isprintable
+	"Return True if all characters are printable.  An empty string is
+	printable, as in CPython."
+
 	self @env0:do: [:char |
-		| cp |
-		cp := char @env0:codePoint.
-		"Control characters and some special characters are not printable"
-		((cp @env0:< 32) @env0:| ((cp @env0:>= 127) @env0:& (cp @env0:< 160))) ifTrue: [ allPrintable := false ].
-	].
-	^ allPrintable
+		(self ___pyIsPrintableCodePoint___: char @env0:codePoint)
+			ifFalse: [^ false]].
+	^ true
 %
 
 category: 'Grail-String Test Methods'

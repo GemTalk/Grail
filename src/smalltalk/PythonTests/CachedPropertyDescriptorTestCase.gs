@@ -223,3 +223,48 @@ testExplicitGet
 	self assert: (testModule @env1:explicit_get) asArray
 		equals: #( 42 42 42 true ).
 %
+
+category: 'Grail-Tests - Descriptor'
+method: CachedPropertyDescriptorTestCase
+testAliasToDecoratedDefBindsTheDescriptor
+	"``b = a'' where ``a'' is a DECORATED sibling def binds the decorated object,
+	so cached_property sees itself bound twice and raises -- with the names in
+	SOURCE order, which is what CPython reports.
+
+	Two things had to change.  Such an alias was compiled as a delegating
+	METHOD, which called the UNdecorated compiled method; and the __set_name__
+	walk visited class-attribute names before the unordered decorator store, so
+	even once both names held the descriptor it named them backwards."
+
+	self assert: testModule @env1:alias_to_decorated_def_binds_the_descriptor
+		equals: 'Cannot assign the same cached_property to two different names (''a'' and ''b'').'
+%
+
+category: 'Grail-Tests - Descriptor'
+method: CachedPropertyDescriptorTestCase
+testAliasToPlainDefStillDelegates
+	"The delegating-method path is still taken for an UNdecorated sibling: it
+	exists because operator dispatch resolves compiled methods, not attributes,
+	so ``__ne__ = __eq__'' has to remain callable as an operator."
+
+	self assert: testModule @env1:alias_to_plain_def_still_delegates asArray
+		equals: #( true true ).
+%
+
+category: 'Grail-Tests - Descriptor'
+method: CachedPropertyDescriptorTestCase
+testMetaclassLevelCachedProperty
+	"A cached_property on a METACLASS, read through the class.  Python reads an
+	attribute off a class by consulting its TYPE, so ``MyClass.prop'' finds
+	MyMeta's descriptor -- which Grail reaches through the recorded
+	``metaclass=''.
+
+	Caching then fails, exactly as in CPython: a class's __dict__ does not
+	support item assignment.  Grail gets there by a different route (a Class
+	cannot hold dynamic instVars) and reports the same message, naming the
+	METACLASS -- the Smalltalk class of a class is ``MyClass class'', which is
+	not a name CPython would print."
+
+	self assert: testModule @env1:metaclass_level_cached_property
+		equals: 'The ''__dict__'' attribute on ''MyMeta'' instance does not support item assignment for caching ''prop'' property.'
+%

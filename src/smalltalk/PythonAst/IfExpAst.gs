@@ -75,3 +75,27 @@ printSmalltalkOn: aStream
 	orelse printSmalltalkOn: aStream.
 	aStream nextPutAll: '])'.
 %
+method: IfExpAst
+test
+	^test
+%
+method: IfExpAst
+test: newValue
+	test := newValue
+%
+method: IfExpAst
+body
+	^body
+%
+method: IfExpAst
+body: newValue
+	body := newValue
+%
+method: IfExpAst
+orelse
+	^orelse
+%
+method: IfExpAst
+orelse: newValue
+	orelse := newValue
+%

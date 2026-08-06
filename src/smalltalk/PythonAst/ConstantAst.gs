@@ -115,3 +115,15 @@ ___annotationSourceString___
 	value == false ifTrue: [^ 'False'].
 	^ value printString
 %
+method: ConstantAst
+value: newValue
+	value := newValue
+%
+method: ConstantAst
+kind
+	^kind
+%
+method: ConstantAst
+kind: newValue
+	kind := newValue
+%

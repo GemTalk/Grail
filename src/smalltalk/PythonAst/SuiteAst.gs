@@ -73,3 +73,7 @@ size
 
 	^body size
 %
+method: SuiteAst
+body: newValue
+	body := newValue
+%

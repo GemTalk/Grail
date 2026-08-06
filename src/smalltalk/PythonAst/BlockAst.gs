@@ -185,3 +185,27 @@ writes
 
 	^ writes
 %
+method: BlockAst
+variables: newValue
+	variables := newValue
+%
+method: BlockAst
+tempCount
+	^tempCount
+%
+method: BlockAst
+tempCount: newValue
+	tempCount := newValue
+%
+method: BlockAst
+writes: newValue
+	writes := newValue
+%
+method: BlockAst
+hasReturnBlocking: newValue
+	hasReturnBlocking := newValue
+%
+method: BlockAst
+globalNames: newValue
+	globalNames := newValue
+%

@@ -275,7 +275,7 @@ value: positional value: kwargs
 			ifTrue: [#'__call__']
 			ifFalse: [
 				| s |
-				s := WriteStream @env0:on: String @env0:new.
+				s := AppendStream @env0:on: Unicode7 @env0:new.
 				s @env0:nextPutAll: '__call__:'.
 				2 @env0:to: nargs do: [:i | s @env0:nextPutAll: '_:'].
 				s @env0:contents @env0:asSymbol].

@@ -75,7 +75,7 @@ userIds do: [:uid |
 					', groups ', dc groups size printString,
 					', privileges ', dc privileges size printString, ')'; lf ] ].
 
-System commitTransaction.
+System commit .
 
 GsFile stdout
 	nextPutAll: '==============================================='; lf;

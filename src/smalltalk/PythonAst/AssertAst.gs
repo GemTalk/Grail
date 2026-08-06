@@ -67,3 +67,19 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: '}].'.
 	].
 %
+method: AssertAst
+test
+	^test
+%
+method: AssertAst
+test: newValue
+	test := newValue
+%
+method: AssertAst
+msg
+	^msg
+%
+method: AssertAst
+msg: newValue
+	msg := newValue
+%

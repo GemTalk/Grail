@@ -112,19 +112,32 @@ fi
 export SHIM_LIB_PATH=""
 if [ -n "$GEMSTONE" ]; then
     echo "Building CPython shim library..."
-    make -C "$GRAIL_DIR/src/c/shim" clean all GEMSTONE="$GEMSTONE"
     case "$OSTYPE" in
       linux*)  export SHIM_LIB_PATH="$GRAIL_DIR/src/c/shim/libcpython_ua.so" ;;
       *)       export SHIM_LIB_PATH="$GRAIL_DIR/src/c/shim/libcpython_ua.dylib" ;;  # assume Darwin
     esac
-    if [ ! -f "$SHIM_LIB_PATH" ]; then
-        echo "Warning: CPython shim library build failed. CPythonShim tests will be skipped."
-        export SHIM_LIB_PATH=""
-    else
-        echo "Building dynamic extension modules..."
+    # uncomment to avoid rebuild of libraries if they already exist
+    # if [ -f "$SHIM_LIB_PATH" ]; then
+    #     echo "Warning: CPython shim library already exists"
+    #     # export SHIM_LIB_PATH=""
+    # else
+        echo "Building shim and dynamic extension modules..."
+        make -C "$GRAIL_DIR/src/c/shim" clean all GEMSTONE="$GEMSTONE"
+        if [ $? -ne 0 ]; then
+          echo "ERROR:  make shim failed"
+          exit 1
+        fi
         mkdir -p "$GRAIL_DIR/lib"
+        if [ $? -ne 0 ]; then
+          echo "ERROR:  mkdir failed"
+          exit 1
+        fi
         make -C "$GRAIL_DIR/src/c/shim" dynmods
-    fi
+        if [ $? -ne 0 ]; then
+          echo "ERROR:  make shim dynmods failed"
+          exit 1
+        fi
+    # fi
 else
     echo "Warning: GEMSTONE not set. Skipping shim library build."
 fi
@@ -164,7 +177,7 @@ echo "PYTHON_PACKAGE_PATH = $PYTHON_PACKAGE_PATH"
 #          2/3/4-arg with:...performMethod: variants are kernel-native, so no
 #          SystemUser step files anything.
 #
-#   3.7.x  The include is EMPTY -- install_base.gs already filed all six as
+#   3.7.x  The include is EMPTY -- install_base37.gs already filed all six as
 #          SystemUser -- so install.gs's `input` of it is a no-op.
 #
 # This replaced a pair of behavioural capability probes; see install_base.sh for
@@ -179,15 +192,11 @@ echo "GemStone version: ${GS_VERSION:-unknown} (from $GEMSTONE/version.txt)"
     case "$GS_VERSION" in
         3.7.*)
             echo "! 3.7.x: all six kernel-extension files were filed as SystemUser by"
-            echo "! install_base.gs; nothing to file per-user here."
+            echo "! install_base37.gs; nothing to file per-user here."
             ;;
         *)
             echo "! 4.0+: kernel-class extensions are per-user session methods."
-            echo "input src/smalltalk/Python/builtin_function_or_method.gs"
-            echo "input src/smalltalk/Python/System.gs"
-            echo "input src/smalltalk/Python/SymbolDictionary.gs"
-            echo "input src/smalltalk/Python/ExecBlock.gs"
-            echo "input src/smalltalk/Python/Object_perform_allocators.gs"
+            echo "input ./scripts/install_base40.gs"
             ;;
     esac
 } > "$GEN_INC"

@@ -110,14 +110,14 @@ test_byte_string
 category: 'Grail-tests - positions'
 method: PythonTokenizerTestCase
 test_column_numbers
-	"Tokens should have correct column numbers."
-
+  "AbstractLocationNode understands column (deriveed from position and sourceString , 
+   but Tokens only hold position."
 	| tokens xTok yTok |
 	tokens := self tokenize: '  x + y'.
 	xTok := (self findToken: #NAME value: 'x' in: tokens).
 	yTok := (self findToken: #NAME value: 'y' in: tokens).
-	self assert: xTok column equals: 2.
-	self assert: yTok column equals: 6.
+	self assert: xTok position equals: 3.
+	self assert: yTok position equals: 7.
 %
 
 category: 'Grail-tests - structure'

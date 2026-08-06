@@ -111,7 +111,7 @@ __repr__
 	CPython for debugging; nothing conformance-critical reads this."
 
 	| stream |
-	stream := WriteStream @env0:on: (String ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	stream @env0:nextPutAll: '<code object '.
 	stream @env0:nextPutAll: (self @env0:dynamicInstVarAt: #'co_name') @env0:asString.
 	stream @env0:nextPutAll: ', file "'.

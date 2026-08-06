@@ -171,3 +171,43 @@ RESULTS = {
     'mutual_cycle': a_mutually_cyclic_graph_raises_recursionerror(),
     'real_types': real_types_are_unaffected(),
 }
+
+
+def abstract_instantiation():
+    """CPython refuses to instantiate a class that still has abstract methods.
+
+    Grail honours that only for a class that EXPLICITLY declared
+    ``metaclass=abc.ABCMeta''.  A plain class using @abc.abstractmethod is left
+    alone on purpose: twilio's AuthStrategy / CredentialProvider are plain
+    classes whose abstract methods raise NotImplementedError from their bodies,
+    and blocking them would break working code.
+
+    Overriding the abstract method clears it, which is how a concrete subclass
+    instantiates while the base it derives from does not -- email's Compat32
+    over Policy is the in-tree case.
+    """
+    import abc
+
+    class Abstract(metaclass=abc.ABCMeta):
+        @abc.abstractmethod
+        def add(self, x, y):
+            pass
+
+    class Concrete(Abstract):
+        def add(self, x, y):
+            return x + y
+
+    class PlainWithAbstract:
+        @abc.abstractmethod
+        def add(self, x, y):
+            raise NotImplementedError
+
+    out = []
+    try:
+        Abstract()
+        out.append('abstract: NO ERROR')
+    except TypeError:
+        out.append('abstract: TypeError')
+    out.append('concrete: %s' % Concrete().add(1, 2))
+    out.append('plain: %s' % type(PlainWithAbstract()).__name__)
+    return out

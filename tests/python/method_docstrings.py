@@ -119,3 +119,43 @@ def update_wrapper_copies_builtin_doc():
         pass
     functools.update_wrapper(wrapper, max)
     return [wrapper.__name__, wrapper.__doc__.startswith('max(')]
+
+
+def class_side_handle_metadata():
+    """A @classmethod's UNBOUND handle must report the docstring and annotations
+    of the method it names.
+
+    Grail compiles a class-side method onto the METACLASS, so the handle's
+    definingClass is ``Cls class'' -- while ClassDefAst compiles the doc and
+    annotation tables onto ``Cls''.  Walking up from the metaclass found
+    nothing, so a class-side handle reported None/{} where the identical
+    instance-side handle reported both.
+
+    This is what a decorator sees when it does ``functools.wraps(func.__func__)''
+    over a @classmethod, which is why the wrapper inherited neither.
+    """
+    captured = {}
+
+    def snoop(func):
+        handle = func.__func__
+        captured['doc'] = handle.__doc__
+        captured['arg'] = handle.__annotations__.get('arg', 'NOKEY')
+        captured['has_annotate'] = hasattr(handle, '__annotate__')
+
+        @classmethod
+        @functools.wraps(handle)
+        def wrapper(*args, **kwargs):
+            return handle(*args, **kwargs)
+
+        return wrapper
+
+    class Host:
+        @snoop
+        @classmethod
+        def go(cls, arg: int) -> str:
+            """the docstring"""
+            return str(arg)
+
+    return [captured['doc'], str(captured['arg'] is int),
+            str(captured['has_annotate']),
+            Host.go.__doc__, str(Host.go.__annotations__.get('arg') is int)]

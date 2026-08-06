@@ -159,3 +159,15 @@ ___annotationSourceString___
 	^ parts inject: '' into: [:acc :p |
 		acc isEmpty ifTrue: [p] ifFalse: [acc , ', ' , p]]
 %
+method: TupleAst
+elts: newValue
+	elts := newValue
+%
+method: TupleAst
+ctx
+	^ctx
+%
+method: TupleAst
+ctx: newValue
+	ctx := newValue
+%

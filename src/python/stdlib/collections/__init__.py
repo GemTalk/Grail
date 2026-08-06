@@ -244,8 +244,13 @@ class deque:
     def remove(self, value):
         """Remove the first occurrence of value.  Raises ValueError
         if absent — matches CPython's list / deque ``remove`` semantics."""
+        # ``x is value or x == value'': every element search in CPython goes
+        # through PyObject_RichCompareBool, which short-circuits on IDENTITY
+        # before calling __eq__.  Without it a value that is not equal to
+        # itself is unfindable in a container that holds it -- nan being the
+        # standard case (test_contains: nan must be found in deque([nan])).
         for i, x in enumerate(self._items):
-            if x == value:
+            if x is value or x == value:
                 self._state += 1
                 del self._items[i]
                 return
@@ -263,7 +268,8 @@ class deque:
         while i < n:
             if self._state != state:
                 raise RuntimeError("deque mutated during iteration")
-            if self._items[i] == value:
+            # identity before __eq__ -- see the note in remove()
+            if self._items[i] is value or self._items[i] == value:
                 c += 1
             i += 1
         if self._state != state:
@@ -290,12 +296,15 @@ class deque:
         while i < stop:
             if self._state != state:
                 raise RuntimeError("deque mutated during iteration")
-            if self._items[i] == value:
+            # identity before __eq__ -- see the note in remove()
+            if self._items[i] is value or self._items[i] == value:
                 return i
             i += 1
         if self._state != state:
             raise RuntimeError("deque mutated during iteration")
-        raise ValueError("%r is not in deque" % (value,))
+        # CPython's wording, which names the method (deque_index in
+        # _collectionsmodule.c) rather than repr'ing the value.
+        raise ValueError("deque.index(x): x not in deque")
 
     def insert(self, i, value):
         self._state += 1
@@ -416,7 +425,8 @@ class deque:
         while i < n:
             if self._state != state:
                 raise RuntimeError("deque mutated during iteration")
-            if self._items[i] == item:
+            # identity before __eq__ -- see the note in remove()
+            if self._items[i] is item or self._items[i] == item:
                 return True
             i += 1
         if self._state != state:

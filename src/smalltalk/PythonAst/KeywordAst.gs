@@ -68,3 +68,15 @@ value
 
 	^value
 %
+method: KeywordAst
+arg
+	^arg
+%
+method: KeywordAst
+arg: newValue
+	arg := newValue
+%
+method: KeywordAst
+value: newValue
+	value := newValue
+%

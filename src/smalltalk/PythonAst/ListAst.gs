@@ -99,3 +99,15 @@ printSmalltalkOn: aStream
 	].
 	aStream nextPutAll: ') perform: #asOrderedCollection env: 0)'.
 %
+method: ListAst
+elts: newValue
+	elts := newValue
+%
+method: ListAst
+ctx
+	^ctx
+%
+method: ListAst
+ctx: newValue
+	ctx := newValue
+%

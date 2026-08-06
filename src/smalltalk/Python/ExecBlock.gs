@@ -455,7 +455,7 @@ classmethod: ExecBlock
 ___pyNone___
 	"Resolve the Python ``None'' singleton from the CALLING session's symbol
 	list.  Same reason as ___pyAttrsClass___: this file compiles with only
-	Globals visible (see the header and install_base.gs), so a bare ``None''
+	Globals visible (see the header and install_base37.gs), so a bare ``None''
 	would either fail to compile or bind to the install user's copy."
 
 	^ System myUserProfile symbolList objectNamed: #'None'
@@ -612,6 +612,26 @@ ___pyTypeParams___: names
 
 	(ExecBlock ___pyAttrsClass___)
 		staticSlotAt: self attr: '___typeParamNames___' put: names.
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
+___pyModuleNamed___: aString
+	"Stamp ``__module__'' at the def site.
+
+	A closure otherwise answers the ``<closure>'' placeholder: a module-level def
+	is a BoundMethod and gets its module by forwarding to the receiving module,
+	but a block has no receiver to forward to.  That left every def compiled as a
+	closure -- notably one written under an ``if'' in a class body -- unable to
+	be pickled by reference, because pickle resolves a callable through its
+	__module__ and __qualname__.
+
+	DEF-SITE storage, like the qualname beside it: the module a def is written in
+	is a property of where it is written.  Returns self, to compose in the
+	def-time cascade."
+
+	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__module__' put: aString.
 	^ self
 %
 

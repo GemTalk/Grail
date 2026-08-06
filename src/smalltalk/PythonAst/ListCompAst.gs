@@ -75,3 +75,19 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: '___r___'; lf.
 	aStream decreaseIndent; nextPutAll: '] value)'
 %
+method: ListCompAst
+elt
+	^elt
+%
+method: ListCompAst
+elt: newValue
+	elt := newValue
+%
+method: ListCompAst
+generators
+	^generators
+%
+method: ListCompAst
+generators: newValue
+	generators := newValue
+%

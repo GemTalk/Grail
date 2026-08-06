@@ -1,4 +1,5 @@
 ! ------------------- Superclass check
+set compile_env: 0
 run
 module ifNil: [self error: 'module is not defined. Check file ordering.'].
 %
@@ -194,6 +195,18 @@ sys_int_info class removeAllMethods: 1.
 %
 
 set compile_env: 1
+
+category: 'Grail-Accessors'
+classmethod: sys
+breakpoint
+   "Signal a Smalltalk Halt that will be signalled with _signalToDebugger, to be handled by the
+    controlling GCI debugger.  Exception handlers on the stack will not be executed.
+
+    Python invocation is like
+      sys.breakpoint()
+   "
+   self @env0:pause
+%
 
 category: 'Grail-Initialization'
 method: sys_implementation
@@ -486,7 +499,6 @@ method: sys
 breakpointhook
 	^ self @env0:at: #breakpointhook
 %
-
 
 category: 'Grail-Accessors'
 method: sys

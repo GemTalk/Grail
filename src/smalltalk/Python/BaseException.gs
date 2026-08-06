@@ -366,7 +366,7 @@ __repr__
 	| className argsArray stream |
 	className := (self @env0:class) @env0:name.
 	argsArray := self args.
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	
 	stream @env0:nextPutAll: className.
 	stream @env0:nextPut: $(.

@@ -1,4 +1,5 @@
 ! ------------------- Superclass check
+set compile_env: 0
 run
 module ifNil: [self error: 'module is not defined. Check file ordering.'].
 %
@@ -9,7 +10,7 @@ doit
 module subclass: 'importlib'
   instVarNames: #()
   classVars: #()
-  classInstVars: #('grailDir' 'miRegistry')
+  classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -60,7 +61,6 @@ importlib removeAllMethods.
 importlib class removeAllMethods.
 %
 
-set compile_env: 0
 
 category: 'Grail-For Tests'
 classmethod: importlib
@@ -362,7 +362,7 @@ hello
 		hello := function value: { 'python.hello' } value: nil.
 		^hello
 	] on: AbstractException do: [:ex |
-		ex halt.
+		self pause "signal Halt to the GCI debugger"
 	].
 %
 
@@ -438,10 +438,10 @@ expandStarImports: aModuleAst
 					expandedNames := subAst body variables asArray
 						select: [:n | (n size > 0) and: [(n at: 1) ~= $_]]].
 				newAliases := expandedNames collect: [:n |
-					AliasAst buildWithFields: (IdentityKeyValueDictionary new
-						at: #name put: n asSymbol;
-						at: #asName put: nil;
-						yourself)].
+					AliasAst new
+						name: n asSymbol;
+						asName: nil;
+						yourself ].
 				stmt names: newAliases.
 				expandedNames do: [:n | body declareVariable: n asSymbol].
 			] ifFalse: [
@@ -538,6 +538,10 @@ ___buildModuleClass: moduleAst name: moduleName
 	`add(...)` are intercepted by CallAst's bare-call dispatcher
 	separately and rewritten to ``self add:'' self-sends."
 	CallAst moduleClassBeingCompiled: moduleClass.
+	"The Python module NAME as well: FunctionDefAst stamps it onto a closure's
+	__module__, which a closure cannot otherwise know.  The class's Smalltalk
+	name is mangled from the dotted Python one, so the class alone will not do."
+	CallAst moduleNameBeingCompiled: moduleName.
 	CallAst moduleFunctionNames: functionNames.
 	CallAst moduleVariableNames: variables.
 	[
@@ -677,6 +681,7 @@ ___buildModuleClass: moduleAst name: moduleName
 		].
 	] ensure: [
 		CallAst moduleClassBeingCompiled: nil.
+		CallAst moduleNameBeingCompiled: nil.
 		CallAst moduleFunctionNames: nil.
 		CallAst moduleVariableNames: nil.
 	].
@@ -743,7 +748,7 @@ ___mintedThisLoad___: aModuleName
 	st := SessionTemps current.
 	map := st at: #'GrailMintedThisLoad' otherwise: nil.
 	map isNil ifTrue: [
-		map := KeyValueDictionary new.
+		map := SymbolKeyValueDictionary new.
 		st at: #'GrailMintedThisLoad' put: map].
 	set := map at: aModuleName asString asSymbol otherwise: nil.
 	set isNil ifTrue: [
@@ -916,7 +921,7 @@ ___deployRefsOf: obj do: aBlock
 	instVars, collection contents (dict keys+values), indexed slots of a
 	non-collection variable object, and dynamic instVars (module globals /
 	PythonInstance attrs).  Bytes objects hold no references."
-
+  | pairs |
 	obj class isBytes ifTrue: [^ self].
 	1 to: obj class instSize do: [:i |
 		aBlock value: (obj instVarAt: i)].
@@ -929,10 +934,9 @@ ___deployRefsOf: obj do: aBlock
 	ifFalse: [
 		(obj class isVariable) ifTrue: [
 			1 to: obj size do: [:i | aBlock value: (obj at: i)]]].
-	(obj respondsTo: #'dynamicInstVarPairs') ifTrue: [ | pairs |
-		pairs := [obj dynamicInstVarPairs] on: AbstractException do: [:e | e return: #()].
-		1 to: (pairs size - 1) by: 2 do: [:i |
-			aBlock value: (pairs at: i + 1)]]
+	pairs := obj dynamicInstVarPairs .
+	1 to: (pairs size - 1) by: 2 do: [:i |
+		aBlock value: (pairs at: i + 1)]
 %
 
 category: 'Grail-Deploy Audit'
@@ -1350,10 +1354,10 @@ ___canonicalInstanceForModuleClass___: aModuleClass
 	deployed with; staleness is the next explicit import's concern."
 
 	self ___canonicalClassesEnabled___ ifFalse: [^ nil].
-	self ___canonicalModules___ keysAndValuesDo: [:name :inst |
+	self ___canonicalModules___ keysAndValuesDo: [:aName :inst |
 		((inst class == aModuleClass) and: [inst isCommitted]) ifTrue: [
 			aModuleClass ___adoptInstance___: inst.
-			self registerModule: name asString with: inst.
+			self registerModule: aName asString with: inst.
 			self ___runSessionInit___: inst.
 			^ inst]].
 	^ nil
@@ -1386,6 +1390,23 @@ ___runSessionInit___: moduleInstance
 	((moduleInstance class whichClassIncludesSelector: #'__session_init__' environmentId: 1) ~~ nil)
 		ifTrue: [moduleInstance perform: #'__session_init__' env: 1].
 	^ moduleInstance
+%
+
+category: 'Private'
+classmethod: importlib
+_stateMap
+  | map tmps key |
+	map := (tmps := SessionTemps current) at: (key := #'GrailModuleHashState') otherwise: nil.
+	map ifNil:[
+		map := SymbolKeyValueDictionary new.
+	  tmps at: key put: map .
+  ].
+  ^ map
+%
+category: 'Private'
+method: importlib
+_stateMap
+  ^ self class _stateMap
 %
 
 category: 'Grail-Module Loading'
@@ -1426,10 +1447,7 @@ loadModuleFromPath: pathString name: moduleName
 		hashes := self ___canonicalModuleHashes___.
 		hashState := ((hashes at: moduleName otherwise: nil) = srcHash)
 			ifTrue: [#'match'] ifFalse: [#'stale'].
-		stateMap := SessionTemps current at: #'GrailModuleHashState' otherwise: nil.
-		stateMap isNil ifTrue: [
-			stateMap := KeyValueDictionary new.
-			SessionTemps current at: #'GrailModuleHashState' put: stateMap].
+    stateMap := self _stateMap .
 		"Phase-5 warm BIND (doc par.10.2): a committed module INSTANCE with
 		matching source binds -- register in sys.modules, adopt as the class's
 		session singleton, return.  The module body does NOT re-run: the
@@ -2194,8 +2212,7 @@ ___miRegistry___
 	dirtied the committed importlib class at every MI class definition
 	(multi-user commit conflicts).  A class DELIBERATELY committed by
 	an application loses its MRO metadata in later sessions -- such
-	sharing belongs in an application-managed RC* collection.  The
-	classInstVar declaration remains but is unused."
+	sharing belongs in an application-managed RC* collection.  "
 
 	| reg |
 	reg := SessionTemps current at: #GrailMiRegistry otherwise: nil.
@@ -3052,10 +3069,7 @@ reload: aModule
 	canonical := importlib @env0:___canonicalClassesEnabled___.
 	canonical ifTrue: [
 		srcHash := (importlib @env0:___sourceStringForPath___: path @env0:asString) @env0:sha1Sum.
-		stateMap := SessionTemps @env0:current @env0:at: #'GrailModuleHashState' otherwise: nil.
-		stateMap @env0:isNil ifTrue: [
-			stateMap := KeyValueDictionary @env0:new.
-			SessionTemps @env0:current @env0:at: #'GrailModuleHashState' put: stateMap].
+		stateMap := self @env0:_stateMap .
 		stateMap @env0:at: name @env0:asSymbol put: #'stale'].
 	moduleAst := importlib @env0:astForPath: path @env0:asString.
 	moduleAst @env0:name: name.

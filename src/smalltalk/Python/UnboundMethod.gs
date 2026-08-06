@@ -347,7 +347,72 @@ __annotations__
 	the inference reported ``no type annotation found'', and the registration
 	was lost."
 
-	^ self ___annotationsForClass___: definingClass
+	^ self ___annotationsForClass___: self ___metadataClass___
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___metadataClass___
+	"The class whose class-side metadata tables describe this handle.
+
+	For a @classmethod / @staticmethod, definingClass is the METACLASS -- that is
+	where Grail compiles a class-side method -- but ClassDefAst compiles
+	___methodDocTable___ / ___methodAnnotationsTable___ / ___methodSignatureTable___
+	onto the CLASS.  Walking up from the metaclass therefore finds nothing, which
+	is why a class-side handle reported __doc__ None and __annotations__ {} while
+	the identical instance-side handle reported both.
+
+	Surfaced through ``@classmethod_friendly_decorator'' in test_functools'
+	test_double_wrapped_methods: it does ``functools.wraps(func.__func__)'', and
+	__func__ of a class-side handle is exactly one of these."
+
+	^ (definingClass @env0:notNil and: [definingClass @env0:isMeta])
+		ifTrue: [definingClass @env0:thisClass]
+		ifFalse: [definingClass]
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+__annotate__
+	"PEP 649: the deferred annotations computation, which
+	functools.update_wrapper COPIES (``__annotate__'' is in
+	WRAPPER_ASSIGNMENTS; ``__annotations__'' is not).  Mirrors BoundMethod's,
+	including the memoization -- check_wrapper asserts the wrapper and the
+	wrapped share the very same object -- and raises rather than answering None
+	when nothing is annotated, so update_wrapper skips the name instead of
+	copying a None the reader would try to call."
+
+	| store perClass cls fn |
+	cls := self ___metadataClass___.
+	cls == nil ifTrue: [
+		AttributeError ___signal___: 'method has no attribute ''__annotate__'''].
+	store := SessionTemps @env0:current
+		@env0:at: #'GrailMethodAnnotateCache'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	perClass := store @env0:at: cls ifAbsentPut: [KeyValueDictionary @env0:new].
+	fn := perClass @env0:at: selector @env0:asString otherwise: nil.
+	fn == nil ifFalse: [^ fn].
+	fn := self ___rawAnnotateForClass___: cls.
+	fn == nil ifTrue: [
+		AttributeError ___signal___: 'method has no attribute ''__annotate__'''].
+	perClass @env0:at: selector @env0:asString put: fn.
+	^ fn
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___rawAnnotateForClass___: aClass
+	"Superclass walk for the annotate FUNCTION itself, where
+	___annotationsForClass___: walks for the dict it computes."
+
+	| tbl v |
+	aClass == nil ifTrue: [^ nil].
+	((aClass @env0:class @env0:whichClassIncludesSelector:
+		#'___methodAnnotationsTable___' environmentId: 1) ~~ nil) ifTrue: [
+			tbl := aClass ___methodAnnotationsTable___.
+			v := tbl @env0:at: selector @env0:asString otherwise: nil.
+			v == nil ifFalse: [^ v]].
+	^ self ___rawAnnotateForClass___: (aClass @env0:superclass)
 %
 
 category: 'Grail-Python Metadata'
@@ -358,10 +423,38 @@ __signature_spec__
 	(BoundMethod) drops the first one.
 
 	The table walk mirrors ___annotationsForClass___:, including the env-1
-	probe: ___methodSignatureTable___ is compiled in environment 1."
+	probe: ___methodSignatureTable___ is compiled in environment 1.
 
-	^ (self ___signatureSpecForClass___: definingClass)
-		ifNil: [ExecBlock @env0:___pyNone___]
+	___methodSignatureTable___ is BOUND-shaped -- ClassDefAst drops the receiver,
+	because that is what a bound access reports -- so the receiver is put back
+	here from the companion ___methodReceiverTable___.  Its kind is 1
+	(POSITIONAL_OR_KEYWORD) and it never carries a default, which is a
+	two-element entry.  A @staticmethod has no entry and is unchanged."
+
+	| spec cls receiver |
+	cls := self ___metadataClass___.
+	spec := self ___signatureSpecForClass___: cls.
+	spec == nil ifTrue: [^ ExecBlock @env0:___pyNone___].
+	receiver := self ___receiverNameForClass___: cls.
+	receiver == nil ifTrue: [^ spec].
+	^ (Array @env0:with: (Array @env0:with: receiver with: 1)) @env0:, spec
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___receiverNameForClass___: aClass
+	"Superclass walk for this handle's entry in ___methodReceiverTable___ -- the
+	receiver parameter name ClassDefAst dropped from the signature spec, or nil
+	for a @staticmethod (and for any class compiled before the table existed)."
+
+	| tbl v |
+	aClass == nil ifTrue: [^ nil].
+	((aClass @env0:class @env0:whichClassIncludesSelector:
+		#'___methodReceiverTable___' environmentId: 1) ~~ nil) ifTrue: [
+			tbl := aClass ___methodReceiverTable___.
+			v := tbl @env0:at: selector @env0:asString otherwise: nil.
+			v == nil ifFalse: [^ v]].
+	^ self ___receiverNameForClass___: (aClass @env0:superclass)
 %
 
 category: 'Grail-Python Metadata'
@@ -373,7 +466,7 @@ __doc__
 	def-time stamp a nested def does.  None when there is none, rather than
 	Object's own __doc__."
 
-	^ (self ___docForClass___: definingClass)
+	^ (self ___docForClass___: self ___metadataClass___)
 		ifNil: [ExecBlock @env0:___pyNone___]
 %
 
@@ -447,6 +540,7 @@ ___pythonValueAttrs___
 		add: #'__qualname__';
 		add: #'__module__';
 		add: #'__annotations__';
+		add: #'__annotate__';
 		add: #'__signature_spec__';
 		add: #'__doc__';
 		yourself

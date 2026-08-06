@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 28 | 5 | 57 | 90 |
-| P2 | 11 | 5 | 18 | 34 |
+| P1 | 29 | 4 | 57 | 90 |
+| P2 | 12 | 4 | 18 | 34 |
 | P3 | 0 | 1 | 55 | 56 |
 | P4 | 0 | 0 | 75 | 75 |
-| **In-scope** | **39** | **11** | **205** | **255** |
+| **In-scope** | **41** | **9** | **205** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -65,7 +65,7 @@ python3 scripts/sync_scope_status.py --check    # exit 1 if it is stale
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **39 of those score OK**.
+Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **41 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -111,7 +111,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_extcall` | Extended call syntax */** (language). |
 | ✅ | `test_float` | float — core type (in harness). |
 |  | `test_flufl` | barry_as_FLUFL __future__ (language). |
-| ❗ | `test_format` | str formatting / format() (language). |
+| ✅ | `test_format` | str formatting / format() (language). |
 |  | `test_fstring` | f-strings (language). |
 |  | `test_funcattrs` | Function/method attributes (language). |
 |  | `test_future_stmt` | __future__ statements (language). |
@@ -187,7 +187,7 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 | ❗ | `test_datetime` | datetime — core data type (in harness). |
 |  | `test_decimal` | decimal — arbitrary-precision arithmetic. |
 |  | `test_defaultdict` | collections.defaultdict. |
-| ❗ | `test_deque` | collections.deque. |
+| ✅ | `test_deque` | collections.deque. |
 |  | `test_dynamicclassattribute` | types.DynamicClassAttribute (used by enum). |
 | ❗ | `test_enum` | enum — core (in harness). |
 | ✅ | `test_fractions` | fractions — core numeric (in harness). |
@@ -665,15 +665,17 @@ status/tests/fail/err/skip — are in
 only what does not change every run: which modules are *done*, and what each
 not-yet-passing one is waiting on.
 
-**Fully green: 39 of the 50** — the ✅ rows in the tier tables above. That list
+**Fully green: 41 of the 50** — the ✅ rows in the tier tables above. That list
 used to be spelled out here and is not any more: it duplicated something the
 Status column now derives, and had drifted to 27.
 
-**Not yet green (the 11 ❗ rows), in descending size of the remaining gap:**
-`test_enum` (metaclass depth — `object.__str__`, `__dir__`-on-class, `_boundary_`
-Flag), `test_datetime`, `test_functools`, and `test_traceback` (the
-only IMPORTERROR — `__code__` on a def that compiled to a real method; PR #129
-attempted it and was closed unmerged).
+**Not yet green (the 9 ❗ rows), in descending size of the remaining gap:**
+`test_datetime` (114), `test_enum` (76 — metaclass depth: `object.__str__`,
+`__dir__`-on-class, `_boundary_` Flag), `test_copy` (43), `test_listcomps` (31),
+`test_yield_from` (30), `test_property` (21), `test_scope` (15),
+`test_functools` (12), and `test_traceback` (the only IMPORTERROR — `__code__`
+on a def that compiled to a real method; PR #129 attempted it and was closed
+unmerged).
 
 `test_iter` closed, and its last test is worth recording because it did **not**
 need the deferred traceback project it looked like it needed.
@@ -734,15 +736,17 @@ leaks into modules already on the board (4 left of 5):**
 | `test_scope` | 41t, 6F 10E | `ExecBlock.__closure__`, `sys.settrace` arity, one `CompileError: undefined symbol x`. LEGB is load-bearing for everything. |
 | `test_yield_from` | 43t, 18F 12E | Generator delegation (`yield from` throw/close/return-value propagation). |
 | `test_deque` | 80t, 11F 24E 4S | `deque` item assignment/deletion, `RuntimeError` on mutation-during-scan, `copy`/`deepcopy` identity. |
-| `test_format` | 18t, 10F 4E 3S | Down to **2F 1E** (2026-08-05). Closed: the four exact grouping-conflict messages and CPython 3.14's type suffix; precision bounds in all three %-engines plus float digit generation (each was an uncatchable NumericError or a hang); `complex.__format__`, which ignored the spec entirely; PEP 682 `z`; and two float literals the lexer mis-read (`0.j`, `1.e+300`). The three left are each a separate project — `%g` rounds the DECIMAL half-up where CPython rounds the exact binary value (needs the exact-rational digit technique), bytes `%`-format lacks `%b`/`%c`, and `repr()` does not escape unassigned code points (needs Unicode category data). |
+| `test_format` | 18t, 10F 4E 3S | **OK, 0F 0E 3S** (2026-08-05). Closed in two rounds. First: the four exact grouping-conflict messages and CPython 3.14's type suffix; precision bounds in all three %-engines plus float digit generation (each an uncatchable NumericError or a hang); `complex.__format__`, which ignored the spec entirely; PEP 682 `z`; two float literals the lexer mis-read (`0.j`, `1.e+300`). Then: `repr()`/`isprintable()` keyed on the Unicode general category (via `Character>>unicodeCategory`) instead of escaping ASCII controls only; scientific digits generated by EXACT integer scaling rather than normalising the mantissa with float division (which rounded a tie the wrong way and, at high precision, discarded the value entirely), with `%g` choosing notation on the post-rounding exponent; bytes `%r` as an alias for `%a`, its own bad-float wording, unconsumed-argument rejection and the `%c` length message. Reaching `test_str_format`'s second half also exposed missing str %-format diagnostics — notably `'%c' % -1`, which reached `Character class>>codePoint:` and died with an uncatchable Smalltalk `OutOfRange`, and `%d`/`%g` silently PARSING a string operand — plus that only a tuple may unpack into arguments (a list was being unpacked, formatting just its first element). |
 
-Two of the eighteen carry a per-test entry in `scripts/cpython_suite_skips.txt`
-because one test **hangs the scoring session** (unbounded work, uncatchable, so
-it takes the whole module's row with it): `test_deque.test_extend`
-(`d.extend(d)` consumes the live deque it appends to) and
-`test_format.test_common_format` (`'%.*d' % (sys.maxsize, 1)` is not
-precision-validated). Both are real bugs with known-shaped fixes; deleting the
-skip is the regression test.
+Two of the eighteen carry a per-test entry in `scripts/cpython_suite_skips.txt`.
+`test_deque.test_extend` still **hangs the scoring session** (`d.extend(d)`
+consumes the live deque it appends to — unbounded and uncatchable, so it takes
+the whole module's row with it); deleting that skip is its regression test.
+`test_format.test_common_format` no longer hangs — its precision is validated
+now — but it cannot pass: it asks for a 123456-fraction-digit float string,
+which exceeds GemStone's LargeInteger ceiling (~39000 decimal digits), so Grail
+raises `OverflowError` where CPython genuinely builds the string. That skip
+records a VM limit, not a missing fix.
 
 ### Trialed and deferred — with the blocker each log named
 
@@ -755,6 +759,13 @@ Rebuilt again on 2026-08-04 against `main` post-#201/#202/#203 (whole manifest,
 50 modules, 4 workers, 293s, no CRASH/TIMEOUT). Two rows moved, both
 improvements: `test_enum` 117 → 105 and `test_functools` 41 → 40 fail+err. No
 module changed status bucket, so the Status column above is unchanged.
+
+Rebuilt again on 2026-08-05 against `main` post-#229/#230/#231 (whole manifest,
+50 modules, 4 workers, 656s, no FAIL/CRASH/TIMEOUT/STERROR). One row moved:
+`test_functools` 19 → 12 fail+err, from the `_c3_mro`/`_find_impl` and
+descriptor-binding work in #229/#231. It stays ❗, so the Status column is
+unchanged — the ✅ count of 41 reflects #230 closing `test_format`, which was
+already committed.
 
 **One named symbol away** — cheap, and each unblocks a whole module:
 

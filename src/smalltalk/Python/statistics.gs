@@ -112,7 +112,7 @@ median_low: data
 category: 'Grail-Built-in Functions'
 method: statistics
 median_high: data
-	| d sorted n mid |
+	| d sorted n |
 	d := self _toList: data.
 	n := d @env0:size.
 	(n == 0) ifTrue: [StatisticsError ___signal___: 'median_high requires at least one data point'].

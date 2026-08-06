@@ -6,7 +6,7 @@ AbstractNode ifNil: [self error: 'AbstractNode is not defined. Check file orderi
 ! ------------------- Class definition for OperatorAst
 expectvalue /Class
 doit
-AbstractNode subclass: 'OperatorAst'
+AbstractLocationNode subclass: 'OperatorAst'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -29,8 +29,8 @@ Used as the op field in BinOp nodes.
 
 Hierarchy:
 Object
-  AbstractNode(parent)
-    AbstractLocationNode(beginLine beginColumn endLine endColumn)
+  AbstractNode
+    AbstractLocationNode
       OperatorAst
 '
 %

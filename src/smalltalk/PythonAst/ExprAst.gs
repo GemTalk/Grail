@@ -76,3 +76,7 @@ printSmalltalkOn: aStream
 	value printSmalltalkOn: aStream.
 	aStream nextPut: $..
 %
+method: ExprAst
+value: newValue
+	value := newValue
+%

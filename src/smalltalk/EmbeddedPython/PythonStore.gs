@@ -29,7 +29,7 @@ Usage via the #default message:
 	| obj |
 	obj := CPythonObject fromString: ''hello''.
 	[ PythonStore default at: ''greeting'' put: obj ] ensure: [ obj release ].
-	System commitTransaction.
+	System commit .
 
 	''Later, possibly in another session:''
 	| pyObj |

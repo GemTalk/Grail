@@ -131,11 +131,10 @@ applyBigmemtestDefaultIfNeeded
 	(self isBigmemtestDecorated
 		and: [(args defaults isNil or: [args defaults isEmpty])
 		and: [(args posonlyargs size + args args size) > 1]]) ifTrue: [
-			args appendDefault: (ConstantAst buildWithFields:
-				(IdentityKeyValueDictionary new
-					at: #value put: 5147;
-					at: #kind put: nil;
-					yourself))].
+			args appendDefault: (ConstantAst new
+					value: 5147;
+					kind: nil;
+					yourself)].
 %
 
 category: 'Grail-other'
@@ -195,7 +194,7 @@ generateResourceSkipSource
 	column rather than run."
 	| stream res |
 	res := self requiresResourceName ifNil: ['a'].
-	stream := WriteStream on: Unicode7 new.
+	stream := AppendStream on: Unicode7 new.
 	stream nextPutAll: name; lf.
 	stream nextPutAll: '^ self skipTest: ''resource '; nextPutAll: res asString;
 		nextPutAll: ' is not enabled'''.
@@ -236,7 +235,7 @@ generateCpythonOnlySkipSource
 	dir()-based discovery still finds it; the body raises SkipTest via
 	TestCase>>skipTest:, counting it in the skipped column rather than run."
 	| stream |
-	stream := WriteStream on: Unicode7 new.
+	stream := AppendStream on: Unicode7 new.
 	stream nextPutAll: name; lf.
 	stream nextPutAll: '^ self skipTest: ''CPython implementation detail'''.
 	^ stream contents
@@ -1006,6 +1005,23 @@ isPropertyAccessorDecorator: deco
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+isDeleterDecorated
+	"True when this def is a property DELETER (``@x.deleter def x(self)'').
+	Such a def has the SAME unary signature as the property getter, so
+	compiling it under the plain name ``x'' would OVERWRITE the getter; the
+	ClassDefAst emit redirects it to a distinct ``___propDeleter_x'' selector
+	that the delete path (object>>___pyAttrDelete___) invokes for ``del
+	obj.x''."
+
+	decorator_list isNil ifTrue: [^ false].
+	^ (decorator_list detect: [:deco |
+		(deco isKindOf: AttributeAst)
+			and: [(deco value isKindOf: NameAst)
+			and: [deco attr asString = 'deleter']]] ifNone: [nil]) notNil
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 printMethodDecoratorsOn: aStream decorators: decoList className: aClassName siblingNames: siblingNames
 	"Rebind a decorated class-body method: ``Cls.m = A(B(Cls.m))''.
 
@@ -1240,6 +1256,15 @@ ___emitQualnameOn___: aStream name: aName
 	still closer than the bare name, and one level is what the corpus asks for."
 
 	| qualified |
+	"__module__ first, and unconditionally: a closure otherwise answers the
+	``<closure>'' placeholder, because a module-level def gets its module by
+	forwarding to the receiving module and a block has no receiver to forward
+	to.  Pickling a callable by reference needs it alongside the qualname."
+	CallAst moduleNameBeingCompiled ifNotNil: [:modName |
+		aStream
+			nextPutAll: '; @env0:___pyModuleNamed___: ''';
+			nextPutAll: modName asString;
+			nextPutAll: ''''].
 	qualified := self ___qualifiedNameFor___: aName.
 	qualified = aName asString ifTrue: [^ self].
 	aStream
@@ -1269,7 +1294,17 @@ ___qualifiedNameFor___: aName
 	enclosingCls := CallAst classBeingCompiled.
 	(enclosingFn == nil
 		or: [enclosingFn == self or: [enclosingFn name == nil]])
-			ifTrue: [^ aName asString].
+			ifTrue: [
+				"No enclosing FUNCTION, but there may be an enclosing CLASS: a def
+				written inside an ``if'' in a class body compiles to a closure
+				rather than a method, and answered the bare name where CPython says
+				``Cls.name''.  No ``<locals>'' -- a class body is not a function
+				scope, which is exactly why CPython omits it here.  Pickling a
+				class-body def by reference depends on this: test_functools'
+				TestLRUC defines its members under ``if c_functools:''."
+				^ enclosingCls == nil
+					ifTrue: [aName asString]
+					ifFalse: [enclosingCls asString , '.' , aName asString]].
 	^ (enclosingCls == nil
 		ifTrue: [enclosingFn name asString]
 		ifFalse: [enclosingCls asString , '.' , enclosingFn name asString])
@@ -1348,6 +1383,28 @@ hasAnnotations
 	gates emission of the __annotations__ stamp."
 
 	^ returns notNil or: [self ___annotatedArgs___ notEmpty]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___receiverParamName___
+	"The name of the parameter that ClassDefAst's signature table DROPS --
+	``self'' for an instance method, ``cls'' for a classmethod, whatever the
+	def actually wrote.  nil when the def declares no positional parameter.
+
+	The table is bound-shaped on purpose (a bound access supplies the
+	receiver, and CPython omits it there), but the UNBOUND read must show it:
+	CPython's ``signature(Cls.method)'' includes ``self''.  Recording the name
+	separately keeps the existing table byte-identical while making the
+	unbound form reconstructible -- the alternative, emitting the receiver
+	into the spec and stripping it at every bound read, would have needed a
+	staticness marker in the table too."
+
+	| allPositional |
+	args ifNil: [^ nil].
+	allPositional := (args posonlyargs ifNil: [#()]) , (args args ifNil: [#()]).
+	allPositional isEmpty ifTrue: [^ nil].
+	^ (allPositional at: 1) name asString
 %
 
 category: 'Grail-code generation'
@@ -1675,7 +1732,7 @@ generateBigmemtestUnaryForwarderSource
 	with an empty positional so the injected default supplies the dry-run
 	size."
 	| stream |
-	stream := WriteStream on: Unicode7 new.
+	stream := AppendStream on: Unicode7 new.
 	stream nextPutAll: name; lf.
 	stream nextPutAll: '^ self _'; nextPutAll: name; nextPutAll: ': { } kw: nil'.
 	^ stream contents
@@ -1696,7 +1753,7 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 	  ^ self <sel>                    (instance: env-1 fixed selector)"
 
 	| stream callParams allParams defaults firstDefault posonlyNames |
-	stream := WriteStream on: Unicode7 new.
+	stream := AppendStream on: Unicode7 new.
 	allParams := self allParameterNames.
 	callParams := stripSelf
 		ifTrue: [allParams copyFrom: 2 to: allParams size]
@@ -1720,7 +1777,7 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 		stream nextPut: $|; lf.
 	].
 	callParams doWithIndex: [:p :i |
-		| absoluteIdx def isPosOnly |
+		| absoluteIdx isPosOnly |
 		"absolute parameter index in the full (self-included) list, to
 		align with the fixed selector's positional order."
 		absoluteIdx := stripSelf ifTrue: [i + 1] ifFalse: [i].
@@ -1781,7 +1838,7 @@ generateModuleMethodStubSource
 	just returns nil. It gets replaced by the real method after codegen."
 
 	| stream paramNames |
-	stream := WriteStream on: Unicode7 new.
+	stream := AppendStream on: Unicode7 new.
 	self isSimplePositionalArgs ifTrue: [
 		paramNames := self allParameterNames.
 		stream nextPutAll: name.
@@ -2757,7 +2814,7 @@ generateMethodStubSource
 	but with self stripped from parameters)."
 
 	| stream paramNames |
-	stream := WriteStream on: Unicode7 new.
+	stream := AppendStream on: Unicode7 new.
 	self compilesAsVarargs ifTrue: [
 		stream nextPut: $_; nextPutAll: name; nextPutAll: ': positional kw: kwargs'.
 	] ifFalse: [
@@ -3249,4 +3306,52 @@ ___reachableStatements___: stmts
 		out add: each.
 		each isUnconditionalReturn ifTrue: [^ out]].
 	^ out
+%
+method: FunctionDefAst
+name: newValue
+	name := newValue
+%
+method: FunctionDefAst
+args
+	^args
+%
+method: FunctionDefAst
+args: newValue
+	args := newValue
+%
+method: FunctionDefAst
+body: newValue
+	body := newValue
+%
+method: FunctionDefAst
+decorator_list
+	^decorator_list
+%
+method: FunctionDefAst
+decorator_list: newValue
+	decorator_list := newValue
+%
+method: FunctionDefAst
+returns
+	^returns
+%
+method: FunctionDefAst
+returns: newValue
+	returns := newValue
+%
+method: FunctionDefAst
+type_comment
+	^type_comment
+%
+method: FunctionDefAst
+type_comment: newValue
+	type_comment := newValue
+%
+method: FunctionDefAst
+type_params
+	^type_params
+%
+method: FunctionDefAst
+type_params: newValue
+	type_params := newValue
 %

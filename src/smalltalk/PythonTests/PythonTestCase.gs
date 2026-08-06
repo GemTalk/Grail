@@ -6,7 +6,7 @@ TestCase ifNil: [self error: 'TestCase is not defined. Check file ordering.'].
 ! ------------------- Class definition for PythonTestCase
 expectvalue /Class
 doit
-TestCase subclass: 'PythonTestCase'
+GsTestCase subclass: 'PythonTestCase'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -47,9 +47,21 @@ isAbstract
 category: 'Grail-Testing'
 classmethod: PythonTestCase
 suite
-	"Return a test suite for all PythonTestCase subclasses.
-	Initialize modules before creating the suite."
-	
+	"Return a test suite for all PythonTestCase subclasses."
+  self initGrail .
+	^ super suite
+%
+
+category: 'Grail-Testing'
+classmethod: PythonTestCase
+initGrail
+  "ensure initialization if executing directly from topaz"
+  | dir |
+  (dir := System gemEnvironmentVariable: 'GRAIL_DIR') ifNil:[
+    System gemEnvironmentVariable: 'GRAIL_DIR' put: (dir := GsFile serverCurrentDirectory)
+  ].
+  importlib grailDir: dir .
+
 	"Initialize sys.modules to ensure all built-in modules are registered.
 	We need to do this carefully to avoid circular dependencies.
 	Call the class method directly in Python environment."
@@ -57,8 +69,27 @@ suite
 		"If initialization fails, continue anyway - individual tests will handle it"
 		Transcript show: 'Warning: Could not initialize sys.modules: ', ex messageText; cr
 	].
-	
-	^ super suite
+%
+
+category: 'Grail-Testing'
+classmethod: PythonTestCase
+debugEx
+  "execute all of the test cases."
+  self initGrail .  
+  ^ super debugEx
+%
+
+category: 'Grail-Testing'
+classmethod: PythonTestCase
+debug: aSelector
+  self initGrail.  
+  ^ super debug: aSelector
+%
+
+category: 'Grail-Testing'
+classmethod: PythonTestCase
+runEx
+  ^ self suite run printString
 %
 
 category: 'Grail-helpers'
@@ -197,6 +228,18 @@ runCase
 
 	super's own ensure: still runs tearDown before the exception gets here."
 
+	"Start every test with no exception BEING HANDLED.  sys.exc_info() reads a
+	session-global (SessionTemps #GrailCurrentException) that TryAst sets on
+	except-handler entry and restores on exit with an ensure: block.  That
+	restore is skipped when the unwind would cross a C primitive, user action
+	or FFI frame -- GemStone refuses to run ensure: blocks across one
+	(UncontinuableError) -- so an error escaping the CPython shim leaves the
+	slot set for the REST OF THE SESSION.  Every later test that asserts
+	sys.exc_info() is empty then fails for a reason that has nothing to do with
+	it: one shim fault in DunderNewTestCase produced two failures over in
+	TracebackTestCase, which is most of why that run was hard to read.
+	Clearing here keeps a leak contained to the test that caused it."
+	BaseException ___setCurrentException___: nil.
 	[ super runCase ]
 		on: BaseException
 		do: [:ex | Error signal: ex description]

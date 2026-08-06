@@ -1,4 +1,4 @@
-output pushnew install.out only
+output pushnew install.out 
 ! ===============================================================================
 ! Grail Installation Script
 !   file  src/smalltalk/install.gs
@@ -40,6 +40,10 @@ iferr 1 where
 iferr 2 output pop
 iferr 3 where
 iferr 4 exit 1
+
+! Uncomment for interactive filein  to fix compile warnings
+! display pauseonwarn
+! iferr_clear
 
 ! Unicode comparison mode is an extent-global SystemUser setting; it is applied
 ! once by ./install_base.sh (via scripts/setUnicodeMode.sh), not here -- an
@@ -120,7 +124,7 @@ GsPackage installIn: home.
 policy homeSymbolDict: home.
 policy externalSymbolList: { Globals }.
 policy enable.
-System commitTransaction.
+System commit.
 Transcript show: 'Session-method policy enabled (per-user home=GrailSessionMethods, external={Globals})'.
 %
 
@@ -822,6 +826,8 @@ run
 	at: #'PosonlyAndReflectedEqTestCase' put: nil;
 	at: #'PropertyAndIsinstanceTestCase' put: nil;
 	at: #'FormatSpecAndComplexTestCase' put: nil;
+	at: #'PrintableReprAndPrintfTestCase' put: nil;
+	at: #'DequeIdentitySearchTestCase' put: nil;
 	yourself.
 Transcript show: 'Forward references created for PythonTests dictionary'.
 %
@@ -931,7 +937,7 @@ input src/smalltalk/Python/NoneType.gs
 ! own), with NO SystemUser step.  install.sh regenerates
 ! out/gen/kernel_class_extensions.gs from the GemStone version just before running
 ! this script: on 4.0+ it lists those files; on 3.7.x it is empty (a no-op
-! comment) because install_base.gs already filed them as shared SystemUser
+! comment) because install_base37.gs already filed them as shared SystemUser
 ! methods.  Filed right after NoneType so `None` is bound, and before the rest of
 ! Step 4 + module init that dispatch to them.
 input out/gen/kernel_class_extensions.gs
@@ -1159,7 +1165,7 @@ commit
 ! System, SymbolDictionary, ExecBlock's value-family, and Object's <primitive:>
 ! methods + env-0 ___new___ allocators) are NOT filed here -- they are shared,
 ! user-independent infrastructure installed once as SystemUser by
-! ./install_base.sh (scripts/install_base.gs).  This per-user script assumes they
+! ./install_base37.sh (scripts/install_base37.gs).  This per-user script assumes they
 ! are already committed; the env-1 module-instantiation blocks below dispatch to
 ! them.
 
@@ -1607,6 +1613,8 @@ input src/smalltalk/PythonTests/GeneratorStopTestCase.gs
 input src/smalltalk/PythonTests/PosonlyAndReflectedEqTestCase.gs
 input src/smalltalk/PythonTests/PropertyAndIsinstanceTestCase.gs
 input src/smalltalk/PythonTests/FormatSpecAndComplexTestCase.gs
+input src/smalltalk/PythonTests/PrintableReprAndPrintfTestCase.gs
+input src/smalltalk/PythonTests/DequeIdentitySearchTestCase.gs
 
 run
 Transcript show: 'Step 6 complete: Test classes loaded'.

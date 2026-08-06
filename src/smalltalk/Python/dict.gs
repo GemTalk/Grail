@@ -10,6 +10,7 @@
 ! These methods are compiled with environmentId 1 (Python) to keep them separate
 ! from the base Smalltalk methods (environmentId 0).
 ! ===============================================================================
+set compile_env: 0
 
 ! ------------------- Remove existing Python methods from dict
 expectvalue /Metaclass3
@@ -597,25 +598,26 @@ __repr__
 		RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object'].
 	seen @env0:add: self.
 
-	^ [[stream := WriteStream @env0:on: (String ___new___).
-	stream @env0:nextPutAll: '{'.
+	^ [[ "cannot use AppendStream here  because of the use of skip:"
+      stream := WriteStream @env0:on: (Unicode7 ___new___).
+	    stream @env0:nextPutAll: '{'.
 
-	self @env0:keysAndValuesDo: [:key :value |
-		| keyRepr valueRepr |
-		keyRepr := key __repr__.
-		valueRepr := value __repr__.
-		stream @env0:nextPutAll: keyRepr.
-		stream @env0:nextPutAll: ': '.
-		stream @env0:nextPutAll: valueRepr.
-		stream @env0:nextPutAll: ', '
-	].
-
-	"Remove the trailing ', '"
-	stream @env0:skip: -2.
-	stream @env0:nextPutAll: '}'.
-
-	stream @env0:contents]
-		@env0:on: AlmostOutOfStack do: [:ex |
+	    self @env0:keysAndValuesDo: [:key :value |
+		    | keyRepr valueRepr |
+		    keyRepr := key __repr__.
+		    valueRepr := value __repr__.
+		    stream @env0:nextPutAll: keyRepr.
+		    stream @env0:nextPutAll: ': '.
+		    stream @env0:nextPutAll: valueRepr.
+		    stream @env0:nextPutAll: ', '
+	    ].
+    
+	    "Remove the trailing ', '"
+	    stream @env0:skip: -2.
+	    stream @env0:nextPutAll: '}'.
+    
+	    stream @env0:contents
+   ] @env0:on: AlmostOutOfStack do: [:ex |
 			"A default gem's stack (GEM_MAX_SMALLTALK_STACK_DEPTH 1000)
 			overflows before the seen-size guard fires -- convert the
 			resumable notification into CPython's RecursionError."
