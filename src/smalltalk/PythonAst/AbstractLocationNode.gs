@@ -88,6 +88,26 @@ endLine
 %
 category: 'Grail-accessors'
 method: AbstractLocationNode
+___indexOfLast: aCharacter in: src startingAt: startIndex
+  "Index of the last aCharacter at or before startIndex, 0 when absent.
+
+   Inlined rather than sent as CharacterCollection>>indexOfLast:startingAt:.
+   That method is NOT in GemStone 4.0's base image (despite the header
+   comment in src/smalltalk/Python/CharacterCollection.gs claiming it is)
+   and that file is only filed on 3.7, by scripts/install_base37.gs -- so
+   on 4.0 the send died with `a Unicode7 does not understand
+   #indexOfLast:startingAt:', taking down EVERY Grail import, since this
+   runs while building AST node positions."
+  | n |
+  n := startIndex min: src size .
+  [ n >= 1 ] whileTrue: [
+    (src at: n) == aCharacter ifTrue:[ ^ n ].
+    n := n - 1 ].
+  ^ 0
+%
+
+category: 'Grail-accessors'
+method: AbstractLocationNode
 column
   "used by ___emitTracebackFrame...  in ComprehensionAst"
   "result is zero based"
@@ -95,11 +115,11 @@ column
   (self dynamicInstVarAt: #column) ifNotNil:[:v | ^ v ].
   src := self sourceString .
   lf := Character lf .
-  prevEolPos := src indexOfLast: lf startingAt: beginPosition .
+  prevEolPos := self ___indexOfLast: lf in: src startingAt: beginPosition .
   col := beginPosition - prevEolPos - 1.
   self dynamicInstVarAt: #column put: col .
-  ^ col  
-%  
+  ^ col
+%
 category: 'Grail-accessors'
 method: AbstractLocationNode
 endColumn
@@ -110,7 +130,7 @@ endColumn
   (self dynamicInstVarAt: #endColumn) ifNotNil:[:v | ^ v ].
   src := self sourceString .
   lf := Character lf .
-  prevEolPos := src indexOfLast: lf startingAt: endPosition .
+  prevEolPos := self ___indexOfLast: lf in: src startingAt: endPosition .
   col := endPosition - prevEolPos .
   self dynamicInstVarAt: #endColumn put: col .
   ^ col  
