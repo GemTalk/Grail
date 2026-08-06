@@ -113,13 +113,33 @@ classmethod: CPythonShim
 libraryPath: aString
 	"Set the path to the shim user action library."
 
+	| changed |
+	"Discard the wrapper map only when the library actually CHANGES.
+
+	A change must discard it: each wrapper caches a tp_* address from the old
+	library at offset 8, those do not survive a reload, and any C structure
+	still holding a wrapper pointer belongs to the library being replaced, so
+	it is unreachable anyway.
+
+	Re-setting the SAME path must NOT.  Nothing about the loaded library
+	moved, every cached tp_* is still valid, and the C structures pointing
+	into those wrappers are still live -- so dropping the map is a pure
+	use-after-free generator.  The map is the ONLY strong reference to a
+	wrapper AND (as the map's key) to the Smalltalk object whose OOP sits at
+	the wrapper's offset 16; once it goes, the Smalltalk object is collected
+	and C reads back a dangling OOP.  Because _Py_Dealloc is a no-op, a
+	compiled regex lives for the whole PROCESS still pointing at its
+	groupindex wrapper, so the damage surfaces arbitrarily far away: one
+	same-path call in CPythonShimTestCase orphaned fractions'
+	_RATIONAL_FORMAT and made DunderNewTestCase>>testVendoredFractionEndToEnd
+	fail with ``a UndefinedObject does not understand #includesKey:'' -- 170
+	reported errors from one line.  Sharded runs never saw it: the two test
+	classes land in different shards, hence different sessions."
+	changed := libraryPath ~= aString.
 	libraryPath := aString.
 	SessionTemps current removeKey: #CPythonShim ifAbsent: [].
-	"Unlike >>reset, a library CHANGE must also discard the wrapper map: each
-	wrapper caches a tp_* address from the old library at offset 8, and those
-	do not survive a reload.  Any C structure still holding a wrapper pointer
-	belongs to the old library and is unreachable anyway."
-	SessionTemps current removeKey: #GrailShimWrapperMap ifAbsent: [].
+	changed ifTrue: [
+		SessionTemps current removeKey: #GrailShimWrapperMap ifAbsent: []].
 %
 
 category: 'Grail-Testing'

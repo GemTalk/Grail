@@ -18,6 +18,13 @@
 > Fixed by making the wrapper map session-scoped, so a new singleton inherits
 > it. The whole-suite-in-one-session reproducer went from a SIGSEGV at test
 > 1241 to no crash at all.
+>
+> **Round 3, 2026-08-05 — the same symptom came back, and this box was
+> incomplete.** Session-scoping the map stopped the *singleton* from orphaning
+> it, but `libraryPath:` still deleted the session entry on **every** call,
+> including one that re-set the path it already had — and a test did precisely
+> that. See [Round 3](#round-3-2026-08-05-the-same-map-wiped-by-librarypath).
+> With that fixed, the whole suite in one session is 3803/3803 green.
 
 *Investigated 2026-08-04 against `main` @ 96f59625 (GemStone 4.0.0, arm64 Darwin).
 Written up for the core-team developer who reported the stack. The reported failure
@@ -313,6 +320,56 @@ fires in a healthy run.
 3134 and stops on `VM temporary object memory is full` — the ordinary
 temp-cache limit of running 3653 tests in one session, which is why the suite is
 sharded.
+
+### Round 3 (2026-08-05): the same map, wiped by `libraryPath:`
+
+The sentence above — "`libraryPath:` *does* still discard the map" — was the
+remaining hole, and it reopened the identical symptom. Making the map
+session-scoped stopped the *singleton* from orphaning it; nothing stopped
+`libraryPath:` from deleting the session entry outright.
+
+`CPythonShim class>>libraryPath:` discarded the map **unconditionally**, on any
+call, including one that sets the path it already had. Re-setting the same path
+changes nothing: the library is loaded, every `tp_*` cached at a wrapper's
+offset 8 is still valid, and the C structures pointing into those wrappers are
+still live. Dropping the map there only destroys things — it is the sole strong
+reference both to each wrapper and, as the map's **key**, to the Smalltalk
+object whose OOP sits at the wrapper's offset 16.
+
+One test did exactly that:
+`CPythonShimTestCase>>testLibraryPathChangeDoesDiscardTheWrapperMap` set the
+**same** path and asserted the discard, which passed only because the discard
+was unconditional. So a test whose subject was "a library *change* drops the
+wrappers" was in fact wiping the live wrappers of every other test in the
+session. Because `_Py_Dealloc` is a no-op, a regex compiled earlier survives for
+the whole process still holding its `groupindex` pointer — so the damage
+surfaced far away, in `fractions`' `_RATIONAL_FORMAT` and thence
+`DunderNewTestCase>>testVendoredFractionEndToEnd`.
+
+Symptom this time was `a UndefinedObject does not understand #includesKey:`
+rather than `a ShimForeignObject …`: the sentinel at offset 24 was intact and
+the block not yet reused, but the OOP at offset 16 had been collected. Per the
+reading in [Why a Grail dict became a
+`ShimForeignObject`](#why-a-grail-dict-became-a-shimforeignobject), that is the
+same failure one stage earlier.
+
+**Fix:** `libraryPath:` compares old and new and discards the map only when the
+path actually changes. The test now exercises a real change and restores the map
+object afterwards (restoring the path is itself a change, so order matters);
+`testSameLibraryPathKeepsTheWrapperMap` pins the same-path case.
+
+**Result:** the whole suite in **one session** — 283 classes, 3803 tests — is
+`3803 run, 3803 passed, 0 failed, 0 errors`. Before the fix the same run
+reported `1373 run … 170 errors` at 70 classes, all of them one orphaned dict
+re-reported. Sharded runs never saw any of it: `CPythonShimTestCase` and
+`DunderNewTestCase` land in different shards, so the wipe and its victim were
+never in the same session.
+
+Note the round-2 "temp-cache limit of 3653 tests in one session" no longer
+binds: with `GEM_TEMPOBJ_CODE_SIZE=600000;GEM_TEMPOBJ_CACHE_SIZE=1000000` the
+full 3803 complete. `GEM_TEMPOBJ_CODE_SIZE` is the knob that matters for a long
+single session — Python `eval:` compiles new methods, and code space overflows
+(`code space doits_meths overflow`) long before object memory does.
 
 ## Two defects worth fixing regardless of which it is
 

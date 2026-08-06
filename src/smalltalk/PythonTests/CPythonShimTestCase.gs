@@ -1937,21 +1937,69 @@ method: CPythonShimTestCase
 testLibraryPathChangeDoesDiscardTheWrapperMap
 	"The one case where dropping the wrappers is correct: a library CHANGE.
 	Each wrapper caches a tp_* address from the old library at offset 8, and
-	those do not survive a reload, so they must not be reused."
+	those do not survive a reload, so they must not be reused.
 
-	| shim value saved |
+	The change has to be a REAL one.  This test used to re-set the SAME path
+	and assert a discard, which only held because >>libraryPath: discarded
+	unconditionally -- so the test was a session poisoner: it threw away the
+	live wrappers belonging to every other test in the session.  C structures
+	outlive their refcount (_Py_Dealloc is a no-op), so a regex compiled
+	earlier kept pointing into freed memory and failed much later and
+	somewhere else.  Sharding hid it; one session did not.
+
+	It also has to put the map BACK, because even a genuine change discards
+	the real session's wrappers.  The ensure: restores the path first and
+	only then reinstates the very same map object -- restoring the path is
+	itself a change and would discard whatever we had just put back."
+
+	| shim value saved savedMap |
 	shim := CPythonShim current.
 	value := Array with: 19 with: 20.
 	shim wrap: value.
-	self assert: (SessionTemps current at: #GrailShimWrapperMap otherwise: nil) notNil.
+	savedMap := SessionTemps current at: #GrailShimWrapperMap otherwise: nil.
+	self assert: savedMap notNil.
 
 	saved := CPythonShim libraryPath.
-	[CPythonShim libraryPath: saved.
+	[CPythonShim libraryPath: saved , '.reload-probe'.
 	 self assert: (SessionTemps current at: #GrailShimWrapperMap otherwise: nil) isNil
-		description: 'libraryPath: must discard wrappers holding old tp_* addresses']
+		description: 'a library CHANGE must discard wrappers holding old tp_* addresses']
 		ensure: [
 			CPythonShim libraryPath: saved.
+			savedMap ifNotNil: [
+				SessionTemps current at: #GrailShimWrapperMap put: savedMap].
 			CPythonShim current]
+%
+
+category: 'Grail-Tests - Session-Local State'
+method: CPythonShimTestCase
+testSameLibraryPathKeepsTheWrapperMap
+	"Re-setting the SAME library path must keep the wrapper map, and every
+	wrapper in it, byte-for-byte identical.
+
+	Nothing about the loaded library moved, so every tp_* cached at a
+	wrapper's offset 8 is still valid and the C structures pointing into
+	those wrappers are still live.  Dropping the map there is a pure
+	use-after-free generator: the map is the only strong reference to a
+	wrapper and -- as the map's KEY -- to the Smalltalk object whose OOP sits
+	at offset 16, so the Smalltalk object is collected and C reads back a
+	dangling OOP.  It cost 170 reported errors in a single-session suite run,
+	all of them one orphaned regex groupindex dict."
+
+	| shim value wrapper saved map |
+	shim := CPythonShim current.
+	value := Array with: 21 with: 22.
+	wrapper := shim wrap: value.
+	map := SessionTemps current at: #GrailShimWrapperMap otherwise: nil.
+	self assert: map notNil.
+
+	saved := CPythonShim libraryPath.
+	CPythonShim libraryPath: saved.
+
+	self assert: (SessionTemps current at: #GrailShimWrapperMap otherwise: nil) == map
+		description: 'a same-path libraryPath: must keep the very same wrapper map'.
+	self assert: (CPythonShim current wrap: value) == wrapper
+		description: 'a wrapper must survive a same-path libraryPath:, or every '
+			, 'C structure holding its pointer reads a dangling OOP'
 %
 
 
