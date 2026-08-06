@@ -625,7 +625,7 @@ parseCallArgList
 	sawKeyword := false.
 	sawKwargsUnpack := false.
 	kwNames := IdentitySet new.
-	((tok := self peek0 notNil and: [(tok isOp: ')') not]) ifTrue: [
+	((tok := self peek) notNil and: [(tok isOp: ')') not]) ifTrue: [
 		[
 			(self peek isOp: ')') ifTrue: [false] ifFalse: [
 				"**kwargs"
