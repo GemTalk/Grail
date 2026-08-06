@@ -1777,7 +1777,7 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 		stream nextPut: $|; lf.
 	].
 	callParams doWithIndex: [:p :i |
-		| absoluteIdx def isPosOnly |
+		| absoluteIdx isPosOnly |
 		"absolute parameter index in the full (self-included) list, to
 		align with the fixed selector's positional order."
 		absoluteIdx := stripSelf ifTrue: [i + 1] ifFalse: [i].
