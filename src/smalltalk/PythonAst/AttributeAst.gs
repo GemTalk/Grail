@@ -64,6 +64,18 @@ attr
 
 category: 'Grail-accessing'
 method: AttributeAst
+___mangledAttr___
+	"The attribute name AS COMPILED: private-name mangled when this node
+	sits inside a class body (see AbstractNode>>___manglePrivate___:).
+	Every codegen site that emits an attribute NAME must go through this
+	rather than reading ``attr'' raw, or a store and its matching load
+	would disagree."
+
+	^ self ___manglePrivate___: attr
+%
+
+category: 'Grail-accessing'
+method: AttributeAst
 value
 
 	^value
@@ -140,12 +152,12 @@ printSmalltalkOn: aStream
 		falls through to ___pyAttrLoad___ so __getattr__ / AttributeError
 		still apply."
 		((CallAst classSlotNames notNil)
-			and: [CallAst classSlotNames includes: attr asSymbol]) ifTrue: [
+			and: [CallAst classSlotNames includes: self ___mangledAttr___ asSymbol]) ifTrue: [
 			aStream
 				nextPutAll: '(___slot_';
-				nextPutAll: attr;
+				nextPutAll: self ___mangledAttr___;
 				nextPutAll: '___ ifNil: [self @env1:___pyAttrLoad___: #''';
-				nextPutAll: attr;
+				nextPutAll: self ___mangledAttr___;
 				nextPutAll: '''])'.
 			^self
 		].
@@ -165,9 +177,9 @@ printSmalltalkOn: aStream
 		      on miss."
 		aStream
 			nextPutAll: '(self @env0:dynamicInstVarAt: #''';
-			nextPutAll: attr;
+			nextPutAll: self ___mangledAttr___;
 			nextPutAll: ''' ifAbsent: [self @env1:___pyAttrLoad___: #''';
-			nextPutAll: attr;
+			nextPutAll: self ___mangledAttr___;
 			nextPutAll: '''])'.
 		^self
 	].
@@ -179,7 +191,7 @@ printSmalltalkOn: aStream
 
 	value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' @env1:___pyAttrLoad___: #'''.
-	aStream nextPutAll: attr.
+	aStream nextPutAll: self ___mangledAttr___.
 	aStream nextPutAll: ''''.
 %
 

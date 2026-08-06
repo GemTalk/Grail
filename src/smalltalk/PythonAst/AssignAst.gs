@@ -134,22 +134,22 @@ printSmalltalkOn: aStream
 					"Slot attribute -> direct named-instVar write; else the
 					instances dynamic-instVar storage (as before)."
 					((CallAst classSlotNames notNil)
-						and: [CallAst classSlotNames includes: eachTgt attr asSymbol])
+						and: [CallAst classSlotNames includes: eachTgt ___mangledAttr___ asSymbol])
 						ifTrue: [
 							aStream
 								nextPutAll: '___slot_';
-								nextPutAll: eachTgt attr;
+								nextPutAll: eachTgt ___mangledAttr___;
 								nextPutAll: '___ := ___chain___. '
 						] ifFalse: [
 							aStream
 								nextPutAll: 'self @env0:dynamicInstVarAt: #''';
-								nextPutAll: eachTgt attr;
+								nextPutAll: eachTgt ___mangledAttr___;
 								nextPutAll: ''' put: ___chain___. '
 						]
 				]
 				ifFalse: [
 					eachTgt value printSmalltalkWithParenthesisOn: aStream.
-					aStream nextPutAll: ' @env1:__setattr__: '''; nextPutAll: eachTgt attr;
+					aStream nextPutAll: ' @env1:__setattr__: '''; nextPutAll: eachTgt ___mangledAttr___;
 						nextPutAll: ''' _: ___chain___. '
 				]
 		] ifFalse: [
@@ -372,10 +372,10 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 				and: [(aTarget value ___boundInNestedFunction___: aTarget value id) not]]) ifTrue: [
 			"Slot attribute → assign the mangled instVar directly by bare name."
 			((CallAst classSlotNames notNil)
-				and: [CallAst classSlotNames includes: aTarget attr asSymbol]) ifTrue: [
+				and: [CallAst classSlotNames includes: aTarget ___mangledAttr___ asSymbol]) ifTrue: [
 				aStream
 					nextPutAll: '___slot_';
-					nextPutAll: aTarget attr;
+					nextPutAll: aTarget ___mangledAttr___;
 					nextPutAll: '___ := (';
 					nextPutAll: rhs;
 					nextPutAll: '). '.
@@ -383,7 +383,7 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 			].
 			aStream
 				nextPutAll: 'self @env1:__setattr__: ''';
-				nextPutAll: aTarget attr;
+				nextPutAll: aTarget ___mangledAttr___;
 				nextPutAll: ''' _: (';
 				nextPutAll: rhs;
 				nextPutAll: '). '.
@@ -392,7 +392,7 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 		aTarget value printSmalltalkWithParenthesisOn: aStream.
 		aStream
 			nextPutAll: ' @env1:__setattr__: ''';
-			nextPutAll: aTarget attr;
+			nextPutAll: aTarget ___mangledAttr___;
 			nextPutAll: ''' _: (';
 			nextPutAll: rhs;
 			nextPutAll: '). '.
@@ -480,9 +480,9 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 		the mangled instVar directly by bare name (this method compiles on
 		the slotted class), bypassing the generic store path."
 		((CallAst classSlotNames notNil)
-			and: [CallAst classSlotNames includes: tgt attr asSymbol]) ifTrue: [
+			and: [CallAst classSlotNames includes: tgt ___mangledAttr___ asSymbol]) ifTrue: [
 			aStream nextPutAll: '___slot_'.
-			aStream nextPutAll: tgt attr.
+			aStream nextPutAll: tgt ___mangledAttr___.
 			aStream nextPutAll: '___ := '.
 			value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPut: $..
@@ -502,7 +502,7 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 		the @base_url.setter, leaving script_root / host / url_scheme
 		unset."
 		aStream nextPutAll: 'self @env1:__setattr__: '''.
-		aStream nextPutAll: tgt attr.
+		aStream nextPutAll: tgt ___mangledAttr___.
 		aStream nextPutAll: ''' _: '.
 		value printSmalltalkWithParenthesisOn: aStream.
 		aStream nextPut: $..
@@ -521,7 +521,7 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 	Symbol receiver would fail that ``__eq__'' check."
 	tgt value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' @env1:__setattr__: '''.
-	aStream nextPutAll: tgt attr.
+	aStream nextPutAll: tgt ___mangledAttr___.
 	aStream nextPutAll: ''' _: '.
 	value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPut: $..

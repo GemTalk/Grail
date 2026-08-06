@@ -89,7 +89,7 @@ printSmalltalkOn: aStream
 				are str-vs-str in Python."
 				target value printSmalltalkWithParenthesisOn: aStream.
 				aStream nextPutAll: ' @env1:__delattr__: ''';
-					nextPutAll: target attr;
+					nextPutAll: target ___mangledAttr___;
 					nextPutAll: '''.'.
 			] ifFalse: [
 				(target isKindOf: NameAst) ifTrue: [

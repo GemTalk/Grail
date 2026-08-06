@@ -252,7 +252,7 @@ printSmalltalkRuntimeOn: aStream
 				selector but is counted as skipped, matching CPython."
 				def isRequiresResourceDecorated
 					ifTrue: [
-						methodSources add: def name asString
+						methodSources add: def ___mangledName___ asString
 							-> def generateResourceSkipSource]
 					ifFalse: [
 					def isCpythonOnlyDecorated
@@ -260,7 +260,7 @@ printSmalltalkRuntimeOn: aStream
 						"A ``@cpython_only''-decorated test skips under an
 						alternative Python implementation (see
 						isCpythonOnlyDecorated); emit a skipping body."
-						methodSources add: def name asString
+						methodSources add: def ___mangledName___ asString
 							-> def generateCpythonOnlySkipSource]
 					ifFalse: [
 						s := PrettyWriteStream on: Unicode7 new.
@@ -271,25 +271,25 @@ printSmalltalkRuntimeOn: aStream
 								like the getter; emitting it as ``x'' would clobber the
 								getter.  Redirect to ``___propDeleter_x'', invoked by
 								object>>___pyAttrDelete___ for ``del obj.x''."
-								methodSources add: ('___propDeleter_' , def name asString)
+								methodSources add: ('___propDeleter_' , def ___mangledName___ asString)
 									-> (self ___redirectUnarySelectorIn: s contents
-										from: def name asString
-										to: ('___propDeleter_' , def name asString))]
+										from: def ___mangledName___ asString
+										to: ('___propDeleter_' , def ___mangledName___ asString))]
 							ifFalse: [
-								methodSources add: def name asString -> s contents].
+								methodSources add: def ___mangledName___ asString -> s contents].
 						"Keyword-call companion for a simple-positional instance
 						method: a varargs ``_name:kw:'' forwarder so ``obj.m(a,
 						kw=v)'' binds by name rather than DNU-ing (django calls
 						view/handler methods with keyword arguments)."
 						def needsVarargsForwarder ifTrue: [
-							methodSources add: ('_' , def name asString)
+							methodSources add: ('_' , def ___mangledName___ asString)
 								-> def generateInstanceVarargsForwarderSource].
 						"A ``@bigmemtest''-family method was normalised to the
 						varargs form (a dry-run ``size'' default injected above),
 						which hides it from dir()-based test discovery.  Emit a
 						plain unary forwarder so getTestCaseNames finds it."
 						def isBigmemtestDecorated ifTrue: [
-							methodSources add: ('bigmem_' , def name asString)
+							methodSources add: ('bigmem_' , def ___mangledName___ asString)
 								-> def generateBigmemtestUnaryForwarderSource]]].
 			] ensure: [CallAst selfParameterName: savedSelfForIM].
 		].
@@ -313,7 +313,7 @@ printSmalltalkRuntimeOn: aStream
 				[
 					s := PrettyWriteStream on: Unicode7 new.
 					def generateMethodSourceOn: s.
-					classMethodSources add: def name asString -> s contents.
+					classMethodSources add: def ___mangledName___ asString -> s contents.
 				] ensure: [
 					CallAst selfParameterName: savedSelfForCM.
 				].
@@ -334,7 +334,7 @@ printSmalltalkRuntimeOn: aStream
 					| s |
 					s := PrettyWriteStream on: Unicode7 new.
 					def generateModuleMethodSourceOn: s.
-					staticMethodSources add: def name asString -> s contents.
+					staticMethodSources add: def ___mangledName___ asString -> s contents.
 				]
 			] ensure: [
 				CallAst selfParameterName: savedSelfForSM.
@@ -2511,7 +2511,7 @@ emitMethodDocTableOn: aStream className: aClassName
 	src nextPutAll: '___methodDocTable___'; lf.
 	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
 	documented do: [:def |
-		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
 		def emitStringLiteral: def ___docString___ on: src.
 		src nextPut: $;].
 	src nextPutAll: ' @env0:yourself)'.
@@ -2548,7 +2548,7 @@ emitMethodSignatureTableOn: aStream className: aClassName
 	src nextPutAll: '___methodSignatureTable___'; lf.
 	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
 	withParams do: [:def |
-		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
 		"Skip ``self''/``cls'' for an instance method or classmethod: what this
 		table feeds is a BOUND access (``instance.method'', or a classmethod
 		reached through its class), where the receiver is already supplied and
@@ -2600,7 +2600,7 @@ emitMethodReceiverTableOn: aStream className: aClassName
 	src nextPutAll: '___methodReceiverTable___'; lf.
 	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
 	withReceiver do: [:def |
-		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString;
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString;
 			nextPutAll: ''' put: '''; nextPutAll: def ___receiverParamName___;
 			nextPutAll: ''''; nextPut: $;].
 	src nextPutAll: ' @env0:yourself)'.
@@ -2644,7 +2644,7 @@ emitMethodAnnotationsTableOn: aStream className: aClassName
 	src nextPutAll: '___methodAnnotationsTable___'; lf.
 	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
 	annotated do: [:def |
-		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
 		def emitAnnotateBlockOn: src.
 		src nextPut: $;].
 	src nextPutAll: ' @env0:yourself)'.
