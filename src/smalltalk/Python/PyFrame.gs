@@ -73,7 +73,7 @@ category: 'Grail-String Representation'
 method: PyFrame
 __repr__
 	| stream |
-	stream := WriteStream @env0:on: (String ___new___).
+	stream := AppendStream @env0:on: (String ___new___).
 	stream @env0:nextPutAll: '<frame at 0x'.
 	stream @env0:nextPutAll: (self @env0:identityHash) @env0:printString.
 	stream @env0:nextPutAll: ', line '.

@@ -24,7 +24,7 @@ __add__: other
 	Python only concatenates like kinds: list+tuple / list+int raise the
 	catchable TypeError (previously [1] + (1,) silently concatenated)."
 
-	| result x |
+	| result |
 	(self ___sameSequenceKindAs___: other) ifFalse: [
 		^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'].
 
@@ -492,7 +492,7 @@ __repr__
 	Subclasses override to provide list vs tuple formatting."
 
 	| stream |
-	stream := WriteStream @env0:on: (String ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	stream @env0:nextPut: $[.
 
 	self @env0:do: [:each |

@@ -86,3 +86,11 @@ printSmalltalkOn: aStream
 
 	aStream nextPutAll: '(TypeError ___signal___: ''*-unpack in call sites is not yet supported'')'
 %
+method: StarredAst
+value: newValue
+	value := newValue
+%
+method: StarredAst
+ctx: newValue
+	ctx := newValue
+%

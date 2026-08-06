@@ -41,7 +41,7 @@ loadFixture
 	"Load tests/python/cached_property_demo.py fresh (drop werkzeug +
 	the fixture so source edits are reflected)."
 
-	| mods keys |
+	| mods |
 	mods := importlib @env1:modules.
 	self ___resetImportedFramework___: 'werkzeug'.
 	mods removeKey: #'cached_property_demo' ifAbsent: [].
@@ -82,7 +82,7 @@ testSetThenReadOverridesGetter
 	the getter never runs.  flask's create_url_adapter assigns
 	``request.host = get_host(...)'' on a @cached_property."
 
-	| mod r |
+	| r |
 	r := self loadFixture @env1:set_then_read_overrides_getter.
 	self assert: (r @env1:__getitem__: 0) equals: 'override'.
 	"Getter never ran — calls stayed 0."

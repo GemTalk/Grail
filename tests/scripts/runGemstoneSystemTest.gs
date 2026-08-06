@@ -113,7 +113,7 @@ gemstone.mySymbolList[0]
 ') == (GsCurrentSession currentSession symbolList at: 1).
 ] ensure: [
   UserGlobals removeKey: #'_Grail_system_test' ifAbsent: [].
-  System commitTransaction
+  System commit 
 ].
 
 out cr; cr.

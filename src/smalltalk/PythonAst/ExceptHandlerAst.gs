@@ -76,3 +76,15 @@ type
 
 	^type
 %
+method: ExceptHandlerAst
+type: newValue
+	type := newValue
+%
+method: ExceptHandlerAst
+name: newValue
+	name := newValue
+%
+method: ExceptHandlerAst
+body: newValue
+	body := newValue
+%

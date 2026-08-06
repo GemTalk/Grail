@@ -1,14 +1,14 @@
 ! ------------------- Superclass check
 run
-WriteStream ifNil: [self error: 'WriteStream is not defined. Check file ordering.'].
+AppendStream ifNil: [self error: 'AppendStream is not defined. Check file ordering.'].
 %
 
 ! ------------------- Class definition for PrettyWriteStream
 expectvalue /Class
 doit
-WriteStream subclass: 'PrettyWriteStream'
-  instVarNames: #( indentCount lfChar)
-  classVars: #()
+AppendStream subclass: 'PrettyWriteStream'
+  instVarNames: #( indentCount )
+  classVars: #( )   "class far Lf inherited from Stream"
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: PythonAst
@@ -78,15 +78,14 @@ ___atLineStart
 	equivalent: contents notEmpty == position > 0, and contents last ==
 	collection at: position."
 
-	"lfChar, not ``Character lf'': this is consulted on EVERY
+	"Lf class variable, not ``Character lf'': this is consulted on EVERY
 	nextPut:/nextPutAll: of every method Grail emits, and ``Character lf'' is a
 	real message send, not a literal.  With the same constant in
 	PythonTokenizer>>advance it came to ~2-4% of the whole SUnit suite's
 	samples.  Cached lazily rather than in a constructor because this class
 	inherits WriteStream's several instance-creation paths."
 
-	lfChar isNil ifTrue: [lfChar := Character lf].
-	^ self position > 0 and: [(collection at: self position) == lfChar]
+	^ self position > 0 and: [(collection at: self position) == Lf ]
 %
 
 category: 'Grail-other'
@@ -96,23 +95,6 @@ on: aCollection
 
 	super on: aCollection.
 	indentCount := 0.
-%
-
-category: 'Grail-other'
-method: PrettyWriteStream
-removeTrailingNone
-	"Remove trailing 'None.' followed by newline from the stream.
-	This is called before printing a new statement to clean up the
-	None that AssignAst adds (which is only needed for the last statement)."
-
-	| contents suffix newSize |
-	contents := self contents.
-	suffix := 'None.' , (Unicode7 with: Character lf).
-	(contents endsWith: suffix) ifTrue: [
-		newSize := contents size - suffix size.
-		self position: newSize.
-		collection := contents copyFrom: 1 to: newSize.
-	].
 %
 
 category: 'Grail-other'

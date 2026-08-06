@@ -146,7 +146,7 @@ permitSessionMethodFor: aBehavior selector: selector
 %
 
 run
-System commitTransaction.
+System commit .
 GsFile stdout nextPutAll: 'session_methods_env1_base_37: patched GsPackagePolicy (updateMethodLookupCache, buildSessionMethodDictionary, permitSessionMethodFor:)'; lf; flush.
 %
 logout

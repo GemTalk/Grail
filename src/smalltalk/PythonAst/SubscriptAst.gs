@@ -131,3 +131,19 @@ method: SubscriptAst
 ___annotationSourceString___
 	^ (value ___annotationSourceString___) , '[' , (slice ___annotationSourceString___) , ']'
 %
+method: SubscriptAst
+value: newValue
+	value := newValue
+%
+method: SubscriptAst
+slice: newValue
+	slice := newValue
+%
+method: SubscriptAst
+ctx
+	^ctx
+%
+method: SubscriptAst
+ctx: newValue
+	ctx := newValue
+%

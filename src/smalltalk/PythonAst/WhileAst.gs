@@ -95,3 +95,27 @@ printSmalltalkOn: aStream
 	].
 	aStream decreaseIndent; nextPutAll: '] @env0:on: PythonBreak do: [:___ex___ | nil].'.
 %
+method: WhileAst
+test
+	^test
+%
+method: WhileAst
+test: newValue
+	test := newValue
+%
+method: WhileAst
+body
+	^body
+%
+method: WhileAst
+body: newValue
+	body := newValue
+%
+method: WhileAst
+orelse
+	^orelse
+%
+method: WhileAst
+orelse: newValue
+	orelse := newValue
+%

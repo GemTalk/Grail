@@ -122,7 +122,7 @@ category: 'Grail-Accessors'
 method: IPv4Address
 __str__
 	| stream |
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream := AppendStream @env0:on: Unicode7 @env0:new.
 	stream @env0:nextPutAll: (((self @env0:dynamicInstVarAt: #_packed) @env0:bitShift: -24) @env0:bitAnd: 16rFF) @env0:printString.
 	stream @env0:nextPut: $..
 	stream @env0:nextPutAll: (((self @env0:dynamicInstVarAt: #_packed) @env0:bitShift: -16) @env0:bitAnd: 16rFF) @env0:printString.

@@ -16,7 +16,7 @@
 ! (Object.gs) separate.
 !
 ! On a LEGACY kernel (3.7.5 / pre-MR#6) they are filed once as SystemUser via
-! install_base.gs (persistent, shared) because the selector-keyed session store
+! install_base37.gs (persistent, shared) because the selector-keyed session store
 ! there keys by selector only, so an env-1 ___new___:_: would clobber the env-0
 ! one.
 !

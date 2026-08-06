@@ -311,3 +311,43 @@ emitUnpackOn: aStream target: aTarget source: sourceExpr depth: aDepth
 	aTarget printSmalltalkOn: aStream.
 	aStream nextPutAll: ' := '; nextPutAll: sourceExpr; nextPut: $.; lf
 %
+method: ForAst
+target
+	^target
+%
+method: ForAst
+target: newValue
+	target := newValue
+%
+method: ForAst
+iter
+	^iter
+%
+method: ForAst
+iter: newValue
+	iter := newValue
+%
+method: ForAst
+body
+	^body
+%
+method: ForAst
+body: newValue
+	body := newValue
+%
+method: ForAst
+orelse
+	^orelse
+%
+method: ForAst
+orelse: newValue
+	orelse := newValue
+%
+method: ForAst
+type_comment
+	^type_comment
+%
+method: ForAst
+type_comment: newValue
+	type_comment := newValue
+%

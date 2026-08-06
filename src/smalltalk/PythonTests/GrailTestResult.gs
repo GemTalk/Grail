@@ -39,9 +39,13 @@ GrailTestResult category: 'Grail-SUnit'
 ! This subclass captures the text (and, for errors, a stack) in the handler and
 ! keeps it alongside the test.  Two constraints shape how:
 !
-!   * sunitAnnounce:toResult: ends with ``self sunitExitWith: false'', which
-!     UNWINDS the handler -- anything after that call never runs.  The capture
-!     therefore has to happen FIRST.
+!   * the handler has to EXIT the protected block itself.  Stock SUnit leaves
+!     that to sunitAnnounce:toResult:, whose ``self sunitExitWith: false'' is
+!     ``self return: false'' for a plain TestFailure -- but ``self resume:
+!     false'' for the ResumableTestFailure that GsTestCase>>assert: signals,
+!     which would carry the failed test on past its failing assertion and then
+!     record it as a pass as well.  runCase: below records and returns
+!     explicitly instead.
 !   * the stack is only live while the handler is on it, so stackReportToLevel:
 !     must be sent from inside the handler, not from a later report pass.
 !
@@ -106,14 +110,29 @@ category: 'Grail-SUnit-Reporting'
 method: GrailTestResult
 runCase: aTestCase
 	"As TestResult>>runCase:, except the exception is examined before it is
-	announced.  It has to be in that order: sunitAnnounce:toResult: unwinds."
+	recorded -- capture has to come first, because the handler exits.
+
+	The exit is done HERE, with an explicit ``ex return:'', rather than by
+	sunitAnnounce:toResult:.  PythonTestCase is a GsTestCase, and
+	GsTestCase>>assert:description: signals a RESUMABLE failure
+	(ResumableTestFailure), whose sunitExitWith: is ``self resume:'', not
+	``self return:''.  Announcing through it therefore RESUMED the failed
+	assertion: the test body ran on past it, aTestCase runCase returned
+	normally, and the protected block went on to addPass: -- so every failing
+	test was counted BOTH as a failure and as a pass (runCount inflated,
+	SetUpBridgeTestCase>>testAssertionFailureIsStillAFailure red) and every
+	assertion after the first failure still ran.  Grail's tests are written
+	for stock SUnit semantics, where the first failed assert ends the test."
 
 	[aTestCase runCase.
 	 self addPass: aTestCase]
 		on: self class failure , self class error
 		do: [:ex |
 			self record: ex for: aTestCase.
-			ex sunitAnnounce: aTestCase toResult: self]
+			(ex isKindOf: self class failure)
+				ifTrue: [self addFailure: aTestCase]
+				ifFalse: [self addError: aTestCase].
+			ex return: nil]
 %
 
 category: 'Grail-SUnit-Reporting'

@@ -87,3 +87,15 @@ printSmalltalkOn: aStream
 	].
 	aStream decreaseIndent; nextPutAll: '].'.
 %
+method: IfAst
+test: newValue
+	test := newValue
+%
+method: IfAst
+body: newValue
+	body := newValue
+%
+method: IfAst
+orelse: newValue
+	orelse := newValue
+%

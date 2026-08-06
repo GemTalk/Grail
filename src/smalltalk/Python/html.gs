@@ -123,7 +123,7 @@ unescape: s
 
 	(s @env0:includesString: '&') ifFalse: [^ s].
 
-	out := WriteStream @env0:on: (Unicode7 @env0:new).
+	out := AppendStream @env0:on: (Unicode7 @env0:new).
 	i := 1.
 	len := s @env0:size.
 	[i @env0:<= len] @env0:whileTrue: [

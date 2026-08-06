@@ -1339,7 +1339,7 @@ to_bytes: length _: byteorder _: signed
 	"int.to_bytes(length, byteorder='big', *, signed=False)
 	Return an array of bytes representing an integer."
 
-	| numBytes isBigEndian isSigned val result |
+	| numBytes isBigEndian isSigned val |
 	numBytes := length.
 	isBigEndian := (byteorder @env0:= 'big').
 	isSigned := (signed == true) or: [signed == true].

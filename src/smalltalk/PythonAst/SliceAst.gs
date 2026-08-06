@@ -97,3 +97,15 @@ printSmalltalkOn: aStream
 		ifNotNil: [step printSmalltalkWithParenthesisOn: aStream].
 	aStream nextPut: $)
 %
+method: SliceAst
+lower: newValue
+	lower := newValue
+%
+method: SliceAst
+upper: newValue
+	upper := newValue
+%
+method: SliceAst
+step: newValue
+	step := newValue
+%

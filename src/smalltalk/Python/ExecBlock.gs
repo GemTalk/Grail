@@ -455,7 +455,7 @@ classmethod: ExecBlock
 ___pyNone___
 	"Resolve the Python ``None'' singleton from the CALLING session's symbol
 	list.  Same reason as ___pyAttrsClass___: this file compiles with only
-	Globals visible (see the header and install_base.gs), so a bare ``None''
+	Globals visible (see the header and install_base37.gs), so a bare ``None''
 	would either fail to compile or bind to the install user's copy."
 
 	^ System myUserProfile symbolList objectNamed: #'None'

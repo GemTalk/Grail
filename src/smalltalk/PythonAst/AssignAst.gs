@@ -577,3 +577,19 @@ ___boundTargetNames___
 				(e isKindOf: NameAst) ifTrue: [names add: e id asSymbol]]]].
 	^ names
 %
+method: AssignAst
+targets: newValue
+	targets := newValue
+%
+method: AssignAst
+value: newValue
+	value := newValue
+%
+method: AssignAst
+type_comment
+	^type_comment
+%
+method: AssignAst
+type_comment: newValue
+	type_comment := newValue
+%

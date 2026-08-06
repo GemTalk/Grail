@@ -76,3 +76,11 @@ printSmalltalkOn: aStream
 		nextPutAll: '@env0:on: StopIteration do: [:___ex___ | ___done___ := true]]. ';
 		nextPutAll: 'None] @env0:value)'
 %
+method: YieldFromAst
+value
+	^value
+%
+method: YieldFromAst
+value: newValue
+	value := newValue
+%

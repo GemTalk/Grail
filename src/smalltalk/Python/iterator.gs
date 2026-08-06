@@ -91,7 +91,7 @@ __repr__
 	| className stream |
 	className := self @env0:class.
 	className := className @env0:name.
-	stream := WriteStream @env0:on: (String ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	stream @env0:nextPut: $<.
 	stream @env0:nextPutAll: className.
 	stream @env0:nextPutAll: ' object at 0x'.

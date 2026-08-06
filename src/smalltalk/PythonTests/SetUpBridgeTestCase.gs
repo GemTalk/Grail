@@ -216,7 +216,15 @@ testAssertionFailureIsStillAFailure
 	self assert: result runCount = 1.
 	self assert: result failureCount = 1
 		description: 'assert: false must stay a FAILURE, got ' , result printString.
-	self assert: result errorCount = 0
+	self assert: result errorCount = 0.
+	"...and must NOT also be counted as a pass.  GsTestCase>>assert: signals a
+	RESUMABLE failure, so announcing it through sunitAnnounce:toResult:
+	(``self resume:'') let the test body continue past the failed assertion
+	and fall through to addPass:.  runCount alone hides that: a double-counted
+	test reads as 2 run, and only this check names the cause."
+	self assert: result passedCount = 0
+		description: 'a failing test must not also be recorded as a pass, got '
+			, result printString
 %
 
 category: 'Grail-Tests - setUp bridge'

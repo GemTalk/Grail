@@ -1,5 +1,6 @@
 ! ===============================================================================
 ! Grail base setup: shared restricted-class methods (run ONCE per extent)
+! Used with version 3.7.5 server
 ! ===============================================================================
 ! Run ONCE per extent, as SystemUser, before any user runs ./install.sh -- most
 ! easily via the wrapper (which also does the 3.7.x GsPackagePolicy patch and
@@ -9,7 +10,7 @@
 !
 ! or directly:
 !
-!     topaz -lq -S scripts/install_base.gs
+!     topaz -lq -S scripts/install_base37.gs
 !
 ! On a LEGACY kernel a few of Grail's kernel extensions cannot be per-user
 ! GsPackagePolicy session methods, so they are filed once here -- persistent and
@@ -54,15 +55,17 @@ login
 
 fileformat utf8
 
+input src/smalltalk/Python/AppendStream.gs
 input src/smalltalk/Python/builtin_function_or_method.gs
-input src/smalltalk/Python/System.gs
-input src/smalltalk/Python/SymbolDictionary.gs
+input src/smalltalk/Python/CharacterCollection.gs
 input src/smalltalk/Python/ExecBlock.gs
 input src/smalltalk/Python/Object_perform_allocators.gs
 input src/smalltalk/Python/Object_perform_primitives.gs
+input src/smalltalk/Python/System.gs
+input src/smalltalk/Python/SymbolDictionary.gs
 
 run
-System commitTransaction.
+System commit .
 GsFile stdout
 	nextPutAll: '==============================================='; lf;
 	nextPutAll: ' install_base: restricted-class methods filed'; lf;

@@ -131,11 +131,10 @@ applyBigmemtestDefaultIfNeeded
 	(self isBigmemtestDecorated
 		and: [(args defaults isNil or: [args defaults isEmpty])
 		and: [(args posonlyargs size + args args size) > 1]]) ifTrue: [
-			args appendDefault: (ConstantAst buildWithFields:
-				(IdentityKeyValueDictionary new
-					at: #value put: 5147;
-					at: #kind put: nil;
-					yourself))].
+			args appendDefault: (ConstantAst new
+					value: 5147;
+					kind: nil;
+					yourself)].
 %
 
 category: 'Grail-other'
@@ -195,7 +194,7 @@ generateResourceSkipSource
 	column rather than run."
 	| stream res |
 	res := self requiresResourceName ifNil: ['a'].
-	stream := WriteStream on: Unicode7 new.
+	stream := AppendStream on: Unicode7 new.
 	stream nextPutAll: name; lf.
 	stream nextPutAll: '^ self skipTest: ''resource '; nextPutAll: res asString;
 		nextPutAll: ' is not enabled'''.
@@ -236,7 +235,7 @@ generateCpythonOnlySkipSource
 	dir()-based discovery still finds it; the body raises SkipTest via
 	TestCase>>skipTest:, counting it in the skipped column rather than run."
 	| stream |
-	stream := WriteStream on: Unicode7 new.
+	stream := AppendStream on: Unicode7 new.
 	stream nextPutAll: name; lf.
 	stream nextPutAll: '^ self skipTest: ''CPython implementation detail'''.
 	^ stream contents
@@ -1733,7 +1732,7 @@ generateBigmemtestUnaryForwarderSource
 	with an empty positional so the injected default supplies the dry-run
 	size."
 	| stream |
-	stream := WriteStream on: Unicode7 new.
+	stream := AppendStream on: Unicode7 new.
 	stream nextPutAll: name; lf.
 	stream nextPutAll: '^ self _'; nextPutAll: name; nextPutAll: ': { } kw: nil'.
 	^ stream contents
@@ -1754,7 +1753,7 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 	  ^ self <sel>                    (instance: env-1 fixed selector)"
 
 	| stream callParams allParams defaults firstDefault posonlyNames |
-	stream := WriteStream on: Unicode7 new.
+	stream := AppendStream on: Unicode7 new.
 	allParams := self allParameterNames.
 	callParams := stripSelf
 		ifTrue: [allParams copyFrom: 2 to: allParams size]
@@ -1778,7 +1777,7 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 		stream nextPut: $|; lf.
 	].
 	callParams doWithIndex: [:p :i |
-		| absoluteIdx def isPosOnly |
+		| absoluteIdx isPosOnly |
 		"absolute parameter index in the full (self-included) list, to
 		align with the fixed selector's positional order."
 		absoluteIdx := stripSelf ifTrue: [i + 1] ifFalse: [i].
@@ -1839,7 +1838,7 @@ generateModuleMethodStubSource
 	just returns nil. It gets replaced by the real method after codegen."
 
 	| stream paramNames |
-	stream := WriteStream on: Unicode7 new.
+	stream := AppendStream on: Unicode7 new.
 	self isSimplePositionalArgs ifTrue: [
 		paramNames := self allParameterNames.
 		stream nextPutAll: name.
@@ -2815,7 +2814,7 @@ generateMethodStubSource
 	but with self stripped from parameters)."
 
 	| stream paramNames |
-	stream := WriteStream on: Unicode7 new.
+	stream := AppendStream on: Unicode7 new.
 	self compilesAsVarargs ifTrue: [
 		stream nextPut: $_; nextPutAll: name; nextPutAll: ': positional kw: kwargs'.
 	] ifFalse: [
@@ -3307,4 +3306,52 @@ ___reachableStatements___: stmts
 		out add: each.
 		each isUnconditionalReturn ifTrue: [^ out]].
 	^ out
+%
+method: FunctionDefAst
+name: newValue
+	name := newValue
+%
+method: FunctionDefAst
+args
+	^args
+%
+method: FunctionDefAst
+args: newValue
+	args := newValue
+%
+method: FunctionDefAst
+body: newValue
+	body := newValue
+%
+method: FunctionDefAst
+decorator_list
+	^decorator_list
+%
+method: FunctionDefAst
+decorator_list: newValue
+	decorator_list := newValue
+%
+method: FunctionDefAst
+returns
+	^returns
+%
+method: FunctionDefAst
+returns: newValue
+	returns := newValue
+%
+method: FunctionDefAst
+type_comment
+	^type_comment
+%
+method: FunctionDefAst
+type_comment: newValue
+	type_comment := newValue
+%
+method: FunctionDefAst
+type_params
+	^type_params
+%
+method: FunctionDefAst
+type_params: newValue
+	type_params := newValue
 %

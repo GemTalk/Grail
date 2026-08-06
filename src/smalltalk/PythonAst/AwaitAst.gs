@@ -64,3 +64,11 @@ printSmalltalkOn: aStream
 
 	value printSmalltalkOn: aStream
 %
+method: AwaitAst
+value
+	^value
+%
+method: AwaitAst
+value: newValue
+	value := newValue
+%

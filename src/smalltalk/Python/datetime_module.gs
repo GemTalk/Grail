@@ -693,7 +693,7 @@ __str__
 	hh := secs @env0:// 3600.
 	mm := (secs @env0:\\ 3600) @env0:// 60.
 	ss := secs @env0:\\ 60.
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream := AppendStream @env0:on: Unicode7 @env0:new.
 	days @env0:~= 0 ifTrue: [
 		stream @env0:nextPutAll: days @env0:printString.
 		stream @env0:nextPutAll: ((days @env0:abs @env0:= 1) ifTrue: [' day, '] ifFalse: [' days, '])
@@ -766,7 +766,7 @@ __repr__
 	d := self @env0:dynamicInstVarAt: #_days.
 	s := self @env0:dynamicInstVarAt: #_seconds.
 	us := self @env0:dynamicInstVarAt: #_microseconds.
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream := AppendStream @env0:on: Unicode7 @env0:new.
 	prefix := (self @env0:class __module__) @env0:= 'datetime'
 		ifTrue: ['datetime.']
 		ifFalse: [''].
@@ -1115,7 +1115,7 @@ ___formatOffset___: tdelta
 	micros := tdelta ___totalMicros___.
 	micros @env0:= 0 ifTrue: [^ 'UTC'].
 	pad := [:n | | s | s := n @env0:printString. s @env0:size @env0:< 2 ifTrue: ['0' @env0:, s] ifFalse: [s]].
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream := AppendStream @env0:on: Unicode7 @env0:new.
 	stream @env0:nextPutAll: 'UTC'.
 	sign := micros @env0:< 0 ifTrue: [$-] ifFalse: [$+].
 	stream @env0:nextPut: sign.
@@ -2210,7 +2210,7 @@ ___isoTzSuffix___
 		@env0:+ (offset seconds @env0:* 1000000)
 		@env0:+ offset microseconds.
 	pad := [:n | | s | s := n @env0:printString. s @env0:size @env0:< 2 ifTrue: ['0' @env0:, s] ifFalse: [s]].
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	stream := AppendStream @env0:on: Unicode7 @env0:new.
 	sign := micros @env0:< 0 ifTrue: [$-] ifFalse: [$+].
 	stream @env0:nextPut: sign.
 	micros := micros @env0:abs.

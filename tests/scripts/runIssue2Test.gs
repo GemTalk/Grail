@@ -65,7 +65,7 @@ match := pat @env1:search: 'xyzabc'.
 
 "Commit both wrappers; both were boxed by the fix and both must guard."
 UserGlobals at: #'Grail_issue_2' put: (Array with: pat with: match).
-System commitTransaction.
+System commit .
 out cr; nextPutAll: 'session1: committed live pattern + match under #Grail_issue_2'; cr.
 %
 logout
@@ -136,7 +136,7 @@ the script -- leaving the repository pristine in every case."
   raises value: 'SreMatch>>span: signals on stale pointer'      value: [match @env1:span: 0].
 ] ensure: [
   UserGlobals removeKey: #'Grail_issue_2' ifAbsent: [].
-  System commitTransaction
+  System commit .
 ].
 
 out cr; cr.

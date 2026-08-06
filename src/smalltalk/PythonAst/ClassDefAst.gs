@@ -154,10 +154,10 @@ printSmalltalkRuntimeOn: aStream
 	(classAttrs anySatisfy: [:p | p key == #'__doc__']) ifFalse: [
 		| docNode |
 		docNode := self ___docString___ ifNil: [
-			ConstantAst buildWithFields: (IdentityKeyValueDictionary new
-				at: #value put: nil;
-				at: #kind put: nil;
-				yourself)].
+			ConstantAst new 
+				value: nil;
+				kind: nil;
+				yourself ].
 		classAttrs := classAttrs copy.
 		classAttrs addFirst: (#'__doc__' -> docNode)].
 
@@ -1669,7 +1669,7 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 
 	| src lf |
 	lf := Character lf asString.
-	src := WriteStream on: Unicode7 new.
+	src := AppendStream on: Unicode7 new.
 	src nextPutAll: 'value: ___pos___ value: ___kw___'; nextPutAll: lf.
 	src nextPutAll: '| instance dynInit |'; nextPutAll: lf.
 	((self firstBaseIsStr or: [self firstBaseIsBytesLike])
@@ -1988,16 +1988,14 @@ classBodyAttributes
 					(stmt targets first class allInstVarNames indexOf: #elts).
 				1 to: elts size do: [:i |
 					| sub |
-					sub := SubscriptAst buildWithFields:
-						(IdentityKeyValueDictionary new
-							at: #value put: stmt value;
-							at: #slice put: (ConstantAst buildWithFields:
-								(IdentityKeyValueDictionary new
-									at: #value put: i - 1;
-									at: #kind put: nil;
-									yourself));
-							at: #ctx put: LoadAst basicNew;
-							yourself).
+					sub := SubscriptAst new
+							value: stmt value;
+							slice: (ConstantAst new
+									value: i - 1;
+									kind: nil;
+									yourself);
+							ctx: LoadAst basicNew;
+							yourself.
 					pairs add: (elts at: i) id asSymbol -> sub]
 			].
 		].
@@ -2095,7 +2093,7 @@ ___methodAliasSourceFor___: aliasName def: origDef
 	``__lt__: ___1'' / ``^ self __eq__: ___1''."
 
 	| stream arity emitSel |
-	stream := WriteStream on: Unicode7 new.
+	stream := AppendStream on: Unicode7 new.
 	arity := origDef instanceMethodArity.
 	emitSel := [:sel |
 		stream nextPutAll: sel asString.
@@ -2642,7 +2640,7 @@ emitMethodAnnotationsTableOn: aStream className: aClassName
 	annotated := self ___allFunctionDefs___ select: [:def |
 		def isOverloadStub not and: [def hasAnnotations]].
 	annotated isEmpty ifTrue: [^ self].
-	src := WriteStream on: String new.
+	src := AppendStream on: String new.
 	src nextPutAll: '___methodAnnotationsTable___'; lf.
 	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
 	annotated do: [:def |
@@ -2979,4 +2977,40 @@ value: posArgs value: keywordArgs value: aScope
 	result == None ifFalse: [TypeError signal: '__init__() should return None, not ?'].
 	^obj
 	"
+%
+method: ClassDefAst
+name: newValue
+	name := newValue
+%
+method: ClassDefAst
+bases: newValue
+	bases := newValue
+%
+method: ClassDefAst
+keywords
+	^keywords
+%
+method: ClassDefAst
+keywords: newValue
+	keywords := newValue
+%
+method: ClassDefAst
+body: newValue
+	body := newValue
+%
+method: ClassDefAst
+decorator_list
+	^decorator_list
+%
+method: ClassDefAst
+decorator_list: newValue
+	decorator_list := newValue
+%
+method: ClassDefAst
+type_params
+	^type_params
+%
+method: ClassDefAst
+type_params: newValue
+	type_params := newValue
 %

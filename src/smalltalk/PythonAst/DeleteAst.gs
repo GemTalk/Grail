@@ -145,3 +145,7 @@ isModuleScopeTarget: aNameAst
 	(aNameAst ___pythonLocalInEnclosingFunctions___: aNameAst id) ifTrue: [^ false].
 	^ true
 %
+method: DeleteAst
+targets: newValue
+	targets := newValue
+%

@@ -240,3 +240,19 @@ printSmalltalkOn: aStream
 			nextPutAll: '''. nil. nil. { ''*'' }. 0 } kw: nil).'.
 	].
 %
+method: ImportFromAst
+module
+	^module
+%
+method: ImportFromAst
+module: newValue
+	module := newValue
+%
+method: ImportFromAst
+level
+	^level
+%
+method: ImportFromAst
+level: newValue
+	level := newValue
+%

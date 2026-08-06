@@ -95,7 +95,7 @@ category: 'Grail-String Representation'
 method: PyTraceback
 __repr__
 	| stream |
-	stream := WriteStream @env0:on: (String ___new___).
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	stream @env0:nextPutAll: '<traceback object at 0x'.
 	stream @env0:nextPutAll: (self @env0:identityHash) @env0:printString.
 	stream @env0:nextPut: $>.

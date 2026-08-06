@@ -42,3 +42,19 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: ' := '.
 	value printSmalltalkOn: aStream.
 %
+method: NamedExprAst
+target
+	^target
+%
+method: NamedExprAst
+target: newValue
+	target := newValue
+%
+method: NamedExprAst
+value
+	^value
+%
+method: NamedExprAst
+value: newValue
+	value := newValue
+%

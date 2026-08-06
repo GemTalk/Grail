@@ -80,3 +80,23 @@ setTo: anObject scope: aScope
 
 	aScope set: arg to: anObject.
 %
+method: ArgAst
+arg
+	^arg
+%
+method: ArgAst
+arg: newValue
+	arg := newValue
+%
+method: ArgAst
+annotation: newValue
+	annotation := newValue
+%
+method: ArgAst
+type_comment
+	^type_comment
+%
+method: ArgAst
+type_comment: newValue
+	type_comment := newValue
+%

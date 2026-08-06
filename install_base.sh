@@ -99,14 +99,16 @@ case "$GS_VERSION" in
         ./scripts/setUnicodeMode.sh || { echo "Error: setUnicodeMode.sh failed."; exit 1; }
 
         echo "Filing the shared kernel-class extensions (SystemUser)..."
-        LC_ALL=C topaz -lq -S scripts/install_base.gs || {
-            echo "Error: install_base.gs failed."; exit 1; }
+        LC_ALL=C topaz -lq -S scripts/install_base37.gs || {
+            echo "Error: install_base37.gs failed."; exit 1; }
         ;;
     *)
         echo "GemStone ${GS_VERSION:-unknown} (4.0+) -- no Grail code goes in the shared base."
         echo "  env-1 session methods on restricted classes: native (MR #6)"
         echo "  2/3/4-arg with:...performMethod:            : kernel-native"
         echo "  kernel-class extensions                     : filed PER-USER by ./install.sh"
+
+        # additions to base image not using session methods would go here
 
         echo "Setting Unicode comparison mode..."
         ./scripts/setUnicodeMode.sh || { echo "Error: setUnicodeMode.sh failed."; exit 1; }
