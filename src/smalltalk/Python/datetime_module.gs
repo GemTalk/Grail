@@ -1448,6 +1448,15 @@ _datetime: positional kw: kwargs
 	microsecond, tzinfo."
 
 	| year month day hour minute second micro tz fold inst |
+	"``fold'' is KEYWORD-ONLY: CPython's signature is
+	datetime(year, month, day, hour=0, minute=0, second=0, microsecond=0,
+	tzinfo=None, *, fold=0), so a 9th POSITIONAL argument is a TypeError,
+	not a positional fold.  Grail read only indices 1..8 and silently
+	dropped anything beyond, so datetime(2000,1,31,23,59,59,0,None,1)
+	quietly built a fold=0 value (test_bad_constructor_arguments)."
+	positional @env0:size @env0:> 8 ifTrue: [
+		^ TypeError ___signal___: ('datetime() takes at most 8 positional arguments (' @env0:,
+			positional @env0:size @env0:printString @env0:, ' given)')].
 	"year/month/day are ordinary parameters in CPython, so they may arrive
 	as keywords (``datetime(2010, 10, day=10)'').  Reading them with a
 	bare ``at:'' made any such call die with an out-of-bounds Smalltalk
@@ -2505,8 +2514,29 @@ ___expandTzDirectives___: fmt for: aDateTimeOrTime
 							haveTzName ifFalse: [
 								tzName := aDateTimeOrTime tzname. haveTzName := true].
 							tzName @env0:== None ifFalse: [
-								out @env0:nextPutAll:
-									(tzName @env0:asString @env0:copyReplaceAll: '%' with: '%%')]
+								| escaped |
+								"Dispatch replace() at the PYTHON level, as CPython's
+								_wrap_strftime does (``Zreplace = s.replace('%', '%%')'').
+								A tzname() may answer a str SUBCLASS that overrides
+								replace(); the old @env0:copyReplaceAll: was a kernel send
+								that silently ignored the override.  CPython then fails in
+								''.join() when the override answers a non-str, so a
+								non-string result is a TypeError here
+								(test_strftime_with_bad_tzname_replace).
+
+								___pyAttrLoad___ + value:value: rather than a direct
+								``@env1:replace: old _: new'' send: the override may be
+								declared varargs (``def replace(self, *args)''), which
+								compiles to a DIFFERENT selector than the fixed-arity
+								replace:_:, so a direct send silently reaches str's base
+								implementation instead of the subclass's."
+								escaped := (tzName @env1:___pyAttrLoad___: #replace)
+									@env1:value: { '%'. '%%' } value: nil.
+								(escaped @env0:isKindOf: CharacterCollection) ifFalse: [
+									^ TypeError @env1:___signal___:
+										'strftime(): tzname.replace() must return str, not ' @env0:,
+										(escaped @env1:__class__ @env1:__name__) @env0:asString].
+								out @env0:nextPutAll: escaped @env0:asString]
 						] ifFalse: [
 						c2 @env0:= $: ifTrue: [
 							"%:z -- anything else after the colon is passed through
@@ -3177,6 +3207,26 @@ _replace: positional kw: kwargs
 	replace() keeps fold unless the caller overrides it (test_subclass_replace_fold)."
 	fold := self @env0:dynamicInstVarAt: #_fold.
 	fold @env0:isNil ifTrue: [fold := 0].
+	"replace() takes its fields POSITIONALLY too -- CPython's signature is
+	replace(year, month, day, hour, minute, second, microsecond, tzinfo,
+	*, fold).  Grail read kwargs only and silently ignored every
+	positional, so dt.replace(1, 1, 1, 1, 1, 1, 1, None, 1) answered an
+	unchanged copy instead of the TypeError its keyword-only fold demands
+	(test_replace)."
+	positional @env0:size @env0:> 8 ifTrue: [
+		^ TypeError @env1:___signal___:
+			'replace() takes at most 8 positional arguments (' @env0:,
+			positional @env0:size @env0:printString @env0:, ' given)'].
+	positional @env0:size @env0:>= 1 ifTrue: [y := positional @env0:at: 1].
+	positional @env0:size @env0:>= 2 ifTrue: [mo := positional @env0:at: 2].
+	positional @env0:size @env0:>= 3 ifTrue: [d := positional @env0:at: 3].
+	positional @env0:size @env0:>= 4 ifTrue: [h := positional @env0:at: 4].
+	positional @env0:size @env0:>= 5 ifTrue: [mi := positional @env0:at: 5].
+	positional @env0:size @env0:>= 6 ifTrue: [s := positional @env0:at: 6].
+	positional @env0:size @env0:>= 7 ifTrue: [us := positional @env0:at: 7].
+	positional @env0:size @env0:>= 8 ifTrue: [
+		tz := positional @env0:at: 8.
+		tz == None ifTrue: [tz := nil]].
 	kwargs @env0:isNil ifFalse: [
 		y := kwargs @env0:at: 'year' ifAbsent: [y].
 		mo := kwargs @env0:at: 'month' ifAbsent: [mo].
@@ -4314,9 +4364,14 @@ ___buildTime___: positional kw: kwargs for: cls
 	Python subclass of time keeps its own class."
 
 	| h mi s us tz fold inst |
-	positional @env0:size @env0:> 6 ifTrue: [
+	"``fold'' is KEYWORD-ONLY: CPython's signature is
+	time(hour=0, minute=0, second=0, microsecond=0, tzinfo=None, *, fold=0),
+	so at most FIVE positional arguments.  The cap was 6, which let
+	time(0, 0, 0, 0, None, 0) through as a silent fold=0 instead of the
+	TypeError CPython raises (test_constructors)."
+	positional @env0:size @env0:> 5 ifTrue: [
 		^ TypeError @env1:___signal___:
-			'function takes at most 6 arguments (' @env0:,
+			'time() takes at most 5 positional arguments (' @env0:,
 			positional @env0:size @env0:printString @env0:, ' given)'].
 	h := positional @env0:size @env0:>= 1 ifTrue: [positional @env0:at: 1] ifFalse: [0].
 	mi := positional @env0:size @env0:>= 2 ifTrue: [positional @env0:at: 2] ifFalse: [0].
@@ -4759,6 +4814,21 @@ _replace: positional kw: kwargs
 	"fold defaults to self's OWN fold (preserved), not 0 (test_subclass_replace_fold)."
 	fold := self @env0:dynamicInstVarAt: #_fold.
 	fold @env0:isNil ifTrue: [fold := 0].
+	"Positional fields, as CPython's replace(hour, minute, second,
+	microsecond, tzinfo, *, fold) allows -- reading kwargs only meant
+	t.replace(1, 1, 1, None, 1) silently answered an unchanged copy
+	instead of rejecting 1 as a tzinfo (test_replace)."
+	positional @env0:size @env0:> 5 ifTrue: [
+		^ TypeError @env1:___signal___:
+			'replace() takes at most 5 positional arguments (' @env0:,
+			positional @env0:size @env0:printString @env0:, ' given)'].
+	positional @env0:size @env0:>= 1 ifTrue: [h := positional @env0:at: 1].
+	positional @env0:size @env0:>= 2 ifTrue: [mi := positional @env0:at: 2].
+	positional @env0:size @env0:>= 3 ifTrue: [s := positional @env0:at: 3].
+	positional @env0:size @env0:>= 4 ifTrue: [us := positional @env0:at: 4].
+	positional @env0:size @env0:>= 5 ifTrue: [
+		tz := positional @env0:at: 5.
+		tz == None ifTrue: [tz := nil]].
 	kwargs @env0:isNil ifFalse: [
 		h := kwargs @env0:at: 'hour' ifAbsent: [h].
 		mi := kwargs @env0:at: 'minute' ifAbsent: [mi].
