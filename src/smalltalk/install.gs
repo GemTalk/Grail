@@ -712,6 +712,7 @@ run
 	at: #'InterruptedErrorTestCase' put: nil;
 	at: #'IsADirectoryErrorTestCase' put: nil;
 	at: #'IteratorTestCase' put: nil;
+	at: #'AssertStatementTestCase' put: nil;
 	at: #'ReNonAsciiSubTestCase' put: nil;
 	at: #'TracebackTestCase' put: nil;
 	at: #'KeyErrorTestCase' put: nil;
@@ -1474,6 +1475,7 @@ input src/smalltalk/PythonTests/ImportlibTestCase.gs
 input src/smalltalk/PythonTests/PackageImportTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
+input src/smalltalk/PythonTests/AssertStatementTestCase.gs
 input src/smalltalk/PythonTests/ReNonAsciiSubTestCase.gs
 input src/smalltalk/PythonTests/TracebackTestCase.gs
 input src/smalltalk/PythonTests/ListSortKwargsTestCase.gs
