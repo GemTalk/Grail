@@ -850,6 +850,37 @@ ___buildLocals___: pairsArray
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___evalScopeFor___: moduleOrNil locals: localsDict
+	"Evaluation namespace for a bare in-function eval()/exec() (CallAst >>
+	printBareEvalExecOn:): the enclosing module's globals with the
+	function's locals laid OVER them.
+
+	Only the locals used to be passed, so an expression could read an
+	enclosing local but not a module-level name -- eval('date(1, 2, 3)')
+	answered `undefined symbol date' even though the module imported it
+	(test_roundtrip).  CPython's bare eval() sees the caller's globals AND
+	locals, so both belong here, locals last because they shadow.
+
+	A COPY, not the live PyModuleDict view: _eval reflects any bindings the
+	expression makes (walrus, etc.) back into whatever it was handed, and
+	those must not become real module globals.  This is also why the module
+	is read defensively -- the eval()/exec() harness compiles code with no
+	real module instance, and a nil or non-module receiver simply
+	contributes nothing rather than failing."
+
+	| merged |
+	merged := dict ___new___.
+	(moduleOrNil @env0:notNil @env0:and: [moduleOrNil @env0:isKindOf: module]) ifTrue: [
+		(PyModuleDict @env0:on: moduleOrNil) @env0:keysAndValuesDo: [:k :v |
+			merged __setitem__: (k @env0:asString @env0:asUnicodeString) _: v]].
+	localsDict @env0:isNil ifFalse: [
+		localsDict @env0:keysAndValuesDo: [:k :v |
+			merged __setitem__: (k @env0:asString @env0:asUnicodeString) _: v]].
+	^ merged
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 open: file
 	"Python builtin open(file) — fixed-arity fast path; text read mode.
 	Implementation lives in FileIO class >> ___open___:mode:encoding:."

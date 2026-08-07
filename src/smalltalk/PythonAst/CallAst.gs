@@ -825,14 +825,27 @@ printBareEvalExecOn: aStream
 
 	The caller (printSmalltalkOn: section 0c) guarantees a NameAst eval/exec, a
 	single positional, no keywords, and function scope (functionBeingCompiled
-	not nil).  Module globals are intentionally not injected (see 0c)."
+	not nil).
+
+	The namespace is the enclosing MODULE's globals with those locals laid
+	over them, assembled by builtins ___evalScopeFor___:locals:.  Locals
+	alone were passed before, so a bare eval could read an enclosing local
+	but not a module-level name -- ``eval('date(1, 2, 3)')'' answered
+	`undefined symbol date' even where the module had imported it
+	(test_roundtrip).  The helper copies rather than exposing the live
+	module view, and tolerates a nil/non-module receiver, which is what
+	made injecting globals here unsafe before."
 
 	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) _'.
 	aStream nextPutAll: function id asString.
 	aStream nextPutAll: ': { '.
 	(arguments at: 1) printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: '. '.
+	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) ___evalScopeFor___: '.
+	aStream nextPutAll: self ___moduleStoreReceiverExpr___.
+	aStream nextPutAll: ' locals: '.
 	self printFunctionLocalsSnapshotOn: aStream.
+	aStream nextPutAll: ')'.
 	aStream nextPutAll: '. } kw: nil)'
 %
 
