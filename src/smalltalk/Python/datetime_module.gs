@@ -506,7 +506,7 @@ __mul__: scale
 	(scale @env0:isKindOf: Float) ifFalse: [
 		^ PyTimedelta @env0:___fromTotalMicros___:
 			(self ___totalMicros___ @env0:* scale) @env0:truncated].
-	ratio := scale as_integer_ratio.
+	ratio := PyTimedelta ___integerRatioOf___: scale.
 	a := ratio @env0:at: 1.
 	b := ratio @env0:at: 2.
 	usec := self ___totalMicros___.
@@ -520,6 +520,32 @@ __pos__
 	"Unary plus returns self (CPython)."
 
 	^ self
+%
+
+category: 'Grail-Private'
+classmethod: PyTimedelta
+___integerRatioOf___: aFloat
+	"as_integer_ratio() validated before use.
+
+	It is user-overridable -- a float SUBCLASS may answer anything -- so
+	CPython's timedelta checks the result explicitly before using it,
+	raising TypeError when it is not a tuple and ValueError when it is not
+	a 2-tuple.  The messages below are that C implementation's, verbatim.
+
+	Grail indexed the result directly (``ratio at: 1'' / ``at: 2''), so a
+	bad value produced a nonsense numerator/denominator and surfaced as
+	``ZeroDivisionError: division by zero'' -- or, for a short tuple, an
+	out-of-bounds Smalltalk error -- instead (test_issue31293)."
+
+	| ratio |
+	ratio := aFloat as_integer_ratio.
+	(ratio @env0:isKindOf: tuple) ifFalse: [
+		^ TypeError ___signal___:
+			'unexpected return type from as_integer_ratio(): expected tuple, not '''
+			@env0:, (ratio @env0:class __name__) @env0:asString @env0:, ''''].
+	ratio @env0:size @env0:= 2 ifFalse: [
+		^ ValueError ___signal___: 'as_integer_ratio() must return a 2-tuple'].
+	^ ratio
 %
 
 category: 'Grail-Arithmetic'
@@ -540,7 +566,7 @@ __truediv__: other
 	usec := self ___totalMicros___.
 	(other @env0:isKindOf: Float) ifTrue: [
 		| ratio a b |
-		ratio := other as_integer_ratio.
+		ratio := PyTimedelta ___integerRatioOf___: other.
 		a := ratio @env0:at: 1.
 		b := ratio @env0:at: 2.
 		^ PyTimedelta @env0:___fromTotalMicros___:
@@ -1422,6 +1448,15 @@ _datetime: positional kw: kwargs
 	microsecond, tzinfo."
 
 	| year month day hour minute second micro tz fold inst |
+	"``fold'' is KEYWORD-ONLY: CPython's signature is
+	datetime(year, month, day, hour=0, minute=0, second=0, microsecond=0,
+	tzinfo=None, *, fold=0), so a 9th POSITIONAL argument is a TypeError,
+	not a positional fold.  Grail read only indices 1..8 and silently
+	dropped anything beyond, so datetime(2000,1,31,23,59,59,0,None,1)
+	quietly built a fold=0 value (test_bad_constructor_arguments)."
+	positional @env0:size @env0:> 8 ifTrue: [
+		^ TypeError ___signal___: ('datetime() takes at most 8 positional arguments (' @env0:,
+			positional @env0:size @env0:printString @env0:, ' given)')].
 	"year/month/day are ordinary parameters in CPython, so they may arrive
 	as keywords (``datetime(2010, 10, day=10)'').  Reading them with a
 	bare ``at:'' made any such call die with an out-of-bounds Smalltalk
@@ -1643,7 +1678,8 @@ ___fromDateTime___: dt micros: micros tz: tz2 gmt: useGmt
 	stashes (e.g. `result.extra = 7') must survive now()/utcnow()
 	(test_subclass_now)."
 	useGmt ifTrue: [
-		^ self @env1:___allocateInstance___:
+		| built |
+		built := self @env1:___allocateInstance___:
 			{ (dt @env0:yearGmt).
 			  (dt @env0:monthGmt).
 			  (dt @env0:dayOfMonthGmt).
@@ -1651,7 +1687,17 @@ ___fromDateTime___: dt micros: micros tz: tz2 gmt: useGmt
 			  (dt @env0:minuteGmt).
 			  (dt @env0:secondGmt).
 			  micros.
-			  tz2 } kw: nil].
+			  tz2 } kw: nil.
+		"With a tz, those GMT fields are a UTC READING that still has to be
+		mapped INTO the zone -- CPython's _fromtimestamp finishes with
+		``result = tz.fromutc(result)''.  Grail only tagged them, so
+		now(tz)/fromtimestamp(ts, tz) answered UTC wall-clock wearing the
+		target zone's label: correct for timezone.utc (the only zone
+		Grail's own callers used) but hours out for any other
+		(test_tzinfo_now, test_tzinfo_fromtimestamp).  tz: nil -- utcnow()
+		and utcfromtimestamp() -- still wants the plain UTC reading."
+		tz2 @env0:isNil ifTrue: [^ built].
+		^ tz2 fromutc: built].
 	^ self @env1:___allocateInstance___:
 		{ (dt @env0:year).
 		  (dt @env0:month).
@@ -1787,7 +1833,7 @@ ___fromTimestamp___: ts tz: tz2 gmt: useGmt
 	they used to be literally the same method, which is why utcfromtimestamp
 	silently followed fromtimestamp onto local time."
 
-	| epoch dt secs micros |
+	| epoch dt secs micros result |
 	(ts @env0:isKindOf: Number) ifFalse: [
 		^ TypeError @env1:___signal___:
 			'an integer is required (got type ' @env0:, ts @env0:class __name__ @env0:, ')'].
@@ -1824,7 +1870,58 @@ ___fromTimestamp___: ts tz: tz2 gmt: useGmt
 	CPython does (test_fromtimestamp_limits / test_utcfromtimestamp_limits)."
 	((useGmt ifTrue: [dt @env0:yearGmt] ifFalse: [dt @env0:year]) @env0:between: 1 @env0:and: 9999)
 		ifFalse: [^ OverflowError @env1:___signal___: 'date value out of range'].
-	^ self ___fromDateTime___: dt micros: micros tz: tz2 gmt: useGmt
+	result := self ___fromDateTime___: dt micros: micros tz: tz2 gmt: useGmt.
+	"A LOCAL, naive reading may be the SECOND pass over an ambiguous wall
+	clock, which CPython detects with the probe below and records as
+	fold=1 -- so fromtimestamp(s) and fromtimestamp(s + 3600) either side
+	of a fall-back transition are distinguishable (test_fromtimestamp).
+	Only for the naive-local family: a UTC reading has no ambiguity, and
+	an explicit tz has already been mapped by fromutc."
+	(useGmt @env0:or: [tz2 @env0:notNil]) ifTrue: [^ result].
+	^ self ___applyFoldProbe___: result at: secs micros: micros
+%
+
+category: 'Grail-Private'
+classmethod: PyDateTime
+___applyFoldProbe___: result at: secs micros: micros
+	"Port of the fold-detection tail of CPython's datetime._fromtimestamp.
+
+	Reads the local clock a day earlier; if the offset changed in between
+	(``trans'' negative), re-reads at the shifted instant and, when that
+	lands on the SAME wall clock as `result', this timestamp is the second
+	pass over a repeated hour -- fold=1.  24h is the largest fold the IANA
+	database has ever carried, which is why CPython probes exactly that
+	far back."
+
+	| maxFold probe1 trans probe2 |
+	maxFold := 24 @env0:* 3600.
+	probe1 := self ___localCivilAt___: secs @env0:- maxFold micros: micros.
+	trans := ((result ___naiveEpochMicros___) @env0:- (probe1 ___naiveEpochMicros___))
+		@env0:- (maxFold @env0:* 1000000).
+	trans @env0:< 0 ifTrue: [
+		probe2 := self ___localCivilAt___: secs @env0:+ (trans @env0:// 1000000) micros: micros.
+		(probe2 ___naiveEpochMicros___) @env0:= (result ___naiveEpochMicros___) ifTrue: [
+			result @env0:dynamicInstVarAt: #_fold put: 1]].
+	^ result
+%
+
+category: 'Grail-Private'
+classmethod: PyDateTime
+___localCivilAt___: secs micros: micros
+	"A naive PyDateTime holding the LOCAL wall clock at epoch-second
+	`secs' -- CPython's ``converter(t)[:6]'' probe, built through
+	___fromFields___ because it is a throwaway comparison value that must
+	not run a subclass's __new__ (and so must not stash attributes or
+	raise from user code) while probing."
+
+	| epoch d |
+	epoch := DateTime
+		@env0:newGmtWithYear: 1970 month: 1 day: 1 hours: 0 minutes: 0 seconds: 0.
+	d := epoch @env0:addSeconds: secs.
+	^ PyDateTime @env0:___fromFields___:
+		(d @env0:year) _: (d @env0:month) _: (d @env0:dayOfMonth)
+		_: (d @env0:hour) _: (d @env0:minute) _: (d @env0:second)
+		_: micros _: nil
 %
 
 category: 'Grail-Initialization'
@@ -2043,22 +2140,37 @@ ___checkUtcOffsetResult___: result for: methodName
 category: 'Grail-Conversion'
 method: PyDateTime
 astimezone: tz
-	"Convert an aware datetime to zone `tz`.  Grail treats a naive
-	datetime as UTC (offset 0), since it has no portable local zone."
+	"Convert to zone `tz', defaulting to the HOST-LOCAL zone.
+
+	Both halves used to assume UTC because Grail had no portable local
+	zone: an omitted tz meant timezone.utc, and a NAIVE receiver was read
+	as offset 0.  The session zone is aligned with the OS now
+	(___ensureSessionTimeZone___), so both follow CPython and go through
+	___localTimezone___ -- which reports the offset in force at THIS
+	instant, so a value either side of a DST transition converts with the
+	right one (test_astimezone, test_astimezone_default_eastern)."
 
 	| mytz myoffset utcWall |
-	"astimezone() with no argument converts to the local zone; Grail has
-	no portable local zone and documents wall clocks as UTC, so an
-	omitted/None tz means UTC (test_astimezone)."
-	tz == None ifTrue: [^ self astimezone: PyTimezone utc].
-	tz @env0:isNil ifTrue: [^ self astimezone: PyTimezone utc].
+	tz == None ifTrue: [^ self astimezone: self ___localTimezone___].
+	tz @env0:isNil ifTrue: [^ self astimezone: self ___localTimezone___].
 	(tz @env0:isKindOf: PyTzinfo) ifFalse: [
 		^ TypeError ___signal___: 'tz argument must be None or of a tzinfo subclass'].
 	mytz := self @env0:dynamicInstVarAt: #_tzinfo.
 	(mytz @env0:notNil and: [mytz @env0:== tz]) ifTrue: [^ self].
-	myoffset := mytz @env0:isNil
-		ifTrue: [PyTimedelta @env0:___fromTotalMicros___: 0]
-		ifFalse: [mytz utcoffset: self].
+	mytz @env0:isNil
+		ifTrue: [
+			mytz := self ___localTimezone___.
+			myoffset := mytz utcoffset: self]
+		ifFalse: [
+			myoffset := self utcoffset.
+			"An AWARE receiver whose tzinfo answers None is treated as naive
+			from here on, exactly as CPython does -- it re-derives the offset
+			from the local zone rather than propagating the None into the
+			subtraction below, where it surfaced as `unsupported operand
+			for -' (test_astimezone's Bogus case)."
+			(myoffset @env0:isNil or: [myoffset @env0:== None]) ifTrue: [
+				mytz := self ___localTimezone___.
+				myoffset := mytz utcoffset: self]].
 	"Shift to UTC wall-clock, retag with the target zone, then let the
 	target zone map UTC -> local."
 	utcWall := self __sub__: myoffset.
@@ -2115,7 +2227,14 @@ timestamp
 
 	| off |
 	off := self utcoffset.
-	off @env0:== None ifTrue: [^ self ___localNaiveEpochSeconds___].
+	"___mktime___, not ___localNaiveEpochSeconds___: the latter lets
+	GemStone resolve an ambiguous local time, so it cannot honour fold
+	(both readings of a repeated hour answered the same instant).  Whole
+	seconds from the fold-aware search, microseconds added back here,
+	exactly as CPython's timestamp() does (test_timestamp)."
+	off @env0:== None ifTrue: [
+		^ (self ___mktime___) @env0:asFloat
+			@env0:+ ((self @env0:dynamicInstVarAt: #_microsecond) @env0:asFloat @env0:/ 1000000.0)].
 	^ self ___naiveEpochSeconds___ @env0:- (off total_seconds)
 %
 
@@ -2206,6 +2325,110 @@ ___naiveEpochMicros___
 		@env0:+ ((self @env0:dynamicInstVarAt: #_minute) @env0:* 60)
 		@env0:+ (self @env0:dynamicInstVarAt: #_second).
 	^ (whole @env0:* 1000000) @env0:+ (self @env0:dynamicInstVarAt: #_microsecond)
+%
+
+category: 'Grail-Private'
+classmethod: PyDateTime
+___localEpochAt___: u
+	"CPython's ``local(u)'' helper from datetime._mktime: the civil fields
+	localtime(u) reports, read back as if they were UTC.  local(u) - u is
+	therefore the local UTC offset in effect at instant u, which is how
+	the whole local-zone family derives an offset without a tm_gmtoff."
+
+	| st |
+	PyDateTime ___ensureSessionTimeZone___.
+	st := time instance localtime: u.
+	^ ((time @env0:___epochDaysForYear___: (st __getitem__: 0)
+			_month: (st __getitem__: 1)
+			_day: (st __getitem__: 2)) @env0:* 86400)
+		@env0:+ ((st __getitem__: 3) @env0:* 3600)
+		@env0:+ ((st __getitem__: 4) @env0:* 60)
+		@env0:+ (st __getitem__: 5)
+%
+
+category: 'Grail-Private'
+method: PyDateTime
+___mktime___
+	"POSIX timestamp for this NAIVE value's wall clock -- a port of
+	CPython's datetime._mktime, which resolves the two readings of an
+	ambiguous local time with ``fold'' and picks a defined answer for a
+	time that does not exist at all.
+
+	___localNaiveEpochSeconds___ hands the fields to GemStone's local
+	DateTime constructor instead, which resolves the ambiguity ITSELF and
+	so cannot honour fold: both readings of 2014-11-02 01:30 came back as
+	the same instant (test_timestamp), and a gap time answered the wrong
+	side (test_timestamp_naive).  This searches for the offset the way
+	CPython does, so both folds and gaps come out right.
+
+	Works in whole seconds, as CPython's does; the caller adds the
+	microseconds back."
+
+	| t maxFold a u1 t1 b u2 t2 fold |
+	maxFold := 24 @env0:* 3600.
+	fold := self @env0:dynamicInstVarAt: #_fold.
+	fold @env0:isNil ifTrue: [fold := 0].
+	t := (self ___naiveEpochMicros___) @env0:// 1000000.
+	a := (PyDateTime ___localEpochAt___: t) @env0:- t.
+	u1 := t @env0:- a.
+	t1 := PyDateTime ___localEpochAt___: u1.
+	t1 @env0:= t
+		ifTrue: [
+			"One solution found; the OTHER one (an hour earlier for fold=0,
+			later for fold=1) may be the one asked for.  When both probes
+			see the same offset there is no transition nearby and u1 is
+			unambiguous."
+			u2 := u1 @env0:+ (fold @env0:= 0 ifTrue: [maxFold @env0:negated] ifFalse: [maxFold]).
+			b := (PyDateTime ___localEpochAt___: u2) @env0:- u2.
+			a @env0:= b ifTrue: [^ u1]]
+		ifFalse: [b := t1 @env0:- u1].
+	u2 := t @env0:- b.
+	t2 := PyDateTime ___localEpochAt___: u2.
+	t2 @env0:= t ifTrue: [^ u2].
+	t1 @env0:= t ifTrue: [^ u1].
+	"Neither offset yields this wall clock: the time falls in a GAP.
+	CPython answers max(u1,u2) for fold=0 and min(u1,u2) for fold=1."
+	^ fold @env0:= 0 ifTrue: [u1 @env0:max: u2] ifFalse: [u1 @env0:min: u2]
+%
+
+category: 'Grail-Private'
+method: PyDateTime
+___localTimezone___
+	"CPython's datetime._local_timezone: a fixed-offset timezone standing
+	for the host zone as it is AT THIS INSTANT, so a value either side of
+	a DST transition converts with the offset actually in force then.
+
+	The name comes from time.tzname, choosing the DST entry when the
+	offset at this instant differs from the zone's standard offset --
+	Grail's struct_time carries no tm_zone/tm_gmtoff to read it from
+	(test_astimezone_default_eastern wants '-0500 EST' and '-0400 EDT')."
+
+	| ts off names stdOff nm myoff |
+	"CPython reaches this on a naive receiver, or explicitly via
+	``self.replace(tzinfo=None)._local_timezone()''.  Treat an offset of
+	None as naive rather than sending ___totalMicros___ to it, so a
+	tzinfo whose utcoffset() answers None (test_astimezone's Bogus) is
+	handled here too instead of dying with a MessageNotUnderstood."
+	myoff := (self @env0:dynamicInstVarAt: #_tzinfo) @env0:isNil
+		ifTrue: [nil]
+		ifFalse: [self utcoffset].
+	(myoff @env0:== None) ifTrue: [myoff := nil].
+	ts := myoff @env0:isNil
+		ifTrue: [self ___mktime___]
+		ifFalse: [((self ___naiveEpochMicros___)
+			@env0:- (myoff ___totalMicros___)) @env0:// 1000000].
+	off := (PyDateTime ___localEpochAt___: ts) @env0:- ts.
+	PyDateTime ___ensureSessionTimeZone___.
+	stdOff := TimeZone @env0:current @env0:secondsFromGmt.
+	names := time instance @env0:dynamicInstVarAt: #tzname.
+	nm := nil.
+	names @env0:isNil ifFalse: [
+		nm := off @env0:= stdOff
+			ifTrue: [names __getitem__: 0]
+			ifFalse: [names __getitem__: 1]].
+	^ PyTimezone
+		__new__: (PyTimedelta @env0:___fromTotalMicros___: off @env0:* 1000000)
+		_: nm
 %
 
 category: 'Grail-Conversion'
@@ -2389,9 +2612,7 @@ strftime: format
 	"%z / %:z / %Z are expanded HERE, before the generic formatter runs --
 	the `time' module's formatter has no tzinfo concept (it would emit a
 	guessed 'UTC' for %Z and drop %z entirely)."
-	fmt := PyDateTime ___expandTzDirectives___: fmt
-		offset: self utcoffset
-		tzname: self tzname.
+	fmt := PyDateTime ___expandTzDirectives___: fmt for: self.
 	^ time instance strftime: fmt _: structTime
 %
 
@@ -2432,9 +2653,18 @@ ___formatOffsetDirective___: offset sep: sep
 
 category: 'Grail-Private'
 classmethod: PyDateTime
-___expandTzDirectives___: fmt offset: offset tzname: tzName
+___expandTzDirectives___: fmt for: aDateTimeOrTime
 	"Port of the %z / %:z / %Z half of CPython's _wrap_strftime, run before
 	the `time'-module formatter sees the string.
+
+	utcoffset()/tzname() are asked for ONLY when the corresponding
+	directive actually appears.  They used to be computed eagerly by the
+	caller, so a tzinfo implementing just one of them -- CPython allows
+	that; the base tzinfo raises NotImplementedError for whichever is
+	missing -- made an unrelated format explode: a Badtzname whose
+	tzname() works but whose utcoffset() does not answered
+	NotImplementedError for strftime('%Z'), which asks for no offset at
+	all (test_zones).
 
 	A left-to-right SCANNER, not copyReplaceAll:, for two reasons CPython
 	shares: '%%z' must stay a literal percent followed by 'z' rather than
@@ -2445,8 +2675,10 @@ ___expandTzDirectives___: fmt offset: offset tzname: tzName
 	An empty expansion is correct for a naive value: CPython renders %z and
 	%Z as '' when utcoffset()/tzname() answer None."
 
-	| out i n ch |
+	| out i n ch offset tzName haveOffset haveTzName |
 	out := WriteStream @env0:on: Unicode7 @env0:new.
+	haveOffset := false.
+	haveTzName := false.
 	i := 1.
 	n := fmt @env0:size.
 	[i @env0:<= n] @env0:whileTrue: [
@@ -2461,13 +2693,38 @@ ___expandTzDirectives___: fmt offset: offset tzname: tzName
 						c2 := fmt @env0:at: i.
 						i := i @env0:+ 1.
 						c2 @env0:= $z ifTrue: [
+							haveOffset ifFalse: [
+								offset := aDateTimeOrTime utcoffset. haveOffset := true].
 							out @env0:nextPutAll:
 								(PyDateTime ___formatOffsetDirective___: offset sep: '')
 						] ifFalse: [
 						c2 @env0:= $Z ifTrue: [
+							haveTzName ifFalse: [
+								tzName := aDateTimeOrTime tzname. haveTzName := true].
 							tzName @env0:== None ifFalse: [
-								out @env0:nextPutAll:
-									(tzName @env0:asString @env0:copyReplaceAll: '%' with: '%%')]
+								| escaped |
+								"Dispatch replace() at the PYTHON level, as CPython's
+								_wrap_strftime does (``Zreplace = s.replace('%', '%%')'').
+								A tzname() may answer a str SUBCLASS that overrides
+								replace(); the old @env0:copyReplaceAll: was a kernel send
+								that silently ignored the override.  CPython then fails in
+								''.join() when the override answers a non-str, so a
+								non-string result is a TypeError here
+								(test_strftime_with_bad_tzname_replace).
+
+								___pyAttrLoad___ + value:value: rather than a direct
+								``@env1:replace: old _: new'' send: the override may be
+								declared varargs (``def replace(self, *args)''), which
+								compiles to a DIFFERENT selector than the fixed-arity
+								replace:_:, so a direct send silently reaches str's base
+								implementation instead of the subclass's."
+								escaped := (tzName @env1:___pyAttrLoad___: #replace)
+									@env1:value: { '%'. '%%' } value: nil.
+								(escaped @env0:isKindOf: CharacterCollection) ifFalse: [
+									^ TypeError @env1:___signal___:
+										'strftime(): tzname.replace() must return str, not ' @env0:,
+										(escaped @env1:__class__ @env1:__name__) @env0:asString].
+								out @env0:nextPutAll: escaped @env0:asString]
 						] ifFalse: [
 						c2 @env0:= $: ifTrue: [
 							"%:z -- anything else after the colon is passed through
@@ -2475,6 +2732,8 @@ ___expandTzDirectives___: fmt offset: offset tzname: tzName
 							(i @env0:<= n @env0:and: [(fmt @env0:at: i) @env0:= $z])
 								ifTrue: [
 									i := i @env0:+ 1.
+									haveOffset ifFalse: [
+										offset := aDateTimeOrTime utcoffset. haveOffset := true].
 									out @env0:nextPutAll:
 										(PyDateTime ___formatOffsetDirective___: offset sep: ':')]
 								ifFalse: [out @env0:nextPut: $%. out @env0:nextPut: c2]
@@ -2601,28 +2860,50 @@ date
 category: 'Grail-Accessors'
 method: PyDateTime
 time
-	"The time() part as a NAIVE PyTime (tzinfo dropped, per CPython)."
+	"The time() part as a NAIVE PyTime (tzinfo dropped, per CPython).
 
-	^ PyTime @env0:___fromFields___:
+	``fold'' comes along -- CPython's time()/timetz() both pass
+	fold=self.fold, so the disambiguation bit is not silently lost when
+	the time-of-day is extracted (test_member)."
+
+	| t |
+	t := PyTime @env0:___fromFields___:
 		(self @env0:dynamicInstVarAt: #_hour)
 		_: (self @env0:dynamicInstVarAt: #_minute)
 		_: (self @env0:dynamicInstVarAt: #_second)
 		_: (self @env0:dynamicInstVarAt: #_microsecond)
-		_: nil
+		_: nil.
+	^ self ___copyFoldTo___: t
+%
+
+category: 'Grail-Private'
+method: PyDateTime
+___copyFoldTo___: aTime
+	"Carry self's fold onto an extracted PyTime, storing only a fold of 1
+	so a plain value keeps its absent-instVar representation."
+
+	| fold |
+	fold := self @env0:dynamicInstVarAt: #_fold.
+	(fold @env0:notNil and: [fold @env0:= 1]) ifTrue: [
+		aTime @env0:dynamicInstVarAt: #_fold put: 1].
+	^ aTime
 %
 
 category: 'Grail-Accessors'
 method: PyDateTime
 timetz
 	"The time() part as an AWARE PyTime -- like time(), but keeps tzinfo
-	(test_extract, test_tz_aware_arithmetic)."
+	(test_extract, test_tz_aware_arithmetic).  Carries fold, as time()
+	does (test_member)."
 
-	^ PyTime @env0:___fromFields___:
+	| t |
+	t := PyTime @env0:___fromFields___:
 		(self @env0:dynamicInstVarAt: #_hour)
 		_: (self @env0:dynamicInstVarAt: #_minute)
 		_: (self @env0:dynamicInstVarAt: #_second)
 		_: (self @env0:dynamicInstVarAt: #_microsecond)
-		_: (self @env0:dynamicInstVarAt: #_tzinfo)
+		_: (self @env0:dynamicInstVarAt: #_tzinfo).
+	^ self ___copyFoldTo___: t
 %
 
 category: 'Grail-Accessors'
@@ -2846,10 +3127,18 @@ __add__: other
 	tz := self @env0:dynamicInstVarAt: #_tzinfo.
 	"self class, not PyDateTime: CPython builds the result with
 	type(self).combine, so DateTimeSubclass + timedelta stays a
-	DateTimeSubclass (test_subclass_datetime)."
-	^ self @env0:class @env0:___fromFields___:
-		(newDate year) _: (newDate month) _: (newDate day)
-		_: h _: mi _: s _: us _: tz
+	DateTimeSubclass (test_subclass_datetime).
+
+	___allocateInstance___:kw:, not the ___fromFields___: bypass, because
+	type(self).combine ultimately calls cls(...) and so runs a subclass's
+	overridden __new__ -- an attribute it stashes must survive addition.
+	Previously invisible: nothing reached __add__ on a subclass instance
+	until astimezone()/fromtimestamp(tz) began converting through
+	timezone.fromutc, which IS dt + offset (test_subclass_now,
+	test_subclass_alternate_constructors_datetime)."
+	^ self @env0:class @env1:___allocateInstance___:
+		{ (newDate year). (newDate month). (newDate day).
+		  h. mi. s. us. tz } kw: nil
 %
 
 category: 'Grail-Arithmetic'
@@ -3063,22 +3352,53 @@ __setattr__: name _: value
 category: 'Grail-Pickle'
 method: PyDateTime
 __reduce__
-	"(class, (y, mo, d, h, mi, s, us[, tzinfo]))."
+	"(class, state) at the default protocol, per CPython's
+	datetime.__reduce__ (which is __reduce_ex__(2))."
 
-	| tz fields |
+	^ self __reduce_ex__: 2
+%
+
+category: 'Grail-Pickle'
+method: PyDateTime
+__reduce_ex__: protocol
+	"CPython's datetime.__reduce_ex__: (class, (10-byte state[, tzinfo])).
+
+	The state is the packed byte string the constructor's pickle backdoor
+	already understands, NOT the plain (y, mo, d, ...) field tuple this
+	used to emit.  Two reasons: it is the only place `fold' can travel --
+	CPython hides it in the high bit of the MONTH byte, and only from
+	protocol 4 on, so an older protocol keeps its historical meaning
+	(test_pickle_fold) -- and it makes Grail's output byte-identical to
+	CPython's, the natural counterpart to reading CPython's pickles in
+	test_compat_unpickle.
+
+	A field tuple could not carry fold at all: __reduce__ args are
+	positional, and fold is keyword-only."
+
+	| y m fold us state tz |
+	y := self @env0:dynamicInstVarAt: #_year.
+	m := self @env0:dynamicInstVarAt: #_month.
+	fold := self @env0:dynamicInstVarAt: #_fold.
+	((fold @env0:notNil and: [fold @env0:= 1]) and: [protocol @env0:> 3])
+		ifTrue: [m := m @env0:+ 128].
+	us := self @env0:dynamicInstVarAt: #_microsecond.
+	state := ByteArray @env0:new: 10.
+	state @env0:at: 1 put: (y @env0:// 256);
+		@env0:at: 2 put: (y @env0:\\ 256);
+		@env0:at: 3 put: m;
+		@env0:at: 4 put: (self @env0:dynamicInstVarAt: #_day);
+		@env0:at: 5 put: (self @env0:dynamicInstVarAt: #_hour);
+		@env0:at: 6 put: (self @env0:dynamicInstVarAt: #_minute);
+		@env0:at: 7 put: (self @env0:dynamicInstVarAt: #_second);
+		@env0:at: 8 put: (us @env0:// 65536);
+		@env0:at: 9 put: ((us @env0:// 256) @env0:\\ 256);
+		@env0:at: 10 put: (us @env0:\\ 256).
 	tz := self @env0:dynamicInstVarAt: #_tzinfo.
-	fields := OrderedCollection @env0:new.
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_year).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_month).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_day).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_hour).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_minute).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_second).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_microsecond).
-	tz @env0:isNil ifFalse: [fields @env0:add: tz].
 	^ tuple @env0:withAll: {
 		(self @env0:class).
-		(tuple @env0:withAll: fields @env0:asArray) }
+		(tz @env0:isNil
+			ifTrue: [tuple @env0:withAll: { state }]
+			ifFalse: [tuple @env0:withAll: { state. tz }]) }
 %
 
 category: 'Grail-Class Attrs'
@@ -3136,6 +3456,26 @@ _replace: positional kw: kwargs
 	replace() keeps fold unless the caller overrides it (test_subclass_replace_fold)."
 	fold := self @env0:dynamicInstVarAt: #_fold.
 	fold @env0:isNil ifTrue: [fold := 0].
+	"replace() takes its fields POSITIONALLY too -- CPython's signature is
+	replace(year, month, day, hour, minute, second, microsecond, tzinfo,
+	*, fold).  Grail read kwargs only and silently ignored every
+	positional, so dt.replace(1, 1, 1, 1, 1, 1, 1, None, 1) answered an
+	unchanged copy instead of the TypeError its keyword-only fold demands
+	(test_replace)."
+	positional @env0:size @env0:> 8 ifTrue: [
+		^ TypeError @env1:___signal___:
+			'replace() takes at most 8 positional arguments (' @env0:,
+			positional @env0:size @env0:printString @env0:, ' given)'].
+	positional @env0:size @env0:>= 1 ifTrue: [y := positional @env0:at: 1].
+	positional @env0:size @env0:>= 2 ifTrue: [mo := positional @env0:at: 2].
+	positional @env0:size @env0:>= 3 ifTrue: [d := positional @env0:at: 3].
+	positional @env0:size @env0:>= 4 ifTrue: [h := positional @env0:at: 4].
+	positional @env0:size @env0:>= 5 ifTrue: [mi := positional @env0:at: 5].
+	positional @env0:size @env0:>= 6 ifTrue: [s := positional @env0:at: 6].
+	positional @env0:size @env0:>= 7 ifTrue: [us := positional @env0:at: 7].
+	positional @env0:size @env0:>= 8 ifTrue: [
+		tz := positional @env0:at: 8.
+		tz == None ifTrue: [tz := nil]].
 	kwargs @env0:isNil ifFalse: [
 		y := kwargs @env0:at: 'year' ifAbsent: [y].
 		mo := kwargs @env0:at: 'month' ifAbsent: [mo].
@@ -4273,9 +4613,14 @@ ___buildTime___: positional kw: kwargs for: cls
 	Python subclass of time keeps its own class."
 
 	| h mi s us tz fold inst |
-	positional @env0:size @env0:> 6 ifTrue: [
+	"``fold'' is KEYWORD-ONLY: CPython's signature is
+	time(hour=0, minute=0, second=0, microsecond=0, tzinfo=None, *, fold=0),
+	so at most FIVE positional arguments.  The cap was 6, which let
+	time(0, 0, 0, 0, None, 0) through as a silent fold=0 instead of the
+	TypeError CPython raises (test_constructors)."
+	positional @env0:size @env0:> 5 ifTrue: [
 		^ TypeError @env1:___signal___:
-			'function takes at most 6 arguments (' @env0:,
+			'time() takes at most 5 positional arguments (' @env0:,
 			positional @env0:size @env0:printString @env0:, ' given)'].
 	h := positional @env0:size @env0:>= 1 ifTrue: [positional @env0:at: 1] ifFalse: [0].
 	mi := positional @env0:size @env0:>= 2 ifTrue: [positional @env0:at: 2] ifFalse: [0].
@@ -4718,6 +5063,21 @@ _replace: positional kw: kwargs
 	"fold defaults to self's OWN fold (preserved), not 0 (test_subclass_replace_fold)."
 	fold := self @env0:dynamicInstVarAt: #_fold.
 	fold @env0:isNil ifTrue: [fold := 0].
+	"Positional fields, as CPython's replace(hour, minute, second,
+	microsecond, tzinfo, *, fold) allows -- reading kwargs only meant
+	t.replace(1, 1, 1, None, 1) silently answered an unchanged copy
+	instead of rejecting 1 as a tzinfo (test_replace)."
+	positional @env0:size @env0:> 5 ifTrue: [
+		^ TypeError @env1:___signal___:
+			'replace() takes at most 5 positional arguments (' @env0:,
+			positional @env0:size @env0:printString @env0:, ' given)'].
+	positional @env0:size @env0:>= 1 ifTrue: [h := positional @env0:at: 1].
+	positional @env0:size @env0:>= 2 ifTrue: [mi := positional @env0:at: 2].
+	positional @env0:size @env0:>= 3 ifTrue: [s := positional @env0:at: 3].
+	positional @env0:size @env0:>= 4 ifTrue: [us := positional @env0:at: 4].
+	positional @env0:size @env0:>= 5 ifTrue: [
+		tz := positional @env0:at: 5.
+		tz == None ifTrue: [tz := nil]].
 	kwargs @env0:isNil ifFalse: [
 		h := kwargs @env0:at: 'hour' ifAbsent: [h].
 		mi := kwargs @env0:at: 'minute' ifAbsent: [mi].
@@ -4758,9 +5118,7 @@ strftime: format
 		_: (self @env0:dynamicInstVarAt: #_microsecond).
 	"%z / %:z / %Z -- see PyDateTime>>strftime: and
 	___expandTzDirectives___:offset:tzname: (test_strftime, test_zones)."
-	fmt := PyDateTime ___expandTzDirectives___: fmt
-		offset: self utcoffset
-		tzname: self tzname.
+	fmt := PyDateTime ___expandTzDirectives___: fmt for: self.
 	^ time instance strftime: fmt _: structTime
 %
 
@@ -4994,19 +5352,40 @@ __setattr__: name _: value
 category: 'Grail-Pickle'
 method: PyTime
 __reduce__
-	"(class, (hour, minute, second, microsecond[, tzinfo]))."
+	"(class, state) at the default protocol, per CPython's time.__reduce__."
 
-	| tz fields |
+	^ self __reduce_ex__: 2
+%
+
+category: 'Grail-Pickle'
+method: PyTime
+__reduce_ex__: protocol
+	"CPython's time.__reduce_ex__: (class, (6-byte state[, tzinfo])).
+
+	See PyDateTime>>__reduce_ex__: for why this is the packed byte state
+	rather than a field tuple.  time hides `fold' in the high bit of the
+	HOUR byte (datetime uses the month byte), again only from protocol 4
+	on (test_pickle_fold)."
+
+	| h fold us state tz |
+	h := self @env0:dynamicInstVarAt: #_hour.
+	fold := self @env0:dynamicInstVarAt: #_fold.
+	((fold @env0:notNil and: [fold @env0:= 1]) and: [protocol @env0:> 3])
+		ifTrue: [h := h @env0:+ 128].
+	us := self @env0:dynamicInstVarAt: #_microsecond.
+	state := ByteArray @env0:new: 6.
+	state @env0:at: 1 put: h;
+		@env0:at: 2 put: (self @env0:dynamicInstVarAt: #_minute);
+		@env0:at: 3 put: (self @env0:dynamicInstVarAt: #_second);
+		@env0:at: 4 put: (us @env0:// 65536);
+		@env0:at: 5 put: ((us @env0:// 256) @env0:\\ 256);
+		@env0:at: 6 put: (us @env0:\\ 256).
 	tz := self @env0:dynamicInstVarAt: #_tzinfo.
-	fields := OrderedCollection @env0:new.
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_hour).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_minute).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_second).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_microsecond).
-	tz @env0:isNil ifFalse: [fields @env0:add: tz].
 	^ tuple @env0:withAll: {
 		(self @env0:class).
-		(tuple @env0:withAll: fields @env0:asArray) }
+		(tz @env0:isNil
+			ifTrue: [tuple @env0:withAll: { state }]
+			ifFalse: [tuple @env0:withAll: { state. tz }]) }
 %
 
 category: 'Grail-Class Attrs'

@@ -637,18 +637,34 @@ static char *buffer_cache_get(OopType oop) {
     return NULL;
 }
 
-static char *buffer_cache_add(OopType oop, int64 size) {
+/* Cache the bytes of `src` under the key `key`.  The two differ only for
+   PyUnicode_AsUTF8, which caches a string's UTF-8 ENCODING (a separate
+   Utf8 object) under the original string's oop. */
+static char *buffer_cache_add_from(OopType key, OopType src, int64 size) {
     char *buf = (char *)malloc((size_t)(size + 1));
     if (!buf) return NULL;
-    GciFetchBytes_(oop, 1, (ByteType *)buf, size);
+    if (size > 0)
+        GciFetchBytes_(src, 1, (ByteType *)buf, size);
     buf[size] = '\0';
     if (buffer_cache_count < MAX_BUFFER_CACHE) {
-        buffer_cache[buffer_cache_count].oop = oop;
+        buffer_cache[buffer_cache_count].oop = key;
         buffer_cache[buffer_cache_count].buf = buf;
         buffer_cache[buffer_cache_count].size = size;
         buffer_cache_count++;
     }
     return buf;
+}
+
+static char *buffer_cache_add(OopType oop, int64 size) {
+    return buffer_cache_add_from(oop, oop, size);
+}
+
+static int64 buffer_cache_get_size(OopType oop) {
+    for (int i = 0; i < buffer_cache_count; i++) {
+        if (buffer_cache[i].oop == oop)
+            return buffer_cache[i].size;
+    }
+    return -1;
 }
 
 /* ====================================================================
@@ -888,8 +904,32 @@ extern "C" const char *PyUnicode_AsUTF8(PyObject *obj) {
     OopType oop = pyobj_oop(obj);
     char *cached = buffer_cache_get(oop);
     if (cached) return cached;
-    int64 size = GciFetchSize_(oop);
-    return buffer_cache_add(oop, size);
+
+    /* Encode through GemStone's own encoder rather than handing back the
+       raw object bytes.  Those are only UTF-8-compatible for 7-bit
+       content: String / ISOLatin store latin-1 code points, and
+       DoubleByteString / Unicode16 store UTF-16 code units, whose 0x00
+       high bytes masquerade as NUL terminators.  Every strlen()-based
+       consumer therefore TRUNCATED a wide string at its first character
+       -- most visibly re.sub, whose result is assembled by
+       PyUnicode_Join(): re.sub('zzz', 'Q', 'abࠀc') answered 'a'
+       even though nothing matched, and re.sub on any non-ASCII subject
+       silently lost everything from the first character onward.  (The
+       SRE MATCHING path already went through encodeAsUTF8, via
+       get_ucs4_for_string, which is why matching, spans and split were
+       correct while sub/subn were not.)
+
+       A 7-bit string encodes to identical bytes, so this only changes
+       behaviour where the old result was already wrong; the per-shimCall
+       buffer cache keeps it to one extra send per distinct string.
+       Falls back to the raw bytes if the receiver has no encodeAsUTF8 --
+       e.g. a ByteArray reaching here defensively. */
+    GciErrSType encErr; GciErr(&encErr);   /* drop any stale error first */
+    OopType srcOop = GciPerform(oop, "encodeAsUTF8", NULL, 0);
+    if (GciErr(&encErr) || srcOop == OOP_NIL || srcOop == OOP_ILLEGAL)
+        srcOop = oop;
+    int64 size = GciFetchSize_(srcOop);
+    return buffer_cache_add_from(oop, srcOop, size);
 }
 
 extern "C" int PyUnicode_Check(PyObject *obj) {
@@ -4831,7 +4871,14 @@ extern "C" const char *PyUnicode_AsUTF8AndSize(PyObject *unicode,
         if (size) *size = 0;
         return NULL;
     }
-    if (size) *size = (Py_ssize_t)GciFetchSize_(pyobj_oop(unicode));
+    if (size) {
+        /* The UTF-8 ENCODED length, which is what `s' actually holds --
+           GciFetchSize_ on the original object answers its raw storage
+           size (UTF-16 code units for a wide string), disagreeing with
+           `s' for exactly the non-ASCII strings this matters for. */
+        int64 cached = buffer_cache_get_size(pyobj_oop(unicode));
+        *size = (Py_ssize_t)(cached >= 0 ? cached : (int64)strlen(s));
+    }
     return s;
 }
 

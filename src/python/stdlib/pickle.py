@@ -1178,11 +1178,91 @@ def _op_binunicode8(u):
     u.stack.append(u.read(n).decode('utf-8'))
 
 
+_HEX_DIGITS = {}
+for _i, _ch in enumerate(b'0123456789'):
+    _HEX_DIGITS[_ch] = _i
+for _i, _ch in enumerate(b'abcdef'):
+    _HEX_DIGITS[_ch] = 10 + _i
+for _i, _ch in enumerate(b'ABCDEF'):
+    _HEX_DIGITS[_ch] = 10 + _i
+del _i, _ch
+
+_ESCAPE_SIMPLE = {
+    0x6E: 0x0A,   # \n
+    0x74: 0x09,   # \t
+    0x72: 0x0D,   # \r
+    0x5C: 0x5C,   # backslash
+    0x27: 0x27,   # \'
+    0x22: 0x22,   # \"
+    0x61: 0x07,   # \a
+    0x62: 0x08,   # \b
+    0x66: 0x0C,   # \f
+    0x76: 0x0B,   # \v
+}
+
+
+def _escape_decode(data):
+    """Apply Python bytes-literal escape rules, as codecs.escape_decode does.
+
+    The protocol-0 STRING opcode carries its payload as a QUOTED Python
+    string literal, so ``\\x07\\xdf`` arrives as eight literal characters
+    that have to be collapsed to two bytes.  CPython's load_string runs
+    codecs.escape_decode for exactly this; Grail has no codecs.escape_decode,
+    hence this local stand-in.
+
+    An unrecognized escape keeps both the backslash and the character,
+    matching CPython.
+    """
+    out = bytearray()
+    i = 0
+    n = len(data)
+    while i < n:
+        c = data[i]
+        if c != 0x5C:
+            out.append(c)
+            i += 1
+            continue
+        i += 1
+        if i >= n:
+            out.append(0x5C)        # trailing lone backslash
+            break
+        c = data[i]
+        i += 1
+        if c in _ESCAPE_SIMPLE:
+            out.append(_ESCAPE_SIMPLE[c])
+        elif 0x30 <= c <= 0x37:     # octal, 1..3 digits
+            val = c - 0x30
+            k = 0
+            while k < 2 and i < n and 0x30 <= data[i] <= 0x37:
+                val = val * 8 + (data[i] - 0x30)
+                i += 1
+                k += 1
+            out.append(val & 0xFF)
+        elif c == 0x78:             # \xHH -- exactly two hex digits
+            if i + 1 >= n:
+                raise ValueError("invalid \\x escape at position %d" % (i - 2,))
+            hi = _HEX_DIGITS.get(data[i])
+            lo = _HEX_DIGITS.get(data[i + 1])
+            if hi is None or lo is None:
+                raise ValueError("invalid \\x escape at position %d" % (i - 2,))
+            # Nibble arithmetic rather than int(s, 16): the two-character
+            # payload of \x0b is the string '0b', which int() reads as a
+            # BINARY-prefixed literal and rejects.
+            out.append(hi * 16 + lo)
+            i += 2
+        else:
+            out.append(0x5C)
+            out.append(c)
+    return bytes(out)
+
+
 def _op_string(u):
     line = u.readline()
-    if len(line) >= 2 and line[0:1] in (b'"', b"'"):
+    if len(line) >= 2 and line[0:1] in (b'"', b"'") and line[-1:] == line[0:1]:
         line = line[1:len(line) - 1]
-    u.stack.append(line.decode(u.encoding, u.errors))
+    else:
+        raise UnpicklingError("the STRING opcode argument must be quoted")
+    u.stack.append(_escape_decode(line).decode(u.encoding, u.errors))
 
 
 def _op_binstring(u):
