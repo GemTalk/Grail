@@ -3311,22 +3311,53 @@ __setattr__: name _: value
 category: 'Grail-Pickle'
 method: PyDateTime
 __reduce__
-	"(class, (y, mo, d, h, mi, s, us[, tzinfo]))."
+	"(class, state) at the default protocol, per CPython's
+	datetime.__reduce__ (which is __reduce_ex__(2))."
 
-	| tz fields |
+	^ self __reduce_ex__: 2
+%
+
+category: 'Grail-Pickle'
+method: PyDateTime
+__reduce_ex__: protocol
+	"CPython's datetime.__reduce_ex__: (class, (10-byte state[, tzinfo])).
+
+	The state is the packed byte string the constructor's pickle backdoor
+	already understands, NOT the plain (y, mo, d, ...) field tuple this
+	used to emit.  Two reasons: it is the only place `fold' can travel --
+	CPython hides it in the high bit of the MONTH byte, and only from
+	protocol 4 on, so an older protocol keeps its historical meaning
+	(test_pickle_fold) -- and it makes Grail's output byte-identical to
+	CPython's, the natural counterpart to reading CPython's pickles in
+	test_compat_unpickle.
+
+	A field tuple could not carry fold at all: __reduce__ args are
+	positional, and fold is keyword-only."
+
+	| y m fold us state tz |
+	y := self @env0:dynamicInstVarAt: #_year.
+	m := self @env0:dynamicInstVarAt: #_month.
+	fold := self @env0:dynamicInstVarAt: #_fold.
+	((fold @env0:notNil and: [fold @env0:= 1]) and: [protocol @env0:> 3])
+		ifTrue: [m := m @env0:+ 128].
+	us := self @env0:dynamicInstVarAt: #_microsecond.
+	state := ByteArray @env0:new: 10.
+	state @env0:at: 1 put: (y @env0:// 256);
+		@env0:at: 2 put: (y @env0:\\ 256);
+		@env0:at: 3 put: m;
+		@env0:at: 4 put: (self @env0:dynamicInstVarAt: #_day);
+		@env0:at: 5 put: (self @env0:dynamicInstVarAt: #_hour);
+		@env0:at: 6 put: (self @env0:dynamicInstVarAt: #_minute);
+		@env0:at: 7 put: (self @env0:dynamicInstVarAt: #_second);
+		@env0:at: 8 put: (us @env0:// 65536);
+		@env0:at: 9 put: ((us @env0:// 256) @env0:\\ 256);
+		@env0:at: 10 put: (us @env0:\\ 256).
 	tz := self @env0:dynamicInstVarAt: #_tzinfo.
-	fields := OrderedCollection @env0:new.
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_year).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_month).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_day).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_hour).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_minute).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_second).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_microsecond).
-	tz @env0:isNil ifFalse: [fields @env0:add: tz].
 	^ tuple @env0:withAll: {
 		(self @env0:class).
-		(tuple @env0:withAll: fields @env0:asArray) }
+		(tz @env0:isNil
+			ifTrue: [tuple @env0:withAll: { state }]
+			ifFalse: [tuple @env0:withAll: { state. tz }]) }
 %
 
 category: 'Grail-Class Attrs'
@@ -5282,19 +5313,40 @@ __setattr__: name _: value
 category: 'Grail-Pickle'
 method: PyTime
 __reduce__
-	"(class, (hour, minute, second, microsecond[, tzinfo]))."
+	"(class, state) at the default protocol, per CPython's time.__reduce__."
 
-	| tz fields |
+	^ self __reduce_ex__: 2
+%
+
+category: 'Grail-Pickle'
+method: PyTime
+__reduce_ex__: protocol
+	"CPython's time.__reduce_ex__: (class, (6-byte state[, tzinfo])).
+
+	See PyDateTime>>__reduce_ex__: for why this is the packed byte state
+	rather than a field tuple.  time hides `fold' in the high bit of the
+	HOUR byte (datetime uses the month byte), again only from protocol 4
+	on (test_pickle_fold)."
+
+	| h fold us state tz |
+	h := self @env0:dynamicInstVarAt: #_hour.
+	fold := self @env0:dynamicInstVarAt: #_fold.
+	((fold @env0:notNil and: [fold @env0:= 1]) and: [protocol @env0:> 3])
+		ifTrue: [h := h @env0:+ 128].
+	us := self @env0:dynamicInstVarAt: #_microsecond.
+	state := ByteArray @env0:new: 6.
+	state @env0:at: 1 put: h;
+		@env0:at: 2 put: (self @env0:dynamicInstVarAt: #_minute);
+		@env0:at: 3 put: (self @env0:dynamicInstVarAt: #_second);
+		@env0:at: 4 put: (us @env0:// 65536);
+		@env0:at: 5 put: ((us @env0:// 256) @env0:\\ 256);
+		@env0:at: 6 put: (us @env0:\\ 256).
 	tz := self @env0:dynamicInstVarAt: #_tzinfo.
-	fields := OrderedCollection @env0:new.
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_hour).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_minute).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_second).
-	fields @env0:add: (self @env0:dynamicInstVarAt: #_microsecond).
-	tz @env0:isNil ifFalse: [fields @env0:add: tz].
 	^ tuple @env0:withAll: {
 		(self @env0:class).
-		(tuple @env0:withAll: fields @env0:asArray) }
+		(tz @env0:isNil
+			ifTrue: [tuple @env0:withAll: { state }]
+			ifFalse: [tuple @env0:withAll: { state. tz }]) }
 %
 
 category: 'Grail-Class Attrs'
