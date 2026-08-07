@@ -1748,6 +1748,23 @@ classVarargsFunctionNames: aSetOrNil
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classDecoratedFunctionNames
+	"Subset of classFunctionNames whose def carries a WRAPPING decorator
+	(@contextlib.contextmanager, a user decorator, ...).  For those the
+	compiled selector is the RAW function while the class-dict entry is the
+	decorator's result, so neither self-send fast path may be used -- the
+	call has to go through ___pyAttrLoad___ to see the wrapper."
+	^ self ___compileContext___ at: #'classDecoratedFunctionNames' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classDecoratedFunctionNames: aSetOrNil
+	self ___compileContext___ at: #'classDecoratedFunctionNames' put: aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 classAttrNames
 	"Set of attribute names declared at class-body scope (``X = expr``
 	or ``X: type = expr`` / bare ``X: type``).  Grail stores these as
@@ -1880,6 +1897,10 @@ classSelfSendSelector
 	(self class classFunctionNames includes: attrSym) ifFalse: [^nil].
 	((self class classVarargsFunctionNames notNil
 		and: [self class classVarargsFunctionNames includes: attrSym])) ifTrue: [^nil].
+	"A decorated def's compiled selector is the RAW function; the wrapper
+	lives in the class dict, so this call must take the attribute path."
+	((self class classDecoratedFunctionNames notNil
+		and: [self class classDecoratedFunctionNames includes: attrSym])) ifTrue: [^nil].
 	keywords isEmpty ifFalse: [^nil].
 	^ self class fastPathSelectorForAttr: attrName arity: arguments size
 %
@@ -1898,6 +1919,10 @@ classSelfSendVarargsSelector
 	(self class isSelfReference: function value id) ifFalse: [^nil].
 	attrName := function attr.
 	(self class classFunctionNames includes: attrName asSymbol) ifFalse: [^nil].
+	"See classSelfSendSelector: a wrapped def must not be self-sent at all."
+	((self class classDecoratedFunctionNames notNil
+		and: [self class classDecoratedFunctionNames includes: attrName asSymbol]))
+			ifTrue: [^nil].
 	candidate := self class varargsSelectorForName: attrName.
 	^ candidate
 %
