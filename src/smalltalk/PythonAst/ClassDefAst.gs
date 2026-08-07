@@ -106,7 +106,7 @@ printSmalltalkRuntimeOn: aStream
 	selfParam := self selfParameterName.
 	funcNames := IdentitySet new.
 	staticFuncNames := IdentitySet new.
-	staticMethodDefs do: [:def | staticFuncNames add: def name asSymbol].
+	staticMethodDefs do: [:def | staticFuncNames add: def ___mangledName___ asSymbol].
 	varargsFuncNames := IdentitySet new.
 	methodDefs do: [:def |
 		"Normalise ``@bigmemtest''-family test methods up front (inject a
@@ -114,13 +114,13 @@ printSmalltalkRuntimeOn: aStream
 		just below — and the later source generation — both see the def in
 		its adjusted, varargs form.  No-op for every other method."
 		def applyBigmemtestDefaultIfNeeded.
-		funcNames add: def name asSymbol.
+		funcNames add: def ___mangledName___ asSymbol.
 		"A def that compiles to the varargs ``_name:kw:`` form (complex
 		signature, or __init__ which is forced to varargs so it can bind
 		keyword args) is marked so classSelfSendSelector dispatches via
 		the varargs selector rather than a fixed-arity send into thin air."
 		def compilesAsVarargs ifTrue: [
-			varargsFuncNames add: def name asSymbol
+			varargsFuncNames add: def ___mangledName___ asSymbol
 		].
 	].
 	"Track @classmethod-decorated funcs in the same name set so a
@@ -128,9 +128,9 @@ printSmalltalkRuntimeOn: aStream
 	known function name (and uses the correct varargs/fixed-arity
 	selector below)."
 	classMethodDefs do: [:def |
-		funcNames add: def name asSymbol.
+		funcNames add: def ___mangledName___ asSymbol.
 		def isSimplePositionalArgs ifFalse: [
-			varargsFuncNames add: def name asSymbol
+			varargsFuncNames add: def ___mangledName___ asSymbol
 		].
 	].
 	"Scan body for class-level simple assignments (`NAME = value`,
