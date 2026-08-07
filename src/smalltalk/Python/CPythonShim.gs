@@ -1050,9 +1050,26 @@ PyUnicode_FromString: aString
 	the wrong Smalltalk class through every C-shim-built str result
 	(re.sub()/subn()/split() etc. via _sre's PyUnicode_Join ->
 	PyUnicode_FromString): test_re.py's test_basic_re_sub expects
-	type(re.sub(...)) to be the SAME class as a plain string literal."
+	type(re.sub(...)) to be the SAME class as a plain string literal.
 
-	^ (self wrap: aString @env0:asUnicodeString) memoryAddress
+	DECODE those bytes as UTF-8 rather than widening them one-for-one:
+	CPython's PyUnicode_FromString takes a UTF-8 encoded C string, and
+	the shim now genuinely hands one over (see PyUnicode_AsUTF8).
+	asUnicodeString widens each BYTE to a code point -- latin-1
+	semantics -- so a multi-byte character arrived as that many separate
+	characters: re.sub on 'abࠀc' answered 'abà\\xa0\\x80c'.
+	Decoding is a no-op for 7-bit content (and still answers Unicode7),
+	so only the previously-mojibake cases change.
+
+	Falls back to the old widening if the bytes are not valid UTF-8,
+	which keeps any caller that really did pass latin-1 working rather
+	than turning its output into an uncatchable ArgumentError."
+
+	| decoded |
+	decoded := [aString @env0:decodeFromUTF8]
+		@env0:on: Error
+		do: [:ex | ex @env0:return: aString @env0:asUnicodeString].
+	^ (self wrap: decoded) memoryAddress
 %
 
 category: 'CPython API'
