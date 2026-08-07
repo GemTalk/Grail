@@ -506,7 +506,7 @@ __mul__: scale
 	(scale @env0:isKindOf: Float) ifFalse: [
 		^ PyTimedelta @env0:___fromTotalMicros___:
 			(self ___totalMicros___ @env0:* scale) @env0:truncated].
-	ratio := scale as_integer_ratio.
+	ratio := PyTimedelta ___integerRatioOf___: scale.
 	a := ratio @env0:at: 1.
 	b := ratio @env0:at: 2.
 	usec := self ___totalMicros___.
@@ -520,6 +520,32 @@ __pos__
 	"Unary plus returns self (CPython)."
 
 	^ self
+%
+
+category: 'Grail-Private'
+classmethod: PyTimedelta
+___integerRatioOf___: aFloat
+	"as_integer_ratio() validated before use.
+
+	It is user-overridable -- a float SUBCLASS may answer anything -- so
+	CPython's timedelta checks the result explicitly before using it,
+	raising TypeError when it is not a tuple and ValueError when it is not
+	a 2-tuple.  The messages below are that C implementation's, verbatim.
+
+	Grail indexed the result directly (``ratio at: 1'' / ``at: 2''), so a
+	bad value produced a nonsense numerator/denominator and surfaced as
+	``ZeroDivisionError: division by zero'' -- or, for a short tuple, an
+	out-of-bounds Smalltalk error -- instead (test_issue31293)."
+
+	| ratio |
+	ratio := aFloat as_integer_ratio.
+	(ratio @env0:isKindOf: tuple) ifFalse: [
+		^ TypeError ___signal___:
+			'unexpected return type from as_integer_ratio(): expected tuple, not '''
+			@env0:, (ratio @env0:class __name__) @env0:asString @env0:, ''''].
+	ratio @env0:size @env0:= 2 ifFalse: [
+		^ ValueError ___signal___: 'as_integer_ratio() must return a 2-tuple'].
+	^ ratio
 %
 
 category: 'Grail-Arithmetic'
@@ -540,7 +566,7 @@ __truediv__: other
 	usec := self ___totalMicros___.
 	(other @env0:isKindOf: Float) ifTrue: [
 		| ratio a b |
-		ratio := other as_integer_ratio.
+		ratio := PyTimedelta ___integerRatioOf___: other.
 		a := ratio @env0:at: 1.
 		b := ratio @env0:at: 2.
 		^ PyTimedelta @env0:___fromTotalMicros___:
@@ -2586,9 +2612,7 @@ strftime: format
 	"%z / %:z / %Z are expanded HERE, before the generic formatter runs --
 	the `time' module's formatter has no tzinfo concept (it would emit a
 	guessed 'UTC' for %Z and drop %z entirely)."
-	fmt := PyDateTime ___expandTzDirectives___: fmt
-		offset: self utcoffset
-		tzname: self tzname.
+	fmt := PyDateTime ___expandTzDirectives___: fmt for: self.
 	^ time instance strftime: fmt _: structTime
 %
 
@@ -2629,9 +2653,18 @@ ___formatOffsetDirective___: offset sep: sep
 
 category: 'Grail-Private'
 classmethod: PyDateTime
-___expandTzDirectives___: fmt offset: offset tzname: tzName
+___expandTzDirectives___: fmt for: aDateTimeOrTime
 	"Port of the %z / %:z / %Z half of CPython's _wrap_strftime, run before
 	the `time'-module formatter sees the string.
+
+	utcoffset()/tzname() are asked for ONLY when the corresponding
+	directive actually appears.  They used to be computed eagerly by the
+	caller, so a tzinfo implementing just one of them -- CPython allows
+	that; the base tzinfo raises NotImplementedError for whichever is
+	missing -- made an unrelated format explode: a Badtzname whose
+	tzname() works but whose utcoffset() does not answered
+	NotImplementedError for strftime('%Z'), which asks for no offset at
+	all (test_zones).
 
 	A left-to-right SCANNER, not copyReplaceAll:, for two reasons CPython
 	shares: '%%z' must stay a literal percent followed by 'z' rather than
@@ -2642,8 +2675,10 @@ ___expandTzDirectives___: fmt offset: offset tzname: tzName
 	An empty expansion is correct for a naive value: CPython renders %z and
 	%Z as '' when utcoffset()/tzname() answer None."
 
-	| out i n ch |
+	| out i n ch offset tzName haveOffset haveTzName |
 	out := WriteStream @env0:on: Unicode7 @env0:new.
+	haveOffset := false.
+	haveTzName := false.
 	i := 1.
 	n := fmt @env0:size.
 	[i @env0:<= n] @env0:whileTrue: [
@@ -2658,10 +2693,14 @@ ___expandTzDirectives___: fmt offset: offset tzname: tzName
 						c2 := fmt @env0:at: i.
 						i := i @env0:+ 1.
 						c2 @env0:= $z ifTrue: [
+							haveOffset ifFalse: [
+								offset := aDateTimeOrTime utcoffset. haveOffset := true].
 							out @env0:nextPutAll:
 								(PyDateTime ___formatOffsetDirective___: offset sep: '')
 						] ifFalse: [
 						c2 @env0:= $Z ifTrue: [
+							haveTzName ifFalse: [
+								tzName := aDateTimeOrTime tzname. haveTzName := true].
 							tzName @env0:== None ifFalse: [
 								| escaped |
 								"Dispatch replace() at the PYTHON level, as CPython's
@@ -2693,6 +2732,8 @@ ___expandTzDirectives___: fmt offset: offset tzname: tzName
 							(i @env0:<= n @env0:and: [(fmt @env0:at: i) @env0:= $z])
 								ifTrue: [
 									i := i @env0:+ 1.
+									haveOffset ifFalse: [
+										offset := aDateTimeOrTime utcoffset. haveOffset := true].
 									out @env0:nextPutAll:
 										(PyDateTime ___formatOffsetDirective___: offset sep: ':')]
 								ifFalse: [out @env0:nextPut: $%. out @env0:nextPut: c2]
@@ -5077,9 +5118,7 @@ strftime: format
 		_: (self @env0:dynamicInstVarAt: #_microsecond).
 	"%z / %:z / %Z -- see PyDateTime>>strftime: and
 	___expandTzDirectives___:offset:tzname: (test_strftime, test_zones)."
-	fmt := PyDateTime ___expandTzDirectives___: fmt
-		offset: self utcoffset
-		tzname: self tzname.
+	fmt := PyDateTime ___expandTzDirectives___: fmt for: self.
 	^ time instance strftime: fmt _: structTime
 %
 
