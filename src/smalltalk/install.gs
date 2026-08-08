@@ -714,6 +714,7 @@ run
 	at: #'IteratorTestCase' put: nil;
 	at: #'AssertStatementTestCase' put: nil;
 	at: #'ClassMethodAttrViaInstanceTestCase' put: nil;
+	at: #'DecoratedMethodSelfCallTestCase' put: nil;
 	at: #'ReNonAsciiSubTestCase' put: nil;
 	at: #'TracebackTestCase' put: nil;
 	at: #'KeyErrorTestCase' put: nil;
@@ -1478,6 +1479,7 @@ input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
 input src/smalltalk/PythonTests/AssertStatementTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodAttrViaInstanceTestCase.gs
+input src/smalltalk/PythonTests/DecoratedMethodSelfCallTestCase.gs
 input src/smalltalk/PythonTests/ReNonAsciiSubTestCase.gs
 input src/smalltalk/PythonTests/TracebackTestCase.gs
 input src/smalltalk/PythonTests/ListSortKwargsTestCase.gs

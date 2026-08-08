@@ -1005,6 +1005,36 @@ isPropertyAccessorDecorator: deco
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___hasWrappingDecorator___
+	"True when this def carries a decorator that REPLACES the function with
+	something else at runtime -- @contextlib.contextmanager, @functools.wraps,
+	any user decorator -- as opposed to the STRUCTURAL ones Grail handles by
+	putting the def in a different bucket (@property and its setter/getter/
+	deleter, @staticmethod, @classmethod) or by interpreting them itself.
+
+	Such a def has TWO distinct entities: the compiled Smalltalk method (the
+	RAW, undecorated function) and the class-dict entry (the decorator's
+	RESULT).  A ``self.m()'' fast-path send reaches the former, which is why
+	it must be suppressed -- see CallAst>>classSelfSendSelector."
+
+	| structural |
+	decorator_list isNil ifTrue: [^ false].
+	structural := #('property' 'staticmethod' 'classmethod' 'setter' 'getter'
+		'deleter' 'abstractmethod' 'abstractproperty' 'cached_property').
+	^ decorator_list anySatisfy: [:deco |
+		| nm |
+		nm := (deco isKindOf: NameAst)
+			ifTrue: [deco id asString]
+			ifFalse: [(deco isKindOf: AttributeAst)
+				ifTrue: [deco attr asString]
+				ifFalse: [nil]].
+		"Anything that is not a bare structural name -- including a CALL
+		decorator such as @deco(arg) -- wraps."
+		nm isNil or: [(structural includes: nm) not]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 isDeleterDecorated
 	"True when this def is a property DELETER (``@x.deleter def x(self)'').
 	Such a def has the SAME unary signature as the property getter, so

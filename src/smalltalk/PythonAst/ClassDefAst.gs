@@ -99,7 +99,7 @@ printSmalltalkRuntimeOn: aStream
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames
 	  savedInBodyEmit savedBoundNames savedNestedNames
 	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars
-	  siblings savedConditionalNames |
+	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -108,6 +108,7 @@ printSmalltalkRuntimeOn: aStream
 	staticFuncNames := IdentitySet new.
 	staticMethodDefs do: [:def | staticFuncNames add: def name asSymbol].
 	varargsFuncNames := IdentitySet new.
+	decoratedFuncNames := IdentitySet new.
 	methodDefs do: [:def |
 		"Normalise ``@bigmemtest''-family test methods up front (inject a
 		dry-run ``size'' default) so the compilesAsVarargs classification
@@ -122,6 +123,13 @@ printSmalltalkRuntimeOn: aStream
 		def compilesAsVarargs ifTrue: [
 			varargsFuncNames add: def name asSymbol
 		].
+		"A WRAPPED def (@contextlib.contextmanager, a user decorator, ...)
+		has a class-dict entry that is the decorator's RESULT, while the
+		compiled selector is the raw function -- so a self.m() fast-path
+		send would bypass the decorator entirely."
+		def ___hasWrappingDecorator___ ifTrue: [
+			decoratedFuncNames add: def name asSymbol
+		].
 	].
 	"Track @classmethod-decorated funcs in the same name set so a
 	self-send like ``cls.foo`` from another method resolves to a
@@ -132,6 +140,13 @@ printSmalltalkRuntimeOn: aStream
 		def isSimplePositionalArgs ifFalse: [
 			varargsFuncNames add: def name asSymbol
 		].
+		"NOT extended to @classmethod defs: a class-side method is not
+		reachable through an instance's ___pyAttrLoad___ in Grail, so
+		suppressing their fast path turns ``self.cm0()'' into an
+		AttributeError (ClassMethodViaInstanceTestCase).  A wrapped
+		CLASSMETHOD therefore still bypasses its decorator -- see
+		test_system_transitions, which needs classmethod-descriptor
+		binding that does not exist yet."
 	].
 	"Scan body for class-level simple assignments (`NAME = value`,
 	or chained `A = B = value`).  Each declared name becomes a
@@ -217,6 +232,8 @@ printSmalltalkRuntimeOn: aStream
 	savedStaticFuncNames := CallAst classStaticFunctionNames.
 	CallAst classStaticFunctionNames: staticFuncNames.
 	CallAst classVarargsFunctionNames: varargsFuncNames.
+	savedDecoratedFuncNames := CallAst classDecoratedFunctionNames.
+	CallAst classDecoratedFunctionNames: decoratedFuncNames.
 	CallAst classAttrNames: (IdentitySet withAll: (classAttrs collect: [:p | p key])).
 	CallAst selfParameterName: selfParam.
 	CallAst classSlotNames: slotNameSet.
@@ -346,6 +363,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classStaticFunctionNames: savedStaticFuncNames.
 		CallAst classDefIsModuleScope: savedIsModuleScope.
 		CallAst classVarargsFunctionNames: savedVarargsFuncNames.
+		CallAst classDecoratedFunctionNames: savedDecoratedFuncNames.
 		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.
 		CallAst classSlotNames: savedSlotNames.
@@ -683,6 +701,8 @@ printSmalltalkRuntimeOn: aStream
 	savedStaticFuncNames := CallAst classStaticFunctionNames.
 	CallAst classStaticFunctionNames: staticFuncNames.
 	CallAst classVarargsFunctionNames: varargsFuncNames.
+	savedDecoratedFuncNames := CallAst classDecoratedFunctionNames.
+	CallAst classDecoratedFunctionNames: decoratedFuncNames.
 	CallAst classAttrNames: ((IdentitySet withAll: (classAttrs collect: [:p | p key]))
 		addAll: ((body body select: [:stmt | stmt isKindOf: ClassDefAst])
 			collect: [:c | c name asSymbol]);
@@ -872,6 +892,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classFunctionNames: savedFuncNames.
 		CallAst classStaticFunctionNames: savedStaticFuncNames.
 		CallAst classVarargsFunctionNames: savedVarargsFuncNames.
+		CallAst classDecoratedFunctionNames: savedDecoratedFuncNames.
 		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.
 		CallAst classSlotNames: savedSlotNames.
