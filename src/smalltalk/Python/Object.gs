@@ -2709,6 +2709,35 @@ ___pyAttrLoad___: aSym
 	reach here without having done so."
 	(self ___classChainAttrLookup___: aSym)
 		@env0:ifNotNil: [:___cv | ^ ___cv].
+	"A @classmethod read through an INSTANCE.  The def lives on the
+	METACLASS (category Grail-Class Methods), so none of the instance-side
+	probes above can see it, and ``p.cm()'' raised AttributeError where
+	CPython binds the class and calls it.
+
+	PythonInstance>>doesNotUnderstand: already forwards the DIRECT-SEND
+	shape, but only for KEYWORD selectors (its branch is guarded by
+	``s last = $:''), so a ZERO-ARG classmethod had no route at all:
+	``p.cm1(7)'' worked while ``p.cm0()'' did not.  This covers every
+	arity, and the load shapes that never reach a send --
+	``getattr(p, 'cm0')'' and ``f = p.cm0'' -- by answering a BoundMethod
+	bound to the CLASS, which is exactly Python's classmethod binding.
+
+	The category gate is the same one the DNU forward uses, so
+	synthesized class-attr accessors and real setters stay out."
+	(self isKindOf: Behavior) ifFalse: [
+		| metaOwner |
+		metaOwner := self @env0:class @env0:class
+			@env0:whichClassIncludesSelector: aSym environmentId: 1.
+		(metaOwner @env0:notNil and: [
+			(metaOwner @env0:categoryOfSelector: aSym environmentId: 1)
+				@env0:= #'Grail-Class Methods'])
+			ifTrue: [
+				"Delegate to the CLASS's own load rather than wrapping the raw
+				selector here: that is what applies a decorator stacked under
+				@classmethod (@contextlib.contextmanager, ...), whose wrapper
+				lives in the class dict while the selector is the raw function.
+				The class is a Behavior, so it cannot re-enter this branch."
+				^ self @env0:class ___pyAttrLoad___: aSym]].
 	"No callable selector matched anywhere in the receiver's class
 	chain.  Before raising AttributeError, give a user-defined
 	``__getattr__'' a chance to handle the miss — matches CPython's
