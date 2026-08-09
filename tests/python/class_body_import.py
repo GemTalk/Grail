@@ -14,6 +14,11 @@ The upstream idiom that exposed it is werkzeug's EnvironBuilder:
         import json
         json_dumps = staticmethod(json.dumps)
         del json
+
+``from X import y`` in a class body binds the same way, and was fixed in the
+same shape once statements began announcing their own bindings: it needed
+only ImportFromAst to implement the class-body protocol.  ``from X import *``
+is not covered because CPython makes it a SyntaxError outside module level.
 """
 
 
@@ -50,6 +55,24 @@ class MultipleOnOneLine:
     both = (json.dumps([1]), math.floor(2.7))
 
 
+class FromImportSimple:
+    from os import sep
+
+    combined = "x" + sep
+
+
+class FromImportAliased:
+    from math import floor as fl
+
+    value = fl(2.7)
+
+
+class FromImportMultiple:
+    from math import floor, ceil
+
+    both = (floor(2.7), ceil(2.1))
+
+
 def probe():
     return {
         "plain_is_module": PlainImport.json.dumps([1]) == "[1]",
@@ -61,4 +84,11 @@ def probe():
         "multiple_math": MultipleOnOneLine.both[1],
         # ``import json`` must not leak into instances, only the class.
         "on_class": hasattr(PlainImport, "json"),
+        # ``from X import y`` binds y in the class namespace too.
+        "from_combined": FromImportSimple.combined,
+        "from_on_class": FromImportSimple.sep,
+        "from_aliased": FromImportAliased.value,
+        "from_alias_not_original": hasattr(FromImportAliased, "floor"),
+        "from_multi_floor": FromImportMultiple.both[0],
+        "from_multi_ceil": FromImportMultiple.both[1],
     }
