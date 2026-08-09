@@ -2399,7 +2399,7 @@ method: builtins
 ___isInstanceSingle___: anObject of: aClass
 	"isinstance with a single class argument (post-tuple-expansion)."
 
-	| result baCls |
+	| result baCls egCls |
 	"Non-class classinfo (isinstance(x, functools.cached_property)
 	where the attr resolved to a BoundMethod): raise CPython's
 	catchable TypeError -- isKindOf: on a non-Behavior dies with an
@@ -2441,6 +2441,18 @@ ___isInstanceSingle___: anObject of: aClass
 		widens: isinstance(1, bool) stays False, since Integer is not
 		under Boolean either."
 		result := anObject isKindOf: Boolean].
+	(result not and: [aClass == (Python @env0:at: #Exception otherwise: nil)]) ifTrue: [
+		| egCls |
+		"PEP 654: ExceptionGroup derives from BOTH BaseExceptionGroup and
+		Exception, but Grail's single-inheritance chain can only put it under
+		BaseExceptionGroup, leaving Python's Exception and BaseExceptionGroup
+		SIBLINGS.  ___issubclass___ and Exception class>>handles: already widen
+		(so issubclass says yes and ``except Exception:'' catches); isinstance
+		has to agree or the same object is an Exception by type and not by
+		instance.  Only ExceptionGroup widens, never a bare BaseExceptionGroup
+		-- CPython excludes that one from Exception too."
+		egCls := Python @env0:at: #ExceptionGroup otherwise: nil.
+		result := egCls @env0:notNil and: [anObject isKindOf: egCls]].
 	(result not and: [aClass == Unicode7]) ifTrue: [
 		"str maps to Unicode7 for construction, but CPython counts EVERY
 		text string as str: Grail literals may come back Unicode16 /

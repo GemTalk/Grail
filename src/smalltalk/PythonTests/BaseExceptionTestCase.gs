@@ -232,3 +232,33 @@ test_reraise_caught_exception
 		self assert: ((results @env1:__getitem__: k) = true)
 			description: 're-raise check failed: ' , k].
 %
+
+category: 'Grail-Tests-BaseException'
+method: BaseExceptionTestCase
+test_exception_group_caught_as_exception
+	"PEP 654: ExceptionGroup derives from BOTH BaseExceptionGroup and
+	Exception, so ``except Exception:'' must catch one.  Grail's
+	single-inheritance chain makes them siblings under BaseException, and only
+	___issubclass___ had been widened -- so issubclass said yes while a raised
+	group escaped ``except Exception:'' as an uncatchable Smalltalk error.
+	Exception class>>handles: (the protocol on:do: really resolves through) and
+	isinstance now widen to match.  Both narrowings are pinned: a SUBCLASS of
+	Exception must not start catching groups, and a bare BaseExceptionGroup is
+	still not an Exception.  See tests/python/exception_group_catch.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'exception_group_catch' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_group_catch.py')
+		name: 'exception_group_catch'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'issubclass_eg_exception' 'eg_by_exception' 'eg_by_eg' 'eg_by_beg'
+	   'eg_by_baseexception' 'eg_not_by_valueerror' 'eg_not_by_typeerror'
+	   'issubclass_beg_exception' 'beg_not_by_exception' 'beg_by_beg'
+	   'beg_by_baseexception' 'plain_by_exception' 'plain_by_valueerror'
+	   'plain_not_by_typeerror' 'keyboardinterrupt_not_by_exception'
+	   'eg_subclass_by_exception' 'caught_message' 'caught_is_group'
+	   'caught_is_exception' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'ExceptionGroup catch check failed: ' , k].
+%
