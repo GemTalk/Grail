@@ -56,6 +56,19 @@ jobs:
       - id: n
         run: echo "ref=ghcr.io/${GITHUB_REPOSITORY,,}/ci-base:latest" >> "$GITHUB_OUTPUT"
 
+  # Self-tests for the shell tooling CI itself depends on -- no container, no
+  # stone, ~seconds.  The conformance gate decides whether a scoreboard delta is
+  # a regression, so a bug in it can turn a real regression into a green run;
+  # that makes it worth checking on every push even though the conformance
+  # measurement itself is nightly.
+  scripts:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: cpython regression-gate self-test
+        run: tests/scripts/test_regression_gate.sh
+
   test:
     needs: image
     runs-on: ubuntu-22.04
@@ -141,12 +154,14 @@ jobs:
   ci-complete:
     name: ci-complete
     if: always()
-    needs: [image, test]
+    needs: [image, test, scripts]
     runs-on: ubuntu-22.04
     steps:
       - name: Verify all CI jobs succeeded
         run: |
-          if [ "${{ needs.image.result }}" != "success" ] || [ "${{ needs.test.result }}" != "success" ]; then
-            echo "image=${{ needs.image.result }} test=${{ needs.test.result }}"
+          if [ "${{ needs.image.result }}" != "success" ] \
+            || [ "${{ needs.test.result }}" != "success" ] \
+            || [ "${{ needs.scripts.result }}" != "success" ]; then
+            echo "image=${{ needs.image.result }} test=${{ needs.test.result }} scripts=${{ needs.scripts.result }}"
             exit 1
           fi
