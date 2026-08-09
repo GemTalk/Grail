@@ -66,10 +66,16 @@ initialize
 	"JSONEncoder — subclassable hook class (django's DjangoJSONEncoder
 	extends it and overrides ``default'').  Grail's _dumps: doesn't
 	route through encoder instances yet; the class exists so the
-	subclass statement and isinstance checks work.  JSONDecodeError
-	aliases ValueError (its CPython superclass)."
+	subclass statement and isinstance checks work.
+
+	JSONDecodeError is a REAL ValueError subclass.  It used to be aliased
+	straight onto ValueError, which made ``except json.JSONDecodeError''
+	catch every ValueError and left msg/doc/pos/lineno/colno missing.
+	``decoder'' is the submodule CPython defines it in, exposed so
+	``json.decoder.JSONDecodeError'' names the same class."
 	self @env0:at: #JSONEncoder put: (PythonInstance ___subclass___: #JSONEncoder instVarNames: #() classInstVarNames: #()).
-	self @env0:at: #JSONDecodeError put: ValueError
+	self @env0:at: #JSONDecodeError put: JSONDecodeError.
+	self @env0:at: #decoder put: (json_decoder instance)
 %
 
 ! ===============================================================================
@@ -159,8 +165,7 @@ loads: s
 	result := self _parseValue: state.
 	self _skipWs: state.
 	(state @env0:at: 2) @env0:<= (state @env0:at: 1) @env0:size ifTrue: [
-		ValueError ___signal___: 'extra data after JSON document at pos '
-			@env0:, (state @env0:at: 2) @env0:printString
+		^ self _decodeError: 'Extra data' state: state at: (state @env0:at: 2)
 	].
 	^ result
 %
@@ -392,6 +397,33 @@ _writeIndent: indent depth: depth onto: stream
 
 category: 'Grail-Private'
 method: json
+_decodeError: aMsg state: state at: aStPos
+	"Raise JSONDecodeError with CPython's wording and position.
+
+	aStPos is a 1-BASED Smalltalk index into the source; CPython's pos is
+	ZERO-BASED, so it converts here -- one place rather than at every call
+	site.  A position one past the end is legitimate and common: that is
+	where every truncated-input error lands."
+
+	| src |
+	src := state @env0:at: 1.
+	JSONDecodeError ___signalMsg___: aMsg doc: src pos: aStPos @env0:- 1
+%
+
+category: 'Grail-Private'
+method: json
+_atEnd: state
+	"True when the cursor is past the last character.  Every container and
+	token parser consults this before indexing: reading past the end used to
+	raise a raw Smalltalk OffsetError, which is not a Python exception at
+	all, so ``except json.JSONDecodeError'' -- and even ``except Exception''
+	-- could not catch a truncated document."
+
+	^ (state @env0:at: 2) @env0:> (state @env0:at: 1) @env0:size
+%
+
+category: 'Grail-Private'
+method: json
 _skipWs: state
 	| src pos n ch |
 	src := state @env0:at: 1.
@@ -416,7 +448,7 @@ _parseValue: state
 	src := state @env0:at: 1.
 	pos := state @env0:at: 2.
 	pos @env0:> src @env0:size ifTrue: [
-		ValueError ___signal___: 'expected JSON value at end of input'
+		^ self _decodeError: 'Expecting value' state: state at: pos
 	].
 	ch := src @env0:at: pos.
 	ch @env0:= ${ ifTrue: [^ self _parseObject: state].
@@ -427,8 +459,7 @@ _parseValue: state
 	((ch @env0:= $-) @env0:or: [ch @env0:asInteger @env0:>= $0 @env0:asInteger @env0:and: [ch @env0:asInteger @env0:<= $9 @env0:asInteger]]) ifTrue: [
 		^ self _parseNumber: state
 	].
-	ValueError ___signal___: 'unexpected character at pos '
-		@env0:, pos @env0:printString
+	^ self _decodeError: 'Expecting value' state: state at: pos
 %
 
 category: 'Grail-Private'
@@ -437,8 +468,12 @@ _parseNull: state
 	| src pos |
 	src := state @env0:at: 1.
 	pos := state @env0:at: 2.
-	(src @env0:copyFrom: pos to: pos @env0:+ 3) @env0:= 'null' ifFalse: [
-		ValueError ___signal___: 'expected null at pos ' @env0:, pos @env0:printString
+	"Bounds FIRST: ``nul'' used to run copyFrom:to: off the end and raise a
+	Smalltalk OffsetError.  CPython reports a truncated or misspelled literal
+	as ``Expecting value'' at the token's START, not where it ran out."
+	(pos @env0:+ 3 @env0:> src @env0:size
+		@env0:or: [(src @env0:copyFrom: pos to: pos @env0:+ 3) @env0:~= 'null']) ifTrue: [
+		^ self _decodeError: 'Expecting value' state: state at: pos
 	].
 	state @env0:at: 2 put: pos @env0:+ 4.
 	^ None
@@ -450,15 +485,19 @@ _parseBool: state
 	| src pos |
 	src := state @env0:at: 1.
 	pos := state @env0:at: 2.
+	"Bounds FIRST -- see _parseNull: ``tru'' / ``fals'' used to raise a
+	Smalltalk OffsetError instead of a Python exception."
 	((src @env0:at: pos) @env0:= $t) ifTrue: [
-		(src @env0:copyFrom: pos to: pos @env0:+ 3) @env0:= 'true' ifFalse: [
-			ValueError ___signal___: 'expected true at pos ' @env0:, pos @env0:printString
+		(pos @env0:+ 3 @env0:> src @env0:size
+			@env0:or: [(src @env0:copyFrom: pos to: pos @env0:+ 3) @env0:~= 'true']) ifTrue: [
+			^ self _decodeError: 'Expecting value' state: state at: pos
 		].
 		state @env0:at: 2 put: pos @env0:+ 4.
 		^ true
 	].
-	(src @env0:copyFrom: pos to: pos @env0:+ 4) @env0:= 'false' ifFalse: [
-		ValueError ___signal___: 'expected false at pos ' @env0:, pos @env0:printString
+	(pos @env0:+ 4 @env0:> src @env0:size
+		@env0:or: [(src @env0:copyFrom: pos to: pos @env0:+ 4) @env0:~= 'false']) ifTrue: [
+		^ self _decodeError: 'Expecting value' state: state at: pos
 	].
 	state @env0:at: 2 put: pos @env0:+ 5.
 	^ false
@@ -469,14 +508,23 @@ method: json
 _parseNumber: state
 	"Read an int/float; the JSON grammar restricts to [-]int[.frac][exp]."
 
-	| src pos n start hasFraction hasExp tokenStr value |
+	| src pos n start digitsStart hasFraction hasExp tokenStr value |
 	src := state @env0:at: 1.
 	pos := state @env0:at: 2.
 	n := src @env0:size.
 	start := pos.
 	(src @env0:at: pos) @env0:= $- ifTrue: [pos := pos @env0:+ 1].
+	digitsStart := pos.
 	[pos @env0:<= n @env0:and: [self _isDigit: (src @env0:at: pos)]]
 		@env0:whileTrue: [pos := pos @env0:+ 1].
+	"A sign with no digits after it is not a number at all -- ``-'' alone, or
+	``[--1]''.  Such a token used to reach Number>>fromString: anyway and raise
+	a Smalltalk ImproperOperation, which is not a Python exception, so no
+	``except'' could catch it.  CPython calls this ``Expecting value'' and
+	points at the START of the token, sign included."
+	pos @env0:= digitsStart ifTrue: [
+		^ self _decodeError: 'Expecting value' state: state at: start
+	].
 	hasFraction := false.
 	(pos @env0:<= n @env0:and: [(src @env0:at: pos) @env0:= $.]) ifTrue: [
 		hasFraction := true.
@@ -522,13 +570,18 @@ _parseString: state
 	"Read a quoted string up to the closing quote, expanding the JSON
 	escape set."
 
-	| src pos n stream ch cv |
+	| src pos n stream ch cv quotePos |
 	src := state @env0:at: 1.
 	pos := state @env0:at: 2.
 	n := src @env0:size.
-	(src @env0:at: pos) @env0:= $" ifFalse: [
-		ValueError ___signal___: 'expected string at pos ' @env0:, pos @env0:printString
+	"The only caller that can reach a non-quote here is an object key, and
+	_parseObject: checks for that itself with CPython's own wording; keep a
+	guard so a bad call cannot index off the end."
+	(pos @env0:> n @env0:or: [(src @env0:at: pos) @env0:~= $"]) ifTrue: [
+		^ self _decodeError: 'Expecting property name enclosed in double quotes'
+			state: state at: pos
 	].
+	quotePos := pos.
 	pos := pos @env0:+ 1.
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
 	[pos @env0:<= n @env0:and: [(src @env0:at: pos) @env0:~= $"]]
@@ -536,7 +589,8 @@ _parseString: state
 			ch := src @env0:at: pos.
 			ch @env0:= $\ ifTrue: [
 				pos := pos @env0:+ 1.
-				pos @env0:> n ifTrue: [ValueError ___signal___: 'truncated escape'].
+				pos @env0:> n ifTrue: [
+					^ self _decodeError: 'Invalid \escape' state: state at: pos @env0:- 1].
 				cv := src @env0:at: pos.
 				cv @env0:= $" ifTrue: [stream @env0:nextPut: $"]
 				ifFalse: [cv @env0:= $\ ifTrue: [stream @env0:nextPut: $\]
@@ -548,12 +602,17 @@ _parseString: state
 				ifFalse: [cv @env0:= $t ifTrue: [stream @env0:nextPut: Character @env0:tab]
 				ifFalse: [cv @env0:= $u ifTrue: [
 					| hex codepoint |
+					"CPython points at the ``u'', not at the backslash, and calls a
+					short or absent escape ``Invalid \uXXXX escape''."
+					pos @env0:+ 4 @env0:> n ifTrue: [
+						^ self _decodeError: 'Invalid \uXXXX escape' state: state at: pos].
 					hex := src @env0:copyFrom: pos @env0:+ 1 to: pos @env0:+ 4.
 					codepoint := Number @env0:fromString: '16r' @env0:, hex.
 					stream @env0:nextPut: (Character @env0:codePoint: codepoint).
 					pos := pos @env0:+ 4
 				] ifFalse: [
-					ValueError ___signal___: 'bad escape \' @env0:, cv @env0:asString
+					"Position of the BACKSLASH, which is where CPython points."
+					^ self _decodeError: 'Invalid \escape' state: state at: pos @env0:- 1
 				]]]]]]]]].
 				pos := pos @env0:+ 1
 			] ifFalse: [
@@ -561,7 +620,10 @@ _parseString: state
 				pos := pos @env0:+ 1
 			]
 		].
-	pos @env0:> n ifTrue: [ValueError ___signal___: 'unterminated string'].
+	"CPython reports an unterminated string at the OPENING quote, not at the
+	end of input -- that is the position a caller needs to find it."
+	pos @env0:> n ifTrue: [
+		^ self _decodeError: 'Unterminated string starting at' state: state at: quotePos].
 	state @env0:at: 2 put: pos @env0:+ 1.
 	^ stream @env0:contents
 %
@@ -572,28 +634,45 @@ _parseArray: state
 	"Parse [...]; comma-separated values, JSON whitespace skipped
 	between tokens."
 
-	| src result first |
+	| src result first commaPos |
 	src := state @env0:at: 1.
 	state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
 	self _skipWs: state.
 	result := list ___new___.
-	(src @env0:at: (state @env0:at: 2)) @env0:= $] ifTrue: [
-		state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
-		^ result
+	"Truncated after ``['' -- CPython wants ``Expecting value'' here, which
+	is exactly what _parseValue: reports, so fall through to it."
+	(self _atEnd: state) ifFalse: [
+		(src @env0:at: (state @env0:at: 2)) @env0:= $] ifTrue: [
+			state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
+			^ result
+		]
 	].
 	first := true.
 	[
 		first ifFalse: [
 			self _skipWs: state.
+			(self _atEnd: state) ifTrue: [
+				^ self _decodeError: 'Expecting '','' delimiter'
+					state: state at: (state @env0:at: 2)].
 			(src @env0:at: (state @env0:at: 2)) @env0:= $, ifFalse: [
-				ValueError ___signal___: 'expected , or ] in array at pos '
-					@env0:, (state @env0:at: 2) @env0:printString
+				^ self _decodeError: 'Expecting '','' delimiter'
+					state: state at: (state @env0:at: 2)
 			].
-			state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1
+			commaPos := state @env0:at: 2.
+			state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
+			"``[1,]'' -- CPython names the trailing comma and points AT it."
+			self _skipWs: state.
+			((self _atEnd: state) @env0:not
+				@env0:and: [(src @env0:at: (state @env0:at: 2)) @env0:= $]]) ifTrue: [
+				^ self _decodeError: 'Illegal trailing comma before end of array'
+					state: state at: commaPos]
 		].
 		first := false.
 		result append: (self _parseValue: state).
 		self _skipWs: state.
+		(self _atEnd: state) ifTrue: [
+			^ self _decodeError: 'Expecting '','' delimiter'
+				state: state at: (state @env0:at: 2)].
 		(src @env0:at: (state @env0:at: 2)) @env0:= $]
 	] @env0:whileFalse.
 	state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
@@ -605,37 +684,62 @@ method: json
 _parseObject: state
 	"Parse {...}; key:value pairs, keys must be strings."
 
-	| src result first key value |
+	| src result first key value commaPos |
 	src := state @env0:at: 1.
 	state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
 	self _skipWs: state.
 	result := dict ___new___.
-	(src @env0:at: (state @env0:at: 2)) @env0:= $} ifTrue: [
-		state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
-		^ result
+	(self _atEnd: state) ifFalse: [
+		(src @env0:at: (state @env0:at: 2)) @env0:= $} ifTrue: [
+			state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
+			^ result
+		]
 	].
 	first := true.
 	[
 		first ifFalse: [
 			self _skipWs: state.
+			(self _atEnd: state) ifTrue: [
+				^ self _decodeError: 'Expecting '','' delimiter'
+					state: state at: (state @env0:at: 2)].
 			(src @env0:at: (state @env0:at: 2)) @env0:= $, ifFalse: [
-				ValueError ___signal___: 'expected , or } in object at pos '
-					@env0:, (state @env0:at: 2) @env0:printString
+				^ self _decodeError: 'Expecting '','' delimiter'
+					state: state at: (state @env0:at: 2)
 			].
-			state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1
+			commaPos := state @env0:at: 2.
+			state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
+			"A trailing comma before the closing brace -- CPython names it and
+			points AT the comma."
+			self _skipWs: state.
+			((self _atEnd: state) @env0:not
+				@env0:and: [(src @env0:at: (state @env0:at: 2)) @env0:= $}]) ifTrue: [
+				^ self _decodeError: 'Illegal trailing comma before end of object'
+					state: state at: commaPos]
 		].
 		first := false.
 		self _skipWs: state.
+		"A key must be a quoted string; ``{'', ``{,}'' and ``{1:2}'' all land
+		here, and CPython gives them all the same wording."
+		((self _atEnd: state)
+			@env0:or: [(src @env0:at: (state @env0:at: 2)) @env0:~= $"]) ifTrue: [
+			^ self _decodeError: 'Expecting property name enclosed in double quotes'
+				state: state at: (state @env0:at: 2)].
 		key := self _parseString: state.
 		self _skipWs: state.
+		(self _atEnd: state) ifTrue: [
+			^ self _decodeError: 'Expecting '':'' delimiter'
+				state: state at: (state @env0:at: 2)].
 		(src @env0:at: (state @env0:at: 2)) @env0:= $: ifFalse: [
-			ValueError ___signal___: 'expected : in object at pos '
-				@env0:, (state @env0:at: 2) @env0:printString
+			^ self _decodeError: 'Expecting '':'' delimiter'
+				state: state at: (state @env0:at: 2)
 		].
 		state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.
 		value := self _parseValue: state.
 		result __setitem__: key _: value.
 		self _skipWs: state.
+		(self _atEnd: state) ifTrue: [
+			^ self _decodeError: 'Expecting '','' delimiter'
+				state: state at: (state @env0:at: 2)].
 		(src @env0:at: (state @env0:at: 2)) @env0:= $}
 	] @env0:whileFalse.
 	state @env0:at: 2 put: (state @env0:at: 2) @env0:+ 1.

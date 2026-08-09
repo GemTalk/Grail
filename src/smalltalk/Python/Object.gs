@@ -828,10 +828,16 @@ ___pythonModuleAttrIdentity___
 	(n @env0:= 'sys_int_info') ifTrue: [^ #('int_info' 'sys')].
 	(n @env0:= 'sys_implementation') ifTrue: [^ #('SimpleNamespace' 'types')].
 
+	"json.  CPython defines JSONDecodeError in the json.decoder SUBMODULE and
+	re-exports it from json, so its __module__ is 'json.decoder' even though
+	``json.JSONDecodeError'' is how most code names it."
+	(n @env0:= 'JSONDecodeError') ifTrue: [^ #('JSONDecodeError' 'json.decoder')].
+
 	"MODULES, not classes -- __name__ only.  ``os.path'' IS the posixpath
 	module in CPython, so that is the name it reports."
 	(n @env0:= 'os_path') ifTrue: [^ #('posixpath' nil)].
 	(n @env0:= 'html_entities') ifTrue: [^ #('html.entities' nil)].
+	(n @env0:= 'json_decoder') ifTrue: [^ #('json.decoder' nil)].
 
 	^ nil
 %
