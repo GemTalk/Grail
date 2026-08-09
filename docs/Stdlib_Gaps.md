@@ -68,6 +68,14 @@ the same name):
   module namespace; closure free variables omitted; `f = locals`
   aliasing not rewritten.
 - **heapq** — merge() is non-lazy.
+- **enum** — `_simple_enum` is a no-op stub: it returns the decorated
+  class unchanged instead of converting it into an Enum, so a class
+  written as `@_simple_enum(IntEnum)` has no `__members__` / member
+  lookup.  `StrEnum` members with `__new__` arguments and three-arg
+  `type(name, (IntEnum,), {...})` construction are also unsupported.
+  Together these are what stop CPython 3.14's `http/__init__.py` (and
+  therefore its `http/client.py`) from being taken as an unmodified
+  source drop — see the header of `src/python/stdlib/http/client.py`.
 - **glob** — no recursive `**` (raises ValueError).
 - **fnmatch** — full `[seq]`/`[!seq]` support; translate() is
   approximate.

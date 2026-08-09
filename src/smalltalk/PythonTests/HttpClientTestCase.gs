@@ -107,3 +107,42 @@ testErrorStatusFlowsThrough
 	self assert: (self resultAt: #r_error at: 'body')
 		equals: '{"error": "no such thing"}'.
 %
+
+category: 'Grail-Tests'
+method: HttpClientTestCase
+testConnectionCloseBodyStillReadable
+	"``Connection: close'' is the ordinary case for requests/urllib.
+	getresponse() drops the connection's socket as soon as the headers
+	say the server will close; the body is then read through the file
+	object the response already holds.  Before the socket _io_refs
+	handshake this raised
+	  a UndefinedObject does not understand #read:into:startingAt:"
+
+	self assert: (self resultAt: #r_conn_close at: 'status') equals: 200.
+	self assert: (self resultAt: #r_conn_close at: 'will_close').
+	self assert: (self resultAt: #r_conn_close at: 'sock_dropped').
+	self assert: (self resultAt: #r_conn_close at: 'body_len') equals: 21000.
+	self assert: (self resultAt: #r_conn_close at: 'body_intact').
+%
+
+category: 'Grail-Tests'
+method: HttpClientTestCase
+testResponseIsContextManager
+	"CPython's HTTPResponse is an io.BufferedIOBase, so ``with
+	urlopen(...) as r:'' works.  Grail's returned no __enter__."
+
+	self assert: (self resultAt: #r_ctx at: 'body') equals: 'inctx'.
+	self assert: (self resultAt: #r_ctx at: 'is_bufferedio').
+	self assert: (self resultAt: #r_ctx at: 'closed_after').
+%
+
+category: 'Grail-Tests'
+method: HttpClientTestCase
+testSocketCloseDeferredWhileMakefileOpen
+	"socket.close() marks the socket closed but keeps the GsSocket until
+	the last makefile() handle closes (CPython socket._io_refs)."
+
+	self assert: (self resultAt: #r_io_refs at: 'alive_after_close').
+	self assert: (self resultAt: #r_io_refs at: 'data') equals: 'payload'.
+	self assert: (self resultAt: #r_io_refs at: 'released_after_fp_close').
+%

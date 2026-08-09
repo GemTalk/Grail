@@ -13,6 +13,13 @@ class ConnectionError(RequestException):
     pass
 
 
+class SSLError(ConnectionError):
+    """A TLS failure — untrusted/expired/mismatched certificate, or a
+    handshake error.  Subclasses ConnectionError as upstream does, so
+    ``except ConnectionError`` still catches it."""
+    pass
+
+
 class HTTPError(RequestException):
     pass
 
