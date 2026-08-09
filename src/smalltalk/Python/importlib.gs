@@ -1605,9 +1605,14 @@ loadModuleFromPath: pathString name: moduleName
 	it (whole subtree + session caches) on failure so the next import
 	rebuilds cleanly from source, then re-signal."
 	canonical ifTrue: [self ___resetMintedThisLoad___: moduleName].
-	[moduleInstance @env1:initialize] on: AbstractException do: [:ex |
-		self removeModule: moduleName.
-		ex outer].
+	"___recursionGuard___ turns a runaway recursion in the module body into a
+	catchable Python RecursionError instead of an AlmostOutOfStack notification
+	that no ``except'' can contain.  It is INSIDE the unload handler so a module
+	that overflows is still removed from sys.modules like any other failure."
+	[BaseException @env1:___recursionGuard___: [moduleInstance @env1:initialize]]
+		on: AbstractException do: [:ex |
+			self removeModule: moduleName.
+			ex outer].
 	"Persistent-state bind/capture for modules declaring ``__persistent__''
 	(docs/Persistent_Modules_and_Classes.md par.6) -- a no-op for the rest."
 	self ___syncPersistentState___: moduleInstance.

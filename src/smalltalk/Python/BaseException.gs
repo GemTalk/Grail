@@ -302,6 +302,33 @@ ___passOrSignal___: excValue
 		do: [:e | e @env0:return: (excValue @env0:signal)]
 %
 
+category: 'Grail-Recursion'
+classmethod: BaseException
+___recursionGuard___: aBlock
+	"Evaluate aBlock -- an entry into Python execution -- converting GemStone's
+	AlmostOutOfStack notification into CPython's catchable RecursionError.
+	Runaway Python recursion otherwise exhausts the Smalltalk stack and raises
+	a notification no Python ``try''/``except'' can contain, killing the whole
+	evaluation instead of raising the RecursionError CPython promises.
+
+	#resignalAs: is what makes ONE guard at the boundary enough, with NO
+	per-call cost: it restarts the handler search from the ORIGINAL signal
+	point, deep inside the recursion, so a Python ``except RecursionError:'' at
+	any depth below this guard still sees it.  Signalling a NEW exception from
+	the handler would instead bypass every handler between here and the
+	overflow, delivering the error only to code OUTSIDE the guard -- which is
+	why this is not written as a plain ``on:do: [RecursionError signal]''.
+
+	The replacement is built rather than signalled so it carries Python args
+	(``str(e)'' / ``e.args'') as well as GemStone's messageText."
+
+	^ aBlock @env0:on: AlmostOutOfStack do: [:ex | | re |
+		re := RecursionError ___new___.
+		re ___args___: { 'maximum recursion depth exceeded' }.
+		re @env0:messageText: 'maximum recursion depth exceeded'.
+		ex @env0:resignalAs: re]
+%
+
 category: 'Grail-Raise Validation'
 classmethod: BaseException
 ___signalOrPass___: excValue
