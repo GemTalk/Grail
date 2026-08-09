@@ -102,6 +102,7 @@ printSmalltalkOn: aStream
 			exc printArgumentsArrayOn: aStream.
 			aStream nextPutAll: ' kw: '.
 			exc printKeywordsDictOn: aStream.
+			self printCauseKeywordOn: aStream.
 			aStream nextPut: $..
 		] ifFalse: [
 			"raise expr → BaseException ___pyRaise___: expr, which validates expr is
@@ -111,9 +112,24 @@ printSmalltalkOn: aStream
 			test_raise_string / test_raise_new_style_non_exception)."
 			aStream nextPutAll: 'BaseException @env1:___pyRaise___: '.
 			exc printSmalltalkWithParenthesisOn: aStream.
+			self printCauseKeywordOn: aStream.
 			aStream nextPut: $..
 		].
 	].
+%
+
+category: 'Grail-other'
+method: RaiseAst
+printCauseKeywordOn: aStream
+	"Append the ``cause:'' keyword for ``raise X from Y''.  Emitting nothing
+	when there is no ``from'' clause selects the shorter selector, which is
+	what distinguishes ``no cause at all'' from ``raise X from None'' -- the
+	latter passes the None singleton, meaning suppress the implicit context
+	but record no cause."
+
+	cause ifNil: [^ self].
+	aStream nextPutAll: ' cause: '.
+	cause printSmalltalkWithParenthesisOn: aStream.
 %
 
 category: 'Grail-other'

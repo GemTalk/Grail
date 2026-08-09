@@ -202,3 +202,33 @@ test_init_with_args_returns_none
 	result := exc @env1:__init__: #('x').
 	self assert: result equals: None.
 %
+
+category: 'Grail-Tests-BaseException'
+method: BaseExceptionTestCase
+test_reraise_caught_exception
+	"``except E as e: raise e'' re-raises the exception being handled, keeping
+	object identity, instead of dying with UncontinuableError 6011 ('Exception
+	has already been signaled') -- GemStone refuses a second #signal, so the
+	raise path uses #pass when the exception is still in flight.  Also covers
+	``raise X from Y'' / ``from None'', which previously dropped the cause
+	entirely.  See tests/python/reraise_caught.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'reraise_caught' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/reraise_caught.py')
+		name: 'reraise_caught'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'basic_reraised' 'basic_identity' 'basic_message' 'bare_identity'
+	   'from_none_identity' 'from_none_cause' 'from_none_suppress'
+	   'from_cause_identity' 'from_cause_cause' 'from_cause_suppress'
+	   'nested_frame_identity' 'different_exc' 'rebound'
+	   'stashed_identity' 'stashed_message' 'import_shape'
+	   'call_from_cause' 'call_from_suppress' 'call_from_message'
+	   'class_from_cause' 'class_from_suppress'
+	   'call_from_none_cause' 'call_from_none_suppress'
+	   'bad_cause_typeerror' 'no_from_cause_none' 'no_from_suppress_false'
+	   'loop_twice' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 're-raise check failed: ' , k].
+%
