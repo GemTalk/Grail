@@ -293,6 +293,12 @@ __name__
 	import time, so they never reach the fallback."
 
 	(self @env0:includesKey: #__name__) ifTrue: [^ self @env0:at: #__name__].
+	"A built-in module whose Smalltalk class name is FLATTENED (``os_path''
+	for os.path, ``html_entities'' for html.entities) must still report its
+	real dotted name -- ``os.path.__name__'' is 'posixpath' in CPython, since
+	os.path IS the posixpath module."
+	(self @env0:class ___pythonModuleAttrIdentity___)
+		@env0:ifNotNil: [:___id | ^ (___id @env0:at: 1)].
 	^ self @env0:class @env0:name @env0:asString
 %
 
