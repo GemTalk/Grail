@@ -1,8 +1,11 @@
-# Minimal `tempfile` stub for Grail.  Jinja2's FileSystemBytecodeCache
-# is the only consumer reachable on the Flask render path; the gem
-# has no /tmp story today, so we return a path and raise on real
-# file creation.  Expand the surface only if a downstream package
-# starts using tempfile for real.
+# Minimal `tempfile` for Grail.  Jinja2's FileSystemBytecodeCache was the
+# original consumer, reachable on the Flask render path; most of the surface
+# still raises NotImplementedError.  mkdtemp IS real -- `os` gives us
+# mkdir/rmdir/getpid, and CPython's own test suite reaches for it constantly
+# (test.support.os_helper.temp_dir), so refusing it bought nothing.
+# Expand the rest as downstream packages actually need it.
+
+import os
 
 
 def gettempdir():
@@ -13,8 +16,48 @@ def gettempprefix():
     return "tmp"
 
 
+_name_counter = [0]
+
+
+def _next_candidate(prefix, suffix):
+    """A per-gem-unique directory name.
+
+    No `random` here: uniqueness comes from the OS pid (distinct per gem, so
+    concurrent sessions cannot collide) plus a monotonic in-process counter.
+    mkdtemp's O_EXCL-equivalent -- os.mkdir failing when the name exists --
+    is what actually guarantees exclusivity; this only has to make collisions
+    rare enough that the retry loop terminates."""
+    _name_counter[0] += 1
+    return "%s%d_%d%s" % (prefix, os.getpid(), _name_counter[0], suffix)
+
+
 def mkdtemp(suffix=None, prefix=None, dir=None):
-    raise NotImplementedError("tempfile.mkdtemp is not supported under Grail")
+    """Create a uniquely-named directory and return its absolute path.
+
+    A real implementation, not the previous NotImplementedError stub: `os`
+    provides mkdir/rmdir, so there is no reason for the caller to be refused.
+    The caller owns the directory and is responsible for removing it, exactly
+    as in CPython."""
+    if suffix is None:
+        suffix = ""
+    if prefix is None:
+        prefix = gettempprefix()
+    if dir is None:
+        dir = gettempdir()
+
+    last = None
+    for _attempt in range(100):
+        path = dir + "/" + _next_candidate(prefix, suffix)
+        try:
+            # 0o700: CPython creates the directory private to its owner.
+            os.mkdir(path, 0o700)
+            return path
+        except OSError as exc:
+            # Name taken (or a transient failure) -- try the next candidate.
+            last = exc
+    raise FileExistsError(
+        "tempfile.mkdtemp: no unique name found in %r after 100 attempts (%s)"
+        % (dir, last))
 
 
 def mkstemp(suffix=None, prefix=None, dir=None, text=False):

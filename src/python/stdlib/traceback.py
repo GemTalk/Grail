@@ -16,6 +16,23 @@ import sys
 _sentinel = object()
 
 
+def _safe_attr(obj, name):
+    """getattr(obj, name) or None.  Every SyntaxError field read here is
+    best-effort: rendering an exception must never raise a second one."""
+    try:
+        value = getattr(obj, name, None)
+    except Exception:
+        return None
+    return value
+
+
+def _is_syntax_error(value):
+    try:
+        return isinstance(value, SyntaxError)
+    except Exception:
+        return False
+
+
 def format_exception_only(exc_type, value=_sentinel, show_group=False):
     """Return a list of strings ending in a newline that render the
     exception class + message.
@@ -43,6 +60,51 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False):
             type_name = exc_type.__name__
         except Exception:
             type_name = str(exc_type)
+    # A SyntaxError renders its location ABOVE the message, and CPython's
+    # exact shape depends on which fields are set:
+    #
+    #   both filename and lineno ->   File "myfile.py", line 100
+    #                                 SyntaxError: bad syntax
+    #   lineno only              ->   File "<string>", line 100
+    #                                 SyntaxError: bad syntax
+    #   filename only            -> SyntaxError: bad syntax (myfile.py)
+    #   neither                  -> SyntaxError: bad syntax
+    #
+    # The message itself is ``msg'', NOT str(value): str() of a SyntaxError
+    # already appends its own "(file, line N)" decoration.
+    header = []
+    if _is_syntax_error(value):
+        msg_attr = _safe_attr(value, 'msg')
+        filename = _safe_attr(value, 'filename')
+        lineno = _safe_attr(value, 'lineno')
+        text = _safe_attr(value, 'text')
+        offset = _safe_attr(value, 'offset')
+        if msg_attr is not None:
+            msg = str(msg_attr)
+        else:
+            msg = str(value) if value is not None else ''
+        if lineno is not None:
+            header.append('  File "%s", line %s\n'
+                          % (filename if filename is not None else '<string>',
+                             lineno))
+            if text:
+                stripped = text.strip()
+                header.append('    ' + stripped + '\n')
+                if offset is not None:
+                    # offset is 1-based and measured against the RAW line, so
+                    # discount the whitespace strip() removed.
+                    indent = len(text) - len(text.lstrip())
+                    caret = int(offset) - 1 - indent
+                    if caret >= 0:
+                        header.append('    ' + ' ' * caret + '^\n')
+        elif filename is not None:
+            msg = msg + ' (' + str(filename) + ')'
+        lines = header + [type_name + ': ' + msg + '\n'] if msg \
+            else header + [type_name + '\n']
+        if show_group:
+            return lines
+        return lines
+
     msg = str(value) if value is not None else ''
     if msg:
         lines = [type_name + ': ' + msg + '\n']
