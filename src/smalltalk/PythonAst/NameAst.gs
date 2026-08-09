@@ -752,6 +752,48 @@ printSmalltalkOn: aStream
 			self emitModuleAttrLoad: id receiverExpr: 'self' on: aStream.
 			^ self
 		].
+	"DOIT (exec/eval) load of a name nothing can bind.  A bare identifier here
+	is not merely wrong at run time -- the SMALLTALK COMPILER rejects it
+	outright (CompileError 1001, 'undefined symbol'), so the whole exec dies
+	before running, even when the name sits in a branch that never executes.
+	CPython compiles such code happily and raises NameError only if the read is
+	actually reached:
+
+	    exec('out = a if False else None')    # fine in CPython; out is None
+
+	Emit the NameError expression instead, which is valid Smalltalk that
+	compiles, stays unevaluated in a dead branch, and raises the catchable
+	Python error when it is reached.
+
+	Deliberately the LAST resort, and narrow: every earlier branch has had its
+	say, the name is declared in no enclosing scope, it is not a module
+	variable or module function of the source being compiled, and it does not
+	resolve as a permitted Smalltalk global.  Those conditions are exactly the
+	ones under which the emitted bare identifier could not have compiled, so
+	this can only convert a hard CompileError into the Python-correct error --
+	it cannot change the meaning of anything that worked before.
+
+	The doit test must be ModuleAst>>compilingDoit, a POSITIVE flag, and not
+	``CallAst moduleClassBeingCompiled isNil''.  That proxy looks equivalent
+	and is not: it also reads nil while compiling the methods of a class
+	defined INSIDE a function, where a local class name is perfectly
+	resolvable.  Using it turned ``class Base:'' in a function into
+	``NameError: name 'Base' is not defined'' for every sibling reference --
+	31 SUnit errors.
+
+	Load context only: a store must keep the bare identifier so the surrounding
+	``<name> := <value>'' stays well-formed."
+	((ctx isKindOf: LoadAst)
+		and: [ModuleAst compilingDoitScope notNil
+		and: [(ModuleAst compilingDoitScope objectNamed: id asSymbol) isNil
+		and: [(self isVariableIsDeclared: id asSymbol) not
+		and: [(self isModuleVariableName: id) not
+		and: [(CallAst moduleFunctionNames notNil
+			and: [CallAst moduleFunctionNames includes: id asSymbol]) not
+		and: [(NameAst isResolvableSymbol: id asSymbol) not]]]]]]) ifTrue: [
+			self emitDoitEnclosingScopeLoad: id on: aStream.
+			^ self
+		].
 	aStream nextPutAll: id.
 %
 

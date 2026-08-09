@@ -58,7 +58,7 @@ different rows and merges cleanly.
 | test.test_isinstance | OK | 23 | 0 | 0 | 2 |  |
 | test.test_index | OK | 55 | 0 | 0 | 0 |  |
 | test.test_baseexception | OK | 11 | 0 | 0 | 1 |  |
-| test.test_listcomps | ERROR | 60 | 8 | 23 | 0 |  |
+| test.test_listcomps | ERROR | 60 | 9 | 20 | 0 |  |
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
 | test.test_copy | ERROR | 81 | 28 | 15 | 0 |  |
 | test.test_scope | ERROR | 41 | 6 | 9 | 0 |  |
