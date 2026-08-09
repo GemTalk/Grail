@@ -299,6 +299,52 @@ printOn: aStream
 		yourself.
 %
 
+category: 'Grail-Class Body'
+method: FunctionDefAst
+printSmalltalkClassBodyRuntimeDefOn: aStream
+	"Emit a ``def'' that a class-body try/for/while/with binds:
+
+		[ | f | f := <function value>.
+		  Cls ___classBodyDefinitionalStore___: #'f' put: f. ] value.
+
+	It cannot be compiled as a Smalltalk METHOD the way an unconditional
+	class-body def is -- whether it exists at all is a runtime fact, and the
+	same selector may be bound by more than one branch of the statement.  A
+	plain function stored as a class attribute binds the receiver on an
+	instance read and comes back raw on a class read, which is what CPython
+	does with a function in a class namespace.
+
+	@staticmethod / @classmethod reach here re-classed by the parser rather
+	than carrying a runtime decorator, so the wrapper that would otherwise
+	have been applied structurally is applied here instead."
+
+	| clsName wrapper savedRuntimeClass savedValueDefNode |
+	clsName := CallAst classBodyRuntimeClass.
+	wrapper := (self isKindOf: StaticFunctionDefAst)
+		ifTrue: ['PyStaticMethod']
+		ifFalse: [(self isKindOf: ClassFunctionDefAst)
+			ifTrue: ['PyClassMethod']
+			ifFalse: [nil]].
+	aStream nextPutAll: '[ | '; nextPutAll: name; nextPutAll: ' |'; lf.
+	savedRuntimeClass := CallAst classBodyRuntimeClass.
+	savedValueDefNode := CallAst classBodyValueDefNode.
+	CallAst classBodyRuntimeClass: nil.
+	CallAst classBodyValueDefNode: self.
+	[self printSmalltalkOn: aStream] ensure: [
+		CallAst classBodyRuntimeClass: savedRuntimeClass.
+		CallAst classBodyValueDefNode: savedValueDefNode].
+	aStream lf;
+		nextPutAll: clsName;
+		nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+		nextPutAll: name;
+		nextPutAll: ''' put: '.
+	wrapper
+		ifNil: [aStream nextPutAll: name]
+		ifNotNil: [aStream nextPutAll: '('; nextPutAll: wrapper;
+			nextPutAll: ' value: { '; nextPutAll: name; nextPutAll: ' } value: nil)'].
+	aStream nextPutAll: '. ] value.'; lf
+%
+
 category: 'Grail-other'
 method: FunctionDefAst
 printSmalltalkOn: aStream
@@ -309,6 +355,17 @@ printSmalltalkOn: aStream
 
 	| fixedCount paramNames savedReturnMode savedFunction moduleDecorators
 	  poCount regCount kwoCount hasKwonly hasPosDefaults needsOuterBlock |
+	"A ``def'' inside a class-body try/for/while/with.  The value form below
+	emits ``<name> := ...'', which needs a declared temp AND a home on the
+	class -- neither exists in ClassDefAst's class-build code, so without this
+	the def is an undefined symbol and the whole class fails to compile.
+	Same shape as emitClassBodyIfDef: (a def in a class-body ``if''): give the
+	emit its ``<name> :='' target as a block temp, then store the result as a
+	class attribute.  The flag is cleared inside, so the def's own body treats
+	its bare names as the locals they are -- and so this branch does not
+	re-enter on the recursive call."
+	self ___inClassBodyRuntimeScope___ ifTrue: [
+		^ self printSmalltalkClassBodyRuntimeDefOn: aStream].
 	(CallAst moduleClassBeingCompiled notNil and: [self isModuleLevelDef]) ifTrue: [
 		"Top-level def: the real env-1 method has already been
 		compiled on the module class (by importlib's topLevelDefs
