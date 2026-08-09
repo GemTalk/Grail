@@ -429,41 +429,101 @@ ___functionBindsPythonLocal___: funcAst named: aSymbol
 	declareWrite:) and global- / nonlocal-declared names (stripped by
 	popScope)."
 
-	| ivars argsIdx bodyIdx argsNode bodyNode argsIvars writesSet |
+	| ivars bodyIdx bodyNode writesSet |
+	(self ___functionBindsParameter___: funcAst named: aSymbol) ifTrue: [^ true].
 	ivars := funcAst class allInstVarNames.
-	argsIdx := ivars indexOf: #args.
 	bodyIdx := ivars indexOf: #body.
-	argsNode := argsIdx > 0 ifTrue: [funcAst instVarAt: argsIdx] ifFalse: [nil].
 	bodyNode := bodyIdx > 0 ifTrue: [funcAst instVarAt: bodyIdx] ifFalse: [nil].
-	argsNode ifNotNil: [
-		argsIvars := argsNode class allInstVarNames.
-		#(#args #posonlyargs #kwonlyargs) do: [:fld |
-			| idx list |
-			idx := argsIvars indexOf: fld.
-			idx > 0 ifTrue: [
-				list := argsNode instVarAt: idx.
-				list ifNotNil: [
-					(list anySatisfy: [:a | a name asSymbol == aSymbol asSymbol])
-						ifTrue: [^ true]
-				].
-			].
-		].
-		#(#vararg #kwarg) do: [:fld |
-			| idx v |
-			idx := argsIvars indexOf: fld.
-			idx > 0 ifTrue: [
-				v := argsNode instVarAt: idx.
-				(v notNil and: [v name asSymbol == aSymbol asSymbol])
-					ifTrue: [^ true].
-			].
-		].
-	].
 	(bodyNode isKindOf: BlockAst) ifTrue: [
 		writesSet := bodyNode writes.
 		(writesSet notNil and: [writesSet includes: aSymbol asSymbol])
 			ifTrue: [^ true]
 	].
 	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___functionBindsParameter___: funcAst named: aSymbol
+	"True iff aSymbol is a PARAMETER of funcAst -- positional-only,
+	ordinary, keyword-only, ``*args'' or ``**kwargs''.  The parameter
+	half of ___functionBindsPythonLocal___:, split out because the
+	unbound-local guard analysis needs to tell a parameter binding
+	apart from a body binding: a parameter is bound before the Python
+	body runs, a body binding may not be."
+
+	| ivars argsIdx argsNode argsIvars |
+	ivars := funcAst class allInstVarNames.
+	argsIdx := ivars indexOf: #args.
+	argsNode := argsIdx > 0 ifTrue: [funcAst instVarAt: argsIdx] ifFalse: [nil].
+	argsNode isNil ifTrue: [^ false].
+	argsIvars := argsNode class allInstVarNames.
+	#(#args #posonlyargs #kwonlyargs) do: [:fld |
+		| idx list |
+		idx := argsIvars indexOf: fld.
+		idx > 0 ifTrue: [
+			list := argsNode instVarAt: idx.
+			list ifNotNil: [
+				(list anySatisfy: [:a | a name asSymbol == aSymbol asSymbol])
+					ifTrue: [^ true]
+			].
+		].
+	].
+	#(#vararg #kwarg) do: [:fld |
+		| idx v |
+		idx := argsIvars indexOf: fld.
+		idx > 0 ifTrue: [
+			v := argsNode instVarAt: idx.
+			(v notNil and: [v name asSymbol == aSymbol asSymbol])
+				ifTrue: [^ true].
+		].
+	].
+	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___guardedLocalNeedsCheck___: aSymbol
+	"False when the unbound-local guard can be SKIPPED for a load of
+	aSymbol -- i.e. the binding it resolves to is a PARAMETER that no
+	``del'' can unbind.
+
+	Only called once ___pythonLocalInEnclosingFunctions___: has already
+	said this name is a true Python local of some enclosing function, so
+	the global-declaration and lambda-default exclusions it applies have
+	already been made; this walk repeats their shape to identify WHICH
+	function owns the binding.
+
+	A parameter is non-nil before the Python body runs in every calling
+	convention Grail emits -- Smalltalk method argument, prologue temp
+	(assigned, or TypeError for a missing argument), or rebind transport
+	temp -- so the only way to unbind one is ``del''.  Defaults, ``*args'',
+	``**kwargs'' and keyword-only parameters all resolve to a value or
+	raise; a ``None'' default is the singleton, not nil.
+
+	The INNERMOST enclosing function that binds the name decides.  If it
+	binds it as a body local rather than a parameter, the guard stays --
+	``def outer(): def inner(): return x; x = 1'' reads a binding that may
+	genuinely be unset."
+
+	| node prev owner |
+	prev := self.
+	node := parent.
+	owner := nil.
+	[node notNil and: [owner isNil]] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [
+				(node == CallAst annotationOwnerDefNode
+					or: [(node isKindOf: LambdaAst) and: [prev isKindOf: ArgumentsAst]])
+					ifFalse: [
+						(self ___functionBindsPythonLocal___: node named: aSymbol)
+							ifTrue: [owner := node]]].
+		prev := node.
+		node := node parent.
+	].
+	owner isNil ifTrue: [^ true].
+	(self ___functionBindsParameter___: owner named: aSymbol) ifFalse: [^ true].
+	^ owner deletedNamesInSubtree includes: aSymbol asSymbol
 %
 
 category: 'Grail-codegen helpers'

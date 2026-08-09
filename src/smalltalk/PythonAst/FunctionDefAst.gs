@@ -9,7 +9,7 @@ doit
 StatementAst subclass: 'FunctionDefAst'
   instVarNames: #( name args body
                     decorator_list returns type_comment type_params
-                    isGeneratorCache)
+                    isGeneratorCache deletedNamesCache)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -2276,6 +2276,18 @@ generateModuleMethodSourceOn: aStream
 		``canOptimise'' above), force a temp for every param — the
 		original conservative behaviour."
 		assignedNames := self assignedNamesInBody.
+		"A ``del'' of one of our own parameters also needs a writable
+		temp: DeleteAst emits ``name := nil'', which cannot target a
+		Smalltalk METHOD ARGUMENT (CompileError 1029, ``expected an
+		assignable variable'').  deletedNamesInSubtree covers the
+		nested case too -- ``def outer(a): def inner(): nonlocal a;
+		del a'' unbinds OUTER's parameter, so outer is the def that
+		has to carry the temp.  Copy rather than mutate:
+		assignedNamesInBody hands back the parse's own writes set."
+		self deletedNamesInSubtree isEmpty ifFalse: [
+			assignedNames := (IdentitySet withAll: assignedNames)
+				addAll: self deletedNamesInSubtree;
+				yourself].
 		needsTemp := paramNames collect: [:each |
 			canOptimise
 				ifTrue: [self paramNeedsTemp: each assigned: assignedNames instVars: instVarNames]
@@ -2663,6 +2675,61 @@ isGenerator
 	isGeneratorCache isNil ifTrue: [
 		isGeneratorCache := self bodyContainsYieldExceptNestedDefs: body body].
 	^ isGeneratorCache
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+deletedNamesInSubtree
+	"The IdentitySet of bare names appearing as ``del <name>'' targets
+	anywhere beneath this def.  Drives NameAst's decision to KEEP the
+	unbound-local guard on a parameter read: a parameter is bound on
+	entry in every calling convention Grail emits (method argument,
+	prologue temp assigned-or-TypeError, or rebind transport temp), so
+	``del'' is the only thing that can unbind one.
+
+	DESCENDS INTO NESTED DEFS AND LAMBDAS, unlike
+	bodyContainsYieldExceptNestedDefs:.  ``def outer(a): def inner():
+	nonlocal a; del a'' unbinds OUTER's parameter, so a nested del has
+	to count against this def.  That over-approximates -- a nested def
+	with its own local of the same name also counts -- which only
+	costs an unnecessary guard, never correctness.
+
+	MEMOISED, for the reason isGenerator documents: the walk builds a
+	fresh ``allInstVarNames'' Array per node, and the guard decision is
+	asked once per NAME READ.  Safe to cache: the body is fully parsed
+	before codegen runs and no caller rewrites it."
+
+	deletedNamesCache isNil ifTrue: [
+		deletedNamesCache := IdentitySet new.
+		self collectDeletedNamesFrom: body into: deletedNamesCache].
+	^ deletedNamesCache
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+collectDeletedNamesFrom: node into: aSet
+	"Recursive walk collecting bare-name ``del'' targets into aSet.
+	Handles both a single node and a collection of them."
+
+	| targets |
+	node isNil ifTrue: [^ self].
+	"Strings and Symbols are SequenceableCollections; recursing into them
+	would walk every Character for nothing."
+	node isString ifTrue: [^ self].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each | self collectDeletedNamesFrom: each into: aSet].
+		^ self].
+	(node isKindOf: AbstractNode) ifFalse: [^ self].
+	(node isKindOf: DeleteAst) ifTrue: [
+		targets := node targets.
+		targets ifNotNil: [
+			targets do: [:t |
+				(t isKindOf: NameAst) ifTrue: [aSet add: t id asSymbol]]]].
+	"Walk every instVar, skipping the ``parent'' back-pointer so the
+	walk cannot cycle up the tree."
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self collectDeletedNamesFrom: (node instVarAt: i) into: aSet]].
 %
 
 category: 'Grail-Module Method Compilation'
