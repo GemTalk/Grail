@@ -306,23 +306,40 @@ explicitly deferred. Closed by giving those defs a code object too:
 Covered by `TracebackTestCase>>testMethodCodeFirstlineno` +
 `tests/python/method_code_firstlineno.py`.
 
-**Current status: `ERROR`** — the module now imports and scores 370 tests
-(21 pass). The next gaps the gate reports, in rough order of leverage:
+**Skip markers honoured (DONE).** With the module importing, the gate's next
+finding was not a traceback gap at all but a *scoring* bug: `unittest`'s
+`TestCase>>run` never consulted `__unittest_skip__`. The decorators had been
+recording it all along, so every `@skipIf` / `@skipUnless` / `@requires_*`-gated
+test RAN and was reported as a failure or an error instead of a skip. Fixed by
+checking the class and method markers before `setUp`, exactly as CPython's
+`run()` does. `test.support.cpython_only` was likewise a passthrough no-op, so
+the C-API classes executed and died on the absent `_testcapi`; it is now a real
+skip (Grail is never CPython). Method-level `@cpython_only` was already handled
+by `ClassDefAst` emitting a skipping body — the runtime change adds the CLASS
+case, and the two agree.
 
-1. `unittest` ignores `__unittest_skip__` (`unittest/__init__.py` `TestCase>>run`
-   never checks the class/method flag CPython checks first), so every gated test
-   *runs* and fails instead of skipping.
-2. `test.support.cpython_only` is a passthrough no-op rather than a real skip, so
-   the C-API classes execute and raise `ModuleNotFoundError: _testcapi` — 142 of
-   the 250 errors.
-3. Multi-frame tracebacks: `tb_next` / `f_back` are always `None` (a 4-deep call
+`test.test_traceback`: 93 failures / 250 errors / 6 skips → **53 / 116 / 180**.
+174 tests moved from bogus failures to correct skips. Passing stays 21: this
+fixes scoring, not behaviour. Four other modules gained skips for the same
+reason (`test_math`, `test_bytes`, `test_datetime`, `test_enum`); ~6 tests that
+had been passing *because* their marker was ignored are now correctly skipped —
+e.g. test_math's `test_exceptions`, which carries
+`@unittest.skipUnless(verbose, ...)` and which CPython does not run either.
+
+**Current status: `ERROR`** — 370 tests, 21 pass, 53 fail, 116 error, 180 skip.
+The remaining gaps, in rough order of leverage:
+
+1. Multi-frame tracebacks: `tb_next` / `f_back` are always `None` (a 4-deep call
    chain yields depth 1), and `co_filename` is the `'<grail>'` placeholder, so
-   the ~38 `format_exc()` comparison failures cannot pass yet.
-4. `traceback.py` gaps: `StackSummary.extract` / `from_list`, `print_stack`,
+   the `format_exc()` comparison failures cannot pass yet. This is the big one,
+   and the only one needing real interpreter work.
+2. `traceback.py` gaps: `StackSummary.extract` / `from_list`, `print_stack`,
    `_print_exception_bltin`, the 3.14 one-arg `format_exception(exc)` form,
    `format_exception_only(show_group=)`.
-5. `SyntaxError` carries none of `msg` / `filename` / `lineno` / `offset` /
+3. `SyntaxError` carries none of `msg` / `filename` / `lineno` / `offset` /
    `text` / `end_lineno` / `end_offset`; `compile()` returns a `str`.
+4. Implicit exception chaining leaves `__context__` as `None`.
+5. `tempfile.mkdtemp` raises `NotImplementedError` (11 errors).
 
 **Phase 3d — `finally`-during-propagation for `sys.exc_info()` (DONE).** Phase 3a
 set the current-exception register only at except-handler entry, so a `finally`

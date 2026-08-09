@@ -64,8 +64,39 @@ class _PassthroughDecorator:
         return _wrap
 
 
-# The skip / requires / impl-detail decorator family.  All no-op.
-cpython_only = _PassthroughDecorator()
+class _SkipDecorator:
+    """Like _PassthroughDecorator, but marks what it decorates as skipped.
+
+    Usable as ``@dec`` and as ``@dec(...)``, on a class or a function, and
+    stamps the same ``__unittest_skip__`` markers unittest.skip does -- which
+    unittest's TestCase.run now honours.
+    """
+
+    def __init__(self, reason):
+        self.reason = reason
+
+    def _mark(self, test_item):
+        test_item.__unittest_skip__ = True
+        test_item.__unittest_skip_why__ = self.reason
+        return test_item
+
+    def __call__(self, *args, **kw):
+        if _is_decorating(args, kw):
+            return self._mark(args[0])
+        def _wrap(test_item):
+            return self._mark(test_item)
+        return _wrap
+
+
+# ``@cpython_only`` marks a test that reaches into CPython implementation
+# detail -- almost always through _testcapi, which Grail does not have.  It
+# used to be a passthrough no-op, so those tests RAN under Grail and failed
+# with ModuleNotFoundError instead of being skipped: 142 of test_traceback's
+# 250 errors were exactly that.  Grail is never CPython (sys.implementation
+# .name == 'grail', so check_impl_detail(cpython=True) is already False), so
+# an unconditional skip is the honest answer and matches what CPython's own
+# suite does on any non-CPython implementation.
+cpython_only = _SkipDecorator('cpython implementation detail')
 requires_IEEE_754 = _PassthroughDecorator()
 requires_docstrings = _PassthroughDecorator()
 requires_resource = _PassthroughDecorator()
