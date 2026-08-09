@@ -19,11 +19,29 @@ def import_module(name, deprecated=False, *, required_on=()):
 
 def import_fresh_module(name, fresh=(), blocked=(), *, deprecated=False,
                         usefrozen=False):
-    # Grail has no C-accelerator split and no fresh-import isolation, so we
-    # do NOT pop-and-reload (which trips the loader's `sys.modules[name]`
-    # lookup mid-reload); we just import the module normally and return it.
-    # fresh/blocked are ignored -- both the "C" and "py" variants a test
-    # requests resolve to the same Grail module.
+    # Grail has no fresh-import isolation, so we do NOT pop-and-reload (which
+    # trips the loader's `sys.modules[name]` lookup mid-reload); we just import
+    # the module normally and return it.
+    #
+    # `fresh=` IS honoured, though.  It names the modules the caller needs
+    # actually present -- in practice the C accelerator, as in
+    #   c_functools = import_fresh_module('functools', fresh=['_functools'])
+    # CPython's helper yields None when one of those cannot be imported, and
+    # test files are written against exactly that contract:
+    #   @unittest.skipUnless(c_functools, 'requires the C _functools module')
+    # Grail ships no C accelerators, so returning the pure-Python module for
+    # the "C" variant made every such class run anyway -- and made
+    # `self.module == c_functools` true for the PY variant too, so C-only
+    # branches fired in both.  Answer None instead: the C-only classes skip,
+    # and the py-variant comparisons come out False as they should.
+    #
+    # `blocked=` stays ignored: it asks for the module WITHOUT its accelerator,
+    # which is what Grail's pure-Python implementation already is.
+    for required in fresh:
+        try:
+            __import__(required)
+        except ImportError:
+            return None
     try:
         __import__(name)
     except ImportError:
