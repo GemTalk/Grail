@@ -278,14 +278,51 @@ additive, 0 regressions across the existing scoreboard):
   (plain-class CM + identity passthroughs, per the module's Grail constraints);
 - `os_helper.temp_dir`, `import_helper.forget`.
 
-**Current status: `IMPORTERROR`**, blocked at import on `__code__` of a
+**Phase 2a follow-up — `__code__` on defs that compile to real methods (DONE).**
+The gate's first verdict was `IMPORTERROR`, blocked at import on `__code__` of a
 class/module-level def (a `BoundMethod`) — hit by a *class-body* line
-`callable_line = get_exception.__code__.co_firstlineno + 2`. This is the Phase 2a
-follow-up (only nested-def `ExecBlock`s carry `__code__` today; module/class-level
-defs → `BoundMethod` were explicitly deferred). **So the gate's verdict: the next
-traceback gap is `BoundMethod.__code__` (code objects on class/module-level defs),
-a prerequisite that ranks ahead of multi-frame deep frames.** The scoreboard's
-`detail` column tracks the live blocker; grow from there.
+`callable_line = get_exception.__code__.co_firstlineno + 2`. Only nested-def
+`ExecBlock`s carried `__code__`; module/class-level defs → `BoundMethod` had been
+explicitly deferred. Closed by giving those defs a code object too:
+
+- `ClassDefAst >> emitMethodCodeTableOn:className:` compiles a class-side
+  `___methodCodeTable___` (method name → `PyCode`), the `__code__` twin of the
+  doc / signature / annotations tables — a class-body def becomes a Smalltalk
+  method and so cannot carry the def-time `___pyCode___:` cascade.
+- It is emitted **before** the class-attribute statements, not beside those
+  sibling tables at the end of the class emit: the blocking line *runs while the
+  class body executes*, so a table compiled afterwards would not exist yet. The
+  table is a literal dict of compile-time constants, so it is safe that early.
+- `importlib`'s top-level-def pass compiles the same table on the module class,
+  for module-level defs.
+- `FunctionDefAst >> emitPyCodeExprOn:qualname:` derives the three parameter
+  counts for both emitters, identically to the nested-def cascade.
+- `BoundMethod` / `UnboundMethod >> __code__` walk the superclass chain for it
+  (so an inherited method reports the code object from where it was *defined*),
+  and raise `AttributeError` when absent — **not** `None`, because
+  `hasattr(x, '__code__')` is how `inspect` / `functools.wraps` decide whether
+  something is a function at all.
+
+Covered by `TracebackTestCase>>testMethodCodeFirstlineno` +
+`tests/python/method_code_firstlineno.py`.
+
+**Current status: `ERROR`** — the module now imports and scores 370 tests
+(21 pass). The next gaps the gate reports, in rough order of leverage:
+
+1. `unittest` ignores `__unittest_skip__` (`unittest/__init__.py` `TestCase>>run`
+   never checks the class/method flag CPython checks first), so every gated test
+   *runs* and fails instead of skipping.
+2. `test.support.cpython_only` is a passthrough no-op rather than a real skip, so
+   the C-API classes execute and raise `ModuleNotFoundError: _testcapi` — 142 of
+   the 250 errors.
+3. Multi-frame tracebacks: `tb_next` / `f_back` are always `None` (a 4-deep call
+   chain yields depth 1), and `co_filename` is the `'<grail>'` placeholder, so
+   the ~38 `format_exc()` comparison failures cannot pass yet.
+4. `traceback.py` gaps: `StackSummary.extract` / `from_list`, `print_stack`,
+   `_print_exception_bltin`, the 3.14 one-arg `format_exception(exc)` form,
+   `format_exception_only(show_group=)`.
+5. `SyntaxError` carries none of `msg` / `filename` / `lineno` / `offset` /
+   `text` / `end_lineno` / `end_offset`; `compile()` returns a `str`.
 
 **Phase 3d — `finally`-during-propagation for `sys.exc_info()` (DONE).** Phase 3a
 set the current-exception register only at except-handler entry, so a `finally`

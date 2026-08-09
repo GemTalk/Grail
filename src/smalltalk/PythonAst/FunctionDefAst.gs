@@ -1454,6 +1454,33 @@ hasSignatureSpec
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+emitPyCodeExprOn: aStream qualname: aQualname
+	"Write the Smalltalk expression building THIS def's ``__code__'' PyCode.
+
+	Shared by the two emitters that stamp a def compiling to a real Smalltalk
+	METHOD -- ClassDefAst >> emitMethodCodeTableOn:className: (class body) and
+	importlib's top-level-def pass (module body) -- so the three parameter
+	counts are derived in exactly one place, and identically to the nested-def
+	cascade in printSmalltalkOn: (co_argcount counts posonly+regular positional
+	params, self/cls included as in CPython; co_kwonlyargcount the keyword-only
+	ones).  beginLine is the ``def'' keyword's line == co_firstlineno."
+
+	| poCount regCount kwoCount |
+	poCount := args isNil ifTrue: [0] ifFalse: [(args posonlyargs ifNil: [#()]) size].
+	regCount := args isNil ifTrue: [0] ifFalse: [(args args ifNil: [#()]) size].
+	kwoCount := args isNil ifTrue: [0] ifFalse: [(args kwonlyargs ifNil: [#()]) size].
+	aStream
+		nextPutAll: '(PyCode @env0:name: '''; nextPutAll: name asString;
+		nextPutAll: ''' qualname: '''; nextPutAll: aQualname;
+		nextPutAll: ''' firstlineno: '; nextPutAll: self beginLine printString;
+		nextPutAll: ' argcount: '; nextPutAll: (poCount + regCount) printString;
+		nextPutAll: ' posonlyargcount: '; nextPutAll: poCount printString;
+		nextPutAll: ' kwonlyargcount: '; nextPutAll: kwoCount printString;
+		nextPutAll: ')'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 emitSignatureSpecOn: aStream
 	^ self emitSignatureSpecOn: aStream skipReceiver: false
 %

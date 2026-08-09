@@ -102,6 +102,27 @@ name: aName firstlineno: aLine argcount: argc posonlyargcount: poargc kwonlyargc
 	^ inst
 %
 
+category: 'Instance Creation'
+classmethod: PyCode
+name: aName qualname: aQualname firstlineno: aLine argcount: argc posonlyargcount: poargc kwonlyargcount: kwargc
+	"Def-time stamp for a def that compiles to a real Smalltalk METHOD rather
+	than a block -- a class-body def or a module top-level def.  Same fields as
+	the block variant beside it, plus an explicit ``co_qualname'': the emitter
+	(ClassDefAst >> emitMethodCodeTableOn:className:, importlib's top-level pass)
+	knows the owning class / module name, which the method itself cannot
+	recover later, and CPython reports ``C.m'' / ``f'' there.
+
+	co_filename stays the '<grail>' placeholder the block variant uses -- Grail
+	has no file-backed code objects, and the traceback design supplies source
+	TEXT through the PEP 657 position array instead of a path + linecache."
+
+	| inst |
+	inst := self name: aName firstlineno: aLine argcount: argc
+		posonlyargcount: poargc kwonlyargcount: kwargc.
+	inst dynamicInstVarAt: #'co_qualname' put: aQualname.
+	^ inst
+%
+
 set compile_env: 1
 
 category: 'Grail-String Representation'

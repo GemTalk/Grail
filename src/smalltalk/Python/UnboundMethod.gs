@@ -488,6 +488,39 @@ ___docForClass___: aClass
 
 category: 'Grail-Python Metadata'
 method: UnboundMethod
+__code__
+	"``Cls.method.__code__''.  Same story as the bound handle: the PyCode lives
+	in the defining class's class-side ___methodCodeTable___, because a
+	class-body def compiles to a Smalltalk method and cannot carry the def-time
+	``___pyCode___:'' cascade a nested def's ExecBlock does.
+
+	AttributeError when there is none, NOT None -- ``hasattr(x, '__code__')'' is
+	the standard is-this-a-function probe (inspect, functools.wraps), so a
+	value would make every handle claim to be one."
+
+	^ (self ___codeForClass___: self ___metadataClass___)
+		ifNil: [AttributeError ___signal___:
+			'''method'' object has no attribute ''__code__''']
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___codeForClass___: aClass
+	"Superclass walk for this handle's selector in ___methodCodeTable___.
+	Mirrors ___docForClass___:, including the env-1 probe."
+
+	| tbl v |
+	aClass == nil ifTrue: [^ nil].
+	((aClass @env0:class @env0:whichClassIncludesSelector:
+		#'___methodCodeTable___' environmentId: 1) ~~ nil) ifTrue: [
+			tbl := aClass ___methodCodeTable___.
+			v := tbl @env0:at: selector @env0:asString otherwise: nil.
+			v == nil ifFalse: [^ v]].
+	^ self ___codeForClass___: (aClass @env0:superclass)
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
 ___signatureSpecForClass___: aClass
 	"Superclass walk for this handle's selector in ___methodSignatureTable___."
 
@@ -543,6 +576,7 @@ ___pythonValueAttrs___
 		add: #'__annotate__';
 		add: #'__signature_spec__';
 		add: #'__doc__';
+		add: #'__code__';
 		yourself
 %
 

@@ -783,6 +783,21 @@ printSmalltalkRuntimeOn: aStream
 				nextPutAll: ''').'; lf.
 			aStream nextPutAll: ' ] value.'; lf.
 	].
+	"Class-side ``___methodCodeTable___'' (method name -> PyCode), the __code__
+	twin of the doc / signature / annotations tables.  A class-body def compiles
+	to a Smalltalk METHOD and so cannot carry the def-time ``___pyCode___:''
+	cascade that stamps a nested def's ExecBlock.
+
+	Emitted HERE, before the class-attribute statements below, NOT beside its
+	sibling tables at the end of the emit: a class body may READ a sibling def's
+	code object while it runs -- ``callable_line =
+	get_exception.__code__.co_firstlineno + 2'' is exactly the line that blocked
+	test.test_traceback at import -- and the attr statements are emitted at that
+	point, so a table compiled afterwards would not exist yet.  The table is a
+	literal dict of compile-time constants, depending only on the class already
+	existing, so it is safe this early.  (The sibling tables stay late; nothing
+	reads __doc__ / __annotations__ from inside a class body.)"
+	self emitMethodCodeTableOn: aStream className: name.
 	[
 		"Python executes a class body top-to-bottom: a name is class-
 		local only once its binding statement has run.  Build each
@@ -2540,6 +2555,49 @@ emitMethodDocTableOn: aStream className: aClassName
 		emitCompileMethodOn: aClassName
 		source: src contents
 		category: 'Grail-Docstrings'
+		env: 1
+		classSide: true
+		onStream: aStream
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitMethodCodeTableOn: aStream className: aClassName
+	"Compile a class-side ``___methodCodeTable___'' returning a dict
+	``method-name -> PyCode'' for every method in this class body.
+
+	A class-body def compiles to a Smalltalk METHOD, so -- exactly as with the
+	doc / signature / annotations tables beside it -- it cannot carry the
+	def-time ``___pyCode___:'' cascade that stamps a nested def's ExecBlock.
+	Without this table ``C.m.__code__'' / ``instance.m.__code__'' raised
+	AttributeError, which is what blocked test.test_traceback at IMPORT: a
+	CLASS-BODY line ``callable_line = get_exception.__code__.co_firstlineno + 2''
+	runs while the class body executes.
+
+	EVERY def, including @classmethod / @staticmethod / @property: CPython gives
+	each a code object, and the reader is usually asking for co_firstlineno.
+	Overload stubs stay out -- the stub is not the implementation, matching the
+	sibling tables.
+
+	Unconditional otherwise (no ``isEmpty ifTrue: [^ self]'' guard beyond the
+	no-defs case): unlike a docstring, EVERY def has a line number, so there is
+	no ``method without one'' to skip."
+
+	| defs src |
+	defs := self ___allFunctionDefs___ reject: [:def | def isOverloadStub].
+	defs isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___methodCodeTable___'; lf.
+	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+	defs do: [:def |
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
+		def emitPyCodeExprOn: src qualname: aClassName , '.' , def name asString.
+		src nextPut: $;].
+	src nextPutAll: ' @env0:yourself)'.
+	self
+		emitCompileMethodOn: aClassName
+		source: src contents
+		category: 'Grail-Tracebacks'
 		env: 1
 		classSide: true
 		onStream: aStream
