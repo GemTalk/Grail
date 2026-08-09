@@ -816,6 +816,13 @@ printSmalltalkRuntimeOn: aStream
 			(stmt isKindOf: ClassDefAst) ifTrue: [
 				(firstBinding includesKey: stmt name asSymbol) ifFalse: [
 					firstBinding at: stmt name asSymbol put: pos]].
+			"An import binds its name at this position too, so later
+			siblings can read it (``import json'' then ``json.dumps'')."
+			(stmt isKindOf: ImportAst) ifTrue: [
+				stmt ___boundTargetNames___ do: [:nm |
+					(firstBinding includesKey: nm) ifFalse: [
+						firstBinding at: nm put: pos].
+					attrAssignPos at: nm put: pos]].
 			((stmt isKindOf: AssignAst) or: [stmt isKindOf: AnnAssignAst]) ifTrue: [
 				(stmt ___boundTargetNames___) do: [:nm |
 					(firstBinding includesKey: nm) ifFalse: [
@@ -2000,6 +2007,14 @@ classBodyAttributes
 	aliasNames := (self ___classBodyMethodAliases___ collect: [:a | a key]) asIdentitySet.
 	pairs := OrderedCollection new.
 	body body do: [:stmt |
+		"``import x'' in a class body binds x in the class NAMESPACE, so it
+		is a class attribute like any other assignment (werkzeug's
+		EnvironBuilder does exactly this, then ``del json'').  Previously
+		imports were simply skipped here, so the name never bound and a
+		later reference raised NameError -- masked until now because the
+		module name resolved as a bare global anyway."
+		(stmt isKindOf: ImportAst) ifTrue: [
+			pairs addAll: stmt classBodyAttributePairs].
 		(stmt isKindOf: AssignAst) ifTrue: [
 			(stmt targets allSatisfy: [:t | t isKindOf: NameAst]) ifTrue: [
 				stmt targets do: [:t |

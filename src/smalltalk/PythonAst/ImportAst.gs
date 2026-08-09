@@ -94,18 +94,7 @@ printSmalltalkOn: aStream
 					nextPutAll: targetName;
 					nextPutAll: ' := '
 			].
-		(asName notNil and: [nameParts size > 1]) ifTrue: [aStream nextPut: $(].
-		aStream
-			nextPutAll: '((Python @env0:at: #builtins) instance) ___import__: { ''';
-			nextPutAll: importName asString;
-			nextPutAll: ''' } kw: nil'.
-		(asName notNil and: [nameParts size > 1]) ifTrue: [
-			"Walk the dotted segments to bind the leaf."
-			aStream nextPut: $).
-			2 to: nameParts size do: [:i |
-				aStream nextPutAll: ' @env1:'; nextPutAll: (nameParts at: i)
-			]
-		].
+		aStream nextPutAll: (self valueSourceFor: each).
 		isModuleStore ifTrue: [aStream nextPut: $)].
 		aStream nextPut: $..
 		index < names size ifTrue: [aStream lf].
@@ -118,4 +107,67 @@ names
 method: ImportAst
 names: newValue
 	names := newValue
+%
+
+category: 'Grail-code generation'
+method: ImportAst
+valueSourceFor: anAlias
+	"Smalltalk source for the VALUE ``import <anAlias>'' binds.
+
+	``import a.b.c`` returns and binds the TOP-level package; only
+	``import a.b.c as x`` binds the leaf, reached by walking the dotted
+	segments after the import.  Shared by printSmalltalkOn: and by the
+	class-body attribute path so the two cannot drift."
+
+	| importName nameParts stream walks |
+	importName := anAlias name asString.
+	nameParts := $. split: importName.
+	walks := anAlias asName notNil and: [nameParts size > 1].
+	stream := WriteStream on: String new.
+	walks ifTrue: [stream nextPut: $(].
+	stream
+		nextPutAll: '((Python @env0:at: #builtins) instance) ___import__: { ''';
+		nextPutAll: importName;
+		nextPutAll: ''' } kw: nil'.
+	walks ifTrue: [
+		stream nextPut: $).
+		2 to: nameParts size do: [:i |
+			stream nextPutAll: ' @env1:'; nextPutAll: (nameParts at: i)]].
+	^ stream contents
+%
+
+category: 'Grail-code generation'
+method: ImportAst
+classBodyAttributePairs
+	"``name -> value'' pairs for an import written in a CLASS BODY.
+
+	CPython executes a class body as a namespace: ``import json'' there
+	binds ``json'' in the class namespace, so it becomes a class attribute
+	(werkzeug's EnvironBuilder relies on exactly this, then ``del json''
+	once it has taken json.dumps).  Grail's class-attribute pipeline is
+	driven by name -> value-AST pairs, so wrap the importer call."
+
+	^ names collect: [:each |
+		(self boundNameFor: each) -> (RawSmalltalkAst source: (self valueSourceFor: each))]
+%
+
+category: 'Grail-code generation'
+method: ImportAst
+boundNameFor: anAlias
+	"The single name ``import <anAlias>'' binds: the alias if given,
+	otherwise the TOP-level package of a dotted path."
+
+	anAlias asName ifNotNil: [:a | ^ a asSymbol].
+	^ ($. split: anAlias name asString) first asSymbol
+%
+
+category: 'Grail-code generation'
+method: ImportAst
+___boundTargetNames___
+	"Every name this import binds -- the same shape AssignAst answers, so
+	ClassDefAst can record binding positions for imports too.  Without it
+	a later class-body statement does not see the imported name as bound
+	and falls back to module scope."
+
+	^ names collect: [:each | self boundNameFor: each]
 %

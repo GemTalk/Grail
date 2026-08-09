@@ -1252,6 +1252,7 @@ input src/smalltalk/PythonAst/BoolOpAst.gs
 input src/smalltalk/PythonAst/CallAst.gs
 input src/smalltalk/PythonAst/CompareAst.gs
 input src/smalltalk/PythonAst/ConstantAst.gs
+input src/smalltalk/PythonAst/RawSmalltalkAst.gs
 input src/smalltalk/PythonAst/DictAst.gs
 input src/smalltalk/PythonAst/DictCompAst.gs
 input src/smalltalk/PythonAst/FormattedValueAst.gs
@@ -1486,6 +1487,7 @@ input src/smalltalk/PythonTests/TracebackTestCase.gs
 input src/smalltalk/PythonTests/ListSortKwargsTestCase.gs
 input src/smalltalk/PythonTests/CachedPropertyDescriptorTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyImportTestCase.gs
 input src/smalltalk/PythonTests/LruHashabilityAndUnionsTestCase.gs
 input src/smalltalk/PythonTests/ListTestCase.gs
 input src/smalltalk/PythonTests/MathTestCase.gs
