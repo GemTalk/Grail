@@ -2,13 +2,20 @@
 
 # This script assumes a stone is already running per the stone name defined in .topazini
 
-# Auto-source .setenv when $GEMSTONE isn't in the environment.  Lets
-# ``./scripts/run_tests.sh`` succeed from a fresh shell without remembering
-# to ``source .setenv`` first — a missing $GEMSTONE only sets $PATH up to
-# topaz, but Grail-specific env (and indirectly the shim registration the
-# committed installation depends on) needs the rest of .setenv too.
+# Always source .setenv when it exists.  Lets ``./scripts/run_tests.sh``
+# succeed from a fresh shell without remembering to ``source .setenv`` first —
+# a missing $GEMSTONE only sets $PATH up to topaz, but Grail-specific env (and
+# indirectly the shim registration the committed installation depends on)
+# needs the rest of .setenv too.
+#
+# Unconditional on purpose: .setenv is this checkout's source of truth for
+# which product + stone to use, so it must win over whatever the launching
+# shell exported.  Sourcing only when $GEMSTONE was unset let an inherited
+# GEMSTONE silently take over — e.g. a 3.7.5 product against a worktree
+# configured for gs40.  CI has no .setenv and exports its env inline, so the
+# -f guard leaves that path alone.
 PROJECT_ROOT=$(cd "$(dirname "$0")/.." && pwd)
-if [ -z "$GEMSTONE" ] && [ -f "$PROJECT_ROOT/.setenv" ]; then
+if [ -f "$PROJECT_ROOT/.setenv" ]; then
     # shellcheck disable=SC1091
     source "$PROJECT_ROOT/.setenv"
 fi

@@ -9,14 +9,21 @@
 INSTALL_T0=$SECONDS
 trap 'printf "TIMING | %-26s | %4ds\n" "TOTAL install.sh" "$((SECONDS - INSTALL_T0))"' EXIT
 
-# Auto-source .setenv when $GEMSTONE isn't in the environment.  Lets
-# ``./install.sh`` succeed from a fresh shell without remembering to
-# ``source .setenv`` first — a missing $SHIM_LIB_PATH at topaz time
-# silently skips _sre / _statistics / _bisect / _crc32c / _shimtest
-# registration, producing a half-installed Grail whose test suite then
-# breaks in obscure ways downstream.
+# Always source .setenv when it exists.  Lets ``./install.sh`` succeed from a
+# fresh shell without remembering to ``source .setenv`` first — a missing
+# $SHIM_LIB_PATH at topaz time silently skips _sre / _statistics / _bisect /
+# _crc32c / _shimtest registration, producing a half-installed Grail whose
+# test suite then breaks in obscure ways downstream.
+#
+# Unconditional on purpose: .setenv is this checkout's source of truth for
+# which product + stone to use, so it must win over whatever the launching
+# shell exported.  Sourcing only when $GEMSTONE was unset let an inherited
+# GEMSTONE silently take over — installing into the wrong product/stone pair
+# is exactly the cross-checkout clobber the per-worktree layout prevents.
+# CI has no .setenv and exports its env inline, so the -f guard leaves that
+# path alone.
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-if [ -z "$GEMSTONE" ] && [ -f "$SCRIPT_DIR/.setenv" ]; then
+if [ -f "$SCRIPT_DIR/.setenv" ]; then
     # shellcheck disable=SC1091
     source "$SCRIPT_DIR/.setenv"
 fi

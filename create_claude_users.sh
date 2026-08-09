@@ -16,9 +16,11 @@
 T0=$SECONDS
 trap 'printf "TIMING | %-26s | %4ds\n" "TOTAL create_claude_users.sh" "$((SECONDS - T0))"' EXIT
 
-# Auto-source .setenv when $GEMSTONE isn't in the environment (see install.sh).
+# Always source .setenv when it exists (see install.sh for why it is
+# unconditional: .setenv, not the launching shell, decides which product +
+# stone this checkout targets).
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-if [ -z "$GEMSTONE" ] && [ -f "$SCRIPT_DIR/.setenv" ]; then
+if [ -f "$SCRIPT_DIR/.setenv" ]; then
     # shellcheck disable=SC1091
     source "$SCRIPT_DIR/.setenv"
 fi
