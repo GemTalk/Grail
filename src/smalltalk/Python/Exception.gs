@@ -98,6 +98,15 @@ handles: anException
 
 	| egCls |
 	(super handles: anException) ifTrue: [^ true].
+	"Cheap reject FIRST -- ordering here is about cost, not just correctness.
+	#handles: is walked over every enclosing handler as an exception unwinds,
+	and one of those unwinds is the AlmostOutOfStack that ___recursionGuard___
+	converts, which arrives with almost no stack left.  Doing SymbolDictionary
+	lookups on every probe was enough extra work to push that unwind into the
+	Red Zone (a harder, untrappable overflow).  This reference is resolved at
+	compile time, and virtually every exception is not a group at all, so the
+	lookups below are now effectively unreachable on the hot path."
+	(anException isKindOf: BaseExceptionGroup) ifFalse: [^ false].
 	self == (Python at: #Exception otherwise: nil) ifFalse: [^ false].
 	egCls := Python at: #ExceptionGroup otherwise: nil.
 	^ egCls notNil and: [anException isKindOf: egCls]

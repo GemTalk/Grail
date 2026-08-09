@@ -262,3 +262,32 @@ test_exception_group_caught_as_exception
 		self assert: ((results @env1:__getitem__: k) = true)
 			description: 'ExceptionGroup catch check failed: ' , k].
 %
+
+category: 'Grail-Tests-BaseException'
+method: BaseExceptionTestCase
+test_recursion_raises_recursion_error
+	"Runaway Python recursion raises CPython's catchable RecursionError instead
+	of exhausting the Smalltalk stack with an AlmostOutOfStack notification no
+	Python ``except'' can contain.  BaseException class>>___recursionGuard___
+	converts it with #resignalAs:, which re-signals from the ORIGINAL (deep)
+	point -- so handlers BELOW the guard still match, which a freshly signalled
+	exception would have skipped.  One guard at the module-execution boundary,
+	no per-call cost.
+
+	KNOWN LIMITATION, documented in the fixture: a recursion that installs a
+	handler at EVERY level still dies, because passing the notification outward
+	through all of them consumes the last of the stack.  See
+	tests/python/recursion_limit.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'recursion_limit' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/recursion_limit.py')
+		name: 'recursion_limit'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'plain' 'plain_message' 'is_runtime_error' 'is_exception'
+	   'by_runtime_error' 'by_exception' 'mutual'
+	   'still_alive' 'bounded_recursion_ok' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'recursion-limit check failed: ' , k].
+%
