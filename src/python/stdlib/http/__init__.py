@@ -26,6 +26,9 @@ __all__ = ['HTTPStatus']
 _value_map = {}
 
 
+from grail import AbstractPyInt
+
+
 class HTTPStatus(AbstractPyInt):
     """An HTTP status code — a real int-like value (subclass of the
     Grail ``AbstractPyInt`` Number base) carrying extra ``.phrase`` /

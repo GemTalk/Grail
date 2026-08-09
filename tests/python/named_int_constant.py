@@ -4,6 +4,8 @@
 # int for re._constants to use it directly.  See TODO.md (the
 # int-subclass entry) for the long-form caveats.
 
+from grail import NamedIntConstant
+
 LITERAL = NamedIntConstant(16, 'LITERAL')
 BRANCH = NamedIntConstant(7, 'BRANCH')
 MAXREPEAT = NamedIntConstant(4294967295, 'MAXREPEAT')
