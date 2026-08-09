@@ -15,9 +15,10 @@ result_y = DYN_Y
 result_sum = DYN_X + DYN_Y
 
 # Bare-name read after `del`: today emits `name := nil` for the static
-# instVar, but the read codegen wraps it in `UnboundLocalError
-# ___checkLocal:`, which raises on nil.  UnboundLocalError is a NameError
-# subclass, so this happens to pass today — accidentally correct.
+# instVar, but the read codegen wraps it in an `ifNil: [UnboundLocalError
+# ___signalUnbound___: #name]` guard, which raises on nil.
+# UnboundLocalError is a NameError subclass, so this happens to pass
+# today — accidentally correct.
 predeclared = 100
 del predeclared
 try:

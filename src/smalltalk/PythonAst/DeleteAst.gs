@@ -106,10 +106,11 @@ printSmalltalkOn: aStream
 							nextPutAll: '''.'.
 					] ifFalse: [
 						"Function-local `del name` → nil the Smalltalk
-						temp.  NameAst wraps subsequent reads in
-						UnboundLocalError ___checkLocal:, so a post-del
-						read raises UnboundLocalError naming the
-						variable."
+						temp.  NameAst wraps subsequent reads in an
+						``ifNil: [UnboundLocalError
+						___signalUnbound___: #name]'' guard, so a
+						post-del read raises UnboundLocalError naming
+						the variable."
 						aStream nextPutAll: target id; nextPutAll: ' := nil.'
 					]
 				] ifFalse: [
