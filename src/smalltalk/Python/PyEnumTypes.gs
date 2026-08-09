@@ -3834,3 +3834,28 @@ __repr__
 %
 
 set compile_env: 0
+
+set compile_env: 1
+
+category: 'Grail-Copy'
+method: Enum
+__copy__
+	"An enum MEMBER is a singleton: ``Color.RED'' is the one and only object
+	for that member, and code compares members with ``is''.  CPython's enum.Enum
+	defines __copy__/__deepcopy__ returning self for exactly this reason --
+	without them copy.copy() would hand back a second object that is equal to
+	the member but not identical to it, silently breaking every identity test
+	(test_enum test_copy_member)."
+
+	^ self
+%
+
+category: 'Grail-Copy'
+method: Enum
+__deepcopy__: memo
+	"See __copy__: a member is a singleton, so a deep copy is the member."
+
+	^ self
+%
+
+set compile_env: 0

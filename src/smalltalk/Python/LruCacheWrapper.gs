@@ -355,3 +355,28 @@ ___pyBindsSelf___
 %
 
 set compile_env: 0
+
+set compile_env: 1
+
+category: 'Grail-Copy'
+method: LruCacheWrapper
+__copy__
+	"An lru_cache wrapper stands in for what CPython makes a plain FUNCTION,
+	and copy treats functions as atoms -- ``copy.copy(f) is f''.  Grail's
+	wrapper is an ordinary instance, so without this it would be reconstructed
+	attribute-by-attribute into a second wrapper that is not the original and
+	carries a shared cache (test_functools TestLRU test_copy/test_deepcopy).
+	CPython declares the same atomicity for its own function objects."
+
+	^ self
+%
+
+category: 'Grail-Copy'
+method: LruCacheWrapper
+__deepcopy__: memo
+	"See __copy__: function-like, so a deep copy is the wrapper itself."
+
+	^ self
+%
+
+set compile_env: 0
