@@ -242,15 +242,104 @@ test_guard_emits_inlined_ifNil
 category: 'Grail-Tests-Load-Site Check'
 method: UnboundLocalErrorTestCase
 test_guard_allocates_no_block
-	"``read_parameter'' is a single guarded read and nothing else, so its
-	compiled method has a block literal if and only if ifNil: was compiled
-	as a real send instead of being inlined."
+	"``read_maybe_unbound'' is a guarded read plus an ``if'', both of
+	which the compiler inlines, so its compiled method has a block
+	literal if and only if the guard's ifNil: was compiled as a real
+	send instead of being inlined."
 
 	| m |
 	m := self unboundGuardFixture class
-		compiledMethodAt: #'read_parameter:' environmentId: 1.
+		compiledMethodAt: #'read_maybe_unbound:' environmentId: 1.
 	self assert: (m sourceString includesString: 'ifNil: [UnboundLocalError').
 	self assert: m _blockLiterals isNil.
+%
+
+! ===============================================================================
+! Parameters: no guard unless `del` can unbind them
+! ===============================================================================
+! A parameter is bound before the Python body runs under every calling
+! convention Grail emits -- Smalltalk method argument, prologue temp
+! (assigned, or TypeError for a missing argument), or rebind transport temp.
+! Defaults, *args, **kwargs and keyword-only parameters all resolve to a value
+! or raise; a ``None'' default is the singleton, not nil.  So the guard is
+! omitted for parameter reads, and NOT omitting it is a pure waste on roughly
+! half of all emitted guards.
+!
+! ``del'' is the one thing that can unbind a parameter, so a del'd parameter
+! keeps its guard -- including when the del is in a nested def via
+! ``nonlocal''.  See AbstractNode >> ___guardedLocalNeedsCheck___: and
+! FunctionDefAst >> deletedNamesInSubtree.
+! ===============================================================================
+
+category: 'Grail-Tests-Load-Site Check'
+method: UnboundLocalErrorTestCase
+test_parameter_read_emits_no_guard
+	"A plain parameter read carries no guard at all."
+
+	| src |
+	src := (self unboundGuardFixture class
+		compiledMethodAt: #'read_parameter:' environmentId: 1) sourceString.
+	self deny: (src includesString: 'ifNil: [UnboundLocalError').
+%
+
+category: 'Grail-Tests-Load-Site Check'
+method: UnboundLocalErrorTestCase
+test_body_local_read_still_guarded
+	"The relaxation is for PARAMETERS only -- a conditionally assigned
+	body local keeps its guard."
+
+	| src |
+	src := (self unboundGuardFixture class
+		compiledMethodAt: #'read_maybe_unbound:' environmentId: 1) sourceString.
+	self assert: (src includesString:
+		'ifNil: [UnboundLocalError ___signalUnbound___: #later]').
+%
+
+category: 'Grail-Tests-Load-Site Check'
+method: UnboundLocalErrorTestCase
+test_deleted_parameter_keeps_guard_and_raises
+	"``del`` on a parameter unbinds it, so the read keeps its guard and
+	raises.  This whole shape used to fail to COMPILE: DeleteAst emits
+	``value := nil``, which cannot target a Smalltalk method argument."
+
+	| src |
+	src := (self unboundGuardFixture class
+		compiledMethodAt: #'deleted_parameter:' environmentId: 1) sourceString.
+	self assert: (src includesString:
+		'ifNil: [UnboundLocalError ___signalUnbound___: #value]').
+	self
+		should: [self unboundGuardFixture
+			perform: #'deleted_parameter:' env: 1 withArguments: { 5 }]
+		raise: UnboundLocalError.
+%
+
+category: 'Grail-Tests-Load-Site Check'
+method: UnboundLocalErrorTestCase
+test_nested_nonlocal_del_keeps_guard_and_raises
+	"``nonlocal value; del value'' in a NESTED def unbinds the OUTER
+	def's parameter, so the outer read must keep its guard."
+
+	| src |
+	src := (self unboundGuardFixture class
+		compiledMethodAt: #'nested_nonlocal_del:' environmentId: 1) sourceString.
+	self assert: (src includesString:
+		'ifNil: [UnboundLocalError ___signalUnbound___: #value]').
+	self
+		should: [self unboundGuardFixture
+			perform: #'nested_nonlocal_del:' env: 1 withArguments: { 5 }]
+		raise: UnboundLocalError.
+%
+
+category: 'Grail-Tests-Load-Site Check'
+method: UnboundLocalErrorTestCase
+test_deleted_parameter_rebound_is_usable
+	"Deleting a parameter and reassigning it rebinds the name."
+
+	self assert: (self eval: 'def f(a):
+    del a
+    a = 7
+    return a
+f(1)') equals: 7.
 %
 
 category: 'Grail-helpers'

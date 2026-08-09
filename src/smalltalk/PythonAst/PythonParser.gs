@@ -3162,9 +3162,31 @@ markScopeReturnBlocking
 category: 'Grail-node construction'
 method: PythonParser
 setDelCtx: anExpr
-	"Change an expression's context to Del."
+	"Change an expression's context to Del.
+
+	A BARE-NAME target (``del x'', as opposed to ``del obj.attr'' or
+	``del d[k]'') is registered as a write of the current scope.  ``del''
+	is a binding-affecting operation on x -- Python lists a del target as
+	bound in the block for exactly this reason -- and two things downstream
+	depend on it:
+
+	  * FunctionDefAst >> paramNeedsTemp:assigned:instVars: consults
+	    ``writes'' to decide whether a parameter needs a transport temp.
+	    Without this, ``def f(a): del a'' emitted ``a := nil'' against the
+	    Smalltalk METHOD ARGUMENT, which is not assignable -- CompileError
+	    1029, ``expected an assignable variable'', failing the whole module
+	    build.  Registering the del gives the parameter a temp, exactly as
+	    a rebinding ``a = ...'' already does.
+	  * The name needs a Smalltalk temp declaration for the ``x := nil''
+	    that DeleteAst emits for a function-local del.
+
+	The unbound-local guard analysis does NOT read this set -- being in
+	``writes'' cannot distinguish a del from an ordinary rebind, and a
+	rebound parameter stays bound.  It walks for DeleteAst nodes instead;
+	see FunctionDefAst >> deletedNamesInSubtree."
 
 	| varNames index |
+	(anExpr isKindOf: NameAst) ifTrue: [self declareWrite: anExpr id asSymbol].
 	varNames := anExpr class allInstVarNames.
 	index := varNames indexOf: #ctx.
 	index > 0 ifTrue: [anExpr instVarAt: index put: self delCtx].

@@ -652,8 +652,17 @@ printSmalltalkOn: aStream
 	~12k guards -- therefore costs an inline nil test instead of a real
 	message send, ~5x cheaper per read measured on 3.7.5.  Value
 	semantics are unchanged: ifNil: yields the receiver when non-nil,
-	which is what ___checkLocal:named: returned."
+	which is what ___checkLocal:named: returned.
+
+	The guard is OMITTED ENTIRELY when the name resolves to a parameter
+	that no ``del'' can unbind -- see ___guardedLocalNeedsCheck___:.  Not
+	emitting a check beats making one cheaper, and parameters are a large
+	share of all guarded reads."
 	((ctx isKindOf: LoadAst) and: [self ___pythonLocalInEnclosingFunctions___: id]) ifTrue: [
+		(self ___guardedLocalNeedsCheck___: id) ifFalse: [
+			aStream nextPutAll: id.
+			^ self
+		].
 		aStream
 			nextPut: $(;
 			nextPutAll: id;
