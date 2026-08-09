@@ -257,21 +257,73 @@ ___pyRaise___: excValue cause: aCause
 		^ excValue ___signalNew___: (Array @env0:new) kw: nil cause: aCause].
 	(excValue @env0:isKindOf: BaseException) ifTrue: [
 		aCause == nil ifFalse: [self ___applyCause___: aCause to: excValue].
-		(self ___isInFlight___: excValue) ifTrue: [^ excValue @env0:pass].
-		^ excValue @env0:signal].
+		(self ___isInFlight___: excValue) ifTrue: [^ self ___passOrSignal___: excValue].
+		^ self ___signalOrPass___: excValue].
 	^ TypeError ___signal___: 'exceptions must derive from BaseException'
 %
 
 category: 'Grail-Raise Validation'
 classmethod: BaseException
 ___isInFlight___: excValue
-	"Is GemStone currently handling excValue?  #_handlerActive is a kernel
-	private, so tolerate its absence (an older image answers false, which just
-	restores the previous always-#signal behaviour) rather than turning every
-	raise into a MessageNotUnderstood."
+	"Is excValue the exception this session is currently HANDLING?
 
-	^ ([excValue @env0:_handlerActive]
-		@env0:on: MessageNotUnderstood do: [:e | e @env0:return: false]) == true
+	Grail's own ___currentException___ is the authority here, NOT the kernel's
+	#_handlerActive.  TryAst sets it on except-handler entry and restores the
+	prior value from an ensure:, so it unwinds correctly however the handler is
+	left -- including a Python ``return'' out of the except body.
+	#_handlerActive does not: after such a return it stays stuck true, so a
+	LATER re-raise of that same exception object misroutes into #pass, skipping
+	the handler that should have caught it.  ___currentException___ also stacks
+	properly for nested handlers, which is what makes ``different exception
+	raised inside a handler'' fall through to the ordinary #signal path."
+
+	^ excValue == (self @env0:___currentException___)
+%
+
+category: 'Grail-Raise Validation'
+classmethod: BaseException
+___passOrSignal___: excValue
+	"#pass an exception ___isInFlight___ says is being handled, falling back to
+	#signal if the kernel cannot actually reach the handler frame.
+
+	The two do not agree in every case: #_handlerActive can answer true while
+	#pass still fails with ``ImproperOperation: cannot find handler frame for
+	exception'' -- e.g. re-raising an exception stashed out of a handler that
+	has since unwound in a way that leaves the flag set.  Without this fallback
+	that surfaces as an UNCATCHABLE Smalltalk error, which no Python
+	``try''/``except'' can contain; #signal at worst raises the ordinary
+	already-signalled error, which is strictly better to hand back.
+
+	The fallback is inside the handler block so the failed #pass has fully
+	unwound before #signal is attempted."
+
+	^ [excValue @env0:pass]
+		@env0:on: (Globals @env0:at: #ImproperOperation)
+		do: [:e | e @env0:return: (excValue @env0:signal)]
+%
+
+category: 'Grail-Raise Validation'
+classmethod: BaseException
+___signalOrPass___: excValue
+	"#signal excValue, falling back to #pass when the kernel refuses because it
+	is already in flight.
+
+	The mirror of ___passOrSignal___, and it covers what ___currentException___
+	cannot see on its own: an exception whose handler is still on the stack but
+	is NOT the innermost one --
+
+	    except A as a:
+	        try: ...
+	        except B: raise a      -- a is in flight, but B is ''current''
+
+	Here ___currentException___ holds the B exception, so the ordinary #signal
+	path is chosen, and only the kernel knows a is unsignalable.  Without this
+	that surfaces as UncontinuableError 6011 escaping as an uncatchable
+	Smalltalk error."
+
+	^ [excValue @env0:signal]
+		@env0:on: (Globals @env0:at: #UncontinuableError)
+		do: [:u | u @env0:return: (excValue @env0:pass)]
 %
 
 category: 'Grail-Raise Validation'
