@@ -44,6 +44,41 @@ removeallclassmethods StatementAst
 
 set compile_env: 0
 
+category: 'Grail-code generation'
+method: StatementAst
+___importBindsAtModuleScope___: aSymbol
+	"True when a name bound by an IMPORT in this statement lands in the
+	module instance's dynamic-instVar storage rather than in a Smalltalk
+	temp.
+
+	Same rule AssignAst >> isModuleScopeStoreTarget: applies to an ordinary
+	assignment, and for the same reason: an import IS a binding, so it has to
+	agree with how NameAst will later READ the name.  Imports used to test
+	only ``is this name a module variable'', which is true of a function-local
+	import whenever the module ALSO imports that name -- so the write went to
+	the module while the read looked at the function's temp, and the name came
+	back unbound:
+
+	    import os.path
+	    def f():
+	        import os.path      # stored on the module...
+	        return os.path.sep  # ...read as a local -> UnboundLocalError
+
+	Shared by ImportAst and ImportFromAst so the two cannot drift."
+
+	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	"``global x'' in the nearest enclosing function forces the module route,
+	even inside a class method -- Python: the declaration binds the name to
+	the module for that whole scope."
+	(self ___nearestEnclosingFunctionDeclaresGlobal___: aSymbol) ifTrue: [^ true].
+	CallAst classBeingCompiled ifNotNil: [^ false].
+	CallAst moduleVariableNames ifNil: [^ false].
+	(CallAst moduleVariableNames includes: aSymbol) ifFalse: [^ false].
+	"A binding anywhere in an enclosing function SHADOWS the module global."
+	(self ___pythonLocalInEnclosingFunctions___: aSymbol) ifTrue: [^ false].
+	^ true
+%
+
 category: 'Grail-Class Body'
 method: StatementAst
 ___boundTargetNames___
