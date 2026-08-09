@@ -775,6 +775,69 @@ ___pythonBuiltinTypeName___
 
 category: 'Grail-Introspection'
 classmethod: object
+___pythonModuleAttrIdentity___
+	"The CPython identity of a class Grail names after the MODULE ATTRIBUTE
+	it implements.
+
+	Grail's Python SymbolDictionary is FLAT, so a class CPython reaches only
+	through a module gets a flattened Smalltalk name: ``functools_partial''
+	for functools.partial, ``sys_flags'' for type(sys.flags),
+	``string_formatter'' for string.Formatter.  That spelling is an
+	implementation detail, but it leaked into every Python-visible report --
+	``functools.partial.__name__'' answered 'functools_partial' where CPython
+	says 'partial', and ``__module__'' answered nothing at all where CPython
+	says 'functools'.
+
+	Answer { pythonName. moduleName } for such a class, else nil.  moduleName
+	is nil for the two entries that are MODULES rather than classes (os.path,
+	html.entities): a module has a __name__ but no __module__.
+
+	Keyed by Smalltalk class NAME, exactly like ___pythonBuiltinTypeName___,
+	so no class-global resolution is needed.  Every pair below is CPython
+	3.14's own answer, read off the running interpreter rather than guessed."
+
+	| n |
+	n := self @env0:name @env0:asString.
+
+	"functools.  ``Placeholder'' is an INSTANCE of _PlaceholderType in
+	CPython, and cmp_to_key's return value is a KeyWrapper."
+	(n @env0:= 'functools_partial') ifTrue: [^ #('partial' 'functools')].
+	(n @env0:= 'functools_partialmethod') ifTrue: [^ #('partialmethod' 'functools')].
+	(n @env0:= 'functools_cached_property') ifTrue: [^ #('cached_property' 'functools')].
+	(n @env0:= 'functools_CacheInfo') ifTrue: [^ #('CacheInfo' 'functools')].
+	(n @env0:= 'functools_Placeholder') ifTrue: [^ #('_PlaceholderType' 'functools')].
+	(n @env0:= 'functools_cmpkey') ifTrue: [^ #('KeyWrapper' 'functools')].
+
+	"numbers -- the numeric tower ABCs."
+	(n @env0:= 'numbers_Number') ifTrue: [^ #('Number' 'numbers')].
+	(n @env0:= 'numbers_Complex') ifTrue: [^ #('Complex' 'numbers')].
+	(n @env0:= 'numbers_Real') ifTrue: [^ #('Real' 'numbers')].
+	(n @env0:= 'numbers_Rational') ifTrue: [^ #('Rational' 'numbers')].
+	(n @env0:= 'numbers_Integral') ifTrue: [^ #('Integral' 'numbers')].
+
+	"os / string / time."
+	(n @env0:= 'os_PathLike') ifTrue: [^ #('PathLike' 'os')].
+	(n @env0:= 'string_formatter') ifTrue: [^ #('Formatter' 'string')].
+	(n @env0:= 'struct_time') ifTrue: [^ #('struct_time' 'time')].
+
+	"sys.  ``sys.implementation'' is a plain types.SimpleNamespace in
+	CPython, not a bespoke type, so that is what it must report."
+	(n @env0:= 'sys_flags') ifTrue: [^ #('flags' 'sys')].
+	(n @env0:= 'sys_float_info') ifTrue: [^ #('float_info' 'sys')].
+	(n @env0:= 'sys_hash_info') ifTrue: [^ #('hash_info' 'sys')].
+	(n @env0:= 'sys_int_info') ifTrue: [^ #('int_info' 'sys')].
+	(n @env0:= 'sys_implementation') ifTrue: [^ #('SimpleNamespace' 'types')].
+
+	"MODULES, not classes -- __name__ only.  ``os.path'' IS the posixpath
+	module in CPython, so that is the name it reports."
+	(n @env0:= 'os_path') ifTrue: [^ #('posixpath' nil)].
+	(n @env0:= 'html_entities') ifTrue: [^ #('html.entities' nil)].
+
+	^ nil
+%
+
+category: 'Grail-Introspection'
+classmethod: object
 ___pythonBuiltinExceptionNames___
 	"The CPython builtin EXCEPTION hierarchy — the exception classes that live
 	in CPython's builtins module (``ValueError.__module__ == 'builtins'``).  The
@@ -839,8 +902,15 @@ ___pythonBuiltinTypeModule___
 	class-enums) or fall through (dynamically created classes such as
 	functional-API enums — reporting 'builtins' for those broke enum pickling)."
 
-	| pd nm |
+	| pd nm id |
 	self ___pythonBuiltinTypeName___ @env0:notNil ifTrue: [^ 'builtins'].
+	"A flattened module-attribute class belongs to the module it was named
+	after, not to builtins -- ``functools.partial.__module__'' is 'functools'.
+	The two MODULE entries (os.path, html.entities) carry nil here: a module
+	has no __module__, so they fall through."
+	id := self ___pythonModuleAttrIdentity___.
+	id @env0:notNil ifTrue: [
+		(id @env0:at: 2) @env0:ifNotNil: [:___mod | ^ ___mod]].
 	nm := self @env0:name @env0:asString @env0:asSymbol.
 	((#( #bool #bytearray #bytes #complex #dict #float #frozenset #int #list
 		#memoryview #object #property #range #set #slice #str #tuple #type )
@@ -871,9 +941,14 @@ __name__
 	messages interpolate this (test_contains: ``argument of type 'base_set'
 	...'')."
 
-	| bt |
+	| bt id |
 	bt := self ___pythonBuiltinTypeName___.
 	bt @env0:notNil ifTrue: [^ bt].
+	"A class named after the module attribute it implements (functools_partial,
+	sys_flags, ...) reports the name CPython gives it, not Grail's flattened
+	spelling."
+	id := self ___pythonModuleAttrIdentity___.
+	id @env0:notNil ifTrue: [^ id @env0:at: 1].
 	"User classes now keep their exact Python name as the GemStone class name
 	(___asSmalltalkClassName___: no longer changes case), so the Smalltalk name
 	IS the Python name -- no mangled->original registry lookup needed."
@@ -890,7 +965,7 @@ __qualname__
 	CPython error messages interpolate it (e.g. textwrap.dedent's
 	``expected str object, not {type(text).__qualname__!r}'')."
 
-	| bt holder qn |
+	| bt holder qn id |
 	"A NESTED class carries a dotted qualified name (``Outer.Inner'') recorded
 	in its own dynInstVars holder at build time (ClassDefAst nested-class emit);
 	top-level classes have none and fall back to the simple name below."
@@ -901,6 +976,10 @@ __qualname__
 			qn @env0:notNil ifTrue: [^ qn @env0:asString]]].
 	bt := self ___pythonBuiltinTypeName___.
 	bt @env0:notNil ifTrue: [^ bt].
+	"Flattened module-attribute class -- same CPython name __name__ reports;
+	all of these are top-level in their module, so qualname equals name."
+	id := self ___pythonModuleAttrIdentity___.
+	id @env0:notNil ifTrue: [^ id @env0:at: 1].
 	"User classes now keep their exact Python name as the GemStone class name
 	(___asSmalltalkClassName___: no longer changes case), so the Smalltalk name
 	IS the Python name -- no mangled->original registry lookup needed."
