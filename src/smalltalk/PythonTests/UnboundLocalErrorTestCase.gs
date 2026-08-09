@@ -194,3 +194,72 @@ test_python_aug_assign_unbound_raises
 f()']
 		raise: UnboundLocalError.
 %
+
+! ===============================================================================
+! Inlined ifNil: guard — codegen shape and message text
+! ===============================================================================
+! NameAst's load-context guard emits
+!     (x ifNil: [UnboundLocalError ___signalUnbound___: #x])
+! rather than a send of ___checkLocal:named:.  ifNil: is an OPTIMISED
+! selector, so the compiler inlines it: the bound case (the overwhelming
+! majority of the ~12k emitted guards) costs an inline nil test rather than
+! a real message send, and allocates no BlockClosure.  Regressing that is
+! invisible behaviourally and shows up only as a slowdown, hence these tests.
+! ===============================================================================
+
+category: 'Grail-Tests-Load-Site Check'
+method: UnboundLocalErrorTestCase
+test_guard_message_matches_cpython
+	"The text built by ___signalUnbound___: must keep CPython's wording."
+
+	self assert: (self eval: 'def f(flag):
+    if flag:
+        later = 1
+    return later
+
+try:
+    f(False)
+    msg = "no error raised"
+except UnboundLocalError as e:
+    msg = str(e)
+msg')
+		equals: 'cannot access local variable ''later'' where it is not associated with a value'.
+%
+
+category: 'Grail-Tests-Load-Site Check'
+method: UnboundLocalErrorTestCase
+test_guard_emits_inlined_ifNil
+	"The emitted guard is the ifNil: form, not a ___checkLocal:named: send."
+
+	| src |
+	src := (self unboundGuardFixture class
+		compiledMethodAt: #'read_maybe_unbound:' environmentId: 1) sourceString.
+	self assert: (src includesString:
+		'ifNil: [UnboundLocalError ___signalUnbound___: #later]').
+	self deny: (src includesString: '___checkLocal:').
+%
+
+category: 'Grail-Tests-Load-Site Check'
+method: UnboundLocalErrorTestCase
+test_guard_allocates_no_block
+	"``read_parameter'' is a single guarded read and nothing else, so its
+	compiled method has a block literal if and only if ifNil: was compiled
+	as a real send instead of being inlined."
+
+	| m |
+	m := self unboundGuardFixture class
+		compiledMethodAt: #'read_parameter:' environmentId: 1.
+	self assert: (m sourceString includesString: 'ifNil: [UnboundLocalError').
+	self assert: m _blockLiterals isNil.
+%
+
+category: 'Grail-helpers'
+method: UnboundLocalErrorTestCase
+unboundGuardFixture
+	"tests/python/unbound_local_guard.py, loaded fresh."
+
+	(importlib @env1:modules) removeKey: #'unbound_local_guard' ifAbsent: [].
+	^ importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/unbound_local_guard.py')
+		name: 'unbound_local_guard'
+%
