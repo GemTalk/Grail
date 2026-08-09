@@ -232,6 +232,49 @@ smalltalkSource
 %
 
 category: 'Grail-evaluation'
+classmethod: ModuleAst
+compilingDoitScope
+	"The symbol list a DOIT's Smalltalk source is currently being generated
+	against -- exec(), eval(), the ad-hoc REPL path, and the runtime
+	compilation of a class body nested inside a function -- or nil during
+	ordinary module compilation.
+
+	NameAst's free-name fallback needs this, and needs it to be the SYMBOL LIST
+	rather than any static property of the AST.  Two cheaper tests were tried
+	and both are wrong:
+
+	  ``CallAst moduleClassBeingCompiled isNil'' -- also nil while compiling
+	    the methods of a class defined inside a function.
+	  a plain ``am I in a doit'' flag -- true there as well, because such a
+	    class body IS compiled as a doit.
+
+	In that case ``class Base:'' in a function is reachable from a sibling
+	method purely because the enclosing scope's bindings are in the doit's
+	symbol list, which no amount of AST inspection can see.  Asking the symbol
+	list is asking exactly the question the Smalltalk compiler is about to ask,
+	so the answers cannot disagree.
+
+	Session-local, and saved/restored rather than set/cleared, so an exec()
+	nested inside another exec() returns to the outer scope."
+
+	^ SessionTemps current at: #'___grailDoitScope___' ifAbsent: [nil]
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
+whileCompilingDoitWithScope: aSymbolList do: aBlock
+	"Evaluate aBlock with ``compilingDoitScope'' set to aSymbolList, restoring
+	the prior value afterwards even if codegen raises."
+
+	| temps key prior |
+	temps := SessionTemps current.
+	key := #'___grailDoitScope___'.
+	prior := temps at: key ifAbsent: [nil].
+	temps at: key put: aSymbolList.
+	^ aBlock ensure: [temps at: key put: prior]
+%
+
+category: 'Grail-evaluation'
 method: ModuleAst
 executeWithScope: aSymbolList
 	"Compile and execute this module, returning the raw execution
@@ -264,7 +307,7 @@ executeWithScope: aSymbolList as: aKind
 	___doit_<N>___ pair per executed statement."
 
 	| code traceDir seq tpzPath irPath compiledMethod result tpzSource |
-	code := self smalltalkSource.
+	code := ModuleAst whileCompilingDoitWithScope: aSymbolList do: [self smalltalkSource].
 	traceDir := importlib ___codegenTraceDir___.
 	traceDir ifNotNil: [
 		seq := ModuleAst nextSeqFor: aKind.
