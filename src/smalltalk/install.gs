@@ -947,6 +947,7 @@ input src/smalltalk/Python/NoneType.gs
 input out/gen/kernel_class_extensions.gs
 
 input src/smalltalk/Python/BaseException.gs
+input src/smalltalk/Python/PyLazyExceptSelector.gs
 input src/smalltalk/Python/Bytearray.gs
 input src/smalltalk/Python/complex.gs
 input src/smalltalk/Python/slice.gs
