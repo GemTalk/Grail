@@ -1369,3 +1369,34 @@ testStartswithEndswithBounds
 	self assert: (self eval: '"abc".endswith("")').
 	self assert: (self eval: '"abc".endswith("", 1, 2)')
 %
+
+category: 'Grail-String Methods'
+method: StrTestCase
+testRindexWithStartAndStop
+	"rindex(sub[, start[, stop]]) — the sliced forms.  Only the 1-arg
+	form existed, so html.parser (which uses the sliced form internally)
+	died on real input with
+	  TypeError: rindex() takes a different number of arguments (3 given)"
+
+	self assert: (self eval: '"abcabcabc".rindex("b") == 7').
+	self assert: (self eval: '"abcabcabc".rindex("b", 2) == 7').
+	self assert: (self eval: '"abcabcabc".rindex("b", 2, 8) == 7').
+	self assert: (self eval: '"abcabcabc".rindex("b", 0, 5) == 4').
+	self assert: (self eval: '"abcabcabc".rindex("a", 0, 2) == 0').
+
+	"negative indices wrap, as in rfind"
+	self assert: (self eval: '"abcabcabc".rindex("b", -4) == 7').
+
+	"the slice really bounds the search"
+	self assert: (self eval: '"abcabcabc".rindex("b", 0, 2) == 1').
+
+	"absent in the slice -> ValueError, not -1"
+	self assert: (self eval:
+		'
+try:
+    "abcabcabc".rindex("c", 0, 2)
+    _r = False
+except ValueError:
+    _r = True
+_r').
+%

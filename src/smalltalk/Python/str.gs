@@ -1947,6 +1947,45 @@ rindex: sub
 
 category: 'Grail-String Methods'
 method: CharacterCollection
+rindex: sub _: start
+	"rindex(sub, start) -- like rfind, ValueError if absent."
+
+	^ self rindex: sub _: start _: (self @env0:size)
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+rindex: sub _: start _: stop
+	"rindex(sub, start, stop) -- highest 0-based index of ``sub'' within
+	the [start, stop) slice; ValueError if absent.  html.parser relies on
+	the sliced form, so a 1-arg-only rindex breaks it on real input."
+
+	| idx |
+	idx := self rfind: sub _: start _: stop.
+	(idx == -1) ifTrue: [
+		ValueError @env0:signal: 'substring not found'
+	].
+	^ idx
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+_rindex: positional kw: kwargs
+	"Varargs entry for ``rindex(sub[, start[, stop]])''."
+
+	| sub |
+	positional @env0:isEmpty ifTrue: [
+		TypeError ___signal___: 'rindex() takes at least 1 argument'
+	].
+	sub := positional @env0:at: 1.
+	positional @env0:size @env0:= 1 ifTrue: [^ self rindex: sub].
+	positional @env0:size @env0:= 2 ifTrue: [
+		^ self rindex: sub _: (positional @env0:at: 2)].
+	^ self rindex: sub _: (positional @env0:at: 2) _: (positional @env0:at: 3)
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
 rjust: width
 	"Return a right-justified string of length width, padded with spaces."
 
