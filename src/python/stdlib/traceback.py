@@ -9,9 +9,28 @@
 import sys
 
 
-def format_exception_only(exc_type, value):
+# Distinguishes "argument not supplied" from an explicit None, so the 3.10+
+# one-argument ``format_exception_only(exc)'' can be told apart from the
+# legacy two-argument ``format_exception_only(type, value)'' when value is
+# genuinely None.  CPython uses a private sentinel for exactly this.
+_sentinel = object()
+
+
+def format_exception_only(exc_type, value=_sentinel, show_group=False):
     """Return a list of strings ending in a newline that render the
-    exception class + message."""
+    exception class + message.
+
+    Accepts both the legacy ``(type, value)'' shape and the 3.10+
+    single-argument ``(exc)'' shape -- ``value'' defaulting to a sentinel
+    rather than None is what makes the two distinguishable.
+
+    ``show_group=True`` (3.11+) additionally renders an ExceptionGroup's
+    nested exceptions, indented, after the group's own line."""
+
+    if value is _sentinel:
+        # Single-argument form: exc_type IS the exception (or None).
+        value = exc_type
+        exc_type = type(exc_type) if exc_type is not None else None
 
     type_name = ''
     if exc_type is not None:
@@ -26,8 +45,17 @@ def format_exception_only(exc_type, value):
             type_name = str(exc_type)
     msg = str(value) if value is not None else ''
     if msg:
-        return [type_name + ': ' + msg + '\n']
-    return [type_name + '\n']
+        lines = [type_name + ': ' + msg + '\n']
+    else:
+        lines = [type_name + '\n']
+
+    # An ExceptionGroup renders its nested exceptions under the group line,
+    # indented, when the caller asks for them.
+    if show_group:
+        for sub in getattr(value, 'exceptions', None) or ():
+            for line in format_exception_only(sub, show_group=True):
+                lines.append('  ' + line)
+    return lines
 
 
 def _unpack_exc_args(exc_type, value, tb):
@@ -161,12 +189,55 @@ class FrameSummary:
 class StackSummary(list):
     """A list of FrameSummary, as returned by ``extract_tb``."""
 
+    @classmethod
+    def extract(cls, frame_gen, limit=None, lookup_lines=True,
+                capture_locals=False):
+        """Build a StackSummary from an iterable of ``(frame, lineno)`` pairs
+        -- the shape ``walk_tb`` / ``walk_stack`` yield.
+
+        ``lookup_lines`` and ``capture_locals`` are accepted for signature
+        compatibility.  Grail has no source-file lookup for a frame (its
+        co_filename is a placeholder; source TEXT arrives with the frame
+        instead) and no f_locals, so neither changes the result."""
+
+        result = cls()
+        count = 0
+        for frame, lineno in frame_gen or ():
+            if limit is not None and count >= limit:
+                break
+            code = getattr(frame, 'f_code', None)
+            filename = getattr(code, 'co_filename', None) if code else None
+            name = getattr(code, 'co_name', None) if code else None
+            result.append(FrameSummary(filename, lineno, name))
+            count += 1
+        return result
+
+    @classmethod
+    def from_list(cls, a_list):
+        """Build a StackSummary from a list of FrameSummary objects or of
+        plain ``(filename, lineno, name, line)`` 4-tuples -- the legacy
+        ``extract_tb`` return shape CPython still accepts here."""
+
+        result = cls()
+        for entry in a_list or ():
+            if isinstance(entry, FrameSummary):
+                result.append(entry)
+            else:
+                filename, lineno, name, line = entry
+                result.append(FrameSummary(filename, lineno, name, line=line))
+        return result
+
+    def format_frame_summary(self, frame_summary):
+        """Render ONE frame, without the trailing newline -- the hook CPython
+        exposes for subclasses that want custom frame rendering."""
+        return str(frame_summary)
+
     def format(self):
         # A FrameSummary's __str__ already carries CPython's 2-space "  File"
         # indent (and a 4-space source line); emit it directly.  format_list
         # adds a 2-space prefix for RAW (non-FrameSummary) entries, so routing
         # through it here would double-indent a real frame.
-        return [str(fs) + '\n' for fs in self]
+        return [self.format_frame_summary(fs) + '\n' for fs in self]
 
 
 def extract_tb(tb, limit=None):
@@ -221,6 +292,25 @@ def print_list(extracted_list, file=None):
         file.write(line)
 
 
+def print_stack(f=None, limit=None, file=None):
+    """Print the current stack to ``file`` (default sys.stderr).  Grail has no
+    live-frame introspection, so extract_stack answers an empty StackSummary
+    and this prints nothing -- but the NAME has to exist, because callers
+    reach for it unconditionally."""
+    if file is None:
+        file = sys.stderr
+    for line in format_stack(f, limit):
+        file.write(line)
+
+
+def print_tb(tb, limit=None, file=None):
+    """Print a traceback's frames (no exception line) to ``file``."""
+    if file is None:
+        file = sys.stderr
+    for line in format_tb(tb, limit):
+        file.write(line)
+
+
 def walk_tb(tb):
     """Yield (frame, lineno) pairs walking the traceback from the given
     node toward its ``tb_next`` tail."""
@@ -271,23 +361,43 @@ class TracebackException:
     def from_exception(cls, exc, **kwargs):
         return cls(type(exc), exc, None, **kwargs)
 
-    def format_exception_only(self):
-        return format_exception_only(self.exc_type, self._value)
+    def format_exception_only(self, show_group=False, **kwargs):
+        """The exception's own line(s), no frames.
 
-    def format(self, chain=True):
+        ``**kwargs`` swallows presentation-only options CPython grew (notably
+        ``colorize``): Grail renders tracebacks as plain text -- _colorize's
+        COLORIZE is False and can_colorize() answers False -- so honouring
+        them would produce the same bytes.  Accepting and ignoring keeps
+        callers that pass them working instead of raising TypeError."""
+        return format_exception_only(self.exc_type, self._value,
+                                     show_group=show_group)
+
+    def format(self, chain=True, **kwargs):
         """Yield strings (header / frames / message).  Generators
         aren't iterated by CPython callers that join the result, so
         return a flat list — easier to test, identical from the
-        caller's perspective."""
+        caller's perspective.
+
+        ``**kwargs`` swallows ``colorize`` and friends, as above."""
         lines = ['Traceback (most recent call last):\n']
+        try:
+            lines.extend(self.stack.format())
+        except Exception:
+            pass
         lines.extend(self.format_exception_only())
         return lines
+
+    def __str__(self):
+        """CPython renders a TracebackException as its exception message
+        alone -- NOT the whole traceback."""
+        return str(self._value) if self._value is not None else ''
 
 
 __all__ = [
     'format_exception_only', 'format_exception', 'format_exc',
     'print_exception', 'print_exc',
     'extract_tb', 'extract_stack', 'format_tb', 'format_stack',
-    'format_list', 'print_list', 'walk_tb', 'walk_stack',
+    'format_list', 'print_list', 'print_stack', 'print_tb',
+    'walk_tb', 'walk_stack',
     'TracebackException', 'FrameSummary', 'StackSummary',
 ]

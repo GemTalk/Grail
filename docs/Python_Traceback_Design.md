@@ -326,20 +326,40 @@ had been passing *because* their marker was ignored are now correctly skipped �
 e.g. test_math's `test_exceptions`, which carries
 `@unittest.skipUnless(verbose, ...)` and which CPython does not run either.
 
-**Current status: `ERROR`** — 370 tests, 21 pass, 53 fail, 116 error, 180 skip.
+**`traceback` module API filled in (DONE).** The module was written as a
+Flask-shaped minimum ("enough for itsdangerous / Werkzeug / Flask error paths"),
+so the gate's next finding was simply *absent names* rather than wrong output.
+Added: `format_exception_only`'s 3.10+ one-argument form (it needs a private
+`_sentinel` default — `None` is a legal `value`, so a `None` default cannot
+distinguish "not supplied") and its 3.11+ `show_group=`; `StackSummary.extract`
+/ `from_list` / `format_frame_summary`; `print_stack` / `print_tb`;
+`TracebackException.__str__` (CPython renders the message alone, not the whole
+traceback) and its `format()` now emitting the captured frames. `format()` /
+`format_exception_only()` also absorb presentation-only kwargs (`colorize`)
+through `**kwargs`: Grail renders plain text, so honouring them would produce
+identical bytes, and raising `TypeError` instead helped nobody.
+
+`test.test_traceback`: 116 errors → **82**, 21 pass → **26**. Failures rise
+53 → 82, which is the intended shape — a test that used to die on a missing
+attribute now runs far enough to make its real content assertion. Verified
+test-by-test (pairing each `GRAIL_TEST` id with whether a `GRAIL_DETAIL`
+followed): **5 fixed, 0 regressions**.
+
+**Current status: `ERROR`** — 370 tests, 26 pass, 82 fail, 82 error, 180 skip.
 The remaining gaps, in rough order of leverage:
 
 1. Multi-frame tracebacks: `tb_next` / `f_back` are always `None` (a 4-deep call
    chain yields depth 1), and `co_filename` is the `'<grail>'` placeholder, so
    the `format_exc()` comparison failures cannot pass yet. This is the big one,
-   and the only one needing real interpreter work.
-2. `traceback.py` gaps: `StackSummary.extract` / `from_list`, `print_stack`,
-   `_print_exception_bltin`, the 3.14 one-arg `format_exception(exc)` form,
-   `format_exception_only(show_group=)`.
-3. `SyntaxError` carries none of `msg` / `filename` / `lineno` / `offset` /
+   and the only one needing real interpreter work — see the "Deferred" note
+   above for why it was prototyped and backed out twice, and what a real
+   attempt would cost (`#directMethod` functions lose their fast path).
+2. `SyntaxError` carries none of `msg` / `filename` / `lineno` / `offset` /
    `text` / `end_lineno` / `end_offset`; `compile()` returns a `str`.
-4. Implicit exception chaining leaves `__context__` as `None`.
-5. `tempfile.mkdtemp` raises `NotImplementedError` (11 errors).
+3. Implicit exception chaining leaves `__context__` as `None`.
+4. `tempfile.mkdtemp` raises `NotImplementedError` (6 errors).
+5. A residual 30 `_testcapi` errors in classes NOT decorated `@cpython_only` —
+   the import sits inside the test body, so only the body can skip it.
 
 **Phase 3d — `finally`-during-propagation for `sys.exc_info()` (DONE).** Phase 3a
 set the current-exception register only at except-handler entry, so a `finally`
