@@ -185,12 +185,25 @@ ___signalNew___: positional kw: kwargs
 	BaseException's __init__ so they skip the __init__ call but still receive
 	the complete args tuple."
 
+	^ self ___signalNew___: positional kw: kwargs cause: nil
+%
+
+category: 'Grail-Initialization'
+classmethod: BaseException
+___signalNew___: positional kw: kwargs cause: aCause
+	"``raise Cls(*positional, **kwargs) from aCause''.  As ___signalNew___:kw:,
+	but the cause is applied to the freshly built instance BEFORE it is
+	signalled -- ``__cause__'' has to be in place by the time any handler sees
+	the exception.  nil aCause means there was no ``from'' clause at all (as
+	distinct from ``from None'', which arrives as the None singleton)."
+
 	| instance |
 	instance := self ___new___.
 	instance ___args___: positional.
 	(self @env0:___hasUserInit___) ifTrue: [
 		(instance ___pyAttrLoad___: #'__init__') value: positional value: kwargs
 	].
+	aCause == nil ifFalse: [BaseException ___applyCause___: aCause to: instance].
 	"Signal WITH a message so GemStone's ``messageText'' / ``description''
 	carry it -- the old ___signal___: path set this, and a bare ``signal''
 	would leave it nil (``ValueError(''x'') description'' would drop the
@@ -214,12 +227,71 @@ ___pyRaise___: excValue
 	MessageNotUnderstood for #signal (test_baseexception test_raise_string /
 	test_raise_new_style_non_exception)."
 
+	^ self ___pyRaise___: excValue cause: nil
+%
+
+category: 'Grail-Raise Validation'
+classmethod: BaseException
+___pyRaise___: excValue cause: aCause
+	"``raise excValue from aCause''.  nil aCause means there was no ``from''
+	clause; ``from None'' arrives as the None singleton, which suppresses the
+	context without recording a cause.
+
+	The instance branch must NOT always #signal.  ``except E as e: raise e''
+	re-raises the very exception being handled, and GemStone refuses to signal
+	one a second time (UncontinuableError 6011, 'Exception has already been
+	signaled').  #pass is the primitive for continuing an exception already in
+	flight, and it preserves object identity -- CPython requires the caught
+	object to BE the one raised.  #_handlerActive is the kernel's own test for
+	``a handler is running for this exception'', true both in the handler block
+	and in any frame beneath it (so a helper that re-raises works too), and
+	false for an exception that was merely stashed and raised after its handler
+	unwound -- which must still take the ordinary #signal path."
+
 	(excValue @env0:isKindOf: Behavior) ifTrue: [
 		((excValue == BaseException) or: [excValue @env0:inheritsFrom: BaseException])
-			ifTrue: [^ excValue @env0:signal].
-		^ TypeError ___signal___: 'exceptions must derive from BaseException'].
-	(excValue @env0:isKindOf: BaseException) ifTrue: [^ excValue @env0:signal].
+			ifFalse: [^ TypeError ___signal___: 'exceptions must derive from BaseException'].
+		"A bare class has no instance to hang __cause__ on, so ``raise Cls from
+		C'' has to build one; without a cause keep the cheaper direct signal."
+		aCause == nil ifTrue: [^ excValue @env0:signal].
+		^ excValue ___signalNew___: (Array @env0:new) kw: nil cause: aCause].
+	(excValue @env0:isKindOf: BaseException) ifTrue: [
+		aCause == nil ifFalse: [self ___applyCause___: aCause to: excValue].
+		(self ___isInFlight___: excValue) ifTrue: [^ excValue @env0:pass].
+		^ excValue @env0:signal].
 	^ TypeError ___signal___: 'exceptions must derive from BaseException'
+%
+
+category: 'Grail-Raise Validation'
+classmethod: BaseException
+___isInFlight___: excValue
+	"Is GemStone currently handling excValue?  #_handlerActive is a kernel
+	private, so tolerate its absence (an older image answers false, which just
+	restores the previous always-#signal behaviour) rather than turning every
+	raise into a MessageNotUnderstood."
+
+	^ ([excValue @env0:_handlerActive]
+		@env0:on: MessageNotUnderstood do: [:e | e @env0:return: false]) == true
+%
+
+category: 'Grail-Raise Validation'
+classmethod: BaseException
+___applyCause___: aCause to: anException
+	"Wire up ``raise anException from aCause''.  CPython sets __cause__, and
+	sets __suppress_context__ as a side effect either way -- ``from None''
+	suppresses the implicit context while recording NO cause, which
+	___setCause___:context: expresses as a nil cause.  A cause that is neither
+	None nor a BaseException is a TypeError."
+
+	| c |
+	c := (aCause == None) ifTrue: [nil] ifFalse: [aCause].
+	(c == nil
+		or: [(c @env0:isKindOf: BaseException)
+			or: [(c @env0:isKindOf: Behavior)
+				and: [(c == BaseException) or: [c @env0:inheritsFrom: BaseException]]]])
+		ifFalse: [^ TypeError ___signal___:
+			'exception causes must derive from BaseException'].
+	^ anException ___setCause___: c context: nil
 %
 
 category: 'Grail-Raise Validation'
@@ -231,10 +303,19 @@ ___pyRaiseNew___: cls args: positional kw: kwargs
 	via ___signalNew___ (running any user __init__), exactly as the unguarded
 	path did for a real exception class."
 
+	^ self ___pyRaiseNew___: cls args: positional kw: kwargs cause: nil
+%
+
+category: 'Grail-Raise Validation'
+classmethod: BaseException
+___pyRaiseNew___: cls args: positional kw: kwargs cause: aCause
+	"``raise cls(*positional, **kwargs) from aCause'' -- as ___pyRaiseNew___:args:kw:
+	with the ``from'' clause applied to the new instance before it is signalled."
+
 	((cls @env0:isKindOf: Behavior)
 		and: [(cls == BaseException) or: [cls @env0:inheritsFrom: BaseException]])
 			ifFalse: [^ TypeError ___signal___: 'exceptions must derive from BaseException'].
-	^ cls ___signalNew___: positional kw: kwargs
+	^ cls ___signalNew___: positional kw: kwargs cause: aCause
 %
 
 category: 'Grail-Raise Validation'
