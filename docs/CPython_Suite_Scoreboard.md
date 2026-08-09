@@ -25,7 +25,7 @@ different rows and merges cleanly.
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
 | test.test_datetime | ERROR | 525 | 0 | 6 | 3 |  |
 | test.test_re | OK | 165 | 0 | 0 | 28 |  |
-| test.test_functools | FAIL | 325 | 2 | 0 | 122 |  |
+| test.test_functools | OK | 325 | 0 | 0 | 124 |  |
 | test.test_list | OK | 68 | 0 | 0 | 3 |  |
 | test.test_tuple | OK | 38 | 0 | 0 | 6 |  |
 | test.test_dict | OK | 120 | 0 | 0 | 20 |  |
@@ -33,7 +33,7 @@ different rows and merges cleanly.
 | test.test_bytes | OK | 316 | 0 | 0 | 25 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
-| test.test_enum | ERROR | 1077 | 50 | 21 | 5 |  |
+| test.test_enum | ERROR | 1077 | 49 | 21 | 5 |  |
 | test.test_unary | OK | 6 | 0 | 0 | 0 |  |
 | test.test_int_literal | OK | 6 | 0 | 0 | 0 |  |
 | test.test_unpack | OK | 1 | 0 | 0 | 0 |  |
