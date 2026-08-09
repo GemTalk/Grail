@@ -117,3 +117,33 @@ testMultipleImportsOnOneStatement
 	self assert: (self at: 'multiple_json') @env0:asString equals: '[1]'.
 	self assert: (self at: 'multiple_math') equals: 2.
 %
+
+category: 'Grail-Tests - from import'
+method: ClassBodyImportTestCase
+testFromImportBindsAsClassAttribute
+	"``from os import sep'' binds sep in the class namespace, and a later
+	body statement must see it -- the same contract as a plain import.
+	ImportFromAst was the last binding form that did not announce itself,
+	so the statement was dropped whole and ``sep'' raised NameError."
+
+	self assert: (self at: 'from_combined') @env0:asString equals: 'x/'.
+	self assert: (self at: 'from_on_class') @env0:asString equals: '/'.
+%
+
+category: 'Grail-Tests - from import'
+method: ClassBodyImportTestCase
+testFromImportAliasBindsOnlyTheAlias
+	"``from math import floor as fl'' binds fl, NOT floor."
+
+	self assert: (self at: 'from_aliased') equals: 2.
+	self deny: (self at: 'from_alias_not_original').
+%
+
+category: 'Grail-Tests - from import'
+method: ClassBodyImportTestCase
+testFromImportMultipleNames
+	"``from math import floor, ceil'' binds both."
+
+	self assert: (self at: 'from_multi_floor') equals: 2.
+	self assert: (self at: 'from_multi_ceil') equals: 3.
+%
