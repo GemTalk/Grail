@@ -19,13 +19,13 @@ different rows and merges cleanly.
 | test.test_math | OK | 88 | 0 | 0 | 5 |  |
 | test.test_int | OK | 52 | 0 | 0 | 17 |  |
 | test.test_float | OK | 54 | 0 | 0 | 3 |  |
-| test.test_heapq | OK | 68 | 0 | 0 | 1 |  |
+| test.test_heapq | OK | 68 | 0 | 0 | 34 |  |
 | test.test_bisect | OK | 46 | 0 | 0 | 0 |  |
-| test.test_operator | OK | 110 | 0 | 0 | 0 |  |
+| test.test_operator | OK | 110 | 0 | 0 | 58 |  |
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
 | test.test_datetime | ERROR | 525 | 0 | 6 | 3 |  |
 | test.test_re | OK | 165 | 0 | 0 | 28 |  |
-| test.test_functools | FAIL | 325 | 5 | 0 | 6 |  |
+| test.test_functools | FAIL | 325 | 2 | 0 | 122 |  |
 | test.test_list | OK | 68 | 0 | 0 | 3 |  |
 | test.test_tuple | OK | 38 | 0 | 0 | 6 |  |
 | test.test_dict | OK | 120 | 0 | 0 | 20 |  |

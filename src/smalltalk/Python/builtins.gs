@@ -3272,3 +3272,71 @@ _map: positional kw: kwargs
 %
 
 set compile_env: 0
+
+category: 'Grail-Built-in Functions'
+classmethod: builtins
+___builtinNamespaceNames___
+	"Every name in CPython's ``builtins'' namespace -- i.e. dir(builtins) on
+	CPython 3.14, the version Grail targets.  This is a SPEC, not an
+	inventory of what Grail implements: it is the set of names Python itself
+	lets an unqualified reference resolve to, so it changes only when the
+	language does.
+
+	NameAst uses it to decide whether a user-written bare name may bind
+	directly to a Smalltalk global.  Grail's own Python SymbolDictionary also
+	holds module classes (``json'', ``math''), implementation classes
+	(``PyDict'', ``PySocket'') and flattened ``module_attr'' names
+	(``sys_flags''), and the user's symbol list reaches the GemStone kernel
+	on top of that -- none of which Python would resolve.  Without this gate
+	``Decimal'' silently bound to GemStone's ScaledDecimal and ``json''
+	resolved with no import at all, instead of raising NameError.
+
+	The five module-level dunders (__name__, __doc__, __package__,
+	__loader__, __spec__) are deliberately EXCLUDED: dir(builtins) lists
+	them, but in real code they are the enclosing module's own attributes,
+	so they must go through the module-attribute path.
+
+	Memoised per session -- codegen asks for this on every free name."
+
+	| s |
+	s := SessionTemps current at: #GrailBuiltinNamespaceNames otherwise: nil.
+	s ifNotNil: [^ s].
+	s := IdentitySet new.
+	s addAll: #(
+		#'ArithmeticError' #'AssertionError' #'AttributeError' #'BaseException'
+		#'BaseExceptionGroup' #'BlockingIOError' #'BrokenPipeError'
+		#'BufferError' #'BytesWarning' #'ChildProcessError'
+		#'ConnectionAbortedError' #'ConnectionError' #'ConnectionRefusedError'
+		#'ConnectionResetError' #'DeprecationWarning' #'EOFError' #'Ellipsis'
+		#'EncodingWarning' #'EnvironmentError' #'Exception' #'ExceptionGroup'
+		#'False' #'FileExistsError' #'FileNotFoundError' #'FloatingPointError'
+		#'FutureWarning' #'GeneratorExit' #'IOError' #'ImportError'
+		#'ImportWarning' #'IndentationError' #'IndexError' #'InterruptedError'
+		#'IsADirectoryError' #'KeyError' #'KeyboardInterrupt' #'LookupError'
+		#'MemoryError' #'ModuleNotFoundError' #'NameError' #'None'
+		#'NotADirectoryError' #'NotImplemented' #'NotImplementedError'
+		#'OSError' #'OverflowError' #'PendingDeprecationWarning'
+		#'PermissionError' #'ProcessLookupError' #'PythonFinalizationError'
+		#'RecursionError' #'ReferenceError' #'ResourceWarning' #'RuntimeError'
+		#'RuntimeWarning' #'StopAsyncIteration' #'StopIteration' #'SyntaxError'
+		#'SyntaxWarning' #'SystemError' #'SystemExit' #'TabError'
+		#'TimeoutError' #'True' #'TypeError' #'UnboundLocalError'
+		#'UnicodeDecodeError' #'UnicodeEncodeError' #'UnicodeError'
+		#'UnicodeTranslateError' #'UnicodeWarning' #'UserWarning' #'ValueError'
+		#'Warning' #'ZeroDivisionError' #'_IncompleteInputError'
+		#'__build_class__' #'__debug__' #'__import__' #'abs' #'aiter' #'all'
+		#'anext' #'any' #'ascii' #'bin' #'bool' #'breakpoint' #'bytearray'
+		#'bytes' #'callable' #'chr' #'classmethod' #'compile' #'complex'
+		#'copyright' #'credits' #'delattr' #'dict' #'dir' #'divmod'
+		#'enumerate' #'eval' #'exec' #'exit' #'filter' #'float' #'format'
+		#'frozenset' #'getattr' #'globals' #'hasattr' #'hash' #'help' #'hex'
+		#'id' #'input' #'int' #'isinstance' #'issubclass' #'iter' #'len'
+		#'license' #'list' #'locals' #'map' #'max' #'memoryview' #'min' #'next'
+		#'object' #'oct' #'open' #'ord' #'pow' #'print' #'property' #'quit'
+		#'range' #'repr' #'reversed' #'round' #'set' #'setattr' #'slice'
+		#'sorted' #'staticmethod' #'str' #'sum' #'super' #'tuple' #'type'
+		#'vars' #'zip'
+	).
+	SessionTemps current at: #GrailBuiltinNamespaceNames put: s.
+	^ s
+%

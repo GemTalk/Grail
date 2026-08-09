@@ -39,11 +39,14 @@ removeallclassmethods ClassDefAst
 
 set compile_env: 0
 
-category: 'Grail-code generation'
+category: 'Grail-Class Body'
 method: ClassDefAst
-addVariableNamesTo: aStream
+___boundTargetNames___
+	"A ``class'' statement binds its own name.  Like ``def'' it contributes
+	no classBodyAttributePairs: a nested class compiles to a real Smalltalk
+	class, not to a class attribute of the enclosing one."
 
-	aStream nextPutAll: name; space
+	^ Array with: name asSymbol
 %
 
 category: 'Grail-code generation'
@@ -809,29 +812,23 @@ printSmalltalkRuntimeOn: aStream
 		| firstBinding attrAssignPos |
 		firstBinding := IdentityKeyValueDictionary new.
 		attrAssignPos := IdentityKeyValueDictionary new.
+		"Each statement ANNOUNCES what it binds (___boundTargetNames___) and
+		which attribute values it yields (classBodyAttributePairs); this scan
+		only assigns positions.  A new binding form therefore becomes visible
+		to later siblings by implementing those methods -- it does not have to
+		be added to a list of isKindOf: tests here."
 		body body doWithIndex: [:stmt :pos |
-			(stmt isKindOf: FunctionDefAst) ifTrue: [
-				(firstBinding includesKey: stmt name asSymbol) ifFalse: [
-					firstBinding at: stmt name asSymbol put: pos]].
-			(stmt isKindOf: ClassDefAst) ifTrue: [
-				(firstBinding includesKey: stmt name asSymbol) ifFalse: [
-					firstBinding at: stmt name asSymbol put: pos]].
-			"An import binds its name at this position too, so later
-			siblings can read it (``import json'' then ``json.dumps'')."
-			(stmt isKindOf: ImportAst) ifTrue: [
-				stmt ___boundTargetNames___ do: [:nm |
-					(firstBinding includesKey: nm) ifFalse: [
-						firstBinding at: nm put: pos].
-					attrAssignPos at: nm put: pos]].
-			((stmt isKindOf: AssignAst) or: [stmt isKindOf: AnnAssignAst]) ifTrue: [
-				(stmt ___boundTargetNames___) do: [:nm |
-					(firstBinding includesKey: nm) ifFalse: [
-						firstBinding at: nm put: pos].
-					"Last assignment wins — that's the statement the
-					classAttrs pair came from (``args_check =
-					staticmethod(args_check)'' rebinding a sibling def
-					must see the def as already bound)."
-					attrAssignPos at: nm put: pos]].
+			stmt ___boundTargetNames___ do: [:nm |
+				(firstBinding includesKey: nm) ifFalse: [
+					firstBinding at: nm put: pos]].
+			"Last assignment wins — that's the statement the classAttrs pair
+			came from (``args_check = staticmethod(args_check)'' rebinding a
+			sibling def must see the def as already bound).  Driven by the
+			attribute pairs, not by the bound names, because a ``def'' or a
+			nested ``class'' binds a name but yields no attribute value and so
+			must not move the position."
+			stmt classBodyAttributePairs do: [:pair |
+				attrAssignPos at: pair key put: pos].
 		].
 		"emittedChainValues: value-AST object -> the FIRST target key that
 		emitted it.  A class-body chained assignment ``a = b = expr'' makes
@@ -1349,12 +1346,8 @@ printSmalltalkRuntimeOn: aStream
 	it when present and falls back to the old two-store walk when it is not."
 	[:orderNames |
 	body body do: [:stmt |
-		(stmt isKindOf: FunctionDefAst) ifTrue: [
-			(orderNames includes: stmt name asSymbol)
-				ifFalse: [orderNames add: stmt name asSymbol]].
-		((stmt isKindOf: AssignAst) or: [stmt isKindOf: AnnAssignAst]) ifTrue: [
-			(stmt ___boundTargetNames___) do: [:nm |
-				(orderNames includes: nm) ifFalse: [orderNames add: nm]]]].
+		stmt ___boundTargetNames___ do: [:nm |
+			(orderNames includes: nm) ifFalse: [orderNames add: nm]]].
 	orderNames isEmpty ifFalse: [
 		| src |
 		src := WriteStream on: String new.
@@ -1990,15 +1983,16 @@ ___allFunctionDefs___
 category: 'Grail-code generation'
 method: ClassDefAst
 classBodyAttributes
-	"Scan the class body for simple-assignment statements and return
-	an OrderedCollection of (Symbol -> ExpressionAst) associations,
-	one per declared name in source order.  A simple assignment is
-	an AssignAst whose every target is a bare NameAst — chained
-	assignments like `A = B = expr` yield two entries pointing at
-	the same value AST.  Tuple, attribute, and subscript targets are
-	skipped.  Used by codegen to materialize class-level attributes
-	(e.g. ``class Color: RED = 1``) as Smalltalk classInstVars +
-	class-side accessor/setter pairs on the new class."
+	"Every class attribute the body declares, as an OrderedCollection of
+	(Symbol -> ExpressionAst) associations in source order.  Used by codegen
+	to materialize them (e.g. ``class Color: RED = 1``) as Smalltalk
+	classInstVars + class-side accessor/setter pairs on the new class.
+
+	The pairs come from the statements themselves, via
+	classBodyAttributePairs -- see StatementAst for the protocol.  A chained
+	``A = B = expr'' yields one entry per target, all pointing at the SAME
+	value AST (emitted once below, the rest aliased); attribute and
+	subscript targets declare nothing on the class and yield no entry."
 
 	| pairs aliasNames |
 	"Sibling-method aliases (``__lt__ = __eq__'') are compiled as real
@@ -2006,62 +2000,17 @@ classBodyAttributes
 	as class attributes -- exclude their names here."
 	aliasNames := (self ___classBodyMethodAliases___ collect: [:a | a key]) asIdentitySet.
 	pairs := OrderedCollection new.
+	"Each binding form says which attributes it yields; this method only
+	applies the rule ClassDefAst owns -- drop the sibling-method aliases,
+	which is cross-statement knowledge no single statement has.  A new
+	binding form joins in by implementing classBodyAttributePairs; nothing
+	here has to learn about it.  (``import x'' in a class body is exactly
+	such a form: CPython binds x in the class NAMESPACE, so it becomes a
+	class attribute like any assignment -- werkzeug's EnvironBuilder does
+	that, then ``del json''.)"
 	body body do: [:stmt |
-		"``import x'' in a class body binds x in the class NAMESPACE, so it
-		is a class attribute like any other assignment (werkzeug's
-		EnvironBuilder does exactly this, then ``del json'').  Previously
-		imports were simply skipped here, so the name never bound and a
-		later reference raised NameError -- masked until now because the
-		module name resolved as a bare global anyway."
-		(stmt isKindOf: ImportAst) ifTrue: [
-			pairs addAll: stmt classBodyAttributePairs].
-		(stmt isKindOf: AssignAst) ifTrue: [
-			(stmt targets allSatisfy: [:t | t isKindOf: NameAst]) ifTrue: [
-				stmt targets do: [:t |
-					(aliasNames includes: t id asSymbol) ifFalse: [
-						pairs add: t id asSymbol -> stmt value].
-				].
-			].
-			"Tuple-target class-body assignment: ``__add__, __radd__ =
-			_operator_fallbacks(_add, operator.add)'' (vendored
-			fractions.py builds every binary operator this way).  Each
-			element becomes a class attribute whose value is a synthetic
-			``<value>[i]`` subscript.  The RHS re-evaluates once per
-			element -- acceptable for the factory-call idiom (each call
-			returns an equivalent fresh tuple)."
-			((stmt targets size = 1)
-				and: [(stmt targets first isKindOf: TupleAst)
-				and: [(stmt targets first instVarAt:
-						((stmt targets first class allInstVarNames indexOf: #elts)))
-					allSatisfy: [:e | e isKindOf: NameAst]]]) ifTrue: [
-				| elts |
-				elts := stmt targets first instVarAt:
-					(stmt targets first class allInstVarNames indexOf: #elts).
-				1 to: elts size do: [:i |
-					| sub |
-					sub := SubscriptAst new
-							value: stmt value;
-							slice: (ConstantAst new
-									value: i - 1;
-									kind: nil;
-									yourself);
-							ctx: LoadAst basicNew;
-							yourself.
-					pairs add: (elts at: i) id asSymbol -> sub]
-			].
-		].
-		"Class-level annotated assignment (`x: int = 5`) — strip
-		the annotation, treat as a regular class attribute.  Bare
-		annotations (`x: int` with no value) ALSO materialize a
-		class-side slot (with a nil initializer); they're commonly
-		used as forward-declared placeholders that get assigned
-		from outside the class body later (Jinja2's
-		``Environment.template_class = Template``)."
-		((stmt isKindOf: AnnAssignAst)
-			and: [stmt target isKindOf: NameAst]) ifTrue: [
-			pairs add: stmt target id asSymbol -> stmt value
-		].
-	].
+		stmt classBodyAttributePairs do: [:pair |
+			(aliasNames includes: pair key) ifFalse: [pairs add: pair]]].
 	^ pairs
 %
 

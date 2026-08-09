@@ -60,23 +60,33 @@ with: aSymbol
 category: 'Grail-codegen helpers'
 classmethod: NameAst
 isResolvableSymbol: aSymbol
-	"True if aSymbol names something the GemStone method compiler can
-	resolve at compile time — i.e., it's defined in some
-	SymbolDictionary on the user's symbol list (a class name, a
-	pre-installed Python module, a Globals binding, etc.).  Used by
-	the late-module-name-binding fallback in `printSmalltalkOn:` to
-	avoid emitting a runtime self-at-lookup for names that already
-	resolve as bare identifiers."
+	"True if a USER-WRITTEN bare name may bind directly to a Smalltalk
+	global at compile time.  Used by the free-name fallback in
+	printSmalltalkOn: to decide between emitting the bare identifier and
+	emitting a runtime module-attribute lookup.
 
-	^ (System myUserProfile symbolList objectNamed: aSymbol) notNil
-%
+	Two conditions, both required.  The name must be one Python itself
+	would resolve unqualified -- i.e. it is in CPython's builtins namespace
+	(see builtins class >> ___builtinNamespaceNames___) -- and it must
+	actually resolve on this user's symbol list.
 
-category: 'other'
-method: NameAst
-addVariableNamesTo: aStream
+	The builtins gate is the important half.  Grail's Python
+	SymbolDictionary is also its implementation namespace: alongside the 93
+	real builtins it holds module classes (``json'', ``math''),
+	implementation classes (``PyDict'', ``PySocket'', ``BoundMethod'') and
+	flattened ``module_attr'' names (``sys_flags'', ``os_path''), and the
+	symbol list reaches the whole GemStone kernel beyond that.  Resolving
+	against all of it made 166 names bind that CPython would not resolve at
+	all: ``json'' worked with no import, and ``Decimal'' silently bound to
+	GemStone's ScaledDecimal.  Now those raise NameError, as they should.
 
-	
-	aStream nextPutAll: id; space.
+	This gates only names the USER wrote.  Internal classes that codegen
+	EMITS -- ``Python'', ``BoundMethod'', ``PyLazyExceptSelector'' -- are
+	written straight into the generated source and never come through here,
+	so they are unaffected."
+
+	^ (builtins ___builtinNamespaceNames___ includes: aSymbol)
+		and: [(System myUserProfile symbolList objectNamed: aSymbol) notNil]
 %
 
 category: 'other'

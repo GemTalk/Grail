@@ -63,15 +63,6 @@ elts
 
 category: 'Grail-other'
 method: TupleAst
-addVariableNamesTo: aStream
-
-	elts do: [:each | 
-		each addVariableNamesTo: aStream.
-	].
-%
-
-category: 'Grail-other'
-method: TupleAst
 declareVariable
 
 	elts do: [:each | each declareVariable].

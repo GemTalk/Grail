@@ -195,6 +195,21 @@ ___boundTargetNames___
 	(target isKindOf: NameAst) ifTrue: [^ OrderedCollection with: target id asSymbol].
 	^ OrderedCollection new
 %
+
+category: 'Grail-Class Body'
+method: AnnAssignAst
+classBodyAttributePairs
+	"``name -> valueAst'' pair for an annotated assignment in a CLASS BODY.
+
+	``x: int = 5'' strips the annotation and behaves as a plain class
+	attribute.  A BARE annotation (``x: int'', no value) also materialises a
+	class-side slot, with a nil initializer: those are commonly
+	forward-declared placeholders assigned from outside the body later
+	(Jinja2's ``Environment.template_class = Template'')."
+
+	(target isKindOf: NameAst) ifFalse: [^ #()].
+	^ Array with: target id asSymbol -> value
+%
 method: AnnAssignAst
 target: newValue
 	target := newValue
