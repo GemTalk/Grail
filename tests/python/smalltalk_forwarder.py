@@ -10,6 +10,12 @@ forwarders target: pong, bump:, combine:with:, giveNil.
 """
 
 from grail import smalltalk
+import gemstone
+
+# A test fixture class in the PythonTests dictionary, not a Python
+# builtin -- reach it through gemstone's named-global lookup rather
+# than relying on Smalltalk globals leaking into the Python namespace.
+GrailForwarderTarget = gemstone["GrailForwarderTarget"]
 
 
 class Widget(GrailForwarderTarget):
