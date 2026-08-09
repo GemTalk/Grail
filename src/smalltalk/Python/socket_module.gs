@@ -820,6 +820,12 @@ initialize
 	self @env0:at: #SHUT_RD put: 0.
 	self @env0:at: #SHUT_WR put: 1.
 	self @env0:at: #SHUT_RDWR put: 2.
+
+	"Exception aliases.  Since CPython 3.10 socket.timeout IS TimeoutError
+	and socket.error IS OSError (both kept as aliases for older code);
+	``from socket import timeout'' is still common in third-party libraries."
+	self @env0:at: #timeout put: TimeoutError.
+	self @env0:at: #error put: OSError.
 %
 
 category: 'Grail-Constructors'

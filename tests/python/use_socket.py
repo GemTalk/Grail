@@ -220,3 +220,22 @@ def http_server_get():
     status = raw.split("\r\n", 1)[0]
     rbody = raw.split("\r\n\r\n", 1)[1] if "\r\n\r\n" in raw else ""
     return [status, rbody]
+
+
+def exception_aliases():
+    """socket.timeout / socket.error, as CPython 3.10+ defines them.
+
+    Both are aliases, not distinct classes: `socket.timeout is
+    TimeoutError` and `socket.error is OSError`.  Third-party code still
+    writes `from socket import timeout`, which fails at import time when
+    the attribute is missing."""
+    import socket
+    from socket import timeout as SocketTimeout
+    from socket import error as SocketError
+    return [
+        socket.timeout is TimeoutError,
+        socket.error is OSError,
+        SocketTimeout is TimeoutError,
+        SocketError is OSError,
+        issubclass(socket.timeout, OSError),
+    ]
