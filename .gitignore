@@ -7,6 +7,7 @@ stdout.txt
 .setenv
 pyperf*
 .claude/settings.local.json
+.claude/worktrees/
 .DS_Store
 twilio_env.py
 
