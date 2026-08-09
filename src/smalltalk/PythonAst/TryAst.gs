@@ -116,8 +116,16 @@ printSmalltalkOn: aStream
 				raise ``TypeError: catching classes that do not inherit from
 				BaseException is not allowed'', not MNU on #handles:
 				(test_baseexception test_catch_*).  The handler is passed as an
-				ARGUMENT so it cannot MNU during the check."
-				aStream nextPutAll: '(BaseException @env1:___pyExceptType___: '.
+				ARGUMENT so it cannot MNU during the check.
+
+				Both the expression AND that validation go inside a block, held
+				by a PyLazyExceptSelector: ``on:do:'' evaluates its on: argument
+				when the handler is INSTALLED, but Python evaluates an
+				``except <expr>:'' clause only when an exception actually
+				reaches it.  Evaluating eagerly made
+				  try: ... / except json.decoder.JSONDecodeError: ...
+				fail on the success path when the name did not resolve."
+				aStream nextPutAll: '(PyLazyExceptSelector @env0:on: [BaseException @env1:___pyExceptType___: '.
 				(handler type isKindOf: TupleAst)
 					ifTrue: [
 						"``except (A, B):`` — emit a GemStone ExceptionSet
@@ -136,7 +144,7 @@ printSmalltalkOn: aStream
 						it merges with the surrounding ``on:...do:`` into one
 						mashed selector."
 						handler type printSmalltalkWithParenthesisOn: aStream].
-				aStream nextPut: $)].
+				aStream nextPutAll: '])'].
 		aStream nextPutAll: ' do: [:___ex | | ___savedExc |'; increaseIndent; lf.
 		"Always re-raise Grail's control-flow signals so a Python
 		``except Exception`` doesn't swallow a pending ``return`` /
