@@ -10,7 +10,7 @@ from urllib.parse import urlsplit, urljoin
 
 from requests.adapters import HTTPAdapter
 from requests.exceptions import (
-    ConnectionError, Timeout, TooManyRedirects, RequestException)
+    ConnectionError, SSLError, Timeout, TooManyRedirects, RequestException)
 from requests.hooks import default_hooks, dispatch_hook
 from requests.models import Request, PreparedRequest, Response
 from requests.structures import CaseInsensitiveDict
@@ -100,10 +100,14 @@ class Session:
             total = getattr(retries, 'total', 0)
             retries = int(total) if total else 0
 
+        if verify is None:
+            verify = self.verify
+
         redirects = 0
         request_to_send = prepared
         while True:
-            response = self._send_once(request_to_send, timeout, retries)
+            response = self._send_once(request_to_send, timeout, retries,
+                                       verify)
             if allow_redirects and response.status_code in \
                     (301, 302, 303, 307, 308):
                 location = response.headers.get('Location')
@@ -132,7 +136,22 @@ class Session:
         response = dispatch_hook('response', request_to_send.hooks, response)
         return response
 
-    def _send_once(self, prepared, timeout, retries):
+    def _ssl_context(self, verify):
+        """Build the TLS context for a ``verify=`` value.
+
+        Upstream semantics: True -> default trust store, False -> no
+        verification, str -> a CA bundle file or hash directory."""
+        import os
+        import ssl
+        if verify is False:
+            return ssl._create_unverified_context()
+        if verify is True or verify is None:
+            return ssl.create_default_context()
+        if os.path.isdir(verify):
+            return ssl.create_default_context(capath=verify)
+        return ssl.create_default_context(cafile=verify)
+
+    def _send_once(self, prepared, timeout, retries, verify=True):
         import http.client
 
         parts = urlsplit(prepared.url)
@@ -149,7 +168,8 @@ class Session:
         while True:
             if scheme == 'https':
                 conn = http.client.HTTPSConnection(
-                    parts.netloc, timeout=timeout)
+                    parts.netloc, timeout=timeout,
+                    context=self._ssl_context(verify))
             elif scheme == 'http':
                 conn = http.client.HTTPConnection(
                     parts.netloc, timeout=timeout)
@@ -163,11 +183,20 @@ class Session:
                 break
             except OSError as exc:
                 conn.close()
+                # A TLS failure is not worth retrying and upstream reports
+                # it as requests.exceptions.SSLError (a ConnectionError).
+                import ssl
+                if isinstance(exc, ssl.SSLError):
+                    raise SSLError(str(exc), request=prepared)
                 attempt = attempt + 1
                 if attempt > retries:
                     raise ConnectionError(str(exc), request=prepared)
 
         body = raw.read()
+        # Close the response before the connection: the response holds a
+        # makefile() handle on the socket, and the socket is only really
+        # released once both are closed (CPython's _io_refs).
+        raw.close()
         conn.close()
 
         response = Response()
@@ -182,12 +211,22 @@ class Session:
 
     def request(self, method, url, params=None, data=None, headers=None,
                 auth=None, timeout=None, allow_redirects=True, hooks=None,
-                json=None, **kwargs):
+                json=None, proxies=None, stream=None, verify=None,
+                cert=None, **kwargs):
         req = Request(method=method, url=url, headers=headers, data=data,
                       params=params, auth=auth, hooks=hooks, json=json)
         prepared = self.prepare_request(req)
+        # As upstream: per-call transport settings fall back to the
+        # session's.  These have to reach send() -- verify= in particular
+        # is the documented way to turn certificate checking off.
+        settings = self.merge_environment_settings(
+            prepared.url, proxies or {}, stream, verify, cert)
         return self.send(prepared, timeout=timeout,
-                         allow_redirects=allow_redirects)
+                         allow_redirects=allow_redirects,
+                         proxies=settings['proxies'],
+                         stream=settings['stream'],
+                         verify=settings['verify'],
+                         cert=settings['cert'])
 
     def get(self, url, **kwargs):
         return self.request('GET', url, **kwargs)

@@ -103,3 +103,39 @@ testTlsRoundtrip
 	self assert: resp equals: 'echo:ping' asByteArray.
 	self assert: version equals: 'TLSv1.3'
 %
+
+category: 'Grail-Tests-Ssl'
+method: SslModuleTestCase
+testDefaultContextLoadsTrustStore
+	"ssl.create_default_context() must arrive with CA anchors loaded, the
+	way CPython's does via load_default_certs().  Without them every
+	verifying handshake fails with 'certificate verify failed', which is
+	what made all HTTPS requests fail.  Offline: only inspects config."
+
+	| mod r |
+	mod := self loadFixture.
+	r := mod @env1:trust_store_defaults.
+	self assert: (r @env1:__getitem__: 'has_cafile')
+		description: 'no platform CA bundle found'.
+	self assert: (r @env1:__getitem__: 'cafile_exists').
+	self assert: (r @env1:__getitem__: 'default_verifies').
+	self assert: (r @env1:__getitem__: 'default_checks_hostname').
+	self assert: (r @env1:__getitem__: 'default_loaded_anchors')
+		description: 'default context loaded no CA anchors'.
+	self assert: (r @env1:__getitem__: 'explicit_cafile_kept').
+%
+
+category: 'Grail-Tests-Ssl'
+method: SslModuleTestCase
+testUnverifiedContextHasVerificationOff
+	"_create_unverified_context() stays off — requests(verify=False)
+	and the TLS roundtrip test both depend on it."
+
+	| mod r |
+	mod := self loadFixture.
+	r := mod @env1:trust_store_defaults.
+	self assert: (r @env1:__getitem__: 'unverified_off').
+	self assert: (r @env1:__getitem__: 'unverified_has_no_anchors').
+	self assert: (r @env1:__getitem__: 'omitted_args_raise')
+		description: 'load_verify_locations() with no args must raise TypeError'.
+%

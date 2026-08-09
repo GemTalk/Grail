@@ -10,6 +10,7 @@
 # HTTPConnection request against it, then plays the server side by
 # hand with a canned HTTP response.
 
+import io
 import socket
 import http.client
 
@@ -187,8 +188,105 @@ def error_status():
     return result
 
 
+def connection_close_body():
+    """``Connection: close`` — the body must still be readable.
+
+    getresponse() closes the connection as soon as the headers say the
+    server will close, so the response is reading through a file object
+    over an already-closed socket.  CPython keeps the socket alive until
+    the last makefile() handle closes (socket._io_refs); without that the
+    read below fails with a nil GsSocket."""
+    srv, port = _listen()
+    client = http.client.HTTPConnection('127.0.0.1', port)
+    client.request('GET', '/bye', headers={'Connection': 'close',
+                                           'Host': '127.0.0.1'})
+
+    # The body must be bigger than one recv() (8192) or the reader
+    # buffers the whole response while the socket is still open and the
+    # bug never fires -- the body has to be fetched AFTER the close.
+    payload = b'goodbye' * 3000          # 21000 bytes
+    conn, request_text = _accept_and_read_request(srv)
+    conn.sendall(b'HTTP/1.1 200 OK\r\n'
+                 b'Content-Type: text/plain\r\n'
+                 b'Content-Length: ' + str(len(payload)).encode('ascii') +
+                 b'\r\n'
+                 b'Connection: close\r\n'
+                 b'\r\n' + payload)
+
+    resp = client.getresponse()
+    will_close = resp.will_close
+    sock_dropped = client.sock is None
+    body = resp.read()
+    result = {
+        'status': resp.status,
+        'will_close': will_close,
+        'sock_dropped': sock_dropped,
+        'body_len': len(body),
+        'body_intact': body == payload,
+    }
+    resp.close()
+    conn.close()
+    client.close()
+    srv.close()
+    return result
+
+
+def response_context_manager():
+    """The response is an io.BufferedIOBase, so ``with resp:`` works."""
+    srv, port = _listen()
+    client = http.client.HTTPConnection('127.0.0.1', port)
+    client.request('GET', '/ctx')
+
+    conn, request_text = _accept_and_read_request(srv)
+    conn.sendall(b'HTTP/1.1 200 OK\r\n'
+                 b'Content-Length: 5\r\n'
+                 b'\r\n'
+                 b'inctx')
+
+    resp = client.getresponse()
+    with resp as r:
+        body = r.read()
+    result = {
+        'body': body.decode('utf-8'),
+        'closed_after': resp.closed,
+        'is_bufferedio': isinstance(resp, io.BufferedIOBase),
+        'readable': True,
+    }
+    conn.close()
+    client.close()
+    srv.close()
+    return result
+
+
+def socket_io_refs():
+    """socket.close() defers the real close while makefile() handles live."""
+    srv, port = _listen()
+    client = socket.socket()
+    client.connect(('127.0.0.1', port))
+    conn, addr = srv.accept()
+    conn.sendall(b'payload')
+
+    fp = client.makefile('rb')
+    client.close()                  # marked closed, but fp still holds it
+    alive_after_close = client.fileno() != -1
+    data = fp.read(7)               # must still work
+    fp.close()                      # last handle -> real close
+    released = client.fileno() == -1
+
+    conn.close()
+    srv.close()
+    return {
+        'alive_after_close': alive_after_close,
+        'data': data.decode('utf-8'),
+        'released_after_fp_close': released,
+    }
+
+
 r_get = get_content_length()
 r_post = post_body()
 r_chunked = chunked_response()
 r_head = head_no_body()
 r_error = error_status()
+r_conn_close = connection_close_body()
+r_ctx = response_context_manager()
+r_io_refs = socket_io_refs()
