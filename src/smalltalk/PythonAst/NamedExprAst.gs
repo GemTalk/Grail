@@ -29,13 +29,6 @@ set compile_env: 0
 
 category: 'Grail-other'
 method: NamedExprAst
-addVariableNamesTo: aStream
-
-	target addVariableNamesTo: aStream.
-%
-
-category: 'Grail-other'
-method: NamedExprAst
 printSmalltalkOn: aStream
 
 	target printSmalltalkOn: aStream.

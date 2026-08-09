@@ -73,14 +73,6 @@ isResolvableSymbol: aSymbol
 
 category: 'other'
 method: NameAst
-addVariableNamesTo: aStream
-
-	
-	aStream nextPutAll: id; space.
-%
-
-category: 'other'
-method: NameAst
 assertContextIsLoad
 
 	ctx assertIsLoad.

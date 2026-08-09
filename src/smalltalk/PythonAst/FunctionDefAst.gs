@@ -37,11 +37,15 @@ removeallclassmethods FunctionDefAst
 
 set compile_env: 0
 
-category: 'Grail-other'
+category: 'Grail-Class Body'
 method: FunctionDefAst
-addVariableNamesTo: aStream
+___boundTargetNames___
+	"A ``def'' binds its own name.  It contributes no
+	classBodyAttributePairs, though -- the body compiles to a real method,
+	not to a class attribute -- so it makes the name visible to later
+	siblings without claiming an attribute value."
 
-	aStream nextPutAll: name; space
+	^ Array with: name asSymbol
 %
 
 category: 'Grail-other'

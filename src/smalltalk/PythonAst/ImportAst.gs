@@ -136,7 +136,7 @@ valueSourceFor: anAlias
 	^ stream contents
 %
 
-category: 'Grail-code generation'
+category: 'Grail-Class Body'
 method: ImportAst
 classBodyAttributePairs
 	"``name -> value'' pairs for an import written in a CLASS BODY.
@@ -151,7 +151,7 @@ classBodyAttributePairs
 		(self boundNameFor: each) -> (RawSmalltalkAst source: (self valueSourceFor: each))]
 %
 
-category: 'Grail-code generation'
+category: 'Grail-Class Body'
 method: ImportAst
 boundNameFor: anAlias
 	"The single name ``import <anAlias>'' binds: the alias if given,
@@ -161,7 +161,7 @@ boundNameFor: anAlias
 	^ ($. split: anAlias name asString) first asSymbol
 %
 
-category: 'Grail-code generation'
+category: 'Grail-Class Body'
 method: ImportAst
 ___boundTargetNames___
 	"Every name this import binds -- the same shape AssignAst answers, so
