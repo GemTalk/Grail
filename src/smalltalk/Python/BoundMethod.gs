@@ -296,6 +296,7 @@ ___pythonValueAttrs___
 		add: #'__annotate__';
 		add: #'__signature_spec__';
 		add: #'__doc__';
+		add: #'__code__';
 		add: #'__dict__';
 		yourself
 %
@@ -777,6 +778,61 @@ __doc__
 	cls == nil ifTrue: [^ ExecBlock @env0:___pyNone___].
 	doc := self ___methodDocForClass___: cls name: selector @env0:asString.
 	^ doc ifNil: [ExecBlock @env0:___pyNone___]
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__code__
+	"``method.__code__'' -- the PyCode ClassDefAst compiled into the defining
+	class's class-side ___methodCodeTable___ (a class-body def becomes a
+	Smalltalk method and so cannot carry the def-time ``___pyCode___:'' stamp a
+	nested def's ExecBlock does), or the module class's table for a top-level
+	def.
+
+	Resolves the owning class exactly as __doc__ does, including the
+	receiver-less ``definingClass'' case (a class-body sibling reference), and
+	walks the superclass chain so an inherited method reports the code object
+	from where it was DEFINED.
+
+	AttributeError when there is none -- matching CPython, where only functions
+	and methods have __code__, and matching ExecBlock >> __code__ for the block
+	case.  Notably NOT None: ``hasattr(x, '__code__')'' is how inspect and
+	functools.wraps decide whether something is a function at all, so answering
+	a value would make every BoundMethod look like one."
+
+	| cls code |
+	cls := (receiver == nil and: [definingClass @env0:notNil])
+		ifTrue: [definingClass]
+		ifFalse: [
+			receiver == nil
+				ifTrue: [nil]
+				ifFalse: [(receiver isKindOf: Class)
+					ifTrue: [receiver]
+					ifFalse: [receiver @env0:class]]].
+	code := cls == nil
+		ifTrue: [nil]
+		ifFalse: [self ___methodCodeForClass___: cls name: selector @env0:asString].
+	code == nil ifTrue: [
+		^ AttributeError ___signal___:
+			'''method'' object has no attribute ''__code__'''].
+	^ code
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___methodCodeForClass___: aClass name: aName
+	"Superclass walk for the first ___methodCodeTable___ entry named aName, or
+	nil.  Mirrors ___methodDocForClass___:name:, including the env-1 probe --
+	the table is compiled in environment 1, so an env-0 ``canUnderstand:'' would
+	never see it."
+
+	| tbl v |
+	aClass == nil ifTrue: [^ nil].
+	((aClass @env0:class @env0:whichClassIncludesSelector: #'___methodCodeTable___' environmentId: 1) ~~ nil) ifTrue: [
+		tbl := aClass ___methodCodeTable___.
+		v := tbl @env0:at: aName otherwise: nil.
+		v == nil ifFalse: [^ v]].
+	^ self ___methodCodeForClass___: (aClass @env0:superclass) name: aName
 %
 
 category: 'Grail-Attribute Access'

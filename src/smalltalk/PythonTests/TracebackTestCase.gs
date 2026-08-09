@@ -130,6 +130,70 @@ testFuncCodeFirstlineno
 	self assert: ((results @env1:__getitem__: 'co_name') = 'inner').
 %
 
+category: 'Grail-Tests - Traceback Data Model'
+method: TracebackTestCase
+testMethodCodeFirstlineno
+	"Phase 2a follow-up: a def that compiles to a real Smalltalk METHOD -- a
+	class-body def or a module top-level def -- carries func.__code__ too, not
+	just a nested def's ExecBlock.  Its PyCode lives in a class-side
+	___methodCodeTable___ (ClassDefAst for a class body, importlib's top-level
+	pass for a module), which BoundMethod / UnboundMethod >> __code__ find by
+	walking the superclass chain.
+
+	The CLASS-BODY read is the case that matters: ``callable_line =
+	get_exception.__code__.co_firstlineno + 2'' runs while the class body is
+	still executing, which is what blocked test.test_traceback at IMPORT.  It is
+	why the table is emitted BEFORE the class-attribute statements rather than
+	beside its sibling doc / signature / annotations tables at the end.
+
+	See tests/python/method_code_firstlineno.py -- line numbers there are
+	load-bearing."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'method_code_firstlineno' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/method_code_firstlineno.py')
+		name: 'method_code_firstlineno'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+
+	"Module top-level def."
+	self assert: ((results @env1:__getitem__: 'mod_firstlineno') = 10)
+		description: 'module-level def __code__.co_firstlineno must be its def line (10)'.
+	self assert: ((results @env1:__getitem__: 'mod_name') = 'module_level').
+	self assert: ((results @env1:__getitem__: 'mod_argcount') = 2)
+		description: 'co_argcount counts positional params (a, b)'.
+	self assert: ((results @env1:__getitem__: 'mod_kwonlyargcount') = 1).
+
+	"Class-body read of a sibling def -- the test.test_traceback blocker shape."
+	self assert: ((results @env1:__getitem__: 'classbody_callable_line') = 20)
+		description: 'a class body must be able to read a sibling def''s __code__ (18 + 2)'.
+	self assert: ((results @env1:__getitem__: 'classbody_line') = 27).
+	self assert: ((results @env1:__getitem__: 'classbody_name') = 'm').
+	self assert: ((results @env1:__getitem__: 'classbody_qualname') = 'Later.m')
+		description: 'co_qualname of a class-body def is Class.method'.
+	self assert: ((results @env1:__getitem__: 'classbody_argcount') = 3)
+		description: 'co_argcount includes the implicit self, as in CPython'.
+	self assert: ((results @env1:__getitem__: 'classbody_kwonlyargcount') = 1).
+
+	"Bound and unbound access agree."
+	self assert: ((results @env1:__getitem__: 'bound_firstlineno') = 27).
+	self assert: ((results @env1:__getitem__: 'unbound_firstlineno') = 27)
+		description: 'Cls.method.__code__ must match instance.method.__code__'.
+
+	"An inherited method reports the code object from where it was DEFINED."
+	self assert: ((results @env1:__getitem__: 'inherited_firstlineno') = 38).
+	self assert: ((results @env1:__getitem__: 'inherited_qualname') = 'Base.inherited')
+		description: 'an inherited method''s code object comes from its defining class'.
+
+	"__code__ must stay ABSENT on a non-function: hasattr(x, ''__code__'') is
+	how inspect / functools.wraps decide whether something is a function."
+	self assert: ((results @env1:__getitem__: 'function_has_code') = true).
+	self assert: ((results @env1:__getitem__: 'int_has_code') = false)
+		description: 'an int must not grow a __code__'.
+	self assert: ((results @env1:__getitem__: 'builtin_method_has_code') = false)
+		description: 'a builtin method has no ___methodCodeTable___ entry -> AttributeError'.
+%
+
 category: 'Grail-Tests - Traceback Runtime'
 method: TracebackTestCase
 testCaughtExceptionHasFrame

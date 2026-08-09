@@ -640,6 +640,39 @@ ___buildModuleClass: moduleAst name: moduleName
 			].
 		].
 
+		"Class-side ``___methodCodeTable___'' (function name -> PyCode) for the
+		module's top-level defs, the module-scope twin of the table ClassDefAst
+		compiles for a class body.  A top-level def is compiled just above as a
+		real method on the module class, so -- like a class-body def, and unlike
+		a nested def -- it has no ExecBlock to carry the def-time
+		``___pyCode___:'' cascade, and ``f.__code__'' would raise AttributeError.
+		BoundMethod >> __code__ finds this by walking from the receiver's class,
+		which for a module-level function IS this module class."
+		topLevelDefs isEmpty ifFalse: [
+			| codeTblSrc |
+			codeTblSrc := WriteStream on: String new.
+			codeTblSrc nextPutAll: '___methodCodeTable___'; nextPutAll: lf.
+			codeTblSrc nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+			topLevelDefs do: [:stmt |
+				codeTblSrc nextPutAll: ' @env0:at: '''; nextPutAll: stmt name asString;
+					nextPutAll: ''' put: '.
+				stmt emitPyCodeExprOn: codeTblSrc qualname: stmt name asString.
+				codeTblSrc nextPut: $;].
+			codeTblSrc nextPutAll: ' @env0:yourself)'.
+			traceDir ifNotNil: [
+				debugStream
+					nextPutAll: 'category: ''Grail-Tracebacks'''; lf;
+					nextPutAll: 'classmethod: '; nextPutAll: debugClassName; lf.
+				self ___writeMethodSource: codeTblSrc contents on: debugStream.
+				debugStream nextPutAll: '%'; lf; lf.
+			].
+			[moduleClass class compileMethod: codeTblSrc contents
+				dictionaries: sl
+				category: 'Grail-Tracebacks'
+				environmentId: 1.
+			] on: CompileWarning do: [:ex | ex resume].
+		].
+
 		"Generate the module body as Smalltalk source for the initialize method.
 		Top-level defs emit BoundMethod assignments; calls emit self-sends."
 		stream := PrettyWriteStream on: Unicode7 new.
