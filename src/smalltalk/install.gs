@@ -1489,6 +1489,7 @@ input src/smalltalk/PythonTests/CachedPropertyDescriptorTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyImportTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyBindingProtocolTestCase.gs
+input src/smalltalk/PythonTests/BuiltinNamespaceNarrowingTestCase.gs
 input src/smalltalk/PythonTests/LruHashabilityAndUnionsTestCase.gs
 input src/smalltalk/PythonTests/ListTestCase.gs
 input src/smalltalk/PythonTests/MathTestCase.gs
