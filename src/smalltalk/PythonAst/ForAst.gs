@@ -188,12 +188,6 @@ ___emitIterPosOn: aStream
 		lf
 %
 
-category: 'Grail-accessing'
-method: ForAst
-addVariableNamesTo: aStream
-	target addVariableNamesTo: aStream.
-%
-
 category: 'Grail-code generation'
 method: ForAst
 emitForTargetStore: aNameAst source: sourceExpr on: aStream

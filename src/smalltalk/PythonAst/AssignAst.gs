@@ -53,13 +53,44 @@ removeallclassmethods AssignAst
 
 set compile_env: 0
 
-category: 'Grail-other'
+category: 'Grail-Class Body'
 method: AssignAst
-addVariableNamesTo: aStream
+classBodyAttributePairs
+	"``name -> valueAst'' pairs for an assignment written in a CLASS BODY.
 
-	targets do: [:each | 
-		each addVariableNamesTo: aStream.
-	].
+	Every target that is a bare NameAst yields a pair; a chained
+	``A = B = expr'' yields one pair per target, all pointing at the SAME
+	value AST (ClassDefAst emits that value once and aliases the rest).
+	Attribute and subscript targets bind nothing on the class, so a
+	statement with any such target contributes nothing.
+
+	Sibling-method aliases (``__lt__ = __eq__'') are deliberately NOT
+	filtered here: which names are aliases is cross-statement knowledge, so
+	ClassDefAst applies that rule to the collected pairs."
+
+	| pairs |
+	pairs := OrderedCollection new.
+	(targets allSatisfy: [:t | t isKindOf: NameAst]) ifTrue: [
+		targets do: [:t | pairs add: t id asSymbol -> value]].
+	"Tuple-target class-body assignment: ``__add__, __radd__ =
+	_operator_fallbacks(_add, operator.add)'' (vendored fractions.py builds
+	every binary operator this way).  Each element becomes a class attribute
+	whose value is a synthetic ``<value>[i]'' subscript.  The RHS
+	re-evaluates once per element -- acceptable for the factory-call idiom
+	(each call returns an equivalent fresh tuple)."
+	((targets size = 1)
+		and: [(targets first isKindOf: TupleAst)
+		and: [targets first elts allSatisfy: [:e | e isKindOf: NameAst]]]) ifTrue: [
+		targets first elts doWithIndex: [:e :i |
+			pairs add: e id asSymbol -> (SubscriptAst new
+					value: value;
+					slice: (ConstantAst new
+							value: i - 1;
+							kind: nil;
+							yourself);
+					ctx: LoadAst basicNew;
+					yourself)]].
+	^ pairs
 %
 
 category: 'Grail-other'
