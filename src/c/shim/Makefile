@@ -67,11 +67,48 @@ $(LIB): $(OBJECTS)
 	$(CXX) $(SHARED_FLAGS) -o $@ $(OBJECTS) $(GEMSTONE)/lib/gciualib.o -lm -lpthread $(UNDEF_ARGS)
 
 GRAIL_LIB_DIR = ../../../lib
-PYTHON_INCLUDES = $(shell python3-config --includes 2>/dev/null)
+
+# CPython headers for the `dynmods` target.  Unlike the shim objects, which
+# compile against our own cpython.h, _grail_demo.so is a REAL CPython extension
+# module and needs a real Python.h.  Resolve it in three steps:
+#
+#   1. python3-config            -- the normal case (and what CI uses).
+#   2. python3.N-config          -- Homebrew's python@3.x formulae are keg-only
+#      for the UNVERSIONED names: `brew install python3` links only
+#      python3.13-config into /opt/homebrew/bin, leaving plain python3-config in
+#      libexec/bin, off PATH.  Scan PATH for any versioned one, newest first.
+#   3. sysconfig                 -- last resort, and only when the directory
+#      really holds Python.h: macOS's system python3 reports an include path
+#      (/Library/Python/3.9/include) that ships no headers at all.
+#
+# Empty if nothing is found; the recipe below then fails with a clear message
+# instead of a bare "'Python.h' file not found".
+PYTHON_INCLUDES := $(shell \
+	if command -v python3-config >/dev/null 2>&1; then \
+		python3-config --includes; \
+	else \
+		cfg=$$(ls -1 $$(echo "$$PATH" | tr ':' ' ' | xargs -n1 -I{} echo '{}/python3.*-config') 2>/dev/null \
+		      | sort -t. -k2,2nr | head -1); \
+		if [ -n "$$cfg" ] && [ -x "$$cfg" ]; then \
+			"$$cfg" --includes; \
+		else \
+			inc=$$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["include"])' 2>/dev/null); \
+			if [ -n "$$inc" ] && [ -f "$$inc/Python.h" ]; then echo "-I$$inc"; fi; \
+		fi; \
+	fi)
 
 dynmods: $(GRAIL_LIB_DIR)/_grail_demo.so
 
 $(GRAIL_LIB_DIR)/_grail_demo.so: _grail_demo.c
+	@if [ -z "$(PYTHON_INCLUDES)" ]; then \
+		echo "ERROR: no CPython development headers found (need Python.h)."; \
+		echo "  Tried: python3-config, python3.N-config on PATH, python3 sysconfig."; \
+		echo "  macOS: brew install python3, then add its libexec/bin to PATH, e.g."; \
+		echo "    export PATH=\"/opt/homebrew/opt/python@3.13/libexec/bin:\$$PATH\""; \
+		echo "  Linux: apt install python3-dev  /  dnf install python3-devel"; \
+		exit 1; \
+	fi
+	@mkdir -p $(GRAIL_LIB_DIR)
 	$(CC) $(CFLAGS) $(PYTHON_INCLUDES) $(SHARED_FLAGS) -o $@ _grail_demo.c $(UNDEF_ARGS)
 
 clean:
