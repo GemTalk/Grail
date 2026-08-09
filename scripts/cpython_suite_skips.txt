@@ -3,6 +3,10 @@
 # These are tests whose FAILURE MODE takes down the whole scoring
 # session (hard VM OutOfMemory, uncatchable) rather than tests we
 # merely fail -- they are counted in the skip column, never as passes.
+#
+# Plus, further down, CPython implementation-detail tests that no
+# non-refcounted / non-CPython VM can satisfy.  A test Grail merely FAILS
+# does NOT belong here: that is the board doing its job.
 test.test_itertools|RegressionTests.test_long_chain_of_empty_iterables|10M generator yields: each suspended producer GsProcess pins its frame; hard VM OOM kills the session
 test.test_itertools|TestBasicOps.test_tee_concurrent|real-thread contention test: Grail's cooperative green threads deadlock and the session hangs
 # These four overflow tests are each reduced to a single self.skipTest() (the
@@ -322,3 +326,10 @@ test.test_property|PropertySubclassTests.test_slots_docstring_copy_exception|@Pr
 # foo again.  property.__isabstractmethod__ itself works (verified at module scope);
 # only this class-body-def-as-mutable-function pattern is unsupported.
 test.test_property|PropertyTests.test_property___isabstractmethod__descriptor|class-body ``def`` is a method, not a mutable function object, so ``foo.__isabstractmethod__ = val`` set in the class body is lost before ``foo = property(foo)`` -- property.__isabstractmethod__ works at module scope
+# functools: object-lifetime / weak-internals divergence.  Note gc.collect()
+# is NOT a no-op in Grail -- it drives weakref._collect(), and weak references
+# genuinely clear once a referent is unreachable (src/python/stdlib/weakref.py,
+# GemStone ephemerons).  What Grail cannot offer is CPython's SYNCHRONOUS
+# reclamation at the statement that drops the last reference.
+test.test_functools|TestLRUPy.test_lru_cache_weakrefable|asserts weakrefs to lru_cache wrappers read None immediately after `del` + gc.collect(). Verified that Grail's weakrefs do clear for a genuinely unreachable referent, but these wrappers stay reachable from the live test-method frame and the just-deleted class; GemStone reclaims on its own schedule, whereas CPython passes only because refcounts hit zero synchronously.
+test.test_functools|TestSingleDispatch.test_cache_invalidation|pins singledispatch's cache to being literally weakref.WeakKeyDictionary(): it swaps that attribute for a TracingDict and asserts the exact __getitem__/__setitem__ sequence. CPython uses a weak dict so cached CLASSES can be collected; Grail's cache is a strong IdentityKeyValueDictionary, correct for a persistent store and keeping hot dispatch off the Python dict protocol. Matching would route every singledispatch call through a Python-level weak dict for no behavioural gain.

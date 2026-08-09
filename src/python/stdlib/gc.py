@@ -36,7 +36,28 @@ def isenabled():
 
 
 def collect(generation=2):
-    # No cyclic collector to drive; report zero unreachable objects.
+    # GemStone has no CPython-style cyclic collector to drive, but it does
+    # have real weak references (ephemerons).  Code calling gc.collect() is
+    # almost always about to check that something is observably gone -- a
+    # weakref returning None, a finalizer having run -- so drive the collector
+    # Grail actually has: weakref._collect() forces an in-memory collection
+    # and drains the ephemeron finalization queue.  As a no-op this left every
+    # such check looking like a leak (test_functools
+    # test_lru_cache_weakrefable).
+    #
+    # Imported lazily: weakref imports _weakref, and a module-level import
+    # here would put gc in that cycle.
+    #
+    # Still returns 0.  The return value is a count of unreachable CYCLIC
+    # objects, which GemStone does not report, and inventing a number would be
+    # worse than admitting we cannot count them.
+    try:
+        import weakref
+    except ImportError:
+        return 0
+    collect_fn = getattr(weakref, '_collect', None)
+    if collect_fn is not None:
+        collect_fn()
     return 0
 
 
