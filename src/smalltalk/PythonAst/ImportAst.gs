@@ -72,10 +72,7 @@ printSmalltalkOn: aStream
 		``self dynamicInstVarAt: #name put: ...'' so the import lands
 		in the module instance's dynamic-instVar storage rather than
 		a non-existent Smalltalk temp."
-		isModuleStore := CallAst moduleClassBeingCompiled notNil
-			and: [CallAst classBeingCompiled isNil
-			and: [CallAst moduleVariableNames notNil
-			and: [CallAst moduleVariableNames includes: targetName asSymbol]]].
+		isModuleStore := self ___importBindsAtModuleScope___: targetName asSymbol.
 		"`__import__('a.b.c')` returns the TOP-level package (`a`).
 		Python's `import a.b.c` statement binds the top-level name
 		unaliased (so `a` is bound to the top), while

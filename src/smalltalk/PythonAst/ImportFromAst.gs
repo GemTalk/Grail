@@ -163,10 +163,7 @@ printSmalltalkOn: aStream
 		targetName := self boundNameFor: each.
 		"Phase A: module-scope target binds into the module's dynamic-
 		instVar storage rather than a non-existent Smalltalk temp."
-		isModuleStore := CallAst moduleClassBeingCompiled notNil
-			and: [CallAst classBeingCompiled isNil
-			and: [CallAst moduleVariableNames notNil
-			and: [CallAst moduleVariableNames includes: targetName]]].
+		isModuleStore := self ___importBindsAtModuleScope___: targetName.
 		isModuleStore
 			ifTrue: [
 				aStream
