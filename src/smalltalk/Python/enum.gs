@@ -65,6 +65,9 @@ initialize
 	self @env0:at: #property put: PropertyDescriptor.
 	self @env0:at: #member put: PropertyDescriptor.
 	self @env0:at: #nonmember put: PropertyDescriptor.
+	"``member'' and ``nonmember'' are overwritten just below with real
+	callables; the at: entries above only keep ``from enum import member''
+	resolving if the dynamic-instVar store is ever bypassed."
 	self @env0:at: #auto put: PropertyDescriptor.
 	self @env0:at: #EnumMeta put: Enum @env0:class.
 	self @env0:at: #IntEnum put: IntEnum.
@@ -80,7 +83,16 @@ initialize
 	x in a marker the enum metaclass unwraps to a plain (non-member) class
 	attribute -- NOT PropertyDescriptor, which the builder counted as a member
 	(Django's Choices.do_not_call_in_templates, test_*_with_nonmember)."
-	self @env0:dynamicInstVarAt: #nonmember put: (BoundMethod receiver: self selector: #nonmember:)
+	self @env0:dynamicInstVarAt: #nonmember put: (BoundMethod receiver: self selector: #nonmember:).
+	"``member(x)'' / ``@member'' is nonmember's mirror: a real 1-arg callable
+	wrapping x in a marker the enum builder unwraps into a FORCED member.  It
+	used to be bound to PropertyDescriptor, so ``@member class Inner'' produced
+	a PropertyDescriptor -- which the builder then either counted as a member
+	with the descriptor as its VALUE or (since the _EnumDict descriptor rule)
+	skipped entirely, and whose post-decorator ``__qualname__'' store raised a
+	raw Smalltalk doesNotUnderstand (test_enum
+	test_nested_classes_in_enum_with_member)."
+	self @env0:dynamicInstVarAt: #member put: (BoundMethod receiver: self selector: #member:)
 %
 
 ! ===============================================================================
@@ -132,6 +144,19 @@ auto
 	values -- 112 test_enum errors expected first/second/third = 1/2/3)."
 
 	^ GrailEnumAuto @env0:new
+%
+
+category: 'Grail-Built-in Functions'
+method: enum
+member: aValue
+	"``enum.member(x)'' / ``@member'' — wrap x in a marker that
+	___grailBuildMembers: unwraps into a FORCED member: x becomes the member's
+	value even where the ordinary rules would skip the name, which is the whole
+	point of CPython's member() (a nested class, or a descriptor that
+	_EnumDict would leave a plain class attribute).  The exact mirror of
+	nonmember: above."
+
+	^ (Python @env0:at: #GrailEnumMember) @env0:on: aValue
 %
 
 category: 'Grail-Built-in Functions'
