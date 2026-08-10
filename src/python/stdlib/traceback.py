@@ -83,6 +83,41 @@ def _format_notes(value):
     return lines
 
 
+def _type_display_name(exc_type):
+    """The name a traceback gives an exception class.
+
+    CPython uses ``__qualname__`` (so a nested class shows its nesting) and
+    QUALIFIES it with the defining module unless that module is ``builtins``
+    or ``__main__`` -- so ValueError stays ``ValueError'' while a library's
+    own exception renders as ``package.module.TheError''.  A ``__module__``
+    that is not a str renders as ``<unknown>``: it is a plain writable
+    attribute, so it can be anything.
+
+    Every read is guarded because rendering an exception must never raise a
+    second one, and the fallbacks step down: __qualname__, then __name__,
+    then str(cls) -- the last covers shim classes exposing neither."""
+    if exc_type is None:
+        return ''
+    try:
+        name = exc_type.__qualname__
+    except Exception:
+        try:
+            name = exc_type.__name__
+        except Exception:
+            return str(exc_type)
+    if not isinstance(name, str):
+        name = str(name)
+    try:
+        smod = exc_type.__module__
+    except Exception:
+        return name
+    if smod is None or smod in ('__main__', 'builtins'):
+        return name
+    if not isinstance(smod, str):
+        smod = '<unknown>'
+    return smod + '.' + name
+
+
 def format_exception_only(exc_type, value=_sentinel, show_group=False):
     """Return a list of strings ending in a newline that render the
     exception class + message.
@@ -94,22 +129,25 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False):
     ``show_group=True`` (3.11+) additionally renders an ExceptionGroup's
     nested exceptions, indented, after the group's own line."""
 
+    # Whether the type was DERIVED from the value (rather than passed by a
+    # legacy caller).  If it was, the value is the exception and always
+    # contributes a message -- including when it is None.
+    derived = False
     if value is _sentinel:
-        # Single-argument form: exc_type IS the exception (or None).
+        # Single-argument form: exc_type IS the exception.  type(None) is
+        # NoneType, not None -- CPython does not special-case a None
+        # exception, which is exactly why ``print_exception(None)'' renders
+        # ``NoneType: None'' rather than a blank line.
         value = exc_type
-        exc_type = type(exc_type) if exc_type is not None else None
+        exc_type = type(value)
+        derived = True
+    elif exc_type is None and value is None:
+        # Legacy three-argument form with the whole triple None --
+        # ``print_exception(None, None, None)''.  Same rendering, same reason.
+        exc_type = type(None)
+        derived = True
 
-    type_name = ''
-    if exc_type is not None:
-        # ``cls.__name__`` returns the class's name string directly
-        # (Grail's ___pyAttrLoad___ unwraps Behavior-side __name__ to
-        # a value).  Fall back to str(cls) if the attribute read
-        # raises for any reason — covers exotic shim classes that
-        # don't expose __name__.
-        try:
-            type_name = exc_type.__name__
-        except Exception:
-            type_name = str(exc_type)
+    type_name = _type_display_name(exc_type)
     # A SyntaxError renders its location ABOVE the message, and CPython's
     # exact shape depends on which fields are set:
     #
@@ -153,7 +191,14 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False):
             else header + [type_name + '\n']
         return lines + _format_notes(value)
 
-    msg = str(value) if value is not None else ''
+    # A DERIVED type means the value is the exception, so it always contributes
+    # a message -- ``None'' included, which is what makes print_exception(None)
+    # render ``NoneType: None''.  A legacy caller that passed a type and an
+    # explicit None value has no message, and keeps rendering the bare name.
+    if value is None and not derived:
+        msg = ''
+    else:
+        msg = _safe_string(value, 'exception')
     if msg:
         lines = [type_name + ': ' + msg + '\n']
     else:
@@ -241,8 +286,10 @@ def format_exc(*args):
     except AttributeError:
         info = (None, None, None)
     exc_type, value, tb = info[0], info[1], info[2]
-    if exc_type is None:
-        return 'None\n'
+    # No special case for "no active exception": format_exception(None, None,
+    # None) now renders CPython's own answer for it, ``NoneType: None''.  This
+    # used to short-circuit to 'None\n', which was neither CPython's text nor
+    # reachable any other way.
     return ''.join(format_exception(exc_type, value, tb))
 
 
@@ -256,7 +303,34 @@ def print_exception(exc_type, value=None, tb=None, file=None):
         file.write(line)
 
 
-def print_exc(file=None):
+def print_last(limit=None, file=None, chain=True):
+    """CPython's ``print_last(...)'': render the exception the interactive
+    interpreter recorded, from ``sys.last_exc'' (3.12+) or the legacy
+    ``sys.last_type'' / ``last_value'' / ``last_traceback'' triple.
+
+    Raises ValueError when neither is set, which is CPython's answer for "there
+    is no last exception" -- callers distinguish that from an empty render.
+
+    ``limit'' / ``chain'' are accepted and not yet acted on, as in print_exc."""
+    have_exc = hasattr(sys, 'last_exc')
+    if not have_exc and not hasattr(sys, 'last_type'):
+        raise ValueError('no last exception')
+    if have_exc:
+        print_exception(sys.last_exc, file=file)
+    else:
+        print_exception(sys.last_type, sys.last_value,
+                        getattr(sys, 'last_traceback', None), file=file)
+
+
+def print_exc(limit=None, file=None, chain=True):
+    """CPython's ``print_exc(limit=None, file=None, chain=True)''.
+
+    ``limit'' is the FIRST positional parameter, not ``file'' -- the signature
+    here used to be ``print_exc(file=None)'', so a caller writing CPython's
+    ``print_exc(None, file=f)'' bound None to the wrong parameter.  ``limit''
+    and ``chain'' are accepted and not yet acted on (limit needs multi-frame
+    tracebacks, chain needs __cause__/__context__ rendering); taking them keeps
+    such a call working instead of raising TypeError."""
     if file is None:
         file = sys.stderr
     file.write(format_exc())
@@ -688,7 +762,7 @@ class TracebackException:
 
 __all__ = [
     'format_exception_only', 'format_exception', 'format_exc',
-    'print_exception', 'print_exc',
+    'print_exception', 'print_exc', 'print_last',
     'extract_tb', 'extract_stack', 'format_tb', 'format_stack',
     'format_list', 'print_list', 'print_stack', 'print_tb',
     'walk_tb', 'walk_stack',

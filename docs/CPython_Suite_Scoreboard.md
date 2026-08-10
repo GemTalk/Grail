@@ -23,7 +23,7 @@ different rows and merges cleanly.
 | test.test_bisect | OK | 46 | 0 | 0 | 0 |  |
 | test.test_operator | OK | 110 | 0 | 0 | 58 |  |
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
-| test.test_datetime | ERROR | 525 | 0 | 6 | 3 |  |
+| test.test_datetime | ERROR | 525 | 0 | 4 | 3 |  |
 | test.test_re | OK | 165 | 0 | 0 | 30 |  |
 | test.test_functools | OK | 325 | 0 | 0 | 125 |  |
 | test.test_list | OK | 68 | 0 | 0 | 4 |  |
@@ -46,7 +46,7 @@ different rows and merges cleanly.
 | test.test_slice | OK | 11 | 0 | 0 | 0 |  |
 | test.test_bool | OK | 31 | 0 | 0 | 0 |  |
 | test.test_iter | OK | 57 | 0 | 0 | 4 |  |
-| test.test_traceback | ERROR | 370 | 79 | 31 | 209 |  |
+| test.test_traceback | ERROR | 370 | 74 | 28 | 209 |  |
 | test.test_compare | OK | 16 | 0 | 0 | 0 |  |
 | test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
 | test.test_keywordonlyarg | OK | 11 | 0 | 0 | 0 |  |

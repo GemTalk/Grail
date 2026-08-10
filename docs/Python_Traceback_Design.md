@@ -629,7 +629,7 @@ would fix them (some overlap; counted by primary blocker):
 | 3 | `FrameSummary.locals` | small, independent |
 | 3 | PEP 678 `__notes__` not rendered | small, independent |
 | 2 | `SyntaxError` attributes (`compile()` answers a str) | larger than it looks |
-| 2 | exception-name module qualification | `test.test_traceback.B.X:` where CPython wants `X:` |
+| 2 | exception-name module qualification | **this row was backwards** -- Grail rendered the BARE name and CPython wants the module-qualified one; corrected and fixed, see §9.8 |
 | ~37 | assorted small rendering/API | see the per-test log |
 
 So frame depth is the single largest bucket but **not a majority**: ~23 of 125.
@@ -688,6 +688,7 @@ day; the numbers below are per landing, measured by running that one module.
 | — | PEP 678 `__notes__` rendering | 42 | §9.6's "3, small, independent" |
 | — | `TracebackException.__eq__` | 45 | §9.6's "8" — 3 of them; the rest need frames |
 | — | module `__loader__` + `extract_tb` on any traceback | 51 | see below |
+| — | exception naming + message rendering | 59 | see below |
 
 Three things learned that the plan did not anticipate:
 
@@ -741,8 +742,44 @@ the extras with `getattr` and falling back to `co_positions()` fixed three more
 tests. Both this and (1) were cases where a *defensive* `except Exception:`
 converted a precise failure into a silent wrong answer.
 
+**§9.6's "exception-name module qualification" row was backwards**, and the
+fix was the opposite of what it implied. CPython names an exception with
+`__qualname__` **qualified by `__module__`** unless that module is `builtins` or
+`__main__`; Grail rendered the bare `__name__`. Reading
+`assertEqual(exp, err)`'s argument order is what caught it -- the note had the
+expected and actual values the wrong way round. Blast radius checked before
+changing anything: every builtin exception reports `__module__ == 'builtins'`,
+so `ValueError: x` is untouched and only library-defined exceptions become
+qualified.
+
+**Three message-rendering defects found alongside it**, all outside the
+traceback module itself:
+
+- **`str(Exception(None))` answered `'aNoneType'`.** The one-argument branch of
+  `BaseException>>__str__` used Smalltalk `#asString`, so the argument's
+  printString leaked instead of its Python `__str__`. The multi-argument branch
+  had already been fixed for exactly this (`'atuple'`); this was its other half.
+  It affects any exception carrying a non-str argument, which is why fixing it
+  also took `test.test_datetime` from 6 errors to 4 -- a second module, not
+  predicted.
+- **`format_exc()` short-circuited to `'None\n'`** with no active exception,
+  where CPython answers `'NoneType: None\n'`. Deleted rather than adjusted:
+  `format_exception(None, None, None)` now renders it correctly on its own.
+- **`print_exc`'s first positional was `file`, not `limit`.** CPython's is
+  `print_exc(limit=None, file=None, chain=True)`, so a caller writing
+  `print_exc(None, file=f)` bound None to the wrong parameter.
+
+**A separate defect found and deliberately NOT fixed here:** a user-defined
+exception subclass with an **empty body** does not record `args` --
+`class E(Exception): pass` then `E("boom").args` answers `()` where CPython
+answers `("boom",)`, so `str()` is `''` and the message disappears from every
+render. A subclass whose `__init__` chains to `super().__init__` works. This is
+in the class-instantiation path rather than in traceback rendering, and it is
+worth its own change: it silently drops the message from `raise MyError("...")`
+for the most common way libraries define exceptions.
+
 **§9.7's ordering still holds** for what remains: the rest of the small
-independent set (`sys._getframe`, `traceback.print_last`, exception-name module
-qualification), then frame depth via §9.2's VM capture,
+independent set (`sys._getframe` -- now the only one left of it), then frame
+depth via §9.2's VM capture,
 with generators prototyped early. Nothing measured today changes the frame-depth
 recommendation.

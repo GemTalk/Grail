@@ -566,7 +566,18 @@ __str__
 	
 	size == 0 ifTrue: [ ^ '' ].
 	size == 1 ifTrue: [
-		^ ((argsArray @env0:at: 1) @env0:asString) @env0:asUnicodeString
+		| arg |
+		arg := argsArray @env0:at: 1.
+		"A str arg is the overwhelming majority and is already the answer."
+		(arg isKindOf: CharacterCollection) ifTrue: [^ arg @env0:asUnicodeString].
+		"CPython's ``str(exc)'' for one arg is ``str(self.args[0])'' -- the
+		PYTHON str protocol.  Smalltalk #asString on a non-str arg answers its
+		printString instead, so ``raise Exception(None)'' rendered
+		``Exception: aNoneType'' rather than ``Exception: None'' -- and likewise
+		for any object whose printString differs from its __str__.  The
+		multi-arg branch below was already fixed for this same class of bug
+		(``atuple''); this is the one-arg half of it."
+		^ (builtins instance) str: arg
 	].
 	"Multiple args: CPython's ``str(exc)'' is ``str(self.args)'', and a tuple has
 	no __str__ so str() falls back to its __repr__ -- ``Exception(0,1,2)''
