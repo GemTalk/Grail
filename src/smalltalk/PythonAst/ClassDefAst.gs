@@ -86,6 +86,38 @@ printSmalltalkOn: aStream
 
 category: 'Grail-code generation'
 method: ClassDefAst
+___classAttrBackingSlotFor: aKey reserved: reservedClassObjIvars
+	"The classInstVar slot name backing the class attribute named aKey.
+
+	Usually the attribute name itself.  Two families get a MANGLED
+	``___cattr_<name>___'' slot instead:
+
+	  * kernel class-object instVars (``name'', ``format'', ...) -- an
+	    unmangled slot would COALESCE with the inherited structural one and
+	    the setter would overwrite the class's real name / format;
+
+	  * Smalltalk PSEUDO-VARIABLES (``self'', ``super'', ``nil'', ``true'',
+	    ``false'', ``thisContext'') -- these cannot be declared as variables
+	    nor assigned, so both the ``classInstVarNames:'' declaration and the
+	    ``true := ___1'' setter body are uncompilable.
+
+	The accessor pair stays NAMED after the attribute either way, so
+	``cls.attr'' is unchanged in Python; only the physical slot moves.
+
+	One method because the DECLARATION site and the ACCESSOR site must agree:
+	when they disagreed, the slot was declared ``true'' while the setter body
+	assigned ``___cattr_true___'', the pair failed to compile, and the whole
+	class came back as a raising stub (``NameError: Grail could not compile
+	this method'')."
+
+	^ ((reservedClassObjIvars includes: aKey)
+		or: [NameAst isReservedSmalltalkIdentifier: aKey])
+		ifTrue: ['___cattr_' , aKey asString , '___']
+		ifFalse: [aKey asString]
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
 printSmalltalkRuntimeOn: aStream
 	"Emit code that, at run time, creates a fresh Smalltalk class for
 	this Python class definition and installs its methods.  Method
@@ -396,12 +428,12 @@ printSmalltalkRuntimeOn: aStream
 	instVars are per-class storage, matching Python's
 	``A.attr != B.attr`` semantics)."
 	allClassInstVars := (classAttrs collect: [:p |
-		"Reserved kernel class-object names are declared under their MANGLED
-		slot so the classInstVar does not coalesce with the inherited structural
-		slot (see the accessor emit below)."
-		(reservedClassObjIvars includes: p key)
-			ifTrue: [('___cattr_' , p key asString , '___') asSymbol]
-			ifFalse: [p key]]) asOrderedCollection.
+		"Reserved kernel class-object names, and Smalltalk pseudo-variables, are
+		declared under their MANGLED slot -- see
+		___classAttrBackingSlotFor:reserved:, which the accessor emit below
+		shares so the declaration and the accessor bodies cannot disagree."
+		(self ___classAttrBackingSlotFor: p key reserved: reservedClassObjIvars)
+			asSymbol]) asOrderedCollection.
 	"Always request a ``__module__'' slot — unless the user already
 	declared one in the class body (e.g. re._constants's
 	``class PatternError(Exception): __module__ = 're''').
@@ -668,12 +700,24 @@ printSmalltalkRuntimeOn: aStream
 		``name asSymbol'').  The accessor is still NAMED ``attr'' so ``cls.attr''
 		(Python) works unchanged; only the physical slot moves -- the same
 		isolation __slots__ get via ___slot_x___.  Non-reserved names use the
-		attribute name directly.  See docs/Python_Class_Attribute_Namespaces.md."
+		attribute name directly.  See docs/Python_Class_Attribute_Namespaces.md.
+
+		The Smalltalk PSEUDO-VARIABLES (``self'', ``super'', ``nil'', ``true'',
+		``false'', ``thisContext'') are mangled for a second, harder reason: they
+		cannot be assigned AT ALL, so the generated setter body ``true := ___1''
+		is not merely wrong but uncompilable.  The whole accessor pair then failed
+		to compile and the class got a raising stub, which surfaced as
+		``NameError: Grail could not compile this method (codegen gap)'' for the
+		entire class -- ``class Logic(Enum): true = True; false = False''
+		(test_enum TestSpecial.test_bool) and any Python class with an attribute
+		so named.  Parameters and locals already get this treatment via NameAst's
+		reserved-name rename; class attributes were the gap.  Reuse that same
+		predicate so the two lists cannot drift."
 		| attrName backingSlot lf accessorSrc setterSrc |
 		attrName := pair key.
-		backingSlot := (reservedClassObjIvars includes: attrName)
-			ifTrue: ['___cattr_' , attrName asString , '___']
-			ifFalse: [attrName asString].
+		backingSlot := self
+			___classAttrBackingSlotFor: attrName
+			reserved: reservedClassObjIvars.
 		lf := Character lf asString.
 		accessorSrc := attrName , lf , '	^ ' , backingSlot.
 		self
