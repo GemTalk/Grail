@@ -141,6 +141,21 @@ printSmalltalkRuntimeOn: aStream
 	selfParam := self selfParameterName.
 	funcNames := IdentitySet new.
 	staticFuncNames := IdentitySet new.
+	"``classBeingCompiled'' must already name THIS class while the name sets
+	are collected: ___mangledName___ mangles through it (AbstractNode >>
+	___manglePrivate___: reads it), and it was not set until well below --
+	so every set was filled with UNMANGLED names while the call sites, emitted
+	later with it set, asked for the MANGLED one.  classSelfSendSelector's
+	membership test then missed, and every private-method call fell off the
+	direct-send fast path onto the far heavier ___pyAttrLoad___ route.  That
+	is a stack-depth regression, not just a slow path: a private recursion
+	bottomed out at depth 400 where the public equivalent reached 1137, and it
+	died with an uncatchable ``cross frame of C primitive'' instead of raising
+	RecursionError (test_richcmp MiscTest.test_recursion, whose UserList
+	comparison chain runs through UserList.__eq__ -> self.__cast()).
+	Saved and restored by the existing savedClass handling below."
+	savedClass := CallAst classBeingCompiled.
+	CallAst classBeingCompiled: name asSymbol.
 	staticMethodDefs do: [:def | staticFuncNames add: def ___mangledName___ asSymbol].
 	varargsFuncNames := IdentitySet new.
 	decoratedFuncNames := IdentitySet new.
@@ -183,6 +198,16 @@ printSmalltalkRuntimeOn: aStream
 		test_system_transitions, which needs classmethod-descriptor
 		binding that does not exist yet."
 	].
+	"Collection done -- put classBeingCompiled BACK to the outer value.
+	It was set early only so ___mangledName___ could mangle through it.
+	It must NOT stay set here: isModuleScopeClassDef answers false
+	whenever classBeingCompiled is non-nil (that is its `nested inside
+	another class' test), so leaving it set reports EVERY class as
+	non-module-scope and routes every super() through the method-local
+	closure-cell path -- which broke super().__init__ argument passing
+	(werkzeug's Request lost `environ', taking out a whole SUnit shard).
+	The real set, for the per-method codegen, happens further down."
+	CallAst classBeingCompiled: savedClass.
 	"Scan body for class-level simple assignments (`NAME = value`,
 	or chained `A = B = value`).  Each declared name becomes a
 	class-side attribute (Smalltalk classInstVar + class-side getter/
@@ -243,8 +268,10 @@ printSmalltalkRuntimeOn: aStream
 	"Push the class-compile context that the per-method codegen reads
 	(CallAst consults these to decide how to dispatch self-sends,
 	etc.).  Save outer values so a class nested in another class
-	restores correctly."
-	savedClass := CallAst classBeingCompiled.
+	restores correctly.  ``savedClass'' is NOT re-captured here: it was
+	already taken further up, before classBeingCompiled had to be set early
+	for the name-mangling collection, and re-taking it now would save THIS
+	class instead of the enclosing one."
 	savedFuncNames := CallAst classFunctionNames.
 	savedVarargsFuncNames := CallAst classVarargsFunctionNames.
 	savedClassAttrNames := CallAst classAttrNames.
