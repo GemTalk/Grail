@@ -498,3 +498,56 @@ testExtractTbOnADuckTypedTraceback
 		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
 			description: 'extract_tb check failed: ' , k].
 %
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testExceptionNaming
+	"How a traceback names an exception: CPython uses __qualname__ and
+	qualifies it with the defining module unless that module is builtins or
+	__main__ -- so ValueError is unchanged while a library's own exception
+	renders module-qualified.  A non-str __module__ renders as <unknown>.
+	See tests/python/exception_naming.py.
+
+	NOTE the nesting check asserts against Outer.Inner.__qualname__ rather than
+	a literal: Grail answers 'Inner' nested one level short of CPython (an
+	'Outer.Inner' where CPython would include every enclosing scope).  That is
+	a separate __qualname__ gap, so this test pins the FORMATTER's rule -- use
+	__qualname__, qualify with __module__ -- and not that bug."
+
+	| mod |
+	importlib @env1:modules removeKey: #'exception_naming' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_naming.py')
+		name: 'exception_naming'.
+	#( 'builtin_exceptions_are_not_module_qualified'
+	   'library_exceptions_are_module_qualified'
+	   'nested_exceptions_use_qualname'
+	   'a_non_str_module_renders_as_unknown' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'exception naming check failed: ' , k].
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testExceptionMessageRendering
+	"str(exc) for a single argument is str(args[0]) -- the PYTHON str protocol.
+	Smalltalk #asString answered the argument's printString instead, so
+	``raise Exception(None)'' rendered ``Exception: aNoneType''.  And a None
+	EXCEPTION is not special-cased: type(None) is NoneType, so
+	print_exception(None) renders ``NoneType: None''."
+
+	| mod |
+	importlib @env1:modules removeKey: #'exception_naming' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_naming.py')
+		name: 'exception_naming'.
+	#( 'a_none_exception_renders_as_nonetype_none'
+	   'a_legacy_type_with_no_value_keeps_the_bare_name'
+	   'a_none_argument_is_not_a_missing_message'
+	   'non_string_arguments_use_python_str'
+	   'a_broken_str_is_reported_not_propagated'
+	   'print_exc_takes_limit_first'
+	   'print_last_reads_sys_last_exc' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'message rendering check failed: ' , k].
+%
