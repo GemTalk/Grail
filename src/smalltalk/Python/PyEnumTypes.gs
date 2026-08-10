@@ -2178,6 +2178,32 @@ ___grailConstructMemberValueStrict: memberType args: rawValue
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailFlagComponents: aMember
+	"The canonical SINGLE-BIT component members of a flag member, in definition
+	order: Color.PURPLE -> (RED, BLUE), Color.BLACK -> ().  A multi-bit member is
+	decomposed, never yielded whole (CPython 3.11+).
+
+	Storage-agnostic -- it reads the #value dynInstVar -- so one copy serves both
+	Flag (Enum-rooted) and IntFlag (AbstractPyInt-rooted, which cannot inherit
+	Flag), and serves __len__ as well as __iter__.  The walk was already written
+	out twice; __len__ would have made it four."
+
+	| v parts |
+	v := aMember @env0:dynamicInstVarAt: #value.
+	parts := OrderedCollection @env0:new.
+	(v isKindOf: Integer) ifTrue: [
+		(Enum ___grailMembers: aMember @env0:class) @env0:do: [:mm | | mv |
+			mv := mm @env0:dynamicInstVarAt: #value.
+			((mv isKindOf: Integer)
+				and: [mv @env0:~= 0
+				and: [(mv @env0:bitAnd: (mv @env0:- 1)) @env0:= 0
+				and: [(v @env0:bitAnd: mv) @env0:= mv]]]) ifTrue: [
+				parts @env0:add: mm]]].
+	^ parts
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailCompositeNameFor: m
 	"Composite/plain name for a (possibly flag) member: 'first|third' for a
 	composite, the plain name for a named member, the value's printString when
@@ -3878,6 +3904,21 @@ __xor__: other
 
 category: 'Grail-Flag Member'
 method: Flag
+__len__
+	"``len(member)'' -- the number of single-bit flags set (CPython 3.11+), so
+	len(Color.BLACK) is 0 and len(Color.WHITE) is 3.
+
+	Also what ``Color.__len__(member)'' reaches: the class's own __len__ shadows
+	the metaclass one that counts MEMBERS, exactly as CPython's Flag.__len__
+	shadows EnumType.__len__ (test_member_length).  Without it the unbound handle
+	found the unary metaclass method and reported ``__len__() takes a different
+	number of arguments (1 given)''."
+
+	^ (Enum ___grailFlagComponents: self) @env0:size
+%
+
+category: 'Grail-Flag Member'
+method: Flag
 __iter__
 	"Iterate a Flag MEMBER: yield its canonical SINGLE-BIT component members in
 	definition order (CPython 3.11+: ``list(Color.PURPLE)'' -> [RED, BLUE];
@@ -3886,18 +3927,7 @@ __iter__
 	operator methods above, is COPIED onto MI flag classes (class E(int, Flag))
 	so IntFlag members iterate too."
 
-	| v parts |
-	v := self @env0:dynamicInstVarAt: #value.
-	parts := OrderedCollection @env0:new.
-	(v isKindOf: Integer) ifTrue: [
-		(Enum ___grailMembers: self @env0:class) @env0:do: [:mm | | mv |
-			mv := mm @env0:dynamicInstVarAt: #value.
-			((mv isKindOf: Integer)
-				and: [mv @env0:~= 0
-				and: [(mv @env0:bitAnd: (mv @env0:- 1)) @env0:= 0
-				and: [(v @env0:bitAnd: mv) @env0:= mv]]]) ifTrue: [
-				parts @env0:add: mm]]].
-	^ parts __iter__
+	^ (Enum ___grailFlagComponents: self) __iter__
 %
 
 category: 'Grail-Flag Member'
@@ -4112,6 +4142,21 @@ __rxor__: other
 
 category: 'Grail-IntFlag Member'
 method: IntFlag
+__len__
+	"``len(member)'' -- the number of single-bit flags set (CPython 3.11+), so
+	len(Color.BLACK) is 0 and len(Color.WHITE) is 3.
+
+	Also what ``Color.__len__(member)'' reaches: the class's own __len__ shadows
+	the metaclass one that counts MEMBERS, exactly as CPython's Flag.__len__
+	shadows EnumType.__len__ (test_member_length).  Without it the unbound handle
+	found the unary metaclass method and reported ``__len__() takes a different
+	number of arguments (1 given)''."
+
+	^ (Enum ___grailFlagComponents: self) @env0:size
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
 __iter__
 	"Iterate an IntFlag MEMBER: yield its canonical SINGLE-BIT component members
 	in definition order (CPython 3.11+).  Mirrors Flag>>__iter__ -- the
@@ -4119,18 +4164,7 @@ __iter__
 	is AbstractPyInt-rooted and does not inherit Flag, so it needs its own copy
 	(like the operator methods above)."
 
-	| v parts |
-	v := self @env0:dynamicInstVarAt: #value.
-	parts := OrderedCollection @env0:new.
-	(v isKindOf: Integer) ifTrue: [
-		(Enum ___grailMembers: self @env0:class) @env0:do: [:mm | | mv |
-			mv := mm @env0:dynamicInstVarAt: #value.
-			((mv isKindOf: Integer)
-				and: [mv @env0:~= 0
-				and: [(mv @env0:bitAnd: (mv @env0:- 1)) @env0:= 0
-				and: [(v @env0:bitAnd: mv) @env0:= mv]]]) ifTrue: [
-				parts @env0:add: mm]]].
-	^ parts __iter__
+	^ (Enum ___grailFlagComponents: self) __iter__
 %
 
 category: 'Grail-IntFlag Member'
