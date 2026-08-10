@@ -427,13 +427,23 @@ printSmalltalkRuntimeOn: aStream
 	new class gets its own per-class value (Smalltalk class-side
 	instVars are per-class storage, matching Python's
 	``A.attr != B.attr`` semantics)."
-	allClassInstVars := (classAttrs collect: [:p |
+	"DEDUPLICATED, first occurrence winning.  classAttrs holds one pair per
+	assignment TARGET, so a body that binds the same name twice -- ordinary
+	Python, ``x = 1'' then ``x = x + 1'' -- yielded the slot twice and
+	``subclass:...classInstVars:'' rejected it with rtErrAddDupInstvar.  That
+	surfaced as the catch-all ``Grail cannot subclass sealed kernel class
+	'PythonInstance''' from Class.gs's retry, i.e. the class failed to build at
+	all.  The stores themselves stay one per assignment, in source order, so
+	the last one still wins."
+	allClassInstVars := OrderedCollection new.
+	classAttrs do: [:p | | slot |
 		"Reserved kernel class-object names, and Smalltalk pseudo-variables, are
 		declared under their MANGLED slot -- see
 		___classAttrBackingSlotFor:reserved:, which the accessor emit below
 		shares so the declaration and the accessor bodies cannot disagree."
-		(self ___classAttrBackingSlotFor: p key reserved: reservedClassObjIvars)
-			asSymbol]) asOrderedCollection.
+		slot := (self ___classAttrBackingSlotFor: p key reserved: reservedClassObjIvars)
+			asSymbol.
+		(allClassInstVars includes: slot) ifFalse: [allClassInstVars add: slot]].
 	"Always request a ``__module__'' slot — unless the user already
 	declared one in the class body (e.g. re._constants's
 	``class PatternError(Exception): __module__ = 're''').
@@ -1427,10 +1437,12 @@ printSmalltalkRuntimeOn: aStream
 	Emitted as a separate class-side method so the hook's own argument, and
 	therefore Enum, is untouched.  Object >> ___invokeSetNameHooks___: consults
 	it when present and falls back to the old two-store walk when it is not."
-	[:orderNames |
+	[:orderNames :repeated |
 	body body do: [:stmt |
 		stmt ___boundTargetNames___ do: [:nm |
-			(orderNames includes: nm) ifFalse: [orderNames add: nm]]].
+			(orderNames includes: nm)
+				ifTrue: [(repeated includes: nm) ifFalse: [repeated add: nm]]
+				ifFalse: [orderNames add: nm]]].
 	orderNames isEmpty ifFalse: [
 		| src |
 		src := WriteStream on: String new.
@@ -1445,7 +1457,45 @@ printSmalltalkRuntimeOn: aStream
 			category: 'Grail-Class Attrs'
 			env: 1
 			classSide: true
-			onStream: aStream]] value: OrderedCollection new.
+			onStream: aStream].
+
+	"Names the body binds MORE THAN ONCE, counting defs and assignments alike.
+
+	CPython tracks this in _EnumDict.__setitem__ -- an enum class body may not
+	reuse a name, however the two bindings are spelled:
+
+	    red = 1 ... red = 4          # two assignments
+	    red = 1 ... def red(self)    # assignment then def
+	    @enum.property def red ... red = 1
+
+	all three raise ``TypeError: 'red' already defined as 1''
+	(test_duplicate_name_error).  Grail's class body cannot notice: each
+	binding compiles to a store that simply overwrites the one before, so by
+	the time the metaclass hook runs a single value is left and nothing
+	records that there were two.
+
+	Recorded for EVERY class because only codegen can see it, but acted on by
+	nobody except Enum's ___grailBuildMembers:.  Rebinding a name in a class
+	body is ordinary Python (``x = 1'' then ``x = f(x)'') and stays legal
+	everywhere else -- CPython restricts it to enums for the same reason, the
+	rule lives in _EnumDict rather than in type.__new__."
+	repeated isEmpty ifFalse: [
+		| src |
+		src := WriteStream on: String new.
+		src nextPutAll: '___classBodyDuplicates___'; lf.
+		src nextPutAll: '	^ #('.
+		repeated do: [:nm |
+			src nextPutAll: ' #'''; nextPutAll: nm asString; nextPut: $'].
+		src nextPutAll: ' )'.
+		self
+			emitCompileMethodOn: name
+			source: src contents
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream]]
+		value: OrderedCollection new
+		value: OrderedCollection new.
 
 	"Metaclass post-population hook.  Send a class-side
 	``___pyClassDefined___:`` to the freshly-populated class with its

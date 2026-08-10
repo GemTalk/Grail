@@ -632,6 +632,32 @@ ___grailBuildMembers: cls names: attrNames
 							ValueError ___signal___:
 								'_sunder_ names, such as ''' @env0:, ns
 									@env0:, ''', are reserved for future Enum use']]].
+	"Duplicate-name validation (CPython _EnumDict.__setitem__): an enum class
+	body may not bind a name twice, however the two bindings are spelled --
+	assignment/assignment, assignment/def, or descriptor/assignment
+	(test_duplicate_name_error covers all three).  Grail's stores simply
+	overwrite each other, so codegen records the repeats for us in
+	___classBodyDuplicates___; see ClassDefAst.
+
+	The reported value is the SURVIVING one, where CPython names the value the
+	FIRST binding had -- the earlier store is gone by the time this runs.  No
+	reachable test pins that text (test_dynamic_members_with_static_methods
+	does, but fails earlier, on ``vars().update()'' in a class body), and
+	matching CPython's shape keeps ``already defined'' regexes working."
+	[ | dups |
+	dups := (cls @env0:class @env0:whichClassIncludesSelector:
+		#'___classBodyDuplicates___' environmentId: 1) @env0:isNil
+			ifTrue: [nil]
+			ifFalse: [cls @env0:perform: #'___classBodyDuplicates___' env: 1].
+	(dups @env0:notNil and: [dups @env0:isEmpty @env0:not]) ifTrue: [ | nm prior |
+		nm := (dups @env0:at: 1) @env0:asString.
+		prior := [cls @env1:___pyAttrLoad___: nm @env0:asSymbol]
+			@env0:on: AbstractException do: [:e | nil].
+		TypeError ___signal___:
+			'''' @env0:, nm @env0:, ''' already defined as '
+				@env0:, ([prior __repr__ @env0:asString]
+					@env0:on: AbstractException do: [:e | prior @env0:printString])] ]
+		@env0:value.
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
