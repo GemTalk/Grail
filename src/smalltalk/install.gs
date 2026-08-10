@@ -760,6 +760,7 @@ run
 	at: #'NumbersTestCase' put: nil;
 	at: #'OSErrorTestCase' put: nil;
 	at: #'ObjectTestCase' put: nil;
+	at: #'ExceptionSubclassArgsTestCase' put: nil;
 	at: #'OsTestCase' put: nil;
 	at: #'OverflowErrorTestCase' put: nil;
 	at: #'PartialCallableAndCopyTestCase' put: nil;
@@ -1533,6 +1534,7 @@ input src/smalltalk/PythonTests/ModuleTestCase.gs
 input src/smalltalk/PythonTests/NoneTypeTestCase.gs
 input src/smalltalk/PythonTests/NumbersTestCase.gs
 input src/smalltalk/PythonTests/ObjectTestCase.gs
+input src/smalltalk/PythonTests/ExceptionSubclassArgsTestCase.gs
 input src/smalltalk/PythonTests/OsTestCase.gs
 input src/smalltalk/PythonTests/PartialCallableAndCopyTestCase.gs
 input src/smalltalk/PythonTests/PartialMethodDescriptorTestCase.gs
