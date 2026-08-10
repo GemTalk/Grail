@@ -1429,6 +1429,31 @@ classBodyDecoratorScope: anAssociationOrNil
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
+sourcePath
+	"The filesystem path of the module being compiled, or nil when there is no
+	file behind it (exec / eval / the REPL doit path).
+
+	Read by the emitters that stamp a PyCode, so ``co_filename'' can be the
+	real path instead of the ``'<grail>''' placeholder.  A code object's
+	filename is what linecache keys on, so a real path is what makes
+	``FrameSummary.line'' -- the SOURCE TEXT of a traceback line -- possible at
+	all; §9 of docs/Python_Traceback_Design.md has the reasoning.
+
+	Set for the duration of ___buildModuleClass:name:, which is the single
+	seam where a ModuleAst carrying a path reaches codegen.  Nil elsewhere, so
+	the placeholder remains for genuinely file-less code."
+
+	^ self ___compileContext___ at: #'sourcePath' otherwise: nil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+sourcePath: aStringOrNil
+	self ___compileContext___ at: #'sourcePath' put: aStringOrNil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
 returnEmitMode
 	"How ReturnAst should emit Python ``return value'' statements:
 
@@ -1712,6 +1737,35 @@ classBodyConditionalNames: aSetOrNil
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classBodyRuntimeClass
+	"The class temp NAME (a String) while ClassDefAst emits a class-body
+	COMPOUND statement -- ``try'' / ``for'' / ``while'' / ``with'' -- verbatim
+	through the statement's own printSmalltalkOn:, or nil outside that emit.
+
+	Such a statement runs at class-DEFINITION time, so every name it binds is
+	a class attribute; but it is emitted as ordinary Smalltalk, where a bare
+	``x := v'' would bind an undeclared block temp and the binding would be
+	lost the moment the statement finished.  The name says which class the
+	store belongs to, so AssignAst / AnnAssignAst can route a bare-NAME target
+	to ___classBodyDefinitionalStore___ instead -- the same runtime
+	accessor-vs-holder dispatch a class-body ``if'' branch uses, and for the
+	same reason: whether the binding ran is a runtime fact.
+
+	Set only around the compound statement's own emit and restored after, so
+	it never leaks into a nested def or class body, where ``x := v'' really is
+	a local."
+
+	^ self ___compileContext___ at: #'classBodyRuntimeClass' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classBodyRuntimeClass: aStringOrNil
+	self ___compileContext___ at: #'classBodyRuntimeClass' put: aStringOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 inClassBodyValueEmit
 	"Boolean — true while ClassDefAst is emitting the class
 	attribute value expressions, false otherwise (including while
@@ -1744,6 +1798,23 @@ category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classVarargsFunctionNames: aSetOrNil
 	self ___compileContext___ at: #'classVarargsFunctionNames' put: aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classDecoratedFunctionNames
+	"Subset of classFunctionNames whose def carries a WRAPPING decorator
+	(@contextlib.contextmanager, a user decorator, ...).  For those the
+	compiled selector is the RAW function while the class-dict entry is the
+	decorator's result, so neither self-send fast path may be used -- the
+	call has to go through ___pyAttrLoad___ to see the wrapper."
+	^ self ___compileContext___ at: #'classDecoratedFunctionNames' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classDecoratedFunctionNames: aSetOrNil
+	self ___compileContext___ at: #'classDecoratedFunctionNames' put: aSetOrNil
 %
 
 category: 'Grail-Class Compile Context'
@@ -1880,6 +1951,10 @@ classSelfSendSelector
 	(self class classFunctionNames includes: attrSym) ifFalse: [^nil].
 	((self class classVarargsFunctionNames notNil
 		and: [self class classVarargsFunctionNames includes: attrSym])) ifTrue: [^nil].
+	"A decorated def's compiled selector is the RAW function; the wrapper
+	lives in the class dict, so this call must take the attribute path."
+	((self class classDecoratedFunctionNames notNil
+		and: [self class classDecoratedFunctionNames includes: attrSym])) ifTrue: [^nil].
 	keywords isEmpty ifFalse: [^nil].
 	^ self class fastPathSelectorForAttr: attrName arity: arguments size
 %
@@ -1898,6 +1973,10 @@ classSelfSendVarargsSelector
 	(self class isSelfReference: function value id) ifFalse: [^nil].
 	attrName := function ___mangledAttr___.
 	(self class classFunctionNames includes: attrName asSymbol) ifFalse: [^nil].
+	"See classSelfSendSelector: a wrapped def must not be self-sent at all."
+	((self class classDecoratedFunctionNames notNil
+		and: [self class classDecoratedFunctionNames includes: attrName asSymbol]))
+			ifTrue: [^nil].
 	candidate := self class varargsSelectorForName: attrName.
 	^ candidate
 %

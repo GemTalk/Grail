@@ -458,6 +458,29 @@ expandStarImports: aModuleAst
 category: 'Grail-Module Loading'
 classmethod: importlib
 ___buildModuleClass: moduleAst name: moduleName
+	"Announce the module's source path to codegen for the duration of the
+	compile, then do the work.
+
+	This is the single seam where a ModuleAst carrying a path reaches codegen
+	(both loadModuleFromPath: and reload: come through here), so it is the one
+	place that has to set CallAst >> sourcePath -- which the PyCode emitters
+	read for ``co_filename''.  Restored in an ensure: so a failed compile cannot
+	leak a stale path into an unrelated one, and so a nested compile (a module
+	whose body imports another) puts its parent's path back on the way out.
+
+	A thin wrapper rather than an indented block around the 260-line body: the
+	re-indent would have swamped the change."
+
+	| saved |
+	saved := CallAst sourcePath.
+	CallAst sourcePath: moduleAst path.
+	^ [self ___buildModuleClassBody: moduleAst name: moduleName]
+		ensure: [CallAst sourcePath: saved]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___buildModuleClassBody: moduleAst name: moduleName
 	"Compile a Python module's parsed AST into its Smalltalk class and return
 	the class.  Creating the class via ``module subclass:`` re-parents (reuses)
 	an existing class of the same name, so calling this again on reload
@@ -638,6 +661,39 @@ ___buildModuleClass: moduleAst name: moduleName
 					environmentId: 1.
 				] on: CompileWarning do: [:ex | ex resume].
 			].
+		].
+
+		"Class-side ``___methodCodeTable___'' (function name -> PyCode) for the
+		module's top-level defs, the module-scope twin of the table ClassDefAst
+		compiles for a class body.  A top-level def is compiled just above as a
+		real method on the module class, so -- like a class-body def, and unlike
+		a nested def -- it has no ExecBlock to carry the def-time
+		``___pyCode___:'' cascade, and ``f.__code__'' would raise AttributeError.
+		BoundMethod >> __code__ finds this by walking from the receiver's class,
+		which for a module-level function IS this module class."
+		topLevelDefs isEmpty ifFalse: [
+			| codeTblSrc |
+			codeTblSrc := WriteStream on: String new.
+			codeTblSrc nextPutAll: '___methodCodeTable___'; nextPutAll: lf.
+			codeTblSrc nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+			topLevelDefs do: [:stmt |
+				codeTblSrc nextPutAll: ' @env0:at: '''; nextPutAll: stmt name asString;
+					nextPutAll: ''' put: '.
+				stmt emitPyCodeExprOn: codeTblSrc qualname: stmt name asString.
+				codeTblSrc nextPut: $;].
+			codeTblSrc nextPutAll: ' @env0:yourself)'.
+			traceDir ifNotNil: [
+				debugStream
+					nextPutAll: 'category: ''Grail-Tracebacks'''; lf;
+					nextPutAll: 'classmethod: '; nextPutAll: debugClassName; lf.
+				self ___writeMethodSource: codeTblSrc contents on: debugStream.
+				debugStream nextPutAll: '%'; lf; lf.
+			].
+			[moduleClass class compileMethod: codeTblSrc contents
+				dictionaries: sl
+				category: 'Grail-Tracebacks'
+				environmentId: 1.
+			] on: CompileWarning do: [:ex | ex resume].
 		].
 
 		"Generate the module body as Smalltalk source for the initialize method.
@@ -1572,9 +1628,14 @@ loadModuleFromPath: pathString name: moduleName
 	it (whole subtree + session caches) on failure so the next import
 	rebuilds cleanly from source, then re-signal."
 	canonical ifTrue: [self ___resetMintedThisLoad___: moduleName].
-	[moduleInstance @env1:initialize] on: AbstractException do: [:ex |
-		self removeModule: moduleName.
-		ex outer].
+	"___recursionGuard___ turns a runaway recursion in the module body into a
+	catchable Python RecursionError instead of an AlmostOutOfStack notification
+	that no ``except'' can contain.  It is INSIDE the unload handler so a module
+	that overflows is still removed from sys.modules like any other failure."
+	[BaseException @env1:___recursionGuard___: [moduleInstance @env1:initialize]]
+		on: AbstractException do: [:ex |
+			self removeModule: moduleName.
+			ex outer].
 	"Persistent-state bind/capture for modules declaring ``__persistent__''
 	(docs/Persistent_Modules_and_Classes.md par.6) -- a no-op for the rest."
 	self ___syncPersistentState___: moduleInstance.

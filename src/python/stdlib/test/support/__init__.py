@@ -12,10 +12,11 @@
 #   * NO @contextlib.contextmanager -- it is a no-op passthrough in Grail
 #     (generators are not coroutine-backed for that pattern).  Every
 #     context manager here is a plain class with __enter__/__exit__.
-#   * Method @-decorators are dropped by Grail codegen, so the skip/
-#     requires/cpython_only family below only has to EXIST as a name
-#     (they are almost never actually executed).  They are written as
-#     flexible passthroughs so direct programmatic calls also no-op.
+#   * The skip/requires/cpython_only family below is written as flexible
+#     passthroughs so direct programmatic calls also no-op.  They ARE
+#     executed as @-decorators: Grail used to drop a decorator built as a
+#     class INSTANCE (silently, inside the decorator-application guard),
+#     which is what these are -- fixed in PythonInstance>>___pyCallValue___:kw:.
 
 import sys
 import unittest
@@ -64,8 +65,53 @@ class _PassthroughDecorator:
         return _wrap
 
 
-# The skip / requires / impl-detail decorator family.  All no-op.
-cpython_only = _PassthroughDecorator()
+class _SkipDecorator:
+    """Like _PassthroughDecorator, but marks what it decorates as skipped.
+
+    Usable as ``@dec`` and as ``@dec(...)``, on a class or a function, and
+    stamps the same ``__unittest_skip__`` markers unittest.skip does -- which
+    unittest's TestCase.run now honours.
+    """
+
+    def __init__(self, reason):
+        self.reason = reason
+
+    def _mark(self, test_item):
+        # Mirror CPython's unittest.skip: a non-class item is REPLACED by a
+        # wrapper that raises SkipTest when CALLED, and only then stamped.
+        # The markers alone are enough for a decorated test METHOD (TestCase
+        # .run checks them before setUp), but not for a decorated HELPER --
+        # test_traceback's CExcReportingTests puts @cpython_only on
+        # get_report(), whose callers are inherited test methods carrying no
+        # marker of their own.  There the skip has to happen at call time.
+        if not isinstance(test_item, type):
+            reason = self.reason
+
+            def skip_wrapper(*args, **kwargs):
+                raise unittest.SkipTest(reason)
+
+            test_item = skip_wrapper
+        test_item.__unittest_skip__ = True
+        test_item.__unittest_skip_why__ = self.reason
+        return test_item
+
+    def __call__(self, *args, **kw):
+        if _is_decorating(args, kw):
+            return self._mark(args[0])
+        def _wrap(test_item):
+            return self._mark(test_item)
+        return _wrap
+
+
+# ``@cpython_only`` marks a test that reaches into CPython implementation
+# detail -- almost always through _testcapi, which Grail does not have.  It
+# used to be a passthrough no-op, so those tests RAN under Grail and failed
+# with ModuleNotFoundError instead of being skipped: 142 of test_traceback's
+# 250 errors were exactly that.  Grail is never CPython (sys.implementation
+# .name == 'grail', so check_impl_detail(cpython=True) is already False), so
+# an unconditional skip is the honest answer and matches what CPython's own
+# suite does on any non-CPython implementation.
+cpython_only = _SkipDecorator('cpython implementation detail')
 requires_IEEE_754 = _PassthroughDecorator()
 requires_docstrings = _PassthroughDecorator()
 requires_resource = _PassthroughDecorator()

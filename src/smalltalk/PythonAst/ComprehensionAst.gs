@@ -275,6 +275,9 @@ ___emitTracebackFrameCloseFor: iterNode on: aStream
 	aStream
 		nextPutAll: '] @env0:on: Exception do: [:___tex___ | ___tex___ @env0:___pushTracebackFrame___: (PyCode @env0:name: ';
 		nextPutAll: (self ___stLiteral: funcName);
+		nextPutAll: ' filename: '.
+	self emitSourceFilenameLiteralOn: aStream.
+	aStream
 		nextPutAll: ' firstlineno: '; nextPutAll: funcLine printString;
 		nextPutAll: ') lineno: '; nextPutAll: iterNode beginLine printString;
                 nextPutAll: ' colno: '; nextPutAll: iterNode column printString;

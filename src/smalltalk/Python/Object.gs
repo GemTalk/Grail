@@ -775,6 +775,75 @@ ___pythonBuiltinTypeName___
 
 category: 'Grail-Introspection'
 classmethod: object
+___pythonModuleAttrIdentity___
+	"The CPython identity of a class Grail names after the MODULE ATTRIBUTE
+	it implements.
+
+	Grail's Python SymbolDictionary is FLAT, so a class CPython reaches only
+	through a module gets a flattened Smalltalk name: ``functools_partial''
+	for functools.partial, ``sys_flags'' for type(sys.flags),
+	``string_formatter'' for string.Formatter.  That spelling is an
+	implementation detail, but it leaked into every Python-visible report --
+	``functools.partial.__name__'' answered 'functools_partial' where CPython
+	says 'partial', and ``__module__'' answered nothing at all where CPython
+	says 'functools'.
+
+	Answer { pythonName. moduleName } for such a class, else nil.  moduleName
+	is nil for the two entries that are MODULES rather than classes (os.path,
+	html.entities): a module has a __name__ but no __module__.
+
+	Keyed by Smalltalk class NAME, exactly like ___pythonBuiltinTypeName___,
+	so no class-global resolution is needed.  Every pair below is CPython
+	3.14's own answer, read off the running interpreter rather than guessed."
+
+	| n |
+	n := self @env0:name @env0:asString.
+
+	"functools.  ``Placeholder'' is an INSTANCE of _PlaceholderType in
+	CPython, and cmp_to_key's return value is a KeyWrapper."
+	(n @env0:= 'functools_partial') ifTrue: [^ #('partial' 'functools')].
+	(n @env0:= 'functools_partialmethod') ifTrue: [^ #('partialmethod' 'functools')].
+	(n @env0:= 'functools_cached_property') ifTrue: [^ #('cached_property' 'functools')].
+	(n @env0:= 'functools_CacheInfo') ifTrue: [^ #('CacheInfo' 'functools')].
+	(n @env0:= 'functools_Placeholder') ifTrue: [^ #('_PlaceholderType' 'functools')].
+	(n @env0:= 'functools_cmpkey') ifTrue: [^ #('KeyWrapper' 'functools')].
+
+	"numbers -- the numeric tower ABCs."
+	(n @env0:= 'numbers_Number') ifTrue: [^ #('Number' 'numbers')].
+	(n @env0:= 'numbers_Complex') ifTrue: [^ #('Complex' 'numbers')].
+	(n @env0:= 'numbers_Real') ifTrue: [^ #('Real' 'numbers')].
+	(n @env0:= 'numbers_Rational') ifTrue: [^ #('Rational' 'numbers')].
+	(n @env0:= 'numbers_Integral') ifTrue: [^ #('Integral' 'numbers')].
+
+	"os / string / time."
+	(n @env0:= 'os_PathLike') ifTrue: [^ #('PathLike' 'os')].
+	(n @env0:= 'string_formatter') ifTrue: [^ #('Formatter' 'string')].
+	(n @env0:= 'struct_time') ifTrue: [^ #('struct_time' 'time')].
+
+	"sys.  ``sys.implementation'' is a plain types.SimpleNamespace in
+	CPython, not a bespoke type, so that is what it must report."
+	(n @env0:= 'sys_flags') ifTrue: [^ #('flags' 'sys')].
+	(n @env0:= 'sys_float_info') ifTrue: [^ #('float_info' 'sys')].
+	(n @env0:= 'sys_hash_info') ifTrue: [^ #('hash_info' 'sys')].
+	(n @env0:= 'sys_int_info') ifTrue: [^ #('int_info' 'sys')].
+	(n @env0:= 'sys_implementation') ifTrue: [^ #('SimpleNamespace' 'types')].
+
+	"json.  CPython defines JSONDecodeError in the json.decoder SUBMODULE and
+	re-exports it from json, so its __module__ is 'json.decoder' even though
+	``json.JSONDecodeError'' is how most code names it."
+	(n @env0:= 'JSONDecodeError') ifTrue: [^ #('JSONDecodeError' 'json.decoder')].
+
+	"MODULES, not classes -- __name__ only.  ``os.path'' IS the posixpath
+	module in CPython, so that is the name it reports."
+	(n @env0:= 'os_path') ifTrue: [^ #('posixpath' nil)].
+	(n @env0:= 'html_entities') ifTrue: [^ #('html.entities' nil)].
+	(n @env0:= 'json_decoder') ifTrue: [^ #('json.decoder' nil)].
+
+	^ nil
+%
+
+category: 'Grail-Introspection'
+classmethod: object
 ___pythonBuiltinExceptionNames___
 	"The CPython builtin EXCEPTION hierarchy — the exception classes that live
 	in CPython's builtins module (``ValueError.__module__ == 'builtins'``).  The
@@ -839,8 +908,15 @@ ___pythonBuiltinTypeModule___
 	class-enums) or fall through (dynamically created classes such as
 	functional-API enums — reporting 'builtins' for those broke enum pickling)."
 
-	| pd nm |
+	| pd nm id |
 	self ___pythonBuiltinTypeName___ @env0:notNil ifTrue: [^ 'builtins'].
+	"A flattened module-attribute class belongs to the module it was named
+	after, not to builtins -- ``functools.partial.__module__'' is 'functools'.
+	The two MODULE entries (os.path, html.entities) carry nil here: a module
+	has no __module__, so they fall through."
+	id := self ___pythonModuleAttrIdentity___.
+	id @env0:notNil ifTrue: [
+		(id @env0:at: 2) @env0:ifNotNil: [:___mod | ^ ___mod]].
 	nm := self @env0:name @env0:asString @env0:asSymbol.
 	((#( #bool #bytearray #bytes #complex #dict #float #frozenset #int #list
 		#memoryview #object #property #range #set #slice #str #tuple #type )
@@ -871,9 +947,14 @@ __name__
 	messages interpolate this (test_contains: ``argument of type 'base_set'
 	...'')."
 
-	| bt |
+	| bt id |
 	bt := self ___pythonBuiltinTypeName___.
 	bt @env0:notNil ifTrue: [^ bt].
+	"A class named after the module attribute it implements (functools_partial,
+	sys_flags, ...) reports the name CPython gives it, not Grail's flattened
+	spelling."
+	id := self ___pythonModuleAttrIdentity___.
+	id @env0:notNil ifTrue: [^ id @env0:at: 1].
 	"User classes now keep their exact Python name as the GemStone class name
 	(___asSmalltalkClassName___: no longer changes case), so the Smalltalk name
 	IS the Python name -- no mangled->original registry lookup needed."
@@ -890,7 +971,7 @@ __qualname__
 	CPython error messages interpolate it (e.g. textwrap.dedent's
 	``expected str object, not {type(text).__qualname__!r}'')."
 
-	| bt holder qn |
+	| bt holder qn id |
 	"A NESTED class carries a dotted qualified name (``Outer.Inner'') recorded
 	in its own dynInstVars holder at build time (ClassDefAst nested-class emit);
 	top-level classes have none and fall back to the simple name below."
@@ -901,6 +982,10 @@ __qualname__
 			qn @env0:notNil ifTrue: [^ qn @env0:asString]]].
 	bt := self ___pythonBuiltinTypeName___.
 	bt @env0:notNil ifTrue: [^ bt].
+	"Flattened module-attribute class -- same CPython name __name__ reports;
+	all of these are top-level in their module, so qualname equals name."
+	id := self ___pythonModuleAttrIdentity___.
+	id @env0:notNil ifTrue: [^ id @env0:at: 1].
 	"User classes now keep their exact Python name as the GemStone class name
 	(___asSmalltalkClassName___: no longer changes case), so the Smalltalk name
 	IS the Python name -- no mangled->original registry lookup needed."
@@ -2350,10 +2435,27 @@ ___pyAttrLoad___: aSym
 				(self ___classChainAttrLookup___: aSym)
 					@env0:ifNotNil: [:___dv | ^ ___dv]].
 		"Setter-paired class-level accessor on a Python user class —
-		value attribute (``class C: X = 1``)."
-		((self @env0:inheritsFrom: PythonInstance)
+		value attribute (``class C: X = 1``).
+
+		``__new__'' is excluded, and is the ONE name that has to be: the pair
+		this branch looks for is a SYNTHESISED getter+setter, but the metaclass
+		chain bottoms out at ``object class'', which defines the allocator in
+		BOTH arities -- unary ``__new__'' and 1-arg ``__new__: cls''.  Those are
+		two arities of one method, not a getter and a setter, so the heuristic
+		read ``Cls.__new__'' as a value attribute and PERFORMED the unary
+		allocator: every ``Cls.__new__'' on a PythonInstance-rooted class
+		CONSTRUCTED an instance instead of answering the function
+		(``Enum.__new__'' was ``<Enum.nil: nil>'', ``Plain.__new__'' a fresh
+		``<Plain object>'').  Sweeping every dunder that resolves off a user
+		class shows __new__ alone is affected -- __init__/__str__/__eq__/... have
+		no unary class-side twin and already resolve correctly -- so the
+		exclusion is exactly as narrow as the defect.  This mirrors the
+		binary-dunder mis-fire ___pyAttrStore___ guards against on the store
+		side, where ``__eq__:'' looks like a setter for the same reason."
+		((aSym ~~ #'__new__')
+			and: [(self @env0:inheritsFrom: PythonInstance)
 			and: [(self ___respondsTo___: aSym)
-				and: [(self ___respondsTo___: sym1)]])
+				and: [(self ___respondsTo___: sym1)]]])
 			ifTrue: [
 				^ self ___classDescriptorGet___: (self @env0:perform: aSym env: 1)
 		].
@@ -2571,6 +2673,18 @@ ___pyAttrLoad___: aSym
 			and: [(Python @env0:at: #builtins otherwise: nil)
 				@env0:ifNil: [false] ifNotNil: [:bc | self @env0:receiver @env0:isKindOf: bc]]])
 		ifTrue: [
+			"``str.__new__(cls, value)'' is the ALLOCATOR -- how a hand-written
+			str-subclass __new__ forwards to its base.  It lives CLASS-side, so
+			the CharacterCollection instance-method probe below never finds it and
+			the generic BoundMethod wrap took over, turning the call into a
+			CONSTRUCTION through cls: ``str.__new__(SomeStrEnum, v)'' ran the
+			enum's by-value lookup and raised ``<enum 'X'> has no members''.
+			Delegate to the concrete string class -- exactly what the equivalent
+			``builtins.str.__new__'' already answers, and what test_enum's
+			test_dir_on_sub_with_behavior_including_instance_dict_on_super and
+			test_multiple_mixin_with_common_data_type call."
+			aSym == #'__new__' ifTrue: [
+				^ Unicode7 @env1:___pyAttrLoad___: #'__new__'].
 			((CharacterCollection @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
 				or: [(CharacterCollection @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
 				or: [(CharacterCollection @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
@@ -2709,6 +2823,35 @@ ___pyAttrLoad___: aSym
 	reach here without having done so."
 	(self ___classChainAttrLookup___: aSym)
 		@env0:ifNotNil: [:___cv | ^ ___cv].
+	"A @classmethod read through an INSTANCE.  The def lives on the
+	METACLASS (category Grail-Class Methods), so none of the instance-side
+	probes above can see it, and ``p.cm()'' raised AttributeError where
+	CPython binds the class and calls it.
+
+	PythonInstance>>doesNotUnderstand: already forwards the DIRECT-SEND
+	shape, but only for KEYWORD selectors (its branch is guarded by
+	``s last = $:''), so a ZERO-ARG classmethod had no route at all:
+	``p.cm1(7)'' worked while ``p.cm0()'' did not.  This covers every
+	arity, and the load shapes that never reach a send --
+	``getattr(p, 'cm0')'' and ``f = p.cm0'' -- by answering a BoundMethod
+	bound to the CLASS, which is exactly Python's classmethod binding.
+
+	The category gate is the same one the DNU forward uses, so
+	synthesized class-attr accessors and real setters stay out."
+	(self isKindOf: Behavior) ifFalse: [
+		| metaOwner |
+		metaOwner := self @env0:class @env0:class
+			@env0:whichClassIncludesSelector: aSym environmentId: 1.
+		(metaOwner @env0:notNil and: [
+			(metaOwner @env0:categoryOfSelector: aSym environmentId: 1)
+				@env0:= #'Grail-Class Methods'])
+			ifTrue: [
+				"Delegate to the CLASS's own load rather than wrapping the raw
+				selector here: that is what applies a decorator stacked under
+				@classmethod (@contextlib.contextmanager, ...), whose wrapper
+				lives in the class dict while the selector is the raw function.
+				The class is a Behavior, so it cannot re-enter this branch."
+				^ self @env0:class ___pyAttrLoad___: aSym]].
 	"No callable selector matched anywhere in the receiver's class
 	chain.  Before raising AttributeError, give a user-defined
 	``__getattr__'' a chance to handle the miss — matches CPython's
@@ -4194,21 +4337,32 @@ ___pyCallValue___: positional kw: kwargs
 	when a top-level def name has been rebound to a non-callable
 	value (e.g. ``def foo(): ...; foo = 21; foo(5)'' must TypeError)."
 
-	"A CLASS reached through the INDIRECT protocol lands here and reports
-	``not callable'', even though calling a class CONSTRUCTS in Python.  A
-	direct ``Cls(...)'' compiles to value:value: and never comes here, so
-	what this affects is a class used as a decorator through the attribute
-	form (``@functools.cached_property'') or reached through a variable --
-	and because a class-body decorator's rebinding store is wrapped in an
-	error-swallowing guard, such a decoration silently does not happen at
-	all.  Answering value:value: for every class here is the general fix,
-	but it also makes ``@enum.property'' / ``@member'' apply for the first
-	time, and Grail's enum member builder then counts the resulting
-	descriptor as a MEMBER (Django's Choices grows a spurious ``label''
-	member, and IntegerChoices can no longer extend it).  So the classes
-	that want it opt in with a class-side ___pyCallValue___:kw: of their own
-	-- see functools_cached_property -- until the enum builder learns
-	CPython's rule that a descriptor is never a member."
+	"A CLASS reached through the INDIRECT protocol CONSTRUCTS, exactly as a
+	direct ``Cls(...)'' does -- value:value: is the universal call protocol
+	(BoundMethod, class objects, blocks, partials all dispatch through it).
+
+	A direct call compiles to value:value: and never comes here, so what this
+	governs is a class reached indirectly: through a variable, handed to
+	something that invokes its argument generically, or -- the case that
+	motivated it -- used as a DECORATOR.  Both the module-level and the
+	class-body decorator emitters wrap their rebinding store in an
+	error-swallowing guard, so raising here did not surface as a TypeError:
+	the decoration silently did not happen and the plain function survived
+	(``@Wrap def z'' left z a BoundMethod; ``@enum.property'' / ``@member''
+	never applied at all).
+
+	This used to raise for every class, because applying ``@enum.property''
+	made Grail's enum member builder count the resulting descriptor as a
+	MEMBER (Django's Choices grew a spurious ``label'' member, and
+	IntegerChoices could then no longer extend it).  The builder now
+	implements CPython's rule that a descriptor is never a member -- see the
+	_EnumDict pre-passes in Enum class>>___grailBuildMembers:names: and
+	>>___grailFunctional:positional:keywords: -- so the restriction is gone,
+	and the classes that opted in with a class-side ___pyCallValue___:kw: of
+	their own (functools_cached_property, functools_partial) now merely
+	shortcut what this answers anyway."
+	(self isKindOf: Behavior) ifTrue: [
+		^ self @env1:value: positional value: kwargs].
 	TypeError ___signal___:
 		'''' @env0:, self @env0:class @env0:name @env0:asString
 			@env0:, ''' object is not callable'

@@ -53,8 +53,27 @@ set compile_env: 1
 category: 'Grail-Initialization'
 method: grail
 initialize
-	"No-op.  The module>>instance class method calls initialize on the
-	newly-created instance; this stub keeps that contract."
+	"Publish the Grail-internal base classes that Grail's own bundled
+	Python needs to subclass.
+
+	These live in the ``Python'' SymbolDictionary, which is currently also
+	what a bare Python name resolves against -- so today they happen to be
+	reachable as globals.  That is not CPython behaviour (``AbstractPyInt''
+	is not a builtin), and the bundled stdlib should not depend on it.
+	Reaching them through ``from grail import ...'' states the dependency,
+	and is what lets bare-name resolution be narrowed to real builtins
+	without breaking re/_constants.py, http/__init__.py and friends.
+
+	The ``grail'' module is the right home: it already exists for exactly
+	this -- Grail-specific APIs with no CPython counterpart.
+
+	Only production classes belong here.  GrailForwarderTarget is a test
+	fixture living in the PythonTests dictionary (and filed after this
+	module), so tests/python/smalltalk_forwarder.py reaches it through the
+	``gemstone'' module's named-global lookup instead."
+
+	self @env0:at: #AbstractPyInt put: AbstractPyInt.
+	self @env0:at: #NamedIntConstant put: NamedIntConstant.
 %
 
 ! ===============================================================================

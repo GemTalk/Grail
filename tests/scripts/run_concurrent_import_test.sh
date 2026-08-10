@@ -18,7 +18,11 @@
 set -u
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 PROJECT_ROOT=$(cd "$SCRIPT_DIR/../.." && pwd)
-if [ -z "${GEMSTONE:-}" ] && [ -f "$PROJECT_ROOT/.setenv" ]; then
+# Always source .setenv when it exists (see install.sh for why it is
+# unconditional: .setenv, not the launching shell, decides which product +
+# stone this checkout targets -- and this test reads GEMSTONE_NAME /
+# GRAIL_NETLDI from it).
+if [ -f "$PROJECT_ROOT/.setenv" ]; then
     # shellcheck disable=SC1091
     source "$PROJECT_ROOT/.setenv"
 fi

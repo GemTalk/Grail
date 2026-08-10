@@ -158,22 +158,12 @@ printSmalltalkOn: aStream
 	exported names (`__all__` or every non-underscore attribute) and
 	binding each one into the local namespace.  See TODO.md."
 
-	| moduleClass absoluteName |
-	absoluteName := self resolvedModuleName.
-	moduleClass := module isNil
-		ifTrue: [nil]
-		ifFalse: [CallAst resolveModuleClassForName: module asSymbol].
-
 	names doWithIndex: [:each :index |
-		| targetName attrName isModuleStore |
-		targetName := each asName ifNil: [each name].
-		attrName := each name asString.
+		| targetName isModuleStore |
+		targetName := self boundNameFor: each.
 		"Phase A: module-scope target binds into the module's dynamic-
 		instVar storage rather than a non-existent Smalltalk temp."
-		isModuleStore := CallAst moduleClassBeingCompiled notNil
-			and: [CallAst classBeingCompiled isNil
-			and: [CallAst moduleVariableNames notNil
-			and: [CallAst moduleVariableNames includes: targetName asSymbol]]].
+		isModuleStore := self ___importBindsAtModuleScope___: targetName.
 		isModuleStore
 			ifTrue: [
 				aStream
@@ -184,42 +174,7 @@ printSmalltalkOn: aStream
 			ifFalse: [
 				aStream nextPutAll: targetName; nextPutAll: ' := '
 			].
-
-		"Pass the imported name as a single-element fromlist so the
-		runtime importer returns the leaf submodule (`re._constants`)
-		rather than the top-level package (`re`).  Without this CPython-
-		standard distinction, dotted imports of submodules would always
-		bind names from the package's __init__.py instead of the actual
-		target."
-
-		(moduleClass notNil and: [NameAst isFastPathBuiltinName: attrName asSymbol on: moduleClass]) ifTrue: [
-			"Callable on a converted module — wrap in BoundMethod."
-			aStream
-				nextPutAll: '(BoundMethod receiver: (((Python @env0:at: #builtins) instance) ___import__: { ''';
-				nextPutAll: absoluteName;
-				nextPutAll: '''. nil. nil. { ''';
-				nextPutAll: attrName;
-				nextPutAll: ''' }. 0 } kw: nil) selector: #';
-				nextPutAll: attrName;
-				nextPutAll: ')'.
-		] ifFalse: [
-			"Stored attribute or unconverted module — go through
-			___pyAttrLoad___ so dynamicInstVar entries (the
-			canonical home for module attributes assigned at init
-			time) are read directly without invoking a same-named
-			unary method.  ``from enum import auto'' depends on
-			this: ``auto'' is pre-stored as a BoundMethod and a
-			bare unary send would dispatch the env-1 ``auto''
-			method, returning an integer."
-			aStream
-				nextPutAll: '((((Python @env0:at: #builtins) instance) ___import__: { ''';
-				nextPutAll: absoluteName;
-				nextPutAll: '''. nil. nil. { ''';
-				nextPutAll: attrName;
-				nextPutAll: ''' }. 0 } kw: nil) @env1:___pyAttrLoad___: #''';
-				nextPutAll: attrName;
-				nextPutAll: ''')'.
-		].
+		aStream nextPutAll: (self valueSourceFor: each).
 		isModuleStore ifTrue: [aStream nextPut: $)].
 		aStream nextPut: $..
 		index < names size ifTrue: [aStream lf].
@@ -229,6 +184,8 @@ printSmalltalkOn: aStream
 	into self.  Catches dynamic names that parse-time expansion
 	missed (e.g. opcodes injected via globals().update())."
 	self wasStarImport ifTrue: [
+		| absoluteName |
+		absoluteName := self resolvedModuleName.
 		names isEmpty ifFalse: [aStream lf].
 		"Pass `('*',)` as fromlist so the importer returns the leaf
 		submodule (matches CPython semantics for `from X import *`)
@@ -239,6 +196,102 @@ printSmalltalkOn: aStream
 			nextPutAll: absoluteName;
 			nextPutAll: '''. nil. nil. { ''*'' }. 0 } kw: nil).'.
 	].
+%
+
+category: 'Grail-code generation'
+method: ImportFromAst
+valueSourceFor: anAlias
+	"Smalltalk source for the VALUE ``from <module> import <anAlias>'' binds.
+
+	The imported name is passed as a single-element fromlist so the runtime
+	importer returns the leaf submodule (``re._parser'') rather than the
+	top-level package (``re'').  Without that CPython-standard distinction a
+	dotted import would always bind names from the package's __init__.py
+	instead of the actual target.
+
+	Shared by printSmalltalkOn: and by the class-body attribute path so the
+	two cannot drift."
+
+	| absoluteName moduleClass attrName stream |
+	absoluteName := self resolvedModuleName.
+	moduleClass := module isNil
+		ifTrue: [nil]
+		ifFalse: [CallAst resolveModuleClassForName: module asSymbol].
+	attrName := anAlias name asString.
+	stream := WriteStream on: String new.
+	(moduleClass notNil
+		and: [NameAst isFastPathBuiltinName: attrName asSymbol on: moduleClass])
+		ifTrue: [
+			"Callable on a converted module — wrap in BoundMethod."
+			stream
+				nextPutAll: '(BoundMethod receiver: (((Python @env0:at: #builtins) instance) ___import__: { ''';
+				nextPutAll: absoluteName;
+				nextPutAll: '''. nil. nil. { ''';
+				nextPutAll: attrName;
+				nextPutAll: ''' }. 0 } kw: nil) selector: #';
+				nextPutAll: attrName;
+				nextPutAll: ')'.
+		]
+		ifFalse: [
+			"Stored attribute or unconverted module — go through
+			___pyAttrLoad___ so dynamicInstVar entries (the canonical home
+			for module attributes assigned at init time) are read directly
+			without invoking a same-named unary method.  ``from enum import
+			auto'' depends on this: ``auto'' is pre-stored as a BoundMethod
+			and a bare unary send would dispatch the env-1 ``auto'' method,
+			returning an integer."
+			stream
+				nextPutAll: '((((Python @env0:at: #builtins) instance) ___import__: { ''';
+				nextPutAll: absoluteName;
+				nextPutAll: '''. nil. nil. { ''';
+				nextPutAll: attrName;
+				nextPutAll: ''' }. 0 } kw: nil) @env1:___pyAttrLoad___: #''';
+				nextPutAll: attrName;
+				nextPutAll: ''')'.
+		].
+	^ stream contents
+%
+
+category: 'Grail-Class Body'
+method: ImportFromAst
+boundNameFor: anAlias
+	"The single name ``from <module> import <anAlias>'' binds: the alias
+	when given, otherwise the imported name itself.  Unlike a plain
+	``import a.b'', there is no dotted-path case here -- a from-import
+	always binds a leaf."
+
+	^ (anAlias asName ifNil: [anAlias name]) asSymbol
+%
+
+category: 'Grail-Class Body'
+method: ImportFromAst
+___boundTargetNames___
+	"Every name this from-import binds -- see StatementAst for the protocol.
+
+	``from X import *'' is excluded: CPython makes it a SyntaxError anywhere
+	but module level, so it can never reach a class body, and at module
+	scope the star names are bound by the runtime merge in
+	printSmalltalkOn: rather than as class attributes."
+
+	self wasStarImport ifTrue: [^ #()].
+	^ names collect: [:each | self boundNameFor: each]
+%
+
+category: 'Grail-Class Body'
+method: ImportFromAst
+classBodyAttributePairs
+	"``name -> value'' pairs for a from-import written in a CLASS BODY.
+
+	CPython executes a class body as a namespace, so ``from os import sep''
+	there binds ``sep'' as a class attribute exactly as ``import os'' binds
+	``os''.  Grail dropped the statement whole: the name never bound and a
+	later reference raised NameError.  It hid for as long as a bare name
+	could resolve as a Smalltalk global, which stopped being true when
+	bare-name resolution was narrowed to CPython's builtins."
+
+	self wasStarImport ifTrue: [^ #()].
+	^ names collect: [:each |
+		(self boundNameFor: each) -> (RawSmalltalkAst source: (self valueSourceFor: each))]
 %
 method: ImportFromAst
 module

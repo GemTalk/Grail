@@ -989,3 +989,131 @@ testRemoveMissingRaisesFileNotFoundError
 	self assert: raised notNil
 		description: 'unlink of a missing file did not raise FileNotFoundError'
 %
+
+category: 'Grail-Tests - File Operations'
+method: OsTestCase
+testPathLikeArgumentsAreAccepted
+	"PEP 519: os and os.path accept anything with __fspath__, not just str.
+	Grail handed the argument straight to the GsFile primitives, which send
+	``encodeAsUTF8'' to whatever they are given -- a pathlib.Path does not
+	understand it, so the result was a MessageNotUnderstood that is
+	UNCATCHABLE from Python and escapes even ``except Exception''.  The
+	shape that found this was ``shutil.rmtree(Path(tempfile.mkdtemp()))'',
+	whose os.listdir killed the whole session."
+
+	self assert: (self eval: 'import os, shutil, tempfile
+from pathlib import Path
+d = Path(tempfile.mkdtemp())
+(d / "b.txt").write_text("hi")
+out = [
+    sorted(os.listdir(d)) == ["b.txt"],
+    os.path.exists(d),
+    os.path.isdir(d),
+    os.path.isfile(d / "b.txt"),
+    os.path.join(d, "b.txt") == str(d) + "/b.txt",
+    os.path.basename(d / "b.txt") == "b.txt",
+    os.path.splitext(d / "b.txt")[1] == ".txt",
+    os.stat(d / "b.txt") is not None,
+    open(d / "b.txt").read() == "hi",
+]
+shutil.rmtree(d)
+out.append(not os.path.exists(d))
+all(out)') equals: true.
+%
+
+category: 'Grail-Tests - File Operations'
+method: OsTestCase
+testStringPathsAreUnaffectedByPathLikeCoercion
+	"The coercion is permissive on purpose -- it fires only for an object
+	that defines __fspath__ and passes everything else through UNCHANGED --
+	so adding it cannot turn a call that used to work into an error."
+
+	self assert: (self eval: 'import os, shutil, tempfile
+d = tempfile.mkdtemp()
+out = [os.listdir(d) == [], os.path.isdir(d),
+       os.path.join(d, "z") == d + "/z",
+       os.path.basename("/a/b/c.txt") == "c.txt",
+       os.path.dirname("/a/b/c.txt") == "/a/b",
+       os.path.splitext("/a/b/c.txt") == ("/a/b/c", ".txt")]
+shutil.rmtree(d)
+all(out)') equals: true.
+%
+
+category: 'Grail-Tests - File Operations'
+method: OsTestCase
+testStatOfMissingFileRaisesFileNotFoundError
+	"GsFile>>stat:isLstat: answers a SmallInteger ERRNO on failure, never nil.
+	os.stat tested for nil, so a missing file produced no exception at all --
+	the errno was wrapped as a stat_result and the first st_* read died as an
+	UNCATCHABLE Smalltalk MNU (#mode sent to a SmallInteger)."
+
+	self assert: (self eval: 'import os
+r = "no exception raised"
+try:
+    os.stat("/no/such/file.py")
+except FileNotFoundError as e:
+    r = "FileNotFoundError" if "No such file or directory" in str(e) else str(e)
+except OSError as e:
+    r = "bare OSError: " + str(e)
+r') equals: 'FileNotFoundError'.
+%
+
+category: 'Grail-Tests - File Operations'
+method: OsTestCase
+testStatOfMissingFileIsCatchableAsOSError
+	"The whole point of raising: ``except OSError'' has to see it, because that
+	is what stdlib code guards a stat with (linecache.updatecache)."
+
+	self assert: (self eval: 'import os
+r = False
+try:
+    os.stat("/no/such/file.py")
+except OSError:
+    r = True
+r') equals: true.
+%
+
+category: 'Grail-Tests - File Operations'
+method: OsTestCase
+testLstatOfMissingFileRaisesOSError
+	"os.lstat had the identical never-fires nil guard."
+
+	self assert: (self eval: 'import os
+r = False
+try:
+    os.lstat("/no/such/file.py")
+except OSError:
+    r = True
+r') equals: true.
+%
+
+category: 'Grail-Tests - File Operations'
+method: OsTestCase
+testGetmtimeOfMissingFileRaisesOSError
+	"os.path.getmtime shared the guard, and answered ``2 mtimeUtcSeconds''."
+
+	self assert: (self eval: 'import os
+r = False
+try:
+    os.path.getmtime("/no/such/file.py")
+except OSError:
+    r = True
+r') equals: true.
+%
+
+category: 'Grail-Tests - File Operations'
+method: OsTestCase
+testStatOfExistingFileStillAnswersStatResult
+	"Guard the success path: the fix tests for the GsFileStat shape rather than
+	for nil, so it must not reject a real stat."
+
+	self assert: (self eval: 'import os, tempfile
+p = os.path.join(tempfile.mkdtemp(), "s.txt")
+with open(p, "w") as f:
+    f.write("hello")
+st = os.stat(p)
+lst = os.lstat(p)
+mt = os.path.getmtime(p)
+os.remove(p)
+all([st.st_size == 5, lst.st_size == 5, mt > 0])') equals: true.
+%

@@ -202,3 +202,92 @@ test_init_with_args_returns_none
 	result := exc @env1:__init__: #('x').
 	self assert: result equals: None.
 %
+
+category: 'Grail-Tests-BaseException'
+method: BaseExceptionTestCase
+test_reraise_caught_exception
+	"``except E as e: raise e'' re-raises the exception being handled, keeping
+	object identity, instead of dying with UncontinuableError 6011 ('Exception
+	has already been signaled') -- GemStone refuses a second #signal, so the
+	raise path uses #pass when the exception is still in flight.  Also covers
+	``raise X from Y'' / ``from None'', which previously dropped the cause
+	entirely.  See tests/python/reraise_caught.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'reraise_caught' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/reraise_caught.py')
+		name: 'reraise_caught'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'basic_reraised' 'basic_identity' 'basic_message' 'bare_identity'
+	   'from_none_identity' 'from_none_cause' 'from_none_suppress'
+	   'from_cause_identity' 'from_cause_cause' 'from_cause_suppress'
+	   'nested_frame_identity' 'different_exc' 'rebound'
+	   'stashed_identity' 'stashed_message' 'import_shape'
+	   'call_from_cause' 'call_from_suppress' 'call_from_message'
+	   'class_from_cause' 'class_from_suppress'
+	   'call_from_none_cause' 'call_from_none_suppress'
+	   'bad_cause_typeerror' 'no_from_cause_none' 'no_from_suppress_false'
+	   'loop_twice' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 're-raise check failed: ' , k].
+%
+
+category: 'Grail-Tests-BaseException'
+method: BaseExceptionTestCase
+test_exception_group_caught_as_exception
+	"PEP 654: ExceptionGroup derives from BOTH BaseExceptionGroup and
+	Exception, so ``except Exception:'' must catch one.  Grail's
+	single-inheritance chain makes them siblings under BaseException, and only
+	___issubclass___ had been widened -- so issubclass said yes while a raised
+	group escaped ``except Exception:'' as an uncatchable Smalltalk error.
+	Exception class>>handles: (the protocol on:do: really resolves through) and
+	isinstance now widen to match.  Both narrowings are pinned: a SUBCLASS of
+	Exception must not start catching groups, and a bare BaseExceptionGroup is
+	still not an Exception.  See tests/python/exception_group_catch.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'exception_group_catch' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_group_catch.py')
+		name: 'exception_group_catch'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'issubclass_eg_exception' 'eg_by_exception' 'eg_by_eg' 'eg_by_beg'
+	   'eg_by_baseexception' 'eg_not_by_valueerror' 'eg_not_by_typeerror'
+	   'issubclass_beg_exception' 'beg_not_by_exception' 'beg_by_beg'
+	   'beg_by_baseexception' 'plain_by_exception' 'plain_by_valueerror'
+	   'plain_not_by_typeerror' 'keyboardinterrupt_not_by_exception'
+	   'eg_subclass_by_exception' 'caught_message' 'caught_is_group'
+	   'caught_is_exception' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'ExceptionGroup catch check failed: ' , k].
+%
+
+category: 'Grail-Tests-BaseException'
+method: BaseExceptionTestCase
+test_recursion_raises_recursion_error
+	"Runaway Python recursion raises CPython's catchable RecursionError instead
+	of exhausting the Smalltalk stack with an AlmostOutOfStack notification no
+	Python ``except'' can contain.  BaseException class>>___recursionGuard___
+	converts it with #resignalAs:, which re-signals from the ORIGINAL (deep)
+	point -- so handlers BELOW the guard still match, which a freshly signalled
+	exception would have skipped.  One guard at the module-execution boundary,
+	no per-call cost.
+
+	KNOWN LIMITATION, documented in the fixture: a recursion that installs a
+	handler at EVERY level still dies, because passing the notification outward
+	through all of them consumes the last of the stack.  See
+	tests/python/recursion_limit.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'recursion_limit' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/recursion_limit.py')
+		name: 'recursion_limit'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'plain' 'plain_message' 'is_runtime_error' 'is_exception'
+	   'by_runtime_error' 'by_exception' 'mutual'
+	   'still_alive' 'bounded_recursion_ok' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'recursion-limit check failed: ' , k].
+%

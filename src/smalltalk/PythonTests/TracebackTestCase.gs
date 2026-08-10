@@ -130,6 +130,70 @@ testFuncCodeFirstlineno
 	self assert: ((results @env1:__getitem__: 'co_name') = 'inner').
 %
 
+category: 'Grail-Tests - Traceback Data Model'
+method: TracebackTestCase
+testMethodCodeFirstlineno
+	"Phase 2a follow-up: a def that compiles to a real Smalltalk METHOD -- a
+	class-body def or a module top-level def -- carries func.__code__ too, not
+	just a nested def's ExecBlock.  Its PyCode lives in a class-side
+	___methodCodeTable___ (ClassDefAst for a class body, importlib's top-level
+	pass for a module), which BoundMethod / UnboundMethod >> __code__ find by
+	walking the superclass chain.
+
+	The CLASS-BODY read is the case that matters: ``callable_line =
+	get_exception.__code__.co_firstlineno + 2'' runs while the class body is
+	still executing, which is what blocked test.test_traceback at IMPORT.  It is
+	why the table is emitted BEFORE the class-attribute statements rather than
+	beside its sibling doc / signature / annotations tables at the end.
+
+	See tests/python/method_code_firstlineno.py -- line numbers there are
+	load-bearing."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'method_code_firstlineno' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/method_code_firstlineno.py')
+		name: 'method_code_firstlineno'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+
+	"Module top-level def."
+	self assert: ((results @env1:__getitem__: 'mod_firstlineno') = 10)
+		description: 'module-level def __code__.co_firstlineno must be its def line (10)'.
+	self assert: ((results @env1:__getitem__: 'mod_name') = 'module_level').
+	self assert: ((results @env1:__getitem__: 'mod_argcount') = 2)
+		description: 'co_argcount counts positional params (a, b)'.
+	self assert: ((results @env1:__getitem__: 'mod_kwonlyargcount') = 1).
+
+	"Class-body read of a sibling def -- the test.test_traceback blocker shape."
+	self assert: ((results @env1:__getitem__: 'classbody_callable_line') = 20)
+		description: 'a class body must be able to read a sibling def''s __code__ (18 + 2)'.
+	self assert: ((results @env1:__getitem__: 'classbody_line') = 27).
+	self assert: ((results @env1:__getitem__: 'classbody_name') = 'm').
+	self assert: ((results @env1:__getitem__: 'classbody_qualname') = 'Later.m')
+		description: 'co_qualname of a class-body def is Class.method'.
+	self assert: ((results @env1:__getitem__: 'classbody_argcount') = 3)
+		description: 'co_argcount includes the implicit self, as in CPython'.
+	self assert: ((results @env1:__getitem__: 'classbody_kwonlyargcount') = 1).
+
+	"Bound and unbound access agree."
+	self assert: ((results @env1:__getitem__: 'bound_firstlineno') = 27).
+	self assert: ((results @env1:__getitem__: 'unbound_firstlineno') = 27)
+		description: 'Cls.method.__code__ must match instance.method.__code__'.
+
+	"An inherited method reports the code object from where it was DEFINED."
+	self assert: ((results @env1:__getitem__: 'inherited_firstlineno') = 38).
+	self assert: ((results @env1:__getitem__: 'inherited_qualname') = 'Base.inherited')
+		description: 'an inherited method''s code object comes from its defining class'.
+
+	"__code__ must stay ABSENT on a non-function: hasattr(x, ''__code__'') is
+	how inspect / functools.wraps decide whether something is a function."
+	self assert: ((results @env1:__getitem__: 'function_has_code') = true).
+	self assert: ((results @env1:__getitem__: 'int_has_code') = false)
+		description: 'an int must not grow a __code__'.
+	self assert: ((results @env1:__getitem__: 'builtin_method_has_code') = false)
+		description: 'a builtin method has no ___methodCodeTable___ entry -> AttributeError'.
+%
+
 category: 'Grail-Tests - Traceback Runtime'
 method: TracebackTestCase
 testCaughtExceptionHasFrame
@@ -272,3 +336,78 @@ testWithTracebackRoundTripRealTb
 %
 
 set compile_env: 0
+
+category: 'Grail-Tests'
+method: TracebackTestCase
+testCodeObjectCarriesTheModulePath
+	"co_filename was the '<grail>' placeholder for every code object, on the
+	grounds that Grail has no file-backed ones.  But the emitters DO know the
+	module's path at compile time -- it is on the ModuleAst -- and a real path
+	is what lets linecache read the source, which is what makes
+	FrameSummary.line possible.  Checked for all three def shapes, since each
+	has its own PyCode emit site."
+
+	| mod path |
+	path := importlib grailDir , '/tests/python/code_filename.py'.
+	mod := importlib loadModuleFromPath: path name: 'code_filename'.
+	self assert: (mod @env1:module_level_filename) equals: path.
+	self assert: (mod @env1:class_body_filename) equals: path.
+	self assert: (mod @env1:nested_def_filename) equals: path.
+	"A file-less compile keeps the placeholder -- there is no path to report."
+	self assert: (self eval: 'def f(): pass
+f.__code__.co_filename') equals: '<grail>'
+%
+
+category: 'Grail-Tests'
+method: TracebackTestCase
+testLinecacheReadsSourceForARealPath
+	"The payoff: with a real co_filename, linecache can read the file.  It
+	could not before, and two further gaps had to close for it to work at all
+	-- there was no ``tokenize'' module (linecache imports it and returns []
+	on ImportError, so EVERY lookup answered nothing), and os.stat answered a
+	raw GsFileStat with no ``st_size'' / ``st_mtime''."
+
+	| mod |
+	mod := importlib loadModuleFromPath: (importlib grailDir , '/tests/python/code_filename.py')
+		name: 'code_filename'.
+	self assert: (mod @env1:linecache_reads_own_source)
+%
+
+category: 'Grail-Tests'
+method: TracebackTestCase
+testFrameSummaryLineCarriesSourceText
+	"traceback.FrameSummary.line is CPython's LAZY property backed by
+	linecache, not a plain attribute -- so a traceback prints the code line
+	under its ``File ..., line N''.  It was always None before."
+
+	| mod |
+	mod := importlib loadModuleFromPath: (importlib grailDir , '/tests/python/code_filename.py')
+		name: 'code_filename'.
+	self assert: (mod @env1:frame_summary_has_source_line)
+%
+
+category: 'Grail-Tests'
+method: TracebackTestCase
+testFrameSummaryHonoursLookupLine
+	"``lookup_line=False'' defers the linecache read; ``locals=`` captures
+	repr()s.  Both are CPython parameters that were simply absent, so every
+	lazy-lookup test raised TypeError on an unexpected keyword."
+
+	| mod |
+	mod := importlib loadModuleFromPath: (importlib grailDir , '/tests/python/code_filename.py')
+		name: 'code_filename'.
+	self assert: (mod @env1:lookup_line_is_honoured)
+%
+
+category: 'Grail-Tests'
+method: TracebackTestCase
+testOsStatAnswersStatResultFields
+	"os.stat answers CPython's os.stat_result, not the raw GsFileStat: the
+	fields are the same but Python reads them as st_size / st_mtime, which is
+	what linecache and django's session backend do."
+
+	| mod |
+	mod := importlib loadModuleFromPath: (importlib grailDir , '/tests/python/code_filename.py')
+		name: 'code_filename'.
+	self assert: (mod @env1:stat_result_fields)
+%

@@ -65,6 +65,12 @@ error = PatternError
 # implements the same Python contract (.name + repr) and unboxes at
 # the C boundary via __index__.  See NamedIntConstant in
 # src/smalltalk/Python/ + TODO.md (int-subclass entry).
+#
+# Imported from ``grail`` rather than used as a bare global: it is a
+# Grail internal, not a CPython builtin, and the bundled stdlib should
+# not depend on it being visible in the default namespace.
+from grail import NamedIntConstant
+
 _NamedIntConstant = NamedIntConstant
 
 MAXREPEAT = _NamedIntConstant(MAXREPEAT, 'MAXREPEAT')

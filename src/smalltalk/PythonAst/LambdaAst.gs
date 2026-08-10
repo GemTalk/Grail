@@ -64,6 +64,20 @@ name
 
 category: 'Grail-other'
 method: LambdaAst
+deletedNamesInSubtree
+	"Always empty: a lambda's body is a single EXPRESSION, and ``del''
+	is a statement, so no lambda can unbind one of its own parameters.
+	Answered so NameAst's parameter-guard analysis can treat lambdas
+	and defs uniformly (see FunctionDefAst >> deletedNamesInSubtree).
+
+	A ``del'' in a def NESTED inside a lambda is impossible for the same
+	reason -- a lambda body cannot contain a def."
+
+	^ IdentitySet new
+%
+
+category: 'Grail-other'
+method: LambdaAst
 isVariableIsDeclared: aSymbol
 	"A lambda's parameter list IS its scope.  NameAst's load-context
 	walk asks every ancestor whether the name is declared so it can

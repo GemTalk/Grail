@@ -141,6 +141,33 @@ fspath: path
 
 category: 'Grail-Filesystem'
 method: os
+___fsPath___: path
+	"Coerce a PathLike argument (PEP 519) to its string path for the
+	filesystem entry points below.  UNLIKE fspath: this is permissive:
+	anything without ``__fspath__'' passes through UNCHANGED rather than
+	raising TypeError, so adding the coercion cannot turn a call that used
+	to work into an error.  fspath: stays strict because it is the public
+	``os.fspath()'', where CPython does raise.
+
+	Every path-taking function in this module and os_path needs it: without
+	it a pathlib.Path reached the GsFile primitives, which send
+	``encodeAsUTF8'' to whatever they are given, and a Path does not
+	understand it -- a MessageNotUnderstood that is UNCATCHABLE from
+	Python, escaping even ``except Exception''.  The shape that found this
+	was ``shutil.rmtree(Path(tempfile.mkdtemp()))'', where rmtree's
+	os.listdir killed the session outright.
+
+	Probes the whole class chain (whichClassIncludesSelector:, like
+	os_PathLike>>__instancecheck__) rather than the own method dict, so a
+	Path SUBCLASS that inherits __fspath__ is coerced too."
+
+	((path @env0:class @env0:whichClassIncludesSelector: #'__fspath__' environmentId: 1) notNil)
+		ifTrue: [^ path __fspath__].
+	^ path
+%
+
+category: 'Grail-Filesystem'
+method: os
 fsdecode: filename
 	"``os.fsdecode(filename)'' — decode a bytes filename to str using
 	the filesystem encoding.  Grail uses UTF-8 throughout.  Bytes
@@ -244,10 +271,11 @@ getcwd
 
 category: 'Grail-File and Directory Operations'
 method: os
-chdir: path
+chdir: aPath
 	"os.chdir(path) — change the current working directory."
 
-	| result |
+	| result path |
+	path := self ___fsPath___: aPath.
 	result := GsFile @env0:_directoryPrim: 0 with: path with: nil.
 	result == nil ifTrue: [
 		OSError ___signal___: ('Cannot change directory to: ' @env0:, (path @env0:printString))
@@ -257,10 +285,11 @@ chdir: path
 
 category: 'Grail-File and Directory Operations'
 method: os
-mkdir: path
+mkdir: aPath
 	"os.mkdir(path) — create a directory."
 
-	| result |
+	| result path |
+	path := self ___fsPath___: aPath.
 	result := GsFile @env0:createServerDirectory: path.
 	result == nil ifTrue: [
 		OSError ___signal___: ('Cannot create directory: ' @env0:, (path @env0:printString))
@@ -270,10 +299,11 @@ mkdir: path
 
 category: 'Grail-File and Directory Operations'
 method: os
-mkdir: path _: mode
+mkdir: aPath _: mode
 	"os.mkdir(path, mode) — create a directory with numeric mode."
 
-	| result |
+	| result path |
+	path := self ___fsPath___: aPath.
 	result := GsFile @env0:createServerDirectory: path mode: mode.
 	result == nil ifTrue: [
 		OSError ___signal___: ('Cannot create directory: ' @env0:, (path @env0:printString))
@@ -283,10 +313,11 @@ mkdir: path _: mode
 
 category: 'Grail-File and Directory Operations'
 method: os
-makedirs: path
+makedirs: aPath
 	"os.makedirs(path) — recursive directory creation."
 
-	| parts currentPath sep |
+	| parts currentPath sep path |
+	path := self ___fsPath___: aPath.
 	sep := '/'.
 	parts := $/ @env0:split: path.
 	currentPath := ''.
@@ -309,10 +340,11 @@ makedirs: path
 
 category: 'Grail-File and Directory Operations'
 method: os
-rmdir: path
+rmdir: aPath
 	"os.rmdir(path) — remove a directory."
 
-	| result |
+	| result path |
+	path := self ___fsPath___: aPath.
 	result := GsFile @env0:removeServerDirectory: path.
 	result == nil ifTrue: [
 		OSError ___signal___: ('Cannot remove directory: ' @env0:, (path @env0:printString))
@@ -322,7 +354,7 @@ rmdir: path
 
 category: 'Grail-File and Directory Operations'
 method: os
-remove: path
+remove: aPath
 	"os.remove(path) — remove a file.
 
 	Raises FileNotFoundError (an OSError subclass, so existing ``except
@@ -331,7 +363,8 @@ remove: path
 	os_helper.unlink() swallows exactly FileNotFoundError/NotADirectoryError
 	and would otherwise propagate a bare OSError out of every cleanup."
 
-	| result |
+	| result path |
+	path := self ___fsPath___: aPath.
 	(self exists: path) ifFalse: [
 		FileNotFoundError ___signal___:
 			('No such file or directory: ' @env0:, (path @env0:printString))
@@ -361,10 +394,12 @@ unlink: path
 
 category: 'Grail-File and Directory Operations'
 method: os
-rename: oldPath _: newPath
+rename: anOldPath _: aNewPath
 	"os.rename(old, new) — rename a file or directory."
 
-	| result msg |
+	| result msg oldPath newPath |
+	oldPath := self ___fsPath___: anOldPath.
+	newPath := self ___fsPath___: aNewPath.
 	result := GsFile @env0:renameFileOnServer: oldPath to: newPath.
 	result == nil ifTrue: [
 		msg := ((oldPath @env0:printString) @env0:, ' to ') @env0:, (newPath @env0:printString).
@@ -389,6 +424,9 @@ _listdir: positional kw: kwargs
 	| actualPath dirContents result |
 	actualPath := (positional @env0:size @env0:>= 1) ifTrue: [positional @env0:at: 1] ifFalse: [nil].
 	actualPath == nil ifTrue: [actualPath := self getcwd].
+	"listdir: routes its 1-arg fast path through here, so this one
+	coercion covers both spellings."
+	actualPath := self ___fsPath___: actualPath.
 	dirContents := GsFile @env0:contentsOfDirectory: actualPath onClient: false.
 	(dirContents isKindOf: Array) ifFalse: [
 		OSError ___signal___: ('Cannot list directory: ' @env0:, (actualPath @env0:printString))
@@ -422,17 +460,19 @@ _listdir: positional kw: kwargs
 
 category: 'Grail-File and Directory Operations'
 method: os
-exists: path
+exists: aPath
 	"os.path.exists(path) exposed as os.exists(path)."
 
-	^ GsFile @env0:existsOnServer: path
+	^ GsFile @env0:existsOnServer: (self ___fsPath___: aPath)
 %
 
 category: 'Grail-File and Directory Operations'
 method: os
-isdir: path
+isdir: aPath
 	"os.path.isdir(path) exposed as os.isdir(path)."
 
+	| path |
+	path := self ___fsPath___: aPath.
 	(GsFile @env0:existsOnServer: path) ifTrue: [
 		^ GsFile @env0:isServerDirectory: path
 	].
@@ -441,56 +481,89 @@ isdir: path
 
 category: 'Grail-File and Directory Operations'
 method: os
-isfile: path
+isfile: aPath
 	"os.path.isfile(path) exposed as os.isfile(path)."
 
+	| path |
+	path := self ___fsPath___: aPath.
 	(GsFile @env0:existsOnServer: path) ifTrue: [
 		^ (GsFile @env0:isServerDirectory: path) == false
 	].
 	^ false
 %
 
-category: 'Grail-File and Directory Operations'
+category: 'Grail-Filesystem'
 method: os
-stat: path
-	"os.stat(path) — get file status."
+___statOrSignal___: path isLstat: isLstat
+	"GsFile>>stat:isLstat: answers a GsFileStat on success but a SmallInteger
+	ERRNO on failure -- never nil, which is what the callers here used to test
+	for.  So a failing stat quietly answered an integer, and the first
+	``st_size'' / ``st_mtime'' read on it blew up as an UNCATCHABLE Smalltalk
+	MessageNotUnderstood (#mode sent to a SmallInteger) rather than the OSError
+	CPython raises.  That is why linecache.updatecache's ``except OSError''
+	never fired for a missing file: it never got an exception at all.
 
-	| statResult |
-	statResult := GsFile @env0:stat: path isLstat: false.
-	statResult == nil ifTrue: [
-		OSError ___signal___: ('Cannot stat: ' @env0:, (path @env0:printString))
-	].
-	^ statResult
+	Test on the SUCCESS shape, so any other unexpected answer also becomes a
+	Python-level error instead of a stray message send.  Map the errnos that
+	have dedicated CPython subclasses; ``except OSError'' catches all of them."
+
+	| result errno |
+	result := GsFile @env0:stat: path isLstat: isLstat.
+	(result @env0:isKindOf: GsFileStat) ifTrue: [^ result].
+	errno := (result @env0:isKindOf: SmallInteger) ifTrue: [result] ifFalse: [0].
+	errno == 2 ifTrue: [
+		FileNotFoundError ___signal___:
+			('[Errno 2] No such file or directory: ' @env0:, (path @env0:printString))].
+	errno == 13 ifTrue: [
+		PermissionError ___signal___:
+			('[Errno 13] Permission denied: ' @env0:, (path @env0:printString))].
+	errno == 20 ifTrue: [
+		NotADirectoryError ___signal___:
+			('[Errno 20] Not a directory: ' @env0:, (path @env0:printString))].
+	^ OSError ___signal___:
+		('[Errno ' @env0:, (errno @env0:printString) @env0:, '] Cannot stat: '
+			@env0:, (path @env0:printString))
 %
 
 category: 'Grail-File and Directory Operations'
 method: os
-getmtime: path
+stat: aPath
+	"os.stat(path) — get file status."
+
+	| statResult path |
+	path := self ___fsPath___: aPath.
+	statResult := self ___statOrSignal___: path isLstat: false.
+	"Answer CPython's os.stat_result, not the raw GsFileStat: the fields are the
+	same but Python code reads them as ``st_size'' / ``st_mtime'' (linecache does
+	so on every source lookup, django's session and file-storage backends too),
+	and a GsFileStat only answers GemStone names.  See PyStatResult."
+	^ PyStatResult @env0:on: statResult
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+getmtime: aPath
 	"os.path.getmtime(path) backing — modification time in seconds since the
 	epoch.  GsFileStat exposes whole-second resolution (mtimeUtcSeconds), so
 	this is coarser than CPython's float on high-resolution filesystems; it is
 	enough for the auto-reloader (which only needs to notice that an edit
 	happened)."
 
-	| st |
-	st := GsFile @env0:stat: path @env0:asString isLstat: false.
-	st == nil ifTrue: [
-		^ OSError ___signal___: ('Cannot stat: ' @env0:, (path @env0:printString))
-	].
+	| st path |
+	path := self ___fsPath___: aPath.
+	st := self ___statOrSignal___: path @env0:asString isLstat: false.
 	^ st @env0:mtimeUtcSeconds
 %
 
 category: 'Grail-File and Directory Operations'
 method: os
-lstat: path
+lstat: aPath
 	"os.lstat(path) — like stat but does not follow symlinks."
 
-	| statResult |
-	statResult := GsFile @env0:stat: path isLstat: true.
-	statResult == nil ifTrue: [
-		OSError ___signal___: ('Cannot lstat: ' @env0:, (path @env0:printString))
-	].
-	^ statResult
+	| statResult path |
+	path := self ___fsPath___: aPath.
+	statResult := self ___statOrSignal___: path isLstat: true.
+	^ PyStatResult @env0:on: statResult
 %
 
 ! ===============================================================================

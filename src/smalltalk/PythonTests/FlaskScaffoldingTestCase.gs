@@ -1999,18 +1999,24 @@ testTracebackExtractTbEmpty
 category: 'Grail-Tests - traceback'
 method: FlaskScaffoldingTestCase
 testTracebackFormatExceptionThreeArg
-	"Legacy 3-arg form: format_exception(type, value, tb) emits
-	the ``Traceback (most recent call last):'' header plus the
-	exception class + message lines."
+	"Legacy 3-arg form: format_exception(type, value, tb).  The fixture
+	passes tb=None EXPLICITLY, and with no frames to introduce there is no
+	``Traceback (most recent call last):'' header -- CPython guards it with
+	``if exc.stack:'' and answers the bare message line:
+
+		>>> traceback.format_exception(RuntimeError, RuntimeError('legacy'), None)
+		['RuntimeError: legacy\\n']
+
+	This test previously asserted the header, matching Grail's own output at
+	the time (the header was emitted unconditionally); test.test_traceback's
+	test_print_exception / test_print_exception_exc assert CPython's shape,
+	so the expectation here was the thing that was wrong."
 
 	| mod result |
 	mod := self loadFixture: 'use_traceback'.
 	result := mod @env1:format_exception_three_arg.
-	self assert: result size equals: 2.
+	self assert: result size equals: 1.
 	self assert: (result @env1:__getitem__: 0)
-		equals: 'Traceback (most recent call last):
-'.
-	self assert: (result @env1:__getitem__: 1)
 		equals: 'RuntimeError: legacy
 '
 %
@@ -2067,18 +2073,26 @@ testTracebackWalkTbReturnsIterator
 category: 'Grail-Tests - traceback'
 method: FlaskScaffoldingTestCase
 testTracebackExceptionFromException
-	"TracebackException.from_exception(e) captures the type/value
-	for deferred rendering; format() emits the same lines as
-	format_exception."
+	"TracebackException.from_exception(e) captures the type/value AND the
+	traceback for deferred rendering; format() emits the same lines as
+	format_exception.
 
-	| mod result |
+	from_exception used to hardcode tb=None, discarding the frames the
+	exception carried -- so this asserted header-then-message with no frame
+	between.  It now threads exc.__traceback__ through, as CPython does, and
+	the shape matches testTracebackFormatExceptionSingleArg above: header,
+	the catching function's frame, then the exception line."
+
+	| mod result last |
 	mod := self loadFixture: 'use_traceback'.
 	result := mod @env1:tracebackexception_from_exception.
 	self assert: (result @env1:__getitem__: 0)
 		equals: 'Traceback (most recent call last):
 '.
-	self assert: (result @env1:__getitem__: 1)
-		equals: 'TypeError: captured
+	self assert: ((result @env1:__getitem__: 1)
+		@env0:includesString: 'in tracebackexception_from_exception').
+	last := (result @env1:__getitem__: ((result @env1:__len__) - 1)).
+	self assert: last equals: 'TypeError: captured
 '
 %
 
@@ -5720,4 +5734,32 @@ testRestDemoServingOverSocket
 	self assert: (r @env1:__getitem__: 'closes_connection') equals: true.
 	self assert: ((r @env1:__getitem__: 'post_status') indexOfSubCollection: '302') > 0.
 	self assert: (r @env1:__getitem__: 'shows_after_post') equals: true
+%
+
+category: 'Grail-Tests - traceback'
+method: FlaskScaffoldingTestCase
+testNoTracebackHeaderWithoutFrames
+	"CPython emits ``Traceback (most recent call last):'' only when there
+	are FRAMES to introduce (``if exc.stack:'' in TracebackException.format).
+	Grail emitted it unconditionally, so a tb-less exception rendered a
+	header labelling nothing -- test.test_traceback's test_print_exception
+	asserts exactly ``Exception: projector\\n''."
+
+	| mod |
+	mod := self loadFixture: 'use_traceback'.
+	self assert: (self eval: 'import traceback
+from io import StringIO
+o = StringIO()
+traceback.print_exception(Exception, Exception("projector"), None, file=o)
+o.getvalue()') equals: 'Exception: projector
+'.
+	self assert: (self eval: 'import traceback
+traceback.format_exception(ValueError, ValueError(1), None)') asArray
+		equals: (Array with: 'ValueError: 1
+').
+	"A group renders through the same path: message + count, no header."
+	self assert: (self eval: 'import traceback
+traceback.format_exception_only(ExceptionGroup("A", [ValueError("B")]))') asArray
+		equals: (Array with: 'ExceptionGroup: A (1 sub-exception)
+')
 %

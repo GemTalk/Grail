@@ -17,8 +17,14 @@
 
 PROJECT_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
-# Auto-source .setenv when $GEMSTONE isn't set (same as run_tests.sh).
-if [ -z "$GEMSTONE" ] && [ -f "$PROJECT_ROOT/.setenv" ]; then
+# Always source .setenv when it exists (same as run_tests.sh): it is this
+# checkout's source of truth for which product + stone to use, so it must win
+# over whatever the launching shell happened to export.  Sourcing it only when
+# $GEMSTONE was unset let an inherited GEMSTONE silently take over -- e.g. a
+# 3.7.5 product against this worktree's gs40 stone, with no topaz on $PATH at
+# all (every module then scored CRASH).  CI has no .setenv and exports its env
+# inline, so the -f guard leaves that path alone.
+if [ -f "$PROJECT_ROOT/.setenv" ]; then
     # shellcheck disable=SC1091
     source "$PROJECT_ROOT/.setenv"
 fi

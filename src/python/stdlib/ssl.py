@@ -93,6 +93,59 @@ class Purpose:
     CLIENT_AUTH = "CLIENT_AUTH"
 
 
+# --- default trust store -----------------------------------------------------
+# CPython gets these from OpenSSL (SSL_CERT_FILE / SSL_CERT_DIR, else the
+# OPENSSLDIR baked into the build).  GemStone's OpenSSL is compiled with its
+# own OPENSSLDIR, so resolve the platform bundle here the same way
+# GsSecureSocket class >> setCaCertLocation does, with the env vars honored
+# first so a caller can point at their own bundle.
+_CA_FILE_CANDIDATES = (
+    '/etc/ssl/certs/ca-certificates.crt',                    # Debian/Ubuntu
+    '/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem',     # RHEL/CentOS
+    '/etc/ssl/cert.pem',                                     # macOS/BSD
+)
+_CA_DIR_CANDIDATES = (
+    '/etc/ssl/certs',
+    '/etc/pki/tls/certs',
+)
+
+
+class DefaultVerifyPaths:
+    def __init__(self, cafile, capath, openssl_cafile_env, openssl_cafile,
+                 openssl_capath_env, openssl_capath):
+        self.cafile = cafile
+        self.capath = capath
+        self.openssl_cafile_env = openssl_cafile_env
+        self.openssl_cafile = openssl_cafile
+        self.openssl_capath_env = openssl_capath_env
+        self.openssl_capath = openssl_capath
+
+
+def _first_existing(paths, isdir=False):
+    import os
+    for p in paths:
+        if p and (os.path.isdir(p) if isdir else os.path.isfile(p)):
+            return p
+    return None
+
+
+def get_default_verify_paths():
+    """The trust store this build would use by default.
+
+    Mirrors CPython's ssl.get_default_verify_paths(): SSL_CERT_FILE /
+    SSL_CERT_DIR win, otherwise the platform bundle."""
+    import os
+    env_file = os.environ.get('SSL_CERT_FILE')
+    env_dir = os.environ.get('SSL_CERT_DIR')
+    cafile = env_file if env_file else _first_existing(_CA_FILE_CANDIDATES)
+    capath = env_dir if env_dir else _first_existing(_CA_DIR_CANDIDATES,
+                                                     isdir=True)
+    return DefaultVerifyPaths(
+        cafile if cafile and os.path.isfile(cafile) else None,
+        capath if capath and os.path.isdir(capath) else None,
+        'SSL_CERT_FILE', env_file, 'SSL_CERT_DIR', env_dir)
+
+
 class SSLContext:
     """A holder for TLS settings (certificate, key, verification policy) that
     stamps out ``SSLSocket`` instances via ``wrap_socket``."""
@@ -103,6 +156,7 @@ class SSLContext:
         self._keyfile = None
         self._password = None
         self._cafile = None
+        self._capath = None
         self.options = OP_ALL
         if protocol == PROTOCOL_TLS_CLIENT:
             self.verify_mode = CERT_REQUIRED
@@ -117,11 +171,35 @@ class SSLContext:
         self._password = password
 
     def load_verify_locations(self, cafile=None, capath=None, cadata=None):
+        if cafile is None and capath is None and cadata is None:
+            raise TypeError("cafile, capath and cadata cannot be all omitted")
+        if cadata is not None:
+            # GsSecureSocket only takes a file or a hash directory.
+            raise NotImplementedError(
+                'Grail ssl: cadata (in-memory certificates) is not supported; '
+                'pass cafile or capath')
         if cafile is not None:
             self._cafile = cafile
+        if capath is not None:
+            self._capath = capath
 
     def load_default_certs(self, purpose=Purpose.SERVER_AUTH):
-        pass
+        """Load the platform trust store, as CPython does for client contexts."""
+        paths = get_default_verify_paths()
+        if paths.cafile is not None:
+            self._cafile = paths.cafile
+        if paths.capath is not None:
+            self._capath = paths.capath
+
+    def _apply_verify_locations(self, sock):
+        """Push this context's trust anchors down to GsSecureSocket.
+
+        Class-side (session-global) in GemStone, so it is re-applied per
+        handshake rather than once at load time."""
+        if self._cafile is not None:
+            sock._sslUseCAFile(self._cafile)
+        elif self._capath is not None:
+            sock._sslUseCADirectory(self._capath)
 
     def set_ciphers(self, ciphers):
         pass
@@ -152,6 +230,9 @@ def create_default_context(purpose=Purpose.SERVER_AUTH, cafile=None,
         ctx = SSLContext(PROTOCOL_TLS_CLIENT)
     if cafile is not None or capath is not None or cadata is not None:
         ctx.load_verify_locations(cafile, capath, cadata)
+    elif ctx.verify_mode != CERT_NONE:
+        # CPython: a verifying default context loads the system trust store.
+        ctx.load_default_certs(purpose)
     return ctx
 
 
@@ -205,10 +286,32 @@ class SSLSocket:
                 self._sock._sslSecureAccept()
         else:
             verify = context.verify_mode != CERT_NONE
+            if verify:
+                context._apply_verify_locations(self._sock)
             self._sock._sslWrapClientSNI(server_hostname or "", verify)
             if do_handshake_on_connect:
-                self._sock._sslSecureConnect()
+                self._do_client_handshake()
         self._secured = True
+
+    def _do_client_handshake(self):
+        """Run the handshake, reporting failure as the CPython exception.
+
+        GsSecureSocket raises a Smalltalk error carrying the OpenSSL message;
+        surface a verification failure as SSLCertVerificationError (what
+        callers catch) and anything else as SSLError."""
+        try:
+            self._sock._sslSecureConnect()
+        except Exception as exc:
+            detail = str(exc)
+            reason = self._sock._sslLastVerifyError()
+            if reason:
+                detail = '%s (%s)' % (detail, reason)
+            if 'certificate verify failed' in detail or reason:
+                raise SSLCertVerificationError(
+                    'certificate verify failed for %r: %s'
+                    % (self.server_hostname, detail))
+            raise SSLError('TLS handshake failed for %r: %s'
+                           % (self.server_hostname, detail))
 
     # --- server listener ---
     def accept(self):

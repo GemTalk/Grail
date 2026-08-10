@@ -940,10 +940,18 @@ testMiFlagEnums
 	enum class-call and buildMembers then removed it -- the class-call
 	fell into str's constructor, 'decoding str is not supported') and
 	the kernel-provider override for metaclass delegators (str's
-	class-side __getitem__: raiser blocked member accessors)."
+	class-side __getitem__: raiser blocked member accessors).
+
+	The LAST element is ``NewSE.first.value'' for a ``class SE(str, Enum)'',
+	and it reads '1' -- a STRING -- not 1.  auto() generates the int 1, and
+	CPython then stores member_type(*args), i.e. str(1), as the member's
+	_value_.  Grail used to keep the raw int for str/int/float STORAGE enums
+	(only a FOREIGN mixin was coerced), so this expectation was written as the
+	int; the mixin-value-coercion fix corrected the behaviour and this
+	expectation with it."
 
 	self assert: (self fixture @env1:MI_FLAG_RESULT) @env1:__repr__
-		equals: '(1, 2, 4, 3, 5, True, True, 1, ''R'', 1, 2, True, ''a'', True, 1)'
+		equals: '(1, 2, 4, 3, 5, True, True, 1, ''R'', 1, 2, True, ''a'', True, ''1'')'
 %
 
 category: 'Grail-Tests - enum internals'

@@ -156,3 +156,20 @@ testHttpServerGet
 	self assert: ((r @env1:__getitem__: 0) indexOfSubCollection: '200 OK') > 0.
 	self assert: (r @env1:__getitem__: 1) equals: 'hello from http.server'
 %
+
+category: 'Grail-Tests'
+method: SocketModuleTestCase
+testExceptionAliases
+	"``from socket import timeout'' is common in third-party code (geopy's
+	adapters, urllib3, requests).  Since CPython 3.10 socket.timeout IS
+	TimeoutError and socket.error IS OSError; Grail defined neither, so
+	the import failed with ModuleNotFoundError 'socket.timeout'."
+
+	| r |
+	r := self loadFixture @env1:exception_aliases.
+	self assert: (r @env1:__getitem__: 0) description: 'socket.timeout is not TimeoutError'.
+	self assert: (r @env1:__getitem__: 1) description: 'socket.error is not OSError'.
+	self assert: (r @env1:__getitem__: 2) description: 'from socket import timeout failed'.
+	self assert: (r @env1:__getitem__: 3) description: 'from socket import error failed'.
+	self assert: (r @env1:__getitem__: 4).
+%

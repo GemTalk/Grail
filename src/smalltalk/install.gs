@@ -253,6 +253,8 @@ run
 	at: #'ResourceWarning' put: nil;
 	at: #'RuntimeError' put: nil;
 	at: #'RuntimeWarning' put: nil;
+	at: #'JSONDecodeError' put: nil;
+	at: #'json_decoder' put: nil;
 	at: #'StatisticsError' put: nil;
 	at: #'StopAsyncIteration' put: nil;
 	at: #'PythonBreak' put: nil;
@@ -302,6 +304,7 @@ run
 	at: #'bytearray' put: nil;
 	at: #'PyMemoryView' put: nil;
 	at: #'PyCode' put: nil;
+	at: #'PyStatResult' put: nil;
 	at: #'PyAnnotate' put: nil;
 	at: #'PyFrame' put: nil;
 	at: #'PyTraceback' put: nil;
@@ -660,6 +663,13 @@ run
 	at: #'EOFErrorTestCase' put: nil;
 	at: #'ExitStackUsageTestCase' put: nil;
 	at: #'EncodingWarningTestCase' put: nil;
+	at: #'ClassBodyRebindingTestCase' put: nil;
+	at: #'ClassNewAttributeTestCase' put: nil;
+	at: #'ReservedNameClassAttrTestCase' put: nil;
+	at: #'EnumDescriptorMemberTestCase' put: nil;
+	at: #'EnumMemberMarkerTestCase' put: nil;
+	at: #'EnumMixinNewTestCase' put: nil;
+	at: #'EnumMixinValueCoercionTestCase' put: nil;
 	at: #'EnumGlobalInjectTestCase' put: nil;
 	at: #'ExceptionGroupTestCase' put: nil;
 	at: #'ExceptionTestCase' put: nil;
@@ -713,6 +723,8 @@ run
 	at: #'IsADirectoryErrorTestCase' put: nil;
 	at: #'IteratorTestCase' put: nil;
 	at: #'AssertStatementTestCase' put: nil;
+	at: #'ClassMethodAttrViaInstanceTestCase' put: nil;
+	at: #'DecoratedMethodSelfCallTestCase' put: nil;
 	at: #'ReNonAsciiSubTestCase' put: nil;
 	at: #'TracebackTestCase' put: nil;
 	at: #'KeyErrorTestCase' put: nil;
@@ -720,6 +732,7 @@ run
 	at: #'KeywordOnlyParamsTestCase' put: nil;
 	at: #'ListSortKwargsTestCase' put: nil;
 	at: #'ClassBodyConditionalTestCase' put: nil;
+	at: #'ClassBodyLoopsTestCase' put: nil;
 	at: #'CachedPropertyDescriptorTestCase' put: nil;
 	at: #'LruHashabilityAndUnionsTestCase' put: nil;
 	at: #'ListTestCase' put: nil;
@@ -945,10 +958,12 @@ input src/smalltalk/Python/NoneType.gs
 input out/gen/kernel_class_extensions.gs
 
 input src/smalltalk/Python/BaseException.gs
+input src/smalltalk/Python/PyLazyExceptSelector.gs
 input src/smalltalk/Python/Bytearray.gs
 input src/smalltalk/Python/complex.gs
 input src/smalltalk/Python/slice.gs
 input src/smalltalk/Python/PyCode.gs
+input src/smalltalk/Python/PyStatResult.gs
 input src/smalltalk/Python/PyAnnotate.gs
 input src/smalltalk/Python/PyFrame.gs
 input src/smalltalk/Python/PyTraceback.gs
@@ -1040,6 +1055,7 @@ input src/smalltalk/Python/mimetypes.gs
 input src/smalltalk/Python/ipaddress.gs
 input src/smalltalk/Python/datetime_module.gs
 input src/smalltalk/Python/json_module.gs
+input src/smalltalk/Python/json_decoder.gs
 input src/smalltalk/Python/io_module.gs
 input src/smalltalk/Python/zlib_module.gs
 input src/smalltalk/Python/math.gs
@@ -1105,6 +1121,7 @@ input src/smalltalk/Python/TimeoutError.gs
 input src/smalltalk/Python/NotImplementedError.gs
 input src/smalltalk/Python/RecursionError.gs
 input src/smalltalk/Python/IndentationError.gs
+input src/smalltalk/Python/JSONDecodeError.gs
 input src/smalltalk/Python/StatisticsError.gs
 input src/smalltalk/Python/UnicodeError.gs
 input src/smalltalk/Python/BytesWarning.gs
@@ -1249,6 +1266,7 @@ input src/smalltalk/PythonAst/BoolOpAst.gs
 input src/smalltalk/PythonAst/CallAst.gs
 input src/smalltalk/PythonAst/CompareAst.gs
 input src/smalltalk/PythonAst/ConstantAst.gs
+input src/smalltalk/PythonAst/RawSmalltalkAst.gs
 input src/smalltalk/PythonAst/DictAst.gs
 input src/smalltalk/PythonAst/DictCompAst.gs
 input src/smalltalk/PythonAst/FormattedValueAst.gs
@@ -1411,6 +1429,13 @@ input src/smalltalk/PythonTests/TernaryTruthinessTestCase.gs
 input src/smalltalk/PythonTests/VarargsNamingTestCase.gs
 input src/smalltalk/PythonTests/YieldFromTestCase.gs
 input src/smalltalk/PythonTests/EnumGlobalInjectTestCase.gs
+input src/smalltalk/PythonTests/EnumDescriptorMemberTestCase.gs
+input src/smalltalk/PythonTests/EnumMemberMarkerTestCase.gs
+input src/smalltalk/PythonTests/EnumMixinNewTestCase.gs
+input src/smalltalk/PythonTests/EnumMixinValueCoercionTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyRebindingTestCase.gs
+input src/smalltalk/PythonTests/ClassNewAttributeTestCase.gs
+input src/smalltalk/PythonTests/ReservedNameClassAttrTestCase.gs
 input src/smalltalk/PythonTests/MakecodesPatternTestCase.gs
 input src/smalltalk/PythonTests/NamedIntConstantTestCase.gs
 input src/smalltalk/PythonTests/NextIterTestCase.gs
@@ -1476,11 +1501,20 @@ input src/smalltalk/PythonTests/PackageImportTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
 input src/smalltalk/PythonTests/AssertStatementTestCase.gs
+input src/smalltalk/PythonTests/ClassMethodAttrViaInstanceTestCase.gs
+input src/smalltalk/PythonTests/DecoratedMethodSelfCallTestCase.gs
 input src/smalltalk/PythonTests/ReNonAsciiSubTestCase.gs
 input src/smalltalk/PythonTests/TracebackTestCase.gs
 input src/smalltalk/PythonTests/ListSortKwargsTestCase.gs
 input src/smalltalk/PythonTests/CachedPropertyDescriptorTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyLoopsTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyImportTestCase.gs
+input src/smalltalk/PythonTests/FunctionScopeImportTestCase.gs
+input src/smalltalk/PythonTests/ModuleAttrIdentityTestCase.gs
+input src/smalltalk/PythonTests/JsonDecodeErrorTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyBindingProtocolTestCase.gs
+input src/smalltalk/PythonTests/BuiltinNamespaceNarrowingTestCase.gs
 input src/smalltalk/PythonTests/LruHashabilityAndUnionsTestCase.gs
 input src/smalltalk/PythonTests/ListTestCase.gs
 input src/smalltalk/PythonTests/MathTestCase.gs
@@ -1736,6 +1770,10 @@ importlib registerModule: '_weakref' with: _weakref ___instance___.
 "CPython's os.path is a real importable module (an alias of posixpath);
 django.utils._os does ``from os.path import abspath, ...''."
 importlib registerModule: 'os.path' with: os_path ___instance___.
+"CPython defines JSONDecodeError in json.decoder and re-exports it, so
+``import json.decoder'' and ``from json.decoder import JSONDecodeError''
+both have to resolve -- django and requests spell it both ways."
+importlib registerModule: 'json.decoder' with: json_decoder ___instance___.
 libPath := System gemEnvironmentVariable:'SHIM_LIB_PATH'.
 (libPath notNil and: [libPath notEmpty]) ifTrue: [
 	"Only record the path (CPythonShim isConfigured then holds).  The shim

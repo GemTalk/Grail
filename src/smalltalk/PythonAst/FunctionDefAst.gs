@@ -9,7 +9,7 @@ doit
 StatementAst subclass: 'FunctionDefAst'
   instVarNames: #( name args body
                     decorator_list returns type_comment type_params
-                    isGeneratorCache)
+                    isGeneratorCache deletedNamesCache)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -37,11 +37,15 @@ removeallclassmethods FunctionDefAst
 
 set compile_env: 0
 
-category: 'Grail-other'
+category: 'Grail-Class Body'
 method: FunctionDefAst
-addVariableNamesTo: aStream
+___boundTargetNames___
+	"A ``def'' binds its own name.  It contributes no
+	classBodyAttributePairs, though -- the body compiles to a real method,
+	not to a class attribute -- so it makes the name visible to later
+	siblings without claiming an attribute value."
 
-	aStream nextPutAll: name; space
+	^ Array with: name asSymbol
 %
 
 category: 'Grail-other'
@@ -306,6 +310,52 @@ printOn: aStream
 		yourself.
 %
 
+category: 'Grail-Class Body'
+method: FunctionDefAst
+printSmalltalkClassBodyRuntimeDefOn: aStream
+	"Emit a ``def'' that a class-body try/for/while/with binds:
+
+		[ | f | f := <function value>.
+		  Cls ___classBodyDefinitionalStore___: #'f' put: f. ] value.
+
+	It cannot be compiled as a Smalltalk METHOD the way an unconditional
+	class-body def is -- whether it exists at all is a runtime fact, and the
+	same selector may be bound by more than one branch of the statement.  A
+	plain function stored as a class attribute binds the receiver on an
+	instance read and comes back raw on a class read, which is what CPython
+	does with a function in a class namespace.
+
+	@staticmethod / @classmethod reach here re-classed by the parser rather
+	than carrying a runtime decorator, so the wrapper that would otherwise
+	have been applied structurally is applied here instead."
+
+	| clsName wrapper savedRuntimeClass savedValueDefNode |
+	clsName := CallAst classBodyRuntimeClass.
+	wrapper := (self isKindOf: StaticFunctionDefAst)
+		ifTrue: ['PyStaticMethod']
+		ifFalse: [(self isKindOf: ClassFunctionDefAst)
+			ifTrue: ['PyClassMethod']
+			ifFalse: [nil]].
+	aStream nextPutAll: '[ | '; nextPutAll: name; nextPutAll: ' |'; lf.
+	savedRuntimeClass := CallAst classBodyRuntimeClass.
+	savedValueDefNode := CallAst classBodyValueDefNode.
+	CallAst classBodyRuntimeClass: nil.
+	CallAst classBodyValueDefNode: self.
+	[self printSmalltalkOn: aStream] ensure: [
+		CallAst classBodyRuntimeClass: savedRuntimeClass.
+		CallAst classBodyValueDefNode: savedValueDefNode].
+	aStream lf;
+		nextPutAll: clsName;
+		nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+		nextPutAll: name;
+		nextPutAll: ''' put: '.
+	wrapper
+		ifNil: [aStream nextPutAll: name]
+		ifNotNil: [aStream nextPutAll: '('; nextPutAll: wrapper;
+			nextPutAll: ' value: { '; nextPutAll: name; nextPutAll: ' } value: nil)'].
+	aStream nextPutAll: '. ] value.'; lf
+%
+
 category: 'Grail-other'
 method: FunctionDefAst
 printSmalltalkOn: aStream
@@ -316,6 +366,17 @@ printSmalltalkOn: aStream
 
 	| fixedCount paramNames savedReturnMode savedFunction moduleDecorators
 	  poCount regCount kwoCount hasKwonly hasPosDefaults needsOuterBlock |
+	"A ``def'' inside a class-body try/for/while/with.  The value form below
+	emits ``<name> := ...'', which needs a declared temp AND a home on the
+	class -- neither exists in ClassDefAst's class-build code, so without this
+	the def is an undefined symbol and the whole class fails to compile.
+	Same shape as emitClassBodyIfDef: (a def in a class-body ``if''): give the
+	emit its ``<name> :='' target as a block temp, then store the result as a
+	class attribute.  The flag is cleared inside, so the def's own body treats
+	its bare names as the locals they are -- and so this branch does not
+	re-enter on the recursive call."
+	self ___inClassBodyRuntimeScope___ ifTrue: [
+		^ self printSmalltalkClassBodyRuntimeDefOn: aStream].
 	(CallAst moduleClassBeingCompiled notNil and: [self isModuleLevelDef]) ifTrue: [
 		"Top-level def: the real env-1 method has already been
 		compiled on the module class (by importlib's topLevelDefs
@@ -694,7 +755,10 @@ printSmalltalkOn: aStream
 			aStream nextPutAll: ')'].
 		aStream
 			nextPutAll: '; @env0:___pyCode___: (PyCode @env0:name: '''; nextPutAll: name;
-			nextPutAll: ''' firstlineno: '; nextPutAll: self beginLine printString;
+			nextPutAll: ''' filename: '.
+		self emitSourceFilenameLiteralOn: aStream.
+		aStream
+			nextPutAll: ' firstlineno: '; nextPutAll: self beginLine printString;
 			nextPutAll: ' argcount: '; nextPutAll: (poCount + regCount) printString;
 			nextPutAll: ' posonlyargcount: '; nextPutAll: poCount printString;
 			nextPutAll: ' kwonlyargcount: '; nextPutAll: kwoCount printString;
@@ -1012,6 +1076,36 @@ isPropertyAccessorDecorator: deco
 	(deco value isKindOf: NameAst) ifFalse: [^ false].
 	a := deco attr asString.
 	^ a = 'setter' or: [a = 'getter' or: [a = 'deleter']]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___hasWrappingDecorator___
+	"True when this def carries a decorator that REPLACES the function with
+	something else at runtime -- @contextlib.contextmanager, @functools.wraps,
+	any user decorator -- as opposed to the STRUCTURAL ones Grail handles by
+	putting the def in a different bucket (@property and its setter/getter/
+	deleter, @staticmethod, @classmethod) or by interpreting them itself.
+
+	Such a def has TWO distinct entities: the compiled Smalltalk method (the
+	RAW, undecorated function) and the class-dict entry (the decorator's
+	RESULT).  A ``self.m()'' fast-path send reaches the former, which is why
+	it must be suppressed -- see CallAst>>classSelfSendSelector."
+
+	| structural |
+	decorator_list isNil ifTrue: [^ false].
+	structural := #('property' 'staticmethod' 'classmethod' 'setter' 'getter'
+		'deleter' 'abstractmethod' 'abstractproperty' 'cached_property').
+	^ decorator_list anySatisfy: [:deco |
+		| nm |
+		nm := (deco isKindOf: NameAst)
+			ifTrue: [deco id asString]
+			ifFalse: [(deco isKindOf: AttributeAst)
+				ifTrue: [deco attr asString]
+				ifFalse: [nil]].
+		"Anything that is not a bare structural name -- including a CALL
+		decorator such as @deco(arg) -- wraps."
+		nm isNil or: [(structural includes: nm) not]]
 %
 
 category: 'Grail-code generation'
@@ -1431,6 +1525,36 @@ hasSignatureSpec
 		or: [args kwonlyargs notEmpty
 		or: [args vararg notNil
 		or: [args kwarg notNil]]]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitPyCodeExprOn: aStream qualname: aQualname
+	"Write the Smalltalk expression building THIS def's ``__code__'' PyCode.
+
+	Shared by the two emitters that stamp a def compiling to a real Smalltalk
+	METHOD -- ClassDefAst >> emitMethodCodeTableOn:className: (class body) and
+	importlib's top-level-def pass (module body) -- so the three parameter
+	counts are derived in exactly one place, and identically to the nested-def
+	cascade in printSmalltalkOn: (co_argcount counts posonly+regular positional
+	params, self/cls included as in CPython; co_kwonlyargcount the keyword-only
+	ones).  beginLine is the ``def'' keyword's line == co_firstlineno."
+
+	| poCount regCount kwoCount |
+	poCount := args isNil ifTrue: [0] ifFalse: [(args posonlyargs ifNil: [#()]) size].
+	regCount := args isNil ifTrue: [0] ifFalse: [(args args ifNil: [#()]) size].
+	kwoCount := args isNil ifTrue: [0] ifFalse: [(args kwonlyargs ifNil: [#()]) size].
+	aStream
+		nextPutAll: '(PyCode @env0:name: '''; nextPutAll: name asString;
+		nextPutAll: ''' qualname: '''; nextPutAll: aQualname;
+		nextPutAll: ''' filename: '.
+	self emitSourceFilenameLiteralOn: aStream.
+	aStream
+		nextPutAll: ' firstlineno: '; nextPutAll: self beginLine printString;
+		nextPutAll: ' argcount: '; nextPutAll: (poCount + regCount) printString;
+		nextPutAll: ' posonlyargcount: '; nextPutAll: poCount printString;
+		nextPutAll: ' kwonlyargcount: '; nextPutAll: kwoCount printString;
+		nextPutAll: ')'
 %
 
 category: 'Grail-code generation'
@@ -2226,6 +2350,18 @@ generateModuleMethodSourceOn: aStream
 		``canOptimise'' above), force a temp for every param — the
 		original conservative behaviour."
 		assignedNames := self assignedNamesInBody.
+		"A ``del'' of one of our own parameters also needs a writable
+		temp: DeleteAst emits ``name := nil'', which cannot target a
+		Smalltalk METHOD ARGUMENT (CompileError 1029, ``expected an
+		assignable variable'').  deletedNamesInSubtree covers the
+		nested case too -- ``def outer(a): def inner(): nonlocal a;
+		del a'' unbinds OUTER's parameter, so outer is the def that
+		has to carry the temp.  Copy rather than mutate:
+		assignedNamesInBody hands back the parse's own writes set."
+		self deletedNamesInSubtree isEmpty ifFalse: [
+			assignedNames := (IdentitySet withAll: assignedNames)
+				addAll: self deletedNamesInSubtree;
+				yourself].
 		needsTemp := paramNames collect: [:each |
 			canOptimise
 				ifTrue: [self paramNeedsTemp: each assigned: assignedNames instVars: instVarNames]
@@ -2613,6 +2749,61 @@ isGenerator
 	isGeneratorCache isNil ifTrue: [
 		isGeneratorCache := self bodyContainsYieldExceptNestedDefs: body body].
 	^ isGeneratorCache
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+deletedNamesInSubtree
+	"The IdentitySet of bare names appearing as ``del <name>'' targets
+	anywhere beneath this def.  Drives NameAst's decision to KEEP the
+	unbound-local guard on a parameter read: a parameter is bound on
+	entry in every calling convention Grail emits (method argument,
+	prologue temp assigned-or-TypeError, or rebind transport temp), so
+	``del'' is the only thing that can unbind one.
+
+	DESCENDS INTO NESTED DEFS AND LAMBDAS, unlike
+	bodyContainsYieldExceptNestedDefs:.  ``def outer(a): def inner():
+	nonlocal a; del a'' unbinds OUTER's parameter, so a nested del has
+	to count against this def.  That over-approximates -- a nested def
+	with its own local of the same name also counts -- which only
+	costs an unnecessary guard, never correctness.
+
+	MEMOISED, for the reason isGenerator documents: the walk builds a
+	fresh ``allInstVarNames'' Array per node, and the guard decision is
+	asked once per NAME READ.  Safe to cache: the body is fully parsed
+	before codegen runs and no caller rewrites it."
+
+	deletedNamesCache isNil ifTrue: [
+		deletedNamesCache := IdentitySet new.
+		self collectDeletedNamesFrom: body into: deletedNamesCache].
+	^ deletedNamesCache
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+collectDeletedNamesFrom: node into: aSet
+	"Recursive walk collecting bare-name ``del'' targets into aSet.
+	Handles both a single node and a collection of them."
+
+	| targets |
+	node isNil ifTrue: [^ self].
+	"Strings and Symbols are SequenceableCollections; recursing into them
+	would walk every Character for nothing."
+	node isString ifTrue: [^ self].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each | self collectDeletedNamesFrom: each into: aSet].
+		^ self].
+	(node isKindOf: AbstractNode) ifFalse: [^ self].
+	(node isKindOf: DeleteAst) ifTrue: [
+		targets := node targets.
+		targets ifNotNil: [
+			targets do: [:t |
+				(t isKindOf: NameAst) ifTrue: [aSet add: t id asSymbol]]]].
+	"Walk every instVar, skipping the ``parent'' back-pointer so the
+	walk cannot cycle up the tree."
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self collectDeletedNamesFrom: (node instVarAt: i) into: aSet]].
 %
 
 category: 'Grail-Module Method Compilation'

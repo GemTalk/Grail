@@ -103,12 +103,18 @@ _join: positional kw: kwargs
 
 category: 'Grail-Path Manipulation'
 method: os_path
-___joinComponents___: paths
+___joinComponents___: somedPaths
 	"Internal helper — apply Python's os.path.join semantics over
 	an indexable collection of path strings.  Empty → ''; absolute
-	component restarts; trailing separator avoids doubling."
+	component restarts; trailing separator avoids doubling.
 
-	| result sep size |
+	Every join spelling (1-arg, 2-arg, varargs) funnels through here, so
+	coercing PathLike components once covers all of them — and
+	``join(Path(dir), name)'' is the single most common way a Path reaches
+	os.path at all."
+
+	| result sep size paths |
+	paths := somedPaths @env0:collect: [:p | (os instance) ___fsPath___: p].
 	(paths @env0:isEmpty) ifTrue: [^ ''].
 	((paths @env0:size) == 1) ifTrue: [^ paths @env0:first].
 	sep := '/'.
@@ -132,10 +138,11 @@ ___joinComponents___: paths
 
 category: 'Grail-Path Manipulation'
 method: os_path
-normcase: path
-	"POSIX normcase is the identity (case is significant)."
+normcase: aPath
+	"POSIX normcase is the identity (case is significant) — but it still has
+	to answer a STRING for a PathLike argument, as CPython's does."
 
-	^ path
+	^ (os instance) ___fsPath___: aPath
 %
 
 category: 'Grail-Path Manipulation'
@@ -148,10 +155,11 @@ realpath: path
 
 category: 'Grail-Path Manipulation'
 method: os_path
-expanduser: path
+expanduser: aPath
 	"~ expansion via the HOME environment variable."
 
-	| home |
+	| home path |
+	path := (os instance) ___fsPath___: aPath.
 	(path @env0:size @env0:> 0 and: [(path @env0:at: 1) @env0:= $~]) ifFalse: [^ path].
 	home := System @env0:gemEnvironmentVariable: 'HOME'.
 	home @env0:isNil ifTrue: [^ path].
@@ -161,10 +169,11 @@ expanduser: path
 
 category: 'Grail-Path Manipulation'
 method: os_path
-basename: path
+basename: aPath
 	"os.path.basename(path) — return the base name of pathname."
 
-	| sep trimmedPath reversedPath index lastIndex |
+	| sep trimmedPath reversedPath index lastIndex path |
+	path := (os instance) ___fsPath___: aPath.
 	sep := '/'.
 	trimmedPath := path.
 	(path @env0:endsWith: sep) ifTrue: [
@@ -180,10 +189,11 @@ basename: path
 
 category: 'Grail-Path Manipulation'
 method: os_path
-dirname: path
+dirname: aPath
 	"os.path.dirname(path) — return the directory name of pathname."
 
-	| sep trimmedPath reversedPath index lastIndex |
+	| sep trimmedPath reversedPath index lastIndex path |
+	path := (os instance) ___fsPath___: aPath.
 	sep := '/'.
 	trimmedPath := path.
 	(path @env0:endsWith: sep) ifTrue: [
@@ -200,10 +210,11 @@ dirname: path
 
 category: 'Grail-Path Manipulation'
 method: os_path
-split: path
+split: aPath
 	"os.path.split(path) — split into (head, tail)."
 
-	| sep pathSize reversedPath index lastIndex head tail |
+	| sep pathSize reversedPath index lastIndex head tail path |
+	path := (os instance) ___fsPath___: aPath.
 	sep := '/'.
 	pathSize := path @env0:size.
 	reversedPath := path @env0:reverse.
@@ -222,10 +233,11 @@ split: path
 
 category: 'Grail-Path Manipulation'
 method: os_path
-splitext: path
+splitext: aPath
 	"os.path.splitext(path) — split into (root, ext)."
 
-	| pathSize reversedPath index lastDotIndex sepIndex root ext |
+	| pathSize reversedPath index lastDotIndex sepIndex root ext path |
+	path := (os instance) ___fsPath___: aPath.
 	pathSize := path @env0:size.
 	reversedPath := path @env0:reverse.
 	index := reversedPath @env0:findString: '.' startingAt: 1.
@@ -245,10 +257,10 @@ splitext: path
 
 category: 'Grail-Path Manipulation'
 method: os_path
-isabs: path
+isabs: aPath
 	"os.path.isabs(path) — True if path is absolute."
 
-	^ path @env0:beginsWith: '/'
+	^ ((os instance) ___fsPath___: aPath) @env0:beginsWith: '/'
 %
 
 category: 'Grail-Path Manipulation'
@@ -262,10 +274,11 @@ getmtime: path
 
 category: 'Grail-Path Manipulation'
 method: os_path
-normpath: path
+normpath: aPath
 	"os.path.normpath(path) — normalize a pathname."
 
-	| parts sep isAbsolute earlyExit result dotDotIndex prevIndex |
+	| parts sep isAbsolute earlyExit result dotDotIndex prevIndex path |
+	path := (os instance) ___fsPath___: aPath.
 	sep := '/'.
 	parts := $/ @env0:split: path.
 	isAbsolute := path @env0:beginsWith: sep.
@@ -360,10 +373,11 @@ isfile: path
 
 category: 'Grail-Path Manipulation'
 method: os_path
-commonpath: paths
+commonpath: somePaths
 	"os.path.commonpath(paths) — longest common sub-path."
 
-	| allParts firstSize minSize commonParts allPartsSize i firstPart allMatch |
+	| allParts firstSize minSize commonParts allPartsSize i firstPart allMatch paths |
+	paths := somePaths @env0:collect: [:p | (os instance) ___fsPath___: p].
 	(paths @env0:isEmpty) ifTrue: [
 		ValueError ___signal___: 'commonpath() arg is an empty sequence'
 	].
@@ -408,10 +422,11 @@ commonpath: paths
 
 category: 'Grail-Path Manipulation'
 method: os_path
-commonprefix: paths
+commonprefix: somePaths
 	"os.path.commonprefix(paths) — longest path prefix (char-by-char)."
 
-	| pathsSize minLen prefix i char allMatch |
+	| pathsSize minLen prefix i char allMatch paths |
+	paths := somePaths @env0:collect: [:p | (os instance) ___fsPath___: p].
 	(paths @env0:isEmpty) ifTrue: [^ ''].
 	pathsSize := paths @env0:size.
 	(pathsSize == 1) ifTrue: [^ paths @env0:first].

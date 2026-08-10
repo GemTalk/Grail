@@ -8,9 +8,109 @@
 # recurses by container type.  Add cases as callers surface.
 
 
+class Error(Exception):
+    """Raised for un-copyable objects.  CPython exposes this as
+    ``copy.Error``, with ``copy.error`` as a long-standing alias."""
+    pass
+
+
+error = Error
+
+
+def _state_is_dict(obj):
+    """True when *obj* is an ordinary instance whose ENTIRE state is its
+    ``__dict__`` -- the one shape it is safe to rebuild attribute by
+    attribute.
+
+    The discriminator is the TYPE of ``__dict__``, not its presence.
+    Presence alone is answered by classes (a plain ``dict``), by modules
+    (``PyModuleDict``) and by several native wrappers whose real state lives
+    elsewhere, so reconstructing any of those from ``__dict__`` would mangle
+    them.  Only an ordinary instance answers Grail's ``PyInstanceDict``.
+
+    This is the predicate the atom passthrough below used to lack, which is
+    why ``copy.copy(obj)`` and ``copy.deepcopy(obj)`` handed back *obj*
+    itself for a plain instance -- the ``unexpectedly identical'' failures
+    throughout test_copy.
+    """
+    try:
+        d = obj.__dict__
+    except BaseException:
+        return False
+    return type(d).__name__ == 'PyInstanceDict'
+
+
+# ``object.__reduce__`` answers a SYMBOL (``___NotImplemented___``) when a
+# class opts out of the pickle protocol.  Symbol is a str subclass here, so
+# ``isinstance(rv, str)`` alone reads that opt-out as the protocol's "I am the
+# global named by this string" form and hands back every plain instance
+# uncopied -- which is exactly the bug this module had.
+#
+# The discriminator is the EXACT type: a genuine "I am this global" reduce
+# answers a real ``str``, the opt-out answers a ``Symbol``.  Comparing the
+# sentinel's TEXT does not work -- ``str(rv) == '___NotImplemented___'`` is
+# False for the Symbol.
+def _is_global_name(rv):
+    """True only for a real ``str`` -- never for the opt-out Symbol."""
+    return type(rv).__name__ == 'str'
+
+
+def _reduce_of(obj):
+    """*obj*'s own pickle-protocol answer, or None when it has none.
+
+    Call this AT MOST ONCE per object per copy: a user ``__reduce__`` may have
+    side effects, and test_copy's test_deepcopy_reduce asserts it runs exactly
+    once.
+
+    Answers either a string (the "I am this global" form) or a tuple (the
+    "rebuild me" form); the opt-out sentinel becomes None.
+    """
+    try:
+        rv = obj.__reduce__()
+    except BaseException:
+        return None
+    if isinstance(rv, str):
+        return rv if _is_global_name(rv) else None
+    return rv
+
+
+def _rebindable_method(obj):
+    """True for a bound method whose RECEIVER is an ordinary instance -- the
+    only case where deep-copying should re-look-up the method on the copy.
+
+    The receiver test is load-bearing, not belt-and-braces.  A plain function
+    is a BoundMethod here too, with the MODULE as its ``__self__``; CPython
+    treats functions as atoms (``deepcopy(f) is f``), and rebinding one
+    produced a fresh object that broke that identity.  Requiring the receiver
+    to be an ordinary instance -- exactly the thing deepcopy will replace with
+    a copy -- admits ``f.b = f.m`` and excludes module-level functions.
+    """
+    if not (hasattr(obj, '__self__') and hasattr(obj, '__name__')):
+        return False
+    try:
+        return _state_is_dict(obj.__self__)
+    except BaseException:
+        return False
+
+
+def _bare_instance(cls):
+    """A fresh instance of *cls* with ``__init__`` not run -- what CPython's
+    reconstructor does.  ``object.__new__`` is the form that dispatches
+    reliably here; ``cls.__new__(cls)`` hits descriptor edge cases (see the
+    note at the top of dataclasses.py)."""
+    return object.__new__(cls)
+
+
 def copy(obj):
     """Shallow copy.  Tries ``obj.__copy__()'' first; falls through
     to container-specific shallow copies."""
+    # A CLASS is an atom, as in CPython.  This must come BEFORE the __copy__
+    # probe: a class INHERITS its instances' __copy__, so ``hasattr`` finds it
+    # and the call goes through unbound -- "unbound method '__copy__' must be
+    # called with an instance as the first argument".  Enum is exactly that
+    # shape, since enum members declare __copy__ to stay singletons.
+    if isinstance(obj, type):
+        return obj
     if hasattr(obj, '__copy__'):
         return obj.__copy__()
     t = type(obj)
@@ -40,6 +140,18 @@ def copy(obj):
     # passthrough below, which is what CPython does for immutables.)
     if isinstance(obj, (bytes, bytearray)):
         result = t(obj)
+        _copy_attrs(obj, result, None)
+        return result
+    # An ORDINARY INSTANCE whose whole state is its __dict__.  CPython gets
+    # here through __reduce_ex__ and reconstructs; Grail can recognise the
+    # shape outright, so build a bare instance of the SAME class (subclass
+    # included) and carry the attributes across.  __init__ is deliberately not
+    # run: copying must not repeat construction side effects.
+    if _is_global_name(_reduce_of(obj)):
+        # "I am the global named by this string" -- identity, not a copy.
+        return obj
+    if _state_is_dict(obj):
+        result = _bare_instance(t)
         _copy_attrs(obj, result, None)
         return result
     # Atoms (int, str, None, ...) — copy returns the same object.
@@ -117,6 +229,12 @@ def deepcopy(obj, memo=None):
     # right allocation pattern ahead of it.  CPython's copy.py keeps the same
     # list, for the same reason.
     _keep_alive(obj, memo)
+    # A CLASS is an atom -- see the matching guard in copy(), which must
+    # likewise precede the dunder probe so an inherited __deepcopy__ is not
+    # called unbound on the class itself.
+    if isinstance(obj, type):
+        memo[obj_id] = obj
+        return obj
     if hasattr(obj, '__deepcopy__'):
         result = obj.__deepcopy__(memo)
         memo[obj_id] = result
@@ -219,7 +337,15 @@ def deepcopy(obj, memo=None):
     # than a tuple, so a plain instance falls through unchanged.  Its state
     # is deep-copied BEFORE __setstate__ sees it -- that is the whole point:
     # deepcopy(f).attr must not be f.attr.
-    reduced = _reduced(obj)
+    # Consulted ONCE per object: a user __reduce__ may have side effects, and
+    # test_copy's test_deepcopy_reduce counts the calls.
+    rv = _reduce_of(obj)
+    if _is_global_name(rv):
+        # The pickle protocol's "I am the global named by this string" form.
+        # A named global has exactly one instance, so the answer is identity.
+        memo[obj_id] = obj
+        return obj
+    reduced = _usable_reduction(rv)
     if reduced is not None:
         factory, args, state = reduced
         result = factory(*deepcopy(list(args), memo))
@@ -231,30 +357,41 @@ def deepcopy(obj, memo=None):
             else:
                 _copy_attrs(obj, result, memo)
         return result
-    # Atoms — deepcopy returns the same object.
+    # An ORDINARY INSTANCE whose whole state is its __dict__ -- the shape the
+    # atom passthrough below used to swallow, handing back obj itself.  The
+    # "state IS its __dict__" predicate this needed now exists: see
+    # _state_is_dict, which keys off the __dict__'s TYPE rather than its
+    # presence, so classes, modules and native wrappers stay out of it.
     #
-    # NOTE a known gap, not a decision: an ordinary instance with no
-    # __reduce__ also lands here, so copy.deepcopy(obj) hands back obj
-    # itself.  CPython would build a new instance and deep-copy its
-    # __dict__.  Fixing that needs a reliable "this object's state IS its
-    # __dict__" predicate, which Grail does not have -- __dict__ alone is
-    # answered by classes, modules and several native wrappers whose state
-    # lives elsewhere.
+    # Registered in the memo BEFORE recursing, so a self-referential object
+    # (obj.self = obj) terminates and its copy points at the copy.
+    #
+    # A BOUND METHOD must REBIND to the deep-copied receiver, which is what
+    # makes ``deepcopy(f).b.__self__ is deepcopy(f)'' hold when an instance
+    # stores one of its own methods (``f.b = f.m'').  The receiver is already
+    # in the memo by the time its attributes are walked, so this resolves to
+    # the copy rather than building a second one.
+    if _rebindable_method(obj):
+        result = getattr(deepcopy(obj.__self__, memo), obj.__name__)
+        memo[obj_id] = result
+        return result
+    if _state_is_dict(obj):
+        result = _bare_instance(t)
+        memo[obj_id] = result
+        _copy_attrs(obj, result, memo)
+        return result
+    # Atoms — deepcopy returns the same object.
     memo[obj_id] = obj
     return obj
 
 
-def _reduced(obj):
-    """``(factory, args, state)`` from *obj*'s own pickle protocol, or None.
+def _usable_reduction(rv):
+    """``(factory, args, state)`` from a pickle-protocol answer, or None.
 
-    None for anything that does not implement it: object's default
-    __reduce__ answers a sentinel rather than a tuple, so the shape check
-    below is what distinguishes an opt-in from a plain instance.
+    Takes the ALREADY-OBTAINED answer (see _reduce_of) rather than calling
+    __reduce__ itself, so a user __reduce__ with side effects runs once.
+    None for anything not of the rebuildable tuple shape.
     """
-    try:
-        rv = obj.__reduce__()
-    except Exception:
-        return None
     if not isinstance(rv, tuple) or len(rv) < 2:
         return None
     factory, args = rv[0], rv[1]

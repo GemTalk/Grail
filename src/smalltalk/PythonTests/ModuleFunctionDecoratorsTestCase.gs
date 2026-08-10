@@ -91,3 +91,15 @@ testStackedDecoratorsApplyBottomUp
 
 	self assert: (testModule @env1:___pyAttrLoad___: #'stacked_result') equals: 'A:B:x'.
 %
+
+category: 'Grail-Tests'
+method: ModuleFunctionDecoratorsTestCase
+testInstanceDecoratorIsApplied
+	"@tag_it where tag_it is an INSTANCE with __call__, not a function.
+	The module-scope decorator path applies it through
+	___pyCallValue___:kw: and used to swallow the resulting ``not
+	callable'' TypeError, leaving the function undecorated."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #'tagged_result')
+		equals: '[t] go'.
+%

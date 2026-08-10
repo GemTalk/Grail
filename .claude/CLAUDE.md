@@ -72,3 +72,45 @@ It aborts, un-memoizes + re-runs the generation guard (drops stale canonical
 registries), and evicts every non-bootstrap module from `sys.modules` so the
 next import rebuilds from disk. (Fresh `run_tests.sh` workers don't need it —
 they log in with empty `SessionTemps`.)
+
+# Parallel agents: one worktree = one GemStone user
+
+Several Claude agents can work at once on different branches, each in its own
+git worktree under `.claude/worktrees/<branch>` (gitignored). Create them with:
+
+```bash
+./scripts/new_worktree.sh <branch> [--stone gs375|gs40] [--user ClaudeN]
+```
+
+**The rule that matters: a worktree must never share a (stone, user) pair with
+another checkout.** `install.sh` installs a PER-USER Grail — env-1 session
+methods plus the `Python*` dictionaries — into a shared stone, so two checkouts
+logging in as the same user overwrite each other's install, in both directions.
+That is exactly what the `Claude0..Claude3` users from `create_claude_users.sh`
+are for. `new_worktree.sh` enforces this: it scans every existing `.topazini`
+(including the main checkout's) and hands out the first unclaimed user, refusing
+`--user` for one already taken unless you pass `--force-user`.
+
+`git worktree add` on its own is NOT sufficient. A bare worktree has no
+`.setenv` / `.topazini` (both gitignored, per-checkout) and no built C shim.
+`new_worktree.sh` writes both config files for the chosen stone and copies
+`.claude/settings.local.json` across; it deliberately does not run `install.sh`,
+which each agent should run itself inside its worktree.
+
+Current layout on this machine:
+
+| worktree | branch | stone | netldi | user |
+| --- | --- | --- | --- | --- |
+| (main checkout) | `main` | `gs375` | `ldi375` | `DataCurator` |
+| `.claude/worktrees/wt/a` | `wt/a` | `gs375` | `ldi375` | `Claude0` |
+| `.claude/worktrees/wt/b` | `wt/b` | `gs375` | `ldi375` | `Claude1` |
+| `.claude/worktrees/wt/c` | `wt/c` | `gs40` | `ldi40` | `Claude2` |
+| `.claude/worktrees/wt/d` | `wt/d` | `gs40` | `ldi40` | `Claude3` |
+
+Per-stone prerequisites, both already done on `gs375` and `gs40`:
+`./create_claude_users.sh` then `./install_base.sh` (once per extent).
+
+Build artifacts (`lib/`, `src/c/shim/*.o`, `libcpython_ua.dylib`) are per-worktree,
+so the worktrees do not contend over them. Remove a finished worktree with
+`git worktree remove .claude/worktrees/<branch>`, which frees its Claude user
+for the next one.

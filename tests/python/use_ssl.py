@@ -46,3 +46,37 @@ def client_roundtrip(port, payload):
     resp = c.recv(4096)
     c.close()
     return [resp, version]
+
+
+def trust_store_defaults():
+    """The default-context trust store, resolved without touching the net.
+
+    A verifying context must come with CA anchors loaded, or every real
+    HTTPS request fails the handshake with 'certificate verify failed'."""
+    import os
+    paths = ssl.get_default_verify_paths()
+    default_ctx = ssl.create_default_context()
+    unverified = ssl._create_unverified_context()
+
+    try:
+        ssl.SSLContext().load_verify_locations()
+        omitted_raises = False
+    except TypeError:
+        omitted_raises = True
+
+    explicit = ssl.create_default_context(cafile=paths.cafile) \
+        if paths.cafile else None
+
+    return {
+        'has_cafile': paths.cafile is not None,
+        'cafile_exists': bool(paths.cafile) and os.path.isfile(paths.cafile),
+        'default_verifies': default_ctx.verify_mode == ssl.CERT_REQUIRED,
+        'default_checks_hostname': default_ctx.check_hostname is True,
+        'default_loaded_anchors': default_ctx._cafile is not None
+                                  or default_ctx._capath is not None,
+        'unverified_off': unverified.verify_mode == ssl.CERT_NONE,
+        'unverified_has_no_anchors': unverified._cafile is None,
+        'omitted_args_raise': omitted_raises,
+        'explicit_cafile_kept': explicit is not None
+                                and explicit._cafile == paths.cafile,
+    }

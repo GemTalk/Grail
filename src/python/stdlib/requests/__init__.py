@@ -19,7 +19,7 @@ from requests import adapters
 from requests import exceptions
 from requests.adapters import HTTPAdapter
 from requests.exceptions import (
-    RequestException, ConnectionError, HTTPError, Timeout,
+    RequestException, ConnectionError, SSLError, HTTPError, Timeout,
     ConnectTimeout, ReadTimeout, TooManyRedirects, InvalidURL,
     MissingSchema, JSONDecodeError)
 from requests.models import Request, PreparedRequest, Response

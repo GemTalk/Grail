@@ -278,14 +278,101 @@ additive, 0 regressions across the existing scoreboard):
   (plain-class CM + identity passthroughs, per the module's Grail constraints);
 - `os_helper.temp_dir`, `import_helper.forget`.
 
-**Current status: `IMPORTERROR`**, blocked at import on `__code__` of a
+**Phase 2a follow-up — `__code__` on defs that compile to real methods (DONE).**
+The gate's first verdict was `IMPORTERROR`, blocked at import on `__code__` of a
 class/module-level def (a `BoundMethod`) — hit by a *class-body* line
-`callable_line = get_exception.__code__.co_firstlineno + 2`. This is the Phase 2a
-follow-up (only nested-def `ExecBlock`s carry `__code__` today; module/class-level
-defs → `BoundMethod` were explicitly deferred). **So the gate's verdict: the next
-traceback gap is `BoundMethod.__code__` (code objects on class/module-level defs),
-a prerequisite that ranks ahead of multi-frame deep frames.** The scoreboard's
-`detail` column tracks the live blocker; grow from there.
+`callable_line = get_exception.__code__.co_firstlineno + 2`. Only nested-def
+`ExecBlock`s carried `__code__`; module/class-level defs → `BoundMethod` had been
+explicitly deferred. Closed by giving those defs a code object too:
+
+- `ClassDefAst >> emitMethodCodeTableOn:className:` compiles a class-side
+  `___methodCodeTable___` (method name → `PyCode`), the `__code__` twin of the
+  doc / signature / annotations tables — a class-body def becomes a Smalltalk
+  method and so cannot carry the def-time `___pyCode___:` cascade.
+- It is emitted **before** the class-attribute statements, not beside those
+  sibling tables at the end of the class emit: the blocking line *runs while the
+  class body executes*, so a table compiled afterwards would not exist yet. The
+  table is a literal dict of compile-time constants, so it is safe that early.
+- `importlib`'s top-level-def pass compiles the same table on the module class,
+  for module-level defs.
+- `FunctionDefAst >> emitPyCodeExprOn:qualname:` derives the three parameter
+  counts for both emitters, identically to the nested-def cascade.
+- `BoundMethod` / `UnboundMethod >> __code__` walk the superclass chain for it
+  (so an inherited method reports the code object from where it was *defined*),
+  and raise `AttributeError` when absent — **not** `None`, because
+  `hasattr(x, '__code__')` is how `inspect` / `functools.wraps` decide whether
+  something is a function at all.
+
+Covered by `TracebackTestCase>>testMethodCodeFirstlineno` +
+`tests/python/method_code_firstlineno.py`.
+
+**Skip markers honoured (DONE).** With the module importing, the gate's next
+finding was not a traceback gap at all but a *scoring* bug: `unittest`'s
+`TestCase>>run` never consulted `__unittest_skip__`. The decorators had been
+recording it all along, so every `@skipIf` / `@skipUnless` / `@requires_*`-gated
+test RAN and was reported as a failure or an error instead of a skip. Fixed by
+checking the class and method markers before `setUp`, exactly as CPython's
+`run()` does. `test.support.cpython_only` was likewise a passthrough no-op, so
+the C-API classes executed and died on the absent `_testcapi`; it is now a real
+skip (Grail is never CPython). Method-level `@cpython_only` was already handled
+by `ClassDefAst` emitting a skipping body — the runtime change adds the CLASS
+case, and the two agree.
+
+`test.test_traceback`: 93 failures / 250 errors / 6 skips → **53 / 116 / 180**.
+174 tests moved from bogus failures to correct skips. Passing stays 21: this
+fixes scoring, not behaviour. Four other modules gained skips for the same
+reason (`test_math`, `test_bytes`, `test_datetime`, `test_enum`); ~6 tests that
+had been passing *because* their marker was ignored are now correctly skipped —
+e.g. test_math's `test_exceptions`, which carries
+`@unittest.skipUnless(verbose, ...)` and which CPython does not run either.
+
+**`traceback` module API filled in (DONE).** The module was written as a
+Flask-shaped minimum ("enough for itsdangerous / Werkzeug / Flask error paths"),
+so the gate's next finding was simply *absent names* rather than wrong output.
+Added: `format_exception_only`'s 3.10+ one-argument form (it needs a private
+`_sentinel` default — `None` is a legal `value`, so a `None` default cannot
+distinguish "not supplied") and its 3.11+ `show_group=`; `StackSummary.extract`
+/ `from_list` / `format_frame_summary`; `print_stack` / `print_tb`;
+`TracebackException.__str__` (CPython renders the message alone, not the whole
+traceback) and its `format()` now emitting the captured frames. `format()` /
+`format_exception_only()` also absorb presentation-only kwargs (`colorize`)
+through `**kwargs`: Grail renders plain text, so honouring them would produce
+identical bytes, and raising `TypeError` instead helped nobody.
+
+`test.test_traceback`: 116 errors → **82**, 21 pass → **26**. Failures rise
+53 → 82, which is the intended shape — a test that used to die on a missing
+attribute now runs far enough to make its real content assertion. Verified
+test-by-test (pairing each `GRAIL_TEST` id with whether a `GRAIL_DETAIL`
+followed): **5 fixed, 0 regressions**.
+
+**Status when this section was written** — 370 tests, 26 pass, 82 fail, 82
+error, 180 skip. **Now 36 pass / 86 fail / 39 error / 209 skip** (2026-08-10);
+items 4 and 5 below are closed and item 1 is scoped in §9. The gaps as they
+stood, in rough order of leverage:
+
+1. Multi-frame tracebacks: `tb_next` / `f_back` are always `None` (a 4-deep call
+   chain yields depth 1), and `co_filename` is the `'<grail>'` placeholder, so
+   the `format_exc()` comparison failures cannot pass yet. This is the big one,
+   and the only one needing real interpreter work — see the "Deferred" note
+   above for why it was prototyped and backed out twice, and what a real
+   attempt would cost (`#directMethod` functions lose their fast path).
+   **Now measured and re-scoped — see §9**, which prices the wrapper (+14 ns per
+   call, constant), rejects the raise-time-capture alternative on measurement,
+   and separates `co_filename` out as a no-runtime-cost prerequisite.
+2. `SyntaxError` carries none of `msg` / `filename` / `lineno` / `offset` /
+   `text` / `end_lineno` / `end_offset`; `compile()` returns a `str`.
+3. Implicit exception chaining leaves `__context__` as `None`.
+4. ~~`tempfile.mkdtemp` raises `NotImplementedError` (6 errors).~~ **Closed** —
+   `mkdtemp` is implemented (`os` provides mkdir/rmdir, so refusing the caller
+   was never necessary).
+5. ~~A residual 30 `_testcapi` errors in classes NOT decorated
+   `@cpython_only`~~ — **mostly closed, and the diagnosis was wrong.** The
+   classes *were* decorated; `@cpython_only` is a `_SkipDecorator` **instance**,
+   and Grail silently dropped every decorator built as a callable instance
+   (`object>>___pyCallValue___:kw:` answered "not callable" and the
+   decorator-application guard discarded it). Fixed in
+   `PythonInstance>>___pyCallValue___:kw:`; 30 → 6 errors, the remainder being
+   test bodies that import `_testcapi` directly.
 
 **Phase 3d — `finally`-during-propagation for `sys.exc_info()` (DONE).** Phase 3a
 set the current-exception register only at except-handler entry, so a `finally`
@@ -341,3 +428,247 @@ ordering just noted.
   1/0/1/0 → **1/0/0/0 OK** (isolated + via the parallel regen; the known flaky
   test_enum row restored to baseline). Full SUnit 3325/3325, cpython gate 0
   regressions / 2 improvements.
+
+## 9. Scoping: multi-frame tracebacks (2026-08-10, gs40)
+
+The remaining `test.test_traceback` gap is dominated by one thing: a traceback is
+always **one frame deep**, that frame's `co_filename` is the `'<grail>'`
+placeholder, and `tb_next` / `f_back` are always `None`. §7's "Deferred" note
+says a real attempt costs `#directMethod` functions their fast path, and calls
+the change large and high-risk — but never put a number on it. This section
+does, and it changes the recommendation.
+
+**Revised 2026-08-10, same day.** The first version of this section priced a
+universal body wrapper (§9.1) and rejected raise-time capture (§9.2) because the
+only live-stack API it had found was a formatted string report. That was wrong:
+`#GemExceptionSignalCapturesStack` makes the VM hand over a **structural** stack
+at signal time for ~1.3 ns per frame and nothing per call. §9.2 and §9.7 are
+rewritten accordingly; §9.1's wrapper measurements are kept because they are
+what the alternative is now compared against, and §9.3 / §9.4 are new.
+
+### 9.1 What a Python call costs today (measured)
+
+`GsProcess stackReportToLevel:` / `System _timeMs`, 2M direct static sends per
+shape, best of 3, gs40 / GemStone 4.0. The four shapes are the ones codegen
+already emits (`FunctionDefAst.gs:2696-2705`), so these are real alternatives,
+not hypotheticals:
+
+| body shape | mode | ns/call | vs `#directMethod` |
+|---|---|---:|---:|
+| method-scope temps, direct `^` | `#directMethod` | 11 | — |
+| body in outer block, direct `^` | `#direct` | 15 | +4 |
+| + one `on:do:` handler | `#exception` | 25 | **+14** |
+| + two handlers (generator-aware) | (proposed) | 35 | **+24** |
+
+A whole Grail **Python-level** call measures **~30 ns** (a `while` loop calling
+`def leaf(x): return x + 1`, minus the same loop without the call).
+
+The handler cost is **constant per call, not proportional to the body**. Re-run
+with a ~12-operation body: 42 ns → 56 ns for one handler (+14), → 68 ns for two
+(+26). Identical absolute deltas. So the relative cost is entirely a function of
+how much work the body does:
+
+- trivial leaf function: **+127%**
+- ~12-operation body: **+33%**
+- two handlers, ~12-operation body: **+62%**
+
+That is the honest range for a universal single-handler body wrapper: somewhere
+between a few percent on data-heavy code and a doubling on call-heavy code.
+Material, but bounded and measurable — not the unknown the note implied.
+
+### 9.2 Capture at raise time — the VM does it, cheaply
+
+The attractive design is to pay nothing per call and get the stack when an
+exception is actually raised. **This works, and it is the recommended
+mechanism.** An earlier pass of this section concluded the opposite; that
+conclusion was wrong because it had only found the string-report API. Both
+findings are kept below, because which API you use changes the answer by three
+orders of magnitude.
+
+**What works: `#GemExceptionSignalCapturesStack`.** Per the kernel comment on
+`AbstractException >> _gsStack`: when
+
+```smalltalk
+System gemConfigurationAt: #GemExceptionSignalCapturesStack put: true
+```
+
+and `gsStack == nil` on entry to primitive 2022 (`AbstractException >> _signal`),
+the primitive fills `gsStack` with an **Array** — a Boolean (`inNativeCode`)
+followed by **triples of `(aGsNMethod, ipOffset, receiver)`**, the same shape
+`GsProcess >> _frameContentsAt:` answers. Structural data, built in C, no string
+parsing. Verified on gs40: a 3-deep Smalltalk stack yields the expected
+`class >> selector` per frame, plus the receiver.
+
+Cost, measured as raise **and** catch, 20 000 iterations, best of 3:
+
+| real stack depth | capture OFF | capture ON | delta |
+|---:|---:|---:|---:|
+| 5 | 150 ns | 150 ns | ~0 |
+| 50 | 150 ns | 250 ns | +100 ns |
+| 200 | 150 ns | 450 ns | +300 ns |
+| 600 | 150 ns | 950 ns | +800 ns |
+
+≈**1.3 ns per Smalltalk frame**, and **zero per-call cost** — the flag only
+affects `_signal`. Break-even against the +14 ns/call wrapper of §9.1 is a
+raise-to-call ratio of about **1 : 21** at depth 200. Ordinary Python is well
+below that, so capture wins by roughly an order of magnitude; only
+pathologically exception-dense code would favour the wrapper.
+
+**Control-flow signals opt out for free.** Capture happens only when
+`gsStack == nil` at signal time, so pre-stamping the instance suppresses it:
+
+| | depth 50 | depth 600 |
+|---|---:|---:|
+| plain `Error new signal:` | 350 ns | 1150 ns |
+| `e _gsStack: #()` first | 150 ns | 200 ns |
+
+This matters because `#exception`-mode functions signal `PythonReturn` on every
+return. `PythonReturn` / `PythonBreak` / `PythonContinue` / `StopIteration`
+already subclass the kernel `Exception` rather than `BaseException`, so stamping
+`_gsStack: #()` at construction keeps them at baseline cost.
+
+**What does NOT work, and why the first pass got it wrong:**
+
+- `GsProcess >> _frameContentsAt:` / `stackDepth` — answer only for a *suspended*
+  process; on the running one `stackDepth` is 0.
+- `AbstractException >> _gsStack` — nil for a normally signalled, caught
+  exception **unless the flag above is set**. That is the fact the first pass
+  missed.
+- `GsProcess class >> stackReportToLevel:` — works live and carries the right
+  information, but as a **formatted String**, and O(depth) at ~1.17 µs/frame
+  (18 µs at depth 5, 192 µs at 200, 704 µs at 600). ~900× the flag's cost.
+  Not the API to build on.
+- **Forking a process to suspend the current one** (fork, pass `self`, wait on a
+  semaphore, then use `_frameContentsAt:`) is unnecessary: the flag already
+  answers structural data with no suspension. Measured for comparison, a bare
+  `fork` + semaphore round trip alone is **~1000 ns**, before walking anything —
+  strictly worse than 350 ns all-in at depth 50, and it adds suspension and
+  reentrancy hazards.
+
+### 9.3 What Python's `raise` actually does with the stack
+
+Decisive for the design, because it determines whether a snapshot is *sufficient*.
+
+CPython does **not** snapshot. A traceback is built **incrementally during
+unwinding**:
+
+1. `raise` attaches a traceback whose single entry is the raising frame.
+2. Every frame the exception propagates *out of* adds an entry, which becomes the
+   new **head**; `tb_next` chains inward toward the raise point. Head is the
+   shallowest frame reached so far, tail is the raise point — hence "most recent
+   call last".
+3. A traceback therefore records the **propagation path**, not the stack. Frames
+   above the eventual catcher never appear; callees that already returned never
+   appear.
+4. Bare `raise` / `raise e` re-raise the **same object**, which keeps its
+   traceback and keeps **accumulating** — one traceback can span two disjoint
+   paths joined at the re-raise point.
+5. `__cause__` (`raise X from Y`) and `__context__` (implicit, raised while
+   handling) each carry their **own** traceback.
+6. `with_traceback(tb)` replaces it outright.
+7. Entries hold frame objects alive, which is why `f_locals` stays inspectable.
+
+Consequences for a raise-time snapshot:
+
+- The snapshot is a **superset** of the traceback: it includes frames above the
+  eventual catcher. It must be **trimmed at the catch site** — which is already
+  the seam §3 identifies, the `except` binding at `TryAst.gs:128-134`, exactly
+  where CPython does `e.__traceback__ = tb`.
+- **Re-raise must splice, not replace**, or the original path is lost.
+- Smalltalk frames must be **filtered** to those that are generated Python
+  functions; the triple's method + receiver identify them.
+- **Generators are the real risk.** Grail runs a generator body in a *forked
+  GsProcess*, so a raise inside one captures that process's stack, which does
+  **not** contain the consumer's frames — while Python's traceback spans both.
+  That needs splicing across the process boundary, and it is the same boundary
+  both backed-out wrapper attempts died on.
+
+### 9.4 The one thing the flag does not give you: Python line numbers
+
+The triple is `(method, ipOffset, receiver)` — **no temps** — so another frame's
+`___curPos___` (which holds the Python line) is unreachable. `GsNMethod >>
+_sourceAtIp:` does resolve an ip to an exact source position, but against the
+**generated Smalltalk** source, whose line numbers are not Python line numbers.
+
+So per-frame Python lines need a compile-time map from ip / step point to Python
+line, emitted per method. That is plumbing with no runtime cost — the same
+character as `co_filename` in §9.5, and naturally done alongside it.
+
+### 9.5 The gap is three separable pieces, not one
+
+Worth stating explicitly, because they have very different costs:
+
+1. **`co_filename` is a placeholder, and is independent of frame depth.** It is
+   `'<grail>'` only as a codegen convenience — `PyCode.gs:82` documents "a real
+   file path is a later refinement". Every emit site (`ClassDefAst >>
+   emitMethodCodeTableOn:className:`, importlib's top-level pass,
+   `FunctionDefAst >> emitPyCodeExprOn:qualname:`) already knows the module's
+   source path at compile time. Threading it through is **plumbing with no
+   runtime cost**, and it unlocks `linecache`, hence `FrameSummary.line` source
+   text — which §6 listed as a non-goal to be served by a position array
+   instead. No wrapper needed.
+2. **Frame depth** (`tb_next` / `f_back`) is the part that needs the universal
+   wrapper, and the part §9.1 prices.
+3. **Frame content** (`lineno` per frame) already works for the one frame that
+   exists, via `___curPos___`; it extends to N frames for free once (2) lands.
+
+### 9.6 What each piece buys
+
+All 125 remaining fail+err in `test.test_traceback`, bucketed by the change that
+would fix them (some overlap; counted by primary blocker):
+
+| # | blocker | notes |
+|---:|---|---|
+| ~23 | frame depth + real `co_filename` | includes ~10 bare frame-count asserts (`1 != 3`, `0 != 5`, …) |
+| 14 | PEP 654 group tree rendering | only 2 are winnable alone; the rest also need frames |
+| 18 | suggestion machinery / `sys.path` file imports | independent; `sys.path` imports are a separate question |
+| 8 | `TracebackException.__eq__` | small, independent |
+| 7 | `_testcapi` / `_suggestions` | not fixable — no C extensions |
+| 4 | `sys._getframe` | small, independent |
+| 4 | uncatchable Smalltalk (`AlmostOutOfStack`, 255 dynamic instVars) | separate defects |
+| 3 | `FrameSummary.locals` | small, independent |
+| 3 | PEP 678 `__notes__` not rendered | small, independent |
+| 2 | `SyntaxError` attributes (`compile()` answers a str) | larger than it looks |
+| 2 | exception-name module qualification | `test.test_traceback.B.X:` where CPython wants `X:` |
+| ~37 | assorted small rendering/API | see the per-test log |
+
+So frame depth is the single largest bucket but **not a majority**: ~23 of 125.
+Roughly 20 more are reachable by small independent changes with no performance
+question at all (`__notes__`, `__eq__`, `_getframe`, `locals`, name
+qualification, `NoneType: None`).
+
+### 9.7 Recommendation
+
+**Do (1) `co_filename` first, as its own change.** No runtime cost, no risk to
+the fast path, unblocks `linecache` / `FrameSummary.line`, and it is a
+prerequisite for judging (2) — with a placeholder filename, correct frame depth
+still cannot match CPython's expected output.
+
+**Then the small independent set** (§9.6), which is cheap and needs no
+architectural decision.
+
+**Then frame depth via §9.2's VM capture — NOT a universal body wrapper.** This
+is the part that changed: with `#GemExceptionSignalCapturesStack` the frame list
+costs nothing per call and ~1.3 ns per frame per raise, so there is no fast-path
+regression to weigh and no need for a codegen flag defaulting off. The two
+backed-out wrapper attempts were solving the problem the expensive way.
+
+The work that remains is therefore compile-time and catch-site, not per-call:
+
+1. Set the flag at session init (alongside the other session setup) — it is a
+   *gem* configuration, so it is per-session and must be re-set, not stored.
+2. Stamp `_gsStack: #()` on `PythonReturn` / `PythonBreak` / `PythonContinue` /
+   `StopIteration` at construction, so control flow stays at baseline cost.
+3. Emit the ip → Python-line map of §9.4, with `co_filename`.
+4. Walk `_gsStack` at the `except` binding (`TryAst.gs:128-134`), filtering to
+   generated Python methods and **trimming to the catching frame** (§9.3).
+5. Splice rather than replace on re-raise (§9.3).
+
+The remaining real risk is **generators**: their body runs in a forked
+GsProcess, so a captured stack does not contain the consumer's frames and has to
+be spliced across that boundary (§9.3). That is the same boundary both wrapper
+attempts died on, so it should be prototyped early rather than last.
+
+Also still true from the earlier attempts, and worth keeping: `AbstractException`
+cannot be named literally in every generated-code compile context, so any class
+reference in generated code must be resolved at runtime.

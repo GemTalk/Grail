@@ -1,12 +1,21 @@
 # Minimal http.client for Grail — the CLIENT subset: HTTPConnection,
 # HTTPSConnection, HTTPResponse, and the standard exception hierarchy.
 #
-# This is a hand-rolled shim, not the CPython source drop.  Upstream
-# http/client.py parses response headers through email.parser /
-# email.message (policy framework, feedparser state machine) — a far
-# larger port than the client itself.  HTTP/1.1 response headers are
-# simple enough to parse inline; if the full email package ever lands,
-# revisiting the source-drop route is tracked in docs/Support_Twilio.md.
+# This is a hand-rolled shim, not the CPython source drop.
+#
+# Status of the source-drop route (re-checked 2026-08-08 against CPython
+# 3.14, which is what Grail targets): the email dependency is no longer
+# the blocker — email.parser.Parser(...).parsestr() already parses a
+# real header block correctly here, including repeated headers via
+# get_all, and io.BufferedIOBase exists.  What blocks it now is enum:
+# CPython's http/__init__.py builds HTTPStatus/HTTPMethod with
+# @enum._simple_enum(IntEnum) / (StrEnum), and Grail's _simple_enum is a
+# no-op stub that returns the plain class, so the dropped-in client dies
+# on `globals().update(http.HTTPStatus.__members__)`.  Making the drop
+# possible needs three enum gaps closed: a real _simple_enum, StrEnum
+# members with __new__ args, and three-arg type() enum construction.
+# Grail's enum.IntEnum otherwise already handles the HTTPStatus pattern
+# (int-valued members with a custom __new__ and by-value identity).
 #
 # Supported:
 #   * HTTP/1.1 requests with keep-alive, explicit Content-Length
@@ -17,7 +26,14 @@
 #
 # Not supported: proxies/tunneling (set_tunnel raises), trailers are
 # read and discarded, no 100-continue request mode.
+#
+# Socket lifetime follows CPython: HTTPResponse reads through its own
+# sock.makefile('rb') handle, and socket.close() defers releasing the
+# GsSocket until the last such handle closes (socket._io_refs).  That is
+# what lets the ordinary Connection: close flow read its body after
+# getresponse() has already closed the connection.
 
+import io
 import socket
 from collections import OrderedDict
 from urllib.parse import urlsplit
@@ -165,59 +181,16 @@ class HTTPMessage:
         return len(self._headers)
 
 
-class _SocketReader:
-    """Buffered reader over the recv() protocol (PySocket or SSLSocket)."""
-
-    def __init__(self, sock):
-        self._sock = sock
-        self._buf = b''
-        self._eof = False
-
-    def _fill(self):
-        if self._eof:
-            return False
-        chunk = self._sock.recv(8192)
-        if not chunk:
-            self._eof = True
-            return False
-        self._buf = self._buf + chunk
-        return True
-
-    def readline(self):
-        """Read up to and including a \\n.  b'' means EOF."""
-        while True:
-            idx = self._buf.find(b'\n')
-            if idx >= 0:
-                line = self._buf[:idx + 1]
-                self._buf = self._buf[idx + 1:]
-                return line
-            if len(self._buf) > _MAX_LINE:
-                raise LineTooLong('header line')
-            if not self._fill():
-                line = self._buf
-                self._buf = b''
-                return line
-
-    def read(self, amt):
-        """Read exactly amt bytes (less only at EOF)."""
-        while len(self._buf) < amt:
-            if not self._fill():
-                break
-        data = self._buf[:amt]
-        self._buf = self._buf[amt:]
-        return data
-
-    def read_to_eof(self):
-        while self._fill():
-            pass
-        data = self._buf
-        self._buf = b''
-        return data
-
-
-class HTTPResponse:
+class HTTPResponse(io.BufferedIOBase):
+    # Like CPython, the response reads through its OWN file object
+    # (``sock.makefile('rb')``) rather than off the raw socket.  That is
+    # what makes the standard ``Connection: close`` flow work: the
+    # connection closes the socket as soon as the headers say it will
+    # close, and the still-open file object keeps the underlying socket
+    # alive until the body has been read (see the _io_refs handshake in
+    # socket.PySocket).
     def __init__(self, sock, method=None, url=''):
-        self._reader = _SocketReader(sock)
+        self.fp = sock.makefile('rb')
         self._method = method
         self.url = url
         self.headers = None
@@ -231,8 +204,15 @@ class HTTPResponse:
         self._body_read = False
         self.closed = False
 
+    def _readline(self):
+        """One line, bounded by _MAX_LINE (CPython's fp.readline(_MAXLINE+1))."""
+        line = self.fp.readline(_MAX_LINE + 1)
+        if len(line) > _MAX_LINE:
+            raise LineTooLong('header line')
+        return line
+
     def _read_status(self):
-        line = self._reader.readline()
+        line = self._readline()
         if not line:
             raise RemoteDisconnected(
                 'Remote end closed connection without response')
@@ -261,7 +241,7 @@ class HTTPResponse:
         count = 0
         last_name = None
         while True:
-            line = self._reader.readline()
+            line = self._readline()
             if not line:
                 break
             text = line.decode('utf-8').rstrip('\r\n')
@@ -328,7 +308,7 @@ class HTTPResponse:
     def _read_chunked(self):
         chunks = []
         while True:
-            size_line = self._reader.readline().decode('utf-8').strip()
+            size_line = self._readline().decode('utf-8').strip()
             if ';' in size_line:
                 size_line = size_line.split(';', 1)[0].strip()
             if size_line == '':
@@ -337,12 +317,12 @@ class HTTPResponse:
             if size == 0:
                 # consume optional trailers up to the blank line
                 while True:
-                    trailer = self._reader.readline()
+                    trailer = self._readline()
                     if not trailer or trailer == b'\r\n' or trailer == b'\n':
                         break
                 break
-            chunks.append(self._reader.read(size))
-            self._reader.read(2)     # trailing CRLF after each chunk
+            chunks.append(self.fp.read(size))
+            self.fp.read(2)     # trailing CRLF after each chunk
         return b''.join(chunks)
 
     def read(self, amt=None):
@@ -358,16 +338,16 @@ class HTTPResponse:
             return self._read_chunked()
         if self.length is not None:
             if amt is not None and amt < self.length:
-                data = self._reader.read(amt)
+                data = self.fp.read(amt)
                 self.length = self.length - len(data)
                 return data
-            data = self._reader.read(self.length)
+            data = self.fp.read(self.length)
             self._body_read = True
             return data
         if amt is not None:
-            return self._reader.read(amt)
+            return self.fp.read(amt)
         self._body_read = True
-        return self._reader.read_to_eof()
+        return self.fp.read()
 
     def getheader(self, name, default=None):
         if self.headers is None:
@@ -383,7 +363,24 @@ class HTTPResponse:
         return self.closed
 
     def close(self):
+        # Closing the response drops its reference to the socket, which
+        # is what finally releases the underlying GsSocket once the
+        # connection has closed too (CPython's _decref_socketios).
         self.closed = True
+        fp = self.fp
+        if fp is not None:
+            self.fp = None
+            fp.close()
+
+    def readable(self):
+        return True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, tb):
+        self.close()
+        return False
 
     def geturl(self):
         return self.url

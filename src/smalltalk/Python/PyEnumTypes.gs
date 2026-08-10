@@ -123,6 +123,46 @@ value
 	^ value
 %
 
+expectvalue /Class
+doit
+Object subclass: 'GrailEnumMember'
+  instVarNames: #( value )
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+GrailEnumMember comment: 'Marker returned by enum.member(x) (and the @member decorator): wraps x so ___grailBuildMembers: FORCES x to be a member even when the ordinary rules would skip it -- a nested class, or a descriptor, which CPython _EnumDict would otherwise leave a plain class attribute (test_enum test_nested_classes_in_enum_with_member).  The exact mirror of GrailEnumNonmember.'
+%
+
+set compile_env: 0
+
+category: 'Grail-Member'
+classmethod: GrailEnumMember
+on: aValue
+	"Wrap aValue as a forced-member marker."
+
+	^ self new setValue: aValue; yourself
+%
+
+category: 'Grail-Member'
+method: GrailEnumMember
+setValue: aValue
+	value := aValue
+%
+
+category: 'Grail-Member'
+method: GrailEnumMember
+value
+	"The wrapped value that becomes the member's value."
+
+	^ value
+%
+
 set compile_env: 0
 
 expectvalue /Class
@@ -164,7 +204,7 @@ AbstractPyStr subclass: 'StrEnum'
 
 run
 Enum comment: 'Python enum base — see category comment in PyEnumTypes.gs.'.
-#( #Enum #Flag #IntEnum #IntFlag #StrEnum #GrailEnumAuto #GrailEnumNonmember ) do: [:nm | (Python at: nm) category: 'Grail-Modules'].
+#( #Enum #Flag #IntEnum #IntFlag #StrEnum #GrailEnumAuto #GrailEnumNonmember #GrailEnumMember ) do: [:nm | (Python at: nm) category: 'Grail-Modules'].
 %
 
 ! ------------------- Remove existing behavior (env 0 + env 1)
@@ -426,12 +466,37 @@ ___grailSuperNewGuard: cls
 	__new__ the walk would land on -- Enum's for a pure enum, Integer/
 	AbstractPyInt/AbstractPyFloat/str's for a mixed one.  Raise CPython's error
 	when cls is building; no-op otherwise, so a legitimate super().__new__ on a
-	non-enum subclass, and a direct member_type.__new__, proceed untouched."
+	non-enum subclass, and a direct member_type.__new__, proceed untouched.
 
+	Restricted to a __new__ defined in the ENUM CLASS'S OWN body, which is what
+	CPython actually rejects: the error comes out of Enum.__new__, so it needs
+	the super() walk to reach Enum in the first place.  A DATA MIXIN's __new__
+	delegating upward is the legitimate shape --
+
+	    class MyInt(int):
+	        def __new__(cls, value):
+	            return super().__new__(cls, value)
+	    class MyIntEnum(HexMixin, MyInt, enum.Enum): ...
+	    class Foo(MyIntEnum): TEST = 1
+
+	-- where super() reaches int.__new__, never Enum's.  Once
+	___grailFindMemberNew: began running the mixin's __new__ to build members
+	(CPython _find_new_ clause 2), the unrestricted guard fired on Foo and took
+	out test_multiple_mixin_inherited.
+
+	The owner test is deliberately ``defined ON cls'' rather than the resolved
+	walk target: guarding the individual storage constructors was tried and is
+	incomplete, because IntEnum/StrEnum/Flag each expose a different one and
+	the walk from a BadSuper(IntEnum) lands on AbstractPyInt's, not Enum's."
+
+	| owner |
 	((cls @env0:isKindOf: Behavior)
-		and: [Enum ___grailBuildingSet @env0:includes: cls]) ifTrue: [
-			^ TypeError ___signal___:
-				'do not use `super().__new__; call the appropriate __new__ directly'].
+		and: [Enum ___grailBuildingSet @env0:includes: cls]) ifFalse: [^ nil].
+	owner := cls @env0:whichClassIncludesSelector: #'___new__:kw:'
+		environmentId: 1.
+	owner == cls ifTrue: [
+		^ TypeError ___signal___:
+			'do not use `super().__new__; call the appropriate __new__ directly'].
 	^ nil
 %
 
@@ -443,7 +508,7 @@ ___grailBuildMembers: cls names: attrNames
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members allOrdered lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass gnvStaticClass genValues foreignMixin |
+	| byValue byName members allOrdered lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass gnvStaticClass genValues foreignMixin forcedMembers |
 	"CPython _check_for_existing_members_: adding members to -- or otherwise
 	subclassing -- an enum that already HAS members is illegal (that enum is
 	final).  Raise before building anything (test_extending / test_extending2);
@@ -490,9 +555,15 @@ ___grailBuildMembers: cls names: attrNames
 	(f = nonmember(float)) and the decorator form (@nonmember class Inner) land
 	here as a NAME bound to a GrailEnumNonmember marker.  Done before the
 	reserved-name / member passes so the name is invisible to them."
+	"enum.member(x) is the exact mirror: x is deliberately a member EVEN WHERE
+	the ordinary rules would skip the name -- a nested class, or a descriptor
+	the _EnumDict rule below would leave a plain class attribute.  Unwrap it the
+	same way and record the name as FORCED so the later passes leave it alone
+	(test_enum test_nested_classes_in_enum_with_member)."
+	forcedMembers := IdentitySet @env0:new.
 	[ | dropped |
 	dropped := OrderedCollection @env0:new.
-	allNames @env0:do: [:nameSym | | raw hasAcc |
+	allNames @env0:do: [:nameSym | | raw hasAcc unwrap |
 		hasAcc := (cls @env0:class @env0:whichClassIncludesSelector:
 			(nameSym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1) notNil.
 		raw := hasAcc
@@ -500,14 +571,45 @@ ___grailBuildMembers: cls names: attrNames
 			ifFalse: [dynHolder @env0:isNil
 				ifTrue: [nil]
 				ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym]].
-		(raw isKindOf: GrailEnumNonmember) ifTrue: [ | nmVal |
-			nmVal := raw @env0:value.
+		"Write the unwrapped value back over the marker, wherever the marker was
+		stored.  Shared by both markers -- they differ only in what happens to
+		the NAME afterwards."
+		unwrap := [:rawVal |
 			hasAcc
 				ifTrue: [cls @env0:perform: (nameSym @env0:asString @env0:, ':') @env0:asSymbol
-					env: 1 withArguments: (Array @env0:with: nmVal)]
+					env: 1 withArguments: (Array @env0:with: rawVal)]
 				ifFalse: [dynHolder @env0:isNil
-					ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym put: nmVal]].
-			dropped @env0:add: nameSym]].
+					ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym put: rawVal]]].
+		(raw isKindOf: GrailEnumNonmember) ifTrue: [
+			unwrap @env0:value: raw @env0:value.
+			dropped @env0:add: nameSym].
+		(raw isKindOf: GrailEnumMember) ifTrue: [
+			unwrap @env0:value: raw @env0:value.
+			forcedMembers @env0:add: nameSym]].
+	dropped @env0:isEmpty ifFalse: [
+		allNames := allNames @env0:reject: [:n | dropped @env0:includes: n]] ] @env0:value.
+	"CPython _EnumDict.__setitem__: a class-body name whose value is a DESCRIPTOR
+	is NOT a member -- ``class E(Enum): x = property(f)'' leaves x an ordinary
+	class attribute.  See ___grailFunctional: for why ___isValueDescriptor___: is
+	the predicate and why underscore names are exempt.  Nothing needs to be
+	re-stored here: the class-body store already holds the descriptor (an
+	accessor pair for a declared name, the dynInstVars holder for one assigned
+	under a class-body ``if''), so dropping the name leaves ``cls.x'' answering
+	it, exactly as CPython's class dict does."
+	[ | dropped |
+	dropped := OrderedCollection @env0:new.
+	allNames @env0:do: [:nameSym | | raw hasAcc ns |
+		ns := nameSym @env0:asString.
+		((((ns @env0:size @env0:> 0) and: [(ns @env0:at: 1) @env0:= $_]) not)
+			and: [(forcedMembers @env0:includes: nameSym) not]) ifTrue: [
+			hasAcc := (cls @env0:class @env0:whichClassIncludesSelector:
+				(ns @env0:, ':') @env0:asSymbol environmentId: 1) notNil.
+			raw := hasAcc
+				ifTrue: [cls @env0:perform: nameSym env: 1]
+				ifFalse: [dynHolder @env0:isNil
+					ifTrue: [nil]
+					ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym]].
+			(cls ___isValueDescriptor___: raw) ifTrue: [dropped @env0:add: nameSym]]].
 	dropped @env0:isEmpty ifFalse: [
 		allNames := allNames @env0:reject: [:n | dropped @env0:includes: n]] ] @env0:value.
 	"Reserved-name validation (CPython EnumType.__new__): a class-body
@@ -530,6 +632,32 @@ ___grailBuildMembers: cls names: attrNames
 							ValueError ___signal___:
 								'_sunder_ names, such as ''' @env0:, ns
 									@env0:, ''', are reserved for future Enum use']]].
+	"Duplicate-name validation (CPython _EnumDict.__setitem__): an enum class
+	body may not bind a name twice, however the two bindings are spelled --
+	assignment/assignment, assignment/def, or descriptor/assignment
+	(test_duplicate_name_error covers all three).  Grail's stores simply
+	overwrite each other, so codegen records the repeats for us in
+	___classBodyDuplicates___; see ClassDefAst.
+
+	The reported value is the SURVIVING one, where CPython names the value the
+	FIRST binding had -- the earlier store is gone by the time this runs.  No
+	reachable test pins that text (test_dynamic_members_with_static_methods
+	does, but fails earlier, on ``vars().update()'' in a class body), and
+	matching CPython's shape keeps ``already defined'' regexes working."
+	[ | dups |
+	dups := (cls @env0:class @env0:whichClassIncludesSelector:
+		#'___classBodyDuplicates___' environmentId: 1) @env0:isNil
+			ifTrue: [nil]
+			ifFalse: [cls @env0:perform: #'___classBodyDuplicates___' env: 1].
+	(dups @env0:notNil and: [dups @env0:isEmpty @env0:not]) ifTrue: [ | nm prior |
+		nm := (dups @env0:at: 1) @env0:asString.
+		prior := [cls @env1:___pyAttrLoad___: nm @env0:asSymbol]
+			@env0:on: AbstractException do: [:e | nil].
+		TypeError ___signal___:
+			'''' @env0:, nm @env0:, ''' already defined as '
+				@env0:, ([prior __repr__ @env0:asString]
+					@env0:on: AbstractException do: [:e | prior @env0:printString])] ]
+		@env0:value.
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
@@ -606,6 +734,17 @@ ___grailBuildMembers: cls names: attrNames
 			and: [((newDefClass @env0:inheritsFrom: Enum)
 				and: [(Enum ___grailMemberTypeFor: cls) == object])
 			or: [(Enum ___grailRecordFor: newDefClass) @env0:notNil]]].
+	"CPython _find_new_ clause 2: no __new__ on cls itself, but the DATA MIXIN
+	supplies one (``class NEI(NamedInt, Enum)'' where NamedInt is a user int
+	subclass).  Members are then member_type.__new__(cls, *args), which is what
+	sets both _value_ and the mixin's own instance slots.  See
+	___grailFindMemberNew: for the two exclusions that keep this away from
+	Grail's storage constructors and from Enum's by-value lookup."
+	hasUserNew ifFalse: [ | mixinNew |
+		mixinNew := Enum ___grailFindMemberNew: cls.
+		mixinNew @env0:notNil ifTrue: [
+			newDefClass := mixinNew.
+			hasUserNew := true]].
 	tupleClass := Python @env0:at: #tuple otherwise: Array.
 	"An MI enum whose storage base is Enum (``cls inheritsFrom: Enum'') but
 	which mixes in a FOREIGN data type -- ``class E(date, Enum)'', where date is
@@ -614,10 +753,7 @@ ___grailBuildMembers: cls names: attrNames
 	nil for a pure Enum/Flag (no mix-in -> object) and for int/str/float-storage
 	enums, whose Smalltalk chain does NOT pass Enum and whose member already IS
 	the data type (rawValue is already correct)."
-	foreignMixin := (cls @env0:inheritsFrom: Enum)
-		ifTrue: [ | mt | mt := Enum ___grailMemberTypeFor: cls.
-			mt == object ifTrue: [nil] ifFalse: [mt] ]
-		ifFalse: [nil].
+	foreignMixin := Enum ___grailValueMixinFor: cls.
 	"A method-local class-body ``super()`` resolves its defining class
 	through the ``___cell_<name>___'' closure cell, which ClassDefAst
 	stores only AFTER this hook (after decorators).  A member __new__ runs
@@ -789,10 +925,8 @@ ___grailBuildMembers: cls names: attrNames
 			tuple while the check used the constructed date would miss.  effVal ==
 			rawValue for every non-foreign case (int/str/float/plain), so
 			behaviour there is unchanged."
-			effVal := (foreignMixin @env0:notNil
-				and: [(rawValue isKindOf: foreignMixin) not])
-					ifTrue: [Enum ___grailConstructMemberValue: foreignMixin args: rawValue]
-					ifFalse: [rawValue].
+			effVal := Enum ___grailCoerceMemberValue: rawValue
+				toMemberType: foreignMixin.
 			(byValue @env0:includesKey: effVal)
 				ifTrue: [member := byValue @env0:at: effVal]
 				ifFalse: [
@@ -840,12 +974,22 @@ ___grailBuildMembers: cls names: attrNames
 									member := (UnboundMethod definingClass: newDefClass selector: #'__new__')
 										value: ({ cls } @env0:, newArgs) value: KeyValueDictionary @env0:new.
 									"CPython: a member's canonical value is its _value_, set by
-									__new__.  When __new__ left it unset, fall back to the raw
-									class-body value (a fuller member_type(*args) reconstruction
-									is a later refinement)."
+									__new__.  When __new__ left it unset, EnumType.__new__ fills it
+									with member_type(*args) -- the mix-in's own construction -- and
+									only falls back to the raw class-body value when member_type is
+									object.  NEI.y.value is NamedInt('the-y', 2), which compares
+									equal to 2; the raw tuple ('the-y', 2) was what Grail stored."
 									v := [member @env0:dynamicInstVarAt: #'_value_']
 								@env0:on: AbstractException do: [:e | nil].
-									memberValue := v @env0:isNil ifTrue: [rawValue] ifFalse: [v]]
+									v @env0:isNil
+										ifFalse: [memberValue := v]
+										ifTrue: [ | mt |
+											mt := Enum ___grailMemberTypeFor: cls.
+											memberValue := (mt @env0:isNil or: [mt == object])
+												ifTrue: [rawValue]
+												ifFalse: [Enum
+													___grailConstructMemberValue: mt
+													args: rawValue]]]
 								ifFalse: [
 									"For a str-storage-rooted enum (``class C(str, Enum)'')
 									the member IS a string: give it CONTENT str(value) so
@@ -1717,10 +1861,211 @@ ___grailMixinFromMro: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailStrBuiltin
+	"The object the Python name ``str'' evaluates to.
+
+	Grail has no single ``str'' CLASS -- strings span Unicode7 / Unicode16 /
+	Unicode32 under CharacterCollection -- so ``str'' is the builtins handle,
+	not a Behavior.  NOT ``builtins ___pyAttrLoad___: #str'': that answers the
+	Unicode7 CLASS, a different object from what the bare name resolves to (in
+	Grail ``str is builtins.str'' is itself False).  BoundMethods are equal by
+	receiver+selector, so minting the handle reproduces the name's value."
+
+	^ BoundMethod
+		receiver: ((Python @env0:at: #builtins) instance)
+		selector: #'str'
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailIsStringType: mt
+	"True when mt is one of Grail's string storage classes.  Unicode7 vs
+	Unicode32 is a storage detail, not a Python type difference."
+
+	^ (mt == CharacterCollection)
+		or: [(mt @env0:isKindOf: Behavior)
+			and: [mt @env0:inheritsFrom: CharacterCollection]]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailNormalizeMemberType: aType
+	"Map a concrete string storage class onto Grail's ``str'' handle for the
+	PYTHON-VISIBLE _member_type_.
+
+	CPython's contract is an identity one -- ``E._member_type_ is str''.  The
+	int and float cases already satisfy it (Integer IS int, Float IS float),
+	but the string walk answered Unicode7 / Unicode32, so the str case was
+	False.  test_enum's shared fixture gates on exactly that identity to decide
+	a mixed enum's expected values.
+
+	Only the visible accessor normalizes: the internal walk
+	(___grailMemberTypeFor:) keeps answering the Smalltalk class, which its
+	isKindOf: and member-construction callers need."
+
+	(Enum ___grailIsStringType: aType) ifTrue: [^ Enum ___grailStrBuiltin].
+	^ aType
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailValueMixinFor: cls
+	"The type whose constructor builds cls's member VALUES -- CPython's
+	member_type in ``new_member._value_ = member_type(*args)'' -- or nil when
+	the values stay raw.
+
+	Two cases, deliberately kept apart:
+
+	  * an Enum-ROOTED class mixing in a FOREIGN data type (``class E(date,
+	    Enum)'').  Unchanged, long-standing behaviour.
+
+	  * a STORAGE-rooted class (``class E(str, Enum)'', int, float), which used
+	    to be excluded entirely and so kept the raw class-body value as its
+	    _value_ -- 1 rather than '1'.
+
+	The storage case admits ONLY the three primitive data types Grail models.
+	___grailMemberTypeFor: answers the first non-enum ancestor, which for a
+	PLAIN mixin is not a data type at all: ``class _EnumSuperClass(metaclass=
+	EnumMeta)'' then ``class E(_EnumSuperClass, Enum)'' answers
+	_EnumSuperClass, and constructing THAT with the member's value produced
+	``<E.A: <_EnumSuperClass object>>'' instead of ``<E.A: 1>'' -- 24 tests
+	across every flavour of the shared fixture (test_multiple_superclasses_repr).
+	CPython's _get_mixins_ makes the same distinction: a base with no usable
+	__new__ is a mixin, not the member type."
+
+	| mt |
+	mt := Enum ___grailMemberTypeFor: cls.
+	mt == object ifTrue: [^ nil].
+	(cls @env0:inheritsFrom: Enum) ifTrue: [^ mt].
+	^ ((mt == Integer)
+		or: [(mt == Float)
+		or: [Enum ___grailIsStringType: mt]])
+			ifTrue: [mt]
+			ifFalse: [nil]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailIsGrailDefinedType: aClass
+	"True when aClass is one of Grail's OWN types -- a built-in storage or data
+	class -- rather than a class written in Python.
+
+	The discriminator is the symbol list.  Grail's built-ins are filed into the
+	``Python'' dictionary (AbstractPyInt, AbstractPyStr, PyDate, Enum, ...) or
+	are kernel classes named in the user's symbol list (Integer, Float,
+	CharacterCollection and its Unicode leaves); Class.gs's ___subclass___
+	creates every Python-level class with ``inDictionary: nil'', so a user
+	class is reachable only through its module namespace and is never found
+	here.  Being an IDENTITY test it also cannot be fooled by a user class that
+	merely reuses a built-in name.
+
+	Used to keep ___grailFindMemberNew: away from the storage constructors,
+	which do publish ``___new__:kw:'' but whose member construction Grail
+	already performs through ___grailCoerceMemberValue:toMemberType:.
+
+	Deliberately NOT an inheritance test: ``inheritsFrom: Number'' looks like
+	the same idea but matches every user int subclass too -- NamedInt is
+	AbstractPyInt-rooted -- which excluded the exact case this exists to admit."
+
+	| named |
+	aClass @env0:isNil ifTrue: [^ false].
+	named := [System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: aClass @env0:name @env0:asSymbol]
+			@env0:on: AbstractException do: [:e | nil].
+	^ named == aClass
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailFindMemberNew: cls
+	"CPython _find_new_, clause 2: when the class body defines no __new__ of
+	its own, the member constructor is ``member_type.__new__'' -- the DATA
+	MIXIN's -- and members are then built as member_type.__new__(cls, *args).
+
+	    class NamedInt(int):
+	        def __new__(cls, *args):
+	            name, *args = args
+	            self = int.__new__(cls, *args)
+	            self._intname = name
+	            return self
+
+	    class NEI(NamedInt, Enum):
+	        x = ('the-x', 1)
+
+	Grail only ever honoured a __new__ defined ON cls (plus, narrowly, an
+	inherited ENUM one), so NEI's members were bare allocations holding the
+	raw tuple: _value_ was ('the-x', 1) instead of 1, and _intname was never
+	set at all -- six test_enum cases, all of them pickle round-trips that
+	first have to build the member.
+
+	Answers the defining class to construct through, or nil.
+
+	Two exclusions, both load-bearing:
+
+	  * a GRAIL-DEFINED type (___grailIsGrailDefinedType:).  AbstractPyInt and
+	    friends do publish ___new__:kw:, but ``class E(int, Enum)'' already
+	    gets its value through ___grailCoerceMemberValue:toMemberType:;
+	    routing it here as well would double-construct every int/str/float
+	    enum in the suite.
+	  * an ENUM class.  Enum.__new__ is the by-value LOOKUP, which CPython
+	    likewise excludes from _find_new_'s candidate set -- running it during
+	    construction is the ``do not use super().__new__'' misuse that
+	    Enum>>___new__:kw: exists to reject (test_bad_new_super).  The
+	    inherited-enum case keeps its own separate rule at the call site
+	    (test_multiple_mixin_inherited)."
+
+	| mt owner |
+	mt := Enum ___grailMemberTypeFor: cls.
+	(mt @env0:isNil or: [mt == object]) ifTrue: [^ nil].
+	(Enum ___grailIsGrailDefinedType: mt) ifTrue: [^ nil].
+	owner := mt @env0:whichClassIncludesSelector: #'___new__:kw:' environmentId: 1.
+	owner @env0:isNil ifTrue: [^ nil].
+	(Enum ___grailIsGrailDefinedType: owner) ifTrue: [^ nil].
+	((owner == Enum) or: [owner @env0:inheritsFrom: Enum]) ifTrue: [^ nil].
+	^ owner
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailCoerceMemberValue: rawValue toMemberType: mt
+	"CPython EnumType.__new__: when the enum mixes in a data type,
+	``new_member._value_ = member_type(*args)''.  So ``class E(str, Enum):
+	june = 1'' has _value_ == '1', not 1.
+
+	Grail applied this only to a FOREIGN mixin (``class E(date, Enum)'') and
+	left int/str/float STORAGE enums holding the raw class-body value, on the
+	grounds that the member already IS the data type.  That is true of the
+	MEMBER -- the str-storage branch below already gives it str(value) as its
+	character content -- but not of its _value_, which stayed the int.
+
+	Answer rawValue unchanged when there is no mix-in or the value already has
+	the mixed-in type.  Construction is best-effort (see
+	___grailConstructMemberValue:args:): a value the type cannot accept keeps
+	its raw form rather than breaking the class definition."
+
+	| ctor |
+	(mt @env0:isNil or: [mt == object]) ifTrue: [^ rawValue].
+	(Enum ___grailIsStringType: mt)
+		ifTrue: [
+			"Already a string in any width -- nothing to do.  Otherwise go
+			through the str BUILTIN: the concrete Unicode class does not
+			implement Python's str()."
+			(rawValue isKindOf: CharacterCollection) ifTrue: [^ rawValue].
+			ctor := Enum ___grailStrBuiltin]
+		ifFalse: [
+			(rawValue isKindOf: mt) ifTrue: [^ rawValue].
+			ctor := mt].
+	^ Enum ___grailConstructMemberValue: ctor args: rawValue
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailConstructMemberValue: memberType args: rawValue
 	"Build the mixed-in data value member_type(*args): a scalar rawValue -> a
 	1-arg call, a tuple -> its elements spread, mirroring CPython's
-	member_type.__new__(cls, *args).  ``class E(date, Enum): d = 2023, 12, 1''
+	member_type.__new__(cls, *args).  memberType is any CALLABLE -- a class, or
+	the ``str'' builtin handle ___grailCoerceMemberValue: passes for string
+	storage -- since value:value: is the universal call protocol.  ``class E(date, Enum): d = 2023, 12, 1''
 	yields date(2023, 12, 1) as the member's _value_ (Grail stores it as #value
 	rather than making the member itself a date, since the storage base is
 	Enum).  Best-effort: on any failure keep the raw class-body value."
@@ -1993,7 +2338,7 @@ ___grailInstallClassProtocol: cls
 	mc := cls @env0:class.
 	#(#'__reversed__' #'mro' #'__repr__' #'__str__' #'__format__:'
 		#'_member_names_' #'_member_map_' #'__members__' #'_value2member_map_'
-		#'_value_repr_' #'_new_member_' #'__dir__' #'__bool__')
+		#'_value_repr_' #'_new_member_' #'__dir__' #'__bool__' #'__new__')
 		@env0:do: [:sel |
 			| prov provCat |
 			prov := mc @env0:whichClassIncludesSelector: sel environmentId: 1.
@@ -2151,6 +2496,37 @@ ___grailFunctional: cls positional: positional keywords: keywords
 			il @env0:___mergeSecondaryBases___: nc bases: baseArray.
 			nc]
 		ifFalse: [cls ___subclass___: className instVarNames: #() classInstVarNames: #()].
+	"CPython _EnumDict.__setitem__: a name whose value is a DESCRIPTOR is NOT a
+	member.  It stays an ordinary class attribute, and an enum whose members dict
+	holds only descriptors stays MEMBER-LESS -- which is what makes it legal to
+	subclass.  Grail counted the descriptor as a member, so the shared test
+	fixture's ``BaseEnum = enum_type('BaseEnum', {'first': enum.property(f)})''
+	built a bogus ``<BaseEnum.first: <PropertyDescriptor object>>'' and the
+	descriptor never reached the members of the subclass built from it
+	(test_enum's *Function.test_basics).
+
+	___isValueDescriptor___: is the project's existing answer to ``is this class
+	attribute a real descriptor object'': PropertyDescriptor (``property'',
+	``enum.property'', DynamicClassAttribute) plus any PythonInstance whose own
+	class implements __get__.  It deliberately excludes Grail's function
+	stand-ins (BoundMethod / UnboundMethod / ExecBlock), which Grail binds
+	elsewhere, and it never fires for a CLASS value -- ``f = float'' IS a member
+	in CPython, and some Grail kernel classes answer __get__ where CPython's
+	types do not.
+
+	Underscore names are left alone: the member loop already routes them (dunder
+	overrides, the gnv), matching CPython, whose sunder/dunder handling likewise
+	runs before its descriptor test."
+	[ | kept |
+	kept := OrderedCollection @env0:new.
+	pairs @env0:do: [:p | | pName |
+		pName := (p @env0:at: 1) @env0:asString.
+		((((pName @env0:size @env0:> 0) and: [(pName @env0:at: 1) @env0:= $_]) not)
+			and: [newCls ___isValueDescriptor___: (p @env0:at: 2)])
+			ifTrue: [Enum ___grailInstallClassDescriptor: newCls
+				name: pName descriptor: (p @env0:at: 2)]
+			ifFalse: [kept @env0:add: p]].
+	pairs := kept ] @env0:value.
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
@@ -2172,10 +2548,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	member_type(*args) as each value, like the class-syntax builder.  nil for a
 	plain Enum-rooted functional enum and for int/str/float storage.  (A bare
 	``type=date'' kwarg is still ignored, so that shape stays plain.)"
-	foreignMixin := (newCls @env0:inheritsFrom: Enum)
-		ifTrue: [ | mt | mt := Enum ___grailMemberTypeFor: newCls.
-			mt == object ifTrue: [nil] ifFalse: [mt] ]
-		ifFalse: [nil].
+	foreignMixin := Enum ___grailValueMixinFor: newCls.
 	"Per-INSTANCE auto() resolution (mirrors ___grailBuildMembers, slice 5):
 	the same GrailEnumAuto marker passed under two names -- the _EnumTests
 	functional MainEnum does ``third = auto(); dupe = third'' then
@@ -2218,10 +2591,8 @@ ___grailFunctional: cls positional: positional keywords: keywords
 		"Construct the foreign-mixin value up front so alias detection, storage
 		and value-lookup all key off the SAME value (see the class-syntax
 		builder).  effVal == rawValue for every non-foreign case."
-		effVal := (foreignMixin @env0:notNil
-			and: [(rawValue isKindOf: foreignMixin) not])
-				ifTrue: [Enum ___grailConstructMemberValue: foreignMixin args: rawValue]
-				ifFalse: [rawValue].
+		effVal := Enum ___grailCoerceMemberValue: rawValue
+			toMemberType: foreignMixin.
 		((nameStr @env0:size @env0:> 0) and: [(nameStr @env0:at: 1) @env0:= $_])
 			ifTrue: [
 				"A callable under a DUNDER name is a user method, not a member
@@ -2244,7 +2615,26 @@ ___grailFunctional: cls positional: positional keywords: keywords
 			(byValue @env0:includesKey: effVal)
 				ifTrue: [member := byValue @env0:at: effVal]
 				ifFalse: [ | canonical |
-					member := newCls @env0:basicNew.
+					"A str-storage-rooted enum's member IS a string, so it needs
+					CONTENT -- basicNew leaves the indexed characters empty, and
+					every member then hashes and compares equal to '' (and to each
+					other).  The class-syntax builder has done this since the
+					str-storage work; the FUNCTIONAL builder never did, which is
+					why ``MinorEnum.june == '1''' was false for the four
+					TestMixedStrClass.test_programmatic_function_* cases even once
+					_value_ carried the coerced string."
+					member := (newCls @env0:inheritsFrom: CharacterCollection)
+						ifTrue: [ | s m |
+							s := (effVal isKindOf: CharacterCollection)
+								ifTrue: [effVal]
+								ifFalse: [[effVal __str__]
+									@env0:on: AbstractException do: [:e | '']].
+							m := newCls @env0:new: s @env0:size.
+							s @env0:size @env0:> 0 ifTrue: [
+								m @env0:replaceFrom: 1 to: s @env0:size
+									with: s startingAt: 1].
+							m]
+						ifFalse: [newCls @env0:basicNew].
 					member @env0:dynamicInstVarAt: #value put: effVal.
 					member @env0:dynamicInstVarAt: #name put: nameStr.
 					byValue @env0:at: effVal put: member.
@@ -2432,6 +2822,74 @@ ___grailCompileOverrideForwarder: cls name: nm
 	cls ___compileMethod: src category: 'Grail-Enum Override'
 %
 
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailInstallClassDescriptor: cls name: nm descriptor: aDescriptor
+	"Install a functional-API DESCRIPTOR member-dict entry (Enum('BaseEnum',
+	{'first': enum.property(f)})) as a real descriptor on cls, so it behaves
+	exactly like the class-syntax spelling of the same thing.
+
+	The class-syntax path is the model: ``@enum.property def first'' is
+	re-classed by the parser and ClassDefAst compiles it as an INSTANCE-side
+	unary getter plus a raising 1-arg setter ('Grail-Property-ReadOnly').  That
+	PAIR is what object>>___pyAttrLoad___ recognises as a value accessor, and it
+	is consulted BEFORE the metaclass member accessor -- which is precisely
+	CPython's _proto_member.__set_name__ redirect: a subclass member named
+	``first'' answers the MEMBER off the class and the DESCRIPTOR off a member
+	instance.  Compiling the same pair here buys that redirect for the
+	functional API without a second mechanism.
+
+	The descriptor object itself cannot be written into method source, so it
+	lives in a per-session cls -> (name -> descriptor) table that the compiled
+	getter reads back."
+
+	| tbl per src |
+	tbl := SessionTemps @env0:current @env0:at: #GrailEnumClassDescriptors otherwise: nil.
+	tbl @env0:isNil ifTrue: [
+		tbl := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailEnumClassDescriptors put: tbl].
+	per := tbl @env0:at: cls otherwise: nil.
+	per @env0:isNil ifTrue: [per := KeyValueDictionary @env0:new. tbl @env0:at: cls put: per].
+	per @env0:at: nm @env0:asString put: aDescriptor.
+	"Best-effort, like the member accessors: a name that is not a valid
+	Smalltalk selector cannot be compiled, and must not abort the whole build."
+	src := nm @env0:asString @env0:, '
+	^ Enum ___grailClassDescriptorGet: self name: ''' @env0:, nm @env0:asString @env0:, ''''.
+	[cls ___compileMethod: src category: 'Grail-Enum Descriptor']
+		@env0:on: AbstractException do: [:e | nil].
+	src := nm @env0:asString @env0:, ': ___1
+	^ AttributeError ___signal___: ''property ''''' @env0:, nm @env0:asString
+		@env0:, ''''' has no setter'''.
+	[cls ___compileMethod: src category: 'Grail-Property-ReadOnly']
+		@env0:on: AbstractException do: [:e | nil]
+%
+
+category: 'Grail-Enum Member'
+classmethod: Enum
+___grailClassDescriptorGet: instance name: nm
+	"Read the descriptor installed by ___grailInstallClassDescriptor: for
+	instance's class (or the nearest ancestor that has one) and ask it for the
+	value -- Python's ``descriptor.__get__(instance, owner)''.  A CLASS method
+	for the same reason ___grailInvokeOverride: is one: a data-mixed member is
+	not Enum-rooted in the Smalltalk chain."
+
+	| tbl walker desc |
+	tbl := SessionTemps @env0:current @env0:at: #GrailEnumClassDescriptors otherwise: nil.
+	desc := nil.
+	(tbl ~~ nil) ifTrue: [
+		walker := instance @env0:class.
+		[walker ~~ nil and: [desc == nil]] @env0:whileTrue: [
+			| per |
+			per := tbl @env0:at: walker otherwise: nil.
+			per == nil ifFalse: [desc := per @env0:at: nm @env0:asString otherwise: nil].
+			walker := walker @env0:superClass]].
+	desc == nil ifTrue: [
+		^ AttributeError ___signal___: ''''
+			@env0:, instance @env0:class @env0:name @env0:asString
+			@env0:, ''' object has no attribute ''' @env0:, nm @env0:asString @env0:, ''''].
+	^ instance ___descriptorGet___: desc
+%
+
 category: 'Grail-Enum Member'
 classmethod: Enum
 ___grailInvokeOverride: member name: nm args: argArray
@@ -2483,7 +2941,8 @@ _member_type_
 		base."
 		((Enum ___grailRecordFor: walker) @env0:isNil
 			and: [(walker @env0:inheritsFrom: Enum) not
-			and: [walker ~~ self]]) ifTrue: [^ walker].
+			and: [walker ~~ self]]) ifTrue: [
+				^ Enum ___grailNormalizeMemberType: walker].
 		walker := walker @env0:superclass].
 	^ object
 %
@@ -2656,6 +3115,30 @@ _member_names_
 	rec @env0:isNil ifTrue: [^ list @env0:withAll: #()].
 	^ list @env0:withAll: ((rec @env0:at: 3)
 		@env0:collect: [:m | m @env0:dynamicInstVarAt: #name])
+%
+
+category: 'Grail-Class Attrs'
+classmethod: Enum
+__new__
+	"``SomeEnum.__new__'' is ALWAYS Enum.__new__ (CPython EnumType.__new__:
+	whatever __new__ built the members is stashed as ``_new_member_'' and the
+	class's own __new__ is replaced with Enum's, so
+	``assertIs(NEI.__new__, Enum.__new__)'' holds even for a data-mixed enum
+	whose mix-in defines one -- test_enum's six test_subclasses_with_* cases).
+
+	Answering the handle for ENUM rather than for the receiver is the whole
+	point: a BoundMethod is equal by receiver+selector, so every enum class has
+	to name the same receiver for the identity to hold.  Calling it still does
+	the right thing -- with arguments it dispatches to Enum class>>___new__:kw:,
+	the by-value lookup that IS Enum.__new__.
+
+	Category MUST be Grail-Class Attrs: that is the category
+	object>>___pyAttrLoad___ PERFORMS on a class receiver rather than wrapping
+	as a BoundMethod (same contract as _member_type_ / _member_names_ below).
+	___grailInstallClassProtocol: copies this onto the metaclass of a data-mixed
+	enum, which does not inherit Enum class."
+
+	^ BoundMethod receiver: Enum selector: #'__new__'
 %
 
 category: 'Grail-Class Attrs'
@@ -3644,9 +4127,11 @@ set compile_env: 1
 category: 'Grail-Class Attrs'
 classmethod: StrEnum
 _member_type_
-	"StrEnum members ARE strings (AbstractPyStr storage)."
+	"StrEnum members ARE strings (AbstractPyStr storage).  Answer the ``str''
+	handle, not a concrete Unicode class, so ``StrEnum._member_type_ is str''
+	holds like the int/float cases -- see ___grailNormalizeMemberType:."
 
-	^ Unicode7
+	^ Enum ___grailStrBuiltin
 %
 
 category: 'Grail-Enum Metaclass'
@@ -3831,6 +4316,31 @@ __repr__
 	val := (self @env0:dynamicInstVarAt: #value) __repr__.
 	^ '<' @env0:, self @env0:class @env0:name @env0:asString @env0:, '.'
 		@env0:, nm @env0:asString @env0:, ': ' @env0:, val @env0:asString @env0:, '>'
+%
+
+set compile_env: 0
+
+set compile_env: 1
+
+category: 'Grail-Copy'
+method: Enum
+__copy__
+	"An enum MEMBER is a singleton: ``Color.RED'' is the one and only object
+	for that member, and code compares members with ``is''.  CPython's enum.Enum
+	defines __copy__/__deepcopy__ returning self for exactly this reason --
+	without them copy.copy() would hand back a second object that is equal to
+	the member but not identical to it, silently breaking every identity test
+	(test_enum test_copy_member)."
+
+	^ self
+%
+
+category: 'Grail-Copy'
+method: Enum
+__deepcopy__: memo
+	"See __copy__: a member is a singleton, so a deep copy is the member."
+
+	^ self
 %
 
 set compile_env: 0

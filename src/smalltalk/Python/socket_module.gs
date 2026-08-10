@@ -23,7 +23,7 @@ module ifNil: [self error: 'module is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'PySocket'
-  instVarNames: #('gsSocket' 'sockHost' 'sockPort' 'timeoutMs')
+  instVarNames: #('gsSocket' 'sockHost' 'sockPort' 'timeoutMs' 'ioRefs' 'pyClosed')
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -80,6 +80,8 @@ category: 'Grail-Private'
 method: PySocket
 _setSock: aGsSocket
 	gsSocket := aGsSocket.
+	ioRefs := 0.
+	pyClosed := false.
 	^ self
 %
 
@@ -87,6 +89,44 @@ category: 'Grail-Private'
 method: PySocket
 _sock
 	^ gsSocket
+%
+
+! ---- CPython's socket _io_refs handshake -------------------------------------
+! socket.close() only marks the socket closed; the GsSocket is released once
+! the last makefile() file object has closed too.  See PySocket >> close.
+
+category: 'Grail-Private'
+method: PySocket
+_realClose
+	"Actually release the GsSocket (idempotent)."
+
+	gsSocket notNil ifTrue: [
+		[gsSocket close] on: Error do: [:e | nil].
+		gsSocket := nil.
+	].
+	^ self
+%
+
+category: 'Grail-Private'
+method: PySocket
+_increfSocketios
+	"One more makefile() object holds this socket open."
+
+	ioRefs isNil ifTrue: [ioRefs := 0].
+	ioRefs := ioRefs + 1.
+	^ self
+%
+
+category: 'Grail-Private'
+method: PySocket
+_decrefSocketios
+	"CPython's socket._decref_socketios(): one makefile() object has closed.
+	When the last one goes and close() was already called, release for real."
+
+	ioRefs isNil ifTrue: [ioRefs := 0].
+	ioRefs > 0 ifTrue: [ioRefs := ioRefs - 1].
+	(pyClosed == true and: [ioRefs <= 0]) ifTrue: [self _realClose].
+	^ self
 %
 
 category: 'Grail-Private'
@@ -223,11 +263,22 @@ sendall: data
 category: 'Grail-Socket Protocol'
 method: PySocket
 close
-	"Close the underlying GsSocket (idempotent)."
+	"``s.close()`` — CPython semantics: mark the socket closed, but defer the
+	real close while file objects from ``makefile'' are still open.
 
-	gsSocket @env0:notNil ifTrue: [
-		[gsSocket @env0:close] @env0:on: Error @env0:do: [:e | nil].
-		gsSocket := nil.
+	CPython's socket.close() is
+	    self._closed = True
+	    if self._io_refs <= 0: self._real_close()
+	and each makefile() object decrements the count when IT closes.  This
+	matters for the ordinary ``Connection: close'' HTTP flow: http.client
+	closes the connection as soon as the response headers say the server
+	will close, and then reads the body through the file object it already
+	holds.  Dropping the GsSocket here would strand that reader on nil (a
+	``doesNotUnderstand: #read:into:startingAt:'')."
+
+	pyClosed := true.
+	(ioRefs @env0:isNil @env0:or: [ioRefs @env0:<= 0]) ifTrue: [
+		self @env0:_realClose
 	].
 	^ None
 %
@@ -411,10 +462,57 @@ _sslWrapClientSNI: host _: doVerify
 category: 'Grail-TLS'
 method: PySocket
 _sslSecureConnect
-	"Run the client-side TLS handshake (suspends while waiting)."
+	"Run the client-side TLS handshake (suspends while waiting).
 
-	gsSocket @env0:secureConnect.
+	GsSecureSocket signals a Smalltalk Error on a failed handshake (an
+	untrusted/expired/mismatched peer certificate being the common case).
+	A raw Smalltalk Error is not catchable from Python, so it would abort
+	the program instead of raising — convert it to OSError, which ssl.py
+	re-raises as SSLCertVerificationError / SSLError."
+
+	[gsSocket @env0:secureConnect]
+		@env0:on: Error
+		@env0:do: [:e |
+			OSError ___signal___: (e @env0:messageText @env0:ifNil: ['TLS handshake failed']) @env0:asString
+		].
 	^ None
+%
+
+! ---- trust anchors for client verification ----------------------------------
+! GsSecureSocket takes the CA location CLASS-side, so these settings are
+! session-global rather than per-SSLContext.  ssl.SSLContext applies its own
+! cafile/capath here immediately before each client handshake, so the last
+! context to wrap a socket wins — enough for the one-trust-store case every
+! real client has, and the reason ssl.py re-applies rather than setting once.
+
+category: 'Grail-TLS'
+method: PySocket
+_sslUseCAFile: path
+	"Verify peer certificates against the PEM bundle at ``path''."
+
+	GsSecureSocket @env0:useCACertificateFileForClients: path @env0:asString.
+	^ None
+%
+
+category: 'Grail-TLS'
+method: PySocket
+_sslUseCADirectory: path
+	"Verify peer certificates against the OpenSSL hash directory ``path''."
+
+	GsSecureSocket @env0:useCACertificateDirectoryForClients: path @env0:asString.
+	^ None
+%
+
+category: 'Grail-TLS'
+method: PySocket
+_sslLastVerifyError
+	"OpenSSL's last client-side certificate verification error, '' if none.
+	Used to turn a failed handshake into ssl.SSLCertVerificationError."
+
+	| err |
+	err := [GsSecureSocket @env0:fetchLastCertificateVerificationErrorForClient]
+		@env0:on: Error @env0:do: [:e | e @env0:return: nil].
+	^ err @env0:isNil @env0:ifTrue: [''] @env0:ifFalse: [err @env0:asString]
 %
 
 category: 'Grail-TLS'
@@ -477,10 +575,13 @@ set compile_env: 0
 category: 'Grail-Private'
 classmethod: PySocketIO
 on: aPySocket
+	"Every ``makefile'' comes through here, so this is where the socket's
+	io-ref count goes up (CPython does it in socket.makefile)."
 
 	| inst |
 	inst := self new.
 	inst _setSock: aPySocket.
+	aPySocket _increfSocketios.
 	^ inst
 %
 
@@ -595,9 +696,14 @@ method: PySocketIO
 close
 	"Detach this file object.  Does NOT close the underlying socket — a
 	socket can hand out separate read/write file objects, and the caller
-	closes the socket itself."
+	closes the socket itself.  It does drop this file object's claim on the
+	socket, which releases the GsSocket if the socket was already closed and
+	this was the last reader (CPython's SocketIO.close -> _decref_socketios).
+	Idempotent: a second close must not decrement twice."
 
+	closed @env0:== true ifTrue: [^ None].
 	closed := true.
+	sock @env0:notNil ifTrue: [sock @env0:_decrefSocketios].
 	^ None
 %
 
@@ -714,6 +820,12 @@ initialize
 	self @env0:at: #SHUT_RD put: 0.
 	self @env0:at: #SHUT_WR put: 1.
 	self @env0:at: #SHUT_RDWR put: 2.
+
+	"Exception aliases.  Since CPython 3.10 socket.timeout IS TimeoutError
+	and socket.error IS OSError (both kept as aliases for older code);
+	``from socket import timeout'' is still common in third-party libraries."
+	self @env0:at: #timeout put: TimeoutError.
+	self @env0:at: #error put: OSError.
 %
 
 category: 'Grail-Constructors'

@@ -576,6 +576,34 @@ class TestCase:
         if result is None:
             result = TestResult()
         result.startTest(self)
+
+        # A @skip / @skipIf / @skipUnless marker on the CLASS or on the test
+        # METHOD short-circuits before setUp, exactly as CPython's run() does.
+        # The decorators recorded __unittest_skip__ all along; run() simply
+        # never consulted it, so a gated test RAN and was reported as a failure
+        # or an error instead of a skip.  That mis-scored every
+        # unittest.skipIf-gated CPython test -- e.g. test.test_traceback's
+        # @requires_debug_ranges / @cpython_only classes, which then executed
+        # and died on the absent _testcapi.
+        #
+        # Class marker first, then the method's, matching CPython's precedence
+        # for the reason string.
+        skip_why = None
+        if getattr(type(self), "__unittest_skip__", False):
+            skip_why = getattr(type(self), "__unittest_skip_why__", "")
+        else:
+            try:
+                test_method = getattr(self, self._testMethodName)
+            except Exception:
+                test_method = None
+            if test_method is not None and getattr(
+                    test_method, "__unittest_skip__", False):
+                skip_why = getattr(test_method, "__unittest_skip_why__", "")
+        if skip_why is not None:
+            result.addSkip(self, skip_why)
+            result.stopTest(self)
+            return result
+
         status = "success"
         message = ""
         try:

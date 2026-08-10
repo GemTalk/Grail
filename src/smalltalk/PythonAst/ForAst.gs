@@ -188,12 +188,6 @@ ___emitIterPosOn: aStream
 		lf
 %
 
-category: 'Grail-accessing'
-method: ForAst
-addVariableNamesTo: aStream
-	target addVariableNamesTo: aStream.
-%
-
 category: 'Grail-code generation'
 method: ForAst
 emitForTargetStore: aNameAst source: sourceExpr on: aStream
@@ -214,11 +208,36 @@ emitForTargetStore: aNameAst source: sourceExpr on: aStream
 			nextPutAll: ').'; lf.
 		^ self
 	].
+	"A ``for'' at CLASS-BODY level: CPython leaves the loop variable bound on
+	the class when the loop finishes, and there is no block temp to bind here
+	anyway -- ClassDefAst emits the statement straight into the class-build
+	code, where ``i := ...'' is an undefined symbol.  Route it to the same
+	per-class definitional store the body's assignments use."
+	(self isClassBodyRuntimeForTarget: aNameAst) ifTrue: [
+		aStream
+			nextPutAll: CallAst classBodyRuntimeClass;
+			nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+			nextPutAll: aNameAst id;
+			nextPutAll: ''' put: (';
+			nextPutAll: sourceExpr;
+			nextPutAll: ').'; lf.
+		^ self
+	].
 	aStream
 		nextPutAll: aNameAst id;
 		nextPutAll: ' := ';
 		nextPutAll: sourceExpr;
 		nextPut: $.; lf.
+%
+
+category: 'Grail-code generation'
+method: ForAst
+isClassBodyRuntimeForTarget: aNameAst
+	"True when this for-loop target is bound directly by a class body that
+	ClassDefAst is emitting verbatim -- see CallAst >> classBodyRuntimeClass."
+
+	(aNameAst isKindOf: NameAst) ifFalse: [^ false].
+	^ self ___inClassBodyRuntimeScope___
 %
 
 category: 'Grail-code generation'
