@@ -427,9 +427,12 @@ category: 'Grail-Private'
 method: builtins
 ___definesOwnCallProtocol___: anObject
 	"True when anObject's class supplies one of Grail's call entry points
-	ITSELF, rather than inheriting the base implementation: PythonInstance's
-	``value:value:'' forwards to __call__, and object's
-	``___pyCallValue___:kw:'' exists only to raise ``not callable''."
+	ITSELF, rather than inheriting the base implementation.  Three are
+	inherited by objects that are NOT callable and so can never count:
+	PythonInstance's ``value:value:'' and its ``___pyCallValue___:kw:''
+	both merely forward to __call__ (raising a TypeError-shaped DNU when
+	the class declares none), and object's ``___pyCallValue___:kw:''
+	exists only to raise ``not callable''."
 
 	| cls owner |
 	cls := anObject @env0:class.
@@ -439,7 +442,8 @@ ___definesOwnCallProtocol___: anObject
 		ifTrue: [^ true].
 	owner := cls
 		@env0:whichClassIncludesSelector: #'___pyCallValue___:kw:' environmentId: 1.
-	^ owner @env0:~~ nil and: [owner @env0:~~ object]
+	^ owner @env0:~~ nil
+		and: [owner @env0:~~ PythonInstance and: [owner @env0:~~ object]]
 %
 
 category: 'Grail-Built-in Functions'

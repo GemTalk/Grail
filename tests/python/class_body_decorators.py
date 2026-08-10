@@ -237,3 +237,39 @@ def unbound_method_is_callable_through_a_binding():
             return ('ident', x)
 
     return Ident().m(5) == ('ident', 5)
+
+
+def instance_decorator_is_applied():
+    """A decorator built as a callable INSTANCE (``@dec`` where dec has
+    __call__) must apply like a plain-function decorator.  It reaches the
+    class-body decorator through ___pyCallValue___:kw:, which object answers
+    with ``not callable'' -- and the application guard then swallowed that, so
+    the decoration silently did not happen.  test.support's ``cpython_only'' is
+    exactly this shape, which is why every @cpython_only test RAN."""
+
+    class Marking:
+        def __call__(self, fn):
+            fn.__marked__ = True
+            return fn
+
+    mark = Marking()
+
+    class Marked:
+        @mark
+        def m(self, x):
+            return ('m', x)
+
+    return getattr(Marked.m, '__marked__', False) is True \
+        and Marked().m(3) == ('m', 3)
+
+
+def a_plain_instance_is_still_not_callable():
+    """Guard on the fix above: PythonInstance now implements
+    ___pyCallValue___:kw:, and callable() must not read that inherited
+    forwarder as evidence of a __call__ -- an instance whose class declares
+    none is not callable."""
+
+    class NoCall:
+        pass
+
+    return callable(NoCall()) is False

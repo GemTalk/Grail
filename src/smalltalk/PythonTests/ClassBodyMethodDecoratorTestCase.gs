@@ -253,3 +253,29 @@ testDecoratorIsNotReappliedOnReimport
 	self assert: results asArray
 		equals: (Array with: 'OUT(IN(base))' with: 'OUT(IN(base))' with: 'OUT(IN(base))')
 %
+
+category: 'Grail-Tests-ClassBodyMethodDecorator'
+method: ClassBodyMethodDecoratorTestCase
+testInstanceDecoratorIsApplied
+	"A decorator that is a callable INSTANCE rather than a function was
+	dropped in silence: codegen applies it through ___pyCallValue___:kw:,
+	which only object implemented -- as the TypeError ``not callable'' --
+	and the application guard discarded that.  PythonInstance now forwards
+	___pyCallValue___:kw: to its value:value:, which does the real __call__
+	dispatch."
+
+	self assert: self loadFixture @env1:instance_decorator_is_applied
+		equals: true
+%
+
+category: 'Grail-Tests-ClassBodyMethodDecorator'
+method: ClassBodyMethodDecoratorTestCase
+testAPlainInstanceIsStillNotCallable
+	"The other side of that fix: callable() decides by asking which class
+	OWNS a call entry point, so PythonInstance's new inherited forwarder
+	must be excluded exactly like its value:value: already was, or every
+	object in the image reports callable."
+
+	self assert: self loadFixture @env1:a_plain_instance_is_still_not_callable
+		equals: true
+%

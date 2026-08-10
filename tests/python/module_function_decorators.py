@@ -61,3 +61,30 @@ def stacked(text):
 
 
 stacked_result = stacked("x")
+
+
+# 5. the decorator is a callable INSTANCE, not a function.  Grail called the
+# decorator through ___pyCallValue___:kw:, which object answers with the
+# TypeError "'X' object is not callable"; only PythonInstance>>value:value:
+# knew how to reach __call__.  Inside the decorator-application guard that
+# TypeError was discarded, so an instance decorator was silently dropped and
+# the function kept its undecorated behaviour.
+class Tagger:
+    def __init__(self, tag):
+        self.tag = tag
+
+    def __call__(self, fn):
+        def wrapper(*args, **kwargs):
+            return self.tag + fn(*args, **kwargs)
+        return wrapper
+
+
+tag_it = Tagger("[t] ")
+
+
+@tag_it
+def tagged(text):
+    return text
+
+
+tagged_result = tagged("go")
