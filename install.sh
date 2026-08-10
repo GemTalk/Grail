@@ -115,6 +115,9 @@ if printf '%s\n' "$BASE_PROBE" | grep -q 'GRAIL_BASE=absent'; then
     exit 1
 fi
 
+# Cleanup prior installs
+rm *.out
+
 # Build the CPython shim User Action library (requires GEMSTONE)
 export SHIM_LIB_PATH=""
 if [ -n "$GEMSTONE" ]; then
