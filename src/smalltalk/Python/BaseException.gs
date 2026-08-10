@@ -517,6 +517,39 @@ __init__: a
 	^ None
 %
 
+category: 'Grail-Initialization'
+method: BaseException
+___init__: positional kw: kwargs
+	"CPython's ``BaseException.__init__(self, *args)'' -- the VARARGS form, of
+	which the two methods above are the 0- and 1-argument specialisations.
+	``self.args'' becomes the whole positional tuple, whatever its length.
+
+	This is the selector a GENERATED class constructor probes when the subclass
+	defines no __init__ of its own: ClassDefAst's ``ifNil:'' branch sends
+	``___init__:kw:'' and swallows MessageNotUnderstood, so that a plain data
+	class with no __init__ anywhere in its hierarchy keeps zero-arg ``new''
+	semantics.  BaseException never implemented it, so for the commonest way to
+	declare an exception --
+
+	    class MyError(Exception):
+	        pass
+
+	-- the send MNU'd, the miss was swallowed, and ``MyError('boom').args''
+	stayed ``()``.  str(e) was then '' and the message vanished from every
+	render: ``raise MyError('boom')'' reported bare ``MyError''.  A subclass
+	whose __init__ chains to super() was unaffected, which is why this hid.
+
+	CPython's BaseException takes NO keyword arguments -- ``Exception(x=1)''
+	is a TypeError.  A subclass that wants them defines its own __init__, and
+	is then dispatched statically without ever reaching here."
+
+	((kwargs @env0:notNil) and: [kwargs @env0:notEmpty]) ifTrue: [
+		^ TypeError ___signal___: (self @env0:class @env0:name @env0:asString
+			@env0:, '() takes no keyword arguments')].
+	self ___args___: (positional isNil ifTrue: [#()] ifFalse: [positional @env0:asArray]).
+	^ None
+%
+
 
 category: 'Grail-String Representation'
 method: BaseException

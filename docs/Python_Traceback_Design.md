@@ -769,14 +769,32 @@ traceback module itself:
   `print_exc(limit=None, file=None, chain=True)`, so a caller writing
   `print_exc(None, file=f)` bound None to the wrong parameter.
 
-**A separate defect found and deliberately NOT fixed here:** a user-defined
-exception subclass with an **empty body** does not record `args` --
-`class E(Exception): pass` then `E("boom").args` answers `()` where CPython
-answers `("boom",)`, so `str()` is `''` and the message disappears from every
-render. A subclass whose `__init__` chains to `super().__init__` works. This is
-in the class-instantiation path rather than in traceback rendering, and it is
-worth its own change: it silently drops the message from `raise MyError("...")`
-for the most common way libraries define exceptions.
+~~**A separate defect found and deliberately NOT fixed here:**~~ **Fixed.** A
+user-defined exception subclass with an **empty body** did not record `args` --
+`class E(Exception): pass` then `E("boom").args` answered `()` where CPython
+answers `("boom",)`, so `str()` was `''` and the message disappeared from every
+render of `raise MyError("...")`, the most common way libraries declare an
+exception.
+
+The cause was a *silent* selector miss, not a logic error. A generated class
+constructor whose class defines no `__init__` of its own probes the **varargs**
+selector `___init__:kw:` and swallows `MessageNotUnderstood` -- deliberately, so
+a plain data class with no `__init__` anywhere keeps zero-arg `new` semantics
+(`ClassDefAst`'s `ifNil:` branch). `BaseException` implemented only the 0- and
+1-argument `__init__` / `__init__:`, never the varargs form, so the send missed
+and the miss was swallowed. A subclass whose `__init__` chained to `super()` was
+dispatched statically and worked, which is why this stayed hidden.
+
+Adding `BaseException>>___init__:kw:` -- CPython's `BaseException(*args)`, which
+sets `args` to the whole positional tuple and rejects keyword arguments -- fixes
+every shape at once: empty body, docstring-only, class-attribute-only, and
+subclasses two levels deep.
+
+Worth recording that this won **zero** conformance tests: the full 50-module
+suite did not move a single row. The curated modules that subclass exceptions
+either define `__init__` or never assert on the message. Its value is
+real-code correctness, covered by the new `ExceptionSubclassArgsTestCase`
+(three tests over an eight-check fixture) rather than by the scoreboard.
 
 **§9.7's ordering still holds** for what remains: the rest of the small
 independent set (`sys._getframe` -- now the only one left of it), then frame
