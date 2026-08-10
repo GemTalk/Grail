@@ -492,6 +492,39 @@ isfile: aPath
 	^ false
 %
 
+category: 'Grail-Filesystem'
+method: os
+___statOrSignal___: path isLstat: isLstat
+	"GsFile>>stat:isLstat: answers a GsFileStat on success but a SmallInteger
+	ERRNO on failure -- never nil, which is what the callers here used to test
+	for.  So a failing stat quietly answered an integer, and the first
+	``st_size'' / ``st_mtime'' read on it blew up as an UNCATCHABLE Smalltalk
+	MessageNotUnderstood (#mode sent to a SmallInteger) rather than the OSError
+	CPython raises.  That is why linecache.updatecache's ``except OSError''
+	never fired for a missing file: it never got an exception at all.
+
+	Test on the SUCCESS shape, so any other unexpected answer also becomes a
+	Python-level error instead of a stray message send.  Map the errnos that
+	have dedicated CPython subclasses; ``except OSError'' catches all of them."
+
+	| result errno |
+	result := GsFile @env0:stat: path isLstat: isLstat.
+	(result @env0:isKindOf: GsFileStat) ifTrue: [^ result].
+	errno := (result @env0:isKindOf: SmallInteger) ifTrue: [result] ifFalse: [0].
+	errno == 2 ifTrue: [
+		FileNotFoundError ___signal___:
+			('[Errno 2] No such file or directory: ' @env0:, (path @env0:printString))].
+	errno == 13 ifTrue: [
+		PermissionError ___signal___:
+			('[Errno 13] Permission denied: ' @env0:, (path @env0:printString))].
+	errno == 20 ifTrue: [
+		NotADirectoryError ___signal___:
+			('[Errno 20] Not a directory: ' @env0:, (path @env0:printString))].
+	^ OSError ___signal___:
+		('[Errno ' @env0:, (errno @env0:printString) @env0:, '] Cannot stat: '
+			@env0:, (path @env0:printString))
+%
+
 category: 'Grail-File and Directory Operations'
 method: os
 stat: aPath
@@ -499,10 +532,7 @@ stat: aPath
 
 	| statResult path |
 	path := self ___fsPath___: aPath.
-	statResult := GsFile @env0:stat: path isLstat: false.
-	statResult == nil ifTrue: [
-		OSError ___signal___: ('Cannot stat: ' @env0:, (path @env0:printString))
-	].
+	statResult := self ___statOrSignal___: path isLstat: false.
 	"Answer CPython's os.stat_result, not the raw GsFileStat: the fields are the
 	same but Python code reads them as ``st_size'' / ``st_mtime'' (linecache does
 	so on every source lookup, django's session and file-storage backends too),
@@ -521,10 +551,7 @@ getmtime: aPath
 
 	| st path |
 	path := self ___fsPath___: aPath.
-	st := GsFile @env0:stat: path @env0:asString isLstat: false.
-	st == nil ifTrue: [
-		^ OSError ___signal___: ('Cannot stat: ' @env0:, (path @env0:printString))
-	].
+	st := self ___statOrSignal___: path @env0:asString isLstat: false.
 	^ st @env0:mtimeUtcSeconds
 %
 
@@ -535,10 +562,7 @@ lstat: aPath
 
 	| statResult path |
 	path := self ___fsPath___: aPath.
-	statResult := GsFile @env0:stat: path isLstat: true.
-	statResult == nil ifTrue: [
-		OSError ___signal___: ('Cannot lstat: ' @env0:, (path @env0:printString))
-	].
+	statResult := self ___statOrSignal___: path isLstat: true.
 	^ PyStatResult @env0:on: statResult
 %
 

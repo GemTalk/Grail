@@ -1038,3 +1038,82 @@ out = [os.listdir(d) == [], os.path.isdir(d),
 shutil.rmtree(d)
 all(out)') equals: true.
 %
+
+category: 'Grail-Tests - File Operations'
+method: OsTestCase
+testStatOfMissingFileRaisesFileNotFoundError
+	"GsFile>>stat:isLstat: answers a SmallInteger ERRNO on failure, never nil.
+	os.stat tested for nil, so a missing file produced no exception at all --
+	the errno was wrapped as a stat_result and the first st_* read died as an
+	UNCATCHABLE Smalltalk MNU (#mode sent to a SmallInteger)."
+
+	self assert: (self eval: 'import os
+r = "no exception raised"
+try:
+    os.stat("/no/such/file.py")
+except FileNotFoundError as e:
+    r = "FileNotFoundError" if "No such file or directory" in str(e) else str(e)
+except OSError as e:
+    r = "bare OSError: " + str(e)
+r') equals: 'FileNotFoundError'.
+%
+
+category: 'Grail-Tests - File Operations'
+method: OsTestCase
+testStatOfMissingFileIsCatchableAsOSError
+	"The whole point of raising: ``except OSError'' has to see it, because that
+	is what stdlib code guards a stat with (linecache.updatecache)."
+
+	self assert: (self eval: 'import os
+r = False
+try:
+    os.stat("/no/such/file.py")
+except OSError:
+    r = True
+r') equals: true.
+%
+
+category: 'Grail-Tests - File Operations'
+method: OsTestCase
+testLstatOfMissingFileRaisesOSError
+	"os.lstat had the identical never-fires nil guard."
+
+	self assert: (self eval: 'import os
+r = False
+try:
+    os.lstat("/no/such/file.py")
+except OSError:
+    r = True
+r') equals: true.
+%
+
+category: 'Grail-Tests - File Operations'
+method: OsTestCase
+testGetmtimeOfMissingFileRaisesOSError
+	"os.path.getmtime shared the guard, and answered ``2 mtimeUtcSeconds''."
+
+	self assert: (self eval: 'import os
+r = False
+try:
+    os.path.getmtime("/no/such/file.py")
+except OSError:
+    r = True
+r') equals: true.
+%
+
+category: 'Grail-Tests - File Operations'
+method: OsTestCase
+testStatOfExistingFileStillAnswersStatResult
+	"Guard the success path: the fix tests for the GsFileStat shape rather than
+	for nil, so it must not reject a real stat."
+
+	self assert: (self eval: 'import os, tempfile
+p = os.path.join(tempfile.mkdtemp(), "s.txt")
+with open(p, "w") as f:
+    f.write("hello")
+st = os.stat(p)
+lst = os.lstat(p)
+mt = os.path.getmtime(p)
+os.remove(p)
+all([st.st_size == 5, lst.st_size == 5, mt > 0])') equals: true.
+%
