@@ -6,6 +6,7 @@
 # render.  Most callers in Flask's stack just need to *print
 # something* on failure; the exact frame walk isn't load-bearing.
 
+import linecache
 import sys
 
 
@@ -219,15 +220,54 @@ class FrameSummary:
     whitespace, exactly as CPython stores it, so ``line[colno - indent :
     end_colno - indent]`` recovers the sub-expression the location points at."""
 
-    def __init__(self, filename, lineno, name, line=None,
-                 end_lineno=None, colno=None, end_colno=None):
+    def __init__(self, filename, lineno, name, lookup_line=True, locals=None,
+                 line=None, end_lineno=None, colno=None, end_colno=None):
+        """``lookup_line`` / ``locals`` are CPython's, in CPython's order.
+
+        They are keyword-only there, so no caller passes them positionally and
+        accepting them as ordinary defaulted parameters is compatible.  Both
+        were previously absent, which turned every lazy-lookup test into a
+        TypeError on an unexpected keyword rather than a wrong value:
+        test_lazy_lines, test_lookup_lines, test_extract_stack_lookup_lines.
+
+        ``lookup_line=True`` resolves the source line NOW (CPython touches the
+        property in __init__ for exactly this); False leaves it deferred until
+        something reads ``.line``."""
         self.filename = filename
         self.lineno = lineno
         self.name = name
         self.end_lineno = end_lineno if end_lineno is not None else lineno
         self.colno = colno
         self.end_colno = end_colno
-        self.line = line.strip() if isinstance(line, str) else line
+        self._line = line.strip() if isinstance(line, str) else line
+        # CPython stores repr()s, not the live objects, so a FrameSummary cannot
+        # keep a frame's locals alive.
+        if locals:
+            self.locals = dict((k, repr(v)) for k, v in locals.items())
+        else:
+            self.locals = None
+        if lookup_line:
+            self.line
+
+    @property
+    def line(self):
+        """The source text of this frame's line, read lazily from linecache --
+        CPython's shape, and the reason a code object's co_filename has to be a
+        real path.
+
+        This used to be a plain attribute, so it was None for every frame the
+        interpreter did not hand source text to, and ``traceback`` printed a
+        ``File ..., line N`` with no code line under it.  Lazy is what CPython
+        does and is what keeps extract_tb cheap when the caller only wants
+        filenames and line numbers."""
+        if self._line is None:
+            if self.filename is None or self.lineno is None:
+                return None
+            got = linecache.getline(self.filename, self.lineno)
+            if not got:
+                return None
+            self._line = got
+        return self._line.strip() if isinstance(self._line, str) else self._line
 
     def __len__(self):
         return 4
@@ -266,10 +306,16 @@ class StackSummary(list):
         """Build a StackSummary from an iterable of ``(frame, lineno)`` pairs
         -- the shape ``walk_tb`` / ``walk_stack`` yield.
 
-        ``lookup_lines`` and ``capture_locals`` are accepted for signature
-        compatibility.  Grail has no source-file lookup for a frame (its
-        co_filename is a placeholder; source TEXT arrives with the frame
-        instead) and no f_locals, so neither changes the result."""
+        ``lookup_lines`` is now REAL: a code object's co_filename is the
+        module's actual path, so linecache can read the source line, and
+        deferring that read is observable (test_extract_stack_lookup_lines vs
+        test_extract_stackup_deferred_lookup_lines assert the two behaviours
+        apart).  The comment here used to say the co_filename was a placeholder
+        and source text arrived with the frame instead; both halves changed.
+
+        ``capture_locals`` passes the frame's f_locals through to FrameSummary,
+        which stores repr()s.  A frame with no f_locals simply captures
+        nothing."""
 
         result = cls()
         count = 0
@@ -279,7 +325,10 @@ class StackSummary(list):
             code = getattr(frame, 'f_code', None)
             filename = getattr(code, 'co_filename', None) if code else None
             name = getattr(code, 'co_name', None) if code else None
-            result.append(FrameSummary(filename, lineno, name))
+            f_locals = getattr(frame, 'f_locals', None) if capture_locals else None
+            result.append(FrameSummary(filename, lineno, name,
+                                       lookup_line=lookup_lines,
+                                       locals=f_locals))
             count += 1
         return result
 
@@ -406,7 +455,16 @@ class TracebackException:
 
     def __init__(self, exc_type, exc_value, exc_traceback,
                  limit=None, lookup_lines=True, capture_locals=False,
-                 compact=False):
+                 compact=False, max_group_width=15, max_group_depth=10,
+                 save_exc_type=True, **kwargs):
+        """``max_group_width`` / ``max_group_depth`` / ``save_exc_type`` are
+        accepted and not yet acted on: they only shape PEP 654 exception-GROUP
+        tree rendering, which Grail does not implement (see §9 of
+        docs/Python_Traceback_Design.md).  Accepting them keeps a caller that
+        passes them at a FAILURE on unimplemented rendering rather than an
+        ERROR on an unexpected keyword, which is the more truthful verdict --
+        the same reason format() and format_exception_only() absorb
+        ``colorize``.  ``**kwargs`` covers the rest of that family."""
         # Use the same input unpacking as format_exception so
         # ``TracebackException(exc)'' single-arg works.
         exc_type, exc_value, exc_traceback = _unpack_exc_args(

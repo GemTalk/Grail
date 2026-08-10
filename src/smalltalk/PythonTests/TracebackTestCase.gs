@@ -336,3 +336,78 @@ testWithTracebackRoundTripRealTb
 %
 
 set compile_env: 0
+
+category: 'Grail-Tests'
+method: TracebackTestCase
+testCodeObjectCarriesTheModulePath
+	"co_filename was the '<grail>' placeholder for every code object, on the
+	grounds that Grail has no file-backed ones.  But the emitters DO know the
+	module's path at compile time -- it is on the ModuleAst -- and a real path
+	is what lets linecache read the source, which is what makes
+	FrameSummary.line possible.  Checked for all three def shapes, since each
+	has its own PyCode emit site."
+
+	| mod path |
+	path := importlib grailDir , '/tests/python/code_filename.py'.
+	mod := importlib loadModuleFromPath: path name: 'code_filename'.
+	self assert: (mod @env1:module_level_filename) equals: path.
+	self assert: (mod @env1:class_body_filename) equals: path.
+	self assert: (mod @env1:nested_def_filename) equals: path.
+	"A file-less compile keeps the placeholder -- there is no path to report."
+	self assert: (self eval: 'def f(): pass
+f.__code__.co_filename') equals: '<grail>'
+%
+
+category: 'Grail-Tests'
+method: TracebackTestCase
+testLinecacheReadsSourceForARealPath
+	"The payoff: with a real co_filename, linecache can read the file.  It
+	could not before, and two further gaps had to close for it to work at all
+	-- there was no ``tokenize'' module (linecache imports it and returns []
+	on ImportError, so EVERY lookup answered nothing), and os.stat answered a
+	raw GsFileStat with no ``st_size'' / ``st_mtime''."
+
+	| mod |
+	mod := importlib loadModuleFromPath: (importlib grailDir , '/tests/python/code_filename.py')
+		name: 'code_filename'.
+	self assert: (mod @env1:linecache_reads_own_source)
+%
+
+category: 'Grail-Tests'
+method: TracebackTestCase
+testFrameSummaryLineCarriesSourceText
+	"traceback.FrameSummary.line is CPython's LAZY property backed by
+	linecache, not a plain attribute -- so a traceback prints the code line
+	under its ``File ..., line N''.  It was always None before."
+
+	| mod |
+	mod := importlib loadModuleFromPath: (importlib grailDir , '/tests/python/code_filename.py')
+		name: 'code_filename'.
+	self assert: (mod @env1:frame_summary_has_source_line)
+%
+
+category: 'Grail-Tests'
+method: TracebackTestCase
+testFrameSummaryHonoursLookupLine
+	"``lookup_line=False'' defers the linecache read; ``locals=`` captures
+	repr()s.  Both are CPython parameters that were simply absent, so every
+	lazy-lookup test raised TypeError on an unexpected keyword."
+
+	| mod |
+	mod := importlib loadModuleFromPath: (importlib grailDir , '/tests/python/code_filename.py')
+		name: 'code_filename'.
+	self assert: (mod @env1:lookup_line_is_honoured)
+%
+
+category: 'Grail-Tests'
+method: TracebackTestCase
+testOsStatAnswersStatResultFields
+	"os.stat answers CPython's os.stat_result, not the raw GsFileStat: the
+	fields are the same but Python reads them as st_size / st_mtime, which is
+	what linecache and django's session backend do."
+
+	| mod |
+	mod := importlib loadModuleFromPath: (importlib grailDir , '/tests/python/code_filename.py')
+		name: 'code_filename'.
+	self assert: (mod @env1:stat_result_fields)
+%

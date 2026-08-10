@@ -638,3 +638,42 @@ ___annotationSourceString___
 
 	^ '<annotation>'
 %
+
+category: 'Grail-code generation'
+method: AbstractNode
+emitSourceFilenameLiteralOn: aStream
+	"Instance-side twin of the class-side implementation below -- the emitters
+	that need this are a mix (ComprehensionAst's is a classmethod, TryAst's and
+	FunctionDefAst's are instance methods), and it depends on no instance state."
+
+	^ self class emitSourceFilenameLiteralOn: aStream
+%
+
+category: 'Grail-code generation'
+classmethod: AbstractNode
+emitSourceFilenameLiteralOn: aStream
+	"Write the Smalltalk string literal for this code object's ``co_filename'':
+	the module's real path when one is known (CallAst >> sourcePath, set for the
+	duration of ___buildModuleClass:name:), else the ``'<grail>''' placeholder
+	that file-less code -- exec, eval, the REPL doit path -- keeps.
+
+	Shared by every PyCode emitter (FunctionDefAst's def-time cascade and
+	emitPyCodeExprOn:qualname:, ComprehensionAst's traceback-frame push,
+	TryAst's catching-frame push) so they cannot disagree about the filename of
+	the same module, and so the quoting is done in exactly one place.
+
+	A path can legally contain a single quote, which would terminate the
+	literal early and produce uncompilable generated code, so quotes are
+	doubled -- the same escaping the other string-literal emitters do."
+
+	| p |
+	p := CallAst sourcePath.
+	aStream nextPut: $'.
+	p isNil
+		ifTrue: [aStream nextPutAll: '<grail>']
+		ifFalse: [
+			p asString do: [:c |
+				c == $' ifTrue: [aStream nextPut: $'].
+				aStream nextPut: c]].
+	aStream nextPut: $'
+%

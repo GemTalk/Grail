@@ -74,12 +74,23 @@ name: aName qualname: aQualname filename: aFilename firstlineno: aLine
 category: 'Instance Creation'
 classmethod: PyCode
 name: aName firstlineno: aLine
-	"Convenience for the def-time codegen stamp, which only has the def's
-	name + line cheaply to hand: co_qualname defaults to the name and
-	co_filename to a placeholder (neither is conformance-critical yet; a real
-	file path is a later refinement)."
+	"Convenience for callers with only a name + line to hand: co_qualname
+	defaults to the name and co_filename to the placeholder.  Codegen no longer
+	comes through here for a def in a real module -- it passes the module's path
+	through the filename: variants below -- so the placeholder now means what it
+	says: there is genuinely no file (exec / eval / the REPL doit path)."
 
 	^ self name: aName qualname: aName filename: '<grail>' firstlineno: aLine
+%
+
+category: 'Instance Creation'
+classmethod: PyCode
+name: aName filename: aFilename firstlineno: aLine
+	"As name:firstlineno: but with the module's real path.  co_qualname still
+	defaults to the name: the nested-def cascade that uses this knows the def's
+	own name but not its owning class or module."
+
+	^ self name: aName qualname: aName filename: aFilename firstlineno: aLine
 %
 
 category: 'Instance Creation'
@@ -104,6 +115,19 @@ name: aName firstlineno: aLine argcount: argc posonlyargcount: poargc kwonlyargc
 
 category: 'Instance Creation'
 classmethod: PyCode
+name: aName filename: aFilename firstlineno: aLine argcount: argc posonlyargcount: poargc kwonlyargcount: kwargc
+	"The nested-def cascade's stamp: parameter counts plus the module's real
+	path, but no qualname (a nested def's emitter knows its own name only)."
+
+	| inst |
+	inst := self name: aName firstlineno: aLine argcount: argc
+		posonlyargcount: poargc kwonlyargcount: kwargc.
+	inst dynamicInstVarAt: #'co_filename' put: aFilename.
+	^ inst
+%
+
+category: 'Instance Creation'
+classmethod: PyCode
 name: aName qualname: aQualname firstlineno: aLine argcount: argc posonlyargcount: poargc kwonlyargcount: kwargc
 	"Def-time stamp for a def that compiles to a real Smalltalk METHOD rather
 	than a block -- a class-body def or a module top-level def.  Same fields as
@@ -112,14 +136,33 @@ name: aName qualname: aQualname firstlineno: aLine argcount: argc posonlyargcoun
 	knows the owning class / module name, which the method itself cannot
 	recover later, and CPython reports ``C.m'' / ``f'' there.
 
-	co_filename stays the '<grail>' placeholder the block variant uses -- Grail
-	has no file-backed code objects, and the traceback design supplies source
-	TEXT through the PEP 657 position array instead of a path + linecache."
+	Keeps the placeholder filename; the filename: variant below is what codegen
+	uses for a def in a real module."
 
 	| inst |
 	inst := self name: aName firstlineno: aLine argcount: argc
 		posonlyargcount: poargc kwonlyargcount: kwargc.
 	inst dynamicInstVarAt: #'co_qualname' put: aQualname.
+	^ inst
+%
+
+category: 'Instance Creation'
+classmethod: PyCode
+name: aName qualname: aQualname filename: aFilename firstlineno: aLine argcount: argc posonlyargcount: poargc kwonlyargcount: kwargc
+	"The full def-time stamp: the sibling above plus the module's real path.
+
+	co_filename used to be the '<grail>' placeholder for every code object on
+	the grounds that Grail has no file-backed ones and the traceback design
+	would supply source TEXT through the PEP 657 position array instead.  Both
+	halves turned out to be wrong: the emitters DO know the module's path at
+	compile time (it is on the ModuleAst), and a real path is what lets
+	linecache -- which every stdlib traceback consumer reaches for -- read the
+	source line itself.  See §9 of docs/Python_Traceback_Design.md."
+
+	| inst |
+	inst := self name: aName qualname: aQualname firstlineno: aLine argcount: argc
+		posonlyargcount: poargc kwonlyargcount: kwargc.
+	inst dynamicInstVarAt: #'co_filename' put: aFilename.
 	^ inst
 %
 
