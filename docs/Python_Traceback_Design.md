@@ -585,6 +585,12 @@ Consequences for a raise-time snapshot:
 
 ### 9.4 The one thing the flag does not give you: Python line numbers
 
+> **Superseded by §9.9 — the conclusion below is wrong.** The flag *does* get you
+> Python line numbers, with no compile-time map: `_sourceAtIp:` answers the
+> generated source with a caret at the ip, and that source carries the Python
+> line as the `___curPos___ := N` literal. Kept for the reasoning, which is
+> instructive about *why* it looked impossible; act on §9.9.
+
 The triple is `(method, ipOffset, receiver)` — **no temps** — so another frame's
 `___curPos___` (which holds the Python line) is unreachable. `GsNMethod >>
 _sourceAtIp:` does resolve an ip to an exact source position, but against the
@@ -593,6 +599,10 @@ _sourceAtIp:` does resolve an ip to an exact source position, but against the
 So per-frame Python lines need a compile-time map from ip / step point to Python
 line, emitted per method. That is plumbing with no runtime cost — the same
 character as `co_filename` in §9.5, and naturally done alongside it.
+
+(The error was reading "another frame's temps are unreachable" as "the line is
+unreachable". The line never had to come from the live temp — it is a literal in
+the source the method was compiled from.)
 
 ### 9.5 The gap is three separable pieces, not one
 
@@ -801,3 +811,129 @@ independent set (`sys._getframe` -- now the only one left of it), then frame
 depth via §9.2's VM capture,
 with generators prototyped early. Nothing measured today changes the frame-depth
 recommendation.
+
+### 9.9 Frame-depth prototype (2026-08-10, gs40)
+
+§9.7 said the generator boundary "should be prototyped early rather than last".
+This is that prototype. It is measurement only — no product change — and it
+**simplifies §9.4** while **confirming §9.3's generator risk** as a hard
+boundary rather than a worry.
+
+#### The capture gives real Python frames
+
+With `#GemExceptionSignalCapturesStack` on, a raise three Python calls deep
+(`catcher` → `outer` → `middle` → `leaf`) yields, innermost first:
+
+```
+[1] AbstractException >> #'signal:'                    env=0
+[2] Object >> #'___signal___:'                          env=1
+[3] BaseException class >> #'___signalNew___:kw:cause:'  env=1
+[4] BaseException class >> #'___pyRaiseNew___:args:kw:cause:'
+[5] BaseException class >> #'___pyRaiseNew___:args:kw:'
+[6] _spike >> #'leaf:'        ip=112   env=1     <- Python frame
+[7] _spike >> nil             ip=120   env=1     <- block inside leaf:
+[8] _spike >> #'middle:'      ip=128   env=1     <- Python frame
+...
+[15] _spike >> #'catcher'     ip=136   env=1     <- Python frame
+[16] Object >> #'perform:env:'                   env=0
+[18] GsNMethod class >> #'_gsReturnToC'          env=0
+[19..21] nil                                     <- over-allocated padding
+```
+
+So the selection rule is concrete: **`environmentId = 1`, `inClass` is a
+generated Python module/class, `selector` not nil**, stopping at the first nil
+method (the array is over-allocated, so `size` overstates the frame count).
+Block frames carry a **nil selector** and belong to the enclosing method — they
+must be merged into it, not reported as separate frames, since CPython has no
+frame for a comprehension body or an `except` block.
+
+Two corrections to §9.2 from the observed data: the leading element is a
+SmallInteger (`0`), not a Boolean; and the trailing padding means the frame
+count has to be derived by scanning for nil rather than from `(size - 1) // 3`.
+
+#### §9.4 was wrong: Python line numbers need NO compile-time map
+
+§9.4 concluded that per-frame Python lines require "a compile-time map from ip /
+step point to Python line, emitted per method". They do not. `GsNMethod >>
+_sourceAtIp:` answers the **generated Smalltalk source with a caret at the exact
+ip**, and that source already carries the Python line as a literal, because
+codegen emits `___curPos___ := N` before each statement:
+
+```
+   leaf: x
+   | ___curPos___ |
+   ___curPos___ := 2.
+   BaseException @env1:___pyRaiseNew___: (ValueError) args: {...} kw: nil.
+ *                     ^4
+```
+
+So the Python line for a frame is **the last `___curPos___ := N` at or above the
+caret line**. §9.4's obstacle was that `___curPos___` is a method temp and
+another frame's temps are unreachable — true, but irrelevant: the line is read
+from the *source literal*, not from the live temp.
+
+Verified against a multi-statement function, where the `raise` is on Python line
+39 and its caller's call site on line 44:
+
+| frame | ip | derived Python line |
+|---|---:|---:|
+| `multi:` | 280 | **39** ✔ |
+| block in `multi_catcher` | 104 | 44 |
+| block in `multi_catcher` | 120 | 44 |
+| `multi_catcher` | 136 | **44** ✔ |
+
+Both exact. Block frames resolve to their home method's line, which is what
+makes merging them safe.
+
+That removes a whole codegen phase from §9.7's step 3.
+
+#### Cost: ~100 µs per frame, at traceback-build time only
+
+200 iterations over the env-1 frames of one captured stack: **182 ms**, ≈0.9 ms
+per traceback, ≈**100 µs per frame**. Nothing per call, and nothing on a raise
+that is never rendered — but note this is ~85× the *per-frame* cost of the
+`stackReportToLevel:` string API that §9.2 rejected. The difference is that this
+is paid only when a traceback is actually inspected, whereas the flag's
+1.3 ns/frame is paid on every raise.
+
+It should be **cached per (method, ip)** — tracebacks repeat the same frames
+constantly, and the derivation is pure. A session-local dictionary, or a lazily
+built per-method ip→line table, reduces it to once per distinct site. Worth
+doing in the same change, since 100 µs × frames × exceptions is easy to notice
+in a loop that raises.
+
+#### Generators: confirmed hard boundary
+
+A raise inside a generator body, consumed by `for v in gen_body()`, captures:
+
+```
+[6] _spike >> nil          env=1     <- the generator body
+[9] PythonGenerator >> nil           <- the forked-process plumbing
+[17] GsProcess >> #'_start'
+```
+
+`gen_consumer`'s frames are **absent entirely** — the capture is of the
+generator's own GsProcess, which does not contain the consumer's stack. So
+§9.3's prediction holds exactly, and it is a boundary, not a degradation: there
+is nothing to trim or filter, the frames simply are not there.
+
+This means a first landable increment should be **multi-frame tracebacks for the
+non-generator case**, with a generator raise keeping today's single-frame
+behaviour, documented as a known limitation. Splicing the consumer's stack
+across the process boundary needs the generator to record its consumer at
+resume time, which is its own change and should not gate the ordinary case.
+
+#### Revised remaining work
+
+1. Set the flag at session init (per-session; must be re-set, not stored).
+2. Stamp `_gsStack: #()` on `PythonReturn` / `PythonBreak` / `PythonContinue` /
+   `StopIteration` at construction, so control flow stays at baseline cost
+   (§9.2 measured 350 → 150 ns at depth 50).
+3. ~~Emit the ip → Python-line map~~ **not needed** — derive from
+   `_sourceAtIp:` + `___curPos___`, with a per-(method, ip) cache.
+4. Walk `_gsStack` at the `except` binding, applying the selection rule above:
+   env 1, generated class, non-nil selector, merge block frames, stop at nil,
+   reverse to outermost-first, and trim to the catching frame.
+5. Splice rather than replace on re-raise.
+6. Generators: single frame as today, then splice across the process boundary as
+   a separate change.
