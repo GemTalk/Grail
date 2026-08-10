@@ -628,16 +628,27 @@ add_note: note
 	"PEP 678 (Python 3.11+): attach a str ``note'' to the exception.  Notes are
 	surfaced via ``__notes__'' and printed after the message in a traceback.
 	Stored in a dynamic instVar (a Python list) so no class-shape change is
-	needed; created lazily on the first note."
+	needed; created lazily on the first note.
+
+	The slot is named ``__notes__'' -- the ATTRIBUTE's own name, not a private
+	``___pyNotes___'' -- because ___pyAttrLoad___ probes dynamic instVars
+	BEFORE the method chain.  That makes __notes__ a genuine writable
+	attribute, which is what CPython has and what the stdlib relies on:
+	``e.__notes__ = [...]'' stores through the ordinary attribute path and is
+	then visible to a read, and ``del e.__notes__'' removes it through
+	___pyAttrDelete___ so the next read falls through to the __notes__ method
+	below and AttributeErrors again -- CPython's ``absent until add_note''
+	state, restored.  Under a private name both of those were invisible: the
+	accessor kept answering the old list."
 
 	| notes |
 	(note isKindOf: CharacterCollection) ifFalse: [
 		^ TypeError ___signal___: 'add_note() argument must be a str, not '
 			@env0:, note @env0:class @env0:name @env0:asString].
-	notes := self @env0:dynamicInstVarAt: #'___pyNotes___'.
+	notes := self @env0:dynamicInstVarAt: #'__notes__'.
 	notes isNil ifTrue: [
 		notes := list ___new___.
-		self @env0:dynamicInstVarAt: #'___pyNotes___' put: notes].
+		self @env0:dynamicInstVarAt: #'__notes__' put: notes].
 	notes append: note.
 	^ None
 %
@@ -647,14 +658,27 @@ method: BaseException
 __notes__
 	"PEP 678 list of notes attached via add_note.  CPython leaves ``__notes__''
 	ABSENT until the first add_note (accessing it raises AttributeError), so
-	mirror that rather than fabricating an empty list."
+	mirror that rather than fabricating an empty list.
+
+	Reached only when the dynamic-instVar slot is unset, since ___pyAttrLoad___
+	probes that first -- so this is exactly the ``no notes'' case."
 
 	| notes |
-	notes := self @env0:dynamicInstVarAt: #'___pyNotes___'.
-	notes isNil ifTrue: [
-		^ AttributeError ___signal___: '''' @env0:, self @env0:class @env0:name @env0:asString
-			@env0:, ''' object has no attribute ''__notes__'''].
-	^ notes
+	notes := self @env0:dynamicInstVarAt: #'__notes__'.
+	notes isNil ifFalse: [^ notes].
+	"No notes.  CPython has no __notes__ descriptor at all, so the read is an
+	ordinary attribute MISS and goes through __getattribute__ -> __getattr__
+	before raising.  Existing as a real method here short-circuits that, so an
+	exception class with a __getattr__ never saw the lookup: replicate the
+	miss path (the same guard as object>>___pyAttrLoad___) before raising.
+	Whatever __getattr__ answers -- including None, and including an exception
+	OTHER than AttributeError -- is then CPython's answer too."
+	((self @env0:class @env0:whichClassIncludesSelector: #'__getattr__:' environmentId: 1) notNil
+		and: [(self @env0:class @env0:whichClassIncludesSelector: #'__getattr__:' environmentId: 1)
+			@env0:~~ object])
+		ifTrue: [^ self __getattr__: '__notes__'].
+	^ AttributeError ___signal___: '''' @env0:, self @env0:class @env0:name @env0:asString
+		@env0:, ''' object has no attribute ''__notes__'''
 %
 
 category: 'Grail-Attribute Access'
