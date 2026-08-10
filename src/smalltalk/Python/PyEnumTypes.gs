@@ -510,6 +510,29 @@ ___grailBuildMembers: cls names: attrNames
 			dropped @env0:add: nameSym]].
 	dropped @env0:isEmpty ifFalse: [
 		allNames := allNames @env0:reject: [:n | dropped @env0:includes: n]] ] @env0:value.
+	"CPython _EnumDict.__setitem__: a class-body name whose value is a DESCRIPTOR
+	is NOT a member -- ``class E(Enum): x = property(f)'' leaves x an ordinary
+	class attribute.  See ___grailFunctional: for why ___isValueDescriptor___: is
+	the predicate and why underscore names are exempt.  Nothing needs to be
+	re-stored here: the class-body store already holds the descriptor (an
+	accessor pair for a declared name, the dynInstVars holder for one assigned
+	under a class-body ``if''), so dropping the name leaves ``cls.x'' answering
+	it, exactly as CPython's class dict does."
+	[ | dropped |
+	dropped := OrderedCollection @env0:new.
+	allNames @env0:do: [:nameSym | | raw hasAcc ns |
+		ns := nameSym @env0:asString.
+		(((ns @env0:size @env0:> 0) and: [(ns @env0:at: 1) @env0:= $_]) not) ifTrue: [
+			hasAcc := (cls @env0:class @env0:whichClassIncludesSelector:
+				(ns @env0:, ':') @env0:asSymbol environmentId: 1) notNil.
+			raw := hasAcc
+				ifTrue: [cls @env0:perform: nameSym env: 1]
+				ifFalse: [dynHolder @env0:isNil
+					ifTrue: [nil]
+					ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym]].
+			(cls ___isValueDescriptor___: raw) ifTrue: [dropped @env0:add: nameSym]]].
+	dropped @env0:isEmpty ifFalse: [
+		allNames := allNames @env0:reject: [:n | dropped @env0:includes: n]] ] @env0:value.
 	"Reserved-name validation (CPython EnumType.__new__): a class-body
 	ASSIGNMENT may not rebind ``mro`` (it would shadow type.mro) nor use a
 	_sunder_ name outside the supported set -- ValueError at definition
@@ -1993,7 +2016,7 @@ ___grailInstallClassProtocol: cls
 	mc := cls @env0:class.
 	#(#'__reversed__' #'mro' #'__repr__' #'__str__' #'__format__:'
 		#'_member_names_' #'_member_map_' #'__members__' #'_value2member_map_'
-		#'_value_repr_' #'_new_member_' #'__dir__' #'__bool__')
+		#'_value_repr_' #'_new_member_' #'__dir__' #'__bool__' #'__new__')
 		@env0:do: [:sel |
 			| prov provCat |
 			prov := mc @env0:whichClassIncludesSelector: sel environmentId: 1.
@@ -2151,6 +2174,37 @@ ___grailFunctional: cls positional: positional keywords: keywords
 			il @env0:___mergeSecondaryBases___: nc bases: baseArray.
 			nc]
 		ifFalse: [cls ___subclass___: className instVarNames: #() classInstVarNames: #()].
+	"CPython _EnumDict.__setitem__: a name whose value is a DESCRIPTOR is NOT a
+	member.  It stays an ordinary class attribute, and an enum whose members dict
+	holds only descriptors stays MEMBER-LESS -- which is what makes it legal to
+	subclass.  Grail counted the descriptor as a member, so the shared test
+	fixture's ``BaseEnum = enum_type('BaseEnum', {'first': enum.property(f)})''
+	built a bogus ``<BaseEnum.first: <PropertyDescriptor object>>'' and the
+	descriptor never reached the members of the subclass built from it
+	(test_enum's *Function.test_basics).
+
+	___isValueDescriptor___: is the project's existing answer to ``is this class
+	attribute a real descriptor object'': PropertyDescriptor (``property'',
+	``enum.property'', DynamicClassAttribute) plus any PythonInstance whose own
+	class implements __get__.  It deliberately excludes Grail's function
+	stand-ins (BoundMethod / UnboundMethod / ExecBlock), which Grail binds
+	elsewhere, and it never fires for a CLASS value -- ``f = float'' IS a member
+	in CPython, and some Grail kernel classes answer __get__ where CPython's
+	types do not.
+
+	Underscore names are left alone: the member loop already routes them (dunder
+	overrides, the gnv), matching CPython, whose sunder/dunder handling likewise
+	runs before its descriptor test."
+	[ | kept |
+	kept := OrderedCollection @env0:new.
+	pairs @env0:do: [:p | | pName |
+		pName := (p @env0:at: 1) @env0:asString.
+		((((pName @env0:size @env0:> 0) and: [(pName @env0:at: 1) @env0:= $_]) not)
+			and: [newCls ___isValueDescriptor___: (p @env0:at: 2)])
+			ifTrue: [Enum ___grailInstallClassDescriptor: newCls
+				name: pName descriptor: (p @env0:at: 2)]
+			ifFalse: [kept @env0:add: p]].
+	pairs := kept ] @env0:value.
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
@@ -2432,6 +2486,74 @@ ___grailCompileOverrideForwarder: cls name: nm
 	cls ___compileMethod: src category: 'Grail-Enum Override'
 %
 
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailInstallClassDescriptor: cls name: nm descriptor: aDescriptor
+	"Install a functional-API DESCRIPTOR member-dict entry (Enum('BaseEnum',
+	{'first': enum.property(f)})) as a real descriptor on cls, so it behaves
+	exactly like the class-syntax spelling of the same thing.
+
+	The class-syntax path is the model: ``@enum.property def first'' is
+	re-classed by the parser and ClassDefAst compiles it as an INSTANCE-side
+	unary getter plus a raising 1-arg setter ('Grail-Property-ReadOnly').  That
+	PAIR is what object>>___pyAttrLoad___ recognises as a value accessor, and it
+	is consulted BEFORE the metaclass member accessor -- which is precisely
+	CPython's _proto_member.__set_name__ redirect: a subclass member named
+	``first'' answers the MEMBER off the class and the DESCRIPTOR off a member
+	instance.  Compiling the same pair here buys that redirect for the
+	functional API without a second mechanism.
+
+	The descriptor object itself cannot be written into method source, so it
+	lives in a per-session cls -> (name -> descriptor) table that the compiled
+	getter reads back."
+
+	| tbl per src |
+	tbl := SessionTemps @env0:current @env0:at: #GrailEnumClassDescriptors otherwise: nil.
+	tbl @env0:isNil ifTrue: [
+		tbl := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailEnumClassDescriptors put: tbl].
+	per := tbl @env0:at: cls otherwise: nil.
+	per @env0:isNil ifTrue: [per := KeyValueDictionary @env0:new. tbl @env0:at: cls put: per].
+	per @env0:at: nm @env0:asString put: aDescriptor.
+	"Best-effort, like the member accessors: a name that is not a valid
+	Smalltalk selector cannot be compiled, and must not abort the whole build."
+	src := nm @env0:asString @env0:, '
+	^ Enum ___grailClassDescriptorGet: self name: ''' @env0:, nm @env0:asString @env0:, ''''.
+	[cls ___compileMethod: src category: 'Grail-Enum Descriptor']
+		@env0:on: AbstractException do: [:e | nil].
+	src := nm @env0:asString @env0:, ': ___1
+	^ AttributeError ___signal___: ''property ''''' @env0:, nm @env0:asString
+		@env0:, ''''' has no setter'''.
+	[cls ___compileMethod: src category: 'Grail-Property-ReadOnly']
+		@env0:on: AbstractException do: [:e | nil]
+%
+
+category: 'Grail-Enum Member'
+classmethod: Enum
+___grailClassDescriptorGet: instance name: nm
+	"Read the descriptor installed by ___grailInstallClassDescriptor: for
+	instance's class (or the nearest ancestor that has one) and ask it for the
+	value -- Python's ``descriptor.__get__(instance, owner)''.  A CLASS method
+	for the same reason ___grailInvokeOverride: is one: a data-mixed member is
+	not Enum-rooted in the Smalltalk chain."
+
+	| tbl walker desc |
+	tbl := SessionTemps @env0:current @env0:at: #GrailEnumClassDescriptors otherwise: nil.
+	desc := nil.
+	(tbl ~~ nil) ifTrue: [
+		walker := instance @env0:class.
+		[walker ~~ nil and: [desc == nil]] @env0:whileTrue: [
+			| per |
+			per := tbl @env0:at: walker otherwise: nil.
+			per == nil ifFalse: [desc := per @env0:at: nm @env0:asString otherwise: nil].
+			walker := walker @env0:superClass]].
+	desc == nil ifTrue: [
+		^ AttributeError ___signal___: ''''
+			@env0:, instance @env0:class @env0:name @env0:asString
+			@env0:, ''' object has no attribute ''' @env0:, nm @env0:asString @env0:, ''''].
+	^ instance ___descriptorGet___: desc
+%
+
 category: 'Grail-Enum Member'
 classmethod: Enum
 ___grailInvokeOverride: member name: nm args: argArray
@@ -2656,6 +2778,30 @@ _member_names_
 	rec @env0:isNil ifTrue: [^ list @env0:withAll: #()].
 	^ list @env0:withAll: ((rec @env0:at: 3)
 		@env0:collect: [:m | m @env0:dynamicInstVarAt: #name])
+%
+
+category: 'Grail-Class Attrs'
+classmethod: Enum
+__new__
+	"``SomeEnum.__new__'' is ALWAYS Enum.__new__ (CPython EnumType.__new__:
+	whatever __new__ built the members is stashed as ``_new_member_'' and the
+	class's own __new__ is replaced with Enum's, so
+	``assertIs(NEI.__new__, Enum.__new__)'' holds even for a data-mixed enum
+	whose mix-in defines one -- test_enum's six test_subclasses_with_* cases).
+
+	Answering the handle for ENUM rather than for the receiver is the whole
+	point: a BoundMethod is equal by receiver+selector, so every enum class has
+	to name the same receiver for the identity to hold.  Calling it still does
+	the right thing -- with arguments it dispatches to Enum class>>___new__:kw:,
+	the by-value lookup that IS Enum.__new__.
+
+	Category MUST be Grail-Class Attrs: that is the category
+	object>>___pyAttrLoad___ PERFORMS on a class receiver rather than wrapping
+	as a BoundMethod (same contract as _member_type_ / _member_names_ below).
+	___grailInstallClassProtocol: copies this onto the metaclass of a data-mixed
+	enum, which does not inherit Enum class."
+
+	^ BoundMethod receiver: Enum selector: #'__new__'
 %
 
 category: 'Grail-Class Attrs'
