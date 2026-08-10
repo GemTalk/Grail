@@ -458,6 +458,29 @@ expandStarImports: aModuleAst
 category: 'Grail-Module Loading'
 classmethod: importlib
 ___buildModuleClass: moduleAst name: moduleName
+	"Announce the module's source path to codegen for the duration of the
+	compile, then do the work.
+
+	This is the single seam where a ModuleAst carrying a path reaches codegen
+	(both loadModuleFromPath: and reload: come through here), so it is the one
+	place that has to set CallAst >> sourcePath -- which the PyCode emitters
+	read for ``co_filename''.  Restored in an ensure: so a failed compile cannot
+	leak a stale path into an unrelated one, and so a nested compile (a module
+	whose body imports another) puts its parent's path back on the way out.
+
+	A thin wrapper rather than an indented block around the 260-line body: the
+	re-indent would have swamped the change."
+
+	| saved |
+	saved := CallAst sourcePath.
+	CallAst sourcePath: moduleAst path.
+	^ [self ___buildModuleClassBody: moduleAst name: moduleName]
+		ensure: [CallAst sourcePath: saved]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___buildModuleClassBody: moduleAst name: moduleName
 	"Compile a Python module's parsed AST into its Smalltalk class and return
 	the class.  Creating the class via ``module subclass:`` re-parents (reuses)
 	an existing class of the same name, so calling this again on reload

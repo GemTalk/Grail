@@ -744,7 +744,10 @@ printSmalltalkOn: aStream
 			aStream nextPutAll: ')'].
 		aStream
 			nextPutAll: '; @env0:___pyCode___: (PyCode @env0:name: '''; nextPutAll: name;
-			nextPutAll: ''' firstlineno: '; nextPutAll: self beginLine printString;
+			nextPutAll: ''' filename: '.
+		self emitSourceFilenameLiteralOn: aStream.
+		aStream
+			nextPutAll: ' firstlineno: '; nextPutAll: self beginLine printString;
 			nextPutAll: ' argcount: '; nextPutAll: (poCount + regCount) printString;
 			nextPutAll: ' posonlyargcount: '; nextPutAll: poCount printString;
 			nextPutAll: ' kwonlyargcount: '; nextPutAll: kwoCount printString;
@@ -1533,7 +1536,10 @@ emitPyCodeExprOn: aStream qualname: aQualname
 	aStream
 		nextPutAll: '(PyCode @env0:name: '''; nextPutAll: name asString;
 		nextPutAll: ''' qualname: '''; nextPutAll: aQualname;
-		nextPutAll: ''' firstlineno: '; nextPutAll: self beginLine printString;
+		nextPutAll: ''' filename: '.
+	self emitSourceFilenameLiteralOn: aStream.
+	aStream
+		nextPutAll: ' firstlineno: '; nextPutAll: self beginLine printString;
 		nextPutAll: ' argcount: '; nextPutAll: (poCount + regCount) printString;
 		nextPutAll: ' posonlyargcount: '; nextPutAll: poCount printString;
 		nextPutAll: ' kwonlyargcount: '; nextPutAll: kwoCount printString;

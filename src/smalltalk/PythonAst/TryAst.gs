@@ -165,7 +165,10 @@ printSmalltalkOn: aStream
 			aStream
 				nextPutAll: '___ex @env0:___pushCatchingFrame___: (PyCode @env0:name: ''';
 				nextPutAll: ___func name asString;
-				nextPutAll: ''' firstlineno: ';
+				nextPutAll: ''' filename: '.
+			self emitSourceFilenameLiteralOn: aStream.
+			aStream
+				nextPutAll: ' firstlineno: ';
 				print: ___func beginLine;
 				nextPutAll: ') pos: ___curPos___.';
 				lf].

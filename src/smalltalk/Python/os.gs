@@ -503,7 +503,11 @@ stat: aPath
 	statResult == nil ifTrue: [
 		OSError ___signal___: ('Cannot stat: ' @env0:, (path @env0:printString))
 	].
-	^ statResult
+	"Answer CPython's os.stat_result, not the raw GsFileStat: the fields are the
+	same but Python code reads them as ``st_size'' / ``st_mtime'' (linecache does
+	so on every source lookup, django's session and file-storage backends too),
+	and a GsFileStat only answers GemStone names.  See PyStatResult."
+	^ PyStatResult @env0:on: statResult
 %
 
 category: 'Grail-File and Directory Operations'
@@ -535,7 +539,7 @@ lstat: aPath
 	statResult == nil ifTrue: [
 		OSError ___signal___: ('Cannot lstat: ' @env0:, (path @env0:printString))
 	].
-	^ statResult
+	^ PyStatResult @env0:on: statResult
 %
 
 ! ===============================================================================

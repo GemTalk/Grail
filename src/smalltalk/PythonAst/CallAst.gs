@@ -1429,6 +1429,31 @@ classBodyDecoratorScope: anAssociationOrNil
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
+sourcePath
+	"The filesystem path of the module being compiled, or nil when there is no
+	file behind it (exec / eval / the REPL doit path).
+
+	Read by the emitters that stamp a PyCode, so ``co_filename'' can be the
+	real path instead of the ``'<grail>''' placeholder.  A code object's
+	filename is what linecache keys on, so a real path is what makes
+	``FrameSummary.line'' -- the SOURCE TEXT of a traceback line -- possible at
+	all; §9 of docs/Python_Traceback_Design.md has the reasoning.
+
+	Set for the duration of ___buildModuleClass:name:, which is the single
+	seam where a ModuleAst carrying a path reaches codegen.  Nil elsewhere, so
+	the placeholder remains for genuinely file-less code."
+
+	^ self ___compileContext___ at: #'sourcePath' otherwise: nil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+sourcePath: aStringOrNil
+	self ___compileContext___ at: #'sourcePath' put: aStringOrNil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
 returnEmitMode
 	"How ReturnAst should emit Python ``return value'' statements:
 
