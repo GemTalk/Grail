@@ -691,10 +691,7 @@ ___grailBuildMembers: cls names: attrNames
 	nil for a pure Enum/Flag (no mix-in -> object) and for int/str/float-storage
 	enums, whose Smalltalk chain does NOT pass Enum and whose member already IS
 	the data type (rawValue is already correct)."
-	foreignMixin := (cls @env0:inheritsFrom: Enum)
-		ifTrue: [ | mt | mt := Enum ___grailMemberTypeFor: cls.
-			mt == object ifTrue: [nil] ifFalse: [mt] ]
-		ifFalse: [nil].
+	foreignMixin := Enum ___grailValueMixinFor: cls.
 	"A method-local class-body ``super()`` resolves its defining class
 	through the ``___cell_<name>___'' closure cell, which ClassDefAst
 	stores only AFTER this hook (after decorators).  A member __new__ runs
@@ -866,10 +863,8 @@ ___grailBuildMembers: cls names: attrNames
 			tuple while the check used the constructed date would miss.  effVal ==
 			rawValue for every non-foreign case (int/str/float/plain), so
 			behaviour there is unchanged."
-			effVal := (foreignMixin @env0:notNil
-				and: [(rawValue isKindOf: foreignMixin) not])
-					ifTrue: [Enum ___grailConstructMemberValue: foreignMixin args: rawValue]
-					ifFalse: [rawValue].
+			effVal := Enum ___grailCoerceMemberValue: rawValue
+				toMemberType: foreignMixin.
 			(byValue @env0:includesKey: effVal)
 				ifTrue: [member := byValue @env0:at: effVal]
 				ifFalse: [
@@ -1794,10 +1789,130 @@ ___grailMixinFromMro: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailStrBuiltin
+	"The object the Python name ``str'' evaluates to.
+
+	Grail has no single ``str'' CLASS -- strings span Unicode7 / Unicode16 /
+	Unicode32 under CharacterCollection -- so ``str'' is the builtins handle,
+	not a Behavior.  NOT ``builtins ___pyAttrLoad___: #str'': that answers the
+	Unicode7 CLASS, a different object from what the bare name resolves to (in
+	Grail ``str is builtins.str'' is itself False).  BoundMethods are equal by
+	receiver+selector, so minting the handle reproduces the name's value."
+
+	^ BoundMethod
+		receiver: ((Python @env0:at: #builtins) instance)
+		selector: #'str'
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailIsStringType: mt
+	"True when mt is one of Grail's string storage classes.  Unicode7 vs
+	Unicode32 is a storage detail, not a Python type difference."
+
+	^ (mt == CharacterCollection)
+		or: [(mt @env0:isKindOf: Behavior)
+			and: [mt @env0:inheritsFrom: CharacterCollection]]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailNormalizeMemberType: aType
+	"Map a concrete string storage class onto Grail's ``str'' handle for the
+	PYTHON-VISIBLE _member_type_.
+
+	CPython's contract is an identity one -- ``E._member_type_ is str''.  The
+	int and float cases already satisfy it (Integer IS int, Float IS float),
+	but the string walk answered Unicode7 / Unicode32, so the str case was
+	False.  test_enum's shared fixture gates on exactly that identity to decide
+	a mixed enum's expected values.
+
+	Only the visible accessor normalizes: the internal walk
+	(___grailMemberTypeFor:) keeps answering the Smalltalk class, which its
+	isKindOf: and member-construction callers need."
+
+	(Enum ___grailIsStringType: aType) ifTrue: [^ Enum ___grailStrBuiltin].
+	^ aType
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailValueMixinFor: cls
+	"The type whose constructor builds cls's member VALUES -- CPython's
+	member_type in ``new_member._value_ = member_type(*args)'' -- or nil when
+	the values stay raw.
+
+	Two cases, deliberately kept apart:
+
+	  * an Enum-ROOTED class mixing in a FOREIGN data type (``class E(date,
+	    Enum)'').  Unchanged, long-standing behaviour.
+
+	  * a STORAGE-rooted class (``class E(str, Enum)'', int, float), which used
+	    to be excluded entirely and so kept the raw class-body value as its
+	    _value_ -- 1 rather than '1'.
+
+	The storage case admits ONLY the three primitive data types Grail models.
+	___grailMemberTypeFor: answers the first non-enum ancestor, which for a
+	PLAIN mixin is not a data type at all: ``class _EnumSuperClass(metaclass=
+	EnumMeta)'' then ``class E(_EnumSuperClass, Enum)'' answers
+	_EnumSuperClass, and constructing THAT with the member's value produced
+	``<E.A: <_EnumSuperClass object>>'' instead of ``<E.A: 1>'' -- 24 tests
+	across every flavour of the shared fixture (test_multiple_superclasses_repr).
+	CPython's _get_mixins_ makes the same distinction: a base with no usable
+	__new__ is a mixin, not the member type."
+
+	| mt |
+	mt := Enum ___grailMemberTypeFor: cls.
+	mt == object ifTrue: [^ nil].
+	(cls @env0:inheritsFrom: Enum) ifTrue: [^ mt].
+	^ ((mt == Integer)
+		or: [(mt == Float)
+		or: [Enum ___grailIsStringType: mt]])
+			ifTrue: [mt]
+			ifFalse: [nil]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailCoerceMemberValue: rawValue toMemberType: mt
+	"CPython EnumType.__new__: when the enum mixes in a data type,
+	``new_member._value_ = member_type(*args)''.  So ``class E(str, Enum):
+	june = 1'' has _value_ == '1', not 1.
+
+	Grail applied this only to a FOREIGN mixin (``class E(date, Enum)'') and
+	left int/str/float STORAGE enums holding the raw class-body value, on the
+	grounds that the member already IS the data type.  That is true of the
+	MEMBER -- the str-storage branch below already gives it str(value) as its
+	character content -- but not of its _value_, which stayed the int.
+
+	Answer rawValue unchanged when there is no mix-in or the value already has
+	the mixed-in type.  Construction is best-effort (see
+	___grailConstructMemberValue:args:): a value the type cannot accept keeps
+	its raw form rather than breaking the class definition."
+
+	| ctor |
+	(mt @env0:isNil or: [mt == object]) ifTrue: [^ rawValue].
+	(Enum ___grailIsStringType: mt)
+		ifTrue: [
+			"Already a string in any width -- nothing to do.  Otherwise go
+			through the str BUILTIN: the concrete Unicode class does not
+			implement Python's str()."
+			(rawValue isKindOf: CharacterCollection) ifTrue: [^ rawValue].
+			ctor := Enum ___grailStrBuiltin]
+		ifFalse: [
+			(rawValue isKindOf: mt) ifTrue: [^ rawValue].
+			ctor := mt].
+	^ Enum ___grailConstructMemberValue: ctor args: rawValue
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailConstructMemberValue: memberType args: rawValue
 	"Build the mixed-in data value member_type(*args): a scalar rawValue -> a
 	1-arg call, a tuple -> its elements spread, mirroring CPython's
-	member_type.__new__(cls, *args).  ``class E(date, Enum): d = 2023, 12, 1''
+	member_type.__new__(cls, *args).  memberType is any CALLABLE -- a class, or
+	the ``str'' builtin handle ___grailCoerceMemberValue: passes for string
+	storage -- since value:value: is the universal call protocol.  ``class E(date, Enum): d = 2023, 12, 1''
 	yields date(2023, 12, 1) as the member's _value_ (Grail stores it as #value
 	rather than making the member itself a date, since the storage base is
 	Enum).  Best-effort: on any failure keep the raw class-body value."
@@ -2280,10 +2395,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	member_type(*args) as each value, like the class-syntax builder.  nil for a
 	plain Enum-rooted functional enum and for int/str/float storage.  (A bare
 	``type=date'' kwarg is still ignored, so that shape stays plain.)"
-	foreignMixin := (newCls @env0:inheritsFrom: Enum)
-		ifTrue: [ | mt | mt := Enum ___grailMemberTypeFor: newCls.
-			mt == object ifTrue: [nil] ifFalse: [mt] ]
-		ifFalse: [nil].
+	foreignMixin := Enum ___grailValueMixinFor: newCls.
 	"Per-INSTANCE auto() resolution (mirrors ___grailBuildMembers, slice 5):
 	the same GrailEnumAuto marker passed under two names -- the _EnumTests
 	functional MainEnum does ``third = auto(); dupe = third'' then
@@ -2326,10 +2438,8 @@ ___grailFunctional: cls positional: positional keywords: keywords
 		"Construct the foreign-mixin value up front so alias detection, storage
 		and value-lookup all key off the SAME value (see the class-syntax
 		builder).  effVal == rawValue for every non-foreign case."
-		effVal := (foreignMixin @env0:notNil
-			and: [(rawValue isKindOf: foreignMixin) not])
-				ifTrue: [Enum ___grailConstructMemberValue: foreignMixin args: rawValue]
-				ifFalse: [rawValue].
+		effVal := Enum ___grailCoerceMemberValue: rawValue
+			toMemberType: foreignMixin.
 		((nameStr @env0:size @env0:> 0) and: [(nameStr @env0:at: 1) @env0:= $_])
 			ifTrue: [
 				"A callable under a DUNDER name is a user method, not a member
@@ -2352,7 +2462,26 @@ ___grailFunctional: cls positional: positional keywords: keywords
 			(byValue @env0:includesKey: effVal)
 				ifTrue: [member := byValue @env0:at: effVal]
 				ifFalse: [ | canonical |
-					member := newCls @env0:basicNew.
+					"A str-storage-rooted enum's member IS a string, so it needs
+					CONTENT -- basicNew leaves the indexed characters empty, and
+					every member then hashes and compares equal to '' (and to each
+					other).  The class-syntax builder has done this since the
+					str-storage work; the FUNCTIONAL builder never did, which is
+					why ``MinorEnum.june == '1''' was false for the four
+					TestMixedStrClass.test_programmatic_function_* cases even once
+					_value_ carried the coerced string."
+					member := (newCls @env0:inheritsFrom: CharacterCollection)
+						ifTrue: [ | s m |
+							s := (effVal isKindOf: CharacterCollection)
+								ifTrue: [effVal]
+								ifFalse: [[effVal __str__]
+									@env0:on: AbstractException do: [:e | '']].
+							m := newCls @env0:new: s @env0:size.
+							s @env0:size @env0:> 0 ifTrue: [
+								m @env0:replaceFrom: 1 to: s @env0:size
+									with: s startingAt: 1].
+							m]
+						ifFalse: [newCls @env0:basicNew].
 					member @env0:dynamicInstVarAt: #value put: effVal.
 					member @env0:dynamicInstVarAt: #name put: nameStr.
 					byValue @env0:at: effVal put: member.
@@ -2659,7 +2788,8 @@ _member_type_
 		base."
 		((Enum ___grailRecordFor: walker) @env0:isNil
 			and: [(walker @env0:inheritsFrom: Enum) not
-			and: [walker ~~ self]]) ifTrue: [^ walker].
+			and: [walker ~~ self]]) ifTrue: [
+				^ Enum ___grailNormalizeMemberType: walker].
 		walker := walker @env0:superclass].
 	^ object
 %
@@ -3844,9 +3974,11 @@ set compile_env: 1
 category: 'Grail-Class Attrs'
 classmethod: StrEnum
 _member_type_
-	"StrEnum members ARE strings (AbstractPyStr storage)."
+	"StrEnum members ARE strings (AbstractPyStr storage).  Answer the ``str''
+	handle, not a concrete Unicode class, so ``StrEnum._member_type_ is str''
+	holds like the int/float cases -- see ___grailNormalizeMemberType:."
 
-	^ Unicode7
+	^ Enum ___grailStrBuiltin
 %
 
 category: 'Grail-Enum Metaclass'
