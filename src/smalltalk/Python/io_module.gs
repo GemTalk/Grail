@@ -753,7 +753,14 @@ ___open___: fileArg mode: modeArg encoding: encodingArg
 	(file isKindOf: CharacterCollection) ifFalse: [
 		(file isKindOf: Number) ifTrue: [
 			TypeError ___signal___: 'integer file descriptors are not supported in Grail'].
-		file := file __str__].
+		"PEP 519 first: CPython's open() asks __fspath__, and only a
+		PathLike is guaranteed to answer the actual filesystem path there.
+		__str__ stays as the fallback because it is what this has always
+		used and the two coincide for pathlib.Path — but a class free to
+		define a display __str__ alongside a real __fspath__ would
+		otherwise be opened under whatever its repr-ish text happened to be."
+		file := (os instance) ___fsPath___: file.
+		(file isKindOf: CharacterCollection) ifFalse: [file := file __str__]].
 	mode := (modeArg == nil @env0:or: [modeArg == None]) ifTrue: ['r'] ifFalse: [modeArg].
 	(mode isKindOf: CharacterCollection) ifFalse: [
 		TypeError ___signal___: 'open() argument ''mode'' must be str'].

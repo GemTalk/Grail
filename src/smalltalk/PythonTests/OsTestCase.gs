@@ -989,3 +989,52 @@ testRemoveMissingRaisesFileNotFoundError
 	self assert: raised notNil
 		description: 'unlink of a missing file did not raise FileNotFoundError'
 %
+
+category: 'Grail-Tests - File Operations'
+method: OsTestCase
+testPathLikeArgumentsAreAccepted
+	"PEP 519: os and os.path accept anything with __fspath__, not just str.
+	Grail handed the argument straight to the GsFile primitives, which send
+	``encodeAsUTF8'' to whatever they are given -- a pathlib.Path does not
+	understand it, so the result was a MessageNotUnderstood that is
+	UNCATCHABLE from Python and escapes even ``except Exception''.  The
+	shape that found this was ``shutil.rmtree(Path(tempfile.mkdtemp()))'',
+	whose os.listdir killed the whole session."
+
+	self assert: (self eval: 'import os, shutil, tempfile
+from pathlib import Path
+d = Path(tempfile.mkdtemp())
+(d / "b.txt").write_text("hi")
+out = [
+    sorted(os.listdir(d)) == ["b.txt"],
+    os.path.exists(d),
+    os.path.isdir(d),
+    os.path.isfile(d / "b.txt"),
+    os.path.join(d, "b.txt") == str(d) + "/b.txt",
+    os.path.basename(d / "b.txt") == "b.txt",
+    os.path.splitext(d / "b.txt")[1] == ".txt",
+    os.stat(d / "b.txt") is not None,
+    open(d / "b.txt").read() == "hi",
+]
+shutil.rmtree(d)
+out.append(not os.path.exists(d))
+all(out)') equals: true.
+%
+
+category: 'Grail-Tests - File Operations'
+method: OsTestCase
+testStringPathsAreUnaffectedByPathLikeCoercion
+	"The coercion is permissive on purpose -- it fires only for an object
+	that defines __fspath__ and passes everything else through UNCHANGED --
+	so adding it cannot turn a call that used to work into an error."
+
+	self assert: (self eval: 'import os, shutil, tempfile
+d = tempfile.mkdtemp()
+out = [os.listdir(d) == [], os.path.isdir(d),
+       os.path.join(d, "z") == d + "/z",
+       os.path.basename("/a/b/c.txt") == "c.txt",
+       os.path.dirname("/a/b/c.txt") == "/a/b",
+       os.path.splitext("/a/b/c.txt") == ("/a/b/c", ".txt")]
+shutil.rmtree(d)
+all(out)') equals: true.
+%
