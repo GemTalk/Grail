@@ -345,8 +345,10 @@ attribute now runs far enough to make its real content assertion. Verified
 test-by-test (pairing each `GRAIL_TEST` id with whether a `GRAIL_DETAIL`
 followed): **5 fixed, 0 regressions**.
 
-**Current status: `ERROR`** — 370 tests, 26 pass, 82 fail, 82 error, 180 skip.
-The remaining gaps, in rough order of leverage:
+**Status when this section was written** — 370 tests, 26 pass, 82 fail, 82
+error, 180 skip. **Now 36 pass / 86 fail / 39 error / 209 skip** (2026-08-10);
+items 4 and 5 below are closed and item 1 is scoped in §9. The gaps as they
+stood, in rough order of leverage:
 
 1. Multi-frame tracebacks: `tb_next` / `f_back` are always `None` (a 4-deep call
    chain yields depth 1), and `co_filename` is the `'<grail>'` placeholder, so
@@ -354,12 +356,23 @@ The remaining gaps, in rough order of leverage:
    and the only one needing real interpreter work — see the "Deferred" note
    above for why it was prototyped and backed out twice, and what a real
    attempt would cost (`#directMethod` functions lose their fast path).
+   **Now measured and re-scoped — see §9**, which prices the wrapper (+14 ns per
+   call, constant), rejects the raise-time-capture alternative on measurement,
+   and separates `co_filename` out as a no-runtime-cost prerequisite.
 2. `SyntaxError` carries none of `msg` / `filename` / `lineno` / `offset` /
    `text` / `end_lineno` / `end_offset`; `compile()` returns a `str`.
 3. Implicit exception chaining leaves `__context__` as `None`.
-4. `tempfile.mkdtemp` raises `NotImplementedError` (6 errors).
-5. A residual 30 `_testcapi` errors in classes NOT decorated `@cpython_only` —
-   the import sits inside the test body, so only the body can skip it.
+4. ~~`tempfile.mkdtemp` raises `NotImplementedError` (6 errors).~~ **Closed** —
+   `mkdtemp` is implemented (`os` provides mkdir/rmdir, so refusing the caller
+   was never necessary).
+5. ~~A residual 30 `_testcapi` errors in classes NOT decorated
+   `@cpython_only`~~ — **mostly closed, and the diagnosis was wrong.** The
+   classes *were* decorated; `@cpython_only` is a `_SkipDecorator` **instance**,
+   and Grail silently dropped every decorator built as a callable instance
+   (`object>>___pyCallValue___:kw:` answered "not callable" and the
+   decorator-application guard discarded it). Fixed in
+   `PythonInstance>>___pyCallValue___:kw:`; 30 → 6 errors, the remainder being
+   test bodies that import `_testcapi` directly.
 
 **Phase 3d — `finally`-during-propagation for `sys.exc_info()` (DONE).** Phase 3a
 set the current-exception register only at except-handler entry, so a `finally`
@@ -415,3 +428,148 @@ ordering just noted.
   1/0/1/0 → **1/0/0/0 OK** (isolated + via the parallel regen; the known flaky
   test_enum row restored to baseline). Full SUnit 3325/3325, cpython gate 0
   regressions / 2 improvements.
+
+## 9. Scoping: multi-frame tracebacks (2026-08-10, gs40)
+
+The remaining `test.test_traceback` gap is dominated by one thing: a traceback is
+always **one frame deep**, that frame's `co_filename` is the `'<grail>'`
+placeholder, and `tb_next` / `f_back` are always `None`. §7's "Deferred" note
+says a real attempt costs `#directMethod` functions their fast path, and calls
+the change large and high-risk — but never put a number on it. This section
+does, and it changes the recommendation.
+
+### 9.1 What a Python call costs today (measured)
+
+`GsProcess stackReportToLevel:` / `System _timeMs`, 2M direct static sends per
+shape, best of 3, gs40 / GemStone 4.0. The four shapes are the ones codegen
+already emits (`FunctionDefAst.gs:2696-2705`), so these are real alternatives,
+not hypotheticals:
+
+| body shape | mode | ns/call | vs `#directMethod` |
+|---|---|---:|---:|
+| method-scope temps, direct `^` | `#directMethod` | 11 | — |
+| body in outer block, direct `^` | `#direct` | 15 | +4 |
+| + one `on:do:` handler | `#exception` | 25 | **+14** |
+| + two handlers (generator-aware) | (proposed) | 35 | **+24** |
+
+A whole Grail **Python-level** call measures **~30 ns** (a `while` loop calling
+`def leaf(x): return x + 1`, minus the same loop without the call).
+
+The handler cost is **constant per call, not proportional to the body**. Re-run
+with a ~12-operation body: 42 ns → 56 ns for one handler (+14), → 68 ns for two
+(+26). Identical absolute deltas. So the relative cost is entirely a function of
+how much work the body does:
+
+- trivial leaf function: **+127%**
+- ~12-operation body: **+33%**
+- two handlers, ~12-operation body: **+62%**
+
+That is the honest range for a universal single-handler body wrapper: somewhere
+between a few percent on data-heavy code and a doubling on call-heavy code.
+Material, but bounded and measurable — not the unknown the note implied.
+
+### 9.2 The alternative that does NOT work: capture at raise time
+
+The obviously attractive design is to pay nothing per call and walk the
+Smalltalk stack when an exception is actually raised (`___signal___:` is already
+the documented choke point). GemStone's live-process introspection was probed:
+
+- `GsProcess >> _frameContentsAt:` / `stackDepth` — **unusable**: they answer for
+  a *suspended* process; on the running one `stackDepth` is 0.
+- `AbstractException >> _gsStack` — **nil** for a normally signalled, caught
+  exception. GemStone does not populate it for us.
+- `GsProcess class >> stackReportToLevel:` — **works** on the live process from
+  inside a method, and yields exactly what is needed: receiver class, selector,
+  line number, and the `GsNMethod` OOP per frame. But it answers a **formatted
+  String**, and it is O(depth):
+
+| real stack depth | µs per capture |
+|---:|---:|
+| 5 | 18 |
+| 50 | 54 |
+| 200 | 192 |
+| 600 | 704 |
+
+~1.17 µs per frame. A Grail Python call spans several Smalltalk frames, so a
+modestly nested program raising an exception pays **200–700 µs per raise**,
+against 30 ns for a call.
+
+**Break-even** against the +14 ns/call wrapper is a raise-to-call ratio of about
+**1 : 14 000**. Python raises far more often than that on ordinary paths
+(`try/except KeyError`, attribute probing, iteration protocols), so raise-time
+capture is *worse* than the wrapper for realistic code — and it would rest on
+parsing a human-readable report. **Rejected on measurement.** The per-frame
+incremental-unwind model in §4 stands.
+
+(One mitigation that survives: Grail's control-flow signals and `StopIteration`
+subclass the kernel `Exception`, not `BaseException`, so generator exhaustion
+would never pay capture cost. Not enough to save the approach.)
+
+### 9.3 The gap is three separable pieces, not one
+
+Worth stating explicitly, because they have very different costs:
+
+1. **`co_filename` is a placeholder, and is independent of frame depth.** It is
+   `'<grail>'` only as a codegen convenience — `PyCode.gs:82` documents "a real
+   file path is a later refinement". Every emit site (`ClassDefAst >>
+   emitMethodCodeTableOn:className:`, importlib's top-level pass,
+   `FunctionDefAst >> emitPyCodeExprOn:qualname:`) already knows the module's
+   source path at compile time. Threading it through is **plumbing with no
+   runtime cost**, and it unlocks `linecache`, hence `FrameSummary.line` source
+   text — which §6 listed as a non-goal to be served by a position array
+   instead. No wrapper needed.
+2. **Frame depth** (`tb_next` / `f_back`) is the part that needs the universal
+   wrapper, and the part §9.1 prices.
+3. **Frame content** (`lineno` per frame) already works for the one frame that
+   exists, via `___curPos___`; it extends to N frames for free once (2) lands.
+
+### 9.4 What each piece buys
+
+All 125 remaining fail+err in `test.test_traceback`, bucketed by the change that
+would fix them (some overlap; counted by primary blocker):
+
+| # | blocker | notes |
+|---:|---|---|
+| ~23 | frame depth + real `co_filename` | includes ~10 bare frame-count asserts (`1 != 3`, `0 != 5`, …) |
+| 14 | PEP 654 group tree rendering | only 2 are winnable alone; the rest also need frames |
+| 18 | suggestion machinery / `sys.path` file imports | independent; `sys.path` imports are a separate question |
+| 8 | `TracebackException.__eq__` | small, independent |
+| 7 | `_testcapi` / `_suggestions` | not fixable — no C extensions |
+| 4 | `sys._getframe` | small, independent |
+| 4 | uncatchable Smalltalk (`AlmostOutOfStack`, 255 dynamic instVars) | separate defects |
+| 3 | `FrameSummary.locals` | small, independent |
+| 3 | PEP 678 `__notes__` not rendered | small, independent |
+| 2 | `SyntaxError` attributes (`compile()` answers a str) | larger than it looks |
+| 2 | exception-name module qualification | `test.test_traceback.B.X:` where CPython wants `X:` |
+| ~37 | assorted small rendering/API | see the per-test log |
+
+So frame depth is the single largest bucket but **not a majority**: ~23 of 125.
+Roughly 20 more are reachable by small independent changes with no performance
+question at all (`__notes__`, `__eq__`, `_getframe`, `locals`, name
+qualification, `NoneType: None`).
+
+### 9.5 Recommendation
+
+**Do (1) `co_filename` first, as its own change.** No runtime cost, no risk to
+the fast path, unblocks `linecache` / `FrameSummary.line`, and it is a
+prerequisite for judging (2) — with a placeholder filename, correct frame depth
+still cannot match CPython's expected output.
+
+**Then the small independent set** (§9.4), which is cheap and needs no
+architectural decision.
+
+**Then frame depth, behind a codegen flag, default OFF, and measure on real
+workloads before flipping it.** §9.1 makes the cost knowable but not free, and
+the fraction of real functions currently in `#directMethod` (where the delta is
++14 ns rather than +10 ns) is not yet known — the flag is what makes that
+measurable instead of argued. Implementation hazards already discovered by the
+two backed-out attempts stand and must be designed for: broadening the catch
+re-raised inside generators ("exception already signalled"), and
+`AbstractException` cannot be named literally in every generated-code compile
+context (resolve it at runtime).
+
+**Open question deliberately left open**: whether a *single* runtime-resolved
+handler can serve both frame capture and the existing `PythonReturn` contract.
+If yes the cost is +14 ns and generators keep their current wrapper; if it needs
+the two-handler shape of §9.1 it is +24 ns, and that difference is large enough
+to change whether the flag should ever default on.
