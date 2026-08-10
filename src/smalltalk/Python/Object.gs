@@ -2673,6 +2673,18 @@ ___pyAttrLoad___: aSym
 			and: [(Python @env0:at: #builtins otherwise: nil)
 				@env0:ifNil: [false] ifNotNil: [:bc | self @env0:receiver @env0:isKindOf: bc]]])
 		ifTrue: [
+			"``str.__new__(cls, value)'' is the ALLOCATOR -- how a hand-written
+			str-subclass __new__ forwards to its base.  It lives CLASS-side, so
+			the CharacterCollection instance-method probe below never finds it and
+			the generic BoundMethod wrap took over, turning the call into a
+			CONSTRUCTION through cls: ``str.__new__(SomeStrEnum, v)'' ran the
+			enum's by-value lookup and raised ``<enum 'X'> has no members''.
+			Delegate to the concrete string class -- exactly what the equivalent
+			``builtins.str.__new__'' already answers, and what test_enum's
+			test_dir_on_sub_with_behavior_including_instance_dict_on_super and
+			test_multiple_mixin_with_common_data_type call."
+			aSym == #'__new__' ifTrue: [
+				^ Unicode7 @env1:___pyAttrLoad___: #'__new__'].
 			((CharacterCollection @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
 				or: [(CharacterCollection @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
 				or: [(CharacterCollection @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
