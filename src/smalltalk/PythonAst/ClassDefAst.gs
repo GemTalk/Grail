@@ -1532,6 +1532,32 @@ printSmalltalkRuntimeOn: aStream
 	transform the body into members.  Emitted BEFORE decorators, so the
 	metaclass runs first — mirroring Python's metaclass-then-decorator
 	order."
+	"CLOSURE CELLS, FIRST EMIT -- before the metaclass hook below.
+
+	A method compiled into this class can RUN during class construction, not
+	only afterwards: Enum's hook calls each member's __init__/__new__ while it
+	builds the members.  With the cells stored only after the hook, such a
+	method read a cell that did not exist yet --
+
+	    def outer():
+	        limit = 255
+	        class E(Enum):
+	            A = 1
+	            def __init__(self, v): self.lim = limit
+
+	raised ``free variable 'limit' referenced before assignment in enclosing
+	scope'' -- test_enum's test_raise_custom_error_on_creation and
+	test_init_exception, where the free variable is an exception CLASS the
+	member __init__ raises.  PyEnumTypes worked around the self-name case alone
+	by pre-storing ___cell_<Name>___ for super(); this fixes the general case.
+
+	Repeated after the decorator loop (see below), because the self-name cell
+	must end up holding the DECORATED class."
+	self
+		___emitClosureCellStoresOn: aStream
+		className: name
+		saved: savedCapturedNames
+		savedWrite: savedCapturedWriteNames.
 	aStream nextPutAll: name; nextPutAll: ' := '; nextPutAll: name;
 		nextPutAll: ' @env1:___pyClassDefined___: { '.
 	self classBodyAttributes
@@ -1589,74 +1615,17 @@ printSmalltalkRuntimeOn: aStream
 		aStream nextPutAll: ' value: { '; nextPutAll: name; nextPutAll: ' } value: nil.'; lf.
 	]
 	] ensure: [CallAst inDecoratorEmit: (savedDecoFlag == true)]] value.
-	"CLOSURE CELLS: store every enclosing-function local the class's
-	method bodies referenced (NameAst emitted ___classCell___ reads for
-	them) onto the class's per-class dynamic attrs.  Emitted AFTER the
-	decorator loop so the self-name cell holds the FINAL class object.
-	Captured BY REFERENCE: stored as a zero-arg block ``[cap]'' closing over
-	the enclosing method temp (Smalltalk blocks capture by reference), so a
-	value assigned to ``cap'' AFTER this class def is still seen when a method
-	body reads it (CPython closure-cell semantics -- test_list
-	test_equal_operator_modifying_operand / test_count_index_remove_crashes /
-	test_repr_mutate).  object>>___classCell___: evaluates the block on read."
-	(CallAst classCapturedNames notNil and: [CallAst classCapturedNames notEmpty])
-		ifTrue: [
-			CallAst classCapturedNames do: [:cap |
-				aStream
-					nextPutAll: name;
-					nextPutAll: ' @env1:___pyAttrStore___: #''___cell_';
-					nextPutAll: cap asString;
-					nextPutAll: '___'' put: ['.
-				"The store's VALUE is `cap` read in THIS classdef's enclosing
-				scope.  If that scope is a class METHOD where `cap` is itself a
-				free variable (an enclosing-function local reached past an
-				intervening class), the method cannot name the outer temp -- it
-				must read its OWN closure cell, and the enclosing class must
-				forward `cap` in turn.  Register `cap` on the enclosing class's
-				captured set (savedCapturedNames) so its own classdef emits the
-				next forward; the recursion terminates at the scope that binds
-				`cap` as a real temp, where the bare name is emitted.  Otherwise
-				`cap` is a reachable temp here (the single-level case): bare."
-				((self ___enclosingFunctionLocalBeyondClass___: cap asSymbol)
-					and: [savedCapturedNames notNil])
-					ifTrue: [
-						aStream
-							nextPutAll: 'self @env1:___classCell___: #''___cell_';
-							nextPutAll: cap asString;
-							nextPutAll: '___'''.
-						savedCapturedNames add: cap asSymbol]
-					ifFalse: [aStream nextPutAll: cap asString].
-				aStream nextPutAll: '].'; lf]].
-	"SETTER CELLS: for every enclosing-function local a method body ASSIGNS
-	(``nonlocal x; x = ...''), store a one-arg block that writes the binding
-	BY REFERENCE, so the mutation reaches the enclosing scope (a method
-	string-compiles with no lexical link to the outer temp, so it cannot
-	assign it directly -- test_dict test_str_nonstr's Key3.__eq__ doing
-	``nonlocal eq_count; eq_count += 1'').  Same enclosing-scope resolution as
-	the reader above: bare temp at the binding scope, else forward through the
-	enclosing method's own setter cell (registering on the enclosing class)."
-	(CallAst classCapturedWriteNames notNil and: [CallAst classCapturedWriteNames notEmpty])
-		ifTrue: [
-			CallAst classCapturedWriteNames do: [:cap |
-				aStream
-					nextPutAll: name;
-					nextPutAll: ' @env1:___pyAttrStore___: #''___cellSetter_';
-					nextPutAll: cap asString;
-					nextPutAll: '___'' put: [:___cellSetVal___ | '.
-				((self ___enclosingFunctionLocalBeyondClass___: cap asSymbol)
-					and: [savedCapturedWriteNames notNil])
-					ifTrue: [
-						aStream
-							nextPutAll: '(self @env1:___classCellSetter___: #''___cellSetter_';
-							nextPutAll: cap asString;
-							nextPutAll: '___'') value: ___cellSetVal___].';
-							lf.
-						savedCapturedWriteNames add: cap asSymbol]
-					ifFalse: [
-						aStream
-							nextPutAll: cap asString;
-							nextPutAll: ' := ___cellSetVal___].';
-							lf]]].
+	"CLOSURE CELLS (second emit).  See ___emitClosureCellStoresOn:className:saved:savedWrite:
+	-- the FIRST emit happens before the metaclass hook so a method that RUNS
+	during class construction can read its cells; this one repeats the stores
+	after the decorator loop so the self-name cell holds the FINAL, decorated
+	class object.  Idempotent: the same blocks, and the captured sets are
+	IdentitySets."
+	self
+		___emitClosureCellStoresOn: aStream
+		className: name
+		saved: savedCapturedNames
+		savedWrite: savedCapturedWriteNames.
 	CallAst classCapturedNames: savedCapturedNames.
 	CallAst classCapturedWriteNames: savedCapturedWriteNames.
 
@@ -2138,6 +2107,84 @@ ___allFunctionDefs___
 	a @staticmethod/@classmethod/@property __hash__ or __eq__ would be missed."
 
 	^ body body select: [:stmt | stmt isKindOf: FunctionDefAst]
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___emitClosureCellStoresOn: aStream className: clsName saved: savedCapturedNames savedWrite: savedCapturedWriteNames
+	"Emit the per-class closure-cell stores.  Factored out because it runs
+	TWICE per classdef: once before the metaclass hook, so a method that runs
+	DURING class construction can read its cells, and once after the decorator
+	loop, so the self-name cell holds the final decorated class.  Both call
+	sites are in printSmalltalkRuntimeOn:."
+
+	"READER CELLS: store every enclosing-function local the class's
+	method bodies referenced (NameAst emitted ___classCell___ reads for
+	them) onto the class's per-class dynamic attrs.
+	Captured BY REFERENCE: stored as a zero-arg block ``[cap]'' closing over
+	the enclosing method temp (Smalltalk blocks capture by reference), so a
+	value assigned to ``cap'' AFTER this class def is still seen when a method
+	body reads it (CPython closure-cell semantics -- test_list
+	test_equal_operator_modifying_operand / test_count_index_remove_crashes /
+	test_repr_mutate).  object>>___classCell___: evaluates the block on read."
+	(CallAst classCapturedNames notNil and: [CallAst classCapturedNames notEmpty])
+		ifTrue: [
+			CallAst classCapturedNames do: [:cap |
+				aStream
+					nextPutAll: clsName;
+					nextPutAll: ' @env1:___pyAttrStore___: #''___cell_';
+					nextPutAll: cap asString;
+					nextPutAll: '___'' put: ['.
+				"The store's VALUE is `cap` read in THIS classdef's enclosing
+				scope.  If that scope is a class METHOD where `cap` is itself a
+				free variable (an enclosing-function local reached past an
+				intervening class), the method cannot name the outer temp -- it
+				must read its OWN closure cell, and the enclosing class must
+				forward `cap` in turn.  Register `cap` on the enclosing class's
+				captured set (savedCapturedNames) so its own classdef emits the
+				next forward; the recursion terminates at the scope that binds
+				`cap` as a real temp, where the bare name is emitted.  Otherwise
+				`cap` is a reachable temp here (the single-level case): bare."
+				((self ___enclosingFunctionLocalBeyondClass___: cap asSymbol)
+					and: [savedCapturedNames notNil])
+					ifTrue: [
+						aStream
+							nextPutAll: 'self @env1:___classCell___: #''___cell_';
+							nextPutAll: cap asString;
+							nextPutAll: '___'''.
+						savedCapturedNames add: cap asSymbol]
+					ifFalse: [aStream nextPutAll: cap asString].
+				aStream nextPutAll: '].'; lf]].
+	"SETTER CELLS: for every enclosing-function local a method body ASSIGNS
+	(``nonlocal x; x = ...''), store a one-arg block that writes the binding
+	BY REFERENCE, so the mutation reaches the enclosing scope (a method
+	string-compiles with no lexical link to the outer temp, so it cannot
+	assign it directly -- test_dict test_str_nonstr's Key3.__eq__ doing
+	``nonlocal eq_count; eq_count += 1'').  Same enclosing-scope resolution as
+	the reader above: bare temp at the binding scope, else forward through the
+	enclosing method's own setter cell (registering on the enclosing class)."
+	(CallAst classCapturedWriteNames notNil and: [CallAst classCapturedWriteNames notEmpty])
+		ifTrue: [
+			CallAst classCapturedWriteNames do: [:cap |
+				aStream
+					nextPutAll: clsName;
+					nextPutAll: ' @env1:___pyAttrStore___: #''___cellSetter_';
+					nextPutAll: cap asString;
+					nextPutAll: '___'' put: [:___cellSetVal___ | '.
+				((self ___enclosingFunctionLocalBeyondClass___: cap asSymbol)
+					and: [savedCapturedWriteNames notNil])
+					ifTrue: [
+						aStream
+							nextPutAll: '(self @env1:___classCellSetter___: #''___cellSetter_';
+							nextPutAll: cap asString;
+							nextPutAll: '___'') value: ___cellSetVal___].';
+							lf.
+						savedCapturedWriteNames add: cap asSymbol]
+					ifFalse: [
+						aStream
+							nextPutAll: cap asString;
+							nextPutAll: ' := ___cellSetVal___].';
+							lf]]].
 %
 
 category: 'Grail-code generation'
