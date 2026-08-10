@@ -658,6 +658,65 @@ ___grailBuildMembers: cls names: attrNames
 				@env0:, ([prior __repr__ @env0:asString]
 					@env0:on: AbstractException do: [:e | prior @env0:printString])] ]
 		@env0:value.
+	"auto()-ordering validation (CPython _EnumDict.__setitem__): a class-body
+	``def _generate_next_value_'' must come BEFORE any member that needs it.
+
+	    class Color(Enum):
+	        red = auto()
+	        ...
+	        def _generate_next_value_(name, start, count, last): ...
+
+	is a TypeError (test_auto_order), because CPython resolves each auto() AS
+	THE BODY EXECUTES and would have numbered red with the default rule before
+	the generator existed.  Grail resolves in a single later pass, so it
+	silently applied the generator to every member -- the definition read as
+	working code that quietly disagreed with CPython on all three values.
+
+	Only a member that ACTUALLY needed generating counts, which is what keeps
+	test_auto_order_wierd legal:
+
+	    weird_auto = auto(); weird_auto.value = 'pathological case'
+	    class Color2(Enum):
+	        red = weird_auto
+	        def _generate_next_value_(...): ...
+	        blue = auto()
+
+	CPython sets _auto_called only when it has to CALL the generator, and
+	red's value was supplied outside the body.  The marker carries that
+	distinction already: a preset auto() answers ``value'', a fresh one raises
+	-- the same probe the resolution loop below uses.
+
+	___classBodyOrder___ is what makes the position visible; it records defs
+	and assignments alike, in source order (see ClassDefAst)."
+	[ | order gnvIdx |
+	order := (cls @env0:class @env0:whichClassIncludesSelector:
+		#'___classBodyOrder___' environmentId: 1) @env0:isNil
+			ifTrue: [nil]
+			ifFalse: [cls @env0:perform: #'___classBodyOrder___' env: 1].
+	gnvIdx := nil.
+	order @env0:isNil ifFalse: [
+		1 @env0:to: order @env0:size do: [:i |
+			((order @env0:at: i) @env0:asString @env0:= '_generate_next_value_')
+				ifTrue: [gnvIdx @env0:isNil ifTrue: [gnvIdx := i]]]].
+	gnvIdx @env0:isNil ifFalse: [
+		1 @env0:to: gnvIdx @env0:- 1 do: [:i | | nameSym raw hasAcc |
+			nameSym := order @env0:at: i.
+			(allNames @env0:includes: nameSym) ifTrue: [
+				hasAcc := (cls @env0:class @env0:whichClassIncludesSelector:
+					(nameSym @env0:asString @env0:, ':') @env0:asSymbol
+					environmentId: 1) notNil.
+				raw := hasAcc
+					ifTrue: [cls @env0:perform: nameSym env: 1]
+					ifFalse: [dynHolder @env0:isNil
+						ifTrue: [nil]
+						ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym]].
+				((raw isKindOf: GrailEnumAuto)
+					and: [([raw ___pyAttrLoad___: #'value'. true]
+						@env0:on: AbstractException do: [:ex | false]) @env0:not])
+					ifTrue: [
+						TypeError ___signal___:
+							'_generate_next_value_ must be defined before members']]]] ]
+		@env0:value.
 	byValue := KeyValueDictionary @env0:new.
 	byName := KeyValueDictionary @env0:new.
 	members := OrderedCollection @env0:new.
@@ -983,13 +1042,30 @@ ___grailBuildMembers: cls names: attrNames
 								@env0:on: AbstractException do: [:e | nil].
 									v @env0:isNil
 										ifFalse: [memberValue := v]
-										ifTrue: [ | mt |
+										ifTrue: [ | mt built ok |
 											mt := Enum ___grailMemberTypeFor: cls.
-											memberValue := (mt @env0:isNil or: [mt == object])
-												ifTrue: [rawValue]
-												ifFalse: [Enum
-													___grailConstructMemberValue: mt
-													args: rawValue]]]
+											(mt @env0:isNil or: [mt == object])
+												ifTrue: [memberValue := rawValue]
+												ifFalse: [
+													"STRICT here, unlike ___grailCoerceMemberValue:'s
+													best-effort construction.  CPython wraps exactly this
+													call and re-raises as ``_value_ not set in __new__'',
+													because a __new__ that neither sets _value_ nor gives
+													member_type usable args has left the member with no
+													value at all -- keeping the raw class-body tuple would
+													paper over a broken definition
+													(test_missing_value_error)."
+													ok := true.
+													built := [Enum
+														___grailConstructMemberValueStrict: mt
+														args: rawValue]
+														@env0:on: AbstractException
+														do: [:ex | ok := false. nil].
+													ok
+														ifTrue: [memberValue := built]
+														ifFalse: [
+															TypeError ___signal___:
+																'_value_ not set in __new__, unable to create it']]]]
 								ifFalse: [
 									"For a str-storage-rooted enum (``class C(str, Enum)'')
 									the member IS a string: give it CONTENT str(value) so
@@ -2078,6 +2154,26 @@ ___grailConstructMemberValue: memberType args: rawValue
 	^ [memberType @env0:perform: #'value:value:' env: 1
 		withArguments: { args. KeyValueDictionary @env0:new }]
 		@env0:on: AbstractException do: [:e | rawValue]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailConstructMemberValueStrict: memberType args: rawValue
+	"member_type(*args), letting a failure PROPAGATE.
+
+	___grailConstructMemberValue:args: keeps the raw class-body value when the
+	type cannot accept it -- right for a coercion that is only refining an
+	already-usable value.  The __new__ path needs the opposite: there the member
+	has NO value yet, so a failure means the definition is broken and CPython
+	reports it as ``_value_ not set in __new__''."
+
+	| tupleClass args |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	args := (rawValue isKindOf: tupleClass)
+		ifTrue: [rawValue @env0:asArray]
+		ifFalse: [Array @env0:with: rawValue].
+	^ memberType @env0:perform: #'value:value:' env: 1
+		withArguments: { args. KeyValueDictionary @env0:new }
 %
 
 category: 'Grail-Enum Metaclass'
