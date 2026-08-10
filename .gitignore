@@ -10,6 +10,7 @@ pyperf*
 .claude/worktrees/
 .DS_Store
 twilio_env.py
+airline_routes.json
 
 
 # Build artifacts
