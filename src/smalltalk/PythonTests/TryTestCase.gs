@@ -256,3 +256,37 @@ except TypeError as e:
     msg = str(e)
 msg') equals: 'catching classes that do not inherit from BaseException is not allowed'.
 %
+
+category: 'Grail-Tests'
+method: TryTestCase
+testExceptTargetNamedUnderscore
+	"``except E as _'' failed to COMPILE: a bare ``_'' is not an identifier
+	in GemStone Smalltalk -- it lexes as the legacy assignment operator
+	(``x _ 5'' assigns) -- so the emitted temporaries read
+	``| ___curPos___ _ e |'' and the whole enclosing function was rejected,
+	surfacing as ``NameError: Grail could not compile this method''.  The
+	parser renames it to ___unused___, as the import-alias and assignment
+	sites already did.  test.test_traceback uses this shape throughout
+	(``except ZeroDivisionError as _: e = _'')."
+
+	self assert: (self eval: 'def f():
+    try:
+        1/0
+    except ZeroDivisionError as _:
+        e = _
+    return type(e).__name__
+f()') equals: 'ZeroDivisionError'.
+
+	"Rebindable, like any other handler name."
+	self assert: (self eval: 'def g():
+    try:
+        raise KeyError("k")
+    except KeyError as _:
+        first = str(_)
+    try:
+        raise IndexError("i")
+    except IndexError as _:
+        second = str(_)
+    return first + "," + second
+g()') equals: 'k,i'.
+%

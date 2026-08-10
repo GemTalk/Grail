@@ -2802,6 +2802,15 @@ parseTry
 			excType := self parseExpression.
 			(self matchKeyword: 'as') ifTrue: [
 				excName := self advance value asSymbol.
+				"``except E as _'' must track the parse-time rename of ``_''
+				that NameAst and the import-alias sites (parseFromImportName,
+				parseDottedAsName) already apply: a BARE ``_'' is not an
+				identifier in GemStone Smalltalk at all -- it lexes as the
+				legacy assignment operator (``x _ 5'' assigns) -- so emitting
+				it as a method temp produced ``| ___curPos___ _ e |'' and the
+				whole function failed to compile.  Underscores WITHIN an
+				identifier are fine, which is what makes ___unused___ legal."
+				excName == #'_' ifTrue: [excName := #'___unused___'].
 				"Bind the except name into the enclosing scope (module body
 				or function), so a module-level ``except X as e'' records e
 				as a module variable rather than an undeclared name."
