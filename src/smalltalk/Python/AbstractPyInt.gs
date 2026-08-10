@@ -82,9 +82,24 @@ category: 'Grail-Accessors'
 method: AbstractPyInt
 value
 	"The underlying SmallInteger.  Read by the numeric protocol below
-	and by the CPython shim (PyLong_As* -> __index__) at the C boundary."
+	and by the CPython shim (PyLong_As* -> __index__) at the C boundary.
 
-	^ self dynamicInstVarAt: #value
+	Unwrapped to a PLAIN Integer, because the slot can legitimately hold
+	another wrapper.  CPython's EnumType.__new__ sets a member's canonical
+	value to member_type(*args), and for a user int subclass that IS an
+	int-subclass instance -- Foo.TEST._value_ is MyInt(1), not 1
+	(test_multiple_mixin_inherited).  Every reader here wants the true
+	integer: _generality coercion, truncated/asInteger, __index__'s PEP 357
+	contract, __int__ (whose caller rejects a non-int -- ``__int__ returned
+	non-int (type NamedInt)''), and the C shim.  A one-level read handed them
+	the wrapper instead."
+
+	| v |
+	v := self dynamicInstVarAt: #value.
+	[(v @env0:isKindOf: AbstractPyInt)
+		and: [(v @env0:dynamicInstVarAt: #value) @env0:notNil]] whileTrue: [
+			v := v @env0:dynamicInstVarAt: #value].
+	^ v
 %
 
 ! ------------------- Numeric coercion protocol (env 0)
