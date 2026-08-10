@@ -569,11 +569,48 @@ ___emitModuleScopeStoreOf___: aNameSymbol from: sourceExpr on: aStream
 				nextPutAll: sourceExpr;
 				nextPutAll: ').'.
 			^ self].
+	"Same problem one scope in: a class-body ``with ... as x'' / ``except ...
+	as e'' has no temp to bind either, because ClassDefAst emits the statement
+	straight into the class-build code.  Route it to the per-class definitional
+	store, which is also where NameAst reads it from (ClassDefAst >>
+	___classBodyConditionalNames___ lists both forms)."
+	self ___inClassBodyRuntimeScope___ ifTrue: [
+		aStream
+			nextPutAll: CallAst classBodyRuntimeClass;
+			nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+			nextPutAll: sym asString;
+			nextPutAll: ''' put: (';
+			nextPutAll: sourceExpr;
+			nextPutAll: ').'.
+		^ self].
 	aStream
 		nextPutAll: sym asString;
 		nextPutAll: ' := ';
 		nextPutAll: sourceExpr;
 		nextPut: $.
+%
+
+category: 'Grail-Class Body'
+method: AbstractNode
+___inClassBodyRuntimeScope___
+	"True while ClassDefAst is emitting a class-body ``try'' / ``for'' /
+	``while'' / ``with'' verbatim (CallAst >> classBodyRuntimeClass is set)
+	AND this node sits directly in that class body rather than inside a def
+	nested within it.
+
+	The flag stays set for the whole statement emit, INCLUDING any nested def
+	or class, so this scope test is what keeps the class-attribute routing off
+	genuine locals: walking out, the first FunctionDefAst-or-ClassDefAst
+	reached must be the ClassDefAst."
+
+	| node |
+	CallAst classBodyRuntimeClass ifNil: [^ false].
+	node := self parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: FunctionDefAst) ifTrue: [^ false].
+		(node isKindOf: ClassDefAst) ifTrue: [^ true].
+		node := node parent].
+	^ false
 %
 
 

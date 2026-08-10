@@ -730,7 +730,9 @@ printSmalltalkRuntimeOn: aStream
 	TestPartialMethod.A).  The nested emit saves/restores the CallAst
 	compile context itself."
 	((body body anySatisfy: [:stmt | stmt isKindOf: ClassDefAst])
-		or: [body body anySatisfy: [:stmt | stmt isKindOf: IfAst]]) ifTrue: [
+		or: [body body anySatisfy: [:stmt |
+			(stmt isKindOf: IfAst)
+				or: [self ___isClassBodyRuntimeStatement___: stmt]]]) ifTrue: [
 		"The per-class dynamic store backs the nested-class attribute
 		AND the class-body ``if'' branch stores (emitted in the attr
 		section below);
@@ -879,13 +881,36 @@ printSmalltalkRuntimeOn: aStream
 		NAME = value assignments (and nested ifs) are honored; other
 		statement kinds inside a class-body if are still dropped."
 		body body doWithIndex: [:stmt :pos |
-			(stmt isKindOf: IfAst) ifTrue: [
-				| bound |
+			| bound |
+			bound := nil.
+			((stmt isKindOf: IfAst)
+				or: [self ___isClassBodyRuntimeStatement___: stmt]) ifTrue: [
 				bound := IdentitySet new.
 				firstBinding keysAndValuesDo: [:nm :p |
-					p < pos ifTrue: [bound add: nm]].
+					p < pos ifTrue: [bound add: nm]]].
+			(stmt isKindOf: IfAst) ifTrue: [
 				CallAst classBodyBoundNames: bound.
-				self emitClassBodyIf: stmt on: aStream]].
+				self emitClassBodyIf: stmt on: aStream].
+			"``try'' / ``for'' / ``while'' / ``with'' at class-body level.
+			CPython runs these at class-definition time like any other body
+			statement, but Grail compiles the body STRUCTURALLY and these
+			carried no classBodyAttributePairs, so the whole statement -- and
+			every binding in it -- was silently DROPPED: ``try: x = 1'' left
+			the class with no ``x'' at all, and no error anywhere.
+
+			Emit the statement through its OWN printSmalltalkOn:, so try/
+			except/finally, loops and comprehensions keep their existing
+			codegen, and flip on classBodyRuntimeClass for the duration so
+			AssignAst routes each bare-NAME binding to the per-class
+			definitional store instead of an undeclared block temp."
+			(self ___isClassBodyRuntimeStatement___: stmt) ifTrue: [
+				| savedRuntimeClass |
+				CallAst classBodyBoundNames: bound.
+				savedRuntimeClass := CallAst classBodyRuntimeClass.
+				CallAst classBodyRuntimeClass: name.
+				[stmt printSmalltalkOn: aStream]
+					ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
+				aStream lf]].
 		"A class-body statement whose target is an ATTRIBUTE or SUBSCRIPT
 		(``cls.foo = property()'', ``Inner.x = 1'') -- not a bare NAME, so it is
 		not a class attribute and was previously DROPPED.  CPython runs it at
@@ -2250,6 +2275,24 @@ ___isClassBodyAttributeAssign___: stmt
 
 category: 'Grail-Class Compilation'
 method: ClassDefAst
+___isClassBodyRuntimeStatement___: aStatement
+	"True for a class-body statement that carries no classBodyAttributePairs
+	of its own but that CPython still EXECUTES at class-definition time, so
+	whatever it binds becomes a class attribute.
+
+	``if'' is deliberately NOT here: it has its own emit
+	(emitClassBodyIf:on:), which only honours the binding forms it knows.
+	These four are emitted verbatim instead -- re-deriving try/except/finally
+	and loop codegen would duplicate it."
+
+	^ (aStatement isKindOf: TryAst)
+		or: [(aStatement isKindOf: ForAst)
+		or: [(aStatement isKindOf: WhileAst)
+		or: [aStatement isKindOf: WithAst]]]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
 emitClassBodyIf: ifStmt on: aStream
 	"Emit a class-body ``if'' as a runtime conditional over per-class
 	dynamic-attr stores (see the call site in the attr-init section)."
@@ -2284,6 +2327,16 @@ emitClassBodyIfBranch: aSuite on: aStream
 	aSuite body do: [:stmt |
 		(stmt isKindOf: IfAst) ifTrue: [
 			self emitClassBodyIf: stmt on: aStream].
+		"A try/for/while/with INSIDE an if branch: same verbatim emit the
+		top-level ones get, so ``if flag: try: x = 1'' binds x like every
+		other class-body path rather than silently dropping the statement."
+		(self ___isClassBodyRuntimeStatement___: stmt) ifTrue: [
+			| savedRuntimeClass |
+			savedRuntimeClass := CallAst classBodyRuntimeClass.
+			CallAst classBodyRuntimeClass: name.
+			[stmt printSmalltalkOn: aStream]
+				ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
+			aStream lf].
 		(stmt isKindOf: FunctionDefAst) ifTrue: [
 			self emitClassBodyIfDef: stmt on: aStream].
 		((stmt isKindOf: AssignAst)
@@ -2354,34 +2407,62 @@ category: 'Grail-Class Compilation'
 method: ClassDefAst
 ___classBodyConditionalNames___
 	"Every name bound inside a top-level class-body ``if'' (either branch,
-	recursively).  NameAst needs the set because such a name is usually in
+	recursively) or inside a class-body ``try'' / ``for'' / ``while'' /
+	``with''.  NameAst needs the set because such a name is usually in
 	the per-class dynamic attr store rather than behind an accessor, and
 	without it the read falls straight through to module scope.  A name that
 	is ALSO bound unconditionally does have an accessor, which is why the
 	read there tries both before giving up -- see NameAst's conditional
-	sibling branch."
+	sibling branch.
 
-	| names collect |
+	All of these are CONDITIONAL in the sense that matters here: whether the
+	binding ran is a runtime fact (the branch may not be taken, the loop may
+	not iterate, the try may raise before reaching the assignment)."
+
+	| names collect collectStmt |
 	names := IdentitySet new.
 	collect := nil.
-	collect := [:suite |
-		(suite notNil and: [suite body notNil]) ifTrue: [
-			suite body do: [:stmt |
-				(stmt isKindOf: IfAst) ifTrue: [
-					collect value: stmt body.
-					collect value: stmt orelse].
-				(stmt isKindOf: FunctionDefAst) ifTrue: [
-					names add: stmt name asSymbol].
-				((stmt isKindOf: AssignAst)
-					and: [stmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
-					stmt targets do: [:t | names add: t id asSymbol]].
-				((stmt isKindOf: AnnAssignAst)
-					and: [(stmt target isKindOf: NameAst) and: [stmt value notNil]]) ifTrue: [
-					names add: stmt target id asSymbol]]]].
-	body body do: [:stmt |
+	collectStmt := nil.
+	collectStmt := [:stmt |
 		(stmt isKindOf: IfAst) ifTrue: [
 			collect value: stmt body.
-			collect value: stmt orelse]].
+			collect value: stmt orelse].
+		"A class-body loop binds its TARGET as well as whatever its body
+		assigns -- ``for i in ...:'' leaves ``i'' on the class."
+		(stmt isKindOf: ForAst) ifTrue: [
+			(stmt target isKindOf: NameAst) ifTrue: [
+				names add: stmt target id asSymbol].
+			collect value: stmt body.
+			collect value: stmt orelse].
+		(stmt isKindOf: WhileAst) ifTrue: [
+			collect value: stmt body.
+			collect value: stmt orelse].
+		(stmt isKindOf: WithAst) ifTrue: [
+			collect value: stmt body].
+		(stmt isKindOf: TryAst) ifTrue: [
+			collect value: stmt body.
+			collect value: stmt orelse.
+			collect value: stmt finalbody.
+			stmt handlers ifNotNil: [:hs |
+				hs do: [:h |
+					"``except E as e'' binds e for the handler's extent."
+					h name ifNotNil: [:n | names add: n asSymbol].
+					collect value: h body]]].
+		(stmt isKindOf: FunctionDefAst) ifTrue: [
+			names add: stmt name asSymbol].
+		((stmt isKindOf: AssignAst)
+			and: [stmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
+			stmt targets do: [:t | names add: t id asSymbol]].
+		((stmt isKindOf: AnnAssignAst)
+			and: [(stmt target isKindOf: NameAst) and: [stmt value notNil]]) ifTrue: [
+			names add: stmt target id asSymbol]].
+	collect := [:suite |
+		(suite notNil and: [suite body notNil]) ifTrue: [
+			suite body do: [:stmt | collectStmt value: stmt]]].
+	body body do: [:stmt |
+		((stmt isKindOf: IfAst)
+			or: [self ___isClassBodyRuntimeStatement___: stmt]) ifTrue: [
+			collectStmt value: stmt]].
 	^ names
 %
 

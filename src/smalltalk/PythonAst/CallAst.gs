@@ -1712,6 +1712,35 @@ classBodyConditionalNames: aSetOrNil
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classBodyRuntimeClass
+	"The class temp NAME (a String) while ClassDefAst emits a class-body
+	COMPOUND statement -- ``try'' / ``for'' / ``while'' / ``with'' -- verbatim
+	through the statement's own printSmalltalkOn:, or nil outside that emit.
+
+	Such a statement runs at class-DEFINITION time, so every name it binds is
+	a class attribute; but it is emitted as ordinary Smalltalk, where a bare
+	``x := v'' would bind an undeclared block temp and the binding would be
+	lost the moment the statement finished.  The name says which class the
+	store belongs to, so AssignAst / AnnAssignAst can route a bare-NAME target
+	to ___classBodyDefinitionalStore___ instead -- the same runtime
+	accessor-vs-holder dispatch a class-body ``if'' branch uses, and for the
+	same reason: whether the binding ran is a runtime fact.
+
+	Set only around the compound statement's own emit and restored after, so
+	it never leaks into a nested def or class body, where ``x := v'' really is
+	a local."
+
+	^ self ___compileContext___ at: #'classBodyRuntimeClass' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classBodyRuntimeClass: aStringOrNil
+	self ___compileContext___ at: #'classBodyRuntimeClass' put: aStringOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 inClassBodyValueEmit
 	"Boolean — true while ClassDefAst is emitting the class
 	attribute value expressions, false otherwise (including while

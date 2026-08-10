@@ -142,6 +142,16 @@ printSmalltalkOn: aStream
 				aStream nextPut: $..
 				^ self
 			].
+		"A bare NAME bound by a class-body ``try'' / ``for'' / ``while'' /
+		``with'' (emitted verbatim by ClassDefAst).  CPython runs the statement
+		at class-definition time, so the binding is a CLASS ATTRIBUTE; a plain
+		``x := v'' here would bind an undeclared block temp and vanish with the
+		statement.  Route it to the same definitional store a class-body ``if''
+		branch uses."
+		((tgt isKindOf: NameAst) and: [self isClassBodyRuntimeStoreTarget: tgt])
+			ifTrue: [
+				^ self printSmalltalkClassBodyRuntimeStoreOn: aStream target: tgt
+			].
 		tgt printSmalltalkOn: aStream.
 		aStream nextPutAll: ' := '.
 		value printSmalltalkOn: aStream.
@@ -212,8 +222,20 @@ printSmalltalkOn: aStream
 							nextPutAll: ''' put: ___chain___. '
 					]
 					ifFalse: [
-						eachTgt printSmalltalkOn: aStream.
-						aStream nextPutAll: ' := ___chain___. '
+						"Chained twin of the single-target class-body runtime
+						store (``a = b = expr'' inside a class-body try/for/
+						while), from the shared chain temp."
+						(self isClassBodyRuntimeStoreTarget: eachTgt)
+							ifTrue: [
+								aStream nextPutAll: CallAst classBodyRuntimeClass;
+									nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+									nextPutAll: eachTgt id;
+									nextPutAll: ''' put: ___chain___. '
+							]
+							ifFalse: [
+								eachTgt printSmalltalkOn: aStream.
+								aStream nextPutAll: ' := ___chain___. '
+							]
 					]
 				]
 			]
@@ -246,6 +268,32 @@ isModuleScopeStoreTarget: aNameAst
 	___declaredInEnclosingFunction___: variables walk."
 	(aNameAst ___pythonLocalInEnclosingFunctions___: aNameAst id) ifTrue: [^ false].
 	^ true
+%
+
+category: 'Grail-Class Body'
+method: AssignAst
+isClassBodyRuntimeStoreTarget: aNameAst
+	"True when this bare-NAME target is bound directly by a class-body
+	COMPOUND statement that ClassDefAst is emitting verbatim (``try'' /
+	``for'' / ``while'' / ``with'' -- see CallAst >> classBodyRuntimeClass).
+	Such a binding is a class attribute, not a block temp."
+
+	(aNameAst isKindOf: NameAst) ifFalse: [^ false].
+	^ self ___inClassBodyRuntimeScope___
+%
+
+category: 'Grail-Class Body'
+method: AssignAst
+printSmalltalkClassBodyRuntimeStoreOn: aStream target: tgt
+	"Emit ``<Cls> ___classBodyDefinitionalStore___: #name put: value'' for a
+	name bound by a class-body try/for/while/with."
+
+	aStream nextPutAll: CallAst classBodyRuntimeClass;
+		nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+		nextPutAll: tgt id;
+		nextPutAll: ''' put: '.
+	value printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPut: $.
 %
 
 category: 'Grail-other'
