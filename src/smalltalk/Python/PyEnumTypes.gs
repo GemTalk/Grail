@@ -123,6 +123,46 @@ value
 	^ value
 %
 
+expectvalue /Class
+doit
+Object subclass: 'GrailEnumMember'
+  instVarNames: #( value )
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+GrailEnumMember comment: 'Marker returned by enum.member(x) (and the @member decorator): wraps x so ___grailBuildMembers: FORCES x to be a member even when the ordinary rules would skip it -- a nested class, or a descriptor, which CPython _EnumDict would otherwise leave a plain class attribute (test_enum test_nested_classes_in_enum_with_member).  The exact mirror of GrailEnumNonmember.'
+%
+
+set compile_env: 0
+
+category: 'Grail-Member'
+classmethod: GrailEnumMember
+on: aValue
+	"Wrap aValue as a forced-member marker."
+
+	^ self new setValue: aValue; yourself
+%
+
+category: 'Grail-Member'
+method: GrailEnumMember
+setValue: aValue
+	value := aValue
+%
+
+category: 'Grail-Member'
+method: GrailEnumMember
+value
+	"The wrapped value that becomes the member's value."
+
+	^ value
+%
+
 set compile_env: 0
 
 expectvalue /Class
@@ -164,7 +204,7 @@ AbstractPyStr subclass: 'StrEnum'
 
 run
 Enum comment: 'Python enum base — see category comment in PyEnumTypes.gs.'.
-#( #Enum #Flag #IntEnum #IntFlag #StrEnum #GrailEnumAuto #GrailEnumNonmember ) do: [:nm | (Python at: nm) category: 'Grail-Modules'].
+#( #Enum #Flag #IntEnum #IntFlag #StrEnum #GrailEnumAuto #GrailEnumNonmember #GrailEnumMember ) do: [:nm | (Python at: nm) category: 'Grail-Modules'].
 %
 
 ! ------------------- Remove existing behavior (env 0 + env 1)
@@ -443,7 +483,7 @@ ___grailBuildMembers: cls names: attrNames
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members allOrdered lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass gnvStaticClass genValues foreignMixin |
+	| byValue byName members allOrdered lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass gnvStaticClass genValues foreignMixin forcedMembers |
 	"CPython _check_for_existing_members_: adding members to -- or otherwise
 	subclassing -- an enum that already HAS members is illegal (that enum is
 	final).  Raise before building anything (test_extending / test_extending2);
@@ -490,9 +530,15 @@ ___grailBuildMembers: cls names: attrNames
 	(f = nonmember(float)) and the decorator form (@nonmember class Inner) land
 	here as a NAME bound to a GrailEnumNonmember marker.  Done before the
 	reserved-name / member passes so the name is invisible to them."
+	"enum.member(x) is the exact mirror: x is deliberately a member EVEN WHERE
+	the ordinary rules would skip the name -- a nested class, or a descriptor
+	the _EnumDict rule below would leave a plain class attribute.  Unwrap it the
+	same way and record the name as FORCED so the later passes leave it alone
+	(test_enum test_nested_classes_in_enum_with_member)."
+	forcedMembers := IdentitySet @env0:new.
 	[ | dropped |
 	dropped := OrderedCollection @env0:new.
-	allNames @env0:do: [:nameSym | | raw hasAcc |
+	allNames @env0:do: [:nameSym | | raw hasAcc unwrap |
 		hasAcc := (cls @env0:class @env0:whichClassIncludesSelector:
 			(nameSym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1) notNil.
 		raw := hasAcc
@@ -500,14 +546,21 @@ ___grailBuildMembers: cls names: attrNames
 			ifFalse: [dynHolder @env0:isNil
 				ifTrue: [nil]
 				ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym]].
-		(raw isKindOf: GrailEnumNonmember) ifTrue: [ | nmVal |
-			nmVal := raw @env0:value.
+		"Write the unwrapped value back over the marker, wherever the marker was
+		stored.  Shared by both markers -- they differ only in what happens to
+		the NAME afterwards."
+		unwrap := [:rawVal |
 			hasAcc
 				ifTrue: [cls @env0:perform: (nameSym @env0:asString @env0:, ':') @env0:asSymbol
-					env: 1 withArguments: (Array @env0:with: nmVal)]
+					env: 1 withArguments: (Array @env0:with: rawVal)]
 				ifFalse: [dynHolder @env0:isNil
-					ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym put: nmVal]].
-			dropped @env0:add: nameSym]].
+					ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym put: rawVal]]].
+		(raw isKindOf: GrailEnumNonmember) ifTrue: [
+			unwrap @env0:value: raw @env0:value.
+			dropped @env0:add: nameSym].
+		(raw isKindOf: GrailEnumMember) ifTrue: [
+			unwrap @env0:value: raw @env0:value.
+			forcedMembers @env0:add: nameSym]].
 	dropped @env0:isEmpty ifFalse: [
 		allNames := allNames @env0:reject: [:n | dropped @env0:includes: n]] ] @env0:value.
 	"CPython _EnumDict.__setitem__: a class-body name whose value is a DESCRIPTOR
@@ -522,7 +575,8 @@ ___grailBuildMembers: cls names: attrNames
 	dropped := OrderedCollection @env0:new.
 	allNames @env0:do: [:nameSym | | raw hasAcc ns |
 		ns := nameSym @env0:asString.
-		(((ns @env0:size @env0:> 0) and: [(ns @env0:at: 1) @env0:= $_]) not) ifTrue: [
+		((((ns @env0:size @env0:> 0) and: [(ns @env0:at: 1) @env0:= $_]) not)
+			and: [(forcedMembers @env0:includes: nameSym) not]) ifTrue: [
 			hasAcc := (cls @env0:class @env0:whichClassIncludesSelector:
 				(ns @env0:, ':') @env0:asSymbol environmentId: 1) notNil.
 			raw := hasAcc

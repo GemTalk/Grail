@@ -665,6 +665,7 @@ run
 	at: #'ClassNewAttributeTestCase' put: nil;
 	at: #'ReservedNameClassAttrTestCase' put: nil;
 	at: #'EnumDescriptorMemberTestCase' put: nil;
+	at: #'EnumMemberMarkerTestCase' put: nil;
 	at: #'EnumGlobalInjectTestCase' put: nil;
 	at: #'ExceptionGroupTestCase' put: nil;
 	at: #'ExceptionTestCase' put: nil;
@@ -1424,6 +1425,7 @@ input src/smalltalk/PythonTests/VarargsNamingTestCase.gs
 input src/smalltalk/PythonTests/YieldFromTestCase.gs
 input src/smalltalk/PythonTests/EnumGlobalInjectTestCase.gs
 input src/smalltalk/PythonTests/EnumDescriptorMemberTestCase.gs
+input src/smalltalk/PythonTests/EnumMemberMarkerTestCase.gs
 input src/smalltalk/PythonTests/ClassNewAttributeTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameClassAttrTestCase.gs
 input src/smalltalk/PythonTests/MakecodesPatternTestCase.gs

@@ -823,13 +823,27 @@ printSmalltalkRuntimeOn: aStream
 			"Record the nested class's DOTTED __qualname__ (``Outer.Inner'') from
 			the enclosing class's own qualname, so CPython-style messages (``property
 			of 'Outer.cls' object ...'') report the lexical nesting Grail does not
-			otherwise track."
-			aStream nextPutAll: nested name asString;
+			otherwise track.
+
+			Guarded on the name still being a CLASS.  This runs after the nested
+			emit, which includes that class's DECORATORS -- and a decorator may
+			return something that is not a class at all.  ``@member'' / ``@nonmember''
+			on a nested enum class return a marker object, and the unguarded store
+			reached object>>___classHolderAttrStore___, whose ``self dynInstVars''
+			raised a raw Smalltalk doesNotUnderstand that escaped as an ST error
+			rather than any Python exception (test_enum's
+			test_nested_classes_in_enum_with_member / _with_nonmember).  A
+			qualname on the marker would mean nothing anyway; the wrapped class
+			keeps the one stamped inside its own emit."
+			aStream nextPutAll: '(';
+				nextPutAll: nested name asString;
+				nextPutAll: ' @env1:___respondsTo___: #''dynInstVars'') ifTrue: [';
+				nextPutAll: nested name asString;
 				nextPutAll: ' @env1:___classHolderAttrStore___: #''___qualname___'' put: (';
 				nextPutAll: name;
 				nextPutAll: ' @env1:__qualname__ @env0:, ''.';
 				nextPutAll: nested name asString;
-				nextPutAll: ''').'; lf.
+				nextPutAll: ''')].'; lf.
 			aStream nextPutAll: ' ] value.'; lf.
 	].
 	"Class-side ``___methodCodeTable___'' (method name -> PyCode), the __code__
