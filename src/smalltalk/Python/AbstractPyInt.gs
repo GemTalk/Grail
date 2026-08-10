@@ -309,6 +309,7 @@ hash
 
 ! ------------------- DNU forwarder (env-0, so env-1 misses route here)
 
+
 category: 'Grail-Python Protocol'
 method: AbstractPyInt
 doesNotUnderstand: aSelector args: anArray envId: envId
@@ -338,6 +339,39 @@ cantPerform: aSymbol withArguments: anArray env: envId
 %
 
 set compile_env: 1
+
+category: 'Grail-Attributes'
+method: AbstractPyInt
+___pyAttrLoad___: aSym
+	"Let an ATTRIBUTE LOAD reach the wrapped value's method suite.
+
+	``class F(int)'' cannot be a real subclass -- the kernel class is
+	sealed -- so Class.gs substitutes this wrapper, which forwards unknown
+	env-1 SENDS to the wrapped value via doesNotUnderstand:.  A LOAD had no
+	such fallback and raised AttributeError first, so the send that would
+	have forwarded cleanly never happened:
+
+	    F(0.5).is_integer()   AttributeError: F object has no attribute ...
+
+	even though every one of those methods exists on the wrapped value.
+	Answer a BoundMethod on the WRAPPED VALUE, which is what actually
+	implements these; binding it to self instead left BoundMethod unable
+	to resolve an arity for a selector its receiver does not define.
+	Safe for this method suite -- is_integer / as_integer_ratio / hex /
+	bit_length and friends read the number, none of them answer self.
+
+	Only reached after the normal lookup has failed, and only when the
+	value really understands the selector -- a genuine miss still raises."
+
+	^ [super ___pyAttrLoad___: aSym]
+		@env0:on: AttributeError
+		do: [:ex |
+			((self @env0:value @env0:class
+				@env0:whichClassIncludesSelector: aSym environmentId: 1) @env0:notNil)
+				ifTrue: [ex @env0:return: (BoundMethod receiver: self @env0:value selector: aSym)]
+				ifFalse: [ex @env0:pass]]
+%
+
 
 ! ------------------- Constructor (allocator protocol)
 

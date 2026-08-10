@@ -687,6 +687,7 @@ day; the numbers below are per landing, measured by running that one module.
 | #296 | `os.stat` of a missing file raises `OSError` | 39 | see below |
 | — | PEP 678 `__notes__` rendering | 42 | §9.6's "3, small, independent" |
 | — | `TracebackException.__eq__` | 45 | §9.6's "8" — 3 of them; the rest need frames |
+| — | module `__loader__` + `extract_tb` on any traceback | 51 | see below |
 
 Three things learned that the plan did not anticipate:
 
@@ -719,15 +720,29 @@ Three things learned that the plan did not anticipate:
   `Exception(123).__str__()` is `'123'`, but `BrokenException(123)` (whose only
   addition is a `__getattr__`) renders as `BrokenException` with no message.
   Independent of tracebacks; it just shows up there first.
-- **`linecache`'s `module_globals` / `lazycache` path is missing.** CPython
-  resolves a filename that does not exist on disk through the calling module's
-  `__loader__.get_source`, which is why `linecache.updatecache('/foo.py',
-  globals())` returns *the caller's* source. Six tests (`TestStack`,
-  `TestTracebackException`, `TestFrame`) now fail on exactly this, having got
-  past the MNU.
+- ~~**`linecache`'s `module_globals` / `lazycache` path is missing.**~~
+  **Fixed.** The port of `lazycache` / `_make_lazycache_entry` was already
+  faithful; what was missing was that Grail set `__name__`, `__package__` and
+  `__file__` on every module but **no `__loader__`**, so
+  `_make_lazycache_entry` found no `get_source` and answered None — and every
+  such lookup silently returned `[]`. Added `PySourceFileLoader` (CPython's
+  `SourceFileLoader`, reduced to answering the module's source) and set it as
+  `__loader__` when the module is built. All six of those tests pass.
+
+**A second lesson of the same shape as (1).** `extract_tb` read `tb_line` /
+`tb_end_lineno` / `tb_colno` / `tb_end_colno` off the traceback. Those are
+Grail's own shortcut for the common case, not part of the traceback protocol
+CPython documents — which is `tb_frame` / `tb_lineno` / `tb_next`, with the
+PEP 657 columns coming off `code.co_positions()` indexed by `tb_lasti`. So
+`extract_tb` raised AttributeError on any other traceback-shaped object, and
+`TracebackException.__init__` swallowed that into an **empty stack** — the
+caller then saw `IndexError` from `stack[0]` with nothing to say why. Reading
+the extras with `getattr` and falling back to `co_positions()` fixed three more
+tests. Both this and (1) were cases where a *defensive* `except Exception:`
+converted a precise failure into a silent wrong answer.
 
 **§9.7's ordering still holds** for what remains: the rest of the small
 independent set (`sys._getframe`, `traceback.print_last`, exception-name module
-qualification, `FrameSummary.locals`), then frame depth via §9.2's VM capture,
+qualification), then frame depth via §9.2's VM capture,
 with generators prototyped early. Nothing measured today changes the frame-depth
 recommendation.

@@ -305,6 +305,7 @@ run
 	at: #'PyMemoryView' put: nil;
 	at: #'PyCode' put: nil;
 	at: #'PyStatResult' put: nil;
+	at: #'PySourceFileLoader' put: nil;
 	at: #'PyAnnotate' put: nil;
 	at: #'PyFrame' put: nil;
 	at: #'PyTraceback' put: nil;
@@ -723,6 +724,7 @@ run
 	at: #'InterruptedErrorTestCase' put: nil;
 	at: #'IsADirectoryErrorTestCase' put: nil;
 	at: #'IteratorTestCase' put: nil;
+	at: #'BuiltinSubclassMethodsTestCase' put: nil;
 	at: #'PrivateNameManglingTestCase' put: nil;
 	at: #'AssertStatementTestCase' put: nil;
 	at: #'ClassMethodAttrViaInstanceTestCase' put: nil;
@@ -966,6 +968,7 @@ input src/smalltalk/Python/complex.gs
 input src/smalltalk/Python/slice.gs
 input src/smalltalk/Python/PyCode.gs
 input src/smalltalk/Python/PyStatResult.gs
+input src/smalltalk/Python/PySourceFileLoader.gs
 input src/smalltalk/Python/PyAnnotate.gs
 input src/smalltalk/Python/PyFrame.gs
 input src/smalltalk/Python/PyTraceback.gs
@@ -1503,6 +1506,7 @@ input src/smalltalk/PythonTests/ImportlibTestCase.gs
 input src/smalltalk/PythonTests/PackageImportTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
+input src/smalltalk/PythonTests/BuiltinSubclassMethodsTestCase.gs
 input src/smalltalk/PythonTests/PrivateNameManglingTestCase.gs
 input src/smalltalk/PythonTests/AssertStatementTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodAttrViaInstanceTestCase.gs
