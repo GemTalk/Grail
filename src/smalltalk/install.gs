@@ -305,6 +305,7 @@ run
 	at: #'PyMemoryView' put: nil;
 	at: #'PyCode' put: nil;
 	at: #'PyStatResult' put: nil;
+	at: #'PySourceFileLoader' put: nil;
 	at: #'PyAnnotate' put: nil;
 	at: #'PyFrame' put: nil;
 	at: #'PyTraceback' put: nil;
@@ -965,6 +966,7 @@ input src/smalltalk/Python/complex.gs
 input src/smalltalk/Python/slice.gs
 input src/smalltalk/Python/PyCode.gs
 input src/smalltalk/Python/PyStatResult.gs
+input src/smalltalk/Python/PySourceFileLoader.gs
 input src/smalltalk/Python/PyAnnotate.gs
 input src/smalltalk/Python/PyFrame.gs
 input src/smalltalk/Python/PyTraceback.gs
