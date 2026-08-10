@@ -411,3 +411,46 @@ testOsStatAnswersStatResultFields
 		name: 'code_filename'.
 	self assert: (mod @env1:stat_result_fields)
 %
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testExceptionNotes
+	"PEP 678: add_note text renders under the exception's own line, __notes__
+	is a genuinely writable/deletable attribute, and a note that cannot be
+	rendered is reported rather than escaping the formatter.  See
+	tests/python/exception_notes.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'exception_notes' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_notes.py')
+		name: 'exception_notes'.
+	#( 'notes_render_under_the_message'
+	   'notes_are_absent_until_the_first_add_note'
+	   'notes_attribute_is_writable_and_deletable'
+	   'non_list_notes_render_as_repr'
+	   'unprintable_notes_do_not_escape_the_formatter'
+	   'broken_getattr_is_reported_not_propagated' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: '__notes__ check failed: ' , k].
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testTracebackExceptionEquality
+	"TracebackException compares by CONTENT: CPython's __eq__ is a __dict__
+	comparison, which works there because it stores the exception's MESSAGE
+	rather than the exception.  A foreign operand gets NotImplemented, not
+	False, so the other side's __eq__ still gets a turn."
+
+	| mod |
+	importlib @env1:modules removeKey: #'exception_notes' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_notes.py')
+		name: 'exception_notes'.
+	#( 'traceback_exception_equality_is_by_content'
+	   'traceback_exception_equality_defers_to_other_types'
+	   'notes_take_part_in_equality' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'TracebackException equality check failed: ' , k].
+%

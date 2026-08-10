@@ -672,3 +672,62 @@ attempts died on, so it should be prototyped early rather than last.
 Also still true from the earlier attempts, and worth keeping: `AbstractException`
 cannot be named literally in every generated-code compile context, so any class
 reference in generated code must be resolved at runtime.
+
+### 9.8 Landed against §9.7's plan (2026-08-10)
+
+Progress log, so §9.6's bucket table can be read against what is left rather
+than re-measured each time. `test.test_traceback` **pass 27 → 45** over the
+day; the numbers below are per landing, measured by running that one module.
+
+| # | change | pass | notes |
+|---|---|---:|---|
+| — | (start of day) | 27 | |
+| #285 | instance-decorator dispatch, `_testcapi` skips | 36 | `@cpython_only` was never *called* |
+| #294 | `co_filename` = real path (+ `tokenize`, `PyStatResult`, lazy `FrameSummary.line`) | 37 | §9.5 item (1) |
+| #296 | `os.stat` of a missing file raises `OSError` | 39 | see below |
+| — | PEP 678 `__notes__` rendering | 42 | §9.6's "3, small, independent" |
+| — | `TracebackException.__eq__` | 45 | §9.6's "8" — 3 of them; the rest need frames |
+
+Three things learned that the plan did not anticipate:
+
+1. **`co_filename` alone was inert.** It needed three more pieces before a
+   single line of source text appeared: a `tokenize` module (`linecache`
+   imports it *inside* `updatecache` and returns `[]` on ImportError, so every
+   lookup silently answered nothing), `os.stat` answering CPython's `st_*`
+   names, and `FrameSummary.line` being a lazy property rather than a plain
+   attribute. §9.5 called item (1) "plumbing with no runtime cost", which was
+   true but not sufficient.
+
+2. **`os.stat` never raised.** `GsFile>>stat:isLstat:` answers a SmallInteger
+   *errno* on failure, never `nil`, which is what the three callers tested
+   for — so `linecache.updatecache`'s `except OSError` never fired, and after
+   #294 wrapped the errno in a `stat_result` the first `st_size` read became an
+   **uncatchable Smalltalk MNU**. Eight tests died there. Fixed in #296 by
+   testing for the *success* shape.
+
+3. **`__notes__` had to become a real attribute.** It was stored under a
+   private `___pyNotes___` slot with a `__notes__` accessor, so
+   `e.__notes__ = [...]` and `del e.__notes__` — both of which the stdlib and
+   the conformance tests use — were invisible; the accessor kept answering the
+   old list. Since `___pyAttrLoad___` probes dynamic instVars *before* the
+   method chain, naming the slot `__notes__` makes assignment and deletion work
+   through the ordinary attribute path with no new machinery.
+
+**Two separate defects found while doing this, not yet fixed:**
+
+- **`str()` of an exception whose class defines `__getattr__` answers `''`.**
+  `Exception(123).__str__()` is `'123'`, but `BrokenException(123)` (whose only
+  addition is a `__getattr__`) renders as `BrokenException` with no message.
+  Independent of tracebacks; it just shows up there first.
+- **`linecache`'s `module_globals` / `lazycache` path is missing.** CPython
+  resolves a filename that does not exist on disk through the calling module's
+  `__loader__.get_source`, which is why `linecache.updatecache('/foo.py',
+  globals())` returns *the caller's* source. Six tests (`TestStack`,
+  `TestTracebackException`, `TestFrame`) now fail on exactly this, having got
+  past the MNU.
+
+**§9.7's ordering still holds** for what remains: the rest of the small
+independent set (`sys._getframe`, `traceback.print_last`, exception-name module
+qualification, `FrameSummary.locals`), then frame depth via §9.2's VM capture,
+with generators prototyped early. Nothing measured today changes the frame-depth
+recommendation.
