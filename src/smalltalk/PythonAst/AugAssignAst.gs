@@ -199,17 +199,17 @@ printSmalltalkAttributeAugAssignOn: aStream
 		diverging from the named-instVar the slot read returns (and
 		bypassing strict enforcement)."
 		((CallAst classSlotNames notNil)
-			and: [CallAst classSlotNames includes: target attr asSymbol]) ifTrue: [
+			and: [CallAst classSlotNames includes: target ___mangledAttr___ asSymbol]) ifTrue: [
 			"``<slot> := (<slot> ifNil: [...]) op value'' — bare mangled
 			instVar (this method compiles on the slotted class); the single
 			wrapping paren makes ``ifNil:'' bind before the ``op'' send."
 			aStream
 				nextPutAll: '___slot_';
-				nextPutAll: target attr;
+				nextPutAll: target ___mangledAttr___;
 				nextPutAll: '___ := (___slot_';
-				nextPutAll: target attr;
+				nextPutAll: target ___mangledAttr___;
 				nextPutAll: '___ ifNil: [self @env1:___pyAttrLoad___: #''';
-				nextPutAll: target attr;
+				nextPutAll: target ___mangledAttr___;
 				nextPutAll: '''])'.
 			op printSmalltalkOn: aStream.
 			value printSmalltalkWithParenthesisOn: aStream.
@@ -224,11 +224,11 @@ printSmalltalkAttributeAugAssignOn: aStream
 		fallback."
 		aStream
 			nextPutAll: 'self @env0:dynamicInstVarAt: #''';
-			nextPutAll: target attr;
+			nextPutAll: target ___mangledAttr___;
 			nextPutAll: ''' put: ((self @env0:dynamicInstVarAt: #''';
-			nextPutAll: target attr;
+			nextPutAll: target ___mangledAttr___;
 			nextPutAll: ''' ifAbsent: [self @env1:___pyAttrLoad___: #''';
-			nextPutAll: target attr;
+			nextPutAll: target ___mangledAttr___;
 			nextPutAll: '''])'.
 		op printSmalltalkOn: aStream.
 		value printSmalltalkWithParenthesisOn: aStream.
@@ -241,11 +241,11 @@ printSmalltalkAttributeAugAssignOn: aStream
 	+= 1'' in django's Field.__init__ crashed exactly there."
 	target value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' @env1:___pyAttrStore___: #'''.
-	aStream nextPutAll: target attr.
+	aStream nextPutAll: target ___mangledAttr___.
 	aStream nextPutAll: ''' put: (('.
 	target value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' @env1:___pyAttrLoad___: #''';
-		nextPutAll: target attr;
+		nextPutAll: target ___mangledAttr___;
 		nextPutAll: ''')'.
 	op printSmalltalkOn: aStream.
 	value printSmalltalkWithParenthesisOn: aStream.

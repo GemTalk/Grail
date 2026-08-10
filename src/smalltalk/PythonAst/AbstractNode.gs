@@ -398,6 +398,43 @@ ___enclosingFunctionLocalBeyondClass___: aSymbol
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___manglePrivate___: aName
+	"Python PRIVATE-NAME MANGLING (CPython's _Py_Mangle).
+
+	An identifier written inside a class body with TWO OR MORE leading
+	underscores and NOT two trailing underscores is rewritten to
+	_<Class><name>, so ``self.__x'' in class C stores _C__x.  That is what
+	makes a private attribute per-class rather than shared: a subclass
+	writing its own __x gets a different slot, and cannot read the base's.
+
+	Not applied outside a class body, and never to a dunder (__x__) --
+	which is why Grail's own ___internal___ names, and every __init__ /
+	__slots__ / __new__, pass through untouched.
+
+	Leading underscores are stripped from the CLASS name (class _C and
+	class C both yield _C__x); an all-underscore class name mangles
+	nothing, matching CPython."
+
+	| s cls stripped i |
+	cls := CallAst classBeingCompiled.
+	cls isNil ifTrue: [^ aName].
+	s := aName asString.
+	"Must start with two underscores..."
+	(s size > 2 and: [(s at: 1) == $_ and: [(s at: 2) == $_]]) ifFalse: [^ aName].
+	"...and must NOT end with two."
+	((s at: s size) == $_ and: [(s at: s size - 1) == $_]) ifTrue: [^ aName].
+	"A dotted name is never mangled (CPython checks this too)."
+	(s includesValue: $.) ifTrue: [^ aName].
+	stripped := cls asString.
+	i := 1.
+	[i <= stripped size and: [(stripped at: i) == $_]] whileTrue: [i := i + 1].
+	stripped := stripped copyFrom: i to: stripped size.
+	stripped isEmpty ifTrue: [^ aName].
+	^ '_' , stripped , s
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___moduleStoreReceiverExpr___
 	"Smalltalk receiver expression for a module dynamic-instVar store /
 	delete.  Inside the module body's initialize and top-level defs,

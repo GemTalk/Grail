@@ -633,7 +633,7 @@ attributeCallFastPathSelector
 	receiverName := function value id.
 	receiverClass := self class resolveModuleClassForName: receiverName.
 	receiverClass ifNil: [^nil].
-	candidate := self class fastPathSelectorForAttr: function attr arity: arguments size.
+	candidate := self class fastPathSelectorForAttr: function ___mangledAttr___ arity: arguments size.
 	((receiverClass methodDictForEnv: 1) includesKey: candidate) ifFalse: [^nil].
 	^ candidate
 %
@@ -683,7 +683,7 @@ printAttributeCallFastPathOn: aStream selector: aSelector
 	is a static NameAst resolving to a module class)."
 
 	| attrName nargs |
-	attrName := function attr asString.
+	attrName := function ___mangledAttr___ asString.
 	nargs := arguments size.
 	aStream nextPut: $(.
 	function value printSmalltalkWithParenthesisOn: aStream.
@@ -717,7 +717,7 @@ attributeCallVarargsSelector
 	receiverName := function value id.
 	receiverClass := self class resolveModuleClassForName: receiverName.
 	receiverClass ifNil: [^nil].
-	candidate := self class varargsSelectorForName: function attr.
+	candidate := self class varargsSelectorForName: function ___mangledAttr___.
 	((receiverClass methodDictForEnv: 1) includesKey: candidate) ifFalse: [^nil].
 	^ candidate
 %
@@ -729,7 +729,7 @@ printAttributeCallVarargsOn: aStream selector: aSelector
 		((receiver) _name: { arg1. arg2. } kw: kwargDict)"
 
 	| attrName |
-	attrName := function attr asString.
+	attrName := function ___mangledAttr___ asString.
 	aStream nextPut: $(.
 	function value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' _'; nextPutAll: attrName; nextPutAll: ': '.
@@ -1946,7 +1946,7 @@ classSelfSendSelector
 	(function isKindOf: AttributeAst) ifFalse: [^nil].
 	(function value isKindOf: NameAst) ifFalse: [^nil].
 	(self class isSelfReference: function value id) ifFalse: [^nil].
-	attrName := function attr.
+	attrName := function ___mangledAttr___.
 	attrSym := attrName asSymbol.
 	(self class classFunctionNames includes: attrSym) ifFalse: [^nil].
 	((self class classVarargsFunctionNames notNil
@@ -1971,7 +1971,7 @@ classSelfSendVarargsSelector
 	(function isKindOf: AttributeAst) ifFalse: [^nil].
 	(function value isKindOf: NameAst) ifFalse: [^nil].
 	(self class isSelfReference: function value id) ifFalse: [^nil].
-	attrName := function attr.
+	attrName := function ___mangledAttr___.
 	(self class classFunctionNames includes: attrName asSymbol) ifFalse: [^nil].
 	"See classSelfSendSelector: a wrapped def must not be self-sent at all."
 	((self class classDecoratedFunctionNames notNil
@@ -1997,7 +1997,7 @@ isSelfOrClsAttributeCallOutsideClassFunctions
 	(function isKindOf: AttributeAst) ifFalse: [^false].
 	(function value isKindOf: NameAst) ifFalse: [^false].
 	(self class isSelfReference: function value id) ifFalse: [^false].
-	attrName := function attr.
+	attrName := function ___mangledAttr___.
 	^ (self class classFunctionNames includes: attrName asSymbol) not
 %
 
@@ -2007,7 +2007,7 @@ printClassSelfSendOn: aStream selector: aSelector
 	"Emit a self-send: (self method: arg1 _: arg2 ...)"
 
 	| attrName nargs |
-	attrName := function attr asString.
+	attrName := function ___mangledAttr___ asString.
 	nargs := arguments size.
 	aStream nextPutAll: '(self '.
 	aStream nextPutAll: attrName.
@@ -2030,7 +2030,7 @@ printClassSelfSendVarargsOn: aStream selector: aSelector
 	"Emit a varargs self-send: (self _method: { args } kw: kwargs)"
 
 	| attrName |
-	attrName := function attr asString.
+	attrName := function ___mangledAttr___ asString.
 	aStream nextPutAll: '(self _'.
 	aStream nextPutAll: attrName; nextPutAll: ': '.
 	self printArgumentsArrayOn: aStream.

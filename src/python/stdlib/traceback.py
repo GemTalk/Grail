@@ -34,6 +34,55 @@ def _is_syntax_error(value):
         return False
 
 
+def _safe_string(value, what, func=str):
+    """CPython's traceback._safe_string: render ``value'' with ``func'', and
+    describe the failure rather than propagating it when that raises -- a
+    traceback must be printable even when the objects in it are not."""
+    try:
+        return func(value)
+    except:
+        return '<%s %s() failed>' % (what, 'repr' if func is repr else 'str')
+
+
+def _format_notes(value):
+    """PEP 678 (3.11+): the lines for ``value.__notes__'', or [] when there
+    are none.
+
+    CPython leaves ``__notes__'' ABSENT until the first add_note, so a
+    getattr default of None is the "no notes" case -- distinct from a note
+    list that is present but empty.
+
+    A note is normally a str, and a multi-line note renders as several lines.
+    But ``__notes__'' is a plain writable attribute, so it can be set to any
+    object: CPython renders a non-str SEQUENCE element-wise, and anything
+    else (including a non-sequence) as a single repr() line.  Both go through
+    _safe_string, because a note's __str__/__repr__ may itself raise."""
+    try:
+        notes = getattr(value, '__notes__', None)
+    except Exception as e:
+        # getattr's default only absorbs AttributeError.  An exception with a
+        # broken __getattr__ can raise anything else, and a traceback must
+        # still print: CPython reports the swallowed error as a note of its
+        # own rather than letting it escape the formatter.
+        return ['Ignored error getting __notes__: '
+                + _safe_string(e, '__notes__', func=repr) + '\n']
+    if notes is None:
+        return []
+    # CPython's test is ``isinstance(notes, collections.abc.Sequence) and not
+    # isinstance(notes, (str, bytes))''.  Narrowed to list/tuple here: that is
+    # what add_note builds, and it keeps the check independent of how much of
+    # collections.abc Grail has registered.  A custom Sequence subclass would
+    # render as one repr() line where CPython renders it element-wise.
+    if not isinstance(notes, (list, tuple)):
+        return [_safe_string(notes, '__notes__', func=repr) + '\n']
+    lines = []
+    for note in notes:
+        text = _safe_string(note, 'note')
+        for piece in text.split('\n'):
+            lines.append(piece + '\n')
+    return lines
+
+
 def format_exception_only(exc_type, value=_sentinel, show_group=False):
     """Return a list of strings ending in a newline that render the
     exception class + message.
@@ -102,15 +151,17 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False):
             msg = msg + ' (' + str(filename) + ')'
         lines = header + [type_name + ': ' + msg + '\n'] if msg \
             else header + [type_name + '\n']
-        if show_group:
-            return lines
-        return lines
+        return lines + _format_notes(value)
 
     msg = str(value) if value is not None else ''
     if msg:
         lines = [type_name + ': ' + msg + '\n']
     else:
         lines = [type_name + '\n']
+
+    # PEP 678 notes go directly under the exception's own line, and ABOVE an
+    # ExceptionGroup's nested exceptions -- the notes belong to the group.
+    lines.extend(_format_notes(value))
 
     # An ExceptionGroup renders its nested exceptions under the group line,
     # indented, when the caller asks for them.
@@ -477,12 +528,25 @@ class TracebackException:
         # leave the chain attrs at None.
         self._value = exc_value
         self._tb = exc_traceback
+        # CPython stores the exception's MESSAGE, not the exception -- ``_str''
+        # -- and that is what makes two TracebackExceptions built from two
+        # distinct-but-equivalent exceptions compare equal (see __eq__).
+        self._str = _safe_string(exc_value, 'exception') if exc_value is not None else ''
         self.__cause__ = None
         self.__context__ = None
         self.__suppress_context__ = False
         # FrameSummary list extracted from the traceback (empty if none).
+        # ``limit'' has to reach the extraction: it changes which frames appear,
+        # so a TracebackException built with one is not equal to one without.
+        #
+        # Deliberately extract_tb rather than StackSummary.extract(walk_tb(..)):
+        # only extract_tb carries the PEP 657 columns (colno / end_colno) off
+        # the traceback, and test_dictcomps / test_setcomps assert on those.
+        # ``capture_locals'' therefore still does not reach the frames -- that
+        # needs f_locals on a traceback's frames, which Grail does not have.
+        self._capture_locals = capture_locals
         try:
-            self.stack = extract_tb(exc_traceback)
+            self.stack = extract_tb(exc_traceback, limit=limit)
         except Exception:
             self.stack = StackSummary()
 
@@ -537,6 +601,35 @@ class TracebackException:
         """CPython renders a TracebackException as its exception message
         alone -- NOT the whole traceback."""
         return str(self._value) if self._value is not None else ''
+
+    def _eq_key(self):
+        """The fields that shape this TracebackException's output.
+
+        CPython's __eq__ is ``self.__dict__ == other.__dict__``, which works
+        there because every field it stores is value-like -- notably ``_str``,
+        the exception's MESSAGE, rather than the exception object.  Grail also
+        keeps ``_value`` (the live exception) for rendering, and comparing THAT
+        would compare by identity, so two equivalent exceptions would never be
+        equal.  Enumerate the output-shaping fields instead, which is the same
+        rule CPython's __dict__ comparison expresses."""
+        return (self.exc_type, self._str, list(self.stack),
+                _format_notes(self._value), self._capture_locals,
+                self.__cause__, self.__context__, self.__suppress_context__)
+
+    def __eq__(self, other):
+        """NotImplemented -- not False -- for a non-TracebackException, so
+        Python falls back to the OTHER operand's __eq__.  That is what makes
+        ``exc == object()'' false while ``exc == ALWAYS_EQ'' is true; returning
+        False would break the second (test_comparison_basic asserts both)."""
+        if isinstance(other, TracebackException):
+            return self._eq_key() == other._eq_key()
+        return NotImplemented
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
 
 
 __all__ = [

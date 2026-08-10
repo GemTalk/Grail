@@ -141,7 +141,22 @@ printSmalltalkRuntimeOn: aStream
 	selfParam := self selfParameterName.
 	funcNames := IdentitySet new.
 	staticFuncNames := IdentitySet new.
-	staticMethodDefs do: [:def | staticFuncNames add: def name asSymbol].
+	"``classBeingCompiled'' must already name THIS class while the name sets
+	are collected: ___mangledName___ mangles through it (AbstractNode >>
+	___manglePrivate___: reads it), and it was not set until well below --
+	so every set was filled with UNMANGLED names while the call sites, emitted
+	later with it set, asked for the MANGLED one.  classSelfSendSelector's
+	membership test then missed, and every private-method call fell off the
+	direct-send fast path onto the far heavier ___pyAttrLoad___ route.  That
+	is a stack-depth regression, not just a slow path: a private recursion
+	bottomed out at depth 400 where the public equivalent reached 1137, and it
+	died with an uncatchable ``cross frame of C primitive'' instead of raising
+	RecursionError (test_richcmp MiscTest.test_recursion, whose UserList
+	comparison chain runs through UserList.__eq__ -> self.__cast()).
+	Saved and restored by the existing savedClass handling below."
+	savedClass := CallAst classBeingCompiled.
+	CallAst classBeingCompiled: name asSymbol.
+	staticMethodDefs do: [:def | staticFuncNames add: def ___mangledName___ asSymbol].
 	varargsFuncNames := IdentitySet new.
 	decoratedFuncNames := IdentitySet new.
 	methodDefs do: [:def |
@@ -150,13 +165,13 @@ printSmalltalkRuntimeOn: aStream
 		just below — and the later source generation — both see the def in
 		its adjusted, varargs form.  No-op for every other method."
 		def applyBigmemtestDefaultIfNeeded.
-		funcNames add: def name asSymbol.
+		funcNames add: def ___mangledName___ asSymbol.
 		"A def that compiles to the varargs ``_name:kw:`` form (complex
 		signature, or __init__ which is forced to varargs so it can bind
 		keyword args) is marked so classSelfSendSelector dispatches via
 		the varargs selector rather than a fixed-arity send into thin air."
 		def compilesAsVarargs ifTrue: [
-			varargsFuncNames add: def name asSymbol
+			varargsFuncNames add: def ___mangledName___ asSymbol
 		].
 		"A WRAPPED def (@contextlib.contextmanager, a user decorator, ...)
 		has a class-dict entry that is the decorator's RESULT, while the
@@ -171,9 +186,9 @@ printSmalltalkRuntimeOn: aStream
 	known function name (and uses the correct varargs/fixed-arity
 	selector below)."
 	classMethodDefs do: [:def |
-		funcNames add: def name asSymbol.
+		funcNames add: def ___mangledName___ asSymbol.
 		def isSimplePositionalArgs ifFalse: [
-			varargsFuncNames add: def name asSymbol
+			varargsFuncNames add: def ___mangledName___ asSymbol
 		].
 		"NOT extended to @classmethod defs: a class-side method is not
 		reachable through an instance's ___pyAttrLoad___ in Grail, so
@@ -183,6 +198,16 @@ printSmalltalkRuntimeOn: aStream
 		test_system_transitions, which needs classmethod-descriptor
 		binding that does not exist yet."
 	].
+	"Collection done -- put classBeingCompiled BACK to the outer value.
+	It was set early only so ___mangledName___ could mangle through it.
+	It must NOT stay set here: isModuleScopeClassDef answers false
+	whenever classBeingCompiled is non-nil (that is its `nested inside
+	another class' test), so leaving it set reports EVERY class as
+	non-module-scope and routes every super() through the method-local
+	closure-cell path -- which broke super().__init__ argument passing
+	(werkzeug's Request lost `environ', taking out a whole SUnit shard).
+	The real set, for the per-method codegen, happens further down."
+	CallAst classBeingCompiled: savedClass.
 	"Scan body for class-level simple assignments (`NAME = value`,
 	or chained `A = B = value`).  Each declared name becomes a
 	class-side attribute (Smalltalk classInstVar + class-side getter/
@@ -243,8 +268,10 @@ printSmalltalkRuntimeOn: aStream
 	"Push the class-compile context that the per-method codegen reads
 	(CallAst consults these to decide how to dispatch self-sends,
 	etc.).  Save outer values so a class nested in another class
-	restores correctly."
-	savedClass := CallAst classBeingCompiled.
+	restores correctly.  ``savedClass'' is NOT re-captured here: it was
+	already taken further up, before classBeingCompiled had to be set early
+	for the name-mangling collection, and re-taking it now would save THIS
+	class instead of the enclosing one."
 	savedFuncNames := CallAst classFunctionNames.
 	savedVarargsFuncNames := CallAst classVarargsFunctionNames.
 	savedClassAttrNames := CallAst classAttrNames.
@@ -304,7 +331,7 @@ printSmalltalkRuntimeOn: aStream
 				selector but is counted as skipped, matching CPython."
 				def isRequiresResourceDecorated
 					ifTrue: [
-						methodSources add: def name asString
+						methodSources add: def ___mangledName___ asString
 							-> def generateResourceSkipSource]
 					ifFalse: [
 					def isCpythonOnlyDecorated
@@ -312,7 +339,7 @@ printSmalltalkRuntimeOn: aStream
 						"A ``@cpython_only''-decorated test skips under an
 						alternative Python implementation (see
 						isCpythonOnlyDecorated); emit a skipping body."
-						methodSources add: def name asString
+						methodSources add: def ___mangledName___ asString
 							-> def generateCpythonOnlySkipSource]
 					ifFalse: [
 						s := PrettyWriteStream on: Unicode7 new.
@@ -323,25 +350,25 @@ printSmalltalkRuntimeOn: aStream
 								like the getter; emitting it as ``x'' would clobber the
 								getter.  Redirect to ``___propDeleter_x'', invoked by
 								object>>___pyAttrDelete___ for ``del obj.x''."
-								methodSources add: ('___propDeleter_' , def name asString)
+								methodSources add: ('___propDeleter_' , def ___mangledName___ asString)
 									-> (self ___redirectUnarySelectorIn: s contents
-										from: def name asString
-										to: ('___propDeleter_' , def name asString))]
+										from: def ___mangledName___ asString
+										to: ('___propDeleter_' , def ___mangledName___ asString))]
 							ifFalse: [
-								methodSources add: def name asString -> s contents].
+								methodSources add: def ___mangledName___ asString -> s contents].
 						"Keyword-call companion for a simple-positional instance
 						method: a varargs ``_name:kw:'' forwarder so ``obj.m(a,
 						kw=v)'' binds by name rather than DNU-ing (django calls
 						view/handler methods with keyword arguments)."
 						def needsVarargsForwarder ifTrue: [
-							methodSources add: ('_' , def name asString)
+							methodSources add: ('_' , def ___mangledName___ asString)
 								-> def generateInstanceVarargsForwarderSource].
 						"A ``@bigmemtest''-family method was normalised to the
 						varargs form (a dry-run ``size'' default injected above),
 						which hides it from dir()-based test discovery.  Emit a
 						plain unary forwarder so getTestCaseNames finds it."
 						def isBigmemtestDecorated ifTrue: [
-							methodSources add: ('bigmem_' , def name asString)
+							methodSources add: ('bigmem_' , def ___mangledName___ asString)
 								-> def generateBigmemtestUnaryForwarderSource]]].
 			] ensure: [CallAst selfParameterName: savedSelfForIM].
 		].
@@ -365,7 +392,7 @@ printSmalltalkRuntimeOn: aStream
 				[
 					s := PrettyWriteStream on: Unicode7 new.
 					def generateMethodSourceOn: s.
-					classMethodSources add: def name asString -> s contents.
+					classMethodSources add: def ___mangledName___ asString -> s contents.
 				] ensure: [
 					CallAst selfParameterName: savedSelfForCM.
 				].
@@ -386,7 +413,7 @@ printSmalltalkRuntimeOn: aStream
 					| s |
 					s := PrettyWriteStream on: Unicode7 new.
 					def generateModuleMethodSourceOn: s.
-					staticMethodSources add: def name asString -> s contents.
+					staticMethodSources add: def ___mangledName___ asString -> s contents.
 				]
 			] ensure: [
 				CallAst selfParameterName: savedSelfForSM.
@@ -2700,7 +2727,7 @@ emitMethodDocTableOn: aStream className: aClassName
 	src nextPutAll: '___methodDocTable___'; lf.
 	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
 	documented do: [:def |
-		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
 		def emitStringLiteral: def ___docString___ on: src.
 		src nextPut: $;].
 	src nextPutAll: ' @env0:yourself)'.
@@ -2780,7 +2807,7 @@ emitMethodSignatureTableOn: aStream className: aClassName
 	src nextPutAll: '___methodSignatureTable___'; lf.
 	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
 	withParams do: [:def |
-		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
 		"Skip ``self''/``cls'' for an instance method or classmethod: what this
 		table feeds is a BOUND access (``instance.method'', or a classmethod
 		reached through its class), where the receiver is already supplied and
@@ -2832,7 +2859,7 @@ emitMethodReceiverTableOn: aStream className: aClassName
 	src nextPutAll: '___methodReceiverTable___'; lf.
 	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
 	withReceiver do: [:def |
-		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString;
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString;
 			nextPutAll: ''' put: '''; nextPutAll: def ___receiverParamName___;
 			nextPutAll: ''''; nextPut: $;].
 	src nextPutAll: ' @env0:yourself)'.
@@ -2876,7 +2903,7 @@ emitMethodAnnotationsTableOn: aStream className: aClassName
 	src nextPutAll: '___methodAnnotationsTable___'; lf.
 	src nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
 	annotated do: [:def |
-		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
+		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
 		def emitAnnotateBlockOn: src.
 		src nextPut: $;].
 	src nextPutAll: ' @env0:yourself)'.
