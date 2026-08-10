@@ -114,13 +114,13 @@ printSmalltalkOn: aStream
 					and: [CallAst classAttrNames includes: target attr asSymbol])
 					ifTrue: [
 						aStream nextPutAll: 'self @env1:'.
-						aStream nextPutAll: target attr.
+						aStream nextPutAll: target ___mangledAttr___.
 						aStream nextPutAll: ': '.
 						value printSmalltalkWithParenthesisOn: aStream.
 						aStream nextPut: $..
 					] ifFalse: [
 						aStream nextPutAll: 'self @env0:dynamicInstVarAt: #'''.
-						aStream nextPutAll: target attr.
+						aStream nextPutAll: target ___mangledAttr___.
 						aStream nextPutAll: ''' put: '.
 						value printSmalltalkWithParenthesisOn: aStream.
 						aStream nextPut: $..
@@ -128,7 +128,7 @@ printSmalltalkOn: aStream
 			] ifFalse: [
 				target value printSmalltalkWithParenthesisOn: aStream.
 				aStream nextPutAll: ' @env1:'.
-				aStream nextPutAll: target attr.
+				aStream nextPutAll: target ___mangledAttr___.
 				aStream nextPutAll: ': '.
 				value printSmalltalkWithParenthesisOn: aStream.
 				aStream nextPut: $..

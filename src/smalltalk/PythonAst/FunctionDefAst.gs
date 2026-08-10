@@ -252,6 +252,17 @@ name
 	^name
 %
 
+category: 'Grail-accessing'
+method: FunctionDefAst
+___mangledName___
+	"The name this def BINDS under: private-name mangled inside a class
+	body.  CPython mangles the binding (class attribute _C__m) but leaves
+	the function's own __name__ as written (__m), so this is used only at
+	binding/selector sites -- never for the ___pyNamed___ stamp."
+
+	^ self ___manglePrivate___: name
+%
+
 category: 'Grail-other'
 method: FunctionDefAst
 printArgList: anArray on: aStream
@@ -2390,7 +2401,7 @@ generateModuleMethodSourceOn: aStream
 		parameter name (when the param is read-only inside the body and
 		not a Smalltalk pseudo-var) or the ``_X'' (or ``___N'') transport
 		name that will be unpacked into a block temp below."
-		aStream nextPutAll: name.
+		aStream nextPutAll: self ___mangledName___.
 		paramNames isEmpty ifFalse: [
 			aStream nextPutAll: ': '.
 			aStream nextPutAll: ((needsTemp at: 1)
@@ -2543,7 +2554,7 @@ generateModuleMethodSourceOn: aStream
 			or: [(paramNames detect: [:p | p asString = 'kwargs'] ifNone: [nil]) notNil
 			or: [(bodyVars detect: [:v | v asString = 'kwargs'] ifNone: [nil]) notNil]])
 			ifTrue: ['___kw___'] ifFalse: ['kwargs'].
-		aStream nextPut: $_; nextPutAll: name;
+		aStream nextPut: $_; nextPutAll: self ___mangledName___;
 			nextPutAll: ': '; nextPutAll: posMethodParam;
 			nextPutAll: ' kw: '; nextPutAll: kwMethodParam; lf.
 
@@ -3231,7 +3242,7 @@ generateMethodSourceOn: aStream
 				transportNames at: i put: '___' , i printString].
 		].
 
-		aStream nextPutAll: name.
+		aStream nextPutAll: self ___mangledName___.
 		paramNames isEmpty ifFalse: [
 			aStream nextPutAll: ': '; nextPutAll: (transportNames at: 1).
 			2 to: paramNames size do: [:i |
@@ -3325,7 +3336,7 @@ generateMethodSourceOn: aStream
 			or: [(paramNames detect: [:p | p asString = 'kwargs'] ifNone: [nil]) notNil
 			or: [(bodyVars detect: [:v | v asString = 'kwargs'] ifNone: [nil]) notNil]])
 			ifTrue: ['___kw___'] ifFalse: ['kwargs'].
-		aStream nextPut: $_; nextPutAll: name;
+		aStream nextPut: $_; nextPutAll: self ___mangledName___;
 			nextPutAll: ': '; nextPutAll: posMethodParam;
 			nextPutAll: ' kw: '; nextPutAll: kwMethodParam; lf.
 
