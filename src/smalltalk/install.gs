@@ -662,6 +662,7 @@ run
 	at: #'EOFErrorTestCase' put: nil;
 	at: #'ExitStackUsageTestCase' put: nil;
 	at: #'EncodingWarningTestCase' put: nil;
+	at: #'ClassNewAttributeTestCase' put: nil;
 	at: #'EnumDescriptorMemberTestCase' put: nil;
 	at: #'EnumGlobalInjectTestCase' put: nil;
 	at: #'ExceptionGroupTestCase' put: nil;
@@ -1422,6 +1423,7 @@ input src/smalltalk/PythonTests/VarargsNamingTestCase.gs
 input src/smalltalk/PythonTests/YieldFromTestCase.gs
 input src/smalltalk/PythonTests/EnumGlobalInjectTestCase.gs
 input src/smalltalk/PythonTests/EnumDescriptorMemberTestCase.gs
+input src/smalltalk/PythonTests/ClassNewAttributeTestCase.gs
 input src/smalltalk/PythonTests/MakecodesPatternTestCase.gs
 input src/smalltalk/PythonTests/NamedIntConstantTestCase.gs
 input src/smalltalk/PythonTests/NextIterTestCase.gs
