@@ -237,7 +237,7 @@ def _unpack_exc_args(exc_type, value, tb):
     return exc_type, value, tb
 
 
-def format_exception(exc_type, value=None, tb=None):
+def format_exception(exc_type, value=None, tb=None, limit=None, chain=True):
     """Return a list of strings ready to be joined.  Accepts either
     the legacy 3-arg ``(type, value, tb)'' shape or the 3.10+
     single-argument ``(exc)'' shape.
@@ -255,7 +255,7 @@ def format_exception(exc_type, value=None, tb=None):
     if tb is not None:
         try:
             # A real traceback object (PyTraceback linked list).
-            frames.extend(format_tb(tb))
+            frames.extend(format_tb(tb, limit))
         except Exception:
             # Legacy callers sometimes pass a plain list of frame entries.
             try:
@@ -293,13 +293,14 @@ def format_exc(*args):
     return ''.join(format_exception(exc_type, value, tb))
 
 
-def print_exception(exc_type, value=None, tb=None, file=None):
+def print_exception(exc_type, value=None, tb=None, limit=None, file=None,
+                    chain=True):
     """Print exception lines to ``file'' (default sys.stderr).
     Accepts either the legacy 3-arg form or the 3.10+ single-
     exception form."""
     if file is None:
         file = sys.stderr
-    for line in format_exception(exc_type, value, tb):
+    for line in format_exception(exc_type, value, tb, limit):
         file.write(line)
 
 
@@ -311,15 +312,17 @@ def print_last(limit=None, file=None, chain=True):
     Raises ValueError when neither is set, which is CPython's answer for "there
     is no last exception" -- callers distinguish that from an empty render.
 
-    ``limit'' / ``chain'' are accepted and not yet acted on, as in print_exc."""
+    ``limit'' is honoured; ``chain'' is accepted and not yet acted on (it needs
+    __cause__/__context__ rendering)."""
     have_exc = hasattr(sys, 'last_exc')
     if not have_exc and not hasattr(sys, 'last_type'):
         raise ValueError('no last exception')
     if have_exc:
-        print_exception(sys.last_exc, file=file)
+        print_exception(sys.last_exc, limit=limit, file=file)
     else:
         print_exception(sys.last_type, sys.last_value,
-                        getattr(sys, 'last_traceback', None), file=file)
+                        getattr(sys, 'last_traceback', None),
+                        limit=limit, file=file)
 
 
 def print_exc(limit=None, file=None, chain=True):
@@ -517,6 +520,33 @@ def _code_positions_at(code, lasti):
     return (None, None, None, None)
 
 
+def _resolve_limit(limit):
+    """CPython's rule for a frame limit, which is subtler than one number.
+
+    An EXPLICIT limit is used as given: ``>= 0'' keeps the first N frames,
+    negative keeps the LAST abs(N).  When no limit is passed, ``sys.tracebacklimit''
+    supplies the default -- but a negative tracebacklimit is clamped to 0, i.e.
+    "show nothing", NOT "show the last N".  test_traceback's LimitTests asserts
+    both halves: ``extract(limit=-2) == nolim[-2:]'' but
+    ``sys.tracebacklimit = -1'' then ``extract() == []''."""
+    if limit is None:
+        limit = getattr(sys, 'tracebacklimit', None)
+        if limit is not None and limit < 0:
+            limit = 0
+    return limit
+
+
+def _apply_limit(frames, limit):
+    """Slice a StackSummary to ``limit'' per _resolve_limit's rule."""
+    if limit is None:
+        return frames
+    kept = frames[:limit] if limit >= 0 else frames[limit:]
+    trimmed = StackSummary()
+    for frame in kept:
+        trimmed.append(frame)
+    return trimmed
+
+
 def extract_tb(tb, limit=None, lookup_lines=True, capture_locals=False):
     """Walk a traceback into a StackSummary of FrameSummary, OUTERMOST frame
     first — so ``extract_tb(exc.__traceback__)[0]`` is the frame that caught
@@ -537,9 +567,13 @@ def extract_tb(tb, limit=None, lookup_lines=True, capture_locals=False):
     result = StackSummary()
     cur = tb
     count = 0
+    limit = _resolve_limit(limit)
+    # Build every frame, then slice: a NEGATIVE limit keeps the last abs(N), so
+    # the walk cannot stop early.  limit == 0 short-circuits, since it keeps
+    # nothing and each frame costs a line derivation.
+    if limit == 0:
+        return result
     while cur is not None:
-        if limit is not None and count >= limit:
-            break
         frame = cur.tb_frame
         code = frame.f_code
         line = getattr(cur, 'tb_line', None)
@@ -559,7 +593,7 @@ def extract_tb(tb, limit=None, lookup_lines=True, capture_locals=False):
             colno=colno, end_colno=end_colno))
         cur = cur.tb_next
         count += 1
-    return result
+    return _apply_limit(result, limit)
 
 
 def extract_stack(f=None, limit=None):

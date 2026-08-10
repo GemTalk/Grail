@@ -551,3 +551,67 @@ testExceptionMessageRendering
 		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
 			description: 'message rendering check failed: ' , k].
 %
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+loadFrameDepthFixture
+	importlib @env1:modules removeKey: #'frame_depth' ifAbsent: [].
+	^ importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/frame_depth.py')
+		name: 'frame_depth'
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testTracebackSpansEveryFrame
+	"A traceback is the WHOLE propagation path, outermost first, built from the
+	VM's raise-time stack capture (#GemExceptionSignalCapturesStack).  It used
+	to be a single frame -- the catching function -- so tb_next was always None.
+	Per-frame Python line numbers come from the ``___curPos___ := N'' literals in
+	the generated source, located via GsNMethod>>_sourceAtIp: (§9.9), so no
+	compile-time ip->line map is needed.  See tests/python/frame_depth.py."
+
+	| mod |
+	mod := self loadFrameDepthFixture.
+	#( 'traceback_spans_every_frame'
+	   'the_traceback_stops_at_the_catching_function'
+	   'tb_next_chains_inward'
+	   'every_frame_names_its_source_file'
+	   'every_frame_resolves_its_source_line' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'frame-depth check failed: ' , k].
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testTracebackFrameLimits
+	"CPython's limit rules, which are subtler than one number: a positive limit
+	keeps the FIRST N frames, a negative one the LAST abs(N) (so the walk cannot
+	stop early), and sys.tracebacklimit supplies the default -- except that a
+	NEGATIVE tracebacklimit means ``show nothing'' rather than ``show the last
+	N''.  test.test_traceback's LimitTests asserts both halves."
+
+	| mod |
+	mod := self loadFrameDepthFixture.
+	#( 'a_positive_limit_keeps_the_first_frames'
+	   'a_negative_limit_keeps_the_last_frames'
+	   'sys_tracebacklimit_supplies_the_default'
+	   'format_exception_honours_limit' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'traceback limit check failed: ' , k].
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testGeneratorRaiseStillProducesATraceback
+	"Known limitation, pinned deliberately: a generator body runs in a forked
+	GsProcess, so the captured stack holds the generator's own frames and NOT
+	the consumer's (§9.9) -- there is nothing to trim, they simply are not
+	there.  Such a raise must still yield a usable traceback rather than none,
+	which the single-frame fallback covers.  This test is what will catch the
+	change in behaviour when the consumer's stack is spliced across that
+	boundary."
+
+	self assert: ((self loadFrameDepthFixture
+		@env0:perform: #'a_generator_raise_still_produces_a_traceback' env: 1) = true)
+%

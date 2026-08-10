@@ -394,6 +394,15 @@ ___pyRaiseNew___: cls args: positional kw: kwargs cause: aCause
 	((cls @env0:isKindOf: Behavior)
 		and: [(cls == BaseException) or: [cls @env0:inheritsFrom: BaseException]])
 			ifFalse: [^ TypeError ___signal___: 'exceptions must derive from BaseException'].
+	"Every Python ``raise'' funnels through here, and this runs BEFORE the signal,
+	so arming the VM's stack capture here covers even the session's first raise.
+	Memoised in SessionTemps, so after the first raise it is one dictionary
+	probe.  Placed here rather than on an import hook because a session can
+	raise without importing, and the flag has to be set before the signal or the
+	traceback has nothing to walk.  The @env0: prefix is required: this method is
+	env 1, and the traceback-building helpers all live in env 0 alongside
+	___pushCatchingFrame___, which generated code also reaches with @env0:."
+	self @env0:___ensureStackCapture___.
 	^ cls ___signalNew___: positional kw: kwargs cause: aCause
 %
 
@@ -836,6 +845,247 @@ ___pushFrameFromPos___: aCode pos: pos
 %
 
 category: 'Grail-Traceback Building'
+classmethod: BaseException
+___ensureStackCapture___
+	"Turn on the VM's raise-time stack capture, once per session.
+
+	``#GemExceptionSignalCapturesStack'' makes primitive 2022 fill
+	``AbstractException >> _gsStack'' with a SmallInteger followed by triples of
+	(GsNMethod, ipOffset, receiver) whenever _gsStack is nil on entry to
+	_signal.  Measured cost is ~1.3 ns per Smalltalk frame per raise and NOTHING
+	per call (§9.2), which is what makes multi-frame tracebacks affordable at
+	all -- the alternative was a per-call body wrapper at +14 ns on every Python
+	call.
+
+	It is a GEM configuration, so it is per-session and must be re-set rather
+	than stored; memoised in SessionTemps so the repeated calls cost a
+	dictionary probe.  Grail's own control-flow signals pre-stamp _gsStack to
+	opt out (PythonReturn / PythonBreak / PythonContinue class >> ___signal___),
+	so the flag does not tax an #exception-mode function's every return."
+
+	| st |
+	st := SessionTemps current.
+	(st at: #'GrailStackCaptureOn' otherwise: nil) == true ifTrue: [^ self].
+	st at: #'GrailStackCaptureOn' put: true.
+	[System gemConfigurationAt: #'GemExceptionSignalCapturesStack' put: true]
+		on: Error do: [:ex |
+			"An image that does not offer the flag keeps today's single-frame
+			tracebacks rather than failing -- the walk below simply finds no
+			captured stack."
+			ex return: nil].
+	^ self
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___pythonFrameNameFor___: aSelector
+	"The Python function name a generated selector came from, or nil when the
+	selector is not one.
+
+	A ``def spam'' compiles to a fixed-arity selector (``spam'', ``spam:'', ...)
+	whose base is the name, and ALSO to a varargs ``_spam:kw:'' whose base reads
+	as ``_spam'' -- the same pair Object >> ___pyAttrDelete___ matches on.  Take
+	everything before the first colon and drop one leading underscore from the
+	varargs form."
+
+	| s idx base |
+	aSelector isNil ifTrue: [^ nil].
+	s := aSelector @env0:asString.
+	idx := s @env0:indexOf: $:.
+	base := (idx @env0:= 0) ifTrue: [s] ifFalse: [s @env0:copyFrom: 1 to: idx @env0:- 1].
+	base @env0:isEmpty ifTrue: [^ nil].
+	"``_spam:kw:'' -> ``spam''.  Only when a colon was present: a plain unary
+	``_spam'' is a genuine Python name beginning with an underscore."
+	((idx @env0:> 0) and: [(base @env0:at: 1) @env0:= $_]) ifTrue: [
+		((s @env0:endsWith: ':kw:') and: [base @env0:size @env0:> 1])
+			ifTrue: [base := base @env0:copyFrom: 2 to: base @env0:size]].
+	^ base
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___pythonLineForMethod___: aMethod ip: anIp
+	"The PYTHON line a generated method was executing at ``anIp''.
+
+	§9.4 assumed this needed a compile-time ip -> line map.  It does not: the
+	generated Smalltalk source carries the Python line as a literal, because
+	codegen emits ``___curPos___ := N'' before every statement, and
+	``GsNMethod >> _sourceAtIp:'' answers that source with a caret marking the
+	exact ip.  So the answer is the last ``___curPos___ := N'' at or above the
+	caret line.  (§9.4's premise -- that another frame's TEMPS are unreachable
+	-- is true and irrelevant: this reads the source literal, not the temp.)
+
+	Cached per (method, ip) in SessionTemps: the derivation is pure, formatting
+	the report costs ~100 us, and a traceback revisits the same sites
+	constantly."
+
+	| cache key |
+	cache := SessionTemps current at: #'GrailIpLineCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailIpLineCache' put: cache].
+	key := { aMethod @env0:asOop. anIp }.
+	^ cache @env0:at: key ifAbsent: [
+		| line |
+		line := self ___derivePythonLineForMethod___: aMethod ip: anIp.
+		cache @env0:at: key put: line.
+		line]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___derivePythonLineForMethod___: aMethod ip: anIp
+	"Uncached worker for ___pythonLineForMethod___:ip: -- see its comment."
+
+	| report lines caretIdx result |
+	report := [aMethod @env0:_sourceAtIp: anIp] on: Error do: [:ex | ex return: nil].
+	report isNil ifTrue: [^ nil].
+	lines := report @env0:subStrings: (String @env0:with: Character lf).
+	"_sourceAtIp: marks the ip with a caret on a line whose first non-blank
+	character is ``*''.  Everything at or above it is what has been reached.
+
+	No caret means FAIL CLOSED -- answer nil, which drops the frame and leaves
+	the single-frame fallback.  Defaulting to the whole method instead (the
+	obvious reading of ``everything above'') answers the LAST ___curPos___ in
+	it: a wrong line that is never nil, so it also passes the is-this-a-Python-
+	frame test.  A missing frame is recoverable; a confidently wrong line
+	number is not."
+	caretIdx := 0.
+	1 to: lines @env0:size do: [:i |
+		(((lines @env0:at: i) @env0:trimSeparators) @env0:beginsWith: '*')
+			ifTrue: [caretIdx @env0:= 0 ifTrue: [caretIdx := i]]].
+	caretIdx @env0:= 0 ifTrue: [^ nil].
+	result := nil.
+	1 to: (caretIdx @env0:min: lines @env0:size) do: [:i |
+		| ln p digits |
+		ln := lines @env0:at: i.
+		p := ln @env0:indexOfSubCollection: '___curPos___ := '.
+		p @env0:> 0 ifTrue: [
+			digits := WriteStream @env0:on: String @env0:new.
+			(p @env0:+ 16) to: ln @env0:size do: [:k |
+				(ln @env0:at: k) @env0:isDigit ifTrue: [digits @env0:nextPut: (ln @env0:at: k)]].
+			digits @env0:contents @env0:isEmpty
+				ifFalse: [result := digits @env0:contents @env0:asNumber]]].
+	^ result
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___buildFramesFromCapturedStack___: aCode pos: posArray
+	"Build the WHOLE propagation path from the VM's captured stack, newest frame
+	innermost, and answer true when it produced at least one frame.
+
+	``_gsStack'' is a SmallInteger followed by (method, ip, receiver) triples,
+	INNERMOST first, over-allocated with trailing nils (so the frame count comes
+	from scanning for nil, not from the array size).  A frame belongs in a Python
+	traceback when its method is env 1 on a generated Python class and its
+	selector decodes to a Python name; block frames carry a NIL selector and
+	belong to the enclosing method, so they are skipped rather than reported --
+	CPython has no frame for a comprehension body or an except block.
+
+	The walk stops after the frame for the CATCHING function (``aCode name''),
+	because a traceback records the propagation path from raise to catch, not the
+	whole stack -- without the trim it would run on into the caller chain and,
+	under a test runner, into unittest's own frames.
+
+	Pushing innermost-first leaves the head at the outermost frame, which is what
+	___pushTracebackFrame___ prepending gives us and what CPython's ``most recent
+	call last'' ordering means.
+
+	Generators are a known gap: a generator body runs in a forked GsProcess, so
+	its captured stack does not contain the consumer's frames at all (§9.9).
+	Such a raise yields only the frames inside the generator, and the single-frame
+	fallback still applies when that leaves nothing."
+
+	| st catchName pushed |
+	st := self @env0:_gsStack.
+	st isNil ifTrue: [^ false].
+	"PyCode keeps its fields in DYNAMIC INSTVARS with no accessor methods (a
+	Python read resolves them through ___pyAttrLoad___'s dynamic probe), so this
+	has to read the slot -- ``aCode co_name'' is a MessageNotUnderstood, and
+	catching it silently left catchName nil, which disabled the trim and let the
+	traceback run on past the catching function into its caller."
+	catchName := aCode isNil
+		ifTrue: [nil]
+		ifFalse: [aCode @env0:dynamicInstVarAt: #'co_name'].
+	pushed := 0.
+	2 to: st @env0:size by: 3 do: [:i |
+		| meth ip name |
+		meth := st @env0:at: i.
+		"Trailing nils pad the array -- the real frames end here."
+		meth isNil ifTrue: [^ pushed @env0:> 0].
+		((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector notNil])
+			ifTrue: [
+				| pyLine |
+				name := BaseException ___pythonFrameNameFor___: meth @env0:selector.
+				ip := st @env0:at: i @env0:+ 1.
+				"A non-nil derived line is what IDENTIFIES a Python frame, and it
+				is self-validating: only codegen emits ``___curPos___ := N'', so
+				Grail's own hand-written env-1 plumbing (``Object >>
+				___signal___:'', ``BaseException class >> ___pyRaiseNew___:'')
+				answers nil here and is skipped without needing a marker or a
+				class/category allow-list.  A method category is NOT usable for
+				this: importlib and ShimSreModule are hand-written yet also use
+				codegen's 'Grail-Methods'."
+				pyLine := name isNil
+					ifTrue: [nil]
+					ifFalse: [BaseException ___pythonLineForMethod___: meth ip: ip].
+				pyLine notNil ifTrue: [
+					| isCatcher frameCode |
+					isCatcher := catchName notNil and: [name @env0:= catchName].
+					frameCode := self ___codeForMethod___: meth name: name ip: ip
+						aCode: aCode.
+					"The CATCHING frame takes the position CODEGEN recorded, never the one
+					derived from the ip.  ___pushFrameFromPos___ already handles both shapes
+					pos comes in: the bare ___curPos___ SmallInteger of an ordinary statement,
+					and the 5-tuple { beginLine. beginColumn. endLine. endColumn. sourceLine }
+					of a comprehension / for-loop iterator clause, whose PEP 657 columns
+					test_dictcomps / test_setcomps assert on.
+
+					Codegen's position is not merely the more precise one here, it is the only
+					correct one: this frame is suspended INSIDE the on:do: protected block, and
+					_sourceAtIp: does not resolve such an ip to the statement in flight.  3.7.5
+					answers a report whose caret sits past the whole block, so the scan below
+					returns the function's LAST ___curPos___ -- frame_depth's catcher reports
+					34, ``return None'', for a call on line 31 -- while 4.0 happens to answer
+					the call site.  Honouring pos ONLY when it was an Array therefore left
+					every ordinary try/except (codegen passes the bare integer there) on the
+					derived line, which is exactly why this passed on 4.0 and failed on 3.7.5.
+					Frames BELOW the catcher are suspended at a CALL site, which does resolve,
+					and both versions derive them correctly."
+					(isCatcher and: [posArray notNil])
+						ifTrue: [self ___pushFrameFromPos___: frameCode pos: posArray]
+						ifFalse: [
+							self ___pushTracebackFrame___: frameCode
+								lineno: pyLine
+								colno: nil endLineno: nil endColno: nil line: nil].
+					pushed := pushed @env0:+ 1.
+					"Reached the function holding the except clause: the traceback
+					ends here."
+					isCatcher ifTrue: [^ true]]]].
+	^ pushed @env0:> 0
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___codeForMethod___: aMethod name: aName ip: anIp aCode: catchCode
+	"A PyCode for one captured frame.  Reuses the catching function's PyCode
+	when the frame IS that function (it already carries the right filename and
+	first line); otherwise builds one, taking the filename from the catching
+	code so every frame in a traceback names the module it came from."
+
+	| filename |
+	filename := '<grail>'.
+	catchCode isNil ifFalse: [
+		"Dynamic instVars, no accessors -- see ___buildFramesFromCapturedStack___."
+		filename := (catchCode @env0:dynamicInstVarAt: #'co_filename')
+			ifNil: ['<grail>'].
+		(catchCode @env0:dynamicInstVarAt: #'co_name') @env0:= aName
+			ifTrue: [^ catchCode]].
+	^ PyCode @env0:name: aName filename: filename firstlineno: 0
+%
+
+category: 'Grail-Traceback Building'
 method: BaseException
 ___pushCatchingFrame___: aCode pos: posArray
 	"Add a frame for the function CATCHING this exception (TryAst emits this at
@@ -847,8 +1097,14 @@ ___pushCatchingFrame___: aCode pos: posArray
 	an exception raised in a wrapper-less function (a plain module-level def or
 	method) and caught here, which would otherwise carry no traceback at all."
 
-	tracebackObj isNil ifTrue: [^ self ___pushFrameFromPos___: aCode pos: posArray].
-	^ self
+	tracebackObj isNil ifFalse: [^ self].
+	"Prefer the WHOLE propagation path from the VM's captured stack (§9.9); fall
+	back to the single catch-site frame when there is no capture -- no flag, a
+	generator raise whose captured frames all sat outside Python code, or an
+	exception that pre-stamped _gsStack to opt out."
+	(self ___buildFramesFromCapturedStack___: aCode pos: posArray)
+		ifTrue: [^ self].
+	^ self ___pushFrameFromPos___: aCode pos: posArray
 %
 
 category: 'Grail-Current Exception'
