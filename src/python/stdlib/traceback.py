@@ -143,24 +143,33 @@ def _unpack_exc_args(exc_type, value, tb):
 def format_exception(exc_type, value=None, tb=None):
     """Return a list of strings ready to be joined.  Accepts either
     the legacy 3-arg ``(type, value, tb)'' shape or the 3.10+
-    single-argument ``(exc)'' shape.  Without a real traceback
-    object the frame list is empty — we still emit the ``Traceback
-    (most recent call last):'' header so the output looks
-    familiar."""
+    single-argument ``(exc)'' shape.
+
+    The ``Traceback (most recent call last):'' header is emitted only when
+    there are FRAMES to introduce, which is CPython's rule (its
+    TracebackException.format does ``if exc.stack:'' before yielding it).
+    This used to emit it unconditionally, so ``format_exception(Exception,
+    Exception('x'), None)'' produced a header labelling nothing --
+    test_traceback's test_print_exception and the format_exc comparisons
+    assert on exactly that."""
 
     exc_type, value, tb = _unpack_exc_args(exc_type, value, tb)
-    lines = ['Traceback (most recent call last):\n']
+    frames = []
     if tb is not None:
         try:
             # A real traceback object (PyTraceback linked list).
-            lines.extend(format_tb(tb))
+            frames.extend(format_tb(tb))
         except Exception:
             # Legacy callers sometimes pass a plain list of frame entries.
             try:
                 for entry in tb:
-                    lines.append('  ' + str(entry) + '\n')
+                    frames.append('  ' + str(entry) + '\n')
             except Exception:
                 pass
+    lines = []
+    if frames:
+        lines.append('Traceback (most recent call last):\n')
+        lines.extend(frames)
     lines.extend(format_exception_only(exc_type, value))
     return lines
 
@@ -421,7 +430,16 @@ class TracebackException:
 
     @classmethod
     def from_exception(cls, exc, **kwargs):
-        return cls(type(exc), exc, None, **kwargs)
+        """CPython: ``cls(type(exc), exc, exc.__traceback__, **kwargs)``.
+
+        The traceback used to be hardcoded to None, which threw away the
+        frames the exception was carrying -- so a TracebackException built
+        this way rendered without any, while the same exception through
+        format_exception(exc) rendered with them.  Invisible before, because
+        format() emitted the header unconditionally and the frames were the
+        only thing missing."""
+        return cls(type(exc), exc, getattr(exc, '__traceback__', None),
+                   **kwargs)
 
     def format_exception_only(self, show_group=False, **kwargs):
         """The exception's own line(s), no frames.
@@ -440,12 +458,20 @@ class TracebackException:
         return a flat list — easier to test, identical from the
         caller's perspective.
 
+        The header is emitted only when the captured stack actually has
+        frames, matching CPython's ``if exc.stack:`` guard — see
+        format_exception() above.
+
         ``**kwargs`` swallows ``colorize`` and friends, as above."""
-        lines = ['Traceback (most recent call last):\n']
+        frames = []
         try:
-            lines.extend(self.stack.format())
+            frames.extend(self.stack.format())
         except Exception:
             pass
+        lines = []
+        if frames:
+            lines.append('Traceback (most recent call last):\n')
+            lines.extend(frames)
         lines.extend(self.format_exception_only())
         return lines
 
