@@ -4308,21 +4308,32 @@ ___pyCallValue___: positional kw: kwargs
 	when a top-level def name has been rebound to a non-callable
 	value (e.g. ``def foo(): ...; foo = 21; foo(5)'' must TypeError)."
 
-	"A CLASS reached through the INDIRECT protocol lands here and reports
-	``not callable'', even though calling a class CONSTRUCTS in Python.  A
-	direct ``Cls(...)'' compiles to value:value: and never comes here, so
-	what this affects is a class used as a decorator through the attribute
-	form (``@functools.cached_property'') or reached through a variable --
-	and because a class-body decorator's rebinding store is wrapped in an
-	error-swallowing guard, such a decoration silently does not happen at
-	all.  Answering value:value: for every class here is the general fix,
-	but it also makes ``@enum.property'' / ``@member'' apply for the first
-	time, and Grail's enum member builder then counts the resulting
-	descriptor as a MEMBER (Django's Choices grows a spurious ``label''
-	member, and IntegerChoices can no longer extend it).  So the classes
-	that want it opt in with a class-side ___pyCallValue___:kw: of their own
-	-- see functools_cached_property -- until the enum builder learns
-	CPython's rule that a descriptor is never a member."
+	"A CLASS reached through the INDIRECT protocol CONSTRUCTS, exactly as a
+	direct ``Cls(...)'' does -- value:value: is the universal call protocol
+	(BoundMethod, class objects, blocks, partials all dispatch through it).
+
+	A direct call compiles to value:value: and never comes here, so what this
+	governs is a class reached indirectly: through a variable, handed to
+	something that invokes its argument generically, or -- the case that
+	motivated it -- used as a DECORATOR.  Both the module-level and the
+	class-body decorator emitters wrap their rebinding store in an
+	error-swallowing guard, so raising here did not surface as a TypeError:
+	the decoration silently did not happen and the plain function survived
+	(``@Wrap def z'' left z a BoundMethod; ``@enum.property'' / ``@member''
+	never applied at all).
+
+	This used to raise for every class, because applying ``@enum.property''
+	made Grail's enum member builder count the resulting descriptor as a
+	MEMBER (Django's Choices grew a spurious ``label'' member, and
+	IntegerChoices could then no longer extend it).  The builder now
+	implements CPython's rule that a descriptor is never a member -- see the
+	_EnumDict pre-passes in Enum class>>___grailBuildMembers:names: and
+	>>___grailFunctional:positional:keywords: -- so the restriction is gone,
+	and the classes that opted in with a class-side ___pyCallValue___:kw: of
+	their own (functools_cached_property, functools_partial) now merely
+	shortcut what this answers anyway."
+	(self isKindOf: Behavior) ifTrue: [
+		^ self @env1:value: positional value: kwargs].
 	TypeError ___signal___:
 		'''' @env0:, self @env0:class @env0:name @env0:asString
 			@env0:, ''' object is not callable'
