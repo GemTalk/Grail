@@ -438,6 +438,14 @@ says a real attempt costs `#directMethod` functions their fast path, and calls
 the change large and high-risk — but never put a number on it. This section
 does, and it changes the recommendation.
 
+**Revised 2026-08-10, same day.** The first version of this section priced a
+universal body wrapper (§9.1) and rejected raise-time capture (§9.2) because the
+only live-stack API it had found was a formatted string report. That was wrong:
+`#GemExceptionSignalCapturesStack` makes the VM hand over a **structural** stack
+at signal time for ~1.3 ns per frame and nothing per call. §9.2 and §9.7 are
+rewritten accordingly; §9.1's wrapper measurements are kept because they are
+what the alternative is now compared against, and §9.3 / §9.4 are new.
+
 ### 9.1 What a Python call costs today (measured)
 
 `GsProcess stackReportToLevel:` / `System _timeMs`, 2M direct static sends per
@@ -468,44 +476,125 @@ That is the honest range for a universal single-handler body wrapper: somewhere
 between a few percent on data-heavy code and a doubling on call-heavy code.
 Material, but bounded and measurable — not the unknown the note implied.
 
-### 9.2 The alternative that does NOT work: capture at raise time
+### 9.2 Capture at raise time — the VM does it, cheaply
 
-The obviously attractive design is to pay nothing per call and walk the
-Smalltalk stack when an exception is actually raised (`___signal___:` is already
-the documented choke point). GemStone's live-process introspection was probed:
+The attractive design is to pay nothing per call and get the stack when an
+exception is actually raised. **This works, and it is the recommended
+mechanism.** An earlier pass of this section concluded the opposite; that
+conclusion was wrong because it had only found the string-report API. Both
+findings are kept below, because which API you use changes the answer by three
+orders of magnitude.
 
-- `GsProcess >> _frameContentsAt:` / `stackDepth` — **unusable**: they answer for
-  a *suspended* process; on the running one `stackDepth` is 0.
-- `AbstractException >> _gsStack` — **nil** for a normally signalled, caught
-  exception. GemStone does not populate it for us.
-- `GsProcess class >> stackReportToLevel:` — **works** on the live process from
-  inside a method, and yields exactly what is needed: receiver class, selector,
-  line number, and the `GsNMethod` OOP per frame. But it answers a **formatted
-  String**, and it is O(depth):
+**What works: `#GemExceptionSignalCapturesStack`.** Per the kernel comment on
+`AbstractException >> _gsStack`: when
 
-| real stack depth | µs per capture |
-|---:|---:|
-| 5 | 18 |
-| 50 | 54 |
-| 200 | 192 |
-| 600 | 704 |
+```smalltalk
+System gemConfigurationAt: #GemExceptionSignalCapturesStack put: true
+```
 
-~1.17 µs per frame. A Grail Python call spans several Smalltalk frames, so a
-modestly nested program raising an exception pays **200–700 µs per raise**,
-against 30 ns for a call.
+and `gsStack == nil` on entry to primitive 2022 (`AbstractException >> _signal`),
+the primitive fills `gsStack` with an **Array** — a Boolean (`inNativeCode`)
+followed by **triples of `(aGsNMethod, ipOffset, receiver)`**, the same shape
+`GsProcess >> _frameContentsAt:` answers. Structural data, built in C, no string
+parsing. Verified on gs40: a 3-deep Smalltalk stack yields the expected
+`class >> selector` per frame, plus the receiver.
 
-**Break-even** against the +14 ns/call wrapper is a raise-to-call ratio of about
-**1 : 14 000**. Python raises far more often than that on ordinary paths
-(`try/except KeyError`, attribute probing, iteration protocols), so raise-time
-capture is *worse* than the wrapper for realistic code — and it would rest on
-parsing a human-readable report. **Rejected on measurement.** The per-frame
-incremental-unwind model in §4 stands.
+Cost, measured as raise **and** catch, 20 000 iterations, best of 3:
 
-(One mitigation that survives: Grail's control-flow signals and `StopIteration`
-subclass the kernel `Exception`, not `BaseException`, so generator exhaustion
-would never pay capture cost. Not enough to save the approach.)
+| real stack depth | capture OFF | capture ON | delta |
+|---:|---:|---:|---:|
+| 5 | 150 ns | 150 ns | ~0 |
+| 50 | 150 ns | 250 ns | +100 ns |
+| 200 | 150 ns | 450 ns | +300 ns |
+| 600 | 150 ns | 950 ns | +800 ns |
 
-### 9.3 The gap is three separable pieces, not one
+≈**1.3 ns per Smalltalk frame**, and **zero per-call cost** — the flag only
+affects `_signal`. Break-even against the +14 ns/call wrapper of §9.1 is a
+raise-to-call ratio of about **1 : 21** at depth 200. Ordinary Python is well
+below that, so capture wins by roughly an order of magnitude; only
+pathologically exception-dense code would favour the wrapper.
+
+**Control-flow signals opt out for free.** Capture happens only when
+`gsStack == nil` at signal time, so pre-stamping the instance suppresses it:
+
+| | depth 50 | depth 600 |
+|---|---:|---:|
+| plain `Error new signal:` | 350 ns | 1150 ns |
+| `e _gsStack: #()` first | 150 ns | 200 ns |
+
+This matters because `#exception`-mode functions signal `PythonReturn` on every
+return. `PythonReturn` / `PythonBreak` / `PythonContinue` / `StopIteration`
+already subclass the kernel `Exception` rather than `BaseException`, so stamping
+`_gsStack: #()` at construction keeps them at baseline cost.
+
+**What does NOT work, and why the first pass got it wrong:**
+
+- `GsProcess >> _frameContentsAt:` / `stackDepth` — answer only for a *suspended*
+  process; on the running one `stackDepth` is 0.
+- `AbstractException >> _gsStack` — nil for a normally signalled, caught
+  exception **unless the flag above is set**. That is the fact the first pass
+  missed.
+- `GsProcess class >> stackReportToLevel:` — works live and carries the right
+  information, but as a **formatted String**, and O(depth) at ~1.17 µs/frame
+  (18 µs at depth 5, 192 µs at 200, 704 µs at 600). ~900× the flag's cost.
+  Not the API to build on.
+- **Forking a process to suspend the current one** (fork, pass `self`, wait on a
+  semaphore, then use `_frameContentsAt:`) is unnecessary: the flag already
+  answers structural data with no suspension. Measured for comparison, a bare
+  `fork` + semaphore round trip alone is **~1000 ns**, before walking anything —
+  strictly worse than 350 ns all-in at depth 50, and it adds suspension and
+  reentrancy hazards.
+
+### 9.3 What Python's `raise` actually does with the stack
+
+Decisive for the design, because it determines whether a snapshot is *sufficient*.
+
+CPython does **not** snapshot. A traceback is built **incrementally during
+unwinding**:
+
+1. `raise` attaches a traceback whose single entry is the raising frame.
+2. Every frame the exception propagates *out of* adds an entry, which becomes the
+   new **head**; `tb_next` chains inward toward the raise point. Head is the
+   shallowest frame reached so far, tail is the raise point — hence "most recent
+   call last".
+3. A traceback therefore records the **propagation path**, not the stack. Frames
+   above the eventual catcher never appear; callees that already returned never
+   appear.
+4. Bare `raise` / `raise e` re-raise the **same object**, which keeps its
+   traceback and keeps **accumulating** — one traceback can span two disjoint
+   paths joined at the re-raise point.
+5. `__cause__` (`raise X from Y`) and `__context__` (implicit, raised while
+   handling) each carry their **own** traceback.
+6. `with_traceback(tb)` replaces it outright.
+7. Entries hold frame objects alive, which is why `f_locals` stays inspectable.
+
+Consequences for a raise-time snapshot:
+
+- The snapshot is a **superset** of the traceback: it includes frames above the
+  eventual catcher. It must be **trimmed at the catch site** — which is already
+  the seam §3 identifies, the `except` binding at `TryAst.gs:128-134`, exactly
+  where CPython does `e.__traceback__ = tb`.
+- **Re-raise must splice, not replace**, or the original path is lost.
+- Smalltalk frames must be **filtered** to those that are generated Python
+  functions; the triple's method + receiver identify them.
+- **Generators are the real risk.** Grail runs a generator body in a *forked
+  GsProcess*, so a raise inside one captures that process's stack, which does
+  **not** contain the consumer's frames — while Python's traceback spans both.
+  That needs splicing across the process boundary, and it is the same boundary
+  both backed-out wrapper attempts died on.
+
+### 9.4 The one thing the flag does not give you: Python line numbers
+
+The triple is `(method, ipOffset, receiver)` — **no temps** — so another frame's
+`___curPos___` (which holds the Python line) is unreachable. `GsNMethod >>
+_sourceAtIp:` does resolve an ip to an exact source position, but against the
+**generated Smalltalk** source, whose line numbers are not Python line numbers.
+
+So per-frame Python lines need a compile-time map from ip / step point to Python
+line, emitted per method. That is plumbing with no runtime cost — the same
+character as `co_filename` in §9.5, and naturally done alongside it.
+
+### 9.5 The gap is three separable pieces, not one
 
 Worth stating explicitly, because they have very different costs:
 
@@ -523,7 +612,7 @@ Worth stating explicitly, because they have very different costs:
 3. **Frame content** (`lineno` per frame) already works for the one frame that
    exists, via `___curPos___`; it extends to N frames for free once (2) lands.
 
-### 9.4 What each piece buys
+### 9.6 What each piece buys
 
 All 125 remaining fail+err in `test.test_traceback`, bucketed by the change that
 would fix them (some overlap; counted by primary blocker):
@@ -548,28 +637,38 @@ Roughly 20 more are reachable by small independent changes with no performance
 question at all (`__notes__`, `__eq__`, `_getframe`, `locals`, name
 qualification, `NoneType: None`).
 
-### 9.5 Recommendation
+### 9.7 Recommendation
 
 **Do (1) `co_filename` first, as its own change.** No runtime cost, no risk to
 the fast path, unblocks `linecache` / `FrameSummary.line`, and it is a
 prerequisite for judging (2) — with a placeholder filename, correct frame depth
 still cannot match CPython's expected output.
 
-**Then the small independent set** (§9.4), which is cheap and needs no
+**Then the small independent set** (§9.6), which is cheap and needs no
 architectural decision.
 
-**Then frame depth, behind a codegen flag, default OFF, and measure on real
-workloads before flipping it.** §9.1 makes the cost knowable but not free, and
-the fraction of real functions currently in `#directMethod` (where the delta is
-+14 ns rather than +10 ns) is not yet known — the flag is what makes that
-measurable instead of argued. Implementation hazards already discovered by the
-two backed-out attempts stand and must be designed for: broadening the catch
-re-raised inside generators ("exception already signalled"), and
-`AbstractException` cannot be named literally in every generated-code compile
-context (resolve it at runtime).
+**Then frame depth via §9.2's VM capture — NOT a universal body wrapper.** This
+is the part that changed: with `#GemExceptionSignalCapturesStack` the frame list
+costs nothing per call and ~1.3 ns per frame per raise, so there is no fast-path
+regression to weigh and no need for a codegen flag defaulting off. The two
+backed-out wrapper attempts were solving the problem the expensive way.
 
-**Open question deliberately left open**: whether a *single* runtime-resolved
-handler can serve both frame capture and the existing `PythonReturn` contract.
-If yes the cost is +14 ns and generators keep their current wrapper; if it needs
-the two-handler shape of §9.1 it is +24 ns, and that difference is large enough
-to change whether the flag should ever default on.
+The work that remains is therefore compile-time and catch-site, not per-call:
+
+1. Set the flag at session init (alongside the other session setup) — it is a
+   *gem* configuration, so it is per-session and must be re-set, not stored.
+2. Stamp `_gsStack: #()` on `PythonReturn` / `PythonBreak` / `PythonContinue` /
+   `StopIteration` at construction, so control flow stays at baseline cost.
+3. Emit the ip → Python-line map of §9.4, with `co_filename`.
+4. Walk `_gsStack` at the `except` binding (`TryAst.gs:128-134`), filtering to
+   generated Python methods and **trimming to the catching frame** (§9.3).
+5. Splice rather than replace on re-raise (§9.3).
+
+The remaining real risk is **generators**: their body runs in a forked
+GsProcess, so a captured stack does not contain the consumer's frames and has to
+be spliced across that boundary (§9.3). That is the same boundary both wrapper
+attempts died on, so it should be prototyped early rather than last.
+
+Also still true from the earlier attempts, and worth keeping: `AbstractException`
+cannot be named literally in every generated-code compile context, so any class
+reference in generated code must be resolved at runtime.
