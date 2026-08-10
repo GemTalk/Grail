@@ -1612,6 +1612,13 @@ loadModuleFromPath: pathString name: moduleName
 	in the Phase-A dynamic-instVar store, so Python ``module.__file__'' reads it
 	through ___pyAttrLoad___ like any other module attribute."
 	moduleInstance dynamicInstVarAt: #'__file__' put: pathString.
+	"PEP 302 ``__loader__''.  Not cosmetic: linecache resolves a filename that
+	is not on disk through the CALLING module's loader (get_source), which is
+	how CPython shows source for a frame whose co_filename does not name a
+	readable file.  With no __loader__ that lookup silently answered [] --
+	see PySourceFileLoader."
+	moduleInstance dynamicInstVarAt: #'__loader__'
+		put: (PySourceFileLoader name: moduleName path: pathString).
 	(pathString endsWith: '__init__.py') ifTrue: [
 		| dirPath |
 		dirPath := pathString copyFrom: 1 to: pathString size - '/__init__.py' size.

@@ -294,7 +294,11 @@ class FrameSummary:
         # CPython stores repr()s, not the live objects, so a FrameSummary cannot
         # keep a frame's locals alive.
         if locals:
-            self.locals = dict((k, repr(v)) for k, v in locals.items())
+            # Through _safe_string, so a local whose repr() raises renders as
+            # '<local repr() failed>' rather than taking the whole traceback
+            # down -- capturing locals must never be riskier than not.
+            self.locals = dict((k, _safe_string(v, 'local', func=repr))
+                               for k, v in locals.items())
         else:
             self.locals = None
         if lookup_line:
@@ -411,11 +415,51 @@ class StackSummary(list):
         return [self.format_frame_summary(fs) + '\n' for fs in self]
 
 
-def extract_tb(tb, limit=None):
+def _code_positions_at(code, lasti):
+    """The PEP 657 ``(lineno, end_lineno, colno, end_colno)'' for the
+    instruction at ``lasti``, read from the code object's ``co_positions()``.
+
+    This is where CPython gets a frame's columns from -- ``co_positions()``
+    yields one tuple per instruction and the traceback's ``tb_lasti`` indexes
+    it (two bytes per instruction).  Grail's own PyTraceback carries the values
+    directly, but anything DUCK-TYPED as a traceback will not: test_traceback
+    builds its fakes as namedtuples with only tb_frame/tb_lineno/tb_next/
+    tb_lasti, and supplies the positions through co_positions on the code
+    object, exactly as a real interpreter would."""
+    if lasti is None or lasti < 0:
+        return (None, None, None, None)
+    try:
+        positions = code.co_positions()
+    except Exception:
+        return (None, None, None, None)
+    try:
+        for index, pos in enumerate(positions):
+            if index == lasti // 2:
+                pos = tuple(pos)
+                # Pad, so a short tuple cannot IndexError the caller.
+                return pos + (None,) * (4 - len(pos))
+    except Exception:
+        pass
+    return (None, None, None, None)
+
+
+def extract_tb(tb, limit=None, lookup_lines=True, capture_locals=False):
     """Walk a traceback into a StackSummary of FrameSummary, OUTERMOST frame
     first — so ``extract_tb(exc.__traceback__)[0]`` is the frame that caught
     the exception.  ``tb`` is a PyTraceback linked list (``tb_next`` chained,
-    terminated by None) or None."""
+    terminated by None) or None.
+
+    Every attribute beyond ``tb_frame`` / ``tb_lineno`` / ``tb_next`` is read
+    with getattr and a fallback.  Those three are the whole of the traceback
+    protocol CPython documents; the ``tb_line`` / ``tb_colno`` extras are
+    Grail's own shortcut for the common case, and requiring them made
+    extract_tb raise AttributeError on any other traceback-shaped object --
+    which TracebackException then swallowed into an EMPTY stack, so the caller
+    saw an IndexError from ``exc.stack[0]`` with nothing to say why.
+
+    ``lookup_lines=False`` defers the linecache read (CPython's contract: the
+    cache must be untouched until something asks for ``.line``), and
+    ``capture_locals`` snapshots each frame's f_locals as repr()s."""
     result = StackSummary()
     cur = tb
     count = 0
@@ -424,11 +468,21 @@ def extract_tb(tb, limit=None):
             break
         frame = cur.tb_frame
         code = frame.f_code
+        line = getattr(cur, 'tb_line', None)
+        end_lineno = getattr(cur, 'tb_end_lineno', None)
+        colno = getattr(cur, 'tb_colno', None)
+        end_colno = getattr(cur, 'tb_end_colno', None)
+        if colno is None and end_colno is None:
+            pos_lineno, pos_end_lineno, colno, end_colno = _code_positions_at(
+                code, getattr(cur, 'tb_lasti', -1))
+            if end_lineno is None:
+                end_lineno = pos_end_lineno
+        f_locals = getattr(frame, 'f_locals', None) if capture_locals else None
         result.append(FrameSummary(
             code.co_filename, cur.tb_lineno, code.co_name,
-            line=cur.tb_line,
-            end_lineno=cur.tb_end_lineno,
-            colno=cur.tb_colno, end_colno=cur.tb_end_colno))
+            lookup_line=lookup_lines, locals=f_locals,
+            line=line, end_lineno=end_lineno,
+            colno=colno, end_colno=end_colno))
         cur = cur.tb_next
         count += 1
     return result
@@ -542,11 +596,11 @@ class TracebackException:
         # Deliberately extract_tb rather than StackSummary.extract(walk_tb(..)):
         # only extract_tb carries the PEP 657 columns (colno / end_colno) off
         # the traceback, and test_dictcomps / test_setcomps assert on those.
-        # ``capture_locals'' therefore still does not reach the frames -- that
-        # needs f_locals on a traceback's frames, which Grail does not have.
         self._capture_locals = capture_locals
         try:
-            self.stack = extract_tb(exc_traceback, limit=limit)
+            self.stack = extract_tb(exc_traceback, limit=limit,
+                                    lookup_lines=lookup_lines,
+                                    capture_locals=capture_locals)
         except Exception:
             self.stack = StackSummary()
 

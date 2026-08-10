@@ -454,3 +454,47 @@ testTracebackExceptionEquality
 		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
 			description: 'TracebackException equality check failed: ' , k].
 %
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testModuleLoaderAndLazyLinecache
+	"Every module carries a PEP 302 __loader__, and linecache resolves a
+	filename that is not on disk through the CALLING module's loader -- which
+	is how a traceback shows source for a frame whose co_filename does not
+	name a readable file.  See tests/python/module_loader.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'module_loader' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/module_loader.py')
+		name: 'module_loader'.
+	#( 'module_has_a_loader'
+	   'loader_answers_the_modules_source'
+	   'loader_reports_filename_and_package'
+	   'loader_rejects_a_foreign_name'
+	   'lazycache_resolves_through_the_loader'
+	   'lazycache_without_globals_finds_nothing' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: '__loader__ / linecache check failed: ' , k].
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testExtractTbOnADuckTypedTraceback
+	"extract_tb must not require Grail's own tb_line / tb_colno extras -- only
+	tb_frame / tb_lineno / tb_next are the documented protocol, with the PEP 657
+	columns coming off the code object's co_positions().  Requiring them made
+	extract_tb raise AttributeError, which TracebackException swallowed into an
+	empty stack, so the caller saw IndexError from stack[0]."
+
+	| mod |
+	importlib @env1:modules removeKey: #'module_loader' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/module_loader.py')
+		name: 'module_loader'.
+	#( 'extract_tb_accepts_a_duck_typed_traceback'
+	   'lookup_lines_false_defers_the_linecache_read'
+	   'capture_locals_snapshots_reprs' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'extract_tb check failed: ' , k].
+%
