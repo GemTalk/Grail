@@ -466,12 +466,37 @@ ___grailSuperNewGuard: cls
 	__new__ the walk would land on -- Enum's for a pure enum, Integer/
 	AbstractPyInt/AbstractPyFloat/str's for a mixed one.  Raise CPython's error
 	when cls is building; no-op otherwise, so a legitimate super().__new__ on a
-	non-enum subclass, and a direct member_type.__new__, proceed untouched."
+	non-enum subclass, and a direct member_type.__new__, proceed untouched.
 
+	Restricted to a __new__ defined in the ENUM CLASS'S OWN body, which is what
+	CPython actually rejects: the error comes out of Enum.__new__, so it needs
+	the super() walk to reach Enum in the first place.  A DATA MIXIN's __new__
+	delegating upward is the legitimate shape --
+
+	    class MyInt(int):
+	        def __new__(cls, value):
+	            return super().__new__(cls, value)
+	    class MyIntEnum(HexMixin, MyInt, enum.Enum): ...
+	    class Foo(MyIntEnum): TEST = 1
+
+	-- where super() reaches int.__new__, never Enum's.  Once
+	___grailFindMemberNew: began running the mixin's __new__ to build members
+	(CPython _find_new_ clause 2), the unrestricted guard fired on Foo and took
+	out test_multiple_mixin_inherited.
+
+	The owner test is deliberately ``defined ON cls'' rather than the resolved
+	walk target: guarding the individual storage constructors was tried and is
+	incomplete, because IntEnum/StrEnum/Flag each expose a different one and
+	the walk from a BadSuper(IntEnum) lands on AbstractPyInt's, not Enum's."
+
+	| owner |
 	((cls @env0:isKindOf: Behavior)
-		and: [Enum ___grailBuildingSet @env0:includes: cls]) ifTrue: [
-			^ TypeError ___signal___:
-				'do not use `super().__new__; call the appropriate __new__ directly'].
+		and: [Enum ___grailBuildingSet @env0:includes: cls]) ifFalse: [^ nil].
+	owner := cls @env0:whichClassIncludesSelector: #'___new__:kw:'
+		environmentId: 1.
+	owner == cls ifTrue: [
+		^ TypeError ___signal___:
+			'do not use `super().__new__; call the appropriate __new__ directly'].
 	^ nil
 %
 
@@ -683,6 +708,17 @@ ___grailBuildMembers: cls names: attrNames
 			and: [((newDefClass @env0:inheritsFrom: Enum)
 				and: [(Enum ___grailMemberTypeFor: cls) == object])
 			or: [(Enum ___grailRecordFor: newDefClass) @env0:notNil]]].
+	"CPython _find_new_ clause 2: no __new__ on cls itself, but the DATA MIXIN
+	supplies one (``class NEI(NamedInt, Enum)'' where NamedInt is a user int
+	subclass).  Members are then member_type.__new__(cls, *args), which is what
+	sets both _value_ and the mixin's own instance slots.  See
+	___grailFindMemberNew: for the two exclusions that keep this away from
+	Grail's storage constructors and from Enum's by-value lookup."
+	hasUserNew ifFalse: [ | mixinNew |
+		mixinNew := Enum ___grailFindMemberNew: cls.
+		mixinNew @env0:notNil ifTrue: [
+			newDefClass := mixinNew.
+			hasUserNew := true]].
 	tupleClass := Python @env0:at: #tuple otherwise: Array.
 	"An MI enum whose storage base is Enum (``cls inheritsFrom: Enum'') but
 	which mixes in a FOREIGN data type -- ``class E(date, Enum)'', where date is
@@ -912,12 +948,22 @@ ___grailBuildMembers: cls names: attrNames
 									member := (UnboundMethod definingClass: newDefClass selector: #'__new__')
 										value: ({ cls } @env0:, newArgs) value: KeyValueDictionary @env0:new.
 									"CPython: a member's canonical value is its _value_, set by
-									__new__.  When __new__ left it unset, fall back to the raw
-									class-body value (a fuller member_type(*args) reconstruction
-									is a later refinement)."
+									__new__.  When __new__ left it unset, EnumType.__new__ fills it
+									with member_type(*args) -- the mix-in's own construction -- and
+									only falls back to the raw class-body value when member_type is
+									object.  NEI.y.value is NamedInt('the-y', 2), which compares
+									equal to 2; the raw tuple ('the-y', 2) was what Grail stored."
 									v := [member @env0:dynamicInstVarAt: #'_value_']
 								@env0:on: AbstractException do: [:e | nil].
-									memberValue := v @env0:isNil ifTrue: [rawValue] ifFalse: [v]]
+									v @env0:isNil
+										ifFalse: [memberValue := v]
+										ifTrue: [ | mt |
+											mt := Enum ___grailMemberTypeFor: cls.
+											memberValue := (mt @env0:isNil or: [mt == object])
+												ifTrue: [rawValue]
+												ifFalse: [Enum
+													___grailConstructMemberValue: mt
+													args: rawValue]]]
 								ifFalse: [
 									"For a str-storage-rooted enum (``class C(str, Enum)'')
 									the member IS a string: give it CONTENT str(value) so
@@ -1870,6 +1916,87 @@ ___grailValueMixinFor: cls
 		or: [Enum ___grailIsStringType: mt]])
 			ifTrue: [mt]
 			ifFalse: [nil]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailIsGrailDefinedType: aClass
+	"True when aClass is one of Grail's OWN types -- a built-in storage or data
+	class -- rather than a class written in Python.
+
+	The discriminator is the symbol list.  Grail's built-ins are filed into the
+	``Python'' dictionary (AbstractPyInt, AbstractPyStr, PyDate, Enum, ...) or
+	are kernel classes named in the user's symbol list (Integer, Float,
+	CharacterCollection and its Unicode leaves); Class.gs's ___subclass___
+	creates every Python-level class with ``inDictionary: nil'', so a user
+	class is reachable only through its module namespace and is never found
+	here.  Being an IDENTITY test it also cannot be fooled by a user class that
+	merely reuses a built-in name.
+
+	Used to keep ___grailFindMemberNew: away from the storage constructors,
+	which do publish ``___new__:kw:'' but whose member construction Grail
+	already performs through ___grailCoerceMemberValue:toMemberType:.
+
+	Deliberately NOT an inheritance test: ``inheritsFrom: Number'' looks like
+	the same idea but matches every user int subclass too -- NamedInt is
+	AbstractPyInt-rooted -- which excluded the exact case this exists to admit."
+
+	| named |
+	aClass @env0:isNil ifTrue: [^ false].
+	named := [System @env0:myUserProfile @env0:symbolList
+		@env0:objectNamed: aClass @env0:name @env0:asSymbol]
+			@env0:on: AbstractException do: [:e | nil].
+	^ named == aClass
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailFindMemberNew: cls
+	"CPython _find_new_, clause 2: when the class body defines no __new__ of
+	its own, the member constructor is ``member_type.__new__'' -- the DATA
+	MIXIN's -- and members are then built as member_type.__new__(cls, *args).
+
+	    class NamedInt(int):
+	        def __new__(cls, *args):
+	            name, *args = args
+	            self = int.__new__(cls, *args)
+	            self._intname = name
+	            return self
+
+	    class NEI(NamedInt, Enum):
+	        x = ('the-x', 1)
+
+	Grail only ever honoured a __new__ defined ON cls (plus, narrowly, an
+	inherited ENUM one), so NEI's members were bare allocations holding the
+	raw tuple: _value_ was ('the-x', 1) instead of 1, and _intname was never
+	set at all -- six test_enum cases, all of them pickle round-trips that
+	first have to build the member.
+
+	Answers the defining class to construct through, or nil.
+
+	Two exclusions, both load-bearing:
+
+	  * a GRAIL-DEFINED type (___grailIsGrailDefinedType:).  AbstractPyInt and
+	    friends do publish ___new__:kw:, but ``class E(int, Enum)'' already
+	    gets its value through ___grailCoerceMemberValue:toMemberType:;
+	    routing it here as well would double-construct every int/str/float
+	    enum in the suite.
+	  * an ENUM class.  Enum.__new__ is the by-value LOOKUP, which CPython
+	    likewise excludes from _find_new_'s candidate set -- running it during
+	    construction is the ``do not use super().__new__'' misuse that
+	    Enum>>___new__:kw: exists to reject (test_bad_new_super).  The
+	    inherited-enum case keeps its own separate rule at the call site
+	    (test_multiple_mixin_inherited)."
+
+	| mt owner |
+	mt := Enum ___grailMemberTypeFor: cls.
+	(mt @env0:isNil or: [mt == object]) ifTrue: [^ nil].
+	(Enum ___grailIsGrailDefinedType: mt) ifTrue: [^ nil].
+	owner := mt @env0:whichClassIncludesSelector: #'___new__:kw:' environmentId: 1.
+	owner @env0:isNil ifTrue: [^ nil].
+	(Enum ___grailIsGrailDefinedType: owner) ifTrue: [^ nil].
+	((owner == Enum) or: [owner @env0:inheritsFrom: Enum]) ifTrue: [^ nil].
+	^ owner
 %
 
 category: 'Grail-Enum Metaclass'

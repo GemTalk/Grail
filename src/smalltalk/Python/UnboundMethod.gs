@@ -59,8 +59,52 @@ _setClass: aClass selector: aSym
 
 category: 'Grail-Private'
 method: UnboundMethod
-_resolveMethodNargs: nargs kwOk: kwOk
-	"Walk definingClass's chain INCLUSIVE and return the method from the
+_resolutionRootFor: obj
+	"``int.__repr__(x)'' where x is an int SUBCLASS instance.
+
+	Class.gs's ___subclass___ cannot root a Python int subclass at Integer --
+	GemStone seals it, and SmallInteger/LargeInteger are immediate/byte-format
+	with no room for instance variables -- so it substitutes AbstractPyInt, a
+	Number sibling carrying the integer in a ``value'' slot.  float does the
+	same with AbstractPyFloat.  That substitution happens at class-creation
+	time; this handle still names the sealed kernel class, so performing its
+	method NON-virtually on a boxed receiver ran Integer's code against an
+	object that is not an Integer.  It did not fail loudly -- it fell through
+	to Smalltalk's printString, so test_enum's
+	``int.__repr__(NamedInt('test', 5))'' answered ``aNamedInt''.
+
+	Resolve from the boxed base instead, which publishes the same protocol
+	(AbstractPyInt >> __repr__, __str__, __eq__, ...) against ``value''.
+	Deliberately the BASE and not ``obj class'': starting at the receiver's own
+	class would make the call VIRTUAL, and NamedInt defines a __repr__ whose
+	body is exactly ``int.__repr__(self)'' -- that recurses until the stack
+	dies.
+
+	str is deliberately absent: Class.gs leaves a plain ``class X(str)'' a
+	byte-format Unicode7 subclass (boxing it broke framework str types), so
+	its content already IS the string and the kernel method applies as-is."
+
+	| boxed |
+	(obj @env0:isKindOf: definingClass) ifTrue: [^ definingClass].
+	((definingClass == Integer)
+		or: [definingClass == SmallInteger or: [definingClass == LargeInteger]])
+		ifTrue: [
+			boxed := System @env0:myUserProfile @env0:symbolList
+				@env0:objectNamed: #'AbstractPyInt'.
+			(boxed @env0:notNil and: [obj @env0:isKindOf: boxed]) ifTrue: [^ boxed]].
+	((definingClass == Float)
+		or: [definingClass == SmallDouble or: [definingClass == BinaryFloat]])
+		ifTrue: [
+			boxed := System @env0:myUserProfile @env0:symbolList
+				@env0:objectNamed: #'AbstractPyFloat'.
+			(boxed @env0:notNil and: [obj @env0:isKindOf: boxed]) ifTrue: [^ boxed]].
+	^ definingClass
+%
+
+category: 'Grail-Private'
+method: UnboundMethod
+_resolveMethodNargs: nargs kwOk: kwOk from: rootClass
+	"Walk rootClass's chain INCLUSIVE and return the method from the
 	CLOSEST class that publishes a usable form.  Checking per-class (rather
 	than scanning the whole chain for the fixed form, then the whole chain
 	for varargs) keeps a class's own varargs ``_name:kw:'' from being
@@ -77,7 +121,7 @@ _resolveMethodNargs: nargs kwOk: kwOk
 		ifFalse: [nargs = 3 ifTrue: [(selector asString , ':_:_:') asSymbol]
 		ifFalse: [nil]]]].
 	vaSel := ('_' , selector asString , ':kw:') asSymbol.
-	walker := definingClass.
+	walker := rootClass.
 	[walker notNil] whileTrue: [
 		| md |
 		md := walker methodDictForEnv: 1.
@@ -186,7 +230,10 @@ value: positional value: kwargs
 		ifFalse: [#()].
 	nargs := rest @env0:size.
 	kwOk := kwargs == nil or: [kwargs @env0:isEmpty].
-	method := self @env0:_resolveMethodNargs: nargs kwOk: kwOk.
+	method := self
+		@env0:_resolveMethodNargs: nargs
+		kwOk: kwOk
+		from: (self @env0:_resolutionRootFor: obj).
 	method ifNil: [
 		^ AttributeError ___signal___:
 			('type object ''' @env0:, definingClass @env0:name @env0:asString
@@ -288,7 +335,7 @@ method: UnboundMethod
 __name__
 	"Python's ``func.__name__''.  ``selector'' holds the plain PYTHON
 	attribute name here (the Smalltalk selector with its arity colons is
-	rebuilt at call time by _resolveMethodNargs:kwOk:), so it is the name
+	rebuilt at call time by _resolveMethodNargs:kwOk:from:), so it is the name
 	CPython would report for ``Cls.m''.
 
 	Load-bearing for method decorators: functools.wraps copies __name__ /
@@ -308,6 +355,27 @@ __qualname__
 
 	definingClass == nil ifTrue: [^ selector @env0:asString].
 	^ definingClass @env0:name @env0:asString @env0:, '.' @env0:, selector @env0:asString
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+__objclass__
+	"CPython's ``method_descriptor.__objclass__'' -- the class that defines the
+	method ``Cls.m'' was reached through.  Code uses it to ask whether a slot is
+	still the inherited default; test_enum's NamedInt picks its str strategy
+	that way:
+
+	    base_str = int.__str__
+	    if base_str.__objclass__ is object:
+	        return base.__repr__(self)
+	    return base_str(self)
+
+	so a missing __objclass__ raised AttributeError before either branch could
+	run.  Answering definingClass gives the object-inherited case for free: a
+	selector found on Grail's ``object'' answers object, and ``is object'' is
+	then True exactly when CPython says it should be."
+
+	^ definingClass
 %
 
 category: 'Grail-Python Metadata'
