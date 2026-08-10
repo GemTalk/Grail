@@ -2016,7 +2016,7 @@ ___grailInstallClassProtocol: cls
 	mc := cls @env0:class.
 	#(#'__reversed__' #'mro' #'__repr__' #'__str__' #'__format__:'
 		#'_member_names_' #'_member_map_' #'__members__' #'_value2member_map_'
-		#'_value_repr_' #'_new_member_' #'__dir__' #'__bool__')
+		#'_value_repr_' #'_new_member_' #'__dir__' #'__bool__' #'__new__')
 		@env0:do: [:sel |
 			| prov provCat |
 			prov := mc @env0:whichClassIncludesSelector: sel environmentId: 1.
@@ -2778,6 +2778,30 @@ _member_names_
 	rec @env0:isNil ifTrue: [^ list @env0:withAll: #()].
 	^ list @env0:withAll: ((rec @env0:at: 3)
 		@env0:collect: [:m | m @env0:dynamicInstVarAt: #name])
+%
+
+category: 'Grail-Class Attrs'
+classmethod: Enum
+__new__
+	"``SomeEnum.__new__'' is ALWAYS Enum.__new__ (CPython EnumType.__new__:
+	whatever __new__ built the members is stashed as ``_new_member_'' and the
+	class's own __new__ is replaced with Enum's, so
+	``assertIs(NEI.__new__, Enum.__new__)'' holds even for a data-mixed enum
+	whose mix-in defines one -- test_enum's six test_subclasses_with_* cases).
+
+	Answering the handle for ENUM rather than for the receiver is the whole
+	point: a BoundMethod is equal by receiver+selector, so every enum class has
+	to name the same receiver for the identity to hold.  Calling it still does
+	the right thing -- with arguments it dispatches to Enum class>>___new__:kw:,
+	the by-value lookup that IS Enum.__new__.
+
+	Category MUST be Grail-Class Attrs: that is the category
+	object>>___pyAttrLoad___ PERFORMS on a class receiver rather than wrapping
+	as a BoundMethod (same contract as _member_type_ / _member_names_ below).
+	___grailInstallClassProtocol: copies this onto the metaclass of a data-mixed
+	enum, which does not inherit Enum class."
+
+	^ BoundMethod receiver: Enum selector: #'__new__'
 %
 
 category: 'Grail-Class Attrs'

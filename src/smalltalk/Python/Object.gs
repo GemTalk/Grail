@@ -2435,10 +2435,27 @@ ___pyAttrLoad___: aSym
 				(self ___classChainAttrLookup___: aSym)
 					@env0:ifNotNil: [:___dv | ^ ___dv]].
 		"Setter-paired class-level accessor on a Python user class —
-		value attribute (``class C: X = 1``)."
-		((self @env0:inheritsFrom: PythonInstance)
+		value attribute (``class C: X = 1``).
+
+		``__new__'' is excluded, and is the ONE name that has to be: the pair
+		this branch looks for is a SYNTHESISED getter+setter, but the metaclass
+		chain bottoms out at ``object class'', which defines the allocator in
+		BOTH arities -- unary ``__new__'' and 1-arg ``__new__: cls''.  Those are
+		two arities of one method, not a getter and a setter, so the heuristic
+		read ``Cls.__new__'' as a value attribute and PERFORMED the unary
+		allocator: every ``Cls.__new__'' on a PythonInstance-rooted class
+		CONSTRUCTED an instance instead of answering the function
+		(``Enum.__new__'' was ``<Enum.nil: nil>'', ``Plain.__new__'' a fresh
+		``<Plain object>'').  Sweeping every dunder that resolves off a user
+		class shows __new__ alone is affected -- __init__/__str__/__eq__/... have
+		no unary class-side twin and already resolve correctly -- so the
+		exclusion is exactly as narrow as the defect.  This mirrors the
+		binary-dunder mis-fire ___pyAttrStore___ guards against on the store
+		side, where ``__eq__:'' looks like a setter for the same reason."
+		((aSym ~~ #'__new__')
+			and: [(self @env0:inheritsFrom: PythonInstance)
 			and: [(self ___respondsTo___: aSym)
-				and: [(self ___respondsTo___: sym1)]])
+				and: [(self ___respondsTo___: sym1)]]])
 			ifTrue: [
 				^ self ___classDescriptorGet___: (self @env0:perform: aSym env: 1)
 		].
