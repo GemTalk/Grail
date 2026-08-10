@@ -296,6 +296,37 @@ value: positional value: kwargs
 	^ self @env0:perform: #'__call__' env: 1 withArguments: positional
 %
 
+category: 'Python-Callable'
+method: PythonInstance
+___pyCallValue___: positional kw: kwargs
+	"Forward the INDIRECT call protocol to ``value:value:'' above, which
+	does the real ``__call__'' dispatch.  Overrides
+	Object>>___pyCallValue___:kw:, whose default answer is the TypeError
+	``'<typename>' object is not callable'' — wrong for an instance whose
+	class defines __call__, since in CPython ``obj(...)'' works exactly
+	when ``type(obj).__call__'' exists.  Same forwarding shape as
+	BoundMethod>>___pyCallValue___:kw:.
+
+	Reached whenever a callable INSTANCE is invoked other than as a
+	literal ``obj(...)'' call site: through a variable, and — the case
+	that motivated this — as a DECORATOR.  A decorator built as a class
+	instance (``cpython_only = _SkipDecorator(...)'' in test.support, and
+	the ``@retry(...)''-style objects common in libraries) is applied by
+	codegen through ___pyCallValue___:kw:, so it raised the not-callable
+	TypeError inside the decorator-application guard and was SILENTLY
+	dropped: the decorator never ran, at module scope and in class bodies
+	alike, while the same object called explicitly worked.  Plain-function
+	decorators were unaffected, which is why this went unnoticed.
+
+	Instances only.  Calling a CLASS through the indirect protocol still
+	lands on Object>>___pyCallValue___:kw: and still reports not-callable
+	— see the discussion there of why the classes that want it opt in
+	individually (the enum member builder counts a descriptor produced by
+	``@enum.property'' / ``@member'' as a member)."
+
+	^ self value: positional value: kwargs
+%
+
 category: 'Python-Introspection'
 method: PythonInstance
 __dict__

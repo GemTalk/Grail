@@ -24,9 +24,9 @@ different rows and merges cleanly.
 | test.test_operator | OK | 110 | 0 | 0 | 58 |  |
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
 | test.test_datetime | ERROR | 525 | 0 | 6 | 3 |  |
-| test.test_re | OK | 165 | 0 | 0 | 28 |  |
-| test.test_functools | OK | 325 | 0 | 0 | 124 |  |
-| test.test_list | OK | 68 | 0 | 0 | 3 |  |
+| test.test_re | OK | 165 | 0 | 0 | 30 |  |
+| test.test_functools | OK | 325 | 0 | 0 | 125 |  |
+| test.test_list | OK | 68 | 0 | 0 | 4 |  |
 | test.test_tuple | OK | 38 | 0 | 0 | 6 |  |
 | test.test_dict | OK | 120 | 0 | 0 | 20 |  |
 | test.test_set | OK | 628 | 0 | 0 | 21 |  |
@@ -61,7 +61,7 @@ different rows and merges cleanly.
 | test.test_listcomps | ERROR | 60 | 7 | 20 | 0 |  |
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
 | test.test_copy | ERROR | 81 | 21 | 12 | 0 |  |
-| test.test_scope | ERROR | 41 | 6 | 9 | 0 |  |
+| test.test_scope | ERROR | 41 | 6 | 7 | 3 |  |
 | test.test_yield_from | ERROR | 43 | 18 | 11 | 0 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
 | test.test_format | OK | 18 | 0 | 0 | 3 |  |
