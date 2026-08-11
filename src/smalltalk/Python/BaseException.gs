@@ -997,7 +997,7 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 	Such a raise yields only the frames inside the generator, and the single-frame
 	fallback still applies when that leaves nothing."
 
-	| st catchName pushed |
+	| st catchName pushed pendingHome pendingLine |
 	st := self @env0:_gsStack.
 	st isNil ifTrue: [^ false].
 	"PyCode keeps its fields in DYNAMIC INSTVARS with no accessor methods (a
@@ -1010,15 +1010,38 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 		ifFalse: [aCode @env0:dynamicInstVarAt: #'co_name'].
 	pushed := 0.
 	2 to: st @env0:size by: 3 do: [:i |
-		| meth ip name |
+		| meth ip name home |
 		meth := st @env0:at: i.
 		"Trailing nils pad the array -- the real frames end here."
 		meth isNil ifTrue: [^ pushed @env0:> 0].
+		ip := st @env0:at: i @env0:+ 1.
+		"Which METHOD a frame belongs to: a block answers its home, a method
+		answers itself.  CPython has no frame of its own for a block (a
+		comprehension body, a try body, an except handler), so blocks are merged
+		into their home rather than reported."
+		home := (meth @env0:environmentId @env0:= 1)
+			ifTrue: [[meth @env0:homeMethod] on: Error do: [:ex | ex return: meth]]
+			ifFalse: [nil].
+		home isNil ifTrue: [home := meth].
+		((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector isNil])
+			ifTrue: [
+				"A BLOCK frame supplies the LINE for its home method, and it is the
+				only reliable source of it.  The block is parked at the statement in
+				flight; the home METHOD frame is parked at whatever construct is
+				running that block -- for a ``try'' body or an ``except'' handler,
+				the on:do: -- and such an ip does not resolve back to the statement
+				(§9.10: under native code it reads as the function's LAST
+				___curPos___, which is how a re-raising frame came out at its
+				``raise'' instead of at the call the exception entered on).
+				Innermost block wins: a later one for the same home is an enclosing
+				block, hence a less precise position."
+				pendingHome @env0:~~ home ifTrue: [
+					pendingHome := home.
+					pendingLine := BaseException ___pythonLineForMethod___: meth ip: ip]].
 		((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector notNil])
 			ifTrue: [
 				| pyLine |
 				name := BaseException ___pythonFrameNameFor___: meth @env0:selector.
-				ip := st @env0:at: i @env0:+ 1.
 				"A non-nil derived line is what IDENTIFIES a Python frame, and it
 				is self-validating: only codegen emits ``___curPos___ := N'', so
 				Grail's own hand-written env-1 plumbing (``Object >>
@@ -1029,7 +1052,11 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 				codegen's 'Grail-Methods'."
 				pyLine := name isNil
 					ifTrue: [nil]
-					ifFalse: [BaseException ___pythonLineForMethod___: meth ip: ip].
+					ifFalse: [(pendingHome @env0:== home and: [pendingLine notNil])
+						ifTrue: [pendingLine]
+						ifFalse: [BaseException ___pythonLineForMethod___: meth ip: ip]].
+				pendingHome := nil.
+				pendingLine := nil.
 				pyLine notNil ifTrue: [
 					| isCatcher frameCode |
 					isCatcher := catchName notNil and: [name @env0:= catchName].
