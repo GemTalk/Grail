@@ -3363,15 +3363,54 @@ value: positional value: keywords
 	which tried to iterate the second positional (a plain int) and leaked a raw
 	Smalltalk error (``a SmallInteger does not understand #do:'')."
 	((positional @env0:size @env0:>= 2)
-		and: [((positional @env0:at: 1) isKindOf: CharacterCollection) not
 		and: [(keywords == nil or: [keywords @env0:isEmpty])
-		and: [(Enum ___grailMembers: self) @env0:notEmpty]]])
-		ifTrue: [^ Enum ___grailLookupValue: self
-			value: ((Python @env0:at: #tuple otherwise: Array) @env0:withAll: positional)].
+		and: [(Enum ___grailMembers: self) @env0:notEmpty
+		and: [(((positional @env0:at: 1) isKindOf: CharacterCollection) not)
+			or: [(Enum ___grailIsNamesSpec: (positional @env0:at: 2)) not]]]])
+		ifTrue: [ | packed mt |
+			packed := (Python @env0:at: #tuple otherwise: Array) @env0:withAll: positional.
+			^ [Enum ___grailLookupValue: self value: packed]
+				@env0:on: AbstractException do: [:e |
+					"A MIXED-IN enum stores member_type(*args) as the value, not the
+					argument tuple, so the several positionals have to be run through
+					the constructor before the lookup can match: ``class NEI(NamedInt,
+					Enum): y = ('the-y', 2)'' has _value_ NamedInt('the-y', 2), and
+					unpickling a member whose mixin supplies its own __reduce_ex__
+					calls NEI('the-y', 2) (test_subclasses_with_reduce_ex).  The tuple
+					lookup is tried FIRST so a plain multi-value member -- Cardinal(1,
+					0), whose value IS the tuple -- keeps its existing answer."
+					mt := Enum ___grailMemberTypeFor: self.
+					(mt @env0:notNil and: [mt ~~ object])
+						ifTrue: [Enum ___grailLookupValue: self
+							value: (Enum ___grailConstructMemberValueStrict: mt args: packed)]
+						ifFalse: [e @env0:pass]]].
 	((positional @env0:size @env0:>= 2)
 		or: [keywords ~~ nil and: [keywords @env0:size @env0:> 0]])
 		ifTrue: [^ Enum ___grailFunctional: self positional: positional keywords: keywords].
 	^ Enum ___grailLookupValue: self value: (positional @env0:at: 1)
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailIsNamesSpec: anObject
+	"Could anObject be the functional API's ``names'' argument -- a
+	whitespace/comma-separated string, a mapping, or a sequence of names or
+	(name, value) pairs?
+
+	The discriminator that separates ``Enum('Name', 'a b c')'' from a
+	multi-value member LOOKUP whose first value happens to be a string.
+	Refusing every string first-positional was too coarse: unpickling
+	``NEI('the-y', 2)'' -- what a mixin's own __reduce_ex__ produces
+	(test_subclasses_with_reduce_ex) -- went to the functional API, which tried
+	to iterate the 2 and raised ``'int' object is not iterable''.  CPython does
+	not ask this question at all: a class that already HAS members cannot be
+	extended, so every such call is a lookup.  Grail keeps the name test because
+	it also routes the subclass form BaseEnum('MainEnum', {...}), and narrows it
+	to calls whose second argument could actually BE names."
+
+	(anObject isKindOf: CharacterCollection) ifTrue: [^ true].
+	(anObject isKindOf: KeyValueDictionary) ifTrue: [^ true].
+	^ anObject @env0:respondsTo: #'do:'
 %
 
 category: 'Grail-Enum Metaclass'
@@ -4078,6 +4117,36 @@ __reduce__
 	to object>>__reduce__ and leaked a raw Smalltalk error (`Not yet
 	implemented: __reduce__`).  Enum-rooted only (plain Enum + Flag); mixed
 	int/str-rooted members do not inherit this."
+
+	| tupleClass |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	^ tupleClass @env0:withAll: {
+		self @env0:class.
+		(tupleClass @env0:withAll: { self @env0:dynamicInstVarAt: #value }) }
+%
+
+category: 'Grail-Pickle'
+method: Enum
+__reduce_ex__: proto
+	"CPython names this one __reduce_ex__, and the distinction MATTERS for a
+	mixed-in enum: pickle asks for __reduce_ex__ FIRST, and only falls back to
+	__reduce__.
+
+	``class NEI(NamedInt, Enum)'' where NamedInt defines __reduce__ puts
+	NamedInt's ahead of Enum's by MRO -- correctly -- so with Enum offering only
+	__reduce__ the member pickled as ``(NEI, ('the-y', 2))'', NamedInt's
+	constructor arguments, and unpickling called NEI('the-y', 2): two positional
+	arguments on an enum class, which is the FUNCTIONAL API and died with
+	``'int' object is not iterable'' (test_subclasses_with_reduce).  CPython
+	resolves __reduce_ex__ to Enum's, because NamedInt defines only __reduce__,
+	and pickles the member by its VALUE.
+
+	__reduce__ stays as it was: a mixin that overrides __reduce_ex__ itself
+	(test_subclasses_with_reduce_ex) still wins over this by the same MRO rule.
+
+	The body is CPython's own -- ``return self.__class__, (self._value_, )'' --
+	rather than a delegation to self.__reduce__, which would resolve straight
+	back to the mixin's override and answer the same wrong thing."
 
 	| tupleClass |
 	tupleClass := Python @env0:at: #tuple otherwise: Array.

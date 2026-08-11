@@ -678,6 +678,7 @@ run
 	at: #'EnumSecondaryMixinTestCase' put: nil;
 	at: #'EnumMemberMarkerTestCase' put: nil;
 	at: #'EnumMixinNewTestCase' put: nil;
+	at: #'EnumMixinReduceTestCase' put: nil;
 	at: #'EnumMixinValueCoercionTestCase' put: nil;
 	at: #'EnumGlobalInjectTestCase' put: nil;
 	at: #'ExceptionGroupTestCase' put: nil;
@@ -1452,6 +1453,7 @@ input src/smalltalk/PythonTests/EnumPickleHelperTestCase.gs
 input src/smalltalk/PythonTests/EnumSecondaryMixinTestCase.gs
 input src/smalltalk/PythonTests/EnumMemberMarkerTestCase.gs
 input src/smalltalk/PythonTests/EnumMixinNewTestCase.gs
+input src/smalltalk/PythonTests/EnumMixinReduceTestCase.gs
 input src/smalltalk/PythonTests/EnumMixinValueCoercionTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyClosureCellTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyRebindingTestCase.gs
