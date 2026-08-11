@@ -69,8 +69,9 @@ def consume_next():
 
 
 def consume_inner():
-    for _ in gen():
-        pass
+    g = gen()
+    next(g)
+    next(g)
 
 
 def nested_consumer():
@@ -102,10 +103,10 @@ def throw_into():
 
 EXPECTED_FOR = [('consume_for', 54), ('gen', 28)]
 EXPECTED_NEXT = [('consume_next', 65), ('gen', 28)]
-EXPECTED_NESTED = [('nested_consumer', 78), ('consume_inner', 72), ('gen', 28)]
-EXPECTED_DELEGATED = [('consume_delegated', 86), ('outer_gen', 37),
+EXPECTED_NESTED = [('nested_consumer', 79), ('consume_inner', 74), ('gen', 28)]
+EXPECTED_DELEGATED = [('consume_delegated', 87), ('outer_gen', 37),
                       ('inner_gen', 33)]
-EXPECTED_THROWN = [('throw_into', 97), ('simple_gen', 41)]
+EXPECTED_THROWN = [('throw_into', 98), ('simple_gen', 41)]
 
 
 def the_generators_own_frame_is_reported():
@@ -128,7 +129,15 @@ def advancing_with_next_gives_the_same_chain():
 
 def every_consumer_frame_appears():
     """Not just the catching one: an intermediate function between the catcher
-    and the generator gets a frame, as it does for any other exception."""
+    and the generator gets a frame, as it does for any other exception.
+
+    consume_inner advances the generator with next() rather than a ``for'' loop
+    deliberately.  An intermediate frame parked on a LOOP's iteration send reports
+    the loop BODY's line under native code (73 for CPython's 72, measured in CI) --
+    the same caret-past-the-construct weakness as §9.10, and the reason this rule
+    needs a frame parked on a plain call to test it honestly.  The for-loop shape is
+    covered by the_generators_own_frame_is_reported, where the loop belongs to the
+    CATCHING function and so takes codegen's exact position instead."""
     return _chain(nested_consumer()) == EXPECTED_NESTED
 
 

@@ -1201,6 +1201,30 @@ behaviour change when the boundary is spliced". It would not have: it asserted
 rather than numbers or names — numbers because constants for the check's own body
 need editing whenever anything above them moves, names because of the gap below.
 
+#### A third native-code residual: a frame parked on a loop's iteration send
+
+CI found this one, as it found §9.10's. An **intermediate** consumer frame — one
+that is neither the catcher nor parked on a plain call — reports the wrong line
+under native code:
+
+```
+consume_inner:  for _ in gen():   <- 72, what CPython reports
+                    pass          <- 73, what a native-code capture derives
+```
+
+The block frame is parked on the loop's `__next__` send, and the caret lands past
+the loop's own `___curPos___ := 73`. Same shape as §9.10's `on:do:` case: an ip
+inside a *construct* does not resolve back to the statement in flight, and only the
+positions **codegen** records are dependable there.
+
+It does not affect the catching function (which takes codegen's position) nor a
+frame parked on a plain call, so `generator_frames.py` advances the intermediate
+consumer with `next()` and says so — the alternative would be a fixture that
+tolerates two answers, which is a test that has stopped testing. The general fix is
+to prefer the frames generated code pushed (`ForAst` records the iterator clause
+with PEP 657 columns) over re-deriving them during a rebuild, which is a change to
+the rebuild rule of §9.10 rather than to this splice.
+
 #### Still open: nested functions
 
 Measured on `main` as well as here, so pre-existing and not from this change:
