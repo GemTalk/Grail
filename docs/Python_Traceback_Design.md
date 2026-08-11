@@ -887,6 +887,43 @@ makes merging them safe.
 
 That removes a whole codegen phase from §9.7's step 3.
 
+#### …but the derivation does NOT hold for the CATCHING frame (3.7.5 ≠ 4.0)
+
+The table above measured the catching frame on **4.0**, where `multi_catcher`'s
+ip resolved to its call site. **3.7.5 does not.** That frame is suspended inside
+the `on:do:` protected block codegen wraps a `try` in, and 3.7.5's
+`_sourceAtIp:` answers a report whose caret sits *past the whole block* — so
+"the last `___curPos___ := N` at or above the caret" is the function's **final**
+statement. For `tests/python/frame_depth.py`'s `catcher`, CI reported
+`car=19 d=34`: line 34, `return None`, for a call on line 31.
+
+```
+17{   ___curPos___ := 34.}
+18{   ^ (None).}
+19{ * ^6 …}          <- caret, past the on:do: that is actually executing
+```
+
+The catching frame therefore takes the position **codegen recorded**, never the
+derived one — `___pushCatchingFrame___` is handed `pos: ___curPos___`, which is
+exact by construction. Note the shape: codegen passes a bare **SmallInteger**
+for an ordinary statement and only a 5-tuple for a comprehension / for-loop
+iterator clause, so honouring `pos` only when `isKindOf: Array` (as the first
+cut did) silently left every ordinary `try/except` on the derived line. That
+read correctly on 4.0 and wrongly on 3.7.5 — three tests that pass on one
+version and fail on the other, from one missing branch.
+
+Frames **below** the catcher are suspended at a *call* site, which both versions
+resolve exactly; CI confirms `leaf`/`middle`/`outer` derive 18/22/26 on 3.7.5.
+
+Residual, untested either way: an intermediate frame that is itself inside a
+`try` whose handler did not match is suspended in a protected block too, so on
+3.7.x its line may read as its function's last statement. The derivation now
+**fails closed** when no caret line is present at all (answering nil drops the
+frame, leaving the single-frame fallback) — a missing frame is recoverable, a
+confidently wrong line number is not — but it cannot detect a caret that is
+merely in the wrong place.
+
+
 #### Cost: ~100 µs per frame, at traceback-build time only
 
 200 iterations over the env-1 frames of one captured stack: **182 ms**, ≈0.9 ms
@@ -925,15 +962,37 @@ resume time, which is its own change and should not gate the ordinary case.
 
 #### Revised remaining work
 
-1. Set the flag at session init (per-session; must be re-set, not stored).
-2. Stamp `_gsStack: #()` on `PythonReturn` / `PythonBreak` / `PythonContinue` /
-   `StopIteration` at construction, so control flow stays at baseline cost
-   (§9.2 measured 350 → 150 ns at depth 50).
-3. ~~Emit the ip → Python-line map~~ **not needed** — derive from
-   `_sourceAtIp:` + `___curPos___`, with a per-(method, ip) cache.
-4. Walk `_gsStack` at the `except` binding, applying the selection rule above:
-   env 1, generated class, non-nil selector, merge block frames, stop at nil,
-   reverse to outermost-first, and trim to the catching frame.
-5. Splice rather than replace on re-raise.
-6. Generators: single frame as today, then splice across the process boundary as
-   a separate change.
+1. ~~Set the flag at session init~~ **done** — armed on the raise path
+   (`___pyRaiseNew___`), not an import hook: a session can raise without
+   importing, and the flag must be set *before* the signal. Memoised in
+   SessionTemps, so it costs one dictionary probe per raise thereafter.
+2. ~~Stamp `_gsStack: #()` on the control-flow signals~~ **done** for
+   `PythonReturn` / `PythonBreak` / `PythonContinue`.
+3. ~~Emit the ip → Python-line map~~ **not needed** — derived from
+   `_sourceAtIp:` + `___curPos___`, cached per (method, ip).
+4. ~~Walk `_gsStack` at the `except` binding~~ **done**, with one correction to
+   the rule: a frame is identified by its **line derivation succeeding**, not by
+   a class or category test. That is self-validating (only codegen emits
+   `___curPos___`) and avoids a false-positive list — a category test is not
+   usable, because `importlib` and `ShimSreModule` are hand-written yet also use
+   codegen's `Grail-Methods`.
+5. Splice rather than replace on re-raise. **Still open.**
+6. Generators: single frame as today (pinned by a test), then splice across the
+   process boundary as a separate change. **Still open.**
+
+One thing the walk must preserve: the catching frame keeps the **precise
+position** codegen recorded (`posArray`'s 5-tuple) when it has one. The walk only
+knows line granularity, and pushing its line-only position over the top of a
+comprehension's exact columns broke `testForLoopExceptionPositions`
+(`init_span`) — PEP 657 columns are what `test_dictcomps` / `test_setcomps`
+assert on.
+
+**What it bought, measured.** `test.test_traceback` pass **59 → 61**. That is far
+short of the "~23" §9.6 attributed to frame depth, and worth being clear about:
+correct multi-frame tracebacks are *necessary* for those tests but not
+*sufficient* — the rest also need `sys._getframe`, `__cause__`/`__context__`
+chaining, caret/anchor lines, or exception-group tree rendering. The two that
+moved (`LimitTests.test_extract_tb`, `test_format_exception`) did so only after
+`limit` was threaded through `extract_tb` / `format_tb` / `format_exception` /
+`print_exception`, which the correct frame count exposed as the next blocker:
+both had previously failed on `1 != 6` and got no further.

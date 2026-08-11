@@ -39,7 +39,13 @@ set compile_env: 0
 category: 'Signalling'
 classmethod: PythonContinue
 ___signal___
-	^ self new signal
+	"Opt out of the VM's raise-time stack capture -- see PythonReturn class >>
+	___signal___ for why (a loop signals this on every break/continue, and a
+	captured stack would be pure cost)."
+	| ex |
+	ex := self new.
+	ex @env0:_gsStack: #().
+	^ ex signal
 %
 
 set compile_env: 0
