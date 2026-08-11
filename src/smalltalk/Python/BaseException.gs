@@ -1091,23 +1091,78 @@ ___codeForMethod___: aMethod name: aName ip: anIp aCode: catchCode
 category: 'Grail-Traceback Building'
 method: BaseException
 ___pushCatchingFrame___: aCode pos: posArray
-	"Add a frame for the function CATCHING this exception (TryAst emits this at
-	the except handler), but ONLY when no traceback exists yet.  A body wrapper
-	(nested/complex functions) or the comprehension iterator wrapper already
-	locates the exception more precisely; adding the catch-site frame on top
-	would duplicate it (and, for the comprehension, replace the exact-column
-	frame the test checks).  So this is the universal FALLBACK -- it fires for
-	an exception raised in a wrapper-less function (a plain module-level def or
-	method) and caught here, which would otherwise carry no traceback at all."
+	"Add the frames for an exception arriving at this except handler (TryAst emits
+	this there).  Three cases, distinguished by what -- if anything -- is already
+	on the exception:
 
-	tracebackObj isNil ifFalse: [^ self].
-	"Prefer the WHOLE propagation path from the VM's captured stack (§9.9); fall
-	back to the single catch-site frame when there is no capture -- no flag, a
-	generator raise whose captured frames all sat outside Python code, or an
-	exception that pre-stamped _gsStack to opt out."
+	1. NO traceback yet: build the whole propagation path from the VM's captured
+	   stack (§9.9), falling back to the single catch-site frame when there is no
+	   capture (no flag, a generator raise whose captured frames all sat outside
+	   Python code, or an exception that pre-stamped _gsStack to opt out).
+
+	2. A traceback whose head names THIS function: a body wrapper (nested/complex
+	   functions) or the comprehension iterator wrapper already located the
+	   exception inside us, and more precisely than we can -- it has PEP 657
+	   columns.  Leave it alone.  Rebuilding here is what broke
+	   testForLoopExceptionPositions (init_span).
+
+	3. A traceback whose head names ANOTHER function: the exception was caught
+	   somewhere deeper, RE-RAISED (bare ``raise''), and has now propagated up
+	   into us.  CPython adds a frame for every function it unwinds through, each
+	   at the line where the exception ENTERED that function -- not at the
+	   ``raise'' -- and each function appears once:
+
+	       two_levels@21 passthrough@16 mid@10 leaf@5
+
+	   Rebuilding from the live captured stack answers exactly that, because
+	   Smalltalk has not unwound anything: a handler runs ON TOP of the frames
+	   that signalled, so the stack still holds the original chain (leaf, mid)
+	   below the re-raise, with the newly entered frames (passthrough,
+	   two_levels) above it -- all parked at their call sites, which is the
+	   position CPython reports.  So the correct splice is to discard the partial
+	   chain and walk again; prepending the catch-site frame instead would report
+	   only the catcher and drop every pass-through frame.
+
+	Same-name recursion is the one case case 3 cannot see: an exception re-raised
+	in f and caught again in f reads as case 2 and keeps the deeper chain."
+
+	| headName saved |
+	tracebackObj isNil ifTrue: [
+		(self ___buildFramesFromCapturedStack___: aCode pos: posArray)
+			ifTrue: [^ self].
+		^ self ___pushFrameFromPos___: aCode pos: posArray].
+
+	headName := self ___headFrameName___.
+	((headName isNil or: [aCode isNil])
+		or: [headName @env0:= (aCode @env0:dynamicInstVarAt: #'co_name')])
+			ifTrue: [^ self].
+
+	"Case 3.  Keep the old chain in hand: if the walk cannot produce frames (no
+	capture in this session) the partial traceback is still better than none, and
+	the catch-site frame is then prepended to it as before."
+	saved := tracebackObj.
+	tracebackObj := nil.
 	(self ___buildFramesFromCapturedStack___: aCode pos: posArray)
 		ifTrue: [^ self].
+	tracebackObj := saved.
 	^ self ___pushFrameFromPos___: aCode pos: posArray
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___headFrameName___
+	"co_name of the frame at the head of this exception's traceback, or nil when
+	it has none.  PyTraceback / PyFrame / PyCode all keep their fields in DYNAMIC
+	instVars with no accessors (a Python read resolves them through
+	___pyAttrLoad___), so this reads the slots."
+
+	| frame code |
+	tracebackObj isNil ifTrue: [^ nil].
+	frame := tracebackObj @env0:dynamicInstVarAt: #'tb_frame'.
+	frame isNil ifTrue: [^ nil].
+	code := frame @env0:dynamicInstVarAt: #'f_code'.
+	code isNil ifTrue: [^ nil].
+	^ code @env0:dynamicInstVarAt: #'co_name'
 %
 
 category: 'Grail-Current Exception'

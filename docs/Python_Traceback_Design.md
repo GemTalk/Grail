@@ -987,16 +987,20 @@ resume time, which is its own change and should not gate the ordinary case.
    `___curPos___`) and avoids a false-positive list — a category test is not
    usable, because `importlib` and `ShimSreModule` are hand-written yet also use
    codegen's `Grail-Methods`.
-5. Splice rather than replace on re-raise. **Still open.**
+5. ~~Splice rather than replace on re-raise~~ **done** — and the splice turned
+   out to be a *rebuild*, not an append; see §9.10.
 6. Generators: single frame as today (pinned by a test), then splice across the
    process boundary as a separate change. **Still open.**
+7. An exception raised inside an `except` handler inherits the handled
+   exception's frames. **Open, found while doing 5**; see §9.10.
 
-One thing the walk must preserve: the catching frame keeps the **precise
-position** codegen recorded (`posArray`'s 5-tuple) when it has one. The walk only
-knows line granularity, and pushing its line-only position over the top of a
-comprehension's exact columns broke `testForLoopExceptionPositions`
-(`init_span`) — PEP 657 columns are what `test_dictcomps` / `test_setcomps`
-assert on.
+One thing the walk must preserve: the catching frame keeps the position
+**codegen** recorded, in either shape it comes in — a bare `___curPos___`
+SmallInteger, or the 5-tuple with PEP 657 columns for a comprehension / for-loop
+iterator clause. Honouring only the 5-tuple lost the columns on comprehensions
+(`testForLoopExceptionPositions`, `init_span`, which is what `test_dictcomps` /
+`test_setcomps` assert on) *and* left every ordinary `try/except` on an
+ip-derived line, which is native-code dependent.
 
 **What it bought, measured.** `test.test_traceback` pass **59 → 61**. That is far
 short of the "~23" §9.6 attributed to frame depth, and worth being clear about:
@@ -1007,3 +1011,68 @@ moved (`LimitTests.test_extract_tb`, `test_format_exception`) did so only after
 `limit` was threaded through `extract_tb` / `format_tb` / `format_exception` /
 `print_exception`, which the correct frame count exposed as the next blocker:
 both had previously failed on `1 != 6` and got no further.
+
+### 9.10 Re-raise splicing, and the handler-context gap (2026-08-11, gs40)
+
+Item 5 said "splice rather than replace". Measured against real CPython 3.14.6,
+the correct operation is the opposite: **rebuild**.
+
+`___pushCatchingFrame___` used to bail out whenever a traceback already existed,
+so everything above a bare `raise` was lost. CPython instead adds a frame for
+**every** function the exception unwinds through, each at the line where it
+*entered* that function — not at the `raise` — and each function exactly once:
+
+| scenario | CPython | Grail before | Grail now |
+|---|---|---|---|
+| bare re-raise | `outer@17 middle@10 leaf@5` | `middle@10 leaf@5` | matches |
+| through a `try`-less function | `two_levels@21 passthrough@16 mid@10 leaf@5` | `mid@10 leaf@5` | matches |
+| two nested re-raises | `catch_twice@42 reraise_twice_outer@35 reraise_twice_inner@28 leaf@5` | `reraise_twice_inner@28 leaf@5` | matches |
+
+Rebuilding from the live captured stack answers all three exactly, for a reason
+specific to the host: **Smalltalk has not unwound anything.** A handler runs *on
+top of* the frames that signalled, so at the moment of the re-raise the stack
+still holds the original chain (`leaf`, `mid`) below the handler, with the newly
+entered frames (`passthrough`, `two_levels`) above it — every one parked at its
+call site, which is the position CPython reports. Appending only the catch-site
+frame would have dropped every pass-through frame.
+
+Which of the three cases applies is decided by the head of the existing
+traceback:
+
+- head names **this** function → a body wrapper or comprehension wrapper already
+  located the exception here, more precisely (it has columns). Leave it.
+- head names **another** function → the exception was re-raised deeper and has
+  propagated into us. Discard the partial chain and walk again.
+
+Same-name recursion is the case that rule cannot see: re-raised in `f` and caught
+again in `f` reads as the first case and keeps the deeper chain.
+
+#### The gap this exposed: raising a NEW exception inside a handler
+
+The same "nothing has unwound" property that makes the rebuild correct makes this
+case wrong, and it predates this change:
+
+```python
+def explicit():
+    try:
+        leaf()                     # 25
+    except ValueError:
+        raise KeyError('wrapped')  # 27
+```
+
+| | frames |
+|---|---|
+| CPython | `catch_explicit@32 explicit@27` |
+| Grail | `catch_explicit@32 explicit@25 leaf@5` |
+
+Two errors, one root cause. `leaf@5` is still on the Smalltalk stack below the
+handler, so the walk reports it even though Python considers it unwound — the new
+exception must not inherit it. And `explicit` reads as line 25 (the `leaf()` call,
+where its frame is parked at the `on:do:`) instead of 27, because the statement in
+flight is known only to the handler *block*, whose frame the walk skips.
+
+Both point the same way: the walk needs to recognise that the innermost Python
+frame is the **handler block's home method**, not the deepest frame on the stack,
+and stop there rather than continuing into the signalling frames below. That is
+item 7, and it is a change to frame identification rather than to splicing, so it
+is deliberately not bundled here.
