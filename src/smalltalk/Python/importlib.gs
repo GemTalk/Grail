@@ -2385,6 +2385,40 @@ ___c3Linearize___: aClass bases: basesArray
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___copyDecoratorRebinding___: aSelector from: aBase to: aClass
+	"Copy the class-body decorator rebinding for aSelector, if the base has
+	one, alongside the compiled method ___mergeSecondaryBases___ just copied.
+
+	``@classproperty def MAX(cls)'' compiles to a method AND stores the
+	decorated object under #MAX in the base's class-side dynInstVars holder;
+	___pyAttrLoad___ reads that holder (via ___classChainAttrLookup___:) before
+	it falls back to wrapping the method, so the holder entry IS the attribute.
+
+	Keyword selectors are skipped -- the holder is keyed by the bare Python
+	name, and the unary selector in the same method dictionary already carries
+	it, so the arity variants would each re-copy the same entry.  Nothing is
+	overwritten: an entry already on aClass came from its own class body or
+	from an earlier (higher-precedence) secondary base."
+
+	| baseHolder deco holder |
+	(aSelector asString includes: $:) ifTrue: [^ self].
+	baseHolder := [aBase perform: #dynInstVars env: 1] on: Error do: [:e | nil].
+	baseHolder isNil ifTrue: [^ self].
+	deco := [baseHolder dynamicInstVarAt: aSelector] on: Error do: [:e | nil].
+	deco isNil ifTrue: [^ self].
+	holder := [aClass perform: #dynInstVars env: 1] on: Error do: [:e | nil].
+	holder isNil ifTrue: [
+		holder := Object new.
+		[aClass perform: #dynInstVars: env: 1 withArguments: { holder }]
+			on: Error do: [:e | holder := nil]].
+	holder isNil ifTrue: [^ self].
+	([holder dynamicInstVarAt: aSelector] on: Error do: [:e | nil]) isNil ifTrue: [
+		[holder dynamicInstVarAt: aSelector put: deco] on: Error do: [:e | nil]].
+	^ self
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___mergeSecondaryBases___: aClass bases: secondaryBases
 	"Multiple-inheritance method resolution.  ``aClass`` already
 	inherits its PRIMARY base (the storage base selected by
@@ -2478,7 +2512,27 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 								env: 1
 								withArguments: { src. 'Grail-MI-Inherited' }]
 							on: Error do: [:e | nil]
-						]
+						].
+						"A class-body DECORATOR rebinds the name it decorates:
+						the compiled method stays put and the DECORATED object
+						lands in the base's dynInstVars holder, which is what
+						``Cls.name'' actually reads.  Copying the method alone
+						therefore hands the subclass the RAW, undecorated
+						function -- ``@classproperty def MAX'' answered an
+						UnboundMethod instead of running the descriptor, but
+						only when the mixin was a SECONDARY base
+						(``class Color(StrMixin, MaxMixin, Enum)''); as the
+						primary base it inherits the holder through the chain
+						and always worked (test_enum test_multiple_mixin).
+
+						Tied to the method copy rather than done as its own
+						sweep of the holder: this is exactly the rebinding that
+						belongs to a def, so it inherits shouldCopy's
+						precedence, and setattr-style class attributes -- and
+						an enum base's member state -- are left alone."
+						self ___copyDecoratorRebinding___: sel
+							from: walker
+							to: aClass
 					]
 				]
 			].

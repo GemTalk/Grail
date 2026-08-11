@@ -2066,14 +2066,26 @@ ___grailValueMixinFor: cls
 	those and still rules out the plain mixins the allowlist was guarding
 	against (a chain that never reaches a constructor contributes nothing)."
 
+	"CPython's member_type is ``_find_data_type_(bases) or object'', and when it
+	is object the value is stored RAW -- ``new_member._value_ = value'' rather
+	than ``member_type(*args)''.  So a chain that reaches no constructor settles
+	the question before either layer below is consulted: neither the
+	first-non-enum-ancestor walk nor the allowlist may resurrect it.
+
+	The layers were both reached through ``cls inheritsFrom: Enum'', which is
+	true whenever the storage base ended up being the enum -- exactly the shape
+	``class CoolColor(StrMixin, SomeEnum, Enum)'' takes, since a plain mixin is
+	no storage base.  ___grailMemberTypeFor: then answered StrMixin, and
+	constructing through it made ``CoolColor.RED.value'' a <StrMixin object>
+	rather than 1 (test_multiple_mixin)."
+	dt := Enum ___grailFindDataType: cls.
+	(dt @env0:isNil or: [dt == object]) ifTrue: [^ nil].
 	mt := Enum ___grailMemberTypeFor: cls.
 	(mt @env0:notNil and: [mt ~~ object]) ifTrue: [
 		(cls @env0:inheritsFrom: Enum) ifTrue: [^ mt].
 		((mt == Integer)
 			or: [(mt == Float)
 			or: [Enum ___grailIsStringType: mt]]) ifTrue: [^ mt]].
-	dt := Enum ___grailFindDataType: cls.
-	(dt @env0:isNil or: [dt == object]) ifTrue: [^ nil].
 	"Only a data type WRITTEN IN PYTHON widens.  _find_data_type_ can also answer
 	one of Grail's own storage roots -- a plain ``class Book(StrEnum)'' resolves
 	to AbstractPyStr -- and those are not Python data types at all, they are how
