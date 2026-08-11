@@ -92,7 +92,16 @@ initialize
 	skipped entirely, and whose post-decorator ``__qualname__'' store raised a
 	raw Smalltalk doesNotUnderstand (test_enum
 	test_nested_classes_in_enum_with_member)."
-	self @env0:dynamicInstVarAt: #member put: (BoundMethod receiver: self selector: #member:)
+	self @env0:dynamicInstVarAt: #member put: (BoundMethod receiver: self selector: #member:).
+	"``_reduce_ex_by_global_name'' is assigned OVER a class's __reduce_ex__
+	(test_pickle_by_name), so it has to be a plain function taking self first --
+	an UnboundMethod.  The module-attribute BoundMethod every other helper here
+	answers would not bind: ___isDescriptorCallable___ refuses to bind one whose
+	receiver is a Smalltalk-implemented module, because that models a C
+	function, and a C function is not a descriptor.  CPython's is pure Python."
+	self @env0:dynamicInstVarAt: #'_reduce_ex_by_global_name'
+		put: (UnboundMethod @env1:definingClass: Enum
+			selector: #'___grailReduceExByGlobalName___')
 %
 
 ! ===============================================================================
@@ -371,6 +380,29 @@ _iter_bits_lsb: num
 			bit := n @env0:bitAnd: (n @env0:negated).
 			gen ___yield___: bit.
 			n := n @env0:- bit]]
+%
+
+category: 'Grail-Built-in Functions'
+method: enum
+_make_class_unpicklable: obj
+	"_make_class_unpicklable(obj) -- break pickling for obj, by replacing
+	__reduce_ex__ with one that raises and blanking __module__ so the class
+	itself cannot be looked up either: test_enum's test_pickle_explodes wants
+	TypeError from a MEMBER and PicklingError from the CLASS, and those are the
+	two halves.
+
+	CPython also accepts a class-body dict, for use from inside a metaclass;
+	Grail has no such caller, so only the object form is implemented.
+
+	The replacement is an UnboundMethod -- a plain function taking self first --
+	for the same reason _reduce_ex_by_global_name is one; see
+	Enum >> ___grailReduceExByGlobalName___:."
+
+	obj @env1:___pyAttrStore___: #'__reduce_ex__'
+		put: (UnboundMethod @env1:definingClass: Enum
+			selector: #'___grailBreakOnCallReduce___').
+	obj @env1:___pyAttrStore___: #'__module__' put: '<unknown>'.
+	^ None
 %
 
 category: 'Grail-Built-in Functions'

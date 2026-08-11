@@ -2840,10 +2840,39 @@ ___grailFunctional: cls positional: positional keywords: keywords
 			il := Python @env0:at: #importlib.
 			baseArray := Array @env0:with: typeBase with: cls.
 			sb := il @env0:___selectStorageBase___: baseArray.
-			nc := sb ___subclass___: className instVarNames: #() classInstVarNames: #().
+			nc := sb ___subclass___: className instVarNames: #()
+				classInstVarNames: #( #'dynInstVars' ).
 			il @env0:___mergeSecondaryBases___: nc bases: baseArray.
 			nc]
-		ifFalse: [cls ___subclass___: className instVarNames: #() classInstVarNames: #()].
+		ifFalse: [cls ___subclass___: className instVarNames: #()
+			classInstVarNames: #( #'dynInstVars' )].
+	"CPython's functional API produces an ORDINARY class, so ``setattr(E, ...)''
+	-- and reading E.__module__ -- must work on it.  Grail's per-class attribute
+	store is a ``dynInstVars'' classInstVar plus its accessor pair, which
+	ClassDefAst emits for a class-SYNTAX class and nothing emitted here: every
+	class-attribute store on a functional enum raised AttributeError, so
+	``enum._make_class_unpicklable(BadPickle)'' could not install either of the
+	two things it sets (test_pickle_explodes).
+
+	__module__ is stamped from the ``module='' keyword, which the docstring
+	above records as accepted-and-ignored.  It is the name pickle resolves a
+	class BY, so ignoring it is what makes a functional enum unpicklable even
+	when its module is right there in the call."
+	[ | holderSrc |
+	(newCls @env0:class @env0:whichClassIncludesSelector: #'dynInstVars'
+		environmentId: 1) @env0:isNil ifTrue: [
+		holderSrc := 'dynInstVars
+	^ dynInstVars'.
+		[newCls @env0:class ___compileMethod: holderSrc category: 'Grail-Class Attrs']
+			@env0:on: AbstractException do: [:e | nil].
+		holderSrc := 'dynInstVars: ___1
+	dynInstVars := ___1.'.
+		[newCls @env0:class ___compileMethod: holderSrc category: 'Grail-Class Attrs']
+			@env0:on: AbstractException do: [:e | nil]]] @env0:value.
+	(keywords ~~ nil and: [keywords @env0:includesKey: 'module']) ifTrue: [
+		[newCls @env1:___pyAttrStore___: #'__module__'
+			put: (keywords @env0:at: 'module')]
+			@env0:on: AbstractException do: [:e | nil]].
 	"CPython _EnumDict.__setitem__: a name whose value is a DESCRIPTOR is NOT a
 	member.  It stays an ordinary class attribute, and an enum whose members dict
 	holds only descriptors stays MEMBER-LESS -- which is what makes it legal to
@@ -4697,6 +4726,38 @@ __deepcopy__: memo
 	"See __copy__: a member is a singleton, so a deep copy is the member."
 
 	^ self
+%
+
+category: 'Grail-Pickling'
+method: Enum
+___grailReduceExByGlobalName___: proto
+	"The body of enum._reduce_ex_by_global_name -- pickle a member BY NAME.
+
+	CPython's is a module-level function that a class assigns over its own
+	__reduce_ex__ (``ReplaceGlobalInt.__reduce_ex__ =
+	enum._reduce_ex_by_global_name'', test_pickle_by_name), so it must be a
+	plain function taking self first.  The enum module exposes it as the
+	UnboundMethod for this method, which is exactly that: the class-attribute
+	read through a member binds the member as self.
+
+	Handing back the module-level BoundMethod instead does NOT work, and
+	correctly so -- ___isDescriptorCallable___ refuses to bind a BoundMethod on
+	a Smalltalk-implemented module because that models a C function, which is
+	not a descriptor.  This one is pure Python in CPython, so it needs the
+	function shape rather than an exception to that rule."
+
+	^ self @env1:___pyAttrLoad___: #'name'
+%
+
+category: 'Grail-Pickling'
+method: Enum
+___grailBreakOnCallReduce___: proto
+	"The __reduce_ex__ enum._make_class_unpicklable installs: refuse, with
+	CPython's message."
+
+	TypeError @env1:___signal___:
+		(self @env1:__repr__) @env0:asString @env0:, ' cannot be pickled'.
+	^ nil
 %
 
 set compile_env: 0
