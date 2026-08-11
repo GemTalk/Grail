@@ -147,11 +147,25 @@ def format_exception_honours_limit():
             and two[-1] == 'ValueError: deep\n')
 
 
-def a_generator_raise_still_produces_a_traceback():
-    """Known limitation, pinned deliberately: a generator body runs in a forked
-    GsProcess, so the captured stack does not contain the CONSUMER's frames
-    (§9.9).  Such a raise must still yield a usable traceback rather than none
-    -- the single-frame fallback covers it."""
+def a_generator_raise_spans_the_consumer_and_the_generator():
+    """This used to pin the LIMITATION -- a generator body runs in a forked
+    GsProcess, so its captured stack held none of the consumer's frames and such a
+    raise fell back to a single frame.  §9.12 splices the two captures, so the
+    chain now spans both sides: the consumer's ``for'' and the generator's
+    ``raise''.
+
+    Note what the old version asserted: ``len(frames) >= 1''.  §9.9 called it the
+    check that would catch the behaviour change when the boundary was spliced, and
+    it would not have.  This one asserts the exact positions.
+
+    It asserts the SOURCE LINES rather than names or numbers.  Names, because the
+    generator here is a NESTED def and Grail names a nested function's frame after
+    its enclosing function (measured: ``[('outer', 10), ('outer', 7)]'' where
+    CPython says ``[('outer', 10), ('gen', 7)]'') -- a separate, pre-existing gap,
+    §9.12, with the naming covered by module-level generators in
+    tests/python/generator_frames.py.  Numbers, because line constants for the
+    check's own body have to be edited every time anything above it moves; the
+    source text pins the same two positions and reads as what it means."""
     def gen():
         yield 1
         raise ValueError('from generator')
@@ -162,5 +176,7 @@ def a_generator_raise_still_produces_a_traceback():
     except ValueError as e:
         frames = traceback.extract_tb(e.__traceback__)
         text = ''.join(traceback.format_exception(e))
-        return len(frames) >= 1 and 'ValueError: from generator' in text
+        return ([f.line for f in frames]
+                == ['for _ in gen():', "raise ValueError('from generator')"]
+                and 'ValueError: from generator' in text)
     return False

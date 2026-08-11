@@ -989,8 +989,7 @@ resume time, which is its own change and should not gate the ordinary case.
    codegen's `Grail-Methods`.
 5. ~~Splice rather than replace on re-raise~~ **done** — and the splice turned
    out to be a *rebuild*, not an append; see §9.10.
-6. Generators: single frame as today (pinned by a test), then splice across the
-   process boundary as a separate change. **Still open.**
+6. ~~Generators: splice across the process boundary~~ **done**; see §9.12.
 7. ~~An exception raised inside an `except` handler inherits the handled
    exception's frames~~ **done**; see §9.11.
 
@@ -1143,3 +1142,83 @@ one. That is §9.6's chaining work, unchanged by this. The test pins the invaria
 that *is* in scope: the handled exception's own traceback still names its own
 frames, held directly rather than through `__context__`, so it fails for the right
 reason if this regresses.
+
+### 9.12 Splicing across the generator's process boundary (2026-08-11, gs40)
+
+§9.9's item 6, the last of them. §9.9 called this "a hard boundary": the stack
+captured when a generator body raises holds the body and the fork plumbing and
+**nothing** of the consumer, because the body runs in its own `GsProcess`.
+
+The boundary is real but it is crossable, and the crossing point already existed.
+`PythonGenerator >> _forkBody` catches an exception escaping the body *on the
+forked process* and stows it; `_signalEscapedException` **re-signals it on the
+consumer**. So:
+
+1. at the stow, take the capture (the generator's half) and **clear `_gsStack`** —
+   primitive 2022 fills it only when nil on entry, so without the clear the
+   re-signal never captures the consumer's half and the traceback collapses to the
+   catch-site frame;
+2. the re-signal on the consumer captures the consumer's half naturally;
+3. the walk concatenates them, generator half first because it is innermost.
+
+One stash **per level**, because `yield from` nests forked processes: the inner
+generator is re-signalled onto the *outer generator's* process, whose handler stows
+in turn. Overwriting instead of appending lost the inner frame. A **boundary index**
+is recorded where each level ends, and the walk flushes its pending block there —
+which is what finally reports a generator's own frame at all, since the body is a
+block whose home *method* frame is not on the forked stack.
+
+Measured against real CPython 3.14.6, all seven shapes now match:
+
+| shape | CPython | Grail before |
+|---|---|---|
+| `for … in gen()` | `consume_for@11 gen@6` | `consume_for@11` |
+| `next(g)` | `consume_next@22 gen@6` | `consume_next@22` |
+| intermediate consumer | `nested_consumer@30 consume_inner@37 gen@6` | `nested_consumer@30` |
+| `yield from` | `consume_delegated@15 outer_gen@10 inner_gen@6` | `consume_delegated@15 outer_gen@10`\* |
+| `gen.throw()` | `throw_into@96 simple_gen@41` | already matched |
+| body catches its own | no traceback | already matched |
+| PEP 479 `StopIteration` | consumer only | already matched |
+
+\* with the first version of the stash, which overwrote per level.
+
+#### A digit-scanning bug the generator fixture exposed
+
+`___derivePythonLineForMethod___` collected **every** digit from `___curPos___ := `
+to end of line, so when the generated statement carried other numeric literals on
+that line they ran together: a `for` loop over a generator derived **37133718**
+from `___curPos___ := 37.`. A whole Python statement does land on one generated
+line, so this was the common case rather than an exotic one — it simply had not
+been hit, because in the earlier fixtures the assignment was the last thing on its
+line. It now reads only the consecutive digits, and takes the **last** assignment
+on the line.
+
+#### The pin that would not have caught it
+
+§9.9 said `a_generator_raise_still_produces_a_traceback` was "what will catch the
+behaviour change when the boundary is spliced". It would not have: it asserted
+`len(frames) >= 1`. It is now exact, and asserts the two frames' **source lines**
+rather than numbers or names — numbers because constants for the check's own body
+need editing whenever anything above them moves, names because of the gap below.
+
+#### Still open: nested functions
+
+Measured on `main` as well as here, so pre-existing and not from this change:
+
+| | CPython | Grail |
+|---|---|---|
+| nested `def` raises | `[('outer', 9), ('helper', 6)]` | `[('outer', 9)]` |
+| nested generator raises | `[('outer', 10), ('gen', 7)]` | `[('outer', 10), ('outer', 7)]` |
+
+A nested function's frame is missing entirely for a plain `def`, and a nested
+*generator* now gets its frame with the right line but named after the **enclosing**
+function — its body is a block whose home method is the enclosing one, and
+`___pythonFrameNameFor___` reads the name from the home method's selector. Giving
+nested functions their own frame identity is its own change; `generator_frames.py`
+therefore uses module-level generators to pin naming.
+
+With item 6 done, §9.9's plan is complete. What remains for `test.test_traceback`
+is what §9.6 already attributed elsewhere: `sys._getframe`, `__cause__` /
+`__context__` chaining (Grail answers `None` for `__context__` today, §9.11),
+caret/anchor lines, and exception-group rendering — plus the nested-function gap
+above.

@@ -957,16 +957,148 @@ ___derivePythonLineForMethod___: aMethod ip: anIp
 	caretIdx @env0:= 0 ifTrue: [^ nil].
 	result := nil.
 	1 to: (caretIdx @env0:min: lines @env0:size) do: [:i |
-		| ln p digits |
-		ln := lines @env0:at: i.
-		p := ln @env0:indexOfSubCollection: '___curPos___ := '.
-		p @env0:> 0 ifTrue: [
+		| rest p |
+		rest := lines @env0:at: i.
+		"Read only the digits IMMEDIATELY following the assignment, and take the
+		LAST assignment on the line.  Collecting every digit to end-of-line instead
+		concatenated the line number with any other numeric literal the statement
+		carried -- a for-loop over a generator derived ``37133718'' from
+		``___curPos___ := 37.'' followed by more generated code on the same line --
+		and a whole statement does land on one line, so this is the common case, not
+		an exotic one."
+		[p := rest @env0:indexOfSubCollection: '___curPos___ := '.
+		 p @env0:> 0] whileTrue: [
+			| digits k |
 			digits := WriteStream @env0:on: String @env0:new.
-			(p @env0:+ 16) to: ln @env0:size do: [:k |
-				(ln @env0:at: k) @env0:isDigit ifTrue: [digits @env0:nextPut: (ln @env0:at: k)]].
+			k := p @env0:+ 16.
+			[(k @env0:<= rest @env0:size) and: [(rest @env0:at: k) @env0:isDigit]]
+				whileTrue: [
+					digits @env0:nextPut: (rest @env0:at: k).
+					k := k @env0:+ 1].
 			digits @env0:contents @env0:isEmpty
-				ifFalse: [result := digits @env0:contents @env0:asNumber]]].
+				ifFalse: [result := digits @env0:contents @env0:asNumber].
+			rest := rest @env0:copyFrom: (p @env0:+ 16) to: rest @env0:size]].
 	^ result
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___stashGeneratorStack___: anException
+	"Remember the frames captured INSIDE a generator's forked process, and clear
+	_gsStack so that re-signalling on the consumer captures the CONSUMER's frames.
+
+	A generator body runs in its own GsProcess, so the stack captured when it
+	raises holds the body and the fork plumbing and NOTHING of the consumer
+	(§9.9).  PythonGenerator stows such an exception and re-signals it on the
+	consumer -- and primitive 2022 fills _gsStack only when it is nil on entry, so
+	without this clear the consumer's half is never captured and the whole
+	traceback collapses to the catch-site frame.  The halves are spliced in
+	___walkableStack___.
+
+	ONE ENTRY PER LEVEL, appended in the order the levels unwind, because
+	``yield from'' nests forked processes: inner_gen raises, its stash is taken,
+	it is re-signalled on OUTER_GEN's process, and outer's handler stashes in turn.
+	Overwriting instead of appending lost the inner generator's frame entirely
+	(``consume_delegated@15 outer_gen@10'' for CPython's
+	``consume_delegated@15 outer_gen@10 inner_gen@6'').  Innermost level first,
+	which is also the order the walk wants.
+
+	Session-local and keyed by IDENTITY, so one generator consuming another keeps
+	its own levels.  Not stored on the exception itself: a dynamic instVar there
+	would be readable as a Python attribute."
+
+	| st reg levels |
+	st := anException _gsStack.
+	st isNil ifTrue: [^ self].
+	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
+	reg isNil ifTrue: [
+		reg := IdentityKeyValueDictionary new.
+		SessionTemps current at: #'GrailGeneratorStacks' put: reg].
+	levels := reg at: anException otherwise: nil.
+	levels isNil ifTrue: [levels := OrderedCollection new].
+	levels add: (self ___trimCapturedStack___: st).
+	reg at: anException put: levels.
+	anException _gsStack: nil.
+	^ self
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___moveGeneratorStack___: oldException to: newException
+	"Follow the stash when PythonGenerator has to re-signal a COPY (an exception
+	that was passed on its way out keeps live handler frames and cannot be
+	signalled again -- PythonGenerator >> _resignalable:).  Also clears the copy's
+	_gsStack, which `copy' brought along with the other named instVars."
+
+	| reg st |
+	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	oldException == newException ifTrue: [^ self].
+	st := reg at: oldException otherwise: nil.
+	st isNil ifTrue: [^ self].
+	reg removeKey: oldException ifAbsent: [].
+	reg at: newException put: st.
+	newException _gsStack: nil.
+	^ self
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___generatorStackFor___: anException
+	"The stashed generator-side capture for anException, or nil."
+
+	| reg |
+	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
+	reg isNil ifTrue: [^ nil].
+	^ reg at: anException otherwise: nil
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___trimCapturedStack___: st
+	"The (method, ip, receiver) triples of a captured stack, without its header
+	element and without the trailing nils it is over-allocated with."
+
+	| out |
+	st isNil ifTrue: [^ #()].
+	out := OrderedCollection new.
+	2 to: st size by: 3 do: [:i |
+		(st at: i) isNil ifTrue: [^ out asArray].
+		out add: (st at: i); add: (st at: i + 1); add: (st at: i + 2)].
+	^ out asArray
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___walkableStack___
+	"Answer { stackToWalk. boundaryIndicesOrNil }.
+
+	Normally just _gsStack with no boundaries.  For an exception that escaped one
+	or more generator bodies, every stashed level is concatenated ahead of the
+	consumer's own capture -- innermost level first -- into a single array with the
+	header-then-triples layout the walk expects.
+
+	A boundary is recorded where each section ENDS.  The walk flushes its pending
+	block there, which is what finally reports a generator's own frame: the body is
+	a BLOCK whose home METHOD frame is not on the forked stack at all, so nothing
+	else ever would."
+
+	| levels sections combined boundaries |
+	levels := BaseException ___generatorStackFor___: self.
+	levels isNil ifTrue: [^ { self _gsStack. nil }].
+	sections := OrderedCollection new.
+	levels do: [:each | sections add: each].
+	sections add: (BaseException ___trimCapturedStack___: self _gsStack).
+	combined := OrderedCollection new.
+	combined add: 0.
+	boundaries := OrderedCollection new.
+	sections do: [:section |
+		"Where the NEXT section starts -- 1-based, so one past what we have."
+		combined isEmpty ifFalse: [boundaries add: combined size + 1].
+		section do: [:slot | combined add: slot]].
+	"The first boundary is the start of section 1, which is not a boundary at all."
+	boundaries isEmpty ifFalse: [boundaries removeFirst].
+	^ { combined asArray. boundaries asArray }
 %
 
 category: 'Grail-Traceback Building'
@@ -997,8 +1129,11 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 	Such a raise yields only the frames inside the generator, and the single-frame
 	fallback still applies when that leaves nothing."
 
-	| st catchName pushed pendingHome pendingLine |
-	st := self @env0:_gsStack.
+	| st catchName pushed pendingHome pendingLine walkable boundary |
+	walkable := self ___walkableStack___.
+	st := walkable @env0:at: 1.
+	"Indices where a generator level ends; nil when no generator is involved."
+	boundary := walkable @env0:at: 2.
 	st isNil ifTrue: [^ false].
 	"PyCode keeps its fields in DYNAMIC INSTVARS with no accessor methods (a
 	Python read resolves them through ___pyAttrLoad___'s dynamic probe), so this
@@ -1011,6 +1146,25 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 	pushed := 0.
 	2 to: st @env0:size by: 3 do: [:i |
 		| meth ip name home |
+		"The generator/consumer boundary: everything before it ran in the
+		generator's forked process.  Flush its pending block as a frame -- the
+		generator body is a BLOCK whose home method frame is not on that stack, so
+		this is the only place its own frame can come from -- and start the
+		consumer's half with nothing pending, or the first consumer frame would
+		read as an already-unwound one (§9.11)."
+		(boundary notNil and: [boundary @env0:includes: i]) ifTrue: [
+			pendingHome notNil ifTrue: [
+				| gname |
+				gname := BaseException ___pythonFrameNameFor___: pendingHome @env0:selector.
+				((gname notNil) and: [pendingLine notNil]) ifTrue: [
+					self ___pushTracebackFrame___:
+							(self ___codeForMethod___: pendingHome name: gname ip: 0
+								aCode: aCode)
+						lineno: pendingLine
+						colno: nil endLineno: nil endColno: nil line: nil.
+					pushed := pushed @env0:+ 1].
+				pendingHome := nil.
+				pendingLine := nil]].
 		meth := st @env0:at: i.
 		"Trailing nils pad the array -- the real frames end here."
 		meth isNil ifTrue: [^ pushed @env0:> 0].

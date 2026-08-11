@@ -119,6 +119,11 @@ _forkBody
 					test_merge_does_not_suppress_index_error is exactly
 					this contract."
 					escapedException := ex.
+					"Take the frames captured HERE, on the forked process: they
+					are the only record of where inside the generator the raise
+					happened, and re-signalling on the consumer would otherwise
+					keep them and lose the consumer's half instead (§9.12)."
+					BaseException ___stashGeneratorStack___: ex.
 					ex return: nil]
 		] ensure: [
 			done := true.
@@ -208,7 +213,11 @@ _signalEscapedException
 	| ex err msg |
 	ex := escapedException.
 	escapedException := nil.
-	(ex @env0:isKindOf: StopIteration) ifFalse: [^ (self _resignalable: ex) @env0:signal].
+	(ex @env0:isKindOf: StopIteration) ifFalse: [
+		| out |
+		out := self _resignalable: ex.
+		BaseException @env0:___moveGeneratorStack___: ex to: out.
+		^ out @env0:signal].
 	msg := 'generator raised StopIteration'.
 	err := RuntimeError ___new___.
 	err ___args___: { msg }.
