@@ -887,15 +887,14 @@ makes merging them safe.
 
 That removes a whole codegen phase from §9.7's step 3.
 
-#### …but the derivation does NOT hold for the CATCHING frame (3.7.5 ≠ 4.0)
+#### …but the derivation does NOT hold for the CATCHING frame
 
-The table above measured the catching frame on **4.0**, where `multi_catcher`'s
-ip resolved to its call site. **3.7.5 does not.** That frame is suspended inside
-the `on:do:` protected block codegen wraps a `try` in, and 3.7.5's
-`_sourceAtIp:` answers a report whose caret sits *past the whole block* — so
-"the last `___curPos___ := N` at or above the caret" is the function's **final**
-statement. For `tests/python/frame_depth.py`'s `catcher`, CI reported
-`car=19 d=34`: line 34, `return None`, for a call on line 31.
+The table above measured the catching frame on a gem running **interpreted**,
+where `multi_catcher`'s ip resolved to its call site. A gem running **native
+code** does not. That frame is suspended inside the `on:do:` protected block
+codegen wraps a `try` in, and there `_sourceAtIp:` answers a report whose caret
+sits *past the whole block* — so "the last `___curPos___ := N` at or above the
+caret" is the function's **final** statement:
 
 ```
 17{   ___curPos___ := 34.}
@@ -903,26 +902,38 @@ statement. For `tests/python/frame_depth.py`'s `catcher`, CI reported
 19{ * ^6 …}          <- caret, past the on:do: that is actually executing
 ```
 
-The catching frame therefore takes the position **codegen recorded**, never the
-derived one — `___pushCatchingFrame___` is handed `pos: ___curPos___`, which is
-exact by construction. Note the shape: codegen passes a bare **SmallInteger**
-for an ordinary statement and only a 5-tuple for a comprehension / for-loop
-iterator clause, so honouring `pos` only when `isKindOf: Array` (as the first
-cut did) silently left every ordinary `try/except` on the derived line. That
-read correctly on 4.0 and wrongly on 3.7.5 — three tests that pass on one
-version and fail on the other, from one missing branch.
+Measured, same commit, same 3.7.5, `tests/python/frame_depth.py`'s `catcher`:
 
-Frames **below** the catcher are suspended at a *call* site, which both versions
-resolve exactly; CI confirms `leaf`/`middle`/`outer` derive 18/22/26 on 3.7.5.
+| gem | `GemNativeCodeEnabled` | captured ips (leaf/middle/outer/catcher) | catcher line |
+|---|---:|---|---:|
+| CI, Linux x86_64 | 2 | 295 / 425 / 425 / 367 | **34** ✘ |
+| local, macOS arm64 | 0 | 104 / 128 / 128 / 136 | **31** ✔ |
 
-Residual, untested either way: an intermediate frame that is itself inside a
-`try` whose handler did not match is suspended in a protected block too, so on
-3.7.x its line may read as its function's last statement. The derivation now
-**fails closed** when no caret line is present at all (answering nil drops the
-frame, leaving the single-frame fallback) — a missing frame is recoverable, a
+The native ips are ~3× the bytecode ones, and only the `on:do:`-suspended frame
+misresolves: CI derives `leaf`/`middle`/`outer` as 18/22/26 exactly, because
+those sit at *call* sites.
+
+This is **not** a 3.7.x-vs-4.0 difference — 3.7.5 with the pre-fix code passes
+the whole suite on an interpreted gem, and native code is simply unavailable on
+macOS/arm64, which is why every local run (both versions) looked fine.
+
+So the catching frame takes the position **codegen recorded** —
+`___pushCatchingFrame___` is handed `pos: ___curPos___`, exact by construction —
+and never the derived one. Note the shape: codegen passes a bare **SmallInteger**
+for an ordinary statement and a 5-tuple only for a comprehension / for-loop
+iterator clause, so honouring `pos` only when `isKindOf: Array` (as the first cut
+did) silently left every ordinary `try/except` on the derived line.
+
+Residual, unmeasured: an intermediate frame that is itself inside a `try` whose
+handler did not match is suspended in a protected block too, so under native code
+its line may read as its function's last statement. The derivation now **fails
+closed** when no caret line is present at all — answering nil drops the frame and
+leaves the single-frame fallback, since a missing frame is recoverable and a
 confidently wrong line number is not — but it cannot detect a caret that is
 merely in the wrong place.
 
+Practical note for anyone debugging this class of bug: a divergence like this is
+invisible to every local gem on macOS, so the only place it reproduces is CI.
 
 #### Cost: ~100 µs per frame, at traceback-build time only
 
