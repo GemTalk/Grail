@@ -508,7 +508,7 @@ ___grailBuildMembers: cls names: attrNames
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members allOrdered lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass gnvStaticClass genValues foreignMixin forcedMembers ntClass |
+	| byValue byName members allOrdered lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass gnvStaticClass genValues foreignMixin forcedMembers ntClass privPat |
 	"CPython _check_for_existing_members_: adding members to -- or otherwise
 	subclassing -- an enum that already HAS members is illegal (that enum is
 	final).  Raise before building anything (test_extending / test_extending2);
@@ -616,15 +616,35 @@ ___grailBuildMembers: cls names: attrNames
 	ASSIGNMENT may not rebind ``mro`` (it would shadow type.mro) nor use a
 	_sunder_ name outside the supported set -- ValueError at definition
 	(test_invalid_names across every enum flavor)."
-	allNames @env0:do: [:nameSym | | ns sz |
+	privPat := '_' @env0:, (cls @env0:name @env0:asString) @env0:, '__'.
+	allNames @env0:do: [:nameSym | | ns sz isPriv |
 		ns := nameSym @env0:asString.
 		sz := ns @env0:size.
 		ns @env0:= 'mro' ifTrue: [
 			ValueError ___signal___: 'cannot use ''mro'' as an enum member name'].
-		(sz @env0:>= 3
+		"CPython checks _is_private BEFORE _is_sunder, and a mangled PRIVATE name
+		passes both tests: ``__major_'' written in class Private is _Private__major_,
+		which opens and closes with a single underscore and so reads as a sunder.
+		CPython calls it a normal attribute (test_private_variable_is_normal_
+		attribute); the pattern is _<ClassName>__ with anything but a trailing
+		``__'' after it."
+		isPriv := (sz @env0:> privPat @env0:size)
+			and: [(ns @env0:copyFrom: 1 to: privPat @env0:size) @env0:= privPat
+			and: [((ns @env0:at: sz) @env0:= $_
+				and: [(ns @env0:at: sz @env0:- 1) @env0:= $_]) not]].
+		"CPython _is_sunder: one leading underscore and one trailing one, so BOTH
+		the second and the second-to-last character have to be something else.
+		Grail asked for ``not (both are underscores)'', which is the same answer
+		only when they agree -- a name underscored at just one end read as a
+		sunder and was rejected outright: ``__major_'' in a class body is a
+		PRIVATE name, mangled to _Cls__major_ (test_private_variable_is_normal_
+		attribute), and CPython does not reserve it."
+		(isPriv not
+			and: [sz @env0:>= 3
 			and: [(ns @env0:at: 1) @env0:= $_
 			and: [(ns @env0:at: sz) @env0:= $_
-			and: [((ns @env0:at: 2) @env0:= $_ and: [(ns @env0:at: sz @env0:- 1) @env0:= $_]) not]]])
+			and: [((ns @env0:at: 2) @env0:= $_) not
+			and: [((ns @env0:at: sz @env0:- 1) @env0:= $_) not]]]]])
 				ifTrue: [
 					(#('_ignore_' '_order_' '_missing_' '_generate_next_value_'
 						'_value_repr_' '_numeric_repr_' '_name_' '_value_')

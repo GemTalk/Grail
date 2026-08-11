@@ -68,10 +68,16 @@ classBodyAttributePairs
 	filtered here: which names are aliases is cross-statement knowledge, so
 	ClassDefAst applies that rule to the collected pairs."
 
+	"PRIVATE-NAME MANGLING.  ``__x = 1'' in class C declares _C__x, exactly as
+	``self.__x'' reads _C__x and ``def __helper'' compiles to _C__helper --
+	AttributeAst and FunctionDefAst already mangle, and this binding form was
+	the one that did not, so a private class attribute was declared under a
+	name nothing could ever read back."
+
 	| pairs |
 	pairs := OrderedCollection new.
 	(targets allSatisfy: [:t | t isKindOf: NameAst]) ifTrue: [
-		targets do: [:t | pairs add: t id asSymbol -> value]].
+		targets do: [:t | pairs add: t ___mangledId___ asSymbol -> value]].
 	"Tuple-target class-body assignment: ``__add__, __radd__ =
 	_operator_fallbacks(_add, operator.add)'' (vendored fractions.py builds
 	every binary operator this way).  Each element becomes a class attribute
@@ -82,7 +88,7 @@ classBodyAttributePairs
 		and: [(targets first isKindOf: TupleAst)
 		and: [targets first elts allSatisfy: [:e | e isKindOf: NameAst]]]) ifTrue: [
 		targets first elts doWithIndex: [:e :i |
-			pairs add: e id asSymbol -> (SubscriptAst new
+			pairs add: e ___mangledId___ asSymbol -> (SubscriptAst new
 					value: value;
 					slice: (ConstantAst new
 							value: i - 1;
@@ -645,15 +651,17 @@ method: AssignAst
 ___boundTargetNames___
 	"Symbols bound by this assignment's simple Name targets (tuple
 	targets contribute each element).  Used by ClassDefAst's source-
-	order class-body name resolution."
+	order class-body name resolution.
+
+	Private-name mangled, matching classBodyAttributePairs."
 
 	| names |
 	names := OrderedCollection new.
 	targets do: [:tgt |
-		(tgt isKindOf: NameAst) ifTrue: [names add: tgt id asSymbol].
+		(tgt isKindOf: NameAst) ifTrue: [names add: tgt ___mangledId___ asSymbol].
 		((tgt isKindOf: TupleAst) or: [tgt isKindOf: ListAst]) ifTrue: [
 			tgt elts do: [:e |
-				(e isKindOf: NameAst) ifTrue: [names add: e id asSymbol]]]].
+				(e isKindOf: NameAst) ifTrue: [names add: e ___mangledId___ asSymbol]]]].
 	^ names
 %
 method: AssignAst

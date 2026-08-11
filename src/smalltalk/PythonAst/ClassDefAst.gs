@@ -44,9 +44,11 @@ method: ClassDefAst
 ___boundTargetNames___
 	"A ``class'' statement binds its own name.  Like ``def'' it contributes
 	no classBodyAttributePairs: a nested class compiles to a real Smalltalk
-	class, not to a class attribute of the enclosing one."
+	class, not to a class attribute of the enclosing one.
 
-	^ Array with: name asSymbol
+	Private-name mangled, like every other class-body binding."
+
+	^ Array with: (self ___manglePrivate___: name) asSymbol
 %
 
 category: 'Grail-code generation'

@@ -131,6 +131,24 @@ id: aSymbol
 	id := aSymbol
 %
 
+category: 'Grail-codegen helpers'
+method: NameAst
+___mangledId___
+	"The name AS COMPILED: private-name mangled when this node sits inside a
+	class body (see AbstractNode >> ___manglePrivate___:), so ``__x'' written
+	in class C is _C__x.  The counterpart of AttributeAst >> ___mangledAttr___
+	and FunctionDefAst >> ___mangledName___.
+
+	Used ONLY on the class-body paths -- the name sets those consult
+	(classFunctionNames, classAttrNames, classSlotNames) are themselves filled
+	with mangled names, so an unmangled probe simply missed.  The ENCLOSING-
+	SCOPE fallbacks keep the raw name: CPython mangles there too and so raises
+	NameError for a module-level ``__x'' read from a class body, but Grail has
+	always resolved it and nothing is gained by breaking that."
+
+	^ self ___manglePrivate___: id
+%
+
 category: 'other'
 method: NameAst
 injectSuperArguments: anArray scope: aScope
@@ -295,7 +313,7 @@ printSmalltalkOn: aStream
 			and: [CallAst inClassBodyValueEmit
 			and: [self ___inNestedScopeWithinClassBody___ not
 			and: [CallAst classBodyBoundNames isNil
-				or: [CallAst classBodyBoundNames includes: id asSymbol]]]]]])
+				or: [CallAst classBodyBoundNames includes: self ___mangledId___ asSymbol]]]]]])
 		ifTrue: [
 			"Sibling method -> receiver-less BoundMethod (call protocol pops
 			positional[1] as the receiver); sibling @staticmethod -> BoundMethod
@@ -303,52 +321,52 @@ printSmalltalkOn: aStream
 			these needs a module instance, so they mirror the module block
 			exactly."
 			(CallAst classFunctionNames notNil
-				and: [CallAst classFunctionNames includes: id asSymbol]) ifTrue: [
+				and: [CallAst classFunctionNames includes: self ___mangledId___ asSymbol]) ifTrue: [
 				aStream
 					nextPutAll: '(BoundMethod receiver: nil selector: #';
-					nextPutAll: id;
+					nextPutAll: self ___mangledId___;
 					nextPutAll: ' definingClass: ';
 					nextPutAll: CallAst classBeingCompiled asString;
 					nextPutAll: ')'.
 				^self].
 			(CallAst classStaticFunctionNames notNil
-				and: [CallAst classStaticFunctionNames includes: id asSymbol]) ifTrue: [
+				and: [CallAst classStaticFunctionNames includes: self ___mangledId___ asSymbol]) ifTrue: [
 				aStream
 					nextPutAll: '(BoundMethod receiver: ';
 					nextPutAll: CallAst classBeingCompiled asString;
 					nextPutAll: ' selector: #';
-					nextPutAll: id;
+					nextPutAll: self ___mangledId___;
 					nextPutAll: ')'.
 				^self].
 			(CallAst classNestedClassNames notNil
-				and: [CallAst classNestedClassNames includes: id asSymbol]) ifTrue: [
+				and: [CallAst classNestedClassNames includes: self ___mangledId___ asSymbol]) ifTrue: [
 				aStream
 					nextPutAll: '(';
 					nextPutAll: CallAst classBeingCompiled asString;
 					nextPutAll: ' @env1:___dynamicClassAttr___: #''';
-					nextPutAll: id;
+					nextPutAll: self ___mangledId___;
 					nextPutAll: ''')'.
 				^self].
 			"Conditionally-bound sibling: the per-class dynamic store, then the
 			accessor pair if the name is ALSO bound unconditionally, then the
 			enclosing scope."
 			(CallAst classBodyConditionalNames notNil
-				and: [CallAst classBodyConditionalNames includes: id asSymbol]) ifTrue: [
+				and: [CallAst classBodyConditionalNames includes: self ___mangledId___ asSymbol]) ifTrue: [
 				| alsoStatic |
 				alsoStatic := CallAst classAttrNames notNil
-					and: [CallAst classAttrNames includes: id asSymbol].
+					and: [CallAst classAttrNames includes: self ___mangledId___ asSymbol].
 				aStream
 					nextPutAll: '((';
 					nextPutAll: CallAst classBeingCompiled asString;
 					nextPutAll: ' @env1:___dynamicClassAttr___: #''';
-					nextPutAll: id;
+					nextPutAll: self ___mangledId___;
 					nextPutAll: ''') @env0:ifNil: ['.
 				alsoStatic ifTrue: [
 					aStream
 						nextPutAll: '(';
 						nextPutAll: CallAst classBeingCompiled asString;
 						nextPutAll: ' ';
-						nextPutAll: id;
+						nextPutAll: self ___mangledId___;
 						nextPutAll: ') @env0:ifNil: ['].
 				self emitDoitEnclosingScopeLoad: id on: aStream.
 				alsoStatic ifTrue: [aStream nextPutAll: ']'].
@@ -359,12 +377,12 @@ printSmalltalkOn: aStream
 			reads the earlier attr with a plain getter send.  nil means ``not
 			bound yet'' (Grail's nil-as-absent rule) -> enclosing scope."
 			(CallAst classAttrNames notNil
-				and: [CallAst classAttrNames includes: id asSymbol]) ifTrue: [
+				and: [CallAst classAttrNames includes: self ___mangledId___ asSymbol]) ifTrue: [
 				aStream
 					nextPutAll: '((';
 					nextPutAll: CallAst classBeingCompiled asString;
 					nextPutAll: ' ';
-					nextPutAll: id;
+					nextPutAll: self ___mangledId___;
 					nextPutAll: ') @env0:ifNil: ['.
 				self emitDoitEnclosingScopeLoad: id on: aStream.
 				aStream nextPutAll: '])'.
@@ -389,9 +407,9 @@ printSmalltalkOn: aStream
 			(CallAst inClassBodyValueEmit
 				and: [self ___inNestedScopeWithinClassBody___ not
 				and: [CallAst classFunctionNames notNil
-				and: [(CallAst classFunctionNames includes: id asSymbol)
+				and: [(CallAst classFunctionNames includes: self ___mangledId___ asSymbol)
 				and: [CallAst classBodyBoundNames isNil
-					or: [CallAst classBodyBoundNames includes: id asSymbol]]]]])
+					or: [CallAst classBodyBoundNames includes: self ___mangledId___ asSymbol]]]]])
 				ifTrue: [
 					"Record the defining class so a staticmethod-style call
 					(a gnv: _generate_next_value_(name, ...), where name is a
@@ -400,7 +418,7 @@ printSmalltalkOn: aStream
 					protocol is otherwise unchanged (BoundMethod>>value:value:)."
 					aStream
 						nextPutAll: '(BoundMethod receiver: nil selector: #';
-						nextPutAll: id;
+						nextPutAll: self ___mangledId___;
 						nextPutAll: ' definingClass: ';
 						nextPutAll: CallAst classBeingCompiled asString;
 						nextPutAll: ')'.
@@ -416,15 +434,15 @@ printSmalltalkOn: aStream
 			(CallAst inClassBodyValueEmit
 				and: [self ___inNestedScopeWithinClassBody___ not
 				and: [CallAst classStaticFunctionNames notNil
-				and: [(CallAst classStaticFunctionNames includes: id asSymbol)
+				and: [(CallAst classStaticFunctionNames includes: self ___mangledId___ asSymbol)
 				and: [CallAst classBodyBoundNames isNil
-					or: [CallAst classBodyBoundNames includes: id asSymbol]]]]])
+					or: [CallAst classBodyBoundNames includes: self ___mangledId___ asSymbol]]]]])
 				ifTrue: [
 					aStream
 						nextPutAll: '(BoundMethod receiver: ';
 						nextPutAll: CallAst classBeingCompiled asString;
 						nextPutAll: ' selector: #';
-						nextPutAll: id;
+						nextPutAll: self ___mangledId___;
 						nextPutAll: ')'.
 					^self
 				].
@@ -441,15 +459,15 @@ printSmalltalkOn: aStream
 			(CallAst inClassBodyValueEmit
 				and: [self ___inNestedScopeWithinClassBody___ not
 				and: [CallAst classNestedClassNames notNil
-				and: [(CallAst classNestedClassNames includes: id asSymbol)
+				and: [(CallAst classNestedClassNames includes: self ___mangledId___ asSymbol)
 				and: [CallAst classBodyBoundNames isNil
-					or: [CallAst classBodyBoundNames includes: id asSymbol]]]]])
+					or: [CallAst classBodyBoundNames includes: self ___mangledId___ asSymbol]]]]])
 				ifTrue: [
 					aStream
 						nextPutAll: '(';
 						nextPutAll: CallAst classBeingCompiled asString;
 						nextPutAll: ' @env1:___dynamicClassAttr___: #''';
-						nextPutAll: id;
+						nextPutAll: self ___mangledId___;
 						nextPutAll: ''')'.
 					^self
 				].
@@ -469,23 +487,23 @@ printSmalltalkOn: aStream
 			(CallAst inClassBodyValueEmit
 				and: [self ___inNestedScopeWithinClassBody___ not
 				and: [CallAst classBodyConditionalNames notNil
-				and: [CallAst classBodyConditionalNames includes: id asSymbol]]])
+				and: [CallAst classBodyConditionalNames includes: self ___mangledId___ asSymbol]]])
 				ifTrue: [
 					| alsoStatic |
 					alsoStatic := CallAst classAttrNames notNil
-						and: [CallAst classAttrNames includes: id asSymbol].
+						and: [CallAst classAttrNames includes: self ___mangledId___ asSymbol].
 					aStream
 						nextPutAll: '((';
 						nextPutAll: CallAst classBeingCompiled asString;
 						nextPutAll: ' @env1:___dynamicClassAttr___: #''';
-						nextPutAll: id;
+						nextPutAll: self ___mangledId___;
 						nextPutAll: ''') @env0:ifNil: ['.
 					alsoStatic ifTrue: [
 						aStream
 							nextPutAll: '(';
 							nextPutAll: CallAst classBeingCompiled asString;
 							nextPutAll: ' ';
-							nextPutAll: id;
+							nextPutAll: self ___mangledId___;
 							nextPutAll: ') @env0:ifNil: ['].
 					self emitModuleAttrLoad: id
 						receiverExpr: CallAst moduleClassBeingCompiled name , ' @env0:___instance___'
@@ -497,9 +515,9 @@ printSmalltalkOn: aStream
 			(CallAst inClassBodyValueEmit
 				and: [self ___inNestedScopeWithinClassBody___ not
 				and: [CallAst classAttrNames notNil
-				and: [(CallAst classAttrNames includes: id asSymbol)
+				and: [(CallAst classAttrNames includes: self ___mangledId___ asSymbol)
 				and: [CallAst classBodyBoundNames isNil
-					or: [CallAst classBodyBoundNames includes: id asSymbol]]]]])
+					or: [CallAst classBodyBoundNames includes: self ___mangledId___ asSymbol]]]]])
 				ifTrue: [
 					"The attr accessor pair is compiled just before each
 					``<Class> <attr>: value'' store, so a later value
@@ -512,7 +530,7 @@ printSmalltalkOn: aStream
 						nextPutAll: '((';
 						nextPutAll: CallAst classBeingCompiled asString;
 						nextPutAll: ' ';
-						nextPutAll: id;
+						nextPutAll: self ___mangledId___;
 						nextPutAll: ') @env0:ifNil: ['.
 					self emitModuleAttrLoad: id
 						receiverExpr: CallAst moduleClassBeingCompiled name , ' @env0:___instance___'
