@@ -43,9 +43,12 @@ ___boundTargetNames___
 	"A ``def'' binds its own name.  It contributes no
 	classBodyAttributePairs, though -- the body compiles to a real method,
 	not to a class attribute -- so it makes the name visible to later
-	siblings without claiming an attribute value."
+	siblings without claiming an attribute value.
 
-	^ Array with: name asSymbol
+	Private-name mangled, matching ___mangledName___ (which is what the
+	compiled method is actually called) and the class-body name sets."
+
+	^ Array with: self ___mangledName___ asSymbol
 %
 
 category: 'Grail-other'

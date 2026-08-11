@@ -398,6 +398,34 @@ ___enclosingFunctionLocalBeyondClass___: aSymbol
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___manglingClassName___
+	"The class whose name mangles a private identifier written at this node --
+	CPython's ``the innermost enclosing class scope''.
+
+	LEXICAL: the nearest ClassDefAst above this node.  ClassDefAst's ambient
+	``classBeingCompiled'' is the older answer and stays as the fallback for
+	synthesised nodes that have no parent chain, but it cannot be the primary
+	one: it is deliberately CLEARED around the class-body name scans (see
+	ClassDefAst -- isModuleScopeClassDef reads it as its `nested inside another
+	class' test), and those scans are exactly where the class-attribute names are
+	decided.  So the ambient alone declared ``__x = 1'' UNMANGLED while every
+	read of it -- ``self.__x'', emitted later with the ambient set -- asked for
+	_C__x.
+
+	The walk starts at the PARENT: a node is mangled by an enclosing class,
+	never by itself, so a nested ``class __Inner'' is mangled by its outer
+	class."
+
+	| node |
+	node := self parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [^ node name asSymbol].
+		node := node parent].
+	^ CallAst classBeingCompiled
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___manglePrivate___: aName
 	"Python PRIVATE-NAME MANGLING (CPython's _Py_Mangle).
 
@@ -416,7 +444,7 @@ ___manglePrivate___: aName
 	nothing, matching CPython."
 
 	| s cls stripped i |
-	cls := CallAst classBeingCompiled.
+	cls := self ___manglingClassName___.
 	cls isNil ifTrue: [^ aName].
 	s := aName asString.
 	"Must start with two underscores..."

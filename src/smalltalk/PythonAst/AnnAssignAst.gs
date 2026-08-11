@@ -192,7 +192,8 @@ method: AnnAssignAst
 ___boundTargetNames___
 	"Symbol bound by this annotated assignment (Name target only)."
 
-	(target isKindOf: NameAst) ifTrue: [^ OrderedCollection with: target id asSymbol].
+	(target isKindOf: NameAst) ifTrue: [
+		^ OrderedCollection with: target ___mangledId___ asSymbol].
 	^ OrderedCollection new
 %
 
@@ -208,7 +209,8 @@ classBodyAttributePairs
 	(Jinja2's ``Environment.template_class = Template'')."
 
 	(target isKindOf: NameAst) ifFalse: [^ #()].
-	^ Array with: target id asSymbol -> value
+	"Private-name mangled, as AssignAst's pairs are."
+	^ Array with: target ___mangledId___ asSymbol -> value
 %
 method: AnnAssignAst
 target: newValue
