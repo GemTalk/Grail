@@ -1217,6 +1217,11 @@ the loop's own `___curPos___ := 73`. Same shape as §9.10's `on:do:` case: an ip
 inside a *construct* does not resolve back to the statement in flight, and only the
 positions **codegen** records are dependable there.
 
+The same weakness covers a generator that is **thrown into**: it is parked at a
+`yield`, so `gen.throw()`'s generator frame does not resolve either, while a
+generator that *raises* is parked on the raise and does (`gen@28` is asserted
+exactly). Interpreted, both are right.
+
 It does not affect the catching function (which takes codegen's position) nor a
 frame parked on a plain call, so `generator_frames.py` advances the intermediate
 consumer with `next()` and says so — the alternative would be a fixture that

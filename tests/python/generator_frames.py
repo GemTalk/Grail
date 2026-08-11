@@ -148,9 +148,19 @@ def yield_from_reports_both_generators():
 
 
 def throw_reports_the_generators_frame():
-    """gen.throw() injects at the suspended yield, and CPython attributes the
-    frame to the generator at that yield."""
-    return _chain(throw_into()) == EXPECTED_THROWN
+    """gen.throw() injects at the suspended yield, and the generator contributes a
+    frame -- which is the rule item 6 is about, and what this asserts.
+
+    It asserts the frame NAMES and the consumer's line, not the generator's line.
+    A generator that RAISES is parked on the raise, which resolves in both
+    execution modes (the_generators_own_frame_is_reported pins ``gen@28''
+    exactly).  One that is THROWN INTO is parked at a yield -- inside a construct
+    -- and §9.12 records that such an ip does not resolve under native code.
+    Interpreted it is line 41, matching CPython; asserting that here would pass
+    locally and fail in CI for a reason that has nothing to do with throw()."""
+    chain = _chain(throw_into())
+    return ([name for name, _ in chain] == ['throw_into', 'simple_gen']
+            and chain[0] == ('throw_into', 98))
 
 
 def an_exception_caught_inside_the_generator_is_invisible():
