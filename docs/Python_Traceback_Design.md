@@ -991,8 +991,8 @@ resume time, which is its own change and should not gate the ordinary case.
    out to be a *rebuild*, not an append; see §9.10.
 6. Generators: single frame as today (pinned by a test), then splice across the
    process boundary as a separate change. **Still open.**
-7. An exception raised inside an `except` handler inherits the handled
-   exception's frames. **Open, found while doing 5**; see §9.10.
+7. ~~An exception raised inside an `except` handler inherits the handled
+   exception's frames~~ **done**; see §9.11.
 
 One thing the walk must preserve: the catching frame keeps the position
 **codegen** recorded, in either shape it comes in — a bare `___curPos___`
@@ -1103,3 +1103,43 @@ is native code, so CI is the only verification — as §9.9's closing note says.
 It does **not** fix item 7, and the walk shows why: between the handler block and
 its home method frame sit the signalling frames of the exception being handled,
 which reset the pending line. Hence `explicit` still reads 25.
+
+### 9.11 Frames Python has already unwound (2026-08-11, gs40)
+
+§9.10's item 7. An exception raised while another is being handled gets its **own**
+traceback; the handled exception's frames belong to `__context__`, not to it. Grail
+reported them, because a Smalltalk handler runs *on top of* the frames that
+signalled — nothing is unwound before `on:do:` is entered — so the whole
+propagation path of the exception being handled is still on the stack below the
+`raise`.
+
+Measured against real CPython 3.14.6:
+
+| case | CPython | Grail before | now |
+|---|---|---|---|
+| `raise K()` in the handler | `catch@35 wrap_bare@16` | `catch@35 wrap_bare@14 leaf@5` | matches |
+| `raise K() from e` | `catch@35 wrap_from@23` | `catch@35 wrap_from@21 leaf@5` | matches |
+| handler calls a helper that raises | `catch@35 wrap_via_helper@30 helper@9` | `catch@35 wrap_via_helper@28 leaf@5 helper@9` | matches |
+
+Two symptoms, one cause. `leaf@5` was included, and the handler's own frame read as
+the *try body* line (14) rather than the `raise` (16) — because the frames between
+the handler block and its home method frame reset the pending block line (§9.10).
+
+**The rule.** Reaching a method frame that is not the pending block's home means we
+are inside a handler running above already-unwound frames, so skip until the pending
+home's own frame arrives. One skip fixes both symptoms: the foreign frames stop
+being reported *and* stop clobbering the line. In the ordinary case nothing is
+skipped, because a block's frames are immediately followed outward by their own
+method frame — a foreign method frame in between is precisely the signature of a
+handler.
+
+Note what this is *not*: "stop at the handler". A function the handler **calls** does
+contribute its frames (`helper@9` above), and the third row pins that.
+
+**Not fixed, and now measured:** implicit chaining. Grail answers `None` for
+`__context__`, so the frames dropped here are not yet reachable the way CPython
+makes them reachable — the exception being handled is simply not linked to the new
+one. That is §9.6's chaining work, unchanged by this. The test pins the invariant
+that *is* in scope: the handled exception's own traceback still names its own
+frames, held directly rather than through `__context__`, so it fails for the right
+reason if this regresses.

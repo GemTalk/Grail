@@ -1041,7 +1041,24 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 		((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector notNil])
 			ifTrue: [
 				| pyLine |
-				name := BaseException ___pythonFrameNameFor___: meth @env0:selector.
+				"A frame Python has ALREADY UNWOUND.  Reaching a method frame that is
+				not the pending block's home means we are inside a handler that is
+				running ABOVE the frames which signalled: Smalltalk unwinds nothing
+				before invoking on:do:, so the whole propagation path of the exception
+				being HANDLED is still on the stack below us.  Python's model has
+				dropped those frames -- an exception raised in an except block gets
+				its own traceback, and the handled one is reachable only through
+				__context__ -- so skip everything until the pending home's own frame.
+
+				This is §9.10's item 7.  Without it a wrapping raise reported the
+				frames of the exception it was wrapping (``catch@35 wrap_bare@14
+				leaf@5'' where CPython says ``catch@35 wrap_bare@16''), and it also
+				kept the pending line from reaching wrap_bare, because these frames
+				reset it -- one skip fixes both the extra frame and the wrong line."
+				(pendingHome notNil and: [pendingHome @env0:~~ home])
+					ifTrue: [name := nil]
+					ifFalse: [
+						name := BaseException ___pythonFrameNameFor___: meth @env0:selector].
 				"A non-nil derived line is what IDENTIFIES a Python frame, and it
 				is self-validating: only codegen emits ``___curPos___ := N'', so
 				Grail's own hand-written env-1 plumbing (``Object >>
@@ -1055,8 +1072,11 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 					ifFalse: [(pendingHome @env0:== home and: [pendingLine notNil])
 						ifTrue: [pendingLine]
 						ifFalse: [BaseException ___pythonLineForMethod___: meth ip: ip]].
-				pendingHome := nil.
-				pendingLine := nil.
+				"A skipped frame must NOT clear the pending line -- it belongs to the
+				handler's home, which we have not reached yet."
+				(pendingHome isNil or: [pendingHome @env0:== home]) ifTrue: [
+					pendingHome := nil.
+					pendingLine := nil].
 				pyLine notNil ifTrue: [
 					| isCatcher frameCode |
 					isCatcher := catchName notNil and: [name @env0:= catchName].
