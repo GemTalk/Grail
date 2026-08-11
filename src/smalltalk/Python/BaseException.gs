@@ -1043,16 +1043,19 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 					test_dictcomps / test_setcomps assert on.
 
 					Codegen's position is not merely the more precise one here, it is the only
-					correct one: this frame is suspended INSIDE the on:do: protected block, and
-					_sourceAtIp: does not resolve such an ip to the statement in flight.  3.7.5
-					answers a report whose caret sits past the whole block, so the scan below
-					returns the function's LAST ___curPos___ -- frame_depth's catcher reports
-					34, ``return None'', for a call on line 31 -- while 4.0 happens to answer
-					the call site.  Honouring pos ONLY when it was an Array therefore left
-					every ordinary try/except (codegen passes the bare integer there) on the
-					derived line, which is exactly why this passed on 4.0 and failed on 3.7.5.
-					Frames BELOW the catcher are suspended at a CALL site, which does resolve,
-					and both versions derive them correctly."
+					one that holds everywhere.  This frame is suspended INSIDE the on:do:
+					protected block, and resolving such an ip back to the statement in flight
+					depends on the GEM: with native code enabled (GemNativeCodeEnabled=2, the
+					CI gem on Linux x86_64) _sourceAtIp: answers a report whose caret sits past
+					the whole block, so the scan below returns the function's LAST ___curPos___
+					-- frame_depth's catcher reports 34, ``return None'', for a call on line 31.
+					An interpreted gem (macOS/arm64, where native code is unavailable) answers
+					the call site and derives 31.  Honouring pos ONLY when it was an Array left
+					every ordinary try/except -- codegen passes the bare integer there -- on the
+					derived line, which is why the first cut passed on every local gem and
+					failed in CI.  Frames BELOW the catcher are suspended at a CALL site, which
+					resolves correctly in both modes (CI derives leaf/middle/outer as 18/22/26).
+					"
 					(isCatcher and: [posArray notNil])
 						ifTrue: [self ___pushFrameFromPos___: frameCode pos: posArray]
 						ifFalse: [
