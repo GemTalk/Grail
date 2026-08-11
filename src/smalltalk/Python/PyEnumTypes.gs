@@ -508,7 +508,7 @@ ___grailBuildMembers: cls names: attrNames
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members allOrdered lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass gnvStaticClass genValues foreignMixin forcedMembers |
+	| byValue byName members allOrdered lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass gnvStaticClass genValues foreignMixin forcedMembers ntClass |
 	"CPython _check_for_existing_members_: adding members to -- or otherwise
 	subclassing -- an enum that already HAS members is illegal (that enum is
 	final).  Raise before building anything (test_extending / test_extending2);
@@ -893,6 +893,29 @@ ___grailBuildMembers: cls names: attrNames
 			INDIVIDUAL generated values, not the whole tuple, belong in last_values, so
 			genValues is updated here and the per-member add below is skipped
 			(tupleAutoDone)."
+			"A NAMEDTUPLE value carrying auto() markers -- ``first = T(auto(),
+			'for the money')''.  Grail's namedtuple classes are not tuple-ROOTED
+			(the ``_NT'' chain runs straight to Enum, never through Array), so the
+			isKindOf: test below never saw one and the marker survived into the
+			member value as ``T(index=<GrailEnumAuto object>, ...)''
+			(test_tuple_subclass_with_auto_2).
+
+			Unwrap to a plain tuple here and rebuild after, so the resolution
+			itself -- left-to-right, feeding genValues between markers so the
+			default generator advances -- stays in ONE place rather than being
+			copied for a second container shape."
+			ntClass := nil.
+			[ | flds |
+			flds := [rawValue @env1:___pyAttrLoad___: #'_fields']
+				@env0:on: AbstractException do: [:e | nil].
+			(flds @env0:notNil and: [(rawValue isKindOf: tupleClass) not]) ifTrue: [
+				| els |
+				els := OrderedCollection @env0:new.
+				flds @env0:do: [:f |
+					els @env0:add: (rawValue @env1:___pyAttrLoad___: f @env0:asSymbol)].
+				(els @env0:anySatisfy: [:el | el isKindOf: GrailEnumAuto]) ifTrue: [
+					ntClass := rawValue @env0:class.
+					rawValue := tupleClass @env0:withAll: els]] ] @env0:value.
 			((rawValue isKindOf: tupleClass)
 				and: [rawValue @env0:anySatisfy: [:el | el isKindOf: GrailEnumAuto]]) ifTrue: [
 				| resolvedEls |
@@ -923,6 +946,14 @@ ___grailBuildMembers: cls names: attrNames
 						ifFalse: [resolvedEls @env0:add: el]].
 				rawValue := tupleClass @env0:withAll: resolvedEls.
 				tupleAutoDone := true].
+			"Rebuild the namedtuple the unwrap above opened, now that its markers
+			carry values.  Best-effort: a type that will not take its own fields
+			back keeps the resolved plain tuple rather than breaking the class."
+			ntClass @env0:isNil ifFalse: [
+				rawValue := [ntClass @env0:perform: #'value:value:' env: 1
+					withArguments: { rawValue @env0:asArray. KeyValueDictionary @env0:new }]
+					@env0:on: AbstractException do: [:e | rawValue].
+				ntClass := nil].
 			"auto() markers resolve to last-integer-value + 1 in
 			declaration order -- except Flag-natured classes, where the
 			next auto value is the next power of two ABOVE the last
@@ -2009,15 +2040,63 @@ ___grailValueMixinFor: cls
 	CPython's _get_mixins_ makes the same distinction: a base with no usable
 	__new__ is a mixin, not the member type."
 
-	| mt |
+	| mt dt |
+	"Two layers, and deliberately WIDENING: every answer the storage walk used to
+	give is kept, and CPython's member_type only fills in where it gave none.
+
+	The storage walk (___grailMemberTypeFor: plus the Integer/Float/string
+	allowlist) is what int/str/float enums have always used, and it stays
+	authoritative for them -- routing StrEnum through the general path instead
+	changed which class construction went through and broke test_shadowed_attr.
+
+	The allowlist exists because ___grailMemberTypeFor: answers the first
+	non-enum ancestor, which for a PLAIN mixin is not a data type at all;
+	constructing through one produced ``<E.A: <_EnumSuperClass object>>'' across
+	24 fixtures.  But it also excluded genuine data types it was never meant to
+	-- every user subclass of a primitive, and every dataclass or namedtuple
+	mixin:
+
+	    class HexInt(int):
+	        def __repr__(self): return hex(self)
+	    class MyEnum(HexInt, enum.Enum): A = 1
+
+	left _value_ a plain 1, so Enum's repr rendered <MyEnum.A: 1> where CPython
+	gives <MyEnum.A: 0x1>: the value has to BE a HexInt for its own repr to show
+	through.  ___grailFindDataType: is CPython's _find_data_type_, which admits
+	those and still rules out the plain mixins the allowlist was guarding
+	against (a chain that never reaches a constructor contributes nothing)."
+
+	"CPython's member_type is ``_find_data_type_(bases) or object'', and when it
+	is object the value is stored RAW -- ``new_member._value_ = value'' rather
+	than ``member_type(*args)''.  So a chain that reaches no constructor settles
+	the question before either layer below is consulted: neither the
+	first-non-enum-ancestor walk nor the allowlist may resurrect it.
+
+	The layers were both reached through ``cls inheritsFrom: Enum'', which is
+	true whenever the storage base ended up being the enum -- exactly the shape
+	``class CoolColor(StrMixin, SomeEnum, Enum)'' takes, since a plain mixin is
+	no storage base.  ___grailMemberTypeFor: then answered StrMixin, and
+	constructing through it made ``CoolColor.RED.value'' a <StrMixin object>
+	rather than 1 (test_multiple_mixin)."
+	dt := Enum ___grailFindDataType: cls.
+	(dt @env0:isNil or: [dt == object]) ifTrue: [^ nil].
 	mt := Enum ___grailMemberTypeFor: cls.
-	mt == object ifTrue: [^ nil].
-	(cls @env0:inheritsFrom: Enum) ifTrue: [^ mt].
-	^ ((mt == Integer)
-		or: [(mt == Float)
-		or: [Enum ___grailIsStringType: mt]])
-			ifTrue: [mt]
-			ifFalse: [nil]
+	(mt @env0:notNil and: [mt ~~ object]) ifTrue: [
+		(cls @env0:inheritsFrom: Enum) ifTrue: [^ mt].
+		((mt == Integer)
+			or: [(mt == Float)
+			or: [Enum ___grailIsStringType: mt]]) ifTrue: [^ mt]].
+	"Only a data type WRITTEN IN PYTHON widens.  _find_data_type_ can also answer
+	one of Grail's own storage roots -- a plain ``class Book(StrEnum)'' resolves
+	to AbstractPyStr -- and those are not Python data types at all, they are how
+	Grail stores str/int/float.  The member already IS the data type there, and
+	constructing through the boxed root instead produced an AbstractPyStr where
+	a plain str belonged, so a member stopped shadowing correctly:
+	``Book.author.title'' answered the member Book.title rather than str's title
+	method (test_shadowed_attr).  A user class -- HexInt, a @dataclass, a
+	namedtuple -- is not in the symbol list and does widen."
+	(Enum ___grailIsGrailDefinedType: dt) ifTrue: [^ nil].
+	^ dt
 %
 
 category: 'Grail-Enum Metaclass'
@@ -2288,8 +2367,18 @@ ___grailMemberRepr: m
 	"Enum/Flag member repr for a mixed-in enum: '<Cls.name: valrepr>' (Flag:
 	'<Cls.a|b: N>' / '<Cls: 0>').  Companion of ___grailMemberStr:."
 
-	| cls |
+	| cls valRepr |
 	cls := m @env0:class.
+	"CPython renders the VALUE with repr(), i.e. the value's own __repr__ --
+	which is the whole point of building _value_ through the data type:
+	<MyEnum.A: 0x1> is HexInt's repr showing through Enum's.  printString is a
+	Smalltalk rendering that agrees for ints and strings and diverges for
+	everything else -- it gave ``aHexInt'', and ``atuple( 3, 'x')'' where Python
+	says ``(3, 'x')''.  Falls back to printString if the value has no usable
+	__repr__, so a value that never had one renders as before."
+	valRepr := [:v |
+		[v @env1:__repr__ @env0:asString]
+			@env0:on: AbstractException do: [:e | v @env0:printString]].
 	(Enum ___grailIsFlagClass: cls) ifTrue: [
 		| v nm |
 		v := m @env0:dynamicInstVarAt: #value.
@@ -2299,10 +2388,10 @@ ___grailMemberRepr: m
 			^ '<' @env0:, cls @env0:name @env0:asString @env0:, ': 0>'].
 		^ '<' @env0:, cls @env0:name @env0:asString @env0:, '.'
 			@env0:, (Enum ___grailCompositeNameFor: m) @env0:, ': '
-			@env0:, v @env0:printString @env0:, '>'].
+			@env0:, (valRepr @env0:value: v) @env0:, '>'].
 	^ '<' @env0:, cls @env0:name @env0:asString @env0:, '.'
 		@env0:, (m @env0:dynamicInstVarAt: #name) @env0:asString @env0:, ': '
-		@env0:, (m @env0:dynamicInstVarAt: #value) @env0:printString @env0:, '>'
+		@env0:, (valRepr @env0:value: (m @env0:dynamicInstVarAt: #value)) @env0:, '>'
 %
 
 category: 'Grail-Enum Metaclass'
@@ -2405,6 +2494,90 @@ ___grailInstallEnumOutput: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailFindDataType: cls
+	"CPython's _find_data_type_: the mixed-in DATA TYPE of an enum, or nil.
+
+	Not the same question as ___grailMemberTypeFor:, which answers the first
+	non-enum ancestor of the storage chain.  That is right for storage and wrong
+	here: for ``class DumbStrEnum(DumbMixin, CustomStrEnum)'' it answers
+	DumbMixin, a pure behaviour mixin, where CPython's data type is str.
+
+	CPython walks the bases carrying a CANDIDATE and commits it at the first
+	class that actually constructs:
+
+	    for base in chain.__mro__:
+	        if base is object:                     continue
+	        elif issubclass(base, Enum):           take base._member_type_, stop
+	        elif '__new__' in base.__dict__ or '__dataclass_fields__' in base.__dict__:
+	                                               take candidate or base, stop
+	        else:                                  candidate = candidate or base
+
+	The candidate is what makes ``class HexInt(int)'' the data type rather than
+	int: HexInt defines no __new__ of its own, so it is remembered, and int's
+	__new__ is what commits it.  A chain that never reaches a constructor
+	contributes nothing -- that is how DumbMixin is excluded, and equally how a
+	plain ``def __init__'' mixin is (test_repr_with_init_mixin): the probe is
+	__new__/__dataclass_fields__, NOT __init__.
+
+	Walking cls's own registered C3 MRO rather than per-base chains is the same
+	traversal flattened; the per-chain candidate reset only distinguishes
+	MULTIPLE data types, which CPython rejects outright."
+
+	| mro candidate objCls |
+	objCls := Python @env0:at: #object otherwise: nil.
+	mro := [(Python @env0:at: #importlib) @env0:___mroOf___: cls]
+		@env0:on: AbstractException do: [:e | #()].
+	candidate := nil.
+	mro @env0:do: [:base |
+		(base == cls
+			or: [(base == objCls) or: [(base == PythonInstance) or: [base == Object]]])
+			ifFalse: [
+				(Enum ___grailIsEnumBase: base)
+					ifTrue: [ | bmt |
+						"An enum base contributes ITS member type, not itself -- this is
+						how ``class DumbStrEnum(DumbMixin, CustomStrEnum)'' reaches str
+						rather than committing DumbMixin as the candidate."
+						bmt := Enum ___grailMemberTypeFor: base.
+						(bmt @env0:notNil and: [bmt ~~ objCls]) ifTrue: [^ bmt]]
+					ifFalse: [
+						((Enum ___grailIsDataTypeBase: base)
+							or: [Enum ___grailHasFieldsMarker: base])
+							ifTrue: [^ candidate @env0:ifNil: [base]]
+							ifFalse: [candidate @env0:isNil ifTrue: [candidate := base]]]]].
+	^ nil
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailHasFieldsMarker: base
+	"The non-__new__ half of CPython's _find_data_type_ constructor probe.
+
+	CPython asks ``'__new__' in base.__dict__ or '__dataclass_fields__' in
+	base.__dict__''.  ___grailIsDataTypeBase: covers __new__; this covers the
+	two field-carrying shapes that construct without publishing one Grail can
+	see:
+
+	  * a @dataclass mixin -- __dataclass_fields__, exactly CPython's own probe.
+	    It defines __init__ and no __new__, so it looked like a pure behaviour
+	    mixin and its __repr__ was kept instead of Enum's
+	    (test_repr_with_dataclass).
+	  * a namedtuple base -- _fields.  CPython reaches these through tuple's
+	    __new__ (the candidate rule commits the namedtuple subclass), but Grail's
+	    namedtuple classes are not tuple-ROOTED: NTCEnum's MRO runs straight from
+	    _NT to Enum, so the walk never meets a constructor at all
+	    (test_namedtuple_as_value).
+
+	Deliberately paired with __new__ and never with __init__: a mixin that only
+	supplies __init__ is NOT a data type, and CPython keeps its __repr__
+	(test_repr_with_init_mixin)."
+
+	^ #('__dataclass_fields__' '_fields') @env0:anySatisfy: [:attr |
+		[(base @env1:___pyAttrLoad___: attr @env0:asSymbol) @env0:notNil]
+			@env0:on: AbstractException do: [:e | false]]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailShouldForceOutput: cls selector: sel
 	"True when cls only inherits the mix-in data type's (or object's) output
 	method for sel, so ___grailInstallEnumOutput: should replace it with
@@ -2413,16 +2586,49 @@ ___grailShouldForceOutput: cls selector: sel
 	Member / Grail-Flag Member / Grail-IntFlag Member) provides it -- those are
 	correct and must be kept."
 
-	| p cat |
+	| p cat dt pdt objCls |
 	p := cls @env0:whichClassIncludesSelector: sel environmentId: 1.
 	p @env0:isNil ifTrue: [^ true].
 	"categoryOfSelector: answers a Symbol -- compare against Symbols."
 	cat := [p @env0:categoryOfSelector: sel environmentId: 1]
 		@env0:on: AbstractException do: [:e | nil].
-	^ (#(#'Grail-Class Methods' #'Grail-Method Aliases' #'Grail-Enum Override'
+	(#(#'Grail-Class Methods' #'Grail-Method Aliases' #'Grail-Enum Override'
 		#'Grail-Property-ReadOnly'
 		#'Grail-CachedProperty-Setter' #'Grail-Enum Member' #'Grail-Flag Member'
-		#'Grail-IntFlag Member') @env0:includes: cat) @env0:not
+		#'Grail-IntFlag Member') @env0:includes: cat) ifFalse: [^ true].
+	"An ENUM-STYLE method (Grail-Enum/Flag/IntFlag Member and the property
+	categories) is correct by construction -- it is one Grail installed -- so it
+	is kept, unconditionally.  Only a USER definition raises the question below;
+	applying the data-type test to the installed ones instead forced Enum's
+	__str__/__format__ over IntFlag's own and took out six format/str cases."
+	(#(#'Grail-Class Methods' #'Grail-Method Aliases') @env0:includes: cat)
+		ifFalse: [^ false].
+	"Beyond here the method is a USER definition.  Keeping every one of them was
+	too blunt: CPython exempts only the enum's OWN class body and then applies
+
+	    if found_method in (data_type_method, object_method):
+	        setattr(enum_class, name, enum_method)
+
+	so a __repr__ INHERITED FROM THE DATA TYPE is replaced by Enum's --
+
+	    class HexInt(int):
+	        def __repr__(self): return hex(self)
+	    class MyEnum(HexInt, enum.Enum): A = 1
+	    repr(MyEnum.A) == '<MyEnum.A: 0x1>'
+
+	-- while one from any other base is left alone, because it is neither the
+	data type's method nor object's.  Asking which CATEGORY defined it cannot
+	tell those apart: a mixin's def and the enum's own def are both
+	Grail-Class Methods (test_inherited_data_type, test_repr_with_dataclass,
+	test_namedtuple_as_value on one side; test_repr_with_init_mixin,
+	test_strenum on the other)."
+	(p == cls) ifTrue: [^ false].
+	objCls := Python @env0:at: #object otherwise: nil.
+	((p == objCls) or: [(p == PythonInstance) or: [p == Object]]) ifTrue: [^ true].
+	dt := Enum ___grailFindDataType: cls.
+	dt @env0:isNil ifTrue: [^ false].
+	pdt := dt @env0:whichClassIncludesSelector: sel environmentId: 1.
+	^ pdt @env0:notNil and: [pdt == p]
 %
 
 category: 'Grail-Enum Metaclass'
