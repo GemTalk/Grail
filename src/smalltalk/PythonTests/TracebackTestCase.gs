@@ -645,3 +645,35 @@ testBareReraiseSplicesFrames
 		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
 			description: 'bare-re-raise check failed: ' , k].
 %
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testRaiseInsideHandlerHasItsOwnFrames
+	"An exception raised while another is being handled gets its OWN traceback;
+	the handled exception's frames belong to __context__, not to it.  Grail read
+	them off the live Smalltalk stack, which still holds them -- a handler runs ON
+	TOP of the frames that signalled rather than after unwinding them -- so a
+	wrapping raise reported the frames it was wrapping, and located its own frame
+	at the try body instead of at the ``raise'' (§9.10 item 7).
+
+	Not simply ``stop at the handler'': a function CALLED from the handler does
+	contribute its frames, which a_function_called_from_the_handler_gets_its_own_frame
+	pins.  Every expectation is verified against real CPython by running the fixture
+	directly -- see its docstring.  See tests/python/handler_context_frames.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'handler_context_frames' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/handler_context_frames.py')
+		name: 'handler_context_frames'.
+	#( 'the_wrapping_raise_reports_only_its_own_frames'
+	   'the_handler_frame_is_at_the_raise_not_at_the_try'
+	   'no_frame_from_the_handled_exception_leaks_in'
+	   'raise_from_behaves_the_same'
+	   'a_function_called_from_the_handler_gets_its_own_frame'
+	   'the_handled_exceptions_own_traceback_survives'
+	   'raise_from_sets_cause'
+	   'the_rendered_traceback_names_only_the_new_frames' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'handler-context check failed: ' , k].
+%
