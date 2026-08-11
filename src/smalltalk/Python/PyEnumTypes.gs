@@ -508,7 +508,7 @@ ___grailBuildMembers: cls names: attrNames
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members allOrdered lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass gnvStaticClass genValues foreignMixin forcedMembers |
+	| byValue byName members allOrdered lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass gnvStaticClass genValues foreignMixin forcedMembers ntClass |
 	"CPython _check_for_existing_members_: adding members to -- or otherwise
 	subclassing -- an enum that already HAS members is illegal (that enum is
 	final).  Raise before building anything (test_extending / test_extending2);
@@ -893,6 +893,29 @@ ___grailBuildMembers: cls names: attrNames
 			INDIVIDUAL generated values, not the whole tuple, belong in last_values, so
 			genValues is updated here and the per-member add below is skipped
 			(tupleAutoDone)."
+			"A NAMEDTUPLE value carrying auto() markers -- ``first = T(auto(),
+			'for the money')''.  Grail's namedtuple classes are not tuple-ROOTED
+			(the ``_NT'' chain runs straight to Enum, never through Array), so the
+			isKindOf: test below never saw one and the marker survived into the
+			member value as ``T(index=<GrailEnumAuto object>, ...)''
+			(test_tuple_subclass_with_auto_2).
+
+			Unwrap to a plain tuple here and rebuild after, so the resolution
+			itself -- left-to-right, feeding genValues between markers so the
+			default generator advances -- stays in ONE place rather than being
+			copied for a second container shape."
+			ntClass := nil.
+			[ | flds |
+			flds := [rawValue @env1:___pyAttrLoad___: #'_fields']
+				@env0:on: AbstractException do: [:e | nil].
+			(flds @env0:notNil and: [(rawValue isKindOf: tupleClass) not]) ifTrue: [
+				| els |
+				els := OrderedCollection @env0:new.
+				flds @env0:do: [:f |
+					els @env0:add: (rawValue @env1:___pyAttrLoad___: f @env0:asSymbol)].
+				(els @env0:anySatisfy: [:el | el isKindOf: GrailEnumAuto]) ifTrue: [
+					ntClass := rawValue @env0:class.
+					rawValue := tupleClass @env0:withAll: els]] ] @env0:value.
 			((rawValue isKindOf: tupleClass)
 				and: [rawValue @env0:anySatisfy: [:el | el isKindOf: GrailEnumAuto]]) ifTrue: [
 				| resolvedEls |
@@ -923,6 +946,14 @@ ___grailBuildMembers: cls names: attrNames
 						ifFalse: [resolvedEls @env0:add: el]].
 				rawValue := tupleClass @env0:withAll: resolvedEls.
 				tupleAutoDone := true].
+			"Rebuild the namedtuple the unwrap above opened, now that its markers
+			carry values.  Best-effort: a type that will not take its own fields
+			back keeps the resolved plain tuple rather than breaking the class."
+			ntClass @env0:isNil ifFalse: [
+				rawValue := [ntClass @env0:perform: #'value:value:' env: 1
+					withArguments: { rawValue @env0:asArray. KeyValueDictionary @env0:new }]
+					@env0:on: AbstractException do: [:e | rawValue].
+				ntClass := nil].
 			"auto() markers resolve to last-integer-value + 1 in
 			declaration order -- except Flag-natured classes, where the
 			next auto value is the next power of two ABOVE the last
