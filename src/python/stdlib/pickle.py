@@ -978,10 +978,15 @@ class _Pickler:
         reduce = getattr(obj, '__reduce_ex__', None)
         rv = None
         if reduce is not None:
-            try:
-                rv = reduce(self.proto)
-            except BaseException:
-                rv = None
+            # A __reduce_ex__ that RAISES is how an object declares itself
+            # unpicklable -- enum._make_class_unpicklable installs exactly such
+            # a method, and test_pickle_explodes wants the TypeError it raises.
+            # Swallowing everything here turned that into "no reduce available"
+            # and the fallback then failed on the CLASS instead, reporting a
+            # PicklingError about the wrong object.  Only a MISSING or
+            # unusable result falls through, which is what NotImplemented and
+            # None already mean below.
+            rv = reduce(self.proto)
         if rv is None or rv is NotImplemented:
             reduce = getattr(obj, '__reduce__', None)
             if reduce is None:

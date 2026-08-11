@@ -674,6 +674,7 @@ run
 	at: #'EnumDefinitionErrorsTestCase' put: nil;
 	at: #'ClassPrivateNameTestCase' put: nil;
 	at: #'EnumNamedtupleAutoTestCase' put: nil;
+	at: #'EnumPickleHelperTestCase' put: nil;
 	at: #'EnumSecondaryMixinTestCase' put: nil;
 	at: #'EnumMemberMarkerTestCase' put: nil;
 	at: #'EnumMixinNewTestCase' put: nil;
@@ -1447,6 +1448,7 @@ input src/smalltalk/PythonTests/EnumDataTypeReprTestCase.gs
 input src/smalltalk/PythonTests/EnumDefinitionErrorsTestCase.gs
 input src/smalltalk/PythonTests/ClassPrivateNameTestCase.gs
 input src/smalltalk/PythonTests/EnumNamedtupleAutoTestCase.gs
+input src/smalltalk/PythonTests/EnumPickleHelperTestCase.gs
 input src/smalltalk/PythonTests/EnumSecondaryMixinTestCase.gs
 input src/smalltalk/PythonTests/EnumMemberMarkerTestCase.gs
 input src/smalltalk/PythonTests/EnumMixinNewTestCase.gs
