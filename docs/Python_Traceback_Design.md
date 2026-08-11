@@ -1076,3 +1076,30 @@ frame is the **handler block's home method**, not the deepest frame on the stack
 and stop there rather than continuing into the signalling frames below. That is
 item 7, and it is a change to frame identification rather than to splicing, so it
 is deliberately not bundled here.
+
+#### A frame's line comes from its innermost BLOCK, not from the method frame
+
+CI caught the half of item 5 that no local gem can see. A re-raising frame is
+itself inside a `try`, so its **method** frame is parked at the `on:do:` — and the
+residual noted above says exactly that such an ip does not resolve under native
+code, where it reads as the function's last `___curPos___`. `mid` therefore came
+out at its `raise` (34) rather than at the call the exception entered on (32), and
+`testBareReraiseSplicesFrames` failed in CI while passing on every local gem. That
+residual had been listed as "untested either way"; it is now tested, and it was
+not peripheral — it is the exact line CPython's rule is about.
+
+The fix uses what §9.4's prototype already observed: a **block** frame resolves
+within its home method's source. The block is parked at the statement in flight,
+while the method frame is parked at whatever construct is *running* that block. So
+blocks remain unreported as frames of their own (CPython has none for a try body,
+an except handler or a comprehension body) but now supply their home's **line**,
+innermost winning — a later block for the same home is an enclosing one, hence
+less precise.
+
+Interpreted this is a no-op: all four measured scenarios come out byte-identical
+and SUnit is unchanged. Its only effect is where the two sources disagree, which
+is native code, so CI is the only verification — as §9.9's closing note says.
+
+It does **not** fix item 7, and the walk shows why: between the handler block and
+its home method frame sit the signalling frames of the exception being handled,
+which reset the pending line. Hence `explicit` still reads 25.
