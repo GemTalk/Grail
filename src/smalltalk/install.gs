@@ -670,6 +670,7 @@ run
 	at: #'ReservedNameClassAttrTestCase' put: nil;
 	at: #'EnumDescriptorMemberTestCase' put: nil;
 	at: #'FlagMemberLengthTestCase' put: nil;
+	at: #'EnumCallAndInitTestCase' put: nil;
 	at: #'EnumDataTypeReprTestCase' put: nil;
 	at: #'EnumDefinitionErrorsTestCase' put: nil;
 	at: #'ClassPrivateNameTestCase' put: nil;
@@ -1445,6 +1446,7 @@ input src/smalltalk/PythonTests/YieldFromTestCase.gs
 input src/smalltalk/PythonTests/EnumGlobalInjectTestCase.gs
 input src/smalltalk/PythonTests/EnumDescriptorMemberTestCase.gs
 input src/smalltalk/PythonTests/FlagMemberLengthTestCase.gs
+input src/smalltalk/PythonTests/EnumCallAndInitTestCase.gs
 input src/smalltalk/PythonTests/EnumDataTypeReprTestCase.gs
 input src/smalltalk/PythonTests/EnumDefinitionErrorsTestCase.gs
 input src/smalltalk/PythonTests/ClassPrivateNameTestCase.gs

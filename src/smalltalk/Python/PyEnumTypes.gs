@@ -781,9 +781,21 @@ ___grailBuildMembers: cls names: attrNames
 	[ | initProvider |
 	initProvider := cls @env0:whichClassIncludesSelector: #'___init__:kw:'
 		environmentId: 1.
+	"What must be excluded is the __init__ GRAIL ships -- Enum's, IntEnum's,
+	object's -- not every class that happens to be an enum.  ___grailIsEnumBase:
+	answers true for a USER enum subclass too (it inherits Enum), so a base
+	written to initialise its subclasses' members never ran:
+
+	    class UniqueEnum(Enum):
+	        def __init__(self, *args): ...   'rejects aliases'
+	    class Color(UniqueEnum): red = 1; green = 2; grene = 2
+
+	silently accepted the alias (test_no_duplicates).  ___grailIsGrailDefinedType:
+	is the symbol-list test that separates Grail's own classes from ones written
+	in Python; the universal roots stay spelled out."
 	hasUserInit := (initProvider == cls)
 		or: [(initProvider @env0:notNil)
-			and: [((Enum ___grailIsEnumBase: initProvider) @env0:not)
+			and: [((Enum ___grailIsGrailDefinedType: initProvider) @env0:not)
 			and: [(initProvider == (Python @env0:at: #object otherwise: nil)) @env0:not
 			and: [(initProvider == PythonInstance) @env0:not
 			and: [(initProvider == Object) @env0:not]]]]] ] @env0:value.
@@ -1151,6 +1163,30 @@ ___grailBuildMembers: cls names: attrNames
 							probes the instance store before wrapping methods)."
 							member @env0:dynamicInstVarAt: #'_value_' put: memberValue.
 							member @env0:dynamicInstVarAt: #'_name_' put: nameStr.
+							"Run a class-body ``def __init__`` on the freshly-built member
+							(CPython _proto_member.__set_name__): value tuple -> positional
+							args, a scalar -> a 1-tuple.  Errors propagate out of the class
+							definition (test_init_exception).
+
+							BEFORE the member joins byValue / members / byName, because
+							CPython runs it before adding to _member_map_ and an __init__
+							that inspects its own class must not see itself:
+
+							    class UniqueEnum(Enum):
+							        def __init__(self, *args):
+							            if any(self.value == e.value for e in cls): raise
+
+							rejected the FIRST member of every subclass once it ran at all
+							(test_no_duplicates).  Aliases (member reused from byValue) are
+							still not initialised -- CPython builds a throwaway member for
+							those and initialises that, which Grail does not."
+							(hasUserInit) ifTrue: [
+								| initArgs |
+								initArgs := (rawValue isKindOf: tupleClass)
+									ifTrue: [rawValue @env0:asArray]
+									ifFalse: [Array @env0:with: rawValue].
+								member @env0:perform: #'___init__:kw:' env: 1
+									withArguments: { initArgs. KeyValueDictionary @env0:new }].
 							byValue @env0:at: memberValue put: member.
 							"Definition-order roll of every non-alias member (see slot-4
 							note above) -- added for ALL built members, unlike the
@@ -1184,19 +1220,7 @@ ___grailBuildMembers: cls names: attrNames
 			hasAccessor
 				ifTrue: [cls @env0:perform: (nameStr @env0:, ':') @env0:asSymbol env: 1
 					withArguments: (Array @env0:with: member)]
-				ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym put: member].
-			"Run a class-body ``def __init__`` on the freshly-built member
-			(CPython _proto_member.__set_name__): value tuple -> positional
-			args, a scalar -> a 1-tuple.  Aliases (member reused from
-			byValue) are NOT re-initialized.  Errors propagate out of the
-			class definition (test_init_exception)."
-			(hasUserInit and: [built]) ifTrue: [
-				| initArgs |
-				initArgs := (rawValue isKindOf: tupleClass)
-					ifTrue: [rawValue @env0:asArray]
-					ifFalse: [Array @env0:with: rawValue].
-				member @env0:perform: #'___init__:kw:' env: 1
-					withArguments: { initArgs. KeyValueDictionary @env0:new }]]]]
+				ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym put: member]]]]
 		@env0:ensure: [Enum ___grailBuildingSet @env0:remove: cls @env0:ifAbsent: []].
 	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members with: allOrdered).
 	"CPython EnumType wraps a user _generate_next_value_ as a staticmethod in the
@@ -1366,7 +1390,23 @@ ___grailLookupValue: cls value: aValue
 	override."
 	(cls @env0:class @env0:whichClassIncludesSelector: #'_missing_:' environmentId: 1) @env0:notNil
 		ifTrue: [^ self ___grailMissing: cls value: aValue].
-	^ ValueError ___signal___: aValue @env0:printString @env0:, ' is not a valid ' @env0:, cls @env0:name @env0:asString
+	^ ValueError ___signal___: (Enum ___grailValueRepr: aValue)
+		@env0:, ' is not a valid ' @env0:, cls @env0:name @env0:asString
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailValueRepr: aValue
+	"repr(aValue), for the ``<value> is not a valid <Cls>'' messages.
+
+	CPython builds those with %r, and Smalltalk's printString diverges from
+	Python's repr for everything but ints and strings: a tuple came out
+	``atuple( 'Foo', atuple( 'pink', 'black'))'' where CPython says
+	``('Foo', ('pink', 'black'))'', which is what test_extending matches on.
+	Falls back to printString for a value with no usable __repr__."
+
+	^ [aValue @env1:__repr__ @env0:asString]
+		@env0:on: AbstractException do: [:e | aValue @env0:printString]
 %
 
 category: 'Grail-Enum Metaclass'
@@ -1388,7 +1428,8 @@ ___grailMissing: cls value: aValue
 	| veExc result |
 	veExc := ValueError @env0:new.
 	veExc @env0:perform: #'__init__:' env: 1 withArguments: {
-		aValue @env0:printString @env0:, ' is not a valid ' @env0:, cls @env0:name @env0:asString }.
+		(Enum ___grailValueRepr: aValue)
+			@env0:, ' is not a valid ' @env0:, cls @env0:name @env0:asString }.
 	result := [cls @env0:perform: #'_missing_:' env: 1 withArguments: { aValue }]
 		@env0:on: AbstractException do: [:e |
 			(e isKindOf: ValueError) @env0:ifFalse: [
@@ -3362,11 +3403,19 @@ value: positional value: keywords
 	route.  Without the packing path, Cardinal(1, 0) went to the functional API,
 	which tried to iterate the second positional (a plain int) and leaked a raw
 	Smalltalk error (``a SmallInteger does not understand #do:'')."
+	"CPython: an enum that already HAS members is final, so a call on it is
+	ALWAYS a lookup -- ``Color('Foo', ('pink', 'black'))'' raises ValueError
+	rather than defining a new enum (test_extending).  Grail used to ask whether
+	the arguments LOOKED like the functional API, first by refusing any string
+	name, then (once a multi-value member lookup needed one) by asking whether
+	the second argument could be a names spec.  Both readings let the
+	member-bearing case slip through to ___grailFunctional:, which happily built
+	``<enum 'Foo'>''.  Membership is the whole test now, as it is in CPython;
+	the functional API on a MEMBER-LESS class -- BaseEnum('MainEnum', {...}),
+	whose only entries are descriptors -- is untouched."
 	((positional @env0:size @env0:>= 2)
 		and: [(keywords == nil or: [keywords @env0:isEmpty])
-		and: [(Enum ___grailMembers: self) @env0:notEmpty
-		and: [(((positional @env0:at: 1) isKindOf: CharacterCollection) not)
-			or: [(Enum ___grailIsNamesSpec: (positional @env0:at: 2)) not]]]])
+		and: [(Enum ___grailMembers: self) @env0:notEmpty]])
 		ifTrue: [ | packed mt |
 			packed := (Python @env0:at: #tuple otherwise: Array) @env0:withAll: positional.
 			^ [Enum ___grailLookupValue: self value: packed]
@@ -3381,36 +3430,23 @@ value: positional value: keywords
 					0), whose value IS the tuple -- keeps its existing answer."
 					mt := Enum ___grailMemberTypeFor: self.
 					(mt @env0:notNil and: [mt ~~ object])
-						ifTrue: [Enum ___grailLookupValue: self
-							value: (Enum ___grailConstructMemberValueStrict: mt args: packed)]
+						ifTrue: [
+							"A member type that cannot take these arguments at all
+							(``str('NewSE', [...])'' -> ``decoding str is not supported'')
+							means the retry has nothing to say; the ORIGINAL ``not a valid''
+							ValueError is still the right answer and must not be replaced by
+							the constructor's complaint."
+							[Enum ___grailLookupValue: self
+								value: (Enum ___grailConstructMemberValueStrict: mt args: packed)]
+								@env0:on: AbstractException do: [:ctorErr |
+									(ctorErr isKindOf: ValueError)
+										ifTrue: [ctorErr @env0:pass]
+										ifFalse: [e @env0:pass]]]
 						ifFalse: [e @env0:pass]]].
 	((positional @env0:size @env0:>= 2)
 		or: [keywords ~~ nil and: [keywords @env0:size @env0:> 0]])
 		ifTrue: [^ Enum ___grailFunctional: self positional: positional keywords: keywords].
 	^ Enum ___grailLookupValue: self value: (positional @env0:at: 1)
-%
-
-category: 'Grail-Enum Metaclass'
-classmethod: Enum
-___grailIsNamesSpec: anObject
-	"Could anObject be the functional API's ``names'' argument -- a
-	whitespace/comma-separated string, a mapping, or a sequence of names or
-	(name, value) pairs?
-
-	The discriminator that separates ``Enum('Name', 'a b c')'' from a
-	multi-value member LOOKUP whose first value happens to be a string.
-	Refusing every string first-positional was too coarse: unpickling
-	``NEI('the-y', 2)'' -- what a mixin's own __reduce_ex__ produces
-	(test_subclasses_with_reduce_ex) -- went to the functional API, which tried
-	to iterate the 2 and raised ``'int' object is not iterable''.  CPython does
-	not ask this question at all: a class that already HAS members cannot be
-	extended, so every such call is a lookup.  Grail keeps the name test because
-	it also routes the subclass form BaseEnum('MainEnum', {...}), and narrows it
-	to calls whose second argument could actually BE names."
-
-	(anObject isKindOf: CharacterCollection) ifTrue: [^ true].
-	(anObject isKindOf: KeyValueDictionary) ifTrue: [^ true].
-	^ anObject @env0:respondsTo: #'do:'
 %
 
 category: 'Grail-Enum Metaclass'
