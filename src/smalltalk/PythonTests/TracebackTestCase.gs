@@ -615,3 +615,33 @@ testGeneratorRaiseStillProducesATraceback
 	self assert: ((self loadFrameDepthFixture
 		@env0:perform: #'a_generator_raise_still_produces_a_traceback' env: 1) = true)
 %
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testBareReraiseSplicesFrames
+	"A bare ``raise'' re-raises the SAME exception, which already carries a
+	traceback.  CPython adds a frame for every function it then unwinds through --
+	each at the line where the exception ENTERED that function, not at the
+	``raise'' -- and each function once.  Grail used to stop at the first
+	traceback it found, losing everything above the re-raise; the walk now rebuilds
+	from the live captured stack, which still holds the original chain because
+	Smalltalk runs a handler ON TOP of the frames that signalled (§9.9 item 5).
+
+	Every expectation in the fixture is verified against real CPython by running
+	the file directly -- see its docstring.  See tests/python/reraise_frames.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'reraise_frames' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/reraise_frames.py')
+		name: 'reraise_frames'.
+	#( 'a_bare_reraise_keeps_the_deeper_frames_and_adds_the_catcher'
+	   'the_reraising_frame_is_reported_at_the_original_call'
+	   'each_function_appears_once'
+	   'a_passed_through_function_gets_a_frame_too'
+	   'nested_reraises_each_add_their_frame'
+	   'the_reraised_exception_is_the_same_object'
+	   'a_reraised_traceback_renders_every_frame' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'bare-re-raise check failed: ' , k].
+%

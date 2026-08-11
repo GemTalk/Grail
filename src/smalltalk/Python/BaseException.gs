@@ -997,7 +997,7 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 	Such a raise yields only the frames inside the generator, and the single-frame
 	fallback still applies when that leaves nothing."
 
-	| st catchName pushed |
+	| st catchName pushed pendingHome pendingLine |
 	st := self @env0:_gsStack.
 	st isNil ifTrue: [^ false].
 	"PyCode keeps its fields in DYNAMIC INSTVARS with no accessor methods (a
@@ -1010,15 +1010,38 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 		ifFalse: [aCode @env0:dynamicInstVarAt: #'co_name'].
 	pushed := 0.
 	2 to: st @env0:size by: 3 do: [:i |
-		| meth ip name |
+		| meth ip name home |
 		meth := st @env0:at: i.
 		"Trailing nils pad the array -- the real frames end here."
 		meth isNil ifTrue: [^ pushed @env0:> 0].
+		ip := st @env0:at: i @env0:+ 1.
+		"Which METHOD a frame belongs to: a block answers its home, a method
+		answers itself.  CPython has no frame of its own for a block (a
+		comprehension body, a try body, an except handler), so blocks are merged
+		into their home rather than reported."
+		home := (meth @env0:environmentId @env0:= 1)
+			ifTrue: [[meth @env0:homeMethod] on: Error do: [:ex | ex return: meth]]
+			ifFalse: [nil].
+		home isNil ifTrue: [home := meth].
+		((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector isNil])
+			ifTrue: [
+				"A BLOCK frame supplies the LINE for its home method, and it is the
+				only reliable source of it.  The block is parked at the statement in
+				flight; the home METHOD frame is parked at whatever construct is
+				running that block -- for a ``try'' body or an ``except'' handler,
+				the on:do: -- and such an ip does not resolve back to the statement
+				(§9.10: under native code it reads as the function's LAST
+				___curPos___, which is how a re-raising frame came out at its
+				``raise'' instead of at the call the exception entered on).
+				Innermost block wins: a later one for the same home is an enclosing
+				block, hence a less precise position."
+				pendingHome @env0:~~ home ifTrue: [
+					pendingHome := home.
+					pendingLine := BaseException ___pythonLineForMethod___: meth ip: ip]].
 		((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector notNil])
 			ifTrue: [
 				| pyLine |
 				name := BaseException ___pythonFrameNameFor___: meth @env0:selector.
-				ip := st @env0:at: i @env0:+ 1.
 				"A non-nil derived line is what IDENTIFIES a Python frame, and it
 				is self-validating: only codegen emits ``___curPos___ := N'', so
 				Grail's own hand-written env-1 plumbing (``Object >>
@@ -1029,7 +1052,11 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 				codegen's 'Grail-Methods'."
 				pyLine := name isNil
 					ifTrue: [nil]
-					ifFalse: [BaseException ___pythonLineForMethod___: meth ip: ip].
+					ifFalse: [(pendingHome @env0:== home and: [pendingLine notNil])
+						ifTrue: [pendingLine]
+						ifFalse: [BaseException ___pythonLineForMethod___: meth ip: ip]].
+				pendingHome := nil.
+				pendingLine := nil.
 				pyLine notNil ifTrue: [
 					| isCatcher frameCode |
 					isCatcher := catchName notNil and: [name @env0:= catchName].
@@ -1091,23 +1118,78 @@ ___codeForMethod___: aMethod name: aName ip: anIp aCode: catchCode
 category: 'Grail-Traceback Building'
 method: BaseException
 ___pushCatchingFrame___: aCode pos: posArray
-	"Add a frame for the function CATCHING this exception (TryAst emits this at
-	the except handler), but ONLY when no traceback exists yet.  A body wrapper
-	(nested/complex functions) or the comprehension iterator wrapper already
-	locates the exception more precisely; adding the catch-site frame on top
-	would duplicate it (and, for the comprehension, replace the exact-column
-	frame the test checks).  So this is the universal FALLBACK -- it fires for
-	an exception raised in a wrapper-less function (a plain module-level def or
-	method) and caught here, which would otherwise carry no traceback at all."
+	"Add the frames for an exception arriving at this except handler (TryAst emits
+	this there).  Three cases, distinguished by what -- if anything -- is already
+	on the exception:
 
-	tracebackObj isNil ifFalse: [^ self].
-	"Prefer the WHOLE propagation path from the VM's captured stack (§9.9); fall
-	back to the single catch-site frame when there is no capture -- no flag, a
-	generator raise whose captured frames all sat outside Python code, or an
-	exception that pre-stamped _gsStack to opt out."
+	1. NO traceback yet: build the whole propagation path from the VM's captured
+	   stack (§9.9), falling back to the single catch-site frame when there is no
+	   capture (no flag, a generator raise whose captured frames all sat outside
+	   Python code, or an exception that pre-stamped _gsStack to opt out).
+
+	2. A traceback whose head names THIS function: a body wrapper (nested/complex
+	   functions) or the comprehension iterator wrapper already located the
+	   exception inside us, and more precisely than we can -- it has PEP 657
+	   columns.  Leave it alone.  Rebuilding here is what broke
+	   testForLoopExceptionPositions (init_span).
+
+	3. A traceback whose head names ANOTHER function: the exception was caught
+	   somewhere deeper, RE-RAISED (bare ``raise''), and has now propagated up
+	   into us.  CPython adds a frame for every function it unwinds through, each
+	   at the line where the exception ENTERED that function -- not at the
+	   ``raise'' -- and each function appears once:
+
+	       two_levels@21 passthrough@16 mid@10 leaf@5
+
+	   Rebuilding from the live captured stack answers exactly that, because
+	   Smalltalk has not unwound anything: a handler runs ON TOP of the frames
+	   that signalled, so the stack still holds the original chain (leaf, mid)
+	   below the re-raise, with the newly entered frames (passthrough,
+	   two_levels) above it -- all parked at their call sites, which is the
+	   position CPython reports.  So the correct splice is to discard the partial
+	   chain and walk again; prepending the catch-site frame instead would report
+	   only the catcher and drop every pass-through frame.
+
+	Same-name recursion is the one case case 3 cannot see: an exception re-raised
+	in f and caught again in f reads as case 2 and keeps the deeper chain."
+
+	| headName saved |
+	tracebackObj isNil ifTrue: [
+		(self ___buildFramesFromCapturedStack___: aCode pos: posArray)
+			ifTrue: [^ self].
+		^ self ___pushFrameFromPos___: aCode pos: posArray].
+
+	headName := self ___headFrameName___.
+	((headName isNil or: [aCode isNil])
+		or: [headName @env0:= (aCode @env0:dynamicInstVarAt: #'co_name')])
+			ifTrue: [^ self].
+
+	"Case 3.  Keep the old chain in hand: if the walk cannot produce frames (no
+	capture in this session) the partial traceback is still better than none, and
+	the catch-site frame is then prepended to it as before."
+	saved := tracebackObj.
+	tracebackObj := nil.
 	(self ___buildFramesFromCapturedStack___: aCode pos: posArray)
 		ifTrue: [^ self].
+	tracebackObj := saved.
 	^ self ___pushFrameFromPos___: aCode pos: posArray
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___headFrameName___
+	"co_name of the frame at the head of this exception's traceback, or nil when
+	it has none.  PyTraceback / PyFrame / PyCode all keep their fields in DYNAMIC
+	instVars with no accessors (a Python read resolves them through
+	___pyAttrLoad___), so this reads the slots."
+
+	| frame code |
+	tracebackObj isNil ifTrue: [^ nil].
+	frame := tracebackObj @env0:dynamicInstVarAt: #'tb_frame'.
+	frame isNil ifTrue: [^ nil].
+	code := frame @env0:dynamicInstVarAt: #'f_code'.
+	code isNil ifTrue: [^ nil].
+	^ code @env0:dynamicInstVarAt: #'co_name'
 %
 
 category: 'Grail-Current Exception'
