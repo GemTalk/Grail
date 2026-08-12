@@ -715,6 +715,12 @@ ___applyImplicitContext___
 				probe := nil]
 			ifFalse: [probe := next]].
 	self @env0:dynamicInstVarAt: #'___context___' put: current.
+	"``current'' is being HANDLED -- we are raising from inside its handler -- so
+	its traceback is already built and it is no longer propagating.  Release its
+	raise-time capture here: that is what keeps a long chain affordable, since
+	otherwise every link retains a full-stack capture and the retained total is
+	quadratic in the chain's length (see ___releaseCapturedStack___)."
+	current @env0:___releaseCapturedStack___.
 	^ self
 %
 
@@ -1434,6 +1440,35 @@ ___pushCatchingFrame___: aCode pos: posArray
 		ifTrue: [^ self].
 	tracebackObj := saved.
 	^ self ___pushFrameFromPos___: aCode pos: posArray
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___releaseCapturedStack___
+	"Drop the VM's raise-time capture.  The frames it held are already in
+	``tracebackObj''; the capture itself is only the raw material.
+
+	This is what keeps a long exception chain affordable.  Primitive 2022 captures
+	the WHOLE Smalltalk stack at every raise, so a recursion that raises once per
+	level captures O(depth) triples at level 1, at level 2, ... -- and when the
+	exceptions stay reachable, as a __context__ chain makes them, the RETAINED
+	total is O(depth^2).  Measured on the classic runaway at 6645 levels (~16
+	Smalltalk frames per level) that is ~350 million triples: it exhausts a gem's
+	temporary object memory outright, and tripling GEM_TEMPOBJ_CACHE_SIZE does not
+	help.
+
+	Called only from ___applyImplicitContext___, deliberately -- NOT when the
+	traceback is first built.  An exception's capture has to outlive its first
+	catch, because a bare re-raise rebuilds the traceback by walking that same
+	capture again with a wider trim: the pass-through frames §9.10 splices in are
+	in the ORIGINAL capture (they were on the stack when the raise happened), and
+	`pass' does not refill _gsStack.  Releasing at catch time broke exactly that
+	(TracebackTestCase>>testBareReraiseSplicesFrames).  By the time an exception
+	becomes another one's __context__ it is being handled and is no longer
+	propagating, so the capture is spent."
+
+	self _gsStack: nil.
+	^ self
 %
 
 category: 'Grail-Traceback Building'
