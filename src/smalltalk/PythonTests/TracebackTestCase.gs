@@ -746,6 +746,54 @@ testExceptionChaining
 
 category: 'Grail-Tests - Traceback Runtime'
 method: TracebackTestCase
+testAttributeErrorSuggestions
+	"CPython's ``Did you mean: 'blech'?'' on a misspelled attribute.
+
+	Three separate gaps had to close before a suggestion was computable, and the
+	fixture pins each one because each was independently missing:
+
+	dir(instance) reported NEITHER the class's data attributes (they compile to
+	accessors on the metaclass, so only dir(TheClass) saw them) NOR the
+	instance's own (dynamic instVars) -- object>>__dir__ scanned env-1 selectors
+	only, so every candidate list was empty.
+
+	AttributeError carried no ``name'' / ``obj''.  CPython has exposed both since
+	3.10, and the suggestion needs both: ``name'' is the misspelling to match,
+	``obj'' supplies the candidates.
+
+	A bare ``raise AttributeError()'' from a user __getattr__ gets those stamped
+	on by the attribute machinery, as CPython's set_attribute_error_context does
+	-- otherwise the shape test_getattr_suggestions_no_args uses (no message, no
+	name) could never be helped.
+
+	The edit costs and tie-breaks are CPython's own (Python/suggestions.c), which
+	is what makes the ordering checks meaningful: substitution beats elimination
+	beats addition, and a case change beats all three.  Verified against real
+	CPython by running the fixture directly; see
+	tests/python/attr_suggestions.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'attr_suggestions' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/attr_suggestions.py')
+		name: 'attr_suggestions'.
+	#( 'dir_of_an_instance_reports_class_and_instance_attributes'
+	   'an_attributeerror_carries_name_and_obj'
+	   'a_close_attribute_is_suggested'
+	   'the_suggestion_follows_cpythons_edit_costs'
+	   'an_instance_attribute_can_be_suggested'
+	   'a_bare_attributeerror_still_gets_a_suggestion'
+	   'a_wildly_wrong_name_gets_no_suggestion'
+	   'an_exact_match_is_never_suggested'
+	   'an_underscored_candidate_is_hidden_from_a_plain_typo'
+	   'a_non_string_candidate_is_ignored'
+	   'an_unrenderable_message_does_not_break_the_line' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'attribute-suggestion check failed: ' , k].
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
 testImplicitContextReleasesTheCapturedStack
 	"An exception stored as another's __context__ must keep its TRACEBACK and drop
 	its raise-time CAPTURE.

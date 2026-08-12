@@ -1497,3 +1497,89 @@ conformance run changes exactly one row, the expected one.
 
 This also lifts a quadratic memory cost off *every* long chain, not just this
 test's — any application that wraps errors repeatedly in a loop was paying it.
+
+### 9.16 "Did you mean: 'x'?" on an AttributeError (2026-08-12, gs40)
+
+CPython appends a suggestion to an `AttributeError` / `NameError` / `ImportError`
+whose misspelled name is close to a real one. `test_traceback` has 20 tests for
+it. This section covers the AttributeError half; the other two need things Grail
+does not have yet, recorded at the end.
+
+**Three separate gaps had to close before a suggestion was computable at all**,
+and none of them is the algorithm:
+
+1. **`dir(instance)` reported almost nothing useful.** `object>>__dir__` scanned
+   env-1 *selectors*, which are methods. A class body's data attributes
+   (`blech = None`) compile to accessors on the METACLASS, so `dir(TheClass)`
+   found them and `dir(instance)` did not; per-instance attributes live in
+   dynamic instVars and were invisible to both. So `dir(A())` answered A's
+   methods and nothing else — every candidate list was empty. It now unions the
+   selector scan with what the class offers and with the instance's own
+   `__dict__`, which is what CPython's `object.__dir__` is
+   (`list(inst.__dict__) + dir(type(inst))`). Guarded to non-classes: for a class
+   `self class` is its METAclass, and the selector scan already reaches the
+   class's attributes through it.
+2. **`AttributeError` carried no `name` / `obj`.** CPython has exposed both since
+   3.10, and the suggestion needs both — `name` is the misspelling, `obj` supplies
+   the candidates. Stored as dynamic instVars under their own Python names, the
+   idiom `__notes__` already uses: `___pyAttrLoad___` probes dynamic instVars
+   before the method chain, so `e.name` answers the value rather than a
+   BoundMethod.
+3. **A bare `raise AttributeError()` from a user `__getattr__` had nothing to go
+   on.** CPython's `set_attribute_error_context()` stamps `name`/`obj` on an
+   AttributeError escaping attribute access when the exception did not supply
+   them. Grail now does the same, at both `__getattr__` dispatch sites (the `def`
+   form and the class-attribute form), filling only what is missing — an
+   AttributeError from a *nested* access already names its own object and that
+   must win.
+
+The algorithm itself is a faithful port of CPython's `_levenshtein_distance` /
+`_compute_suggestion_error`, including the early bail (callers rely on
+"> max_cost" meaning *no suggestion*) and the weighted substitution cost. It was
+validated against CPython's own function on the exact strings the tests use, with
+zero mismatches — worth doing, because the tests assert which candidate *wins*:
+substitution over elimination over addition, and a case change over all three.
+
+**A latent `_safe_string` bug surfaced.** Appending the suffix concatenates to the
+message, and that turned a silent wrong-type into a `TypeError`: Grail's `str()`
+on a class with `__str__ = None` returns None where CPython raises, so `msg` was
+None and `None + suffix` blew up. `_safe_string` now guarantees a str, which is
+what its contract always claimed. **Found, not fixed:** the underlying divergence
+— `str(obj)` should raise `TypeError` when `__str__` is None.
+
+**The scoreboard shows `test_set` going OK → ERROR, and that is an improvement.**
+Grail's `TestLoader.getTestCaseNames` calls `dir()` on an INSTANCE
+(`testCaseClass("setUp")`), where CPython calls it on the class. Widening instance
+`dir()` therefore widened test discovery, and two tests that had **never run**
+now do: `TestSetSubclassWithSlots.test_pickling` and its frozenset twin, which
+`test_set.py` installs as class-body assignments
+(`test_pickling = TestJointOps.test_pickling`) — exactly the class-attribute shape
+instance `dir()` used to miss. Both fail with `object has no attribute 's'`.
+The cause is NOT diagnosed: two plausible explanations were checked and both were
+wrong (a `__slots__` class declaring `__dict__` does accept `self.s`, and a
+class-body `setUp = Donor.setUp` does correctly shadow an inherited `setUp`). So
+this is recorded as an open question rather than explained. The measurement got
+more honest, and hiding it by narrowing `dir()` again would be the wrong trade.
+
+**Result: `test.test_traceback` 64 → 68 passing** (failures 67 → 64, errors 23 →
+22), with `test_set` 628 → 630 discovered and its 2 newly-run tests failing.
+SUnit 4082 → 4083.
+
+**Deliberately not done — `sys.stdlib_module_names` is empty**, so
+`NameError: name 'io' is not defined` gets no "Did you forget to import 'io'?"
+hint and two tests keep failing. Populating it is a genuine behavioural choice,
+not an oversight: CPython's set is the names that are stdlib **for that version**,
+and it deliberately includes modules unimportable on the running platform
+(`winreg` on Linux). Grail ships 82 stdlib modules and has no `io` at all, so
+copying CPython's ~310-name list would make Grail advise an import that then
+fails, while listing only what Grail ships means those two tests fail honestly
+because Grail's stdlib genuinely differs. Left unchanged pending that call.
+
+**Still needing more than this section provides:** NameError suggestions want
+`f_locals`/`f_globals` on PyFrame (also the last three assertions of
+`test_getattr_suggestions_underscored`, which un-hide underscored candidates when
+`self` in the frame IS the object); ImportError suggestions want `from X import Y`
+to raise `ImportError` rather than `ModuleNotFoundError`;
+`test_getattr_suggestions_with_custom___dir__` wants a metaclass `__dir__` to be
+honoured for `dir(TheClass)`; and `test_getattr_suggestions_do_not_trigger_for_big_dicts`
+hits GemStone's 255-dynamic-instVar ceiling.

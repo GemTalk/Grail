@@ -39,9 +39,19 @@ def _safe_string(value, what, func=str):
     describe the failure rather than propagating it when that raises -- a
     traceback must be printable even when the objects in it are not."""
     try:
-        return func(value)
+        rendered = func(value)
     except:
         return '<%s %s() failed>' % (what, 'repr' if func is repr else 'str')
+    # The contract is a STRING, not "whatever func returned".  CPython's str()
+    # either returns a str or raises, so it cannot hand back anything else; in
+    # Grail a class with ``__str__ = None'' yields None from str() rather than
+    # raising TypeError, and a None leaking out of here poisons every caller
+    # that concatenates the message (test_getattr_suggestions_invalid_args
+    # builds exactly that object).  Treat a non-str result as a failed render,
+    # which is what it is.
+    if not isinstance(rendered, str):
+        return '<%s %s() failed>' % (what, 'repr' if func is repr else 'str')
+    return rendered
 
 
 def _format_notes(value):
@@ -116,6 +126,228 @@ def _type_display_name(exc_type):
     if not isinstance(smod, str):
         smod = '<unknown>'
     return smod + '.' + name
+
+
+# ---------------------------------------------------------------- suggestions
+#
+# CPython appends "Did you mean: 'x'?" to an AttributeError / NameError /
+# ImportError whose misspelled name is close to a real one.  The algorithm is
+# Python/suggestions.c, mirrored in CPython's own traceback.py; these constants
+# and costs are its, not ours, because the tests assert which candidate WINS
+# (test_getattr_suggestions pins substitution over elimination over addition,
+# and a case change over any of them).
+
+_MAX_CANDIDATE_ITEMS = 750
+_MAX_STRING_SIZE = 40
+_MOVE_COST = 2
+_CASE_COST = 1
+
+
+def _substitution_cost(ch_a, ch_b):
+    """Cost of turning ch_a into ch_b: free if equal, cheap for a case change,
+    full price otherwise.  The cheap case is what makes 'BLuch' beat 'fluch' as
+    a suggestion for 'bluch'."""
+    if ch_a == ch_b:
+        return 0
+    if ch_a.lower() == ch_b.lower():
+        return _CASE_COST
+    return _MOVE_COST
+
+
+def _levenshtein_distance(a, b, max_cost):
+    """Weighted edit distance, giving up as soon as it exceeds max_cost.
+
+    A port of CPython's, including its optimizations, because the early bail is
+    not just a speed trick -- callers rely on the ``> max_cost'' answer to mean
+    "no suggestion", and a plain distance would suggest wildly unrelated names.
+    Keeps one row rather than the full matrix."""
+    if a == b:
+        return 0
+
+    # Trim the common prefix and suffix: they contribute nothing.
+    pre = 0
+    while a[pre:] and b[pre:] and a[pre] == b[pre]:
+        pre += 1
+    a = a[pre:]
+    b = b[pre:]
+    post = 0
+    while a[:post or None] and b[:post or None] and a[post - 1] == b[post - 1]:
+        post -= 1
+    a = a[:post or None]
+    b = b[:post or None]
+    if not a or not b:
+        return _MOVE_COST * (len(a) + len(b))
+    if len(a) > _MAX_STRING_SIZE or len(b) > _MAX_STRING_SIZE:
+        return max_cost + 1
+
+    # Prefer the shorter string as the row, and fail fast when the length
+    # difference alone already costs too much.
+    if len(b) < len(a):
+        a, b = b, a
+    if (len(b) - len(a)) * _MOVE_COST > max_cost:
+        return max_cost + 1
+
+    row = list(range(_MOVE_COST, _MOVE_COST * (len(a) + 1), _MOVE_COST))
+    result = 0
+    for bindex in range(len(b)):
+        bchar = b[bindex]
+        distance = result = bindex * _MOVE_COST
+        minimum = None
+        for index in range(len(a)):
+            substitute = distance + _substitution_cost(bchar, a[index])
+            distance = row[index]
+            insert_delete = min(result, distance) + _MOVE_COST
+            result = min(insert_delete, substitute)
+            row[index] = result
+            if minimum is None or result < minimum:
+                minimum = result
+        if minimum is not None and minimum > max_cost:
+            # Every cell in this row is already too expensive.
+            return max_cost + 1
+    return result
+
+
+def _candidates_for(exc_value, tb, wrong_name):
+    """The names a suggestion may be drawn from, or None when there are none to
+    be had.  Which names depends on the exception:
+
+    AttributeError -> dir(obj), which is why Grail's object.__dir__ had to learn
+    about class attributes and instance attributes first (it reported neither for
+    an instance, so every candidate list was empty).
+
+    NameError -> the frame's locals, globals and builtins.  Grail's PyFrame does
+    not carry f_locals / f_globals yet, so this branch finds nothing and no
+    suggestion is offered -- which is the honest answer rather than a wrong one.
+
+    ImportError -> the module's dir().
+    """
+    if isinstance(exc_value, AttributeError):
+        obj = getattr(exc_value, 'obj', _sentinel)
+        if obj is _sentinel:
+            return None
+        try:
+            try:
+                d = dir(obj)
+            except TypeError:
+                # Unsortable attributes -- CPython's own fallback.
+                d = (list(type(obj).__dict__.keys())
+                     + list(getattr(obj, '__dict__', {}).keys()))
+            d = sorted([x for x in d if isinstance(x, str)])
+        except Exception:
+            return None
+        # An underscored candidate is only offered for an underscored typo.
+        # CPython also un-hides them when the access came from inside the
+        # object's own method (``self'' in the frame locals is that object),
+        # which needs frame locals Grail does not have -- see above.
+        if wrong_name[:1] != '_':
+            d = [x for x in d if x[:1] != '_']
+        return d
+    if isinstance(exc_value, ImportError):
+        try:
+            mod = __import__(exc_value.name)
+            d = dir(mod)
+            d = sorted([x for x in d if isinstance(x, str)])
+        except Exception:
+            return None
+        if wrong_name[:1] != '_':
+            d = [x for x in d if x[:1] != '_']
+        return d
+    if isinstance(exc_value, NameError):
+        frame = _last_frame_of(tb)
+        if frame is None:
+            return None
+        d = []
+        for attr in ('f_locals', 'f_globals', 'f_builtins'):
+            ns = getattr(frame, attr, None)
+            if ns:
+                try:
+                    d.extend(list(ns))
+                except Exception:
+                    pass
+        return [x for x in d if isinstance(x, str)] or None
+    return None
+
+
+def _last_frame_of(tb):
+    """The innermost frame of a traceback, or None."""
+    if tb is None:
+        return None
+    try:
+        while getattr(tb, 'tb_next', None) is not None:
+            tb = tb.tb_next
+        return getattr(tb, 'tb_frame', None)
+    except Exception:
+        return None
+
+
+def _compute_suggestion_error(exc_value, tb, wrong_name):
+    """The closest real name to ``wrong_name'', or None.
+
+    The thresholds are CPython's: no more than a third of the characters
+    involved may need changing, and a candidate is only taken if it beats every
+    one seen so far -- so ties go to the FIRST in sorted order, which is what
+    makes the expectations in test_getattr_suggestions deterministic."""
+    if wrong_name is None or not isinstance(wrong_name, str):
+        return None
+    d = _candidates_for(exc_value, tb, wrong_name)
+    if not d:
+        return None
+    if len(d) > _MAX_CANDIDATE_ITEMS:
+        return None
+    wrong_name_len = len(wrong_name)
+    if wrong_name_len > _MAX_STRING_SIZE:
+        return None
+    best_distance = wrong_name_len
+    suggestion = None
+    for possible_name in d:
+        if possible_name == wrong_name:
+            continue
+        max_distance = (len(possible_name) + wrong_name_len + 3) * _MOVE_COST // 6
+        max_distance = min(max_distance, best_distance - 1)
+        current_distance = _levenshtein_distance(
+            possible_name, wrong_name, max_distance)
+        if current_distance > max_distance:
+            continue
+        if not suggestion or current_distance < best_distance:
+            suggestion = possible_name
+            best_distance = current_distance
+    return suggestion
+
+
+def _suggestion_suffix(exc_type, value, tb=None):
+    """What CPython appends to the message line, or ''.
+
+    Two separate additions, and a NameError can get both: the closest name, and
+    -- when the undefined name is a stdlib module -- a reminder to import it."""
+    if value is None or exc_type is None:
+        return ''
+    try:
+        if not issubclass(exc_type, (NameError, AttributeError, ImportError)):
+            return ''
+    except TypeError:
+        return ''
+    try:
+        if issubclass(exc_type, ImportError):
+            wrong_name = getattr(value, 'name_from', None)
+        else:
+            wrong_name = getattr(value, 'name', None)
+        if wrong_name is None or not isinstance(wrong_name, str):
+            return ''
+        suffix = ''
+        suggestion = _compute_suggestion_error(value, tb, wrong_name)
+        if suggestion:
+            suffix = ". Did you mean: '" + suggestion + "'?"
+        if issubclass(exc_type, NameError):
+            if wrong_name in getattr(sys, 'stdlib_module_names', ()):
+                if suggestion:
+                    suffix += " Or did you forget to import '" + wrong_name + "'?"
+                else:
+                    suffix = ". Did you forget to import '" + wrong_name + "'?"
+        return suffix
+    except Exception:
+        # A suggestion is a courtesy; failing to compute one must never replace
+        # the error the user actually needs to see.
+        return ''
 
 
 def format_exception_only(exc_type, value=_sentinel, show_group=False):
@@ -199,6 +431,16 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False):
         msg = ''
     else:
         msg = _safe_string(value, 'exception')
+    # "Did you mean: 'x'?" rides on the message line.  CPython computes it once
+    # in TracebackException.__init__ and stores it in _str; doing it here instead
+    # covers BOTH entry points -- the module-level function and
+    # TracebackException.format_exception_only, which delegates to it -- without
+    # the suggestion having to be threaded through construction.
+    # Appended even when the message is EMPTY: ``raise AttributeError()'' has no
+    # message, and CPython still renders "AttributeError: . Did you mean: 'x'?"
+    # -- the colon form is chosen from the COMBINED string, not from the message
+    # alone (test_getattr_suggestions_no_args).
+    msg = msg + _suggestion_suffix(exc_type, value)
     if msg:
         lines = [type_name + ': ' + msg + '\n']
     else:

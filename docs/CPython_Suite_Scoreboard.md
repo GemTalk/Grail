@@ -29,8 +29,8 @@ different rows and merges cleanly.
 | test.test_list | OK | 68 | 0 | 0 | 4 |  |
 | test.test_tuple | OK | 38 | 0 | 0 | 6 |  |
 | test.test_dict | OK | 120 | 0 | 0 | 20 |  |
-| test.test_set | OK | 628 | 0 | 0 | 21 |  |
-| test.test_bytes | OK | 316 | 0 | 0 | 25 |  |
+| test.test_set | ERROR | 630 | 0 | 2 | 21 |  |
+| test.test_bytes | OK | 317 | 0 | 0 | 25 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
 | test.test_enum | ERROR | 1077 | 11 | 13 | 6 |  |
@@ -46,7 +46,7 @@ different rows and merges cleanly.
 | test.test_slice | OK | 11 | 0 | 0 | 0 |  |
 | test.test_bool | OK | 31 | 0 | 0 | 0 |  |
 | test.test_iter | OK | 57 | 0 | 0 | 4 |  |
-| test.test_traceback | ERROR | 370 | 67 | 23 | 216 |  |
+| test.test_traceback | ERROR | 370 | 64 | 22 | 216 |  |
 | test.test_compare | OK | 16 | 0 | 0 | 0 |  |
 | test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
 | test.test_keywordonlyarg | OK | 11 | 0 | 0 | 0 |  |
