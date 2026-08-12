@@ -1273,8 +1273,13 @@ def _enum_protocol_results():
         out['mro_reserved'] = 'no-raise'
     except ValueError:
         out['mro_reserved'] = 'ValueError'
+    # A COMPOSITE is named after the members it subsumes (CPython 3.11+):
+    # Perm(5)._name_ is 'R|X', not None.  It used to read ``is None'' here,
+    # which is pre-3.11 behaviour -- and the name is reachable, so a flag whose
+    # __str__ answers self._name_ printed 'None' (test_enum
+    # OldTestIntFlag.test_format).
     out['sunders'] = (Color.RED._name_, Color.RED._value_,
-                      Perm(5)._name_ is None, Perm(5)._value_)
+                      Perm(5)._name_, Perm(5)._value_)
 
     class MainF(Flag):
         first = auto()
@@ -1285,10 +1290,11 @@ def _enum_protocol_results():
     out['flag_alias'] = ([m.name for m in MainF],
                          MainF.dupe is MainF(3),
                          MainF['dupe'] is MainF(3),
-                         MainF(5).name is None,
+                         MainF(5).name,
                          MainF.dupe in MainF)
-    # An explicitly-DEFINED composite keeps its class-body name in repr
-    # (CPython: <TE.dupe: 3>), unlike runtime composites (TE(5), nameless).
+    # An explicitly-DEFINED composite keeps its class-body NAME, where a runtime
+    # one is named after the members it subsumes (CPython 3.11+: MainF(5).name
+    # is 'first|third').  This read ``is None'' -- pre-3.11 behaviour.
     out['flag_alias_name'] = repr(MainF.dupe)
 
     class CondF(Flag):

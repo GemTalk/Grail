@@ -120,13 +120,13 @@ testIntFlagCompositeMembers
 	(CPython), not a plain int (which AbstractPyInt's DNU int-forward used
 	to produce), with the enum-style repr; results cache, so the same bit
 	combination is the identical object; str stays the int (ReprEnum); a
-	composite's .name is None."
+	composite is NAMED after the members it subsumes (CPython 3.11+)."
 
 	self assert: (self resultAt: 'perm_or_is_member').
 	self assert: (self resultAt: 'perm_or_repr') equals: '<Perm.READ|WRITE: 3>'.
 	self assert: (self resultAt: 'perm_or_str') equals: '3'.
 	self assert: (self resultAt: 'perm_or_cached').
-	self assert: (self resultAt: 'perm_composite_name_none').
+	self assert: (self resultAt: 'perm_composite_name') asString equals: 'READ|WRITE'.
 %
 
 category: 'Grail-Tests'

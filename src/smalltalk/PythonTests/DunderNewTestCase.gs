@@ -1202,7 +1202,7 @@ testEnumMetaclassProtocol
 	Perm(0) / falsy; calling a member-less enum class raises TypeError
 	'has no members' (not ValueError); reserved-name validation (mro,
 	_sunder_) raises ValueError at definition; canonical sunder attrs
-	(_name_/_value_, None name on composites)."
+	(_name_/_value_, the joined name on composites)."
 
 	| r |
 	r := self fixture @env1:ENUM_PROTOCOL_RESULT.
@@ -1222,13 +1222,17 @@ testEnumMetaclassProtocol
 		equals: '<enum ''Empty''> has no members'.
 	self assert: (r @env1:__getitem__: 'sunder_reserved') equals: 'ValueError'.
 	self assert: (r @env1:__getitem__: 'mro_reserved') equals: 'ValueError'.
+	"A COMPOSITE is named after the members it subsumes (CPython 3.11+):
+	Perm(5)._name_ is 'R|X'.  This read ``is None'' -- pre-3.11 behaviour --
+	and the name is reachable, so a flag whose __str__ answers self._name_
+	printed 'None' (test_enum OldTestIntFlag.test_format)."
 	self assert: (r @env1:__getitem__: 'sunders') @env1:__repr__
-		equals: '(''RED'', 1, True, 5)'.
+		equals: '(''RED'', 1, ''R|X'', 5)'.
 	"Flag composite-alias: a class-body value covered by existing member
 	bits is an alias -- named/value lookup works, iteration excludes it,
-	and its .name reads as None."
+	and a RUNTIME composite is named after the members it subsumes."
 	self assert: (r @env1:__getitem__: 'flag_alias') @env1:__repr__
-		equals: '([''first'', ''second'', ''third''], True, True, True, True)'.
+		equals: '([''first'', ''second'', ''third''], True, True, ''first|third'', True)'.
 	self assert: (r @env1:__getitem__: 'flag_alias_name')
 		equals: '<MainF.dupe: 3>'.
 	"Class-body-if stores are swept from the per-class dynamic store into
