@@ -634,6 +634,20 @@ printSmalltalkRuntimeOn: aStream
 	subclasses of built-ins (Exception, dict, ...) that are NOT
 	PythonInstances, and is inherited so a subclass of a slotted class is
 	covered too."
+	"Marks a class as PYTHON-DEFINED.  The strictness walk needs to tell a
+	Python class that declared no __slots__ -- which gives its instances a
+	__dict__ and so forbids strictness below it -- from a Grail BUILTIN
+	base such as property or a numbers ABC, whose instances carry no Python
+	__dict__ and which CPython spells with __slots__ = () anyway."
+	self
+		emitCompileMethodOn: name
+		source: '___pyDefinedClass___
+	^ true'
+		category: 'Grail-Slots'
+		env: 1
+		classSide: false
+		onStream: aStream.
+
 	(self slotsValueAst notNil) ifTrue: [
 		self
 			emitCompileMethodOn: name
@@ -651,7 +665,14 @@ printSmalltalkRuntimeOn: aStream
 	instance-side marker the runtime store / __dict__ paths consult via
 	``self class whichClassIncludesSelector:'' (self is the instance there);
 	subclasses inherit it so strictness propagates down a slotted chain."
+	"Gated at CLASS-CREATION time on ___pyStrictSlotsAllowed___, not just on
+	this class's own declaration: CPython drops the __dict__ only when the
+	WHOLE mro declares __slots__, so a slotted class with a plain base still
+	has one.  The base may live in another module, so only the runtime can
+	answer that -- see PythonInstance class>>___pyStrictSlotsAllowed___."
 	self slotsDeclaredStrict ifTrue: [
+		aStream nextPutAll: '('; nextPutAll: name;
+			nextPutAll: ' ___pyStrictSlotsAllowed___) ifTrue: ['; lf.
 		self
 			emitCompileMethodOn: name
 			source: '___pySlotsStrict___
@@ -660,6 +681,7 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: false
 			onStream: aStream.
+		aStream nextPutAll: '].'; lf.
 	].
 
 	"Compile each instance method as a real env-1 method on the new

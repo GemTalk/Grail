@@ -672,6 +672,7 @@ run
 	at: #'FlagMemberLengthTestCase' put: nil;
 	at: #'EnumCallAndInitTestCase' put: nil;
 	at: #'EnumCompositeNameTestCase' put: nil;
+	at: #'EnumDataclassReprTestCase' put: nil;
 	at: #'EnumNestedClassTestCase' put: nil;
 	at: #'EnumDataTypeReprTestCase' put: nil;
 	at: #'EnumDefinitionErrorsTestCase' put: nil;
@@ -738,6 +739,7 @@ run
 	at: #'IsADirectoryErrorTestCase' put: nil;
 	at: #'IteratorTestCase' put: nil;
 	at: #'ClassMethodDecoratorOrderTestCase' put: nil;
+	at: #'SlotsInheritedDictTestCase' put: nil;
 	at: #'TimedeltaFloatOperandTestCase' put: nil;
 	at: #'BuiltinSubclassMethodsTestCase' put: nil;
 	at: #'PrivateNameManglingTestCase' put: nil;
@@ -1454,6 +1456,7 @@ input src/smalltalk/PythonTests/EnumDescriptorMemberTestCase.gs
 input src/smalltalk/PythonTests/FlagMemberLengthTestCase.gs
 input src/smalltalk/PythonTests/EnumCallAndInitTestCase.gs
 input src/smalltalk/PythonTests/EnumCompositeNameTestCase.gs
+input src/smalltalk/PythonTests/EnumDataclassReprTestCase.gs
 input src/smalltalk/PythonTests/EnumNestedClassTestCase.gs
 input src/smalltalk/PythonTests/EnumDataTypeReprTestCase.gs
 input src/smalltalk/PythonTests/EnumDefinitionErrorsTestCase.gs
@@ -1536,6 +1539,7 @@ input src/smalltalk/PythonTests/PackageImportTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodDecoratorOrderTestCase.gs
+input src/smalltalk/PythonTests/SlotsInheritedDictTestCase.gs
 input src/smalltalk/PythonTests/TimedeltaFloatOperandTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassMethodsTestCase.gs
 input src/smalltalk/PythonTests/PrivateNameManglingTestCase.gs
