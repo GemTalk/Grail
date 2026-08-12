@@ -99,12 +99,31 @@ def invalid_construction():
     return out
 
 
+def _addr_neutral(text):
+    """Blank out the address in a default object repr.
+
+    The target here has no repr of its own, so it falls to
+    ``object.__repr__``, which -- as in CPython -- ends in the object's
+    address.  Nothing can pin that, and CPython's own tests match such reprs
+    with assertRegex for the same reason; neutralising it keeps the assertion
+    an exact one.
+    """
+    out = []
+    rest = text
+    while ' at 0x' in rest:
+        head, _, rest = rest.partition(' at 0x')
+        _addr, _, rest = rest.partition('>')
+        out.append(head + ' at 0xADDR>')
+    out.append(rest)
+    return ''.join(out)
+
+
 def reprs():
     """``functools.partialmethod(<target>, 3, b=4)''.  A closure had no repr
     of its own, so this printed as a bare Grail object."""
     v = vars(A)
-    return [repr(v['nothing']), repr(v['positional']),
-            repr(v['keywords']), repr(v['both'])]
+    return [_addr_neutral(repr(v['nothing'])), _addr_neutral(repr(v['positional'])),
+            _addr_neutral(repr(v['keywords'])), _addr_neutral(repr(v['both']))]
 
 
 def attributes():

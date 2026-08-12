@@ -262,6 +262,16 @@ class attrgetter:
     def __reduce__(self):
         return self.__class__, self._attrs
 
+    def __repr__(self):
+        # CPython gives all three getters a repr built from their CONTENTS,
+        # which is what makes ``repr(pickle.loads(pickle.dumps(f))) ==
+        # repr(f)'' hold -- test_operator asserts exactly that.  Without one
+        # they fell to object.__repr__, and that comparison passed only for as
+        # long as the default repr carried no address to differ in.
+        return '%s.%s(%s)' % (self.__class__.__module__,
+                              self.__class__.__qualname__,
+                              ', '.join(map(repr, self._attrs)))
+
     @staticmethod
     def _resolve(obj, dotted):
         for part in dotted.split('.'):
@@ -285,6 +295,11 @@ class itemgetter:
 
     def __reduce__(self):
         return self.__class__, self._items
+
+    def __repr__(self):
+        return '%s.%s(%s)' % (self.__class__.__module__,
+                              self.__class__.__name__,
+                              ', '.join(map(repr, self._items)))
 
 
 class methodcaller:
@@ -312,6 +327,14 @@ class methodcaller:
 
     def __setstate__(self, state):
         self._kwargs = state
+
+    def __repr__(self):
+        args = [repr(self._name)]
+        args.extend(map(repr, self._args))
+        args.extend('%s=%r' % (k, v) for k, v in self._kwargs.items())
+        return '%s.%s(%s)' % (self.__class__.__module__,
+                              self.__class__.__name__,
+                              ', '.join(args))
 
 
 # In-place arithmetic — used less often, but keep parity.

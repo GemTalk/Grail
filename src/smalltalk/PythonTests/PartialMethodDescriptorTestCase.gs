@@ -180,13 +180,15 @@ category: 'Grail-Tests - Protocol'
 method: PartialMethodDescriptorTestCase
 testRepr
 	"A closure had no repr of its own, so this printed as a bare Grail
-	object.  The target's own repr is whatever Grail gives a function."
+	object.  The target's own repr is whatever Grail gives a function --
+	here object.__repr__, whose trailing address the fixture blanks out to
+	0xADDR so the assertion can stay an exact one."
 
 	self assert: testModule @env1:reprs asArray
-		equals: #( 'functools.partialmethod(<BoundMethod object>)'
-			'functools.partialmethod(<BoundMethod object>, 1)'
-			'functools.partialmethod(<BoundMethod object>, a=2)'
-			'functools.partialmethod(<BoundMethod object>, 3, b=4)' ).
+		equals: #( 'functools.partialmethod(<BoundMethod object at 0xADDR>)'
+			'functools.partialmethod(<BoundMethod object at 0xADDR>, 1)'
+			'functools.partialmethod(<BoundMethod object at 0xADDR>, a=2)'
+			'functools.partialmethod(<BoundMethod object at 0xADDR>, 3, b=4)' ).
 %
 
 category: 'Grail-Tests - Protocol'

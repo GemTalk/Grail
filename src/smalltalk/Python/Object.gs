@@ -4292,9 +4292,9 @@ __repr__
 	(the dataclass decorator installs one via ``cls.__repr__ =
 	synth_fn'').  When present, bind self and forward; the synthesized
 	closure renders ``ClassName(field=value, ...)''.  When absent,
-	fall through to the default ``<ClassName object>''."
+	fall through to the default ``<module.QualName object at 0x...>''."
 
-	| myClass className stream fn mcOwner |
+	| myClass className stream fn mcOwner mod |
 	fn := self ___dynamicClassAttr___: #'__repr__'.
 	fn == nil ifFalse: [^ fn ___pyCallValue___: { self } kw: nil].
 	"A ``@staticmethod def __repr__()'' (a dunder with no self) defined in the
@@ -4306,12 +4306,51 @@ __repr__
 	mcOwner := self @env0:class @env0:class @env0:whichClassIncludesSelector: #'__repr__' environmentId: 1.
 	(mcOwner @env0:notNil and: [mcOwner @env0:== (self @env0:class @env0:class)]) ifTrue: [
 		^ self @env0:class @env0:perform: #'__repr__' env: 1].
+	"CPython object_repr:
+
+	    if (mod != NULL && !equal(mod, ""builtins""))
+	        ""<%U.%U object at %p>"" % (mod, qualname, self)
+	    else
+	        ""<%s object at %p>"" % (tp_name, self)
+
+	so the module qualifies the name unless it is builtins, the NAME is the
+	__qualname__ (an inner class reads ``Outer.Inner''), and the address is
+	id(self) in hex -- which is why unittest's assertRegex, not assertEqual, is
+	what CPython's own tests match a default repr with.  Grail printed
+	``<Foo object>'', naming neither the module nor the object.
+
+	id() is builtins id:, i.e. identityHash, so ``hex(id(x)) in repr(x)'' holds
+	the way it does in CPython.  Falls back to the class name for either part
+	that cannot be read, since a repr must not raise.
+
+	Both parts are taken only when they are STRINGS, which object_repr is
+	explicit about (``else if (!PyUnicode_Check(mod)) mod = NULL'').  It earns
+	its keep here: several of Grail's own classes answer something else
+	entirely for __module__ -- BoundMethod answers an UnboundMethod -- and
+	without the check that object printed as ``<anUnboundMethod.BoundMethod
+	object at 0x...>''."
+
 	myClass := self @env0:class.
-	className := myClass @env0:name.
+	className := [ | qn |
+		qn := myClass @env1:___pyAttrLoad___: #'__qualname__'.
+		(qn isKindOf: CharacterCollection)
+			ifTrue: [qn @env0:asString]
+			ifFalse: [myClass @env0:name @env0:asString] ]
+		@env0:on: AbstractException do: [:e | e @env0:return: myClass @env0:name @env0:asString].
+	mod := [ | mv |
+		mv := myClass @env1:___pyAttrLoad___: #'__module__'.
+		(mv isKindOf: CharacterCollection) ifTrue: [mv @env0:asString] ifFalse: [nil] ]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	stream @env0:nextPut: $<.
+	(mod @env0:notNil and: [mod @env0:~= 'builtins']) ifTrue: [
+		stream @env0:nextPutAll: mod.
+		stream @env0:nextPut: $.].
 	stream @env0:nextPutAll: className.
-	stream @env0:nextPutAll: ' object>'.
+	stream @env0:nextPutAll: ' object at 0x'.
+	stream @env0:nextPutAll:
+		(self @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase.
+	stream @env0:nextPut: $>.
 	^ stream @env0:contents
 %
 
