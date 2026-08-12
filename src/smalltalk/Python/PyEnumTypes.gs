@@ -1396,6 +1396,26 @@ ___grailLookupValue: cls value: aValue
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailReduceOf: aMember
+	"(cls, (value,)) -- the body of every enum member's __reduce__.
+
+	Shared because the STORAGE-ROOTED roots Grail ships -- IntEnum, IntFlag,
+	StrEnum -- do not inherit Enum on the Smalltalk chain, so they never saw it.
+	A USER's ``class E(int, Enum)'' did, because ___mergeSecondaryBases___ copies
+	Enum's instance methods down, which is why only the shipped roots lost pickle
+	identity: with no __reduce__ and no __reduce_ex__ to answer with, pickle fell
+	through to newobj(cls) and rebuilt a member-shaped object equal to the
+	canonical one but not IT (OldTestFlag test_pickle)."
+
+	| tupleClass |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	^ tupleClass @env0:withAll: {
+		aMember @env0:class.
+		(tupleClass @env0:withAll: { aMember @env0:dynamicInstVarAt: #value }) }
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailValueRepr: aValue
 	"repr(aValue), for the ``<value> is not a valid <Cls>'' messages.
 
@@ -4151,14 +4171,9 @@ __reduce__
 	singleton member (so a round-tripped member is `is`-identical, as the
 	pickle tests require).  Without this, pickling an enum member fell through
 	to object>>__reduce__ and leaked a raw Smalltalk error (`Not yet
-	implemented: __reduce__`).  Enum-rooted only (plain Enum + Flag); mixed
-	int/str-rooted members do not inherit this."
+	implemented: __reduce__`)."
 
-	| tupleClass |
-	tupleClass := Python @env0:at: #tuple otherwise: Array.
-	^ tupleClass @env0:withAll: {
-		self @env0:class.
-		(tupleClass @env0:withAll: { self @env0:dynamicInstVarAt: #value }) }
+	^ Enum ___grailReduceOf: self
 %
 
 category: 'Grail-Pickle'
@@ -4390,6 +4405,22 @@ __str__
 ! ------------------- IntEnum members: int-like (inherit AbstractPyInt),
 ! enum-style repr/str + a .name accessor.
 
+category: 'Grail-Pickle'
+method: IntEnum
+__reduce__
+	"(cls, (value,)) -- AbstractPyInt-rooted, so Enum's is not inherited."
+
+	^ Enum ___grailReduceOf: self
+%
+
+category: 'Grail-Pickle'
+method: IntEnum
+__reduce_ex__: proto
+	"pickle asks for this one FIRST; see Enum >> __reduce_ex__:."
+
+	^ Enum ___grailReduceOf: self
+%
+
 category: 'Grail-Enum Member'
 method: IntEnum
 name
@@ -4437,6 +4468,22 @@ __format__: aSpec
 ! IntEnum metaclass methods above.  Results resolve through
 ! ___grailIntFlagValue: -- KEEP boundary (CPython 3.11+ IntFlag default):
 ! uncovered bits are retained, not rejected.
+
+category: 'Grail-Pickle'
+method: IntFlag
+__reduce__
+	"(cls, (value,)) -- AbstractPyInt-rooted, so Enum's is not inherited."
+
+	^ Enum ___grailReduceOf: self
+%
+
+category: 'Grail-Pickle'
+method: IntFlag
+__reduce_ex__: proto
+	"pickle asks for this one FIRST; see Enum >> __reduce_ex__:."
+
+	^ Enum ___grailReduceOf: self
+%
 
 category: 'Grail-IntFlag Member'
 method: IntFlag
@@ -4785,6 +4832,22 @@ _boundary_
 %
 
 ! ------------------- StrEnum members (instance side)
+
+category: 'Grail-Pickle'
+method: StrEnum
+__reduce__
+	"(cls, (value,)) -- AbstractPyStr-rooted, so Enum's is not inherited."
+
+	^ Enum ___grailReduceOf: self
+%
+
+category: 'Grail-Pickle'
+method: StrEnum
+__reduce_ex__: proto
+	"pickle asks for this one FIRST; see Enum >> __reduce_ex__:."
+
+	^ Enum ___grailReduceOf: self
+%
 
 category: 'Grail-Enum Member'
 method: StrEnum
