@@ -237,6 +237,69 @@ def _unpack_exc_args(exc_type, value, tb):
     return exc_type, value, tb
 
 
+def _is_seen(exc, seen):
+    """Identity membership -- ``in`` would use __eq__, and an exception may
+    define one (test_unhashable builds exactly that)."""
+    for other in seen:
+        if other is exc:
+            return True
+    return False
+
+
+_cause_message = (
+    "\nThe above exception was the direct cause of the following exception:\n\n")
+
+_context_message = (
+    "\nDuring handling of the above exception, another exception occurred:\n\n")
+
+
+def _chain_of(exc):
+    """CPython's chain as a list of ``(connector, exception)`` pairs, in the
+    order they are rendered -- deepest first, each connector introducing the
+    exception it precedes.
+
+    The rule per link is CPython's: an explicit __cause__ wins and prints "the
+    direct cause of"; otherwise __context__ prints "During handling of", unless
+    __suppress_context__, which ``raise X from ...`` sets either way (including
+    ``from None``).
+
+    Iterative, and guarded by IDENTITY against a chain that loops back on
+    itself -- re-raising the exception being handled can produce one, and a
+    recursive walk would hang or exhaust the stack.
+    """
+    links = []
+    seen = []
+    while exc is not None:
+        duplicate = False
+        for other in seen:
+            if other is exc:
+                duplicate = True
+                break
+        if duplicate:
+            break
+        seen.append(exc)
+        cause = getattr(exc, '__cause__', None)
+        context = getattr(exc, '__context__', None)
+        suppress = getattr(exc, '__suppress_context__', False)
+        if cause is not None:
+            nxt, msg = cause, _cause_message
+        elif context is not None and not suppress:
+            nxt, msg = context, _context_message
+        else:
+            nxt, msg = None, None
+        # msg introduces THIS exception, so it belongs with it once reversed.
+        links.append((msg, exc))
+        exc = nxt
+    # The DEEPEST exception introduces nothing: when the walk stopped on a cycle
+    # its link still carries the connector it would have used for the link we
+    # refused to follow, which rendered a stray "direct cause of" ahead of the
+    # first block (test_cause_recursive: 5 blocks where CPython has 3).
+    if links:
+        links[-1] = (None, links[-1][1])
+    links.reverse()
+    return links
+
+
 def format_exception(exc_type, value=None, tb=None, limit=None, chain=True):
     """Return a list of strings ready to be joined.  Accepts either
     the legacy 3-arg ``(type, value, tb)'' shape or the 3.10+
@@ -251,6 +314,17 @@ def format_exception(exc_type, value=None, tb=None, limit=None, chain=True):
     assert on exactly that."""
 
     exc_type, value, tb = _unpack_exc_args(exc_type, value, tb)
+    if chain and value is not None:
+        links = _chain_of(value)
+        if len(links) > 1:
+            lines = []
+            for connector, exc in links:
+                if connector is not None:
+                    lines.append(connector)
+                lines.extend(format_exception(
+                    type(exc), exc, getattr(exc, '__traceback__', None),
+                    limit=limit, chain=False))
+            return lines
     frames = []
     if tb is not None:
         try:
@@ -669,7 +743,7 @@ class TracebackException:
     def __init__(self, exc_type, exc_value, exc_traceback,
                  limit=None, lookup_lines=True, capture_locals=False,
                  compact=False, max_group_width=15, max_group_depth=10,
-                 save_exc_type=True, **kwargs):
+                 save_exc_type=True, _seen=None, **kwargs):
         """``max_group_width`` / ``max_group_depth`` / ``save_exc_type`` are
         accepted and not yet acted on: they only shape PEP 654 exception-GROUP
         tree rendering, which Grail does not implement (see §9 of
@@ -694,9 +768,32 @@ class TracebackException:
         # -- and that is what makes two TracebackExceptions built from two
         # distinct-but-equivalent exceptions compare equal (see __eq__).
         self._str = _safe_string(exc_value, 'exception') if exc_value is not None else ''
+        # The chain, captured at construction as CPython does: rendering can be
+        # deferred or repeated, and by then the live exceptions may be gone.
+        # ``_seen`` is the cycle guard, carried down by identity of the VALUES so
+        # a chain that loops back terminates instead of recursing forever.
         self.__cause__ = None
         self.__context__ = None
-        self.__suppress_context__ = False
+        self.__suppress_context__ = bool(
+            getattr(exc_value, '__suppress_context__', False))
+        if _seen is None:
+            _seen = []
+        if exc_value is not None:
+            _seen.append(exc_value)
+            cause = getattr(exc_value, '__cause__', None)
+            context = getattr(exc_value, '__context__', None)
+            if cause is not None and not _is_seen(cause, _seen):
+                self.__cause__ = TracebackException(
+                    type(cause), cause, getattr(cause, '__traceback__', None),
+                    limit=limit, lookup_lines=lookup_lines,
+                    capture_locals=capture_locals, _seen=_seen)
+            if (context is not None and not self.__suppress_context__
+                    and not _is_seen(context, _seen)):
+                self.__context__ = TracebackException(
+                    type(context), context,
+                    getattr(context, '__traceback__', None),
+                    limit=limit, lookup_lines=lookup_lines,
+                    capture_locals=capture_locals, _seen=_seen)
         # FrameSummary list extracted from the traceback (empty if none).
         # ``limit'' has to reach the extraction: it changes which frames appear,
         # so a TracebackException built with one is not equal to one without.
@@ -747,6 +844,30 @@ class TracebackException:
         format_exception() above.
 
         ``**kwargs`` swallows ``colorize`` and friends, as above."""
+        if chain:
+            links = []
+            link = self
+            while link is not None:
+                if link.__cause__ is not None:
+                    links.append((_cause_message, link))
+                    link = link.__cause__
+                elif link.__context__ is not None:
+                    links.append((_context_message, link))
+                    link = link.__context__
+                else:
+                    links.append((None, link))
+                    link = None
+            links.reverse()
+            lines = []
+            for connector, link in links:
+                if connector is not None:
+                    lines.append(connector)
+                lines.extend(link._format_self())
+            return lines
+        return self._format_self()
+
+    def _format_self(self):
+        """This exception alone -- header, frames, message -- with no chain."""
         frames = []
         try:
             frames.extend(self.stack.format())

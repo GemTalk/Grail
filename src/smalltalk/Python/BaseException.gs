@@ -147,6 +147,7 @@ ___signal___: message
 	| instance |
 	instance := self ___new___.
 	instance ___args___: { message }.
+	instance ___applyImplicitContext___.
 	instance ___signal___: message.
 %
 
@@ -203,6 +204,9 @@ ___signalNew___: positional kw: kwargs cause: aCause
 	(self @env0:___hasUserInit___) ifTrue: [
 		(instance ___pyAttrLoad___: #'__init__') value: positional value: kwargs
 	].
+	"Implicit context BEFORE the explicit cause: ``raise X from Y'' records both,
+	and ___applyCause___ must not find the slot already occupied by its own Y."
+	instance ___applyImplicitContext___.
 	aCause == nil ifFalse: [BaseException ___applyCause___: aCause to: instance].
 	"Signal WITH a message so GemStone's ``messageText'' / ``description''
 	carry it -- the old ___signal___: path set this, and a bare ``signal''
@@ -253,9 +257,24 @@ ___pyRaise___: excValue cause: aCause
 			ifFalse: [^ TypeError ___signal___: 'exceptions must derive from BaseException'].
 		"A bare class has no instance to hang __cause__ on, so ``raise Cls from
 		C'' has to build one; without a cause keep the cheaper direct signal."
-		aCause == nil ifTrue: [^ excValue @env0:signal].
+		aCause == nil ifTrue: [
+			"...and neither does it for the IMPLICIT context, so when there is an
+			exception being handled, build the instance rather than signalling the
+			class directly.  ``raise KeyError'' inside an ``except'' must record the
+			handled exception as __context__ exactly as ``raise KeyError()'' does
+			(test_traceback's PyExcReportingTests test_context).  With nothing being
+			handled -- the common case -- keep the cheaper direct signal."
+			(BaseException @env0:___currentException___) isNil
+				ifTrue: [^ excValue @env0:signal].
+			^ excValue ___signalNew___: (Array @env0:new) kw: nil cause: nil].
 		^ excValue ___signalNew___: (Array @env0:new) kw: nil cause: aCause].
 	(excValue @env0:isKindOf: BaseException) ifTrue: [
+		"An ALREADY-BUILT exception gets its context here: ``raise z from e''
+		re-raises an instance, and CPython records the handled exception as its
+		__context__ just as for a fresh one.  ___applyImplicitContext___ declines
+		to chain an exception to itself, which is what ``except E as e: raise e''
+		does, and declines to build a cycle."
+		excValue ___applyImplicitContext___.
 		aCause == nil ifFalse: [self ___applyCause___: aCause to: excValue].
 		(self ___isInFlight___: excValue) ifTrue: [^ self ___passOrSignal___: excValue].
 		^ self ___signalOrPass___: excValue].
@@ -477,13 +496,11 @@ __cause__
 category: 'Grail-Exception Chaining'
 method: BaseException
 __context__
-	"Return the exception context (the exception that was being handled
-	when this exception was raised).  Full implicit chaining (auto-setting
-	the context from the currently-handled exception on every raise) is
-	still unimplemented, but an EXPLICITLY chained context -- stored in the
-	___context___ dynamic instVar by code that constructs a derived
-	exception (e.g. Enum value-lookup when a _missing_ hook returns a bad
-	value or raises) -- is honored here.  Unset -> None (CPython default)."
+	"Return the exception context: the exception that was being handled when this
+	one was raised.  Set implicitly on every raise inside an ``except'' block
+	(___applyImplicitContext___), and explicitly by ``raise X from Y'' and by code
+	that constructs a derived exception (e.g. Enum value-lookup when a _missing_
+	hook returns a bad value or raises).  Unset -> None (CPython default)."
 
 	^ ([self @env0:dynamicInstVarAt: #'___context___']
 		@env0:on: AbstractException do: [:e | nil]) ifNil: [None]
@@ -640,6 +657,62 @@ __suppress_context__
 
 	^ ([self @env0:dynamicInstVarAt: #'___suppressContext___']
 		@env0:on: AbstractException do: [:e | nil]) == true
+%
+
+category: 'Grail-Exception Chaining'
+method: BaseException
+___applyImplicitContext___
+	"CPython's IMPLICIT chaining: an exception raised while another is being
+	HANDLED records that other one as its __context__, which is what produces
+
+	    During handling of the above exception, another exception occurred:
+
+	in a rendered traceback.  Unlike __cause__ this needs no syntax -- it happens
+	on every raise inside an ``except'' block -- and unlike __cause__ it does NOT
+	set __suppress_context__.  ``raise X from Y'' sets BOTH: CPython reports
+	cause=Y and context=Y there, with the flag on so only the cause renders.
+
+	The exception being handled is the one TryAst records in
+	___currentException___ on handler entry (and restores on exit), so no new
+	bookkeeping is needed.
+
+	It must not overwrite a context already set -- an explicit one, or this
+	exception being re-raised -- and must not chain an exception to itself.
+
+	Cycles it BREAKS rather than declines, which is what CPython does
+	(_PyErr_SetObject): walk the candidate's context chain, and if this exception
+	is already in it, clear THAT link's context before chaining.  Declining
+	instead leaves the context unset, which is visibly wrong -- test_traceback's
+	test_cause_recursive builds exactly this shape and CPython reports
+	__context__ as the KeyError, not None -- while doing nothing at all would let
+	format() walk the loop forever."
+
+	| current probe next |
+	(self ___rawContext___) isNil ifFalse: [^ self].
+	current := BaseException @env0:___currentException___.
+	current isNil ifTrue: [^ self].
+	current == self ifTrue: [^ self].
+	probe := current.
+	[probe isNil] whileFalse: [
+		next := probe ___rawContext___.
+		next == self
+			ifTrue: [
+				probe @env0:dynamicInstVarAt: #'___context___' put: nil.
+				probe := nil]
+			ifFalse: [probe := next]].
+	self @env0:dynamicInstVarAt: #'___context___' put: current.
+	^ self
+%
+
+category: 'Grail-Exception Chaining'
+method: BaseException
+___rawContext___
+	"The ___context___ slot as STORED -- nil when unset, where __context__
+	answers the None singleton.  The chain walks need to tell ``no context'' from
+	``a context that happens to be None''."
+
+	^ ([self @env0:dynamicInstVarAt: #'___context___']
+		@env0:on: AbstractException do: [:e | nil])
 %
 
 category: 'Grail-Exception Chaining'
