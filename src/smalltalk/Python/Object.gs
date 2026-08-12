@@ -2910,7 +2910,15 @@ ___pyAttrLoad___: aSym
 	((self @env0:class @env0:whichClassIncludesSelector: #'__getattr__:' environmentId: 1) notNil
 		and: [(self @env0:class @env0:whichClassIncludesSelector: #'__getattr__:' environmentId: 1)
 			~~ object])
-		ifTrue: [^ self __getattr__: s].
+		ifTrue: [
+			"Same name/obj stamping as the class-attribute form below: a user
+			``def __getattr__'' that raises a bare AttributeError must still
+			carry what a suggestion is computed from."
+			^ [self __getattr__: s]
+				@env0:on: AttributeError
+				do: [:ex |
+					AttributeError @env0:___stampContextOn___: ex name: s obj: self.
+					ex @env0:pass]].
 	"A ``__getattr__'' bound as a class ATTRIBUTE (a function value,
 	not a ``def'') — django's LazyObject does ``__getattr__ =
 	new_method_proxy(getattr)''.  Grail stores it in the per-class
@@ -2933,12 +2941,22 @@ ___pyAttrLoad___: aSym
 			]
 		].
 		(getattrFn == nil or: [getattrFn == None]) ifFalse: [
-			^ getattrFn value: { self. s } value: nil
+			"Stamp CPython's name/obj onto a BARE AttributeError escaping the
+			user's __getattr__ -- see ___stampContextOn___:name:obj:.  Passed on
+			rather than re-signalled so the handler search continues from the
+			original raise point and the traceback is unaffected."
+			^ [getattrFn value: { self. s } value: nil]
+				@env0:on: AttributeError
+				do: [:ex |
+					AttributeError @env0:___stampContextOn___: ex name: s obj: self.
+					ex @env0:pass]
 		]
 	].
-	^ AttributeError ___signal___:
-		(self @env0:class @env0:name @env0:asString @env0:,
-			' object has no attribute ''' @env0:, s @env0:, '''')
+	"Carries CPython's ``name'' / ``obj'' -- see
+	AttributeError class>>___signalMissing___:on:.  This is the terminal miss for
+	an ordinary attribute read, so it is where the suggestion machinery gets its
+	inputs from."
+	^ AttributeError @env0:___signalMissing___: s on: self
 %
 
 category: 'Grail-Convenience Methods - Keyword'
@@ -2983,11 +3001,14 @@ __getattr__: name
 	doesn't find the attribute (instance dict miss, class chain miss).
 	The default raises AttributeError — subclasses override to compute
 	missing attributes lazily (proxy patterns, virtual properties like
-	the Fahrenheit/Celsius example in AttributeProtocolTestCase)."
+	the Fahrenheit/Celsius example in AttributeProtocolTestCase).
 
-	^ AttributeError ___signal___:
-		(self @env0:class @env0:name @env0:asString @env0:,
-			' object has no attribute ''' @env0:, name @env0:asString @env0:, '''')
+	Raised through ___signalMissing___:on: so the exception carries CPython's
+	``name'' and ``obj'', which is what lets traceback.py offer
+	``Did you mean: 'blech'?''.  This is THE attribute-miss path for a Python
+	object, so it is the one that has to carry them."
+
+	^ AttributeError @env0:___signalMissing___: name asString on: self
 %
 
 category: 'Grail-Attribute Access'
@@ -3043,6 +3064,36 @@ __dir__
 	Python attribute (CPython's dict has __new__, never a bare .new), so
 	it would spuriously fail dir(UserDict) >= dir(dict)-style superset
 	checks (test_collections.TestUserObjects)."
+
+	"An INSTANCE also sees everything its class offers, plus its own attributes.
+	CPython's object.__dir__ is essentially
+	``list(inst.__dict__) + dir(type(inst))'', and the selector scan above finds
+	NEITHER of those halves for an instance: a class body's data attributes
+	(``blech = None'') compile to accessors on the METACLASS, so they are found
+	by dir(TheClass) but not by dir(instance), and per-instance attributes live
+	in dynamic instVars rather than in any method dictionary.  So
+	``dir(A())'' answered only A's methods -- no ``blech'', no attribute set in
+	__init__ -- while ``dir(A)'' answered the data attributes and not the
+	methods.
+
+	Guarded to non-classes: for a class, self class is its METAclass, and the
+	scan above already reaches the class's own attributes through it.  Recursing
+	there would add the metaclass's selectors, which Python does not report."
+	self @env0:isBehavior ifFalse: [
+		| names |
+		names := result @env0:asSet.
+		"Anything the class offers.  Rescued rather than assumed: __dir__ can be
+		user-defined and raise, and self class need not be a Python class at all."
+		[(self @env0:class @env1:__dir__) @env0:do: [:n |
+			names @env0:add: n @env0:asString]]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		"The instance's own attributes.  A strict __slots__ class has no
+		__dict__ and raises AttributeError -- correctly, and there is nothing to
+		add in that case."
+		[(self @env1:__dict__) @env1:keys @env0:do: [:k |
+			names @env0:add: k @env0:asString]]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		result := names].
 	^ ((result @env0:asSet) @env0:asSortedCollection) @env0:asArray
 %
 

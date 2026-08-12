@@ -443,9 +443,13 @@ ___moduleAttrLoad___: aSym
 	the NameError — matching ``KeyError → NameError'' in CPython's
 	__globals__[name] lookup."
 
+	"Raised through ___signalUndefined___: so the exception carries CPython's
+	``name'' -- traceback.py needs it both for ``Did you mean'' and for the
+	``Did you forget to import 'io'?'' hint it derives from
+	sys.stdlib_module_names.  This is the bare-name miss for module globals,
+	which is the undefined-name path Python code actually hits."
 	^ self ___globalAt___: aSym otherwise: [
-		NameError ___signal___:
-			'name ''' @env0:, aSym @env0:asString @env0:, ''' is not defined']
+		NameError @env0:___signalUndefined___: aSym @env0:asString]
 %
 
 category: 'Grail-Attribute Access'
