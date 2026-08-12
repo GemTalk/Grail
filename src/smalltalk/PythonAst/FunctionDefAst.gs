@@ -1097,18 +1097,21 @@ ___hasWrappingDecorator___
 
 	| structural |
 	decorator_list isNil ifTrue: [^ false].
-	structural := #('property' 'staticmethod' 'classmethod' 'setter' 'getter'
-		'deleter' 'abstractmethod' 'abstractproperty' 'cached_property').
+	"decorator_list holds SYMBOLS (PythonParser builds decoratorNames), not
+	AST nodes.  Testing for NameAst/AttributeAst therefore matched nothing
+	and fell through to the ``unrecognized => wrapping'' default for EVERY
+	entry -- so even a bare @classmethod counted as wrapped.  That was
+	merely wasteful before (the fast path was suppressed and the attribute
+	path answered the same method), but it now decides whether a classmethod
+	is re-wrapped in a descriptor, where it has to be right."
+	structural := #(#'property' #'staticmethod' #'classmethod' #'setter'
+		#'getter' #'deleter' #'abstractmethod' #'abstractproperty'
+		#'cached_property').
 	^ decorator_list anySatisfy: [:deco |
-		| nm |
-		nm := (deco isKindOf: NameAst)
-			ifTrue: [deco id asString]
-			ifFalse: [(deco isKindOf: AttributeAst)
-				ifTrue: [deco attr asString]
-				ifFalse: [nil]].
-		"Anything that is not a bare structural name -- including a CALL
-		decorator such as @deco(arg) -- wraps."
-		nm isNil or: [(structural includes: nm) not]]
+		(deco isKindOf: Symbol)
+			ifTrue: [(structural includes: deco asSymbol) not]
+			ifFalse: ["a non-symbol entry is a call form such as @deco(arg)"
+				true]]
 %
 
 category: 'Grail-code generation'
@@ -1173,16 +1176,64 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName sibl
 	CallAst >> classBodyDecoratorScope.  Cleared on the way out, including on
 	an emit error, so it can never leak into an unrelated compile."
 	CallAst classBodyDecoratorScope: aClassName -> siblingNames.
+	"A decorated @classmethod's chain now produces a PLAIN callable taking
+	``cls'' (see printMethodDecoratorChainOn:), so re-apply the classmethod
+	descriptor over the result -- classmethod(deco(m)), CPython's order.
+	PyClassMethod already answers __get__, which the class-attribute read
+	paths honour, so the class gets bound on every access shape."
+	(self ___decoratorBaseIsClassMethod___
+		and: [self ___classMethodIsOutermost___])
+		ifTrue: [aStream nextPutAll: '(PyClassMethod @env1:__new__: '].
 	[self
 		printMethodDecoratorChainOn: aStream
 		decorators: decoList
 		index: 1
 		className: aClassName]
 			ensure: [CallAst classBodyDecoratorScope: nil].
+	(self ___decoratorBaseIsClassMethod___
+		and: [self ___classMethodIsOutermost___])
+		ifTrue: [aStream nextPutAll: ')'].
 	aStream
 		nextPutAll: '] @env0:on: AbstractException do: [:___de |'; lf;
 		nextPutAll: '	((___de isKindOf: PythonReturn) @env0:or: [(___de isKindOf: PythonBreak) @env0:or: [___de isKindOf: PythonContinue]]) ifTrue: [___de @env0:pass]].';
 		lf
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___classMethodIsOutermost___
+	"Is ``@classmethod'' the OUTERMOST decorator on this def?
+
+	decorator_list is written outermost-first, and applied bottom-up, so
+	``@classmethod @deco def m'' is classmethod(deco(m)) -- classmethod wraps
+	LAST and the descriptor belongs on the outside.  But
+	``@singledispatchmethod @classmethod def m'' is the other order: the
+	classmethod applies FIRST and singledispatchmethod's descriptor is what
+	the class must hold.  Re-wrapping that in a classmethod broke
+	functools' TestSingleDispatch (a PyClassMethod is not callable and
+	reprs as ``<classmethod object>'').
+
+	Only the outermost case gets the rewritten base and the descriptor; any
+	other position keeps the pre-existing emit."
+
+	| first |
+	decorator_list isNil ifTrue: [^ false].
+	decorator_list isEmpty ifTrue: [^ false].
+	first := decorator_list at: 1.
+	^ (first isKindOf: Symbol) and: [first asSymbol == #'classmethod']
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___decoratorBaseIsClassMethod___
+	"Is this def a @classmethod?  False here; ClassFunctionDefAst overrides.
+
+	Separate from ___decoratorBaseIsClassSide___, which a @staticmethod also
+	answers true to.  The two need DIFFERENT decorator bases: a staticmethod
+	ignores its receiver, so a BoundMethod on the class is harmless, while a
+	classmethod's receiver IS ``cls'' and must reach the decorator."
+
+	^ false
 %
 
 category: 'Grail-code generation'
@@ -1221,8 +1272,26 @@ printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aC
 		ignored receiver for a staticmethod.  It is also the right descriptor
 		distinction for a decorator to see -- CPython hands over a classmethod
 		or staticmethod OBJECT here, neither of which binds an instance."
-		self ___decoratorBaseIsClassSide___
+		(self ___decoratorBaseIsClassMethod___
+			and: [self ___classMethodIsOutermost___])
 			ifTrue: [
+				"``@classmethod @deco def m(cls, ...)'' is classmethod(deco(m)):
+				deco wraps the RAW function, which still takes ``cls'', and
+				classmethod binds it afterwards.  Handing deco a BoundMethod on
+				the class instead bound cls FIRST, so the wrapper never saw it --
+				CPython passes (cls, x) where Grail passed (x).  An UnboundMethod
+				rooted at the METAclass is the unbound form: called with
+				(cls, ...) it performs the class-side selector on cls."
+				aStream
+					nextPutAll: '(UnboundMethod definingClass: ';
+					nextPutAll: aClassName;
+					nextPutAll: ' @env0:class selector: #''';
+					nextPutAll: name;
+					nextPutAll: ''')']
+			ifFalse: [self ___decoratorBaseIsClassSide___
+			ifTrue: [
+				"@staticmethod: the receiver is ignored, so a BoundMethod on the
+				class is the right shape already."
 				aStream
 					nextPutAll: '(BoundMethod receiver: ';
 					nextPutAll: aClassName;
@@ -1235,7 +1304,7 @@ printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aC
 					nextPutAll: aClassName;
 					nextPutAll: ' selector: #''';
 					nextPutAll: name;
-					nextPutAll: ''')'].
+					nextPutAll: ''')']].
 		^ self].
 	aStream nextPutAll: '(('.
 	self printDecoratorReceiverOn: aStream deco: (decoList at: i).
