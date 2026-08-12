@@ -1146,18 +1146,20 @@ __reduce__
 	element to __setstate__, or merges it into the instance when it is a
 	plain dict."
 
-	| args state names |
+	| args state |
 	args := (self ___respondsTo___: #'__getinitargs__')
 		ifTrue: [self __getinitargs__]
 		ifFalse: [tuple @env0:new].
-	state := dict ___new___.
-	names := [self @env0:dynamicInstanceVariables]
-		@env0:on: AbstractException do: [:e | e @env0:return: #()].
-	names @env0:do: [:nm |
-		| v |
-		v := self @env0:dynamicInstVarAt: nm.
-		v == nil ifFalse: [
-			state __setitem__: nm @env0:asString @env0:asUnicodeString _: v]].
+	"State comes from __getstate__ rather than being rebuilt from
+	dynamicInstanceVariables here.  Those hold only the __dict__ half:
+	__slots__ values live in NAMED instance variables, so a slotted
+	subclass pickled with every slot missing and came back with them
+	unset -- utcoffset() answered None after a round trip
+	(test_pickling_subclass, PicklableFixedOffsetWithSlots).
+	object>>__getstate__ answers CPython's (dict, slots) 2-tuple for such
+	a class, which pickle.py's BUILD already restores, and the plain dict
+	for every other."
+	state := self __getstate__.
 	^ tuple @env0:withAll: { self @env0:class. args. state }
 %
 

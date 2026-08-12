@@ -251,6 +251,8 @@ cantPerform: aSymbol withArguments: anArray env: envId
 
 set compile_env: 1
 
+
+
 category: 'Python-Callable'
 method: PythonInstance
 value: positional value: kwargs
@@ -353,6 +355,7 @@ __dict__
 %
 
 set compile_env: 0
+
 
 category: 'Python-Introspection'
 classmethod: PythonInstance
