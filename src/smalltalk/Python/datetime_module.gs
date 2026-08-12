@@ -503,7 +503,7 @@ __mul__: scale
 
 	| ratio a b usec |
 	(scale isKindOf: Number) ifFalse: [^ #'___NotImplemented___'].
-	(scale @env0:isKindOf: Float) ifFalse: [
+	(PyTimedelta ___isFloatOperand___: scale) ifFalse: [
 		^ PyTimedelta @env0:___fromTotalMicros___:
 			(self ___totalMicros___ @env0:* scale) @env0:truncated].
 	ratio := PyTimedelta ___integerRatioOf___: scale.
@@ -520,6 +520,23 @@ __pos__
 	"Unary plus returns self (CPython)."
 
 	^ self
+%
+
+category: 'Grail-Private'
+classmethod: PyTimedelta
+___isFloatOperand___: obj
+	"True for anything timedelta arithmetic must treat as a Python float.
+
+	``isKindOf: Float'' alone misses a float SUBCLASS: the kernel Float is
+	sealed, so ``class F(float)'' becomes an AbstractPyFloat wrapper, which
+	is a Number but not a Float.  Such an operand therefore took the INTEGER
+	path -- multiplying/dividing by the wrapper directly instead of going
+	through as_integer_ratio -- so a subclass that overrides
+	as_integer_ratio was ignored entirely (test_issue31293).
+
+	Mirrors float>>__instancecheck__, which recognizes the same wrapper."
+
+	^ (obj @env0:isKindOf: Float) @env0:or: [obj @env0:isKindOf: AbstractPyFloat]
 %
 
 category: 'Grail-Private'
@@ -562,15 +579,24 @@ __truediv__: other
 		other ___totalMicros___ @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
 		^ (self ___totalMicros___ @env0:/ other ___totalMicros___) @env0:asFloat].
 	(other isKindOf: Number) ifFalse: [^ #'___NotImplemented___'].
-	other @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
 	usec := self ___totalMicros___.
-	(other @env0:isKindOf: Float) ifTrue: [
+	"The FLOAT branch runs before any zero test, as CPython's does: it has
+	no explicit zero check at all, so as_integer_ratio() is consulted first
+	and ZeroDivisionError only falls out of the division afterwards.  A
+	float SUBCLASS overriding as_integer_ratio with something invalid must
+	therefore raise TypeError/ValueError -- checking for a zero divisor up
+	front pre-empted that, since such an instance compares equal to 0
+	(test_issue31293).  0.0 still divides by zero: its ratio is (0, 1), so
+	the numerator `a' below is 0."
+	(PyTimedelta ___isFloatOperand___: other) ifTrue: [
 		| ratio a b |
 		ratio := PyTimedelta ___integerRatioOf___: other.
 		a := ratio @env0:at: 1.
 		b := ratio @env0:at: 2.
+		a @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
 		^ PyTimedelta @env0:___fromTotalMicros___:
 			(PyTimedelta @env0:___divideAndRound___: b @env0:* usec by: a)].
+	other @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
 	^ PyTimedelta @env0:___fromTotalMicros___:
 		(PyTimedelta @env0:___divideAndRound___: usec by: other)
 %
