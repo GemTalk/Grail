@@ -710,3 +710,36 @@ testGeneratorTracebackSpansTheBoundary
 		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
 			description: 'generator-frame check failed: ' , k].
 %
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testExceptionChaining
+	"__cause__ / __context__ chaining, both halves.  Grail had __cause__
+	(``raise X from Y'') and __suppress_context__, but never set __context__ and
+	rendered only the outermost exception -- so a wrapped error lost the one that
+	caused it.  Implicit context now comes from the exception TryAst records in
+	___currentException___, on every raise path (constructed, bare class, and an
+	already-built instance), and format_exception / TracebackException.format walk
+	the chain with CPython's two connector lines.
+
+	Every expectation is verified against real CPython by running the fixture
+	directly -- see its docstring.  See tests/python/exception_chaining.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'exception_chaining' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_chaining.py')
+		name: 'exception_chaining'.
+	#( 'a_raise_inside_a_handler_records_the_context'
+	   'an_implicit_context_renders_the_during_handling_line'
+	   'an_explicit_cause_sets_both_and_suppresses'
+	   'raise_from_none_suppresses_the_context_but_keeps_it'
+	   'a_bare_class_raise_chains_too'
+	   'a_cyclic_chain_terminates_and_renders_once'
+	   'reraising_the_handled_exception_does_not_self_chain'
+	   'chain_false_renders_only_the_outermost'
+	   'tracebackexception_captures_the_chain' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'exception-chaining check failed: ' , k].
+%
+

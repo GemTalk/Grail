@@ -1251,3 +1251,56 @@ is what §9.6 already attributed elsewhere: `sys._getframe`, `__cause__` /
 `__context__` chaining (Grail answers `None` for `__context__` today, §9.11),
 caret/anchor lines, and exception-group rendering — plus the nested-function gap
 above.
+
+### 9.13 __cause__ / __context__ chaining (2026-08-11, gs40)
+
+The largest coherent group left in `test.test_traceback` after §9.9's plan, found
+by bucketing the 96 non-passing tests by cause rather than by trusting §9.6's
+estimates: **20** suggestion tests, **19** exception-group, **12** chaining,
+4 `sys._getframe`. Chaining is the one that was half-built already.
+
+Grail had `__cause__` (`raise X from Y`) and `__suppress_context__`, but never set
+`__context__`, and `format_exception` rendered only the outermost exception even
+when a cause existed. Measured against real CPython 3.14.6:
+
+| | CPython | before |
+|---|---|---|
+| raise inside a handler | `context=ZeroDivisionError`, 2 sections, "During handling" | `context=None`, 1 section |
+| `raise X from Y` | `cause=Y context=Y suppress=True`, 2 sections, "direct cause" | cause ✓, `context=None`, **1 section** |
+| `raise X from None` | `context=Y suppress=True`, 1 section | `context=None` |
+
+**Implicit context needs no new bookkeeping.** The exception being handled is
+already recorded — `TryAst` sets `___currentException___` on handler entry and
+restores it on exit, which `sys.exception()` uses. So a raise consults it, subject
+to three rules: don't overwrite a context already set, don't chain an exception to
+itself (`except E as e: raise e`), and **break** cycles rather than decline them.
+
+That last one matters and is easy to get backwards. CPython's `_PyErr_SetObject`
+walks the candidate's context chain and, on finding the exception being raised,
+*clears that link's context* and chains anyway. Declining instead leaves the
+context unset — visibly wrong, since `test_cause_recursive` builds exactly this
+shape and CPython reports `__context__` as the `KeyError`, not `None`.
+
+**Every raise path needs it**, which the tests found one at a time. `RaiseAst`
+emits three shapes: a constructed `raise Cls(...)` through `___signalNew___`, a
+bare `raise expr` through `___pyRaise___:` — which covers both a bare *class* and
+an already-built *instance* — and `Cls ___signal___: msg` for built-ins. The bare
+class had no instance to hang a context on and signalled the class directly; it
+now builds an instance when, and only when, something is being handled, so the
+common uncontexted raise keeps the cheaper path.
+
+**Rendering** walks the chain in `format_exception` (over live exceptions) and in
+`TracebackException.format` (over links captured at construction, as CPython does
+so rendering can be deferred). One subtlety: the deepest exception introduces
+nothing, and when the walk stops on a cycle its link still carries the connector
+it would have used for the link it refused to follow — which printed a stray "the
+direct cause of" *ahead of* the first block (5 blocks where CPython has 3).
+
+**Result: `test.test_traceback` 61 → 63 passing, failures 72 → 67.** Modest
+against 12 tests in the bucket, and worth being precise about why: the rest fail
+on things chaining does not supply — `DeprecationWarning` on the legacy 3-arg
+form, exception-group tree rendering, and `test_long_context_chain`, which
+exhausts the temporary object space because `TracebackException` builds the chain
+**recursively**. CPython's does it with an explicit queue for that exact reason;
+converting it is the next piece of this thread.
+
