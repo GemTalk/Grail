@@ -81,4 +81,7 @@ r['perm_xor_named'] = _try(lambda: ((Perm.READ | Perm.WRITE) ^ Perm.READ) is Per
 r['perm_invert_value'] = _try(lambda: int(~Perm.READ))
 r['perm_keep_value'] = _try(lambda: int(Perm.READ | 8))
 r['perm_member_in_composite'] = _try(lambda: Perm.READ in (Perm.READ | Perm.WRITE))
-r['perm_composite_name_none'] = _try(lambda: (Perm.READ | Perm.WRITE).name is None)
+# A COMPOSITE is named after the members it subsumes (CPython 3.11+), not None:
+# this read ``is None'', which is pre-3.11 behaviour, and the name is reachable
+# (a flag whose __str__ answers self._name_ printed 'None').
+r['perm_composite_name'] = _try(lambda: (Perm.READ | Perm.WRITE).name)

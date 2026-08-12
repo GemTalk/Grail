@@ -395,11 +395,16 @@ ___grailGlobalMemberRepr: m
 	(Enum ___grailIsFlagClass: cls) ifTrue: [
 		| val pieces named out |
 		val := m @env0:dynamicInstVarAt: #value.
-		"A plain named member (nm set) formats directly; a composite (nm nil)
-		decomposes.  Decide ``nameless'' by whether the decomposition yields any
-		NAMED piece -- a composite that only leftover-covers bits (HeadlightsK(8))
-		has none and formats as Cls(value), NOT as the bare leftover int."
-		(nm @env0:isNil or: [nm == None]) ifTrue: [
+		"A plain named member formats directly; a COMPOSITE pseudo-member
+		decomposes, so that each named piece can carry the module prefix.  Marked
+		at construction rather than inferred from a missing name: a composite
+		carries the joined name now (CPython 3.11+), which this branch would
+		otherwise read as ``already named''.  Decide ``nameless'' by whether the
+		decomposition yields any NAMED piece -- a composite that only
+		leftover-covers bits (HeadlightsK(8)) has none and formats as Cls(value),
+		NOT as the bare leftover int."
+		((m @env0:dynamicInstVarAt: #'___grailIsComposite') == true
+			or: [nm @env0:isNil or: [nm == None]]) ifTrue: [
 			pieces := Enum ___grailFlagDecomposePieces: m.
 			named := pieces @env0:reject: [:p |
 				(p @env0:size @env0:> 0) and: [(p @env0:at: 1) @env0:isDigit]].
@@ -1689,11 +1694,8 @@ ___grailFlagComposite: cls value: intValue
 		covered @env0:= intValue ifFalse: [^ nil]].
 	member := cls @env0:basicNew.
 	member @env0:dynamicInstVarAt: #value put: intValue.
-	member @env0:dynamicInstVarAt: #name put: None.
 	member @env0:dynamicInstVarAt: #'_value_' put: intValue.
-	"Composite pseudo-members have no name; expose Python None (nil is
-	the project's ABSENT marker and would fall through to a method wrap)."
-	member @env0:dynamicInstVarAt: #'_name_' put: None.
+	Enum ___grailNameComposite: member.
 	byValue @env0:at: intValue put: member.
 	^ member
 %
@@ -1721,9 +1723,8 @@ ___grailIntFlagValue: cls value: intValue
 	instVar #value on an AbstractPyInt-rooted class (see AbstractPyInt's
 	class comment), so one store makes the composite a working int."
 	member @env0:dynamicInstVarAt: #value put: intValue.
-	member @env0:dynamicInstVarAt: #name put: None.
 	member @env0:dynamicInstVarAt: #'_value_' put: intValue.
-	member @env0:dynamicInstVarAt: #'_name_' put: None.
+	Enum ___grailNameComposite: member.
 	byValue @env0:at: intValue put: member.
 	^ member
 %
@@ -2403,6 +2404,47 @@ ___grailFlagComponents: aMember
 				and: [(v @env0:bitAnd: mv) @env0:= mv]]]) ifTrue: [
 				parts @env0:add: mm]]].
 	^ parts
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailNameComposite: aMember
+	"Stamp a freshly-built composite pseudo-member's name.
+
+	CPython 3.11+ names a composite after the members it subsumes -- ``RED|GREEN''
+	-- and that name is REACHABLE: a flag whose __str__ answers self._name_ prints
+	it, which is exactly what OldTestIntFlag test_format asserts (``format(NewPerm.R
+	| Perm.X, '')'' is 'R|X').  Grail stored None, so that __str__ printed 'None'
+	while the built-in repr -- which computes the same join separately -- looked
+	right.
+
+	The pieces come from the decomposition the repr already uses, so a KEEP
+	composite carrying uncovered bits is named the way it is printed (R|8).  A
+	value that decomposes to NOTHING -- zero, with no zero-valued member -- keeps
+	None, matching CPython's ``<Color: 0>'' and Grail's own repr for it.  None,
+	not nil: nil is the project's ABSENT marker and would fall through to a
+	method wrap."
+
+	| pieces nm |
+	pieces := [Enum ___grailFlagDecomposePieces: aMember]
+		@env0:on: AbstractException do: [:e | nil].
+	nm := (pieces @env0:isNil or: [pieces @env0:isEmpty])
+		ifTrue: [None]
+		ifFalse: [pieces @env0:inject: nil into: [:acc :p |
+			acc @env0:isNil ifTrue: [p @env0:asString]
+				ifFalse: [acc @env0:, '|' @env0:, p @env0:asString]]].
+	aMember @env0:dynamicInstVarAt: #name put: nm.
+	aMember @env0:dynamicInstVarAt: #'_name_' put: nm.
+	"An explicit marker, because the NAME can no longer answer ``is this a
+	composite?''.  ___grailGlobalMemberRepr: still has to decompose -- it prefixes
+	each named piece with the module (module.LOW_BEAM_K|module.FOG_K|8) -- and it
+	used the absent name as the test; once composites carry one it printed
+	``module.LOW_BEAM_K|FOG_K'' instead (test_global_repr_keep /
+	test_global_repr_conform1).  Every other name-absent test in this file wants
+	precisely the string now stored, so those short-circuit on it and are left
+	alone."
+	aMember @env0:dynamicInstVarAt: #'___grailIsComposite' put: true.
+	^ aMember
 %
 
 category: 'Grail-Enum Metaclass'
