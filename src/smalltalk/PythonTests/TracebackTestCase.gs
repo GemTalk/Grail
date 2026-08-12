@@ -603,17 +603,19 @@ testTracebackFrameLimits
 
 category: 'Grail-Tests - Traceback Runtime'
 method: TracebackTestCase
-testGeneratorRaiseStillProducesATraceback
-	"Known limitation, pinned deliberately: a generator body runs in a forked
-	GsProcess, so the captured stack holds the generator's own frames and NOT
-	the consumer's (§9.9) -- there is nothing to trim, they simply are not
-	there.  Such a raise must still yield a usable traceback rather than none,
-	which the single-frame fallback covers.  This test is what will catch the
-	change in behaviour when the consumer's stack is spliced across that
-	boundary."
+testGeneratorRaiseSpansTheBoundary
+	"A raise inside a generator body spans BOTH sides.  The body runs in a forked
+	GsProcess whose captured stack holds none of the consumer's frames, so the two
+	captures are spliced (§9.12).
+
+	This test used to pin the OPPOSITE -- the single-frame fallback -- and §9.9
+	called it the one that would catch the behaviour change when the consumer's
+	stack was spliced.  It would not have: it asserted ``len(frames) >= 1''.  It
+	is exact now.  The detailed shapes are testGeneratorTracebackSpansTheBoundary."
 
 	self assert: ((self loadFrameDepthFixture
-		@env0:perform: #'a_generator_raise_still_produces_a_traceback' env: 1) = true)
+		@env0:perform: #'a_generator_raise_spans_the_consumer_and_the_generator'
+		env: 1) = true)
 %
 
 category: 'Grail-Tests - Traceback Runtime'
@@ -676,4 +678,35 @@ testRaiseInsideHandlerHasItsOwnFrames
 	   'the_rendered_traceback_names_only_the_new_frames' ) do: [:k |
 		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
 			description: 'handler-context check failed: ' , k].
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testGeneratorTracebackSpansTheBoundary
+	"§9.9's item 6, the last of them.  A generator body runs in its own forked
+	GsProcess, so the stack captured when it raises holds the body and the fork
+	plumbing and NOTHING of the consumer.  PythonGenerator stows such an exception
+	and re-signals it on the consumer, which is where the consumer's half is
+	captured; the two are spliced, one stashed level per generator so that
+	``yield from'' reports both bodies.
+
+	Every expectation is verified against real CPython by running the fixture
+	directly -- see its docstring.  See tests/python/generator_frames.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'generator_frames' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/generator_frames.py')
+		name: 'generator_frames'.
+	#( 'the_generators_own_frame_is_reported'
+	   'the_consumers_frame_is_reported_too'
+	   'advancing_with_next_gives_the_same_chain'
+	   'every_consumer_frame_appears'
+	   'yield_from_reports_both_generators'
+	   'throw_reports_the_generators_frame'
+	   'an_exception_caught_inside_the_generator_is_invisible'
+	   'pep479_still_converts_stopiteration'
+	   'the_rendered_traceback_names_both' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'generator-frame check failed: ' , k].
 %
