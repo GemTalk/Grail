@@ -593,14 +593,25 @@ ___grailBuildMembers: cls names: attrNames
 			forcedMembers @env0:add: nameSym]].
 	dropped @env0:isEmpty ifFalse: [
 		allNames := allNames @env0:reject: [:n | dropped @env0:includes: n]] ] @env0:value.
-	"CPython _EnumDict.__setitem__: a class-body name whose value is a DESCRIPTOR
-	is NOT a member -- ``class E(Enum): x = property(f)'' leaves x an ordinary
-	class attribute.  See ___grailFunctional: for why ___isValueDescriptor___: is
-	the predicate and why underscore names are exempt.  Nothing needs to be
-	re-stored here: the class-body store already holds the descriptor (an
-	accessor pair for a declared name, the dynInstVars holder for one assigned
-	under a class-body ``if''), so dropping the name leaves ``cls.x'' answering
-	it, exactly as CPython's class dict does."
+	"CPython _EnumDict.__setitem__ names two kinds of class-body value that are
+	NOT members -- ``not _is_descriptor(value) and not _is_internal_class(...)''
+	-- so both are dropped here, in the one pass.
+
+	A DESCRIPTOR: ``class E(Enum): x = property(f)'' leaves x an ordinary class
+	attribute.  See ___grailFunctional: for why ___isValueDescriptor___: is the
+	predicate and why underscore names are exempt.
+
+	An INTERNAL CLASS: a class DEFINED IN the body (3.13 -- it was a member,
+	with a DeprecationWarning, through 3.12), so ``class Outer(Enum): class
+	Inner(Enum): ...'' leaves Outer.Inner the class itself rather than an Outer
+	member wrapping it.  Merely NAMING a class defined elsewhere still makes a
+	member (``class MyTypes(Enum): i = int''), and CPython separates the two by
+	__qualname__ alone; see ___grailIsInternalClass:inClassNamed:.
+
+	Nothing needs to be re-stored for either: the class-body store already holds
+	the value (an accessor pair for a declared name, the dynInstVars holder for
+	one assigned under a class-body ``if''), so dropping the name leaves
+	``cls.x'' answering it, exactly as CPython's class dict does."
 	[ | dropped |
 	dropped := OrderedCollection @env0:new.
 	allNames @env0:do: [:nameSym | | raw hasAcc ns |
@@ -614,7 +625,10 @@ ___grailBuildMembers: cls names: attrNames
 				ifFalse: [dynHolder @env0:isNil
 					ifTrue: [nil]
 					ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym]].
-			(cls ___isValueDescriptor___: raw) ifTrue: [dropped @env0:add: nameSym]]].
+			((cls ___isValueDescriptor___: raw)
+				or: [Enum ___grailIsInternalClass: raw
+					inClassNamed: cls @env0:name @env0:asString])
+						ifTrue: [dropped @env0:add: nameSym]]].
 	dropped @env0:isEmpty ifFalse: [
 		allNames := allNames @env0:reject: [:n | dropped @env0:includes: n]] ] @env0:value.
 	"Reserved-name validation (CPython EnumType.__new__): a class-body
@@ -2228,6 +2242,44 @@ ___grailValueMixinFor: cls
 	namedtuple -- is not in the symbol list and does widen."
 	(Enum ___grailIsGrailDefinedType: dt) ifTrue: [^ nil].
 	^ dt
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailIsInternalClass: aValue inClassNamed: clsName
+	"CPython _is_internal_class: is aValue a class DEFINED IN the body of the
+	enum named clsName, as opposed to one merely named there?
+
+	    class Outer(Enum):
+	        class Inner(Enum): ...      -- internal, NOT a member (3.13)
+
+	    class MyTypes(Enum):
+	        i = int                     -- named, IS a member (value is int)
+
+	Both bind a name to a class, and nothing about the class itself
+	distinguishes them -- so CPython reads __qualname__, which a nested
+	definition alone gets prefixed with its enclosing class: ``Outer.Inner''
+	against a bare ``Inner''.  The endsWith test covers a nesting deeper than
+	one level, where the qualname carries the whole chain
+	(``Whatever.Outer.Inner'').
+
+	CPython comments that it deliberately avoids ``re'' here, since re imports
+	enum; the string work is spelled out for the same reason."
+
+	| qualname clsname sPattern ePattern qs es |
+	(aValue isKindOf: Class) ifFalse: [^ false].
+	qualname := [(aValue @env1:___pyAttrLoad___: #'__qualname__') @env0:asString]
+		@env0:on: AbstractException do: [:e | e @env0:return: ''].
+	clsname := [(aValue @env1:___pyAttrLoad___: #'__name__') @env0:asString]
+		@env0:on: AbstractException do: [:e | e @env0:return: ''].
+	clsname @env0:isEmpty ifTrue: [^ false].
+	sPattern := clsName @env0:, '.' @env0:, clsname.
+	qualname @env0:= sPattern ifTrue: [^ true].
+	ePattern := '.' @env0:, sPattern.
+	qs := qualname @env0:size.
+	es := ePattern @env0:size.
+	^ (qs @env0:>= es)
+		and: [(qualname @env0:copyFrom: qs @env0:- es @env0:+ 1 to: qs) @env0:= ePattern]
 %
 
 category: 'Grail-Enum Metaclass'
