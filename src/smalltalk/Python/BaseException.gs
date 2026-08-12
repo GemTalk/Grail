@@ -339,12 +339,26 @@ ___recursionGuard___: aBlock
 	why this is not written as a plain ``on:do: [RecursionError signal]''.
 
 	The replacement is built rather than signalled so it carries Python args
-	(``str(e)'' / ``e.args'') as well as GemStone's messageText."
+	(``str(e)'' / ``e.args'') as well as GemStone's messageText.
+
+	It also takes the implicit __context__ every other raise gets.  The overflow
+	happens at some arbitrary depth, which for the classic runaway --
+
+	    def f():
+	        try: 1/0
+	        except ZeroDivisionError: f()
+
+	-- is inside a handler, so CPython reports the RecursionError with the
+	innermost ZeroDivisionError as its context, and that one chained to the next
+	out, giving a context chain as long as the recursion.  Building the
+	replacement with ___new___ alone left it unchained, so the whole chain
+	rendered as a single traceback (test_long_context_chain)."
 
 	^ aBlock @env0:on: AlmostOutOfStack do: [:ex | | re |
 		re := RecursionError ___new___.
 		re ___args___: { 'maximum recursion depth exceeded' }.
 		re @env0:messageText: 'maximum recursion depth exceeded'.
+		re ___applyImplicitContext___.
 		ex @env0:resignalAs: re]
 %
 

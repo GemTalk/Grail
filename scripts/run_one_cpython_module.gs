@@ -143,7 +143,15 @@ emit := [:st :tt :ff :ee :ss :dd |
         skips := skips + 1 ]
       ifFalse: [
       [ | r detail |
-        r := harnessMod @env1:run_one: tc.
+        "___recursionGuard___ turns runaway Python recursion INSIDE the test into
+         a catchable RecursionError, as CPython's own limit does, instead of an
+         AlmostOutOfStack notification that escapes into Smalltalk.  Without it
+         the rescue below scored such a test 'ST: ...', and a test that DRIVES the
+         recursion limit deliberately (test_traceback's test_long_context_chain)
+         could not get as far as its own ``except RecursionError''.  Module bodies
+         have been guarded all along, in importlib; this is the other
+         Smalltalk -> Python entry point the suite uses."
+        r := BaseException @env1:___recursionGuard___: [harnessMod @env1:run_one: tc].
         tests := tests + 1.
         fails := fails + (r @env1:__getitem__: 0).
         errs := errs + (r @env1:__getitem__: 1).
