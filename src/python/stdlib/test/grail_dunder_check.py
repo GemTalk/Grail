@@ -639,7 +639,15 @@ def _mi_flag_results():
         A = 'a'
         B = 'b'
 
-    NewSE = SE('NewSE', [('first', auto())])
+    # The functional API needs a MEMBER-LESS base.  An enum that already has
+    # members is final in CPython, so ``SE('NewSE', [...])'' is a value LOOKUP
+    # there and raises ValueError -- it never defines a new enum.  This used to
+    # be written against SE and only worked because Grail read a string first
+    # argument as a class name (test_enum test_extending).
+    class SEBase(str, Enum):
+        pass
+
+    NewSE = SEBase('NewSE', [('first', auto())])
     return (IFlag.R.value, IFlag.W.value, IFlag.X.value,
             rw.value, IFlag(5).value, IFlag.R in rw,
             (rw & IFlag.R) is IFlag.R, IFlag.R + 0, IFlag.R.name,
