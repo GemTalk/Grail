@@ -746,6 +746,49 @@ testExceptionChaining
 
 category: 'Grail-Tests - Traceback Runtime'
 method: TracebackTestCase
+testFrameGlobalsAndNameErrorSuggestions
+	"A traceback frame's f_globals, and the NameError suggestions it enables.
+
+	DERIVED, not captured.  Grail has no real interpreter frames: a frame is
+	reconstructed from the VM's (method, ip, receiver) triples, and threading a
+	namespace through that walk would mean touching the most delicate code in the
+	traceback path (§9.10-§9.12 took three CI rounds to stabilise).  The frame's
+	PyCode already carries co_filename, which identifies the module unambiguously
+	-- exactly one sys.modules entry has that __file__ -- so PyFrame resolves the
+	LIVE PyModuleDict on demand instead.
+
+	Two limits are pinned as deliberate behaviour, not left to be discovered:
+
+	f_locals does not exist.  A Python function's locals are Smalltalk method
+	temporaries and the capture records only (method, ip, receiver), so a
+	misspelled LOCAL name gets no suggestion where CPython offers one.
+
+	No suggestion at all without a traceback -- CPython gates the whole NameError
+	branch on having a frame, so format_exception_only(exc) stays silent even for a
+	misspelled builtin.  Being MORE helpful than CPython is a conformance bug, and
+	the fixture check for it caught exactly that in an earlier draft, which
+	answered from dir(builtins) regardless of frame.
+
+	Verified against real CPython by running the fixture directly; see
+	tests/python/frame_globals.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'frame_globals' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/frame_globals.py')
+		name: 'frame_globals'.
+	#( 'a_frame_reports_its_module_globals'
+	   'the_globals_view_is_live'
+	   'a_misspelled_global_is_suggested'
+	   'a_misspelled_builtin_is_suggested'
+	   'no_suggestion_without_a_traceback'
+	   'a_wildly_wrong_global_gets_no_suggestion' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'frame-globals check failed: ' , k].
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
 testAttributeErrorSuggestions
 	"CPython's ``Did you mean: 'blech'?'' on a misspelled attribute.
 
