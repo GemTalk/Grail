@@ -1090,9 +1090,7 @@ ___grailBuildMembers: cls names: attrNames
 									(a scalar -> a 1-tuple); the receiver is cls (the __new__
 									self-param).  A __new__ that delegates to super().__new__
 									raises the guard in Enum>>___new__:kw: here."
-									newArgs := (rawValue isKindOf: tupleClass)
-										ifTrue: [rawValue @env0:asArray]
-										ifFalse: [Array @env0:with: rawValue].
+									newArgs := Enum ___grailSpreadArgs: rawValue.
 									member := (UnboundMethod definingClass: newDefClass selector: #'__new__')
 										value: ({ cls } @env0:, newArgs) value: KeyValueDictionary @env0:new.
 									"CPython: a member's canonical value is its _value_, set by
@@ -1141,6 +1139,30 @@ ___grailBuildMembers: cls names: attrNames
 									_member_type_ is str -> str content, but _value_ is the raw/
 									auto value).  int/float storage keeps the value in a named
 									slot, so basicNew is right there."
+									"A TUPLE-rooted enum (``class SomeTuple(tuple, Enum)'')
+									has the same problem the str branch below solves, for
+									the same reason: basicNew leaves the INDEXED content
+									empty, so every member was a zero-length tuple --
+									len() 0, indexing raised IndexError, iteration yielded
+									nothing, and ``SomeTuple.third == (3, 'for the
+									music')'' was False even though _value_ held exactly
+									that (test_tuple_subclass).  Give the member the
+									value's elements, as the str branch gives it the
+									value's characters.
+
+									A namedtuple mixin is NOT caught here -- Grail's
+									namedtuple classes are not tuple-rooted -- so it keeps
+									whatever it had."
+									(cls @env0:inheritsFrom: tupleClass)
+										ifTrue: [ | els |
+											els := [effVal @env0:asArray]
+												@env0:on: AbstractException
+												do: [:e | Array @env0:with: effVal].
+											member := cls @env0:new: els @env0:size.
+											els @env0:size @env0:> 0 ifTrue: [
+												member @env0:replaceFrom: 1 to: els @env0:size
+													with: els startingAt: 1]]
+									ifFalse: [
 									(cls @env0:inheritsFrom: CharacterCollection)
 										ifTrue: [ | s |
 											s := (effVal isKindOf: CharacterCollection)
@@ -1151,7 +1173,7 @@ ___grailBuildMembers: cls names: attrNames
 											s @env0:size @env0:> 0 ifTrue: [
 												member @env0:replaceFrom: 1 to: s @env0:size
 													with: s startingAt: 1]]
-										ifFalse: [member := cls @env0:basicNew].
+										ifFalse: [member := cls @env0:basicNew]].
 									"effVal already carries member_type(*args) for a
 									foreign-mixin enum (else the raw value)."
 									memberValue := effVal].
@@ -1182,9 +1204,7 @@ ___grailBuildMembers: cls names: attrNames
 							those and initialises that, which Grail does not."
 							(hasUserInit) ifTrue: [
 								| initArgs |
-								initArgs := (rawValue isKindOf: tupleClass)
-									ifTrue: [rawValue @env0:asArray]
-									ifFalse: [Array @env0:with: rawValue].
+								initArgs := Enum ___grailSpreadArgs: rawValue.
 								member @env0:perform: #'___init__:kw:' env: 1
 									withArguments: { initArgs. KeyValueDictionary @env0:new }].
 							byValue @env0:at: memberValue put: member.
@@ -1392,6 +1412,35 @@ ___grailLookupValue: cls value: aValue
 		ifTrue: [^ self ___grailMissing: cls value: aValue].
 	^ ValueError ___signal___: (Enum ___grailValueRepr: aValue)
 		@env0:, ' is not a valid ' @env0:, cls @env0:name @env0:asString
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailSpreadArgs: rawValue
+	"The positional arguments a member VALUE contributes to __new__ / __init__ /
+	member_type(*args) -- CPython's ``args = value if isinstance(value, tuple)
+	else (value,)''.
+
+	A NAMEDTUPLE is a tuple in CPython and so spreads.  Grail's namedtuple classes
+	are not tuple-ROOTED -- the collections factory's ``_NT'' chain runs straight
+	to Enum, never through Array -- so the isKindOf: test missed them and a
+	namedtuple value reached a user __new__ as ONE argument: ``missing required
+	argument: a'' (test_namedtuple_as_value).  Detected by ``_fields'', the same
+	way the auto()-in-a-namedtuple path detects one."
+
+	| tupleClass flds |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	(rawValue isKindOf: tupleClass) ifTrue: [^ rawValue @env0:asArray].
+	flds := [rawValue @env1:___pyAttrLoad___: #'_fields']
+		@env0:on: AbstractException do: [:e | nil].
+	flds @env0:isNil ifFalse: [
+		^ [ | els |
+			els := OrderedCollection @env0:new.
+			flds @env0:do: [:f |
+				els @env0:add: (rawValue @env1:___pyAttrLoad___: f @env0:asString @env0:asSymbol)].
+			els @env0:asArray]
+			@env0:on: AbstractException do: [:e | Array @env0:with: rawValue]].
+	^ Array @env0:with: rawValue
 %
 
 category: 'Grail-Enum Metaclass'
@@ -2306,11 +2355,8 @@ ___grailConstructMemberValue: memberType args: rawValue
 	rather than making the member itself a date, since the storage base is
 	Enum).  Best-effort: on any failure keep the raw class-body value."
 
-	| tupleClass args |
-	tupleClass := Python @env0:at: #tuple otherwise: Array.
-	args := (rawValue isKindOf: tupleClass)
-		ifTrue: [rawValue @env0:asArray]
-		ifFalse: [Array @env0:with: rawValue].
+	| args |
+	args := Enum ___grailSpreadArgs: rawValue.
 	^ [memberType @env0:perform: #'value:value:' env: 1
 		withArguments: { args. KeyValueDictionary @env0:new }]
 		@env0:on: AbstractException do: [:e | rawValue]
@@ -2327,11 +2373,8 @@ ___grailConstructMemberValueStrict: memberType args: rawValue
 	has NO value yet, so a failure means the definition is broken and CPython
 	reports it as ``_value_ not set in __new__''."
 
-	| tupleClass args |
-	tupleClass := Python @env0:at: #tuple otherwise: Array.
-	args := (rawValue isKindOf: tupleClass)
-		ifTrue: [rawValue @env0:asArray]
-		ifFalse: [Array @env0:with: rawValue].
+	| args |
+	args := Enum ___grailSpreadArgs: rawValue.
 	^ memberType @env0:perform: #'value:value:' env: 1
 		withArguments: { args. KeyValueDictionary @env0:new }
 %
