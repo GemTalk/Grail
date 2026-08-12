@@ -743,3 +743,47 @@ testExceptionChaining
 			description: 'exception-chaining check failed: ' , k].
 %
 
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testRecursionContextChain
+	"The context chain a RUNAWAY RECURSION produces, and rendering a chain too
+	long to walk recursively.
+
+	Two fixes meet here.  ___recursionGuard___ converts GemStone's
+	AlmostOutOfStack into a catchable RecursionError, but built the replacement
+	with ___new___ alone -- so unlike every other raise it took no implicit
+	__context__, and a chain CPython renders as one block per level rendered as a
+	single traceback.  And TracebackException captured the chain by RECURSING per
+	link, which overflows on a chain longer than the stack (reachable because
+	__context__ is a writable attribute, so a loop can build one of any length);
+	it now expands from a queue, as CPython's does for this same reason.
+
+	Each check is evaluated INSIDE ___recursionGuard___, which is what the
+	CPython-suite harness does around every test for the same reason -- without
+	it the runaway's AlmostOutOfStack escapes into Smalltalk instead of reaching
+	the fixture's ``except RecursionError''.
+
+	The depth reached is a property of the gem's stack configuration, not of
+	Grail (188 levels here, 6645 under the CPython suite's deeper stack), so the
+	fixture asserts RELATIONS -- one link per level, one block per link -- rather
+	than counts.  Every expectation is verified against real CPython by running
+	the fixture directly; see tests/python/recursion_chain.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'recursion_chain' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/recursion_chain.py')
+		name: 'recursion_chain'.
+	#( 'a_runaway_recursion_raises_a_catchable_recursionerror'
+	   'the_recursionerror_records_the_handled_exception_as_context'
+	   'the_context_chain_is_as_long_as_the_recursion'
+	   'the_long_chain_renders_one_block_per_link'
+	   'format_exception_renders_the_long_chain_too'
+	   'a_chain_longer_than_the_stack_is_still_constructible'
+	   'the_long_chain_still_renders_every_link'
+	   'a_cycle_in_an_assigned_context_still_terminates' ) do: [:k |
+		self assert: ((BaseException @env1:___recursionGuard___: [
+				mod @env0:perform: k asSymbol env: 1]) = true)
+			description: 'recursion-chain check failed: ' , k].
+%
+

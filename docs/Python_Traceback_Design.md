@@ -1299,8 +1299,134 @@ direct cause of" *ahead of* the first block (5 blocks where CPython has 3).
 **Result: `test.test_traceback` 61 → 63 passing, failures 72 → 67.** Modest
 against 12 tests in the bucket, and worth being precise about why: the rest fail
 on things chaining does not supply — `DeprecationWarning` on the legacy 3-arg
-form, exception-group tree rendering, and `test_long_context_chain`, which
-exhausts the temporary object space because `TracebackException` builds the chain
-**recursively**. CPython's does it with an explicit queue for that exact reason;
-converting it is the next piece of this thread.
+form, exception-group tree rendering, and `test_long_context_chain`, which builds
+its chain from a runaway recursion. §9.14 takes that one up.
 
+> Superseded, and recorded because guessing a cause is what went wrong: this
+> section originally named the next piece as converting `TracebackException`'s
+> **recursive** chain construction to a queue, on the theory that the recursion
+> was what exhausted the temporary object space in `test_long_context_chain`.
+> Measurement (§9.14) put the actual blocker two steps earlier — the chain was
+> length **1**, so nothing deep was ever walked. The queue conversion turned out
+> to be worth doing for a different reason, and not to be what fixed anything
+> here.
+
+
+### 9.14 The chain a runaway recursion builds (2026-08-12, gs40)
+
+Taking up `test_long_context_chain`, the one test §9.13 left named. CPython's
+shape is the classic runaway:
+
+```python
+def f():
+    try: 1/0
+    except ZeroDivisionError: f()
+```
+
+Every level raises `ZeroDivisionError` while the level above is *handling* one, so
+each links to the next by `__context__`; the `RecursionError` that finally stops it
+links to the innermost. CPython therefore reports a context chain as long as the
+recursion and renders one traceback block per link.
+
+**Measuring first changed the plan.** §9.13 had guessed the blocker was recursive
+chain construction exhausting temp object space. It was not. Probing the actual
+shape found three separate things, in the order they bite:
+
+1. **The `AlmostOutOfStack` never reached Python at all.** Grail has no Python
+   frame counter, so the gem's Smalltalk stack runs out first and GemStone signals
+   `AlmostOutOfStack`, a *notification* no Python `except` can contain.
+   `BaseException class>>___recursionGuard___` has converted it to a catchable
+   `RecursionError` since before this work — but only around **module bodies**, in
+   `importlib`. The CPython-suite harness's per-test call into Python was
+   unguarded, so the notification escaped into Smalltalk and the per-test rescue
+   scored the test `ST: ...`. One `___recursionGuard___:` around
+   `harnessMod run_one:` fixes that; it is the other Smalltalk → Python entry
+   point the suite uses.
+2. **The guard's replacement exception took no `__context__`.** It is built with
+   `___new___` and args directly, which bypasses the implicit-context path §9.13
+   added to every other raise. So the chain was length **1**: the whole thing
+   rendered as a single traceback. This is the actual bug, and it is a
+   one-line fix — `re ___applyImplicitContext___` before the `resignalAs:`.
+   With it, the chain is as long as the recursion (measured: 6645 links under the
+   suite's stack settings).
+3. **Only then does construction depth matter** — and, measured, *not* for this
+   test. See below.
+
+**The depth reached is a property of the gem, not of Grail**, which the fixture
+has to respect. `sys.getrecursionlimit()` answers a fixed 1000 that has nothing to
+do with the depth actually reachable; the real limit is wherever the Smalltalk
+stack runs out, and the gem's configuration moves it:
+
+| gem config | Python levels reached | chain links |
+|---|---|---|
+| `run_tests.sh` (default stack depth) | 187 | 188 |
+| `run_cpython_suite.sh` (`GEM_MAX_SMALLTALK_STACK_DEPTH=80000`) | 6645 | 6645 |
+| CPython 3.14.6 | 998 | 999 |
+
+So `tests/python/recursion_chain.py` asserts **relations** — one chain link per
+level, one rendered block per link — rather than counts. That is stricter than
+CPython's own test (which uses loose `> recursionlimit * 0.5` thresholds) and it
+holds unchanged across both gem configurations and under real CPython.
+
+One thing the fixture has to do to be *stable*, found the hard way: **drive the
+runaway once and memoize it.** GemStone runs an `on:do:` handler at the signal
+point, before unwinding, so the Python `except RecursionError` that catches the
+converted notification executes in whatever reserve is left past the
+`AlmostOutOfStack` threshold. That works — but it is a margin, and spending it
+once per check meant the outcome depended on how deep the *caller* already was:
+with five excursions the checks passed under SUnit on 4.0 and escaped as an
+uncaught `RecursionError` on 3.7.5 at a slightly different frame budget. One
+excursion, memoized, passes on both stones under both gem configurations, and runs
+about 4× faster. A test whose result depends on a few frames of caller depth is
+not measuring what it claims to.
+
+**The queue conversion: real, but not what fixed this.** `TracebackException`
+captured the chain by recursing once per link. Converting it to CPython's explicit
+queue (only the top-level construction expands; a nested one receives `_seen` and
+builds just itself) was §9.13's predicted fix. Measured, the recursive version
+handled the full 6645-link chain fine, in the same time — so it is *not* what
+makes this test's chain renderable, and saying otherwise would be inventing a
+result.
+
+What the queue does buy is reachable a different way. `__context__` is a
+**writable** attribute in CPython and in Grail, so a loop can build a chain of any
+length with no stack cost at all — bounded by memory, not by the recursion that
+would normally produce it. There the recursive version breaks:
+
+| loop-built chain | recursive | queue |
+|---|---|---|
+| 13 000 links | builds | builds |
+| 16 000 links | `RecursionError` **while reporting a `RecursionError`** | builds |
+| 20 000 links | `RecursionError` | builds, 39 999 lines |
+
+Raising `RecursionError` from inside the reporting machinery is the one place that
+error is useless, so the conversion is worth keeping on its own merits — stated as
+what it is, robustness, not a fix.
+
+**The cycle guard went from O(n²) to O(n).** Both walks (`_chain_of` over live
+exceptions, `_seen` during construction) guarded by scanning a *list* by identity —
+deliberately, since an exception may define `__eq__`, and `test_unhashable` builds
+one with no `__hash__`. CPython avoids both problems by holding **`id()` values in
+a set**, which Grail supports and which is immune to a pathological `__eq__`
+because the members are integers. At 20 000 links: **33.2s → 11.8s**, and the gap
+widens with length.
+
+**Result: no change to the scoreboard.** `test_long_context_chain` still fails,
+now on `AlmostOutOfMemory` — "session's temporary object memory is almost full" —
+rather than on a wrong chain. In a fresh session with the suite's exact gem
+settings the same 6645-link chain builds and renders correctly, so what is
+exhausted is the *accumulated* temp memory of a session that has already run the
+other 369 tests in the module, not the chain itself. The failure moved from wrong
+output to a resource ceiling; the behaviour under it is right, and that is worth
+separating from a pass.
+
+Sizing that footprint is the open item: 6645 `TracebackException`s each carry a
+`StackSummary` whose `FrameSummary`s hold their own copy of the source line, where
+CPython shares them through `linecache`. Whether that duplication dominates is
+unmeasured, and is the next thing to measure rather than assume — which is the
+lesson §9.13's superseded guess earns.
+
+**Found, not fixed:** `1/0` reports `integer division or modulo by zero` where
+CPython 3.14 says `division by zero` (it reserves the former for `//` and `%`).
+Unrelated to chaining, and changing a built-in's message text can move other
+modules' expectations, so it is recorded here rather than bundled in.
