@@ -737,10 +737,59 @@ testExceptionChaining
 	   'a_bare_class_raise_chains_too'
 	   'a_cyclic_chain_terminates_and_renders_once'
 	   'reraising_the_handled_exception_does_not_self_chain'
+	   'a_context_link_keeps_its_own_traceback'
 	   'chain_false_renders_only_the_outermost'
 	   'tracebackexception_captures_the_chain' ) do: [:k |
 		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
 			description: 'exception-chaining check failed: ' , k].
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testImplicitContextReleasesTheCapturedStack
+	"An exception stored as another's __context__ must keep its TRACEBACK and drop
+	its raise-time CAPTURE.
+
+	Primitive 2022 fills _gsStack with the whole Smalltalk stack at every raise.
+	That is what makes multi-frame tracebacks affordable (§9.2) -- nothing per
+	call -- but the capture is only raw material, and holding it after the
+	traceback is built makes a long chain quadratic: every link retains a
+	full-stack capture, so a runaway that raises once per level retains O(depth^2)
+	triples.  At the depth Grail reaches (~6645 levels, ~16 Smalltalk frames each)
+	that is ~350 million triples and the gem runs out of temporary object memory
+	outright -- tripling GEM_TEMPOBJ_CACHE_SIZE does not help.
+
+	___applyImplicitContext___ releases it, which is the one point where the
+	exception is provably spent: we are raising from inside its handler, so its
+	traceback is built and it is no longer propagating.  Releasing EARLIER, when
+	the traceback is first built, is wrong -- a bare re-raise rebuilds by walking
+	that same capture again with a wider trim, and testBareReraiseSplicesFrames
+	catches it.
+
+	Asserted on the Smalltalk slot because _gsStack is not reachable from Python.
+	The companion fixture check (the context keeps its own traceback) is in
+	tests/python/exception_chaining.py."
+
+	| mod exc ctx |
+	"Capture is enabled lazily, on the first traceback build, so in a fresh
+	session the very first raise happens with it OFF and _gsStack stays nil for a
+	reason that has nothing to do with releasing it.  Enable it up front, or this
+	test asserts nothing -- it passed with the release removed until this line was
+	added."
+	BaseException ___ensureStackCapture___.
+	importlib @env1:modules removeKey: #'exception_chaining' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_chaining.py')
+		name: 'exception_chaining'.
+	exc := mod @env0:perform: #'implicit_context' env: 1.
+	ctx := exc @env0:dynamicInstVarAt: #'___context___'.
+	self deny: ctx isNil
+		description: 'the ValueError should have the ZeroDivisionError as __context__'.
+	self assert: ctx _gsStack isNil
+		description: 'a context link must not retain its raise-time _gsStack capture'.
+	"The traceback built FROM that capture has to survive it."
+	self deny: (ctx @env0:instVarAt: 2) isNil
+		description: 'releasing the capture must not discard the context traceback'.
 %
 
 category: 'Grail-Tests - Traceback Runtime'

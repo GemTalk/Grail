@@ -161,6 +161,22 @@ def reraising_the_handled_exception_does_not_self_chain():
     return (e.__context__ is None or e.__context__ is not e) and _sections(e) == 1
 
 
+def a_context_link_keeps_its_own_traceback():
+    """The context is a real exception with its own frames, not just a message.
+
+    Pinned because Grail releases the VM's raise-time stack capture once an
+    exception becomes another's __context__ -- that capture is what makes a long
+    chain quadratic in memory (see TracebackTestCase>>
+    testImplicitContextReleasesTheCapturedStack).  The traceback BUILT from it
+    has to outlive it, which is what this checks from the Python side."""
+    e = implicit_context()
+    ctx = e.__context__
+    return (ctx.__traceback__ is not None
+            and len(traceback.extract_tb(ctx.__traceback__)) >= 1
+            and 'in implicit_context' in ''.join(
+                traceback.format_exception(ctx)))
+
+
 def chain_false_renders_only_the_outermost():
     """The ``chain'' parameter still turns it all off."""
     e = implicit_context()
@@ -190,6 +206,7 @@ if __name__ == '__main__':
         a_bare_class_raise_chains_too,
         a_cyclic_chain_terminates_and_renders_once,
         reraising_the_handled_exception_does_not_self_chain,
+        a_context_link_keeps_its_own_traceback,
         chain_false_renders_only_the_outermost,
         tracebackexception_captures_the_chain,
     ]

@@ -1413,20 +1413,87 @@ widens with length.
 
 **Result: no change to the scoreboard.** `test_long_context_chain` still fails,
 now on `AlmostOutOfMemory` — "session's temporary object memory is almost full" —
-rather than on a wrong chain. In a fresh session with the suite's exact gem
-settings the same 6645-link chain builds and renders correctly, so what is
-exhausted is the *accumulated* temp memory of a session that has already run the
-other 369 tests in the module, not the chain itself. The failure moved from wrong
-output to a resource ceiling; the behaviour under it is right, and that is worth
-separating from a pass.
+rather than on a wrong chain. The failure moved from wrong output to a resource
+ceiling; the behaviour under it is right, and that is worth separating from a pass.
 
-Sizing that footprint is the open item: 6645 `TracebackException`s each carry a
-`StackSummary` whose `FrameSummary`s hold their own copy of the source line, where
-CPython shares them through `linecache`. Whether that duplication dominates is
-unmeasured, and is the next thing to measure rather than assume — which is the
-lesson §9.13's superseded guess earns.
+> Corrected in §9.15: the explanation offered here — that what is exhausted is the
+> *accumulated* temp memory of a session that has already run the module's other
+> 369 tests — is wrong. It rested on the chain building fine in an isolated probe,
+> but that probe ran with raise-time stack capture OFF, which is the whole cost.
+> Tripling `GEM_TEMPOBJ_CACHE_SIZE` disproves the accumulation story outright.
+
+Sizing that footprint is the open item — §9.15 takes it up, and both guesses in
+this paragraph turned out to be wrong.
 
 **Found, not fixed:** `1/0` reports `integer division or modulo by zero` where
 CPython 3.14 says `division by zero` (it reserves the former for `//` and `%`).
 Unrelated to chaining, and changing a built-in's message text can move other
 modules' expectations, so it is recorded here rather than bundled in.
+
+### 9.15 Releasing the raise-time capture (2026-08-12, gs40)
+
+`test_long_context_chain` now passes. §9.14 left it failing on `AlmostOutOfMemory`
+and named the wrong culprit twice; measuring properly found a single cause with a
+one-line fix.
+
+**Both of §9.14's guesses were wrong.** It suggested the exhausted memory was the
+session's *accumulated* garbage from the module's other 369 tests, and that the
+footprint to investigate was `FrameSummary` holding its own copy of each source
+line where CPython shares them through `linecache`. Neither survived measurement:
+
+* Tripling `GEM_TEMPOBJ_CACHE_SIZE` (500 000 → 1 500 000) changed nothing — the
+  test still failed identically. Accumulation would have been relieved by that.
+* `FrameSummary` already stores the string `linecache.getline` returns, so the
+  lines *are* shared. Building the chain with `lookup_lines=False` did not reduce
+  memory at all.
+
+The reason §9.14's isolated probe seemed to show the chain building fine in ~10 MB
+is that a bare `topaz` session has `#GemExceptionSignalCapturesStack` **off** —
+`___ensureStackCapture___` enables it lazily, on the first traceback build. So the
+probe measured the one configuration in which the problem does not exist. Enabling
+capture explicitly reproduces it immediately, and not as a near miss:
+
+| capture | 6645-level runaway |
+|---|---|
+| off | chain + build + format, ~10 MB |
+| on, before this change | **fatal** "VM temporary object memory is full" |
+| on, after this change | chain + build + format, ~62 MB peak |
+
+**The cost is quadratic, and it is retention rather than allocation.** Primitive
+2022 fills `_gsStack` with the *whole* Smalltalk stack at every raise. That is
+what makes multi-frame tracebacks affordable in the first place — ~1.3 ns per
+frame per raise and nothing per call (§9.2) — but the capture is only raw
+material for building the traceback. Nothing dropped it afterwards. A recursion
+that raises once per level captures O(depth) triples at level 1, at level 2, and
+so on; while each exception stays reachable — which is exactly what a `__context__`
+chain does — the retained total is **O(depth²)**. At 6645 levels of ~16 Smalltalk
+frames each that is ~350 million triples, which no cache size accommodates.
+
+**Where to release it is the whole question**, and the obvious answer is wrong.
+Releasing when the traceback is first built fails: an exception's capture has to
+outlive its first catch, because a bare re-raise rebuilds the traceback by walking
+that *same* capture again with a wider trim (§9.10). The pass-through frames it
+splices in are in the original capture — they were already on the stack when the
+raise happened — and `pass` does not refill `_gsStack`, so a cleared capture leaves
+the rebuild with nothing. `testBareReraiseSplicesFrames` caught this on the first
+try.
+
+`___applyImplicitContext___` is the point where the exception is provably spent: we
+are raising from inside its handler, so its traceback is built and it is no longer
+propagating. One line there — `current ___releaseCapturedStack___` — turns O(depth²)
+retention into O(depth).
+
+**A vacuous test, caught before it shipped.** The obvious regression test — assert
+`_gsStack` is nil on a context link — passed with the fix *removed*. In a fresh
+session the first raise happens before any traceback build, so capture is still off
+and the slot is nil for an unrelated reason. The test now calls
+`___ensureStackCapture___` first, and without that line it proves nothing. Worth
+recording because a test that cannot fail is worse than no test: it reads as
+coverage.
+
+**Result: `test.test_traceback` 63 → 64 passing, errors 24 → 23**, identical on
+3.7.5 and 4.0. SUnit 4073 → 4074, all passing on both stones. Full 50-module
+conformance run changes exactly one row, the expected one.
+
+This also lifts a quadratic memory cost off *every* long chain, not just this
+test's — any application that wraps errors repeatedly in a loop was paying it.
