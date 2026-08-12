@@ -69,6 +69,53 @@ dynamicInstVarAt: aSymbol ifAbsent: absentBlock
 
 set compile_env: 1
 
+category: 'Grail-Slots'
+classmethod: object
+___pyStrictSlotsAllowed___
+	"Whether THIS class may enforce strict __slots__ -- i.e. deny any
+	attribute it did not declare, and have no per-instance __dict__.
+
+	CPython drops the __dict__ only when EVERY class in the MRO except
+	object declares __slots__.  A class whose base is a plain, non-slotted
+	class therefore still HAS a __dict__ no matter how its own __slots__ is
+	written, and an attribute the base's __init__ assigns keeps working:
+
+	    class Base:                     # no __slots__
+	        def __init__(self): self.b = 2
+	    class Sub(Base):
+	        __slots__ = ('a',)
+	    Sub().b                         # 2 in CPython
+
+	Grail marked Sub strict purely from its OWN declaration, so that
+	assignment raised AttributeError and Sub could not even be constructed
+	-- which is what took out datetimetester's
+	PicklableFixedOffsetWithSlots, whose __slots__ deliberately omits the
+	base's third private attribute.
+
+	Reaching PythonInstance means nothing above this class declared slots
+	of its own, which is CPython's `object' case and IS allowed to be
+	strict.  A non-PythonInstance base that is not itself strict -- a
+	builtin like dict or Exception -- answers false, which is the LENIENT
+	direction and matches the documented fallback for a __slots__ value
+	Grail cannot read at compile time."
+
+	| sup |
+	sup := self @env0:superclass.
+	[sup @env0:notNil] @env0:whileTrue: [
+		"Only PYTHON-DEFINED ancestors matter.  One that declares no
+		__slots__ of its own gives instances a __dict__, so nothing below it
+		can be strict.  A Grail BUILTIN base (property, a numbers ABC, ...)
+		is skipped: its instances carry no Python __dict__, and CPython
+		spells those types with __slots__ = () anyway -- treating them as
+		blockers made Fraction and a property subclass wrongly non-strict."
+		((sup @env0:whichClassIncludesSelector: #'___pyDefinedClass___' environmentId: 1)
+			@env0:== sup) ifTrue: [
+			((sup @env0:whichClassIncludesSelector: #'___pyHasSlots___' environmentId: 1)
+				@env0:== sup) ifFalse: [^ false]].
+		sup := sup @env0:superclass].
+	^ true
+%
+
 category: 'Grail-Convenience Methods'
 classmethod: object
 ___new___
@@ -3417,14 +3464,38 @@ __getstate__
 	when there are none, matching CPython (an empty __dict__ with no slots
 	getstates to None so the reconstructor skips restoring state)."
 
-	| names d |
+	| names d slotDict ivNames |
 	names := self @env0:dynamicInstanceVariables.
-	names @env0:isEmpty ifTrue: [^ None].
-	d := dict ___new___.
-	names @env0:do: [:nm |
-		d __setitem__: (nm @env0:asString @env0:asUnicodeString)
-			_: (self @env0:dynamicInstVarAt: nm)].
-	^ d
+	d := nil.
+	names @env0:isEmpty ifFalse: [
+		d := dict ___new___.
+		names @env0:do: [:nm |
+			d __setitem__: (nm @env0:asString @env0:asUnicodeString)
+				_: (self @env0:dynamicInstVarAt: nm)]].
+	"__slots__ values live in NAMED instance variables (``___slot_x___''),
+	not in dynamicInstanceVariables, so they were absent from the state
+	entirely and a slotted instance came back from a pickle with every
+	slot unset -- utcoffset() answered None after a round trip
+	(test_pickling_subclass).  CPython answers a (dict, slots) 2-TUPLE for
+	such a class, which pickle's BUILD already knows how to restore; an
+	unset slot is simply omitted, exactly as CPython omits it."
+	slotDict := nil.
+	(self ___respondsTo___: #'___pyHasSlots___') ifTrue: [
+		ivNames := self @env0:class @env0:allInstVarNames.
+		1 @env0:to: ivNames @env0:size do: [:idx |
+			| ivn val |
+			ivn := (ivNames @env0:at: idx) @env0:asString.
+			((ivn @env0:size @env0:> 11)
+				@env0:and: [(ivn @env0:copyFrom: 1 to: 8) @env0:= '___slot_']) ifTrue: [
+				val := self @env0:instVarAt: idx.
+				val @env0:isNil ifFalse: [
+					slotDict @env0:isNil ifTrue: [slotDict := dict ___new___].
+					slotDict __setitem__:
+						((ivn @env0:copyFrom: 9 to: ivn @env0:size @env0:- 3)
+							@env0:asUnicodeString) _: val]]]].
+	slotDict @env0:isNil ifTrue: [
+		^ d @env0:isNil ifTrue: [None] ifFalse: [d]].
+	^ tuple @env0:withAll: { d @env0:isNil ifTrue: [None] ifFalse: [d]. slotDict }
 %
 
 category: 'Grail-Comparison'
