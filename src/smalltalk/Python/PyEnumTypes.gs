@@ -1484,6 +1484,102 @@ ___grailReduceOf: aMember
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailFindDataRepr: cls
+	"CPython _find_data_repr_, whose answer a class keeps as _value_repr_ and
+	Enum.__repr__ then applies to the value: ``v_repr = cls._value_repr_ or
+	repr''.  Walks the bases for the first one that supplies a __repr__ and
+	answers what to render the member's value with.
+
+	Only ONE of CPython's outcomes differs from plainly repr-ing the value, so
+	that is the only one named here:
+
+	  #dataclass -- the __repr__ found is the one @dataclass GENERATED, which
+	      CPython refuses to use.  It substitutes _dataclass_repr, printing
+	      just the repr=True fields and no class name, so a member reads
+	      ``<Creature.DOG: size='medium', legs=4>'' rather than
+	      ``<Creature.DOG: CreatureDataMixin(size='medium', legs=4, tail=True)>''
+	      -- the enum member IS the composite, so repeating the mixin's name
+	      and the fields it hides would say it twice.
+
+	  nil -- everything else, where Grail's ordinary repr dispatch already
+	      produces CPython's answer: a hand-written __repr__ on the data type,
+	      one inherited from further up (@dataclass(repr=False) over a base
+	      that has one), or none at all, which leaves the default object repr.
+
+	The walk starts at cls's SUPERCLASS because CPython walks the bases, and it
+	stops at an enum base with nil for the same reason CPython returns
+	``base._value_repr_'' there -- Grail's is always None.  That is what keeps
+	a dataclass INSTANCE used as an ordinary member value (``class Plain(Enum):
+	A = Free(1)'', bases just (Enum,)) printing its own full repr: the rule is
+	about the enum's data TYPE, not about the value happening to be a
+	dataclass.
+
+	``In its own __dict__'' is two stores in Grail: a class-body ``def'' is a
+	compiled method on that very class, while @dataclass writes its generated
+	functions and __dataclass_params__ into the per-class dynInstVars holder."
+
+	| walker |
+	walker := cls @env0:superClass.
+	[walker @env0:notNil] @env0:whileTrue: [
+		(walker == PythonInstance or: [walker == Object]) ifTrue: [^ nil].
+		(Enum ___grailIsEnumBase: walker) ifTrue: [^ nil].
+		[ | holder ownRepr params |
+		holder := ((walker @env0:class @env0:whichClassIncludesSelector: #dynInstVars
+			environmentId: 1) notNil)
+				ifTrue: [walker @env0:perform: #dynInstVars env: 1]
+				ifFalse: [nil].
+		ownRepr := (holder @env0:notNil
+			and: [([holder @env0:dynamicInstVarAt: #'__repr__']
+				@env0:on: AbstractException do: [:e | e @env0:return: nil]) @env0:notNil])
+			or: [(walker @env0:whichClassIncludesSelector: #'__repr__' environmentId: 1)
+				== walker].
+		ownRepr ifTrue: [
+			params := holder @env0:isNil
+				ifTrue: [nil]
+				ifFalse: [[holder @env0:dynamicInstVarAt: #'__dataclass_params__']
+					@env0:on: AbstractException do: [:e | e @env0:return: nil]].
+			params @env0:isNil ifTrue: [^ nil].
+			^ ((params @env1:___pyAttrLoad___: #'repr') == true)
+				ifTrue: [#dataclass]
+				ifFalse: [nil]] ] @env0:value.
+		walker := walker @env0:superClass].
+	^ nil
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailDataclassRepr: aValue
+	"CPython _dataclass_repr -- the substitute for a GENERATED dataclass
+	__repr__:
+
+	    ', '.join('%s=%r' % (k, getattr(self, k))
+	              for k in dcf.keys() if dcf[k].repr)
+
+	Field ORDER is the declaration order, which __dataclass_fields__ (an
+	OrderedDict) already carries, and a field declared ``field(repr=False)'' is
+	left out -- that is the whole point of preferring this over the generated
+	__repr__, which prints every field and prefixes the mixin's name.
+
+	Answers nil if the value cannot supply the fields, so the caller can fall
+	back to an ordinary repr rather than let a repr raise."
+
+	| dcf out |
+	dcf := [aValue @env1:___pyAttrLoad___: #'__dataclass_fields__']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	dcf @env0:isNil ifTrue: [^ nil].
+	^ [ out := OrderedCollection @env0:new.
+		dcf @env0:keysAndValuesDo: [:k :fld |
+			((fld @env1:___pyAttrLoad___: #'repr') == true) ifTrue: [ | v |
+				v := aValue @env1:___pyAttrLoad___: k @env0:asString @env0:asSymbol.
+				out @env0:add: k @env0:asString @env0:, '='
+					@env0:, (Enum ___grailValueRepr: v)]].
+		out @env0:inject: nil into: [:acc :each |
+			acc @env0:isNil ifTrue: [each] ifFalse: [acc @env0:, ', ' @env0:, each]] ]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailValueRepr: aValue
 	"repr(aValue), for the ``<value> is not a valid <Cls>'' messages.
 
@@ -4160,8 +4256,17 @@ __repr__
 	val := (self @env0:dynamicInstVarAt: #value).
 	val := val @env0:isNil
 		ifTrue: ['nil']
-		ifFalse: [[val @env1:__repr__ @env0:asString]
-			@env0:on: AbstractException do: [:e | val @env0:printString]].
+		ifFalse: [ | dcRepr |
+			"CPython ``v_repr = self.__class__._value_repr_ or repr''.  The one
+			answer _find_data_repr_ gives that is not plain repr is the
+			dataclass substitute; see ___grailFindDataRepr:."
+			dcRepr := ((Enum ___grailFindDataRepr: self @env0:class) == #dataclass)
+				ifTrue: [Enum ___grailDataclassRepr: val]
+				ifFalse: [nil].
+			dcRepr @env0:isNil
+				ifFalse: [dcRepr]
+				ifTrue: [[val @env1:__repr__ @env0:asString]
+					@env0:on: AbstractException do: [:e | val @env0:printString]]].
 	"A member can reach here with no stored #name -- e.g. a malformed/partial
 	object produced by a reconstruction Grail could not complete (pickle-by-
 	name of a mixed-in data-subclass enum whose member_type() construction is
