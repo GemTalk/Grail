@@ -192,13 +192,16 @@ printSmalltalkRuntimeOn: aStream
 		def isSimplePositionalArgs ifFalse: [
 			varargsFuncNames add: def ___mangledName___ asSymbol
 		].
-		"NOT extended to @classmethod defs: a class-side method is not
-		reachable through an instance's ___pyAttrLoad___ in Grail, so
-		suppressing their fast path turns ``self.cm0()'' into an
-		AttributeError (ClassMethodViaInstanceTestCase).  A wrapped
-		CLASSMETHOD therefore still bypasses its decorator -- see
-		test_system_transitions, which needs classmethod-descriptor
-		binding that does not exist yet."
+		"Extended to @classmethod defs as well.  This was previously held
+		back because a class-side method was not reachable through an
+		instance's ___pyAttrLoad___, so suppressing the fast path turned
+		``self.cm0()'' into an AttributeError; that probe now exists, and
+		a decorated classmethod is stored as a PyClassMethod descriptor
+		which only the attribute path consults.  Without this, ``self.m()''
+		still reached the RAW class-side method and bypassed the wrapper."
+		def ___hasWrappingDecorator___ ifTrue: [
+			decoratedFuncNames add: def ___mangledName___ asSymbol
+		].
 	].
 	"Collection done -- put classBeingCompiled BACK to the outer value.
 	It was set early only so ___mangledName___ could mangle through it.

@@ -54,6 +54,12 @@ set compile_env: 0
 
 category: 'Grail-code generation'
 method: ClassFunctionDefAst
+___decoratorBaseIsClassMethod___
+	^ true
+%
+
+category: 'Grail-code generation'
+method: ClassFunctionDefAst
 ___decoratorBaseIsClassSide___
 	"A @classmethod compiles onto the metaclass, with ``cls'' as the Smalltalk
 	receiver -- so a class-body decorator's base must be a BoundMethod on the
