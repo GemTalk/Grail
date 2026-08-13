@@ -696,6 +696,7 @@ run
 	at: #'BuiltinSubclassPickleTestCase' put: nil;
 	at: #'EnumPickleByNameTestCase' put: nil;
 	at: #'ClassBodyNamespaceTestCase' put: nil;
+	at: #'EnumAutoAtAssignmentTestCase' put: nil;
 	at: #'EnumDictTestCase' put: nil;
 	at: #'EnumFlagMasksTestCase' put: nil;
 	at: #'EnumNamedFlagsTestCase' put: nil;
@@ -1503,6 +1504,7 @@ input src/smalltalk/PythonTests/EnumModuleApiTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassPickleTestCase.gs
 input src/smalltalk/PythonTests/EnumPickleByNameTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNamespaceTestCase.gs
+input src/smalltalk/PythonTests/EnumAutoAtAssignmentTestCase.gs
 input src/smalltalk/PythonTests/EnumDictTestCase.gs
 input src/smalltalk/PythonTests/EnumFlagMasksTestCase.gs
 input src/smalltalk/PythonTests/EnumNamedFlagsTestCase.gs

@@ -205,18 +205,19 @@ testVarsInABodyIsNotTheNamespaceWhichIsAKnownGap
 	self assert: (self resultAt: 'vars_in_body_a_known_gap') asString equals: 'dict'.
 %
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests - Enums get one too'
 method: ClassBodyNamespaceTestCase
-testAutoIsNotResolvedAtAssignmentWhichIsAKnownGap
-	"""Recorded, NOT endorsed.  ``auto()'' is still resolved in a later pass, so
-	a body that USES a member it just defined sees the unresolved marker and the
-	operator fails.  The read-back this needs is already in place -- the
-	namespace's value is what lands on the class -- but EnumDict does not yet
-	call _generate_next_value_ on the way in.  test_enum's
-	test_using_members_as_nonmember is what closing this buys."""
+testAutoIsResolvedAtAssignment
+	"""The first thing the namespace bought that a later pass could not: a body
+	that USES a member it just defined sees the number rather than an unresolved
+	marker, so ``ALL = nonmember(A | B)'' works.
 
-	self assert: (self resultAt: 'auto_at_assignment_a_known_gap') asString
-		equals: 'TypeError'.
+	This is what the READ-BACK exists for -- ___grailNsStore___ stores what the
+	namespace answers, not what it was handed, so EnumDict substituting the
+	resolved value is what lands on the class.  Pinned in full by
+	EnumAutoAtAssignmentTestCase."""
+
+	self assert: (self resultAt: 'auto_at_assignment') asString equals: '3'.
 %
 
 category: 'Grail-Tests - Known gaps'

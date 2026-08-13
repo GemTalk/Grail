@@ -206,19 +206,20 @@ class VarsProbe(metaclass=WatchMeta):
 
 r['vars_in_body_a_known_gap'] = VarsProbe.kind
 
-# ``auto()`` is still resolved in a later pass rather than at assignment, so a
-# body that USES a member it just defined sees the unresolved marker.  The
-# read-back needed for it is in place -- the namespace's value is what lands on
-# the class -- but EnumDict does not yet call _generate_next_value_ on the way
-# in.  This is what test_enum's test_using_members_as_nonmember needs.
-try:
-    class Combining(enum.Flag):
-        A = enum.auto()
-        B = enum.auto()
-        ALL = enum.nonmember(A | B)
-    r['auto_at_assignment_a_known_gap'] = repr(Combining.ALL)
-except TypeError as e:
-    r['auto_at_assignment_a_known_gap'] = type(e).__name__
+# ``auto()`` is resolved AT ASSIGNMENT now, which is the first thing the
+# namespace bought that a later pass could not: a body that uses a member it just
+# defined sees the number, not the marker.  Pinned in full by
+# enum_auto_at_assignment.py; kept here because it is what the read-back --
+# storing the namespace's value rather than the one passed in -- exists for.
+
+
+class Combining(enum.Flag):
+    A = enum.auto()
+    B = enum.auto()
+    ALL = enum.nonmember(A | B)
+
+
+r['auto_at_assignment'] = repr(Combining.ALL)
 
 # An INHERITED metaclass is not asked, because Grail does not install a Python
 # metaclass as the Smalltalk metaclass -- a subclass has nothing here to ask.
