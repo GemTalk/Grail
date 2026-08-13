@@ -794,11 +794,21 @@ printLocalsCallOn: aStream
 	Module scope (functionBeingCompiled is nil): locals() IS globals()
 	— emit `self`, exactly like the globals() rewrite.
 
-	Known V1 gaps: a class-body locals() answers the module namespace
-	(not the class namespace); free variables of enclosing closures
-	are not included."
+	Class-body scope: the names the class body has bound SO FAR, which is
+	what CPython's class-body locals() reports -- see
+	printClassBodyLocalsSnapshotOn:.
+
+	Known V1 gap: the class-body dict is a SNAPSHOT, so writing through it
+	(``locals()['x'] = 43'') does not bind a class attribute."
 
 	| fn |
+	"Class body FIRST: inside one, functionBeingCompiled is still the
+	ENCLOSING function (the classdef is emitted in its scope), so without
+	this test a class-body locals() answered that function's locals -- names
+	from a different scope entirely, and CPython's rule is that a class body
+	does not even see them."
+	CallAst inClassBodyValueEmit ifTrue: [
+		^ self printClassBodyLocalsSnapshotOn: aStream].
 	fn := CallAst functionBeingCompiled.
 	"Module scope: locals() IS globals() — emit the same live view as the
 	globals() rewrite (docs/LEGB.md)."
@@ -973,6 +983,58 @@ ___freeVariableIsAssignable___: aSymbol for: aFunctionDefAst
 				^ (node body writes ifNil: [#()]) includes: aSymbol]].
 		node := node parent].
 	^ false
+%
+
+category: 'Grail-other'
+method: CallAst
+printClassBodyLocalsSnapshotOn: aStream
+	"Emit the 0-arg ``locals()'' rewrite for a call INSIDE A CLASS BODY: a dict
+	of the names the class body has bound so far, in source order.
+
+	That is what CPython reports there.  A class body executes as a namespace
+	rather than a function, so its locals() is the mapping being built into the
+	class -- NOT the enclosing function's locals, which is what Grail answered
+	before (a class body cannot even see those: Python skips class scope when
+	resolving a free variable, so ``x'' from an enclosing def is precisely the
+	name that must NOT appear).  test_scope's testLocalsClass asserts exactly
+	that absence:
+
+	    def f(x):
+	        class C:
+	            y = x
+	            def m(self): return x
+	            z = list(locals())      # ['y', 'm'] -- 'x' must not be here
+
+	``bound so far'' comes from CallAst classBodyBoundNames, which ClassDefAst
+	already computes per attribute for sequential-execution ordering, so a name
+	bound LATER in the body is correctly absent too.  Each value is read by
+	letting a NameAst compile itself under the live class-body context, which
+	routes a sibling def to a BoundMethod and a plain attribute to the class
+	store -- the same expressions any other class-body reference emits.
+
+	Grail's class bodies compile to static attribute stores rather than
+	executing into a real mapping, so this is a SNAPSHOT: reads are right,
+	but ``locals()['x'] = 43'' cannot bind a class attribute (test_scope's
+	testClassNamespaceOverridesClosure and testClassAndGlobal still fail).
+	Giving it write-through means executing class bodies into a namespace,
+	which is a change to ClassDefAst rather than to this rewrite.
+
+	Two SHAPE differences from CPython, both deliberate.  The implicit
+	``__module__'' / ``__qualname__'' / ``__firstlineno__'' entries CPython
+	seeds a class namespace with are absent -- they are not names the body
+	binds, and emitting two of the three would be no closer to CPython than
+	emitting none.  And the order is the class body's binding order rather
+	than a dict's insertion order over those dunders first."
+
+	| bound |
+	bound := CallAst classBodyBoundNames.
+	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) ___buildLocals___: { '.
+	bound ifNotNil: [
+		bound do: [:each |
+			aStream nextPutAll: '{ '''; nextPutAll: each asString; nextPutAll: '''. '.
+			CallAst ___emitFreeVariableRead___: each asSymbol parent: self on: aStream.
+			aStream nextPutAll: ' }. ']].
+	aStream nextPutAll: '})'
 %
 
 category: 'Grail-other'
