@@ -2680,6 +2680,22 @@ ___isClassBodyRuntimeStatement___: aStatement
 	These four are emitted verbatim instead -- re-deriving try/except/finally
 	and loop codegen would duplicate it."
 
+	"A body-level AUGMENTED ASSIGNMENT to a bare name joins them.  ``x += 1''
+	rebinds the class attribute, so CPython leaves ``class C: x = 1; x += 1''
+	with C.x == 2 -- but an AugAssignAst yields no classBodyAttributePairs, so
+	the structural compile had nothing to emit and dropped the statement whole,
+	leaving C.x == 1 and reporting nothing.  Emitted verbatim here instead, with
+	AugAssignAst's class-body branch turning it into a read-modify-write through
+	___classBodyDefinitionalStore___:put:.
+
+	A target the body declared ``nonlocal'' is excluded: that one binds the
+	ENCLOSING function's variable, not a class attribute, and has its own
+	enclosing-scope emit (___classBodyNonlocalTargetNames___:).  Without the
+	exclusion it would be emitted twice, once per pass, and the increment would
+	be applied to both the class and the outer binding."
+	((aStatement isKindOf: AugAssignAst)
+		and: [aStatement target isKindOf: NameAst]) ifTrue: [
+			^ (self ___classBodyNonlocalTargetNames___: aStatement) isEmpty].
 	^ (aStatement isKindOf: TryAst)
 		or: [(aStatement isKindOf: ForAst)
 		or: [(aStatement isKindOf: WhileAst)
