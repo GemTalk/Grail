@@ -55,6 +55,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Carry the per-module wall-clock sidecars (out/cpython/*.sec) between
+      # nightly runs.  run_cpython_suite.sh launches heaviest-first weighted by
+      # them; with no cache every run starts from the test-count ESTIMATE, which
+      # is the ordering the duration weights exist to replace.  Measured
+      # back-to-back locally: 254s by test count, 206s once the durations
+      # settle.  restore-keys lets a run inherit the previous day's timings, and
+      # the always-unique key makes every run save a fresh copy.  A cache miss
+      # is harmless -- the estimate is the documented fallback.
+      - name: Restore module durations
+        uses: actions/cache@v4
+        with:
+          path: out/cpython/*.sec
+          key: cpython-durations-${{ github.run_id }}
+          restore-keys: cpython-durations-
+
       # Same non-root 'ci' pattern as ci.yml (NetLDI guest mode needs it).
       - name: install + cpython conformance (as non-root 'ci')
         run: |

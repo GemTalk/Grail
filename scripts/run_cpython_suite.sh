@@ -89,12 +89,18 @@ SCOREBOARD_JSON="$OUTDIR/scoreboard.json"
 CONCURRENCY="${GRAIL_CPYTHON_WORKERS:-4}"
 SUITE_T0=$SECONDS
 
-run_module() { # $1=mod -- run one module capped; record exit code to a sidecar
-    local mod="$1" log="$OUTDIR/$1.out"
+run_module() { # $1=mod -- run one module capped; record exit code + duration sidecars
+    local mod="$1" log="$OUTDIR/$1.out" t0
     rm -f "$log" "$OUTDIR/$1.rc"
     export GRAIL_TEST_MODULE="$mod"
+    t0=$(date +%s)
     run_capped topaz -lq -C "$TOPAZ_CFG" -S "$DRIVER" < /dev/null > "$log" 2>&1
     echo $? > "$OUTDIR/$1.rc"
+    # Wall clock, for the NEXT run's launch order (see launch_order).  Written
+    # last and never removed at start-up: a `.sec' is the one artifact here that
+    # is deliberately read across runs, and a crashed/timed-out module's honest
+    # 600s belongs in the schedule as much as a fast one's 1s.
+    echo $(( $(date +%s) - t0 )) > "$OUTDIR/$1.sec"
 }
 
 # Module list: explicit args override the manifest.
@@ -126,24 +132,64 @@ echo "Running CPython suite against Grail (timeout=${PER_MODULE_TIMEOUT}s per mo
 echo
 
 # Launch heaviest-first (longest-processing-time scheduling): start the big
-# modules (test_enum, test_set) early so they run while the many light modules
-# fill the other slots, instead of bunching at the end and starving each other.
-# Weight = test count from the committed scoreboard (a good duration proxy);
-# modules absent there sort last (weight 0) via a stable sort, which is fine --
-# they are new/small.  PARSE order (phase 2) stays manifest order so the
-# regenerated scoreboard is byte-deterministic.  A missing/garbled scoreboard
-# just yields all-zero weights -> manifest launch order (safe fallback).
+# modules early so they run while the many light modules fill the other slots,
+# instead of bunching at the end and starving each other.  PARSE order (phase 2)
+# stays manifest order so the regenerated scoreboard is byte-deterministic.
+#
+# Weight is the module's MEASURED wall clock from the previous run (the `.sec'
+# sidecars).  It used to be the committed scoreboard's TEST COUNT, which reads
+# like a fair proxy and is not: test_enum runs 1077 tests in 25s while test_math
+# runs 88 in 164s, so the count launched the suite's longest module twelfth and
+# its shortest-per-test module first -- exactly backwards.
+#
+# Measured back-to-back at CONCURRENCY=4 on a 50-module manifest: 254s by test
+# count, 227s by duration, then 206s on the next duration-ordered run -- ~19%
+# once the weights settle.  The second-run gain is the point of feeding the
+# schedule its own output: the first duration pass is weighted by timings taken
+# under whatever load produced them, and each run re-measures under the load the
+# schedule itself creates, so the weights converge on the conditions they are
+# used in.  (Do not expect serial_total/CONCURRENCY.  Four modules sharing one
+# stone inflate each other ~25%, and the makespan can never beat the single
+# longest module -- 199s of the 206s here is test_math alone.  Splitting that
+# module is worth more than any further scheduling work.)
+#
+# A module with no `.sec' yet (newly wired, or a fresh clone / CI runner with no
+# cache) is estimated from its scoreboard test count at the suite-wide average
+# of ~6 tests/second, so it still lands in roughly the right place; one with
+# neither sorts last, as it did before.  Weights are centiseconds so the integer
+# sort keeps some resolution among the sub-second modules.  Ties keep manifest
+# order (field 2 = seq).
+TESTS_PER_SEC=6
 launch_order() {
-    # Join the manifest module list against the committed scoreboard's test
-    # counts, emit heaviest-first; ties keep manifest order (field 2 = seq).
-    printf '%s\n' $MODULES | awk '
-        FNR==NR { seq[++nm]=$1; wt[$1]=0; next }
-        /^\| / {
-            line=$0; gsub(/^\| *| *\| *$/, "", line); split(line, f, / *\| */)
-            if (f[1] in wt && f[3] ~ /^[0-9]+$/) wt[f[1]]=f[3]
+    local mods durs sb
+    mods="$(mktemp)"; durs="$(mktemp)"; sb="$(mktemp)"
+    printf '%s\n' $MODULES > "$mods"
+    for m in $MODULES; do
+        [ -f "$OUTDIR/$m.sec" ] && printf '%s\t%s\n' "$m" "$(cat "$OUTDIR/$m.sec")"
+    done > "$durs"
+    # Copied, not passed by path: a MISSING scoreboard would make awk exit
+    # before reading anything, discarding the `.sec' weights too and dropping
+    # the whole order back to the manifest.  An empty stand-in keeps the
+    # measured durations working on a board-less first run.
+    [ -f "$SCOREBOARD_MD" ] && cat "$SCOREBOARD_MD" > "$sb"
+    awk -v durfile="$durs" -v sbfile="$sb" -v tps="$TESTS_PER_SEC" '
+        FILENAME == durfile { if ($2 ~ /^[0-9]+$/) sec[$1] = $2; next }
+        FILENAME == sbfile {
+            if ($0 !~ /^\| /) next
+            line = $0; gsub(/^\| *| *\| *$/, "", line); split(line, f, / *\| */)
+            if (f[3] ~ /^[0-9]+$/) cnt[f[1]] = f[3]
+            next
         }
-        END { for (i=1; i<=nm; i++) print wt[seq[i]] "\t" i "\t" seq[i] }
-    ' - "$SCOREBOARD_MD" 2>/dev/null | sort -k1,1rn -k2,2n | cut -f3
+        { seq[++nm] = $1 }
+        END {
+            for (i = 1; i <= nm; i++) {
+                m = seq[i]
+                w = (m in sec) ? sec[m] * 100 : ((m in cnt) ? cnt[m] * 100 / tps : 0)
+                printf "%d\t%d\t%s\n", w, i, m
+            }
+        }
+    ' "$durs" "$sb" "$mods" 2>/dev/null | sort -k1,1rn -k2,2n | cut -f3
+    rm -f "$mods" "$durs" "$sb"
 }
 LAUNCH_MODULES=$(launch_order)
 [ -z "$LAUNCH_MODULES" ] && LAUNCH_MODULES="$MODULES"   # fallback: manifest order
@@ -171,6 +217,8 @@ for mod in $MODULES; do
     log="$OUTDIR/${mod}.out"
     rc=$(cat "$OUTDIR/${mod}.rc" 2>/dev/null || echo 1)
     rm -f "$OUTDIR/${mod}.rc"
+    # Kept (not removed) -- next run's launch_order reads it.
+    secs=$(cat "$OUTDIR/${mod}.sec" 2>/dev/null || echo 0)
 
     line=$(grep -m1 '^GRAIL_RESULT|' "$log")
 
@@ -213,8 +261,8 @@ for mod in $MODULES; do
 
     [ "$first_json" -eq 0 ] && printf ',\n' >> "$ROWS_JSON"
     first_json=0
-    printf '    {"module": "%s", "status": "%s", "tests": %s, "failures": %s, "errors": %s, "skipped": %s, "exit_code": %s, "detail": "%s"}' \
-        "$mod" "$status" "$tests" "$failures" "$errors" "$skipped" "$rc" "$(json_escape "$detail")" >> "$ROWS_JSON"
+    printf '    {"module": "%s", "status": "%s", "tests": %s, "failures": %s, "errors": %s, "skipped": %s, "seconds": %s, "exit_code": %s, "detail": "%s"}' \
+        "$mod" "$status" "$tests" "$failures" "$errors" "$skipped" "$secs" "$rc" "$(json_escape "$detail")" >> "$ROWS_JSON"
 done
 
 GENERATED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
