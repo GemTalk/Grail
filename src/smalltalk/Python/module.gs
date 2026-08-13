@@ -230,9 +230,35 @@ __dir__
 		by the name, so a module that legitimately defines ``def initialize()''
 		still shows up."
 		skip ifFalse: [
-			skip := (cls @env0:categoryOfSelector: sel environmentId: 1)
-				@env0:= #'Grail-Module Body'].
+			| cat |
+			cat := cls @env0:categoryOfSelector: sel environmentId: 1.
+			"'Grail-Initialization' is the same artifact for a module written in
+			SMALLTALK (enum.gs, functools.gs): its ``initialize'' populates the
+			namespace at import and is Grail's setup hook, not something CPython's
+			enum exports.  It leaked into dir(enum) as a public name, so every
+			dir()-walking consumer saw an attribute that does not exist upstream --
+			test_enum's test__all__ counted it as part of enum's API.
+
+			Still a category test rather than a name test, for the reason above: a
+			Python module's own ``def initialize()'' compiles into 'Grail-Module
+			Body' or 'Grail-Methods', never into a hand-written Smalltalk
+			category."
+			skip := (cat @env0:= #'Grail-Module Body')
+				or: [cat @env0:= #'Grail-Initialization']].
 		skip ifFalse: [
+			"A module-level ``def f(*args, **kwargs)'' compiles to the VARARGS
+			selector ``_f:kw:'' -- Grail prefixes exactly one underscore.  That
+			prefix is an encoding, not part of the Python name, so reporting it
+			verbatim made a public function look private: ``enum.verify'' is
+			spelled ``_verify:kw:'' and dir(enum) answered '_verify', which every
+			caller that filters leading underscores (dir()-walking introspection,
+			test.support.check__all__, pydoc) then dropped -- while
+			getattr(enum, 'verify') worked perfectly.  Strip the one prefix
+			underscore for that shape only, which leaves a genuinely private
+			``def _f(*args)'' (compiled as ``__f:kw:'') still private."
+			((s @env0:endsWith: ':kw:')
+				and: [(s @env0:at: 1) @env0:= $_])
+					ifTrue: [s := s @env0:copyFrom: 2 to: s @env0:size].
 			index := s @env0:indexOf: $:.
 			(index == 0) ifFalse: [s := s @env0:copyFrom: 1 to: (index @env0:- 1)].
 			names @env0:add: s]].
