@@ -54,7 +54,10 @@ initialize
 	self @env0:at: #CONTINUOUS put: #CONTINUOUS.
 	self @env0:at: #NAMED_FLAGS put: #NAMED_FLAGS.
 	self @env0:at: #ReprEnum put: ReprEnum.
-	self @env0:at: #EnumDict put: dict.
+	"enum.EnumDict is a real class (Python dictionary), not plain dict: it
+	refuses to let a member name be reused.  Resolved at IMPORT time rather
+	than compiled in, since EnumDict.gs files after this one."
+	self @env0:at: #EnumDict put: (Python @env0:at: #'EnumDict' otherwise: dict).
 	"Enum / IntEnum / IntFlag / StrEnum / Flag are all real classes now
 	(see PyEnumTypes.gs): ``class X(IntEnum): A = 1`` builds real members
 	via the metaclass hook ``___pyClassDefined___:``.  StrEnum is

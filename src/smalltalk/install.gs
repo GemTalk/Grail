@@ -672,6 +672,7 @@ run
 	at: #'FlagMemberLengthTestCase' put: nil;
 	at: #'EnumCallAndInitTestCase' put: nil;
 	at: #'EnumCompositeNameTestCase' put: nil;
+	at: #'EnumDictTestCase' put: nil;
 	at: #'EnumFlagMasksTestCase' put: nil;
 	at: #'EnumNamedFlagsTestCase' put: nil;
 	at: #'EnumMidbuildLookupTestCase' put: nil;
@@ -1190,6 +1191,7 @@ input src/smalltalk/Python/Decimal.gs
 input src/smalltalk/Python/Fraction.gs
 input src/smalltalk/Python/dict.gs
 input src/smalltalk/Python/PyDict.gs
+input src/smalltalk/Python/EnumDict.gs
 input src/smalltalk/Python/ExecBlockAttrs.gs
 input src/smalltalk/Python/Float.gs
 input src/smalltalk/Python/SetProtocol.gs
@@ -1461,6 +1463,7 @@ input src/smalltalk/PythonTests/EnumDescriptorMemberTestCase.gs
 input src/smalltalk/PythonTests/FlagMemberLengthTestCase.gs
 input src/smalltalk/PythonTests/EnumCallAndInitTestCase.gs
 input src/smalltalk/PythonTests/EnumCompositeNameTestCase.gs
+input src/smalltalk/PythonTests/EnumDictTestCase.gs
 input src/smalltalk/PythonTests/EnumFlagMasksTestCase.gs
 input src/smalltalk/PythonTests/EnumNamedFlagsTestCase.gs
 input src/smalltalk/PythonTests/EnumMidbuildLookupTestCase.gs
