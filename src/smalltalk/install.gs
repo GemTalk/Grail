@@ -739,6 +739,7 @@ run
 	at: #'InterruptedErrorTestCase' put: nil;
 	at: #'IsADirectoryErrorTestCase' put: nil;
 	at: #'IteratorTestCase' put: nil;
+	at: #'EnvVarGuardTestCase' put: nil;
 	at: #'ClassMethodDecoratorOrderTestCase' put: nil;
 	at: #'SlotsInheritedDictTestCase' put: nil;
 	at: #'TimedeltaFloatOperandTestCase' put: nil;
@@ -1540,6 +1541,7 @@ input src/smalltalk/PythonTests/ImportlibTestCase.gs
 input src/smalltalk/PythonTests/PackageImportTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
+input src/smalltalk/PythonTests/EnvVarGuardTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodDecoratorOrderTestCase.gs
 input src/smalltalk/PythonTests/SlotsInheritedDictTestCase.gs
 input src/smalltalk/PythonTests/TimedeltaFloatOperandTestCase.gs
