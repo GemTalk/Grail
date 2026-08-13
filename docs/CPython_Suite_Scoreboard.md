@@ -61,8 +61,8 @@ different rows and merges cleanly.
 | test.test_listcomps | ERROR | 60 | 7 | 19 | 0 |  |
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
 | test.test_copy | ERROR | 81 | 21 | 12 | 0 |  |
-| test.test_scope | ERROR | 41 | 4 | 1 | 4 |  |
 | test.test_yield_from | ERROR | 43 | 17 | 12 | 0 |  |
+| test.test_scope | ERROR | 41 | 3 | 1 | 4 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
 | test.test_format | OK | 18 | 0 | 0 | 3 |  |
 | test.test_binop | IMPORTERROR | 0 | 0 | 0 | 0 | B class object has no attribute 'register' |

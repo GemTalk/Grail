@@ -1244,3 +1244,55 @@ testAHandlerRaiseLeavesTheTry
 		self assert: (answer = true)
 			description: 'handler-raise check failed: ' , k , ' -> ' , answer printString].
 %
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testKeyErrorMessageQuotesItsKey
+	"``str(KeyError(k))'' is ``repr(k)'', not ``str(k)''.
+
+	KeyError is the one built-in exception whose message shows its argument's
+	REPR, and it is deliberate: a missing key is usually a string, so
+	``KeyError: missing'' reads as prose where ``KeyError: 'missing''' shows the
+	value actually looked up.  It also tells ``KeyError('')'' apart from
+	``KeyError()''.  Grail inherited BaseException's plain str, so every KeyError
+	message was unquoted and every traceback ending in one differed from CPython.
+
+	The rule is uniform for a single argument rather than special-cased for
+	strings -- KeyError(1) is ``1'', KeyError(None) is ``None'',
+	KeyError(('t', 1)) is ``('t', 1)'' -- and with no arguments or several,
+	CPython falls straight back to BaseException_str, so KeyError>>__str__ sends
+	``super __str__'' rather than reimplementing the empty and tuple cases.
+
+	Reaches further than it looks: traceback.py renders an exception through
+	str(), so this changes the last line of every traceback that ends in a
+	KeyError.  That is the point -- CPython's line is ``KeyError: 'missing'''.
+
+	Found while writing tests/python/handler_raise.py, which had to raise
+	RuntimeError instead of KeyError to avoid asserting this bug by accident.
+
+	Every expectation is verified against real CPython by running the fixture
+	directly; see tests/python/keyerror_str.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'keyerror_str' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/keyerror_str.py')
+		name: 'keyerror_str'.
+	#( 'a_string_key_is_quoted'
+	   'the_quoting_distinguishes_an_empty_key_from_no_key'
+	   'an_int_key_uses_repr_too'
+	   'a_none_key_uses_repr'
+	   'a_tuple_key_uses_repr'
+	   'a_newline_in_the_key_is_escaped_by_repr'
+	   'several_args_fall_back_to_the_args_tuple'
+	   'repr_of_the_exception_is_unchanged'
+	   'args_are_unchanged'
+	   'a_real_dict_miss_reports_the_quoted_key'
+	   'a_traceback_line_shows_the_quoted_key'
+	   'a_subclass_inherits_the_rule'
+	   'other_exceptions_are_untouched' ) do: [:k |
+		| answer |
+		answer := mod @env0:perform: k asSymbol env: 1.
+		self assert: (answer = true)
+			description: 'KeyError-str check failed: ' , k , ' -> ' , answer printString].
+%

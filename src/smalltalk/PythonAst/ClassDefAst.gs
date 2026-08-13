@@ -1088,6 +1088,38 @@ printSmalltalkRuntimeOn: aStream
 				CallAst classBodyBoundNames: bound.
 				stmt printSmalltalkOn: aStream.
 				aStream lf]].
+		"A class-body statement assigning a name the body declared ``nonlocal''.
+		It binds the ENCLOSING function's variable, not a class attribute, so the
+		structural compile has nothing to emit for it and dropped it whole --
+		``nonlocal x; x += 1'' in a class body left the outer x untouched and
+		produced no code at all (test_scope testNonLocalClass).  The name is
+		already excluded from classBodyAttributes, so it does not become a class
+		attribute either.
+
+		Emitted through the statement's OWN printSmalltalkOn: in THIS enclosing
+		scope, where the name is a real Smalltalk temp and ``x := ...'' compiles
+		-- the same trick the runtime-statement pass above uses.  Deliberately
+		NOT inside classBodyRuntimeClass: that flag routes bare-NAME bindings to
+		the per-class store, which is the opposite of what a nonlocal name wants.
+
+		ORDERING: these run after the class attributes are initialised rather
+		than at their source position in the body.  It matters only if an
+		attribute value expression READS the nonlocal name, which would then see
+		the pre-write value; the common shape (a ``nonlocal'' declaration and its
+		write at the top of the body, read later from a method) is unaffected."
+		body body doWithIndex: [:stmt :pos |
+			| targets |
+			targets := self ___classBodyNonlocalTargetNames___: stmt.
+			(targets isEmpty not
+				and: [targets allSatisfy: [:t |
+					self ___nonlocalTargetIsAssignableHere___: t id asSymbol]]) ifTrue: [
+				| bound |
+				bound := IdentitySet new.
+				firstBinding keysAndValuesDo: [:nm :p |
+					p < pos ifTrue: [bound add: nm]].
+				CallAst classBodyBoundNames: bound.
+				stmt printSmalltalkOn: aStream.
+				aStream lf]].
 	] ensure: [
 		"RESTORE (not hardcode-off) the body-emit flags: a NESTED class
 		emits inside the OUTER class's attr-value section, and clearing
@@ -2302,11 +2334,20 @@ classBodyAttributes
 	value AST (emitted once below, the rest aliased); attribute and
 	subscript targets declare nothing on the class and yield no entry."
 
-	| pairs aliasNames |
+	| pairs aliasNames nonlocals |
 	"Sibling-method aliases (``__lt__ = __eq__'') are compiled as real
 	delegating methods (see ___classBodyMethodAliases___), NOT materialized
 	as class attributes -- exclude their names here."
 	aliasNames := (self ___classBodyMethodAliases___ collect: [:a | a key]) asIdentitySet.
+	"A name the body declared ``nonlocal'' names the ENCLOSING function's
+	binding, so an assignment to it is not a class attribute at all -- CPython
+	keeps it out of the class __dict__, which test_scope's testNonLocalClass
+	asserts directly.  Grail bound it as an attribute AND left the enclosing
+	variable untouched, so the statement was wrong in both directions; the
+	write itself is emitted by emitClassBodyNonlocalWritesOn:."
+	nonlocals := (body notNil and: [body nonlocalNames notNil])
+		ifTrue: [body nonlocalNames]
+		ifFalse: [#()].
 	pairs := OrderedCollection new.
 	"Each binding form says which attributes it yields; this method only
 	applies the rule ClassDefAst owns -- drop the sibling-method aliases,
@@ -2318,7 +2359,9 @@ classBodyAttributes
 	that, then ``del json''.)"
 	body body do: [:stmt |
 		stmt classBodyAttributePairs do: [:pair |
-			(aliasNames includes: pair key) ifFalse: [pairs add: pair]]].
+			((aliasNames includes: pair key)
+				or: [nonlocals includes: pair key asSymbol])
+					ifFalse: [pairs add: pair]]].
 	^ pairs
 %
 
@@ -2554,6 +2597,70 @@ ___isClassBodyAttributeAssign___: stmt
 	(tgt value isKindOf: NameAst) ifFalse: [^ false].
 	^ self body body anySatisfy: [:s |
 		(s isKindOf: ClassDefAst) and: [s name asString = tgt value id asString]]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___nonlocalTargetIsAssignableHere___: aSymbol
+	"True when aSymbol is a plain assignable Smalltalk temp in the scope this
+	classdef is being emitted into, so ``aSymbol := value'' compiles there.
+
+	A ``nonlocal'' declaration only says the name is not local to the class
+	body; it does not guarantee Grail HAS a temp for it.  ``__class__'' is the
+	counter-example that matters -- CPython gives every method an implicit
+	__class__ closure cell, so
+
+	    class X:
+	        nonlocal __class__
+	        __class__ = 42
+
+	is legal there and Grail has no such temp, making the emitted
+	``__class__ := 42'' a CompileError 1001 that takes the whole enclosing
+	method down (test_super's test_various___class___pathologies, which went
+	from a plain assertion failure to a codegen-gap stub when the write was
+	emitted unconditionally).
+
+	Tested the same way the closure-cell writer is: render the name through
+	NameAst at the emission point and require it to come back as the bare
+	identifier.  Anything else -- Smalltalk ``self'', a ___classCell___ read, a
+	module attribute load -- is not an assignable variable.  Failing the test
+	the statement stays dropped, which is what it was before; the name is still
+	excluded from the class attributes, so the CPython-visible
+	``__class__ not in X.__dict__'' half keeps holding."
+
+	^ (CallAst ___freeVariableReadSource___: aSymbol parent: self parent)
+		= aSymbol asString
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyNonlocalTargetNames___: stmt
+	"The bare-NAME targets of stmt that this class body declared ``nonlocal'',
+	or an empty collection when there are none.
+
+	Such a statement assigns the ENCLOSING function's binding rather than a
+	class attribute, so it needs the enclosing-scope emit rather than the
+	structural class-attribute compile -- see the third body pass in
+	printSmalltalkRuntimeOn:.
+
+	Handles the two forms that can carry a bare-name target: ``x = v'' and
+	``x += v''.  An AugAssignAst is the one that made the gap visible, since it
+	implements neither ___boundTargetNames___ nor classBodyAttributePairs and so
+	is invisible to every other class-body scan; the plain-assign case was
+	worse than invisible, binding a class attribute of the same name."
+
+	| targets nonlocals |
+	nonlocals := (body notNil and: [body nonlocalNames notNil])
+		ifTrue: [body nonlocalNames]
+		ifFalse: [^ #()].
+	nonlocals isEmpty ifTrue: [^ #()].
+	targets := (stmt isKindOf: AssignAst)
+		ifTrue: [stmt targets]
+		ifFalse: [(stmt isKindOf: AugAssignAst)
+			ifTrue: [Array with: stmt target]
+			ifFalse: [^ #()]].
+	^ (targets select: [:t |
+		(t isKindOf: NameAst) and: [nonlocals includes: t id asSymbol]])
 %
 
 category: 'Grail-Class Compilation'
