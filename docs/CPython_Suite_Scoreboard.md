@@ -62,13 +62,13 @@ different rows and merges cleanly.
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
 | test.test_copy | ERROR | 81 | 21 | 12 | 0 |  |
 | test.test_scope | ERROR | 41 | 4 | 1 | 4 |  |
-| test.test_yield_from | ERROR | 43 | 18 | 11 | 0 |  |
+| test.test_yield_from | ERROR | 43 | 17 | 12 | 0 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
 | test.test_format | OK | 18 | 0 | 0 | 3 |  |
 | test.test_binop | IMPORTERROR | 0 | 0 | 0 | 0 | B class object has no attribute 'register' |
 | test.test_complex | ERROR | 37 | 13 | 12 | 0 |  |
 | test.test_enumerate | IMPORTERROR | 0 | 0 | 0 | 0 | name 'enumerate' is not defined |
-| test.test_raise | ERROR | 37 | 6 | 9 | 0 |  |
+| test.test_raise | ERROR | 37 | 1 | 14 | 0 |  |
 | test.test_funcattrs | ERROR | 35 | 14 | 13 | 1 |  |
 | test.test_decorators | ERROR | 16 | 1 | 5 | 0 |  |
 | test.test_print | ERROR | 9 | 6 | 2 | 0 |  |
@@ -82,7 +82,7 @@ different rows and merges cleanly.
 | test.test_subclassinit | ERROR | 17 | 7 | 3 | 0 |  |
 | test.test_super | ERROR | 40 | 13 | 24 | 3 |  |
 | test.test_typechecks | ERROR | 6 | 2 | 1 | 0 |  |
-| test.test_with | IMPORTERROR | 0 | 0 | 0 | 0 | Expression Context should be <Load> but is <StoreAst> |
+| test.test_with | ERROR | 54 | 6 | 5 | 0 |  |
 | test.test_positional_only_arg | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'dis' |
 | test.test_string_literals | ERROR | 20 | 3 | 10 | 0 |  |
 | test.test_genericclass | ERROR | 22 | 12 | 7 | 1 |  |

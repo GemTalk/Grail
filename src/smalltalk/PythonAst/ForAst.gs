@@ -198,6 +198,16 @@ emitForTargetStore: aNameAst source: sourceExpr on: aStream
 	next iteration value), not parenthesized — wrap it here when the
 	store needs the value as a keyword-message arg."
 
+	"The target need not be a NAME: ``for h.slot in xs:'',
+	``for d['k'] in xs:'' and ``for [a, b] in xs:'' are all legal Python,
+	and printSmalltalkOn: routes every non-TupleAst target here.  Those
+	shapes used to reach isModuleScopeForTarget:, which sends
+	isModuleVariableName: -- a NameAst-only selector -- and died with a
+	doesNotUnderstand at COMPILE time, taking the enclosing module with
+	it.  Hand them to the shared store emitter."
+	(aNameAst isKindOf: NameAst) ifFalse: [
+		^ self ___emitTargetStore___: aNameAst from: sourceExpr on: aStream].
+
 	(self isModuleScopeForTarget: aNameAst) ifTrue: [
 		aStream
 			nextPutAll: self ___moduleStoreReceiverExpr___;
@@ -324,11 +334,14 @@ emitUnpackOn: aStream target: aTarget source: sourceExpr depth: aDepth
 		].
 		^ self
 	].
-	"Fallback: emit a single assignment via the target's own
-	printSmalltalkOn:.  Covers attribute / subscript targets that
-	the parser rarely produces in for-loops but might appear."
-	aTarget printSmalltalkOn: aStream.
-	aStream nextPutAll: ' := '; nextPutAll: sourceExpr; nextPut: $.; lf
+	"Attribute / subscript target -- ``for h.slot in xs:'' and
+	``for d['k'] in xs:'' are legal Python.  This used to emit the target
+	via its own printSmalltalkOn:, which asserts a LOAD context and so
+	raised ``Expression Context should be <Load> but is <Store>'' at
+	compile time, taking the whole enclosing module down.  Route it to the
+	shared store emitter instead, the same one AssignAst and WithAst use."
+	self ___emitTargetStore___: aTarget from: sourceExpr on: aStream.
+	aStream lf
 %
 method: ForAst
 target

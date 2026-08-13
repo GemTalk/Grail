@@ -3255,12 +3255,31 @@ ___illegalStoreTargetDesc___: anExpr
 	test_illegal_assignment) and lets every other node through, so ordinary
 	Name / Attribute / Subscript / tuple / list / starred targets are
 	unaffected.  (The stricter augmented-assignment rule -- only a single
-	simple target -- is enforced separately at the ``+='' parse site.)"
+	simple target -- is enforced separately at the ``+='' parse site.)
+
+	A CONSTANT is the other form that can never be a target: ``None = 1'',
+	``with mock as None:'' and ``with mock as (foo, None, bar):'' are all
+	SyntaxError in CPython, and Grail used to accept every one of them and
+	emit code that silently did the wrong thing.  test_with's
+	testAssignmentToNoneError / ...TupleOnlyContainingNone... /
+	...TupleContainingNone... are three tests on exactly this.
+
+	CPython appends ``here. Maybe you meant '==' instead of '='?'' when the
+	target is a literal in an ``='' STATEMENT specifically; this hook is
+	shared by every store context (with-as and for-targets get the bare
+	message), so it emits the bare noun in all of them."
 
 	(anExpr isKindOf: DictCompAst) ifTrue: [^ 'dict comprehension'].
 	(anExpr isKindOf: ListCompAst) ifTrue: [^ 'list comprehension'].
 	(anExpr isKindOf: SetCompAst) ifTrue: [^ 'set comprehension'].
 	(anExpr isKindOf: GeneratorExpAst) ifTrue: [^ 'generator expression'].
+	(anExpr isKindOf: ConstantAst) ifTrue: [
+		"CPython names the three keyword constants; every other literal
+		(number, string, ellipsis, ...) is just ``literal''."
+		anExpr value == nil ifTrue: [^ 'None'].
+		anExpr value == true ifTrue: [^ 'True'].
+		anExpr value == false ifTrue: [^ 'False'].
+		^ 'literal'].
 	^ nil
 %
 
