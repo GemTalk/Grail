@@ -895,6 +895,59 @@ ___grailBuildMembers: cls names: attrNames
 	that delegates to super().__new__ hits the guard in
 	Enum>>___new__:kw:.  ensure: clears it even when that guard (or a
 	user __new__/__init__) raises out of the loop."
+	"THE CLASS-CALL PATH IS FIXED UP BEFORE THE LOOP, not after it, so that a
+	class-body __init__ can call cls(value) on the members built so far:
+
+	    class UniqueEnum(Enum):
+	        def __init__(self, *args):
+	            ...
+	            e = cls(self.value).name
+
+	is CPython's test_no_duplicates, and _value2member_map_ is live there
+	because EnumType.__new__ fills it member by member.  Grail's equivalent --
+	the registry record above -- is already published before the loop, but the
+	generic instantiation still SHADOWED the lookup, so cls(value) built a
+	fresh instance and ran __init__ on it: __init__ calling cls(...) recursed
+	until RecursionError.  Nothing in the loop needs the generic (member
+	construction calls the DATA TYPE's value:value:, never the enum's), and
+	the ClassDefAst emit it undoes has already happened by the time this hook
+	runs."
+	"Drop the ClassDefAst-emitted generic instantiation (env-1
+	``value:value:``) so calling the class — Color(value) — reaches the
+	inherited enum value-lookup instead of trying to build an instance.
+	ONLY the generic one: ___mergeSecondaryBases___ pre-installs Enum's
+	own value:value: (category Grail-Enum Metaclass) on MI enums whose
+	kernel-rooted chain would otherwise dispatch the class-call to the
+	data base's constructor (str-mixin enums hit ``decoding str is not
+	supported'')."
+	(((cls @env0:class @env0:methodDictForEnv: 1) @env0:includesKey: #'value:value:')
+		and: [((cls @env0:class @env0:categoryOfSelector: #'value:value:' environmentId: 1)
+			== #'Grail-Enum Metaclass') not])
+		ifTrue: [
+			[cls @env0:class @env0:removeSelector: #'value:value:' environmentId: 1]
+				@env0:on: Error do: [:ex |
+					"A host extent may hook method removal (e.g. a change-
+					notification framework patched into Behavior) and fail
+					AFTER the selector is already gone.  Swallow the hook's
+					failure when the removal took; anything else passes."
+					((cls @env0:class @env0:methodDictForEnv: 1) @env0:includesKey: #'value:value:')
+						ifTrue: [ex @env0:pass]]].
+	"With the generic gone, make sure the class-call actually reaches
+	the ENUM lookup: for MI enums whose kernel-rooted metaclass chain
+	provides some other value:value: (str-mixin classes dispatched the
+	class-call into CharacterCollection's constructor -- ``decoding str
+	is not supported''), compile Enum's version onto the metaclass.
+	This runs at HOOK time, i.e. after the ClassDefAst-emitted generic
+	instantiation compile, so nothing overwrites it afterwards."
+	[ | prov |
+	prov := cls @env0:class @env0:whichClassIncludesSelector: #'value:value:' environmentId: 1.
+	((prov == Enum @env0:class)
+		or: [(prov == IntEnum @env0:class)
+		or: [(prov @env0:notNil and: [(cls @env0:class @env0:categoryOfSelector: #'value:value:' environmentId: 1) == #'Grail-Enum Metaclass'])]]) ifFalse: [
+		(cls @env0:class) ___compileMethod:
+			(Enum @env0:class @env0:sourceCodeAt: #'value:value:' environmentId: 1)
+			category: 'Grail-Enum Metaclass']]
+		@env0:on: Error do: [:ex | "best effort" ].
 	Enum ___grailBuildingSet @env0:add: cls.
 	[
 	allNames @env0:do: [:nameSym | | nameStr hasAccessor |
@@ -1328,42 +1381,6 @@ ___grailBuildMembers: cls names: attrNames
 		orderNames @env0:asArray @env0:= memberNames ifFalse: [
 			TypeError ___signal___: cls @env0:name @env0:asString
 				@env0:, ': member order does not match _order_']] ] @env0:value.
-	"Drop the ClassDefAst-emitted generic instantiation (env-1
-	``value:value:``) so calling the class — Color(value) — reaches the
-	inherited enum value-lookup instead of trying to build an instance.
-	ONLY the generic one: ___mergeSecondaryBases___ pre-installs Enum's
-	own value:value: (category Grail-Enum Metaclass) on MI enums whose
-	kernel-rooted chain would otherwise dispatch the class-call to the
-	data base's constructor (str-mixin enums hit ``decoding str is not
-	supported'')."
-	(((cls @env0:class @env0:methodDictForEnv: 1) @env0:includesKey: #'value:value:')
-		and: [((cls @env0:class @env0:categoryOfSelector: #'value:value:' environmentId: 1)
-			== #'Grail-Enum Metaclass') not])
-		ifTrue: [
-			[cls @env0:class @env0:removeSelector: #'value:value:' environmentId: 1]
-				@env0:on: Error do: [:ex |
-					"A host extent may hook method removal (e.g. a change-
-					notification framework patched into Behavior) and fail
-					AFTER the selector is already gone.  Swallow the hook's
-					failure when the removal took; anything else passes."
-					((cls @env0:class @env0:methodDictForEnv: 1) @env0:includesKey: #'value:value:')
-						ifTrue: [ex @env0:pass]]].
-	"With the generic gone, make sure the class-call actually reaches
-	the ENUM lookup: for MI enums whose kernel-rooted metaclass chain
-	provides some other value:value: (str-mixin classes dispatched the
-	class-call into CharacterCollection's constructor -- ``decoding str
-	is not supported''), compile Enum's version onto the metaclass.
-	This runs at HOOK time, i.e. after the ClassDefAst-emitted generic
-	instantiation compile, so nothing overwrites it afterwards."
-	[ | prov |
-	prov := cls @env0:class @env0:whichClassIncludesSelector: #'value:value:' environmentId: 1.
-	((prov == Enum @env0:class)
-		or: [(prov == IntEnum @env0:class)
-		or: [(prov @env0:notNil and: [(cls @env0:class @env0:categoryOfSelector: #'value:value:' environmentId: 1) == #'Grail-Enum Metaclass'])]]) ifFalse: [
-		(cls @env0:class) ___compileMethod:
-			(Enum @env0:class @env0:sourceCodeAt: #'value:value:' environmentId: 1)
-			category: 'Grail-Enum Metaclass']]
-		@env0:on: Error do: [:ex | "best effort" ].
 	"A data-mixed enum's metaclass lacks the Enum class-side protocol
 	(_member_names_, _value_repr_, mro, __reversed__, class repr, ...); install
 	it.  No-op for pure Enum/Flag and IntEnum/StrEnum-rooted classes."
