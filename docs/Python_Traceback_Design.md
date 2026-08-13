@@ -2209,4 +2209,47 @@ earlier designs broke. SUnit 4176, all green.
 
 Still open from §9.23, unrelated: `str(KeyError('x'))` is `'x'` in Grail and
 `"'x'"` in CPython, because KeyError's `__str__` is the *repr* of its argument.
-The fixture uses `RuntimeError` so the two stay separate.
+The fixture uses `RuntimeError` so the two stay separate. **Closed in §9.25.**
+
+### 9.25 KeyError's message quotes its key (2026-08-13, gs40)
+
+Closes the loose end §9.24 recorded. `str(KeyError(k))` is `repr(k)`, not `str(k)`
+— KeyError is the one built-in exception whose message shows its argument's repr,
+and it is deliberate: a missing key is usually a string, so `KeyError: missing`
+reads as prose where `KeyError: 'missing'` shows the value actually looked up. It
+also tells `KeyError('')` apart from `KeyError()`.
+
+Grail inherited `BaseException >> __str__`, so every KeyError message was
+unquoted. The rule is uniform for a single argument rather than special-cased for
+strings — `KeyError(1)` → `1`, `KeyError(None)` → `None`, `KeyError(('t', 1))` →
+`('t', 1)` — and for no arguments or several, CPython falls straight back to
+`BaseException_str`, so `KeyError >> __str__` sends `super __str__` rather than
+reimplementing the empty and tuple cases.
+
+**It reaches further than it looks.** `traceback.py` renders an exception through
+`str()`, so this changes the last line of every traceback ending in a KeyError.
+That is the point, and it is also why five of Grail's own tests failed on the
+first run — all five had encoded the unquoted form.
+
+**Three of the five were the interesting kind.** `KeyError ___signal___: key
+printString` appeared at five raise sites (`PyInstanceDict`, `PyModuleDict`,
+`PyEnumTypes`) — a hand-rolled *workaround* for the missing repr rule, quoting the
+key at the raise instead of in `__str__`. With the real rule in place those
+double-quoted (`KeyError: "'k'"`), which is how they were found. They now pass the
+raw key, as `dict.gs` and `gemstone.gs` always did. The `popitem(): dictionary is
+empty` sites needed no change: CPython quotes that message too, since it is just
+a one-argument KeyError like any other.
+
+**And a fixture was pinning the bug again.** `tests/python/exception_naming.py`
+asserted `KeyError: x` in a loop over builtin exception classes, which made that
+check **false under real CPython** — the third time this session a
+standalone-runnable fixture turned out to encode Grail's behaviour rather than
+CPython's (after `exec_class_definition.py` in §9.21 and the `handler_raise.py`
+near-miss in §9.23). Worth stating as a pattern: *a fixture is only verified
+against CPython if someone actually ran it there*, and the ones that predate that
+habit are where these hide.
+
+**Result.** `tests/python/keyerror_str.py` — 13 checks, all green under real
+CPython 3.14.6 — passes in full. SUnit **4202, all green** (five stale assertions
+corrected). Full 71-module sweep: **0 regressions**, and no row moves — this is
+correctness the scoreboard cannot see, which is the honest way to report it.
