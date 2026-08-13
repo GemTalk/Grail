@@ -130,3 +130,19 @@ test.test_format
 #
 # NOTE: test_json and test_string are PACKAGES (directories) in 3.14, not
 # single modules -- out of scope for the V1 single-module harness.
+#
+# Not wired, and not for lack of trying: test_metaclass, test_unpack_ex,
+# test_genexps, test_descrtut, test_extcall and test_pep646_syntax carry NO
+# unittest.TestCase at all -- they are pure doctest modules, which
+# _grail_harness's discovery cannot see, so each scores SKIP with 0 tests and
+# reads on the board like a module that passed nothing rather than one nobody
+# can measure.  8 of the 179 unwired-but-importable in-scope modules are this
+# shape (scripts/cpython_import_census.py --cpython-lib counts them).  Teaching
+# the harness doctest discovery is what unlocks them.
+test.test_binop
+test.test_complex
+test.test_enumerate
+test.test_raise
+test.test_funcattrs
+test.test_decorators
+test.test_print

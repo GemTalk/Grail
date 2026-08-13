@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 30 | 3 | 57 | 90 |
+| P1 | 30 | 10 | 50 | 90 |
 | P2 | 13 | 3 | 18 | 34 |
 | P3 | 0 | 1 | 55 | 56 |
 | P4 | 0 | 0 | 75 | 75 |
-| **In-scope** | **43** | **7** | **205** | **255** |
+| **In-scope** | **43** | **14** | **198** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -88,7 +88,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **43 of those score OK**.
+Of the 255 in-scope modules, **57 are wired into the harness** (P1 40 · P2 16 · P3 1) and **43 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -107,24 +107,24 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_asyncgen` | Async generators — a core language feature. |
 | ✅ | `test_augassign` | Augmented-assignment semantics (language). |
 | ✅ | `test_baseexception` | BaseException hierarchy (language). |
-|  | `test_binop` | Binary-operator dispatch (language). |
+| ❗ | `test_binop` | Binary-operator dispatch (language). |
 | ✅ | `test_bool` | bool type (language). |
 |  | `test_builtin` | Built-in functions (language). |
 | ✅ | `test_bytes` | bytes / bytearray (language/core type). |
 |  | `test_call` | Call protocol (language). |
 |  | `test_class` | Class definition/semantics (language). |
 | ✅ | `test_compare` | Object comparison protocol (language). |
-|  | `test_complex` | complex type (language). |
+| ❗ | `test_complex` | complex type (language). |
 | ✅ | `test_contains` | Membership (`in`) protocol (language). |
 |  | `test_coroutines` | Coroutines / async-await (language). |
-|  | `test_decorators` | Decorators (language). |
+| ❗ | `test_decorators` | Decorators (language). |
 |  | `test_descr` | Descriptors / new-style class machinery (language). |
 |  | `test_descrtut` | Descriptor tutorial doctests (language). |
 | ✅ | `test_dict` | dict — core type (in harness). |
 | ✅ | `test_dictcomps` | Dict comprehensions (language). |
 | ✅ | `test_dictviews` | dict keys/values/items views (language). |
 |  | `test_dynamic` | Dynamic name binding / exec (language). |
-|  | `test_enumerate` | enumerate builtin (language). |
+| ❗ | `test_enumerate` | enumerate builtin (language). |
 |  | `test_eof` | Parser EOF handling (language). |
 |  | `test_except_star` | except* / PEP 654 (language). |
 |  | `test_exception_group` | ExceptionGroup (language). |
@@ -136,7 +136,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_flufl` | barry_as_FLUFL __future__ (language). |
 | ✅ | `test_format` | str formatting / format() (language). |
 |  | `test_fstring` | f-strings (language). |
-|  | `test_funcattrs` | Function/method attributes (language). |
+| ❗ | `test_funcattrs` | Function/method attributes (language). |
 |  | `test_future_stmt` | __future__ statements (language). |
 | ✅ | `test_generator_stop` | PEP 479 StopIteration handling (language). |
 |  | `test_generators` | Generators (language). |
@@ -163,9 +163,9 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_pep646_syntax` | Variadic generics syntax / PEP 646 (language). |
 |  | `test_positional_only_arg` | Positional-only args / (language). |
 | ✅ | `test_pow` | pow() / ** (language). |
-|  | `test_print` | print() (language/builtin). |
+| ❗ | `test_print` | print() (language/builtin). |
 | ✅ | `test_property` | property descriptor (language). |
-|  | `test_raise` | raise statement (language). |
+| ❗ | `test_raise` | raise statement (language). |
 |  | `test_range` | range (language/builtin). |
 | ✅ | `test_richcmp` | Rich comparison operators (language). |
 | ❗ | `test_scope` | Lexical scoping / closures (language). |
