@@ -1029,9 +1029,31 @@ def extract_tb(tb, limit=None, lookup_lines=True, capture_locals=False):
 
 
 def extract_stack(f=None, limit=None):
-    # No live-frame introspection yet; an empty StackSummary is the honest
-    # answer (a real stack walk is a separate future feature).
-    return StackSummary()
+    """A StackSummary for the live stack at ``f'' (the caller when f is None).
+
+    CPython is ``StackSummary.extract(walk_stack(f), limit=limit)'', and now that
+    walk_stack is real, so is this -- it used to answer an empty StackSummary,
+    which was honest when there were no frame objects to walk and is not any
+    more.
+
+    Note the ORDER: walk_stack yields innermost-first, and a StackSummary is
+    outermost-first (the same ``most recent call last'' order a traceback
+    prints), so the walk is reversed.  Getting this backwards renders a stack
+    upside down, which reads as plausible until compared with CPython."""
+    if f is None:
+        # _live_frames_of_caller already excludes this module's frames, so there
+        # is no count to get wrong.
+        frames = [(fr, _safe_lineno(fr)) for fr in _live_frames_of_caller()]
+    else:
+        frames = walk_stack(f)
+    if not frames:
+        return StackSummary()
+    frames = list(reversed(frames))
+    try:
+        summary = StackSummary.extract(iter(frames), limit=limit)
+    except Exception:
+        return StackSummary()
+    return summary
 
 
 def format_tb(tb, limit=None):
@@ -1039,7 +1061,11 @@ def format_tb(tb, limit=None):
 
 
 def format_stack(f=None, limit=None):
-    return []
+    """The live stack rendered as a list of strings, one entry per frame.
+
+    CPython: ``format_list(extract_stack(f, limit=limit))''.  As with
+    extract_stack, this answered [] only because there was no stack to walk."""
+    return format_list(extract_stack(f, limit=limit))
 
 
 def format_list(extracted_list):
@@ -1085,10 +1111,90 @@ def walk_tb(tb):
         cur = cur.tb_next
 
 
+def _safe_lineno(frame):
+    """A frame's f_lineno, or None.  Reading it must never raise: a frame whose
+    ip does not resolve to a Python line reports 0 rather than going missing."""
+    try:
+        return frame.f_lineno
+    except Exception:
+        return None
+
+
+def _own_filename():
+    """This module's file, used to keep traceback.py's own frames out of a live
+    stack walk.
+
+    CPython's format_stack() stops at its CALLER: walk_stack / extract_stack /
+    format_stack never appear in their own output.  The obvious way to arrange
+    that is to drop a fixed number of innermost frames -- and that is exactly
+    what broke under native code, where a frame whose ip does not resolve can go
+    missing, so "drop one" silently dropped the CALLER instead.  Identifying the
+    frames by FILE cannot miscount however many of them survive."""
+    try:
+        return __file__
+    except NameError:
+        pass
+    try:
+        return _own_filename.__code__.co_filename
+    except Exception:
+        return None
+
+
+def _live_frames_of_caller():
+    """The caller's frames, innermost first, with this module's own removed."""
+    try:
+        frame = sys._getframe()
+    except Exception:
+        return []
+    chain = []
+    # Bounded: f_back is reconstructed rather than owned by the VM, and a cycle
+    # would hang the formatter whose job is to report a problem.
+    while frame is not None and len(chain) < 10000:
+        chain.append(frame)
+        try:
+            frame = frame.f_back
+        except Exception:
+            break
+    mine = _own_filename()
+    if mine is not None:
+        while chain:
+            try:
+                if chain[0].f_code.co_filename != mine:
+                    break
+            except Exception:
+                break
+            chain.pop(0)
+    return chain
+
+
 def walk_stack(f):
     """Yield (frame, lineno) pairs walking the stack starting at ``f''.
-    Grail has no real frame objects so the generator is empty."""
-    return iter(())
+
+    ``f=None'' means the CALLER's stack, which is what every caller in the
+    stdlib passes.  This used to answer an empty iterator, on the grounds that
+    Grail had no frame objects; sys._getframe now reconstructs them from the
+    VM's raise-time capture, so the walk is real.
+
+    Returns a LIST rather than a generator, as everything else in this module
+    does: callers either iterate it once or join it, and a list is easier to
+    assert on."""
+    if f is None:
+        chain = _live_frames_of_caller()
+        return [(fr, _safe_lineno(fr)) for fr in chain]
+    frames = []
+    # Bounded, because f_back is reconstructed rather than owned by the VM: a
+    # cycle would hang the formatter whose job is to report a problem.
+    while f is not None and len(frames) < 10000:
+        try:
+            lineno = f.f_lineno
+        except Exception:
+            lineno = None
+        frames.append((f, lineno))
+        try:
+            f = f.f_back
+        except Exception:
+            break
+    return frames
 
 
 def _indent_lines(text, prefix):

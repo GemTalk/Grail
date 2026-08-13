@@ -833,6 +833,67 @@ getrecursionlimit
 
 category: 'Grail-Built-in Functions'
 method: sys
+_getframe
+	"_getframe() -> the CALLER's frame.  CPython's default depth is 0, which
+	means the frame of whoever called _getframe, not _getframe's own."
+
+	^ self @env1:_getframe: 0
+%
+
+category: 'Grail-Built-in Functions'
+method: sys
+_getframe: depth
+	"_getframe(depth) -> the frame ``depth'' levels above the caller.
+
+	Grail has no interpreter frames to hand out, so this reconstructs them from
+	the VM's raise-time stack capture -- see
+	BaseException class>>___liveFrameChain___ for why raising is the only way a
+	RUNNING gem can read its own stack.  The frames are real PyFrames, carrying
+	f_code / f_lineno / f_back, which is what traceback.walk_stack and
+	StackSummary.extract need.
+
+	Deliberately NOT carrying f_locals.  A Python function's locals are Smalltalk
+	method TEMPS, and the capture records only (method, ip, receiver) -- so the
+	values are not in it, and their NAMES are not either.  Reporting an empty
+	f_locals would be worse than having none: code that reads it would silently
+	see a frame with no variables rather than an AttributeError telling it the
+	truth."
+
+	| frame n |
+	frame := BaseException @env0:___liveFrameChain___.
+	"Drop this implementation's own frames.  Both _getframe and _getframe: decode
+	to the Python name ``_getframe'', so this skips either arrival route, and what
+	is left innermost is the caller -- CPython's depth 0."
+	[(frame @env0:~~ nil) and: [(frame @env0:~~ None) and: [
+		(self @env1:___frameName___: frame) @env0:= '_getframe']]]
+		whileTrue: [frame := frame @env0:dynamicInstVarAt: #'f_back'].
+	n := depth.
+	[(n @env0:notNil) and: [n @env0:> 0]] whileTrue: [
+		((frame @env0:== nil) or: [frame @env0:== None]) ifTrue: [
+			^ ValueError ___signal___: 'call stack is not deep enough'].
+		frame := frame @env0:dynamicInstVarAt: #'f_back'.
+		n := n @env0:- 1].
+	((frame @env0:== nil) or: [frame @env0:== None]) ifTrue: [
+		^ ValueError ___signal___: 'call stack is not deep enough'].
+	^ frame
+%
+
+category: 'Grail-Built-in Functions'
+method: sys
+___frameName___: aFrame
+	"The co_name of a frame, or nil.  PyFrame/PyCode keep their fields in dynamic
+	instVars with no accessors, so this reads the slots."
+
+	| code |
+	code := [aFrame @env0:dynamicInstVarAt: #'f_code']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	code isNil ifTrue: [^ nil].
+	^ [code @env0:dynamicInstVarAt: #'co_name']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
+%
+
+category: 'Grail-Built-in Functions'
+method: sys
 gettrace
 	"gettrace() -> None"
 	^ None

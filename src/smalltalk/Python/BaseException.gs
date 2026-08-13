@@ -1548,3 +1548,148 @@ ___ensureFinally___: protectedBlock finally: finallyBlock
 					[finallyBlock value]
 						ensure: [self ___setCurrentException___: sav] ] ]
 %
+
+category: 'Grail-Live Frames'
+classmethod: BaseException
+___liveFrameChain___
+	"The CALLER's live Python stack as a chain of PyFrames, innermost first,
+	linked by f_back.  Answers nil when no frame could be built.
+
+	This is what sys._getframe stands on, and it gets the stack the only way a
+	running gem can: by RAISING.  GsProcess>>_frameContentsAt: reads a SUSPENDED
+	process -- ``GsProcess current'' inside running code answers stackDepth 0 and
+	no frames at all -- while the VM's raise-time capture
+	(#GemExceptionSignalCapturesStack) fills _gsStack with (method, ip, receiver)
+	triples for the whole live stack.  So a throwaway Error is signalled and
+	immediately caught, purely for its capture.  CPython's _getframe is free;
+	this one costs a raise, which the traceback machinery already measures at
+	~1.3 ns per frame.
+
+	Deliberately NOT ___buildFramesFromCapturedStack___: that walk answers a
+	TRACEBACK -- the path from raise to catch -- so it trims at the catching
+	function, which is precisely the frame a live stack walk wants to continue
+	past.  It also merges block frames into their home method, which is right for
+	both uses, and that rule is repeated here rather than shared, because the two
+	walks agree on almost nothing else.
+
+	The chain is built OUTERMOST-first so each frame can be handed its caller as
+	f_back; the innermost frame, returned here, is therefore the last one built."
+
+	| probe st pairs prev frame done |
+	self ___ensureStackCapture___.
+	"Signal and catch in one breath.  ``ex return:'' unwinds without letting the
+	Error reach any outer handler -- notably not a Python ``except''."
+	probe := [Error @env0:new @env0:signal: 'grail live-frame probe']
+		@env0:on: Error do: [:ex | ex @env0:return: ex].
+	st := [probe @env0:_gsStack] @env0:on: Error do: [:ex | ex @env0:return: nil].
+	st isNil ifTrue: [^ nil].
+	"(method, ip) for every frame that is a Python FUNCTION, innermost first.
+	A block frame carries a nil selector and belongs to its home method, so it is
+	skipped -- CPython has no frame for a comprehension body or an except block."
+	pairs := OrderedCollection @env0:new.
+	"``done'' rather than leaving the loop early: the index of a to:do: is a block
+	PARAMETER and not assignable, so there is nothing to advance past the end."
+	done := false.
+	2 to: st @env0:size by: 3 do: [:i |
+		| meth |
+		done ifFalse: [
+			meth := st @env0:at: i.
+			"Trailing nils pad the array; the real frames end at the first one."
+			meth isNil
+				ifTrue: [done := true]
+				ifFalse: [
+					((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector notNil])
+						ifTrue: [
+							"Env 1 plus a decodable selector is not enough to mean ``Python frame'':
+							Grail compiles its own runtime helpers into env 1 too, and they decode to
+							perfectly plausible names -- ``perform'' and ``value'' duly appeared at the
+							innermost end of every walk.
+
+							The test is whether the method IS generated Python code, asked of its
+							SOURCE and so independent of the ip.  The first version asked instead
+							whether a Python LINE could be derived at this ip, which conflated two
+							different questions and broke under native code: §9.10 records that ip ->
+							line derivation fails closed for a frame suspended inside a protected
+							block, and native ips differ from bytecode ips, so on CI (native code on,
+							unavailable on macOS/arm64) legitimate frames were silently DROPPED from
+							the walk rather than merely losing their line number."
+							(((self ___pythonFrameNameFor___: meth @env0:selector) notNil)
+								and: [self ___isGeneratedPythonMethod___: meth]) ifTrue: [
+									pairs @env0:add: { meth. st @env0:at: i @env0:+ 1 }]]]]].
+	pairs @env0:isEmpty ifTrue: [^ nil].
+	prev := None.
+	pairs @env0:size @env0:to: 1 by: -1 do: [:k |
+		| pair meth ip name line code |
+		pair := pairs @env0:at: k.
+		meth := pair @env0:at: 1.
+		ip := pair @env0:at: 2.
+		"A nil line is not a reason to drop the frame -- see the filter above -- so it
+		becomes 0, the same ``position unknown'' a traceback frame uses."
+		line := self ___pythonLineForMethod___: meth ip: ip.
+		name := self ___pythonFrameNameFor___: meth @env0:selector.
+		code := PyCode @env0:name: name
+			filename: (self ___liveFrameFilenameFor___: meth)
+			firstlineno: 0.
+		frame := PyFrame @env0:code: code lineno: (line ifNil: [0]) back: prev globals: None.
+		prev := frame].
+	^ frame
+%
+
+category: 'Grail-Live Frames'
+classmethod: BaseException
+___liveFrameFilenameFor___: aMethod
+	"The ``co_filename'' for a live frame's method.
+
+	A traceback takes ONE filename for every frame, from the catching function's
+	PyCode -- fine there, because a traceback is usually within one module, and
+	wrong in general.  A live stack walk crosses modules routinely (the test
+	runner calls the test calls the library), so the filename is derived per
+	frame instead.
+
+	A generated Python function's defining class IS its module: ``meth inClass
+	name'' answers the module name, so the module's own ``__file__'' is one
+	sys.modules lookup away.  Falls back to ``<grail>'', which is what a frame
+	with no locatable module has always reported."
+
+	| clsName mod file |
+	clsName := [aMethod @env0:inClass @env0:name @env0:asString]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	clsName isNil ifTrue: [^ '<grail>'].
+	mod := [(importlib @env1:modules) @env0:at: clsName @env0:asSymbol otherwise: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	mod isNil ifTrue: [^ '<grail>'].
+	file := [mod @env0:dynamicInstVarAt: #'__file__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	((file isNil) or: [(file isKindOf: CharacterCollection) @env0:not])
+		ifTrue: [^ '<grail>'].
+	^ file @env0:asString
+%
+
+category: 'Grail-Live Frames'
+classmethod: BaseException
+___isGeneratedPythonMethod___: aMethod
+	"Whether ``aMethod'' is compiled Python rather than part of Grail's runtime.
+
+	Asked of the method SOURCE, not of an ip: codegen emits ``___curPos___ := N''
+	before every Python statement, so the literal is present in any generated
+	body and absent from every hand-written Smalltalk one.  That makes this
+	answer independent of where the frame is suspended, which the ip -> line
+	derivation is not (§9.10).
+
+	Cached per method in SessionTemps, like the ip -> line cache and for the same
+	reason: the answer is fixed for the life of the method, and a stack walk
+	revisits the same methods constantly."
+
+	| cache key |
+	cache := SessionTemps @env0:current @env0:at: #'GrailPyMethodCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #'GrailPyMethodCache' put: cache].
+	key := aMethod @env0:asOop.
+	^ cache @env0:at: key ifAbsent: [
+		| answer |
+		answer := [(aMethod @env0:sourceString) @env0:includesString: '___curPos___']
+			@env0:on: Error do: [:ex | ex @env0:return: false].
+		cache @env0:at: key put: answer.
+		answer]
+%

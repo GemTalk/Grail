@@ -1958,3 +1958,108 @@ regressions, 1 improvement**. SUnit 4149, all green.
 `test_exception_group_format` still fails, now on the caret lines alone — the last
 of §9.20's three blockers, and the one that needs real PEP 657 anchor work rather
 than a message change.
+
+### 9.22 A live stack: sys._getframe, and why it raises to read one (2026-08-13, gs40)
+
+Every frame Grail had until now came from an **exception**: §9.9's machinery
+reconstructs frames from the VM's raise-time capture. `sys._getframe` asks a
+different question — what is on the stack *right now*, with nothing raised — and
+it did not exist. So `traceback.walk_stack` answered an empty iterator, and
+`print_stack` / `format_stack` / `extract_stack` all reported nothing at all,
+each with a comment saying an empty answer was the honest one. It was, until it
+wasn't.
+
+**A running gem cannot read its own stack the obvious way.** `GsProcess` is the
+natural place to look, and it is a dead end: `GsProcess current` inside running
+code answers `stackDepth` **0** and `_frameContentsAt:` **nil** for every level —
+that API reads a *suspended* process, one stopped at a breakpoint. Measured
+before designing anything, which saved building on it.
+
+What does work is the mechanism already in use: `#GemExceptionSignalCapturesStack`
+fills `_gsStack` with `(method, ip, receiver)` triples for the whole live stack at
+the moment of a raise. So `___liveFrameChain___` **signals a throwaway `Error` and
+catches it in the same expression**, purely for the capture. `ex return: ex`
+unwinds without letting it reach any outer handler — notably not a Python
+`except`. CPython's `_getframe` is free; Grail's costs a raise, which §9.2 already
+measures at ~1.3 ns per frame.
+
+It deliberately does **not** reuse `___buildFramesFromCapturedStack___`. That walk
+answers a *traceback* — the path from raise to catch — so it trims at the catching
+function, which is exactly the frame a live walk needs to continue past. The block
+merging rule is repeated rather than shared, because the two walks agree on
+little else.
+
+**Env 1 plus a decodable selector does not mean "Python frame".** The first
+working version reported `['perform', 'value', 'leaf', 'mid', 'top', 'probe']` —
+Grail compiles its own runtime helpers into env 1 too, and `Object >> perform:` /
+`ExecBlock >> value` decode, quite reasonably, to `perform` and `value`. The fix
+is a better question: does the frame have a **derivable Python line**? Only
+generated Python code carries the `___curPos___ := N` literals that
+`___pythonLineForMethod___:` reads, so a nil line *is* the signal that a frame
+belongs to the machinery rather than to the program. That also means the line is
+computed once, in the filter, and carried.
+
+Filenames are per frame here, unlike a traceback's. A traceback takes one
+filename from the catching function's PyCode — fine when a traceback stays in one
+module, wrong in general — and a live walk crosses modules routinely. A generated
+function's defining class **is** its module (`meth inClass name`), so the module's
+own `__file__` is one `sys.modules` lookup away.
+
+**CI found a bug local runs structurally cannot.** The first version used
+"can a Python line be derived at this ip?" as the test for *is this a Python
+frame*, which conflates two questions. §9.10 records that ip → line derivation
+**fails closed** — a frame suspended inside a protected block resolves to
+nothing — and native ips differ from bytecode ips. Native code is on in CI and
+*unavailable on macOS/arm64*, so locally every frame resolved and the filter
+looked right; on CI legitimate frames were silently **dropped from the walk**
+rather than merely losing a line number. `format_stack` then skipped one level too
+far, because it identified its own frame to exclude by *position* — "drop the
+innermost, it's mine" — and the frame it dropped was the caller's.
+
+Both halves are fixed by asking better questions. Is this Python code? Ask the
+method's **source** for the `___curPos___` literal codegen emits, which no ip can
+affect (cached per method, like the line cache). Which frames are the traceback
+module's own? Identify them by **file**, which cannot miscount however many
+survive. A nil line now costs a frame its line number, not its existence.
+
+**The native-code attribution is measured, not assumed.** With `gs375` available
+locally the two candidate variables separate cleanly: the *original* ip-based
+filter was reinstalled on 3.7.5 on this machine and **passed** the whole fixture,
+so the GemStone version is not the variable — leaving
+`GemNativeCodeEnabled`, which is 2 on CI's Linux x86_64 and unavailable on
+macOS/arm64, exactly as §9.10's table records. The current code was then verified
+on 3.7.5 too: SUnit 4156 all green and `test_traceback` identical to 4.0 at
+47 failures / 17 errors / 217 skipped.
+
+**Two limits, asserted rather than left to be discovered.** `f_locals` does not
+exist and is not faked: a Python function's locals are Smalltalk method *temps*,
+and the capture holds neither their values nor their names, so an empty dict would
+let a caller believe a frame had no variables. And a **nested function gets no
+frame of its own** — Grail compiles a nested `def` into its enclosing method — which
+is pre-existing and is precisely why `test_walk_stack` and
+`test_walk_innermost_frame` still fail: both assert that a nested call adds
+exactly one frame.
+
+**Result: `test.test_traceback` 88 → 89 passing**, two tests fixed by name
+(`TestTracebackFormat.test_stack_format` and
+`CExcReportingTests.test_KeyboardInterrupt_at_first_line_of_frame`) with **no test
+newly failing or erroring**, and three more moved from *error* to *failure* —
+they now run and disagree, instead of dying on a missing attribute. SUnit 4149 all
+green; full sweep 0 regressions, 1 improvement.
+
+**One number is unexplained**, recorded rather than smoothed over: `skipped` went
+216 → 217, so a test that previously passed now skips, which is why two fixes net
++1.  (Measured twice, against two different bases — before and after #351 merged —
+with the same 2-fixed / 1-newly-skipped shape both times, so it is a property of
+this change rather than of the base.) It cannot be attributed with the current harness — `run_one_cpython_module.gs`
+emits a line per test and a detail line only for failures and errors, so a skipped
+test is indistinguishable from a passing one in the log, and `test_traceback` has
+no static `@skipIf` to inspect. Attributing it needs the harness to record skip
+names, which is a harness change and not this one.
+
+`f_locals` remains the blocker for `MiscTracebackCases.test_clear`, and it is not
+a matter of effort: the capture records `(method, ip, receiver)`, so a frame's
+temps are genuinely absent from it. Reaching them would need either a codegen
+change (record each function's local names, and read the temps some other way) or
+VM support — a much larger piece than this one, and worth its own investigation
+rather than an incremental attempt.

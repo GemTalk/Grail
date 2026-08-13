@@ -1091,3 +1091,78 @@ testExceptionGroupTreeRendering
 		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
 			description: 'exception-group check failed: ' , k].
 %
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testLiveFramesAndGetframe
+	"sys._getframe, and walking a LIVE stack.
+
+	Every frame Grail had until now came from an EXCEPTION: the traceback
+	machinery reconstructs them from the VM's raise-time capture.  _getframe asks
+	a different question -- what is on the stack right now, with nothing raised --
+	and it did not exist, so traceback.walk_stack answered an empty iterator and
+	everything built on it (print_stack / format_stack / extract_stack) reported
+	nothing at all.
+
+	The mechanism is worth knowing, because it looks like a hack until the
+	alternative is checked: a RUNNING gem cannot read its own stack through
+	GsProcess.  ``GsProcess current'' inside running code answers stackDepth 0 and
+	no frames -- _frameContentsAt: reads a SUSPENDED process.  The VM's raise-time
+	capture, on the other hand, fills _gsStack with (method, ip, receiver) triples
+	for the whole live stack.  So ___liveFrameChain___ signals a throwaway Error,
+	catches it in the same expression, and reads the capture.  CPython's _getframe
+	is free; Grail's costs a raise.
+
+	Env 1 plus a decodable selector is NOT enough to identify a Python frame:
+	Grail compiles its own runtime helpers into env 1 too, and ``Object >>
+	perform:'' / ``ExecBlock >> value'' decode to the plausible names ``perform''
+	and ``value'', which duly appeared at the innermost end of every walk.  The
+	filter requires a derivable PYTHON LINE -- only generated code carries the
+	``___curPos___ := N'' literals -- and the fixture checks that the machinery
+	stays out.
+
+	Two limits are asserted as deliberate rather than left to be discovered.
+	f_locals does not exist and is not faked: a Python function's locals are
+	Smalltalk method TEMPS and the capture holds neither their values nor their
+	names, so an empty dict would let a caller believe a frame had no variables.
+	And a NESTED function gets no frame of its own, because Grail compiles a
+	nested ``def'' into its enclosing method -- pre-existing, and the reason
+	test_walk_stack still fails, since it asserts a nested call adds exactly one
+	frame.
+
+	The fourteen CPython-parity checks are verified against real CPython by
+	running the fixture directly; the two marked GRAIL-SPECIFIC are the only ones
+	that answer differently there.  See tests/python/live_frames.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'live_frames' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/live_frames.py')
+		name: 'live_frames'.
+	#( 'getframe_returns_a_frame'
+	   'getframe_names_its_caller'
+	   'depth_counts_outwards'
+	   'too_great_a_depth_raises_valueerror'
+	   'a_frame_reports_its_line'
+	   'a_frame_reports_its_file'
+	   'a_frame_chains_to_its_caller'
+	   'the_chain_ends_rather_than_looping'
+	   'walk_stack_reports_the_call_chain'
+	   'walk_stack_yields_frame_lineno_pairs'
+	   'walk_stack_from_an_explicit_frame_starts_there'
+	   'format_stack_renders_the_live_stack'
+	   'the_traceback_module_keeps_its_own_frames_out'
+	   'format_stack_ends_at_its_caller'
+	   'extract_stack_produces_frame_summaries'
+	   'the_machinery_keeps_itself_out_of_the_walk'
+	   'a_frame_has_no_f_locals'
+	   'a_nested_function_gets_no_frame_of_its_own' ) do: [:k |
+		| answer |
+		answer := mod @env0:perform: k asSymbol env: 1.
+		"Report what the check ANSWERED, not just that it failed.  A check may
+		return evidence instead of false -- the only place some of these have ever
+		failed is CI, where native code is on and macOS/arm64 cannot reproduce it,
+		so the log has to carry the diagnosis."
+		self assert: (answer = true)
+			description: 'live-frame check failed: ' , k , ' -> ' , answer printString].
+%
