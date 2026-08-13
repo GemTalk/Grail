@@ -29,6 +29,10 @@ Verdicts per module:
                 script could not map.  Both are candidates for wiring.
     CRASH       the probe killed the session; the driver resumes past it
 
+"Is this a stdlib module?" is answered by scripts/cpython_314_stdlib_modules.txt
+-- the 3.14 series the scope document targets -- not by the interpreter running
+this script, which ./.setenv pins to 3.13 for unrelated reasons.
+
 Output is out/cpython/import_census.tsv (gitignored, like the rest of out/).
 Nothing here is committed and nothing gates CI: this is a survey to point the
 next vendoring effort, not a measurement of conformance.
@@ -45,6 +49,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SCOPE = ROOT / "docs" / "Grail_CPython_Scope.md"
 MANIFEST = ROOT / "scripts" / "cpython_suite_manifest.txt"
 PROBE = ROOT / "scripts" / "cpython_import_census.gs"
+STDLIB_NAMES = ROOT / "scripts" / "cpython_314_stdlib_modules.txt"
 OUTDIR = ROOT / "out" / "cpython"
 TSV = OUTDIR / "import_census.tsv"
 
@@ -52,6 +57,37 @@ TIER_HEADING = re.compile(r"^### (P[1-4]) — ")
 ROW = re.compile(r"^\|\s*(\S*)\s*\|\s*`(test_\w+)`\s*\|")
 
 TOPAZ_CFG = "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=500000;"
+
+
+def stdlib_names():
+    """The 3.14 module-name universe, from the vendored list.
+
+    Deliberately NOT sys.stdlib_module_names of whatever interpreter runs this:
+    ./.setenv prepends python@3.13 to PATH (the C shim needs its
+    python3-config), so every census run from a configured shell classified
+    against 3.13 -- which has no `annotationlib', so test_annotationlib was
+    filed as a language test rather than probed.  The scope document targets
+    3.14.4; the list has to as well.
+    """
+    if not STDLIB_NAMES.exists():
+        sys.exit("missing %s -- see its header for how to regenerate"
+                 % STDLIB_NAMES.relative_to(ROOT))
+    names = {
+        line.strip()
+        for line in STDLIB_NAMES.read_text().splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+    # Free drift check when the interpreter happens to BE a 3.14: a vendored
+    # list that has fallen behind the series it claims is worth knowing about,
+    # and this is the only moment we can tell.
+    if sys.version_info[:2] == (3, 14):
+        live = set(sys.stdlib_module_names)
+        if live != names:
+            print("note: vendored 3.14 list differs from this %s interpreter "
+                  "(+%d/-%d); see %s"
+                  % (sys.version.split()[0], len(live - names), len(names - live),
+                     STDLIB_NAMES.name), file=sys.stderr)
+    return names
 
 
 def unmeasured_by_tier():
@@ -118,11 +154,14 @@ def run_probe(names):
     verdicts, offset = {}, 0
     while offset < len(names):
         env["GRAIL_CENSUS_OFFSET"] = str(offset)
-        proc = subprocess.run(
-            ["topaz", "-lq", "-C", TOPAZ_CFG, "-S", str(PROBE)],
-            cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
-            capture_output=True, text=True, errors="replace",
-        )
+        try:
+            proc = subprocess.run(
+                ["topaz", "-lq", "-C", TOPAZ_CFG, "-S", str(PROBE)],
+                cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
+                capture_output=True, text=True, errors="replace",
+            )
+        except FileNotFoundError:
+            sys.exit("topaz not on PATH -- run `source .setenv` first")
         probing, done, progressed = None, False, 0
         for line in proc.stdout.splitlines():
             if line.startswith("CENSUS_FATAL|"):
@@ -213,20 +252,78 @@ def report(rows):
             print("  " + "  ".join("%-18s" % m for m in missing[i:i + 6]).rstrip())
 
 
+TESTCASE_CLASS = re.compile(r"^class\s+\w+\s*\([^)]*\bTestCase\b", re.M)
+
+
+def shape_report(rows, libtest):
+    """Of the ready-to-wire modules, how many can this harness actually score?
+
+    "Ready to wire" means the subject imports -- it says nothing about whether
+    the test file yields any TESTS.  Two shapes score zero here no matter how
+    good Grail gets, and counting them as ready overstates the reachable work:
+
+      * pure doctest modules (test_genexps, test_metaclass, ...) carry no
+        unittest.TestCase, and _grail_harness discovers TestCases only, so they
+        land on the board as SKIP with 0 tests -- indistinguishable at a glance
+        from a module that ran and passed nothing;
+      * a few names are PACKAGES upstream (test_json, test_string), which the
+        single-module harness does not handle at all.
+
+    Needs a CPython 3.14 Lib/test to look at, so it is opt-in rather than part
+    of the census proper.
+    """
+    if not libtest.is_dir():
+        sys.exit("--cpython-lib: not a directory: %s" % libtest)
+    ready = [(t, m) for t, m, _s, v, _d in rows if v in ("IMPORTS", "NO_SUBJECT")]
+    scorable, doctest_only, not_a_module = [], [], []
+    for tier, mod in ready:
+        path = libtest / (mod + ".py")
+        if not path.is_file():
+            not_a_module.append((tier, mod))
+        elif TESTCASE_CLASS.search(path.read_text(errors="replace")):
+            scorable.append((tier, mod))
+        else:
+            doctest_only.append((tier, mod))
+
+    def per_tier(group):
+        counts = {}
+        for tier, _ in group:
+            counts[tier] = counts.get(tier, 0) + 1
+        return " ".join("%s:%d" % kv for kv in sorted(counts.items())) or "-"
+
+    print("\nOf those %d, what this harness can actually score (per %s):"
+          % (len(ready), libtest))
+    print("  %-34s %4d   %s" % ("has unittest TestCases", len(scorable),
+                                per_tier(scorable)))
+    print("  %-34s %4d   %s" % ("doctest-only -> always SKIP", len(doctest_only),
+                                per_tier(doctest_only)))
+    print("  %-34s %4d   %s" % ("a package, not one .py", len(not_a_module),
+                                per_tier(not_a_module)))
+    if doctest_only:
+        print("  doctest-only: %s" % " ".join(sorted(m for _, m in doctest_only)))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--report", action="store_true",
                     help="re-print the last census without re-probing")
+    ap.add_argument("--cpython-lib", metavar="DIR",
+                    help="a CPython 3.14 Lib/test directory; adds a breakdown of "
+                         "which ready-to-wire modules this harness can actually "
+                         "SCORE (see shape_report)")
     args = ap.parse_args()
 
     if args.report:
-        report(read_tsv())
+        rows = read_tsv()
+        report(rows)
+        if args.cpython_lib:
+            shape_report(rows, Path(args.cpython_lib))
         return
 
-    stdlib = sys.stdlib_module_names
-    print("host CPython %d.%d supplies the stdlib name list (%d names)"
-          % (sys.version_info[0], sys.version_info[1], len(stdlib)))
+    stdlib = stdlib_names()
+    print("classifying against the vendored CPython 3.14 module list (%d names)"
+          % len(stdlib))
 
     targets = unmeasured_by_tier()
     if not targets:
