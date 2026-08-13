@@ -69,6 +69,23 @@ jobs:
       - name: cpython regression-gate self-test
         run: tests/scripts/test_regression_gate.sh
 
+      # The fixture gate runs tests/python's self-running fixtures under real
+      # CPython, so it needs the version the fixtures were written against --
+      # the runner's system python3 is 3.10 and predates ExceptionGroup.  This
+      # is the only step here that needs an interpreter; everything else in
+      # this job is pure shell.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: fixture-gate self-test
+        run: tests/scripts/test_python_fixture_gate.sh
+
+      # Catches a fixture that encodes Grail's behaviour instead of CPython's,
+      # which would otherwise read as conformance evidence forever after.
+      - name: tests/python fixtures agree with CPython
+        run: scripts/check_python_fixtures.sh -v
+
   test:
     needs: image
     runs-on: ubuntu-22.04

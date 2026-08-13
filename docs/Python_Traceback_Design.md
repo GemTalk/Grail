@@ -2324,3 +2324,76 @@ there by design.
 **Result: `test.test_traceback` 92 → 95 passing** (errors 17 → 14), the three
 tests named above, verified by name with nothing newly failing. SUnit **4224, all
 green**. Full 71-module sweep: **0 regressions, 1 improvement**.
+
+### 9.27 A gate for the fixtures, and an honest measure of its reach (2026-08-13, gs40)
+
+§9.26 ended by proposing a CI guard that runs the self-running fixtures under
+CPython, on the strength of four fixtures that had pinned Grail's behaviour
+instead of CPython's. Building it started with checking that premise, and the
+check embarrassed it:
+
+**Three of those four bugs are in files the guard cannot see.**
+`exec_class_definition.py`, `exception_naming.py` and `code_filename.py` have no
+`__main__` block. Only the `handler_raise.py` near-miss was in a self-running
+file — and that one was caught by hand at the time. So the guard, as motivated,
+would have caught **none** of the bugs used to justify it. That does not make it
+worthless, but it does move the value: it holds a line for fixtures that have
+opted in, and makes opting in cheap for new ones. It is not evidence that the
+corpus agrees with CPython, and §9.26's framing should be read with that
+correction.
+
+A census of all 258 fixtures under CPython 3.14.6, each in its own subprocess:
+
+| | files | |
+| --- | --- | --- |
+| no zero-argument checks | 116 | return values for the harness to compare, not booleans |
+| some check differs | 93 | mostly helpers my probe called as if they were checks |
+| all checks answer True | 32 | already CPython-clean; **16 are not yet self-running** |
+| fails to import | 16 | several deliberately |
+| hangs | 1 | |
+
+The 93 are largely a probe artefact: with no `checks` list to read, "every public
+zero-argument function" also collects helpers like `leaf` and `runaway` that
+raise *by design*. That is precisely why the gate reads an explicit `__main__`
+block rather than introspecting — **a fixture must declare what its checks are**.
+The interesting number is the 32: those already agree with CPython, and 16 of
+them could opt in for the cost of a `__main__` block.
+
+**The count is 15, not 16.** `module_higher_arity_def.py` matches a naive grep
+for `if __name__ == '__main__':` but the string is *inside a function* — it
+checks that the idiom is False on import. Running it as a script would falsify
+its own subject: its other checks assert
+`__name__ == 'module_higher_arity_def'`. The gate anchors the pattern at column
+zero, so the file excludes itself.
+
+**Two traps, both of which look like a passing run**, are pinned by
+`tests/scripts/test_python_fixture_gate.sh`:
+
+* `live_frames.py` prints a separator line containing the word "FAIL". A
+  grep-based gate fails on a clean tree, so the status word is read from the
+  first or second whitespace field instead. Its two Grail-limitation checks now
+  print `XFAIL`; `XPASS` fails the gate, since a limitation that has quietly
+  gone away means the check is stale.
+* A fixture whose `__main__` block prints nothing would otherwise pass by
+  vacuity, so zero recognised result lines is an error.
+
+The self-test was **mutation-tested** rather than merely run: reverting the gate
+to grep-based status detection, unanchoring the `__main__` pattern, and deleting
+the no-results check each turn it red (2, 1 and 1 assertions respectively). A
+gate self-test that cannot fail is worse than none, because it certifies the
+thing it does not check.
+
+**A side finding, not fixed here.** `cached_property_descriptor.py:82` does
+`cp = cp` inside a `class` body nested in a function. That is a `NameError` in
+CPython — class bodies use `LOAD_NAME` (local → global → builtins) and skip the
+enclosing function scope — so the fixture cannot run there as written. If Grail
+executes it, Grail resolves class-body names through the enclosing scope and
+differs. This belongs with the class-body namespace work
+(`docs/Class_Body_Namespace.md`), not here.
+
+**Result:** 15 fixtures, **180 OK + 2 XFAIL**, wired into the existing no-stone
+`scripts` job in CI (which needs `setup-python` 3.14 — the runner's system
+`python3` is 3.10 and predates `ExceptionGroup`). SUnit **4271, all green**. No
+Smalltalk changed; the only fixture edit is a `__main__` block, which the harness
+provably never executes — `TracebackTestCase` loads the file with
+`name: 'live_frames'`.

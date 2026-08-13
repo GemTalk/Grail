@@ -278,6 +278,10 @@ if __name__ == '__main__':
     ]
     for fn in checks:
         print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))
-    print('--- expected to FAIL under CPython (Grail-specific limits) ---')
+    # These assert a Grail LIMITATION, so CPython is expected to disagree.
+    # XFAIL is that expected disagreement and is not a failure;  XPASS means
+    # CPython now agrees, i.e. the check no longer documents a difference and
+    # should be retired or moved up into `checks'.
+    print('--- documented Grail limits: CPython is expected to differ ---')
     for fn in grail_only:
-        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))
+        print('%-5s %s' % ('XPASS' if fn() is True else 'XFAIL', fn.__name__))
