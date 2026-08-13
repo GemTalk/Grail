@@ -1614,6 +1614,35 @@ printSmalltalkRuntimeOn: aStream
 	savedDecoFlag := CallAst inDecoratorEmit.
 	CallAst inDecoratorEmit: true.
 	[
+	"PEP 487: type.__new__ finishes by calling
+	``super(cls, cls).__init_subclass__(**kwds)'' on the class it just built, so
+	a parent is told about each new subclass.  Emitted after the metaclass hook
+	and before the decorators, which is where CPython fires it -- inside
+	type.__new__, hence BEFORE EnumType.__new__ sets _boundary_ from a
+	``boundary='' class keyword (the loop just below) and before any decorator
+	sees the class.
+
+	Sent to the class rather than folded into ___pyClassDefined___: for the same
+	reason CPython puts it in type.__new__ rather than in a metaclass: every
+	metaclass reaches it through super().__new__, so overriding that hook (as
+	Enum class does, three times over) must not be able to lose it.
+
+	The class KEYWORDS travel with it, which is what the protocol is mostly used
+	for -- ``class Sub(Base, tag='x')'' reaches ``__init_subclass__(cls, tag)''.
+	Two are withheld, the same two the loop below consumes: ``metaclass'', which
+	CPython's class machinery takes for itself, and ``boundary'', which
+	EnumType.__new__ declares as a named parameter and so never forwards.  Every
+	other keyword is passed on, and object.__init_subclass__ rejects whatever no
+	one in the chain accepted -- an unconsumed class keyword is a typo, and
+	CPython says so rather than dropping it.
+
+	Values are ordinary expressions in the scope ENCLOSING the class statement,
+	so this sits inside the inDecoratorEmit guard alongside the boundary value
+	and the decorators."
+	aStream nextPutAll: name; nextPutAll: ' @env1:___grailInitSubclass___: '.
+	self printClassKeywordsDictOn: aStream.
+	aStream nextPutAll: '.'; lf.
+
 	keywords notNil ifTrue: [
 		keywords do: [:kw |
 			(kw name notNil and: [kw name asString = 'boundary']) ifTrue: [
@@ -3269,6 +3298,49 @@ method: ClassDefAst
 name
 
 	^name
+%
+
+category: 'Grail-other'
+method: ClassDefAst
+printClassKeywordsDictOn: aStream
+	"The class keywords that PEP 487 forwards to __init_subclass__, as the
+	kwargs expression for ___grailInitSubclass___: -- ``nil'' when there are
+	none, mirroring CallAst >> printKeywordsDictOn:.
+
+	``metaclass'' and ``boundary'' are withheld: both are consumed by the class
+	machinery itself (see the caller), so forwarding them would hand
+	object.__init_subclass__ a keyword nobody asked for and turn every
+	``class E(Flag, boundary=KEEP)'' into a TypeError.
+
+	A ``**splat'' in a class header carries no compile-time name, so it cannot
+	be split against those two; it is forwarded whole via update:, and a splat
+	that happens to carry ``metaclass'' would reach __init_subclass__.  Nothing
+	in the corpus writes one -- the header form exists mainly for metaclass
+	factories -- and the alternative, dropping it, would lose the keywords that
+	ARE meant to travel.
+
+	PyDict, and String keys, for the reasons CallAst spells out: kwargs are
+	looked up with ``='' and user code expects ``kwargs['tag']'' to work."
+
+	| forwarded |
+	keywords isNil ifTrue: [aStream nextPutAll: 'nil'. ^ self].
+	forwarded := keywords reject: [:kw |
+		kw name notNil and: [
+			(kw name asString = 'metaclass') or: [kw name asString = 'boundary']]].
+	forwarded isEmpty ifTrue: [aStream nextPutAll: 'nil'. ^ self].
+	aStream nextPutAll: '((PyDict @env0:new)'.
+	forwarded do: [:kw |
+		kw name
+			ifNotNil: [
+				aStream nextPutAll: ' @env0:at: '''; nextPutAll: kw name asString;
+					nextPutAll: ''' put: '.
+				kw value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPut: $;]
+			ifNil: [
+				aStream nextPutAll: ' @env1:update: '.
+				kw value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPut: $;]].
+	aStream nextPutAll: ' yourself)'.
 %
 
 category: 'Grail-other'
