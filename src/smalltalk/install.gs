@@ -690,6 +690,7 @@ run
 	at: #'InitSubclassTestCase' put: nil;
 	at: #'NamedtupleNamingTestCase' put: nil;
 	at: #'EnumModuleApiTestCase' put: nil;
+	at: #'BuiltinSubclassPickleTestCase' put: nil;
 	at: #'EnumDictTestCase' put: nil;
 	at: #'EnumFlagMasksTestCase' put: nil;
 	at: #'EnumNamedFlagsTestCase' put: nil;
@@ -761,6 +762,7 @@ run
 	at: #'InterruptedErrorTestCase' put: nil;
 	at: #'IsADirectoryErrorTestCase' put: nil;
 	at: #'IteratorTestCase' put: nil;
+	at: #'TzFileHistoryTestCase' put: nil;
 	at: #'EnvVarGuardTestCase' put: nil;
 	at: #'ClassMethodDecoratorOrderTestCase' put: nil;
 	at: #'SlotsInheritedDictTestCase' put: nil;
@@ -1488,6 +1490,7 @@ input src/smalltalk/PythonTests/ClassQualnameStoreTestCase.gs
 input src/smalltalk/PythonTests/InitSubclassTestCase.gs
 input src/smalltalk/PythonTests/NamedtupleNamingTestCase.gs
 input src/smalltalk/PythonTests/EnumModuleApiTestCase.gs
+input src/smalltalk/PythonTests/BuiltinSubclassPickleTestCase.gs
 input src/smalltalk/PythonTests/EnumDictTestCase.gs
 input src/smalltalk/PythonTests/EnumFlagMasksTestCase.gs
 input src/smalltalk/PythonTests/EnumNamedFlagsTestCase.gs
@@ -1575,6 +1578,7 @@ input src/smalltalk/PythonTests/ImportlibTestCase.gs
 input src/smalltalk/PythonTests/PackageImportTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
+input src/smalltalk/PythonTests/TzFileHistoryTestCase.gs
 input src/smalltalk/PythonTests/EnvVarGuardTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodDecoratorOrderTestCase.gs
 input src/smalltalk/PythonTests/SlotsInheritedDictTestCase.gs

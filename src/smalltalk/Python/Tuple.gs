@@ -485,4 +485,25 @@ __setitem__: index _: value
 	TypeError ___signal___: '''tuple'' object does not support item assignment'
 %
 
+set compile_env: 1
+category: 'Grail-Pickle'
+method: tuple
+__getnewargs__
+	"CPython's tuple.__getnewargs__: the argument tuple that rebuilds this
+	value through __new__.
+
+	The tuple's elements as a plain tuple, matching CPython's
+	tuple.__getnewargs__().
+
+	It exists for PICKLING an immutable builtin's subclass.  ``class MySub(tuple)''
+	carries its value in the CONSTRUCTOR, not in instance state, so
+	object.__reduce_ex__'s new-style reduction has to hand the value back as a
+	__new__ argument -- allocating a bare instance rebuilds an empty one.  Grail's
+	pickle used to reduce any tuple subclass to a plain tuple, losing the class."
+
+	| tupleClass |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	^ tupleClass @env0:withAll: { tupleClass @env0:withAll: (self @env0:asArray) }
+%
+
 set compile_env: 0

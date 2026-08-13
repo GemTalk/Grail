@@ -280,6 +280,287 @@ initialize
 	self ___refreshTimezoneGlobals___
 %
 
+category: 'Grail-Private'
+method: time
+___tzTable___
+	"The parsed tz-database table for the CURRENT zone, or nil when there
+	is none to use.  Memoised per session, and invalidated by tzset.
+
+	nil is a normal answer, not a failure: a POSIX TZ spec such as
+	``EST+05EDT,M3.2.0,M11.1.0'' names no file, and test.support.run_with_tz
+	uses exactly that form.  Those keep the rule-based GemStone zone, which
+	models a single std/dst rule pair correctly -- which is all such a spec
+	describes."
+
+	| temps key spec bytes table |
+	temps := SessionTemps @env0:current.
+	key := #'GrailTzTable'.
+	(temps @env0:at: #'GrailTzTableSet' otherwise: false)
+		ifTrue: [^ temps @env0:at: key otherwise: nil].
+	temps @env0:at: #'GrailTzTableSet' put: true.
+	spec := self ___tzEnvironmentSpec___.
+	"An Olson name resolves to a file; a POSIX rule spec does not, and the
+	host zone (no TZ set) is /etc/localtime."
+	bytes := [self ___tzFileBytesFor___: spec]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	bytes == nil ifTrue: [
+		temps @env0:at: key put: nil.
+		^ nil].
+	table := [self ___parseTzFile___: bytes]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	temps @env0:at: key put: table.
+	^ table
+%
+
+category: 'Grail-Private'
+method: time
+___tzTableInvalidate___
+	"Drop the memoised table so the next read re-reads the zone.  Called by
+	tzset, which is the only thing that can change which zone applies."
+
+	| temps |
+	temps := SessionTemps @env0:current.
+	temps @env0:at: #'GrailTzTableSet' put: false.
+	temps @env0:at: #'GrailTzTable' put: nil
+%
+
+category: 'Grail-Private'
+method: time
+___tzEntryAt___: epochSeconds
+	"{ offsetSecondsEastOfUtc. isdst. abbrev } in effect at an INSTANT, from
+	the tz database, or nil when no table applies.
+
+	Binary search for the last transition at or before the instant.  Before
+	the first transition the tz format says to use the first NON-dst type,
+	which is where a zone's pre-1900 Local Mean Time lives."
+
+	| table transitions typeIdx types lo hi mid idx t |
+	table := self ___tzTable___.
+	table == nil ifTrue: [^ nil].
+	transitions := table @env0:at: 1.
+	typeIdx := table @env0:at: 2.
+	types := table @env0:at: 3.
+	idx := nil.
+	(transitions @env0:isEmpty @env0:or: [epochSeconds @env0:< (transitions @env0:at: 1)])
+		ifTrue: [
+			"Before recorded history: first non-dst type, else type 0."
+			idx := 1.
+			1 @env0:to: (types @env0:at: 2) @env0:size do: [:k |
+				(idx @env0:= 1 @env0:and: [((types @env0:at: 2) @env0:at: k) @env0:= 0])
+					ifTrue: [idx := k]]]
+		ifFalse: [
+			lo := 1.
+			hi := transitions @env0:size.
+			[lo @env0:< hi] @env0:whileTrue: [
+				mid := (lo @env0:+ hi @env0:+ 1) @env0:// 2.
+				t := transitions @env0:at: mid.
+				t @env0:<= epochSeconds
+					ifTrue: [lo := mid]
+					ifFalse: [hi := mid @env0:- 1]].
+			idx := (typeIdx @env0:at: lo) @env0:+ 1].
+	idx @env0:< 1 ifTrue: [idx := 1].
+	idx @env0:> (types @env0:at: 1) @env0:size ifTrue: [idx := (types @env0:at: 1) @env0:size].
+	^ Array
+		@env0:with: ((types @env0:at: 1) @env0:at: idx)
+		with: ((types @env0:at: 2) @env0:at: idx)
+		with: ((types @env0:at: 3) @env0:at: idx)
+%
+
+
+category: 'Grail-Private'
+method: time
+___tzGlobalsFromTable___
+	"Publish timezone / altzone / daylight / tzname from the tz database.
+	Answers false when no table applies, leaving the rule-based path.
+
+	CPython reports the zone as it stands NOW, so the std/dst pair is taken
+	from the types actually in use around the present instant rather than
+	from every type the file has ever carried -- a zone that abandoned DST
+	decades ago must report daylight=0 today."
+
+	| table types now entry stdOff dstOff stdName dstName transitions typeIdx cutoff |
+	table := self ___tzTable___.
+	table == nil ifTrue: [^ false].
+	transitions := table @env0:at: 1.
+	typeIdx := table @env0:at: 2.
+	types := table @env0:at: 3.
+	now := self time @env0:truncated.
+	entry := self ___tzEntryAt___: now.
+	entry == nil ifTrue: [^ false].
+	"Standard = the current entry when it is not DST, else the entry the
+	zone falls back to."
+	stdOff := entry @env0:at: 1.
+	stdName := entry @env0:at: 3.
+	dstOff := nil.
+	dstName := nil.
+	(entry @env0:at: 2) @env0:= 0
+		ifFalse: [
+			dstOff := entry @env0:at: 1.
+			dstName := entry @env0:at: 3.
+			stdOff := nil].
+	"Scan the transitions of roughly the last two years for the other half."
+	cutoff := now @env0:- (86400 @env0:* 800).
+	1 @env0:to: transitions @env0:size do: [:k |
+		| t idx off isdst nm |
+		t := transitions @env0:at: k.
+		(t @env0:>= cutoff @env0:and: [t @env0:<= (now @env0:+ (86400 @env0:* 400))]) ifTrue: [
+			idx := (typeIdx @env0:at: k) @env0:+ 1.
+			off := (types @env0:at: 1) @env0:at: idx.
+			isdst := (types @env0:at: 2) @env0:at: idx.
+			nm := (types @env0:at: 3) @env0:at: idx.
+			isdst @env0:= 0
+				ifTrue: [stdOff @env0:isNil ifTrue: [stdOff := off. stdName := nm]]
+				ifFalse: [dstOff @env0:isNil ifTrue: [dstOff := off. dstName := nm]]]].
+	stdOff @env0:isNil ifTrue: [stdOff := entry @env0:at: 1. stdName := entry @env0:at: 3].
+	"No DST type in current use -- CPython reports the standard name twice
+	and daylight 0."
+	dstOff @env0:isNil ifTrue: [dstOff := stdOff. dstName := stdName].
+	self @env0:dynamicInstVarAt: #tzname
+		put: (tuple @env0:withAll: { stdName. dstName }).
+	self @env0:dynamicInstVarAt: #timezone put: stdOff @env0:negated.
+	self @env0:dynamicInstVarAt: #altzone put: dstOff @env0:negated.
+	self @env0:dynamicInstVarAt: #daylight
+		put: (dstOff @env0:= stdOff ifTrue: [0] ifFalse: [1]).
+	^ true
+%
+
+category: 'Grail-Private'
+method: time
+___tzFileBytesFor___: zoneName
+	"Raw bytes of the tz database file for zoneName, or nil.
+
+	zoneName nil means the host's own zone, which is /etc/localtime (a copy
+	of, or symlink to, the same TZif file).  A name is looked up under the
+	zoneinfo root.  Anything that does not resolve to a readable TZif file
+	answers nil, and the caller falls back to GemStone's rule-based zone."
+
+	| roots path f bytes |
+	zoneName == nil ifTrue: [
+		f := GsFile @env0:openReadOnServer: '/etc/localtime'.
+		f == nil ifTrue: [^ nil].
+		bytes := f @env0:contents.
+		f @env0:close.
+		^ bytes].
+	"Reject anything that could escape the zoneinfo root or name a
+	non-zone file; real zone names are letters, digits, _ + - and /."
+	(zoneName @env0:isEmpty
+		or: [((zoneName @env0:indexOfSubCollection: '..') @env0:> 0)
+		or: [(zoneName @env0:at: 1) @env0:= $/]]) ifTrue: [^ nil].
+	roots := #('/usr/share/zoneinfo/' '/usr/lib/zoneinfo/'
+		'/usr/share/lib/zoneinfo/' '/etc/zoneinfo/').
+	roots @env0:do: [:root |
+		path := root @env0:, zoneName.
+		f := [GsFile @env0:openReadOnServer: path]
+			@env0:on: Error do: [:ex | ex @env0:return: nil].
+		f == nil ifFalse: [
+			bytes := f @env0:contents.
+			f @env0:close.
+			(bytes @env0:notNil @env0:and: [bytes @env0:size @env0:> 4]) ifTrue: [^ bytes]]].
+	^ nil
+%
+
+category: 'Grail-Private'
+method: time
+___tzBigEndianAt___: bytes from: pos size: n signed: signedFlag
+	"Big-endian integer of n bytes starting at 1-based pos."
+
+	| v first |
+	v := 0.
+	first := (bytes @env0:at: pos) @env0:asInteger.
+	1 @env0:to: n do: [:k |
+		v := (v @env0:* 256) @env0:+ ((bytes @env0:at: pos @env0:+ k @env0:- 1) @env0:asInteger)].
+	(signedFlag @env0:and: [first @env0:>= 128])
+		ifTrue: [v := v @env0:- (256 @env0:raisedTo: n)].
+	^ v
+%
+
+category: 'Grail-Private'
+method: time
+___parseTzFile___: bytes
+	"Parse a TZif file into { transitionTimes. offsets. isdsts. abbrevs },
+	four parallel Arrays where entry i describes the period STARTING at
+	transitionTimes[i].  Answers nil if the bytes are not a usable TZif.
+
+	Reads the VERSION 2+ 64-bit block when present, and only falls back to
+	the 32-bit one otherwise.  That matters for exactly the history this
+	exists to get right: the 32-bit block cannot express a transition before
+	1901 or after 2038, and several zones carry their pre-1900 Local Mean
+	Time -- an offset that is not a whole number of minutes -- as their
+	FIRST entry.  Asia/Tehran's is +12:57:36, which is why datetimetester's
+	IranTest was out by 4m16s against a rule-based zone."
+
+	| pos ver counts timecnt typecnt charcnt leapcnt isstdcnt isutcnt
+	  tsize transitions typeIdx offsets isdsts abbrinds abbrevs base blockStart |
+	(bytes @env0:size @env0:< 44) ifTrue: [^ nil].
+	((bytes @env0:copyFrom: 1 to: 4) @env0:asString @env0:= 'TZif') ifFalse: [^ nil].
+	ver := (bytes @env0:at: 5) @env0:asInteger.
+	"Header counts live at offset 21 (1-based), six 4-byte big-endian ints."
+	counts := [:start |
+		(1 @env0:to: 6) @env0:collect: [:k |
+			self ___tzBigEndianAt___: bytes
+				from: start @env0:+ ((k @env0:- 1) @env0:* 4)
+				size: 4 signed: false]].
+	blockStart := 1.
+	tsize := 4.
+	"Version '2'/'3' (bytes 0x32/0x33) repeat the whole thing with 8-byte
+	times after the 32-bit block; skip to that second header."
+	(ver @env0:>= 50) ifTrue: [
+		| c1 skip |
+		c1 := counts @env0:value: 21.
+		skip := 44
+			@env0:+ ((c1 @env0:at: 4) @env0:* 5)
+			@env0:+ ((c1 @env0:at: 5) @env0:* 6)
+			@env0:+ (c1 @env0:at: 6)
+			@env0:+ ((c1 @env0:at: 3) @env0:* 8)
+			@env0:+ (c1 @env0:at: 2)
+			@env0:+ (c1 @env0:at: 1).
+		blockStart := 1 @env0:+ skip.
+		(blockStart @env0:+ 44 @env0:> bytes @env0:size) ifTrue: [^ nil].
+		((bytes @env0:copyFrom: blockStart to: blockStart @env0:+ 3) @env0:asString @env0:= 'TZif')
+			ifFalse: [^ nil].
+		tsize := 8].
+	counts := counts @env0:value: blockStart @env0:+ 20.
+	isutcnt := counts @env0:at: 1.
+	isstdcnt := counts @env0:at: 2.
+	leapcnt := counts @env0:at: 3.
+	timecnt := counts @env0:at: 4.
+	typecnt := counts @env0:at: 5.
+	charcnt := counts @env0:at: 6.
+	typecnt @env0:= 0 ifTrue: [^ nil].
+	pos := blockStart @env0:+ 44.
+	transitions := Array @env0:new: timecnt.
+	1 @env0:to: timecnt do: [:k |
+		transitions @env0:at: k put:
+			(self ___tzBigEndianAt___: bytes from: pos size: tsize signed: true).
+		pos := pos @env0:+ tsize].
+	typeIdx := Array @env0:new: timecnt.
+	1 @env0:to: timecnt do: [:k |
+		typeIdx @env0:at: k put: ((bytes @env0:at: pos) @env0:asInteger).
+		pos := pos @env0:+ 1].
+	offsets := Array @env0:new: typecnt.
+	isdsts := Array @env0:new: typecnt.
+	abbrinds := Array @env0:new: typecnt.
+	1 @env0:to: typecnt do: [:k |
+		offsets @env0:at: k put:
+			(self ___tzBigEndianAt___: bytes from: pos size: 4 signed: true).
+		isdsts @env0:at: k put: ((bytes @env0:at: pos @env0:+ 4) @env0:asInteger).
+		abbrinds @env0:at: k put: ((bytes @env0:at: pos @env0:+ 5) @env0:asInteger).
+		pos := pos @env0:+ 6].
+	base := pos.
+	abbrevs := Array @env0:new: typecnt.
+	1 @env0:to: typecnt do: [:k |
+		| start end |
+		start := base @env0:+ (abbrinds @env0:at: k).
+		end := start.
+		[end @env0:<= bytes @env0:size
+			@env0:and: [(bytes @env0:at: end) @env0:asInteger @env0:~= 0]]
+				@env0:whileTrue: [end := end @env0:+ 1].
+		abbrevs @env0:at: k put:
+			((bytes @env0:copyFrom: start to: end @env0:- 1) @env0:asString)].
+	^ Array @env0:with: transitions with: typeIdx
+		with: (Array @env0:with: offsets with: isdsts with: abbrevs)
+%
+
 category: 'Grail-Initialization'
 method: time
 tzset
@@ -317,6 +598,8 @@ tzset
 	memoises that it has.  Set the memo here too, so a later first call to
 	now() cannot silently undo the zone just installed."
 	SessionTemps @env0:current @env0:at: #'GrailSessionTimeZoneSet' put: true.
+	"Which zone FILE applies has just changed too."
+	self ___tzTableInvalidate___.
 	self ___refreshTimezoneGlobals___.
 	^ None
 %
@@ -455,6 +738,14 @@ ___refreshTimezoneGlobals___
 	back rather than publish an empty name.  Caught by CI: this machine is
 	US/Eastern, where both names are populated, and the UTC runner was the
 	only place the empty one showed up."
+	"Derive these from the tz DATABASE when one applies: GemStone's zone
+	carries a DST rule for zones that do not use DST at all, so a host on
+	(say) -03 year round reported daylight=1 and tzname ('-03','-02') where
+	CPython reports 0 and ('-03','-03').  That is what
+	DatetimeLocalTimeTestCase>>testIsdstTracksTheZone has been failing on:
+	the flags themselves were right, but daylight=1 sent the check down the
+	branch that requires them to differ."
+	(self ___tzGlobalsFromTable___) ifTrue: [^ self].
 	stdName := tz @env0:standardPrintString @env0:asString.
 	dstName := tz @env0:dstPrintString @env0:asString.
 	dstName @env0:isEmpty ifTrue: [dstName := stdName].
@@ -614,8 +905,20 @@ localtime: epochSeconds
 	the session zone with the OS, so real local time is now available and
 	both modules can use it."
 
-	| epoch dt |
+	| entry epoch dt secs |
 	PyDateTime ___ensureSessionTimeZone___.
+	"Prefer the tz DATABASE when one applies.  GemStone's TimeZone models a
+	single std/dst rule pair, which is right for the zone as it stands today
+	but cannot reproduce its history: it was out by 2h across a 1918 DST
+	boundary, and by 4m16s in 1935 Tehran, whose pre-1946 offset was
+	+3:25:44 -- not a whole number of minutes, so no rule pair can express
+	it.  The transition table carries both exactly.
+
+	nil falls through to the rule-based path, which is what a POSIX TZ spec
+	(``EST+05EDT,M3.2.0,M11.1.0'', as test.support.run_with_tz sets) names --
+	no file, and a single rule pair is all such a spec describes."
+	entry := [self ___tzEntryAt___: epochSeconds @env0:truncated]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
 	epoch := DateTime
 		@env0:newGmtWithYear: 1970
 		month: 1
@@ -623,8 +926,23 @@ localtime: epochSeconds
 		hours: 0
 		minutes: 0
 		seconds: 0.
-	dt := epoch @env0:addSeconds: epochSeconds @env0:truncated.
-	^ self ___structTimeLocalFromDateTime___: dt
+	entry == nil ifTrue: [
+		dt := epoch @env0:addSeconds: epochSeconds @env0:truncated.
+		^ self ___structTimeLocalFromDateTime___: dt].
+	"Local civil time IS utc + offset, so read the GMT fields of the shifted
+	instant rather than asking the session zone to convert."
+	secs := epochSeconds @env0:truncated @env0:+ (entry @env0:at: 1).
+	dt := epoch @env0:addSeconds: secs.
+	^ self
+		___structTimeYear___: dt @env0:yearGmt
+		_month: dt @env0:monthGmt
+		_day: dt @env0:dayOfMonthGmt
+		_hour: dt @env0:hourGmt
+		_minute: dt @env0:minuteGmt
+		_second: dt @env0:secondGmt
+		_dayOfWeek: dt @env0:dayOfWeekGmt
+		_dayOfYear: dt @env0:dayOfYearGmt
+		_isdst: ((entry @env0:at: 2) @env0:= 0 ifTrue: [0] ifFalse: [1])
 %
 
 category: 'Grail-Private'
@@ -762,6 +1080,30 @@ mktime: structTime
 	rejects the fields, rather than raising where it previously returned."
 
 	PyDateTime ___ensureSessionTimeZone___.
+	"When a tz table applies it must ALSO drive the inverse, or localtime and
+	mktime describe different zones and every round trip is off by the
+	difference -- test_fromtimestamp_limits does exactly such a round trip and
+	broke by 1:16:48 (a Local Mean Time offset) the moment localtime alone
+	started using the table.
+
+	CPython's algorithm: guess the offset, correct, and check.  A wall clock
+	that no instant maps to (a spring-forward gap) or that two map to (a
+	fall-back fold) is resolved the way CPython's mktime does with
+	tm_isdst = -1, by keeping the first solution found."
+	(self ___tzTable___) @env0:notNil ifTrue: [
+		| civil u1 t1 a b u2 t2 |
+		civil := ((time @env0:___epochDaysForYear___: year _month: mon _day: day)
+				@env0:* 86400)
+			@env0:+ (hour @env0:* 3600) @env0:+ (min @env0:* 60) @env0:+ sec.
+		a := ((self ___tzEntryAt___: civil) @env0:at: 1).
+		u1 := civil @env0:- a.
+		t1 := u1 @env0:+ ((self ___tzEntryAt___: u1) @env0:at: 1).
+		t1 @env0:= civil ifTrue: [^ u1 @env0:asFloat].
+		b := t1 @env0:- u1.
+		u2 := civil @env0:- b.
+		t2 := u2 @env0:+ ((self ___tzEntryAt___: u2) @env0:at: 1).
+		t2 @env0:= civil ifTrue: [^ u2 @env0:asFloat].
+		^ u1 @env0:asFloat].
 	localDt := [DateTime
 		@env0:newWithYear: year
 		month: mon

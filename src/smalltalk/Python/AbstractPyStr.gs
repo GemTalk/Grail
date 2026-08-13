@@ -296,4 +296,26 @@ __getattr__: name
 	^ self @env0:___strValue___ ___pyAttrLoad___: name @env0:asSymbol
 %
 
+set compile_env: 1
+category: 'Grail-Pickle'
+method: AbstractPyStr
+__getnewargs__
+	"CPython's str.__getnewargs__: the argument tuple that rebuilds this
+	value through __new__.
+
+	The wrapped string as a plain str, matching CPython's
+	str.__getnewargs__().
+
+	It exists for PICKLING an immutable builtin's subclass.  Such a subclass
+	carries its value in the CONSTRUCTOR, not in instance state, so
+	object.__reduce_ex__'s new-style reduction has to hand the value back as a
+	__new__ argument -- ``str.__new__(MySub)'' alone rebuilds an empty one and
+	the value is gone.  Grail's pickle used to reduce any str subclass to a
+	plain str, losing the class outright."
+
+	| tupleClass |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	^ tupleClass @env0:withAll: { self ___strValue___ }
+%
+
 set compile_env: 0

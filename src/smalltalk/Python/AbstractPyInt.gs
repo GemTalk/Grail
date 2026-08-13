@@ -527,4 +527,26 @@ __ge__: other
 	^ self @env0:value __ge__: other
 %
 
+set compile_env: 1
+category: 'Grail-Pickle'
+method: AbstractPyInt
+__getnewargs__
+	"CPython's int.__getnewargs__: the argument tuple that rebuilds this
+	value through __new__.
+
+	The underlying integer, unwrapped -- ``int.__getnewargs__()'' answers
+	(int(self),) in CPython.
+
+	It exists for PICKLING an immutable builtin's subclass.  Such a subclass
+	carries its value in the CONSTRUCTOR, not in instance state, so
+	object.__reduce_ex__'s new-style reduction has to hand the value back as a
+	__new__ argument -- ``int.__new__(MySub)'' alone rebuilds an empty one and
+	the value is gone.  Grail's pickle used to reduce any int subclass to a
+	plain int, losing the class outright."
+
+	| tupleClass |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	^ tupleClass @env0:withAll: { self @env0:value }
+%
+
 set compile_env: 0
