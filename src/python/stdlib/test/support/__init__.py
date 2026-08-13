@@ -9,9 +9,13 @@
 # IMPORTERROR naming a missing symbol, add it here.
 #
 # IMPORTANT Grail constraints honored below:
-#   * NO @contextlib.contextmanager -- it is a no-op passthrough in Grail
-#     (generators are not coroutine-backed for that pattern).  Every
-#     context manager here is a plain class with __enter__/__exit__.
+#   * Every context manager here is a plain class with __enter__/__exit__
+#     rather than @contextlib.contextmanager.  That started as a hard
+#     requirement -- contextmanager WAS a no-op passthrough in Grail -- and
+#     is now only a convention: it runs the real single-yield protocol as of
+#     the _GeneratorContextManager rewrite.  Kept because a plain class has
+#     no generator dependence at all, which is what you want in the file
+#     every other test module imports before anything else can run.
 #   * The skip/requires/cpython_only family below is written as flexible
 #     passthroughs so direct programmatic calls also no-op.  They ARE
 #     executed as @-decorators: Grail used to drop a decorator built as a
@@ -32,6 +36,9 @@ is_emscripten = False
 is_android = False
 HAVE_PY_DOCSTRINGS = True
 MISSING_C_DOCSTRINGS = False
+# CPython sets this from a --with-pydebug build; Grail is never one, and the
+# tests that read it are asking about assertion-heavy C behaviour.
+Py_DEBUG = False
 
 # Size constants used by bigmem tests.
 _1M = 1024 * 1024
@@ -126,6 +133,14 @@ skip_if_unlimited_stack_size = _PassthroughDecorator()
 skip_on_s390x = _PassthroughDecorator()
 skip_emscripten_stack_overflow = _PassthroughDecorator()
 skip_wasi_stack_overflow = _PassthroughDecorator()
+
+# CPython's requires_limited_api skips unless BOTH _testcapi and
+# _testlimitedcapi import.  Grail has neither and never will -- these tests
+# exercise the C stable ABI -- so the skip is unconditional, for the same
+# reason cpython_only above is.  A passthrough would run them and score
+# ModuleNotFoundError instead.
+requires_limited_api = _SkipDecorator(
+    'needs _testcapi and _testlimitedcapi modules')
 
 
 def run_with_tz(tz):
@@ -447,6 +462,28 @@ class infinite_recursion:
         return self
 
     def __exit__(self, *exc):
+        return False
+
+
+class set_recursion_limit:
+    """CPython's set_recursion_limit: pin sys.setrecursionlimit for the
+    block and restore it after.
+
+    Written as a plain class rather than CPython's @contextlib.contextmanager
+    to match the rest of this file (see the header note).  It is NOT a
+    passthrough -- the tests using it drive recursion deliberately and read
+    the limit they set, so a no-op would change what they measure."""
+
+    def __init__(self, limit):
+        self.limit = limit
+
+    def __enter__(self):
+        self.original_limit = sys.getrecursionlimit()
+        sys.setrecursionlimit(self.limit)
+        return self
+
+    def __exit__(self, *exc):
+        sys.setrecursionlimit(self.original_limit)
         return False
 
 
