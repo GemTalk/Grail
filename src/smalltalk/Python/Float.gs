@@ -618,6 +618,8 @@ __divmod__: other
 	"Return (quotient, remainder) as a tuple."
 
 	| quot rem |
+	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
 	quot := self @env0:// other.
 	rem := self @env0:\\ other.
 	^ tuple @env0:with: quot with: rem
@@ -684,12 +686,19 @@ __floordiv__: other
 	"Floor division.  Python ``float // x'' always yields a FLOAT (``0.1 //
 	1.0'' is 0.0, not 0) -- GemStone's // answers an Integer, so coerce."
 
+	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
 	(other isKindOf: Number) ifTrue: [
-		(other @env0:= 0) ifTrue: [
-			ZeroDivisionError ___signal___: 'float floor division by zero'].
 		^ (self @env0:// other) @env0:asFloat].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (self @env0:// (other __index__)) @env0:asFloat].
+		@env0:includesKey: #'__index__') ifTrue: [
+			"The __index__ result is the real divisor, so it is what gets checked:
+			``1.0 // False'' has a non-Number operand that indexes to zero."
+			| idx |
+			idx := other __index__.
+			(ZeroDivisionError @env0:___isZeroDivisor___: idx) ifTrue: [
+				ZeroDivisionError ___signal___: 'division by zero'].
+			^ (self @env0:// idx) @env0:asFloat].
 	^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'
 %
 
@@ -762,6 +771,10 @@ __mod__: other
 	GemStone's \\ yields NaN."
 
 	| result |
+	"``1.0 % 0'' answered NaN before this guard: GemStone's \\ follows fmod,
+	which has no error case for a zero divisor.  Python raises."
+	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
 	(other isKindOf: Number) ifTrue: [
 		((other @env0:isKindOf: Float) and: [(other @env0:_getKind) @env0:== 3]) ifTrue: [
 			| mod |
@@ -841,7 +854,7 @@ __pow__: other
 		explicit divide-by-zero guard (C99 F.9.4.4; test_float_pow)."
 		((self @env0:= 0.0) and: [(other @env0:< 0)
 			and: [(((other @env0:_getKind) @env0:== 3) or: [(other @env0:_getKind) @env0:> 4]) @env0:not]])
-			ifTrue: [ZeroDivisionError ___signal___: '0.0 cannot be raised to a negative power'].
+			ifTrue: [ZeroDivisionError ___signal___: 'zero to a negative power'].
 		((self @env0:< 0) and: [((self @env0:_getKind) @env0:<= 2)
 			and: [(other @env0:isKindOf: Integer) @env0:not
 			and: [(((other @env0:_getKind) @env0:== 3) or: [(other @env0:_getKind) @env0:> 4]) @env0:not
@@ -1020,11 +1033,22 @@ __sub__: other
 category: 'Grail-Arithmetic'
 method: float
 __truediv__: other
-	"True division (always returns float)."
+	"True division (always returns float).
 
+	IEEE 754 says x/0.0 is an infinity and GemStone obliges, so this answered
+	``inf'' for ``1.0 / 0'' where Python raises.  Python's ``/'' is not IEEE
+	division: it checks the divisor first, whatever the operand types."
+
+	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
 	(other isKindOf: Number) ifTrue: [^ self @env0:/ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:/ (other __index__)].
+		@env0:includesKey: #'__index__') ifTrue: [
+			| idx |
+			idx := other __index__.
+			(ZeroDivisionError @env0:___isZeroDivisor___: idx) ifTrue: [
+				ZeroDivisionError ___signal___: 'division by zero'].
+			^ self @env0:/ idx].
 	^ self ___binOpFallback___: other op: '/' reflected: #'__rtruediv__:'
 %
 

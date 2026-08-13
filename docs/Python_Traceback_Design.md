@@ -1880,3 +1880,81 @@ small and now blocks named tests rather than being a curiosity; `f_locals` via l
 `GsProcess` introspection (2 tests, plus `sys._getframe`'s 4); the three
 ImportError suggestion tests whose blocker §9.19 left as an open question; and the
 `sys.stdlib_module_names` decision from §9.16, which is still the user's to make.
+
+### 9.21 Division by zero: the message, and three cases that never raised (2026-08-13, gs40)
+
+§9.20 named this as next because it blocked two *group* tests, and it is otherwise
+not a traceback topic at all. It began as a wording fix and turned out to be four
+bugs — the guards were written per operator, so each was wrong in a way the others
+hid.
+
+**The wording.** CPython used to distinguish the operators — `integer division or
+modulo by zero`, `float division by zero`, `float floor division by zero`, `float
+modulo` — and **3.14 collapsed every one of them into `division by zero`**. Grail
+still said the 3.13 text. Separately `0 ** -1` says `zero to a negative power`,
+where Grail said `0.0 cannot be raised to a negative power`, a wording no recent
+CPython has used.
+
+**Float division did not raise at all.** `1.0 / 0` answered `inf` and `1.0 % 0`
+answered `nan`: `float.__truediv__` and `float.__mod__` had no guard, and
+`float.__divmod__` had neither a guard nor a type check. IEEE 754 says those are
+the correct values and GemStone obliges — Python's `/` is not IEEE division, and
+checks the divisor first. A silently wrong number is worse than a wrong message.
+
+**`False` was not recognised as a zero.** A Python bool *is* an int, so `1 //
+False` is division by zero. Grail represents `False` as the Smalltalk `false`,
+whose class is `Boolean` and **not** a `Number`, so every guard shaped `(other
+isKindOf: Number) and: [other = 0]` short-circuited on the *first* clause and
+never looked at the value — even though the second clause would have answered true
+(`false = 0` is true in GemStone). `1 // False`, `1 % False` and `divmod(1,
+False)` then reached the kernel and raised GemStone's `ZeroDivide`: error 2026,
+not a Python exception, and so uncatchable from Python at all. `1 / False` took
+another route and answered `OverflowError`, claiming the quotient was too large
+for a float — an answer about the quotient's size for a divisor that is zero.
+
+**A complex zero was not recognised either.** `(1+2j) / 0` answered `(nan-nanj)`.
+Both operand orders are guarded now, so `1 / 0j` raises too.
+
+The zero *test* is one method, `ZeroDivisionError class >> ___isZeroDivisor___:`.
+It tests the **type**, not just `= 0`: a user class whose `__eq__` claims equality
+with zero is not a zero *divisor* and still gets its `__rtruediv__`. That is a
+deliberate limit rather than an oversight, so the fixture checks it.
+
+**There is deliberately no helper that both tests and raises**, though it would
+read better at the seventeen call sites. Wrapping the raise puts one more frame
+underneath `___signal___:`, and that frame *persists* while the exception is
+handled — a Smalltalk handler block runs on top of the signalling stack. For the
+classic runaway
+
+```python
+def f():
+    try: 1/0
+    except ZeroDivisionError: f()
+```
+
+that is one extra frame per level of recursion, and it moved where the gem runs
+out of stack: `AlmostOutOfStack` began arriving inside
+`PyLazyExceptSelector >> handles:`, while the handler search was deciding whether
+`except ZeroDivisionError` matched. `___recursionGuard___` cannot convert that as
+cleanly, and `testRecursionContextChain` went from passing to erroring with
+`RecursionError` escaping the test. So the call sites test with a helper whose
+frame is popped before anything is signalled, then send `___signal___:` from the
+operator's own frame exactly as they did before. The message literal is repeated
+as a result — the intended trade, since what the bugs were about was the test.
+
+**A fixture had been pinning Grail's own bug.**
+`tests/python/exec_class_definition.py` asserted `ZeroDivisionError: integer
+division or modulo by zero`, and that check was **false when run under real
+CPython** — which is the whole point of these fixtures being standalone-runnable.
+It passes under CPython now for the first time. Worth remembering that a fixture
+verified against CPython *at the time it was written* can rot when the expectation
+was wrong to begin with.
+
+**Result: `test.test_traceback` 86 → 88 passing** (failures 46 → 44), the two
+tests §9.20 predicted: `test_exception_group_format_exception_onlyi_recursive` and
+`test_format_exception_group_with_tracebacks`. `check_cpython_regressions.sh`: **0
+regressions, 1 improvement**. SUnit 4149, all green.
+
+`test_exception_group_format` still fails, now on the caret lines alone — the last
+of §9.20's three blockers, and the one that needs real PEP 657 anchor work rather
+than a message change.
