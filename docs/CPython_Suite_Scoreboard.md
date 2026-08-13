@@ -33,7 +33,7 @@ different rows and merges cleanly.
 | test.test_bytes | OK | 317 | 0 | 0 | 25 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
-| test.test_enum | ERROR | 1077 | 6 | 7 | 6 |  |
+| test.test_enum | ERROR | 1077 | 5 | 7 | 6 |  |
 | test.test_unary | OK | 6 | 0 | 0 | 0 |  |
 | test.test_int_literal | OK | 6 | 0 | 0 | 0 |  |
 | test.test_unpack | OK | 1 | 0 | 0 | 0 |  |
@@ -61,14 +61,14 @@ different rows and merges cleanly.
 | test.test_listcomps | ERROR | 60 | 7 | 19 | 0 |  |
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
 | test.test_copy | ERROR | 81 | 21 | 12 | 0 |  |
+| test.test_yield_from | ERROR | 43 | 17 | 12 | 0 |  |
 | test.test_scope | ERROR | 41 | 3 | 1 | 4 |  |
-| test.test_yield_from | ERROR | 43 | 18 | 11 | 0 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
 | test.test_format | OK | 18 | 0 | 0 | 3 |  |
 | test.test_binop | IMPORTERROR | 0 | 0 | 0 | 0 | B class object has no attribute 'register' |
 | test.test_complex | ERROR | 37 | 13 | 12 | 0 |  |
 | test.test_enumerate | IMPORTERROR | 0 | 0 | 0 | 0 | name 'enumerate' is not defined |
-| test.test_raise | ERROR | 37 | 6 | 9 | 0 |  |
+| test.test_raise | ERROR | 37 | 1 | 14 | 0 |  |
 | test.test_funcattrs | ERROR | 35 | 14 | 13 | 1 |  |
 | test.test_decorators | ERROR | 16 | 1 | 5 | 0 |  |
 | test.test_print | ERROR | 9 | 6 | 2 | 0 |  |

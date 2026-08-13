@@ -64,6 +64,30 @@ EnumDict removeAllMethods: 1.
 
 set compile_env: 1
 
+category: 'Grail-Initialization'
+classmethod: EnumDict
+__new__: aClassName
+	"""``EnumDict(cls_name)'' -- CPython records the class name so that a
+	MANGLED PRIVATE name (``_Color__spam'') can be told from a reserved sunder.
+
+	Overridden because the inherited dict constructor reads a positional
+	argument as the mapping to build FROM, so ``EnumDict('Color')'' raised
+	``dictionary update sequence element #0 has length 1'' -- which is what a
+	__prepare__ returning EnumDict(cls) hit, silently, the moment class-body
+	namespaces started calling it.
+
+	A name is the only thing this constructor takes, so anything else is the
+	inherited behaviour; that keeps ``EnumDict()'' and any genuine
+	build-from-mapping use working."""
+
+	| inst |
+	(aClassName isKindOf: CharacterCollection) ifFalse: [
+		^ super __new__: aClassName].
+	inst := self ___new___.
+	inst @env0:dynamicInstVarAt: #'_cls_name' put: aClassName @env0:asString.
+	^ inst
+%
+
 category: 'Grail-Python Protocol'
 method: EnumDict
 __setitem__: key _: value

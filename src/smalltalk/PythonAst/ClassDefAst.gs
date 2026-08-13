@@ -136,7 +136,8 @@ printSmalltalkRuntimeOn: aStream
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames
 	  savedInBodyEmit savedBoundNames savedNestedNames
 	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars
-	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames |
+	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
+	  metaclassKw |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -925,6 +926,34 @@ printSmalltalkRuntimeOn: aStream
 	existing, so it is safe this early.  (The sibling tables stay late; nothing
 	reads __doc__ / __annotations__ from inside a class body.)"
 	self emitMethodCodeTableOn: aStream className: name.
+
+	"PEP 3115's ``__prepare__'': ask the metaclass for the mapping the body is to
+	be executed in, BEFORE the attribute statements below run, because a
+	namespace that watches the writes has to see them as they happen.  Answers
+	nil -- every store then goes straight through -- unless the metaclass really
+	supplies one.
+
+	STAGE LIMIT, emitted only for an EXPLICIT ``metaclass='' keyword: Grail does
+	not install a Python metaclass as the Smalltalk metaclass, so a class that
+	INHERITS one has nothing here to ask.  That is a pre-existing modelling gap
+	rather than one this introduces, and it is what confines the change to the
+	class statements that name a metaclass -- every other class in the corpus
+	emits exactly what it did before.  See docs/Class_Body_Namespace.md.
+
+	The metaclass expression evaluates in the scope ENCLOSING the class
+	statement, like the boundary keyword and the decorators, so it is emitted
+	under inDecoratorEmit."
+	metaclassKw := keywords isNil
+		ifTrue: [nil]
+		ifFalse: [keywords detect: [:kw |
+			kw name notNil and: [kw name asString = 'metaclass']] ifNone: [nil]].
+	metaclassKw ifNotNil: [ | savedDeco |
+		savedDeco := CallAst inDecoratorEmit.
+		CallAst inDecoratorEmit: true.
+		[aStream nextPutAll: name; nextPutAll: ' @env1:___grailPrepareNamespace___: ('.
+		metaclassKw value printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ').'; lf]
+			ensure: [CallAst inDecoratorEmit: (savedDeco == true)]].
 	[
 		"Python executes a class body top-to-bottom: a name is class-
 		local only once its binding statement has run.  Build each
@@ -974,9 +1003,11 @@ printSmalltalkRuntimeOn: aStream
 						RHS, so every name shares the single evaluation -- one
 						GrailEnumAuto marker, which the enum builder then aliases."
 						aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key;
-							nextPutAll: ': ('; nextPutAll: name; nextPutAll: ' ';
+							nextPutAll: ': ('; nextPutAll: name;
+							nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
+							nextPutAll: ''' value: ('; nextPutAll: name; nextPutAll: ' ';
 							nextPutAll: (emittedChainValues at: pair value);
-							nextPutAll: ').'; lf]
+							nextPutAll: ')).'; lf]
 					ifFalse: [
 						| myPos bound |
 						emittedChainValues at: pair value put: pair key.
@@ -987,9 +1018,17 @@ printSmalltalkRuntimeOn: aStream
 							firstBinding keysAndValuesDo: [:nm :pos |
 								pos < myPos ifTrue: [bound add: nm]]].
 						CallAst classBodyBoundNames: (myPos isNil ifTrue: [nil] ifFalse: [bound]).
-						aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key; nextPutAll: ': '.
+						"Through the class-body namespace, when there is one: the
+						value is offered to the mapping and READ BACK, so a
+						namespace may refuse the write (enum.EnumDict on a reused
+						member name) or transform it.  With no namespace the helper
+						answers the value untouched, so this is what it always was."
+						aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key;
+							nextPutAll: ': ('; nextPutAll: name;
+							nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
+							nextPutAll: ''' value: ('.
 						pair value printSmalltalkWithParenthesisOn: aStream.
-						aStream nextPutAll: '.'; lf]
+						aStream nextPutAll: ')).'; lf]
 			].
 		]] value: IdentityKeyValueDictionary new.
 		"Top-level ``if'' statements in the class body: CPython runs
@@ -1624,6 +1663,12 @@ printSmalltalkRuntimeOn: aStream
 			aStream nextPutAll: '#'''; nextPutAll: pair key asString; nextPut: $']
 		separatedBy: [aStream nextPutAll: '. '].
 	aStream nextPutAll: ' }.'; lf.
+
+	"The class statement is over as far as the namespace is concerned -- the
+	metaclass hook above was the last thing entitled to see it.  Emitted only
+	where ___grailPrepareNamespace___ was, so an ordinary class emits neither."
+	metaclassKw ifNotNil: [
+		aStream nextPutAll: name; nextPutAll: ' @env1:___grailFinishNamespace___.'; lf].
 
 	"CLASS KEYWORD ``boundary='': a Flag/IntFlag may override its family-default
 	FlagBoundary (STRICT for Flag, KEEP for IntFlag) with

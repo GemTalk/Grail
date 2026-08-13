@@ -749,6 +749,96 @@ ___grailNearerOf___: aClass and: anotherClass from: startClass
 	^ aClass
 %
 
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailPrepareNamespace___: aMetaclass
+	"PEP 3115's ``__prepare__'': the mapping a class body is executed in.
+
+	    class Meta(type):
+	        @classmethod
+	        def __prepare__(metacls, cls, bases, **kwds):
+	            return EnumDict(cls)
+
+	CPython asks the metaclass for a namespace BEFORE running the body, runs the
+	body against it, and hands it to the metaclass afterwards.  A namespace that
+	watches the writes can then refuse one -- which is the whole point of
+	enum.EnumDict, and of this.
+
+	Grail has no class-body namespace: a body compiles to accessor stores on the
+	class.  This is the first stage of giving it one -- the mapping exists, and
+	every class-body ASSIGNMENT is routed through it (___grailNsStore___:value:)
+	in source order, so a namespace sees each write as it happens.  What it does
+	NOT yet cover is the rest of a body: nested classes, ``if'' branches, ``def''s
+	and decorated ``def''s each have their own emission path and still bypass it,
+	and ``vars()'' inside a body does not answer it.  See
+	docs/Class_Body_Namespace.md.
+
+	Answers nil -- meaning no namespace, and every store goes straight through --
+	unless the metaclass really supplies __prepare__.  Kept in SessionTemps
+	keyed by the class rather than on the class itself: it is scaffolding for
+	the duration of the class statement, it must never be committed, and keying
+	by class handles a nested class statement without a stack."
+
+	| prep ns tbl |
+	aMetaclass isNil ifTrue: [^ nil].
+	prep := [aMetaclass ___pyAttrLoad___: #'__prepare__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	prep isNil ifTrue: [^ nil].
+	"NOT guarded.  A __prepare__ that raises is a real error in the metaclass and
+	CPython propagates it; swallowing it here turned a broken namespace into a
+	silent no-namespace, which looked exactly like this whole path not working."
+	ns := prep @env1:value: { self @env1:__name__. #() } value: nil.
+	(ns isNil or: [ns == None]) ifTrue: [^ nil].
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingClassNamespace'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	tbl @env0:at: self put: ns.
+	^ ns
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailNsStore___: aName value: aValue
+	"One class-body assignment, seen by the namespace if there is one.
+
+	Answers the value to store in the class attribute.  With no namespace that
+	is aValue untouched, which is every class in the corpus that does not name a
+	metaclass with __prepare__.
+
+	The value is READ BACK from the namespace rather than passed through, because
+	a namespace is entitled to transform what it was given -- CPython's
+	_EnumDict resolves an ``auto()'' at assignment time, so the name is already
+	an int for the next statement in the body to use.  Nothing in Grail depends
+	on that yet; reading back is what makes it possible without revisiting this.
+
+	A namespace that REFUSES the write raises out of here, which is what
+	enum.EnumDict does for a reused member name -- and is the behaviour this
+	whole path exists to make reachable."
+
+	| tbl ns |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingClassNamespace' otherwise: nil.
+	tbl isNil ifTrue: [^ aValue].
+	ns := tbl @env0:at: self otherwise: nil.
+	ns isNil ifTrue: [^ aValue].
+	ns @env1:__setitem__: aName @env0:asString _: aValue.
+	^ ns @env1:__getitem__: aName @env0:asString
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailFinishNamespace___
+	"Drop the pending namespace once the class statement is over.  Called after
+	the metaclass hook, which is the last thing entitled to see it."
+
+	| tbl |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingClassNamespace' otherwise: nil.
+	tbl isNil ifTrue: [^ self].
+	tbl @env0:removeKey: self ifAbsent: [].
+	^ self
+%
+
 category: 'Grail-Initialization'
 classmethod: object
 ___pyClassDefined___: attrNames
@@ -1792,12 +1882,19 @@ ___classBodyDefinitionalStore___: aName put: aValue
 	canonically-registered class, and a class-body binding is DEFINITIONAL --
 	see ___classHolderAttrStore___ for what that costs."
 
-	| setterSym getterSym |
+	| setterSym getterSym v |
+	"Through the class-body namespace first, when the class statement prepared
+	one.  Routing it HERE rather than at the two emission sites covers both the
+	single and the chained runtime store, and covers every compound form at once
+	-- a binding inside a class-body ``with'' is exactly where test_enum's
+	test_enum_dict_in_metaclass puts the duplicate it expects to be refused.
+	With no namespace this answers aValue untouched."
+	v := self ___grailNsStore___: aName value: aValue.
 	setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
 	getterSym := aName @env0:asString @env0:asSymbol.
 	((self ___respondsTo___: setterSym) and: [self ___respondsTo___: getterSym])
-		ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { aValue }].
-	^ self ___classHolderAttrStore___: aName put: aValue
+		ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { v }].
+	^ self ___classHolderAttrStore___: aName put: v
 %
 
 category: 'Grail-Class Attr Overlay'
