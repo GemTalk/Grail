@@ -106,12 +106,20 @@ testRebindingSubclassKeepsItsOwnValue
 category: 'Grail-Tests - Enum duplicate names'
 method: ClassBodyRebindingTestCase
 testEnumRejectsEverySpellingOfADuplicate
-	"CPython _EnumDict.__setitem__ (test_duplicate_name_error).  The reported
-	value is the SURVIVING binding's, where CPython names the first one's: the
-	earlier store is already gone when the metaclass hook runs."
+	"CPython _EnumDict.__setitem__ (test_duplicate_name_error).
+
+	All three now name the FIRST binding's value, as CPython does.  This test
+	used to record a deviation on the first case -- ``already defined as 4'',
+	the surviving binding's value, because the earlier store was already gone by
+	the time the metaclass hook ran and noticed the clash.  An enum body is now
+	executed against an EnumDict namespace, so the duplicate is refused AT THE
+	SECOND ASSIGNMENT, while the first value is still what the mapping holds.
+	CPython's own test pins that reading: test_dynamic_members_with_static_methods
+	expects ``'FOO_CAT' already defined as 'aloof''' -- the existing value, not
+	the incoming one."
 
 	self assert: (self resultAt: 'dup_assign_assign') asString
-		equals: '''red'' already defined as 4'.
+		equals: '''red'' already defined as 1'.
 	self assert: (self resultAt: 'dup_assign_def') asString
 		equals: '''red'' already defined as 1'.
 	self assert: (self resultAt: 'dup_property_assign') asString

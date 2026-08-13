@@ -154,6 +154,36 @@ testAnOrdinaryClassEmitsWhatItAlwaysDid
 	self assert: (self resultAt: 'ordinary_value') asString equals: '''second'''.
 %
 
+category: 'Grail-Tests - Enums get one too'
+method: ClassBodyNamespaceTestCase
+testAnEnumBodyRunsInANamespaceWithoutNamingAMetaclass
+	"""Grail's enum metaclass is Smalltalk (``Enum class''), so there is no
+	``metaclass='' keyword to carry it -- which is why the gate on an explicit
+	keyword had to go.  The namespace comes from the metaclass chain instead.
+
+	Members, autos and aliases are all unaffected: the namespace is a route,
+	not a replacement."""
+
+	self assert: (self resultAt: 'enum_members') asString equals: '[''RED'', ''GREEN'']'.
+	self assert: (self resultAt: 'enum_autos') asString equals: '1,2'.
+	self assert: (self resultAt: 'enum_alias') asString equals: 'True'.
+%
+
+category: 'Grail-Tests - Enums get one too'
+method: ClassBodyNamespaceTestCase
+testAReusedMemberNameIsRefusedWhereItIsWritten
+	"""And so the value reported is the one the mapping ALREADY HOLDS.
+
+	Grail used to name the surviving binding instead -- the metaclass hook
+	noticed the clash only after the earlier store was gone -- and
+	ClassBodyRebindingTestCase recorded that as a deviation.  CPython's own test
+	pins the reading: test_dynamic_members_with_static_methods expects
+	``'FOO_CAT' already defined as 'aloof''', the existing value."""
+
+	self assert: (self resultAt: 'enum_duplicate') asString
+		equals: '''red'' already defined as 1'.
+%
+
 category: 'Grail-Tests - Known gaps'
 method: ClassBodyNamespaceTestCase
 testDefsAndNestedClassesBypassItWhichIsAKnownGap
@@ -173,6 +203,20 @@ testVarsInABodyIsNotTheNamespaceWhichIsAKnownGap
 	test_dynamic_members_with_static_methods -- is not reached by this stage."
 
 	self assert: (self resultAt: 'vars_in_body_a_known_gap') asString equals: 'dict'.
+%
+
+category: 'Grail-Tests - Known gaps'
+method: ClassBodyNamespaceTestCase
+testAutoIsNotResolvedAtAssignmentWhichIsAKnownGap
+	"""Recorded, NOT endorsed.  ``auto()'' is still resolved in a later pass, so
+	a body that USES a member it just defined sees the unresolved marker and the
+	operator fails.  The read-back this needs is already in place -- the
+	namespace's value is what lands on the class -- but EnumDict does not yet
+	call _generate_next_value_ on the way in.  test_enum's
+	test_using_members_as_nonmember is what closing this buys."""
+
+	self assert: (self resultAt: 'auto_at_assignment_a_known_gap') asString
+		equals: 'TypeError'.
 %
 
 category: 'Grail-Tests - Known gaps'

@@ -780,7 +780,22 @@ ___grailPrepareNamespace___: aMetaclass
 	by class handles a nested class statement without a stack."
 
 	| prep ns tbl |
-	aMetaclass isNil ifTrue: [^ nil].
+	aMetaclass isNil ifTrue: [
+		"No ``metaclass='' keyword.  Grail's own metaclasses are SMALLTALK -- an
+		enum's namespace comes from ``Enum class'', not from a keyword -- so ask
+		the receiver's metaclass chain for the Grail-side hook.  A selector probe
+		rather than an attribute load, because this runs for every class
+		definition in the corpus and answers nil for almost all of them."
+		((self @env0:class @env0:whichClassIncludesSelector:
+			#'___grailMetaclassNamespace___' environmentId: 1) == nil)
+				ifTrue: [^ nil].
+		ns := self ___grailMetaclassNamespace___.
+		(ns isNil or: [ns == None]) ifTrue: [^ nil].
+		tbl := SessionTemps @env0:current
+			@env0:at: #'GrailPendingClassNamespace'
+			ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+		tbl @env0:at: self put: ns.
+		^ ns].
 	prep := [aMetaclass ___pyAttrLoad___: #'__prepare__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	prep isNil ifTrue: [^ nil].
