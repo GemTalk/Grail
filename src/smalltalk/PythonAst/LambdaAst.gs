@@ -196,7 +196,7 @@ printSmalltalkOn: aStream
 	makes every lambda call site stricter, which is its own change."
 
 	| posArgs transport kwonlyNames varargName kwargName
-	  defaults kwDefaults firstWithDefault suffix hasOuter |
+	  defaults kwDefaults firstWithDefault suffix hasOuter requiredKwonly |
 	posArgs := args posonlyargs , args args.
 	transport := self transportNamesFor: posArgs.
 	kwonlyNames := self transportNamesFor: args kwonlyargs.
@@ -272,6 +272,22 @@ printSmalltalkOn: aStream
 	name, so a reserved-name param (``lambda self=x: ...'') is still passable
 	as ``self=''.  Keys are Python str (Smalltalk String) to match the dict
 	CallAst>>printKeywordsDictOn: builds."
+	"All-at-once missing-parameter report, before the binding loop, which sees
+	one parameter at a time -- as in FunctionDefAst.  A lambda's __qualname__ is
+	``<lambda>'', which is what CPython names in the message.  Guarded on the
+	positional count so an ordinary call pays a compare and no send."
+	firstWithDefault > 1 ifTrue: [
+		aStream
+			nextPutAll: '((___positional___ @env0:size) @env0:< ';
+			nextPutAll: (firstWithDefault - 1) printString;
+			nextPutAll: ') ifTrue: [TypeError ___checkMissingPositional___: ___positional___ kwargs: ___kwargs___ names: #( '.
+		1 to: firstWithDefault - 1 do: [:i |
+			aStream nextPut: $'; nextPutAll: (posArgs at: i) name asString;
+				nextPutAll: ''' '].
+		aStream
+			nextPutAll: ') posonly: ';
+			nextPutAll: ((args posonlyargs size) min: firstWithDefault - 1) printString;
+			nextPutAll: ' qualifiedName: ''<lambda>''].'; lf].
 	transport doWithIndex: [:n :i |
 		| pyName |
 		pyName := (posArgs at: i) name asString.
@@ -292,10 +308,12 @@ printSmalltalkOn: aStream
 				aStream nextPutAll: '___lamdef_'; nextPutAll: n;
 					nextPutAll: suffix]
 			ifFalse: [
+				"Unreachable once the pre-pass above has run; kept as the
+				binding's own last word, in the same wording."
 				aStream
-					nextPutAll: 'TypeError ___signal___: ''<lambda>() missing required argument: ';
+					nextPutAll: 'TypeError ___signalMissingArguments___: #( ''';
 					nextPutAll: pyName;
-					nextPut: $'].
+					nextPutAll: ''' ) kind: ''positional'' qualifiedName: ''<lambda>'''].
 		aStream nextPutAll: ']].'; lf.
 	].
 
@@ -316,6 +334,18 @@ printSmalltalkOn: aStream
 
 	"Bind keyword-only args from the kwargs dict, else their default, else a
 	catchable TypeError (a nil kw_defaults entry means the arg is required)."
+	"Required keyword-only parameters, reported together and after the positional
+	ones -- CPython's order.  Unguarded: a keyword-only parameter is filled by
+	name, so there is no count that proves them all present."
+	requiredKwonly := OrderedCollection new.
+	kwonlyNames doWithIndex: [:n :i |
+		(kwDefaults at: i ifAbsent: [nil]) isNil ifTrue: [
+			requiredKwonly add: (args kwonlyargs at: i) name asString]].
+	requiredKwonly isEmpty ifFalse: [
+		aStream nextPutAll: 'TypeError ___checkMissingKeywordOnly___: ___kwargs___ defaults: nil names: #( '.
+		requiredKwonly do: [:each |
+			aStream nextPut: $'; nextPutAll: each; nextPutAll: ''' '].
+		aStream nextPutAll: ') qualifiedName: ''<lambda>''.'; lf].
 	kwonlyNames doWithIndex: [:n :i |
 		| pyName def |
 		pyName := (args kwonlyargs at: i) name asString.
@@ -331,9 +361,9 @@ printSmalltalkOn: aStream
 		def isNil
 			ifTrue: [
 				aStream
-					nextPutAll: 'TypeError ___signal___: ''<lambda>() missing keyword-only argument: ';
+					nextPutAll: 'TypeError ___signalMissingArguments___: #( ''';
 					nextPutAll: pyName;
-					nextPut: $']
+					nextPutAll: ''' ) kind: ''keyword-only'' qualifiedName: ''<lambda>''']
 			ifFalse: [
 				aStream nextPutAll: '___lamdef_'; nextPutAll: n;
 					nextPutAll: suffix].
