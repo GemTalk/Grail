@@ -5001,6 +5001,23 @@ ___pyAttrStore___: aName put: aValue
 		for every program that never does this."
 		(aName @env0:asString @env0:= '__hash__') ifTrue: [
 			SessionTemps @env0:current @env0:at: #'GrailDynamicHashSeen' put: true].
+		"``cls.__qualname__ = 'Outer.Inner''' is a WRITABLE slot in CPython, and
+		pickle depends on it: a class defined in a function body is pickled by
+		walking its dotted qualname from the module, so the idiom is to attach
+		the class somewhere reachable and then say where it now lives.
+
+		    self.__class__.NestedEnum = NestedEnum
+		    NestedEnum.__qualname__ = 'TestSpecial.NestedEnum'
+
+		Grail dropped the store silently: the class-side READ of __qualname__
+		always performs the getter (it must, so ``type(x).__qualname__'' is a
+		string and not a bound method), and the getter reads a DIFFERENT slot --
+		___qualname___, which ClassDefAst fills for a nested class at build
+		time.  Route the store to that slot, so an assignment overrides the
+		build-time value through the one path the getter already honours.
+		test_enum test_pickle_nested_class."
+		(aName @env0:asString @env0:= '__qualname__') ifTrue: [
+			^ self ___classHolderAttrStore___: #'___qualname___' put: aValue].
 		"(Enum member-reassignment is guarded in __setattr__:_:, the single
 		store entry point, BEFORE the accessor-setter dispatch.)"
 		"Canonical-class overlay: runtime stores on a shared canonical
