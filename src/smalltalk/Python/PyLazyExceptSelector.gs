@@ -29,7 +29,7 @@ BaseException ifNil: [self error: 'BaseException is not defined. Check file orde
 expectvalue /Class
 doit
 Object subclass: 'PyLazyExceptSelector'
-  instVarNames: #( block selector evaluated )
+  instVarNames: #( block selector evaluated shieldAbove )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -65,6 +65,31 @@ set compile_env: 0
 
 category: 'Grail-Private'
 classmethod: PyLazyExceptSelector
+on: aBlock shieldedAbove: aDepth
+	"As on:, plus the handler depth at which this selector was INSTALLED.  It
+	handles nothing once the depth has risen above that.
+
+	This is what stops an exception raised in one ``except'' handler from being
+	caught by a LATER handler of the same try.  Python's except clauses are
+	alternatives for the try BODY only; they compile to nested protected blocks,
+	so the later handlers' on:do: enclose the earlier handlers' bodies.
+
+	A DEPTH rather than a flag, and captured at install time rather than read
+	from a shared place, because that is what makes nesting come out right: a try
+	inside a handler installs its selectors at the raised depth, so its own
+	handlers still catch from its own body while the enclosing try's later
+	handlers stay shielded.  Two earlier designs failed here -- moving handler
+	bodies outside the on:do: makes a bare ``raise'' impossible (GemStone will not
+	re-signal an unwound exception), and a per-statement flag in an enclosing
+	block costs a stack frame per try, which turned test_richcmp's
+	test_recursion into a RecursionError.  An integer in the selector costs
+	neither."
+
+	^ self new _setBlock: aBlock shieldAbove: aDepth
+%
+
+category: 'Grail-Private'
+classmethod: PyLazyExceptSelector
 on: aBlock
 	"aBlock answers the handler target (an exception class or ExceptionSet),
 	already passed through BaseException class >> ___pyExceptType___:."
@@ -77,6 +102,15 @@ method: PyLazyExceptSelector
 _setBlock: aBlock
 	block := aBlock.
 	evaluated := false.
+	^ self
+%
+
+category: 'Grail-Private'
+method: PyLazyExceptSelector
+_setBlock: aBlock shieldAbove: aDepth
+	block := aBlock.
+	evaluated := false.
+	shieldAbove := aDepth.
 	^ self
 %
 
@@ -97,5 +131,9 @@ handles: anException
 	"Sent by on:do: only while searching for a handler for a signalled
 	exception -- which is precisely when Python evaluates the clause."
 
+	"Shielded: a handler body of this same try (or of something it called) is
+	running, so this clause is not an alternative for what it raised."
+	(shieldAbove notNil
+		and: [BaseException ___handlerDepth___ > shieldAbove]) ifTrue: [^ false].
 	^ self _selector handles: anException
 %

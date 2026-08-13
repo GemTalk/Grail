@@ -62,6 +62,34 @@ set compile_env: 0
 category: 'Grail-other'
 method: TryAst
 printSmalltalkOn: aStream
+	"Emit this try/except/else/finally.
+
+	Handlers compile to NESTED protected blocks:
+
+		[[ body ] on: T1 do: [H1] ] on: T2 do: [H2]
+
+	so H1's BODY runs inside H2's protected block.  Without the SHIELD below, an
+	exception raised by the first handler was caught by the second -- but Python's
+	except clauses are alternatives for the try BODY only, and a raise inside a
+	handler leaves the whole statement.  Every handler but the last was exposed to
+	every handler after it.
+
+	The shield is a DEPTH.  Each handler body brackets itself with
+	BaseException ___enterHandler___ / ___exitHandler___ (through the ensure: that
+	already restores sys.exc_info()), and the selectors of handlers 2..N record
+	the depth at which they were INSTALLED and handle nothing once the depth has
+	risen above it.  Nesting therefore works: a try inside a handler installs its
+	selectors at the raised depth, so its own handlers still catch from its own
+	body while this try's later handlers stay shielded.
+
+	Two other designs were built and measured first, and both are worse.  Moving
+	the handler bodies outside the on:do: (recording which matched, dispatching
+	afterwards) is semantically exact and makes a bare ``raise'' impossible --
+	GemStone will not signal an exception whose handler has unwound
+	(UncontinuableError 6011), which test_listcomps' test_comp_in_try_except
+	catches.  A per-statement flag in a block enclosing the whole try works, and
+	costs a stack frame per try: test_richcmp's test_recursion became a
+	RecursionError.  An integer captured in the selector costs neither."
 
 	| useEnsureFinally |
 	"finally-during-propagation: route the finally through
@@ -108,7 +136,14 @@ printSmalltalkOn: aStream
 			ifTrue: [aStream nextPutAll: '] @env0:on: ']
 			ifFalse: [aStream nextPutAll: ']] @env0:on: '].
 		handler type
-			ifNil: [aStream nextPutAll: 'BaseException']
+			ifNil: [
+				"A bare ``except:''.  After the first handler it still needs a shield,
+				and the shield lives on PyLazyExceptSelector, so the class has to be
+				wrapped rather than emitted directly."
+				index = 1
+					ifTrue: [aStream nextPutAll: 'BaseException']
+					ifFalse: [
+						aStream nextPutAll: '(PyLazyExceptSelector @env0:on: [BaseException] shieldedAbove: (BaseException @env0:___handlerDepth___))']]
 			ifNotNil: [
 				"Validate the handler through BaseException ___pyExceptType___:
 				before ``on:do:'' sends it #handles:.  Catching a non-exception
@@ -144,7 +179,12 @@ printSmalltalkOn: aStream
 						it merges with the surrounding ``on:...do:`` into one
 						mashed selector."
 						handler type printSmalltalkWithParenthesisOn: aStream].
-				aStream nextPutAll: '])'].
+				index = 1
+					ifTrue: [aStream nextPutAll: '])']
+					ifFalse: [
+						"Records the depth as it is INSTALLED, which is what makes the
+						shield exact under nesting."
+						aStream nextPutAll: '] shieldedAbove: (BaseException @env0:___handlerDepth___))']].
 		aStream nextPutAll: ' do: [:___ex | | ___savedExc |'; increaseIndent; lf.
 		"Always re-raise Grail's control-flow signals so a Python
 		``except Exception`` doesn't swallow a pending ``return`` /
@@ -178,7 +218,7 @@ printSmalltalkOn: aStream
 		Runs AFTER the control-flow guard so a pending signal never becomes
 		'the current exception'."
 		aStream
-			nextPutAll: '___savedExc := BaseException @env0:___currentException___. BaseException @env0:___setCurrentException___: ___ex. [';
+			nextPutAll: '___savedExc := BaseException @env0:___currentException___. BaseException @env0:___setCurrentException___: ___ex. BaseException @env0:___enterHandler___. [';
 			lf.
 		handler name ifNotNil: [
 			"Route ``except X as e'' through the module-scope-aware store so
@@ -190,7 +230,7 @@ printSmalltalkOn: aStream
 		handler body printSmalltalkOn: aStream.
 		aStream
 			lf;
-			nextPutAll: '] @env0:ensure: [BaseException @env0:___setCurrentException___: ___savedExc]';
+			nextPutAll: '] @env0:ensure: [BaseException @env0:___exitHandler___. BaseException @env0:___setCurrentException___: ___savedExc]';
 			lf.
 	].
 
