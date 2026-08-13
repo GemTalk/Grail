@@ -1653,3 +1653,66 @@ moves only this row.
 `..._when_builtins_is_module` fail earlier, on `AttributeError: PyModuleDict object
 has no attribute 'copy'` — `globals().copy()` is unimplemented, which is unrelated
 to suggestions and worth its own fix.
+
+### 9.18 A module namespace you can copy, and a NameError that names itself (2026-08-12, gs40)
+
+§9.17 left two suggestion tests failing on `AttributeError: PyModuleDict object has
+no attribute 'copy'`, unrelated to suggestions. Fixing that exposed a second gap
+behind it, and both are worth stating because each is a general bug rather than a
+test-shaped one.
+
+**`globals()` could not be copied.** CPython's `globals()` *is* a dict. Grail's is
+a live view over the module (`PyModuleDict`), which is the right object — a write
+through it must reach the module — but it was missing precisely the operations that
+deliberately *do not* write through. `copy()` was absent, so the ordinary
+
+```python
+custom = globals().copy()
+custom['k'] = v
+eval(expr, custom)
+```
+
+idiom raised `AttributeError`. Returning another live view would have been worse
+than the error: the mutations would land in the module, silently. `copy()` now
+answers a plain `dict` snapshot, and `popitem` / `__or__` / `__ior__` are added
+alongside it — the same family, missing for the same reason. `__ior__` *does* write
+through, matching `update()`; `__or__` does not, matching CPython's dict.
+
+`fromkeys` is deliberately left out: it is a dict *constructor* helper, not a
+mapping operation on an instance, and its presence on a live view would mean
+nothing.
+
+**A NameError raised inside a function was anonymous.** §9.16 gave `NameError` a
+`name` attribute and routed the module-global miss (`module>>___moduleAttrLoad___:`)
+through it. But a bare-name miss compiled *inside a function body* is emitted by
+`NameAst` codegen, which raised inline:
+
+    NameError ___signal___: 'name ''x'' is not defined'
+
+— message only, no attribute. So the very case a suggestion is most wanted for had
+nothing to compute one from. The codegen now emits
+`NameError @env0:___signalUndefined___: 'x'`, which builds the identical message
+*and* sets `name`. The fixture asserts the message is unchanged, because adding an
+attribute must not reword an error.
+
+This is what makes `eval("ZeroDivisionErrrrr", custom_globals)` suggest
+`ZeroDivisionError`: the frame and its `f_globals` were already right after §9.17,
+and the only thing missing was the name to match against.
+
+**Result: `test.test_traceback` 70 → 71 passing** (failures 62 → 61), the test being
+`test_name_error_suggestions_from_builtins_when_builtins_is_module`. SUnit 4101 →
+4102 before the new test, 4103 with it.
+
+Worth being precise about what `copy()` alone bought: **nothing on the scoreboard.**
+It cleared the `AttributeError` and both blocked tests then failed on their *next*
+obstacle. One of them needed the codegen fix above; the other,
+`test_name_error_suggestions_with_non_string_candidates`, wants a candidate from
+`locals()` and so still needs `f_locals` (§9.17). A fix that moves no counter is
+still a fix — `globals().copy()` is a common idiom that simply did not work — but it
+would be misleading to bundle it with the number.
+
+**Still open in this thread:** `f_locals` for local-name suggestions (2 tests, and a
+prerequisite for `sys._getframe`); the `sys.stdlib_module_names` decision from §9.16
+(2 tests); ImportError suggestions, which need `from X import Y` to raise
+`ImportError` rather than `ModuleNotFoundError` (3 tests); and the 19 ExceptionGroup
+tests, now the largest single bucket.

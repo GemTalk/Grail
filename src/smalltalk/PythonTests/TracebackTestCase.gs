@@ -746,6 +746,51 @@ testExceptionChaining
 
 category: 'Grail-Tests - Traceback Runtime'
 method: TracebackTestCase
+testModuleDictOpsAndNameErrorName
+	"The mapping operations a module namespace must support, and the ``name'' every
+	NameError must carry.
+
+	CPython's globals() IS a dict.  Grail's is a LIVE view over the module
+	(PyModuleDict) -- the right object, since a write through it must reach the
+	module -- but it was missing the operations that deliberately do NOT write
+	through.  copy() was absent entirely, so the ordinary
+	``custom = globals().copy(); custom[k] = v'' idiom raised AttributeError
+	instead of handing back a namespace of the caller's own.  popitem / __or__ /
+	__ior__ were missing for the same reason and are added with it.
+
+	The second half is ``e.name''.  CPython has carried it on NameError since 3.10
+	and the stdlib reads it.  In Grail only the MODULE-global miss set it: a
+	bare-name miss inside a function body is emitted by NameAst codegen, which
+	raised inline with no attribute, so every such miss was anonymous.  Both paths
+	are checked because they are genuinely different code, and the message is
+	asserted unchanged -- adding an attribute must not reword the error.
+
+	Verified against real CPython by running the fixture directly; see
+	tests/python/module_dict_ops.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'module_dict_ops' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/module_dict_ops.py')
+		name: 'module_dict_ops'.
+	#( 'a_copy_is_a_plain_dict'
+	   'a_copy_carries_the_current_bindings'
+	   'writing_to_a_copy_does_not_touch_the_module'
+	   'deleting_from_a_copy_does_not_touch_the_module'
+	   'eval_accepts_a_copied_namespace'
+	   'or_merges_into_a_new_dict'
+	   'ior_merges_in_place'
+	   'popitem_returns_a_pair_and_removes_it'
+	   'popitem_on_an_empty_mapping_raises_keyerror'
+	   'a_module_global_miss_names_the_binding'
+	   'a_miss_inside_a_function_names_the_binding_too'
+	   'the_message_is_unchanged_by_carrying_the_name' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'module-dict/NameError-name check failed: ' , k].
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
 testFrameGlobalsAndNameErrorSuggestions
 	"A traceback frame's f_globals, and the NameError suggestions it enables.
 

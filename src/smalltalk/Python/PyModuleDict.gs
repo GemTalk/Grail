@@ -271,6 +271,70 @@ pop: key _: default
 
 category: 'Grail-Python-Protocol'
 method: PyModuleDict
+copy
+	"``globals().copy()'' -- a SNAPSHOT, as a plain dict.
+
+	CPython's globals() IS a dict, so copy() returns an ordinary dict that no
+	longer tracks the module.  Grail's globals() is a LIVE view, which makes the
+	distinction load-bearing rather than academic: the whole point of copying is
+	to get a namespace you can mutate without touching the module, which is what
+	``custom_globals = globals().copy(); custom_globals[k] = v'' relies on (the
+	eval-with-custom-globals idiom in test_traceback's suggestion tests, and a
+	common one outside them).  Returning another live view would write those
+	mutations straight back into the module."
+
+	| d |
+	d := dict ___new___.
+	self @env0:keysAndValuesDo: [:k :v |
+		d __setitem__: k @env0:asString _: v].
+	^ d
+%
+
+category: 'Grail-Python-Protocol'
+method: PyModuleDict
+popitem
+	"Remove and return one (key, value) pair; KeyError when empty.
+
+	CPython's dict.popitem is LIFO -- it removes the last-inserted pair.  Grail's
+	module storage spans dynamic instVars and dict slots with no single insertion
+	order to honour, so this removes the last pair this view enumerates, which is
+	the same pair a caller draining the mapping would expect to see next."
+
+	| pairs last |
+	pairs := self items.
+	(pairs __len__) @env0:= 0 ifTrue: [
+		KeyError ___signal___: 'popitem(): dictionary is empty'].
+	last := pairs __getitem__: (pairs __len__) @env0:- 1.
+	self pop: (last __getitem__: 0).
+	^ last
+%
+
+category: 'Grail-Python-Protocol'
+method: PyModuleDict
+__or__: other
+	"PEP 584 ``globals() | other'' -- a new plain dict, module untouched.
+
+	Same reasoning as copy(): the result is a dict, not a view, because CPython's
+	operand is a dict and the result must not write through to the module."
+
+	| d |
+	d := self copy.
+	d update: other.
+	^ d
+%
+
+category: 'Grail-Python-Protocol'
+method: PyModuleDict
+__ior__: other
+	"PEP 584 ``globals() |= other'' -- an IN-PLACE merge, so this one DOES write
+	through to the module, exactly as ``globals().update(other)'' does."
+
+	self update: other.
+	^ self
+%
+
+category: 'Grail-Python-Protocol'
+method: PyModuleDict
 setdefault: key _: default
 	"Read through the FULL chain (a dict-slot or def binding counts as
 	present); write, when absent, to the canonical dynamic-instVar home."
