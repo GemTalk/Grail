@@ -45,6 +45,21 @@ clean := [:s | | str lf cr tab ws cp |
   str := s isNil
     ifTrue: ['']
     ifFalse: [(s isKindOf: CharacterCollection) ifTrue: [s] ifFalse: [s printString]].
+  "Strip the project root, so a detail that quotes a FILE PATH does not bake
+   this checkout's location into the committed scoreboard.  An ImportError
+   naming the module it could not read does exactly that, and the row then
+   differs on every machine and against CI -- which is the one thing the
+   committed board must not do, since it is the baseline
+   check_cpython_regressions.sh diffs against.  Replaced with the relative
+   path, which is what a reader wants anyway."
+  [ | dir idx |
+    dir := System gemEnvironmentVariable: 'GRAIL_DIR'.
+    (dir isNil or: [dir isEmpty]) ifFalse: [
+      (dir endsWith: '/') ifFalse: [dir := dir , '/'].
+      [(idx := str indexOfSubCollection: dir) > 0] whileTrue: [
+        str := (str copyFrom: 1 to: idx - 1) ,
+               (str copyFrom: idx + dir size to: str size)]]
+  ] on: AbstractException do: [:ex | ex return: nil].
   "Cap length -- some Smalltalk errors embed a whole dict printString."
   str size > 240 ifTrue: [str := (str copyFrom: 1 to: 240) , ' ...'].
   lf := Character lf. cr := Character cr. tab := Character tab.

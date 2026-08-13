@@ -2055,6 +2055,14 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 		callParams do: [:p | stream nextPutAll: (self transportParamName: p); space].
 		stream nextPut: $|; lf.
 	].
+	"Reject extra positional / unexpected keyword args BEFORE binding (the
+	fixed selector we forward to would otherwise silently drop them).  Ahead
+	of the loop for the reason printPositionalUnpackingOn: gives: the binding
+	raises ``missing required argument'' for the first parameter it cannot
+	fill, so running the guards afterwards let that outrank what the caller
+	actually did wrong -- passing a positional-only parameter by keyword."
+	self printArgCountChecksOn: stream
+		positionalName: '___pos___' kwargsName: '___kw___' nPositional: callParams size.
 	callParams doWithIndex: [:p :i |
 		| absoluteIdx isPosOnly |
 		"absolute parameter index in the full (self-included) list, to
@@ -2085,10 +2093,6 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 		positional-only parameter."
 		stream nextPutAll: (isPosOnly ifTrue: ['].'] ifFalse: [']].']); lf.
 	].
-	"Reject extra positional / unexpected keyword args (the fixed selector
-	we forward to would otherwise silently drop them)."
-	self printArgCountChecksOn: stream
-		positionalName: '___pos___' kwargsName: '___kw___' nPositional: callParams size.
 	"Forward to the fixed-arity selector."
 	stream nextPutAll: '^ self '.
 	stripSelf
@@ -2205,6 +2209,16 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 	(args posonlyargs ifNil: [#()]) do: [:a |
 		posonlyNames add: a name asString.
 		posonlyNames add: (self transportParamName: a name) asString].
+	"Arity + keyword guards BEFORE the per-parameter binding, not after it.
+	The binding loop raises ``missing required argument'' as it goes, so
+	whichever parameter it reaches first won the report -- and CPython decides
+	the other way round, validating the CALL before complaining about what it
+	could not fill.  ``def f(a, /, b)'' called ``f(a=1, b=2)'' has to say the
+	positional-only parameter was passed by keyword; running the guards last
+	said ``missing required argument: a'', which names the right parameter for
+	entirely the wrong reason and hides what the caller actually did wrong."
+	self printArgCountChecksOn: aStream
+		positionalName: posName kwargsName: kwName nPositional: numParams.
 	1 to: numParams do: [:i |
 		| pname hasDefault isPosOnly |
 		pname := paramNames at: i.
@@ -2286,9 +2300,7 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 		"One closing bracket per gate opened: the positional gate always, the
 		kwargs gate only for a keyword-bindable parameter."
 		aStream nextPutAll: (isPosOnly ifTrue: ['].'] ifFalse: [']].']); lf
-	].
-	self printArgCountChecksOn: aStream
-		positionalName: posName kwargsName: kwName nPositional: numParams
+	]
 %
 
 category: 'Module Method Compilation'
@@ -2345,21 +2357,75 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 			nextPutAll: ' but '' @env0:, ('; nextPutAll: posName;
 			nextPutAll: ' @env0:size) @env0:printString @env0:, ('; nextPutAll: posName;
 			nextPutAll: ' @env0:size @env0:> 1 ifTrue: ['' were given''] ifFalse: ['' was given'']))].'; lf ].
-	"2. Unexpected keyword -- skipped when **kwargs collects the extras."
-	args kwarg isNil ifTrue: [ | kwNames |
+	"2. Unexpected keyword -- skipped when **kwargs collects the extras.
+
+	A POSITIONAL-ONLY name is not bindable by keyword, which is the whole
+	point of PEP 570, so it must not be in the accepted list.  It was, and the
+	consequence was worse than a wrong message: a posonly parameter WITH a
+	default silently ignored the keyword and used the default, so
+	``def h(a=1, /, b=2)'' answered (1, 2) for ``h(a=9)'' where CPython raises.
+	(Without a default the call still failed, but as ``missing required
+	argument: a'' rather than for the real reason.)
+
+	The **kwargs case is untouched and stays correct: this whole guard is
+	skipped when the def collects extras, and CPython likewise lets
+	``def g(a, /, **kw)'' take ``g(1, a=2)'' with the name landing in kw.
+
+	Two messages, and CPython prefers the posonly one when a call commits both
+	sins -- ``f(1, 2, a=1, z=9)'' reports a, not z -- so the offenders are
+	collected before either is raised rather than raised as they are met.
+	Posonly names are reported in PARAMETER order, joined by ', ' inside ONE
+	pair of quotes (``'a, b''', not ``'a', 'b'''), matching
+	CPython's format_kwargs_error."
+	args kwarg isNil ifTrue: [ | kwNames poNames |
+		poNames := args posonlyargs collect: [:a | a name asString].
 		kwNames := OrderedCollection new.
-		args posonlyargs do: [:a | kwNames add: a name asString].
 		args args do: [:a | kwNames add: a name asString].
 		args kwonlyargs do: [:a | kwNames add: a name asString].
-		aStream
-			nextPutAll: '('; nextPutAll: kwName;
-			nextPutAll: ' @env0:isNil) @env0:not ifTrue: [';
-			nextPutAll: kwName; nextPutAll: ' @env0:keysDo: [:___k___ | ({ '.
-		kwNames do: [:n | aStream nextPutAll: ''''; nextPutAll: n; nextPutAll: '''. '].
-		aStream
-			nextPutAll: '} @env0:includes: (___k___ @env0:asString)) ifFalse: [TypeError ___signal___: (''';
-			nextPutAll: name;
-			nextPutAll: '() got an unexpected keyword argument: '' @env0:, (___k___ @env0:asString))]]].'; lf ].
+		poNames isEmpty
+			ifTrue: [
+				"No positional-only parameters: emit exactly what this always
+				emitted, so the overwhelmingly common def is byte-identical."
+				aStream
+					nextPutAll: '('; nextPutAll: kwName;
+					nextPutAll: ' @env0:isNil) @env0:not ifTrue: [';
+					nextPutAll: kwName; nextPutAll: ' @env0:keysDo: [:___k___ | ({ '.
+				kwNames do: [:n | aStream nextPutAll: ''''; nextPutAll: n; nextPutAll: '''. '].
+				aStream
+					nextPutAll: '} @env0:includes: (___k___ @env0:asString)) ifFalse: [TypeError ___signal___: (''';
+					nextPutAll: name;
+					nextPutAll: '() got an unexpected keyword argument: '' @env0:, (___k___ @env0:asString))]]].'; lf ]
+			ifFalse: [
+				aStream
+					nextPutAll: '('; nextPutAll: kwName;
+					nextPutAll: ' @env0:isNil) @env0:not ifTrue: [ [ | ___po___ ___unk___ | '; lf;
+					nextPutAll: '  ___po___ := OrderedCollection @env0:new. ___unk___ := nil.'; lf.
+				"Posonly offenders, walked in parameter order so the message is
+				deterministic and matches CPython's ordering."
+				aStream nextPutAll: '  { '.
+				poNames do: [:n | aStream nextPutAll: ''''; nextPutAll: n; nextPutAll: '''. '].
+				aStream
+					nextPutAll: '} @env0:do: [:___n___ | ';
+					nextPutAll: kwName;
+					nextPutAll: ' @env0:keysDo: [:___k___ | (___k___ @env0:asString) @env0:= ___n___ ifTrue: [___po___ @env0:add: ___n___]]].'; lf.
+				"First unbindable name that is not a posonly one."
+				aStream
+					nextPutAll: '  '; nextPutAll: kwName;
+					nextPutAll: ' @env0:keysDo: [:___k___ | (({ '.
+				kwNames do: [:n | aStream nextPutAll: ''''; nextPutAll: n; nextPutAll: '''. '].
+				aStream nextPutAll: '} @env0:includes: (___k___ @env0:asString)) or: [{ '.
+				poNames do: [:n | aStream nextPutAll: ''''; nextPutAll: n; nextPutAll: '''. '].
+				aStream
+					nextPutAll: '} @env0:includes: (___k___ @env0:asString)]) ifFalse: [';
+					nextPutAll: '___unk___ @env0:isNil ifTrue: [___unk___ := ___k___ @env0:asString]]].'; lf;
+					nextPutAll: '  ___po___ @env0:isEmpty ifFalse: [TypeError ___signal___: (''';
+					nextPutAll: name;
+					nextPutAll: '() got some positional-only arguments passed as keyword arguments: '''''' @env0:, ';
+					nextPutAll: '((___po___ @env0:inject: nil into: [:___acc___ :___e___ | ___acc___ @env0:isNil ifTrue: [___e___] ifFalse: [___acc___ @env0:, '', '' @env0:, ___e___]])) @env0:, '''''''')].'; lf;
+					nextPutAll: '  ___unk___ @env0:isNil ifFalse: [TypeError ___signal___: (''';
+					nextPutAll: name;
+					nextPutAll: '() got an unexpected keyword argument: '' @env0:, ___unk___)].'; lf;
+					nextPutAll: '] @env0:value ].'; lf ] ].
 %
 
 category: 'Module Method Compilation'

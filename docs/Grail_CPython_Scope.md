@@ -28,10 +28,10 @@ Where the in-scope tiers stand:
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
 | P1 | 31 | 23 | 36 | 90 |
-| P2 | 13 | 3 | 18 | 34 |
+| P2 | 14 | 2 | 18 | 34 |
 | P3 | 0 | 1 | 55 | 56 |
 | P4 | 0 | 0 | 75 | 75 |
-| **In-scope** | **44** | **27** | **184** | **255** |
+| **In-scope** | **45** | **26** | **184** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -88,7 +88,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **71 are wired into the harness** (P1 54 · P2 16 · P3 1) and **44 of those score OK**.
+Of the 255 in-scope modules, **71 are wired into the harness** (P1 54 · P2 16 · P3 1) and **45 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -207,7 +207,7 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 |  | `test_cmath` | cmath — complex math. |
 | ✅ | `test_collections` | collections — core containers. |
 | ❗ | `test_copy` | copy — shallow/deep copy protocol. |
-| ❗ | `test_datetime` | datetime — core data type (in harness). |
+| ✅ | `test_datetime` | datetime — core data type (in harness). |
 |  | `test_decimal` | decimal — arbitrary-precision arithmetic. |
 |  | `test_defaultdict` | collections.defaultdict. |
 | ✅ | `test_deque` | collections.deque. |

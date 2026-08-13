@@ -103,11 +103,17 @@ run_module() { # $1=mod -- run one module capped; record exit code + duration si
     echo $(( $(date +%s) - t0 )) > "$OUTDIR/$1.sec"
 }
 
-# Module list: explicit args override the manifest.
+# Module list: explicit args override the manifest.  A run so narrowed is a
+# PARTIAL run, and must not rewrite the committed scoreboard: that file is built
+# from the rows this run parsed, so naming two modules replaced all 71 rows with
+# 2 and silently destroyed the baseline check_cpython_regressions.sh diffs
+# against.  Partial runs still write the JSON and print their summary.
 if [ "$#" -gt 0 ]; then
     MODULES="$*"
+    PARTIAL=1
 else
     MODULES=$(grep -vE '^[[:space:]]*(#|$)' "$MANIFEST")
+    PARTIAL=0
 fi
 
 # Status buckets + totals (bash 3.2: plain vars, no associative arrays).
@@ -287,7 +293,13 @@ SUMMARY="OK $n_OK · FAIL $n_FAIL · ERROR $n_ERROR · SKIP $n_SKIP · IMPORTERR
     echo "| Module | Status | tests | fail | err | skip | detail |"
     echo "|--------|--------|------:|-----:|----:|-----:|--------|"
     cat "$ROWS_MD"
-} > "$SCOREBOARD_MD"
+} > "$SCOREBOARD_MD.new"
+
+if [ "$PARTIAL" -eq 1 ]; then
+    rm -f "$SCOREBOARD_MD.new"
+else
+    mv "$SCOREBOARD_MD.new" "$SCOREBOARD_MD"
+fi
 
 {
     echo "{"
@@ -305,7 +317,11 @@ SUMMARY="OK $n_OK · FAIL $n_FAIL · ERROR $n_ERROR · SKIP $n_SKIP · IMPORTERR
 rm -f "$ROWS_MD" "$ROWS_JSON"
 
 echo
-echo "Scoreboard: $SCOREBOARD_MD"
+if [ "$PARTIAL" -eq 1 ]; then
+    echo "Scoreboard: NOT rewritten (partial run of $n_modules module(s); the committed board is the full-manifest baseline)"
+else
+    echo "Scoreboard: $SCOREBOARD_MD"
+fi
 echo "JSON:       $SCOREBOARD_JSON"
 echo "$SUMMARY"
 printf 'TIMING | cpython-suite (%s mods, x%s) | %ds\n' "$n_modules" "$CONCURRENCY" "$((SECONDS - SUITE_T0))"

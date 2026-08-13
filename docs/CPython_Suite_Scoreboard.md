@@ -73,7 +73,7 @@ different rows and merges cleanly.
 | test.test_decorators | ERROR | 16 | 1 | 5 | 0 |  |
 | test.test_print | ERROR | 9 | 6 | 2 | 0 |  |
 | test.test_builtin | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd800 is illegal for Unicode |
-| test.test_call | IMPORTERROR | 0 | 0 | 0 | 0 | a OffsetError occurred (error 2003), reason:objErrBadOffsetIncomplete, max:1 actual:0 |
+| test.test_call | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'requires_limited_api' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
 | test.test_dynamic | ERROR | 11 | 5 | 2 | 0 |  |
 | test.test_exception_variations | ERROR | 30 | 2 | 7 | 0 |  |
 | test.test_global | IMPORTERROR | 0 | 0 | 0 | 0 | Unexpected token: NEWLINE '' at line 165 |
@@ -83,6 +83,6 @@ different rows and merges cleanly.
 | test.test_super | ERROR | 40 | 13 | 24 | 3 |  |
 | test.test_typechecks | ERROR | 6 | 2 | 1 | 0 |  |
 | test.test_with | IMPORTERROR | 0 | 0 | 0 | 0 | Expression Context should be <Load> but is <StoreAst> |
-| test.test_positional_only_arg | IMPORTERROR | 0 | 0 | 0 | 0 | a OffsetError occurred (error 2003), reason:objErrBadOffsetIncomplete, max:1 actual:0 |
+| test.test_positional_only_arg | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'dis' |
 | test.test_string_literals | ERROR | 20 | 3 | 10 | 0 |  |
 | test.test_genericclass | ERROR | 22 | 12 | 7 | 1 |  |
