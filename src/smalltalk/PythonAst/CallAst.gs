@@ -851,6 +851,57 @@ printBareEvalExecOn: aStream
 
 category: 'Grail-other'
 method: CallAst
+___freeVariableNamesFor___: aFunctionDefAst
+	"The Python FREE VARIABLES of aFunctionDefAst, sorted: names it mentions
+	but does not bind, which an enclosing FUNCTION scope does bind.  Used by
+	printFunctionLocalsSnapshotOn: to complete the locals() snapshot.
+
+	The mention set comes from the parser (BlockAst >> reads, accumulated
+	outward at popScope so a name referenced only by a DEEPER nested def is
+	still free here -- which is right, since this scope has to carry the
+	binding down to it).  Intersecting it with the enclosing scopes' bound
+	names is what separates a free variable from a module global or builtin,
+	both of which are also mere mentions and neither of which belongs in
+	locals().
+
+	THE WALK STOPS AT A CLASS BODY, for two independent reasons that happen
+	to agree.  Python skips class scope when resolving a free variable (a
+	method does not see class attributes as closure names), and Grail
+	compiles a class-body def to a real Smalltalk METHOD rather than to a
+	nested block -- so an enclosing function's temps are not in lexical scope
+	there and emitting one would be an undefined-variable COMPILE error, not
+	a wrong answer.  Stopping at the ClassDefAst rules that out by
+	construction.
+
+	Names declared ``global'' in this scope are excluded: they name the
+	module binding, and CPython's locals() does not report them.  ``nonlocal''
+	names need no special case -- the parser strips them from the scope's own
+	variables, so they arrive here through the free-variable path, which is
+	exactly where CPython puts them."
+
+	| mentions bound node own globals |
+	mentions := aFunctionDefAst body reads ifNil: [^ #()].
+	own := aFunctionDefAst body variables.
+	globals := aFunctionDefAst body globalNames ifNil: [#()].
+	bound := IdentitySet new.
+	node := aFunctionDefAst parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [node := nil] ifFalse: [
+			(node isKindOf: FunctionDefAst) ifTrue: [
+				node body ifNotNil: [:b |
+					b variables do: [:v | bound add: v].
+					"Parameters live on the args node, not in body variables."
+					node allParameterNames do: [:p | bound add: p asSymbol]]].
+			node := node parent]].
+	^ (mentions select: [:n |
+		(bound includes: n)
+			and: [(own includes: n) not
+			and: [(globals includes: n) not]]])
+				asSortedCollection: [:a :b | a asString <= b asString]
+%
+
+category: 'Grail-other'
+method: CallAst
 printFunctionLocalsSnapshotOn: aStream
 	"Emit ``((builtins instance) ___buildLocals___: { {name. value}. ... })'' --
 	a pair-array snapshot of every name in the enclosing FUNCTION scope, which
@@ -865,6 +916,21 @@ printFunctionLocalsSnapshotOn: aStream
 	names := fn body variables asSortedCollection: [:a :b | a asString <= b asString].
 	paramNames := fn allParameterNames.
 	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) ___buildLocals___: { '.
+	"FREE VARIABLES first -- CPython's locals() reports a function's free
+	variables alongside its own locals, and Grail listed only the locals, so
+	``locals()'' in a closure dropped every name inherited from an enclosing
+	def (test_scope testLocalsFunction) and a bare ``eval'' built on this same
+	snapshot could not see one either (testEvalFreeVars).  Emitted as the bare
+	Smalltalk temp name, which is exactly how NameAst compiles a free-variable
+	READ in this block -- the nested def is a Smalltalk block closed over the
+	enclosing block's temps, so the name is already in lexical scope."
+	(self ___freeVariableNamesFor___: fn) do: [:each |
+		aStream
+			nextPutAll: '{ ''';
+			nextPutAll: each asString;
+			nextPutAll: '''. ';
+			nextPutAll: each asString;
+			nextPutAll: ' }. '].
 	names do: [:each |
 		(CallAst isSelfReference: each)
 			ifTrue: [

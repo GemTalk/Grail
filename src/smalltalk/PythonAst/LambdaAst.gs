@@ -245,6 +245,11 @@ printSmalltalkOn: aStream
 
 	"Underscored sentinels, not bare ``positional''/``keywords'': a lambda
 	parameter spelled like the dispatch temp would otherwise collide with it."
+	"Open a paren when there is no defaults wrapper to supply one: unlike a
+	def -- which is a STATEMENT -- a lambda is an expression in arbitrary
+	positions, and the trailing ``___pyCode___:'' keyword send below would
+	otherwise be absorbed by a surrounding keyword message."
+	hasOuter ifFalse: [aStream nextPut: $(].
 	aStream nextPutAll: '[:___positional___ :___kwargs___ |'.
 
 	"Declare locals for every parameter name (positional + kwonly + *args +
@@ -359,7 +364,26 @@ printSmalltalkOn: aStream
 	body printSmalltalkOn: aStream.
 
 	aStream nextPut: $].
-	hasOuter ifTrue: [aStream nextPutAll: '] value)'].
+	"Stamp lambda.__code__, the same def-time PyCode cascade FunctionDefAst
+	emits -- a lambda IS a function in Python and ``f.__code__'' is how
+	introspection reaches its name, file and line.  Without it every lambda
+	raised AttributeError there (test_scope testEvalExecFreeVars).  co_name is
+	``<lambda>'', as in CPython.  ___pyCode___: answers the receiver, so the
+	block stays the value of the expression.
+	Emitted INSIDE the defaults wrapper when there is one, so the stamp lands
+	on the inner callable block rather than on the outer setup block."
+	aStream
+		nextPutAll: ' @env0:___pyCode___: (PyCode @env0:name: ''<lambda>'' filename: '.
+	self emitSourceFilenameLiteralOn: aStream.
+	aStream
+		nextPutAll: ' firstlineno: '; nextPutAll: (self beginLine ifNil: [0]) printString;
+		nextPutAll: ' argcount: '; nextPutAll: (posArgs size) printString;
+		nextPutAll: ' posonlyargcount: '; nextPutAll: (args posonlyargs ifNil: [#()]) size printString;
+		nextPutAll: ' kwonlyargcount: '; nextPutAll: (args kwonlyargs ifNil: [#()]) size printString;
+		nextPutAll: ')'.
+	hasOuter
+		ifTrue: [aStream nextPutAll: '] value)']
+		ifFalse: [aStream nextPut: $)].
 %
 method: LambdaAst
 args

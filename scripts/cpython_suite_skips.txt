@@ -35,6 +35,7 @@ test.test_itertools|TestBasicOps.test_product_overflow|AlmostOutOfStack (session
 test.test_sort|TestDecorateSortUndecorate.test_key_with_mutating_del|needs a sort-key object's __del__ to fire DURING the sort (refcount timing) so its list mutation is caught — Grail GC is not refcounted, so __del__ never runs mid-sort
 test.test_dict|DictTest.test_container_iterator|refcycle collection (gc.collect of a cycle) — Grail has no cycle collector
 test.test_dict|DictTest.test_free_after_iterating|CPython refcount/__del__-timing — Grail GC is not refcounted (test_list's twin is skipped too)
+test.test_scope|ScopeTests.testLeaks|counts 100 closure-captured objects back to zero via __del__ after the last reference drops — refcount finalization, and gc_collect() cannot stand in for it on a non-refcounted VM
 # free-threading build atomicity (concurrent readers/writers): Grail is single cooperative-threaded
 test.test_dict|DictTest.test_setdefault_atomic|free-threading-build atomicity — N/A to Grail's cooperative threads
 test.test_dict|DictTest.test_setitem_atomic_at_resize|free-threading-build atomicity — N/A to Grail

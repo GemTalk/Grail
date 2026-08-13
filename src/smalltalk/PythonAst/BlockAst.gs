@@ -7,7 +7,7 @@ SuiteAst ifNil: [self error: 'SuiteAst is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 SuiteAst subclass: 'BlockAst'
-  instVarNames: #( variables tempCount writes hasReturnBlocking globalNames)
+  instVarNames: #( variables tempCount writes hasReturnBlocking globalNames reads)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -151,6 +151,31 @@ hasReturnBlocking
 	flag; callers should treat nil as false."
 
 	^ hasReturnBlocking
+%
+
+category: 'Grail-other'
+method: BlockAst
+reads
+	"Every name MENTIONED anywhere in this scope, including inside its
+	nested scopes, that is not bound by the scope that mentioned it --
+	the parser accumulates this on the way out of each scope (popScope).
+
+	It is a superset of the scope's free variables: a name here may also
+	be a module global or a builtin.  Callers narrow it by intersecting
+	with the bound names of the enclosing FUNCTION scopes; that
+	intersection is exactly Python's free-variable set, which is what
+	``locals()'' has to include alongside the scope's own locals.
+
+	May be nil for BlockAst nodes built before this field existed (and for
+	hand-built nodes); callers treat nil as empty."
+
+	^ reads
+%
+
+category: 'Grail-other'
+method: BlockAst
+reads: newValue
+	reads := newValue
 %
 
 category: 'Grail-other'
