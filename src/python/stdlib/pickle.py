@@ -487,6 +487,45 @@ def newobj(cls):
     return object.__new__(cls)
 
 
+def _is_python_subclass(obj):
+    """True when obj's class was defined by PYTHON code rather than by Grail.
+
+    This, and not an exact-type test, is what separates ``class NamedInt(int)``
+    from the several GemStone classes Grail uses to back a single Python type.
+
+    Identity does not work: ``type('abc') is str`` is False, because str is
+    Unicode7/Unicode16/Unicode32/String depending on content and origin (and
+    int is SmallInteger or a Large*Integer).  Verified, not assumed.
+
+    A NAME test is wrong in the other direction, which cost a round of this
+    change: Symbol is a CharacterCollection subclass Grail uses for str-ish
+    internal values -- enum's STRICT/CONFORM constants are Symbols -- so
+    ``type(obj).__name__ == 'str'`` sent one down the subclass path, and pickle
+    then failed trying to name the Symbol CLASS.
+
+    ClassDefAst stamps every class it builds with ___pyDefinedClass___, which
+    is exactly the question being asked.
+    """
+    return hasattr(type(obj), '___pyDefinedClass___')
+
+
+def _new_args_of(obj):
+    """CPython's __getnewargs_ex__ / __getnewargs__ pair, as (args, kwargs).
+
+    ``object.__reduce_ex__(2)`` asks for these so that a value living in the
+    CONSTRUCTOR rather than in instance state survives the round trip.  For an
+    immutable builtin's subclass that is the whole value.
+    """
+    getnewargs_ex = getattr(obj, '__getnewargs_ex__', None)
+    if getnewargs_ex is not None:
+        args, kwargs = getnewargs_ex()
+        return tuple(args), kwargs
+    getnewargs = getattr(obj, '__getnewargs__', None)
+    if getnewargs is not None:
+        return tuple(getnewargs()), None
+    return (), None
+
+
 # --------------------------------------------------------------------------
 # Pickler
 # --------------------------------------------------------------------------
@@ -583,15 +622,26 @@ class _Pickler:
                 pass
             self.save_reduce_of(obj)
             return
+        # The primitive fast paths are for the builtin ITSELF.  A genuine
+        # Python subclass -- ``class NamedInt(int)`` -- must fall through to
+        # __reduce_ex__, or it pickles as its raw value and comes back as a
+        # plain int, its class lost.  CPython gets this from dispatching on the
+        # exact type; here it needs _is_python_subclass, since neither identity
+        # nor the type NAME distinguishes the two (see there).
+        # (see there).  The enum branch above is the same rule, applied earlier
+        # because an IntEnum member has to be recognised as a member first.
         if isinstance(obj, int):
-            self.save_int(obj)
-            return
-        if isinstance(obj, float):
-            self.save_float(obj)
-            return
-        if isinstance(obj, str):
-            self.save_str(obj)
-            return
+            if not _is_python_subclass(obj):
+                self.save_int(obj)
+                return
+        elif isinstance(obj, float):
+            if not _is_python_subclass(obj):
+                self.save_float(obj)
+                return
+        elif isinstance(obj, str):
+            if not _is_python_subclass(obj):
+                self.save_str(obj)
+                return
         if type(obj) is bytearray:
             self.save_bytearray(obj)
             return
@@ -606,8 +656,15 @@ class _Pickler:
             self.save_subclass_container(obj, bytes(obj))
             return
         if isinstance(obj, tuple):
-            self.save_tuple(obj)
-            return
+            if not _is_python_subclass(obj):
+                self.save_tuple(obj)
+                return
+            # A tuple SUBCLASS falls through to __reduce_ex__, where
+            # tuple.__getnewargs__ supplies the elements and NEWOBJ runs
+            # ``cls.__new__(cls, elements)'' -- CPython's own reduction for it.
+            # list and dict subclasses are NOT handled here: CPython rebuilds
+            # those through listitems/dictitems rather than __getnewargs__, a
+            # different mechanism, and they still pickle as plain containers.
         if isinstance(obj, list):
             self.save_list(obj)
             return
@@ -996,6 +1053,27 @@ class _Pickler:
             # No custom __reduce__: a plain instance pickles as
             # newobj(cls) + __getstate__, both by reference.
             state = obj.__getstate__() if hasattr(obj, '__getstate__') else None
+            args, kwargs = _new_args_of(obj)
+            if args or kwargs:
+                # CPython's object.__reduce_ex__(2) reduction: NEWOBJ runs
+                # ``cls.__new__(cls, *args)``, which is the only way to rebuild
+                # an object whose value lives in the constructor -- every
+                # immutable builtin's subclass.  Emitted only when there ARE
+                # such args, so a plain instance keeps the bare-allocation path
+                # above: cls.__new__(cls) would fail for any class whose
+                # __new__ demands arguments, where object.__new__(cls) does not.
+                self.save(type(obj))
+                self.save(tuple(args))
+                if kwargs:
+                    self.save(kwargs)
+                    self.write(NEWOBJ_EX)
+                else:
+                    self.write(NEWOBJ)
+                self.memoize(obj)
+                if state is not None:
+                    self.save(state)
+                    self.write(BUILD)
+                return
             self.save_reduce(newobj, (type(obj),), state=state, obj=obj)
             return
         if isinstance(rv, str):

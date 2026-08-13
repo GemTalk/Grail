@@ -454,4 +454,25 @@ __ge__: other
 	^ self @env0:value __ge__: other
 %
 
+set compile_env: 1
+category: 'Grail-Pickle'
+method: AbstractPyFloat
+__getnewargs__
+	"CPython's float.__getnewargs__: the argument tuple that rebuilds this
+	value through __new__.
+
+	The underlying float, matching CPython's float.__getnewargs__().
+
+	It exists for PICKLING an immutable builtin's subclass.  Such a subclass
+	carries its value in the CONSTRUCTOR, not in instance state, so
+	object.__reduce_ex__'s new-style reduction has to hand the value back as a
+	__new__ argument -- ``float.__new__(MySub)'' alone rebuilds an empty one and
+	the value is gone.  Grail's pickle used to reduce any float subclass to a
+	plain float, losing the class outright."
+
+	| tupleClass |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	^ tupleClass @env0:withAll: { self @env0:value }
+%
+
 set compile_env: 0
