@@ -341,7 +341,12 @@ _COMPAT_NAME_IN = {('__builtin__', 'xrange'): ('builtins', 'range')}
 
 
 def whichmodule(obj, name):
-    modname = getattr(obj, '__module__', None)
+    # Guarded for the same reason as in _find_global: some Grail objects raise
+    # from a __module__ read rather than answering a defaulted getattr.
+    try:
+        modname = getattr(obj, '__module__', None)
+    except BaseException:
+        modname = None
     if isinstance(modname, str):
         return modname
     for modname in list(sys.modules):
@@ -385,7 +390,17 @@ def _find_global(obj):
     if not isinstance(name, str):
         raise PicklingError("Can't pickle %r: no __name__" % (obj,))
 
-    modname = getattr(obj, '__module__', None)
+    # A DEFAULTED getattr is not enough here.  Grail has objects whose
+    # __module__ read raises rather than answering the default --
+    # PropertyDescriptor is one -- and the exception left modname unbound, so
+    # the failure surfaced four lines down as ``UnboundLocalError: cannot
+    # access local variable 'modname'`` instead of anything to do with
+    # pickling.  Treat a raising read as "no __module__", which is what the
+    # whichmodule fallback is for.
+    try:
+        modname = getattr(obj, '__module__', None)
+    except BaseException:
+        modname = None
     if not isinstance(modname, str):
         modname = whichmodule(obj, name)
 

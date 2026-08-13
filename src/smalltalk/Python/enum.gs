@@ -105,6 +105,21 @@ initialize
 	self @env0:dynamicInstVarAt: #'_reduce_ex_by_global_name'
 		put: (UnboundMethod @env1:definingClass: Enum
 			selector: #'___grailReduceExByGlobalName___').
+	"``pickle_by_enum_name'' / ``pickle_by_global_name'' -- CPython's two public
+	replacement reductions, for a member whose ordinary value-based one cannot
+	work.  ``class NEI(NamedInt, Enum)'' is the case test_enum names: the default
+	(cls, (value,)) rebuilds the VALUE, and NamedInt.__new__ refuses a value with
+	no name, so the class assigns pickle_by_enum_name over its own __reduce_ex__
+	and the member travels as (getattr, (cls, name)) instead.
+
+	UnboundMethods for the same reason as the private alias just above: these are
+	ASSIGNED onto a class, so they have to take self first."
+	self @env0:dynamicInstVarAt: #'pickle_by_enum_name'
+		put: (UnboundMethod @env1:definingClass: Enum
+			selector: #'___grailReduceExByEnumName___').
+	self @env0:dynamicInstVarAt: #'pickle_by_global_name'
+		put: (UnboundMethod @env1:definingClass: Enum
+			selector: #'___grailReduceExByGlobalName___').
 	"``__all__'' -- the module's declared API, which enum simply did not have.
 	It is what test.support.check__all__ inspects, and what any consumer asking
 	what this module exports reads.
@@ -134,7 +149,7 @@ initialize
 		'auto' 'unique' 'verify' 'member' 'nonmember' 'property'
 		'STRICT' 'CONFORM' 'EJECT' 'KEEP'
 		'CONTINUOUS' 'NAMED_FLAGS' 'UNIQUE'
-		'global_enum'))
+		'global_enum' 'pickle_by_enum_name' 'pickle_by_global_name'))
 %
 
 ! ===============================================================================
