@@ -97,17 +97,49 @@ def plain_kwonly(x=5, *, y=6):
 r['plain_kwonly'] = plain_kwonly()
 r['plain_kwonly_given'] = plain_kwonly(1, y=2)
 
-# A posonly parameter may not be passed by name -- CPython raises TypeError,
-# which is the whole point of PEP 570.  Grail currently binds it happily; that
-# is a separate gap in the call/binding path, not in the default-capture
-# codegen above, and the SUnit case pins the current answer so the day it is
-# fixed something says so.
-try:
-    one_each(a=1)
-    r['posonly_by_name'] = 'no error'
-except TypeError as e:
-    r['posonly_by_name'] = 'TypeError'
-except Exception as e:
-    r['posonly_by_name'] = type(e).__name__
+# --- PEP 570: a positional-only parameter may not be passed by NAME ----------
+# CPython raises TypeError with a dedicated message, and prefers it over the
+# unexpected-keyword one when a call commits both sins.  Grail used to accept
+# the keyword: without a default the call failed for the wrong reason
+# ("missing required argument"), and WITH a default it silently ignored the
+# keyword and used the default -- a wrong answer rather than an error.
+
+
+def _err(fn):
+    try:
+        return repr(fn())
+    except TypeError as e:
+        return 'TypeError: %s' % e
+    except Exception as e:
+        return '%s: %s' % (type(e).__name__, e)
+
+
+def by_name(a, /, b):
+    return (a, b)
+
+
+def by_name_defaulted(a=1, /, b=2):
+    return (a, b)
+
+
+def two_posonly(a, b, /, c):
+    return (a, b, c)
+
+
+def collects(a, /, **kw):
+    return (a, kw)
+
+
+r['byname_required'] = _err(lambda: by_name(a=1, b=2))
+r['byname_defaulted'] = _err(lambda: by_name_defaulted(a=9))
+r['byname_two'] = _err(lambda: two_posonly(a=1, b=2, c=3))
+# The posonly complaint outranks the unexpected-keyword one.
+r['byname_beats_unknown'] = _err(lambda: two_posonly(1, 2, a=1, z=9))
+# Passing them positionally is of course fine.
+r['byname_positional_ok'] = _err(lambda: by_name(1, b=2))
+r['byname_defaulted_positional_ok'] = _err(lambda: by_name_defaulted(9))
+# With **kwargs the NAME is legal -- CPython routes it to kw, parameter keeps
+# its positional value.
+r['byname_into_kwargs'] = _err(lambda: collects(1, a=2))
 
 RESULTS = r

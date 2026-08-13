@@ -90,21 +90,68 @@ testPositionalOnlyDefaults
 				assert: ((got @env1:__getitem__: (i - 1)) = (want at: i))
 				description: key , ' element ' , i printString , ' was ' ,
 					(got @env1:__getitem__: (i - 1)) printString]].
-	"KNOWN GAP, pinned deliberately at the WRONG answer.  CPython raises
-	TypeError for ``one_each(a=1)'' -- refusing to bind a positional-only
-	parameter by name is the entire point of PEP 570 -- and Grail binds it
-	happily.  That is a separate defect in the call/binding path, not in the
-	default-capture codegen this test covers, and it was there before this
-	change; asserting the CPython answer here would fail for a reason this
-	test is not about.
+	"The by-name rejection this file used to pin at the WRONG answer now has
+	its own test method below."
+%
 
-	Pinned rather than dropped so the day the binding path starts enforcing
-	it, this assertion fails and points at the line to update -- a silent
-	omission would let the gap be fixed with nobody noticing the pin."
-	self
-		assert: ((results @env1:__getitem__: 'posonly_by_name') = 'no error')
-		description: 'posonly_by_name was ' ,
-			(results @env1:__getitem__: 'posonly_by_name') printString ,
-			' -- if this now says TypeError, Grail gained PEP 570 by-name '
-			, 'enforcement: change the expectation to ''TypeError'''
+category: 'Grail-Tests - functions'
+method: PositionalOnlyDefaultsTestCase
+testPositionalOnlyCannotBePassedByName
+	"PEP 570's actual point: a parameter declared before ``/'' is not
+	keyword-bindable.  Grail accepted the keyword anyway, and the two ways
+	that went wrong were not equally visible --
+
+	  * with no default the call still failed, but as ``missing required
+	    argument: a'', naming the right parameter for entirely the wrong
+	    reason;
+	  * WITH a default it silently ignored the keyword and used the default,
+	    so ``def h(a=1, /, b=2)'' answered (1, 2) for ``h(a=9)''.  A wrong
+	    answer, not an error.
+
+	Two fixes.  The unexpected-keyword guard no longer treats posonly names as
+	bindable, and reports them with CPython's own message -- names in
+	PARAMETER order, joined by ', ' inside ONE pair of quotes (``'a, b''').
+	And the arity/keyword guards now run BEFORE the per-parameter binding
+	rather than after it, in both the varargs entry and the fixed-arity
+	forwarder: the binding loop raises ``missing required argument'' for the
+	first parameter it cannot fill, which outranked the real complaint.
+	CPython validates the call before reporting what it could not fill, and
+	prefers the posonly message when a call commits both sins.
+
+	``**kwargs'' is the deliberate exception, in Grail as in CPython:
+	``def collects(a, /, **kw)'' takes ``collects(1, a=2)'' with the name
+	landing in kw and the parameter keeping its positional value.  The guard
+	is skipped entirely for a def that collects extras.
+
+	Every expected string here is CPython 3.14's, verbatim."
+
+	| mod results expect |
+	importlib @env1:modules removeKey: #'positional_only_defaults' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/positional_only_defaults.py')
+		name: 'positional_only_defaults'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	expect := {
+		{ 'byname_required'.
+		  'TypeError: by_name() got some positional-only arguments passed as keyword arguments: ''a''' }.
+		{ 'byname_defaulted'.
+		  'TypeError: by_name_defaulted() got some positional-only arguments passed as keyword arguments: ''a''' }.
+		"Two offenders: one quoted, comma-joined list -- not one pair of
+		quotes each."
+		{ 'byname_two'.
+		  'TypeError: two_posonly() got some positional-only arguments passed as keyword arguments: ''a, b''' }.
+		"The posonly complaint outranks the unexpected-keyword one."
+		{ 'byname_beats_unknown'.
+		  'TypeError: two_posonly() got some positional-only arguments passed as keyword arguments: ''a''' }.
+		"...and the legal spellings still work."
+		{ 'byname_positional_ok'. '(1, 2)' }.
+		{ 'byname_defaulted_positional_ok'. '(9, 2)' }.
+		{ 'byname_into_kwargs'. '(1, {''a'': 2})' } }.
+	expect do: [:pair |
+		| got |
+		got := results @env1:__getitem__: (pair at: 1).
+		self
+			assert: (got asString = (pair at: 2))
+			description: (pair at: 1) , ': expected <' , (pair at: 2) ,
+				'> but got <' , got asString , '>']
 %
