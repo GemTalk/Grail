@@ -28,6 +28,45 @@ fails with that instruction, instead of building the C shim and then dying on
 topaz's bare "userId/password is invalid". CI is unaffected — it logs in as
 `DataCurator`, which every extent has.
 
+## How much CPython suite to run before a PR
+
+Two tiers, chosen by WHAT THE CHANGE TOUCHES, not by how big it feels. The full
+suite is ~6 minutes and grows as modules are added; a single module is ~26s and
+stays flat, so tiering keeps the common case cheap while still covering the
+changes that can actually reach across modules.
+
+* **Tier 1 — targeted module + `./scripts/run_tests.sh`.** The change is
+  confined to one stdlib module or its Smalltalk peer (`enum.gs`,
+  `PyEnumTypes.gs`, `operator.py`, …). Nothing outside that module can plausibly
+  move, so a full run buys nothing the nightly won't give you. Most conformance
+  work lands here.
+* **Tier 2 — full `./scripts/run_cpython_suite.sh`, then
+  `./scripts/check_cpython_regressions.sh`, before opening the PR.** The change
+  touches SHARED MACHINERY, where the blast radius is the whole corpus by
+  construction: `Object.gs`, anything in `PythonAst/` (codegen runs for every
+  module), `importlib.gs`, builtins, the attribute/descriptor path. Quote the
+  "0 regressions" result in the PR body — for a change that fires on every class
+  definition, the number is the evidence, not a reassurance.
+
+Why tiered rather than always-full: over PRs #327–#347 the full suite caught
+exactly ONE out-of-module regression — #333, where giving `object.__repr__` a
+real address broke three `test_operator` tests. That change was tier 2. The nine
+quiet runs were all tier 1. The signal tracks the file, not the luck.
+
+The nightly GitHub action (plus a manual on-demand run) covers what tier 1
+skips. Its one real cost is attribution: a nightly diff is a day of merges wide,
+so budget for the occasional bisect rather than assuming it is free.
+
+Two traps in this harness, both of which look like a passing run:
+
+* **The module name is `test.test_enum`, not `test_enum`.** A bare name scores
+  `IMPORTERROR` ("no file on search path") and writes `out/cpython/test_enum.out`
+  — leaving the previous `out/cpython/test.test_enum.out` in place, so the
+  obvious next command reads a STALE result that looks fine.
+* **`check_cpython_regressions.sh` does NOT run the suite.** It compares
+  `out/cpython/scoreboard.json` against the checked-in scoreboard, so it happily
+  passes against whatever the last run left behind. Run the suite first.
+
 ## 4.0 needs NO Grail code in the shared base
 On 4.0 (build 2026-07-29 or later) `install_base.sh` files nothing of Grail's:
 MR #6 permits env-1 session methods on `GsNMethod`/`System`/`SymbolDictionary`,
