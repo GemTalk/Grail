@@ -803,7 +803,8 @@ printSmalltalkOn: aStream
 	``<name> := <value>'' stays well-formed."
 	((ctx isKindOf: LoadAst)
 		and: [ModuleAst compilingDoitScope notNil
-		and: [(ModuleAst compilingDoitScope objectNamed: id asSymbol) isNil
+		and: [(ModuleAst compilingDoitScope
+				objectNamed: (NameAst doitScopeNameFor: id asSymbol)) isNil
 		and: [(self isVariableIsDeclared: id asSymbol) not
 		and: [(self isModuleVariableName: id) not
 		and: [(CallAst moduleFunctionNames notNil
@@ -812,6 +813,15 @@ printSmalltalkOn: aStream
 			self emitDoitEnclosingScopeLoad: id on: aStream.
 			^ self
 		].
+	"A name that collides with a Smalltalk pseudo-variable cannot be carried
+	by a doit's symbol-list scope under its own spelling -- see
+	NameAst class >> doitScopeNameFor:.  Emit the mangled stand-in, which
+	the scope seeding in builtins _exec: / _eval: binds to the real value.
+	Load and store alike: ``self := x'' is no more legal than reading it."
+	ModuleAst compilingDoitScope notNil ifTrue: [
+		aStream nextPutAll: (NameAst doitScopeNameFor: id) asString.
+		^ self
+	].
 	aStream nextPutAll: id.
 %
 
@@ -907,6 +917,54 @@ isReservedSmalltalkIdentifier: aSymbol
 
 	^ #(#'self' #'super' #'thisContext' #'nil' #'true' #'false')
 		includes: aSymbol asSymbol
+%
+
+category: 'other'
+classmethod: NameAst
+doitScopeNameFor: aSymbol
+	"The identifier under which aSymbol is carried in a DOIT (exec/eval)
+	scope: the name itself, unless it collides with a Smalltalk
+	pseudo-variable, in which case a mangled stand-in.
+
+	Names in an exec'd body resolve as SYMBOL-LIST globals -- the scope is
+	a SymbolDictionary the compiler is handed, not a set of block temps
+	(ModuleAst >> evaluateSource:usingModuleScope:as:).  That works for
+	every ordinary name and silently fails for exactly six: emitting
+	``self'' compiles to Smalltalk's pseudo-variable, which in a doit
+	executed with ``_executeInContext: nil'' is nil.  So
+
+	    class C:
+	        def m(self):
+	            exec('self.assertEqual(1, 1)')
+
+	saw ``self'' as nil rather than the receiver -- and a bare ``self''
+	could never be ASSIGNED in exec'd source either, since ``self := x''
+	is not legal Smalltalk (test_scope testScopeOfGlobalStmt,
+	testClassAndGlobal).
+
+	Both halves must agree on this name -- codegen (NameAst
+	printSmalltalkOn:, ModuleAst ensureModuleScope:) and the scope seeding
+	/ reflect-back in builtins _exec: / _eval: -- so it lives here as the
+	single definition rather than being spelled out at each site."
+
+	^ (self isReservedSmalltalkIdentifier: aSymbol)
+		ifTrue: [('___pyresv_' , aSymbol asString , '___') asSymbol]
+		ifFalse: [aSymbol asSymbol]
+%
+
+category: 'other'
+classmethod: NameAst
+doitScopeNameToPythonName: aSymbol
+	"Inverse of doitScopeNameFor: -- the Python name a doit-scope
+	identifier stands for.  Used by the reflect-back loops in builtins
+	_exec: / _eval:, which copy the scope's bindings out to the caller's
+	globals mapping and must restore the original spelling."
+
+	| s |
+	s := aSymbol asString.
+	((s beginsWith: '___pyresv_') and: [s endsWith: '___'])
+		ifFalse: [^ aSymbol asString].
+	^ s copyFrom: 11 to: s size - 3
 %
 
 category: 'other'

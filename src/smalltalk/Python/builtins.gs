@@ -196,6 +196,17 @@ _exec: positional kw: kwargs
 
 	| source globalsDict scope sym k |
 	source := positional @env0:at: 1.
+	"exec() takes source TEXT here.  A PyCode -- what ``f.__code__'' answers --
+	is metadata (name, filename, line, arg counts), not executable code: Grail
+	compiles Python to Smalltalk methods and keeps no bytecode to re-enter.
+	Without this guard the object fell through to the parser and died in a
+	string concatenation with a Smalltalk MessageNotUnderstood, which Python
+	code cannot catch; a TypeError is both catchable and what CPython raises
+	for the case that actually reaches here (a code object carrying free
+	variables -- test_scope testEvalExecFreeVars)."
+	(source @env0:isKindOf: CharacterCollection) @env0:ifFalse: [
+		^ TypeError ___signal___:
+			'exec() arg 1 must be a string; a code object is metadata only in Grail'].
 	globalsDict := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [nil].
@@ -210,7 +221,11 @@ _exec: positional kw: kwargs
 	((globalsDict isKindOf: KeyValueDictionary)
 		or: [globalsDict isKindOf: PyInstanceDict]) ifTrue: [
 		globalsDict @env0:keysAndValuesDo: [:key :value |
-			sym := key @env0:isSymbol ifTrue: [key] ifFalse: [key @env0:asString @env0:asSymbol].
+			"doitScopeNameFor: mangles the six names that collide with a
+			Smalltalk pseudo-variable, so ``self'' in the exec'd source finds
+			the caller's receiver instead of the doit's nil one."
+			sym := NameAst @env0:doitScopeNameFor:
+				(key @env0:isSymbol ifTrue: [key] ifFalse: [key @env0:asString @env0:asSymbol]).
 			scope @env0:at: sym put: value]
 	].
 	"Run the source as a module body in the seeded scope.  Tag the
@@ -218,9 +233,9 @@ _exec: positional kw: kwargs
 	carry the ___exec_N___ prefix."
 	ModuleAst @env0:evaluateSource: source usingModuleScope: scope as: #exec.
 	"Reflect every binding back into the original globals dict using
-	string keys (Python convention)."
+	string keys (Python convention), undoing the pseudo-variable mangling."
 	scope @env0:keysAndValuesDo: [:key :value |
-		k := key @env0:asString.
+		k := NameAst @env0:doitScopeNameToPythonName: key.
 		globalsDict @env0:at: k put: value].
 	^ None
 %
@@ -243,6 +258,11 @@ _eval: positional kw: kwargs
 
 	| source globalsDict scope sym k result |
 	source := positional @env0:at: 1.
+	"Source TEXT only -- see the matching guard in _exec: for why a PyCode
+	cannot be evaluated and must fail as a catchable TypeError."
+	(source @env0:isKindOf: CharacterCollection) @env0:ifFalse: [
+		^ TypeError ___signal___:
+			'eval() arg 1 must be a string; a code object is metadata only in Grail'].
 	globalsDict := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [nil].
@@ -254,15 +274,17 @@ _eval: positional kw: kwargs
 	((globalsDict isKindOf: KeyValueDictionary)
 		or: [globalsDict isKindOf: PyInstanceDict]) ifTrue: [
 		globalsDict @env0:keysAndValuesDo: [:key :value |
-			sym := key @env0:isSymbol
+			"Mangled where the name collides with a Smalltalk pseudo-variable
+			-- see NameAst class >> doitScopeNameFor: and _exec:."
+			sym := NameAst @env0:doitScopeNameFor: (key @env0:isSymbol
 				ifTrue: [key]
-				ifFalse: [key @env0:asString @env0:asSymbol].
+				ifFalse: [key @env0:asString @env0:asSymbol]).
 			scope @env0:at: sym put: value]].
 	result := ModuleAst @env0:evaluateExpressionSource: source usingModuleScope: scope.
 	"Reflect any bindings produced inside the expression (walrus, etc.)
-	back into globals using string keys."
+	back into globals using string keys, undoing the mangling."
 	scope @env0:keysAndValuesDo: [:key :value |
-		k := key @env0:asString.
+		k := NameAst @env0:doitScopeNameToPythonName: key.
 		globalsDict @env0:at: k put: value].
 	^ result
 %

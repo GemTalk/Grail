@@ -190,7 +190,11 @@ ensureModuleScope: aSymbolDictionary
 	"Ensure module scope has entries for declared variables."
 
 	self setParent: nil.
-	body variables do: [:each | aSymbolDictionary at: each ifAbsentPut: [nil] ].
+	"Under the doit-scope spelling: a body variable named like a Smalltalk
+	pseudo-variable is emitted mangled by NameAst codegen, so the slot the
+	compiler has to find must carry the same name."
+	body variables do: [:each |
+		aSymbolDictionary at: (NameAst doitScopeNameFor: each) ifAbsentPut: [nil] ].
 %
 
 category: 'Grail-evaluation'

@@ -9,7 +9,7 @@ doit
 Object subclass: 'PythonParser'
   instVarNames: #( source tokens position variableStack classNesting writeStack
                     blockingStack nonlocalStack globalStack inCompTarget
-                    underscoreDefCount underscoreCurrentName)
+                    underscoreDefCount underscoreCurrentName readStack)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -448,6 +448,13 @@ parseAtom
 		self advance.
 		nameSym := tok value asSymbol.
 		nameSym = #'_' ifTrue: [nameSym := self underscoreReadName].
+		"Record the MENTION in this scope's read set.  This is the single
+		funnel for every bare-name reference, which is what makes the free-
+		variable set cheap to collect (see popScope).  Store targets pass
+		through here too -- they are parsed as loads and retargeted later by
+		setStoreCtx: -- but a name this scope binds is filtered out when the
+		set is used, so the imprecision is harmless."
+		readStack last add: nameSym.
 		^NameAst new
 			id: nameSym;
 			ctx: self loadCtx;
@@ -737,6 +744,7 @@ parseClassDefWithDecorators: decorators
 		writes: writes;
 		hasReturnBlocking: blocking;
 		globalNames: (scope at: 4);
+		reads: (scope at: 5);
 		yourself.
 	^ClassDefAst new
 		name: nameTok value asSymbol;
@@ -1392,6 +1400,7 @@ parseFunctionDefWithDecorators: decorators
 		writes: writes;
 		hasReturnBlocking: blocking;
 		globalNames: (scope at: 4);
+		reads: (scope at: 5);
 		yourself.
 	decoratorNames := decorators collect: [:each |
 		(each isKindOf: NameAst)
@@ -1646,6 +1655,22 @@ parseImportFrom
 	self expect: #KEYWORD value: 'import'.
 	"Parse names"
 	(self matchOp: '*') ifTrue: [
+		"``from X import *'' is legal ONLY at module level.  A star import
+		dumps an unknown name set into the scope, which would make every
+		bare name in an enclosing function ambiguous between local and
+		imported -- CPython rejects it at compile time for that reason
+		(``import * only allowed at module level'').  variableStack holds
+		one entry for the module body (seeded by source:), so a size above
+		1 means we are inside a function, lambda or class body.
+		Grail already ASSUMED this rule rather than enforcing it:
+		ImportFromAst >> ___boundTargetNames___ excludes star imports
+		because ``it can never reach a class body'', and codegen only
+		handles the module-level merge (importlib expandStarImports:).
+		Without the check the statement silently bound nothing, so the
+		later reference raised NameError at run time instead of
+		SyntaxError at compile time (test_scope testUnoptimizedNamespaces)."
+		variableStack size > 1 ifTrue: [
+			SyntaxError signal: 'import * only allowed at module level'].
 		names := Array with: (AliasAst new
 			name: #'*';
 			asName: nil;
@@ -1817,6 +1842,7 @@ parseModule
 		writes: writes;
 		hasReturnBlocking: blocking;
 		globalNames: (scope at: 4);
+		reads: (scope at: 5);
 		yourself.
 	module := ModuleAst basicNew.
 	module
@@ -3116,12 +3142,13 @@ popScope
 	the outer scope's closure-captured location instead of binding
 	a fresh shadow."
 
-	| vars writes blocking nonlocals globals |
+	| vars writes blocking nonlocals globals reads |
 	vars := variableStack removeLast.
 	writes := writeStack removeLast.
 	blocking := blockingStack removeLast.
 	nonlocals := nonlocalStack removeLast.
 	globals := globalStack removeLast.
+	reads := readStack removeLast.
 	nonlocals do: [:n |
 		vars remove: n ifAbsent: [].
 		writes remove: n ifAbsent: [].
@@ -3139,7 +3166,22 @@ popScope
 	on the BlockAst (globalNames) -- codegen needs per-scope global
 	declarations to route reads/stores of those names to the module
 	even past enclosing-function shadows."
-	^ Array with: vars with: writes with: blocking with: globals
+
+	"FREE-NAME PROPAGATION.  Every name this scope MENTIONS but does not
+	BIND is a candidate free variable of the enclosing scope too -- Python's
+	rule is that a name referenced by a nested function is free in every
+	scope between the reference and the binding, which is why the cell has
+	to be threaded through the intermediate function at all.  Propagating
+	on the way out gives each scope the transitive read set with one pass
+	and no separate symtable walk.
+	Consumed by CallAst >> printFunctionLocalsSnapshotOn:, which intersects
+	it with the enclosing function scopes' bound names to decide which free
+	variables ``locals()'' must report (CPython includes them; Grail listed
+	only the scope's own locals)."
+	readStack isEmpty ifFalse: [
+		reads do: [:n |
+			(vars includes: n) ifFalse: [readStack last add: n]]].
+	^ Array with: vars with: writes with: blocking with: globals with: reads
 %
 
 category: 'Grail-node construction'
@@ -3153,6 +3195,7 @@ pushScope
 	blockingStack add: false.
 	nonlocalStack add: IdentitySet new.
 	globalStack add: IdentitySet new.
+	readStack add: IdentitySet new.
 %
 
 category: 'Grail-node construction'
@@ -3310,6 +3353,8 @@ source: aString
 	nonlocalStack add: IdentitySet new.
 	globalStack := Array new.
 	globalStack add: IdentitySet new.
+	readStack := Array new.
+	readStack add: IdentitySet new.
 	classNesting := 0.
 	inCompTarget := false.
 %
