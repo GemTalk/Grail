@@ -5277,6 +5277,41 @@ ___grailReduceExByGlobalName___: proto
 
 category: 'Grail-Pickling'
 method: Enum
+___grailReduceExByEnumName___: proto
+	"The body of enum.pickle_by_enum_name -- pickle a member as
+	``getattr(cls, name)''.
+
+	CPython's is a module-level function that a class assigns over its own
+	__reduce_ex__ when the default value-based reduction cannot work:
+
+	    NEI.__reduce_ex__ = enum.pickle_by_enum_name
+
+	``class NEI(NamedInt, Enum)'' is exactly that case.  The default reduction
+	is (cls, (value,)), and rebuilding the VALUE calls NamedInt.__new__ with the
+	value alone -- which raises, because NamedInt demands a name as well.  Going
+	by NAME sidesteps the member type's constructor entirely.
+
+	Same function shape as ___grailReduceExByGlobalName___ above, and for the
+	same reason: it is assigned onto a class, so it must take self first.
+
+	``getattr'' is read from the builtins MODULE INSTANCE, not from the builtins
+	class in the Python dictionary.  The class answers an UnboundMethod, which
+	is not the object Python code sees and which pickle cannot name; the module
+	instance answers the BoundMethod that ``getattr'' evaluates to, and that one
+	pickles by reference as builtins.getattr."
+
+	| tupleClass builtinsMod |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	builtinsMod := importlib @env1:modules @env1:__getitem__: 'builtins'.
+	^ tupleClass @env0:withAll: {
+		builtinsMod @env1:___pyAttrLoad___: #'getattr'.
+		tupleClass @env0:withAll: {
+			self @env0:class.
+			self @env1:___pyAttrLoad___: #'name' } }
+%
+
+category: 'Grail-Pickling'
+method: Enum
 ___grailBreakOnCallReduce___: proto
 	"The __reduce_ex__ enum._make_class_unpicklable installs: refuse, with
 	CPython's message."
