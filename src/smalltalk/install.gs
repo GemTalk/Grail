@@ -316,6 +316,7 @@ run
 	at: #'bytearray' put: nil;
 	at: #'PyMemoryView' put: nil;
 	at: #'PyCode' put: nil;
+	at: #'PyCell' put: nil;
 	at: #'PyStatResult' put: nil;
 	at: #'PySourceFileLoader' put: nil;
 	at: #'PyAnnotate' put: nil;
@@ -642,6 +643,7 @@ run
 	at: #'GenericAliasTestCase' put: nil;
 	at: #'Pep649AnnotationsTestCase' put: nil;
 	at: #'NestedDefIdentityTestCase' put: nil;
+	at: #'ClosureCellTestCase' put: nil;
 	at: #'MethodDocstringTestCase' put: nil;
 	at: #'GlobalStatementCodegenTestCase' put: nil;
 	at: #'EmailMessageTestCase' put: nil;
@@ -1012,6 +1014,7 @@ input src/smalltalk/Python/Bytearray.gs
 input src/smalltalk/Python/complex.gs
 input src/smalltalk/Python/slice.gs
 input src/smalltalk/Python/PyCode.gs
+input src/smalltalk/Python/PyCell.gs
 input src/smalltalk/Python/PyStatResult.gs
 input src/smalltalk/Python/PySourceFileLoader.gs
 input src/smalltalk/Python/PyAnnotate.gs
@@ -1460,6 +1463,7 @@ input src/smalltalk/PythonTests/GenericClassSubscriptTestCase.gs
 input src/smalltalk/PythonTests/GenericAliasTestCase.gs
 input src/smalltalk/PythonTests/Pep649AnnotationsTestCase.gs
 input src/smalltalk/PythonTests/NestedDefIdentityTestCase.gs
+input src/smalltalk/PythonTests/ClosureCellTestCase.gs
 input src/smalltalk/PythonTests/MethodDocstringTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementCodegenTestCase.gs
 input src/smalltalk/PythonTests/EnumAutoImportTestCase.gs

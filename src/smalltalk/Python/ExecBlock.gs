@@ -163,6 +163,29 @@ __code__
 
 category: 'Grail-Attribute Access'
 method: ExecBlock
+__closure__
+	"``func.__closure__'' -- a tuple of PyCell, one per FREE VARIABLE of the
+	def, in sorted name order; None for a function that closes over nothing,
+	as in CPython.
+
+	FunctionDefAst cascades ``___pyClosure___:'' at the def site with the
+	reader/writer block pair for each free variable, so each cell reads and
+	writes the enclosing scope's live binding rather than a snapshot.  The
+	free-variable set is the one CallAst computes for locals()
+	(___freeVariableNamesFor___:), so the two answers cannot drift apart.
+
+	CPython orders __closure__ by co_freevars, which is sorted; the stamp
+	emits sorted names for the same reason.  #'__closure__' is in
+	___pythonValueAttrs___ so a read returns the tuple, not a BoundMethod."
+
+	| cells |
+	cells := (ExecBlock @env0:___pyAttrsClass___) @env0:slotAt: self attr: '__closure__'.
+	cells @env0:isNil ifTrue: [^ ExecBlock @env0:___pyNone___].
+	^ (ExecBlock @env0:___pyTupleClass___) @env0:perform: #'withAll:' env: 0 withArguments: { cells }
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
 __kwdefaults__
 	"``func.__kwdefaults__'' -- a dict mapping each keyword-only parameter that
 	has a default to that default's VALUE, or None when the function declares no
@@ -491,6 +514,7 @@ ___slotNames___
 		add: #'__annotate__';
 		add: #'__type_params__';
 		add: #'__code__';
+		add: #'__closure__';
 		add: #'__kwdefaults__';
 		add: #'__signature_spec__';
 		yourself
@@ -533,6 +557,7 @@ ___pythonValueAttrs___
 		add: #'__annotate__';
 		add: #'__type_params__';
 		add: #'__code__';
+		add: #'__closure__';
 		add: #'__kwdefaults__';
 		add: #'__signature_spec__';
 		yourself
@@ -671,6 +696,22 @@ ___pyCode___: aCode
 	``name := <block>'' assignment / decorator pipeline."
 
 	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__code__' put: aCode.
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: ExecBlock
+___pyClosure___: anArrayOfCells
+	"Stamp this closure's ``__closure__'' cells at def-time.  Stored as the raw
+	Array; ``__closure__'' wraps it as a tuple per read, which keeps the stamp
+	cheap for the overwhelming majority of defs that nobody introspects.
+	Returns self so it composes in the def-time cascade beside ___pyCode___:.
+
+	Env 0, like ___pyCode___: beside it and for the same reason: FunctionDefAst
+	emits the cascade as ``@env0:___pyClosure___:''.  Filed in the env-1 region
+	it compiles fine and is simply never found at the call site."
+
+	(ExecBlock ___pyAttrsClass___) staticSlotAt: self attr: '__closure__' put: anArrayOfCells.
 	^ self
 %
 

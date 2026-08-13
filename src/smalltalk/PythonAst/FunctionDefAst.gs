@@ -787,6 +787,16 @@ printSmalltalkOn: aStream
 		self hasSignatureSpec ifTrue: [
 			aStream nextPutAll: '; @env0:___pySig___: '.
 			self emitSignatureSpecOn: aStream].
+		"Stamp func.__closure__ -- one PyCell per FREE VARIABLE, cascaded onto
+		the same block receiver.  Each cell carries the reader/writer block pair
+		for that variable, so it reads and writes the enclosing scope's LIVE
+		binding (Smalltalk blocks capture by reference) rather than a snapshot;
+		the ___cell_<name>___ / ___cellSetter_<name>___ pair ClassDefAst emits
+		for class-method capture works the same way.
+		Only emitted when the def actually closes over something -- CPython's
+		__closure__ is None otherwise, which the accessor answers when no stamp
+		is present, so a niladic-capture def pays nothing."
+		self emitClosureCellsOn: aStream.
 	"Phase A: close the dynamicInstVarAt:put: paren opened above when
 	this is a module-scope nested def; otherwise just emit the
 	statement-terminating period."
@@ -1645,6 +1655,56 @@ category: 'Grail-code generation'
 method: FunctionDefAst
 emitSignatureSpecOn: aStream
 	^ self emitSignatureSpecOn: aStream skipReceiver: false
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitClosureCellsOn: aStream
+	"Emit the ``; @env0:___pyClosure___: { <cell>. ... }'' cascade that gives
+	this def its ``__closure__'', or nothing when it closes over no enclosing
+	binding (CPython answers None there, and so does the accessor when no stamp
+	was written).
+
+	Each cell is ``PyCell reader: [x] setter: [:v | x := v]'' -- the same
+	capture-by-reference pair ClassDefAst uses for ___cell_<name>___, so
+	``cell_contents'' tracks later assignments and writing it reaches the
+	enclosing binding.  Emitted in the ENCLOSING scope, where those temps are
+	lexically visible; that is the same place the free-variable reads inside
+	the body resolve, which is why the blocks compile.
+
+	The free-variable set is CallAst's, the one locals() reports, so
+	``sorted(locals()) >= co_freevars'' cannot drift between the two features.
+	It is empty for a def compiled to a real Smalltalk METHOD (the walk stops
+	at a class body), so a class-body def gets no cells -- a known gap, not a
+	wrong answer: CPython would give it cells for the same free variables."
+
+	| freeNames |
+	freeNames := CallAst ___freeVariableNamesFor___: self.
+	freeNames isEmpty ifTrue: [^ self].
+	aStream nextPutAll: '; @env0:___pyClosure___: { '.
+	freeNames do: [:each |
+		| readSrc |
+		"How the name resolves AT THE DEF SITE, which is not always the bare
+		identifier -- see CallAst >> ___emitFreeVariableRead___:parent:on:."
+		readSrc := CallAst ___freeVariableReadSource___: each asSymbol parent: self parent.
+		aStream nextPutAll: '(PyCell @env0:reader: ['; nextPutAll: readSrc.
+		"The WRITER half only when the read is the BARE NAME -- that is exactly
+		the case where the binding is a plain Smalltalk temp and ``x := v''
+		compiles.  Anything else (``self'', a ___classCell___ read, a module
+		attribute load) is not an assignable variable, and emitting a setter
+		over it is CompileError 1001 at module-load time.  It must also be a
+		name the binding scope actually assigns, since a block or method
+		ARGUMENT is not assignable either.  Failing both, the cell is
+		read-only, which is what CPython's cell was before 3.7."
+		((readSrc = each asString)
+			and: [CallAst ___freeVariableIsAssignable___: each asSymbol for: self])
+			ifTrue: [
+				aStream
+					nextPutAll: '] setter: [:___cv___ | ';
+					nextPutAll: each asString;
+					nextPutAll: ' := ___cv___]). ']
+			ifFalse: [aStream nextPutAll: ']). ']].
+	aStream nextPutAll: '}'
 %
 
 category: 'Grail-code generation'
