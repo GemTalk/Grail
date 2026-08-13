@@ -136,6 +136,18 @@ Transcript show: 'Session-method policy enabled (per-user home=GrailSessionMetho
 ! replaces the override in that package.  Commits on success.
 input src/smalltalk/RepairHostExtent.gs
 
+! Run a full MFC if repository space is getting low
+run
+| path dbSizeGB freeSpaceGB |
+path := SystemRepository fileNames first.
+dbSizeGB := (SystemRepository fileSizeOfExtent: path) / 1024 / 1024 // 1024.
+freeSpaceGB := SystemRepository freeSpace / 1024 / 1024 // 1024.
+(dbSizeGB > 8 and: [freeSpaceGB < 1]) ifTrue: [
+    SystemRepository markForCollection; reclaimAll.
+	System abort.
+]
+%
+
 ! ===============================================================================
 ! Step 1: Remove and recreate SymbolDictionaries
 ! ===============================================================================
