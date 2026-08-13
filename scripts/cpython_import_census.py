@@ -252,15 +252,73 @@ def report(rows):
             print("  " + "  ".join("%-18s" % m for m in missing[i:i + 6]).rstrip())
 
 
+TESTCASE_CLASS = re.compile(r"^class\s+\w+\s*\([^)]*\bTestCase\b", re.M)
+
+
+def shape_report(rows, libtest):
+    """Of the ready-to-wire modules, how many can this harness actually score?
+
+    "Ready to wire" means the subject imports -- it says nothing about whether
+    the test file yields any TESTS.  Two shapes score zero here no matter how
+    good Grail gets, and counting them as ready overstates the reachable work:
+
+      * pure doctest modules (test_genexps, test_metaclass, ...) carry no
+        unittest.TestCase, and _grail_harness discovers TestCases only, so they
+        land on the board as SKIP with 0 tests -- indistinguishable at a glance
+        from a module that ran and passed nothing;
+      * a few names are PACKAGES upstream (test_json, test_string), which the
+        single-module harness does not handle at all.
+
+    Needs a CPython 3.14 Lib/test to look at, so it is opt-in rather than part
+    of the census proper.
+    """
+    if not libtest.is_dir():
+        sys.exit("--cpython-lib: not a directory: %s" % libtest)
+    ready = [(t, m) for t, m, _s, v, _d in rows if v in ("IMPORTS", "NO_SUBJECT")]
+    scorable, doctest_only, not_a_module = [], [], []
+    for tier, mod in ready:
+        path = libtest / (mod + ".py")
+        if not path.is_file():
+            not_a_module.append((tier, mod))
+        elif TESTCASE_CLASS.search(path.read_text(errors="replace")):
+            scorable.append((tier, mod))
+        else:
+            doctest_only.append((tier, mod))
+
+    def per_tier(group):
+        counts = {}
+        for tier, _ in group:
+            counts[tier] = counts.get(tier, 0) + 1
+        return " ".join("%s:%d" % kv for kv in sorted(counts.items())) or "-"
+
+    print("\nOf those %d, what this harness can actually score (per %s):"
+          % (len(ready), libtest))
+    print("  %-34s %4d   %s" % ("has unittest TestCases", len(scorable),
+                                per_tier(scorable)))
+    print("  %-34s %4d   %s" % ("doctest-only -> always SKIP", len(doctest_only),
+                                per_tier(doctest_only)))
+    print("  %-34s %4d   %s" % ("a package, not one .py", len(not_a_module),
+                                per_tier(not_a_module)))
+    if doctest_only:
+        print("  doctest-only: %s" % " ".join(sorted(m for _, m in doctest_only)))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--report", action="store_true",
                     help="re-print the last census without re-probing")
+    ap.add_argument("--cpython-lib", metavar="DIR",
+                    help="a CPython 3.14 Lib/test directory; adds a breakdown of "
+                         "which ready-to-wire modules this harness can actually "
+                         "SCORE (see shape_report)")
     args = ap.parse_args()
 
     if args.report:
-        report(read_tsv())
+        rows = read_tsv()
+        report(rows)
+        if args.cpython_lib:
+            shape_report(rows, Path(args.cpython_lib))
         return
 
     stdlib = stdlib_names()
