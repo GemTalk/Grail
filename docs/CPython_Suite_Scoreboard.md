@@ -61,7 +61,7 @@ different rows and merges cleanly.
 | test.test_listcomps | ERROR | 60 | 7 | 19 | 0 |  |
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
 | test.test_copy | ERROR | 81 | 21 | 12 | 0 |  |
-| test.test_scope | ERROR | 41 | 5 | 3 | 4 |  |
+| test.test_scope | ERROR | 41 | 5 | 1 | 4 |  |
 | test.test_yield_from | ERROR | 43 | 18 | 11 | 0 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
 | test.test_format | OK | 18 | 0 | 0 | 3 |  |
@@ -69,6 +69,6 @@ different rows and merges cleanly.
 | test.test_complex | ERROR | 37 | 13 | 12 | 0 |  |
 | test.test_enumerate | IMPORTERROR | 0 | 0 | 0 | 0 | name 'enumerate' is not defined |
 | test.test_raise | ERROR | 37 | 6 | 9 | 0 |  |
-| test.test_funcattrs | ERROR | 35 | 12 | 15 | 1 |  |
+| test.test_funcattrs | ERROR | 35 | 14 | 13 | 1 |  |
 | test.test_decorators | ERROR | 16 | 1 | 5 | 0 |  |
 | test.test_print | ERROR | 9 | 6 | 2 | 0 |  |

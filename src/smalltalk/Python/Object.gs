@@ -1115,6 +1115,11 @@ ___pythonBuiltinTypeName___
 	(#('Interval') @env0:includes: n) ifTrue: [^ 'range'].
 	(#('ScaledDecimal') @env0:includes: n) ifTrue: [^ 'Decimal'].
 	(#('GsNMethod') @env0:includes: n) ifTrue: [^ 'builtin_function_or_method'].
+	"PyCell backs Python's closure-cell type, whose CPython spelling is
+	``cell'' -- test_funcattrs' test___closure__ asserts exactly
+	``type(c).__name__ == 'cell'''.  Named PyCell in Smalltalk only because
+	``cell'' is too generic a name to claim in the flat Python dictionary."
+	(#('PyCell') @env0:includes: n) ifTrue: [^ 'cell'].
 	^ nil
 %
 

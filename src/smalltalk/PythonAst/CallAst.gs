@@ -850,7 +850,7 @@ printBareEvalExecOn: aStream
 %
 
 category: 'Grail-other'
-method: CallAst
+classmethod: CallAst
 ___freeVariableNamesFor___: aFunctionDefAst
 	"The Python FREE VARIABLES of aFunctionDefAst, sorted: names it mentions
 	but does not bind, which an enclosing FUNCTION scope does bind.  Used by
@@ -901,6 +901,81 @@ ___freeVariableNamesFor___: aFunctionDefAst
 %
 
 category: 'Grail-other'
+classmethod: CallAst
+___emitFreeVariableRead___: aSymbol parent: aNode on: aStream
+	"Emit the read of free variable aSymbol as it resolves AT aNode -- by
+	building a NameAst there and letting it compile itself.
+
+	Emitting the bare name instead is wrong often enough to break module
+	loads.  NameAst resolves a name through a stack of cases that a raw
+	identifier silently skips: the self/cls parameter of a class-body def IS
+	Smalltalk ``self'' (fractions' ``_operator_fallbacks(monomorphic_operator,
+	...)'' is exactly this -- its first parameter, captured by the nested
+	``forward'', compiles to ``self''), a reserved-named parameter is renamed
+	to its ``_<name>'' transport temp, an enclosing local reached past a class
+	body comes from ``___classCell___'', and a module-level name is a module
+	attribute load.  Emitting ``monomorphic_operator'' where the method has no
+	such temp is CompileError 1001, which takes the whole module down.
+
+	aNode fixes the resolution point, and the two callers differ: the closure
+	cells are emitted at the DEF SITE, in the enclosing scope, while the
+	locals() snapshot is emitted INSIDE the function body."
+
+	| nameNode |
+	nameNode := NameAst with: aSymbol.
+	nameNode ctx: LoadAst basicNew.
+	nameNode setParent: aNode.
+	nameNode printSmalltalkOn: aStream
+%
+
+category: 'Grail-other'
+classmethod: CallAst
+___freeVariableReadSource___: aSymbol parent: aNode
+	"___emitFreeVariableRead___:parent:on: rendered to a String, so a caller
+	can compare it against the bare name -- the test for ``this free variable
+	is a plain assignable temp here'' (see FunctionDefAst >>
+	emitClosureCellsOn:)."
+
+	| ws |
+	ws := WriteStream on: String new.
+	self ___emitFreeVariableRead___: aSymbol parent: aNode on: ws.
+	^ ws contents
+%
+
+category: 'Grail-other'
+classmethod: CallAst
+___freeVariableIsAssignable___: aSymbol for: aFunctionDefAst
+	"True when the enclosing scope that BINDS aSymbol holds it in a real
+	Smalltalk TEMP, so ``aSymbol := value'' compiles there.
+
+	Used by FunctionDefAst >> emitClosureCellsOn: to decide whether a closure
+	cell gets a writer block.  It is not cosmetic: a Smalltalk block or method
+	ARGUMENT is not assignable, so emitting ``[:v | arg := v]'' over a
+	parameter the enclosing function never assigns is CompileError 1001,
+	``expected an assignable variable'' -- which takes down the whole module
+	load, not just that def.
+
+	A name in the binding scope's WRITE set is assignable by construction: the
+	scope assigns it somewhere, so codegen either declared it as a temp or
+	transported the parameter into one (FunctionDefAst >>
+	paramNeedsTemp:assigned:instVars:).  A parameter that is only ever read
+	stays a bare argument, and its cell is read-only -- which loses nothing
+	real, since nothing in that program writes the binding either."
+
+	| node |
+	node := aFunctionDefAst parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [^ false].
+		((node isKindOf: FunctionDefAst) and: [node body notNil]) ifTrue: [
+			(node body variables includes: aSymbol) ifTrue: [
+				^ (node body writes ifNil: [#()]) includes: aSymbol].
+			(node allParameterNames anySatisfy: [:p | p asSymbol == aSymbol]) ifTrue: [
+				^ (node body writes ifNil: [#()]) includes: aSymbol]].
+		node := node parent].
+	^ false
+%
+
+category: 'Grail-other'
 method: CallAst
 printFunctionLocalsSnapshotOn: aStream
 	"Emit ``((builtins instance) ___buildLocals___: { {name. value}. ... })'' --
@@ -924,13 +999,18 @@ printFunctionLocalsSnapshotOn: aStream
 	Smalltalk temp name, which is exactly how NameAst compiles a free-variable
 	READ in this block -- the nested def is a Smalltalk block closed over the
 	enclosing block's temps, so the name is already in lexical scope."
-	(self ___freeVariableNamesFor___: fn) do: [:each |
+	(CallAst ___freeVariableNamesFor___: fn) do: [:each |
 		aStream
 			nextPutAll: '{ ''';
 			nextPutAll: each asString;
-			nextPutAll: '''. ';
-			nextPutAll: each asString;
-			nextPutAll: ' }. '].
+			nextPutAll: '''. '.
+		"Resolved AS AT THE CALL SITE (inside the function body), not as the
+		bare identifier: a free variable that is the self/cls parameter of an
+		enclosing class-body def compiles to Smalltalk ``self'', a reserved
+		name to its transport temp, and so on -- see
+		___emitFreeVariableRead___:parent:on:."
+		CallAst ___emitFreeVariableRead___: each asSymbol parent: fn body on: aStream.
+		aStream nextPutAll: ' }. '].
 	names do: [:each |
 		(CallAst isSelfReference: each)
 			ifTrue: [
