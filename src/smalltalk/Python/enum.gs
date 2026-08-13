@@ -104,7 +104,37 @@ initialize
 	function, and a C function is not a descriptor.  CPython's is pure Python."
 	self @env0:dynamicInstVarAt: #'_reduce_ex_by_global_name'
 		put: (UnboundMethod @env1:definingClass: Enum
-			selector: #'___grailReduceExByGlobalName___')
+			selector: #'___grailReduceExByGlobalName___').
+	"``__all__'' -- the module's declared API, which enum simply did not have.
+	It is what test.support.check__all__ inspects, and what any consumer asking
+	what this module exports reads.
+
+	It does NOT currently drive ``from enum import *'': Grail's star-import walks
+	the module's own dict entries and dynamic instVars instead, so it already
+	imported most of these and still misses ``unique'' and ``global_enum'',
+	which are METHODS rather than stored entries.  Teaching the star-import to
+	consult __all__ is a change in the import machinery, not here; the gap is
+	pinned in tests/python/enum_module_api.py so this list is not mistaken for a
+	fix to it.
+
+	This is what enum ACTUALLY exports, which is not quite CPython's list.
+	Absent here, each for its own reason: ``FlagBoundary'' and ``EnumCheck'',
+	because Grail models their MEMBERS as opaque symbols and never builds the
+	enclosing enum; and the ``global_flag_repr'' / ``global_enum_repr'' /
+	``global_str'' / ``pickle_by_global_name'' / ``pickle_by_enum_name'' helpers,
+	which Grail has not needed.  A name listed here that the module does not
+	define would break ``import *'' outright, so this list tracks reality rather
+	than upstream's.
+
+	``show_flag_values'' IS defined and is deliberately unlisted, exactly as
+	upstream -- test_enum's own check names it as not_exported."
+	self @env0:at: #'__all__' put: (list @env0:withAll: #(
+		'EnumType' 'EnumMeta' 'EnumDict'
+		'Enum' 'IntEnum' 'StrEnum' 'Flag' 'IntFlag' 'ReprEnum'
+		'auto' 'unique' 'verify' 'member' 'nonmember' 'property'
+		'STRICT' 'CONFORM' 'EJECT' 'KEEP'
+		'CONTINUOUS' 'NAMED_FLAGS' 'UNIQUE'
+		'global_enum'))
 %
 
 ! ===============================================================================
@@ -272,8 +302,8 @@ _verify: positional kw: kwargs
 		| cls |
 		cls := positional2 @env0:at: 1.
 		checksUnique ifTrue: [self unique: cls].
-		checksContinuous ifTrue: [self continuous: cls].
-		checksNamedFlags ifTrue: [self named_flags: cls].
+		checksContinuous ifTrue: [self _continuous: cls].
+		checksNamedFlags ifTrue: [self _named_flags: cls].
 		cls]
 %
 
@@ -307,7 +337,7 @@ show_flag_values: aValue
 
 category: 'Grail-Built-in Functions'
 method: enum
-named_flags: cls
+_named_flags: cls
 	"``@verify(NAMED_FLAGS)`` -- raise ValueError when an ALIAS carries a bit no
 	NAMED member covers (CPython enum.verify NAMED_FLAGS):
 
@@ -439,7 +469,7 @@ unique: cls
 
 category: 'Grail-Built-in Functions'
 method: enum
-continuous: cls
+_continuous: cls
 	"``@verify(CONTINUOUS)`` -- raise ValueError when the member values leave a
 	gap (CPython enum.verify CONTINUOUS).  For a plain enum the values must be
 	consecutive integers between the min and max; for a flag they must be the
