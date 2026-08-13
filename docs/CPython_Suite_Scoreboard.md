@@ -65,3 +65,10 @@ different rows and merges cleanly.
 | test.test_yield_from | ERROR | 43 | 18 | 11 | 0 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
 | test.test_format | OK | 18 | 0 | 0 | 3 |  |
+| test.test_binop | IMPORTERROR | 0 | 0 | 0 | 0 | B class object has no attribute 'register' |
+| test.test_complex | ERROR | 37 | 15 | 11 | 0 |  |
+| test.test_enumerate | IMPORTERROR | 0 | 0 | 0 | 0 | name 'enumerate' is not defined |
+| test.test_raise | ERROR | 37 | 6 | 9 | 0 |  |
+| test.test_funcattrs | ERROR | 35 | 12 | 15 | 1 |  |
+| test.test_decorators | ERROR | 16 | 1 | 5 | 0 |  |
+| test.test_print | ERROR | 9 | 6 | 2 | 0 |  |
