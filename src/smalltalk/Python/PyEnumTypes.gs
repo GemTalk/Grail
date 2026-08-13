@@ -1526,6 +1526,27 @@ ___grailReduceOf: aMember
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailMetaclassNamespace___
+	"""The class-body namespace an ENUM is built in -- Grail's answer to
+	CPython's ``EnumType.__prepare__``, which returns an EnumDict.
+
+	Reached from object >> ___grailPrepareNamespace___ when a class statement
+	names no metaclass, because Grail's enum metaclass is Smalltalk (``Enum
+	class'') and there is no ``metaclass='' keyword to carry it.
+
+	What it buys is CPython's assignment-time behaviour inside an enum body: a
+	reused member name is refused where it is written, and an ``auto()'' is
+	resolved as it is assigned, so a later statement in the same body sees the
+	number rather than an unresolved marker."""
+
+	| enumDict |
+	enumDict := Python @env0:at: #'EnumDict' otherwise: nil.
+	enumDict isNil ifTrue: [^ nil].
+	^ enumDict @env1:__new__: (self @env1:__name__)
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailFindDataRepr: cls
 	"CPython _find_data_repr_, whose answer a class keeps as _value_repr_ and
 	Enum.__repr__ then applies to the value: ``v_repr = cls._value_repr_ or

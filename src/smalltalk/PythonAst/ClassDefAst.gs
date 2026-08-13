@@ -933,12 +933,13 @@ printSmalltalkRuntimeOn: aStream
 	nil -- every store then goes straight through -- unless the metaclass really
 	supplies one.
 
-	STAGE LIMIT, emitted only for an EXPLICIT ``metaclass='' keyword: Grail does
-	not install a Python metaclass as the Smalltalk metaclass, so a class that
-	INHERITS one has nothing here to ask.  That is a pre-existing modelling gap
-	rather than one this introduces, and it is what confines the change to the
-	class statements that name a metaclass -- every other class in the corpus
-	emits exactly what it did before.  See docs/Class_Body_Namespace.md.
+	Emitted for EVERY class statement, not only one naming a metaclass: Grail's
+	own metaclasses are Smalltalk, and an enum's namespace comes from ``Enum
+	class'' rather than from a ``metaclass='' keyword.  The helper answers nil
+	unless something really supplies a namespace, so an ordinary class pays one
+	send and stores exactly what it did before.  A class that INHERITS a PYTHON
+	metaclass is still not reached -- Grail does not install one as the Smalltalk
+	metaclass, so there is nothing to ask.  See docs/Class_Body_Namespace.md.
 
 	The metaclass expression evaluates in the scope ENCLOSING the class
 	statement, like the boundary keyword and the decorators, so it is emitted
@@ -947,13 +948,18 @@ printSmalltalkRuntimeOn: aStream
 		ifTrue: [nil]
 		ifFalse: [keywords detect: [:kw |
 			kw name notNil and: [kw name asString = 'metaclass']] ifNone: [nil]].
-	metaclassKw ifNotNil: [ | savedDeco |
-		savedDeco := CallAst inDecoratorEmit.
-		CallAst inDecoratorEmit: true.
-		[aStream nextPutAll: name; nextPutAll: ' @env1:___grailPrepareNamespace___: ('.
-		metaclassKw value printSmalltalkWithParenthesisOn: aStream.
-		aStream nextPutAll: ').'; lf]
-			ensure: [CallAst inDecoratorEmit: (savedDeco == true)]].
+	[ | savedDeco |
+	savedDeco := CallAst inDecoratorEmit.
+	CallAst inDecoratorEmit: true.
+	[aStream nextPutAll: name; nextPutAll: ' @env1:___grailPrepareNamespace___: '.
+	metaclassKw
+		ifNil: [aStream nextPutAll: 'nil']
+		ifNotNil: [
+			aStream nextPut: $(.
+			metaclassKw value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPut: $)].
+	aStream nextPutAll: '.'; lf]
+		ensure: [CallAst inDecoratorEmit: (savedDeco == true)]] value.
 	[
 		"Python executes a class body top-to-bottom: a name is class-
 		local only once its binding statement has run.  Build each
@@ -1667,8 +1673,7 @@ printSmalltalkRuntimeOn: aStream
 	"The class statement is over as far as the namespace is concerned -- the
 	metaclass hook above was the last thing entitled to see it.  Emitted only
 	where ___grailPrepareNamespace___ was, so an ordinary class emits neither."
-	metaclassKw ifNotNil: [
-		aStream nextPutAll: name; nextPutAll: ' @env1:___grailFinishNamespace___.'; lf].
+	aStream nextPutAll: name; nextPutAll: ' @env1:___grailFinishNamespace___.'; lf.
 
 	"CLASS KEYWORD ``boundary='': a Flag/IntFlag may override its family-default
 	FlagBoundary (STRICT for Flag, KEEP for IntFlag) with
@@ -2675,6 +2680,22 @@ ___isClassBodyRuntimeStatement___: aStatement
 	These four are emitted verbatim instead -- re-deriving try/except/finally
 	and loop codegen would duplicate it."
 
+	"A body-level AUGMENTED ASSIGNMENT to a bare name joins them.  ``x += 1''
+	rebinds the class attribute, so CPython leaves ``class C: x = 1; x += 1''
+	with C.x == 2 -- but an AugAssignAst yields no classBodyAttributePairs, so
+	the structural compile had nothing to emit and dropped the statement whole,
+	leaving C.x == 1 and reporting nothing.  Emitted verbatim here instead, with
+	AugAssignAst's class-body branch turning it into a read-modify-write through
+	___classBodyDefinitionalStore___:put:.
+
+	A target the body declared ``nonlocal'' is excluded: that one binds the
+	ENCLOSING function's variable, not a class attribute, and has its own
+	enclosing-scope emit (___classBodyNonlocalTargetNames___:).  Without the
+	exclusion it would be emitted twice, once per pass, and the increment would
+	be applied to both the class and the outer binding."
+	((aStatement isKindOf: AugAssignAst)
+		and: [aStatement target isKindOf: NameAst]) ifTrue: [
+			^ (self ___classBodyNonlocalTargetNames___: aStatement) isEmpty].
 	^ (aStatement isKindOf: TryAst)
 		or: [(aStatement isKindOf: ForAst)
 		or: [(aStatement isKindOf: WhileAst)
