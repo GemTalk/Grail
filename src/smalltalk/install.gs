@@ -644,6 +644,7 @@ run
 	at: #'Pep649AnnotationsTestCase' put: nil;
 	at: #'NestedDefIdentityTestCase' put: nil;
 	at: #'ClosureCellTestCase' put: nil;
+	at: #'ClassBodyLocalsTestCase' put: nil;
 	at: #'MethodDocstringTestCase' put: nil;
 	at: #'GlobalStatementCodegenTestCase' put: nil;
 	at: #'EmailMessageTestCase' put: nil;
@@ -1464,6 +1465,7 @@ input src/smalltalk/PythonTests/GenericAliasTestCase.gs
 input src/smalltalk/PythonTests/Pep649AnnotationsTestCase.gs
 input src/smalltalk/PythonTests/NestedDefIdentityTestCase.gs
 input src/smalltalk/PythonTests/ClosureCellTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyLocalsTestCase.gs
 input src/smalltalk/PythonTests/MethodDocstringTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementCodegenTestCase.gs
 input src/smalltalk/PythonTests/EnumAutoImportTestCase.gs
