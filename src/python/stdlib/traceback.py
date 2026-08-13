@@ -253,17 +253,39 @@ def _candidates_for(exc_value, tb, wrong_name):
             d = [x for x in d if x[:1] != '_']
         return d
     if isinstance(exc_value, NameError):
+        d = []
         frame = _last_frame_of(tb)
+        # No frame means no candidates AT ALL, including builtins.  CPython gates
+        # the whole NameError branch on having one, so
+        # ``format_exception_only(exc)'' -- which passes no traceback -- offers no
+        # suggestion even for a misspelled builtin.  Grail must not be more
+        # helpful than CPython here: the tests that assert a suggestion use
+        # format_exc(), which carries the traceback.
         if frame is None:
             return None
-        d = []
-        for attr in ('f_locals', 'f_globals', 'f_builtins'):
-            ns = getattr(frame, attr, None)
-            if ns:
-                try:
-                    d.extend(list(ns))
-                except Exception:
-                    pass
+        if frame is not None:
+            # f_locals is absent in Grail: a Python function's locals are
+            # Smalltalk method temporaries, and the VM's raise-time capture
+            # records only (method, ip, receiver) -- no temps -- so a local
+            # name cannot be offered as a candidate.  f_globals IS available,
+            # derived from the frame's co_filename (PyFrame>>f_globals).
+            for attr in ('f_locals', 'f_globals'):
+                ns = getattr(frame, attr, None)
+                if ns:
+                    try:
+                        d.extend(list(ns))
+                    except Exception:
+                        pass
+        # CPython reads frame.f_builtins, a real dict.  Grail's builtins are
+        # methods on the builtins class rather than dict entries, so there is no
+        # such mapping to read; dir() of the builtins module lists exactly the
+        # names a bare-name read can resolve, which is what a candidate list
+        # needs.  Guarded: a suggestion is a courtesy and must never raise.
+        try:
+            import builtins as _builtins
+            d.extend(dir(_builtins))
+        except Exception:
+            pass
         return [x for x in d if isinstance(x, str)] or None
     return None
 
@@ -350,7 +372,17 @@ def _suggestion_suffix(exc_type, value, tb=None):
         return ''
 
 
-def format_exception_only(exc_type, value=_sentinel, show_group=False):
+# ``_tb'' below is private and carries a traceback the CALLER already holds, for
+# the NameError suggestion (whose candidates come from the frame).  CPython
+# computes that suggestion in TracebackException.__init__, where the traceback is
+# in hand; this function has no public traceback parameter there either, and must
+# NOT go looking for one on the exception.  ``format_exception_only(exc)'' offers
+# no suggestion in CPython even for a misspelled builtin, so reading
+# exc.__traceback__ here would make Grail MORE helpful than CPython -- a
+# conformance bug, and one an earlier draft actually had.
+# tests/python/frame_globals.py pins it.
+def format_exception_only(exc_type, value=_sentinel, show_group=False,
+                          _tb=None):
     """Return a list of strings ending in a newline that render the
     exception class + message.
 
@@ -440,7 +472,7 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False):
     # message, and CPython still renders "AttributeError: . Did you mean: 'x'?"
     # -- the colon form is chosen from the COMBINED string, not from the message
     # alone (test_getattr_suggestions_no_args).
-    msg = msg + _suggestion_suffix(exc_type, value)
+    msg = msg + _suggestion_suffix(exc_type, value, _tb)
     if msg:
         lines = [type_name + ': ' + msg + '\n']
     else:
@@ -584,7 +616,7 @@ def format_exception(exc_type, value=None, tb=None, limit=None, chain=True):
     if frames:
         lines.append('Traceback (most recent call last):\n')
         lines.extend(frames)
-    lines.extend(format_exception_only(exc_type, value))
+    lines.extend(format_exception_only(exc_type, value, _tb=tb))
     return lines
 
 
@@ -1102,7 +1134,7 @@ class TracebackException:
         them would produce the same bytes.  Accepting and ignoring keeps
         callers that pass them working instead of raising TypeError."""
         return format_exception_only(self.exc_type, self._value,
-                                     show_group=show_group)
+                                     show_group=show_group, _tb=self._tb)
 
     def format(self, chain=True, **kwargs):
         """Yield strings (header / frames / message).  Generators

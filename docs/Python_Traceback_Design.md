@@ -1583,3 +1583,73 @@ to raise `ImportError` rather than `ModuleNotFoundError`;
 `test_getattr_suggestions_with_custom___dir__` wants a metaclass `__dir__` to be
 honoured for `dir(TheClass)`; and `test_getattr_suggestions_do_not_trigger_for_big_dicts`
 hits GemStone's 255-dynamic-instVar ceiling.
+
+### 9.17 A frame's globals, and NameError suggestions (2026-08-12, gs375)
+
+§9.16 shipped the AttributeError half of CPython's suggestions and recorded that
+the NameError half wanted frame namespaces. This adds `f_globals`, which gets the
+global and builtin cases; the local case stays out of reach and is now pinned as
+deliberate behaviour rather than an omission.
+
+**`f_globals` is derived, not captured.** A traceback frame is reconstructed from
+the VM's `(method, ip, receiver)` triples, so threading a namespace through the
+capture walk would mean editing the most delicate code in the traceback path —
+§9.10–§9.12 took three CI rounds to stabilise, every one of them a native-code
+line-resolution surprise. The frame's `PyCode` already carries `co_filename`,
+which identifies the module unambiguously (exactly one `sys.modules` entry has
+that `__file__`), so `PyFrame>>f_globals` resolves the **live** `PyModuleDict` on
+demand and answers None when the module cannot be identified. No change to the
+walk at all.
+
+The dynamic instVar had to stop being written when the caller passes None:
+`___pyAttrLoad___` probes dynamic instVars *before* the method chain, so a stored
+None would shadow the accessor and every frame would report None.
+
+**No `f_builtins`, on purpose.** CPython's is the real builtins module dict.
+Grail's builtins are *methods* on the builtins class, so there is no mapping to
+hand back, and a dict built here would have to invent its values —
+`builtins ___pyAttrLoad___: #str` deliberately answers something different from
+what the bare name `str` resolves to (§ the handle-vs-class note in PyEnumTypes).
+`dir(builtins)` lists exactly the 143 names a bare-name read *can* resolve, so
+`traceback.py` takes the builtin candidates from there and the frame object stays
+honest about what it has.
+
+**Being more helpful than CPython is a conformance bug.** Two drafts got this
+wrong in opposite directions, and the fixture caught both:
+
+* The first sourced builtin candidates *regardless* of whether a frame was found,
+  so Grail suggested `ZeroDivisionError` where CPython stays silent. CPython gates
+  the whole NameError branch on having a frame.
+* The fix for *that* then found no frame at all on the path the tests actually
+  use, because `format_exception_only` has no traceback parameter — so the
+  suggestion never appeared. Reaching for `value.__traceback__` inside it made the
+  tests pass and reintroduced the first bug: `format_exception_only(exc)` offers no
+  suggestion in CPython even for a misspelled builtin.
+
+The resolution is a private `_tb` argument, passed only by the callers that
+legitimately hold a traceback (`format_exception`, and
+`TracebackException.format_exception_only` from its own `_tb`). `format_exception_only`
+never sniffs the exception for one. `no_suggestion_without_a_traceback` in the
+fixture is the check that keeps this honest, and it is the reason the fixture
+asserts a *negative*.
+
+**`f_locals` does not exist and cannot cheaply.** A Python function's locals are
+Smalltalk method temporaries; the raise-time capture records only
+`(method, ip, receiver)`, with no temps, so a misspelled LOCAL gets no suggestion
+where CPython offers one. The fixture prints that difference rather than asserting
+it, so it stays visible. Reading temps would need live `GsProcess` frame
+introspection at raise time — a different mechanism from the capture, and a
+separate piece of work.
+
+**Result: `test.test_traceback` 68 → 70 passing** (failures 64 → 62), the two
+being `test_name_error_suggestions_from_globals` and
+`test_name_error_suggestions_from_builtins`. SUnit 4100 → 4101. Full 50-module run
+moves only this row.
+
+**Still open in this thread:** `test_name_error_suggestions` and
+`test_name_error_with_instance` need `f_locals`; two more need the
+`sys.stdlib_module_names` decision from §9.16; and
+`test_name_error_suggestions_with_non_string_candidates` /
+`..._when_builtins_is_module` fail earlier, on `AttributeError: PyModuleDict object
+has no attribute 'copy'` — `globals().copy()` is unimplemented, which is unrelated
+to suggestions and worth its own fix.
