@@ -1,70 +1,96 @@
-# GRAIL minimal contextlib stub.
+# GRAIL reduced contextlib.
 #
-# CPython exposes contextmanager / ExitStack / closing / suppress /
-# nullcontext.  Grail's generator support is missing (yield isn't
-# wired through a coroutine runtime), so `@contextmanager` can't do
-# the with-block protocol.  Stub the decorators to a no-op
-# pass-through and provide a few simple class-based helpers.
-# Expand as Flask deps actually invoke these.
+# Covers contextmanager / ExitStack / closing / suppress / nullcontext /
+# chdir and the two abstract base classes.  @contextmanager runs the real
+# single-yield protocol; the header used to say generators weren't wired
+# and the decorators were no-op pass-throughs, which stopped being true
+# some time ago.  asynccontextmanager IS still a pass-through -- Grail has
+# no async context managers, and `async with` is emitted as plain `with`.
+# Expand as callers actually invoke the rest.
 
 
-class _GeneratorCM:
+class _GeneratorContextManager:
     """Wraps a generator that has yielded exactly once.  __enter__
     advances to the yield and returns the yielded value; __exit__
     advances past the yield (or throws an exception in) to run any
-    cleanup code.  Mirrors CPython's contextlib._GeneratorContextManager
-    behavior closely enough for the common patterns."""
+    cleanup code.
 
-    def __init__(self, gen):
-        self.gen = gen
+    The name is CPython's, and so is the (func, args, kwds) constructor:
+    code that subclasses this — test_with's MockContextManager does, and
+    calls the unbound __enter__/__exit__ on itself — needs both.  Grail
+    called it _GeneratorCM and took an already-built generator, which was
+    private-in-practice but not importable under the documented name."""
+
+    def __init__(self, func, args, kwds):
+        self.gen = func(*args, **kwds)
+        self.func, self.args, self.kwds = func, args, kwds
+        doc = getattr(func, "__doc__", None)
+        if doc is None:
+            doc = type(self).__doc__
+        self.__doc__ = doc
+
+    def _recreate_cm(self):
+        return self.__class__(self.func, self.args, self.kwds)
 
     def __enter__(self):
+        # CPython also deletes self.args/kwds/func here to drop references
+        # to the arguments; keeping them is strictly more permissive and
+        # leaves _recreate_cm usable after a first entry.
         try:
             return next(self.gen)
         except StopIteration:
-            raise RuntimeError("generator didn't yield")
+            raise RuntimeError("generator didn't yield") from None
 
-    def __exit__(self, exc_type, exc, tb):
-        if exc_type is None:
+    def __exit__(self, typ, value, traceback):
+        if typ is None:
             try:
                 next(self.gen)
             except StopIteration:
                 return False
-            raise RuntimeError("generator didn't stop")
-        # Exceptional exit: re-raise inside the generator.
-        try:
-            self.gen.throw(exc)
-        except StopIteration:
-            # Generator caught and finished — exception swallowed.
-            return True
-        except BaseException as e:
-            if e is exc:
-                # Generator re-raised the same instance: don't swallow.
+            else:
+                raise RuntimeError("generator didn't stop")
+        else:
+            if value is None:
+                # Only the exception type was supplied; the generator has
+                # to be thrown an instance.
+                value = typ()
+            try:
+                self.gen.throw(value)
+            except StopIteration as exc:
+                # Suppress StopIteration *unless* it is the exception we
+                # threw in: __exit__() must not swallow that one.
+                return exc is not value
+            except RuntimeError as exc:
+                # Don't re-raise the passed-in exception.
+                if exc is value:
+                    return False
+                # Avoid suppressing if a StopIteration exception was passed
+                # to throw() and later wrapped into a RuntimeError (see
+                # PEP 479 / bpo-27122).
+                if isinstance(value, StopIteration) and exc.__cause__ is value:
+                    return False
+                raise
+            except BaseException as exc:
+                # Only re-raise if it's *not* the exception that was passed
+                # to throw(): the generator re-raising it means it did not
+                # handle it, so __exit__ must not suppress.
+                if exc is not value:
+                    raise
                 return False
-            # A new exception escaped — surface it.
-            raise
-        raise RuntimeError("generator didn't stop after throw")
+            raise RuntimeError("generator didn't stop after throw()")
+
+
+# Grail's former private name for the above, kept so any in-tree caller
+# that predates the rename keeps working.
+_GeneratorCM = _GeneratorContextManager
 
 
 def contextmanager(func):
     """Decorator: turn a single-yield generator function into a
-    context-manager factory.  Grail's call-site *-unpack isn't ready
-    yet so the wrapper dispatches positional args explicitly for the
-    common 0-3 arg case; kwargs are not threaded through."""
+    context-manager factory."""
 
     def helper(*args, **kw):
-        n = len(args)
-        if n == 0:
-            g = func()
-        elif n == 1:
-            g = func(args[0])
-        elif n == 2:
-            g = func(args[0], args[1])
-        elif n == 3:
-            g = func(args[0], args[1], args[2])
-        else:
-            raise TypeError("@contextmanager wrapper supports up to 3 positional args")
-        return _GeneratorCM(g)
+        return _GeneratorContextManager(func, args, kw)
 
     # CPython's contextmanager wraps with functools.wraps, so the factory carries
     # the decorated function's identity -- name, doc, and __wrapped__.  Grail's

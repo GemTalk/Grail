@@ -3774,15 +3774,83 @@ __enter__
 	with a raw generator in a with-statement (a dropped @contextmanager
 	class-body decorator)."
 
-	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
-		@env0:, ''' object does not support the context manager protocol')
+	TypeError ___signal___: (self ___contextManagerProtocolError___: '__enter__')
 %
 
 category: 'Grail-Context Manager'
 method: object
 __exit__: excType _: excValue _: excTb
-	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
-		@env0:, ''' object does not support the context manager protocol')
+
+	TypeError ___signal___: (self ___contextManagerProtocolError___: '__exit__')
+%
+
+category: 'Grail-Context Manager'
+method: object
+___contextManagerProtocolError___: missingSelector
+	"CPython's TypeError text for ``with obj:'' on a non-manager, built here
+	because it depends on WHICH halves of the protocol the object has:
+
+	  'X' object does not support the context manager protocol
+	      (missed __exit__ method)
+
+	with a trailing ``but it supports the asynchronous context manager
+	protocol. Did you mean to use 'async with'?'' when the object is an
+	ASYNC manager used with a plain ``with''.
+
+	missingSelector is the half whose default fallback ran.  CPython reports
+	a missing __exit__ BEFORE a missing __enter__ -- its SETUP_WITH looks
+	__exit__ up first -- so when neither half exists this answers the
+	__exit__ message even though it was __enter__ that fell through.
+	Deciding it here rather than in WithAst's emit keeps the check off the
+	success path entirely: it runs only when the object is already known not
+	to be a context manager."
+
+	| missed hasAsync |
+	missed := (self ___definesProtocolMethod___: '__exit__'
+			selectors: #( #'__exit__:_:_:' #'__exit__:kw:' #'__exit__:' ))
+		ifTrue: [missingSelector]
+		ifFalse: ['__exit__'].
+	hasAsync := (self ___definesProtocolMethod___: '__aenter__'
+			selectors: #( #'__aenter__' #'__aenter__:kw:' ))
+		@env0:and: [self ___definesProtocolMethod___: '__aexit__'
+			selectors: #( #'__aexit__:_:_:' #'__aexit__:kw:' #'__aexit__:' )].
+	^ '''' @env0:, self ___pyTypeNameForError___ @env0:asString
+		@env0:, ''' object does not support the context manager protocol (missed '
+		@env0:, missed @env0:, ' method)'
+		@env0:, (hasAsync
+			ifTrue: [' but it supports the asynchronous context manager protocol. '
+				@env0:, 'Did you mean to use ''async with''?']
+			ifFalse: [''])
+%
+
+category: 'Grail-Context Manager'
+method: object
+___definesProtocolMethod___: aName selectors: selectorArray
+	"True when the receiver's class really supplies the Python method
+	``aName'', rather than inheriting the default that raises.
+
+	Two places to look, because Grail compiles the two kinds of def
+	differently.  A plain ``def __exit__(...)'' becomes a Smalltalk method
+	on the class, so it is found by whichClassIncludesSelector: -- but a
+	bare ``includes'' test is not enough there, because object ITSELF
+	defines __enter__ / __exit__:_:_: (that is what makes the error
+	catchable in the first place), hence the ``~~ object'' guard.  Mirrors
+	the reason ___hasUserInit___ exists for __init__.  An ``async def''
+	compiles to no Smalltalk method at all and lands in the per-class
+	dynInstVars store, as does a runtime ``Cls.__aexit__ = fn''; that is
+	what ___dynamicClassAttr___: walks.
+
+	Several selectors per name because the arity a Python def compiles to
+	varies -- ``def __exit__(self, t, v, tb)'' becomes __exit__:_:_: while
+	``def __exit__(self, *args)'' goes through the kwargs forwarder."
+
+	| owner |
+	(self ___dynamicClassAttr___: aName @env0:asSymbol) @env0:notNil ifTrue: [^ true].
+	selectorArray @env0:do: [:sel |
+		owner := self @env0:class @env0:whichClassIncludesSelector: sel environmentId: 1.
+		(owner @env0:notNil @env0:and: [owner @env0:~~ object])
+			ifTrue: [^ true]].
+	^ false
 %
 
 category: 'Grail-Convenience Methods - Attribute'

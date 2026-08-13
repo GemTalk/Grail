@@ -82,7 +82,7 @@ different rows and merges cleanly.
 | test.test_subclassinit | ERROR | 17 | 7 | 3 | 0 |  |
 | test.test_super | ERROR | 40 | 13 | 24 | 3 |  |
 | test.test_typechecks | ERROR | 6 | 2 | 1 | 0 |  |
-| test.test_with | IMPORTERROR | 0 | 0 | 0 | 0 | Expression Context should be <Load> but is <StoreAst> |
+| test.test_with | ERROR | 54 | 6 | 5 | 0 |  |
 | test.test_positional_only_arg | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'dis' |
 | test.test_string_literals | ERROR | 20 | 3 | 10 | 0 |  |
 | test.test_genericclass | ERROR | 22 | 12 | 7 | 1 |  |

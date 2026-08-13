@@ -772,6 +772,7 @@ run
 	at: #'SlotsInheritedDictTestCase' put: nil;
 	at: #'ClassAttrMethodOverrideTestCase' put: nil;
 	at: #'PositionalOnlyDefaultsTestCase' put: nil;
+	at: #'WithAsTargetsTestCase' put: nil;
 	at: #'TimedeltaFloatOperandTestCase' put: nil;
 	at: #'BuiltinSubclassMethodsTestCase' put: nil;
 	at: #'PrivateNameManglingTestCase' put: nil;
@@ -1593,6 +1594,7 @@ input src/smalltalk/PythonTests/ClassMethodDecoratorOrderTestCase.gs
 input src/smalltalk/PythonTests/SlotsInheritedDictTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrMethodOverrideTestCase.gs
 input src/smalltalk/PythonTests/PositionalOnlyDefaultsTestCase.gs
+input src/smalltalk/PythonTests/WithAsTargetsTestCase.gs
 input src/smalltalk/PythonTests/TimedeltaFloatOperandTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassMethodsTestCase.gs
 input src/smalltalk/PythonTests/PrivateNameManglingTestCase.gs

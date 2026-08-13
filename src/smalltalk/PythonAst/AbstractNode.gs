@@ -655,6 +655,249 @@ ___emitModuleScopeStoreOf___: aNameSymbol from: sourceExpr on: aStream
 		nextPut: $.
 %
 
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___emitTargetStore___: aTarget from: sourceExpr on: aStream
+	"Store the raw Smalltalk expression fragment ``sourceExpr'' into an
+	arbitrary Python assignment TARGET: a name, an attribute, a subscript,
+	or a (possibly nested, possibly starred) tuple/list.
+
+	``with EXPR as TARGET'' is an assignment whose right-hand side is a
+	value the emitter already holds in a Smalltalk temp rather than a
+	Python expression node, so it cannot go through AssignAst.  WithAst
+	handled only a bare NameAst and fell back to
+	``TARGET printSmalltalkOn: ... := ...'' -- which is a LOAD emit of a
+	STORE-context node.  Every other target shape was therefore broken:
+	an attribute or subscript target died on ``Expression Context should
+	be <Load> but is <Store>'', and a tuple target emitted
+	``(tuple withAll: {a. b}) := val'', which is not valid Smalltalk.
+	That is what stopped test.test_with importing at all.
+
+	Names route through ___emitModuleScopeStoreOf___:from:on:, the only
+	path that also covers a class-body ``with''.  Every other shape goes
+	to the same per-element store AssignAst uses for tuple unpacking, so
+	a with-target now gets its iterable coercion, ValueError value-count
+	check, PEP 3132 star support and @property setter dispatch."
+
+	(aTarget isKindOf: NameAst) ifTrue: [
+		^ self ___emitModuleScopeStoreOf___: aTarget id from: sourceExpr on: aStream].
+	^ self
+		emitTupleElementStoreOn: aStream
+		target: aTarget
+		holder: '___tgt___'
+		indexExpr: nil
+		directRhs: sourceExpr
+%
+
+category: 'other'
+method: AbstractNode
+emitUnpackCoercionAndStoresOn: aStream elts: elts holder: holder
+	"Shared tail of EVERY tuple/list unpack -- the top-level target and each
+	nested one.  The caller has just written ``holder := <rhs>'' and left the
+	statement open; append the iterable coercion + value-count check that
+	closes it, then one store per target element.
+
+	Factored out because the nested path used to do neither: it bound the
+	inner holder straight to ``outer __getitem__: i'' and indexed that, so
+	``(a, b), (c,) = IteratingSequenceClass(2), {42: 24}'' (test_iter
+	test_unpack_iter) raised ``not subscriptable'' on an iterable that has
+	__iter__ but no __getitem__, a nested target could not raise ValueError
+	for the wrong number of values, and a nested STAR target did not compile
+	at all -- StarredAst fell through to the plain-expression printer, which
+	emits a ``*-unpack in call sites is not yet supported'' TypeError signal
+	into the left-hand side of an assignment, a CompileError that took the
+	whole enclosing module down with it.  A nested target is entitled to
+	exactly the semantics of an outer one, so it now runs the same code."
+
+	| starIdx nBefore hasStar nAfter |
+	starIdx := elts findFirst: [:e | e isKindOf: StarredAst].
+	hasStar := starIdx ~= 0.
+	nBefore := hasStar ifTrue: [starIdx - 1] ifFalse: [elts size].
+	nAfter := hasStar ifTrue: [elts size - starIdx] ifFalse: [0].
+	"___unpackSequence___: sequences answer themselves (Object default);
+	iterables WITHOUT positional __getitem__ (enum classes: `R, W, X =
+	Perm`) materialize their iteration order as an indexable list --
+	CPython unpacks via __iter__, this codegen indexes.  ___unpackCheck___
+	then enforces CPython's value count (ValueError on too few / too many)."
+	aStream nextPutAll: ' ___unpackSequence___ ___unpackCheck___: ';
+		nextPutAll: nBefore printString;
+		nextPutAll: ' star: '; nextPutAll: (hasStar ifTrue: ['true'] ifFalse: ['false']);
+		nextPutAll: ' after: '; nextPutAll: nAfter printString; nextPutAll: '. '.
+	starIdx = 0 ifTrue: [
+		elts doWithIndex: [:elt :i |
+			self
+				emitTupleElementStoreOn: aStream
+				target: elt
+				holder: holder
+				indexExpr: (i - 1) printString
+		].
+	] ifFalse: [
+		elts doWithIndex: [:elt :i |
+			i < starIdx ifTrue: [
+				"Before the star — positive index from start."
+				self
+					emitTupleElementStoreOn: aStream
+					target: elt
+					holder: holder
+					indexExpr: (i - 1) printString
+			] ifFalse: [(i = starIdx)
+				ifTrue: [
+					"Star itself: slice from current index to (size-after-star) before end."
+					| afterCount sliceExpr |
+					afterCount := elts size - i.
+					sliceExpr := holder , ' ___getslice___: ' , (i - 1) printString , ' _: '
+						, (afterCount = 0 ifTrue: ['nil'] ifFalse: ['-' , afterCount printString])
+						, ' _: nil'.
+					self
+						emitTupleElementStoreOn: aStream
+						target: elt value
+						holder: holder
+						indexExpr: nil
+						directRhs: sliceExpr
+				] ifFalse: [
+					"After the star — negative index from end."
+					| offsetFromEnd |
+					offsetFromEnd := elts size - i + 1.
+					self
+						emitTupleElementStoreOn: aStream
+						target: elt
+						holder: holder
+						indexExpr: '-' , offsetFromEnd printString
+				]
+			].
+		].
+	]
+%
+
+category: 'other'
+method: AbstractNode
+emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: indexExpr
+	"Convenience entry for the regular (non-star) per-element store
+	— builds the holder __getitem__: <index> RHS."
+
+	^ self
+		emitTupleElementStoreOn: aStream
+		target: aTarget
+		holder: holder
+		indexExpr: indexExpr
+		directRhs: nil
+%
+
+category: 'other'
+method: AbstractNode
+emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: indexExpr directRhs: directRhs
+	"Emit a single target's store inside a tuple-unpack.  Handles
+	NameAst (plain assignment), AttributeAst (env-1 setter or
+	classmethod self-ref instVar write), SubscriptAst
+	(``obj[i] = ...``), and nested Tuple/List targets (recurse).
+
+	``directRhs`` is a pre-built Smalltalk source expression used
+	for the star-slice path; when nil, the RHS is
+	``holder __getitem__: indexExpr``."
+
+	| rhs |
+	rhs := directRhs ifNil: [holder , ' __getitem__: ' , indexExpr].
+	(aTarget isKindOf: AttributeAst) ifTrue: [
+		"obj.attr = rhs (per-element store inside a tuple unpack) —
+		route through ``__setattr__:_:'' (both self and foreign receivers)
+		so @property setters fire.  Object>>__setattr__:_: detects the
+		paired getter+setter at runtime and dispatches to the setter;
+		otherwise falls through to dynamic-instVar storage."
+		((aTarget value isKindOf: NameAst)
+			and: [(CallAst isSelfReference: aTarget value id)
+				and: [(aTarget value ___boundInNestedFunction___: aTarget value id) not]]) ifTrue: [
+			"Slot attribute → assign the mangled instVar directly by bare name."
+			((CallAst classSlotNames notNil)
+				and: [CallAst classSlotNames includes: aTarget ___mangledAttr___ asSymbol]) ifTrue: [
+				aStream
+					nextPutAll: '___slot_';
+					nextPutAll: aTarget ___mangledAttr___;
+					nextPutAll: '___ := (';
+					nextPutAll: rhs;
+					nextPutAll: '). '.
+				^ self
+			].
+			aStream
+				nextPutAll: 'self @env1:__setattr__: ''';
+				nextPutAll: aTarget ___mangledAttr___;
+				nextPutAll: ''' _: (';
+				nextPutAll: rhs;
+				nextPutAll: '). '.
+			^ self
+		].
+		aTarget value printSmalltalkWithParenthesisOn: aStream.
+		aStream
+			nextPutAll: ' @env1:__setattr__: ''';
+			nextPutAll: aTarget ___mangledAttr___;
+			nextPutAll: ''' _: (';
+			nextPutAll: rhs;
+			nextPutAll: '). '.
+		^ self
+	].
+	(aTarget isKindOf: SubscriptAst) ifTrue: [
+		"obj[idx] = rhs — __setitem__:_: dispatch."
+		aTarget value printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ' __setitem__: '.
+		aTarget slice printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ' _: ('; nextPutAll: rhs; nextPutAll: '). '.
+		^ self
+	].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		"Nested unpacking: recurse using a fresh holder, through the SAME
+		coercion + value-count + star emitter the top-level target uses.
+		The RHS is parenthesized because it is a keyword message
+		(``holder __getitem__: 0''), and ___unpackSequence___ is unary."
+		| nestedHolder |
+		nestedHolder := holder , '_n'.
+		aStream nextPutAll: '[| '; nextPutAll: nestedHolder; nextPutAll: ' | ';
+			nextPutAll: nestedHolder; nextPutAll: ' := ('; nextPutAll: rhs; nextPutAll: ')'.
+		self emitUnpackCoercionAndStoresOn: aStream elts: aTarget elts holder: nestedHolder.
+		aStream nextPutAll: '] value. '.
+		^ self
+	].
+	"Default: NameAst / starred wrapper — bare assignment OR Phase A
+	module-scope dynamicInstVarAt:put: when the target is a module
+	global."
+	((aTarget isKindOf: NameAst) and: [self isModuleScopeStoreTarget: aTarget])
+		ifTrue: [
+			aStream
+				nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+				nextPutAll: aTarget id;
+				nextPutAll: ''' put: (';
+				nextPutAll: rhs;
+				nextPutAll: '). '.
+			^ self
+		].
+	aTarget printSmalltalkOn: aStream.
+	aStream nextPutAll: ' := '; nextPutAll: rhs; nextPutAll: '. '
+%
+
+category: 'Grail-other'
+method: AbstractNode
+isModuleScopeStoreTarget: aNameAst
+	"Phase A: true if this assignment target is a module-scope name —
+	i.e. we're compiling inside a module body or top-level def (not a
+	user class method), and the name was declared in the module body's
+	scope (parser-recorded into ``CallAst moduleVariableNames''), and
+	no enclosing function shadows it as a local."
+
+	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	"``global x'' in the nearest enclosing function forces the module
+	route -- even inside a class method (the emitters pick the module-
+	instance receiver via ___moduleStoreReceiverExpr___) and past any
+	enclosing-function shadow (Python: the declaration binds the name
+	to the module for the whole declaring scope)."
+	(aNameAst ___nearestEnclosingFunctionDeclaresGlobal___: aNameAst id)
+		ifTrue: [^ true].
+	CallAst classBeingCompiled ifNotNil: [^ false].
+	(aNameAst isModuleVariableName: aNameAst id) ifFalse: [^ false].
+	"PRECISE local-shadow check (writes + params; comprehension targets
+	and global-declared names excluded) -- not the over-approximating
+	___declaredInEnclosingFunction___: variables walk."
+	(aNameAst ___pythonLocalInEnclosingFunctions___: aNameAst id) ifTrue: [^ false].
+	^ true
+%
+
 category: 'Grail-Class Body'
 method: AbstractNode
 ___inClassBodyRuntimeScope___
