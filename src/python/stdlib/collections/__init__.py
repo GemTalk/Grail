@@ -713,20 +713,38 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
             return cls(*values)
 
         def __repr__(self):
-            # ``self._typename`` is fixed at factory-call time (the
-            # underlying Smalltalk class is always literally ``_NT'',
-            # so it can't carry a per-call name) -- a REAL subclass
-            # (``class B(A): pass'') has its own genuine class name, so
-            # prefer that when this instance isn't a direct ``_NT''.
-            cls = type(self)
-            name = cls.__name__ if cls is not _NT else self._typename
+            # The class now carries the typename as its own __name__, so a
+            # direct namedtuple and a REAL subclass (``class B(A): pass'')
+            # are both answered by asking the class.
             parts = []
             for i in range(len(self._fields)):
                 parts.append(self._fields[i] + '=' + repr(self._values[i]))
-            return name + '(' + ', '.join(parts) + ')'
+            return type(self).__name__ + '(' + ', '.join(parts) + ')'
 
-    if module is not None:
-        _NT.__module__ = module
+    # The class the factory built is named after the typename it was asked
+    # for, exactly as CPython's does.  The class STATEMENT above can only be
+    # spelled one way, so every namedtuple was called ``_NT'' -- which showed
+    # up in repr of subclasses and in error messages, and made the result
+    # impossible to pickle, since pickle saves a class by looking its name back
+    # up and ``collections._NT'' is not where it lives.
+    _NT.__name__ = typename
+    _NT.__qualname__ = typename
+
+    # CPython defaults __module__ to the CALLER's module
+    # (``_sys._getframe(1).f_globals['__name__']``) and, when it cannot work
+    # that out, deliberately leaves __module__ alone rather than guessing.
+    # Grail has no caller-frame access at all -- there is no sys._getframe, and
+    # GemStone refuses frame inspection on the running process -- so the second
+    # branch is the only one available here.
+    #
+    # Leaving it alone would mean inheriting ``collections'' from the class
+    # statement above, which is never right and is worse than nothing: pickle
+    # trusts a string __module__ and would look for ``collections.T''.  Clearing
+    # it instead hands the question to pickle's own documented fallback,
+    # whichmodule(), which scans sys.modules for where the class is actually
+    # bound -- so a namedtuple built at module scope pickles, which none did
+    # before.  An explicit ``module='' argument still wins, as upstream.
+    _NT.__module__ = module
     return _NT
 
 

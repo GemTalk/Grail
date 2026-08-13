@@ -686,6 +686,7 @@ run
 	at: #'EnumCompositeNameTestCase' put: nil;
 	at: #'ClassQualnameStoreTestCase' put: nil;
 	at: #'InitSubclassTestCase' put: nil;
+	at: #'NamedtupleNamingTestCase' put: nil;
 	at: #'EnumDictTestCase' put: nil;
 	at: #'EnumFlagMasksTestCase' put: nil;
 	at: #'EnumNamedFlagsTestCase' put: nil;
@@ -1480,6 +1481,7 @@ input src/smalltalk/PythonTests/EnumCallAndInitTestCase.gs
 input src/smalltalk/PythonTests/EnumCompositeNameTestCase.gs
 input src/smalltalk/PythonTests/ClassQualnameStoreTestCase.gs
 input src/smalltalk/PythonTests/InitSubclassTestCase.gs
+input src/smalltalk/PythonTests/NamedtupleNamingTestCase.gs
 input src/smalltalk/PythonTests/EnumDictTestCase.gs
 input src/smalltalk/PythonTests/EnumFlagMasksTestCase.gs
 input src/smalltalk/PythonTests/EnumNamedFlagsTestCase.gs
