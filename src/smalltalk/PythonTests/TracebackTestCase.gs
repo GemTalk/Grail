@@ -1166,3 +1166,81 @@ testLiveFramesAndGetframe
 		self assert: (answer = true)
 			description: 'live-frame check failed: ' , k , ' -> ' , answer printString].
 %
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testAHandlerRaiseLeavesTheTry
+	"The ``except'' clauses of one ``try'' are ALTERNATIVES for the try BODY.  An
+	exception raised inside a handler propagates out of the whole statement; it is
+	never offered to that statement's other handlers.
+
+	Grail offered it to them.  Handlers compile to NESTED protected blocks --
+
+		[[ body ] on: T1 do: [H1] ] on: T2 do: [H2]
+
+	-- so H1's BODY ran inside H2's protected block and H2 caught whatever H1
+	raised.  Every handler but the last was exposed to every handler after it,
+	silently breaking the commonest narrowing idiom in the language:
+
+		try: parse(text)
+		except ValueError as e: raise ConfigError(str(e)) from None
+		except Exception: log_unexpected()
+
+	The shield is a DEPTH.  Each handler body brackets itself with
+	BaseException ___enterHandler___ / ___exitHandler___ (through the ensure: that
+	already restores sys.exc_info(), so a return / break / continue or a re-raise
+	still unwinds it), and the selectors of handlers 2..N record the depth at
+	which they were INSTALLED, handling nothing once the depth rises above it.
+	Nesting therefore comes out right: a try inside a handler installs its own
+	selectors at the raised depth, so its own handlers still catch from its own
+	body while the enclosing try's later handlers stay shielded.
+
+	Two other designs were built and measured first; both are worse, and both
+	looked obviously correct until run.  Moving the handler bodies outside the
+	on:do: -- recording which matched and dispatching afterwards -- is semantically
+	exact and makes a bare ``raise'' IMPOSSIBLE, because GemStone will not signal
+	an exception whose handler has unwound (UncontinuableError 6011); test_listcomps'
+	test_comp_in_try_except is what caught that, not this fixture.  A per-statement
+	flag in a block enclosing the whole try works and costs a stack frame per try,
+	which turned test_richcmp's MiscTest.test_recursion into a RecursionError.  An
+	integer captured in the selector costs neither.
+
+	This is also the answer to the question section 9.19 left open.  The
+	import-suggestion tests do ``except ImportError as e: raise e from None'' with
+	an ``except Exception'' after it and got their own re-raise back in the second
+	handler -- surfacing as ``Expected ImportError but got <ImportError class
+	object>''.  All three theories recorded there were wrong (ImportError matching,
+	the exec boundary, ModuleNotFoundError's hierarchy); the fault was in
+	try/except codegen and had nothing to do with imports.
+
+	Every expectation is verified against real CPython by running the fixture
+	directly; see tests/python/handler_raise.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'handler_raise' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/handler_raise.py')
+		name: 'handler_raise'.
+	#( 'a_raise_in_a_handler_leaves_the_try'
+	   'a_reraise_in_a_handler_leaves_the_try'
+	   'a_bare_reraise_in_a_handler_leaves_the_try'
+	   'the_later_handler_is_skipped_even_when_it_would_match'
+	   'three_handlers_expose_neither_of_the_first_two'
+	   'a_matching_handler_still_catches'
+	   'the_first_matching_handler_wins'
+	   'an_unmatched_exception_still_propagates'
+	   'the_body_result_is_unaffected'
+	   'an_else_clause_still_runs_when_nothing_raised'
+	   'a_finally_still_runs_when_a_handler_raises'
+	   'a_return_from_a_handler_still_returns'
+	   'a_break_from_a_handler_still_breaks'
+	   'a_continue_from_a_handler_still_continues'
+	   'a_nested_try_inside_a_handler_still_works'
+	   'a_handler_raise_is_catchable_further_out'
+	   'the_context_of_a_handler_raise_is_the_original'
+	   'from_none_suppresses_the_context' ) do: [:k |
+		| answer |
+		answer := mod @env0:perform: k asSymbol env: 1.
+		self assert: (answer = true)
+			description: 'handler-raise check failed: ' , k , ' -> ' , answer printString].
+%

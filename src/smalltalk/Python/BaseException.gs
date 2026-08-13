@@ -1693,3 +1693,50 @@ ___isGeneratedPythonMethod___: aMethod
 		cache @env0:at: key put: answer.
 		answer]
 %
+
+category: 'Grail-Handler Depth'
+classmethod: BaseException
+___handlerDepth___
+	"How many ``except'' handler BODIES are currently running in this session.
+
+	Used to keep an exception raised in one handler from being caught by a LATER
+	handler of the same try.  Python's except clauses are alternatives for the try
+	BODY only, but they compile to nested protected blocks -- so the later
+	handlers' on:do: enclose the earlier handlers' bodies and would catch what
+	they raise.
+
+	A selector records this depth when it is INSTALLED and refuses to handle
+	anything once the depth has risen above it (PyLazyExceptSelector
+	>>on:shieldedAbove:).  Recording the depth rather than a flag is what makes
+	nesting work: a try INSIDE a handler installs its own selectors at the raised
+	depth, so its own handlers still catch from its own body, while the outer
+	try's later handlers stay shielded."
+
+	^ (SessionTemps @env0:current @env0:at: #'GrailHandlerDepth' otherwise: 0)
+%
+
+category: 'Grail-Handler Depth'
+classmethod: BaseException
+___enterHandler___
+	"Called as an ``except'' handler body starts."
+
+	SessionTemps @env0:current
+		@env0:at: #'GrailHandlerDepth'
+		put: self ___handlerDepth___ @env0:+ 1.
+	^ self
+%
+
+category: 'Grail-Handler Depth'
+classmethod: BaseException
+___exitHandler___
+	"Called as an ``except'' handler body finishes, however it finishes -- the
+	caller pairs this with the enter through ensure:, so a return / break /
+	continue or a re-raise still unwinds the count."
+
+	| d |
+	d := self ___handlerDepth___.
+	SessionTemps @env0:current
+		@env0:at: #'GrailHandlerDepth'
+		put: (d @env0:> 0 ifTrue: [d @env0:- 1] ifFalse: [0]).
+	^ self
+%

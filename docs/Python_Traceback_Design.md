@@ -2064,7 +2064,7 @@ change (record each function's local names, and read the temps some other way) o
 VM support — a much larger piece than this one, and worth its own investigation
 rather than an incremental attempt.
 
-### 9.23 An except handler's raise is caught by its sibling (2026-08-13, gs40) — DIAGNOSED, NOT FIXED
+### 9.23 An except handler's raise is caught by its sibling (2026-08-13, gs40) — diagnosed here, **fixed in §9.24**
 
 **The bug.** In Grail, an exception raised inside an `except` handler is caught by
 a *later* `except` clause of the same `try`. CPython propagates it out of the whole
@@ -2144,3 +2144,69 @@ needs a separate route.
 **Found along the way, unrelated and unfixed:** `str(KeyError('x'))` is `'x'` in
 Grail and `"'x'"` in CPython — KeyError's `__str__` is the *repr* of its argument.
 The fixture uses `RuntimeError` throughout to avoid entangling the two.
+
+### 9.24 Shielding a sibling handler with a depth, not a flag (2026-08-13, gs40)
+
+§9.23's bug, fixed: an exception raised inside an `except` handler no longer
+reaches a later `except` clause of the same `try`.
+
+The two designs §9.23 rejected both failed on something structural, and the fix
+came from taking their failures seriously rather than trying harder at either.
+
+- *Bodies outside the `on:do:`* died because **GemStone will not signal an
+  exception whose handler has unwound** (`UncontinuableError` 6011), so a bare
+  `raise` became impossible.  Constraint learned: **the handler body has to stay
+  inside its own protected block.**
+- *A flag in a block enclosing the `try`* died because that block is **a stack
+  frame per `try`**, and `test_richcmp`'s `test_recursion` sits close enough to
+  the ceiling to notice.  Constraint learned: **no new frame, and no new
+  per-activation temp either** (a temp needs a scope to live in).
+
+Both constraints are satisfied by putting the state in the **selector**, which is
+already constructed once per `on:do:` install — i.e. once per activation — and
+costs nothing extra:
+
+```smalltalk
+PyLazyExceptSelector on: [ ...type... ] shieldedAbove: (BaseException ___handlerDepth___)
+```
+
+`___handlerDepth___` is a session count of how many handler *bodies* are running;
+each body brackets itself with `___enterHandler___` / `___exitHandler___` through
+the `ensure:` that already restores `sys.exc_info()`, so a `return` / `break` /
+`continue` or a re-raise still unwinds the count.  A selector handles nothing once
+the depth has risen **above the value it recorded when it was installed**.
+
+**A depth rather than a flag is the whole trick**, and the case that proves it is
+a `try` nested inside a handler:
+
+| moment | depth | O1 (base 0) | O2 (base 0) | I1 (base 1) | I2 (base 1) |
+|---|---:|---|---|---|---|
+| O's body raises | 0 | **matches** | — | — | — |
+| inside O1, I's body raises | 1 | — | — | **matches** | — |
+| inside I1, X raised | 2 | — | shielded | — | shielded |
+| back in O1, Y raised | 1 | — | shielded | — | — |
+
+A single shared flag or counter gets the second row wrong — it would shield `I1`
+from its own body's exception.  Capturing the baseline at install time is what
+distinguishes "a handler of *this* `try` is running" from "we happen to be
+somewhere under some handler".
+
+Only handlers **after the first** are shielded, because the nesting puts each
+handler's `do:` block outside the `on:do:` of every *earlier* handler — the first
+handler is never in a position to catch what a later one raises.  A bare
+`except:` compiles to the class directly, so it has to be wrapped in a
+`PyLazyExceptSelector` to carry a shield at all; appending `shieldedBy:` to the
+bare class instead produced the three-keyword `on:shieldedBy:do:`, which nothing
+implements, and `test_format` found it as an MNU on `ExecBlock`.
+
+**Result.** `tests/python/handler_raise.py` — 18 checks, all passing under real
+CPython 3.14.6 — passes in full, and is now wired into SUnit rather than sitting
+as a known-failing file. `test.test_traceback` **89 → 91 passing** (failures 46 →
+44). Tier 2, since this is codegen every `try` in the language goes through: full
+sweep with **0 regressions, 1 improvement**, and specifically `test_richcmp` and
+`test_format` back to OK and `test_listcomps` unmoved — the three modules the
+earlier designs broke. SUnit 4176, all green.
+
+Still open from §9.23, unrelated: `str(KeyError('x'))` is `'x'` in Grail and
+`"'x'"` in CPython, because KeyError's `__str__` is the *repr* of its argument.
+The fixture uses `RuntimeError` so the two stay separate.
