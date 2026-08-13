@@ -19,6 +19,7 @@
 #     which is what these are -- fixed in PythonInstance>>___pyCallValue___:kw:.
 
 import sys
+import types
 import unittest
 
 # Re-exported so `from test.support import verbose`-style imports work and
@@ -563,6 +564,46 @@ def run_unittest(*classes):
 def check_syntax_error(testcase, statement, errtext="", *, lineno=None, offset=None):
     with testcase.assertRaises(SyntaxError):
         compile(statement, "<test string>", "exec")
+
+
+def check__all__(test_case, module, name_of_module=None, extra=(),
+                 not_exported=()):
+    """Assert that the __all__ variable of 'module' contains all public names.
+
+    The module's public names (its API) are detected automatically based on
+    whether they match the public name convention and were defined in
+    'module'.
+
+    The 'name_of_module' argument can specify (as a string or tuple thereof)
+    what module(s) an API could be defined in order to be detected as a
+    public API.  One case for this is when 'module' imports part of its public
+    API from other modules, possibly a C backend.
+
+    The 'extra' argument can be a set of names that wouldn't otherwise be
+    automatically detected as "public", like objects without a proper
+    '__module__' attribute.  If provided, it will be added to the
+    automatically detected ones.
+
+    The 'not_exported' argument can be a set of names that must not be treated
+    as part of the public API even though their names indicate otherwise.
+    """
+    if name_of_module is None:
+        name_of_module = (module.__name__,)
+    elif isinstance(name_of_module, str):
+        name_of_module = (name_of_module,)
+
+    expected = set(extra)
+
+    for name in dir(module):
+        if name.startswith('_') or name in not_exported:
+            continue
+        obj = getattr(module, name)
+
+        if (getattr(obj, '__module__', None) in name_of_module or
+                (not hasattr(obj, '__module__') and
+                 not isinstance(obj, types.ModuleType))):
+            expected.add(name)
+    test_case.assertCountEqual(module.__all__, expected)
 
 
 # --- misc paths --------------------------------------------------------

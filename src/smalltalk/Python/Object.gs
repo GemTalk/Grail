@@ -1178,6 +1178,25 @@ ___pythonModuleAttrIdentity___
 	``json.JSONDecodeError'' is how most code names it."
 	(n @env0:= 'JSONDecodeError') ifTrue: [^ #('JSONDecodeError' 'json.decoder')].
 
+	"enum.  These keep their CPython NAME already (the Smalltalk class is spelled
+	the same), and are here purely for __module__: they are defined in enum
+	upstream, so ``enum.Enum.__module__'' is 'enum' and not nothing.  It is also
+	what gives the METACLASS an answer -- ``type(Color).__module__'' asks
+	``Enum class'', which has no identity of its own and defers to the class it
+	is the metaclass of.
+
+	Only the classes enum DEFINES are listed.  ``enum.property'' is deliberately
+	absent: Grail aliases it to the builtin ``property'' (one PropertyDescriptor
+	class serves both), so claiming 'enum' here would relabel the builtin, whose
+	__module__ is 'builtins'."
+	(n @env0:= 'Enum') ifTrue: [^ #('Enum' 'enum')].
+	(n @env0:= 'IntEnum') ifTrue: [^ #('IntEnum' 'enum')].
+	(n @env0:= 'StrEnum') ifTrue: [^ #('StrEnum' 'enum')].
+	(n @env0:= 'ReprEnum') ifTrue: [^ #('ReprEnum' 'enum')].
+	(n @env0:= 'Flag') ifTrue: [^ #('Flag' 'enum')].
+	(n @env0:= 'IntFlag') ifTrue: [^ #('IntFlag' 'enum')].
+	(n @env0:= 'EnumDict') ifTrue: [^ #('EnumDict' 'enum')].
+
 	"MODULES, not classes -- __name__ only.  ``os.path'' IS the posixpath
 	module in CPython, so that is the name it reports."
 	(n @env0:= 'os_path') ifTrue: [^ #('posixpath' nil)].
@@ -2792,10 +2811,29 @@ ___pyAttrLoad___: aSym
 		a genuine built-in type — critically for dynamically created classes
 		(functional-API enums), which MUST fall through: reporting 'builtins'
 		for them broke enum pickling (the class is not found in builtins)."
+		"A METACLASS is a Behavior too, and its own metaclass chain runs to
+		Metaclass3 rather than to ``object class'' -- so it does not inherit
+		___pythonBuiltinTypeModule___, and sending it blindly turned
+		``EnumType.__module__'' into a raw Smalltalk MessageNotUnderstood
+		escaping out of getattr(), where CPython answers a string.  Ask the
+		class it is the metaclass OF: CPython defines a metaclass in the same
+		module as the class it builds, which is what makes
+		``type(Color).__module__'' report 'enum'."
 		(s @env0:= '__module__')
 			ifTrue: [
-				(self ___pythonBuiltinTypeModule___)
-					@env0:ifNotNil: [:___m | ^ ___m]].
+				(self ___respondsTo___: #'___pythonBuiltinTypeModule___')
+					ifTrue: [
+						(self ___pythonBuiltinTypeModule___)
+							@env0:ifNotNil: [:___m | ^ ___m]]
+					ifFalse: [
+						(self @env0:isKindOf: Metaclass3) ifTrue: [
+							| tc |
+							tc := self @env0:thisClass.
+							(tc @env0:notNil and: [
+								tc ___respondsTo___: #'___pythonBuiltinTypeModule___'])
+								ifTrue: [
+									(tc ___pythonBuiltinTypeModule___)
+										@env0:ifNotNil: [:___m | ^ ___m]]]]].
 		"Python ``cls.__dict__``: the class's OWN attribute dict.  MUST
 		precede the unbound-method wrap below -- PythonInstance defines an
 		instance-side __dict__ (the live per-instance view), so a CLASS
