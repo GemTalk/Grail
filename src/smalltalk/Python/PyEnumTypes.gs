@@ -922,7 +922,7 @@ ___grailBuildMembers: cls names: attrNames
 							Enum ___grailStoreOverride: cls name: nameStr callable: dunVal.
 							Enum ___grailCompileOverrideForwarder: cls name: nameStr]]]
 			ifFalse: [
-			| rawValue member built effVal tupleAutoDone |
+			| rawValue member built effVal tupleAutoDone aliasOf |
 			built := false.
 			tupleAutoDone := false.
 			"Declared names read through their compiled accessor pair;
@@ -1068,18 +1068,37 @@ ___grailBuildMembers: cls names: attrNames
 			behaviour there is unchanged."
 			effVal := Enum ___grailCoerceMemberValue: rawValue
 				toMemberType: foreignMixin.
-			(byValue @env0:includesKey: effVal)
-				ifTrue: [member := byValue @env0:at: effVal]
-				ifFalse: [
+			"CPython _proto_member.__set_name__ decides ALIAS-NESS LAST.  It builds
+			the member -- __new__, _value_, _name_, __init__ -- and only then looks
+			the value up in _value2member_map_, replacing what it built with the
+			canonical member on a hit.  So an alias gets a fully constructed
+			THROWAWAY of its own, and the class-body __init__ runs for it:
+
+			    class UniqueEnum(Enum):
+			        def __init__(self, *args):
+			            if any(self.value == e.value for e in cls):
+			                raise ValueError(...)
+
+			is how test_no_duplicates rejects ``grene = 2'' beside ``green = 2'' --
+			the alias's own __init__ is what sees the clash and raises.  Grail
+			short-circuited on the byValue hit and built nothing, so that class
+			body defined quietly.
+
+			Remembered here, applied after the build below."
+			aliasOf := (byValue @env0:includesKey: effVal)
+				ifTrue: [byValue @env0:at: effVal]
+				ifFalse: [nil].
+			[
 					"Flag composite-alias (CPython): a class-body value whose
 					bits are all covered by the ALREADY-DEFINED members
 					(``dupe = 3`` after R=1/W=2) is an ALIAS for the
 					composite -- reachable by name and value, but excluded
 					from iteration and _member_names_."
 					member := nil.
-					((rawValue isKindOf: Integer)
+					(aliasOf @env0:isNil
+						and: [(rawValue isKindOf: Integer)
 						and: [rawValue @env0:> 0
-						and: [Enum ___grailIsFlagClass: cls]]) ifTrue: [
+						and: [Enum ___grailIsFlagClass: cls]]]) ifTrue: [
 						| mask |
 						mask := 0.
 						members @env0:do: [:m | | mv |
@@ -1218,14 +1237,20 @@ ___grailBuildMembers: cls names: attrNames
 							            if any(self.value == e.value for e in cls): raise
 
 							rejected the FIRST member of every subclass once it ran at all
-							(test_no_duplicates).  Aliases (member reused from byValue) are
-							still not initialised -- CPython builds a throwaway member for
-							those and initialises that, which Grail does not."
+							(test_no_duplicates).  An ALIAS is initialised too -- this member
+							is the throwaway CPython builds for it, and everything below is
+							what gets skipped instead."
 							(hasUserInit) ifTrue: [
 								| initArgs |
 								initArgs := Enum ___grailSpreadArgs: rawValue.
 								member @env0:perform: #'___init__:kw:' env: 1
 									withArguments: { initArgs. KeyValueDictionary @env0:new }].
+							"THE ALIAS TEST, in CPython's place: everything from here on
+							records a member the class OWNS, and an alias owns nothing --
+							it hands its name to the member that already holds the value
+							and the throwaway just built is dropped."
+							aliasOf @env0:isNil ifFalse: [member := aliasOf].
+							aliasOf @env0:isNil ifTrue: [
 							byValue @env0:at: memberValue put: member.
 							"Definition-order roll of every non-alias member (see slot-4
 							note above) -- added for ALL built members, unlike the
@@ -1254,7 +1279,7 @@ ___grailBuildMembers: cls names: attrNames
 								and: [(Enum ___grailIsFlagClass: cls)
 								and: [(memberValue @env0:<= 0)
 									or: [(memberValue @env0:bitAnd: memberValue @env0:- 1) @env0:~= 0]]])
-								ifFalse: [members @env0:add: member]]].
+								ifFalse: [members @env0:add: member]]]] @env0:value.
 			byName @env0:at: nameStr put: member.
 			hasAccessor
 				ifTrue: [cls @env0:perform: (nameStr @env0:, ':') @env0:asSymbol env: 1

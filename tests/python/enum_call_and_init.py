@@ -145,17 +145,17 @@ try:
 except TypeError as e:
     r['raising_init'] = 'TypeError: %s' % (e,)
 
-# --- KNOWN GAP, recorded rather than endorsed ----------------------------------
-# CPython builds a THROWAWAY member for an alias and initialises that, so
-# UniqueEnum above rejects ``grene = 2''.  Grail reuses the canonical member and
-# does not initialise it, so the alias is accepted.  Asserted as it behaves so
-# that whoever fixes it sees this change rather than the gap going unnoticed.
+# --- an alias is initialised too ------------------------------------------------
+# CPython builds a THROWAWAY member for an alias and initialises THAT, deciding
+# alias-ness only afterwards -- which is how UniqueEnum above rejects
+# ``grene = 2''.  Grail used to reuse the canonical member and build nothing, so
+# the alias was accepted silently.
 
 try:
     class Dupes(UniqueEnum):
         red = 1
         green = 2
         grene = 2
-    r['alias_init_gap'] = 'accepted:%s' % (Dupes.grene is Dupes.green,)
+    r['alias_init'] = 'accepted:%s' % (Dupes.grene is Dupes.green,)
 except ValueError as e:
-    r['alias_init_gap'] = 'ValueError'
+    r['alias_init'] = 'ValueError'
