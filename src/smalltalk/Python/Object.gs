@@ -663,7 +663,201 @@ ___pyClassDefined___: attrNames
 	A metaclass that overrides this hook (Enum class) takes on that job
 	itself; none of the in-tree ones has an entry that wants __set_name__."
 
+	self ___grailInstallAttrMethodShadows___: attrNames.
 	^ self ___invokeSetNameHooks___: attrNames
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailInstallAttrMethodShadows___: attrNames
+	"A class-body ASSIGNMENT that binds a callable -- ``setUp =
+	TestJointOps.setUp'', CPython's idiom for borrowing a method from an
+	unrelated class -- must OVERRIDE an inherited method of the same name.
+
+	It lands in the class ATTRIBUTE store, which every ``obj.name'' load
+	consults ahead of any compiled method, so attribute-routed calls already
+	run it.  A fast-path self-send does not: ``self.setUp()'' compiled inside
+	the BASE class emits a direct Smalltalk send (CallAst
+	classSelfSendSelector), which resolves virtually and finds the base's own
+	compiled method -- the subclass's assignment is invisible to it, because
+	an assignment compiles no method.
+
+	unittest.TestCase >> run does exactly that, so test.test_set's
+	TestSetSubclassWithSlots (``setUp = TestJointOps.setUp'') ran TestCase's
+	no-op setUp and every test in it died on a missing ``self.s''.
+
+	Fix it where the shadowing is knowable: at class-creation time, compile a
+	real forwarding method for each inherited selector the assigned name
+	shadows, whose body re-routes through the attribute load.  The virtual
+	send then lands on the forwarder and the assignment wins, exactly as
+	CPython's single class __dict__ makes it.
+
+	Cost on the ordinary class is one method-dictionary probe per candidate
+	name per inherited class -- the chain is walked ONCE, fetching each
+	class's env-1 dictionary once (that fetch, a merge of the persistent and
+	transient dicts, is the expensive part).  The attribute VALUE is read only
+	for a name the chain actually implements, and a forwarder is compiled only
+	when that value is a callable that binds self."
+
+	| sup ownDict pending inherited walker md |
+	attrNames == nil ifTrue: [^ self].
+	sup := self @env0:superclass.
+	sup == nil ifTrue: [^ self].
+	ownDict := self @env0:methodDictForEnv: 1.
+	"Candidates: plain ASCII identifiers (a generated selector has to compile)
+	whose arities this class does not already supply itself -- a real ``def''
+	in the same body, or a sibling alias, already wins on its own."
+	pending := OrderedCollection @env0:new.
+	attrNames @env0:do: [:nm |
+		| s fam kept |
+		s := nm @env0:asString.
+		(self ___grailShadowableName___: s) ifTrue: [
+			fam := self ___grailShadowFamilyFor___: s.
+			kept := ownDict == nil
+				ifTrue: [fam]
+				ifFalse: [fam @env0:reject: [:pair |
+					ownDict @env0:includesKey: (pair @env0:at: 1)]].
+			kept @env0:isEmpty ifFalse: [
+				pending @env0:add: (Array @env0:with: s with: kept)]]].
+	pending @env0:isEmpty ifTrue: [^ self].
+	"One walk of the superclass chain for every candidate at once."
+	inherited := IdentitySet @env0:new.
+	walker := sup.
+	[walker == nil] whileFalse: [
+		md := walker @env0:methodDictForEnv: 1.
+		md == nil ifFalse: [
+			pending @env0:do: [:entry |
+				(entry @env0:at: 2) @env0:do: [:pair |
+					(md @env0:includesKey: (pair @env0:at: 1))
+						ifTrue: [inherited @env0:add: (pair @env0:at: 1)]]]].
+		walker := walker @env0:superClass].
+	inherited @env0:isEmpty ifTrue: [^ self].
+	pending @env0:do: [:entry |
+		| s shadowed val |
+		s := entry @env0:at: 1.
+		shadowed := (entry @env0:at: 2) @env0:select: [:pair |
+			inherited @env0:includes: (pair @env0:at: 1)].
+		"A name carrying BOTH the unary and the 1-arg selector is the shape of
+		a getter/setter PAIR, which ___pyAttrLoad___ resolves by PERFORMING the
+		unary one -- installing a forwarder there would make that perform call
+		the forwarder, which loads the attribute again.  Leave such a name
+		alone; it is a data attribute in Grail's encoding, not a method."
+		((shadowed @env0:anySatisfy: [:pair | (pair @env0:at: 2) == 0])
+			and: [shadowed @env0:anySatisfy: [:pair | (pair @env0:at: 2) == 1]])
+				ifTrue: [shadowed := Array @env0:new].
+		shadowed @env0:isEmpty ifFalse: [
+			"Reading the value can run a __get__; only do it for a name that is
+			really shadowing something."
+			val := [self ___pyAttrLoad___: s @env0:asSymbol]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+			(self ___isDescriptorCallable___: val) ifTrue: [
+				shadowed @env0:do: [:pair |
+					self
+						___compileMethod: (self ___grailShadowSourceFor___: s
+							nargs: (pair @env0:at: 2))
+						category: 'Grail-Attr Method Shadows']]]].
+	^ self
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailShadowableName___: aString
+	"True when aString can be spelled as a Smalltalk selector -- a non-empty
+	ASCII identifier.  ___compileMethod:category: answers a compile failure by
+	installing a NameError-raising STUB under the same selector, which for a
+	shadow would REPLACE a working attribute path with a broken method, so the
+	name is screened before any source is built."
+
+	| c |
+	aString @env0:isEmpty ifTrue: [^ false].
+	(aString @env0:at: 1) @env0:isDigit ifTrue: [^ false].
+	1 to: aString @env0:size do: [:i |
+		c := aString @env0:at: i.
+		(c @env0:codePoint @env0:> 127) ifTrue: [^ false].
+		((c @env0:isLetter) or: [(c @env0:isDigit) or: [c == $_]]) ifFalse: [^ false]].
+	^ true
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailShadowFamilyFor___: aString
+	"Every Smalltalk selector a Python method named aString can have been
+	compiled to, each paired with the Python argument count it takes (self
+	excluded); -1 marks the varargs ``_name:kw:'' form.  The same eight
+	selectors ___selectorFamilyFor___: builds for an attribute load."
+
+	| out sel |
+	out := OrderedCollection @env0:new.
+	out @env0:add: (Array @env0:with: aString @env0:asSymbol with: 0).
+	sel := aString @env0:, ':'.
+	1 to: 6 do: [:i |
+		out @env0:add: (Array @env0:with: sel @env0:asSymbol with: i).
+		sel := sel @env0:, '_:'].
+	out @env0:add: (Array @env0:with:
+		('_' @env0:, aString @env0:, ':kw:') @env0:asSymbol with: -1).
+	^ out @env0:asArray
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailShadowSourceFor___: aName nargs: n
+	"Source of the forwarding method described in
+	___grailInstallAttrMethodShadows___:.  For ``m = Other.m'' with an
+	inherited 1-arg ``m'':
+
+	    m: ___a1
+	        | ___f |
+	        ___f := self ___grailAttrMethodShadow___: #'m'.
+	        ___f == nil ifTrue: [^ super m: ___a1].
+	        ^ ___f value: { ___a1 } value: nil
+
+	The ``super'' arm is what runs if the attribute is ever taken away again
+	(``del Cls.m''), and is always reachable -- a forwarder is compiled only
+	for a selector the superclass chain implements."
+
+	| ws header |
+	ws := WriteStream @env0:on: String @env0:new.
+	"The method pattern, reused verbatim as the super send's arguments."
+	header := WriteStream @env0:on: String @env0:new.
+	n @env0:= -1
+		ifTrue: [
+			header @env0:nextPut: $_.
+			header @env0:nextPutAll: aName.
+			header @env0:nextPutAll: ': ___args kw: ___kw']
+		ifFalse: [
+			header @env0:nextPutAll: aName.
+			n @env0:> 0 ifTrue: [
+				header @env0:nextPutAll: ': ___a1'.
+				2 to: n do: [:k |
+					header @env0:nextPutAll: ' _: ___a'.
+					header @env0:nextPutAll: k @env0:printString]]].
+	ws @env0:nextPutAll: header @env0:contents.
+	ws @env0:nextPut: Character @env0:lf.
+	ws @env0:nextPutAll: '	| ___f |'.
+	ws @env0:nextPut: Character @env0:lf.
+	ws @env0:nextPutAll: '	___f := self ___grailAttrMethodShadow___: #'''.
+	ws @env0:nextPutAll: aName.
+	ws @env0:nextPutAll: '''.'.
+	ws @env0:nextPut: Character @env0:lf.
+	ws @env0:nextPutAll: '	___f == nil ifTrue: [^ super '.
+	ws @env0:nextPutAll: header @env0:contents.
+	ws @env0:nextPutAll: '].'.
+	ws @env0:nextPut: Character @env0:lf.
+	ws @env0:nextPutAll: '	^ ___f value: '.
+	n @env0:= -1
+		ifTrue: [ws @env0:nextPutAll: '___args value: ___kw'.
+			^ ws @env0:contents].
+	n @env0:= 0
+		ifTrue: [ws @env0:nextPutAll: '#()']
+		ifFalse: [
+			ws @env0:nextPutAll: '{ '.
+			1 to: n do: [:k |
+				k @env0:> 1 ifTrue: [ws @env0:nextPutAll: '. '].
+				ws @env0:nextPutAll: '___a'.
+				ws @env0:nextPutAll: k @env0:printString].
+			ws @env0:nextPutAll: ' }'].
+	ws @env0:nextPutAll: ' value: nil'.
+	^ ws @env0:contents
 %
 
 category: 'Grail-Initialization'
@@ -1214,6 +1408,42 @@ ___descriptorGet___: aValue
 	(aValue ___respondsTo___: #'__get__:_:')
 		ifTrue: [^ aValue __get__: self _: self @env0:class].
 	^ aValue
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailAttrMethodShadow___: aSym
+	"The callable to run for a forwarding method compiled by
+	Object class >> ___grailInstallAttrMethodShadows___:, bound to self --
+	or nil, meaning ``there is no class attribute here after all, run the
+	inherited method instead''.
+
+	Reads through ___pyAttrLoad___, which consults the class attribute store
+	ahead of any compiled method, so the forwarder does not find itself.
+
+	BINDING IS DONE HERE, not left to the load.  ___pyAttrLoad___ binds self
+	only for an UnboundMethod (``m = Other.m''); a CLOSURE stored as a class
+	attribute comes back raw, on purpose, because the plain read ``obj.m''
+	must answer the function itself.  A forwarder standing in for a method
+	call is the other case, so anything ___isDescriptorCallable___ recognises
+	gets a MethodBinding.  Without this django's LazyObject --
+	``__getattr__ = new_method_proxy(getattr)'', whose value is a closure --
+	called the proxy with the ATTRIBUTE NAME as self.
+
+	nil is answered when the load raised (the attribute was deleted), and
+	when it answered a BoundMethod on self, which is ___pyAttrLoad___'s way
+	of saying it found only a compiled method -- the forwarder itself, so
+	calling it would recurse."
+
+	| v |
+	v := [self ___pyAttrLoad___: aSym]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	v == nil ifTrue: [^ nil].
+	((v isKindOf: BoundMethod) and: [(v @env0:receiver) == self]) ifTrue: [^ nil].
+	(v isKindOf: MethodBinding) ifTrue: [^ v].
+	(self ___isDescriptorCallable___: v)
+		ifTrue: [^ MethodBinding instance: self callable: v].
+	^ v
 %
 
 category: 'Grail-Convenience Methods - Attribute'

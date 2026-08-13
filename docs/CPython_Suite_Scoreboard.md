@@ -29,7 +29,7 @@ different rows and merges cleanly.
 | test.test_list | OK | 68 | 0 | 0 | 4 |  |
 | test.test_tuple | OK | 38 | 0 | 0 | 6 |  |
 | test.test_dict | OK | 120 | 0 | 0 | 20 |  |
-| test.test_set | ERROR | 630 | 0 | 2 | 21 |  |
+| test.test_set | OK | 630 | 0 | 0 | 21 |  |
 | test.test_bytes | OK | 317 | 0 | 0 | 25 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
