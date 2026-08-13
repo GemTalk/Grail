@@ -927,6 +927,14 @@ emitKeywordOnlyBindingOn: aStream
 	TypeError.  Consulting the cell (rather than an inlined default) is what lets
 	``func.__kwdefaults__ = {...}'' change what the next call binds."
 
+	"Every keyword-only name goes into the all-at-once check, not just the ones
+	declared without a default: this form reads its defaults from the LIVE cell,
+	so ``del f.__kwdefaults__['k']'' makes a defaulted parameter required, and
+	CPython reports it here when the call omits it."
+	self printMissingKeywordOnlyCheckOn: aStream
+		kwargsName: '___kwargs___'
+		defaultsSource: '(___kwdefaults___ @env0:at: 1)'
+		names: self ___allKeywordOnlyNames___.
 	(args kwonlyargs ifNil: [#()]) do: [:each |
 		| nm pn |
 		nm := each name.
@@ -948,14 +956,14 @@ emitKwDefaultLookupFor: nm on: aStream
 	one keyword-only parameter -- used in both arms of its ``___kwargs___'' probe
 	(the param may be absent from the kwargs dict, or the dict may be nil)."
 
+	aStream nextPutAll: '(___kwdefaults___ @env0:at: 1) ifNil: ['.
+	self printSingleMissingArgumentOn: aStream name: nm kind: 'keyword-only'.
 	aStream
-		nextPutAll: '(___kwdefaults___ @env0:at: 1) ifNil: [TypeError ___signal___: ''missing keyword-only argument: ';
+		nextPutAll: '] ifNotNil: [:___d___ | ___d___ @env0:at: ''';
 		nextPutAll: nm;
-		nextPutAll: '''] ifNotNil: [:___d___ | ___d___ @env0:at: ''';
-		nextPutAll: nm;
-		nextPutAll: ''' ifAbsent: [TypeError ___signal___: ''missing keyword-only argument: ';
-		nextPutAll: nm;
-		nextPutAll: ''']]'.
+		nextPutAll: ''' ifAbsent: ['.
+	self printSingleMissingArgumentOn: aStream name: nm kind: 'keyword-only'.
+	aStream nextPutAll: ']]'.
 %
 
 category: 'Grail-code generation'
@@ -2063,6 +2071,17 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 	actually did wrong -- passing a positional-only parameter by keyword."
 	self printArgCountChecksOn: stream
 		positionalName: '___pos___' kwargsName: '___kw___' nPositional: callParams size.
+	"The all-at-once missing-parameter check, as in printPositionalUnpackingOn:.
+	``firstDefault'' counts over the FULL parameter list, so a stripped receiver
+	shifts it by one relative to callParams; clamp because a def may have more
+	defaults than this forwarder has parameters."
+	self printMissingPositionalCheckOn: stream
+		paramNames: callParams
+		positionalName: '___pos___'
+		kwargsName: '___kw___'
+		requiredCount: ((firstDefault - (stripSelf ifTrue: [1] ifFalse: [0]))
+			min: callParams size)
+		posonlyNames: posonlyNames.
 	callParams doWithIndex: [:p :i |
 		| absoluteIdx isPosOnly |
 		"absolute parameter index in the full (self-included) list, to
@@ -2087,8 +2106,8 @@ ___varargsForwarderSourceStripSelf___: stripSelf
 				d := defaults at: absoluteIdx - firstDefault.
 				d printSmalltalkOn: stream ]
 			ifFalse: [
-				stream nextPutAll: 'TypeError ___signal___: ''missing required argument: ';
-					nextPutAll: p asString; nextPutAll: '''' ].
+				self printSingleMissingArgumentOn: stream
+					name: p kind: 'positional' ].
 		"One close per gate opened — the kwargs gate is absent for a
 		positional-only parameter."
 		stream nextPutAll: (isPosOnly ifTrue: ['].'] ifFalse: [']].']); lf.
@@ -2219,6 +2238,16 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 	entirely the wrong reason and hides what the caller actually did wrong."
 	self printArgCountChecksOn: aStream
 		positionalName: posName kwargsName: kwName nPositional: numParams.
+	"...and the missing-parameter report likewise cannot be made from inside the
+	binding loop, which sees one parameter at a time: CPython names EVERY
+	unfilled parameter in one message.  Emitted as a pre-pass over the same
+	inputs the loop is about to use."
+	self printMissingPositionalCheckOn: aStream
+		paramNames: paramNames
+		positionalName: posName
+		kwargsName: kwName
+		requiredCount: firstWithDefault - 1
+		posonlyNames: posonlyNames.
 	1 to: numParams do: [:i |
 		| pname hasDefault isPosOnly |
 		pname := paramNames at: i.
@@ -2292,15 +2321,164 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 						]
 					]
 		] ifFalse: [
-			aStream
-				nextPutAll: 'TypeError ___signal___: ''missing required argument: ';
-				nextPutAll: pname;
-				nextPutAll: ''''
+			"Unreachable once the pre-pass above has run -- kept as the binding's
+			own last word, and phrased identically so a call that somehow arrives
+			here does not report the parameter in older wording."
+			self printSingleMissingArgumentOn: aStream
+				name: pname kind: 'positional'
 		].
 		"One closing bracket per gate opened: the positional gate always, the
 		kwargs gate only for a keyword-bindable parameter."
 		aStream nextPutAll: (isPosOnly ifTrue: ['].'] ifFalse: [']].']); lf
 	]
+%
+
+category: 'Module Method Compilation'
+method: FunctionDefAst
+printMissingPositionalCheckOn: aStream paramNames: paramNames positionalName: posName kwargsName: kwName requiredCount: nRequired posonlyNames: posonlyNames
+	"Emit the ``every unfilled positional parameter, in one message'' check that
+	has to run BEFORE the binding loop -- see ___checkMissingPositional___ for
+	why it cannot be part of it.
+
+	Guarded by a size comparison so the ordinary call pays a compare and no
+	send: when the caller passed at least as many positional args as there are
+	REQUIRED parameters, none of them can be unfilled.  That is the overwhelming
+	majority of calls, and this check is emitted into every def in the corpus.
+
+	``nRequired'' is the count of parameters with no default.  They are always
+	the leading ones (Python rejects a bare parameter after a defaulted one), so
+	the required set is paramNames' prefix and its parameter positions are
+	1..nRequired -- which is what lets the runtime check compare against the
+	positional count by index."
+
+	| displayNames posonlyCount |
+	nRequired <= 0 ifTrue: [^ self].
+	"Report the PYTHON name.  paramNames may hold transport names (``_self'' for
+	a parameter named ``self''), which is what the binding temps are called but
+	not what the caller wrote."
+	displayNames := (1 to: nRequired) collect: [:i |
+		self ___pythonParamNameFor___: (paramNames at: i)].
+	"Positional-only parameters are a prefix of the parameter list, so a count is
+	enough for the runtime check -- but count only the CONSECUTIVE leading ones
+	rather than trusting that, since the callers build paramNames differently."
+	posonlyCount := 0.
+	[posonlyCount < nRequired
+		and: [posonlyNames includes: (paramNames at: posonlyCount + 1) asString]]
+			whileTrue: [posonlyCount := posonlyCount + 1].
+	aStream
+		nextPutAll: '(('; nextPutAll: posName;
+		nextPutAll: ' @env0:size) @env0:< '; print: nRequired;
+		nextPutAll: ') ifTrue: [TypeError ___checkMissingPositional___: ';
+		nextPutAll: posName; nextPutAll: ' kwargs: '; nextPutAll: kwName;
+		nextPutAll: ' names: '.
+	self printNameLiteralArray: displayNames on: aStream.
+	aStream
+		nextPutAll: ' posonly: '; print: posonlyCount;
+		nextPutAll: ' qualifiedName: ''';
+		nextPutAll: (self ___qualifiedNameFor___: name);
+		nextPutAll: '''].'; lf
+%
+
+category: 'Module Method Compilation'
+method: FunctionDefAst
+printMissingKeywordOnlyCheckOn: aStream kwargsName: kwName defaultsSource: defaultsSource names: names
+	"Emit the matching check for keyword-only parameters, before their binding
+	loop -- so a call missing several is reported in one message, and after the
+	positional check, which CPython lets outrank it.
+
+	Unguarded, unlike the positional one: a keyword-only parameter is filled by
+	NAME, so there is no count to compare that would prove them all present.
+	Only defs that actually declare keyword-only parameters emit it at all.
+
+	``defaultsSource'' is Smalltalk source for the def's __kwdefaults__ dict, or
+	nil where the generator bakes each default in and the set is fixed at
+	compile time; in that case ``names'' holds only the parameters that have no
+	default."
+
+	names isEmpty ifTrue: [^ self].
+	aStream
+		nextPutAll: 'TypeError ___checkMissingKeywordOnly___: '; nextPutAll: kwName;
+		nextPutAll: ' defaults: '; nextPutAll: (defaultsSource ifNil: ['nil']);
+		nextPutAll: ' names: '.
+	self printNameLiteralArray: names on: aStream.
+	aStream
+		nextPutAll: ' qualifiedName: ''';
+		nextPutAll: (self ___qualifiedNameFor___: name);
+		nextPutAll: '''.'; lf
+%
+
+category: 'Module Method Compilation'
+method: FunctionDefAst
+___requiredKeywordOnlyNames___
+	"The keyword-only parameters declared WITHOUT a default, in order -- the ones
+	the generators that bake defaults in can know are required at compile time."
+
+	| result |
+	result := OrderedCollection new.
+	(args kwonlyargs ifNil: [#()]) doWithIndex: [:each :i |
+		((args kw_defaults ifNil: [#()]) at: i ifAbsent: [nil]) isNil
+			ifTrue: [result add: each name asString]].
+	^ result asArray
+%
+
+category: 'Module Method Compilation'
+method: FunctionDefAst
+___allKeywordOnlyNames___
+	"Every keyword-only parameter, in order.  Used by the generator whose
+	defaults live in a runtime cell, where which of them are required is not a
+	compile-time fact."
+
+	^ (args kwonlyargs ifNil: [#()]) collect: [:each | each name asString]
+%
+
+category: 'Module Method Compilation'
+method: FunctionDefAst
+printSingleMissingArgumentOn: aStream name: aName kind: kindString
+	"One parameter's missing-argument raise, in CPython's wording.  Used by the
+	per-parameter binding fallbacks, which the pre-pass checks now reach first
+	but which still have to compile to something."
+
+	aStream nextPutAll: 'TypeError ___signalMissingArguments___: '.
+	self printNameLiteralArray:
+		(Array with: (kindString = 'positional'
+			ifTrue: [self ___pythonParamNameFor___: aName]
+			ifFalse: [aName asString]))
+		on: aStream.
+	aStream
+		nextPutAll: ' kind: '''; nextPutAll: kindString;
+		nextPutAll: ''' qualifiedName: ''';
+		nextPutAll: (self ___qualifiedNameFor___: name);
+		nextPutAll: ''''
+%
+
+category: 'Module Method Compilation'
+method: FunctionDefAst
+printNameLiteralArray: names on: aStream
+	"``#( ''a'' ''b'' )'' -- a Smalltalk literal array of parameter names.  No
+	escaping: these are Python identifiers by construction."
+
+	aStream nextPutAll: '#( '.
+	names do: [:each | aStream nextPut: $'; nextPutAll: each asString; nextPutAll: ''' '].
+	aStream nextPut: $)
+%
+
+category: 'Module Method Compilation'
+method: FunctionDefAst
+___pythonParamNameFor___: aName
+	"The Python name of the parameter whose binding temp is ``aName''.  The
+	three generators pass printPositionalUnpackingOn: their parameter lists in
+	different shapes -- raw names, transport names, receiver stripped -- so the
+	mapping is by lookup over this def's own parameters rather than by index.
+	Answers aName unchanged when it matches none, which is the safe direction:
+	the name is only ever used in an error message."
+
+	| target |
+	target := aName asString.
+	((args posonlyargs ifNil: [#()]) , (args args ifNil: [#()])) do: [:a |
+		((a name asString = target)
+			or: [(self transportParamName: a name) asString = target])
+				ifTrue: [^ a name asString]].
+	^ target
 %
 
 category: 'Module Method Compilation'
@@ -2829,6 +3007,10 @@ generateModuleMethodSourceOn: aStream
 		kw_defaults means the kwonly arg is required (no default) —
 		emit a TypeError if missing.  Lookup keys are symbols since
 		kwargs dicts are built with symbol keys."
+		self printMissingKeywordOnlyCheckOn: aStream
+			kwargsName: kwMethodParam
+			defaultsSource: nil
+			names: self ___requiredKeywordOnlyNames___.
 		args kwonlyargs doWithIndex: [:each :i |
 			| def |
 			def := args kw_defaults at: i ifAbsent: [nil].
@@ -2837,10 +3019,8 @@ generateModuleMethodSourceOn: aStream
 				nextPutAll: ' := '; nextPutAll: kwMethodParam;
 				nextPutAll: ' ifNil: ['.
 			def isNil ifTrue: [
-				aStream
-					nextPutAll: 'TypeError ___signal___: ''missing keyword-only argument: ';
-					nextPutAll: each name;
-					nextPutAll: ''''
+				self printSingleMissingArgumentOn: aStream
+					name: each name kind: 'keyword-only'
 			] ifFalse: [
 				def printSmalltalkOn: aStream
 			].
@@ -2850,10 +3030,8 @@ generateModuleMethodSourceOn: aStream
 				nextPutAll: each name;
 				nextPutAll: ''' ifAbsent: ['.
 			def isNil ifTrue: [
-				aStream
-					nextPutAll: 'TypeError ___signal___: ''missing keyword-only argument: ';
-					nextPutAll: each name;
-					nextPutAll: ''''
+				self printSingleMissingArgumentOn: aStream
+					name: each name kind: 'keyword-only'
 			] ifFalse: [
 				def printSmalltalkOn: aStream
 			].
@@ -3610,6 +3788,10 @@ generateMethodSourceOn: aStream
 		].
 		"Bind keyword-only args from the kwargs dict, falling back to
 		the corresponding kw_default expression."
+		self printMissingKeywordOnlyCheckOn: aStream
+			kwargsName: kwMethodParam
+			defaultsSource: nil
+			names: self ___requiredKeywordOnlyNames___.
 		args kwonlyargs doWithIndex: [:each :i |
 			| def |
 			def := args kw_defaults at: i ifAbsent: [nil].
@@ -3618,10 +3800,8 @@ generateMethodSourceOn: aStream
 				nextPutAll: ' := '; nextPutAll: kwMethodParam;
 				nextPutAll: ' ifNil: ['.
 			def isNil ifTrue: [
-				aStream
-					nextPutAll: 'TypeError ___signal___: ''missing keyword-only argument: ';
-					nextPutAll: each name;
-					nextPutAll: ''''
+				self printSingleMissingArgumentOn: aStream
+					name: each name kind: 'keyword-only'
 			] ifFalse: [
 				def printSmalltalkOn: aStream
 			].
@@ -3631,10 +3811,8 @@ generateMethodSourceOn: aStream
 				nextPutAll: each name;
 				nextPutAll: ''' ifAbsent: ['.
 			def isNil ifTrue: [
-				aStream
-					nextPutAll: 'TypeError ___signal___: ''missing keyword-only argument: ';
-					nextPutAll: each name;
-					nextPutAll: ''''
+				self printSingleMissingArgumentOn: aStream
+					name: each name kind: 'keyword-only'
 			] ifFalse: [
 				def printSmalltalkOn: aStream
 			].

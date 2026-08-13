@@ -151,6 +151,99 @@ ___signal___: message
 	instance ___signal___: message.
 %
 
+category: 'Grail-Argument Binding'
+classmethod: BaseException
+___missingArgumentsText___: names kind: kind qualifiedName: qname
+	"CPython's format_missing() text, for the argument names in ``names''.
+
+		f() missing 1 required positional argument: ''c''
+		f() missing 2 required positional arguments: ''b'' and ''c''
+		f() missing 3 required positional arguments: ''a'', ''b'', and ''c''
+
+	Note the Oxford comma at three or more and the bare ``and'' at exactly two
+	-- test_positional_only_arg matches all three shapes as regexes, so the
+	joining is not cosmetic.  ``kind'' is ''positional'' or ''keyword-only'';
+	``qname'' is the __qualname__, which is what CPython names here (``C.m()'',
+	``outer.<locals>.inner()''), not the bare function name."
+
+	| text n |
+	n := names @env0:size.
+	text := qname @env0:, '() missing ' @env0:, (n @env0:printString)
+		@env0:, ' required ' @env0:, kind @env0:, ' argument'
+		@env0:, ((n @env0:= 1) ifTrue: [''] ifFalse: ['s']) @env0:, ': '.
+	names @env0:doWithIndex: [:each :i |
+		(i @env0:> 1) ifTrue: [
+			text := text @env0:, ((n @env0:> 2) ifTrue: [', '] ifFalse: [' ']).
+			(i @env0:= n) ifTrue: [text := text @env0:, 'and ']].
+		text := text @env0:, '''' @env0:, (each @env0:asString) @env0:, ''''].
+	^ text
+%
+
+category: 'Grail-Argument Binding'
+classmethod: BaseException
+___signalMissingArguments___: names kind: kind qualifiedName: qname
+	"Raise the missing-argument TypeError for an already-determined list of
+	names.  The per-parameter binding fallbacks emitted by FunctionDefAst and
+	LambdaAst come here with a single name, so a call that somehow reaches one
+	of them still reports CPython's wording rather than a second, older one."
+
+	^ TypeError ___signal___:
+		(self ___missingArgumentsText___: names kind: kind qualifiedName: qname)
+%
+
+category: 'Grail-Argument Binding'
+classmethod: BaseException
+___checkMissingPositional___: positional kwargs: kwargs names: names posonly: posonlyCount qualifiedName: qname
+	"Raise if any REQUIRED positional parameter is unfilled, naming them ALL.
+
+	Grail used to raise from inside the binding loop, so whichever parameter it
+	reached first was the whole report: ``f(a, b, c)'' called ``f()'' said
+	``missing required argument: a'' where CPython says all three.  Collecting
+	them cannot be done during binding, hence this pre-pass.
+
+	``names'' is the required parameters in order, occupying parameter
+	positions 1..names size -- they are always a prefix, since Python forbids a
+	parameter without a default after one with a default.  The first
+	``posonlyCount'' of them are positional-only and so are NOT fillable by
+	keyword (PEP 570); a keyword of that name belongs to **kwargs instead."
+
+	| missing |
+	missing := OrderedCollection @env0:new.
+	names @env0:doWithIndex: [:each :i |
+		((positional @env0:size) @env0:>= i) ifFalse: [
+			((i @env0:> posonlyCount)
+				and: [(kwargs @env0:notNil)
+					and: [kwargs @env0:includesKey: each]])
+				ifFalse: [missing @env0:add: each]]].
+	(missing @env0:isEmpty) ifTrue: [^ self].
+	^ self ___signalMissingArguments___: (missing @env0:asArray)
+		kind: 'positional' qualifiedName: qname
+%
+
+category: 'Grail-Argument Binding'
+classmethod: BaseException
+___checkMissingKeywordOnly___: kwargs defaults: defaults names: names qualifiedName: qname
+	"As ___checkMissingPositional___, for keyword-only parameters: a name is
+	filled by the call's kwargs, or by a default, and is missing otherwise.
+	CPython reports these separately from the positional ones and only once the
+	positional set is complete, which is why this runs after that check.
+
+	``defaults'' is the def's __kwdefaults__ dict, or nil.  It is consulted at
+	RUNTIME rather than baked in, because __kwdefaults__ is writable: deleting
+	an entry makes an apparently-defaulted parameter required, and CPython then
+	reports it here."
+
+	| missing |
+	missing := OrderedCollection @env0:new.
+	names @env0:do: [:each |
+		(((kwargs @env0:notNil) and: [kwargs @env0:includesKey: each])
+			or: [(defaults @env0:notNil) and: [defaults @env0:includesKey: each]])
+			ifFalse: [missing @env0:add: each]].
+	(missing @env0:isEmpty) ifTrue: [^ self].
+	^ self ___signalMissingArguments___: (missing @env0:asArray)
+		kind: 'keyword-only' qualifiedName: qname
+%
+
 set compile_env: 0
 category: 'Grail-Initialization'
 classmethod: BaseException

@@ -54,9 +54,9 @@ def missing_argument_is_a_catchable_typeerror():
         _catch(lambda a: a),
         _catch(lambda a, b=2: (a, b)),
         _catch(lambda *, k: k),
-    ] == ['TypeError: <lambda>() missing required argument: a',
-          'TypeError: <lambda>() missing required argument: a',
-          'TypeError: <lambda>() missing keyword-only argument: k']
+    ] == ["TypeError: <lambda>() missing 1 required positional argument: 'a'",
+          "TypeError: <lambda>() missing 1 required positional argument: 'a'",
+          "TypeError: <lambda>() missing 1 required keyword-only argument: 'k'"]
 
 
 # --------------------------------------------------------- 2. keyword-only args
