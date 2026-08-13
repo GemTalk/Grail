@@ -382,7 +382,7 @@ def _suggestion_suffix(exc_type, value, tb=None):
 # conformance bug, and one an earlier draft actually had.
 # tests/python/frame_globals.py pins it.
 def format_exception_only(exc_type, value=_sentinel, show_group=False,
-                          _tb=None):
+                          _tb=None, _depth=0):
     """Return a list of strings ending in a newline that render the
     exception class + message.
 
@@ -390,8 +390,19 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False,
     single-argument ``(exc)'' shape -- ``value'' defaulting to a sentinel
     rather than None is what makes the two distinguishable.
 
-    ``show_group=True`` (3.11+) additionally renders an ExceptionGroup's
-    nested exceptions, indented, after the group's own line."""
+    ``show_group=True'' (3.11+) additionally renders an ExceptionGroup's
+    nested exceptions, indented, after the group's own line.
+
+    ``_depth'' is that nesting level, and it is private for the same reason
+    CPython's is: callers pass ``show_group'', never a depth.  It has to be
+    THREADED through the recursion rather than each level prefixing the level
+    below, because it decides two things that only the absolute depth can
+    answer -- the indent is ``3 * _depth'' spaces, and a multi-line MESSAGE is
+    split into one string per line only when nested.  At depth 0 CPython yields
+    the message whole, embedded newlines and all.
+    test_format_exception_group_multiline_messages asserts both halves at once:
+    the group's own ``A\\n1'' stays one string while the nested ``B\\n2'' becomes
+    two, each carrying the indent."""
 
     # Whether the type was DERIVED from the value (rather than passed by a
     # legacy caller).  If it was, the value is the exception and always
@@ -412,6 +423,11 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False,
         derived = True
 
     type_name = _type_display_name(exc_type)
+    # NOT ``indent'': the SyntaxError branch below already binds that name to a
+    # WIDTH (how much whitespace strip() removed from the source line), and the
+    # two collided -- every SyntaxError whose text was indented then rendered as
+    # ``int + str'' (test_syntax_error_various_offsets, add=2).
+    nesting_indent = 3 * _depth * ' '
     # A SyntaxError renders its location ABOVE the message, and CPython's
     # exact shape depends on which fields are set:
     #
@@ -453,7 +469,14 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False,
             msg = msg + ' (' + str(filename) + ')'
         lines = header + [type_name + ': ' + msg + '\n'] if msg \
             else header + [type_name + '\n']
-        return lines + _format_notes(value)
+        lines = lines + _format_notes(value)
+        # A nested SyntaxError is indented but NOT split: CPython prefixes each
+        # already-separate line of the location block and leaves a multi-line
+        # ``msg'' alone, so the location lines end up at indent+2 and indent+4
+        # (test_format_exception_group_syntax_error's 5 and 7 spaces).
+        if nesting_indent:
+            lines = [nesting_indent + line for line in lines]
+        return lines
 
     # A DERIVED type means the value is the exception, so it always contributes
     # a message -- ``None'' included, which is what makes print_exception(None)
@@ -473,21 +496,29 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False,
     # -- the colon form is chosen from the COMBINED string, not from the message
     # alone (test_getattr_suggestions_no_args).
     msg = msg + _suggestion_suffix(exc_type, value, _tb)
-    if msg:
-        lines = [type_name + ': ' + msg + '\n']
+    final = type_name + ': ' + msg if msg else type_name
+    if _depth > 0:
+        # Nested: one string per line, so a multi-line message carries the
+        # indent on every line of it rather than only the first.
+        lines = [nesting_indent + piece + '\n' for piece in final.split('\n')]
     else:
-        lines = [type_name + '\n']
+        lines = [final + '\n']
 
     # PEP 678 notes go directly under the exception's own line, and ABOVE an
     # ExceptionGroup's nested exceptions -- the notes belong to the group.
-    lines.extend(_format_notes(value))
+    # _format_notes has already split a multi-line note into one string per
+    # line, so indenting is a straight prefix.
+    notes = _format_notes(value)
+    if nesting_indent:
+        notes = [nesting_indent + line for line in notes]
+    lines.extend(notes)
 
     # An ExceptionGroup renders its nested exceptions under the group line,
     # indented, when the caller asks for them.
     if show_group:
         for sub in getattr(value, 'exceptions', None) or ():
-            for line in format_exception_only(sub, show_group=True):
-                lines.append('  ' + line)
+            lines.extend(format_exception_only(sub, show_group=True,
+                                               _depth=_depth + 1))
     return lines
 
 
@@ -575,6 +606,44 @@ def _chain_of(exc):
     return links
 
 
+def _is_exception_group(value):
+    """Whether ``value'' is a PEP 654 group, i.e. renders as a tree.
+
+    ``isinstance(value, BaseExceptionGroup)'' rather than a duck-typed
+    ``hasattr(value, 'exceptions')'': CPython gates on the type, and an
+    ordinary exception is free to carry an attribute of that name."""
+    try:
+        return isinstance(value, BaseExceptionGroup)
+    except Exception:
+        return False
+
+
+def _chain_has_group(value):
+    """Whether a group appears anywhere in ``value''s cause/context chain.
+
+    Guarded by identity like _chain_of, for the same reason: re-raising the
+    exception being handled can close the chain into a cycle."""
+    seen = _seen_set()
+    while value is not None:
+        key = id(value)
+        if key in seen:
+            return False
+        seen.add(key)
+        if _is_exception_group(value):
+            return True
+        cause = getattr(value, '__cause__', None)
+        if cause is not None:
+            value = cause
+            continue
+        context = getattr(value, '__context__', None)
+        if context is not None and not getattr(
+                value, '__suppress_context__', False):
+            value = context
+            continue
+        return False
+    return False
+
+
 def format_exception(exc_type, value=None, tb=None, limit=None, chain=True):
     """Return a list of strings ready to be joined.  Accepts either
     the legacy 3-arg ``(type, value, tb)'' shape or the 3.10+
@@ -589,6 +658,20 @@ def format_exception(exc_type, value=None, tb=None, limit=None, chain=True):
     assert on exactly that."""
 
     exc_type, value, tb = _unpack_exc_args(exc_type, value, tb)
+    # PEP 654 tree rendering lives in TracebackException.format, because the
+    # margin it draws (``  | '' / ``+-+---- 1 ----'') is carried in a context
+    # object threaded through the WHOLE chain -- the sub-exceptions of a group
+    # are indented relative to the group that contains them, across links.  This
+    # function's link-by-link walk has nowhere to keep that, so hand a group
+    # over rather than reproduce it.
+    #
+    # CPython routes every exception through TracebackException; Grail does so
+    # only for groups on purpose.  Moving wholesale would re-route the rendering
+    # of every exception in the language to gain the groups, and this function's
+    # own walk is what the rest of the suite currently measures.
+    if value is not None and _chain_has_group(value):
+        return list(TracebackException(exc_type, value, tb,
+                                       limit=limit).format(chain=chain))
     if chain and value is not None:
         links = _chain_of(value)
         if len(links) > 1:
@@ -1008,6 +1091,61 @@ def walk_stack(f):
     return iter(())
 
 
+def _indent_lines(text, prefix):
+    """``textwrap.indent(text, prefix, lambda line: True)''.
+
+    Written out rather than imported: the predicate matters (EVERY line gets the
+    margin, blank ones included, or a blank line inside a group would break the
+    ``|'' rule), and this is the only place traceback.py would need textwrap --
+    which is itself a Python module Grail has to import and compile.
+
+    One string can hold several lines: a frame with a caret line under it is a
+    single entry in stack.format(), so indenting has to reach inside."""
+    if not text or not prefix:
+        return text
+    parts = text.split('\n')
+    # A trailing '' means the text ENDED with a newline.  That is not a line of
+    # its own and gets no prefix -- textwrap.indent's rule, and the reason
+    # ``a\nb\n'' indents to ``Xa\nXb\n'' rather than ``Xa\nXb\nX''.
+    tail = ''
+    if parts[-1] == '':
+        parts = parts[:-1]
+        tail = '\n'
+    return '\n'.join([prefix + part for part in parts]) + tail
+
+
+class _ExceptionPrintContext:
+    """The state a group tree is drawn with, shared across a whole format().
+
+    ``exception_group_depth'' is how deeply nested the exception being rendered
+    is, which fixes both the left indent (two spaces per level) and whether a
+    margin is drawn at all.  ``need_close'' remembers that the last child of a
+    group still owes a closing ``+-----'' rule -- it is set before recursing and
+    cleared by whoever emits the rule, so the DEEPEST nesting closes first and
+    each level closes exactly once."""
+
+    def __init__(self):
+        self.seen = set()
+        self.exception_group_depth = 0
+        self.need_close = False
+
+    def indent(self):
+        return ' ' * (2 * self.exception_group_depth)
+
+    def emit(self, text_gen, margin_char=None):
+        """The lines of ``text_gen'' (one string or a list) with this context's
+        indent and margin.  CPython yields; Grail returns a list, as everywhere
+        else in this module."""
+        if margin_char is None:
+            margin_char = '|'
+        indent_str = self.indent()
+        if self.exception_group_depth:
+            indent_str += margin_char + ' '
+        if isinstance(text_gen, str):
+            return [_indent_lines(text_gen, indent_str)]
+        return [_indent_lines(text, indent_str) for text in text_gen]
+
+
 class TracebackException:
     """CPython's reusable exception-formatting helper.  Captures the
     exception's type / value (and chain) at construction time so the
@@ -1019,19 +1157,21 @@ class TracebackException:
                  limit=None, lookup_lines=True, capture_locals=False,
                  compact=False, max_group_width=15, max_group_depth=10,
                  save_exc_type=True, _seen=None, **kwargs):
-        """``max_group_width`` / ``max_group_depth`` / ``save_exc_type`` are
-        accepted and not yet acted on: they only shape PEP 654 exception-GROUP
-        tree rendering, which Grail does not implement (see §9 of
-        docs/Python_Traceback_Design.md).  Accepting them keeps a caller that
-        passes them at a FAILURE on unimplemented rendering rather than an
-        ERROR on an unexpected keyword, which is the more truthful verdict --
-        the same reason format() and format_exception_only() absorb
-        ``colorize``.  ``**kwargs`` covers the rest of that family."""
+        """``max_group_width`` / ``max_group_depth`` bound PEP 654 group-tree
+        rendering: how many children of one group are shown before the rest
+        become "and N more exceptions", and how deep the nesting is drawn before
+        it becomes "... (max_group_depth is N)".  ``save_exc_type`` is accepted
+        and not acted on -- it controls a DeprecationWarning on a field Grail
+        does not keep.  ``**kwargs`` covers the rest of that family (notably
+        ``colorize``), for the same reason format() absorbs it: honouring it
+        would produce the same bytes."""
         # Use the same input unpacking as format_exception so
         # ``TracebackException(exc)'' single-arg works.
         exc_type, exc_value, exc_traceback = _unpack_exc_args(
             exc_type, exc_value, exc_traceback)
         self.exc_type = exc_type
+        self.max_group_width = max_group_width
+        self.max_group_depth = max_group_depth
         # CPython exposes ``value'' (the message) plus the chain
         # attributes (__cause__ / __context__ / __suppress_context__).
         # Without real chained-exception support and with Grail's
@@ -1063,6 +1203,14 @@ class TracebackException:
             _seen = _seen_set()
         self.__cause__ = None
         self.__context__ = None
+        # ``None'' means "not a group", which is what format() tests to choose
+        # between a plain traceback and a tree -- an EMPTY list would mean a
+        # group with no children and draw a (correct, but different) tree.
+        # Initialised here rather than only in the queue loop below so that a
+        # TracebackException built with an explicit _seen -- a recursive call
+        # that was never queued -- still has the attribute.  CPython leaves it
+        # unset in that case and would raise AttributeError on format().
+        self.exceptions = None
         self.__suppress_context__ = bool(
             getattr(exc_value, '__suppress_context__', False))
         if exc_value is not None:
@@ -1099,7 +1247,9 @@ class TracebackException:
                         type(cause), cause,
                         getattr(cause, '__traceback__', None),
                         limit=limit, lookup_lines=lookup_lines,
-                        capture_locals=capture_locals, _seen=_seen)
+                        capture_locals=capture_locals,
+                        max_group_width=max_group_width,
+                        max_group_depth=max_group_depth, _seen=_seen)
                     queue.append((te.__cause__, cause))
                 # __suppress_context__ is the TracebackException's own copy of
                 # the flag, taken from ``value`` at its construction.
@@ -1109,8 +1259,30 @@ class TracebackException:
                         type(context), context,
                         getattr(context, '__traceback__', None),
                         limit=limit, lookup_lines=lookup_lines,
-                        capture_locals=capture_locals, _seen=_seen)
+                        capture_locals=capture_locals,
+                        max_group_width=max_group_width,
+                        max_group_depth=max_group_depth, _seen=_seen)
                     queue.append((te.__context__, context))
+                # A group's CHILDREN are links too, and they go on the same
+                # queue: nesting is unbounded (a group of groups of ...), so
+                # recursing per level would put the same stack-depth ceiling on
+                # rendering a tree that the chain walk above avoids.  Unlike
+                # cause/context these are not deduplicated against _seen -- the
+                # same exception may legitimately appear in two groups, and
+                # CPython renders it in both.
+                if _is_exception_group(value):
+                    children = []
+                    for sub in value.exceptions:
+                        children.append(TracebackException(
+                            type(sub), sub,
+                            getattr(sub, '__traceback__', None),
+                            limit=limit, lookup_lines=lookup_lines,
+                            capture_locals=capture_locals,
+                            max_group_width=max_group_width,
+                            max_group_depth=max_group_depth, _seen=_seen))
+                    te.exceptions = children
+                    for pair in zip(children, value.exceptions):
+                        queue.append(pair)
 
     @classmethod
     def from_exception(cls, exc, **kwargs):
@@ -1136,7 +1308,7 @@ class TracebackException:
         return format_exception_only(self.exc_type, self._value,
                                      show_group=show_group, _tb=self._tb)
 
-    def format(self, chain=True, **kwargs):
+    def format(self, chain=True, _ctx=None, **kwargs):
         """Yield strings (header / frames / message).  Generators
         aren't iterated by CPython callers that join the result, so
         return a flat list — easier to test, identical from the
@@ -1146,9 +1318,15 @@ class TracebackException:
         frames, matching CPython's ``if exc.stack:`` guard — see
         format_exception() above.
 
+        ``_ctx`` is the group-tree drawing state, private and threaded through
+        the recursion: the whole chain shares one, so a sub-exception's own
+        chain is indented under the group that holds it.
+
         ``**kwargs`` swallows ``colorize`` and friends, as above."""
+        if _ctx is None:
+            _ctx = _ExceptionPrintContext()
+        links = []
         if chain:
-            links = []
             link = self
             while link is not None:
                 if link.__cause__ is not None:
@@ -1161,13 +1339,85 @@ class TracebackException:
                     links.append((None, link))
                     link = None
             links.reverse()
-            lines = []
-            for connector, link in links:
-                if connector is not None:
-                    lines.append(connector)
-                lines.extend(link._format_self())
-            return lines
-        return self._format_self()
+        else:
+            links.append((None, self))
+        lines = []
+        for connector, link in links:
+            if connector is not None:
+                lines.extend(_ctx.emit(connector))
+            if link.exceptions is None:
+                lines.extend(_ctx.emit(link._format_self()))
+            elif _ctx.exception_group_depth > self.max_group_depth:
+                lines.extend(_ctx.emit(
+                    '... (max_group_depth is %s)\n' % (self.max_group_depth,)))
+            else:
+                lines.extend(self._format_group(link, chain, _ctx))
+        return lines
+
+    def _format_group(self, link, chain, _ctx):
+        """One exception GROUP as a tree: its own traceback, then a numbered
+        rule per child with the child rendered under it.
+
+        Split out of format() because the nesting is what makes this hard to
+        read, not the shape of any one line.  CPython keeps it inline."""
+        lines = []
+        # Depth 0 means this is the OUTERMOST group, and it is the only one whose
+        # first line carries a ``+'' instead of a ``|'' -- the corner of the box
+        # everything else is drawn inside.  Bumping the depth before rendering it
+        # is what gives even the top-level group its ``  | '' margin.
+        is_toplevel = (_ctx.exception_group_depth == 0)
+        if is_toplevel:
+            _ctx.exception_group_depth += 1
+        frames = []
+        try:
+            frames.extend(link.stack.format())
+        except Exception:
+            pass
+        if frames:
+            lines.extend(_ctx.emit(
+                'Exception Group Traceback (most recent call last):\n',
+                margin_char='+' if is_toplevel else None))
+            lines.extend(_ctx.emit(frames))
+        lines.extend(_ctx.emit(link.format_exception_only()))
+
+        num_excs = len(link.exceptions)
+        # One rule too many when truncating: the extra one is the ``...'' rule
+        # that introduces "and N more exceptions".
+        if num_excs <= self.max_group_width:
+            shown = num_excs
+        else:
+            shown = self.max_group_width + 1
+        _ctx.need_close = False
+        for i in range(shown):
+            last_exc = (i == shown - 1)
+            if last_exc:
+                # The closing rule may instead be emitted by a recursive call,
+                # which is what need_close hands down.
+                _ctx.need_close = True
+            truncated = (self.max_group_width is not None
+                         and i >= self.max_group_width)
+            title = '...' if truncated else '%s' % (i + 1,)
+            lines.append(_ctx.indent()
+                         + ('+-' if i == 0 else '  ')
+                         + '+---------------- ' + title
+                         + ' ----------------\n')
+            _ctx.exception_group_depth += 1
+            if not truncated:
+                lines.extend(link.exceptions[i].format(chain=chain, _ctx=_ctx))
+            else:
+                remaining = num_excs - self.max_group_width
+                plural = 's' if remaining > 1 else ''
+                lines.extend(_ctx.emit(
+                    'and %s more exception%s\n' % (remaining, plural)))
+            if last_exc and _ctx.need_close:
+                lines.append(_ctx.indent()
+                             + '+------------------------------------\n')
+                _ctx.need_close = False
+            _ctx.exception_group_depth -= 1
+
+        if is_toplevel:
+            _ctx.exception_group_depth = 0
+        return lines
 
     def _format_self(self):
         """This exception alone -- header, frames, message -- with no chain."""
@@ -1197,10 +1447,18 @@ class TracebackException:
         keeps ``_value`` (the live exception) for rendering, and comparing THAT
         would compare by identity, so two equivalent exceptions would never be
         equal.  Enumerate the output-shaping fields instead, which is the same
-        rule CPython's __dict__ comparison expresses."""
+        rule CPython's __dict__ comparison expresses.
+
+        A group's CHILDREN shape its output too, so they are part of the key --
+        and because they are TracebackExceptions themselves, comparing them
+        recurses through this same rule rather than comparing exceptions by
+        identity.  ``max_group_width'' / ``max_group_depth'' likewise: they
+        decide where the tree is truncated, and CPython's __dict__ comparison
+        includes them for that reason."""
         return (self.exc_type, self._str, list(self.stack),
                 _format_notes(self._value), self._capture_locals,
-                self.__cause__, self.__context__, self.__suppress_context__)
+                self.__cause__, self.__context__, self.__suppress_context__,
+                self.exceptions, self.max_group_width, self.max_group_depth)
 
     def __eq__(self, other):
         """NotImplemented -- not False -- for a non-TracebackException, so

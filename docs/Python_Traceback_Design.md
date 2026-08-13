@@ -1776,3 +1776,107 @@ instead. It is *not* that `except ImportError` fails to match an ImportError
 very from-import path), and it is *not* that `ModuleNotFoundError` is not a subclass
 of `ImportError` (it is). Something about how the exception crosses `exec` inside
 that test remains to be found.
+
+### 9.20 Rendering an exception group as a tree (2026-08-13, gs40)
+
+The largest single bucket left in `test.test_traceback`, and the first item in a
+while that needed new machinery rather than gap-filling. A PEP 654 group is the
+one exception that does not render as a block of text — its children are drawn
+inside a box:
+
+```
+  + Exception Group Traceback (most recent call last):
+  |   File "f.py", line 12, in f
+  | ExceptionGroup: eg (2 sub-exceptions)
+  +-+---------------- 1 ----------------
+    | ValueError: first
+    +---------------- 2 ----------------
+    | ValueError: second
+    +------------------------------------
+```
+
+Grail rendered the group's own line and stopped. The children were simply absent,
+so a group reported strictly less than it already knew — the exceptions were
+there, in `exc.exceptions`, unread.
+
+**Three independent pieces were missing**, which is why this reads as one change
+rather than three: none of them is useful alone.
+
+**The nesting indent was two spaces, and cumulative.** `format_exception_only(eg,
+show_group=True)` indents each level by *three*, measured from the absolute depth.
+Grail used two, and got there by having each level prefix the level below — which
+produces the same shape at one level of nesting and diverges at two. The depth is
+not only a width: it also decides whether a multi-line *message* is split into
+one string per line, which is what lets every line of it carry the indent. The
+group's own message is deliberately not split, so
+`test_format_exception_group_multiline_messages` asserts both halves at once —
+`'ExceptionGroup: A\n1 (1 sub-exception)\n'` stays whole while the nested
+`ValueError('B\n2')` becomes `'   ValueError: B\n', '   2\n'`. Ten of CPython's
+group tests differ from the old output in nothing but this indent.
+
+**`TracebackException.exceptions` did not exist.** A list of `TracebackException`
+for a group, `None` for anything else — `None` and not an empty list, because
+`format()` tests it to choose between a plain traceback and a tree, and an empty
+group is a real thing that draws a (correct, different) empty box. Without it
+nothing downstream could draw a tree even in principle, and `max_group_width` /
+`max_group_depth` were accepted and then discarded. The children go on the same
+breadth-first queue §9.14 built for the cause/context chain, for the same reason:
+group nesting is unbounded, so recursing per level would put back the stack-depth
+ceiling that queue exists to remove. Unlike cause/context they are *not*
+deduplicated against `_seen` — the same exception may legitimately appear in two
+groups, and CPython renders it in both.
+
+**The margin is positional state, so `format_exception` had to hand groups over.**
+The `|` and `+-+---- 1 ----` are drawn from a depth counter plus a "this level
+still owes a closing rule" flag, shared across the *whole* chain (CPython keeps
+both in a private `_ExceptionPrintContext`; Grail now has the same class, and
+`format()` threads it through a private `_ctx`). The module-level
+`format_exception` renders a chain link by link and has nowhere to keep that, so
+it now delegates to `TracebackException` when a group appears anywhere in the
+chain. Deliberately *only* then: CPython routes every exception through
+`TracebackException`, and moving Grail wholesale would re-route the rendering of
+every exception in the language to gain the groups.
+
+**The port was checked against CPython before it was checked against Grail.**
+`src/python/stdlib/traceback.py` is pure Python, so it imports under CPython 3.14.6
+directly, and its output can be diffed against the real `traceback` module for the
+same exception. Every group shape came out byte-identical — the only differences
+in the whole comparison were the caret lines (`~^^`) under the failing expression,
+which is an unrelated pre-existing gap. That is a much tighter loop than an
+install-and-sweep per iteration, and worth reaching for whenever the change is
+confined to a ported stdlib module.
+
+**It still cost a test, and only measuring found it.** `nesting_indent` started out
+called `indent` — and the SyntaxError branch of the same function already binds
+`indent`, to a *width*: how much whitespace `strip()` removed from the source line,
+needed to place the caret. The width overwrote the string, so every SyntaxError
+whose text was indented rendered as `int + str`. It turned
+`test_syntax_error_various_offsets` (whose `add=2` arm supplies exactly that) from
+a failure into an error.
+
+The CPython-side comparison did not catch it, because the one SyntaxError in that
+probe had `offset=None` and never entered the branch that rebinds the name. What
+caught it was diffing the *named* failing and erroring tests before and against
+after, rather than the totals: errors went 22 → 23 while failures dropped 61 → 45,
+and a net gain of fifteen would have hidden it completely. The fixture now carries
+a check for a top-level indented SyntaxError — asserted as a shape, since the
+caret-run gap means Grail and CPython genuinely differ on those bytes, and pinning
+CPython's would assert the gap instead of the crash.
+
+**Result: `test.test_traceback` 71 → 86 passing** (failures 61 → 46, errors
+unchanged at 22), verified by name: fifteen tests fixed, no test newly failing or
+newly erroring. SUnit 4125, all green. Full 50-module sweep: no other row moves.
+
+Two group tests remain, both blocked on things that are not about groups:
+`test_exception_group_format` and `test_exception_group_format_exception_onlyi_recursive`
+need `1/0` to say `division by zero` where Grail says `integer division or modulo
+by zero` (the Smalltalk message), and the first also needs the caret lines.
+`TestTracebackException_ExceptionGroups.test_comparison` fails on an uncatchable
+`cannot find handler frame for exception` when a group is re-raised five times —
+unchanged by this work, and unexplained.
+
+Next, in the order I would take them: the `ZeroDivisionError` wording, which is
+small and now blocks named tests rather than being a curiosity; `f_locals` via live
+`GsProcess` introspection (2 tests, plus `sys._getframe`'s 4); the three
+ImportError suggestion tests whose blocker §9.19 left as an open question; and the
+`sys.stdlib_module_names` decision from §9.16, which is still the user's to make.
