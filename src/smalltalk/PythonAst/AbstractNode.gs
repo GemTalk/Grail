@@ -287,18 +287,12 @@ ___nearestEnclosingFunctionDeclaresGlobal___: aSymbol
 	(BlockAst>>globalNames); lambdas cannot contain statements, so a
 	LambdaAst never declares one."
 
-	| node ivars bodyIdx bodyNode gset |
+	| node |
 	node := parent.
 	[node notNil] whileTrue: [
 		(node isKindOf: LambdaAst) ifTrue: [^ false].
 		(node isKindOf: FunctionDefAst) ifTrue: [
-			ivars := node class allInstVarNames.
-			bodyIdx := ivars indexOf: #body.
-			bodyNode := bodyIdx > 0 ifTrue: [node instVarAt: bodyIdx] ifFalse: [nil].
-			(bodyNode isKindOf: BlockAst) ifFalse: [^ false].
-			gset := bodyNode globalNames.
-			^ gset notNil and: [gset includes: aSymbol asSymbol]
-		].
+			^ self ___functionDeclaresGlobal___: node named: aSymbol].
 		node := node parent.
 	].
 	^ false
@@ -359,12 +353,96 @@ ___pythonLocalInEnclosingFunctions___: aSymbol
 				(node == CallAst annotationOwnerDefNode
 					or: [(node isKindOf: LambdaAst) and: [prev isKindOf: ArgumentsAst]])
 					ifFalse: [
+						"``global aSymbol'' declared by THIS enclosing scope ends the
+						walk.  The declaration makes the name a module binding for the
+						whole of that scope, INCLUDING the functions nested inside it,
+						so an outer function's same-named local must not claim it:
+
+							x = 7
+							def f():
+								x = 1
+								def g():
+									global x
+									def h(): return x    # 7, not f's 1
+
+						Only the NEAREST enclosing function was consulted before (the
+						guard above), which is the right rule for a STORE -- ``x = 1''
+						in h binds h's own local -- but not for this walk, which is
+						about which enclosing scope a free READ resolves to.  h read
+						f's 1, and the further nesting the test uses (test_scope's
+						testScopeOfGlobalStmt, four cases) is exactly what put an
+						undeclaring scope in between."
+						(self ___functionDeclaresGlobal___: node named: aSymbol)
+							ifTrue: [^ false].
 						(self ___functionBindsPythonLocal___: node named: aSymbol)
 							ifTrue: [^ true]]].
 		prev := node.
 		node := node parent.
 	].
 	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___globalDeclarationWinsFor___: aSymbol
+	"Walking outward from this node, is the first enclosing function scope
+	that has anything to say about aSymbol one that declares it ``global''?
+
+	Python resolves a name against the INNERMOST enclosing scope that either
+	binds it or declares it, so the two possibilities have to be tested in the
+	same walk rather than one after the other:
+
+	    def f():
+	        x = 1
+	        def g():
+	            global x
+	            def h(): return x     # global -- g declared it
+	            def k():
+	                x = 5
+	                return x          # k's own local, g's declaration is moot
+
+	Answers false when neither is found, which leaves the name to the ordinary
+	module/builtins lookup."
+
+	| node prev |
+	prev := self.
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [
+				"Same two exclusions as ___pythonLocalInEnclosingFunctions___:
+				-- an annotation and a lambda default are evaluated in the
+				ENCLOSING scope, so the scope they are written in has no say."
+				(node == CallAst annotationOwnerDefNode
+					or: [(node isKindOf: LambdaAst) and: [prev isKindOf: ArgumentsAst]])
+					ifFalse: [
+						(self ___functionDeclaresGlobal___: node named: aSymbol)
+							ifTrue: [^ true].
+						(self ___functionBindsPythonLocal___: node named: aSymbol)
+							ifTrue: [^ false]]].
+		prev := node.
+		node := node parent.
+	].
+	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___functionDeclaresGlobal___: aFunctionNode named: aSymbol
+	"Does aFunctionNode's own scope declare ``global aSymbol''?  The
+	per-scope set the parser records on the body BlockAst.  A LambdaAst
+	cannot contain statements, so it never declares one."
+
+	| ivars bodyIdx bodyNode gset |
+	(aFunctionNode isKindOf: FunctionDefAst) ifFalse: [^ false].
+	ivars := aFunctionNode class allInstVarNames.
+	bodyIdx := ivars indexOf: #body.
+	bodyNode := bodyIdx > 0
+		ifTrue: [aFunctionNode instVarAt: bodyIdx]
+		ifFalse: [nil].
+	(bodyNode isKindOf: BlockAst) ifFalse: [^ false].
+	gset := bodyNode globalNames.
+	^ gset notNil and: [gset includes: aSymbol asSymbol]
 %
 
 category: 'Grail-codegen helpers'

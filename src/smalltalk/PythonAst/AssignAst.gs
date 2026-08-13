@@ -125,6 +125,29 @@ printSmalltalkOn: aStream
 		(tgt isKindOf: ListAst) ifTrue: [
 			^self printSmalltalkTupleStoreOn: aStream target: tgt.
 		].
+		"``global x; x = v'' inside a DOIT (exec/eval).  The read side explains
+		why a bare identifier cannot name the doit's scope slot here -- an
+		enclosing def's same-named temp captures it lexically -- and a STORE
+		has the same problem, with the worse consequence: the assignment
+		silently rebinds the enclosing local and the global keeps its old
+		value.  Route it through the scope handle, as NameAst's load does.
+
+		The NEAREST enclosing function's declaration is the right test for a
+		store (unlike the read's walk): ``x = v'' binds the scope it is
+		written in, so only that scope's own declaration can send it
+		elsewhere."
+		((tgt isKindOf: NameAst)
+			and: [ModuleAst compilingDoitScope notNil
+			and: [tgt ___nearestEnclosingFunctionDeclaresGlobal___: tgt id]])
+			ifTrue: [
+				aStream
+					nextPutAll: '___pyGlobals___ @env0:at: #''';
+					nextPutAll: (NameAst doitScopeNameFor: tgt id asSymbol) asString;
+					nextPutAll: ''' put: '.
+				value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPut: $..
+				^ self
+			].
 		((tgt isKindOf: NameAst) and: [self isModuleScopeStoreTarget: tgt])
 			ifTrue: [
 				^ self printSmalltalkModuleStoreOn: aStream target: tgt

@@ -304,6 +304,12 @@ ___reflectDoitScope___: aScope seeded: seeded into: targetDict globalNames: glob
 	locals -- and it is exactly the evidence CPython acts on."
 
 	aScope @env0:keysAndValuesDo: [:key :value |
+		"ensureModuleScope: parks a handle on the scope inside itself, so that
+		codegen can name a global-declared slot explicitly where a bare
+		identifier would be captured by an enclosing block temp.  It is
+		machinery, not a binding the source produced, and must not surface in
+		the caller's namespace."
+		(key @env0:== #'___pyGlobals___') @env0:ifFalse: [
 		((seeded @env0:includesKey: key)
 			@env0:and: [(seeded @env0:at: key) @env0:== value])
 			@env0:ifFalse: [ | pyName target |
@@ -312,7 +318,7 @@ ___reflectDoitScope___: aScope seeded: seeded into: targetDict globalNames: glob
 					@env0:and: [globalNames @env0:includes: pyName @env0:asString @env0:asSymbol])
 					ifTrue: [globalsDict]
 					ifFalse: [targetDict].
-				target @env0:at: pyName put: value]]
+				target @env0:at: pyName put: value]]]
 %
 
 category: 'Grail-Built-in Functions'

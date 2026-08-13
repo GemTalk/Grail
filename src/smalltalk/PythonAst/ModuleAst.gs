@@ -254,6 +254,16 @@ ensureModuleScope: aSymbolDictionary
 	compiler has to find must carry the same name."
 	body variables do: [:each |
 		aSymbolDictionary at: (NameAst doitScopeNameFor: each) ifAbsentPut: [nil] ].
+	"A handle on the scope itself, for the one case a bare identifier cannot
+	reach it: a name declared ``global'' and read or written from inside a
+	nested def whose ENCLOSING def has a same-named local.  The local is a
+	Smalltalk block temp, and Smalltalk resolves the bare identifier
+	LEXICALLY, so the temp wins over this dictionary and the global
+	declaration is silently ignored (test_scope testScopeOfGlobalStmt).
+	Going through the handle names the slot explicitly, which no temp can
+	shadow.  ___reflectDoitScope___: drops the key again so it never reaches
+	the caller's namespace."
+	aSymbolDictionary at: #'___pyGlobals___' put: aSymbolDictionary.
 %
 
 category: 'Grail-evaluation'
