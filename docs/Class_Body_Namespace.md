@@ -101,17 +101,40 @@ chained runtime store already funnel through. `EnumDict(cls_name)` gained the
 constructor CPython gives it, which a `__prepare__` returning `EnumDict(cls)`
 needs and which the inherited dict constructor was refusing.
 
-That closes `test_enum_dict_in_metaclass`. The other four still need what stage 1
-does not do:
+That closes `test_enum_dict_in_metaclass`.
+
+## Stage 2, as shipped
+
+The gate is gone: every class statement asks for a namespace. An ordinary class
+pays one send and gets nil, storing exactly what it did before. The point is that
+Grail's own metaclasses are **Smalltalk** — an enum's namespace comes from `Enum
+class`, and there is no `metaclass=` keyword to carry it — so a compile-time gate
+on that keyword could never reach an enum at all.
+
+`Enum class` now supplies an `EnumDict`, so every enum body in the corpus runs
+against one. Verified at 0 regressions across 71 modules, which is the number
+that matters for a change with that reach.
+
+One behaviour moved, and it is a fix: a reused member name is refused **where it
+is written**, so the reported value is the one the mapping already holds.
+`ClassBodyRebindingTestCase` had recorded the old answer as a deviation — the
+metaclass hook noticed the clash only after the earlier store was gone, and named
+the surviving value. CPython's own `test_dynamic_members_with_static_methods`
+pins the correct reading (`'FOO_CAT' already defined as 'aloof'`), and that
+expectation is updated with the reasoning.
+
+## What is still missing
 
 - `def` and nested `class` bindings bypass the namespace — each has its own
   emission path
 - `vars()` inside a body answers a plain dict, not the live namespace, which is
   what `test_ignore` and `test_dynamic_members_with_static_methods` write into
-- `auto()` is not resolved at assignment time, which `test_using_members_as_nonmember`
-  needs — the read-back is already in place for it, but no namespace exists for a
-  plain `class E(Flag)` since none names a metaclass
-- an inherited metaclass is not asked, per the note above
+- `auto()` is not resolved at assignment, which `test_using_members_as_nonmember`
+  needs. The read-back is in place and an enum body now has a namespace, so what
+  remains is `EnumDict.__setitem__` calling `_generate_next_value_` on the way in
+  — and retiring the later resolution pass in the builder, which currently
+  reproduces the assignment-time ordering rule by inspecting `___classBodyOrder___`
+- an inherited PYTHON metaclass is not asked, per the note above
 
 ## Scale
 

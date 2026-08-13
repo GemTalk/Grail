@@ -138,6 +138,53 @@ class Ordinary:
 r['ordinary_calls'] = repr(calls)
 r['ordinary_value'] = repr(Ordinary.a)
 
+# --- an ENUM gets one without naming a metaclass -----------------------------------
+# Grail's enum metaclass is Smalltalk (``Enum class''), so there is no
+# ``metaclass='' keyword to carry it.  The namespace comes from the metaclass
+# chain instead, which is why the gate on an explicit keyword had to go.
+
+import enum
+
+
+class Ordinal(enum.Enum):
+    RED = 1
+    GREEN = 2
+
+
+r['enum_members'] = repr([m.name for m in Ordinal])
+
+# A reused member name is refused WHERE IT IS WRITTEN, so the value reported is
+# the one the mapping already holds -- CPython's reading, and a deviation Grail
+# used to record: the metaclass hook noticed the clash only after the earlier
+# store was gone, and named the surviving value instead.
+try:
+    class Dup(enum.Enum):
+        red = 1
+        green = 2
+        red = 4
+    r['enum_duplicate'] = 'NOT RAISED'
+except TypeError as e:
+    r['enum_duplicate'] = str(e)
+
+# Autos, aliases and ordinary members are all unaffected.
+
+
+class Flags(enum.Flag):
+    A = enum.auto()
+    B = enum.auto()
+
+
+r['enum_autos'] = '%d,%d' % (Flags.A.value, Flags.B.value)
+
+
+class Aliased(enum.Enum):
+    CANON = 1
+    OTHER = 2
+    ALIAS = 1
+
+
+r['enum_alias'] = repr(Aliased.ALIAS is Aliased.CANON)
+
 # --- KNOWN GAPS, recorded rather than endorsed ------------------------------------
 # Stage 1 routes ASSIGNMENTS -- at body level and inside compound statements.
 # A ``def`` and a nested ``class`` bind a name too, and CPython's namespace sees
@@ -158,6 +205,20 @@ class VarsProbe(metaclass=WatchMeta):
 
 
 r['vars_in_body_a_known_gap'] = VarsProbe.kind
+
+# ``auto()`` is still resolved in a later pass rather than at assignment, so a
+# body that USES a member it just defined sees the unresolved marker.  The
+# read-back needed for it is in place -- the namespace's value is what lands on
+# the class -- but EnumDict does not yet call _generate_next_value_ on the way
+# in.  This is what test_enum's test_using_members_as_nonmember needs.
+try:
+    class Combining(enum.Flag):
+        A = enum.auto()
+        B = enum.auto()
+        ALL = enum.nonmember(A | B)
+    r['auto_at_assignment_a_known_gap'] = repr(Combining.ALL)
+except TypeError as e:
+    r['auto_at_assignment_a_known_gap'] = type(e).__name__
 
 # An INHERITED metaclass is not asked, because Grail does not install a Python
 # metaclass as the Smalltalk metaclass -- a subclass has nothing here to ask.
