@@ -118,6 +118,40 @@ printSmalltalkOn: aStream
 	op printSmalltalkOn: opStream.
 	binSel := opStream _contents trimSeparators.
 	iSel := '__i' , (binSel copyFrom: 3 to: binSel size).
+
+	"CLASS-BODY LEVEL ``x += 1''.  A class body executes sequentially and an
+	augmented assignment there rebinds the class attribute, so both the read
+	and the store belong to the class -- ``class C: x = 1; x += 1'' leaves
+	C.x == 2 in CPython.  Grail emitted NOTHING for this statement: an
+	AugAssignAst carries no classBodyAttributePairs, so the structural
+	class-body compile had nothing to emit and the whole statement was
+	silently dropped, leaving C.x == 1.
+
+	The store goes through ___classBodyDefinitionalStore___:put:, the same
+	route AssignAst's runtime-scope branch uses -- which is what picks between
+	the accessor pair and the dynInstVars holder, and what the class-body
+	NAMESPACE (PEP 3115 __prepare__) observes, so an augmented assignment is
+	recorded there like any other binding rather than bypassing it.
+
+	The READ is emitted as an explicit ___pyAttrLoad___ on the class: the
+	target's ctx is Store, so printSmalltalkOn: would give a bare identifier,
+	which is not a readable name here."
+	((target isKindOf: NameAst)
+		and: [self ___inClassBodyRuntimeScope___]) ifTrue: [
+			aStream
+				nextPutAll: CallAst classBodyRuntimeClass;
+				nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+				nextPutAll: target id;
+				nextPutAll: ''' put: ((';
+				nextPutAll: CallAst classBodyRuntimeClass;
+				nextPutAll: ' @env1:___pyAttrLoad___: #''';
+				nextPutAll: target id;
+				nextPutAll: ''') @env1:___augmentedOp___: '.
+			value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPutAll: ' inplace: #'''; nextPutAll: iSel;
+				nextPutAll: ''' binary: #'''; nextPutAll: binSel; nextPutAll: ''').'.
+			^ self
+		].
 	"``nonlocal x; x op= v'' inside a class METHOD: x is an enclosing-function
 	local reached past the class, so the method has no lexical link to the
 	outer temp -- read AND write must go through closure cells (the read cell
