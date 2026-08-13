@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 30 | 10 | 50 | 90 |
+| P1 | 31 | 23 | 36 | 90 |
 | P2 | 13 | 3 | 18 | 34 |
 | P3 | 0 | 1 | 55 | 56 |
 | P4 | 0 | 0 | 75 | 75 |
-| **In-scope** | **43** | **14** | **198** | **255** |
+| **In-scope** | **44** | **27** | **184** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -88,7 +88,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **57 are wired into the harness** (P1 40 · P2 16 · P3 1) and **43 of those score OK**.
+Of the 255 in-scope modules, **71 are wired into the harness** (P1 54 · P2 16 · P3 1) and **44 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -109,9 +109,9 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_baseexception` | BaseException hierarchy (language). |
 | ❗ | `test_binop` | Binary-operator dispatch (language). |
 | ✅ | `test_bool` | bool type (language). |
-|  | `test_builtin` | Built-in functions (language). |
+| ❗ | `test_builtin` | Built-in functions (language). |
 | ✅ | `test_bytes` | bytes / bytearray (language/core type). |
-|  | `test_call` | Call protocol (language). |
+| ❗ | `test_call` | Call protocol (language). |
 |  | `test_class` | Class definition/semantics (language). |
 | ✅ | `test_compare` | Object comparison protocol (language). |
 | ❗ | `test_complex` | complex type (language). |
@@ -123,13 +123,13 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_dict` | dict — core type (in harness). |
 | ✅ | `test_dictcomps` | Dict comprehensions (language). |
 | ✅ | `test_dictviews` | dict keys/values/items views (language). |
-|  | `test_dynamic` | Dynamic name binding / exec (language). |
+| ❗ | `test_dynamic` | Dynamic name binding / exec (language). |
 | ❗ | `test_enumerate` | enumerate builtin (language). |
 |  | `test_eof` | Parser EOF handling (language). |
 |  | `test_except_star` | except* / PEP 654 (language). |
 |  | `test_exception_group` | ExceptionGroup (language). |
 |  | `test_exception_hierarchy` | Built-in exception hierarchy (language). |
-|  | `test_exception_variations` | try/except/finally variations (language). |
+| ❗ | `test_exception_variations` | try/except/finally variations (language). |
 |  | `test_exceptions` | Exceptions (language). |
 |  | `test_extcall` | Extended call syntax */** (language). |
 | ✅ | `test_float` | float — core type (in harness). |
@@ -140,11 +140,11 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_future_stmt` | __future__ statements (language). |
 | ✅ | `test_generator_stop` | PEP 479 StopIteration handling (language). |
 |  | `test_generators` | Generators (language). |
-|  | `test_genericclass` | __class_getitem__ / generic classes (language). |
+| ❗ | `test_genericclass` | __class_getitem__ / generic classes (language). |
 |  | `test_genexps` | Generator expressions (language). |
-|  | `test_global` | global statement (language). |
+| ❗ | `test_global` | global statement (language). |
 |  | `test_grammar` | Grammar (language). |
-|  | `test_hash` | hash() protocol (language). |
+| ✅ | `test_hash` | hash() protocol (language). |
 | ✅ | `test_index` | __index__ protocol (language). |
 | ✅ | `test_int` | int — core type (in harness). |
 | ✅ | `test_int_literal` | Integer literal parsing (language). |
@@ -158,10 +158,10 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_longexp` | Very long expressions (parser stress). |
 |  | `test_metaclass` | Metaclasses (language). |
 |  | `test_module` | Module objects & namespace (language). |
-|  | `test_named_expressions` | Walrus := operator (language). |
+| ❗ | `test_named_expressions` | Walrus := operator (language). |
 |  | `test_patma` | Structural pattern matching (language). |
 |  | `test_pep646_syntax` | Variadic generics syntax / PEP 646 (language). |
-|  | `test_positional_only_arg` | Positional-only args / (language). |
+| ❗ | `test_positional_only_arg` | Positional-only args / (language). |
 | ✅ | `test_pow` | pow() / ** (language). |
 | ❗ | `test_print` | print() (language/builtin). |
 | ✅ | `test_property` | property descriptor (language). |
@@ -175,9 +175,9 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_sort` | list.sort / sorted (language/builtin). |
 |  | `test_source_encoding` | Source-file encoding declarations (parser). |
 |  | `test_str` | str — core type (language). |
-|  | `test_string_literals` | String-literal syntax (language). |
-|  | `test_subclassinit` | __init_subclass__ (language). |
-|  | `test_super` | super() (language). |
+| ❗ | `test_string_literals` | String-literal syntax (language). |
+| ❗ | `test_subclassinit` | __init_subclass__ (language). |
+| ❗ | `test_super` | super() (language). |
 |  | `test_syntax` | SyntaxError coverage (language). |
 |  | `test_tstring` | Template strings / PEP 750 (language, new in 3.14). |
 | ✅ | `test_tuple` | tuple — core type (in harness). |
@@ -185,14 +185,14 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_type_annotations` | Annotation syntax/semantics (language). |
 |  | `test_type_comments` | # type: comments (language/ast). |
 |  | `test_type_params` | PEP 695 type parameters (language). |
-|  | `test_typechecks` | type()/isinstance checks (language). |
+| ❗ | `test_typechecks` | type()/isinstance checks (language). |
 |  | `test_types` | types module — built-in type objects (language). |
 | ✅ | `test_unary` | Unary operators (language). |
 |  | `test_unicode_identifiers` | Unicode identifier support (language). |
 | ✅ | `test_unpack` | Sequence unpacking (language). |
 |  | `test_unpack_ex` | Extended (starred) unpacking (language). |
 |  | `test_utf8source` | UTF-8 source files (parser). |
-|  | `test_with` | with statement / context managers (language). |
+| ❗ | `test_with` | with statement / context managers (language). |
 | ❗ | `test_yield_from` | yield from (language). |
 
 ### P2 — Core stdlib (data structures · numbers · algorithms · text)  ·  34 modules

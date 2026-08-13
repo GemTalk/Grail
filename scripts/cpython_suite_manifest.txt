@@ -146,3 +146,25 @@ test.test_raise
 test.test_funcattrs
 test.test_decorators
 test.test_print
+#
+# Nor test_class: line 859 is a bare top-level ``from _testinternalcapi import
+# has_inline_values'', so the module cannot import at all, and
+# _testinternalcapi is CPython interpreter internals -- explicitly
+# out-of-scope in docs/Grail_CPython_Scope.md.  Wiring it would park a
+# permanently red row whose blocker nobody intends to fix.  The other 858
+# lines are ordinary class-model tests; they become reachable if that import
+# is ever stubbed.
+test.test_builtin
+test.test_call
+test.test_dynamic
+test.test_exception_variations
+test.test_global
+test.test_hash
+test.test_named_expressions
+test.test_subclassinit
+test.test_super
+test.test_typechecks
+test.test_with
+test.test_positional_only_arg
+test.test_string_literals
+test.test_genericclass
