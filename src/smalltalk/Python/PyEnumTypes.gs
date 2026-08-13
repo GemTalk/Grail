@@ -1953,7 +1953,7 @@ ___grailLookupName: cls name: aName
 	rec := self ___grailRecordFor: cls.
 	(rec @env0:notNil and: [(rec @env0:at: 2) @env0:includesKey: aName])
 		ifTrue: [^ (rec @env0:at: 2) @env0:at: aName].
-	^ KeyError ___signal___: aName @env0:printString
+	^ KeyError ___signal___: aName
 %
 
 category: 'Grail-Enum Metaclass'

@@ -288,5 +288,5 @@ f()') equals: 'ZeroDivisionError'.
     except IndexError as _:
         second = str(_)
     return first + "," + second
-g()') equals: 'k,i'.
+g()') equals: '''k'',i'.
 %

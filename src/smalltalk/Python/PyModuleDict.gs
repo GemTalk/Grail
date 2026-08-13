@@ -158,7 +158,7 @@ __getitem__: key
 	absent := Object @env0:new.
 	val := source ___globalAt___: key @env0:asSymbol otherwise: [absent].
 	val == absent ifTrue: [
-		KeyError ___signal___: key @env0:printString].
+		KeyError ___signal___: key].
 	^ val
 %
 
@@ -250,7 +250,7 @@ pop: key
 		val := source @env0:at: sym.
 		source @env0:removeKey: sym.
 		^ val].
-	KeyError ___signal___: key @env0:printString
+	KeyError ___signal___: key
 %
 
 category: 'Grail-Python-Protocol'

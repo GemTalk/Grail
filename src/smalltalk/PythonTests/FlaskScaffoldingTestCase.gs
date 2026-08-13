@@ -2106,8 +2106,10 @@ testTracebackExceptionFormatExceptionOnly
 	mod := self loadFixture: 'use_traceback'.
 	result := mod @env1:tracebackexception_format_only.
 	self assert: result size equals: 1.
+	"``KeyError: 'x''' and not ``KeyError: x'': KeyError's message is the REPR
+	of its argument, which is CPython's rule for that one exception."
 	self assert: (result @env1:__getitem__: 0)
-		equals: 'KeyError: x
+		equals: 'KeyError: ''x''
 '
 %
 

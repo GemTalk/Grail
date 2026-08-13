@@ -7,7 +7,8 @@ SuiteAst ifNil: [self error: 'SuiteAst is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 SuiteAst subclass: 'BlockAst'
-  instVarNames: #( variables tempCount writes hasReturnBlocking globalNames reads)
+  instVarNames: #( variables tempCount writes hasReturnBlocking globalNames reads
+                   nonlocalNames)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -176,6 +177,31 @@ category: 'Grail-other'
 method: BlockAst
 reads: newValue
 	reads := newValue
+%
+
+category: 'Grail-other'
+method: BlockAst
+nonlocalNames
+	"Names declared ``nonlocal'' in this scope (parser-recorded from the
+	nonlocalStack at popScope time).  They are stripped from ``variables''
+	and ``writes'' so codegen does not declare a shadowing Smalltalk temp,
+	which is exactly what makes them indistinguishable afterwards from a
+	name the scope never mentioned -- hence this set.
+
+	A CLASS BODY is where the distinction matters: ``nonlocal x; x += 1''
+	there must write the enclosing function's binding, while an ordinary
+	class-body assignment binds a class attribute.
+
+	May be nil for BlockAst nodes built before this field existed (and for
+	hand-built nodes); callers treat nil as empty."
+
+	^ nonlocalNames
+%
+
+category: 'Grail-other'
+method: BlockAst
+nonlocalNames: newValue
+	nonlocalNames := newValue
 %
 
 category: 'Grail-other'

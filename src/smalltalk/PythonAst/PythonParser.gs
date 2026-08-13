@@ -745,6 +745,7 @@ parseClassDefWithDecorators: decorators
 		hasReturnBlocking: blocking;
 		globalNames: (scope at: 4);
 		reads: (scope at: 5);
+		nonlocalNames: (scope at: 6);
 		yourself.
 	^ClassDefAst new
 		name: nameTok value asSymbol;
@@ -1401,6 +1402,7 @@ parseFunctionDefWithDecorators: decorators
 		hasReturnBlocking: blocking;
 		globalNames: (scope at: 4);
 		reads: (scope at: 5);
+		nonlocalNames: (scope at: 6);
 		yourself.
 	decoratorNames := decorators collect: [:each |
 		(each isKindOf: NameAst)
@@ -1843,6 +1845,7 @@ parseModule
 		hasReturnBlocking: blocking;
 		globalNames: (scope at: 4);
 		reads: (scope at: 5);
+		nonlocalNames: (scope at: 6);
 		yourself.
 	module := ModuleAst basicNew.
 	module
@@ -3181,7 +3184,16 @@ popScope
 	readStack isEmpty ifFalse: [
 		reads do: [:n |
 			(vars includes: n) ifFalse: [readStack last add: n]]].
-	^ Array with: vars with: writes with: blocking with: globals with: reads
+	"The nonlocal set is returned too, for the same reason the globals set is:
+	stripping the names from this scope's locals is not enough on its own,
+	because codegen has to be able to tell a ``nonlocal'' name APART from a
+	name that was simply never bound here.  A class body is where the
+	difference shows -- ClassDefAst must emit ``nonlocal x; x += 1'' as a write
+	to the enclosing binding rather than treating it as a class attribute or,
+	as it did before, dropping the statement entirely."
+	"Brace array, not ``Array with:...'': the with: family stops at five
+	arguments, and this scope tuple now carries six."
+	^ { vars. writes. blocking. globals. reads. nonlocals }
 %
 
 category: 'Grail-node construction'

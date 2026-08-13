@@ -26,11 +26,20 @@ class Outer:
 
 def builtin_exceptions_are_not_module_qualified():
     """CPython omits the module for builtins and __main__, so the everyday
-    render is unchanged -- ``ValueError: x'', never ``builtins.ValueError: x''."""
+    render is unchanged -- ``ValueError: x'', never ``builtins.ValueError: x''.
+
+    KeyError carries its own expected text rather than sharing the loop's: its
+    message is the REPR of the argument, so it renders "KeyError: 'x'".  This
+    check used to assert an unquoted "KeyError: x" along with the rest, which
+    made it FALSE under real CPython -- it was pinning a Grail bug, and catching
+    exactly that is the point of running these fixtures standalone.
+    """
     out = []
-    for cls in (ValueError, TypeError, ZeroDivisionError, KeyError, OSError):
+    for cls in (ValueError, TypeError, ZeroDivisionError, OSError):
         out.append(''.join(traceback.format_exception_only(cls('x')))
                    == cls.__name__ + ": x\n")
+    out.append(''.join(traceback.format_exception_only(KeyError('x')))
+               == "KeyError: 'x'\n")
     return all(out)
 
 

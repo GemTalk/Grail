@@ -167,7 +167,7 @@ __getitem__: key
 	sym := key @env0:asSymbol.
 	val := source @env0:dynamicInstVarAt: sym.
 	val == nil ifTrue: [
-		KeyError ___signal___: key @env0:printString
+		KeyError ___signal___: key
 	].
 	^ val
 %
@@ -312,7 +312,7 @@ pop: key
 	sym := key @env0:asSymbol.
 	val := source @env0:dynamicInstVarAt: sym.
 	val == nil ifTrue: [
-		KeyError ___signal___: key @env0:printString
+		KeyError ___signal___: key
 	].
 	source @env0:removeDynamicInstVar: sym.
 	^ val
