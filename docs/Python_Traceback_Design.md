@@ -1716,3 +1716,63 @@ prerequisite for `sys._getframe`); the `sys.stdlib_module_names` decision from �
 (2 tests); ImportError suggestions, which need `from X import Y` to raise
 `ImportError` rather than `ModuleNotFoundError` (3 tests); and the 19 ExceptionGroup
 tests, now the largest single bucket.
+
+### 9.19 Import machinery: sys.path, from-import errors, and Symbol-keyed deletes (2026-08-13, gs40)
+
+Chasing the three ImportError suggestion tests turned up three bugs, none of them
+about tracebacks, and **none of them moved the scoreboard**. That is recorded here
+plainly because the temptation is to report the fixes and let the reader assume a
+gain that did not happen.
+
+**`sys.path` was not consulted at all.** The resolver searched `grailDir`, the
+bundled stdlib, and a Grail-specific `extraSearchRoots` list — reachable only from
+code written *for* Grail. So `sys.path.append(d); import m` raised
+`ModuleNotFoundError` however `d` was populated, which makes the single most common
+way to extend the import path in Python a no-op. Both the `.py` and `.so` resolvers
+now search `sys.path` as well, read live on each resolution since it is an ordinary
+list a caller may append to or pop from.
+
+It is searched **last**, a deliberate deviation from CPython, where `sys.path` *is*
+the whole search path. Grail's ported stdlib has to win: a directory added to
+`sys.path` must not be able to shadow Grail's own `os` or `traceback` with a
+same-named file.
+
+**`from PKG import missing` claimed the wrong thing.** It raised
+`ModuleNotFoundError` naming `PKG.missing` as a missing *module*, where the module
+was found and the *name* was not. CPython raises `ImportError`, `cannot import name
+'x' from 'PKG' (path)`, carrying `name` / `name_from` / `path`. The old choice was
+deliberate — a `ModuleNotFoundError` is an `ImportError` subclass, so
+`try: from . import x except ImportError: pass` hooks worked — and `ImportError`
+itself keeps those working, being the base class, while saying what actually
+happened.
+
+**Deleting a str key from a Symbol-keyed dictionary raised an uncatchable
+Smalltalk error.** `includesKey:` compares by equality, so a Python str key is
+*found*; `removeKey:` matches by identity, so it matched nothing and GemStone
+signalled `LookupError` — not a Python exception, so not catchable from Python at
+all. `sys.modules` is such a dictionary, so `del sys.modules[name]` and
+`sys.modules.pop(name, None)` did this to every caller, including
+`test.support.import_helper`'s `unload` / `forget` that every temp-module test uses
+for cleanup. `__delitem__` / `pop` / `pop(k, default)` now resolve the key the
+dictionary actually holds, via one shared `___removeStoredKey___`.
+
+That third bug is why the first two showed *negative* progress at first: fixing the
+import let those tests get as far as their cleanup, which then died on the delete.
+Four tests went from failing to erroring before it was fixed — a reminder that a
+fix which unblocks a code path is answerable for what the path then hits.
+
+**Result: `test.test_traceback` unchanged at 71 passing** — verified by measuring
+the module with these changes stashed and unstashed on the same extent, both
+`failures=61 errors=22`. SUnit 4103 → 4117. Full 50-module run: no row moves.
+
+**Why the suggestion tests still fail**, stated as an open question rather than a
+theory, because two theories were checked and both were wrong. The tests now get a
+real `ImportError` with `name_from` set, and the machinery that would compute a
+suggestion from it is already in place, but the test's own
+`except ImportError: raise e from None` does not appear to take the exception —
+`self.fail("Expected ImportError but got <ImportError class object ...>")` fires
+instead. It is *not* that `except ImportError` fails to match an ImportError
+(checked directly: it matches, including one raised through `exec` and one from this
+very from-import path), and it is *not* that `ModuleNotFoundError` is not a subclass
+of `ImportError` (it is). Something about how the exception crosses `exec` inside
+that test remains to be found.

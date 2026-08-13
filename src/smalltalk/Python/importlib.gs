@@ -2703,8 +2703,13 @@ ___moduleNameToPath___: aName
 	Search order: grailDir, grailDir/src/python/stdlib (the bundled stdlib
 	ports), then the extra search roots (a sys.path-like list — see
 	extraSearchRoots / addSearchRoot:, used to point Grail at third-party
-	package trees such as NumPy's site-packages).  For each root, check
-	name.py before name/__init__.py."
+	package trees such as NumPy's site-packages), and finally ``sys.path''.
+	For each root, check name.py before name/__init__.py.
+
+	sys.path comes LAST, a deliberate deviation from CPython where it IS the whole
+	search path.  Grail's ported stdlib under grailDir has to win: a directory a
+	caller adds to sys.path must not be able to shadow Grail's own ``os'' or
+	``traceback'' with a same-named file, which searching sys.path first allows."
 	| pathParts joined searchRoots result gd |
 	gd := self @env0:grailDir.
 	gd == nil ifTrue: [^ nil].
@@ -2714,6 +2719,7 @@ ___moduleNameToPath___: aName
 		@env0:add: gd;
 		@env0:add: (gd @env0:, '/src/python/stdlib');
 		@env0:addAll: self extraSearchRoots;
+		@env0:addAll: self ___sysPathRoots___;
 		@env0:yourself.
 	"Return via a local rather than ``^'' out of the do: block.  This
 	method is reachable from the CPython shim's PyInit user-action
@@ -2745,6 +2751,44 @@ extraSearchRoots
 	so they can be configured per session without recompiling the class.
 	Used to point Grail at third-party package trees (e.g. NumPy)."
 	^ SessionTemps @env0:current @env0:at: #Grail_importlib_extraRoots otherwise: #()
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___sysPathRoots___
+	"``sys.path'' as an Array of directory strings, or #() when it is unusable.
+
+	Appending to sys.path is THE documented way to extend the import search path in
+	Python, and Grail's resolver did not consult it at all -- so
+	``sys.path.append(d); import m'' raised ModuleNotFoundError no matter what was
+	in d.  extraSearchRoots serves the same purpose but is Grail-specific, so only
+	code written FOR Grail could reach it; ordinary Python could not.
+
+	Read live rather than mirrored into extraSearchRoots: sys.path is an ordinary
+	list a caller may append to, pop from, or replace wholesale -- the
+	append-then-pop-in-cleanup idiom is standard, and test_traceback's
+	make_module uses exactly it -- so a copy taken at configuration time would go
+	stale.
+
+	Fully guarded, and non-string entries are skipped: sys.path is a plain list
+	that may hold anything (CPython allows path-hook objects there), and a failure
+	to read it must not turn every import into an error."
+
+	| sm p out |
+	"The sys MODULE instance, via sys.modules -- ``sys'' names the class here, and
+	the path list lives on the instance."
+	sm := [(self @env1:modules) @env0:at: #'sys' otherwise: nil]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	sm == nil ifTrue: [^ #()].
+	p := [sm @env0:at: #'path']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	p == nil ifTrue: [^ #()].
+	out := OrderedCollection @env0:new.
+	[p @env0:do: [:entry |
+		(entry isKindOf: CharacterCollection) ifTrue: [
+			entry @env0:isEmpty ifFalse: [out @env0:add: entry @env0:asString]]]]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	^ out @env0:asArray
 %
 
 category: 'Grail-Module Loading'
@@ -2789,6 +2833,7 @@ ___moduleNameToSoPath___: aName
 		@env0:add: gd;
 		@env0:add: (gd @env0:, '/src/python/stdlib');
 		@env0:addAll: self extraSearchRoots;
+		@env0:addAll: self ___sysPathRoots___;
 		@env0:yourself.
 	result := nil.
 	searchRoots @env0:do: [:root | | base dir entries |
@@ -3110,8 +3155,15 @@ ___import__: positional kw: kwargs
 								provided := [(result ___pyAttrLoad___: fromName @env0:asSymbol). true]
 									@env0:on: AbstractException do: [:ignored | false].
 								provided ifFalse: [
-									ModuleNotFoundError ___signal___:
-										(('No module named ''' @env0:, subName) @env0:, '''')]]]
+									"A missing NAME, not a missing module: CPython raises
+									ImportError here, saying ``cannot import name 'x' from
+									'PKG' (path)'' and carrying name / name_from / path.
+									ImportError is ModuleNotFoundError's BASE, so the
+									``try: from . import x except ImportError: pass'' hooks
+									this used to serve keep working."
+									ImportError @env0:___signalCannotImportName___: fromName
+										from: absoluteName
+										path: (self @env0:class ___moduleNameToPath___: absoluteName)]]]
 				]
 			]
 		]

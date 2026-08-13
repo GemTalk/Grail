@@ -415,12 +415,11 @@ method: dict
 __delitem__: key
 	"Remove d[key] from dictionary. Raises KeyError if key is not in the dictionary"
 
-	| hasKey |
-	hasKey := self @env0:includesKey: key.
-	hasKey ifFalse: [
+	| absent |
+	absent := self ___absentMarker___.
+	(self ___removeStoredKey___: key) == absent ifTrue: [
 		KeyError ___signal___: key
-	].
-	self @env0:removeKey: key
+	]
 %
 
 category: 'Grail-Comparison'
@@ -689,17 +688,76 @@ keys
 
 category: 'Grail-Mutation Methods'
 method: dict
+___removeStoredKey___: key
+	"Remove the entry ``key'' names and answer its value, or answer the marker
+	object ___absentMarker___ when there is none.
+
+	Exists because ``includesKey:'' and ``removeKey:'' do not agree on what a key
+	IS.  A SymbolDictionary -- which is what sys.modules and a Smalltalk-built
+	kwargs dict are -- stores Symbol keys and removes by IDENTITY, while lookup
+	compares by equality.  So a Python str key is FOUND and then cannot be
+	REMOVED, and GemStone signals an uncatchable LookupError instead of deleting
+	anything: ``del sys.modules[name]'' and ``sys.modules.pop(name, None)'' both
+	did this to every caller (test.support.import_helper's unload/forget, which
+	every temp-module test relies on for cleanup).
+
+	Resolution order: the key as given, then its Symbol form, then a scan
+	comparing as text -- a Symbol and an equal String are not interchangeable to
+	removeKey:, so the scan is what covers the residue."
+
+	| absent stored value |
+	absent := self ___absentMarker___.
+	(self @env0:includesKey: key) ifFalse: [
+		((key isKindOf: CharacterCollection)
+			and: [self @env0:includesKey: key @env0:asSymbol]) ifFalse: [^ absent]].
+	stored := nil.
+	"Prefer an exact removal; only look further when it cannot be done."
+	(self @env0:includesKey: key) ifTrue: [
+		value := self @env0:at: key.
+		(self @env0:removeKey: key ifAbsent: [absent]) == absent
+			ifFalse: [^ value]].
+	(key isKindOf: CharacterCollection) ifTrue: [
+		(self @env0:includesKey: key @env0:asSymbol) ifTrue: [stored := key @env0:asSymbol]].
+	stored isNil ifTrue: [
+		self @env0:keysDo: [:k |
+			(stored isNil and: [
+				((k isKindOf: CharacterCollection)
+					and: [key isKindOf: CharacterCollection])
+					and: [(k @env0:asString) @env0:= (key @env0:asString)]])
+						ifTrue: [stored := k]]].
+	stored isNil ifTrue: [^ absent].
+	value := self @env0:at: stored.
+	self @env0:removeKey: stored.
+	^ value
+%
+
+category: 'Grail-Mutation Methods'
+method: dict
+___absentMarker___
+	"A private sentinel distinguishing ``removed nothing'' from ``removed a value
+	that happens to be nil/None''.  Session-local and identity-compared."
+
+	| st m |
+	st := SessionTemps @env0:current.
+	m := st @env0:at: #'Grail_dict_absentMarker' otherwise: nil.
+	m == nil ifTrue: [
+		m := Object @env0:new.
+		st @env0:at: #'Grail_dict_absentMarker' put: m].
+	^ m
+%
+
+category: 'Grail-Mutation Methods'
+method: dict
 pop: key
 	"If key is in the dictionary, remove it and return its value, else raise KeyError"
 
-	| hasKey value |
-	hasKey := self @env0:includesKey: key.
-	hasKey ifFalse: [
+	| value absent |
+	absent := self ___absentMarker___.
+	value := self ___removeStoredKey___: key.
+	value == absent ifTrue: [
 		key ___requireHashableAsDictKey___.
 		KeyError ___signal___: key
 	].
-		value := self @env0:at: key.
-	self @env0:removeKey: key.
 	^ value
 %
 
@@ -709,25 +767,21 @@ pop: key _: default
 	"If key is in the dictionary, remove it and return its value, else
 	return default.
 
-	GRAIL: also try the symbol form of the key — kwargs dicts built
-	from Smalltalk-side ``__init__:kw:`` callers store keys as
-	Symbols, but Python source calling ``kwargs.pop('name', default)``
-	passes a String.  Symbol = String for human eyes but distinct
-	OOPs for identity-keyed dictionaries."
+	GRAIL: the Symbol form of the key is tried too -- kwargs dicts built from
+	Smalltalk-side ``__init__:kw:`` callers store Symbol keys, but Python source
+	calling ``kwargs.pop('name', default)`` passes a String.  Symbol = String for
+	human eyes but distinct OOPs for identity-keyed dictionaries.  That whole
+	resolution now lives in ___removeStoredKey___, which also covers the case this
+	method used to get WRONG: when includesKey: accepted the String, the old code
+	took the first branch and called ``removeKey: key'', which fails by identity
+	and raised an uncatchable LookupError instead of popping anything --
+	``sys.modules.pop(name, None)'' did that to every caller."
 
-	| value |
-	(self @env0:includesKey: key) ifTrue: [
-		value := self @env0:at: key.
-		self @env0:removeKey: key.
-		^ value
-	].
-	((key isKindOf: String) and: [self @env0:includesKey: key @env0:asSymbol])
-		ifTrue: [
-			value := self @env0:at: key @env0:asSymbol.
-			self @env0:removeKey: key @env0:asSymbol.
-			^ value
-		].
-	^ default
+	| value absent |
+	absent := self ___absentMarker___.
+	value := self ___removeStoredKey___: key.
+	value == absent ifTrue: [^ default].
+	^ value
 %
 
 category: 'Grail-Mutation Methods'
