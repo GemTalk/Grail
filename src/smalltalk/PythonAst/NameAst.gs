@@ -842,13 +842,19 @@ emitDoitEnclosingScopeLoad: aSymbol on: aStream
 		ifTrue: [
 			aStream nextPutAll: aSymbol.
 			^ self].
-	"Quotes emitted as characters rather than doubled inside a literal: the
-	target text itself contains a quoted name (``name 'items' is not
-	defined''), so a nested literal would need six consecutive quotes here."
-	aStream nextPutAll: 'NameError ___signal___: '; nextPut: $'.
-	aStream nextPutAll: 'name '; nextPut: $'; nextPut: $'.
-	aStream nextPutAll: aSymbol; nextPut: $'; nextPut: $'.
-	aStream nextPutAll: ' is not defined'; nextPut: $'
+	"Raised through ___signalUndefined___: so the exception carries CPython's
+	``name''.  The MESSAGE is unchanged -- the helper builds the same
+	``name 'x' is not defined'' text -- but the attribute is what traceback.py
+	needs to offer ``Did you mean: ...?'' and the ``Did you forget to import'' hint,
+	and what stdlib code reading ``e.name'' expects.  Emitting the raise inline
+	left every bare-name miss compiled into a function body without it; only the
+	MODULE-global path (module>>___moduleAttrLoad___:) had been converted.
+
+	``___signalUndefined___:'' is an env-0 classmethod and generated code is env 1,
+	hence the @env0: prefix.  Only the NAME is quoted now, so the doubled-quote
+	gymnastics the old inline message needed are gone."
+	aStream nextPutAll: 'NameError @env0:___signalUndefined___: '; nextPut: $'.
+	aStream nextPutAll: aSymbol; nextPut: $'
 %
 
 category: 'Grail-codegen helpers'
