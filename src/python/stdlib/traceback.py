@@ -455,14 +455,28 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False,
             header.append('  File "%s", line %s\n'
                           % (filename if filename is not None else '<string>',
                              lineno))
-            if text:
+            # SyntaxError's location fields are a plain writable tuple, so any of
+            # them can be any object -- ``SyntaxError('error', 'abcd')'' gives
+            # lineno='b', offset='c', text='d' (gh-128894).  CPython's rules,
+            # measured rather than guessed:
+            #
+            #   text not a str           -> no source block at all
+            #   offset None              -> source line, no caret
+            #   offset an int            -> source line + caret
+            #   offset present, not int  -> no source block at all
+            #
+            # The last is the surprising one: an unusable offset suppresses the
+            # source LINE too, not just the caret.  ``lineno'' needs no check --
+            # it is only ever printed, and ``line b'' is what CPython shows.
+            offset_usable = offset is None or isinstance(offset, int)
+            if isinstance(text, str) and offset_usable:
                 stripped = text.strip()
                 header.append('    ' + stripped + '\n')
                 if offset is not None:
                     # offset is 1-based and measured against the RAW line, so
                     # discount the whitespace strip() removed.
                     indent = len(text) - len(text.lstrip())
-                    caret = int(offset) - 1 - indent
+                    caret = offset - 1 - indent
                     if caret >= 0:
                         header.append('    ' + ' ' * caret + '^\n')
         elif filename is not None:
@@ -522,6 +536,27 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False,
     return lines
 
 
+def _require_exception(value):
+    """CPython's guard for the single-argument form: ``print_exception(42)'' is a
+    TypeError, not a render of ``int: 42''.
+
+    Only the ONE-argument form is checked.  The legacy three-argument form is left
+    alone deliberately -- CPython 3.14 fails it too, but with whatever the value
+    happens to raise (``print_exception(ValueError, 'x', None)'' answers
+    AttributeError on __suppress_context__), and tightening it here would break
+    Grail callers that pass a type and a message.  None stays legal, which is what
+    makes ``print_exception(None)'' render ``NoneType: None''."""
+    if value is None:
+        return
+    try:
+        ok = isinstance(value, BaseException)
+    except Exception:
+        ok = False
+    if not ok:
+        raise TypeError('Exception expected for value, %s found'
+                        % (type(value).__name__,))
+
+
 def _unpack_exc_args(exc_type, value, tb):
     """Resolve the (type, value, tb) triple from either legacy
     3-arg ``format_exception(type, value, tb)'' or the 3.10+ single-
@@ -531,6 +566,11 @@ def _unpack_exc_args(exc_type, value, tb):
     Grail exceptions now carry a real ``__traceback__'' (a PyTraceback
     or None), so the single-arg form auto-pulls it when the caller did
     not pass one — matching CPython's ``format_exception(exc)''."""
+    # A single argument that is neither an exception nor None is a TypeError, not
+    # something to render.  ``value is None and tb is None'' identifies the
+    # one-argument call, since the legacy form always supplies all three.
+    if value is None and tb is None:
+        _require_exception(exc_type)
     # 3.10+ single-arg form: a BaseException instance in exc_type.
     if isinstance(exc_type, BaseException):
         exc = exc_type
@@ -799,7 +839,12 @@ class FrameSummary:
         self.end_lineno = end_lineno if end_lineno is not None else lineno
         self.colno = colno
         self.end_colno = end_colno
-        self._line = line.strip() if isinstance(line, str) else line
+        # ``_lines'' and not ``_line'': that is the slot name CPython 3.14 uses, and
+        # test_lazy_lines reads it directly to check that lookup_line=False leaves it
+        # unfilled.  Stored RAW rather than stripped, because the ``line'' property
+        # strips on the way out -- keeping the original is what lets a caller that
+        # wants columns line them up against the text they were measured from.
+        self._lines = line
         # CPython stores repr()s, not the live objects, so a FrameSummary cannot
         # keep a frame's locals alive.
         if locals:
@@ -824,14 +869,18 @@ class FrameSummary:
         ``File ..., line N`` with no code line under it.  Lazy is what CPython
         does and is what keeps extract_tb cheap when the caller only wants
         filenames and line numbers."""
-        if self._line is None:
+        if self._lines is None:
             if self.filename is None or self.lineno is None:
                 return None
             got = linecache.getline(self.filename, self.lineno)
             if not got:
                 return None
-            self._line = got
-        return self._line.strip() if isinstance(self._line, str) else self._line
+            self._lines = got
+        if not isinstance(self._lines, str):
+            return self._lines
+        # The FIRST line only, stripped: a multi-line statement's cached text can
+        # hold several, which is CPython's shape too.
+        return self._lines.partition('\n')[0].strip()
 
     def __len__(self):
         return 4

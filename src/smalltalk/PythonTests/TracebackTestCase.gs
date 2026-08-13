@@ -1296,3 +1296,68 @@ testKeyErrorMessageQuotesItsKey
 		self assert: (answer = true)
 			description: 'KeyError-str check failed: ' , k , ' -> ' , answer printString].
 %
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testTracebackEdgeCases
+	"Three small traceback.py conformance gaps, grouped because each is a few
+	lines and none deserves its own test.
+
+	``print_exception(42)'' is a TypeError -- ``Exception expected for value, int
+	found'' -- not a render of ``int: 42''.  Grail rendered it and then failed
+	writing to a file it had not been given, so the reported error was an
+	AttributeError on None rather than the TypeError the caller should see.  Only
+	the ONE-argument form is guarded: the legacy three-argument form fails under
+	CPython too, but with whatever the value happens to raise, and tightening it
+	would break Grail callers that pass a type and a message.
+
+	FrameSummary keeps a frame's source text in ``_lines'' -- CPython 3.14's slot
+	name -- and it stays nil while lookup_line=False.  Grail called it ``_line'',
+	so code reading the documented name found nothing.  Stored raw and stripped by
+	the ``line'' property on the way out.
+
+	A SyntaxError's location fields are a plain writable tuple, so any of them can
+	be any object: ``SyntaxError('error', 'abcd')'' gives lineno='b', offset='c',
+	text='d' (gh-128894).  Rendering must not raise, and Grail called int() on the
+	offset and died with ValueError.  The rules were MEASURED against CPython
+	rather than guessed, because one of them is counter-intuitive:
+
+		text not a str           -> no source block at all
+		offset None              -> source line, no caret
+		offset an int            -> source line + caret
+		offset present, not int  -> no source block at all
+
+	An unusable offset suppresses the source LINE too, not just the caret; and
+	``lineno'' needs no check at all, since it is only ever printed -- ``line b''
+	is what CPython shows.
+
+	Every expectation is verified against real CPython by running the fixture
+	directly; see tests/python/traceback_edge_cases.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'traceback_edge_cases' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/traceback_edge_cases.py')
+		name: 'traceback_edge_cases'.
+	#( 'print_exception_of_a_non_exception_is_a_typeerror'
+	   'format_exception_of_a_non_exception_is_a_typeerror'
+	   'the_type_name_in_the_message_is_the_value_s'
+	   'none_is_still_legal'
+	   'a_real_exception_still_prints'
+	   'a_frame_summary_starts_with_no_cached_lines'
+	   'the_line_property_fills_the_cache_on_first_use'
+	   'a_supplied_line_is_kept_as_given'
+	   'lookup_line_true_resolves_immediately'
+	   'a_string_location_tuple_does_not_raise'
+	   'an_all_none_location_renders_the_message_alone'
+	   'an_int_text_field_suppresses_the_source_block'
+	   'a_six_field_location_behaves_the_same'
+	   'a_non_int_offset_suppresses_the_source_line_too'
+	   'a_none_offset_shows_the_source_line_without_a_caret'
+	   'a_non_int_lineno_is_printed_as_is'
+	   'a_wellformed_syntax_error_is_unaffected' ) do: [:k |
+		| answer |
+		answer := mod @env0:perform: k asSymbol env: 1.
+		self assert: (answer = true)
+			description: 'traceback edge-case check failed: ' , k , ' -> ' , answer printString].
+%
