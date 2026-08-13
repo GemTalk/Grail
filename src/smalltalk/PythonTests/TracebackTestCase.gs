@@ -1023,3 +1023,71 @@ testRecursionContextChain
 			description: 'recursion-chain check failed: ' , k].
 %
 
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testExceptionGroupTreeRendering
+	"A PEP 654 group is the one exception that does not render as a single block
+	of text: its children are drawn inside a box, each under a numbered rule.
+	Grail rendered the group's own line and stopped, so a group reported strictly
+	less than it knew.
+
+	Three pieces were missing, and each is independently checked by the fixture.
+
+	format_exception_only(eg, show_group=True) indents each nesting level by
+	THREE spaces; Grail used two, and indented CUMULATIVELY -- each level
+	prefixing the level below -- rather than from the absolute depth.  The depth
+	is not only the width: it also decides whether a multi-line MESSAGE is split
+	into one string per line, which is what lets every line carry the indent.
+	The group's OWN message is deliberately not split.
+
+	TracebackException>>exceptions did not exist -- a list of TracebackException
+	for a group, None for anything else -- so nothing downstream could draw a
+	tree even in principle, and max_group_width / max_group_depth were accepted
+	and then discarded.
+
+	format() and the module-level format_exception() now draw the box.  The
+	margin is positional state shared across the WHOLE chain (CPython keeps it in
+	a private _ExceptionPrintContext), which is why format_exception hands a
+	group over to TracebackException instead of rendering it link by link: its
+	own walk has nowhere to keep that state.
+
+	Deliberately NOT asserted: the caret lines CPython puts under the failing
+	expression, and ZeroDivisionError's wording (Grail says ``integer division or
+	modulo by zero'' where CPython says ``division by zero'').  Both are
+	independent gaps that merely show up inside group output, and asserting them
+	here would make this test fail for reasons unrelated to groups.
+
+	Every expectation is verified against real CPython by running the fixture
+	directly; see tests/python/exception_groups.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'exception_groups' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_groups.py')
+		name: 'exception_groups'.
+	#( 'a_nested_exception_is_indented_three_spaces'
+	   'each_nesting_level_adds_three_more'
+	   'a_nested_multiline_message_is_split_per_line'
+	   'a_nested_note_is_indented_with_its_exception'
+	   'a_nested_syntax_error_indents_its_location_block'
+	   'an_indented_syntax_error_still_renders_at_top_level'
+	   'show_group_is_off_by_default'
+	   'a_group_reports_its_children_as_tracebackexceptions'
+	   'the_children_carry_their_own_messages'
+	   'a_nested_group_child_is_itself_a_group'
+	   'format_draws_a_numbered_rule_per_child'
+	   'format_draws_the_whole_box'
+	   'a_nested_group_is_indented_two_spaces_per_level'
+	   'max_group_width_truncates_the_children'
+	   'one_truncated_exception_is_singular'
+	   'max_group_depth_stops_the_nesting'
+	   'the_depth_limit_keeps_the_siblings_of_what_it_elided'
+	   'format_exception_renders_the_tree_too'
+	   'a_group_still_reports_its_own_traceback'
+	   'a_group_with_a_non_group_chain_link_still_chains'
+	   'two_tracebackexceptions_from_one_group_are_equal'
+	   'different_children_make_them_unequal' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'exception-group check failed: ' , k].
+%
