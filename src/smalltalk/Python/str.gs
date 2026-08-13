@@ -2628,4 +2628,25 @@ zfill: width
 	^ stream @env0:contents
 %
 
+set compile_env: 1
+category: 'Grail-Pickle'
+method: CharacterCollection
+__getnewargs__
+	"CPython's str.__getnewargs__: the argument tuple that rebuilds this
+	value through __new__.
+
+	The string itself, as a plain str -- CPython's str.__getnewargs__()
+	answers (str(self),).
+
+	It exists for PICKLING an immutable builtin's subclass.  ``class MySub(str)''
+	carries its value in the CONSTRUCTOR, not in instance state, so
+	object.__reduce_ex__'s new-style reduction has to hand the value back as a
+	__new__ argument -- allocating a bare instance rebuilds an empty one.  Grail's
+	pickle used to reduce any str subclass to a plain str, losing the class."
+
+	| tupleClass |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	^ tupleClass @env0:withAll: { self @env0:asString }
+%
+
 set compile_env: 0
