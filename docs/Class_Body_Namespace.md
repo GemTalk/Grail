@@ -34,21 +34,21 @@ hand it one.
 Three approaches were investigated and each fails for a structural reason, not
 for want of effort.
 
-**Mirror each assignment into the namespace, keyed by name.** This is the
-smallest change that looks sufficient, and it cannot work.
-`ClassDefAst >> classBodyAttributes` collapses to **one pair per name** — "last
-assignment wins", by design, so that `args_check = staticmethod(args_check)`
-rebinding a sibling `def` sees the def as already bound. By the time anything
-could write to a namespace, `a = 1; a = 2` is already a *single* store. The
-duplicate is lost at scan time, which is precisely the event
-`test_enum_dict_in_metaclass` asserts on.
+**Mirror each assignment into the namespace, keyed by name.** This is what
+stage 1 does, and it works — see below. An earlier revision of this note claimed
+it could not, on the grounds that `classBodyAttributes` collapses to one pair per
+name. That was wrong, and worth correcting rather than deleting: the collapse is
+in `attrAssignPos`, which only decides the *bound-names context* an emit runs
+under. `classBodyAttributes` itself keeps one pair per (statement, target) in
+source order, so `a = 1; a = 2` already emits two stores and evaluates both
+right-hand sides. Verified by side effect, not by reading.
 
 **Gate the new path on an explicit `metaclass=` keyword**, to contain the blast
 radius at compile time. It misses inherited metaclasses: `class Sub(Base)` where
 `Base` already has one gets `Meta.__prepare__` in CPython and no keyword to key
-off here. A runtime gate (`namespace is nil`) does not have that hole and costs
-one test per assignment, so prefer it — but it does not rescue the approach
-above.
+off here. Stage 1 accepts that deliberately — the hole is narrower than it looks,
+because Grail does not install a Python metaclass as the Smalltalk metaclass, so
+a subclass has nothing to ask either way. Closing it means fixing that first.
 
 **Populate the namespace after the body runs**, then hand it to the metaclass.
 Every one of the five tests observes the namespace *during* the body — a
@@ -89,6 +89,29 @@ Two properties to preserve, both of which have bitten previous changes here:
   guarded region entirely (see `Persistent_Modules_and_Classes.md`), so anything
   emitted inside it — the metaclass hook, decorators, `__init_subclass__` — does
   not re-run. The namespace belongs inside that region with them.
+
+## Stage 1, as shipped
+
+`__prepare__` is called for a class statement that names a metaclass, and every
+class-body **assignment** is routed through the returned mapping in source order
+— body level and inside a compound statement (`with`, `if`, loops) alike. Two
+places do it: the attribute-value emit in `ClassDefAst`, and
+`object >> ___classBodyDefinitionalStore___:put:`, which both the single and the
+chained runtime store already funnel through. `EnumDict(cls_name)` gained the
+constructor CPython gives it, which a `__prepare__` returning `EnumDict(cls)`
+needs and which the inherited dict constructor was refusing.
+
+That closes `test_enum_dict_in_metaclass`. The other four still need what stage 1
+does not do:
+
+- `def` and nested `class` bindings bypass the namespace — each has its own
+  emission path
+- `vars()` inside a body answers a plain dict, not the live namespace, which is
+  what `test_ignore` and `test_dynamic_members_with_static_methods` write into
+- `auto()` is not resolved at assignment time, which `test_using_members_as_nonmember`
+  needs — the read-back is already in place for it, but no namespace exists for a
+  plain `class E(Flag)` since none names a metaclass
+- an inherited metaclass is not asked, per the note above
 
 ## Scale
 
