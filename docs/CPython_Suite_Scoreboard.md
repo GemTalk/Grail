@@ -46,7 +46,7 @@ different rows and merges cleanly.
 | test.test_slice | OK | 11 | 0 | 0 | 0 |  |
 | test.test_bool | OK | 31 | 0 | 0 | 0 |  |
 | test.test_iter | OK | 57 | 0 | 0 | 4 |  |
-| test.test_traceback | ERROR | 370 | 44 | 17 | 217 |  |
+| test.test_traceback | ERROR | 370 | 45 | 15 | 218 |  |
 | test.test_compare | OK | 16 | 0 | 0 | 0 |  |
 | test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
 | test.test_keywordonlyarg | OK | 11 | 0 | 0 | 0 |  |
@@ -61,8 +61,8 @@ different rows and merges cleanly.
 | test.test_listcomps | ERROR | 60 | 7 | 19 | 0 |  |
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
 | test.test_copy | ERROR | 81 | 21 | 12 | 0 |  |
+| test.test_scope | FAIL | 41 | 4 | 0 | 4 |  |
 | test.test_yield_from | ERROR | 43 | 17 | 12 | 0 |  |
-| test.test_scope | ERROR | 41 | 3 | 1 | 4 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
 | test.test_format | OK | 18 | 0 | 0 | 3 |  |
 | test.test_binop | IMPORTERROR | 0 | 0 | 0 | 0 | B class object has no attribute 'register' |
@@ -73,7 +73,7 @@ different rows and merges cleanly.
 | test.test_decorators | ERROR | 16 | 1 | 5 | 0 |  |
 | test.test_print | ERROR | 9 | 6 | 2 | 0 |  |
 | test.test_builtin | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd800 is illegal for Unicode |
-| test.test_call | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'requires_limited_api' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
+| test.test_call | OK | 186 | 0 | 0 | 182 |  |
 | test.test_dynamic | ERROR | 11 | 5 | 2 | 0 |  |
 | test.test_exception_variations | ERROR | 30 | 2 | 7 | 0 |  |
 | test.test_global | IMPORTERROR | 0 | 0 | 0 | 0 | Unexpected token: NEWLINE '' at line 165 |
@@ -83,6 +83,6 @@ different rows and merges cleanly.
 | test.test_super | ERROR | 40 | 13 | 24 | 3 |  |
 | test.test_typechecks | ERROR | 6 | 2 | 1 | 0 |  |
 | test.test_with | ERROR | 54 | 6 | 5 | 0 |  |
-| test.test_positional_only_arg | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'dis' |
+| test.test_positional_only_arg | ERROR | 28 | 11 | 4 | 0 |  |
 | test.test_string_literals | ERROR | 20 | 3 | 10 | 0 |  |
 | test.test_genericclass | ERROR | 22 | 12 | 7 | 1 |  |

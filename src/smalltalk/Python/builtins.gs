@@ -179,22 +179,30 @@ category: 'Grail-Built-in Functions'
 method: builtins
 _exec: positional kw: kwargs
 	"Python builtin exec(source_or_code, globals=None, locals=None).
-	Grail implementation: parse ``source`` as a module body, evaluate
-	it in a fresh module scope pre-populated with ``globals``, then
-	reflect every binding produced by the body back into the
-	``globals`` mapping.  ``locals`` is ignored (the Python contract
-	already permits aliasing globals==locals at module-level exec).
+	Grail implementation: parse ``source`` as a module body, evaluate it in a
+	fresh module scope pre-populated with ``globals`` (then ``locals`` on top,
+	so a locals entry shadows a globals one exactly as a name lookup would),
+	then reflect the bindings the body produced back into the ``locals``
+	mapping -- which is ``globals`` when locals was not supplied, since that
+	is what CPython defaults it to.
 
-	The load-bearing caller is jinja2's
-	``Template.from_code(env, code, ...)`` which compiles the
-	generated template-render source and exec's it into a fresh
-	dict so the dict ends up populated with ``root``, ``blocks``,
-	``name``, ``debug_info`` etc.
+	``locals'' used to be IGNORED outright, with every binding reflected into
+	globals.  That is not an approximation of the 3-argument form, it is a
+	silent no-op for it: ``l = {}; exec('def f(): ...', {}, l)'' left l EMPTY,
+	so nothing exec'd into a separate namespace could be read back at all --
+	defs, classes, assignments and imports alike (test_call's
+	test_function_with_many_args, which reads l['f'], is one line of that).
 
-	Without exec, jinja2 template rendering can't progress past the
-	from_code step regardless of how much of the compiler runs."
+	The load-bearing caller is jinja2's ``Template.from_code(env, code, ...)''
+	which compiles the generated template-render source and exec's it into a
+	fresh dict so the dict ends up populated with ``root'', ``blocks'',
+	``name'', ``debug_info'' etc.  That is the 2-argument form and is
+	unaffected: globals and locals are then the same object.
 
-	| source globalsDict scope sym k |
+	Without exec, jinja2 template rendering can't progress past the from_code
+	step regardless of how much of the compiler runs."
+
+	| source globalsDict localsDict scope seeded globalNames |
 	source := positional @env0:at: 1.
 	"exec() takes source TEXT here.  A PyCode -- what ``f.__code__'' answers --
 	is metadata (name, filename, line, arg counts), not executable code: Grail
@@ -213,31 +221,98 @@ _exec: positional kw: kwargs
 	(globalsDict @env0:isNil) ifTrue: [
 		globalsDict := KeyValueDictionary @env0:new
 	].
-	"Build a SymbolDictionary seeded from the globals mapping; module
-	scope must use Symbol keys.  The live dict views (PyModuleDict from
-	globals(), PyInstanceDict from obj.__dict__) speak keysAndValuesDo:
-	too -- exec(src, globals()) is the canonical caller."
+	localsDict := (positional @env0:size @env0:>= 3)
+		ifTrue: [positional @env0:at: 3]
+		ifFalse: [nil].
+	"CPython: locals defaults to globals, so the 2-argument form keeps
+	reflecting into globals exactly as before."
+	(localsDict @env0:isNil) ifTrue: [localsDict := globalsDict].
 	scope := SymbolDictionary @env0:new.
-	((globalsDict isKindOf: KeyValueDictionary)
-		or: [globalsDict isKindOf: PyInstanceDict]) ifTrue: [
-		globalsDict @env0:keysAndValuesDo: [:key :value |
+	seeded := self ___seedDoitScope___: scope from: globalsDict.
+	"Locals on top: a name bound in both resolves to the locals value."
+	(localsDict @env0:== globalsDict) @env0:ifFalse: [
+		self ___seedDoitScope___: scope from: localsDict].
+	"Run the source as a module body in the seeded scope.  Tag the
+	debug capture as #exec so the .tpz / .ir files under $TMP/codegen/
+	carry the ___exec_N___ prefix.  globalNamesInto: collects the names the
+	source declares ``global'', which is the one thing that overrides the
+	locals routing below -- see ___reflectDoitScope___:."
+	globalNames := IdentitySet @env0:new.
+	ModuleAst @env0:evaluateSource: source usingModuleScope: scope as: #exec
+		globalNamesInto: globalNames.
+	self ___reflectDoitScope___: scope seeded: seeded into: localsDict
+		globalNames: globalNames globals: globalsDict.
+	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___seedDoitScope___: aScope from: aDict
+	"Copy aDict's entries into the SymbolDictionary an exec/eval doit runs in
+	-- module scope must use Symbol keys.  The live dict views (PyModuleDict
+	from globals(), PyInstanceDict from obj.__dict__) speak keysAndValuesDo:
+	too; exec(src, globals()) is the canonical caller.
+
+	Answers a dictionary of what was seeded, which
+	___reflectDoitScope___:seeded:into: uses to tell the caller's own entries
+	apart from the bindings the source produced."
+
+	| seeded sym |
+	seeded := KeyValueDictionary @env0:new.
+	((aDict isKindOf: KeyValueDictionary)
+		or: [aDict isKindOf: PyInstanceDict]) ifTrue: [
+		aDict @env0:keysAndValuesDo: [:key :value |
 			"doitScopeNameFor: mangles the six names that collide with a
 			Smalltalk pseudo-variable, so ``self'' in the exec'd source finds
 			the caller's receiver instead of the doit's nil one."
 			sym := NameAst @env0:doitScopeNameFor:
 				(key @env0:isSymbol ifTrue: [key] ifFalse: [key @env0:asString @env0:asSymbol]).
-			scope @env0:at: sym put: value]
-	].
-	"Run the source as a module body in the seeded scope.  Tag the
-	debug capture as #exec so the .tpz / .ir files under $TMP/codegen/
-	carry the ___exec_N___ prefix."
-	ModuleAst @env0:evaluateSource: source usingModuleScope: scope as: #exec.
-	"Reflect every binding back into the original globals dict using
-	string keys (Python convention), undoing the pseudo-variable mangling."
-	scope @env0:keysAndValuesDo: [:key :value |
-		k := NameAst @env0:doitScopeNameToPythonName: key.
-		globalsDict @env0:at: k put: value].
-	^ None
+			aScope @env0:at: sym put: value.
+			seeded @env0:at: sym put: value]].
+	^ seeded
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___reflectDoitScope___: aScope seeded: seeded into: targetDict
+	"Reflect back with no ``global'' overrides -- eval()'s case, since a
+	``global'' statement cannot appear inside an expression."
+
+	^ self ___reflectDoitScope___: aScope seeded: seeded into: targetDict
+		globalNames: nil globals: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___reflectDoitScope___: aScope seeded: seeded into: targetDict globalNames: globalNames globals: globalsDict
+	"Write the bindings an exec/eval doit produced back into targetDict, with
+	string keys (Python convention) and the pseudo-variable mangling undone.
+
+	Only the bindings the SOURCE produced: an entry still holding the exact
+	object it was seeded with is the caller's own and is skipped, so
+	``exec(src, globals_dict, l)'' leaves l holding what src bound rather than
+	a copy of globals_dict.  The comparison is by IDENTITY, so rebinding a
+	name to an equal-but-distinct object still counts.  It does mean a
+	rebinding to the identical object it already held (``exec('x = 1', {'x':
+	1}, l)'', where GemStone interns the SmallInteger) is indistinguishable
+	from no binding at all and does not land in l -- the one case this loses,
+	and only when globals and locals are separate mappings.
+
+	A name the source declared ``global'' goes to globalsDict instead.  Grail
+	runs the body in one flat scope, so that declaration is the only evidence
+	left at this point that the binding was meant for globals rather than
+	locals -- and it is exactly the evidence CPython acts on."
+
+	aScope @env0:keysAndValuesDo: [:key :value |
+		((seeded @env0:includesKey: key)
+			@env0:and: [(seeded @env0:at: key) @env0:== value])
+			@env0:ifFalse: [ | pyName target |
+				pyName := NameAst @env0:doitScopeNameToPythonName: key.
+				target := ((globalNames @env0:notNil)
+					@env0:and: [globalNames @env0:includes: pyName @env0:asString @env0:asSymbol])
+					ifTrue: [globalsDict]
+					ifFalse: [targetDict].
+				target @env0:at: pyName put: value]]
 %
 
 category: 'Grail-Built-in Functions'
@@ -248,15 +323,13 @@ _eval: positional kw: kwargs
 	in the supplied ``globals'' scope, return the value.  Raises
 	SyntaxError if the source is anything other than a bare
 	expression (assignments / multiple statements belong to exec()).
-	``locals'' is currently ignored — matches the approximation
-	_exec uses (Python permits aliasing globals==locals at module
-	level, and a finer-grained Locals shadow isn't yet wired up).
 
-	Walrus-expression bindings (``(x := 5) + 1'') and any other
-	side-effect bindings inside the expression land in ``globals''
-	via the same reflect-back loop _exec uses."
+	``locals'' is honoured on the same terms as _exec:'s -- seeded over
+	globals for lookups, and the target the reflect-back writes to -- so
+	walrus bindings (``(x := 5) + 1'') and any other side-effect binding
+	inside the expression land where CPython puts them."
 
-	| source globalsDict scope sym k result |
+	| source globalsDict localsDict scope seeded result |
 	source := positional @env0:at: 1.
 	"Source TEXT only -- see the matching guard in _exec: for why a PyCode
 	cannot be evaluated and must fail as a catchable TypeError."
@@ -268,24 +341,16 @@ _eval: positional kw: kwargs
 		ifFalse: [nil].
 	globalsDict @env0:isNil ifTrue: [
 		globalsDict := KeyValueDictionary @env0:new].
-	"Seed a fresh SymbolDictionary scope from globals (live dict views
-	accepted -- see _exec)."
+	localsDict := (positional @env0:size @env0:>= 3)
+		ifTrue: [positional @env0:at: 3]
+		ifFalse: [nil].
+	(localsDict @env0:isNil) ifTrue: [localsDict := globalsDict].
 	scope := SymbolDictionary @env0:new.
-	((globalsDict isKindOf: KeyValueDictionary)
-		or: [globalsDict isKindOf: PyInstanceDict]) ifTrue: [
-		globalsDict @env0:keysAndValuesDo: [:key :value |
-			"Mangled where the name collides with a Smalltalk pseudo-variable
-			-- see NameAst class >> doitScopeNameFor: and _exec:."
-			sym := NameAst @env0:doitScopeNameFor: (key @env0:isSymbol
-				ifTrue: [key]
-				ifFalse: [key @env0:asString @env0:asSymbol]).
-			scope @env0:at: sym put: value]].
+	seeded := self ___seedDoitScope___: scope from: globalsDict.
+	(localsDict @env0:== globalsDict) @env0:ifFalse: [
+		self ___seedDoitScope___: scope from: localsDict].
 	result := ModuleAst @env0:evaluateExpressionSource: source usingModuleScope: scope.
-	"Reflect any bindings produced inside the expression (walrus, etc.)
-	back into globals using string keys, undoing the mangling."
-	scope @env0:keysAndValuesDo: [:key :value |
-		k := NameAst @env0:doitScopeNameToPythonName: key.
-		globalsDict @env0:at: k put: value].
+	self ___reflectDoitScope___: scope seeded: seeded into: localsDict.
 	^ result
 %
 

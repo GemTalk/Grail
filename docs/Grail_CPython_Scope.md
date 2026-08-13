@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 31 | 23 | 36 | 90 |
+| P1 | 32 | 22 | 36 | 90 |
 | P2 | 14 | 2 | 18 | 34 |
 | P3 | 0 | 1 | 55 | 56 |
 | P4 | 0 | 0 | 75 | 75 |
-| **In-scope** | **45** | **26** | **184** | **255** |
+| **In-scope** | **46** | **25** | **184** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -88,7 +88,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **71 are wired into the harness** (P1 54 · P2 16 · P3 1) and **45 of those score OK**.
+Of the 255 in-scope modules, **71 are wired into the harness** (P1 54 · P2 16 · P3 1) and **46 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -111,7 +111,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_bool` | bool type (language). |
 | ❗ | `test_builtin` | Built-in functions (language). |
 | ✅ | `test_bytes` | bytes / bytearray (language/core type). |
-| ❗ | `test_call` | Call protocol (language). |
+| ✅ | `test_call` | Call protocol (language). |
 |  | `test_class` | Class definition/semantics (language). |
 | ✅ | `test_compare` | Object comparison protocol (language). |
 | ❗ | `test_complex` | complex type (language). |
