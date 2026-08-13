@@ -746,6 +746,57 @@ testExceptionChaining
 
 category: 'Grail-Tests - Traceback Runtime'
 method: TracebackTestCase
+testSysPathImportAndFromImportErrors
+	"Three import-machinery rules, each independently broken, none of them about
+	tracebacks -- they surfaced while chasing the ImportError suggestion tests.
+
+	sys.path was not consulted AT ALL.  The resolver searched grailDir, the bundled
+	stdlib, and a Grail-specific ``extraSearchRoots'' list only code written for
+	Grail could reach, so ``sys.path.append(d); import m'' raised
+	ModuleNotFoundError however d was populated.  sys.path is now searched too,
+	LAST -- deliberately not first as in CPython, so a directory a caller adds
+	cannot shadow Grail's own ported ``os'' or ``traceback''.
+
+	``from PKG import missing'' raised ModuleNotFoundError naming ``PKG.missing''
+	as a missing MODULE.  It is a missing NAME: CPython raises ImportError with
+	``cannot import name 'x' from 'PKG' (path)'' and carries name / name_from /
+	path.  ImportError is ModuleNotFoundError's BASE, so the
+	``try: from . import x except ImportError: pass'' hooks the old behaviour
+	served keep working.
+
+	Deleting a str key from a Symbol-keyed dictionary removed nothing and signalled
+	an UNCATCHABLE Smalltalk LookupError -- lookup compares by equality so the key
+	was FOUND, removal matches by identity so it matched nothing.  sys.modules is
+	such a dictionary, so ``del sys.modules[name]'' and
+	``sys.modules.pop(name, None)'' did this to every caller, test.support's
+	unload/forget among them.  That one is why the other two showed no scoreboard
+	gain at first: fixing the import let those tests reach their cleanup, which
+	then died here.
+
+	Verified against real CPython by running the fixture directly; see
+	tests/python/sys_path_import.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'sys_path_import' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/sys_path_import.py')
+		name: 'sys_path_import'.
+	#( 'a_directory_on_sys_path_is_searched'
+	   'a_module_found_via_sys_path_lands_in_sys_modules'
+	   'a_from_import_of_a_present_name_works'
+	   'a_from_import_of_a_missing_name_raises_importerror'
+	   'the_missing_name_error_reads_like_cpythons'
+	   'the_missing_name_error_carries_name_and_name_from'
+	   'deleting_a_module_from_sys_modules_works'
+	   'popping_a_module_from_sys_modules_works'
+	   'popping_an_absent_key_returns_the_default'
+	   'deleting_an_absent_key_raises_keyerror' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'import-machinery check failed: ' , k].
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
 testModuleDictOpsAndNameErrorName
 	"The mapping operations a module namespace must support, and the ``name'' every
 	NameError must carry.
