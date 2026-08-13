@@ -1921,7 +1921,9 @@ ___grailFlagNamedMask: cls
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
 ___grailFlagSingleBitMask: cls
-	"OR of only the SINGLE-BIT named members (CPython's _flag_mask_).  A
+	"OR of only the SINGLE-BIT named members (CPython's _singles_mask_; its
+	_flag_mask_ is ___grailFlagNamedMask: above, which counts multi-bit
+	members too).  A
 	STRICT/CONFORM Flag inverts within this, NOT the full mask that also
 	covers a multi-bit member (``MASK = 255'' with only A=1/B=2): ~A is B, not
 	254.  When every member is single-bit this equals ___grailFlagMask:, so a
@@ -3022,7 +3024,9 @@ ___grailInstallClassProtocol: cls
 	mc := cls @env0:class.
 	#(#'__reversed__' #'mro' #'__repr__' #'__str__' #'__format__:'
 		#'_member_names_' #'_member_map_' #'__members__' #'_value2member_map_'
-		#'_value_repr_' #'_new_member_' #'__dir__' #'__bool__' #'__new__')
+		#'_value_repr_' #'_new_member_' #'__dir__' #'__bool__' #'__new__'
+		#'_flag_mask_' #'_singles_mask_' #'_all_bits_'
+		#'___grailSetClassBoundary___:')
 		@env0:do: [:sel |
 			| prov provCat |
 			prov := mc @env0:whichClassIncludesSelector: sel environmentId: 1.
@@ -3980,6 +3984,76 @@ __members__
 	mutating the live registry map through what CPython makes read-only."
 
 	^ self _member_map_ @env0:copy
+%
+
+category: 'Grail-Class Attrs'
+classmethod: Enum
+_flag_mask_
+	"CPython keeps three masks on every Flag CLASS, built up member by member in
+	_proto_member.__set_name__:
+
+	    enum_class._flag_mask_ |= value
+	    if _is_single_bit(value):
+	        enum_class._singles_mask_ |= value
+	    enum_class._all_bits_ = 2 ** ((enum_class._flag_mask_).bit_length()) - 1
+
+	Grail derives them from the registry record instead of accumulating them,
+	which answers the same at every point -- the record is live throughout
+	construction, so a __new__ or __init__ that reads one mid-build sees the
+	members built so far, exactly as CPython's running total does.
+
+	_flag_mask_ is the OR of EVERY named member's value, multi-bit ones
+	included; ___grailFlagNamedMask: already computes it for the KEEP invert.
+
+	A non-flag enum has none of the three -- CPython only sets them under
+	``if issubclass(enum_class, Flag)'' -- so reading one is an AttributeError
+	there, as it is in CPython."
+
+	^ Enum ___grailFlagMaskAttr: self named: #'_flag_mask_'
+%
+
+category: 'Grail-Class Attrs'
+classmethod: Enum
+_singles_mask_
+	"OR of the SINGLE-BIT members only -- CPython's _singles_mask_, the space a
+	STRICT/CONFORM flag inverts within.  See _flag_mask_ above."
+
+	^ Enum ___grailFlagMaskAttr: self named: #'_singles_mask_'
+%
+
+category: 'Grail-Class Attrs'
+classmethod: Enum
+_all_bits_
+	"``2 ** (_flag_mask_.bit_length()) - 1'' -- every bit position up to the
+	highest one any member uses, filled in.  A flag whose single member is
+	1 << 97 has an _all_bits_ of 2**98 - 1 (test_flag_with_custom_new), so this
+	is emphatically NOT the mask itself.  See _flag_mask_ above."
+
+	^ Enum ___grailFlagMaskAttr: self named: #'_all_bits_'
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailFlagMaskAttr: cls named: aName
+	"Shared body of _flag_mask_ / _singles_mask_ / _all_bits_: refuse the lot on
+	a non-flag enum, then answer the one asked for.
+
+	The refusal matters as much as the values.  CPython sets these three only
+	for a Flag subclass, so ``PlainEnum._all_bits_'' is an AttributeError there;
+	answering 0 would quietly make every enum look like an empty flag."
+
+	| mask |
+	(Enum ___grailIsFlagClass: cls) ifFalse: [
+		^ AttributeError ___signal___: 'type object '''
+			@env0:, cls @env0:name @env0:asString @env0:, ''' has no attribute '''
+			@env0:, aName @env0:asString @env0:, ''''].
+	aName @env0:= #'_singles_mask_' ifTrue: [
+		^ Enum ___grailFlagSingleBitMask: cls].
+	mask := Enum ___grailFlagNamedMask: cls.
+	aName @env0:= #'_flag_mask_' ifTrue: [^ mask].
+	"bit_length: highBit is 1-based and answers 0 for 0, which is the same
+	number Python's bit_length() gives."
+	^ (1 @env0:bitShift: mask @env0:highBit) @env0:- 1
 %
 
 category: 'Grail-Class Attrs'
