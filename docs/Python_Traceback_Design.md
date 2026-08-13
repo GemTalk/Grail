@@ -2063,3 +2063,84 @@ temps are genuinely absent from it. Reaching them would need either a codegen
 change (record each function's local names, and read the temps some other way) or
 VM support — a much larger piece than this one, and worth its own investigation
 rather than an incremental attempt.
+
+### 9.23 An except handler's raise is caught by its sibling (2026-08-13, gs40) — DIAGNOSED, NOT FIXED
+
+**The bug.** In Grail, an exception raised inside an `except` handler is caught by
+a *later* `except` clause of the same `try`. CPython propagates it out of the whole
+statement — the except clauses are alternatives for the try **body** only.
+
+```python
+try:
+    raise ValueError('original')
+except ValueError:
+    raise RuntimeError('from handler')   # must leave the try
+except Exception:
+    return 'this must not run'           # Grail runs this
+```
+
+The cause is the emitted shape. Handlers compile to nested protected blocks:
+
+```
+[[ body ] on: T1 do: [H1] ] on: T2 do: [H2]
+```
+
+so H1's *body* runs inside H2's protected block, and H2 catches whatever H1 raises.
+**Every handler but the last is exposed to every handler after it.** That silently
+breaks the commonest narrowing idiom in the language, and it is not a traceback
+issue at all — it is core control flow.
+
+`tests/python/handler_raise.py` is the reproduction: 18 checks, all passing under
+real CPython 3.14.6, **7 failing in Grail**. It is committed and standalone-runnable
+but deliberately *not* wired into SUnit, since it would fail the suite.
+
+**This is also the answer to §9.19's open question.** The import-suggestion tests do
+`except ImportError as e: raise e from None` with an `except Exception` after it, and
+got their own re-raise back in the second handler — reported as the baffling
+`Expected ImportError but got <ImportError class object>`. Three theories in §9.19
+were checked and all three were wrong (ImportError matching, the `exec` boundary,
+`ModuleNotFoundError`'s hierarchy). The fault was in `try/except` codegen and had
+nothing to do with imports. Instrumenting the failing test, rather than reasoning
+about it, is what found this in minutes.
+
+**Two designs were built and measured; each has a real defect.** Recorded because
+the defects are the useful part — both look obviously correct until run.
+
+*1. Record which handler matched; run its body after the `on:do:`.*
+
+```
+[ | sel exc | sel := 0.
+  [[ body ] on: T1 do: [:ex | sel := 1. exc := ex. nil] ] on: T2 do: [:ex | sel := 2. ...].
+  sel = 1 ifTrue: [ <H1 body> ].  sel = 2 ifTrue: [ <H2 body> ] ] value
+```
+
+Semantically exact, and it **breaks `raise`**. Once a handler's `on:do:` has
+unwound, GemStone will not signal that exception again: `UncontinuableError` 6011,
+*Exception has already been signaled*. A bare `raise` inside a handler therefore
+becomes impossible — `___ex pass` needs an active handler context, `___ex signal`
+and `___pyRaise___:` both hit 6011. Found by `test_listcomps`'
+`test_comp_in_try_except` (a comprehension raising `ValueError` under
+`except ValueError: ... raise`), not by the fixture, whose re-raise cases happened
+to sit in a shape that survived.
+
+*2. Keep the nesting; shield the later selectors.* A flag in a block enclosing the
+statement, set while any handler body runs; `PyLazyExceptSelector` answers
+`handles: false` while it is set. This **works** — all 18 fixture checks pass,
+`test_traceback` 46 → 44 failures, `test_listcomps` unchanged — but it wraps every
+`try` in one extra block, and that costs stack depth: `test_richcmp`'s
+`MiscTest.test_recursion` goes from OK to `RecursionError`. A previously-green
+module regressing is not a trade worth making, and it is the same lesson §9.21
+recorded about the division guard — a frame added per level of recursion is not free.
+
+**The design that avoids both**, for whoever takes this next: give each `try`
+statement its own flag in a **method temp**, declared by `FunctionDefAst` (one per
+`try` in the body, e.g. `___tryInH_1`, `___tryInH_2`). Method temps are per
+*activation*, which is the granularity the flag needs, and they cost no stack
+frame. A single shared counter will not do — an inner `try`'s handlers must still
+catch exceptions from the inner body while an outer handler is running, so the
+state has to be per-`try`, not per-function. Module-level `try` (no method temps)
+needs a separate route.
+
+**Found along the way, unrelated and unfixed:** `str(KeyError('x'))` is `'x'` in
+Grail and `"'x'"` in CPython — KeyError's `__str__` is the *repr* of its argument.
+The fixture uses `RuntimeError` throughout to avoid entangling the two.
