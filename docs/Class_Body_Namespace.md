@@ -123,22 +123,51 @@ the surviving value. CPython's own `test_dynamic_members_with_static_methods`
 pins the correct reading (`'FOO_CAT' already defined as 'aloof'`), and that
 expectation is updated with the reasoning.
 
+## Stage 3, as shipped
+
+`EnumDict.__setitem__` resolves an `auto()` **as it is assigned**, so the rest of
+the body sees the number and `ALL = nonmember(A | B)` works. That closes
+`test_using_members_as_nonmember`.
+
+The marker is **mutated** — its `value` slot filled in, CPython's `v.value =
+self._generate_next_value(...)` — and the mapping stores the number. The mutation
+is not decoration: it is what keeps `dupe = third` an alias rather than a second
+call to the generator, since the same marker object bound again now answers a
+value.
+
+Two things did **not** happen, deliberately.
+
+The builder's resolution pass was **not retired**. It still runs for every path
+with no class body — the functional API, `_convert_`, dynamically built classes —
+and the fixture pins both spellings agreeing. What the namespace resolves, the
+builder simply sees as an ordinary value.
+
+The ordering rule was **not** reimplemented in `EnumDict`. CPython raises
+`_generate_next_value_ must be defined before members` from `__setitem__`, keyed
+on an `_auto_called` flag, but a `def` still bypasses the namespace (below), so
+`EnumDict` never sees the generator arrive and cannot time it. The check stays
+where it was, reading `___classBodyOrder___` — only its **evidence** changed.
+It used to look for a member still holding an unresolved marker; resolving at
+assignment takes that evidence away, so `EnumDict` records the names it actually
+had to generate for (`_auto_named`) and the builder reads that instead. Closing
+the `def` gap is what would let the rule move to where CPython keeps it.
+
+A namedtuple value carrying markers is left to the builder, which unwraps and
+rebuilds it. The namespace handles a bare marker and a plain tuple of markers.
+
 ## What is still missing
 
 - `def` and nested `class` bindings bypass the namespace — each has its own
-  emission path
+  emission path. This is now the load-bearing one: it blocks the `_auto_called`
+  ordering rule moving to `EnumDict`, where CPython keeps it
 - `vars()` inside a body answers a plain dict, not the live namespace, which is
   what `test_ignore` and `test_dynamic_members_with_static_methods` write into
-- `auto()` is not resolved at assignment, which `test_using_members_as_nonmember`
-  needs. The read-back is in place and an enum body now has a namespace, so what
-  remains is `EnumDict.__setitem__` calling `_generate_next_value_` on the way in
-  — and retiring the later resolution pass in the builder, which currently
-  reproduces the assignment-time ordering rule by inspecting `___classBodyOrder___`
 - an inherited PYTHON metaclass is not asked, per the note above
 
 ## Scale
 
-This touches every class definition in the corpus, so it is tier 2 by
-`.claude/CLAUDE.md`'s rule and wants the full CPython suite before any PR. It is
-realistically several sessions of work, not one, and it should be staged with a
-full-suite run at each stage rather than landed at once.
+Stages 1 and 2 touched every class definition in the corpus, so they were tier 2
+by `.claude/CLAUDE.md`'s rule and each took a full CPython suite run. Stage 3 did
+not: it is confined to `EnumDict` and `PyEnumTypes`, so it is tier 1 — the
+machinery it needed was already in place and paid for. Later stages that move
+codegen again (`def` bindings, `vars()`) go back to tier 2.

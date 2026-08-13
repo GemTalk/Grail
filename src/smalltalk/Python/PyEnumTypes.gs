@@ -721,13 +721,26 @@ ___grailBuildMembers: cls names: attrNames
 	        blue = auto()
 
 	CPython sets _auto_called only when it has to CALL the generator, and
-	red's value was supplied outside the body.  The marker carries that
-	distinction already: a preset auto() answers ``value'', a fresh one raises
-	-- the same probe the resolution loop below uses.
+	red's value was supplied outside the body.
+
+	WHERE that distinction is read from depends on whether the body ran against
+	a namespace.  With one, EnumDict resolved each auto() as it was assigned and
+	recorded the names it had to generate for (_auto_named) -- so the marker is
+	long gone from the class attribute by the time this runs, and asking the
+	namespace is the only way to tell.  Without one -- the functional API,
+	_convert_, a class built without a class statement -- the marker is still
+	there and carries the distinction itself: a preset auto() answers ``value'',
+	a fresh one raises.
 
 	___classBodyOrder___ is what makes the position visible; it records defs
 	and assignments alike, in source order (see ClassDefAst)."
-	[ | order gnvIdx |
+	[ | order gnvIdx nsTbl ns autoNamed |
+	nsTbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingClassNamespace' otherwise: nil.
+	ns := nsTbl @env0:isNil ifTrue: [nil] ifFalse: [nsTbl @env0:at: cls otherwise: nil].
+	autoNamed := ns @env0:isNil
+		ifTrue: [nil]
+		ifFalse: [ns @env0:dynamicInstVarAt: #'_auto_named'].
 	order := (cls @env0:class @env0:whichClassIncludesSelector:
 		#'___classBodyOrder___' environmentId: 1) @env0:isNil
 			ifTrue: [nil]
@@ -749,9 +762,11 @@ ___grailBuildMembers: cls names: attrNames
 					ifFalse: [dynHolder @env0:isNil
 						ifTrue: [nil]
 						ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym]].
-				((raw isKindOf: GrailEnumAuto)
+				((autoNamed @env0:notNil
+					and: [autoNamed @env0:includes: nameSym @env0:asString])
+					or: [(raw isKindOf: GrailEnumAuto)
 					and: [([raw ___pyAttrLoad___: #'value'. true]
-						@env0:on: AbstractException do: [:ex | false]) @env0:not])
+						@env0:on: AbstractException do: [:ex | false]) @env0:not]])
 					ifTrue: [
 						TypeError ___signal___:
 							'_generate_next_value_ must be defined before members']]]] ]
@@ -1539,10 +1554,39 @@ ___grailMetaclassNamespace___
 	resolved as it is assigned, so a later statement in the same body sees the
 	number rather than an unresolved marker."""
 
-	| enumDict |
+	| enumDict ns |
 	enumDict := Python @env0:at: #'EnumDict' otherwise: nil.
 	enumDict isNil ifTrue: [^ nil].
-	^ enumDict @env1:__new__: (self @env1:__name__)
+	ns := enumDict @env1:__new__: (self @env1:__name__).
+	"The class being defined, so the namespace can resolve an ``auto()'' the way
+	___grailBuildMembers: would: which _generate_next_value_ applies, and
+	whether the class is Flag-natured or a StrEnum, are both questions about
+	cls.  CPython's EnumType.__prepare__ hands the same thing over as
+	``enum_dict._cls_name'' plus the generator taken off the first base."
+	ns @env0:dynamicInstVarAt: #'_cls' put: self.
+	^ ns
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailNamespaceAutoValueFor: nameStr class: cls count: count lastValues: lastValues
+	"""The value a bare ``auto()'' takes, chosen by exactly the rule
+	___grailBuildMembers: applies: a user _generate_next_value_ wins, else a
+	StrEnum yields the lowercased name, else a Flag-natured class takes the next
+	power of two above the highest value so far and a plain enum the next
+	integer.
+
+	Called from EnumDict at ASSIGNMENT time, which is where CPython resolves.
+	The builder keeps its own copy of the same choice because it still runs for
+	every path that has no namespace -- the functional API, _convert_, and any
+	class built without a class statement."""
+
+	(Enum ___grailClassHasGnv: cls) ifTrue: [
+		^ Enum ___grailGnvValueFor: cls name: nameStr
+			count: count lastValues: (list @env0:withAll: lastValues)].
+	(Enum ___grailIsStrEnumClass: cls) ifTrue: [^ nameStr @env0:asLowercase].
+	(Enum ___grailIsFlagClass: cls) ifTrue: [^ Enum ___grailFlagAutoNext: lastValues].
+	^ Enum ___grailPlainAutoNext: lastValues
 %
 
 category: 'Grail-Enum Metaclass'
