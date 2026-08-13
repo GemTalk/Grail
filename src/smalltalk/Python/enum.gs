@@ -258,18 +258,147 @@ _verify: positional kw: kwargs
 	ValueError on a duplicate-valued enum (test_enum test_unique_dirty via
 	@verify).  CONTINUOUS is enforced too (test_continuous): the member values
 	must form a gap-free run -- consecutive integers for an enum, consecutive
-	powers of two for a flag.  NAMED_FLAGS stays advisory (returns the class
-	unchanged); skipping it only means we never raise on it."
+	powers of two for a flag.  NAMED_FLAGS is enforced as well (test_composite):
+	every bit an alias carries must belong to some named member."
 
-	| checksUnique checksContinuous |
+	| checksUnique checksContinuous checksNamedFlags |
 	checksUnique := positional @env0:includes: (self @env0:at: #UNIQUE).
 	checksContinuous := positional @env0:includes: (self @env0:at: #CONTINUOUS).
+	checksNamedFlags := positional @env0:includes: (self @env0:at: #NAMED_FLAGS).
 	^ [:positional2 :keywords2 |
 		| cls |
 		cls := positional2 @env0:at: 1.
 		checksUnique ifTrue: [self unique: cls].
 		checksContinuous ifTrue: [self continuous: cls].
+		checksNamedFlags ifTrue: [self named_flags: cls].
 		cls]
+%
+
+category: 'Grail-Built-in Functions'
+method: enum
+show_flag_values: aValue
+	"CPython enum.show_flag_values -- ``list(_iter_bits_lsb(value))'', the set
+	bits of value from the least significant up: show_flag_values(3) is [1, 2].
+	Named in the ValueError @verify(NAMED_FLAGS) raises, as the way to see which
+	bits an alias is made of.
+
+	_iter_bits_lsb takes a member's value when handed a member, and refuses a
+	negative number -- ``%r is not a positive integer'' -- which is also why the
+	NAMED_FLAGS check skips negative aliases rather than decomposing them."
+
+	| num out |
+	num := aValue.
+	(num isKindOf: (Python @env0:at: #Enum)) ifTrue: [
+		num := num @env0:dynamicInstVarAt: #value].
+	((num isKindOf: Integer) and: [num @env0:< 0]) ifTrue: [
+		^ ValueError ___signal___: ((Python @env0:at: #Enum) ___grailValueRepr: aValue)
+			@env0:, ' is not a positive integer'].
+	out := OrderedCollection @env0:new.
+	[num @env0:> 0] @env0:whileTrue: [ | b |
+		"num & (~num + 1) -- the lowest set bit."
+		b := num @env0:bitAnd: (num @env0:bitInvert) @env0:+ 1.
+		out @env0:add: b.
+		num := num @env0:bitXor: b].
+	^ list @env0:withAll: out @env0:asArray
+%
+
+category: 'Grail-Built-in Functions'
+method: enum
+named_flags: cls
+	"``@verify(NAMED_FLAGS)`` -- raise ValueError when an ALIAS carries a bit no
+	NAMED member covers (CPython enum.verify NAMED_FLAGS):
+
+	    @verify(NAMED_FLAGS)
+	    class Bizarre(Flag):
+	        b = 3
+	        c = 4
+	        d = 6
+
+	Only c is named -- b and d are multi-bit, so they are aliases -- and between
+	them they need bits 1 and 2, which nothing names:
+
+	    invalid Flag 'Bizarre': aliases b and d are missing combined values of
+	    0x3 [use enum.show_flag_values(value) for details]
+
+	The bits are accumulated across ALL offending aliases, so the reported value
+	is a single combined number: ``value 0x%x'' when it is one bit, ``combined
+	values of 0x%x'' when it is several.
+
+	ORDER.  CPython walks _member_map_, which is a dict in declaration order, so
+	its message lists aliases as they were written.  Grail's _member_map_ is
+	hash-ordered (as ``unique'' above also has to work around), so declaration
+	order is taken from the record's definition-order roll -- which holds every
+	multi-bit and zero member, i.e. exactly the aliases this check is about.  A
+	same-VALUE alias (``dupe = 6'' beside ``d = 6'') builds no member of its own
+	and so is not in that roll; those are gathered afterwards, which can order
+	them differently from CPython when both kinds are present in one class.
+	Nothing reachable pins that combination, and the bits reported are the same
+	either way."
+
+	| enumClass named namedValues offenders missingValue msg aliasPart valuePart |
+	enumClass := Python @env0:at: #Enum.
+	(enumClass ___grailIsFlagClass: cls) ifFalse: [^ cls].
+	named := enumClass ___grailMembers: cls.
+	namedValues := Set @env0:new.
+	named @env0:do: [:m | namedValues @env0:add: (m @env0:dynamicInstVarAt: #value)].
+	offenders := OrderedCollection @env0:new.
+	missingValue := 0.
+	"Definition order first: every built member that is NOT canonical."
+	(enumClass ___grailAllNamedMembers: cls) @env0:do: [:m |
+		(named @env0:includes: m) ifFalse: [
+			| missed |
+			missed := self ___grailMissingBitsOf: m against: namedValues.
+			missed @env0:= 0 ifFalse: [
+				offenders @env0:add: (m @env0:dynamicInstVarAt: #name) @env0:asString.
+				missingValue := missingValue @env0:bitOr: missed]]].
+	"Then any same-value alias -- a NAME bound to a member that carries another."
+	cls @env1:_member_map_ @env0:keysAndValuesDo: [:nm :m | | own |
+		own := (m @env0:dynamicInstVarAt: #name).
+		(own @env0:notNil and: [(nm @env0:asString @env0:= own @env0:asString) not]) ifTrue: [
+			| missed |
+			missed := self ___grailMissingBitsOf: m against: namedValues.
+			missed @env0:= 0 ifFalse: [
+				offenders @env0:add: nm @env0:asString.
+				missingValue := missingValue @env0:bitOr: missed]]].
+	offenders @env0:isEmpty ifTrue: [^ cls].
+	aliasPart := offenders @env0:size @env0:= 1
+		ifTrue: ['alias ' @env0:, (offenders @env0:at: 1) @env0:, ' is missing']
+		ifFalse: [ | head |
+			head := WriteStream @env0:on: String @env0:new.
+			1 to: offenders @env0:size @env0:- 1 do: [:i |
+				i @env0:> 1 ifTrue: [head @env0:nextPutAll: ', '].
+				head @env0:nextPutAll: (offenders @env0:at: i)].
+			'aliases ' @env0:, head @env0:contents @env0:, ' and '
+				@env0:, (offenders @env0:at: offenders @env0:size) @env0:, ' are missing'].
+	valuePart := ((missingValue @env0:bitAnd: missingValue @env0:- 1) @env0:= 0)
+		ifTrue: ['value 0x' @env0:, (missingValue @env0:printStringRadix: 16) @env0:asLowercase]
+		ifFalse: ['combined values of 0x'
+			@env0:, (missingValue @env0:printStringRadix: 16) @env0:asLowercase].
+	msg := 'invalid Flag ''' @env0:, cls @env0:name @env0:asString @env0:, ''': '
+		@env0:, aliasPart @env0:, ' ' @env0:, valuePart
+		@env0:, ' [use enum.show_flag_values(value) for details]'.
+	^ ValueError ___signal___: msg
+%
+
+category: 'Grail-Built-in Functions'
+method: enum
+___grailMissingBitsOf: aMember against: namedValues
+	"The bits of aMember's value that no NAMED member's value equals -- CPython's
+	``missed = [v for v in _iter_bits_lsb(alias.value) if v not in member_values]''
+	folded into one integer, 0 when nothing is missing.
+
+	A negative alias is skipped (0), because _iter_bits_lsb refuses to decompose
+	one; a non-integer value has no bits to check."
+
+	| v missed |
+	v := aMember @env0:dynamicInstVarAt: #value.
+	((v isKindOf: Integer) and: [v @env0:>= 0]) ifFalse: [^ 0].
+	missed := 0.
+	[v @env0:> 0] @env0:whileTrue: [ | b |
+		b := v @env0:bitAnd: (v @env0:bitInvert) @env0:+ 1.
+		(namedValues @env0:includes: b) ifFalse: [missed := missed @env0:bitOr: b].
+		v := v @env0:bitXor: b].
+	^ missed
 %
 
 category: 'Grail-Built-in Functions'
