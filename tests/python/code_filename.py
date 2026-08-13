@@ -68,17 +68,22 @@ def frame_summary_has_source_line():
 
 def lookup_line_is_honoured():
     """lookup_line=False defers the linecache read; the default resolves it.
-    locals= captures repr()s rather than the live objects."""
+    locals= captures repr()s rather than the live objects.
+
+    The cache slot is ``_lines'', which is what CPython 3.14 calls it.  This
+    check used to read ``_line'' -- Grail's own name for it -- and so RAISED
+    AttributeError under real CPython rather than merely disagreeing.  One more
+    fixture that had never been run there."""
     path = Holder.meth.__code__.co_filename
 
     deferred = traceback.FrameSummary(path, 23, "meth", lookup_line=False)
-    if deferred._line is not None:
+    if deferred._lines is not None:
         return False                   # must not have looked it up yet
     if deferred.line.strip() != "return 1                       # line 23":
         return False                   # ...but reading .line resolves it
 
     eager = traceback.FrameSummary(path, 23, "meth")
-    if eager._line is None:
+    if eager._lines is None:
         return False                   # default resolves in __init__
 
     withlocals = traceback.FrameSummary(path, 23, "meth", locals={"a": 1})

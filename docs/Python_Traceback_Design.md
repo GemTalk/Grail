@@ -2253,3 +2253,74 @@ habit are where these hide.
 CPython 3.14.6 — passes in full. SUnit **4202, all green** (five stale assertions
 corrected). Full 71-module sweep: **0 regressions**, and no row moves — this is
 correctness the scoreboard cannot see, which is the honest way to report it.
+
+### 9.26 Three small conformance gaps, and a scoping result on carets (2026-08-13, gs40)
+
+**Carets are not the next thing, and now there is a reason on record.** §9.20/§9.24
+listed PEP 657 caret rendering as the largest remaining bucket (8 tests), and the
+plan looked cheap: `___pyPositionLiteralArray` already emits a full
+`#(line col endLine endColno sourceLine)` literal, and `___pushFrameFromPos___`
+already accepts it. Measuring CPython first killed the plan:
+
+```
+x = foo(bar()) + 1
+        ~~~^^
+```
+
+CPython's carets are **per-instruction** — they underline the *failing
+sub-expression*, not the statement. Grail's `___curPos___` is per-**statement** by
+design, so feeding it to the caret renderer would underline the whole line
+whenever a statement contains more than one call: confidently wrong output, which
+§9.10 already argues is worse than none. Real carets need a position store per
+*call site*, which changes both the cost of `___curPos___` and the meaning the
+§9.10 machinery depends on. That is a project, not an increment.
+
+**Nested-function frames are likewise deeper than they look.** A nested `def`
+compiles to an ExecBlock, and the raise-time capture records `(method, ip,
+receiver)` — so every closure of the same nested function shares one `GsNMethod`
+and there is no per-closure identity in the capture to name a frame by. Giving
+them frames means compiling nested defs to real methods, which is where closure
+semantics live.
+
+**What shipped instead: three small gaps, all in traceback.py.**
+
+`print_exception(42)` is a `TypeError` — *Exception expected for value, int found*
+— not a render of `int: 42`. Grail rendered it and then failed writing to a file
+it had not been given, so the error a caller saw was an `AttributeError` on None.
+Only the **one-argument** form is guarded: the legacy three-argument form fails
+under CPython too, but with whatever the value happens to raise, and tightening it
+would break Grail callers that pass a type and a message.
+
+`FrameSummary._lines` is CPython 3.14's slot name for a frame's cached source
+text, and it stays None while `lookup_line=False`. Grail called it `_line`.
+
+A SyntaxError's location fields are a plain writable tuple, so any of them can be
+any object — `SyntaxError('error', 'abcd')` gives `lineno='b'`, `offset='c'`,
+`text='d'` (gh-128894). Rendering must not raise; Grail called `int()` on the
+offset and died with `ValueError`. The rules were **measured**, because one is
+counter-intuitive:
+
+| condition | result |
+|---|---|
+| `text` not a str | no source block at all |
+| `offset` None | source line, no caret |
+| `offset` an int | source line + caret |
+| `offset` present, not an int | **no source block at all** |
+
+An unusable offset suppresses the source *line* too, not just the caret. `lineno`
+needs no check — it is only ever printed, so `line b` is what CPython shows.
+
+**And a fourth fixture was pinning Grail's own name.**
+`tests/python/code_filename.py` read `FrameSummary._line`, which does not exist in
+CPython — so that check did not merely disagree there, it **raised
+AttributeError**. After §9.21's `exec_class_definition.py`, §9.25's
+`exception_naming.py`, and the `handler_raise.py` near-miss, that is four. The
+common factor is not carelessness about expectations; it is that these fixtures
+are *driven from Smalltalk* and only 16 of the 253 have a `__main__` block, so
+most have never been executed under CPython at all. A guard is possible but not
+free: the other 237 legitimately test Grail-specific behaviour and would fail
+there by design.
+
+**Result: `test.test_traceback` 92 → 95 passing** (errors 17 → 14), the three
+tests named above, verified by name with nothing newly failing. SUnit **4224, all
+green**. Full 71-module sweep: **0 regressions, 1 improvement**.
