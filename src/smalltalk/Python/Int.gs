@@ -551,8 +551,8 @@ __divmod__: other
 	| quot rem |
 	"CPython: division/modulo by zero raises catchable
 	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
-	((other isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
-		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
+	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
 	quot := self @env0:// other.
 	rem := self @env0:\\ other.
 	^ tuple @env0:with: quot with: rem
@@ -638,8 +638,8 @@ __floordiv__: other
 	"Floor division."
 	"CPython: division/modulo by zero raises catchable
 	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
-	((other isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
-		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
+	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:// other].
 	((other @env0:class @env0:methodDictForEnv: 1)
@@ -793,8 +793,8 @@ __mod__: other
 	"Modulo operation."
 	"CPython: division/modulo by zero raises catchable
 	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
-	((other isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
-		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
+	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
 
 	(other isKindOf: Number) ifTrue: [^ self @env0:\\ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
@@ -872,8 +872,7 @@ __pow__: other
 		exponent coerces to float, so it is 0.0 ** -n -> division by zero),
 		not Grail's capacity OverflowError or an IEEE infinity."
 		((self @env0:= 0) and: [other @env0:< 0]) ifTrue: [
-			^ ZeroDivisionError ___signal___:
-				'0.0 cannot be raised to a negative power'].
+			^ ZeroDivisionError ___signal___: 'zero to a negative power'].
 		^ [ | r |
 			r := self @env0:raisedTo: other.
 			"Python: int ** a NEGATIVE int is a float (``4 ** -3`` == 0.015625),
@@ -930,8 +929,8 @@ __rdivmod__: other
 	"Reverse divmod (divmod(other, self))."
 	| quot rem |
 	"Reverse form: other OP self -- self is the divisor."
-	(self @env0:= 0) ifTrue: [
-		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
+	(ZeroDivisionError @env0:___isZeroDivisor___: self) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
 	quot := other @env0:// self.
 	rem := other @env0:\\ self.
 	^ tuple @env0:with: quot with: rem
@@ -951,8 +950,8 @@ method: int
 __rfloordiv__: other
 	"Reverse floor division (other // self)."
 	"Reverse form: other OP self -- self is the divisor."
-	(self @env0:= 0) ifTrue: [
-		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
+	(ZeroDivisionError @env0:___isZeroDivisor___: self) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
 
 	(other isKindOf: Number) ifTrue: [^ other @env0:// self].
 	((other @env0:class @env0:methodDictForEnv: 1)
@@ -977,8 +976,8 @@ method: int
 __rmod__: other
 	"Reverse modulo (other % self)."
 	"Reverse form: other OP self -- self is the divisor."
-	(self @env0:= 0) ifTrue: [
-		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
+	(ZeroDivisionError @env0:___isZeroDivisor___: self) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
 
 	(other isKindOf: Number) ifTrue: [^ other @env0:\\ self].
 	((other @env0:class @env0:methodDictForEnv: 1)
@@ -1091,8 +1090,8 @@ __rtruediv__: other
 	"Reverse true division (other / self).  As with __truediv__, int/int is
 	float division (self is the divisor here)."
 	"Reverse form: other OP self -- self is the divisor."
-	(self @env0:= 0) ifTrue: [
-		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
+	(ZeroDivisionError @env0:___isZeroDivisor___: self) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
 
 	(other isKindOf: Integer) ifTrue: [^ other ___intTrueDivFloat___: self].
 	(other isKindOf: Number) ifTrue: [^ other @env0:/ self].
@@ -1111,6 +1110,13 @@ ___intTrueDivFloat___: other
 	matching CPython's 'integer division result too large for a float'."
 
 	| f |
+	"``1 / False'' arrives HERE, not at __truediv__'s guard: False is not a
+	Number, so that guard passes it to the __index__ branch, which coerces it to
+	0 and hands it over.  Without this check the kernel divide raised, and the
+	handler below relabelled it ``integer division result too large for a
+	float'' -- an answer about the quotient's size for a divisor that is zero."
+	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
 	f := [(self @env0:/ other) @env0:asFloat] @env0:on: Error do: [:ex |
 		OverflowError ___signal___: 'integer division result too large for a float'].
 	((f @env0:_getKind) @env0:== 3) ifTrue: [
@@ -1181,8 +1187,8 @@ __truediv__: other
 	int/<GemStone Fraction> keeps its (pre-existing) exact result."
 	"CPython: division/modulo by zero raises catchable ZeroDivisionError;
 	the kernel ZeroDivide is uncatchable."
-	((other isKindOf: Number) and: [other @env0:= 0]) ifTrue: [
-		ZeroDivisionError ___signal___: 'integer division or modulo by zero'].
+	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
 
 	(other isKindOf: Integer) ifTrue: [^ self ___intTrueDivFloat___: other].
 	(other isKindOf: Number) ifTrue: [^ self @env0:/ other].

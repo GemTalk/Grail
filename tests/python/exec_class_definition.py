@@ -128,9 +128,15 @@ def exec_class_raises_python_errors_not_smalltalk_ones():
     ``undefined symbol items``, which is now the top remaining cause in
     test_listcomps.  Asserting CPython's NameError here would be asserting
     something Grail does not yet do.
+
+    Note on the message: this used to expect ``integer division or modulo by
+    zero'', which was Grail's own wording and had stopped being any CPython's --
+    3.14 collapsed every division-by-zero message into ``division by zero''.  So
+    this check was FALSE when run under real CPython, which is the thing running
+    the fixture standalone is supposed to catch.
     """
     return _catch(exec, 'class _C:\n    y = 1 / 0\n', {}) == \
-        'ZeroDivisionError: integer division or modulo by zero'
+        'ZeroDivisionError: division by zero'
 
 
 # ----------------------------------------- 3. the scopes test_listcomps drives

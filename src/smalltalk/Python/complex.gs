@@ -662,6 +662,9 @@ __rtruediv__: other
 	"Right-hand divide (other / self)."
 
 	| otherReal otherImag denom ac bd bc ad newReal newImag |
+	"Reverse form: other / self, so SELF is the divisor -- ``1 / 0j''."
+	(ZeroDivisionError @env0:___isZeroDivisor___: self) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
 	(other @env0:class) == complex
 		ifTrue: [
 			otherReal := other real.
@@ -725,6 +728,11 @@ __truediv__: other
 	instead of 10.0 because 0.1² rounds to 0.010000000000000002."
 
 	| c d a b newReal newImag r den |
+	"A zero denominator makes every quotient below NaN rather than an error --
+	``(1+2j) / 0'' answered ``(nan-nanj)''.  Checked on the operand as given, so
+	both a real zero and ``0j'' are caught."
+	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
+		ZeroDivisionError ___signal___: 'division by zero'].
 	(other @env0:class) == complex
 		ifTrue: [c := other real. d := other imag]
 		ifFalse: [c := other @env0:asFloat. d := 0.0].

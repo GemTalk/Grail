@@ -194,7 +194,7 @@ testOtherExceptionsPropagateUnchanged
 
 	self
 		assertResult: 'keep_other_exception'
-		equals: 'ZeroDivisionError: integer division or modulo by zero'
+		equals: 'ZeroDivisionError: division by zero'
 %
 
 category: 'Grail-Tests-PEP479'
@@ -238,7 +238,7 @@ testExceptionThroughComprehensionInBodyReachesConsumer
 
 	self
 		assertResult: 'passed_comprehension'
-		equals: 'ZeroDivisionError: integer division or modulo by zero'
+		equals: 'ZeroDivisionError: division by zero'
 %
 
 category: 'Grail-Tests-PEP479'
