@@ -646,6 +646,110 @@ __init_subclass__
 %
 
 category: 'Grail-Initialization'
+method: object
+___init_subclass__: positional kw: kwargs
+	"The end of PEP 487's cooperative chain: ``object.__init_subclass__''.
+
+	It is reachable INSTANCE-side, not only class-side, because that is where
+	the chain looks for it.  A class-body ``def __init_subclass__(cls, **kwds)''
+	compiles to an instance-side ___init_subclass__:kw: whose ``self'' is the
+	SUBCLASS being created, and the ``super().__init_subclass__(**kwds)'' every
+	well-behaved implementation opens with resolves through Super, which walks
+	instance-side method dictionaries.  Without a base here the last link in the
+	chain found nothing.
+
+	CPython raises for a leftover keyword, which is the whole point of making the
+	chain cooperative: a class keyword nobody consumed is a typo, and silence
+	would hide it."
+
+	(kwargs == nil or: [kwargs @env0:isEmpty]) ifFalse: [
+		^ TypeError ___signal___:
+			'object.__init_subclass__() takes no keyword arguments'].
+	^ None
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailInitSubclass___: kwargs
+	"PEP 487.  CPython's type.__new__ ends by calling
+
+	    super(cls, cls).__init_subclass__(**kwds)
+
+	on the class it has just built, and ClassDefAst emits this send at the
+	matching moment -- after the ___pyClassDefined___: metaclass hook, before the
+	class decorators -- with the forwarded class keywords.
+
+	The lookup starts at the SUPERCLASS, which is the whole subtlety of the
+	protocol: a class's own __init_subclass__ never runs for itself, only for
+	its subclasses.  Starting at the class instead would also be a straight
+	infinite recursion for the ordinary implementation, whose first act is to
+	delegate upwards.
+
+	The found method is run with the new class as the receiver -- an
+	instance-side method executed against a class object, which is exactly what
+	CPython's implicit ``classmethod'' wrapping of __init_subclass__ arranges.
+
+	Answers self so the send can sit in the ``C := C ...'' chain if it ever
+	needs to."
+
+	| sup sel instOwner metaOwner found meth |
+	sel := #'___init_subclass__:kw:'.
+	sup := self @env0:superclass.
+	sup == nil ifTrue: [^ self].
+	"Two spellings to look for.  A plain ``def __init_subclass__(cls, **kwds)''
+	compiles instance-side -- CPython makes it an implicit classmethod, and
+	running an instance-side method against a class object is Grail's equivalent.
+	The EXPLICIT ``@classmethod def __init_subclass__'' is legal too (redundant
+	in CPython, but written often enough), and that one compiles CLASS-side, so
+	the metaclass chain has to be searched as well."
+	instOwner := sup @env0:whichClassIncludesSelector: sel environmentId: 1.
+	metaOwner := sup @env0:class
+		@env0:whichClassIncludesSelector: sel environmentId: 1.
+	found := (instOwner == nil or: [metaOwner == nil])
+		ifTrue: [instOwner == nil ifTrue: [metaOwner] ifFalse: [instOwner]]
+		ifFalse: [
+			"Both spellings live in this chain -- take whichever class is nearer,
+			which is what a single CPython MRO would have done.  Only reached by
+			a hierarchy that mixes the two, so the extra walk costs nothing in
+			the ordinary case (and it walks superclass links only, with no
+			method-dictionary fetch)."
+			self ___grailNearerOf___: instOwner and: metaOwner @env0:thisClass
+				from: sup].
+	"Reaching object means nobody in the chain implements the hook.  Its base is
+	a no-op EXCEPT for the leftover-keyword complaint, so a class header that
+	passed keywords still has to run it."
+	found == nil ifTrue: [^ self].
+	found == object ifTrue: [
+		(kwargs == nil or: [kwargs @env0:isEmpty]) ifTrue: [^ self]].
+	meth := (found @env0:methodDictForEnv: 1)
+		@env0:at: sel otherwise: nil.
+	"The nearer owner may be the metaclass side, whose method lives on the
+	metaclass, not on the class."
+	meth == nil ifTrue: [
+		meth := (found @env0:class @env0:methodDictForEnv: 1)
+			@env0:at: sel otherwise: nil].
+	meth == nil ifTrue: [^ self].
+	self @env0:with: #() with: kwargs performMethod: meth.
+	^ self
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailNearerOf___: aClass and: anotherClass from: startClass
+	"Whichever of the two is met first walking up from startClass.  Answers
+	aClass if neither is on the chain, which cannot happen from the one caller
+	(both came from a selector lookup rooted there)."
+
+	| walker |
+	walker := startClass.
+	[walker == nil] whileFalse: [
+		walker == aClass ifTrue: [^ aClass].
+		walker == anotherClass ifTrue: [^ anotherClass].
+		walker := walker @env0:superClass].
+	^ aClass
+%
+
+category: 'Grail-Initialization'
 classmethod: object
 ___pyClassDefined___: attrNames
 	"Metaclass post-population hook.  ClassDefAst sends this (class-side)
