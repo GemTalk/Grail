@@ -1292,7 +1292,17 @@ __name__
 	messages interpolate this (test_contains: ``argument of type 'base_set'
 	...'')."
 
-	| bt id |
+	| bt id holder nm |
+	"``cls.__name__ = 'T''' is writable in CPython, and a class FACTORY is the
+	reason: collections.namedtuple builds one class and then names it after the
+	typename it was asked for.  An assigned name wins over every derivation
+	below -- it is the caller stating the answer outright.  Independent of
+	__qualname__, which CPython leaves alone when __name__ is set."
+	(self ___respondsTo___: #dynInstVars) ifTrue: [
+		holder := self @env0:perform: #dynInstVars env: 1.
+		holder @env0:notNil ifTrue: [
+			nm := holder @env0:dynamicInstVarAt: #'___name___'.
+			nm @env0:notNil ifTrue: [^ nm @env0:asString]]].
 	bt := self ___pythonBuiltinTypeName___.
 	bt @env0:notNil ifTrue: [^ bt].
 	"A class named after the module attribute it implements (functools_partial,
@@ -5122,6 +5132,14 @@ ___pyAttrStore___: aName put: aValue
 		test_enum test_pickle_nested_class."
 		(aName @env0:asString @env0:= '__qualname__') ifTrue: [
 			^ self ___classHolderAttrStore___: #'___qualname___' put: aValue].
+		"``cls.__name__ = 'T''' is writable too, and dropped for the same reason:
+		the class-side read performs the getter, which derives the name from the
+		Smalltalk class rather than looking for a stored one.  A class FACTORY is
+		what needs it -- collections.namedtuple builds one class and then names
+		it after the typename it was asked for, which is also what makes the
+		result picklable."
+		(aName @env0:asString @env0:= '__name__') ifTrue: [
+			^ self ___classHolderAttrStore___: #'___name___' put: aValue].
 		"(Enum member-reassignment is guarded in __setattr__:_:, the single
 		store entry point, BEFORE the accessor-setter dispatch.)"
 		"Canonical-class overlay: runtime stores on a shared canonical
