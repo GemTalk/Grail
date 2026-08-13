@@ -28,10 +28,10 @@ Where the in-scope tiers stand:
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
 | P1 | 30 | 3 | 57 | 90 |
-| P2 | 12 | 4 | 18 | 34 |
+| P2 | 13 | 3 | 18 | 34 |
 | P3 | 0 | 1 | 55 | 56 |
 | P4 | 0 | 0 | 75 | 75 |
-| **In-scope** | **42** | **8** | **205** | **255** |
+| **In-scope** | **43** | **7** | **205** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -46,6 +46,29 @@ moves a row:
 python3 scripts/sync_scope_status.py            # rewrite the column
 python3 scripts/sync_scope_status.py --check    # exit 1 if it is stale
 ```
+
+### Sizing the blank cells
+
+A blank Status is 205 of the 255 in-scope rows, so most of what this document
+describes is unknown rather than measured. Wiring a module means vendoring its
+test file into `src/python/stdlib/test/` first, which is why the measured set
+grows slowly — but whether the module a test *exercises* can be imported at all
+is one import away, and that is what says whether vendoring the test file is
+worth doing:
+
+```
+./scripts/cpython_import_census.py            # probe every unmeasured in-scope row
+./scripts/cpython_import_census.py --report   # re-print the last run
+```
+
+It maps each `test_x` to its subject module, imports each one through the same
+`builtins.__import__` a Python `import` statement reaches, and buckets the
+results into IMPORTS / MISSING / ERROR / NO_SUBJECT (a language test such as
+`test_grammar`, which needs no subject). The whole survey is one Grail session
+and a few seconds; the report is written to `out/cpython/import_census.tsv`
+(gitignored). It measures **importability, not conformance** — a subject that
+imports says the test file can be run, not that it will pass. Nothing here is
+committed and nothing gates CI.
 
 ## Summary
 
@@ -65,7 +88,7 @@ python3 scripts/sync_scope_status.py --check    # exit 1 if it is stale
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **42 of those score OK**.
+Of the 255 in-scope modules, **50 are wired into the harness** (P1 33 · P2 16 · P3 1) and **43 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -191,7 +214,7 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 |  | `test_dynamicclassattribute` | types.DynamicClassAttribute (used by enum). |
 | ❗ | `test_enum` | enum — core (in harness). |
 | ✅ | `test_fractions` | fractions — core numeric (in harness). |
-| ❗ | `test_functools` | functools — core (in harness). |
+| ✅ | `test_functools` | functools — core (in harness). |
 |  | `test_genericalias` | types.GenericAlias — list[int] etc. (language/typing). |
 |  | `test_graphlib` | graphlib.TopologicalSorter — pure algorithm. |
 | ✅ | `test_heapq` | heapq — core (in harness). |
