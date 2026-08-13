@@ -159,14 +159,15 @@ testInitOnTheClassItselfUnchanged
 	self assert: (self resultAt: 'own_init') asString equals: '4.869e+24/6.0518e+06'.
 %
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests - Alias construction'
 method: EnumCallAndInitTestCase
-testAliasIsNotInitialisedIsAKnownGap
-	"Recorded, NOT endorsed.  CPython builds a throwaway member for an alias and
-	initialises THAT, so a UniqueEnum base rejects ``grene = 2''; Grail reuses
-	the canonical member and never initialises it, so the alias is accepted.
-	Asserted as it behaves so that whoever fixes it sees this fail rather than
-	the gap going unnoticed (test_no_duplicates)."
+testAnAliasIsInitialisedToo
+	"CPython builds a THROWAWAY member for an alias and initialises that,
+	deciding alias-ness only afterwards -- which is how a UniqueEnum base
+	rejects ``grene = 2'' (test_no_duplicates).  Grail reused the canonical
+	member and built nothing, so the alias was accepted silently; this was
+	recorded here as a known gap until ___grailBuildMembers: moved the alias
+	test to CPython's place, after the build."
 
-	self assert: (self resultAt: 'alias_init_gap') asString equals: 'accepted:True'.
+	self assert: (self resultAt: 'alias_init') asString equals: 'ValueError'.
 %
