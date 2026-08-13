@@ -69,6 +69,6 @@ different rows and merges cleanly.
 | test.test_complex | ERROR | 37 | 13 | 12 | 0 |  |
 | test.test_enumerate | IMPORTERROR | 0 | 0 | 0 | 0 | name 'enumerate' is not defined |
 | test.test_raise | ERROR | 37 | 6 | 9 | 0 |  |
-| test.test_funcattrs | ERROR | 35 | 12 | 15 | 1 |  |
+| test.test_funcattrs | ERROR | 35 | 13 | 14 | 1 |  |
 | test.test_decorators | ERROR | 16 | 1 | 5 | 0 |  |
 | test.test_print | ERROR | 9 | 6 | 2 | 0 |  |

@@ -481,17 +481,29 @@ printSmalltalkOn: aStream
 	scope (jinja2's ``missing=missing``) resolve there at def-time instead of
 	failing in the inner block where the same name is the local being bound."
 	needsOuterBlock ifTrue: [
-		| numDefaults firstWithDefault |
+		| numDefaults firstWithDefault positionals |
+		"``defaults'' covers the POSITIONAL-ONLY params and the regular ones
+		together -- CPython's arguments node applies it to
+		``posonlyargs , args'' as one sequence -- so the name each default
+		belongs to has to be looked up in that combined list.  Indexing
+		``args args'' alone made the arithmetic go off the front of it for any
+		def whose defaults reach back into the posonly section: ``def f(a=1, /,
+		b=2)'' has 2 defaults over 1 regular arg, so firstWithDefault was 0 and
+		codegen died with a raw OffsetError (2003 objErrBadOffsetIncomplete,
+		max:1 actual:0) -- an uncatchable Smalltalk error during compilation, so
+		the whole module failed to import rather than one def failing.  That is
+		both of test_call's and test_positional_only_arg's IMPORTERRORs."
+		positionals := (args posonlyargs ifNil: [#()]) , (args args ifNil: [#()]).
 		numDefaults := hasPosDefaults ifTrue: [args defaults size] ifFalse: [0].
-		firstWithDefault := args args size - numDefaults + 1.
+		firstWithDefault := positionals size - numDefaults + 1.
 		aStream nextPut: $[; lf; nextPutAll: '| '.
 		1 to: numDefaults do: [:i |
-			aStream nextPutAll: '___default_'; nextPutAll: (args args at: firstWithDefault + i - 1) name; nextPutAll: '___ '].
+			aStream nextPutAll: '___default_'; nextPutAll: (positionals at: firstWithDefault + i - 1) name; nextPutAll: '___ '].
 		hasKwonly ifTrue: [aStream nextPutAll: '___kwdefaults___ '].
 		aStream nextPutAll: '|'; lf.
 		1 to: numDefaults do: [:i |
 			| pname |
-			pname := (args args at: firstWithDefault + i - 1) name.
+			pname := (positionals at: firstWithDefault + i - 1) name.
 			aStream nextPutAll: '___default_'; nextPutAll: pname; nextPutAll: '___ := '.
 			(args defaults at: i) printSmalltalkOn: aStream.
 			aStream nextPut: $.; lf].
