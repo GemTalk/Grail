@@ -69,6 +69,20 @@ different rows and merges cleanly.
 | test.test_complex | ERROR | 37 | 13 | 12 | 0 |  |
 | test.test_enumerate | IMPORTERROR | 0 | 0 | 0 | 0 | name 'enumerate' is not defined |
 | test.test_raise | ERROR | 37 | 6 | 9 | 0 |  |
-| test.test_funcattrs | ERROR | 35 | 12 | 15 | 1 |  |
+| test.test_funcattrs | ERROR | 35 | 13 | 14 | 1 |  |
 | test.test_decorators | ERROR | 16 | 1 | 5 | 0 |  |
 | test.test_print | ERROR | 9 | 6 | 2 | 0 |  |
+| test.test_builtin | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd800 is illegal for Unicode |
+| test.test_call | IMPORTERROR | 0 | 0 | 0 | 0 | a OffsetError occurred (error 2003), reason:objErrBadOffsetIncomplete, max:1 actual:0 |
+| test.test_dynamic | ERROR | 11 | 5 | 2 | 0 |  |
+| test.test_exception_variations | ERROR | 30 | 2 | 7 | 0 |  |
+| test.test_global | IMPORTERROR | 0 | 0 | 0 | 0 | Unexpected token: NEWLINE '' at line 165 |
+| test.test_hash | OK | 30 | 0 | 0 | 16 |  |
+| test.test_named_expressions | ERROR | 74 | 22 | 15 | 0 |  |
+| test.test_subclassinit | ERROR | 17 | 7 | 3 | 0 |  |
+| test.test_super | ERROR | 40 | 13 | 24 | 3 |  |
+| test.test_typechecks | ERROR | 6 | 2 | 1 | 0 |  |
+| test.test_with | IMPORTERROR | 0 | 0 | 0 | 0 | Expression Context should be <Load> but is <StoreAst> |
+| test.test_positional_only_arg | IMPORTERROR | 0 | 0 | 0 | 0 | a OffsetError occurred (error 2003), reason:objErrBadOffsetIncomplete, max:1 actual:0 |
+| test.test_string_literals | ERROR | 20 | 3 | 10 | 0 |  |
+| test.test_genericclass | ERROR | 22 | 12 | 7 | 1 |  |
