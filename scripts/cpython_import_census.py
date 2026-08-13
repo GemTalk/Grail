@@ -29,6 +29,10 @@ Verdicts per module:
                 script could not map.  Both are candidates for wiring.
     CRASH       the probe killed the session; the driver resumes past it
 
+"Is this a stdlib module?" is answered by scripts/cpython_314_stdlib_modules.txt
+-- the 3.14 series the scope document targets -- not by the interpreter running
+this script, which ./.setenv pins to 3.13 for unrelated reasons.
+
 Output is out/cpython/import_census.tsv (gitignored, like the rest of out/).
 Nothing here is committed and nothing gates CI: this is a survey to point the
 next vendoring effort, not a measurement of conformance.
@@ -45,6 +49,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SCOPE = ROOT / "docs" / "Grail_CPython_Scope.md"
 MANIFEST = ROOT / "scripts" / "cpython_suite_manifest.txt"
 PROBE = ROOT / "scripts" / "cpython_import_census.gs"
+STDLIB_NAMES = ROOT / "scripts" / "cpython_314_stdlib_modules.txt"
 OUTDIR = ROOT / "out" / "cpython"
 TSV = OUTDIR / "import_census.tsv"
 
@@ -52,6 +57,37 @@ TIER_HEADING = re.compile(r"^### (P[1-4]) — ")
 ROW = re.compile(r"^\|\s*(\S*)\s*\|\s*`(test_\w+)`\s*\|")
 
 TOPAZ_CFG = "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=500000;"
+
+
+def stdlib_names():
+    """The 3.14 module-name universe, from the vendored list.
+
+    Deliberately NOT sys.stdlib_module_names of whatever interpreter runs this:
+    ./.setenv prepends python@3.13 to PATH (the C shim needs its
+    python3-config), so every census run from a configured shell classified
+    against 3.13 -- which has no `annotationlib', so test_annotationlib was
+    filed as a language test rather than probed.  The scope document targets
+    3.14.4; the list has to as well.
+    """
+    if not STDLIB_NAMES.exists():
+        sys.exit("missing %s -- see its header for how to regenerate"
+                 % STDLIB_NAMES.relative_to(ROOT))
+    names = {
+        line.strip()
+        for line in STDLIB_NAMES.read_text().splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+    # Free drift check when the interpreter happens to BE a 3.14: a vendored
+    # list that has fallen behind the series it claims is worth knowing about,
+    # and this is the only moment we can tell.
+    if sys.version_info[:2] == (3, 14):
+        live = set(sys.stdlib_module_names)
+        if live != names:
+            print("note: vendored 3.14 list differs from this %s interpreter "
+                  "(+%d/-%d); see %s"
+                  % (sys.version.split()[0], len(live - names), len(names - live),
+                     STDLIB_NAMES.name), file=sys.stderr)
+    return names
 
 
 def unmeasured_by_tier():
@@ -118,11 +154,14 @@ def run_probe(names):
     verdicts, offset = {}, 0
     while offset < len(names):
         env["GRAIL_CENSUS_OFFSET"] = str(offset)
-        proc = subprocess.run(
-            ["topaz", "-lq", "-C", TOPAZ_CFG, "-S", str(PROBE)],
-            cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
-            capture_output=True, text=True, errors="replace",
-        )
+        try:
+            proc = subprocess.run(
+                ["topaz", "-lq", "-C", TOPAZ_CFG, "-S", str(PROBE)],
+                cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
+                capture_output=True, text=True, errors="replace",
+            )
+        except FileNotFoundError:
+            sys.exit("topaz not on PATH -- run `source .setenv` first")
         probing, done, progressed = None, False, 0
         for line in proc.stdout.splitlines():
             if line.startswith("CENSUS_FATAL|"):
@@ -224,9 +263,9 @@ def main():
         report(read_tsv())
         return
 
-    stdlib = sys.stdlib_module_names
-    print("host CPython %d.%d supplies the stdlib name list (%d names)"
-          % (sys.version_info[0], sys.version_info[1], len(stdlib)))
+    stdlib = stdlib_names()
+    print("classifying against the vendored CPython 3.14 module list (%d names)"
+          % len(stdlib))
 
     targets = unmeasured_by_tier()
     if not targets:
