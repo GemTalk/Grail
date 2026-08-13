@@ -33,7 +33,7 @@ different rows and merges cleanly.
 | test.test_bytes | OK | 317 | 0 | 0 | 25 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
-| test.test_enum | ERROR | 1077 | 5 | 7 | 6 |  |
+| test.test_enum | ERROR | 1077 | 4 | 6 | 6 |  |
 | test.test_unary | OK | 6 | 0 | 0 | 0 |  |
 | test.test_int_literal | OK | 6 | 0 | 0 | 0 |  |
 | test.test_unpack | OK | 1 | 0 | 0 | 0 |  |
@@ -46,7 +46,7 @@ different rows and merges cleanly.
 | test.test_slice | OK | 11 | 0 | 0 | 0 |  |
 | test.test_bool | OK | 31 | 0 | 0 | 0 |  |
 | test.test_iter | OK | 57 | 0 | 0 | 4 |  |
-| test.test_traceback | ERROR | 370 | 44 | 14 | 217 |  |
+| test.test_traceback | ERROR | 370 | 45 | 12 | 218 |  |
 | test.test_compare | OK | 16 | 0 | 0 | 0 |  |
 | test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
 | test.test_keywordonlyarg | OK | 11 | 0 | 0 | 0 |  |
@@ -83,6 +83,6 @@ different rows and merges cleanly.
 | test.test_super | ERROR | 40 | 13 | 24 | 3 |  |
 | test.test_typechecks | ERROR | 6 | 2 | 1 | 0 |  |
 | test.test_with | ERROR | 54 | 6 | 5 | 0 |  |
-| test.test_positional_only_arg | ERROR | 28 | 11 | 4 | 0 |  |
+| test.test_positional_only_arg | ERROR | 28 | 4 | 4 | 0 |  |
 | test.test_string_literals | ERROR | 20 | 3 | 10 | 0 |  |
 | test.test_genericclass | ERROR | 22 | 12 | 7 | 1 |  |
