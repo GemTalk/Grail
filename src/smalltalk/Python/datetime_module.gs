@@ -1726,13 +1726,37 @@ ___fromDateTime___: dt micros: micros tz: tz2 gmt: useGmt
 		and utcfromtimestamp() -- still wants the plain UTC reading."
 		tz2 @env0:isNil ifTrue: [^ built].
 		^ tz2 fromutc: built].
+	"LOCAL civil fields come from time.localtime, which consults the tz
+	DATABASE when one applies.  Reading DateTime's session-zone accessors
+	instead used GemStone's rule-based zone, so this half of the round trip
+	described a different zone from timestamp()'s half -- which goes through
+	___mktime___ -> time.localtime -- and test_fromtimestamp_limits came back
+	1:16:48 out, that being a Local Mean Time offset."
+	^ self @env1:___fromLocalEpoch___:
+		(((time @env0:___epochDaysForYear___: dt @env0:yearGmt
+				_month: dt @env0:monthGmt
+				_day: dt @env0:dayOfMonthGmt) @env0:* 86400)
+			@env0:+ (dt @env0:hourGmt @env0:* 3600)
+			@env0:+ (dt @env0:minuteGmt @env0:* 60)
+			@env0:+ dt @env0:secondGmt)
+		micros: micros tz: tz2
+%
+
+category: 'Grail-Private'
+classmethod: PyDateTime
+___fromLocalEpoch___: epochSeconds micros: micros tz: tz2
+	"Build the instance from the LOCAL civil fields of an instant, via
+	time.localtime so the tz database drives the conversion."
+
+	| st |
+	st := time instance localtime: epochSeconds.
 	^ self @env1:___allocateInstance___:
-		{ (dt @env0:year).
-		  (dt @env0:month).
-		  (dt @env0:dayOfMonth).
-		  (dt @env0:hour).
-		  (dt @env0:minute).
-		  (dt @env0:second).
+		{ (st __getitem__: 0).
+		  (st __getitem__: 1).
+		  (st __getitem__: 2).
+		  (st __getitem__: 3).
+		  (st __getitem__: 4).
+		  (st __getitem__: 5).
 		  micros.
 		  tz2 } kw: nil
 %
@@ -1942,13 +1966,17 @@ ___localCivilAt___: secs micros: micros
 	not run a subclass's __new__ (and so must not stash attributes or
 	raise from user code) while probing."
 
-	| epoch d |
-	epoch := DateTime
-		@env0:newGmtWithYear: 1970 month: 1 day: 1 hours: 0 minutes: 0 seconds: 0.
-	d := epoch @env0:addSeconds: secs.
+	"Through time.localtime, so the probe reads the SAME zone the value it
+	is compared against did.  Reading DateTime's session-zone accessors
+	here left the probe on GemStone's rule-based zone while the result came
+	from the tz database, so the two disagreed across any historical
+	transition and fromtimestamp stamped fold=1 on an unambiguous 1935
+	Tehran instant."
+	| st |
+	st := time instance localtime: secs.
 	^ PyDateTime @env0:___fromFields___:
-		(d @env0:year) _: (d @env0:month) _: (d @env0:dayOfMonth)
-		_: (d @env0:hour) _: (d @env0:minute) _: (d @env0:second)
+		(st __getitem__: 0) _: (st __getitem__: 1) _: (st __getitem__: 2)
+		_: (st __getitem__: 3) _: (st __getitem__: 4) _: (st __getitem__: 5)
 		_: micros _: nil
 %
 
@@ -2445,7 +2473,19 @@ ___localTimezone___
 		ifTrue: [self ___mktime___]
 		ifFalse: [((self ___naiveEpochMicros___)
 			@env0:- (myoff ___totalMicros___)) @env0:// 1000000].
-	off := (PyDateTime ___localEpochAt___: ts) @env0:- ts.
+	"The offset that maps THIS wall clock to its instant, not the offset in
+	force AT that instant.  For a time inside a spring-forward GAP those
+	differ: the wall clock never happened, so local(ts) - ts describes the
+	post-transition side whichever fold was asked for, and astimezone()
+	answered the two folds the wrong way round (gh-83861's check, that
+	utc(fold=0) == utc(fold=1) + shift, came out inverted).  Deriving it
+	from ___mktime___'s answer keeps astimezone consistent with
+	timestamp(), which resolves the gap correctly for both folds.
+	Unchanged for an AWARE value, where ts already came from its own
+	utcoffset and this is the same quantity."
+	off := myoff @env0:isNil
+		ifTrue: [((self ___naiveEpochMicros___) @env0:// 1000000) @env0:- ts]
+		ifFalse: [(PyDateTime ___localEpochAt___: ts) @env0:- ts].
 	PyDateTime ___ensureSessionTimeZone___.
 	stdOff := TimeZone @env0:current @env0:secondsFromGmt.
 	names := time instance @env0:dynamicInstVarAt: #tzname.
