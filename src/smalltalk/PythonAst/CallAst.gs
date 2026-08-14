@@ -174,6 +174,21 @@ printSmalltalkOn: aStream
 			and: [arguments isEmpty and: [keywords isEmpty]]])
 				ifTrue: [^ self printLocalsCallOn: aStream].
 
+	"0b'. Zero-arg ``dir()'' -- the names in the CURRENT scope, sorted.  Python
+	defines it as exactly that, so it rewrites through the same machinery
+	locals() uses rather than inventing a second way to find the scope: the
+	one-argument form ``dir(x)'' is an ordinary builtins call and is untouched.
+	Without this a bare dir() had no receiver to inspect at all and raised
+	TypeError (test_listcomps test_code_replace)."
+	((function isKindOf: NameAst)
+		and: [function id = #'dir'
+			and: [arguments isEmpty and: [keywords isEmpty]]])
+				ifTrue: [
+					aStream nextPutAll: '((Python @env0:at: #builtins) instance) @env1:___dirOfNamespace___: ('.
+					self printLocalsCallOn: aStream.
+					aStream nextPutAll: ')'.
+					^ self].
+
 	"0c. Bare `eval(expr)` / `exec(src)` INSIDE A FUNCTION with NO explicit
 	globals/locals — compile-time rewrite that injects the enclosing
 	function's locals as the evaluation namespace, so an expression can see
