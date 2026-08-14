@@ -377,17 +377,34 @@ stale.
 
 ### What the gate does and does not cover
 
-It runs only fixtures with a top-level `__main__` block — **15 of 258 files**.
+It runs only fixtures with a top-level `__main__` block — **38 of 260 files**.
 The rest are Smalltalk-driven and mostly cannot run under CPython at all: they
 exercise Grail-specific behaviour, return values for the harness to compare
 rather than booleans, or are deliberately unimportable. So a green gate does
 **not** mean the corpus agrees with CPython.
 
-Note in particular that **three of the four bugs above were in files that are
-not self-running**, and the gate would not have caught them. Converting more
-fixtures is what widens the net; tightening the script is not. Treat the gate as
-holding a line that has been opted into, and make opting in the default for
-anything new.
+The 38 is up from 15: a census found every fixture whose public zero-argument
+functions all answer `True` under CPython, and the 23 that were not yet
+self-running were converted. That is the move that widens the net — tightening
+the script is not. Of the four fixtures that historically pinned Grail's
+behaviour, `exec_class_definition.py` and `handler_raise.py` are now covered;
+`exception_naming.py` and `code_filename.py` still are not, because they do not
+run under CPython as written. Treat the gate as holding a line that has been
+opted into, and make opting in the default for anything new.
+
+**A fixture can pass on import and fail as a script.** The census imports each
+file under its real module name; the gate runs it with `__name__` set to
+`__main__`. Anything that depends on module identity differs between the two,
+which is a feature — it catches expectations that were quietly pinned to one
+context. Converting `exception_subclass_args.py` surfaced exactly this: it
+asserted a literal `'exception_subclass_args.Empty: boom'`, but
+`format_exception_only` qualifies by `__module__` and **CPython suppresses that
+prefix entirely for `__main__` and `builtins`** (which is why `ValueError: x`
+has no prefix). Derive such a prefix rather than hardcoding it:
+
+```python
+prefix = '' if __name__ in ('__main__', 'builtins') else __name__ + '.'
+```
 
 Two traps are pinned by `tests/scripts/test_python_fixture_gate.sh`, both of
 which look like a passing run:

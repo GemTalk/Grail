@@ -189,3 +189,20 @@ def notes_take_part_in_equality():
     noted = traceback.TracebackException(ValueError, noted_exc, None)
 
     return not (plain == noted)
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.
+if __name__ == '__main__':
+    checks = [
+        notes_render_under_the_message,
+        notes_are_absent_until_the_first_add_note,
+        notes_attribute_is_writable_and_deletable,
+        non_list_notes_render_as_repr,
+        unprintable_notes_do_not_escape_the_formatter,
+        broken_getattr_is_reported_not_propagated,
+        traceback_exception_equality_is_by_content,
+        traceback_exception_equality_defers_to_other_types,
+        notes_take_part_in_equality,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

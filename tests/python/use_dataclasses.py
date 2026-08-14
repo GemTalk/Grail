@@ -132,3 +132,31 @@ def required_field_still_required():
     except TypeError:
         return True
     return False
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.
+if __name__ == '__main__':
+    checks = [
+        construct_sets_attrs,
+        construct_by_keyword,
+        is_dataclass_class,
+        is_dataclass_instance,
+        fields_names,
+        missing_required_arg_raises,
+        repr_is_synthesized,
+        eq_equal_instances,
+        eq_unequal_instances,
+        ne_unequal_instances,
+        ne_equal_instances,
+        asdict_roundtrip,
+        astuple_roundtrip,
+        replace_overrides_one_field,
+        defaults_field_order,
+        default_simple_value,
+        default_factory_produces_value,
+        default_factory_per_instance,
+        defaults_are_overridable,
+        required_field_still_required,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

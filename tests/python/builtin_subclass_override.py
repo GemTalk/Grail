@@ -88,3 +88,17 @@ def set_subclass_new_rejects_kwarg():
         return False
     except TypeError:
         return True
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.
+if __name__ == '__main__':
+    checks = [
+        varargs_override_beats_inherited_builtin,
+        override_default_arg_still_works,
+        frozenset_subclass_new_accepts_kwarg,
+        frozenset_subclass_init_accepts_kwarg,
+        frozenset_plain_subclass_rejects_kwarg,
+        set_subclass_new_rejects_kwarg,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

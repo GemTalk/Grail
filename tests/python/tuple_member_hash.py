@@ -36,3 +36,13 @@ def custom_member_hash_is_honoured():
 def custom_member_in_a_set():
     """Same contract through the other hashed collection."""
     return len({(Custom(1),), (Custom(1),)}) == 1
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.
+if __name__ == '__main__':
+    checks = [
+        custom_member_hash_is_honoured,
+        custom_member_in_a_set,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

@@ -143,3 +143,19 @@ def nonlocal_write_through_nested_class_method():
     it.add(5)
     it.add(7)
     return total == 12
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.
+if __name__ == '__main__':
+    checks = [
+        closure_assign_reaches_outer,
+        two_nonlocals,
+        closure_via_callback,
+        wsgi_like_pattern,
+        freevar_through_nested_class_method,
+        nonlocal_write_in_method_aug,
+        nonlocal_write_in_method_plain,
+        nonlocal_write_through_nested_class_method,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))
