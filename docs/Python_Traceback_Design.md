@@ -2426,7 +2426,7 @@ written — the honest accounting from §9.27 improves but does not close.
 
 SUnit **4288, all green**. No Smalltalk changed.
 
-### 9.29 The last two bug-pinners, and a legacy-form gap (2026-08-14, gs40)
+### 9.29 The last two bug-pinners, and a legacy-form gap (2026-08-14, gs40) — gap **closed in §9.30**
 
 §9.28 left `exception_naming.py` and `code_filename.py` outside the gate because
 they did not run under CPython as written. Both now do — **40 fixtures, 304 OK**
@@ -2508,3 +2508,83 @@ known to have pinned Grail's behaviour is now checked against CPython on each
 push. SUnit **4288, all green**. The only Smalltalk change is a comment and one
 removed assertion in `TracebackTestCase`; `traceback.py` is untouched, so
 `test.test_traceback` is unaffected.
+
+### 9.30 Telling "not passed" from "passed None" (2026-08-14, gs40)
+
+§9.29 recorded the legacy-form gap and left it failing. This closes it. The three
+shapes now answer exactly what CPython answers, verified against a live gem:
+
+| call | CPython 3.14.6 | Grail before | Grail now |
+| --- | --- | --- | --- |
+| `format_exception_only(ValueError, None)` | `NoneType: None` | `ValueError` | `NoneType: None` |
+| `format_exception(ValueError, None, None)` | `NoneType: None` | raises `TypeError` | `NoneType: None` |
+| `TracebackException(ValueError, None, None)` | `ValueError: None` | `ValueError` | `ValueError: None` |
+
+**The whole bug was that `None` cannot mean two things at once.** `value` and
+`tb` defaulted to `None`, and the one-argument form was detected by
+`value is None and tb is None` — which is also true of an explicit
+`format_exception(ValueError, None, None)`. That call therefore took the
+single-argument path and hit §9.26's `_require_exception` guard, which rejects a
+*type* as a value. The fix is CPython's: **make the defaults a sentinel**, so
+"not passed" and "passed `None`" are distinguishable at all. Everything else
+follows from being able to tell them apart.
+
+**The rule the legacy form obeys is counter-intuitive and worth stating.** The
+type argument is *ignored*: CPython derives the type from the value, because the
+value is the only argument that can carry a message. `format_exception_only`
+previously kept the passed type and used a `derived` flag to decide whether the
+value contributed a message at all, reading "value is None and not derived" as
+"no message" — producing a bare `ValueError` that matches **neither** CPython
+path. The flag is gone; the value always contributes.
+
+**And the trap: the class must NOT do this.** `TracebackException` keeps the type
+it was constructed with, so the same arguments render two ways depending on which
+door you come in by. Two changes protect that half:
+
+* `TracebackException.__init__` no longer calls `_unpack_exc_args` — that
+  helper normalises *for the module-level functions*. It keeps the triple it is
+  handed, retaining only Grail's convenience of expanding a `BaseException`
+  passed as the type. All five internal constructors already pass a consistent
+  triple, so nothing else moved.
+* `format_exception_only` takes a private `_keep_type`, which the class path
+  passes. Without it, `TracebackException(ValueError, None, None)` would render
+  `NoneType: None` — trading one wrong answer for another.
+
+The fixture asserts all three shapes together, precisely so a later
+"simplification" into one rule cannot quietly drop whichever half was not in
+mind.
+
+**Blast radius, measured rather than assumed.** `test.test_traceback` is
+**unchanged by name** — same 57 failing tests before and after, none fixed, none
+newly failing, no test changing kind. The fix corrects behaviour that module does
+not exercise. No stdlib module outside `traceback.py` calls these entry points,
+so the surface is the module plus its tests.
+
+**The sentinel is Python-level, and that draws a contract boundary.** Grail reads
+`nil` as "undefined / unbound" and `None` as an explicit Python value
+(`NoneType.gs`), which makes `nil` the natural "no argument" marker for a
+Smalltalk caller. These are Python entry points following CPython's contract, so
+the marker must be a value no *caller* can produce — a private `object()`, as in
+`contextvars._MISSING`, `dataclasses.KW_ONLY` and `itertools._sentinel`. A
+Smalltalk caller that fills the optional slots with `nil` therefore does **not**
+get the one-argument form; `nil` is taken as an explicit value and the type is
+derived from it:
+
+| call | answers |
+| --- | --- |
+| `tb @env1:format_exception: exc` | `ValueError: v` ✅ |
+| `tb @env1:format_exception: exc _: nil _: nil` | `UndefinedObject: <UndefinedObject object at 0x101>` |
+
+Both were measured. The second is **out of contract**: omit the optional
+arguments rather than passing `nil`. It was already wrong before this change —
+it rendered `ValueError: <UndefinedObject object at 0x101>`, right type and
+garbage message, where it is now garbage in both halves — so this reshapes a
+pre-existing hole rather than opening one. Closing it properly would mean
+teaching the Smalltalk → Python boundary to map `nil` onto each function's
+default, which is a dispatch-wide decision and not traceback.py's to make.
+
+**A stale scoreboard row turned up on the way.** The committed board records
+`test.test_traceback` at f=44 e=14 s=217; the actual baseline on current `main`
+is **f=45 e=12 s=218** (95 passing either way). That is a third stale row
+alongside `test_raise` and `test_yield_from`, and it is why the A/B above
+compares two runs made here rather than trusting the committed numbers.

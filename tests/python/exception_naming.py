@@ -120,35 +120,35 @@ def a_none_exception_renders_as_nonetype_none():
 
 
 def a_legacy_type_is_ignored_when_a_value_is_given():
-    """KNOWN GRAIL GAP -- this states CPython and Grail does not match it yet.
+    """The module-level legacy entry points DERIVE the type from the value and
+    IGNORE the type they were handed -- the value is the only argument that can
+    carry a message, so it decides the type.  The CLASS is deliberately
+    different: it keeps the type it was constructed with.
 
-    CPython's module-level legacy entry points DERIVE the type from the value
-    and ignore the type they were handed.  The CLASS does not -- it keeps the
-    type it was constructed with.  Both sides were measured rather than reasoned
-    about, in CPython 3.14.6 and in Grail:
+        format_exception_only(ValueError, None)    -> 'NoneType: None'
+        format_exception(ValueError, None, None)   -> 'NoneType: None'
+        TracebackException(ValueError, None, None) -> 'ValueError: None'
 
-                                                 CPython        Grail
-        format_exception_only(ValueError, None)  NoneType: None ValueError
-        format_exception(ValueError, None, None) NoneType: None TypeError!
-        TracebackException(ValueError,None,None) ValueError: None   --
+    All three are CPython 3.14.6, measured.  The last line is the one that makes
+    this worth pinning: the same arguments render two different ways depending
+    on which door you come in by, so a fix that "simplifies" the two into one
+    breaks whichever it did not have in mind.
 
-    Grail matches neither CPython path, and it does not even fail the same way
-    twice.  format_exception_only carries a ``derived'' flag and reads "value is
-    None and not derived" as "no message at all", giving the bare name;
-    format_exception instead reaches the single-argument guard, which rejects a
-    TYPE as a value and raises ``Exception expected for value, type found''.
-
-    This check used to assert Grail's 'ValueError\\n' as though it were
-    CPython's rule, which is what made it a fixture pinning a bug.  Fixing it
-    properly means reworking that flag AND leaving the class path alone, so it
-    is left failing here on purpose and TracebackTestCase no longer asserts it.
-    The second clause below RAISES under Grail rather than answering False --
-    which is why nothing in the harness may call this until it is fixed.
-    """
+    This check used to assert 'ValueError\\n' -- what Grail did -- as though it
+    were CPython's rule, and was a fixture pinning a bug.  Grail matched neither
+    path and did not even fail the same way twice: format_exception_only gave
+    the bare name via a ``derived'' flag, while format_exception reached the
+    single-argument guard and RAISED ``Exception expected for value, type
+    found''.  Both are fixed; the sentinel defaults on value/tb are what let the
+    two shapes be told apart at all."""
     return (''.join(traceback.format_exception_only(ValueError, None))
                 == 'NoneType: None\n'
             and ''.join(traceback.format_exception(ValueError, None, None))
-                == 'NoneType: None\n')
+                == 'NoneType: None\n'
+            # The class keeps its own type -- the half a naive fix would lose.
+            and ''.join(traceback.TracebackException(
+                    ValueError, None, None).format_exception_only())
+                == 'ValueError: None\n')
 
 
 def a_none_argument_is_not_a_missing_message():
