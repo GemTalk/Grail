@@ -265,6 +265,52 @@ printSmalltalkOn: aStream
 			nextPutAll: ')'.
 		^ self
 	].
+	"CLASS-BODY LOAD_NAME.  CPython compiles every read in a class body to
+	LOAD_NAME, which consults the body's NAMESPACE at runtime and only then the
+	enclosing scopes.  Grail resolves the read statically instead, which is
+	exact for a body whose bindings are all statements -- and wrong for one that
+	writes through locals():
+
+	    x = 42
+	    class X:
+	        locals()['x'] = 43
+	        y = x               -- 43 in CPython; the static read answered 42
+
+	So probe the class's own dynamically-bound names first (that write lands in
+	the per-class holder, since no statement named ``x'' for an accessor to be
+	compiled for) and fall back to whatever the read would otherwise have been.
+	___classBodyDynamicRead___ deliberately does NOT walk the bases: LOAD_NAME
+	sees the class body's namespace, never inherited attributes, so an inherited
+	``x'' must not outrank the module global here.
+
+	Gated on classBodyDynamicLocals, so a class body with no locals()/vars()
+	call -- every class body in the corpus but a handful -- emits exactly what
+	it did before.
+
+	The fallback is THIS METHOD re-entered with the gate suppressed, so there is
+	one description of how a class-body name resolves rather than a copy that
+	can drift.  A plain flag suffices for the suppression: a NameAst emit is a
+	leaf and never emits another NameAst, so nothing else is in flight."
+	((ctx isKindOf: LoadAst)
+		and: [CallAst classBodyDynamicLocals
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst inClassBodyValueEmit
+		and: [self ___inNestedScopeWithinClassBody___ not]]]]) ifTrue: [
+			| inner |
+			inner := WriteStream on: String new.
+			CallAst classBodyDynamicLocals: false.
+			[self printSmalltalkOn: inner]
+				ensure: [CallAst classBodyDynamicLocals: true].
+			aStream
+				nextPutAll: '((';
+				nextPutAll: CallAst classBeingCompiled asString;
+				nextPutAll: ' @env1:___classBodyDynamicRead___: #''';
+				nextPutAll: self ___mangledId___;
+				nextPutAll: ''') @env0:ifNil: [';
+				nextPutAll: inner contents;
+				nextPutAll: '])'.
+			^ self
+		].
 	"Class-method free-variable path: when compiling a Python class
 	body, a free name that isn't a local or a class inst var still
 	resolves through Python's LEGB rules to the enclosing module's

@@ -796,10 +796,7 @@ printLocalsCallOn: aStream
 
 	Class-body scope: the names the class body has bound SO FAR, which is
 	what CPython's class-body locals() reports -- see
-	printClassBodyLocalsSnapshotOn:.
-
-	Known V1 gap: the class-body dict is a SNAPSHOT, so writing through it
-	(``locals()['x'] = 43'') does not bind a class attribute."
+	printClassBodyLocalsOn:."
 
 	| fn |
 	"Class body FIRST: inside one, functionBeingCompiled is still the
@@ -808,7 +805,7 @@ printLocalsCallOn: aStream
 	from a different scope entirely, and CPython's rule is that a class body
 	does not even see them."
 	CallAst inClassBodyValueEmit ifTrue: [
-		^ self printClassBodyLocalsSnapshotOn: aStream].
+		^ self printClassBodyLocalsOn: aStream].
 	fn := CallAst functionBeingCompiled.
 	"Module scope: locals() IS globals() — emit the same live view as the
 	globals() rewrite (docs/LEGB.md)."
@@ -987,9 +984,10 @@ ___freeVariableIsAssignable___: aSymbol for: aFunctionDefAst
 
 category: 'Grail-other'
 method: CallAst
-printClassBodyLocalsSnapshotOn: aStream
-	"Emit the 0-arg ``locals()'' rewrite for a call INSIDE A CLASS BODY: a dict
-	of the names the class body has bound so far, in source order.
+printClassBodyLocalsOn: aStream
+	"Emit the 0-arg ``locals()'' rewrite for a call INSIDE A CLASS BODY: a
+	mapping of the names the class body has bound so far, in source order,
+	CONNECTED to the class so that a write through it binds a class attribute.
 
 	That is what CPython reports there.  A class body executes as a namespace
 	rather than a function, so its locals() is the mapping being built into the
@@ -1013,11 +1011,14 @@ printClassBodyLocalsSnapshotOn: aStream
 	store -- the same expressions any other class-body reference emits.
 
 	Grail's class bodies compile to static attribute stores rather than
-	executing into a real mapping, so this is a SNAPSHOT: reads are right,
-	but ``locals()['x'] = 43'' cannot bind a class attribute (test_scope's
-	testClassNamespaceOverridesClosure and testClassAndGlobal still fail).
-	Giving it write-through means executing class bodies into a namespace,
-	which is a change to ClassDefAst rather than to this rewrite.
+	executing into a real mapping, so the entries are a SNAPSHOT -- an instance
+	held across statements does not grow as the body binds more names.  The
+	WRITES are connected even so: the answer is a ClassBodyLocals bound to the
+	class under construction, whose __setitem__/__delitem__ bind and unbind the
+	class attribute (test_scope's testClassAndGlobal and
+	testClassNamespaceOverridesClosure).  See ClassBodyLocals' class comment for
+	what stays snapshot-shaped and docs/Class_Body_Namespace.md for what closing
+	that would take.
 
 	Two SHAPE differences from CPython, both deliberate.  The implicit
 	``__module__'' / ``__qualname__'' / ``__firstlineno__'' entries CPython
@@ -1028,13 +1029,15 @@ printClassBodyLocalsSnapshotOn: aStream
 
 	| bound |
 	bound := CallAst classBodyBoundNames.
-	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) ___buildLocals___: { '.
+	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) ___buildClassBodyLocals___: { '.
 	bound ifNotNil: [
 		bound do: [:each |
 			aStream nextPutAll: '{ '''; nextPutAll: each asString; nextPutAll: '''. '.
 			CallAst ___emitFreeVariableRead___: each asSymbol parent: self on: aStream.
 			aStream nextPutAll: ' }. ']].
-	aStream nextPutAll: '})'
+	aStream nextPutAll: '} forClass: '.
+	aStream nextPutAll: CallAst classBeingCompiled asString.
+	aStream nextPutAll: ')'
 %
 
 category: 'Grail-other'
@@ -1990,6 +1993,35 @@ category: 'Grail-Class Compile Context'
 classmethod: CallAst
 inClassBodyValueEmit: aBoolean
 	self ___compileContext___ at: #'inClassBodyValueEmit' put: aBoolean
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classBodyDynamicLocals
+	"True while emitting a class body that can bind a name BEHIND codegen's
+	back -- one that calls locals() or vars(), whose answer is a live
+	ClassBodyLocals a write can go through.
+
+	CPython compiles every class-body name read to LOAD_NAME, which consults
+	the body's namespace at runtime.  Grail resolves such a read statically,
+	which is exact for a body whose bindings are all statements -- and wrong
+	for one where a locals() write bound a name no statement mentions.  This
+	flag is what tells the two apart, so NameAst pays for the runtime probe
+	only where the answer can actually differ.
+
+	Set by ClassDefAst from ___classBodyCanBindDynamically___, an
+	OVER-approximation (it reads the scope's mention set, which a nested
+	method's own locals() call also lands in).  Over-triggering costs one nil
+	probe per class-body read and changes no answer; under-triggering would
+	lose the binding, so the imprecision is on the safe side deliberately."
+
+	^ (self ___compileContext___ at: #'classBodyDynamicLocals' otherwise: nil) == true
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classBodyDynamicLocals: aBoolean
+	self ___compileContext___ at: #'classBodyDynamicLocals' put: aBoolean
 %
 
 category: 'Grail-Class Compile Context'

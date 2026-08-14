@@ -130,7 +130,7 @@ printSmalltalkRuntimeOn: aStream
 	| methodDefs classMethodDefs staticMethodDefs selfParam
 	  funcNames varargsFuncNames
 	  methodSources classMethodSources staticMethodSources
-	  initMethod initSelector classAttrs allClassInstVars staticFuncNames savedStaticFuncNames savedIsModuleScope
+	  initMethod initSelector classAttrs allClassInstVars staticFuncNames savedStaticFuncNames savedIsModuleScope savedDynamicLocals
 	  savedClass savedFuncNames savedVarargsFuncNames
 	  savedSelfParam savedClassAttrNames settersByName
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames
@@ -829,6 +829,8 @@ printSmalltalkRuntimeOn: aStream
 			collect: [:c | c name asSymbol])).
 	savedConditionalNames := CallAst classBodyConditionalNames.
 	CallAst classBodyConditionalNames: self ___classBodyConditionalNames___.
+	savedDynamicLocals := CallAst classBodyDynamicLocals.
+	CallAst classBodyDynamicLocals: self ___classBodyCanBindDynamically___.
 	CallAst inClassBodyValueEmit: true.
 	"NESTED CLASSES (``class Outer: class A: ...``) -- previously
 	dropped entirely.  Emit each nested classdef inside a bracketed
@@ -838,10 +840,16 @@ printSmalltalkRuntimeOn: aStream
 	``a = A()'' in the outer body can read it (test_functools'
 	TestPartialMethod.A).  The nested emit saves/restores the CallAst
 	compile context itself."
+	"...and a class body that can bind DYNAMICALLY needs them just as much: a
+	``locals()['x'] = 43'' for a name no statement mentions has no accessor pair
+	to store through, so ___classBodyDefinitionalStore___ falls back to the
+	holder -- which must already exist by the time the attribute section runs,
+	not be compiled at the end of it."
 	((body body anySatisfy: [:stmt | stmt isKindOf: ClassDefAst])
+		or: [self ___classBodyCanBindDynamically___
 		or: [body body anySatisfy: [:stmt |
 			(stmt isKindOf: IfAst)
-				or: [self ___isClassBodyRuntimeStatement___: stmt]]]) ifTrue: [
+				or: [self ___isClassBodyRuntimeStatement___: stmt]]]]) ifTrue: [
 		"The per-class dynamic store backs the nested-class attribute
 		AND the class-body ``if'' branch stores (emitted in the attr
 		section below);
@@ -968,7 +976,7 @@ printSmalltalkRuntimeOn: aStream
 		so NameAst falls back to module scope for later siblings
 		(``empty_values = list(validators.EMPTY_VALUES)'' before
 		``def validators'' — django's Field)."
-		| firstBinding attrAssignPos globalWrites flushGlobalsBefore |
+		| firstBinding attrAssignPos pendingStmts flushPendingBefore |
 		firstBinding := IdentityKeyValueDictionary new.
 		attrAssignPos := IdentityKeyValueDictionary new.
 		"Each statement ANNOUNCES what it binds (___boundTargetNames___) and
@@ -995,45 +1003,48 @@ printSmalltalkRuntimeOn: aStream
 		emitting it once per target re-evaluates the RHS per name, which is wrong
 		for an RHS with identity/side effects.  Block-wrapped only to add the
 		temp without touching the method-level declaration."
-		"A class-body statement assigning a name the body declared ``global''.
-		It binds the MODULE, not a class attribute, so the structural compile
-		has nothing to emit for it and dropped it whole -- ``class C: global x;
-		x = 13'' left the module's x alone AND bound a class attribute of that
-		name (the name is now excluded from classBodyAttributes, so only the
-		write is left to do).
+		"The class-body statements the structural compile has no attribute pair
+		for and yet CPython executes -- a ``global''-declared assignment, an
+		assignment through a subscript, a ``del'' -- each emitted through its OWN
+		printSmalltalkOn: (see ___classBodyOrderedRuntimeStatements___ for what
+		qualifies and why).  Dropping them was silent in all three cases.
 
 		Emitted in SOURCE ORDER, interleaved with the attribute stores below
 		rather than in a pass after them.  A pass afterwards is what the
 		``nonlocal'' writes use and it is wrong here: a later attribute that
-		READS the declared name would see the pre-write value.  ``global g; g =
-		2; y = g'' in a class body must leave y == 2 (test_listcomps
-		test_explicit_global), and with a trailing pass it answered 1.
-
-		Emitted through the statement's OWN printSmalltalkOn:, where AssignAst's
-		store routing sees the class body's declaration via
-		___nearestEnclosingScopeDeclaresGlobal___ and picks the module receiver
-		-- or, inside a doit, the scope handle."
-		globalWrites := self ___classBodyGlobalWriteStatements___.
-		flushGlobalsBefore := [:limit |
-			[globalWrites notEmpty and: [globalWrites first key < limit]]
+		READS the name would see the pre-statement value.  ``global g; g = 2; y
+		= g'' in a class body must leave y == 2 (test_listcomps
+		test_explicit_global), and with a trailing pass it answered 1."
+		pendingStmts := self ___classBodyOrderedRuntimeStatements___.
+		flushPendingBefore := [:limit |
+			[pendingStmts notEmpty and: [pendingStmts first key < limit]]
 					whileTrue: [
-						| entry bound |
-						entry := globalWrites removeFirst.
+						| entry bound savedRuntimeClass |
+						entry := pendingStmts removeFirst.
 						bound := IdentitySet new.
 						firstBinding keysAndValuesDo: [:nm :p |
 							p < entry key ifTrue: [bound add: nm]].
 						CallAst classBodyBoundNames: bound.
-						entry value printSmalltalkOn: aStream.
+						"``del x'' takes the class it unbinds from this flag.  An
+						ASSIGNMENT must not see it: for a global-declared name it
+						would route the store to the class instead of the module,
+						which is the opposite of what the declaration asked for."
+						savedRuntimeClass := CallAst classBodyRuntimeClass.
+						(entry value isKindOf: DeleteAst)
+							ifTrue: [CallAst classBodyRuntimeClass: name].
+						[entry value printSmalltalkOn: aStream]
+							ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
 						aStream lf]].
 		[:emittedChainValues |
 		classAttrs do: [:pair |
-			"Any global-declared write that stands BEFORE this attribute in the
+			"Any pending statement that stands BEFORE this attribute in the
 			source goes out first, so the attribute's value expression reads
-			what the write left.  An attribute whose position is unknown flushes
-			nothing -- the ordering can only be honoured against a position."
+			what that statement left.  An attribute whose position is unknown
+			flushes nothing -- the ordering can only be honoured against a
+			position."
 			(attrAssignPos at: pair key asSymbol
 				ifAbsent: [firstBinding at: pair key asSymbol ifAbsent: [nil]])
-					ifNotNil: [:attrPos | flushGlobalsBefore value: attrPos].
+					ifNotNil: [:attrPos | flushPendingBefore value: attrPos].
 			"pair value is nil for bare annotations (``x: int'' with no
 			assignment) — skip the init emit; the slot stays nil until
 			some later assignment fills it."
@@ -1075,7 +1086,7 @@ printSmalltalkRuntimeOn: aStream
 			].
 		]] value: IdentityKeyValueDictionary new.
 		"Whatever is left stands after the last attribute in the body."
-		flushGlobalsBefore value: body body size + 1.
+		flushPendingBefore value: body body size + 1.
 		"Top-level ``if'' statements in the class body: CPython runs
 		them at class-DEFINITION time — the C-vs-Python dual-module
 		pattern (``if c_functools: partial = c_functools.partial''
@@ -1182,6 +1193,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classBodyBoundNames: savedBoundNames.
 		CallAst classNestedClassNames: savedNestedNames.
 		CallAst classBodyConditionalNames: savedConditionalNames.
+		CallAst classBodyDynamicLocals: (savedDynamicLocals == true).
 	].
 	"NamedTuple-style classes get a ``_fields'' accessor/setter pair
 	on the metaclass, initialised to a tuple of declaration-order
@@ -2697,19 +2709,142 @@ ___classBodyGlobalTargetNames___: stmt
 
 category: 'Grail-Class Compilation'
 method: ClassDefAst
-___classBodyGlobalWriteStatements___
-	"The class body's ``global''-declared assignments, as (sourcePosition ->
-	statement) associations in body order.  printSmalltalkRuntimeOn: flushes
-	them into the class-attribute emit at their own positions, so a later
-	attribute reading the name sees the value the write left."
+___classBodyOrderedRuntimeStatements___
+	"The class-body statements that must be emitted AT THEIR OWN SOURCE
+	POSITION, interleaved with the attribute stores rather than in a pass after
+	them, as (sourcePosition -> statement) associations in body order.
+	printSmalltalkRuntimeOn: flushes them.
+
+	Position matters for all three because each can change what a LATER
+	attribute value reads -- which a trailing pass, running once every attribute
+	has been computed, cannot do:
+
+	  * a ``global''-declared assignment (``global g; g = 2; y = g'' must leave
+	    y == 2; with a trailing pass it answered 1, which is how this regressed
+	    test_listcomps' test_explicit_global once already)
+	  * an assignment through a SUBSCRIPT (``locals()['x'] = 43; y = x'', and
+	    ``d = {}; d['a'] = 1; k = d['a']'' -- both statements Grail dropped
+	    entirely, leaving the write undone and no error anywhere)
+	  * ``del x'', which unbinds a name a later attribute may read
+
+	The other two body passes stay where they are and do not overlap this one:
+	___isClassBodyRuntimeStatement___: covers try/for/while/with and augmented
+	assignment, and ___isClassBodyAttributeAssign___: requires an ATTRIBUTE
+	target and must keep running after the nested classes it mutates are built."
 
 	| result |
 	result := OrderedCollection new.
 	body ifNil: [^ result].
 	body body doWithIndex: [:stmt :pos |
-		(self ___classBodyGlobalTargetNames___: stmt) isEmpty
-			ifFalse: [result add: pos -> stmt]].
+		((self ___classBodyGlobalTargetNames___: stmt) isEmpty not
+			or: [(self ___isClassBodySubscriptAssign___: stmt)
+			or: [self ___isClassBodyDeleteStatement___: stmt]])
+				ifTrue: [result add: pos -> stmt]].
 	^ result
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___isClassBodySubscriptAssign___: stmt
+	"True for a class-body assignment whose target is a SUBSCRIPT --
+	``locals()['x'] = 43'', ``Period['month_0'] = i * 30''.
+
+	Not a bare name, so it yields no classBodyAttributePairs, so the structural
+	compile had nothing to emit and DROPPED the statement whole: even
+	``class C: d = {}; d['a'] = 1'' left d empty, and the failure was silent.
+	CPython runs it at class-definition time like any other body statement."
+
+	(stmt isKindOf: AssignAst) ifFalse: [^ false].
+	stmt targets size = 1 ifFalse: [^ false].
+	^ stmt targets first isKindOf: SubscriptAst
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___isClassBodyDeleteStatement___: stmt
+	"True for a class-body ``del'' this emit can honour.
+
+	A bare-NAME target is routed to the class (DeleteAst reads
+	classBodyRuntimeClass, which the flush sets), and two kinds of name are
+	EXCLUDED -- each keeps today's behaviour, which is to be dropped:
+
+	  * one the body declared ``global'' or ``nonlocal''.  That names another
+	    scope's binding, so there is no class attribute to unbind and it needs
+	    the enclosing-scope emit instead.
+	  * one the body binds with a ``def'' or a nested ``class''.  Grail compiles
+	    those to real Smalltalk METHODS, and a sibling assignment referring to
+	    one compiles to a BoundMethod naming its SELECTOR -- so removing the
+	    method to honour the delete would break the alias that the delete is
+	    normally there to leave behind.  Flask's NullSession is exactly that
+	    shape (``def _fail'', then ``__setitem__ = ... = _fail'', then ``del
+	    _fail''), and honouring the statement there broke every Flask test.
+	    CPython has no such coupling: the assignment captured the function
+	    object, so unbinding the name costs it nothing.
+
+	Subscript and attribute targets carry their own receiver, so they need no
+	exclusion and simply emit as they would anywhere else."
+
+	(stmt isKindOf: DeleteAst) ifFalse: [^ false].
+	stmt targets isEmpty ifTrue: [^ false].
+	^ stmt targets allSatisfy: [:t |
+		(t isKindOf: NameAst)
+			ifTrue: [(self ___classBodyDeclaresElsewhere___: t id asSymbol) not
+				and: [(self ___classBodyBindsAsDefinition___: t id asSymbol) not]]
+			ifFalse: [(t isKindOf: SubscriptAst) or: [t isKindOf: AttributeAst]]]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyBindsAsDefinition___: aSymbol
+	"True when this class body binds aSymbol with a ``def'' or a nested
+	``class'' -- a binding that compiles to a Smalltalk method or a per-class
+	holder entry other class-body expressions may name by SELECTOR, rather than
+	to a value a delete can simply take away."
+
+	body ifNil: [^ false].
+	^ body body anySatisfy: [:stmt |
+		((stmt isKindOf: FunctionDefAst) or: [stmt isKindOf: ClassDefAst])
+			and: [stmt name notNil
+			and: [stmt name asString = aSymbol asString]]]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyDeclaresElsewhere___: aSymbol
+	"True when this class body declared aSymbol ``global'' or ``nonlocal'' --
+	either way the name belongs to an enclosing scope rather than to the class
+	namespace."
+
+	body ifNil: [^ false].
+	(body globalNames notNil and: [body globalNames includes: aSymbol])
+		ifTrue: [^ true].
+	^ body nonlocalNames notNil and: [body nonlocalNames includes: aSymbol]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyCanBindDynamically___
+	"True when this class body can bind a name that NO statement in it names --
+	that is, when it calls locals() or vars(), whose answer is a live
+	ClassBodyLocals that ``locals()['x'] = 43'' writes through.
+
+	It is what CallAst classBodyDynamicLocals carries, and through that what
+	decides whether a class-body name read pays for a runtime probe of the
+	class's own dynamically-bound names before resolving statically.  Grail's
+	static resolution is exact for a body whose bindings are all statements, so
+	the probe would be pure cost everywhere else.
+
+	The evidence is the scope's MENTION set rather than a walk for the call, so
+	it over-approximates: a nested method's own locals() call is accumulated
+	outward into the class body's reads and trips this too.  That direction is
+	deliberate.  Over-triggering costs one nil probe per class-body read and
+	changes no answer; under-triggering would silently lose a binding."
+
+	| reads |
+	body ifNil: [^ false].
+	reads := body reads.
+	reads ifNil: [^ false].
+	^ (reads includes: #'locals') or: [reads includes: #'vars']
 %
 
 category: 'Grail-Class Compilation'

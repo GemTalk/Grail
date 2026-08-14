@@ -299,6 +299,7 @@ run
 	at: #'_shimtest' put: nil;
 	at: #'_sre' put: nil;
 	at: #'BoundMethod' put: nil;
+	at: #'ClassBodyLocals' put: nil;
 	at: #'ExecBlockAttrs' put: nil;
 	at: #'MethodBinding' put: nil;
 	at: #'PropertyDescriptor' put: nil;
@@ -797,6 +798,7 @@ run
 	at: #'KeywordOnlyParamsTestCase' put: nil;
 	at: #'ListSortKwargsTestCase' put: nil;
 	at: #'ClassBodyConditionalTestCase' put: nil;
+	at: #'ClassBodyDroppedStatementTestCase' put: nil;
 	at: #'ClassBodyLoopsTestCase' put: nil;
 	at: #'CachedPropertyDescriptorTestCase' put: nil;
 	at: #'LruHashabilityAndUnionsTestCase' put: nil;
@@ -1232,6 +1234,7 @@ input src/smalltalk/Python/Fraction.gs
 input src/smalltalk/Python/dict.gs
 input src/smalltalk/Python/PyDict.gs
 input src/smalltalk/Python/EnumDict.gs
+input src/smalltalk/Python/ClassBodyLocals.gs
 input src/smalltalk/Python/ExecBlockAttrs.gs
 input src/smalltalk/Python/Float.gs
 input src/smalltalk/Python/SetProtocol.gs
@@ -1628,6 +1631,7 @@ input src/smalltalk/PythonTests/TracebackTestCase.gs
 input src/smalltalk/PythonTests/ListSortKwargsTestCase.gs
 input src/smalltalk/PythonTests/CachedPropertyDescriptorTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyDroppedStatementTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyLoopsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyImportTestCase.gs
 input src/smalltalk/PythonTests/FunctionScopeImportTestCase.gs
