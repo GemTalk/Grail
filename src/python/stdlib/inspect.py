@@ -469,16 +469,75 @@ def getdoc(obj):
     return None
 
 
+def getmro(cls):
+    """The class's __mro__ as a tuple -- CPython's inspect.getmro."""
+    try:
+        return tuple(cls.__mro__)
+    except AttributeError:
+        return (cls,)
+
+
 def getmembers(obj, predicate=None):
-    """Return (name, value) pairs from dir(obj), optionally filtered."""
+    """Return (name, value) pairs from dir(obj), optionally filtered.
+
+    CPython's version does two things beyond walking ``dir()``, and both exist
+    for attributes ``dir()`` alone cannot reach:
+
+    * a name that ``dir()`` offers but ``getattr()`` refuses is looked up in the
+      MRO's ``__dict__``s rather than dropped.  A descriptor may decline to
+      produce a value while still being a real member -- CPython's comment is
+      "some descriptors don't return meaningful values and are only implemented
+      for the sake of __dir__".
+
+    * every ``DynamicClassAttribute`` in a base's ``__dict__`` is ADDED to the
+      candidate names.  Such a descriptor deliberately hides itself from the
+      class (it routes class access to the metaclass) so ``dir()`` never offers
+      it -- ``Enum.name`` and ``Enum.value`` are the canonical pair, which is
+      why ``inspect.getmembers(SomeEnum)`` reports them in CPython.
+
+    Grail did neither, so a class attribute reachable only through those two
+    paths was simply absent.
+    """
+    # Imported here, not at module scope: types reaches enum for
+    # DynamicClassAttribute, and inspect is imported early enough that the
+    # module-level cycle bites.
+    import types
+
+    is_class = isinstance(obj, type)
+    mro = ((obj,) + tuple(getmro(obj))) if is_class else ()
+    names = list(dir(obj))
+    # DynamicClassAttributes hide from dir(), so collect them off the bases.
+    try:
+        for base in obj.__bases__:
+            for k, v in base.__dict__.items():
+                if isinstance(v, types.DynamicClassAttribute):
+                    names.append(k)
+    except AttributeError:
+        pass
     results = []
-    for name in dir(obj):
+    processed = set()
+    for name in names:
         try:
             value = getattr(obj, name)
+            # A name reached twice (dir() and the sweep above) takes the
+            # __dict__ route, so the descriptor itself is reported.
+            if name in processed:
+                raise AttributeError(name)
         except AttributeError:
-            continue
+            for base in mro:
+                try:
+                    d = base.__dict__
+                except AttributeError:
+                    continue
+                if name in d:
+                    value = d[name]
+                    break
+            else:
+                # A missing slot, or a __dir__ offering a name nothing backs.
+                continue
         if predicate is None or predicate(value):
             results.append((name, value))
+        processed.add(name)
     results.sort(key=lambda pair: pair[0])
     return results
 
