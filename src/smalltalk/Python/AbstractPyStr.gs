@@ -78,6 +78,15 @@ new
 
 ! ------------------- Accessors
 
+category: 'Grail-Testing'
+method: AbstractPyStr
+___isPyStr___
+	"True: a boxed Python str is still a str -- see object >> ___isPyStr___
+	for why callers should ask this rather than isKindOf: CharacterCollection."
+
+	^ true
+%
+
 category: 'Grail-Accessors'
 method: AbstractPyStr
 value

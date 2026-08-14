@@ -1257,6 +1257,14 @@ _format: positional kw: kwargs
 
 set compile_env: 0
 
+category: 'Grail-Testing'
+method: CharacterCollection
+___isPyStr___
+	"True: every CharacterCollection is a Python str."
+
+	^ true
+%
+
 category: 'Grail-String Methods'
 method: CharacterCollection
 ___formatPad___: count with: fillChar

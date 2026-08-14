@@ -55,6 +55,18 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: 'None'.
 		^self.
 	].
+	(value isKindOf: PyStrSurrogate) ifTrue: [
+		"A str holding a lone surrogate cannot be written as a Smalltalk
+		string literal -- there is no Character for the code point, which is
+		the whole reason this class exists.  Emit a CONSTRUCTOR instead, so
+		the literal is rebuilt at run time from its code points."
+		aStream nextPutAll: '(PyStrSurrogate @env0:___fromCodePoints___: #('.
+		value ___codePoints___ doWithIndex: [:cp :i |
+			i > 1 ifTrue: [aStream space].
+			aStream print: cp].
+		aStream nextPutAll: '))'.
+		^self.
+	].
 	(value isKindOf: String) ifTrue: [
 		aStream nextPutAll: value printString.
 		^self.
