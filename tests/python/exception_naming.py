@@ -7,6 +7,27 @@ behaviour matches CPython, so a failure names the specific rule.
 import traceback
 
 
+def _rendered_name(cls):
+    """How CPython names a class in a rendered exception -- a transcription of
+    traceback._get_exc_type_str.
+
+    DERIVED rather than hardcoded, because both halves move between the two
+    ways this file runs.  ``__module__'' is '__main__' when it runs as a script
+    and 'exception_naming' when the harness imports it, and the module prefix
+    is suppressed for '__main__' and 'builtins' (which is why ``ValueError: x''
+    has no prefix).  ``__qualname__'' carries a '<locals>' segment for a class
+    defined inside a function, so a function-local ``X'' renders as
+    ``check.<locals>.X'', not ``X''.  Several checks below hardcoded the bare
+    name and were therefore pinned to one context."""
+    stype = cls.__qualname__
+    smod = cls.__module__
+    if smod not in ('__main__', 'builtins'):
+        if not isinstance(smod, str):
+            smod = '<unknown>'
+        stype = smod + '.' + stype
+    return stype
+
+
 class ModuleLevelError(Exception):
     # The explicit __init__ is deliberate.  A subclass with an EMPTY body does
     # not record args in Grail today -- ``class E(Exception): pass'' then
@@ -47,7 +68,12 @@ def library_exceptions_are_module_qualified():
     """An exception defined in a module renders module-qualified, which is what
     CPython does and what test_traceback's modulename/qualname tests assert."""
     text = ''.join(traceback.format_exception_only(ModuleLevelError('boom')))
-    return text == 'exception_naming.ModuleLevelError: boom\n'
+    return (text == '%s: boom\n' % _rendered_name(ModuleLevelError)
+            # ...and the prefix really is present when imported as a module,
+            # which is the actual subject here.  Under `python3 thisfile.py'
+            # __module__ is '__main__' and CPython suppresses it by design.
+            and (ModuleLevelError.__module__ == '__main__'
+                 or text.startswith(ModuleLevelError.__module__ + '.')))
 
 
 def nested_exceptions_use_qualname():
@@ -56,8 +82,9 @@ def nested_exceptions_use_qualname():
     # Grail's __qualname__ for a nested class is what it is (see the test
     # method's comment); assert consistency with the attribute rather than a
     # hardcoded string, exactly as CPython's own test does.
-    expected = '%s.%s: I am Inner\n' % (Outer.Inner.__module__,
-                                        Outer.Inner.__qualname__)
+    expected = '%s: I am Inner\n' % _rendered_name(Outer.Inner)
+    # The nesting itself is the subject, so assert the qualname is compound
+    # separately -- _rendered_name would happily agree with a bare 'Inner'.
     return text == expected and '.' in Outer.Inner.__qualname__
 
 
@@ -70,10 +97,16 @@ def a_non_str_module_renders_as_unknown():
 
     X.__module__ = 42
     got = ''.join(traceback.format_exception_only(X()))
-    if got != '<unknown>.X: I am X\n':
+    # _rendered_name supplies the '<unknown>.' and the '<locals>' segment; the
+    # rule under test is that a non-str module becomes '<unknown>' rather than
+    # raising or rendering the 42.
+    if got != '%s: I am X\n' % _rendered_name(X):
+        return False
+    if not got.startswith('<unknown>.'):
         return False
     X.__module__ = 'some_module'
-    return ''.join(traceback.format_exception_only(X())) == 'some_module.X: I am X\n'
+    return (''.join(traceback.format_exception_only(X()))
+            == '%s: I am X\n' % _rendered_name(X))
 
 
 def a_none_exception_renders_as_nonetype_none():
@@ -86,11 +119,36 @@ def a_none_exception_renders_as_nonetype_none():
             and traceback.format_exc() == 'NoneType: None\n')
 
 
-def a_legacy_type_with_no_value_keeps_the_bare_name():
-    """The counterpart to the rule above: a caller that passed a TYPE and an
-    explicit None value has no message, and must keep rendering just the name
-    -- so the None handling above cannot be a blanket 'always stringify'."""
-    return ''.join(traceback.format_exception_only(ValueError, None)) == 'ValueError\n'
+def a_legacy_type_is_ignored_when_a_value_is_given():
+    """The module-level legacy entry points DERIVE the type from the value and
+    IGNORE the type they were handed -- the value is the only argument that can
+    carry a message, so it decides the type.  The CLASS is deliberately
+    different: it keeps the type it was constructed with.
+
+        format_exception_only(ValueError, None)    -> 'NoneType: None'
+        format_exception(ValueError, None, None)   -> 'NoneType: None'
+        TracebackException(ValueError, None, None) -> 'ValueError: None'
+
+    All three are CPython 3.14.6, measured.  The last line is the one that makes
+    this worth pinning: the same arguments render two different ways depending
+    on which door you come in by, so a fix that "simplifies" the two into one
+    breaks whichever it did not have in mind.
+
+    This check used to assert 'ValueError\\n' -- what Grail did -- as though it
+    were CPython's rule, and was a fixture pinning a bug.  Grail matched neither
+    path and did not even fail the same way twice: format_exception_only gave
+    the bare name via a ``derived'' flag, while format_exception reached the
+    single-argument guard and RAISED ``Exception expected for value, type
+    found''.  Both are fixed; the sentinel defaults on value/tb are what let the
+    two shapes be told apart at all."""
+    return (''.join(traceback.format_exception_only(ValueError, None))
+                == 'NoneType: None\n'
+            and ''.join(traceback.format_exception(ValueError, None, None))
+                == 'NoneType: None\n'
+            # The class keeps its own type -- the half a naive fix would lose.
+            and ''.join(traceback.TracebackException(
+                    ValueError, None, None).format_exception_only())
+                == 'ValueError: None\n')
 
 
 def a_none_argument_is_not_a_missing_message():
@@ -128,9 +186,9 @@ def a_broken_str_is_reported_not_propagated():
         def __str__(self):
             raise ValueError('bad')
 
-    Broken.__module__ = 'builtins'      # keep the name unqualified for clarity
+    Broken.__module__ = 'builtins'      # keep the module prefix suppressed
     return (''.join(traceback.format_exception_only(Broken()))
-            == 'Broken: <exception str() failed>\n')
+            == '%s: <exception str() failed>\n' % _rendered_name(Broken))
 
 
 def print_exc_takes_limit_first():
@@ -167,3 +225,22 @@ def print_last_reads_sys_last_exc():
         if not had:
             del sys.last_exc
     return True
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.
+if __name__ == '__main__':
+    checks = [
+        builtin_exceptions_are_not_module_qualified,
+        library_exceptions_are_module_qualified,
+        nested_exceptions_use_qualname,
+        a_non_str_module_renders_as_unknown,
+        a_none_exception_renders_as_nonetype_none,
+        a_legacy_type_is_ignored_when_a_value_is_given,
+        a_none_argument_is_not_a_missing_message,
+        non_string_arguments_use_python_str,
+        a_broken_str_is_reported_not_propagated,
+        print_exc_takes_limit_first,
+        print_last_reads_sys_last_exc,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

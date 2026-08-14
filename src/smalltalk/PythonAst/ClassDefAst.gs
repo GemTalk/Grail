@@ -136,7 +136,8 @@ printSmalltalkRuntimeOn: aStream
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames
 	  savedInBodyEmit savedBoundNames savedNestedNames
 	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars
-	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames |
+	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
+	  metaclassKw |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -925,6 +926,40 @@ printSmalltalkRuntimeOn: aStream
 	existing, so it is safe this early.  (The sibling tables stay late; nothing
 	reads __doc__ / __annotations__ from inside a class body.)"
 	self emitMethodCodeTableOn: aStream className: name.
+
+	"PEP 3115's ``__prepare__'': ask the metaclass for the mapping the body is to
+	be executed in, BEFORE the attribute statements below run, because a
+	namespace that watches the writes has to see them as they happen.  Answers
+	nil -- every store then goes straight through -- unless the metaclass really
+	supplies one.
+
+	Emitted for EVERY class statement, not only one naming a metaclass: Grail's
+	own metaclasses are Smalltalk, and an enum's namespace comes from ``Enum
+	class'' rather than from a ``metaclass='' keyword.  The helper answers nil
+	unless something really supplies a namespace, so an ordinary class pays one
+	send and stores exactly what it did before.  A class that INHERITS a PYTHON
+	metaclass is still not reached -- Grail does not install one as the Smalltalk
+	metaclass, so there is nothing to ask.  See docs/Class_Body_Namespace.md.
+
+	The metaclass expression evaluates in the scope ENCLOSING the class
+	statement, like the boundary keyword and the decorators, so it is emitted
+	under inDecoratorEmit."
+	metaclassKw := keywords isNil
+		ifTrue: [nil]
+		ifFalse: [keywords detect: [:kw |
+			kw name notNil and: [kw name asString = 'metaclass']] ifNone: [nil]].
+	[ | savedDeco |
+	savedDeco := CallAst inDecoratorEmit.
+	CallAst inDecoratorEmit: true.
+	[aStream nextPutAll: name; nextPutAll: ' @env1:___grailPrepareNamespace___: '.
+	metaclassKw
+		ifNil: [aStream nextPutAll: 'nil']
+		ifNotNil: [
+			aStream nextPut: $(.
+			metaclassKw value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPut: $)].
+	aStream nextPutAll: '.'; lf]
+		ensure: [CallAst inDecoratorEmit: (savedDeco == true)]] value.
 	[
 		"Python executes a class body top-to-bottom: a name is class-
 		local only once its binding statement has run.  Build each
@@ -933,7 +968,7 @@ printSmalltalkRuntimeOn: aStream
 		so NameAst falls back to module scope for later siblings
 		(``empty_values = list(validators.EMPTY_VALUES)'' before
 		``def validators'' — django's Field)."
-		| firstBinding attrAssignPos |
+		| firstBinding attrAssignPos globalWrites flushGlobalsBefore |
 		firstBinding := IdentityKeyValueDictionary new.
 		attrAssignPos := IdentityKeyValueDictionary new.
 		"Each statement ANNOUNCES what it binds (___boundTargetNames___) and
@@ -960,8 +995,45 @@ printSmalltalkRuntimeOn: aStream
 		emitting it once per target re-evaluates the RHS per name, which is wrong
 		for an RHS with identity/side effects.  Block-wrapped only to add the
 		temp without touching the method-level declaration."
+		"A class-body statement assigning a name the body declared ``global''.
+		It binds the MODULE, not a class attribute, so the structural compile
+		has nothing to emit for it and dropped it whole -- ``class C: global x;
+		x = 13'' left the module's x alone AND bound a class attribute of that
+		name (the name is now excluded from classBodyAttributes, so only the
+		write is left to do).
+
+		Emitted in SOURCE ORDER, interleaved with the attribute stores below
+		rather than in a pass after them.  A pass afterwards is what the
+		``nonlocal'' writes use and it is wrong here: a later attribute that
+		READS the declared name would see the pre-write value.  ``global g; g =
+		2; y = g'' in a class body must leave y == 2 (test_listcomps
+		test_explicit_global), and with a trailing pass it answered 1.
+
+		Emitted through the statement's OWN printSmalltalkOn:, where AssignAst's
+		store routing sees the class body's declaration via
+		___nearestEnclosingScopeDeclaresGlobal___ and picks the module receiver
+		-- or, inside a doit, the scope handle."
+		globalWrites := self ___classBodyGlobalWriteStatements___.
+		flushGlobalsBefore := [:limit |
+			[globalWrites notEmpty and: [globalWrites first key < limit]]
+					whileTrue: [
+						| entry bound |
+						entry := globalWrites removeFirst.
+						bound := IdentitySet new.
+						firstBinding keysAndValuesDo: [:nm :p |
+							p < entry key ifTrue: [bound add: nm]].
+						CallAst classBodyBoundNames: bound.
+						entry value printSmalltalkOn: aStream.
+						aStream lf]].
 		[:emittedChainValues |
 		classAttrs do: [:pair |
+			"Any global-declared write that stands BEFORE this attribute in the
+			source goes out first, so the attribute's value expression reads
+			what the write left.  An attribute whose position is unknown flushes
+			nothing -- the ordering can only be honoured against a position."
+			(attrAssignPos at: pair key asSymbol
+				ifAbsent: [firstBinding at: pair key asSymbol ifAbsent: [nil]])
+					ifNotNil: [:attrPos | flushGlobalsBefore value: attrPos].
 			"pair value is nil for bare annotations (``x: int'' with no
 			assignment) — skip the init emit; the slot stays nil until
 			some later assignment fills it."
@@ -974,9 +1046,11 @@ printSmalltalkRuntimeOn: aStream
 						RHS, so every name shares the single evaluation -- one
 						GrailEnumAuto marker, which the enum builder then aliases."
 						aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key;
-							nextPutAll: ': ('; nextPutAll: name; nextPutAll: ' ';
+							nextPutAll: ': ('; nextPutAll: name;
+							nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
+							nextPutAll: ''' value: ('; nextPutAll: name; nextPutAll: ' ';
 							nextPutAll: (emittedChainValues at: pair value);
-							nextPutAll: ').'; lf]
+							nextPutAll: ')).'; lf]
 					ifFalse: [
 						| myPos bound |
 						emittedChainValues at: pair value put: pair key.
@@ -987,11 +1061,21 @@ printSmalltalkRuntimeOn: aStream
 							firstBinding keysAndValuesDo: [:nm :pos |
 								pos < myPos ifTrue: [bound add: nm]]].
 						CallAst classBodyBoundNames: (myPos isNil ifTrue: [nil] ifFalse: [bound]).
-						aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key; nextPutAll: ': '.
+						"Through the class-body namespace, when there is one: the
+						value is offered to the mapping and READ BACK, so a
+						namespace may refuse the write (enum.EnumDict on a reused
+						member name) or transform it.  With no namespace the helper
+						answers the value untouched, so this is what it always was."
+						aStream nextPutAll: name; nextPutAll: ' '; nextPutAll: pair key;
+							nextPutAll: ': ('; nextPutAll: name;
+							nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
+							nextPutAll: ''' value: ('.
 						pair value printSmalltalkWithParenthesisOn: aStream.
-						aStream nextPutAll: '.'; lf]
+						aStream nextPutAll: ')).'; lf]
 			].
 		]] value: IdentityKeyValueDictionary new.
+		"Whatever is left stands after the last attribute in the body."
+		flushGlobalsBefore value: body body size + 1.
 		"Top-level ``if'' statements in the class body: CPython runs
 		them at class-DEFINITION time — the C-vs-Python dual-module
 		pattern (``if c_functools: partial = c_functools.partial''
@@ -1625,6 +1709,11 @@ printSmalltalkRuntimeOn: aStream
 		separatedBy: [aStream nextPutAll: '. '].
 	aStream nextPutAll: ' }.'; lf.
 
+	"The class statement is over as far as the namespace is concerned -- the
+	metaclass hook above was the last thing entitled to see it.  Emitted only
+	where ___grailPrepareNamespace___ was, so an ordinary class emits neither."
+	aStream nextPutAll: name; nextPutAll: ' @env1:___grailFinishNamespace___.'; lf.
+
 	"CLASS KEYWORD ``boundary='': a Flag/IntFlag may override its family-default
 	FlagBoundary (STRICT for Flag, KEEP for IntFlag) with
 	``class E(Flag, boundary=CONFORM)''.  Emit a store onto the freshly-built
@@ -1894,7 +1983,19 @@ emitCompileMethodOn: classVarName source: sourceString category: categoryString 
 	aStream
 		nextPutAll: ' category: ''';
 		nextPutAll: categoryString;
-		nextPutAll: '''.'; lf.
+		nextPutAll: ''''.
+	"Inside a DOIT, hand the helper the doit's own scope.  These methods
+	compile at RUNTIME against the user profile's symbol list, which an
+	exec's SymbolDictionary is not on, so without this a method could not
+	read a name from the source it was written in -- ``exec('x = 12; class
+	C: ...')'' left every method that mentions x uncompilable, and the
+	classdef survived only through the raising stub Grail installs for a
+	method it cannot compile.  The handle ensureModuleScope: parks in the
+	scope is what names it here; outside a doit there is no scope to pass
+	and the plain two-keyword form stands."
+	ModuleAst compilingDoitScope ifNotNil: [
+		aStream nextPutAll: ' scope: ___pyGlobals___'].
+	aStream nextPutAll: '.'; lf.
 %
 
 category: 'Grail-code generation'
@@ -2289,7 +2390,7 @@ classBodyAttributes
 	value AST (emitted once below, the rest aliased); attribute and
 	subscript targets declare nothing on the class and yield no entry."
 
-	| pairs aliasNames nonlocals |
+	| pairs aliasNames nonlocals globals |
 	"Sibling-method aliases (``__lt__ = __eq__'') are compiled as real
 	delegating methods (see ___classBodyMethodAliases___), NOT materialized
 	as class attributes -- exclude their names here."
@@ -2303,6 +2404,17 @@ classBodyAttributes
 	nonlocals := (body notNil and: [body nonlocalNames notNil])
 		ifTrue: [body nonlocalNames]
 		ifFalse: [#()].
+	"A name the body declared ``global'' is the same story one scope further
+	out: it names the MODULE binding, so an assignment to it is not a class
+	attribute either.  ``class Global: global x; x = 13'' leaves Global with no
+	``x'' at all -- test_scope's testScopeOfGlobalStmt reads it back through a
+	method, which sees the module value.  Grail bound a class attribute AND
+	left the module binding untouched, wrong in both directions.  The write
+	itself is emitted by the global-write flush in printSmalltalkRuntimeOn:,
+	interleaved with these attributes in SOURCE ORDER."
+	globals := (body notNil and: [body globalNames notNil])
+		ifTrue: [body globalNames]
+		ifFalse: [#()].
 	pairs := OrderedCollection new.
 	"Each binding form says which attributes it yields; this method only
 	applies the rule ClassDefAst owns -- drop the sibling-method aliases,
@@ -2315,7 +2427,8 @@ classBodyAttributes
 	body body do: [:stmt |
 		stmt classBodyAttributePairs do: [:pair |
 			((aliasNames includes: pair key)
-				or: [nonlocals includes: pair key asSymbol])
+				or: [(nonlocals includes: pair key asSymbol)
+				or: [globals includes: pair key asSymbol]])
 					ifFalse: [pairs add: pair]]].
 	^ pairs
 %
@@ -2556,6 +2669,51 @@ ___isClassBodyAttributeAssign___: stmt
 
 category: 'Grail-Class Compilation'
 method: ClassDefAst
+___classBodyGlobalTargetNames___: stmt
+	"The bare-NAME targets of stmt that this class body declared ``global'',
+	as ___classBodyNonlocalTargetNames___ does for ``nonlocal'' -- and for the
+	same reason: such a statement assigns the MODULE binding rather than a
+	class attribute, so it needs an emit of its own rather than the structural
+	class-attribute compile.
+
+	No assignability guard is needed, unlike the nonlocal case: that one has to
+	prove Grail HAS a temp for the name in the enclosing scope, whereas a
+	module binding is reached through the module instance (or, in a doit, the
+	scope handle) and is always writable."
+
+	| targets globals |
+	globals := (body notNil and: [body globalNames notNil])
+		ifTrue: [body globalNames]
+		ifFalse: [^ #()].
+	globals isEmpty ifTrue: [^ #()].
+	targets := (stmt isKindOf: AssignAst)
+		ifTrue: [stmt targets]
+		ifFalse: [(stmt isKindOf: AugAssignAst)
+			ifTrue: [Array with: stmt target]
+			ifFalse: [^ #()]].
+	^ (targets select: [:t |
+		(t isKindOf: NameAst) and: [globals includes: t id asSymbol]])
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyGlobalWriteStatements___
+	"The class body's ``global''-declared assignments, as (sourcePosition ->
+	statement) associations in body order.  printSmalltalkRuntimeOn: flushes
+	them into the class-attribute emit at their own positions, so a later
+	attribute reading the name sees the value the write left."
+
+	| result |
+	result := OrderedCollection new.
+	body ifNil: [^ result].
+	body body doWithIndex: [:stmt :pos |
+		(self ___classBodyGlobalTargetNames___: stmt) isEmpty
+			ifFalse: [result add: pos -> stmt]].
+	^ result
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
 ___nonlocalTargetIsAssignableHere___: aSymbol
 	"True when aSymbol is a plain assignable Smalltalk temp in the scope this
 	classdef is being emitted into, so ``aSymbol := value'' compiles there.
@@ -2630,6 +2788,22 @@ ___isClassBodyRuntimeStatement___: aStatement
 	These four are emitted verbatim instead -- re-deriving try/except/finally
 	and loop codegen would duplicate it."
 
+	"A body-level AUGMENTED ASSIGNMENT to a bare name joins them.  ``x += 1''
+	rebinds the class attribute, so CPython leaves ``class C: x = 1; x += 1''
+	with C.x == 2 -- but an AugAssignAst yields no classBodyAttributePairs, so
+	the structural compile had nothing to emit and dropped the statement whole,
+	leaving C.x == 1 and reporting nothing.  Emitted verbatim here instead, with
+	AugAssignAst's class-body branch turning it into a read-modify-write through
+	___classBodyDefinitionalStore___:put:.
+
+	A target the body declared ``nonlocal'' is excluded: that one binds the
+	ENCLOSING function's variable, not a class attribute, and has its own
+	enclosing-scope emit (___classBodyNonlocalTargetNames___:).  Without the
+	exclusion it would be emitted twice, once per pass, and the increment would
+	be applied to both the class and the outer binding."
+	((aStatement isKindOf: AugAssignAst)
+		and: [aStatement target isKindOf: NameAst]) ifTrue: [
+			^ (self ___classBodyNonlocalTargetNames___: aStatement) isEmpty].
 	^ (aStatement isKindOf: TryAst)
 		or: [(aStatement isKindOf: ForAst)
 		or: [(aStatement isKindOf: WhileAst)

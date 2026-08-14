@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 31 | 23 | 36 | 90 |
+| P1 | 32 | 22 | 36 | 90 |
 | P2 | 14 | 2 | 18 | 34 |
-| P3 | 0 | 1 | 55 | 56 |
+| P3 | 0 | 13 | 43 | 56 |
 | P4 | 0 | 0 | 75 | 75 |
-| **In-scope** | **45** | **26** | **184** | **255** |
+| **In-scope** | **46** | **37** | **172** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -88,7 +88,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **71 are wired into the harness** (P1 54 · P2 16 · P3 1) and **45 of those score OK**.
+Of the 255 in-scope modules, **83 are wired into the harness** (P1 54 · P2 16 · P3 13) and **46 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -111,7 +111,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_bool` | bool type (language). |
 | ❗ | `test_builtin` | Built-in functions (language). |
 | ✅ | `test_bytes` | bytes / bytearray (language/core type). |
-| ❗ | `test_call` | Call protocol (language). |
+| ✅ | `test_call` | Call protocol (language). |
 |  | `test_class` | Class definition/semantics (language). |
 | ✅ | `test_compare` | Object comparison protocol (language). |
 | ❗ | `test_complex` | complex type (language). |
@@ -242,60 +242,60 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 
 | Status | Module | Rationale |
 |:------:|--------|-----------|
-|  | `test_annotationlib` | PEP 649 deferred annotations (new in 3.14) — annotation evaluation semantics. |
+| ❗ | `test_annotationlib` | PEP 649 deferred annotations (new in 3.14) — annotation evaluation semantics. |
 |  | `test_argparse` | argparse — pure-Python CLI parsing. |
 |  | `test_atexit` | atexit callbacks — pure-ish, but 'interpreter exit' semantics differ in a persistent DB VM. *(edge — see below)* |
 |  | `test_base64` | base64 — pure-Python encoding. |
 |  | `test_binascii` | binascii encodings — pure semantics. |
-|  | `test_bufio` | Buffered I/O layer — in-scope for StringIO/BytesIO; real-file backing is OS. *(edge — see below)* |
+| ❗ | `test_bufio` | Buffered I/O layer — in-scope for StringIO/BytesIO; real-file backing is OS. *(edge — see below)* |
 |  | `test_calendar` | calendar — pure Python. |
 |  | `test_charmapcodec` | charmap codec — pure text codec. |
 |  | `test_codeccallbacks` | Codec error-handler callbacks — pure. |
-|  | `test_codecs` | codecs core — encode/decode registry (pure). |
+| ❗ | `test_codecs` | codecs core — encode/decode registry (pure). |
 |  | `test_colorsys` | colorsys — pure color-space math. |
 |  | `test_configparser` | configparser (INI) — pure Python. |
 |  | `test_context` | contextvars — pure-Python context state. |
 |  | `test_contextlib` | contextlib — pure Python. |
-|  | `test_contextlib_async` | async contextlib — pure Python. |
+| ❗ | `test_contextlib_async` | async contextlib — pure Python. |
 |  | `test_copyreg` | copyreg — pickle/copy registry. |
 |  | `test_csv` | csv — reader/writer (pure semantics). |
 |  | `test_dataclasses` | dataclasses — pure-Python codegen over classes. |
-|  | `test_difflib` | difflib — pure Python. |
+| ❗ | `test_difflib` | difflib — pure Python. |
 |  | `test_doctest` | doctest — pure-Python test framework. |
 |  | `test_fnmatch` | fnmatch — pure glob-pattern matching on strings. |
 |  | `test_genericpath` | genericpath — pure string path operations. |
 |  | `test_getopt` | getopt — pure CLI parsing. |
-|  | `test_gettext` | gettext — pure-Python .mo/.po i18n. |
+| ❗ | `test_gettext` | gettext — pure-Python .mo/.po i18n. |
 |  | `test_inspect` | inspect — needs frame/code/signature introspection depth. *(edge — see below)* |
 |  | `test_io` | io core — StringIO/BytesIO in-scope; FileIO backing is OS. *(edge — see below)* |
 |  | `test_json` | json package (vendored) — pure-Python. |
-|  | `test_linecache` | linecache — caches source lines (reads files, but a caching layer). *(edge — see below)* |
+| ❗ | `test_linecache` | linecache — caches source lines (reads files, but a caching layer). *(edge — see below)* |
 |  | `test_logging` | logging (vendored) — core stdlib; socket/file handlers are optional. |
 |  | `test_memoryio` | In-memory StringIO/BytesIO — pure. |
 |  | `test_ntpath` | ntpath — pure Windows path-string operations. |
 |  | `test_optparse` | optparse — pure (legacy CLI). |
 |  | `test_pathlib` | pathlib — pure path algebra is in-scope; stat/IO methods are OS. *(edge — see below)* |
-|  | `test_pickle` | pickle (partial support today) — pure-Python protocol. |
+| ❗ | `test_pickle` | pickle (partial support today) — pure-Python protocol. |
 |  | `test_pickletools` | pickletools — pure. |
 |  | `test_posixpath` | posixpath — pure POSIX path-string operations. |
 |  | `test_pprint` | pprint — pure Python. |
 |  | `test_queue` | queue — pure structures (thread-safety atop them). |
-|  | `test_reprlib` | reprlib — pure Python. |
+| ❗ | `test_reprlib` | reprlib — pure Python. |
 |  | `test_sched` | sched — pure event scheduler. |
 |  | `test_shlex` | shlex — pure lexer. |
 |  | `test_strftime` | time.strftime formatting — pure. |
 |  | `test_strptime` | _strptime parsing — pure. |
-|  | `test_struct` | struct — binary packing; C-accelerated but pure semantics. *(edge — see below)* |
+| ❗ | `test_struct` | struct — binary packing; C-accelerated but pure semantics. *(edge — see below)* |
 |  | `test_time` | time — clock/sleep; pure formatting parts in-scope, OS clock parts not. *(edge — see below)* |
 |  | `test_timeit` | timeit — pure timing harness. |
 |  | `test_tokenize` | tokenize — pure Python tokenizer. |
 |  | `test_tomllib` | tomllib — pure-Python TOML parser. |
 | ❗ | `test_traceback` | traceback — needs frame/tb introspection. *(edge — see below)* |
-|  | `test_typing` | typing — pure-Python type hints. |
+| ❗ | `test_typing` | typing — pure-Python type hints. |
 |  | `test_ucn` | \N{...} unicode-name escapes — needs the UCD name table. |
 |  | `test_unicodedata` | unicodedata — large UCD tables (C-backed). *(edge — see below)* |
 |  | `test_univnewlines` | Universal newline handling (text io). |
-|  | `test_warnings` | warnings — pure-Python warning framework. |
+| ❗ | `test_warnings` | warnings — pure-Python warning framework. |
 |  | `test_xpickle` | Cross-Python-version pickle compatibility. *(edge — see below)* |
 |  | `test_zoneinfo` | zoneinfo — IANA tz database (needs the tz data files). |
 

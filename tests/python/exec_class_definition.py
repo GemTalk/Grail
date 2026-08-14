@@ -174,3 +174,20 @@ RESULTS = {
     'python_errors': exec_class_raises_python_errors_not_smalltalk_ones(),
     'three_scopes': exec_class_in_each_of_the_three_scopes(),
 }
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.
+if __name__ == '__main__':
+    checks = [
+        exec_of_a_class_body_works,
+        exec_class_lands_in_the_supplied_globals,
+        exec_class_body_may_hold_a_comprehension,
+        exec_class_is_instantiable_with_methods,
+        exec_class_supports_isinstance_and_type,
+        exec_class_can_subclass_and_be_subclassed,
+        exec_class_inherits_attributes_through_the_mro,
+        exec_class_raises_python_errors_not_smalltalk_ones,
+        exec_class_in_each_of_the_three_scopes,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

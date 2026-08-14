@@ -398,6 +398,7 @@ run
 	at: #'AbstractPyInt' put: nil;
 	at: #'AbstractPyFloat' put: nil;
 	at: #'AbstractPyStr' put: nil;
+	at: #'PyStrSurrogate' put: nil;
 	at: #'Enum' put: nil;
 	at: #'IntEnum' put: nil;
 	at: #'IntFlag' put: nil;
@@ -646,6 +647,11 @@ run
 	at: #'ClosureCellTestCase' put: nil;
 	at: #'ClassBodyLocalsTestCase' put: nil;
 	at: #'ClassBodyNonlocalTestCase' put: nil;
+	at: #'ClassBodyAugAssignTestCase' put: nil;
+	at: #'MissingArgumentMessageTestCase' put: nil;
+	at: #'GlobalDeclarationScopeTestCase' put: nil;
+	at: #'ExecClassMethodScopeTestCase' put: nil;
+	at: #'ClassBodyGlobalTestCase' put: nil;
 	at: #'MethodDocstringTestCase' put: nil;
 	at: #'GlobalStatementCodegenTestCase' put: nil;
 	at: #'EmailMessageTestCase' put: nil;
@@ -694,6 +700,11 @@ run
 	at: #'EnumModuleApiTestCase' put: nil;
 	at: #'BuiltinSubclassPickleTestCase' put: nil;
 	at: #'EnumPickleByNameTestCase' put: nil;
+	at: #'ClassBodyNamespaceTestCase' put: nil;
+	at: #'InspectGetmembersTestCase' put: nil;
+	at: #'StrDecodeArgsTestCase' put: nil;
+	at: #'StrEnumMixinAndNewTestCase' put: nil;
+	at: #'EnumAutoAtAssignmentTestCase' put: nil;
 	at: #'EnumDictTestCase' put: nil;
 	at: #'EnumFlagMasksTestCase' put: nil;
 	at: #'EnumNamedFlagsTestCase' put: nil;
@@ -773,6 +784,9 @@ run
 	at: #'SlotsInheritedDictTestCase' put: nil;
 	at: #'ClassAttrMethodOverrideTestCase' put: nil;
 	at: #'PositionalOnlyDefaultsTestCase' put: nil;
+	at: #'WithAsTargetsTestCase' put: nil;
+	at: #'SurrogateStrTestCase' put: nil;
+	at: #'ExecLocalsTestCase' put: nil;
 	at: #'TimedeltaFloatOperandTestCase' put: nil;
 	at: #'BuiltinSubclassMethodsTestCase' put: nil;
 	at: #'PrivateNameManglingTestCase' put: nil;
@@ -1032,6 +1046,7 @@ input src/smalltalk/Python/PyModuleDict.gs
 input src/smalltalk/Python/AbstractPyInt.gs
 input src/smalltalk/Python/AbstractPyFloat.gs
 input src/smalltalk/Python/AbstractPyStr.gs
+input src/smalltalk/Python/PyStrSurrogate.gs
 input src/smalltalk/Python/NamedIntConstant.gs
 input src/smalltalk/Python/BoundMethod.gs
 input src/smalltalk/Python/MethodBinding.gs
@@ -1470,6 +1485,11 @@ input src/smalltalk/PythonTests/NestedDefIdentityTestCase.gs
 input src/smalltalk/PythonTests/ClosureCellTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyLocalsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNonlocalTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyAugAssignTestCase.gs
+input src/smalltalk/PythonTests/MissingArgumentMessageTestCase.gs
+input src/smalltalk/PythonTests/GlobalDeclarationScopeTestCase.gs
+input src/smalltalk/PythonTests/ExecClassMethodScopeTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyGlobalTestCase.gs
 input src/smalltalk/PythonTests/MethodDocstringTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementCodegenTestCase.gs
 input src/smalltalk/PythonTests/EnumAutoImportTestCase.gs
@@ -1500,6 +1520,11 @@ input src/smalltalk/PythonTests/NamedtupleNamingTestCase.gs
 input src/smalltalk/PythonTests/EnumModuleApiTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassPickleTestCase.gs
 input src/smalltalk/PythonTests/EnumPickleByNameTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyNamespaceTestCase.gs
+input src/smalltalk/PythonTests/InspectGetmembersTestCase.gs
+input src/smalltalk/PythonTests/StrDecodeArgsTestCase.gs
+input src/smalltalk/PythonTests/StrEnumMixinAndNewTestCase.gs
+input src/smalltalk/PythonTests/EnumAutoAtAssignmentTestCase.gs
 input src/smalltalk/PythonTests/EnumDictTestCase.gs
 input src/smalltalk/PythonTests/EnumFlagMasksTestCase.gs
 input src/smalltalk/PythonTests/EnumNamedFlagsTestCase.gs
@@ -1595,6 +1620,9 @@ input src/smalltalk/PythonTests/ClassMethodDecoratorOrderTestCase.gs
 input src/smalltalk/PythonTests/SlotsInheritedDictTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrMethodOverrideTestCase.gs
 input src/smalltalk/PythonTests/PositionalOnlyDefaultsTestCase.gs
+input src/smalltalk/PythonTests/WithAsTargetsTestCase.gs
+input src/smalltalk/PythonTests/SurrogateStrTestCase.gs
+input src/smalltalk/PythonTests/ExecLocalsTestCase.gs
 input src/smalltalk/PythonTests/TimedeltaFloatOperandTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassMethodsTestCase.gs
 input src/smalltalk/PythonTests/PrivateNameManglingTestCase.gs

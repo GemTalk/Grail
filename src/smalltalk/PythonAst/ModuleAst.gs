@@ -95,12 +95,71 @@ evaluateSource: sourceString usingModuleScope: aSymbolDictionary as: aKind
 	#eval; everything else (the REPL, test helpers) defaults to
 	#doit via the 2-arg form."
 
+	^ self
+		evaluateSource: sourceString
+		usingModuleScope: aSymbolDictionary
+		as: aKind
+		globalNamesInto: nil
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
+evaluateSource: sourceString usingModuleScope: aSymbolDictionary as: aKind globalNamesInto: aSetOrNil
+	"As the 3-arg variant, and additionally collects into aSetOrNil every
+	name the source declares ``global'' ANYWHERE in it, nested defs included.
+
+	exec(source, globals, locals) needs this to reflect its bindings back to
+	the right mapping.  Grail runs an exec'd body in ONE flat scope -- it has
+	no separate globals/locals at runtime -- so after the body has run,
+	deciding where a binding belongs is a question about the SOURCE, and a
+	``global'' declaration is the whole answer: a name declared global is the
+	one kind that must land in the globals mapping even though every other
+	binding the body made belongs to locals.
+
+	    a = 10            # -> locals
+	    def spam():
+	        global a
+	        (a := 20)     # -> globals
+	    spam()
+
+	is test_named_expressions' test_named_expression_scope_25, which asserts
+	exactly that split.  aSetOrNil is nil for the callers that do not care,
+	which skips the walk entirely."
+
 	| module symbolList |
 	module := self parseSource: sourceString.
 	module useTempsForBlock: false.
 	module ensureModuleScope: aSymbolDictionary.
+	aSetOrNil ifNotNil: [self collectGlobalNamesFrom: module into: aSetOrNil].
 	symbolList := self symbolListForModuleScope: aSymbolDictionary.
 	^module evaluateWithScope: symbolList as: aKind
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
+collectGlobalNamesFrom: node into: aSet
+	"Recursive walk collecting the names of every ``global x, y'' statement
+	beneath node, as Symbols.  Same shape as FunctionDefAst >>
+	collectDeletedNamesFrom:into:, including its two guards: strings are
+	SequenceableCollections and recursing into one walks its Characters for
+	nothing, and the ``parent'' back-pointer is skipped so the walk cannot
+	cycle up the tree.
+
+	DESCENDS INTO NESTED DEFS -- which is the point, since the declaration
+	that matters is almost always inside one."
+
+	node isNil ifTrue: [^ self].
+	node isString ifTrue: [^ self].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each | self collectGlobalNamesFrom: each into: aSet].
+		^ self].
+	(node isKindOf: AbstractNode) ifFalse: [^ self].
+	(node isKindOf: GlobalAst) ifTrue: [
+		node names ifNotNil: [:ns |
+			ns do: [:n | aSet add: n asString asSymbol]]].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self collectGlobalNamesFrom: (node instVarAt: i) into: aSet]]
 %
 
 category: 'Grail-evaluation'
@@ -195,6 +254,16 @@ ensureModuleScope: aSymbolDictionary
 	compiler has to find must carry the same name."
 	body variables do: [:each |
 		aSymbolDictionary at: (NameAst doitScopeNameFor: each) ifAbsentPut: [nil] ].
+	"A handle on the scope itself, for the one case a bare identifier cannot
+	reach it: a name declared ``global'' and read or written from inside a
+	nested def whose ENCLOSING def has a same-named local.  The local is a
+	Smalltalk block temp, and Smalltalk resolves the bare identifier
+	LEXICALLY, so the temp wins over this dictionary and the global
+	declaration is silently ignored (test_scope testScopeOfGlobalStmt).
+	Going through the handle names the slot explicitly, which no temp can
+	shadow.  ___reflectDoitScope___: drops the key again so it never reaches
+	the caller's namespace."
+	aSymbolDictionary at: #'___pyGlobals___' put: aSymbolDictionary.
 %
 
 category: 'Grail-evaluation'

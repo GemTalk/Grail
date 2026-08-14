@@ -749,6 +749,111 @@ ___grailNearerOf___: aClass and: anotherClass from: startClass
 	^ aClass
 %
 
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailPrepareNamespace___: aMetaclass
+	"PEP 3115's ``__prepare__'': the mapping a class body is executed in.
+
+	    class Meta(type):
+	        @classmethod
+	        def __prepare__(metacls, cls, bases, **kwds):
+	            return EnumDict(cls)
+
+	CPython asks the metaclass for a namespace BEFORE running the body, runs the
+	body against it, and hands it to the metaclass afterwards.  A namespace that
+	watches the writes can then refuse one -- which is the whole point of
+	enum.EnumDict, and of this.
+
+	Grail has no class-body namespace: a body compiles to accessor stores on the
+	class.  This is the first stage of giving it one -- the mapping exists, and
+	every class-body ASSIGNMENT is routed through it (___grailNsStore___:value:)
+	in source order, so a namespace sees each write as it happens.  What it does
+	NOT yet cover is the rest of a body: nested classes, ``if'' branches, ``def''s
+	and decorated ``def''s each have their own emission path and still bypass it,
+	and ``vars()'' inside a body does not answer it.  See
+	docs/Class_Body_Namespace.md.
+
+	Answers nil -- meaning no namespace, and every store goes straight through --
+	unless the metaclass really supplies __prepare__.  Kept in SessionTemps
+	keyed by the class rather than on the class itself: it is scaffolding for
+	the duration of the class statement, it must never be committed, and keying
+	by class handles a nested class statement without a stack."
+
+	| prep ns tbl |
+	aMetaclass isNil ifTrue: [
+		"No ``metaclass='' keyword.  Grail's own metaclasses are SMALLTALK -- an
+		enum's namespace comes from ``Enum class'', not from a keyword -- so ask
+		the receiver's metaclass chain for the Grail-side hook.  A selector probe
+		rather than an attribute load, because this runs for every class
+		definition in the corpus and answers nil for almost all of them."
+		((self @env0:class @env0:whichClassIncludesSelector:
+			#'___grailMetaclassNamespace___' environmentId: 1) == nil)
+				ifTrue: [^ nil].
+		ns := self ___grailMetaclassNamespace___.
+		(ns isNil or: [ns == None]) ifTrue: [^ nil].
+		tbl := SessionTemps @env0:current
+			@env0:at: #'GrailPendingClassNamespace'
+			ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+		tbl @env0:at: self put: ns.
+		^ ns].
+	prep := [aMetaclass ___pyAttrLoad___: #'__prepare__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	prep isNil ifTrue: [^ nil].
+	"NOT guarded.  A __prepare__ that raises is a real error in the metaclass and
+	CPython propagates it; swallowing it here turned a broken namespace into a
+	silent no-namespace, which looked exactly like this whole path not working."
+	ns := prep @env1:value: { self @env1:__name__. #() } value: nil.
+	(ns isNil or: [ns == None]) ifTrue: [^ nil].
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingClassNamespace'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	tbl @env0:at: self put: ns.
+	^ ns
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailNsStore___: aName value: aValue
+	"One class-body assignment, seen by the namespace if there is one.
+
+	Answers the value to store in the class attribute.  With no namespace that
+	is aValue untouched, which is every class in the corpus that does not name a
+	metaclass with __prepare__.
+
+	The value is READ BACK from the namespace rather than passed through, because
+	a namespace is entitled to transform what it was given -- CPython's
+	_EnumDict resolves an ``auto()'' at assignment time, so the name is already
+	an int for the next statement in the body to use.  Nothing in Grail depends
+	on that yet; reading back is what makes it possible without revisiting this.
+
+	A namespace that REFUSES the write raises out of here, which is what
+	enum.EnumDict does for a reused member name -- and is the behaviour this
+	whole path exists to make reachable."
+
+	| tbl ns |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingClassNamespace' otherwise: nil.
+	tbl isNil ifTrue: [^ aValue].
+	ns := tbl @env0:at: self otherwise: nil.
+	ns isNil ifTrue: [^ aValue].
+	ns @env1:__setitem__: aName @env0:asString _: aValue.
+	^ ns @env1:__getitem__: aName @env0:asString
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailFinishNamespace___
+	"Drop the pending namespace once the class statement is over.  Called after
+	the metaclass hook, which is the last thing entitled to see it."
+
+	| tbl |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingClassNamespace' otherwise: nil.
+	tbl isNil ifTrue: [^ self].
+	tbl @env0:removeKey: self ifAbsent: [].
+	^ self
+%
+
 category: 'Grail-Initialization'
 classmethod: object
 ___pyClassDefined___: attrNames
@@ -1107,8 +1212,12 @@ ___pythonBuiltinTypeName___
 		'LargeNegativeInteger' 'AbstractPyInt') @env0:includes: n) ifTrue: [^ 'int'].
 	(#('Boolean') @env0:includes: n) ifTrue: [^ 'bool'].
 	(#('Float' 'SmallDouble' 'AbstractPyFloat') @env0:includes: n) ifTrue: [^ 'float'].
+	"PyStrSurrogate is named explicitly rather than inherited: this test is
+	keyed by class NAME so that no class-global resolution is needed, which
+	means an AbstractPyStr SUBCLASS does not pick the answer up for free."
 	(#('Unicode7' 'Unicode16' 'Unicode32' 'String' 'DoubleByteString'
-		'QuadByteString' 'AbstractPyStr') @env0:includes: n) ifTrue: [^ 'str'].
+		'QuadByteString' 'AbstractPyStr' 'PyStrSurrogate') @env0:includes: n)
+			ifTrue: [^ 'str'].
 	(#('ByteArray') @env0:includes: n) ifTrue: [^ 'bytes'].
 	(#('OrderedCollection') @env0:includes: n) ifTrue: [^ 'list'].
 	(#('PyDict' 'KeyValueDictionary') @env0:includes: n) ifTrue: [^ 'dict'].
@@ -1792,12 +1901,19 @@ ___classBodyDefinitionalStore___: aName put: aValue
 	canonically-registered class, and a class-body binding is DEFINITIONAL --
 	see ___classHolderAttrStore___ for what that costs."
 
-	| setterSym getterSym |
+	| setterSym getterSym v |
+	"Through the class-body namespace first, when the class statement prepared
+	one.  Routing it HERE rather than at the two emission sites covers both the
+	single and the chained runtime store, and covers every compound form at once
+	-- a binding inside a class-body ``with'' is exactly where test_enum's
+	test_enum_dict_in_metaclass puts the duplicate it expects to be refused.
+	With no namespace this answers aValue untouched."
+	v := self ___grailNsStore___: aName value: aValue.
 	setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
 	getterSym := aName @env0:asString @env0:asSymbol.
 	((self ___respondsTo___: setterSym) and: [self ___respondsTo___: getterSym])
-		ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { aValue }].
-	^ self ___classHolderAttrStore___: aName put: aValue
+		ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { v }].
+	^ self ___classHolderAttrStore___: aName put: v
 %
 
 category: 'Grail-Class Attr Overlay'
@@ -3673,6 +3789,42 @@ __format__: formatSpec
 			@env0:, '.__format__')
 %
 
+set compile_env: 0
+
+category: 'Grail-Testing'
+method: object
+___isPyStr___
+	"Is the receiver a Python ``str''?  False here; CharacterCollection and
+	AbstractPyStr answer true.
+
+	Defined in env 0, as its two overrides are, because the callers are
+	Smalltalk guards.  Two consequences worth stating, both of which cost a
+	broken suite to learn:
+
+	  * Split the definitions across environments and the predicate answers
+	    ``false'' for every string, since an env-1 lookup finds only this
+	    one.  All three must live in env 0.
+	  * From env-1 code, send it as ``@env0:___isPyStr___''.  A bare send
+	    is an env-1 send and raises doesNotUnderstand.
+
+	The point of asking this way rather than ``isKindOf: CharacterCollection''
+	is that Grail's str is NOT one Smalltalk class and never was -- it is
+	Unicode7 / Unicode16 / Unicode32 / String / Symbol, plus AbstractPyStr
+	for StrEnum and ``class X(str)'', plus PyStrSurrogate for a str holding
+	code points GemStone has no Character for.  A ``isKindOf:
+	CharacterCollection'' test silently answers false for the last two, and
+	the failure mode is a wrong answer rather than an error: the value is
+	quietly treated as not-a-string and takes some other branch.
+
+	Prefer this at every site that means ``is this a Python string''.  A site
+	that genuinely means ``is this a Smalltalk CharacterCollection I am about
+	to index or concatenate'' should keep isKindOf: and say so."
+
+	^ false
+%
+
+set compile_env: 1
+
 category: 'Grail-Context Manager'
 method: object
 __enter__
@@ -3682,15 +3834,83 @@ __enter__
 	with a raw generator in a with-statement (a dropped @contextmanager
 	class-body decorator)."
 
-	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
-		@env0:, ''' object does not support the context manager protocol')
+	TypeError ___signal___: (self ___contextManagerProtocolError___: '__enter__')
 %
 
 category: 'Grail-Context Manager'
 method: object
 __exit__: excType _: excValue _: excTb
-	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
-		@env0:, ''' object does not support the context manager protocol')
+
+	TypeError ___signal___: (self ___contextManagerProtocolError___: '__exit__')
+%
+
+category: 'Grail-Context Manager'
+method: object
+___contextManagerProtocolError___: missingSelector
+	"CPython's TypeError text for ``with obj:'' on a non-manager, built here
+	because it depends on WHICH halves of the protocol the object has:
+
+	  'X' object does not support the context manager protocol
+	      (missed __exit__ method)
+
+	with a trailing ``but it supports the asynchronous context manager
+	protocol. Did you mean to use 'async with'?'' when the object is an
+	ASYNC manager used with a plain ``with''.
+
+	missingSelector is the half whose default fallback ran.  CPython reports
+	a missing __exit__ BEFORE a missing __enter__ -- its SETUP_WITH looks
+	__exit__ up first -- so when neither half exists this answers the
+	__exit__ message even though it was __enter__ that fell through.
+	Deciding it here rather than in WithAst's emit keeps the check off the
+	success path entirely: it runs only when the object is already known not
+	to be a context manager."
+
+	| missed hasAsync |
+	missed := (self ___definesProtocolMethod___: '__exit__'
+			selectors: #( #'__exit__:_:_:' #'__exit__:kw:' #'__exit__:' ))
+		ifTrue: [missingSelector]
+		ifFalse: ['__exit__'].
+	hasAsync := (self ___definesProtocolMethod___: '__aenter__'
+			selectors: #( #'__aenter__' #'__aenter__:kw:' ))
+		@env0:and: [self ___definesProtocolMethod___: '__aexit__'
+			selectors: #( #'__aexit__:_:_:' #'__aexit__:kw:' #'__aexit__:' )].
+	^ '''' @env0:, self ___pyTypeNameForError___ @env0:asString
+		@env0:, ''' object does not support the context manager protocol (missed '
+		@env0:, missed @env0:, ' method)'
+		@env0:, (hasAsync
+			ifTrue: [' but it supports the asynchronous context manager protocol. '
+				@env0:, 'Did you mean to use ''async with''?']
+			ifFalse: [''])
+%
+
+category: 'Grail-Context Manager'
+method: object
+___definesProtocolMethod___: aName selectors: selectorArray
+	"True when the receiver's class really supplies the Python method
+	``aName'', rather than inheriting the default that raises.
+
+	Two places to look, because Grail compiles the two kinds of def
+	differently.  A plain ``def __exit__(...)'' becomes a Smalltalk method
+	on the class, so it is found by whichClassIncludesSelector: -- but a
+	bare ``includes'' test is not enough there, because object ITSELF
+	defines __enter__ / __exit__:_:_: (that is what makes the error
+	catchable in the first place), hence the ``~~ object'' guard.  Mirrors
+	the reason ___hasUserInit___ exists for __init__.  An ``async def''
+	compiles to no Smalltalk method at all and lands in the per-class
+	dynInstVars store, as does a runtime ``Cls.__aexit__ = fn''; that is
+	what ___dynamicClassAttr___: walks.
+
+	Several selectors per name because the arity a Python def compiles to
+	varies -- ``def __exit__(self, t, v, tb)'' becomes __exit__:_:_: while
+	``def __exit__(self, *args)'' goes through the kwargs forwarder."
+
+	| owner |
+	(self ___dynamicClassAttr___: aName @env0:asSymbol) @env0:notNil ifTrue: [^ true].
+	selectorArray @env0:do: [:sel |
+		owner := self @env0:class @env0:whichClassIncludesSelector: sel environmentId: 1.
+		(owner @env0:notNil @env0:and: [owner @env0:~~ object])
+			ifTrue: [^ true]].
+	^ false
 %
 
 category: 'Grail-Convenience Methods - Attribute'

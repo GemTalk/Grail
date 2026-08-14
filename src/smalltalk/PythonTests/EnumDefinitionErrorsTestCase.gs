@@ -144,13 +144,16 @@ testConstructibleMixinValueStillBuilds
 
 category: 'Grail-Tests - _value_ not set in __new__'
 method: EnumDefinitionErrorsTestCase
-testEncodedStrArgsAreAKnownGap
-	"Recorded, NOT endorsed.  CPython builds ``three = b'3', 'ascii''' as
-	str(b'3', 'ascii') == '3'; Grail's str handle has no (bytes, encoding) form,
-	so the best-effort coercion fails and the raw tuple survives.  Asserted so
-	the day that form is supported this test fails and gets updated rather than
-	the gap going unnoticed.  One of the things test_custom_strenum still wants."
+testEncodedStrArgsNowBuild
+	"""Was a recorded gap, and it did its job: the assertion was written so that
+	the day the (bytes, encoding) form was supported this test would FAIL and be
+	updated, rather than the gap going unnoticed.  That day is this one.
 
-	self assert: (self resultAt: 'encoded_gap') asString
-		equals: '(b''3'', ''ascii'')'.
+	CPython builds ``three = b'3', 'ascii''' as str(b'3', 'ascii') == '3'.
+	Grail's str handle is a one-argument BoundMethod, so the coercion could not
+	make the call at all, and the path being best-effort meant the raw tuple
+	survived as the member's value.  StrDecodeArgsTestCase pins the whole shape,
+	including the argument validation and the tuple that is NOT a decode."""
+
+	self assert: (self resultAt: 'encoded_gap') asString equals: '''3'''.
 %

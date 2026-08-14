@@ -68,3 +68,16 @@ def super_init_positional():
 def super_init_keyword():
     b = Point3D(x=4, y=5, z=6)
     return b.x == 4 and b.y == 5 and b.z == 6
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.
+if __name__ == '__main__':
+    checks = [
+        init_by_keyword,
+        init_mixed_positional_keyword,
+        init_missing_arg_raises,
+        super_init_positional,
+        super_init_keyword,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

@@ -721,13 +721,26 @@ ___grailBuildMembers: cls names: attrNames
 	        blue = auto()
 
 	CPython sets _auto_called only when it has to CALL the generator, and
-	red's value was supplied outside the body.  The marker carries that
-	distinction already: a preset auto() answers ``value'', a fresh one raises
-	-- the same probe the resolution loop below uses.
+	red's value was supplied outside the body.
+
+	WHERE that distinction is read from depends on whether the body ran against
+	a namespace.  With one, EnumDict resolved each auto() as it was assigned and
+	recorded the names it had to generate for (_auto_named) -- so the marker is
+	long gone from the class attribute by the time this runs, and asking the
+	namespace is the only way to tell.  Without one -- the functional API,
+	_convert_, a class built without a class statement -- the marker is still
+	there and carries the distinction itself: a preset auto() answers ``value'',
+	a fresh one raises.
 
 	___classBodyOrder___ is what makes the position visible; it records defs
 	and assignments alike, in source order (see ClassDefAst)."
-	[ | order gnvIdx |
+	[ | order gnvIdx nsTbl ns autoNamed |
+	nsTbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingClassNamespace' otherwise: nil.
+	ns := nsTbl @env0:isNil ifTrue: [nil] ifFalse: [nsTbl @env0:at: cls otherwise: nil].
+	autoNamed := ns @env0:isNil
+		ifTrue: [nil]
+		ifFalse: [ns @env0:dynamicInstVarAt: #'_auto_named'].
 	order := (cls @env0:class @env0:whichClassIncludesSelector:
 		#'___classBodyOrder___' environmentId: 1) @env0:isNil
 			ifTrue: [nil]
@@ -749,9 +762,11 @@ ___grailBuildMembers: cls names: attrNames
 					ifFalse: [dynHolder @env0:isNil
 						ifTrue: [nil]
 						ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym]].
-				((raw isKindOf: GrailEnumAuto)
+				((autoNamed @env0:notNil
+					and: [autoNamed @env0:includes: nameSym @env0:asString])
+					or: [(raw isKindOf: GrailEnumAuto)
 					and: [([raw ___pyAttrLoad___: #'value'. true]
-						@env0:on: AbstractException do: [:ex | false]) @env0:not])
+						@env0:on: AbstractException do: [:ex | false]) @env0:not]])
 					ifTrue: [
 						TypeError ___signal___:
 							'_generate_next_value_ must be defined before members']]]] ]
@@ -1111,6 +1126,12 @@ ___grailBuildMembers: cls names: attrNames
 				(rawValue isKindOf: Integer) ifTrue: [
 					lastInt := rawValue.
 					maxInt := maxInt @env0:max: rawValue]].
+			"StrEnum members are str(*values), validated argument by argument --
+			see ___grailStrEnumValueFor:.  Applied AFTER genValues, because
+			last_values holds the value as WRITTEN (the tuple), and only when the
+			class has no __new__ of its own to decide the value instead."
+			((Enum ___grailIsStrEnumClass: cls) and: [hasUserNew @env0:not]) ifTrue: [
+				rawValue := Enum ___grailStrEnumValueFor: rawValue].
 			"A foreign-mixin enum (``class E(date, Enum)'') carries
 			member_type(*args) -- date(2023, 12, 1) -- as its canonical value.
 			Construct it up front so alias detection, value-lookup and storage
@@ -1522,6 +1543,56 @@ ___grailReduceOf: aMember
 	^ tupleClass @env0:withAll: {
 		aMember @env0:class.
 		(tupleClass @env0:withAll: { aMember @env0:dynamicInstVarAt: #value }) }
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailMetaclassNamespace___
+	"""The class-body namespace an ENUM is built in -- Grail's answer to
+	CPython's ``EnumType.__prepare__``, which returns an EnumDict.
+
+	Reached from object >> ___grailPrepareNamespace___ when a class statement
+	names no metaclass, because Grail's enum metaclass is Smalltalk (``Enum
+	class'') and there is no ``metaclass='' keyword to carry it.
+
+	What it buys is CPython's assignment-time behaviour inside an enum body: a
+	reused member name is refused where it is written, and an ``auto()'' is
+	resolved as it is assigned, so a later statement in the same body sees the
+	number rather than an unresolved marker."""
+
+	| enumDict ns |
+	enumDict := Python @env0:at: #'EnumDict' otherwise: nil.
+	enumDict isNil ifTrue: [^ nil].
+	ns := enumDict @env1:__new__: (self @env1:__name__).
+	"The class being defined, so the namespace can resolve an ``auto()'' the way
+	___grailBuildMembers: would: which _generate_next_value_ applies, and
+	whether the class is Flag-natured or a StrEnum, are both questions about
+	cls.  CPython's EnumType.__prepare__ hands the same thing over as
+	``enum_dict._cls_name'' plus the generator taken off the first base."
+	ns @env0:dynamicInstVarAt: #'_cls' put: self.
+	^ ns
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailNamespaceAutoValueFor: nameStr class: cls count: count lastValues: lastValues
+	"""The value a bare ``auto()'' takes, chosen by exactly the rule
+	___grailBuildMembers: applies: a user _generate_next_value_ wins, else a
+	StrEnum yields the lowercased name, else a Flag-natured class takes the next
+	power of two above the highest value so far and a plain enum the next
+	integer.
+
+	Called from EnumDict at ASSIGNMENT time, which is where CPython resolves.
+	The builder keeps its own copy of the same choice because it still runs for
+	every path that has no namespace -- the functional API, _convert_, and any
+	class built without a class statement."""
+
+	(Enum ___grailClassHasGnv: cls) ifTrue: [
+		^ Enum ___grailGnvValueFor: cls name: nameStr
+			count: count lastValues: (list @env0:withAll: lastValues)].
+	(Enum ___grailIsStrEnumClass: cls) ifTrue: [^ nameStr @env0:asLowercase].
+	(Enum ___grailIsFlagClass: cls) ifTrue: [^ Enum ___grailFlagAutoNext: lastValues].
+	^ Enum ___grailPlainAutoNext: lastValues
 %
 
 category: 'Grail-Enum Metaclass'
@@ -2281,6 +2352,58 @@ ___grailIsStringType: mt
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailStrEnumValueFor: rawValue
+	"""CPython StrEnum.__new__ -- ``values must already be of type `str`'':
+
+	    class GoodStrEnum(StrEnum):
+	        one = '1'
+	        three = b'3', 'ascii'               -- str(b'3', 'ascii') == '3'
+	    class Bad(StrEnum):
+	        one = 1                             -- TypeError, 1 is not a string
+
+	A member value is the argument list to str(), so a TUPLE value is
+	str(*values) -- which is how the bytes/encoding/errors spellings above are
+	written -- and each argument has its own complaint.  Grail had none of this:
+	the value was stored as given, so ``three'' became the literal string
+	'atuple' and every rejected spelling defined quietly.
+
+	Only for a StrEnum-natured class with no __new__ of its own.  ``class
+	CustomStrEnum(str, Enum)'' is NOT one, and CPython's messages there come
+	from str() itself (``argument 2 must be str, not ...''), which is the
+	distinction test_strenum and test_custom_strenum are drawing between their
+	otherwise identical bodies."""
+
+	| tupleClass vals bad |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	vals := (rawValue isKindOf: tupleClass)
+		ifTrue: [rawValue @env0:asArray]
+		ifFalse: [Array @env0:with: rawValue].
+	(vals @env0:size @env0:> 3) ifTrue: [
+		^ TypeError ___signal___: 'too many arguments for str(): '
+			@env0:, (Enum ___grailValueRepr: rawValue)].
+	bad := [:i | (Enum ___grailIsStringType: (vals @env0:at: i) @env0:class) @env0:not].
+	((vals @env0:size @env0:= 1) and: [bad @env0:value: 1]) ifTrue: [
+		^ TypeError ___signal___: (Enum ___grailValueRepr: (vals @env0:at: 1))
+			@env0:, ' is not a string'].
+	((vals @env0:size @env0:>= 2) and: [bad @env0:value: 2]) ifTrue: [
+		^ TypeError ___signal___: 'encoding must be a string, not '
+			@env0:, (Enum ___grailValueRepr: (vals @env0:at: 2))].
+	((vals @env0:size @env0:= 3) and: [bad @env0:value: 3]) ifTrue: [
+		^ TypeError ___signal___: 'errors must be a string, not '
+			@env0:, (Enum ___grailValueRepr: (vals @env0:at: 3))].
+	"str(*values).  A single string argument is already the value.  The
+	bytes+encoding spellings are str(bytes, encoding[, errors]), which is
+	bytes.decode(encoding[, errors]) -- reached through the value's own
+	``decode'' so the decoding is the one Grail already implements rather than a
+	second copy of it here.  (The ``str'' handle itself takes one argument: it
+	is a BoundMethod, not a class, because Grail has no single str class.)"
+	(vals @env0:size @env0:= 1) ifTrue: [^ vals @env0:at: 1].
+	^ ((vals @env0:at: 1) @env1:___pyAttrLoad___: #'decode')
+		@env1:value: (vals @env0:copyFrom: 2 to: vals @env0:size) value: nil
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailNormalizeMemberType: aType
 	"Map a concrete string storage class onto Grail's ``str'' handle for the
 	PYTHON-VISIBLE _member_type_.
@@ -2550,6 +2673,34 @@ ___grailConstructMemberValue: memberType args: rawValue
 
 	| args |
 	args := Enum ___grailSpreadArgs: rawValue.
+	"str(bytes, encoding[, errors]) -- the ONLY multi-argument spelling of str(),
+	and the reason a member value can legitimately be a tuple whose first element
+	is bytes:
+
+	    class GoodStrEnum(str, Enum):
+	        three = b'3', 'ascii'          -- '3'
+
+	Two things blocked it.  The ``str'' handle is a BoundMethod of fixed arity 1,
+	so the call could not be made at all; and the best-effort guard below then
+	kept the raw tuple, so the member's value silently became a tuple.  Route it
+	through str's own varargs entry, and let the constructor's TypeError REACH
+	THE CALLER, which is what CPython does -- ``two = b'2', sys.getdefaultencoding''
+	is a TypeError out of the class statement (test_custom_strenum).
+
+	Keyed on the first element being BYTES, not on argument count, because a
+	multi-element tuple usually means something else entirely: it is the argument
+	list to the class's own __new__ (``key_type = 'An$(Bn)', 0''), which must not
+	be handed to str() -- doing so answered ``decoding str is not supported'' and
+	displaced the _value_ complaint test_missing_value_error waits for."
+	((memberType == Enum ___grailStrBuiltin)
+		and: [args @env0:size @env0:> 1
+		and: [(args @env0:at: 1) isKindOf: ByteArray]]) ifTrue: [
+			"Sent to Unicode7, not CharacterCollection: the decode allocates
+			through ``self'', and CharacterCollection is abstract (``a method has
+			been invoked in the abstract superclass ... #new:'').  Unicode7 is the
+			canonical narrow str class str.gs itself allocates."
+			^ Unicode7 @env0:perform: #'_str:kw:' env: 1
+				withArguments: { args. KeyValueDictionary @env0:new }].
 	^ [memberType @env0:perform: #'value:value:' env: 1
 		withArguments: { args. KeyValueDictionary @env0:new }]
 		@env0:on: AbstractException do: [:e | rawValue]

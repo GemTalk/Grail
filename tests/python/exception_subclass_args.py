@@ -76,7 +76,16 @@ def the_message_reaches_the_rendered_traceback():
     reports its message.  Before the fix this rendered as bare
     ``exception_subclass_args.Empty''."""
     text = ''.join(traceback.format_exception_only(Empty('boom')))
-    return text == 'exception_subclass_args.Empty: boom\n'
+    # The prefix is DERIVED, not the literal 'exception_subclass_args'.
+    # format_exception_only qualifies by Empty.__module__ (which follows
+    # __name__), and CPython suppresses that prefix entirely for '__main__' and
+    # 'builtins' -- which is why `ValueError: x' has no prefix.  So the same
+    # file renders 'exception_subclass_args.Empty: boom' when the harness
+    # imports it and a bare 'Empty: boom' under `python3 thisfile.py'.  The
+    # literal pinned the first and was silently wrong in the second; what the
+    # check is really about is the message surviving, not the prefix.
+    prefix = '' if __name__ in ('__main__', 'builtins') else __name__ + '.'
+    return text == '%sEmpty: boom\n' % prefix
 
 
 def a_raised_subclass_carries_its_message():
@@ -118,3 +127,18 @@ def repr_sees_the_args():
             and repr(Empty()) == 'Empty()'
             and repr(Empty('a', 'b')) == "Empty('a', 'b')"
             and not (Empty('a') == Empty('a')))
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.
+if __name__ == '__main__':
+    checks = [
+        a_subclass_with_no_init_records_args,
+        args_is_the_whole_positional_tuple,
+        a_subclass_that_chains_to_super_still_works,
+        the_message_reaches_the_rendered_traceback,
+        a_raised_subclass_carries_its_message,
+        keyword_arguments_are_rejected,
+        repr_sees_the_args,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

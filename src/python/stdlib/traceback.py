@@ -14,6 +14,27 @@ import sys
 # one-argument ``format_exception_only(exc)'' can be told apart from the
 # legacy two-argument ``format_exception_only(type, value)'' when value is
 # genuinely None.  CPython uses a private sentinel for exactly this.
+#
+# THIS IS A PYTHON-LEVEL SENTINEL, and deliberately NOT Smalltalk's nil.  Grail
+# reads nil as "undefined / unbound" and None as an explicit Python value (see
+# NoneType.gs), so nil is the natural "I have no argument" marker for a
+# Smalltalk caller -- but these are Python entry points following CPython's
+# contract, where the marker has to be a value no CALLER can produce, and an
+# omitted Python parameter is bound to its default rather than left unbound.
+#
+# The consequence, measured rather than assumed: a Smalltalk caller that fills
+# the optional slots with nil does NOT get the one-argument form.  nil is not
+# the sentinel, so it is taken as an explicit value and the type is derived
+# from it:
+#
+#   tb @env1:format_exception: exc _: nil _: nil
+#       -> 'UndefinedObject: <UndefinedObject object at 0x101>'
+#
+# That is out of contract, not a bug to work around here: OMIT the optional
+# arguments (``tb @env1:format_exception: exc'') rather than passing nil, which
+# answers 'ValueError: v' correctly.  Handling nil would mean teaching the
+# Smalltalk -> Python boundary to map it onto each function's default, which is
+# a dispatch-wide decision and not traceback.py's to make.
 _sentinel = object()
 
 
@@ -382,7 +403,7 @@ def _suggestion_suffix(exc_type, value, tb=None):
 # conformance bug, and one an earlier draft actually had.
 # tests/python/frame_globals.py pins it.
 def format_exception_only(exc_type, value=_sentinel, show_group=False,
-                          _tb=None, _depth=0):
+                          _tb=None, _depth=0, _keep_type=False):
     """Return a list of strings ending in a newline that render the
     exception class + message.
 
@@ -404,10 +425,6 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False,
     the group's own ``A\\n1'' stays one string while the nested ``B\\n2'' becomes
     two, each carrying the indent."""
 
-    # Whether the type was DERIVED from the value (rather than passed by a
-    # legacy caller).  If it was, the value is the exception and always
-    # contributes a message -- including when it is None.
-    derived = False
     if value is _sentinel:
         # Single-argument form: exc_type IS the exception.  type(None) is
         # NoneType, not None -- CPython does not special-case a None
@@ -415,12 +432,19 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False,
         # ``NoneType: None'' rather than a blank line.
         value = exc_type
         exc_type = type(value)
-        derived = True
-    elif exc_type is None and value is None:
-        # Legacy three-argument form with the whole triple None --
-        # ``print_exception(None, None, None)''.  Same rendering, same reason.
-        exc_type = type(None)
-        derived = True
+    elif not _keep_type:
+        # Legacy two-argument form.  CPython IGNORES the type it was handed and
+        # derives it from the value (see _unpack_exc_args), so
+        # ``format_exception_only(ValueError, None)'' is 'NoneType: None'.
+        #
+        # This used to keep exc_type and carry a ``derived'' flag, reading
+        # "value is None and not derived" as "no message at all" -- which
+        # rendered a bare 'ValueError' and matched neither CPython path.
+        exc_type = type(value)
+    # ...and _keep_type is the TracebackException path, which KEEPS the type it
+    # was constructed with: the class renders 'ValueError: None' where the
+    # module-level function renders 'NoneType: None'.  Same arguments, two
+    # different answers, and both are CPython.
 
     type_name = _type_display_name(exc_type)
     # NOT ``indent'': the SyntaxError branch below already binds that name to a
@@ -455,14 +479,28 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False,
             header.append('  File "%s", line %s\n'
                           % (filename if filename is not None else '<string>',
                              lineno))
-            if text:
+            # SyntaxError's location fields are a plain writable tuple, so any of
+            # them can be any object -- ``SyntaxError('error', 'abcd')'' gives
+            # lineno='b', offset='c', text='d' (gh-128894).  CPython's rules,
+            # measured rather than guessed:
+            #
+            #   text not a str           -> no source block at all
+            #   offset None              -> source line, no caret
+            #   offset an int            -> source line + caret
+            #   offset present, not int  -> no source block at all
+            #
+            # The last is the surprising one: an unusable offset suppresses the
+            # source LINE too, not just the caret.  ``lineno'' needs no check --
+            # it is only ever printed, and ``line b'' is what CPython shows.
+            offset_usable = offset is None or isinstance(offset, int)
+            if isinstance(text, str) and offset_usable:
                 stripped = text.strip()
                 header.append('    ' + stripped + '\n')
                 if offset is not None:
                     # offset is 1-based and measured against the RAW line, so
                     # discount the whitespace strip() removed.
                     indent = len(text) - len(text.lstrip())
-                    caret = int(offset) - 1 - indent
+                    caret = offset - 1 - indent
                     if caret >= 0:
                         header.append('    ' + ' ' * caret + '^\n')
         elif filename is not None:
@@ -478,14 +516,12 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False,
             lines = [nesting_indent + line for line in lines]
         return lines
 
-    # A DERIVED type means the value is the exception, so it always contributes
-    # a message -- ``None'' included, which is what makes print_exception(None)
-    # render ``NoneType: None''.  A legacy caller that passed a type and an
-    # explicit None value has no message, and keeps rendering the bare name.
-    if value is None and not derived:
-        msg = ''
-    else:
-        msg = _safe_string(value, 'exception')
+    # The value ALWAYS contributes a message, ``None'' included -- which is what
+    # makes print_exception(None) render ``NoneType: None'', and what makes the
+    # class path render ``ValueError: None''.  There is no longer a case that
+    # suppresses it: the old "legacy caller passed a type and an explicit None"
+    # branch produced a bare name that no CPython path produces.
+    msg = _safe_string(value, 'exception')
     # "Did you mean: 'x'?" rides on the message line.  CPython computes it once
     # in TracebackException.__init__ and stores it in _str; doing it here instead
     # covers BOTH entry points -- the module-level function and
@@ -522,6 +558,27 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False,
     return lines
 
 
+def _require_exception(value):
+    """CPython's guard for the single-argument form: ``print_exception(42)'' is a
+    TypeError, not a render of ``int: 42''.
+
+    Only the ONE-argument form is checked.  The legacy three-argument form is left
+    alone deliberately -- CPython 3.14 fails it too, but with whatever the value
+    happens to raise (``print_exception(ValueError, 'x', None)'' answers
+    AttributeError on __suppress_context__), and tightening it here would break
+    Grail callers that pass a type and a message.  None stays legal, which is what
+    makes ``print_exception(None)'' render ``NoneType: None''."""
+    if value is None:
+        return
+    try:
+        ok = isinstance(value, BaseException)
+    except Exception:
+        ok = False
+    if not ok:
+        raise TypeError('Exception expected for value, %s found'
+                        % (type(value).__name__,))
+
+
 def _unpack_exc_args(exc_type, value, tb):
     """Resolve the (type, value, tb) triple from either legacy
     3-arg ``format_exception(type, value, tb)'' or the 3.10+ single-
@@ -531,15 +588,33 @@ def _unpack_exc_args(exc_type, value, tb):
     Grail exceptions now carry a real ``__traceback__'' (a PyTraceback
     or None), so the single-arg form auto-pulls it when the caller did
     not pass one — matching CPython's ``format_exception(exc)''."""
-    # 3.10+ single-arg form: a BaseException instance in exc_type.
-    if isinstance(exc_type, BaseException):
-        exc = exc_type
-        exc_type = type(exc)
-        if value is None:
-            value = exc
-        if tb is None:
-            tb = getattr(exc, '__traceback__', None)
-    return exc_type, value, tb
+    # The two shapes are told apart by whether value/tb were passed AT ALL,
+    # which is why their defaults are a SENTINEL and not None.  They used to
+    # default to None and be told apart by ``value is None and tb is None'',
+    # and that cannot distinguish ``format_exception(exc)'' from an explicit
+    # ``format_exception(ValueError, None, None)'' -- so the latter took the
+    # single-argument path and raised TypeError out of _require_exception,
+    # where CPython renders 'NoneType: None'.
+    if (value is _sentinel) != (tb is _sentinel):
+        raise ValueError('Both or neither of value and tb must be given')
+    if value is _sentinel:
+        # Single-argument form: exc_type IS the exception (or None).
+        _require_exception(exc_type)
+        if isinstance(exc_type, BaseException):
+            return (type(exc_type), exc_type,
+                    getattr(exc_type, '__traceback__', None))
+        # None is the one non-exception CPython accepts, and type(None) is
+        # NoneType -- which is what makes print_exception(None) render
+        # ``NoneType: None'' rather than a blank line.
+        return type(None), None, None
+    # Legacy triple.  THE TYPE PASSED IS IGNORED: CPython derives it from the
+    # value, because the value is the only argument that can carry a message.
+    # So format_exception(ValueError, None, None) is 'NoneType: None'.
+    #
+    # The CLASS deliberately does NOT do this -- TracebackException keeps the
+    # type it is constructed with and renders 'ValueError: None' for the same
+    # arguments.  Only the module-level entry points normalise.
+    return type(value), value, tb
 
 
 def _seen_set():
@@ -644,7 +719,8 @@ def _chain_has_group(value):
     return False
 
 
-def format_exception(exc_type, value=None, tb=None, limit=None, chain=True):
+def format_exception(exc_type, value=_sentinel, tb=_sentinel, limit=None,
+                     chain=True):
     """Return a list of strings ready to be joined.  Accepts either
     the legacy 3-arg ``(type, value, tb)'' shape or the 3.10+
     single-argument ``(exc)'' shape.
@@ -725,8 +801,8 @@ def format_exc(*args):
     return ''.join(format_exception(exc_type, value, tb))
 
 
-def print_exception(exc_type, value=None, tb=None, limit=None, file=None,
-                    chain=True):
+def print_exception(exc_type, value=_sentinel, tb=_sentinel, limit=None,
+                    file=None, chain=True):
     """Print exception lines to ``file'' (default sys.stderr).
     Accepts either the legacy 3-arg form or the 3.10+ single-
     exception form."""
@@ -799,7 +875,12 @@ class FrameSummary:
         self.end_lineno = end_lineno if end_lineno is not None else lineno
         self.colno = colno
         self.end_colno = end_colno
-        self._line = line.strip() if isinstance(line, str) else line
+        # ``_lines'' and not ``_line'': that is the slot name CPython 3.14 uses, and
+        # test_lazy_lines reads it directly to check that lookup_line=False leaves it
+        # unfilled.  Stored RAW rather than stripped, because the ``line'' property
+        # strips on the way out -- keeping the original is what lets a caller that
+        # wants columns line them up against the text they were measured from.
+        self._lines = line
         # CPython stores repr()s, not the live objects, so a FrameSummary cannot
         # keep a frame's locals alive.
         if locals:
@@ -824,14 +905,18 @@ class FrameSummary:
         ``File ..., line N`` with no code line under it.  Lazy is what CPython
         does and is what keeps extract_tb cheap when the caller only wants
         filenames and line numbers."""
-        if self._line is None:
+        if self._lines is None:
             if self.filename is None or self.lineno is None:
                 return None
             got = linecache.getline(self.filename, self.lineno)
             if not got:
                 return None
-            self._line = got
-        return self._line.strip() if isinstance(self._line, str) else self._line
+            self._lines = got
+        if not isinstance(self._lines, str):
+            return self._lines
+        # The FIRST line only, stripped: a multi-line statement's cached text can
+        # hold several, which is CPython's shape too.
+        return self._lines.partition('\n')[0].strip()
 
     def __len__(self):
         return 4
@@ -1271,10 +1356,22 @@ class TracebackException:
         does not keep.  ``**kwargs`` covers the rest of that family (notably
         ``colorize``), for the same reason format() absorbs it: honouring it
         would produce the same bytes."""
-        # Use the same input unpacking as format_exception so
-        # ``TracebackException(exc)'' single-arg works.
-        exc_type, exc_value, exc_traceback = _unpack_exc_args(
-            exc_type, exc_value, exc_traceback)
+        # NOT _unpack_exc_args: that normalises for the MODULE-LEVEL entry
+        # points, deriving the type from the value and discarding the one it was
+        # given.  CPython's class does no such thing -- it keeps the triple it
+        # is handed, which is why TracebackException(ValueError, None, None)
+        # renders 'ValueError: None' while format_exception(ValueError, None,
+        # None) renders 'NoneType: None'.
+        #
+        # The one convenience kept is Grail's: a BaseException passed as the
+        # type expands to its own (type, value, traceback).
+        if isinstance(exc_type, BaseException):
+            exc = exc_type
+            exc_type = type(exc)
+            if exc_value is None:
+                exc_value = exc
+            if exc_traceback is None:
+                exc_traceback = getattr(exc, '__traceback__', None)
         self.exc_type = exc_type
         self.max_group_width = max_group_width
         self.max_group_depth = max_group_depth
@@ -1411,8 +1508,13 @@ class TracebackException:
         COLORIZE is False and can_colorize() answers False -- so honouring
         them would produce the same bytes.  Accepting and ignoring keeps
         callers that pass them working instead of raising TypeError."""
+        # _keep_type: the class renders the type it was CONSTRUCTED with, unlike
+        # the module-level legacy form which derives it from the value.  Without
+        # this, TracebackException(ValueError, None, None) would render
+        # 'NoneType: None' where CPython gives 'ValueError: None'.
         return format_exception_only(self.exc_type, self._value,
-                                     show_group=show_group, _tb=self._tb)
+                                     show_group=show_group, _tb=self._tb,
+                                     _keep_type=True)
 
     def format(self, chain=True, _ctx=None, **kwargs):
         """Yield strings (header / frames / message).  Generators

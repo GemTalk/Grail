@@ -282,3 +282,19 @@ RESULTS = {
     'presize_exceptions': presize_hint_exceptions_are_not_suppressed(),
     'unusable_hint': unusable_hint_does_not_break_the_build(),
 }
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.
+if __name__ == '__main__':
+    checks = [
+        hint_decreases_over_every_iterator,
+        reversed_range_is_an_iterator,
+        mutation_during_iteration_is_detected,
+        deque_same_size_mutation_is_detected,
+        reverse_iterator_over_shrunken_list,
+        forward_iterator_follows_a_growing_list,
+        presize_hint_exceptions_are_not_suppressed,
+        unusable_hint_does_not_break_the_build,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

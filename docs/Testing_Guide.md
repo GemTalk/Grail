@@ -326,6 +326,120 @@ input src/smalltalk/PythonTests/{ClassName}TestCase.gs
 
 Run `./install.sh` so the new class is compiled into the image.
 
+## Python fixtures in `tests/python/`, and the CPython gate
+
+A fixture in `tests/python/` states **what CPython does**; the Smalltalk test
+case then asserts Grail agrees. That only works if the fixture was measured
+against CPython. A fixture written from a Grail session instead pins Grail's
+*current* behaviour — bug and all — and from then on reads as conformance
+evidence. This has happened four times: `exec_class_definition.py`,
+`exception_naming.py`, `code_filename.py`, and a near-miss in `handler_raise.py`
+that would have baked in `KeyError`'s unquoted message. `code_filename.py`
+asserted `FrameSummary._line`, a slot CPython has never had.
+
+### Make new fixtures self-running
+
+End the file with a **top-level** `__main__` block that prints one line per
+check. `scripts/check_python_fixtures.sh` then runs it under real CPython on
+every push, and a fixture that disagrees fails CI:
+
+```python
+if __name__ == '__main__':
+    checks = [a_check, another_check]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))
+```
+
+A second convention, for checks that answer a value rather than a boolean, is
+also recognised — the status word may be the first *or* second field:
+
+```python
+    print('%-12s %s %s' % (label, 'OK ' if actual == expected else 'DIFF', actual))
+```
+
+Run the file by hand (`python3 tests/python/your_fixture.py`) while writing it:
+that output *is* where the expected values come from.
+
+### Checks that document a Grail limitation
+
+Some checks assert something Grail cannot yet do, so CPython is *expected* to
+disagree. Put those in a separate list and print `XFAIL`; the gate accepts it.
+See the `grail_only` list in `live_frames.py`:
+
+```python
+    for fn in grail_only:
+        print('%-5s %s' % ('XPASS' if fn() is True else 'XFAIL', fn.__name__))
+```
+
+`XPASS` — such a check passing under CPython — **fails** the gate, because it
+means the difference the check documents no longer exists and the check is
+stale.
+
+### What the gate does and does not cover
+
+It runs only fixtures with a top-level `__main__` block — **40 of 260 files**.
+The rest are Smalltalk-driven and mostly cannot run under CPython at all: they
+exercise Grail-specific behaviour, return values for the harness to compare
+rather than booleans, or are deliberately unimportable. So a green gate does
+**not** mean the corpus agrees with CPython.
+
+The 40 is up from 15: a census found every fixture whose public zero-argument
+functions all answer `True` under CPython and converted the 23 that were not yet
+self-running, then the last two known bug-pinners were corrected and converted
+too. That is the move that widens the net — tightening the script is not. **All
+four fixtures that historically pinned Grail's behaviour are now covered.**
+Treat the gate as holding a line that has been opted into, and make opting in
+the default for anything new.
+
+### When a corrected fixture then fails under Grail
+
+Correcting an expectation to what CPython really does can turn up a genuine
+Grail gap rather than a typo. Do not resolve that by softening the check back
+toward Grail — that is how the fixture became misleading in the first place.
+State CPython's rule, and record the gap where a reader will meet it:
+
+* the check keeps a `KNOWN GRAIL GAP` docstring giving the measured CPython
+  behaviour, so the gate is green and the fixture is honest;
+* the Smalltalk driver **stops asserting that one check** and says in a comment
+  why, naming the check — a silent removal reads as an oversight later.
+
+`exception_naming.py`'s `a_legacy_type_is_ignored_when_a_value_is_given` is the
+worked example. Note this is not the same as `XFAIL`: an `XFAIL` check asserts a
+Grail limitation and *fails* under CPython, whereas this one asserts CPython and
+fails under Grail.
+
+**A fixture can pass on import and fail as a script.** The census imports each
+file under its real module name; the gate runs it with `__name__` set to
+`__main__`. Anything that depends on module identity differs between the two,
+which is a feature — it catches expectations that were quietly pinned to one
+context. Converting `exception_subclass_args.py` surfaced exactly this: it
+asserted a literal `'exception_subclass_args.Empty: boom'`, but
+`format_exception_only` qualifies by `__module__` and **CPython suppresses that
+prefix entirely for `__main__` and `builtins`** (which is why `ValueError: x`
+has no prefix). Derive such a prefix rather than hardcoding it:
+
+```python
+prefix = '' if __name__ in ('__main__', 'builtins') else __name__ + '.'
+```
+
+Two traps are pinned by `tests/scripts/test_python_fixture_gate.sh`, both of
+which look like a passing run:
+
+* The status word is read from a **field**, never by grepping the line —
+  `live_frames.py` prints a separator containing the word "FAIL", and a
+  grep-based gate fails on a clean tree.
+* Only a **column-zero** `__main__` counts. `module_higher_arity_def.py` has that
+  string inside a function (it checks the idiom is False on import) and its
+  checks assert `__name__ == 'module_higher_arity_def'` — running it as a script
+  would falsify the very thing it tests.
+
+Run both locally before opening a PR that adds or edits a fixture:
+
+```bash
+scripts/check_python_fixtures.sh -v        # fixtures agree with CPython
+tests/scripts/test_python_fixture_gate.sh  # the gate itself still works
+```
+
 ## Best Practices
 
 ### 1. Test Normal Cases First

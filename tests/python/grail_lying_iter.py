@@ -19,3 +19,12 @@ def check():
             and list(LyingTuple((2,))) == [1]
             and list([2]) == [2]
             and list((3, 4)) == [3, 4])
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.
+if __name__ == '__main__':
+    checks = [
+        check,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

@@ -58,3 +58,14 @@ def property_descriptor_uses_methods():
     pb = PropBox()
     pb.x = 'updated'
     return pb.x == 'updated'
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.
+if __name__ == '__main__':
+    checks = [
+        pair_resolves,
+        pair_callable_with_instance,
+        property_descriptor_uses_methods,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

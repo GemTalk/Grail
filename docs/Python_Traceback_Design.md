@@ -2253,3 +2253,338 @@ habit are where these hide.
 CPython 3.14.6 — passes in full. SUnit **4202, all green** (five stale assertions
 corrected). Full 71-module sweep: **0 regressions**, and no row moves — this is
 correctness the scoreboard cannot see, which is the honest way to report it.
+
+### 9.26 Three small conformance gaps, and a scoping result on carets (2026-08-13, gs40)
+
+**Carets are not the next thing, and now there is a reason on record.** §9.20/§9.24
+listed PEP 657 caret rendering as the largest remaining bucket (8 tests), and the
+plan looked cheap: `___pyPositionLiteralArray` already emits a full
+`#(line col endLine endColno sourceLine)` literal, and `___pushFrameFromPos___`
+already accepts it. Measuring CPython first killed the plan:
+
+```
+x = foo(bar()) + 1
+        ~~~^^
+```
+
+CPython's carets are **per-instruction** — they underline the *failing
+sub-expression*, not the statement. Grail's `___curPos___` is per-**statement** by
+design, so feeding it to the caret renderer would underline the whole line
+whenever a statement contains more than one call: confidently wrong output, which
+§9.10 already argues is worse than none. Real carets need a position store per
+*call site*, which changes both the cost of `___curPos___` and the meaning the
+§9.10 machinery depends on. That is a project, not an increment.
+
+**Nested-function frames are likewise deeper than they look.** A nested `def`
+compiles to an ExecBlock, and the raise-time capture records `(method, ip,
+receiver)` — so every closure of the same nested function shares one `GsNMethod`
+and there is no per-closure identity in the capture to name a frame by. Giving
+them frames means compiling nested defs to real methods, which is where closure
+semantics live.
+
+**What shipped instead: three small gaps, all in traceback.py.**
+
+`print_exception(42)` is a `TypeError` — *Exception expected for value, int found*
+— not a render of `int: 42`. Grail rendered it and then failed writing to a file
+it had not been given, so the error a caller saw was an `AttributeError` on None.
+Only the **one-argument** form is guarded: the legacy three-argument form fails
+under CPython too, but with whatever the value happens to raise, and tightening it
+would break Grail callers that pass a type and a message.
+
+`FrameSummary._lines` is CPython 3.14's slot name for a frame's cached source
+text, and it stays None while `lookup_line=False`. Grail called it `_line`.
+
+A SyntaxError's location fields are a plain writable tuple, so any of them can be
+any object — `SyntaxError('error', 'abcd')` gives `lineno='b'`, `offset='c'`,
+`text='d'` (gh-128894). Rendering must not raise; Grail called `int()` on the
+offset and died with `ValueError`. The rules were **measured**, because one is
+counter-intuitive:
+
+| condition | result |
+|---|---|
+| `text` not a str | no source block at all |
+| `offset` None | source line, no caret |
+| `offset` an int | source line + caret |
+| `offset` present, not an int | **no source block at all** |
+
+An unusable offset suppresses the source *line* too, not just the caret. `lineno`
+needs no check — it is only ever printed, so `line b` is what CPython shows.
+
+**And a fourth fixture was pinning Grail's own name.**
+`tests/python/code_filename.py` read `FrameSummary._line`, which does not exist in
+CPython — so that check did not merely disagree there, it **raised
+AttributeError**. After §9.21's `exec_class_definition.py`, §9.25's
+`exception_naming.py`, and the `handler_raise.py` near-miss, that is four. The
+common factor is not carelessness about expectations; it is that these fixtures
+are *driven from Smalltalk* and only 16 of the 253 have a `__main__` block, so
+most have never been executed under CPython at all. A guard is possible but not
+free: the other 237 legitimately test Grail-specific behaviour and would fail
+there by design.
+
+**Result: `test.test_traceback` 92 → 95 passing** (errors 17 → 14), the three
+tests named above, verified by name with nothing newly failing. SUnit **4224, all
+green**. Full 71-module sweep: **0 regressions, 1 improvement**.
+
+### 9.27 A gate for the fixtures, and an honest measure of its reach (2026-08-13, gs40)
+
+§9.26 ended by proposing a CI guard that runs the self-running fixtures under
+CPython, on the strength of four fixtures that had pinned Grail's behaviour
+instead of CPython's. Building it started with checking that premise, and the
+check embarrassed it:
+
+**Three of those four bugs are in files the guard cannot see.**
+`exec_class_definition.py`, `exception_naming.py` and `code_filename.py` have no
+`__main__` block. Only the `handler_raise.py` near-miss was in a self-running
+file — and that one was caught by hand at the time. So the guard, as motivated,
+would have caught **none** of the bugs used to justify it. That does not make it
+worthless, but it does move the value: it holds a line for fixtures that have
+opted in, and makes opting in cheap for new ones. It is not evidence that the
+corpus agrees with CPython, and §9.26's framing should be read with that
+correction.
+
+A census of all 258 fixtures under CPython 3.14.6, each in its own subprocess:
+
+| | files | |
+| --- | --- | --- |
+| no zero-argument checks | 116 | return values for the harness to compare, not booleans |
+| some check differs | 93 | mostly helpers my probe called as if they were checks |
+| all checks answer True | 32 | already CPython-clean; **16 are not yet self-running** |
+| fails to import | 16 | several deliberately |
+| hangs | 1 | |
+
+The 93 are largely a probe artefact: with no `checks` list to read, "every public
+zero-argument function" also collects helpers like `leaf` and `runaway` that
+raise *by design*. That is precisely why the gate reads an explicit `__main__`
+block rather than introspecting — **a fixture must declare what its checks are**.
+The interesting number is the 32: those already agree with CPython, and 16 of
+them could opt in for the cost of a `__main__` block.
+
+**The count is 15, not 16.** `module_higher_arity_def.py` matches a naive grep
+for `if __name__ == '__main__':` but the string is *inside a function* — it
+checks that the idiom is False on import. Running it as a script would falsify
+its own subject: its other checks assert
+`__name__ == 'module_higher_arity_def'`. The gate anchors the pattern at column
+zero, so the file excludes itself.
+
+**Two traps, both of which look like a passing run**, are pinned by
+`tests/scripts/test_python_fixture_gate.sh`:
+
+* `live_frames.py` prints a separator line containing the word "FAIL". A
+  grep-based gate fails on a clean tree, so the status word is read from the
+  first or second whitespace field instead. Its two Grail-limitation checks now
+  print `XFAIL`; `XPASS` fails the gate, since a limitation that has quietly
+  gone away means the check is stale.
+* A fixture whose `__main__` block prints nothing would otherwise pass by
+  vacuity, so zero recognised result lines is an error.
+
+The self-test was **mutation-tested** rather than merely run: reverting the gate
+to grep-based status detection, unanchoring the `__main__` pattern, and deleting
+the no-results check each turn it red (2, 1 and 1 assertions respectively). A
+gate self-test that cannot fail is worse than none, because it certifies the
+thing it does not check.
+
+**A side finding, not fixed here.** `cached_property_descriptor.py:82` does
+`cp = cp` inside a `class` body nested in a function. That is a `NameError` in
+CPython — class bodies use `LOAD_NAME` (local → global → builtins) and skip the
+enclosing function scope — so the fixture cannot run there as written. If Grail
+executes it, Grail resolves class-body names through the enclosing scope and
+differs. This belongs with the class-body namespace work
+(`docs/Class_Body_Namespace.md`), not here.
+
+**Result:** 15 fixtures, **180 OK + 2 XFAIL**, wired into the existing no-stone
+`scripts` job in CI (which needs `setup-python` 3.14 — the runner's system
+`python3` is 3.10 and predates `ExceptionGroup`). SUnit **4271, all green**. No
+Smalltalk changed; the only fixture edit is a `__main__` block, which the harness
+provably never executes — `TracebackTestCase` loads the file with
+`name: 'live_frames'`.
+
+### 9.28 Widening the net: 15 fixtures → 38 (2026-08-13, gs40)
+
+§9.27 argued that converting fixtures, not tightening the gate, is what makes it
+worth anything. Done: the 23 fixtures whose checks already answered `True` under
+CPython now have `__main__` blocks, taking the gate from **15 files / 180 OK** to
+**38 files / 288 OK + 2 XFAIL**.
+
+Most of this is not traceback work at all — the converted set is class bodies,
+comprehension scoping, pickling, iterators, dataclasses and closures — so the
+substance lives in `docs/Testing_Guide.md` rather than here. Two things are worth
+recording where the earlier sections are:
+
+**A fixture can pass on import and fail as a script**, and the difference is
+`__name__`. The census imported each file under its real module name; the gate
+runs it as `__main__`. `exception_subclass_args.py` failed on exactly that,
+asserting a literal `'exception_subclass_args.Empty: boom'` — and the fix is a
+traceback rule this document had not yet stated: `format_exception_only`
+qualifies by `__module__`, but **CPython suppresses the prefix entirely for
+`__main__` and `builtins`**, which is why `ValueError: x` renders bare. The check
+now derives the prefix, so it is right in both contexts instead of pinned to one.
+
+**Two of the four historical bug-pinning fixtures are now covered**
+(`exec_class_definition.py`, `handler_raise.py`). `exception_naming.py` and
+`code_filename.py` remain outside, because they do not run under CPython as
+written — the honest accounting from §9.27 improves but does not close.
+
+SUnit **4288, all green**. No Smalltalk changed.
+
+### 9.29 The last two bug-pinners, and a legacy-form gap (2026-08-14, gs40) — gap **closed in §9.30**
+
+§9.28 left `exception_naming.py` and `code_filename.py` outside the gate because
+they did not run under CPython as written. Both now do — **40 fixtures, 304 OK**
+— and getting there turned up three separate wrong expectations plus one real
+conformance gap. All four were *measured*, not reasoned about.
+
+**A class defined inside a function has `<locals>` in its `__qualname__`.**
+`format_exception_only` names a class by `__qualname__`, so a function-local
+`class X(Exception)` renders as `check.<locals>.X`, never `X`. Two checks
+hardcoded the bare name and so were pinned to Grail, which does not add the
+segment. Both now derive the expected text through a new `_rendered_name`
+helper, a direct transcription of CPython's `_get_exc_type_str`:
+
+```python
+stype = cls.__qualname__
+smod = cls.__module__
+if smod not in ('__main__', 'builtins'):
+    if not isinstance(smod, str):
+        smod = '<unknown>'
+    stype = smod + '.' + stype
+```
+
+That one helper also absorbs the `__main__` suppression from §9.28, which is why
+three further checks in the file needed no bespoke handling.
+
+**`st_mtime_ns == st_mtime * 1e9` is false in CPython.** `st_mtime` is a float
+and `st_mtime_ns` an exact integer, so they agree only to float precision —
+about a microsecond at present-day timestamps. `code_filename.py` asserted exact
+equality, which holds in Grail. It now asserts they describe the same instant
+(`abs(...) < 1e-3`), which is the rule actually worth pinning.
+
+**The legacy `(type, value)` form: Grail matches neither CPython path, and does
+not even fail the same way twice.** Both sides were measured — CPython 3.14.6,
+and Grail through `ModuleAst evaluateExpressionSource:`:
+
+| call | CPython 3.14 | Grail |
+| --- | --- | --- |
+| `format_exception_only(ValueError, None)` | `NoneType: None` | `ValueError` |
+| `format_exception(ValueError, None, None)` | `NoneType: None` | **raises `TypeError`** |
+| `TracebackException(ValueError, None, None)` | `ValueError: None` | — |
+
+The module-level entry points **ignore the type they are handed** and derive it
+from the value; the *class* keeps the type it was constructed with. Grail's two
+paths diverge for different reasons: `format_exception_only` carries a `derived`
+flag and reads "value is None and not derived" as "no message at all"
+(traceback.py:499), giving the bare name, while `format_exception` instead
+reaches the single-argument guard added in §9.26, which rejects a *type* as a
+value and raises `Exception expected for value, type found`. The fixture had
+asserted Grail's `'ValueError\n'` as though it were CPython's rule.
+
+Worth stating plainly because it nearly went out wrong: the first draft of this
+section claimed Grail rendered the bare name for *all three*, reasoned from
+reading `format_exception_only`. Running the second form against a live gem is
+what turned up the `TypeError`. Because that clause **raises** rather than
+answering `False`, nothing in the harness may call this check until it is fixed
+— which is a stronger constraint than an ordinary failing assertion, and is
+recorded in the driver comment for the next person.
+
+**This one is left failing on purpose.** Fixing it means reworking that flag
+while keeping the class path intact — the two internal callers at
+traceback.py:742 and :1463 both pass `(type, value)` pairs, and :1463 is the
+class path that must *not* normalise. That is its own change with its own blast
+radius, so the check now states CPython, carries a `KNOWN GRAIL GAP` docstring,
+and `TracebackTestCase` no longer asserts it — with a comment naming the check,
+because a silent removal reads as an oversight later. Note this is **not**
+`XFAIL`: an `XFAIL` check asserts a Grail limitation and fails under *CPython*,
+whereas this asserts CPython and fails under *Grail*.
+
+**`code_filename.py` keeps both shapes.** Its three filename functions answer a
+path rather than a bool, because the Smalltalk driver asserts each equals the
+absolute path it loaded — a stronger claim than any self-comparison, and the one
+that caught `co_filename` being the `'<grail>'` placeholder. A standalone run has
+no such external path, so a new boolean check states the portable half (all three
+def shapes agree with each other and with `__file__`). Neither run is weakened to
+suit the other.
+
+**Result:** the gate covers **40 fixtures, 304 OK + 2 XFAIL**, and every fixture
+known to have pinned Grail's behaviour is now checked against CPython on each
+push. SUnit **4288, all green**. The only Smalltalk change is a comment and one
+removed assertion in `TracebackTestCase`; `traceback.py` is untouched, so
+`test.test_traceback` is unaffected.
+
+### 9.30 Telling "not passed" from "passed None" (2026-08-14, gs40)
+
+§9.29 recorded the legacy-form gap and left it failing. This closes it. The three
+shapes now answer exactly what CPython answers, verified against a live gem:
+
+| call | CPython 3.14.6 | Grail before | Grail now |
+| --- | --- | --- | --- |
+| `format_exception_only(ValueError, None)` | `NoneType: None` | `ValueError` | `NoneType: None` |
+| `format_exception(ValueError, None, None)` | `NoneType: None` | raises `TypeError` | `NoneType: None` |
+| `TracebackException(ValueError, None, None)` | `ValueError: None` | `ValueError` | `ValueError: None` |
+
+**The whole bug was that `None` cannot mean two things at once.** `value` and
+`tb` defaulted to `None`, and the one-argument form was detected by
+`value is None and tb is None` — which is also true of an explicit
+`format_exception(ValueError, None, None)`. That call therefore took the
+single-argument path and hit §9.26's `_require_exception` guard, which rejects a
+*type* as a value. The fix is CPython's: **make the defaults a sentinel**, so
+"not passed" and "passed `None`" are distinguishable at all. Everything else
+follows from being able to tell them apart.
+
+**The rule the legacy form obeys is counter-intuitive and worth stating.** The
+type argument is *ignored*: CPython derives the type from the value, because the
+value is the only argument that can carry a message. `format_exception_only`
+previously kept the passed type and used a `derived` flag to decide whether the
+value contributed a message at all, reading "value is None and not derived" as
+"no message" — producing a bare `ValueError` that matches **neither** CPython
+path. The flag is gone; the value always contributes.
+
+**And the trap: the class must NOT do this.** `TracebackException` keeps the type
+it was constructed with, so the same arguments render two ways depending on which
+door you come in by. Two changes protect that half:
+
+* `TracebackException.__init__` no longer calls `_unpack_exc_args` — that
+  helper normalises *for the module-level functions*. It keeps the triple it is
+  handed, retaining only Grail's convenience of expanding a `BaseException`
+  passed as the type. All five internal constructors already pass a consistent
+  triple, so nothing else moved.
+* `format_exception_only` takes a private `_keep_type`, which the class path
+  passes. Without it, `TracebackException(ValueError, None, None)` would render
+  `NoneType: None` — trading one wrong answer for another.
+
+The fixture asserts all three shapes together, precisely so a later
+"simplification" into one rule cannot quietly drop whichever half was not in
+mind.
+
+**Blast radius, measured rather than assumed.** `test.test_traceback` is
+**unchanged by name** — same 57 failing tests before and after, none fixed, none
+newly failing, no test changing kind. The fix corrects behaviour that module does
+not exercise. No stdlib module outside `traceback.py` calls these entry points,
+so the surface is the module plus its tests.
+
+**The sentinel is Python-level, and that draws a contract boundary.** Grail reads
+`nil` as "undefined / unbound" and `None` as an explicit Python value
+(`NoneType.gs`), which makes `nil` the natural "no argument" marker for a
+Smalltalk caller. These are Python entry points following CPython's contract, so
+the marker must be a value no *caller* can produce — a private `object()`, as in
+`contextvars._MISSING`, `dataclasses.KW_ONLY` and `itertools._sentinel`. A
+Smalltalk caller that fills the optional slots with `nil` therefore does **not**
+get the one-argument form; `nil` is taken as an explicit value and the type is
+derived from it:
+
+| call | answers |
+| --- | --- |
+| `tb @env1:format_exception: exc` | `ValueError: v` ✅ |
+| `tb @env1:format_exception: exc _: nil _: nil` | `UndefinedObject: <UndefinedObject object at 0x101>` |
+
+Both were measured. The second is **out of contract**: omit the optional
+arguments rather than passing `nil`. It was already wrong before this change —
+it rendered `ValueError: <UndefinedObject object at 0x101>`, right type and
+garbage message, where it is now garbage in both halves — so this reshapes a
+pre-existing hole rather than opening one. Closing it properly would mean
+teaching the Smalltalk → Python boundary to map `nil` onto each function's
+default, which is a dispatch-wide decision and not traceback.py's to make.
+
+**A stale scoreboard row turned up on the way.** The committed board records
+`test.test_traceback` at f=44 e=14 s=217; the actual baseline on current `main`
+is **f=45 e=12 s=218** (95 passing either way). That is a third stale row
+alongside `test_raise` and `test_yield_from`, and it is why the A/B above
+compares two runs made here rather than trusting the committed numbers.

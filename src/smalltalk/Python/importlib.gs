@@ -2189,6 +2189,48 @@ ___inheritClassAttrs___: aClass exclude: ownAttrs
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___hasBuiltinStorage___: b
+	"Does base b carry BUILT-IN storage, as opposed to being a
+	behaviour-only mixin?  ___selectStorageBase___: asks this first,
+	because a base that carries storage must become the Smalltalk
+	superclass or the new class loses that storage entirely.
+
+	Three roots, and the last two are the point of this being its own
+	method rather than one inlined ``inheritsFrom: Collection'':
+
+	  * Collection -- Grail's dict / list / set (Dictionary /
+	    SequenceableCollection / Set are all Collection subclasses).
+
+	  * Number -- int and float storage.  AbstractPyInt and Float both
+	    reach it.
+
+	  * AbstractPyStr -- Grail's BOXED str root, which sits DIRECTLY
+	    under Object.  That is what made this a bug rather than a
+	    tidy-up: the fallback below picks the base with the deepest
+	    superclass chain as a proxy for ``substantial base'', and
+	    AbstractPyStr's chain is three long -- exactly tying a plain
+	    ``class M: ...'' mixin (M < PythonInstance < Object), which then
+	    won on left-to-right preference.  So ``class B(M, StrEnum)''
+	    got M as its Smalltalk superclass, the enum metaclass protocol
+	    never reached it (that copy is gated on the SUPERCLASS chain),
+	    and its members were never built: ``B.seven'' answered the bare
+	    string '7' rather than a member, silently.  ``class C(M,
+	    IntEnum)'' was fine only by luck -- AbstractPyInt sits under
+	    Number, so its chain is five long and beat the mixin's three.
+
+	    test_enum test_strenum / test_custom_strenum reach this through
+	    ``class DumbStrEnum(DumbMixin, StrEnum)''."
+
+	(b isKindOf: Behavior) ifFalse: [^ false].
+	(b inheritsFrom: Collection) ifTrue: [^ true].
+	(b inheritsFrom: Number) ifTrue: [^ true].
+	^ [ | root |
+	root := Python at: #'AbstractPyStr' otherwise: nil.
+	root ~~ nil and: [(b == root) or: [b inheritsFrom: root]] ] value
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___selectStorageBase___: bases
 	"Pick the Smalltalk superclass for a multi-base Python class.
 	Return the LEFTMOST base whose class chain reaches a built-in
@@ -2204,7 +2246,7 @@ ___selectStorageBase___: bases
 	the other bases' methods."
 
 	bases do: [:b |
-		((b isKindOf: Behavior) and: [b inheritsFrom: Collection])
+		(self ___hasBuiltinStorage___: b)
 			ifTrue: [^ self ___widenStrBase___: b]
 	].
 	"No built-in storage base.  Prefer the base with the DEEPEST
@@ -2215,7 +2257,11 @@ ___selectStorageBase___: bases
 	Smalltalk superclass, or the primary chain dead-ends before it.
 	Ties keep left-to-right preference.  Method-precedence is then
 	restored to C3 by ___mergeSecondaryBases___, which lets a leftmost
-	mixin OVERRIDE this deeper base (see there)."
+	mixin OVERRIDE this deeper base (see there).
+
+	Depth is a PROXY for ``carries storage'', which is why the test above
+	runs first: a base that really does carry storage must never be
+	decided by chain length.  See ___hasBuiltinStorage___:."
 	^ [ | best bestDepth |
 	best := bases first.
 	bestDepth := -1.

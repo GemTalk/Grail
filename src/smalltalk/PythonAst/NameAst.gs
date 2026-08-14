@@ -676,6 +676,46 @@ printSmalltalkOn: aStream
 	that no ``del'' can unbind -- see ___guardedLocalNeedsCheck___:.  Not
 	emitting a check beats making one cheaper, and parameters are a large
 	share of all guarded reads."
+	"A name an enclosing scope declared ``global'', read inside a DOIT
+	(exec/eval).  The bare identifier cannot be used here: the doit's scope
+	dictionary and an enclosing def's local are both spelled ``x'', and
+	Smalltalk resolves the identifier LEXICALLY, so the block temp wins and
+	the global declaration does nothing:
+
+	    exec('''x = 7
+	    def f():
+	        x = 1
+	        def g():
+	            global x
+	            def h(): return x     # 7 in CPython, was f''s 1 here
+	            return h()
+	        return g()''')
+
+	Naming the slot through the scope handle ensureModuleScope: parks in the
+	dictionary is what no temp can shadow.  Outside a doit the module-level
+	path already routes these correctly -- a module global is an attribute of
+	the module instance, not an identifier -- so this is doit-only.
+
+	A COMPREHENSION TARGET is excluded, and is the one shape that makes this
+	branch's position matter.  A comprehension has its own scope, so its loop
+	variable shadows the declaration for the length of the comprehension --
+	``global g'' then ``[g for g in [1]]'' iterates over the comprehension's
+	own g and leaves the global alone (test_listcomps test_explicit_global,
+	test_explicit_global_3).  Without the exclusion this branch outranked the
+	comprehension-target branch below and read the global instead."
+	((ctx isKindOf: LoadAst)
+		and: [ModuleAst compilingDoitScope notNil
+		and: [(self ___isEnclosingComprehensionTarget___: id) not
+		and: [self ___globalDeclarationWinsFor___: id]]]) ifTrue: [
+			aStream
+				nextPutAll: '(___pyGlobals___ @env0:at: #''';
+				nextPutAll: (NameAst doitScopeNameFor: id asSymbol) asString;
+				nextPutAll: ''' otherwise: nil)';
+				nextPutAll: ' ifNil: [NameError @env0:___signalUndefined___: ''';
+				nextPutAll: id;
+				nextPutAll: ''']'.
+			^ self
+		].
 	((ctx isKindOf: LoadAst) and: [self ___pythonLocalInEnclosingFunctions___: id]) ifTrue: [
 		(self ___guardedLocalNeedsCheck___: id) ifFalse: [
 			aStream nextPutAll: id.

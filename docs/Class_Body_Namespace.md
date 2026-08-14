@@ -34,21 +34,21 @@ hand it one.
 Three approaches were investigated and each fails for a structural reason, not
 for want of effort.
 
-**Mirror each assignment into the namespace, keyed by name.** This is the
-smallest change that looks sufficient, and it cannot work.
-`ClassDefAst >> classBodyAttributes` collapses to **one pair per name** — "last
-assignment wins", by design, so that `args_check = staticmethod(args_check)`
-rebinding a sibling `def` sees the def as already bound. By the time anything
-could write to a namespace, `a = 1; a = 2` is already a *single* store. The
-duplicate is lost at scan time, which is precisely the event
-`test_enum_dict_in_metaclass` asserts on.
+**Mirror each assignment into the namespace, keyed by name.** This is what
+stage 1 does, and it works — see below. An earlier revision of this note claimed
+it could not, on the grounds that `classBodyAttributes` collapses to one pair per
+name. That was wrong, and worth correcting rather than deleting: the collapse is
+in `attrAssignPos`, which only decides the *bound-names context* an emit runs
+under. `classBodyAttributes` itself keeps one pair per (statement, target) in
+source order, so `a = 1; a = 2` already emits two stores and evaluates both
+right-hand sides. Verified by side effect, not by reading.
 
 **Gate the new path on an explicit `metaclass=` keyword**, to contain the blast
 radius at compile time. It misses inherited metaclasses: `class Sub(Base)` where
 `Base` already has one gets `Meta.__prepare__` in CPython and no keyword to key
-off here. A runtime gate (`namespace is nil`) does not have that hole and costs
-one test per assignment, so prefer it — but it does not rescue the approach
-above.
+off here. Stage 1 accepts that deliberately — the hole is narrower than it looks,
+because Grail does not install a Python metaclass as the Smalltalk metaclass, so
+a subclass has nothing to ask either way. Closing it means fixing that first.
 
 **Populate the namespace after the body runs**, then hand it to the metaclass.
 Every one of the five tests observes the namespace *during* the body — a
@@ -90,9 +90,84 @@ Two properties to preserve, both of which have bitten previous changes here:
   emitted inside it — the metaclass hook, decorators, `__init_subclass__` — does
   not re-run. The namespace belongs inside that region with them.
 
+## Stage 1, as shipped
+
+`__prepare__` is called for a class statement that names a metaclass, and every
+class-body **assignment** is routed through the returned mapping in source order
+— body level and inside a compound statement (`with`, `if`, loops) alike. Two
+places do it: the attribute-value emit in `ClassDefAst`, and
+`object >> ___classBodyDefinitionalStore___:put:`, which both the single and the
+chained runtime store already funnel through. `EnumDict(cls_name)` gained the
+constructor CPython gives it, which a `__prepare__` returning `EnumDict(cls)`
+needs and which the inherited dict constructor was refusing.
+
+That closes `test_enum_dict_in_metaclass`.
+
+## Stage 2, as shipped
+
+The gate is gone: every class statement asks for a namespace. An ordinary class
+pays one send and gets nil, storing exactly what it did before. The point is that
+Grail's own metaclasses are **Smalltalk** — an enum's namespace comes from `Enum
+class`, and there is no `metaclass=` keyword to carry it — so a compile-time gate
+on that keyword could never reach an enum at all.
+
+`Enum class` now supplies an `EnumDict`, so every enum body in the corpus runs
+against one. Verified at 0 regressions across 71 modules, which is the number
+that matters for a change with that reach.
+
+One behaviour moved, and it is a fix: a reused member name is refused **where it
+is written**, so the reported value is the one the mapping already holds.
+`ClassBodyRebindingTestCase` had recorded the old answer as a deviation — the
+metaclass hook noticed the clash only after the earlier store was gone, and named
+the surviving value. CPython's own `test_dynamic_members_with_static_methods`
+pins the correct reading (`'FOO_CAT' already defined as 'aloof'`), and that
+expectation is updated with the reasoning.
+
+## Stage 3, as shipped
+
+`EnumDict.__setitem__` resolves an `auto()` **as it is assigned**, so the rest of
+the body sees the number and `ALL = nonmember(A | B)` works. That closes
+`test_using_members_as_nonmember`.
+
+The marker is **mutated** — its `value` slot filled in, CPython's `v.value =
+self._generate_next_value(...)` — and the mapping stores the number. The mutation
+is not decoration: it is what keeps `dupe = third` an alias rather than a second
+call to the generator, since the same marker object bound again now answers a
+value.
+
+Two things did **not** happen, deliberately.
+
+The builder's resolution pass was **not retired**. It still runs for every path
+with no class body — the functional API, `_convert_`, dynamically built classes —
+and the fixture pins both spellings agreeing. What the namespace resolves, the
+builder simply sees as an ordinary value.
+
+The ordering rule was **not** reimplemented in `EnumDict`. CPython raises
+`_generate_next_value_ must be defined before members` from `__setitem__`, keyed
+on an `_auto_called` flag, but a `def` still bypasses the namespace (below), so
+`EnumDict` never sees the generator arrive and cannot time it. The check stays
+where it was, reading `___classBodyOrder___` — only its **evidence** changed.
+It used to look for a member still holding an unresolved marker; resolving at
+assignment takes that evidence away, so `EnumDict` records the names it actually
+had to generate for (`_auto_named`) and the builder reads that instead. Closing
+the `def` gap is what would let the rule move to where CPython keeps it.
+
+A namedtuple value carrying markers is left to the builder, which unwraps and
+rebuilds it. The namespace handles a bare marker and a plain tuple of markers.
+
+## What is still missing
+
+- `def` and nested `class` bindings bypass the namespace — each has its own
+  emission path. This is now the load-bearing one: it blocks the `_auto_called`
+  ordering rule moving to `EnumDict`, where CPython keeps it
+- `vars()` inside a body answers a plain dict, not the live namespace, which is
+  what `test_ignore` and `test_dynamic_members_with_static_methods` write into
+- an inherited PYTHON metaclass is not asked, per the note above
+
 ## Scale
 
-This touches every class definition in the corpus, so it is tier 2 by
-`.claude/CLAUDE.md`'s rule and wants the full CPython suite before any PR. It is
-realistically several sessions of work, not one, and it should be staged with a
-full-suite run at each stage rather than landed at once.
+Stages 1 and 2 touched every class definition in the corpus, so they were tier 2
+by `.claude/CLAUDE.md`'s rule and each took a full CPython suite run. Stage 3 did
+not: it is confined to `EnumDict` and `PyEnumTypes`, so it is tier 1 — the
+machinery it needed was already in place and paid for. Later stages that move
+codegen again (`def` bindings, `vars()`) go back to tier 2.

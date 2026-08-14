@@ -184,3 +184,22 @@ RESULTS = {
     'method_body_unaffected': method_bodies_are_unaffected(),
     'exec_matches_module': exec_agrees_with_module_compilation(),
 }
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.
+if __name__ == '__main__':
+    checks = [
+        element_expression_reads_the_module_not_the_class,
+        condition_expression_reads_the_module_not_the_class,
+        second_for_clause_iterable_reads_the_module_not_the_class,
+        nested_comprehension_reads_the_module_not_the_class,
+        outermost_iterable_reads_the_class_attribute,
+        outermost_iterable_may_be_an_expression,
+        outermost_sees_class_while_element_does_not,
+        lambda_body_reads_the_module_not_the_class,
+        plain_class_body_reads_are_unaffected,
+        method_bodies_are_unaffected,
+        exec_agrees_with_module_compilation,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))
