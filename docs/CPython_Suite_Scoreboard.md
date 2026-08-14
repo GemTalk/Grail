@@ -98,3 +98,15 @@ different rows and merges cleanly.
 | test.test_struct | ERROR | 43 | 6 | 29 | 7 |  |
 | test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'assert_never' from 'typing' (src/python/stdlib/typing.py) |
 | test.test_warnings | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'get_overloads' from 'typing' (src/python/stdlib/typing.py) |
+| test.test___all__ | IMPORTERROR | 0 | 0 | 0 | 0 | module has no attribute 'check_sanitizer' |
+| test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'multibytecodec_support' from 'test' (src/python/stdlib/test/__init__.py) |
+| test.test_codecmaps_tw | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'multibytecodec_support' from 'test' (src/python/stdlib/test/__init__.py) |
+| test.test_htmlparser | ERROR | 67 | 6 | 13 | 1 |  |
+| test.test_ipaddress | IMPORTERROR | 0 | 0 | 0 | 0 | module has no attribute 'IPv6Address' |
+| test.test_netrc | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'netrc' |
+| test.test_pulldom | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax' |
+| test.test_sax | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax' |
+| test.test_ssl | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'socket_helper' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
+| test.test_urllib2_localnet | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'hashlib_helper' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
+| test.test_wave | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'audiotests' from 'test' (src/python/stdlib/test/__init__.py) |
+| test.test_zipapp | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'zipapp' |

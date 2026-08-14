@@ -33,6 +33,29 @@ Verdicts per module:
 -- the 3.14 series the scope document targets -- not by the interpreter running
 this script, which ./.setenv pins to 3.13 for unrelated reasons.
 
+"Ready to wire" IS OPTIMISTIC, and measurably so.  This script asks only
+whether the SUBJECT imports.  A CPython test file also imports test-support
+helpers -- test.support.socket_helper, test.support.hashlib_helper,
+test.multibytecodec_support, test.audiotests -- and a missing one fails the
+module just as hard, before a single test runs.  Those are invisible here.
+
+The P4 probe batch measured the gap directly.  Of its 12 modules this script
+would have called 7 "ready to wire"; 1 actually scored.  The other 6 died on an
+unvendored HELPER, not on anything about Grail:
+
+    test_ipaddress          test.support.LARGEST       (since added)
+    test_ssl                test.support.socket_helper
+    test_urllib2_localnet   test.support.hashlib_helper
+    test_codecencodings_kr  test.multibytecodec_support
+    test_codecmaps_tw       test.multibytecodec_support
+    test___all__            test.support.check_sanitizer
+
+So read IMPORTS as "the subject is not the blocker", not as "this will score".
+The helpers are usually cheap to vendor -- but expect the next blocker behind
+each one rather than a passing module: clearing LARGEST advanced test_ipaddress
+to needing IPv6Address, which is most of a 2417-line module Grail implements
+493 lines of.
+
 Output is out/cpython/import_census.tsv (gitignored, like the rest of out/).
 Nothing here is committed and nothing gates CI: this is a survey to point the
 next vendoring effort, not a measurement of conformance.

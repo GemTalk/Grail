@@ -308,6 +308,72 @@ class _NeverEqual:
 NEVER_EQ = _NeverEqual()
 
 
+class _LARGEST:
+    """Object greater than anything except itself (CPython support._LARGEST).
+
+    CPython derives the remaining comparisons with @functools.total_ordering;
+    they are spelled out here instead, which is equivalent and keeps the class
+    independent of that decorator."""
+
+    def __eq__(self, other):
+        return isinstance(other, _LARGEST)
+
+    def __ne__(self, other):
+        return not isinstance(other, _LARGEST)
+
+    def __lt__(self, other):
+        return False
+
+    def __le__(self, other):
+        return isinstance(other, _LARGEST)
+
+    def __gt__(self, other):
+        return not isinstance(other, _LARGEST)
+
+    def __ge__(self, other):
+        return True
+
+    def __hash__(self):
+        return 3
+
+    def __repr__(self):
+        return "LARGEST"
+
+
+LARGEST = _LARGEST()
+
+
+class _SMALLEST:
+    """Object less than anything except itself (CPython support._SMALLEST)."""
+
+    def __eq__(self, other):
+        return isinstance(other, _SMALLEST)
+
+    def __ne__(self, other):
+        return not isinstance(other, _SMALLEST)
+
+    def __gt__(self, other):
+        return False
+
+    def __ge__(self, other):
+        return isinstance(other, _SMALLEST)
+
+    def __lt__(self, other):
+        return not isinstance(other, _SMALLEST)
+
+    def __le__(self, other):
+        return True
+
+    def __hash__(self):
+        return 4
+
+    def __repr__(self):
+        return "SMALLEST"
+
+
+SMALLEST = _SMALLEST()
+
+
 class BrokenIter:
     """Iterator whose __init__/__next__/__iter__ can be told to raise, used by
     test_iter to check the interpreter handles exceptions from the iterator

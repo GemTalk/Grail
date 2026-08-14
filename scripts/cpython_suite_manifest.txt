@@ -197,3 +197,53 @@ test.test_reprlib
 test.test_struct
 test.test_typing
 test.test_warnings
+
+# --- P4 probe batch: the same SYSTEMATIC SAMPLE, applied to the last tier ----
+# P4 is 75 modules, 29% of the in-scope corpus, and NONE had ever been
+# measured -- the one part of the "how far is this from done" estimate still
+# resting on zero data.  The P3 batch above closed the other half; this closes
+# this one.
+#
+# Of the 69 P4 modules CPython ships as a single test_*.py, sort by name and
+# take every 6th.  No skipping the awkward ones: test_ssl is 5.7k lines and
+# test_urllib2_localnet wants a live server, and they are in for exactly the
+# reason test_typing was -- a sample that drops what looks hard measures
+# nothing.  Whatever these score IS the P4 estimate.
+#
+# ONE DELIBERATE DIFFERENCE from the P3 batch, which matters when comparing
+# the two numbers: P3 was drawn only from modules whose SUBJECT already
+# imports.  This one is not filtered that way, because for P4 the open
+# question is not "how many nearly pass" but "how much of it is reachable at
+# all" -- and pre-filtering on the subject importing would answer that by
+# assuming it.  Expect a lower measurable rate than P3's for that reason
+# alone; the two rates are not like-for-like.
+#
+# Vendored from CPython 3.14.6, as the P3 batch was.
+#
+# RESULT: 1 of 12 measurable -- test_htmlparser, 67 tests, 47 passing on first
+# contact.  The other 11 scored IMPORTERROR, and WHY matters more than the
+# count: only 5 were blocked on a subject Grail does not have (netrc, wave,
+# xml.sax x2, zipapp).  The other 6 died on an unvendored TEST-SUPPORT HELPER
+# -- socket_helper, hashlib_helper, multibytecodec_support, check_sanitizer,
+# and support.LARGEST (added in this batch) -- which says nothing about Grail
+# at all.
+#
+# That is the batch's real finding, and it is a correction to
+# cpython_import_census.py rather than to the P4 estimate: the census probes
+# the SUBJECT import and cannot see helper imports, so it would have called 7
+# of these 12 "ready to wire" when 1 scored.  Recorded in that script's
+# docstring.  Expect blockers to STACK behind each helper: clearing LARGEST
+# advanced test_ipaddress to needing IPv6Address, which Grail's IPv4-only
+# ipaddress does not have.
+test.test___all__
+test.test_codecencodings_kr
+test.test_codecmaps_tw
+test.test_htmlparser
+test.test_ipaddress
+test.test_netrc
+test.test_pulldom
+test.test_sax
+test.test_ssl
+test.test_urllib2_localnet
+test.test_wave
+test.test_zipapp
