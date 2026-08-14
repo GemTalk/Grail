@@ -693,6 +693,37 @@ tokenizeOperator
 
 category: 'Grail-tokenizing'
 method: PythonTokenizer
+___addCodePoint___: aCodePoint to: aBuilder
+	"Append one code point to the literal being scanned, answering the
+	builder to carry on with -- normally the SAME object, so the common
+	path costs one extra send and nothing else.
+
+	When the code point is a lone surrogate (D800..DFFF), GemStone cannot
+	make a Character for it and ``addCodePoint:'' would raise OutOfRange out
+	of the tokenizer, failing the whole module's import over one literal.
+	Promote to PyStrSurrogate instead: it answers the same three accumulator
+	selectors (add: / addCodePoint: / lf), so scanning continues unchanged
+	and the finished token is a Python str that happens not to be a
+	CharacterCollection.
+
+	Only \\u and \\U can reach this: \\x tops out at 0xFF, an octal escape at
+	0o777, \\N resolves against a table with no surrogates in it, and a raw
+	source character cannot be a lone surrogate (the file would not have
+	decoded).  So this is the whole trap, in one place."
+
+	((aCodePoint >= 16rD800 and: [aCodePoint <= 16rDFFF])
+		and: [(aBuilder isKindOf: PyStrSurrogate) not])
+		ifTrue: [
+			| promoted |
+			promoted := PyStrSurrogate ___onPrefix___: aBuilder.
+			promoted addCodePoint: aCodePoint.
+			^ promoted].
+	aBuilder addCodePoint: aCodePoint.
+	^ aBuilder
+%
+
+category: 'Grail-tokenizing'
+method: PythonTokenizer
 tokenizeString
 	"Tokenize a string literal (handles prefixes, single/double/triple quotes, escapes)."
 
@@ -799,13 +830,13 @@ tokenizeString
 			ifFalse: [escaped == $u ifTrue: [
 				| hex |
 				(hex := Unicode7 new) add: self advance ; add: self advance ; add: self advance; add: self advance.
-				 str addCodePoint: (PythonParser integerFrom: hex radix: 16).
+				 str := self ___addCodePoint___: (PythonParser integerFrom: hex radix: 16) to: str.
 			]
 			ifFalse: [escaped == $U ifTrue: [
 				| hex |
 				hex := Unicode7 new.
 				8 timesRepeat: [hex := hex , self advance asString].
-				 str addCodePoint: (PythonParser integerFrom: hex radix: 16).
+				 str := self ___addCodePoint___: (PythonParser integerFrom: hex radix: 16) to: str.
 			]
 			ifFalse: [escaped == $N ifTrue: [
 				"\N{NAME} named-character escape.  Resolved against a

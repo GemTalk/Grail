@@ -2379,18 +2379,47 @@ parseStatements
 category: 'Grail-parsing - atoms'
 method: PythonParser
 parseStringLiteral
-	"Parse one or more adjacent string tokens (implicit concatenation)."
+	"Parse one or more adjacent string tokens (implicit concatenation).
 
-	| startTok writeStream aTok |
+	Collect the parts first, because a part may be a PyStrSurrogate -- a
+	str the tokenizer could not build as a CharacterCollection because it
+	holds a lone surrogate.  Streaming straight into a Unicode7 sent
+	``addAll:'' to that object and died on ``do:''.  Adjacent-literal
+	concatenation is how these appear in practice: CPython's own tests
+	write them split across source lines."
+
+	| startTok parts aTok |
 	startTok := self peek.
-	writeStream := AppendStream on: Unicode7 new.
+	parts := OrderedCollection new.
 	[(aTok := self peek) notNil and: [ aTok isString]] whileTrue: [
-		writeStream nextPutAll: self advance value.
+		parts add: self advance value.
 	].
 	^ConstantAst new
-		value: writeStream contents;
+		value: (self ___joinStringParts___: parts);
 		kind: nil;
 		from: startTok to: self lastToken ; yourself
+%
+
+category: 'Grail-node construction'
+method: PythonParser
+___joinStringParts___: parts
+	"Concatenate adjacent string-literal parts.  With no surrogate part this
+	is the original Unicode7 stream, byte for byte.  With one, the whole
+	result must be a PyStrSurrogate -- concatenating a representable prefix
+	onto an unrepresentable character does not make it representable."
+
+	| anySurrogate cps writeStream |
+	anySurrogate := parts anySatisfy: [:p | p isKindOf: PyStrSurrogate].
+	anySurrogate ifFalse: [
+		writeStream := AppendStream on: Unicode7 new.
+		parts do: [:p | writeStream nextPutAll: p].
+		^ writeStream contents].
+	cps := OrderedCollection new.
+	parts do: [:p |
+		(p isKindOf: PyStrSurrogate)
+			ifTrue: [cps addAll: p ___codePoints___]
+			ifFalse: [p do: [:c | cps add: c codePoint]]].
+	^ PyStrSurrogate ___fromCodePoints___: cps
 %
 
 category: 'Grail-token access'

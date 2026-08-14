@@ -398,6 +398,7 @@ run
 	at: #'AbstractPyInt' put: nil;
 	at: #'AbstractPyFloat' put: nil;
 	at: #'AbstractPyStr' put: nil;
+	at: #'PyStrSurrogate' put: nil;
 	at: #'Enum' put: nil;
 	at: #'IntEnum' put: nil;
 	at: #'IntFlag' put: nil;
@@ -699,6 +700,7 @@ run
 	at: #'BuiltinSubclassPickleTestCase' put: nil;
 	at: #'EnumPickleByNameTestCase' put: nil;
 	at: #'ClassBodyNamespaceTestCase' put: nil;
+	at: #'StrDecodeArgsTestCase' put: nil;
 	at: #'StrEnumMixinAndNewTestCase' put: nil;
 	at: #'EnumAutoAtAssignmentTestCase' put: nil;
 	at: #'EnumDictTestCase' put: nil;
@@ -779,6 +781,7 @@ run
 	at: #'ClassAttrMethodOverrideTestCase' put: nil;
 	at: #'PositionalOnlyDefaultsTestCase' put: nil;
 	at: #'WithAsTargetsTestCase' put: nil;
+	at: #'SurrogateStrTestCase' put: nil;
 	at: #'ExecLocalsTestCase' put: nil;
 	at: #'TimedeltaFloatOperandTestCase' put: nil;
 	at: #'BuiltinSubclassMethodsTestCase' put: nil;
@@ -1039,6 +1042,7 @@ input src/smalltalk/Python/PyModuleDict.gs
 input src/smalltalk/Python/AbstractPyInt.gs
 input src/smalltalk/Python/AbstractPyFloat.gs
 input src/smalltalk/Python/AbstractPyStr.gs
+input src/smalltalk/Python/PyStrSurrogate.gs
 input src/smalltalk/Python/NamedIntConstant.gs
 input src/smalltalk/Python/BoundMethod.gs
 input src/smalltalk/Python/MethodBinding.gs
@@ -1512,6 +1516,7 @@ input src/smalltalk/PythonTests/EnumModuleApiTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassPickleTestCase.gs
 input src/smalltalk/PythonTests/EnumPickleByNameTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNamespaceTestCase.gs
+input src/smalltalk/PythonTests/StrDecodeArgsTestCase.gs
 input src/smalltalk/PythonTests/StrEnumMixinAndNewTestCase.gs
 input src/smalltalk/PythonTests/EnumAutoAtAssignmentTestCase.gs
 input src/smalltalk/PythonTests/EnumDictTestCase.gs
@@ -1608,6 +1613,7 @@ input src/smalltalk/PythonTests/SlotsInheritedDictTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrMethodOverrideTestCase.gs
 input src/smalltalk/PythonTests/PositionalOnlyDefaultsTestCase.gs
 input src/smalltalk/PythonTests/WithAsTargetsTestCase.gs
+input src/smalltalk/PythonTests/SurrogateStrTestCase.gs
 input src/smalltalk/PythonTests/ExecLocalsTestCase.gs
 input src/smalltalk/PythonTests/TimedeltaFloatOperandTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassMethodsTestCase.gs

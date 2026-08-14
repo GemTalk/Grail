@@ -35,3 +35,12 @@ def check():
         pass
     # A genuine iterator (defines __iter__ AND __next__) is unaffected.
     return list(iter(GoodIter())) == [1, 2, 3]
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.
+if __name__ == '__main__':
+    checks = [
+        check,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

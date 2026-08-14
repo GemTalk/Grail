@@ -2558,8 +2558,7 @@ ___isInstanceSingle___: anObject of: aClass
 		False and re.compile rejected wide-string patterns
 		(test_word_boundaries).  bytes stays distinct: ByteArray is not a
 		CharacterCollection."
-		result := (anObject isKindOf: CharacterCollection)
-			or: [anObject isKindOf: AbstractPyStr]].
+		result := anObject @env0:___isPyStr___].
 	(result not and: [aClass == (Python @env0:at: #'PyDict' otherwise: nil)]) ifTrue: [
 		"dict maps to PyDict (the insertion-ordered subclass) for
 		construction, but CPython counts EVERY dict as a dict: internal

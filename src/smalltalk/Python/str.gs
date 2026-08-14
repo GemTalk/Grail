@@ -130,6 +130,17 @@ __new__: obj _: encoding
 				^ res].
 
 	(obj isKindOf: ByteArray) ifTrue: [
+		"CPython validates the decode arguments before decoding anything:
+		``str() argument 'encoding' must be str, not builtin_function_or_method''.
+		Grail handed whatever it was given straight to ``decode:'', which tried
+		to iterate it -- so ``str(b'2', sys.getdefaultencoding)'' surfaced as a
+		Smalltalk MessageNotUnderstood (``a BoundMethod does not understand
+		#do:'') rather than a TypeError, and inside a class body that meant an
+		enum definition failed with an internal error instead of the constructor
+		complaint.  test_enum test_custom_strenum."
+		(encoding isKindOf: CharacterCollection) ifFalse: [
+			^ TypeError ___signal___: 'str() argument ''encoding'' must be str, not '
+				@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: encoding)].
 		"Re-wrap through the 1-arg SELF-TYPED allocator.  ``decode:''
 		answers a plain string, so returning it directly dropped the
 		subclass: ``Markup(b'x', 'ascii')'' decoded correctly but came
@@ -157,6 +168,18 @@ __new__: obj _: encoding _: errors
 	((obj @env0:isKindOf: Behavior)
 		@env0:and: [obj @env0:inheritsFrom: CharacterCollection])
 			ifTrue: [^ obj __new__: encoding _: errors].
+
+	"``errors'' has its own complaint, and ``encoding'' is checked FIRST so that
+	str(b'2', <not a str>, <not a str>) names the encoding, as CPython does.
+	The delegation below re-checks encoding; doing it here as well is what keeps
+	the two in that order."
+	(obj isKindOf: ByteArray) ifTrue: [
+		(encoding isKindOf: CharacterCollection) ifFalse: [
+			^ TypeError ___signal___: 'str() argument ''encoding'' must be str, not '
+				@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: encoding)].
+		(errors isKindOf: CharacterCollection) ifFalse: [
+			^ TypeError ___signal___: 'str() argument ''errors'' must be str, not '
+				@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: errors)]].
 
 	^ self __new__: obj _: encoding
 %
@@ -1256,6 +1279,14 @@ _format: positional kw: kwargs
 %
 
 set compile_env: 0
+
+category: 'Grail-Testing'
+method: CharacterCollection
+___isPyStr___
+	"True: every CharacterCollection is a Python str."
+
+	^ true
+%
 
 category: 'Grail-String Methods'
 method: CharacterCollection

@@ -1212,8 +1212,12 @@ ___pythonBuiltinTypeName___
 		'LargeNegativeInteger' 'AbstractPyInt') @env0:includes: n) ifTrue: [^ 'int'].
 	(#('Boolean') @env0:includes: n) ifTrue: [^ 'bool'].
 	(#('Float' 'SmallDouble' 'AbstractPyFloat') @env0:includes: n) ifTrue: [^ 'float'].
+	"PyStrSurrogate is named explicitly rather than inherited: this test is
+	keyed by class NAME so that no class-global resolution is needed, which
+	means an AbstractPyStr SUBCLASS does not pick the answer up for free."
 	(#('Unicode7' 'Unicode16' 'Unicode32' 'String' 'DoubleByteString'
-		'QuadByteString' 'AbstractPyStr') @env0:includes: n) ifTrue: [^ 'str'].
+		'QuadByteString' 'AbstractPyStr' 'PyStrSurrogate') @env0:includes: n)
+			ifTrue: [^ 'str'].
 	(#('ByteArray') @env0:includes: n) ifTrue: [^ 'bytes'].
 	(#('OrderedCollection') @env0:includes: n) ifTrue: [^ 'list'].
 	(#('PyDict' 'KeyValueDictionary') @env0:includes: n) ifTrue: [^ 'dict'].
@@ -3779,6 +3783,42 @@ __format__: formatSpec
 			@env0:, (self __class__ __name__) @env0:asString
 			@env0:, '.__format__')
 %
+
+set compile_env: 0
+
+category: 'Grail-Testing'
+method: object
+___isPyStr___
+	"Is the receiver a Python ``str''?  False here; CharacterCollection and
+	AbstractPyStr answer true.
+
+	Defined in env 0, as its two overrides are, because the callers are
+	Smalltalk guards.  Two consequences worth stating, both of which cost a
+	broken suite to learn:
+
+	  * Split the definitions across environments and the predicate answers
+	    ``false'' for every string, since an env-1 lookup finds only this
+	    one.  All three must live in env 0.
+	  * From env-1 code, send it as ``@env0:___isPyStr___''.  A bare send
+	    is an env-1 send and raises doesNotUnderstand.
+
+	The point of asking this way rather than ``isKindOf: CharacterCollection''
+	is that Grail's str is NOT one Smalltalk class and never was -- it is
+	Unicode7 / Unicode16 / Unicode32 / String / Symbol, plus AbstractPyStr
+	for StrEnum and ``class X(str)'', plus PyStrSurrogate for a str holding
+	code points GemStone has no Character for.  A ``isKindOf:
+	CharacterCollection'' test silently answers false for the last two, and
+	the failure mode is a wrong answer rather than an error: the value is
+	quietly treated as not-a-string and takes some other branch.
+
+	Prefer this at every site that means ``is this a Python string''.  A site
+	that genuinely means ``is this a Smalltalk CharacterCollection I am about
+	to index or concatenate'' should keep isKindOf: and say so."
+
+	^ false
+%
+
+set compile_env: 1
 
 category: 'Grail-Context Manager'
 method: object
