@@ -1126,6 +1126,12 @@ ___grailBuildMembers: cls names: attrNames
 				(rawValue isKindOf: Integer) ifTrue: [
 					lastInt := rawValue.
 					maxInt := maxInt @env0:max: rawValue]].
+			"StrEnum members are str(*values), validated argument by argument --
+			see ___grailStrEnumValueFor:.  Applied AFTER genValues, because
+			last_values holds the value as WRITTEN (the tuple), and only when the
+			class has no __new__ of its own to decide the value instead."
+			((Enum ___grailIsStrEnumClass: cls) and: [hasUserNew @env0:not]) ifTrue: [
+				rawValue := Enum ___grailStrEnumValueFor: rawValue].
 			"A foreign-mixin enum (``class E(date, Enum)'') carries
 			member_type(*args) -- date(2023, 12, 1) -- as its canonical value.
 			Construct it up front so alias detection, value-lookup and storage
@@ -2342,6 +2348,58 @@ ___grailIsStringType: mt
 	^ (mt == CharacterCollection)
 		or: [(mt @env0:isKindOf: Behavior)
 			and: [mt @env0:inheritsFrom: CharacterCollection]]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailStrEnumValueFor: rawValue
+	"""CPython StrEnum.__new__ -- ``values must already be of type `str`'':
+
+	    class GoodStrEnum(StrEnum):
+	        one = '1'
+	        three = b'3', 'ascii'               -- str(b'3', 'ascii') == '3'
+	    class Bad(StrEnum):
+	        one = 1                             -- TypeError, 1 is not a string
+
+	A member value is the argument list to str(), so a TUPLE value is
+	str(*values) -- which is how the bytes/encoding/errors spellings above are
+	written -- and each argument has its own complaint.  Grail had none of this:
+	the value was stored as given, so ``three'' became the literal string
+	'atuple' and every rejected spelling defined quietly.
+
+	Only for a StrEnum-natured class with no __new__ of its own.  ``class
+	CustomStrEnum(str, Enum)'' is NOT one, and CPython's messages there come
+	from str() itself (``argument 2 must be str, not ...''), which is the
+	distinction test_strenum and test_custom_strenum are drawing between their
+	otherwise identical bodies."""
+
+	| tupleClass vals bad |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	vals := (rawValue isKindOf: tupleClass)
+		ifTrue: [rawValue @env0:asArray]
+		ifFalse: [Array @env0:with: rawValue].
+	(vals @env0:size @env0:> 3) ifTrue: [
+		^ TypeError ___signal___: 'too many arguments for str(): '
+			@env0:, (Enum ___grailValueRepr: rawValue)].
+	bad := [:i | (Enum ___grailIsStringType: (vals @env0:at: i) @env0:class) @env0:not].
+	((vals @env0:size @env0:= 1) and: [bad @env0:value: 1]) ifTrue: [
+		^ TypeError ___signal___: (Enum ___grailValueRepr: (vals @env0:at: 1))
+			@env0:, ' is not a string'].
+	((vals @env0:size @env0:>= 2) and: [bad @env0:value: 2]) ifTrue: [
+		^ TypeError ___signal___: 'encoding must be a string, not '
+			@env0:, (Enum ___grailValueRepr: (vals @env0:at: 2))].
+	((vals @env0:size @env0:= 3) and: [bad @env0:value: 3]) ifTrue: [
+		^ TypeError ___signal___: 'errors must be a string, not '
+			@env0:, (Enum ___grailValueRepr: (vals @env0:at: 3))].
+	"str(*values).  A single string argument is already the value.  The
+	bytes+encoding spellings are str(bytes, encoding[, errors]), which is
+	bytes.decode(encoding[, errors]) -- reached through the value's own
+	``decode'' so the decoding is the one Grail already implements rather than a
+	second copy of it here.  (The ``str'' handle itself takes one argument: it
+	is a BoundMethod, not a class, because Grail has no single str class.)"
+	(vals @env0:size @env0:= 1) ifTrue: [^ vals @env0:at: 1].
+	^ ((vals @env0:at: 1) @env1:___pyAttrLoad___: #'decode')
+		@env1:value: (vals @env0:copyFrom: 2 to: vals @env0:size) value: nil
 %
 
 category: 'Grail-Enum Metaclass'
