@@ -572,64 +572,16 @@ dir: anObject
 	^ anObject __dir__
 %
 
-category: 'Grail-Built-in Functions'
-method: builtins
-enumerate: anIterable
-	"Python builtin enumerate(iterable) — fixed-arity fast path (start=0)."
-
-	^ self ___enumerate___: anIterable start: 0
-%
-
-category: 'Grail-Built-in Functions'
-method: builtins
-enumerate: anIterable _: startValue
-	"Python builtin enumerate(iterable, start) — the 2-positional form
-	(enum.py's own _EnumDict / _iter helpers pass an explicit start)."
-
-	^ self ___enumerate___: anIterable start: startValue
-%
-
-category: 'Grail-Built-in Functions'
-method: builtins
-_enumerate: positional kw: kwargs
-	"Python builtin enumerate(iterable, start=0) — varargs entry for the
-	``start='' keyword (and the positional start) the fixed-arity forms
-	can't accept together."
-
-	| iterable start |
-	iterable := positional @env0:at: 1.
-	start := (positional @env0:size @env0:>= 2)
-		ifTrue: [positional @env0:at: 2]
-		ifFalse: [
-			kwargs @env0:isNil
-				ifTrue: [0]
-				ifFalse: [kwargs @env0:at: 'start' ifAbsent: [0]]].
-	^ self ___enumerate___: iterable start: start
-%
-
-category: 'Grail-Built-in Functions'
-method: builtins
-___enumerate___: anIterable start: startValue
-	"Shared enumerate core: yield (index, item) pairs counting from
-	startValue.  Eager (materializes to a list iterator) as the original
-	1-arg form was."
-
-	| iter lst index done |
-	lst := list ___new___.
-	index := startValue.
-	iter := anIterable __iter__.
-	done := false.
-	[done] @env0:whileFalse: [
-		| item pair |
-		[
-			item := iter __next__.
-			pair := tuple @env0:withAll: {index. item}.
-			lst append: pair.
-			index := index @env0:+ 1
-		] @env0:on: StopIteration do: [:ex | done := true]
-	].
-	^ lst __iter__
-%
+! ``enumerate'' is a TYPE, not a builtins function -- see Python/enumerate.gs.
+! It had four entry points here (enumerate:, enumerate:_:, _enumerate:kw: and
+! the ___enumerate___:start: core).  They are gone rather than kept as
+! shorthand: NameAst treats any name the builtins class publishes a method for
+! as a fast-path builtin and emits a BoundMethod for it, so while they existed
+! the bare name ``enumerate'' evaluated to that wrapper instead of the class.
+! ``enum = enumerate'' then stored a BoundMethod, and ``type(enumerate(s)) is
+! enumerate'' was false.  Removing them lets the name resolve to the class the
+! same way ``list'' and ``tuple'' do, and a direct ``enumerate(x)'' call
+! becomes ordinary instantiation, which is where the argument checking lives.
 
 category: 'Grail-Built-in Functions'
 method: builtins
@@ -1978,6 +1930,14 @@ reversed: aSequence
 	env-0 reverseDo:) hit MNU."
 
 	| lst |
+	"``__reversed__ = None'' BLOCKS, the same rule that makes ``__hash__ =
+	None'' unhashable: the lookup succeeds and yields None, so CPython reports
+	the type as not reversible rather than falling back to the sequence
+	protocol.  A class that declares __len__ and __getitem__ would otherwise
+	reverse perfectly well, which is precisely what the block exists to
+	prevent (test_enumerate's TestReversed.test_objmethods)."
+	(self ___reversedBlocked___: aSequence)
+		ifTrue: [^ self ___notReversible___: aSequence].
 	(aSequence ___respondsTo___: #'__reversed__')
 		ifTrue: [^ aSequence __reversed__].
 	"A string reversed must yield 1-char STRINGS, matching forward str
@@ -1987,9 +1947,64 @@ reversed: aSequence
 	CharacterCollections, so they keep the reverseDo: path (ints)."
 	(aSequence @env0:isKindOf: CharacterCollection)
 		ifTrue: [^ (aSequence @env0:reverse) __iter__].
-	lst := list ___new___.
-	aSequence @env0:reverseDo: [:item | lst append: item].
-	^ lst __iter__
+	"OLD-STYLE SEQUENCE PROTOCOL.  A user class with no __reversed__ is
+	reversible when it answers __getitem__, and CPython walks it DOWN from
+	len - 1.  Grail went straight to the env-0 ``reverseDo:'', which such a
+	class does not understand -- an uncatchable MNU, not the TypeError Python
+	code catches.
+
+	The two failure messages are distinct and CPython distinguishes them in
+	this order: reversed_new tests PySequence_Check (i.e. __getitem__) FIRST,
+	so an object with __len__ but no __getitem__ is ``not reversible'', and
+	only then takes the length, so an object with __getitem__ but no __len__
+	reports ``has no len()''."
+	"A NATIVE Smalltalk sequence keeps the reverseDo: route.  It would satisfy
+	the sequence protocol below too, but the iterator type is observable:
+	pickle.py reduces each built-in iterator by type, and routing tuples
+	through seq_iterator made a reversed tuple reload as a tuple_iterator --
+	a different type than it started as (TestReversed.test_pickle)."
+	(aSequence @env0:class @env0:whichClassIncludesSelector: #'reverseDo:'
+		environmentId: 0) @env0:isNil ifFalse: [
+		lst := list ___new___.
+		aSequence @env0:reverseDo: [:item | lst append: item].
+		^ lst __iter__].
+	(self ___hasProtocolForCall___: aSequence _: '__getitem__') ifTrue: [
+		(self ___hasProtocolForCall___: aSequence _: '__len__') ifFalse: [
+			^ TypeError ___signal___: ('object of type '''
+				@env0:, (aSequence ___pyTypeNameForError___)
+				@env0:, ''' has no len()')].
+		^ seq_iterator ___onReverse: aSequence].
+	^ self ___notReversible___: aSequence
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___reversedBlocked___: anObject
+	"True when anObject's class body bound __reversed__ to None.
+
+	ClassDefAst compiles a class-body ``name = value'' to an accessor pair in
+	category ``Grail-Class Attrs'' on the metaclass, so that is where the None
+	is found -- ___respondsTo___ would not see it, and a plain getattr would
+	answer the None without saying it came from a class-body binding rather
+	than from an absent name."
+
+	| owner |
+	owner := anObject @env0:class @env0:class
+		@env0:whichClassIncludesSelector: #'__reversed__' environmentId: 1.
+	owner @env0:isNil ifTrue: [^ false].
+	((owner @env0:categoryOfSelector: #'__reversed__' environmentId: 1)
+		@env0:asString @env0:= 'Grail-Class Attrs') ifFalse: [^ false].
+	^ (anObject @env0:class @env0:perform: #'__reversed__' env: 1)
+		@env0:== (Python @env0:at: #None otherwise: nil)
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___notReversible___: aSequence
+	"CPython's reversed_new error for a type that cannot be reversed."
+
+	^ TypeError ___signal___: ('''' @env0:, (aSequence ___pyTypeNameForError___)
+		@env0:, ''' object is not reversible')
 %
 
 category: 'Grail-Built-in Functions'

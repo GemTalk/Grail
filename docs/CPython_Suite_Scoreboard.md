@@ -67,7 +67,7 @@ different rows and merges cleanly.
 | test.test_format | OK | 18 | 0 | 0 | 3 |  |
 | test.test_binop | IMPORTERROR | 0 | 0 | 0 | 0 | B class object has no attribute 'register' |
 | test.test_complex | ERROR | 37 | 13 | 12 | 0 |  |
-| test.test_enumerate | IMPORTERROR | 0 | 0 | 0 | 0 | name 'enumerate' is not defined |
+| test.test_enumerate | FAIL | 92 | 12 | 0 | 15 |  |
 | test.test_raise | ERROR | 37 | 1 | 14 | 0 |  |
 | test.test_funcattrs | ERROR | 35 | 14 | 13 | 1 |  |
 | test.test_decorators | ERROR | 16 | 1 | 5 | 0 |  |

@@ -7,7 +7,7 @@ iterator ifNil: [self error: 'iterator is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 iterator subclass: 'seq_iterator'
-  instVarNames: #( source index exhausted)
+  instVarNames: #( source index exhausted reverse)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -35,6 +35,11 @@ Instance variables:
   exhausted - latched true once __getitem__ raised IndexError, so a spent
               iterator stays spent (matches CPython clearing it_seq and the
               list_iterator latch) and does not re-probe __getitem__
+  reverse   - walking DOWN from len(source)-1 rather than up from 0, which is
+              what reversed(x) needs for an old-style sequence.  CPython gives
+              that its own type (PyReversed_Type); the two differ only in
+              direction, so one class carries both, as list_iterator already
+              does for iter(list)/reversed(list)
 '
 %
 
@@ -62,12 +67,38 @@ ___on: aSequence
 	^ instance
 %
 
+category: 'Grail-Instance Creation'
+classmethod: seq_iterator
+___onReverse: aSequence
+	"reversed(x) for an old-style sequence -- one that answers __getitem__ and
+	__len__ but has no __reversed__ of its own.
+
+	The starting index is taken ONCE, here, exactly as CPython's reversed_new
+	does: a sequence that later changes length keeps the iterator's original
+	starting point rather than re-measuring on every step."
+
+	| instance |
+	instance := self ___new___.
+	instance ___sourceReverse: aSequence.
+	^ instance
+%
+
 category: 'Grail-Private'
 method: seq_iterator
 ___source: aSequence
 	source := aSequence.
 	index := 0.
-	exhausted := false
+	exhausted := false.
+	reverse := false
+%
+
+category: 'Grail-Private'
+method: seq_iterator
+___sourceReverse: aSequence
+	source := aSequence.
+	index := (aSequence __len__) @env0:- 1.
+	exhausted := false.
+	reverse := true
 %
 
 category: 'Grail-Iterator Protocol'
@@ -80,13 +111,20 @@ __next__
 
 	| v |
 	exhausted @env0:ifTrue: [StopIteration @env0:signal].
+	"Reverse: walk down to 0 and stop.  There is no IndexError to wait for --
+	index 0 is a valid item -- so the bound is the test."
+	(reverse @env0:== true and: [index @env0:< 0]) @env0:ifTrue: [
+		exhausted := true.
+		StopIteration @env0:signal].
 	v := [source __getitem__: index]
 		@env0:on: IndexError
 		do: [:ex | ex @env0:return: #'___seqIterStop___'].
 	(v @env0:== #'___seqIterStop___') @env0:ifTrue: [
 		exhausted := true.
 		StopIteration @env0:signal].
-	index := index @env0:+ 1.
+	index := reverse @env0:== true
+		ifTrue: [index @env0:- 1]
+		ifFalse: [index @env0:+ 1].
 	^ v
 %
 
@@ -100,8 +138,16 @@ __length_hint__
 	looked up rather than named directly, the same defensive pattern the
 	binary-op protocol in Object.gs uses.)"
 
-	| ni n |
+	| ni n position |
 	exhausted @env0:ifTrue: [^ 0].
+	"Reverse: CPython's reversed_len re-measures the sequence and answers
+	min(index + 1, len) -- so a source that has SHRUNK past the current index
+	reports nothing left, and a __len__ that raises the second time propagates
+	rather than being cached away (test_enumerate's SeqWithWeirdLen)."
+	reverse @env0:== true ifTrue: [
+		n := source __len__.
+		position := index @env0:+ 1.
+		^ (n @env0:< position) ifTrue: [0] ifFalse: [position]].
 	((source @env0:class @env0:whichClassIncludesSelector: #'__len__' environmentId: 1)
 		@env0:isNil) ifFalse: [
 		n := source __len__.
@@ -143,7 +189,8 @@ method: seq_iterator
 ___setState: aSource _: idx
 	source := aSource.
 	index := idx.
-	exhausted := false
+	exhausted := false.
+	reverse := false
 %
 
 category: 'Grail-Pickle Protocol'
