@@ -197,12 +197,24 @@ testDefsAndNestedClassesBypassItWhichIsAKnownGap
 
 category: 'Grail-Tests - Known gaps'
 method: ClassBodyNamespaceTestCase
-testVarsInABodyIsNotTheNamespaceWhichIsAKnownGap
-	"Recorded, NOT endorsed.  ``vars()'' answers a plain dict, so the
-	write-into-vars() idiom -- test_enum's test_ignore and
-	test_dynamic_members_with_static_methods -- is not reached by this stage."
+testVarsInABodyIsNotTheNamespaceObjectWhichIsAKnownGap
+	"Recorded, NOT endorsed, and now NARROWER than it was.  ``vars()'' in a
+	class body used to answer a plain dict, so the write-into-vars() idiom was
+	out of reach entirely.  It answers a live ClassBodyLocals instead: a write
+	through it binds the class attribute and IS offered to the prepared
+	namespace, which the two assertions below pin.  CPython's answer here is
+	the Watch instance itself.
 
-	self assert: (self resultAt: 'vars_in_body_a_known_gap') asString equals: 'dict'.
+	What remains is that the object is not the namespace, so an alias held
+	across statements reports the names bound up to the call rather than
+	growing with the body.  See ClassBodyLocalsTestCase."
+
+	self assert: (self resultAt: 'vars_in_body_kind') asString
+		equals: 'ClassBodyLocals'.
+	self assert: (self resultAt: 'vars_write_reaches_namespace') asString
+		equals: 'True'.
+	self assert: (self resultAt: 'vars_write_binds_attribute') asString
+		equals: '1'.
 %
 
 category: 'Grail-Tests - Enums get one too'

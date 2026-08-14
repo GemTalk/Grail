@@ -830,14 +830,29 @@ ___grailNsStore___: aName value: aValue
 	enum.EnumDict does for a reused member name -- and is the behaviour this
 	whole path exists to make reachable."
 
-	| tbl ns |
-	tbl := SessionTemps @env0:current
-		@env0:at: #'GrailPendingClassNamespace' otherwise: nil.
-	tbl isNil ifTrue: [^ aValue].
-	ns := tbl @env0:at: self otherwise: nil.
+	| ns |
+	ns := self ___grailPendingNamespace___.
 	ns isNil ifTrue: [^ aValue].
 	ns @env1:__setitem__: aName @env0:asString _: aValue.
 	^ ns @env1:__getitem__: aName @env0:asString
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailPendingNamespace___
+	"The namespace ___grailPrepareNamespace___ installed for the receiver, or
+	nil -- which is every class that does not name a metaclass with __prepare__
+	and whose metaclass chain supplies no ___grailMetaclassNamespace___.
+
+	Kept in SessionTemps keyed by the class rather than on the class itself: it
+	is scaffolding for the duration of the class statement and must never be
+	committed."
+
+	| tbl |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingClassNamespace' otherwise: nil.
+	tbl isNil ifTrue: [^ nil].
+	^ tbl @env0:at: self otherwise: nil
 %
 
 category: 'Grail-Class Namespace'
@@ -1914,6 +1929,84 @@ ___classBodyDefinitionalStore___: aName put: aValue
 	((self ___respondsTo___: setterSym) and: [self ___respondsTo___: getterSym])
 		ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { v }].
 	^ self ___classHolderAttrStore___: aName put: v
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___classBodyDefinitionalDelete___: aName
+	"``del x'' in a class body -- the inverse of
+	___classBodyDefinitionalStore___:put:, and it has to look in the same three
+	places, because which one holds the binding is not knowable at emit time: a
+	name assigned unconditionally somewhere in the body has an accessor pair, a
+	name bound only by a locals() write or a conditional branch is in the
+	dynInstVars holder, and the prepared namespace has a copy of either.
+
+	CPython's class-body ``del'' is DELETE_NAME on the body's own namespace, so
+	it raises NameError when the name is not bound there -- and, in particular,
+	does NOT reach an enclosing function's local or the module global of the
+	same name.  ``found'' is what makes that faithful: it records whether any of
+	the three actually held a value, and nothing having held one is the
+	NameError case rather than a silent no-op.
+
+	An ACCESSOR PAIR is REMOVED, not nilled.  Nilling the slot looks like the
+	nil-as-absent rule the class-body reads use, but ___pyAttrLoad___ does not
+	apply that rule to a class accessor: it answered the nil, so ``class C: x =
+	1; del x'' left C.x reading back as a raw UndefinedObject and hasattr(C,
+	'x') answering true -- a worse answer than not honouring the del at all.
+	Removing the pair makes the load MISS, which is the AttributeError CPython
+	gives.  Own methods only, and only the pair this class body compiled
+	('Grail-Class Attrs'), so an inherited attribute is never deleted -- object
+	>> ___pyAttrDelete___: scopes itself the same way and for the same reason."
+
+	| ns getterSym setterSym holder found meta |
+	found := false.
+	ns := self ___grailPendingNamespace___.
+	ns isNil ifFalse: [
+		(ns @env1:__contains__: aName @env0:asString) ___isTruthy___ ifTrue: [
+			ns @env1:__delitem__: aName @env0:asString.
+			found := true]].
+	getterSym := aName @env0:asString @env0:asSymbol.
+	setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
+	meta := self @env0:class.
+	((meta @env0:whichClassIncludesSelector: getterSym environmentId: 1) == meta
+		and: [(meta @env0:categoryOfSelector: getterSym environmentId: 1)
+			@env0:= #'Grail-Class Attrs'])
+		ifTrue: [
+			found := true.
+			meta @env0:removeSelector: getterSym environmentId: 1.
+			(meta @env0:whichClassIncludesSelector: setterSym environmentId: 1) == meta
+				ifTrue: [meta @env0:removeSelector: setterSym environmentId: 1]].
+	holder := (self ___respondsTo___: #dynInstVars)
+		ifTrue: [self @env0:perform: #dynInstVars env: 1]
+		ifFalse: [nil].
+	holder == nil ifFalse: [
+		(holder @env0:dynamicInstVarAt: getterSym) == nil ifFalse: [
+			found := true.
+			holder @env0:removeDynamicInstVar: getterSym]].
+	found ifFalse: [
+		^ NameError ___signal___:
+			'name ''' @env0:, aName @env0:asString @env0:, ''' is not defined'].
+	^ self
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___classBodyDynamicRead___: aSym
+	"The value a class body bound DYNAMICALLY on the receiver class -- a
+	locals() write, a conditional branch, a nested class -- or nil.
+
+	The receiver's OWN holder only, deliberately: this backs the class-body
+	read of a name codegen could not see bound (NameAst), and CPython's
+	LOAD_NAME there consults the class body's namespace and then the enclosing
+	scopes -- never the BASES.  ___dynamicClassAttr___: walks the superclass
+	chain, so using it here would let an inherited attribute of the same name
+	outrank the module global the body is entitled to read."
+
+	| holder |
+	(self ___respondsTo___: #dynInstVars) ifFalse: [^ nil].
+	holder := self @env0:perform: #dynInstVars env: 1.
+	holder == nil ifTrue: [^ nil].
+	^ holder @env0:dynamicInstVarAt: aSym
 %
 
 category: 'Grail-Class Attr Overlay'

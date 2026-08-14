@@ -93,6 +93,26 @@ printSmalltalkOn: aStream
 					nextPutAll: '''.'.
 			] ifFalse: [
 				(target isKindOf: NameAst) ifTrue: [
+					"``del x'' in a CLASS BODY.  CPython's is DELETE_NAME on the
+					body's own namespace: it unbinds the class attribute, raises
+					NameError when nothing there is bound, and never reaches the
+					enclosing function local or module global of the same name.
+
+					Grail compiles a class body structurally, and a DeleteAst
+					yields no attribute pair, so the whole statement used to be
+					DROPPED -- ``class C: x = 1; del x'' left C.x == 1 and
+					reported nothing.  Nor could the branches below stand in: the
+					module one binds the wrong scope, and the function-local one
+					(``x := nil'') would nil an ENCLOSING def's temp, which is
+					precisely the binding CPython leaves alone
+					(testClassNamespaceOverridesClosure asserts the outer x is
+					still 42 after the class body deletes its own).
+
+					classBodyRuntimeClass is set by ClassDefAst only around
+					class-body-level statements, which is exactly the scope this
+					applies to; a ``del'' inside a method compiles under no such
+					flag and keeps the local branch."
+					CallAst classBodyRuntimeClass ifNil: [
 					(self isModuleScopeTarget: target) ifTrue: [
 						"Phase A: `del name` at module scope truly removes
 						the binding from the module instance's dynamic-
@@ -112,7 +132,11 @@ printSmalltalkOn: aStream
 						post-del read raises UnboundLocalError naming
 						the variable."
 						aStream nextPutAll: target id; nextPutAll: ' := nil.'
-					]
+					]] ifNotNil: [:clsName |
+						aStream nextPutAll: clsName;
+							nextPutAll: ' @env1:___classBodyDefinitionalDelete___: #''';
+							nextPutAll: target ___mangledId___;
+							nextPutAll: '''.']
 				] ifFalse: [
 					self error: 'del for ', target class name, ' is not yet supported'
 				]

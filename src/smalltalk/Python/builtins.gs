@@ -947,6 +947,27 @@ ___buildLocals___: pairsArray
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___buildClassBodyLocals___: pairsArray forClass: aClass
+	"Backing for the CLASS-BODY locals()/vars() rewrite (CallAst >>
+	printClassBodyLocalsOn:).  Same pairs as ___buildLocals___: -- the names the
+	body has bound so far -- but the answer is a ClassBodyLocals, so a write
+	through it binds a class attribute instead of vanishing.
+
+	The entries go in BEFORE the class is bound, which is what keeps seeding
+	from writing through: ClassBodyLocals >> __setitem__ is the inherited dict
+	store until ___grailBindClass___ runs."
+
+	| d |
+	d := ClassBodyLocals ___new___.
+	pairsArray @env0:do: [:pair |
+		(pair @env0:at: 2) == nil ifFalse: [
+			d __setitem__: ((pair @env0:at: 1) @env0:asUnicodeString) _: (pair @env0:at: 2)]].
+	d ___grailBindClass___: aClass.
+	^ d
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___evalScopeFor___: moduleOrNil locals: localsDict
 	"Evaluation namespace for a bare in-function eval()/exec() (CallAst >>
 	printBareEvalExecOn:): the enclosing module's globals with the

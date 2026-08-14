@@ -194,17 +194,24 @@ r['enum_alias'] = repr(Aliased.ALIAS is Aliased.CANON)
 r['def_seen_a_known_gap'] = repr('method' in seen)
 r['nested_class_seen_a_known_gap'] = repr('Nested' in seen)
 
-# ``vars()`` inside a class body answers a plain dict rather than the live
-# namespace, so the write-into-vars() idiom (test_enum's test_ignore) is not
-# reached by this stage.
+# ``vars()`` inside a class body is no longer a plain dict: it answers a live
+# ClassBodyLocals, and a write through it is offered to the prepared namespace
+# like any other class-body assignment -- ``written`` below is what the watching
+# metaclass saw.  What it is still NOT is the namespace OBJECT itself, so
+# ``v is the mapping __prepare__ returned`` is False here and True in CPython;
+# an alias held across statements therefore reports the names bound up to the
+# call rather than growing with the body.
 
 
 class VarsProbe(metaclass=WatchMeta):
     v = vars()
+    v['written'] = 1
     kind = type(v).__name__
 
 
-r['vars_in_body_a_known_gap'] = VarsProbe.kind
+r['vars_in_body_kind'] = VarsProbe.kind
+r['vars_write_reaches_namespace'] = repr('written' in seen)
+r['vars_write_binds_attribute'] = repr(VarsProbe.written)
 
 # ``auto()`` is resolved AT ASSIGNMENT now, which is the first thing the
 # namespace bought that a later pass could not: a body that uses a member it just
