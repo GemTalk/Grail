@@ -58,6 +58,18 @@ class temp_dir:
         if self.path is None:
             self.path = tempfile.mkdtemp()
             self._created = True
+        else:
+            # CPython mkdirs a NAMED path too, and only its caller knows
+            # whether that mattered.  Omitting it made temp_dir('x') a no-op
+            # that yielded a path which did not exist -- fine for the sole
+            # previous caller, which always passed None, and wrong for
+            # temp_cwd below, whose whole job is to chdir into it.
+            try:
+                os.mkdir(self.path)
+                self._created = True
+            except OSError:
+                if not self.quiet:
+                    raise
         return self.path
 
     def __exit__(self, *exc):
@@ -65,6 +77,66 @@ class temp_dir:
             import shutil
             shutil.rmtree(self.path, ignore_errors=True)
         return False
+
+
+class change_cwd:
+    """Context manager temporarily changing the CWD (CPython
+    os_helper.change_cwd), written as a plain class -- Grail forbids
+    @contextlib.contextmanager."""
+
+    def __init__(self, path, quiet=False):
+        self.path = path
+        self.quiet = quiet
+        self.saved_dir = None
+
+    def __enter__(self):
+        self.saved_dir = os.getcwd()
+        try:
+            os.chdir(self.path)
+        except OSError:
+            if not self.quiet:
+                raise
+        return os.getcwd()
+
+    def __exit__(self, *exc):
+        if self.saved_dir is not None:
+            os.chdir(self.saved_dir)
+        return False
+
+
+class temp_cwd:
+    """Context manager creating a temporary directory and chdir'ing into it
+    (CPython os_helper.temp_cwd), written as a plain class.
+
+    CPython nests temp_dir inside change_cwd via @contextmanager; the same
+    nesting is done explicitly here, and unwound in reverse on exit so the
+    CWD is restored BEFORE the directory it names is removed."""
+
+    def __init__(self, name="tempcwd", quiet=False):
+        self.name = name
+        self.quiet = quiet
+        self._temp_dir = None
+        self._change_cwd = None
+
+    def __enter__(self):
+        self._temp_dir = temp_dir(path=self.name, quiet=self.quiet)
+        temp_path = self._temp_dir.__enter__()
+        self._change_cwd = change_cwd(temp_path, quiet=self.quiet)
+        return self._change_cwd.__enter__()
+
+    def __exit__(self, *exc):
+        if self._change_cwd is not None:
+            self._change_cwd.__exit__(*exc)
+        if self._temp_dir is not None:
+            self._temp_dir.__exit__(*exc)
+        return False
+
+
+def rmtree(path):
+    """Remove a directory tree, ignoring a missing one (CPython
+    os_helper.rmtree)."""
+    import shutil
+    shutil.rmtree(path, ignore_errors=True)
 
 
 class EnvironmentVarGuard(MutableMapping):

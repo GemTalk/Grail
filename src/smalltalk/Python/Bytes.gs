@@ -1397,7 +1397,15 @@ decode: encoding
 	"Decode bytes to string using specified encoding"
 
 	| encodingStr |
-	encodingStr := encoding.
+	"Normalise the codec name before dispatching, as CPython does and as
+	str>>encode already did on this side of the pair.  Without it every
+	branch below was an EXACT match on a lowercase hyphenated spelling, so
+	``b'x'.decode('UTF-8')'' -- the spelling that appears verbatim in a MIME
+	or .mo Content-Type header -- raised LookupError while 'utf-8' worked.
+	Lowercase plus underscore-to-hyphen also subsumes the alias spellings
+	('utf_8', 'unicode_escape') without enumerating them per branch."
+	encodingStr := (encoding @env0:asLowercase)
+		@env0:collect: [:c | (c @env0:= $_) ifTrue: [$-] ifFalse: [c]].
 
 	"Support UTF-8.  Ill-formed input raises Python's catchable
 	UnicodeDecodeError, not GemStone's raw ArgumentError (which escapes
@@ -1430,10 +1438,14 @@ decode: encoding
 		^ result
 	].
 
-	"Support Latin-1"
+	"Support Latin-1.  ``iso-8859-1'' is the same codec under the name the
+	wire actually uses -- it is the default charset of a GNU .mo catalog
+	header -- and str>>encode already accepted it on the way out."
 	((encodingStr @env0:= 'latin-1') or: [
-		encodingStr @env0:= 'latin1'
-	]) ifTrue: [
+		(encodingStr @env0:= 'latin1') or: [
+		(encodingStr @env0:= 'iso-8859-1') or: [
+		encodingStr @env0:= 'iso8859-1'
+	]]]) ifTrue: [
 		| result size |
 		size := self @env0:size.
 		result := Unicode7 ___new___: size.
@@ -1480,6 +1492,30 @@ decode: encoding
 			char := Character @env0:codePoint: byte.
 			result @env0:at: i put: char
 		].
+		^ result
+	].
+
+	"iso-8859-15 (latin-9): the inverse of str>>encode's latin-9 branch --
+	latin-1 with 8 code points substituted.  encode has supported it since
+	test_bytes needed ``bytes('€', 'iso8859-15')''; decode did not, so a
+	round-trip raised LookupError on the way back."
+	((encodingStr @env0:= 'iso-8859-15') or: [(encodingStr @env0:= 'iso8859-15')
+		or: [(encodingStr @env0:= 'latin-9') or: [(encodingStr @env0:= 'latin9')
+		or: [encodingStr @env0:= 'l9']]]]) ifTrue: [
+		| result size map |
+		"byte -> code point for the 8 that differ from latin-1."
+		map := IdentityKeyValueDictionary @env0:new.
+		map @env0:at: 16rA4 put: 16r20AC; @env0:at: 16rA6 put: 16r0160;
+			@env0:at: 16rA8 put: 16r0161; @env0:at: 16rB4 put: 16r017D;
+			@env0:at: 16rB8 put: 16r017E; @env0:at: 16rBC put: 16r0152;
+			@env0:at: 16rBD put: 16r0153; @env0:at: 16rBE put: 16r0178.
+		size := self @env0:size.
+		result := Unicode7 ___new___: size.
+		1 @env0:to: size do: [:i |
+			| byte |
+			byte := self @env0:at: i.
+			result @env0:at: i put: (Character @env0:codePoint:
+				(map @env0:at: byte otherwise: byte))].
 		^ result
 	].
 

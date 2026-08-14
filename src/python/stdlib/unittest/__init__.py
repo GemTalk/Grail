@@ -280,6 +280,35 @@ class TestCase:
             entry = self._cleanups.pop()
             entry[0](*entry[1], **entry[2])
 
+    # Class-level cleanups, the companion of setUpClass.  Stored on the CLASS,
+    # not the instance, and drained once the last test of that class has run.
+    #
+    # The list is created HERE, lazily, rather than by whoever ran setUpClass.
+    # Depending on the caller to seed it is what broke first: the CPython
+    # harness (test/_grail_harness.py) invokes setUpClass itself, around each
+    # individual test, so a list seeded only by TestSuite left addClassCleanup
+    # raising AttributeError -- inside a setUpClass whose exception the harness
+    # deliberately swallows.  Lazy init makes the two entry points independent.
+    #
+    # Set on ``cls'', never mutated through a base: a subclass that inherits
+    # the attribute would otherwise append into its parent's list.
+    @classmethod
+    def addClassCleanup(cls, function, *args, **kwargs):
+        if cls.__dict__.get("_class_cleanups") is None:
+            cls._class_cleanups = []
+        cls._class_cleanups.append((function, args, kwargs))
+
+    @classmethod
+    def doClassCleanups(cls):
+        # __dict__, not getattr: an inherited list belongs to the base class
+        # and is that class's to drain.
+        entries = cls.__dict__.get("_class_cleanups")
+        if entries is None:
+            return
+        while len(entries) > 0:
+            entry = entries.pop()
+            entry[0](*entry[1], **entry[2])
+
     def fail(self, msg=None):
         if msg is None:
             msg = "fail() called"
@@ -692,11 +721,98 @@ class TestSuite:
     def __iter__(self):
         return iter(self._tests)
 
+    # ---- class fixtures ----------------------------------------------------
+    #
+    # setUpClass / tearDownClass / addClassCleanup were DECLARED on TestCase
+    # (as no-op hooks) but nothing ever called them, so a class-level fixture
+    # silently did not run.  That is not a missing feature so much as a quiet
+    # wrong answer: test.test_gettext writes its eight .mo catalogs in
+    # setUpClass, so 21 of its tests failed with FileNotFoundError on files
+    # their own fixture was supposed to have created.
+    #
+    # Placed here rather than in TestCase.run because the fixture spans a RUN
+    # OF TESTS, not one test: it fires when the class CHANGES.  The state lives
+    # on ``result'' (as in CPython) so that nested suites, which each call
+    # run() separately, share one notion of "the class we are in" instead of
+    # re-running setUpClass per suite.
+
+    def _setUpClass(self, test, result):
+        """Run setUpClass if ``test'' begins a new class."""
+
+        currentClass = type(test)
+        if currentClass is getattr(result, "_previousTestClass", None):
+            return
+        # A skipped class never sets up -- CPython checks this before the
+        # fixture, so @unittest.skip on a class costs nothing to honour.
+        if getattr(currentClass, "__unittest_skip__", False):
+            return
+        currentClass._classSetupFailed = False
+        currentClass._classSetupError = ""
+        currentClass._class_cleanups = []
+        setUpClass = getattr(currentClass, "setUpClass", None)
+        if setUpClass is None:
+            return
+        try:
+            setUpClass()
+        except Exception as e:
+            currentClass._classSetupFailed = True
+            currentClass._classSetupError = ("setUpClass: " +
+                                             _describe_exception(e))
+
+    def _tearDownPreviousClass(self, test, result):
+        """Run tearDownClass + class cleanups when leaving a class.
+
+        ``test'' is None at the end of the top-level suite, which is what
+        tears down the final class."""
+
+        previousClass = getattr(result, "_previousTestClass", None)
+        if previousClass is None:
+            return
+        if test is not None and type(test) is previousClass:
+            return
+        if getattr(previousClass, "_classSetupFailed", False):
+            return
+        tearDownClass = getattr(previousClass, "tearDownClass", None)
+        if tearDownClass is not None:
+            try:
+                tearDownClass()
+            except Exception:
+                # A failing teardown must not lose the results already
+                # recorded for the class, nor stop the next class running.
+                pass
+        try:
+            previousClass.doClassCleanups()
+        except Exception:
+            pass
+
     def run(self, result):
+        # Only the OUTERMOST suite tears down the last class, so a nested
+        # suite does not close a class its parent is still filling.
+        topLevel = False
+        if getattr(result, "_testRunEntered", False) is False:
+            result._testRunEntered = True
+            topLevel = True
         for test in self._tests:
             if result.shouldStop:
                 break
+            if isinstance(test, TestSuite):
+                test.run(result)
+                continue
+            self._tearDownPreviousClass(test, result)
+            self._setUpClass(test, result)
+            result._previousTestClass = type(test)
+            if getattr(type(test), "_classSetupFailed", False):
+                # Report the fixture failure against EVERY test in the class,
+                # rather than as one synthetic error, so the count of tests
+                # stays honest and the scoreboard attributes it correctly.
+                result.startTest(test)
+                result.addError(test, getattr(type(test), "_classSetupError", ""))
+                result.stopTest(test)
+                continue
             test.run(result)
+        if topLevel:
+            self._tearDownPreviousClass(None, result)
+            result._testRunEntered = False
         return result
 
 

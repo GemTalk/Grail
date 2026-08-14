@@ -91,7 +91,7 @@ different rows and merges cleanly.
 | test.test_codecs | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'encodings' |
 | test.test_contextlib_async | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'run_no_yield_async_fn' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
 | test.test_difflib | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'findfile' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
-| test.test_gettext | ERROR | 73 | 0 | 72 | 1 |  |
+| test.test_gettext | ERROR | 73 | 14 | 4 | 1 |  |
 | test.test_linecache | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'importlib.machinery' |
 | test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '_compat_pickle' |
 | test.test_reprlib | IMPORTERROR | 0 | 0 | 0 | 0 | name 'wrapped' is not defined |

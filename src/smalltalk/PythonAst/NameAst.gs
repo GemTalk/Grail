@@ -902,8 +902,17 @@ emitDoitEnclosingScopeLoad: aSymbol on: aStream
 
 	``___signalUndefined___:'' is an env-0 classmethod and generated code is env 1,
 	hence the @env0: prefix.  Only the NAME is quoted now, so the doubled-quote
-	gymnastics the old inline message needed are gone."
-	aStream nextPutAll: 'NameError @env0:___signalUndefined___: '; nextPut: $'.
+	gymnastics the old inline message needed are gone.
+
+	``___resolveBuiltinOrSignal___:'' rather than ___signalUndefined___: so a
+	name INJECTED into builtins at run time (``builtins.__dict__['_'] = ...'',
+	which is how gettext.install() publishes ``_'') still resolves.  Compiling
+	an unconditional raise made that idiom unusable: the name does not exist
+	when the reader is compiled, and nothing later could be consulted.  On a
+	miss the resolver raises the identical NameError, so this only converts a
+	certain failure into a lookup."
+
+	aStream nextPutAll: 'NameError @env0:___resolveBuiltinOrSignal___: '; nextPut: $'.
 	aStream nextPutAll: aSymbol; nextPut: $'
 %
 
