@@ -1944,7 +1944,19 @@ emitCompileMethodOn: classVarName source: sourceString category: categoryString 
 	aStream
 		nextPutAll: ' category: ''';
 		nextPutAll: categoryString;
-		nextPutAll: '''.'; lf.
+		nextPutAll: ''''.
+	"Inside a DOIT, hand the helper the doit's own scope.  These methods
+	compile at RUNTIME against the user profile's symbol list, which an
+	exec's SymbolDictionary is not on, so without this a method could not
+	read a name from the source it was written in -- ``exec('x = 12; class
+	C: ...')'' left every method that mentions x uncompilable, and the
+	classdef survived only through the raising stub Grail installs for a
+	method it cannot compile.  The handle ensureModuleScope: parks in the
+	scope is what names it here; outside a doit there is no scope to pass
+	and the plain two-keyword form stands."
+	ModuleAst compilingDoitScope ifNotNil: [
+		aStream nextPutAll: ' scope: ___pyGlobals___'].
+	aStream nextPutAll: '.'; lf.
 %
 
 category: 'Grail-code generation'

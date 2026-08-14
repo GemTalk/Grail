@@ -283,14 +283,46 @@ ___compileMethod: aSource category: aCategory
 	~250 chars per method → ~50.  Class-side compiles use ``Foo class
 	___compileMethod: ...''."
 
-	"Resolve the symbol list locally rather than calling
+	^ self ___compileMethod: aSource category: aCategory scope: nil
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
+___compileMethod: aSource category: aCategory scope: aScopeOrNil
+	"As ___compileMethod:category:, with aScopeOrNil -- a SymbolDictionary --
+	searched FIRST when the method's source resolves a name.
+
+	That scope is a DOIT's.  ``exec'' runs its source with a SymbolDictionary
+	of the exec'd names on the compiler's symbol list, but a class defined in
+	that source compiles its METHODS here, at RUNTIME, against the user
+	profile's symbol list -- which the doit's scope is not on.  So a method
+	could not see a name from the very source it was written in:
+
+	    exec('x = 12
+	    class C:
+	        def get(self): return x
+	    got = C().get()')
+
+	``get'' failed to compile at all.  The classdef survived only because the
+	CompileError handler below installs a raising stub, which is why this
+	surfaced as a NameError about a codegen gap rather than as a missing name.
+
+	Nothing about it is specific to ``global'' -- any read of an exec-level
+	name from a method body hit it.  ClassDefAst passes the scope when it is
+	emitting inside a doit and nil otherwise, which is every other caller.
+
+	Resolve the rest of the symbol list locally rather than calling
 	``importlib ___compilationSymbolList___'' — Class.gs files in
 	early during install (as SystemUser, before the Python /
 	importlib globals exist), so the bare ``Python at: #importlib''
 	would fail to compile here.  The user-profile symbol list is the
 	same value importlib's helper would return."
+
+	| dicts |
+	dicts := System @env0:myUserProfile @env0:symbolList @env0:copy.
+	aScopeOrNil @env0:ifNotNil: [:sc | dicts @env0:insertObject: sc at: 1].
 	[[self @env0:compileMethod: aSource
-		dictionaries: System @env0:myUserProfile @env0:symbolList @env0:copy
+		dictionaries: dicts
 		category: aCategory
 		environmentId: 1.
 	] @env0:on: CompileWarning do: [:ex | ex @env0:resume]]
@@ -314,7 +346,7 @@ ___compileMethod: aSource category: aCategory
 				'	(System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #NameError)
 		@env1:___signal___: ''Grail could not compile this method (codegen gap); see install/import log'''.
 			[[self @env0:compileMethod: stubSrc
-				dictionaries: System @env0:myUserProfile @env0:symbolList @env0:copy
+				dictionaries: dicts
 				category: aCategory
 				environmentId: 1.
 			] @env0:on: CompileWarning do: [:wx | wx @env0:resume]]
