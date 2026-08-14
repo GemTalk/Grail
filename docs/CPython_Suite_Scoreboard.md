@@ -81,7 +81,7 @@ different rows and merges cleanly.
 | test.test_named_expressions | ERROR | 74 | 22 | 15 | 0 |  |
 | test.test_subclassinit | ERROR | 17 | 7 | 3 | 0 |  |
 | test.test_super | ERROR | 40 | 13 | 24 | 3 |  |
-| test.test_typechecks | ERROR | 6 | 2 | 1 | 0 |  |
+| test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
 | test.test_with | ERROR | 54 | 6 | 5 | 0 |  |
 | test.test_positional_only_arg | ERROR | 28 | 4 | 4 | 0 |  |
 | test.test_string_literals | ERROR | 20 | 3 | 10 | 0 |  |

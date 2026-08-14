@@ -2496,7 +2496,24 @@ method: builtins
 ___isInstanceSingle___: anObject of: aClass
 	"isinstance with a single class argument (post-tuple-expansion)."
 
-	| result baCls egCls |
+	| result baCls egCls hook |
+	"CPython PyObject_IsInstance: after the exact-type fast path it looks up
+	__instancecheck__ on TYPE(cls) and, when the metaclass supplies one,
+	DELEGATES to it entirely.  That is the whole ABC mechanism -- what makes
+	isinstance(x, MyABC) consult register()ed classes and __subclasshook__ --
+	and Grail never looked, so a metaclass defining it was simply ignored
+	(test_typechecks).
+
+	The exact-type match short-circuits first, as CPython's does: it is the
+	common case and must not pay a lookup or a Python call.  The hook itself is
+	nil unless the class recorded a ``metaclass='' that defines the method, so
+	ordinary isinstance pays one SessionTemps read."
+	(aClass isKindOf: Behavior) ifTrue: [
+		(anObject @env0:class == aClass) ifTrue: [^ true].
+		hook := aClass ___metaclassCheckHook___: #'__instancecheck__'.
+		hook @env0:notNil ifTrue: [
+			"PyObject_IsTrue on the result, so any truthy answer counts."
+			^ (hook ___pyCallValue___: { aClass. anObject } kw: nil) ___isTruthy___]].
 	"Non-class classinfo (isinstance(x, functools.cached_property)
 	where the attr resolved to a BoundMethod): raise CPython's
 	catchable TypeError -- isKindOf: on a non-Behavior dies with an
@@ -2810,6 +2827,12 @@ ___isSubclass___: aClass of: aClassOrTuple depth: aDepth
 		].
 		^ false
 	].
+	"__subclasscheck__ on the metaclass wins over the built-in walk, exactly as
+	__instancecheck__ does for isinstance -- see ___isInstanceSingle___:of:."
+	(target isKindOf: Behavior) ifTrue: [ | hook |
+		hook := target ___metaclassCheckHook___: #'__subclasscheck__'.
+		hook @env0:notNil ifTrue: [
+			^ (hook ___pyCallValue___: { target. sub } kw: nil) ___isTruthy___]].
 	^ self ___isSubclassSingle___: sub of: target
 %
 

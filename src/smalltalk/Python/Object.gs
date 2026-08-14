@@ -3038,7 +3038,18 @@ ___pyAttrLoad___: aSym
 		through it, so the consult happens here."
 		(self ___grailMetaclass___) @env0:ifNotNil: [:___meta |
 			(___meta ___classChainAttrLookup___: aSym)
-				@env0:ifNotNil: [:___mv | ^ self ___descriptorGet___: ___mv]].
+				@env0:ifNotNil: [:___mv | ^ self ___descriptorGet___: ___mv].
+			"...and a compiled ``def'' on the metaclass, which the attribute
+			lookup above cannot see -- a two-parameter def is the selector
+			``name:'', not the unary ``name''.  Reached as a BOUND method with
+			this class as its cls parameter, exactly as CPython binds a metaclass
+			method accessed through the class: ``Integer.__subclasscheck__(int)''
+			runs ABC.__subclasscheck__(Integer, int).  BoundMethod dispatches it
+			non-virtually off definingClass, since the class is not a Smalltalk
+			instance of the metaclass."
+			(___meta ___chainOwnsAnyOf___: family orUnary: aSym from: ___meta)
+				ifTrue: [^ BoundMethod receiver: self selector: aSym
+					definingClass: ___meta]].
 		"Instance method accessed via the class object — an *unbound* method
 		(a plain function in Python 3).  ``ParentClass.__init__(self, **opts)''
 		(explicit super-init, e.g. flask's ``Environment'' subclass calling
@@ -4713,6 +4724,38 @@ ___grailMetaclass___
 
 category: 'Grail-Metaclass'
 method: object
+___metaclassCheckHook___: baseSym
+	"The recorded metaclass's callable for baseSym -- __instancecheck__ or
+	__subclasscheck__ -- or nil when it supplies none.
+
+	The three shapes are the ones ___metaclassCompare___ already looks for, for
+	the same reason: a compiled ``def'' on the metaclass, or an attribute
+	holding a function (a synthesised or aliased one).  The caller passes the
+	class itself as the FIRST argument, since that is the cls parameter.
+
+	Deliberately does NOT probe ``self class'' -- the Smalltalk metaclass.
+	Grail already defines __instancecheck__: class-side for some builtins
+	(Integer class), taking the class as RECEIVER with one argument, which is a
+	different convention from Python's (cls, obj); invoking those here broke
+	every isinstance(x, int) in the corpus.  This hook exists for a metaclass
+	written in PYTHON, which is the case Grail had no answer for at all."
+
+	| meta fn |
+	(self isKindOf: Behavior) ifFalse: [^ nil].
+	meta := self ___grailMetaclass___.
+	meta == nil ifTrue: [^ nil].
+	fn := meta ___classChainAttrLookup___: baseSym.
+	fn == nil ifTrue: [fn := meta ___classAttrDunder___: baseSym].
+	fn == nil ifTrue: [
+		(meta @env0:whichClassIncludesSelector:
+			(baseSym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1)
+				== nil ifTrue: [^ nil].
+		fn := UnboundMethod definingClass: meta selector: baseSym].
+	^ fn
+%
+
+category: 'Grail-Metaclass'
+method: object
 ___grailSetMetaclass___: aMetaclass
 	"Record a ``class C(metaclass=M)'' keyword.  A RECORD, not a construction:
 	builtins >> type: answers the single canonical ``type'' BoundMethod as any
@@ -5710,6 +5753,33 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	BoundMethod/varargs machinery)."
 	binOp := self ___tryBinaryDunderDNU___: aSelector args: anArray.
 	binOp == #'___noBinOp___' ifFalse: [^ binOp].
+	"A METACLASS METHOD reached as a DIRECT SEND on the class.  Inside a compiled
+	method body ``cls.__subclasscheck__(c)'' emits the send __subclasscheck__:
+	rather than an attribute load, so the metaclass consult in ___pyAttrLoad___:
+	never runs -- and the class's own Smalltalk metaclass, a Metaclass3, does not
+	understand it.  That is how a metaclass calling its own sibling hook died
+	(test_typechecks's ABC.__instancecheck__ calls cls.__subclasscheck__).
+
+	Invoked with the class prepended as the cls parameter, and dispatched off
+	the recorded metaclass because the class is not a Smalltalk instance of it."
+	(self isKindOf: Behavior) ifTrue: [ | meta base tbl |
+		"The table is read DIRECTLY: this runs in the DNU path for EVERY class
+		that fails a send, including kernel classes whose metaclass chain does
+		not reach object, where the env-1 ___grailMetaclass___ send is itself a
+		MessageNotUnderstood."
+		tbl := SessionTemps @env0:current
+			@env0:at: #'GrailClassMetaclass' otherwise: nil.
+		meta := tbl == nil ifTrue: [nil] ifFalse: [tbl @env0:at: self otherwise: nil].
+		(meta @env0:notNil
+			and: [(meta @env0:whichClassIncludesSelector: aSelector environmentId: 1)
+				@env0:notNil]) ifTrue: [
+			base := (s @env0:includes: $:)
+				ifTrue: [s @env0:copyFrom: 1 to: (s @env0:indexOf: $:) @env0:- 1]
+				ifFalse: [s].
+			"This method compiles in env 0, so the UnboundMethod protocol -- which
+			is env 1 -- needs explicit annotations."
+			^ (UnboundMethod @env1:definingClass: meta selector: base @env0:asSymbol)
+				@env1:value: (Array @env0:with: self) @env0:, anArray value: nil]].
 	"A missing ``__contains__:'' (``x in None'') raises CPython's
 	catchable TypeError.  Only this ONE container dunder is intercepted:
 	__len__ / __iter__ / __getitem__ double as soft-miss PROBES all over
