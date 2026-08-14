@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 32 | 22 | 36 | 90 |
+| P1 | 35 | 19 | 36 | 90 |
 | P2 | 14 | 2 | 18 | 34 |
 | P3 | 0 | 13 | 43 | 56 |
-| P4 | 0 | 0 | 75 | 75 |
-| **In-scope** | **46** | **37** | **172** | **255** |
+| P4 | 0 | 12 | 63 | 75 |
+| **In-scope** | **49** | **46** | **160** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -88,7 +88,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **83 are wired into the harness** (P1 54 · P2 16 · P3 13) and **46 of those score OK**.
+Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 · P3 13 · P4 12) and **49 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -107,7 +107,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_asyncgen` | Async generators — a core language feature. |
 | ✅ | `test_augassign` | Augmented-assignment semantics (language). |
 | ✅ | `test_baseexception` | BaseException hierarchy (language). |
-| ❗ | `test_binop` | Binary-operator dispatch (language). |
+| ✅ | `test_binop` | Binary-operator dispatch (language). |
 | ✅ | `test_bool` | bool type (language). |
 | ❗ | `test_builtin` | Built-in functions (language). |
 | ✅ | `test_bytes` | bytes / bytearray (language/core type). |
@@ -168,7 +168,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ❗ | `test_raise` | raise statement (language). |
 |  | `test_range` | range (language/builtin). |
 | ✅ | `test_richcmp` | Rich comparison operators (language). |
-| ❗ | `test_scope` | Lexical scoping / closures (language). |
+| ✅ | `test_scope` | Lexical scoping / closures (language). |
 | ✅ | `test_set` | set/frozenset — core type (in harness). |
 | ✅ | `test_setcomps` | Set comprehensions (language). |
 | ✅ | `test_slice` | slice objects (language). |
@@ -185,7 +185,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_type_annotations` | Annotation syntax/semantics (language). |
 |  | `test_type_comments` | # type: comments (language/ast). |
 |  | `test_type_params` | PEP 695 type parameters (language). |
-| ❗ | `test_typechecks` | type()/isinstance checks (language). |
+| ✅ | `test_typechecks` | type()/isinstance checks (language). |
 |  | `test_types` | types module — built-in type objects (language). |
 | ✅ | `test_unary` | Unary operators (language). |
 |  | `test_unicode_identifiers` | Unicode identifier support (language). |
@@ -305,27 +305,27 @@ The vendored web/async/net ambition (flask/jinja/requests/asyncio point here). P
 
 | Status | Module | Rationale |
 |:------:|--------|-----------|
-|  | `test___all__` | Meta-test asserting every stdlib module's __all__; depends on importing the whole library — low-priority hygiene check. *(edge — see below)* |
+| ❗ | `test___all__` | Meta-test asserting every stdlib module's __all__; depends on importing the whole library — low-priority hygiene check. *(edge — see below)* |
 |  | `test_array` | array.array typed buffers — C-backed; a pure reimplementation is possible but non-trivial. *(edge — see below)* |
 |  | `test_asyncio` | asyncio (vendored) — coroutine/task machinery is in-scope; the selector event loop needs a GemStone I/O bridge. *(edge — see below)* |
 |  | `test_codecencodings_cn` | CJK (GB*) codec tables — large, C-table-backed; low priority. *(edge — see below)* |
 |  | `test_codecencodings_hk` | CJK (HK) codec tables — large, C-table-backed; low priority. *(edge — see below)* |
 |  | `test_codecencodings_iso2022` | ISO-2022 stateful codecs — C-backed; low priority. *(edge — see below)* |
 |  | `test_codecencodings_jp` | Japanese codec tables — C-table-backed; low priority. *(edge — see below)* |
-|  | `test_codecencodings_kr` | Korean codec tables — C-table-backed; low priority. *(edge — see below)* |
+| ❗ | `test_codecencodings_kr` | Korean codec tables — C-table-backed; low priority. *(edge — see below)* |
 |  | `test_codecencodings_tw` | Traditional-Chinese codec tables — C-table-backed; low priority. *(edge — see below)* |
 |  | `test_codecmaps_cn` | CJK codec round-trip maps (network-fetched data) — low priority. *(edge — see below)* |
 |  | `test_codecmaps_hk` | CJK codec round-trip maps — low priority. *(edge — see below)* |
 |  | `test_codecmaps_jp` | CJK codec round-trip maps — low priority. *(edge — see below)* |
 |  | `test_codecmaps_kr` | CJK codec round-trip maps — low priority. *(edge — see below)* |
-|  | `test_codecmaps_tw` | CJK codec round-trip maps — low priority. *(edge — see below)* |
+| ❗ | `test_codecmaps_tw` | CJK codec round-trip maps — low priority. *(edge — see below)* |
 |  | `test_docxmlrpc` | XML-RPC docserver — net + server; low priority. *(edge — see below)* |
 |  | `test_email` | email package (vendored) — pure-Python. |
 |  | `test_ftplib` | ftplib — FTP client (net stack). |
 |  | `test_hashlib` | hashlib — crypto digests; C/OpenSSL-accelerated but pure fallbacks exist. *(edge — see below)* |
 |  | `test_hmac` | hmac — pure-Python over a hash. |
 |  | `test_html` | html escaping/entities — pure (web stack). |
-|  | `test_htmlparser` | html.parser — pure (web stack). |
+| ❗ | `test_htmlparser` | html.parser — pure (web stack). |
 |  | `test_http_cookiejar` | http.cookiejar — pure (web stack). |
 |  | `test_http_cookies` | http.cookies — pure (web stack). |
 |  | `test_httplib` | http.client — web stack (needs socket bridge). |
@@ -333,50 +333,50 @@ The vendored web/async/net ambition (flask/jinja/requests/asyncio point here). P
 |  | `test_imaplib` | imaplib — IMAP client (net stack). |
 |  | `test_import` | Import system — Grail vendors importlib; heavy filesystem/C internals in the test. *(edge — see below)* |
 |  | `test_importlib` | importlib package (vendored) — import machinery; some C/fs internals out of reach. *(edge — see below)* |
-|  | `test_ipaddress` | ipaddress — pure Python. |
+| ❗ | `test_ipaddress` | ipaddress — pure Python. |
 |  | `test_mailbox` | mailbox — email adjacent, but backed by filesystem mailboxes. *(edge — see below)* |
 |  | `test_mimetypes` | mimetypes — pure lookup tables (web stack). |
 |  | `test_minidom` | xml.dom.minidom (vendored xml). |
 |  | `test_modulefinder` | modulefinder — static import graph analysis (tooling). *(edge — see below)* |
 |  | `test_multibytecodec` | Multibyte codec engine — C-backed CJK; low priority. *(edge — see below)* |
-|  | `test_netrc` | netrc — pure parser (net-config). |
+| ❗ | `test_netrc` | netrc — pure parser (net-config). |
 |  | `test_nturl2path` | nturl2path — url<->path conversion (pure). |
 |  | `test_pkg` | Package import semantics — import system. *(edge — see below)* |
 |  | `test_pkgutil` | pkgutil — package discovery utilities. |
 |  | `test_plistlib` | plistlib — pure XML/binary plist parsing (Apple format). *(edge — see below)* |
 |  | `test_poplib` | poplib — POP3 client (net stack). |
-|  | `test_pulldom` | xml.dom.pulldom (vendored xml). |
+| ❗ | `test_pulldom` | xml.dom.pulldom (vendored xml). |
 |  | `test_pyclbr` | pyclbr — Python class browser (source parsing tool). *(edge — see below)* |
 |  | `test_pydoc` | pydoc — introspection + doc HTTP server. *(edge — see below)* |
 |  | `test_pyexpat` | pyexpat — C expat XML parser (needed under xml.etree). *(edge — see below)* |
 |  | `test_quopri` | quopri — quoted-printable (email encoding). |
 |  | `test_robotparser` | robotparser — robots.txt (pure, web stack). |
 |  | `test_runpy` | runpy — -m module execution (import/exec machinery). *(edge — see below)* |
-|  | `test_sax` | xml.sax (vendored xml). |
+| ❗ | `test_sax` | xml.sax (vendored xml). |
 |  | `test_secrets` | secrets — crypto-strong tokens (web/security). |
 |  | `test_smtplib` | smtplib — SMTP client (net stack). |
 |  | `test_smtpnet` | smtplib against a live external server (needs real network). *(edge — see below)* |
 |  | `test_socket` | socket — net transport; requires a GemStone GsSocket bridge. *(edge — see below)* |
 |  | `test_socketserver` | socketserver — atop sockets. *(edge — see below)* |
-|  | `test_ssl` | ssl — C/OpenSSL TLS; needed by the secure net stack. *(edge — see below)* |
+| ❗ | `test_ssl` | ssl — C/OpenSSL TLS; needed by the secure net stack. *(edge — see below)* |
 |  | `test_stringprep` | stringprep (RFC 3454) — pure (net/security). |
 |  | `test_tabnanny` | tabnanny — indentation checker (tokenize-based tool). *(edge — see below)* |
 |  | `test_timeout` | Socket timeout behavior (net). *(edge — see below)* |
 |  | `test_urllib` | urllib (vendored) — web stack. |
 |  | `test_urllib2` | urllib.request — web stack. |
-|  | `test_urllib2_localnet` | urllib against a local server (needs a running server). *(edge — see below)* |
+| ❗ | `test_urllib2_localnet` | urllib against a local server (needs a running server). *(edge — see below)* |
 |  | `test_urllib2net` | urllib against the live internet (needs real network). *(edge — see below)* |
 |  | `test_urllib_response` | urllib response objects — web stack. |
 |  | `test_urllibnet` | urllib against the live internet (needs real network). *(edge — see below)* |
 |  | `test_urlparse` | urllib.parse — pure URL parsing (web stack). |
 |  | `test_uuid` | uuid — pure (some OS node-id lookups optional). |
-|  | `test_wave` | wave — pure WAV container parsing (audio format). *(edge — see below)* |
+| ❗ | `test_wave` | wave — pure WAV container parsing (audio format). *(edge — see below)* |
 |  | `test_wsgiref` | wsgiref (vendored) — WSGI reference (web stack). |
 |  | `test_xml_dom_minicompat` | xml.dom minicompat (vendored xml). |
 |  | `test_xml_dom_xmlbuilder` | xml.dom xmlbuilder (vendored xml). |
 |  | `test_xml_etree` | xml.etree.ElementTree (vendored xml). |
 |  | `test_xmlrpc` | xmlrpc — web stack. |
-|  | `test_zipapp` | zipapp — build/run .pyz apps (zip + exec). *(edge — see below)* |
+| ❗ | `test_zipapp` | zipapp — build/run .pyz apps (zip + exec). *(edge — see below)* |
 |  | `test_zipfile` | zipfile — ZIP archives (pure-ish + zlib codec). *(edge — see below)* |
 |  | `test_zipimport` | zipimport — importing modules from ZIPs. *(edge — see below)* |
 |  | `test_zipimport_support` | zipimport traceback/source support. *(edge — see below)* |

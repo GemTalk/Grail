@@ -956,10 +956,21 @@ emitDoitEnclosingScopeLoad: aSymbol on: aStream
 	an unconditional raise made that idiom unusable: the name does not exist
 	when the reader is compiled, and nothing later could be consulted.  On a
 	miss the resolver raises the identical NameError, so this only converts a
-	certain failure into a lookup."
+	certain failure into a lookup.
 
-	aStream nextPutAll: 'NameError @env0:___resolveBuiltinOrSignal___: '; nextPut: $'.
-	aStream nextPutAll: aSymbol; nextPut: $'
+	PARENTHESISED, which the emit was not.  This is an EXPRESSION, and when the
+	unresolved name is CALLED -- ``spam(a=1)'' for an undefined spam -- the
+	caller appends its own keyword parts to whatever this emitted.  Unbracketed,
+	the two merged into a single selector: the generated source read
+	``NameError @env0:___resolve...: 'spam' value: a value: b'', which is one
+	keyword message ``___resolve...:value:value:'' that nothing implements, so
+	the intended NameError surfaced as an uncatchable MessageNotUnderstood.
+	Longstanding -- the previous ___signalUndefined___: emit had the same shape
+	and merged the same way."
+
+	aStream nextPutAll: '(NameError @env0:___resolveBuiltinOrSignal___: '; nextPut: $'.
+	aStream nextPutAll: aSymbol; nextPut: $'.
+	aStream nextPut: $)
 %
 
 category: 'Grail-codegen helpers'

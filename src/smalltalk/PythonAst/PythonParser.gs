@@ -1834,6 +1834,10 @@ parseModule
 	| body block module variables writes blocking scope |
 	self skipNewlines.
 	body := self parseStatements.
+	"PEP 572's comprehension restrictions, checked over the finished tree --
+	see ___validateComprehensions___: for why this cannot run at construction
+	time."
+	self ___validateComprehensions___: body.
 	scope := self popScope.
 	variables := scope at: 1.
 	writes := scope at: 2.
@@ -3434,4 +3438,184 @@ wrapSuite: statementsArray
 	^SuiteAst new
 		body: statementsArray;
 		yourself .
+%
+
+! ------------------- PEP 572: assignment expressions in comprehensions
+!
+! Three restrictions CPython enforces at compile time, each with its own
+! message.  Grail accepted all of them silently -- 15 of the corpus's 22
+! ``SyntaxError not raised'' assertions are here, and accepting invalid Python
+! is a wrong answer rather than a missing feature: the code compiles and does
+! something.
+!
+! Run as a TOP-DOWN pass from parseModule rather than at comprehension
+! construction, and that ordering is load-bearing.  The parser builds
+! bottom-up, so in ``[i for i in [j for j in range(5) if (j := True)]]'' the
+! INNER comprehension is finished first and would report its own
+! rebind-iteration-variable error.  CPython reports the OUTER one -- the whole
+! inner comprehension sits in the outer's iterable expression -- so the check
+! has to see the outer node first.  Verified against CPython 3.14 for each
+! nested case in test_named_expressions.
+
+category: 'Grail-validation'
+method: PythonParser
+___validateComprehensions___: node
+	"Walk node top-down, checking every comprehension found.  Same guards as
+	ModuleAst >> collectGlobalNamesFrom:into:: strings are
+	SequenceableCollections and recursing into one walks Characters for
+	nothing, and ``parent'' is skipped so the walk cannot cycle upwards."
+
+	node isNil ifTrue: [^ self].
+	node isString ifTrue: [^ self].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each | self ___validateComprehensions___: each].
+		^ self].
+	(node isKindOf: AbstractNode) ifFalse: [^ self].
+	"Check BEFORE recursing -- see the note above on why order matters."
+	(self ___comprehensionGeneratorsOf___: node) ifNotNil: [:gens |
+		self ___checkComprehension___: node generators: gens].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self ___validateComprehensions___: (node instVarAt: i)]]
+%
+
+category: 'Grail-validation'
+method: PythonParser
+___comprehensionGeneratorsOf___: node
+	"The generators of a comprehension node, or nil if node is not one.  All
+	four comprehension forms carry them under the same instVar name."
+
+	((node isKindOf: ListCompAst) or: [(node isKindOf: SetCompAst)
+		or: [(node isKindOf: DictCompAst) or: [node isKindOf: GeneratorExpAst]]])
+		ifFalse: [^ nil].
+	^ node generators
+%
+
+category: 'Grail-validation'
+method: PythonParser
+___comprehensionElementsOf___: node
+	"The element expression(s) of a comprehension: a dict comprehension has
+	two, the others one."
+
+	(node isKindOf: DictCompAst) ifTrue: [^ { node key. node value }].
+	^ { node elt }
+%
+
+category: 'Grail-validation'
+method: PythonParser
+___checkComprehension___: node generators: gens
+	"The three PEP 572 restrictions, in the order CPython reports them."
+
+	| boundUpTo boundAfter |
+	"Rule 1 -- no assignment expression anywhere in an ITERABLE expression.
+	Checked first, and over the whole subtree, so a walrus nested inside a
+	lambda or a further comprehension in that position is caught here rather
+	than by the inner node's own rules."
+	gens do: [:gen |
+		(self ___firstNamedExprIn___: gen iter) ifNotNil: [:ne |
+			SyntaxError signal:
+				'assignment expression cannot be used in a comprehension iterable expression']].
+
+	"Rules 2 and 3 differ only by WHICH for-clause binds the name, so build
+	the two name sets once per position.  boundUpTo/boundAfter are computed
+	per generator index i: names bound at or before i, and names bound after."
+	1 to: gens size do: [:i |
+		boundUpTo := Set new.
+		boundAfter := Set new.
+		1 to: gens size do: [:j |
+			self ___collectStoreNamesIn___: (gens at: j) target
+				into: (j <= i ifTrue: [boundUpTo] ifFalse: [boundAfter])].
+		(gens at: i) ifs do: [:cond |
+			self ___checkNamedExprsIn___: cond
+				boundUpTo: boundUpTo boundAfter: boundAfter]].
+
+	"The element expression comes last, so EVERY for-clause is 'earlier' for
+	it -- ``{(j := 0) for i in range(5) for j in range(5)}'' is a rebound
+	iteration variable, not an inner-loop rebind."
+	boundUpTo := Set new.
+	gens do: [:gen | self ___collectStoreNamesIn___: gen target into: boundUpTo].
+	(self ___comprehensionElementsOf___: node) do: [:elt |
+		self ___checkNamedExprsIn___: elt
+			boundUpTo: boundUpTo boundAfter: Set new]
+%
+
+category: 'Grail-validation'
+method: PythonParser
+___checkNamedExprsIn___: node boundUpTo: earlier boundAfter: later
+	"Raise for any assignment expression under node whose target collides with
+	a comprehension for-clause target.  A name bound by an EARLIER (or the
+	same) clause is a rebound iteration variable; one bound by a LATER clause
+	is the inner-loop case, which CPython words the other way round -- the
+	inner loop rebinds the walrus target, not the reverse."
+
+	| found |
+	found := OrderedCollection new.
+	self ___collectNamedExprsIn___: node into: found.
+	found do: [:ne |
+		| target name |
+		target := ne target.
+		(target isKindOf: NameAst) ifTrue: [
+			name := target id asString.
+			(earlier includes: name) ifTrue: [
+				SyntaxError signal:
+					'assignment expression cannot rebind comprehension iteration variable ''' ,
+					name , ''''].
+			(later includes: name) ifTrue: [
+				SyntaxError signal:
+					'comprehension inner loop cannot rebind assignment expression target ''' ,
+					name , '''']]]
+%
+
+category: 'Grail-validation'
+method: PythonParser
+___firstNamedExprIn___: node
+	"The first NamedExprAst under node, or nil."
+
+	| found |
+	found := OrderedCollection new.
+	self ___collectNamedExprsIn___: node into: found.
+	^ found isEmpty ifTrue: [nil] ifFalse: [found first]
+%
+
+category: 'Grail-validation'
+method: PythonParser
+___collectNamedExprsIn___: node into: aColl
+	"Every NamedExprAst under node, including inside lambdas and nested
+	comprehensions -- both are positions CPython still rejects."
+
+	node isNil ifTrue: [^ self].
+	node isString ifTrue: [^ self].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each | self ___collectNamedExprsIn___: each into: aColl].
+		^ self].
+	(node isKindOf: AbstractNode) ifFalse: [^ self].
+	(node isKindOf: NamedExprAst) ifTrue: [aColl add: node].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self ___collectNamedExprsIn___: (node instVarAt: i) into: aColl]]
+%
+
+category: 'Grail-validation'
+method: PythonParser
+___collectStoreNamesIn___: node into: aSet
+	"Names BOUND by a for-clause target, as Strings.
+
+	Only NameAsts in STORE context count, which is what distinguishes the
+	names a target binds from the ones it merely reads: in
+	``for a, (*b, c[d+e::f(g)], h.i) in j'' the target binds a and b, while c,
+	d, e, f, g and h are loads inside a subscript or attribute and bind
+	nothing.  setStoreCtx: marks exactly the bound ones, recursing through
+	tuples, lists and starred targets and no further."
+
+	node isNil ifTrue: [^ self].
+	node isString ifTrue: [^ self].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each | self ___collectStoreNamesIn___: each into: aSet].
+		^ self].
+	(node isKindOf: AbstractNode) ifFalse: [^ self].
+	((node isKindOf: NameAst) and: [node ctx isKindOf: StoreAst]) ifTrue: [
+		aSet add: node id asString].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self ___collectStoreNamesIn___: (node instVarAt: i) into: aSet]]
 %
