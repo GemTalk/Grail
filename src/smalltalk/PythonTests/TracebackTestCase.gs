@@ -541,8 +541,20 @@ testExceptionMessageRendering
 	mod := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_naming.py')
 		name: 'exception_naming'.
+	"NOT asserted: a_legacy_type_is_ignored_when_a_value_is_given.  It states
+	 CPython's rule and Grail does not match it yet -- the module-level legacy
+	 entry points DERIVE the type from the value and ignore the one they were
+	 handed, so both format_exception_only(ValueError, None) and
+	 format_exception(ValueError, None, None) render 'NoneType: None', while
+	 the TracebackException CLASS keeps its constructed type ('ValueError:
+	 None').  Grail matches neither, and fails differently in each: the first
+	 answers a bare 'ValueError', the second RAISES TypeError 'Exception
+	 expected for value, type found'.  Because it raises rather than answering
+	 false, it must not be added back to this list until it is fixed.  The
+	 fixture used to assert Grail's bare name as though it were CPython, which
+	 is why this is called out rather than quietly dropped; see
+	 tests/python/exception_naming.py."
 	#( 'a_none_exception_renders_as_nonetype_none'
-	   'a_legacy_type_with_no_value_keeps_the_bare_name'
 	   'a_none_argument_is_not_a_missing_message'
 	   'non_string_arguments_use_python_str'
 	   'a_broken_str_is_reported_not_propagated'

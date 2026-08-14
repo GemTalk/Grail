@@ -377,20 +377,36 @@ stale.
 
 ### What the gate does and does not cover
 
-It runs only fixtures with a top-level `__main__` block — **38 of 260 files**.
+It runs only fixtures with a top-level `__main__` block — **40 of 260 files**.
 The rest are Smalltalk-driven and mostly cannot run under CPython at all: they
 exercise Grail-specific behaviour, return values for the harness to compare
 rather than booleans, or are deliberately unimportable. So a green gate does
 **not** mean the corpus agrees with CPython.
 
-The 38 is up from 15: a census found every fixture whose public zero-argument
-functions all answer `True` under CPython, and the 23 that were not yet
-self-running were converted. That is the move that widens the net — tightening
-the script is not. Of the four fixtures that historically pinned Grail's
-behaviour, `exec_class_definition.py` and `handler_raise.py` are now covered;
-`exception_naming.py` and `code_filename.py` still are not, because they do not
-run under CPython as written. Treat the gate as holding a line that has been
-opted into, and make opting in the default for anything new.
+The 40 is up from 15: a census found every fixture whose public zero-argument
+functions all answer `True` under CPython and converted the 23 that were not yet
+self-running, then the last two known bug-pinners were corrected and converted
+too. That is the move that widens the net — tightening the script is not. **All
+four fixtures that historically pinned Grail's behaviour are now covered.**
+Treat the gate as holding a line that has been opted into, and make opting in
+the default for anything new.
+
+### When a corrected fixture then fails under Grail
+
+Correcting an expectation to what CPython really does can turn up a genuine
+Grail gap rather than a typo. Do not resolve that by softening the check back
+toward Grail — that is how the fixture became misleading in the first place.
+State CPython's rule, and record the gap where a reader will meet it:
+
+* the check keeps a `KNOWN GRAIL GAP` docstring giving the measured CPython
+  behaviour, so the gate is green and the fixture is honest;
+* the Smalltalk driver **stops asserting that one check** and says in a comment
+  why, naming the check — a silent removal reads as an oversight later.
+
+`exception_naming.py`'s `a_legacy_type_is_ignored_when_a_value_is_given` is the
+worked example. Note this is not the same as `XFAIL`: an `XFAIL` check asserts a
+Grail limitation and *fails* under CPython, whereas this one asserts CPython and
+fails under Grail.
 
 **A fixture can pass on import and fail as a script.** The census imports each
 file under its real module name; the gate runs it with `__name__` set to
