@@ -401,6 +401,21 @@ value: positional value: kwargs
 			(receiver @env0:isNil and: [definingClass @env0:notNil]) ifTrue: [
 				^ (UnboundMethod definingClass: definingClass selector: selector)
 					value: positional value: kwargs].
+			"A BOUND reference whose method lives on a recorded definingClass the
+			receiver is not a Smalltalk instance of.  That is what a metaclass
+			method reached through its class is: ``Integer.__subclasscheck__''
+			for ``class Integer(metaclass=ABC)'' has to run ABC's method with
+			Integer as its cls parameter, and Integer is not an instance of ABC
+			-- Grail records a metaclass rather than building the class through
+			one.  Prepend the receiver and dispatch non-virtually, which is
+			exactly what the receiver-less branch above does one slot later.
+
+			Without this the perform below sent __subclasscheck__: to the class
+			and died with an uncatchable MessageNotUnderstood on a Metaclass3."
+			(receiver @env0:notNil and: [definingClass @env0:notNil]) ifTrue: [
+				^ (UnboundMethod definingClass: definingClass selector: selector)
+					value: (Array @env0:with: receiver) @env0:, actualArgs
+					value: kwargs].
 			TypeError ___signal___: (selector @env0:asString
 				@env0:, '() takes a different number of arguments ('
 				@env0:, actualArgs @env0:size @env0:printString
