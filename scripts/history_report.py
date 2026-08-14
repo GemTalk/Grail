@@ -143,18 +143,29 @@ def board_revs():
     return list(by_day.items())
 
 
-def cpython_series(daily=False):
+def _bucket(d, period):
+    """The bucket key for an ISO date string under `period'."""
+    if period == "monthly":
+        return d[:7]
+    y, w, _ = date.fromisoformat(d).isocalendar()
+    return f"{y}-W{w:02d}"
+
+
+def cpython_series(period="monthly"):
+    """Scoreboard totals, one row per period.
+
+    Takes the LAST observation in each bucket -- where the week/month ENDED,
+    not its best or first moment -- and always appends the newest observation
+    so the in-progress period is represented rather than silently dropped."""
     revs = board_revs()
     if not revs:
         return []
-    if daily:
+    if period == "daily":
         picked = revs
     else:
-        # Last observation of each month, plus the final one so the current
-        # partial month is represented.
-        seen, picked = OrderedDict(), []
+        seen = OrderedDict()
         for d, h in revs:
-            seen[d[:7]] = (d, h)
+            seen[_bucket(d, period)] = (d, h)
         picked = list(seen.values())
         if revs[-1] not in picked:
             picked.append(revs[-1])
@@ -174,11 +185,20 @@ def md_sunit(rows):
         prev = n
 
 
-def md_cpython(rows, daily=False):
-    label = "Date" if daily else "Month end"
+def md_cpython(rows, period="monthly"):
+    # "Last run in ..." rather than "Week/Month ending": the date shown is the
+    # last scoreboard commit IN that bucket, which is usually not the bucket's
+    # final calendar day (nobody runs the suite every day, and the newest
+    # bucket is still in progress).  Labelling it as the period end would be
+    # asserting a measurement on a day we did not measure.
+    label = {"daily": "Date",
+             "weekly": "Last run in week",
+             "monthly": "Last run in month"}[period]
     print(f"\n### CPython regression suite — outcome of every test discovered\n")
-    print(f"| {label} | Modules | Modules OK | Tests | Passing | Failing | Errors | Skipped | % of run | % of all |")
-    print("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+    print(f"| {label} | Modules | Modules OK | ΔOK | Tests | Passing | ΔPass | "
+          f"Failing | Errors | Skipped | % of run | % of all |")
+    print("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+    prev_ok = prev_pass = None
     for d, mods, ok, tests, fail, err, skip in rows:
         passing = tests - fail - err - skip
         run = tests - skip
@@ -190,8 +210,25 @@ def md_cpython(rows, daily=False):
         # a test CPython itself would skip on this platform.
         r_run = f"{100 * passing / run:.1f}%" if run else "—"
         r_all = f"{100 * passing / tests:.1f}%" if tests else "—"
-        print(f"| {d} | {mods} | {ok} | {tests:,} | {passing:,} | {fail:,} | "
-              f"{err:,} | {skip:,} | {r_run} | {r_all} |")
+        d_ok = "—" if prev_ok is None else f"{ok - prev_ok:+d}"
+        d_pass = "—" if prev_pass is None else f"{passing - prev_pass:+,d}"
+        print(f"| {d} | {mods} | {ok} | {d_ok} | {tests:,} | {passing:,} | {d_pass} | "
+              f"{fail:,} | {err:,} | {skip:,} | {r_run} | {r_all} |")
+        prev_ok, prev_pass = ok, passing
+
+    # The newest bucket is almost always incomplete, and its deltas therefore
+    # cover fewer days than the rows above it -- worth saying, because an
+    # apparently slowing final row is usually just a short week.
+    if rows and period in ("weekly", "monthly"):
+        last = date.fromisoformat(rows[-1][0])
+        y, w, dow = last.isocalendar()
+        span = dow if period == "weekly" else last.day
+        full = 7 if period == "weekly" else 28
+        if span < full:
+            unit = "week" if period == "weekly" else "month"
+            print(f"\n*Final row is a partial {unit}: {span} day"
+                  f"{'' if span == 1 else 's'} of data, so its deltas are not "
+                  f"comparable with the full {unit}s above.*")
 
 
 def write_tsv(path, header, rows):
@@ -205,12 +242,18 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sunit", action="store_true")
     ap.add_argument("--cpython", action="store_true")
+    ap.add_argument("--period", choices=("daily", "weekly", "monthly"),
+                    default="monthly",
+                    help="CPython series resolution (default: monthly)")
     ap.add_argument("--daily", action="store_true",
-                    help="CPython series at per-commit-day resolution")
+                    help="shorthand for --period daily")
+    ap.add_argument("--weekly", action="store_true",
+                    help="shorthand for --period weekly")
     ap.add_argument("--since", default="2026-01-01")
     ap.add_argument("--tsv", metavar="DIR", help="also write TSVs here")
     a = ap.parse_args()
     both = not (a.sunit or a.cpython)
+    period = "daily" if a.daily else "weekly" if a.weekly else a.period
 
     if git("rev-parse", "--verify", "-q", "origin/main").strip() == "":
         sys.exit("no origin/main -- run `git fetch origin main` first")
@@ -229,8 +272,8 @@ def main():
                       [(f"{w:%Y-%m-%d}", n, f) for w, n, f in rows])
 
     if both or a.cpython:
-        rows = cpython_series(daily=a.daily)
-        md_cpython(rows, daily=a.daily)
+        rows = cpython_series(period=period)
+        md_cpython(rows, period=period)
         if out:
             write_tsv(out / "cpython_history.tsv",
                       ["date", "modules", "modules_ok", "tests", "passing",
