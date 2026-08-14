@@ -2583,8 +2583,59 @@ pre-existing hole rather than opening one. Closing it properly would mean
 teaching the Smalltalk → Python boundary to map `nil` onto each function's
 default, which is a dispatch-wide decision and not traceback.py's to make.
 
-**A stale scoreboard row turned up on the way.** The committed board records
-`test.test_traceback` at f=44 e=14 s=217; the actual baseline on current `main`
-is **f=45 e=12 s=218** (95 passing either way). That is a third stale row
-alongside `test_raise` and `test_yield_from`, and it is why the A/B above
-compares two runs made here rather than trusting the committed numbers.
+**A "stale scoreboard row" reported here was wrong — corrected in §9.31.** This
+section originally claimed the committed board recorded `test.test_traceback` at
+f=44 e=14 s=217 against an actual f=45 e=12 s=218. The committed board says
+f=45 e=12 s=218 and always did. What was read was
+`out/cpython/scoreboard.json`, which **`out/` is gitignored** — a local leftover
+from an earlier run in the same worktree, not the baseline. The A/B above
+compares two runs made here, which was the right method for an unrelated reason
+(it isolates the change under test); the justification given for it was not.
+
+### 9.31 The scoreboard was never stale: read the committed board (2026-08-14, gs40)
+
+§9.30 claimed three stale rows and put "refresh the scoreboard" at the top of the
+backlog. A full-manifest run settles it: **there is nothing to refresh.**
+
+```
+$ ./scripts/run_cpython_suite.sh          # 83 modules, 285s
+$ git status --short                      # (no output)
+$ ./scripts/check_cpython_regressions.sh
+cpython regression gate: 0 regression(s), 0 improvement(s)
+```
+
+The regenerated `docs/CPython_Suite_Scoreboard.md` is **byte-identical** to the
+committed one, and all three rows said the right thing all along:
+
+| module | committed | fresh run |
+| --- | --- | --- |
+| `test.test_traceback` | 370 / 45 / 12 / 218 | same |
+| `test.test_yield_from` | 43 / 17 / 12 / 0 | same |
+| `test.test_raise` | 37 / 1 / 14 / 0 | same |
+
+**The mistake was reading the wrong file.** The committed baseline is
+`docs/CPython_Suite_Scoreboard.md`; `out/cpython/scoreboard.json` is a **local
+artefact** — `.gitignore` line 3 ignores `out/` wholesale — left behind by
+whatever ran last in that worktree. Reading the JSON and calling it "the
+committed board" produced a confident, specific, wrong claim that reached a
+commit message, a PR body, a PR comment and this document.
+
+Two things make the trap easy to fall into, and both are worth knowing:
+
+* The JSON is the *natural* thing to parse — it is structured, it sits under the
+  obvious name `scoreboard.json`, and the markdown looks like a rendered report
+  rather than the source of truth. It is the other way round: the markdown rows
+  are what is committed and what the gate diffs, and the board's own header says
+  so.
+* A gitignored file is invisible to `git status`, so nothing about a stale one
+  looks unusual. It cannot be caught by inspecting the working tree; it is only
+  caught by reading the baseline the *gate* reads.
+
+**How to check a baseline claim in future:** `git show HEAD:docs/CPython_Suite_Scoreboard.md`,
+or just run `check_cpython_regressions.sh`, which does exactly that comparison
+and is the authority. Never quote `out/cpython/scoreboard.json` as a baseline —
+it is only ever the result of the last run on that machine.
+
+The earlier note that `test_raise` sat at 6/9 while measuring 1/14 was true when
+it was written; someone has since refreshed the board. That is the ordinary
+lifecycle working, not a backlog item.
