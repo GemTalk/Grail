@@ -78,7 +78,7 @@ different rows and merges cleanly.
 | test.test_exception_variations | ERROR | 30 | 2 | 7 | 0 |  |
 | test.test_global | IMPORTERROR | 0 | 0 | 0 | 0 | Unexpected token: NEWLINE '' at line 165 |
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
-| test.test_named_expressions | ERROR | 74 | 22 | 15 | 0 |  |
+| test.test_named_expressions | ERROR | 74 | 9 | 14 | 0 |  |
 | test.test_subclassinit | ERROR | 17 | 7 | 3 | 0 |  |
 | test.test_super | ERROR | 40 | 13 | 24 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
