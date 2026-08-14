@@ -122,12 +122,13 @@ class Constructible(str, Enum):
 
 r['constructible'] = ','.join('%s=%r' % (m.name, m.value) for m in Constructible)
 
-# KNOWN GAP, recorded rather than asserted as correct: CPython builds
-# ``three = b'3', 'ascii''' as str(b'3', 'ascii') == '3'.  Grail's str handle
-# does not accept the (bytes, encoding) form, so the coercion fails and the raw
-# tuple survives.  That path is best-effort by design -- only the __new__ path
-# above is strict -- so this stays a wrong VALUE rather than becoming an error.
-# It is one of the things test_custom_strenum still wants.
+# Was a known gap, now closed: CPython builds ``three = b'3', 'ascii''' as
+# str(b'3', 'ascii') == '3'.  Grail's str handle is a one-argument BoundMethod,
+# so the coercion could not make the call and -- the path being best-effort --
+# the raw tuple survived as the member's value.  A member value whose first
+# element is BYTES now routes through str's varargs entry.  See
+# str_decode_args.py, which pins the whole shape including the argument
+# validation.
 
 
 class Encoded(str, Enum):
