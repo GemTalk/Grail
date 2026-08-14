@@ -65,7 +65,7 @@ different rows and merges cleanly.
 | test.test_yield_from | ERROR | 43 | 17 | 12 | 0 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
 | test.test_format | OK | 18 | 0 | 0 | 3 |  |
-| test.test_binop | IMPORTERROR | 0 | 0 | 0 | 0 | B class object has no attribute 'register' |
+| test.test_binop | OK | 12 | 0 | 0 | 0 |  |
 | test.test_complex | ERROR | 37 | 13 | 12 | 0 |  |
 | test.test_enumerate | FAIL | 92 | 12 | 0 | 15 |  |
 | test.test_raise | ERROR | 37 | 1 | 14 | 0 |  |

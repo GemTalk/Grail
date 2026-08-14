@@ -4583,41 +4583,144 @@ ___rbinOpFallback___: other op: opString
 category: 'Grail-Comparison'
 method: object
 ___cmpLt___: other
-	| r |
+	"SUBCLASS PRIORITY, as in ___cmpEq___: when type(other) is a proper subclass
+	of type(self) and overrides the REFLECTED operator, CPython tries that first
+	-- ``B() <= C()'' with C a subclass of B calls C.__ge__ before B.__le__
+	(test_binop's OperationOrderTests.test_comparison_orders asserts the exact
+	sequence).  Ordering used to go straight to the forward dunder, so the two
+	came out swapped.
+
+	``pri notNil'' means the reflected operator already ran and declined, so the
+	fallback must NOT run it again -- straight to the unorderable TypeError."
+	| pri r |
+	pri := self ___reflectedFirst___: other
+		selector: #'__gt__:' kwSelector: #'___gt__:kw:'.
+	(pri @env0:~~ nil and: [pri @env0:~~ #'___NotImplemented___']) ifTrue: [^ pri].
+	(self ___cmpDunderBlocked___: #'__lt__') ifTrue: [^ self ___cmpBlockedError___].
 	r := self __lt__: other.
 	(r @env0:== #'___NotImplemented___') ifTrue: [
-		^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'].
+		pri @env0:== nil ifTrue: [
+			^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'].
+		^ self ___cmpUnorderable___: other op: '<'].
 	^ r
 %
 
 category: 'Grail-Comparison'
 method: object
 ___cmpLe___: other
-	| r |
+	"Subclass priority and the None block -- see ___cmpLt___."
+	| pri r |
+	pri := self ___reflectedFirst___: other
+		selector: #'__ge__:' kwSelector: #'___ge__:kw:'.
+	(pri @env0:~~ nil and: [pri @env0:~~ #'___NotImplemented___']) ifTrue: [^ pri].
+	(self ___cmpDunderBlocked___: #'__le__') ifTrue: [^ self ___cmpBlockedError___].
 	r := self __le__: other.
 	(r @env0:== #'___NotImplemented___') ifTrue: [
-		^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'].
+		pri @env0:== nil ifTrue: [
+			^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'].
+		^ self ___cmpUnorderable___: other op: '<='].
 	^ r
 %
 
 category: 'Grail-Comparison'
 method: object
 ___cmpGt___: other
-	| r |
+	"Subclass priority and the None block -- see ___cmpLt___."
+	| pri r |
+	pri := self ___reflectedFirst___: other
+		selector: #'__lt__:' kwSelector: #'___lt__:kw:'.
+	(pri @env0:~~ nil and: [pri @env0:~~ #'___NotImplemented___']) ifTrue: [^ pri].
+	(self ___cmpDunderBlocked___: #'__gt__') ifTrue: [^ self ___cmpBlockedError___].
 	r := self __gt__: other.
 	(r @env0:== #'___NotImplemented___') ifTrue: [
-		^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'].
+		pri @env0:== nil ifTrue: [
+			^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'].
+		^ self ___cmpUnorderable___: other op: '>'].
 	^ r
 %
 
 category: 'Grail-Comparison'
 method: object
 ___cmpGe___: other
-	| r |
+	"Subclass priority and the None block -- see ___cmpLt___."
+	| pri r |
+	pri := self ___reflectedFirst___: other
+		selector: #'__le__:' kwSelector: #'___le__:kw:'.
+	(pri @env0:~~ nil and: [pri @env0:~~ #'___NotImplemented___']) ifTrue: [^ pri].
+	(self ___cmpDunderBlocked___: #'__ge__') ifTrue: [^ self ___cmpBlockedError___].
 	r := self __ge__: other.
 	(r @env0:== #'___NotImplemented___') ifTrue: [
-		^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'].
+		pri @env0:== nil ifTrue: [
+			^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'].
+		^ self ___cmpUnorderable___: other op: '>='].
 	^ r
+%
+
+category: 'Grail-Comparison'
+method: object
+___cmpDunderBlocked___: baseSym
+	"True when this object's class BLOCKS baseSym by binding it to None.
+
+	``__eq__ = None'' in a class body does not leave the comparison undefined --
+	the lookup succeeds and yields None, which CPython then calls, so the
+	operation raises ``'NoneType' object is not callable'' instead of falling
+	back to the other operand.  Blocking is the whole point: the idiom exists to
+	stop a subclass inheriting a comparison that would be wrong for it, and a
+	fallback would silently supply the very answer it is refusing to give.
+	``__hash__ = None'' is the same rule, and Grail already honours that one.
+
+	ClassDefAst compiles a class-body ``name = value'' to a metaclass accessor
+	in category ``Grail-Class Attrs'', which is where the None is found.
+	___pyAttrLoad___ would answer it too, but this runs on the == path, so it
+	stays a category test plus one perform rather than the full attribute
+	protocol."
+
+	| attrOwner methOwner |
+	"Every == runs this, so the ordinary answer (``nobody binds that name'')
+	has to be cheap: ___respondsTo___: is the CACHED primitive form of the
+	metaclass-chain walk below, and answers false without fetching a single
+	method dictionary.  The expensive category/value probes then run only for a
+	class that actually has such a class attribute."
+	(self @env0:class ___respondsTo___: baseSym) ifFalse: [^ false].
+	attrOwner := self @env0:class @env0:class
+		@env0:whichClassIncludesSelector: baseSym environmentId: 1.
+	attrOwner == nil ifTrue: [^ false].
+	(attrOwner @env0:categoryOfSelector: baseSym environmentId: 1)
+		== #'Grail-Class Attrs' ifFalse: [^ false].
+	((self @env0:class @env0:perform: baseSym env: 1)
+		== (Python @env0:at: #None otherwise: nil)) ifFalse: [^ false].
+	"A compiled ``def'' on a MORE DERIVED class outranks an inherited None, which
+	is how a single CPython MRO settles it.  Only reached once a None is actually
+	in the chain, so the extra walk is off the ordinary path."
+	methOwner := self @env0:class @env0:whichClassIncludesSelector:
+		(baseSym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1.
+	(methOwner @env0:notNil and: [methOwner @env0:~~ object]) ifTrue: [
+		((object ___grailNearerOf___: methOwner and: attrOwner @env0:thisClass
+			from: self @env0:class) @env0:== methOwner) ifTrue: [^ false]].
+	^ true
+%
+
+category: 'Grail-Comparison'
+method: object
+___cmpBlockedError___
+	"The TypeError CPython raises when a comparison dunder blocked with None is
+	called.  Its wording is not incidental: CPython gets here by calling the None
+	it found, so the message is the generic not-callable one."
+
+	^ TypeError ___signal___: '''NoneType'' object is not callable'
+%
+
+category: 'Grail-Comparison'
+method: object
+___cmpUnorderable___: other op: opString
+	"CPython's unorderable-pair TypeError.  Split out of ___cmpFallback___ so the
+	subclass-priority path can raise it WITHOUT retrying the reflected dunder:
+	once that has run and declined, CPython does not run it a second time."
+
+	^ TypeError ___signal___:
+		('''' @env0:, opString @env0:, ''' not supported between instances of '''
+			@env0:, (self ___pyTypeNameForError___)
+			@env0:, ''' and ''' @env0:, (other ___pyTypeNameForError___) @env0:, '''')
 %
 
 category: 'Grail-Comparison'
@@ -4634,11 +4737,20 @@ ___reflectedFirst___: other selector: refSelector kwSelector: kwSelector
 	NotImplemented sentinel and means ``tried, declined'' -- the caller must
 	then NOT try that same reflected method again."
 
-	| myClass otherClass owner mine |
+	| myClass otherClass owner mine refBase |
 	myClass := self @env0:class.
 	otherClass := other @env0:class.
 	(otherClass @env0:== myClass) ifTrue: [^ nil].
 	(otherClass @env0:inheritsFrom: myClass) ifFalse: [^ nil].
+	"A subclass that BLOCKS the reflected method with None counts as overriding
+	it -- CPython reaches the block through exactly this priority rule, so
+	``SupEq() == S()'' raises rather than answering from SupEq.__eq__.  Tested
+	before the override probe below, which would read the inherited compiled
+	method as ``not overridden'' and hand the comparison back to the forward
+	direction."
+	refBase := (refSelector @env0:asString @env0:copyFrom: 1
+		to: refSelector @env0:asString @env0:size - 1) @env0:asSymbol.
+	(other ___cmpDunderBlocked___: refBase) ifTrue: [^ other ___cmpBlockedError___].
 	owner := otherClass
 		@env0:whichClassIncludesSelector: refSelector environmentId: 1.
 	"object implements every comparison dunder, so an owner of ``object'' means
@@ -4661,6 +4773,8 @@ ___cmpEq___: other
 	pri := self ___reflectedFirst___: other
 		selector: #'__eq__:' kwSelector: #'___eq__:kw:'.
 	(pri @env0:~~ nil and: [pri @env0:~~ #'___NotImplemented___']) ifTrue: [^ pri].
+	"``__eq__ = None'' on THIS operand -- see ___cmpDunderBlocked___:."
+	(self ___cmpDunderBlocked___: #'__eq__') ifTrue: [^ self ___cmpBlockedError___].
 	r := self __eq__: other.
 	(r @env0:== #'___NotImplemented___') ifTrue: [
 		"pri notNil: the reflected __eq__ already ran and declined, so identity
@@ -4677,6 +4791,8 @@ ___cmpNe___: other
 	pri := self ___reflectedFirst___: other
 		selector: #'__ne__:' kwSelector: #'___ne__:kw:'.
 	(pri @env0:~~ nil and: [pri @env0:~~ #'___NotImplemented___']) ifTrue: [^ pri].
+	"``__ne__ = None'' on THIS operand -- see ___cmpDunderBlocked___:."
+	(self ___cmpDunderBlocked___: #'__ne__') ifTrue: [^ self ___cmpBlockedError___].
 	r := self __ne__: other.
 	(r @env0:== #'___NotImplemented___') ifTrue: [
 		"See ___cmpEq___: a reflected __ne__ that already declined is not
@@ -4722,15 +4838,28 @@ ___eqValue___: other
 	regardless of whether the class is kernel- or PythonInstance-backed, so
 	the extra isKindOf: guard was redundant as well as overly narrow."
 
-	| refOwner rr |
+	| refOwner rr tried |
+	tried := false.
+	"``__eq__ = None'' on the REFLECTED operand blocks here too: CPython reaches
+	that operand's slot and calls the None it finds, so ``F() == X()'' raises
+	rather than settling on identity.  See ___cmpDunderBlocked___:."
+	(other ___cmpDunderBlocked___: #'__eq__') ifTrue: [^ other ___cmpBlockedError___].
 	refOwner := other @env0:class
 		@env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
 	(refOwner @env0:~~ nil and: [refOwner @env0:~~ object]) ifTrue: [
+		tried := true.
 		rr := other @env0:perform: #'__eq__:' env: 1 withArguments: { self }.
 		(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]].
-	"A reflected ``def __eq__(*args)'' has only the varargs selector."
-	rr := other ___varargsDunder___: #'___eq__:kw:' with: self.
-	(rr @env0:~~ nil and: [rr @env0:~~ #'___NotImplemented___']) ifTrue: [^ rr].
+	"A reflected ``def __eq__(*args)'' has only the varargs selector -- try it
+	ONLY when the fixed-arity form was absent.  A plain ``def __eq__(self,
+	other)'' compiles to BOTH forms, so running this unconditionally called the
+	reflected __eq__ a second time after it had already declined: ``A() == A()''
+	with a NotImplemented-returning __eq__ logged three calls where CPython logs
+	two (test_binop's OperationOrderTests.test_comparison_orders).  ___neValue___
+	guards the same way and for the same reason."
+	tried ifFalse: [
+		rr := other ___varargsDunder___: #'___eq__:kw:' with: self.
+		(rr @env0:~~ nil and: [rr @env0:~~ #'___NotImplemented___']) ifTrue: [^ rr]].
 	^ self @env0:== other
 %
 
@@ -4749,6 +4878,8 @@ ___neValue___: other
 
 	| refOwner rr tried |
 	tried := false.
+	"``__ne__ = None'' on the REFLECTED operand -- see ___cmpDunderBlocked___:."
+	(other ___cmpDunderBlocked___: #'__ne__') ifTrue: [^ other ___cmpBlockedError___].
 	refOwner := other @env0:class
 		@env0:whichClassIncludesSelector: #'__ne__:' environmentId: 1.
 	(refOwner @env0:~~ nil and: [refOwner @env0:~~ object]) ifTrue: [
@@ -4805,14 +4936,24 @@ ___classAttrCmp___: baseSym with: other
 category: 'Grail-Metaclass'
 method: object
 ___grailMetaclass___
-	"The ``metaclass='' recorded for this class, or nil.  SESSION-LOCAL and keyed
-	by class: a Class cannot hold dynamic instVars (ImproperOperation 2484)."
+	"The ``metaclass='' in effect for this class, or nil.  SESSION-LOCAL and keyed
+	by class: a Class cannot hold dynamic instVars (ImproperOperation 2484).
 
-	| tbl |
+	INHERITED through the superclass chain, as in CPython: ``class ABC(metaclass=
+	ABCMeta)'' makes every ``class Foo(ABC)'' an instance of ABCMeta too, which is
+	what puts ``Foo.register'' within reach.  Only the class that wrote the keyword
+	carries a record, so the walk is what supplies the rest of the chain."
+
+	| tbl walker meta |
 	(self isKindOf: Behavior) ifFalse: [^ nil].
 	tbl := SessionTemps @env0:current @env0:at: #'GrailClassMetaclass' otherwise: nil.
 	tbl == nil ifTrue: [^ nil].
-	^ tbl @env0:at: self otherwise: nil
+	walker := self.
+	[walker == nil] whileFalse: [
+		meta := tbl @env0:at: walker otherwise: nil.
+		meta == nil ifFalse: [^ meta].
+		walker := walker @env0:superClass].
+	^ nil
 %
 
 category: 'Grail-Metaclass'
@@ -4863,6 +5004,46 @@ ___grailSetMetaclass___: aMetaclass
 		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
 	tbl @env0:at: self put: aMetaclass.
 	^ self
+%
+
+category: 'Grail-Metaclass'
+method: object
+___metaclassMethodFor___: aSym
+	"A METHOD compiled on this class's recorded ``metaclass='', bound with this
+	class as ``self'' -- or nil when there is no metaclass or it defines no such
+	method.
+
+	___pyAttrLoad___ answers the ATTRIBUTE form of this question itself (a
+	metaclass def read off the class).  This exists for the send that loads no
+	attribute at all: ___tryMetaclassMethodDNU___:args: -- see there for why a
+	metaclass method self-sending to a sibling never reaches the attribute path.
+
+	The binding is what makes the CPython signature come out right.  ABCMeta
+	writes ``def register(cls, subclass)'' and it is called ``B.register(V)'':
+	the class is the receiver, not an argument.  A MethodBinding prepends this
+	class to the call arguments and the UnboundMethod pops it back off as the
+	receiver, so the metaclass's method runs NON-virtually with self = the using
+	class -- which is exactly the object it expects, and is not in its own
+	chain."
+
+	| meta family owner |
+	meta := self ___grailMetaclass___.
+	meta == nil ifTrue: [^ nil].
+	"A name the metaclass does not define is the common case -- every send that
+	gets this far has already missed everywhere else -- so try the 0-arg
+	spelling on its own first and build the seven-selector family only when that
+	misses."
+	owner := meta @env0:whichClassIncludesSelector: aSym environmentId: 1.
+	owner == nil ifTrue: [
+		family := self ___selectorFamilyFor___: aSym string: aSym @env0:asString.
+		1 to: 7 do: [:i |
+			owner == nil ifTrue: [
+				owner := meta @env0:whichClassIncludesSelector: (family @env0:at: i)
+					environmentId: 1]]].
+	owner == nil ifTrue: [^ nil].
+	^ MethodBinding
+		instance: self
+		callable: (UnboundMethod definingClass: meta selector: aSym)
 %
 
 category: 'Grail-Metaclass'
@@ -4973,9 +5154,7 @@ ___cmpFallback___: other op: opString reflected: refSelector
 		fn == nil ifFalse: [
 			rr := fn ___pyCallValue___: { other. self } kw: nil.
 			(rr == (Python @env0:at: #NotImplemented otherwise: nil)) ifFalse: [^ rr]]].
-	TypeError ___signal___: ('''' @env0:, opString @env0:, ''' not supported between instances of '''
-		@env0:, (self ___pyTypeNameForError___)
-		@env0:, ''' and ''' @env0:, (other ___pyTypeNameForError___) @env0:, '''')
+	^ self ___cmpUnorderable___: other op: opString
 %
 
 category: 'Grail-Comparison'
@@ -5619,11 +5798,18 @@ __str__
 category: 'Grail-Other'
 method: object
 __subclasshook__: subclass
-	"Customize issubclass() for abstract base classes.
-	Default implementation should return NotImplemented singleton.
-	TODO: Implement once NotImplementedType is created in smalltalk/classes/"
+	"Customize issubclass() for abstract base classes.  The default DECLINES,
+	which is what lets a caller tell ``this hook has no opinion'' apart from
+	``this hook says no'' -- ABCMeta.__subclasscheck__ consults the registry
+	only when the answer is NotImplemented, so returning false here would make
+	every registered virtual subclass invisible.
 
-	self @env0:error: 'Not yet implemented: __subclasshook__ (needs NotImplemented singleton)'
+	The TODO this replaces (``once NotImplementedType is created'') was
+	discharged long ago: Python >> NotImplemented is the singleton, and it is
+	what CPython's object.__subclasshook__ returns.  Until then any class
+	reaching the default raised, which is why nothing could call it."
+
+	^ Python @env0:at: #NotImplemented otherwise: nil
 %
 
 category: 'Grail-Message Handling'
@@ -5815,6 +6001,48 @@ ___tryClassMethodDNU___: aSelector args: anArray
 
 category: 'Grail-Attribute Access'
 method: object
+___tryMetaclassMethodDNU___: aSelector args: anArray
+	"A metaclass method reached by a DIRECT SEND rather than an attribute load.
+
+	``ABCMeta.__instancecheck__'' ends in ``return cls.__subclasscheck__(...)'',
+	and inside a method ``cls'' IS the receiver, so codegen takes the self-send
+	fast path and emits a plain ``__subclasscheck__:'' send.  That dispatches on
+	the USING class, where the sibling metaclass method is not -- Grail records a
+	metaclass rather than making the class an instance of it, so the two live in
+	unrelated chains.  ___pyAttrLoad___'s metaclass consult never runs, because
+	no attribute was loaded.
+
+	Catching it here rather than teaching the fast path to sit this one out keeps
+	the cost where it belongs: on the miss, which is the only case that needs it.
+	Answers #'___noMetaMethod___' when nothing matches, so a genuine unknown send
+	still raises MNU.
+
+	Only a Behavior receiver qualifies.  An INSTANCE of a class whose metaclass
+	defines the selector must not reach it -- in Python a metaclass method is not
+	part of the instance protocol."
+
+	| s base handle isVarargs |
+	(self isKindOf: Behavior) ifFalse: [^ #'___noMetaMethod___'].
+	self @env1:___grailMetaclass___ == nil ifTrue: [^ #'___noMetaMethod___'].
+	s := aSelector asString.
+	base := (s includesValue: $:)
+		ifTrue: [s copyFrom: 1 to: (s indexOf: $:) - 1]
+		ifFalse: [s].
+	"The varargs form arrives as ``_name:kw:'' carrying {positional. kwargs}
+	rather than the arguments themselves; its Python name drops the leading
+	underscore this convention added."
+	isVarargs := (s endsWith: ':kw:')
+		and: [base size > 1 and: [(base at: 1) == $_]].
+	isVarargs ifTrue: [base := base copyFrom: 2 to: base size].
+	handle := self @env1:___metaclassMethodFor___: base asSymbol.
+	handle == nil ifTrue: [^ #'___noMetaMethod___'].
+	isVarargs ifTrue: [
+		^ handle @env1:value: (anArray at: 1) value: (anArray at: 2)].
+	^ handle @env1:value: anArray asArray value: nil
+%
+
+category: 'Grail-Attribute Access'
+method: object
 doesNotUnderstand: aSelector args: anArray envId: envId
 	"Bound-method-via-attribute-load fallback.
 
@@ -5830,7 +6058,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	``attr:_:`` etc., or the varargs form ``_attr:kw:``).
 	All other unknown sends fall through to super."
 
-	| s md cls binOp clsMeth |
+	| s md cls binOp clsMeth metaMeth |
 	envId = 1 ifFalse: [
      ^ MessageNotUnderstood new
          receiver: self selector: aSelector args: anArray envId: envId ; 
@@ -5927,8 +6155,12 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 		"@classmethod through an instance -- see ___tryClassMethodDNU___:."
 		clsMeth := self ___tryClassMethodDNU___: aSelector args: anArray.
 		clsMeth == #'___noClassMethod___' ifFalse: [^ clsMeth].
+		"A sibling method on a recorded ``metaclass='' -- see
+		___tryMetaclassMethodDNU___:args:."
+		metaMeth := self ___tryMetaclassMethodDNU___: aSelector args: anArray.
+		metaMeth == #'___noMetaMethod___' ifFalse: [^ metaMeth].
 		^ MessageNotUnderstood new
-        receiver: cls selector: aSelector args: anArray envId: envId ; 
+        receiver: cls selector: aSelector args: anArray envId: envId ;
         signal
 	].
 	"Unary selector with 0 args — return BoundMethod if class has any
@@ -5947,8 +6179,12 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	CALLING for 0-arg instance methods, so do the same here."
 	clsMeth := self ___tryClassMethodDNU___: aSelector args: anArray.
 	clsMeth == #'___noClassMethod___' ifFalse: [^ clsMeth].
+	"A 0-arg sibling method on a recorded ``metaclass='' -- see
+	___tryMetaclassMethodDNU___:args:."
+	metaMeth := self ___tryMetaclassMethodDNU___: aSelector args: anArray.
+	metaMeth == #'___noMetaMethod___' ifFalse: [^ metaMeth].
   ^ MessageNotUnderstood new
-      receiver: cls selector: aSelector args: anArray envId: envId ; 
+      receiver: cls selector: aSelector args: anArray envId: envId ;
       signal
 %
 
