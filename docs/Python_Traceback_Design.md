@@ -2254,7 +2254,7 @@ CPython 3.14.6 — passes in full. SUnit **4202, all green** (five stale asserti
 corrected). Full 71-module sweep: **0 regressions**, and no row moves — this is
 correctness the scoreboard cannot see, which is the honest way to report it.
 
-### 9.26 Three small conformance gaps, and a scoping result on carets (2026-08-13, gs40)
+### 9.26 Three small conformance gaps, and a scoping result on carets (2026-08-13, gs40) — caret scoping refined in **§9.32**
 
 **Carets are not the next thing, and now there is a reason on record.** §9.20/§9.24
 listed PEP 657 caret rendering as the largest remaining bucket (8 tests), and the
@@ -2639,3 +2639,88 @@ it is only ever the result of the last run on that machine.
 The earlier note that `test_raise` sat at 6/9 while measuring 1/14 was true when
 it was written; someone has since refreshed the board. That is the ordinary
 lifecycle working, not a backlog item.
+
+### 9.32 Carets: worth 9 tests, not 2, and here is the design (2026-08-14, gs40)
+
+Two corrections to the backlog, both from bucketing all **57** remaining
+`test.test_traceback` failures by cause rather than by guess.
+
+**The seven "exception group" failures are caret failures.** They were being
+counted as a group-rendering bucket on the strength of an assertion message
+beginning `'  + Exception Group Traceback (most recent call last):'`. Rendering
+the same group under both interpreters shows Grail's output is **structurally
+identical** to CPython's — same header, same `  | ` margin, same frames, same
+`+-+---- 1 ----` boxes. The only difference is the caret line:
+
+```
+  |     exception_or_callable()
+  |     ~~~~~~~~~~~~~~~~~~~~~^^        <- CPython emits this; Grail does not
+```
+
+`test_exception_group_basic` asserts that line literally
+(`test_traceback.py:2645`). §9.20's group work is done; these tests are waiting
+on carets alone. So carets are worth **~9 tests** (7 group + 2 direct), which
+makes them the largest single cause left — not the 2 they were credited with.
+
+**The remaining clusters, for the record:** suggestion family 11 (several
+sub-causes; 2 of them are `sys.stdlib_module_names`, and the underscored /
+`self.blech` variants need frame locals — CPython un-hides a private candidate
+only when the access came from inside the object's own method), colorize 4,
+`<grail>` filename 5, nested frames 4, `f_locals` 1.
+
+#### Why §9.26 called this a project, and what it missed
+
+§9.26 concluded carets need per-call-site positions and stopped there. That is
+right, but the obstacle is narrower and more mechanical than "the position array
+cannot be used". **There are two independent position mechanisms**, and only one
+of them is a problem:
+
+| | how a frame gets its position | takes a span today? |
+| --- | --- | --- |
+| unwinding through a function | `___pushFrameFromPos___` reads the runtime `___curPos___` temp | **yes** — it already accepts the 5-element array |
+| rebuilt from a `(method, ip)` triple | `_sourceAtIp:` scans the GENERATED SMALLTALK SOURCE for the last `___curPos___ := N` above a caret marker | **no** — it reads the digits immediately after `:=` |
+
+So `___pyPositionLiteralArray` is not blocked by the consumer; it is blocked by a
+**text scanner**. Emit `___curPos___ := #(12 4 12 20 'src')` and the digit-read
+finds no digit after `:=`, answers nil, and drops the frame — fail-closed by
+design (§9.26 chose that over a confidently wrong line). ForAst.gs:186 already
+emits the array form for a comprehension iterable, which works precisely because
+that path pushes its frame directly rather than going through the scanner.
+
+#### The design
+
+Two parts, and the cheap part is not the expensive one.
+
+**Part 1 — teach the scanner the array form (small).** Extend the digit-read in
+`_sourceAtIp:` to accept `#(` followed by the line number, so both
+`___curPos___ := 12` and `___curPos___ := #(12 ...)` answer 12. Roughly ten
+lines in one method, no codegen change, no behaviour change on its own. This
+removes the blocker §9.26 recorded.
+
+**Part 2 — emit spans at call sites (the actual work, tier 2).** A caret on a
+non-innermost frame marks the CALL that led to the next frame, so the position
+must be the call's span, not the statement's. That means a store before each call
+expression rather than one per statement — a change in the call path, which fires
+for every call in every Python function.
+
+Two things make Part 2 more tractable than it sounds:
+
+* **A literal array allocates nothing.** `___pyPositionLiteralArray` emits `#(...)`
+  of compile-time constants, so the store is a pointer assignment — the same cost
+  as today's integer store, which `___emitCurPosBefore:on:` already calls "free
+  enough to sit before EVERY statement". Per-call cost is one store, not an
+  allocation.
+* **Statement-level stores stay.** Calls refine the position within a statement;
+  they do not replace the statement store, so any path without a call keeps
+  today's behaviour exactly.
+
+The open questions are scope, not feasibility: whether to emit at every call or
+only where a frame can be observed, what module-level code does (it has no
+`___curPos___` temp at all — `CallAst functionBeingCompiled` is nil there, so
+module frames would stay line-only), and whether the innermost frame needs
+operator spans (`x['a']['b']` marking the failing subscript) as well as call
+spans — `TestColorizedTraceback.test_colorized_traceback` wants exactly that.
+
+**Recommended split:** Part 1 alone, verified to change nothing, then Part 2
+behind a full sweep. Doing Part 2 first is what makes this look like one big
+risky change; the blocker and the feature are separable.
