@@ -474,8 +474,11 @@ ___moduleAttrLoad___: aSym
 	``Did you forget to import 'io'?'' hint it derives from
 	sys.stdlib_module_names.  This is the bare-name miss for module globals,
 	which is the undefined-name path Python code actually hits."
+	"Through ___resolveBuiltinOrSignal___: so a name injected into builtins at
+	run time (gettext.install()'s ``_'') resolves before the raise; on a miss
+	it signals the identical NameError."
 	^ self ___globalAt___: aSym otherwise: [
-		NameError @env0:___signalUndefined___: aSym @env0:asString]
+		NameError @env0:___resolveBuiltinOrSignal___: aSym @env0:asString]
 %
 
 category: 'Grail-Attribute Access'

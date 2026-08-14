@@ -820,59 +820,100 @@ __code__
 
 category: 'Grail-Attribute Access'
 method: BoundMethod
+___methodLookupChainFor___: aClass
+	"The classes to search, nearest first, for one of the per-class
+	___method*Table___ dictionaries.
+
+	The raw Smalltalk superclass chain is NOT enough.  A Python class with
+	several bases is one Smalltalk class whose superclass is only its PRIMARY
+	base; the rest live in the C3 MRO, so a method inherited from a MIXIN was
+	invisible to a superclass walk.  test.test_gettext hits this squarely --
+	``class GNUTranslationsPluralFormsTestCase(PluralFormsTests,
+	GettextBaseTest)'' inherits the helper that reads
+	``self._test_plural_forms.__code__'', and 13 tests reported
+	``'method' object has no attribute '__code__''' for a method that plainly
+	exists.
+
+	Chain first, MRO only if that misses: the chain is a cheap pointer walk and
+	is the whole answer under single inheritance, so the C3 computation is paid
+	only where the old code was about to answer nil anyway.  Answers a
+	collection; never nil."
+
+	| chain c il mro |
+	chain := OrderedCollection @env0:new.
+	c := aClass.
+	[c == nil] whileFalse: [
+		chain @env0:add: c.
+		c := c @env0:superclass].
+	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
+	il == nil ifTrue: [^ chain].
+	mro := [il @env0:___mroOf___: aClass] @env0:on: Error do: [:ex | nil].
+	mro == nil ifTrue: [^ chain].
+	"Append only what the chain missed, keeping nearest-first order."
+	mro @env0:do: [:each |
+		(chain @env0:includesIdentical: each) ifFalse: [chain @env0:add: each]].
+	^ chain
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
 ___methodCodeForClass___: aClass name: aName
-	"Superclass walk for the first ___methodCodeTable___ entry named aName, or
+	"First ___methodCodeTable___ entry named aName along the lookup chain, or
 	nil.  Mirrors ___methodDocForClass___:name:, including the env-1 probe --
 	the table is compiled in environment 1, so an env-0 ``canUnderstand:'' would
 	never see it."
 
 	| tbl v |
 	aClass == nil ifTrue: [^ nil].
-	((aClass @env0:class @env0:whichClassIncludesSelector: #'___methodCodeTable___' environmentId: 1) ~~ nil) ifTrue: [
-		tbl := aClass ___methodCodeTable___.
-		v := tbl @env0:at: aName otherwise: nil.
-		v == nil ifFalse: [^ v]].
-	^ self ___methodCodeForClass___: (aClass @env0:superclass) name: aName
+	(self ___methodLookupChainFor___: aClass) @env0:do: [:c |
+		((c @env0:class @env0:whichClassIncludesSelector: #'___methodCodeTable___' environmentId: 1) ~~ nil) ifTrue: [
+			tbl := c ___methodCodeTable___.
+			v := tbl @env0:at: aName otherwise: nil.
+			v == nil ifFalse: [^ v]]].
+	^ nil
 %
 
 category: 'Grail-Attribute Access'
 method: BoundMethod
 ___methodDocForClass___: aClass name: aName
-	"Superclass walk for the first ___methodDocTable___ entry named aName, or
-	nil.  Mirrors ___methodSignatureForClass___:name:, including the env-1
+	"First ___methodDocTable___ entry named aName along the lookup chain
+	(see ___methodLookupChainFor___:), or nil.  Mirrors ___methodSignatureForClass___:name:, including the env-1
 	probe -- the table is compiled in environment 1, so an env-0
 	``canUnderstand:'' would never see it."
 
 	| tbl v |
 	aClass == nil ifTrue: [^ nil].
-	((aClass @env0:class @env0:whichClassIncludesSelector: #'___methodDocTable___' environmentId: 1) ~~ nil) ifTrue: [
-		tbl := aClass ___methodDocTable___.
-		v := tbl @env0:at: aName otherwise: nil.
-		v == nil ifFalse: [^ v]].
-	^ self ___methodDocForClass___: (aClass @env0:superclass) name: aName
+	(self ___methodLookupChainFor___: aClass) @env0:do: [:c |
+		((c @env0:class @env0:whichClassIncludesSelector: #'___methodDocTable___' environmentId: 1) ~~ nil) ifTrue: [
+			tbl := c ___methodDocTable___.
+			v := tbl @env0:at: aName otherwise: nil.
+			v == nil ifFalse: [^ v]]].
+	^ nil
 %
 
 category: 'Grail-Attribute Access'
 method: BoundMethod
 ___methodSignatureForClass___: aClass name: aName
-	"Superclass walk for the first ___methodSignatureTable___ entry named aName,
-	or nil.  Mirrors ___methodAnnotationsForClass___:name:, including the env-1
+	"First ___methodSignatureTable___ entry named aName along the lookup
+	chain (see ___methodLookupChainFor___:), or nil.  Mirrors ___methodAnnotationsForClass___:name:, including the env-1
 	probe -- the table is compiled in environment 1, so an env-0
 	``canUnderstand:'' would never see it."
 
 	| tbl v |
 	aClass == nil ifTrue: [^ nil].
-	((aClass @env0:class @env0:whichClassIncludesSelector: #'___methodSignatureTable___' environmentId: 1) ~~ nil) ifTrue: [
-		tbl := aClass ___methodSignatureTable___.
-		v := tbl @env0:at: aName otherwise: nil.
-		v == nil ifFalse: [^ v]].
-	^ self ___methodSignatureForClass___: (aClass @env0:superclass) name: aName
+	(self ___methodLookupChainFor___: aClass) @env0:do: [:c |
+		((c @env0:class @env0:whichClassIncludesSelector: #'___methodSignatureTable___' environmentId: 1) ~~ nil) ifTrue: [
+			tbl := c ___methodSignatureTable___.
+			v := tbl @env0:at: aName otherwise: nil.
+			v == nil ifFalse: [^ v]]].
+	^ nil
 %
 
 category: 'Grail-Attribute Access'
 method: BoundMethod
 ___methodAnnotationsForClass___: aClass name: aName
-	"Walk aClass and its superclasses for the first entry named aName in a
+	"Walk aClass and its ancestors (see ___methodLookupChainFor___:) for the
+	first entry named aName in a
 	``___methodAnnotationsTable___'' (compiled class-side by ClassDefAst
 	for classes that declare annotated methods).  The entry is a PEP 649
 	annotate FUNCTION, so call it with Format.VALUE to get the dict.
@@ -884,11 +925,12 @@ ___methodAnnotationsForClass___: aClass name: aName
 
 	| tbl v |
 	aClass == nil ifTrue: [^ KeyValueDictionary @env0:new].
-	((aClass @env0:class @env0:whichClassIncludesSelector: #'___methodAnnotationsTable___' environmentId: 1) ~~ nil) ifTrue: [
-		tbl := aClass ___methodAnnotationsTable___.
-		v := tbl @env0:at: aName otherwise: nil.
-		v == nil ifFalse: [^ v @env0:value: { 1 } value: nil]].
-	^ self ___methodAnnotationsForClass___: (aClass @env0:superclass) name: aName
+	(self ___methodLookupChainFor___: aClass) @env0:do: [:c |
+		((c @env0:class @env0:whichClassIncludesSelector: #'___methodAnnotationsTable___' environmentId: 1) ~~ nil) ifTrue: [
+			tbl := c ___methodAnnotationsTable___.
+			v := tbl @env0:at: aName otherwise: nil.
+			v == nil ifFalse: [^ v @env0:value: { 1 } value: nil]]].
+	^ KeyValueDictionary @env0:new
 %
 
 category: 'Grail-Attribute Access'

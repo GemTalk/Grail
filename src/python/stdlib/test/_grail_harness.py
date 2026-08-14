@@ -87,13 +87,22 @@ def run_one(tc):
     # per-test behaviour exactly where setUpClass was absent or trivial.
     cls = type(tc)
     did_setup = False
+    setup_err = ''
     setup = getattr(cls, 'setUpClass', None)
     if setup is not None:
         try:
             setup()
             did_setup = True
-        except Exception:
+        except Exception as e:
+            # Keep the message.  Swallowing it outright is the resilient
+            # behaviour we want -- one unsatisfiable class fixture must not
+            # tank the tests that pass without it -- but swallowing it
+            # SILENTLY made a broken fixture indistinguishable from an absent
+            # one.  test.test_gettext writes its .mo catalogs in setUpClass;
+            # when that raised, 21 tests reported a bare FileNotFoundError
+            # naming a file whose absence had nothing to do with the test.
             did_setup = False
+            setup_err = type(e).__name__ + ': ' + str(e)
     try:
         tc.run(result)
     finally:
@@ -104,9 +113,24 @@ def run_one(tc):
                     teardown()
                 except Exception:
                     pass
+            # Drain addClassCleanup registrations too.  tearDownClass alone is
+            # only half the fixture: test.test_gettext registers its
+            # ``rmtree(LOCALEDIR)'' as a CLASS CLEANUP, so without this the
+            # per-test loop left an ``xx/'' locale tree behind in the checkout
+            # -- once per class, never removed.
+            cleanups = getattr(cls, 'doClassCleanups', None)
+            if cleanups is not None:
+                try:
+                    cleanups()
+                except Exception:
+                    pass
     detail = ''
     if result.errors:
         detail = 'E: ' + _first_line(result.errors[0][1])
     elif result.failures:
         detail = 'F: ' + _first_line(result.failures[0][1])
+    # Only annotate a test that actually went wrong: a class whose fixture
+    # failed but whose tests pass anyway needs no noise.
+    if setup_err and detail:
+        detail = detail + ' [setUpClass failed: ' + setup_err[:120] + ']'
     return (len(result.failures), len(result.errors), len(result.skipped), detail)

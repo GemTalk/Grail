@@ -2025,7 +2025,17 @@ round: aNumber
 		ifTrue: [^ aNumber perform: #'___round__:kw:' env: 1 withArguments: { { }. nil }].
 	((aNumber @env0:class @env0:whichClassIncludesSelector: #'__round__' environmentId: 1) @env0:notNil)
 		ifTrue: [^ aNumber @env0:perform: #'__round__' env: 1].
-	^ aNumber @env0:rounded
+	"A non-number reaches the kernel's #rounded, which it does not understand
+	-- an UNCATCHABLE MessageNotUnderstood where CPython raises a perfectly
+	ordinary TypeError.  gettext._as_int is built on catching exactly that
+	(``try: round(n) / except TypeError:'' is how it rejects a non-integer
+	plural value), so the MNU escaped the except clause and killed the test.
+	Converted the same way len: converts its own MNU, and worded as CPython
+	words it: ``type str doesn't define __round__ method''."
+	^ [aNumber @env0:rounded] @env0:on: MessageNotUnderstood do: [:ex |
+		TypeError ___signal___: ('type ' @env0:,
+			(bytes ___pyTypeNameOf___: aNumber) @env0:,
+			' doesn''t define __round__ method')]
 %
 
 category: 'Grail-Built-in Functions'
