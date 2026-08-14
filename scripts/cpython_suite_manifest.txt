@@ -168,3 +168,32 @@ test.test_with
 test.test_positional_only_arg
 test.test_string_literals
 test.test_genericclass
+
+# --- P3 probe batch: a SYSTEMATIC SAMPLE, not a curated one -----------------
+# Every earlier batch was chosen -- areas Grail already covered, modules that
+# looked close.  That is fine for making progress and useless for forecasting,
+# because a hand-picked cohort tells you nothing about the ones nobody picked.
+# P3 and P4 are 131 of the 255 in-scope modules and exactly ONE of them had
+# ever been measured, so half the scope was being extrapolated from zero data.
+#
+# So: of the 47 P3 modules whose subject imports today (scripts/
+# cpython_import_census.py), sort by name and take every 4th.  No skipping the
+# awkward ones -- test_typing is 11k lines and test_codecs 3.9k, and they are
+# in precisely because a sample that drops them measures nothing.  Whatever
+# these score IS the P3 estimate.
+#
+# Vendored from CPython 3.14.6; the rest of the corpus is 3.14.4.  A patch
+# release apart, but it is the reason a vendored file may differ slightly from
+# what the header above claims.
+test.test_annotationlib
+test.test_bufio
+test.test_codecs
+test.test_contextlib_async
+test.test_difflib
+test.test_gettext
+test.test_linecache
+test.test_pickle
+test.test_reprlib
+test.test_struct
+test.test_typing
+test.test_warnings

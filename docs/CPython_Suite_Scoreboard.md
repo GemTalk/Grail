@@ -86,3 +86,15 @@ different rows and merges cleanly.
 | test.test_positional_only_arg | ERROR | 28 | 4 | 4 | 0 |  |
 | test.test_string_literals | ERROR | 20 | 3 | 10 | 0 |  |
 | test.test_genericclass | ERROR | 22 | 12 | 7 | 1 |  |
+| test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
+| test.test_bufio | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '_pyio' |
+| test.test_codecs | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd800 is illegal for Unicode |
+| test.test_contextlib_async | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'run_no_yield_async_fn' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
+| test.test_difflib | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'findfile' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
+| test.test_gettext | ERROR | 73 | 0 | 72 | 1 |  |
+| test.test_linecache | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rd834 is illegal for Unicode |
+| test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '_compat_pickle' |
+| test.test_reprlib | IMPORTERROR | 0 | 0 | 0 | 0 | name 'wrapped' is not defined |
+| test.test_struct | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rdc00 is illegal for Unicode |
+| test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'assert_never' from 'typing' (src/python/stdlib/typing.py) |
+| test.test_warnings | IMPORTERROR | 0 | 0 | 0 | 0 | codePoint 16rdc80 is illegal for Unicode |
