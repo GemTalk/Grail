@@ -93,10 +93,47 @@ def lookup_line_is_honoured():
 def stat_result_fields():
     """os.stat answers CPython's st_* names, and the values are sane."""
     st = os.stat(Holder.meth.__code__.co_filename)
+    # st_mtime is a FLOAT and st_mtime_ns an exact int, so they agree only to
+    # float precision -- roughly a microsecond on a present-day timestamp.
+    # This used to assert ``st_mtime_ns == st_mtime * 1e9'' exactly, which
+    # holds in Grail and is FALSE in CPython: one more expectation that had
+    # never been run against the real interpreter.  The rule worth pinning is
+    # that the two describe the same instant, not that the float is lossless.
     return (st.st_size > 0
             and st.st_mtime > 0
             and st.st_mode > 0
-            and st.st_mtime_ns == st.st_mtime * 1000000000)
+            and abs(st.st_mtime - st.st_mtime_ns / 1e9) < 1e-3)
+
+
+def all_def_shapes_share_the_module_filename():
+    """The BOOLEAN form of the three filename checks, for the standalone run.
+
+    Those three answer the filename itself rather than a bool, because the
+    Smalltalk driver asserts each equals the absolute path it loaded -- a
+    stronger claim than any self-comparison, and the one that actually caught
+    co_filename being the '<grail>' placeholder for every code object.  A
+    standalone run has no such external path to compare against, so this states
+    the portable half: all three def shapes agree with each other and with
+    __file__.  Keeping both means neither run is weakened to suit the other."""
+    shapes = (module_level_filename(), class_body_filename(),
+              nested_def_filename())
+    return all(s == __file__ for s in shapes)
 
 
 _THIS_FILE = module_level_filename()
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.  The three
+# filename functions above are deliberately absent: they answer a path, not a
+# bool, and are asserted against the loaded path by the Smalltalk driver.
+# all_def_shapes_share_the_module_filename covers them here.
+if __name__ == '__main__':
+    checks = [
+        all_def_shapes_share_the_module_filename,
+        linecache_reads_own_source,
+        frame_summary_has_source_line,
+        lookup_line_is_honoured,
+        stat_result_fields,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))
