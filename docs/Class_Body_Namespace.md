@@ -187,6 +187,51 @@ body, and their names still have to become members. The mapping now carries the
 write to `EnumDict`; the member set is built from `___classBodyOrder___`, a
 static list, which a dynamic name never joins.
 
+## Stage 5, as shipped
+
+A bare **expression statement** is emitted, joining the `try` / `for` / `while` /
+`with` statements stage 4 rescued. It had been dropped for the same reason and
+one step earlier: it binds no name at all, so the structural compile had nothing
+to hang it on. A class-body `print(...)` produced no output and no error.
+
+The one that matters is `vars().update({...})`, which is how a class body defines
+members computed at runtime. Emitting the statement was only half of it — `dict`'s
+mutators store with `at:put:` rather than through `__setitem__`, which is right
+for a dict (CPython's `dict.update` does not call a subclass's `__setitem__`
+either) and wrong for a namespace whose whole job is to be connected. So
+`ClassBodyLocals` routes `update` / `_update:kw:` / `setdefault` / `pop` /
+`popitem` / `clear` through `__setitem__` / `__delitem__`. Subscript assignment
+already went that way, which is why *it* worked and `.update()` silently dropped
+everything.
+
+That closes `test_dynamic_members_with_static_methods` — so the paragraph above
+is now half wrong, and worth reading for which half. A dynamic name **does** join
+the member set, just not through `___classBodyOrder___`: `___grailBuildMembers:`
+already sweeps the per-class `dynInstVars` holder for candidates the static list
+missed, which it grew for names assigned under a class-body `if`. A `vars()`
+write lands in the same holder and is picked up by the same sweep. What is still
+true is the READ side, which is what `test_ignore` needs and still does not have:
+`OneDay = day_1` names something no statement bound, and a statically scanned
+body cannot resolve it.
+
+Emitting the statement then exposed two things the drop had been hiding, both
+about a comprehension in a class body:
+
+- a **free name** there skips the class namespace (a comprehension is its own
+  scope), so it is a global read. `isVariableIsDeclared:` goes class-body-blind
+  when it climbs out of a `def` or a `lambda` but not out of a comprehension, so
+  the doit fallback concluded a bare identifier would compile. Under `exec` it
+  does not — the Smalltalk compiler rejects the whole `exec` with `undefined
+  symbol` before running a line. Fixing that cured three pre-existing failures of
+  the same family in `test_listcomps`
+- a **walrus** there is a `SyntaxError` (PEP 572): it would bind in the scope
+  enclosing the comprehension, which is a class namespace a comprehension cannot
+  write to, so CPython refuses the program at compile time. Grail had no
+  complaint only because the statement was dropped
+
+`test_enum` `ERROR/9 -> ERROR/8`, `test_listcomps` `24 -> 21`,
+`test_named_expressions` `37 -> 36`.
+
 ## What is still missing
 
 - `def` and nested `class` bindings bypass the namespace — each has its own
@@ -207,5 +252,5 @@ Stages 1 and 2 touched every class definition in the corpus, so they were tier 2
 by `.claude/CLAUDE.md`'s rule and each took a full CPython suite run. Stage 3 did
 not: it is confined to `EnumDict` and `PyEnumTypes`, so it is tier 1 — the
 machinery it needed was already in place and paid for. Stage 4 moved codegen
-again and went back to tier 2. Any later stage that does (`def` bindings) is
-tier 2 too.
+again and went back to tier 2, and so did stage 5. Any later stage that does
+(`def` bindings) is tier 2 too.

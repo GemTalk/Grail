@@ -31,9 +31,58 @@ category: 'Grail-other'
 method: NamedExprAst
 printSmalltalkOn: aStream
 
+	self ___checkNotInClassBodyComprehension___.
 	target printSmalltalkOn: aStream.
 	aStream nextPutAll: ' := '.
 	value printSmalltalkOn: aStream.
+%
+
+category: 'Grail-other'
+method: NamedExprAst
+___checkNotInClassBodyComprehension___
+	"PEP 572 forbids a walrus inside a comprehension that sits in a CLASS body,
+	and CPython rejects it at COMPILE time:
+
+	    class Foo:
+	        [(42, 1 + ((( j := i )))) for i in range(5)]
+
+	    SyntaxError: assignment expression within a comprehension cannot be
+	                 used in a class body
+
+	The rule exists because the two scopes disagree about where ``j'' would go:
+	a walrus binds in the scope ENCLOSING the comprehension, and that scope is
+	a class namespace, which a comprehension cannot write to.  There is no
+	answer, so the language refuses the program.
+
+	Grail has no answer either, and used to have no complaint: a class body
+	binds no name for a bare expression statement, so the statement was dropped
+	whole and the walrus never compiled.  Now that such a statement is emitted,
+	``j'' reaches codegen as a bare identifier bound nowhere -- a SMALLTALK
+	CompileError (``undefined symbol j'') that kills the whole compile, and
+	that Python code cannot catch.  Raise CPython's SyntaxError instead, which
+	is both catchable and the right diagnosis (test_named_expressions
+	test_named_expression_invalid_in_class_body).
+
+	Walks OUT rather than scanning down, the idiom the rest of the AST uses: a
+	FunctionDefAst or LambdaAst between here and the class body ends the walk,
+	because a walrus inside a comprehension inside a METHOD is ordinary and
+	legal -- the enclosing scope is then the function, not the class."
+
+	| node inComp |
+	inComp := false.
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: ListCompAst)
+			or: [(node isKindOf: SetCompAst)
+			or: [(node isKindOf: DictCompAst)
+			or: [node isKindOf: GeneratorExpAst]]])
+				ifTrue: [inComp := true].
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [^ self].
+		((node isKindOf: ClassDefAst) and: [inComp]) ifTrue: [
+			^ SyntaxError @env1:___signal___:
+				'assignment expression within a comprehension cannot be used in a class body'].
+		node := node parent].
 %
 method: NamedExprAst
 target

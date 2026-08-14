@@ -891,7 +891,7 @@ printSmalltalkOn: aStream
 		and: [ModuleAst compilingDoitScope notNil
 		and: [(ModuleAst compilingDoitScope
 				objectNamed: (NameAst doitScopeNameFor: id asSymbol)) isNil
-		and: [(self isVariableIsDeclared: id asSymbol) not
+		and: [(self ___isDeclaredForThisScope___: id asSymbol) not
 		and: [(self isModuleVariableName: id) not
 		and: [(CallAst moduleFunctionNames notNil
 			and: [CallAst moduleFunctionNames includes: id asSymbol]) not
@@ -1377,6 +1377,37 @@ ___isEnclosingComprehensionTarget___: aSymbol
 		node := node parent.
 	].
 	^ false
+%
+
+category: 'other'
+method: NameAst
+___isDeclaredForThisScope___: aSymbol
+	"isVariableIsDeclared:, with the class body's own names invisible when this
+	read sits in a nested scope inside it.
+
+	isVariableIsDeclared: switches to the class-body-blind ``FromMethod'' walk
+	when it climbs out of a FunctionDefAst or a LambdaAst, but not out of a
+	COMPREHENSION -- which is equally a scope of its own in Python 3, and
+	equally does not see the enclosing class namespace.  So a class-level
+	``y'' counted as a declaration for a read inside a class-body
+	comprehension, and the doit fallback above concluded that a bare ``y''
+	would compile.  In a doit it does not: the name is in no symbol-list slot,
+	so the SMALLTALK compiler rejects the whole exec with ``undefined symbol
+	y'' before running a line of it.
+
+	    exec('class _C:\\n    y = 1\\n    [x + y for x in range(2)]')
+
+	is a plain NameError in CPython (the comprehension skips class scope and
+	finds no global ``y''), which is what the fallback now emits.
+
+	Only this guard consults it.  ___inNestedScopeWithinClassBody___ already
+	encodes the same rule -- including its one exception, the outermost
+	comprehension's outermost iterable, which CPython DOES evaluate in the
+	enclosing scope -- for the class-sibling read branches above."
+
+	self ___inNestedScopeWithinClassBody___
+		ifTrue: [^ self isVariableIsDeclaredFromMethod: aSymbol].
+	^ self isVariableIsDeclared: aSymbol
 %
 
 category: 'other'
