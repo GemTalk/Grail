@@ -33,7 +33,7 @@ different rows and merges cleanly.
 | test.test_bytes | OK | 317 | 0 | 0 | 25 |  |
 | test.test_collections | OK | 101 | 0 | 0 | 41 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
-| test.test_enum | ERROR | 1077 | 4 | 6 | 6 |  |
+| test.test_enum | ERROR | 1077 | 3 | 6 | 6 |  |
 | test.test_unary | OK | 6 | 0 | 0 | 0 |  |
 | test.test_int_literal | OK | 6 | 0 | 0 | 0 |  |
 | test.test_unpack | OK | 1 | 0 | 0 | 0 |  |
@@ -61,7 +61,7 @@ different rows and merges cleanly.
 | test.test_listcomps | ERROR | 60 | 7 | 19 | 0 |  |
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
 | test.test_copy | ERROR | 81 | 21 | 12 | 0 |  |
-| test.test_scope | ERROR | 41 | 2 | 1 | 4 |  |
+| test.test_scope | FAIL | 41 | 3 | 0 | 4 |  |
 | test.test_yield_from | ERROR | 43 | 17 | 12 | 0 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
 | test.test_format | OK | 18 | 0 | 0 | 3 |  |

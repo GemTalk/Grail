@@ -2673,6 +2673,34 @@ ___grailConstructMemberValue: memberType args: rawValue
 
 	| args |
 	args := Enum ___grailSpreadArgs: rawValue.
+	"str(bytes, encoding[, errors]) -- the ONLY multi-argument spelling of str(),
+	and the reason a member value can legitimately be a tuple whose first element
+	is bytes:
+
+	    class GoodStrEnum(str, Enum):
+	        three = b'3', 'ascii'          -- '3'
+
+	Two things blocked it.  The ``str'' handle is a BoundMethod of fixed arity 1,
+	so the call could not be made at all; and the best-effort guard below then
+	kept the raw tuple, so the member's value silently became a tuple.  Route it
+	through str's own varargs entry, and let the constructor's TypeError REACH
+	THE CALLER, which is what CPython does -- ``two = b'2', sys.getdefaultencoding''
+	is a TypeError out of the class statement (test_custom_strenum).
+
+	Keyed on the first element being BYTES, not on argument count, because a
+	multi-element tuple usually means something else entirely: it is the argument
+	list to the class's own __new__ (``key_type = 'An$(Bn)', 0''), which must not
+	be handed to str() -- doing so answered ``decoding str is not supported'' and
+	displaced the _value_ complaint test_missing_value_error waits for."
+	((memberType == Enum ___grailStrBuiltin)
+		and: [args @env0:size @env0:> 1
+		and: [(args @env0:at: 1) isKindOf: ByteArray]]) ifTrue: [
+			"Sent to Unicode7, not CharacterCollection: the decode allocates
+			through ``self'', and CharacterCollection is abstract (``a method has
+			been invoked in the abstract superclass ... #new:'').  Unicode7 is the
+			canonical narrow str class str.gs itself allocates."
+			^ Unicode7 @env0:perform: #'_str:kw:' env: 1
+				withArguments: { args. KeyValueDictionary @env0:new }].
 	^ [memberType @env0:perform: #'value:value:' env: 1
 		withArguments: { args. KeyValueDictionary @env0:new }]
 		@env0:on: AbstractException do: [:e | rawValue]

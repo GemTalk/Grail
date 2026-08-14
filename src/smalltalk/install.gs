@@ -650,6 +650,7 @@ run
 	at: #'ClassBodyAugAssignTestCase' put: nil;
 	at: #'MissingArgumentMessageTestCase' put: nil;
 	at: #'GlobalDeclarationScopeTestCase' put: nil;
+	at: #'ExecClassMethodScopeTestCase' put: nil;
 	at: #'MethodDocstringTestCase' put: nil;
 	at: #'GlobalStatementCodegenTestCase' put: nil;
 	at: #'EmailMessageTestCase' put: nil;
@@ -700,6 +701,7 @@ run
 	at: #'EnumPickleByNameTestCase' put: nil;
 	at: #'ClassBodyNamespaceTestCase' put: nil;
 	at: #'InspectGetmembersTestCase' put: nil;
+	at: #'StrDecodeArgsTestCase' put: nil;
 	at: #'StrEnumMixinAndNewTestCase' put: nil;
 	at: #'EnumAutoAtAssignmentTestCase' put: nil;
 	at: #'EnumDictTestCase' put: nil;
@@ -1483,6 +1485,7 @@ input src/smalltalk/PythonTests/ClassBodyNonlocalTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyAugAssignTestCase.gs
 input src/smalltalk/PythonTests/MissingArgumentMessageTestCase.gs
 input src/smalltalk/PythonTests/GlobalDeclarationScopeTestCase.gs
+input src/smalltalk/PythonTests/ExecClassMethodScopeTestCase.gs
 input src/smalltalk/PythonTests/MethodDocstringTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementCodegenTestCase.gs
 input src/smalltalk/PythonTests/EnumAutoImportTestCase.gs
@@ -1515,6 +1518,7 @@ input src/smalltalk/PythonTests/BuiltinSubclassPickleTestCase.gs
 input src/smalltalk/PythonTests/EnumPickleByNameTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNamespaceTestCase.gs
 input src/smalltalk/PythonTests/InspectGetmembersTestCase.gs
+input src/smalltalk/PythonTests/StrDecodeArgsTestCase.gs
 input src/smalltalk/PythonTests/StrEnumMixinAndNewTestCase.gs
 input src/smalltalk/PythonTests/EnumAutoAtAssignmentTestCase.gs
 input src/smalltalk/PythonTests/EnumDictTestCase.gs
