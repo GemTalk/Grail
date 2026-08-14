@@ -167,3 +167,20 @@ RESULTS = {
     'attr_shadows_global': class_attribute_shadows_an_exec_global(),
     'exec_matches_module': exec_agrees_with_module_compilation(),
 }
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.
+if __name__ == '__main__':
+    checks = [
+        plain_sibling_attribute_read,
+        comprehension_outermost_iterable_reads_a_sibling,
+        lambda_in_a_comprehension_reads_a_sibling,
+        nested_comprehension_over_a_sibling,
+        sibling_method_reference,
+        nested_class_sibling_reference,
+        class_body_still_reads_an_exec_global,
+        class_attribute_shadows_an_exec_global,
+        exec_agrees_with_module_compilation,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

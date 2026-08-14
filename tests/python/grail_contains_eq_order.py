@@ -50,3 +50,12 @@ def check():
     ok = ok and (2 in Iterable([1, 2, 3]))
     ok = ok and (not (9 in Iterable([1, 2, 3])))
     return ok
+
+
+# scripts/check_python_fixtures.sh runs this under CPython in CI.
+if __name__ == '__main__':
+    checks = [
+        check,
+    ]
+    for fn in checks:
+        print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

@@ -2397,3 +2397,31 @@ differs. This belongs with the class-body namespace work
 Smalltalk changed; the only fixture edit is a `__main__` block, which the harness
 provably never executes — `TracebackTestCase` loads the file with
 `name: 'live_frames'`.
+
+### 9.28 Widening the net: 15 fixtures → 38 (2026-08-13, gs40)
+
+§9.27 argued that converting fixtures, not tightening the gate, is what makes it
+worth anything. Done: the 23 fixtures whose checks already answered `True` under
+CPython now have `__main__` blocks, taking the gate from **15 files / 180 OK** to
+**38 files / 288 OK + 2 XFAIL**.
+
+Most of this is not traceback work at all — the converted set is class bodies,
+comprehension scoping, pickling, iterators, dataclasses and closures — so the
+substance lives in `docs/Testing_Guide.md` rather than here. Two things are worth
+recording where the earlier sections are:
+
+**A fixture can pass on import and fail as a script**, and the difference is
+`__name__`. The census imported each file under its real module name; the gate
+runs it as `__main__`. `exception_subclass_args.py` failed on exactly that,
+asserting a literal `'exception_subclass_args.Empty: boom'` — and the fix is a
+traceback rule this document had not yet stated: `format_exception_only`
+qualifies by `__module__`, but **CPython suppresses the prefix entirely for
+`__main__` and `builtins`**, which is why `ValueError: x` renders bare. The check
+now derives the prefix, so it is right in both contexts instead of pinned to one.
+
+**Two of the four historical bug-pinning fixtures are now covered**
+(`exec_class_definition.py`, `handler_raise.py`). `exception_naming.py` and
+`code_filename.py` remain outside, because they do not run under CPython as
+written — the honest accounting from §9.27 improves but does not close.
+
+SUnit **4288, all green**. No Smalltalk changed.
