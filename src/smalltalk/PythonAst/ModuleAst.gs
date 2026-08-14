@@ -127,7 +127,24 @@ evaluateSource: sourceString usingModuleScope: aSymbolDictionary as: aKind globa
 	which skips the walk entirely."
 
 	| module symbolList |
-	module := self parseSource: sourceString.
+	"Re-raise a PARSER SyntaxError so the Python ``str(e)'' carries its
+	message.  The env-0 parser can set only GemStone's messageText;
+	___signal___: populates the ``args'' tuple BaseException>>__str__ reads.
+	compile() has done this since test_dictcomps needed it, but exec() and
+	eval() reach the parser through here and did NOT, so every SyntaxError
+	they raised arrived with an EMPTY message -- assertRaisesRegex could
+	match nothing, and the test that checks WHICH syntax error you get could
+	not be written.  test_named_expressions checks all 15 of its invalid
+	cases through exec().
+
+	Wraps the PARSE only, not the evaluation below: a SyntaxError raised at
+	RUN time is already a Python one carrying its own args, and re-signalling
+	it from messageText would throw those away."
+	module := [self parseSource: sourceString]
+		on: SyntaxError
+		do: [:ex |
+			SyntaxError @env1:___signal___:
+				(ex messageText ifNil: ['invalid syntax'])].
 	module useTempsForBlock: false.
 	module ensureModuleScope: aSymbolDictionary.
 	aSetOrNil ifNotNil: [self collectGlobalNamesFrom: module into: aSetOrNil].
