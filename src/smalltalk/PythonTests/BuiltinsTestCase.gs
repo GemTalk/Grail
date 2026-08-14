@@ -569,13 +569,24 @@ testDivmod
 category: 'Grail-Tests - Sequence Functions'
 method: BuiltinsTestCase
 testEnumerate
-	"Test enumerate() — Phase-4 fast-path direct method dispatch."
+	"Test enumerate() — now a TYPE rather than a builtins method.
 
-	| b result lst first second |
-	b := builtins ___instance___.
+	It used to be dispatched as ``builtins enumerate: seq'', which this test
+	called directly.  That method is gone: while builtins published one, NameAst
+	read ``enumerate'' as a fast-path builtin and the bare name evaluated to a
+	BoundMethod instead of the class -- so ``class MyEnum(enumerate)'' raised
+	NameError and ``type(enumerate(s)) is enumerate'' was false.  Construction
+	now goes through the class, which is also what compiled Python reaches.
 
+	The pairs are checked lazily, one __next__ at a time, because the iterator
+	no longer materializes its source."
+
+	| result lst first second |
 	lst := list withAll: #('a' 'b' 'c').
-	result := b @env1:enumerate: lst.
+	result := enumerate @env1:__new__: lst.
+
+	self assert: result @env0:class equals: enumerate.
+	self assert: result @env1:__iter__ equals: result.
 
 	first := result @env1:__next__.
 	self assert: (first @env1:__getitem__: 0) equals: 0.

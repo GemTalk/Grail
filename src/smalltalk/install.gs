@@ -353,6 +353,7 @@ run
 	at: #'filter_iterator' put: nil;
 	at: #'map_iterator' put: nil;
 	at: #'zip_iterator' put: nil;
+	at: #'enumerate' put: nil;
 	at: #'hashlib' put: nil;
 	at: #'socket' put: nil;
 	at: #'PySocket' put: nil;
@@ -779,6 +780,7 @@ run
 	at: #'IsADirectoryErrorTestCase' put: nil;
 	at: #'IteratorTestCase' put: nil;
 	at: #'TzFileHistoryTestCase' put: nil;
+	at: #'EnumerateTypeTestCase' put: nil;
 	at: #'EnvVarGuardTestCase' put: nil;
 	at: #'ClassMethodDecoratorOrderTestCase' put: nil;
 	at: #'SlotsInheritedDictTestCase' put: nil;
@@ -1075,6 +1077,7 @@ input src/smalltalk/Python/dict_itemiterator.gs
 input src/smalltalk/Python/dict_keyiterator.gs
 input src/smalltalk/Python/dict_valueiterator.gs
 input src/smalltalk/Python/list_iterator.gs
+input src/smalltalk/Python/enumerate.gs
 input src/smalltalk/Python/seq_iterator.gs
 input src/smalltalk/Python/callable_iterator.gs
 input src/smalltalk/Python/range_iterator.gs
@@ -1616,6 +1619,7 @@ input src/smalltalk/PythonTests/PackageImportTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
 input src/smalltalk/PythonTests/TzFileHistoryTestCase.gs
+input src/smalltalk/PythonTests/EnumerateTypeTestCase.gs
 input src/smalltalk/PythonTests/EnvVarGuardTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodDecoratorOrderTestCase.gs
 input src/smalltalk/PythonTests/SlotsInheritedDictTestCase.gs
