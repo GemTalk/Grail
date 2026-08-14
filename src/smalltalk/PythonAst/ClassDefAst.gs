@@ -2939,6 +2939,19 @@ ___isClassBodyRuntimeStatement___: aStatement
 	((aStatement isKindOf: AugAssignAst)
 		and: [aStatement target isKindOf: NameAst]) ifTrue: [
 			^ (self ___classBodyNonlocalTargetNames___: aStatement) isEmpty].
+	"A bare EXPRESSION statement joins them for the same reason.  CPython
+	executes one at class-definition time -- it is how a class body calls
+	``vars().update({...})'' to define members computed at runtime (test_enum's
+	test_dynamic_members_with_static_methods) -- but it binds no name, so it
+	carried no classBodyAttributePairs and the structural compile dropped it
+	whole.  A class-body ``print(...)'' produced no output and no error either.
+
+	The DOCSTRING is excluded: the leading bare string literal is not an
+	expression CPython evaluates for effect, it is lifted into __doc__, and
+	___docString___ already emits it as a class attribute.  Every other pure
+	constant is excluded with it, since evaluating one can have no effect."
+	(aStatement isKindOf: ExprAst) ifTrue: [
+		^ (aStatement value isKindOf: ConstantAst) not].
 	^ (aStatement isKindOf: TryAst)
 		or: [(aStatement isKindOf: ForAst)
 		or: [(aStatement isKindOf: WhileAst)

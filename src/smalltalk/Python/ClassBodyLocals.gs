@@ -134,4 +134,127 @@ __delitem__: key
 	^ super __delitem__: key
 %
 
+category: 'Grail-Python Protocol'
+method: ClassBodyLocals
+update: other
+	"``vars().update({...})'' in a class body -- bind a class attribute per
+	entry, not just a mapping entry.
+
+	dict's own mutators store with ``at:put:'' rather than through
+	__setitem__, which is right for a dict (CPython's dict.update does not call
+	a subclass's __setitem__ either) but wrong HERE: CPython's class-body
+	vars()/locals() IS the namespace, so mutating it by any route reaches the
+	class.  Grail's is a connected snapshot, so the connection has to be made
+	per mutator.  Subscript assignment already went through __setitem__ and
+	worked; ``.update()'' silently dropped every entry (test_enum's
+	test_dynamic_members_with_static_methods, which defines its members that
+	way).
+
+	The argument shapes -- mapping, keys+__getitem__ protocol, iterable of
+	pairs -- and their error messages are dict's, reused by merging into a
+	scratch dict first and replaying THAT through __setitem__.  Replaying
+	preserves insertion order, which the enum case needs: a later duplicate has
+	to reach EnumDict to be refused."
+
+	| scratch |
+	self ___grailClass___ @env0:isNil ifTrue: [^ super update: other].
+	scratch := dict ___new___.
+	scratch update: other.
+	scratch @env0:keysAndValuesDo: [:k :v | self __setitem__: k _: v].
+	^ None
+%
+
+category: 'Grail-Python Protocol'
+method: ClassBodyLocals
+_update: positional kw: kwargs
+	"``vars().update(mapping, **kwargs)'' -- the varargs form.  Same reason as
+	update:, and the keyword half needs its own routing because dict's stores
+	the kwargs with at:put: directly rather than delegating.
+
+	The positional is merged FIRST, then the keywords, which is the order that
+	makes ``update({'FOO_CAT': 'aloof'}, **{'FOO_CAT': 'small'})'' raise
+	EnumDict's ``'FOO_CAT' already defined as 'aloof''' rather than quietly
+	taking the last value."
+
+	| cls |
+	cls := self ___grailClass___.
+	cls @env0:isNil ifTrue: [^ super _update: positional kw: kwargs].
+	positional @env0:isEmpty ifFalse: [self update: (positional @env0:at: 1)].
+	(kwargs @env0:isNil not and: [kwargs @env0:isEmpty not]) ifTrue: [
+		kwargs @env0:keysAndValuesDo: [:key :value |
+			(key @env0:isKindOf: CharacterCollection) ifFalse: [
+				TypeError ___signal___: 'keywords must be strings'].
+			self __setitem__: key @env0:asString _: value]].
+	^ None
+%
+
+category: 'Grail-Python Protocol'
+method: ClassBodyLocals
+setdefault: key _: default
+	"``vars().setdefault(name, x)'' -- an insertion, so it binds the class
+	attribute like any other.  An already-present key is answered untouched, so
+	no store happens and the class is not disturbed."
+
+	self ___grailClass___ @env0:isNil ifTrue: [^ super setdefault: key _: default].
+	(self @env0:includesKey: key) ifTrue: [^ self @env0:at: key].
+	^ self __setitem__: key _: default
+%
+
+category: 'Grail-Python Protocol'
+method: ClassBodyLocals
+pop: key _: default
+	"``vars().pop(name)'' -- a removal, so it unbinds the class attribute.
+	Routed through __delitem__ for that; the value is read before the delete
+	because the delete is what makes it unreadable."
+
+	| absent value |
+	self ___grailClass___ @env0:isNil ifTrue: [^ super pop: key _: default].
+	absent := self ___absentMarker___.
+	value := self get: key _: absent.
+	value == absent ifTrue: [^ default].
+	self __delitem__: key.
+	^ value
+%
+
+category: 'Grail-Python Protocol'
+method: ClassBodyLocals
+pop: key
+	"One-argument pop -- KeyError when absent, exactly as dict's does."
+
+	| absent value |
+	absent := self ___absentMarker___.
+	value := self pop: key _: absent.
+	value == absent ifTrue: [
+		key ___requireHashableAsDictKey___.
+		KeyError ___signal___: key].
+	^ value
+%
+
+category: 'Grail-Python Protocol'
+method: ClassBodyLocals
+popitem
+	"``vars().popitem()'' -- a removal, so it unbinds the class attribute too."
+
+	| pair |
+	self ___grailClass___ @env0:isNil ifTrue: [^ super popitem].
+	pair := super popitem.
+	"super already removed the mapping entry; unbind the class side to match."
+	self ___grailClass___
+		___classBodyDefinitionalDelete___: (pair @env0:at: 1) @env0:asString.
+	^ pair
+%
+
+category: 'Grail-Python Protocol'
+method: ClassBodyLocals
+clear
+	"``vars().clear()'' -- unbind every name the mapping holds, then empty it."
+
+	| keys |
+	self ___grailClass___ @env0:isNil ifTrue: [^ super clear].
+	keys := OrderedCollection @env0:new.
+	self @env0:keysDo: [:k | keys @env0:add: k].
+	keys @env0:do: [:k | self __delitem__: k].
+	^ None
+%
+
 set compile_env: 0
