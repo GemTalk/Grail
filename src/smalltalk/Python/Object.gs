@@ -2134,6 +2134,49 @@ ___classChainAttrLookup___: aSym
 
 category: 'Grail-Class Attr Overlay'
 method: object
+___classBodyAttrOutrankedByMethod___: aSym
+	"True when this instance's class chain supplies aSym as a compiled METHOD
+	nearer than the class whose BODY bound it as an attribute.
+
+	The metaclass-side counterpart of the test ___classChainAttrLookup___:
+	already makes for the dynInstVars store.  CPython holds a class's
+	attributes and its functions in ONE __dict__ and lets the MRO decide, so
+	the nearer class wins whichever kind it supplies.  Grail splits them --
+	ClassDefAst compiles a class-body ``x = v'' to an accessor PAIR on the
+	metaclass and a ``def x'' to an ordinary instance method -- and the
+	class-attribute probe consulted only the metaclass side, so a BASE class's
+	attribute beat a SUBCLASS's own def.
+
+	The owner of the accessor pair identifies the class whose body did the
+	binding; ``upTo:'' EXCLUDES it, so a class that both binds the attribute
+	and defines the method has had the attribute assigned OVER the method and
+	last-write-wins keeps the attribute -- the ordinary monkey-patch,
+	unchanged.
+
+	The pair test is also what keeps real class-side METHODS out:
+	@classmethod/@staticmethod have no unary setter, are not class-body data,
+	and have their own branch."
+
+	| startClass metaclass owner |
+	"Both receiver kinds, the same way ___classChainAttrLookup___: takes its
+	start: reading ``Sub.enum'' off the CLASS asks the same MRO question as
+	reading it off an instance, one level up."
+	startClass := (self isKindOf: Behavior)
+		ifTrue: [self]
+		ifFalse: [self @env0:class].
+	metaclass := startClass @env0:class.
+	(metaclass @env0:whichClassIncludesSelector: aSym environmentId: 1)
+		== nil ifTrue: [^ false].
+	owner := metaclass @env0:whichClassIncludesSelector:
+		(aSym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1.
+	owner == nil ifTrue: [^ false].
+	owner @env0:isMeta ifFalse: [^ false].
+	^ self ___methodDefinedFrom___: startClass
+		upTo: owner @env0:thisClass name: aSym
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
 ___methodDefinedFrom___: startClass upTo: attrClass name: aSym
 	"True when some class from startClass up to but EXCLUDING attrClass defines
 	aSym as a compiled env-1 method -- i.e. a class NEARER the receiver than
@@ -3095,10 +3138,15 @@ ___pyAttrLoad___: aSym
 		exclusion is exactly as narrow as the defect.  This mirrors the
 		binary-dunder mis-fire ___pyAttrStore___ guards against on the store
 		side, where ``__eq__:'' looks like a setter for the same reason."
+		"...and the MRO rule -- see ___classBodyAttrOutrankedByMethod___:.  A
+		SUBCLASS's own ``def x'' outranks the accessor pair a BASE class body
+		emitted for ``x = v'', on the class side exactly as on the instance
+		side: ``Sub.enum'' must answer Sub's function, not Base's value."
 		((aSym ~~ #'__new__')
 			and: [(self @env0:inheritsFrom: PythonInstance)
 			and: [(self ___respondsTo___: aSym)
-				and: [(self ___respondsTo___: sym1)]]])
+				and: [(self ___respondsTo___: sym1)
+				and: [(self ___classBodyAttrOutrankedByMethod___: aSym) not]]]])
 			ifTrue: [
 				^ self ___classDescriptorGet___: (self @env0:perform: aSym env: 1)
 		].
@@ -3111,7 +3159,12 @@ ___pyAttrLoad___: aSym
 		the value rather than wrapping it as a BoundMethod.  Covers
 		flask's ``SecureCookieSession(CallbackDict, SessionMixin)''."
 		owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
-		(owner notNil and: [(owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs'])
+		"The MRO rule on the CLASS side -- see ___classBodyAttrOutrankedByMethod___:.
+		``Sub.enum'' must answer Sub's own def, not the attribute Base's body
+		bound, exactly as ``Sub().enum'' must."
+		(owner notNil
+			and: [((owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs')
+			and: [(self ___classBodyAttrOutrankedByMethod___: aSym) not]])
 			ifTrue: [^ self ___classDescriptorGet___: (self @env0:perform: aSym env: 1)].
 		"Per-class dynamic attr store — the home of setattr(cls, ...)
 		fallbacks AND of class-attr values merged from SECONDARY bases
@@ -3251,7 +3304,8 @@ ___pyAttrLoad___: aSym
 				^ ___ovv].
 		metaclass := self @env0:class @env0:class.
 		((metaclass @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
-			and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil]) ifTrue: [
+			and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
+			and: [(self ___classBodyAttrOutrankedByMethod___: aSym) not]]) ifTrue: [
 			"Same descriptor treatment as the overlay path just above: a callable
 			class attribute (function/UnboundMethod/lambda) read through an
 			instance binds self via a MethodBinding, so a class-body ``m =
@@ -3284,7 +3338,15 @@ ___pyAttrLoad___: aSym
 		method) dicts -- so the seven walks did sevenfold the expensive part.
 		whichClassIncludesSelector: was 26% of the profiled suite's total time,
 		two thirds of it from right here."
-		(self ___metaChainOwnsAnyOf___: family from: metaclass)
+		"...and the SAME MRO rule for the class-side wrap.  Suppressing only the
+		attribute probe above hands the name to this branch instead, which
+		answers a BoundMethod bound to the CLASS -- the same wrong answer
+		wearing a different hat.  The test is precise about which names it
+		catches: it requires the accessor PAIR a class-body ``x = v'' emits, and
+		a @classmethod has no unary setter, so real class-side methods are
+		untouched."
+		((self ___classBodyAttrOutrankedByMethod___: aSym) not
+			and: [self ___metaChainOwnsAnyOf___: family from: metaclass])
 			ifTrue: [
 				"...unless a class-attribute store has REPLACED it.  In CPython a
 				``@classmethod def m'' is a class-dict entry, so a later
@@ -3359,7 +3421,14 @@ ___pyAttrLoad___: aSym
 	(self isKindOf: Behavior) ifFalse: [
 		| attrOwner metaOwns |
 		attrOwner := self @env0:class @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
-		(attrOwner notNil and: [(attrOwner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs'])
+		"...and the MRO rule once more -- see ___classBodyAttrOutrankedByMethod___:.
+		This is the THIRD reader of the class-body accessor for an instance (the
+		other two are in the PythonInstance branch above), and a rule that holds
+		for a name has to hold at every place that name can be answered: gating
+		only some of them moves the wrong answer rather than removing it."
+		(attrOwner notNil
+			and: [((attrOwner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs')
+			and: [(self ___classBodyAttrOutrankedByMethod___: aSym) not]])
 			ifTrue: [
 				"Enum member DynamicClassAttribute (test_shadowed_attr): a data-type
 				attribute (int.numerator / str.title) shadowed by a same-named sibling
@@ -3399,13 +3468,19 @@ ___pyAttrLoad___: aSym
 		metaOwns := [:sel | | o |
 			o := self @env0:class @env0:class @env0:whichClassIncludesSelector: sel environmentId: 1.
 			o notNil and: [o @env0:isMeta and: [(self ___respondsTo___: sel) not]]].
-		((metaOwns @env0:value: sym1)
+		"The MRO rule again -- see ___classBodyAttrOutrankedByMethod___:.  The
+		``x:'' this branch matches on can be the SETTER half of a class-body
+		accessor pair rather than a class method, and then a subclass ``def x''
+		outranks it.  Without this the name escapes the two gates in the
+		PythonInstance branch only to be answered here, bound to the CLASS."
+		((self ___classBodyAttrOutrankedByMethod___: aSym) not
+			and: [(metaOwns @env0:value: sym1)
 			or: [(metaOwns @env0:value: sym2)
 				or: [(metaOwns @env0:value: sym3)
 					or: [(metaOwns @env0:value: sym4)
 						or: [(metaOwns @env0:value: sym5)
 							or: [(metaOwns @env0:value: sym6)
-								or: [metaOwns @env0:value: symVA]]]]]])
+								or: [metaOwns @env0:value: symVA]]]]]]])
 			ifTrue: [^ BoundMethod receiver: self @env0:class selector: aSym].
 	].
 	"Other classes (built-in collections, strings, ...): if any class
