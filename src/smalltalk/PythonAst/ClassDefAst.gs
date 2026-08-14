@@ -968,7 +968,7 @@ printSmalltalkRuntimeOn: aStream
 		so NameAst falls back to module scope for later siblings
 		(``empty_values = list(validators.EMPTY_VALUES)'' before
 		``def validators'' — django's Field)."
-		| firstBinding attrAssignPos |
+		| firstBinding attrAssignPos globalWrites flushGlobalsBefore |
 		firstBinding := IdentityKeyValueDictionary new.
 		attrAssignPos := IdentityKeyValueDictionary new.
 		"Each statement ANNOUNCES what it binds (___boundTargetNames___) and
@@ -995,8 +995,45 @@ printSmalltalkRuntimeOn: aStream
 		emitting it once per target re-evaluates the RHS per name, which is wrong
 		for an RHS with identity/side effects.  Block-wrapped only to add the
 		temp without touching the method-level declaration."
+		"A class-body statement assigning a name the body declared ``global''.
+		It binds the MODULE, not a class attribute, so the structural compile
+		has nothing to emit for it and dropped it whole -- ``class C: global x;
+		x = 13'' left the module's x alone AND bound a class attribute of that
+		name (the name is now excluded from classBodyAttributes, so only the
+		write is left to do).
+
+		Emitted in SOURCE ORDER, interleaved with the attribute stores below
+		rather than in a pass after them.  A pass afterwards is what the
+		``nonlocal'' writes use and it is wrong here: a later attribute that
+		READS the declared name would see the pre-write value.  ``global g; g =
+		2; y = g'' in a class body must leave y == 2 (test_listcomps
+		test_explicit_global), and with a trailing pass it answered 1.
+
+		Emitted through the statement's OWN printSmalltalkOn:, where AssignAst's
+		store routing sees the class body's declaration via
+		___nearestEnclosingScopeDeclaresGlobal___ and picks the module receiver
+		-- or, inside a doit, the scope handle."
+		globalWrites := self ___classBodyGlobalWriteStatements___.
+		flushGlobalsBefore := [:limit |
+			[globalWrites notEmpty and: [globalWrites first key < limit]]
+					whileTrue: [
+						| entry bound |
+						entry := globalWrites removeFirst.
+						bound := IdentitySet new.
+						firstBinding keysAndValuesDo: [:nm :p |
+							p < entry key ifTrue: [bound add: nm]].
+						CallAst classBodyBoundNames: bound.
+						entry value printSmalltalkOn: aStream.
+						aStream lf]].
 		[:emittedChainValues |
 		classAttrs do: [:pair |
+			"Any global-declared write that stands BEFORE this attribute in the
+			source goes out first, so the attribute's value expression reads
+			what the write left.  An attribute whose position is unknown flushes
+			nothing -- the ordering can only be honoured against a position."
+			(attrAssignPos at: pair key asSymbol
+				ifAbsent: [firstBinding at: pair key asSymbol ifAbsent: [nil]])
+					ifNotNil: [:attrPos | flushGlobalsBefore value: attrPos].
 			"pair value is nil for bare annotations (``x: int'' with no
 			assignment) — skip the init emit; the slot stays nil until
 			some later assignment fills it."
@@ -1037,6 +1074,8 @@ printSmalltalkRuntimeOn: aStream
 						aStream nextPutAll: ')).'; lf]
 			].
 		]] value: IdentityKeyValueDictionary new.
+		"Whatever is left stands after the last attribute in the body."
+		flushGlobalsBefore value: body body size + 1.
 		"Top-level ``if'' statements in the class body: CPython runs
 		them at class-DEFINITION time — the C-vs-Python dual-module
 		pattern (``if c_functools: partial = c_functools.partial''
@@ -2351,7 +2390,7 @@ classBodyAttributes
 	value AST (emitted once below, the rest aliased); attribute and
 	subscript targets declare nothing on the class and yield no entry."
 
-	| pairs aliasNames nonlocals |
+	| pairs aliasNames nonlocals globals |
 	"Sibling-method aliases (``__lt__ = __eq__'') are compiled as real
 	delegating methods (see ___classBodyMethodAliases___), NOT materialized
 	as class attributes -- exclude their names here."
@@ -2365,6 +2404,17 @@ classBodyAttributes
 	nonlocals := (body notNil and: [body nonlocalNames notNil])
 		ifTrue: [body nonlocalNames]
 		ifFalse: [#()].
+	"A name the body declared ``global'' is the same story one scope further
+	out: it names the MODULE binding, so an assignment to it is not a class
+	attribute either.  ``class Global: global x; x = 13'' leaves Global with no
+	``x'' at all -- test_scope's testScopeOfGlobalStmt reads it back through a
+	method, which sees the module value.  Grail bound a class attribute AND
+	left the module binding untouched, wrong in both directions.  The write
+	itself is emitted by the global-write flush in printSmalltalkRuntimeOn:,
+	interleaved with these attributes in SOURCE ORDER."
+	globals := (body notNil and: [body globalNames notNil])
+		ifTrue: [body globalNames]
+		ifFalse: [#()].
 	pairs := OrderedCollection new.
 	"Each binding form says which attributes it yields; this method only
 	applies the rule ClassDefAst owns -- drop the sibling-method aliases,
@@ -2377,7 +2427,8 @@ classBodyAttributes
 	body body do: [:stmt |
 		stmt classBodyAttributePairs do: [:pair |
 			((aliasNames includes: pair key)
-				or: [nonlocals includes: pair key asSymbol])
+				or: [(nonlocals includes: pair key asSymbol)
+				or: [globals includes: pair key asSymbol]])
 					ifFalse: [pairs add: pair]]].
 	^ pairs
 %
@@ -2614,6 +2665,51 @@ ___isClassBodyAttributeAssign___: stmt
 	(tgt value isKindOf: NameAst) ifFalse: [^ false].
 	^ self body body anySatisfy: [:s |
 		(s isKindOf: ClassDefAst) and: [s name asString = tgt value id asString]]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyGlobalTargetNames___: stmt
+	"The bare-NAME targets of stmt that this class body declared ``global'',
+	as ___classBodyNonlocalTargetNames___ does for ``nonlocal'' -- and for the
+	same reason: such a statement assigns the MODULE binding rather than a
+	class attribute, so it needs an emit of its own rather than the structural
+	class-attribute compile.
+
+	No assignability guard is needed, unlike the nonlocal case: that one has to
+	prove Grail HAS a temp for the name in the enclosing scope, whereas a
+	module binding is reached through the module instance (or, in a doit, the
+	scope handle) and is always writable."
+
+	| targets globals |
+	globals := (body notNil and: [body globalNames notNil])
+		ifTrue: [body globalNames]
+		ifFalse: [^ #()].
+	globals isEmpty ifTrue: [^ #()].
+	targets := (stmt isKindOf: AssignAst)
+		ifTrue: [stmt targets]
+		ifFalse: [(stmt isKindOf: AugAssignAst)
+			ifTrue: [Array with: stmt target]
+			ifFalse: [^ #()]].
+	^ (targets select: [:t |
+		(t isKindOf: NameAst) and: [globals includes: t id asSymbol]])
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyGlobalWriteStatements___
+	"The class body's ``global''-declared assignments, as (sourcePosition ->
+	statement) associations in body order.  printSmalltalkRuntimeOn: flushes
+	them into the class-attribute emit at their own positions, so a later
+	attribute reading the name sees the value the write left."
+
+	| result |
+	result := OrderedCollection new.
+	body ifNil: [^ result].
+	body body doWithIndex: [:stmt :pos |
+		(self ___classBodyGlobalTargetNames___: stmt) isEmpty
+			ifFalse: [result add: pos -> stmt]].
+	^ result
 %
 
 category: 'Grail-Class Compilation'

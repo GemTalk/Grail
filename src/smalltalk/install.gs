@@ -651,6 +651,7 @@ run
 	at: #'MissingArgumentMessageTestCase' put: nil;
 	at: #'GlobalDeclarationScopeTestCase' put: nil;
 	at: #'ExecClassMethodScopeTestCase' put: nil;
+	at: #'ClassBodyGlobalTestCase' put: nil;
 	at: #'MethodDocstringTestCase' put: nil;
 	at: #'GlobalStatementCodegenTestCase' put: nil;
 	at: #'EmailMessageTestCase' put: nil;
@@ -1485,6 +1486,7 @@ input src/smalltalk/PythonTests/ClassBodyAugAssignTestCase.gs
 input src/smalltalk/PythonTests/MissingArgumentMessageTestCase.gs
 input src/smalltalk/PythonTests/GlobalDeclarationScopeTestCase.gs
 input src/smalltalk/PythonTests/ExecClassMethodScopeTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyGlobalTestCase.gs
 input src/smalltalk/PythonTests/MethodDocstringTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementCodegenTestCase.gs
 input src/smalltalk/PythonTests/EnumAutoImportTestCase.gs

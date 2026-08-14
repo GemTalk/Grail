@@ -138,7 +138,7 @@ printSmalltalkOn: aStream
 		elsewhere."
 		((tgt isKindOf: NameAst)
 			and: [ModuleAst compilingDoitScope notNil
-			and: [tgt ___nearestEnclosingFunctionDeclaresGlobal___: tgt id]])
+			and: [tgt ___nearestEnclosingScopeDeclaresGlobal___: tgt id]])
 			ifTrue: [
 				aStream
 					nextPutAll: '___pyGlobals___ @env0:at: #''';

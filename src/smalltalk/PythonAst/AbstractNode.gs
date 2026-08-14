@@ -433,16 +433,56 @@ ___functionDeclaresGlobal___: aFunctionNode named: aSymbol
 	per-scope set the parser records on the body BlockAst.  A LambdaAst
 	cannot contain statements, so it never declares one."
 
-	| ivars bodyIdx bodyNode gset |
 	(aFunctionNode isKindOf: FunctionDefAst) ifFalse: [^ false].
-	ivars := aFunctionNode class allInstVarNames.
+	^ self ___scopeNodeDeclaresGlobal___: aFunctionNode named: aSymbol
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___scopeNodeDeclaresGlobal___: aScopeNode named: aSymbol
+	"Does aScopeNode's own scope declare ``global aSymbol''?  Works for a
+	FunctionDefAst or a ClassDefAst -- both hold their statements in a
+	``body'' BlockAst, and the parser records the per-scope global set there."
+
+	| ivars bodyIdx bodyNode gset |
+	ivars := aScopeNode class allInstVarNames.
 	bodyIdx := ivars indexOf: #body.
 	bodyNode := bodyIdx > 0
-		ifTrue: [aFunctionNode instVarAt: bodyIdx]
+		ifTrue: [aScopeNode instVarAt: bodyIdx]
 		ifFalse: [nil].
 	(bodyNode isKindOf: BlockAst) ifFalse: [^ false].
 	gset := bodyNode globalNames.
 	^ gset notNil and: [gset includes: aSymbol asSymbol]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___nearestEnclosingScopeDeclaresGlobal___: aSymbol
+	"``global aSymbol'' declared by the nearest enclosing scope, counting a
+	CLASS BODY as a scope -- which ___nearestEnclosingFunctionDeclaresGlobal___
+	deliberately does not, since a class body is not a scope a nested function
+	resolves free names through.
+
+	For a STORE it is the right question, and a class body can be the scope
+	that answers it:
+
+	    x = 12
+	    class Global:
+	        global x
+	        x = 13        # rebinds the MODULE x; Global gets no ''x'' attribute
+
+	Grail read the declaration for neither part: it bound x as a class
+	attribute and left the module binding at 12."
+
+	| node |
+	node := parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: LambdaAst) ifTrue: [^ false].
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: ClassDefAst])
+			ifTrue: [^ self ___scopeNodeDeclaresGlobal___: node named: aSymbol].
+		node := node parent.
+	].
+	^ false
 %
 
 category: 'Grail-codegen helpers'
@@ -960,12 +1000,17 @@ isModuleScopeStoreTarget: aNameAst
 	no enclosing function shadows it as a local."
 
 	CallAst moduleClassBeingCompiled ifNil: [^ false].
-	"``global x'' in the nearest enclosing function forces the module
+	"``global x'' in the nearest enclosing SCOPE forces the module
 	route -- even inside a class method (the emitters pick the module-
 	instance receiver via ___moduleStoreReceiverExpr___) and past any
 	enclosing-function shadow (Python: the declaration binds the name
-	to the module for the whole declaring scope)."
-	(aNameAst ___nearestEnclosingFunctionDeclaresGlobal___: aNameAst id)
+	to the module for the whole declaring scope).
+
+	A CLASS BODY counts as that scope.  ``class C: global x; x = 13''
+	rebinds the module's x and leaves C without an ``x'' attribute;
+	asking only about enclosing FUNCTIONS missed the declaration and
+	stored a class attribute instead."
+	(aNameAst ___nearestEnclosingScopeDeclaresGlobal___: aNameAst id)
 		ifTrue: [^ true].
 	CallAst classBeingCompiled ifNotNil: [^ false].
 	(aNameAst isModuleVariableName: aNameAst id) ifFalse: [^ false].
