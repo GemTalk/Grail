@@ -84,14 +84,21 @@ class ABCMeta:
     def __subclasscheck__(cls, subclass):
         """issubclass(subclass, cls).
 
-        Grail reaches this only after the real Smalltalk chain and the C3
-        MRO have both missed, so a genuine subclass never gets here and the
-        registry/hook answers are all that remain."""
+        Decides the REAL chain as well as the virtual one, in CPython's
+        order: the hook first, then genuine inheritance, then the registry.
+        That order is not optional -- a __subclasshook__ answering False
+        must be able to disown a real subclass -- and neither is covering
+        inheritance here at all: builtins delegates to this method BEFORE
+        walking the Smalltalk chain, exactly as CPython's
+        PyObject_IsSubclass hands the whole question to the metaclass, so
+        anything this does not answer is answered wrongly."""
         hook = getattr(cls, '__subclasshook__', None)
         if hook is not None:
             ok = hook(subclass)
             if ok is not NotImplemented:
                 return bool(ok)
+        if cls in getattr(subclass, '__mro__', ()):
+            return True
         for registered in _registry.get(cls, ()):
             if subclass is registered or issubclass(subclass, registered):
                 return True

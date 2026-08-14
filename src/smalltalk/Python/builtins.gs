@@ -572,64 +572,16 @@ dir: anObject
 	^ anObject __dir__
 %
 
-category: 'Grail-Built-in Functions'
-method: builtins
-enumerate: anIterable
-	"Python builtin enumerate(iterable) — fixed-arity fast path (start=0)."
-
-	^ self ___enumerate___: anIterable start: 0
-%
-
-category: 'Grail-Built-in Functions'
-method: builtins
-enumerate: anIterable _: startValue
-	"Python builtin enumerate(iterable, start) — the 2-positional form
-	(enum.py's own _EnumDict / _iter helpers pass an explicit start)."
-
-	^ self ___enumerate___: anIterable start: startValue
-%
-
-category: 'Grail-Built-in Functions'
-method: builtins
-_enumerate: positional kw: kwargs
-	"Python builtin enumerate(iterable, start=0) — varargs entry for the
-	``start='' keyword (and the positional start) the fixed-arity forms
-	can't accept together."
-
-	| iterable start |
-	iterable := positional @env0:at: 1.
-	start := (positional @env0:size @env0:>= 2)
-		ifTrue: [positional @env0:at: 2]
-		ifFalse: [
-			kwargs @env0:isNil
-				ifTrue: [0]
-				ifFalse: [kwargs @env0:at: 'start' ifAbsent: [0]]].
-	^ self ___enumerate___: iterable start: start
-%
-
-category: 'Grail-Built-in Functions'
-method: builtins
-___enumerate___: anIterable start: startValue
-	"Shared enumerate core: yield (index, item) pairs counting from
-	startValue.  Eager (materializes to a list iterator) as the original
-	1-arg form was."
-
-	| iter lst index done |
-	lst := list ___new___.
-	index := startValue.
-	iter := anIterable __iter__.
-	done := false.
-	[done] @env0:whileFalse: [
-		| item pair |
-		[
-			item := iter __next__.
-			pair := tuple @env0:withAll: {index. item}.
-			lst append: pair.
-			index := index @env0:+ 1
-		] @env0:on: StopIteration do: [:ex | done := true]
-	].
-	^ lst __iter__
-%
+! ``enumerate'' is a TYPE, not a builtins function -- see Python/enumerate.gs.
+! It had four entry points here (enumerate:, enumerate:_:, _enumerate:kw: and
+! the ___enumerate___:start: core).  They are gone rather than kept as
+! shorthand: NameAst treats any name the builtins class publishes a method for
+! as a fast-path builtin and emits a BoundMethod for it, so while they existed
+! the bare name ``enumerate'' evaluated to that wrapper instead of the class.
+! ``enum = enumerate'' then stored a BoundMethod, and ``type(enumerate(s)) is
+! enumerate'' was false.  Removing them lets the name resolve to the class the
+! same way ``list'' and ``tuple'' do, and a direct ``enumerate(x)'' call
+! becomes ordinary instantiation, which is where the argument checking lives.
 
 category: 'Grail-Built-in Functions'
 method: builtins
@@ -942,6 +894,27 @@ ___buildLocals___: pairsArray
 	pairsArray @env0:do: [:pair |
 		(pair @env0:at: 2) == nil ifFalse: [
 			d __setitem__: ((pair @env0:at: 1) @env0:asUnicodeString) _: (pair @env0:at: 2)]].
+	^ d
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___buildClassBodyLocals___: pairsArray forClass: aClass
+	"Backing for the CLASS-BODY locals()/vars() rewrite (CallAst >>
+	printClassBodyLocalsOn:).  Same pairs as ___buildLocals___: -- the names the
+	body has bound so far -- but the answer is a ClassBodyLocals, so a write
+	through it binds a class attribute instead of vanishing.
+
+	The entries go in BEFORE the class is bound, which is what keeps seeding
+	from writing through: ClassBodyLocals >> __setitem__ is the inherited dict
+	store until ___grailBindClass___ runs."
+
+	| d |
+	d := ClassBodyLocals ___new___.
+	pairsArray @env0:do: [:pair |
+		(pair @env0:at: 2) == nil ifFalse: [
+			d __setitem__: ((pair @env0:at: 1) @env0:asUnicodeString) _: (pair @env0:at: 2)]].
+	d ___grailBindClass___: aClass.
 	^ d
 %
 
@@ -1978,6 +1951,14 @@ reversed: aSequence
 	env-0 reverseDo:) hit MNU."
 
 	| lst |
+	"``__reversed__ = None'' BLOCKS, the same rule that makes ``__hash__ =
+	None'' unhashable: the lookup succeeds and yields None, so CPython reports
+	the type as not reversible rather than falling back to the sequence
+	protocol.  A class that declares __len__ and __getitem__ would otherwise
+	reverse perfectly well, which is precisely what the block exists to
+	prevent (test_enumerate's TestReversed.test_objmethods)."
+	(self ___reversedBlocked___: aSequence)
+		ifTrue: [^ self ___notReversible___: aSequence].
 	(aSequence ___respondsTo___: #'__reversed__')
 		ifTrue: [^ aSequence __reversed__].
 	"A string reversed must yield 1-char STRINGS, matching forward str
@@ -1987,9 +1968,64 @@ reversed: aSequence
 	CharacterCollections, so they keep the reverseDo: path (ints)."
 	(aSequence @env0:isKindOf: CharacterCollection)
 		ifTrue: [^ (aSequence @env0:reverse) __iter__].
-	lst := list ___new___.
-	aSequence @env0:reverseDo: [:item | lst append: item].
-	^ lst __iter__
+	"OLD-STYLE SEQUENCE PROTOCOL.  A user class with no __reversed__ is
+	reversible when it answers __getitem__, and CPython walks it DOWN from
+	len - 1.  Grail went straight to the env-0 ``reverseDo:'', which such a
+	class does not understand -- an uncatchable MNU, not the TypeError Python
+	code catches.
+
+	The two failure messages are distinct and CPython distinguishes them in
+	this order: reversed_new tests PySequence_Check (i.e. __getitem__) FIRST,
+	so an object with __len__ but no __getitem__ is ``not reversible'', and
+	only then takes the length, so an object with __getitem__ but no __len__
+	reports ``has no len()''."
+	"A NATIVE Smalltalk sequence keeps the reverseDo: route.  It would satisfy
+	the sequence protocol below too, but the iterator type is observable:
+	pickle.py reduces each built-in iterator by type, and routing tuples
+	through seq_iterator made a reversed tuple reload as a tuple_iterator --
+	a different type than it started as (TestReversed.test_pickle)."
+	(aSequence @env0:class @env0:whichClassIncludesSelector: #'reverseDo:'
+		environmentId: 0) @env0:isNil ifFalse: [
+		lst := list ___new___.
+		aSequence @env0:reverseDo: [:item | lst append: item].
+		^ lst __iter__].
+	(self ___hasProtocolForCall___: aSequence _: '__getitem__') ifTrue: [
+		(self ___hasProtocolForCall___: aSequence _: '__len__') ifFalse: [
+			^ TypeError ___signal___: ('object of type '''
+				@env0:, (aSequence ___pyTypeNameForError___)
+				@env0:, ''' has no len()')].
+		^ seq_iterator ___onReverse: aSequence].
+	^ self ___notReversible___: aSequence
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___reversedBlocked___: anObject
+	"True when anObject's class body bound __reversed__ to None.
+
+	ClassDefAst compiles a class-body ``name = value'' to an accessor pair in
+	category ``Grail-Class Attrs'' on the metaclass, so that is where the None
+	is found -- ___respondsTo___ would not see it, and a plain getattr would
+	answer the None without saying it came from a class-body binding rather
+	than from an absent name."
+
+	| owner |
+	owner := anObject @env0:class @env0:class
+		@env0:whichClassIncludesSelector: #'__reversed__' environmentId: 1.
+	owner @env0:isNil ifTrue: [^ false].
+	((owner @env0:categoryOfSelector: #'__reversed__' environmentId: 1)
+		@env0:asString @env0:= 'Grail-Class Attrs') ifFalse: [^ false].
+	^ (anObject @env0:class @env0:perform: #'__reversed__' env: 1)
+		@env0:== (Python @env0:at: #None otherwise: nil)
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___notReversible___: aSequence
+	"CPython's reversed_new error for a type that cannot be reversed."
+
+	^ TypeError ___signal___: ('''' @env0:, (aSequence ___pyTypeNameForError___)
+		@env0:, ''' object is not reversible')
 %
 
 category: 'Grail-Built-in Functions'
@@ -2025,7 +2061,17 @@ round: aNumber
 		ifTrue: [^ aNumber perform: #'___round__:kw:' env: 1 withArguments: { { }. nil }].
 	((aNumber @env0:class @env0:whichClassIncludesSelector: #'__round__' environmentId: 1) @env0:notNil)
 		ifTrue: [^ aNumber @env0:perform: #'__round__' env: 1].
-	^ aNumber @env0:rounded
+	"A non-number reaches the kernel's #rounded, which it does not understand
+	-- an UNCATCHABLE MessageNotUnderstood where CPython raises a perfectly
+	ordinary TypeError.  gettext._as_int is built on catching exactly that
+	(``try: round(n) / except TypeError:'' is how it rejects a non-integer
+	plural value), so the MNU escaped the except clause and killed the test.
+	Converted the same way len: converts its own MNU, and worded as CPython
+	words it: ``type str doesn't define __round__ method''."
+	^ [aNumber @env0:rounded] @env0:on: MessageNotUnderstood do: [:ex |
+		TypeError ___signal___: ('type ' @env0:,
+			(bytes ___pyTypeNameOf___: aNumber) @env0:,
+			' doesn''t define __round__ method')]
 %
 
 category: 'Grail-Built-in Functions'
@@ -2496,7 +2542,24 @@ method: builtins
 ___isInstanceSingle___: anObject of: aClass
 	"isinstance with a single class argument (post-tuple-expansion)."
 
-	| result baCls egCls |
+	| result baCls egCls hook |
+	"CPython PyObject_IsInstance: after the exact-type fast path it looks up
+	__instancecheck__ on TYPE(cls) and, when the metaclass supplies one,
+	DELEGATES to it entirely.  That is the whole ABC mechanism -- what makes
+	isinstance(x, MyABC) consult register()ed classes and __subclasshook__ --
+	and Grail never looked, so a metaclass defining it was simply ignored
+	(test_typechecks).
+
+	The exact-type match short-circuits first, as CPython's does: it is the
+	common case and must not pay a lookup or a Python call.  The hook itself is
+	nil unless the class recorded a ``metaclass='' that defines the method, so
+	ordinary isinstance pays one SessionTemps read."
+	(aClass isKindOf: Behavior) ifTrue: [
+		(anObject @env0:class == aClass) ifTrue: [^ true].
+		hook := aClass ___metaclassCheckHook___: #'__instancecheck__'.
+		hook @env0:notNil ifTrue: [
+			"PyObject_IsTrue on the result, so any truthy answer counts."
+			^ (hook ___pyCallValue___: { aClass. anObject } kw: nil) ___isTruthy___]].
 	"Non-class classinfo (isinstance(x, functools.cached_property)
 	where the attr resolved to a BoundMethod): raise CPython's
 	catchable TypeError -- isKindOf: on a non-Behavior dies with an
@@ -2606,13 +2669,6 @@ ___isInstanceSingle___: anObject of: aClass
 		probes aClass's metaclass chain (class-side responds-to)."
 		(aClass ___respondsTo___: #'__instancecheck__:') ifTrue: [
 			result := aClass __instancecheck__: anObject
-		] ifFalse: [
-			"...and the hook a recorded ``metaclass='' contributes, which lives on
-			the class's TYPE and so is not in the chain just walked.  See the
-			matching consult in ___isSubclassSingle___:of:."
-			(aClass ___metaclassMethodFor___: #'__instancecheck__')
-				@env0:ifNotNil: [:___hook |
-					result := (___hook value: { anObject } value: nil) == true]
 		]
 	].
 	"CPython: a bytearray is NOT a bytes -- they are distinct types.  Grail
@@ -2817,6 +2873,12 @@ ___isSubclass___: aClass of: aClassOrTuple depth: aDepth
 		].
 		^ false
 	].
+	"__subclasscheck__ on the metaclass wins over the built-in walk, exactly as
+	__instancecheck__ does for isinstance -- see ___isInstanceSingle___:of:."
+	(target isKindOf: Behavior) ifTrue: [ | hook |
+		hook := target ___metaclassCheckHook___: #'__subclasscheck__'.
+		hook @env0:notNil ifTrue: [
+			^ (hook ___pyCallValue___: { target. sub } kw: nil) ___isTruthy___]].
 	^ self ___isSubclassSingle___: sub of: target
 %
 
@@ -3050,14 +3112,6 @@ ___isSubclassSingle___: sub of: target
 	the widenings, and the C3 MRO all missed."
 	(target ___respondsTo___: #'__subclasscheck__:') ifTrue: [
 		^ (target __subclasscheck__: sub) == true].
-	"The same hook contributed by a recorded ``metaclass='' rather than
-	inherited: ``class B(metaclass=ABCMeta)'' puts __subclasscheck__ on ABCMeta,
-	which is B's TYPE and so not in the chain ___respondsTo___: walks.  This is
-	the road every user-written ABC takes -- collections.abc's own ABCs reach the
-	branch above instead, because _ABCRoot is a real base of theirs."
-	(target ___metaclassMethodFor___: #'__subclasscheck__')
-		@env0:ifNotNil: [:___hook |
-			^ (___hook value: { sub } value: nil) == true].
 	^ false
 %
 

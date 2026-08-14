@@ -213,17 +213,21 @@ method: Behavior
 mro
 	"Python ``cls.mro()'': the method resolution order as a LIST.
 
-	CPython's type.mro() and cls.__mro__ answer the same linearization in
-	different containers -- a fresh list from the method, a cached tuple from
-	the attribute -- so this derives from __mro__ rather than repeating it.
-	The list is fresh per call, as in CPython, where mutating the result must
-	not disturb the class.
+	The same linearization ``cls.__mro__'' answers -- this is the callable
+	spelling of it, and CPython's differs only in returning a fresh list where
+	__mro__ is a tuple.  A metaclass computing subclass relationships reaches for
+	it (test_typechecks's ABC.__subclasscheck__ does ``any(c in candidates for c
+	in sub.mro())''), and abc-style code generally prefers it because the list is
+	safe to mutate.
 
-	Written by anything that inspects a hierarchy by hand instead of asking
-	issubclass: test_typechecks' metaclass settles __subclasscheck__ with
-	``any(c in candidates for c in sub.mro())''."
+	Answered as a real method rather than a value, so ``cls.mro'' wraps as a
+	BoundMethod and ``cls.mro()'' calls it -- unlike __mro__, which
+	___pyAttrLoad___: lists among the dunders that always read as their value."
 
-	^ (self __mro__) @env0:asOrderedCollection
+	| lst |
+	lst := Python @env0:at: #list otherwise: nil.
+	lst == nil ifTrue: [^ Array @env0:withAll: self __mro__].
+	^ lst @env0:withAll: self __mro__
 %
 
 category: 'Grail-Reflection'

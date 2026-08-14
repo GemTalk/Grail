@@ -155,13 +155,50 @@ the `def` gap is what would let the rule move to where CPython keeps it.
 A namedtuple value carrying markers is left to the builder, which unwraps and
 rebuilds it. The namespace handles a bare marker and a plain tuple of markers.
 
+## Stage 4, as shipped
+
+`locals()` / `vars()` in a class body answers a **`ClassBodyLocals`** — the
+snapshot it always answered, with the writes connected. `__setitem__` and
+`__delitem__` route through `___classBodyDefinitionalStore___` /
+`___classBodyDefinitionalDelete___`, the two entry points a class-body `if`
+branch and a class-body loop already store through, so a write binds a class
+attribute *and* is offered to the prepared namespace on the same terms as any
+other class-body assignment.
+
+Reads had to move with it. Grail resolves a class-body name statically, which is
+exact only for a body whose bindings are all statements — so a body that calls
+`locals()` now probes the class's own dynamically-bound names first, CPython's
+LOAD_NAME order. The probe is gated on that call (the only way a name can be
+bound behind codegen's back) and reads the class's **own** holder, never the
+bases, since LOAD_NAME does not see inherited attributes.
+
+Two class-body statement kinds that were **dropped whole** are emitted with it,
+because `locals()['x'] = 43` is one of them: an assignment through a subscript,
+and `del`. Both go out at their own source position, interleaved with the
+attribute stores, since either can change what a later attribute value reads.
+
+That closes `test_scope` (`FAIL/2 -> OK/0`) — `testClassAndGlobal` and
+`testClassNamespaceOverridesClosure`, the two the stage-1 note listed as
+needing the namespace.
+
+Note what it does **not** buy: `test_ignore` and
+`test_dynamic_members_with_static_methods` write into `vars()` in an **enum**
+body, and their names still have to become members. The mapping now carries the
+write to `EnumDict`; the member set is built from `___classBodyOrder___`, a
+static list, which a dynamic name never joins.
+
 ## What is still missing
 
 - `def` and nested `class` bindings bypass the namespace — each has its own
   emission path. This is now the load-bearing one: it blocks the `_auto_called`
-  ordering rule moving to `EnumDict`, where CPython keeps it
-- `vars()` inside a body answers a plain dict, not the live namespace, which is
-  what `test_ignore` and `test_dynamic_members_with_static_methods` write into
+  ordering rule moving to `EnumDict`, where CPython keeps it, and it is why a
+  class-body `del` of a `def`-bound name is still dropped (removing the method
+  would break a sibling assignment, which compiles to a `BoundMethod` naming
+  its *selector* — flask's `NullSession`)
+- `locals()` answers a mapping bound to the class, but not the prepared
+  namespace **object**: an alias held across statements reports the names bound
+  up to the call rather than growing with the body. Same root cause — a body is
+  scanned, not executed into a mapping
 - an inherited PYTHON metaclass is not asked, per the note above
 
 ## Scale
@@ -169,5 +206,6 @@ rebuilds it. The namespace handles a bare marker and a plain tuple of markers.
 Stages 1 and 2 touched every class definition in the corpus, so they were tier 2
 by `.claude/CLAUDE.md`'s rule and each took a full CPython suite run. Stage 3 did
 not: it is confined to `EnumDict` and `PyEnumTypes`, so it is tier 1 — the
-machinery it needed was already in place and paid for. Later stages that move
-codegen again (`def` bindings, `vars()`) go back to tier 2.
+machinery it needed was already in place and paid for. Stage 4 moved codegen
+again and went back to tier 2. Any later stage that does (`def` bindings) is
+tier 2 too.

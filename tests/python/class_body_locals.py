@@ -76,3 +76,83 @@ def function_locals_still_work_inside_a_method():
             b = a + 1
             return sorted(n for n in locals() if n != 'self')
     return C().m(1)
+
+
+# ------------------------------------------------- writing through locals()
+
+
+def a_write_binds_a_class_attribute():
+    """THE WRITE HALF.  CPython's class-body locals() IS the namespace being
+    built into the class, so storing into it binds a class attribute -- and the
+    body reads it back, because a class-body name read is LOAD_NAME against
+    that namespace.  The dict Grail answered was a snapshot, so both halves
+    were lost: the attribute never appeared and the read fell through to the
+    enclosing scope (test_scope testClassAndGlobal)."""
+    looked_up_by_load_name = False
+
+    class X:
+        locals()['looked_up_by_load_name'] = True
+        passed = looked_up_by_load_name
+
+    return (X.passed, looked_up_by_load_name, X.looked_up_by_load_name)
+
+
+def a_write_outranks_the_enclosing_closure():
+    """test_scope's testClassNamespaceOverridesClosure.  ``x'' is a local of
+    the enclosing def, and the class body's own binding -- made through
+    locals() -- is what ``y = x'' must see.  The enclosing binding is left
+    alone."""
+    x = 42
+
+    class X:
+        locals()["x"] = 43
+        y = x
+
+    return (X.y, x)
+
+
+def a_write_then_del_leaves_no_attribute():
+    """...and the second half of that test: deleting the name the locals()
+    write bound leaves the class without it, and still does not touch the
+    enclosing x."""
+    x = 42
+
+    class X:
+        locals()["x"] = 43
+        del x
+
+    return (hasattr(X, 'x'), x)
+
+
+def vars_writes_the_same_namespace():
+    """Zero-arg vars() is locals(), for writes as much as for reads."""
+    class C:
+        vars()['a'] = 7
+        b = a
+    return (C.a, C.b)
+
+
+def a_write_through_an_alias_lands_too():
+    """The mapping is an OBJECT, not a compile-time spelling: binding it to a
+    name and writing through that must work the same way.  This is the shape
+    enum's ``Period = vars()'' then ``Period['month_0'] = ...'' uses, and no
+    rewrite of ``locals()[k] = v'' as a special form could reach it."""
+    class C:
+        ns = locals()
+        ns['w'] = 5
+        got = w
+    return (C.got, hasattr(C, 'w'))
+
+
+def an_enclosing_local_is_still_not_readable():
+    """The probe added for the write half must not make a class body see the
+    enclosing scope's locals as class-body names -- ``x'' is bound in f, the
+    class binds nothing of that name, so the read is the enclosing one (12)
+    and the class gets no attribute."""
+    def f(x):
+        class C:
+            locals()['other'] = 1
+            y = x
+        return C
+    c = f(12)
+    return (c.y, hasattr(c, 'x'))

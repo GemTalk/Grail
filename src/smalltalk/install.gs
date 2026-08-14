@@ -299,6 +299,7 @@ run
 	at: #'_shimtest' put: nil;
 	at: #'_sre' put: nil;
 	at: #'BoundMethod' put: nil;
+	at: #'ClassBodyLocals' put: nil;
 	at: #'ExecBlockAttrs' put: nil;
 	at: #'MethodBinding' put: nil;
 	at: #'PropertyDescriptor' put: nil;
@@ -352,6 +353,7 @@ run
 	at: #'filter_iterator' put: nil;
 	at: #'map_iterator' put: nil;
 	at: #'zip_iterator' put: nil;
+	at: #'enumerate' put: nil;
 	at: #'hashlib' put: nil;
 	at: #'socket' put: nil;
 	at: #'PySocket' put: nil;
@@ -701,6 +703,7 @@ run
 	at: #'BuiltinSubclassPickleTestCase' put: nil;
 	at: #'EnumPickleByNameTestCase' put: nil;
 	at: #'ClassBodyNamespaceTestCase' put: nil;
+	at: #'MetaclassInstancecheckTestCase' put: nil;
 	at: #'InspectGetmembersTestCase' put: nil;
 	at: #'StrDecodeArgsTestCase' put: nil;
 	at: #'StrEnumMixinAndNewTestCase' put: nil;
@@ -777,6 +780,7 @@ run
 	at: #'IsADirectoryErrorTestCase' put: nil;
 	at: #'IteratorTestCase' put: nil;
 	at: #'TzFileHistoryTestCase' put: nil;
+	at: #'EnumerateTypeTestCase' put: nil;
 	at: #'MetaclassMethodsTestCase' put: nil;
 	at: #'ComparisonBlockingTestCase' put: nil;
 	at: #'EnvVarGuardTestCase' put: nil;
@@ -800,6 +804,7 @@ run
 	at: #'KeywordOnlyParamsTestCase' put: nil;
 	at: #'ListSortKwargsTestCase' put: nil;
 	at: #'ClassBodyConditionalTestCase' put: nil;
+	at: #'ClassBodyDroppedStatementTestCase' put: nil;
 	at: #'ClassBodyLoopsTestCase' put: nil;
 	at: #'CachedPropertyDescriptorTestCase' put: nil;
 	at: #'LruHashabilityAndUnionsTestCase' put: nil;
@@ -1074,6 +1079,7 @@ input src/smalltalk/Python/dict_itemiterator.gs
 input src/smalltalk/Python/dict_keyiterator.gs
 input src/smalltalk/Python/dict_valueiterator.gs
 input src/smalltalk/Python/list_iterator.gs
+input src/smalltalk/Python/enumerate.gs
 input src/smalltalk/Python/seq_iterator.gs
 input src/smalltalk/Python/callable_iterator.gs
 input src/smalltalk/Python/range_iterator.gs
@@ -1235,6 +1241,7 @@ input src/smalltalk/Python/Fraction.gs
 input src/smalltalk/Python/dict.gs
 input src/smalltalk/Python/PyDict.gs
 input src/smalltalk/Python/EnumDict.gs
+input src/smalltalk/Python/ClassBodyLocals.gs
 input src/smalltalk/Python/ExecBlockAttrs.gs
 input src/smalltalk/Python/Float.gs
 input src/smalltalk/Python/SetProtocol.gs
@@ -1521,6 +1528,7 @@ input src/smalltalk/PythonTests/EnumModuleApiTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassPickleTestCase.gs
 input src/smalltalk/PythonTests/EnumPickleByNameTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNamespaceTestCase.gs
+input src/smalltalk/PythonTests/MetaclassInstancecheckTestCase.gs
 input src/smalltalk/PythonTests/InspectGetmembersTestCase.gs
 input src/smalltalk/PythonTests/StrDecodeArgsTestCase.gs
 input src/smalltalk/PythonTests/StrEnumMixinAndNewTestCase.gs
@@ -1613,6 +1621,7 @@ input src/smalltalk/PythonTests/PackageImportTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
 input src/smalltalk/PythonTests/TzFileHistoryTestCase.gs
+input src/smalltalk/PythonTests/EnumerateTypeTestCase.gs
 input src/smalltalk/PythonTests/MetaclassMethodsTestCase.gs
 input src/smalltalk/PythonTests/ComparisonBlockingTestCase.gs
 input src/smalltalk/PythonTests/EnvVarGuardTestCase.gs
@@ -1634,6 +1643,7 @@ input src/smalltalk/PythonTests/TracebackTestCase.gs
 input src/smalltalk/PythonTests/ListSortKwargsTestCase.gs
 input src/smalltalk/PythonTests/CachedPropertyDescriptorTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyDroppedStatementTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyLoopsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyImportTestCase.gs
 input src/smalltalk/PythonTests/FunctionScopeImportTestCase.gs

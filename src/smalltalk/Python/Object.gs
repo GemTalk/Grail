@@ -830,14 +830,29 @@ ___grailNsStore___: aName value: aValue
 	enum.EnumDict does for a reused member name -- and is the behaviour this
 	whole path exists to make reachable."
 
-	| tbl ns |
-	tbl := SessionTemps @env0:current
-		@env0:at: #'GrailPendingClassNamespace' otherwise: nil.
-	tbl isNil ifTrue: [^ aValue].
-	ns := tbl @env0:at: self otherwise: nil.
+	| ns |
+	ns := self ___grailPendingNamespace___.
 	ns isNil ifTrue: [^ aValue].
 	ns @env1:__setitem__: aName @env0:asString _: aValue.
 	^ ns @env1:__getitem__: aName @env0:asString
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailPendingNamespace___
+	"The namespace ___grailPrepareNamespace___ installed for the receiver, or
+	nil -- which is every class that does not name a metaclass with __prepare__
+	and whose metaclass chain supplies no ___grailMetaclassNamespace___.
+
+	Kept in SessionTemps keyed by the class rather than on the class itself: it
+	is scaffolding for the duration of the class statement and must never be
+	committed."
+
+	| tbl |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingClassNamespace' otherwise: nil.
+	tbl isNil ifTrue: [^ nil].
+	^ tbl @env0:at: self otherwise: nil
 %
 
 category: 'Grail-Class Namespace'
@@ -1914,6 +1929,84 @@ ___classBodyDefinitionalStore___: aName put: aValue
 	((self ___respondsTo___: setterSym) and: [self ___respondsTo___: getterSym])
 		ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { v }].
 	^ self ___classHolderAttrStore___: aName put: v
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___classBodyDefinitionalDelete___: aName
+	"``del x'' in a class body -- the inverse of
+	___classBodyDefinitionalStore___:put:, and it has to look in the same three
+	places, because which one holds the binding is not knowable at emit time: a
+	name assigned unconditionally somewhere in the body has an accessor pair, a
+	name bound only by a locals() write or a conditional branch is in the
+	dynInstVars holder, and the prepared namespace has a copy of either.
+
+	CPython's class-body ``del'' is DELETE_NAME on the body's own namespace, so
+	it raises NameError when the name is not bound there -- and, in particular,
+	does NOT reach an enclosing function's local or the module global of the
+	same name.  ``found'' is what makes that faithful: it records whether any of
+	the three actually held a value, and nothing having held one is the
+	NameError case rather than a silent no-op.
+
+	An ACCESSOR PAIR is REMOVED, not nilled.  Nilling the slot looks like the
+	nil-as-absent rule the class-body reads use, but ___pyAttrLoad___ does not
+	apply that rule to a class accessor: it answered the nil, so ``class C: x =
+	1; del x'' left C.x reading back as a raw UndefinedObject and hasattr(C,
+	'x') answering true -- a worse answer than not honouring the del at all.
+	Removing the pair makes the load MISS, which is the AttributeError CPython
+	gives.  Own methods only, and only the pair this class body compiled
+	('Grail-Class Attrs'), so an inherited attribute is never deleted -- object
+	>> ___pyAttrDelete___: scopes itself the same way and for the same reason."
+
+	| ns getterSym setterSym holder found meta |
+	found := false.
+	ns := self ___grailPendingNamespace___.
+	ns isNil ifFalse: [
+		(ns @env1:__contains__: aName @env0:asString) ___isTruthy___ ifTrue: [
+			ns @env1:__delitem__: aName @env0:asString.
+			found := true]].
+	getterSym := aName @env0:asString @env0:asSymbol.
+	setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
+	meta := self @env0:class.
+	((meta @env0:whichClassIncludesSelector: getterSym environmentId: 1) == meta
+		and: [(meta @env0:categoryOfSelector: getterSym environmentId: 1)
+			@env0:= #'Grail-Class Attrs'])
+		ifTrue: [
+			found := true.
+			meta @env0:removeSelector: getterSym environmentId: 1.
+			(meta @env0:whichClassIncludesSelector: setterSym environmentId: 1) == meta
+				ifTrue: [meta @env0:removeSelector: setterSym environmentId: 1]].
+	holder := (self ___respondsTo___: #dynInstVars)
+		ifTrue: [self @env0:perform: #dynInstVars env: 1]
+		ifFalse: [nil].
+	holder == nil ifFalse: [
+		(holder @env0:dynamicInstVarAt: getterSym) == nil ifFalse: [
+			found := true.
+			holder @env0:removeDynamicInstVar: getterSym]].
+	found ifFalse: [
+		^ NameError ___signal___:
+			'name ''' @env0:, aName @env0:asString @env0:, ''' is not defined'].
+	^ self
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___classBodyDynamicRead___: aSym
+	"The value a class body bound DYNAMICALLY on the receiver class -- a
+	locals() write, a conditional branch, a nested class -- or nil.
+
+	The receiver's OWN holder only, deliberately: this backs the class-body
+	read of a name codegen could not see bound (NameAst), and CPython's
+	LOAD_NAME there consults the class body's namespace and then the enclosing
+	scopes -- never the BASES.  ___dynamicClassAttr___: walks the superclass
+	chain, so using it here would let an inherited attribute of the same name
+	outrank the module global the body is entitled to read."
+
+	| holder |
+	(self ___respondsTo___: #dynInstVars) ifFalse: [^ nil].
+	holder := self @env0:perform: #dynInstVars env: 1.
+	holder == nil ifTrue: [^ nil].
+	^ holder @env0:dynamicInstVarAt: aSym
 %
 
 category: 'Grail-Class Attr Overlay'
@@ -3038,12 +3131,18 @@ ___pyAttrLoad___: aSym
 		through it, so the consult happens here."
 		(self ___grailMetaclass___) @env0:ifNotNil: [:___meta |
 			(___meta ___classChainAttrLookup___: aSym)
-				@env0:ifNotNil: [:___mv | ^ self ___descriptorGet___: ___mv]].
-		"A metaclass METHOD, the other half of that same consult: class-body data
-		on the metaclass is what the lookup above finds, and ``ABCMeta.register''
-		-- a compiled def -- is what it cannot.  See ___metaclassMethodFor___:."
-		(self ___metaclassMethodFor___: aSym)
-			@env0:ifNotNil: [:___mm | ^ ___mm].
+				@env0:ifNotNil: [:___mv | ^ self ___descriptorGet___: ___mv].
+			"...and a compiled ``def'' on the metaclass, which the attribute
+			lookup above cannot see -- a two-parameter def is the selector
+			``name:'', not the unary ``name''.  Reached as a BOUND method with
+			this class as its cls parameter, exactly as CPython binds a metaclass
+			method accessed through the class: ``Integer.__subclasscheck__(int)''
+			runs ABC.__subclasscheck__(Integer, int).  BoundMethod dispatches it
+			non-virtually off definingClass, since the class is not a Smalltalk
+			instance of the metaclass."
+			(___meta ___chainOwnsAnyOf___: family orUnary: aSym from: ___meta)
+				ifTrue: [^ BoundMethod receiver: self selector: aSym
+					definingClass: ___meta]].
 		"Instance method accessed via the class object — an *unbound* method
 		(a plain function in Python 3).  ``ParentClass.__init__(self, **opts)''
 		(explicit super-init, e.g. flask's ``Environment'' subclass calling
@@ -4859,6 +4958,38 @@ ___grailMetaclass___
 
 category: 'Grail-Metaclass'
 method: object
+___metaclassCheckHook___: baseSym
+	"The recorded metaclass's callable for baseSym -- __instancecheck__ or
+	__subclasscheck__ -- or nil when it supplies none.
+
+	The three shapes are the ones ___metaclassCompare___ already looks for, for
+	the same reason: a compiled ``def'' on the metaclass, or an attribute
+	holding a function (a synthesised or aliased one).  The caller passes the
+	class itself as the FIRST argument, since that is the cls parameter.
+
+	Deliberately does NOT probe ``self class'' -- the Smalltalk metaclass.
+	Grail already defines __instancecheck__: class-side for some builtins
+	(Integer class), taking the class as RECEIVER with one argument, which is a
+	different convention from Python's (cls, obj); invoking those here broke
+	every isinstance(x, int) in the corpus.  This hook exists for a metaclass
+	written in PYTHON, which is the case Grail had no answer for at all."
+
+	| meta fn |
+	(self isKindOf: Behavior) ifFalse: [^ nil].
+	meta := self ___grailMetaclass___.
+	meta == nil ifTrue: [^ nil].
+	fn := meta ___classChainAttrLookup___: baseSym.
+	fn == nil ifTrue: [fn := meta ___classAttrDunder___: baseSym].
+	fn == nil ifTrue: [
+		(meta @env0:whichClassIncludesSelector:
+			(baseSym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1)
+				== nil ifTrue: [^ nil].
+		fn := UnboundMethod definingClass: meta selector: baseSym].
+	^ fn
+%
+
+category: 'Grail-Metaclass'
+method: object
 ___grailSetMetaclass___: aMetaclass
 	"Record a ``class C(metaclass=M)'' keyword.  A RECORD, not a construction:
 	builtins >> type: answers the single canonical ``type'' BoundMethod as any
@@ -4882,26 +5013,26 @@ ___metaclassMethodFor___: aSym
 	class as ``self'' -- or nil when there is no metaclass or it defines no such
 	method.
 
-	This is the half of the metaclass consult that ___classChainAttrLookup___
-	cannot answer: that finds class-body DATA on the metaclass, whereas
-	``ABCMeta.register'' is a compiled def.  CPython finds both in the same step,
-	because reading an attribute off a class searches ``type(cls).__mro__'' and
-	``register'' is simply what lives there.
+	___pyAttrLoad___ answers the ATTRIBUTE form of this question itself (a
+	metaclass def read off the class).  This exists for the send that loads no
+	attribute at all: ___tryMetaclassMethodDNU___:args: -- see there for why a
+	metaclass method self-sending to a sibling never reaches the attribute path.
 
 	The binding is what makes the CPython signature come out right.  ABCMeta
-	writes ``def register(cls, subclass)'' and calls it ``B.register(V)'': the
-	class is the receiver, not an argument.  A MethodBinding prepends this class
-	to the call arguments and the UnboundMethod pops it back off as the receiver,
-	so the metaclass's method runs NON-virtually with self = the using class --
-	which is exactly the object it expects, and is not in its own chain."
+	writes ``def register(cls, subclass)'' and it is called ``B.register(V)'':
+	the class is the receiver, not an argument.  A MethodBinding prepends this
+	class to the call arguments and the UnboundMethod pops it back off as the
+	receiver, so the metaclass's method runs NON-virtually with self = the using
+	class -- which is exactly the object it expects, and is not in its own
+	chain."
 
 	| meta family owner |
 	meta := self ___grailMetaclass___.
 	meta == nil ifTrue: [^ nil].
-	"A name the metaclass does not define is the common case -- every attribute
-	load that gets this far has already missed everywhere else -- so try the
-	0-arg spelling on its own first and build the seven-selector family only
-	when that misses."
+	"A name the metaclass does not define is the common case -- every send that
+	gets this far has already missed everywhere else -- so try the 0-arg
+	spelling on its own first and build the seven-selector family only when that
+	misses."
 	owner := meta @env0:whichClassIncludesSelector: aSym environmentId: 1.
 	owner == nil ifTrue: [
 		family := self ___selectorFamilyFor___: aSym string: aSym @env0:asString.
@@ -5943,6 +6074,33 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	BoundMethod/varargs machinery)."
 	binOp := self ___tryBinaryDunderDNU___: aSelector args: anArray.
 	binOp == #'___noBinOp___' ifFalse: [^ binOp].
+	"A METACLASS METHOD reached as a DIRECT SEND on the class.  Inside a compiled
+	method body ``cls.__subclasscheck__(c)'' emits the send __subclasscheck__:
+	rather than an attribute load, so the metaclass consult in ___pyAttrLoad___:
+	never runs -- and the class's own Smalltalk metaclass, a Metaclass3, does not
+	understand it.  That is how a metaclass calling its own sibling hook died
+	(test_typechecks's ABC.__instancecheck__ calls cls.__subclasscheck__).
+
+	Invoked with the class prepended as the cls parameter, and dispatched off
+	the recorded metaclass because the class is not a Smalltalk instance of it."
+	(self isKindOf: Behavior) ifTrue: [ | meta base tbl |
+		"The table is read DIRECTLY: this runs in the DNU path for EVERY class
+		that fails a send, including kernel classes whose metaclass chain does
+		not reach object, where the env-1 ___grailMetaclass___ send is itself a
+		MessageNotUnderstood."
+		tbl := SessionTemps @env0:current
+			@env0:at: #'GrailClassMetaclass' otherwise: nil.
+		meta := tbl == nil ifTrue: [nil] ifFalse: [tbl @env0:at: self otherwise: nil].
+		(meta @env0:notNil
+			and: [(meta @env0:whichClassIncludesSelector: aSelector environmentId: 1)
+				@env0:notNil]) ifTrue: [
+			base := (s @env0:includes: $:)
+				ifTrue: [s @env0:copyFrom: 1 to: (s @env0:indexOf: $:) @env0:- 1]
+				ifFalse: [s].
+			"This method compiles in env 0, so the UnboundMethod protocol -- which
+			is env 1 -- needs explicit annotations."
+			^ (UnboundMethod @env1:definingClass: meta selector: base @env0:asSymbol)
+				@env1:value: (Array @env0:with: self) @env0:, anArray value: nil]].
 	"A missing ``__contains__:'' (``x in None'') raises CPython's
 	catchable TypeError.  Only this ONE container dunder is intercepted:
 	__len__ / __iter__ / __getitem__ double as soft-miss PROBES all over

@@ -61,13 +61,13 @@ different rows and merges cleanly.
 | test.test_listcomps | ERROR | 60 | 5 | 19 | 0 |  |
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
 | test.test_copy | ERROR | 81 | 21 | 12 | 0 |  |
-| test.test_scope | FAIL | 41 | 2 | 0 | 4 |  |
+| test.test_scope | OK | 41 | 0 | 0 | 4 |  |
 | test.test_yield_from | ERROR | 43 | 17 | 12 | 0 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
 | test.test_format | OK | 18 | 0 | 0 | 3 |  |
 | test.test_binop | OK | 12 | 0 | 0 | 0 |  |
 | test.test_complex | ERROR | 37 | 13 | 12 | 0 |  |
-| test.test_enumerate | IMPORTERROR | 0 | 0 | 0 | 0 | name 'enumerate' is not defined |
+| test.test_enumerate | FAIL | 92 | 12 | 0 | 15 |  |
 | test.test_raise | ERROR | 37 | 1 | 14 | 0 |  |
 | test.test_funcattrs | ERROR | 35 | 14 | 13 | 1 |  |
 | test.test_decorators | ERROR | 16 | 1 | 5 | 0 |  |
@@ -81,7 +81,7 @@ different rows and merges cleanly.
 | test.test_named_expressions | ERROR | 74 | 22 | 15 | 0 |  |
 | test.test_subclassinit | ERROR | 17 | 7 | 3 | 0 |  |
 | test.test_super | ERROR | 40 | 13 | 24 | 3 |  |
-| test.test_typechecks | ERROR | 6 | 2 | 1 | 0 |  |
+| test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
 | test.test_with | ERROR | 54 | 6 | 5 | 0 |  |
 | test.test_positional_only_arg | ERROR | 28 | 4 | 4 | 0 |  |
 | test.test_string_literals | ERROR | 20 | 3 | 10 | 0 |  |
@@ -91,7 +91,7 @@ different rows and merges cleanly.
 | test.test_codecs | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'encodings' |
 | test.test_contextlib_async | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'run_no_yield_async_fn' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
 | test.test_difflib | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'findfile' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
-| test.test_gettext | ERROR | 73 | 0 | 72 | 1 |  |
+| test.test_gettext | ERROR | 73 | 14 | 4 | 1 |  |
 | test.test_linecache | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'importlib.machinery' |
 | test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '_compat_pickle' |
 | test.test_reprlib | IMPORTERROR | 0 | 0 | 0 | 0 | name 'wrapped' is not defined |

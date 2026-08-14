@@ -62,11 +62,26 @@ def _encode(data, alpha):
     return bytes(out)
 
 
-def _decode(data, table):
+def _decode(data, table, validate=False):
     """Decode base64 ``data`` (bytes or str) using ``table`` (256-byte
-    reverse alphabet, -1 for invalid)."""
+    reverse alphabet, -1 for invalid).
+
+    With ``validate`` false -- the default, and CPython's -- bytes that are
+    in neither the alphabet nor the padding are DISCARDED before decoding,
+    per the b64decode docs.  Skipping that step is what broke decodebytes(),
+    whose entire purpose is line-broken MIME data: every embedded newline
+    counted as a character, so a valid multi-line catalog raised
+    ``ValueError: invalid base64 character''."""
     if isinstance(data, str):
         data = data.encode('ascii')
+    if validate:
+        for c in data:
+            if c != 61 and table[c] < 0:
+                raise ValueError('Non-base64 digit found')
+    else:
+        kept = [c for c in data if c == 61 or table[c] >= 0]
+        if len(kept) != len(data):
+            data = bytes(kept)
     n = len(data)
     while n > 0 and data[n - 1] == 61:
         n = n - 1
@@ -109,9 +124,21 @@ def b64encode(data, altchars=None):
 
 
 def b64decode(data, altchars=None, validate=False):
-    """Decode a standard Base64 bytes/str to bytes.  ``validate`` is
-    accepted for CPython API parity but ignored."""
-    return _decode(data, _B64_DECODE)
+    """Decode a standard Base64 bytes/str to bytes.
+
+    ``altchars`` is a 2-byte string giving the substitutes used for ``+``
+    and ``/``; ``validate`` rejects any other non-alphabet byte instead of
+    discarding it.  Both were previously accepted and ignored, which made
+    b64decode(validate=True) silently accept corrupt input."""
+    if isinstance(data, str):
+        data = data.encode('ascii')
+    if altchars is not None:
+        if isinstance(altchars, str):
+            altchars = altchars.encode('ascii')
+        data = bytes([43 if c == altchars[0]
+                      else (47 if c == altchars[1] else c)
+                      for c in data])
+    return _decode(data, _B64_DECODE, validate)
 
 
 def urlsafe_b64encode(data):

@@ -25,6 +25,41 @@ set compile_env: 0
 
 category: 'Grail-Name Errors'
 classmethod: NameError
+___resolveBuiltinOrSignal___: aName
+	"Last chance for a bare name the compiler could not bind: a name INJECTED
+	into builtins at run time.  Answers the value if one is there, and raises
+	exactly as ___signalUndefined___: does otherwise.
+
+	``builtins.__dict__[name] = value'' is a real Python idiom, and gettext is
+	its canonical user -- ``gettext.install()'' publishes the translation
+	function as ``_'' so that ``_('msg')'' works everywhere afterwards.  Grail
+	resolved names entirely at COMPILE time, so a name that did not exist yet
+	compiled to an unconditional raise and no later injection could be seen.
+	The gap was general, not about ``_'': any injected name failed the same
+	way.
+
+	Called ONLY where the old code raised unconditionally, which is what makes
+	it safe: a name that resolves today never reaches here, so no working
+	lookup changes and nothing is added to the hot path.  A miss still raises
+	the same NameError, with the same message and the same ``name'' attribute.
+
+	Note the ``_'' spelling.  PythonParser renames ``_'' to ___unused___ (a
+	bare underscore is not a valid Smalltalk identifier), so compiled code
+	reads the renamed name; gettext's install() publishes BOTH spellings, and
+	this resolver simply answers whichever it is asked for."
+
+	| b inst v |
+	b := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #builtins.
+	b == nil ifFalse: [
+		inst := [b @env0:___instance___] @env0:on: Error do: [:ex | nil].
+		inst == nil ifFalse: [
+			v := inst @env0:dynamicInstVarAt: aName @env0:asSymbol ifAbsent: [nil].
+			v == nil ifFalse: [^ v]]].
+	^ self ___signalUndefined___: aName
+%
+
+category: 'Grail-Name Errors'
+classmethod: NameError
 ___signalUndefined___: aName
 	"Raise NameError for an unbound name, carrying CPython's ``name'' attribute.
 
