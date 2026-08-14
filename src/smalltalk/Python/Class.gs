@@ -210,6 +210,24 @@ __mro__
 
 category: 'Grail-Reflection'
 method: Behavior
+mro
+	"Python ``cls.mro()'': the method resolution order as a LIST.
+
+	CPython's type.mro() and cls.__mro__ answer the same linearization in
+	different containers -- a fresh list from the method, a cached tuple from
+	the attribute -- so this derives from __mro__ rather than repeating it.
+	The list is fresh per call, as in CPython, where mutating the result must
+	not disturb the class.
+
+	Written by anything that inspects a hierarchy by hand instead of asking
+	issubclass: test_typechecks' metaclass settles __subclasscheck__ with
+	``any(c in candidates for c in sub.mro())''."
+
+	^ (self __mro__) @env0:asOrderedCollection
+%
+
+category: 'Grail-Reflection'
+method: Behavior
 __base__
 	"Python ``cls.__base__'': the primary (first) base class.  Grail
 	classes are single-inheritance Smalltalk classes, so this is the

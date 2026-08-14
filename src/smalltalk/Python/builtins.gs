@@ -2536,6 +2536,13 @@ ___isInstanceSingle___: anObject of: aClass
 		probes aClass's metaclass chain (class-side responds-to)."
 		(aClass ___respondsTo___: #'__instancecheck__:') ifTrue: [
 			result := aClass __instancecheck__: anObject
+		] ifFalse: [
+			"...and the hook a recorded ``metaclass='' contributes, which lives on
+			the class's TYPE and so is not in the chain just walked.  See the
+			matching consult in ___isSubclassSingle___:of:."
+			(aClass ___metaclassMethodFor___: #'__instancecheck__')
+				@env0:ifNotNil: [:___hook |
+					result := (___hook value: { anObject } value: nil) == true]
 		]
 	].
 	"CPython: a bytearray is NOT a bytes -- they are distinct types.  Grail
@@ -2973,6 +2980,14 @@ ___isSubclassSingle___: sub of: target
 	the widenings, and the C3 MRO all missed."
 	(target ___respondsTo___: #'__subclasscheck__:') ifTrue: [
 		^ (target __subclasscheck__: sub) == true].
+	"The same hook contributed by a recorded ``metaclass='' rather than
+	inherited: ``class B(metaclass=ABCMeta)'' puts __subclasscheck__ on ABCMeta,
+	which is B's TYPE and so not in the chain ___respondsTo___: walks.  This is
+	the road every user-written ABC takes -- collections.abc's own ABCs reach the
+	branch above instead, because _ABCRoot is a real base of theirs."
+	(target ___metaclassMethodFor___: #'__subclasscheck__')
+		@env0:ifNotNil: [:___hook |
+			^ (___hook value: { sub } value: nil) == true].
 	^ false
 %
 
