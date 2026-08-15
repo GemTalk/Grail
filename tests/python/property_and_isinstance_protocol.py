@@ -117,10 +117,12 @@ _run("issubclass_union_miss", lambda: issubclass(dict, float | str))
 _run("issubclass_union_bad_arg1", lambda: issubclass(2, Child | Super))
 _run("issubclass_union_generic_alias", lambda: issubclass(int, list[int] | Child))
 _run("isinstance_generic_alias_rejected", lambda: isinstance(2, list[int]))
-# typing aliases are the builtins now, so ``|`` works on them.
+# typing.List is a deprecated ALIAS of list, not list itself: it is its own
+# object, and ``|`` and the type checks work through its __origin__.  See
+# tests/python/typing_generic_aliases.py.
 import typing
 
-_run("typing_list_is_list", lambda: typing.List is list)
+_run("typing_list_is_not_list", lambda: typing.List is list)
 _run("typing_union_subclass", lambda: issubclass(typing.List, typing.List | typing.Tuple))
 _run("typing_union_miss", lambda: issubclass(int, typing.List | typing.Tuple))
 _run("typing_subscript", lambda: str(typing.List[int]))

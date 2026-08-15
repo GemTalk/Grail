@@ -5065,6 +5065,42 @@ ___metaclassCheckHook___: baseSym
 
 category: 'Grail-Metaclass'
 method: object
+___nonClassCheckHook___: baseSym
+	"The __instancecheck__ / __subclasscheck__ a NON-CLASS classinfo supplies,
+	or nil.
+
+	CPython's PyObject_IsInstance looks the hook up on TYPE(cls) whatever cls
+	is -- it does not first require cls to be a type.  For an ordinary class
+	that means the metaclass (___metaclassCheckHook___ above); for anything
+	else it means the object's own Python class, which is what this answers.
+
+	That is not a corner case: it is how ``isinstance([], typing.List)'' works.
+	``typing.List'' is a _SpecialGenericAlias INSTANCE, not a type, and the
+	check reaches list only because _SpecialGenericAlias defines
+	__instancecheck__.  Grail had no path for it, so a non-class classinfo went
+	straight to the old-style __bases__ protocol or to the TypeError.
+
+	Restricted to a non-Behavior receiver so it cannot collide with the
+	class-as-receiver __instancecheck__: convention Grail defines for some
+	builtins -- see ___metaclassCheckHook___, which that convention already
+	cost once.  The three lookup shapes are its, for the same reasons."
+
+	| cls fn |
+	(self isKindOf: Behavior) ifTrue: [^ nil].
+	cls := self @env0:class.
+	cls == nil ifTrue: [^ nil].
+	fn := cls ___classChainAttrLookup___: baseSym.
+	fn == nil ifTrue: [fn := cls ___classAttrDunder___: baseSym].
+	fn == nil ifTrue: [
+		(cls @env0:whichClassIncludesSelector:
+			(baseSym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1)
+				== nil ifTrue: [^ nil].
+		fn := UnboundMethod definingClass: cls selector: baseSym].
+	^ fn
+%
+
+category: 'Grail-Metaclass'
+method: object
 ___grailSetMetaclass___: aMetaclass
 	"Record a ``class C(metaclass=M)'' keyword.  A RECORD, not a construction:
 	builtins >> type: answers the single canonical ``type'' BoundMethod as any
