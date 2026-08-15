@@ -7,6 +7,29 @@
 # paths.  Expand on demand.
 
 
+# CPython's code-object flag bits, exposed here because that is where Python
+# code reads them from (``from inspect import CO_COROUTINE``).  The values are
+# CPython's and are part of the language surface, not an implementation
+# detail -- test.test_builtin imports CO_COROUTINE and masks co_flags with it.
+#
+# Grail compiles ``async def`` to a plain function and its PyCode carries no
+# flags word, so a code object here reports co_flags == 0: the NAMES resolve
+# and the masks evaluate, but nothing sets the bits.  Code that asks "is this
+# a coroutine?" should use iscoroutinefunction(), which Grail does answer.
+CO_OPTIMIZED = 0x0001
+CO_NEWLOCALS = 0x0002
+CO_VARARGS = 0x0004
+CO_VARKEYWORDS = 0x0008
+CO_NESTED = 0x0010
+CO_GENERATOR = 0x0020
+CO_NOFREE = 0x0040
+CO_COROUTINE = 0x0080
+CO_ITERABLE_COROUTINE = 0x0100
+CO_ASYNC_GENERATOR = 0x0200
+CO_HAS_DOCSTRING = 0x4000000
+CO_METHOD = 0x8000000
+
+
 def ismethod(obj):
     """True if obj is a bound method."""
     # Grail's BoundMethod is the closest analogue; treat the

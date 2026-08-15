@@ -692,6 +692,7 @@ run
 	at: #'ClassBodyClosureCellTestCase' put: nil;
 	at: #'ClassBodyRebindingTestCase' put: nil;
 	at: #'ClassNewAttributeTestCase' put: nil;
+	at: #'RawUnicodeEscapeTestCase' put: nil;
 	at: #'ReservedNameClassAttrTestCase' put: nil;
 	at: #'EnumDescriptorMemberTestCase' put: nil;
 	at: #'FlagMemberLengthTestCase' put: nil;
@@ -1602,6 +1603,7 @@ input src/smalltalk/PythonTests/EnumMixinValueCoercionTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyClosureCellTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyRebindingTestCase.gs
 input src/smalltalk/PythonTests/ClassNewAttributeTestCase.gs
+input src/smalltalk/PythonTests/RawUnicodeEscapeTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameClassAttrTestCase.gs
 input src/smalltalk/PythonTests/MakecodesPatternTestCase.gs
 input src/smalltalk/PythonTests/NamedIntConstantTestCase.gs
