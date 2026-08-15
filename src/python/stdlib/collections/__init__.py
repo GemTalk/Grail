@@ -712,6 +712,11 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
             cls = type(self)
             return cls(*values)
 
+        # Python 3.13's copy.replace() protocol; _replace is its older name
+        # and the two are documented to be the same operation.
+        def __replace__(self, **kwargs):
+            return self._replace(**kwargs)
+
         def __repr__(self):
             # The class now carries the typename as its own __name__, so a
             # direct namedtuple and a REAL subclass (``class B(A): pass'')

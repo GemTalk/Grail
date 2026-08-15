@@ -214,6 +214,47 @@ __len__
 
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
+__eq__: other
+	"Compare by CONTENTS, as a mapping.
+
+	``instance.__dict__'' is a real dict in CPython, so code compares it as
+	one -- ``self.__dict__ == other.__dict__'' is the whole of __eq__ for
+	several classes, and a copy or pickle round trip written that way could
+	never pass while this view inherited object's IDENTITY equality: two
+	instances with identical attributes compared unequal.
+
+	Equal to any mapping with the same keys and equal values, not just to
+	another PyInstanceDict, so ``obj.__dict__ == {'foo': 1}'' works too.
+	Values compare with the Python == protocol, which honours a user __eq__."
+
+	| otherKeys mySize |
+	(other ___respondsTo___: #'keys') ifFalse: [^ #'___NotImplemented___'].
+	mySize := self __len__.
+	otherKeys := [other keys] @env0:on: AbstractException do: [:e | e @env0:return: nil].
+	otherKeys == nil ifTrue: [^ #'___NotImplemented___'].
+	(otherKeys @env0:size @env0:= mySize) ifFalse: [^ false].
+	self @env0:keysAndValuesDo: [:k :v |
+		| ov |
+		ov := [other __getitem__: k @env0:asString]
+			@env0:on: AbstractException do: [:e | e @env0:return: #'___absent___'].
+		(ov @env0:== #'___absent___') ifTrue: [^ false].
+		(v ___pyRichEqBool___: ov) ifFalse: [^ false]].
+	^ true
+%
+
+category: 'Grail-Python-Protocol'
+method: PyInstanceDict
+__ne__: other
+	"Derived from __eq__ so the two never disagree."
+
+	| r |
+	r := self __eq__: other.
+	(r @env0:== #'___NotImplemented___') ifTrue: [^ r].
+	^ r @env0:not
+%
+
+category: 'Grail-Python-Protocol'
+method: PyInstanceDict
 get: key
 	^ self get: key _: None
 %

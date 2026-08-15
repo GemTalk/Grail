@@ -191,6 +191,15 @@ hashFunction: aKey
 	(e.g. a KeyError) propagates unchanged (test_dict test_unhashable_key)."
 
 	| h |
+	"A CLASS buckets by IDENTITY.  CPython hashes a class with type.__hash__,
+	never with the class's own ``__hash__'' -- that one describes its
+	INSTANCES, and for a mapping type it is the None that makes them
+	unhashable (collections.UserDict sets exactly that).  Reading it off the
+	class produced nil, and the modulo below then failed with ``nil
+	doesNotUnderstand: #\\''.  Classes ARE ordinary dict keys and set
+	elements: copy.py keys its atomic-type tables as sets of classes."
+	(aKey isKindOf: Behavior)
+		ifTrue: [^ (aKey identityHash \\ tableSize) + 1].
 	h := [aKey @env1:__hash__] on: TypeError do: [:ex |
 		aKey @env1:___raiseUnhashableUse___: ex context: 'a dict key'].
 	^ (h \\ tableSize) + 1

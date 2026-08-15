@@ -586,8 +586,19 @@ dir: anObject
 category: 'Grail-Built-in Functions'
 method: builtins
 hash: anObject
-	"Python builtin hash(x) — fixed-arity fast path."
+	"Python builtin hash(x) — fixed-arity fast path.
 
+	A CLASS hashes by IDENTITY.  CPython computes hash(SomeClass) with
+	type.__hash__, never with the class's own ``__hash__'' -- that one
+	describes its INSTANCES.  Reading it off the class is wrong twice over:
+	for a mapping type it is the None that makes instances unhashable
+	(collections.UserDict sets exactly that), so hash() answered None and the
+	set machinery then died on ``nil doesNotUnderstand: #\\''.
+
+	Not a corner case: copy.py keys its atomic-type tables as SETS OF
+	CLASSES, so every copy.copy hashes the type first."
+
+	(anObject @env0:isKindOf: Behavior) ifTrue: [^ anObject @env0:identityHash].
 	^ [anObject __hash__] @env0:on: MessageNotUnderstood do: [:ex |
 		TypeError ___signal___: 'unhashable type'
 	]
