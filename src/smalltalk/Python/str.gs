@@ -995,6 +995,32 @@ encode: encoding _: errors
 				ifFalse: [ws @env0:nextPut: b]].
 		^ bytes @env0:withAll: ws @env0:contents].
 
+	"raw-unicode-escape, the inverse of the bytes>>decode branch: a code point
+	below 256 is one Latin-1 byte, anything above becomes a LOWERCASE-hex
+	\uXXXX / \UXXXXXXXX escape.  Backslashes already in the string are NOT
+	doubled, which is what makes the codec lossy: encode of a backslash-u
+	literal and encode of the character it names collide."
+	((enc @env0:= 'raw-unicode-escape') or: [
+		enc @env0:= 'raw_unicode_escape']) ifTrue: [
+		| ws digits |
+		ws := WriteStream @env0:on: ByteArray @env0:new.
+		digits := '0123456789abcdef'.
+		1 @env0:to: size do: [:i | | cp width |
+			cp := (self @env0:at: i) @env0:codePoint.
+			cp @env0:< 256
+				ifTrue: [ws @env0:nextPut: cp]
+				ifFalse: [
+					width := cp @env0:< 16r10000 ifTrue: [4] ifFalse: [8].
+					ws @env0:nextPut: 92.
+					ws @env0:nextPut: (width @env0:= 4 ifTrue: [117] ifFalse: [85]).
+					"Emit the nibbles most-significant first, zero-padded to
+					the escape's fixed width."
+					width @env0:to: 1 by: -1 do: [:shift |
+						ws @env0:nextPut: (digits @env0:at:
+							(((cp @env0:bitShift: (shift @env0:- 1) @env0:* -4)
+								@env0:bitAnd: 15) @env0:+ 1)) @env0:codePoint]]].
+		^ bytes @env0:withAll: ws @env0:contents].
+
 	LookupError ___signal___: ('unknown encoding: ' @env0:, encoding)
 %
 

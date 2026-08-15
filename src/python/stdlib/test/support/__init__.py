@@ -715,7 +715,98 @@ import os as _os
 # CPython uses this to locate data files; point at the vendored stdlib root.
 REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.dirname(__file__)))
 STDLIB_DIR = REPO_ROOT
-TEST_HOME_DIR = _os.path.dirname(__file__)
+# CPython: TEST_SUPPORT_DIR is test/support, TEST_HOME_DIR its parent test/.
+# (This used to name the support/ directory, which findfile() would then search
+# instead of the test tree where the data files actually live.)
+TEST_SUPPORT_DIR = _os.path.dirname(_os.path.abspath(__file__))
+TEST_HOME_DIR = _os.path.dirname(TEST_SUPPORT_DIR)
+
+
+def findfile(filename, subdir=None):
+    """Try to find a file on sys.path or in the test directory.
+
+    If it is not found the argument passed to the function is returned (this
+    does not necessarily signal failure; could still be the legitimate path).
+    Setting *subdir* indicates a relative path to use to find the file rather
+    than looking directly in the path directories.
+    """
+    if _os.path.isabs(filename):
+        return filename
+    if subdir is not None:
+        filename = _os.path.join(subdir, filename)
+    path = [TEST_HOME_DIR] + sys.path
+    for dn in path:
+        fn = _os.path.join(dn, filename)
+        if _os.path.exists(fn):
+            return fn
+    return filename
+
+
+def check_sanitizer(*, address=False, memory=False, ub=False, thread=False,
+                    function=True):
+    """Returns True if Python is compiled with sanitizer support.
+
+    Grail runs on GemStone, not on a sanitizer-instrumented CPython build, so
+    this is always False.  The argument check is CPython's and is kept: callers
+    rely on the TypeError-ish guard to catch a mis-spelled keyword.
+    """
+    if not (address or memory or ub or thread):
+        raise ValueError('At least one of address, memory, ub or thread must '
+                         'be True')
+    return False
+
+
+def skip_if_sanitizer(reason=None, *, address=False, memory=False, ub=False,
+                      thread=False, function=True):
+    """Decorator that skips a test when the named sanitizer is enabled."""
+    if reason is None:
+        reason = 'not working with sanitizers active'
+    skip = check_sanitizer(address=address, memory=memory, ub=ub,
+                           thread=thread, function=function)
+    return unittest.skipIf(skip, reason)
+
+
+# --- driving a coroutine by hand ---------------------------------------
+# These let a synchronous test step an ``async def`` without an event loop.
+
+try:
+    _coroutine_decorator = types.coroutine
+except AttributeError:
+    # Grail has no types.coroutine; a bare generator still yields and still
+    # raises StopIteration(value), which is all the drivers below read.
+    def _coroutine_decorator(func):
+        return func
+
+
+@_coroutine_decorator
+def async_yield(v):
+    return (yield v)
+
+
+def run_yielding_async_fn(async_fn, /, *args, **kwargs):
+    """Run an async function to completion, discarding what it yields."""
+    coro = async_fn(*args, **kwargs)
+    try:
+        while True:
+            try:
+                coro.send(None)
+            except StopIteration as e:
+                return e.value
+    finally:
+        coro.close()
+
+
+def run_no_yield_async_fn(async_fn, /, *args, **kwargs):
+    """Run an async function that must complete without ever yielding."""
+    coro = async_fn(*args, **kwargs)
+    try:
+        coro.send(None)
+    except StopIteration as e:
+        return e.value
+    else:
+        raise AssertionError("coroutine did not complete")
+    finally:
+        coro.close()
 
 # TESTFN mirrors os_helper for the rare top-level reference.
 TESTFN = "@grail_test_tmp"

@@ -444,8 +444,64 @@ def cast(typ, val):
     return val
 
 
+# module -> qualname -> first line -> function.  Plain nested dicts rather
+# than the defaultdict/functools.partial CPython uses: typing is imported very
+# early, and this avoids taking a dependency on collections from here.
+_overload_registry = {}
+
+
 def overload(func):
+    """Register *func* as an overload and hand it back.
+
+    CPython returns a dummy that raises when called, on the grounds that an
+    @overload body is a declaration and the real implementation follows.
+    Grail returns the function itself -- the long-standing behaviour here,
+    and the last (non-overloaded) def wins either way, so the difference
+    only shows if something calls a declaration on purpose."""
+    try:
+        f = func.__func__ if isinstance(func, (staticmethod, classmethod)) else func
+        by_qualname = _overload_registry.setdefault(f.__module__, {})
+        by_line = by_qualname.setdefault(f.__qualname__, {})
+        by_line[f.__code__.co_firstlineno] = func
+    except AttributeError:
+        # Not every callable carries the metadata the registry keys on; an
+        # unregisterable overload is still a usable function.
+        pass
     return func
+
+
+def get_overloads(func):
+    """The registered overloads for *func*, in definition order.
+
+    Keyed by (module, qualname) so the several @overload declarations that
+    share a name collect together, and by first line so each is kept."""
+    f = func.__func__ if isinstance(func, (staticmethod, classmethod)) else func
+    try:
+        by_qualname = _overload_registry[f.__module__]
+        by_line = by_qualname[f.__qualname__]
+    except (AttributeError, KeyError):
+        return []
+    return [by_line[line] for line in sorted(by_line)]
+
+
+def clear_overloads():
+    """Drop every registered overload -- CPython exposes this so a long-lived
+    process can release the functions the registry pins."""
+    _overload_registry.clear()
+
+
+def assert_never(arg, /):
+    """Ask the type checker to prove a branch is unreachable; at run time it
+    always raises, because reaching it means the proof was wrong."""
+    value = repr(arg)
+    if len(value) > 100:
+        value = value[:100] + '...'
+    raise AssertionError("Expected code to be unreachable, but got: %s" % (value,))
+
+
+def assert_type(val, typ, /):
+    """Type-checker assertion; a no-op at run time, as in CPython."""
+    return val
 
 
 def get_type_hints(obj, globalns=None, localns=None, include_extras=False):

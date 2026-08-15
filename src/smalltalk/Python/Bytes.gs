@@ -1467,6 +1467,17 @@ decode: encoding
 		^ self @env0:___decodeUnicodeEscape___
 	].
 
+	"raw-unicode-escape: Latin-1 EXCEPT that \uXXXX and \UXXXXXXXX name a
+	code point.  Unlike unicode-escape this leaves every other backslash
+	sequence alone -- \n stays backslash-n, and a DOUBLED backslash keeps
+	both, so b'\\u00e9' decodes to the six literal characters rather than to
+	e-acute.  test_builtin builds its Arabic-Indic digit cases with it."
+	((encodingStr @env0:= 'raw-unicode-escape') or: [
+		encodingStr @env0:= 'raw_unicode_escape'
+	]) ifTrue: [
+		^ self @env0:___decodeRawUnicodeEscape___
+	].
+
 	"UTF-16 (BOM-detected for plain 'utf-16', explicit for -le/-be) --
 	the inverse of str>>___pyEncodeUTF16___."
 	((encodingStr @env0:= 'utf-16') or: [(encodingStr @env0:= 'utf-16-le')
@@ -1626,7 +1637,7 @@ ___decodeUnicodeEscape___
 			"\\x — 2 hex digits."
 			(next = 120) ifTrue: [
 				(i + 3 <= size) ifFalse: [
-					UnicodeDecodeError ___signal___: 'truncated \\xXX escape'].
+					UnicodeDecodeError @env1:___signal___: 'truncated \\xXX escape'].
 				hexN := self ___parseHex___: i + 2 length: 2.
 				out nextPut: (Character codePoint: hexN).
 				i := i + 4
@@ -1634,7 +1645,7 @@ ___decodeUnicodeEscape___
 			"\\u — 4 hex digits."
 			(next = 117) ifTrue: [
 				(i + 5 <= size) ifFalse: [
-					UnicodeDecodeError ___signal___: 'truncated \\uXXXX escape'].
+					UnicodeDecodeError @env1:___signal___: 'truncated \\uXXXX escape'].
 				codeUnit := self ___parseHex___: i + 2 length: 4.
 				out nextPut: (Character codePoint: codeUnit).
 				i := i + 6
@@ -1642,7 +1653,7 @@ ___decodeUnicodeEscape___
 			"\\U — 8 hex digits."
 			(next = 85) ifTrue: [
 				(i + 9 <= size) ifFalse: [
-					UnicodeDecodeError ___signal___: 'truncated \\UXXXXXXXX escape'].
+					UnicodeDecodeError @env1:___signal___: 'truncated \\UXXXXXXXX escape'].
 				codeUnit := self ___parseHex___: i + 2 length: 8.
 				out nextPut: (Character codePoint: codeUnit).
 				i := i + 10
@@ -1674,6 +1685,71 @@ ___decodeUnicodeEscape___
 
 category: 'Grail-Encoding/Decoding'
 method: bytes
+___decodeRawUnicodeEscape___
+	"raw-unicode-escape decoder.  Pure env-0 helper called by decode:.
+
+	Only \uXXXX and \UXXXXXXXX are escapes; every other byte -- backslash
+	included -- is its own Latin-1 code point.  CPython consumes the byte
+	AFTER a backslash unconditionally, which is what makes a doubled
+	backslash inert: the second one is eaten as a literal, so the ``u'' that
+	follows can no longer open an escape."
+
+	| size out i byte |
+	size := self size.
+	"WriteStream on a pre-sized Unicode32, for the reason spelled out in
+	___decodeUnicodeEscape___: AppendStream would prepend ``size'' NULs."
+	out := WriteStream on: (Unicode32 new: size).
+	i := 1.
+	[i <= size] whileTrue: [
+		byte := self at: i.
+		(byte = 92 and: [i < size]) ifTrue: [
+			| next nDigits |
+			next := self at: i + 1.
+			nDigits := nil.
+			(next = 117) ifTrue: [nDigits := 4].
+			(next = 85) ifTrue: [nDigits := 8].
+			nDigits == nil ifTrue: [
+				"Not an escape: the backslash and the byte after it are both
+				literal.  Consuming BOTH is the point -- see the comment above."
+				out nextPut: (Character codePoint: 92).
+				out nextPut: (Character codePoint: next).
+				i := i + 2
+			] ifFalse: [
+				| j avail |
+				"Count the hex digits actually present, as CPython does, so a
+				truncated escape is diagnosed rather than read past the end."
+				j := i + 2.
+				avail := 0.
+				[avail < nDigits and: [j <= size and: [self ___isHexDigit___: (self at: j)]]]
+					whileTrue: [avail := avail + 1. j := j + 1].
+				(avail = nDigits) ifFalse: [
+					UnicodeDecodeError @env1:___signal___:
+						((next = 117)
+							ifTrue: ['truncated \uXXXX escape']
+							ifFalse: ['truncated \UXXXXXXXX escape'])].
+				out nextPut: (Character codePoint: (self ___parseHex___: i + 2 length: nDigits)).
+				i := i + 2 + nDigits
+			]
+		] ifFalse: [
+			out nextPut: (Character codePoint: byte).
+			i := i + 1
+		]
+	].
+	^ out contents
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___isHexDigit___: aByte
+	"True if aByte is an ASCII hex digit."
+
+	^ (aByte >= 48 and: [aByte <= 57])
+		or: [(aByte >= 97 and: [aByte <= 102])
+		or: [aByte >= 65 and: [aByte <= 70]]]
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
 ___parseHex___: startIdx length: n
 	"Parse n hex digits starting at byte index startIdx; return the integer value."
 
@@ -1684,7 +1760,7 @@ ___parseHex___: startIdx length: n
 		(byte >= 48 and: [byte <= 57]) ifTrue: [digit := byte - 48] ifFalse: [
 		(byte >= 97 and: [byte <= 102]) ifTrue: [digit := byte - 87] ifFalse: [
 		(byte >= 65 and: [byte <= 70]) ifTrue: [digit := byte - 55] ifFalse: [
-			UnicodeDecodeError ___signal___: 'invalid hex digit in escape']]].
+			UnicodeDecodeError @env1:___signal___: 'invalid hex digit in escape']]].
 		value := (value * 16) + digit
 	].
 	^ value
