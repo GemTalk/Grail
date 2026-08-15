@@ -111,15 +111,18 @@ r['star_import_misses_unique_a_known_gap'] = repr('unique' not in _bound)
 r['unique_is_declared'] = repr('unique' in enum.__all__)
 
 # ``enum.property`` is a class of its own in CPython, defined in enum, so
-# upstream it reports __module__ == 'enum'.  Grail serves it with the same
-# PropertyDescriptor that backs the builtin ``property``, so claiming 'enum'
-# here would relabel the builtin -- it reports nothing instead.  Exported
-# either way, as upstream.
-# It has no __module__ at all, in fact -- a plain read raises AttributeError,
-# where CPython answers a string for every class.  That is PropertyDescriptor's
-# own gap rather than enum's, and check__all__ tolerates it: a public name with
-# no __module__ still counts as part of the API.
-r['enum_property_module_is_a_known_gap'] = repr(
+# upstream it reports __module__ == 'enum'.  It does here too now.
+#
+# It used to report nothing at all -- a plain read raised AttributeError -- on
+# the reasoning that the same PropertyDescriptor backed the builtin
+# ``property``, so claiming 'enum' would relabel the builtin.  That reasoning
+# stopped applying once enum.property became its own class, and the gap was not
+# cosmetic: __module__ is how pickle saves a class BY REFERENCE, and without it
+# pickle falls back to SCANNING sys.modules for a module exposing the object
+# under its __qualname__.  ``types`` exposes this one (as
+# DynamicClassAttribute), so pickling enum.property depended on whether an
+# earlier test had imported types -- see tests/python/enum_pickle_by_name.py.
+r['enum_property_module'] = repr(
     getattr(enum.property, '__module__', '<no __module__>'))
 
 # FlagBoundary and EnumCheck are absent because Grail models their MEMBERS

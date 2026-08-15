@@ -5450,6 +5450,69 @@ __setattr__: name _: value
 
 category: 'Grail-Attribute Access'
 classmethod: object
+___stampPythonIdentity___: aModuleName qualname: aQualname
+	"Give a SMALLTALK-defined class the ``__module__'' / ``__qualname__'' a
+	Python-defined one gets from its class body -- the module it is EXPORTED
+	from and the name it is exported under.
+
+	Not cosmetic.  Those two are how an object is pickled BY REFERENCE, and
+	without __module__ pickle falls back to whichmodule(), which SCANS
+	sys.modules for a module exposing the object under its __qualname__.  That
+	scan is order-dependent by construction, so whether such a class pickles at
+	all depends on which modules an earlier test happened to import:
+
+	    enum.property           -- __qualname__ 'DynamicClassAttribute'
+	    types                   -- exposes it under exactly that name
+
+	so pickle.dumps(enum.property) raised PicklingError in a fresh session and
+	succeeded once anything had imported types.  A whole-suite run imports it;
+	a single-test run does not, which is why EnumPickleByNameTestCase passed
+	alone and failed in company.  CPython has no such gap: its classes carry
+	__module__, so whichmodule returns on the first line and never scans.
+
+	setattr cannot do this -- ___pyAttrStore___ refuses a non-Python class --
+	so the accessors are COMPILED class-side, which is the same shape
+	ClassDefAst emits for a Python class body.  Best-effort per accessor: a
+	class whose metaclass will not take a method must not abort a module's
+	initialize."
+
+	self ___stampPythonIdentityAccessor___: '__module__' value: aModuleName.
+	self ___stampPythonIdentityAccessor___: '__qualname__' value: aQualname.
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+classmethod: object
+___stampPythonIdentityAccessor___: aName value: aValue
+	"One literal-returning class-side accessor for ___stampPythonIdentity___:.
+	'Grail-Class Attrs' is the category the class-attribute read path already
+	consults -- see ___pyAttrLoad___'s Behavior branch.
+
+	KNOWN DIVERGENCE, and the reason this helper is applied one class at a
+	time rather than swept across every Smalltalk class: Grail makes a class
+	attribute visible from an INSTANCE, which is right for a Python class
+	(``class C: pass'' really does give ``C().__module__'') but not for the
+	builtin-like types stamped here.  CPython keeps these on the TYPE alone --
+	``property.__module__'' is 'builtins' while ``property(g).__module__''
+	raises -- because the value comes from a getset on ``type'' rather than
+	from the class dict.  Compiling a raising INSTANCE-side __module__ does not
+	fix it: the class-attribute branch is consulted first and wins.
+
+	So stamping a class whose instances are themselves picklable would trade
+	one bug for a worse one -- pickle would find a __module__ on the instance
+	and save it BY REFERENCE as the CLASS, silently, where it used to refuse.
+	Stamp only classes whose instances do not travel that way."
+
+	[self @env0:class ___compileMethod:
+		aName @env0:, '
+	^ ''' @env0:, aValue @env0:asString @env0:, ''''
+		category: 'Grail-Class Attrs']
+			@env0:on: AbstractException do: [:e | nil].
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+classmethod: object
 ___pyChangeClassOf: anObject to: newClass
 	"Back ``anObject.__class__ = newClass''.  Compiled by AssignAst as
 	``object ___pyChangeClassOf: <target> to: <value>'' rather than through

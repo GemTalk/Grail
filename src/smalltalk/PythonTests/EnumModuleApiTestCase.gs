@@ -173,18 +173,24 @@ testStarImportIgnoresAllWhichIsAKnownGap
 	self assert: (self resultAt: 'unique_is_declared') asString equals: 'True'.
 %
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests - Module identity'
 method: EnumModuleApiTestCase
-testEnumPropertyHasNoModuleWhichIsAKnownGap
-	"Recorded, NOT endorsed.  ``enum.property'' is a class of its own upstream,
-	defined in enum, so CPython reports 'enum'.  Grail serves it with the same
-	PropertyDescriptor that backs the builtin ``property'', so claiming 'enum'
-	would relabel the builtin -- and PropertyDescriptor has no __module__ at
-	all, where CPython gives every class one.  check__all__ tolerates that: a
-	public name with no __module__ still counts as part of the API."
+testEnumPropertyReportsItsModule
+	"``enum.property'' is a class of its own upstream, defined in enum, so
+	CPython reports 'enum'.  It does here too now.
 
-	self assert: (self resultAt: 'enum_property_module_is_a_known_gap') asString
-		equals: '''<no __module__>'''.
+	This used to be recorded as a known gap on the reasoning that the same
+	PropertyDescriptor backed the builtin ``property'', so claiming 'enum'
+	would relabel the builtin.  That stopped applying once enum.property became
+	its own class -- and the gap was never cosmetic.  __module__ is how pickle
+	saves a class BY REFERENCE; without it pickle SCANS sys.modules for a module
+	exposing the object under its __qualname__, and ``types'' exposes this one.
+	So pickling enum.property depended on whether an earlier test had imported
+	types, which is why EnumPickleByNameTestCase passed alone and failed in a
+	whole-suite run."
+
+	self assert: (self resultAt: 'enum_property_module') asString
+		equals: '''enum'''.
 %
 
 category: 'Grail-Tests - Known gaps'

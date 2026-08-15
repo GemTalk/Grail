@@ -84,19 +84,46 @@ r['by_name_member'] = repr(pickle.loads(pickle.dumps(NEI.y)) is NEI.y)
 # --- a raising __module__ no longer looks like a local-variable bug ---------------
 # pickle reads obj.__module__ with a defaulted getattr, which is not enough
 # under Grail: some objects RAISE from that read instead of answering the
-# default -- enum.property (a PropertyDescriptor) is one.  The exception left
-# ``modname`` unbound, so the failure surfaced as ``UnboundLocalError: cannot
-# access local variable 'modname'``, naming nothing to do with pickling.  It is
-# now treated as "no __module__", which is what the whichmodule fallback is for.
+# default.  The exception left ``modname`` unbound, so the failure surfaced as
+# ``UnboundLocalError: cannot access local variable 'modname'``, naming nothing
+# to do with pickling.  It is now treated as "no __module__", which is what the
+# whichmodule fallback is for.
+#
+# A property INSTANCE is the subject, and it raises in CPython too -- the value
+# lives on the type, not the instance.  enum.property (the CLASS) used to be the
+# subject and no longer raises: it now reports 'enum', as upstream does.
 
-r['property_module_raises'] = 'no'
+def _g(self):
+    return 1
+
+
+r['instance_module_raises'] = 'no'
 try:
-    enum.property.__module__
+    property(_g).__module__
 except AttributeError:
-    r['property_module_raises'] = 'yes'
+    r['instance_module_raises'] = 'yes'
+
+# --- and a class carries the identity pickle saves it by --------------------------
+# __module__ is how a class is pickled BY REFERENCE.  Without it pickle falls
+# back to whichmodule(), which SCANS sys.modules for a module exposing the
+# object under its __qualname__ -- an order-dependent test by construction.
+# enum.property's __qualname__ was 'DynamicClassAttribute' and ``types`` exposes
+# it under exactly that name, so this answered PicklingError in a fresh session
+# and 'ok' once anything had imported types.  That is why this fixture's test
+# passed ALONE and failed in a whole-suite run.
+
+r['enum_property_module'] = repr(getattr(enum.property, '__module__', None))
 
 try:
     pickle.dumps(enum.property)
     r['pickling_it'] = 'ok'
 except Exception as e:
     r['pickling_it'] = type(e).__name__
+
+# The same, with types imported first: the answer must not depend on it.
+import types as _types  # noqa: F401
+try:
+    pickle.dumps(enum.property)
+    r['pickling_it_after_types'] = 'ok'
+except Exception as e:
+    r['pickling_it_after_types'] = type(e).__name__

@@ -117,12 +117,41 @@ method: EnumPickleByNameTestCase
 testARaisingModuleReadIsTreatedAsAbsent
 	"pickle read obj.__module__ with a DEFAULTED getattr, which is not enough
 	under Grail: some objects raise from that read instead of answering the
-	default -- enum.property is one.  The exception left ``modname'' unbound, so
-	the failure surfaced as ``UnboundLocalError: cannot access local variable
-	'modname''', naming nothing to do with pickling.  It is now treated as no
-	__module__, which is what the whichmodule fallback is for, and the object
-	that genuinely cannot be pickled says so."
+	default.  The exception left ``modname'' unbound, so the failure surfaced as
+	``UnboundLocalError: cannot access local variable 'modname''', naming
+	nothing to do with pickling.  It is now treated as no __module__, which is
+	what the whichmodule fallback is for.
 
-	self assert: (self resultAt: 'property_module_raises') asString equals: 'yes'.
-	self assert: (self resultAt: 'pickling_it') asString equals: 'PicklingError'.
+	The subject is a property INSTANCE, which raises in CPython too -- the value
+	lives on the type, not the instance.  enum.property (the CLASS) used to be
+	the subject and no longer raises; see the two tests below."
+
+	self assert: (self resultAt: 'instance_module_raises') asString equals: 'yes'.
+%
+
+category: 'Grail-Tests - A raising __module__'
+method: EnumPickleByNameTestCase
+testAClassCarriesTheIdentityPickleSavesItBy
+	"__module__ is how a class is pickled BY REFERENCE.  Without it pickle falls
+	back to whichmodule(), which SCANS sys.modules for a module exposing the
+	object under its __qualname__."
+
+	self assert: (self resultAt: 'enum_property_module') asString equals: '''enum'''.
+	self assert: (self resultAt: 'pickling_it') asString equals: 'ok'.
+%
+
+category: 'Grail-Tests - A raising __module__'
+method: EnumPickleByNameTestCase
+testPicklingItDoesNotDependOnWhatElseWasImported
+	"THE REGRESSION GUARD, and the reason the previous two assertions moved.
+
+	enum.property's __qualname__ was 'DynamicClassAttribute', and ``types''
+	exposes it under exactly that name, so whichmodule's scan found it only
+	AFTER something had imported types.  pickle.dumps(enum.property) therefore
+	answered PicklingError in a fresh session and 'ok' in a whole-suite run --
+	this test class passed alone and failed in company, with the test ORDER
+	deciding the answer.  Both spellings must now agree."
+
+	self assert: (self resultAt: 'pickling_it') asString equals: 'ok'.
+	self assert: (self resultAt: 'pickling_it_after_types') asString equals: 'ok'.
 %
