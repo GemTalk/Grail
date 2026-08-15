@@ -175,6 +175,13 @@ __new__: r
 
 	(r @env0:isBehavior) ifTrue: [^ r @env0:new].
 	(r isKindOf: complex) ifTrue: [^ r].
+	"A STRING is parsed, not coerced.  It used to fall through to
+	__init__:_:'s ``asFloat'', which answers NaN for anything GemStone cannot
+	read as a number -- so complex('(1-6j)') quietly became (nan+0j) and
+	complex('') did too, instead of raising ValueError.  A repr round-trip,
+	which is how most of test_complex checks itself, could not survive that."
+	(r @env0:isKindOf: CharacterCollection) ifTrue: [
+		^ self ___parseString___: r].
 	"CPython's complex(x) protocol tries x.__complex__() first.  A non-numeric
 	object (a user class registered as numbers.Complex, e.g. test_fractions'
 	Rect) is converted through it; int/float/str have no __complex__ so they
@@ -207,12 +214,210 @@ __new__: r _: i
 
 category: 'Grail-Type Conversion'
 classmethod: complex
-from_number: n
-	"Create a complex number from a real number.
-	In Python: complex.from_number(5) returns (5+0j)"
+___malformed___
+	"The single ValueError complex(str) raises, worded as CPython words it."
 
-	"Use Smalltalk-side constructor"
-	^ self __new__: n _: 0.0
+	^ ValueError ___signal___: 'complex() arg is a malformed string'
+%
+
+category: 'Grail-Type Conversion'
+classmethod: complex
+___scanComponentIn___: s from: start
+	"Index just past the numeric component starting at ``start'', or start
+	itself when there is none (a bare ``j'', or a sign followed by ``j'').
+
+	Only DELIMITS the token -- float() does the actual conversion, so the
+	underscore rules (PEP 515), the inf/infinity/nan spellings and gradual
+	underflow all stay in one implementation instead of being re-derived
+	here and drifting from it."
+
+	| i n c |
+	n := s @env0:size.
+	i := start.
+	"An exponent's sign is part of the token; a leading sign is handled by the
+	caller, which needs it to tell ``1+2j'' from ``1e+2''."
+	[i @env0:<= n] whileTrue: [
+		c := s @env0:at: i.
+		(c @env0:isDigit or: [c @env0:== $. or: [c @env0:== $_]])
+			ifTrue: [i := i @env0:+ 1]
+			ifFalse: [
+				"e/E starts an exponent only when a digit or sign follows it;
+				otherwise it is the leading letter of a word like ``e''."
+				((c @env0:== $e or: [c @env0:== $E])
+					@env0:and: [i @env0:< n])
+					ifTrue: [
+						| d |
+						d := s @env0:at: i @env0:+ 1.
+						((d @env0:isDigit) @env0:or: [d @env0:== $+ or: [d @env0:== $-]])
+							ifTrue: [i := i @env0:+ 2]
+							ifFalse: [^ i]]
+					ifFalse: [^ i]]].
+	^ i
+%
+
+category: 'Grail-Type Conversion'
+classmethod: complex
+___scanWordIn___: s from: start
+	"Index just past an alphabetic inf/infinity/nan word at ``start'', or
+	start when there is none.
+
+	A trailing ``j'' is NOT part of the word: ``nanj'' is the imaginary unit
+	suffix applied to nan, and ``infj'' likewise, so the run is given back a
+	character when dropping it still leaves a word we recognise."
+
+	| i n word |
+	n := s @env0:size.
+	i := start.
+	[i @env0:<= n and: [(s @env0:at: i) @env0:isLetter]] whileTrue: [i := i @env0:+ 1].
+	i @env0:= start ifTrue: [^ start].
+	word := (s @env0:copyFrom: start to: i @env0:- 1) @env0:asLowercase.
+	((word @env0:= 'inf') @env0:or: [(word @env0:= 'infinity') @env0:or: [word @env0:= 'nan']])
+		ifTrue: [^ i].
+	((word @env0:endsWith: 'j') @env0:and: [word @env0:size @env0:> 1]) ifTrue: [
+		| head |
+		head := word @env0:copyFrom: 1 to: word @env0:size @env0:- 1.
+		((head @env0:= 'inf') @env0:or: [(head @env0:= 'infinity') @env0:or: [head @env0:= 'nan']])
+			ifTrue: [^ i @env0:- 1]].
+	^ start
+%
+
+category: 'Grail-Type Conversion'
+classmethod: complex
+___floatFrom___: s sign: signChar
+	"float(s) with ``signChar'' applied, where an EMPTY s means 1.0 (the
+	magnitude Python lets you omit before j: ``+j'' is 1j).
+
+	The sign is applied by NEGATION rather than by handing float() a signed
+	string so that -nan keeps its sign bit: float('-nan') answers a NaN whose
+	sign GemStone does not preserve, and test_complex asserts
+	``copysign(1., complex('-nan').real) == -1.''."
+
+	| mag |
+	mag := s @env0:isEmpty
+		ifTrue: [1.0]
+		ifFalse: [
+			"float class>>__new__: is compiled in ENVIRONMENT 1, so this is an
+			env-1 send.  Catch ValueError ONLY -- restating it in complex()'s
+			wording is the whole point, but an earlier version caught every
+			Error, which turned a wrong-environment MessageNotUnderstood into
+			``malformed string'' and made every magnitude look unparseable."
+			[float __new__: s]
+				@env0:on: ValueError do: [:ex | self ___malformed___]].
+	^ signChar @env0:== $- ifTrue: [mag @env0:negated] ifFalse: [mag]
+%
+
+category: 'Grail-Type Conversion'
+classmethod: complex
+___parseString___: aString
+	"complex(str) -- CPython's grammar:
+
+	    ws* [ '(' ws* ] <component> [ <signed-component> ] [ ws* ')' ] ws*
+
+	where a component is an optional sign, an optional magnitude and an
+	optional 'j'/'J'.  Anything left over, or a NUL anywhere, is a ValueError."
+
+	| s i n gotBracket c sign1 start1 end1 mag1 isImag1 real imag sign2 start2 end2 |
+	s := aString @env0:asString.
+	"codePoint: -- GemStone's Character class has no #value:."
+	(s @env0:includes: (Character @env0:codePoint: 0)) ifTrue: [^ self ___malformed___].
+	n := s @env0:size.
+	i := 1.
+	[i @env0:<= n and: [(s @env0:at: i) @env0:isSeparator]] whileTrue: [i := i @env0:+ 1].
+	gotBracket := false.
+	(i @env0:<= n and: [(s @env0:at: i) @env0:== $(]) ifTrue: [
+		gotBracket := true.
+		i := i @env0:+ 1.
+		[i @env0:<= n and: [(s @env0:at: i) @env0:isSeparator]] whileTrue: [i := i @env0:+ 1]].
+	i @env0:> n ifTrue: [^ self ___malformed___].
+
+	"--- first component ---"
+	sign1 := $+.
+	c := s @env0:at: i.
+	(c @env0:== $+ or: [c @env0:== $-]) ifTrue: [sign1 := c. i := i @env0:+ 1].
+	i @env0:> n ifTrue: [^ self ___malformed___].
+	start1 := i.
+	end1 := self ___scanComponentIn___: s from: i.
+	end1 @env0:= start1 ifTrue: [end1 := self ___scanWordIn___: s from: i].
+	mag1 := s @env0:copyFrom: start1 to: end1 @env0:- 1.
+	i := end1.
+	isImag1 := i @env0:<= n and: [(s @env0:at: i) @env0:== $j or: [(s @env0:at: i) @env0:== $J]].
+	isImag1 ifTrue: [i := i @env0:+ 1]
+		ifFalse: [
+			"Only the imaginary part may omit its magnitude."
+			mag1 @env0:isEmpty ifTrue: [^ self ___malformed___]].
+
+	isImag1
+		ifTrue: [ real := 0.0. imag := self ___floatFrom___: mag1 sign: sign1 ]
+		ifFalse: [
+			real := self ___floatFrom___: mag1 sign: sign1.
+			imag := 0.0.
+			"--- optional second component, which must be signed and imaginary ---"
+			(i @env0:<= n and: [(s @env0:at: i) @env0:== $+ or: [(s @env0:at: i) @env0:== $-]]) ifTrue: [
+				sign2 := s @env0:at: i.
+				i := i @env0:+ 1.
+				start2 := i.
+				end2 := self ___scanComponentIn___: s from: i.
+				end2 @env0:= start2 ifTrue: [end2 := self ___scanWordIn___: s from: i].
+				i := end2.
+				(i @env0:<= n and: [(s @env0:at: i) @env0:== $j or: [(s @env0:at: i) @env0:== $J]])
+					ifFalse: [^ self ___malformed___].
+				i := i @env0:+ 1.
+				imag := self ___floatFrom___: (s @env0:copyFrom: start2 to: end2 @env0:- 1)
+					sign: sign2]].
+
+	"--- trailer ---"
+	[i @env0:<= n and: [(s @env0:at: i) @env0:isSeparator]] whileTrue: [i := i @env0:+ 1].
+	gotBracket ifTrue: [
+		(i @env0:<= n and: [(s @env0:at: i) @env0:== $)]) ifFalse: [^ self ___malformed___].
+		i := i @env0:+ 1.
+		[i @env0:<= n and: [(s @env0:at: i) @env0:isSeparator]] whileTrue: [i := i @env0:+ 1]].
+	i @env0:<= n ifTrue: [^ self ___malformed___].
+	^ complex @env1:__new__: real _: imag
+%
+
+category: 'Grail-Type Conversion'
+classmethod: complex
+from_number: n
+	"complex.from_number(x) -- x as a complex, accepting ONLY numbers.
+
+	It used to be ``self __new__: n _: 0.0'', which assumed n was real: a
+	complex argument (``complex.from_number(3.14j)'') reached __init__:_: and
+	died sending #asFloat to a complex, as a Smalltalk MessageNotUnderstood
+	that no ``except'' could catch.
+
+	Narrower than complex(): from_number rejects what complex() accepts from a
+	STRING, and rejects a type that only has __int__ (MyInt in test_complex),
+	because it is documented as the number-only constructor.  Order follows
+	CPython -- complex, then __complex__, then __float__, then __index__ --
+	and the result is narrowed to the RECEIVING class, so
+	``ComplexSubclass.from_number(...)'' answers a ComplexSubclass."
+
+	| v |
+	v := (n isKindOf: complex)
+		ifTrue: [n]
+		ifFalse: [
+			((n @env0:class @env0:whichClassIncludesSelector: #'__complex__' environmentId: 1) @env0:notNil)
+				ifTrue: [n __complex__]
+				ifFalse: [
+					((n @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) @env0:notNil)
+						ifTrue: [complex @env1:__new__: (n __float__) _: 0.0]
+						ifFalse: [
+							((n @env0:class @env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:notNil)
+								ifTrue: [complex @env1:__new__: (n __index__) _: 0.0]
+								ifFalse: [
+									"A Smalltalk-native number (SmallInteger, Float, Fraction)
+									carries none of those dunders but is still a number."
+									(n @env0:isKindOf: Number)
+										ifTrue: [complex @env1:__new__: n _: 0.0]
+										ifFalse: [
+											TypeError ___signal___:
+												('complex.from_number() argument must be a number, not '''
+													@env0:, (bytes ___pyTypeNameOf___: n) @env0:, '''')]]]]].
+	"CPython answers the SAME object for complex.from_number(c) when c is
+	already exactly a complex -- test_from_number asserts the identity."
+	((self @env0:== complex) @env0:and: [v @env0:class @env0:== complex])
+		ifTrue: [^ v].
+	^ self @env1:__new__: (v @env1:real) _: (v @env1:imag)
 %
 
 category: 'Grail-Arithmetic'
@@ -234,17 +439,20 @@ method: complex
 __add__: other
 	"Add two complex numbers or complex and real."
 
-	| otherReal otherImag |
-	(other @env0:class) == complex
-		ifTrue: [
-			otherReal := other real.
-			otherImag := other imag.
-		]
-		ifFalse: [
-			otherReal := other @env0:asFloat.
-			otherImag := 0.0.
-		].
-	^ complex __new__: ((self real) @env0:+ otherReal) _: ((self imag) @env0:+ otherImag)
+	"A real operand leaves the OTHER component untouched, rather than being
+	widened to complex(x, 0.0) and combined.  Widening is what destroys a
+	signed zero: -0.0 + 0.0 is +0.0 in IEEE, so ``complex(-0.0, -0.0) +
+	(-0.0)'' reported a +0.0 imaginary part where CPython keeps -0.0.
+
+	``isKindOf:'' rather than ``class ==''  so a complex SUBCLASS takes the
+	complex branch; under ``class =='' it fell to the real branch and sent
+	#asFloat to a complex, a Smalltalk MessageNotUnderstood no ``except''
+	could catch."
+
+	(other isKindOf: complex) ifTrue: [
+		^ complex __new__: ((self real) @env0:+ (other @env1:real))
+			_: ((self imag) @env0:+ (other @env1:imag))].
+	^ complex __new__: ((self real) @env0:+ (other @env0:asFloat)) _: (self imag)
 %
 
 category: 'Grail-Type Conversion'
@@ -259,9 +467,26 @@ __bool__
 category: 'Grail-Type Conversion'
 method: complex
 __complex__
-	"Return self (already a complex number)."
+	"Return this value as an EXACT complex.
 
-	^ self
+	Self only when self is exactly complex: CPython narrows a subclass here
+	(``type(ComplexSubclass(3+4j).__complex__()) is complex''), the same rule
+	__pos__ follows, and for the same reason -- the operation yields a complex
+	VALUE, and nothing about the subclass survives it."
+
+	^ self ___asExactComplex___
+%
+
+category: 'Grail-Type Conversion'
+method: complex
+___asExactComplex___
+	"Self when self is exactly a complex, otherwise a plain complex with the
+	same parts.  The one place the subclass-narrowing rule is written down;
+	__complex__ and __pos__ both defer to it."
+
+	^ (self @env0:class @env0:== complex)
+		ifTrue: [self]
+		ifFalse: [complex @env1:__new__: (self @env1:real) _: (self @env1:imag)]
 %
 
 category: 'Grail-Comparison'
@@ -379,8 +604,15 @@ method: complex
 __getnewargs__
 	"Return arguments for pickling/unpickling."
 
-	"Return a tuple (array) of (real, imag) for reconstruction"
-	^ {self real. self imag}
+	"A TUPLE, not a bare Array.  ``__getnewargs__'' is read by pickle and
+	compared directly in test_getnewargs (``(1+2j).__getnewargs__() ==
+	(1.0, 2.0)''), and a Grail Array reports as a Python list -- so the
+	value was right and its type was wrong, which reads as a puzzling
+	``[1.0, 2.0] != (1.0, 2.0)''."
+	"@env0: -- tuple class>>withAll: is compiled in environment 0, and this
+	method is in complex.gs's env-1 section, so a bare send looks it up in
+	env 1 and answers a MessageNotUnderstood on the metaclass."
+	^ tuple @env0:withAll: {self real. self imag}
 %
 
 category: 'Grail-Serialization'
@@ -505,10 +737,75 @@ __neg__
 
 category: 'Grail-Arithmetic'
 method: complex
-__pos__
-	"Unary plus (returns self)."
+___unsupportedOperand___: opString with: other reflected: reflected
+	"CPython's ``unsupported operand type(s)'' TypeError, with the operand
+	type names in SOURCE order (so the reflected form reports int and complex
+	that way round, not complex and int)."
 
-	^ self
+	| mine theirs |
+	mine := bytes ___pyTypeNameOf___: self.
+	theirs := bytes ___pyTypeNameOf___: other.
+	^ TypeError ___signal___: ('unsupported operand type(s) for '
+		@env0:, opString @env0:, ': '''
+		@env0:, (reflected ifTrue: [theirs] ifFalse: [mine]) @env0:, ''' and '''
+		@env0:, (reflected ifTrue: [mine] ifFalse: [theirs]) @env0:, '''')
+%
+
+! Floor division, modulo and divmod are NOT DEFINED on complex in Python --
+! there is no meaningful floor of a complex number, and CPython removed the
+! historical implementations in 3.0.  Grail defined none of them either, so
+! ``a // b'' fell through to a generic numeric path that DIVIDED: a zero
+! divisor then raised ZeroDivisionError where CPython raises TypeError, and a
+! non-zero one silently produced an answer for an operation Python does not
+! have.  The second is the worse bug -- a wrong answer rather than a wrong
+! error -- and test_complex only catches it because ZERO_DIVISION happens to
+! use zeros.
+
+category: 'Grail-Arithmetic'
+method: complex
+__floordiv__: other
+	^ self ___unsupportedOperand___: '//' with: other reflected: false
+%
+
+category: 'Grail-Arithmetic'
+method: complex
+__rfloordiv__: other
+	^ self ___unsupportedOperand___: '//' with: other reflected: true
+%
+
+category: 'Grail-Arithmetic'
+method: complex
+__mod__: other
+	^ self ___unsupportedOperand___: '%' with: other reflected: false
+%
+
+category: 'Grail-Arithmetic'
+method: complex
+__rmod__: other
+	^ self ___unsupportedOperand___: '%' with: other reflected: true
+%
+
+category: 'Grail-Arithmetic'
+method: complex
+__divmod__: other
+	^ self ___unsupportedOperand___: 'divmod()' with: other reflected: false
+%
+
+category: 'Grail-Arithmetic'
+method: complex
+__rdivmod__: other
+	^ self ___unsupportedOperand___: 'divmod()' with: other reflected: true
+%
+
+category: 'Grail-Arithmetic'
+method: complex
+__pos__
+	"Unary plus.  Self when self is exactly complex; a plain complex with the
+	same parts for a subclass, since ``type(+ComplexSubclass(1, 6)) is
+	complex'' in CPython -- unary plus produces a complex VALUE and does not
+	preserve the subclass."
+
+	^ self ___asExactComplex___
 %
 
 category: 'Grail-Arithmetic'
@@ -581,28 +878,35 @@ method: complex
 __repr__
 	"Return string representation of complex number."
 
+	"SIGNED ZEROS are the whole difficulty here, and the previous version got
+	both halves of them wrong.
+
+	CPython omits the real part only when it is POSITIVE zero: repr of
+	complex(0, 1) is ``1j'' but of complex(-0.0, 1) is ``(-0+1j)''.  Testing
+	``real = 0.0'' cannot tell those apart -- IEEE says -0.0 = 0.0 -- so the
+	negative zero silently printed as ``1j''.
+
+	And the imaginary sign came from ``imag >= 0.0'', which is TRUE for -0.0,
+	while the magnitude came from ``imag abs'', which answers -0.0 unchanged.
+	The two combined to emit BOTH signs: complex(-1, -0.0) printed
+	``(-1+-0j)''.
+
+	Both are fixed by asking ___formatComponent___ instead of the arithmetic:
+	it delegates to float's own __repr__, which already spells -0.0 as ``-0'',
+	so a leading '-' IS the sign bit -- true for -0.0, negatives and -inf
+	alike, and correctly absent for nan (CPython prints ``(1+nanj)'')."
+
 	| realStr imagStr |
 	realStr := self ___formatComponent___: self real.
-	imagStr := (self imag) @env0:abs.
-	imagStr := self ___formatComponent___: imagStr.
-
-	^ (((self real) @env0:= 0.0)
-		ifTrue: [imagStr @env0:, 'j']
-		ifFalse: [
-			((self imag) @env0:>= 0.0)
-				ifTrue: [
-					(((('(' @env0:, realStr)
-						@env0:, '+')
-						@env0:, imagStr)
-						@env0:, 'j)')
-				]
-				ifFalse: [
-					(((('(' @env0:, realStr)
-						@env0:, '-')
-						@env0:, imagStr)
-						@env0:, 'j)')
-				]
-		]) @env0:asUnicodeString
+	imagStr := self ___formatComponent___: self imag.
+	"'0' exactly -- '-0' falls through to the parenthesised form."
+	(realStr @env0:= '0') ifTrue: [
+		^ (imagStr @env0:, 'j') @env0:asUnicodeString].
+	"A negative component already carries its '-', so only a positive one
+	needs a separator inserted."
+	^ ('(' @env0:, realStr
+		@env0:, ((imagStr @env0:beginsWith: '-') ifTrue: [''] ifFalse: ['+'])
+		@env0:, imagStr @env0:, 'j)') @env0:asUnicodeString
 %
 
 category: 'Grail-Arithmetic'
@@ -643,17 +947,24 @@ method: complex
 __rsub__: other
 	"Right-hand subtract (other - self)."
 
-	| otherReal otherImag |
-	(other @env0:class) == complex
-		ifTrue: [
-			otherReal := other real.
-			otherImag := other imag.
-		]
-		ifFalse: [
-			otherReal := other @env0:asFloat.
-			otherImag := 0.0.
-		].
-	^ complex __new__: (otherReal @env0:- (self real)) _: (otherImag @env0:- (self imag))
+	"A real operand leaves the OTHER component untouched, rather than being
+	widened to complex(x, 0.0) and combined.  Widening is what destroys a
+	signed zero: -0.0 + 0.0 is +0.0 in IEEE, so ``complex(-0.0, -0.0) +
+	(-0.0)'' reported a +0.0 imaginary part where CPython keeps -0.0.
+
+	``isKindOf:'' rather than ``class ==''  so a complex SUBCLASS takes the
+	complex branch; under ``class =='' it fell to the real branch and sent
+	#asFloat to a complex, a Smalltalk MessageNotUnderstood no ``except''
+	could catch."
+
+	(other isKindOf: complex) ifTrue: [
+		^ complex __new__: ((other @env1:real) @env0:- (self real))
+			_: ((other @env1:imag) @env0:- (self imag))].
+	"Real minus complex NEGATES the imaginary part -- it is not left alone,
+	because the complex operand is on the right: 0.0 - complex(0.0, 0.0) has
+	a -0.0 imaginary part in CPython."
+	^ complex __new__: ((other @env0:asFloat) @env0:- (self real))
+		_: ((self imag) @env0:negated)
 %
 
 category: 'Grail-Arithmetic'
@@ -706,17 +1017,20 @@ method: complex
 __sub__: other
 	"Subtract two complex numbers or complex and real."
 
-	| otherReal otherImag |
-	(other @env0:class) == complex
-		ifTrue: [
-			otherReal := other real.
-			otherImag := other imag.
-		]
-		ifFalse: [
-			otherReal := other @env0:asFloat.
-			otherImag := 0.0.
-		].
-	^ complex __new__: ((self real) @env0:- otherReal) _: ((self imag) @env0:- otherImag)
+	"A real operand leaves the OTHER component untouched, rather than being
+	widened to complex(x, 0.0) and combined.  Widening is what destroys a
+	signed zero: -0.0 + 0.0 is +0.0 in IEEE, so ``complex(-0.0, -0.0) +
+	(-0.0)'' reported a +0.0 imaginary part where CPython keeps -0.0.
+
+	``isKindOf:'' rather than ``class ==''  so a complex SUBCLASS takes the
+	complex branch; under ``class =='' it fell to the real branch and sent
+	#asFloat to a complex, a Smalltalk MessageNotUnderstood no ``except''
+	could catch."
+
+	(other isKindOf: complex) ifTrue: [
+		^ complex __new__: ((self real) @env0:- (other @env1:real))
+			_: ((self imag) @env0:- (other @env1:imag))].
+	^ complex __new__: ((self real) @env0:- (other @env0:asFloat)) _: (self imag)
 %
 
 category: 'Grail-Arithmetic'

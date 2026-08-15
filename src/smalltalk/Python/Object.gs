@@ -2421,14 +2421,21 @@ ___classCellSetter___: aSym
 
 category: 'Grail-Initialization'
 method: object
-___pyBuiltinCollectionInit___: positional kw: keywords new: hasNew
-	"Populate a built-in-collection subclass instance during Cls(*args, **kw)
-	when the subclass defines no __init__ of its own (population is inherited
-	from the built-in type's __init__).  ClassDefAst emits this on the
-	general (runtime-allocated) construction path, so it works for DYNAMIC
-	bases -- ``class T(self.type2test)'' -- detecting the collection kind by
-	isKindOf at RUNTIME.  Currently handles list subclasses; a non-collection
-	receiver is a NO-OP, leaving ordinary classes unaffected.
+___pyBuiltinSubclassInit___: positional kw: keywords new: hasNew
+	"Initialise a built-in subclass instance during Cls(*args, **kw) when the
+	subclass defines no __init__ of its own (the state is inherited from the
+	built-in type's __init__).  ClassDefAst emits this on the general
+	(runtime-allocated) construction path, so it works for DYNAMIC bases --
+	``class T(self.type2test)'' -- detecting the built-in kind by isKindOf at
+	RUNTIME.  Handles list, set/frozenset and complex; any other receiver is a
+	NO-OP, leaving ordinary classes unaffected.
+
+	Named ...SubclassInit rather than the original ...CollectionInit because
+	complex -- a SCALAR -- joined the list: what a built-in subclass inherits
+	is not always elements.  A plain ``class C(complex): pass'' was allocated
+	and then left completely uninitialised, so ``C(3, 4).real'' answered the
+	BOUND METHOD ``real'' rather than 3.0, and anything that then did
+	arithmetic on it died in Smalltalk rather than raising a Python error.
 
 	``hasNew'' = the class overrode __new__.  CPython then makes the
 	inherited __init__ lenient about the leftover constructor args __new__
@@ -2477,6 +2484,30 @@ ___pyBuiltinCollectionInit___: positional kw: keywords new: hasNew
 		((keywords @env0:notNil and: [keywords @env0:isEmpty @env0:not])
 			and: [hasNew @env0:not and: [(self @env0:class ___hasUserInit___) @env0:not]]) ifTrue: [
 			TypeError ___signal___: 'frozenset() takes no keyword arguments']].
+
+	"A complex subclass carries its value in the ``real''/``imag'' dynamic
+	instVars complex>>__init__:_: writes.  The general allocation path never
+	wrote them, so a plain ``class C(complex): pass'' produced an instance
+	whose ``.real'' resolved to the METHOD of that name -- the source of
+	``must be real number, not BoundMethod'' and of a Smalltalk
+	MessageNotUnderstood escaping from __repr__.
+
+	Delegating to complex's own __new__: rather than re-deriving the parts
+	keeps ONE definition of the conversion rules (a lone argument may itself
+	be complex, or reach the value through __complex__ / __float__), so this
+	cannot drift from complex(...)."
+	(self @env0:isKindOf: complex) ifTrue: [
+		| v |
+		hasNew ifFalse: [
+			(positional @env0:size @env0:> 2) ifTrue: [
+				TypeError ___signal___: 'complex() takes at most 2 arguments']].
+		v := positional @env0:isEmpty
+			ifTrue: [complex @env1:__new__: 0.0 _: 0.0]
+			ifFalse: [(positional @env0:size @env0:= 1)
+				ifTrue: [complex @env1:__new__: (positional @env0:at: 1)]
+				ifFalse: [complex @env1:__new__: (positional @env0:at: 1)
+					_: (positional @env0:at: 2)]].
+		self @env1:__init__: (v @env1:real) _: (v @env1:imag)].
 	^ self
 %
 

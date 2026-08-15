@@ -252,7 +252,14 @@ testTrailingDotFollowedByImaginarySuffix
 	form reaches that branch."
 
 	self assertResult: 'literal_0_dot_j' equals: '''0j'''.
-	self assertResult: 'literal_neg_0_dot_j' equals: '''-0j'''
+	"``-0.j'' is complex(-0.0, -0.0) -- unary minus negates BOTH parts -- and
+	CPython reprs it ``(-0-0j)'': the real part is printed whenever it is not
+	POSITIVE zero.  This expectation used to read ``-0j'', which was Grail's
+	own output at the time and not CPython's: __repr__ tested ``real = 0.0'',
+	which is true for -0.0 as well, and so dropped a real part CPython keeps.
+	Verified against CPython 3.14; the test was pinning the bug rather than
+	the behaviour."
+	self assertResult: 'literal_neg_0_dot_j' equals: '''(-0-0j)'''
 %
 
 category: 'Grail-Tests-FormatSpec'

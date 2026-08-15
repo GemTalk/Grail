@@ -2149,7 +2149,7 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 					subclass_with_new)."
 					initSelector isNil ifTrue: [
 						src
-							nextPutAll: 'instance @env1:___pyBuiltinCollectionInit___: ___pos___ kw: ___kw___ new: ';
+							nextPutAll: 'instance @env1:___pyBuiltinSubclassInit___: ___pos___ kw: ___kw___ new: ';
 							nextPutAll: (self definesOwnNew ifTrue: ['true'] ifFalse: ['false']);
 							nextPutAll: '.'; nextPutAll: lf]]]].
 	"Descriptor-bound __init__ override: a setattr-installed
@@ -3606,7 +3606,7 @@ definesOwnNew
 	"True when the class body defines its own ``__new__''.  When it does, a
 	built-in-collection subclass's inherited __init__ is lenient about the
 	extra constructor args (CPython: __new__ consumed them) -- see
-	___pyBuiltinCollectionInit___ (test_list test_keywords_in_subclass's
+	___pyBuiltinSubclassInit___ (test_list test_keywords_in_subclass's
 	subclass_with_new)."
 
 	^ (self instanceMethodDefs
