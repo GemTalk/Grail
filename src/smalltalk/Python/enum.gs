@@ -65,7 +65,17 @@ initialize
 	the ReprEnum contract)."
 	self @env0:at: #Enum put: Enum.
 	self @env0:at: #EnumType put: Enum @env0:class.
-	self @env0:at: #property put: PropertyDescriptor.
+	"``enum.property'' is NOT the builtin property: it is the descriptor that
+	hides from the CLASS so an enum member can have a ``name'' while the class
+	keeps its own meaning for that name (types.DynamicClassAttribute is the
+	same object, and types.py imports it from here).  Exporting
+	PropertyDescriptor for it made the two one behaviour, and the enum case
+	took the property answer -- class access handed back the descriptor where
+	CPython raises AttributeError."
+	"DynamicClassAttribute is exported under the name ``property'', and it says
+	so: install.gs stamps its __module__/__qualname__ once the class exists.
+	See object class >> ___stampPythonIdentity___: for why that matters."
+	self @env0:at: #property put: DynamicClassAttribute.
 	self @env0:at: #member put: PropertyDescriptor.
 	self @env0:at: #nonmember put: PropertyDescriptor.
 	"``member'' and ``nonmember'' are overwritten just below with real

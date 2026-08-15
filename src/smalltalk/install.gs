@@ -303,6 +303,7 @@ run
 	at: #'ExecBlockAttrs' put: nil;
 	at: #'MethodBinding' put: nil;
 	at: #'PropertyDescriptor' put: nil;
+	at: #'DynamicClassAttribute' put: nil;
 	at: #'PyStaticMethod' put: nil;
 	at: #'PyClassMethod' put: nil;
 	at: #'LruCacheWrapper' put: nil;
@@ -700,6 +701,7 @@ run
 	at: #'InitSubclassTestCase' put: nil;
 	at: #'NamedtupleNamingTestCase' put: nil;
 	at: #'EnumModuleApiTestCase' put: nil;
+	at: #'EnumDynamicClassAttributeTestCase' put: nil;
 	at: #'BuiltinSubclassPickleTestCase' put: nil;
 	at: #'EnumPickleByNameTestCase' put: nil;
 	at: #'ClassBodyNamespaceTestCase' put: nil;
@@ -1061,6 +1063,7 @@ input src/smalltalk/Python/NamedIntConstant.gs
 input src/smalltalk/Python/BoundMethod.gs
 input src/smalltalk/Python/MethodBinding.gs
 input src/smalltalk/Python/PropertyDescriptor.gs
+input src/smalltalk/Python/DynamicClassAttribute.gs
 input src/smalltalk/Python/MethodWrappers.gs
 
 ! Register ``property'' → PropertyDescriptor AFTER the class file is
@@ -1276,6 +1279,40 @@ commit
 ! ------- Register built-in numeric types with numbers module ABCs
 run
 numbers @env1:instance.
+%
+commit
+
+! ------- Tell classes exported under a DIFFERENT name what they are called
+!
+! A Smalltalk class exposed as a Python module attribute has no __module__ and
+! a __qualname__ that is its SMALLTALK name, so it does not know the name it is
+! reachable by.  Both are how pickle saves an object BY REFERENCE, and without
+! __module__ pickle falls back to whichmodule(), which SCANS sys.modules for a
+! module exposing the object under its __qualname__ -- an order-dependent test
+! by construction.  Two consequences, both of which we hit:
+!
+!   * enum.property has __qualname__ 'DynamicClassAttribute', and types exposes
+!     it under exactly that name, so pickle.dumps(enum.property) raised
+!     PicklingError in a fresh session and succeeded once anything had imported
+!     types.  EnumPickleByNameTestCase therefore passed ALONE and failed in a
+!     whole-suite run -- the test order decided the answer.
+!   * a survey of enum / types / functools / io found 13 module-level classes
+!     with no readable __module__ at all, so every one of them pickles by a
+!     sys.modules scan.
+!
+! CPython has no such gap: its classes carry both, so whichmodule returns on its
+! first line and never scans.  Stamped HERE, after Object.gs has filed
+! ___stampPythonIdentity___: and every class exists, so the table stays in one
+! place as more are found.  Verified against CPython 3.14.
+!
+! ONE ENTRY ONLY, deliberately.  A stamp is visible from INSTANCES too (see
+! ___stampPythonIdentityAccessor___:value:), so it is safe only for a class
+! whose instances do not pickle by reference.  ``property'' itself is the
+! counter-example and is left alone: stamping it makes pickle save a property
+! INSTANCE as the property CLASS instead of refusing, which is worse than the
+! gap.  The other 12 need that judgement one at a time.
+run
+DynamicClassAttribute @env1:___stampPythonIdentity___: 'enum' qualname: 'property'.
 %
 commit
 
@@ -1530,6 +1567,7 @@ input src/smalltalk/PythonTests/ClassQualnameStoreTestCase.gs
 input src/smalltalk/PythonTests/InitSubclassTestCase.gs
 input src/smalltalk/PythonTests/NamedtupleNamingTestCase.gs
 input src/smalltalk/PythonTests/EnumModuleApiTestCase.gs
+input src/smalltalk/PythonTests/EnumDynamicClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassPickleTestCase.gs
 input src/smalltalk/PythonTests/EnumPickleByNameTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNamespaceTestCase.gs
