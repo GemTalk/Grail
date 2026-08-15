@@ -2809,3 +2809,57 @@ semantics that would draw the wrong thing. Carets remain the largest cluster
 (~9 tests) and the least ready. If traceback work continues, the `<grail>`
 filename cluster (5 tests) and the suggestion family (11, several sub-causes) are
 unblocked; carets are gated on an `ast` decision that is bigger than traceback.
+
+### 9.34 A live frame for a method named `<grail>` (2026-08-14, gs40)
+
+The `<grail>` cluster from §9.32's bucketing is five tests — `test_extract_stack`,
+`test_format_stack`, `test_print_stack`, `test_custom_format_frame` — and they
+are all LIVE-stack tests, not exception tracebacks. The two mechanisms resolve a
+filename differently, which is why `code_filename.py` passed throughout while
+these failed.
+
+**The bug: only one of the two def shapes resolved.**
+`BaseException class >> ___liveFrameFilenameFor___:` derived `co_filename` from
+`aMethod inClass name`, on the stated premise that "a generated Python function's
+defining class IS its module". That holds for a MODULE-LEVEL def. A CLASS-BODY
+def compiles to a Smalltalk method whose `inClass` is the **Python class** —
+`T`, not `stackprobe` — so the `sys.modules` lookup missed and every live frame
+for a method answered `<grail>`. Measured, before:
+
+```
+MODLEVEL=[('/.../stackprobe.py','probe'), ('/.../stackprobe.py','modlevel')]
+METHOD  =[('/.../stackprobe.py','probe'), ('<grail>','meth')]
+```
+
+**The fix** consults the defining class's class-side `___methodCodeTable___`
+first — the same `PyCode` that backs `__code__`, so its `co_filename` is exactly
+the path `code_filename.py` already pins and the two mechanisms cannot disagree.
+No superclass walk is needed, unlike `BoundMethod>>___methodCodeForClass___:name:`:
+that starts from the RECEIVER's class and must climb to find an inherited method,
+whereas `aMethod inClass` IS the defining class. The module route stays as the
+fallback for module-level defs, and `<grail>` remains the last resort.
+
+One trap worth recording: the temp could not be called `name`. This is a
+CLASSMETHOD, so `self` is the class and GemStone's `Class` instVar `name` is
+already in scope — `CompileError 1030, variable has already been declared`.
+
+**It fixes the filename and wins no tests, which is the useful part.** After the
+change, `<grail>` in `test.test_traceback`'s failure details drops from 5 lines
+to 1, and the scoreboard row is unchanged at `t=370 f=45 e=12 s=218`. The
+placeholder was masking two further problems, now legible:
+
+* **Relative vs absolute paths.** `test_custom_format_frame` renders
+  `File "src/python/stdlib/test/test_traceback.py"` where the test expects the
+  absolute `__file__`. A module's `co_filename` mirrors however the module was
+  loaded, and the CPython harness loads by relative path while `__file__` is
+  absolutised. `code_filename.py` does not catch this because its fixture is
+  loaded by an absolute path, so both agree there.
+* **Harness and unittest frames are in the walk.** `run_one`
+  (`_grail_harness.py`) and `run` (`unittest/__init__.py`) appear in the
+  extracted stack; the tests compare against a specific expected list.
+
+Both are real and neither is what the cluster looked like from the outside. A
+regression check is pinned in `live_frames.py`
+(`a_method_s_live_frame_names_its_real_file`), asserting BOTH shapes so that a
+future fix repairing one by breaking the other fails rather than looks like
+progress.
