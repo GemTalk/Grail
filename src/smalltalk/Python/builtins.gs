@@ -2578,6 +2578,16 @@ ___isInstanceSingle___: anObject of: aClass
 	catchable TypeError -- isKindOf: on a non-Behavior dies with an
 	UNCATCHABLE ArgumentTypeError (killed test_functools)."
 	(aClass isKindOf: Behavior) ifFalse: [
+		"A non-class classinfo may still supply __instancecheck__ on its own
+		type -- CPython looks the hook up on TYPE(cls) without first requiring
+		cls to be a type, and ``isinstance([], typing.List)'' is exactly that
+		shape (typing.List is a _SpecialGenericAlias INSTANCE).  Asked BEFORE
+		the __bases__ protocol and the TypeError, both of which are the
+		fallbacks for a classinfo that supplies no hook."
+		hook := aClass ___nonClassCheckHook___: #'__instancecheck__'.
+		hook @env0:notNil ifTrue: [
+			^ (hook ___pyCallValue___: { aClass. anObject } kw: nil) ___isTruthy___]].
+	(aClass isKindOf: Behavior) ifFalse: [
 		"OLD-STYLE PROTOCOL (CPython recursive_isinstance): a non-type
 		classinfo that exposes a tuple __bases__ is not an error -- compare
 		the INSTANCE's __class__ against it through the __bases__ graph.
@@ -2890,6 +2900,15 @@ ___isSubclass___: aClass of: aClassOrTuple depth: aDepth
 	__instancecheck__ does for isinstance -- see ___isInstanceSingle___:of:."
 	(target isKindOf: Behavior) ifTrue: [ | hook |
 		hook := target ___metaclassCheckHook___: #'__subclasscheck__'.
+		hook @env0:notNil ifTrue: [
+			^ (hook ___pyCallValue___: { target. sub } kw: nil) ___isTruthy___]].
+	"A NON-CLASS target may supply the hook on its own type -- CPython looks
+	__subclasscheck__ up on TYPE(cls) whatever cls is, and never validates the
+	FIRST argument before asking, which is what lets
+	``issubclass(typing.List, typing.List | typing.Tuple)'' work with a
+	non-class on both sides.  See ___nonClassCheckHook___."
+	(target isKindOf: Behavior) ifFalse: [ | hook |
+		hook := target ___nonClassCheckHook___: #'__subclasscheck__'.
 		hook @env0:notNil ifTrue: [
 			^ (hook ___pyCallValue___: { target. sub } kw: nil) ___isTruthy___]].
 	^ self ___isSubclassSingle___: sub of: target

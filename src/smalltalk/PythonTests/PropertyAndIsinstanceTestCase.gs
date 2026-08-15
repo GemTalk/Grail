@@ -187,15 +187,24 @@ testUnionMembersAreStillValidated
 
 category: 'Grail-Tests-PropertyIsinstance'
 method: PropertyAndIsinstanceTestCase
-testTypingContainerAliasesAreTheBuiltins
-	"typing.List has been a deprecated alias of list since 3.9; as a bare stub
-	instance it was not a type at all, so ``typing.List | typing.Tuple'' raised
-	``unsupported operand type(s) for |''."
+testTypingContainerAliasesDelegateToTheBuiltins
+	"typing.List is a deprecated ALIAS of list, not list itself.  It is its own
+	object -- a _SpecialGenericAlias wrapping list as __origin__ -- and ``|''
+	and the type checks work THROUGH that origin.
 
-	self assertResult: 'typing_list_is_list' equals: 'True'.
+	Two of these assertions used to say the opposite, and were wrong against
+	CPython in both directions: ``typing.List is list'' is False there, and
+	``typing.List[int]'' prints as itself rather than as ``list[int]''.  They
+	pinned the aliasing that made the earlier stub usable; conflating the two
+	objects is what test_enum's test_enum_of_generic_aliases catches, since it
+	puts both in one enum and requires two distinct members.  The other two
+	assertions are unchanged and are the reason the aliasing existed -- they
+	must keep passing, and do."
+
+	self assertResult: 'typing_list_is_not_list' equals: 'False'.
 	self assertResult: 'typing_union_subclass' equals: 'True'.
 	self assertResult: 'typing_union_miss' equals: 'False'.
-	self assertResult: 'typing_subscript' equals: '''list[int]'''
+	self assertResult: 'typing_subscript' equals: '''typing.List[int]'''
 %
 
 category: 'Grail-Tests-PropertyIsinstance'
