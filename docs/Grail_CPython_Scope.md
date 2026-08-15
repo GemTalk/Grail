@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 35 | 19 | 36 | 90 |
+| P1 | 37 | 17 | 36 | 90 |
 | P2 | 14 | 2 | 18 | 34 |
 | P3 | 0 | 13 | 43 | 56 |
 | P4 | 0 | 12 | 63 | 75 |
-| **In-scope** | **49** | **46** | **160** | **255** |
+| **In-scope** | **51** | **44** | **160** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -88,7 +88,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 · P3 13 · P4 12) and **49 of those score OK**.
+Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 · P3 13 · P4 12) and **51 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -114,7 +114,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_call` | Call protocol (language). |
 |  | `test_class` | Class definition/semantics (language). |
 | ✅ | `test_compare` | Object comparison protocol (language). |
-| ❗ | `test_complex` | complex type (language). |
+| ✅ | `test_complex` | complex type (language). |
 | ✅ | `test_contains` | Membership (`in`) protocol (language). |
 |  | `test_coroutines` | Coroutines / async-await (language). |
 | ❗ | `test_decorators` | Decorators (language). |
@@ -124,7 +124,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_dictcomps` | Dict comprehensions (language). |
 | ✅ | `test_dictviews` | dict keys/values/items views (language). |
 | ❗ | `test_dynamic` | Dynamic name binding / exec (language). |
-| ❗ | `test_enumerate` | enumerate builtin (language). |
+| ✅ | `test_enumerate` | enumerate builtin (language). |
 |  | `test_eof` | Parser EOF handling (language). |
 |  | `test_except_star` | except* / PEP 654 (language). |
 |  | `test_exception_group` | ExceptionGroup (language). |

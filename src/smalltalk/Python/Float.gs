@@ -303,8 +303,15 @@ ___parseFloatBody___: trimmed original: original
 			(expCount @env0:== 0) ifTrue: [self @env0:error: 'bad exponent']].
 		(idx @env0:<= size) ifTrue: [self @env0:error: 'trailing garbage'].
 		cleaned := ws @env0:contents.
-		sign @env0:< 0 ifTrue: [cleaned := '-' @env0:, cleaned].
+		"The sign is applied by NEGATION, not by handing the reader a signed
+		numeral.  ``-0'' has no written '.' or exponent, so Number>>fromStream:
+		reads it as the INTEGER 0 and #asFloat then answers +0.0 -- float('-0')
+		lost its sign bit where float('-0.0') kept it, and complex('-0j'), which
+		is what repr(complex(0.0, -0.0)) produces, could not round-trip
+		(test_repr_roundtrip).  inf/nan have already returned above, so v is a
+		finite magnitude here and negating it is exact."
 		v := (Number @env0:fromStream: (ReadStreamPortable @env0:on: cleaned)) @env0:asFloat.
+		sign @env0:< 0 ifTrue: [v := v @env0:negated].
 		v
 	] @env0:on: Error do: [:ex | ValueError ___signal___: ('could not convert string to float: ' @env0:, (original __repr__))]
 %
@@ -686,9 +693,16 @@ __floordiv__: other
 	"Floor division.  Python ``float // x'' always yields a FLOAT (``0.1 //
 	1.0'' is 0.0, not 0) -- GemStone's // answers an Integer, so coerce."
 
-	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
-		ZeroDivisionError ___signal___: 'division by zero'].
+	"The operand TYPE is checked BEFORE the divisor's value, as CPython does:
+	``1.0 // 0j'' is a TypeError -- complex has no floor division -- and NOT a
+	ZeroDivisionError.  The guard used to run first, so a complex zero was
+	reported as division by zero and test_complex's test_floordiv_zero_division
+	failed on the wrong exception.  Confining the guard to the branch that will
+	actually do the arithmetic gets the order right without duplicating the
+	dispatch."
 	(other isKindOf: Number) ifTrue: [
+		(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
+			ZeroDivisionError ___signal___: 'division by zero'].
 		^ (self @env0:// other) @env0:asFloat].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
@@ -773,9 +787,16 @@ __mod__: other
 	| result |
 	"``1.0 % 0'' answered NaN before this guard: GemStone's \\ follows fmod,
 	which has no error case for a zero divisor.  Python raises."
-	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
-		ZeroDivisionError ___signal___: 'division by zero'].
+	"The operand TYPE is checked BEFORE the divisor's value, as CPython does:
+	``1.0 % 0j'' is a TypeError -- complex has no modulo -- and NOT a
+	ZeroDivisionError.  The guard used to run first, so a complex zero was
+	reported as division by zero and test_complex's test_mod_zero_division
+	failed on the wrong exception.  Confining the guard to the branch that will
+	actually do the arithmetic gets the order right without duplicating the
+	dispatch."
 	(other isKindOf: Number) ifTrue: [
+		(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
+			ZeroDivisionError ___signal___: 'division by zero'].
 		((other @env0:isKindOf: Float) and: [(other @env0:_getKind) @env0:== 3]) ifTrue: [
 			| mod |
 			mod := self.

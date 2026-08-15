@@ -3609,11 +3609,20 @@ ___grailConvert: positional kw: kwargs forType: etype
 		(filterFn == nil
 			or: [(filterFn value: (Array @env0:with: k @env0:asString) value: nil) ___isTruthy___])
 			ifTrue: [memberPairs @env0:add: (Array @env0:with: k @env0:asString with: v)]].
-	"Sort by (value, name); on non-orderable values, sort by name alone."
+	"Sort by (value, name); on non-orderable values, sort by name alone.
+
+	Compared through ___cmpEq___/___cmpLt___ -- the OPERATOR level -- and not
+	by sending __eq__/__lt__ directly.  A dunder is allowed to answer the
+	NotImplemented sentinel, and ``___isTruthy___'' on that SYMBOL is simply
+	true, so the ordering silently succeeded on values that cannot be ordered
+	at all and the by-name fallback never ran: complex members came out in
+	value order (test_convert_complex).  The operator level is what turns the
+	sentinel into the TypeError this ``on: AbstractException'' is here to
+	catch."
 	sortedPairs := [(memberPairs @env0:asSortedCollection: [:a :b |
-		((a @env0:at: 2) __eq__: (b @env0:at: 2)) ___isTruthy___
+		((a @env0:at: 2) ___cmpEq___: (b @env0:at: 2)) ___isTruthy___
 			ifTrue: [(a @env0:at: 1) @env0:<= (b @env0:at: 1)]
-			ifFalse: [((a @env0:at: 2) __lt__: (b @env0:at: 2)) ___isTruthy___]]) @env0:asArray]
+			ifFalse: [((a @env0:at: 2) ___cmpLt___: (b @env0:at: 2)) ___isTruthy___]]) @env0:asArray]
 		@env0:on: AbstractException
 		do: [:ex |
 			(memberPairs @env0:asSortedCollection: [:a :b | (a @env0:at: 1) @env0:<= (b @env0:at: 1)]) @env0:asArray].

@@ -66,7 +66,7 @@ different rows and merges cleanly.
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
 | test.test_format | OK | 18 | 0 | 0 | 3 |  |
 | test.test_binop | OK | 12 | 0 | 0 | 0 |  |
-| test.test_complex | ERROR | 37 | 7 | 8 | 0 |  |
+| test.test_complex | OK | 37 | 0 | 0 | 0 |  |
 | test.test_enumerate | OK | 92 | 0 | 0 | 15 |  |
 | test.test_raise | ERROR | 37 | 1 | 14 | 0 |  |
 | test.test_funcattrs | ERROR | 35 | 14 | 13 | 1 |  |

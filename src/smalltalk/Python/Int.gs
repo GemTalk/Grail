@@ -638,12 +638,27 @@ __floordiv__: other
 	"Floor division."
 	"CPython: division/modulo by zero raises catchable
 	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
-	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
-		ZeroDivisionError ___signal___: 'division by zero'].
-
-	(other isKindOf: Number) ifTrue: [^ self @env0:// other].
+	"The operand TYPE is checked BEFORE the divisor's value, as CPython does:
+	``1 // 0j'' is a TypeError -- complex has no floor division -- and NOT a
+	ZeroDivisionError.  The guard used to run first, so a complex zero was
+	reported as division by zero and test_complex's test_floordiv_zero_division
+	failed on the wrong exception.  Confining the guard to the branch that will
+	actually do the arithmetic gets the order right without duplicating the
+	dispatch."
+	(other isKindOf: Number) ifTrue: [
+		(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
+			ZeroDivisionError ___signal___: 'division by zero'].
+		^ self @env0:// other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:// (other __index__)].
+		@env0:includesKey: #'__index__') ifTrue: [
+			"The __index__ result is the real divisor, so it is what gets
+			checked: ``1 // False'' indexes to zero, and reached the kernel's
+			UNCATCHABLE ZeroDivide."
+			| idx |
+			idx := other __index__.
+			(ZeroDivisionError @env0:___isZeroDivisor___: idx) ifTrue: [
+				ZeroDivisionError ___signal___: 'division by zero'].
+			^ self @env0:// idx].
 	^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'
 %
 
@@ -793,12 +808,24 @@ __mod__: other
 	"Modulo operation."
 	"CPython: division/modulo by zero raises catchable
 	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
-	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
-		ZeroDivisionError ___signal___: 'division by zero'].
-
-	(other isKindOf: Number) ifTrue: [^ self @env0:\\ other].
+	"The operand TYPE is checked BEFORE the divisor's value, as CPython does:
+	``1 % 0j'' is a TypeError -- complex has no modulo -- and NOT a
+	ZeroDivisionError.  The guard used to run first, so a complex zero was
+	reported as division by zero and test_complex's test_mod_zero_division
+	failed on the wrong exception.  Confining the guard to the branch that will
+	actually do the arithmetic gets the order right without duplicating the
+	dispatch."
+	(other isKindOf: Number) ifTrue: [
+		(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
+			ZeroDivisionError ___signal___: 'division by zero'].
+		^ self @env0:\\ other].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ self @env0:\\ (other __index__)].
+		@env0:includesKey: #'__index__') ifTrue: [
+			| idx |
+			idx := other __index__.
+			(ZeroDivisionError @env0:___isZeroDivisor___: idx) ifTrue: [
+				ZeroDivisionError ___signal___: 'division by zero'].
+			^ self @env0:\\ idx].
 	^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'
 %
 

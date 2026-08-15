@@ -771,7 +771,7 @@ max: anIterable
 				maxVal := item.
 				first := false
 			] ifFalse: [
-				(item __gt__: maxVal) ifTrue: [maxVal := item]
+				(item ___cmpGt___: maxVal) ifTrue: [maxVal := item]
 			]
 		] @env0:on: StopIteration do: [:ex | done := true]
 	].
@@ -781,17 +781,27 @@ max: anIterable
 category: 'Grail-Built-in Functions'
 method: builtins
 min: a _: b
-	"Python builtin min(a, b) — 2-arg fast path."
+	"Python builtin min(a, b) — 2-arg fast path.
 
-	^ (a __lt__: b) ifTrue: [a] ifFalse: [b]
+	Compares through ___cmpLt___/___cmpGt___ -- the OPERATOR-level comparison
+	-- rather than sending the __lt__/__gt__ dunder directly.  A dunder may
+	answer the NotImplemented sentinel, which is not a Boolean: ``min(3j, 1j)''
+	died with an uncatchable ``Expected #'___NotImplemented___' to be a
+	Boolean'' where CPython raises TypeError.  The operator level is what turns
+	the sentinel into the reflected call and then into that TypeError, and it is
+	what CPython's min/max use (PyObject_RichCompare).
+	"
+
+	^ (a ___cmpLt___: b) ifTrue: [a] ifFalse: [b]
 %
 
 category: 'Python-Built-in Functions'
 method: builtins
 max: a _: b
-	"Python builtin max(a, b) — 2-arg fast path."
+	"Python builtin max(a, b) — 2-arg fast path.  See min:_: for why the
+	comparison goes through ___cmpGt___ and not __gt__."
 
-	^ (a __gt__: b) ifTrue: [a] ifFalse: [b]
+	^ (a ___cmpGt___: b) ifTrue: [a] ifFalse: [b]
 %
 
 category: 'Grail-Built-in Functions'
@@ -846,8 +856,8 @@ ___minOrMax___: positional kw: kwargs lessThan: pickSmaller
 				gotAny := true
 			] @env0:ifTrue: [
 				isBetter := pickSmaller
-					@env0:ifTrue: [itemKey __lt__: bestKey]
-					@env0:ifFalse: [itemKey __gt__: bestKey].
+					@env0:ifTrue: [itemKey ___cmpLt___: bestKey]
+					@env0:ifFalse: [itemKey ___cmpGt___: bestKey].
 				isBetter @env0:ifTrue: [best := item. bestKey := itemKey]
 			]
 		] @env0:on: StopIteration do: [:ex | done := true]
@@ -861,7 +871,8 @@ ___minOrMax___: positional kw: kwargs lessThan: pickSmaller
 category: 'Python-Built-in Functions'
 method: builtins
 min: anIterable
-	"Python builtin min(iterable) — fixed-arity fast path."
+	"Python builtin min(iterable) — fixed-arity fast path.  See min:_: for why
+	the comparison goes through ___cmpLt___ and not __lt__."
 
 	| iter minVal first done |
 	iter := anIterable __iter__.
@@ -876,7 +887,7 @@ min: anIterable
 				minVal := item.
 				first := false
 			] ifFalse: [
-				(item __lt__: minVal) ifTrue: [minVal := item]
+				(item ___cmpLt___: minVal) ifTrue: [minVal := item]
 			]
 		] @env0:on: StopIteration do: [:ex | done := true]
 	].
@@ -3303,6 +3314,17 @@ _pow: positional kw: kwargs
 			so a huge exponent never materializes x**y -- test_pow
 			test_big_exp does pow(a, b, prime) with b up to 2**50000."
 			^ self ___modPow___: x exp: y mod: z].
+		"A COMPLEX operand is a ValueError, not the TypeError below: CPython
+		reaches complex's power slot, which rejects a modulus outright --
+		``pow(1+1j, 1+1j, 1+1j)'' is ValueError('complex modulo') (test_pow).
+		WHICH of the two you get follows CPython's slot order, so the first
+		complex-or-float operand IN ORDER decides: float's slot runs first in
+		``pow(1.0, 1+1j, 2)'' and raises the TypeError, while int's declines in
+		``pow(2, 1+1j, 3)'' and complex's raises."
+		(({x. y. z} @env0:detect: [:v |
+			(v @env0:isKindOf: complex) or: [v @env0:isKindOf: Float]]
+			ifNone: [nil]) @env0:isKindOf: complex) ifTrue: [
+				ValueError ___signal___: 'complex modulo'].
 		tn := [:v | | n | n := v @env0:class @env0:name @env0:asString.
 			(#('Integer' 'SmallInteger' 'LargeInteger' 'LargePositiveInteger'
 				'LargeNegativeInteger') @env0:includes: n) ifTrue: ['int'] ifFalse: [n]].

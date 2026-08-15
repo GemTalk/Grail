@@ -2492,21 +2492,21 @@ ___pyBuiltinSubclassInit___: positional kw: keywords new: hasNew
 	``must be real number, not BoundMethod'' and of a Smalltalk
 	MessageNotUnderstood escaping from __repr__.
 
-	Delegating to complex's own __new__: rather than re-deriving the parts
-	keeps ONE definition of the conversion rules (a lone argument may itself
-	be complex, or reach the value through __complex__ / __float__), so this
-	cannot drift from complex(...)."
+	Delegating to complex's own varargs constructor rather than re-deriving the
+	parts keeps ONE definition of the conversion rules (a lone argument may
+	itself be complex, or reach the value through __complex__ / __float__; the
+	one- and two-argument forms mean different things), so this cannot drift
+	from complex(...)."
 	(self @env0:isKindOf: complex) ifTrue: [
 		| v |
-		hasNew ifFalse: [
-			(positional @env0:size @env0:> 2) ifTrue: [
-				TypeError ___signal___: 'complex() takes at most 2 arguments']].
-		v := positional @env0:isEmpty
-			ifTrue: [complex @env1:__new__: 0.0 _: 0.0]
-			ifFalse: [(positional @env0:size @env0:= 1)
-				ifTrue: [complex @env1:__new__: (positional @env0:at: 1)]
-				ifFalse: [complex @env1:__new__: (positional @env0:at: 1)
-					_: (positional @env0:at: 2)]].
+		"A subclass with its own __new__ has ALREADY built the value.  complex
+		is immutable -- it keeps no __init__ of its own, and CPython's is
+		object's, which does nothing -- so re-deriving the parts from the raw
+		constructor arguments would OVERWRITE what __new__ computed:
+		test_constructor's complex1 doubles its argument in __new__, and
+		complex(complex1(1j)) came back 1j instead of 2j."
+		hasNew ifTrue: [^ self].
+		v := complex @env1:_new: positional kw: keywords.
 		self @env1:__init__: (v @env1:real) _: (v @env1:imag)].
 	^ self
 %
