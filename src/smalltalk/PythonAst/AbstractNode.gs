@@ -324,26 +324,34 @@ ___pythonLocalInEnclosingFunctions___: aSymbol
 	[node notNil] whileTrue: [
 		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
 			ifTrue: [
-				"A LAMBDA reached through its ArgumentsAst -- i.e. this node is
-				in the PARAMETER LIST (a default expression), not in the body --
-				does NOT bind the name.  Python evaluates a default in the
+				"A scope node reached through its ArgumentsAst -- i.e. this node
+				is in the PARAMETER LIST (a default expression), not in the body
+				-- does NOT bind the name.  Python evaluates a default in the
 				ENCLOSING scope at definition time, so
-				``missing = 1; lambda missing=missing: missing'' must read the
-				enclosing ``missing'' for the default and the parameter inside
-				the body.  Without this, the default resolved as a read of the
-				lambda's own parameter and was emitted into the def-time outer
-				block where no such temp exists: CompileError 1001, ``undefined
-				symbol missing''.
+				``missing = 1; def f(missing=missing)'' must read the enclosing
+				``missing'' for the default and the parameter inside the body.
 
-				Restricted to LambdaAst deliberately.  A def's defaults already
-				resolve through FunctionDefAst's own default-capture path
-				(``def root(context, missing=missing)'' is the jinja2 case its
-				printSmalltalkOn: comment describes), and widening the rule to
-				FunctionDefAst is a separate change with its own blast radius.
+				This covers ``def'' as well as ``lambda''.  It was restricted to
+				LambdaAst on the belief that a def's defaults already resolved
+				through FunctionDefAst's own default-capture path; they did not,
+				and the ``def f(x=x)'' idiom was broken three different ways:
 
-				A lambda nested in a def still sees the DEF's locals: the walk
-				only skips the lambda it climbed out of, then carries on --
-				``def f(): x = 1; return lambda x=x: x'' reads f's x."
+				  * module-level def -- the default read the PARAMETER, which is
+				    still nil while its own default is being computed, so
+				    ``limit = 7; def f(v, limit=limit)'' answered nil
+				  * def nested in a def, and lambda in a def, over a MODULE
+				    global -- the hoisted def-time block emitted a bare
+				    identifier for a name that is a module attribute there, so
+				    the module failed to compile outright: CompileError 1001,
+				    ``undefined symbol''.  A whole module lost to one def
+				  * copy.py's own ``def _deepcopy_list(x, memo,
+				    deepcopy=deepcopy)'' -- ten test_copy failures reading
+				    ``'UndefinedObject' object is not callable''
+
+				A lambda or def nested in a def still sees the OUTER def's
+				locals: the walk only skips the scope it climbed out of, then
+				carries on -- ``def f(): x = 1; return lambda x=x: x'' reads
+				f's x."
 				"An ANNOTATION of this very def: Python evaluates parameter and
 				return annotations in the ENCLOSING scope, so the def's own
 				parameters do not shadow.  Same rule as the lambda-default case
@@ -351,7 +359,7 @@ ___pythonLocalInEnclosingFunctions___: aSymbol
 				built outside the def, where a parameter temp does not exist.  See
 				CallAst >> annotationOwnerDefNode."
 				(node == CallAst annotationOwnerDefNode
-					or: [(node isKindOf: LambdaAst) and: [prev isKindOf: ArgumentsAst]])
+					or: [prev isKindOf: ArgumentsAst])
 					ifFalse: [
 						"``global aSymbol'' declared by THIS enclosing scope ends the
 						walk.  The declaration makes the name a module binding for the
@@ -414,7 +422,7 @@ ___globalDeclarationWinsFor___: aSymbol
 				-- an annotation and a lambda default are evaluated in the
 				ENCLOSING scope, so the scope they are written in has no say."
 				(node == CallAst annotationOwnerDefNode
-					or: [(node isKindOf: LambdaAst) and: [prev isKindOf: ArgumentsAst]])
+					or: [prev isKindOf: ArgumentsAst])
 					ifFalse: [
 						(self ___functionDeclaresGlobal___: node named: aSymbol)
 							ifTrue: [^ true].
@@ -697,7 +705,7 @@ ___guardedLocalNeedsCheck___: aSymbol
 		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
 			ifTrue: [
 				(node == CallAst annotationOwnerDefNode
-					or: [(node isKindOf: LambdaAst) and: [prev isKindOf: ArgumentsAst]])
+					or: [prev isKindOf: ArgumentsAst])
 					ifFalse: [
 						(self ___functionBindsPythonLocal___: node named: aSymbol)
 							ifTrue: [owner := node]]].
