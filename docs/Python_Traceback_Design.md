@@ -2724,3 +2724,88 @@ spans — `TestColorizedTraceback.test_colorized_traceback` wants exactly that.
 **Recommended split:** Part 1 alone, verified to change nothing, then Part 2
 behind a full sweep. Doing Part 2 first is what makes this look like one big
 risky change; the blocker and the feature are separable.
+
+> **§9.32's plan is incomplete — read §9.33 before starting it.** It treats the
+> Python side as ready because `FrameSummary` carries `colno` and `extract_tb`
+> populates it. Nothing *renders* a caret, and the renderer has its own blocker.
+
+### 9.33 Carets need three things, and two are missing (2026-08-14, gs40)
+
+Starting §9.32's Part 1 turned up two blockers it did not account for. Both were
+measured, and either one alone makes Part 2 (the expensive tier-2 codegen work)
+produce nothing usable.
+
+**What IS done: the plumbing, end to end.** `PyTraceback` carries `tb_colno` /
+`tb_end_colno` (`PyTraceback.gs:31`), `extract_tb` reads them into a
+`FrameSummary` alongside `_code_positions_at` as a fallback
+(`traceback.py:1098`), and `FrameSummary` stores `colno` / `end_colno` /
+`end_lineno` with the documented `line[colno - indent : end_colno - indent]`
+contract. A span that reaches a frame survives to the renderer intact.
+
+**Missing 1 — nothing renders a caret line.** CPython draws it in
+`StackSummary.format_frame_summary`; Grail's returns `str(frame_summary)`, and
+`FrameSummary.__str__` emits only the `File` row and the source line. (Note
+CPython's own `__str__` is just the repr — the two implementations differ here
+deliberately, see the comment on `StackSummary.format`.) Measured CPython
+behaviour, which is not what one would guess:
+
+| `line`, `colno`, `end_colno` | rendered caret line |
+| --- | --- |
+| `exception_or_callable()`, 4, 27 | `        ~~~~~~~~~~~~~~~~~^^` |
+| `foo()`, 0, 5 | `    ~~~^^` |
+| `y = x['a']['b']['c']`, 4, 19 | `        ^^^^^^^^^^^^^^^` |
+| `a = b + c`, 4, 9 | `        ~~^~~` |
+| `foo()`, None, None | *(no caret line)* |
+
+A span covering the whole line **still** gets a caret line — the obvious
+"suppress when it spans everything" rule is wrong. And the `~` / `^` split is
+expression-aware: a call anchors the parentheses, a binary operator anchors the
+operator, a subscript chain anchors everything.
+
+**Missing 2 — that split needs a real `ast`, and Grail's is a stub.** CPython
+computes it in `_extract_caret_anchors_from_line_segment`, which parses the
+source segment and reads `col_offset` off the node. `src/python/stdlib/ast.py`
+says plainly what it is: `parse()` returns a `_ParsedExpr` wrapper, "anything
+that walks the tree will hit AttributeError", and the node classes are "minimal
+stubs so werkzeug.routing's converter parser can reference `ast.AST` … as type
+tags". There is no `col_offset` to read. CPython's fallback when anchors cannot
+be computed is to emit all `^`, which renders `foo()` as `^^^^^` where CPython
+gives `~~~^^` — so the fallback does not win the tests either.
+
+#### The data Grail already has is worse than none
+
+`ForAst.gs:186` emits a real span for a comprehension, and it reaches the frame.
+For `return [1 / 0 for i in range(3)]`:
+
+| | span on frame `boom` | what it points at |
+| --- | --- | --- |
+| CPython | `colno=12 end_colno=17` | `1 / 0` — the failing division, anchored `~~^~~` |
+| Grail | `colno=27 end_colno=35` | `range(3)` — the comprehension's **iterable** |
+
+Both are "correct" for what they record; only CPython's records *what failed*.
+So switching on a renderer today would underline `range(3)` for a
+`ZeroDivisionError` — a confident, precise, wrong answer, which §9.10 argues is
+worse than no caret at all. **Part 2 is therefore not "emit spans at call
+sites" but "emit spans for the failing sub-expression"**, and any existing span
+whose semantics are "the iterable" has to be re-pointed or excluded rather than
+inherited.
+
+#### Revised shape of the work
+
+1. **A real `ast`** — or an equivalent way to locate the anchor within a source
+   segment. Grail has a Python parser in Smalltalk, so exposing enough of it to
+   answer "where is the operator in this segment" is plausible, but it is its own
+   project and `test.test_ast` is in the manifest as its own scoreboard row.
+2. **The renderer**, transcribing CPython's algorithm — tier 1, self-contained,
+   testable with fixtures that construct `FrameSummary` with explicit columns.
+   Cannot land usefully before (1), because without anchors it renders all `^`.
+3. **Per-operation spans in codegen** — tier 2, and larger than §9.32 framed it:
+   the span must mark the failing sub-expression, which is a property of the
+   *operation*, not of the call site or the statement.
+
+**Recommendation: do not start §9.32's Part 1/Part 2 yet.** Ten lines of scanner
+change and a tier-2 codegen pass would deliver data that nothing can draw, in a
+semantics that would draw the wrong thing. Carets remain the largest cluster
+(~9 tests) and the least ready. If traceback work continues, the `<grail>`
+filename cluster (5 tests) and the suggestion family (11, several sub-causes) are
+unblocked; carets are gated on an `ast` decision that is bigger than traceback.
