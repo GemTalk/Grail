@@ -66,7 +66,7 @@ different rows and merges cleanly.
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
 | test.test_format | OK | 18 | 0 | 0 | 3 |  |
 | test.test_binop | OK | 12 | 0 | 0 | 0 |  |
-| test.test_complex | ERROR | 37 | 13 | 12 | 0 |  |
+| test.test_complex | ERROR | 37 | 7 | 8 | 0 |  |
 | test.test_enumerate | OK | 92 | 0 | 0 | 15 |  |
 | test.test_raise | ERROR | 37 | 1 | 14 | 0 |  |
 | test.test_funcattrs | ERROR | 35 | 14 | 13 | 1 |  |
@@ -78,7 +78,7 @@ different rows and merges cleanly.
 | test.test_exception_variations | ERROR | 30 | 2 | 7 | 0 |  |
 | test.test_global | IMPORTERROR | 0 | 0 | 0 | 0 | Unexpected token: NEWLINE '' at line 165 |
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
-| test.test_named_expressions | ERROR | 74 | 9 | 14 | 0 |  |
+| test.test_named_expressions | ERROR | 74 | 8 | 14 | 0 |  |
 | test.test_subclassinit | ERROR | 17 | 7 | 3 | 0 |  |
 | test.test_super | ERROR | 40 | 13 | 24 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |

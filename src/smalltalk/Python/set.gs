@@ -67,7 +67,7 @@ __init__
 	"set().__init__() -- CPython set_init clears then adds nothing, so an
 	explicit no-arg re-init empties the set.  (Only reached by an EXPLICIT
 	``s.__init__()'' call; base/subclass construction populate through
-	__new__ / ___pyBuiltinCollectionInit___, never this fixed-arity form.)"
+	__new__ / ___pyBuiltinSubclassInit___, never this fixed-arity form.)"
 
 	self clear.
 	^ None
@@ -107,7 +107,7 @@ ___init__: positional kw: keywords
 	fallback for a set subclass with no own __init__.  Population is NOT done
 	here: an explicit ``s.__init__(word)'' dispatches to the fixed-arity
 	__init__: form, and during construction the positional was already consumed
-	by ___pyBuiltinCollectionInit___ -- re-updating here would double-consume a
+	by ___pyBuiltinSubclassInit___ -- re-updating here would double-consume a
 	one-shot iterator argument (test_setOfFrozensets: 0 != 3).  A subclass WITH
 	its own __init__ dispatches to that instead and never reaches here."
 
