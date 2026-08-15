@@ -1984,6 +1984,122 @@ needsVarargsForwarder
 		and: [self allParameterNames notEmpty]]
 %
 
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
+needsFixedArityForwarders
+	"""True for a def that compiles as VARARGS but accepts a bounded number of
+	positional arguments, so it should ALSO get fixed-arity entry points.
+
+	The MIRROR IMAGE of needsVarargsForwarder.  That one adds a ``_name:kw:''
+	companion so a KEYWORD call site reaches a fixed-arity def; this one adds
+	``name:'' / ``name:_:'' companions so a FIXED-ARITY call site reaches a def
+	that compiled as varargs.
+
+	Without it a subclass override cannot replace a fixed-arity base method.
+	Base-class code calling ``self.m(x)'' emits ``m:''; an override written
+	``def m(self, x, flag=False)'' compiles only to ``_m:kw:''; the send finds
+	the BASE's ``m:'' and the override never runs -- silently, with no DNU.
+	That is the shape stdlib subclassing takes whenever CPython grows a keyword
+	(``colorize=False''), and it is recorded in section 9.35 of
+	docs/Python_Traceback_Design.md.
+
+	Two exclusions:
+
+	  * ``*args'' -- the positional arity is unbounded, so the set of forwarders
+	    cannot be enumerated.  Such a def keeps varargs-only dispatch.
+	  * ``__init__'' -- compilesAsVarargs forces it to the varargs form ON
+	    PURPOSE (see there), and construction / super dispatch resolve it by
+	    name.  Adding a fixed-arity entry point would reintroduce exactly the
+	    positional-arity cap that routing through varargs exists to sidestep."""
+
+	self compilesAsVarargs ifFalse: [^ false].
+	args vararg ifNotNil: [^ false].
+	name asSymbol == #'__init__' ifTrue: [^ false].
+	^ self fixedArityForwarderArities notEmpty
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
+fixedArityForwarderArities
+	"""The instance-method arities (self excluded) this def can be CALLED with,
+	from fewest to most.
+
+	The most is every positional parameter; the fewest is that minus the
+	defaulted tail, since a defaulted parameter may be omitted.  Keyword-only
+	parameters do not appear -- they are never bound positionally -- and
+	``**kwargs'' does not change the positional count.
+
+	ARITY 0 IS INCLUDED, and it is the one that needs the category guard in
+	___pyAttrLoad___ (§9.36) to be safe.  ``m'' plus ``m:'' is exactly the
+	shape of a synthesized property getter/setter pair, so the attribute load
+	read an ordinary method as a property and PERFORMED it:
+
+	    class C:
+	        def foo(self, a=None):
+	            return 42
+	    C().foo            --> 42     (CPython: a bound method)
+	    C().foo(1)         --> TypeError: 'int' object is not callable
+
+	Measured, not reasoned: that broke ``import werkzeug.local'' through
+	re/_parser's ``State >> opengroup(self, name=None)'' -- which returns a
+	group id, so ``state.opengroup(name)'' read the id and then tried to call
+	it.  Compiling the forwarders into their own method category, and having
+	the pair test consult it, tells the two apart -- so the arities can be
+	emitted in full and a base ``def m(self)'' overridden by ``def m(self,
+	flag=False)'' dispatches like every other override."""
+
+	| maxArity nDefaults minArity |
+	maxArity := self instanceMethodArity.
+	nDefaults := args defaults isNil ifTrue: [0] ifFalse: [args defaults size].
+	minArity := (maxArity - nDefaults) max: 0.
+	^ (minArity to: maxArity) asArray
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
+fixedAritySelectorFor: nArgs
+	"The Smalltalk selector a call of nArgs positional arguments sends -- the
+	one generateInstanceFixedArityForwarderSource: defines, and the one the
+	___grailSuperImplements___: gate asks the superclass about."
+
+	| stream |
+	nArgs = 0 ifTrue: [^ self ___mangledName___ asString].
+	stream := AppendStream on: Unicode7 new.
+	stream nextPutAll: self ___mangledName___ asString; nextPutAll: ':'.
+	2 to: nArgs do: [:i | stream nextPutAll: '_:'].
+	^ stream contents
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
+generateInstanceFixedArityForwarderSource: nArgs
+	"""A fixed-arity entry point of arity nArgs that forwards into this def's
+	varargs body, so a fixed-arity send reaches it.
+
+	Same shape as generateBigmemtestUnaryForwarderSource, which does this for
+	one special case (arity 0, for dir()-based test discovery); this is the
+	general form.  The positional arguments are packed into the array the
+	varargs body already unpacks, and ``kw: nil'' means no keywords -- the body
+	then applies its own defaults for whatever was not passed."""
+
+	| stream params |
+	stream := AppendStream on: Unicode7 new.
+	params := (1 to: nArgs) collect: [:i | '___fa' , i printString].
+	nArgs = 0
+		ifTrue: [stream nextPutAll: name]
+		ifFalse: [
+			stream nextPutAll: name; nextPutAll: ': '; nextPutAll: (params at: 1).
+			2 to: nArgs do: [:i |
+				stream nextPutAll: ' _: '; nextPutAll: (params at: i)]].
+	stream lf.
+	stream nextPutAll: '^ self _'; nextPutAll: name; nextPutAll: ': {'.
+	1 to: nArgs do: [:i |
+		i > 1 ifTrue: [stream nextPutAll: '. '].
+		stream nextPutAll: (params at: i)].
+	stream nextPutAll: '} kw: nil'.
+	^ stream contents
+%
+
 category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
 generateModuleMethodVarargsForwarderSource

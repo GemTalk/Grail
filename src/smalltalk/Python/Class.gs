@@ -273,6 +273,35 @@ __bases__
 
 category: 'Grail-Class Compilation'
 method: Behavior
+___grailSuperImplements___: aSelector
+	"True when a SUPERCLASS of the receiver implements aSelector in env 1.
+
+	The gate on fixed-arity forwarders (§9.36).  A def carrying defaults
+	compiles to ``_m:kw:'' only, so a base-class ``self.m(x)'' -- a fixed-arity
+	send -- misses the override; the cure is a ``m:'' entry point delegating
+	into the varargs body.  Emitting one for EVERY defaulted def is what does
+	the damage: the extra spellings are indistinguishable from a property
+	setter, and they win selector-by-arity lookups that must reach the varargs
+	body.  Measured, that cost 114 SUnit errors and 22 CPython-suite
+	regressions across three unrelated mechanisms.
+
+	A forwarder is only ever NEEDED where a superclass already answers that
+	exact fixed-arity selector -- that is the definition of the override case
+	§9.35 describes.  Asking the question here, at class-creation time, is what
+	makes the answer available at all: the base class is a runtime object, and
+	codegen cannot see it.
+
+	Starts at ``superclass'' deliberately.  The receiver's own ``_m:kw:'' is
+	already compiled by this point, and a class does not override itself."
+
+	| s |
+	s := self @env0:superclass.
+	s == nil ifTrue: [^ false].
+	^ (s @env0:whichClassIncludesSelector: aSelector environmentId: 1) ~~ nil
+%
+
+category: 'Grail-Class Compilation'
+method: Behavior
 ___compileMethod: aSource category: aCategory
 	"Compile aSource as a method on the receiver, env-1, using the
 	Grail compilation symbol list, wrapped in a CompileWarning

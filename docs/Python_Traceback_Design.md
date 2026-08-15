@@ -2924,3 +2924,99 @@ Smalltalk driver, because two of its checks state CPython and fail here — the
 same treatment §9.29 gave the legacy-form gap, and for the same reason: the
 fixture should say what is true, and the harness should not go red for a bug it
 is documenting.
+
+### 9.36 Fixing the override, and the property pair it collided with (2026-08-14, gs40)
+
+§9.35's fix, plus the thing that made it a two-part change rather than a
+one-part one.
+
+**Part 1 — the forwarders.** `FunctionDefAst>>needsFixedArityForwarders` now
+emits a fixed-arity entry point for each arity a defaulted def accepts, each
+one delegating into the varargs body so the omitted arguments take their
+defaults. `def m(self, x, flag=False)` gains `m:` and `m:_:` alongside
+`_m:kw:`, so a base-class `self.m(x)` — which compiles to `m:` — lands on the
+override. This is the mirror of `needsVarargsForwarder`, which already emits a
+varargs companion for simple-positional defs so keyword call sites bind.
+`*args` is excluded (unbounded arity) and so is `__init__`, which routes
+through varargs on purpose.
+
+**Part 2 — the collision, which is the part worth remembering.** An arity-1
+forwarder `m:` is *shape-identical to a synthesized property setter*, and
+`___pyAttrLoad___` treats a class chain carrying both `m` and `m:` as a
+getter/setter pair: it PERFORMS the unary and answers the value. That is how
+`@property` and instVar reads work, and it is the right behaviour for a real
+pair. With the forwarders it fired on ordinary methods, so `obj.m` answered the
+method's RESULT and the call site then tried to call that result.
+
+It failed as `TypeError: 'SmallInteger' object is not callable` on
+`import werkzeug.local`, through re/_parser's
+`State.opengroup(self, name=None)` — which returns a group id, so
+`state.opengroup(name)` read the id and called it. Reduced to six lines:
+
+```python
+class C:
+    def foo(self, a=None):
+        return 42
+C().foo        # 42 under the unfixed change; CPython answers a bound method
+C().foo(1)     # TypeError: 'int' object is not callable
+```
+
+The fix is to make the two distinguishable. The forwarders compile into their
+own method category, `Grail-Fixed Arity Forwarders`, and the pair test in
+`___pyAttrLoad___` consults the category of whatever implements `m:` before
+deciding it is a setter. The probe runs only when both spellings exist, which
+is the rare case, and the same category-based discrimination is already used a
+few branches up for module receivers.
+
+**Part 3 — gating the forwarders on need, which is what the suite forced.**
+With the category guard in, SUnit and the sweep still came back at **114 errors
+and 22 regressions**, through two more mechanisms the category could not reach:
+
+* `UnboundMethod`'s selector-by-arity lookup picked the new `_operator_fallbacks:`
+  over the varargs body, and `with:performMethod:` — which exists to run an
+  EXACT method, bypassing MRO — then dispatched the forwarder's inner `self`
+  send on the wrong receiver. 86 errors, all from one line of `fractions.py`.
+* Plain name collisions: `Unicode7 does not understand #'new'`, 17 more.
+
+Three unrelated mechanisms, each surfacing only after the previous was fixed,
+is the signal that the DESIGN was wrong rather than that it needed another
+patch. Emitting a fixed-arity selector for every defaulted def changes name
+resolution across the whole image, and `fractions._operator_fallbacks` and
+`re/_parser.State.opengroup` have no override relationship at all.
+
+A forwarder is only ever NEEDED where a superclass already answers that exact
+fixed-arity selector — which is the definition of the override case. So each
+one is now emitted behind a runtime test:
+
+```smalltalk
+(Cls ___grailSuperImplements___: #'m:') ifTrue: [Cls ___compileMethod: '...' category: 'Grail-Fixed Arity Forwarders'].
+```
+
+It has to be a RUNTIME test: the base class is a runtime object, and codegen
+cannot see it. `ExtraDefault.m` overriding `Base.m(self, x)` gets exactly one
+forwarder, `m:`; `fractions`, `re/_parser` and the `new` collisions fall outside
+the gate and get nothing.
+
+**Why this matters beyond the bug.** An earlier attempt tried to duck part 2 by
+emitting only arities ≥ 1, on the theory that the unary forwarder was the unsafe
+one. That is what the werkzeug failure looked like in isolation, and it was
+wrong in both directions: `m:` alone still forges a pair when a base class
+supplies the unary `m`, and it broke a plain `ZeroArgSub().m()` call that had
+worked before. Each of the three collisions was found by MEASURING, and none of
+them by reading the change. For codegen that fires on every class definition,
+the tier-2 sweep is not a formality — it was the only thing standing between
+this and a 22-module regression.
+
+`tests/python/override_default_arg.py` grew from six checks to eight; the two
+that §9.35 left failing now pass, and the two new ones cover the arity-0 shape
+from outside and from base-class code. It is wired to
+`PythonTests>>OverrideDefaultArgTestCase`, which §9.35 deliberately did not do
+because the fixture then documented a bug.
+
+Tier 2, per CLAUDE.md: `PythonAst/` codegen runs for every module, and
+`Object.gs` / `Class.gs` are on the attribute and class-creation paths. Final
+run: SUnit **4378/4378**, gate **0 regressions, 0 improvements**, scoreboard
+byte-identical. Zero improvements is the honest number — this wins no CPython
+test today. It removes a silent wrong-method bug and unblocks the 3.13+
+`colorize=` override shape that `test_traceback`'s `test_custom_format_frame`
+needs.
