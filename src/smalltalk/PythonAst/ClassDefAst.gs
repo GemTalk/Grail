@@ -129,7 +129,7 @@ printSmalltalkRuntimeOn: aStream
 
 	| methodDefs classMethodDefs staticMethodDefs selfParam
 	  funcNames varargsFuncNames
-	  methodSources classMethodSources staticMethodSources
+	  methodSources fixedArityForwarderSources classMethodSources staticMethodSources
 	  initMethod initSelector classAttrs allClassInstVars staticFuncNames savedStaticFuncNames savedIsModuleScope savedDynamicLocals
 	  savedClass savedFuncNames savedVarargsFuncNames
 	  savedSelfParam savedClassAttrNames settersByName
@@ -311,6 +311,7 @@ printSmalltalkRuntimeOn: aStream
 	savedCapturedWriteNames := CallAst classCapturedWriteNames.
 	CallAst classCapturedWriteNames: IdentitySet new.
 	methodSources := OrderedCollection new.
+	fixedArityForwarderSources := OrderedCollection new.
 	classMethodSources := OrderedCollection new.
 	staticMethodSources := OrderedCollection new.
 	[
@@ -369,6 +370,26 @@ printSmalltalkRuntimeOn: aStream
 						def needsVarargsForwarder ifTrue: [
 							methodSources add: ('_' , def ___mangledName___ asString)
 								-> def generateInstanceVarargsForwarderSource].
+						"The MIRROR of the above: fixed-arity entry points for a
+						method that compiled as varargs, so a fixed-arity send
+						reaches it.  Without them an override written
+						``def m(self, x, flag=False)'' cannot replace a base
+						``def m(self, x)'': base code calling ``self.m(x)'' emits
+						``m:'', the override is only ``_m:kw:'', and the send
+						silently finds the BASE.  See §9.35.
+
+						Kept in a SEPARATE collection because these compile into
+						their own method category: an arity-1 forwarder ``m:''
+						is shape-identical to the synthesized property SETTER
+						that pairs with a unary getter ``m'', and
+						___pyAttrLoad___ reads such a pair as a property and
+						PERFORMS the getter.  The category is what tells them
+						apart.  See §9.36."
+						def needsFixedArityForwarders ifTrue: [
+							def fixedArityForwarderArities do: [:n |
+								fixedArityForwarderSources
+									add: (def fixedAritySelectorFor: n)
+										-> (def generateInstanceFixedArityForwarderSource: n)]].
 						"A ``@bigmemtest''-family method was normalised to the
 						varargs form (a dry-run ``size'' default injected above),
 						which hides it from dir()-based test discovery.  Emit a
@@ -695,6 +716,37 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: false
 			onStream: aStream.
+	].
+
+	"Fixed-arity forwarders into a varargs body (see §9.36), each GATED on the
+	superclass actually implementing that selector -- which is the only case
+	where one is needed, and the only case where it is safe.  Emitting them
+	unconditionally cost 114 SUnit errors and 22 CPython-suite regressions
+	through three unrelated mechanisms: the property getter/setter pair test,
+	UnboundMethod's selector-by-arity lookup, and plain name collisions.  The
+	gate is a RUNTIME test because the base class is a runtime object that
+	codegen cannot see.
+
+	Their own category as well, because an arity-1 forwarder ``m:'' is
+	shape-identical to the synthesized property SETTER that pairs with a unary
+	getter ``m'', and ___pyAttrLoad___ reads such a pair as a property --
+	performing the getter and answering its RESULT where Python answers a bound
+	method.  The category is what distinguishes them there."
+	fixedArityForwarderSources do: [:assoc |
+		aStream
+			nextPutAll: '(';
+			nextPutAll: name;
+			nextPutAll: ' ___grailSuperImplements___: #''';
+			nextPutAll: assoc key;
+			nextPutAll: ''') ifTrue: ['; lf.
+		self
+			emitCompileMethodOn: name
+			source: assoc value
+			category: 'Grail-Fixed Arity Forwarders'
+			env: 1
+			classSide: false
+			onStream: aStream.
+		aStream nextPutAll: '].'; lf.
 	].
 
 	"Compile sibling-method aliases (``__lt__ = __eq__'') as real delegating

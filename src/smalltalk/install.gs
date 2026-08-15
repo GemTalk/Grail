@@ -836,6 +836,7 @@ run
 	at: #'ExceptionSubclassArgsTestCase' put: nil;
 	at: #'OsTestCase' put: nil;
 	at: #'OverflowErrorTestCase' put: nil;
+	at: #'OverrideDefaultArgTestCase' put: nil;
 	at: #'PartialCallableAndCopyTestCase' put: nil;
 	at: #'PickleProtocolTestCase' put: nil;
 	at: #'PartialMethodDescriptorTestCase' put: nil;
@@ -1671,6 +1672,7 @@ input src/smalltalk/PythonTests/NumbersTestCase.gs
 input src/smalltalk/PythonTests/ObjectTestCase.gs
 input src/smalltalk/PythonTests/ExceptionSubclassArgsTestCase.gs
 input src/smalltalk/PythonTests/OsTestCase.gs
+input src/smalltalk/PythonTests/OverrideDefaultArgTestCase.gs
 input src/smalltalk/PythonTests/PartialCallableAndCopyTestCase.gs
 input src/smalltalk/PythonTests/PartialMethodDescriptorTestCase.gs
 input src/smalltalk/PythonTests/PassTestCase.gs
