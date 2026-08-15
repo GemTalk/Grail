@@ -704,9 +704,39 @@ def check__all__(test_case, module, name_of_module=None, extra=(),
 
         if (getattr(obj, '__module__', None) in name_of_module or
                 (not hasattr(obj, '__module__') and
-                 not isinstance(obj, types.ModuleType))):
+                 not _is_module_object(obj))):
             expected.add(name)
     test_case.assertCountEqual(module.__all__, expected)
+
+
+def _module_base_types():
+    """GRAIL: the types an imported module can actually have here.
+
+    CPython's check__all__ excludes ``isinstance(obj, types.ModuleType)`` so a
+    module's own imports do not count as its public API.  Grail's
+    types.ModuleType is a deliberate STUB class that nothing inherits from
+    (see src/python/stdlib/types.py), and Grail modules are instances of a
+    Smalltalk class ``module`` instead -- so that test answers False for every
+    module and ``wave.__all__`` gets compared against a set holding builtins,
+    struct and sys.
+
+    Every module shares that one base, reachable from any module's type, so
+    take it from sys and keep types.ModuleType alongside for the day the stub
+    becomes real.
+    """
+    bases = [types.ModuleType]
+    try:
+        bases.extend(type(sys).__mro__[1:2])
+    except BaseException:
+        pass
+    return tuple(bases)
+
+
+def _is_module_object(obj):
+    try:
+        return isinstance(obj, _module_base_types())
+    except BaseException:
+        return False
 
 
 # --- misc paths --------------------------------------------------------
@@ -810,6 +840,120 @@ def run_no_yield_async_fn(async_fn, /, *args, **kwargs):
 
 # TESTFN mirrors os_helper for the rare top-level reference.
 TESTFN = "@grail_test_tmp"
+
+
+# --- network-backed test data ------------------------------------------
+# CPython keeps the downloaded mapping tables (unicode.org's CJK files, and
+# similar) under test/data.  Nothing here fetches anything unless the
+# 'urlfetch' resource is enabled, and Grail enables only 'cpu' and 'decimal' --
+# so in practice requires() below raises SkipTest and the caller SKIPS rather
+# than erroring, which is the same thing that happens in a CPython run without
+# -u urlfetch.  test_codecmaps_* is entirely built on this.
+
+TEST_DATA_DIR = _os.path.join(TEST_HOME_DIR, "data")
+
+INTERNET_TIMEOUT = 60.0
+
+
+def open_urlresource(url, *args, **kw):
+    import urllib.parse
+    from test.support.os_helper import unlink
+    try:
+        import gzip
+    except ImportError:
+        gzip = None
+
+    check = kw.pop('check', None)
+
+    filename = urllib.parse.urlparse(url)[2].split('/')[-1]  # '/': it's URL!
+
+    fn = _os.path.join(TEST_DATA_DIR, filename)
+
+    def check_valid_file(fn):
+        f = open(fn, *args, **kw)
+        if check is None:
+            return f
+        elif check(f):
+            f.seek(0)
+            return f
+        f.close()
+
+    if _os.path.exists(fn):
+        f = check_valid_file(fn)
+        if f is not None:
+            return f
+        unlink(fn)
+
+    # Verify the requirement before downloading the file.  This is where a
+    # Grail run stops: 'urlfetch' is not in _ENABLED_RESOURCES, so requires()
+    # raises SkipTest.
+    requires('urlfetch')
+
+    import urllib.request
+    if verbose:
+        print('\tfetching %s ...' % url)
+    opener = urllib.request.build_opener()
+    if gzip:
+        opener.addheaders.append(('Accept-Encoding', 'gzip'))
+    f = opener.open(url, timeout=INTERNET_TIMEOUT)
+    if gzip and f.headers.get('Content-Encoding') == 'gzip':
+        f = gzip.GzipFile(fileobj=f)
+    try:
+        with open(fn, "wb") as out:
+            s = f.read()
+            while s:
+                out.write(s)
+                s = f.read()
+    finally:
+        f.close()
+
+    f = check_valid_file(fn)
+    if f is not None:
+        return f
+    raise TestFailed('invalid resource %r' % fn)
+
+
+# --- unraisable exceptions ---------------------------------------------
+
+class catch_unraisable_exception:
+    """Context manager catching an unraisable exception via sys.unraisablehook.
+
+    GRAIL: sys.unraisablehook is not assignable here -- sys exposes the
+    original as __unraisablehook__ and there is no writable slot -- and Grail
+    has no finalizer machinery that would call it in the first place.  So the
+    hook is installed only if the assignment takes, and cm.unraisable stays
+    None otherwise.  A test that merely wraps code in this manager still runs;
+    one that asserts on cm.unraisable will fail rather than error, which is the
+    honest outcome.
+    """
+
+    def __init__(self):
+        self.unraisable = None
+        self._old_hook = None
+        self._installed = False
+
+    def _hook(self, unraisable):
+        self.unraisable = unraisable
+
+    def __enter__(self):
+        try:
+            self._old_hook = sys.unraisablehook
+            sys.unraisablehook = self._hook
+            self._installed = True
+        except BaseException:
+            self._installed = False
+        return self
+
+    def __exit__(self, *exc_info):
+        if self._installed:
+            try:
+                sys.unraisablehook = self._old_hook
+            except BaseException:
+                pass
+        try:
+            del self.unraisable
+        except BaseException:
+            self.unraisable = None
 
 
 # --- submodule attributes (support.numbers / support.testcase) ---------
