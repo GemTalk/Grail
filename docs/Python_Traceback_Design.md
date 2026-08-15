@@ -2863,3 +2863,64 @@ regression check is pinned in `live_frames.py`
 (`a_method_s_live_frame_names_its_real_file`), asserting BOTH shapes so that a
 future fix repairing one by breaking the other fails rather than looks like
 progress.
+
+### 9.35 An override with a defaulted parameter does not override (2026-08-14, gs40)
+
+Chasing the `<grail>` cluster's remaining failures turned up a bug that has
+nothing to do with tracebacks. `test_custom_format_frame` was rendering the
+DEFAULT frame format rather than its subclass's, and the reason generalises:
+
+```python
+class Base:
+    def m(self, x):            return 'BASE'
+    def call_internally(self, x): return self.m(x)
+
+class ExtraDefault(Base):
+    def m(self, x, flag=False): return 'SUB'
+```
+
+| call | CPython | Grail |
+| --- | --- | --- |
+| `SameArity().call_internally(1)` | `SUB` | `SUB` |
+| `ExtraDefault().m(1)` — from outside | `SUB` | `SUB` |
+| `ExtraDefault().call_internally(1)` — from base code | `SUB` | **`BASE`** |
+
+**Why.** A simple-positional def compiles to a FIXED-ARITY selector — `m:`, via
+`CallAst fastPathSelectorForAttr:arity:`. A def carrying a default compiles to
+the varargs form `_m:kw:` instead. Base-class code calling `self.m(x)` emits the
+fixed-arity send, which finds the base's `m:` and never reaches the subclass's
+`_m:kw:`. Verified directly: on the subclass, `whichClassIncludesSelector:
+#'format_frame_summary:' environmentId: 1` answers `StackSummary`, while the
+subclass's own env-1 method dictionary holds only `_format_frame_summary:kw:`.
+
+Calls from OUTSIDE resolve through attribute lookup, which goes by name and
+works — so the bug is invisible from the caller's side and appears only for
+calls made from within the base class. There is no DNU and no error; the wrong
+method simply runs.
+
+**This is the shape stdlib subclassing takes** whenever CPython grows a keyword.
+`def format_frame_summary(self, frame_summary, colorize=False)` overriding a base
+`def format_frame_summary(self, frame_summary)` is real code from
+`test_traceback`, and the same pattern recurs across 3.13+ signatures.
+
+**The fix has precedent in the codebase, in the opposite direction.** Grail
+already emits a varargs COMPANION for simple-positional defs so keyword call
+sites bind (`FunctionDefAst>>needsVarargsForwarder`: "a fixed-arity selector
+encodes only arity, so a keyword call ... would DNU"), and it already emits a
+fixed-arity companion for one special case
+(`generateBigmemtestUnaryForwarderSource`, which "restores the plain `name`
+entry" so `dir()`-based test discovery finds it). What is missing is the general
+reverse direction: a def that compiles as varargs gets no fixed-arity entry
+points, so it cannot override one.
+
+Emitting fixed-arity forwarders for each arity a defaulted def accepts would
+close it, at the cost of extra (tiny) methods per def — `def f(a, b=1, c=2)`
+would gain three. It is a codegen change in `PythonAst/`, so **tier 2**, and it
+changes method dispatch generally: it wants its own change and a full sweep,
+not a rider on traceback work.
+
+`tests/python/override_default_arg.py` pins the rules. It is NOT wired into a
+Smalltalk driver, because two of its checks state CPython and fail here — the
+same treatment §9.29 gave the legacy-form gap, and for the same reason: the
+fixture should say what is true, and the harness should not go red for a bug it
+is documenting.
