@@ -780,6 +780,7 @@ run
 	at: #'IsADirectoryErrorTestCase' put: nil;
 	at: #'IteratorTestCase' put: nil;
 	at: #'TzFileHistoryTestCase' put: nil;
+	at: #'ComprehensionTargetsTestCase' put: nil;
 	at: #'MethodShadowsClassAttrTestCase' put: nil;
 	at: #'EnumerateTypeTestCase' put: nil;
 	at: #'MetaclassMethodsTestCase' put: nil;
@@ -1623,6 +1624,7 @@ input src/smalltalk/PythonTests/PackageImportTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
 input src/smalltalk/PythonTests/TzFileHistoryTestCase.gs
+input src/smalltalk/PythonTests/ComprehensionTargetsTestCase.gs
 input src/smalltalk/PythonTests/MethodShadowsClassAttrTestCase.gs
 input src/smalltalk/PythonTests/EnumerateTypeTestCase.gs
 input src/smalltalk/PythonTests/MetaclassMethodsTestCase.gs

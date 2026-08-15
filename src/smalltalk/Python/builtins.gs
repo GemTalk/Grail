@@ -572,6 +572,19 @@ dir: anObject
 	^ anObject __dir__
 %
 
+category: 'Grail-Built-in Functions'
+method: builtins
+___dirOfNamespace___: aMapping
+	"The zero-argument ``dir()'': the names in the caller's scope, SORTED.
+
+	CallAst rewrites the bare call and hands the same namespace locals() would
+	answer -- a snapshot dict in a function, the live module view at module
+	scope -- so this only has to order the keys.  Sorted because dir() is
+	documented to be, and callers compare the result."
+
+	^ self sorted: (list @env1:__new__: aMapping)
+%
+
 ! ``enumerate'' is a TYPE, not a builtins function -- see Python/enumerate.gs.
 ! It had four entry points here (enumerate:, enumerate:_:, _enumerate:kw: and
 ! the ___enumerate___:start: core).  They are gone rather than kept as
