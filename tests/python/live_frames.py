@@ -241,6 +241,34 @@ def a_frame_has_no_f_locals():
     return not hasattr(sys._getframe(), 'f_locals')
 
 
+class _Holder:
+    def meth(self):
+        return [fs.filename for fs in traceback.extract_stack()]
+
+
+def a_method_s_live_frame_names_its_real_file():
+    """A live frame for a CLASS-BODY def reports the module's file, not the
+    ``<grail>'' placeholder.
+
+    The two def shapes resolve their filename differently and only one used to
+    work.  A module-level def's defining class IS its module, so a sys.modules
+    lookup finds ``__file__''.  A class-body def's defining class is the PYTHON
+    CLASS -- ``_Holder'', not ``live_frames'' -- so that lookup missed and every
+    live frame for a method answered ``<grail>''.  Exception tracebacks were
+    never affected (they take the filename from the catching function's PyCode),
+    which is why code_filename.py passed throughout while test_format_stack and
+    friends did not: the two mechanisms are separate.
+
+    Both frames are checked, so a fix that repaired the method shape by breaking
+    the module shape would fail here rather than look like progress."""
+    names = _Holder().meth()
+    if len(names) < 2:
+        return False
+    return (names[-1] == __file__          # _Holder.meth -- the class-body def
+            and names[-2] == __file__      # this function -- module-level
+            and '<grail>' not in names)
+
+
 def a_nested_function_gets_no_frame_of_its_own():
     """GRAIL-SPECIFIC (CPython gives every call a frame).  A nested ``def'' is
     compiled into its enclosing method, so calling it does not deepen the Python
@@ -270,6 +298,7 @@ if __name__ == '__main__':
         the_traceback_module_keeps_its_own_frames_out,
         format_stack_ends_at_its_caller,
         extract_stack_produces_frame_summaries,
+        a_method_s_live_frame_names_its_real_file,
         the_machinery_keeps_itself_out_of_the_walk,
     ]
     grail_only = [

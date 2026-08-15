@@ -1739,13 +1739,56 @@ ___liveFrameFilenameFor___: aMethod
 	runner calls the test calls the library), so the filename is derived per
 	frame instead.
 
-	A generated Python function's defining class IS its module: ``meth inClass
-	name'' answers the module name, so the module's own ``__file__'' is one
-	sys.modules lookup away.  Falls back to ``<grail>'', which is what a frame
-	with no locatable module has always reported."
+	Two routes, because there are two def shapes and only one of them names a
+	module.
 
-	| clsName mod file |
-	clsName := [aMethod @env0:inClass @env0:name @env0:asString]
+	A MODULE-LEVEL def's defining class IS its module: ``meth inClass name''
+	answers the module name, so the module's own ``__file__'' is one sys.modules
+	lookup away.  That was the only route here, and it silently failed for the
+	other shape.
+
+	A CLASS-BODY def compiles to a Smalltalk method whose ``inClass'' is the
+	PYTHON CLASS, not the module -- ``T'', not ``stackprobe'' -- so the
+	sys.modules lookup missed and EVERY live frame for a method reported
+	``<grail>''.  Exception tracebacks were unaffected (they take the filename
+	from the catching function's PyCode), which is why code_filename.py passed
+	throughout while test_format_stack / test_print_stack / test_extract_stack
+	did not.  The class-side ``___methodCodeTable___'' holds the very PyCode that
+	backs ``__code__'', so its co_filename is exactly the path code_filename.py
+	already pins -- consult it FIRST, and the two paths cannot disagree.
+
+	Falls back to ``<grail>'', which is what a frame with no locatable module has
+	always reported."
+
+	| cls clsName mod file pyName tbl code |
+	cls := [aMethod @env0:inClass] @env0:on: Error do: [:ex | ex @env0:return: nil].
+	cls isNil ifTrue: [^ '<grail>'].
+	"Route 1: the defining class's own code table (a class-body def).  aMethod's
+	 inClass IS the defining class, so no superclass walk is needed -- unlike
+	 BoundMethod>>___methodCodeForClass___:name:, which starts from the RECEIVER's
+	 class and must climb to find an inherited method."
+	"NOT ``name'': this is a CLASSMETHOD, so self is the class and GemStone's
+	 Class instVar ``name'' is already in scope -- CompileError 1030."
+	pyName := [self ___pythonFrameNameFor___: aMethod @env0:selector]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	pyName isNil ifFalse: [
+		"The table is compiled in environment 1, so an env-0 probe would never
+		 see it -- same reason BoundMethod passes environmentId: 1 here."
+		((cls @env0:class @env0:whichClassIncludesSelector: #'___methodCodeTable___'
+			environmentId: 1) ~~ nil) ifTrue: [
+				tbl := [cls @env1:___methodCodeTable___]
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+				tbl isNil ifFalse: [
+					code := [tbl @env0:at: pyName otherwise: nil]
+						@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+					code isNil ifFalse: [
+						file := [code @env0:dynamicInstVarAt: #'co_filename']
+							@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+						((file isKindOf: CharacterCollection)
+							and: [(file @env0:asString @env0:= '<grail>') @env0:not])
+								ifTrue: [^ file @env0:asString]]]]].
+	"Route 2: inClass names a module (a module-level def)."
+	clsName := [cls @env0:name @env0:asString]
 		@env0:on: Error do: [:ex | ex @env0:return: nil].
 	clsName isNil ifTrue: [^ '<grail>'].
 	mod := [(importlib @env1:modules) @env0:at: clsName @env0:asSymbol otherwise: nil]

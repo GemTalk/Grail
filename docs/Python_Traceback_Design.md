@@ -2724,3 +2724,203 @@ spans — `TestColorizedTraceback.test_colorized_traceback` wants exactly that.
 **Recommended split:** Part 1 alone, verified to change nothing, then Part 2
 behind a full sweep. Doing Part 2 first is what makes this look like one big
 risky change; the blocker and the feature are separable.
+
+> **§9.32's plan is incomplete — read §9.33 before starting it.** It treats the
+> Python side as ready because `FrameSummary` carries `colno` and `extract_tb`
+> populates it. Nothing *renders* a caret, and the renderer has its own blocker.
+
+### 9.33 Carets need three things, and two are missing (2026-08-14, gs40)
+
+Starting §9.32's Part 1 turned up two blockers it did not account for. Both were
+measured, and either one alone makes Part 2 (the expensive tier-2 codegen work)
+produce nothing usable.
+
+**What IS done: the plumbing, end to end.** `PyTraceback` carries `tb_colno` /
+`tb_end_colno` (`PyTraceback.gs:31`), `extract_tb` reads them into a
+`FrameSummary` alongside `_code_positions_at` as a fallback
+(`traceback.py:1098`), and `FrameSummary` stores `colno` / `end_colno` /
+`end_lineno` with the documented `line[colno - indent : end_colno - indent]`
+contract. A span that reaches a frame survives to the renderer intact.
+
+**Missing 1 — nothing renders a caret line.** CPython draws it in
+`StackSummary.format_frame_summary`; Grail's returns `str(frame_summary)`, and
+`FrameSummary.__str__` emits only the `File` row and the source line. (Note
+CPython's own `__str__` is just the repr — the two implementations differ here
+deliberately, see the comment on `StackSummary.format`.) Measured CPython
+behaviour, which is not what one would guess:
+
+| `line`, `colno`, `end_colno` | rendered caret line |
+| --- | --- |
+| `exception_or_callable()`, 4, 27 | `        ~~~~~~~~~~~~~~~~~^^` |
+| `foo()`, 0, 5 | `    ~~~^^` |
+| `y = x['a']['b']['c']`, 4, 19 | `        ^^^^^^^^^^^^^^^` |
+| `a = b + c`, 4, 9 | `        ~~^~~` |
+| `foo()`, None, None | *(no caret line)* |
+
+A span covering the whole line **still** gets a caret line — the obvious
+"suppress when it spans everything" rule is wrong. And the `~` / `^` split is
+expression-aware: a call anchors the parentheses, a binary operator anchors the
+operator, a subscript chain anchors everything.
+
+**Missing 2 — that split needs a real `ast`, and Grail's is a stub.** CPython
+computes it in `_extract_caret_anchors_from_line_segment`, which parses the
+source segment and reads `col_offset` off the node. `src/python/stdlib/ast.py`
+says plainly what it is: `parse()` returns a `_ParsedExpr` wrapper, "anything
+that walks the tree will hit AttributeError", and the node classes are "minimal
+stubs so werkzeug.routing's converter parser can reference `ast.AST` … as type
+tags". There is no `col_offset` to read. CPython's fallback when anchors cannot
+be computed is to emit all `^`, which renders `foo()` as `^^^^^` where CPython
+gives `~~~^^` — so the fallback does not win the tests either.
+
+#### The data Grail already has is worse than none
+
+`ForAst.gs:186` emits a real span for a comprehension, and it reaches the frame.
+For `return [1 / 0 for i in range(3)]`:
+
+| | span on frame `boom` | what it points at |
+| --- | --- | --- |
+| CPython | `colno=12 end_colno=17` | `1 / 0` — the failing division, anchored `~~^~~` |
+| Grail | `colno=27 end_colno=35` | `range(3)` — the comprehension's **iterable** |
+
+Both are "correct" for what they record; only CPython's records *what failed*.
+So switching on a renderer today would underline `range(3)` for a
+`ZeroDivisionError` — a confident, precise, wrong answer, which §9.10 argues is
+worse than no caret at all. **Part 2 is therefore not "emit spans at call
+sites" but "emit spans for the failing sub-expression"**, and any existing span
+whose semantics are "the iterable" has to be re-pointed or excluded rather than
+inherited.
+
+#### Revised shape of the work
+
+1. **A real `ast`** — or an equivalent way to locate the anchor within a source
+   segment. Grail has a Python parser in Smalltalk, so exposing enough of it to
+   answer "where is the operator in this segment" is plausible, but it is its own
+   project and `test.test_ast` is in the manifest as its own scoreboard row.
+2. **The renderer**, transcribing CPython's algorithm — tier 1, self-contained,
+   testable with fixtures that construct `FrameSummary` with explicit columns.
+   Cannot land usefully before (1), because without anchors it renders all `^`.
+3. **Per-operation spans in codegen** — tier 2, and larger than §9.32 framed it:
+   the span must mark the failing sub-expression, which is a property of the
+   *operation*, not of the call site or the statement.
+
+**Recommendation: do not start §9.32's Part 1/Part 2 yet.** Ten lines of scanner
+change and a tier-2 codegen pass would deliver data that nothing can draw, in a
+semantics that would draw the wrong thing. Carets remain the largest cluster
+(~9 tests) and the least ready. If traceback work continues, the `<grail>`
+filename cluster (5 tests) and the suggestion family (11, several sub-causes) are
+unblocked; carets are gated on an `ast` decision that is bigger than traceback.
+
+### 9.34 A live frame for a method named `<grail>` (2026-08-14, gs40)
+
+The `<grail>` cluster from §9.32's bucketing is five tests — `test_extract_stack`,
+`test_format_stack`, `test_print_stack`, `test_custom_format_frame` — and they
+are all LIVE-stack tests, not exception tracebacks. The two mechanisms resolve a
+filename differently, which is why `code_filename.py` passed throughout while
+these failed.
+
+**The bug: only one of the two def shapes resolved.**
+`BaseException class >> ___liveFrameFilenameFor___:` derived `co_filename` from
+`aMethod inClass name`, on the stated premise that "a generated Python function's
+defining class IS its module". That holds for a MODULE-LEVEL def. A CLASS-BODY
+def compiles to a Smalltalk method whose `inClass` is the **Python class** —
+`T`, not `stackprobe` — so the `sys.modules` lookup missed and every live frame
+for a method answered `<grail>`. Measured, before:
+
+```
+MODLEVEL=[('/.../stackprobe.py','probe'), ('/.../stackprobe.py','modlevel')]
+METHOD  =[('/.../stackprobe.py','probe'), ('<grail>','meth')]
+```
+
+**The fix** consults the defining class's class-side `___methodCodeTable___`
+first — the same `PyCode` that backs `__code__`, so its `co_filename` is exactly
+the path `code_filename.py` already pins and the two mechanisms cannot disagree.
+No superclass walk is needed, unlike `BoundMethod>>___methodCodeForClass___:name:`:
+that starts from the RECEIVER's class and must climb to find an inherited method,
+whereas `aMethod inClass` IS the defining class. The module route stays as the
+fallback for module-level defs, and `<grail>` remains the last resort.
+
+One trap worth recording: the temp could not be called `name`. This is a
+CLASSMETHOD, so `self` is the class and GemStone's `Class` instVar `name` is
+already in scope — `CompileError 1030, variable has already been declared`.
+
+**It fixes the filename and wins no tests, which is the useful part.** After the
+change, `<grail>` in `test.test_traceback`'s failure details drops from 5 lines
+to 1, and the scoreboard row is unchanged at `t=370 f=45 e=12 s=218`. The
+placeholder was masking two further problems, now legible:
+
+* **Relative vs absolute paths.** `test_custom_format_frame` renders
+  `File "src/python/stdlib/test/test_traceback.py"` where the test expects the
+  absolute `__file__`. A module's `co_filename` mirrors however the module was
+  loaded, and the CPython harness loads by relative path while `__file__` is
+  absolutised. `code_filename.py` does not catch this because its fixture is
+  loaded by an absolute path, so both agree there.
+* **Harness and unittest frames are in the walk.** `run_one`
+  (`_grail_harness.py`) and `run` (`unittest/__init__.py`) appear in the
+  extracted stack; the tests compare against a specific expected list.
+
+Both are real and neither is what the cluster looked like from the outside. A
+regression check is pinned in `live_frames.py`
+(`a_method_s_live_frame_names_its_real_file`), asserting BOTH shapes so that a
+future fix repairing one by breaking the other fails rather than looks like
+progress.
+
+### 9.35 An override with a defaulted parameter does not override (2026-08-14, gs40)
+
+Chasing the `<grail>` cluster's remaining failures turned up a bug that has
+nothing to do with tracebacks. `test_custom_format_frame` was rendering the
+DEFAULT frame format rather than its subclass's, and the reason generalises:
+
+```python
+class Base:
+    def m(self, x):            return 'BASE'
+    def call_internally(self, x): return self.m(x)
+
+class ExtraDefault(Base):
+    def m(self, x, flag=False): return 'SUB'
+```
+
+| call | CPython | Grail |
+| --- | --- | --- |
+| `SameArity().call_internally(1)` | `SUB` | `SUB` |
+| `ExtraDefault().m(1)` — from outside | `SUB` | `SUB` |
+| `ExtraDefault().call_internally(1)` — from base code | `SUB` | **`BASE`** |
+
+**Why.** A simple-positional def compiles to a FIXED-ARITY selector — `m:`, via
+`CallAst fastPathSelectorForAttr:arity:`. A def carrying a default compiles to
+the varargs form `_m:kw:` instead. Base-class code calling `self.m(x)` emits the
+fixed-arity send, which finds the base's `m:` and never reaches the subclass's
+`_m:kw:`. Verified directly: on the subclass, `whichClassIncludesSelector:
+#'format_frame_summary:' environmentId: 1` answers `StackSummary`, while the
+subclass's own env-1 method dictionary holds only `_format_frame_summary:kw:`.
+
+Calls from OUTSIDE resolve through attribute lookup, which goes by name and
+works — so the bug is invisible from the caller's side and appears only for
+calls made from within the base class. There is no DNU and no error; the wrong
+method simply runs.
+
+**This is the shape stdlib subclassing takes** whenever CPython grows a keyword.
+`def format_frame_summary(self, frame_summary, colorize=False)` overriding a base
+`def format_frame_summary(self, frame_summary)` is real code from
+`test_traceback`, and the same pattern recurs across 3.13+ signatures.
+
+**The fix has precedent in the codebase, in the opposite direction.** Grail
+already emits a varargs COMPANION for simple-positional defs so keyword call
+sites bind (`FunctionDefAst>>needsVarargsForwarder`: "a fixed-arity selector
+encodes only arity, so a keyword call ... would DNU"), and it already emits a
+fixed-arity companion for one special case
+(`generateBigmemtestUnaryForwarderSource`, which "restores the plain `name`
+entry" so `dir()`-based test discovery finds it). What is missing is the general
+reverse direction: a def that compiles as varargs gets no fixed-arity entry
+points, so it cannot override one.
+
+Emitting fixed-arity forwarders for each arity a defaulted def accepts would
+close it, at the cost of extra (tiny) methods per def — `def f(a, b=1, c=2)`
+would gain three. It is a codegen change in `PythonAst/`, so **tier 2**, and it
+changes method dispatch generally: it wants its own change and a full sweep,
+not a rider on traceback work.
+
+`tests/python/override_default_arg.py` pins the rules. It is NOT wired into a
+Smalltalk driver, because two of its checks state CPython and fail here — the
+same treatment §9.29 gave the legacy-form gap, and for the same reason: the
+fixture should say what is true, and the harness should not go red for a bug it
+is documenting.

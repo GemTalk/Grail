@@ -1162,6 +1162,7 @@ testLiveFramesAndGetframe
 	   'the_traceback_module_keeps_its_own_frames_out'
 	   'format_stack_ends_at_its_caller'
 	   'extract_stack_produces_frame_summaries'
+	   'a_method_s_live_frame_names_its_real_file'
 	   'the_machinery_keeps_itself_out_of_the_walk'
 	   'a_frame_has_no_f_locals'
 	   'a_nested_function_gets_no_frame_of_its_own' ) do: [:k |

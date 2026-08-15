@@ -704,6 +704,7 @@ run
 	at: #'EnumPickleByNameTestCase' put: nil;
 	at: #'ClassBodyNamespaceTestCase' put: nil;
 	at: #'MetaclassInstancecheckTestCase' put: nil;
+	at: #'TypingGenericAliasTestCase' put: nil;
 	at: #'InspectGetmembersTestCase' put: nil;
 	at: #'StrDecodeArgsTestCase' put: nil;
 	at: #'StrEnumMixinAndNewTestCase' put: nil;
@@ -780,6 +781,7 @@ run
 	at: #'IsADirectoryErrorTestCase' put: nil;
 	at: #'IteratorTestCase' put: nil;
 	at: #'TzFileHistoryTestCase' put: nil;
+	at: #'ComprehensionTargetsTestCase' put: nil;
 	at: #'CopyProtocolTestCase' put: nil;
 	at: #'MethodShadowsClassAttrTestCase' put: nil;
 	at: #'EnumerateTypeTestCase' put: nil;
@@ -808,6 +810,7 @@ run
 	at: #'ClassBodyConditionalTestCase' put: nil;
 	at: #'ClassBodyDroppedStatementTestCase' put: nil;
 	at: #'ClassBodyExpressionStatementTestCase' put: nil;
+	at: #'DefDefaultsScopeTestCase' put: nil;
 	at: #'ClassBodyLoopsTestCase' put: nil;
 	at: #'CachedPropertyDescriptorTestCase' put: nil;
 	at: #'LruHashabilityAndUnionsTestCase' put: nil;
@@ -1532,6 +1535,7 @@ input src/smalltalk/PythonTests/BuiltinSubclassPickleTestCase.gs
 input src/smalltalk/PythonTests/EnumPickleByNameTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNamespaceTestCase.gs
 input src/smalltalk/PythonTests/MetaclassInstancecheckTestCase.gs
+input src/smalltalk/PythonTests/TypingGenericAliasTestCase.gs
 input src/smalltalk/PythonTests/InspectGetmembersTestCase.gs
 input src/smalltalk/PythonTests/StrDecodeArgsTestCase.gs
 input src/smalltalk/PythonTests/StrEnumMixinAndNewTestCase.gs
@@ -1624,6 +1628,7 @@ input src/smalltalk/PythonTests/PackageImportTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
 input src/smalltalk/PythonTests/TzFileHistoryTestCase.gs
+input src/smalltalk/PythonTests/ComprehensionTargetsTestCase.gs
 input src/smalltalk/PythonTests/CopyProtocolTestCase.gs
 input src/smalltalk/PythonTests/MethodShadowsClassAttrTestCase.gs
 input src/smalltalk/PythonTests/EnumerateTypeTestCase.gs
@@ -1650,6 +1655,7 @@ input src/smalltalk/PythonTests/CachedPropertyDescriptorTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDroppedStatementTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyExpressionStatementTestCase.gs
+input src/smalltalk/PythonTests/DefDefaultsScopeTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyLoopsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyImportTestCase.gs
 input src/smalltalk/PythonTests/FunctionScopeImportTestCase.gs

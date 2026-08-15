@@ -100,16 +100,50 @@ ___collectTargetNames___: aTarget into: seenSet on: aStream
 
 category: 'Grail-code generation'
 classmethod: ComprehensionAst
-___emitUnpack___: aTarget from: sourceExpr on: aStream
-	"Bind aTarget from the Smalltalk expression sourceExpr — plain
-	name, nested tuple (recursing with a wrapped __getitem__: source),
-	or PEP 3132 star slice."
+___emitTargetStore___: aTarget from: sourceExpr on: aStream
+	"Bind ONE non-tuple target from the Smalltalk expression sourceExpr.
 
-	| n |
+	A comprehension's for-target is a full ASSIGNMENT target, not just a name.
+	``for [0, 1][k] in ...'' stores through __setitem__ and ``for obj.a in ...''
+	through __setattr__ -- the same shapes AssignAst emits for a statement
+	assignment, and legal in exactly the same places.  Grail read ``target id''
+	unconditionally, so a subscript target died with an uncatchable
+	``SubscriptAst does not understand #id'' (test_listcomps test_nested_2 and
+	test_nested_free_var_in_iter), and inside a TUPLE target it was quietly
+	dropped instead -- the store simply never happened."
+
 	(aTarget isKindOf: NameAst) ifTrue: [
 		aStream nextPutAll: aTarget id; nextPutAll: ' := '; nextPutAll: sourceExpr; nextPut: $.; lf.
 		^ self].
-	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifFalse: [^ self].
+	(aTarget isKindOf: SubscriptAst) ifTrue: [
+		aTarget value printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ' __setitem__: '.
+		aTarget slice printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ' _: '; nextPutAll: sourceExpr; nextPut: $.; lf.
+		^ self].
+	(aTarget isKindOf: AttributeAst) ifTrue: [
+		aTarget value printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ' @env1:__setattr__: ''';
+			nextPutAll: aTarget ___mangledAttr___;
+			nextPutAll: ''' _: '; nextPutAll: sourceExpr; nextPut: $.; lf.
+		^ self].
+	^ self
+%
+
+category: 'Grail-code generation'
+classmethod: ComprehensionAst
+___emitUnpack___: aTarget from: sourceExpr on: aStream
+	"Bind aTarget from the Smalltalk expression sourceExpr — plain
+	name, nested tuple (recursing with a wrapped __getitem__: source),
+	or PEP 3132 star slice.
+
+	A leaf that is not a tuple goes to ___emitTargetStore___:, so a subscript
+	or attribute leaf inside a tuple target (``for (l[0], l) in ...'') stores
+	rather than being skipped."
+
+	| n |
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifFalse: [
+		^ self ___emitTargetStore___: aTarget from: sourceExpr on: aStream].
 	n := aTarget elts size.
 	aTarget elts doWithIndex: [:elt :i |
 		| childExpr starIdx after |
@@ -143,7 +177,7 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 	[true] whileTrue: loop, target binding (with tuple unpacking when
 	needed), and chained `ifTrue:` blocks for the if-clauses."
 
-	| gen iterTemp itemTemp isTupleTarget hasIfs srcTemp |
+	| gen iterTemp itemTemp isTupleTarget hasIfs srcTemp isNameTarget |
 	anIndex > aCollection size ifTrue: [
 		aBlock value.
 		^self
@@ -152,7 +186,11 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 	iterTemp := '___iter' , anIndex printString , '___'.
 	itemTemp := '___item' , anIndex printString , '___'.
 	srcTemp := '___src' , anIndex printString , '___'.
-	isTupleTarget := gen target isKindOf: TupleAst.
+	"A LIST target (``for [a, b] in ...'') unpacks exactly as a tuple does; it
+	used to fall into the plain-name branch and die on ``target id''."
+	isTupleTarget := (gen target isKindOf: TupleAst)
+		or: [gen target isKindOf: ListAst].
+	isNameTarget := gen target isKindOf: NameAst.
 	hasIfs := gen ifs notNil and: [gen ifs size > 0].
 
 	"Outermost generator: open a traceback-frame wrapper block (closed by
@@ -176,7 +214,9 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 
 	"Open block + StopIteration handler"
 	aStream nextPutAll: '[| ', iterTemp.
-	isTupleTarget ifTrue: [aStream nextPutAll: ' ', itemTemp].
+	"Every target except a plain name needs the item temp: the value has to be
+	held before it can be stored THROUGH the target."
+	isNameTarget ifFalse: [aStream nextPutAll: ' ', itemTemp].
 	isTupleTarget ifTrue: [
 		| seen |
 		"Recursive name collection: nested tuple targets (``for (a, b),
@@ -187,7 +227,10 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 		seen := IdentitySet new.
 		self ___collectTargetNames___: gen target into: seen on: aStream
 	] ifFalse: [
-		aStream nextPutAll: ' '; nextPutAll: gen target id
+		"Only a NAME target declares a temp.  A subscript/attribute target binds
+		nothing new -- it writes into an object that already exists -- and the
+		names inside it are READS, resolved in the enclosing scope."
+		isNameTarget ifTrue: [aStream nextPutAll: ' '; nextPutAll: gen target id]
 	].
 	aStream nextPutAll: ' |'; lf; increaseIndent.
 
@@ -202,13 +245,16 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 	"[true] whileTrue: ["
 	aStream nextPutAll: '[true] whileTrue: ['; lf; increaseIndent.
 
-	"Bind target (tuple unpack or simple)"
-	isTupleTarget ifTrue: [
-		aStream nextPutAll: itemTemp; nextPutAll: ' := '; nextPutAll: iterTemp; nextPutAll: ' __next__.'; lf.
-		self ___emitUnpack___: gen target from: itemTemp on: aStream
-	] ifFalse: [
+	"Bind target: a plain name assigns straight from __next__; everything else
+	lands in the item temp first and is then STORED through the target."
+	isNameTarget ifTrue: [
 		gen target printSmalltalkOn: aStream.
 		aStream nextPutAll: ' := '; nextPutAll: iterTemp; nextPutAll: ' __next__.'; lf
+	] ifFalse: [
+		aStream nextPutAll: itemTemp; nextPutAll: ' := '; nextPutAll: iterTemp; nextPutAll: ' __next__.'; lf.
+		isTupleTarget
+			ifTrue: [self ___emitUnpack___: gen target from: itemTemp on: aStream]
+			ifFalse: [self ___emitTargetStore___: gen target from: itemTemp on: aStream]
 	].
 
 	"Chain the if-clauses around the inner body"
