@@ -71,12 +71,12 @@ different rows and merges cleanly.
 | test.test_raise | ERROR | 37 | 1 | 14 | 0 |  |
 | test.test_funcattrs | ERROR | 35 | 14 | 13 | 1 |  |
 | test.test_decorators | ERROR | 16 | 1 | 5 | 0 |  |
-| test.test_print | ERROR | 9 | 6 | 2 | 0 |  |
+| test.test_print | FAIL | 9 | 2 | 0 | 0 |  |
 | test.test_builtin | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'CO_COROUTINE' from 'inspect' (src/python/stdlib/inspect.py) |
 | test.test_call | OK | 186 | 0 | 0 | 182 |  |
 | test.test_dynamic | ERROR | 11 | 5 | 2 | 0 |  |
 | test.test_exception_variations | ERROR | 30 | 2 | 7 | 0 |  |
-| test.test_global | IMPORTERROR | 0 | 0 | 0 | 0 | Unexpected token: NEWLINE '' at line 165 |
+| test.test_global | IMPORTERROR | 0 | 0 | 0 | 0 | invalid syntax |
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
 | test.test_named_expressions | ERROR | 74 | 8 | 14 | 0 |  |
 | test.test_subclassinit | ERROR | 17 | 7 | 3 | 0 |  |
@@ -96,7 +96,7 @@ different rows and merges cleanly.
 | test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '_compat_pickle' |
 | test.test_reprlib | IMPORTERROR | 0 | 0 | 0 | 0 | name 'wrapped' is not defined |
 | test.test_struct | ERROR | 43 | 6 | 29 | 7 |  |
-| test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'assert_never' from 'typing' (src/python/stdlib/typing.py) |
+| test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | invalid syntax |
 | test.test_warnings | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'get_overloads' from 'typing' (src/python/stdlib/typing.py) |
 | test.test___all__ | IMPORTERROR | 0 | 0 | 0 | 0 | module has no attribute 'check_sanitizer' |
 | test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'multibytecodec_support' from 'test' (src/python/stdlib/test/__init__.py) |

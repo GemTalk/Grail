@@ -2166,7 +2166,57 @@ parseSimpleStatements
 			stmts add: self parseSimpleStatement.
 		].
 	].
+	self checkSimpleStatementTerminator: stmts last.
 	^stmts
+%
+
+category: 'Grail-parsing - statements'
+method: PythonParser
+checkSimpleStatementTerminator: lastStmt
+	"A run of simple statements ends at a NEWLINE or the end of input.  Anything
+	else means two expressions were juxtaposed with no separator between them,
+	which is a SyntaxError -- and used to parse as TWO STATEMENTS, silently:
+
+	    print ''Hello World''      -> ExprAst(print), ExprAst(''Hello World'')
+
+	so a Python-2 print statement ran the name lookup, discarded the string and
+	reported nothing.  ``print p'' did raise, but as a NameError naming p, which
+	is a confusing way to be told the syntax is Python 2.
+
+	The PY2 HINT is CPython's, and it is why this check earns its place rather
+	than merely answering ``invalid syntax'': a bare ``print'' or ``exec''
+	followed by the start of another expression is the one juxtaposition common
+	enough to name, so CPython names it (test_print's TestPy2MigrationHint, six
+	tests).  The message must keep CPython's exact wording -- the tests match
+	its text, not the exception type."
+
+	| tok |
+	tok := self peek.
+	tok isNil ifTrue: [^ self].
+	(tok isNewline or: [tok isEndMarker]) ifTrue: [^ self].
+	"Every ``;'' has already been consumed by the caller's loop, so reaching
+	here with one is impossible; a dedent is the block parser's business."
+	(self ___py2StatementKeywordOf___: lastStmt) ifNotNil: [:kw |
+		^ SyntaxError signal: 'Missing parentheses in call to ''' , kw
+			, '''. Did you mean ' , kw , '(...)?'].
+	^ SyntaxError signal: 'invalid syntax'
+%
+
+category: 'Grail-parsing - statements'
+method: PythonParser
+___py2StatementKeywordOf___: aStmt
+	"``print'' or ``exec'' when aStmt is an expression statement that is exactly
+	that bare NAME -- the two Python-2 statement keywords CPython gives a
+	migration hint for.  Answers nil for anything else, including a CALL of
+	either (``print(x)'' is an ExprAst wrapping a CallAst, not a NameAst)."
+
+	| val |
+	(aStmt isKindOf: ExprAst) ifFalse: [^ nil].
+	val := aStmt value.
+	(val isKindOf: NameAst) ifFalse: [^ nil].
+	((val id asString = 'print') or: [val id asString = 'exec'])
+		ifTrue: [^ val id asString].
+	^ nil
 %
 
 category: 'Grail-parsing - parameters'
