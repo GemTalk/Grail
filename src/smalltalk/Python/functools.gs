@@ -987,11 +987,28 @@ __setstate__: state
 	"Install internal state -- args to a PLAIN tuple, kwds to a PLAIN
 	dict (test_setstate_subclasses requires exact tuple/dict types)."
 	self @env0:dynamicInstVarAt: #func put: fn.
-	self @env0:dynamicInstVarAt: #args put: (tuple @env0:withAll: args).
-	kd := KeyValueDictionary @env0:new.
-	(kwds ~~ None) ifTrue: [
-		kwds @env0:keysAndValuesDo: [:k :v | kd @env0:at: k put: v]].
-	self @env0:dynamicInstVarAt: #keywords put: kd.
+	"An EXACT tuple / dict is installed AS IS; only a SUBCLASS is normalised.
+	That is what CPython's partial_setstate does (PyTuple_CheckExact and
+	PyDict_CheckExact, incref otherwise), and the difference is observable:
+	copy.copy(f) reaches __setstate__ with f's OWN args and keywords, so
+	rebuilding them here made ``f_copy.args is f.args'' false -- which
+	test_functools' test_copy asserts.  The comment above already said
+	subclasses were the case being normalised; the code did it to everything."
+	(args @env0:class @env0:== tuple)
+		ifTrue: [self @env0:dynamicInstVarAt: #args put: args]
+		ifFalse: [self @env0:dynamicInstVarAt: #args put: (tuple @env0:withAll: args)].
+	"EXACT means the canonical dict class, which is PyDict at run time --
+	KeyValueDictionary alone missed it, so every keywords dict was rebuilt."
+	((kwds ~~ None) and: [
+		(kwds @env0:class @env0:== (System @env0:myUserProfile @env0:symbolList
+			@env0:objectNamed: #PyDict))
+		or: [kwds @env0:class @env0:== KeyValueDictionary]])
+		ifTrue: [self @env0:dynamicInstVarAt: #keywords put: kwds]
+		ifFalse: [
+			kd := KeyValueDictionary @env0:new.
+			(kwds ~~ None) ifTrue: [
+				kwds @env0:keysAndValuesDo: [:k :v | kd @env0:at: k put: v]].
+			self @env0:dynamicInstVarAt: #keywords put: kd].
 	"Reset the instance __dict__: drop every user attribute (all
 	dynamic instVars except the reserved three), then apply namespace."
 	pairs := self @env0:dynamicInstVarPairs.

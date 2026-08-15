@@ -193,6 +193,48 @@ initCPointer: aCPointer
 	cPointer := aCPointer
 %
 
+set compile_env: 1
+
+category: 'Grail-Copy Protocol'
+method: SrePattern
+__copy__
+	"CPython's Pattern.__copy__: a compiled pattern is IMMUTABLE and shared,
+	so copying answers the pattern itself.  test_re's test_copying asserts
+	the identity, and without the dunder copy.copy fell to the reduction
+	protocol and rebuilt a second, equal-but-distinct pattern."
+
+	^ self
+%
+
+category: 'Grail-Copy Protocol'
+method: SrePattern
+__deepcopy__: memo
+	"CPython's Pattern.__deepcopy__ -- same reasoning as __copy__."
+
+	^ self
+%
+
+category: 'Grail-Copy Protocol'
+method: SreMatch
+__copy__
+	"CPython's Match.__copy__: a match is an immutable snapshot, so copying
+	answers it unchanged.  Without the dunder copy.copy fell to the reduction
+	protocol, which rebuilds the match -- and a Grail match does not survive
+	being reconstructed (``not valid in this session'')."
+
+	^ self
+%
+
+category: 'Grail-Copy Protocol'
+method: SreMatch
+__deepcopy__: memo
+	"CPython's Match.__deepcopy__ -- same reasoning as __copy__."
+
+	^ self
+%
+
+set compile_env: 0
+
 category: 'Grail-Private'
 method: SrePattern
 initCompileArgs: anArray

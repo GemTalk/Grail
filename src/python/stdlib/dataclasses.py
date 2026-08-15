@@ -367,6 +367,16 @@ def _make_synthesized_eq(field_dict):
     return __eq__
 
 
+def _dataclass_replace_dunder(*args, **changes):
+    """``obj.__replace__(**changes)'' -- the bound form copy.replace() calls.
+
+    Takes *args for the same reason replace() does: Grail's varargs unpacker
+    does not bind a required positional alongside **kwargs."""
+    if not args:
+        raise TypeError('__replace__() requires an instance')
+    return replace(args[0], **changes)
+
+
 def dataclass(_cls=None, *, init=True, repr=True, eq=True, order=False,
               unsafe_hash=False, frozen=False, match_args=True,
               kw_only=False, slots=False, weakref_slot=False):
@@ -402,6 +412,10 @@ def dataclass(_cls=None, *, init=True, repr=True, eq=True, order=False,
                     _make_synthesized_repr(cls.__name__, field_dict))
         if eq:
             setattr(cls, '__eq__', _make_synthesized_eq(field_dict))
+        # Python 3.13's copy.replace() protocol.  dataclasses.replace() is the
+        # same operation under its older name, so the dunder forwards to it
+        # rather than duplicating the field walk.
+        setattr(cls, '__replace__', _dataclass_replace_dunder)
         return cls
 
     # Support both ``@dataclass'' and ``@dataclass(frozen=True)''.

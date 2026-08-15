@@ -60,7 +60,7 @@ different rows and merges cleanly.
 | test.test_baseexception | OK | 11 | 0 | 0 | 1 |  |
 | test.test_listcomps | ERROR | 60 | 4 | 15 | 0 |  |
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
-| test.test_copy | ERROR | 81 | 21 | 12 | 0 |  |
+| test.test_copy | ERROR | 81 | 7 | 8 | 0 |  |
 | test.test_scope | OK | 41 | 0 | 0 | 4 |  |
 | test.test_yield_from | ERROR | 43 | 17 | 12 | 0 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
