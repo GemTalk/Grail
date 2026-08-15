@@ -809,6 +809,7 @@ run
 	at: #'ClassBodyConditionalTestCase' put: nil;
 	at: #'ClassBodyDroppedStatementTestCase' put: nil;
 	at: #'ClassBodyExpressionStatementTestCase' put: nil;
+	at: #'DefDefaultsScopeTestCase' put: nil;
 	at: #'ClassBodyLoopsTestCase' put: nil;
 	at: #'CachedPropertyDescriptorTestCase' put: nil;
 	at: #'LruHashabilityAndUnionsTestCase' put: nil;
@@ -1652,6 +1653,7 @@ input src/smalltalk/PythonTests/CachedPropertyDescriptorTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDroppedStatementTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyExpressionStatementTestCase.gs
+input src/smalltalk/PythonTests/DefDefaultsScopeTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyLoopsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyImportTestCase.gs
 input src/smalltalk/PythonTests/FunctionScopeImportTestCase.gs
