@@ -91,7 +91,7 @@ different rows and merges cleanly.
 | test.test_codecs | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'encodings' |
 | test.test_contextlib_async | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.test_contextlib' |
 | test.test_difflib | ERROR | 38 | 2 | 34 | 0 |  |
-| test.test_gettext | ERROR | 73 | 14 | 4 | 1 |  |
+| test.test_gettext | ERROR | 73 | 13 | 4 | 1 |  |
 | test.test_linecache | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'importlib.machinery' |
 | test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '_compat_pickle' |
 | test.test_reprlib | IMPORTERROR | 0 | 0 | 0 | 0 | name 'wrapped' is not defined |
@@ -99,14 +99,14 @@ different rows and merges cleanly.
 | test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | invalid syntax |
 | test.test_warnings | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.test_warnings.data' |
 | test.test___all__ | ERROR | 1 | 0 | 1 | 0 |  |
-| test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'multibytecodec_support' from 'test' (src/python/stdlib/test/__init__.py) |
-| test.test_codecmaps_tw | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'multibytecodec_support' from 'test' (src/python/stdlib/test/__init__.py) |
+| test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | [Errno 2] No such file or directory: 'src/python/stdlib/test/cjkencodings/cp949.txt' |
+| test.test_codecmaps_tw | SKIP | 6 | 0 | 0 | 6 |  |
 | test.test_htmlparser | ERROR | 67 | 6 | 13 | 1 |  |
 | test.test_ipaddress | IMPORTERROR | 0 | 0 | 0 | 0 | module has no attribute 'IPv6Address' |
 | test.test_netrc | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'netrc' |
 | test.test_pulldom | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax' |
 | test.test_sax | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax' |
-| test.test_ssl | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'socket_helper' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
-| test.test_urllib2_localnet | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'hashlib_helper' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
-| test.test_wave | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'audiotests' from 'test' (src/python/stdlib/test/__init__.py) |
+| test.test_ssl | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'asyncore' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
+| test.test_urllib2_localnet | ERROR | 21 | 0 | 21 | 0 |  |
+| test.test_wave | ERROR | 113 | 0 | 26 | 0 |  |
 | test.test_zipapp | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'zipapp' |

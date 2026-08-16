@@ -770,6 +770,7 @@ run
 	at: #'GemStoneTestCase' put: nil;
 	at: #'GzipTestCase' put: nil;
 	at: #'MockTestCase' put: nil;
+	at: #'WarningsDeprecatedTestCase' put: nil;
 	at: #'WsgirefTestCase' put: nil;
 	at: #'GlobalStatementTestCase' put: nil;
 	at: #'GeneratorExitTestCase' put: nil;
@@ -1648,6 +1649,7 @@ input src/smalltalk/PythonTests/ZlibTestCase.gs
 input src/smalltalk/PythonTests/EmailMessageTestCase.gs
 input src/smalltalk/PythonTests/GzipTestCase.gs
 input src/smalltalk/PythonTests/MockTestCase.gs
+input src/smalltalk/PythonTests/WarningsDeprecatedTestCase.gs
 input src/smalltalk/PythonTests/WsgirefTestCase.gs
 input src/smalltalk/PythonTests/GemStoneTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementTestCase.gs

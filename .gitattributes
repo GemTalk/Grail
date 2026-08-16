@@ -1,5 +1,11 @@
 * text eol=lf
 
+# ...but binary test fixtures must be left byte-for-byte alone.  The blanket
+# rule above rewrote CRLF pairs inside test/audiodata/pluck-pcm16.wav on the
+# way into the index, so the committed blob no longer matched the file
+# test_wave reads -- invisible locally, because the working copy was fine.
+*.wav binary
+
 # inform linguist that files with these extensions are indeed smalltalk files
 *.gs linguist-language=Smalltalk
 *.st linguist-language=Smalltalk

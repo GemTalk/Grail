@@ -821,6 +821,13 @@ initialize
 	self @env0:at: #SHUT_WR put: 1.
 	self @env0:at: #SHUT_RDWR put: 2.
 
+	"has_ipv6 reports whether the BUILD supports IPv6, and this one does not:
+	PySocket is TCP/IPv4 over GsSocket and ignores the family argument
+	entirely, so answering true would make callers hand AF_INET6 to a socket
+	that silently gives them IPv4.  test.support.socket_helper reads it at
+	import time to decide whether to probe for a usable ::1."
+	self @env0:at: #has_ipv6 put: false.
+
 	"Exception aliases.  Since CPython 3.10 socket.timeout IS TimeoutError
 	and socket.error IS OSError (both kept as aliases for older code);
 	``from socket import timeout'' is still common in third-party libraries."

@@ -187,6 +187,60 @@ _warn: positional kw: keywords
 
 category: 'Grail-Public'
 method: warnings
+__deprecated: positional kw: keywords
+	"_deprecated(name, message=..., *, remove) - the stdlib's own helper for
+	announcing that a name goes away in a named release.  Vendored wave.py
+	calls it from five deprecated methods, so test_wave errored on all of
+	them without it.
+
+	CPython also RAISES RuntimeError when the removal version has already
+	passed, which is a guard for CPython's own release process rather than
+	something a caller can trigger; Grail keeps it, comparing against
+	sys.version_info the same way.
+
+	``remove'' is keyword-only in CPython and always passed that way."
+
+	| name message remove removeFormatted msg vi |
+	positional @env0:size @env0:< 1 ifTrue: [
+		TypeError ___signal___:
+			'_deprecated() missing 1 required positional argument: ''name'''].
+	name := positional @env0:at: 1.
+	message := positional @env0:size @env0:>= 2
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [
+			(keywords ~~ nil and: [keywords @env0:includesKey: 'message'])
+				ifTrue: [keywords @env0:at: 'message']
+				ifFalse: ['{name!r} is deprecated and slated for removal in Python {remove}']].
+	remove := (keywords ~~ nil and: [keywords @env0:includesKey: 'remove'])
+		ifTrue: [keywords @env0:at: 'remove']
+		ifFalse: [
+			TypeError ___signal___:
+				'_deprecated() missing 1 required keyword-only argument: ''remove'''].
+	removeFormatted := (remove @env1:__getitem__: 0) @env0:printString
+		@env0:, '.' @env0:, (remove @env1:__getitem__: 1) @env0:printString.
+
+	"Past the announced removal is a bug in the CALLER's version bookkeeping."
+	"``sys'' names the module CLASS in Smalltalk; the attributes live on its
+	singleton instance, which ___instance___ answers."
+	vi := (Python @env0:at: #sys) @env0:___instance___ @env1:version_info.
+	(((vi @env1:__getitem__: 0) @env0:> (remove @env1:__getitem__: 0))
+		or: [((vi @env1:__getitem__: 0) @env0:= (remove @env1:__getitem__: 0))
+			and: [(vi @env1:__getitem__: 1) @env0:> (remove @env1:__getitem__: 1)]])
+		ifTrue: [
+			^ RuntimeError ___signal___: ('''' @env0:, name @env0:printString
+				@env0:, ''' was slated for removal after Python '
+				@env0:, removeFormatted @env0:, ' alpha')].
+
+	"CPython formats with str.format; the two fields are all wave uses."
+	msg := message.
+	msg := msg @env1:replace: '{name!r}' _: name @env0:printString.
+	msg := msg @env1:replace: '{name}' _: name.
+	msg := msg @env1:replace: '{remove}' _: removeFormatted.
+	^ self warn: msg _: DeprecationWarning
+%
+
+category: 'Grail-Public'
+method: warnings
 warn: message _: category
 	"warn(message, category) - emit a warning of `category` (defaults
 	to UserWarning when nil/None)."

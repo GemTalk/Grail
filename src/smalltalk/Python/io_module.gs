@@ -420,6 +420,18 @@ read
 	^ self read: -1
 %
 
+category: 'Grail-Writing'
+method: BytesIO
+flush
+	"flush() on an in-memory stream has nothing to push anywhere, but it is
+	part of the IOBase protocol and callers do invoke it -- wave.Wave_write
+	flushes the underlying file on close, and test_wave writes into a BytesIO.
+	CPython inherits the same no-op from IOBase.  It still raises on a CLOSED
+	stream, which is what _checkOpen provides."
+
+	self _checkOpen
+%
+
 category: 'Grail-Reading'
 method: BytesIO
 read: n
