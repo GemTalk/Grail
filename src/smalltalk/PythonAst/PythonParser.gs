@@ -2418,6 +2418,10 @@ parseStatement
 	here, by lookahead -- see atMatchStatement."
 	self atMatchStatement ifTrue: [^Array with: self parseMatch].
 
+	"``type'' is a soft keyword too (PEP 695), and a far more heavily used
+	identifier than ``match'' -- it is a BUILTIN.  See atTypeAliasStatement."
+	self atTypeAliasStatement ifTrue: [^Array with: self parseTypeAlias].
+
 	"Simple statements"
 	^self parseSimpleStatements
 %
@@ -4219,4 +4223,89 @@ parseMatchClassPattern: clsNode from: tok
 		kwdAttrs: kwNames;
 		kwdPatterns: kwPats;
 		from: tok to: self lastToken ; yourself
+%
+
+category: 'Grail-parsing - type alias'
+method: PythonParser
+atTypeAliasStatement
+	"Is the current NAME ``type'' opening a PEP 695 type-alias statement?
+
+	``type'' is a soft keyword AND a builtin, so it appears as an ordinary
+	identifier far more often than it opens a statement.  The grammar is
+
+	    type NAME [type_params] '=' expression
+
+	so the test is: ``type'' followed by a NAME, followed by ``='' or
+	``[''.  Nothing else can look like that:
+
+	    type X = int       -> statement    (NAME then '=')
+	    type X[T] = list   -> statement    (NAME then '[')
+	    type(x)            -> builtin call ('(' is not a NAME)
+	    type = 5           -> assignment   ('=' is not a NAME)
+	    type.__name__      -> attribute    ('.' is not a NAME)
+	    isinstance(x, type)-> not at a statement head at all
+
+	``type X'' with neither ``='' nor ``['' after it is not valid Python in
+	any reading, so declining it here loses nothing."
+
+	| tok next after |
+	tok := self peek.
+	(tok notNil and: [tok isName and: [tok value = 'type']]) ifFalse: [^false].
+	next := position + 1 <= tokens size ifTrue: [tokens at: position + 1] ifFalse: [nil].
+	(next notNil and: [next isName]) ifFalse: [^false].
+	after := position + 2 <= tokens size ifTrue: [tokens at: position + 2] ifFalse: [nil].
+	after ifNil: [^false].
+	^(after isOp: '=') or: [after isOp: '[']
+%
+
+category: 'Grail-parsing - type alias'
+method: PythonParser
+parseTypeAlias
+	"Parse: type NAME '=' expression
+
+	The PARAMETERISED form ``type X[T] = list[T]'' is REFUSED here rather
+	than accepted and quietly given no type parameters.  Binding T inside
+	the (lazily evaluated) value needs a scope Grail does not have yet, so
+	accepting the syntax would leave T resolving to whatever the enclosing
+	scope happened to hold -- a wrong ANSWER rather than an error, and one
+	that surfaces far from its cause.  A SyntaxError naming the
+	unsupported form is the honest reading."
+
+	| tok target valueExpr nameNode aliasValue |
+	tok := self advance.  "consume the soft keyword 'type'"
+	target := self expectType: #NAME.
+	(self atOp: '[') ifTrue: [
+		SyntaxError signal:
+			'Grail does not yet support type parameters on a type alias (type '
+				, target value , '[...] = ...) at line ' , tok line printString].
+	self expect: #OP value: '='.
+	valueExpr := self parseExpression.
+	nameNode := self ___typeAliasTarget___: target.
+	aliasValue := TypeAliasValueAst new
+		aliasName: target value asString;
+		value: valueExpr;
+		from: tok to: self lastToken ; yourself.
+	^TypeAliasAst new
+		name: nameNode;
+		value: valueExpr;
+		assign: (AssignAst new
+			targets: (Array with: nameNode);
+			value: aliasValue;
+			from: tok to: self lastToken ; yourself);
+		from: tok to: self lastToken ; yourself
+%
+
+category: 'Grail-parsing - type alias'
+method: PythonParser
+___typeAliasTarget___: aToken
+	"The alias name as a STORE target -- ``type X = int'' binds X in the
+	enclosing scope exactly as an assignment would."
+
+	| node |
+	node := NameAst new
+		id: aToken value asSymbol;
+		ctx: self loadCtx;
+		token: aToken ; yourself.
+	self setStoreCtx: node.
+	^node
 %
