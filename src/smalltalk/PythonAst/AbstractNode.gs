@@ -217,13 +217,65 @@ ___emitCurPosBefore: aStmt on: aStream
 	temp; CallAst functionBeingCompiled is nil there) or when aStmt carries no
 	position."
 
+	| node lit |
 	(CallAst functionBeingCompiled isNil or: [aStmt beginLine isNil])
 		ifTrue: [^ self].
+	"PEP 657 columns when the statement offers a span narrower than itself.
+	___pyPositionLiteralArray answers a LITERAL array -- every element a
+	compile-time constant -- so the store stays a pointer assignment that
+	allocates nothing, exactly like the bare line store it replaces, and can
+	still sit inside a hot loop.
+
+	___pythonLineForMethod___ must be able to read the line back out of this
+	form: a frame is IDENTIFIED as Python by that scan succeeding, so an
+	unreadable store deletes the frame rather than just its columns.  That is
+	what §9.38 mismeasured and §9.39 diagnosed; the scanner now steps over the
+	``#('' and both shapes read alike."
+	node := self ___curPosSpanNodeFor___: aStmt.
+	node notNil ifTrue: [
+		lit := [node ___pyPositionLiteralArray] on: Error do: [:ex | ex return: nil].
+		lit notNil ifTrue: [
+			aStream nextPutAll: '___curPos___ := '; nextPutAll: lit;
+				nextPutAll: '.'; lf.
+			^ self]].
 	aStream
 		nextPutAll: '___curPos___ := ';
 		print: aStmt beginLine;
 		nextPutAll: '.';
 		lf
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___curPosSpanNodeFor___: aStmt
+	"The sub-expression a traceback should blame for aStmt, or nil to keep the
+	line-only store.
+
+	CPython's span is the RAISING OPERATION, not the statement.  For
+	``return a / b'' it reports ``a / b'', so the statement's own span would
+	underline the ``return'' too and draw a caret line CPython never draws.
+	The value of a ``return'' or of a simple assignment IS that operation
+	whenever the statement holds exactly one, which is the common shape.
+
+	Deliberately an APPROXIMATION, and it stops short for a statement whose
+	failure is a strict sub-expression: ``return o.attr.meth()'' blames the
+	whole call here where CPython blames ``o.attr.meth'' if the attribute is
+	what failed.  Going further needs a store before each nested operation, and
+	Smalltalk expression emission is inline -- there is no statement boundary to
+	hang one on without wrapping every operand in a block, which would allocate
+	per evaluation.
+
+	Answering nil for every other statement keeps them exactly as they were: a
+	wrong span is worse than none (§9.10)."
+
+	| ivars idx cls |
+	aStmt isNil ifTrue: [^ nil].
+	cls := aStmt class name asString.
+	((cls = 'ReturnAst') or: [cls = 'AssignAst']) ifFalse: [^ nil].
+	ivars := aStmt class allInstVarNames.
+	idx := ivars indexOf: #value.
+	idx = 0 ifTrue: [^ nil].
+	^ aStmt instVarAt: idx
 %
 
 category: 'Grail-other'
