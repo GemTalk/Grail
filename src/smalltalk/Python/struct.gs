@@ -466,15 +466,86 @@ _formatString: format
 	so a bytes format used to be parsed as that literal text: every
 	character bad, and Struct.format reporting 'aByteArray'."
 
+	| str |
 	(format @env0:isKindOf: ByteArray) ifTrue: [
-		| str |
 		str := String @env0:new: format @env0:size.
 		1 @env0:to: format @env0:size do: [:i |
 			str @env0:at: i put: (Character @env0:codePoint: (format @env0:at: i))
 		].
 		^ str
 	].
-	^ format @env0:asString
+	"A str format is ASCII-ENCODED first, so ANY code point above 127 is a
+	UnicodeEncodeError naming its position -- surrogates are not a special
+	case, they are just the ones Grail cannot put in a Smalltalk String.
+	Checking the code points BEFORE coercing is what keeps a lone
+	surrogate from escaping as Grail's internal NotImplementedError
+	instead of the UnicodeEncodeError CPython raises."
+	(format @env0:isKindOf: PyStrSurrogate) ifTrue: [
+		| cps |
+		cps := format @env0:___codePoints___.
+		1 @env0:to: cps @env0:size do: [:i |
+			self _checkAsciiCodePoint: (cps @env0:at: i) at: i @env0:- 1
+		].
+		"Every code point is ASCII, so this cannot be a surrogate string."
+		^ format @env0:asString
+	].
+	str := format @env0:asString.
+	1 @env0:to: str @env0:size do: [:i |
+		self _checkAsciiCodePoint: (str @env0:at: i) @env0:codePoint at: i @env0:- 1
+	].
+	^ str
+%
+
+category: 'Grail-Private'
+method: struct
+_checkAsciiCodePoint: cp at: zeroBasedPos
+	"Raise CPython's UnicodeEncodeError for a non-ASCII format character."
+
+	cp @env0:<= 127 ifTrue: [^ self].
+	^ UnicodeEncodeError ___signal___: '''ascii'' codec can''t encode character '''
+		@env0:, (self _charEscape: cp) @env0:, ''' in position '
+		@env0:, zeroBasedPos @env0:printString
+		@env0:, ': ordinal not in range(128)'
+%
+
+category: 'Grail-Private'
+method: struct
+_charEscape: cp
+	"Python's repr escape for one non-printable/non-ASCII code point:
+	\xHH below 256, \uHHHH below 65536, else \UHHHHHHHH.
+
+	Single backslashes: a Smalltalk string literal has NO escape
+	sequences, so '\x' is already the two characters Python prints."
+
+	| hex width prefix |
+	cp @env0:< 256 ifTrue: [prefix := '\x'. width := 2]
+	ifFalse: [cp @env0:< 65536
+		ifTrue: [prefix := '\u'. width := 4]
+		ifFalse: [prefix := '\U'. width := 8]].
+	"Built a nibble at a time rather than via a radix printer: GemStone's
+	#printStringRadix: prefixes the radix ('16rFF') and #printString: is
+	not a SmallInteger selector at all."
+	hex := String @env0:new.
+	width @env0:- 1 @env0:to: 0 by: -1 do: [:shift |
+		| nib |
+		nib := (cp @env0:bitShift: 0 @env0:- (shift @env0:* 4)) @env0:bitAnd: 15.
+		hex := hex @env0:, (String @env0:with: ('0123456789abcdef' @env0:at: nib @env0:+ 1))
+	].
+	^ prefix @env0:, hex
+%
+
+category: 'Grail-Private'
+method: struct
+_validatedFormat: format
+	"Normalise a format to a Smalltalk String AND check that it parses.
+
+	Struct precompiles, so a bad format must be rejected at construction
+	rather than at the first pack."
+
+	| normalized |
+	normalized := self _formatString: format.
+	self _parse: normalized.
+	^ normalized
 %
 
 category: 'Grail-Private'
@@ -1274,7 +1345,7 @@ __new__: fmt
 
 	| inst |
 	inst := self @env0:new.
-	inst @env0:dynamicInstVarAt: #_format put: (struct instance _formatString: fmt).
+	inst @env0:dynamicInstVarAt: #_format put: (struct instance _validatedFormat: fmt).
 	^ inst
 %
 
@@ -1328,9 +1399,17 @@ __init__: fmt
 	repoint an existing Struct at a new format, which
 	test_Struct_reinitialization exercises directly.  Without it the
 	instance kept the format __new__ gave it and silently ignored the
-	second call."
+	second call.
 
-	self @env0:dynamicInstVarAt: #_format put: (struct instance _formatString: fmt).
+	The format is VALIDATED before it is stored, so a rejected
+	re-initialization leaves the previous format in place -- CPython's
+	test_Struct_reinitialization packs with the OLD format after
+	``s.__init__('$')'' raises.  Storing first would leave the instance
+	holding a format it can neither pack nor unpack with."
+
+	| normalized |
+	normalized := struct instance _validatedFormat: fmt.
+	self @env0:dynamicInstVarAt: #_format put: normalized.
 	^ nil
 %
 

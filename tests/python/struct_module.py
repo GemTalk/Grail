@@ -155,6 +155,17 @@ r['bytes_format_type'] = type(struct.Struct(b'=i2H').format).__name__
 r['embedded_null'] = call(struct.calcsize, '2\0i')
 r['repeat_no_code'] = call(struct.calcsize, '2')
 
+# A format is ASCII-ENCODED first, so ANY code point above 127 is a
+# UnicodeEncodeError naming its position -- a lone surrogate is not a special
+# case, just the one Grail cannot put in a Smalltalk String.  Checking the code
+# points BEFORE coercing is what keeps Grail's internal NotImplementedError
+# from escaping in place of the UnicodeEncodeError CPython raises.
+r['nonascii_latin1'] = call(struct.calcsize, '\xff')
+r['nonascii_bmp'] = call(struct.calcsize, '\u1234')
+r['lone_surrogate'] = call(struct.calcsize, '\udc00')
+r['surrogate_position'] = call(struct.calcsize, 'i\udc00')
+r['surrogate_in_struct'] = call(struct.Struct, '\udc00')
+
 # --- Struct: repr and re-initialization -------------------------------------
 
 r['struct_repr'] = repr(struct.Struct('=i2H'))
@@ -162,11 +173,20 @@ _s = struct.Struct('>h')
 _s.__init__('>hh')
 r['struct_reinit_format'] = repr(_s.format)
 r['struct_reinit_pack'] = repr(_s.pack(1, 2))
+# A REJECTED re-initialization must leave the previous format in place:
+# storing before validating leaves the instance holding a format it can
+# neither pack nor unpack with.
+_r = struct.Struct('>hh')
+r['reinit_rejected'] = call(_r.__init__, '$')
+r['reinit_keeps_old_format'] = repr(_r.format)
+r['reinit_still_packs'] = repr(_r.pack(1, 2))
+r['bad_format_at_construction'] = call(struct.Struct, '$')
 r['struct_iter_unpack'] = repr(list(struct.Struct('>h').iter_unpack(b'\x00\x01\x00\x02')))
 r['struct_unpack_from_kw'] = repr(struct.Struct('i').unpack_from(b'\xff\xff\x07\x00\x00\x00', offset=2))
 
 
 EXPECTED = {
+    'bad_format_at_construction': 'error: bad char in struct format',
     'bool_for_int': "b'\\x01\\x00\\x00\\x00'",
     'bool_pack_list': "b'\\x00'",
     'bool_pack_three': "b'\\x01'",
@@ -194,6 +214,7 @@ EXPECTED = {
     'iter_unpack': '[(1,), (2,)]',
     'iter_unpack_empty_fmt': 'error: cannot iteratively unpack with a struct of length 0',
     'iter_unpack_ragged': 'error: iterative unpacking requires a buffer of a multiple of 2 bytes',
+    'lone_surrogate': "UnicodeEncodeError: 'ascii' codec can't encode character '\\udc00' in position 0: ordinal not in range(128)",
     'nan_round_trip': 'True',
     'native_ci': '8',
     'native_long': '8',
@@ -201,6 +222,8 @@ EXPECTED = {
     'native_n_roundtrip': '(-5,)',
     'native_pack_ci': "b'a\\x00\\x00\\x00\\x01\\x00\\x00\\x00'",
     'no_trailing_pad': '9',
+    'nonascii_bmp': "UnicodeEncodeError: 'ascii' codec can't encode character '\\u1234' in position 0: ordinal not in range(128)",
+    'nonascii_latin1': "UnicodeEncodeError: 'ascii' codec can't encode character '\\xff' in position 0: ordinal not in range(128)",
     'not_caught_as_valueerror': 'correct',
     'pack_into': "b'\\x07\\x00\\x00\\x00\\x00\\x00\\x00\\x00'",
     'pack_into_bad_offset_kind': 'TypeError',
@@ -209,6 +232,9 @@ EXPECTED = {
     'pascal_pack': "b'\\x03abc\\x00'",
     'pascal_truncates': "b'\\x02ab'",
     'pascal_unpack': "(b'abc',)",
+    'reinit_keeps_old_format': "'>hh'",
+    'reinit_rejected': 'error: bad char in struct format',
+    'reinit_still_packs': "b'\\x00\\x01\\x00\\x02'",
     'repeat_no_code': 'error: repeat count given without format specifier',
     'short_big': "error: 'h' format requires -32768 <= number <= 32767",
     'standard_ci': '5',
@@ -220,6 +246,8 @@ EXPECTED = {
     'struct_reinit_pack': "b'\\x00\\x01\\x00\\x02'",
     'struct_repr': "Struct('=i2H')",
     'struct_unpack_from_kw': '(7,)',
+    'surrogate_in_struct': "UnicodeEncodeError: 'ascii' codec can't encode character '\\udc00' in position 0: ordinal not in range(128)",
+    'surrogate_position': "UnicodeEncodeError: 'ascii' codec can't encode character '\\udc00' in position 1: ordinal not in range(128)",
     'unpack_exact': '(7,)',
     'unpack_from': '(7,)',
     'unpack_from_far_neg': 'error: offset -8 out of range for 4-byte buffer',

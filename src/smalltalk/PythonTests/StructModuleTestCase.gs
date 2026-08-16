@@ -291,6 +291,27 @@ testAFormatMayBeBytesButMayNotContainANull
 	self assertMatchesCPythonAt: 'repeat_no_code'.
 %
 
+category: 'Grail-Tests - Format Strings'
+method: StructModuleTestCase
+testANonAsciiFormatIsAUnicodeEncodeError
+	"A format is ASCII-ENCODED first, so ANY code point above 127 fails
+	the same way, naming its POSITION and the character's Python escape.
+	A lone surrogate is not a special case -- it is simply the one Grail
+	cannot put in a Smalltalk String.
+
+	That last point is why the code points are checked BEFORE coercing:
+	coercing first let Grail's internal NotImplementedError (``does not
+	support coerced to a Smalltalk string'') escape to the caller in
+	place of the UnicodeEncodeError CPython raises, which no portable
+	``except UnicodeEncodeError'' could catch."
+
+	self assertMatchesCPythonAt: 'nonascii_latin1'.
+	self assertMatchesCPythonAt: 'nonascii_bmp'.
+	self assertMatchesCPythonAt: 'lone_surrogate'.
+	self assertMatchesCPythonAt: 'surrogate_position'.
+	self assertMatchesCPythonAt: 'surrogate_in_struct'.
+%
+
 category: 'Grail-Tests - Struct'
 method: StructModuleTestCase
 testStructReprAndReinitialization
@@ -300,6 +321,20 @@ testStructReprAndReinitialization
 	self assertMatchesCPythonAt: 'struct_repr'.
 	self assertMatchesCPythonAt: 'struct_reinit_format'.
 	self assertMatchesCPythonAt: 'struct_reinit_pack'.
+%
+
+category: 'Grail-Tests - Struct'
+method: StructModuleTestCase
+testARejectedFormatLeavesTheInstanceUsable
+	"Struct precompiles, so the format is validated BEFORE it is stored.
+	Storing first left the instance holding a format it could neither
+	pack nor unpack with -- and CPython packs with the OLD format after
+	a rejected ``__init__''."
+
+	self assertMatchesCPythonAt: 'reinit_rejected'.
+	self assertMatchesCPythonAt: 'reinit_keeps_old_format'.
+	self assertMatchesCPythonAt: 'reinit_still_packs'.
+	self assertMatchesCPythonAt: 'bad_format_at_construction'.
 %
 
 category: 'Grail-Tests - Struct'
