@@ -32,7 +32,7 @@ ClassAttributeTestCase category: 'Grail-SUnit'
 ! no slot to write into.
 !
 ! Fix: each generated Python class gets a class instVar
-! ``dynInstVars'' holding an Object new whose dynamic instVars
+! ``___dynInstVars___'' holding an Object new whose dynamic instVars
 ! provide a dict-like store for class-level attributes.  Class-side
 ! attribute load / store / delete probe it.
 ! ===============================================================================
@@ -65,7 +65,7 @@ setUp
 category: 'Grail-Tests - Direct store'
 method: ClassAttributeTestCase
 testBrandNewAttrStoreThenRead
-	"Setting a brand-new attribute on a class lands in its dynInstVars,
+	"Setting a brand-new attribute on a class lands in its ___dynInstVars___,
 	and the class attribute load reads it back."
 
 	self assert: (testModule @env1:___pyAttrLoad___: #brand_new_read) equals: 42.
@@ -75,7 +75,7 @@ category: 'Grail-Tests - Direct store'
 method: ClassAttributeTestCase
 testPreDeclaredAttrStillReadable
 	"Pre-declared class body attrs continue to work alongside the new
-	dynInstVars storage — no regression."
+	___dynInstVars___ storage — no regression."
 
 	self assert: (testModule @env1:___pyAttrLoad___: #declared_read) equals: 'preset'.
 %
@@ -85,7 +85,7 @@ testPreDeclaredAttrStillReadable
 category: 'Grail-Tests - setattr / getattr'
 method: ClassAttributeTestCase
 testSetattrOnClassWrites
-	"setattr(C, 'name', value) stores into the class's dynInstVars."
+	"setattr(C, 'name', value) stores into the class's ___dynInstVars___."
 
 	self assert: (testModule @env1:___pyAttrLoad___: #via_setattr_read) equals: 'hello'.
 %
@@ -93,7 +93,7 @@ testSetattrOnClassWrites
 category: 'Grail-Tests - setattr / getattr'
 method: ClassAttributeTestCase
 testGetattrOnClassReads
-	"getattr(C, 'name') reads back through the dynInstVars store."
+	"getattr(C, 'name') reads back through the ___dynInstVars___ store."
 
 	self assert: (testModule @env1:___pyAttrLoad___: #via_getattr_read) equals: 'hello'.
 %
@@ -140,7 +140,7 @@ testDelattrRemovesClassAttribute
 category: 'Grail-Tests - delattr / del'
 method: ClassAttributeTestCase
 testDelStatementRemovesClassAttribute
-	"`del C.name` removes the slot from dynInstVars."
+	"`del C.name` removes the slot from ___dynInstVars___."
 
 	self assert: (testModule @env1:___pyAttrLoad___: #del_stmt_after)
 		equals: 'attribute_error'.
@@ -170,7 +170,7 @@ testRebindClassAttribute
 category: 'Grail-Tests - Per-class isolation'
 method: ClassAttributeTestCase
 testTwoClassesGetSeparateStorage
-	"Each class has its own dynInstVars; setting C.tag on one doesn't
+	"Each class has its own ___dynInstVars___; setting C.tag on one doesn't
 	leak into the other."
 
 	self assert: (testModule @env1:___pyAttrLoad___: #box_tag) equals: 'box-tag'.
@@ -184,7 +184,7 @@ method: ClassAttributeTestCase
 testClassDictReadsOwnAttrs
 	"cls.__dict__ is a dict of the class's OWN attributes: class-body
 	data attrs read as values, methods appear under their Python names,
-	and Grail machinery (dynInstVars, ___...___ selectors) does not
+	and Grail machinery (___dynInstVars___, ___...___ selectors) does not
 	leak in.  Regresses the PythonInstance instance-__dict__ shadowing
 	bug: a CLASS access used to answer an UnboundMethod wrapping the
 	per-instance view (test_enum's member_dir then died on .items())."
@@ -196,7 +196,7 @@ testClassDictReadsOwnAttrs
 category: 'Grail-Tests - Class __dict__'
 method: ClassAttributeTestCase
 testClassDictSeesSetattr
-	"A post-definition setattr(cls, ...) store (dynInstVars-backed)
+	"A post-definition setattr(cls, ...) store (___dynInstVars___-backed)
 	shows up in a subsequent cls.__dict__ snapshot."
 
 	self assert: (testModule @env1:___pyAttrLoad___: #dict_after_setattr) equals: 9.
@@ -216,7 +216,7 @@ method: ClassAttributeTestCase
 testReservedClassObjectNamesIsolated
 	"A Python class attribute whose name is an inherited kernel class-object
 	instVar (``name'', ``format'', ...) is an ordinary Python attribute stored
-	in dynInstVars, NOT the class's structural slot.  So ``cls.name'' reads the
+	in ___dynInstVars___, NOT the class's structural slot.  So ``cls.name'' reads the
 	Python value, ``cls.__name__'' still reports the real class name, and each
 	class keeps its own per-class value -- and importing such a class no longer
 	overwrites the Smalltalk class name (which crashed GemStone 4.0 MR#6's

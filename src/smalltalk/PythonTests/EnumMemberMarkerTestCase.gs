@@ -32,7 +32,7 @@ EnumMemberMarkerTestCase category: 'Grail-SUnit'
 ! ``@member class Inner'' produced a descriptor instead of a marker.  And the
 ! nested class's ``__qualname__'' store was emitted AFTER that class's
 ! DECORATORS, so it ran against whatever the decorator returned -- for a marker
-! that reached object>>___classHolderAttrStore___, whose ``self dynInstVars''
+! that reached object>>___classHolderAttrStore___, whose ``self ___dynInstVars___''
 ! raised a raw Smalltalk doesNotUnderstand.  It escaped as an ST error rather
 ! than any Python exception, taking out both
 ! test_nested_classes_in_enum_with_member and _with_nonmember.

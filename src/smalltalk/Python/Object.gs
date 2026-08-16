@@ -863,7 +863,7 @@ ___grailNsBind___: aName
 	___pyAttrLoad___ answers what the name is bound to -- an unbound method for
 	a ``def'', the class itself for a nested ``class''.  That is also what makes
 	a DECORATED def come out right: the decorator has already rebound the name
-	in the dynInstVars holder, and the load reads the holder first, so the
+	in the ___dynInstVars___ holder, and the load reads the holder first, so the
 	namespace sees the decorated object and not the raw method.
 
 	Unlike ___grailNsStore___:value: this does NOT read the value back out of
@@ -1177,7 +1177,7 @@ ___invokeSetNameHooks___: attrNames
 	Two stores to walk, because Grail splits what CPython keeps in one class
 	__dict__: a class-body ASSIGNMENT reaches a ClassDefAst-synthesised
 	``Grail-Class Attrs'' accessor and is named in attrNames, while a class-
-	body method DECORATOR's rebinding goes to the per-class dynInstVars
+	body method DECORATOR's rebinding goes to the per-class ___dynInstVars___
 	holder (___classHolderAttrStore___).  Names in attrNames come in
 	declaration order; the holder's do not, so a class that binds the same
 	descriptor to a decorated def AND an assignment may report the two names
@@ -1202,8 +1202,8 @@ ___invokeSetNameHooks___: attrNames
 			ifTrue: [self ___classBodyOrder___]
 			ifFalse: [nil].
 	ordered == nil ifFalse: [
-		holder := (self ___respondsTo___: #dynInstVars)
-			ifTrue: [self @env0:perform: #dynInstVars env: 1]
+		holder := (self ___respondsTo___: #___dynInstVars___)
+			ifTrue: [self @env0:perform: #___dynInstVars___ env: 1]
 			ifFalse: [nil].
 		ordered @env0:do: [:sym |
 			| v |
@@ -1219,8 +1219,8 @@ ___invokeSetNameHooks___: attrNames
 			| sym |
 			sym := nm @env0:asString @env0:asSymbol.
 			self ___setNameOn___: (self ___classBodyValueAt___: sym) named: sym]].
-	holder := (self ___respondsTo___: #dynInstVars)
-		ifTrue: [self @env0:perform: #dynInstVars env: 1]
+	holder := (self ___respondsTo___: #___dynInstVars___)
+		ifTrue: [self @env0:perform: #___dynInstVars___ env: 1]
 		ifFalse: [nil].
 	holder == nil ifFalse: [
 		(holder @env0:dynamicInstanceVariables) @env0:do: [:sym |
@@ -1539,8 +1539,8 @@ __name__
 	typename it was asked for.  An assigned name wins over every derivation
 	below -- it is the caller stating the answer outright.  Independent of
 	__qualname__, which CPython leaves alone when __name__ is set."
-	(self ___respondsTo___: #dynInstVars) ifTrue: [
-		holder := self @env0:perform: #dynInstVars env: 1.
+	(self ___respondsTo___: #___dynInstVars___) ifTrue: [
+		holder := self @env0:perform: #___dynInstVars___ env: 1.
 		holder @env0:notNil ifTrue: [
 			nm := holder @env0:dynamicInstVarAt: #'___name___'.
 			nm @env0:notNil ifTrue: [^ nm @env0:asString]]].
@@ -1569,10 +1569,10 @@ __qualname__
 
 	| bt holder qn id |
 	"A NESTED class carries a dotted qualified name (``Outer.Inner'') recorded
-	in its own dynInstVars holder at build time (ClassDefAst nested-class emit);
+	in its own ___dynInstVars___ holder at build time (ClassDefAst nested-class emit);
 	top-level classes have none and fall back to the simple name below."
-	(self ___respondsTo___: #dynInstVars) ifTrue: [
-		holder := self @env0:perform: #dynInstVars env: 1.
+	(self ___respondsTo___: #___dynInstVars___) ifTrue: [
+		holder := self @env0:perform: #___dynInstVars___ env: 1.
 		holder @env0:notNil ifTrue: [
 			qn := holder @env0:dynamicInstVarAt: #'___qualname___'.
 			qn @env0:notNil ifTrue: [^ qn @env0:asString]]].
@@ -1838,7 +1838,7 @@ category: 'Grail-Convenience Methods - Attribute'
 method: object
 ___dynamicClassAttr___: aSym
 	"Walk self's class chain looking for aSym in the per-class
-	``dynInstVars'' store.  Returns the raw value if found, nil
+	``___dynInstVars___'' store.  Returns the raw value if found, nil
 	otherwise.  Used by class instantiation to detect a setattr'd
 	override (e.g. ``Cls.__init__ = synthesized_fn'') before falling
 	back to the statically-compiled dispatch.
@@ -1854,15 +1854,15 @@ ___dynamicClassAttr___: aSym
 		ifFalse: [self @env0:class].
 	"Canonical-class overlay first: a runtime setattr on a canonical class
 	(e.g. ``Cls.__init__ = fn'') lands in the session overlay, which must
-	shadow the committed dynInstVars store.  The lookup walks the same
+	shadow the committed ___dynInstVars___ store.  The lookup walks the same
 	superclass chain this method does."
 	(self ___classAttrOverlayLookup___: walker name: aSym)
 		@env0:ifNotNil: [:___ovv | ^ ___ovv].
 	[walker == nil] whileFalse: [
-		(walker ___respondsTo___: #dynInstVars)
+		(walker ___respondsTo___: #___dynInstVars___)
 			ifTrue: [
 				| holder dynValue |
-				holder := walker @env0:perform: #dynInstVars env: 1.
+				holder := walker @env0:perform: #___dynInstVars___ env: 1.
 				holder == nil ifFalse: [
 					dynValue := holder @env0:dynamicInstVarAt: aSym.
 					dynValue == nil ifFalse: [^ dynValue]
@@ -1963,7 +1963,7 @@ ___classAttrOverlayLookup___: aClass name: aSym
 	This walk needs the rule as much as the committed one does -- more subtly,
 	because WHICH store a runtime ``Cls.x = v'' lands in depends on the
 	canonical-classes flag.  With it on (the test suite turns it on) the write
-	goes to this overlay instead of the dynInstVars holder, so a fix applied
+	goes to this overlay instead of the ___dynInstVars___ holder, so a fix applied
 	only to the holder walk looked right in a plain session and still let an
 	ancestor's attribute shadow a subclass's method under the suite."
 
@@ -1994,13 +1994,13 @@ ___classBodyDefinitionalStore___: aName put: aValue
 	A class attribute has two possible homes, and which one it has is fixed
 	when the class is built: a name assigned UNCONDITIONALLY somewhere in the
 	body gets an accessor/setter pair (a real classInstVar slot), and
-	everything else gets a dynInstVars entry.  A conditional binding cannot
+	everything else gets a ___dynInstVars___ entry.  A conditional binding cannot
 	know at emit time which it is dealing with -- ``x = 1'' followed by ``if
 	flag: x = 2'' has an accessor, a name bound only inside the branch does
 	not -- so it has to ask.
 
 	Writing to the wrong home is not a near-miss.  ___pyAttrLoad___ consults
-	the accessor BEFORE the dynInstVars store, so a branch that wrote to the
+	the accessor BEFORE the ___dynInstVars___ store, so a branch that wrote to the
 	holder while an accessor existed would be shadowed by the unconditional
 	value it was supposed to replace: ``x = 1; if flag: x = 2'' answered 1.
 
@@ -2032,7 +2032,7 @@ ___classBodyDefinitionalDelete___: aName
 	places, because which one holds the binding is not knowable at emit time: a
 	name assigned unconditionally somewhere in the body has an accessor pair, a
 	name bound only by a locals() write or a conditional branch is in the
-	dynInstVars holder, and the prepared namespace has a copy of either.
+	___dynInstVars___ holder, and the prepared namespace has a copy of either.
 
 	CPython's class-body ``del'' is DELETE_NAME on the body's own namespace, so
 	it raises NameError when the name is not bound there -- and, in particular,
@@ -2069,8 +2069,8 @@ ___classBodyDefinitionalDelete___: aName
 			meta @env0:removeSelector: getterSym environmentId: 1.
 			(meta @env0:whichClassIncludesSelector: setterSym environmentId: 1) == meta
 				ifTrue: [meta @env0:removeSelector: setterSym environmentId: 1]].
-	holder := (self ___respondsTo___: #dynInstVars)
-		ifTrue: [self @env0:perform: #dynInstVars env: 1]
+	holder := (self ___respondsTo___: #___dynInstVars___)
+		ifTrue: [self @env0:perform: #___dynInstVars___ env: 1]
 		ifFalse: [nil].
 	holder == nil ifFalse: [
 		(holder @env0:dynamicInstVarAt: getterSym) == nil ifFalse: [
@@ -2096,8 +2096,8 @@ ___classBodyDynamicRead___: aSym
 	outrank the module global the body is entitled to read."
 
 	| holder |
-	(self ___respondsTo___: #dynInstVars) ifFalse: [^ nil].
-	holder := self @env0:perform: #dynInstVars env: 1.
+	(self ___respondsTo___: #___dynInstVars___) ifFalse: [^ nil].
+	holder := self @env0:perform: #___dynInstVars___ env: 1.
 	holder == nil ifTrue: [^ nil].
 	^ holder @env0:dynamicInstVarAt: aSym
 %
@@ -2105,9 +2105,9 @@ ___classBodyDynamicRead___: aSym
 category: 'Grail-Class Attr Overlay'
 method: object
 ___classHolderAttrStore___: aName put: aValue
-	"Write aName into the receiver's OWN per-class ``dynInstVars'' holder --
+	"Write aName into the receiver's OWN per-class ``___dynInstVars___'' holder --
 	the committed class-attribute store that ___classChainAttrLookup___: reads.
-	The receiver is a class that declares ``dynInstVars'' (every generated
+	The receiver is a class that declares ``___dynInstVars___'' (every generated
 	Python class does; ClassDefAst initialises the classInstVar at class-build
 	time).
 
@@ -2128,10 +2128,10 @@ ___classHolderAttrStore___: aName put: aValue
 	Returns aValue, so it can be used as an expression."
 
 	| holder |
-	holder := self @env0:perform: #dynInstVars env: 1.
+	holder := self @env0:perform: #___dynInstVars___ env: 1.
 	holder == nil ifTrue: [
 		holder := Object @env0:new.
-		self @env0:perform: #dynInstVars: env: 1 withArguments: { holder }
+		self @env0:perform: #___dynInstVars___: env: 1 withArguments: { holder }
 	].
 	holder ___pyStoreDynamic___: aName @env0:asString @env0:asSymbol put: aValue.
 	^ aValue
@@ -2140,7 +2140,7 @@ ___classHolderAttrStore___: aName put: aValue
 category: 'Grail-Class Attr Overlay'
 method: object
 ___classChainAttrLookup___: aSym
-	"Read aSym from the per-class ``dynInstVars'' store, walking the
+	"Read aSym from the per-class ``___dynInstVars___'' store, walking the
 	receiver's class chain.  This is the COMMITTED class-attribute store --
 	the home of ``setattr(cls, ...)'', of class-attr values merged from
 	secondary bases (multiple inheritance; see importlib
@@ -2198,8 +2198,8 @@ ___classChainAttrLookup___: aSym
 		ifFalse: [self @env0:class].
 	walker := start.
 	[walker == nil] whileFalse: [
-		(walker ___respondsTo___: #dynInstVars) ifTrue: [
-			holder := walker @env0:perform: #dynInstVars env: 1.
+		(walker ___respondsTo___: #___dynInstVars___) ifTrue: [
+			holder := walker @env0:perform: #___dynInstVars___ env: 1.
 			holder == nil ifFalse: [
 				v := holder @env0:dynamicInstVarAt: aSym.
 				v == nil ifFalse: [
@@ -2232,7 +2232,7 @@ ___classBodyAttrOutrankedByMethod___: aSym
 	nearer than the class whose BODY bound it as an attribute.
 
 	The metaclass-side counterpart of the test ___classChainAttrLookup___:
-	already makes for the dynInstVars store.  CPython holds a class's
+	already makes for the ___dynInstVars___ store.  CPython holds a class's
 	attributes and its functions in ONE __dict__ and lets the MRO decide, so
 	the nearer class wins whichever kind it supplies.  Grail splits them --
 	ClassDefAst compiles a class-body ``x = v'' to an accessor PAIR on the
@@ -2402,7 +2402,7 @@ ___classDict___
 			nm := nm @env0:copyFrom: 1 to: (nm @env0:indexOf: $:) @env0:- 1].
 		(((nm @env0:size) @env0:> 0)
 			and: [(nm @env0:copyFrom: 1 to: (3 @env0:min: nm @env0:size)) @env0:~= '___'
-			and: [nm @env0:~= 'dynInstVars'
+			and: [nm @env0:~= '___dynInstVars___'
 			and: [(d @env0:includesKey: nm) @env0:not]]]) ifTrue: [
 			d @env0:at: nm put:
 				(UnboundMethod definingClass: defCls selector: nm @env0:asSymbol)]].
@@ -2417,7 +2417,7 @@ ___classDict___
 			| nm setter v |
 			nm := sel @env0:asString.
 			((nm @env0:includes: $:) @env0:not
-				and: [nm @env0:~= 'dynInstVars']) ifTrue: [
+				and: [nm @env0:~= '___dynInstVars___']) ifTrue: [
 				setter := (nm @env0:, ':') @env0:asSymbol.
 				(cmd @env0:includesKey: setter)
 					ifTrue: [
@@ -2428,8 +2428,8 @@ ___classDict___
 	method wrap (enum members shadow their accessor machinery).
 	dynamicInstVarPairs answers a FLAT alternating array and raises on a
 	never-stored holder -- guard and iterate by 2."
-	(self ___respondsTo___: #dynInstVars) ifTrue: [
-		holder := [self @env0:perform: #dynInstVars env: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
+	(self ___respondsTo___: #___dynInstVars___) ifTrue: [
+		holder := [self @env0:perform: #___dynInstVars___ env: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
 		holder == nil ifFalse: [
 			pairs := [holder @env0:dynamicInstVarPairs] @env0:on: AbstractException do: [:e | e @env0:return: #()].
 			1 @env0:to: pairs @env0:size @env0:- 1 by: 2 do: [:i |
@@ -2448,7 +2448,7 @@ ___classDict___
 				v == nil ifFalse: [d @env0:at: k @env0:asString put: v]]]] ]
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	"A FUNCTIONAL enum's _generate_next_value_ is a staticmethod in the session
-	gnv-static store (functional enums have no dynInstVars holder to carry it; a
+	gnv-static store (functional enums have no ___dynInstVars___ holder to carry it; a
 	CLASS-syntax enum already surfaces it via branch (a)).  Surface it so
 	``type(cls.__dict__['_generate_next_value_']) is staticmethod'' holds
 	(test_gnv_is_static Function variants).  Gated on this being an enum class so no
@@ -2913,7 +2913,7 @@ ___isValueDescriptor___: aValue
 	"PropertyDescriptor (the ``property'' builtin and subclasses) is a
 	statically-defined Smalltalk class, NOT a PythonInstance, yet it is a genuine
 	DATA descriptor: an instance read of ``x = property(...)'' bound via
-	setattr (dynInstVars, not the class-body accessor pair) must ask it for the
+	setattr (___dynInstVars___, not the class-body accessor pair) must ask it for the
 	value rather than hand it back.  Answered here so the shared descriptor-get
 	paths (___classChainAttrLookup___, the overlay lookups) treat it uniformly."
 	(aValue @env0:isKindOf: PropertyDescriptor) ifTrue: [^ true].
@@ -3328,7 +3328,7 @@ ___pyAttrLoad___: aSym
 			@env0:ifNotNil: [:___ovv | ^ ___ovv].
 		"MRO precedence: a DEFINITIONAL per-class store (a nested class def
 		``class Sub: class cls: ...'', an if-branch binding) lands in THIS class's
-		OWN dynInstVars and must beat a same-named accessor INHERITED from a base --
+		OWN ___dynInstVars___ and must beat a same-named accessor INHERITED from a base --
 		``class Sub(Base): class cls: ...'' where Base declares ``cls = None'' must
 		answer Sub's nested class, not Base's None (test_property's
 		PropertyUnreachable mixins).  The setter-paired accessor branch below walks
@@ -3533,7 +3533,7 @@ ___pyAttrLoad___: aSym
 		"Canonical-class overlay first: an ``self.x'' read falling back to
 		the class must see a runtime ``Cls.x = v'' overlay store before the
 		committed class-body accessor -- with the SAME descriptor binding the
-		committed per-class dynInstVars path applies below: a callable stored
+		committed per-class ___dynInstVars___ path applies below: a callable stored
 		as a class attribute and read through an INSTANCE binds self via a
 		MethodBinding (``Box.greet = fn; b.greet(x)'' -> fn(b, x)).
 		___descriptorGet___ is wrong here -- it excludes BoundMethod and would
@@ -3792,7 +3792,7 @@ ___pyAttrLoad___: aSym
 		ifTrue: [
 			^ self ___unboundMethodClosure___: aSym
 		].
-	"dynInstVars probe — see ___classChainAttrLookup___:.  An instance
+	"___dynInstVars___ probe — see ___classChainAttrLookup___:.  An instance
 	receiver already probed it above (it has to precede the BoundMethod wrap
 	to shadow a compiled method); this remains for the receiver kinds that
 	reach here without having done so."
@@ -3850,13 +3850,13 @@ ___pyAttrLoad___: aSym
 	"A ``__getattr__'' bound as a class ATTRIBUTE (a function value,
 	not a ``def'') — django's LazyObject does ``__getattr__ =
 	new_method_proxy(getattr)''.  Grail stores it in the per-class
-	dynInstVars holder rather than as an env-1 method, so probe the
+	___dynInstVars___ holder rather than as an env-1 method, so probe the
 	class chain and invoke it with (self, name); CPython passes the
 	instance as the descriptor's first arg."
 	(self isKindOf: Behavior) ifFalse: [
 		| getattrFn metaCls |
 		"``__getattr__'' bound as a class attribute lands in EITHER the
-		per-class dynInstVars holder (setattr / MI merge) OR a
+		per-class ___dynInstVars___ holder (setattr / MI merge) OR a
 		Grail-Class Attrs accessor pair on the metaclass (a plain
 		``__getattr__ = fn'' class-body assignment — django's
 		LazyObject).  Probe both."
@@ -4051,6 +4051,32 @@ __getattr__: name
 
 category: 'Grail-Attribute Access'
 method: object
+___grailIsFixedAritySelector___: aString from: firstColon
+	"True when aString is a Grail FIXED-ARITY method selector: a name, a colon,
+	then zero or more ``_:'' groups -- ``meth:'', ``meth:_:'', ``meth:_:_:'',
+	which is what FunctionDefAst>>fixedAritySelectorFor: builds.
+
+	Used by __dir__ to tell a Python method from a Smalltalk keyword selector
+	that merely SHARES ITS FIRST SEGMENT.  ``perform:env:'' and ``value:value:''
+	fail here; ``__setitem__:_:'' passes."
+
+	| rest sz i |
+	rest := aString @env0:copyFrom: (firstColon @env0:+ 1) to: aString @env0:size.
+	sz := rest @env0:size.
+	sz == 0 ifTrue: [^ true].
+	i := 1.
+	[i @env0:<= sz] @env0:whileTrue: [
+		"An odd-length remainder runs off the end here, which is the answer for
+		a selector like ``foo:_'' that is not a valid encoding anyway."
+		(i @env0:+ 1) @env0:> sz ifTrue: [^ false].
+		((rest @env0:at: i) == $_ and: [(rest @env0:at: (i @env0:+ 1)) == $:])
+			ifFalse: [^ false].
+		i := i @env0:+ 2].
+	^ true
+%
+
+category: 'Grail-Attribute Access'
+method: object
 __dir__
 	"Return list of valid attributes for this object.
 	Returns an Array of Strings containing all method names for environment 1 (Python).
@@ -4101,13 +4127,33 @@ __dir__
 			and: [(s @env0:copyFrom: (sz @env0:- 3) to: sz) @env0:= ':kw:']])
 			ifTrue: [s @env0:copyFrom: 2 to: (sz @env0:- 4)]
 			ifFalse: [
-				"Fixed-arity keyword selector (``name:_:'') -- strip at the first
-				colon; a unary selector has none and passes through unchanged."
+				"Fixed-arity keyword selector -- ``name:'' followed by zero or more
+				``_:'', which is exactly what FunctionDefAst>>fixedAritySelectorFor:
+				emits.  The REST OF THE SELECTOR HAS TO BE CHECKED, not just
+				truncated at the first colon: every Python object inherits Object,
+				whose env-1 kernel selectors include ``perform:env:'',
+				``value:value:'' and ``with:perform:env:'' -- the dispatch and call
+				protocol Grail is built on.  Truncating those manufactured the
+				Python-looking names ``perform'', ``value'' and ``with'' and put
+				them in dir() for EVERY object (40 of the 42 parity subjects).
+
+				They cannot be renamed out of the way the ``___''-prefix convention
+				handles Grail's own helpers: they are GemStone kernel selectors, and
+				``value:value:'' is deliberately the universal call protocol.  A
+				prefix filter never sees them either -- ``with:perform:env:'' is an
+				ordinary selector.  Recognising the ENCODING is what separates a
+				Python method from the infrastructure it dispatches through.
+
+				A selector that is neither encoding answers nil and is dropped."
 				index := s @env0:indexOf: $:.
 				index == 0
 					ifTrue: [s]
-					ifFalse: [s @env0:copyFrom: 1 to: (index @env0:- 1)]]
+					ifFalse: [
+						(self ___grailIsFixedAritySelector___: s from: index)
+							ifTrue: [s @env0:copyFrom: 1 to: (index @env0:- 1)]
+							ifFalse: [nil]]]
 	].
+	result := result @env0:reject: [:name | name @env0:isNil].
 	"CPython dir() returns unique names; a simple-positional def can yield BOTH
 	a fixed-arity selector and a ``_name:kw:'' keyword companion, which now
 	debang to the same name -- dedup before sorting."
@@ -4284,7 +4330,7 @@ __eq__: other
 	"Return self == other.
 
 	Probe for a setattr-installed ``__eq__'' on the class chain
-	(``cls.__eq__ = synth_fn'' lands in the per-class dynInstVars
+	(``cls.__eq__ = synth_fn'' lands in the per-class ___dynInstVars___
 	store — the dataclass decorator does this).  When present, bind
 	self + other and forward, mirroring the instantiation path that
 	consults a dynamic ``__init__''.  When absent (the common case),
@@ -4443,7 +4489,7 @@ ___definesProtocolMethod___: aName selectors: selectorArray
 	catchable in the first place), hence the ``~~ object'' guard.  Mirrors
 	the reason ___hasUserInit___ exists for __init__.  An ``async def''
 	compiles to no Smalltalk method at all and lands in the per-class
-	dynInstVars store, as does a runtime ``Cls.__aexit__ = fn''; that is
+	___dynInstVars___ store, as does a runtime ``Cls.__aexit__ = fn''; that is
 	what ___dynamicClassAttr___: walks.
 
 	Several selectors per name because the arity a Python def compiles to
@@ -6014,7 +6060,7 @@ ___pyAttrDelete___: aName
 	GemStone classes don't support dynamicInstVar removal and the
 	auto-generated class-side setters have no removal counterpart.
 	Add a class-side delete mechanism alongside the metaclass dynamic
-	store (see [[dynInstVars-on-metaclass]]) if/when that lands."
+	store (see [[___dynInstVars___-on-metaclass]]) if/when that lands."
 
 	| sym owned |
 	sym := aName @env0:asSymbol.
@@ -6024,13 +6070,13 @@ ___pyAttrDelete___: aName
 		being undone) before consulting the committed store."
 		(self ___classAttrOverlayRemove___: self name: sym)
 			ifTrue: [^ self].
-		"Class receiver — remove from dynInstVars dict (Python user
-		class).  Built-in / non-Python classes have no dynInstVars
+		"Class receiver — remove from ___dynInstVars___ dict (Python user
+		class).  Built-in / non-Python classes have no ___dynInstVars___
 		slot and immediately AttributeError."
-		(self ___respondsTo___: #dynInstVars)
+		(self ___respondsTo___: #___dynInstVars___)
 			ifTrue: [
 				| holder |
-				holder := self @env0:perform: #dynInstVars env: 1.
+				holder := self @env0:perform: #___dynInstVars___ env: 1.
 				(holder == nil) ifFalse: [
 					(holder @env0:dynamicInstVarAt: sym) == nil ifFalse: [
 						^ holder @env0:removeDynamicInstVar: sym
@@ -6168,7 +6214,7 @@ ___instancePropertyDescriptorFor___: aName
 	"The PropertyDescriptor bound to aName as a CLASS attribute of this
 	instance's class (or an ancestor), read RAW without firing __get__ -- or nil.
 	Covers a class-body ``x = property(...)'' (via the class-side accessor) and a
-	runtime ``setattr(cls, 'x', property(...))'' (the per-class dynInstVars
+	runtime ``setattr(cls, 'x', property(...))'' (the per-class ___dynInstVars___
 	holder).  Used by the store/delete descriptor hooks for the call form."
 
 	| aSym raw walker holder |
@@ -6180,8 +6226,8 @@ ___instancePropertyDescriptorFor___: aName
 			(raw @env0:isKindOf: PropertyDescriptor) ifTrue: [^ raw]].
 	walker := self @env0:class.
 	[walker == nil] @env0:whileFalse: [
-		(walker ___respondsTo___: #dynInstVars) ifTrue: [
-			holder := walker @env0:perform: #dynInstVars env: 1.
+		(walker ___respondsTo___: #___dynInstVars___) ifTrue: [
+			holder := walker @env0:perform: #___dynInstVars___ env: 1.
 			holder == nil ifFalse: [
 				raw := holder @env0:dynamicInstVarAt: aSym.
 				(raw @env0:isKindOf: PropertyDescriptor) ifTrue: [^ raw]]].
@@ -6192,14 +6238,14 @@ ___instancePropertyDescriptorFor___: aName
 category: 'Grail-Attribute Access'
 method: object
 ___ownDynInstVarHas___: aSym
-	"True when this class's OWN per-class dynInstVars holder binds aSym (a
+	"True when this class's OWN per-class ___dynInstVars___ holder binds aSym (a
 	definitional store: a nested class def, an if-branch class-body binding, a
 	setattr on THIS class).  Own-only -- does not walk the superclass chain --
 	so the class-read precedence check stays scoped to genuine MRO conflicts."
 
 	| holder |
-	(self ___respondsTo___: #dynInstVars) ifFalse: [^ false].
-	holder := self @env0:perform: #dynInstVars env: 1.
+	(self ___respondsTo___: #___dynInstVars___) ifFalse: [^ false].
+	holder := self @env0:perform: #___dynInstVars___ env: 1.
 	holder == nil ifTrue: [^ false].
 	^ (holder @env0:dynamicInstVarAt: aSym) ~~ nil
 %
@@ -6221,9 +6267,9 @@ ___pyAttrStore___: aName put: aValue
 	    @property pairs (the auto-generated setter writes to the
 	    classInstVar slot).
 	  * Class receiver without a static setter — write to the
-	    per-class ``dynInstVars'' dict (an Object whose dynamic
+	    per-class ``___dynInstVars___'' dict (an Object whose dynamic
 	    instVars hold the class-level attribute store).  Every
-	    generated Python class declares a ``dynInstVars''
+	    generated Python class declares a ``___dynInstVars___''
 	    classInstVar initialised at class-build time; see
 	    [[class-side-dynamic-attrs]] for the design rationale.
 
@@ -6283,12 +6329,12 @@ ___pyAttrStore___: aName put: aValue
 		unary getter) look like setters and ``setattr(cls, '__eq__',
 		fn)'' would dispatch ``cls __eq__: fn'' instead of storing fn.
 		The dataclass decorator relies on this store landing in
-		dynInstVars so object>>__eq__ can find it."
+		___dynInstVars___ so object>>__eq__ can find it."
 		((self ___respondsTo___: setterSym)
 			and: [self ___respondsTo___: getterSym])
 			ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { aValue }].
-		"Python user class — store in the per-class dynInstVars dict."
-		(self ___respondsTo___: #dynInstVars)
+		"Python user class — store in the per-class ___dynInstVars___ dict."
+		(self ___respondsTo___: #___dynInstVars___)
 			ifTrue: [^ self ___classHolderAttrStore___: aName put: aValue].
 		"Built-in / non-Python class with no setter — AttributeError."
 		^ AttributeError ___signal___:

@@ -31,7 +31,7 @@ AttributeInheritanceTestCase category: 'Grail-SUnit'
 ! without mutating the parent, and instance shadows of class attrs
 ! disappear on del.
 !
-! Pre-fix, dynInstVars probes only walked the receiver's own slot,
+! Pre-fix, ___dynInstVars___ probes only walked the receiver's own slot,
 ! so subclass + instance reads of an inherited class attr raised
 ! AttributeError.  Fix walks the superclass chain on miss.
 ! ===============================================================================
@@ -74,7 +74,7 @@ category: 'Grail-Tests - Class chain'
 method: AttributeInheritanceTestCase
 testGrandchildWalksFullChain
 	"C inherits from B inherits from A.  C.alpha walks past B's empty
-	dynInstVars all the way up to A."
+	___dynInstVars___ all the way up to A."
 
 	self assert: (testModule @env1:___pyAttrLoad___: #c_reads_alpha) equals: 'from-A'.
 %
@@ -85,7 +85,7 @@ category: 'Grail-Tests - Instance fallthrough'
 method: AttributeInheritanceTestCase
 testInstanceReadsParentClassAttr
 	"a_inst is an A instance with no instance attrs; reading a_inst.alpha
-	misses the instance dict and walks up to A's dynInstVars."
+	misses the instance dict and walks up to A's ___dynInstVars___."
 
 	self assert: (testModule @env1:___pyAttrLoad___: #inst_reads_alpha) equals: 'from-A'.
 %
@@ -94,7 +94,7 @@ category: 'Grail-Tests - Instance fallthrough'
 method: AttributeInheritanceTestCase
 testInstanceWalksDeepChain
 	"c_inst is a C instance.  c_inst.alpha walks instance dict → C →
-	B → A.dynInstVars and finds 'from-A'."
+	B → A.___dynInstVars___ and finds 'from-A'."
 
 	self assert: (testModule @env1:___pyAttrLoad___: #c_inst_reads_alpha)
 		equals: 'from-A'.
@@ -113,7 +113,7 @@ testSubclassOverrideHidesParent
 category: 'Grail-Tests - Override isolation'
 method: AttributeInheritanceTestCase
 testParentUnaffectedBySubclassOverride
-	"Setting B.alpha must not mutate A.alpha — A's dynInstVars stays at 'from-A'."
+	"Setting B.alpha must not mutate A.alpha — A's ___dynInstVars___ stays at 'from-A'."
 
 	self assert: (testModule @env1:___pyAttrLoad___: #a_still_reads_a) equals: 'from-A'.
 %

@@ -37,7 +37,7 @@ doit
 PythonInstance subclass: 'functools_cmpkey'
   instVarNames: #()
   classVars: #()
-  classInstVars: #( dynInstVars )
+  classInstVars: #( ___dynInstVars___ )
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -507,19 +507,19 @@ __eq__: other
 
 category: 'Grail-Class Attrs'
 classmethod: functools_cmpkey
-dynInstVars
+___dynInstVars___
 	"The per-class attribute holder object >> ___classHolderAttrStore___ writes
 	into.  ClassDefAst synthesises this pair for every generated Python class;
 	a hand-written one needs it spelled out before it can carry a class
 	attribute (see functools >> initialize, which binds __hash__ = None)."
 
-	^ dynInstVars
+	^ ___dynInstVars___
 %
 
 category: 'Grail-Class Attrs'
 classmethod: functools_cmpkey
-dynInstVars: anObject
-	dynInstVars := anObject
+___dynInstVars___: anObject
+	___dynInstVars___ := anObject
 %
 
 category: 'Grail-Hashing'
@@ -1846,7 +1846,7 @@ ___orderingRootsOf___: cls
 	    accessor on the metaclass.  Only the UNARY name is probed: every
 	    class answers the binary ``__lt__:'' through object, so testing that
 	    would report all four operators on every class.
-	  * a runtime ``Cls.__lt__ = f'' lands in the per-class dynInstVars store
+	  * a runtime ``Cls.__lt__ = f'' lands in the per-class ___dynInstVars___ store
 	    (or, for a canonical class, the session overlay) -- both of which
 	    ___dynamicClassAttr___ walks."
 

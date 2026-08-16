@@ -312,8 +312,8 @@ ___pyAttrLoad___: aSym
 	this closes the definitional case that method decorators need."
 	walker := cls @env0:superClass.
 	[walker == nil] whileFalse: [
-		(walker @env0:_respondsTo: #dynInstVars flags: 16r10001) ifTrue: [
-			holder := walker @env0:perform: #dynInstVars env: 1.
+		(walker @env0:_respondsTo: #___dynInstVars___ flags: 16r10001) ifTrue: [
+			holder := walker @env0:perform: #___dynInstVars___ env: 1.
 			holder == nil ifFalse: [
 				v := holder @env0:dynamicInstVarAt: aSym.
 				v == nil ifFalse: [^ MethodBinding instance: obj callable: v]

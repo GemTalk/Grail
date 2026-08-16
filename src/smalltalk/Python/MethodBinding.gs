@@ -40,7 +40,7 @@ selector) — when called, dispatches the selector to the receiver.
 MethodBinding = (instance, callable) — when called, prepends
 instance to args and forwards to the inner callable.  The wrap is
 applied by ___pyAttrLoad___ when a callable is found in a class''s
-dynInstVars (NOT the instance''s own dynInstVars — that path
+___dynInstVars___ (NOT the instance''s own ___dynInstVars___ — that path
 bypasses descriptors).'
 %
 

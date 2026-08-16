@@ -253,7 +253,7 @@ printSmalltalkRuntimeOn: aStream
 	(Python, through the still-named ``name'' accessor) and ``Foo name''
 	(Smalltalk, the real class name) stay independent.  Object's metaclass carries
 	exactly the kernel class-object instVars (no Grail additions like __module__
-	/ dynInstVars), so it is the reserved set.  See
+	/ ___dynInstVars___), so it is the reserved set.  See
 	docs/Python_Class_Attribute_Namespaces.md."
 	reservedClassObjIvars := IdentitySet @env0:withAll:
 		(Object @env0:class @env0:allInstVarNames).
@@ -510,15 +510,15 @@ printSmalltalkRuntimeOn: aStream
 	handler needed at the call site."
 	(allClassInstVars includes: #'__module__') ifFalse: [
 		allClassInstVars add: #'__module__'].
-	"Always request a ``dynInstVars'' slot to hold the per-class
+	"Always request a ``___dynInstVars___'' slot to hold the per-class
 	dynamic-attribute dict (an Object whose dynamicInstVars provide
 	the storage).  Each class gets its own slot — see
 	[[class-side-dynamic-attrs]].  GemStone classes don't support
 	dynamicInstVarAt:put: directly; this Object new sits in the
 	classInstVar and gives us the same dictionary semantics for
 	class-level Python attribute stores."
-	(allClassInstVars includes: #'dynInstVars') ifFalse: [
-		allClassInstVars add: #'dynInstVars'].
+	(allClassInstVars includes: #'___dynInstVars___') ifFalse: [
+		allClassInstVars add: #'___dynInstVars___'].
 	"Add ``_fields`` slot so NamedTuple-style subclasses can introspect
 	their bare-annotation field layout in declaration order.  Skipped
 	when the user already declared ``_fields`` themselves.  See the
@@ -913,22 +913,22 @@ printSmalltalkRuntimeOn: aStream
 		here survives."
 		self
 			emitCompileMethodOn: name
-			source: 'dynInstVars
-	^ dynInstVars'
+			source: '___dynInstVars___
+	^ ___dynInstVars___'
 			category: 'Grail-Class Attrs'
 			env: 1
 			classSide: true
 			onStream: aStream.
 		self
 			emitCompileMethodOn: name
-			source: 'dynInstVars: ___1
-	dynInstVars := ___1.'
+			source: '___dynInstVars___: ___1
+	___dynInstVars___ := ___1.'
 			category: 'Grail-Class Attrs'
 			env: 1
 			classSide: true
 			onStream: aStream.
 		aStream nextPutAll: name;
-			nextPutAll: ' dynInstVars: (Object @env0:new).'; lf].
+			nextPutAll: ' ___dynInstVars___: (Object @env0:new).'; lf].
 	"___classHolderAttrStore___, not ___pyAttrStore___: this store is
 	DEFINITIONAL and must land on the committed class.  ___pyAttrStore___
 	diverts to the session overlay once the class is in the canonical set,
@@ -956,7 +956,7 @@ printSmalltalkRuntimeOn: aStream
 			emit, which includes that class's DECORATORS -- and a decorator may
 			return something that is not a class at all.  ``@member'' / ``@nonmember''
 			on a nested enum class return a marker object, and the unguarded store
-			reached object>>___classHolderAttrStore___, whose ``self dynInstVars''
+			reached object>>___classHolderAttrStore___, whose ``self ___dynInstVars___''
 			raised a raw Smalltalk doesNotUnderstand that escaped as an ST error
 			rather than any Python exception (test_enum's
 			test_nested_classes_in_enum_with_member / _with_nonmember).  A
@@ -964,7 +964,7 @@ printSmalltalkRuntimeOn: aStream
 			keeps the one stamped inside its own emit."
 			aStream nextPutAll: '(';
 				nextPutAll: nested name asString;
-				nextPutAll: ' @env1:___respondsTo___: #''dynInstVars'') ifTrue: [';
+				nextPutAll: ' @env1:___respondsTo___: #''___dynInstVars___'') ifTrue: [';
 				nextPutAll: nested name asString;
 				nextPutAll: ' @env1:___classHolderAttrStore___: #''___qualname___'' put: (';
 				nextPutAll: name;
@@ -1410,7 +1410,7 @@ printSmalltalkRuntimeOn: aStream
 		aStream nextPutAll: '.'; lf.
 	].
 
-	"Compile the ``dynInstVars'' accessor + setter pair on every class.
+	"Compile the ``___dynInstVars___'' accessor + setter pair on every class.
 	The slot holds an Object new whose dynamic instVars serve as the
 	per-class dictionary for dynamically-set Python attributes
 	(``C.brand_new = 42'').  See [[class-side-dynamic-attrs]] —
@@ -1418,16 +1418,16 @@ printSmalltalkRuntimeOn: aStream
 	so this Object proxy gives us the same dict semantics."
 	self
 		emitCompileMethodOn: name
-		source: 'dynInstVars
-	^ dynInstVars'
+		source: '___dynInstVars___
+	^ ___dynInstVars___'
 		category: 'Grail-Class Attrs'
 		env: 1
 		classSide: true
 		onStream: aStream.
 	self
 		emitCompileMethodOn: name
-		source: 'dynInstVars: ___1
-	dynInstVars := ___1.'
+		source: '___dynInstVars___: ___1
+	___dynInstVars___ := ___1.'
 		category: 'Grail-Class Attrs'
 		env: 1
 		classSide: true
@@ -1436,9 +1436,9 @@ printSmalltalkRuntimeOn: aStream
 	during the attr-value section already forced the holder into existence
 	-- an unconditional overwrite here wiped it (Outer.A vanished)."
 	aStream nextPutAll: name;
-		nextPutAll: ' dynInstVars == nil ifTrue: [';
+		nextPutAll: ' ___dynInstVars___ == nil ifTrue: [';
 		nextPutAll: name;
-		nextPutAll: ' dynInstVars: (Object @env0:new)].'; lf.
+		nextPutAll: ' ___dynInstVars___: (Object @env0:new)].'; lf.
 
 	"For each @property (and @cached_property) method, compile a 1-arg
 	setter that signals AttributeError.  Pairing the getter with a
@@ -2249,7 +2249,7 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 							nextPutAll: (self definesOwnNew ifTrue: ['true'] ifFalse: ['false']);
 							nextPutAll: '.'; nextPutAll: lf]]]].
 	"Descriptor-bound __init__ override: a setattr-installed
-	``cls.__init__ = synth_fn'' lands in the class''s dynInstVars
+	``cls.__init__ = synth_fn'' lands in the class''s ___dynInstVars___
 	store.  Probe for it BEFORE the static dispatch so dataclass-
 	style synthesis (or any runtime mutation of __init__) takes
 	effect.  When found, prepend the instance to ___pos___ args and
@@ -3121,7 +3121,7 @@ emitClassBodyIfBranch: aSuite on: aStream
 	recurse.  Anything else is dropped (same as before).
 
 	The stores go through ___classBodyDefinitionalStore___, which picks
-	between the accessor pair and the dynInstVars holder at runtime -- a
+	between the accessor pair and the ___dynInstVars___ holder at runtime -- a
 	conditional binding cannot know at emit time which home the name has.
 	NOT ___pyAttrStore___, which would dispatch the same way but divert to
 	the session overlay for a canonically-registered class; see the
