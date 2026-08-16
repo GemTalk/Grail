@@ -1960,16 +1960,28 @@ printSuperclassOn: aStream
 		BoundMethods instead of invoking them)."
 		((only isKindOf: NameAst) and: [only id asString = 'object'])
 			ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
-		"``class M(type):'' -- a metaclass.  Grail has no metaclass OBJECT to
-		subclass: builtins >> type: answers the single canonical ``type''
-		BoundMethod for any class, and no class is bound to the NAME, so the bare
-		name raised NameError and the definition never ran at all.  Root it at
-		PythonInstance, exactly as ``object'' is rooted.  That does not make it a
-		working metaclass -- Grail RECORDS a metaclass rather than routing class
-		creation through one -- but it makes the class exist with its methods,
-		which is what a metaclass-defined comparison needs."
+		"``class M(type):'' -- a metaclass.  Rooted at PyType, the class that
+		IS Python's ``type'' (Python.gs dictionary entry ``type'').
+
+		This used to root at PythonInstance, and the reason it had to is worth
+		keeping: there was no ``type'' OBJECT at all.  ``builtins >> type:''
+		answers a canonical BoundMethod for any class, and nothing was bound to
+		the NAME, so the bare name raised NameError and the definition never ran.
+		PythonInstance at least made the class exist with its methods, which is
+		what a metaclass-defined comparison needs.
+
+		What the real base buys is ancestry: a metaclass now HAS ``type'' above
+		it, so ``super().__new__(cls, name, bases, ns)'' has something to reach
+		and ``issubclass(Meta, type)'' is true.  That second one is load-bearing
+		beyond metaclasses -- object >> ___pyMetaclass___ deliberately declines
+		to report a declared ``metaclass='' because copy() tests a class with
+		``issubclass(type(x), type)'', which was false while Meta rooted at
+		PythonInstance.  Rooting here is what makes reporting it safe.
+
+		It does NOT by itself make class creation route through the metaclass;
+		PyType carries no construction protocol yet.  See PyType's comment."
 		((only isKindOf: NameAst) and: [only id asString = 'type'])
-			ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
+			ifTrue: [^ aStream nextPutAll: 'PyType'].
 		"``class X(str):`` subclasses Unicode32, not the Unicode7 that the
 		name ``str'' resolves to.  GemStone migrates a Unicode string to
 		the canonical wider class IN PLACE when it is handed a character

@@ -1325,6 +1325,10 @@ ___pythonBuiltinTypeName___
 	``type(c).__name__ == 'cell'''.  Named PyCell in Smalltalk only because
 	``cell'' is too generic a name to claim in the flat Python dictionary."
 	(#('PyCell') @env0:includes: n) ifTrue: [^ 'cell'].
+	"PyType backs Python's ``type''.  Named PyType in Smalltalk because
+	``type'' as a Smalltalk global would collide, and because the flat Python
+	dictionary entry (Python at: #'type') is what carries the Python name."
+	(#('PyType') @env0:includes: n) ifTrue: [^ 'type'].
 	^ nil
 %
 
