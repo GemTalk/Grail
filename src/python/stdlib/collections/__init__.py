@@ -1407,6 +1407,14 @@ class UserList:
 class UserDict:
     """Dict wrapper with .data."""
 
+    # Upstream's UserDict subclasses MutableMapping and inherits this marker
+    # from Mapping; Grail's is standalone, so it has to say so itself.  ``None''
+    # means "not reversible" -- without it reversed(UserDict(...)) fell through
+    # to the SEQUENCE protocol, which __len__ and __getitem__ make it look like,
+    # and asked for key 1: ``KeyError: 1'' where CPython raises ``TypeError:
+    # 'UserDict' object is not reversible''.
+    __reversed__ = None
+
     def __init__(self, dict=None, /, **kwargs):
         # ``/`` makes self and dict POSITIONAL-ONLY, as upstream.  Without it,
         # UserDict(dict=42) and UserDict(self=42) bound the parameters instead

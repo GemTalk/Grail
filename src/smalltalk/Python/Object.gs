@@ -3896,7 +3896,23 @@ __dir__
 
 	| selectors result myClass |
 	myClass := self @env0:class.
-	selectors := myClass @env0:allSelectorsForEnvironment: 1.
+	selectors := (myClass @env0:allSelectorsForEnvironment: 1) @env0:asSet.
+	"A CLASS receiver needs BOTH chains, because Grail splits in two what CPython
+	keeps in one dict.  ``self class'' is the metaclass, which is where a class
+	body's DATA attributes live (``data = 42'' compiles to a data/data: accessor
+	pair on C class) -- so the scan above finds those, and finds no method at all.
+	The class's own env-1 selectors are the methods, and they were never consulted:
+	dir(C) answered ``data'' but not ``meth'', while dir(C()) answered both.
+
+	CPython's type.__dir__ merges cls.__dict__ with each base's and DELIBERATELY
+	omits the metaclass (``methods belonging to the metaclass would probably be
+	more confusing than helpful'').  Grail cannot omit it -- that is where half
+	the answer is stored -- so the union is the closest reachable thing, and it
+	costs the metaclass's own selectors leaking in.  They leaked in before this
+	change too; what changes is that the class's methods are now there as well."
+	self @env0:isBehavior ifTrue: [
+		selectors @env0:addAll: (self @env0:allSelectorsForEnvironment: 1)].
+	selectors := selectors @env0:asArray.
 	"Filter out convenience methods (starting with ___)"
 	selectors := selectors @env0:reject: [:selector |
 		| selectorStr prefix |
