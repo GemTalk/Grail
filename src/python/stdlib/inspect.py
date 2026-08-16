@@ -676,6 +676,197 @@ def getmembers(obj, predicate=None):
     return results
 
 
+# Imported HERE rather than at module scope, and the reason is the same one
+# getmembers records for ``types'': inspect is imported early, and a
+# module-level import of collections makes the cycle bite.  A module-level
+# ``Attribute = namedtuple(...)'' would need collections at import time, so the
+# class is built on first use and cached.
+_Attribute = None
+
+
+def _attribute_class():
+    global _Attribute
+    if _Attribute is None:
+        from collections import namedtuple
+        _Attribute = namedtuple(
+            'Attribute', 'name kind defining_class object')
+    return _Attribute
+
+
+class _AttributeFactory:
+    """``inspect.Attribute`` -- a namedtuple, built on first use.
+
+    ``from inspect import Attribute`` has to give something importable at
+    module-import time, and isinstance/equality have to behave as the real
+    namedtuple's, so this forwards both construction and instance checks to it.
+    """
+
+    def __call__(self, *args, **kwargs):
+        return _attribute_class()(*args, **kwargs)
+
+    def __instancecheck__(self, obj):
+        return isinstance(obj, _attribute_class())
+
+
+Attribute = _AttributeFactory()
+
+
+def classify_class_attrs(cls):
+    """Return a list of Attribute(name, kind, defining_class, object) tuples.
+
+    Ported from CPython rather than approximated, because every part of it is
+    load-bearing for the one question it answers -- WHERE did this attribute
+    come from, and what KIND is it:
+
+    * the search covers the metaclass MRO as well as the class MRO, so an
+      attribute stored on the metaclass reports that metaclass as its home
+      rather than None.  ``EnumType.__members__`` is the example that matters:
+      it is a property on the metaclass, not on the enum.
+    * ``kind`` is read off the __dict__ entry, not off the getattr result,
+      because the two differ exactly where the answer is interesting -- a
+      staticmethod reached through getattr is a plain function, and a
+      classmethod is a bound method.  CPython's comment: "Static and class
+      methods are dramatic examples."
+    * DynamicClassAttributes are appended to the candidate names, for the same
+      reason getmembers does it: they hide from dir(), so nothing else offers
+      them.  Enum.name and Enum.value are the pair this exists for.
+
+    Grail did not have this at all, so ``from inspect import Attribute`` was an
+    ImportError and test_enum's TestStdLib.test_inspect_classify_class_attrs
+    never ran a line of its body.
+
+    Two CPython types are consulted through getattr rather than named directly:
+    BuiltinMethodType and ClassMethodDescriptorType are how CPython recognises
+    a C-level static or class method, and Grail's types module may not define
+    either.  Absent, the isinstance test simply never matches those, which is
+    right -- Grail has no C-level descriptors to find.
+    """
+
+    import types
+
+    mro = getmro(cls)
+    # CPython takes ``getmro(type(cls))`` and drops type and object, leaving the
+    # metaclasses that actually define things -- for an enum, exactly
+    # (EnumType,).  Taken literally here that walks into GemStone's own
+    # metaclass chain (Class, Metaclass3, Module, Behavior), whose __dict__s and
+    # __getattr__ are not Python objects at all and blow up on contact.
+    #
+    # The metaclasses of the classes in the MRO are the same set for everything
+    # Grail can model, and are reachable without leaving Python: type(Color) and
+    # type(Enum) are both EnumType, type(object) is type, and type is dropped --
+    # so this yields (EnumType,) exactly as upstream.  It does NOT reproduce a
+    # metaclass HIERARCHY (``class MetaB(MetaA)`` would contribute only MetaB),
+    # which is fair here because Grail does not model one: see
+    # object >> ___pyMetaclass___.
+    metamro = []
+    for _c in (cls,) + tuple(mro):
+        _m = type(_c)
+        if _m is not type and _m is not object and _m not in metamro:
+            metamro.append(_m)
+    metamro = tuple(metamro)
+    class_bases = (cls,) + mro
+    all_bases = class_bases + metamro
+    names = list(dir(cls))
+    for base in mro:
+        try:
+            items = base.__dict__.items()
+        except AttributeError:
+            continue
+        for k, v in items:
+            if isinstance(v, types.DynamicClassAttribute) and v.fget is not None:
+                names.append(k)
+
+    _builtin_method = getattr(types, 'BuiltinMethodType', None)
+    _classmethod_descr = getattr(types, 'ClassMethodDescriptorType', None)
+    static_kinds = tuple(
+        k for k in (staticmethod, _builtin_method) if k is not None)
+    class_kinds = tuple(
+        k for k in (classmethod, _classmethod_descr) if k is not None)
+
+    result = []
+    processed = set()
+
+    for name in names:
+        homecls = None
+        get_obj = None
+        dict_obj = None
+        if name not in processed:
+            try:
+                if name == '__dict__':
+                    raise Exception("__dict__ is special, don't want the proxy")
+                get_obj = getattr(cls, name)
+            except Exception:
+                pass
+            else:
+                homecls = getattr(get_obj, "__objclass__", homecls)
+                if homecls not in class_bases:
+                    homecls = None
+                    last_cls = None
+                    for srch_cls in class_bases:
+                        srch_obj = getattr(srch_cls, name, None)
+                        if srch_obj is get_obj:
+                            last_cls = srch_cls
+                    for srch_cls in metamro:
+                        # CPython asks the metaclass's __getattr__ SLOT here,
+                        # unbound, as ``srch_cls.__getattr__(cls, name)''.
+                        # That call is not available in Grail: a metaclass is
+                        # an ordinary class object, so ``__getattr__'' comes
+                        # back BOUND and the two arguments arrive one too many
+                        # -- the name parameter binds to the class, and the
+                        # mismatch dies inside the attribute path as a
+                        # MessageNotUnderstood that Python cannot catch.
+                        #
+                        # A plain getattr on the metaclass asks the same
+                        # question -- does the attribute live here? -- and is
+                        # what a metaclass attribute looks like from Python.
+                        # It is narrower than CPython's, which deliberately
+                        # uses the __getattr__ HOOK to catch attributes a
+                        # metaclass computes rather than stores; Grail has no
+                        # such metaclass to ask.
+                        srch_obj = getattr(srch_cls, name, None)
+                        if srch_obj is get_obj:
+                            last_cls = srch_cls
+                    if last_cls is not None:
+                        homecls = last_cls
+        for base in all_bases:
+            try:
+                d = base.__dict__
+            except AttributeError:
+                continue
+            if name in d:
+                dict_obj = d[name]
+                if homecls not in metamro:
+                    homecls = base
+                break
+        if homecls is None:
+            continue
+        obj = get_obj if get_obj is not None else dict_obj
+        if static_kinds and isinstance(dict_obj, static_kinds):
+            kind = "static method"
+            obj = dict_obj
+        elif class_kinds and isinstance(dict_obj, class_kinds):
+            kind = "class method"
+            obj = dict_obj
+        elif isinstance(dict_obj, types.DynamicClassAttribute):
+            # NOT "property", though Grail's DynamicClassAttribute is a
+            # PropertyDescriptor subclass and so passes the isinstance below.
+            # Upstream the two are unrelated -- enum.property derives from
+            # DynamicClassAttribute, which does not derive from property -- so a
+            # DynamicClassAttribute falls through to "data" there, which is what
+            # test_enum asserts for Enum.name and Enum.value.
+            kind = "data"
+        elif isinstance(dict_obj, property):
+            kind = "property"
+            obj = dict_obj
+        elif isroutine(obj):
+            kind = "method"
+        else:
+            kind = "data"
+        result.append(_attribute_class()(name, kind, homecls, obj))
+        processed.add(name)
+    return result
+
+
 def isdatadescriptor(obj):
     return False
 
