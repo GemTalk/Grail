@@ -125,9 +125,17 @@ r['unique_is_declared'] = repr('unique' in enum.__all__)
 r['enum_property_module'] = repr(
     getattr(enum.property, '__module__', '<no __module__>'))
 
-# FlagBoundary and EnumCheck are absent because Grail models their MEMBERS
-# (STRICT/CONFORM/EJECT/KEEP, UNIQUE/CONTINUOUS/NAMED_FLAGS) as opaque symbols
-# and never builds the enclosing enum.  The members themselves do resolve.
-r['boundary_class_present_a_known_gap'] = repr(hasattr(enum, 'FlagBoundary'))
+# FlagBoundary and EnumCheck are real StrEnums, as upstream.  They used to be
+# absent entirely -- Grail modelled only their MEMBERS, as opaque symbols, and
+# never built the enclosing enum -- so the classes could not be looked at and a
+# "member" had no name, value or repr.
+r['boundary_class_present'] = repr(hasattr(enum, 'FlagBoundary'))
+r['check_class_present'] = repr(hasattr(enum, 'EnumCheck'))
 r['boundary_members_resolve'] = repr(
     all(hasattr(enum, n) for n in ('STRICT', 'CONFORM', 'EJECT', 'KEEP')))
+r['boundary_members_are_members'] = repr(
+    [enum.STRICT.name, enum.STRICT.value, enum.STRICT == 'strict'])
+r['boundary_member_order'] = repr([m.name for m in enum.FlagBoundary])
+r['check_member_order'] = repr([m.name for m in enum.EnumCheck])
+r['members_are_the_classes_own'] = repr(
+    enum.STRICT is enum.FlagBoundary.STRICT and enum.UNIQUE is enum.EnumCheck.UNIQUE)

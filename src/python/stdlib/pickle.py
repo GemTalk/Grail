@@ -514,9 +514,11 @@ def _is_python_subclass(obj):
 
     A NAME test is wrong in the other direction, which cost a round of this
     change: Symbol is a CharacterCollection subclass Grail uses for str-ish
-    internal values -- enum's STRICT/CONFORM constants are Symbols -- so
-    ``type(obj).__name__ == 'str'`` sent one down the subclass path, and pickle
-    then failed trying to name the Symbol CLASS.
+    internal values, so ``type(obj).__name__ == 'str'`` sent one down the
+    subclass path, and pickle then failed trying to name the Symbol CLASS.
+    (enum's STRICT/CONFORM constants used to be the example; they are
+    FlagBoundary members now, so the hazard is real but no longer has a subject
+    reachable from Python.)
 
     ClassDefAst stamps every class it builds with ___pyDefinedClass___, which
     is exactly the question being asked.

@@ -44,15 +44,17 @@ category: 'Grail-Initialization'
 method: enum
 initialize
 	"Initialize stored attributes."
-	self @env0:at: #KEEP put: #KEEP.
-	"FlagBoundary + verify() constants: opaque symbols are enough for
-	``from enum import STRICT, CONFORM, ...`` to resolve (test_enum)."
-	self @env0:at: #STRICT put: #STRICT.
-	self @env0:at: #CONFORM put: #CONFORM.
-	self @env0:at: #EJECT put: #EJECT.
-	self @env0:at: #UNIQUE put: #UNIQUE.
-	self @env0:at: #CONTINUOUS put: #CONTINUOUS.
-	self @env0:at: #NAMED_FLAGS put: #NAMED_FLAGS.
+	"FlagBoundary / EnumCheck and their members.  Both are real StrEnums here,
+	as upstream; the seven names are their MEMBERS, not opaque symbols.
+
+	Symbols were enough for ``from enum import STRICT, CONFORM, ...`` to
+	resolve, and for the internal boundary machinery, which still speaks
+	Symbols.  What they could not do is be looked at: the two CLASSES did not
+	exist (``enum.FlagBoundary'' was an AttributeError), a member had no name,
+	value or repr, and ``STRICT == 'strict''' -- true for a StrEnum member --
+	was false.  test_enum's test_inspect_signatures asks for
+	signature(FlagBoundary) and test_enum_module_api for the class itself."
+	self ___grailDefineBoundaryEnums___.
 	self @env0:at: #ReprEnum put: ReprEnum.
 	"enum.EnumDict is a real class (Python dictionary), not plain dict: it
 	refuses to let a member name be reused.  Resolved at IMPORT time rather
@@ -157,9 +159,62 @@ initialize
 		'EnumType' 'EnumMeta' 'EnumDict'
 		'Enum' 'IntEnum' 'StrEnum' 'Flag' 'IntFlag' 'ReprEnum'
 		'auto' 'unique' 'verify' 'member' 'nonmember' 'property'
-		'STRICT' 'CONFORM' 'EJECT' 'KEEP'
-		'CONTINUOUS' 'NAMED_FLAGS' 'UNIQUE'
+		'FlagBoundary' 'STRICT' 'CONFORM' 'EJECT' 'KEEP'
+		'EnumCheck' 'CONTINUOUS' 'NAMED_FLAGS' 'UNIQUE'
 		'global_enum' 'pickle_by_enum_name' 'pickle_by_global_name'))
+%
+
+category: 'Grail-Initialization'
+method: enum
+___grailDefineBoundaryEnums___
+	"Build FlagBoundary and EnumCheck as real StrEnums and bind their members
+	as the module's STRICT / CONFORM / EJECT / KEEP / CONTINUOUS / NAMED_FLAGS
+	/ UNIQUE, exactly as upstream does.
+
+	Built through the FUNCTIONAL API rather than declared as Smalltalk classes,
+	because that is the one path that already produces a complete enum -- real
+	members with name / value / repr, iteration order, aliasing, the lot -- and
+	re-declaring all of that class-side would be a second implementation of it.
+
+	The names arrive as an ORDERED list of pairs, not a dictionary: iteration
+	order is the member order, and a KeyValueDictionary's is its hash order.
+	CPython's is STRICT, CONFORM, EJECT, KEEP.
+
+	The values are CPython's own, which are not decorative -- a StrEnum member
+	IS its value, so ``enum.STRICT == 'strict''' holds, and EnumCheck's members
+	carry the sentences upstream gives them (``UNIQUE'' is 'one name per
+	value')."
+
+	| fb ec |
+	fb := StrEnum @env1:___pyCallValue___: { 'FlagBoundary'.
+		self ___grailPairList___: #( #('STRICT' 'strict') #('CONFORM' 'conform')
+			#('EJECT' 'eject') #('KEEP' 'keep') ) } kw: nil.
+	ec := StrEnum @env1:___pyCallValue___: { 'EnumCheck'.
+		self ___grailPairList___: #(
+			#('CONTINUOUS' 'no skipped integer values')
+			#('NAMED_FLAGS' 'multi-flag aliases may not contain unnamed flags')
+			#('UNIQUE' 'one name per value') ) } kw: nil.
+	self @env0:at: #FlagBoundary put: fb.
+	self @env0:at: #EnumCheck put: ec.
+	#('STRICT' 'CONFORM' 'EJECT' 'KEEP') @env0:do: [:nm |
+		self @env0:at: nm @env0:asSymbol put: (fb @env1:___pyAttrLoad___: nm @env0:asSymbol)].
+	#('CONTINUOUS' 'NAMED_FLAGS' 'UNIQUE') @env0:do: [:nm |
+		self @env0:at: nm @env0:asSymbol put: (ec @env1:___pyAttrLoad___: nm @env0:asSymbol)].
+	^ self
+%
+
+category: 'Grail-Initialization'
+method: enum
+___grailPairList___: anArrayOfPairs
+	"A Python list of (name, value) tuples -- the ordered form of the
+	functional API's ``names'' argument."
+
+	| out |
+	out := list @env0:new.
+	anArrayOfPairs @env0:do: [:p |
+		out @env0:add: (tuple @env0:withAll:
+			(Array @env0:with: (p @env0:at: 1) @env0:with: (p @env0:at: 2)))].
+	^ out
 %
 
 ! ===============================================================================

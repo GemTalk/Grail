@@ -195,12 +195,42 @@ testEnumPropertyReportsItsModule
 
 category: 'Grail-Tests - Known gaps'
 method: EnumModuleApiTestCase
-testFlagBoundaryClassIsAbsentWhichIsAKnownGap
-	"Recorded, NOT endorsed.  Grail models the FlagBoundary / EnumCheck MEMBERS
-	as opaque symbols and never builds the enclosing enum, so the two classes do
-	not exist -- which is why neither is declared.  Every member resolves."
+testFlagBoundaryAndEnumCheckAreRealEnums
+	"Both are real StrEnums, as upstream.  They used to be absent ENTIRELY:
+	Grail modelled only their MEMBERS, as opaque symbols, and never built the
+	enclosing enum, so ``enum.FlagBoundary'' was an AttributeError and a
+	``member'' had no name, value or repr.
 
-	self assert: (self resultAt: 'boundary_class_present_a_known_gap') asString
-		equals: 'False'.
+	Symbols were enough to import and enough for the internal boundary
+	machinery, which still speaks them -- ___grailBoundaryMemberFor: converts
+	only where the value escapes into Python, at ``cls._boundary_''.  What they
+	could not do is be looked at."
+
+	self assert: (self resultAt: 'boundary_class_present') asString equals: 'True'.
+	self assert: (self resultAt: 'check_class_present') asString equals: 'True'.
 	self assert: (self resultAt: 'boundary_members_resolve') asString equals: 'True'.
+%
+
+category: 'Grail-Tests - Module identity'
+method: EnumModuleApiTestCase
+testBoundaryMembersAreRealMembers
+	"A StrEnum member IS its value, so ``enum.STRICT == 'strict''' holds -- it
+	was False while STRICT was the symbol #STRICT."
+
+	self assert: (self resultAt: 'boundary_members_are_members') asString
+		equals: '[''STRICT'', ''strict'', True]'.
+	self assert: (self resultAt: 'members_are_the_classes_own') asString equals: 'True'.
+%
+
+category: 'Grail-Tests - Module identity'
+method: EnumModuleApiTestCase
+testBoundaryMemberOrderIsUpstreams
+	"Definition order is member order, which is why the functional API is fed an
+	ordered list of pairs rather than a dictionary -- a KeyValueDictionary's
+	order is its hash order."
+
+	self assert: (self resultAt: 'boundary_member_order') asString
+		equals: '[''STRICT'', ''CONFORM'', ''EJECT'', ''KEEP'']'.
+	self assert: (self resultAt: 'check_member_order') asString
+		equals: '[''CONTINUOUS'', ''NAMED_FLAGS'', ''UNIQUE'']'.
 %
