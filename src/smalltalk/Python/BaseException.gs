@@ -1125,6 +1125,121 @@ ___pythonLineForMethod___: aMethod ip: anIp
 
 category: 'Grail-Traceback Building'
 classmethod: BaseException
+___pythonSpanForMethod___: aMethod ip: anIp
+	"The 5-element PEP 657 span of the statement in flight at anIp, or nil.
+
+	The COMPANION of ___pythonLineForMethod___:ip:, and the reason a non-catcher
+	frame can carry columns at all.  That method answers a bare line, and the
+	frame push had ``colno: nil'' hardcoded for every frame but the catching one
+	-- so the RAISING frame, which is exactly the one a caret line attaches to,
+	could never have columns however good codegen's spans were.  §9.39 traced
+	the flow; this closes it.
+
+	Cached on (method, ip) like the line scan, and for the same reason: the
+	underlying _sourceAtIp: report costs ~100us and a traceback revisits the
+	same sites constantly."
+
+	| cache key |
+	cache := SessionTemps current at: #'GrailIpSpanCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailIpSpanCache' put: cache].
+	key := { aMethod @env0:asOop. anIp }.
+	^ cache @env0:at: key ifAbsent: [
+		| span |
+		span := self ___derivePythonSpanForMethod___: aMethod ip: anIp.
+		cache @env0:at: key put: span.
+		span]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___derivePythonSpanForMethod___: aMethod ip: anIp
+	"Uncached worker for ___pythonSpanForMethod___:ip:.
+
+	Same scan as ___derivePythonLineForMethod___:ip: -- last ``___curPos___ :=''
+	at or above the ip's caret -- but keeps the SPAN form only.  A bare-integer
+	store answers nil here, so a statement codegen gave no span to is left
+	exactly as it was rather than guessed at."
+
+	| report lines caretIdx result |
+	report := [aMethod @env0:_sourceAtIp: anIp] on: Error do: [:ex | ex return: nil].
+	report isNil ifTrue: [^ nil].
+	lines := report @env0:subStrings: (String @env0:with: Character lf).
+	caretIdx := 0.
+	1 to: lines @env0:size do: [:i |
+		(((lines @env0:at: i) @env0:trimSeparators) @env0:beginsWith: '*')
+			ifTrue: [caretIdx @env0:= 0 ifTrue: [caretIdx := i]]].
+	caretIdx @env0:= 0 ifTrue: [^ nil].
+	result := nil.
+	1 to: (caretIdx @env0:min: lines @env0:size) do: [:i |
+		| rest p |
+		rest := lines @env0:at: i.
+		[p := rest @env0:indexOfSubCollection: '___curPos___ := #('.
+		 p @env0:> 0] whileTrue: [
+			| parsed |
+			parsed := self ___parsePositionLiteral___: rest from: (p @env0:+ 18).
+			parsed notNil ifTrue: [result := parsed].
+			rest := rest @env0:copyFrom: (p @env0:+ 18) to: rest @env0:size]].
+	^ result
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___parsePositionLiteral___: aString from: anIndex
+	"Parse ``line col endLine endCol 'src')'' -- the body of the literal array
+	___pyPositionLiteralArray emits -- into a 5-element Array, or nil.
+
+	Read from the generated SOURCE rather than from the method's literal frame:
+	the frame holds every literal the method has and nothing says which store
+	an ip belongs to, whereas the source scan already located the right one."
+
+	| nums k n src |
+	nums := Array @env0:new: 4.
+	k := anIndex.
+	1 to: 4 do: [:i |
+		| digits |
+		[(k @env0:<= aString @env0:size)
+			and: [(aString @env0:at: k) @env0:= $ ]] whileTrue: [k := k @env0:+ 1].
+		digits := WriteStream @env0:on: String @env0:new.
+		[(k @env0:<= aString @env0:size)
+			and: [(aString @env0:at: k) @env0:isDigit]] whileTrue: [
+				digits @env0:nextPut: (aString @env0:at: k).
+				k := k @env0:+ 1].
+		digits @env0:contents @env0:isEmpty ifTrue: [^ nil].
+		nums @env0:at: i put: digits @env0:contents @env0:asNumber].
+	[(k @env0:<= aString @env0:size)
+		and: [(aString @env0:at: k) @env0:= $ ]] whileTrue: [k := k @env0:+ 1].
+	src := nil.
+	(k @env0:<= aString @env0:size and: [(aString @env0:at: k) @env0:= $'])
+		ifTrue: [
+			| out done |
+			out := WriteStream @env0:on: String @env0:new.
+			k := k @env0:+ 1.
+			done := false.
+			[done @env0:not and: [k @env0:<= aString @env0:size]] whileTrue: [
+				| ch |
+				ch := aString @env0:at: k.
+				ch @env0:= $'
+					ifTrue: [
+						"A doubled quote is one literal quote, not the end."
+						((k @env0:< aString @env0:size)
+							and: [(aString @env0:at: (k @env0:+ 1)) @env0:= $'])
+							ifTrue: [out @env0:nextPut: $'. k := k @env0:+ 2]
+							ifFalse: [done := true. k := k @env0:+ 1]]
+					ifFalse: [out @env0:nextPut: ch. k := k @env0:+ 1]].
+			done ifTrue: [src := out @env0:contents]].
+	n := Array @env0:new: 5.
+	n @env0:at: 1 put: (nums @env0:at: 1).
+	n @env0:at: 2 put: (nums @env0:at: 2).
+	n @env0:at: 3 put: (nums @env0:at: 3).
+	n @env0:at: 4 put: (nums @env0:at: 4).
+	n @env0:at: 5 put: src.
+	^ n
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
 ___derivePythonLineForMethod___: aMethod ip: anIp
 	"Uncached worker for ___pythonLineForMethod___:ip: -- see its comment."
 
@@ -1162,6 +1277,17 @@ ___derivePythonLineForMethod___: aMethod ip: anIp
 			| digits k |
 			digits := WriteStream @env0:on: String @env0:new.
 			k := p @env0:+ 16.
+			"A PEP 657 span store -- ``___curPos___ := #(line col endLine endCol
+			 src)'' -- carries the line as the array's FIRST element.  Stepping
+			 over the ``#('' finds it in the same place the bare-integer form
+			 puts it.  This is load-bearing beyond the line number: a frame is
+			 IDENTIFIED as Python by this scan answering non-nil, so a store
+			 shape it cannot read makes the whole frame vanish from the
+			 traceback rather than merely lose its columns (§9.39)."
+			((k @env0:< rest @env0:size)
+				and: [((rest @env0:at: k) @env0:= $#)
+					and: [(rest @env0:at: (k @env0:+ 1)) @env0:= $(]])
+				ifTrue: [k := k @env0:+ 2].
 			[(k @env0:<= rest @env0:size) and: [(rest @env0:at: k) @env0:isDigit]]
 				whileTrue: [
 					digits @env0:nextPut: (rest @env0:at: k).
@@ -1448,12 +1574,23 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 					failed in CI.  Frames BELOW the catcher are suspended at a CALL site, which
 					resolves correctly in both modes (CI derives leaf/middle/outer as 18/22/26).
 					"
+					"A non-catcher frame -- the RAISING frame among them -- takes the
+					span codegen recorded when there is one.  Guarded on the line
+					agreeing with the derived one: the scan can only be trusted to
+					have found the right store when both readings of it match, and a
+					wrong span draws a confident caret under the wrong code (§9.10),
+					which is worse than the columns being absent."
 					(isCatcher and: [posArray notNil])
 						ifTrue: [self ___pushFrameFromPos___: frameCode pos: posArray]
 						ifFalse: [
-							self ___pushTracebackFrame___: frameCode
-								lineno: pyLine
-								colno: nil endLineno: nil endColno: nil line: nil].
+							| span |
+							span := BaseException ___pythonSpanForMethod___: meth ip: ip.
+							(span notNil and: [(span @env0:at: 1) @env0:= pyLine])
+								ifTrue: [self ___pushFrameFromPos___: frameCode pos: span]
+								ifFalse: [
+									self ___pushTracebackFrame___: frameCode
+										lineno: pyLine
+										colno: nil endLineno: nil endColno: nil line: nil]].
 					pushed := pushed @env0:+ 1.
 					"Reached the function holding the except clause: the traceback
 					ends here."
