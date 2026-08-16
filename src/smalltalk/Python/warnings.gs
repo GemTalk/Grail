@@ -137,15 +137,28 @@ _actionFor: message _: category
 	| msgStr |
 	msgStr := message @env0:asString.
 	(self _filters) @env0:do: [:f |
-		| catMatch msgMatch fCat fMsg |
+		| catMatch msgMatch fCat fMsg fMod fLine |
 		fCat := f @env0:at: 2.
 		fMsg := f @env0:at: 3.
+		"Filters built by simplefilter and the fixed-arity forms are still
+		3-element, so read the newer slots defensively."
+		fMod := f @env0:size @env0:>= 4 ifTrue: [f @env0:at: 4] ifFalse: [nil].
+		fLine := f @env0:size @env0:>= 5 ifTrue: [f @env0:at: 5] ifFalse: [0].
 		catMatch := fCat == nil
 			@env0:or: [category == fCat
 				@env0:or: [category @env0:inheritsFrom: fCat]].
 		msgMatch := fMsg == nil
 			@env0:or: [(msgStr @env0:indexOfSubCollection: fMsg) @env0:> 0].
-		(catMatch @env0:and: [msgMatch]) ifTrue: [^ f @env0:at: 1]
+		"A filter constrained by MODULE or LINENO is skipped, not honoured:
+		Grail does not record where a warning came from, so it cannot be
+		shown to apply.  Skipping is the safe direction -- the filter
+		simply does not fire, so a warning is not escalated to an error it
+		was never proven to name.  Treating the constraint as satisfied
+		would go the other way and silently WIDEN every such filter,
+		turning unrelated warnings into errors far from their cause."
+		(fMod == nil and: [fLine @env0:== nil or: [fLine @env0:= 0]])
+			ifTrue: [
+				(catMatch @env0:and: [msgMatch]) ifTrue: [^ f @env0:at: 1]]
 	].
 	^ 'default'
 %
@@ -353,6 +366,81 @@ _simplefilter: positional kw: kwargs
 			ifFalse: [TypeError ___signal___:
 				('simplefilter() got an unexpected keyword argument ''' @env0:, key @env0:, '''')]]].
 	^ self simplefilter: action _: category
+%
+
+category: 'Grail-Filters'
+method: warnings
+_filterwarnings: positional kw: kwargs
+	"filterwarnings(action, message='', category=Warning, module='',
+	lineno=0, append=False) -- CPython's full signature, by position or by
+	keyword.
+
+	Only the fixed-arity positional forms existed, so
+	``filterwarnings('error', module='<test string>')'' -- which
+	test_global's setUp calls for every one of its 20 tests -- raised
+	``takes a different number of arguments'' and errored the whole
+	module.
+
+	``module'' and ``lineno'' are RECORDED BUT NOT MATCHABLE: Grail does
+	not track which module or line a warning came from, so a filter
+	naming one cannot be shown to apply.  Such a filter is therefore
+	SKIPPED rather than treated as matching everything -- see
+	_actionFor:_: for why that direction is the safe one."
+
+	| n action message category module lineno append kwAt |
+	kwAt := [:name :dflt |
+		(kwargs @env0:notNil and: [kwargs @env0:includesKey: name])
+			@env0:ifTrue: [kwargs @env0:at: name]
+			@env0:ifFalse: [dflt]].
+	n := positional @env0:size.
+	n @env0:< 1 ifTrue: [
+		TypeError ___signal___:
+			'filterwarnings() missing required argument ''action'' (pos 1)'].
+	action := positional @env0:at: 1.
+	message := n @env0:>= 2 ifTrue: [positional @env0:at: 2] ifFalse: [kwAt value: 'message' value: nil].
+	category := n @env0:>= 3 ifTrue: [positional @env0:at: 3] ifFalse: [kwAt value: 'category' value: nil].
+	module := n @env0:>= 4 ifTrue: [positional @env0:at: 4] ifFalse: [kwAt value: 'module' value: nil].
+	lineno := n @env0:>= 5 ifTrue: [positional @env0:at: 5] ifFalse: [kwAt value: 'lineno' value: 0].
+	append := n @env0:>= 6 ifTrue: [positional @env0:at: 6] ifFalse: [kwAt value: 'append' value: false].
+	^ self
+		___addFilter___: action
+		message: (self ___emptyPatternToNil___: message)
+		category: ((category @env0:== nil or: [category @env0:== None])
+			ifTrue: [nil] ifFalse: [category])
+		module: (self ___emptyPatternToNil___: module)
+		lineno: lineno
+		append: append
+%
+
+category: 'Grail-Filters'
+method: warnings
+___emptyPatternToNil___: aPattern
+	"CPython's message/module default is the EMPTY regex, which matches
+	every string -- so an empty pattern is 'no constraint', not 'matches
+	only the empty string'.  nil is how this filter list spells that."
+
+	(aPattern @env0:== nil or: [aPattern @env0:== None]) ifTrue: [^ nil].
+	aPattern @env0:asString @env0:isEmpty ifTrue: [^ nil].
+	^ aPattern @env0:asString
+%
+
+category: 'Grail-Filters'
+method: warnings
+___addFilter___: action message: msg category: cat module: mod lineno: lineno append: append
+	"Install a filter.  Positions 1-3 stay exactly as they were so the
+	3-element filters simplefilter and the fixed-arity forms build keep
+	working unchanged; module and lineno are appended.
+
+	``append=True'' puts the filter at the END of the list, where it is
+	consulted last -- the whole point of the flag, and previously
+	unavailable at any arity."
+
+	| f |
+	f := { action. cat. msg. mod. lineno }.
+	(append @env0:== true or: [append @env0:== 1])
+		ifTrue: [(self _filters) @env0:addLast: f]
+		ifFalse: [(self _filters) @env0:addFirst: f].
+	^ None
 %
 
 category: 'Grail-Filters'
