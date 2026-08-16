@@ -3085,3 +3085,59 @@ project with a clear contract: emit `(colno, end_colno)` for the operation that
 raised. The scanner and renderer are dormant until it does, and
 `tests/python/caret_anchors.py` holds them to CPython in the meantime — its
 eighteen checks pass identically under CPython 3.14.6 and under Grail.
+
+### 9.38 Spans are not the caret blocker; missing frames are (2026-08-15, gs40)
+
+§9.33 named "per-operation spans in codegen" as the third and final caret
+blocker, and §9.37 left it as the only one. Attempting it measured something
+that changes the scope: **the frames carets would attach to are not in the
+traceback at all.**
+
+**What was tried.** `___emitCurPosBefore:on:` stores a bare line integer before
+every statement. `AbstractLocationNode>>___pyPositionLiteralArray` already emits
+the 5-element PEP 657 array, `___pushFrameFromPos___` already accepts it, and
+both are proven in the one place they are used (`ForAst.gs:186`). So the
+smallest real step is to store the array instead of the integer, using the span
+of the `return`/assignment VALUE — which is the raising operation whenever the
+statement holds exactly one, the common shape.
+
+That was implemented and installed. `test_traceback` did not move:
+`t=370 f=45 e=12 s=218`, identical. **It has been reverted** — codegen
+complexity that fires on every module, with no measured benefit, is what §9.36
+argues against paying for.
+
+**Why it bought nothing.** Two measurements, on a three-deep call chain
+`_names -> mid -> raiser`:
+
+| raised by | frames in Grail's traceback | CPython |
+| --- | --- | --- |
+| explicit `raise ValueError` in `raiser` | `_names`, `raiser` | `_names`, `mid`, `raiser` |
+| `a / b` with `b == 0` in `div` | `_names` only | `_names`, `div` |
+
+An INTERMEDIATE frame (`mid`) is dropped, and for an exception raised inside a
+Smalltalk primitive the RAISING frame (`div`) is absent entirely — the innermost
+frame is exactly the one a caret line belongs to. Adding columns to frames that
+are not there cannot change a rendered traceback.
+
+The second row is the sharper one. `ZeroDivisionError` originates below Python:
+`___pushFrameFromPos___` runs as an exception unwinds THROUGH a compiled Python
+function, and nothing pushed a frame for `div` on the way out. Every caret test
+in `test_traceback` builds its expectation from a raise inside a called
+function, so this gap alone accounts for them independently of spans.
+
+**Revised blocker list.** §9.33 had three items; §9.37 cleared two. The third
+splits, and the new first item was not on the list at all:
+
+1. **Frame coverage** — the raising frame, and intermediate frames, must appear.
+   This is traceback-capture work, not codegen, and it is a prerequisite for
+   anything caret-shaped. Its blast radius is every traceback Grail renders, so
+   it wants its own change and its own measurement.
+2. **Per-operation spans** — unchanged in difficulty, but now known to be
+   worthless until (1) lands. The statement-level approximation above is
+   ready to reinstate and is ~20 lines.
+
+**What this is worth.** No tests, again — but it retires a plan rather than a
+line of code. §9.33's recommendation was "carets are gated on an `ast`
+decision"; §9.37 showed that was wrong; this shows the replacement plan was
+also aimed at the wrong layer. The cost of finding out was one reverted change
+and one measurement, which is the cheap way to learn it.
