@@ -131,6 +131,18 @@ class _ParameterKind:
         return '<_ParameterKind: %s>' % self._name
 
 
+class _empty:
+    """CPython's ``Parameter.empty`` / ``Signature.empty`` -- the marker for
+    "there is no default" and "there is no annotation".
+
+    A MODULE-level sentinel rather than None, and that distinction is the whole
+    point: ``Parameter('module', KEYWORD_ONLY, default=None)`` means the default
+    IS None, and rendered as ``module=None``.  Grail used None as the marker, so
+    that parameter rendered as a bare ``module`` -- indistinguishable from one
+    with no default at all.  Defined before Parameter so it can be the actual
+    default expression of __init__ rather than something patched in after."""
+
+
 class Parameter:
     POSITIONAL_ONLY = _ParameterKind('POSITIONAL_ONLY')
     POSITIONAL_OR_KEYWORD = _ParameterKind('POSITIONAL_OR_KEYWORD')
@@ -138,14 +150,51 @@ class Parameter:
     KEYWORD_ONLY = _ParameterKind('KEYWORD_ONLY')
     VAR_KEYWORD = _ParameterKind('VAR_KEYWORD')
 
-    class empty:
-        pass
+    empty = _empty
 
-    def __init__(self, name, kind, default=None, annotation=None):
+    def __init__(self, name, kind, default=_empty, annotation=_empty):
         self.name = name
         self.kind = kind
-        self.default = default if default is not None else Parameter.empty
-        self.annotation = annotation if annotation is not None else Parameter.empty
+        self.default = default
+        self.annotation = annotation
+
+    def __repr__(self):
+        return '<Parameter "%s">' % (self,)
+
+    def __str__(self):
+        text = self.name
+        if self.kind is Parameter.VAR_POSITIONAL:
+            text = '*' + text
+        elif self.kind is Parameter.VAR_KEYWORD:
+            text = '**' + text
+        annotated = self.annotation is not Parameter.empty
+        if annotated:
+            text = text + ': ' + formatannotation(self.annotation)
+        if self.default is not Parameter.empty:
+            text = text + (' = ' if annotated else '=') + repr(self.default)
+        return text
+
+    def __eq__(self, other):
+        """CPython compares the four fields, which is what makes an expected
+        Signature built by hand compare equal to an introspected one -- and
+        without it two Parameters compared by IDENTITY, so no such comparison
+        could ever succeed (test_enum's test_inspect_signatures builds exactly
+        that expectation)."""
+        if not isinstance(other, Parameter):
+            return NotImplemented
+        return (self.name == other.name
+                and self.kind is other.kind
+                and self.default == other.default
+                and self.annotation == other.annotation)
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
+
+    def __hash__(self):
+        return hash((self.name, id(self.kind)))
 
 
 _KINDS = (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD,
@@ -230,10 +279,10 @@ def _signature_from_spec(func):
         default = entry[2] if len(entry) > 2 else None
         params.append(Parameter(
             name, kind,
-            default=_DefaultText(default) if default is not None else None,
-            annotation=ann.get(name, None)))
+            default=_DefaultText(default) if default is not None else _empty,
+            annotation=ann.get(name, _empty)))
     return Signature(parameters=params,
-                     return_annotation=ann.get('return', None))
+                     return_annotation=ann.get('return', _empty))
 
 
 class _DefaultText:
@@ -256,7 +305,35 @@ class _DefaultText:
         return self._text
 
     def __eq__(self, other):
-        return isinstance(other, _DefaultText) and other._text == self._text
+        """Equal to another text, and equal to a VALUE that renders as that
+        text.
+
+        The second half is what lets an introspected signature compare equal to
+        the same one built by hand: CPython's Parameter.__eq__ compares defaults
+        by value, and an expected signature is written with values
+        (``default=1``) while an introspected one carries the source text
+        (``'1'``).  Comparing by rendered form is the faithful bridge -- and the
+        only one available, since re-evaluating the text to get a value is
+        exactly what this class exists to avoid.
+
+        So it agrees wherever the text is already its own repr, which is every
+        literal, and disagrees where it is not (``x=1+1`` holds '1+1', which no
+        value renders as) -- the same boundary __repr__ has."""
+        if isinstance(other, _DefaultText):
+            return other._text == self._text
+        try:
+            return repr(other) == self._text
+        except BaseException:
+            return NotImplemented
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
+
+    def __hash__(self):
+        return hash(self._text)
 
 
 def _signature_from_callable(obj, *, follow_wrapped=True, globals=None,
@@ -302,19 +379,29 @@ def signature(obj, *args, **kwargs):
             call = getattr(type(obj), '__call__', None)
             text = getattr(call, '__text_signature__', None) if call is not None else None
     if isinstance(text, str):
-        return Signature(text)
+        return Signature(text=text)
     return Signature()
 
 
 class Signature:
     empty = Parameter.empty
 
-    def __init__(self, text=None, parameters=None, return_annotation=None):
+    def __init__(self, parameters=None, *, return_annotation=_empty, text=None):
+        """CPython's first positional argument is PARAMETERS, and this took
+        ``text'' there -- a Grail-only shortcut for a signature already rendered
+        as a string.  So ``Signature([Parameter(...), ...])'', the spelling
+        every caller writing an expected signature by hand uses, stashed the
+        LIST as the rendered text; __str__ handed it back unrendered and
+        __repr__ then concatenated a string with a list:
+
+            TypeError: unsupported operand type(s) for +:
+                       'Unicode7' and 'OrderedCollection'
+
+        The text form is still here, now keyword-only, which is how the one
+        internal caller passes it."""
         self._text = text
         self._params = list(parameters) if parameters else []
-        self.return_annotation = (return_annotation
-                                  if return_annotation is not None
-                                  else Parameter.empty)
+        self.return_annotation = return_annotation
 
     @classmethod
     def from_callable(cls, obj, **kwargs):
@@ -377,6 +464,30 @@ class Signature:
 
     def __repr__(self):
         return '<Signature ' + self.__str__() + '>'
+
+    def __eq__(self, other):
+        """Compare by PARAMETERS and return annotation, as CPython does, so a
+        signature built by hand compares equal to an introspected one.  Without
+        it the comparison was by identity and always False.
+
+        A text-only signature has no parameter list to compare, so it falls
+        back to comparing what it renders as -- which is the only thing it
+        knows about itself."""
+        if not isinstance(other, Signature):
+            return NotImplemented
+        if self._text is not None or other._text is not None:
+            return str(self) == str(other)
+        return (self._params == other._params
+                and self.return_annotation == other.return_annotation)
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
+
+    def __hash__(self):
+        return hash(str(self))
 
     def bind(self, *args, **kwargs):
         return _BoundArguments()
