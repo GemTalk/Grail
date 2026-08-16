@@ -39,16 +39,16 @@ EnumMemberPropertyTestCase category: 'Grail-SUnit'
 ! entirely; its key set is now exactly CPython's.
 !
 ! WHAT MADE IT POSSIBLE.  Enum had nowhere to PUT a class attribute.  Every class
-! ClassDefAst generates carries a per-class holder (``dynInstVars'') and the
+! ClassDefAst generates carries a per-class holder (``___dynInstVars___'') and the
 ! accessor pair for it; Enum is written in Smalltalk and had neither, so
 ! ___classHolderAttrStore___ -- and through it every class-level store -- died
-! with ``a Enum class does not understand #'dynInstVars'''.  Giving it one is
+! with ``a Enum class does not understand #'___dynInstVars___'''.  Giving it one is
 ! what this change is really about; the descriptors are the first thing to use it.
 !
 ! THREE THINGS THAT BROKE ON THE WAY, all of them latent and all fixed here:
 !
 !   * ___mergeSecondaryBases___ decided ``is this class generated from Python?''
-!     by asking whether its metaclass answers ``dynInstVars''.  That is an
+!     by asking whether its metaclass answers ``___dynInstVars___''.  That is an
 !     attribute HOLDER and only incidentally a proxy for generated, so Enum
 !     acquiring one put Enum ITSELF into the merge walk for every ``class E(int,
 !     Enum)'' -- which evaluated its class-side attrs, one of which (_all_bits_)

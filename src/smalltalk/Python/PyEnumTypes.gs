@@ -31,7 +31,7 @@ doit
 PythonInstance subclass: 'Enum'
   instVarNames: #()
   classVars: #( EnumRegistry )
-  classInstVars: #( dynInstVars )
+  classInstVars: #( ___dynInstVars___ )
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -262,14 +262,14 @@ ___grailDeclaredMetaclass___
 
 category: 'Grail-Class Attrs'
 classmethod: Enum
-dynInstVars
+___dynInstVars___
 	"The per-class attribute holder, the same slot ClassDefAst declares on every
 	generated Python class and the same accessor pair it compiles for it.
 
 	Enum is written in Smalltalk and so had neither, which meant Enum itself
 	could hold no Python class attribute at all: ___classHolderAttrStore___ (and
 	through it every ___pyAttrStore___ that lands on a class) died with ``a Enum
-	class does not understand #'dynInstVars'''.  It is what lets Enum carry
+	class does not understand #'___dynInstVars___'''.  It is what lets Enum carry
 	``name'' and ``value'' as real DynamicClassAttribute descriptors -- see
 	___grailInstallMemberProperties___.
 
@@ -277,13 +277,13 @@ dynInstVars
 	path recognises as an accessor rather than wrapping the method as a
 	BoundMethod, and what ___classBodyDefinitionalDelete___: scopes itself to."
 
-	^ dynInstVars
+	^ ___dynInstVars___
 %
 
 category: 'Grail-Class Attrs'
 classmethod: Enum
-dynInstVars: aHolder
-	dynInstVars := aHolder
+___dynInstVars___: aHolder
+	___dynInstVars___ := aHolder
 %
 
 category: 'Grail-Enum Metaclass'
@@ -375,7 +375,7 @@ classmethod: Enum
 ___grailGnvStaticStore
 	"Per-SESSION map: enum class -> the PyStaticMethod wrapping its
 	_generate_next_value_.  Used ONLY for FUNCTIONAL enums, which (unlike
-	class-syntax enums) have no dynInstVars holder to hold the staticmethod, so
+	class-syntax enums) have no ___dynInstVars___ holder to hold the staticmethod, so
 	object>>___classDict___ reads this to surface it in cls.__dict__
 	(test_gnv_is_static Function variants).  SessionTemps-backed like
 	___grailRegistry___ so it never dirties committed state."
@@ -647,7 +647,7 @@ ___grailDropIgnoredNames: cls from: allNames
 
 	Grail cannot pop from a dict, because by the time this runs the names are
 	already REAL class state -- an accessor pair for a name the body assigned
-	unconditionally, a dynInstVars entry for one bound through the namespace, or
+	unconditionally, a ___dynInstVars___ entry for one bound through the namespace, or
 	both.  ___classBodyDefinitionalDelete___: is the operation that knows all
 	three homes, so the pop becomes a delete of exactly what the body stored.
 	It signals NameError for a name that was never bound, which is not an error
@@ -691,7 +691,7 @@ ___grailOwnClassAttr: cls named: aString
 	namespace, so an inherited value must not be seen.  The two homes are the
 	ones ___classBodyDefinitionalStore___:put: writes to: an accessor compiled
 	into 'Grail-Class Attrs' for a name the body assigned unconditionally, and
-	the per-class dynInstVars holder for everything else."
+	the per-class ___dynInstVars___ holder for everything else."
 
 	| sym meta holder |
 	sym := aString @env0:asSymbol.
@@ -699,8 +699,8 @@ ___grailOwnClassAttr: cls named: aString
 	(meta @env0:whichClassIncludesSelector: sym environmentId: 1) == meta
 		ifTrue: [^ [cls @env0:perform: sym env: 1]
 			@env0:on: AbstractException do: [:e | e @env0:return: nil]].
-	holder := (cls ___respondsTo___: #dynInstVars)
-		ifTrue: [cls @env0:perform: #dynInstVars env: 1]
+	holder := (cls ___respondsTo___: #___dynInstVars___)
+		ifTrue: [cls @env0:perform: #___dynInstVars___ env: 1]
 		ifFalse: [nil].
 	holder == nil ifTrue: [^ nil].
 	^ holder @env0:dynamicInstVarAt: sym
@@ -760,12 +760,12 @@ ___grailBuildMembers: cls names: attrNames
 	"Names assigned under a class-body ``if`` (the shared test fixture's
 	``if issubclass(...): dupe = 3'') never reach classBodyAttributes --
 	their stores go through ___pyAttrStore___ into the per-class
-	dynInstVars holder BEFORE this hook runs.  Sweep the holder for
+	___dynInstVars___ holder BEFORE this hook runs.  Sweep the holder for
 	additional member candidates (skipping underscore-prefixed machinery
 	such as closure cells) and process them after the declared names."
 	allNames := attrNames @env0:asOrderedCollection.
-	dynHolder := ((cls @env0:class @env0:whichClassIncludesSelector: #dynInstVars environmentId: 1) notNil)
-		ifTrue: [cls @env0:perform: #dynInstVars env: 1]
+	dynHolder := ((cls @env0:class @env0:whichClassIncludesSelector: #___dynInstVars___ environmentId: 1) notNil)
+		ifTrue: [cls @env0:perform: #___dynInstVars___ env: 1]
 		ifFalse: [nil].
 	dynHolder == nil ifFalse: [
 		| dynPairs i |
@@ -846,7 +846,7 @@ ___grailBuildMembers: cls names: attrNames
 	__qualname__ alone; see ___grailIsInternalClass:inClassNamed:.
 
 	Nothing needs to be re-stored for either: the class-body store already holds
-	the value (an accessor pair for a declared name, the dynInstVars holder for
+	the value (an accessor pair for a declared name, the ___dynInstVars___ holder for
 	one assigned under a class-body ``if''), so dropping the name leaves
 	``cls.x'' answering it, exactly as CPython's class dict does."
 	[ | dropped |
@@ -1891,7 +1891,7 @@ ___grailFindDataRepr: cls
 
 	``In its own __dict__'' is two stores in Grail: a class-body ``def'' is a
 	compiled method on that very class, while @dataclass writes its generated
-	functions and __dataclass_params__ into the per-class dynInstVars holder."
+	functions and __dataclass_params__ into the per-class ___dynInstVars___ holder."
 
 	| walker |
 	walker := cls @env0:superClass.
@@ -1899,9 +1899,9 @@ ___grailFindDataRepr: cls
 		(walker == PythonInstance or: [walker == Object]) ifTrue: [^ nil].
 		(Enum ___grailIsEnumBase: walker) ifTrue: [^ nil].
 		[ | holder ownRepr params |
-		holder := ((walker @env0:class @env0:whichClassIncludesSelector: #dynInstVars
+		holder := ((walker @env0:class @env0:whichClassIncludesSelector: #___dynInstVars___
 			environmentId: 1) notNil)
-				ifTrue: [walker @env0:perform: #dynInstVars env: 1]
+				ifTrue: [walker @env0:perform: #___dynInstVars___ env: 1]
 				ifFalse: [nil].
 		ownRepr := (holder @env0:notNil
 			and: [([holder @env0:dynamicInstVarAt: #'__repr__']
@@ -3101,7 +3101,7 @@ classmethod: Enum
 ___grailCompositeNameFor: m
 	"Composite/plain name for a (possibly flag) member: 'first|third' for a
 	composite, the plain name for a named member, the value's printString when
-	no named bit covers it.  Storage-agnostic (reads #name/#value dynInstVars),
+	no named bit covers it.  Storage-agnostic (reads #name/#value ___dynInstVars___),
 	so it works on the int-rooted members of a mixed flag (``class E(int,
 	Flag)``), which do NOT inherit Flag>>___compositeName___."
 
@@ -3469,7 +3469,7 @@ ___grailInstallClassProtocol: cls
 	Smalltalk, so its METACLASS does not inherit Enum class and is missing the
 	enum class-side protocol (_member_names_, _value_repr_, mro, __reversed__,
 	the ``<enum 'Name'>'' class repr, ...).  ___mergeSecondaryBases___ does not
-	fill these (Enum class is not a dynInstVars-bearing Python metaclass), so
+	fill these (Enum class is not a ___dynInstVars___-bearing Python metaclass), so
 	`reversed(E)` fell to reverseDo: and `E._value_repr_` raised AttributeError.
 	Copy Enum class's own source for each protocol selector onto cls's metaclass
 	unless an enum metaclass already provides it (pure Enum/Flag, and the
@@ -3638,14 +3638,14 @@ ___grailFunctional: cls positional: positional keywords: keywords
 			baseArray := Array @env0:with: typeBase with: cls.
 			sb := il @env0:___selectStorageBase___: baseArray.
 			nc := sb ___subclass___: className instVarNames: #()
-				classInstVarNames: #( #'dynInstVars' ).
+				classInstVarNames: #( #'___dynInstVars___' ).
 			il @env0:___mergeSecondaryBases___: nc bases: baseArray.
 			nc]
 		ifFalse: [cls ___subclass___: className instVarNames: #()
-			classInstVarNames: #( #'dynInstVars' )].
+			classInstVarNames: #( #'___dynInstVars___' )].
 	"CPython's functional API produces an ORDINARY class, so ``setattr(E, ...)''
 	-- and reading E.__module__ -- must work on it.  Grail's per-class attribute
-	store is a ``dynInstVars'' classInstVar plus its accessor pair, which
+	store is a ``___dynInstVars___'' classInstVar plus its accessor pair, which
 	ClassDefAst emits for a class-SYNTAX class and nothing emitted here: every
 	class-attribute store on a functional enum raised AttributeError, so
 	``enum._make_class_unpicklable(BadPickle)'' could not install either of the
@@ -3656,14 +3656,14 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	class BY, so ignoring it is what makes a functional enum unpicklable even
 	when its module is right there in the call."
 	[ | holderSrc |
-	(newCls @env0:class @env0:whichClassIncludesSelector: #'dynInstVars'
+	(newCls @env0:class @env0:whichClassIncludesSelector: #'___dynInstVars___'
 		environmentId: 1) @env0:isNil ifTrue: [
-		holderSrc := 'dynInstVars
-	^ dynInstVars'.
+		holderSrc := '___dynInstVars___
+	^ ___dynInstVars___'.
 		[newCls @env0:class ___compileMethod: holderSrc category: 'Grail-Class Attrs']
 			@env0:on: AbstractException do: [:e | nil].
-		holderSrc := 'dynInstVars: ___1
-	dynInstVars := ___1.'.
+		holderSrc := '___dynInstVars___: ___1
+	___dynInstVars___ := ___1.'.
 		[newCls @env0:class ___compileMethod: holderSrc category: 'Grail-Class Attrs']
 			@env0:on: AbstractException do: [:e | nil]]] @env0:value.
 	(keywords ~~ nil and: [keywords @env0:includesKey: 'module']) ifTrue: [
@@ -3845,7 +3845,7 @@ ___grailFunctional: cls positional: positional keywords: keywords
 	self ___grailRegistry___ @env0:at: newCls put: (Array @env0:with: byValue with: byName with: members).
 	"Record the functional gnv as a staticmethod in the session gnv-static store;
 	___classDict___ surfaces it in newCls.__dict__ (functional enums have no
-	dynInstVars holder, so the class-syntax holder path can't be used).  A value
+	___dynInstVars___ holder, so the class-syntax holder path can't be used).  A value
 	already a staticmethod (BusyGNV passes ``staticmethod(fn)'') is kept; a bare
 	function is wrapped."
 	gnvFnValue @env0:notNil ifTrue: [ | sm |
@@ -4783,7 +4783,7 @@ _add_alias_: name
 				@env0:on: AbstractException do: [:e | existing @env0:printString])].
 	byName @env0:at: nm put: self.
 	"Attribute access (``Cls.NAME'') -- store on the class exactly like
-	setattr(cls, name, member) (lands in the per-class dynInstVars holder;
+	setattr(cls, name, member) (lands in the per-class ___dynInstVars___ holder;
 	NAME has no compiled accessor, so this is the only reader path)."
 	cls @env0:perform: #'___pyAttrStore___:put:' env: 1 withArguments: { nm. self }.
 	^ self

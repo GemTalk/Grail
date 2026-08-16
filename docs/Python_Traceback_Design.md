@@ -3468,3 +3468,58 @@ lead about the defect, which was in name resolution. Both times the fix came
 from a probe that varied ONE thing — there, base position; here, what `type(str)`
 actually answers. Neither was reachable by reading the code that appeared to be
 at fault.
+
+### 9.44 dir() reported the dispatch protocol as Python attributes (2026-08-16, gs40)
+
+§9.43 left `dir()` with 777 extra names and 12 real reporting defects. Sweeping
+them with `scripts/dir_parity.py` showed the extras were not one problem, and
+only one of the three needed judgement.
+
+**The big one was not a method anyone wrote.** `perform`, `value` and `with`
+appeared on 40 of the 42 subjects. They are not methods — they are the kernel
+selectors `perform:env:`, `value:value:` and `with:perform:env:`, TRUNCATED AT
+THE FIRST COLON. `__dir__` recovers a Python name from a fixed-arity selector by
+taking everything before the first colon, and applied to the dispatch and call
+protocol Grail is built on, that manufactures three plausible Python names for
+every object in the image.
+
+The fix is to check the whole encoding instead of truncating. A Grail method
+selector is exactly `name:` followed by zero or more `_:`
+(`FunctionDefAst>>fixedAritySelectorFor:`), plus the varargs `_name:kw:` form.
+`perform:env:` and `value:value:` match neither.
+
+**Why the `___` convention could not have caught it**, which was the question
+that prompted the sweep: the convention governs what Grail INVENTS. These are
+GemStone kernel selectors — `value:value:` is deliberately the universal call
+protocol, `with:…performMethod:` is kernel-native on 4.0 — so they cannot be
+renamed out of the way, and a prefix filter never sees them, because
+`with:perform:env:` is a perfectly ordinary selector. Recognising the ENCODING
+is what separates a Python method from the infrastructure it dispatches through.
+
+Two names WERE ordinary violations of the convention and were renamed:
+`dynInstVars` → `___dynInstVars___` (175 occurrences across 20 files) and
+`_replaceFirst` → `___replaceFirst___`.
+
+Result: **777 extras → 641, with zero names lost.** The second number is the one
+that matters. `dir()` drives unittest's `getTestCaseNames`, `inspect` and
+`pydoc`, so a filter that removes too much silently stops tests being
+discovered — strictly worse than the leak it fixes. That is why the fixture's
+positive checks outnumber its negative ones, and why "new missing must be zero"
+was the gate the change was driven against rather than "extras must fall".
+
+**Where the convention genuinely stops.** After the renames, `asFloat` is the
+only non-dunder leak that is a Grail-added env-1 method, and it cannot follow the
+rule: GemStone's own math shims and coercion fallbacks send `#asFloat` in both
+environments, so renaming it breaks kernel callers. The rule covers what Grail
+invents, not what Grail must implement to satisfy the kernel — a one-name
+exception here, but a load-bearing one.
+
+**What remains is a different bug, and it answers the original question.** The
+rest of the extras are real Python attributes on the WRONG RECEIVER: `mro` (39
+subjects), `__bases__`, `__mro__`, `__name__`, `__qualname__`. `type.mro()` is
+genuine CPython API — on `type`. Grail puts it on every instance because
+`__dir__` unions the class chain, and it unions the class chain because
+class-body DATA attributes live on the metaclass. CPython runs two different
+algorithms: `type.__dir__` walks the class's own MRO and DELIBERATELY omits the
+metaclass, while `object.__dir__` is the instance `__dict__` plus `type(obj)`'s
+MRO. `___classBodyOrder___` is what would let Grail stop unioning and split them.

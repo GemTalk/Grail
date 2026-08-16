@@ -218,7 +218,7 @@ method: ClassBodyConditionalTestCase
 testABranchOverwritesAnUnconditionalBinding
 	"``both = 1'' then ``if flag: both = 2''.  A name assigned anywhere
 	unconditionally in the body gets an accessor pair (a real classInstVar);
-	a name bound only in a branch gets a dynInstVars entry.  A conditional
+	a name bound only in a branch gets a ___dynInstVars___ entry.  A conditional
 	binding cannot know at emit time which it faces, and writing to the
 	wrong one is not a near-miss: ___pyAttrLoad___ consults the accessor
 	BEFORE the holder, so storing 2 in the holder left the read answering
@@ -294,7 +294,7 @@ testEveryBindingSurvivesReimport
 	so the store landed on the class.  On a REBUILD it already is, so the
 	store went to the overlay -- and ___resetClassAttrOverlay___, emitted
 	right after the class-build guard, wiped it.  Meanwhile the rebuild's
-	own ``dynInstVars: (Object new)'' had cleared the committed value.  The
+	own ``___dynInstVars___: (Object new)'' had cleared the committed value.  The
 	binding ended up in neither place.
 
 	setUp re-imports on every test, so the whole suite exercises the warm

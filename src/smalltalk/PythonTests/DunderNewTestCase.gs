@@ -440,7 +440,7 @@ testRuntimeClassCompileFailureIsCatchable
 
 	| cls |
 	cls := PythonInstance @env1:___subclass___: #'___CompileFailProbe___'
-		instVarNames: #() classInstVarNames: #(#'__module__' #'dynInstVars').
+		instVarNames: #() classInstVarNames: #(#'__module__' #'___dynInstVars___').
 	self should: [cls @env1:___compileMethod: '][ bogus' category: 'Grail-Test']
 		raise: NameError
 %
@@ -1269,7 +1269,7 @@ testCanonicalClassAttrOverlay
 	classInstVar slot stays untouched (no dirtying of the shared class).
 	``del Cls.x`` removes the overlay entry and the committed value shows
 	through again.  A store under a NEVER-DECLARED name must not reach the
-	committed per-class dynInstVars either.  Everything is flag-gated and
+	committed per-class ___dynInstVars___ either.  Everything is flag-gated and
 	the ensure: resets the session + in-transaction registry keys, so the
 	rest of the suite (flag off) is unaffected."
 
@@ -1298,7 +1298,7 @@ testCanonicalClassAttrOverlay
 	self assert: (inst @env1:___pyAttrLoad___: #'z') equals: 99.
 	holder @env1:___pyAttrStore___: 'fresh' put: 'x'.
 	self assert: (holder @env1:___pyAttrLoad___: #'fresh') equals: 'x'.
-	self assert: ((holder perform: #'dynInstVars' env: 1)
+	self assert: ((holder perform: #'___dynInstVars___' env: 1)
 		dynamicInstVarAt: #'fresh') equals: nil.
 	holder @env1:__delattr__: 'z'.
 	self assert: (holder @env1:___pyAttrLoad___: #'z') equals: 10.

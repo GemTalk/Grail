@@ -48,7 +48,7 @@ ClassBodyNamespaceDefsTestCase category: 'Grail-SUnit'
 !   * The value is READ BACK OFF THE CLASS, not passed in -- by the time the
 !     bind runs the method is compiled and the nested class stored.  That is
 !     also what makes a DECORATED def come out right: the decorator has already
-!     rebound the name in the dynInstVars holder, and the load reads the holder
+!     rebound the name in the ___dynInstVars___ holder, and the load reads the holder
 !     first, so the mapping sees the decorated object.
 !   * Unlike ___grailNsStore___:value: it does not read the value back OUT of
 !     the mapping onto the class -- the method is already compiled, so a

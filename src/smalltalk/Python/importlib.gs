@@ -2136,7 +2136,7 @@ ___moduleNameShadowsCompileScope___: aSymbol
 category: 'Grail-Class Compilation'
 classmethod: importlib
 ___ensureClassAttrHolder___: aClass
-	"Give aClass the ``dynInstVars'' accessor pair a class attribute is stored
+	"Give aClass the ``___dynInstVars___'' accessor pair a class attribute is stored
 	through, if it does not have one.  Answers aClass.
 
 	``___pyAttrStore___'' puts a class attribute in a per-class holder reached
@@ -2162,14 +2162,14 @@ ___ensureClassAttrHolder___: aClass
 	was, which is the pre-existing behaviour."
 
 	| src |
-	(aClass @env0:class @env0:whichClassIncludesSelector: #'dynInstVars'
+	(aClass @env0:class @env0:whichClassIncludesSelector: #'___dynInstVars___'
 		environmentId: 1) @env0:notNil ifTrue: [^ aClass].
-	src := 'dynInstVars
-	^ dynInstVars'.
+	src := '___dynInstVars___
+	^ ___dynInstVars___'.
 	[aClass @env0:class @env1:___compileMethod: src category: 'Grail-Class Attrs']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
-	src := 'dynInstVars: ___1
-	dynInstVars := ___1.'.
+	src := '___dynInstVars___: ___1
+	___dynInstVars___ := ___1.'.
 	[aClass @env0:class @env1:___compileMethod: src category: 'Grail-Class Attrs']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	^ aClass
@@ -2210,10 +2210,10 @@ ___inheritClassAttrs___: aClass exclude: ownAttrs
 		(((aClass superclass class whichClassIncludesSelector: n environmentId: 1) notNil)
 			and: [(aClass class whichClassIncludesSelector: (n asString , ':') asSymbol environmentId: 1) notNil
 			and: [n ~= #'__module__'
-			and: [n ~= #'dynInstVars'
+			and: [n ~= #'___dynInstVars___'
 			and: [(ownAttrs includes: n) not
 			and: [(kernelSlots includes: n) not]]]]]) ifTrue: [
-			"dynInstVars excluded: copying the PARENT's holder makes the
+			"___dynInstVars___ excluded: copying the PARENT's holder makes the
 			subclass SHARE the parent's per-class dynamic attrs -- the
 			conditional holder-init (nested-class fix) then keeps the
 			shared object, and a sibling dataclass's setattr'd __init__
@@ -2478,7 +2478,7 @@ ___copyDecoratorRebinding___: aSelector from: aBase to: aClass
 	one, alongside the compiled method ___mergeSecondaryBases___ just copied.
 
 	``@classproperty def MAX(cls)'' compiles to a method AND stores the
-	decorated object under #MAX in the base's class-side dynInstVars holder;
+	decorated object under #MAX in the base's class-side ___dynInstVars___ holder;
 	___pyAttrLoad___ reads that holder (via ___classChainAttrLookup___:) before
 	it falls back to wrapping the method, so the holder entry IS the attribute.
 
@@ -2511,14 +2511,14 @@ ___copyDecoratorRebinding___: aSelector from: aBase to: aClass
 	| pyName baseHolder deco holder |
 	pyName := self ___pythonNameForSelector___: aSelector.
 	pyName isNil ifTrue: [^ self].
-	baseHolder := [aBase perform: #dynInstVars env: 1] on: Error do: [:e | nil].
+	baseHolder := [aBase perform: #___dynInstVars___ env: 1] on: Error do: [:e | nil].
 	baseHolder isNil ifTrue: [^ self].
 	deco := [baseHolder dynamicInstVarAt: pyName] on: Error do: [:e | nil].
 	deco isNil ifTrue: [^ self].
-	holder := [aClass perform: #dynInstVars env: 1] on: Error do: [:e | nil].
+	holder := [aClass perform: #___dynInstVars___ env: 1] on: Error do: [:e | nil].
 	holder isNil ifTrue: [
 		holder := Object new.
-		[aClass perform: #dynInstVars: env: 1 withArguments: { holder }]
+		[aClass perform: #___dynInstVars___: env: 1 withArguments: { holder }]
 			on: Error do: [:e | holder := nil]].
 	holder isNil ifTrue: [^ self].
 	([holder dynamicInstVarAt: pyName] on: Error do: [:e | nil]) isNil ifTrue: [
@@ -2629,7 +2629,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 		what ___pyDefinedClass___ marks and what the limitation note above calls
 		``stops at the first non-Python (built-in) ancestor''.
 
-		The test used to be ``does its metaclass answer dynInstVars?'', which is
+		The test used to be ``does its metaclass answer ___dynInstVars___?'', which is
 		a per-class attribute HOLDER and only incidentally a proxy for generated:
 		ClassDefAst happens to emit both on every class it builds.  A Smalltalk-
 		written class acquiring a holder therefore silently joined the walk --
@@ -2681,7 +2681,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 						].
 						"A class-body DECORATOR rebinds the name it decorates:
 						the compiled method stays put and the DECORATED object
-						lands in the base's dynInstVars holder, which is what
+						lands in the base's ___dynInstVars___ holder, which is what
 						``Cls.name'' actually reads.  Copying the method alone
 						therefore hands the subclass the RAW, undecorated
 						function -- ``@classproperty def MAX'' answered an
@@ -2707,7 +2707,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 			(classInstVars are per-class storage).  aClass's metaclass
 			has no classInstVar slots for the base's attrs, so accessor
 			sources can't be recompiled here — copy the VALUES into
-			aClass's per-class dynInstVars holder (where
+			aClass's per-class ___dynInstVars___ holder (where
 			___pyAttrStore___ also lands and ___pyAttrLoad___ probes),
 			so ``IntegerFieldExact(IntegerFieldOverflow, Exact)'' sees
 			Exact's ``lookup_name = 'exact'''.  Real class-side METHODS
@@ -2735,12 +2735,12 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 					].
 					"Value pass for class attributes (unary getter in the
 					Grail-Class Attrs category): copy into aClass's
-					dynInstVars holder when nothing shadows it."
+					___dynInstVars___ holder when nothing shadows it."
 					(cat == #'Grail-Class Attrs'
 						and: [(sel asString includes: $:) not
 						and: [(kernelSlots includes: sel) not
 						and: [sel ~~ #'__module__'
-						and: [sel ~~ #'dynInstVars'
+						and: [sel ~~ #'___dynInstVars___'
 						and: [(aClass class whichClassIncludesSelector: sel environmentId: 1) isNil]]]]]) ifTrue: [
 						| v holder |
 						"AbstractException, not Error: a class attribute here is a
@@ -2754,10 +2754,10 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 						v := [walker perform: sel env: 1]
 							on: AbstractException do: [:e | e return: nil].
 						v isNil ifFalse: [
-							holder := [aClass perform: #dynInstVars env: 1] on: Error do: [:e | nil].
+							holder := [aClass perform: #___dynInstVars___ env: 1] on: Error do: [:e | nil].
 							holder isNil ifTrue: [
 								holder := Object new.
-								[aClass perform: #dynInstVars: env: 1 withArguments: { holder }]
+								[aClass perform: #___dynInstVars___: env: 1 withArguments: { holder }]
 									on: Error do: [:e | nil]
 							].
 							(holder dynamicInstVarAt: sel) isNil ifTrue: [
@@ -2771,7 +2771,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 		]
 	].
 	"ENUM SECONDARY BASE: the hand-written Enum metaclass carries the
-	whole member-building/lookup protocol but declares no dynInstVars,
+	whole member-building/lookup protocol but declares no ___dynInstVars___,
 	so the general class-side walk above skips it entirely -- an MI
 	enum (``class E(date, ReprEnum)``) built NO members and had no
 	_member_type_ (751 test_enum errors).  Recompile the fixed
@@ -2819,7 +2819,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 		aClass class perform: #'___compileMethod:category:' env: 1
 			withArguments: { src. 'Grail-Enum Metaclass' }]
 			on: Error do: [:e | nil].
-		"INSTANCE-side member protocol: the same dynInstVars gate that
+		"INSTANCE-side member protocol: the same ___dynInstVars___ gate that
 		skipped the Enum metaclass also skips Flag/Enum in the general
 		instance walk above, so an MI flag's members (class E(int, Flag)
 		is AbstractPyInt-rooted) had no |/&/^/~ algebra, name/value

@@ -43,7 +43,7 @@ EnumPickleHelperTestCase category: 'Grail-SUnit'
 !     then failed on the CLASS).
 !
 ! (3) A functional-API enum had no per-class attribute store at all -- no
-!     ``dynInstVars'' classInstVar, which ClassDefAst emits for a class-SYNTAX
+!     ``___dynInstVars___'' classInstVar, which ClassDefAst emits for a class-SYNTAX
 !     class -- so every ``setattr(E, ...)'' raised AttributeError and
 !     E.__module__ did not exist.  The ``module='' keyword was accepted and
 !     ignored, and that is the name pickle resolves a class BY.

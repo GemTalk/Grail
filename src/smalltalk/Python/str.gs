@@ -2091,13 +2091,18 @@ replace: old _: new _: count
 	| n | n := count.
 	(n == nil or: [n == None or: [n @env0:< 0]]) ifTrue: [
 		^ self @env0:copyReplaceAll: old with: new].
-	^ self _replaceFirst: old _: new _: n
+	^ self ___replaceFirst___: old _: new _: n
 %
 
 category: 'Grail-String Methods'
 method: CharacterCollection
-_replaceFirst: old _: new _: count
-	"Replace the first ``count'' non-overlapping occurrences of old."
+___replaceFirst___: old _: new _: count
+	"Replace the first ``count'' non-overlapping occurrences of old.
+
+	TUNDER-NAMED because it is Grail's own helper, not a Python attribute.
+	Spelt ``_replaceFirst:_:_:'' it matched the fixed-arity ENCODING for a
+	Python method, so dir('') listed a ``_replaceFirst'' that CPython has no
+	such thing as -- the ``___''-prefix filter never saw it."
 
 	| stream oldSize src pos n done |
 	oldSize := old @env0:size.
