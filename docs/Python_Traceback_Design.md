@@ -3250,3 +3250,55 @@ the whole call, and a multi-line span renders no caret. Both are recorded in
 `tests/python/caret_anchors.py`; going further needs a position store before
 each nested operation, which Smalltalk's inline expression emission has no
 statement boundary to hang on.
+
+### 9.41 A Python object cannot have more than 255 attributes (2026-08-16, gs40)
+
+Found while working through `test_traceback`'s suggestion family, but it is not
+a traceback bug and it is not small.
+
+`test_getattr_suggestions_do_not_trigger_for_big_dicts` does
+`setattr(A, f"index_{index}", None)` for 2000 indices. Grail dies on the 256th.
+Measured, by bisecting from Smalltalk (Python cannot observe it — see below):
+
+| receiver | attributes that succeed | 256th |
+| --- | --- | --- |
+| class (`setattr(A, ...)`) | **255** | `ImproperOperation` (error 2484) |
+| instance (`setattr(obj, ...)`) | **255** | same |
+
+Grail stores Python attributes as GemStone DYNAMIC INSTVARS, and GemStone caps
+those at 255 per object. Every Python object in Grail therefore has a hard
+255-attribute ceiling — classes, instances, and modules alike.
+
+**The failure is worse than the limit.** `ImproperOperation` is a Smalltalk
+error, not a Python exception, so it does not pass through the env-1 mapping
+that turns Smalltalk errors into catchable Python ones. A `try: ... except
+Exception:` around the store does NOT catch it; the probe written for this
+section had to be rewritten in Smalltalk with `on: Error do:` before it could
+report anything at all. Python code cannot defend against this, cannot detect
+it, and gets no traceback it can act on.
+
+**Scope.** This has nothing to do with tracebacks; it is reachable by any
+program that builds a class or object with many attributes — a generated
+constants class, a `__slots__`-less record type, an enum with hundreds of
+members, a module namespace. `test_traceback` merely happens to contain a test
+that crosses the line deliberately.
+
+**Not attempted here.** Fixing it means storing attributes somewhere other than
+dynamic instVars once a receiver crosses a threshold — a spill dictionary
+consulted by `___pyAttrLoad___` / `___pyAttrStore___` / `__dict__` / `dir()`,
+which is the attribute path in its entirety and therefore tier 2 with the
+widest blast radius of anything in this document. It wants its own change, its
+own measurement, and a decision about whether the spill is per-object or
+per-class.
+
+**Two smaller things worth doing first**, either of which is independently
+useful:
+
+1. **Make the failure catchable.** Mapping error 2484 to a Python exception at
+   the store site would at least let a program see it. CPython raises nothing
+   here, so any exception is non-conformant — but an uncatchable Smalltalk error
+   escaping into Python code is strictly worse than a wrong-but-catchable one,
+   and this is the same argument §9.10 makes about frames.
+2. **Pin the limit in a fixture.** Deliberately NOT done in this change: a
+   fixture that crosses the line would take the SUnit run down with it, since
+   the error cannot be caught. That is itself an argument for (1).
