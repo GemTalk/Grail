@@ -58,13 +58,8 @@ InspectClassifyClassAttrsTestCase category: 'Grail-SUnit'
 ! lookup instead of catching it, so a genuine MNU from inside a class's own
 ! implementation still propagates.
 !
-! WHAT THIS DOES NOT CLOSE, and why -- all inherited from the substrate:
+! WHAT THIS DOES NOT CLOSE, and why -- both inherited from the substrate:
 !
-!   * dir() ON A CLASS does not list the class's methods.  dir(instance) does;
-!     dir(C) instead offers GemStone internals (mro, perform, with).
-!     classify_class_attrs starts from dir(), so a plain class's methods and
-!     properties are never candidates.  This is the blocker for the plain-class
-!     half of the test, and it reaches getmembers and pydoc too.
 !   * a class __dict__ holds an UnboundMethod where CPython holds a staticmethod
 !     or classmethod OBJECT, and ``kind'' is read off that object precisely
 !     because it is what tells the two apart.
@@ -155,21 +150,18 @@ testADataAttributeIsFoundAndClassified
 	self assert: (self resultAt: 'plain_data') asString equals: '(''data'', True)'.
 %
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests - Plain classes'
 method: InspectClassifyClassAttrsTestCase
-testDirOfAClassOmitsItsMethodsWhichIsAKnownGap
-	"Recorded, NOT endorsed, and the blocker for the plain-class half of
-	test_inspect_classify_class_attrs.  dir() on an INSTANCE lists ``meth'';
-	dir() on the CLASS does not, and offers GemStone internals (mro, perform,
-	with) in its place -- it is walking the metaclass chain rather than the
-	class's own methods.  classify_class_attrs starts from dir(), so a plain
-	class's methods and properties are never candidates; getmembers and pydoc
-	read the same list."
+testAPlainClassesMethodsAreCandidates
+	"This algorithm starts from dir(), so it can only classify what dir()
+	reports -- and dir() on a CLASS used to omit the class's own methods, which
+	made every method and property of a plain class invisible here.  Fixed in
+	object>>__dir__; see DirOfAClassTestCase for that change and its evidence."
 
-	self assert: (self resultAt: 'dir_of_a_class_omits_methods_is_a_known_gap') asString
-		equals: '[False, True]'.
-	self assert: (self resultAt: 'plain_methods_missing_is_a_known_gap') asString
-		equals: '[False, False, False]'.
+	self assert: (self resultAt: 'dir_of_a_class_lists_its_methods') asString
+		equals: '[True, True]'.
+	self assert: (self resultAt: 'plain_methods_are_found') asString
+		equals: '[True, True, True]'.
 %
 
 category: 'Grail-Tests - Known gaps'

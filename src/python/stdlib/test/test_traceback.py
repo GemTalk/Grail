@@ -4211,6 +4211,15 @@ class SuggestionFormattingTestBase:
                 self.assertNotIn("'pytho'", actual)
 
     def test_getattr_suggestions_do_not_trigger_for_big_dicts(self):
+        # Grail: attributes are GemStone DYNAMIC INSTVARS, which cap at 255 per
+        # object, so no Grail object can hold the 2000 this test sets -- the
+        # 256th raises MemoryError.  Lifting the ceiling means moving attribute
+        # storage off dynamic instVars, which is the whole attribute path; the
+        # limit and the decision to keep it are recorded in section 9.41 of
+        # docs/Python_Traceback_Design.md, and tests/python/attribute_ceiling.py
+        # asserts the ceiling so a change in either direction is caught.
+        self.skipTest("Grail: an object holds at most 255 attributes "
+                      "(GemStone dynamic instVar limit)")
         class A:
             blech = None
         # A class with a very big __dict__ will not be considered

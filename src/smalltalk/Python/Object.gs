@@ -2073,7 +2073,7 @@ ___classHolderAttrStore___: aName put: aValue
 		holder := Object @env0:new.
 		self @env0:perform: #dynInstVars: env: 1 withArguments: { holder }
 	].
-	holder @env0:dynamicInstVarAt: aName @env0:asString @env0:asSymbol put: aValue.
+	holder ___pyStoreDynamic___: aName @env0:asString @env0:asSymbol put: aValue.
 	^ aValue
 %
 
@@ -2904,6 +2904,47 @@ ___unboundMethodClosure___: aSym
 %
 
 category: 'Grail-Convenience Methods - Attribute'
+method: object
+___pyStoreDynamic___: aSym put: aValue
+	"Store a Python attribute, turning GemStone's dynamic-instVar ceiling into a
+	CATCHABLE Python exception.
+
+	Grail keeps Python attributes as GemStone dynamic instVars, which cap at 255
+	PER OBJECT, so every Python object -- class, instance or module -- has a
+	hard 255-attribute ceiling (§9.41).  Crossing it signalled ImproperOperation
+	(error 2484), a SMALLTALK error: it never passes through the env-1 mapping
+	that makes Smalltalk errors catchable from Python, so ``except Exception''
+	did not see it and Python code could neither defend against the limit nor
+	detect it.  A probe written in Python simply died.
+
+	CPython has no such limit and raises nothing here, so ANY exception is
+	non-conformant.  That is not the choice being made: the choice is between an
+	uncatchable Smalltalk error and a catchable Python one, and §9.10's argument
+	applies -- a wrong-but-catchable failure is recoverable, an uncatchable one
+	is not.  MemoryError is the closest Python has to ``this object cannot hold
+	any more'', and the message names the real limit rather than pretending to
+	be CPython.
+
+	Only the ATTRIBUTE-store sites route through here.  The load path's
+	memoisation caches store dynamic instVars too, but a cache that cannot be
+	filled should fall back silently rather than raise."
+
+	^ [self @env0:dynamicInstVarAt: aSym put: aValue]
+		@env0:on: Error
+		do: [:ex |
+			"Match on the reason, not the class: ImproperOperation covers more
+			than this one condition."
+			(((ex @env0:messageText ifNil: ['']) @env0:asString)
+				@env0:indexOfSubCollection: 'more than 255 dynamic instVars') @env0:> 0
+				ifTrue: [
+					MemoryError ___signal___: 'cannot set attribute '''
+						@env0:, aSym @env0:asString @env0:,
+						''': a Grail object holds at most 255 attributes (GemStone '
+						@env0:, 'dynamic instVar limit); see section 9.41']
+				ifFalse: [ex @env0:pass]]
+%
+
+category: 'Grail-Attribute Protocol'
 method: object
 ___pyAttrLoad___: aSym
 	"Python ``obj.attr`` load semantics, dispatching at runtime.
@@ -3896,7 +3937,23 @@ __dir__
 
 	| selectors result myClass |
 	myClass := self @env0:class.
-	selectors := myClass @env0:allSelectorsForEnvironment: 1.
+	selectors := (myClass @env0:allSelectorsForEnvironment: 1) @env0:asSet.
+	"A CLASS receiver needs BOTH chains, because Grail splits in two what CPython
+	keeps in one dict.  ``self class'' is the metaclass, which is where a class
+	body's DATA attributes live (``data = 42'' compiles to a data/data: accessor
+	pair on C class) -- so the scan above finds those, and finds no method at all.
+	The class's own env-1 selectors are the methods, and they were never consulted:
+	dir(C) answered ``data'' but not ``meth'', while dir(C()) answered both.
+
+	CPython's type.__dir__ merges cls.__dict__ with each base's and DELIBERATELY
+	omits the metaclass (``methods belonging to the metaclass would probably be
+	more confusing than helpful'').  Grail cannot omit it -- that is where half
+	the answer is stored -- so the union is the closest reachable thing, and it
+	costs the metaclass's own selectors leaking in.  They leaked in before this
+	change too; what changes is that the class's methods are now there as well."
+	self @env0:isBehavior ifTrue: [
+		selectors @env0:addAll: (self @env0:allSelectorsForEnvironment: 1)].
+	selectors := selectors @env0:asArray.
 	"Filter out convenience methods (starting with ___)"
 	selectors := selectors @env0:reject: [:selector |
 		| selectorStr prefix |
@@ -6146,7 +6203,7 @@ ___pyAttrStore___: aName put: aValue
 					''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
 		].
 	].
-	self @env0:dynamicInstVarAt: aName @env0:asSymbol put: aValue.
+	self ___pyStoreDynamic___: aName @env0:asSymbol put: aValue.
 	^ aValue
 %
 

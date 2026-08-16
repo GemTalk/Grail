@@ -39,7 +39,12 @@ def ismethod(obj):
 
 
 def isfunction(obj):
-    return type(obj).__name__ in ('function', 'ExecBlock')
+    # ``UnboundMethod`` is what a CLASS hands back where CPython hands back a
+    # plain function -- ``C.meth`` is an UnboundMethod, ``C().meth`` a
+    # BoundMethod, which is exactly CPython's function/method split.  Leaving it
+    # out made isroutine() False for every method reached through its class, so
+    # classify_class_attrs called them all "data" and getmembers/pydoc agreed.
+    return type(obj).__name__ in ('function', 'ExecBlock', 'UnboundMethod')
 
 
 def isclass(obj):
