@@ -177,6 +177,26 @@ abs: aNumber
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___requireArgs___: positional atLeast: aCount message: aMessage
+	"Missing-required-argument guard for the varargs builtins.
+
+	``positional at: 1'' on an EMPTY Array is a kernel OffsetError (error
+	2003, objErrBadOffsetIncomplete) -- an env-0 error, so Python cannot
+	catch it, and it ended the WHOLE module run rather than the one call.
+	``exec()'', ``eval()'', ``compile()'', ``sorted()'', ``sum()'',
+	``getattr()'', ``__import__()'' and ``round()'' all presented that way.
+	CPython raises a plain TypeError for every one of them, which is what
+	the suite's ``assertRaises(TypeError, f)'' expects.
+
+	The message is supplied by the caller because CPython's wording is
+	per-builtin and assertRaisesRegex matches it."
+
+	positional @env0:size @env0:< aCount ifTrue: [
+		TypeError ___signal___: aMessage]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 _exec: positional kw: kwargs
 	"Python builtin exec(source_or_code, globals=None, locals=None).
 	Grail implementation: parse ``source`` as a module body, evaluate it in a
@@ -203,6 +223,8 @@ _exec: positional kw: kwargs
 	step regardless of how much of the compiler runs."
 
 	| source globalsDict localsDict scope seeded globalNames |
+	self ___requireArgs___: positional atLeast: 1
+		message: 'exec() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
 	"exec() takes source TEXT here.  A PyCode -- what ``f.__code__'' answers --
 	is metadata (name, filename, line, arg counts), not executable code: Grail
@@ -336,6 +358,8 @@ _eval: positional kw: kwargs
 	inside the expression land where CPython puts them."
 
 	| source globalsDict localsDict scope seeded result |
+	self ___requireArgs___: positional atLeast: 1
+		message: 'eval() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
 	"Source TEXT only -- see the matching guard in _exec: for why a PyCode
 	cannot be evaluated and must fail as a catchable TypeError."
@@ -378,6 +402,8 @@ _compile: positional kw: kwargs
 	non-string source (already an AST/code object) is returned as-is."
 
 	| source |
+	self ___requireArgs___: positional atLeast: 1
+		message: 'compile() missing required argument ''source'' (pos 1)'.
 	source := positional @env0:at: 1.
 	(source isKindOf: CharacterCollection)
 		ifTrue: [
@@ -447,7 +473,26 @@ method: builtins
 bin: aNumber
 	"Python builtin bin(x) — fixed-arity fast path."
 
-	^ '0b' @env0:, ((self ___radixInteger___: aNumber) @env0:printStringRadix: 2)
+	^ self ___radixString___: aNumber prefix: '0b' radix: 2
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___radixString___: aNumber prefix: aPrefix radix: aRadix
+	"Shared render for bin/oct/hex.
+
+	The SIGN goes in front of the base prefix, not inside it: CPython's
+	bin(-1) is '-0b1', and Grail answered '0b-1' because the kernel's
+	#printStringRadix: emits its own leading minus and the prefix was
+	simply concatenated ahead of it.  Wrong for every negative input to
+	all three builtins, and silently so -- a plausible-looking string
+	that no Python parser accepts."
+
+	| v |
+	v := self ___radixInteger___: aNumber.
+	v @env0:< 0 ifTrue: [
+		^ '-' @env0:, aPrefix @env0:, (v @env0:negated @env0:printStringRadix: aRadix)].
+	^ aPrefix @env0:, (v @env0:printStringRadix: aRadix)
 %
 
 category: 'Grail-Built-in Functions'
@@ -459,12 +504,16 @@ ___radixInteger___: aNumber
 	else (notably a mixed-in-int enum member -- class E(HexInt, Enum) -- which
 	is AbstractPyInt-rooted and does NOT understand the kernel
 	#printStringRadix:, yet answers __index__ with its int value) is routed
-	through __index__.  Objects without __index__ keep the prior behavior
-	(sent #printStringRadix: directly), so nothing that worked before changes."
+	through __index__.
+
+	An object with NO __index__ used to be handed to #printStringRadix:
+	anyway -- an env-0 MessageNotUnderstood, which Python cannot catch, so
+	``bin(())'' did not raise TypeError, it took down the whole module run.
+	``___asIndex___'' is the shared PEP 357 coercion and already raises
+	CPython's ``'tuple' object cannot be interpreted as an integer''."
 
 	(aNumber @env0:isKindOf: Integer) ifTrue: [^ aNumber].
-	(aNumber ___respondsTo___: #'__index__') ifTrue: [^ aNumber @env1:__index__].
-	^ aNumber
+	^ aNumber ___asIndex___
 %
 
 category: 'Grail-Built-in Functions'
@@ -551,7 +600,14 @@ chr: anInteger
 	whole test_re module run via test_bigcharset).  Raise a catchable
 	ValueError at the source instead."
 
-	(anInteger @env0:< 0 or: [anInteger @env0:> 16r10FFFF]) ifTrue: [
+	| cp |
+	"CPython coerces with __index__, so chr(65.0) is a TypeError, not a
+	character.  Grail compared the Float against the range bounds (which
+	succeeds), then handed it to Character class>>codePoint: -- an
+	UNCATCHABLE ArgumentTypeError (error 2094, rtErrBadArgKind) that ended
+	the whole test_builtin run rather than failing chr()'s own test."
+	cp := anInteger ___asIndex___.
+	(cp @env0:< 0 or: [cp @env0:> 16r10FFFF]) ifTrue: [
 		"CPython raises ValueError for a codepoint outside 0..0x10FFFF;
 		without this guard Character codePoint: raises an UNCATCHABLE Smalltalk
 		OutOfRange (error 2723), which escaped as an ST error rather than the
@@ -559,9 +615,9 @@ chr: anInteger
 		chr(c) precisely to catch that ValueError (test_re
 		test_sre_character_literals / _class_literals: \U00110000)."
 		ValueError ___signal___: 'chr() arg not in range(0x110000)'].
-	(anInteger @env0:>= 16rD800 and: [anInteger @env0:<= 16rDFFF]) ifTrue: [
+	(cp @env0:>= 16rD800 and: [cp @env0:<= 16rDFFF]) ifTrue: [
 		ValueError ___signal___: 'chr() arg is a lone surrogate, which Grail strings cannot represent'].
-	^ (Character @env0:codePoint: anInteger) @env0:asString
+	^ (Character @env0:codePoint: cp) @env0:asString
 %
 
 category: 'Grail-Built-in Functions'
@@ -622,7 +678,7 @@ method: builtins
 hex: aNumber
 	"Python builtin hex(x) — fixed-arity fast path."
 
-	^ '0x' @env0:, ((self ___radixInteger___: aNumber) @env0:printStringRadix: 16) @env0:asLowercase
+	^ (self ___radixString___: aNumber prefix: '0x' radix: 16) @env0:asLowercase
 %
 
 category: 'Grail-Built-in Functions'
@@ -786,6 +842,11 @@ max: anIterable
 			]
 		] @env0:on: StopIteration do: [:ex | done := true]
 	].
+	"An EMPTY iterable used to answer Smalltalk nil -- not None, not an
+	error, but the one value Python has no name for, handed back into
+	Python code to fail somewhere else entirely.  CPython raises here."
+	first ifTrue: [
+		ValueError ___signal___: 'max() iterable argument is empty'].
 	^ maxVal
 %
 
@@ -840,6 +901,13 @@ ___minOrMax___: positional kw: kwargs lessThan: pickSmaller
 	"Shared helper for the varargs forms of min and max."
 
 	| iterable keyFn default iter best done bestKey hasDefault gotAny |
+	"Zero positionals is a TypeError in CPython, not the empty-sequence
+	ValueError: ``min()'' is a call that never had an argument to reduce,
+	which is a different mistake from ``min([])''."
+	self ___requireArgs___: positional atLeast: 1
+		message: (pickSmaller @env0:ifTrue: ['min'] @env0:ifFalse: ['max'])
+			@env0:, ' expected at least 1 argument, got '
+			@env0:, positional @env0:size @env0:printString.
 	keyFn := (kwargs @env0:notNil and: [kwargs @env0:includesKey: 'key'])
 		@env0:ifTrue: [kwargs @env0:at: 'key']
 		@env0:ifFalse: [nil].
@@ -875,7 +943,8 @@ ___minOrMax___: positional kw: kwargs lessThan: pickSmaller
 	].
 	gotAny @env0:ifFalse: [
 		hasDefault @env0:ifTrue: [^ default].
-		ValueError ___signal___: 'arg is an empty sequence'].
+		ValueError ___signal___: (pickSmaller @env0:ifTrue: ['min'] @env0:ifFalse: ['max'])
+			@env0:, '() iterable argument is empty'].
 	^ best
 %
 
@@ -902,6 +971,11 @@ min: anIterable
 			]
 		] @env0:on: StopIteration do: [:ex | done := true]
 	].
+	"An EMPTY iterable used to answer Smalltalk nil -- not None, not an
+	error, but the one value Python has no name for, handed back into
+	Python code to fail somewhere else entirely.  CPython raises here."
+	first ifTrue: [
+		ValueError ___signal___: 'min() iterable argument is empty'].
 	^ minVal
 %
 
@@ -910,7 +984,7 @@ method: builtins
 oct: aNumber
 	"Python builtin oct(x) — fixed-arity fast path."
 
-	^ '0o' @env0:, ((self ___radixInteger___: aNumber) @env0:printStringRadix: 8)
+	^ self ___radixString___: aNumber prefix: '0o' radix: 8
 %
 
 category: 'Grail-Built-in Functions'
@@ -2347,6 +2421,9 @@ _sorted: positional kw: kwargs
 	GsNMethod optimizedSelectors compiles a bare isNil as a real
 	send — which nothing implements in env 1."
 	| iterable keyFn reverse lst iter done sortedArray |
+	self ___requireArgs___: positional atLeast: 1
+		message: 'sorted expected 1 argument, got '
+			@env0:, positional @env0:size @env0:printString.
 	iterable := positional @env0:at: 1.
 	keyFn := kwargs @env0:isNil
 		ifTrue: [nil]
@@ -2447,6 +2524,8 @@ _sum: positional kw: kwargs
 	sync_do_sum once the @pass_environment shim injects environment."
 
 	| iterable start |
+	self ___requireArgs___: positional atLeast: 1
+		message: 'sum() takes at least 1 positional argument (0 given)'.
 	iterable := positional @env0:at: 1.
 	start := positional @env0:size >= 2
 		ifTrue: [positional @env0:at: 2]
@@ -2865,6 +2944,9 @@ _getattr: positional kw: kwargs
 	Returns ``default`` instead of raising AttributeError on miss."
 
 	| anObject aName |
+	self ___requireArgs___: positional atLeast: 2
+		message: 'getattr expected at least 2 arguments, got '
+			@env0:, positional @env0:size @env0:printString.
 	anObject := positional @env0:at: 1.
 	aName := positional @env0:at: 2.
 	(positional @env0:size) @env0:>= 3 ifTrue: [
@@ -3259,6 +3341,8 @@ ___import__: positional kw: kwargs
 	to the name and appends `:kw:`, giving `___import__:kw:` — three
 	leading underscores, two trailing before `:kw:`."
 
+	self ___requireArgs___: positional atLeast: 1
+		message: '__import__() missing required argument ''name'' (pos 1)'.
 	^ (importlib instance) ___import__: positional kw: kwargs
 %
 
@@ -3272,6 +3356,8 @@ ___reload__: positional kw: kwargs
 	``importlib.reload'' can call it the way ``import_module'' calls
 	``__import__''."
 
+	self ___requireArgs___: positional atLeast: 1
+		message: 'reload() missing required argument ''module'' (pos 1)'.
 	^ (importlib instance) reload: (positional @env0:at: 1)
 %
 
@@ -3537,6 +3623,8 @@ _round: positional kw: kwargs
 	handles 2-arg calls and the kwarg form `round(x, ndigits=n)`."
 
 	| number ndigits multiplier |
+	self ___requireArgs___: positional atLeast: 1
+		message: 'round() missing required argument ''number'' (pos 1)'.
 	number := positional @env0:at: 1.
 	ndigits := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
@@ -3572,10 +3660,37 @@ _round: positional kw: kwargs
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___strictKeyword___: kwargs for: aName
+	"The ``strict='' keyword shared by zip() and map(), and the rejection
+	of every other keyword.  CPython names the offending keyword rather
+	than saying the function takes none, which is what
+	``map(f, xs, badkw=1)'' reports."
+
+	| v |
+	(kwargs @env0:== nil or: [kwargs @env0:size @env0:= 0]) ifTrue: [^ false].
+	v := false.
+	kwargs @env0:keysAndValuesDo: [:k :each | | key |
+		key := k @env0:asString.
+		key @env0:= 'strict'
+			ifTrue: [v := each]
+			ifFalse: [
+				TypeError ___signal___: (aName @env0:, '() got an unexpected keyword argument '''
+					@env0:, key @env0:, '''')]].
+	^ v ___isTruthy___
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 _zip: positional kw: kwargs
-	"Python builtin zip(*iterables) — varargs fast path. Each positional
-	element is an iterable; the result is an iterator yielding tuples
-	drawn from each one in lockstep, stopping at the shortest."
+	"Python builtin zip(*iterables, strict=False) — varargs fast path.
+	Each positional element is an iterable; the result is an iterator
+	yielding tuples drawn from each one in lockstep, stopping at the
+	shortest -- or, under strict=True, raising ValueError when they are
+	not all the same length.
+
+	``strict'' used to be ACCEPTED AND IGNORED: zip(a, b, strict=True)
+	over mismatched lengths quietly truncated, which is the one outcome
+	the keyword exists to rule out."
 
 	| iterators |
 	iterators := Array @env0:new: positional @env0:size.
@@ -3584,26 +3699,31 @@ _zip: positional kw: kwargs
 	"LAZY, as in CPython -- an eager zip looped forever (then
 	OOM-killed the session) on infinite sources like
 	zip(count(), count(1))."
-	^ zip_iterator ___on: iterators
+	^ zip_iterator
+		___on: iterators
+		strict: (self ___strictKeyword___: kwargs for: 'zip')
 %
 
 category: 'Grail-Built-in Functions'
 method: builtins
 _map: positional kw: kwargs
-	"Python builtin map(func, *iterables) — varargs fast path for 3+
-	positional args (func plus 2 or more iterables); the 1-iterable case
-	goes through the fixed-arity map:_: instead.  map() takes no keyword
-	arguments."
+	"Python builtin map(func, *iterables, strict=False) — varargs fast path
+	for 2+ positional args (func plus one or more iterables); a bare
+	``map(f, xs)'' with no keyword goes through the fixed-arity map:_:
+	instead.  3.14 gave map() zip()'s ``strict'' keyword; before that it
+	took none, and this method still rejects every OTHER keyword."
 
-	| iterators |
-	(kwargs @env0:notNil and: [kwargs @env0:size @env0:> 0]) ifTrue: [
-		TypeError ___signal___: 'map() takes no keyword arguments'].
+	| iterators isStrict |
+	isStrict := self ___strictKeyword___: kwargs for: 'map'.
 	positional @env0:size @env0:< 2 ifTrue: [
 		TypeError ___signal___: 'map() must have at least two arguments.'].
 	iterators := Array @env0:new: positional @env0:size @env0:- 1.
 	2 @env0:to: positional @env0:size do: [:i |
 		iterators @env0:at: i @env0:- 1 put: (self ___pyIter___: (positional @env0:at: i))].
-	^ map_iterator ___on: (positional @env0:at: 1) sources: iterators
+	^ map_iterator
+		___on: (positional @env0:at: 1)
+		sources: iterators
+		strict: isStrict
 %
 
 set compile_env: 0
