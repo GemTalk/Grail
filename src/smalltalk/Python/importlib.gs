@@ -2135,6 +2135,48 @@ ___moduleNameShadowsCompileScope___: aSymbol
 
 category: 'Grail-Class Compilation'
 classmethod: importlib
+___ensureClassAttrHolder___: aClass
+	"Give aClass the ``dynInstVars'' accessor pair a class attribute is stored
+	through, if it does not have one.  Answers aClass.
+
+	``___pyAttrStore___'' puts a class attribute in a per-class holder reached
+	by that pair, and ClassDefAst emits it for every class it compiles.  A class
+	built WITHOUT going through ClassDefAst has no such pair, and the first
+	store raises -- which is what made ``type('B', (), {'z': 5})'' die inside
+	the constructor with ``'B' object has no attribute 'z'''.  The error
+	escaping construction rather than the read is why a Python ``try/except''
+	around the attribute could not catch it.
+
+	Idempotent, and it looks for an INHERITED pair too: a subclass of a
+	ClassDefAst-built class already reaches one through its metaclass chain, and
+	compiling a second would give it a holder that shadows the parent's.
+
+	``___compileMethod:category:'' is sent @env1: DELIBERATELY.  It is an env-1
+	method on Behavior, so an env-0 send is a doesNotUnderstand -- and with the
+	guard below that DNU is swallowed, leaving a class with no holder and the
+	original raise still in place.  Which is exactly what happened when this was
+	first written, and it looked like the fix simply not working.
+
+	The compiles are guarded because this runs on kernel-adjacent classes whose
+	metaclass may refuse a new method; a refusal leaves the class exactly as it
+	was, which is the pre-existing behaviour."
+
+	| src |
+	(aClass @env0:class @env0:whichClassIncludesSelector: #'dynInstVars'
+		environmentId: 1) @env0:notNil ifTrue: [^ aClass].
+	src := 'dynInstVars
+	^ dynInstVars'.
+	[aClass @env0:class @env1:___compileMethod: src category: 'Grail-Class Attrs']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	src := 'dynInstVars: ___1
+	dynInstVars := ___1.'.
+	[aClass @env0:class @env1:___compileMethod: src category: 'Grail-Class Attrs']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	^ aClass
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
 ___inheritClassAttrs___: aClass exclude: ownAttrs
 	"Copy parent metaclass class-side instVar values into aClass's
 	matching slot for every name the parent declares (via env-1

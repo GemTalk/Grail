@@ -3287,18 +3287,38 @@ type: className _: bases _: namespace
 	then merge the other Python bases' methods (importlib
 	___selectStorageBase___ / ___mergeSecondaryBases___).  An EMPTY
 	namespace is supported — e.g. werkzeug's
-	``type('WrapperTestResponse', (TestResponse, wrapper), {})''.  A
-	non-empty namespace would need runtime method / attribute
-	compilation (re-running ClassDefAst's body emit) and is not modeled
-	yet, so it raises rather than silently dropping the bindings."
+	``type('WrapperTestResponse', (TestResponse, wrapper), {})''.
 
-	| il baseArray storageBase nameSym newClass |
+	A NON-EMPTY namespace is stored as class attributes below.  That store
+	used to RAISE -- ``type('B', (), {'z': 5})'' died with ``'B' object has
+	no attribute 'z''' from inside the constructor, so the AttributeError
+	escaped the class statement rather than the load, and a Python
+	``try/except'' around the read could not catch it because the failure
+	had already happened.  The cause was the holder, not the store: a
+	class built here has no ``dynInstVars'' accessor pair, which is where
+	``___pyAttrStore___'' puts a class attribute, and which the compile-time
+	path in ClassDefAst emits for every class it builds.  Ensured below."
+
+	| il baseArray storageBase nameSym newClass ownAttrNames |
 	il := Python @env0:at: #importlib.
 	baseArray := Array @env0:withAll: bases.
 	baseArray @env0:isEmpty ifTrue: [ baseArray := { PythonInstance } ].
 	storageBase := il @env0:___selectStorageBase___: baseArray.
 	nameSym := (il @env0:___asSmalltalkClassName___: className @env0:asString) @env0:asSymbol.
-	newClass := storageBase ___subclass___: nameSym instVarNames: #() classInstVarNames: #().
+	"``dynInstVars'' is the class-side SLOT the class-attribute holder lives in,
+	and it is requested here rather than added later because a Smalltalk class's
+	instVars are fixed at creation.  ClassDefAst declares it for every class it
+	compiles; a class built here did not have it, so ___ensureClassAttrHolder___
+	could compile an accessor whose variable did not exist -- a compile failure,
+	which installs the codegen-gap STUB, so the store then died with ``Grail
+	could not compile this method'' instead of the AttributeError it used to
+	give.  ___subclass___: filters the name against the parent's hierarchy, so
+	asking for it when a base already declares it is a no-op."
+	newClass := storageBase ___subclass___: nameSym instVarNames: #()
+		classInstVarNames: #('dynInstVars').
+	"Symbols: ___inheritClassAttrs___ compares against ``allInstVarNames'',
+	which answers symbols."
+	ownAttrNames := IdentitySet @env0:new.
 	il @env0:___mergeSecondaryBases___: newClass bases: baseArray.
 	"Non-empty namespace: store each binding as a class attribute via
 	the polymorphic attribute store (values land in the per-class
@@ -3308,7 +3328,14 @@ type: className _: bases _: namespace
 	methods are invoked through instance attribute dispatch)."
 	(namespace @env0:isNil @env0:not and: [namespace @env0:isEmpty @env0:not])
 		ifTrue: [
+			"The holder a class attribute lands in.  ClassDefAst emits this pair
+			for every class it compiles; a class built here never had it, so the
+			first store raised out of the constructor.  Same guard PyEnumTypes
+			uses for a functional-API enum, which is the other path that builds
+			a class without going through ClassDefAst."
+			il @env0:___ensureClassAttrHolder___: newClass.
 			namespace @env0:keysAndValuesDo: [:k :v |
+				ownAttrNames @env0:add: k @env0:asSymbol.
 				newClass ___pyAttrStore___: k @env0:asSymbol put: v
 			]
 		].
@@ -3320,10 +3347,17 @@ type: className _: bases _: namespace
 	(TestResponse, Response), {})'' otherwise lost ``Response.
 	implicit_sequence_conversion = True'', so ``test_client'' responses read
 	it as nil and ``get_data()'' raised ``RuntimeError: the response object
-	required the iterable to be a sequence''.  Namespace is empty here (the
-	non-empty case is rejected above), so nothing of newClass's own to
-	exclude."
-	il @env0:___inheritClassAttrs___: newClass exclude: #().
+	required the iterable to be a sequence''.
+
+	EXCLUDING the namespace's own names, which is load-bearing now that a
+	non-empty namespace is honoured: this step copies the PARENT's value into
+	the subclass's matching slot, and an accessor slot outranks the holder the
+	namespace store writes to.  So ``type('Derived', (Base,), {'kind':
+	'derived'})'' answered Base's ``'base''' -- the inherit pass overwrote the
+	override it was supposed to leave alone.  The parameter existed for exactly
+	this; it had only ever been given an empty set because the non-empty case
+	could not get this far."
+	il @env0:___inheritClassAttrs___: newClass exclude: ownAttrNames.
 	^ newClass
 %
 

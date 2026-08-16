@@ -121,10 +121,22 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	StrEnum does NOT need the substitution: it is defined directly as an
 	AbstractPyStr subclass (PyEnumTypes.gs), so ``class C(StrEnum)`` and
 	the functional StrEnum('X', {...}) already root at the boxed base."
+	"Compared AS STRINGS, deliberately.  ``allInstVarNames'' answers SYMBOLS
+	and callers pass STRINGS, so a plain ``includes:'' never matched and the
+	filter silently did nothing -- the whole point of this step.  It went
+	unnoticed because no caller had yet passed a name the parent already owned;
+	the first one that did (``type(name, bases, ns)'' asking for the
+	``dynInstVars'' holder slot) hit rtErrAddDupInstvar, which surfaces here as
+	the ImproperOperation handler below and reported the far more alarming
+	``Grail cannot subclass sealed kernel class 'Base'''."
 	filteredIvars := ivarNames @env0:reject: [:n |
-		self @env0:allInstVarNames @env0:includes: n].
+		(self @env0:allInstVarNames
+			@env0:detect: [:m | m @env0:asString @env0:= n @env0:asString]
+			ifNone: [nil]) @env0:notNil].
 	filteredClassIvars := classIvarNames @env0:reject: [:n |
-		self @env0:class @env0:allInstVarNames @env0:includes: n].
+		(self @env0:class @env0:allInstVarNames
+			@env0:detect: [:m | m @env0:asString @env0:= n @env0:asString]
+			ifNone: [nil]) @env0:notNil].
 	"A sealed kernel class (Integer, Boolean, ...) refuses subclassing
 	with an UNCATCHABLE ImproperOperation that killed whole CPython
 	test-module runs (class myint(int) in test_fractions/test_math).
