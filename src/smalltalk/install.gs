@@ -701,6 +701,7 @@ run
 	at: #'ClassQualnameStoreTestCase' put: nil;
 	at: #'InitSubclassTestCase' put: nil;
 	at: #'NamedtupleNamingTestCase' put: nil;
+	at: #'ClassMetaclassIdentityTestCase' put: nil;
 	at: #'EnumMemberPropertyTestCase' put: nil;
 	at: #'ClassBodySourceOrderTestCase' put: nil;
 	at: #'EnumIgnoreNamesTestCase' put: nil;
@@ -1591,6 +1592,7 @@ input src/smalltalk/PythonTests/EnumCompositeNameTestCase.gs
 input src/smalltalk/PythonTests/ClassQualnameStoreTestCase.gs
 input src/smalltalk/PythonTests/InitSubclassTestCase.gs
 input src/smalltalk/PythonTests/NamedtupleNamingTestCase.gs
+input src/smalltalk/PythonTests/ClassMetaclassIdentityTestCase.gs
 input src/smalltalk/PythonTests/EnumMemberPropertyTestCase.gs
 input src/smalltalk/PythonTests/ClassBodySourceOrderTestCase.gs
 input src/smalltalk/PythonTests/EnumIgnoreNamesTestCase.gs

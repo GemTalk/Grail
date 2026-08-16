@@ -2540,18 +2540,20 @@ method: builtins
 type: anObject
 	"Python builtin type(x) — fixed-arity fast path.
 
-	A class argument's metaclass is, in Grail, the single canonical ``type''
-	object (a memoized BoundMethod interned in BoundMethod class), so
-	``type(cls) is type'' holds and stays consistent with
-	``isinstance(cls, type)'' — both key off ``isKindOf: Behavior''.  Every
-	non-class returns its Python class as before.  (The previous behavior
-	returned the per-class Smalltalk metaclass, whose ``__name__'' was a bare
-	UnboundMethod — nothing depended on it, and enum/abc carry no Python-level
-	metaclass machinery.)"
+	ONE ROUTE for both spellings.  CPython's ``x.__class__ is type(x)'' is an
+	invariant, and these two used to disagree for every class receiver:
+	__class__ answered the per-class Smalltalk metaclass and this answered the
+	canonical ``type'', so the two were never the same object.
 
-	(anObject isKindOf: Behavior) ifTrue: [
-		^ BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #'type'].
-	^ anObject __class__
+	An ordinary class still answers that canonical ``type'' -- object >>
+	___pyMetaclass___ ends there -- so ``type(cls) is type'' keeps holding and
+	stays consistent with ``isinstance(cls, type)'', which keys off ``isKindOf:
+	Behavior''.  What changes is a class that HAS a Python metaclass: an enum
+	now answers EnumType, and a ``metaclass='' class answers what it declared.
+	The note this replaced said enum and abc carried no Python-level metaclass
+	machinery; enum does now, and test_enum asserts it."
+
+	^ anObject ___pyMetaclass___
 %
 
 ! ===============================================================================

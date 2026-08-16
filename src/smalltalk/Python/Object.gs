@@ -414,10 +414,43 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	"``class X(base)`` where base is NOT a class (a BoundMethod --
 	test_functools subclasses functools.cached_property, which Grail
 	models as a module method): CPython raises TypeError; the bare
-	env-1 MNU was uncatchable and killed the module run."
+	env-1 MNU was uncatchable and killed the module run.
 
+	A METACLASS base is the exception, and gets exactly the degradation
+	BoundMethod >> ___subclass___: already gives the canonical ``type'':
+	build the class as a plain subclass of object.  Grail does not model
+	metaclasses -- it RECORDS one -- but the class statement must SUCCEED,
+	because subclassing a metaclass is how a Python program writes one:
+
+	    class auto_enum(type(Enum)):
+	        def __new__(metacls, cls, bases, classdict): ...
+
+	That is test_enum's test_multiple_mixin_mro, and it used to reach here as
+	the canonical ``type'' -- a BoundMethod, which took that path -- only
+	because type(Enum) answered ``type'' rather than EnumType.  Once type()
+	told the truth about an enum's metaclass, the same line arrived as a
+	Metaclass3 and the graceful path no longer applied.  Keeping the two in
+	step is what this branch is for; it does not make the metaclass work, and
+	__new__ above is still never called."
+
+	self ___isMetaclassBase___ ifTrue: [
+		^ object @env1:___subclass___: aSymbol
+			instVarNames: ivarNames classInstVarNames: classIvarNames].
 	TypeError ___signal___: ('cannot subclass a non-class base ('
 		@env0:, self @env0:class @env0:name @env0:asString @env0:, ')')
+%
+
+category: 'Grail-Instantiation'
+method: object
+___isMetaclassBase___
+	"True when the receiver is a METACLASS -- ``Enum class'', what type(Enum)
+	answers -- rather than an ordinary object.
+
+	A class is an instance of its metaclass, and a metaclass is an instance of
+	Metaclass3, so this is the test that separates ``Enum class'' from ``Enum''
+	without naming either."
+
+	^ self @env0:class == Metaclass3
 %
 
 category: 'Grail-Instantiation'
@@ -3704,9 +3737,98 @@ ___signal___: message
 category: 'Grail-Attribute Access'
 method: object
 __class__
-	"Return the class of this object (Python type)"
+	"Return the class of this object (Python type).
 
+	A CLASS receiver answers its METACLASS, which is not the same question --
+	see ___pyMetaclass___ for why ``self class'' is the wrong answer there."
+
+	(self isKindOf: Behavior) ifTrue: [^ self ___pyMetaclass___].
 	^ self @env0:class
+%
+
+category: 'Grail-Metaclass'
+classmethod: object
+___grailDeclaredMetaclass___
+	"The Python metaclass this SMALLTALK-written class means to have, or nil
+	for ``type''.
+
+	Grail gives every class its own Smalltalk metaclass, which is an artefact
+	of how classes are built and not a Python-visible object: ``Color class''
+	is anonymous, has no Python name, and is not what CPython means by
+	type(Color).  So the default is nil -- ``an ordinary class, whose metaclass
+	is type'' -- and a class that really does have one says so by overriding
+	this.  Enum is the one that does, answering EnumType.
+
+	Class-side, so a subclass inherits the answer: every ``class Color(Enum)''
+	gets EnumType from Enum class without doing anything.  A class that reaches
+	its enum-ness through a SECONDARY base (``class Mixed(int, Enum)'' is rooted
+	at Grail's int, so its metaclass chain never passes Enum class) is covered
+	by the MRO walk in ___pyMetaclass___ instead."
+
+	^ nil
+%
+
+category: 'Grail-Metaclass'
+method: object
+___pyMetaclass___
+	"The receiver's Python type: for an instance its class, for a CLASS its
+	METACLASS.  Backs both ``x.__class__'' and ``type(x)'', which is what makes
+	CPython's ``x.__class__ is type(x)'' hold -- the two used to disagree for
+	every class receiver, one answering the Smalltalk metaclass and the other
+	the canonical ``type''.
+
+	Two sources:
+
+	  * a metaclass DECLARED by a Smalltalk-written ancestor
+	    (___grailDeclaredMetaclass___).  Tried on the receiver first, where the
+	    Smalltalk chain supplies it for free, then along the Python MRO so that
+	    a class reaching its metaclass through a SECONDARY base finds it too:
+	    ``class Mixed(int, Enum)'' is rooted at Grail's int and must still
+	    answer EnumType, exactly as CPython picks the most derived metaclass
+	    among the bases.  The MRO is most-derived-first, so the first hit is it.
+	  * otherwise ``type'', the single canonical object -- so ``type(cls) is
+	    type'' keeps holding for an ordinary class, which is what it answered
+	    before and what isinstance(cls, type) agrees with.
+
+	NOT the receiver's own Smalltalk metaclass, which is what this used to
+	answer through ``self class'': ``Color class'' is anonymous scaffolding
+	with no Python name, and handing it out leaked a GemStone artefact into an
+	answer Python code compares -- inspect.getmembers(Color)['__class__']
+	is asserted to be EnumType (test_enum TestStdLib.test_inspect_getmembers).
+
+	An explicit ``metaclass='' is DELIBERATELY not consulted, though
+	___grailMetaclass___ records one and CPython would answer it.  Reporting it
+	was tried and regressed test_copy: copy() treats a class as atomic via
+	``issubclass(type(x), type)'', and Grail roots ``class Meta(type)'' at
+	PythonInstance -- the documented degradation for a base it cannot model --
+	so nothing links Meta back to ``type'' and issubclass answers False.  With
+	type(C) still ``type'' the atomic branch is reached directly, which is why
+	this worked before and why claiming the recorded metaclass breaks it.  The
+	honest position is that Grail RECORDS a metaclass rather than being one, so
+	type() does not yet report it; see the known-gap test."
+
+	| declared mro |
+	"A non-class answers through __class__, NOT ``self class''.  One Python type
+	is backed by several GemStone classes here, and the normalising is done by
+	__class__ overrides -- Float, Bytearray, the set and dict-view protocols,
+	and the integer classes, where ``self class'' is SmallInteger and the Python
+	answer is Integer.  Going straight to ``self class'' made type(1) answer
+	SmallInteger and broke eleven test_enum tests; __class__ has always been
+	what the type() builtin asked, and still is."
+	(self isKindOf: Behavior) ifFalse: [^ self __class__].
+	declared := self ___grailDeclaredMetaclass___.
+	declared == nil ifFalse: [^ declared].
+	"@env0: -- ___mroOf___ is an env-0 classmethod, and an env-1 send of it
+	fails.  The failure was invisible: the handler below turned it into nil, so
+	every MI class quietly skipped the walk and answered ``type''."
+	mro := [(Python @env0:at: #importlib) @env0:___mroOf___: self]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	mro == nil ifFalse: [
+		mro @env0:do: [:c |
+			(c isKindOf: Behavior) ifTrue: [
+				declared := c ___grailDeclaredMetaclass___.
+				declared == nil ifFalse: [^ declared]]]].
+	^ BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #'type'
 %
 
 category: 'Grail-Attribute Access'
