@@ -3020,3 +3020,68 @@ byte-identical. Zero improvements is the honest number — this wins no CPython
 test today. It removes a silent wrong-method bug and unblocks the 3.13+
 `colorize=` override shape that `test_traceback`'s `test_custom_format_frame`
 needs.
+
+### 9.37 Carets do not need an `ast` (2026-08-15, gs40)
+
+§9.33 called carets "the largest cluster and the least ready", gated on three
+things of which two were missing. One of those two was **wrong**, and this
+section retires it.
+
+**The claim.** §9.33: the `~`/`^` split "needs a real `ast`, and Grail's is a
+stub". CPython computes the anchor in
+`_extract_caret_anchors_from_line_segment`, which parses the segment and reads
+`col_offset` off the node; Grail's `ast.parse` returns a wrapper with no
+positions. The conclusion drawn was that carets are gated on an `ast` project
+"bigger than traceback".
+
+**Why it was wrong.** An `ast` is *sufficient*, not *necessary*. The segment is
+not arbitrary Python — it is a single valid expression, and CPython only ever
+anchors three node types. That is scannable: track bracket depth and string
+literals, then take either the trailing call/subscript bracket or the
+loosest-binding depth-0 binary operator.
+
+**How it was checked, because "it looks right" is what §9.35 punished.** The
+scanner was compared against CPython's own extractor over every
+`BinOp`/`Subscript`/`Call` node in the 3.14.6 stdlib — each node sliced out by
+its own position, which is exactly the input shape the renderer produces:
+
+| corpus | segments | agreement |
+| --- | --- | --- |
+| hand-written (bytes literals, walrus, f-strings, strings containing brackets) | 82 | 100% |
+| harvested from the 3.14.6 stdlib | 36641 | 100% |
+| rendered frames from real raised exceptions | 31 | 100% |
+
+The harvest is what made it correct. Five behaviours were found there and none
+by reading CPython:
+
+* CPython **never tokenizes the operator**. It takes the first operator
+  character and extends by exactly one under a condition on where `ast` reports
+  the right operand starting. `//` and `**` fall out of that rule rather than
+  being matched.
+* A **parenthesised operand extends** the span — `x*(a + b)` anchors `*(` —
+  because `ast` reports a parenthesised expression from inside the paren.
+* A **tuple operand does not** — `"%s"%(a, b)` anchors just `%` — because `ast`
+  keeps the parens for a tuple. This is why the rule cannot be simplified to
+  "extend over a paren", and it was found by `turtle.py`.
+* A **float exponent's sign is not an operator**: `2.5e+3 * r` roots at the `*`.
+* A **bytes literal can be subscripted**: `b'z'[0]` anchors `[0]`.
+
+**The renderer** (§9.33's second missing item) is transcribed too, single-line,
+including the suppression rule for `return f()` / `x = f()` where the callee is
+a bare name — CPython decides that with `ast` as well, and it is recognisable
+by scanning for the same reason.
+
+**What this wins today: nothing, and that is the honest number.**
+`test_traceback` is unchanged at `t=370 f=45 e=12 s=218`. Grail's frames carry
+`colno=None` — measured, not assumed — so the renderer never fires. §9.33's
+third item, per-operation spans in codegen, is now the **only** blocker, and it
+is unchanged in difficulty: the span must mark the *failing sub-expression*,
+and the one existing span (`ForAst.gs:186`) points at a comprehension's
+iterable rather than at what failed, so it must be re-pointed or excluded
+rather than inherited.
+
+Two of three blockers are now cleared, and the remaining one is a codegen
+project with a clear contract: emit `(colno, end_colno)` for the operation that
+raised. The scanner and renderer are dormant until it does, and
+`tests/python/caret_anchors.py` holds them to CPython in the meantime — its
+eighteen checks pass identically under CPython 3.14.6 and under Grail.
