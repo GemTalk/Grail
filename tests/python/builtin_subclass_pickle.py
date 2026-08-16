@@ -104,13 +104,20 @@ except TypeError as e:
 
 # --- what the guard must NOT catch ------------------------------------------------
 # Grail uses Symbol -- a CharacterCollection subclass -- for str-ish internal
-# values, including enum's boundary constants.  It is not a Python subclass of
-# str, and it must keep pickling AS a str: a name-based guard sent it down the
-# subclass path and pickle then failed trying to name the Symbol class.
+# values.  It is not a Python subclass of str and must not be treated as one: a
+# name-based guard sent it down the subclass path and pickle then failed trying
+# to name the Symbol class.  _is_python_subclass asks ___pyDefinedClass___
+# instead, which is the actual question.
+#
+# enum's boundary constants USED to be the example here, and are no longer:
+# STRICT is a FlagBoundary member now, so this line checks the enum branch
+# rather than the Symbol one.  The guard is unchanged and still right; what it
+# has lost is a subject reachable from plain Python, since a Symbol reports
+# ``str`` for type(x).__name__ and cannot be told apart from here.
 
 import enum
 
-r['symbol'] = _round(enum.STRICT)
+r['boundary_constant'] = _round(enum.STRICT)
 
 # An enum member that mixes in int is still a member, not a raw int -- the enum
 # branch of the dispatch runs before the primitive one.

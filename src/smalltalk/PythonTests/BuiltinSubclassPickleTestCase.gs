@@ -117,14 +117,24 @@ testThePrimitiveFastPathStillApplies
 
 category: 'Grail-Tests - The plain builtins are untouched'
 method: BuiltinSubclassPickleTestCase
-testASymbolStillPicklesAsAString
-	"Grail uses Symbol -- a CharacterCollection subclass -- for str-ish internal
-	values, including enum's boundary constants.  It is not a PYTHON subclass of
-	str and must not be treated as one: a name-based guard sent it down the
-	subclass path, and pickle failed trying to name the Symbol class.  That
-	broke three test_enum tests before the discriminator was corrected."
+testABoundaryConstantPicklesAsItsMember
+	"enum.STRICT is a FlagBoundary MEMBER now, so it pickles as one -- which is
+	what CPython does, verified.
 
-	self assert: (self resultAt: 'symbol') asString equals: 'str:''STRICT'''.
+	This assertion used to read ``str:'STRICT''' and was the project's example
+	of the OTHER thing: Grail uses Symbol -- a CharacterCollection subclass --
+	for str-ish internal values, and a Symbol must not be taken for a Python
+	subclass of str (a name-based guard sent one down the subclass path, and
+	pickle then failed trying to name the Symbol class; three test_enum tests
+	broke before the discriminator was corrected).
+
+	That guard is UNCHANGED and still right -- pickle's _is_python_subclass asks
+	___pyDefinedClass___, not a name.  What it has lost is a subject reachable
+	from plain Python: a Symbol reports ``str'' for type(x).__name__, so nothing
+	in a Python fixture can tell one apart to exercise it deliberately."
+
+	self assert: (self resultAt: 'boundary_constant') asString
+		equals: 'FlagBoundary:<FlagBoundary.STRICT: ''strict''>'.
 %
 
 category: 'Grail-Tests - The plain builtins are untouched'

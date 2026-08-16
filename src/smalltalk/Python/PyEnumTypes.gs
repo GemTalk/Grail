@@ -1807,15 +1807,30 @@ category: 'Grail-Enum Metaclass'
 classmethod: Enum
 ___grailSetClassBoundary: cls to: aBoundary
 	"Record an explicit FlagBoundary override for cls (the ``boundary='' class
-	keyword; ClassDefAst emits ``E ___grailSetClassBoundary___: enum.KEEP'').  The
-	enum module's STRICT/CONFORM/EJECT/KEEP constants ARE the like-named symbols,
-	so normalize to one of those and ignore anything else (family default stands)."
+	keyword; ClassDefAst emits ``E ___grailSetClassBoundary___: enum.KEEP'').
+	The machinery below speaks SYMBOLS -- #'STRICT' and friends -- so normalize
+	to one of those and ignore anything else (family default stands).
+
+	The NAME, not the string value.  enum.KEEP is a FlagBoundary member now, and
+	a StrEnum member IS its value: ``KEEP asString'' is 'keep', which normalizes
+	to #'keep' and matches nothing.  Its ``name'' is 'KEEP'.  A plain Symbol or
+	string still works, which is what the internal callers and any older
+	spelling pass.
+
+	Read as ``name'' rather than ``_name_'': a StrEnum member is AbstractPyStr-
+	rooted and does not inherit Enum's sunder accessors, so ``_name_'' raises
+	there (a separate gap, not one this needs)."
 
 	| sym |
 	aBoundary @env0:isNil ifTrue: [^ cls].
 	sym := (aBoundary isKindOf: Symbol)
 		ifTrue: [aBoundary]
-		ifFalse: [aBoundary @env0:asString @env0:asSymbol].
+		ifFalse: [ | nm |
+			nm := [aBoundary @env1:___pyAttrLoad___: #'name']
+				@env0:on: AbstractException do: [:e | e @env0:return: nil].
+			(nm @env0:notNil and: [nm @env0:isKindOf: CharacterCollection])
+				ifTrue: [nm @env0:asString @env0:asSymbol]
+				ifFalse: [aBoundary @env0:asString @env0:asSymbol]].
 	(#(#'STRICT' #'CONFORM' #'EJECT' #'KEEP') @env0:includes: sym)
 		ifTrue: [self ___grailBoundaryMap @env0:at: cls put: sym].
 	^ cls
@@ -1841,6 +1856,31 @@ ___grailFlagBoundaryOf: cls
 	override := self ___grailBoundaryOverrideFor: cls.
 	override @env0:notNil ifTrue: [^ override].
 	^ (self ___grailIsIntFlagClass: cls) ifTrue: [#'KEEP'] ifFalse: [#'STRICT']
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailBoundaryMemberFor: aSymbol
+	"The FlagBoundary MEMBER for one of the four boundary symbols -- what
+	``cls._boundary_'' answers, since that attribute is read by USER code and
+	CPython's is a member (``Iron._boundary_ is FlagBoundary.CONFORM'').
+
+	The machinery below keeps speaking Symbols: they are compared in a dozen
+	places on the flag hot path, and a member would have to be unwrapped at
+	every one.  This converts only at the boundary where the value escapes into
+	Python -- the three _boundary_ accessors.
+
+	Falls back to the symbol if enum is not importable or has no such member,
+	so a flag class still reports SOMETHING rather than raising from an
+	attribute read."
+
+	| mod member |
+	mod := [(Python @env0:at: #'enum') @env1:instance]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	mod @env0:isNil ifTrue: [^ aSymbol].
+	member := [mod @env1:___pyAttrLoad___: aSymbol]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	^ member @env0:isNil ifTrue: [aSymbol] ifFalse: [member]
 %
 
 category: 'Grail-Enum Metaclass'
@@ -3218,7 +3258,7 @@ ___grailInstallClassProtocol: cls
 		and: [(mc @env0:whichClassIncludesSelector: #'_boundary_' environmentId: 1) @env0:isNil])
 		ifTrue: [
 			[mc ___compileMethod: '_boundary_
-	^ Enum ___grailFlagBoundaryOf: self' category: 'Grail-Class Attrs']
+	^ Enum ___grailBoundaryMemberFor: (Enum ___grailFlagBoundaryOf: self)' category: 'Grail-Class Attrs']
 				@env0:on: Error do: [:e | "best effort"]].
 	^ cls
 %
@@ -5335,7 +5375,7 @@ _boundary_
 	subclass reads its OWN effective boundary).  Read by
 	test_open_invert_expectations / test_boundary."
 
-	^ Enum ___grailFlagBoundaryOf: self
+	^ Enum ___grailBoundaryMemberFor: (Enum ___grailFlagBoundaryOf: self)
 %
 
 category: 'Grail-Class Attrs'
@@ -5346,7 +5386,7 @@ _boundary_
 	(Iron(IntFlag, boundary=STRICT)) wins, while a plain IntFlag / override-free
 	subclass answers the #KEEP default -- ``enum.IntFlag._boundary_ is KEEP''."
 
-	^ Enum ___grailFlagBoundaryOf: self
+	^ Enum ___grailBoundaryMemberFor: (Enum ___grailFlagBoundaryOf: self)
 %
 
 ! ------------------- StrEnum members (instance side)
