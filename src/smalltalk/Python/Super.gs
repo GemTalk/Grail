@@ -258,6 +258,16 @@ cls: aClass obj: anObject
 			@env0:, (aClass == nil
 				ifTrue: ['NoneType']
 				ifFalse: [aClass @env0:class @env0:name @env0:asString])].
+	"NO supercheck here.  This is the path every COMPILED super() takes, and
+	applying CPython's obj-is-an-instance-of-cls test to it breaks working
+	code: Grail reaches a cooperative mixin's methods through the receiver's
+	MRO, but a class merged in that way is not always ON the MRO that
+	___mroOf___ reports for the receiver either, so the check rejected calls
+	the proxy then services correctly -- measured, as four Django failures.
+	The explicit constructor (__new__:_:) does check, which is where
+	CPython's diagnostic is actually reachable from Python code.
+	test_supercheck_fail wants it on both; that needs the MRO agreement to be
+	exact first."
 	inst := self @env0:new.
 	inst @env0:_setCls: aClass obj: anObject.
 	^ inst
@@ -276,6 +286,13 @@ ___pyAttrLoad___: aSym
 	via a thin _Super-bound shim that exposes ``value:value:``."
 
 	| s sym1 sym2 sym3 symVA pickMethod walker holder v |
+	"``__class__'' is the proxy's OWN type, not a name to resolve against the
+	parent chain -- CPython answers the ``super'' type itself, and
+	``super().__class__ is super'' is how test_super___class__ checks that the
+	name and the object agree.  Delegating it returned a parent-method proxy
+	instead, so the comparison was quietly false.  Every other name still goes
+	to the parent, which is the point of the proxy."
+	(aSym @env0:asSymbol == #'__class__') @env0:ifTrue: [^ self @env0:class].
 	"A class-attribute store on a PARENT shadows that parent's compiled method,
 	the same way it does for a direct instance read (object >>
 	___classChainAttrLookup___: and its caller).  super() has to honour it too:
@@ -330,6 +347,149 @@ ___pyAttrLoad___: aSym
 	"Wrap (obj, pickMethod) in a callable proxy that resolves the
 	method at call time once arity is known."
 	^ SuperBoundMethod obj: obj resolver: pickMethod selector: aSym
+%
+
+set compile_env: 0
+
+! ===============================================================================
+! ``super'' as a first-class name
+! ===============================================================================
+!
+! NameAst resolves the bare name ``super'' to this class, so every use that is
+! NOT one of CallAst's rewritten call shapes lands here: ``super(int, int,
+! int)'', ``super(1, int)'', ``f = super'', ``class mysuper(super)'',
+! ``super.__init__(sp, ...)''.  Object's class-call path dispatches such a call
+! to __new__ / __new__: / __new__:_: by arity, which is where CPython's own
+! argument diagnostics belong.
+
+set compile_env: 1
+
+category: 'Grail-Instance Creation'
+classmethod: Super
+__new__
+	"``super()'' with no arguments reaching the RUNTIME path -- i.e. outside a
+	method body, since inside one CallAst rewrites it to a bound proxy before
+	this class is ever named.  CPython has no frame to infer the class from
+	either, and says so."
+
+	^ RuntimeError ___signal___: 'super(): no arguments'
+%
+
+category: 'Grail-Instance Creation'
+classmethod: Super
+__new__: aClass
+	"``super(C)'' -- CPython's UNBOUND super object.  The type check is the
+	same one the bound form applies; what differs is only that no second
+	argument binds it to an instance."
+
+	^ self cls: aClass obj: nil
+%
+
+category: 'Grail-Instance Creation'
+classmethod: Super
+__new__: aClass _: anObject
+	"``super(C, obj)'' called as an ordinary constructor.  Applies both of
+	CPython's checks -- argument 1 must be a type, and obj must be an instance
+	or subtype of it -- then builds the same proxy the compiled rewrite does."
+
+	^ self cls: aClass obj: (self ___superCheck___: anObject against: aClass)
+%
+
+category: 'Grail-Instance Creation'
+classmethod: Super
+__new__: aClass _: anObject _: anExtra
+	"Three arguments.  CPython counts them and refuses; without this the
+	generic class-call path reports its own ``takes wrong number of
+	arguments'' wording instead, and test_super_argcount matches on
+	``expected at most''."
+
+	^ TypeError ___signal___: 'super() expected at most 2 arguments, got 3'
+%
+
+category: 'Grail-Instance Creation'
+classmethod: Super
+___superCheck___: anObject against: aClass
+	"CPython's supercheck: ``obj'' must be an instance of ``aClass'', or a
+	SUBCLASS of it when obj is itself a type.  Answers obj so callers can use
+	it inline.
+
+	The message names which of the two readings failed, because that is what
+	says whether you passed the wrong object or the wrong class:
+
+	    super(type, obj): obj (instance of C) is not an instance or
+	    subtype of type (int).
+
+	Grail checked nothing here: a mismatched pair simply built a proxy whose
+	lookups walked the wrong chain, so the failure surfaced later and
+	elsewhere (test_supercheck_fail).
+
+	A nil obj is the UNBOUND form (``super(C)''), which has nothing to check.
+
+	A non-class ``aClass'' is left alone: ``cls:obj:'' raises the argument-1
+	TypeError for it, and that diagnosis is the more useful one.  Checking obj
+	against it first instead walked ``inheritsFrom: 1'' and died in the kernel
+	with an uncatchable ArgumentTypeError -- ``super(1, int)'' is exactly that
+	shape (test_super_argtype)."
+
+	| ok describe |
+	anObject == nil ifTrue: [^ anObject].
+	(aClass @env0:isKindOf: Behavior) @env0:ifFalse: [^ anObject].
+	ok := self ___isInstanceOrSubtype___: anObject of: aClass.
+	ok @env0:ifTrue: [^ anObject].
+	describe := (anObject @env0:isKindOf: Behavior)
+		@env0:ifTrue: ['type ' @env0:, anObject @env0:name @env0:asString]
+		@env0:ifFalse: ['instance of '
+			@env0:, anObject @env0:class @env0:name @env0:asString].
+	^ TypeError ___signal___: 'super(type, obj): obj (' @env0:, describe
+		@env0:, ') is not an instance or subtype of type ('
+		@env0:, aClass @env0:name @env0:asString @env0:, ').'
+%
+
+category: 'Grail-Instance Creation'
+classmethod: Super
+___isInstanceOrSubtype___: anObject of: aClass
+	"Python's ``isinstance(obj, cls) or (isinstance(obj, type) and
+	issubclass(obj, cls))'', consulted through the MRO rather than the
+	Smalltalk superclass chain.
+
+	The distinction is load-bearing here.  A cooperative mixin is NOT a
+	Smalltalk superclass of the classes that use it -- ``class D(Mixin,
+	Base)'' reaches Base through D's C3 linearization, and a Mixin method
+	copied onto D still carries ``cls = Mixin'' -- so a chain-based check
+	would reject ``super(Mixin, self)'', which is the single most common
+	legitimate two-argument call in the corpus.  _lookupMethodFirstOf: already
+	resolves methods through the same MRO, so agreeing with it is what keeps
+	the check from rejecting calls the proxy then services happily.
+
+	Permissive when no MRO is registered: answering true leaves the previous
+	behaviour (no check at all) in place rather than inventing a failure."
+
+	| il mro probe |
+	il := Python @env0:at: #importlib otherwise: nil.
+	probe := (anObject @env0:isKindOf: Behavior)
+		@env0:ifTrue: [anObject]
+		@env0:ifFalse: [anObject @env0:class].
+	probe == aClass ifTrue: [^ true].
+	il == nil ifFalse: [
+		mro := [il ___mroOf___: probe]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		(mro @env0:notNil @env0:and: [mro @env0:notEmpty]) ifTrue: [
+			^ mro @env0:includes: aClass]].
+	^ (anObject @env0:isKindOf: Behavior)
+		@env0:ifTrue: [anObject @env0:inheritsFrom: aClass]
+		@env0:ifFalse: [anObject @env0:isKindOf: aClass]
+%
+
+category: 'Grail-Initialization'
+method: Super
+__init__: aClass _: anObject
+	"``super.__init__(sp, C, obj)'' -- re-binding an existing proxy through the
+	unbound method on the type.  CPython documents the shape as not endorsed
+	but supports it, and test_super_init_leaks calls it in a loop."
+
+	self @env0:_setCls: aClass
+		obj: (Super ___superCheck___: anObject against: aClass).
+	^ None
 %
 
 set compile_env: 0

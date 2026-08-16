@@ -58,7 +58,7 @@ different rows and merges cleanly.
 | test.test_isinstance | OK | 23 | 0 | 0 | 2 |  |
 | test.test_index | OK | 55 | 0 | 0 | 0 |  |
 | test.test_baseexception | OK | 11 | 0 | 0 | 1 |  |
-| test.test_listcomps | ERROR | 60 | 4 | 15 | 0 |  |
+| test.test_listcomps | ERROR | 60 | 4 | 14 | 0 |  |
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
 | test.test_copy | ERROR | 81 | 7 | 7 | 0 |  |
 | test.test_scope | OK | 41 | 0 | 0 | 4 |  |
@@ -80,7 +80,7 @@ different rows and merges cleanly.
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
 | test.test_named_expressions | ERROR | 74 | 8 | 14 | 0 |  |
 | test.test_subclassinit | ERROR | 17 | 7 | 3 | 0 |  |
-| test.test_super | ERROR | 40 | 10 | 16 | 3 |  |
+| test.test_super | ERROR | 40 | 9 | 10 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
 | test.test_with | ERROR | 54 | 5 | 5 | 0 |  |
 | test.test_positional_only_arg | ERROR | 28 | 4 | 4 | 0 |  |

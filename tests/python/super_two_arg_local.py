@@ -156,8 +156,78 @@ def class_name_local_declaration_still_wins():
             return __class__
     return T().repair()
 
+# ---------------------------------------------------------------------------
+# ``super'' as a first-class NAME.  It was only ever a CallAst rewrite, firing
+# on the zero-arg form and the 2-arg form with a bare NameAst first argument.
+# Every other use raised ``name 'super' is not defined'' -- and ``super'' is a
+# Smalltalk pseudo-variable, so the identifier can never be emitted as itself.
+# NameAst now resolves it to the Super class, which IS Python's super type
+# here, so those uses reach real argument checks.
+# ---------------------------------------------------------------------------
+
+
+def super_is_a_name():
+    """The bare name exists and is stable."""
+    f = super
+    return f is super
+
+
+def super_too_many_arguments():
+    """CPython counts the arguments and refuses more than two."""
+    try:
+        super(int, int, int)
+    except TypeError as e:
+        return 'expected at most' in str(e)
+    return 'no error'
+
+
+def super_first_argument_must_be_a_type():
+    try:
+        super(1, int)
+    except TypeError as e:
+        return 'argument 1 must be a type' in str(e)
+    return 'no error'
+
+
+def super_proxy_class_is_super():
+    """super().__class__ is the super type -- not a proxy for a parent
+    attribute, which is what delegating the name produced."""
+    class C:
+        def method(self):
+            return super().__class__
+    return C().method() is super
+
+
+def super_can_be_subclassed():
+    """``class mysuper(super)'' needs super to be a real class object."""
+    class mysuper(super):
+        pass
+    return mysuper.__name__
+
+
+def super_two_arg_with_local_class():
+    """The first argument may be a LOCAL holding a class, not a module-level
+    class name.  The rewrite assumed the latter and looked the name up as a
+    module attribute, so it silently became nil and Super reported
+    ``argument 1 must be a type, not NoneType''."""
+    class Base:
+        def f(self):
+            return 'base'
+    class Derived(Base):
+        def make(self, cls_):
+            return super(cls_, self)
+    return Derived().make(Derived).__class__ is super
+
+
+def super_two_arg_with_builtin_type():
+    """...and it may be a BUILTIN type, which is likewise not a module
+    attribute."""
+    sp = super(float, 1.0)
+    return sp.__class__ is super
+
 
 def report():
+
     return {
         'module_two_arg_init': ModSub().trail,
         'module_two_arg_method': ModSub().who(),
@@ -170,4 +240,11 @@ def report():
         'class_name_defining': class_name_is_defining_class_not_type_of_self(),
         'class_name_with_super': class_name_alongside_zero_arg_super(),
         'class_name_local_wins': class_name_local_declaration_still_wins(),
+        'super_is_a_name': super_is_a_name(),
+        'super_too_many_arguments': super_too_many_arguments(),
+        'super_first_arg_type': super_first_argument_must_be_a_type(),
+        'super_proxy_class': super_proxy_class_is_super(),
+        'super_subclassed': super_can_be_subclassed(),
+        'super_two_arg_local_class': super_two_arg_with_local_class(),
+        'super_two_arg_builtin': super_two_arg_with_builtin_type(),
     }
