@@ -2531,10 +2531,36 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 		overrideMode := overrideEligible
 			and: [storageIdx > 0 and: [baseIdx < storageIdx]].
 		walker := base.
+		"Walk only as far as the classes GENERATED FROM PYTHON SOURCE, which is
+		what ___pyDefinedClass___ marks and what the limitation note above calls
+		``stops at the first non-Python (built-in) ancestor''.
+
+		The test used to be ``does its metaclass answer dynInstVars?'', which is
+		a per-class attribute HOLDER and only incidentally a proxy for generated:
+		ClassDefAst happens to emit both on every class it builds.  A Smalltalk-
+		written class acquiring a holder therefore silently joined the walk --
+		which is what happened when Enum was given one so that it could carry
+		``name'' and ``value'' as descriptors.  The walk then entered Enum for
+		every ``class E(int, Enum)'' and evaluated its class-side attrs, one of
+		which (_all_bits_) raises AttributeError on a non-flag enum by design:
+		test_enum stopped importing at all.
+
+		Measured before changing: of everything in the Python dictionary exactly
+		one Smalltalk-written class carries a holder accessor, functools_cmpkey,
+		and no Smalltalk-written class carries ___pyDefinedClass___.  So this
+		swap changes the walk for that one class and for nothing else.
+
+		``isKindOf: Behavior'' is not tidying.  A base need not be a class --
+		``class C(list[int])'' passes a PyGenericAlias -- and the old test asked
+		its METACLASS, which is a Behavior whatever the base is.  Asking the base
+		directly has no such protection: without the guard, 28 SUnit tests died
+		on ``a PyGenericAlias does not understand
+		#whichClassIncludesSelector:environmentId:''."
 		[(walker ~~ nil)
 			and: [(walker ~~ PythonInstance)
 			and: [(walker ~~ Object)
-			and: [(walker class whichClassIncludesSelector: #'dynInstVars' environmentId: 1) ~~ nil]]]]
+			and: [(walker isKindOf: Behavior)
+			and: [(walker whichClassIncludesSelector: #'___pyDefinedClass___' environmentId: 1) ~~ nil]]]]]
 			whileTrue: [
 			| md mdc kernelSlots ownMd |
 			ownMd := aClass methodDictForEnv: 1.
@@ -2623,7 +2649,16 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 						and: [sel ~~ #'dynInstVars'
 						and: [(aClass class whichClassIncludesSelector: sel environmentId: 1) isNil]]]]]) ifTrue: [
 						| v holder |
-						v := [walker perform: sel env: 1] on: Error do: [:e | nil].
+						"AbstractException, not Error: a class attribute here is a
+						Grail-Class Attrs ACCESSOR, and one is entitled to refuse --
+						Enum's _all_bits_ / _flag_mask_ / _singles_mask_ raise
+						AttributeError on a non-flag enum, exactly as CPython does,
+						because answering 0 would make every enum look like an empty
+						flag.  A Python exception is not an Error subclass here, so
+						``on: Error'' let it out and one refusing attribute took down
+						the whole class definition."
+						v := [walker perform: sel env: 1]
+							on: AbstractException do: [:e | e return: nil].
 						v isNil ifFalse: [
 							holder := [aClass perform: #dynInstVars env: 1] on: Error do: [:e | nil].
 							holder isNil ifTrue: [

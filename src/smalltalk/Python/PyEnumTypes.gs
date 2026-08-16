@@ -31,7 +31,7 @@ doit
 PythonInstance subclass: 'Enum'
   instVarNames: #()
   classVars: #( EnumRegistry )
-  classInstVars: #()
+  classInstVars: #( dynInstVars )
   poolDictionaries: #()
   inDictionary: Python
   options: #()
@@ -220,6 +220,89 @@ set compile_env: 1
 ! ===============================================================================
 ! Shared metaclass logic — class methods on Enum class, taking target cls
 ! ===============================================================================
+
+category: 'Grail-Class Attrs'
+classmethod: Enum
+dynInstVars
+	"The per-class attribute holder, the same slot ClassDefAst declares on every
+	generated Python class and the same accessor pair it compiles for it.
+
+	Enum is written in Smalltalk and so had neither, which meant Enum itself
+	could hold no Python class attribute at all: ___classHolderAttrStore___ (and
+	through it every ___pyAttrStore___ that lands on a class) died with ``a Enum
+	class does not understand #'dynInstVars'''.  It is what lets Enum carry
+	``name'' and ``value'' as real DynamicClassAttribute descriptors -- see
+	___grailInstallMemberProperties___.
+
+	The category MUST be 'Grail-Class Attrs': that is what the attribute-load
+	path recognises as an accessor rather than wrapping the method as a
+	BoundMethod, and what ___classBodyDefinitionalDelete___: scopes itself to."
+
+	^ dynInstVars
+%
+
+category: 'Grail-Class Attrs'
+classmethod: Enum
+dynInstVars: aHolder
+	dynInstVars := aHolder
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailInstallMemberProperties___
+	"Give Enum ``name'' and ``value'' as real DynamicClassAttribute descriptors,
+	which is what CPython has:
+
+	    Enum.__dict__['name']      <enum.property object>
+	    Color.name                 AttributeError -- class access is refused
+	    Color.CYAN.name            'CYAN'
+
+	Grail had them as plain Smalltalk methods, so the first answered an
+	UnboundMethod and the second answered one instead of raising.  Both are
+	needed by inspect, and by more than a spelling: getmembers DISCOVERS these
+	two names by sweeping the bases for ``isinstance(v, DynamicClassAttribute)''
+	-- such a descriptor hides from dir(), so nothing else offers it -- and
+	classify_class_attrs then reports kind 'data' for it, where an UnboundMethod
+	is isroutine() and comes out 'method'.  test_enum's test_inspect_getmembers
+	and test_inspect_classify_class_attrs both compare against
+	``Enum.__dict__['name']'' itself, so the object has to be the descriptor,
+	not merely something answering the same value.
+
+	The getter is the SUNDER accessor, not the public one: _name_ and _value_
+	read the member's dynamic instVar directly, so the descriptor cannot recurse
+	back into itself.
+
+	Member reads do NOT go through here.  ___grailBuildMembers: stores name and
+	value as instance dynamic instVars, which ___pyAttrLoad___ finds before it
+	ever consults the class -- so the hot path is untouched and this descriptor
+	is what the CLASS side sees.  Idempotent, and called from install rather
+	than from enum's module initialize: the store lands on the committed class,
+	which is the installing user's to write."
+
+	^ Enum ___grailInstallMemberPropertiesOn: self
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailInstallMemberPropertiesOn: cls
+	"Put the two descriptors in cls's own class-attribute holder.
+
+	Called for Enum at install time, and again from ___grailBuildMembers: for
+	any enum whose SMALLTALK chain does not pass Enum -- ``class Mixed(int,
+	Enum)'' is rooted at AbstractPyInt, so ___classChainAttrLookup___ walking up
+	from it never reaches Enum's holder and ``Mixed.name'' answered the
+	UnboundMethod that ___mergeSecondaryBases___ copied down instead of raising.
+	The same shape as _ignore_, which worked on a plain Enum and silently did
+	nothing on every mixin for exactly this reason."
+
+	cls @env1:___classHolderAttrStore___: #'name'
+		put: (DynamicClassAttribute @env1:__new__:
+			(UnboundMethod definingClass: Enum selector: #'_name_')).
+	cls @env1:___classHolderAttrStore___: #'value'
+		put: (DynamicClassAttribute @env1:__new__:
+			(UnboundMethod definingClass: Enum selector: #'_value_')).
+	^ cls
+%
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
@@ -526,6 +609,12 @@ ___grailBuildMembers: cls names: attrNames
 	"CPython _get_mixins_ base-combination rules: at most one data type mixed
 	in, and any data type must precede the Enum base."
 	Enum ___grailValidateBases: cls.
+	"``name'' and ``value'' are DynamicClassAttributes on Enum, and a
+	STORAGE-ROOTED enum cannot inherit them: ``class Mixed(int, Enum)'' is
+	rooted at AbstractPyInt, so the class-attribute walk never reaches Enum's
+	holder.  Give it its own copy -- see ___grailInstallMemberPropertiesOn:."
+	(cls @env0:inheritsFrom: Enum) ifFalse: [
+		Enum ___grailInstallMemberPropertiesOn: cls].
 	"Names assigned under a class-body ``if`` (the shared test fixture's
 	``if issubclass(...): dupe = 3'') never reach classBodyAttributes --
 	their stores go through ___pyAttrStore___ into the per-class
@@ -4658,7 +4747,15 @@ ___grailMemberDir: aMember
 				((ns @env0:size @env0:> 0) and: [(ns @env0:at: 1) @env0:~= $_]) ifTrue: [
 					(obj isKindOf: propClass)
 						ifTrue: [
-							((obj @env0:fget @env0:notNil)
+							"_rawFget, not fget: the public reader is env 1 ONLY, so
+							the env-0 send here was a MessageNotUnderstood for every
+							descriptor that reached it.  Latent until Enum carried
+							``name'' and ``value'' as real descriptors and put two in
+							the very __dict__ this walks -- then 72 test_enum tests
+							died in Smalltalk.  Same slot, same nil-when-absent
+							meaning, which is what CPython's ``obj.fget is not None''
+							asks."
+							((obj @env0:_rawFget @env0:notNil)
 								or: [(memberMap @env0:includesKey: ns) @env0:not])
 								ifTrue: [allowed @env0:add: ns]
 								ifFalse: [allowed @env0:remove: ns @env0:ifAbsent: []]]
