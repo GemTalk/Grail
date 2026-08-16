@@ -3390,19 +3390,116 @@ ___modPow___: base exp: e mod: m
 category: 'Grail-Built-in Functions'
 method: builtins
 _print: positional kw: kwargs
-	"Python builtin print(*objects, sep, end, file, flush) — varargs fast
-	path. Currently only honors positional args; sep/end/file/flush
-	kwargs are silently ignored, matching the legacy behavior."
+	"Python builtin print(*objects, sep=' ', end='\n', file=sys.stdout,
+	flush=False).
 
-	positional @env0:do: [:obj |
-		| strRep |
+	Every keyword used to be IGNORED, and the separator was wrong with them:
+	a space was written AFTER each object rather than BETWEEN them, so
+	``print('a', 'b')'' produced ``a b '' with a trailing space, and there was
+	no way to suppress the newline.
+
+	WHERE IT WRITES is the part with reach.  The target is the ``file''
+	argument, or ``sys.stdout'' when there is none -- looked up at CALL TIME,
+	which is what makes redirection work:
+
+	    sys.stdout = io.StringIO()      -- test.support.captured_stdout()
+	    print('123')                    -- lands in the StringIO
+
+	Grail leaves sys.stdout as None, meaning the console, so an ordinary print
+	still goes to the Transcript exactly as before.  Anything else is written
+	through its ``write'' method, which is all a file-like object has to
+	provide -- io.StringIO, a real file, or a user class."
+
+	| sep end target text flush |
+	sep := self ___printKwarg___: kwargs named: 'sep' default: ' '.
+	end := self ___printKwarg___: kwargs named: 'end'
+		default: (String @env0:with: Character @env0:lf).
+	target := self ___printTarget___: kwargs.
+	text := WriteStream @env0:on: Unicode7 @env0:new.
+	1 @env0:to: positional @env0:size do: [:i |
+		| obj strRep |
+		obj := positional @env0:at: i.
+		"``str(obj)'', with __repr__ as the fallback for an object whose class
+		defines neither -- the same two-step the original did."
 		[strRep := obj __str__]
 			@env0:on: MessageNotUnderstood do: [:ex | strRep := obj __repr__].
-		Transcript @env0:nextPutAll: strRep.
-		Transcript @env0:space
-	].
-	Transcript @env0:cr.
+		text @env0:nextPutAll: strRep @env0:asString.
+		"BETWEEN, not after: no separator follows the last object."
+		i @env0:< positional @env0:size ifTrue: [
+			text @env0:nextPutAll: sep @env0:asString]].
+	text @env0:nextPutAll: end @env0:asString.
+	target @env0:isNil
+		ifTrue: [Transcript @env0:nextPutAll: text @env0:contents]
+		ifFalse: [
+			"``file'' only has to provide write(); anything else is an
+			AttributeError naming it, which is what CPython raises for
+			``print('', file='')'' -- and what a bare send produced instead was
+			an uncatchable MessageNotUnderstood.  Both spellings are probed: a
+			Python ``def write(self, s)'' compiles to the fixed-arity selector,
+			and one with defaults or *args to the varargs form."
+			((target ___respondsTo___: #'write:')
+				or: [target ___respondsTo___: #'_write:kw:']) ifFalse: [
+					^ AttributeError ___signal___: '''' @env0:,
+						(bytes ___pyTypeNameOf___: target) @env0:,
+						''' object has no attribute ''write'''].
+			target @env1:write: text @env0:contents].
+	flush := kwargs @env0:isNil
+		ifTrue: [nil]
+		ifFalse: [kwargs @env0:at: 'flush' otherwise: nil].
+	(flush @env0:notNil and: [flush ___isTruthy___]) ifTrue: [
+		"NOT guarded.  CPython passes an exception from flush() straight
+		through -- test_print_flush asserts a RuntimeError raised by a
+		file-like object's flush reaches the caller -- so swallowing it here
+		would turn a reported failure into a silent one."
+		target @env0:isNil ifFalse: [target @env1:flush]].
 	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___printKwarg___: kwargs named: aName default: aDefault
+	"One of print's string-valued keywords.  An explicit None means ``use the
+	default'', which is CPython's rule for sep and end -- ``print(x, sep=None)''
+	is the same as omitting it, not an empty separator."
+
+	| v |
+	kwargs @env0:isNil ifTrue: [^ aDefault].
+	v := kwargs @env0:at: aName otherwise: nil.
+	(v @env0:isNil or: [v @env0:== None]) ifTrue: [^ aDefault].
+	"A non-string is a TypeError, naming the keyword and the type it got --
+	CPython's exact wording, since test_print matches the message."
+	(v isKindOf: CharacterCollection) ifFalse: [
+		^ TypeError ___signal___: aName @env0:, ' must be None or a string, not '
+			@env0:, (bytes ___pyTypeNameOf___: v)].
+	^ v
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___printTarget___: kwargs
+	"Where print writes: the ``file'' argument, else sys.stdout, else nil
+	meaning the console.
+
+	sys.stdout is read at CALL TIME rather than captured, so reassigning it
+	redirects subsequent prints -- the whole point of
+	test.support.captured_stdout().  Grail's own sys.stdout is None, which is
+	how an ordinary print still reaches the Transcript."
+
+	| f sysMod out |
+	kwargs @env0:isNil ifFalse: [
+		f := kwargs @env0:at: 'file' otherwise: nil.
+		(f @env0:notNil and: [f @env0:~~ None]) ifTrue: [^ f]].
+	sysMod := Python @env0:at: #'sys' otherwise: nil.
+	sysMod @env0:isNil ifTrue: [^ nil].
+	"___pyAttrLoad___ rather than the ``stdout'' accessor send.  An assignment
+	``sys.stdout = buf'' lands in the module instance's DYNAMIC store, while
+	the compiled accessor keeps answering the None it was initialised with and
+	shadows it -- so the accessor reports no redirection ever happened.  This
+	is the path a Python-level ``sys.stdout'' read already takes."
+	out := [sysMod @env0:___instance___ @env1:___pyAttrLoad___: #'stdout']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(out @env0:isNil or: [out @env0:== None]) ifTrue: [^ nil].
+	^ out
 %
 
 category: 'Grail-Built-in Functions'
