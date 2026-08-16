@@ -95,29 +95,29 @@ r['enum_name_value'] = repr(
 _c = _by_name(C)
 r['plain_data'] = repr((_c['data'].kind, _c['data'].defining_class is C))
 
-# --- KNOWN GAPS, recorded rather than endorsed ------------------------------------------
-# All three are inherited from the substrate, not from the port, and each is its
-# own piece of work.  CPython is expected to DISAGREE with every value below.
-#
-# 1. dir() ON A CLASS does not list the class's methods -- dir(instance) does,
-#    and dir(C) instead offers GemStone internals (mro, perform, with).
-#    classify_class_attrs starts from dir(), so every method and property of a
-#    plain class is simply never a candidate.  This is the blocker for the
-#    plain-class half of test_inspect_classify_class_attrs, and it reaches
-#    getmembers and pydoc too.
-r['dir_of_a_class_omits_methods_is_a_known_gap'] = repr(
+# dir() on a CLASS reaches the class's own methods, so they are candidates.
+# It did not: object>>__dir__ scanned only the METACLASS chain, which is where
+# a class body's data attributes live, and so answered ``data'' but no ``meth''
+# -- while dir(C()) answered both.  classify_class_attrs starts from dir(), so
+# every method and property of a plain class was simply never a candidate.
+# See tests/python/dir_of_a_class.py.
+r['dir_of_a_class_lists_its_methods'] = repr(
     ['meth' in dir(C), 'meth' in dir(C())])
-r['plain_methods_missing_is_a_known_gap'] = repr(
+r['plain_methods_are_found'] = repr(
     [n in _c for n in ('meth', 'prop', 'inherited')])
 
-# 2. A class __dict__ holds an UnboundMethod where CPython holds a staticmethod
+# --- KNOWN GAPS, recorded rather than endorsed ------------------------------------------
+# Both are inherited from the substrate, not from the port, and each is its own
+# piece of work.  CPython is expected to DISAGREE with every value below.
+#
+# 1. A class __dict__ holds an UnboundMethod where CPython holds a staticmethod
 #    or classmethod OBJECT, and ``kind'' is read off the __dict__ entry
 #    precisely because that object is what distinguishes them.  So both come
 #    back as plain methods when they are reached at all.
 r['staticmethod_kind_is_a_known_gap'] = repr(
     [type(C.__dict__['stat']).__name__, type(C.__dict__['cls_m']).__name__])
 
-# 3. Enum.__dict__ reports methods that live on the METACLASS upstream, and the
+# 2. Enum.__dict__ reports methods that live on the METACLASS upstream, and the
 #    class mro is searched before the metaclass mro, so those dunders name Enum
 #    as their home where CPython names EnumType.
 r['metaclass_dunder_home_is_a_known_gap'] = repr(
@@ -127,6 +127,7 @@ r['metaclass_dunder_home_is_a_known_gap'] = repr(
 EXPECTED = {
     'attribute_equality': 'True',
     'attribute_fields': "('x', 'data', True, 1)",
+    'dir_of_a_class_lists_its_methods': '[True, True]',
     'enum_members': "[('data', True), ('data', True), ('data', True)]",
     'enum_name_value': "[('data', True), ('data', True)]",
     'enum_names': ("['CYAN', 'MAGENTA', 'YELLOW', '__class__', '__contains__', "
@@ -134,12 +135,11 @@ EXPECTED = {
                    "'__len__', '__members__', '__module__', '__name__', "
                    "'__qualname__', 'name', 'value']"),
     'plain_data': "('data', True)",
+    'plain_methods_are_found': '[True, True, True]',
 }
 
 GRAIL_ONLY = {
-    'dir_of_a_class_omits_methods_is_a_known_gap': '[False, True]',
     'metaclass_dunder_home_is_a_known_gap': '[True, True, True]',
-    'plain_methods_missing_is_a_known_gap': '[False, False, False]',
     'staticmethod_kind_is_a_known_gap': "['UnboundMethod', 'UnboundMethod']",
 }
 
