@@ -507,6 +507,109 @@ ___grailSuperNewGuard: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailDropIgnoredNames: cls from: allNames
+	"Remove every name the class body listed in ``_ignore_'' -- and ``_ignore_''
+	itself -- from cls and from allNames, answering what is left.
+
+	    class Period(timedelta, Enum):
+	        _ignore_ = 'Period i'
+	        Period = vars()
+	        for i in range(32):
+	            Period['day_%d' % i] = i, 'day'
+
+	``Period'' and ``i'' are scaffolding for building the real members, and
+	CPython leaves NO trace of them: EnumType.__new__ pops each key out of the
+	class dict (``for key in ignore: classdict.pop(key, None)''), having pushed
+	``_ignore_'' onto the same list first, so test_enum's test_ignore can assert
+	all three are absent from the finished class.
+
+	Grail cannot pop from a dict, because by the time this runs the names are
+	already REAL class state -- an accessor pair for a name the body assigned
+	unconditionally, a dynInstVars entry for one bound through the namespace, or
+	both.  ___classBodyDefinitionalDelete___: is the operation that knows all
+	three homes, so the pop becomes a delete of exactly what the body stored.
+	It signals NameError for a name that was never bound, which is not an error
+	HERE -- ``_ignore_'' may name something the body never got around to
+	assigning -- so each delete is guarded.
+
+	The list is read back off the CLASS and re-parsed, rather than taken from
+	the EnumDict that already parsed it as it was assigned.  Not a duplicate
+	route: a MIXIN enum never gets an EnumDict at all.  ``__prepare__'' reaches
+	a class through its metaclass, which Grail resolves along the SMALLTALK
+	superclass chain -- and ``class I(int, Enum)'' is rooted at AbstractPyInt,
+	``class S(str, Enum)'' at Unicode32, so neither chain passes Enum and the
+	pending namespace is nil for both.  Taking the list from the namespace made
+	_ignore_ work on a plain Enum and silently do nothing on every mixin, which
+	is how it behaved before this method existed.  ___grailParseIgnoreList: is
+	shared with EnumDict so the two cannot drift.
+
+	A class whose body never mentioned _ignore_ answers nil, the list is empty,
+	and this drops nothing -- which is every enum in the corpus but one."
+
+	| ignored |
+	ignored := Enum ___grailParseIgnoreList:
+		(Enum ___grailOwnClassAttr: cls named: '_ignore_').
+	"``_ignore_'' goes with them -- CPython appends it to the list it is about
+	to walk.  Unconditionally, so a body that assigned it is cleaned up even
+	when the list itself came out empty."
+	ignored @env0:add: '_ignore_'.
+	ignored @env0:do: [:n |
+		[cls ___classBodyDefinitionalDelete___: n @env0:asSymbol]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil]].
+	^ allNames @env0:reject: [:n | ignored @env0:includes: n @env0:asString]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailOwnClassAttr: cls named: aString
+	"The value cls's OWN class body bound to aString, or nil -- never an
+	inherited one.
+
+	CPython reads ``_ignore_'' out of the classdict, which is the body's own
+	namespace, so an inherited value must not be seen.  The two homes are the
+	ones ___classBodyDefinitionalStore___:put: writes to: an accessor compiled
+	into 'Grail-Class Attrs' for a name the body assigned unconditionally, and
+	the per-class dynInstVars holder for everything else."
+
+	| sym meta holder |
+	sym := aString @env0:asSymbol.
+	meta := cls @env0:class.
+	(meta @env0:whichClassIncludesSelector: sym environmentId: 1) == meta
+		ifTrue: [^ [cls @env0:perform: sym env: 1]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil]].
+	holder := (cls ___respondsTo___: #dynInstVars)
+		ifTrue: [cls @env0:perform: #dynInstVars env: 1]
+		ifFalse: [nil].
+	holder == nil ifTrue: [^ nil].
+	^ holder @env0:dynamicInstVarAt: sym
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailParseIgnoreList: aValue
+	"CPython's ``value.replace(',',' ').split()'' for a string, ``list(value)''
+	for anything else -- answering an OrderedCollection of Strings, empty for
+	nil or for a value that is neither.
+
+	Shared by EnumDict >> __setitem__:_: (which needs the list to keep the
+	named entries out of _member_names) and by ___grailDropIgnoredNames:from:
+	(which needs it to take them off the finished class).  Two parses of one
+	syntax is exactly the kind of pair that drifts, and they reach the value by
+	different routes -- one as it is assigned, one read back off the class."
+
+	| parsed |
+	parsed := OrderedCollection @env0:new.
+	aValue @env0:isNil ifTrue: [^ parsed].
+	[(aValue isKindOf: CharacterCollection)
+		ifTrue: [(aValue @env0:asString @env0:copyReplaceAll: ',' with: ' ')
+			@env0:subStrings @env0:do: [:n | parsed @env0:add: n @env0:asString]]
+		ifFalse: [aValue @env0:do: [:n | parsed @env0:add: n @env0:asString]]]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	^ parsed
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailBuildMembers: cls names: attrNames
 	"Turn each class-body NAME=value on cls into a singleton member (an
 	instance of cls).  Equal values alias to the first member (CPython
@@ -553,6 +656,12 @@ ___grailBuildMembers: cls names: attrNames
 				and: [(allNames @env0:includes: dynSym) not]])
 					ifTrue: [allNames @env0:add: dynSym].
 			i := i @env0:+ 2]].
+	"_ignore_ = 'Period i': those names are not members AND not attributes --
+	CPython pops each one out of the class dict before anything else looks at
+	it.  Grail's class body has already STORED them by now, so the equivalent is
+	a delete; done here, before the member passes, so the names are invisible to
+	every one of them exactly as they are upstream."
+	allNames := Enum ___grailDropIgnoredNames: cls from: allNames.
 	"enum.nonmember(x): x is deliberately NOT a member.  Unwrap it, store the
 	raw value as a plain class attribute (Outer.Inner is Inner; MyTypes.f is
 	float; Example.ALL == 3, type int), and DROP the name from member building
@@ -1319,6 +1428,31 @@ ___grailBuildMembers: cls names: attrNames
 								initArgs := Enum ___grailSpreadArgs: rawValue.
 								member @env0:perform: #'___init__:kw:' env: 1
 									withArguments: { initArgs. KeyValueDictionary @env0:new }].
+							"...and on the value the member ACTUALLY ENDED UP WITH, which is
+							only now known.  CPython looks up enum_member._value_, and a
+							user __new__ is free to make that something other than the
+							class-body value it was handed:
+
+							    class Period(timedelta, Enum):
+							        def __new__(cls, value, period):
+							            obj = timedelta.__new__(cls, value)
+							            obj._value_ = value          -- 30, not (30, 'month')
+							            ...
+
+							so ``month_1 = 30, 'month''' and ``day_30 = 30, 'day''' are the
+							SAME member upstream and were two here (test_enum
+							TestSpecial.test_ignore).  The early lookup above keys on the
+							class-body value, which is right for every enum without a
+							__new__ of its own -- there memberValue IS effVal and this
+							finds the same answer -- and cannot see through one that has.
+
+							Only when the early test found nothing: a hit there is already
+							the canonical member, and re-deriving it from a value the
+							throwaway may have changed could pick a different one."
+							aliasOf @env0:isNil ifTrue: [
+								aliasOf := (byValue @env0:includesKey: memberValue)
+									ifTrue: [byValue @env0:at: memberValue]
+									ifFalse: [nil]].
 							"THE ALIAS TEST, in CPython's place: everything from here on
 							records a member the class OWNS, and an alias owns nothing --
 							it hands its name to the member that already holds the value

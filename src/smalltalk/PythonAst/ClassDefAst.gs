@@ -1071,20 +1071,28 @@ printSmalltalkRuntimeOn: aStream
 		flushPendingBefore := [:limit |
 			[pendingStmts notEmpty and: [pendingStmts first key < limit]]
 					whileTrue: [
-						| entry bound savedRuntimeClass |
+						| entry stmt bound savedRuntimeClass |
 						entry := pendingStmts removeFirst.
+						stmt := entry value.
 						bound := IdentitySet new.
 						firstBinding keysAndValuesDo: [:nm :p |
 							p < entry key ifTrue: [bound add: nm]].
 						CallAst classBodyBoundNames: bound.
-						"``del x'' takes the class it unbinds from this flag.  An
-						ASSIGNMENT must not see it: for a global-declared name it
-						would route the store to the class instead of the module,
-						which is the opposite of what the declaration asked for."
+						"``del x'' takes the class it unbinds from this flag, and so
+						does every statement emitted VERBATIM here -- it is what
+						makes AssignAst route a bare-NAME binding inside a class-body
+						loop to the per-class definitional store instead of an
+						undeclared block temp.  A global-declared ASSIGNMENT must NOT
+						see it: it would route the store to the class instead of the
+						module, which is the opposite of what the declaration asked
+						for.  ``if'' has its own emit and sets nothing."
 						savedRuntimeClass := CallAst classBodyRuntimeClass.
-						(entry value isKindOf: DeleteAst)
-							ifTrue: [CallAst classBodyRuntimeClass: name].
-						[entry value printSmalltalkOn: aStream]
+						((stmt isKindOf: DeleteAst)
+							or: [self ___isClassBodyRuntimeStatement___: stmt])
+								ifTrue: [CallAst classBodyRuntimeClass: name].
+						[(stmt isKindOf: IfAst)
+							ifTrue: [self emitClassBodyIf: stmt on: aStream]
+							ifFalse: [stmt printSmalltalkOn: aStream]]
 							ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
 						aStream lf]].
 		[:emittedChainValues |
@@ -1137,49 +1145,21 @@ printSmalltalkRuntimeOn: aStream
 						aStream nextPutAll: ')).'; lf]
 			].
 		]] value: IdentityKeyValueDictionary new.
-		"Whatever is left stands after the last attribute in the body."
-		flushPendingBefore value: body body size + 1.
-		"Top-level ``if'' statements in the class body: CPython runs
-		them at class-DEFINITION time — the C-vs-Python dual-module
-		pattern (``if c_functools: partial = c_functools.partial''
-		guards 30+ attributes in test_functools).  Emit each as a
-		runtime conditional whose branch assignments store per-class
-		DYNAMIC attrs — the tier setattr(cls, ...) writes and both
-		class-receiver and instance attribute loads consult — so the
-		attribute exists exactly when its branch ran.  Only simple
-		NAME = value assignments (and nested ifs) are honored; other
-		statement kinds inside a class-body if are still dropped."
-		body body doWithIndex: [:stmt :pos |
-			| bound |
-			bound := nil.
-			((stmt isKindOf: IfAst)
-				or: [self ___isClassBodyRuntimeStatement___: stmt]) ifTrue: [
-				bound := IdentitySet new.
-				firstBinding keysAndValuesDo: [:nm :p |
-					p < pos ifTrue: [bound add: nm]]].
-			(stmt isKindOf: IfAst) ifTrue: [
-				CallAst classBodyBoundNames: bound.
-				self emitClassBodyIf: stmt on: aStream].
-			"``try'' / ``for'' / ``while'' / ``with'' at class-body level.
-			CPython runs these at class-definition time like any other body
-			statement, but Grail compiles the body STRUCTURALLY and these
-			carried no classBodyAttributePairs, so the whole statement -- and
-			every binding in it -- was silently DROPPED: ``try: x = 1'' left
-			the class with no ``x'' at all, and no error anywhere.
+		"Whatever is left stands after the last attribute in the body.
 
-			Emit the statement through its OWN printSmalltalkOn:, so try/
-			except/finally, loops and comprehensions keep their existing
-			codegen, and flip on classBodyRuntimeClass for the duration so
-			AssignAst routes each bare-NAME binding to the per-class
-			definitional store instead of an undeclared block temp."
-			(self ___isClassBodyRuntimeStatement___: stmt) ifTrue: [
-				| savedRuntimeClass |
-				CallAst classBodyBoundNames: bound.
-				savedRuntimeClass := CallAst classBodyRuntimeClass.
-				CallAst classBodyRuntimeClass: name.
-				[stmt printSmalltalkOn: aStream]
-					ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
-				aStream lf]].
+		Which is where the class-body ``if'' and the try/for/while/with/
+		augassign/bare-expression statements END UP when nothing reads what they
+		bind -- but they are flushed ABOVE, at their own source position, rather
+		than in a pass of their own here.  Two behaviours ride on that emit and
+		are unchanged by where it happens: an ``if'' becomes a runtime
+		conditional whose branch assignments store per-class DYNAMIC attrs, so
+		the attribute exists exactly when its branch ran (the C-vs-Python
+		dual-module pattern -- ``if c_functools: partial = c_functools.partial''
+		guards 30+ attributes in test_functools; only simple NAME = value
+		assignments and nested ifs are honoured inside one).  The rest go out
+		through their OWN printSmalltalkOn:, so try/except/finally and loop
+		codegen is not re-derived here."
+		flushPendingBefore value: body body size + 1.
 		"A class-body statement whose target is an ATTRIBUTE or SUBSCRIPT
 		(``cls.foo = property()'', ``Inner.x = 1'') -- not a bare NAME, so it is
 		not a class attribute and was previously DROPPED.  CPython runs it at
@@ -2767,7 +2747,7 @@ ___classBodyOrderedRuntimeStatements___
 	them, as (sourcePosition -> statement) associations in body order.
 	printSmalltalkRuntimeOn: flushes them.
 
-	Position matters for all three because each can change what a LATER
+	Position matters for every one of them because each can change what a LATER
 	attribute value reads -- which a trailing pass, running once every attribute
 	has been computed, cannot do:
 
@@ -2778,11 +2758,26 @@ ___classBodyOrderedRuntimeStatements___
 	    ``d = {}; d['a'] = 1; k = d['a']'' -- both statements Grail dropped
 	    entirely, leaving the write undone and no error anywhere)
 	  * ``del x'', which unbinds a name a later attribute may read
+	  * an ``if'', and the try/for/while/with/augassign/bare-expression set
+	    ___isClassBodyRuntimeStatement___: covers.  These ran in a trailing pass
+	    until the loop that DEFINES a name met the attribute that READS it:
 
-	The other two body passes stay where they are and do not overlap this one:
-	___isClassBodyRuntimeStatement___: covers try/for/while/with and augmented
-	assignment, and ___isClassBodyAttributeAssign___: requires an ATTRIBUTE
-	target and must keep running after the nested classes it mutates are built."
+	        class Period(timedelta, Enum):
+	            Period = vars()
+	            for i in range(32):
+	                Period['day_%d' % i] = i, 'day'
+	            OneDay = day_1
+
+	    ``OneDay = day_1'' was emitted before the loop it depends on, so the
+	    name resolved through to the module and raised NameError (test_enum
+	    TestSpecial.test_ignore).  The dynamic read was already in place and
+	    correct -- what was wrong was WHEN it ran.
+
+	CPython executes a class body top to bottom, once, so source order is not a
+	refinement here but the algorithm.  The remaining pass that does NOT join
+	this one is ___isClassBodyAttributeAssign___:, which requires an ATTRIBUTE
+	target (``Inner.x = 1'') and must keep running after the nested classes it
+	mutates are built."
 
 	| result |
 	result := OrderedCollection new.
@@ -2790,7 +2785,9 @@ ___classBodyOrderedRuntimeStatements___
 	body body doWithIndex: [:stmt :pos |
 		((self ___classBodyGlobalTargetNames___: stmt) isEmpty not
 			or: [(self ___isClassBodySubscriptAssign___: stmt)
-			or: [self ___isClassBodyDeleteStatement___: stmt]])
+			or: [(self ___isClassBodyDeleteStatement___: stmt)
+			or: [(stmt isKindOf: IfAst)
+			or: [self ___isClassBodyRuntimeStatement___: stmt]]]])
 				ifTrue: [result add: pos -> stmt]].
 	^ result
 %
@@ -3156,7 +3153,16 @@ ___classBodyConditionalNames___
 		(stmt isKindOf: WhileAst) ifTrue: [
 			collect value: stmt body.
 			collect value: stmt orelse].
+		"``with X() as c:'' binds c on the class exactly as a loop target does,
+		and only the STORE side knew it: W.c read back fine from outside, while
+		``c'' inside the with body -- or in any later class-body statement --
+		fell through to module scope and raised NameError.  Every item, since
+		``with A() as a, B() as b:'' binds both."
 		(stmt isKindOf: WithAst) ifTrue: [
+			stmt items ifNotNil: [:its |
+				its do: [:item |
+					(item optional_vars isKindOf: NameAst) ifTrue: [
+						names add: item optional_vars id asSymbol]]].
 			collect value: stmt body].
 		(stmt isKindOf: TryAst) ifTrue: [
 			collect value: stmt body.
