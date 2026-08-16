@@ -3820,7 +3820,7 @@ ___pyMetaclass___
 	SmallInteger and broke eleven test_enum tests; __class__ has always been
 	what the type() builtin asked, and still is."
 	(self isKindOf: Behavior) ifFalse: [^ self __class__].
-	declared := self ___grailDeclaredMetaclass___.
+	declared := self ___grailDeclaredMetaclassOrNil___.
 	declared == nil ifFalse: [^ declared].
 	"@env0: -- ___mroOf___ is an env-0 classmethod, and an env-1 send of it
 	fails.  The failure was invisible: the handler below turned it into nil, so
@@ -3830,9 +3830,30 @@ ___pyMetaclass___
 	mro == nil ifFalse: [
 		mro @env0:do: [:c |
 			(c isKindOf: Behavior) ifTrue: [
-				declared := c ___grailDeclaredMetaclass___.
+				declared := c ___grailDeclaredMetaclassOrNil___.
 				declared == nil ifFalse: [^ declared]]]].
 	^ BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #'type'
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailDeclaredMetaclassOrNil___
+	"___grailDeclaredMetaclass___, or nil when the receiver cannot answer it.
+
+	The default lives on ``object class'', and a METACLASS receiver does not
+	reach it: ``Enum class'' is an instance of Metaclass3, whose chain does not
+	pass object class, so the send is a MessageNotUnderstood.  That is only
+	reachable at all because type() now hands metaclasses out to Python -- and
+	then anything doing ordinary introspection on one, inspect's
+	classify_class_attrs among them, walked straight into an uncatchable
+	Smalltalk error.
+
+	Tested by lookup rather than caught, so a genuine MNU raised from INSIDE a
+	class's own ___grailDeclaredMetaclass___ still propagates."
+
+	(self @env0:class @env0:whichClassIncludesSelector: #'___grailDeclaredMetaclass___'
+		environmentId: 1) == nil ifTrue: [^ nil].
+	^ self ___grailDeclaredMetaclass___
 %
 
 category: 'Grail-Attribute Access'
