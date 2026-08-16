@@ -58,10 +58,12 @@ ClassBodyConditionalTestCase category: 'Grail-SUnit'
 ! with bare-name bindings routed to the same definitional store used here --
 ! including inside an ``if'' branch, which this emitter now delegates.
 !
-! Still diverging, and pinned by testAReadAfterTheBranchDivergesFromCPython:
-! the class emit runs in PHASES (all attribute values, then the ``if''
-! statements), so an attribute whose value READS a name a later branch
-! rebinds sees the pre-branch value.  CPython runs the body top to bottom.
+! The class emit used to run in PHASES (all attribute values, then the ``if''
+! statements), so an attribute whose value READ a name a later branch rebinds
+! saw the pre-branch value -- pinned here for a long time as a known divergence.
+! The body now emits in SOURCE ORDER, which is what CPython does; see
+! testAReadAfterTheBranchSeesWhatTheBranchBound and ClassDefAst >>
+! ___classBodyOrderedRuntimeStatements___.
 ! ===============================================================================
 
 set compile_env: 0
@@ -243,26 +245,25 @@ testAnUnrunBranchLeavesTheUnconditionalBindingAlone
 
 category: 'Grail-Tests - Name Resolution'
 method: ClassBodyConditionalTestCase
-testAReadAfterTheBranchDivergesFromCPython
-	"KNOWN DIVERGENCE, pinned so it is visible rather than folklore.
+testAReadAfterTheBranchSeesWhatTheBranchBound
+	"``both = 1; if flag: both = 2; taken = both'' leaves taken == 2, as
+	CPython, which runs a class body top to bottom.
 
-	``both = 1; if flag: both = 2; taken = both'' gives taken == 2 in
-	CPython, which runs a class body top to bottom.  Grail answers 1: the
-	class emit runs in PHASES, all attribute values first and the ``if''
-	statements after, so ``taken'' is computed before the branch that
-	changes ``both'' has run.  Statement-order emit is the fix and it is a
-	good deal larger than anything here -- the attr loop, the nested-class
-	pass and the decorator scopes all assume the current phasing.
+	This was pinned as a KNOWN DIVERGENCE answering 1, because the class emit
+	ran in PHASES -- all attribute values first, the ``if'' statements after --
+	so ``taken'' was computed before the branch that changes ``both'' had run.
+	The note here said statement-order emit was the fix and would be a good deal
+	larger than anything nearby.  It was not: the positional flush that the
+	``global'' / subscript / ``del'' statements already used took the ``if'' and
+	the try/for/while/with set as they were, and the attr loop, the nested-class
+	pass and the decorator scopes needed no changes at all.  See
+	ClassDefAst >> ___classBodyOrderedRuntimeStatements___.
 
-	Only reads that come AFTER a branch in source order are affected; the
-	branch's own binding is correct (testABranchOverwritesAnUnconditional-
-	Binding), and so is a read of a name the branch itself bound
-	(testABranchNameIsVisibleLaterInTheSameBranch).
+	The two halves that were already right are unchanged: the branch's own
+	binding (testABranchOverwritesAnUnconditionalBinding) and a read of a name
+	the branch itself bound (testABranchNameIsVisibleLaterInTheSameBranch)."
 
-	If this starts failing with 2, phase ordering was fixed: delete the
-	test and assert CPython's answer above."
-
-	self assert: (self at: 'taken') equals: 1.
+	self assert: (self at: 'taken') equals: 2.
 %
 
 category: 'Grail-Tests - Name Resolution'

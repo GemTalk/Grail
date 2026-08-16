@@ -356,22 +356,53 @@ ___new__: positional kw: kwargs
 	non-virtually with the actual class as receiver (self=cls), so this
 	simply forwards to the same varargs assembler used by value:value:.
 
-	EXCEPT: a mixed-in Enum (``class E(timedelta, Enum): def __new__
-	(cls, v): return super().__new__(cls, v)'') reaches this SAME
-	selector via super()'s MRO walk (Enum's classmethod of the same
-	name lives further down the registered MRO, past timedelta) --
-	Grail's super() picks the nearest class defining the selector by
-	position, unlike CPython's EnumType, which installs its own
-	__new__ directly onto the mixed-in class so it's found FIRST
-	regardless of mixin order.  Defer to Enum's guard (test_enum's
-	test_bad_new_super) whenever this class is a mid-construction enum
-	member, rather than actually allocating a timedelta -- keeps the
-	fix local instead of touching Enum's class-creation machinery."
+	A mixed-in Enum reaches this same selector by TWO routes that have to be
+	told apart, and a local guard here cannot tell them apart:
 
-	(Enum ___grailBuildingSet @env0:includes: self) ifTrue: [
-		^ TypeError @env1:___signal___:
-			'do not use `super().__new__; call the appropriate __new__ directly'].
-	^ self _timedelta: positional kw: kwargs
+	    class E(timedelta, Enum):
+	        def __new__(cls, v):
+	            return super().__new__(cls, v)      -- CPython REJECTS this
+	    class Period(timedelta, Enum):
+	        def __new__(cls, value, period):
+	            obj = timedelta.__new__(cls, value) -- CPython REQUIRES this
+
+	Both arrive as ``___new__:kw:'' with a mid-construction enum class as the
+	receiver, so the ``is self being built?'' test this method used to make
+	raised test_bad_new_super's TypeError for the second one as well, and
+	test_enum's test_ignore could not build its members at all.
+
+	The distinction is WHERE THE CALL CAME FROM, which only the caller knows:
+	SuperBoundMethod >> value:value: fires Enum class >> ___grailSuperNewGuard:
+	on the super() path, before the MRO walk resolves to whichever storage
+	__new__ the mixin order exposes.  That is the whole guard, so nothing is
+	needed here -- an explicit timedelta.__new__ is simply allowed to allocate.
+
+	The assembler is a CLASS-SIDE method, so ``self _timedelta:kw:'' reaches it
+	only from a receiver whose METACLASS chain passes PyTimedelta class.  A
+	mixed enum's does not: ``class P(timedelta, Enum)'' is rooted at Enum in
+	Smalltalk and carries timedelta as a merged SECONDARY base, so the send was
+	a raw MessageNotUnderstood -- an error Python cannot even catch.
+
+	Compute on PyTimedelta in that case and RE-HOME the result onto an instance
+	of the actual class, which is what CPython's ``timedelta.__new__(cls, ...)''
+	answers and what the enum then hangs _value_ off.  Cheap because a
+	timedelta's whole state is three DYNAMIC instVars -- there is no declared
+	layout to inherit, so any object can carry them and P needs no PyTimedelta
+	on its Smalltalk chain to be a working timedelta.  Rooting P at PyTimedelta
+	instead was tried and is the wrong lever: it takes the class off the Enum
+	chain, and the 52 date-mixin enum tests that rely on ___grailValueMixinFor:
+	building the member's value all break."
+
+	| proto inst |
+	((self @env0:class @env0:whichClassIncludesSelector: #'_timedelta:kw:'
+		environmentId: 1) @env0:isNil) ifFalse: [
+			^ self _timedelta: positional kw: kwargs].
+	proto := PyTimedelta _timedelta: positional kw: kwargs.
+	inst := self @env0:new.
+	#( #_days #_seconds #_microseconds ) @env0:do: [:slot |
+		inst @env0:dynamicInstVarAt: slot
+			put: (proto @env0:dynamicInstVarAt: slot)].
+	^ inst
 %
 
 set compile_env: 0
@@ -3817,22 +3848,15 @@ ___new__: positional kw: kwargs
 	non-virtually with the actual class as receiver (self), matching a
 	real ``def __new__(cls, ...)`` -- mirrors ___fromFields___:_:_:.
 
-	EXCEPT: a mixed-in Enum (``class E(date, Enum): def __new__(cls, ...):
-	return super().__new__(cls, ...)'') reaches this SAME selector via
-	super()'s MRO walk (Enum's classmethod of the same name lives
-	further down the registered MRO, past date) -- Grail's super()
-	picks the nearest class defining the selector by position, unlike
-	CPython's EnumType, which installs its own __new__ directly onto
-	the mixed-in class so it's found FIRST regardless of mixin order.
-	Defer to Enum's guard (test_enum's test_bad_new_super) whenever this
-	class is a mid-construction enum member, rather than actually
-	allocating a date -- keeps the fix local instead of touching Enum's
-	class-creation machinery."
+	A mixed-in Enum reaches this same selector by two routes CPython treats
+	oppositely -- ``super().__new__(cls, ...)'' is rejected, an explicit
+	``date.__new__(cls, ...)'' is the required form -- and both arrive here with
+	a mid-construction enum class as the receiver, so the ``is self being
+	built?'' test this method used to make rejected the legitimate one too.  The
+	guard lives at the one place that can tell them apart, SuperBoundMethod >>
+	value:value:; see PyTimedelta >> ___new__:kw: for the full account."
 
 	| y m d inst |
-	(Enum ___grailBuildingSet @env0:includes: self) ifTrue: [
-		^ TypeError @env1:___signal___:
-			'do not use `super().__new__; call the appropriate __new__ directly'].
 	y := positional @env0:at: 1 ifAbsent: [nil].
 	m := positional @env0:at: 2 ifAbsent: [nil].
 	d := positional @env0:at: 3 ifAbsent: [nil].
