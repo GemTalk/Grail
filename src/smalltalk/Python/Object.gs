@@ -2704,6 +2704,57 @@ ___metaChainOwnsAnyOf___: family from: metaclass
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___unaryGetterShadowedBySetter___: getterSym setter: setterSym
+	"True when setterSym (the ``name:'' spelling) is owned STRICTLY BELOW
+	getterSym (the bare ``name'' spelling) in the receiver's class chain --
+	a subclass ``def name(self, x)'' WIDENING an inherited ``def name(self)''.
+
+	Grail spells a method's parameter count into its selector, so an override
+	that CHANGES the arity lands under a different selector than the method it
+	overrides, leaving BOTH reachable through the chain.  Selector-wise that is
+	indistinguishable from a property getter/setter pair, so the pair branch in
+	``___pyAttrLoad___'' PERFORMED the inherited unary and answered its RETURN
+	VALUE where Python answers a bound method:
+
+	  class Base:    def f(self):        ...   ->  f
+	  class Derived: def f(self, extra): ...   ->  f:
+
+	``Derived().f('x')'' died with ``'Unicode7' object is not callable'' --
+	the call site had Base.f's STRING in hand and tried to call it.
+
+	Ownership is the discriminator a category test cannot supply, because both
+	halves of an override are ordinary ``Grail-Class Methods'' -- the same
+	category an explicit ``@x.setter'' carries.  A property pair declared on
+	one class, or inherited intact from one ancestor, has EQUAL owners and is
+	unaffected.
+
+	WHY ONLY THIS DIRECTION.  The mirror shape -- a subclass NARROWING an
+	inherited ``name:'' down to a unary ``name'' -- is still read as a pair and
+	still broken.  It is not an oversight: it is shape-identical to a property
+	whose getter alone is overridden while the setter is inherited, which is
+	what test_property's ``PropertySubNewGetter'' does with
+	``@BaseClass.spam.getter''.  In both, the unary is the more derived half,
+	so ownership cannot separate them and a symmetric rule regresses
+	test_property (measured, not reasoned).  Telling those apart needs
+	PROPERTY PROVENANCE that Grail does not record today: an explicit setter
+	is compiled as a plain method, and only the SYNTHESIZED read-only stub
+	carries a distinguishing category (``Grail-Property-ReadOnly'').
+
+	Answers false when either spelling has no owner, so this guard only ever
+	narrows the branch it protects."
+
+	| getterOwner setterOwner |
+	getterOwner := self @env0:class
+		@env0:whichClassIncludesSelector: getterSym environmentId: 1.
+	setterOwner := self @env0:class
+		@env0:whichClassIncludesSelector: setterSym environmentId: 1.
+	(getterOwner == nil or: [setterOwner == nil]) ifTrue: [^ false].
+	getterOwner == setterOwner ifTrue: [^ false].
+	^ setterOwner @env0:inheritsFrom: getterOwner
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___selectorFamilyFor___: aSym string: aString
 	"The seven Smalltalk selectors the attribute name aSym can have compiled
 	to -- ``n:'', ``n:_:'' .. ``n:_:_:_:_:_:'', and the varargs ``_n:kw:'' --
@@ -3321,16 +3372,26 @@ ___pyAttrLoad___: aSym
 	whose result is a group id that the call site then tried to call.  The
 	forwarders carry their own method category precisely so they can be told
 	apart here, and the probe runs only when both spellings exist."
+	"AN ARITY-WIDENING OVERRIDE IS NOT A SETTER EITHER.  ``def f(self, x)'' in a
+	subclass of a class defining ``def f(self)'' compiles to ``f:'' over an
+	inherited ``f'' -- the same two spellings a property pair has, so the pair
+	test fired and PERFORMED the unary, answering a RETURN VALUE where Python
+	answers a bound method.  Both defs are ordinary ``Grail-Class Methods'', so
+	the category probe above cannot separate them; their OWNERS can, since a
+	real pair is declared together on one class.  See
+	``___unaryGetterShadowedBySetter___:setter:'', which also records why the
+	MIRROR shape (a subclass narrowing to a unary) is deliberately left alone."
 	(isGenerated
 		and: [(self ___respondsTo___: sym1)
 			and: [(self ___respondsTo___: aSym)
-				and: [ | ___setterOwner |
-					___setterOwner := self @env0:class
-						@env0:whichClassIncludesSelector: sym1 environmentId: 1.
-					___setterOwner == nil
-						or: [(___setterOwner @env0:categoryOfSelector: sym1
-								environmentId: 1) @env0:asString
-							@env0:~= 'Grail-Fixed Arity Forwarders']]]])
+				and: [(self ___unaryGetterShadowedBySetter___: aSym setter: sym1) not
+					and: [ | ___setterOwner |
+						___setterOwner := self @env0:class
+							@env0:whichClassIncludesSelector: sym1 environmentId: 1.
+						___setterOwner == nil
+							or: [(___setterOwner @env0:categoryOfSelector: sym1
+									environmentId: 1) @env0:asString
+								@env0:~= 'Grail-Fixed Arity Forwarders']]]]])
 		ifTrue: [
 			| instVal metaclass |
 			instVal := self @env0:perform: aSym env: 1.
