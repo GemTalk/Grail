@@ -52,29 +52,29 @@ set compile_env: 0
 category: 'Grail-code generation'
 method: YieldFromAst
 printSmalltalkOn: aStream
-	"``yield from iterable`` — Grail has no real generator delegation
-	yet; treat it as ``for x in iterable: yield x`` open-coded into a
-	loop that hands each item to ``___gen___ ___yield___:``.  Matches
-	the surrounding YieldAst convention (see YieldAst >>
-	printSmalltalkOn:); inside a regular def the surrounding codegen
-	never binds ``___gen___`` so a top-level ``yield from`` falls
-	through to a Smalltalk compile error, mirroring Python's
-	``SyntaxError: 'yield' outside function``.
+	"``yield from iterable`` — real PEP 380 delegation, performed by
+	``PythonGenerator >> ___yieldFrom___:``.  Matches the surrounding
+	YieldAst convention (see YieldAst >> printSmalltalkOn:); inside a
+	regular def the surrounding codegen never binds ``___gen___`` so a
+	top-level ``yield from`` falls through to a Smalltalk compile
+	error, mirroring Python's ``SyntaxError: 'yield' outside
+	function``.
 
-	Drive the iterable through the Python ``__iter__`` / ``__next__``
-	protocol (mirroring ForAst) rather than a Smalltalk ``do:`` — the
-	source may be any Python iterable (e.g. a werkzeug ``Headers``)
-	that has no ``do:``.  ``yield from`` still evaluates to None; the
-	inner generator's StopIteration return value is not yet captured."
+	This used to be open-coded HERE as ``for x in iterable: yield x'',
+	which forwards values outward but nothing inward: the consumer's
+	send / throw / close all acted on the DELEGATOR rather than being
+	forwarded to the sub-iterator, and the expression's value was
+	hardcoded None instead of the sub-generator's return value.  All
+	four are properties of the delegation as a whole, spanning many
+	suspensions, so they cannot be expressed in a per-item loop —
+	hence the move to a runtime method, which holds the delegation
+	state across suspensions.  The emitted expression now evaluates to
+	the sub-iterator's return value, so ``r = yield from g()'' binds
+	what ``g'' returned."
 
-	aStream nextPutAll: '([ | ___it___ ___done___ | ___it___ := '.
+	aStream nextPutAll: '(___gen___ @env1:___yieldFrom___: '.
 	value printSmalltalkWithParenthesisOn: aStream.
-	aStream
-		nextPutAll: ' @env1:__iter__. ___done___ := false. ';
-		nextPutAll: '[___done___] @env0:whileFalse: [';
-		nextPutAll: '[___gen___ @env1:___yield___: (___it___ @env1:__next__)] ';
-		nextPutAll: '@env0:on: StopIteration do: [:___ex___ | ___done___ := true]]. ';
-		nextPutAll: 'None] @env0:value)'
+	aStream nextPutAll: ')'
 %
 method: YieldFromAst
 value
