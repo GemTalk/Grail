@@ -268,6 +268,21 @@ ___isSurrogate___: aCodePoint
 
 category: 'Grail-Accessors'
 method: PyStrSurrogate
+asString
+	"Refuse, rather than answer GemStone's Object>>asString.
+
+	``___strValue___'' already refuses, but only the DELEGATING paths consult
+	it -- ``asString'' is understood by Object, so it never reached the
+	doesNotUnderstand: hook and quietly answered the literal text
+	'aPyStrSurrogate'.  ``'%s' % filename'' produced exactly that: not an
+	error, an ANSWER, and a wrong one.  A partial surface has to fail loudly
+	or it is worse than no surface at all."
+
+	^ self ___strValue___
+%
+
+category: 'Grail-Accessors'
+method: PyStrSurrogate
 ___strValue___
 	"AbstractPyStr delegates the whole str surface through here.  This class
 	cannot: the value it holds is precisely the thing no CharacterCollection
@@ -296,7 +311,11 @@ category: 'Grail-Python Protocol'
 method: PyStrSurrogate
 ___unsupported___: what
 
-	^ NotImplementedError ___signal___:
+	"@env1: -- ___signal___: is a classmethod compiled in ENVIRONMENT 1, and
+	this method is in the file's env-0 section, so a bare send answers a
+	MessageNotUnderstood on the metaclass and the unsupported-operation
+	report becomes an uncatchable Smalltalk error instead of a Python one."
+	^ NotImplementedError @env1:___signal___:
 		'str containing lone surrogates does not support ' , what asString
 			, ' in Grail (GemStone Characters cannot hold code points D800-DFFF)'
 %
@@ -325,10 +344,44 @@ ___isTruthy___
 
 category: 'Grail-Python Protocol'
 method: PyStrSurrogate
+__bool__
+	"A str is truthy when it is non-empty.
+
+	Spelled out rather than left to the doesNotUnderstand: refusal, which is
+	how it used to be answered: bool()'s probe (Bool.gs) wraps the __bool__
+	send in ``on: MessageNotUnderstood'', and the refusal happened to raise
+	one -- because ___unsupported___ could not reach ___signal___: from env 0
+	-- so ``bool(s)'' worked by accident, through the __len__ fallback.  Once
+	the refusal raised the NotImplementedError it always meant to, the
+	accident stopped: ``bool(s)'' escaped as an unsupported operation.  It is
+	not unsupported; there was simply nothing here to say so."
+
+	^ codePoints @env0:size @env0:> 0
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
 __str__
 	"CPython: ``str(s) is s'' for an exact str."
 
 	^ self
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+__format__: formatSpec
+	"An EMPTY format spec is str(self), which is self.  That is the whole of
+	``'{}'.format(name)'', and it is what difflib's unified_diff does to build
+	its ``--- <file>'' header out of a surrogateescape'd filename
+	(test_difflib's TestBytes).
+
+	A spec that actually asks for fill/align/width/precision would have to
+	measure and slice the string through the shared format engine, which works
+	in CharacterCollections; that is refused rather than approximated, like
+	the rest of this deliberately partial surface."
+
+	(formatSpec @env0:isNil or: [formatSpec @env0:isEmpty]) ifTrue: [^ self].
+	^ self @env0:___unsupported___: '__format__ with a non-empty spec'
 %
 
 category: 'Grail-Python Protocol'
@@ -471,13 +524,17 @@ category: 'Grail-Python Protocol'
 method: PyStrSurrogate
 encode: encoding _: errors
 	"``surrogatepass'' emits the WTF-8 form (U+D800 -> ED A0 80), which is
-	what CPython answers.  ``strict'' raises.  Other handlers are not
-	implemented rather than approximated."
+	what CPython answers.  ``surrogateescape'' undoes PEP 383's byte
+	smuggling.  ``strict'' raises.  Other handlers are not implemented rather
+	than approximated."
 
-	(errors @env0:asString @env0:= 'surrogatepass') ifFalse: [
-		^ UnicodeEncodeError ___signal___:
-			(self @env0:___strictEncodeMessage___: encoding)].
-	^ self @env0:___wtf8Bytes___
+	| e |
+	e := errors @env0:asString.
+	(e @env0:= 'surrogatepass') ifTrue: [^ self @env0:___wtf8Bytes___].
+	(e @env0:= 'surrogateescape') ifTrue: [
+		^ self @env0:___surrogateEscapeBytes___: encoding].
+	^ UnicodeEncodeError ___signal___:
+		(self @env0:___strictEncodeMessage___: encoding)
 %
 
 set compile_env: 0
@@ -493,31 +550,80 @@ ___strictEncodeMessage___: encoding
 
 category: 'Grail-Python Protocol'
 method: PyStrSurrogate
+___surrogateEscapeBytes___: encoding
+	"The inverse of bytes>>___decodeSurrogateEscape___: -- PEP 383's
+	``surrogateescape''.  A code point in U+DC80..U+DCFF is a SMUGGLED BYTE
+	and goes back out as that byte; everything else is encoded normally, and
+	anything the codec cannot represent is a UnicodeEncodeError.
+
+	Only the DC80..DCFF window escapes.  A surrogate outside it never came
+	from a byte -- it was written as a literal -- and CPython refuses it here
+	too, which is what keeps the round trip honest rather than merely
+	total."
+
+	| enc out max |
+	enc := encoding asString asLowercase.
+	max := ((enc = 'ascii') or: [enc = 'us-ascii'])
+		ifTrue: [127]
+		ifFalse: [
+			((enc = 'latin-1') or: [(enc = 'latin1') or: [enc = 'iso-8859-1']])
+				ifTrue: [255]
+				ifFalse: [
+					((enc = 'utf-8') or: [enc = 'utf8'])
+						ifTrue: [nil]
+						ifFalse: [^ LookupError @env1:___signal___:
+							('unknown encoding: ' , encoding asString)]]].
+	out := ByteArray new.
+	codePoints do: [:cp |
+		(cp >= 16rDC80 and: [cp <= 16rDCFF])
+			ifTrue: [out add: cp - 16rDC00]
+			ifFalse: [
+				(self ___isSurrogate___: cp)
+					ifTrue: [^ UnicodeEncodeError @env1:___signal___:
+						(self ___strictEncodeMessage___: encoding)]
+					ifFalse: [
+						max == nil
+							ifTrue: [self ___appendUTF8___: cp to: out]
+							ifFalse: [
+								cp > max
+									ifTrue: [^ UnicodeEncodeError @env1:___signal___:
+										('''' , enc , ''' codec can''t encode character')]
+									ifFalse: [out add: cp]]]]].
+	^ out
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+___appendUTF8___: cp to: aByteArray
+	"One code point as UTF-8 bytes.  Split out of ___wtf8Bytes___ so the
+	surrogateescape encoder shares the multi-byte arithmetic instead of
+	restating it."
+
+	cp < 16r80 ifTrue: [^ aByteArray add: cp].
+	cp < 16r800 ifTrue: [
+		aByteArray add: (16rC0 bitOr: (cp bitShift: -6)).
+		^ aByteArray add: (16r80 bitOr: (cp bitAnd: 16r3F))].
+	cp < 16r10000 ifTrue: [
+		aByteArray add: (16rE0 bitOr: (cp bitShift: -12)).
+		aByteArray add: (16r80 bitOr: ((cp bitShift: -6) bitAnd: 16r3F)).
+		^ aByteArray add: (16r80 bitOr: (cp bitAnd: 16r3F))].
+	aByteArray add: (16rF0 bitOr: (cp bitShift: -18)).
+	aByteArray add: (16r80 bitOr: ((cp bitShift: -12) bitAnd: 16r3F)).
+	aByteArray add: (16r80 bitOr: ((cp bitShift: -6) bitAnd: 16r3F)).
+	^ aByteArray add: (16r80 bitOr: (cp bitAnd: 16r3F))
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
 ___wtf8Bytes___
 	"The ``surrogatepass'' encoding: plain UTF-8, except that a surrogate is
 	encoded in the three-byte form rather than refused (U+D800 -> ED A0 80).
 	Same bytes CPython answers for encode('utf-8', 'surrogatepass')."
 
-	| bytes |
-	bytes := ByteArray new.
-	codePoints do: [:cp |
-		cp < 16r80
-			ifTrue: [bytes add: cp]
-			ifFalse: [cp < 16r800
-				ifTrue: [
-					bytes add: (16rC0 bitOr: (cp bitShift: -6)).
-					bytes add: (16r80 bitOr: (cp bitAnd: 16r3F))]
-				ifFalse: [cp < 16r10000
-					ifTrue: [
-						bytes add: (16rE0 bitOr: (cp bitShift: -12)).
-						bytes add: (16r80 bitOr: ((cp bitShift: -6) bitAnd: 16r3F)).
-						bytes add: (16r80 bitOr: (cp bitAnd: 16r3F))]
-					ifFalse: [
-						bytes add: (16rF0 bitOr: (cp bitShift: -18)).
-						bytes add: (16r80 bitOr: ((cp bitShift: -12) bitAnd: 16r3F)).
-						bytes add: (16r80 bitOr: ((cp bitShift: -6) bitAnd: 16r3F)).
-						bytes add: (16r80 bitOr: (cp bitAnd: 16r3F))]]]].
-	^ bytes
+	| out |
+	out := ByteArray new.
+	codePoints do: [:cp | self ___appendUTF8___: cp to: out].
+	^ out
 %
 
 set compile_env: 0

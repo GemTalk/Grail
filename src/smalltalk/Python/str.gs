@@ -1303,9 +1303,14 @@ _format: positional kw: kwargs
 
 	Field access (``{0.attr}'', ``{0[i]}'') is NOT yet supported."
 
-	| size out i ch nextAuto |
+	| size out i ch nextAuto pieces |
 	size := self @env0:size.
 	out := WriteStream @env0:on: (Unicode7 ___new___).
+	"``pieces'' stays nil for the overwhelmingly common case.  It is only
+	created when a formatted field turns out to be a str holding LONE
+	SURROGATES, which no CharacterCollection -- and so no WriteStream on one --
+	can hold; see the assembly at the end."
+	pieces := nil.
 	i := 1.
 	nextAuto := 0.
 	[i @env0:<= size] @env0:whileTrue: [
@@ -1323,7 +1328,7 @@ _format: positional kw: kwargs
 				i := i @env0:+ 2
 			] ifFalse: [
 		(ch == ${) ifTrue: [
-			| endIdx field convFlag spec value |
+			| endIdx field convFlag spec value piece |
 			endIdx := self @env0:___findFormatBraceEnd___: i @env0:+ 1.
 			endIdx @env0:isNil ifTrue: [
 				ValueError ___signal___: 'unmatched ''{'' in format string'].
@@ -1358,14 +1363,46 @@ _format: positional kw: kwargs
 				convFlag @env0:= 's' @env0:ifTrue: [value := value __str__].
 			].
 			"Format-spec dispatch.  Delegate to value.__format__(spec)."
-			out @env0:nextPutAll: (value __format__: spec) @env0:asString.
+			piece := value __format__: spec.
+			(piece @env0:isKindOf: PyStrSurrogate)
+				ifTrue: [
+					"Flush what the stream holds and set it aside: the rest of
+					the result has to be assembled out of CODE POINTS, because
+					this piece has one no Character can represent.  A filename
+					that is not valid UTF-8 arrives here through PEP 383's
+					surrogateescape, and ``'--- {}'.format(fname)'' is exactly
+					what difflib's unified_diff does with it."
+					pieces @env0:isNil ifTrue: [pieces := OrderedCollection @env0:new].
+					pieces @env0:add: out @env0:contents.
+					pieces @env0:add: piece.
+					out := WriteStream @env0:on: (Unicode7 ___new___)]
+				ifFalse: [out @env0:nextPutAll: piece @env0:asString].
 			i := endIdx @env0:+ 1
 		] ifFalse: [
 			out @env0:nextPut: ch.
 			i := i @env0:+ 1
 		]]].
 	].
-	^ out @env0:contents
+	pieces @env0:isNil ifTrue: [^ out @env0:contents].
+	"___fromCodePoints___ demotes back to an ordinary string when nothing in
+	the result was actually a surrogate after all."
+	pieces @env0:add: out @env0:contents.
+	^ PyStrSurrogate @env0:___fromCodePoints___: (self ___codePointsOfAll___: pieces)
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___codePointsOfAll___: aCollection
+	"The code points of a sequence of pieces, each either an ordinary string
+	or a PyStrSurrogate -- the one representation that can hold both."
+
+	| cps |
+	cps := OrderedCollection @env0:new.
+	aCollection @env0:do: [:piece |
+		(piece @env0:isKindOf: PyStrSurrogate)
+			ifTrue: [cps @env0:addAll: (piece @env0:___codePoints___)]
+			ifFalse: [piece @env0:do: [:c | cps @env0:add: c @env0:codePoint]]].
+	^ cps
 %
 
 set compile_env: 0
