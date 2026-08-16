@@ -90,7 +90,7 @@ different rows and merges cleanly.
 | test.test_bufio | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '_pyio' |
 | test.test_codecs | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'encodings' |
 | test.test_contextlib_async | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.test_contextlib' |
-| test.test_difflib | ERROR | 38 | 2 | 34 | 0 |  |
+| test.test_difflib | ERROR | 38 | 0 | 2 | 0 |  |
 | test.test_gettext | ERROR | 73 | 13 | 4 | 1 |  |
 | test.test_linecache | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'importlib.machinery' |
 | test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '_compat_pickle' |

@@ -262,9 +262,19 @@ __eq__: other
 	(``'a' == ALWAYS_EQ'' is True throughout CPython's suite, and
 	``'a' == UserString('a')'' relies on the same hand-off).  ___cmpEq___ ->
 	___eqValue___ still ends at identity/False when that operand has no
-	__eq__ of its own, so plain ``'a' == 1'' is unchanged."
+	__eq__ of its own, so plain ``'a' == 1'' is unchanged.
 
-	(other isKindOf: CharacterCollection) ifTrue: [^ self @env0:= other].
+	Two strings are compared by CODEPOINT, not by GemStone's ``='', for the
+	same reason __lt__ and __contains__ already are: under
+	enableUnicodeComparisonMode ``='' is an ICU COLLATION, which treats the C0
+	control characters as ignorable and therefore EQUAL to one another.
+	``'\x01' == '\x00''' was True, and so was ``'ab\x00' == 'ab\x01''' --
+	difflib marks intraline changes with exactly those two sentinels, so its
+	line-wrapping state machine could not tell a start marker from an end one
+	(test_difflib's wrapcolumn cases).  CPython's str equality is exact."
+
+	(other isKindOf: CharacterCollection) ifTrue: [
+		^ (self ___codePointCompare___: other) @env0:= 0].
 	^ #'___NotImplemented___'
 %
 
@@ -660,7 +670,8 @@ __ne__: other
 	it here by Smalltalk ~= would skip the reflected __ne__/__eq__ that
 	___cmpNe___ -> ___neValue___ is there to try."
 
-	(other isKindOf: CharacterCollection) ifTrue: [^ self @env0:~= other].
+	(other isKindOf: CharacterCollection) ifTrue: [
+		^ (self ___codePointCompare___: other) @env0:~= 0].
 	^ #'___NotImplemented___'
 %
 
@@ -901,15 +912,58 @@ encode
 
 category: 'Grail-String Methods'
 method: CharacterCollection
+___unencodable___: cp errors: errors message: aMessage
+	"The bytes an UN-ENCODABLE code point contributes to the output under
+	CPython's error policy -- empty for 'ignore', a replacement for the three
+	substituting policies, and a raise for 'strict' (and for any name this
+	does not know, which is what CPython does for an unregistered handler).
+
+	Only 'strict' and 'ignore' were honoured before; 'replace',
+	'backslashreplace' and 'xmlcharrefreplace' all raised UnicodeEncodeError
+	as though they were 'strict'.  difflib's HtmlDiff renders a non-ASCII
+	document by asking for xmlcharrefreplace, so it could not produce one at
+	all (test_difflib test_make_file_usascii_charset_with_nonascii_input).
+
+	'surrogateescape' and 'namereplace' deliberately still raise: the first
+	needs LONE SURROGATES to survive in a str, which GemStone's Unicode
+	strings do not carry, and the second needs the Unicode character-name
+	database.  Both would be silently wrong if approximated."
+
+	| digits out width |
+	(errors @env0:= 'ignore') ifTrue: [^ ByteArray @env0:new].
+	(errors @env0:= 'replace') ifTrue: [^ ByteArray @env0:with: 63].
+	(errors @env0:= 'xmlcharrefreplace') ifTrue: [
+		^ ('&#' @env0:, cp @env0:printString @env0:, ';') @env0:asByteArray].
+	(errors @env0:= 'backslashreplace') ifTrue: [
+		"\xNN below 256, \uNNNN below 65536, \UNNNNNNNN above -- CPython picks
+		the shortest escape that holds the code point."
+		digits := '0123456789abcdef'.
+		width := cp @env0:< 256
+			ifTrue: [2]
+			ifFalse: [cp @env0:< 16r10000 ifTrue: [4] ifFalse: [8]].
+		out := WriteStream @env0:on: ByteArray @env0:new.
+		out @env0:nextPut: 92.
+		out @env0:nextPut: (width @env0:= 2
+			ifTrue: [120]
+			ifFalse: [width @env0:= 4 ifTrue: [117] ifFalse: [85]]).
+		width @env0:to: 1 by: -1 do: [:shift |
+			out @env0:nextPut: (digits @env0:at:
+				(((cp @env0:bitShift: (shift @env0:- 1) @env0:* -4)
+					@env0:bitAnd: 15) @env0:+ 1)) @env0:codePoint].
+		^ out @env0:contents].
+	^ UnicodeEncodeError ___signal___: aMessage
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
 encode: encoding _: errors
-	"Encode the receiver to bytes under ``encoding'', honoring ``errors''
-	('strict' raises UnicodeEncodeError on an un-encodable character; 'ignore'
-	drops it).  UTF-8 is a real multi-byte encoder (GemStone encodeAsUTF8);
-	UTF-16 (BOM/LE/BE) is supported; ascii and latin-1 / idna are single-byte."
-	| enc size ignore result |
+	"Encode the receiver to bytes under ``encoding'', honoring ``errors'' --
+	see ___unencodable___:errors:message: for the policies.  UTF-8 is a real
+	multi-byte encoder (GemStone encodeAsUTF8); UTF-16 (BOM/LE/BE) is
+	supported; ascii and latin-1 / idna are single-byte."
+	| enc size result |
 	enc := encoding @env0:asLowercase.
 	size := self @env0:size.
-	ignore := errors @env0:= 'ignore'.
 
 	"unicode_escape: backslash-escape control and non-ASCII characters,
 	yielding ASCII bytes (django.utils.log uses it)."
@@ -957,11 +1011,10 @@ encode: encoding _: errors
 		1 @env0:to: size do: [:i | | cv |
 			cv := (self @env0:at: i) @env0:codePoint.
 			cv @env0:> max
-				ifTrue: [ignore ifFalse: [
-					UnicodeEncodeError ___signal___:
-						((max @env0:= 127)
-							ifTrue: ['''ascii'' codec can''t encode character']
-							ifFalse: ['''latin-1'' codec can''t encode character (ordinal not in range(256))'])]]
+				ifTrue: [ws @env0:nextPutAll: (self ___unencodable___: cv errors: errors
+					message: ((max @env0:= 127)
+						ifTrue: ['''ascii'' codec can''t encode character']
+						ifFalse: ['''latin-1'' codec can''t encode character (ordinal not in range(256))']))]
 				ifFalse: [ws @env0:nextPut: cv]].
 		^ bytes @env0:withAll: ws @env0:contents].
 
@@ -990,8 +1043,8 @@ encode: encoding _: errors
 				(#(16rA4 16rA6 16rA8 16rB4 16rB8 16rBC 16rBD 16rBE) @env0:includes: cp)
 					ifFalse: [b := cp]].
 			b == nil
-				ifTrue: [ignore ifFalse: [UnicodeEncodeError ___signal___:
-					'''iso8859-15'' codec can''t encode character']]
+				ifTrue: [ws @env0:nextPutAll: (self ___unencodable___: cp errors: errors
+					message: '''iso8859-15'' codec can''t encode character')]
 				ifFalse: [ws @env0:nextPut: b]].
 		^ bytes @env0:withAll: ws @env0:contents].
 
@@ -1039,8 +1092,19 @@ method: CharacterCollection
 endswith: suffix
 	"Test whether string ends with the specified suffix.  An empty suffix is
 	always a suffix (CPython) -- GemStone's endsWith: returns false for an
-	empty argument, so special-case it."
+	empty argument, so special-case it.
 
+	A TUPLE of suffixes is CPython's ``ends with ANY of these'' form; see
+	startswith: for why handing one to GemStone was an uncatchable error."
+
+	(suffix isKindOf: tuple) ifTrue: [
+		1 @env0:to: (suffix @env0:size) do: [:ti |
+			(self endswith: (suffix @env0:at: ti)) ifTrue: [^ true]].
+		^ false].
+	(suffix @env0:isKindOf: CharacterCollection) ifFalse: [
+		TypeError ___signal___:
+			('endswith first arg must be str or a tuple of str, not '
+				@env0:, (bytes ___pyTypeNameOf___: suffix))].
 	suffix @env0:isEmpty ifTrue: [^ true].
 	^ self @env0:endsWith: suffix
 %
@@ -1802,10 +1866,46 @@ lower
 
 category: 'Grail-String Methods'
 method: CharacterCollection
+___pyTrimLeft___
+	"self with leading PYTHON whitespace removed -- see ___pyTrimRight___."
+
+	| size i |
+	size := self @env0:size.
+	i := 1.
+	[i @env0:<= size and: [self ___isPySpaceCodePoint___: (self @env0:at: i) @env0:codePoint]]
+		@env0:whileTrue: [i := i @env0:+ 1].
+	^ i @env0:= 1 ifTrue: [self] ifFalse: [self @env0:copyFrom: i to: size]
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___pyTrimRight___
+	"self with trailing PYTHON whitespace removed.
+
+	The no-argument strip/lstrip/rstrip used GemStone's trimLeft/trimRight/
+	trimBoth, whose idea of whitespace is neither CPython's subset nor its
+	superset -- it is simply a DIFFERENT set.  It strips NUL and the other
+	C0 controls, which str.isspace() says are not whitespace (difflib marks
+	intraline changes with \\x00 and \\x01 sentinels precisely because an
+	escaper will not touch them, and rstrip() ate the closing \\x01, so every
+	marked-up run lost its </span>), and it leaves the non-Latin-1 space
+	characters alone, which str.isspace() says ARE whitespace ('a\\u2003'
+	kept its EM SPACE).  ___isPySpaceCodePoint___: is the set str.isspace()
+	already uses, so both ends now agree with CPython."
+
+	| j |
+	j := self @env0:size.
+	[j @env0:>= 1 and: [self ___isPySpaceCodePoint___: (self @env0:at: j) @env0:codePoint]]
+		@env0:whileTrue: [j := j @env0:- 1].
+	^ j @env0:= self @env0:size ifTrue: [self] ifFalse: [self @env0:copyFrom: 1 to: j]
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
 lstrip
 	"Return a copy of the string with leading whitespace removed."
 
-	^ self @env0:trimLeft
+	^ self ___pyTrimLeft___
 %
 
 category: 'Grail-String Methods'
@@ -1816,7 +1916,7 @@ lstrip: chars
 	Python's str.lstrip()."
 
 	(chars == nil or: [chars == None])
-		ifTrue: [^ self @env0:trimLeft].
+		ifTrue: [^ self ___pyTrimLeft___].
 	^ self @env0:___lstripChars___: chars
 %
 
@@ -2156,7 +2256,7 @@ method: CharacterCollection
 rstrip
 	"Return a copy of the string with trailing whitespace removed."
 
-	^ self @env0:trimRight
+	^ self ___pyTrimRight___
 %
 
 category: 'Grail-String Methods'
@@ -2167,7 +2267,7 @@ rstrip: chars
 	Python's str.rstrip()."
 
 	(chars == nil or: [chars == None])
-		ifTrue: [^ self @env0:trimRight].
+		ifTrue: [^ self ___pyTrimRight___].
 	^ self @env0:___rstripChars___: chars
 %
 
@@ -2343,8 +2443,25 @@ method: CharacterCollection
 startswith: prefix
 	"Test whether string starts with the specified prefix.  An empty prefix
 	is always a prefix (CPython) -- GemStone's beginsWith: returns false for
-	an empty argument, so special-case it."
+	an empty argument, so special-case it.
 
+	A TUPLE of prefixes is CPython's ``starts with ANY of these'' form, and it
+	is not a rarity: difflib's _mdiff dispatches its whole line-pairing state
+	machine on ``s.startswith(('--?+', '--+', '- '))''.  bytes>>startswith:
+	already accepted one; str did not, and handed the tuple straight to
+	GemStone's beginsWith:, which answered an UNCATCHABLE ArgumentTypeError
+	(``expected a CharacterCollection'') that no Python ``except'' could see.
+	Each element is validated by the recursive single-prefix call, so a
+	non-str element raises the same TypeError CPython raises."
+
+	(prefix isKindOf: tuple) ifTrue: [
+		1 @env0:to: (prefix @env0:size) do: [:ti |
+			(self startswith: (prefix @env0:at: ti)) ifTrue: [^ true]].
+		^ false].
+	(prefix @env0:isKindOf: CharacterCollection) ifFalse: [
+		TypeError ___signal___:
+			('startswith first arg must be str or a tuple of str, not '
+				@env0:, (bytes ___pyTypeNameOf___: prefix))].
 	prefix @env0:isEmpty ifTrue: [^ true].
 	^ self @env0:beginsWith: prefix
 %
@@ -2407,7 +2524,7 @@ method: CharacterCollection
 strip
 	"Return a copy of the string with leading and trailing whitespace removed."
 
-	^ self @env0:trimBoth
+	^ self ___pyTrimLeft___ ___pyTrimRight___
 %
 
 category: 'Grail-String Methods'
@@ -2418,7 +2535,7 @@ strip: chars
 	Empty string strips nothing."
 
 	(chars == nil or: [chars == None])
-		ifTrue: [^ self @env0:trimBoth].
+		ifTrue: [^ self ___pyTrimLeft___ ___pyTrimRight___].
 	^ (self @env0:___lstripChars___: chars) @env0:___rstripChars___: chars
 %
 
