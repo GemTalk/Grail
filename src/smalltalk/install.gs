@@ -721,6 +721,7 @@ run
 	at: #'EnumMemberPropertyTestCase' put: nil;
 	at: #'InspectClassifyClassAttrsTestCase' put: nil;
 	at: #'DirOfAClassTestCase' put: nil;
+	at: #'AsyncDefInClassBodyTestCase' put: nil;
 	at: #'ClassBodySourceOrderTestCase' put: nil;
 	at: #'EnumIgnoreNamesTestCase' put: nil;
 	at: #'MatchStatementTestCase' put: nil;
@@ -1633,6 +1634,7 @@ input src/smalltalk/PythonTests/ClassMetaclassIdentityTestCase.gs
 input src/smalltalk/PythonTests/EnumMemberPropertyTestCase.gs
 input src/smalltalk/PythonTests/InspectClassifyClassAttrsTestCase.gs
 input src/smalltalk/PythonTests/DirOfAClassTestCase.gs
+input src/smalltalk/PythonTests/AsyncDefInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/ClassBodySourceOrderTestCase.gs
 input src/smalltalk/PythonTests/EnumIgnoreNamesTestCase.gs
 input src/smalltalk/PythonTests/MatchStatementTestCase.gs

@@ -344,8 +344,7 @@ parseAsync
 	(self atKeyword: 'def') ifTrue: [
 		| funcNode |
 		funcNode := self parseFunctionDef.
-		"Change class to AsyncFunctionDefAst"
-		funcNode changeClassTo: AsyncFunctionDefAst.
+		self ___markAsyncFunctionDef: funcNode.
 		^funcNode
 	].
 	(self atKeyword: 'for') ifTrue: [
@@ -898,7 +897,7 @@ parseDecorated
 		| funcNode |
 		self advance. "consume 'async'"
 		funcNode := self parseFunctionDefWithDecorators: decorators.
-		funcNode changeClassTo: AsyncFunctionDefAst.
+		self ___markAsyncFunctionDef: funcNode.
 		^funcNode
 	].
 	SyntaxError signal: 'Expected function or class definition after decorator'.
@@ -1434,6 +1433,40 @@ parseFunctionDefWithDecorators: decorators
 				ifTrue: [funcNode changeClassTo: ClassFunctionDefAst]
 				ifFalse: [funcNode changeClassTo: InstanceFunctionDefAst]].
 	].
+	^funcNode
+%
+
+category: 'Grail-parsing - compound statements'
+method: PythonParser
+___markAsyncFunctionDef: funcNode
+	"Record that funcNode was written ``async def'' -- but ONLY when doing so
+	does not destroy a more important classification.
+
+	Both async-def parse paths used to re-class unconditionally, and inside a
+	CLASS BODY that overwrote the Instance/Static/ClassFunctionDefAst the def
+	had just been given.  ClassDefAst collects a class's methods by selecting
+	InstanceFunctionDefAst nodes, so an ``async def'' in a class body was
+	collected by nothing and SILENTLY DISCARDED -- the method simply did not
+	exist:
+
+	    class C:
+	        async def m(self): ...
+	    hasattr(C, 'm')        # False; CPython says True
+
+	Nothing was reported, at parse time or after.  ``async def'' at MODULE
+	scope was unaffected, which is why this survived: the node is a plain
+	FunctionDefAst there and re-classing it costs nothing.
+
+	The guard is ``still a plain FunctionDefAst''.  AsyncFunctionDefAst is a
+	pure MARKER -- it adds no methods and overrides no codegen, because Grail
+	emits ``async def'' as a regular def (see AsyncFunctionDefAst's class
+	comment and AwaitAst) -- so declining to apply it inside a class body loses
+	nothing that generates code, while applying it lost the method entirely.
+	Should async ever need per-kind marking, the fix is async variants of the
+	three class-body subclasses, not re-instating the clobber."
+
+	funcNode class == FunctionDefAst ifTrue: [
+		funcNode changeClassTo: AsyncFunctionDefAst].
 	^funcNode
 %
 
