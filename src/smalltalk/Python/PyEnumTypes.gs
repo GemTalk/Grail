@@ -221,6 +221,45 @@ set compile_env: 1
 ! Shared metaclass logic — class methods on Enum class, taking target cls
 ! ===============================================================================
 
+category: 'Grail-Metaclass'
+classmethod: Enum
+___grailDeclaredMetaclass___
+	"""EnumType -- which in Grail IS ``Enum class'', the object enum.py binds
+	that name to.
+
+	CPython's type(Color) is enum.EnumType, and Grail answered Color's own
+	anonymous Smalltalk metaclass.  Declaring it here rather than special-casing
+	Enum in ___pyMetaclass___ keeps the rule general: a Smalltalk-written class
+	that has a real Python metaclass says so, and everything else is type.
+
+	Inherited by every enum whose Smalltalk chain passes Enum; a storage-rooted
+	one (``class Mixed(int, Enum)'') is found by ___pyMetaclass___'s MRO walk."""
+
+	^ Enum @env0:class
+%
+
+category: 'Grail-Metaclass'
+classmethod: IntEnum
+___grailDeclaredMetaclass___
+	"""EnumType, same as Enum's -- IntEnum cannot inherit that answer.
+
+	It is rooted at AbstractPyInt so its Smalltalk chain never passes Enum, and
+	being written in Smalltalk it has no registered MI bases either, so
+	___pyMetaclass___'s MRO walk has nothing to find.  StrEnum is the same shape;
+	IntFlag inherits this one.  A USER's ``class Mixed(int, Enum)'' is different
+	-- it does have registered bases, and the walk finds Enum through them."""
+
+	^ Enum @env0:class
+%
+
+category: 'Grail-Metaclass'
+classmethod: StrEnum
+___grailDeclaredMetaclass___
+	"""EnumType -- see IntEnum's, which this mirrors for the AbstractPyStr root."""
+
+	^ Enum @env0:class
+%
+
 category: 'Grail-Class Attrs'
 classmethod: Enum
 dynInstVars
