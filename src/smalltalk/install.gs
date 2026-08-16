@@ -595,6 +595,7 @@ run
 	at: #'ClassMethodViaInstanceTestCase' put: nil;
 	at: #'StrSubclassWideTestCase' put: nil;
 	at: #'StrSubclassConstructionTestCase' put: nil;
+	at: #'StructModuleTestCase' put: nil;
 	at: #'DatetimeLocalTimeTestCase' put: nil;
 	at: #'FunctionMetadataTestCase' put: nil;
 	at: #'SingleDispatchRegisterTestCase' put: nil;
@@ -1539,6 +1540,7 @@ input src/smalltalk/PythonTests/BuiltinSubclassOverrideTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodViaInstanceTestCase.gs
 input src/smalltalk/PythonTests/StrSubclassWideTestCase.gs
 input src/smalltalk/PythonTests/StrSubclassConstructionTestCase.gs
+input src/smalltalk/PythonTests/StructModuleTestCase.gs
 input src/smalltalk/PythonTests/DatetimeLocalTimeTestCase.gs
 input src/smalltalk/PythonTests/FunctionMetadataTestCase.gs
 input src/smalltalk/PythonTests/SingleDispatchMethodTestCase.gs
