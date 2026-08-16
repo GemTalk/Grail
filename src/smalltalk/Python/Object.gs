@@ -3994,7 +3994,13 @@ ___pyMetaclass___
 			(c isKindOf: Behavior) ifTrue: [
 				declared := c ___grailDeclaredMetaclassOrNil___.
 				declared == nil ifFalse: [^ declared]]]].
-	^ BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #'type'
+	"PyType, the class that IS Python's ``type''.  This used to mint a
+	BoundMethod on builtins -- the only ``type'' there was -- and the identity
+	held because the NAME evaluated to the same shape.  Now that the name is
+	PyType, answering the BoundMethod would break ``type(cls) is type'', which
+	is exactly what it did (ClassMetaclassIdentityTestCase, OperatorSemantics
+	testTypeOfClassIsType).  Both ends move together or neither does."
+	^ PyType
 %
 
 category: 'Grail-Metaclass'

@@ -144,11 +144,13 @@ class WithMeta(metaclass=Meta):
 
 r['explicit_metaclass_is_a_known_gap'] = repr(
     [type(ABC) is ABCMeta, type(WithMeta) is Meta])
-r['subclass_of_type_is_a_known_gap'] = repr(issubclass(Meta, type))
+# No longer a gap: a metaclass roots at PyType, the real ``type``, so it
+# REMEMBERS that it subclassed type -- which is precisely what the note below
+# said closing this would take.
+r['subclass_of_type'] = repr(issubclass(Meta, type))
 
 GRAIL_ONLY = {
     'explicit_metaclass_is_a_known_gap': '[False, False]',
-    'subclass_of_type_is_a_known_gap': 'False',
 }
 
 
