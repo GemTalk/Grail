@@ -1327,6 +1327,14 @@ ___pythonModuleAttrIdentity___
 	(n @env0:= 'string_formatter') ifTrue: [^ #('Formatter' 'string')].
 	(n @env0:= 'struct_time') ifTrue: [^ #('struct_time' 'time')].
 
+	"struct.  ``error'' and ``Struct'' are too generic to claim as
+	top-level names in the flat Python dictionary, so the Smalltalk
+	classes are StructError/PyStruct; CPython reaches both only through
+	the module.  Struct's __module__ really is the C accelerator
+	'_struct', not 'struct' -- struct.py does ``from _struct import *''."
+	(n @env0:= 'StructError') ifTrue: [^ #('error' 'struct')].
+	(n @env0:= 'PyStruct') ifTrue: [^ #('Struct' '_struct')].
+
 	"sys.  ``sys.implementation'' is a plain types.SimpleNamespace in
 	CPython, not a bespoke type, so that is what it must report."
 	(n @env0:= 'sys_flags') ifTrue: [^ #('flags' 'sys')].
