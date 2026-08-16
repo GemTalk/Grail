@@ -1924,9 +1924,10 @@ ___printfConvert___: value conv: conv flags: flags width: width precision: preci
 		being masked, as before and as in CPython, because nothing here
 		catches: builtins>>repr: is a bare ``anObject __repr__''.
 
-		``self str:'' rather than ``value __str__'' so a str SUBCLASS coerces
-		down to a plain str exactly as str() does."
-		conv @env0:= $s ifTrue: [body := (self str: value) @env0:asString].
+		``str __new__:'' rather than ``value __str__'' so a str SUBCLASS coerces
+		down to a plain str exactly as str() does -- it IS what str() does now
+		that the builtins>>str: fast path is gone."
+		conv @env0:= $s ifTrue: [body := (str __new__: value) @env0:asString].
 		conv @env0:= $r ifTrue: [body := (self repr: value) @env0:asString].
 		conv @env0:= $a ifTrue: [body := (self ascii: value) @env0:asString].
 		conv @env0:= $c ifTrue: [body := self ___printfCharBody___: value].
@@ -2456,40 +2457,18 @@ _sorted: positional kw: kwargs
 	^ lst
 %
 
-category: 'Grail-Built-in Functions'
-method: builtins
-str: anObject
-	"Python builtin str(x) — fixed-arity fast path.  A user-defined str
-	SUBCLASS instance (``class FooStr(str): ...'') must coerce down to
-	a genuine plain str here, mirroring CPython (str(subclass_instance)
-	is exactly type str, never the subclass) -- the inherited __str__
-	just answers self unchanged, which would otherwise retain the
-	subclass's own overrides (test_float.py's test_floatconversion:
-	FooStr.__float__ calls str(self) and, without this, gets back
-	ANOTHER FooStr, re-entering __float__ and recursing forever).
-	Checked against the specific sealed/kernel string classes (not
-	just ``isKindOf: CharacterCollection``) so a plain WIDE string
-	(Unicode16/32, auto-promoted by content, not a user subclass)
-	takes the untouched fast path -- str.gs's __new__: always builds a
-	narrow Unicode7 copy, which would corrupt a wide one."
-
-	((anObject isKindOf: CharacterCollection) and: [
-		(anObject @env0:class @env0:== Unicode7) @env0:not and: [
-		(anObject @env0:class @env0:== Unicode16) @env0:not and: [
-		(anObject @env0:class @env0:== Unicode32) @env0:not and: [
-		(anObject @env0:class @env0:== String) @env0:not and: [
-		(anObject @env0:class @env0:== Symbol) @env0:not]]]]]) ifTrue: [
-			"Coerce the __str__ RESULT, not the input: a plain str subclass
-			inherits str.__str__ (answers self), so this stays the input's
-			character content; but a subclass with an OVERRIDING __str__ --
-			notably a str-mixin enum member (``class E(str, Enum)``), whose
-			forced Enum __str__ answers 'E.name' while its own char content is
-			empty -- is honored (CPython str(x) calls type(x).__str__)."
-			| r |
-			r := [anObject __str__] @env0:on: AbstractException do: [:ex | anObject].
-			^ (r isKindOf: CharacterCollection) ifTrue: [str __new__: r] ifFalse: [r]].
-	^ [anObject __str__] @env0:on: MessageNotUnderstood do: [:ex | anObject __repr__]
-%
+! ``str'' is a TYPE, not a builtins function.  It had a ``str:'' fast-path
+! method here, and NameAst treats any name builtins publishes a method for as a
+! fast-path builtin (isFastPathBuiltinName:) -- so the bare name ``str''
+! evaluated to a BoundMethod wrapper instead of the class.  ``type('a') is str''
+! was false, ``isinstance(x, str)'' was passed the wrapper, and dir(str)
+! described a function object: 53 of str's names were missing.  Removing it lets
+! the name resolve to the class the way ``int'' and ``list'' already do, and
+! makes ``str(x)'' ordinary instantiation.  The coercion semantics this method
+! carried (a str SUBCLASS coerces down to a plain str; a plain kernel string --
+! including a WIDE Unicode16/32 -- is answered unchanged) now live in
+! str.gs's ``__new__:'', which is where CPython keeps them.  Same fix as
+! ``enumerate'' above.
 
 category: 'Grail-Built-in Functions'
 method: builtins

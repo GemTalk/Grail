@@ -1186,16 +1186,28 @@ testSorted
 category: 'Grail-Tests - String Functions'
 method: BuiltinsTestCase
 testStr
-	"Test str() — Phase-4 fast-path direct method dispatch."
+	"Test str() — ordinary CLASS instantiation, not a builtins fast path.
 
-	| b result |
-	b := builtins ___instance___.
+	``str'' had a ``builtins>>str:'' fast-path method, and NameAst treats any
+	name builtins publishes a method for as a fast-path builtin -- so the bare
+	name resolved to a BoundMethod WRAPPER rather than the class.
+	``type('a') is str'' was false and dir(str) described a function object.
+	Removing the method lets the name resolve to the class the way ``int'' and
+	``list'' already did; str() semantics live in str.gs's __new__:, which is
+	where CPython keeps them.  Same fix as ``enumerate''.
 
-	result := b @env1:str: 42.
-	self assert: result equals: '42'.
+	So this no longer sends ``str:'' to the builtins instance -- there is no
+	such method -- and asserts the identity that was broken instead."
 
-	result := b @env1:str: 'hello'.
-	self assert: result equals: 'hello'
+	self assert: (str @env1:__new__: 42) equals: '42'.
+	self assert: (str @env1:__new__: 'hello') equals: 'hello'.
+
+	"The name IS the class: type('a') is str."
+	self assert: str == ('a' @env1:___pyMetaclass___)
+		description: 'str must be the string type, not a builtins wrapper'.
+	self deny: ((builtins ___instance___) @env0:class
+			@env0:whichClassIncludesSelector: #'str:' environmentId: 1) notNil
+		description: 'builtins>>str: must stay removed; it shadows the class'
 %
 
 category: 'Grail-Tests - Aggregation Functions'
