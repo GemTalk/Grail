@@ -2073,7 +2073,7 @@ ___classHolderAttrStore___: aName put: aValue
 		holder := Object @env0:new.
 		self @env0:perform: #dynInstVars: env: 1 withArguments: { holder }
 	].
-	holder @env0:dynamicInstVarAt: aName @env0:asString @env0:asSymbol put: aValue.
+	holder ___pyStoreDynamic___: aName @env0:asString @env0:asSymbol put: aValue.
 	^ aValue
 %
 
@@ -2904,6 +2904,47 @@ ___unboundMethodClosure___: aSym
 %
 
 category: 'Grail-Convenience Methods - Attribute'
+method: object
+___pyStoreDynamic___: aSym put: aValue
+	"Store a Python attribute, turning GemStone's dynamic-instVar ceiling into a
+	CATCHABLE Python exception.
+
+	Grail keeps Python attributes as GemStone dynamic instVars, which cap at 255
+	PER OBJECT, so every Python object -- class, instance or module -- has a
+	hard 255-attribute ceiling (§9.41).  Crossing it signalled ImproperOperation
+	(error 2484), a SMALLTALK error: it never passes through the env-1 mapping
+	that makes Smalltalk errors catchable from Python, so ``except Exception''
+	did not see it and Python code could neither defend against the limit nor
+	detect it.  A probe written in Python simply died.
+
+	CPython has no such limit and raises nothing here, so ANY exception is
+	non-conformant.  That is not the choice being made: the choice is between an
+	uncatchable Smalltalk error and a catchable Python one, and §9.10's argument
+	applies -- a wrong-but-catchable failure is recoverable, an uncatchable one
+	is not.  MemoryError is the closest Python has to ``this object cannot hold
+	any more'', and the message names the real limit rather than pretending to
+	be CPython.
+
+	Only the ATTRIBUTE-store sites route through here.  The load path's
+	memoisation caches store dynamic instVars too, but a cache that cannot be
+	filled should fall back silently rather than raise."
+
+	^ [self @env0:dynamicInstVarAt: aSym put: aValue]
+		@env0:on: Error
+		do: [:ex |
+			"Match on the reason, not the class: ImproperOperation covers more
+			than this one condition."
+			(((ex @env0:messageText ifNil: ['']) @env0:asString)
+				@env0:indexOfSubCollection: 'more than 255 dynamic instVars') @env0:> 0
+				ifTrue: [
+					MemoryError ___signal___: 'cannot set attribute '''
+						@env0:, aSym @env0:asString @env0:,
+						''': a Grail object holds at most 255 attributes (GemStone '
+						@env0:, 'dynamic instVar limit); see section 9.41']
+				ifFalse: [ex @env0:pass]]
+%
+
+category: 'Grail-Attribute Protocol'
 method: object
 ___pyAttrLoad___: aSym
 	"Python ``obj.attr`` load semantics, dispatching at runtime.
@@ -6162,7 +6203,7 @@ ___pyAttrStore___: aName put: aValue
 					''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
 		].
 	].
-	self @env0:dynamicInstVarAt: aName @env0:asSymbol put: aValue.
+	self ___pyStoreDynamic___: aName @env0:asSymbol put: aValue.
 	^ aValue
 %
 
