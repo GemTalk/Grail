@@ -1768,7 +1768,13 @@ class TracebackException:
                 exc_value = exc
             if exc_traceback is None:
                 exc_traceback = getattr(exc, '__traceback__', None)
-        self.exc_type = exc_type
+        # CPython 3.13 DEPRECATED ``exc_type'' in favour of ``exc_type_str''.
+        # The class stores the type privately and exposes it through a
+        # property that warns; ``save_exc_type=False'' drops it entirely, which
+        # is what the deprecation is for.  Internal readers use _exc_type so
+        # rendering a traceback does not warn.
+        self._exc_type = exc_type if save_exc_type else None
+        self.exc_type_str = _type_display_name(exc_type)
         self.max_group_width = max_group_width
         self.max_group_depth = max_group_depth
         # CPython exposes ``value'' (the message) plus the chain
@@ -1896,6 +1902,20 @@ class TracebackException:
         return cls(type(exc), exc, getattr(exc, '__traceback__', None),
                    **kwargs)
 
+    @property
+    def exc_type(self):
+        """DEPRECATED since CPython 3.13 -- use ``exc_type_str''.
+
+        Kept as a warning property rather than removed: the attribute is part
+        of a long-standing public API, and test_traceback asserts BOTH that it
+        still answers the type and that reading it warns.  ``save_exc_type=
+        False'' makes it None, which is the point of the deprecation -- a
+        TracebackException is meant to be picklable without holding a class."""
+        import warnings
+        warnings.warn('Deprecated in 3.13. Use exc_type_str instead.',
+                      DeprecationWarning, stacklevel=2)
+        return self._exc_type
+
     def format_exception_only(self, show_group=False, **kwargs):
         """The exception's own line(s), no frames.
 
@@ -1908,7 +1928,7 @@ class TracebackException:
         # the module-level legacy form which derives it from the value.  Without
         # this, TracebackException(ValueError, None, None) would render
         # 'NoneType: None' where CPython gives 'ValueError: None'.
-        return format_exception_only(self.exc_type, self._value,
+        return format_exception_only(self._exc_type, self._value,
                                      show_group=show_group, _tb=self._tb,
                                      _keep_type=True)
 
@@ -2059,7 +2079,7 @@ class TracebackException:
         identity.  ``max_group_width'' / ``max_group_depth'' likewise: they
         decide where the tree is truncated, and CPython's __dict__ comparison
         includes them for that reason."""
-        return (self.exc_type, self._str, list(self.stack),
+        return (self._exc_type, self._str, list(self.stack),
                 _format_notes(self._value), self._capture_locals,
                 self.__cause__, self.__context__, self.__suppress_context__,
                 self.exceptions, self.max_group_width, self.max_group_depth)
