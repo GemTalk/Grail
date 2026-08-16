@@ -46,7 +46,7 @@ different rows and merges cleanly.
 | test.test_slice | OK | 11 | 0 | 0 | 0 |  |
 | test.test_bool | OK | 31 | 0 | 0 | 0 |  |
 | test.test_iter | OK | 57 | 0 | 0 | 4 |  |
-| test.test_traceback | ERROR | 370 | 45 | 12 | 218 |  |
+| test.test_traceback | ERROR | 370 | 45 | 11 | 219 |  |
 | test.test_compare | OK | 16 | 0 | 0 | 0 |  |
 | test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
 | test.test_keywordonlyarg | OK | 11 | 0 | 0 | 0 |  |
@@ -102,7 +102,7 @@ different rows and merges cleanly.
 | test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | [Errno 2] No such file or directory: 'src/python/stdlib/test/cjkencodings/cp949.txt' |
 | test.test_codecmaps_tw | SKIP | 6 | 0 | 0 | 6 |  |
 | test.test_htmlparser | ERROR | 67 | 6 | 13 | 1 |  |
-| test.test_ipaddress | IMPORTERROR | 0 | 0 | 0 | 0 | module has no attribute 'IPv6Address' |
+| test.test_ipaddress | IMPORTERROR | 0 | 0 | 0 | 0 | module '?' has no attribute 'IPv6Address' |
 | test.test_netrc | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'netrc' |
 | test.test_pulldom | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax' |
 | test.test_sax | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax' |

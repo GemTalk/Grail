@@ -577,6 +577,7 @@ run
 (System myUserProfile symbolList objectNamed: #'PythonTests')
 	at: #'ArithmeticErrorTestCase' put: nil;
 	at: #'AssertionErrorTestCase' put: nil;
+	at: #'AttributeCeilingTestCase' put: nil;
 	at: #'AttributeErrorTestCase' put: nil;
 	at: #'BaseExceptionGroupTestCase' put: nil;
 	at: #'BaseExceptionTestCase' put: nil;
@@ -1819,6 +1820,7 @@ input src/smalltalk/PythonTests/BaseExceptionTestCase.gs
 ! ------------------- Exception Test Classes
 input src/smalltalk/PythonTests/ArithmeticErrorTestCase.gs
 input src/smalltalk/PythonTests/AssertionErrorTestCase.gs
+input src/smalltalk/PythonTests/AttributeCeilingTestCase.gs
 input src/smalltalk/PythonTests/AttributeErrorTestCase.gs
 input src/smalltalk/PythonTests/BaseExceptionGroupTestCase.gs
 input src/smalltalk/PythonTests/BlockingIOErrorTestCase.gs
