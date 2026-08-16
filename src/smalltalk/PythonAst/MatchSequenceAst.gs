@@ -85,9 +85,10 @@ printMatchTestOn: aStream subject: aName depth: anInteger
 				p name isNil
 					ifTrue: [aStream nextPutAll: 'true']
 					ifFalse: [
-						p name printSmalltalkOn: aStream.
-						aStream nextPutAll: ' := ', aName, ' ___matchStarSlice___: ',
-							(i - 1) printString, ' fromEnd: ', (patterns size - i) printString.
+						self emitNameStoreOn: aStream target: p name
+							rhs: aName , ' ___matchStarSlice___: '
+								, (i - 1) printString , ' fromEnd: '
+								, (patterns size - i) printString.
 						aStream nextPutAll: '. true']]
 			ifFalse: [
 				aStream nextPutAll: '([:', sub, ' | '.

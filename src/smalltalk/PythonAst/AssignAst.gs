@@ -246,7 +246,7 @@ printSmalltalkOn: aStream
 				((eachTgt isKindOf: NameAst)
 					and: [self isModuleScopeStoreTarget: eachTgt])
 					ifTrue: [
-						aStream nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+						aStream nextPutAll: self ___moduleStoreReceiverExpr___; nextPutAll: ' @env0:dynamicInstVarAt: #''';
 							nextPutAll: eachTgt id;
 							nextPutAll: ''' put: ___chain___. '
 					]

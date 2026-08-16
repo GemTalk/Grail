@@ -566,8 +566,10 @@ printSmalltalkRuntimeOn: aStream
 	defs (nested inside a function or another class) the existing
 	bare-assignment emit works because the parser declares the
 	enclosing scope's variable."
-	(self isModuleScopeClassDef) ifTrue: [
+	(self ___bindsClassNameToModule___) ifTrue: [
 		aStream nextPutAll: '[| '; nextPutAll: name; nextPutAll: ' | '.
+	].
+	(self isModuleScopeClassDef) ifTrue: [
 		"Canonical-class fast path (docs/Persistent_Modules_and_Classes.md):
 		probe the committed registry first -- a hit binds the final
 		(post-decorator) object with ZERO compiles, so a warm import never
@@ -1896,12 +1898,52 @@ printSmalltalkRuntimeOn: aStream
 		aStream
 			nextPutAll: 'importlib @env0:___resetClassAttrOverlay___: ';
 			nextPutAll: name; nextPutAll: '.'; lf.
+	].
+	"The module BINDING closes the block, so it runs for the
+	global-declared case too -- where no canonical guard was opened."
+	(self ___bindsClassNameToModule___) ifTrue: [
+		"NOT a bare ``self'': inside a user class METHOD self is the Python
+		instance, not the module, so a method declaring ``global C'' would
+		hang the class off the instance.  ___moduleStoreReceiverExpr___
+		reaches the module singleton explicitly there."
 		aStream
-			nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+			nextPutAll: self ___moduleStoreReceiverExpr___;
+			nextPutAll: ' @env0:dynamicInstVarAt: #''';
 			nextPutAll: name;
 			nextPutAll: ''' put: '; nextPutAll: name;
 			nextPutAll: '.] value.'; lf.
 	].
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___bindsClassNameToModule___
+	"True when the class NAME must be stored into the module instance
+	rather than into a Smalltalk temp of the enclosing scope.
+
+	Two ways that happens.  The class def sits directly at module scope
+	(isModuleScopeClassDef), or -- the case this predicate exists for --
+	the name is declared ``global'' in the nearest enclosing scope:
+
+	    def f():
+	        global C
+	        class C: pass       # binds the MODULE's C
+
+	The nested path assumes the parser declared <name> as a Smalltalk
+	temp via declareWrite.  For a global-declared name it correctly does
+	NOT, so the bare assignment emitted there named an UNDEFINED SYMBOL
+	and the whole method failed to compile -- surfacing as ``Grail could
+	not compile this method (codegen gap)'' rather than as anything
+	pointing at ``global''.
+
+	This is deliberately SEPARATE from isModuleScopeClassDef, which also
+	gates the canonical-class registry.  A function-local class is minted
+	fresh per execution and must not enter that registry no matter where
+	its name is bound."
+
+	self isModuleScopeClassDef ifTrue: [^ true].
+	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	^ self ___nearestEnclosingScopeDeclaresGlobal___: name asSymbol
 %
 
 category: 'Grail-code generation'

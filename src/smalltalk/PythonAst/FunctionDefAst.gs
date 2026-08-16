@@ -456,7 +456,8 @@ printSmalltalkOn: aStream
 	a block temp."
 	(self isModuleScopeNestedDefTarget) ifTrue: [
 		aStream
-			nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+			nextPutAll: self ___moduleStoreReceiverExpr___;
+			nextPutAll: ' @env0:dynamicInstVarAt: #''';
 			nextPutAll: name;
 			nextPutAll: ''' put: ('
 	] ifFalse: [
@@ -831,7 +832,8 @@ printSmalltalkOn: aStream
 				(self isModuleScopeNestedDefTarget) ifTrue: [
 					aStream
 						lf;
-						nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+						nextPutAll: self ___moduleStoreReceiverExpr___;
+			nextPutAll: ' @env0:dynamicInstVarAt: #''';
 						nextPutAll: name;
 						nextPutAll: ''' put: ('
 				] ifFalse: [
@@ -978,6 +980,16 @@ isModuleScopeNestedDefTarget
 
 	| node |
 	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	"``global f'' in the nearest enclosing scope forces the module route,
+	ahead of BOTH guards below: it holds inside a class METHOD (where the
+	receiver becomes the module singleton, not self), and it holds for a
+	name the module body never mentions -- ``def f(): global g; def g()...''
+	creates the module binding at call time, so g is not in
+	moduleVariableNames.  Missing it emitted a bare assignment to a name
+	the parser had (correctly) not declared, and the method failed to
+	compile."
+	(self ___nearestEnclosingScopeDeclaresGlobal___: name asSymbol)
+		ifTrue: [^ true].
 	CallAst classBeingCompiled ifNotNil: [^ false].
 	CallAst moduleVariableNames ifNil: [^ false].
 	(CallAst moduleVariableNames includes: name asSymbol) ifFalse: [^ false].
