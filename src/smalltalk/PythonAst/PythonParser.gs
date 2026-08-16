@@ -7,7 +7,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'PythonParser'
-  instVarNames: #( source tokens position variableStack classNesting writeStack
+  instVarNames: #( source tokens position variableStack classNesting writeStack paramStack annotatedStack compTargetStack ownReadStack
                     blockingStack nonlocalStack globalStack inCompTarget
                     underscoreDefCount underscoreCurrentName readStack)
   classVars: #()
@@ -142,6 +142,21 @@ declareVariable: aSymbol
 
 category: 'Grail-node construction'
 method: PythonParser
+declareParameter: aSymbol
+	"Register a parameter: in scope exactly as declareVariable: does, and
+	additionally in the scope's PARAMETER set.
+
+	The extra set exists for one caller -- ``global x'' has to report
+	``name 'x' is parameter and global'' rather than one of the other
+	three diagnostics, and declareVariable: alone cannot say which names
+	were parameters (it is also used for f-string name propagation)."
+
+	self declareVariable: aSymbol.
+	paramStack last add: aSymbol
+%
+
+category: 'Grail-node construction'
+method: PythonParser
 declareWrite: aSymbol
 	"Register a name as both ``in scope'' and ``written in this
 	scope''.  Use this for any binding-creating form whose name is a
@@ -172,7 +187,16 @@ declareWrite: aSymbol
 	numbered def -- see underscoreDefName."
 	aSymbol == #'___unused___' ifTrue: [underscoreCurrentName := #'___unused___'].
 	variableStack last add: aSymbol.
-	inCompTarget == true ifTrue: [^ self].
+	inCompTarget == true ifTrue: [
+		"Remember it: a comprehension is its own SCOPE in Python 3, so its
+		target neither binds nor reads in the enclosing function -- and
+		``global c'' after ``[c for c in ...]'' is therefore legal.  The
+		reads emitted inside the comprehension do land in this scope's
+		readStack, which without this would report ``used prior to global
+		declaration'' for code CPython accepts."
+		compTargetStack last add: aSymbol.
+		^ self
+	].
 	writeStack last add: aSymbol.
 %
 
@@ -454,6 +478,7 @@ parseAtom
 		setStoreCtx: -- but a name this scope binds is filtered out when the
 		set is used, so the imprecision is harmless."
 		readStack last add: nameSym.
+		ownReadStack last add: nameSym.
 		^NameAst new
 			id: nameSym;
 			ctx: self loadCtx;
@@ -1201,6 +1226,11 @@ parseExpressionOrAssignment
 			].
 			self setStoreCtx: expr.
 			simple := (expr isKindOf: NameAst) ifTrue: [1] ifFalse: [0].
+			"Remember the ANNOTATED name: ``x: int'' with no value binds
+			nothing, so it never reaches the write set, yet it still makes a
+			later ``global x'' an error -- with its own wording."
+			(expr isKindOf: NameAst)
+				ifTrue: [annotatedStack last add: expr id asSymbol].
 			^AnnAssignAst new
 				target: expr;
 				annotation: annotation;
@@ -1375,11 +1405,11 @@ parseFunctionDefWithDecorators: decorators
 	(scope-only) rather than declareWrite: so the params don't show up
 	in body.writes — the writeSet is meant to flag *body* rebinds, not
 	parameter declarations."
-	args posonlyargs do: [:a | self declareVariable: a name asSymbol].
-	args args do: [:a | self declareVariable: a name asSymbol].
-	args kwonlyargs do: [:a | self declareVariable: a name asSymbol].
-	args vararg ifNotNil: [self declareVariable: args vararg name asSymbol].
-	args kwarg ifNotNil: [self declareVariable: args kwarg name asSymbol].
+	args posonlyargs do: [:a | self declareParameter: a name asSymbol].
+	args args do: [:a | self declareParameter: a name asSymbol].
+	args kwonlyargs do: [:a | self declareParameter: a name asSymbol].
+	args vararg ifNotNil: [self declareParameter: args vararg name asSymbol].
+	args kwarg ifNotNil: [self declareParameter: args kwarg name asSymbol].
 	"Save + zero classNesting around the body parse so nested ``def
 	c(x):`` inside a method body doesn't get re-classed as an
 	InstanceFunctionDefAst (which would emit instance-style
@@ -1577,6 +1607,73 @@ parseFunctionParametersUntil: endOp
 
 category: 'Grail-parsing - simple statements'
 method: PythonParser
+___checkGlobalDeclarationLegal___: aName at: aToken
+	"CPython's symtable rejects ``global x'' when x is already a parameter
+	of, bound in, or read in THIS scope -- with four distinct messages.
+	Grail accepted all four silently, so code CPython refuses to compile
+	ran here with the name quietly meaning something else.
+
+	Only inside a FUNCTION scope: at module level ``global x'' is legal
+	and a no-op, and a CLASS body permits it too (``class C: global x''
+	rebinds the module's x, which Grail already relies on).  The scope
+	depth test is what keeps this from rejecting either."
+
+	| depth |
+	depth := variableStack size.
+	depth @env0:<= 1 ifTrue: [^ self].
+	classNesting @env0:> 0 ifTrue: [^ self].
+	((paramStack last) includes: aName) ifTrue: [
+		^ self ___signalGlobalSyntaxError___: 'name ''' , aName asString
+			, ''' is parameter and global' at: aToken
+	].
+	((annotatedStack last) includes: aName) ifTrue: [
+		^ self ___signalGlobalSyntaxError___: 'annotated name ''' , aName asString
+			, ''' can''t be global' at: aToken
+	].
+	((writeStack last) includes: aName) ifTrue: [
+		^ self ___signalGlobalSyntaxError___: 'name ''' , aName asString
+			, ''' is assigned to before global declaration' at: aToken
+	].
+	"ownReadStack, NOT readStack: the latter carries free names propagated
+	OUT of nested scopes, so a read inside a nested def counted as a read
+	here.  That rejected test_builtin's ``global all, any, tuple'', where
+	every use of ``all'' is inside a nested def -- CPython compiles it,
+	and a whole module failed to import.
+
+	The check also skips comprehension TARGETS, and only here: a genuine
+	assignment puts the name in writeStack, which is tested above, so
+	skipping cannot hide a real ``assigned to before''."
+	(((ownReadStack last) includes: aName)
+		and: [((compTargetStack last) includes: aName) @env0:not]) ifTrue: [
+		^ self ___signalGlobalSyntaxError___: 'name ''' , aName asString
+			, ''' is used prior to global declaration' at: aToken
+	]
+%
+
+category: 'Grail-parsing - simple statements'
+method: PythonParser
+___signalGlobalSyntaxError___: aMessage at: aToken
+	"Signal with CPython's message.  The location fields are filled in
+	the same shape CPython uses (offset is 1-based on the ``global''
+	token's column), so a caller reading e.lineno / e.offset sees the
+	global STATEMENT rather than nothing."
+
+	| loc |
+	"PythonToken carries ``position'' (an index into the source), not a
+	column; a precise column would need a line-start table, so the
+	position is reported as-is rather than invented."
+	loc := Array @env0:with: '<string>'
+		with: (aToken line ifNil: [0])
+		with: (aToken position ifNil: [0])
+		with: nil.
+	"@env1: explicitly -- ___signalNew___:kw: is an env-1 method and this
+	file compiles at env 0, so a bare send raises MessageNotUnderstood
+	instead of the SyntaxError it was meant to build."
+	^ SyntaxError @env1:___signalNew___: (Array @env0:with: aMessage with: (tuple @env0:withAll: loc)) kw: nil
+%
+
+category: 'Grail-parsing - simple statements'
+method: PythonParser
 parseGlobal
 	"Parse: global name, ...
 
@@ -1596,6 +1693,7 @@ parseGlobal
 	[self matchOp: ','] whileTrue: [
 		names add: self advance value asSymbol.
 	].
+	names do: [:n | self ___checkGlobalDeclarationLegal___: n at: tok].
 	names do: [:n |
 		globalStack last add: n.
 		variableStack first add: n.
@@ -3280,6 +3378,11 @@ popScope
 	nonlocals := nonlocalStack removeLast.
 	globals := globalStack removeLast.
 	reads := readStack removeLast.
+	paramStack removeLast.
+	annotatedStack removeLast.
+	compTargetStack removeLast.
+	"NOT propagated to the enclosing scope -- that is the whole point."
+	ownReadStack removeLast.
 	nonlocals do: [:n |
 		"...with ONE exception: ``__class__''.
 
@@ -3378,6 +3481,24 @@ pushScope
 	nonlocalStack add: IdentitySet new.
 	globalStack add: IdentitySet new.
 	readStack add: IdentitySet new.
+	"Two sets kept SEPARATE from variables/writes because ``global'' has
+	to tell four situations apart that those two conflate.  A PARAMETER
+	registers via declareVariable:, which is also used for unrelated
+	scope hints (f-string name propagation), so ``in variables but not in
+	writes'' would misidentify them.  An ANNOTATION without a value
+	(``x: int'') binds nothing, so it is not a write at all -- yet it
+	still makes a later ``global x'' an error, with its own message."
+	paramStack add: IdentitySet new.
+	annotatedStack add: IdentitySet new.
+	compTargetStack add: IdentitySet new.
+	"Reads made by THIS scope's own statements.  Deliberately NOT the same
+	as readStack, which popScope grows by FREE-NAME PROPAGATION: every
+	name an inner scope mentions without binding is added to the enclosing
+	scope's readStack so closures and locals() work.  That makes readStack
+	the TRANSITIVE read set, and using it to answer ``was this name used
+	before the global declaration?'' reports reads that happened inside a
+	nested def -- a different scope, and legal."
+	ownReadStack add: IdentitySet new.
 %
 
 category: 'Grail-node construction'
@@ -3556,6 +3677,14 @@ source: aString
 	globalStack add: IdentitySet new.
 	readStack := Array new.
 	readStack add: IdentitySet new.
+	paramStack := Array new.
+	paramStack add: IdentitySet new.
+	compTargetStack := Array new.
+	compTargetStack add: IdentitySet new.
+	ownReadStack := Array new.
+	ownReadStack add: IdentitySet new.
+	annotatedStack := Array new.
+	annotatedStack add: IdentitySet new.
 	classNesting := 0.
 	inCompTarget := false.
 %
