@@ -100,4 +100,53 @@ __repr__
 	^ stream @env0:contents
 %
 
+category: 'Grail-Private'
+method: iterator
+___strictExhausted___: anIndex sources: srcs name: aName
+	"CPython's ``check:'' label in zip_next (bltinmodule.c), shared by zip
+	and map -- both grew a ``strict='' keyword and both implement it the
+	same way.  anIndex is the 1-based position of the source that just
+	raised StopIteration.
+
+	If it is NOT the first source, the earlier ones supplied an item this
+	round, so this one is short.  If it IS the first, the zip may simply be
+	over -- but only if every OTHER source is also exhausted, so each is
+	pulled once to find out.  Anything that is not StopIteration (a source
+	raising its own error) propagates untouched, which is what
+	test_builtin''s test_zip_strict_error_handling checks: it interleaves a
+	deliberately-raising iterator with short ones and pins which exception
+	wins at each length.
+
+	Answers nothing -- every path signals."
+
+	| stopped |
+	anIndex @env0:> 1 ifTrue: [
+		ValueError ___signal___:
+			(self ___strictMessage___: aName argument: anIndex relation: 'shorter')].
+	2 @env0:to: srcs @env0:size do: [:j |
+		stopped := false.
+		[(srcs @env0:at: j) __next__] @env0:on: StopIteration do: [:ex |
+			stopped := true.
+			ex @env0:return: nil].
+		stopped ifFalse: [
+			ValueError ___signal___:
+				(self ___strictMessage___: aName argument: j relation: 'longer')]].
+	StopIteration ___signal___: nil
+%
+
+category: 'Grail-Private'
+method: iterator
+___strictMessage___: aName argument: anIndex relation: aRelation
+	"CPython's wording, down to the singular/plural of the reference
+	argument: ``zip() argument 2 is shorter than argument 1'' but
+	``zip() argument 3 is shorter than arguments 1-2''."
+
+	| prev |
+	prev := anIndex @env0:- 1.
+	^ aName @env0:, '() argument ' @env0:, anIndex @env0:printString
+		@env0:, ' is ' @env0:, aRelation @env0:, ' than argument'
+		@env0:, (prev @env0:= 1 ifTrue: [' '] ifFalse: ['s 1-'])
+		@env0:, prev @env0:printString
+%
+
 set compile_env: 0

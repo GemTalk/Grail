@@ -544,6 +544,35 @@ __ceil__
 	^ self
 %
 
+category: 'Grail-Private'
+method: int
+___floorQuotientOf___: aDividend by: aDivisor
+	"Floor division that survives the SmallInteger boundary.
+
+	GemStone's ``//'' primitive OVERFLOWS for the one integer pair whose
+	true quotient is not representable as a SmallInteger:
+
+	    (0 - 1152921504606846976) // -1  =>  -1152921504606846976
+
+	-- it answers the dividend unchanged rather than promoting to a
+	LargePositiveInteger.  ``quo:'' and ``/'' overflow identically; ``*''
+	and ``negated'' promote correctly.  That dividend is SmallInteger's
+	minimum, so this is exactly CPython's ``divmod(-sys.maxsize-1, -1)''
+	case (test_builtin test_divmod), which must answer (sys.maxsize+1, 0).
+	Silently wrong rather than loud: the quotient came back with the wrong
+	SIGN and no error at all.
+
+	Dividing an integer by -1 IS negation, exactly, for every input, so
+	routing the whole ``-1'' divisor case through #negated fixes the
+	boundary and changes nothing else.  Both operands must be integers:
+	``5.5 // -1'' is -6.0, which is not ``5.5 negated''."
+
+	((aDividend @env0:isKindOf: Integer)
+		and: [(aDivisor @env0:isKindOf: Integer) and: [aDivisor @env0:= -1]])
+			ifTrue: [^ aDividend @env0:negated].
+	^ aDividend @env0:// aDivisor
+%
+
 category: 'Grail-Arithmetic'
 method: int
 __divmod__: other
@@ -553,7 +582,7 @@ __divmod__: other
 	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
 	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
 		ZeroDivisionError ___signal___: 'division by zero'].
-	quot := self @env0:// other.
+	quot := self ___floorQuotientOf___: self by: other.
 	rem := self @env0:\\ other.
 	^ tuple @env0:with: quot with: rem
 %
@@ -648,7 +677,7 @@ __floordiv__: other
 	(other isKindOf: Number) ifTrue: [
 		(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
 			ZeroDivisionError ___signal___: 'division by zero'].
-		^ self @env0:// other].
+		^ self ___floorQuotientOf___: self by: other].
 	((other @env0:class @env0:methodDictForEnv: 1)
 		@env0:includesKey: #'__index__') ifTrue: [
 			"The __index__ result is the real divisor, so it is what gets
@@ -658,7 +687,7 @@ __floordiv__: other
 			idx := other __index__.
 			(ZeroDivisionError @env0:___isZeroDivisor___: idx) ifTrue: [
 				ZeroDivisionError ___signal___: 'division by zero'].
-			^ self @env0:// idx].
+			^ self ___floorQuotientOf___: self by: idx].
 	^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'
 %
 
@@ -958,7 +987,7 @@ __rdivmod__: other
 	"Reverse form: other OP self -- self is the divisor."
 	(ZeroDivisionError @env0:___isZeroDivisor___: self) ifTrue: [
 		ZeroDivisionError ___signal___: 'division by zero'].
-	quot := other @env0:// self.
+	quot := self ___floorQuotientOf___: other by: self.
 	rem := other @env0:\\ self.
 	^ tuple @env0:with: quot with: rem
 %
@@ -980,9 +1009,10 @@ __rfloordiv__: other
 	(ZeroDivisionError @env0:___isZeroDivisor___: self) ifTrue: [
 		ZeroDivisionError ___signal___: 'division by zero'].
 
-	(other isKindOf: Number) ifTrue: [^ other @env0:// self].
+	(other isKindOf: Number) ifTrue: [^ self ___floorQuotientOf___: other by: self].
 	((other @env0:class @env0:methodDictForEnv: 1)
-		@env0:includesKey: #'__index__') ifTrue: [^ (other __index__) @env0:// self].
+		@env0:includesKey: #'__index__') ifTrue: [
+			^ self ___floorQuotientOf___: (other __index__) by: self].
 	^ self ___rbinOpFallback___: other op: '//'
 %
 
