@@ -668,10 +668,55 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
         def __hash__(self):
             return hash(tuple(self._values))
 
+        def _cmp_values(self, other):
+            """``other``'s elements as a list, or None when ``other`` is not
+            a tuple-like operand and the comparison must decline.
+
+            CPython's namedtuple IS a tuple, so it compares and ORDERS against
+            tuples and other namedtuples and answers NotImplemented for
+            anything else.  Grail's cannot subclass tuple (see the factory
+            docstring), so it has to spell the protocol out -- and until it
+            did, a namedtuple could not be sorted at all: difflib keeps its
+            matching blocks in a list of ``Match`` namedtuples and sorts it,
+            which raised "'<' not supported between instances of 'Match' and
+            'Match'" (test_difflib).
+            """
+            values = getattr(other, '_values', None)
+            if values is not None:
+                return list(values)
+            if isinstance(other, tuple):
+                return list(other)
+            return None
+
         def __eq__(self, other):
-            if hasattr(other, '_values'):
-                return self._values == other._values
-            return self._values == list(other)
+            values = self._cmp_values(other)
+            if values is None:
+                return NotImplemented
+            return self._values == values
+
+        def __lt__(self, other):
+            values = self._cmp_values(other)
+            if values is None:
+                return NotImplemented
+            return self._values < values
+
+        def __le__(self, other):
+            values = self._cmp_values(other)
+            if values is None:
+                return NotImplemented
+            return self._values <= values
+
+        def __gt__(self, other):
+            values = self._cmp_values(other)
+            if values is None:
+                return NotImplemented
+            return self._values > values
+
+        def __ge__(self, other):
+            values = self._cmp_values(other)
+            if values is None:
+                return NotImplemented
+            return self._values >= values
 
         def _asdict(self):
             result = {}

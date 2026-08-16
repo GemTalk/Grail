@@ -1421,8 +1421,13 @@ decode: encoding
 					('''utf-8'' codec can''t decode bytes: invalid continuation byte')]
 	].
 
-	"Support ASCII"
-	(encodingStr @env0:= 'ascii') ifTrue: [
+	"Support ASCII.  ``us-ascii'' is the same codec under the name that appears
+	in a MIME Content-Type header, and str>>encode already accepted it on the
+	way out -- difflib's HtmlDiff round-trips through
+	``.encode(charset, 'xmlcharrefreplace').decode(charset)'', so accepting the
+	spelling in only one direction made ``make_file(..., charset='us-ascii')''
+	a LookupError (test_difflib)."
+	((encodingStr @env0:= 'ascii') or: [encodingStr @env0:= 'us-ascii']) ifTrue: [
 		| result size |
 		size := self @env0:size.
 		result := Unicode7 ___new___: size.
