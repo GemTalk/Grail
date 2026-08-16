@@ -162,3 +162,53 @@ testUnassignableNonlocalTargetStillCompiles
 
 	self deny: testModule @env1:unassignable_nonlocal_target_still_compiles.
 %
+
+category: 'Grail-Tests - nonlocal __class__ in a method'
+method: ClassBodyNonlocalTestCase
+testNonlocalClassInMethodCompiles
+	"``nonlocal __class__'' in a METHOD body -- the one name CPython exempts
+	from needing an enclosing binding, since a class body supplies __class__ to
+	its methods as an implicit closure cell.
+
+	popScope stripped EVERY nonlocal name from the scope's local set, so the
+	following assignment had no declared Smalltalk temp to target.  That is a
+	CompileError, and Class.gs answers one by installing a stub that raises
+	``Grail could not compile this method (codegen gap)'' when called -- so the
+	failure surfaced only at call time.  test_super's TestSuper.tearDown is
+	this exact shape, and because tearDown runs after EVERY test in the class,
+	one uncompilable method errored nine of them.
+
+	The name is now kept local when no enclosing scope binds it, which declares
+	the temp.  Grail resolves __class__ lexically rather than through a
+	rebindable cell, so the write stays within the method -- and the damage
+	CPython's tearDown exists to repair cannot occur here in the first place."
+
+	self assert: testModule @env1:nonlocal_class_in_method_compiles equals: 'T'
+%
+
+category: 'Grail-Tests - nonlocal __class__ in a method'
+method: ClassBodyNonlocalTestCase
+testNonlocalClassDoesNotBreakSiblingMethods
+	"A sibling method of the same class is unaffected -- zero-arg super() in
+	particular still resolves, since it reads the defining class lexically and
+	not through the name this method rebinds."
+
+	| pair |
+	pair := testModule @env1:nonlocal_class_does_not_break_siblings.
+	self assert: (pair @env1:__getitem__: 0) equals: 'repaired'.
+	self assert: (pair @env1:__getitem__: 1) equals: 'base+derived'
+%
+
+category: 'Grail-Tests - nonlocal __class__ in a method'
+method: ClassBodyNonlocalTestCase
+testOrdinaryNonlocalStillWritesThrough
+	"The ordinary case must be untouched: a nonlocal that DOES have an
+	enclosing binding still writes through to it rather than binding a fresh
+	local.  That is the whole point of stripping the name, and the new
+	exemption is conditioned on there being no enclosing binding at all."
+
+	self assert: testModule @env1:nonlocal_with_enclosing_binding_still_writes_through
+		equals: 2.
+	self assert: testModule @env1:nonlocal_in_nested_function_still_writes_through
+		equals: 'set by inner'
+%

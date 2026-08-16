@@ -80,7 +80,7 @@ different rows and merges cleanly.
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
 | test.test_named_expressions | ERROR | 74 | 8 | 14 | 0 |  |
 | test.test_subclassinit | ERROR | 17 | 7 | 3 | 0 |  |
-| test.test_super | ERROR | 40 | 13 | 24 | 3 |  |
+| test.test_super | ERROR | 40 | 13 | 16 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
 | test.test_with | ERROR | 54 | 5 | 5 | 0 |  |
 | test.test_positional_only_arg | ERROR | 28 | 4 | 4 | 0 |  |
