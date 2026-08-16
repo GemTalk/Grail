@@ -748,7 +748,9 @@ __str__
 		for any object whose printString differs from its __str__.  The
 		multi-arg branch below was already fixed for this same class of bug
 		(``atuple''); this is the one-arg half of it."
-		^ (builtins instance) str: arg
+		"``str __new__:'' rather than the removed ``builtins>>str:'' fast path --
+		str is a class now, so this is ordinary instantiation."
+		^ str __new__: arg
 	].
 	"Multiple args: CPython's ``str(exc)'' is ``str(self.args)'', and a tuple has
 	no __str__ so str() falls back to its __repr__ -- ``Exception(0,1,2)''

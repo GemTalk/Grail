@@ -3386,3 +3386,85 @@ lookup and had nothing to do with C. Grouping by the message would have skipped
 three tests and left the real bug in place, still discarding decorators
 everywhere else in the corpus. The probe that separated them cost about five
 minutes.
+
+### 9.43 `str` was not the string type, and `dir()` is how we found out (2026-08-16, gs40)
+
+`test_traceback`'s ten `PurePythonSuggestionFormattingTests` failures are not
+traceback bugs. `_compute_suggestion_error` and `_suggestion_suffix` are both
+correct and correctly wired; what feeds them is wrong. Four of the ten come down
+to `dir()` / `__dict__` / `__getattribute__` conformance, so `dir()` was measured
+directly rather than reasoned about — `scripts/dir_parity.py`, 42 subjects,
+diffed against CPython 3.14.6.
+
+**The first result overturned the working assumption.** The belief going in,
+formed from one hand-picked class, was that Grail's `dir()` only ever
+OVER-reports. Across the corpus it was **207 missing, 788 extra**.
+
+But a raw count of "missing" is useless, because two opposite problems look
+identical in a diff. So the harness classifies each missing name by whether
+`getattr` can still reach it:
+
+| | count | meaning |
+| --- | --- | --- |
+| ABSENT | 142 | `getattr` misses it too — `dir()` is HONEST; the gap is a missing feature |
+| REPORTING | 65 | reachable but unlisted — a real `dir()` defect |
+
+Two thirds of the apparent "dir bug" is not one. `float.__radd__`,
+`__firstlineno__`, `__static_attributes__`, `__weakref__`, `__slots__` members
+and function `__globals__` are genuinely absent; no `__dir__` rewrite conjures
+them. **This classification is the harness's whole value** — without it the
+obvious move is to start rewriting `__dir__`, which would have fixed almost
+nothing.
+
+**And 53 of the 65 real defects were one thing, which was not `dir()` either.**
+
+```
+type(str) = BoundMethod        str is type('') = False
+```
+
+`str` was not the string type. Grail published a `str:` fast-path method on
+`builtins`, and `NameAst>>isFastPathBuiltinName:` binds any such name to a
+BoundMethod wrapper — so `dir(str)` was faithfully describing a *function*
+(`__call__`, `__code__`, `__func__`). The identical trap is already documented
+for `enumerate` in `builtins.gs`, with the identical fix.
+
+The wrapper survived so long because it is so well camouflaged: `isinstance(x,
+str)`, `str('x')`, `str.__name__`, `issubclass(str, object)` and even
+`class S(str)` all worked. Only two things showed it, and neither is something
+anyone reads code to find. Checking all fourteen builtin type names found
+exactly two affected — `str` and `type`; `int`, `float`, `list`, `dict`, `set`,
+`tuple`, `bytes`, `bool`, `frozenset`, `object`, `bytearray`, `complex` were
+already the real classes.
+
+Removing `builtins>>str:` moves `str()`'s semantics into `str.gs`'s `__new__:`,
+where CPython keeps them. Two traps there, both found by tests rather than
+foresight:
+
+* **Answering a kernel-class receiver unchanged is not a safe fast path.** A
+  str-mixin enum member (`class E(str, Enum)`) IS stored in a kernel string
+  class, and its forced Enum `__str__` answers `'E.name'` while its character
+  content is something else. Short-circuiting on the class returned the raw
+  content. `__str__` must always be consulted; what the kernel case skips is the
+  COPY, which is what keeps a wide `Unicode16/32` from being narrowed.
+* **"Canonical receiver" is any kernel string class, not just the `str` global.**
+  A str-mixin enum resolves its member type by walking the storage chain and
+  lands on `Unicode32`, so a `Unicode7`-only test sent that receiver down the
+  subclass allocate path and left the member's value raw — `1` rather than `'1'`.
+
+`Enum>>___grailStrBuiltin` then had to stop minting the old handle. Its failure
+mode is worth recording: member-value construction is *best-effort*, so a
+BoundMethod on a selector that no longer existed failed **silently** and the
+member simply kept its raw value. A loud error would have been cheaper.
+
+Result: `dir()` REPORTING defects **65 → 12**, SUnit 4538/4538, and the twelve
+that remain are small and specific — `__dict__` unlisted on exception classes
+(5), a secondary base's DATA attribute reachable but unlisted (2), and module
+dunders on `sys` (5).
+
+**The lesson is §9.42's, one level up.** There the error message named the thing
+that failed rather than the thing that was wrong. Here the *symptom* did:
+"`dir(str)` is missing 53 names" is a true statement about `dir` and a false
+lead about the defect, which was in name resolution. Both times the fix came
+from a probe that varied ONE thing — there, base position; here, what `type(str)`
+actually answers. Neither was reachable by reading the code that appeared to be
+at fault.

@@ -181,16 +181,37 @@ testCodegenIntTwoArg
 
 category: 'Grail-Tests - Codegen'
 method: ClassCallFastPathTestCase
-testCodegenStrStillUsesBuiltinsFastPath
-	"`str(42)` must keep going through the builtins instance fast path
-	(builtins has `str: anObject` defined). The class-call fast path
-	must not steal this case — builtins fast path takes precedence."
+testCodegenBuiltinsFastPathTakesPrecedence
+	"A name builtins publishes a fast-path method for must keep going through
+	the builtins instance; the class-call fast path must not steal it.
+
+	``str(42)'' used to be this test's example and no longer can be: builtins
+	>>str: was REMOVED so that the bare name ``str'' resolves to the class
+	rather than a BoundMethod wrapper (``type('a') is str'' was false, and
+	dir(str) described a function).  ``repr'' is the same shape and still has
+	its fast path, so it pins the precedence rule the test is actually about.
+	testCodegenStrIsAClassCall below pins what str does now, so the pair covers
+	both sides of the boundary."
+
+	| src |
+	src := self generatedSourceFor: 'repr(42)'.
+	self assert: (src includesString: '#builtins) instance').
+	self assert: (src includesString: 'repr: ').
+	self deny: (src includesString: '@env1:__new__')
+%
+
+category: 'Grail-Tests - Codegen'
+method: ClassCallFastPathTestCase
+testCodegenStrIsAClassCall
+	"``str(42)'' is ordinary class instantiation now that builtins>>str: is
+	gone -- the same shape ``int(x)'' and ``list(x)'' have always had.  Pins the
+	codegen half of that change; BuiltinsTestCase>>testStr pins the runtime
+	half (str IS the string type, and builtins>>str: stays removed)."
 
 	| src |
 	src := self generatedSourceFor: 'str(42)'.
-	self assert: (src includesString: '#builtins) instance').
-	self assert: (src includesString: 'str: ').
-	self deny: (src includesString: '@env1:__new__')
+	self assert: (src includesString: '@env1:__new__').
+	self deny: (src includesString: 'instance) str: ')
 %
 
 category: 'Grail-Tests - Codegen'

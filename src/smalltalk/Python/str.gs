@@ -47,6 +47,59 @@ __new__: obj
 	instance of the subclass in user code like markupsafe.Markup."
 
 	| source result |
+	"CANONICAL RECEIVER = Python's ``str(obj)''.  This branch used to live in
+	builtins>>str:, reached because ``str(x)'' compiled to a direct
+	``builtins str: x'' send.  That fast-path method is what made the NAME
+	``str'' resolve to a BoundMethod wrapper instead of the class
+	(NameAst>>isFastPathBuiltinName:), so ``type('a') is str'' was false and
+	dir(str) described a function -- 53 of str's names missing.  Removing the
+	method fixes the name; the semantics it carried have to land HERE, which is
+	where CPython keeps them anyway.
+
+	A plain kernel string is answered UNCHANGED.  Not just an optimisation: the
+	allocate-and-copy below builds a string of the RECEIVER's class, so a wide
+	Unicode16/32 (auto-promoted by content, not a user subclass) copied into a
+	narrow Unicode7 would be corrupted."
+	"Canonical = ANY kernel string class, not only the ``str'' global (Unicode7).
+	A str-mixin enum resolves its member type by walking the storage chain, and
+	that walk answers Unicode32 -- so a Unicode7-only test sent that receiver
+	down the SUBCLASS allocate path and left the member's value raw (1 rather
+	than '1'), which is what broke the str-mixin enum tests."
+	((self @env0:== Unicode7)
+		or: [(self @env0:== Unicode16)
+		or: [(self @env0:== Unicode32)
+		or: [(self @env0:== String)
+		or: [self @env0:== Symbol]]]]) ifTrue: [
+		obj @env0:ifNil: [^ '' @env0:copy].
+		(obj isKindOf: CharacterCollection) ifTrue: [
+			| r isKernelString |
+			"__str__ is ALWAYS consulted, kernel string or not.  Answering a
+			kernel-class receiver unchanged looks like a safe fast path and is
+			not: a str-mixin enum member (``class E(str, Enum)'') IS stored in a
+			kernel string class, and its forced Enum __str__ answers 'E.name'
+			while its own character content is something else entirely.
+			Short-circuiting on the class returned the raw content and broke
+			five enum tests."
+			isKernelString := (obj @env0:class @env0:== Unicode7)
+				or: [(obj @env0:class @env0:== Unicode16)
+				or: [(obj @env0:class @env0:== Unicode32)
+				or: [(obj @env0:class @env0:== String)
+				or: [obj @env0:class @env0:== Symbol]]]].
+			r := [obj __str__] @env0:on: AbstractException do: [:ex | obj].
+			"A kernel string is returned WITHOUT copying.  ___allocateStringLike___
+			builds a string of the RECEIVER's class, so copying a wide
+			Unicode16/32 (auto-promoted by content, not a user subclass) into the
+			narrow canonical class would corrupt it."
+			isKernelString ifTrue: [^ r].
+			"A str SUBCLASS instance coerces DOWN to a genuine plain str --
+			CPython's str(subclass_instance) is exactly str, never the subclass.
+			Without it, FooStr.__float__ calling str(self) got back another
+			FooStr and recursed forever (test_float test_floatconversion)."
+			^ (r isKindOf: CharacterCollection)
+				ifTrue: [self ___allocateStringLike___: r]
+				ifFalse: [r]].
+		^ [obj __str__] @env0:on: MessageNotUnderstood do: [:ex | obj __repr__]].
+
 	obj @env0:ifNil: [source := ''].
 	obj @env0:ifNotNil: [
 		(obj isKindOf: CharacterCollection)
@@ -66,6 +119,27 @@ __new__: obj
 			with: source
 			startingAt: 1
 	].
+	^ result
+%
+
+category: 'Grail-Initialization'
+classmethod: CharacterCollection
+___allocateStringLike___: source
+	"A fresh string of the RECEIVER's class carrying source's characters.
+
+	Split out of __new__: so the canonical ``str(obj)'' branch can coerce a
+	subclass instance down to a plain str without re-entering __new__: -- which
+	would take the canonical branch again and answer the subclass unchanged,
+	defeating the coercion."
+
+	| result |
+	result := self @env0:new: source @env0:size.
+	source @env0:size @env0:> 0 ifTrue: [
+		result
+			@env0:replaceFrom: 1
+			to: source @env0:size
+			with: source
+			startingAt: 1].
 	^ result
 %
 

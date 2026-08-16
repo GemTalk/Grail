@@ -2627,18 +2627,22 @@ ___grailMixinFromMro: cls
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
 ___grailStrBuiltin
-	"The object the Python name ``str'' evaluates to.
+	"The object the Python name ``str'' evaluates to -- now the CLASS.
 
-	Grail has no single ``str'' CLASS -- strings span Unicode7 / Unicode16 /
-	Unicode32 under CharacterCollection -- so ``str'' is the builtins handle,
-	not a Behavior.  NOT ``builtins ___pyAttrLoad___: #str'': that answers the
-	Unicode7 CLASS, a different object from what the bare name resolves to (in
-	Grail ``str is builtins.str'' is itself False).  BoundMethods are equal by
-	receiver+selector, so minting the handle reproduces the name's value."
+	This used to mint a BoundMethod on builtins>>str:, because that fast-path
+	method is what the bare name ``str'' resolved to
+	(NameAst>>isFastPathBuiltinName:) and the concrete Unicode class did not
+	implement Python's str().  Both halves have changed: builtins>>str: is gone,
+	so the name resolves to the class the way ``int'' and ``list'' already did,
+	and str.gs's __new__: now carries the str() semantics for a canonical
+	receiver.  Minting the old handle would answer a BoundMethod on a selector
+	that no longer exists, and since member-value construction is best-effort
+	the failure was SILENT: ``class E(str, Enum): june = 1'' kept 1 as its
+	_value_ instead of '1'.
 
-	^ BoundMethod
-		receiver: ((Python @env0:at: #builtins) instance)
-		selector: #'str'
+	The name is kept for its call sites, which want ``whatever str() is''."
+
+	^ Python @env0:at: #str
 %
 
 category: 'Grail-Enum Metaclass'
