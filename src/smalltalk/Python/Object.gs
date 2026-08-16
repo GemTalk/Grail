@@ -3074,7 +3074,11 @@ ___pyAttrLoad___: aSym
 			^ dValue
 		].
 		^ self @env0:at: aSym ifAbsent: [
-			AttributeError ___signal___: 'module has no attribute ''' @env0:, s @env0:, ''''
+			"CPython names the module: ``module 'io' has no attribute 'nope'''."
+			AttributeError ___signal___: 'module ''' @env0:,
+				((self @env0:dynamicInstVarAt: #'__name__') @env0:ifNil: ['?'])
+					@env0:asString @env0:,
+				''' has no attribute ''' @env0:, s @env0:, ''''
 		]
 	].
 	"Class receivers — `Cls.X` where Cls is a Python user class —

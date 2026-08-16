@@ -63,8 +63,20 @@ ___signalMissing___: aName on: anObject
 	its own blast radius across tests that assert on it."
 
 	| instance msg |
-	msg := (anObject @env0:class @env0:name @env0:asString) @env0:,
-		' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''.
+	"CPython quotes the type name: ``'A' object has no attribute 'x'''.  The
+	sibling path above (aValue == nil) already emitted the quoted form, so Grail
+	was inconsistent with ITSELF as well as with CPython, and
+	test_getattr_suggestions asserts on the full rendered message."
+	"A CLASS receiver reads differently in CPython: ``type object 'C1' has no
+	attribute 'foo'''.  Grail said ``C1 class object has no attribute 'foo''',
+	because the metaclass's own name IS ``C1 class'' -- plausible-looking and
+	wrong in both halves."
+	msg := (anObject @env0:isKindOf: Behavior)
+		ifTrue: ['type object ''' @env0:,
+			(anObject @env0:name @env0:asString) @env0:,
+			''' has no attribute ''' @env0:, aName @env0:asString @env0:, '''']
+		ifFalse: ['''' @env0:, (anObject @env0:class @env0:name @env0:asString) @env0:,
+			''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''].
 	instance := self @env1:___new___.
 	instance @env1:___args___: { msg }.
 	instance @env0:dynamicInstVarAt: #'name' put: aName @env0:asString.
