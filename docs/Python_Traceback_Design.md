@@ -3141,3 +3141,55 @@ line of code. §9.33's recommendation was "carets are gated on an `ast`
 decision"; §9.37 showed that was wrong; this shows the replacement plan was
 also aimed at the wrong layer. The cost of finding out was one reverted change
 and one measurement, which is the cheap way to learn it.
+
+### 9.39 §9.38 was wrong: the frames were fine, my change dropped them (2026-08-15, gs40)
+
+**§9.38's central claim is false and is retracted.** It reported that Grail's
+tracebacks omit intermediate and raising frames, revised the caret blocker list
+to put "frame coverage" first, and said spans were worthless until that was
+fixed. All of it rests on a measurement taken with my own uncommitted change
+installed, and the change is what dropped the frames.
+
+Re-measured on clean `main`, the same two cases §9.38 tabulated:
+
+| raised by | §9.38 claimed | actually, on clean main |
+| --- | --- | --- |
+| explicit `raise` in `raiser` | `_names`, `raiser` | `_names`, **`mid`**, `raiser` |
+| `a / b` with `b == 0` in `div` | `_names` only | `_names`, **`div`** |
+
+Four further body shapes (`return f()`, bare `f()`, `x = f()`, a statement
+before the call) all produce the full chain. **Frame coverage was never the
+problem.**
+
+**What actually happened, and it is worth more than the retraction costs.**
+`___pythonLineForMethod___` identifies a Python frame by parsing the generated
+SOURCE for `___curPos___ := N` with an INTEGER literal — §9.38 even quotes the
+comment saying so, which is how the error survived a reading of the code. The
+span change emitted
+
+    ___curPos___ := #(4 11 4 16 '    return a / b').
+
+No integer follows the assignment, so no line is derivable, so the frame is not
+recognised as Python at all and is silently skipped. The change did not fail to
+help; it removed the frames it was meant to annotate.
+
+**The real constraint on span work, which is now known:** the position store is
+load-bearing for FRAME IDENTIFICATION, not just for the line number. Upgrading
+it to the 5-element array requires teaching `___pythonLineForMethod___` to
+parse that form too — otherwise every statement it is emitted for disappears
+from the traceback. That is a small, contained change to one scanner, and it
+makes the §9.38 experiment worth re-running rather than abandoning.
+
+**Why this happened, since it is the second time.** §9.31 retracted a "stale
+scoreboard" claim that came from reading a gitignored file. This one comes from
+measuring a build that contained an experiment I had already decided to revert.
+The common shape is a measurement whose *environment* was not established
+before the result was believed — and in both cases the result was
+surprising-but-plausible, which is exactly when the environment most deserves
+checking. A surprising measurement should first prompt "what is different about
+this build?", and the cheapest form of that question is to re-run it on a clean
+tree before writing it down.
+
+The caret blocker list reverts to §9.37's: per-operation spans in codegen, now
+with a known prerequisite (the scanner must accept the array form) that makes it
+smaller than §9.33 estimated rather than larger.
