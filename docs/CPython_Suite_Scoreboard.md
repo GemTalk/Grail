@@ -76,7 +76,7 @@ different rows and merges cleanly.
 | test.test_call | OK | 186 | 0 | 0 | 182 |  |
 | test.test_dynamic | ERROR | 11 | 5 | 2 | 0 |  |
 | test.test_exception_variations | ERROR | 30 | 2 | 7 | 0 |  |
-| test.test_global | ERROR | 20 | 4 | 1 | 0 |  |
+| test.test_global | ERROR | 20 | 0 | 1 | 0 |  |
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
 | test.test_named_expressions | ERROR | 74 | 9 | 12 | 0 |  |
 | test.test_subclassinit | ERROR | 17 | 7 | 3 | 0 |  |
