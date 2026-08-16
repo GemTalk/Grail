@@ -2163,6 +2163,45 @@ selfParameterRebound: aBooleanOrNil
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+printDefiningClassOn: aStream
+	"Emit the expression for the class lexically enclosing the method being
+	compiled -- CPython's implicit ``__class__'' cell.
+
+	This is the class half of the zero-arg ``super()'' rewrite, factored out
+	so the bare name ``__class__'' resolves through exactly the same two
+	paths and cannot drift from it:
+
+	  * A METHOD-LOCAL class (defined in a function body) is not a module
+	    attribute, so it is reached through the closure cell that holds the
+	    class object.  ___classCell___ chain-walks by the name-specific key
+	    ``___cell_<ClassName>___'', which only the defining class carries, so
+	    it still resolves correctly when the method runs on a SUBCLASS
+	    instance -- which is the whole point of the cell: ``__class__'' is
+	    the class the method was DEFINED in, not type(self).
+	  * Otherwise the class is a module attribute, read off the module
+	    instance.
+
+	Registering the captured class name is what makes ClassDefAst emit the
+	cell store, so it must happen on the same branch that reads the cell."
+
+	(self classDefIsModuleScope == false)
+		ifTrue: [
+			self addCapturedClassName: self classBeingCompiled.
+			aStream
+				nextPutAll: '(self @env1:___classCell___: #''___cell_';
+				nextPutAll: self classBeingCompiled asString;
+				nextPutAll: '___'')']
+		ifFalse: [
+			aStream
+				nextPutAll: '((';
+				nextPutAll: self moduleClassBeingCompiled name;
+				nextPutAll: ' @env0:___instance___) @env1:';
+				nextPutAll: self classBeingCompiled asString;
+				nextPutAll: ')']
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 isSelfReference: aSymbol
 	"The self/cls parameter of a class-body def IS the Smalltalk receiver --
 	but only because such a def compiles to a real method.  A CONDITIONAL
