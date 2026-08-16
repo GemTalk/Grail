@@ -699,18 +699,23 @@ __repr__
 	
 	((argsArray @env0:size) @env0:> 0) ifTrue: [
 		argsArray @env0:doWithIndex: [:arg :idx |
-			| argRepr |
 			(idx @env0:> 1) ifTrue: [
 				stream @env0:nextPutAll: ', '.
 			].
-			argRepr := arg @env0:asString.
-			(arg isKindOf: Unicode7) ifTrue: [
-				stream @env0:nextPut: $'.
-				stream @env0:nextPutAll: argRepr.
-				stream @env0:nextPut: $'.
-			] ifFalse: [
-				stream @env0:nextPutAll: argRepr.
-			].
+			"Each argument is rendered with Python repr(), which is what CPython's
+			BaseException_repr does (it formats self->args, a tuple, with %R).
+			Smalltalk ``asString'' was standing in for it, and only agreed with
+			Python on the types whose printString happens to look Pythonic --
+			integers, and strings once quotes were added by hand.  Everything else
+			leaked Smalltalk: None printed ``aNoneType'', a tuple ``atuple'', and a
+			nested exception the VM's ``a StopIteration occurred (error 2702)''.
+			test_yield_from's test_next_and_return_with_value compares
+			``%r'' % (e,) against ``StopIteration((2,))'' and
+			``StopIteration(StopIteration(3))'', both of which need real repr.
+			Quoting is no longer applied here: repr() of a str already returns it
+			quoted, and doing both gave ``''''spam''''''."
+			stream @env0:nextPutAll:
+				((builtins instance) repr: arg) @env0:asString.
 		].
 	].
 	

@@ -7,7 +7,7 @@ PythonInstance ifNil: [self error: 'PythonInstance is not defined. Check file or
 expectvalue /Class
 doit
 PythonInstance subclass: 'PythonGenerator'
-  instVarNames: #( block proc consumerSem producerSem value done returnValue started sentValue injectedException escapedException )
+  instVarNames: #( block proc consumerSem producerSem value done returnValue started sentValue injectedException escapedException running )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -48,7 +48,12 @@ State:
   * injectedException  — an exception to raise inside the producer
                          at the suspended yield point; set by
                          ``throw:`` / ``close``, raised by
-                         ``___yield___:``.'
+                         ``___yield___:``.
+  * running            — true while the body is executing, i.e. between
+                         a consumer resuming it and the producer
+                         yielding back.  Python''s ``gi_running``, and
+                         the guard that makes re-entering a generator a
+                         ValueError instead of a deadlock.'
 %
 
 expectvalue /Class
@@ -93,21 +98,30 @@ _initWithBlock: aBlock
 	started := false.
 	sentValue := nil.
 	injectedException := nil.
+	running := false.
 %
 
 category: 'Grail-Private'
 method: PythonGenerator
 _forkBody
-	"Start the producer process.  GeneratorExit is caught at the top
-	level so close() can shut down silently without leaving an
-	unhandled exception in the forked process."
+	"Start the producer process.  Every exception that leaves the body --
+	GeneratorExit included -- is stowed for the consumer rather than handled
+	here.
+
+	GeneratorExit used to be swallowed at this level, on the reasoning that
+	close() shuts down silently.  That is true of close(), but it is the
+	CONSUMER's distinction to make, not the body's: ``gen.throw(GeneratorExit())''
+	must PROPAGATE the GeneratorExit out of throw(), while ``gen.close()''
+	absorbs it and answers None.  Swallowing it here erased the difference, so
+	throw(GeneratorExit()) reported the generator's exhaustion (StopIteration)
+	instead of the exception the caller threw -- test_close_and_throw_work's
+	``throw GeneratorExit'' subtest, and four of its neighbours.  close() now
+	absorbs it explicitly, which is the only place that knows it asked."
 
 	started := true.
 	proc := [
 		[
-			[[returnValue := block value: self]
-				on: GeneratorExit
-				do: [:ex | nil]]
+			[returnValue := block value: self]
 				on: AbstractException
 				do: [:ex |
 					"An exception raised INSIDE the generator body runs
@@ -153,6 +167,17 @@ __iter__
 	^ self
 %
 
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+gi_running
+	"Python's ``gen.gi_running'' — True while this generator's body is
+	executing.  A debugger reads it, and so does test_yield_from's
+	test_delegating_generators_claim_to_be_running_with_close, which checks it
+	from inside a sub-iterator's close() while the delegator is mid-resume."
+
+	^ running @env0:ifTrue: [True] ifFalse: [False]
+%
+
 category: 'Grail-Iterator Protocol'
 method: PythonGenerator
 __next__
@@ -171,23 +196,46 @@ send: aValue
 	Python rule: sending a non-None value to a just-started generator
 	is a TypeError — the first ``yield`` has nothing to return into."
 
+	self ___checkNotRunning___.
 	started ifFalse: [
 		aValue == None ifFalse: [
 			TypeError ___signal___:
 				'can''t send non-None value to a just-started generator'
 		].
+		running := true.
 		self @env0:_forkBody.
 	] ifTrue: [
-		done ifTrue: [StopIteration ___signal___: returnValue].
+		done ifTrue: [StopIteration ___signalReturn___: returnValue].
 		sentValue := aValue.
 		injectedException := nil.
+		running := true.
 		producerSem @env0:signal.
 	].
-	consumerSem @env0:wait.
+	[consumerSem @env0:wait] @env0:ensure: [running := false].
 	done ifTrue: [
 		escapedException == nil ifFalse: [^ self _signalEscapedException].
-		StopIteration ___signal___: returnValue].
+		^ self ___signalExhausted___].
 	^ value
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___signalExhausted___
+	"Raise the StopIteration that reports the body has finished, carrying its
+	return value -- ONCE.
+
+	CPython delivers a generator's return value with the first StopIteration
+	only; the generator is exhausted afterwards, so every later next() raises a
+	bare ``StopIteration()'' whose value is None.  Grail kept answering the
+	stored returnValue forever, so a second next() on a finished generator
+	re-reported the value -- which is what
+	TestInterestingEdgeCases.assert_stop_iteration checks after each close /
+	throw (``self.assertIsNone(caught.exception.value)'')."
+
+	| rv |
+	rv := returnValue.
+	returnValue := None.
+	^ StopIteration ___signalReturn___: rv
 %
 
 category: 'Grail-Private'
@@ -206,7 +254,7 @@ _signalEscapedException
 	(test_generator_stop TestPEP479).
 
 	The generator's NORMAL termination does NOT come through here: send: / throw:
-	signal that themselves with ``StopIteration ___signal___: returnValue'' when
+	signal that themselves with ``StopIteration ___signalReturn___: returnValue'' when
 	no exception escaped.  Nor does a StopIteration that the body CATCHES, or the
 	one ``yield from'' consumes to end a delegation -- neither escapes the body."
 
@@ -273,6 +321,7 @@ throw: anException
 	value; if the exception bubbles out, propagate it; if the
 	body completes normally, raise StopIteration."
 
+	self ___checkNotRunning___.
 	started ifFalse: [
 		"Throwing on a not-yet-started generator just raises in the
 		caller — the body hasn''t reached a yield point to inject at."
@@ -282,16 +331,69 @@ throw: anException
 	done ifTrue: [^ (self _resignalable: anException) @env0:signal].
 	injectedException := anException.
 	sentValue := nil.
+	running := true.
 	producerSem @env0:signal.
-	consumerSem @env0:wait.
+	[consumerSem @env0:wait] @env0:ensure: [running := false].
 	done ifTrue: [
 		"Body finished — normal completion raises StopIteration; an
 		exception that bubbled out of the body (stowed by _forkBody)
 		re-signals on THIS (consumer) process, PEP 479 applied."
 		escapedException == nil ifFalse: [^ self _signalEscapedException].
-		StopIteration ___signal___: returnValue
+		"A GeneratorExit that was THROWN and that the body then swallowed by
+		returning still propagates: PEP 342 suppresses the StopIteration, not
+		the GeneratorExit.  ``inner'' catching the exit and returning a value
+		must therefore surface as the thrown GeneratorExit, not as
+		StopIteration(returned) -- test_close_and_throw_return's ``throw
+		GeneratorExit'' subtest.  The return value is discarded with it, so a
+		later next() reports a plain exhausted generator."
+		(anException @env0:isKindOf: GeneratorExit) ifTrue: [
+			returnValue := None.
+			^ (self _resignalable: anException) @env0:signal].
+		^ self ___signalExhausted___
 	].
 	^ value
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___probeDelegationAttr___: anIterator named: aName
+	"Look aName up on a sub-iterator through the PYTHON attribute protocol,
+	purely for its side effects.
+
+	PEP 380's expansion writes ``_m = _i.throw'' / ``_i.send'' -- a genuine
+	getattr -- and the distinction from a Smalltalk method-dictionary probe
+	matters for an object with a __getattr__ hook: the hook RUNS, and an
+	exception it raises propagates instead of being read as ``no such
+	attribute''.  test_broken_getattr_handling's sub-iterator raises
+	ZeroDivisionError from __getattr__ and expects to see it.
+
+	___respondsTo___ cannot see any of that, so callers use it as the fast path
+	and fall back here when it misses.  A genuine absence is swallowed: the
+	caller already knows what to do about it, and the two cases differ (a
+	missing ``send'' is an AttributeError, a missing ``throw'' re-raises in the
+	delegator)."
+
+	^ [anIterator @env1:___pyAttrLoad___: aName @env0:asSymbol]
+		@env0:on: AttributeError
+		do: [:ex | ex @env0:return: nil]
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___checkNotRunning___
+	"Guard every consumer entry point against re-entering a generator that is
+	already executing -- Python's ``ValueError: generator already executing''.
+
+	Without it the re-entry DEADLOCKED rather than raising: the consumer
+	signalled producerSem and then waited on consumerSem, but the ``producer''
+	it was waiting for is the very process doing the waiting, so nothing could
+	ever signal back and the scheduler reported the whole session deadlocked.
+	``yield from gi'' inside gi is the direct case (test_attempted_yield_from_loop),
+	and delegation makes it easy to reach indirectly: one() delegates to two(),
+	which delegates back to one() (test_delegating_generators_claim_to_be_running)."
+
+	running @env0:ifTrue: [
+		^ ValueError ___signal___: 'generator already executing']
 %
 
 category: 'Grail-Generator Protocol'
@@ -307,13 +409,31 @@ close
 		^ None
 	].
 	done ifTrue: [^ None].
+	self ___checkNotRunning___.
 	injectedException := GeneratorExit @env0:new.
 	sentValue := nil.
+	running := true.
 	producerSem @env0:signal.
-	consumerSem @env0:wait.
+	[consumerSem @env0:wait] @env0:ensure: [running := false].
 	done ifFalse: [
 		RuntimeError ___signal___: 'generator ignored GeneratorExit'
 	].
+	"PEP 342: close() SUPPRESSES a StopIteration, so a body that caught the
+	GeneratorExit and returned a value leaves an exhausted generator, not one
+	holding that value.  Dropping it here makes the later next() report
+	``StopIteration'' with value None, as CPython does
+	(test_close_and_throw_return)."
+	returnValue := None.
+	"The body is now finished.  Absorb the GeneratorExit this method itself
+	injected -- close() answers None rather than re-raising what it asked for --
+	but let any OTHER exception the body raised on its way out propagate, which
+	is what CPython's gen.close() does (test_close_and_throw_raise_exception
+	throws from a ``finally'' during the close and expects to see it).
+	_forkBody no longer discriminates, so the choice is made here."
+	escapedException @env0:isNil ifFalse: [
+		(escapedException @env0:isKindOf: GeneratorExit)
+			ifTrue: [escapedException := nil]
+			ifFalse: [^ self _signalEscapedException]].
 	^ None
 %
 
@@ -346,4 +466,124 @@ ___yield___: aValue
 	^ sent
 %
 
+category: 'Grail-Yield Protocol'
+method: PythonGenerator
+___yieldFrom___: anIterable
+	"Called from the generator body for ``yield from anIterable'' -- PEP 380
+	delegation.  Answers the sub-iterator's return value, which is what the
+	``yield from'' EXPRESSION evaluates to.
+
+	This is PEP 380's own formal expansion, transcribed.  ``self'' is the
+	DELEGATING generator, so ``self ___yield___: y'' is the expansion's
+	``yield _y'': it suspends this generator and hands y straight to the
+	consumer.  Everything the consumer then does at that suspension point --
+	send, throw, close -- arrives back here as the value or the exception of
+	that same ___yield___:, and is forwarded to the sub-iterator.  That
+	forwarding is the whole point of delegation, and is what makes the
+	delegating generator TRANSPARENT.
+
+	What it replaces: YieldFromAst used to open-code ``for x in it: yield x''.
+	That forwards values outward and nothing inward, so the four ways a
+	delegation is observable all failed --
+
+	  * send()  resumed the DELEGATOR and dropped the value; the sub-generator
+	    saw None (test_delegation_of_send).
+	  * throw() raised in the delegator instead of at the sub-generator's
+	    suspension point (test_delegating_throw).
+	  * close() closed the delegator without closing the sub-generator, so its
+	    ``finally'' never ran (test_delegating_close).
+	  * the expression's value was hardcoded None instead of the
+	    sub-generator's return (test_generator_return_value).
+
+	Sub-iterators need not be generators: ``yield from [1, 2]'' is legal, so
+	send/throw/close are forwarded only when the sub-iterator actually has
+	them.  Per PEP 380 a missing ``close'' is ignored, while a missing
+	``throw'' re-raises in the delegator, and a non-None send() to something
+	with no ``send'' raises AttributeError -- which is precisely
+	test_attempting_to_send_to_non_generator's contract."
+
+	| it y result finished sent raised |
+	it := anIterable @env1:__iter__.
+	result := None.
+	finished := false.
+	"The priming advance.  An already-empty sub-iterator finishes the
+	delegation before this generator ever suspends -- ``yield from ()'' must
+	not yield."
+	[y := it @env1:__next__]
+		@env0:on: StopIteration
+		do: [:ex | finished := true. result := ex @env1:value. ex @env0:return: nil].
+	[finished] @env0:whileFalse: [
+		raised := nil.
+		sent := nil.
+		"Suspend.  Returns the sent value, or raises what the consumer threw."
+		[sent := self ___yield___: y]
+			@env0:on: AbstractException
+			do: [:ex | raised := ex. ex @env0:return: nil].
+		raised @env0:isNil ifTrue: [
+			"Resumed normally: advance the sub-iterator, forwarding the sent
+			value.  next() and send(None) are distinct in CPython only in that
+			send(None) requires a send method; PEP 380 uses next() for None."
+			[sent == None
+				ifTrue: [y := it @env1:__next__]
+				ifFalse: [
+					"PEP 380 forwards a non-None send() with _i.send(_s), so a
+					sub-iterator without one raises AttributeError naming
+					``send'' -- ``yield from range(3)'' then gi.send(42) is
+					test_attempting_to_send_to_non_generator.  Raised
+					explicitly, because the bare env-1 send would otherwise
+					surface as an uncatchable MessageNotUnderstood."
+					(it ___respondsTo___: #'send:') @env0:ifFalse: [
+						self ___probeDelegationAttr___: it named: 'send'.
+						^ AttributeError ___signal___: '''' @env0:,
+							(bytes ___pyTypeNameOf___: it) @env0:,
+							''' object has no attribute ''send'''].
+					y := it @env1:send: sent]]
+				@env0:on: StopIteration
+				do: [:ex |
+					finished := true.
+					result := ex @env1:value.
+					ex @env0:return: nil]
+		] ifFalse: [
+			(raised @env0:isKindOf: GeneratorExit) ifTrue: [
+				"close(): shut the sub-iterator down first (running its
+				``finally''), then let GeneratorExit carry on out of this body so
+				_forkBody can retire the delegator."
+				(it ___respondsTo___: #'close') ifTrue: [it @env1:close].
+				^ (self _resignalable: raised) @env0:signal].
+			"throw(): re-raise at the SUB-generator's suspension point.  If it
+			catches and yields again, that value becomes the next value we
+			yield; if it returns, the delegation ends with its return value; if
+			it does not catch, the exception propagates out of here."
+			(it ___respondsTo___: #'throw:') ifFalse: [
+				"PEP 380 looks ``throw'' up as an ATTRIBUTE and re-raises in the
+				delegator only when that lookup says AttributeError.  Consulting
+				the attribute protocol (rather than stopping at the Smalltalk
+				probe above) is what lets a __getattr__ hook run and its own
+				exception propagate -- test_broken_getattr_handling."
+				self ___probeDelegationAttr___: it named: 'throw'.
+				^ (self _resignalable: raised) @env0:signal].
+			[y := it @env1:throw: raised]
+				@env0:on: StopIteration
+				do: [:ex |
+					finished := true.
+					result := ex @env1:value.
+					ex @env0:return: nil]]].
+	^ result
+%
+
+! ___pythonValueAttrs___ MUST be compiled in env 0: Object >> ___pyAttrLoad___
+! consults it through an env-0 ``respondsTo:'', so an env-1 definition is
+! invisible to the probe and the hook silently does nothing.
 set compile_env: 0
+
+category: 'Grail-Python Attribute Hook'
+classmethod: PythonGenerator
+___pythonValueAttrs___
+	"``g.gi_running'' is a bool, not a callable, so ___pyAttrLoad___ performs
+	the accessor rather than answering a BoundMethod (which would test truthy
+	whatever the generator was doing)."
+
+	^ IdentitySet new
+		add: #'gi_running';
+		yourself
+%
