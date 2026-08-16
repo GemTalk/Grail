@@ -1370,3 +1370,87 @@ testTracebackEdgeCases
 		self assert: (answer = true)
 			description: 'traceback edge-case check failed: ' , k , ' -> ' , answer printString].
 %
+
+category: 'Grail-Tests - finally semantics'
+method: TracebackTestCase
+testRaiseInFinallyReplacesInFlightException
+	"A ``raise'' inside a finally REPLACES the exception that was propagating,
+	chaining to it through __context__ -- Python lets exactly one exception
+	leave a try/finally, and it is the finally's.
+
+	Grail ran the finally from an ensure:, i.e. while the stack was already
+	unwinding, and by then ``ex pass'' had delivered the original exception to
+	the enclosing handler.  So the outer ``except'' ran TWICE -- once for the
+	ValueError it had already been handed, then again for the KeyError arriving
+	as a second, unrelated propagation.  The finally now runs inside the
+	handler, before anything outside the try can see the exception.
+
+	The generator case is the same rule reached by a different route: TryAst
+	used to fall back to a plain ensure: inside a generator, so a generator's
+	finally kept the old ordering.  See tests/python/finally_propagation.py."
+
+	| mod pair |
+	importlib @env1:modules removeKey: #'finally_propagation' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/finally_propagation.py')
+		name: 'finally_propagation'.
+
+	pair := mod @env1:raise_in_finally_replaces.
+	self assert: (pair @env1:__getitem__: 0) equals: 'KeyError'.
+	self assert: (pair @env1:__getitem__: 1) equals: 'ValueError'.
+
+	self assert: (mod @env1:outer_handler_runs_once) size equals: 1.
+
+	pair := mod @env1:generator_raise_in_finally_replaces.
+	self assert: (pair @env1:__getitem__: 0) equals: 'KeyError'.
+	self assert: (pair @env1:__getitem__: 1) equals: 'ValueError'.
+
+	self assert: mod @env1:return_in_finally_wins equals: 'finally won'
+%
+
+category: 'Grail-Tests - finally semantics'
+method: TracebackTestCase
+testControlFlowSignalIsNotAHandledException
+	"A pending ``return'' passing through a try is not an exception being
+	handled, so it must not reach sys.exc_info() nor become the __context__ of
+	anything the finally raises.
+
+	___ensureFinally___ catches BaseException, and its comment claimed the
+	control-flow carriers were excluded for free because they ``subclass the
+	kernel Exception directly, NOT this BaseException''.  They do not --
+	PythonReturn's chain runs through Grail's BaseException -- so a
+	``return'' was being installed as the session's current exception, and
+	surfaced as a PythonReturn in both places."
+
+	| mod |
+	importlib @env1:modules removeKey: #'finally_propagation' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/finally_propagation.py')
+		name: 'finally_propagation'.
+
+	self assert: mod @env1:raise_in_finally_on_return_has_no_context equals: None.
+	self assert: mod @env1:exc_info_in_finally_on_return_is_none equals: None
+%
+
+category: 'Grail-Tests - finally semantics'
+method: TracebackTestCase
+testGeneratorFinallyYieldKeepsExceptionIdentity
+	"A generator whose finally YIELDS suspends mid-propagation; the exception
+	that resumes out of the next advance is the SAME object, not a copy.
+
+	Re-raising a caught exception costs identity in GemStone whenever the
+	object still holds handler frames, since the VM refuses to signal one of
+	those and the only recourse is a copy.  ___ensureFinally___ returns from
+	its handler rather than passing, which pops those frames, so the common
+	case re-signals the original."
+
+	| mod pair |
+	importlib @env1:modules removeKey: #'finally_propagation' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/finally_propagation.py')
+		name: 'finally_propagation'.
+
+	pair := mod @env1:generator_finally_yield_keeps_exception_identity.
+	self assert: (pair @env1:__getitem__: 0) equals: 'second'.
+	self assert: (pair @env1:__getitem__: 1) equals: true
+%

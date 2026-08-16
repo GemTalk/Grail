@@ -3193,3 +3193,60 @@ tree before writing it down.
 The caret blocker list reverts to §9.37's: per-operation spans in codegen, now
 with a known prerequisite (the scanner must accept the array form) that makes it
 smaller than §9.33 estimated rather than larger.
+
+### 9.40 Carets render — and the tests for them are `@cpython_only` (2026-08-16, gs40)
+
+Grail draws PEP 657 caret lines now. The path §9.37 built is connected end to
+end, and the output is byte-identical to CPython:
+
+```
+  File "t.py", line 10, in div
+    return a / b
+           ~~^~~
+```
+
+`return raiser()` in the same traceback correctly draws NO caret — the
+bare-name-call suppression firing exactly where CPython fires it.
+
+**The three changes**, the last of which §9.39 predicted:
+
+1. `___pythonLineForMethod___` steps over `#(`, so a span store is still
+   readable as the Python-frame marker. Without this the store deletes the
+   frame (§9.39).
+2. `___emitCurPosBefore:` emits the span of a `return`'s or an assignment's
+   value — the raising operation whenever the statement holds one.
+3. `___pythonSpanForMethod___:ip:` reads the 5-element span back out of the
+   generated source, and the NON-CATCHER push uses it. This was the missing
+   link: `colno: nil` was hardcoded for every frame but the catching one, so
+   the raising frame — the one a caret attaches to — could never carry columns
+   however good the spans were. Guarded on the span's line agreeing with the
+   independently derived line, so a mis-located store cannot draw a confident
+   caret under the wrong code (§9.10).
+
+**`test_traceback` did not move**: `t=370 f=45 e=12 s=218`. This time the
+reason is definitive rather than inferred. `CPythonTracebackErrorCaretTests` and
+its legacy twin are decorated `@cpython_only`, so every one of their ~40 caret
+assertions is SKIPPED — they sit in the `s=218` bucket, not the failing one.
+
+**That retires §9.32's estimate.** It sized carets at "worth 9 tests" and §9.33
+raised it to ~12 by folding in the colorize cluster. Both counted tests that
+cannot be won: the module's caret coverage is gated behind `@cpython_only`, and
+no amount of correct caret rendering will flip it. The bucket was never
+measured — it was read off test NAMES, which is the fourth time in this stream
+of work that a name-derived bucket has been wrong (see §9.31, §9.37, §9.39).
+
+So the honest ledger for the whole caret arc: three PRs, one retraction, a
+working feature that matches CPython, and **zero tests**. The feature is worth
+having on its own terms — a traceback that points at the failing
+sub-expression is the single most useful thing PEP 657 added, and Grail's goal
+is to match CPython rather than to move a number. But the cluster should never
+have been ranked by test count, and the ranking is what drew three attempts to
+it ahead of work that could actually score.
+
+**Scope of what landed.** Single-line spans, for `return` and simple
+assignment statements only. A statement whose failure is a strict
+sub-expression (`return o.attr.meth()` where the ATTRIBUTE fails) still blames
+the whole call, and a multi-line span renders no caret. Both are recorded in
+`tests/python/caret_anchors.py`; going further needs a position store before
+each nested operation, which Smalltalk's inline expression emission has no
+statement boundary to hang on.

@@ -98,9 +98,7 @@ printSmalltalkOn: aStream
 	a non-generator scope (the helper's ``ex pass'' re-raise is generator-unsafe;
 	a generator try/finally keeps the plain ensure:).  Module-level try/finally
 	(functionBeingCompiled nil) is never a generator, so it uses the helper too."
-	useEnsureFinally := finalbody size > 0 and: [
-		CallAst functionBeingCompiled isNil
-			or: [CallAst functionBeingCompiled isGenerator not]].
+	useEnsureFinally := finalbody size > 0.
 
 	"Open ensure wrapper for finally"
 	finalbody size > 0 ifTrue: [

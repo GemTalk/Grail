@@ -156,15 +156,43 @@ __setitem__: key _: value
 					^ ValueError ___signal___:
 						'_sunder_ names, such as ''' @env0:, ks
 							@env0:, ''', are reserved for future Enum use'].
-			ks @env0:= '_ignore_' ifTrue: [
-				"``_ignore_ = 'a b''' or a list of names -- those names are then
-				skipped rather than becoming members."
-				ignoreNames := OrderedCollection @env0:new.
-				[(value isKindOf: CharacterCollection)
-					ifTrue: [value @env0:asString @env0:subStrings @env0:do: [:n |
-						ignoreNames @env0:add: (n @env0:copyReplaceAll: ',' with: '')]]
-					ifFalse: [value @env0:do: [:n | ignoreNames @env0:add: n @env0:asString]]]
-					@env0:on: AbstractException do: [:e | nil]].
+			ks @env0:= '_ignore_' ifTrue: [ | parsed already |
+				"``_ignore_ = 'a b''' (or ``'a,b''', or any iterable of names):
+				those names are then skipped rather than becoming members, and
+				EnumType drops them from the class entirely -- see
+				Enum class >> ___grailDropIgnoredNames:.
+
+				STORED BACK.  The parsed list used to be assigned to the local
+				only, so ``_ignore'' kept the empty collection the lazy default
+				installed and every ignored name went on to be treated as an
+				ordinary class-body binding.  With a loop that reuses one name
+				-- ``_ignore_ = 'Period i'; for i in range(32): ...'' -- the
+				second iteration then hit the member-clash rule below and
+				raised ``'i' already defined as 0'' (test_enum
+				TestSpecial.test_ignore).
+
+				COMMAS become separators, as CPython's
+				value.replace(',',' ').split() -- splitting first and stripping
+				commas after turned ``'a,b''' into the single name ``ab''.  The
+				parse lives on Enum, shared with ___grailDropIgnoredNames:from:,
+				which has to re-read the list off the finished class because a
+				MIXIN enum never gets an EnumDict at all."
+				parsed := Enum ___grailParseIgnoreList: value.
+				"A name that is ALREADY a member cannot be un-made into one."
+				already := parsed @env0:select: [:n | memberNames @env0:includes: n].
+				already @env0:isEmpty ifFalse: [ | text |
+					"CPython formats the clash as a set literal, so a caller matching
+					on the message sees the same shape.  Encounter order, where
+					CPython's is a set's -- arbitrary in both, and no test pins it."
+					text := ''.
+					already @env0:doWithIndex: [:n :i |
+						i @env0:> 1 ifTrue: [text := text @env0:, ', '].
+						text := text @env0:, '''' @env0:, n @env0:asString @env0:, ''''].
+					^ ValueError ___signal___:
+						'_ignore_ cannot specify already set names: {'
+							@env0:, text @env0:, '}'].
+				ignoreNames := parsed.
+				self @env0:dynamicInstVarAt: #'_ignore' put: ignoreNames].
 			^ super __setitem__: key _: value].
 	"_is_dunder, with CPython's __order__ -> _order_ rename."
 	((sz @env0:>= 5)
