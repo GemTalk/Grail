@@ -724,6 +724,7 @@ run
 	at: #'EnumIgnoreNamesTestCase' put: nil;
 	at: #'MatchStatementTestCase' put: nil;
 	at: #'TypeAliasTestCase' put: nil;
+	at: #'WarningsModuleFilterTestCase' put: nil;
 	at: #'EnumModuleApiTestCase' put: nil;
 	at: #'EnumDynamicClassAttributeTestCase' put: nil;
 	at: #'BuiltinSubclassPickleTestCase' put: nil;
@@ -1633,6 +1634,7 @@ input src/smalltalk/PythonTests/ClassBodySourceOrderTestCase.gs
 input src/smalltalk/PythonTests/EnumIgnoreNamesTestCase.gs
 input src/smalltalk/PythonTests/MatchStatementTestCase.gs
 input src/smalltalk/PythonTests/TypeAliasTestCase.gs
+input src/smalltalk/PythonTests/WarningsModuleFilterTestCase.gs
 input src/smalltalk/PythonTests/EnumModuleApiTestCase.gs
 input src/smalltalk/PythonTests/EnumDynamicClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassPickleTestCase.gs
