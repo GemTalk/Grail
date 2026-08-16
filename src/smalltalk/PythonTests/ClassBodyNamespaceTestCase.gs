@@ -37,17 +37,22 @@ ClassBodyNamespaceTestCase category: 'Grail-SUnit'
 ! enum.EnumDict.
 !
 ! Grail had no class-body namespace at all: a body compiles to accessor stores on
-! the class.  This is the FIRST STAGE of giving it one, and what it covers versus
-! what it does not is the shape of the remaining work, so both are pinned here.
+! the class.  This was the FIRST STAGE of giving it one, and what it covers
+! versus what it does not is the shape of the remaining work, so both are pinned
+! here.
 !
 ! COVERED: every class-body ASSIGNMENT, at body level and inside a compound
 ! statement (``with'' / ``if'' / loops), in source order.  Routed at two places
 ! -- the attribute-value emit in ClassDefAst, and object >>
 ! ___classBodyDefinitionalStore___:put:, which both the single and the chained
-! runtime store already funnel through.
+! runtime store already funnel through.  Since stage 6, ``def'' and nested
+! ``class'' bindings are covered too, through ___grailNsBind___: at their own
+! source position -- see ClassBodyNamespaceDefsTestCase, and the two tests below
+! that used to record their absence as a gap.
 !
-! NOT COVERED: ``def'' and nested ``class'' bindings, ``vars()'' inside a body,
-! and an INHERITED metaclass.  See docs/Class_Body_Namespace.md.
+! NOT COVERED: ``vars()'' inside a body answering the namespace OBJECT, and a
+! metaclass's __new__ / __init__ being dispatched at all (only __prepare__ is).
+! See docs/Class_Body_Namespace.md.
 !
 ! Drives tests/python/class_body_namespace.py.  test_enum
 ! TestEnumDict.test_enum_dict_in_metaclass.
