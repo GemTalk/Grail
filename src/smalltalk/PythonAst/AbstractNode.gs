@@ -961,6 +961,35 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 		directRhs: nil
 %
 
+category: 'Grail-codegen helpers'
+method: AbstractNode
+emitNameStoreOn: aStream target: aNameAst rhs: rhsSource
+	"Emit a store of rhsSource into aNameAst as a single EXPRESSION, with
+	no trailing period, so it can sit inside a larger expression.
+
+	A ``global''-declared name has no Smalltalk temp -- the parser
+	correctly does not declare one -- so a bare ``n := v'' there names an
+	UNDEFINED SYMBOL and the enclosing method fails to compile.  Every
+	binding construct that is not a plain assignment (match captures,
+	walrus, def, class, import-as) needs this same routing, which is why
+	it lives here rather than being open-coded per node."
+
+	(self isModuleScopeStoreTarget: aNameAst)
+		ifTrue: [
+			aStream
+				nextPutAll: self ___moduleStoreReceiverExpr___;
+				nextPutAll: ' @env0:dynamicInstVarAt: #''';
+				nextPutAll: aNameAst id;
+				nextPutAll: ''' put: (';
+				nextPutAll: rhsSource;
+				nextPutAll: ')'
+		]
+		ifFalse: [
+			aNameAst printSmalltalkOn: aStream.
+			aStream nextPutAll: ' := '; nextPutAll: rhsSource
+		]
+%
+
 category: 'other'
 method: AbstractNode
 emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: indexExpr directRhs: directRhs
@@ -1039,7 +1068,7 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 	((aTarget isKindOf: NameAst) and: [self isModuleScopeStoreTarget: aTarget])
 		ifTrue: [
 			aStream
-				nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+				nextPutAll: self ___moduleStoreReceiverExpr___; nextPutAll: ' @env0:dynamicInstVarAt: #''';
 				nextPutAll: aTarget id;
 				nextPutAll: ''' put: (';
 				nextPutAll: rhs;

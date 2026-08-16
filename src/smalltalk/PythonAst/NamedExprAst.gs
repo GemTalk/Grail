@@ -31,10 +31,22 @@ category: 'Grail-other'
 method: NamedExprAst
 printSmalltalkOn: aStream
 
+	"``global x'' makes the walrus target a module binding, and such a
+	name has no Smalltalk temp to assign to -- the bare ``x := v'' named
+	an undefined symbol and failed the whole method's compile."
+
+	| rhs |
 	self ___checkNotInClassBodyComprehension___.
+	"PrettyWriteStream, not a bare WriteStream: codegen sends indentation
+	protocol (#increaseIndent, #lf) that a plain WriteStream does not
+	understand, and the failure shows up as the whole module refusing to
+	import rather than as a bad expression."
+	rhs := PrettyWriteStream on: Unicode7 new.
+	value printSmalltalkOn: rhs.
+	(target isKindOf: NameAst)
+		ifTrue: [^ self emitNameStoreOn: aStream target: target rhs: rhs contents].
 	target printSmalltalkOn: aStream.
-	aStream nextPutAll: ' := '.
-	value printSmalltalkOn: aStream.
+	aStream nextPutAll: ' := '; nextPutAll: rhs contents.
 %
 
 category: 'Grail-other'

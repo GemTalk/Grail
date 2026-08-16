@@ -566,8 +566,10 @@ printSmalltalkRuntimeOn: aStream
 	defs (nested inside a function or another class) the existing
 	bare-assignment emit works because the parser declares the
 	enclosing scope's variable."
-	(self isModuleScopeClassDef) ifTrue: [
+	(self ___bindsClassNameToModule___) ifTrue: [
 		aStream nextPutAll: '[| '; nextPutAll: name; nextPutAll: ' | '.
+	].
+	(self isModuleScopeClassDef) ifTrue: [
 		"Canonical-class fast path (docs/Persistent_Modules_and_Classes.md):
 		probe the committed registry first -- a hit binds the final
 		(post-decorator) object with ZERO compiles, so a warm import never
@@ -1896,12 +1898,52 @@ printSmalltalkRuntimeOn: aStream
 		aStream
 			nextPutAll: 'importlib @env0:___resetClassAttrOverlay___: ';
 			nextPutAll: name; nextPutAll: '.'; lf.
+	].
+	"The module BINDING closes the block, so it runs for the
+	global-declared case too -- where no canonical guard was opened."
+	(self ___bindsClassNameToModule___) ifTrue: [
+		"NOT a bare ``self'': inside a user class METHOD self is the Python
+		instance, not the module, so a method declaring ``global C'' would
+		hang the class off the instance.  ___moduleStoreReceiverExpr___
+		reaches the module singleton explicitly there."
 		aStream
-			nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+			nextPutAll: self ___moduleStoreReceiverExpr___;
+			nextPutAll: ' @env0:dynamicInstVarAt: #''';
 			nextPutAll: name;
 			nextPutAll: ''' put: '; nextPutAll: name;
 			nextPutAll: '.] value.'; lf.
 	].
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___bindsClassNameToModule___
+	"True when the class NAME must be stored into the module instance
+	rather than into a Smalltalk temp of the enclosing scope.
+
+	Two ways that happens.  The class def sits directly at module scope
+	(isModuleScopeClassDef), or -- the case this predicate exists for --
+	the name is declared ``global'' in the nearest enclosing scope:
+
+	    def f():
+	        global C
+	        class C: pass       # binds the MODULE's C
+
+	The nested path assumes the parser declared <name> as a Smalltalk
+	temp via declareWrite.  For a global-declared name it correctly does
+	NOT, so the bare assignment emitted there named an UNDEFINED SYMBOL
+	and the whole method failed to compile -- surfacing as ``Grail could
+	not compile this method (codegen gap)'' rather than as anything
+	pointing at ``global''.
+
+	This is deliberately SEPARATE from isModuleScopeClassDef, which also
+	gates the canonical-class registry.  A function-local class is minted
+	fresh per execution and must not enter that registry no matter where
+	its name is bound."
+
+	self isModuleScopeClassDef ifTrue: [^ true].
+	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	^ self ___nearestEnclosingScopeDeclaresGlobal___: name asSymbol
 %
 
 category: 'Grail-code generation'
@@ -1960,16 +2002,28 @@ printSuperclassOn: aStream
 		BoundMethods instead of invoking them)."
 		((only isKindOf: NameAst) and: [only id asString = 'object'])
 			ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
-		"``class M(type):'' -- a metaclass.  Grail has no metaclass OBJECT to
-		subclass: builtins >> type: answers the single canonical ``type''
-		BoundMethod for any class, and no class is bound to the NAME, so the bare
-		name raised NameError and the definition never ran at all.  Root it at
-		PythonInstance, exactly as ``object'' is rooted.  That does not make it a
-		working metaclass -- Grail RECORDS a metaclass rather than routing class
-		creation through one -- but it makes the class exist with its methods,
-		which is what a metaclass-defined comparison needs."
+		"``class M(type):'' -- a metaclass.  Rooted at PyType, the class that
+		IS Python's ``type'' (Python.gs dictionary entry ``type'').
+
+		This used to root at PythonInstance, and the reason it had to is worth
+		keeping: there was no ``type'' OBJECT at all.  ``builtins >> type:''
+		answers a canonical BoundMethod for any class, and nothing was bound to
+		the NAME, so the bare name raised NameError and the definition never ran.
+		PythonInstance at least made the class exist with its methods, which is
+		what a metaclass-defined comparison needs.
+
+		What the real base buys is ancestry: a metaclass now HAS ``type'' above
+		it, so ``super().__new__(cls, name, bases, ns)'' has something to reach
+		and ``issubclass(Meta, type)'' is true.  That second one is load-bearing
+		beyond metaclasses -- object >> ___pyMetaclass___ deliberately declines
+		to report a declared ``metaclass='' because copy() tests a class with
+		``issubclass(type(x), type)'', which was false while Meta rooted at
+		PythonInstance.  Rooting here is what makes reporting it safe.
+
+		It does NOT by itself make class creation route through the metaclass;
+		PyType carries no construction protocol yet.  See PyType's comment."
 		((only isKindOf: NameAst) and: [only id asString = 'type'])
-			ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
+			ifTrue: [^ aStream nextPutAll: 'PyType'].
 		"``class X(str):`` subclasses Unicode32, not the Unicode7 that the
 		name ``str'' resolves to.  GemStone migrates a Unicode string to
 		the canonical wider class IN PLACE when it is handed a character

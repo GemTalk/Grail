@@ -58,14 +58,14 @@ printMatchTestOn: aStream subject: aName depth: anInteger
 			bind-then-answer-true.  A block is the only grouping that takes
 			a statement sequence, and #value evaluates it in place."
 			aStream nextPutAll: '['.
-			name printSmalltalkOn: aStream.
-			^ aStream nextPutAll: ' := ', aName, '. true] @env0:value'].
+			self emitNameStoreOn: aStream target: name rhs: aName.
+			^ aStream nextPutAll: '. true] @env0:value'].
 	aStream nextPutAll: '('.
 	pattern printMatchTestOn: aStream subject: aName depth: anInteger.
 	name isNil ifTrue: [^ aStream nextPutAll: ')'].
 	aStream nextPutAll: ' and: ['.
-	name printSmalltalkOn: aStream.
-	aStream nextPutAll: ' := ', aName, '. true])'
+	self emitNameStoreOn: aStream target: name rhs: aName.
+	aStream nextPutAll: '. true])'
 %
 
 method: MatchAsAst

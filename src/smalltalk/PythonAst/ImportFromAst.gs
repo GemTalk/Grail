@@ -167,7 +167,7 @@ printSmalltalkOn: aStream
 		isModuleStore
 			ifTrue: [
 				aStream
-					nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+					nextPutAll: self ___moduleStoreReceiverExpr___; nextPutAll: ' @env0:dynamicInstVarAt: #''';
 					nextPutAll: targetName;
 					nextPutAll: ''' put: ('
 			]
