@@ -6531,4 +6531,210 @@ doesNotUnderstand: aSelector args: anArray envId: envId
       signal
 %
 
+set compile_env: 1
+
+category: 'Grail-Match Protocol'
+method: object
+___matchIsSequence___
+	"PEP 634 sequence-pattern gate.
+
+	The exclusion is the whole point: str, bytes and bytearray are
+	sequences by every other measure, and PEP 634 rules them OUT so that
+	``case [a, b]:'' does not match the string 'ab'.  Matching them would
+	be silently wrong -- a two-character string quietly destructured into
+	two single-character bindings.
+
+	range is likewise excluded by CPython; everything else registered as a
+	Sequence (list, tuple, and user classes with __len__ + __getitem__)
+	matches."
+
+	(self isKindOf: CharacterCollection) ifTrue: [^ false].
+	(self isKindOf: AbstractPyStr) ifTrue: [^ false].
+	(self isKindOf: bytes) ifTrue: [^ false].
+	(self isKindOf: bytearray) ifTrue: [^ false].
+	(self isKindOf: range) ifTrue: [^ false].
+	(self isKindOf: list) ifTrue: [^ true].
+	(self isKindOf: tuple) ifTrue: [^ true].
+	"A MAPPING is not a sequence, and this is the exclusion that bites:
+	dict answers both __len__ and __getitem__:, so a duck-typed gate let
+	``case [x, y]:'' match a two-entry dict and then index it with 0 --
+	a KeyError from inside a pattern that should simply not have matched.
+	set is excluded for the same reason in reverse: no __getitem__:."
+	self ___matchIsMapping___ ifTrue: [^ false].
+	(self isKindOf: set) ifTrue: [^ false].
+	(self isKindOf: frozenset) ifTrue: [^ false].
+	"``___respondsTo___:'' is NOT enough: object itself carries __len__ and
+	__getitem__: fallbacks that exist only to raise, so probing for them
+	answered true for None -- and ``case [x, y]:'' then called __len__ on
+	it and surfaced the fallback's TypeError from inside a pattern that
+	should simply not have matched.  Ask WHICH class supplies them and
+	reject the generic roots, the same test builtins uses to decide
+	whether a class really implements a protocol."
+	"Duck-typing is offered ONLY to user-defined Python classes.  Grail's
+	built-in objects answer far more of the protocol than they implement
+	-- probing None found both __len__ and __getitem__:, so ``case [x, y]:''
+	matched None and then surfaced __len__'s TypeError from inside a
+	pattern that should simply not have matched.  Restricting the duck
+	test to PythonInstance keeps user Sequence classes working without
+	letting a builtin answer for a protocol it only raises on.
+
+	KNOWN GAP: a user class registered with collections.abc.Sequence but
+	NOT defining __len__/__getitem__: itself still does not match a
+	sequence pattern.  That is a silent non-match, so it is called out
+	here rather than left to be discovered."
+	(self isKindOf: PythonInstance) ifFalse: [^ false].
+	^ (self ___matchDefinesOwnSelector___: #'__len__')
+		and: [self ___matchDefinesOwnSelector___: #'__getitem__:']
+%
+
+category: 'Grail-Match Protocol'
+method: object
+___matchDefinesOwnSelector___: aSelector
+	"Does this object's class REALLY implement aSelector, as opposed to
+	inheriting the raising fallback every object carries?"
+
+	| owner |
+	owner := self @env0:class
+		@env0:whichClassIncludesSelector: aSelector environmentId: 1.
+	owner == nil ifTrue: [^ false].
+	owner == object ifTrue: [^ false].
+	owner == PythonInstance ifTrue: [^ false].
+	^ true
+%
+
+category: 'Grail-Match Protocol'
+method: object
+___matchIsMapping___
+	"PEP 634 mapping-pattern gate: a dict, or anything offering the
+	mapping protocol (keys + __getitem__)."
+
+	(self isKindOf: dict) ifTrue: [^ true].
+	"Same restriction as ___matchIsSequence___, and for the same reason."
+	(self isKindOf: PythonInstance) ifFalse: [^ false].
+	^ (self ___matchDefinesOwnSelector___: #'keys')
+		and: [self ___matchDefinesOwnSelector___: #'__getitem__:']
+%
+
+category: 'Grail-Match Protocol'
+method: object
+___matchLen___
+	"The subject's length for a sequence pattern's arity gate."
+
+	^ self __len__
+%
+
+category: 'Grail-Match Protocol'
+method: object
+___matchItemAt___: anIndex
+	"One element of a sequence subject.  anIndex is a Python index, so it
+	may be NEGATIVE -- the patterns that follow a ``*rest'' are addressed
+	from the end, which is what lets them be tested without knowing the
+	subject's length."
+
+	^ self __getitem__: anIndex
+%
+
+category: 'Grail-Match Protocol'
+method: object
+___matchStarSlice___: headCount fromEnd: tailCount
+	"The slice a ``*rest'' pattern absorbs: everything after the first
+	headCount elements and before the last tailCount.
+
+	CPython binds a LIST here regardless of the subject's own type -- a
+	tuple subject still gives ``rest'' a list -- so build one rather than
+	slicing the subject."
+
+	| n out |
+	n := self __len__.
+	out := list ___new___.
+	headCount to: n @env0:- tailCount @env0:- 1 do: [:i |
+		out append: (self __getitem__: i)].
+	^ out
+%
+
+category: 'Grail-Match Protocol'
+method: object
+___matchHasKey___: aKey
+	"Is aKey present?  A mapping pattern names a SUBSET of the subject's
+	keys, so a missing key is an ordinary non-match and must not surface
+	as the KeyError a bare __getitem__ would raise."
+
+	^ (self __contains__: aKey) ___isTruthy___
+%
+
+category: 'Grail-Match Protocol'
+method: object
+___matchItemForKey___: aKey
+	"The value a mapping pattern's key selects; only ever sent after
+	___matchHasKey___: has answered true."
+
+	^ self __getitem__: aKey
+%
+
+category: 'Grail-Match Protocol'
+method: object
+___matchRestExcluding___: anArrayOfKeys
+	"The ``**rest'' of a mapping pattern: a NEW dict holding every key the
+	pattern did not name.  A fresh dict, not a view -- CPython copies, so
+	mutating rest must not touch the subject."
+
+	| out |
+	out := dict ___new___.
+	"keysDo: is the raw walk over the stored keys -- the same one dict's
+	own __contains__ uses -- rather than iterating the dict_keys VIEW,
+	which is a Python-level object and does not answer the Smalltalk
+	iteration protocol."
+	self @env0:keysDo: [:k |
+		(anArrayOfKeys @env0:detect: [:each | (k ___cmpEq___: each) ___isTruthy___]
+			ifNone: [nil]) @env0:isNil
+				ifTrue: [out __setitem__: k _: (self __getitem__: k)]].
+	^ out
+%
+
+category: 'Grail-Match Protocol'
+method: object
+___matchIsInstanceOf___: aClass
+	"The isinstance gate of a class pattern, routed through the builtin so
+	ABCs and __instancecheck__ behave as they do everywhere else."
+
+	^ ((builtins instance) isinstance: self _: aClass) ___isTruthy___
+%
+
+category: 'Grail-Match Protocol'
+method: object
+___matchAttr___: aName
+	"Read an attribute for a keyword sub-pattern.  A MISSING attribute is
+	a non-match, not an AttributeError, so answer the miss sentinel and
+	let the caller short-circuit."
+
+	^ [self ___pyAttrLoad___: aName @env0:asSymbol]
+		@env0:on: AttributeError do: [:ex | ex @env0:return: #'___matchMiss___']
+%
+
+category: 'Grail-Match Protocol'
+method: object
+___matchArgAt___: anIndex of: aClass
+	"Resolve positional sub-pattern anIndex through the class's
+	``__match_args__''.
+
+	A class with no __match_args__ accepts NO positional patterns, and
+	CPython makes that a TypeError at match time rather than a quiet
+	non-match -- ``case Point(1, 2):'' against a Point that never declared
+	__match_args__ is a bug in the pattern, not a subject that failed to
+	match, and it must say so."
+
+	| args n |
+	args := [aClass ___pyAttrLoad___: #'__match_args__']
+		@env0:on: AttributeError do: [:ex | ex @env0:return: nil].
+	args == nil ifTrue: [
+		TypeError ___signal___: (aClass @env1:__name__) @env0:asString
+			@env0:, '() accepts 0 positional sub-patterns'].
+	n := args __len__.
+	anIndex @env0:>= n ifTrue: [
+		TypeError ___signal___: (aClass @env1:__name__) @env0:asString
+			@env0:, '() accepts ' @env0:, n @env0:printString
+			@env0:, ' positional sub-patterns'].
+	^ self ___matchAttr___: (args __getitem__: anIndex) @env0:asString
+%
+
 set compile_env: 0

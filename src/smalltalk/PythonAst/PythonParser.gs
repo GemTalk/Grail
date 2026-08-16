@@ -2411,6 +2411,13 @@ parseStatement
 	(tok isKeyword: 'async') ifTrue: [^Array with: self parseAsync].
 	(tok isOp: '@') ifTrue: [^Array with: self parseDecorated].
 
+	"``match'' is a SOFT keyword (PEP 634): it is an ordinary identifier
+	everywhere except at the head of a match statement, so ``match = 1'',
+	``match(x)'' and ``match[i] = 2'' all have to keep working.  The
+	tokenizer therefore hands it over as a NAME and the decision is made
+	here, by lookahead -- see atMatchStatement."
+	self atMatchStatement ifTrue: [^Array with: self parseMatch].
+
 	"Simple statements"
 	^self parseSimpleStatements
 %
@@ -3711,4 +3718,505 @@ ___collectStoreNamesIn___: node into: aSet
 	node class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [
 			self ___collectStoreNamesIn___: (node instVarAt: i) into: aSet]]
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+atMatchStatement
+	"Is the current NAME ``match'' opening a match STATEMENT rather than
+	being used as an ordinary identifier?
+
+	``match'' is a soft keyword, so this cannot be answered by the token
+	alone.  CPython's grammar accepts it only as
+
+	    match SUBJECT ':' NEWLINE INDENT
+
+	so the test is: the next token could start an expression, and the
+	logical line ends with a colon.  That distinguishes every real-world
+	shape without backtracking:
+
+	    match x:         -> statement    (':' ends the line)
+	    match(x)         -> a call       (no ':')
+	    match = 1        -> assignment   (next token cannot start an expr)
+	    match, y = 1, 2  -> tuple assign (ditto)
+	    match: int = 5   -> annotated    (ditto)
+	    match[i] = 2     -> subscript    (no ':')
+	    match[i]: int    -> annotated    (':' present but not last)
+
+	Deciding by lookahead rather than by trying-and-backtracking matters
+	for error quality: a syntax error INSIDE a real match statement stays
+	a match-statement error instead of being silently re-reported as a
+	confusing expression-statement error."
+
+	| tok next depth i lastWasColon |
+	tok := self peek.
+	(tok notNil and: [tok isName and: [tok value = 'match']]) ifFalse: [^false].
+	next := position + 1 <= tokens size ifTrue: [tokens at: position + 1] ifFalse: [nil].
+	next ifNil: [^false].
+	"An operator that cannot begin an expression means ``match'' is being
+	used as a plain name.  '-', '~', '*', '(' and '[' CAN begin one."
+	(next type == #OP and: [
+		(#('-' '~' '*' '(' '[' '{') includes: next value) not]) ifTrue: [^false].
+	next isEndMarker ifTrue: [^false].
+	next type == #NEWLINE ifTrue: [^false].
+	"Scan the logical line: the colon that opens the block is the LAST
+	token on it, at bracket depth zero."
+	depth := 0.
+	i := position + 1.
+	lastWasColon := false.
+	[i <= tokens size] whileTrue: [
+		| t |
+		t := tokens at: i.
+		t isEndMarker ifTrue: [^false].
+		(t type == #NEWLINE and: [depth = 0]) ifTrue: [^lastWasColon].
+		t type == #OP ifTrue: [
+			(#('(' '[' '{') includes: t value) ifTrue: [depth := depth + 1].
+			(#(')' ']' '}') includes: t value) ifTrue: [depth := depth - 1]].
+		lastWasColon := depth = 0 and: [t type == #OP and: [t value = ':']].
+		i := i + 1].
+	^false
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseMatch
+	"Parse: match SUBJECT ':' NEWLINE INDENT case_block+ DEDENT"
+
+	| tok subject cases |
+	tok := self advance.  "consume the soft keyword 'match'"
+	subject := self parseMatchSubject.
+	self expect: #OP value: ':'.
+	cases := self parseCaseBlocks.
+	cases isEmpty ifTrue: [
+		SyntaxError signal: 'expected at least one case block at line ',
+			tok line printString].
+	^MatchAst new
+		subject: subject;
+		cases: cases;
+		from: tok to: self lastToken ; yourself
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseMatchSubject
+	"The subject expression.  A bare comma makes it a TUPLE, without
+	parentheses: ``match x, y:'' matches the pair."
+
+	| first elts startTok |
+	startTok := self peek.
+	first := self parseExpression.
+	(self atOp: ',') ifFalse: [^first].
+	elts := Array with: first.
+	[self matchOp: ','] whileTrue: [
+		(self atOp: ':') ifTrue: [^TupleAst new
+			elts: elts; ctx: self loadCtx;
+			from: startTok to: self lastToken ; yourself].
+		elts := elts copyWith: self parseExpression].
+	^TupleAst new
+		elts: elts;
+		ctx: self loadCtx;
+		from: startTok to: self lastToken ; yourself
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseCaseBlocks
+	"The indented run of ``case'' clauses that forms a match body."
+
+	| cases |
+	self expectType: #NEWLINE.
+	self skipNewlines.
+	self expectType: #INDENT.
+	cases := Array new.
+	self skipNewlines.
+	[(self peek notNil)
+		and: [self peek isEndMarker not
+		and: [self peekType ~~ #DEDENT]]] whileTrue: [
+			cases := cases copyWith: self parseCaseBlock.
+			self skipNewlines].
+	self peekType == #DEDENT ifTrue: [self advance].
+	^cases
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseCaseBlock
+	"Parse: case PATTERNS [if GUARD] ':' BLOCK
+
+	``case'' is a soft keyword too, but unambiguous here -- nothing else
+	may open a statement inside a match body."
+
+	| tok pattern guard body |
+	tok := self peek.
+	(tok notNil and: [tok isName and: [tok value = 'case']]) ifFalse: [
+		SyntaxError signal: 'expected ''case'' in match body at line ',
+			(tok isNil ifTrue: ['?'] ifFalse: [tok line printString])].
+	self advance.
+	pattern := self parseMatchPatterns.
+	guard := nil.
+	(self matchKeyword: 'if') ifTrue: [guard := self parseExpression].
+	self expect: #OP value: ':'.
+	body := self parseBlock.
+	^MatchCaseAst new
+		pattern: pattern;
+		guard: guard;
+		body: (self wrapSuite: body);
+		from: tok to: self lastToken ; yourself
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseMatchPatterns
+	"Top level of a case's pattern.  A bare comma makes an OPEN sequence
+	pattern: ``case 1, 2:'' is the same as ``case [1, 2]:''."
+
+	| first elts startTok |
+	startTok := self peek.
+	first := self parseMatchPattern.
+	(self atOp: ',') ifFalse: [^first].
+	elts := Array with: first.
+	[self matchOp: ','] whileTrue: [
+		((self atOp: ':') or: [self atKeyword: 'if']) ifTrue: [
+			^MatchSequenceAst new patterns: elts;
+				from: startTok to: self lastToken ; yourself].
+		elts := elts copyWith: self parseMatchPattern].
+	^MatchSequenceAst new
+		patterns: elts;
+		from: startTok to: self lastToken ; yourself
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseMatchPattern
+	"or_pattern ['as' NAME]"
+
+	| tok inner target |
+	tok := self peek.
+	inner := self parseMatchOrPattern.
+	(self atKeyword: 'as') ifFalse: [^inner].
+	self advance.
+	target := self parseMatchCaptureTarget.
+	^MatchAsAst new
+		pattern: inner;
+		name: target;
+		from: tok to: self lastToken ; yourself
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseMatchOrPattern
+	"closed_pattern ('|' closed_pattern)*"
+
+	| tok alts |
+	tok := self peek.
+	alts := Array with: self parseMatchClosedPattern.
+	[self atOp: '|'] whileTrue: [
+		self advance.
+		alts := alts copyWith: self parseMatchClosedPattern].
+	alts size = 1 ifTrue: [^alts first].
+	^MatchOrAst new
+		patterns: alts;
+		from: tok to: self lastToken ; yourself
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseMatchCaptureTarget
+	"A name a pattern BINDS.  Registered as a write so the enclosing
+	scope allocates it -- a captured name is an ordinary local, and
+	without this it would compile as an unbound read."
+
+	| tok node |
+	tok := self peek.
+	(tok notNil and: [tok isName]) ifFalse: [
+		SyntaxError signal: 'expected a name to bind at line ',
+			(tok isNil ifTrue: ['?'] ifFalse: [tok line printString])].
+	self advance.
+	node := NameAst new
+		id: tok value asSymbol;
+		ctx: self loadCtx;
+		token: tok ; yourself.
+	self setStoreCtx: node.
+	^node
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseMatchClosedPattern
+	"One pattern with no top-level ``|'' or ``as''.
+
+	The NAME cases are where PEP 634's one genuinely surprising rule
+	lives: a BARE name CAPTURES (it is a binding, never a comparison),
+	while a DOTTED name is a VALUE pattern (a comparison, never a
+	binding).  So ``case RED:'' always matches and rebinds RED, and only
+	``case Color.RED:'' tests against the constant -- the single most
+	common way to write a wrong match statement, and not something the
+	implementation may quietly smooth over."
+
+	| tok |
+	tok := self peek.
+	tok ifNil: [SyntaxError signal: 'Unexpected end of input in pattern'].
+
+	(tok isKeyword: 'None') ifTrue: [^ self parseMatchSingleton].
+	(tok isKeyword: 'True') ifTrue: [^ self parseMatchSingleton].
+	(tok isKeyword: 'False') ifTrue: [^ self parseMatchSingleton].
+
+	(tok isOp: '[') ifTrue: [^ self parseMatchSequence: '[' close: ']'].
+	(tok isOp: '(') ifTrue: [^ self parseMatchGroupOrSequence].
+	(tok isOp: '{') ifTrue: [^ self parseMatchMapping].
+	(tok isOp: '*') ifTrue: [^ self parseMatchStar].
+
+	tok isName ifTrue: [^ self parseMatchNamePattern].
+
+	"Everything else is a literal: numbers, strings, and the unary minus
+	of a negative number.  Reuse the expression parser's atom handling so
+	string concatenation and complex literals behave identically to the
+	rest of the language -- but through parseUnary, NOT parseExpression,
+	so a top-level ``|'' stays the or-pattern separator instead of being
+	swallowed as bitwise-or."
+	^MatchValueAst new
+		value: self parseBitwiseXor;
+		from: tok to: self lastToken ; yourself
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseMatchSingleton
+	"None / True / False -- compared by identity, so they get their own
+	node rather than folding into MatchValueAst."
+
+	| tok |
+	tok := self peek.
+	^MatchSingletonAst new
+		value: self parseAtom;
+		from: tok to: self lastToken ; yourself
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseMatchStar
+	"``*name'' or ``*_'' inside a sequence pattern."
+
+	| tok target |
+	tok := self advance.  "consume '*'"
+	target := nil.
+	(self peek notNil and: [self peek isName and: [self peek value = '_']])
+		ifTrue: [self advance]
+		ifFalse: [target := self parseMatchCaptureTarget].
+	^MatchStarAst new
+		name: target;
+		from: tok to: self lastToken ; yourself
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseMatchSequence: openOp close: closeOp
+	"``[p, q]'' or ``(p, q)'' -- an exact-arity sequence pattern unless it
+	contains a star."
+
+	| tok elts |
+	tok := self expect: #OP value: openOp.
+	elts := Array new.
+	[self atOp: closeOp] whileFalse: [
+		elts := elts copyWith: self parseMatchPattern.
+		(self matchOp: ',') ifFalse: [
+			self expect: #OP value: closeOp.
+			^self ___matchSequenceOf___: elts from: tok]].
+	self expect: #OP value: closeOp.
+	^self ___matchSequenceOf___: elts from: tok
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+___matchSequenceOf___: elts from: tok
+	"Build a sequence pattern, rejecting the one arity error PEP 634
+	names: more than one star.  Two stars have no unambiguous split, so
+	this is a syntax error rather than a runtime surprise."
+
+	| stars |
+	stars := 0.
+	elts do: [:each | (each isKindOf: MatchStarAst) ifTrue: [stars := stars + 1]].
+	stars > 1 ifTrue: [
+		SyntaxError signal: 'multiple starred names in sequence pattern at line ',
+			tok line printString].
+	^MatchSequenceAst new
+		patterns: elts;
+		from: tok to: self lastToken ; yourself
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseMatchGroupOrSequence
+	"``(P)'' is a GROUP -- just parentheses around one pattern -- but
+	``(P,)'' and ``(P, Q)'' are sequence patterns, exactly as they are for
+	expressions.  The trailing comma is the whole difference."
+
+	| tok first elts |
+	tok := self expect: #OP value: '('.
+	(self atOp: ')') ifTrue: [
+		self advance.
+		^MatchSequenceAst new patterns: Array new;
+			from: tok to: self lastToken ; yourself].
+	first := self parseMatchPattern.
+	(self atOp: ')') ifTrue: [
+		self advance.
+		^first].
+	elts := Array with: first.
+	[self matchOp: ','] whileTrue: [
+		(self atOp: ')') ifTrue: [
+			self advance.
+			^self ___matchSequenceOf___: elts from: tok].
+		elts := elts copyWith: self parseMatchPattern].
+	self expect: #OP value: ')'.
+	^self ___matchSequenceOf___: elts from: tok
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseMatchMapping
+	"``{KEY: P, ..., **rest}''.
+
+	Keys are literals or dotted names -- never patterns, and never bare
+	capture names, because a mapping pattern LOOKS UP its keys."
+
+	| tok keys pats rest |
+	tok := self expect: #OP value: '{'.
+	keys := Array new.
+	pats := Array new.
+	rest := nil.
+	[self atOp: '}'] whileFalse: [
+		(self atOp: '**')
+			ifTrue: [
+				self advance.
+				rest := self parseMatchCaptureTarget]
+			ifFalse: [
+				keys := keys copyWith: self parseMatchMappingKey.
+				self expect: #OP value: ':'.
+				pats := pats copyWith: self parseMatchPattern].
+		(self matchOp: ',') ifFalse: [
+			self expect: #OP value: '}'.
+			^MatchMappingAst new keys: keys; patterns: pats; rest: rest;
+				from: tok to: self lastToken ; yourself]].
+	self expect: #OP value: '}'.
+	^MatchMappingAst new
+		keys: keys;
+		patterns: pats;
+		rest: rest;
+		from: tok to: self lastToken ; yourself
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseMatchMappingKey
+	"A mapping pattern's key: a literal, or a dotted name."
+
+	| tok |
+	tok := self peek.
+	(tok notNil and: [tok isName]) ifTrue: [^ self parseMatchDottedName].
+	^self parseBitwiseXor
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseMatchDottedName
+	"NAME ('.' NAME)* as a LOAD expression -- the value-pattern and
+	class-pattern head."
+
+	| tok node |
+	tok := self advance.
+	node := NameAst new
+		id: tok value asSymbol;
+		ctx: self loadCtx;
+		token: tok ; yourself.
+	[self atOp: '.'] whileTrue: [
+		| attrTok |
+		self advance.
+		attrTok := self expectType: #NAME.
+		node := AttributeAst new
+			value: node;
+			attr: attrTok value asSymbol;
+			ctx: self loadCtx;
+			from: tok to: self lastToken ; yourself].
+	^node
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseMatchNamePattern
+	"A NAME at the head of a pattern is one of three different things:
+
+	    _          wildcard  -- matches anything, binds nothing
+	    x          capture   -- matches anything, BINDS x
+	    a.b        value     -- compares against a.b
+	    C(...)     class     -- isinstance plus sub-patterns"
+
+	| tok node |
+	tok := self peek.
+	(tok value = '_' and: [
+		| nxt |
+		nxt := position + 1 <= tokens size ifTrue: [tokens at: position + 1] ifFalse: [nil].
+		nxt isNil or: [(nxt isOp: '.') not and: [(nxt isOp: '(') not]]])
+		ifTrue: [
+			self advance.
+			^MatchAsAst new pattern: nil; name: nil;
+				from: tok to: self lastToken ; yourself].
+	node := self parseMatchDottedName.
+	(self atOp: '(') ifTrue: [^ self parseMatchClassPattern: node from: tok].
+	(node isKindOf: NameAst) ifTrue: [
+		"A bare name captures.  Re-declare it as a WRITE: parseMatchDottedName
+		registered a read, which is right for the dotted case and wrong here."
+		| target |
+		target := NameAst new
+			id: node id;
+			ctx: self loadCtx;
+			token: tok ; yourself.
+		self setStoreCtx: target.
+		^MatchAsAst new pattern: nil; name: target;
+			from: tok to: self lastToken ; yourself].
+	^MatchValueAst new
+		value: node;
+		from: tok to: self lastToken ; yourself
+%
+
+category: 'Grail-parsing - match'
+method: PythonParser
+parseMatchClassPattern: clsNode from: tok
+	"``C(p, q, kw=r)'' -- positional sub-patterns first, then keyword
+	ones.  A positional after a keyword is a syntax error, as it is in a
+	call."
+
+	| pats kwNames kwPats seenKeyword |
+	self expect: #OP value: '('.
+	pats := Array new.
+	kwNames := Array new.
+	kwPats := Array new.
+	seenKeyword := false.
+	[self atOp: ')'] whileFalse: [
+		| nxt |
+		nxt := position + 1 <= tokens size ifTrue: [tokens at: position + 1] ifFalse: [nil].
+		(self peek isName and: [nxt notNil and: [nxt isOp: '=']])
+			ifTrue: [
+				| nameTok |
+				seenKeyword := true.
+				nameTok := self advance.
+				self advance.  "consume '='"
+				kwNames := kwNames copyWith: nameTok value asSymbol.
+				kwPats := kwPats copyWith: self parseMatchPattern]
+			ifFalse: [
+				seenKeyword ifTrue: [
+					SyntaxError signal: 'positional patterns follow keyword patterns at line ',
+						tok line printString].
+				pats := pats copyWith: self parseMatchPattern].
+		(self matchOp: ',') ifFalse: [
+			self expect: #OP value: ')'.
+			^MatchClassAst new cls: clsNode; patterns: pats;
+				kwdAttrs: kwNames; kwdPatterns: kwPats;
+				from: tok to: self lastToken ; yourself]].
+	self expect: #OP value: ')'.
+	^MatchClassAst new
+		cls: clsNode;
+		patterns: pats;
+		kwdAttrs: kwNames;
+		kwdPatterns: kwPats;
+		from: tok to: self lastToken ; yourself
 %
