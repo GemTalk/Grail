@@ -128,16 +128,68 @@ _resolveCategory: category
 
 category: 'Grail-Private'
 method: warnings
+___warningOrigin___
+	"The MODULE NAME a warning is being raised from -- what CPython matches
+	a filter's ``module='' against.
+
+	It is the dotted ``__name__'', NOT the filename.  CPython's C
+	implementation takes it from the raising frame's globals['__name__'],
+	so ``filterwarnings('error', module='__main__')'' fires for a script
+	while the script's own PATH does not match at all.  (The pure-Python
+	warn_explicit fallback derives a name from the filename instead, which
+	is why the two look interchangeable until you test them -- they are
+	not, and matching the filename silently scoped every filter to
+	something no caller writes.)
+
+	Grail gets the live stack the only way a running gem can, by RAISING:
+	BaseException class>>___liveFrameChain___, which sys._getframe already
+	stands on.  Frames carry no globals, so the name is recovered by
+	matching the frame's co_filename against the __file__ of each imported
+	module.  Answers nil when no frame or no module matches, and a nil
+	origin means a module-scoped filter still cannot be evaluated."
+
+	| frame code fname mods hit |
+	frame := [BaseException @env0:___liveFrameChain___]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	frame == nil ifTrue: [^ nil].
+	code := [frame @env0:dynamicInstVarAt: #'f_code']
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	code == nil ifTrue: [^ nil].
+	fname := [code @env0:dynamicInstVarAt: #'co_filename']
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	(fname == nil or: [fname @env0:== None]) ifTrue: [^ nil].
+	fname := fname @env0:asString.
+	mods := [importlib @env1:modules] @env0:on: Error do: [:ex | ex @env0:return: nil].
+	mods == nil ifTrue: [^ nil].
+	hit := nil.
+	[mods @env0:keysAndValuesDo: [:k :m |
+		hit == nil ifTrue: [
+			| f |
+			f := [m @env0:dynamicInstVarAt: #'__file__']
+				@env0:on: Error do: [:ex | ex @env0:return: nil].
+			(f notNil and: [f @env0:asString @env0:= fname]) ifTrue: [hit := k @env0:asString]]]]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	^ hit
+%
+
+category: 'Grail-Private'
+method: warnings
 _actionFor: message _: category
 	"Walk the filter list, returning the first matching action.
 	Each filter is a triple { action. categoryClass. messageSubstring }
 	where categoryClass=nil matches all and messageSubstring=nil matches
 	any text.  When no filter matches, return 'default'."
 
-	| msgStr |
+	| msgStr origin needsOrigin |
 	msgStr := message @env0:asString.
+	"Only pay for the stack capture when a filter actually names a module:
+	___warningOrigin___ costs a RAISE, and the overwhelmingly common case
+	is a filter list with no module constraint at all."
+	needsOrigin := (self _filters) @env0:detect: [:f |
+		f @env0:size @env0:>= 4 and: [(f @env0:at: 4) @env0:notNil]] ifNone: [nil].
+	origin := needsOrigin @env0:isNil ifTrue: [nil] ifFalse: [self ___warningOrigin___].
 	(self _filters) @env0:do: [:f |
-		| catMatch msgMatch fCat fMsg fMod fLine |
+		| catMatch msgMatch modMatch fCat fMsg fMod fLine |
 		fCat := f @env0:at: 2.
 		fMsg := f @env0:at: 3.
 		"Filters built by simplefilter and the fixed-arity forms are still
@@ -149,16 +201,27 @@ _actionFor: message _: category
 				@env0:or: [category @env0:inheritsFrom: fCat]].
 		msgMatch := fMsg == nil
 			@env0:or: [(msgStr @env0:indexOfSubCollection: fMsg) @env0:> 0].
-		"A filter constrained by MODULE or LINENO is skipped, not honoured:
-		Grail does not record where a warning came from, so it cannot be
-		shown to apply.  Skipping is the safe direction -- the filter
-		simply does not fire, so a warning is not escalated to an error it
-		was never proven to name.  Treating the constraint as satisfied
-		would go the other way and silently WIDEN every such filter,
-		turning unrelated warnings into errors far from their cause."
-		(fMod == nil and: [fLine @env0:== nil or: [fLine @env0:= 0]])
-			ifTrue: [
-				(catMatch @env0:and: [msgMatch]) ifTrue: [^ f @env0:at: 1]]
+		"MODULE is now matched for real, against the dotted MODULE NAME the
+		warning was raised from (___warningOrigin___).  CPython compiles the
+		pattern as a regex and applies #match, which is ANCHORED AT THE
+		START -- so a prefix test is faithful for the literal patterns
+		every real filter uses, and avoids pulling the regex engine into
+		the warning path (the message pattern is a substring test here for
+		the same reason).
+
+		An origin of nil means no Python frame could be built, so a
+		module-scoped filter still cannot be shown to apply and is skipped
+		-- the safe direction: a warning is not escalated to an error it
+		was never proven to name.
+
+		LINENO is still unmatchable and still skips."
+		modMatch := fMod == nil
+			@env0:or: [origin @env0:notNil
+				@env0:and: [origin @env0:size @env0:>= fMod @env0:size
+					@env0:and: [(origin @env0:copyFrom: 1 to: fMod @env0:size) @env0:= fMod]]].
+		(fLine @env0:== nil or: [fLine @env0:= 0]) ifTrue: [
+			(catMatch @env0:and: [msgMatch @env0:and: [modMatch]])
+				ifTrue: [^ f @env0:at: 1]]
 	].
 	^ 'default'
 %
