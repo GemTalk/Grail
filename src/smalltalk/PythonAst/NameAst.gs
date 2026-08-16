@@ -297,6 +297,31 @@ printSmalltalkOn: aStream
 			CallAst printDefiningClassOn: aStream.
 			^ self
 		].
+	"The bare name ``super'', where CallAst's call-shape rewrites did not
+	already consume it.  ``super'' is a Smalltalk PSEUDO-VARIABLE, so the
+	identifier can never be emitted as itself; until now nothing emitted
+	anything for it, and every use that was not the zero-arg or
+	2-arg-bare-NameAst call form raised ``name 'super' is not defined'' --
+	``super(int, int, int)'', ``super(1, int)'', ``f = super'',
+	``class mysuper(super)'', ``super.__init__(...)''.
+
+	Resolve it to the Super class, which IS Python's ``super'' type here, so
+	those uses see a real object: calling it runs Super class's argument
+	checks, and ``super().__class__ is super'' holds because the proxy's
+	class is that same object.
+
+	Stood down when an enclosing function declares ``super'' itself, and when
+	the MODULE binds the name -- a module is free to define ``class super:''
+	or have the attribute patched, and then the binding wins over the builtin,
+	exactly as for any other shadowed builtin."
+	((ctx isKindOf: LoadAst)
+		and: [id asSymbol == #'super'
+		and: [(self ___declaredInEnclosingFunction___: #'super') not
+		and: [(self isModuleVariableName: #'super') not]]])
+		ifTrue: [
+			aStream nextPutAll: 'Super'.
+			^ self
+		].
 	(self isFastPathBuiltinName) ifTrue: [
 		aStream
 			nextPutAll: '(BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #';

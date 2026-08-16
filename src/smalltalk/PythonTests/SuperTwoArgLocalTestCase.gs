@@ -213,3 +213,56 @@ testExplicitLocalShadowsClassNameCell
 	self assert: (probe @env1:__getitem__: 'class_name_local_wins')
 		equals: 'shadowed'
 %
+
+category: 'Grail-Tests - super as a name'
+method: SuperTwoArgLocalTestCase
+testSuperIsAFirstClassName
+	"``super'' was only ever a CallAst rewrite -- the zero-arg form and the
+	2-arg form with a bare NameAst first argument.  Every other use raised
+	``name 'super' is not defined'', because ``super'' is a Smalltalk
+	PSEUDO-VARIABLE and the identifier can never be emitted as itself, so
+	nothing was emitted at all.
+
+	NameAst resolves it to the Super class, which IS Python's super type here,
+	so ``f = super'', ``class mysuper(super)'' and a direct call all see a real
+	object."
+
+	self assert: (probe @env1:__getitem__: 'super_is_a_name') equals: true.
+	self assert: (probe @env1:__getitem__: 'super_subclassed') equals: 'mysuper'
+%
+
+category: 'Grail-Tests - super as a name'
+method: SuperTwoArgLocalTestCase
+testSuperConstructorArgumentChecks
+	"Calling it runs CPython's own argument diagnostics, which the generic
+	class-call path could not give: it reported its own ``takes wrong number
+	of arguments'' wording instead."
+
+	self assert: (probe @env1:__getitem__: 'super_too_many_arguments')
+		equals: true.
+	self assert: (probe @env1:__getitem__: 'super_first_arg_type') equals: true
+%
+
+category: 'Grail-Tests - super as a name'
+method: SuperTwoArgLocalTestCase
+testSuperProxyClassIsTheSuperType
+	"``super().__class__'' is the super type itself.  The proxy delegates every
+	attribute to the parent chain, which turned this into a parent-method
+	proxy and made the comparison quietly false."
+
+	self assert: (probe @env1:__getitem__: 'super_proxy_class') equals: true
+%
+
+category: 'Grail-Tests - super as a name'
+method: SuperTwoArgLocalTestCase
+testTwoArgSuperAcceptsNonModuleClasses
+	"The 2-arg rewrite assumed its first argument NAMED a module-level class
+	and emitted a module-attribute read for it.  Any other kind of name became
+	a miss -- nil -- and Super then reported ``argument 1 must be a type, not
+	NoneType'', a diagnosis of the wrong thing entirely.  A parameter holding a
+	class and a builtin type are both ordinary and both were broken."
+
+	self assert: (probe @env1:__getitem__: 'super_two_arg_local_class')
+		equals: true.
+	self assert: (probe @env1:__getitem__: 'super_two_arg_builtin') equals: true
+%

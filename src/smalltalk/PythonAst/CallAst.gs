@@ -291,12 +291,39 @@ printSmalltalkOn: aStream
 					(arguments at: 2) printSmalltalkWithParenthesisOn: aStream.
 					aStream nextPutAll: ')'.
 					^self].
-			aStream
-				nextPutAll: '(Super @env1:cls: ((';
-				nextPutAll: CallAst moduleClassBeingCompiled name;
-				nextPutAll: ' @env0:___instance___) @env1:';
-				nextPutAll: (arguments at: 1) id asString;
-				nextPutAll: ') obj: '.
+			"The module-instance accessor is only right when the first argument
+			NAMES A MODULE-LEVEL CLASS.  It was applied to every NameAst, so
+			any other kind of name silently became a module-attribute miss --
+			nil -- and Super reported ``argument 1 must be a type, not
+			NoneType''.  That is a diagnosis of the wrong thing entirely, and
+			it hid two ordinary shapes:
+
+			    def method(self, type_, obj):   super(type_, obj).method()
+			    sp = super(float, 1.0)
+
+			-- a PARAMETER holding a class (test_supercheck_fail, where the
+			bogus message displaced the real one the test matches on) and a
+			BUILTIN type (test_super_init_leaks).  Neither is a module
+			attribute.
+
+			Emit the argument's own codegen instead, which resolves a local, a
+			parameter, a builtin or a module global correctly by construction.
+			The accessor is kept only for a name the module really does bind,
+			which is the case the comment above is about: inside a class's own
+			compiled method a bare reference to that class is not reliably in
+			scope."
+			((arguments at: 1) isModuleVariableName: (arguments at: 1) id asSymbol)
+				ifTrue: [
+					aStream
+						nextPutAll: '(Super @env1:cls: ((';
+						nextPutAll: CallAst moduleClassBeingCompiled name;
+						nextPutAll: ' @env0:___instance___) @env1:';
+						nextPutAll: (arguments at: 1) id asString;
+						nextPutAll: ') obj: ']
+				ifFalse: [
+					aStream nextPutAll: '(Super @env1:cls: '.
+					(arguments at: 1) printSmalltalkWithParenthesisOn: aStream.
+					aStream nextPutAll: ' obj: '].
 			(arguments at: 2) printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPutAll: ')'.
 			^self].
