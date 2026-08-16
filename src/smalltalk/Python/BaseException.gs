@@ -1631,20 +1631,143 @@ ___ensureFinally___: protectedBlock finally: finallyBlock
 	TryAst emits this in place of a bare ``ensure:'' ONLY in non-generator
 	scopes: the ``ex pass'' re-raise below is unsafe inside a forked generator
 	process (``exception has already been signalled''), so a try/finally inside a
-	generator keeps the plain ensure: and this one exc_info gap."
+	generator keeps the plain ensure: and this one exc_info gap.
 
-	| propExc |
+	WHEN the finally runs matters as much as that it runs.  It used to run from
+	the ensure: block for every exit, including the exceptional one -- but an
+	ensure: fires while the stack UNWINDS, and by then ``ex pass'' has already
+	delivered the exception to the enclosing handler.  So for
+
+	    try:      raise ValueError()
+	    finally:  raise KeyError()
+
+	the caller's ``except'' ran TWICE: once for the ValueError that pass had
+	already handed it, and then again for the KeyError, arriving as a second,
+	unrelated propagation.  Python has one exception leave a try/finally, and it
+	is the finally's: a raise there REPLACES the in-flight exception (chaining
+	to it through __context__).
+
+	So the exceptional path now runs the finally INSIDE the handler, before
+	``ex pass'' lets anything see it.  A finally that raises simply propagates
+	from there, replacing ex and never reaching the pass; a finally that
+	completes falls through to pass, which propagates ex as before.  The
+	ensure: is still what covers the other exits -- normal completion and the
+	control-flow signals (PythonReturn / PythonBreak / PythonContinue), none of
+	which are BaseException -- with ``ranFinally'' keeping the two paths from
+	both firing."
+
+	| ranFinally propExc result |
+	ranFinally := false.
 	propExc := nil.
-	^ [ [protectedBlock value]
-			on: BaseException do: [:ex | propExc := ex. ex pass] ]
+	result := [ [protectedBlock value]
+			on: BaseException
+			do: [:ex |
+				ranFinally := true.
+				"A ``return'' / ``break'' / ``continue'' passing through the
+				try is NOT an exception being handled, so it must not become
+				the session's current one -- CPython reports the ENCLOSING
+				handled exception inside such a finally, not a fresh thing.
+				This method's comment used to claim the distinction came for
+				free because the control-flow signals ``subclass the kernel
+				Exception directly, NOT this BaseException''.  They do not:
+				PythonReturn's chain runs through Grail's BaseException, so
+				``on: BaseException'' catches it like anything else, and
+				installing it leaked a PythonReturn into sys.exc_info() and
+				into the __context__ of anything the finally raised."
+				(self ___isControlFlowSignal___: ex)
+					ifTrue: [finallyBlock value]
+					ifFalse: [self ___runFinally___: finallyBlock during: ex].
+				propExc := ex.
+				"RETURN from the handler rather than ``pass'', then re-signal
+				below.  Both keep the exception propagating, but an exception
+				that was passed retains a handler frame, and the VM refuses to
+				signal one of those again -- so every later re-raise has to
+				work on a COPY (PythonGenerator >> _resignalable:), and the
+				object's IDENTITY is lost.  Returning pops the frames, so the
+				re-signal below is the same object the raise site created.
+				That matters wherever Python compares exceptions by identity:
+				a generator whose ``finally'' yields suspends mid-propagation,
+				and test_close_and_throw_yield asserts the exception coming
+				back out of the resuming next() ``is'' the one thrown."
+				ex return: nil] ]
 		ensure: [
-			propExc isNil
-				ifTrue: [finallyBlock value]
-				ifFalse: [ | sav |
-					sav := self ___currentException___.
-					self ___setCurrentException___: propExc.
-					[finallyBlock value]
-						ensure: [self ___setCurrentException___: sav] ] ]
+			ranFinally ifFalse: [finallyBlock value]].
+	propExc isNil ifFalse: [^ (self ___resignalable___: propExc) @env0:signal].
+	^ result
+%
+
+category: 'Grail-Current Exception'
+classmethod: BaseException
+___resignalable___: anException
+	"``anException'' if it can be signalled again, else a clean copy of it.
+
+	An exception carries its live handler frames in INDEXED slots appended to
+	its named ones, and the VM refuses -- uncontinuably, error 6011
+	``Exception has already been signaled'' -- to signal one that still has
+	them.  Returning normally from a handler pops them, which is why
+	___ensureFinally___ returns rather than passing, and why the common case
+	re-signals the SAME object and keeps its identity.
+
+	It is not enough on its own: an exception that was already PASSED further
+	in (Grail compiles a bare ``raise'' inside an ``except'' to ``___ex
+	pass'') keeps one frame's worth even after our handler returns, and
+	signalling that one is the 6011 -- which is what TracebackTestCase's
+	testAHandlerRaiseLeavesTheTry and testFinallyDuringPropagation raise.
+	``copy'' answers an instance of the same class with the named and dynamic
+	instance variables (messageText, args, __cause__, __context__, ...) but
+	none of the stale frames, so it signals cleanly and still matches the same
+	``except'' clauses.
+
+	A last resort, not the default -- Python propagates the identical object,
+	and the frame test keeps the copy to the cases that cannot avoid it.  This
+	is PythonGenerator >> _resignalable:'s rule, applied at the other site that
+	re-raises a caught exception."
+
+	^ ((anException @env0:isKindOf: AbstractException)
+		@env0:and: [anException @env0:_basicSize @env0:> 0])
+			ifTrue: [anException @env0:copy]
+			ifFalse: [anException]
+%
+
+category: 'Grail-Current Exception'
+classmethod: BaseException
+___isControlFlowSignal___: anException
+	"True for Grail's internal ``return'' / ``break'' / ``continue'' carriers.
+
+	They are signalled like exceptions so they can unwind through ensure: and
+	ifCurtailed:, but they are not exceptions in Python's sense: nothing is
+	being handled, so they must never appear in sys.exc_info(), become an
+	exception's __context__, or be reported to user code.  The same three are
+	screened by TryAst's per-handler control-flow guard, which re-raises them
+	rather than letting an ``except Exception'' swallow a pending return."
+
+	^ (anException @env0:isKindOf: PythonReturn)
+		or: [(anException @env0:isKindOf: PythonBreak)
+		or: [anException @env0:isKindOf: PythonContinue]]
+%
+
+category: 'Grail-Current Exception'
+classmethod: BaseException
+___runFinally___: finallyBlock during: anException
+	"Run a ``finally'' body while anException is the session's current
+	exception, then restore whatever was current before.
+
+	Installing it is what makes sys.exc_info() / sys.exception() inside the
+	finally report the in-flight exception, as CPython does, and it is also
+	what gives an exception RAISED by the finally its __context__ -- the
+	implicit chaining reads the same slot.
+
+	Only real Python exceptions reach here: the caller screens out the
+	control-flow signals with ___isControlFlowSignal___: first, so a return /
+	break / continue through a finally leaves exc_info untouched -- correct,
+	since CPython shows the ENCLOSING handled exception there rather than a
+	fresh one."
+
+	| saved |
+	saved := self ___currentException___.
+	self ___setCurrentException___: anException.
+	^ [finallyBlock value]
+		ensure: [self ___setCurrentException___: saved]
 %
 
 category: 'Grail-Live Frames'
