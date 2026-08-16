@@ -7,7 +7,7 @@ AbstractLocationNode ifNil: [self error: 'AbstractLocationNode is not defined. C
 expectvalue /Class
 doit
 AbstractLocationNode subclass: 'ExceptHandlerAst'
-  instVarNames: #( type name body)
+  instVarNames: #( type name body isStar)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -87,4 +87,24 @@ name: newValue
 method: ExceptHandlerAst
 body: newValue
 	body := newValue
+%
+
+category: 'Grail-accessing'
+method: ExceptHandlerAst
+isStar
+	"True for a PEP 654 ``except*'' clause.
+
+	The two forms cannot be mixed in one try -- CPython rejects that at
+	compile time -- and their semantics differ enough that TryAst emits a
+	wholly separate shape for a star try: every matching clause runs
+	against a SPLIT of the raised group, rather than the first match
+	winning."
+
+	^ isStar == true
+%
+
+category: 'Grail-accessing'
+method: ExceptHandlerAst
+isStar: aBoolean
+	isStar := aBoolean
 %

@@ -75,14 +75,14 @@ different rows and merges cleanly.
 | test.test_builtin | ERROR | 133 | 26 | 52 | 15 |  |
 | test.test_call | OK | 186 | 0 | 0 | 182 |  |
 | test.test_dynamic | ERROR | 11 | 5 | 2 | 0 |  |
-| test.test_exception_variations | ERROR | 30 | 2 | 7 | 0 |  |
-| test.test_global | ERROR | 20 | 4 | 1 | 0 |  |
+| test.test_exception_variations | FAIL | 30 | 1 | 0 | 0 |  |
+| test.test_global | FAIL | 20 | 4 | 0 | 0 |  |
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
 | test.test_named_expressions | ERROR | 74 | 9 | 12 | 0 |  |
 | test.test_subclassinit | ERROR | 17 | 7 | 3 | 0 |  |
 | test.test_super | ERROR | 40 | 9 | 10 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
-| test.test_with | ERROR | 54 | 5 | 5 | 0 |  |
+| test.test_with | ERROR | 54 | 4 | 5 | 0 |  |
 | test.test_positional_only_arg | ERROR | 28 | 4 | 4 | 0 |  |
 | test.test_string_literals | ERROR | 20 | 3 | 10 | 0 |  |
 | test.test_genericclass | ERROR | 22 | 12 | 7 | 1 |  |

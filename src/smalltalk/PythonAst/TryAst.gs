@@ -92,6 +92,14 @@ printSmalltalkOn: aStream
 	RecursionError.  An integer captured in the selector costs neither."
 
 	| useEnsureFinally |
+	"PEP 654 ``except*'' gets a WHOLLY SEPARATE emit.  The nested-on:do:
+	shape below encodes ``first matching clause wins, the rest are
+	alternatives''; except* means the opposite -- the raised group is
+	SPLIT and every clause runs against its own share -- so there is
+	nothing to thread through that shape."
+	(handlers notEmpty and: [(handlers at: 1) isStar]) ifTrue: [
+		^ self printExceptStarOn: aStream
+	].
 	"finally-during-propagation: route the finally through
 	BaseException>>___ensureFinally___:finally: (instead of a bare ensure:) so
 	sys.exc_info() inside the finally sees a propagating exception -- but ONLY in
@@ -284,4 +292,71 @@ finalbody
 method: TryAst
 finalbody: newValue
 	finalbody := newValue
+%
+
+category: 'Grail-code generation'
+method: TryAst
+printExceptStarOn: aStream
+	"Emit a PEP 654 try/except*.
+
+	    [ body ] on: BaseException do: [:ex |
+	        rest := normalize(ex).
+	        rest := clause(rest, T1, [:g | n1 := g. body1]).
+	        rest := clause(rest, T2, [:g | n2 := g. body2]).
+	        finish(rest, ex) ]
+
+	The remainder is THREADED through the clauses rather than each clause
+	testing the original: every clause takes its matching subgroup out and
+	passes the rest on, which is what makes all of them run instead of
+	just the first match.
+
+	finally still wraps the whole thing, so its emit is shared with the
+	ordinary path."
+
+	| useEnsureFinally exVar restVar |
+	"``___ex'' deliberately, NOT a star-specific name: a bare ``raise'' in a
+	handler emits ``___ex pass'', so any other spelling leaves that
+	re-raise naming an undefined symbol and the whole method fails to
+	compile.  test_traceback's test_exception_group_wrapped_naked is
+	exactly ``except* Exception as e: raise''."
+	exVar := '___ex'.
+	restVar := '___estar_rest___'.
+	useEnsureFinally := finalbody size > 0.
+	useEnsureFinally ifTrue: [
+		aStream nextPutAll: 'BaseException @env0:___ensureFinally___: '; nextPut: $[.
+	].
+	aStream nextPut: $[; increaseIndent; lf.
+	body printSmalltalkOn: aStream.
+	orelse size > 0 ifTrue: [orelse printSmalltalkOn: aStream].
+	aStream decreaseIndent.
+	aStream nextPutAll: '] @env0:on: BaseException do: [:'; nextPutAll: exVar;
+		nextPutAll: ' | | '; nextPutAll: restVar; nextPutAll: ' | '; increaseIndent; lf.
+	aStream nextPutAll: restVar;
+		nextPutAll: ' := BaseExceptionGroup @env1:___exceptStarNormalize___: ';
+		nextPutAll: exVar; nextPutAll: '.'; lf.
+	handlers do: [:each |
+		aStream nextPutAll: restVar;
+			nextPutAll: ' := BaseExceptionGroup @env1:___exceptStarClause___: ';
+			nextPutAll: restVar; nextPutAll: ' type: ('.
+		each type printSmalltalkOn: aStream.
+		aStream nextPutAll: ') do: [:___estar_g___ | '; increaseIndent; lf.
+		each name ifNotNil: [:n |
+			"The SAME module-scope-aware store the ordinary handler uses.  A
+			bare ``n := g'' breaks exactly where every other binding form
+			did: a ``global''-declared name has no Smalltalk temp, so the
+			assignment names an undefined symbol.  test_global's
+			test_caught_exception_group is precisely that case."
+			self ___emitModuleScopeStoreOf___: n from: '___estar_g___' on: aStream.
+			aStream lf].
+		each body printSmalltalkOn: aStream.
+		aStream decreaseIndent; nextPutAll: '].'; lf.
+	].
+	aStream nextPutAll: 'BaseExceptionGroup @env1:___exceptStarFinish___: ';
+		nextPutAll: restVar; nextPutAll: ' original: '; nextPutAll: exVar.
+	aStream decreaseIndent; lf; nextPutAll: ']'.
+	useEnsureFinally ifTrue: [
+		aStream nextPutAll: '] finally: ['; increaseIndent; lf.
+		finalbody printSmalltalkOn: aStream.
+		aStream decreaseIndent; nextPutAll: '].'; lf
+	] ifFalse: [aStream nextPutAll: '.'; lf]
 %
