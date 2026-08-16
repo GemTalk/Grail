@@ -1065,6 +1065,14 @@ ord: aString
 		errorMsg := errorMsg @env0:, ' found'.
 		TypeError ___signal___: errorMsg
 	].
+	"A str holding a LONE SURROGATE has no Character to fetch -- GemStone's
+	Character cannot hold D800..DFFF, which is why PyStrSurrogate keeps raw
+	code points instead of indexable slots.  ``at:'' on one answered an
+	uncatchable OffsetError (``object does not have varying instVars''), so
+	``ord('\udce9')'' -- an ordinary thing to do to a surrogateescape'd byte
+	-- brought the session down rather than answering 56553."
+	(aString isKindOf: PyStrSurrogate) ifTrue: [
+		^ (aString @env0:___codePoints___) @env0:at: 1].
 	char := aString @env0:at: 1.
 	"A str yields a Character (-> codePoint); a bytes/bytearray yields the
 	byte value directly as an Integer (ord(b'A') == 65)."

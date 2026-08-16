@@ -1357,10 +1357,99 @@ decode: encoding _: errors
 	input."
 
 	| enc |
-	enc := encoding @env0:asLowercase.
+	enc := (encoding @env0:asLowercase)
+		@env0:collect: [:c | (c @env0:= $_) ifTrue: [$-] ifFalse: [c]].
 	(((enc @env0:= 'utf-8') or: [enc @env0:= 'utf8']) and: [errors @env0:= 'ignore'])
 		ifTrue: [^ self ___pyDecodeUTF8Ignore___].
+	(errors @env0:asString @env0:= 'surrogateescape') ifTrue: [
+		^ self ___decodeSurrogateEscape___: enc].
 	^ self decode: encoding
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___decodeSurrogateEscape___: enc
+	"PEP 383's ``surrogateescape'': a byte the codec cannot decode becomes the
+	code point U+DC00+byte, so the bytes survive a decode/encode round trip
+	unchanged.  It is how CPython carries an OS byte string -- a filename,
+	argv, environ -- that is not valid in the filesystem encoding, and it is
+	what difflib.diff_bytes uses to run the TEXT differ over arbitrary bytes
+	(test_difflib's TestBytes).
+
+	The escaped code points land in the surrogate block, which a GemStone
+	Character cannot hold -- PyStrSurrogate is the representation for exactly
+	that, and its ___fromCodePoints___: demotes back to an ordinary string
+	when nothing actually escaped."
+
+	| cps |
+	((enc @env0:= 'ascii') or: [enc @env0:= 'us-ascii']) ifTrue: [
+		cps := OrderedCollection @env0:new.
+		1 @env0:to: self @env0:size do: [:i |
+			| b |
+			b := self @env0:at: i.
+			cps @env0:add: (b @env0:> 127 ifTrue: [16rDC00 @env0:+ b] ifFalse: [b])].
+		^ PyStrSurrogate @env0:___fromCodePoints___: cps].
+	"latin-1 decodes every byte there is, so nothing can ever escape."
+	((enc @env0:= 'latin-1') or: [(enc @env0:= 'latin1')
+		or: [enc @env0:= 'iso-8859-1']]) ifTrue: [^ self decode: enc].
+	((enc @env0:= 'utf-8') or: [enc @env0:= 'utf8']) ifTrue: [
+		^ self ___decodeUTF8SurrogateEscape___].
+	"Any other codec: nothing here knows which of its bytes are
+	undecodable, so let the strict decoder speak rather than guess."
+	^ self decode: enc
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___decodeUTF8SurrogateEscape___
+	"UTF-8 with PEP 383 escaping.  GemStone's decodeFromUTF8 is
+	all-or-nothing -- it raises on the first ill-formed byte and tells you
+	nothing about where -- so the scan is done here: each well-formed
+	sequence decodes, and every other byte escapes to U+DC00+byte ONE AT A
+	TIME, which is CPython's rule.
+
+	Overlong forms, encoded surrogates and values above U+10FFFF are
+	ill-formed and escape byte by byte, so ``b'\xed\xa0\x80''' comes back as
+	three escaped bytes rather than one U+D800 -- surrogatepass is the
+	handler that decodes those, and it is a different handler on purpose."
+
+	| cps i n |
+	cps := OrderedCollection @env0:new.
+	n := self @env0:size.
+	i := 1.
+	[i @env0:<= n] @env0:whileTrue: [
+		| b len cp ok j |
+		b := self @env0:at: i.
+		len := nil.
+		cp := nil.
+		b @env0:< 16r80 ifTrue: [len := 1. cp := b].
+		((b @env0:>= 16rC2) and: [b @env0:<= 16rDF]) ifTrue: [
+			len := 2. cp := b @env0:bitAnd: 16r1F].
+		((b @env0:>= 16rE0) and: [b @env0:<= 16rEF]) ifTrue: [
+			len := 3. cp := b @env0:bitAnd: 16r0F].
+		((b @env0:>= 16rF0) and: [b @env0:<= 16rF4]) ifTrue: [
+			len := 4. cp := b @env0:bitAnd: 16r07].
+		ok := (len @env0:~~ nil) and: [i @env0:+ len @env0:- 1 @env0:<= n].
+		ok ifTrue: [
+			j := i @env0:+ 1.
+			[ok and: [j @env0:<= (i @env0:+ len @env0:- 1)]] @env0:whileTrue: [
+				| c |
+				c := self @env0:at: j.
+				((c @env0:>= 16r80) and: [c @env0:<= 16rBF])
+					ifTrue: [
+						cp := (cp @env0:bitShift: 6) @env0:bitOr: (c @env0:bitAnd: 16r3F).
+						j := j @env0:+ 1]
+					ifFalse: [ok := false]]].
+		ok ifTrue: [
+			(((len @env0:= 2) and: [cp @env0:< 16r80])
+				or: [((len @env0:= 3) and: [cp @env0:< 16r800])
+				or: [((len @env0:= 4) and: [cp @env0:< 16r10000])
+				or: [((cp @env0:>= 16rD800) and: [cp @env0:<= 16rDFFF])
+				or: [cp @env0:> 16r10FFFF]]]]) ifTrue: [ok := false]].
+		ok
+			ifTrue: [cps @env0:add: cp. i := i @env0:+ len]
+			ifFalse: [cps @env0:add: 16rDC00 @env0:+ b. i := i @env0:+ 1]].
+	^ PyStrSurrogate @env0:___fromCodePoints___: cps
 %
 
 category: 'Grail-Encoding/Decoding'

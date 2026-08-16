@@ -29,9 +29,9 @@ Where the in-scope tiers stand:
 |------|------:|----------:|-------------:|------:|
 | P1 | 37 | 17 | 36 | 90 |
 | P2 | 14 | 2 | 18 | 34 |
-| P3 | 0 | 13 | 43 | 56 |
+| P3 | 1 | 12 | 43 | 56 |
 | P4 | 0 | 12 | 63 | 75 |
-| **In-scope** | **51** | **44** | **160** | **255** |
+| **In-scope** | **52** | **43** | **160** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -88,7 +88,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 · P3 13 · P4 12) and **51 of those score OK**.
+Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 · P3 13 · P4 12) and **52 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -260,7 +260,7 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 |  | `test_copyreg` | copyreg — pickle/copy registry. |
 |  | `test_csv` | csv — reader/writer (pure semantics). |
 |  | `test_dataclasses` | dataclasses — pure-Python codegen over classes. |
-| ❗ | `test_difflib` | difflib — pure Python. |
+| ✅ | `test_difflib` | difflib — pure Python. |
 |  | `test_doctest` | doctest — pure-Python test framework. |
 |  | `test_fnmatch` | fnmatch — pure glob-pattern matching on strings. |
 |  | `test_genericpath` | genericpath — pure string path operations. |
