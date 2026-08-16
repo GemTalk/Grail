@@ -62,7 +62,7 @@ different rows and merges cleanly.
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
 | test.test_copy | ERROR | 81 | 7 | 8 | 0 |  |
 | test.test_scope | OK | 41 | 0 | 0 | 4 |  |
-| test.test_yield_from | ERROR | 43 | 17 | 12 | 0 |  |
+| test.test_yield_from | ERROR | 43 | 5 | 2 | 0 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
 | test.test_format | OK | 18 | 0 | 0 | 3 |  |
 | test.test_binop | OK | 12 | 0 | 0 | 0 |  |
@@ -82,7 +82,7 @@ different rows and merges cleanly.
 | test.test_subclassinit | ERROR | 17 | 7 | 3 | 0 |  |
 | test.test_super | ERROR | 40 | 13 | 24 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
-| test.test_with | ERROR | 54 | 6 | 5 | 0 |  |
+| test.test_with | ERROR | 54 | 5 | 5 | 0 |  |
 | test.test_positional_only_arg | ERROR | 28 | 4 | 4 | 0 |  |
 | test.test_string_literals | ERROR | 20 | 3 | 10 | 0 |  |
 | test.test_genericclass | ERROR | 22 | 12 | 7 | 1 |  |
