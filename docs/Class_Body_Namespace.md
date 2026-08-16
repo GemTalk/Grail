@@ -232,14 +232,71 @@ about a comprehension in a class body:
 `test_enum` `ERROR/9 -> ERROR/8`, `test_listcomps` `24 -> 21`,
 `test_named_expressions` `37 -> 36`.
 
+## Stage 6, as shipped
+
+A class-body **`def`** and a **nested `class`** are offered to the namespace, at
+their own source position. These were the two body statements that bind a name
+without producing a value — a `def` compiles to a Smalltalk method, a nested
+class is built and stored through `___classHolderAttrStore___` — which is why
+they had no store to route and bypassed the mapping entirely. A prepared
+namespace saw `a`, `b`, `c` and never `f` or `Inner`.
+
+Both join `___classBodyOrderedRuntimeStatements___`, the source-order flush the
+`global`/subscript/`del`/`if` statements already use, so the mapping sees the
+body in the order CPython executes it. They are **not** emitted by that flush —
+each already has its own emission path — only bound.
+
+`object >> ___grailNsBind___:` reads the value **back off the class** rather
+than taking one passed in: by the time it runs the method is compiled and the
+nested class stored. That is also what makes a **decorated** `def` come out
+right, and for free — the decorator has already rebound the name in the
+dynInstVars holder, and the load reads the holder first, so the mapping gets the
+decorated object rather than the raw method.
+
+Two asymmetries with `___grailNsStore___:value:`, both deliberate:
+
+- it does **not** read the value back out of the mapping onto the class. The
+  method is already compiled, so a namespace that *transforms* a `def` is
+  recorded and not reflected. Nothing can observe that until a metaclass is
+  handed the mapping.
+- a name the class cannot answer is **skipped**, not raised on. The emit is
+  driven by the source, and a body can bind a name codegen does not install as
+  a readable attribute; answering nothing is the narrower miss.
+
+`async def` is bound by the same emit and is a **no-op today**: Grail does not
+compile a class-body `async def` to an attribute at all (`hasattr(K, 'coro')` is
+false), so there is nothing to offer. Listed anyway, because the omission would
+be the wrong shape once that separate gap closes.
+
+**This unlocks no CPython suite test on its own** — 0 regressions, 0
+improvements across the full corpus, which for a change that fires on every
+class definition is the number that matters. Its value is as the prerequisite:
+every test in `test_super`'s `__classcell__` cluster reads a `def` back out of
+the namespace its metaclass was given, so none of them can move until the
+namespace has one. Stage 7 (dispatching `Meta.__new__`/`__init__` with the
+mapping, and making `type(A)` answer the metaclass) is what turns it into
+visible conformance.
+
+`ClassBodyNamespaceTestCase` had recorded the absence as a known gap
+(`testDefsAndNestedClassesBypassItWhichIsAKnownGap`); that expectation is
+updated with the reasoning, as stage 3's was.
+
 ## What is still missing
 
-- `def` and nested `class` bindings bypass the namespace — each has its own
-  emission path. This is now the load-bearing one: it blocks the `_auto_called`
-  ordering rule moving to `EnumDict`, where CPython keeps it, and it is why a
-  class-body `del` of a `def`-bound name is still dropped (removing the method
-  would break a sibling assignment, which compiles to a `BoundMethod` naming
-  its *selector* — flask's `NullSession`)
+- a metaclass's `__new__` / `__init__` are never dispatched, and `type(A)`
+  answers `type` rather than the metaclass. Only `__prepare__` is called. This
+  is now the load-bearing one: the mapping is faithful enough to hand over, and
+  nothing hands it over. It is what the whole `__classcell__` cluster in
+  `test_super` waits on, and it is a change of ownership rather than a hook — a
+  `class` statement in Grail *creates a Smalltalk class*, where CPython lets the
+  metaclass return anything at all, including `None`
+- the `_auto_called` ordering rule still reads `___classBodyOrder___` rather
+  than living in `EnumDict` where CPython keeps it. Stage 6 removed the reason
+  it could not move (a `def` now reaches the mapping), so this is available
+  work rather than blocked work
+- a class-body `del` of a `def`-bound name is still dropped: removing the method
+  would break a sibling assignment, which compiles to a `BoundMethod` naming its
+  *selector* — flask's `NullSession`
 - `locals()` answers a mapping bound to the class, but not the prepared
   namespace **object**: an alias held across statements reports the names bound
   up to the call rather than growing with the body. Same root cause — a body is
@@ -252,5 +309,6 @@ Stages 1 and 2 touched every class definition in the corpus, so they were tier 2
 by `.claude/CLAUDE.md`'s rule and each took a full CPython suite run. Stage 3 did
 not: it is confined to `EnumDict` and `PyEnumTypes`, so it is tier 1 — the
 machinery it needed was already in place and paid for. Stage 4 moved codegen
-again and went back to tier 2, and so did stage 5. Any later stage that does
-(`def` bindings) is tier 2 too.
+again and went back to tier 2, and so did stages 5 and 6. Stage 7 (metaclass
+dispatch) is tier 2 by the same rule, and is the widest of them: it changes who
+owns the object a `class` statement produces.

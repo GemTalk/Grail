@@ -846,6 +846,54 @@ ___grailPrepareNamespace___: aMetaclass
 
 category: 'Grail-Class Namespace'
 classmethod: object
+___grailNsBind___: aName
+	"One class-body ``def'' or nested ``class'', seen by the namespace if there
+	is one.  Answers the receiver, so the emit can chain.
+
+	The DEFINITIONAL counterpart to ___grailNsStore___:value:.  An assignment
+	has a value in hand to offer the mapping; a ``def'' does not -- Grail
+	compiles it to a Smalltalk METHOD, and a nested ``class'' to a real class
+	stored through ___classHolderAttrStore___.  Neither produces a value at the
+	point the body binds the name, which is why both bypassed the namespace
+	entirely: CPython's mapping holds a function object for every ``def'' in the
+	body, and Grail's held nothing at all.
+
+	So the value is READ BACK OFF THE CLASS rather than passed in: by the time
+	this runs the method is compiled and the nested class is stored, and
+	___pyAttrLoad___ answers what the name is bound to -- an unbound method for
+	a ``def'', the class itself for a nested ``class''.  That is also what makes
+	a DECORATED def come out right: the decorator has already rebound the name
+	in the dynInstVars holder, and the load reads the holder first, so the
+	namespace sees the decorated object and not the raw method.
+
+	Unlike ___grailNsStore___:value: this does NOT read the value back out of
+	the mapping to store on the class.  The class attribute is not this emit's
+	to set -- the method is already compiled -- so a namespace that transforms
+	a ``def'' is recorded in the mapping and not reflected onto the class.
+	Stage 7 (handing the mapping to the metaclass) is what would make that
+	difference observable; today nothing can see it.
+
+	Answers immediately when there is no namespace, which is every class in the
+	corpus that does not name a metaclass with __prepare__."
+
+	| ns v |
+	ns := self ___grailPendingNamespace___.
+	ns isNil ifTrue: [^ self].
+	"A name the class cannot answer is skipped rather than raising.  The emit
+	is driven by the SOURCE (every def and nested class in the body), and a
+	body can bind a name codegen does not install as a readable attribute --
+	a conditionally-defined nested class among them.  CPython would have the
+	name; answering nothing is the narrower miss, and it keeps a namespace
+	from turning a def into a class-definition-time error."
+	v := [self ___pyAttrLoad___: aName @env0:asSymbol]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	v isNil ifTrue: [^ self].
+	ns @env1:__setitem__: aName @env0:asString _: v.
+	^ self
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
 ___grailNsStore___: aName value: aValue
 	"One class-body assignment, seen by the namespace if there is one.
 

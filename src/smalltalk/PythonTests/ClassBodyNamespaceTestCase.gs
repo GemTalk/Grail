@@ -37,17 +37,22 @@ ClassBodyNamespaceTestCase category: 'Grail-SUnit'
 ! enum.EnumDict.
 !
 ! Grail had no class-body namespace at all: a body compiles to accessor stores on
-! the class.  This is the FIRST STAGE of giving it one, and what it covers versus
-! what it does not is the shape of the remaining work, so both are pinned here.
+! the class.  This was the FIRST STAGE of giving it one, and what it covers
+! versus what it does not is the shape of the remaining work, so both are pinned
+! here.
 !
 ! COVERED: every class-body ASSIGNMENT, at body level and inside a compound
 ! statement (``with'' / ``if'' / loops), in source order.  Routed at two places
 ! -- the attribute-value emit in ClassDefAst, and object >>
 ! ___classBodyDefinitionalStore___:put:, which both the single and the chained
-! runtime store already funnel through.
+! runtime store already funnel through.  Since stage 6, ``def'' and nested
+! ``class'' bindings are covered too, through ___grailNsBind___: at their own
+! source position -- see ClassBodyNamespaceDefsTestCase, and the two tests below
+! that used to record their absence as a gap.
 !
-! NOT COVERED: ``def'' and nested ``class'' bindings, ``vars()'' inside a body,
-! and an INHERITED metaclass.  See docs/Class_Body_Namespace.md.
+! NOT COVERED: ``vars()'' inside a body answering the namespace OBJECT, and a
+! metaclass's __new__ / __init__ being dispatched at all (only __prepare__ is).
+! See docs/Class_Body_Namespace.md.
 !
 ! Drives tests/python/class_body_namespace.py.  test_enum
 ! TestEnumDict.test_enum_dict_in_metaclass.
@@ -84,12 +89,18 @@ resultAt: key
 
 category: 'Grail-Tests - The namespace sees the body'
 method: ClassBodyNamespaceTestCase
-testEveryAssignmentIsOfferedInSourceOrder
+testEveryBindingIsOfferedInSourceOrder
 	"Body-level, inside a ``with'', and inside an ``if'' -- plus __doc__, which
-	CPython also puts in the namespace."
+	CPython also puts in the namespace.
+
+	``method'' and ``Nested'' join the list at stage 6, after ``in_if'', which
+	is where the body binds them.  That they arrive IN ORDER rather than in a
+	pass of their own is the part that matters: CPython executes a body top to
+	bottom, so a mapping that transforms or refuses a write has to see the
+	same sequence."
 
 	self assert: (self resultAt: 'seen') asString
-		equals: '[''__doc__'', ''plain'', ''handle'', ''in_with'', ''in_if'']'.
+		equals: '[''__doc__'', ''plain'', ''handle'', ''in_with'', ''in_if'', ''method'', ''Nested'']'.
 %
 
 category: 'Grail-Tests - The namespace sees the body'
@@ -186,13 +197,22 @@ testAReusedMemberNameIsRefusedWhereItIsWritten
 
 category: 'Grail-Tests - Known gaps'
 method: ClassBodyNamespaceTestCase
-testDefsAndNestedClassesBypassItWhichIsAKnownGap
-	"Recorded, NOT endorsed.  Stage 1 routes ASSIGNMENTS.  A ``def'' and a
-	nested ``class'' bind a name too, and CPython's namespace sees both; here
-	each has its own emission path and still bypasses it."
+testDefsAndNestedClassesAreSeenToo
+	"Was ``...BypassItWhichIsAKnownGap'', recorded rather than endorsed since
+	stage 1: a ``def'' and a nested ``class'' bind a name, CPython's namespace
+	sees both, and each of Grail's had its own emission path that bypassed it.
 
-	self assert: (self resultAt: 'def_seen_a_known_gap') asString equals: 'False'.
-	self assert: (self resultAt: 'nested_class_seen_a_known_gap') asString equals: 'False'.
+	Stage 6 closed it -- the name is offered at its own source position, with
+	the value read back off the class, since neither statement produces one
+	where the body binds the name.  The gap this test recorded was the
+	prerequisite for handing a faithful namespace to a metaclass's __new__.
+
+	See ClassBodyNamespaceDefsTestCase for the full stage-6 coverage; this
+	assertion stays here because it is the one that was WRONG before, and the
+	pair reads as the before/after."
+
+	self assert: (self resultAt: 'def_seen') asString equals: 'True'.
+	self assert: (self resultAt: 'nested_class_seen') asString equals: 'True'.
 %
 
 category: 'Grail-Tests - Known gaps'

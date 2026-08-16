@@ -1090,9 +1090,19 @@ printSmalltalkRuntimeOn: aStream
 						((stmt isKindOf: DeleteAst)
 							or: [self ___isClassBodyRuntimeStatement___: stmt])
 								ifTrue: [CallAst classBodyRuntimeClass: name].
-						[(stmt isKindOf: IfAst)
-							ifTrue: [self emitClassBodyIf: stmt on: aStream]
-							ifFalse: [stmt printSmalltalkOn: aStream]]
+						[(self ___isClassBodyNamespaceBinding___: stmt)
+							ifTrue: [
+								"NOT an emit of the statement -- the def is already
+								compiled and the nested class already stored.  Only
+								the namespace binding, at this name's own source
+								position, so a mapping sees the body in order."
+								aStream nextPutAll: name;
+									nextPutAll: ' @env1:___grailNsBind___: ''';
+									nextPutAll: stmt name asString;
+									nextPutAll: '''.']
+							ifFalse: [(stmt isKindOf: IfAst)
+								ifTrue: [self emitClassBodyIf: stmt on: aStream]
+								ifFalse: [stmt printSmalltalkOn: aStream]]]
 							ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
 						aStream lf]].
 		[:emittedChainValues |
@@ -2787,9 +2797,36 @@ ___classBodyOrderedRuntimeStatements___
 			or: [(self ___isClassBodySubscriptAssign___: stmt)
 			or: [(self ___isClassBodyDeleteStatement___: stmt)
 			or: [(stmt isKindOf: IfAst)
-			or: [self ___isClassBodyRuntimeStatement___: stmt]]]])
+			or: [(self ___isClassBodyNamespaceBinding___: stmt)
+			or: [self ___isClassBodyRuntimeStatement___: stmt]]]]])
 				ifTrue: [result add: pos -> stmt]].
 	^ result
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___isClassBodyNamespaceBinding___: stmt
+	"True for a class-body ``def'' or nested ``class'' -- the two body
+	statements that BIND A NAME without producing a value.
+
+	They join the source-order flush not to be emitted (each already has its
+	own emission path -- a def compiles to a Smalltalk method, a nested class
+	is built and stored through ___classHolderAttrStore___) but so the name
+	can be offered to the prepared namespace AT ITS OWN POSITION.  CPython's
+	class namespace holds a function object for every def in the body;
+	Grail's held nothing for either, which is the gap
+	docs/Class_Body_Namespace.md calls the load-bearing one.
+
+	Both async spellings count: ``async def'' binds a name in a class body
+	exactly as ``def'' does.  Including it is currently a NO-OP rather than a
+	fix -- Grail does not compile a class-body ``async def'' to an attribute at
+	all (``hasattr(K, 'coro')'' is false), so the bind finds nothing to offer
+	the mapping and skips.  Listed anyway because the omission would be the
+	wrong shape: when that separate gap closes, the binding is already right."
+
+	^ (stmt isKindOf: FunctionDefAst)
+		or: [(stmt isKindOf: AsyncFunctionDefAst)
+		or: [stmt isKindOf: ClassDefAst]]
 %
 
 category: 'Grail-Class Compilation'
