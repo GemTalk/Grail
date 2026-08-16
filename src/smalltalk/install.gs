@@ -776,6 +776,7 @@ run
 	at: #'CaretAnchorTestCase' put: nil;
 	at: #'ConfigparserTestCase' put: nil;
 	at: #'CsvTestCase' put: nil;
+	at: #'DecoratorSecondaryBaseTestCase' put: nil;
 	at: #'FnmatchTestCase' put: nil;
 	at: #'GetoptTestCase' put: nil;
 	at: #'GetpassTestCase' put: nil;
@@ -1696,6 +1697,7 @@ input src/smalltalk/PythonTests/CalendarTestCase.gs
 input src/smalltalk/PythonTests/CaretAnchorTestCase.gs
 input src/smalltalk/PythonTests/ConfigparserTestCase.gs
 input src/smalltalk/PythonTests/CsvTestCase.gs
+input src/smalltalk/PythonTests/DecoratorSecondaryBaseTestCase.gs
 input src/smalltalk/PythonTests/FnmatchTestCase.gs
 input src/smalltalk/PythonTests/GetoptTestCase.gs
 input src/smalltalk/PythonTests/GetpassTestCase.gs
