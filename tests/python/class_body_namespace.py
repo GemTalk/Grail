@@ -185,14 +185,13 @@ class Aliased(enum.Enum):
 
 r['enum_alias'] = repr(Aliased.ALIAS is Aliased.CANON)
 
-# --- KNOWN GAPS, recorded rather than endorsed ------------------------------------
-# Stage 1 routes ASSIGNMENTS -- at body level and inside compound statements.
-# A ``def`` and a nested ``class`` bind a name too, and CPython's namespace sees
-# both; here they have their own emission paths and still bypass it.  ``seen``
-# above shows exactly that: 'method' and 'Nested' are absent.
+# Stage 6 closed what stages 1-5 recorded here as a gap: a ``def`` and a nested
+# ``class`` bind a name too, and the namespace now sees both, at their own
+# source position.  ``seen`` above shows it -- 'method' and 'Nested' follow
+# 'in_if', which is the order the body binds them in.
 
-r['def_seen_a_known_gap'] = repr('method' in seen)
-r['nested_class_seen_a_known_gap'] = repr('Nested' in seen)
+r['def_seen'] = repr('method' in seen)
+r['nested_class_seen'] = repr('Nested' in seen)
 
 # ``vars()`` inside a class body is no longer a plain dict: it answers a live
 # ClassBodyLocals, and a write through it is offered to the prepared namespace

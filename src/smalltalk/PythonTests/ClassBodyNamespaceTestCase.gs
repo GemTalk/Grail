@@ -84,12 +84,18 @@ resultAt: key
 
 category: 'Grail-Tests - The namespace sees the body'
 method: ClassBodyNamespaceTestCase
-testEveryAssignmentIsOfferedInSourceOrder
+testEveryBindingIsOfferedInSourceOrder
 	"Body-level, inside a ``with'', and inside an ``if'' -- plus __doc__, which
-	CPython also puts in the namespace."
+	CPython also puts in the namespace.
+
+	``method'' and ``Nested'' join the list at stage 6, after ``in_if'', which
+	is where the body binds them.  That they arrive IN ORDER rather than in a
+	pass of their own is the part that matters: CPython executes a body top to
+	bottom, so a mapping that transforms or refuses a write has to see the
+	same sequence."
 
 	self assert: (self resultAt: 'seen') asString
-		equals: '[''__doc__'', ''plain'', ''handle'', ''in_with'', ''in_if'']'.
+		equals: '[''__doc__'', ''plain'', ''handle'', ''in_with'', ''in_if'', ''method'', ''Nested'']'.
 %
 
 category: 'Grail-Tests - The namespace sees the body'
@@ -186,13 +192,22 @@ testAReusedMemberNameIsRefusedWhereItIsWritten
 
 category: 'Grail-Tests - Known gaps'
 method: ClassBodyNamespaceTestCase
-testDefsAndNestedClassesBypassItWhichIsAKnownGap
-	"Recorded, NOT endorsed.  Stage 1 routes ASSIGNMENTS.  A ``def'' and a
-	nested ``class'' bind a name too, and CPython's namespace sees both; here
-	each has its own emission path and still bypasses it."
+testDefsAndNestedClassesAreSeenToo
+	"Was ``...BypassItWhichIsAKnownGap'', recorded rather than endorsed since
+	stage 1: a ``def'' and a nested ``class'' bind a name, CPython's namespace
+	sees both, and each of Grail's had its own emission path that bypassed it.
 
-	self assert: (self resultAt: 'def_seen_a_known_gap') asString equals: 'False'.
-	self assert: (self resultAt: 'nested_class_seen_a_known_gap') asString equals: 'False'.
+	Stage 6 closed it -- the name is offered at its own source position, with
+	the value read back off the class, since neither statement produces one
+	where the body binds the name.  The gap this test recorded was the
+	prerequisite for handing a faithful namespace to a metaclass's __new__.
+
+	See ClassBodyNamespaceDefsTestCase for the full stage-6 coverage; this
+	assertion stays here because it is the one that was WRONG before, and the
+	pair reads as the before/after."
+
+	self assert: (self resultAt: 'def_seen') asString equals: 'True'.
+	self assert: (self resultAt: 'nested_class_seen') asString equals: 'True'.
 %
 
 category: 'Grail-Tests - Known gaps'
