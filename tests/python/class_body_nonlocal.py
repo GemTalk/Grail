@@ -105,3 +105,70 @@ def unassignable_nonlocal_target_still_compiles():
                 __class__ = 42
             return '__class__' in X.__dict__
     return Holder().make()
+
+
+# ---------------------------------------------------------------------------
+# ``nonlocal __class__'' in a METHOD.  CPython exempts this one name from the
+# rule that a nonlocal must have an enclosing binding: a class body supplies
+# __class__ to its methods as an implicit closure cell (the same cell zero-arg
+# super() uses).  Grail stripped every nonlocal name from the method's local
+# set, so the assignment had no declared target, the method failed to compile,
+# and Class.gs installed a raising stub in its place -- which is how
+# test_super's TestSuper.tearDown turned one uncompilable method into an error
+# on nine tests, since tearDown runs after every one of them.
+# ---------------------------------------------------------------------------
+
+
+def nonlocal_class_in_method_compiles():
+    """The method compiles and runs; the assignment is readable within it."""
+    class T:
+        def repair(self):
+            nonlocal __class__
+            __class__ = T
+            return __class__.__name__
+    return T().repair()
+
+
+def nonlocal_class_does_not_break_siblings():
+    """A sibling method of the same class is unaffected -- in particular
+    zero-arg super() still resolves."""
+    class Base:
+        def f(self):
+            return 'base'
+    class Derived(Base):
+        def repair(self):
+            nonlocal __class__
+            __class__ = Derived
+            return 'repaired'
+        def f(self):
+            return super().f() + '+derived'
+    d = Derived()
+    return (d.repair(), d.f())
+
+
+def nonlocal_with_enclosing_binding_still_writes_through():
+    """The ordinary case is untouched: a nonlocal that DOES have an enclosing
+    binding still writes through to it rather than binding a local."""
+    def outer():
+        count = 0
+        def bump():
+            nonlocal count
+            count += 1
+        bump()
+        bump()
+        return count
+    return outer()
+
+
+def nonlocal_in_nested_function_still_writes_through():
+    """...including through two levels."""
+    def outer():
+        value = 'outer'
+        def middle():
+            def inner():
+                nonlocal value
+                value = 'set by inner'
+            inner()
+        middle()
+        return value
+    return outer()

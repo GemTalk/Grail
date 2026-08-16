@@ -31,7 +31,7 @@ Where the in-scope tiers stand:
 | P2 | 14 | 2 | 18 | 34 |
 | P3 | 1 | 12 | 43 | 56 |
 | P4 | 0 | 12 | 63 | 75 |
-| **In-scope** | **52** | **43** | **160** | **255** |
+| **In-scope** | **53** | **42** | **160** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -88,7 +88,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 · P3 13 · P4 12) and **52 of those score OK**.
+Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 · P3 13 · P4 12) and **53 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely

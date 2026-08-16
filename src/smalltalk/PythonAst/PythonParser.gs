@@ -3211,7 +3211,8 @@ underscoreReadName
 	^ underscoreCurrentName ifNil: [#'___unused___']
 %
 
-category: 'Grail-node construction'
+
+category: 'Grail-Scope'
 method: PythonParser
 popScope
 	"Pop the current variable, write, and return-blocking scopes in
@@ -3236,8 +3237,50 @@ popScope
 	globals := globalStack removeLast.
 	reads := readStack removeLast.
 	nonlocals do: [:n |
-		vars remove: n ifAbsent: [].
-		writes remove: n ifAbsent: [].
+		"...with ONE exception: ``__class__''.
+
+		Every other nonlocal has an enclosing binding to propagate to, because
+		a nonlocal without one is a SyntaxError in CPython.  ``__class__'' is
+		the name the language exempts: a class body provides it to its methods
+		as an implicit closure cell.  Nothing on the Smalltalk side declares
+		it, so stripping it leaves the assignment with an undeclared target --
+		which does not compile, so the whole method is replaced by a raising
+		stub (Class.gs's CompileError fallback) and every call reports a
+		codegen gap.  test_super's TestSuper.tearDown is exactly that --
+
+		    def tearDown(self):
+		        nonlocal __class__
+		        __class__ = TestSuper
+
+		-- and because tearDown runs after EVERY test in the class, the stub
+		turned one uncompilable method into an error on nine of them.
+
+		Keeping the name local declares the Smalltalk temp, so the method
+		compiles and the assignment is readable within it.  Grail resolves
+		``__class__'' lexically rather than through a rebindable cell (see
+		CallAst's zero-arg ``super()'' codegen), so the write does not
+		propagate to the class's other methods as CPython's would -- which
+		also means the damage that this tearDown exists to repair cannot
+		happen here.
+
+		Testing the NAME rather than ``does any enclosing scope bind it'' is
+		deliberate: the scopes are built as the parse walks, so at popScope
+		time an enclosing binding that appears LATER in the source has not
+		been recorded yet.  ``nonlocal ret'' in a function defined above
+		``ret = None'' is legal Python and common --
+
+		    def gen():
+		        nonlocal ret
+		        ret = yield from MyIter()
+		    ret = None
+
+		-- and a binding test would wrongly keep ``ret'' local there, leaving
+		the outer name unwritten (test_yield_from) or unbound
+		(functools' lru_cache counters, an UnboundLocalError).  The name test
+		has no such ordering hazard."
+		n == #'__class__' ifFalse: [
+			vars remove: n ifAbsent: [].
+			writes remove: n ifAbsent: []].
 	].
 	"``global x'' names are likewise stripped from this scope's local
 	sets so an inner ``x = expr'' doesn't declare a fresh Smalltalk
