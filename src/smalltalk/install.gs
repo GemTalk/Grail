@@ -497,6 +497,17 @@ run
 	at: #'ImportAst' put: nil;
 	at: #'ImportFromAst' put: nil;
 	at: #'InAst' put: nil;
+	at: #'MatchAsAst' put: nil;
+	at: #'MatchAst' put: nil;
+	at: #'MatchCaseAst' put: nil;
+	at: #'MatchClassAst' put: nil;
+	at: #'MatchMappingAst' put: nil;
+	at: #'MatchOrAst' put: nil;
+	at: #'MatchSequenceAst' put: nil;
+	at: #'MatchSingletonAst' put: nil;
+	at: #'MatchStarAst' put: nil;
+	at: #'MatchValueAst' put: nil;
+	at: #'PatternAst' put: nil;
 	at: #'InstanceFunctionDefAst' put: nil;
 	at: #'InvertAst' put: nil;
 	at: #'IsAst' put: nil;
@@ -706,6 +717,7 @@ run
 	at: #'InspectClassifyClassAttrsTestCase' put: nil;
 	at: #'ClassBodySourceOrderTestCase' put: nil;
 	at: #'EnumIgnoreNamesTestCase' put: nil;
+	at: #'MatchStatementTestCase' put: nil;
 	at: #'EnumModuleApiTestCase' put: nil;
 	at: #'EnumDynamicClassAttributeTestCase' put: nil;
 	at: #'BuiltinSubclassPickleTestCase' put: nil;
@@ -1372,6 +1384,8 @@ input src/smalltalk/PythonAst/SuiteAst.gs
 input src/smalltalk/PythonAst/TypeIgnoreAst.gs
 input src/smalltalk/PythonAst/TypeParamAst.gs
 input src/smalltalk/PythonAst/WithItemAst.gs
+input src/smalltalk/PythonAst/MatchCaseAst.gs
+input src/smalltalk/PythonAst/PatternAst.gs
 input src/smalltalk/PythonAst/AliasAst.gs
 input src/smalltalk/PythonAst/ArgAst.gs
 input src/smalltalk/PythonAst/ExceptHandlerAst.gs
@@ -1379,6 +1393,15 @@ input src/smalltalk/PythonAst/ExpressionAst.gs
 input src/smalltalk/PythonAst/KeywordAst.gs
 input src/smalltalk/PythonAst/SliceAst.gs
 input src/smalltalk/PythonAst/StatementAst.gs
+input src/smalltalk/PythonAst/MatchAst.gs
+input src/smalltalk/PythonAst/MatchValueAst.gs
+input src/smalltalk/PythonAst/MatchSingletonAst.gs
+input src/smalltalk/PythonAst/MatchSequenceAst.gs
+input src/smalltalk/PythonAst/MatchStarAst.gs
+input src/smalltalk/PythonAst/MatchMappingAst.gs
+input src/smalltalk/PythonAst/MatchClassAst.gs
+input src/smalltalk/PythonAst/MatchAsAst.gs
+input src/smalltalk/PythonAst/MatchOrAst.gs
 input src/smalltalk/PythonAst/EqAst.gs
 input src/smalltalk/PythonAst/GtAst.gs
 input src/smalltalk/PythonAst/GtEAst.gs
@@ -1598,6 +1621,7 @@ input src/smalltalk/PythonTests/EnumMemberPropertyTestCase.gs
 input src/smalltalk/PythonTests/InspectClassifyClassAttrsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodySourceOrderTestCase.gs
 input src/smalltalk/PythonTests/EnumIgnoreNamesTestCase.gs
+input src/smalltalk/PythonTests/MatchStatementTestCase.gs
 input src/smalltalk/PythonTests/EnumModuleApiTestCase.gs
 input src/smalltalk/PythonTests/EnumDynamicClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassPickleTestCase.gs
