@@ -311,6 +311,7 @@ run
 	at: #'functools_Placeholder' put: nil;
 	at: #'functools_cached_property' put: nil;
 	at: #'Super' put: nil;
+	at: #'TypeAliasType' put: nil;
 	at: #'SuperBoundMethod' put: nil;
 	at: #'UnboundMethod' put: nil;
 	at: #'PythonGenerator' put: nil;
@@ -507,6 +508,8 @@ run
 	at: #'MatchSingletonAst' put: nil;
 	at: #'MatchStarAst' put: nil;
 	at: #'MatchValueAst' put: nil;
+	at: #'TypeAliasAst' put: nil;
+	at: #'TypeAliasValueAst' put: nil;
 	at: #'PatternAst' put: nil;
 	at: #'InstanceFunctionDefAst' put: nil;
 	at: #'InvertAst' put: nil;
@@ -718,6 +721,7 @@ run
 	at: #'ClassBodySourceOrderTestCase' put: nil;
 	at: #'EnumIgnoreNamesTestCase' put: nil;
 	at: #'MatchStatementTestCase' put: nil;
+	at: #'TypeAliasTestCase' put: nil;
 	at: #'EnumModuleApiTestCase' put: nil;
 	at: #'EnumDynamicClassAttributeTestCase' put: nil;
 	at: #'BuiltinSubclassPickleTestCase' put: nil;
@@ -1100,6 +1104,7 @@ Transcript show: 'Registered: property -> PropertyDescriptor'.
 %
 input src/smalltalk/Python/SuperBoundMethod.gs
 input src/smalltalk/Python/Super.gs
+input src/smalltalk/Python/TypeAliasType.gs
 input src/smalltalk/Python/UnboundMethod.gs
 input src/smalltalk/Python/PythonGenerator.gs
 input src/smalltalk/Python/string_Formatter.gs
@@ -1395,6 +1400,8 @@ input src/smalltalk/PythonAst/SliceAst.gs
 input src/smalltalk/PythonAst/StatementAst.gs
 input src/smalltalk/PythonAst/MatchAst.gs
 input src/smalltalk/PythonAst/MatchValueAst.gs
+input src/smalltalk/PythonAst/TypeAliasAst.gs
+input src/smalltalk/PythonAst/TypeAliasValueAst.gs
 input src/smalltalk/PythonAst/MatchSingletonAst.gs
 input src/smalltalk/PythonAst/MatchSequenceAst.gs
 input src/smalltalk/PythonAst/MatchStarAst.gs
@@ -1622,6 +1629,7 @@ input src/smalltalk/PythonTests/InspectClassifyClassAttrsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodySourceOrderTestCase.gs
 input src/smalltalk/PythonTests/EnumIgnoreNamesTestCase.gs
 input src/smalltalk/PythonTests/MatchStatementTestCase.gs
+input src/smalltalk/PythonTests/TypeAliasTestCase.gs
 input src/smalltalk/PythonTests/EnumModuleApiTestCase.gs
 input src/smalltalk/PythonTests/EnumDynamicClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassPickleTestCase.gs

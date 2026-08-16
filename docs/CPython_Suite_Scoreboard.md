@@ -76,7 +76,7 @@ different rows and merges cleanly.
 | test.test_call | OK | 186 | 0 | 0 | 182 |  |
 | test.test_dynamic | ERROR | 11 | 5 | 2 | 0 |  |
 | test.test_exception_variations | ERROR | 30 | 2 | 7 | 0 |  |
-| test.test_global | IMPORTERROR | 0 | 0 | 0 | 0 | invalid syntax |
+| test.test_global | ERROR | 20 | 0 | 20 | 0 |  |
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
 | test.test_named_expressions | ERROR | 74 | 8 | 14 | 0 |  |
 | test.test_subclassinit | ERROR | 17 | 7 | 3 | 0 |  |
@@ -96,7 +96,7 @@ different rows and merges cleanly.
 | test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '_compat_pickle' |
 | test.test_reprlib | IMPORTERROR | 0 | 0 | 0 | 0 | name 'wrapped' is not defined |
 | test.test_struct | ERROR | 43 | 6 | 29 | 7 |  |
-| test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | invalid syntax |
+| test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | Grail does not yet support type parameters on a type alias (type type_alias[...] = ...) at line 5860 |
 | test.test_warnings | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.test_warnings.data' |
 | test.test___all__ | ERROR | 1 | 0 | 1 | 0 |  |
 | test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | [Errno 2] No such file or directory: 'src/python/stdlib/test/cjkencodings/cp949.txt' |
