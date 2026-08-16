@@ -3302,3 +3302,87 @@ useful:
 2. **Pin the limit in a fixture.** Deliberately NOT done in this change: a
    fixture that crosses the line would take the SUnit run down with it, since
    the error cannot be caught. That is itself an argument for (1).
+
+### 9.42 A decorator on a secondary base's method was silently discarded (2026-08-16, gs40)
+
+Three of `test_traceback`'s remaining errors were `ModuleNotFoundError: No
+module named '_testcapi'`. That module is CPython's C-API test shim, which Grail
+has no way to provide, so the obvious move was the skip list — the category the
+project reserves for what Grail can't or won't support.
+
+Two of the three did not belong there. `TracebackFormatMixin` already marks the
+helper they call:
+
+```python
+    @cpython_only
+    def check_traceback_format(self, cleanup_func=None):
+        from _testcapi import traceback_print
+```
+
+`@cpython_only` is not a no-op in Grail — `test.support` builds it as a real
+skipping decorator, and `FunctionDefAst` recognises it besides. CPython skips
+these tests on any non-CPython implementation. Grail was *supposed* to be
+skipping them too, and wasn't.
+
+**Reading the code did not explain it, and a probe did.** A minimal reproduction
+skipped correctly. Adding one line changed the answer:
+
+| shape | result |
+| --- | --- |
+| `class Mixin` — call the helper directly | `SkipTest` |
+| `class Sub(Mixin)` | `SkipTest` |
+| `class SubTC(unittest.TestCase, Mixin)` | **`ModuleNotFoundError`** |
+
+The variable is not the decorator, the helper, or `_testcapi`. It is **base
+position.** A Python class gets ONE Smalltalk superclass — the primary base —
+and its other bases are reproduced by copying their compiled methods down
+(`___mergeSecondaryBases___`). A class-body decorator is not part of the
+compiled method: the method stays where it is and the DECORATED object is stored
+under the bare Python name in the base's class-attribute holder, which is what
+`C.m` actually reads. `___copyDecoratorRebinding___` exists precisely to carry
+that holder entry across with the method.
+
+It carried it for unary selectors only:
+
+```smalltalk
+	(aSelector asString includes: $:) ifTrue: [^ self].
+```
+
+justified in its own comment by "the unary selector in the same method
+dictionary already carries it". That is true for exactly one Python signature —
+`def m(self)`, the only shape Grail compiles to a unary selector. Give the def a
+default, a required argument, or `*args`, and it compiles to a keyword selector
+with no unary variant, and the rebinding was dropped on the floor.
+
+So the scope was never `_testcapi`, or `cpython_only`, or tracebacks: **any
+decorator on any secondary-base method taking arguments was being discarded.**
+A `@property`, a `@functools.wraps`, a user decorator — all silently reverted to
+the raw function for subclasses that listed the mixin second.
+
+The fix maps a selector back to its bare Python name
+(`___pythonNameForSelector___`) instead of bailing. The one trap is the varargs
+form's leading underscore, which codegen adds: stripping it unconditionally
+turns a genuinely underscore-prefixed `def _foo(self, a)` into `foo` and copies
+the rebinding onto the wrong attribute. Keying the strip to the `:kw:` suffix
+keeps the two apart.
+
+`tests/python/decorator_secondary_base.py` sweeps signature shape, the axis the
+bug lived on. Three of its eight checks are CONTROLS that passed before the fix
+too — unary selector, mixin-first, own-definition-wins — and they are what shows
+the change is targeted rather than a blanket copy. Measured against the
+unfixed build: **5 of 8 fail, 3 controls hold.** A fixture that passes both
+before and after would have been worth nothing.
+
+Result: `t=370 f=39 e=11 s=219` → `t=370 f=39 e=9 s=221`. The two tests now skip
+the way CPython skips them. Only the third `_testcapi` test was a genuine skip-
+list case: `test_colorized_traceback_is_the_default` imports the module directly
+and carries no decorator, because in CPython `_testcapi` is simply always there.
+
+**The lesson is the one §9.39 and §9.31 already paid for, in a new costume.** An
+error message names the thing that failed, not the thing that is wrong.
+`ModuleNotFoundError: _testcapi` is a true statement about a missing C extension
+and a false lead about the defect, which was in multiple-inheritance attribute
+lookup and had nothing to do with C. Grouping by the message would have skipped
+three tests and left the real bug in place, still discarding decorators
+everywhere else in the corpus. The probe that separated them cost about five
+minutes.

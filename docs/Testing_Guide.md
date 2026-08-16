@@ -377,13 +377,13 @@ stale.
 
 ### What the gate does and does not cover
 
-It runs only fixtures with a top-level `__main__` block — **49 of 260 files**.
+It runs only fixtures with a top-level `__main__` block — **61 of 295 files**.
 The rest are Smalltalk-driven and mostly cannot run under CPython at all: they
 exercise Grail-specific behaviour, return values for the harness to compare
 rather than booleans, or are deliberately unimportable. So a green gate does
 **not** mean the corpus agrees with CPython.
 
-The 49 is up from 15: a census found every fixture whose public zero-argument
+The 61 is up from 15: a census found every fixture whose public zero-argument
 functions all answer `True` under CPython and converted the 23 that were not yet
 self-running, then the last two known bug-pinners were corrected and converted
 too. That is the move that widens the net — tightening the script is not. **All

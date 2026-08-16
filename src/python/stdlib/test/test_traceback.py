@@ -4906,6 +4906,15 @@ class TestColorizedTraceback(unittest.TestCase):
         self.assertIn(expected(**colors), actual)
 
     def test_colorized_traceback_is_the_default(self):
+        # Grail: ``_testcapi'' is a C extension module built alongside the
+        # CPython interpreter to exercise the C API.  Grail has no C API and no
+        # C extension modules, so it cannot supply one.  Unlike its neighbours
+        # in TracebackFormatMixin this test carries no ``@cpython_only'' -- in
+        # CPython _testcapi is simply always there -- so the skip has to be
+        # written out.  What it covers (colorized output) IS reachable without
+        # the C printer; the sibling test_colorized_traceback exercises that.
+        self.skipTest("Grail: no _testcapi (Grail has no C extension modules)")
+
         def foo():
             1/0
 

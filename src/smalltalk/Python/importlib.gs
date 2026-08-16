@@ -2440,17 +2440,38 @@ ___copyDecoratorRebinding___: aSelector from: aBase to: aClass
 	___pyAttrLoad___ reads that holder (via ___classChainAttrLookup___:) before
 	it falls back to wrapping the method, so the holder entry IS the attribute.
 
-	Keyword selectors are skipped -- the holder is keyed by the bare Python
-	name, and the unary selector in the same method dictionary already carries
-	it, so the arity variants would each re-copy the same entry.  Nothing is
-	overwritten: an entry already on aClass came from its own class body or
-	from an earlier (higher-precedence) secondary base."
+	The holder is keyed by the BARE PYTHON NAME, so the selector has to be
+	mapped back to it (___pythonNameForSelector___).  This method used to bail
+	on every keyword selector, on the reasoning that ``the unary selector in the
+	same method dictionary already carries it''.  That holds only for a def whose
+	Python signature is ``(self)'' -- the sole shape that compiles to a unary
+	selector.  Give the def a DEFAULT (``def helper(self, cleanup=None)'') and it
+	compiles to the varargs ``_helper:kw:'' form with NO unary variant, so the
+	bail dropped the rebinding on the floor and the subclass got the RAW,
+	undecorated function.
 
-	| baseHolder deco holder |
-	(aSelector asString includes: $:) ifTrue: [^ self].
+	What that cost, concretely: test_traceback's TracebackFormatMixin puts
+	``@cpython_only'' on ``check_traceback_format(self, cleanup_func=None)''.
+	Through ``class TestTracebackFormat(unittest.TestCase, TracebackFormatMixin)''
+	-- mixin SECOND, so it is merged by copy rather than inherited -- the skip
+	vanished, the real body ran, and its ``from _testcapi import ...'' raised
+	ModuleNotFoundError.  Two tests scored ERROR that CPython itself skips on any
+	non-CPython implementation.  Nothing about this is specific to _testcapi or
+	to cpython_only: ANY decorator on ANY secondary-base method taking arguments
+	was silently discarded.
+
+	Copying under the bare name makes the arity variants converge on ONE key,
+	which the ``already present'' guard below makes idempotent -- so the dedup the
+	old bail was reaching for still holds, without losing the entry.  Nothing is
+	overwritten: an entry already on aClass came from its own class body or from
+	an earlier (higher-precedence) secondary base."
+
+	| pyName baseHolder deco holder |
+	pyName := self ___pythonNameForSelector___: aSelector.
+	pyName isNil ifTrue: [^ self].
 	baseHolder := [aBase perform: #dynInstVars env: 1] on: Error do: [:e | nil].
 	baseHolder isNil ifTrue: [^ self].
-	deco := [baseHolder dynamicInstVarAt: aSelector] on: Error do: [:e | nil].
+	deco := [baseHolder dynamicInstVarAt: pyName] on: Error do: [:e | nil].
 	deco isNil ifTrue: [^ self].
 	holder := [aClass perform: #dynInstVars env: 1] on: Error do: [:e | nil].
 	holder isNil ifTrue: [
@@ -2458,9 +2479,40 @@ ___copyDecoratorRebinding___: aSelector from: aBase to: aClass
 		[aClass perform: #dynInstVars: env: 1 withArguments: { holder }]
 			on: Error do: [:e | holder := nil]].
 	holder isNil ifTrue: [^ self].
-	([holder dynamicInstVarAt: aSelector] on: Error do: [:e | nil]) isNil ifTrue: [
-		[holder dynamicInstVarAt: aSelector put: deco] on: Error do: [:e | nil]].
+	([holder dynamicInstVarAt: pyName] on: Error do: [:e | nil]) isNil ifTrue: [
+		[holder dynamicInstVarAt: pyName put: deco] on: Error do: [:e | nil]].
 	^ self
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___pythonNameForSelector___: aSelector
+	"The bare Python name a compiled selector came from, or nil if it is not a
+	shape this mapping covers.  Used by ___copyDecoratorRebinding___ to find the
+	class-attribute holder key for a method it is copying.
+
+	The three shapes ClassDefAst emits, and only these:
+	  * ``foo''        -- ``def foo(self)'', the sole unary case  -> foo
+	  * ``foo:_:''     -- fixed-arity, simple positional params   -> foo
+	  * ``_foo:kw:''   -- varargs (defaults / *args / **kwargs)   -> foo
+
+	The varargs form is the one that needs care: its leading underscore is added
+	by codegen, so it must be stripped -- but ONLY for that form.  ``def _foo
+	(self, a)'' is a genuinely underscore-prefixed name compiling to the
+	fixed-arity ``_foo:'', where stripping would answer ``foo'' and copy a
+	rebinding onto the wrong attribute.  Keying the strip to the ``:kw:'' suffix
+	keeps the two apart, and round-trips ``__init__'' (``___init__:kw:'') too."
+
+	| s idx |
+	s := aSelector asString.
+	idx := s indexOf: $:.
+	idx = 0 ifTrue: [^ s asSymbol].
+	((s size > 4) and: [(s copyFrom: s size - 3 to: s size) = ':kw:'])
+		ifTrue: [
+			((s at: 1) == $_ and: [idx > 2]) ifFalse: [^ nil].
+			^ (s copyFrom: 2 to: idx - 1) asSymbol].
+	idx < 2 ifTrue: [^ nil].
+	^ (s copyFrom: 1 to: idx - 1) asSymbol
 %
 
 category: 'Grail-Module Loading'
