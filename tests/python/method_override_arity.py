@@ -103,6 +103,29 @@ def report():
     }
 
 
+# What CPython produces for report().  The Smalltalk test case asserts these
+# same values, so running this file under CPython checks the EXPECTATIONS
+# themselves rather than just exercising the code.
+EXPECTED = {
+    'widen': 'base+x',
+    'inherited': 'base-g:i',
+    'base_f': 'base',
+    'base_g': 'base-g:y',
+    'deep': 'base+a+b',
+    'handle': 'base+h',
+    'getattr': 'base+ga',
+    'callable': True,
+    'prop_read': 'assigned',
+    'prop_inherited': 'initial',
+    'prop_not_callable': False,
+}
+
+
 if __name__ == '__main__':
-    for key, value in report().items():
-        print(key, '=', repr(value))
+    got = report()
+    for key, expected in EXPECTED.items():
+        actual = got[key]
+        print('%-4s %s -> %r' % ('OK' if actual == expected else 'FAIL',
+                                 key, actual))
+    for extra in sorted(set(got) - set(EXPECTED)):
+        print('%-4s %s is not in EXPECTED' % ('FAIL', extra))
