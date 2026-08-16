@@ -258,6 +258,45 @@ printSmalltalkOn: aStream
 		aStream nextPut: $_; nextPutAll: id.
 		^ self
 	].
+	"``__class__'' inside a method is the class the method was DEFINED in --
+	CPython gives every method an implicit closure cell holding it, which is
+	also what zero-arg ``super()'' reads.  Grail had no such name, so the read
+	fell through to the fast-path builtin wrap just below and answered a
+	BoundMethod for ``builtins.__class__'' -- the same object for every class,
+	so ``__class__ is X'' was false everywhere and nothing errored to say so
+	(test_super's test___class___instancemethod / _classmethod / _staticmethod,
+	and the __class___mro / _new / _delayed group).
+
+	It is the DEFINING class, not type(self): a method inherited by a subclass
+	still sees the class whose body it appeared in, which is what makes
+	CallAst's cell key name-specific.  Both share printDefiningClassOn: so the
+	two readings cannot drift.
+
+	Load context only -- a store still emits the bare identifier so
+	``<name> := <value>'' stays well-formed -- and stood down when an
+	ENCLOSING FUNCTION declares ``__class__'' itself, so an explicit
+	``nonlocal __class__'' local (which popScope now keeps, see PythonParser)
+	still wins.
+
+	The test is deliberately per-enclosing-function rather than
+	isVariableIsDeclared:, which also consults MODULE scope.  ``global
+	__class__'' anywhere in a module registers the name there, and
+	test_super does exactly that inside one test
+	(test_various___class___pathologies) -- which made ``__class__'' look
+	declared for the whole file and stood this branch down in every unrelated
+	method, leaving them all on the BoundMethod fallback.  A module-level
+	binding of ``__class__'' is not what a method's implicit cell reads
+	anyway."
+	((ctx isKindOf: LoadAst)
+		and: [id asSymbol == #'__class__'
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst moduleClassBeingCompiled notNil
+		and: [CallAst inClassBodyValueEmit ~~ true
+		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not]]]]])
+		ifTrue: [
+			CallAst printDefiningClassOn: aStream.
+			^ self
+		].
 	(self isFastPathBuiltinName) ifTrue: [
 		aStream
 			nextPutAll: '(BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #';

@@ -161,3 +161,55 @@ testANonClassFirstArgumentRaisesTypeError
 %
 
 set compile_env: 0
+
+category: 'Grail-Tests - __class__ name'
+method: SuperTwoArgLocalTestCase
+testClassNameReadsDefiningClass
+	"The bare name ``__class__'' inside a method reads the class the method
+	was DEFINED in -- CPython's implicit closure cell, the same one zero-arg
+	super() consults.
+
+	Grail had no such name, so the read fell through to the fast-path builtin
+	wrap and answered a BoundMethod for ``builtins.__class__''.  That is the
+	SAME object for every class, so ``__class__ is X'' was quietly false
+	everywhere rather than raising -- test_super's
+	test___class___instancemethod / _classmethod / _staticmethod."
+
+	self assert: (probe @env1:__getitem__: 'class_name_instance') equals: true.
+	self assert: ((probe @env1:__getitem__: 'class_name_cm_sm') @env1:__getitem__: 0)
+		equals: true.
+	self assert: ((probe @env1:__getitem__: 'class_name_cm_sm') @env1:__getitem__: 1)
+		equals: true
+%
+
+category: 'Grail-Tests - __class__ name'
+method: SuperTwoArgLocalTestCase
+testClassNameIsDefiningClassNotTypeOfSelf
+	"A method inherited by a subclass still sees the class whose body it
+	appeared in, not type(self).  That distinction is why the closure-cell key
+	is name-specific (``___cell_<ClassName>___''), and it is what makes
+	__class__ share CallAst's resolution with zero-arg super() rather than
+	reaching for the receiver's class."
+
+	| pair |
+	pair := probe @env1:__getitem__: 'class_name_defining'.
+	self assert: (pair @env1:__getitem__: 0) equals: true.
+	self assert: (pair @env1:__getitem__: 1) equals: true.
+	self assert: (probe @env1:__getitem__: 'class_name_with_super') equals: 'B+D'
+%
+
+category: 'Grail-Tests - __class__ name'
+method: SuperTwoArgLocalTestCase
+testExplicitLocalShadowsClassNameCell
+	"An enclosing function that declares ``__class__'' itself still wins: the
+	cell read stands down for a ``nonlocal __class__'' local.
+
+	The stand-down test is per-ENCLOSING-FUNCTION, not isVariableIsDeclared:,
+	which also consults module scope.  A single ``global __class__'' anywhere
+	in a file registers the name there -- test_super does exactly that inside
+	one test -- which made __class__ look declared for the whole module and
+	stood the branch down in every unrelated method."
+
+	self assert: (probe @env1:__getitem__: 'class_name_local_wins')
+		equals: 'shadowed'
+%
