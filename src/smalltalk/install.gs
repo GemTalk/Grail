@@ -701,6 +701,7 @@ run
 	at: #'ClassQualnameStoreTestCase' put: nil;
 	at: #'InitSubclassTestCase' put: nil;
 	at: #'NamedtupleNamingTestCase' put: nil;
+	at: #'EnumMemberPropertyTestCase' put: nil;
 	at: #'ClassBodySourceOrderTestCase' put: nil;
 	at: #'EnumIgnoreNamesTestCase' put: nil;
 	at: #'EnumModuleApiTestCase' put: nil;
@@ -1321,6 +1322,20 @@ commit
 ! counter-example and is left alone: stamping it makes pickle save a property
 ! INSTANCE as the property CLASS instead of refusing, which is worse than the
 ! gap.  The other 12 need that judgement one at a time.
+! ------- Enum.name / Enum.value as real descriptors
+!
+! CPython defines both as enum.property -- a DynamicClassAttribute -- so
+! ``Enum.__dict__['name']'' is that descriptor and ``Color.name'' raises.  Grail
+! had them as plain Smalltalk methods, which answered an UnboundMethod for both.
+! Installed HERE rather than in enum's module initialize because the store lands
+! on the COMMITTED class, which is the installing user's to write; see
+! Enum class >> ___grailInstallMemberProperties___ for why inspect needs the
+! descriptor itself and not merely something answering the same value.
+run
+Enum @env1:___grailInstallMemberProperties___.
+%
+commit
+
 run
 DynamicClassAttribute @env1:___stampPythonIdentity___: 'enum' qualname: 'property'.
 %
@@ -1576,6 +1591,7 @@ input src/smalltalk/PythonTests/EnumCompositeNameTestCase.gs
 input src/smalltalk/PythonTests/ClassQualnameStoreTestCase.gs
 input src/smalltalk/PythonTests/InitSubclassTestCase.gs
 input src/smalltalk/PythonTests/NamedtupleNamingTestCase.gs
+input src/smalltalk/PythonTests/EnumMemberPropertyTestCase.gs
 input src/smalltalk/PythonTests/ClassBodySourceOrderTestCase.gs
 input src/smalltalk/PythonTests/EnumIgnoreNamesTestCase.gs
 input src/smalltalk/PythonTests/EnumModuleApiTestCase.gs
