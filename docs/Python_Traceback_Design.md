@@ -3973,3 +3973,68 @@ separate symptom of the same root cause and wants its own change.
 `test_print_stack`, `test_custom_format_frame`, `MiscTracebackCases.test_extract_stack`
 — with 0 regressions across the full suite, and every new check verified against
 real CPython 3.14.6.
+
+### 9.51 The same MRO bug, one dictionary over (2026-08-17, gs40)
+
+9.50 left this measured and unfixed, and it is worth its own entry only because
+of how it was found: **not by a failing test.** Nothing in the CPython corpus
+moves when it is fixed. It was found by writing down what the frame-filename fix
+had *not* covered.
+
+`UnboundMethod` — the handle behind `Cls.method` — carried **five** copies of a
+plain superclass walk, one per metadata table:
+
+| table | attribute |
+|---|---|
+| `___methodCodeTable___` | `__code__` |
+| `___methodDocTable___` | `__doc__` |
+| `___methodSignatureTable___` | `inspect.signature` |
+| `___methodReceiverTable___` | the `self`/`cls` the signature table drops |
+| `___methodAnnotationsTable___` | `__annotations__` / `__annotate__` |
+
+Every one had the defect 9.50 describes: a secondary base's methods are
+**recompiled** onto the subclass, but each table is built by `ClassDefAst` from
+one class body, so a copied method's metadata stays behind where a superclass
+walk cannot reach it. Measured on `class Multi(unittest.TestCase, Mixin)`:
+
+```
+Multi.meth.__code__    -> AttributeError: 'method' object has no attribute
+Multi.meth.__doc__     -> None
+Multi().meth.__code__  -> the right PyCode
+```
+
+The third line is the whole story. `BoundMethod` learned to consult the C3 MRO
+for `test_gettext`, so the **instance-side** read of the very same method was
+right while the **class-side** read was wrong. Two handles onto one method,
+disagreeing, in two files.
+
+Five copies of one walk are now one walk, `___tableEntryFor___:table:`, over the
+chain `BoundMethod` uses. Net −64/+86 lines with the comments.
+
+**Why it matters despite moving no test.** `__code__` *raises* rather than
+answering None, deliberately: `hasattr(x, '__code__')` is how `inspect` and
+`functools.wraps` decide whether something is a function at all. So the failure
+does not surface as a wrong docstring — it surfaces as a wrapper silently
+declining to copy metadata, or a dispatch declining to register, somewhere
+downstream. That is exactly the shape of bug a corpus of unit tests is worst at
+catching, which is the argument for fixing it on the strength of a probe rather
+than waiting for a red test.
+
+**Two guard rails, because widening a lookup can newly go wrong.**
+`precedence_follows_the_mro` gives two bases the same method name and requires the
+metadata to come from wherever the *call* goes — a walk that searched in the
+wrong order would report one docstring while the call ran the other method, which
+is worse than the `AttributeError` being fixed because nothing raises.
+`a_non_method_has_no_code` requires a plain class attribute still not to claim a
+`__code__`.
+
+Its first version reached for `Multi.maxDiff`, a real `unittest.TestCase` class
+attribute, and failed in Grail with `type object 'Multi' has no attribute
+'maxDiff'` — a separate gap in Grail's vendored `unittest`, nothing to do with
+the walk. A guard rail that can fail for an unrelated reason tests the wrong
+thing, so the fixture now defines the attribute it checks. (`maxDiff` is a real
+missing piece; recorded here rather than fixed in passing.)
+
+**Result:** 14 checks, all verified identical under real CPython 3.14.6.
+`test_traceback` unchanged at 23, full suite **0 regressions and 0 improvements**
+— the honest number for a fix found by reading rather than by measuring.

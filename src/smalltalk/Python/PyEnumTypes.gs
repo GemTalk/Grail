@@ -3147,10 +3147,45 @@ ___grailFlagDecomposePieces: m
 			parts @env0:add: (mm @env0:dynamicInstVarAt: #name) @env0:asString.
 			covered := covered @env0:bitOr: mv]].
 	"Leftover = v with all covered bits removed (covered is a subset of v, so
-	v bitXor: covered clears exactly those)."
+	v bitXor: covered clears exactly those).  Rendered through the class's
+	_numeric_repr_, which is the ONLY place CPython lets an enum choose how its
+	uncovered bits read -- see ___grailNumericRepr:for:."
 	(v @env0:bitXor: covered) @env0:~= 0
-		ifTrue: [parts @env0:add: (v @env0:bitXor: covered) @env0:printString].
+		ifTrue: [parts @env0:add: (Enum
+			___grailNumericRepr: (v @env0:bitXor: covered)
+			for: m @env0:class)].
 	^ parts
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailNumericRepr: anInteger for: cls
+	"How this flag class renders the bits a KEEP composite carries but no member
+	names -- CPython's ``cls._numeric_repr_(unknown)''.
+
+	Flag declares ``_numeric_repr_ = repr'' and a class may override it; the
+	stdlib itself does, in re: ``class RegexFlag(...): _numeric_repr_ = hex'',
+	which is why CPython prints re.I|0x1000000 as ``re.IGNORECASE|0x1000000''
+	rather than in decimal.  _numeric_repr_ is already exempt from the reserved
+	_sunder_ check and from EnumDict's member names, so a class body could
+	always SET it -- nothing ever read it, and every leftover rendered through
+	printString.
+
+	printString remains the fallback, and it is the right one: for an Integer it
+	is character-for-character what repr answers, so a class that sets nothing
+	renders exactly as before.  A _numeric_repr_ that raises or answers a
+	non-string falls back the same way rather than breaking the repr of a member
+	that is otherwise fine."
+
+	| fn out |
+	fn := [cls ___pyAttrLoad___: #'_numeric_repr_']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	(fn @env0:isNil or: [fn == None]) ifTrue: [^ anInteger @env0:printString].
+	out := [fn ___pyCallValue___: { anInteger } kw: nil]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	^ (out @env0:isKindOf: CharacterCollection)
+		ifTrue: [out @env0:asString]
+		ifFalse: [anInteger @env0:printString]
 %
 
 category: 'Grail-Enum Metaclass'
