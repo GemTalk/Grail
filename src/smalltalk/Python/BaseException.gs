@@ -1722,7 +1722,7 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 				blockLine := BaseException ___pythonLineForMethod___: meth ip: ip.
 				(nArgs @env0:= 2)
 					ifTrue: [
-						| fnLine fnName |
+						| fnLine fnName isCatcher frameCode |
 						"The nested function's frame is parked where its BODY is --
 						which the inner zero-argument blocks already resolved into
 						pendingLine.  Fall back to this block's own position when
@@ -1731,11 +1731,33 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 						fnLine := pendingLine isNil ifTrue: [blockLine] ifFalse: [pendingLine].
 						fnName := BaseException ___nestedFunctionNameFor___: home line: fnLine.
 						((fnName notNil) and: [fnLine notNil]) ifTrue: [
-							self ___pushTracebackFrame___:
-									(self ___codeForMethod___: home name: fnName ip: 0
-										aCode: aCode)
-								lineno: fnLine
-								colno: nil endLineno: nil endColno: nil line: nil.
+							isCatcher := catchName notNil and: [fnName @env0:= catchName].
+							frameCode := self ___codeForMethod___: home name: fnName ip: 0
+								aCode: aCode.
+							"A nested function that CATCHES gets codegen's recorded span,
+							exactly as the method branch below does -- pendingLine can only
+							ever answer a LINE, so without this a nested ``def'' reported
+							colno nil where the identical code at module scope reported the
+							PEP 657 columns (test_with's testExceptionLocation asserts the
+							span of the failing context manager, and its functions are
+							nested inside the test method).
+
+							Deliberately narrower than the method branch: taken only when
+							pos arrived as a span AND that span's line already agrees with
+							the derived one.  This can therefore only ADD columns, never
+							move a line -- an ordinary nested try/except, where codegen
+							passes the bare integer, keeps the line the walk derives for it
+							(test_long_context_chain and friends depend on that line), and a
+							disagreement means the two readings did not find the same store,
+							which §9.10 says must lose the columns rather than draw a
+							confident caret under the wrong code."
+							((isCatcher and: [posArray @env0:isKindOf: Array])
+								and: [(posArray @env0:at: 1) @env0:= fnLine])
+								ifTrue: [self ___pushFrameFromPos___: frameCode pos: posArray]
+								ifFalse: [
+									self ___pushTracebackFrame___: frameCode
+										lineno: fnLine
+										colno: nil endLineno: nil endColno: nil line: nil].
 							pushed := pushed @env0:+ 1.
 							"Consumed: the home method's own frame must not reuse this
 							line, or ``outer'' would report the line inside ``inner''."
@@ -1751,8 +1773,7 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 							of the 1 CPython reports.  That is quadratic in the recursion
 							depth across the __context__ chain, and it exhausted the
 							session's temporary object memory."
-							(catchName notNil and: [fnName @env0:= catchName])
-								ifTrue: [^ true]]]
+							isCatcher ifTrue: [^ true]]]
 					ifFalse: [
 						pendingHome @env0:~~ home ifTrue: [
 							pendingHome := home.

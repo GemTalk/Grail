@@ -92,26 +92,60 @@ r['init_raises_columns'] = repr(
     [_first(init_raises).colno, _first(init_raises).end_colno])
 
 
-# --- KNOWN GAP, recorded rather than endorsed ----------------------------------
-# A NESTED function loses the columns (the line is still right).  Its traceback
-# frame is built by walking the Smalltalk stack rather than from the live
-# ___curPos___, and that walk recovers only a LINE from the generated source --
-# it pushes colno/end_colno as None.  Reaching them means teaching the walk to
-# carry the whole span, not just its first element.  This is the half of
-# test_with's testExceptionLocation that still fails, because its manager
-# expressions live in functions nested inside the test method.
-def _nested_case():
+# --- and a NESTED function keeps them ------------------------------------------
+# A nested ``def'' compiles to a Smalltalk block, so its traceback frame is not
+# built from the live ___curPos___ at all -- it is reconstructed by WALKING the
+# stack, and that walk used to push colno/end_colno as None because pendingLine
+# can only ever answer a line.  The catching frame now takes codegen's recorded
+# span instead, so the same code reports the same columns whether the manager
+# sits at module scope or three ``def''s deep.
+#
+# This is the shape test_with's testExceptionLocation actually has: its manager
+# expressions live in functions nested inside the test METHOD.
+def _one_level():
     def inner():
         try:
-            with Dummy(), InitRaises() as cm:
+            with Dummy(), InitRaises() as cm:                 # line 108
                 pass
         except Exception as e:
             return e
-    f = traceback.extract_tb(inner().__traceback__)[0]
-    return [f.colno, f.end_colno]
+    return traceback.extract_tb(inner().__traceback__)[0]
 
 
-r['nested_function_columns_is_a_known_gap'] = repr(_nested_case())
+def _two_levels():
+    def mid():
+        def inner():
+            try:
+                with Dummy(), ExitRaises() as cm:             # line 119
+                    pass
+            except Exception as e:
+                return e
+        return inner()
+    return traceback.extract_tb(mid().__traceback__)[0]
+
+
+def _inside_a_method():
+    class T:
+        def run(self):
+            def inner():
+                try:
+                    with InitRaises() as cm, Dummy():         # line 132
+                        pass
+                except Exception as e:
+                    return e
+            return inner()
+    return traceback.extract_tb(T().run().__traceback__)[0]
+
+
+r['nested_one_level'] = repr(
+    [_one_level().lineno, _one_level().colno, _one_level().end_colno])
+# __exit__ raising, two ``def''s deep -- the re-store before the exit call has to
+# survive the walk as well as the direct read.
+r['nested_two_levels'] = repr(
+    [_two_levels().lineno, _two_levels().colno, _two_levels().end_colno])
+r['nested_inside_a_method'] = repr(
+    [_inside_a_method().lineno, _inside_a_method().colno,
+     _inside_a_method().end_colno])
 
 
 EXPECTED = {
@@ -120,10 +154,9 @@ EXPECTED = {
     'exit_raises_line': '[63, 63]',
     'init_raises_columns': '[22, 34]',
     'init_raises_line': '[47, 47]',
-}
-
-GRAIL_ONLY = {
-    'nested_function_columns_is_a_known_gap': '[None, None]',
+    'nested_inside_a_method': '[132, 25, 37]',
+    'nested_one_level': '[108, 26, 38]',
+    'nested_two_levels': '[119, 30, 42]',
 }
 
 
@@ -131,6 +164,3 @@ if __name__ == '__main__':
     for k in sorted(EXPECTED):
         actual = r[k]
         print('%-32s %s %s' % (k, 'OK ' if actual == EXPECTED[k] else 'DIFF', actual))
-    for k in sorted(GRAIL_ONLY):
-        actual = r[k]
-        print('%-32s %s %s' % (k, 'XPASS' if actual == GRAIL_ONLY[k] else 'XFAIL', actual))

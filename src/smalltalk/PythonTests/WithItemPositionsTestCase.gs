@@ -50,13 +50,18 @@ WithItemPositionsTestCase category: 'Grail-SUnit'
 ! COLUMNS as well as the right line -- which is what actually identifies the
 ! failing manager.
 !
-! WHAT THIS DOES NOT CLOSE.  A NESTED function keeps the right line but loses the
-! columns: its frame is built by WALKING the Smalltalk stack rather than from the
-! live ___curPos___, and that walk recovers only a LINE from the generated
-! source, pushing colno/end_colno as None.  Reaching them means teaching the walk
-! to carry the whole span rather than its first element.  That is the half of
-! test_with''s testExceptionLocation still failing, because its manager
-! expressions sit in functions nested inside the test method.
+! A NESTED function needs a SECOND fix, because its frame never reads the live
+! ___curPos___ at all.  A nested ``def'' compiles to a Smalltalk block, so its
+! frame is reconstructed by WALKING the stack, and that walk could only ever
+! answer a LINE -- it pushed colno/end_colno as None.  The walk's catching-frame
+! branch now takes codegen''s recorded span, exactly as the method branch beside
+! it already did.  Narrower than that one on purpose: only when the span''s line
+! already agrees with the derived one, so it can add columns but never move a
+! line an ordinary nested try/except depends on.
+!
+! That is the shape test_with''s testExceptionLocation actually has -- its
+! manager expressions sit in functions nested inside the test METHOD -- and with
+! both halves in place test_with is at 54/54.
 !
 ! Drives tests/python/with_item_positions.py.  test_with
 ! NestedWith.testExceptionLocation.
@@ -131,14 +136,35 @@ testTheColumnsIdentifyWhichManagerFailed
 	self assert: (self resultAt: 'init_raises_columns') asString equals: '[22, 34]'.
 %
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests - Columns'
 method: WithItemPositionsTestCase
-testANestedFunctionLosesTheColumnsWhichIsAKnownGap
-	"Recorded, NOT endorsed.  The LINE is right; the columns are not.  A nested
-	function's frame is built by walking the Smalltalk stack rather than from the
-	live ___curPos___, and that walk recovers only a line from the generated
-	source.  test_with's testExceptionLocation is exactly this shape."
+testANestedFunctionKeepsTheColumnsToo
+	"The same manager expression must report the same span whether it sits at
+	module scope or inside a nested ``def''.  It did not: a nested function's
+	frame is rebuilt by WALKING the stack, and the walk answered a line only."
 
-	self assert: (self resultAt: 'nested_function_columns_is_a_known_gap') asString
-		equals: '[None, None]'.
+	self assert: (self resultAt: 'nested_one_level') asString
+		equals: '[108, 26, 38]'.
+%
+
+category: 'Grail-Tests - Columns'
+method: WithItemPositionsTestCase
+testTheExitCaseSurvivesTwoLevelsOfNesting
+	"__exit__ raising, two ``def''s deep -- the span re-stored before the exit
+	call has to survive the stack walk as well as the direct read, and the walk
+	has to find the INNERMOST function rather than an enclosing one."
+
+	self assert: (self resultAt: 'nested_two_levels') asString
+		equals: '[119, 30, 42]'.
+%
+
+category: 'Grail-Tests - Columns'
+method: WithItemPositionsTestCase
+testAFunctionNestedInsideAMethodKeepsTheColumns
+	"test_with's testExceptionLocation in miniature: the manager expressions sit
+	in functions nested inside a method, which is why the module-scope case
+	passing told us nothing about it."
+
+	self assert: (self resultAt: 'nested_inside_a_method') asString
+		equals: '[132, 25, 37]'.
 %
