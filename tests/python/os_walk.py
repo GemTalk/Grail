@@ -63,9 +63,7 @@ for d in ('a', 'a/aa', 'a/ab', 'b'):
     os.mkdir(os.path.join(ROOT, d))
 for f in ('f0.txt', 'a/f1.txt', 'a/aa/f2.txt', 'b/f3.txt'):
     _mkfile(os.path.join(ROOT, f))
-# os.symlink is not implemented in Grail; os.system is, and both run the same
-# shell here.
-os.system('ln -s ../a ' + os.path.join(ROOT, 'b', 'lnk'))
+os.symlink('../a', os.path.join(ROOT, 'b', 'lnk'))
 
 
 def _rel(p):

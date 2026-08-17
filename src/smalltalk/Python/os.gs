@@ -56,6 +56,83 @@ doit
 os_PathLike category: 'Grail-Modules'
 %
 
+! ------- os_DirEntry class (Python 'os.DirEntry')
+expectvalue /Class
+doit
+object subclass: 'os_DirEntry'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+os_DirEntry comment:
+'One entry from ``os.scandir()'' -- CPython''s DirEntry.
+
+Carries the entry''s ``name'' and full ``path'' and answers the type questions
+about it: is_dir / is_file / is_symlink / stat / inode, each with the
+follow_symlinks argument where CPython has one.
+
+WHAT IT DOES NOT DO IS CACHE.  CPython''s DirEntry caches the stat results it
+has been asked for, which is what makes scandir faster than listdir + stat,
+and its documentation warns that a cached answer may already be stale.  This
+one re-stats on every question, so it is SLOWER and FRESHER than CPython''s.
+Code that reads an entry twice across a filesystem change therefore sees the
+change here and might not there -- a difference in CPython''s favour for speed
+and in this one''s for accuracy, and in neither''s for conformance.
+
+is_junction is always false: junctions are a Windows concept, and Grail''s os
+reports ``posix''.
+'
+%
+
+expectvalue /Class
+doit
+os_DirEntry category: 'Grail-Filesystem'
+%
+
+! ------- os_ScandirIterator class (Python 'posix.ScandirIterator')
+expectvalue /Class
+doit
+object subclass: 'os_ScandirIterator'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+os_ScandirIterator comment:
+'What ``os.scandir()'' answers -- CPython''s posix.ScandirIterator.
+
+An iterator (``__iter__'' answers self, ``__next__'' advances) that is ALSO a
+context manager, because ``with os.scandir(p) as it:'' is the spelling CPython''s
+own library uses and a bare generator could not offer it.  That is the reason
+this is a class rather than a PythonGenerator: the iterator protocol alone would
+have been a two-line generator, and every ``with'' over it would have failed
+with an AttributeError on __enter__.
+
+The entries are read EAGERLY, at scandir() time.  CPython''s reads the directory
+in blocks as you iterate; Grail''s cannot, because GsFile answers a whole
+directory listing in one call and there is no partial-read primitive under it.
+So close() and __exit__ release the held list rather than a directory handle,
+and an iterator left unclosed leaks nothing -- which is why no ResourceWarning
+is emitted where CPython emits one.
+'
+%
+
+expectvalue /Class
+doit
+os_ScandirIterator category: 'Grail-Filesystem'
+%
+
 set compile_env: 0
 
 ! ------------------- Remove existing Python methods from os
@@ -65,6 +142,14 @@ os removeAllMethods: 1.
 os class removeAllMethods: 1.
 os_PathLike removeAllMethods: 1.
 os_PathLike class removeAllMethods: 1.
+os_DirEntry removeAllMethods.
+os_DirEntry class removeAllMethods.
+os_DirEntry removeAllMethods: 1.
+os_DirEntry class removeAllMethods: 1.
+os_ScandirIterator removeAllMethods.
+os_ScandirIterator class removeAllMethods.
+os_ScandirIterator removeAllMethods: 1.
+os_ScandirIterator class removeAllMethods: 1.
 %
 
 set compile_env: 1
@@ -97,6 +182,9 @@ initialize
 	self @env0:at: #linesep put: ((Character @env0:lf) @env0:asString).
 	self @env0:at: #path put: (os_path instance).
 	self @env0:at: #PathLike put: os_PathLike.
+	"``os.DirEntry'' is a real module attribute in CPython -- code type-tests
+	scandir results against it -- even though nothing can construct one."
+	self @env0:at: #DirEntry put: os_DirEntry.
 	"Pre-store fsdecode as a BoundMethod so ``from os import
 	fsdecode'' (werkzeug's file_storage) reads the callable
 	directly via the ImportFromAst __pyAttrLoad path."
@@ -365,7 +453,13 @@ remove: aPath
 
 	| result path |
 	path := self ___fsPath___: aPath.
-	(self exists: path) ifFalse: [
+	"``exists'' FOLLOWS a symlink, so a DANGLING one -- a link whose target is
+	gone, which is legal and which os.symlink can create deliberately -- looked
+	absent and raised FileNotFoundError instead of being unlinked.  CPython
+	removes the LINK, and never consults the target at all.  The extra islink
+	test is what makes the link itself visible here; a bare exists() cannot see
+	one whose target does not exist."
+	((self exists: path) @env0:or: [self ___isLink___: path]) ifFalse: [
 		FileNotFoundError ___signal___:
 			('No such file or directory: ' @env0:, (path @env0:printString))
 	].
@@ -483,8 +577,420 @@ _listdir: positional kw: kwargs
 %
 
 ! ===============================================================================
+! os.scandir — DirEntry and its iterator
+! ===============================================================================
+
+set compile_env: 0
+
+category: 'Instance Creation'
+classmethod: os_DirEntry
+name: aName path: aPath
+	"Fields are dynamic instVars named exactly as the Python attributes, so
+	``entry.name'' reads the VALUE rather than a BoundMethod wrapping an
+	accessor -- the same arrangement PyStatResult uses for its st_* fields."
+
+	| inst |
+	inst := self new.
+	inst dynamicInstVarAt: #'name' put: aName.
+	inst dynamicInstVarAt: #'path' put: aPath.
+	^ inst
+%
+
+category: 'Grail-Python Attribute Hook'
+classmethod: os_DirEntry
+___pythonValueAttrs___
+	"name and path are DATA; everything else about an entry is a method call,
+	exactly as in CPython (``e.name'' but ``e.is_dir()'')."
+
+	^ IdentitySet new add: #'name'; add: #'path'; yourself
+%
+
+set compile_env: 1
+
+category: 'Grail-Filesystem'
+method: os_DirEntry
+name
+	^ self @env0:dynamicInstVarAt: #'name'
+%
+
+category: 'Grail-Filesystem'
+method: os_DirEntry
+path
+	^ self @env0:dynamicInstVarAt: #'path'
+%
+
+category: 'Grail-Filesystem'
+method: os_DirEntry
+__fspath__
+	"DirEntry is path-like (PEP 519), so it can be passed straight to open()
+	or any os function -- which is most of the point of scandir."
+
+	^ self path
+%
+
+category: 'Grail-Filesystem'
+method: os_DirEntry
+__repr__
+	"CPython renders <DirEntry 'name'> -- the NAME, not the path."
+
+	^ '<DirEntry ' @env0:, ((((Python @env0:at: #builtins) instance) repr: self name) @env0:asString) @env0:, '>'
+%
+
+category: 'Grail-Filesystem'
+method: os_DirEntry
+is_dir
+	"entry.is_dir() -- follow_symlinks defaults to TRUE, so a symlink to a
+	directory answers true."
+
+	^ (os instance) isdir: self path
+%
+
+category: 'Grail-Filesystem'
+method: os_DirEntry
+_is_dir: positional kw: kwargs
+	"entry.is_dir(follow_symlinks=False) -- with following off, a symlink is
+	never a directory, whatever it points at."
+
+	| follow |
+	follow := (os instance) ___scandirFollowArg___: positional kw: kwargs
+		for: 'is_dir'.
+	follow ifTrue: [^ self is_dir].
+	((os instance) ___isLink___: self path) ifTrue: [^ false].
+	^ (os instance) isdir: self path
+%
+
+category: 'Grail-Filesystem'
+method: os_DirEntry
+is_file
+	"entry.is_file() -- follow_symlinks defaults to true."
+
+	^ (os instance) isfile: self path
+%
+
+category: 'Grail-Filesystem'
+method: os_DirEntry
+_is_file: positional kw: kwargs
+	"entry.is_file(follow_symlinks=False).  A symlink is not a regular file
+	when following is off, even one pointing at a regular file."
+
+	| follow |
+	follow := (os instance) ___scandirFollowArg___: positional kw: kwargs
+		for: 'is_file'.
+	follow ifTrue: [^ self is_file].
+	((os instance) ___isLink___: self path) ifTrue: [^ false].
+	^ (os instance) isfile: self path
+%
+
+category: 'Grail-Filesystem'
+method: os_DirEntry
+is_symlink
+	"entry.is_symlink() -- no follow_symlinks argument in CPython either;
+	asking whether something IS a link cannot follow it."
+
+	^ (os instance) ___isLink___: self path
+%
+
+category: 'Grail-Filesystem'
+method: os_DirEntry
+is_junction
+	"Junctions are a Windows concept; Grail's os reports ``posix''."
+
+	^ false
+%
+
+category: 'Grail-Filesystem'
+method: os_DirEntry
+stat
+	"entry.stat() -- follow_symlinks defaults to true, so a symlink reports
+	its TARGET's stat."
+
+	^ (os instance) stat: self path
+%
+
+category: 'Grail-Filesystem'
+method: os_DirEntry
+_stat: positional kw: kwargs
+	"entry.stat(follow_symlinks=False) -- lstat, so a symlink reports itself."
+
+	| follow |
+	follow := (os instance) ___scandirFollowArg___: positional kw: kwargs
+		for: 'stat'.
+	follow ifTrue: [^ self stat].
+	^ (os instance) lstat: self path
+%
+
+category: 'Grail-Filesystem'
+method: os_DirEntry
+inode
+	"entry.inode() -- the inode number, from lstat: CPython's does not follow
+	the link either, so a symlink answers ITS inode, not its target's."
+
+	^ ((os instance) lstat: self path) @env1:___pyAttrLoad___: #'st_ino'
+%
+
+set compile_env: 0
+
+category: 'Instance Creation'
+classmethod: os_ScandirIterator
+onEntries: anOrderedCollection
+	| inst |
+	inst := self new.
+	inst dynamicInstVarAt: #'___entries___' put: anOrderedCollection.
+	inst dynamicInstVarAt: #'___index___' put: 1.
+	^ inst
+%
+
+set compile_env: 1
+
+category: 'Grail-Filesystem'
+method: os_ScandirIterator
+__iter__
+	"Its own iterator, as every CPython iterator is."
+
+	^ self
+%
+
+category: 'Grail-Filesystem'
+method: os_ScandirIterator
+__next__
+	"Exhaustion LATCHES: close() empties the list and the index runs past the
+	end, so a spent iterator stays spent."
+
+	| entries index |
+	entries := self @env0:dynamicInstVarAt: #'___entries___'.
+	index := self @env0:dynamicInstVarAt: #'___index___'.
+	(entries @env0:isNil @env0:or: [index @env0:> entries @env0:size])
+		ifTrue: [StopIteration @env0:signal].
+	self @env0:dynamicInstVarAt: #'___index___' put: index @env0:+ 1.
+	^ entries @env0:at: index
+%
+
+category: 'Grail-Filesystem'
+method: os_ScandirIterator
+__enter__
+	"``with os.scandir(p) as it:'' -- the spelling CPython's own library uses,
+	and the reason this is a class rather than a generator."
+
+	^ self
+%
+
+category: 'Grail-Filesystem'
+method: os_ScandirIterator
+__exit__: excType _: excValue _: excTb
+	"Answer false so an exception inside the ``with'' still propagates."
+
+	self close.
+	^ false
+%
+
+category: 'Grail-Filesystem'
+method: os_ScandirIterator
+close
+	"Release the entries.  CPython closes a live directory handle here;
+	Grail's listing is already complete by construction (see the class
+	comment), so this only drops the reference -- calling it twice, or never,
+	is harmless either way."
+
+	self @env0:dynamicInstVarAt: #'___entries___' put: nil.
+	^ None
+%
+
+! ===============================================================================
 ! Directory tree walking
 ! ===============================================================================
+
+category: 'Grail-File and Directory Operations'
+method: os
+___scandirFollowArg___: positional kw: kwargs for: aName
+	"The follow_symlinks argument of DirEntry's is_dir / is_file / stat.
+	KEYWORD-ONLY in CPython, so a positional one is a TypeError rather than
+	quietly taken as the flag."
+
+	positional @env0:isEmpty ifFalse: [
+		TypeError ___signal___:
+			(aName @env0:, '() takes no positional arguments')].
+	((kwargs @env0:isNil) @env0:not and: [kwargs @env0:includesKey: 'follow_symlinks'])
+		ifTrue: [^ (kwargs @env0:at: 'follow_symlinks') ___isTruthy___].
+	^ true
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+_scandir: positional kw: kwargs
+	"os.scandir(path='.') -- an iterator of DirEntry, one per directory entry.
+
+	The entries are read EAGERLY here rather than block by block as CPython's
+	does, because GsFile answers a whole directory listing in one call and
+	there is no partial-read primitive under it.  What that costs is memory on
+	a very large directory; what it does NOT cost is the interface, which is
+	why this still answers an iterator object rather than a list -- ``with
+	os.scandir(p) as it:'' is the spelling CPython's own library uses.
+
+	Errors come from listdir, which raises FileNotFoundError for a missing
+	path and NotADirectoryError for a file, so scandir inherits CPython's
+	behaviour for both without restating it."
+
+	| target names entries |
+	target := (positional @env0:size @env0:>= 1)
+		ifTrue: [positional @env0:at: 1]
+		ifFalse: [
+			((kwargs @env0:isNil) @env0:not and: [kwargs @env0:includesKey: 'path'])
+				ifTrue: [kwargs @env0:at: 'path']
+				ifFalse: ['.']].
+	target := self ___fsPath___: target.
+	names := self listdir: target.
+	entries := OrderedCollection @env0:new.
+	names @env0:do: [:name |
+		entries @env0:addLast:
+			(os_DirEntry
+				@env0:name: name
+				path: ((os_path instance) join: target _: name))].
+	^ os_ScandirIterator @env0:onEntries: entries
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+scandir
+	"os.scandir() -- 0-arg form, the current directory."
+
+	^ self _scandir: { } kw: nil
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+scandir: aPath
+	"os.scandir(path) -- 1-arg fast path."
+
+	^ self _scandir: { aPath } kw: nil
+%
+
+! ===============================================================================
+! Symbolic links
+! ===============================================================================
+
+category: 'Grail-File and Directory Operations'
+method: os
+___shellQuote___: aString
+	"Wrap a path for the shell in SINGLE quotes, which quote everything except
+	a single quote itself -- and that one is closed, escaped, and reopened.
+
+	Needed because symlink/readlink have no GemStone primitive and so run a
+	command (see ___runShell___:).  A path containing a space, a ``$'', or a
+	``;'' would otherwise be re-parsed by the shell, and the last of those is
+	arbitrary command execution rather than a wrong answer."
+
+	| s out |
+	s := (self ___fsPath___: aString) @env0:asString.
+	out := WriteStream @env0:on: String @env0:new.
+	out @env0:nextPut: $'.
+	1 @env0:to: s @env0:size do: [:i |
+		| c |
+		c := s @env0:at: i.
+		c @env0:= $'
+			ifTrue: [out @env0:nextPutAll: '''\''''']
+			ifFalse: [out @env0:nextPut: c]].
+	out @env0:nextPut: $'.
+	^ out @env0:contents
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___runShell___: aCommand
+	"Run aCommand on the server and answer its STDOUT.
+
+	System>>performOnServer: does not report an exit status, so nothing here
+	can branch on one -- every caller below checks the RESULTING FILESYSTEM
+	STATE instead, which is the honest test anyway."
+
+	^ System @env0:performOnServer: aCommand
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+symlink: src _: dst
+	"os.symlink(src, dst) -- create dst as a symbolic link to src.
+
+	src is NOT required to exist: a dangling symlink is legal in POSIX and in
+	CPython, and shutil/test code creates them deliberately.
+
+	Implemented by running ``ln -s'', because GemStone exposes no symlink
+	primitive -- GsFile can TEST for a symbolic link but not make one.  The
+	paths are shell-quoted (___shellQuote___:) and passed after ``--'', so a
+	path containing a space or a ``;'' cannot be re-parsed as shell syntax.
+
+	The two errors CPython raises are checked BEFORE the command, since the
+	command reports no status: dst already existing is FileExistsError, and a
+	missing parent directory is FileNotFoundError.  Anything else that goes
+	wrong is caught after the fact by asking whether the link now exists."
+
+	| dstPath parent |
+	dstPath := self ___fsPath___: dst.
+	"lstat, not exists: a DANGLING symlink already occupying dst is still an
+	occupant, and exists() would follow it and answer false."
+	((self ___isLink___: dstPath) @env0:or: [GsFile @env0:existsOnServer: dstPath])
+		ifTrue: [
+			FileExistsError ___signal___:
+				('[Errno 17] File exists: ' @env0:, (dstPath @env0:printString))].
+	parent := (os_path instance) dirname: dstPath.
+	"``== true'' is not belt-and-braces: GsFile>>isServerDirectory: answers NIL
+	for a path that does not exist -- which is exactly the case being tested
+	here -- and nil reaching ifFalse: is an ImproperOperation, an uncatchable
+	Smalltalk error where a FileNotFoundError was due."
+	(parent @env0:isEmpty @env0:or: [(GsFile @env0:isServerDirectory: parent) == true])
+		ifFalse: [
+			FileNotFoundError ___signal___:
+				('[Errno 2] No such file or directory: ' @env0:, (dstPath @env0:printString))].
+	self ___runShell___: 'ln -s -- ' @env0:,
+		(self ___shellQuote___: src) @env0:, ' ' @env0:,
+		(self ___shellQuote___: dstPath).
+	(self ___isLink___: dstPath) ifFalse: [
+		OSError ___signal___:
+			('Cannot create symbolic link: ' @env0:, (dstPath @env0:printString))].
+	^ None
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+_symlink: positional kw: kwargs
+	"os.symlink(src, dst, target_is_directory=False).
+
+	target_is_directory is accepted and IGNORED, which is what CPython does on
+	POSIX too -- it exists for Windows, where the two kinds of link differ."
+
+	positional @env0:size @env0:< 2 ifTrue: [
+		TypeError ___signal___:
+			'symlink() missing required argument: ''dst'''].
+	^ self symlink: (positional @env0:at: 1) _: (positional @env0:at: 2)
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+readlink: aPath
+	"os.readlink(path) -- the path a symbolic link points at, VERBATIM: a
+	relative target is answered relative, not resolved against the link's
+	directory.  That is CPython's contract, and os.path.realpath is what
+	resolves.
+
+	Not a link is EINVAL, not ENOENT -- CPython distinguishes ``there is
+	nothing there'' from ``there is something there but it is not a link'',
+	and code branches on it."
+
+	| path out |
+	path := self ___fsPath___: aPath.
+	((GsFile @env0:stat: path isLstat: true) @env0:isKindOf: GsFileStat)
+		ifFalse: [
+			FileNotFoundError ___signal___:
+				('[Errno 2] No such file or directory: ' @env0:, (path @env0:printString))].
+	(self ___isLink___: path) ifFalse: [
+		OSError ___signal___:
+			('[Errno 22] Invalid argument: ' @env0:, (path @env0:printString))].
+	out := self ___runShell___: 'readlink -- ' @env0:, (self ___shellQuote___: path).
+	"readlink(1) terminates its answer with a newline; the syscall does not."
+	[out @env0:size @env0:> 0
+		and: [(out @env0:at: out @env0:size) @env0:= (Character @env0:lf)]]
+		@env0:whileTrue: [out := out @env0:copyFrom: 1 to: out @env0:size @env0:- 1].
+	^ out @env0:asUnicodeString
+%
 
 category: 'Grail-File and Directory Operations'
 method: os

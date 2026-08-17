@@ -1687,6 +1687,11 @@ ___pythonModuleAttrIdentity___
 
 	"os / string / time."
 	(n @env0:= 'os_PathLike') ifTrue: [^ #('PathLike' 'os')].
+	"scandir's two types report ``posix'' as their module in CPython, not
+	``os'' -- they are implemented in the posix extension and only re-exported
+	by os, which os.DirEntry's own __module__ shows."
+	(n @env0:= 'os_DirEntry') ifTrue: [^ #('DirEntry' 'posix')].
+	(n @env0:= 'os_ScandirIterator') ifTrue: [^ #('ScandirIterator' 'posix')].
 	(n @env0:= 'string_formatter') ifTrue: [^ #('Formatter' 'string')].
 	(n @env0:= 'struct_time') ifTrue: [^ #('struct_time' 'time')].
 
