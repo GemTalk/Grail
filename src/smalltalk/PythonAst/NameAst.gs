@@ -415,6 +415,45 @@ printSmalltalkOn: aStream
 	that reads the name as a Smalltalk local (which fails at
 	compile time because class methods don't have module inst vars
 	in scope)."
+	"Class-body read of a SIBLING-METHOD ALIAS (``wrapped = m'' earlier in this
+	body, then ``wrapper = staticmethod(wrapped)'').  An alias is compiled as a
+	delegating METHOD rather than kept as a class attribute -- see ClassDefAst
+	>> ___classBodyMethodAliases___ for why -- so it appears in neither
+	classFunctionNames nor classAttrNames, and this read fell through every
+	class-body branch to the module, raising ``name 'wrapped' is not defined''
+	at class-init time.  test_reprlib failed to IMPORT for exactly that.
+
+	Answer the ORIGINAL's function object, not the alias's own forwarder: in
+	CPython one function is bound under both names, so ``C.in_tuple[0] is
+	C.m'' holds.  The forwarder would call correctly and compare unequal --
+	the silent half of the same bug.
+
+	Read through ___pyAttrLoad___ for the reason the attribute re-point in
+	ClassDefAst gives: the class exists and its methods are compiled by the
+	time attribute values run, and a plain ``Cls name'' send would look for a
+	metaclass method that is not there.
+
+	Placed ahead of the exec/eval and module class-body blocks so it covers
+	both -- it names only the class under construction, which both have.
+	Position-gated by classBodyBoundNames like the sibling-def branches, so a
+	name aliased LATER in the body is still correctly unbound here."
+	((ctx isKindOf: LoadAst)
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst inClassBodyValueEmit
+		and: [self ___inNestedScopeWithinClassBody___ not
+		and: [CallAst classMethodAliasTargets notNil
+		and: [(CallAst classMethodAliasTargets includesKey: id asSymbol)
+		and: [CallAst classBodyBoundNames isNil
+			or: [CallAst classBodyBoundNames includes: id asSymbol]]]]]]])
+		ifTrue: [
+			aStream
+				nextPutAll: '(';
+				nextPutAll: CallAst classBeingCompiled asString;
+				nextPutAll: ' @env1:___pyAttrLoad___: #''';
+				nextPutAll: (CallAst classMethodAliasTargets at: id asSymbol) asString;
+				nextPutAll: ''')'.
+			^ self
+		].
 	"EXEC/EVAL class body: same sibling-name reads as the block below, but
 	there is no module class, so every one of that block's fallbacks --
 	``<ModuleClass> @env0:___instance___ ...'' -- is unavailable.  Handled
