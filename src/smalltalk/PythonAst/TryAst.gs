@@ -209,7 +209,7 @@ printSmalltalkOn: aStream
 		___curPos___)."
 		CallAst functionBeingCompiled ifNotNil: [:___func |
 			aStream
-				nextPutAll: '___ex @env0:___pushCatchingFrame___: (PyCode @env0:name: ''';
+				nextPutAll: '(BaseException @env0:___payloadOf___: ___ex) @env0:___pushCatchingFrame___: (PyCode @env0:name: ''';
 				nextPutAll: ___func name asString;
 				nextPutAll: ''' filename: '.
 			self emitSourceFilenameLiteralOn: aStream.
@@ -223,14 +223,20 @@ printSmalltalkOn: aStream
 		via ensure: so a return/break/continue or a re-raise still restores.
 		Runs AFTER the control-flow guard so a pending signal never becomes
 		'the current exception'."
+		"``___ex'' may be a CARRIER -- a throwaway exception raised to deliver
+		the real one without re-signalling it (BaseException
+		___signalCarrying___:).  Everything from here on is Python-visible, so
+		it must see the PAYLOAD: sys.exc_info(), the ``as e'' binding and a bare
+		``raise'' in the body all read what these two lines record."
 		aStream
-			nextPutAll: '___savedExc := BaseException @env0:___currentException___. BaseException @env0:___setCurrentException___: ___ex. BaseException @env0:___enterHandler___. [';
+			nextPutAll: '___savedExc := BaseException @env0:___currentException___. BaseException @env0:___setCurrentException___: (BaseException @env0:___payloadOf___: ___ex). BaseException @env0:___enterHandler___. [';
 			lf.
 		handler name ifNotNil: [
 			"Route ``except X as e'' through the module-scope-aware store so
 			a module-level e binds the module variable rather than an
 			undeclared temp."
-			self ___emitModuleScopeStoreOf___: handler name from: '___ex' on: aStream.
+			self ___emitModuleScopeStoreOf___: handler name
+				from: '(BaseException @env0:___payloadOf___: ___ex)' on: aStream.
 			aStream lf.
 		].
 		handler body printSmalltalkOn: aStream.
