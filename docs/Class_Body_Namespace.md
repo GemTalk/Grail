@@ -281,15 +281,59 @@ visible conformance.
 (`testDefsAndNestedClassesBypassItWhichIsAKnownGap`); that expectation is
 updated with the reasoning, as stage 3's was.
 
+## Stage 7, as shipped
+
+`class A(metaclass=M)` now **runs** `M.__new__` and `M.__init__`. The namespace
+staged through stages 1–6 is what gets handed over, which is the whole reason
+the staging existed.
+
+**The order is inverted, deliberately.** CPython evaluates the statement as
+`M(name, bases, ns)`, so `M` builds the class. Grail cannot: a body compiles
+onto a real Smalltalk class before any hook can run, and that class is what the
+module's methods, closure cells and `__class__` references are already bound to.
+So the class is built first and `M` runs *over* it, with `type.__new__`
+answering the class **under construction** instead of making a second one. For
+the shape every metaclass in the corpus is written in the two are
+indistinguishable:
+
+```python
+def __new__(cls, name, bases, ns):
+    self = super().__new__(cls, name, bases, ns)   # the class being defined
+    self.tag = 'x'                                 # mutates it
+    return self                                    # re-binds the name
+```
+
+The return value is honoured, so a metaclass may answer something that is not a
+class at all — `test_super` returns `None`, `test_subclassinit` returns `0`.
+That is why the dispatch is the **last** class-construction step rather than
+living at the `___pyClassDefined___` hook: every send after it would otherwise
+be aimed at `None`.
+
+Three constraints measurement forced:
+
+- `super().__new__(cls, name, bases, ns)` is **four** positional arguments, and
+  `Super`'s selector family stopped at three — so it never tried
+  `__new__:_:_:_:` and answered an *instance* of the metaclass. Not
+  metaclass-specific; any four-argument `super()` call had it
+- a **Smalltalk** metaclass must be excluded. `EnumMeta` also defines `__new__`,
+  with the enum machinery's signature; handing it CPython's four arguments broke
+  every mixin-coercion test. Only a metaclass rooted at `PyType` qualifies
+- "defines `__new__`" must mean **overrides** it. `object` defines
+  `___new__:kw:` and `PyType` inherits it, so an attribute-load test was true
+  for every metaclass alive: `ABCMeta`, which overrides neither, was handed a
+  namespace that was then written back over its class's own methods
+
+Measured: `test_super` 19 → 18 failing, `test_subclassinit` 10 → 9, no
+regression across the corpus.
+
 ## What is still missing
 
-- a metaclass's `__new__` / `__init__` are never dispatched, and `type(A)`
-  answers `type` rather than the metaclass. Only `__prepare__` is called. This
-  is now the load-bearing one: the mapping is faithful enough to hand over, and
-  nothing hands it over. It is what the whole `__classcell__` cluster in
-  `test_super` waits on, and it is a change of ownership rather than a hook — a
-  `class` statement in Grail *creates a Smalltalk class*, where CPython lets the
-  metaclass return anything at all, including `None`
+- `__classcell__` is not injected into the namespace, so the `__class__` /
+  zero-argument-`super()` cluster in `test_super` still fails. This is the next
+  load-bearing item, and stage 7 is what it waits on: there is now a real
+  namespace, handed to a real metaclass, at the moment CPython would put the
+  cell in it
+- a metaclass `__call__` is not consulted, and `mro()` is not overridable
 - the `_auto_called` ordering rule still reads `___classBodyOrder___` rather
   than living in `EnumDict` where CPython keeps it. Stage 6 removed the reason
   it could not move (a `def` now reaches the mapping), so this is available

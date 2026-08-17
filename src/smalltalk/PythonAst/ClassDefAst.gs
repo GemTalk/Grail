@@ -1765,10 +1765,12 @@ printSmalltalkRuntimeOn: aStream
 		separatedBy: [aStream nextPutAll: '. '].
 	aStream nextPutAll: ' }.'; lf.
 
-	"The class statement is over as far as the namespace is concerned -- the
-	metaclass hook above was the last thing entitled to see it.  Emitted only
-	where ___grailPrepareNamespace___ was, so an ordinary class emits neither."
-	aStream nextPutAll: name; nextPutAll: ' @env1:___grailFinishNamespace___.'; lf.
+	"The namespace is torn down by ___grailDispatchMetaclass___ below, which is
+	the LAST class-construction step and so the last thing entitled to see it.
+	It used to be dropped here, immediately after the metaclass hook; that
+	cannot work now that a ``metaclass='' may re-bind the name to a NON-class
+	(CPython lets __new__ return None or 0), because every send between here and
+	the decorators would then be aimed at None."
 
 	"CLASS KEYWORD ``boundary='': a Flag/IntFlag may override its family-default
 	FlagBoundary (STRICT for Flag, KEEP for IntFlag) with
@@ -1835,6 +1837,22 @@ printSmalltalkRuntimeOn: aStream
 					nextPutAll: ' @env1:___grailSetMetaclass___: ('.
 				kw value printSmalltalkWithParenthesisOn: aStream.
 				aStream nextPutAll: ').'; lf]]].
+
+	"RUN THE METACLASS.  Last of the class-construction steps and the one that
+	can re-bind the name: CPython evaluates ``class A(metaclass=M)'' as
+	``M(name, bases, ns)'', so M's __new__ decides what A is -- and is entitled
+	to answer something that is not a class at all (test_super returns None,
+	test_subclassinit returns 0).
+
+	Placed AFTER __init_subclass__ and the class keywords rather than at the
+	metaclass hook, so that every one of those still addresses the real class.
+	Placed BEFORE the decorators because CPython runs the metaclass first, which
+	is the same reason the ___pyClassDefined___ hook sits where it does.
+
+	Answers the receiver untouched unless a ``metaclass='' overriding __new__ or
+	__init__ is in effect, so an ordinary class pays one send."
+	aStream nextPutAll: name; nextPutAll: ' := '; nextPutAll: name;
+		nextPutAll: ' @env1:___grailDispatchMetaclass___.'; lf.
 
 	"Apply class decorators bottom-up.  Python's ``@A @B class C:``
 	rebinds C to ``A(B(C))`` — the decorator closest to the class
