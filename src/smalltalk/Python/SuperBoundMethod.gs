@@ -155,3 +155,78 @@ value: positional value: kwargs
 %
 
 set compile_env: 0
+
+category: 'Grail-Private'
+method: SuperBoundMethod
+_obj
+	"env-0, like _setObj:resolver:selector: above -- __eq__ reaches these with
+	@env0: sends, and compiling them under env 1 (which the surrounding section
+	selects) left them unreachable from there: ``a SuperBoundMethod does not
+	understand #'_obj''', escaping as an uncatchable Smalltalk error rather than
+	a Python one."
+
+	^ obj
+%
+
+category: 'Grail-Private'
+method: SuperBoundMethod
+_selector
+	^ selector
+%
+
+set compile_env: 1
+
+category: 'Grail-Comparison'
+method: SuperBoundMethod
+__eq__: other
+	"``super(C, e).__reduce__ == e.__reduce__''.
+
+	CPython compares bound methods by (__func__, __self__), and a method reached
+	through a super proxy is an ORDINARY bound method there -- so when nothing
+	between C and object overrides the name, the two are the same object pair and
+	compare equal.  test_super's test_special_methods asserts exactly that for
+	__reduce__, __reduce_ex__ and __getstate__: a super object must not make the
+	pickling protocol look different from the object's own.
+
+	Grail hands back a SuperBoundMethod, which defined no equality at all, so the
+	comparison fell to identity and was False for every name.
+
+	Keyed on the receiver's IDENTITY and the selector, which is BoundMethod's own
+	convention rather than a new one -- see BoundMethod >> __eq__, where the
+	reasoning (a Symbol uniquely names the method reached on that receiver, and
+	each attribute access mints a fresh handle) and its limitation are already
+	written down.  The limitation is worth restating because a super proxy makes
+	it easier to hit: resolution starts AFTER cls, so if a class between cls and
+	the owner overrides the name, CPython compares the two __func__s and answers
+	False where this answers True.  Nothing in the corpus overrides the pickling
+	dunders, which is the case the test is about."
+
+	(other @env0:isKindOf: BoundMethod) @env0:ifTrue: [
+		^ (obj == (other @env0:receiver))
+			@env0:and: [selector @env0:asSymbol == (other @env0:selector) @env0:asSymbol]].
+	"An UNBOUND handle, which is what the CLASS form compares against.
+	test_special_methods runs its whole body twice -- ``for e in E(), E'' -- and
+	the second pass asks whether ``super(C, E).__reduce__ == E.__reduce__''.
+	CPython answers True because both are the very same unbound descriptor
+	(``<method '__reduce__' of 'object' objects>''): accessing the name on a
+	CLASS does not bind, and neither does a super whose __self__ is that class.
+	Grail spells the two differently -- SuperBoundMethod here, UnboundMethod
+	there -- so the comparison has to bridge them.  Keyed the analogous way:
+	super's obj IS the class, and the unbound handle names it as its
+	definingClass."
+	(other @env0:isKindOf: UnboundMethod) @env0:ifTrue: [
+		^ (obj == (other @env0:definingClass))
+			@env0:and: [selector @env0:asSymbol == (other @env0:selector) @env0:asSymbol]].
+	(other @env0:isKindOf: SuperBoundMethod) @env0:ifTrue: [
+		^ (obj == (other @env0:_obj))
+			@env0:and: [selector @env0:asSymbol == (other @env0:_selector) @env0:asSymbol]].
+	^ false
+%
+
+category: 'Grail-Comparison'
+method: SuperBoundMethod
+__ne__: other
+	^ (self __eq__: other) @env0:not
+%
+
+set compile_env: 0

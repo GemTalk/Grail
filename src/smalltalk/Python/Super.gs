@@ -408,6 +408,25 @@ ___pyAttrLoad___: aSym
 	instead, so the comparison was quietly false.  Every other name still goes
 	to the parent, which is the point of the proxy."
 	(aSym @env0:asSymbol == #'__class__') @env0:ifTrue: [^ self @env0:class].
+	"The proxy's OWN state, for the same reason: these describe the super object
+	rather than naming something to resolve against the parent chain.  CPython
+	exposes all three as read-only attributes of a super object, and they are how
+	a copied or unpickled proxy is checked for having survived intact
+	(test_super's test_pickling and test_deep_copying assert each of them).
+	Without them the parent walk ran and answered ``'super' object has no
+	attribute '__self__''' -- which, since #472 made a missing name fail at
+	LOOKUP time, is at least a clean AttributeError rather than a proxy that
+	explodes when called.
+
+	``__self_class__'' is type(obj), EXCEPT when obj is itself a class, where
+	CPython answers the class: ``super(C, E)'' has __self__ E and
+	__self_class__ E, so the two coincide for the unbound-ish form."
+	(aSym @env0:asSymbol == #'__thisclass__') @env0:ifTrue: [^ cls].
+	(aSym @env0:asSymbol == #'__self__') @env0:ifTrue: [^ obj].
+	(aSym @env0:asSymbol == #'__self_class__') @env0:ifTrue: [
+		^ (obj @env0:isKindOf: Behavior)
+			@env0:ifTrue: [obj]
+			@env0:ifFalse: [obj @env0:class]].
 	"A class-attribute store on a PARENT shadows that parent's compiled method,
 	the same way it does for a direct instance read (object >>
 	___classChainAttrLookup___: and its caller).  super() has to honour it too:
@@ -425,6 +444,19 @@ ___pyAttrLoad___: aSym
 	only, not the session-local canonical overlay, so a runtime ``Parent.m = f''
 	seen through super() is likewise still a gap.  Both were gaps before too;
 	this closes the definitional case that method decorators need."
+	"A proxy with NO class cannot resolve anything, and must say so CATCHABLY.
+	Every walk below starts at ``cls superClass'', which nil does not understand
+	-- an env-0 MessageNotUnderstood that Python cannot catch, so it escapes the
+	one call and takes down the whole module run.  cls:obj: already refuses a nil
+	class for exactly this reason, but it is not the only way to get one: an
+	UNPICKLER builds the object empty and then asks it for ``__setstate__'',
+	which arrives here before any class has been set (test_super's test_pickling).
+	An AttributeError is both true -- the proxy has no attributes to offer -- and
+	catchable, which is what lets that test fail as a test."
+	cls @env0:isNil ifTrue: [
+		^ AttributeError ___signal___:
+			('''super'' object has no attribute ''' @env0:, aSym @env0:asString
+				@env0:, '''')].
 	walker := cls @env0:superClass.
 	[walker == nil] whileFalse: [
 		(walker @env0:_respondsTo: #___dynInstVars___ flags: 16r10001) ifTrue: [
