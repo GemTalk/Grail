@@ -323,6 +323,24 @@ printSmalltalkOn: aStream
 			any method that references ``super'', however it goes on to use it."
 			CallAst classBeingCompiled notNil
 				ifTrue: [CallAst classNeedsClassCell: true].
+			"...but a name the module binds at RUN TIME still wins over the
+			builtin, and the two guards above cannot see that: they read the
+			parser's record of the module BODY, while mock.patch sets the
+			attribute long after that body was compiled.  Answer the patched
+			value when there is one and the Super class otherwise, so
+			``super(1, 2)'' calls the replacement (test_shadowed_dynamic_two_arg)
+			while every unpatched read still yields Super.
+
+			Needs a module class to hang the probe off; without one nothing could
+			have been patched, so emit Super directly."
+			CallAst moduleClassBeingCompiled notNil
+				ifTrue: [
+					aStream
+						nextPutAll: '((';
+						nextPutAll: CallAst moduleClassBeingCompiled name;
+						nextPutAll: ' @env0:___instance___ @env1:___grailShadowedSuper___)';
+						nextPutAll: ' ifNil: [Super])'.
+					^ self].
 			aStream nextPutAll: 'Super'.
 			^ self
 		].

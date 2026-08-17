@@ -58,6 +58,64 @@ def unload(name):
     sys.modules.pop(name, None)
 
 
+class ready_to_import:
+    """Context manager putting a freshly written module on sys.path, yielding
+    ``(name, path)`` -- CPython import_helper.ready_to_import, written as a
+    plain class because Grail forbids @contextlib.contextmanager (the same
+    reason os_helper's temp_dir and change_cwd are classes).
+
+    This one really does need the filesystem, and Grail can do all of it:
+    tempfile.mkdtemp, open(path, 'w'), and an import that honours sys.path.
+    That last part is not obvious -- Grail searches its own bundled stdlib
+    FIRST and sys.path LAST, deliberately, so a caller cannot shadow Grail's
+    ``os'' -- but a name that Grail does not ship resolves out of sys.path
+    exactly as CPython would (importlib >> ___moduleNameToPath___:).
+
+    What a test gets from this is a module whose BODY it chose, which is the
+    only way to observe module-scope behaviour that the test file's own module
+    cannot have: test_super's test_shadowed_global needs a module that binds
+    the name ``super''."""
+
+    def __init__(self, name=None, source=""):
+        self.name = name or "spam"
+        self.source = source
+        self._temp_dir = None
+        self._tempdir_path = None
+        self._old_module = None
+        self._had_old_module = False
+
+    def __enter__(self):
+        from test.support import os_helper
+        from test.support import script_helper
+        self._temp_dir = os_helper.temp_dir()
+        self._tempdir_path = self._temp_dir.__enter__()
+        path = script_helper.make_script(self._tempdir_path, self.name,
+                                         self.source)
+        # Clear any already-imported module of this name, and remember whether
+        # there WAS one -- restoring it is not the same as removing it.
+        if self.name in sys.modules:
+            self._old_module = sys.modules.pop(self.name)
+            self._had_old_module = True
+        sys.path.insert(0, self._tempdir_path)
+        return self.name, path
+
+    def __exit__(self, *exc):
+        # Unwound in reverse, and every step guarded: an exception inside the
+        # body must still leave sys.path and sys.modules as they were, or the
+        # temporary directory stays on the search path for the rest of the run
+        # and later imports of an unrelated name can find a stale file.
+        try:
+            sys.path.remove(self._tempdir_path)
+        except ValueError:
+            pass
+        sys.modules.pop(self.name, None)
+        if self._had_old_module:
+            sys.modules[self.name] = self._old_module
+        if self._temp_dir is not None:
+            self._temp_dir.__exit__(*exc)
+        return False
+
+
 class CleanImport:
     def __init__(self, *module_names):
         self.module_names = module_names
