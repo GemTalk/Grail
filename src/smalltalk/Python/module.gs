@@ -483,6 +483,37 @@ ___moduleAttrLoad___: aSym
 
 category: 'Grail-Attribute Access'
 method: module
+___grailShadowedSuper___
+	"The module attribute ``super'' if this module has one, else nil -- the
+	RUNTIME half of ``does the program bind the name super''.
+
+	CPython does not treat ``super()'' as a syntactic form: the compiler emits
+	an ordinary LOAD of the name, so whatever the module currently binds wins.
+	Grail rewrites ``super()'' at codegen time, so it needs to ask.  The
+	question is split in two, by WHEN the binding can be seen:
+
+	  * STATICALLY, from a ``class super:'' or ``super = ...'' in the module
+	    body -- CallAst >> ___superNameIsShadowed___, which suppresses the
+	    rewrite entirely and costs nothing at run time.
+	  * At RUN TIME, from a name set on the module after it was compiled
+	    (``unittest.mock.patch(f'{__name__}.super', MySuper)'', which is
+	    test_super's test_shadowed_dynamic and test_shadowed_dynamic_two_arg).
+	    That is this method.
+
+	Deliberately ONLY the dynamic-instVar slot, not the full
+	___globalAt___:otherwise: chain.  A runtime setattr on a module lands in
+	that slot and nowhere else, so one probe is the whole answer -- whereas the
+	full chain's MISS path (accessor-category test, several
+	whichClassIncludesSelector: probes, the legacy SymbolDictionary) is the
+	expensive one, and a miss is the case EVERY ordinary super() call in the
+	corpus takes.  Anything the full chain would find that this does not is
+	static by construction, and therefore already the static half's job."
+
+	^ self @env0:dynamicInstVarAt: #'super'
+%
+
+category: 'Grail-Attribute Access'
+method: module
 ___globalAt___: aSym otherwise: aBlock
 	"Resolve a module-global binding; evaluate aBlock when absent.  The
 	single resolution chain behind bare-name reads (___moduleAttrLoad___:,

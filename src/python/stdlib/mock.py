@@ -17,7 +17,9 @@
 #     patch objects whose attributes dispatch dynamically;
 #   * call objects compare by exact (args, kwargs) equality.
 
+import builtins
 import importlib
+import sys
 
 __all__ = ["Mock", "MagicMock", "NonCallableMock", "patch", "sentinel",
            "call", "DEFAULT", "ANY"]
@@ -267,15 +269,53 @@ NonCallableMock = Mock
 MagicMock = Mock
 
 
+def _is_module(obj):
+    """True when obj is a module.
+
+    CPython's mock asks ``isinstance(target, ModuleType)``, which does not work
+    here: every Grail module is its OWN class (type(os) is the `os` class,
+    deriving from `module`), and `types.ModuleType` is a separate stub class
+    that no real module inherits from -- so the isinstance test answers False
+    for every module there is.
+
+    Ask sys.modules instead, which is exact and needs no type machinery: a
+    module is the object registered under its own __name__.  A class also has
+    __name__, but no class is in sys.modules under it, so this does not widen
+    to non-modules."""
+
+    name = getattr(obj, "__name__", None)
+    if name is None:
+        return False
+    return sys.modules.get(name) is obj
+
+
 class _Patcher:
     def __init__(self, target_obj, attribute, new):
         self._target_obj = target_obj
         self._attribute = attribute
         self._new = new
         self._old = None
+        self._created = False
 
     def __enter__(self):
-        self._old = getattr(self._target_obj, self._attribute)
+        try:
+            self._old = getattr(self._target_obj, self._attribute)
+        except AttributeError:
+            # A BUILTIN name on a MODULE is patchable even though the module
+            # does not define it -- CPython's _patch.get_original sets
+            # create=True for exactly this case (`if name in _builtins and
+            # isinstance(target, ModuleType)`), because shadowing a builtin per
+            # module is a real thing to want to test.  test_super's
+            # test_shadowed_dynamic patches `<module>.super`, which no module
+            # binds; without this, `patch` raised AttributeError before the
+            # test could run at all.
+            #
+            # Anything else missing stays an error: patching a name that is
+            # neither defined nor a builtin is a typo, and CPython reports it.
+            if not (_is_module(self._target_obj)
+                    and hasattr(builtins, self._attribute)):
+                raise
+            self._created = True
         replacement = self._new
         if replacement is DEFAULT:
             replacement = Mock(name=self._attribute)
@@ -283,7 +323,16 @@ class _Patcher:
         return replacement
 
     def __exit__(self, exc_type, exc_value, tb):
-        setattr(self._target_obj, self._attribute, self._old)
+        # A name we CREATED has to be removed again, not set back to None:
+        # leaving `super = None` on the module would shadow the builtin for
+        # every later test in the file.
+        if self._created:
+            try:
+                delattr(self._target_obj, self._attribute)
+            except AttributeError:
+                pass
+        else:
+            setattr(self._target_obj, self._attribute, self._old)
         return False
 
     def start(self):

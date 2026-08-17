@@ -218,13 +218,18 @@ printSmalltalkOn: aStream
 	of which emit as Smalltalk `self` (see NameAst >> printSmalltalkOn:).
 	Outside class-method context, fall through to the normal call
 	dispatch (super will resolve to whatever the surrounding scope
-	binds it to, typically NameError)."
+	binds it to, typically NameError).
+
+	Also stood down when the program BINDS the name ``super'' -- see
+	___superNameIsShadowed___ -- because then this is not the builtin at all
+	and the normal call dispatch is the whole of the right answer."
 	((function isKindOf: NameAst)
 		and: [function id = #'super'
 			and: [arguments isEmpty
 				and: [keywords isEmpty
-					and: [CallAst classBeingCompiled notNil
-						and: [CallAst moduleClassBeingCompiled notNil]]]]])
+					and: [self ___superNameIsShadowed___ not
+						and: [CallAst classBeingCompiled notNil
+							and: [CallAst moduleClassBeingCompiled notNil]]]]]])
 		ifTrue: [
 			"A METHOD-LOCAL class (defined in a function body) is not a
 			module attribute, so the module-instance-by-name lookup below
@@ -242,20 +247,38 @@ printSmalltalkOn: aStream
 			``super(C, self)'' form below is deliberately not flagged: it names
 			its class, so CPython creates no cell for it."
 			CallAst classNeedsClassCell: true.
+			"The RUNTIME half of the shadow rule.  ___superNameIsShadowed___
+			above reads the parser's record of the module BODY, so it cannot see
+			a name set on the module AFTER that body was compiled --
+			``mock.patch(f'{__name__}.super', MySuper)'', which is test_super's
+			test_shadowed_dynamic.  Probe for it and call the replacement with
+			the zero arguments the source wrote; fall back to the proxy, which
+			is what every unpatched call in the corpus takes.
+
+			Written as ``[:___sup___ | ...] @env0:value: <probe>'' so the probe
+			is evaluated ONCE and the arms can both refer to it.  The arms use
+			``== nil ifTrue:ifFalse:'' rather than ifNil:ifNotNil: because that
+			is the form the generated env-1 code already relies on being
+			compiler-inlined."
+			aStream nextPutAll: '([:___sup___ | ___sup___ == nil ifTrue: ['.
 			(CallAst classDefIsModuleScope == false)
 				ifTrue: [
 					CallAst addCapturedClassName: CallAst classBeingCompiled.
 					aStream
 						nextPutAll: '(Super @env1:cls: (self @env1:___classCell___: #''___cell_';
 						nextPutAll: CallAst classBeingCompiled asString;
-						nextPutAll: '___'') obj: self)'.
-					^self].
+						nextPutAll: '___'') obj: self)']
+				ifFalse: [
+					aStream
+						nextPutAll: '(Super @env1:cls: ((';
+						nextPutAll: CallAst moduleClassBeingCompiled name;
+						nextPutAll: ' @env0:___instance___) @env1:';
+						nextPutAll: CallAst classBeingCompiled asString;
+						nextPutAll: ') obj: self)'].
 			aStream
-				nextPutAll: '(Super @env1:cls: ((';
+				nextPutAll: '] ifFalse: [___sup___ @env1:value: { } value: nil]] @env0:value: ((';
 				nextPutAll: CallAst moduleClassBeingCompiled name;
-				nextPutAll: ' @env0:___instance___) @env1:';
-				nextPutAll: CallAst classBeingCompiled asString;
-				nextPutAll: ') obj: self)'.
+				nextPutAll: ' @env0:___instance___) @env1:___grailShadowedSuper___))'.
 			^self].
 
 	"Explicit ``super(Cls, obj)`` inside a class method.  Mirror the
@@ -279,9 +302,10 @@ printSmalltalkOn: aStream
 		and: [function id = #'super'
 			and: [arguments size = 2
 				and: [keywords isEmpty
-					and: [((arguments at: 1) isKindOf: NameAst)
-						and: [CallAst classBeingCompiled notNil
-							and: [CallAst moduleClassBeingCompiled notNil]]]]]])
+					and: [self ___superNameIsShadowed___ not
+						and: [((arguments at: 1) isKindOf: NameAst)
+							and: [CallAst classBeingCompiled notNil
+								and: [CallAst moduleClassBeingCompiled notNil]]]]]]])
 		ifTrue: [
 			"A METHOD-LOCAL class is not a module attribute, so the
 			module-instance accessor below answers NIL for it -- and every
@@ -545,6 +569,51 @@ printSmalltalkOn: aStream
 	self printArgumentsArrayOn: aStream.
 	aStream nextPutAll: ' value: '.
 	self printKeywordsDictOn: aStream.
+%
+
+category: 'Grail-other'
+method: CallAst
+___superNameIsShadowed___
+	"True when the name in this call's function position is ``super'' AND the
+	program itself binds that name, so the call must NOT be rewritten into a
+	Super proxy.
+
+	``super()'' is not a syntactic form in CPython.  The compiler emits an
+	ordinary LOAD of the name and the zero-argument magic lives in
+	super.__init__, which inspects the calling frame -- so a program that binds
+	``super'' shadows the builtin exactly as it would shadow ``len'', and
+	``super()'' then calls whatever it bound:
+
+	    class super: msg = 'truly super'      # module scope
+	    class C:
+	        def method(self): return super().msg    # -> 'truly super'
+
+	NameAst's bare-name ``super'' handler already stood down on both shadow
+	forms; the call-shape rewrites below did not, so the two disagreed for the
+	one shape that actually occurs -- a CALL -- and a shadowing module got the
+	builtin proxy anyway (test_super's test_shadowed_global, test_shadowed_local,
+	and the two test_shadowed_dynamic tests).  Sharing ONE predicate is what
+	keeps them from drifting apart again; the two tests either move together or
+	not at all.
+
+	Both checks are STATIC -- the parser's record of what the module body and
+	the enclosing functions bind.  A name patched onto the module at RUNTIME
+	(unittest.mock.patch) is therefore still missed; see
+	docs/Class_Body_Namespace.md.
+
+	Note what this deliberately does NOT guard: the ``__class__'' cell.  CPython
+	creates that cell from the NAME ``super'' appearing in a method, shadowed or
+	not -- measured, not assumed:
+
+	    freevars with module shadow: ('__class__',)
+	    freevars with local shadow:  ('__class__', 'super')
+
+	so the unconditional classNeedsClassCell: below stays unconditional."
+
+	^ (function isKindOf: NameAst)
+		and: [function id = #'super'
+			and: [(function ___declaredInEnclosingFunction___: #'super')
+				or: [function isModuleVariableName: #'super']]]
 %
 
 category: 'Grail-other'

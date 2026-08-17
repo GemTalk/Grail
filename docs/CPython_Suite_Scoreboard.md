@@ -80,10 +80,10 @@ different rows and merges cleanly.
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
 | test.test_named_expressions | ERROR | 74 | 9 | 12 | 0 |  |
 | test.test_subclassinit | ERROR | 17 | 6 | 3 | 0 |  |
-| test.test_super | ERROR | 40 | 5 | 9 | 3 |  |
+| test.test_super | ERROR | 40 | 5 | 6 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
 | test.test_with | ERROR | 54 | 3 | 3 | 0 |  |
-| test.test_positional_only_arg | ERROR | 28 | 4 | 4 | 0 |  |
+| test.test_positional_only_arg | ERROR | 28 | 4 | 3 | 0 |  |
 | test.test_string_literals | ERROR | 20 | 3 | 10 | 0 |  |
 | test.test_genericclass | ERROR | 22 | 12 | 7 | 1 |  |
 | test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
