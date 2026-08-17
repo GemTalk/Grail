@@ -1129,18 +1129,26 @@ testLiveFramesAndGetframe
 	``___curPos___ := N'' literals -- and the fixture checks that the machinery
 	stays out.
 
-	Two limits are asserted as deliberate rather than left to be discovered.
+	ONE limit is asserted as deliberate rather than left to be discovered.
 	f_locals does not exist and is not faked: a Python function's locals are
 	Smalltalk method TEMPS and the capture holds neither their values nor their
 	names, so an empty dict would let a caller believe a frame had no variables.
-	And a NESTED function gets no frame of its own, because Grail compiles a
-	nested ``def'' into its enclosing method -- pre-existing, and the reason
-	test_walk_stack still fails, since it asserts a nested call adds exactly one
-	frame.
+	(A nested function used to be the second such limit -- it got no frame of its
+	own -- and is now checked for the CPython behaviour instead.)
 
-	The fourteen CPython-parity checks are verified against real CPython by
-	running the fixture directly; the two marked GRAIL-SPECIFIC are the only ones
-	that answer differently there.  See tests/python/live_frames.py."
+	Three of the checks below cover what the RENDERING of a live stack got wrong
+	while the walk itself was right, which is why they live here and not with the
+	traceback fixtures: format_list rendered each entry as ``'  ' + str(entry)''
+	over a FrameSummary that already carried the two-space indent, so every frame
+	came out indented four; the trailing newline sat in ``format'' rather than in
+	the ``format_frame_summary'' hook, so a subclass that renders a frame its own
+	way got a newline it never asked for; and a method that called a nested def
+	reported its own LAST statement instead of the call site, because such a body
+	compiles inside a block whose end is where the method's ip sits.
+
+	The twenty-five CPython-parity checks are verified against real CPython by
+	running the fixture directly; the one marked GRAIL-SPECIFIC is the only one
+	that answers differently there.  See tests/python/live_frames.py."
 
 	| mod |
 	importlib @env1:modules removeKey: #'live_frames' ifAbsent: [].
@@ -1165,7 +1173,15 @@ testLiveFramesAndGetframe
 	   'a_method_s_live_frame_names_its_real_file'
 	   'the_machinery_keeps_itself_out_of_the_walk'
 	   'a_frame_has_no_f_locals'
-	   'a_nested_function_gets_its_own_frame' ) do: [:k |
+	   'a_nested_function_gets_its_own_frame'
+	   'a_method_s_frame_reports_the_call_site'
+	   'a_mixin_method_s_frame_names_its_real_file'
+	   'format_stack_indents_each_frame_by_two'
+	   'format_list_renders_a_frame_summary'
+	   'format_list_renders_a_legacy_four_tuple'
+	   'format_list_rejects_a_bare_string'
+	   'a_frame_summary_renders_as_its_repr'
+	   'format_frame_summary_carries_its_own_newline' ) do: [:k |
 		| answer |
 		answer := mod @env0:perform: k asSymbol env: 1.
 		"Report what the check ANSWERED, not just that it failed.  A check may

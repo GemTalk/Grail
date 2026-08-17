@@ -852,21 +852,26 @@ ___methodLookupChainFor___: aClass
 	Chain first, MRO only if that misses: the chain is a cheap pointer walk and
 	is the whole answer under single inheritance, so the C3 computation is paid
 	only where the old code was about to answer nil anyway.  Answers a
-	collection; never nil."
+	collection; never nil.
 
-	| chain c il mro |
+	The walk itself now lives on importlib, which owns the MI registry ___mroOf___
+	reads, because BaseException's live-frame filename derivation needs the same
+	chain -- and had the same bug for the same reason.  Kept here as a delegating
+	method so the three ___method*ForClass___:name: senders below read unchanged."
+
+	| chain c il |
+	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
+	il == nil ifFalse: [
+		chain := [il @env0:___methodLookupChainFor___: aClass]
+			@env0:on: Error do: [:ex | nil].
+		chain == nil ifFalse: [^ chain]].
+	"No importlib (or it refused): the superclass chain, which is the whole
+	 answer under single inheritance."
 	chain := OrderedCollection @env0:new.
 	c := aClass.
 	[c == nil] whileFalse: [
 		chain @env0:add: c.
 		c := c @env0:superclass].
-	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
-	il == nil ifTrue: [^ chain].
-	mro := [il @env0:___mroOf___: aClass] @env0:on: Error do: [:ex | nil].
-	mro == nil ifTrue: [^ chain].
-	"Append only what the chain missed, keeping nearest-first order."
-	mro @env0:do: [:each |
-		(chain @env0:includesIdentical: each) ifFalse: [chain @env0:add: each]].
 	^ chain
 %
 

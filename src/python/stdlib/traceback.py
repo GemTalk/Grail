@@ -789,9 +789,11 @@ def format_exception(exc, /, value=_sentinel, tb=_sentinel, limit=None,
             frames.extend(format_tb(tb, limit))
         except Exception:
             # Legacy callers sometimes pass a plain list of frame entries.
+            # format_list is the renderer for that shape (FrameSummary objects
+            # or 4-tuples); it used to be str() here, which stopped rendering a
+            # frame at all once FrameSummary lost its fabricated __str__.
             try:
-                for entry in tb:
-                    frames.append('  ' + str(entry) + '\n')
+                frames.extend(format_list(tb))
             except Exception:
                 pass
     lines = []
@@ -1284,11 +1286,14 @@ class FrameSummary:
         return '<FrameSummary file %s, line %r in %s>' % (
             self.filename, self.lineno, self.name)
 
-    def __str__(self):
-        row = '  File "%s", line %s, in %s' % (self.filename, self.lineno, self.name)
-        if self.line:
-            row += '\n    ' + self.line
-        return row
+    # NO __str__.  CPython's FrameSummary does not define one, so ``str(fs)''
+    # answers the repr above -- verified against 3.14.6, where
+    # ``str(extract_stack()[-1])'' is ``<FrameSummary file <string>, line 9 in
+    # <module>>''.  Grail had one that rendered the ``  File ..., line N, in f''
+    # row, which existed only because format_list/print_list rendered frames by
+    # str() instead of routing through StackSummary.  Both now do what CPython
+    # does, so the fabricated __str__ has no caller and would only mislead the
+    # next reader into rendering frames through str() again.
 
 
 class StackSummary(list):
@@ -1370,13 +1375,28 @@ class StackSummary(list):
         return False
 
     def format_frame_summary(self, frame_summary):
-        """Render ONE frame, without the trailing newline -- the hook CPython
+        """Render ONE frame, INCLUDING its trailing newline -- the hook CPython
         exposes for subclasses that want custom frame rendering.
+
+        The newline belongs here and not in ``format`` because CPython puts it
+        here: ``format`` appends what this answers verbatim.  Grail had it the
+        other way round, which is invisible for every frame Grail itself renders
+        (the newline lands in the same place either way) and wrong the moment a
+        SUBCLASS overrides this -- test_custom_format_frame's override answers
+        ``f'{filename}:{lineno}''' and expects exactly that back from format(),
+        while Grail appended a newline the override never asked for.
 
         Emits PEP 657 carets when the frame carries columns.  Single-line
         frames only: a span crossing lines answers no anchors and falls back to
         the plain source line, which is what CPython does when it cannot
         compute anchors."""
+        return self._frame_summary_row(frame_summary) + '\n'
+
+    def _frame_summary_row(self, frame_summary):
+        """format_frame_summary's body, without the trailing newline.
+
+        Split out so the several early returns below do not each have to
+        remember the newline."""
         row = '  File "%s", line %s, in %s' % (
             frame_summary.filename, frame_summary.lineno, frame_summary.name)
         line = frame_summary.line
@@ -1425,10 +1445,10 @@ class StackSummary(list):
         return row
 
     def format(self):
-        # A FrameSummary's __str__ already carries CPython's 2-space "  File"
-        # indent (and a 4-space source line); emit it directly.  format_list
-        # adds a 2-space prefix for RAW (non-FrameSummary) entries, so routing
-        # through it here would double-indent a real frame.
+        # Each piece is appended VERBATIM: format_frame_summary owns the
+        # trailing newline, as it does in CPython, so that an override which
+        # answers something else (test_custom_format_frame answers
+        # ``filename:lineno'') is reproduced exactly.
         #
         # A format_frame_summary override may answer None to DROP a frame, which
         # CPython supports and test_dropping_frames relies on.  Grail could not
@@ -1440,7 +1460,7 @@ class StackSummary(list):
             piece = self.format_frame_summary(fs)
             if piece is None:
                 continue
-            formatted.append(piece + '\n')
+            formatted.append(piece)
         return formatted
 
 
@@ -1589,14 +1609,27 @@ def format_stack(f=None, limit=None):
 
 
 def format_list(extracted_list):
-    """Format a list of FrameSummary-like entries.  Each entry is
-    rendered with a two-space indent — matches CPython's output
-    layout.  Accepts any iterable of values that respond to
-    ``__str__''."""
-    return ['  ' + str(entry) + '\n' for entry in (extracted_list or [])]
+    """Format a list of FrameSummary objects, or of the legacy
+    ``(filename, lineno, name, line)'' 4-tuples, for printing.
+
+    CPython is exactly ``StackSummary.from_list(extracted_list).format()'' and
+    now so is this.  It used to be ``'  ' + str(entry) + '\\n''', which had two
+    consequences: a FrameSummary carries the ``  File ...'' indent itself, so
+    every frame came out indented FOUR spaces (visible in format_stack /
+    print_stack, whose output is nothing but format_list); and a 4-tuple came out
+    as its repr rather than as a rendered frame.  Routing through StackSummary
+    also means carets, and the format_frame_summary hook, apply to these entries
+    as they do everywhere else.
+
+    Note what this gives up: ``format_list(['some string'])'' used to answer
+    ``['  some string\\n']''.  CPython raises ValueError (too many values to
+    unpack) there, because an entry that is not a FrameSummary must be a 4-tuple
+    -- verified on 3.14.6."""
+    return StackSummary.from_list(extracted_list).format()
 
 
 def print_list(extracted_list, file=None):
+    """The format_list rendering, written to ``file'' (default sys.stderr)."""
     if file is None:
         file = sys.stderr
     for line in format_list(extracted_list):
@@ -1604,10 +1637,11 @@ def print_list(extracted_list, file=None):
 
 
 def print_stack(f=None, limit=None, file=None):
-    """Print the current stack to ``file`` (default sys.stderr).  Grail has no
-    live-frame introspection, so extract_stack answers an empty StackSummary
-    and this prints nothing -- but the NAME has to exist, because callers
-    reach for it unconditionally."""
+    """Print the current stack to ``file`` (default sys.stderr).
+
+    The docstring here used to say Grail had no live-frame introspection and
+    that this printed nothing.  It does now (BaseException
+    ___liveFrameChain___), so the only thing left to say is what CPython says."""
     if file is None:
         file = sys.stderr
     for line in format_stack(f, limit):

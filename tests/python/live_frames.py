@@ -26,16 +26,15 @@ neither the values nor their names are in it.  An empty f_locals would be worse
 than none -- code reading it would silently see a frame with no variables instead
 of an AttributeError telling it the truth.
 
-A NESTED function gets no frame of its own.  Grail compiles a nested ``def'' into
-its enclosing method rather than a separate one, so a nested call does not deepen
-the Python stack.  This is a pre-existing gap that shows up here for the first
-time, and the check below asserts what Grail DOES do, with the CPython answer
-stated in the comment.
+(``f_locals'' is now the only such limit.  A nested function used to be the
+second -- it got no frame of its own, because a nested ``def'' compiles to a
+BLOCK and the walk skipped every block.  That is fixed; the check below asserts
+the CPython behaviour, and the note on it records what it used to say.)
 
 Run this file under CPython (``python3 tests/python/live_frames.py'') to see what
-it produces -- that is where the expectations come from.  The two checks that
-document Grail-specific limits are marked, and are the only ones that would
-answer differently there.
+it produces -- that is where the expectations come from.  The one check that
+documents a Grail-specific limit is marked, and is the only one that would answer
+differently there.
 """
 
 import sys
@@ -290,6 +289,157 @@ def a_nested_function_gets_its_own_frame():
     return deeper() == here + 1
 
 
+class _CallSite:
+    def meth(self):
+        def fmt():
+            return traceback.extract_stack()
+        result = fmt()
+        trailing = 1
+        return (result, trailing)[0]
+
+
+def a_method_s_frame_reports_the_call_site():
+    """The frame for a method that called a nested def reports the line of the
+    CALL, not the method's last statement.
+
+    ``_CallSite.meth'' calls ``fmt()'' and then has two more statements.  Grail
+    reported the last of them for every frame of this shape, and the reason is
+    worth stating because it looks like an off-by-one and is not: a class-body
+    def whose body contains a nested def compiles with the body inside a BLOCK,
+    so the METHOD's instruction pointer sits at the end of that block and the
+    ip -> line derivation answers the method's final statement.  The enclosing
+    block frame, one hop inside the method, carries the call site exactly -- the
+    walk computed it and then discarded it.
+
+    A module-level def is unaffected (its body is not wrapped), which is why
+    this needs a method to reproduce and why the checks above did not catch it.
+
+    Returns the offending entry rather than False so a failure says which line
+    it picked."""
+    result = _CallSite().meth()
+    wanted = _CallSite.meth.__code__.co_firstlineno + 3      # ``result = fmt()''
+    for entry in result:
+        if entry.name == 'meth':
+            if entry.lineno == wanted:
+                return True
+            return 'meth reported line %r, wanted %r (%r)' % (
+                entry.lineno, wanted, entry.line)
+    return 'no frame named meth in %r' % ([e.name for e in result],)
+
+
+class _MixinBase:
+    def rendered(self):
+        return traceback.format_stack()
+
+
+class _ByMixin(_Holder, _MixinBase):
+    pass
+
+
+def a_mixin_method_s_frame_names_its_real_file():
+    """A method reached through a SECOND base reports its real file.
+
+    Grail merges multiple inheritance by RECOMPILING the secondary bases'
+    methods onto the subclass, but the per-class table that holds each method's
+    PyCode is built from one class body, so the copied method's code object
+    stays behind in the base's table -- where no superclass walk from the
+    subclass can reach it.  Every mixin method's live frame therefore reported
+    ``<grail>'', while the same method's ``__code__'' beside it reported the real
+    path, because THAT lookup already consulted the MRO.
+
+    ``class TestTracebackFormat(unittest.TestCase, TracebackFormatMixin)'' is
+    the shape in CPython's own test suite, so this is not a corner."""
+    text = ''.join(_ByMixin().rendered())
+    if '<grail>' in text:
+        return 'reported <grail>: %r' % (text[:400],)
+    return 'live_frames.py' in text and ', in rendered' in text
+
+
+def format_stack_indents_each_frame_by_two():
+    """Two spaces before ``File'', four before the source line -- CPython's
+    layout, and the one every test that greps a traceback assumes.
+
+    format_stack is nothing but format_list over the extracted frames, and
+    format_list used to render each entry as ``'  ' + str(entry)'' while a
+    FrameSummary's own text already carried the two-space indent.  So every
+    frame came out indented FOUR spaces: correct-looking in isolation, wrong
+    against any expected text."""
+    lines = traceback.format_stack()
+    if not lines:
+        return False
+    location, _, source = lines[-1].partition('\n')
+    return (location.startswith('  File "')
+            and not location.startswith('   ')
+            and source.startswith('    ')
+            and not source.startswith('     '))
+
+
+def format_list_renders_a_frame_summary():
+    """format_list accepts what extract_stack answers, and renders it once."""
+    summary = traceback.extract_stack()
+    rendered = traceback.format_list(summary[-1:])
+    return (len(rendered) == 1
+            and rendered[0].startswith('  File "')
+            and 'in format_list_renders_a_frame_summary' in rendered[0]
+            and rendered[0].endswith('\n'))
+
+
+def format_list_renders_a_legacy_four_tuple():
+    """The other shape CPython accepts: the ``(filename, lineno, name, line)''
+    tuple extract_tb answered before FrameSummary existed."""
+    return traceback.format_list([('f.py', 3, 'g', 'x = 1')]) == [
+        '  File "f.py", line 3, in g\n    x = 1\n']
+
+
+def format_list_rejects_a_bare_string():
+    """An entry that is neither a FrameSummary nor a 4-tuple is an ERROR.
+
+    Grail used to answer ``['  some string\\n']'' here, because format_list
+    rendered entries with str().  That tolerance is what hid the double-indent
+    bug above, and a Grail fixture asserted it -- so the tolerance had a test
+    defending it.  CPython raises ValueError (too many values to unpack)."""
+    try:
+        traceback.format_list(['frame-one', 'frame-two'])
+    except ValueError:
+        return True
+    except Exception as e:
+        return 'raised %s, wanted ValueError' % type(e).__name__
+    return 'no error'
+
+
+def a_frame_summary_renders_as_its_repr():
+    """FrameSummary defines no ``__str__'', so str() gives the repr.
+
+    Grail had one that produced the ``  File ..., line N, in f'' row, which
+    existed only to serve format_list's str()-based rendering.  Nothing in
+    CPython renders a frame that way, and keeping it would invite the next
+    reader to do so again."""
+    text = str(traceback.extract_stack()[-1])
+    return text.startswith('<FrameSummary file ') and 'File "' not in text
+
+
+def format_frame_summary_carries_its_own_newline():
+    """The hook owns the trailing newline; ``format'' appends what it answers
+    verbatim.  A subclass that renders a frame some other way therefore gets
+    exactly its own text back -- CPython's test_custom_format_frame asserts
+    precisely that, and Grail appended a newline the override never asked
+    for."""
+    class Custom(traceback.StackSummary):
+        # ``**kwargs'' because CPython's format() passes colorize= through.
+        def format_frame_summary(self, frame_summary, **kwargs):
+            return '%s:%s' % (frame_summary.filename, frame_summary.lineno)
+
+    summary = traceback.extract_stack()
+    # Constructed directly, not via from_list: CPython's from_list hardcodes
+    # ``StackSummary()'' rather than the receiving class, so Custom.from_list
+    # would answer a plain StackSummary there.
+    plain = traceback.StackSummary(summary[-1:])
+    custom = Custom(summary[-1:])
+    return (plain.format()[0].endswith('\n')
+            and custom.format() == ['%s:%s' % (summary[-1].filename,
+                                               summary[-1].lineno)])
+
+
 if __name__ == '__main__':
     checks = [
         getframe_returns_a_frame,
@@ -310,6 +460,14 @@ if __name__ == '__main__':
         a_method_s_live_frame_names_its_real_file,
         the_machinery_keeps_itself_out_of_the_walk,
         a_nested_function_gets_its_own_frame,
+        a_method_s_frame_reports_the_call_site,
+        a_mixin_method_s_frame_names_its_real_file,
+        format_stack_indents_each_frame_by_two,
+        format_list_renders_a_frame_summary,
+        format_list_renders_a_legacy_four_tuple,
+        format_list_rejects_a_bare_string,
+        a_frame_summary_renders_as_its_repr,
+        format_frame_summary_carries_its_own_newline,
     ]
     grail_only = [
         a_frame_has_no_f_locals,
