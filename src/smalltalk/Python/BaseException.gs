@@ -1156,65 +1156,99 @@ ___pythonSpanForMethod___: aMethod ip: anIp
 
 category: 'Grail-Traceback Building'
 classmethod: BaseException
-___nestedFunctionNameFor___: aMethod line: aLine
-	"The Python name of the nested ``def'' whose body contains aLine, within
-	aMethod's source -- or nil if aLine is in no nested def.
+___nestedFunctionNameFor___: aMethod ip: anIp
+	"The Python name of the nested ``def'' whose body contains the frame aMethod
+	is parked at, or nil if that frame is in no nested def.
 
 	A nested def compiles to a BLOCK, so it has no selector to decode a name
 	from (___pythonFrameNameFor___ works off the selector, which is nil for a
 	block).  But codegen stamps every nested def's identity into the ENCLOSING
-	method's source:
+	method's source, and -- this is the part that makes an exact answer possible
+	-- it emits the stamp immediately AFTER the block it names has closed:
 
-	    ___pyCode___: (PyCode @env0:name: 'inner' filename: '...' firstlineno: 2
+	    ___curPos___ := #(4 12 4 17 '            1 / 0').   <- inside b
+	    ]) ... ___pyCode___: (PyCode @env0:name: 'b' ... firstlineno: 3).
+	    ___curPos___ := #(5 8 5 11 '        b()').          <- inside a
+	    ]) ... ___pyCode___: (PyCode @env0:name: 'a' ... firstlineno: 2).
 
-	so the name is recoverable by scanning for those stamps and taking the one
-	whose ``firstlineno'' is the greatest that does not exceed aLine.  Greatest-
-	not-exceeding is what makes nesting work: an inner def is stamped with a
-	higher firstlineno than the def enclosing it, so the innermost enclosing one
-	wins, which is the frame the line actually belongs to.
+	Blocks nest properly, so the FIRST stamp following a position is exactly the
+	innermost def enclosing it -- no bracket matching, no line arithmetic.
+
+	The position comes from ``_sourceAtIp:'', whose report marks the ip's line
+	with a leading ``*'', the same handle ___derivePythonLineForMethod___ uses
+	(scanning backwards from it) -- this scans forward.  Starting AT the marker
+	line rather than the source line it marks is deliberate: a frame parked on a
+	``def'' statement would otherwise read that def's own stamp and report the
+	function being DEFINED instead of the one doing the defining.
+
+	Line numbers cannot do this job, which is what the first cut got wrong.  It
+	took the greatest ``firstlineno'' not exceeding the frame's Python line, on
+	the reasoning that an inner def is stamped higher than the def enclosing it
+	so the innermost enclosing one wins.  That holds only when the target line
+	is inside the last def OPENED before it.  In
+
+	    def two_deep():
+	        def a():
+	            def b():
+	                1 / 0
+	            b()          # line 5
+	        a()
+
+	the frame for ``a'' sits at line 5, and ``b'' (firstlineno 3) both precedes
+	line 5 and does not contain it -- so ``a'' was reported as ``b'', giving
+	['two_deep', 'b', 'b'] where CPython says ['two_deep', 'a', 'b'].  The line
+	numbers were right throughout; only the names were wrong, which is why the
+	fixture checks names and lines separately.
 
 	Answers nil rather than guessing when nothing matches, and the caller treats
-	nil as ``merge this block into its home'' -- the pre-existing behaviour."
+	nil as ``merge this block into its home'' -- the pre-existing behaviour.
 
-	| src rest best bestLine p |
-	aLine isNil ifTrue: [^ nil].
-	src := [aMethod @env0:sourceString] @env0:on: Error do: [:ex | ex @env0:return: nil].
-	src isNil ifTrue: [^ nil].
-	best := nil.
-	bestLine := 0.
-	rest := src.
-	"``p'' is a METHOD temp, not a condition-block one: the body below reads it,
-	and a temp declared inside the whileTrue: condition is out of scope there."
-	[ p := rest @env0:indexOfSubCollection: 'PyCode @env0:name: '''.
-	  p @env0:> 0 ] whileTrue: [
-		| k nm digits fl |
-		k := p @env0:+ 20.
-		nm := WriteStream @env0:on: String @env0:new.
-		[(k @env0:<= rest @env0:size) and: [(rest @env0:at: k) @env0:~= $']]
-			whileTrue: [
-				nm @env0:nextPut: (rest @env0:at: k).
-				k := k @env0:+ 1].
-		"``firstlineno:'' follows inside the same PyCode literal."
-		fl := nil.
-		[ | q |
-		  q := (rest @env0:copyFrom: k to: rest @env0:size)
-				@env0:indexOfSubCollection: 'firstlineno: '.
-		  q @env0:> 0 ifTrue: [
-			| j |
-			j := k @env0:+ q @env0:+ 12.
-			digits := WriteStream @env0:on: String @env0:new.
-			[(j @env0:<= rest @env0:size) and: [(rest @env0:at: j) @env0:isDigit]]
+	Cached per (method, ip) alongside the line derivation, for the same reason:
+	the scan is pure, formatting the report costs ~100 us, and a deep or
+	repeated traceback revisits the same sites constantly."
+
+	| cache key |
+	cache := SessionTemps current at: #'GrailIpFnNameCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailIpFnNameCache' put: cache].
+	key := { aMethod @env0:asOop. anIp }.
+	^ cache @env0:at: key ifAbsent: [
+		| name |
+		name := self ___deriveNestedFunctionNameFor___: aMethod ip: anIp.
+		cache @env0:at: key put: name.
+		name]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___deriveNestedFunctionNameFor___: aMethod ip: anIp
+	"Uncached worker for ___nestedFunctionNameFor___:ip:."
+
+	| report lines caretIdx |
+	report := [aMethod @env0:_sourceAtIp: anIp]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	report isNil ifTrue: [^ nil].
+	lines := report @env0:subStrings: (String @env0:with: Character lf).
+	caretIdx := 0.
+	1 to: lines @env0:size do: [:i |
+		(((lines @env0:at: i) @env0:trimSeparators) @env0:beginsWith: '*')
+			ifTrue: [caretIdx @env0:= 0 ifTrue: [caretIdx := i]]].
+	caretIdx @env0:= 0 ifTrue: [^ nil].
+	caretIdx to: lines @env0:size do: [:i |
+		| rest p |
+		rest := lines @env0:at: i.
+		p := rest @env0:indexOfSubCollection: 'PyCode @env0:name: '''.
+		p @env0:> 0 ifTrue: [
+			| k nm |
+			k := p @env0:+ 20.
+			nm := WriteStream @env0:on: String @env0:new.
+			[(k @env0:<= rest @env0:size) and: [(rest @env0:at: k) @env0:~= $']]
 				whileTrue: [
-					digits @env0:nextPut: (rest @env0:at: j).
-					j := j @env0:+ 1].
-			digits @env0:contents @env0:isEmpty
-				ifFalse: [fl := digits @env0:contents @env0:asNumber]] ] @env0:value.
-		((fl notNil) and: [(fl @env0:<= aLine) and: [fl @env0:> bestLine]])
-			ifTrue: [
-				bestLine := fl.
-				best := nm @env0:contents].
-		rest := rest @env0:copyFrom: (p @env0:+ 20) to: rest @env0:size].
-	^ best
+					nm @env0:nextPut: (rest @env0:at: k).
+					k := k @env0:+ 1].
+			nm @env0:contents @env0:isEmpty ifFalse: [^ nm @env0:contents]]].
+	^ nil
 %
 
 category: 'Grail-Traceback Building'
@@ -1600,7 +1634,7 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 						there were none (a body that raises without an intervening
 						block)."
 						fnLine := pendingLine isNil ifTrue: [blockLine] ifFalse: [pendingLine].
-						fnName := BaseException ___nestedFunctionNameFor___: home line: fnLine.
+						fnName := BaseException ___nestedFunctionNameFor___: meth ip: ip.
 						((fnName notNil) and: [fnLine notNil]) ifTrue: [
 							self ___pushTracebackFrame___:
 									(self ___codeForMethod___: home name: fnName ip: 0

@@ -135,8 +135,22 @@ def checks():
 
 RESULTS = checks()
 
+#: What each subject actually produced, for the failure message.  A boolean
+#: alone says a frame chain is wrong but not how, and the whole point of these
+#: checks is that a WRONG chain is the plausible outcome -- right length, wrong
+#: names -- so the driver quotes this rather than making the next reader
+#: re-derive it.
+ACTUAL = " | ".join(
+    "%s: names=%s offsets=%s" % (fn.__name__, _names(fn), _offsets(fn))
+    for fn in (module_level, reads_a_local, takes_a_parameter, two_deep,
+               in_a_method, raises_from_a_comprehension)
+)
+
 
 # scripts/check_python_fixtures.sh runs this under CPython in CI.
 if __name__ == '__main__':
     for k, v in RESULTS.items():
         print('%-4s %s' % ('OK' if v is True else 'FAIL', k))
+    print()
+    for k in ACTUAL:
+        print('     %s' % k)

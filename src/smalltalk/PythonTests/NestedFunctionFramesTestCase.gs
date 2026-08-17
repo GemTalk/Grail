@@ -73,12 +73,16 @@ testNestedFunctionFrames
 	All twelve checks answer identically under real CPython 3.14.6.  See
 	tests/python/nested_function_frames.py."
 
-	| mod results |
+	| mod results detail |
 	importlib @env1:modules removeKey: #'nested_function_frames' ifAbsent: [].
 	mod := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/nested_function_frames.py')
 		name: 'nested_function_frames'.
 	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	"What each subject actually produced.  A boolean alone says the chain is
+	wrong but not how, and a WRONG chain -- right length, wrong names -- is the
+	plausible failure here, so quote it."
+	detail := (mod @env1:___pyAttrLoad___: #ACTUAL) @env0:asString.
 	#( 'module_level_frames' 'reads_a_local_frames' 'takes_a_parameter_frames'
 	   'two_deep_frames' 'in_a_method_frames'
 	   'module_level_names' 'two_deep_names' 'takes_a_parameter_names'
@@ -86,5 +90,6 @@ testNestedFunctionFrames
 	   'module_level_lines' 'two_deep_lines'
 	   'comprehension_adds_no_frame' ) do: [:k |
 		self assert: ((results @env1:__getitem__: k) = true)
-			description: 'nested-function frame check failed: ' , k]
+			description: 'nested-function frame check failed: ' , k
+				, ' -- actual: ' , detail]
 %

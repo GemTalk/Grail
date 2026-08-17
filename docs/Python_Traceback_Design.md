@@ -3523,3 +3523,102 @@ class-body DATA attributes live on the metaclass. CPython runs two different
 algorithms: `type.__dir__` walks the class's own MRO and DELIBERATELY omits the
 metaclass, while `object.__dir__` is the instance `__dict__` plus `type(obj)`'s
 MRO. `___classBodyOrder___` is what would let Grail stop unioning and split them.
+
+### 9.45 Nested functions had no traceback frames at all (2026-08-16, gs40)
+
+The task was "the seven exception-group caret tests in `test_traceback`". The
+cluster name pointed away from the defect for the fourth time running (§9.42,
+§9.43, §9.44): the expected output those tests assert on carries a caret line
+under `exception_or_callable()`, but they were not failing on the caret. They
+were failing on a **missing frame**, because `exception_or_callable` is a nested
+`def` and Grail gave nested functions no traceback frames whatsoever.
+
+**Why a nested `def` is a block, and why that erased it.** A nested `def`
+compiles to a Smalltalk block — it has to. Only a block can close over the
+enclosing function's locals; only a block has no class to live in; and only a
+fresh block copy per execution gives CPython's distinct function object per
+`def`. `___buildFramesFromCapturedStack___` merged every block frame into its
+home method, which is *right* for everything else blocks are used for — a
+comprehension body, a `try` body, an `except` handler — because CPython has no
+frame for any of those. Nested functions were collateral damage: `outer`
+calling `inner` reported ONE frame where CPython reports two, and three levels
+still reported one.
+
+**Told apart by argument count.** Codegen calls a Python function block as
+`[:___positional___ :___kwargs___ | ...]`, and nothing else in env 1 emits a
+two-argument block — comprehension bodies, `try` bodies, `except` handlers and
+the generator machinery are all zero-argument (measured across all of them, not
+assumed: comprehension = none, try/except = 0, generator = 0,0,0, nested
+function = 0,0,2). The `___pyNamed___` / `___pyCode___` stamps would be the
+obvious test and are **not** usable: they live on the block OBJECT, while the
+stack walk sees only compiled methods.
+
+**Two bugs the first cut shipped, both found by measurement rather than review.**
+
+*The walk never terminated.* A traceback stops at the CATCHING frame, and that
+test lived only in the method branch — a nested `def` has no method frame, so a
+function that recurses out of its own handler walked the entire stack. At
+recursion depth N each level materialised N frames instead of the 1 CPython
+reports, quadratic across the `__context__` chain. `test_long_context_chain`
+turned it into `AlmostOutOfMemory`: the session's temporary object memory,
+exhausted. It was the *only* new failure in the A/B, and it was pointing at a
+real defect rather than at a resource limit.
+
+*The name scan was wrong for siblings.* A block has no selector, so the frame's
+name is recovered by scanning the enclosing method's generated source for the
+`PyCode name:` stamp codegen emitted. The first cut took the greatest
+`firstlineno` not exceeding the frame's Python line, reasoning that an inner def
+is stamped higher than the def enclosing it, so the innermost enclosing one
+wins. That holds only when the target line is inside the last def *opened*
+before it:
+
+```python
+def two_deep():
+    def a():
+        def b():
+            1 / 0
+        b()          # line 5
+    a()
+```
+
+The frame for `a` sits at line 5, and `b` (firstlineno 3) both precedes line 5
+and does not contain it. Grail answered `['two_deep', 'b', 'b']` where CPython
+says `['two_deep', 'a', 'b']`. **Line numbers cannot do this job** — they were
+correct throughout while the names were wrong, which is exactly why the fixture
+checks names and lines as separate assertions.
+
+**The fix is a property of codegen's output, not a heuristic.** Codegen emits
+each def's stamp immediately AFTER the block it names has closed:
+
+```
+___curPos___ := #(4 12 4 17 '            1 / 0').   <- inside b
+]) ... ___pyCode___: (PyCode @env0:name: 'b' ... firstlineno: 3).
+___curPos___ := #(5 8 5 11 '        b()').          <- inside a
+]) ... ___pyCode___: (PyCode @env0:name: 'a' ... firstlineno: 2).
+```
+
+Blocks nest properly, so the FIRST stamp *following* a position is exactly the
+innermost def enclosing it — no bracket matching, no line arithmetic. The
+position comes from `_sourceAtIp:`, whose report marks the ip's line with a
+leading `*`; `___derivePythonLineForMethod___` scans backwards from that marker,
+this scans forwards from it. Starting at the marker line rather than the source
+line it marks is deliberate: a frame parked on a `def` statement would otherwise
+read that def's own stamp and report the function being DEFINED instead of the
+one doing the defining.
+
+**Result.** `test.test_traceback` 39 failures → 32: the six exception-group
+tests plus `TestStack.test_dropping_frames`. Full suite: 0 regressions. The
+frame fix alone scored **−1** (zero tests fixed, one memory blow-up); it needed
+the caret work on top, and the caret work needed it — neither half was worth
+landing alone, which the A/B said plainly before any of it was believed.
+
+**A stale note corrected on the way past.** `for_traceback_positions.py`
+recorded, as a documented Grail gap, that an exception from a for-loop BODY
+carries no span, and asserted `body_has_no_colno` — with a note that giving
+expression statements a PEP 657 span was "necessary but not sufficient" because
+`ForAst`'s iterator-clause store would overwrite the body's. That reasoning was
+wrong: the body statement's store is the LATER one, so it wins on its own.
+Grail now answers `colno=12 end_colno=17`, CPython's exact numbers, and the
+check is a parity assertion (`body_span`) rather than a pinned gap. A fixture
+that pins a gap has to be re-measured when the surrounding machinery moves, or
+it quietly outlives the gap it documents.
