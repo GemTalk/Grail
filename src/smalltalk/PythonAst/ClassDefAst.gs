@@ -137,7 +137,8 @@ printSmalltalkRuntimeOn: aStream
 	  savedInBodyEmit savedBoundNames savedNestedNames
 	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars
 	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
-	  metaclassKw savedAliasTargets savedNeedsClassCell |
+	  metaclassKw savedAliasTargets savedNeedsClassCell
+	  savedEnclosingClassCtx |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -859,6 +860,32 @@ printSmalltalkRuntimeOn: aStream
 			classSide: true
 			onStream: aStream.
 	].
+	"PUBLISH THE ENCLOSING CLASS before the re-push below overwrites the two
+	slots that describe it.  Right here -- after the earlier restore and before
+	line ``classBeingCompiled: name asSymbol'' -- classBeingCompiled and
+	classDefIsModuleScope still name the class this one is nested in, and
+	savedCapturedNames is that class's own captured set.  Nothing else in the
+	body emit can recover them, which is why NameAst gets them from here.
+	Needed because ``__class__'' in a class BODY is the ENCLOSING class, not the
+	class being defined; see CallAst >> enclosingClassContext."
+	savedEnclosingClassCtx := CallAst enclosingClassContext.
+	"Only when a FUNCTION separates the two classes.  ``__class__'' is a free
+	variable of the enclosing SCOPE, and a class body is not a scope names
+	resolve through -- so a class body nested DIRECTLY inside another class body
+	does not see the outer class and CPython raises NameError:
+	    class Outer:
+	        class Inner:
+	            x = __class__          # NameError, not Outer
+	inClassBodyValueEmit is still the OUTER value here (the re-push below sets
+	it), so it answers exactly that question: true means we got here from a
+	class body rather than through a method."
+	CallAst enclosingClassContext: ((CallAst classBeingCompiled == nil
+		or: [CallAst inClassBodyValueEmit == true])
+		ifTrue: [nil]
+		ifFalse: [Array
+			with: CallAst classBeingCompiled
+			with: (CallAst classDefIsModuleScope ~~ false)
+			with: savedCapturedNames]).
 	"Re-push the class compile context around the class-attribute
 	value emit so NameAst can resolve in-body references like
 	``def get_data(...); data = property(get_data)'' or
@@ -1261,6 +1288,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst selfParameterName: savedSelfParam.
 		CallAst classSlotNames: savedSlotNames.
 		CallAst inClassBodyValueEmit: (savedInBodyEmit == true).
+		CallAst enclosingClassContext: savedEnclosingClassCtx.
 		CallAst classBodyBoundNames: savedBoundNames.
 		CallAst classNestedClassNames: savedNestedNames.
 		CallAst classBodyConditionalNames: savedConditionalNames.
