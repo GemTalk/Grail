@@ -297,6 +297,41 @@ printSmalltalkOn: aStream
 			CallAst printDefiningClassOn: aStream.
 			^ self
 		].
+	"``__class__'' in a CLASS BODY is the ENCLOSING class, not the class being
+	defined -- that class does not exist yet, which is precisely why the branch
+	above stands down here.  But standing down let the read fall all the way
+	through to the module, where it resolved to a BoundMethod for
+	``builtins.__class__'': an object with no relationship to any class at all,
+	so ``X.x is type(self)'' was false and nothing errored to say why
+	(test_super's test_various___class___pathologies).
+
+	CPython makes ``__class__'' a free variable of the enclosing scope here, so
+	for a class nested in a method it is the class that method was defined in:
+
+	    class Host:
+	        def run(self):
+	            class X:
+	                x = __class__          # Host
+
+	With NO enclosing class, CPython raises ``name '__class__' is not defined''.
+	Two shapes have none: a class body at MODULE scope, and a class body nested
+	directly inside another class body -- a class body is not a function scope,
+	so the name does not resolve through it.  Both are raised explicitly here
+	rather than left to fall through, because the fall-through does NOT raise:
+	``__class__'' resolves as a builtins attribute and comes back as a
+	BoundMethod, so the read quietly produced a non-class instead of the
+	NameError CPython promises."
+	((ctx isKindOf: LoadAst)
+		and: [id asSymbol == #'__class__'
+		and: [CallAst inClassBodyValueEmit == true
+		and: [CallAst moduleClassBeingCompiled notNil
+		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not]]]])
+		ifTrue: [
+			(CallAst printEnclosingClassOn: aStream) ifTrue: [^ self].
+			aStream nextPutAll:
+				'(NameError @env1:___signal___: ''name ''''__class__'''' is not defined'')'.
+			^ self
+		].
 	"The bare name ``super'', where CallAst's call-shape rewrites did not
 	already consume it.  ``super'' is a Smalltalk PSEUDO-VARIABLE, so the
 	identifier can never be emitted as itself; until now nothing emitted

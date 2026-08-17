@@ -1217,6 +1217,27 @@ isUnconditionalReturn
 
 category: 'Grail-annotations'
 method: AbstractNode
+___defaultSourceString___
+	"Source text for a DEFAULT VALUE expression, as inspect.signature prints it.
+
+	Separate from ___annotationSourceString___ because the two callers want
+	different renderings of the same node, and sharing one unparser produced
+	wrong text for both defaults and, in one case, a structurally CORRUPT
+	signature.  A string literal is the clearest split: an annotation stores a
+	forward reference verbatim (``x: 'Foo''' -> ``Foo'', PEP 563), while a
+	default must be its repr (``a='abc''' -> ``'abc''').  Rendering a default
+	the annotation way gave ``a=abc'' and, for the empty string, ``b='' --
+	nothing at all.
+
+	Delegates by default, so every shape the annotation unparser already renders
+	correctly (Name, Attribute, Subscript, BinOp) keeps working and only the
+	nodes that genuinely differ override."
+
+	^ self ___annotationSourceString___
+%
+
+category: 'Grail-annotations'
+method: AbstractNode
 ___annotationSourceString___
 	"PEP 563-style source string for an annotation expression.  The
 	annotation subset the unparser covers (Name / Attribute / Subscript /

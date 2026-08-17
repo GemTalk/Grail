@@ -52,3 +52,10 @@ printSmalltalkOn: aStream
 	operand printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' __neg__'.
 %
+
+category: 'Grail-annotations'
+method: USubAst
+___pythonUnaryGlyph___
+
+	^ '-'
+%

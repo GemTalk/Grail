@@ -1959,6 +1959,85 @@ addCapturedClassName: aSymbol
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+enclosingClassContext
+	"The class LEXICALLY ENCLOSING the class body being emitted, as
+	{ name. isModuleScope. capturedNames }, or nil when there is none.
+
+	``__class__'' inside a class BODY is not the class being defined -- that
+	class does not exist yet.  It is the enclosing scope's ``__class__'', which
+	for a class nested in a method is the class that method was defined in:
+
+	    class Host:
+	        def run(self):
+	            class X:
+	                x = __class__      # Host, not X
+
+	classBeingCompiled cannot answer that: ClassDefAst overwrites it with the
+	INNER class before the body is emitted, and keeps the outer value only in a
+	method-local.  This is that local, published for the duration of the body
+	emit -- which is why it is set at the same point as inClassBodyValueEmit and
+	restored beside it.
+
+	The captured-names SET is carried too, and it is the enclosing class's own
+	set object rather than a copy: a method-local enclosing class is reached
+	through its closure cell, and the cell store is only emitted for names in
+	that set, so the read has to be able to register itself there.  Registering
+	in classCapturedNames instead would file it under the INNER class, whose
+	stores are emitted at a point where the name means nothing."
+
+	^ self ___compileContext___ at: #'enclosingClassContext' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+enclosingClassContext: anArrayOrNil
+	self ___compileContext___ at: #'enclosingClassContext' put: anArrayOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+printEnclosingClassOn: aStream
+	"Emit the expression for the class enclosing the class body being emitted.
+	Mirrors printDefiningClassOn:'s two paths -- module attribute for a
+	module-scope class, closure cell for a method-local one -- but reads the
+	published enclosing context instead of the live one.
+
+	Deliberately NOT printDefiningClassOn: with the context swapped: that method
+	also sets classNeedsClassCell and registers a captured name, and at the point
+	this runs both of those slots belong to the INNER class, so it would flag the
+	wrong class on both counts.  Answers false when there is no enclosing class,
+	so the caller can fall through."
+
+	| ctx clsName |
+	ctx := self enclosingClassContext.
+	ctx == nil ifTrue: [^ false].
+	clsName := ctx at: 1.
+	clsName == nil ifTrue: [^ false].
+	(ctx at: 2) == true
+		ifTrue: [
+			self moduleClassBeingCompiled == nil ifTrue: [^ false].
+			aStream
+				nextPutAll: '((';
+				nextPutAll: self moduleClassBeingCompiled name;
+				nextPutAll: ' @env0:___instance___) @env1:';
+				nextPutAll: clsName asString;
+				nextPutAll: ')'.
+			^ true]
+		ifFalse: [
+			"Method-local: reached through the cell that holds the class object.
+			Register the name in the ENCLOSING class's captured set so its
+			ClassDefAst emits the matching store."
+			(ctx at: 3) == nil ifTrue: [^ false].
+			(ctx at: 3) add: clsName asSymbol.
+			aStream
+				nextPutAll: '(self @env1:___classCell___: #''___cell_';
+				nextPutAll: clsName asString;
+				nextPutAll: '___'')'.
+			^ true]
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 classNeedsClassCell
 	"Did a method body in the class being compiled reference ``__class__'' --
 	either by name or through a zero-arg ``super()''?

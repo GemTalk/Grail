@@ -52,3 +52,10 @@ printSmalltalkOn: aStream
 	operand printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' __invert__'.
 %
+
+category: 'Grail-annotations'
+method: InvertAst
+___pythonUnaryGlyph___
+
+	^ '~'
+%

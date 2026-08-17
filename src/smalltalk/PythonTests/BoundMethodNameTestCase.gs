@@ -53,13 +53,27 @@ testNameReturnsSelectorString
 
 category: 'Grail-Tests - BoundMethod Names'
 method: BoundMethodNameTestCase
-testQualnameMatchesName
-	"``bm.__qualname__'' returns the same identifier as __name__
-	until Grail tracks lexical nesting on BoundMethods."
+testQualnameQualifiesByReceiverType
+	"``bm.__qualname__'' qualifies a bound method with its receiver's PYTHON
+	type, as CPython does: ``'hello'.lower.__qualname__'' is ``str.lower''.
+
+	This asserted the BARE name -- ``the same identifier as __name__ until Grail
+	tracks lexical nesting'' -- and that was the defect, not a rule: a bare
+	``lower'' names nothing reachable from a module, which is exactly why the
+	CLASS-receiver case was qualified earlier (pickle resolves a callable by
+	walking its qualname).  test_funcattrs' test_builtin__qualname__ asserts
+	``list.append'' and ``str.maketrans''.
+
+	Qualifying by the receiver's type rather than by the method's DEFINING class
+	is deliberate and imperfect; see BoundMethod >> __qualname__.  Asking the
+	Smalltalk defining class leaked Grail internals (``CharacterCollection.lower'',
+	``Unicode7.lower''), which is worse than the one case this gets wrong -- an
+	inherited method reports the subclass."
 
 	| bm |
 	bm := BoundMethod @env1:receiver: 'hello' selector: #'lower'.
-	self assert: bm @env1:__qualname__ equals: bm @env1:__name__
+	self assert: bm @env1:__qualname__ equals: 'str.lower'.
+	self assert: bm @env1:__name__ equals: 'lower'
 %
 
 category: 'Grail-Tests - BoundMethod Names'

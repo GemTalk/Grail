@@ -629,6 +629,7 @@ run
 	at: #'ClassBodyMethodAliasTestCase' put: nil;
 	at: #'OsWalkTestCase' put: nil;
 	at: #'ClassReprTestCase' put: nil;
+	at: #'DynamicClassModuleTestCase' put: nil;
 	at: #'FunctionAttrWriteTestCase' put: nil;
 	at: #'OsScandirSymlinkTestCase' put: nil;
 	at: #'OsPathPredicateTestCase' put: nil;
@@ -699,6 +700,7 @@ run
 	at: #'ClassCellTestCase' put: nil;
 	at: #'SuperLookupTestCase' put: nil;
 	at: #'SuperShadowingTestCase' put: nil;
+	at: #'ClassBodyDunderClassTestCase' put: nil;
 	at: #'SuperTwoArgCheckTestCase' put: nil;
 	at: #'TypeThreeArgNamespaceTestCase' put: nil;
 	at: #'ClassBodyNamespaceDefsTestCase' put: nil;
@@ -771,7 +773,9 @@ run
 	at: #'AsyncDefInClassBodyTestCase' put: nil;
 	at: #'ReraiseIdentityTestCase' put: nil;
 	at: #'CoroutineObjectsTestCase' put: nil;
+	at: #'StopIterationThroughContextManagerTestCase' put: nil;
 	at: #'AsyncWithProtocolTestCase' put: nil;
+	at: #'WithItemPositionsTestCase' put: nil;
 	at: #'ClassBodySourceOrderTestCase' put: nil;
 	at: #'EnumIgnoreNamesTestCase' put: nil;
 	at: #'MatchStatementTestCase' put: nil;
@@ -833,6 +837,7 @@ run
 	at: #'NestedFunctionFramesTestCase' put: nil;
 	at: #'FrameEqualityTestCase' put: nil;
 	at: #'StdlibModuleNamesTestCase' put: nil;
+	at: #'SignatureDefaultTextTestCase' put: nil;
 	at: #'StrIsATypeTestCase' put: nil;
 	at: #'FnmatchTestCase' put: nil;
 	at: #'GetoptTestCase' put: nil;
@@ -1602,6 +1607,7 @@ input src/smalltalk/PythonTests/GlobalSyntaxErrorsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyMethodAliasTestCase.gs
 input src/smalltalk/PythonTests/OsWalkTestCase.gs
 input src/smalltalk/PythonTests/ClassReprTestCase.gs
+input src/smalltalk/PythonTests/DynamicClassModuleTestCase.gs
 input src/smalltalk/PythonTests/FunctionAttrWriteTestCase.gs
 input src/smalltalk/PythonTests/OsScandirSymlinkTestCase.gs
 input src/smalltalk/PythonTests/OsPathPredicateTestCase.gs
@@ -1660,6 +1666,7 @@ input src/smalltalk/PythonTests/ClassDictProxyTestCase.gs
 input src/smalltalk/PythonTests/ClassCellTestCase.gs
 input src/smalltalk/PythonTests/SuperLookupTestCase.gs
 input src/smalltalk/PythonTests/SuperShadowingTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyDunderClassTestCase.gs
 input src/smalltalk/PythonTests/SuperTwoArgCheckTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNamespaceDefsTestCase.gs
@@ -1713,7 +1720,9 @@ input src/smalltalk/PythonTests/DirOfAClassTestCase.gs
 input src/smalltalk/PythonTests/AsyncDefInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/ReraiseIdentityTestCase.gs
 input src/smalltalk/PythonTests/CoroutineObjectsTestCase.gs
+input src/smalltalk/PythonTests/StopIterationThroughContextManagerTestCase.gs
 input src/smalltalk/PythonTests/AsyncWithProtocolTestCase.gs
+input src/smalltalk/PythonTests/WithItemPositionsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodySourceOrderTestCase.gs
 input src/smalltalk/PythonTests/EnumIgnoreNamesTestCase.gs
 input src/smalltalk/PythonTests/MatchStatementTestCase.gs
@@ -1785,6 +1794,7 @@ input src/smalltalk/PythonTests/DirExcludesInternalsTestCase.gs
 input src/smalltalk/PythonTests/NestedFunctionFramesTestCase.gs
 input src/smalltalk/PythonTests/FrameEqualityTestCase.gs
 input src/smalltalk/PythonTests/StdlibModuleNamesTestCase.gs
+input src/smalltalk/PythonTests/SignatureDefaultTextTestCase.gs
 input src/smalltalk/PythonTests/StrIsATypeTestCase.gs
 input src/smalltalk/PythonTests/FnmatchTestCase.gs
 input src/smalltalk/PythonTests/GetoptTestCase.gs

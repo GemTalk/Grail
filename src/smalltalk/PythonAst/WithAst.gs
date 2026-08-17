@@ -71,6 +71,14 @@ printItem: anIndex onStream: aStream
 
 	| item |
 	item := items at: anIndex.
+	"Blame THIS context manager's expression, not the statement and not the
+	body.  CPython pins a raise from __init__ / __enter__ / __exit__ to the
+	manager expression precisely so that ``with A(), B(), C():'' says WHICH one
+	failed, and it is the only position that can.  ___curPos___ otherwise still
+	holds whatever the enclosing statement left there -- the ``with'' line for
+	an __enter__ raise, which looked right by accident, and the BODY's last
+	statement for an __init__ or __exit__ raise, which did not."
+	self ___emitItemPosOn___: aStream for: item.
 	aStream nextPutAll: '([:___cm___ |'.
 	aStream increaseIndent; lf.
 	aStream nextPutAll: '| ___val___ |'; lf.
@@ -102,6 +110,7 @@ printItem: anIndex onStream: aStream
 			self printItem: anIndex + 1 onStream: aStream.
 			aStream nextPut: $.; lf
 		].
+	self ___emitItemPosOn___: aStream for: item.
 	aStream nextPutAll: '(PythonCoroutine @env0:___grailAwait___: ((___cm___ @env1:___pyAttrLoad___: #'''.
 	aStream nextPutAll: self ___exitSelector___.
 	aStream nextPutAll: ''') @env1:value: { None. None. None } value: nil))'.
@@ -177,4 +186,26 @@ category: 'Grail-Code Generation'
 method: WithAst
 ___exitSelector___
 	^ '__exit__'
+%
+
+category: 'Grail-other'
+method: WithAst
+___emitItemPosOn___: aStream for: anItem
+	"Store the span of anItem's context-manager EXPRESSION into ___curPos___.
+
+	Uses the same literal-array form ___emitCurPosBefore:on: emits for a
+	statement, so ___pushFrameFromPos___ reads it back identically and the frame
+	gains PEP 657 columns as well as the right line -- which is what lets
+	``with A(), B(), C():'' underline the manager that actually failed.
+
+	No-op outside a function (no ___curPos___ temp there) or when the expression
+	carries no position."
+
+	| expr lit |
+	CallAst functionBeingCompiled isNil ifTrue: [^ self].
+	expr := anItem context_expr.
+	(expr isNil or: [expr beginLine isNil]) ifTrue: [^ self].
+	lit := [expr ___pyPositionLiteralArray] on: Error do: [:ex | ex return: nil].
+	lit isNil ifTrue: [^ self].
+	aStream nextPutAll: '___curPos___ := '; nextPutAll: lit; nextPutAll: '.'; lf
 %

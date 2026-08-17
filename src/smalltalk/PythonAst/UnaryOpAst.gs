@@ -74,3 +74,24 @@ method: UnaryOpAst
 operand: newValue
 	operand := newValue
 %
+
+category: 'Grail-annotations'
+method: UnaryOpAst
+___defaultSourceString___
+	"``-5'' is an ordinary default and fell to the ``<annotation>'' placeholder,
+	because a unary operator never appears in the annotation subset the shared
+	unparser was written for.
+
+	UnaryOpAst is ABSTRACT, so the glyph comes from the subclass rather than from
+	an ``op'' instance variable -- there is none, unlike BinOpAst."
+
+	^ self ___pythonUnaryGlyph___ , (operand ___defaultSourceString___)
+%
+
+category: 'Grail-annotations'
+method: UnaryOpAst
+___pythonUnaryGlyph___
+	"Overridden per subclass; abstract here rather than guessed."
+
+	^ self error: 'UnaryOpAst is abstract; subclasses must implement ___pythonUnaryGlyph___'
+%

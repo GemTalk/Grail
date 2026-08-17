@@ -139,3 +139,27 @@ method: ConstantAst
 kind: newValue
 	kind := newValue
 %
+
+category: 'Grail-annotations'
+method: ConstantAst
+___defaultSourceString___
+	"A literal default renders as its PYTHON REPR, which for a string means
+	QUOTED.  ___annotationSourceString___ deliberately strips the quotes -- an
+	annotation's string literal is a forward reference whose content IS the name
+	-- so a default taking that path rendered a='abc' as a=abc, and the empty
+	string as nothing at all after the equals sign.
+
+	Quote choice follows repr: single quotes normally, DOUBLE quotes when the
+	value itself contains a single quote.  That avoids emitting a backslash
+	escape and is what CPython prints for these cases."
+
+	| str |
+	(value isKindOf: CharacterCollection) ifFalse: [
+		^ self ___annotationSourceString___].
+	str := value asString.
+	(str includes: $') ifTrue: [
+		| dq |
+		dq := String with: $".
+		^ dq , str , dq].
+	^ (String with: $') , str , (String with: $')
+%

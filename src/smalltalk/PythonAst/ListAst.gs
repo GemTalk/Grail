@@ -111,3 +111,14 @@ method: ListAst
 ctx: newValue
 	ctx := newValue
 %
+
+category: 'Grail-annotations'
+method: ListAst
+___defaultSourceString___
+	"``h=[1]'' fell to the ``<annotation>'' placeholder."
+
+	| parts |
+	parts := elts collect: [:e | e ___defaultSourceString___].
+	^ '[' , (parts inject: '' into: [:acc :each |
+		acc isEmpty ifTrue: [each] ifFalse: [acc , ', ' , each]]) , ']'
+%

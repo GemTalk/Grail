@@ -69,10 +69,10 @@ different rows and merges cleanly.
 | test.test_complex | OK | 37 | 0 | 0 | 0 |  |
 | test.test_enumerate | OK | 92 | 0 | 0 | 15 |  |
 | test.test_raise | ERROR | 37 | 1 | 13 | 0 |  |
-| test.test_funcattrs | ERROR | 35 | 12 | 13 | 1 |  |
+| test.test_funcattrs | ERROR | 35 | 11 | 13 | 1 |  |
 | test.test_decorators | ERROR | 16 | 1 | 5 | 0 |  |
 | test.test_print | OK | 9 | 0 | 0 | 0 |  |
-| test.test_builtin | ERROR | 133 | 26 | 52 | 15 |  |
+| test.test_builtin | ERROR | 133 | 29 | 49 | 15 |  |
 | test.test_call | OK | 186 | 0 | 0 | 182 |  |
 | test.test_dynamic | ERROR | 11 | 5 | 2 | 0 |  |
 | test.test_exception_variations | FAIL | 30 | 1 | 0 | 0 |  |
@@ -82,7 +82,7 @@ different rows and merges cleanly.
 | test.test_subclassinit | ERROR | 17 | 6 | 3 | 0 |  |
 | test.test_super | ERROR | 40 | 5 | 5 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
-| test.test_with | ERROR | 54 | 1 | 2 | 0 |  |
+| test.test_with | OK | 54 | 0 | 0 | 0 |  |
 | test.test_positional_only_arg | ERROR | 28 | 4 | 3 | 0 |  |
 | test.test_string_literals | ERROR | 20 | 3 | 10 | 0 |  |
 | test.test_genericclass | ERROR | 22 | 12 | 7 | 1 |  |
@@ -91,7 +91,7 @@ different rows and merges cleanly.
 | test.test_codecs | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'encodings' |
 | test.test_contextlib_async | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.test_contextlib' |
 | test.test_difflib | OK | 38 | 0 | 0 | 0 |  |
-| test.test_gettext | ERROR | 73 | 13 | 4 | 1 |  |
+| test.test_gettext | ERROR | 73 | 13 | 3 | 1 |  |
 | test.test_linecache | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'importlib.machinery' |
 | test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '_compat_pickle' |
 | test.test_reprlib | ERROR | 33 | 15 | 10 | 2 |  |
