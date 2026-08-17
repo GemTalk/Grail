@@ -813,6 +813,14 @@ ___grailPrepareNamespace___: aMetaclass
 	by class handles a nested class statement without a stack."
 
 	| prep ns tbl |
+	"RECORD THE METACLASS HERE.  ClassDefAst also emits a ___grailSetMetaclass___
+	from its class-keyword loop, but that runs AFTER ___pyClassDefined___: --
+	where the metaclass __new__/__init__ dispatch happens -- so a record written
+	there is too late for the dispatch to see.  This is the right moment on
+	CPython's terms too: the metaclass is settled before the body runs, which is
+	precisely what __prepare__ is asked at."
+	(aMetaclass @env0:notNil and: [aMetaclass isKindOf: Behavior]) ifTrue: [
+		self ___grailSetMetaclass___: aMetaclass].
 	aMetaclass isNil ifTrue: [
 		"No ``metaclass='' keyword.  Grail's own metaclasses are SMALLTALK -- an
 		enum's namespace comes from ``Enum class'', not from a keyword -- so ask
@@ -831,17 +839,154 @@ ___grailPrepareNamespace___: aMetaclass
 		^ ns].
 	prep := [aMetaclass ___pyAttrLoad___: #'__prepare__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-	prep isNil ifTrue: [^ nil].
-	"NOT guarded.  A __prepare__ that raises is a real error in the metaclass and
-	CPython propagates it; swallowing it here turned a broken namespace into a
-	silent no-namespace, which looked exactly like this whole path not working."
-	ns := prep @env1:value: { self @env1:__name__. #() } value: nil.
+	prep isNil
+		ifTrue: [
+			"No __prepare__, but a metaclass that overrides __new__ or __init__
+			still has to be HANDED a namespace: CPython passes the body's mapping
+			as the third argument, and every metaclass in the corpus that
+			overrides __new__ reads or mutates it (``namespace.copy()'',
+			``namespace.pop('__classcell__')'').  A plain dict is what CPython
+			uses when __prepare__ is not defined.
+
+			Asked only of a class that named a metaclass, and answered nil for a
+			metaclass that overrides neither -- an ordinary class still allocates
+			nothing and stores exactly what it did before."
+			(self ___grailMetaclassConstructs___: aMetaclass) ifFalse: [^ nil].
+			ns := dict @env1:___new___]
+		ifFalse: [
+			"NOT guarded.  A __prepare__ that raises is a real error in the
+			metaclass and CPython propagates it; swallowing it here turned a
+			broken namespace into a silent no-namespace, which looked exactly
+			like this whole path not working."
+			ns := prep @env1:value: { self @env1:__name__. #() } value: nil].
 	(ns isNil or: [ns == None]) ifTrue: [^ nil].
 	tbl := SessionTemps @env0:current
 		@env0:at: #'GrailPendingClassNamespace'
 		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
 	tbl @env0:at: self put: ns.
 	^ ns
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailMetaclassConstructs___: aMetaclass
+	"Does this metaclass take part in CLASS CREATION -- does it override
+	__new__ or __init__?
+
+	The question decides whether the class statement pays for a namespace at
+	all.  A metaclass that only adds methods for its classes to inherit
+	(functools.total_ordering's case, ABCMeta's register) wants nothing handed
+	to it and gets no namespace, so the common metaclass costs exactly what it
+	did before.
+
+	A DEFINITION, not an attribute load.  ``___pyAttrLoad___: #'__new__''' walks
+	the inheritance chain and now finds PyType's OWN __new__ for every metaclass
+	alive, so it answered true universally -- ABCMeta overrides neither and was
+	dispatched anyway, which is how test_binop broke with ``type object
+	'ABCMeta' has no method '__ge__'''.
+
+	Any metaclass reaching this point is rooted at PyType and therefore written
+	in Python, and Grail compiles a Python ``def'' to the varargs form
+	``_<name>:kw:'', so those two selectors are the whole question."
+
+	| owner |
+	(aMetaclass isKindOf: Behavior) ifFalse: [^ false].
+	"A PYTHON metaclass only -- one written ``class M(type)'' and so rooted at
+	PyType.  Grail's own metaclasses are SMALLTALK (EnumMeta / EnumType /
+	``Enum class'') and reach the class through ___pyClassDefined___ overrides
+	instead; they also define __new__, but with the enum machinery's signature,
+	not CPython's (metaclass, name, bases, namespace).
+
+	Dispatching into one of those is not a near miss, it is a different
+	protocol: ``class _EnumSuperClass(metaclass=EnumMeta)'' handed Enum class's
+	__new__ four arguments it does not take and every mixin-coercion test died
+	with ``<enum 'Enum class'> has no members''."
+	(aMetaclass @env0:inheritsFrom: PyType) ifFalse: [^ false].
+	"STRICTLY BELOW PyType.  ``object'' itself defines ___new__:kw:, and PyType
+	inherits it, so a mere ``owner ~~ PyType'' test still answered true for a
+	metaclass that overrides nothing -- ABCMeta was classified as constructing,
+	was handed a namespace, and PyType >> __new__ then wrote that namespace back
+	over the class's own methods.  ``class B(OperationLogger, metaclass=ABCMeta)''
+	lost its __ge__ to an UnboundMethod owned by ABCMeta, and a comparison that
+	should have ended in TypeError raised AttributeError instead (test_binop
+	test_comparison_orders)."
+	#( #'___new__:kw:' #'___init__:kw:' ) @env0:do: [:sel |
+		owner := aMetaclass @env0:whichClassIncludesSelector: sel environmentId: 1.
+		(owner @env0:notNil and: [owner @env0:inheritsFrom: PyType])
+			ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailDispatchMetaclass___
+	"Run the metaclass's __new__ and __init__ over the class just built, and
+	answer what the class name should be bound to.
+
+	CPython evaluates ``class A(metaclass=M)'' as ``M(name, bases, ns)'', so M
+	BUILDS the class.  Grail cannot invert that -- the body is already compiled
+	onto a real Smalltalk class before any hook can run -- so the class is built
+	first and the metaclass is then run OVER it, with type.__new__ answering the
+	class under construction (see PyType >> __new__:_:_:_:).  For the shape
+	every metaclass in the corpus is written in, the two orders are
+	indistinguishable:
+
+	    self = super().__new__(cls, name, bases, namespace)   # the built class
+	    self.meta_owner = self.owner                          # mutates it
+	    return self                                           # re-binds the name
+
+	The RETURN VALUE is honoured, which is the part that needs the class
+	statement to re-bind: a metaclass may legally return something that is not a
+	class at all (test_super returns None, test_subclassinit returns 0) and the
+	name then holds that.
+
+	__init__ runs after __new__ and its result is DISCARDED, as CPython
+	discards it -- but only when __new__ handed back a class, mirroring
+	CPython's rule that __init__ is skipped when __new__ returns something that
+	is not an instance of the metaclass."
+
+	| meta ns clsBases clsName stk fn result |
+	"LAST STEP OF THE CLASS STATEMENT, so it also drops the pending namespace --
+	nothing after this is entitled to see it, and the separate
+	___grailFinishNamespace___ emit that used to do the job cannot survive here:
+	a metaclass may re-bind the name to a NON-class, and every remaining
+	class-construction send would then go to None."
+	[
+	meta := self ___grailMetaclass___.
+	meta == nil ifTrue: [^ self].
+	(meta isKindOf: Behavior) ifFalse: [^ self].
+	"PYTHON metaclasses only; see ___grailMetaclassConstructs___: for why a
+	Smalltalk-written one (EnumMeta) must not be handed CPython's protocol."
+	(meta @env0:inheritsFrom: PyType) ifFalse: [^ self].
+	"A metaclass that does not construct got no namespace, and there is nothing
+	to dispatch.  Enum and the other Smalltalk-declared metaclasses reach the
+	class through ___pyClassDefined___ overrides instead and never get here."
+	ns := self ___grailPendingNamespace___.
+	ns == nil ifTrue: [^ self].
+	clsName := self ___pyNameOrEmpty___.
+	clsBases := [self ___pyAttrLoad___: #'__bases__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: #()].
+	result := self.
+	fn := [meta ___pyAttrLoad___: #'__new__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	fn @env0:notNil ifTrue: [
+		stk := SessionTemps @env0:current
+			@env0:at: #'GrailClassUnderConstruction'
+			ifAbsentPut: [OrderedCollection @env0:new].
+		stk @env0:addLast: self.
+		"ensure: -- a metaclass __new__ that raises must not leave the class on
+		the stack, or the NEXT class statement's super().__new__ answers this
+		one.  Nothing about the raise is swallowed; it propagates as CPython's
+		does."
+		[result := fn @env1:___pyCallValue___: { meta. clsName. clsBases. ns } kw: nil]
+			@env0:ensure: [stk @env0:removeLast]].
+	(result @env0:notNil and: [result isKindOf: Behavior]) ifTrue: [
+		fn := [meta ___pyAttrLoad___: #'__init__']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		fn @env0:notNil ifTrue: [
+			fn @env1:___pyCallValue___: { result. clsName. clsBases. ns } kw: nil]].
+	^ result
+	] @env0:ensure: [self ___grailFinishNamespace___]
 %
 
 category: 'Grail-Class Namespace'

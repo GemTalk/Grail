@@ -285,7 +285,7 @@ ___pyAttrLoad___: aSym
 	bound to obj.  We piggy-back on BoundMethod for arity dispatch
 	via a thin _Super-bound shim that exposes ``value:value:``."
 
-	| s sym1 sym2 sym3 symVA pickMethod walker holder v |
+	| s symVA pickMethod walker holder v |
 	"``__class__'' is the proxy's OWN type, not a name to resolve against the
 	parent chain -- CPython answers the ``super'' type itself, and
 	``super().__class__ is super'' is how test_super___class__ checks that the
@@ -322,19 +322,29 @@ ___pyAttrLoad___: aSym
 		walker := walker @env0:superClass
 	].
 	s := aSym @env0:asString.
-	sym1 := (s @env0:, ':') @env0:asSymbol.
-	sym2 := (s @env0:, ':_:') @env0:asSymbol.
-	sym3 := (s @env0:, ':_:_:') @env0:asSymbol.
 	symVA := ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol.
 	pickMethod := [:nargs :kwOk |
 		| fixedSel |
-		"Resolve the fixed-arity selector for the call-site arity
-		(nil for 4+ positional args — only varargs can carry those)."
-		fixedSel := nil.
-		nargs @env0:= 0 ifTrue: [fixedSel := aSym].
-		nargs @env0:= 1 ifTrue: [fixedSel := sym1].
-		nargs @env0:= 2 ifTrue: [fixedSel := sym2].
-		nargs @env0:= 3 ifTrue: [fixedSel := sym3].
+		"Resolve the fixed-arity selector for the call-site arity.
+
+		BUILT, not enumerated.  This used to stop at three positional arguments
+		and leave fixedSel nil beyond that, so ``super().m(a, b, c, d)'' could
+		only ever reach a VARARGS method and silently missed a fixed-arity one.
+
+		The case that exposed it is the standard metaclass idiom:
+		``super().__new__(cls, name, bases, namespace)'' is FOUR positional
+		arguments, so it never tried __new__:_:_:_:, fell through to the generic
+		allocation path, and answered an INSTANCE of the metaclass where CPython
+		answers the class.  Nothing about that was specific to metaclasses --
+		any four-argument super() call had it."
+		fixedSel := nargs @env0:= 0
+			ifTrue: [aSym]
+			ifFalse: [ | ws |
+				ws := WriteStream @env0:on: String @env0:new.
+				ws @env0:nextPutAll: s.
+				ws @env0:nextPut: $:.
+				2 @env0:to: nargs do: [:i | ws @env0:nextPutAll: '_:'].
+				ws @env0:contents @env0:asSymbol].
 		"Per-class probe of both forms — the NEAREST parent class
 		defining either form wins (Python MRO semantics; see
 		_lookupMethodFirstOf:).  With no kwargs prefer the fixed

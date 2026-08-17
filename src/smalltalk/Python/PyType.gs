@@ -120,6 +120,74 @@ _new: positional kw: kwargs
 		'type() takes 1 or 3 arguments'
 %
 
+category: 'Grail-Class Construction'
+classmethod: PyType
+__new__: mcls _: aName _: bases _: ns
+	"``super().__new__(cls, name, bases, namespace)'' from inside a metaclass
+	__new__.  This is the single shape almost every metaclass in the corpus is
+	written in:
+
+	    def __new__(cls, name, bases, namespace):
+	        self = super().__new__(cls, name, bases, namespace)
+	        ...observe or mutate self...
+	        return self
+
+	CPython BUILDS the class here.  Grail cannot: the class statement has
+	already compiled its body onto a real Smalltalk class by the time a
+	metaclass hook can run, and that class is what the module's methods, closure
+	cells and __class__ references are bound to.  Building a second one and
+	handing it back would leave the first one live and referenced.
+
+	So the class under construction is what this ANSWERS.  The identity is the
+	point -- the metaclass gets the very object the class statement is defining,
+	so ``self.f()'', ``self.meta_owner = ...'' and ``namespace.copy()'' all see
+	and affect the real class, and returning it re-binds the name to itself.
+	The namespace argument needs no replay: ___grailNsStore___:value: writes
+	each class-body binding to the namespace AND to the class as it happens, so
+	the two already agree.
+
+	Outside a class statement there is nothing under construction and this is an
+	ordinary three-argument type() call, which builds a class as it always did."
+
+	| pending |
+	pending := PyType ___classUnderConstruction___.
+	pending @env0:notNil ifTrue: [
+		"APPLY THE NAMESPACE.  type.__new__ is defined as ``build a class with
+		this namespace'', so what the metaclass did to the mapping before
+		calling it has to land on the class -- and a metaclass that ADDS to the
+		namespace is the whole reason several of them override __new__ at all
+		(``namespace['__classcell__'] = cell'').
+
+		Grail's class already carries every binding the BODY made, because
+		___grailNsStore___:value: writes to the namespace and the class as each
+		statement runs.  What it cannot know about is a write the metaclass
+		itself made between the body finishing and this call, which is exactly
+		what this replays."
+		(ns @env0:isNil @env0:not and: [ns @env0:isEmpty @env0:not]) ifTrue: [
+			ns @env0:keysAndValuesDo: [:k :v |
+				[pending ___pyAttrStore___: k @env0:asSymbol put: v]
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
+		^ pending].
+	^ (builtins @env1:instance) @env1:type: aName _: bases _: ns
+%
+
+category: 'Grail-Class Construction'
+classmethod: PyType
+___classUnderConstruction___
+	"The class whose statement is currently running its metaclass __new__, or
+	nil.  A STACK, because a class statement can appear inside another class's
+	body and each needs its own answer.
+
+	Session-local scaffolding for the duration of a class statement, exactly
+	like the prepared namespace it partners: it must never be committed."
+
+	| stk |
+	stk := SessionTemps @env0:current
+		@env0:at: #'GrailClassUnderConstruction' otherwise: nil.
+	(stk @env0:isNil or: [stk @env0:isEmpty]) ifTrue: [^ nil].
+	^ stk @env0:last
+%
+
 category: 'Grail-Attribute Access'
 classmethod: PyType
 __dict__
