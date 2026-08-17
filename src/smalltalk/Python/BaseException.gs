@@ -2311,9 +2311,18 @@ ___liveFrameChain___
 	walks agree on almost nothing else.
 
 	The chain is built OUTERMOST-first so each frame can be handed its caller as
-	f_back; the innermost frame, returned here, is therefore the last one built."
+	f_back; the innermost frame, returned here, is therefore the last one built.
 
-	| probe st pairs prev frame done pendingHome pendingLine |
+	A GENERATOR body runs on its own forked GsProcess, so its capture ends at the
+	fork and contains nothing of the consumer that resumed it -- the same process
+	boundary the traceback walk crosses by stashing (___stashGeneratorStack___:).
+	The live walk cannot stash, because nothing raised; instead it follows the
+	link the other way and READS the consumer, which is legitimately suspended
+	(blocked on consumerSem) and so is exactly the case _frameContentsAt: serves.
+	___liveFrameSections___: follows that chain; the walk runs once per section
+	and the sections concatenate innermost-first."
+
+	| probe st sections pairs |
 	self ___ensureStackCapture___.
 	"Signal and catch in one breath.  ``ex return:'' unwinds without letting the
 	Error reach any outer handler -- notably not a Python ``except''."
@@ -2321,6 +2330,29 @@ ___liveFrameChain___
 		@env0:on: Error do: [:ex | ex @env0:return: ex].
 	st := [probe @env0:_gsStack] @env0:on: Error do: [:ex | ex @env0:return: nil].
 	st isNil ifTrue: [^ nil].
+	sections := self ___liveFrameSections___: (self ___trimCapturedStack___: st).
+	pairs := OrderedCollection @env0:new.
+	sections @env0:do: [:section |
+		(self ___liveFramePairsFrom___: (section @env0:at: 1)
+			generatorBody: (section @env0:at: 2))
+				@env0:do: [:each | pairs @env0:add: each]].
+	^ self ___liveFrameChainFromPairs___: pairs
+%
+
+category: 'Grail-Live Frames'
+classmethod: BaseException
+___liveFramePairsFrom___: st generatorBody: isGeneratorBody
+	"{ method. ip. name. lineOrNil } for every frame of ONE section of a live
+	stack, innermost first.  ``st'' is a headerless run of (method, ip, receiver)
+	triples -- the shape ___trimCapturedStack___: answers and the shape
+	___framesOfSuspendedProcess___: builds.
+
+	``isGeneratorBody'' says this section is a generator's forked process, which
+	changes one thing: what is left PENDING at the end of the section is flushed
+	as a frame instead of discarded.  See the flush at the bottom for why that is
+	the only way a generator's own frame can appear at all."
+
+	| pairs done pendingHome pendingLine |
 	"{ method. ip. name. lineOrNil } for every frame that is a Python FUNCTION,
 	innermost first.  A block frame carries a nil selector and normally belongs to
 	its home method, so it is skipped -- CPython has no frame for a comprehension
@@ -2347,7 +2379,7 @@ ___liveFrameChain___
 	done := false.
 	pendingHome := nil.
 	pendingLine := nil.
-	2 to: st @env0:size by: 3 do: [:i |
+	1 to: st @env0:size by: 3 do: [:i |
 		| meth ip home |
 		done ifFalse: [
 			meth := st @env0:at: i.
@@ -2434,6 +2466,39 @@ ___liveFrameChain___
 							the line above or not, no frame further out can be this home's."
 							pendingHome := nil.
 							pendingLine := nil]]]].
+	"THE GENERATOR'S OWN FRAME.  A generator body is a BLOCK -- codegen emits
+	``PythonGenerator withBlock: [:___gen___ | ...]'' -- and the frame for the
+	``def'' that contains it is not on this process at all: the def RETURNED, on
+	the consumer's process, as soon as it built the generator.  So the block's
+	home never arrives to consume the pending line the way an ordinary call does,
+	and without this flush a stack walked from inside ``def gen(): yield f()''
+	reported ['f'] where CPython reports ['f', 'gen', ...].
+
+	The name comes from the pending LINE, which is inside the def: a nested def
+	resolves through ___nestedFunctionNameFor___:line: exactly as the 2-argument
+	block branch above does, and a module-level def is a real Smalltalk method
+	whose own selector already decodes to the Python name."
+	(isGeneratorBody and: [pendingHome @env0:notNil]) ifTrue: [
+		| fnName |
+		fnName := self ___nestedFunctionNameFor___: pendingHome line: pendingLine.
+		fnName isNil ifTrue: [
+			fnName := self ___pythonFrameNameFor___: pendingHome @env0:selector].
+		((fnName notNil) and: [self ___isGeneratedPythonMethod___: pendingHome]) ifTrue: [
+			pairs @env0:add: { pendingHome. 0. fnName. (pendingLine ifNil: [0]) }]].
+	^ pairs
+%
+
+category: 'Grail-Live Frames'
+classmethod: BaseException
+___liveFrameChainFromPairs___: pairs
+	"Turn the { method. ip. name. lineOrNil } quadruples of a whole live stack --
+	all its sections, innermost first -- into a chain of PyFrames linked by
+	f_back, and answer the INNERMOST.  Nil when there is nothing to report.
+
+	Built outermost-first so each frame can be handed its caller as f_back; the
+	innermost frame, returned here, is therefore the last one built."
+
+	| prev frame |
 	pairs @env0:isEmpty ifTrue: [^ nil].
 	prev := None.
 	pairs @env0:size @env0:to: 1 by: -1 do: [:k |
@@ -2454,6 +2519,129 @@ ___liveFrameChain___
 		frame := PyFrame @env0:code: code lineno: (line ifNil: [0]) back: prev globals: None.
 		prev := frame].
 	^ frame
+%
+
+category: 'Grail-Live Frames'
+classmethod: BaseException
+___liveFrameSections___: triples
+	"The live stack in SECTIONS, innermost first: { tripleRun. isGeneratorBody }
+	for the current process, then for each consumer process out through the
+	generator delegation chain.
+
+	One section per GsProcess, because that is the unit a stack capture covers.
+	A generator body runs forked, so ``for x in spam(gen()): ...'' has THREE
+	processes live at the moment gen's body runs -- gen's, spam's, and the
+	caller's -- and only the first is in the capture.  CPython has one stack with
+	all three functions on it, and a debugger is entitled to see them: that is
+	what test_yield_from's test_delegator_is_visible_to_debugger checks.
+
+	The links are read off the stack itself rather than out of a registry.  Every
+	generator body has PythonGenerator>>_forkBody frames beneath it running with
+	the generator as self (___generatorOwningStack___: recovers it), and the
+	generator remembers the process that last resumed it.  Nothing has to be
+	registered, so nothing has to be unregistered -- an abandoned generator would
+	otherwise pin a dead GsProcess in a session-lifetime dictionary for as long as
+	the session lived.
+
+	The consumer is genuinely suspended (blocked on consumerSem inside send: /
+	throw: / close), which is the precondition _frameContentsAt: needs and which
+	the CURRENT process can never satisfy for itself.
+
+	Bounded and loop-guarded: a chain deeper than 64 delegations, or one that
+	revisits a process, stops rather than walks forever."
+
+	| sections cur gen next seen hops |
+	sections := OrderedCollection new.
+	cur := triples.
+	seen := IdentitySet new.
+	hops := 0.
+	[(cur notNil) and: [hops < 64]] whileTrue: [
+		gen := self ___generatorOwningStack___: cur.
+		sections add: { cur. gen notNil }.
+		next := gen isNil
+			ifTrue: [nil]
+			ifFalse: [[gen ___consumerProcess___]
+				on: Error do: [:ex | ex return: nil]].
+		((next isNil)
+			or: [(seen includes: next) or: [next == GsProcess current]])
+				ifTrue: [cur := nil]
+				ifFalse: [
+					seen add: next.
+					cur := self ___framesOfSuspendedProcess___: next].
+		hops := hops + 1].
+	^ sections
+%
+
+category: 'Grail-Live Frames'
+classmethod: BaseException
+___generatorOwningStack___: triples
+	"The PythonGenerator whose body is running on the stack ``triples'' belongs
+	to, or nil when that stack is not a generator body.
+
+	Read off the frames themselves: _forkBody's blocks run with the generator as
+	self, so the generator is reachable from any frame whose home method is
+	_forkBody.  Scanned from the innermost end, because the first such frame out
+	from here is this process's own -- a process runs exactly one generator body.
+
+	Through ``selfValue'', NOT the triple's third slot.  A captured triple holds
+	(method, ip, RECEIVER), and the receiver of a BLOCK frame is the ExecBlock
+	itself, not the self it closes over -- so the obvious read answers an
+	ExecBlock for every frame here and the generator is never found."
+
+	| i |
+	triples isNil ifTrue: [^ nil].
+	i := 1.
+	[i + 2 <= triples size] whileTrue: [
+		| meth home rcvr cand |
+		meth := triples at: i.
+		home := meth isNil
+			ifTrue: [nil]
+			ifFalse: [[meth homeMethod] on: Error do: [:ex | ex return: meth]].
+		(home notNil and: [home selector == #'_forkBody']) ifTrue: [
+			rcvr := triples at: i + 2.
+			cand := (rcvr isKindOf: PythonGenerator)
+				ifTrue: [rcvr]
+				ifFalse: [[rcvr selfValue] on: Error do: [:ex | ex return: nil]].
+			(cand isKindOf: PythonGenerator) ifTrue: [^ cand]].
+		i := i + 3].
+	^ nil
+%
+
+category: 'Grail-Live Frames'
+classmethod: BaseException
+___framesOfSuspendedProcess___: aProcess
+	"The frames of a SUSPENDED process as (method, ip, receiver) triples,
+	innermost first -- the same shape ___trimCapturedStack___: answers for a
+	raise-time capture, so the one walk serves both.
+
+	``_frameContentsAt:'' answers an Array whose first slot is the GsNMethod and
+	whose SECOND is the ip in the ``_sourceAtIp:'' convention -- the same ip
+	_gsStack records, so line derivation needs no translation.  (Not the ip in
+	``_frameDescrAt:'', which is a different number for the same frame.)
+
+	Answers nil rather than an empty array when the process cannot be read: a
+	terminated or running process has no readable frames, and a caller
+	distinguishing ``no frames'' from ``no more sections'' would be reading a
+	distinction that does not exist."
+
+	| out d |
+	aProcess isNil ifTrue: [^ nil].
+	d := [aProcess stackDepth] on: Error do: [:ex | ex return: 0].
+	((d isNil) or: [d <= 0]) ifTrue: [^ nil].
+	out := OrderedCollection new.
+	1 to: d do: [:i |
+		| fc meth |
+		fc := [aProcess _frameContentsAt: i] on: Error do: [:ex | ex return: nil].
+		fc isNil ifFalse: [
+			meth := [aProcess _methodInFrameContents: fc]
+				on: Error do: [:ex | ex return: nil].
+			meth isNil ifFalse: [
+				out add: meth;
+					add: (fc at: 2);
+					add: ([aProcess _receiverInFrameContents: fc]
+						on: Error do: [:ex | ex return: nil])]]].
+	out isEmpty ifTrue: [^ nil].
+	^ out asArray
 %
 
 category: 'Grail-Live Frames'
