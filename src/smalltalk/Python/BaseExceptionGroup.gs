@@ -98,6 +98,157 @@ __str__
 		@env0:, (n @env0:= 1 ifTrue: [' sub-exception)'] ifFalse: [' sub-exceptions)'])
 %
 
+category: 'Grail-Exception Groups'
+method: BaseExceptionGroup
+derive: anExceptionSeq
+	"``eg.derive(excs)'' -- PEP 654: a NEW group of the same kind holding
+	excs, keeping this group's message.
+
+	The hook subclasses override to carry their own extra state across a
+	split.  split/subgroup go through it rather than constructing
+	directly, so a subclass survives the operation as its own type."
+
+	"___new___ then ___args___:, the same two steps every raise path uses --
+	there is no one-shot constructor taking the args tuple."
+	| inst |
+	inst := self @env0:class ___new___.
+	"A LIST, not a tuple: CPython keeps args[1] as whatever was passed, and
+	a group is written ``ExceptionGroup('eg', [exc])'', so repr() shows
+	brackets.  ``exceptions'' converts to a tuple on read, which is the
+	other half of the same CPython asymmetry."
+	inst ___args___: (Array @env0:with: self message
+		with: (list @env0:withAll: anExceptionSeq @env0:asArray)).
+	^ inst
+%
+
+category: 'Grail-Exception Groups'
+method: BaseExceptionGroup
+___matchesCondition___: aCondition against: anException
+	"PEP 654 allows the split condition to be an exception TYPE (or tuple
+	of types) or a PREDICATE taking the exception.  Both appear in real
+	code, and ``except*'' itself only ever passes a type."
+
+	(aCondition @env0:isKindOf: Class) ifTrue: [
+		^ anException @env1:___matchIsInstanceOf___: aCondition
+	].
+	(aCondition @env0:class @env0:= tuple) ifTrue: [
+		aCondition @env0:do: [:t |
+			(anException @env1:___matchIsInstanceOf___: t) ifTrue: [^ true]].
+		^ false
+	].
+	"``value:value:'' is Grail's generic Python call (positional array,
+	kwargs) -- ExecBlock has no ___call___:."
+	^ (aCondition @env1:value: (Array @env0:with: anException) value: nil) ___isTruthy___
+%
+
+category: 'Grail-Exception Groups'
+method: BaseExceptionGroup
+___splitOn___: aCondition
+	"The shared engine for split/subgroup: answer { matching. rest }, each
+	either a derived group or nil.
+
+	RECURSES into nested groups, which is the whole point of the design --
+	a group may contain groups, and PEP 654 matches leaves wherever they
+	sit while preserving the surrounding structure.  A nested group that
+	contributes nothing to a side is dropped from that side rather than
+	kept as an empty shell."
+
+	| matched unmatched |
+	matched := OrderedCollection @env0:new.
+	unmatched := OrderedCollection @env0:new.
+	self exceptions @env0:do: [:each |
+		(each @env0:isKindOf: BaseExceptionGroup)
+			ifTrue: [
+				| pair |
+				pair := each @env1:___splitOn___: aCondition.
+				(pair @env0:at: 1) == nil ifFalse: [matched @env0:add: (pair @env0:at: 1)].
+				(pair @env0:at: 2) == nil ifFalse: [unmatched @env0:add: (pair @env0:at: 2)]
+			]
+			ifFalse: [
+				(self ___matchesCondition___: aCondition against: each)
+					ifTrue: [matched @env0:add: each]
+					ifFalse: [unmatched @env0:add: each]
+			]
+	].
+	^ Array @env0:with: (matched @env0:isEmpty ifTrue: [nil] ifFalse: [self derive: matched])
+		with: (unmatched @env0:isEmpty ifTrue: [nil] ifFalse: [self derive: unmatched])
+%
+
+category: 'Grail-Exception Groups'
+method: BaseExceptionGroup
+subgroup: aCondition
+	"``eg.subgroup(cond)'' -- the matching part, or None."
+
+	| m |
+	m := (self ___splitOn___: aCondition) @env0:at: 1.
+	^ m == nil ifTrue: [None] ifFalse: [m]
+%
+
+category: 'Grail-Exception Groups'
+method: BaseExceptionGroup
+split: aCondition
+	"``eg.split(cond)'' -- the pair (matching, rest), each or None."
+
+	| pair |
+	pair := self ___splitOn___: aCondition.
+	^ tuple @env0:withAll: (Array
+		@env0:with: ((pair @env0:at: 1) == nil ifTrue: [None] ifFalse: [pair @env0:at: 1])
+		@env0:with: ((pair @env0:at: 2) == nil ifTrue: [None] ifFalse: [pair @env0:at: 2]))
+%
+
+category: 'Grail-Except Star'
+classmethod: BaseExceptionGroup
+___exceptStarNormalize___: anException
+	"PEP 654 matches against a GROUP, so a bare exception is treated as if
+	wrapped in one -- ``except* ValueError'' catching a plain ValueError
+	binds an ExceptionGroup, not the ValueError.
+
+	The ORIGINAL is not discarded: see ___exceptStarFinish___:original:,
+	which propagates it unchanged when nothing matched, rather than
+	handing back a wrapper CPython never made."
+
+	| inst |
+	(anException @env0:isKindOf: BaseExceptionGroup) ifTrue: [^ anException].
+	inst := ExceptionGroup ___new___.
+	inst ___args___: (Array @env0:with: ''
+		with: (list @env0:withAll: (Array @env0:with: anException))).
+	^ inst
+%
+
+category: 'Grail-Except Star'
+classmethod: BaseExceptionGroup
+___exceptStarClause___: aGroupOrNil type: aType do: aBlock
+	"Run ONE ``except*'' clause against what is left, answering the
+	remainder (nil once nothing is left).
+
+	Unlike plain ``except'', where the first matching clause wins, EVERY
+	clause gets a turn: each takes its matching subgroup out and passes
+	the rest along.  That is why this threads a remainder instead of
+	returning a boolean."
+
+	| pair |
+	aGroupOrNil == nil ifTrue: [^ nil].
+	pair := aGroupOrNil ___splitOn___: aType.
+	(pair @env0:at: 1) == nil ifFalse: [aBlock @env0:value: (pair @env0:at: 1)].
+	^ pair @env0:at: 2
+%
+
+category: 'Grail-Except Star'
+classmethod: BaseExceptionGroup
+___exceptStarFinish___: aRemainderOrNil original: anOriginal
+	"Propagate whatever no clause claimed.
+
+	When the raised exception was NOT a group and nothing matched, the
+	ORIGINAL propagates -- ``raise ValueError'' past an ``except*
+	TypeError'' is still a ValueError to the caller, not the wrapper this
+	machinery built to match against."
+
+	aRemainderOrNil == nil ifTrue: [^ nil].
+	(anOriginal @env0:isKindOf: BaseExceptionGroup)
+		ifTrue: [^ BaseException ___pyRaise___: aRemainderOrNil].
+	^ BaseException ___pyRaise___: anOriginal
+%
+
 set compile_env: 0
 
 category: 'Grail-Python Attribute Hook'
