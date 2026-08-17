@@ -2165,7 +2165,7 @@ ___liveFrameChain___
 	The chain is built OUTERMOST-first so each frame can be handed its caller as
 	f_back; the innermost frame, returned here, is therefore the last one built."
 
-	| probe st pairs prev frame done |
+	| probe st pairs prev frame done pendingHome pendingLine |
 	self ___ensureStackCapture___.
 	"Signal and catch in one breath.  ``ex return:'' unwinds without letting the
 	Error reach any outer handler -- notably not a Python ``except''."
@@ -2173,21 +2173,74 @@ ___liveFrameChain___
 		@env0:on: Error do: [:ex | ex @env0:return: ex].
 	st := [probe @env0:_gsStack] @env0:on: Error do: [:ex | ex @env0:return: nil].
 	st isNil ifTrue: [^ nil].
-	"(method, ip) for every frame that is a Python FUNCTION, innermost first.
-	A block frame carries a nil selector and belongs to its home method, so it is
-	skipped -- CPython has no frame for a comprehension body or an except block."
+	"{ method. ip. name. lineOrNil } for every frame that is a Python FUNCTION,
+	innermost first.  A block frame carries a nil selector and normally belongs to
+	its home method, so it is skipped -- CPython has no frame for a comprehension
+	body or an except block.
+
+	EXCEPT when the block IS a Python function.  A nested ``def'' compiles to a
+	block (only a block closes over the enclosing function's locals, only a block
+	has no class to live in, and only a fresh copy per execution gives CPython's
+	distinct function object per ``def''), so skipping every block erased nested
+	functions from the live stack exactly as it did from tracebacks -- 9.45.  From
+	inside ``def outer(): def inner(): traceback.extract_stack()'' CPython answers
+	['<module>', 'outer', 'inner'] and this walk answered ['outer'].
+
+	Told apart by ARGUMENT COUNT, the same discriminator 9.45 established for the
+	traceback walk: codegen calls a Python function block as
+	``[:___positional___ :___kwargs___ | ...]'' and nothing else in env 1 emits a
+	two-argument block.  The NAME comes from ___nestedFunctionNameFor___:line:,
+	which is shared with the traceback walk and derives containment from the
+	Python line rather than from _sourceAtIp: -- see there for why that matters in
+	a native-code gem."
 	pairs := OrderedCollection @env0:new.
 	"``done'' rather than leaving the loop early: the index of a to:do: is a block
 	PARAMETER and not assignable, so there is nothing to advance past the end."
 	done := false.
+	pendingHome := nil.
+	pendingLine := nil.
 	2 to: st @env0:size by: 3 do: [:i |
-		| meth |
+		| meth ip home |
 		done ifFalse: [
 			meth := st @env0:at: i.
 			"Trailing nils pad the array; the real frames end at the first one."
 			meth isNil
 				ifTrue: [done := true]
 				ifFalse: [
+					ip := st @env0:at: i @env0:+ 1.
+					home := (meth @env0:environmentId @env0:= 1)
+						ifTrue: [[meth @env0:homeMethod]
+							@env0:on: Error do: [:ex | ex @env0:return: meth]]
+						ifFalse: [nil].
+					home isNil ifTrue: [home := meth].
+					((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector isNil])
+						ifTrue: [
+							| nArgs blockLine |
+							nArgs := [meth @env0:numArgs]
+								@env0:on: Error do: [:ex | ex @env0:return: 0].
+							blockLine := self ___pythonLineForMethod___: meth ip: ip.
+							(nArgs @env0:= 2)
+								ifTrue: [
+									| fnLine fnName |
+									"The nested function is parked where its BODY is, which the
+									inner zero-argument blocks already resolved into pendingLine.
+									Fall back to this block's own position when there were none."
+									fnLine := pendingLine isNil
+										ifTrue: [blockLine]
+										ifFalse: [pendingLine].
+									fnName := self ___nestedFunctionNameFor___: home line: fnLine.
+									((fnName notNil)
+										and: [self ___isGeneratedPythonMethod___: home]) ifTrue: [
+											pairs @env0:add: { home. ip. fnName. (fnLine ifNil: [0]) }.
+											"Consumed: the home method's own frame must not reuse
+											this line, or ``outer'' would report the line inside
+											``inner''."
+											pendingHome := nil.
+											pendingLine := nil]]
+								ifFalse: [
+									pendingHome @env0:~~ home ifTrue: [
+										pendingHome := home.
+										pendingLine := blockLine]]].
 					((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector notNil])
 						ifTrue: [
 							"Env 1 plus a decodable selector is not enough to mean ``Python frame'':
@@ -2205,7 +2258,12 @@ ___liveFrameChain___
 							the walk rather than merely losing their line number."
 							(((self ___pythonFrameNameFor___: meth @env0:selector) notNil)
 								and: [self ___isGeneratedPythonMethod___: meth]) ifTrue: [
-									pairs @env0:add: { meth. st @env0:at: i @env0:+ 1 }]]]]].
+									pairs @env0:add: { meth. ip.
+										(self ___pythonFrameNameFor___: meth @env0:selector). nil }].
+							"A real method frame ends any pending block line: the line
+							belongs to the block's own home, not to this frame."
+							pendingHome := nil.
+							pendingLine := nil]]]].
 	pairs @env0:isEmpty ifTrue: [^ nil].
 	prev := None.
 	pairs @env0:size @env0:to: 1 by: -1 do: [:k |
@@ -2213,10 +2271,13 @@ ___liveFrameChain___
 		pair := pairs @env0:at: k.
 		meth := pair @env0:at: 1.
 		ip := pair @env0:at: 2.
+		name := pair @env0:at: 3.
 		"A nil line is not a reason to drop the frame -- see the filter above -- so it
-		becomes 0, the same ``position unknown'' a traceback frame uses."
-		line := self ___pythonLineForMethod___: meth ip: ip.
-		name := self ___pythonFrameNameFor___: meth @env0:selector.
+		becomes 0, the same ``position unknown'' a traceback frame uses.  A nested
+		function carries its line already, resolved from the block that supplied it;
+		a method frame derives it from its own ip."
+		line := (pair @env0:at: 4)
+			ifNil: [self ___pythonLineForMethod___: meth ip: ip].
 		code := PyCode @env0:name: name
 			filename: (self ___liveFrameFilenameFor___: meth)
 			firstlineno: 0.
