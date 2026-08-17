@@ -261,7 +261,26 @@ _signalEscapedException
 	one ``yield from'' consumes to end a delegation -- neither escapes the body."
 
 	| ex err msg |
-	ex := escapedException.
+	"UNWRAP FIRST.  What escaped may be a CARRIER -- the throwaway
+	___signalCarrying___: raises when the payload cannot be signalled directly,
+	which is exactly the case here: gen.throw(value) is normally called while
+	value is IN FLIGHT (contextlib's __exit__ runs inside the with-statement's
+	own handler), so the payload has live frames and travels wrapped.
+	Both uses below need the payload, and the __cause__ one is load-bearing:
+
+	    except RuntimeError as exc:
+	        if isinstance(value, StopIteration) and exc.__cause__ is value:
+	            return False
+
+	is how _GeneratorContextManager.__exit__ recognises the PEP 479 wrapper
+	around the very StopIteration it threw in, and declines to swallow it.
+	Chaining the carrier made that test False, so __exit__ re-raised the
+	RuntimeError and ``with cm(): raise StopIteration('x')'' surfaced
+	``generator raised StopIteration'' instead of the StopIteration.
+	The isKindOf: test needs it too -- a carrier for a StopIteration payload is
+	itself a StopIteration, but relying on that would be relying on an
+	implementation detail of how carriers pick their class."
+	ex := BaseException @env0:___payloadOf___: escapedException.
 	escapedException := nil.
 	(ex @env0:isKindOf: StopIteration) ifFalse: [^ self _raiseThrown: ex].
 	msg := 'generator raised StopIteration'.

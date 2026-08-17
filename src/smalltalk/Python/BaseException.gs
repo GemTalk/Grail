@@ -523,9 +523,26 @@ ___pyRaiseNew___: cls args: positional kw: kwargs cause: aCause
 	"``raise cls(*positional, **kwargs) from aCause'' -- as ___pyRaiseNew___:args:kw:
 	with the ``from'' clause applied to the new instance before it is signalled."
 
+	"NOT an exception class -- so this is not a construct-and-signal at all.
+	``raise f(x)'' where f is an ordinary callable is legal Python: the call is
+	EVALUATED and its result is raised, and it is the RESULT that must be an
+	exception.  RaiseAst routes every bare-name callee here because a bare name
+	is usually a class, but ``raise next(iter([]))'' -- CPython's own idiom in
+	test_with, where next() raises StopIteration before returning anything -- is
+	the counter-example.  Rejecting the callee outright reported ``exceptions
+	must derive from BaseException'' about a perfectly good call that had not
+	been made yet.
+
+	Evaluating and re-routing keeps the guard that motivated this branch:
+	``raise NewStyleClass()'' still constructs an instance, and ___pyRaise___:
+	still finds it is not a BaseException and answers the same TypeError
+	(test_baseexception test_raise_new_style_non_exception).  What changes is
+	that the diagnosis now comes from the VALUE rather than from the callee."
 	((cls @env0:isKindOf: Behavior)
 		and: [(cls == BaseException) or: [cls @env0:inheritsFrom: BaseException]])
-			ifFalse: [^ TypeError ___signal___: 'exceptions must derive from BaseException'].
+			ifFalse: [
+				^ self ___pyRaise___: (cls @env1:value: positional value: kwargs)
+					cause: aCause].
 	"Every Python ``raise'' funnels through here, and this runs BEFORE the signal,
 	so arming the VM's stack capture here covers even the session's first raise.
 	Memoised in SessionTemps, so after the first raise it is one dictionary
