@@ -3649,3 +3649,43 @@ Grail now answers `colno=12 end_colno=17`, CPython's exact numbers, and the
 check is a parity assertion (`body_span`) rather than a pinned gap. A fixture
 that pins a gap has to be re-measured when the surrounding machinery moves, or
 it quietly outlives the gap it documents.
+
+### 9.46 The live stack had the same nested-function hole (2026-08-16, gs40)
+
+§9.45 gave nested functions traceback frames. The LIVE stack walk had the
+identical hole, and `___liveFrameChain___` said so in its own comment — that it
+skips block frames, and that this rule "is repeated here rather than shared,
+because the two walks agree on almost nothing else." Sharing the *rule* was
+right; what neither walk had was the exception to it.
+
+Measured from inside `def outer(): def inner(): traceback.extract_stack()`:
+
+| | frames |
+| --- | --- |
+| CPython | `['<module>', 'outer', 'inner']` |
+| Grail, before | `['outer']` |
+| Grail, after | `['outer', 'inner']` |
+
+The fix is §9.45's discriminator applied to the second walk — a two-argument
+block is a Python function — reusing `___nestedFunctionNameFor___:line:`
+unchanged. That helper was already gem-independent (it derives containment from
+the Python line, never from `_sourceAtIp:`), so the native-code trap that cost
+§9.45 a CI round trip did not repeat here.
+
+**A fixture had pinned the gap as a rule.** `live_frames.py` carried
+`a_nested_function_gets_no_frame_of_its_own` as a deliberate Grail-only XFAIL,
+and its docstring named the consequence exactly: *"it is why test_walk_stack
+still fails: that test asserts a nested call adds exactly one frame."* So the
+fix was checked by INVERTING that assertion rather than deleting it, and it
+moved from the `grail_only` list to the parity list. This is the second such
+correction in two sections (§9.45 did the same to `body_has_no_colno`), which is
+worth stating as a habit: **a fixture that pins a gap has to be re-measured when
+the surrounding machinery moves, or it quietly outlives the gap it documents and
+starts defending it.**
+
+`test_walk_innermost_frame` now passes. `test_walk_stack` moved off its count
+assertion (`len(s2) - len(s1) == 1`) onto its identity one (`s2[1:] == s1`),
+which is a different and larger problem: Grail RECONSTRUCTS frames on each walk
+by raising, so two walks yield equal-valued but non-identical PyFrames, where
+CPython yields the same live objects. That needs frame identity, not more
+frames.

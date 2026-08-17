@@ -1165,7 +1165,7 @@ testLiveFramesAndGetframe
 	   'a_method_s_live_frame_names_its_real_file'
 	   'the_machinery_keeps_itself_out_of_the_walk'
 	   'a_frame_has_no_f_locals'
-	   'a_nested_function_gets_no_frame_of_its_own' ) do: [:k |
+	   'a_nested_function_gets_its_own_frame' ) do: [:k |
 		| answer |
 		answer := mod @env0:perform: k asSymbol env: 1.
 		"Report what the check ANSWERED, not just that it failed.  A check may

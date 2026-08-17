@@ -269,16 +269,25 @@ def a_method_s_live_frame_names_its_real_file():
             and '<grail>' not in names)
 
 
-def a_nested_function_gets_no_frame_of_its_own():
-    """GRAIL-SPECIFIC (CPython gives every call a frame).  A nested ``def'' is
-    compiled into its enclosing method, so calling it does not deepen the Python
-    stack.  Pre-existing, and it is why test_walk_stack still fails: that test
-    asserts a nested call adds exactly one frame."""
+def a_nested_function_gets_its_own_frame():
+    """A nested ``def'' deepens the live stack by exactly one, as in CPython.
+
+    This recorded the opposite for as long as nested defs were invisible to the
+    walk: a nested def compiles to a BLOCK, and the walk skipped every block
+    because that is right for the other things blocks are used for (a
+    comprehension body, a ``try'' body, an ``except'' handler).  The note here
+    named the consequence exactly -- "it is why test_walk_stack still fails:
+    that test asserts a nested call adds exactly one frame" -- so the fix is
+    checked by inverting the assertion rather than deleting it.
+
+    Two-argument blocks are how a Python function block is told from those
+    others; see 9.45 and tests/python/nested_function_frames.py, which covers
+    the same discriminator on the TRACEBACK path."""
     def deeper():
         return len(list(traceback.walk_stack(None)))
 
     here = len(list(traceback.walk_stack(None)))
-    return deeper() == here
+    return deeper() == here + 1
 
 
 if __name__ == '__main__':
@@ -300,10 +309,10 @@ if __name__ == '__main__':
         extract_stack_produces_frame_summaries,
         a_method_s_live_frame_names_its_real_file,
         the_machinery_keeps_itself_out_of_the_walk,
+        a_nested_function_gets_its_own_frame,
     ]
     grail_only = [
         a_frame_has_no_f_locals,
-        a_nested_function_gets_no_frame_of_its_own,
     ]
     for fn in checks:
         print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))
