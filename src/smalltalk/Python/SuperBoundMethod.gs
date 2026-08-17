@@ -80,7 +80,7 @@ value: positional value: kwargs
 	through ``obj``'s class (which would re-fire the override).
 	The 0..4-arg variants cover the same range Super >> DNU does."
 
-	| nargs kwOk method resolvedSel |
+	| nargs kwOk method resolvedSel recv pair |
 	"CPython forbids a member ``def __new__'' from delegating to
 	``super().__new__'' while the enum is being built (test_bad_new_super): it
 	must call the data type's __new__ directly.  Catch it here, BEFORE the
@@ -91,35 +91,57 @@ value: positional value: kwargs
 	selector == #'__new__' ifTrue: [Enum ___grailSuperNewGuard: obj].
 	nargs := positional @env0:size.
 	kwOk := kwargs == nil or: [kwargs @env0:isEmpty].
-	method := resolver @env0:value: nargs value: kwOk.
+	"The resolver answers { method. cameFromTheClassSide } -- see Super >>
+	_lookupMethodAndSideFirstOf:."
+	pair := resolver @env0:value: nargs value: kwOk.
+	method := pair @env0:isNil ifTrue: [nil] ifFalse: [pair @env0:at: 1].
 	method ifNil: [
 		AttributeError ___signal___:
 			'super(): no parent method ''' @env0:, selector @env0:asString @env0:, ''''
 	].
+	"A CLASS-SIDE parent method takes the CLASS as its receiver.  Grail compiles
+	a Python @classmethod onto the metaclass, so when super() from an instance
+	method reaches one -- ``def cm(cls): return super().cm()'' whose MRO
+	successors are all @classmethods -- performing it with the instance would
+	bind ``cls'' to the instance.  Substituting obj's class is what CPython's
+	classmethod descriptor does when reached through super().
+
+	Only when obj is not already a class: ``super(D, cls)'' inside __new__ has
+	the right receiver to begin with.
+
+	Decided by the LOOKUP, not re-derived here.  ``the method lives on a
+	metaclass'' is not the same question and was wrong twice over: Grail
+	resolves plenty of ordinary inherited methods through the class-side dict,
+	and substituting the class for those ran KeyValueDictionary's __setitem__
+	with the CLASS as receiver (180 SUnit errors, then 48 after a narrower but
+	still-derived guess).  The lookup knows which dict it hit; it now says so."
+	recv := ((pair @env0:at: 2) and: [(obj @env0:isKindOf: Behavior) @env0:not])
+		ifTrue: [obj @env0:class]
+		ifFalse: [obj].
 	"Varargs parent: dispatch as (positional, kwargs) via the 2-arg
 	primitive, regardless of the call-site arity."
 	resolvedSel := method @env0:selector.
 	(resolvedSel @env0:asString @env0:endsWith: ':kw:') ifTrue: [
-		^ obj @env0:with: positional with: (kwargs ifNil: [nil]) performMethod: method
+		^ recv @env0:with: positional with: (kwargs ifNil: [nil]) performMethod: method
 	].
 	"Fixed-arity parent: pick the primitive variant matching the
 	call-site positional count."
-	nargs @env0:= 0 ifTrue: [^ obj @env0:performMethod: method].
+	nargs @env0:= 0 ifTrue: [^ recv @env0:performMethod: method].
 	nargs @env0:= 1 ifTrue: [
-		^ obj @env0:with: (positional @env0:at: 1) performMethod: method].
+		^ recv @env0:with: (positional @env0:at: 1) performMethod: method].
 	nargs @env0:= 2 ifTrue: [
-		^ obj
+		^ recv
 			@env0:with: (positional @env0:at: 1)
 			with: (positional @env0:at: 2)
 			performMethod: method].
 	nargs @env0:= 3 ifTrue: [
-		^ obj
+		^ recv
 			@env0:with: (positional @env0:at: 1)
 			with: (positional @env0:at: 2)
 			with: (positional @env0:at: 3)
 			performMethod: method].
 	nargs @env0:= 4 ifTrue: [
-		^ obj
+		^ recv
 			@env0:with: (positional @env0:at: 1)
 			with: (positional @env0:at: 2)
 			with: (positional @env0:at: 3)
@@ -129,7 +151,7 @@ value: positional value: kwargs
 	plain perform — works when the parent method doesn't itself
 	call super() (which would otherwise re-dispatch through obj's
 	override and infinite-recurse)."
-	^ obj @env0:perform: resolvedSel env: 1 withArguments: positional
+	^ recv @env0:perform: resolvedSel env: 1 withArguments: positional
 %
 
 set compile_env: 0

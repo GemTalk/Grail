@@ -367,6 +367,19 @@ isfile: path
 	^ (os instance) isfile: path
 %
 
+category: 'Grail-Path Manipulation'
+method: os_path
+islink: path
+	"os.path.islink(path) — true iff path names a symbolic link.
+
+	Unlike isdir/isfile this has no ``os.islink'' counterpart to delegate to,
+	because CPython has none either: islink lives on os.path alone.  The
+	primitive is os >> ___isLink___:, which lstats rather than stats -- stat
+	follows the link and would report the target's type."
+
+	^ (os instance) ___isLink___: path
+%
+
 ! ===============================================================================
 ! Fast-path callables — multi-path operations
 ! ===============================================================================
