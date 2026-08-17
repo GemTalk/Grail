@@ -1635,6 +1635,20 @@ ___pythonBuiltinTypeName___
 	``type(c).__name__ == 'cell'''.  Named PyCell in Smalltalk only because
 	``cell'' is too generic a name to claim in the flat Python dictionary."
 	(#('PyCell') @env0:includes: n) ifTrue: [^ 'cell'].
+	"``Super'' backs Python's ``super'' type.  It is the one Grail-DEFINED
+	built-in type whose Smalltalk name differs from its Python name, and for a
+	reason that cannot be worked around: ``super'' is a Smalltalk
+	pseudo-variable, so it cannot be a class name.  (The same asymmetry is why
+	builtins had to bind #super explicitly rather than resolving it from the
+	Python dictionary.)
+
+	This one entry answers three questions at once, which is why it belongs here
+	rather than being spelled out three times: ``type(s).__name__'' becomes
+	``super'', __module__ answers 'builtins' (the first test in this method's
+	caller is exactly ``___pythonBuiltinTypeName___ notNil''), and pickle can
+	then save a super object BY REFERENCE as builtins.super instead of reporting
+	``Can't pickle <class 'Super'>: module '__main__' not found''."
+	(#('Super') @env0:includes: n) ifTrue: [^ 'super'].
 	"``type'' needs no entry: the Smalltalk class IS called type, so its own
 	name is already the Python one.  It was PyType for two releases and had a
 	mapping here; renaming it to match tuple / list / complex / dict retired
