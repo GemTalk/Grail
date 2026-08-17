@@ -6164,6 +6164,66 @@ __reduce_ex__: protocol
 
 category: 'Grail-String Representation'
 method: object
+___typeReprString___
+	"CPython's type_repr, for a receiver that is a CLASS:
+
+	    <class 'module.QualName'>      when __module__ is set and not builtins
+	    <class 'QualName'>             otherwise
+
+	The module is omitted for ``builtins'' exactly, which is why ``int''
+	answers ``<class 'int'>'' while a user class carries its module.  Both
+	parts are taken only when they read as STRINGS -- a class whose
+	__module__ is something else is not a reason for repr to raise -- and the
+	Smalltalk class name is the last resort."
+
+	| qual mod stream meta owner |
+	"A user METACLASS that defines __repr__ owns this: ``repr(C)'' is
+	``type(C).__repr__(C)''.  It cannot be reached by an ordinary send --
+	Grail MODELS the metaclass relation (``Custom.__class__'' answers ReprMeta,
+	``Custom.shout()'' dispatches to it) rather than making ReprMeta the
+	Smalltalk metaclass of Custom, so ``Custom __repr__'' looks up the
+	SMALLTALK chain and lands here regardless.  That is why the metaclass repr
+	never fired, before this branch existed or after it.
+
+	So consult the modelled metaclass explicitly and, when it defines
+	__repr__ itself, run that method with the CLASS as receiver -- the same
+	non-virtual invocation UnboundMethod uses for ``Cls.method(obj)''.
+
+	Guarded on the DEFINING class of the selector, not merely on its presence:
+	every metaclass inherits the default from ``object'', and treating that as
+	a user definition would recurse straight back into this method."
+	meta := [self @env1:___pyAttrLoad___: #'__class__']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	(meta @env0:notNil and: [(meta @env0:isKindOf: Behavior) and: [meta @env0:~~ self]])
+		ifTrue: [
+			owner := meta @env0:whichClassIncludesSelector: #'__repr__' environmentId: 1.
+			(owner @env0:notNil
+				and: [owner @env0:~~ (Python @env0:at: #object)
+				and: [owner @env0:~~ (Python @env0:at: #type)]]) ifTrue: [
+					^ (UnboundMethod definingClass: meta selector: #'__repr__')
+						@env1:value: { self } value: nil]].
+	qual := [ | qn |
+		qn := self @env1:___pyAttrLoad___: #'__qualname__'.
+		(qn isKindOf: CharacterCollection)
+			ifTrue: [qn @env0:asString]
+			ifFalse: [self @env0:name @env0:asString] ]
+		@env0:on: AbstractException do: [:e | e @env0:return: self @env0:name @env0:asString].
+	mod := [ | mv |
+		mv := self @env1:___pyAttrLoad___: #'__module__'.
+		(mv isKindOf: CharacterCollection) ifTrue: [mv @env0:asString] ifFalse: [nil] ]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
+	stream @env0:nextPutAll: '<class '''.
+	(mod @env0:notNil and: [mod @env0:~= 'builtins']) ifTrue: [
+		stream @env0:nextPutAll: mod.
+		stream @env0:nextPut: $.].
+	stream @env0:nextPutAll: qual.
+	stream @env0:nextPutAll: '''>'.
+	^ stream @env0:contents
+%
+
+category: 'Grail-String Representation'
+method: object
 __repr__
 	"Return a string representation for debugging.
 
@@ -6174,6 +6234,32 @@ __repr__
 	fall through to the default ``<module.QualName object at 0x...>''."
 
 	| myClass className stream fn mcOwner mod |
+	"A CLASS reprs as ``<class 'module.QualName'>'' -- CPython's type_repr --
+	not as an instance of its metaclass.  Grail had no such branch, so every
+	class object fell through to the instance form below, where ``self class''
+	is the METACLASS and its qualname carries the trailing ``class'':
+
+	    repr(int)     -- '<Integer class object at 0x112>'
+	    repr(Static)  -- '<Static class object at 0xac6244>'
+
+	against CPython's ``<class 'int'>'' and ``<class '__main__.Static'>''.
+	Three separate faults in one string: the wrong SHAPE, a meaningless
+	ADDRESS where a class has stable identity, and -- for every builtin --
+	the SMALLTALK name, so ``int'' announced itself as ``Integer'' and ``str''
+	as ``Unicode7''.  It is not an obscure corner either: this is what
+	``print(type(x))'', ``%s'' % cls, an f-string on a class, and most
+	type-error messages produce.
+
+	FIRST in the method, ahead of the setattr-installed __repr__ probe, which
+	for a class receiver would find the repr meant for its INSTANCES.  A user
+	METACLASS that defines __repr__ still wins, and needs nothing here: it is
+	found by the ordinary env-1 lookup before this method is reached at all.
+
+	Falls back to the Smalltalk class name if either part is unreadable or is
+	not a string, for the reason the instance branch gives -- a repr must not
+	raise, and several of Grail's own classes answer non-strings for
+	__module__."
+	(self @env0:isKindOf: Behavior) ifTrue: [^ self ___typeReprString___].
 	fn := self ___dynamicClassAttr___: #'__repr__'.
 	fn == nil ifFalse: [^ fn ___pyCallValue___: { self } kw: nil].
 	"A ``@staticmethod def __repr__()'' (a dunder with no self) defined in the
