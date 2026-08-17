@@ -1795,9 +1795,18 @@ category: 'Grail-code generation'
 method: FunctionDefAst
 emitSignatureEntryFor: anArg kind: kindIndex default: aDefaultNodeOrNil on: aStream
 	"One ``{ name . kind . default-text }'' triple.  The default's source
-	text comes from ___annotationSourceString___, the same unparser the
-	annotations use -- it covers the literal shapes real defaults take and
-	falls back to a placeholder rather than failing to compile.
+	text comes from ___defaultSourceString___.
+
+	It USED to come from ___annotationSourceString___, the annotations'
+	unparser, on the reasoning that it covers the literal shapes real defaults
+	take.  It does not, and sharing it was wrong in three ways at once:
+	every binary operator rendered as the PEP 604 union bar (``a=1+1'' ->
+	``a=1 | 1''), a string literal lost its quotes because an annotation's
+	string is a forward reference (``a='abc''' -> ``a=abc'', and the empty
+	string -> nothing at all), and a tuple rendered bare so the signature's
+	apparent ARITY changed (``j=(1,2)'' -> ``j=1, 2'').  Unary minus, lists and
+	dicts fell to the ``<annotation>'' placeholder.  ___defaultSourceString___
+	delegates to the annotation form for the nodes where the two agree.
 
 	A parameter with no default emits a TWO-element entry rather than a
 	third slot holding Smalltalk nil: nil reaching a Python local is
@@ -1808,7 +1817,7 @@ emitSignatureEntryFor: anArg kind: kindIndex default: aDefaultNodeOrNil on: aStr
 	aStream nextPutAll: kindIndex printString.
 	(aDefaultNodeOrNil isNil or: [aDefaultNodeOrNil isNone]) ifFalse: [
 		aStream nextPutAll: '. '.
-		self emitStringLiteral: aDefaultNodeOrNil ___annotationSourceString___
+		self emitStringLiteral: aDefaultNodeOrNil ___defaultSourceString___
 			on: aStream].
 	aStream nextPutAll: ' }'
 %

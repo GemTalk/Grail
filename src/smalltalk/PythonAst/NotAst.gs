@@ -58,3 +58,10 @@ printSmalltalkOn: aStream
 	operand printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' ___isTruthy___) @env0:not'.
 %
+
+category: 'Grail-annotations'
+method: NotAst
+___pythonUnaryGlyph___
+
+	^ 'not '
+%

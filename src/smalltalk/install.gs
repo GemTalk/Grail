@@ -832,6 +832,7 @@ run
 	at: #'NestedFunctionFramesTestCase' put: nil;
 	at: #'FrameEqualityTestCase' put: nil;
 	at: #'StdlibModuleNamesTestCase' put: nil;
+	at: #'SignatureDefaultTextTestCase' put: nil;
 	at: #'StrIsATypeTestCase' put: nil;
 	at: #'FnmatchTestCase' put: nil;
 	at: #'GetoptTestCase' put: nil;
@@ -1783,6 +1784,7 @@ input src/smalltalk/PythonTests/DirExcludesInternalsTestCase.gs
 input src/smalltalk/PythonTests/NestedFunctionFramesTestCase.gs
 input src/smalltalk/PythonTests/FrameEqualityTestCase.gs
 input src/smalltalk/PythonTests/StdlibModuleNamesTestCase.gs
+input src/smalltalk/PythonTests/SignatureDefaultTextTestCase.gs
 input src/smalltalk/PythonTests/StrIsATypeTestCase.gs
 input src/smalltalk/PythonTests/FnmatchTestCase.gs
 input src/smalltalk/PythonTests/GetoptTestCase.gs

@@ -107,3 +107,17 @@ method: DictAst
 values: newValue
 	values := newValue
 %
+
+category: 'Grail-annotations'
+method: DictAst
+___defaultSourceString___
+	"``i={'x': 1}'' fell to the ``<annotation>'' placeholder."
+
+	| parts |
+	parts := OrderedCollection new.
+	1 to: keys size do: [:i |
+		parts add: ((keys at: i) ___defaultSourceString___) , ': '
+			, ((values at: i) ___defaultSourceString___)].
+	^ '{' , (parts inject: '' into: [:acc :each |
+		acc isEmpty ifTrue: [each] ifFalse: [acc , ', ' , each]]) , '}'
+%
