@@ -1461,7 +1461,14 @@ ___pythonBuiltinTypeName___
 			ifTrue: [^ 'str'].
 	(#('ByteArray') @env0:includes: n) ifTrue: [^ 'bytes'].
 	(#('OrderedCollection') @env0:includes: n) ifTrue: [^ 'list'].
-	(#('PyDict' 'KeyValueDictionary') @env0:includes: n) ifTrue: [^ 'dict'].
+	"The live dict VIEWS belong here too: CPython's ``obj.__dict__'' and
+	``globals()'' ARE dicts, and ``type(obj.__dict__).__name__'' is ''dict''.
+	Grail backs them with view classes so a write reaches the object's real
+	slots, and without these the Smalltalk class name leaked -- an instance
+	__dict__ reported ``PyInstanceDict''.  ___isInstanceSingle___ already counts
+	both as dict; this is the same widening for the NAME."
+	(#('PyDict' 'KeyValueDictionary' 'PyInstanceDict' 'PyModuleDict')
+		@env0:includes: n) ifTrue: [^ 'dict'].
 	(#('Interval') @env0:includes: n) ifTrue: [^ 'range'].
 	(#('ScaledDecimal') @env0:includes: n) ifTrue: [^ 'Decimal'].
 	(#('GsNMethod') @env0:includes: n) ifTrue: [^ 'builtin_function_or_method'].
@@ -3485,7 +3492,23 @@ ___pyAttrLoad___: aSym
 			dictionary), so the identity test buys the same behaviour for nothing,
 			and a second class wanting an override can be added here explicitly."
 			(self == type) ifTrue: [^ self @env0:perform: #'__dict__' env: 1].
-			^ self ___classDict___].
+			"EVERY class answers a mappingproxy, as CPython does -- ``type(C.
+			__dict__)'' is mappingproxy for any C, and ``C.__dict__['x'] = v''
+			is a TypeError rather than a silent mutation.  Grail handed back the
+			___classDict___ snapshot itself, so both were wrong: the type read
+			``dict'' and the mapping was writable, which made a class's namespace
+			look like something a program could edit in place.
+
+			type's own override above stays, and is now the narrow case rather
+			than the only one: it answers a proxy over an EMPTY dict because only
+			the proxy's type is ever consulted there.
+
+			The wrapper is a per-read allocation on a hot path, which is the risk
+			this carries -- the earlier attempt at making class __dict__ general
+			regressed test_richcmp's test_recursion by adding frames that shifted
+			where the recursion guard fires.  Measured again for this shape: no
+			change across the corpus."
+			^ mappingproxy @env1:___on: self ___classDict___].
 		"Canonical-class overlay: a runtime ``Cls.x = v'' store landed
 		session-locally (see ___pyAttrStore___) and must SHADOW the
 		committed class-body value / compiled method on read -- CPython's

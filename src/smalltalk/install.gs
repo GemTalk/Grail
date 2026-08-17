@@ -688,6 +688,7 @@ run
 	at: #'SuperTwoArgLocalTestCase' put: nil;
 	at: #'MetaclassBaseTestCase' put: nil;
 	at: #'MetaclassDispatchTestCase' put: nil;
+	at: #'ClassDictProxyTestCase' put: nil;
 	at: #'TypeThreeArgNamespaceTestCase' put: nil;
 	at: #'ClassBodyNamespaceDefsTestCase' put: nil;
 	at: #'MethodOverrideArityTestCase' put: nil;
@@ -1632,6 +1633,7 @@ input src/smalltalk/PythonTests/SlotsTestCase.gs
 input src/smalltalk/PythonTests/SuperTwoArgLocalTestCase.gs
 input src/smalltalk/PythonTests/MetaclassBaseTestCase.gs
 input src/smalltalk/PythonTests/MetaclassDispatchTestCase.gs
+input src/smalltalk/PythonTests/ClassDictProxyTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNamespaceDefsTestCase.gs
 input src/smalltalk/PythonTests/MethodOverrideArityTestCase.gs
