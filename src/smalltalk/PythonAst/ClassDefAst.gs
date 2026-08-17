@@ -3188,8 +3188,7 @@ ___nonlocalTargetIsAssignableHere___: aSymbol
 	excluded from the class attributes, so the CPython-visible
 	``__class__ not in X.__dict__'' half keeps holding."
 
-	^ (CallAst ___freeVariableReadSource___: aSymbol parent: self parent)
-		= aSymbol asString
+	^ CallAst ___freeVariableIsAssignableTemp___: aSymbol parent: self parent
 %
 
 category: 'Grail-Class Compilation'
