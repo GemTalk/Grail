@@ -1676,6 +1676,7 @@ input src/smalltalk/PythonTests/SuperProxyAttrsTestCase.gs
 input src/smalltalk/PythonTests/PickleDispatchTableTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNamespaceDefsTestCase.gs
+input src/smalltalk/PythonTests/MixinMethodMetadataTestCase.gs
 input src/smalltalk/PythonTests/MethodOverrideArityTestCase.gs
 input src/smalltalk/PythonTests/DictKwargsTestCase.gs
 input src/smalltalk/PythonTests/DunderClassTestCase.gs

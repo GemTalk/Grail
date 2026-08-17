@@ -469,18 +469,72 @@ __annotate__
 
 category: 'Grail-Python Metadata'
 method: UnboundMethod
-___rawAnnotateForClass___: aClass
-	"Superclass walk for the annotate FUNCTION itself, where
-	___annotationsForClass___: walks for the dict it computes."
+___tableEntryFor___: aClass table: aTableSelector
+	"First entry named by this handle's selector in the class-side metadata table
+	``aTableSelector'' along aClass's LOOKUP CHAIN (superclasses, then the C3
+	MRO), or nil.
 
-	| tbl v |
+	One walk for what were five copies of it -- ___methodAnnotationsTable___,
+	___methodReceiverTable___, ___methodDocTable___, ___methodCodeTable___,
+	___methodSignatureTable___ -- which differed only in the table selector and
+	shared a defect none of them could see alone.
+
+	THE SUPERCLASS CHAIN IS NOT ENOUGH.  A Python class with several bases is one
+	Smalltalk class whose superclass is only its PRIMARY base;
+	___mergeSecondaryBases___ RECOMPILES the other bases' methods onto it, but
+	every one of these tables is built by ClassDefAst from ONE class body, so the
+	copied method's metadata stays behind in the base's table -- where a walk from
+	the subclass cannot reach it.  For ``class Multi(unittest.TestCase, Mixin)'':
+
+	    Multi.meth.__code__   -> AttributeError: 'method' object has no ...
+	    Multi.meth.__doc__    -> None
+	    Multi().meth.__code__ -> the right PyCode
+
+	The last line is the tell.  BoundMethod consulted the MRO already (for
+	test_gettext), so the INSTANCE-side read of the very same method was right
+	while the CLASS-side read was wrong -- and __code__ raising is not a quiet
+	wrong answer: ``hasattr(x, '__code__')'' is how inspect and functools.wraps
+	decide whether something is a function at all.
+
+	importlib is reached through the symbol list rather than named directly, as
+	BoundMethod does: importlib.gs is filed AFTER this file, so a direct
+	reference would be a forward one.  Falls back to the plain superclass chain
+	when it is absent, which is the whole answer under single inheritance."
+
+	| chain il c |
 	aClass == nil ifTrue: [^ nil].
-	((aClass @env0:class @env0:whichClassIncludesSelector:
-		#'___methodAnnotationsTable___' environmentId: 1) ~~ nil) ifTrue: [
-			tbl := aClass ___methodAnnotationsTable___.
-			v := tbl @env0:at: selector @env0:asString otherwise: nil.
-			v == nil ifFalse: [^ v]].
-	^ self ___rawAnnotateForClass___: (aClass @env0:superclass)
+	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
+	il == nil ifFalse: [
+		chain := [il @env0:___methodLookupChainFor___: aClass]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	chain == nil ifTrue: [
+		chain := OrderedCollection @env0:new.
+		c := aClass.
+		[c == nil] whileFalse: [
+			chain @env0:add: c.
+			c := c @env0:superclass]].
+	chain @env0:do: [:each |
+		"The tables are compiled in environment 1, so an env-0 ``canUnderstand:''
+		 would never see them."
+		((each @env0:class @env0:whichClassIncludesSelector: aTableSelector
+			environmentId: 1) ~~ nil) ifTrue: [
+				| tbl v |
+				tbl := [each @env0:perform: aTableSelector env: 1]
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+				tbl == nil ifFalse: [
+					v := [tbl @env0:at: selector @env0:asString otherwise: nil]
+						@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+					v == nil ifFalse: [^ v]]]].
+	^ nil
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___rawAnnotateForClass___: aClass
+	"The annotate FUNCTION itself, where ___annotationsForClass___: answers the
+	dict it computes."
+
+	^ self ___tableEntryFor___: aClass table: #'___methodAnnotationsTable___'
 %
 
 category: 'Grail-Python Metadata'
@@ -511,18 +565,11 @@ __signature_spec__
 category: 'Grail-Python Metadata'
 method: UnboundMethod
 ___receiverNameForClass___: aClass
-	"Superclass walk for this handle's entry in ___methodReceiverTable___ -- the
-	receiver parameter name ClassDefAst dropped from the signature spec, or nil
-	for a @staticmethod (and for any class compiled before the table existed)."
+	"This handle's entry in ___methodReceiverTable___ -- the receiver parameter
+	name ClassDefAst dropped from the signature spec, or nil for a @staticmethod
+	(and for any class compiled before the table existed)."
 
-	| tbl v |
-	aClass == nil ifTrue: [^ nil].
-	((aClass @env0:class @env0:whichClassIncludesSelector:
-		#'___methodReceiverTable___' environmentId: 1) ~~ nil) ifTrue: [
-			tbl := aClass ___methodReceiverTable___.
-			v := tbl @env0:at: selector @env0:asString otherwise: nil.
-			v == nil ifFalse: [^ v]].
-	^ self ___receiverNameForClass___: (aClass @env0:superclass)
+	^ self ___tableEntryFor___: aClass table: #'___methodReceiverTable___'
 %
 
 category: 'Grail-Python Metadata'
@@ -541,17 +588,9 @@ __doc__
 category: 'Grail-Python Metadata'
 method: UnboundMethod
 ___docForClass___: aClass
-	"Superclass walk for this handle's selector in ___methodDocTable___.
-	Mirrors ___signatureSpecForClass___:, including the env-1 probe."
+	"This handle's selector in ___methodDocTable___, or nil."
 
-	| tbl v |
-	aClass == nil ifTrue: [^ nil].
-	((aClass @env0:class @env0:whichClassIncludesSelector:
-		#'___methodDocTable___' environmentId: 1) ~~ nil) ifTrue: [
-			tbl := aClass ___methodDocTable___.
-			v := tbl @env0:at: selector @env0:asString otherwise: nil.
-			v == nil ifFalse: [^ v]].
-	^ self ___docForClass___: (aClass @env0:superclass)
+	^ self ___tableEntryFor___: aClass table: #'___methodDocTable___'
 %
 
 category: 'Grail-Python Metadata'
@@ -574,51 +613,33 @@ __code__
 category: 'Grail-Python Metadata'
 method: UnboundMethod
 ___codeForClass___: aClass
-	"Superclass walk for this handle's selector in ___methodCodeTable___.
-	Mirrors ___docForClass___:, including the env-1 probe."
+	"This handle's selector in ___methodCodeTable___, or nil."
 
-	| tbl v |
-	aClass == nil ifTrue: [^ nil].
-	((aClass @env0:class @env0:whichClassIncludesSelector:
-		#'___methodCodeTable___' environmentId: 1) ~~ nil) ifTrue: [
-			tbl := aClass ___methodCodeTable___.
-			v := tbl @env0:at: selector @env0:asString otherwise: nil.
-			v == nil ifFalse: [^ v]].
-	^ self ___codeForClass___: (aClass @env0:superclass)
+	^ self ___tableEntryFor___: aClass table: #'___methodCodeTable___'
 %
 
 category: 'Grail-Python Metadata'
 method: UnboundMethod
 ___signatureSpecForClass___: aClass
-	"Superclass walk for this handle's selector in ___methodSignatureTable___."
+	"This handle's selector in ___methodSignatureTable___, or nil."
 
-	| tbl v |
-	aClass == nil ifTrue: [^ nil].
-	((aClass @env0:class @env0:whichClassIncludesSelector:
-		#'___methodSignatureTable___' environmentId: 1) ~~ nil) ifTrue: [
-			tbl := aClass ___methodSignatureTable___.
-			v := tbl @env0:at: selector @env0:asString otherwise: nil.
-			v == nil ifFalse: [^ v]].
-	^ self ___signatureSpecForClass___: (aClass @env0:superclass)
+	^ self ___tableEntryFor___: aClass table: #'___methodSignatureTable___'
 %
 
 category: 'Grail-Python Metadata'
 method: UnboundMethod
 ___annotationsForClass___: aClass
-	"Superclass walk for the first ___methodAnnotationsTable___ entry named by
-	this handle's selector.  The entry is a PEP 649 annotate FUNCTION, called
-	here with Format.VALUE.  The table is compiled in ENVIRONMENT 1, so probe
-	the metaclass with environmentId: 1 -- an env-0 ``canUnderstand:'' would
-	never see it.  Mirrors BoundMethod >> ___methodAnnotationsForClass___:name:."
+	"The dict computed by the first ___methodAnnotationsTable___ entry named by
+	this handle's selector.  The entry is a PEP 649 annotate FUNCTION, called here
+	with Format.VALUE.  Mirrors BoundMethod >> ___methodAnnotationsForClass___:name:.
 
-	| tbl v |
-	aClass == nil ifTrue: [^ KeyValueDictionary @env0:new].
-	((aClass @env0:class @env0:whichClassIncludesSelector:
-		#'___methodAnnotationsTable___' environmentId: 1) ~~ nil) ifTrue: [
-			tbl := aClass ___methodAnnotationsTable___.
-			v := tbl @env0:at: selector @env0:asString otherwise: nil.
-			v == nil ifFalse: [^ v @env0:value: { 1 } value: nil]].
-	^ self ___annotationsForClass___: (aClass @env0:superclass)
+	An EMPTY DICT when there is no entry, not nil: CPython's rule is that a
+	function always has an __annotations__."
+
+	| v |
+	v := self ___tableEntryFor___: aClass table: #'___methodAnnotationsTable___'.
+	v == nil ifTrue: [^ KeyValueDictionary @env0:new].
+	^ v @env0:value: { 1 } value: nil
 %
 
 set compile_env: 0
