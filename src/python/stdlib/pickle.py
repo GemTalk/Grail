@@ -21,6 +21,13 @@
 
 import sys
 
+# copyreg's out-of-band reduction table, consulted in save().  Imported under a
+# private alias so the name cannot be mistaken for a Pickler ATTRIBUTE: CPython
+# lets a subclass override the table by defining ``self.dispatch_table``, which
+# Grail does not support, and a bare ``dispatch_table`` here would read as if it
+# did.
+from copyreg import dispatch_table as _dispatch_table
+
 # An enum MEMBER that also subclasses int/str/float (IntEnum, IntFlag, a
 # data-mixed ``class C(int, Enum)``) satisfies the isinstance(obj, int/str/
 # float) primitive dispatch in save() and would pickle as its RAW value,
@@ -713,6 +720,34 @@ class _Pickler:
             return
         if type(obj) in _ITER_TYPES:
             self.save_iterator(obj)
+            return
+        # copyreg.dispatch_table -- a reduction registered OUT OF BAND, keyed by
+        # TYPE.  CPython consults it here, between the primitive dispatch above
+        # and the by-reference / __reduce__ tail below, and the position is the
+        # point: a type registered here never reaches __reduce__ at all.
+        #
+        # That is what the table is FOR.  A type whose attribute access is a
+        # proxy cannot answer __reduce__ for itself -- ``super`` is the standard
+        # case, since ``s.__reduce__`` resolves against the parent chain and so
+        # IS the underlying object's reduce.  Being keyed by type, the entry is
+        # invisible to attribute lookup, which is how super stays picklable while
+        # ``hasattr(s, '__deepcopy__')`` is False.
+        #
+        # copy.py already honoured this; pickle.py did not, so a registered
+        # reductor worked for copy.deepcopy and was silently skipped when
+        # pickling.  The unpickler then built the object EMPTY and asked it for
+        # __setstate__ (test_super's test_pickling).
+        #
+        # A STRING reduction means "save by reference under this name", which is
+        # what CPython does with it; every other reduction is a (callable, args)
+        # tuple handled exactly like __reduce__'s.
+        reduce = _dispatch_table.get(type(obj))
+        if reduce is not None:
+            rv = reduce(obj)
+            if isinstance(rv, str):
+                self.save_global(obj, rv)
+            else:
+                self.save_reduce(*rv, obj=obj)
             return
         if isinstance(obj, type):
             self.save_global(obj)
