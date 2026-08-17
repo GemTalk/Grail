@@ -60,9 +60,19 @@ printSmalltalkOn: aStream
 
 	exc ifNil: [
 		"Bare ``raise'' — re-raise the active exception.  Two cases:
-		  - Inside an ``except'' handler: emit ``___ex pass.''.  The
-		    enclosing TryAst codegen puts ``___ex'' in scope as the
-		    block parameter of ``do: [:___ex | ...]''.
+		  - Inside an ``except'' handler: re-raise ``___ex'' through a
+		    CARRIER.  The enclosing TryAst codegen puts ``___ex'' in scope
+		    as the block parameter of ``do: [:___ex | ...]''.
+
+		    This used to emit ``___ex pass''.  #pass keeps the object's
+		    identity, which CPython requires, but continues the ORIGINAL
+		    handler search -- it resumes OUTSIDE the currently-active
+		    on:do:, so a handler established INSIDE this except body never
+		    saw the exception and it left the function instead.  A carrier
+		    delivers the same payload from an ordinary #signal, which is
+		    CPython's fresh search from the raise point.  ___payloadOf___:
+		    keeps a re-raise of an already-carried exception flat rather
+		    than nesting carrier inside carrier.
 		  - Outside any except handler: ``___ex'' isn't in scope and
 		    the bare emit produces a CompileError.  CPython's
 		    semantics here are ``re-raise whatever ``sys.exc_info()''
@@ -72,7 +82,8 @@ printSmalltalkOn: aStream
 		    callers that reach this path get a clear failure mode
 		    instead of a compile-time error during module load."
 		(self ___enclosingExceptHandler___ notNil)
-			ifTrue: [aStream nextPutAll: '___ex @env0:pass.']
+			ifTrue: [aStream nextPutAll:
+				'BaseException @env0:___signalCarrying___: (BaseException @env0:___payloadOf___: ___ex).']
 			ifFalse: [aStream nextPutAll: 'RuntimeError @env1:___signal___: ''No active exception to re-raise''.'].
 		^ self
 	].

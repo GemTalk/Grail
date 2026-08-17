@@ -369,7 +369,12 @@ ___pyRaise___: excValue cause: aCause
 		does, and declines to build a cycle."
 		excValue ___applyImplicitContext___.
 		aCause == nil ifFalse: [self ___applyCause___: aCause to: excValue].
-		(self ___isInFlight___: excValue) ifTrue: [^ self ___passOrSignal___: excValue].
+		"In flight -- its handler is running, so the object is a live anchor and
+		cannot be signalled again.  A CARRIER re-raises it without re-signalling
+		it, which keeps CPython's identity AND gets a fresh handler search; #pass
+		kept the identity but resumed outside the active on:do:, skipping any
+		handler established inside the except body.  See ___signalCarrying___:."
+		(self ___isInFlight___: excValue) ifTrue: [^ self @env0:___signalCarrying___: excValue].
 		^ self ___signalOrPass___: excValue].
 	^ TypeError ___signal___: 'exceptions must derive from BaseException'
 %
@@ -413,6 +418,7 @@ ___passOrSignal___: excValue
 		@env0:on: (Globals @env0:at: #ImproperOperation)
 		do: [:e | e @env0:return: (excValue @env0:signal)]
 %
+
 
 category: 'Grail-Recursion'
 classmethod: BaseException
@@ -995,11 +1001,32 @@ ___pushTracebackFrame___: aCode lineno: ln colno: co endLineno: el endColno: ec 
 	Python exceptions and must not grow a traceback -- the caller re-raises them
 	unchanged."
 
-	| frame tb |
+	| frame tb payload |
 	((self isKindOf: PythonReturn)
 		or: [(self isKindOf: PythonBreak)
 		or: [(self isKindOf: PythonContinue)
 		or: [self isKindOf: StopIteration]]]) ifTrue: [^ self].
+	"A CARRIER is the object propagating, but the PAYLOAD is the one Python
+	holds -- so a frame recorded while a carrier is unwinding has to land on the
+	payload or it is discarded with the carrier.  That is what dropped the
+	catch-site frame from a bare re-raise: the frames recorded BEFORE the
+	re-raise were on the payload and survived, and the one added on top of them
+	was not.  See ___signalCarrying___:."
+	payload := BaseException ___payloadOf___: self.
+	payload == self ifFalse: [
+		"...and it must not MOVE where the exception entered that frame.  CPython
+		records one frame per function unwound through, positioned where the
+		exception ENTERED it, and a re-raise does not relocate it: ``mid'' is
+		reported at its ``leaf()'' call, never at its own ``raise''.  A carrier
+		is a fresh #signal from the raise point, so without this it looked like
+		a new origin and pushed a SECOND frame for a function already recorded
+		-- ``mid'' appeared at both line 32 and line 34.  #pass never did,
+		because it continued the original propagation rather than starting one.
+		Head-of-chain test only: re-entering a function legitimately does get a
+		new frame, and that arrives with something else on the head."
+		((payload ___tracebackHeadCode___) == aCode) ifTrue: [^ self].
+		^ payload ___pushTracebackFrame___: aCode lineno: ln colno: co
+			endLineno: el endColno: ec line: src].
 	frame := PyFrame code: aCode lineno: ln back: None globals: None.
 	"Store the None singleton for any absent field: a nil dynamic instVar reads
 	back as ABSENT (AttributeError on tb_line/tb_colno/...), so line-level frames
@@ -1723,6 +1750,104 @@ ___headFrameName___
 	code := frame @env0:dynamicInstVarAt: #'f_code'.
 	code isNil ifTrue: [^ nil].
 	^ code @env0:dynamicInstVarAt: #'co_name'
+%
+
+category: 'Grail-Carrier'
+classmethod: BaseException
+___signalCarrying___: payload
+	"Raise payload WITHOUT signalling payload itself.
+
+	WHY THIS EXISTS.  GemStone LIFTS a handler onto the signalling frame rather
+	than UNWINDING to it, so a signalled exception is not inert data -- it is
+	the live anchor joining a still-running signal point to its handler.  Those
+	are the frames the VM appends as indexed slots: _basicSize is 5 inside the
+	handler and 0 the moment it returns, that return being the deferred unwind.
+	One object cannot anchor two live signals at once, which is exactly the
+	UncontinuableError 6011 (``Exception has already been signaled'') that
+	``except E as e: raise e'' walks into.
+
+	Python's model is the opposite.  ``raise'' UNWINDS, so by the time an
+	``except'' body runs the original propagation is already over and the
+	exception is ordinary data that may be raised again freely -- and CPython
+	requires the re-raised object to BE the caught one, because ``is''
+	comparisons are built on it (contextlib's _GeneratorContextManager.__exit__
+	is literally ``if exc is not value: raise'').
+
+	So stop asking one object to be both.  Signal a fresh throwaway CARRIER of
+	the payload's own class that references the payload; the handler unwraps.
+	The payload is never signalled, so it never acquires frames and stays
+	raisable for ever.
+
+	SAME CLASS, deliberately: ``on: ValueError do:'' selects on the object
+	actually signalled, so the carrier has to match whatever the payload would
+	have matched -- including a user-defined ``class MyError(ValueError)''.
+	Allocated with env-0 #new rather than any Python constructor: nothing runs
+	__init__ on a carrier, and nothing reads it as a Python object.
+
+	WHAT IT REPLACES.  #pass preserved identity but continued the ORIGINAL
+	search, resuming OUTSIDE the currently-active on:do: -- so a handler
+	established INSIDE the except body was skipped entirely:
+
+	    except RuntimeError as outer:
+	        try:
+	            raise outer
+	        except BaseException:      ""never ran -- the exception left the function""
+	            ...
+
+	A carrier is an ordinary #signal from the raise point, which is precisely
+	CPython's fresh handler search.
+
+	messageText is carried across so an UNCAUGHT re-raise still reports
+	something at the Smalltalk level, where no Grail handler is present to
+	unwrap it."
+
+	| carrier |
+	carrier := payload @env0:class @env0:new.
+	carrier @env0:dynamicInstVarAt: #'___grailPayload___' put: payload.
+	[carrier @env0:messageText: payload @env0:messageText]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	^ carrier @env0:signal
+%
+
+category: 'Grail-Carrier'
+method: BaseException
+___tracebackHeadCode___
+	"The PyCode of this exception's SHALLOWEST recorded frame, or nil when it
+	has none yet.  Used to tell ``a frame for a function already on the chain''
+	from ``a frame for a function being entered'' -- see
+	___pushTracebackFrame___:, which must not let a re-raise record its own
+	function twice."
+
+	| head frame |
+	head := tracebackObj.
+	(head == nil or: [head == None]) ifTrue: [^ nil].
+	frame := head @env0:dynamicInstVarAt: #'tb_frame'.
+	(frame == nil or: [frame == None]) ifTrue: [^ nil].
+	^ frame @env0:dynamicInstVarAt: #'f_code'
+%
+
+category: 'Grail-Carrier'
+classmethod: BaseException
+___payloadOf___: anException
+	"The Python exception anException stands for: itself, unless it is a
+	CARRIER, in which case the object it was raised to deliver.
+
+	THE ONE SANCTIONED CROSSING.  Every path that hands a caught exception back
+	to Python goes through here -- the ``except X as e'' binding, the
+	sys.exc_info() current-exception record, and a bare ``raise''.  Leaking a
+	carrier to Python instead of its payload reintroduces the identity bug this
+	removes, but rarer and much harder to find, so there is deliberately ONE
+	way across rather than an unwrap open-coded at each site.
+
+	Answers anException unchanged for everything that is not a carrier, which is
+	every exception raised for the first time and every exception GemStone
+	itself signals."
+
+	| payload |
+	(anException @env0:isKindOf: AbstractException) @env0:ifFalse: [^ anException].
+	payload := [anException @env0:dynamicInstVarAt: #'___grailPayload___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	^ payload == nil ifTrue: [anException] ifFalse: [payload]
 %
 
 category: 'Grail-Current Exception'
