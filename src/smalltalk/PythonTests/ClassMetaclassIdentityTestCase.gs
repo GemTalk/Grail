@@ -43,10 +43,11 @@ ClassMetaclassIdentityTestCase category: 'Grail-SUnit'
 ! so the rule stays general rather than special-casing enum -- a Smalltalk class
 ! that really has a Python metaclass says so.
 !
-! An explicit ``metaclass='' is NOT consulted, though ___grailMetaclass___
-! records one and CPython would answer it.  Preferring the record was tried and
-! reverted; see testAnExplicitMetaclassIsNotReportedWhichIsAKnownGap for what it
-! broke and what closing it would actually take.
+! An explicit ``metaclass='' IS now consulted, after the declared one so that an
+! enum keeps answering EnumType.  Preferring the record was tried and reverted
+! ONCE, when ``class Meta(type)'' still rooted at a substitute and copy()'s
+! ``issubclass(type(x), type)'' therefore answered False; PyType removed that
+! obstacle, and testAnExplicitMetaclassIsReported carries the history.
 !
 ! The ancestor search runs along the PYTHON MRO, not the Smalltalk superclass
 ! chain, so ``class Mixed(int, Enum)'' -- rooted at Grail's int, never passing
@@ -182,34 +183,53 @@ testSubclassingAMetaclassStillBuildsTheClass
 		equals: '''auto_enum'''.
 %
 
+category: 'Grail-Tests - Metaclass identity'
+method: ClassMetaclassIdentityTestCase
+testAnExplicitMetaclassIsReported
+	"``class C(metaclass=Meta)'' -- type(C) is Meta, and isinstance(C, Meta).
+	This was the known gap this test case carried, and the note it carried is
+	worth keeping because it names exactly what closing it took.
+
+	Reporting the record was TRIED and reverted once.  ___grailMetaclass___ had
+	it all along, so the resolver could simply prefer it -- and doing so
+	regressed test_copy: copy() decides a class is atomic with
+	``issubclass(type(x), type)'', and Grail rooted ``class Meta(type)'' at a
+	substitute, so nothing linked Meta back to ``type'' and that test answered
+	False.  With type(C) still ``type'' the atomic branch was reached directly,
+	which is why the LESS truthful answer worked and the more truthful one
+	broke it.
+
+	So closing it was never a change to the resolver.  It was making a class
+	that subclasses ``type'' REMEMBER that it did -- PyType, a real ``type''
+	object for a metaclass to root at.  With that in place the resolver change
+	is the two lines the old note predicted, and the copy() test is satisfied
+	through the ancestry rather than by declining to answer.
+
+	isinstance moves with it and not before it: isinstance(C, M) is
+	issubclass(type(C), M), so while type(C) was ``type'' the question was
+	``issubclass(type, M)'' -- False for every M."
+
+	self assert: (self resultAt: 'explicit_metaclass') asString equals: 'True'.
+	self assert: (self resultAt: 'explicit_metaclass_isinstance') asString
+		equals: 'True'.
+%
+
 category: 'Grail-Tests - Known gaps'
 method: ClassMetaclassIdentityTestCase
-testAnExplicitMetaclassIsNotReportedWhichIsAKnownGap
-	"Recorded, NOT endorsed.  CPython: type(ABC) is ABCMeta, and type(C) is Meta
-	for ``class C(metaclass=Meta)''.  Grail answers ``type'' for both.
+testAbcDoesNotDeclareItsMetaclassWhichIsAVendoredDivergence
+	"CPython: type(ABC) is ABCMeta.  Grail answers ``type'', and NOT because
+	type() cannot report a metaclass -- the test above shows it now does.  The
+	vendored abc.py writes ``class ABC:'' where upstream writes ``class
+	ABC(metaclass=ABCMeta)'', so there is no keyword here to report.
 
-	Reporting the record was TRIED and reverted, which is the useful part.
-	___grailMetaclass___ has it, so the resolver could simply prefer it -- and
-	doing so regressed test_copy: copy() decides a class is atomic with
-	``issubclass(type(x), type)'', and Grail roots ``class Meta(type)'' at object
-	(the documented degradation for a base it cannot model), so nothing links
-	Meta back to ``type'' and that test answers False.  With type(C) still
-	``type'' the atomic branch is reached directly, which is why it worked
-	before and why the more truthful answer broke it.
+	Kept as a gap rather than fixed in passing because the divergence is a
+	deliberate one with its own reasoning (see the note in src/python/stdlib/
+	abc.py: ABCMeta's Python-level __instancecheck__ is a cost every ``class
+	Foo(ABC)'' would then pay).  Closing it is a change to abc.py, measured on
+	its own."
 
-	So closing this is not a change to the resolver: it means making a class
-	that subclasses ``type'' REMEMBER that it did.  THAT HALF IS NOW DONE --
-	``type'' is a real class (PyType), a metaclass roots at it, and
-	``issubclass(Meta, type)'' answers True, so the second assertion moved out
-	of the gap and into testAMetaclassRemembersThatItSubclassedType below.
-
-	What remains is the resolver itself: type(C) still answers ``type'' rather
-	than the recorded ``metaclass=''.  The reason it could not is gone -- the
-	copy() atomic test ``issubclass(type(x), type)'' now has a real answer --
-	so this is available work rather than blocked work."
-
-	self assert: (self resultAt: 'explicit_metaclass_is_a_known_gap') asString
-		equals: '[False, False]'.
+	self assert: (self resultAt: 'abc_metaclass_is_a_vendored_divergence')
+		asString equals: 'False'.
 %
 
 category: 'Grail-Tests - Metaclass identity'

@@ -42,16 +42,24 @@ class ABC:
 _registry = {}
 
 
-class ABCMeta:
+class ABCMeta(type):
     """Metaclass for abstract base classes.
 
-    GRAIL: upstream subclasses ``type`` and creates the class; Grail has no
-    metaclass object to route class creation through, so ``class C(...,
+    GRAIL: upstream subclasses ``type`` and creates the class.  Grail now has a
+    real ``type`` to subclass, so the base is upstream's -- it used to read
+    ``class ABCMeta:`` because there was no metaclass object to name.  What
+    Grail still does NOT do is route class creation through it: ``class C(...,
     metaclass=ABCMeta)`` RECORDS ABCMeta (object >> ___grailSetMetaclass___)
-    and attribute lookup on C consults it -- CPython's ``type(cls).__mro__''
-    step, reached by a different road.  The methods below are therefore
-    written exactly as CPython writes them, taking the USING class as
-    ``cls``, and that is what they receive.
+    rather than calling ABCMeta.__new__, and attribute lookup on C consults the
+    record -- CPython's ``type(cls).__mro__'' step, reached by a different road.
+    The methods below are therefore written exactly as CPython writes them,
+    taking the USING class as ``cls``, and that is what they receive.
+
+    The base is not cosmetic: ``issubclass(ABCMeta, type)`` is how copy()
+    decides a class is atomic, so without it copy.copy() of a class whose
+    metaclass is ABCMeta tried to build a new object instead of returning the
+    class (test_copy test_copy_atomic / test_deepcopy_atomic).  That only
+    surfaced once type() began reporting a recorded ``metaclass=''.
 
     What this does NOT do is enforce abstractness: instantiating a class
     with unimplemented abstract methods is allowed (CPython raises
