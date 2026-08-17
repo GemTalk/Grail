@@ -319,6 +319,10 @@ printSmalltalkOn: aStream
 		and: [(self ___declaredInEnclosingFunction___: #'super') not
 		and: [(self isModuleVariableName: #'super') not]]])
 		ifTrue: [
+			"The bare name still counts: CPython creates the __class__ cell for
+			any method that references ``super'', however it goes on to use it."
+			CallAst classBeingCompiled notNil
+				ifTrue: [CallAst classNeedsClassCell: true].
 			aStream nextPutAll: 'Super'.
 			^ self
 		].

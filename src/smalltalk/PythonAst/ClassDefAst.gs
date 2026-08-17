@@ -137,7 +137,7 @@ printSmalltalkRuntimeOn: aStream
 	  savedInBodyEmit savedBoundNames savedNestedNames
 	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars
 	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
-	  metaclassKw savedAliasTargets |
+	  metaclassKw savedAliasTargets savedNeedsClassCell |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -308,6 +308,10 @@ printSmalltalkRuntimeOn: aStream
 
 	savedCapturedNames := CallAst classCapturedNames.
 	CallAst classCapturedNames: IdentitySet new.
+	"Whether a method body reads ``__class__'' is a question about THIS class,
+	so a nested class statement must not inherit or clobber the outer answer."
+	savedNeedsClassCell := CallAst classNeedsClassCell.
+	CallAst classNeedsClassCell: false.
 	savedCapturedWriteNames := CallAst classCapturedWriteNames.
 	CallAst classCapturedWriteNames: IdentitySet new.
 	methodSources := OrderedCollection new.
@@ -1821,6 +1825,14 @@ printSmalltalkRuntimeOn: aStream
 		className: name
 		saved: savedCapturedNames
 		savedWrite: savedCapturedWriteNames.
+	"``__classcell__'', injected at the END of the body exactly as CPython's
+	compiler does, and only when a method actually referenced ``__class__'' or
+	used a zero-arg ``super()''.  Emitted before the metaclass hook because the
+	metaclass must SEE the cell -- passing it on to type.__new__ is the contract
+	the protocol exists to express."
+	CallAst classNeedsClassCell ifTrue: [
+		aStream nextPutAll: name;
+			nextPutAll: ' @env1:___grailInjectClassCell___.'; lf].
 	aStream nextPutAll: name; nextPutAll: ' := '; nextPutAll: name;
 		nextPutAll: ' @env1:___pyClassDefined___: { '.
 	self classBodyAttributes
@@ -1943,6 +1955,7 @@ printSmalltalkRuntimeOn: aStream
 		savedWrite: savedCapturedWriteNames.
 	CallAst classCapturedNames: savedCapturedNames.
 	CallAst classCapturedWriteNames: savedCapturedWriteNames.
+	CallAst classNeedsClassCell: savedNeedsClassCell.
 
 	"Phase A: close the wrapping block (opened at the top of this
 	method) and store the final class object into the module

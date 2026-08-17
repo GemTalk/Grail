@@ -165,8 +165,17 @@ __new__: mcls _: aName _: bases _: ns
 		what this replays."
 		(ns @env0:isNil @env0:not and: [ns @env0:isEmpty @env0:not]) ifTrue: [
 			ns @env0:keysAndValuesDo: [:k :v |
-				[pending ___pyAttrStore___: k @env0:asSymbol put: v]
-					@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
+				"``__classcell__'' is protocol, not a class attribute.  CPython
+				consumes it here and never stores it on the class -- copying it
+				across would leave a stray attribute on every class whose methods
+				mention __class__."
+				(k @env0:asString @env0:= '__classcell__') @env0:ifFalse: [
+					[pending ___pyAttrStore___: k @env0:asSymbol put: v]
+						@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]]].
+		"Fill the cell, and police what the metaclass did to it: this is the
+		moment CPython populates ``__class__'', and the moment it raises if the
+		metaclass dropped the cell or replaced it with something else."
+		pending ___grailFillClassCell___: ns.
 		^ pending].
 	^ (builtins @env1:instance) @env1:type: aName _: bases _: ns
 %
