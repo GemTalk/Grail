@@ -298,6 +298,27 @@ class _CallSite:
         return (result, trailing)[0]
 
 
+def method_frame_call_site():
+    """``(reported, call_site, last_statement)'' for a method that called a
+    nested def -- the three line numbers the check below compares.
+
+    Split out from the check because the answer is GEM-DEPENDENT in Grail and the
+    Smalltalk driver is the only place that can ask which gem it is.  Under
+    CPython, and on an interpreted gem, ``reported == call_site''.  With native
+    code enabled it is ``last_statement``, for the reason 9.10 documents:
+    ip -> line derivation puts a protected block's caret PAST the whole block, so
+    the nearest preceding ``___curPos___'' literal is the method's final
+    statement.  See TracebackTestCase>>testAMethodFrameReportsItsCallSite."""
+    result = _CallSite().meth()
+    first = _CallSite.meth.__code__.co_firstlineno
+    reported = None
+    for entry in result:
+        if entry.name == 'meth':
+            reported = entry.lineno
+            break
+    return (reported, first + 3, first + 5)
+
+
 def a_method_s_frame_reports_the_call_site():
     """The frame for a method that called a nested def reports the line of the
     CALL, not the method's last statement.
@@ -314,17 +335,15 @@ def a_method_s_frame_reports_the_call_site():
     A module-level def is unaffected (its body is not wrapped), which is why
     this needs a method to reproduce and why the checks above did not catch it.
 
-    Returns the offending entry rather than False so a failure says which line
-    it picked."""
-    result = _CallSite().meth()
-    wanted = _CallSite.meth.__code__.co_firstlineno + 3      # ``result = fmt()''
-    for entry in result:
-        if entry.name == 'meth':
-            if entry.lineno == wanted:
-                return True
-            return 'meth reported line %r, wanted %r (%r)' % (
-                entry.lineno, wanted, entry.line)
-    return 'no frame named meth in %r' % ([e.name for e in result],)
+    This is the CPython statement of the rule, so it stays in ``checks'' and is
+    what the fixture gate verifies.  Grail asserts it through the Smalltalk
+    driver instead, which knows whether native code is on -- with native code the
+    call site is not recoverable at all, and the driver pins THAT answer rather
+    than skipping."""
+    reported, call_site, _last = method_frame_call_site()
+    if reported == call_site:
+        return True
+    return 'meth reported line %r, wanted %r' % (reported, call_site)
 
 
 class _MixinBase:

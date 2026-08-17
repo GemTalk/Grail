@@ -3916,6 +3916,37 @@ block's line. Measured:
 T>>nested_assign_last        nArgs=0  ip=88   line=21   <- what was reported
 ```
 
+**And this one is gem-dependent, which CI said and I had not asked.** The fix
+turns on that middle frame — the wrapping block, which on an interpreted gem
+carries the call site exactly. With native code enabled it does not: §9.10's
+table records that a protected block's caret sits **past the whole block**, so
+the wrapper derives the method's last statement too, and **no frame in the
+capture carries the call site**. CI reported `meth reported line 298, wanted 296`
+with everything else in the run green.
+
+So the fix is real, is what CPython does, and is **inert on a native-code gem**.
+That is the third time in this series that something built on `_sourceAtIp:`
+passed locally and failed only on CI (§9.45's nested-function *names* was the
+first, and its fix was to stop depending on the ip at all). The lesson that keeps
+not sticking: **a local green run cannot validate anything derived from an ip**,
+because native code is unavailable on macOS/arm64 — so for any ip-derived change
+the CI run is not a formality, it is the measurement.
+
+The assertion therefore lives in the Smalltalk driver
+(`testAMethodFrameReportsItsCallSite`), which can ask
+`System gemConfigurationAt: #GemNativeCodeEnabled`, and it pins the **exact**
+answer for both gems rather than skipping on one: the call site when interpreted,
+the last statement when native. Skipping would have let the original defect back
+in on CI unnoticed, and pinning the degraded answer means that if a future
+GemStone resolves a protected block's ip properly, the test fails and says so
+instead of quietly passing. The Python fixture keeps the unconditional CPython
+statement of the rule, which is what the fixture gate verifies.
+
+The practical consequence: `test_format_stack` / `test_print_stack` are fixed on
+an interpreted gem, which is where the scoreboard is measured, and would still
+fail on a native one. CI does not run the CPython suite, so the committed rows
+stay consistent.
+
 **Five. A mixin's frames reported `<grail>`.** A live frame's filename comes from
 the PyCode in the defining class's class-side `___methodCodeTable___`. Grail
 merges multiple inheritance by **recompiling** the secondary bases' methods onto
