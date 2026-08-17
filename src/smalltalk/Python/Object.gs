@@ -3963,7 +3963,7 @@ ___pyMetaclass___
 	every class receiver, one answering the Smalltalk metaclass and the other
 	the canonical ``type''.
 
-	Two sources:
+	Three sources, in this order:
 
 	  * a metaclass DECLARED by a Smalltalk-written ancestor
 	    (___grailDeclaredMetaclass___).  Tried on the receiver first, where the
@@ -3972,6 +3972,17 @@ ___pyMetaclass___
 	    ``class Mixed(int, Enum)'' is rooted at Grail's int and must still
 	    answer EnumType, exactly as CPython picks the most derived metaclass
 	    among the bases.  The MRO is most-derived-first, so the first hit is it.
+	  * failing that, an explicit ``class C(metaclass=M)'' as recorded by
+	    ___grailSetMetaclass___ and inherited down the superclass chain, as
+	    CPython inherits it.  Reporting it was tried ONCE before and regressed
+	    test_copy: copy() treats a class as atomic via ``issubclass(type(x),
+	    type)'', and Grail then rooted ``class Meta(type)'' at PythonInstance --
+	    the documented degradation for a base it could not model -- so nothing
+	    linked Meta back to ``type'' and issubclass answered False.  PyType is
+	    that base, so the atomic test is satisfied through real ancestry and the
+	    record can be told the truth.  Ordered AFTER the declared metaclass
+	    because an enum declares EnumType in Smalltalk and never writes the
+	    keyword; the two must not compete.
 	  * otherwise ``type'', the single canonical object -- so ``type(cls) is
 	    type'' keeps holding for an ordinary class, which is what it answered
 	    before and what isinstance(cls, type) agrees with.
@@ -3980,18 +3991,7 @@ ___pyMetaclass___
 	answer through ``self class'': ``Color class'' is anonymous scaffolding
 	with no Python name, and handing it out leaked a GemStone artefact into an
 	answer Python code compares -- inspect.getmembers(Color)['__class__']
-	is asserted to be EnumType (test_enum TestStdLib.test_inspect_getmembers).
-
-	An explicit ``metaclass='' is DELIBERATELY not consulted, though
-	___grailMetaclass___ records one and CPython would answer it.  Reporting it
-	was tried and regressed test_copy: copy() treats a class as atomic via
-	``issubclass(type(x), type)'', and Grail roots ``class Meta(type)'' at
-	PythonInstance -- the documented degradation for a base it cannot model --
-	so nothing links Meta back to ``type'' and issubclass answers False.  With
-	type(C) still ``type'' the atomic branch is reached directly, which is why
-	this worked before and why claiming the recorded metaclass breaks it.  The
-	honest position is that Grail RECORDS a metaclass rather than being one, so
-	type() does not yet report it; see the known-gap test."
+	is asserted to be EnumType (test_enum TestStdLib.test_inspect_getmembers)."
 
 	| declared mro |
 	"A non-class answers through __class__, NOT ``self class''.  One Python type
@@ -4014,6 +4014,21 @@ ___pyMetaclass___
 			(c isKindOf: Behavior) ifTrue: [
 				declared := c ___grailDeclaredMetaclassOrNil___.
 				declared == nil ifFalse: [^ declared]]]].
+	"An explicit ``class C(metaclass=M)'', recorded by ___grailSetMetaclass___
+	and inherited down the superclass chain as CPython inherits it.  Tried AFTER
+	the Smalltalk-declared metaclass so that an enum keeps answering EnumType --
+	Enum declares its metaclass in Smalltalk and never writes the keyword, and
+	the two must not compete.
+
+	This is the answer PyType made safe.  It was withheld until now for ONE
+	reason: copy() decides a class is atomic with ``issubclass(type(x), type)'',
+	and while ``class Meta(type)'' was rooted at PythonInstance nothing linked
+	Meta back to ``type'', so reporting M made that False and broke test_copy.
+	Meta is rooted at PyType now and issubclass answers True, so the atomic
+	branch is reached through the real ancestry rather than by declining to
+	answer."
+	declared := self ___grailMetaclass___.
+	declared == nil ifFalse: [^ declared].
 	"PyType, the class that IS Python's ``type''.  This used to mint a
 	BoundMethod on builtins -- the only ``type'' there was -- and the identity
 	held because the NAME evaluated to the same shape.  Now that the name is
@@ -5546,11 +5561,15 @@ ___nonClassCheckHook___: baseSym
 category: 'Grail-Metaclass'
 method: object
 ___grailSetMetaclass___: aMetaclass
-	"Record a ``class C(metaclass=M)'' keyword.  A RECORD, not a construction:
-	builtins >> type: answers the single canonical ``type'' BoundMethod as any
-	class's metaclass, so there is no metaclass object and class creation has
-	nowhere to route.  What it buys is that a metaclass-defined comparison can be
-	found for ``A < B'' -- functools.total_ordering's metaclass case."
+	"Record a ``class C(metaclass=M)'' keyword.  Still a RECORD rather than a
+	construction -- the class is built by Grail's own machinery and M's __new__
+	is not what builds it -- but the record is no longer inert.  It is what
+	___pyMetaclass___ reports, so type(C), C.__class__ and isinstance(C, M) all
+	answer M, and it is where a metaclass-defined comparison is found for
+	``A < B'' (functools.total_ordering's metaclass case).
+
+	Session-local and keyed by class, because a Class cannot hold dynamic
+	instVars; ___grailMetaclass___ does the inheriting walk on read."
 
 	| tbl |
 	((aMetaclass isKindOf: Behavior) and: [self isKindOf: Behavior]) ifFalse: [^ self].

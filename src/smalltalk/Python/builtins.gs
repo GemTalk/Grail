@@ -2783,6 +2783,23 @@ ___isInstanceSingle___: anObject of: aClass
 		il == nil ifFalse: [
 			result := (il @env0:___mroOf___: anObject @env0:class) @env0:includes: aClass]].
 	result ifFalse: [
+		"A CLASS receiver is judged by its METACLASS: CPython's isinstance(C, M)
+		is issubclass(type(C), M), and for a class ``type(C)'' is the metaclass,
+		not ``C class''.  isKindOf: cannot answer it -- A's Smalltalk chain never
+		passes Meta, because a Python metaclass is an ordinary Grail class and
+		not A's Smalltalk metaclass (see object >> ___pyMetaclass___).
+
+		Only reachable now that ___pyMetaclass___ reports a recorded
+		``metaclass='': the question was previously ``issubclass(type, M)'',
+		which is False for every M, so this branch would have changed nothing.
+		The isinstance(x, type) reading is settled far above and never gets
+		here."
+		(anObject isKindOf: Behavior) ifTrue: [
+			| mc |
+			mc := anObject ___pyMetaclass___.
+			(mc @env0:notNil and: [mc isKindOf: Behavior]) ifTrue: [
+				result := (mc == aClass) or: [mc @env0:inheritsFrom: aClass]]]].
+	result ifFalse: [
 		"Walk the metaclass chain (not just the own method dict) for
 		``__instancecheck__:'' — ABCs define it once on a base
 		(``numbers.Number'', ``collections.abc._ABCStub'') and the
