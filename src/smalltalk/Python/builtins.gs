@@ -3389,6 +3389,14 @@ type: className _: bases _: namespace
 	this; it had only ever been given an empty set because the non-empty case
 	could not get this far."
 	il @env0:___inheritClassAttrs___: newClass exclude: ownAttrNames.
+	"``type(name, bases, ns)'' IS type.__new__, so a ``__classcell__'' in the
+	namespace binds here on the same terms as in a class statement -- and is
+	REFUSED when it already points at another class.  test_super
+	test___classcell___wrong_cell is precisely that: a metaclass builds a second
+	class from the namespace it was handed, whose cell is by then filled with
+	the first, and re-pointing it would leave the first class's methods reading
+	the second."
+	newClass @env1:___grailApplyClassCell___: namespace.
 	^ newClass
 %
 

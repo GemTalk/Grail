@@ -235,6 +235,13 @@ printSmalltalkOn: aStream
 			defining class carries, so it resolves correctly even when
 			the method runs on a subclass instance.  Register the class's
 			own name as captured so ClassDefAst emits the cell store."
+			"A zero-arg ``super()'' needs ``__class__'', so CPython's compiler
+			injects __classcell__ for it exactly as it does for the bare name.
+			Flagged HERE and not in printDefiningClassOn:, which this path does
+			not go through -- it emits the Super proxy itself.  The EXPLICIT
+			``super(C, self)'' form below is deliberately not flagged: it names
+			its class, so CPython creates no cell for it."
+			CallAst classNeedsClassCell: true.
 			(CallAst classDefIsModuleScope == false)
 				ifTrue: [
 					CallAst addCapturedClassName: CallAst classBeingCompiled.
@@ -259,6 +266,15 @@ printSmalltalkOn: aStream
 	own compilation scope.  Only the common ``NameAst-class,
 	positional-2'' form is rewritten; anything else falls through (and
 	``super'' raises NameError as it did before)."
+	"Referencing the NAME ``super'' inside a method is enough for CPython's
+	symbol table to create the implicit ``__class__'' cell -- it does not wait
+	to see the zero-argument form.  So the EXPLICIT ``super(C, self)'' gets a
+	__classcell__ too, which was measured rather than assumed: the fixture
+	predicted no cell here and CPython disagreed."
+	((function isKindOf: NameAst)
+		and: [function id = #'super'
+			and: [CallAst classBeingCompiled notNil
+				and: [CallAst classNeedsClassCell: true. true]]]) ifTrue: [].
 	((function isKindOf: NameAst)
 		and: [function id = #'super'
 			and: [arguments size = 2
@@ -1874,6 +1890,32 @@ addCapturedClassName: aSymbol
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classNeedsClassCell
+	"Did a method body in the class being compiled reference ``__class__'' --
+	either by name or through a zero-arg ``super()''?
+
+	This is CPython's rule for whether the compiler injects ``__classcell__''
+	into the class namespace: the cell exists when at least one method needs
+	it, and is omitted otherwise (test_super
+	test___classcell___expected_behaviour asserts BOTH halves).
+
+	Set by printDefiningClassOn:, which is the single point both spellings go
+	through -- the bare name and the super() rewrite are deliberately the same
+	code path there, so the flag cannot drift from what actually reads the
+	class.  ClassDefAst saves and restores it around a class body, the way it
+	does classCapturedNames, so a nested class gets its own answer."
+
+	^ (self ___compileContext___ at: #'classNeedsClassCell' otherwise: false) == true
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classNeedsClassCell: aBoolean
+	self ___compileContext___ at: #'classNeedsClassCell' put: aBoolean == true
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 classCapturedWriteNames
 	"Enclosing-function locals ASSIGNED (``nonlocal x; x = ...'') from the
 	CLASS-METHOD bodies being generated.  A write needs a MUTABLE cell, so
@@ -2241,6 +2283,13 @@ printDefiningClassOn: aStream
 	Registering the captured class name is what makes ClassDefAst emit the
 	cell store, so it must happen on the same branch that reads the cell."
 
+	"CPython injects ``__classcell__'' into the class namespace exactly when a
+	method needs the class -- and this method IS that condition, for both
+	spellings, which is why the flag is set here rather than by a separate scan
+	of the body.  Set on BOTH branches: a method-local class and a
+	module-scope one differ in how the class is reached, not in whether the
+	method referenced it."
+	self classNeedsClassCell: true.
 	(self classDefIsModuleScope == false)
 		ifTrue: [
 			self addCapturedClassName: self classBeingCompiled.

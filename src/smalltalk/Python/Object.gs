@@ -869,6 +869,162 @@ ___grailPrepareNamespace___: aMetaclass
 
 category: 'Grail-Class Namespace'
 classmethod: object
+___grailInjectClassCell___
+	"Put ``__classcell__'' into the class namespace, as CPython's compiler does
+	at the END of a class body.
+
+	Emitted by ClassDefAst only when a method actually referenced ``__class__''
+	-- by name or through a zero-arg ``super()'' -- which is CPython's own rule
+	and is decided at the single point both spellings compile through
+	(CallAst >> printDefiningClassOn:).  A class whose methods never ask gets no
+	entry, and test_super asserts that half as firmly as the other.
+
+	The cell is EMPTY here and filled by type.__new__ with the finished class,
+	which is the ordering the whole protocol exists to express: the metaclass
+	sees the cell before the class exists, and is trusted to hand it on.
+
+	Kept in SessionTemps beside the namespace, keyed by class, so the fill step
+	can tell ``the metaclass passed my cell through'' from ``the metaclass
+	dropped it'' -- the two RuntimeError cases in test_super turn on exactly
+	that distinction and cannot be told apart from the namespace alone."
+
+	| ns holder cell tbl |
+	ns := self ___grailPendingNamespace___.
+	"No namespace means no metaclass is watching, so there is nothing that could
+	observe the cell.  ``__class__'' itself still resolves -- Grail compiles it
+	lexically and does not read this cell -- so an ordinary class is unaffected."
+	ns == nil ifTrue: [^ self].
+	"Two slots: the value, and whether it has been SET.  A filled flag rather
+	than a nil test, because CPython distinguishes an empty cell from one
+	holding None -- ``cell.cell_contents'' on an unset cell raises ValueError,
+	and a metaclass is entitled to look before type.__new__ has filled it
+	(test_super reads the cell it was handed).  PyCell >> cell_contents only
+	raises when the READER BLOCK is nil, which it never is here, so the empty
+	case has to be expressed inside the block."
+	holder := Array @env0:new: 2.
+	"@env0: -- PyCell's constructors are env-0 classmethods.  An env-1 send is a
+	MessageNotUnderstood on Metaclass3, which is what the first attempt got."
+	cell := PyCell
+		@env0:reader: [
+			(holder @env0:at: 2) == true
+				ifTrue: [holder @env0:at: 1]
+				ifFalse: [ValueError @env1:___signal___: 'Cell is empty']]
+		setter: [:v |
+			holder @env0:at: 1 put: v.
+			holder @env0:at: 2 put: true].
+	ns @env1:__setitem__: '__classcell__' _: cell.
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingClassCell'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	tbl @env0:at: self put: cell.
+	^ self
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailPendingClassCell___
+	"The ``__classcell__'' this class statement injected, or nil."
+
+	| tbl |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingClassCell' otherwise: nil.
+	tbl == nil ifTrue: [^ nil].
+	^ tbl @env0:at: self otherwise: nil
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailDropPendingClassCell___
+	"Forget the injected cell.  The class statement is over."
+
+	| tbl |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingClassCell' otherwise: nil.
+	tbl == nil ifTrue: [^ self].
+	tbl @env0:removeKey: self ifAbsent: [].
+	^ self
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailFillClassCell___: ns
+	"Fill the injected ``__classcell__'' with this class, and police what the
+	metaclass did to it.  Called from type.__new__, which is where CPython
+	fills it -- the metaclass hands the namespace on, and the cell is populated
+	as the class comes into being.
+
+	Three outcomes, all of them CPython's:
+
+	  * the cell came through untouched -- fill it, and the methods that
+	    close over ``__class__'' see the finished class
+	  * it was REPLACED by something that is not a cell -- TypeError.
+	    test_super test___classcell___wrong_cell writes a foreign object in
+	  * it was REMOVED -- RuntimeError naming the class, which is CPython's
+	    ``__class__ not set ... Was __classcell__ propagated to type.__new__?''
+	    A metaclass that pops the entry has broken the contract, and the class
+	    it returns would have a dead ``__class__''
+
+	Answers self so the caller can chain; raising is the interesting path."
+
+	| expected actual |
+	expected := self ___grailPendingClassCell___.
+	"Nothing was injected -- this class's methods never asked for __class__, so
+	whatever is or is not in the namespace is not our business.  A metaclass is
+	free to put its own '__classcell__' key in a namespace we did not seed."
+	expected == nil ifTrue: [^ self].
+	actual := [ns @env1:__getitem__: '__classcell__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	actual == nil ifTrue: [
+		^ RuntimeError @env1:___signal___:
+			('__class__ not set defining ''' @env0:, self ___pyNameOrEmpty___
+				@env0:, ''' as ' @env0:, self @env0:printString
+				@env0:, '. Was __classcell__ propagated to type.__new__?')].
+	^ self ___grailApplyClassCell___: ns
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailApplyClassCell___: ns
+	"Point a namespace's ``__classcell__'' at this class, refusing the two
+	shapes CPython refuses.  Shared by both routes into type.__new__: the class
+	statement (through ___grailFillClassCell___:) and the three-argument
+	``type(name, bases, ns)'' builder, which is the SAME constructor and must
+	apply the same rule.
+
+	  * not a cell at all -- TypeError.  A metaclass that writes its own object
+	    over the entry has broken the protocol.
+	  * a cell ALREADY pointing at a different class -- TypeError.  This is the
+	    case that needs the three-argument builder to care: test_super
+	    test___classcell___wrong_cell has a metaclass build a SECOND class from
+	    the same namespace (``B = type('B', (), namespace)''), whose cell is by
+	    then filled with the first.  Re-pointing it would leave the first class's
+	    methods reading the second, which is exactly the corruption the check
+	    exists to prevent.
+
+	An unfilled cell, or one already pointing at this very class, is fine --
+	the latter makes the operation idempotent."
+
+	| cell current |
+	cell := [ns @env1:__getitem__: '__classcell__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	cell == nil ifTrue: [^ self].
+	(cell @env0:isKindOf: PyCell) ifFalse: [
+		^ TypeError @env1:___signal___:
+			('__classcell__ must be a nonlocal cell, not '
+				@env0:, cell @env0:class @env0:name @env0:asString)].
+	current := [cell @env1:cell_contents]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(current @env0:notNil and: [current ~~ self]) ifTrue: [
+		^ TypeError @env1:___signal___:
+			('__class__ set to ' @env0:, current @env0:printString
+				@env0:, ' defining ' @env0:, self ___pyNameOrEmpty___
+				@env0:, ' as ' @env0:, self @env0:printString)].
+	cell @env1:___setCellContents___: self.
+	^ self
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
 ___grailMetaclassConstructs___: aMetaclass
 	"Does this metaclass take part in CLASS CREATION -- does it override
 	__new__ or __init__?
@@ -986,7 +1142,9 @@ ___grailDispatchMetaclass___
 		fn @env0:notNil ifTrue: [
 			fn @env1:___pyCallValue___: { result. clsName. clsBases. ns } kw: nil]].
 	^ result
-	] @env0:ensure: [self ___grailFinishNamespace___]
+	] @env0:ensure: [
+		self ___grailFinishNamespace___.
+		self ___grailDropPendingClassCell___]
 %
 
 category: 'Grail-Class Namespace'
