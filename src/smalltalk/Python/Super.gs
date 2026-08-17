@@ -109,7 +109,7 @@ _lookupMethod: aSym
 
 category: 'Grail-Private'
 method: Super
-_lookupMethodFirstOf: selectors
+_lookupMethodAndSideFirstOf: selectors
 	"Walk the superClass chain starting from cls's parent; at EACH
 	class probe the env-1 methodDict for each selector in order
 	(nil entries skipped).  The first class defining ANY of the
@@ -123,6 +123,11 @@ _lookupMethodFirstOf: selectors
 	(twilio.twiml: MessagingResponse() left TwiML.__init__ unrun,
 	so ``verbs`` / ``attrs`` never materialized)."
 
+	"ANSWERS A PAIR: { method. cameFromTheClassSide }.  The side is what the
+	caller needs to bind the right receiver, and this is the only place that
+	knows it -- re-deriving it afterwards from the method object was tried
+	twice and was wrong both times, because ``defined on a metaclass'' is not
+	the same question as ``was reached as a @classmethod here''."
 	| il receiverCls mro idx walker alsoMeta |
 	"MRO-POSITIONAL lookup (Python semantics): search the classes AFTER
 	``cls'' in the RECEIVER's C3 linearization, not cls's Smalltalk
@@ -135,13 +140,37 @@ _lookupMethodFirstOf: selectors
 	it, fall back to the superclass-chain walk (identical to the old
 	behavior for single inheritance)."
 
-	"When the bound receiver is itself a CLASS (``super(D, cls)`` inside
-	``__new__``), Python looks the attribute up on the MRO classes AS
-	OBJECTS -- which for Grail means the parents' class-side (metaclass)
-	dicts too: object's ``__new__:`` family is compiled class-side."
-	alsoMeta := obj isKindOf: Behavior.
+	"The class-side (metaclass) dicts are searched too.  That started as a
+	narrow allowance for a CLASS receiver (``super(D, cls)`` inside
+	``__new__``, where object's ``__new__:`` family is compiled class-side) --
+	see below for why it is now unconditional."
+	"ALWAYS search the class side, not only when the bound receiver is a class.
+	A Python @classmethod compiles onto Grail's metaclass, so a parent's
+	classmethod was invisible to ``super()'' called from an INSTANCE method --
+	``super(): no parent method 'cm''' for test_super's D.cm, which is a plain
+	method whose MRO successors are all classmethods.  CPython draws no such
+	distinction: super() looks the name up on the MRO classes, and a
+	classmethod is found from either side.
+
+	The receiver is corrected where the method is invoked (SuperBoundMethod),
+	which is the only place that knows whether the winning method came from the
+	class side.
+
+	NARROWLY, and this is the whole difficulty.  Grail's metaclass carries a
+	great deal of INTERNAL class-side machinery (constructors, dynInstVars,
+	attribute plumbing), and exposing all of it to an instance-side super()
+	lookup broke 180 SUnit tests -- ``super()'' started resolving names to
+	Grail internals that happen to live class-side.  So for an INSTANCE
+	receiver only a genuine Python @classmethod counts, identified by the
+	category ClassDefAst compiles them under.  A CLASS receiver keeps the
+	unrestricted search it always had."
+	alsoMeta := true.
 	il := Python at: #importlib otherwise: nil.
-	receiverCls := alsoMeta ifTrue: [obj] ifFalse: [obj class].
+	"objIsClass is a SEPARATE question from alsoMeta, and they were one flag
+	until the class-side search became unconditional: this line decides whose
+	MRO to walk, and answering ``obj'' for an instance handed ___mroOf___: an
+	instance (``a D does not understand #superclass'')."
+	receiverCls := (obj isKindOf: Behavior) ifTrue: [obj] ifFalse: [obj class].
 	il == nil ifFalse: [
 		mro := il ___mroOf___: receiverCls.
 		idx := mro indexOf: cls.
@@ -154,9 +183,10 @@ _lookupMethodFirstOf: selectors
 					ifFalse: [nil].
 				selectors do: [:sel |
 					sel ifNotNil: [
-						(md includesKey: sel) ifTrue: [^ md at: sel].
-						(mdMeta ~~ nil and: [mdMeta includesKey: sel])
-							ifTrue: [^ mdMeta at: sel]]]].
+						(md includesKey: sel) ifTrue: [^ { md at: sel. false }].
+						(mdMeta ~~ nil and: [(mdMeta includesKey: sel)
+							and: [self _isPythonClassMethod: sel on: (mro at: i)]])
+							ifTrue: [^ { mdMeta at: sel. true }]]]].
 			^ nil]].
 	walker := cls superClass.
 	[walker notNil] whileTrue: [
@@ -167,9 +197,10 @@ _lookupMethodFirstOf: selectors
 			ifFalse: [nil].
 		selectors do: [:sel |
 			sel ifNotNil: [
-				(md includesKey: sel) ifTrue: [^ md at: sel].
-				(mdMeta ~~ nil and: [mdMeta includesKey: sel])
-					ifTrue: [^ mdMeta at: sel]]].
+				(md includesKey: sel) ifTrue: [^ { md at: sel. false }].
+				(mdMeta ~~ nil and: [(mdMeta includesKey: sel)
+					and: [self _isPythonClassMethod: sel on: walker]])
+					ifTrue: [^ { mdMeta at: sel. true }]]].
 		walker := walker superClass].
 	^ nil
 %
@@ -192,7 +223,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	envId 0 falls through to default DNU — Smalltalk-side sends to
 	the proxy aren't part of the Python protocol."
 
-	| method nargs varargsSel |
+	| method nargs varargsSel pair |
 	envId = 1 ifFalse: [
 		^ super doesNotUnderstand: aSelector args: anArray envId: envId
 	].
@@ -201,7 +232,12 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	see _lookupMethodFirstOf: for why chain-at-a-time probing was
 	wrong."
 	varargsSel := self _varargsSelectorFor: aSelector.
-	method := self _lookupMethodFirstOf: { aSelector. varargsSel }.
+	"The lookup answers { method. cameFromTheClassSide }.  This DNU path binds
+	``obj'' throughout and does not honour the class-side case; it is reached
+	only for names ___pyAttrLoad___: did not handle, and a @classmethod always
+	goes through there."
+	pair := self _lookupMethodAndSideFirstOf: { aSelector. varargsSel }.
+	method := pair isNil ifTrue: [nil] ifFalse: [pair at: 1].
 	method ifNotNil: [
 		(method selector asString endsWith: ':kw:') ifTrue: [
 			^ obj with: anArray with: nil performMethod: method
@@ -233,6 +269,51 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 		^ obj perform: aSelector env: 1 withArguments: anArray
 	].
 	^ super doesNotUnderstand: aSelector args: anArray envId: envId
+%
+
+category: 'Grail-Private'
+method: Super
+_isPythonClassMethod: aSelector on: aClass
+	"Is this class-side method a Python @classmethod, rather than one of
+	Grail's own metaclass internals?
+
+	The distinction matters only for an INSTANCE receiver: ``super().cm()''
+	from a plain method must reach a parent's @classmethod, but must NOT reach
+	the constructors and attribute plumbing that also live class-side.  A
+	CLASS receiver is allowed the unrestricted search -- ``super(D, cls)''
+	inside __new__ legitimately wants object's class-side ``__new__:''.
+
+	Identified by the category ClassDefAst compiles @classmethods under, which
+	is the only marker distinguishing them once compiled."
+
+	| objIsClass |
+	objIsClass := obj isKindOf: Behavior.
+	objIsClass ifTrue: [^ true].
+	^ (aClass class @env0:categoryOfSelector: aSelector environmentId: 1)
+		@env0:asString @env0:= 'Grail-Class Methods'
+%
+
+category: 'Grail-Private'
+method: Super
+_superDefinesAnyFormOf: aString
+	"Does the parent chain define this name at ANY arity?
+
+	The question the deferred resolver cannot answer, because it needs a
+	call-site arity before it can build a selector.  Builds the whole family --
+	the bare symbol, the fixed-arity forms, and the varargs ``_<name>:kw:'' --
+	and asks the ordinary MRO walk once."
+
+	| fam ws |
+	fam := OrderedCollection @env0:new.
+	fam @env0:add: aString @env0:asSymbol.
+	1 @env0:to: 9 do: [:n |
+		ws := WriteStream @env0:on: String @env0:new.
+		ws @env0:nextPutAll: aString.
+		ws @env0:nextPut: $:.
+		2 @env0:to: n do: [:i | ws @env0:nextPutAll: '_:'].
+		fam @env0:add: ws @env0:contents @env0:asSymbol].
+	fam @env0:add: ('_' @env0:, aString @env0:, ':kw:') @env0:asSymbol.
+	^ (self @env0:_lookupMethodAndSideFirstOf: fam @env0:asArray) @env0:notNil
 %
 
 set compile_env: 1
@@ -352,12 +433,34 @@ ___pyAttrLoad___: aSym
 		``_<name>:kw:`` (a fixed-arity method would silently drop
 		them — typically Object>>__init__, the env-1 default no-op)."
 		kwOk
-			ifTrue: [self @env0:_lookupMethodFirstOf: { fixedSel. symVA }]
-			ifFalse: [self @env0:_lookupMethodFirstOf: { symVA. fixedSel }]].
+			ifTrue: [self @env0:_lookupMethodAndSideFirstOf: { fixedSel. symVA }]
+			ifFalse: [self @env0:_lookupMethodAndSideFirstOf: { symVA. fixedSel }]].
+	"RESOLVE EAGERLY ENOUGH TO FAIL EAGERLY.  The proxy below defers the real
+	arity-sensitive lookup to call time, which is right -- but it also meant a
+	name the parent chain does NOT define at any arity still produced a
+	perfectly truthy proxy, and the AttributeError only fired when it was
+	called.
+
+	That breaks the standard probe-with-a-default idiom.  copy.deepcopy does
+	``getattr(x, '__deepcopy__', None)'', gets a proxy instead of None, calls
+	it, and the AttributeError escapes OUTSIDE the guard that was supposed to
+	catch it -- test_super test_deep_copying and test_pickling, where the
+	object being copied is a super object itself.  ``hasattr'' was wrong for
+	the same reason: True for every name.
+
+	So probe the whole arity family once, here, and raise now if nothing in the
+	chain defines the name in any form.  Nine arities plus the varargs form
+	covers everything Grail compiles; a name that exists at some arity still
+	gets the deferred proxy, so the call-time resolution is unchanged."
+	(self @env0:_superDefinesAnyFormOf: s) ifFalse: [
+		^ AttributeError ___signal___:
+			('''super'' object has no attribute ''' @env0:, s @env0:, '''')].
 	"Wrap (obj, pickMethod) in a callable proxy that resolves the
 	method at call time once arity is known."
 	^ SuperBoundMethod obj: obj resolver: pickMethod selector: aSym
 %
+
+
 
 set compile_env: 0
 
