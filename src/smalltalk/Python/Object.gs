@@ -2949,6 +2949,38 @@ ___pyBuiltinSubclassInit___: positional kw: keywords new: hasNew
 		hasNew ifTrue: [^ self].
 		v := complex @env1:_new: positional kw: keywords.
 		self @env1:__init__: (v @env1:real) _: (v @env1:imag)].
+
+	"A FileIO subclass -- ``class UnseekableIO(io.FileIO)'' -- carries its GsFile
+	and the readable/writable/closed bookkeeping in dynamic instVars that only
+	FileIO's constructor writes.  The general allocation path never wrote them, so
+	the instance was returned UNINITIALISED and the failure surfaced later and
+	elsewhere: ``nil does not understand #close'', naming neither the class nor
+	the missing initialisation.  20 of test_wave's errors were this one thing.
+
+	Worth noting what made it hard to see: the BASE class raised properly
+	(``io.FileIO(p, 'rb')'' answered ``FileIO() takes wrong number of arguments'',
+	because FileIO had no Python-visible constructor at all) while the SUBCLASS
+	silently succeeded.  A missing constructor is louder on the class that lacks
+	it than on the class that inherits it.
+
+	TextIOWrapper is excluded although it IS a FileIO subclass: its Python
+	constructor takes an already-open BUFFER, not a path, so opening a file from
+	positional[0] would be wrong for it.  It has no Python constructor either --
+	a separate gap, not one to guess at from here."
+	((self @env0:isKindOf: FileIO)
+		and: [(self @env0:isKindOf: TextIOWrapper) @env0:not]) ifTrue: [
+		| mode |
+		"An own __new__ has already built whatever it built; do not reopen over it."
+		hasNew ifTrue: [^ self].
+		positional @env0:isEmpty ifTrue: [
+			TypeError ___signal___:
+				'FileIO() missing required argument ''file'' (pos 1)'].
+		mode := (positional @env0:size @env0:>= 2)
+			ifTrue: [positional @env0:at: 2]
+			ifFalse: [(keywords @env0:notNil and: [keywords @env0:isEmpty @env0:not])
+				ifTrue: [keywords @env0:at: 'mode' ifAbsent: ['r']]
+				ifFalse: ['r']].
+		self @env1:___openInto___: (positional @env0:at: 1) mode: mode].
 	^ self
 %
 

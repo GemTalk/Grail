@@ -754,6 +754,141 @@ ___resolveEncoding___: anEncoding
 
 category: 'Grail-Opening'
 classmethod: FileIO
+__new__
+	"``io.FileIO()'' -- the file name is required.
+
+	Needed as its own arity: a 0-positional call does not reach the varargs
+	``_new:kw:'' form (which does guard for it), so without this it fell through
+	to plain ``new'' and answered an UNINITIALISED instance -- the same silent
+	failure the subclass path had, one arity over.  Caught by the fixture's
+	a_missing_name_is_a_typeerror, which is exactly what that check is for."
+
+	^ TypeError ___signal___: 'FileIO() missing required argument ''file'' (pos 1)'
+%
+
+category: 'Grail-Opening'
+classmethod: FileIO
+__new__: fileArg
+	"``io.FileIO(name)'' -- CPython's default mode is 'r'."
+
+	^ self ___construct___: fileArg mode: 'r'
+%
+
+category: 'Grail-Opening'
+classmethod: FileIO
+__new__: fileArg _: modeArg
+	"``io.FileIO(name, mode)''."
+
+	^ self ___construct___: fileArg mode: modeArg
+%
+
+category: 'Grail-Opening'
+classmethod: FileIO
+_new: posArgs kw: kwArgs
+	"``io.FileIO(name, mode='r', closefd=True, opener=None)'' in its varargs form,
+	which is also the form a keyword call arrives in.
+
+	closefd/opener are ACCEPTED AND IGNORED rather than rejected: Grail's FileIO
+	owns its GsFile unconditionally (there are no integer file descriptors to
+	borrow -- ___open___ raises TypeError for one), so closefd=True is the only
+	behaviour available and is the default.  Rejecting the name outright would
+	fail calls that merely pass the default explicitly."
+
+	| n file mode |
+	n := posArgs @env0:size.
+	(n @env0:< 1 @env0:or: [n @env0:> 4]) ifTrue: [
+		TypeError ___signal___: 'FileIO() takes 1 to 4 positional arguments'].
+	file := posArgs @env0:at: 1.
+	mode := n @env0:>= 2 ifTrue: [posArgs @env0:at: 2] ifFalse: [
+		(kwArgs == nil @env0:or: [kwArgs == None])
+			ifTrue: ['r']
+			ifFalse: [kwArgs @env0:at: 'mode' ifAbsent: ['r']]].
+	^ self ___construct___: file mode: mode
+%
+
+category: 'Grail-Opening'
+classmethod: FileIO
+___construct___: fileArg mode: modeArg
+	"``io.FileIO(name, mode)'': open the file and answer an instance OF SELF.
+
+	Distinct from ___open___:mode:encoding: in three ways that all matter.
+
+	It answers an instance of SELF, not of FileIO, so a SUBCLASS gets its own
+	class -- which is the whole point.  test_wave's ``class UnseekableIO(
+	io.FileIO)'' overrides tell/seek to raise, and 20 of its tests need it.
+	Before this, FileIO had NO Python-visible constructor at all: ``io.FileIO(p,
+	'rb')'' raised ``FileIO() takes wrong number of arguments'' -- while the
+	SUBCLASS call silently answered an UNINITIALISED instance, because the call
+	protocol fell back to plain ``new'' when it found no constructor.  The failure
+	then surfaced far away, as ``nil does not understand #close'', naming neither
+	the class nor the missing constructor.
+
+	It is ALWAYS BINARY.  CPython's FileIO is a raw byte stream: it takes 'r',
+	'w', 'x', 'a' and '+', ignores a 'b', and rejects 't' -- ``io.FileIO(p, 'rt')''
+	is a ValueError there.  Text decoding is TextIOWrapper's job.
+
+	And ``mode'' reports NORMALISED, with the 'b' put back and '+' last:
+	CPython answers 'rb' for 'r' and 'rb+' for 'r+'."
+
+	^ self @env0:new ___openInto___: fileArg mode: modeArg
+%
+
+category: 'Grail-Opening'
+method: FileIO
+___openInto___: fileArg mode: modeArg
+	"Open ``fileArg'' and initialise SELF from it -- the instance-side half of the
+	FileIO constructor.
+
+	Instance-side on purpose: the SUBCLASS path cannot allocate.  A Python
+	``class UnseekableIO(io.FileIO)'' is allocated by ClassDefAst's general
+	construction path and then handed to ___pyBuiltinSubclassInit___, which has an
+	instance and needs it initialised in place -- so both routes end here rather
+	than one of them answering a fresh object the other would throw away."
+
+	| mode normalised opened |
+	mode := (modeArg == nil @env0:or: [modeArg == None]) ifTrue: ['r'] ifFalse: [modeArg].
+	(mode isKindOf: CharacterCollection) ifFalse: [
+		TypeError ___signal___: 'FileIO() argument ''mode'' must be str'].
+	(mode @env0:includes: $t) ifTrue: [
+		"CPython: io.FileIO(p, 'rt') is a ValueError.  FileIO is a RAW byte
+		 stream; text is TextIOWrapper's job."
+		ValueError ___signal___: ('invalid mode: ' @env0:, mode)].
+	"``r'' -> ``rb''.  ___open___ parses either and owns the rest of the
+	 validation (exactly one of r/w/x/a, no stray letters), so there is one
+	 definition of what a mode string means."
+	normalised := (mode @env0:includes: $b) ifTrue: [mode] ifFalse: [mode @env0:, 'b'].
+	opened := FileIO ___open___: fileArg mode: normalised encoding: nil.
+	self ___initGsFile___: (opened @env0:dynamicInstVarAt: #_gsfile)
+		name: (opened @env0:dynamicInstVarAt: #_name)
+		mode: (opened @env0:dynamicInstVarAt: #_mode)
+		readable: (opened @env0:dynamicInstVarAt: #_readable)
+		writable: (opened @env0:dynamicInstVarAt: #_writable).
+	^ self ___renormaliseMode___
+%
+
+category: 'Grail-Opening'
+method: FileIO
+___renormaliseMode___
+	"Report ``mode'' the way CPython's FileIO does: 'b' present, '+' last.
+
+	open() keeps the mode string the CALLER passed, which is right for open() --
+	``open(p).mode'' is 'r' there too.  FileIO is the one that normalises:
+	``io.FileIO(p, 'r').mode'' is 'rb' and ``io.FileIO(p, 'r+').mode'' is 'rb+'."
+
+	| m base |
+	m := self @env0:dynamicInstVarAt: #_mode.
+	(m isKindOf: CharacterCollection) ifFalse: [^ self].
+	base := WriteStream @env0:on: String @env0:new.
+	m @env0:do: [:c |
+		((c @env0:= $b) @env0:or: [c @env0:= $+]) ifFalse: [base @env0:nextPut: c]].
+	base @env0:nextPut: $b.
+	(m @env0:includes: $+) ifTrue: [base @env0:nextPut: $+].
+	self @env0:dynamicInstVarAt: #_mode put: base @env0:contents.
+	^ self
+%
+
+category: 'Grail-Opening'
+classmethod: FileIO
 ___open___: fileArg mode: modeArg encoding: encodingArg
 	"Master entry point behind the open() builtin and io.open().
 	Parses the Python mode string, maps it to a GsFile fopen mode
@@ -814,15 +949,31 @@ ___open___: fileArg mode: modeArg encoding: encodingArg
 			FileNotFoundError ___signal___: ('[Errno 2] No such file or directory: ''' @env0:, file @env0:, '''')].
 		OSError ___signal___: ('could not open file: ''' @env0:, file @env0:, '''')].
 	inst := (hasB ifTrue: [FileIO] ifFalse: [TextIOWrapper]) @env0:new.
-	inst @env0:dynamicInstVarAt: #_gsfile put: gsfile.
-	inst @env0:dynamicInstVarAt: #_name put: file.
-	inst @env0:dynamicInstVarAt: #_mode put: mode.
-	inst @env0:dynamicInstVarAt: #_closed put: false.
-	inst @env0:dynamicInstVarAt: #_readable put: ((hasR) @env0:or: [hasPlus]).
-	inst @env0:dynamicInstVarAt: #_writable put: ((hasR @env0:not) @env0:or: [hasPlus]).
+	inst ___initGsFile___: gsfile name: file mode: mode
+		readable: ((hasR) @env0:or: [hasPlus])
+		writable: ((hasR @env0:not) @env0:or: [hasPlus]).
 	hasB ifFalse: [
 		inst @env0:dynamicInstVarAt: #_encoding put: (FileIO ___resolveEncoding___: encodingArg)].
 	^ inst
+%
+
+category: 'Grail-Opening'
+method: FileIO
+___initGsFile___: gsfile name: aName mode: aMode readable: isReadable writable: isWritable
+	"Stamp the six bookkeeping instVars every FileIO needs onto SELF.
+
+	Extracted so the open() path and the ``io.FileIO(name, mode)'' constructor
+	initialise an instance the same way.  open() builds the instance itself (it
+	chooses FileIO vs TextIOWrapper from the mode); the constructor cannot, since
+	the class is already fixed -- and is usually a SUBCLASS."
+
+	self @env0:dynamicInstVarAt: #_gsfile put: gsfile.
+	self @env0:dynamicInstVarAt: #_name put: aName.
+	self @env0:dynamicInstVarAt: #_mode put: aMode.
+	self @env0:dynamicInstVarAt: #_closed put: false.
+	self @env0:dynamicInstVarAt: #_readable put: isReadable.
+	self @env0:dynamicInstVarAt: #_writable put: isWritable.
+	^ self
 %
 
 category: 'Grail-Opening'
