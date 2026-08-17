@@ -4811,6 +4811,61 @@ __exit__: excType _: excValue _: excTb
 
 category: 'Grail-Context Manager'
 method: object
+__aenter__
+	"Default: not an ASYNC context manager.  Mirrors __enter__, and exists for
+	the same reason -- ``async with obj:'' on an object without __aenter__ must
+	raise a catchable TypeError naming the ASYNCHRONOUS protocol, not an
+	uncatchable env-1 MessageNotUnderstood.
+
+	Before AsyncWithAst drove __aenter__/__aexit__ at all, ``async with'' emitted
+	a plain ``with'', so this case reported the SYNC message -- the wrong
+	protocol and the wrong missing method."
+
+	TypeError ___signal___: (self ___asyncContextManagerProtocolError___: '__aenter__')
+%
+
+category: 'Grail-Context Manager'
+method: object
+__aexit__: excType _: excValue _: excTb
+
+	TypeError ___signal___: (self ___asyncContextManagerProtocolError___: '__aexit__')
+%
+
+category: 'Grail-Context Manager'
+method: object
+___asyncContextManagerProtocolError___: missingSelector
+	"CPython's TypeError text for ``async with obj:'' on a non-manager -- the
+	mirror of ___contextManagerProtocolError___:, including the cross-protocol
+	hint in the other direction:
+
+	  'X' object does not support the asynchronous context manager protocol
+	      (missed __aexit__ method) but it supports the context manager
+	      protocol. Did you mean to use 'with'?
+
+	Same reporting order as the synchronous side: a missing __aexit__ is named
+	BEFORE a missing __aenter__, so an object with neither half reports __aexit__
+	even though it was __aenter__ that fell through."
+
+	| missed hasSync |
+	missed := (self ___definesProtocolMethod___: '__aexit__'
+			selectors: #( #'__aexit__:_:_:' #'__aexit__:kw:' #'__aexit__:' ))
+		ifTrue: [missingSelector]
+		ifFalse: ['__aexit__'].
+	hasSync := (self ___definesProtocolMethod___: '__enter__'
+			selectors: #( #'__enter__' #'__enter__:kw:' ))
+		@env0:and: [self ___definesProtocolMethod___: '__exit__'
+			selectors: #( #'__exit__:_:_:' #'__exit__:kw:' #'__exit__:' )].
+	^ '''' @env0:, self ___pyTypeNameForError___ @env0:asString
+		@env0:, ''' object does not support the asynchronous context manager protocol (missed '
+		@env0:, missed @env0:, ' method)'
+		@env0:, (hasSync
+			ifTrue: [' but it supports the context manager protocol. '
+				@env0:, 'Did you mean to use ''with''?']
+			ifFalse: [''])
+%
+
+category: 'Grail-Context Manager'
+method: object
 ___contextManagerProtocolError___: missingSelector
 	"CPython's TypeError text for ``with obj:'' on a non-manager, built here
 	because it depends on WHICH halves of the protocol the object has:
