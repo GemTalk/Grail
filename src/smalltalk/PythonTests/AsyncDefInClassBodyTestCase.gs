@@ -64,9 +64,6 @@ AsyncDefInClassBodyTestCase category: 'Grail-SUnit'
 ! WHAT THIS DOES NOT CLOSE, both PRE-DATING this fix and unchanged by it --
 ! listing the methods is what makes them observable at all:
 !
-!   * Grail runs an async body SYNCHRONOUSLY and returns its value where CPython
-!     returns a coroutine.  There is no event loop, which is why the three
-!     sibling test_with cases that actually drive a coroutine still fail.
 !   * a staticmethod and a classmethod are both stored as an UnboundMethod, so
 !     the class dict cannot tell the three kinds apart -- the same gap
 !     DirOfAClassTestCase records.
@@ -166,19 +163,18 @@ testThePlainProtocolMessagesAreUnchanged
 		equals: '''Neither'' object does not support the context manager protocol (missed __exit__ method)'.
 %
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests - The methods exist'
 method: AsyncDefInClassBodyTestCase
-testAnAsyncBodyRunsSynchronouslyWhichIsAKnownGap
-	"Recorded, NOT endorsed, and PRE-DATING this fix -- Grail has no event loop,
-	so an async body runs to completion and answers its value where CPython
-	answers a coroutine.  This is why the three sibling test_with cases that
-	actually drive a coroutine (testAsyncEnterAttributeError,
-	testAsyncExitAttributeError, testAsyncWithForSyncManager) still fail:
-	they need ``async with'', not merely the methods to exist."
+testCallingAnAsyncMethodAnswersACoroutine
+	"Was a known gap here, now closed: an async body used to run to completion
+	at the call and answer its value.  It answers a PythonCoroutine, and the
+	body does not run until something drives it -- which is what let test_with's
+	``do_async_with(obj).send(None)'' cases start running at all."
 
-	self assert: (self resultAt: 'async_call_runs_synchronously_is_a_known_gap') asString
-		equals: '[''m'', ''s'', ''c'']'.
+	self assert: (self resultAt: 'async_call_answers_a_coroutine') asString
+		equals: '[True, True, True]'.
 %
+
 
 category: 'Grail-Tests - Known gaps'
 method: AsyncDefInClassBodyTestCase

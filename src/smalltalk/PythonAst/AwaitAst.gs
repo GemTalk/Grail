@@ -54,15 +54,24 @@ set compile_env: 0
 category: 'Grail-code generation'
 method: AwaitAst
 printSmalltalkOn: aStream
-	"Grail has no async runtime — emit just the awaited expression so
-	the resulting Smalltalk evaluates the inner value synchronously.
-	The surrounding ``async def`` is itself codegen'd as a regular
-	``def`` (see AsyncFunctionDefAst), so the body runs to completion
-	without ever actually awaiting.  Adequate for the import-only
-	Jinja2 / Werkzeug / Flask story; revisit if a real coroutine
-	runtime lands."
+	"``await X'' DRIVES X to completion and answers its result.
 
-	value printSmalltalkOn: aStream
+	Calling an ``async def'' now answers a PythonCoroutine rather than running
+	the body (FunctionDefAst ___wrapsBody___), so ``await'' can no longer be the
+	identity: it has to run the thing.  There is still NO EVENT LOOP -- nothing
+	suspends -- so driving means running straight through and taking the value
+	the coroutine returned, which arrives as StopIteration''s value exactly as it
+	does for a generator.
+
+	Non-coroutine operands pass through UNCHANGED.  ``await'' on a plain value
+	is not legal Python, but it is what Grail did everywhere before this, and a
+	great deal of shipped library code (jinja2, asgiref, flask) awaits things
+	Grail resolves synchronously.  Passing them through keeps that working
+	rather than turning a previously-quiet path into a TypeError."
+
+	aStream nextPutAll: '(PythonCoroutine @env0:___grailAwait___: ('.
+	value printSmalltalkOn: aStream.
+	aStream nextPutAll: '))'
 %
 method: AwaitAst
 value

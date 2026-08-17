@@ -9,7 +9,7 @@ doit
 StatementAst subclass: 'FunctionDefAst'
   instVarNames: #( name args body
                     decorator_list returns type_comment type_params
-                    isGeneratorCache deletedNamesCache)
+                    isGeneratorCache deletedNamesCache isAsyncFlag)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -612,8 +612,8 @@ printSmalltalkOn: aStream
 	___yield___:`` references with no surrounding declaration —
 	compile error ``undefined symbol ___gen___``.  Eval and exec
 	paths both flow through this closure form."
-	self isGenerator ifTrue: [
-		aStream nextPutAll: 'PythonGenerator @env1:withBlock: [:___gen___ |'; lf.
+	self ___wrapsBody___ ifTrue: [
+		aStream nextPutAll: self ___lazyWrapperClass___ , ' @env1:withBlock: [:___gen___ |'; lf.
 	].
 	aStream
 		nextPutAll: '[';
@@ -661,7 +661,7 @@ printSmalltalkOn: aStream
 		decreaseIndent;
 		nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]';
 		lf.
-	self isGenerator ifTrue: [
+	self ___wrapsBody___ ifTrue: [
 		aStream nextPutAll: ']'.
 	].
 	aStream nextPutAll: '.'; lf.
@@ -2989,7 +2989,7 @@ generateModuleMethodSourceOn: aStream
 		is gated on canOptimise (we need the instVar set) and on
 		useDirect (the method-scope form needs the ``^''-return path —
 		generator and with/try-finally bodies still need the wrapper)."
-		useDirectReturn := (self isGenerator not)
+		useDirectReturn := (self ___wrapsBody___ not)
 			and: [body hasReturnBlocking ~~ true].
 		useMethodTemps := canOptimise
 			and: [useDirectReturn
@@ -3234,13 +3234,62 @@ generateModuleMethodSourceOn: aStream
 			(useMethodTemps == true
 				ifTrue: [#directMethod]
 				ifFalse: [
-					(self isGenerator or: [body hasReturnBlocking == true])
+					(self ___wrapsBody___ or: [body hasReturnBlocking == true])
 						ifTrue: [#exception]
 						ifFalse: [#direct]]).
 		self printBodyOn: aStream.
 	] ensure: [CallAst returnEmitMode: savedReturnMode].
 	"Close the outer block only when we opened one."
 	useMethodTemps == true ifFalse: [aStream nextPutAll: '] value'].
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+isAsync
+	"True if this def was written ``async def''.
+
+	A FLAG rather than the node's class, because the class already carries
+	something else: a def inside a CLASS BODY is re-classed to
+	Instance/Static/ClassFunctionDefAst, and overwriting that with
+	AsyncFunctionDefAst is what silently discarded every async method.  The two
+	facts are independent, so they need independent storage."
+
+	^ isAsyncFlag == true
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+isAsync: aBoolean
+	isAsyncFlag := aBoolean.
+	^ self
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+___wrapsBody___
+	"True when a CALL must not run the body -- it has to answer a lazy object
+	instead.  Two reasons, and they emit the same shape:
+
+	  * a GENERATOR (the body contains yield), answering a PythonGenerator
+	  * a COROUTINE (``async def''), answering a PythonCoroutine
+
+	Everything that keyed off isGenerator keys off this instead, because the
+	question was never really ``is it a generator'' -- it was ``is the body a
+	Smalltalk BLOCK rather than a method body''.  That governs the wrapper emit,
+	its closing bracket, and whether ``return'' can use the direct ``^'' path or
+	must signal PythonReturn for the block handler to catch."
+
+	^ self isGenerator or: [self isAsync]
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+___lazyWrapperClass___
+	"The class a call answers when the body is wrapped.  An ``async def''
+	containing ``yield'' is an ASYNC GENERATOR upstream, which Grail does not
+	model; it answers a coroutine here, the closer of the two."
+
+	^ self isAsync ifTrue: ['PythonCoroutine'] ifFalse: ['PythonGenerator']
 %
 
 category: 'Grail-Module Method Compilation'
@@ -3451,8 +3500,8 @@ printBodyOn: aStream
 		and: [self ___stmtEndsWithInlineReturn___:
 			(self ___reachableStatements___: body body) last]].
 
-	self isGenerator ifTrue: [
-		aStream nextPutAll: 'PythonGenerator @env1:withBlock: [:___gen___ |'; lf.
+	self ___wrapsBody___ ifTrue: [
+		aStream nextPutAll: self ___lazyWrapperClass___ , ' @env1:withBlock: [:___gen___ |'; lf.
 	].
 	(useDirect or: [useMethod]) ifFalse: [
 		aStream nextPutAll: '['; lf.
@@ -3477,7 +3526,7 @@ printBodyOn: aStream
 	(useDirect or: [useMethod]) ifFalse: [
 		aStream nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]'.
 	].
-	self isGenerator ifTrue: [
+	self ___wrapsBody___ ifTrue: [
 		aStream nextPutAll: ']'.
 	].
 	(useDirect or: [useMethod]) ifFalse: [
@@ -3807,7 +3856,7 @@ generateMethodSourceOn: aStream
 		no gain.  (Despite this method's name, ``class method'' here
 		means ``method of a Python class'' — covers instance methods,
 		@classmethod, and @staticmethod alike.)"
-		useDirectReturn := (self isGenerator not)
+		useDirectReturn := (self ___wrapsBody___ not)
 			and: [body hasReturnBlocking ~~ true].
 		useMethodTemps := useDirectReturn and: [allLocals isEmpty].
 
@@ -3997,7 +4046,7 @@ generateMethodSourceOn: aStream
 			(useMethodTemps == true
 				ifTrue: [#directMethod]
 				ifFalse: [
-					(self isGenerator or: [body hasReturnBlocking == true])
+					(self ___wrapsBody___ or: [body hasReturnBlocking == true])
 						ifTrue: [#exception]
 						ifFalse: [#direct]]).
 		CallAst selfParameterRebound: selfRebound.
