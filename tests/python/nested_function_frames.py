@@ -96,6 +96,22 @@ def in_a_method():
     Holder().method()
 
 
+def raises_after_sibling_defs():
+    """The shape that separates the three name-recovery attempts.
+
+    ``a'' raises AFTER defining two siblings, so the raising line is greater
+    than both their start lines while belonging to neither.  Recovering the
+    name from a def's START line alone reports ``c'' here; it needs each def's
+    full RANGE, and that a sibling's range must not swallow a later line."""
+    def a():
+        def b():
+            pass
+        def c():
+            pass
+        1 / 0
+    a()
+
+
 def raises_from_a_comprehension():
     """The negative control: a comprehension body is a block too, and must NOT
     gain a frame.  This is what stops the fix over-reaching."""
@@ -127,6 +143,9 @@ def checks():
         # ascending or all-equal.
         "module_level_lines": _offsets(module_level) == [4, 3],
         "two_deep_lines": _offsets(two_deep) == [5, 4, 3],
+        # --- a sibling def's range must not swallow a later line ---
+        "sibling_after_names":
+            _names(raises_after_sibling_defs) == ["raises_after_sibling_defs", "a"],
         # --- negative control: a comprehension is still NOT a frame ---
         "comprehension_adds_no_frame":
             len(_names(raises_from_a_comprehension)) == 2,
@@ -143,7 +162,7 @@ RESULTS = checks()
 ACTUAL = " | ".join(
     "%s: names=%s offsets=%s" % (fn.__name__, _names(fn), _offsets(fn))
     for fn in (module_level, reads_a_local, takes_a_parameter, two_deep,
-               in_a_method, raises_from_a_comprehension)
+               in_a_method, raises_after_sibling_defs, raises_from_a_comprehension)
 )
 
 
@@ -152,5 +171,4 @@ if __name__ == '__main__':
     for k, v in RESULTS.items():
         print('%-4s %s' % ('OK' if v is True else 'FAIL', k))
     print()
-    for k in ACTUAL:
-        print('     %s' % k)
+    print(ACTUAL)

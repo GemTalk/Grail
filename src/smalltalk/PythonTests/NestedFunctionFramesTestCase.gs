@@ -70,7 +70,7 @@ testNestedFunctionFrames
 	``comprehension_adds_no_frame'' is the negative control -- it is what
 	stops the fix over-reaching into the blocks that must stay merged.
 
-	All twelve checks answer identically under real CPython 3.14.6.  See
+	All thirteen checks answer identically under real CPython 3.14.6.  See
 	tests/python/nested_function_frames.py."
 
 	| mod results detail |
@@ -88,6 +88,7 @@ testNestedFunctionFrames
 	   'module_level_names' 'two_deep_names' 'takes_a_parameter_names'
 	   'in_a_method_names'
 	   'module_level_lines' 'two_deep_lines'
+	   'sibling_after_names'
 	   'comprehension_adds_no_frame' ) do: [:k |
 		self assert: ((results @env1:__getitem__: k) = true)
 			description: 'nested-function frame check failed: ' , k
