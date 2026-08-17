@@ -339,19 +339,53 @@ cls: aClass obj: anObject
 			@env0:, (aClass == nil
 				ifTrue: ['NoneType']
 				ifFalse: [aClass @env0:class @env0:name @env0:asString])].
-	"NO supercheck here.  This is the path every COMPILED super() takes, and
-	applying CPython's obj-is-an-instance-of-cls test to it breaks working
-	code: Grail reaches a cooperative mixin's methods through the receiver's
-	MRO, but a class merged in that way is not always ON the MRO that
-	___mroOf___ reports for the receiver either, so the check rejected calls
-	the proxy then services correctly -- measured, as four Django failures.
-	The explicit constructor (__new__:_:) does check, which is where
-	CPython's diagnostic is actually reachable from Python code.
-	test_supercheck_fail wants it on both; that needs the MRO agreement to be
-	exact first."
+	"NO supercheck here, and now for a narrower reason than before.  This is what
+	a ZERO-ARG ``super()'' compiles to: codegen builds the pair from the lexical
+	class and the method's own first argument, so it is well-formed by
+	construction and a check could only cost a lookup on the hottest super path
+	there is.
+
+	An EXPLICIT ``super(a, b)'' -- both halves arbitrary expressions the program
+	chose -- compiles to ``checkedCls:obj:'' instead, which does apply it.  That
+	split is what test_supercheck_fail needed.
+
+	It was previously skipped on BOTH compiled paths, because the check itself
+	was wrong: ___isInstanceOrSubtype___ answered ``mro includes: aClass''
+	exclusively, and a cooperative mixin is not always on the linearization
+	___mroOf___ reports -- so it rejected calls the proxy then serviced correctly
+	(four Django failures, measured).  The check now accepts the MRO *or* the
+	Smalltalk chain, so the explicit path can afford it."
 	inst := self @env0:new.
 	inst @env0:_setCls: aClass obj: anObject.
 	^ inst
+%
+
+category: 'Grail-Instance Creation'
+classmethod: Super
+checkedCls: aClass obj: anObject
+	"``super(C, obj)'' as WRITTEN IN SOURCE, compiled.  The same proxy cls:obj:
+	builds, with CPython's supercheck applied first.
+
+	Two constructors because the callers differ in what they can be trusted
+	about, not for convenience:
+
+	  * cls:obj: is what a ZERO-ARG ``super()'' compiles to.  Codegen builds the
+	    pair from the lexical class and the method's own first argument, so it is
+	    well-formed by construction -- a check could only cost a lookup on the
+	    hottest super path there is.
+	  * this is what an EXPLICIT two-argument ``super(a, b)'' compiles to, where
+	    both halves are arbitrary expressions.  That is the form CPython's
+	    diagnostic exists for, and the form test_supercheck_fail exercises
+	    through a method parameter:
+
+	        def method(self, type_, obj): return super(type_, obj).method()
+
+	Without this, a mismatched pair built a proxy that walked the wrong chain, so
+	the failure surfaced later and elsewhere -- as ``'super' object has no
+	attribute 'method''' from the eventual lookup, displacing the TypeError the
+	test matches on."
+
+	^ self cls: aClass obj: (self ___superCheck___: anObject against: aClass)
 %
 
 category: 'Grail-Attribute'
@@ -550,12 +584,32 @@ ___superCheck___: anObject against: aClass
 	ok := self ___isInstanceOrSubtype___: anObject of: aClass.
 	ok @env0:ifTrue: [^ anObject].
 	describe := (anObject @env0:isKindOf: Behavior)
-		@env0:ifTrue: ['type ' @env0:, anObject @env0:name @env0:asString]
+		@env0:ifTrue: ['type ' @env0:, (self ___pyNameOf___: anObject)]
 		@env0:ifFalse: ['instance of '
-			@env0:, anObject @env0:class @env0:name @env0:asString].
+			@env0:, (self ___pyNameOf___: anObject @env0:class)].
 	^ TypeError ___signal___: 'super(type, obj): obj (' @env0:, describe
 		@env0:, ') is not an instance or subtype of type ('
-		@env0:, aClass @env0:name @env0:asString @env0:, ').'
+		@env0:, (self ___pyNameOf___: aClass) @env0:, ').'
+%
+
+category: 'Grail-Instance Creation'
+classmethod: Super
+___pyNameOf___: aBehavior
+	"aBehavior's PYTHON type name.
+
+	The Smalltalk name is the wrong one for a Python diagnostic whenever a
+	reused GemStone kernel class backs a built-in type: this message named
+	``Integer'' and ``OrderedCollection'' where CPython says ``int'' and
+	``list'', so test_supercheck_fail matched the message's structure and failed
+	on its nouns -- which are the half that actually tells you what you passed.
+
+	___pythonBuiltinTypeName___ answers nil for everything it does not remap
+	(Grail-defined built-ins already carry their Python name, and user classes
+	must keep their own), so falling back to the Smalltalk name is correct rather
+	than merely safe."
+
+	^ (aBehavior @env1:___pythonBuiltinTypeName___)
+		@env0:ifNil: [aBehavior @env0:name @env0:asString]
 %
 
 category: 'Grail-Instance Creation'
@@ -575,7 +629,19 @@ ___isInstanceOrSubtype___: anObject of: aClass
 	the check from rejecting calls the proxy then services happily.
 
 	Permissive when no MRO is registered: answering true leaves the previous
-	behaviour (no check at all) in place rather than inventing a failure."
+	behaviour (no check at all) in place rather than inventing a failure.
+
+	EITHER answer accepts -- the MRO or the Smalltalk chain -- and that is the
+	fix that made this check safe to apply on the compiled path at all.  It used
+	to answer ``mro includes: aClass'' EXCLUSIVELY whenever an MRO was
+	registered, falling back to the chain only when there was none.  So a class
+	the receiver genuinely inherits from was REJECTED whenever ___mroOf___
+	reported a linearization that omitted it -- the mixin case the paragraph
+	above is about, and why cls:obj: had to skip the check entirely (four Django
+	failures, measured).  Consulting both can only ever ACCEPT more than before,
+	never less, so it cannot reintroduce those rejections; and it still refuses
+	pairs related by neither -- super(int, <C instance>), super(C, list()),
+	super(C, list)."
 
 	| il mro probe |
 	il := Python @env0:at: #importlib otherwise: nil.
@@ -584,10 +650,18 @@ ___isInstanceOrSubtype___: anObject of: aClass
 		@env0:ifFalse: [anObject @env0:class].
 	probe == aClass ifTrue: [^ true].
 	il == nil ifFalse: [
-		mro := [il ___mroOf___: probe]
+		"@env0: -- ___mroOf___: is an env-0 classmethod, and this method compiles
+		under ``set compile_env: 1'', so the bare send was an env-1 send that
+		could never reach it.  The on:do: below then swallowed the resulting
+		doesNotUnderstand and answered nil, so THE MRO BRANCH HAS NEVER RUN: this
+		check was silently chain-only, which is precisely why it rejected
+		cooperative mixins and had to be kept off the compiled path.  The handler
+		is still wanted (___mroOf___: raises for a class with no registered MRO)
+		but it was hiding a wiring bug rather than a missing MRO."
+		mro := [il @env0:___mroOf___: probe]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 		(mro @env0:notNil @env0:and: [mro @env0:notEmpty]) ifTrue: [
-			^ mro @env0:includes: aClass]].
+			(mro @env0:includes: aClass) ifTrue: [^ true]]].
 	^ (anObject @env0:isKindOf: Behavior)
 		@env0:ifTrue: [anObject @env0:inheritsFrom: aClass]
 		@env0:ifFalse: [anObject @env0:isKindOf: aClass]
